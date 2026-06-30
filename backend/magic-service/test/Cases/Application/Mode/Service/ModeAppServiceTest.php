@@ -8,6 +8,7 @@ declare(strict_types=1);
 namespace HyperfTest\Cases\Application\Mode\Service;
 
 use App\Application\Mode\Service\ModeAppService;
+use App\Application\Permission\Service\UserModelAccessAppService;
 use App\Domain\File\Repository\Persistence\Facade\CloudFileRepositoryInterface;
 use App\Domain\File\Service\FileDomainService;
 use App\Domain\Mode\Entity\ModeAggregate;
@@ -54,11 +55,17 @@ use App\Infrastructure\ExternalAPI\VideoGenerateAPI\Keling\Transport\ApiKeyKelin
 use App\Infrastructure\ExternalAPI\VideoGenerateAPI\VideoGenerateFactory;
 use App\Infrastructure\ExternalAPI\VideoGenerateAPI\VolcengineArkSeedanceVideoAdapter;
 use App\Infrastructure\ExternalAPI\VideoGenerateAPI\VolcengineArkVideoClient;
+use App\Infrastructure\Util\Context\CoContext;
 use App\Infrastructure\Util\Locker\LockerInterface;
 use App\Interfaces\Authorization\Web\MagicUserAuthorization;
+use Dtyq\SuperMagic\Application\Agent\Service\SuperMagicAgentAppService;
+use Dtyq\SuperMagic\Domain\Agent\Entity\SuperMagicAgentEntity;
+use Hyperf\Context\ApplicationContext;
+use Hyperf\Di\Container;
 use Hyperf\Guzzle\ClientFactory;
 use PHPUnit\Framework\TestCase;
 use ReflectionMethod;
+use RuntimeException;
 
 /**
  * @internal
@@ -342,13 +349,98 @@ class ModeAppServiceTest extends TestCase
     }
 
     /**
+     * @dataProvider featuredAgentI18nFallbackProvider
+     */
+    public function testGetFeaturedAgentUsesI18nNameAndDescriptionFallback(
+        array $nameI18n,
+        array $descriptionI18n,
+        string $expectedName,
+        string $expectedDescription
+    ): void {
+        CoContext::setLanguage('zh_CN');
+
+        $aggregate = $this->createAggregateWithRelations(['llm-model']);
+        $modeDomainService = $this->createMock(ModeDomainService::class);
+        $modeDomainService
+            ->method('getModes')
+            ->willReturn(['list' => [$aggregate->getMode()]]);
+        $modeDomainService
+            ->method('batchBuildModeAggregates')
+            ->willReturn([$aggregate]);
+
+        $service = $this->createService(
+            [11 => $this->createProviderConfigEntity(11, ProviderCode::Cloudsway)],
+            [
+                'llm-model' => [
+                    $this->createProviderModel('llm-model', Category::LLM, 'llm-version', 11),
+                ],
+            ],
+            null,
+            $modeDomainService
+        );
+
+        $agent = $this->createFeaturedAgent($nameI18n, $descriptionI18n);
+        $superMagicAgentAppService = $this->createMock(SuperMagicAgentAppService::class);
+        $superMagicAgentAppService
+            ->method('getFeaturedAgent')
+            ->willReturn([
+                'frequent' => [$agent],
+                'all' => [],
+                'total' => 1,
+                'playbooks' => [],
+            ]);
+        $userModelAccessAppService = $this->createMock(UserModelAccessAppService::class);
+        $userModelAccessAppService
+            ->method('resolveAccessContext')
+            ->willReturn([
+                'is_restricted' => false,
+                'accessible_model_id_map' => [],
+            ]);
+
+        $authorization = (new MagicUserAuthorization())->setOrganizationCode('TGosRaFhvb');
+        $result = $this->withContainerBindings([
+            SuperMagicAgentAppService::class => $superMagicAgentAppService,
+            UserModelAccessAppService::class => $userModelAccessAppService,
+        ], static fn () => $service->getFeaturedAgent($authorization));
+
+        $this->assertSame($expectedName, $result['list'][0]['mode']['name']);
+        $this->assertSame($expectedDescription, $result['list'][0]['mode']['description']);
+        $this->assertSame('描述', $result['list'][0]['mode']['placeholder']);
+    }
+
+    public static function featuredAgentI18nFallbackProvider(): array
+    {
+        return [
+            'current language value' => [
+                ['zh_CN' => '当前名称', 'default' => '默认名称'],
+                ['zh_CN' => '当前描述', 'default' => '默认描述'],
+                '当前名称',
+                '当前描述',
+            ],
+            'default value' => [
+                ['default' => '默认名称'],
+                ['default' => '默认描述'],
+                '默认名称',
+                '默认描述',
+            ],
+            'scalar value' => [
+                [],
+                [],
+                'Scalar Name',
+                'Scalar Description',
+            ],
+        ];
+    }
+
+    /**
      * @param array<int, ProviderConfigEntity> $providerConfigs
      * @param array<string, list<ProviderModelEntity>> $providerModelsByModelIds
      */
     private function createService(
         array $providerConfigs = [],
         array $providerModelsByModelIds = [],
-        ?OrganizationBasedModelFilterInterface $organizationModelFilter = null
+        ?OrganizationBasedModelFilterInterface $organizationModelFilter = null,
+        ?ModeDomainService $modeDomainService = null
     ): ModeAppService {
         $providerConfigRepository = $this->createMock(ProviderConfigRepositoryInterface::class);
         $providerConfigRepository
@@ -374,7 +466,7 @@ class ModeAppServiceTest extends TestCase
         }
 
         return new ModeAppService(
-            new ModeDomainService(
+            $modeDomainService ?? new ModeDomainService(
                 $this->createMock(ModeRepositoryInterface::class),
                 $this->createMock(ModeGroupRepositoryInterface::class),
                 $this->createMock(ModeGroupRelationRepositoryInterface::class)
@@ -496,6 +588,43 @@ class ModeAppServiceTest extends TestCase
             'status' => Status::Enabled->value,
             'organization_code' => 'TGosRaFhvb',
         ]);
+    }
+
+    private function createFeaturedAgent(array $nameI18n, array $descriptionI18n): SuperMagicAgentEntity
+    {
+        $agent = new SuperMagicAgentEntity();
+        $agent->setCode('general');
+        $agent->setName('Scalar Name');
+        $agent->setDescription('Scalar Description');
+        $agent->setNameI18n($nameI18n);
+        $agent->setDescriptionI18n($descriptionI18n);
+        $agent->setIcon([]);
+
+        return $agent;
+    }
+
+    private function withContainerBindings(array $bindings, callable $callback): mixed
+    {
+        $container = ApplicationContext::getContainer();
+        if (! $container instanceof Container) {
+            throw new RuntimeException('ModeAppServiceTest requires Hyperf DI container.');
+        }
+
+        $originalBindings = [];
+        foreach (array_keys($bindings) as $id) {
+            $originalBindings[$id] = $container->get($id);
+        }
+        foreach ($bindings as $id => $binding) {
+            $container->set($id, $binding);
+        }
+
+        try {
+            return $callback();
+        } finally {
+            foreach ($originalBindings as $id => $binding) {
+                $container->set($id, $binding);
+            }
+        }
     }
 
     /**

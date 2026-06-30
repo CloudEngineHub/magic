@@ -3,7 +3,7 @@ WaitWechatLogin — 等待微信官方 ClawBot 扫码结果的 Tool。
 
 不挂载到 LLM tool list，仅供 SDK snippet 通过 /api/sdk/tool/call 调用。
 """
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 from pydantic import Field
 
@@ -39,6 +39,23 @@ class WaitWechatLogin(BaseTool[WaitWechatLoginParams]):
     -->
     Wait for the WeChat QR login result. Intended for SDK snippets only and not exposed as a normal LLM tool.
     """
+
+    def is_visible_in_context(self, agent_context: "AgentContext") -> bool:
+        return agent_context.is_interactive_main_agent_context()
+
+    async def check_execution_permission(
+        self,
+        tool_context: ToolContext,
+        params: WaitWechatLoginParams,
+    ) -> Optional[ToolResult]:
+        agent_context = tool_context.get_extension("agent_context")
+        if agent_context is not None and agent_context.is_interactive_main_agent_context():
+            return None
+
+        return ToolResult.error(
+            "This tool cannot be used from a sub-agent or non-interactive context. "
+            "Ask the parent agent to handle the WeChat login flow instead."
+        )
 
     async def execute(self, tool_context: ToolContext, params: WaitWechatLoginParams) -> ToolResult:
         try:

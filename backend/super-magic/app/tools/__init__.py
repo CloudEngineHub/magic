@@ -7,6 +7,8 @@
 from app.tools.dummy_tool import DummyTool # DummyTool 必须在第一个位置导入，
 from app.tools.ask_user import AskUserTool
 from app.tools.web_search import WebSearch
+from app.tools.agent_list import AgentList
+from app.tools.prepare_agent import PrepareAgent
 from app.tools.call_subagent import CallSubagent
 from app.tools.wait_for_subagents import WaitForSubagents
 from app.tools.compact_chat_history import CompactChatHistory
@@ -172,7 +174,9 @@ __all__ = [
     "AnalysisSlideWebpage",
     "AppendToFile",
     "WebSearch",
-    "CallAgent",
+    "AgentList",
+    "PrepareAgent",
+    "CallSubagent",
     "WaitForSubagents",
     "ConnectDingTalkBot",
     "ConnectLarkBot",

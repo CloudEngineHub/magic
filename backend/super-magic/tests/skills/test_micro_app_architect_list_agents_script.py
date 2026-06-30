@@ -29,7 +29,7 @@ def install_package_tree(monkeypatch, dotted_name):
         monkeypatch.setitem(sys.modules, name, module)
 
 
-def test_agent_info_list_hides_raw_sdk_errors(monkeypatch, capsys):
+def test_micro_app_architect_list_agents_hides_raw_sdk_errors(monkeypatch, capsys):
     install_package_tree(monkeypatch, "_shared")
     install_module(monkeypatch, "_shared.bootstrap")
 
@@ -65,14 +65,14 @@ def test_agent_info_list_hides_raw_sdk_errors(monkeypatch, capsys):
         "app.infrastructure.sdk.magic_service.parameter.list_agents_parameter"
     ].ListAgentsParameter = ListAgentsParameter
 
-    monkeypatch.setattr(sys, "argv", ["list.py"])
+    monkeypatch.setattr(sys, "argv", ["list_agents.py"])
     script = (
         Path(__file__).resolve().parents[2]
         / "agents"
         / "skills"
-        / "agent-info"
+        / "micro-app-architect"
         / "scripts"
-        / "list.py"
+        / "list_agents.py"
     )
 
     with pytest.raises(SystemExit) as exc_info:

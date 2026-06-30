@@ -86,6 +86,18 @@ class BaseTool(Generic[T], ABC):
         """
         return True
 
+    def is_visible_in_context(self, agent_context: "AgentContext") -> bool:
+        """是否在当前 Agent 上下文向 LLM 暴露此工具。默认暴露。"""
+        return True
+
+    async def check_execution_permission(
+        self,
+        tool_context: ToolContext,
+        params: T,
+    ) -> Optional[ToolResult]:
+        """执行前权限检查。返回 None 表示允许；返回 ToolResult 表示拦截并直接回给模型。"""
+        return None
+
     def get_horizon(self, tool_context: "ToolContext") -> "AgentHorizon":
         """从 tool_context 获取当前 agent 的 AgentHorizon 实例。"""
         from app.core.context.agent_context import AgentContext
@@ -523,6 +535,15 @@ class BaseTool(Generic[T], ABC):
                 execution_time = time.time() - start_time
                 self._end_tool_span(span, result, execution_time, e)
                 return result
+
+            permission_result = await self.check_execution_permission(tool_context, params)
+            if permission_result is not None:
+                execution_time = time.time() - start_time
+                permission_result.execution_time = execution_time
+                permission_result.name = str(self.get_effective_name())
+                permission_result.tool_call_id = getattr(tool_context, "tool_call_id", None)
+                self._end_tool_span(span, permission_result, execution_time)
+                return permission_result
 
             # 执行工具
             execution_error = None

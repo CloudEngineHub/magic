@@ -76,6 +76,26 @@ class BaseUserToolCallTool(BaseTool[T]):
     def allow_code_mode(self) -> bool:
         return False
 
+    def is_visible_in_context(self, agent_context: "AgentContext") -> bool:
+        return agent_context.is_interactive_main_agent_context()
+
+    async def check_execution_permission(
+        self,
+        tool_context: ToolContext,
+        params: T,
+    ) -> Optional[ToolResult]:
+        from app.core.context.agent_context import AgentContext
+
+        agent_context = tool_context.get_extension_typed("agent_context", AgentContext)
+        if agent_context is not None and agent_context.is_interactive_main_agent_context():
+            return None
+
+        return ToolResult.error(
+            "This tool cannot be used from a sub-agent or non-interactive context. "
+            "Continue with the available information. If user input is truly required, "
+            "return the unresolved question to the parent agent instead of calling this tool."
+        )
+
     async def set_extra_arguments(self, tool_context: ToolContext) -> None:
         """设置 expires_at 并调用子类预处理 hook。"""
         tool_context.arguments["expires_at"] = int(time.time()) + self.user_tool_call_timeout
