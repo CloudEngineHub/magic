@@ -121,10 +121,11 @@ function touchEnd(element: Element) {
 	})
 }
 
-function renderSidebar(menuValue: MobileShellMenuContextValue) {
+/** Mounts the sidebar with optional page prefix so tests can assert shared shell selectors. */
+function renderSidebar(menuValue: MobileShellMenuContextValue, testIdPrefix?: string) {
 	return render(
 		<MobileShellMenuProvider value={menuValue}>
-			<MobileShellSidebar />
+			<MobileShellSidebar testIdPrefix={testIdPrefix} />
 		</MobileShellMenuProvider>,
 	)
 }
@@ -186,8 +187,8 @@ describe("MobileShellSidebar", () => {
 			loadMoreRecentItems: vi.fn(),
 		})
 
-		const pill = screen.getByTestId("mobile-super-shell-account-pill")
-		expect(pill.style.boxShadow).toContain("25px 50px -12px")
+		const pill = screen.getByTestId("mobile-shell-account-pill")
+		expect(pill.style.boxShadow).toContain("10px 20px -12px")
 		expect(pill).toHaveClass("pl-[6px]", "pr-[10px]", "py-[6px]")
 
 		const avatarRoot = pill.querySelector('[data-slot="avatar"]')
@@ -199,6 +200,26 @@ describe("MobileShellSidebar", () => {
 			backgroundColor: colors.bg,
 			color: colors.text,
 		})
+	})
+
+	it("keeps account pill test id stable across page-specific shell prefixes", () => {
+		renderSidebar(
+			{
+				activeView: "chats",
+				navItems: [],
+				recentItems: [],
+				onNavigate: vi.fn(),
+				onGoHome: vi.fn(),
+				onRecentNavigate: vi.fn(),
+				reloadRecentItems: vi.fn(),
+				hasMore: false,
+				loadMoreRecentItems: vi.fn(),
+			},
+			"mobile-chat-home-page",
+		)
+
+		expect(screen.getByTestId("mobile-shell-account-pill")).toBeInTheDocument()
+		expect(screen.queryByTestId("mobile-chat-home-page-account-pill")).not.toBeInTheDocument()
 	})
 
 	it("wires shell-recent project whitelist and chat actions without pin", () => {

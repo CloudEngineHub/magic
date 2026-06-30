@@ -32,6 +32,9 @@ const PRIMARY_NAV_KEYS = new Set(["home", "chats", "workspaces", "recording"])
 
 const ACCOUNT_PILL_BOX_SHADOW = "rgb(0 0 0 / 17%) 0px 10px 20px -12px"
 
+// Keep the account trigger stable across page-specific shell prefixes for shared E2E flows.
+const MOBILE_SHELL_ACCOUNT_BUTTON_TEST_ID = "mobile-shell-account-pill"
+
 /** 统一计算侧栏导航行样式；导航项不展示路由选中或点击激活高亮。 */
 function navRowClass() {
 	return cn(
@@ -292,7 +295,7 @@ const MobileShellSidebarView = observer(function MobileShellSidebarView({
 						onClick={openSettings}
 						className="flex min-w-0 items-center gap-[6px] rounded-full bg-card py-[6px] pl-[6px] pr-[10px] text-left transition-opacity active:opacity-60"
 						style={{ boxShadow: ACCOUNT_PILL_BOX_SHADOW }}
-						data-testid={`${testIdPrefix}-account-pill`}
+						data-testid={MOBILE_SHELL_ACCOUNT_BUTTON_TEST_ID}
 					>
 						{/* Prefer real avatar; colored initial fallback matches prototype when image is missing. */}
 						<Avatar className="size-6">
