@@ -270,7 +270,16 @@ export default memo(function ShareSuccessModal(props: ShareSuccessModalProps) {
 			fileDisplayConfig,
 			t,
 		})
-	}, [fileCount, mainFileName, shareName, projectName, shareProject, shareUrl, fileDisplayConfig, t])
+	}, [
+		fileCount,
+		mainFileName,
+		shareName,
+		projectName,
+		shareProject,
+		shareUrl,
+		fileDisplayConfig,
+		t,
+	])
 
 	// Render share message with clickable links
 	const renderShareMessage = useCallback(() => {
@@ -365,7 +374,8 @@ export default memo(function ShareSuccessModal(props: ShareSuccessModalProps) {
 			canvas.toBlob((blob) => {
 				if (!blob) return
 				const url = URL.createObjectURL(blob)
-				downloadFileWithAnchor(url, filename)
+				// Keep the derived download prompt above the share success dialog.
+				downloadFileWithAnchor(url, filename, undefined, { modalZIndex: 1300 })
 				magicToast.success(t("share.downloadSuccess"))
 			})
 		}
@@ -497,7 +507,11 @@ export default memo(function ShareSuccessModal(props: ShareSuccessModalProps) {
 						<div className={styles.mobileShareLinkSection}>
 							<div className={styles.mobileLabel}>{t("share.shareLink")}</div>
 							<div className={styles.mobileShareLinkBox}>{renderShareMessage()}</div>
-							<div className={styles.mobileCopyButton} onClick={handleCopyShareLink} data-testid="handle-copy-share-link">
+							<div
+								className={styles.mobileCopyButton}
+								onClick={handleCopyShareLink}
+								data-testid="handle-copy-share-link"
+							>
 								<Copy size={16} />
 								{t("share.copy")}
 							</div>
@@ -548,7 +562,10 @@ export default memo(function ShareSuccessModal(props: ShareSuccessModalProps) {
 				data-testid="on-pointer-down-outside"
 			>
 				{/* Header */}
-				<DialogHeader className="border-b border-border px-3 py-3" data-testid="share-success-modal-header">
+				<DialogHeader
+					className="border-b border-border px-3 py-3"
+					data-testid="share-success-modal-header"
+				>
 					<DialogTitle className="text-base font-semibold">
 						{t("share.successModalTitle")}
 					</DialogTitle>
@@ -673,7 +690,10 @@ export default memo(function ShareSuccessModal(props: ShareSuccessModalProps) {
 				</div>
 
 				{/* Footer */}
-				<DialogFooter className="border-t border-border px-3 py-3" data-testid="share-success-modal-footer">
+				<DialogFooter
+					className="border-t border-border px-3 py-3"
+					data-testid="share-success-modal-footer"
+				>
 					<div className="flex w-full items-center justify-between gap-1.5">
 						<Button
 							variant="outline"
