@@ -260,7 +260,9 @@ function AskUserFormImpl({
 			if (draftCacheKey && !submittedAnswers && !isTerminal) {
 				writeAskUserDraftAnswers(draftCacheKey, answersRef.current as AskUserDraftAnswers)
 			}
-			setCanSubmit(areAnswersComplete(questions, answersRef.current))
+			setCanSubmit(
+				getAnsweredQuestionCount(questions, answersRef.current) === questions.length,
+			)
 			onProgressChange?.(getAnsweredQuestionCount(questions, answersRef.current))
 			setInvalidQuestionIds((current) => {
 				if (!current.has(id)) return current
@@ -361,12 +363,12 @@ function AskUserFormImpl({
 		> | null
 		answersRef.current = nextDraftAnswers ? { ...nextDraftAnswers } : {}
 		setDraftAnswers(nextDraftAnswers || undefined)
-		setCanSubmit(areAnswersComplete(questions, answersRef.current))
+		setCanSubmit(getAnsweredQuestionCount(questions, answersRef.current) === questions.length)
 		onProgressChange?.(getAnsweredQuestionCount(questions, answersRef.current))
 	}, [draftCacheKey, isTerminal, onProgressChange, questions, submittedAnswers])
 
 	useEffect(() => {
-		setCanSubmit(areAnswersComplete(questions, answersRef.current))
+		setCanSubmit(getAnsweredQuestionCount(questions, answersRef.current) === questions.length)
 	}, [questions])
 
 	return (

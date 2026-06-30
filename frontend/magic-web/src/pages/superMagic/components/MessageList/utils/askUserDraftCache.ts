@@ -8,7 +8,6 @@ const ASK_USER_DRAFT_CACHE_ROOT = "super_magic/ask_user_draft/v1"
 
 interface AskUserDraftCachePayload {
 	answers: AskUserDraftAnswers
-	version: 1
 }
 
 function canUseLocalStorage() {
@@ -32,15 +31,6 @@ function normalizeAnswers(value: unknown): AskUserDraftAnswers | null {
 	}
 
 	return answers
-}
-
-function normalizePayload(value: unknown): AskUserDraftCachePayload | null {
-	if (!value || typeof value !== "object" || Array.isArray(value)) return null
-	const payload = value as Partial<AskUserDraftCachePayload>
-	if (payload.version !== 1) return null
-	const answers = normalizeAnswers(payload.answers)
-	if (!answers) return null
-	return { answers, version: 1 }
 }
 
 function hasMeaningfulAnswer(answers: AskUserDraftAnswers) {
@@ -76,13 +66,14 @@ export function readAskUserDraftAnswers(cacheKey: string): AskUserDraftAnswers |
 		const raw = window.localStorage.getItem(cacheKey)
 		if (!raw) return null
 
-		const payload = normalizePayload(JSON.parse(raw))
-		if (!payload) {
+		const payload = JSON.parse(raw) as Partial<AskUserDraftCachePayload>
+		const answers = normalizeAnswers(payload?.answers)
+		if (!answers) {
 			clearAskUserDraftAnswers(cacheKey)
 			return null
 		}
 
-		return payload.answers
+		return answers
 	} catch (error) {
 		console.error(error)
 		clearAskUserDraftAnswers(cacheKey)
@@ -102,7 +93,6 @@ export function writeAskUserDraftAnswers(cacheKey: string, answers: AskUserDraft
 	try {
 		const payload: AskUserDraftCachePayload = {
 			answers: normalizedAnswers,
-			version: 1,
 		}
 		window.localStorage.setItem(cacheKey, JSON.stringify(payload))
 	} catch (error) {

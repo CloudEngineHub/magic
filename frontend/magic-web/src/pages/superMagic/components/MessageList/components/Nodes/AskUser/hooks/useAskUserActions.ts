@@ -114,8 +114,6 @@ export function useAskUserActions({
 	const [otherTexts, setOtherTexts] = useState<Record<string, string>>({})
 	const [pendingAction, setPendingAction] = useState<AskUserPendingAction>(null)
 	const skipNextDraftWriteRef = useRef(true)
-	const askUserQuestionsRef = useRef(askUser.questions)
-	askUserQuestionsRef.current = askUser.questions
 	const draftCacheKey = useMemo(
 		() =>
 			buildAskUserDraftCacheKey({
@@ -124,17 +122,10 @@ export function useAskUserActions({
 			}),
 		[askUser.questionId, context?.topicId],
 	)
-	const questionSignature = useMemo(
-		() =>
-			askUser.questions
-				.map((question) => `${question.subId}:${question.interactionType}`)
-				.join("|"),
-		[askUser.questions],
-	)
 
 	useEffect(() => {
 		const draftState = buildDraftState(
-			askUserQuestionsRef.current,
+			askUser.questions,
 			readAskUserDraftAnswers(draftCacheKey),
 		)
 		skipNextDraftWriteRef.current = true
@@ -143,7 +134,7 @@ export function useAskUserActions({
 		setSelectedOptionsMap(draftState.selectedOptionsMap)
 		setOtherTexts(draftState.otherTexts)
 		setPendingAction(null)
-	}, [askUser.questionId, draftCacheKey, questionSignature])
+	}, [askUser.questionId, askUser.questions, draftCacheKey])
 
 	const answer = useMemo(() => {
 		const answers: Record<string, string | string[]> = {}
