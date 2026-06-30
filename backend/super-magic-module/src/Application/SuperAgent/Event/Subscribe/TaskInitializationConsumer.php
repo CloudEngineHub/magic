@@ -7,28 +7,14 @@ declare(strict_types=1);
 
 namespace Dtyq\SuperMagic\Application\SuperAgent\Event\Subscribe;
 
-use App\Application\LongTermMemory\Enum\AppCodeEnum;
-use App\Application\MCP\SupperMagicMCP\ProjectMcpConfigService;
-use App\Domain\Chat\DTO\Message\Common\MessageExtra\SuperAgent\SuperAgentExtra;
 use App\Domain\Chat\Entity\MagicConversationEntity;
 use App\Domain\Chat\Entity\ValueObject\ConversationType;
 use App\Domain\Chat\Service\MagicConversationDomainService;
 use App\Domain\Contact\Entity\ValueObject\DataIsolation;
-use App\Domain\LongTermMemory\Service\LongTermMemoryDomainService;
-use App\Domain\MCP\Entity\ValueObject\MCPDataIsolation;
 use Dtyq\SuperMagic\Application\SuperAgent\DTO\TaskInitializationMessageDTO;
+use Dtyq\SuperMagic\Application\SuperAgent\DTO\UserMessageDTO;
 use Dtyq\SuperMagic\Application\SuperAgent\Service\ClientMessageAppService;
-use Dtyq\SuperMagic\Application\SuperAgent\Service\TaskContextMentionsResolver;
-use Dtyq\SuperMagic\Application\SuperAgent\Service\VideoModelConfigResolver;
-use Dtyq\SuperMagic\Domain\SuperAgent\Entity\ProjectEntity;
-use Dtyq\SuperMagic\Domain\SuperAgent\Entity\TopicEntity;
-use Dtyq\SuperMagic\Domain\SuperAgent\Entity\ValueObject\ChatInstruction;
-use Dtyq\SuperMagic\Domain\SuperAgent\Entity\ValueObject\ProjectMode;
-use Dtyq\SuperMagic\Domain\SuperAgent\Entity\ValueObject\TaskContext;
-use Dtyq\SuperMagic\Domain\SuperAgent\Service\AgentDomainService;
-use Dtyq\SuperMagic\Domain\SuperAgent\Service\ProjectDomainService;
-use Dtyq\SuperMagic\Domain\SuperAgent\Service\TaskDomainService;
-use Dtyq\SuperMagic\Domain\SuperAgent\Service\TopicDomainService;
+use Dtyq\SuperMagic\Application\SuperAgent\Service\HandleUserMessageAppService;
 use Dtyq\SuperMagic\Infrastructure\Utils\TaskTerminationUtil;
 use Hyperf\Amqp\Annotation\Consumer;
 use Hyperf\Amqp\Message\ConsumerMessage;
@@ -43,6 +29,11 @@ use function Hyperf\Translation\trans;
 
 /**
  * Task initialization consumer with interrupt support at any time.
+ *
+ * Thin consumer: it reconstructs the DataIsolation and UserMessageDTO from the queue
+ * payload and delegates to the unified HandleUserMessageAppService::handleChatMessage,
+ * passing the already-created task id so task creation / user message persistence are
+ * skipped. All redundant sandbox initialization logic now lives in the core service.
  */
 #[Consumer(
     exchange: 'super-magic',
@@ -55,14 +46,9 @@ class TaskInitializationConsumer extends ConsumerMessage
     protected LoggerInterface $logger;
 
     public function __construct(
-        private readonly AgentDomainService $agentDomainService,
-        private readonly TaskDomainService $taskDomainService,
-        private readonly TopicDomainService $topicDomainService,
-        private readonly ProjectDomainService $projectDomainService,
-        private readonly LongTermMemoryDomainService $longTermMemoryDomainService,
+        private readonly HandleUserMessageAppService $handleUserMessageAppService,
         private readonly ClientMessageAppService $clientMessageAppService,
         private readonly MagicConversationDomainService $magicConversationDomainService,
-        private readonly ProjectMcpConfigService $projectMcpConfigService,
         private readonly Redis $redis,
         LoggerFactory $loggerFactory
     ) {
@@ -81,15 +67,39 @@ class TaskInitializationConsumer extends ConsumerMessage
             $messageDTO = TaskInitializationMessageDTO::fromArray($data);
 
             // [Checkpoint 1] Check termination flag first (support interrupt at any time)
-            if ($this->checkTerminationFlag($messageDTO->getTaskId())) {
+            if (TaskTerminationUtil::isTaskTerminated($this->redis, $this->logger, $messageDTO->getTaskId())) {
                 $this->logger->info('[Checkpoint 1] Task already terminated, skip processing', [
                     'task_id' => $messageDTO->getTaskId(),
                 ]);
                 return Result::ACK;
             }
 
-            // Build initialization parameters
-            $this->buildAndInitializeAgent($messageDTO);
+            // Rebuild data isolation
+            $dataIsolation = DataIsolation::create(
+                $messageDTO->getOrganizationCode(),
+                $messageDTO->getUserId()
+            );
+            $dataIsolation->setLanguage($messageDTO->getLanguage());
+
+            // Rebuild UserMessageDTO from the serialized payload. Resolve the agent
+            // conversation id here when the producer did not carry it (chatConversationId
+            // is readonly, so inject it into the array before reconstructing).
+            $userMessageArray = $messageDTO->getUserMessage();
+            if (($userMessageArray['chat_conversation_id'] ?? '') === '') {
+                $agentConversationId = $this->getAgentConversationId($dataIsolation, $messageDTO->getAgentUserId());
+                if ($agentConversationId !== '') {
+                    $userMessageArray['chat_conversation_id'] = $agentConversationId;
+                }
+            }
+            $userMessageDTO = UserMessageDTO::fromArray($userMessageArray);
+
+            // Reuse the unified core: task already created and user message already persisted,
+            // so pass the task id to skip task creation / message persistence.
+            $this->handleUserMessageAppService->handleChatMessage(
+                $dataIsolation,
+                $userMessageDTO,
+                $messageDTO->getTaskId()
+            );
 
             $this->logger->info('Task initialization completed', [
                 'task_id' => $messageDTO->getTaskId(),
@@ -112,279 +122,6 @@ class TaskInitializationConsumer extends ConsumerMessage
             // Return ACK to avoid infinite retry
             return Result::ACK;
         }
-    }
-
-    /**
-     * Check if task is terminated.
-     */
-    private function checkTerminationFlag(int $taskId): bool
-    {
-        return TaskTerminationUtil::isTaskTerminated($this->redis, $this->logger, $taskId);
-    }
-
-    /**
-     * Build and initialize agent with interrupt support at any time.
-     */
-    private function buildAndInitializeAgent(TaskInitializationMessageDTO $messageDTO): void
-    {
-        // Create data isolation
-        $dataIsolation = DataIsolation::create(
-            $messageDTO->getOrganizationCode(),
-            $messageDTO->getUserId()
-        );
-        $dataIsolation->setLanguage($messageDTO->getLanguage());
-
-        // Get task entity
-        $taskEntity = $this->taskDomainService->getTaskById($messageDTO->getTaskId());
-        if (is_null($taskEntity)) {
-            $this->logger->error('Task not found', [
-                'task_id' => $messageDTO->getTaskId(),
-            ]);
-            return;
-        }
-
-        // [Checkpoint 2] Check termination flag again before proceeding
-        /* @phpstan-ignore-next-line if.alwaysFalse - Termination flag can be set externally */
-        if ($this->checkTerminationFlag($taskEntity->getId())) {
-            $this->logger->info('[Checkpoint 2] Task terminated before initialization', [
-                'task_id' => $taskEntity->getId(),
-            ]);
-            return;
-        }
-
-        // Get topic entity
-        $topicEntity = $this->topicDomainService->getTopicById($messageDTO->getTopicId());
-        if (is_null($topicEntity)) {
-            $this->logger->error('Topic not found', [
-                'topic_id' => $messageDTO->getTopicId(),
-            ]);
-            return;
-        }
-
-        // Get project entity
-        $projectEntity = $this->projectDomainService->getProjectNotUserId(
-            $messageDTO->getProjectId()
-        );
-        if (is_null($projectEntity)) {
-            $this->logger->error('Project not found', [
-                'project_id' => $messageDTO->getProjectId(),
-            ]);
-            return;
-        }
-
-        // Reconstruct full SuperAgentExtra directly from messageContent so that all
-        // fields written by the producer (topic_pattern, model, image_model,
-        // video_model, enable_web_search, mentions, etc.) are preserved end to end.
-        // Falls back to the legacy extraData fast-path for backward compatibility
-        // (older messages already in the queue may only carry extraData).
-        $extra = $this->reconstructSuperAgentExtra($messageDTO);
-        $extraData = $messageDTO->getExtraData();
-
-        // Get AI Agent's conversation ID using unique index for optimal query performance
-        $agentConversationId = $this->getAgentConversationId(
-            $dataIsolation,
-            $messageDTO->getAgentUserId()
-        );
-
-        // Resolve request-level agent config with fallback chain:
-        //   1) topic_pattern from the current message extra (request-level override)
-        //   2) topic entity's persisted topic_mode (legacy / IM-driven flow)
-        // Normalization is done here so open-api requests can take effect without
-        // changing broader topic persistence behavior.
-        [$agentMode, $agentCode, $extraTopicPattern] = $this->resolveRequestedAgentConfig($topicEntity, $extra);
-
-        // Resolve model_id with fallback chain (extra > extraData)
-        $extraModelId = $extra?->getModelId() ?? '';
-        $modelId = $extraModelId !== '' ? $extraModelId : (string) ($extraData['model_id'] ?? '');
-
-        $this->logger->info('Resolved task initialization agent config', [
-            'task_id' => $taskEntity->getId(),
-            'topic_id' => $topicEntity->getId(),
-            'requested_topic_pattern' => $extraTopicPattern,
-            'topic_mode' => $topicEntity->getTopicMode(),
-            'resolved_agent_mode' => $agentMode,
-            'resolved_agent_code' => $agentCode,
-        ]);
-
-        // Build task context with all fields populated.
-        // Bridge model_id and agent_mode so that they reach the sandbox via
-        // ChatMessageRequest. model_id is auto-registered into
-        // dynamic_config.models by TaskContext::getDynamicConfig().
-        $taskContext = new TaskContext(
-            task: $taskEntity,
-            dataIsolation: $dataIsolation,
-            chatConversationId: $agentConversationId,
-            chatTopicId: $messageDTO->getChatTopicId(),
-            agentUserId: $messageDTO->getAgentUserId(),
-            sandboxId: $topicEntity->getSandboxId(),
-            taskId: (string) $taskEntity->getId(),
-            instruction: ChatInstruction::FollowUp,
-            agentMode: $agentMode,
-            modelId: $modelId,
-            isFirstTask: empty($topicEntity->getSandboxId()),
-            extra: $extra,
-            agentCode: $agentCode,
-        );
-        if (is_array($extraData)) {
-            $videoModel = array_filter([
-                'model_id' => ! empty($extraData['video_model_id']) ? $extraData['video_model_id'] : null,
-                'video_generation_config' => is_array($extraData['video_generation_config'] ?? null)
-                    ? $extraData['video_generation_config']
-                    : null,
-            ], static fn (mixed $value): bool => $value !== null);
-            if ($videoModel !== []) {
-                $dynamicConfig = $taskContext->getDynamicConfig();
-                $dynamicConfig['video_model'] = $videoModel;
-                $taskContext = $taskContext->setDynamicConfig($dynamicConfig);
-            }
-        }
-        $taskContext = $this->appendVideoModelDynamicConfig($taskContext, $extra);
-
-        // Add MCP config
-        $mcpDataIsolation = MCPDataIsolation::create(
-            $dataIsolation->getCurrentOrganizationCode(),
-            $dataIsolation->getCurrentUserId()
-        );
-        $mcpConfig = $this->projectMcpConfigService->buildForTask($mcpDataIsolation, $taskContext);
-        $taskContext = $taskContext->setMcpConfig($mcpConfig);
-        $taskContext = $this->appendDynamicParamsToDynamicConfig($taskContext, $extra);
-
-        // Create and initialize sandbox with interrupt support
-        $sandboxId = $this->createAndInitializeSandbox(
-            $dataIsolation,
-            $taskContext,
-            $projectEntity,
-            $topicEntity
-        );
-
-        $this->logger->info('Agent initialized successfully', [
-            'task_id' => $taskEntity->getId(),
-            'sandbox_id' => $sandboxId,
-        ]);
-    }
-
-    private function appendVideoModelDynamicConfig(TaskContext $taskContext, ?SuperAgentExtra $extra): TaskContext
-    {
-        if ($extra === null) {
-            return $taskContext;
-        }
-
-        $videoModel = di(VideoModelConfigResolver::class)->resolve($extra->getVideoModel(), $taskContext->getDataIsolation());
-        if ($videoModel === null) {
-            return $taskContext;
-        }
-
-        $dynamicConfig = $taskContext->getDynamicConfig();
-        $dynamicConfig['video_model'] = array_filter([
-            'model_id' => $videoModel['model_id'] ?? null,
-            'video_generation_config' => is_array($videoModel['video_generation_config'] ?? null)
-                ? $videoModel['video_generation_config']
-                : null,
-        ], static fn (mixed $value): bool => $value !== null);
-
-        return $taskContext->setDynamicConfig($dynamicConfig);
-    }
-
-    private function appendDynamicParamsToDynamicConfig(TaskContext $taskContext, ?SuperAgentExtra $extra): TaskContext
-    {
-        $dynamicParams = $extra?->getDynamicParams();
-        if (empty($dynamicParams)) {
-            return $taskContext;
-        }
-
-        $dynamicConfig = array_merge($taskContext->getDynamicConfig(), $dynamicParams);
-        return $taskContext->setDynamicConfig($dynamicConfig);
-    }
-
-    /**
-     * Create and initialize sandbox with interrupt support at every step.
-     */
-    private function createAndInitializeSandbox(
-        DataIsolation $dataIsolation,
-        TaskContext $taskContext,
-        ProjectEntity $projectEntity,
-        TopicEntity $topicEntity
-    ): string {
-        $taskId = $taskContext->getTask()->getId();
-
-        $memories = $this->longTermMemoryDomainService->getEffectiveMemoriesForSandbox(
-            $dataIsolation->getCurrentOrganizationCode(),
-            AppCodeEnum::SUPER_MAGIC->value,
-            $dataIsolation->getCurrentUserId(),
-            (string) $projectEntity->getId(),
-        );
-
-        // 传话题已绑定的 sandbox_id（未绑定则为空），让 Domain 在没有绑定时能走 warm pool。
-        // 不要传 topic_id，否则会跳过 warm 池守卫。
-        $agentContext = $this->agentDomainService->buildInitAgentContext(
-            dataIsolation: $dataIsolation,
-            projectEntity: $projectEntity,
-            topicEntity: $topicEntity,
-            taskEntity: $taskContext->getTask(),
-            sandboxId: (string) $topicEntity->getSandboxId(),
-            memories: $memories
-        );
-        if ($agentContext->getInitContext() !== null && $taskContext->getAgentMode() !== '') {
-            $agentContext->getInitContext()->setAgentMode($taskContext->getAgentMode());
-        }
-
-        $sandboxId = $this->agentDomainService->ensureSandboxInitialized(
-            $dataIsolation,
-            $agentContext,
-            interruptChecker: fn () => $this->checkTerminationFlag($taskId)
-        );
-
-        $this->topicDomainService->updateTopicSandboxId($dataIsolation, $taskContext->getTopicId(), $sandboxId);
-        $this->taskDomainService->updateTaskSandboxId($dataIsolation, $taskContext->getTask()->getId(), $sandboxId);
-        $taskContext->setSandboxId($sandboxId);
-
-        /* @phpstan-ignore-next-line if.alwaysFalse - Termination flag can be set externally */
-        if ($this->checkTerminationFlag($taskId)) {
-            $this->logger->info('[Sandbox][Consumer] Task terminated before sending message', [
-                'task_id' => $taskId,
-                'sandbox_id' => $sandboxId,
-            ]);
-            return $sandboxId;
-        }
-
-        // 在 Application 层完成 mentions 规范化，Domain 层不再跨域聚合
-        di(TaskContextMentionsResolver::class)->resolve($taskContext, $dataIsolation);
-        $this->agentDomainService->sendChatMessage($dataIsolation, $taskContext);
-
-        $this->logger->info('[Sandbox][Consumer] Message sent to agent successfully', [
-            'task_id' => $taskId,
-            'sandbox_id' => $sandboxId,
-        ]);
-
-        return $sandboxId;
-    }
-
-    /**
-     * Resolve the effective agent mode/code for the current initialization request.
-     *
-     * Returns:
-     *   0 => resolved agent_mode passed to sandbox
-     *   1 => resolved agent_code passed via chat dynamic_config when needed
-     *   2 => raw request-level topic_pattern for observability
-     *
-     * This keeps the fix localized in the consumer:
-     * - open-api request-level topic_pattern wins over persisted topic_mode
-     * - open-api request-level agent_code wins over persisted topic agent_code
-     * - SMA-* is normalized to custom_agent + agent_code before later layers run
-     */
-    private function resolveRequestedAgentConfig(TopicEntity $topicEntity, ?SuperAgentExtra $extra): array
-    {
-        $extraTopicPattern = trim((string) ($extra?->getTopicPattern() ?? ''));
-        $agentMode = $extraTopicPattern !== '' ? $extraTopicPattern : trim((string) $topicEntity->getTopicMode());
-        $extraAgentCode = trim((string) ($extra?->getAgentCode() ?? ''));
-        $agentCode = $extraAgentCode !== '' ? $extraAgentCode : trim((string) $topicEntity->getAgentCode());
-
-        if ($agentMode !== '' && str_starts_with($agentMode, 'SMA-')) {
-            $agentCode = $agentMode;
-            $agentMode = ProjectMode::CUSTOM_AGENT->value;
-        }
-
-        return [$agentMode, $agentCode, $extraTopicPattern];
     }
 
     /**
@@ -441,44 +178,6 @@ class TaskInitializationConsumer extends ConsumerMessage
                 'error' => $notificationError->getMessage(),
             ]);
         }
-    }
-
-    /**
-     * Reconstruct SuperAgentExtra from the queue payload.
-     *
-     * Strategy:
-     *   1) Prefer rebuilding from messageContent.extra.super_agent so all fields
-     *      (topic_pattern, model, image_model, video_model, enable_web_search,
-     *      mentions, etc.) survive the round-trip through MQ.
-     *   2) Fall back to the legacy extraData fast-path for backward compatibility
-     *      with messages enqueued before this change (or producers that only
-     *      populate extraData).
-     */
-    private function reconstructSuperAgentExtra(TaskInitializationMessageDTO $messageDTO): ?SuperAgentExtra
-    {
-        $messageContent = $messageDTO->getMessageContent();
-        $superAgentArray = $messageContent['extra']['super_agent'] ?? null;
-        if (is_array($superAgentArray) && $superAgentArray !== []) {
-            return new SuperAgentExtra($superAgentArray);
-        }
-
-        $extraData = $messageDTO->getExtraData();
-        if ($extraData === null) {
-            return null;
-        }
-
-        $extra = new SuperAgentExtra();
-        if (! empty($extraData['image_model_id'])) {
-            $extra->setImageModel(['model_id' => $extraData['image_model_id']]);
-        }
-        if (! empty($extraData['model_id'])) {
-            $extra->setModel(['model_id' => $extraData['model_id']]);
-        }
-        if (! empty($extraData['video_model_id'])) {
-            $extra->setVideoModel(['model_id' => $extraData['video_model_id']]);
-        }
-
-        return $extra;
     }
 
     /**

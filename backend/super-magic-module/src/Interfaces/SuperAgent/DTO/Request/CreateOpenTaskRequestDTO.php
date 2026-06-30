@@ -8,6 +8,7 @@ declare(strict_types=1);
 namespace Dtyq\SuperMagic\Interfaces\SuperAgent\DTO\Request;
 
 use App\Infrastructure\Core\AbstractRequestDTO;
+use Dtyq\SuperMagic\Infrastructure\Utils\TiptapBuilder;
 
 /**
  * Create open task request DTO (simplified for open API).
@@ -95,6 +96,43 @@ class CreateOpenTaskRequestDTO extends AbstractRequestDTO
     public function getEnableWebSearch(): bool
     {
         return $this->enableWebSearch;
+    }
+
+    /**
+     * Convert this Open API DTO to the internal CreateTaskRequestDTO format.
+     *
+     * All format differences (plain text → Tiptap, model/agent config placement)
+     * are handled here so callers stay clean.
+     */
+    public function toCreateTaskRequestDTO(): CreateTaskRequestDTO
+    {
+        $superAgent = [
+            'mentions' => [],
+            'chat_mode' => 'normal',
+            'topic_pattern' => $this->agentMode ?: 'general',
+            'enable_web_search' => $this->enableWebSearch,
+        ];
+
+        if ($this->modelId !== '') {
+            $superAgent['model'] = ['model_id' => $this->modelId];
+        }
+        if ($this->imageModelId !== '') {
+            $superAgent['image_model'] = ['model_id' => $this->imageModelId];
+        }
+        if ($this->videoModelId !== '') {
+            $superAgent['video_model'] = ['model_id' => $this->videoModelId];
+        }
+
+        return new CreateTaskRequestDTO([
+            'project_id' => $this->projectId,
+            'topic_id' => $this->topicId,
+            'message_type' => 'rich_text',
+            'message_content' => [
+                'content' => TiptapBuilder::plainTextToJson($this->content),
+                'instructs' => [['value' => 'normal']],
+                'extra' => ['super_agent' => $superAgent],
+            ],
+        ]);
     }
 
     /**
