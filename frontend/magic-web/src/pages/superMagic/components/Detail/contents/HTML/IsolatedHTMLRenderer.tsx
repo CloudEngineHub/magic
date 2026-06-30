@@ -993,7 +993,7 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 				cancelled = true
 			}
 		}, [
-			attachmentList,
+			// attachmentList,
 			fileId,
 			getMarkerId,
 			selectedProject?.current_topic_id,
