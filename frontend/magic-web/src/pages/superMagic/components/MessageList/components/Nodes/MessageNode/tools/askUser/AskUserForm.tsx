@@ -15,8 +15,17 @@ import { RadioGroup, RadioGroupItem } from "@/components/shadcn-ui/radio-group"
 import { Checkbox } from "@/components/shadcn-ui/checkbox"
 import { Button } from "@/components/shadcn-ui/button"
 import { cn } from "@/lib/utils"
-import { ASK_USER_CONFIRM_VALUE } from "@/pages/superMagic/components/MessageList/utils/askUserConstants"
+import {
+	ASK_USER_CONFIRM_VALUE,
+	type AskUserConfirmValue,
+} from "@/pages/superMagic/components/MessageList/utils/askUserConstants"
 import type { AskUserLocale } from "@/pages/superMagic/components/MessageList/utils/askUser"
+import {
+	clearAskUserDraftAnswers,
+	readAskUserDraftAnswers,
+	writeAskUserDraftAnswers,
+	type AskUserDraftAnswers,
+} from "@/pages/superMagic/components/MessageList/utils/askUserDraftCache"
 import type { ParsedQuestion } from "./parse"
 import {
 	getAskUserAutoSubmitInText,
@@ -54,6 +63,7 @@ interface AskUserFormProps {
 	/** 已提交的答案（来自 toolResponseMap，用于回显） */
 	submittedAnswers?: Readonly<Record<string, AnswerValue>>
 	status?: AskUserFormStatus
+	draftCacheKey?: string
 	onSubmit?: (answers: AskUserAnswers) => void
 	onSkip?: (answers: AskUserAnswers) => void
 	onProgressChange?: (count: number) => void
@@ -61,8 +71,7 @@ interface AskUserFormProps {
 }
 
 const EMPTY_ARRAY: readonly string[] = Object.freeze([])
-const askUserQuestionPanelClass =
-	"mt-1.5 min-w-0 rounded-md border border-border bg-muted py-2.5 pr-2.5"
+const askUserQuestionPanelClass = "mt-1.5 min-w-0 rounded-md border border-border bg-muted p-2.5"
 const askUserBreakTextClass = "min-w-0 whitespace-pre-wrap break-words [overflow-wrap:anywhere]"
 const askUserBodyTextClass = "text-sm leading-5"
 const askUserQuestionTextClass = `${askUserBodyTextClass} font-normal text-foreground`
@@ -74,14 +83,16 @@ const askUserInputClass = `min-h-16 w-full max-h-[200px] min-w-0 resize-none ove
 const askUserOptionControlBase =
 	"mt-0.5 size-4 shrink-0 border border-input bg-background shadow-xs focus-visible:ring-1 focus-visible:ring-ring/50"
 const askUserOptionRowClass = "flex min-h-6 cursor-pointer items-start gap-2 py-0.5"
-const ASK_USER_CONFIRM_OPTIONS: readonly string[] = [
-	ASK_USER_CONFIRM_VALUE.yes,
-	ASK_USER_CONFIRM_VALUE.no,
-]
 
 function formatAnswerForDisplay(value?: AnswerValue | null) {
 	if (Array.isArray(value)) return value.join("、")
 	return value || ""
+}
+
+function getSingleAnswerValue(value?: AnswerValue) {
+	if (typeof value === "string") return value
+	if (Array.isArray(value)) return value[0] || ""
+	return ""
 }
 
 function shouldIgnoreOptionRowClick(event: MouseEvent<HTMLElement>) {
@@ -114,12 +125,8 @@ function buildDefaultAnswers(questions: readonly ParsedQuestion[]) {
 	for (const question of questions) {
 		const defaultValue = normalizeDefaultAnswer(question)
 		if (defaultValue === null) return { isComplete: false, answers }
-		if (Array.isArray(defaultValue) && defaultValue.length === 0) {
+		if (!isAnsweredQuestionValueValid(question, defaultValue))
 			return { isComplete: false, answers }
-		}
-		if (typeof defaultValue === "string" && !defaultValue.trim()) {
-			return { isComplete: false, answers }
-		}
 		answers[question.id] = defaultValue
 	}
 	return { isComplete: questions.length > 0, answers }
@@ -150,6 +157,16 @@ function getAnsweredQuestionCount(
 	return questions.filter((question) =>
 		isAnsweredQuestionValueValid(question, answers[question.id]),
 	).length
+}
+
+function areAnswersComplete(
+	questions: readonly ParsedQuestion[],
+	answers: Readonly<Record<string, AnswerValue>>,
+) {
+	return (
+		questions.length > 0 &&
+		questions.every((question) => isAnsweredQuestionValueValid(question, answers[question.id]))
+	)
 }
 
 function useCountdown(expiresAt: number | undefined, onExpire?: () => void) {
@@ -217,6 +234,7 @@ function AskUserFormImpl({
 	expiresAt,
 	submittedAnswers,
 	status = "pending",
+	draftCacheKey,
 	onSubmit,
 	onSkip,
 	onProgressChange,
@@ -228,76 +246,73 @@ function AskUserFormImpl({
 	const [invalidQuestionIds, setInvalidQuestionIds] = useState<ReadonlySet<string>>(
 		() => new Set(),
 	)
-	const questionById = useMemo(
-		() => new Map(questions.map((question) => [question.id, question])),
-		[questions],
-	)
+	const [draftAnswers, setDraftAnswers] = useState<Readonly<Record<string, AnswerValue>>>()
+	const [canSubmit, setCanSubmit] = useState(false)
+
+	const hasPending = useMemo(() => questions.some((q) => !q.isComplete), [questions])
+	const isPending = status === "pending"
+	const isTimeout = status === "timeout"
+	const isTerminal = ["answered", "skipped", "timeout", "cancelled"].includes(status)
 
 	const writeAnswer = useCallback(
 		(id: string, value: AnswerValue) => {
 			answersRef.current[id] = value
+			if (draftCacheKey && !submittedAnswers && !isTerminal) {
+				writeAskUserDraftAnswers(draftCacheKey, answersRef.current as AskUserDraftAnswers)
+			}
+			setCanSubmit(areAnswersComplete(questions, answersRef.current))
 			onProgressChange?.(getAnsweredQuestionCount(questions, answersRef.current))
 			setInvalidQuestionIds((current) => {
 				if (!current.has(id)) return current
-				const question = questionById.get(id)
+				const question = questions.find((item) => item.id === id)
 				if (!question || !isAnsweredQuestionValueValid(question, value)) return current
 				const next = new Set(current)
 				next.delete(id)
 				return next
 			})
 		},
-		[onProgressChange, questionById, questions],
+		[draftCacheKey, isTerminal, onProgressChange, questions, submittedAnswers],
 	)
 
+	const ctxValue = useMemo<AnswersContextValue>(() => ({ writeAnswer }), [writeAnswer])
 	const registerQuestionNode = useCallback((id: string, node: HTMLDivElement | null) => {
-		if (node) {
-			questionNodesRef.current.set(id, node)
-			return
-		}
-		questionNodesRef.current.delete(id)
+		if (node) questionNodesRef.current.set(id, node)
+		else questionNodesRef.current.delete(id)
 	}, [])
 
-	const ctxValue = useMemo<AnswersContextValue>(() => ({ writeAnswer }), [writeAnswer])
-
-	const hasPending = useMemo(() => questions.some((q) => !q.isComplete), [questions])
-	const isPending = status === "pending"
-	const isTimeout = status === "timeout"
-	const isTerminal = ["answered", "skipped", "timeout", "cancelled"].includes(status)
 	const actionsDisabled =
 		Boolean(streaming) ||
 		Boolean(disabled) ||
 		hasPending ||
 		questions.length === 0 ||
 		isTerminal
+	const submitDisabled = actionsDisabled
 	const defaultAnswers = useMemo(() => buildDefaultAnswers(questions), [questions])
 	const displayAnswers = submittedAnswers || (isTimeout ? defaultAnswers.answers : undefined)
 
-	/** 提交时统一校验，避免底部漏填项因按钮置灰而无法被用户发现。 */
 	const handleSubmit = useCallback(
 		(answers?: AskUserAnswers) => {
-			const nextAnswers = (
-				answers ? { ...answers } : { ...answersRef.current }
-			) as AskUserAnswers
-			const nextInvalidQuestionIds = questions
+			const nextAnswers = (answers ? { ...answers } : { ...answersRef.current }) as Record<
+				string,
+				AnswerValue
+			>
+			const invalidIds = questions
 				.filter(
 					(question) => !isAnsweredQuestionValueValid(question, nextAnswers[question.id]),
 				)
 				.map((question) => question.id)
-
-			if (nextInvalidQuestionIds.length > 0) {
-				setInvalidQuestionIds(new Set(nextInvalidQuestionIds))
-				const firstInvalidQuestionId = nextInvalidQuestionIds[0]
-				requestAnimationFrame(() => {
-					questionNodesRef.current.get(firstInvalidQuestionId)?.scrollIntoView({
+			if (invalidIds.length) {
+				setInvalidQuestionIds(new Set(invalidIds))
+				requestAnimationFrame(() =>
+					questionNodesRef.current.get(invalidIds[0])?.scrollIntoView({
 						behavior: "smooth",
 						block: "center",
-					})
-				})
+					}),
+				)
 				return
 			}
-
-			setInvalidQuestionIds((current) => (current.size > 0 ? new Set() : current))
-			onSubmit?.(nextAnswers)
+			setInvalidQuestionIds((current) => (current.size ? new Set() : current))
+			onSubmit?.(nextAnswers as AskUserAnswers)
 		},
 		[onSubmit, questions],
 	)
@@ -330,6 +345,30 @@ function AskUserFormImpl({
 		)
 	}, [onProgressChange, questions, submittedAnswers])
 
+	useEffect(() => {
+		if (!draftCacheKey) {
+			setDraftAnswers(undefined)
+			return
+		}
+		if (submittedAnswers || isTerminal) {
+			clearAskUserDraftAnswers(draftCacheKey)
+			setDraftAnswers(undefined)
+			return
+		}
+
+		const nextDraftAnswers = readAskUserDraftAnswers(draftCacheKey) as Readonly<
+			Record<string, AnswerValue>
+		> | null
+		answersRef.current = nextDraftAnswers ? { ...nextDraftAnswers } : {}
+		setDraftAnswers(nextDraftAnswers || undefined)
+		setCanSubmit(areAnswersComplete(questions, answersRef.current))
+		onProgressChange?.(getAnsweredQuestionCount(questions, answersRef.current))
+	}, [draftCacheKey, isTerminal, onProgressChange, questions, submittedAnswers])
+
+	useEffect(() => {
+		setCanSubmit(areAnswersComplete(questions, answersRef.current))
+	}, [questions])
+
 	return (
 		<AnswersContext.Provider value={ctxValue}>
 			<div
@@ -342,7 +381,7 @@ function AskUserFormImpl({
 				>
 					<div
 						className={cn(
-							"-mr-1.5 min-h-0 flex-1 space-y-3 overflow-y-auto overflow-x-hidden",
+							"-mr-1.5 min-h-0 flex-1 space-y-3 overflow-y-auto overflow-x-hidden pr-3",
 							askUserScrollAreaClass,
 						)}
 						data-testid="ask-user-v2-card-questions"
@@ -360,6 +399,7 @@ function AskUserFormImpl({
 									Boolean(disabled) || (!!streaming && !question.isComplete)
 								}
 								submittedAnswer={displayAnswers?.[question.id]}
+								draftAnswer={draftAnswers?.[question.id]}
 								showDefaultHint={!displayAnswers && !disabled && !isTimeout}
 							/>
 						))}
@@ -404,7 +444,7 @@ function AskUserFormImpl({
 								<Button
 									type="button"
 									size="sm"
-									disabled={actionsDisabled}
+									disabled={submitDisabled}
 									onClick={() => handleSubmit()}
 									data-testid="ask-user-v2-card-submit-button"
 									className="h-7 rounded-md bg-primary px-3 text-sm font-medium leading-5 text-primary-foreground shadow-none hover:bg-primary/90"
@@ -430,6 +470,7 @@ interface QuestionItemProps {
 	disabled: boolean
 	submittedAnswer?: AnswerValue
 	showDefaultHint: boolean
+	draftAnswer?: AnswerValue
 }
 
 const QuestionItem = memo(function QuestionItem({
@@ -442,6 +483,7 @@ const QuestionItem = memo(function QuestionItem({
 	disabled,
 	submittedAnswer,
 	showDefaultHint,
+	draftAnswer,
 }: QuestionItemProps) {
 	const hasMultipleQuestions = total > 1
 	const questionContentIndentClass =
@@ -450,7 +492,7 @@ const QuestionItem = memo(function QuestionItem({
 	return (
 		<div
 			ref={(node) => registerQuestionNode(question.id, node)}
-			className={cn("space-y-1.5 rounded-md p-2", !question.isComplete && "opacity-70")}
+			className={cn("space-y-1.5 transition-opacity", !question.isComplete && "opacity-70")}
 			aria-invalid={invalid || undefined}
 			data-testid={`ask-user-v2-card-question-item-${question.id}`}
 		>
@@ -472,6 +514,7 @@ const QuestionItem = memo(function QuestionItem({
 						questionId={question.id}
 						disabled={disabled}
 						submittedAnswer={submittedAnswer}
+						draftAnswer={draftAnswer}
 					/>
 				)}
 
@@ -482,6 +525,7 @@ const QuestionItem = memo(function QuestionItem({
 						invalid={invalid}
 						disabled={disabled}
 						submittedAnswer={submittedAnswer}
+						draftAnswer={draftAnswer}
 					/>
 				)}
 
@@ -492,6 +536,7 @@ const QuestionItem = memo(function QuestionItem({
 						otherPlaceholder={getAskUserOtherPlaceholder(locale)}
 						disabled={disabled}
 						submittedAnswer={submittedAnswer}
+						draftAnswer={draftAnswer}
 					/>
 				)}
 
@@ -505,6 +550,7 @@ const QuestionItem = memo(function QuestionItem({
 						max={question.max}
 						disabled={disabled}
 						submittedAnswer={submittedAnswer}
+						draftAnswer={draftAnswer}
 					/>
 				)}
 			</div>
@@ -522,11 +568,7 @@ const QuestionItem = memo(function QuestionItem({
 				</p>
 			)}
 			{invalid && (
-				<p
-					className="text-sm leading-5 text-destructive"
-					role="alert"
-					data-testid={`ask-user-v2-card-question-error-${question.id}`}
-				>
+				<p className="text-sm leading-5 text-destructive" role="alert">
 					{getAskUserRequiredValidationText(locale)}
 				</p>
 			)}
@@ -539,6 +581,7 @@ interface ConfirmFieldProps {
 	questionId: string
 	disabled: boolean
 	submittedAnswer?: AnswerValue
+	draftAnswer?: AnswerValue
 }
 
 const ConfirmField = memo(function ConfirmField({
@@ -546,25 +589,60 @@ const ConfirmField = memo(function ConfirmField({
 	questionId,
 	disabled,
 	submittedAnswer,
+	draftAnswer,
 }: ConfirmFieldProps) {
-	const optionLabels = useMemo(
-		() => ({
-			[ASK_USER_CONFIRM_VALUE.yes]: getAskUserConfirmActionText(locale),
-			[ASK_USER_CONFIRM_VALUE.no]: getAskUserRejectActionText(locale),
-		}),
-		[locale],
+	const writeAnswer = useWriteAnswer()
+	const [value, setValue] = useState(() => getSingleAnswerValue(draftAnswer))
+
+	const displayValue = typeof submittedAnswer === "string" ? submittedAnswer : value
+
+	useEffect(() => {
+		setValue(getSingleAnswerValue(draftAnswer))
+	}, [draftAnswer, questionId])
+
+	const handleSelect = useCallback(
+		(next: AskUserConfirmValue) => {
+			setValue(next)
+			writeAnswer(questionId, next)
+		},
+		[questionId, writeAnswer],
 	)
 
 	return (
-		<SelectField
-			questionId={questionId}
-			options={ASK_USER_CONFIRM_OPTIONS}
-			optionLabels={optionLabels}
-			otherPlaceholder={getAskUserOtherPlaceholder(locale)}
-			testIdPrefix="confirm"
-			disabled={disabled}
-			submittedAnswer={submittedAnswer}
-		/>
+		<div className="flex w-full justify-start">
+			<div className="flex flex-wrap gap-3">
+				<Button
+					type="button"
+					variant={displayValue === ASK_USER_CONFIRM_VALUE.yes ? "default" : "outline"}
+					size="sm"
+					disabled={disabled}
+					onClick={() => handleSelect(ASK_USER_CONFIRM_VALUE.yes)}
+					data-testid={`ask-user-v2-card-confirm-yes-button-${questionId}`}
+					className={cn(
+						"h-7 rounded-full border border-border px-3 text-sm font-normal leading-5 text-foreground shadow-none transition-colors hover:bg-accent hover:text-accent-foreground",
+						displayValue === ASK_USER_CONFIRM_VALUE.yes &&
+							"border-primary bg-primary text-primary-foreground hover:bg-primary/90 hover:text-primary-foreground disabled:border-primary disabled:bg-primary disabled:text-primary-foreground disabled:opacity-100",
+					)}
+				>
+					{getAskUserConfirmActionText(locale)}
+				</Button>
+				<Button
+					type="button"
+					variant={displayValue === ASK_USER_CONFIRM_VALUE.no ? "default" : "outline"}
+					size="sm"
+					disabled={disabled}
+					onClick={() => handleSelect(ASK_USER_CONFIRM_VALUE.no)}
+					data-testid={`ask-user-v2-card-confirm-no-button-${questionId}`}
+					className={cn(
+						"h-7 rounded-full border border-border px-3 text-sm font-normal leading-5 text-foreground shadow-none transition-colors hover:bg-accent hover:text-accent-foreground",
+						displayValue === ASK_USER_CONFIRM_VALUE.no &&
+							"border-primary bg-primary text-primary-foreground hover:bg-primary/90 hover:text-primary-foreground disabled:border-primary disabled:bg-primary disabled:text-primary-foreground disabled:opacity-100",
+					)}
+				>
+					{getAskUserRejectActionText(locale)}
+				</Button>
+			</div>
+		</div>
 	)
 })
 
@@ -574,6 +652,7 @@ interface InputFieldProps {
 	invalid: boolean
 	disabled: boolean
 	submittedAnswer?: AnswerValue
+	draftAnswer?: AnswerValue
 }
 
 const InputField = memo(function InputField({
@@ -582,12 +661,17 @@ const InputField = memo(function InputField({
 	invalid,
 	disabled,
 	submittedAnswer,
+	draftAnswer,
 }: InputFieldProps) {
 	const writeAnswer = useWriteAnswer()
-	const [value, setValue] = useState("")
+	const [value, setValue] = useState(() => getSingleAnswerValue(draftAnswer))
 	const textareaRef = useRef<HTMLTextAreaElement>(null)
 
 	const displayValue = typeof submittedAnswer === "string" ? submittedAnswer : value
+
+	useEffect(() => {
+		setValue(getSingleAnswerValue(draftAnswer))
+	}, [draftAnswer, questionId])
 
 	useLayoutEffect(() => {
 		const textarea = textareaRef.current
@@ -630,25 +714,27 @@ const InputField = memo(function InputField({
 interface SelectFieldProps {
 	questionId: string
 	options: readonly string[]
-	optionLabels?: Readonly<Record<string, string>>
 	otherPlaceholder: string
-	testIdPrefix?: "confirm" | "select"
 	disabled: boolean
 	submittedAnswer?: AnswerValue
+	draftAnswer?: AnswerValue
 }
 
 const SelectField = memo(function SelectField({
 	questionId,
 	options,
-	optionLabels,
 	otherPlaceholder,
-	testIdPrefix = "select",
 	disabled,
 	submittedAnswer,
+	draftAnswer,
 }: SelectFieldProps) {
 	const writeAnswer = useWriteAnswer()
-	const [value, setValue] = useState("")
-	const [otherText, setOtherText] = useState("")
+	const initialDraftState = useMemo(
+		() => resolveSelectDisplayState(options, draftAnswer),
+		[options, draftAnswer],
+	)
+	const [value, setValue] = useState(() => initialDraftState.selectedValue)
+	const [otherText, setOtherText] = useState(() => initialDraftState.otherText)
 
 	const renderableOptions = useMemo(() => getAskUserRenderableOptions(options), [options])
 	const submittedState = useMemo(
@@ -658,6 +744,11 @@ const SelectField = memo(function SelectField({
 
 	const displayValue = submittedAnswer !== undefined ? submittedState.selectedValue : value
 	const displayOtherText = submittedAnswer !== undefined ? submittedState.otherText : otherText
+
+	useEffect(() => {
+		setValue(initialDraftState.selectedValue)
+		setOtherText(initialDraftState.otherText)
+	}, [initialDraftState, questionId])
 
 	const handleChange = useCallback(
 		(next: string) => {
@@ -682,7 +773,7 @@ const SelectField = memo(function SelectField({
 			onValueChange={handleChange}
 			disabled={disabled}
 			className="gap-0.5"
-			data-testid={`ask-user-v2-card-${testIdPrefix}-group-${questionId}`}
+			data-testid={`ask-user-v2-card-select-group-${questionId}`}
 		>
 			{renderableOptions.map((opt, idx) => {
 				const optionId = `${questionId}-opt-${idx}`
@@ -695,7 +786,7 @@ const SelectField = memo(function SelectField({
 							if (disabled || shouldIgnoreOptionRowClick(event)) return
 							handleChange(opt)
 						}}
-						data-testid={`ask-user-v2-card-${testIdPrefix}-option-${questionId}`}
+						data-testid={`ask-user-v2-card-select-option-${questionId}`}
 					>
 						<RadioGroupItem
 							id={optionId}
@@ -708,7 +799,7 @@ const SelectField = memo(function SelectField({
 						/>
 						{isOther ? (
 							<AskUserOtherInput
-								testIdPrefix={testIdPrefix}
+								testIdPrefix="select"
 								placeholder={otherPlaceholder}
 								value={displayOtherText}
 								onChange={handleOtherTextChange}
@@ -723,7 +814,7 @@ const SelectField = memo(function SelectField({
 							/>
 						) : (
 							<span className={cn(askUserQuestionTextClass, askUserBreakTextClass)}>
-								{optionLabels?.[opt] ?? opt}
+								{opt}
 							</span>
 						)}
 					</div>
@@ -742,6 +833,7 @@ interface MultiSelectFieldProps {
 	max?: number
 	disabled: boolean
 	submittedAnswer?: AnswerValue
+	draftAnswer?: AnswerValue
 }
 
 function parseMultiSelectAnswer(answer: AnswerValue | undefined): readonly string[] {
@@ -765,12 +857,18 @@ const MultiSelectField = memo(function MultiSelectField({
 	max,
 	disabled,
 	submittedAnswer,
+	draftAnswer,
 }: MultiSelectFieldProps) {
 	const writeAnswer = useWriteAnswer()
-	const [value, setValue] = useState<readonly string[]>(EMPTY_ARRAY)
-	const [otherText, setOtherText] = useState("")
 
 	const renderableOptions = useMemo(() => getAskUserRenderableOptions(options), [options])
+	const draftValues = useMemo(() => parseMultiSelectAnswer(draftAnswer), [draftAnswer])
+	const draftState = useMemo(
+		() => resolveMultiSelectDisplayState(options, draftValues),
+		[options, draftValues],
+	)
+	const [value, setValue] = useState<readonly string[]>(() => draftState.selectedValues)
+	const [otherText, setOtherText] = useState(() => draftState.otherText)
 	const submittedValues = useMemo(
 		() => parseMultiSelectAnswer(submittedAnswer),
 		[submittedAnswer],
@@ -781,9 +879,15 @@ const MultiSelectField = memo(function MultiSelectField({
 	)
 	const displayValue = submittedAnswer !== undefined ? submittedState.selectedValues : value
 	const displayOtherText = submittedAnswer !== undefined ? submittedState.otherText : otherText
+	const maxSelectionReached = typeof max === "number" && displayValue.length >= max
 
 	const valueRef = useRef<readonly string[]>(EMPTY_ARRAY)
 	valueRef.current = value
+
+	useEffect(() => {
+		setValue(draftState.selectedValues)
+		setOtherText(draftState.otherText)
+	}, [draftState, questionId])
 
 	const toggle = useCallback(
 		(option: string, checked: boolean) => {
@@ -826,7 +930,13 @@ const MultiSelectField = memo(function MultiSelectField({
 							key={optionId}
 							className={askUserOptionRowClass}
 							onClick={(event) => {
-								if (disabled || shouldIgnoreOptionRowClick(event)) return
+								if (
+									disabled ||
+									(!checked && maxSelectionReached) ||
+									shouldIgnoreOptionRowClick(event)
+								) {
+									return
+								}
 								toggle(opt, !checked)
 							}}
 							data-testid={`ask-user-v2-card-multi-select-option-${questionId}`}
@@ -834,7 +944,7 @@ const MultiSelectField = memo(function MultiSelectField({
 							<Checkbox
 								id={optionId}
 								checked={checked}
-								disabled={disabled}
+								disabled={disabled || (!checked && maxSelectionReached)}
 								onCheckedChange={(next) => toggle(opt, next === true)}
 								className={cn(
 									askUserOptionControlBase,
@@ -848,11 +958,14 @@ const MultiSelectField = memo(function MultiSelectField({
 									value={displayOtherText}
 									onChange={handleOtherTextChange}
 									onFocus={() => {
-										if (!displayValue.includes(ASK_USER_OTHER_SENTINEL)) {
+										if (
+											!displayValue.includes(ASK_USER_OTHER_SENTINEL) &&
+											!maxSelectionReached
+										) {
 											toggle(ASK_USER_OTHER_SENTINEL, true)
 										}
 									}}
-									disabled={disabled}
+									disabled={disabled || (!checked && maxSelectionReached)}
 									questionId={questionId}
 								/>
 							) : (
