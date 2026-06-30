@@ -180,7 +180,7 @@ function SlideSelectionDialog({
 				</div>
 
 				{/* 幻灯片网格：延后渲染，先出壳再出列表 */}
-				<div className="min-h-[200px] flex-1 overflow-y-auto">
+				<div className="min-h-[152px] flex-1 overflow-y-auto">
 					{!contentReady ? (
 						<div className="3xl:grid-cols-5 grid grid-cols-2 gap-4 p-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
 							{Array.from({ length: 8 }).map((_, i) => (
