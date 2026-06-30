@@ -58,6 +58,13 @@ class CreateOpenTaskRequestDTO extends AbstractRequestDTO
      */
     public bool $enableWebSearch = true;
 
+    /**
+     * Optional extra message subscription config (single item).
+     * Will be appended to the system subscription list when initializing the sandbox.
+     * Supported fields: method, url, auth_scheme, headers.
+     */
+    public ?array $messageSubscriptionConfig = null;
+
     public function getProjectId(): string
     {
         return $this->projectId;
@@ -96,6 +103,11 @@ class CreateOpenTaskRequestDTO extends AbstractRequestDTO
     public function getEnableWebSearch(): bool
     {
         return $this->enableWebSearch;
+    }
+
+    public function getMessageSubscriptionConfig(): ?array
+    {
+        return $this->messageSubscriptionConfig;
     }
 
     /**
@@ -149,6 +161,11 @@ class CreateOpenTaskRequestDTO extends AbstractRequestDTO
             'image_model_id' => 'nullable|string|max:100',
             'video_model_id' => 'nullable|string|max:100',
             'enable_web_search' => 'nullable|boolean',
+            'message_subscription_config' => 'nullable|array',
+            'message_subscription_config.method' => 'required_with:message_subscription_config|string',
+            'message_subscription_config.url' => 'required_with:message_subscription_config|string',
+            'message_subscription_config.auth_scheme' => 'nullable|string',
+            'message_subscription_config.headers' => 'nullable|array',
         ];
     }
 
@@ -174,6 +191,11 @@ class CreateOpenTaskRequestDTO extends AbstractRequestDTO
             'video_model_id.string' => 'Video model ID must be a string',
             'video_model_id.max' => 'Video model ID cannot exceed 100 characters',
             'enable_web_search.boolean' => 'Enable web search must be a boolean value',
+            'message_subscription_config.array' => 'Message subscription config must be an array',
+            'message_subscription_config.method.required_with' => 'Subscription config method is required',
+            'message_subscription_config.method.string' => 'Subscription config method must be a string',
+            'message_subscription_config.url.required_with' => 'Subscription config URL is required',
+            'message_subscription_config.url.string' => 'Subscription config URL must be a string',
         ];
     }
 }

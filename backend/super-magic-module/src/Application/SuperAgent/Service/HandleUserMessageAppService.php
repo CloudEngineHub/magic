@@ -272,6 +272,7 @@ class HandleUserMessageAppService extends AbstractAppService
             isFirstTask: $isFirstTask,
             extra: $userMessageDTO->getExtra(),
             agentCode: $resolvedAgentCode,
+            messageSubscriptionConfig: $userMessageDTO->getMessageSubscriptionConfig(),
         );
         $taskContext = $this->appendVideoModelDynamicConfig($taskContext, $userMessageDTO->getExtra());
         // Add MCP config to task context
@@ -543,13 +544,17 @@ class HandleUserMessageAppService extends AbstractAppService
         // 不要在这里把 topic_id 当成 sandbox_id 传进去：那样会触发 tryWarmPoolFastPath 的
         // "已有 sandbox_id 跳过 warm 池" 守卫，导致 chat 永远走冷创建。传话题已绑定的
         // sandbox_id（未绑定则为空），由 Domain 内部决定走 warm 还是 cold 路径。
+        $extraSubscriptionConfigs = $taskContext->getMessageSubscriptionConfig() !== null
+            ? [$taskContext->getMessageSubscriptionConfig()]
+            : [];
         $agentContext = $this->agentDomainService->buildInitAgentContext(
             dataIsolation: $dataIsolation,
             projectEntity: $projectEntity,
             topicEntity: $topicEntity,
             taskEntity: $taskContext->getTask(),
             sandboxId: (string) $topicEntity->getSandboxId(),
-            memories: $memories
+            memories: $memories,
+            extraSubscriptionConfigs: $extraSubscriptionConfigs
         );
         // Propagate the resolved agent mode to the sandbox init context (request-level override)
         if ($agentContext->getInitContext() !== null && $taskContext->getAgentMode() !== '') {

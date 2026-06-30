@@ -287,7 +287,10 @@ class InitClientMessage(ClientMessage):
     """
 
     type: str = MessageType.INIT.value
-    message_subscription_config: Optional[MessageSubscriptionConfig] = None  # 消息订阅配置，可选字段
+    message_subscription_config: List[MessageSubscriptionConfig] = Field(
+        default_factory=list,
+        description="Message subscription config list",
+    )
     sts_token_refresh: Optional[STSTokenRefreshConfig] = None  # STS Token刷新配置，可选字段
     metadata: Optional[Metadata] = None  # 元数据信息，使用强类型
     upload_config: Optional[Dict[str, Any]] = None  # 上传配置，可包含平台类型和临时凭证
@@ -315,7 +318,7 @@ Custom agent config. type identifies the agent variant; profile carries identity
     def validate_message_subscription_config(cls, v):
         if Environment.is_local():
             return v
-        if v is None:
+        if not v:
             raise ValueError("消息订阅配置 'message_subscription_config' 不能为空")
         return v
 

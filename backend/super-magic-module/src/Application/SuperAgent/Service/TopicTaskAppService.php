@@ -726,7 +726,8 @@ class TopicTaskAppService extends AbstractAppService
         $result = $this->createTaskByDataIsolation(
             $dataIsolation,
             $internalDTO,
-            executionSource: $executionSource
+            executionSource: $executionSource,
+            messageSubscriptionConfig: $requestDTO->getMessageSubscriptionConfig()
         );
 
         return $this->buildCreateTaskResponse($result);
@@ -924,7 +925,8 @@ class TopicTaskAppService extends AbstractAppService
         CreateTaskRequestDTO $requestDTO,
         ?array $source = null,
         bool $deliverToQueue = true,
-        ?SuperMagicExecutionSource $executionSource = null
+        ?SuperMagicExecutionSource $executionSource = null,
+        ?array $messageSubscriptionConfig = null
     ): array {
         $preparedRequestDTO = $this->createTaskRequestDTOWithSource($requestDTO, $source);
         if ($executionSource !== null) {
@@ -1012,7 +1014,8 @@ class TopicTaskAppService extends AbstractAppService
                     $persistResult['agentUserId'],
                     $businessMessageId,
                     $persistResult['imSeqId'],
-                    $executionSource ?? SuperMagicExecutionSource::HumanChat
+                    $executionSource ?? SuperMagicExecutionSource::HumanChat,
+                    $messageSubscriptionConfig
                 );
             }
 
@@ -1777,7 +1780,8 @@ class TopicTaskAppService extends AbstractAppService
         string $agentUserId,
         string $messageId,
         ?int $imSeqId,
-        SuperMagicExecutionSource $executionSource
+        SuperMagicExecutionSource $executionSource,
+        ?array $messageSubscriptionConfig = null
     ): void {
         $language = $this->translator->getLocale() ?? 'en_US';
 
@@ -1792,6 +1796,7 @@ class TopicTaskAppService extends AbstractAppService
             messageSeqId: $imSeqId !== null ? (string) $imSeqId : '',
             language: $language,
             executionSource: $executionSource,
+            messageSubscriptionConfig: $messageSubscriptionConfig,
         );
 
         // Create queue message DTO carrying the serialized UserMessageDTO and task id

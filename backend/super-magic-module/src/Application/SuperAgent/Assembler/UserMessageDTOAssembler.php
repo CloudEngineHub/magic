@@ -43,7 +43,8 @@ class UserMessageDTOAssembler
         string $messageSeqId,
         string $language,
         SuperMagicExecutionSource $executionSource,
-        string $chatConversationId = ''
+        string $chatConversationId = '',
+        ?array $messageSubscriptionConfig = null
     ): UserMessageDTO {
         // @phpstan-ignore-next-line method.notFound - MagicMessageStruct implements TextContentInterface and has getExtra()
         $superAgentExtra = $contentStruct->getExtra()?->getSuperAgent();
@@ -82,6 +83,7 @@ class UserMessageDTOAssembler
             chatMessageType: $messageType,
             dynamicParams: $dynamicParams,
             extra: $superAgentExtra,
+            messageSubscriptionConfig: $messageSubscriptionConfig,
         );
     }
 }
