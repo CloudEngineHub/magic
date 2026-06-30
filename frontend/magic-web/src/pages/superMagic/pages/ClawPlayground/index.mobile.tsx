@@ -299,6 +299,7 @@ const ClawMobileConversationPanel = observer(
 								onSendMessage={messageQueue.sendQueuedMessage}
 								onStartEdit={messageQueue.startEditQueueItem}
 								onCancelEdit={messageQueue.cancelEditQueueItem}
+								variant="mobile"
 							/>
 						</div>
 					) : null

@@ -161,6 +161,7 @@ const ProjectPageInputContainerComponent: React.FC<ProjectPageInputContainerProp
 				onSendMessage={messageQueue.sendQueuedMessage}
 				onStartEdit={messageQueue.startEditQueueItem}
 				onCancelEdit={messageQueue.cancelEditQueueItem}
+				variant={isMobile ? "mobile" : "default"}
 			/>
 		)
 
@@ -178,6 +179,7 @@ const ProjectPageInputContainerComponent: React.FC<ProjectPageInputContainerProp
 		messageQueue.sendQueuedMessage,
 		messageQueue.startEditQueueItem,
 		messageQueue.cancelEditQueueItem,
+		isMobile,
 	])
 
 	const sceneEditorContext = useMemo<SceneEditorContext>(() => {

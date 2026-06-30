@@ -2527,6 +2527,13 @@
 		"taskPending": "等待中",
 		"taskProcessing": "处理中",
 		"title": "任务队列",
+		"mobile": {
+			"collapse": "收起队列",
+			"count": "{{count}} 条",
+			"emptyContent": "⋯",
+			"expand": "展开队列",
+			"title": "队列中"
+		},
 		"updateFailed": "更新队列消息失败",
 		"updateSuccess": "队列消息已更新"
 	},

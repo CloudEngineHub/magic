@@ -2527,6 +2527,13 @@
 		"taskPending": "Pending",
 		"taskProcessing": "Processing",
 		"title": "Task Queue",
+		"mobile": {
+			"collapse": "Collapse queue",
+			"count": "{{count}} items",
+			"emptyContent": "⋯",
+			"expand": "Expand queue",
+			"title": "Queued"
+		},
 		"updateFailed": "Failed to update queue message",
 		"updateSuccess": "Queue message updated successfully"
 	},
