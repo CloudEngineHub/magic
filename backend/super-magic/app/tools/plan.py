@@ -132,14 +132,14 @@ class PlanTool(BaseUserToolCallTool[PlanParams]):
 Plan content must be concrete enough for the user to approve:
 - Short requests must be expanded into a complete but lightweight product plan. Do not produce a minimal demo plan unless the user explicitly asks for a minimal or simplest version.
 - Before filling plan fields, derive capabilities from general product dimensions rather than fixed scene templates:
-  - Data: what object is managed, which attributes are needed, and whether status, time, category, notes, order, or archive fields are needed.
+  - Data: what object is managed, which attributes are needed, and whether status, category, notes, order, or archive fields are needed. For timestamps, prefer MagicBase system fields such as `created_at` and `updated_at` for display and sorting; only plan custom time fields when the app has a distinct business time such as due date, appointment time, publish time, or event date.
   - Operations: whether users need create, view, edit, delete, search, filter, sort, batch actions, or export.
   - State: whether records need active, completed, overdue, draft, archived, error, or similar lifecycle states.
   - Identity and permissions: whether records need creator, owner, assignee, collaborator, "my data versus all data", or per-user edit/delete visibility. Use `window.Magic.getContext()` to get the real current user profile before user-dependent operations. Use real `user_id` fields for permission checks; display names are not permission keys.
   - Feedback: which loading, empty, error, success, disabled, active, confirmation, and undo-like feedback states are needed.
   - Analysis: whether counts, progress, summaries, distributions, recent activity, or lightweight trends make the app more useful.
   - Experience: whether quick entry, inline editing, modal/drawer details, mobile alternatives, or keyboard actions are useful.
-  - Persistence: which fields must be stored in MagicBase and which are only temporary UI state.
+  - Persistence: which dynamic business fields must be stored in MagicBase and which are only temporary UI state. Do not list MagicBase system fields such as `id`, `record_id`, `created_at`, `updated_at`, `created_by`, `project_id`, `table_id`, or `organization_code` as writable data_model fields.
 - Put the expanded, real feature scope into `requirements`, the derived persistent fields into `data_model`, and the expanded verifiable outcomes into `acceptance_criteria`.
 - If the plan includes teamwork, ownership, creator/assignee fields, edit/delete permissions, or "my records" filtering, explicitly state that the HTML app must call `window.Magic.getContext()` first, which MagicBase fields store stable identity, which display fields come from context user information, and which operations are limited to the current user. Acceptance criteria must verify that non-owners do not see or cannot use edit/delete actions and that the app never writes fake users such as unknown, guest, visitor, or unnamed users.
 - `assumptions` must name the concrete defaults used for product expansion. Do not use vague statements such as "simple and easy to use".
@@ -166,14 +166,14 @@ Do not call when:
 Plan content must be concrete enough for user approval:
 - Short requests must be expanded into a complete but lightweight product plan. Do not produce a minimal demo plan unless the user explicitly asks for a minimal or simplest version.
 - Before filling plan fields, derive capabilities from general product dimensions rather than fixed scene templates:
-  - Data: what object is managed, which attributes are needed, and whether status, time, category, notes, order, or archive fields are needed.
+  - Data: what object is managed, which attributes are needed, and whether status, category, notes, order, or archive fields are needed. For timestamps, prefer MagicBase system fields such as `created_at` and `updated_at` for display and sorting; only plan custom time fields when the app has a distinct business time such as due date, appointment time, publish time, or event date.
   - Operations: whether users need create, view, edit, delete, search, filter, sort, batch actions, or export.
   - State: whether records need active, completed, overdue, draft, archived, error, or similar lifecycle states.
   - Identity and permissions: whether records need creator, owner, assignee, collaborator, "my data versus all data", or per-user edit/delete visibility. Use `window.Magic.getContext()` to get the real current user profile before user-dependent operations. Use real `user_id` fields for permission checks; display names are not permission keys.
   - Feedback: which loading, empty, error, success, disabled, active, confirmation, and undo-like feedback states are needed.
   - Analysis: whether counts, progress, summaries, distributions, recent activity, or lightweight trends make the app more useful.
   - Experience: whether quick entry, inline editing, modal/drawer details, mobile alternatives, or keyboard actions are useful.
-  - Persistence: which fields must be stored in MagicBase and which are only temporary UI state.
+  - Persistence: which dynamic business fields must be stored in MagicBase and which are only temporary UI state. Do not list MagicBase system fields such as `id`, `record_id`, `created_at`, `updated_at`, `created_by`, `project_id`, `table_id`, or `organization_code` as writable data_model fields.
 - Put the expanded, real feature scope into `requirements`, the derived persistent fields into `data_model`, and the expanded verifiable outcomes into `acceptance_criteria`.
 - If the plan includes teamwork, ownership, creator/assignee fields, edit/delete permissions, or "my records" filtering, explicitly state that the HTML app must call `window.Magic.getContext()` first, which MagicBase fields store stable identity, which display fields come from context user information, and which operations are limited to the current user. Acceptance criteria must verify that non-owners do not see or cannot use edit/delete actions and that the app never writes fake users such as unknown, guest, visitor, or unnamed users.
 - `assumptions` must name the concrete defaults used for product expansion. Do not use vague statements such as "simple and easy to use".

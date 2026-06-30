@@ -9,6 +9,12 @@ namespace App\Domain\MagicBase\Entity\ValueObject;
 
 final class MagicBaseConst
 {
+    public const ROW_STORAGE_DRIVER_MONGODB = 'mongodb';
+
+    public const ROW_STORAGE_SEARCH_SIZE = 10000;
+
+    public const MONGODB_COLLECTION_PREFIX = 'magicbase_rows';
+
     public const SCOPE_PUBLIC = 'public';
 
     public const SCOPE_PRIVATE_USER = 'private_user';

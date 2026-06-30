@@ -18,6 +18,7 @@ readonly class MagicBaseRowQuery
      */
     public function __construct(
         private string $organizationCode,
+        private int $projectId,
         private int $tableId,
         private array $filters,
         private array $sorts,
@@ -37,6 +38,11 @@ readonly class MagicBaseRowQuery
     public function getOrganizationCode(): string
     {
         return $this->organizationCode;
+    }
+
+    public function getProjectId(): int
+    {
+        return $this->projectId;
     }
 
     public function getTableId(): int

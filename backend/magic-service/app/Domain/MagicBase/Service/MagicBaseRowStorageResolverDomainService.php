@@ -8,45 +8,56 @@ declare(strict_types=1);
 namespace App\Domain\MagicBase\Service;
 
 use App\Domain\MagicBase\Entity\MagicBaseRowEntity;
+use App\Domain\MagicBase\Entity\ValueObject\MagicBaseConst;
 use App\Domain\MagicBase\Entity\ValueObject\MagicBaseEntityCollection;
 use App\Domain\MagicBase\Entity\ValueObject\MagicBaseRowQuery;
 use App\Domain\MagicBase\Entity\ValueObject\MagicBaseRowQueryResult;
 use App\Domain\MagicBase\Repository\Facade\MagicBaseRowQueryRepositoryInterface;
 use App\Domain\MagicBase\Repository\Facade\MagicBaseRowStoreRepositoryInterface;
-use App\Domain\MagicBase\Repository\Persistence\Storage\OpenSearch\MagicBaseOpenSearchRowQueryRepository;
-use App\Domain\MagicBase\Repository\Persistence\Storage\OpenSearch\MagicBaseOpenSearchRowStoreRepository;
+use App\Domain\MagicBase\Repository\Persistence\Storage\MongoDB\MagicBaseMongoRowQueryRepository;
+use App\Domain\MagicBase\Repository\Persistence\Storage\MongoDB\MagicBaseMongoRowStoreRepository;
 
 readonly class MagicBaseRowStorageResolverDomainService implements MagicBaseRowStoreRepositoryInterface, MagicBaseRowQueryRepositoryInterface
 {
     public function __construct(
-        private MagicBaseOpenSearchRowStoreRepository $openSearchRowStoreRepository,
-        private MagicBaseOpenSearchRowQueryRepository $openSearchRowQueryRepository,
+        private MagicBaseMongoRowStoreRepository $mongoRowStoreRepository,
+        private MagicBaseMongoRowQueryRepository $mongoRowQueryRepository,
     ) {
     }
 
     public function getStorageDriver(): string
     {
-        return 'opensearch';
+        return MagicBaseConst::ROW_STORAGE_DRIVER_MONGODB;
     }
 
-    public function getRow(string $organizationCode, int $tableId, int $recordId): ?MagicBaseRowEntity
+    public function getRow(string $organizationCode, int $projectId, int $tableId, int $recordId): ?MagicBaseRowEntity
     {
-        return $this->openSearchRowQueryRepository->getRow($organizationCode, $tableId, $recordId);
+        return $this->queryRepository()->getRow($organizationCode, $projectId, $tableId, $recordId);
     }
 
     public function queryRows(MagicBaseRowQuery $query): MagicBaseRowQueryResult
     {
-        return $this->openSearchRowQueryRepository->queryRows($query);
+        return $this->queryRepository()->queryRows($query);
     }
 
     /** @return MagicBaseEntityCollection<MagicBaseRowEntity> */
-    public function listRows(string $organizationCode, int $tableId, bool $includeDeleted = false): MagicBaseEntityCollection
+    public function listRows(string $organizationCode, int $projectId, int $tableId, bool $includeDeleted = false): MagicBaseEntityCollection
     {
-        return $this->openSearchRowQueryRepository->listRows($organizationCode, $tableId, $includeDeleted);
+        return $this->queryRepository()->listRows($organizationCode, $projectId, $tableId, $includeDeleted);
     }
 
     public function saveRow(MagicBaseRowEntity $payload): MagicBaseRowEntity
     {
-        return $this->openSearchRowStoreRepository->saveRow($payload);
+        return $this->storeRepository()->saveRow($payload);
+    }
+
+    private function storeRepository(): MagicBaseRowStoreRepositoryInterface
+    {
+        return $this->mongoRowStoreRepository;
+    }
+
+    private function queryRepository(): MagicBaseRowQueryRepositoryInterface
+    {
+        return $this->mongoRowQueryRepository;
     }
 }

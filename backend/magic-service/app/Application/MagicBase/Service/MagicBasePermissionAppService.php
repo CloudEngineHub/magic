@@ -105,7 +105,7 @@ readonly class MagicBasePermissionAppService
     {
         $this->accessControl->requireTableManager($authorization, $projectId, $tableId);
         $recordId = $this->parsePayloadId($requestDTO->getRecordId(), 'record_id');
-        $this->rowQuerySupport->getRowOrFail($authorization, $tableId, $recordId);
+        $this->rowQuerySupport->getRowOrFail($authorization, $projectId, $tableId, $recordId);
         $subject = $this->adminDomainService->normalizeSubjectPayload($requestDTO->toArray(), true);
 
         $saved = $this->metadataDomainService->upsertRowPermission([

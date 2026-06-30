@@ -88,7 +88,7 @@ readonly class MagicBaseAccessControl
 
     public function requireReadableRow(MagicUserAuthorization $authorization, MagicBaseTableAccessContext $context, int $recordId): MagicBaseRowEntity
     {
-        $row = $this->getRowOrFail($authorization, $context->getTableId(), $recordId);
+        $row = $this->getRowOrFail($authorization, $context->getProjectId(), $context->getTableId(), $recordId);
         if (! $this->permissionDomainService->canReadRow(
             $context->getActor(),
             $row,
@@ -103,7 +103,7 @@ readonly class MagicBaseAccessControl
 
     public function requireEditableRow(MagicUserAuthorization $authorization, MagicBaseTableAccessContext $context, int $recordId): MagicBaseRowEntity
     {
-        $row = $this->getRowOrFail($authorization, $context->getTableId(), $recordId);
+        $row = $this->getRowOrFail($authorization, $context->getProjectId(), $context->getTableId(), $recordId);
         if (! $this->permissionDomainService->canEditRow(
             $context->getActor(),
             $row,
@@ -118,7 +118,7 @@ readonly class MagicBaseAccessControl
 
     public function requireDeletableRow(MagicUserAuthorization $authorization, MagicBaseTableAccessContext $context, int $recordId): MagicBaseRowEntity
     {
-        $row = $this->getRowOrFail($authorization, $context->getTableId(), $recordId);
+        $row = $this->getRowOrFail($authorization, $context->getProjectId(), $context->getTableId(), $recordId);
         if (! $this->permissionDomainService->canDeleteRow(
             $context->getActor(),
             $row,
@@ -266,9 +266,9 @@ readonly class MagicBaseAccessControl
         return $table;
     }
 
-    private function getRowOrFail(MagicUserAuthorization $authorization, int $tableId, int $recordId): MagicBaseRowEntity
+    private function getRowOrFail(MagicUserAuthorization $authorization, int $projectId, int $tableId, int $recordId): MagicBaseRowEntity
     {
-        $row = $this->rowStorageResolver->getRow($authorization->getOrganizationCode(), $tableId, $recordId);
+        $row = $this->rowStorageResolver->getRow($authorization->getOrganizationCode(), $projectId, $tableId, $recordId);
         if ($row === null || $row->getDeleted()) {
             MagicBaseExceptionBuilder::resourceNotFound('记录');
         }

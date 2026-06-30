@@ -2,7 +2,7 @@ import json
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from agentlang.context.tool_context import ToolContext
 from agentlang.tools.tool_result import ToolResult
@@ -36,6 +36,21 @@ def _now_text() -> str:
 
 def _json_safe(value: Any) -> Any:
     return json.loads(json.dumps(value, ensure_ascii=False, default=str))
+
+
+def _coerce_permission_object(value: Any, field_name: str) -> Optional[Dict[str, Any]]:
+    if value in (None, ""):
+        return None
+    if isinstance(value, dict):
+        return value
+    if isinstance(value, str):
+        try:
+            parsed = json.loads(value)
+        except json.JSONDecodeError as e:
+            raise ValueError(f"{field_name} must be an object or a valid JSON object string") from e
+        if isinstance(parsed, dict):
+            return parsed
+    raise ValueError(f"{field_name} must be an object")
 
 
 def _column_id(column: Dict[str, Any]) -> str:
@@ -284,8 +299,13 @@ Options for types such as single_select and multi_select. The shape depends on M
     dynamic_permission: Optional[Dict[str, Any]] = Field(
         default=None,
         description="""<!--zh: 字段动态权限配置，可选。-->
-Optional dynamic permission config, for example {"read_scope": "public", "edit_scope": "public"}."""
+Optional column dynamic permission object, for example {"read_scope": "public", "edit_scope": "public"}. Pass it as an object, not as a JSON string."""
     )
+
+    @field_validator("dynamic_permission", mode="before")
+    @classmethod
+    def _validate_dynamic_permission(cls, value: Any) -> Optional[Dict[str, Any]]:
+        return _coerce_permission_object(value, "dynamic_permission")
 
     def to_body(self) -> Dict[str, Any]:
         body: Dict[str, Any] = {
@@ -421,9 +441,17 @@ Optional project name for MagicBase."""
     )
     dynamic_permissions: Optional[Dict[str, Any]] = Field(
         default=None,
-        description="""<!--zh: 表、行、列动态权限配置，可选；省略时 MagicBase 默认 public。-->
-Optional table, row, and column dynamic permissions. Omit to use MagicBase public defaults."""
+        description="""<!--zh
+        表、行、列动态权限配置，可选；省略时 MagicBase 默认 public。
+        需要“只能看自己的/只能改自己的/我的数据”时，必须传对象形式的 row private_user，不能传 JSON 字符串。
+        -->
+Optional table, row, and column dynamic permissions. Pass this as an object, never as a JSON string. For owner-only rows, use {"table": {"read_scope": "public", "insert_scope": "public"}, "row": {"read_scope": "private_user", "edit_scope": "private_user", "delete_scope": "private_user"}, "columns": {}}. Omit only when public defaults are intended."""
     )
+
+    @field_validator("dynamic_permissions", mode="before")
+    @classmethod
+    def _validate_dynamic_permissions(cls, value: Any) -> Optional[Dict[str, Any]]:
+        return _coerce_permission_object(value, "dynamic_permissions")
 
 
 @tool(name="create_magicbase_table")
@@ -449,13 +477,15 @@ HTML 微应用工作流中，create_magicbase_table 会自动维护 MagicBase sc
 
 不要为了 schema migration 单独调用编辑文件工具。普通项目记忆由 `update_html_app_memory` 在开发任务结束前统一整理。
 -->
-For HTML micro-app work, create_magicbase_table automatically maintains MagicBase schema records:
-- Before calling MagicBase, it appends a Pending migration to the workspace-root `.magicbase/migrations.json`.
-- On success, it updates that migration to Success, records the real table_id, and refreshes the latest MagicBase data model in `HTML-APP.md`.
-- On failure, it updates that migration to Failed with a short error summary and does not modify the official data model in `HTML-APP.md`.
-
-Do not call file-editing tools just to maintain schema migrations. Ordinary project memory is summarized with `update_html_app_memory` once before the development task ends.
-"""
+	For HTML micro-app work, create_magicbase_table automatically maintains MagicBase schema records:
+	- Before calling MagicBase, it appends a Pending migration to the workspace-root `.magicbase/migrations.json`.
+	- On success, it updates that migration to Success, records the real table_id, and refreshes the latest MagicBase data model in `HTML-APP.md`.
+	- On failure, it updates that migration to Failed with a short error summary and does not modify the official data model in `HTML-APP.md`.
+	
+	When the user asks for owner-only or "my data" access, keep `dynamic_permissions` in the table creation request and use row `private_user`. Do not fall back to public table creation after a permission parameter error.
+	
+	Do not call file-editing tools just to maintain schema migrations. Ordinary project memory is summarized with `update_html_app_memory` once before the development task ends.
+	"""
 
     async def execute(self, tool_context: ToolContext, params: CreateMagicbaseTableParams) -> ToolResult:
         project_id = _get_project_id()
@@ -468,7 +498,11 @@ Do not call file-editing tools just to maintain schema migrations. Ordinary proj
         migration = new_migration(
             operation="create_table",
             target={"table_key": params.table_key, "table_name": params.table_name},
-            planned_schema={"columns": planned_columns, "description": params.description},
+            planned_schema={
+                "columns": planned_columns,
+                "description": params.description,
+                "dynamic_permissions": params.dynamic_permissions,
+            },
             reason="Create a MagicBase table for the HTML micro-app data model.",
         )
         try:
@@ -544,8 +578,13 @@ Options for types such as single_select and multi_select. The shape depends on M
     dynamic_permission: Optional[Dict[str, Any]] = Field(
         default=None,
         description="""<!--zh: 字段动态权限配置，可选。-->
-Optional dynamic permission config, for example {"read_scope": "public", "edit_scope": "public"}."""
+Optional column dynamic permission object, for example {"read_scope": "public", "edit_scope": "public"}. Pass it as an object, not as a JSON string."""
     )
+
+    @field_validator("dynamic_permission", mode="before")
+    @classmethod
+    def _validate_dynamic_permission(cls, value: Any) -> Optional[Dict[str, Any]]:
+        return _coerce_permission_object(value, "dynamic_permission")
 
 
 @tool(name="create_magicbase_column")

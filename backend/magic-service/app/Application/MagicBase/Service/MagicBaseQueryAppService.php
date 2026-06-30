@@ -33,8 +33,8 @@ readonly class MagicBaseQueryAppService
     {
         $context = $this->accessControl->requireReadableTable($authorization, $projectId, $tableId);
         $sorts = $requestDTO->getSort();
-        $this->rowQuerySupport->assertSortableByOpenSearch($sorts);
-        $filters = $this->rowQuerySupport->resolveFiltersForOpenSearch(
+        $this->rowQuerySupport->assertSortableByRowStorage($sorts);
+        $filters = $this->rowQuerySupport->resolveFiltersForRowStorage(
             $authorization,
             $projectId,
             $context->getTable(),
