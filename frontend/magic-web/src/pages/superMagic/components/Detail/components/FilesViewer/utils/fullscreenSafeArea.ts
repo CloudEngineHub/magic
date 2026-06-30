@@ -1,0 +1,10 @@
+// The viewport layer paints the whole screen so safe-area gutters never reveal the page below.
+export const FILE_VIEWER_FULLSCREEN_VIEWPORT_CLASS_NAME =
+	"fixed inset-0 z-detail-fullscreen h-screen w-screen rounded-none bg-white"
+
+// The safe-area layer keeps file preview controls clear of iPad WebView status and home areas.
+export const FILE_VIEWER_FULLSCREEN_SAFE_AREA_CLASS_NAME =
+	"absolute bottom-[var(--safe-area-inset-bottom)] left-[var(--safe-area-inset-left)] right-[var(--safe-area-inset-right)] top-[var(--safe-area-inset-top)] flex min-h-0 min-w-0 flex-col"
+
+// Fullscreen tabs should be bounded by the safe-area shell instead of claiming the viewport.
+export const FILE_VIEWER_FULLSCREEN_TAB_CONTENT_CLASS_NAME = "absolute inset-0 h-full"

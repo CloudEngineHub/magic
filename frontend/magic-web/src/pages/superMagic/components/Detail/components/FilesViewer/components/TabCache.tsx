@@ -9,6 +9,7 @@ import { getWebsiteTabData } from "../utils/websiteTabs"
 import type { TabItem } from "../types"
 import type { KnowledgeBaseTabData } from "../hooks/useKnowledgeBaseTab"
 import { getFileViewerTabType } from "../utils/tabType"
+import { FILE_VIEWER_FULLSCREEN_TAB_CONTENT_CLASS_NAME } from "../utils/fullscreenSafeArea"
 
 type CachedTab = Partial<TabItem> & {
 	id: string
@@ -95,7 +96,7 @@ const TabCache = memo(
 				className={cn(
 					"left-0 w-full transition-[opacity,visibility] duration-200",
 					effectiveIsFullscreen
-						? "fixed top-0 h-full"
+						? FILE_VIEWER_FULLSCREEN_TAB_CONTENT_CLASS_NAME
 						: fillsViewerWithoutTabBar
 							? "absolute top-0 h-full"
 							: "absolute top-11 h-[calc(100%-44px)]",

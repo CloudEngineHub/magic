@@ -22,6 +22,10 @@ vi.mock("../components/PlaybackTabContent", () => ({
 	default: () => <div data-testid="playback-tab-content" />,
 }))
 
+vi.mock("../components/KnowledgeBaseTabContent", () => ({
+	default: () => <div data-testid="knowledge-base-tab-content" />,
+}))
+
 // Mock dependencies
 vi.mock("../../../Render", () => ({
 	default: () => <div data-testid="render-component" />,
@@ -137,5 +141,17 @@ describe("TabCache", () => {
 
 		expect(screen.queryByTestId("render-component")).not.toBeInTheDocument()
 		expect(screen.getByTitle("Unsplash")).toHaveAttribute("src", "https://unsplash.com")
+	})
+
+	it("keeps fullscreen content bounded by the safe-area shell", () => {
+		render(
+			<TabCache tab={mockTab} isActive={true} renderProps={mockRenderProps} isFullscreen />,
+		)
+
+		const container = screen.getByTestId("render-component").parentElement
+		expect(container).toHaveClass("absolute")
+		expect(container).toHaveClass("inset-0")
+		expect(container).not.toHaveClass("fixed")
+		expect(container).not.toHaveClass("top-0")
 	})
 })

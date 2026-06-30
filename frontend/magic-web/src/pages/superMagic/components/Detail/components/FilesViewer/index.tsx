@@ -47,6 +47,10 @@ import {
 	getWebsiteTabData,
 	saveCommonWebsitePreset,
 } from "./utils/websiteTabs"
+import {
+	FILE_VIEWER_FULLSCREEN_SAFE_AREA_CLASS_NAME,
+	FILE_VIEWER_FULLSCREEN_VIEWPORT_CLASS_NAME,
+} from "./utils/fullscreenSafeArea"
 
 // 获取文件路径用作tooltip的工具函数
 const getFileTooltip = (tab: any, unknownFileText: string) => {
@@ -539,90 +543,97 @@ const FilesViewer = memo(
 				<div
 					className={cn(
 						"flex h-full flex-col",
-						isFullscreen &&
-							"fixed inset-0 z-detail-fullscreen h-screen w-screen rounded-none bg-white",
+						isFullscreen && FILE_VIEWER_FULLSCREEN_VIEWPORT_CLASS_NAME,
 					)}
 				>
-					{/* Tab Bar — hidden in immersive read-only mode (e.g. audio recording detail) */}
-					{tabs.length > 0 && !isFullscreenMode && !props.hideTabBar && (
-						<div className="relative flex h-11 items-center bg-accent">
-							<HeadlessHorizontalScroll
-								className="h-full min-w-0 flex-1"
-								controlBackground="rgb(var(--accent-rgb))"
-								scrollContainerClassName="no-scrollbar flex h-full w-full items-center overflow-x-auto overflow-y-hidden px-1 gap-0.5"
-								scrollContainerRef={tabsContainerRef}
-								onScrollContainerContextMenu={handleContainerContextMenu}
-							>
-								{tabs.map((tab, index) => renderTabItem(tab, index))}
-							</HeadlessHorizontalScroll>
+					<div
+						className={cn(
+							"flex h-full min-h-0 min-w-0 flex-col",
+							// Fullscreen fixed layers bypass BaseLayoutPc padding, so this shell reapplies safe-area insets.
+							isFullscreen && FILE_VIEWER_FULLSCREEN_SAFE_AREA_CLASS_NAME,
+						)}
+					>
+						{/* Tab Bar — hidden in immersive read-only mode (e.g. audio recording detail) */}
+						{tabs.length > 0 && !isFullscreenMode && !props.hideTabBar && (
+							<div className="relative flex h-11 items-center bg-accent">
+								<HeadlessHorizontalScroll
+									className="h-full min-w-0 flex-1"
+									controlBackground="rgb(var(--accent-rgb))"
+									scrollContainerClassName="no-scrollbar flex h-full w-full items-center overflow-x-auto overflow-y-hidden px-1 gap-0.5"
+									scrollContainerRef={tabsContainerRef}
+									onScrollContainerContextMenu={handleContainerContextMenu}
+								>
+									{tabs.map((tab, index) => renderTabItem(tab, index))}
+								</HeadlessHorizontalScroll>
 
-							<WebsitePresetMenu onOpenWebsiteTab={openWebsiteTab} />
+								<WebsitePresetMenu onOpenWebsiteTab={openWebsiteTab} />
 
-							{/* 展开按钮 */}
-							<DropdownMenu
-								open={expandPanelVisible}
-								onOpenChange={setExpandPanelVisible}
-							>
-								<DropdownMenuTrigger asChild>
-									<div className="relative mx-1 flex size-7 shrink-0 cursor-pointer select-none items-center justify-center rounded-md transition-all duration-200 hover:bg-black/10">
-										<MagicIcon component={IconMenu2} size={18} />
+								{/* 展开按钮 */}
+								<DropdownMenu
+									open={expandPanelVisible}
+									onOpenChange={setExpandPanelVisible}
+								>
+									<DropdownMenuTrigger asChild>
+										<div className="relative mx-1 flex size-7 shrink-0 cursor-pointer select-none items-center justify-center rounded-md transition-all duration-200 hover:bg-black/10">
+											<MagicIcon component={IconMenu2} size={18} />
+										</div>
+									</DropdownMenuTrigger>
+									<DropdownMenuContent
+										align="end"
+										className="max-h-[300px] w-[180px] overflow-y-auto p-1"
+									>
+										{tabs.map(renderExpandPanelItem)}
+									</DropdownMenuContent>
+								</DropdownMenu>
+
+								{/* 关闭所有 tab 按钮 */}
+								<Tooltip
+									title={t("shortcut.closeAllTabs")}
+									placement="bottom"
+									mouseEnterDelay={0.3}
+								>
+									<div
+										className="relative mr-1 flex size-7 shrink-0 cursor-pointer select-none items-center justify-center rounded-md transition-all duration-200 hover:bg-black/10"
+										onClick={handleClearAllTabs}
+										data-testid="handle-clear-all-tabs"
+									>
+										<MagicIcon component={IconX} size={16} />
 									</div>
-								</DropdownMenuTrigger>
-								<DropdownMenuContent
-									align="end"
-									className="max-h-[300px] w-[180px] overflow-y-auto p-1"
-								>
-									{tabs.map(renderExpandPanelItem)}
-								</DropdownMenuContent>
-							</DropdownMenu>
+								</Tooltip>
+							</div>
+						)}
 
-							{/* 关闭所有 tab 按钮 */}
-							<Tooltip
-								title={t("shortcut.closeAllTabs")}
-								placement="bottom"
-								mouseEnterDelay={0.3}
-							>
-								<div
-									className="relative mr-1 flex size-7 shrink-0 cursor-pointer select-none items-center justify-center rounded-md transition-all duration-200 hover:bg-black/10"
-									onClick={handleClearAllTabs}
-									data-testid="handle-clear-all-tabs"
-								>
-									<MagicIcon component={IconX} size={16} />
-								</div>
-							</Tooltip>
-						</div>
-					)}
+						{/* 右键菜单 */}
+						<TabContextMenu
+							contextMenuState={contextMenuState}
+							getContextMenuItems={getContextMenuItems}
+							onClose={hideContextMenu}
+						/>
+						<CommonWebsitePresetDialog
+							open={commonWebsiteDialogOpen}
+							mode="add"
+							initialValues={commonWebsiteInitialValues}
+							onOpenChange={setCommonWebsiteDialogOpen}
+							onSubmit={handleSubmitCommonWebsite}
+						/>
 
-					{/* 右键菜单 */}
-					<TabContextMenu
-						contextMenuState={contextMenuState}
-						getContextMenuItems={getContextMenuItems}
-						onClose={hideContextMenu}
-					/>
-					<CommonWebsitePresetDialog
-						open={commonWebsiteDialogOpen}
-						mode="add"
-						initialValues={commonWebsiteInitialValues}
-						onOpenChange={setCommonWebsiteDialogOpen}
-						onSubmit={handleSubmitCommonWebsite}
-					/>
-
-					{/* Content Area */}
-					<div className="flex flex-1 flex-col overflow-hidden">
-						{currentTab ? (
-							isRestoringFileTabs ? (
-								<div className="flex h-full items-center justify-center">
-									<MagicSpin spinning />
-								</div>
-							) : (
-								<>
+						{/* Content Area */}
+						<div className="flex flex-1 flex-col overflow-hidden">
+							{currentTab ? (
+								isRestoringFileTabs ? (
+									<div className="flex h-full items-center justify-center">
+										<MagicSpin spinning />
+									</div>
+								) : (
+									<>
 										{/* Render all cached tabs */}
-									{renderCachedTabs}
-								</>
-							)
-						) : shouldShowDetailEmpty ? (
-							<DetailEmpty />
-						) : null}
+										{renderCachedTabs}
+									</>
+								)
+							) : shouldShowDetailEmpty ? (
+								<DetailEmpty />
+							) : null}
+						</div>
 					</div>
 				</div>
 			)
