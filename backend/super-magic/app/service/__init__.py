@@ -1,15 +1,25 @@
-"""服务包的懒加载导出。"""
+"""
+服务模块初始化文件
+"""
+
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from app.service.agent_event.file_storage_listener_service import FileStorageListenerService
+    from app.service.agent_service import AgentService
+    from app.service.attachment_service import AttachmentService
+    from app.service.file_service import FileService
+
 
 __all__ = [
-    "AgentService",
-    "AttachmentService",
-    "FileStorageListenerService",
-    "FileService",
+    'AgentService',
+    'AttachmentService',
+    'FileStorageListenerService',
+    'FileService',
 ]
 
 
-def __getattr__(name: str):
-    """懒加载服务导出，避免子模块导入时拉起重量级依赖。"""
+def __getattr__(name: str) -> object:
     if name == "AgentService":
         from app.service.agent_service import AgentService
 
