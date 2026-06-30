@@ -69,7 +69,7 @@ function AudioRecordingEntryPanel() {
 			className="flex h-full min-h-0 w-full min-w-0 flex-col overflow-hidden bg-mobile-background"
 		>
 			<div className="mobile-page-header">
-				<MobileShellSidebarToggleButton testId="mobile-audio-entry-menu-button" />
+				<MobileShellSidebarToggleButton />
 				<p className="mobile-page-header-title">{t("mobile.shell.navRecording")}</p>
 				<button
 					type="button"
