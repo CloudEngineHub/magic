@@ -84,8 +84,8 @@ vi.mock("@/pages/superMagicMobile/components/MobileShell", () => ({
 			{children}
 		</button>
 	),
-	MobileShellSidebarToggleButton: ({ testId }: { testId: string }) => (
-		<button type="button" data-testid={testId}>
+	MobileShellSidebarToggleButton: ({ testId }: { testId?: string }) => (
+		<button type="button" data-testid={testId ?? "mobile-shell-menu-button"}>
 			menu
 		</button>
 	),

@@ -195,13 +195,13 @@ function WorkspaceListViewInner({
 	const sharedWorkspaceDescription = t("workspace.collaborationProjectsDescV2")
 
 	return (
-		<div className="flex h-full min-h-0 flex-col bg-mobile-background" data-testid="workspaces-page">
+		<div
+			className="flex h-full min-h-0 flex-col bg-mobile-background"
+			data-testid="workspaces-page"
+		>
 			{/* Header */}
 			<div className="mobile-page-header">
-				<MobileShellSidebarToggleButton
-					variant="icon"
-					testId="workspaces-page-menu-trigger"
-				/>
+				<MobileShellSidebarToggleButton variant="icon" />
 
 				<p className="min-w-0 flex-1 truncate text-center text-[18px] font-medium leading-6 text-foreground">
 					{t("workspace.workspace")}

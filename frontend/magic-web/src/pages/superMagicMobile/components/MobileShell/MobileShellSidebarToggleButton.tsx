@@ -7,8 +7,11 @@ import { cn } from "@/lib/utils"
 import MobileShellIconButton from "./MobileShellIconButton"
 import { useOptionalSuperMobileShellOutlet } from "./SuperMobileShellRouteLayout"
 
+// Keep the same selector for both open and close states so E2E tests can reuse one target.
+const MOBILE_SHELL_MENU_BUTTON_TEST_ID = "mobile-shell-menu-button"
+
 export interface MobileShellSidebarToggleButtonProps {
-	testId: string
+	testId?: string
 	/** `header` = mobile-page-header; `icon` = shell icon button; `floating` = My Crew / MagiClaw card pill. */
 	variant?: "header" | "icon" | "floating"
 	className?: string
@@ -20,7 +23,7 @@ export interface MobileShellSidebarToggleButtonProps {
  * Prototype-aligned sidebar control: hamburger when closed, X when the drawer is open.
  */
 export function MobileShellSidebarToggleButton({
-	testId,
+	testId = MOBILE_SHELL_MENU_BUTTON_TEST_ID,
 	variant = "header",
 	className,
 	onFallbackOpen,
