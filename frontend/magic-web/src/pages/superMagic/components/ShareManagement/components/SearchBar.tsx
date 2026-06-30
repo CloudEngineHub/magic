@@ -179,6 +179,7 @@ function SearchBar({
 								className="sticky top-0 z-10 bg-popover px-2 pb-2 pt-2"
 								onPointerDown={(e) => e.stopPropagation()}
 								onMouseDown={(e) => e.stopPropagation()}
+								data-testid="on-pointer-down"
 							>
 								<Input
 									placeholder={t("shareManagement.searchProject")}

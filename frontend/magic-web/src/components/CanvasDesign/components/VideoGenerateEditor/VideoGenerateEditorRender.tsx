@@ -9,11 +9,9 @@ import {
 } from "react"
 import { ArrowUp, LoaderCircle, ZapIcon } from "lucide-react"
 import { useUpdateEffect } from "ahooks"
-import { Modal } from "antd"
 import { toast } from "sonner"
 import { useHostUiLocale } from "../../context/HostUiLocaleContext"
 import { Button } from "../ui/button"
-import { Checkbox } from "../ui/checkbox"
 import { useCanvasDesignI18n } from "../../context/I18nContext"
 import { useCanvas } from "../../context/CanvasContext"
 import { useCanvasSelectionUI } from "../../context/CanvasUIContext"
@@ -25,7 +23,7 @@ import type { UseVideoEditorConfigOptions } from "./video-editor-config.types"
 import { VideoElement as VideoElementClass } from "../../canvas/element/elements/VideoElement"
 import { generateUUID } from "../../canvas/utils/utils"
 import MessageEditor, { type MessageEditorRef } from "../MessageEditor/MessageEditor"
-import { useMessageEditorMention } from "../MessageEditor/useMessageEditorMention"
+import { useCanvasReferenceMention } from "../MessageEditor/useCanvasReferenceMention"
 import VideoEditorControls from "./VideoEditorControls"
 import { useVideoEditorConfig } from "./useVideoEditorConfig"
 import { validateReferenceAssetsByLimits } from "./video-editor-config.model"
@@ -44,10 +42,8 @@ import {
 import styles from "./index.module.css"
 import { createAndSubmitVideoGeneration } from "./createAndSubmitVideoGeneration"
 import { useVideoPointsEstimate } from "./useVideoPointsEstimate"
-import {
-	getShouldSkipVideoPointsConfirm,
-	setShouldSkipVideoPointsConfirm,
-} from "./video-points-confirm.storage"
+import { useVideoPointsConfirm } from "./useVideoPointsConfirm"
+import { buildVideoPointsEstimateSignature } from "./video-points-estimate.utils"
 
 interface VideoGenerateEditorRenderProps {
 	videoElement: VideoElement
@@ -59,6 +55,8 @@ interface VideoGenerateEditorRenderProps {
 	/** 成片后重新进入编辑器时仅按 generateVideoRequest 恢复，不合并临时草稿 */
 	restoreOnMount?: UseVideoEditorConfigOptions["restoreOnMount"]
 	submitTarget?: "current-element" | "new-element"
+	/** 尺寸选择变化时是否同步更新当前元素尺寸 */
+	syncElementSize?: UseVideoEditorConfigOptions["syncElementSize"]
 }
 
 /** 画布内浮动的视频生成编辑器：提示词、模型、输入区与发送 */
@@ -70,6 +68,7 @@ export default function VideoGenerateEditorRender(props: VideoGenerateEditorRend
 		onGenerateSubmitSucceeded,
 		restoreOnMount,
 		submitTarget = "current-element",
+		syncElementSize,
 	} = props
 	const { t } = useCanvasDesignI18n()
 	const hostUiLocale = useHostUiLocale()
@@ -87,6 +86,7 @@ export default function VideoGenerateEditorRender(props: VideoGenerateEditorRend
 	const sendingRef = useRef(false)
 	const isMountedRef = useRef(false)
 	const hasScrollbar = hasEditorScrollbar || hasSourceListScrollbar
+	const confirmVideoGeneration = useVideoPointsConfirm()
 
 	useEffect(() => {
 		isMountedRef.current = true
@@ -99,61 +99,25 @@ export default function VideoGenerateEditorRender(props: VideoGenerateEditorRend
 		videoElement,
 		messageEditorRef: editorRef,
 		...(restoreOnMount ? { restoreOnMount } : {}),
+		...(syncElementSize !== undefined ? { syncElementSize } : {}),
 	})
 	const { handlers } = config
-	const estimateModelId = useMemo(() => {
-		if (config.selectedModelId) return config.selectedModelId
-		if (config.hasRestoredRef.current) return undefined
-
-		const requestModelId = videoElement.generateVideoRequest?.model_id
-		if (
-			requestModelId &&
-			config.modelOptions.some((option) => option.value === requestModelId)
-		) {
-			return requestModelId
-		}
-
-		const rootStorage = canvas?.magicConfigManager.config?.methods?.getRootStorage?.()
-		const defaultModelId = rootStorage?.defaultGenerateVideoConfig?.model_id
-		if (
-			defaultModelId &&
-			config.modelOptions.some((option) => option.value === defaultModelId)
-		) {
-			return defaultModelId
-		}
-
-		return config.modelOptions[0]?.value
-	}, [
-		canvas,
-		config.hasRestoredRef,
-		config.modelOptions,
-		config.selectedModelId,
-		videoElement.generateVideoRequest?.model_id,
-	])
+	const { buildRequestParams } = handlers
+	const hasNonStandardInputMode = config.availableInputModes.some((mode) => mode !== "standard")
+	const isEstimateInputModeSettled =
+		config.availableInputModes.includes(config.selectedInputMode) &&
+		!(config.selectedInputMode === "standard" && hasNonStandardInputMode)
+	const estimateModelId =
+		config.hasRestoredRef.current && isEstimateInputModeSettled
+			? config.selectedModelId || undefined
+			: undefined
 	const estimateRequest = useMemo(() => {
 		if (!estimateModelId) return null
-		const generation = {
-			...(config.selectedAspectRatio ? { aspect_ratio: config.selectedAspectRatio } : {}),
-			...(config.selectedResolution ? { resolution: config.selectedResolution } : {}),
-			...(config.selectedDurationSeconds != null &&
-			Number.isFinite(config.selectedDurationSeconds)
-				? { duration_seconds: config.selectedDurationSeconds }
-				: {}),
-			...(config.selectedCompressionQuality
-				? { compression_quality: config.selectedCompressionQuality }
-				: {}),
-		}
 		return {
+			...buildRequestParams(),
 			model_id: estimateModelId,
-			generation,
 		}
-	}, [
-		estimateModelId,
-		config.selectedAspectRatio,
-		config.selectedResolution,
-		config.selectedDurationSeconds,
-		config.selectedCompressionQuality,
-	])
+	}, [estimateModelId, buildRequestParams])
 	const estimateSignature = useMemo(() => {
 		if (!estimateRequest) return null
 		return buildVideoPointsEstimateSignature(estimateRequest)
@@ -165,7 +129,7 @@ export default function VideoGenerateEditorRender(props: VideoGenerateEditorRend
 	})
 
 	const { matchableItems, mentionDataService, mentionExtension, mentionEnabled } =
-		useMessageEditorMention({
+		useCanvasReferenceMention({
 			matchableItems: config.matchableItems,
 			mentionEnabledOverride: config.modelOptions.length > 0,
 			maxReferenceFiles: config.supportsReferenceAssets ? config.maxReferenceImages : 0,
@@ -261,8 +225,8 @@ export default function VideoGenerateEditorRender(props: VideoGenerateEditorRend
 	const handleSelectSource = useCallback(
 		(source: ReferenceResourceSourceType) => {
 			if (config.isUploading) return
-			handlers.setPopoverOpen(false)
 			if (source !== "local-upload") return
+			handlers.setPopoverOpen(false)
 			handlers.triggerFileSelect()
 		},
 		[config.isUploading, handlers],
@@ -446,6 +410,7 @@ export default function VideoGenerateEditorRender(props: VideoGenerateEditorRend
 								canvas,
 								sourceVideoElement: videoElement,
 								request: requestParams,
+								newElementSize: config.ratioOption,
 							})
 						: await (async () => {
 								handlers.saveDraftRequest(requestParams)
@@ -460,6 +425,7 @@ export default function VideoGenerateEditorRender(props: VideoGenerateEditorRend
 		[
 			canvas,
 			config.prompt,
+			config.ratioOption,
 			config.selectedModelId,
 			handlers,
 			onGenerateSubmitSucceeded,
@@ -529,57 +495,13 @@ export default function VideoGenerateEditorRender(props: VideoGenerateEditorRend
 		}
 		const elementInstance = canvas.elementManager.getElementInstance(videoElement.id)
 		if (!(elementInstance instanceof VideoElementClass)) return
-		if (getShouldSkipVideoPointsConfirm() || estimatedPoints == null) {
-			await submitVideoGeneration(requestParams)
-			return
-		}
-		let shouldSkipNextConfirm = false
-		const confirmOptions = {
-			title: t("videoEditor.sendConfirmTitle", "消耗提示"),
-			content: (
-				<div
-					className={styles.sendConfirmContent}
-					data-testid="video-points-confirm-content"
-				>
-					<p className={styles.sendConfirmDescription}>
-						{t("videoEditor.sendConfirmDescription", {
-							defaultValue: "本次任务预计消耗约 {{points}} 积分，是否确认执行？",
-							points: estimatedPoints,
-						})}
-					</p>
-					<label className={styles.sendConfirmCheckboxRow}>
-						<Checkbox
-							data-testid="video-points-confirm-skip-checkbox"
-							onCheckedChange={(checked) => {
-								shouldSkipNextConfirm = checked === true
-							}}
-						/>
-						<span className={styles.sendConfirmCheckboxLabel}>
-							{t("videoEditor.sendConfirmSkip", "下次不再提示")}
-						</span>
-					</label>
-				</div>
-			),
-			okText: t("videoEditor.sendConfirmOk", "确认执行"),
-			okButtonProps: {
-				"data-testid": "video-points-confirm-ok-button",
-			},
-			cancelButtonProps: {
-				"data-testid": "video-points-confirm-cancel-button",
-			},
-			onOk: () => {
-				setShouldSkipVideoPointsConfirm(shouldSkipNextConfirm)
-				void submitVideoGeneration(requestParams)
-			},
-		}
-		const injectedConfirmModal = canvas.magicConfigManager.config?.methods?.confirmModal
-		if (injectedConfirmModal) {
-			injectedConfirmModal(confirmOptions)
-			return
-		}
-		Modal.confirm(confirmOptions)
+		await confirmVideoGeneration({
+			points: estimatedPoints,
+			onConfirm: () => submitVideoGeneration(requestParams),
+		})
 	}, [
 		canvas,
+		confirmVideoGeneration,
 		config.currentInputModeConfig,
 		config.prompt,
 		config.referenceImageInfos,
@@ -685,11 +607,4 @@ function getVideoEditorShellNominalWidthPx(languageCode: string | undefined): nu
 	const normalized = languageCode.toLowerCase().replace(/-/g, "_")
 	if (normalized.startsWith("zh")) return 580
 	return 760
-}
-
-function buildVideoPointsEstimateSignature(request: Partial<GenerateVideoRequest>): string {
-	return JSON.stringify({
-		model_id: request.model_id,
-		generation: request.generation,
-	})
 }

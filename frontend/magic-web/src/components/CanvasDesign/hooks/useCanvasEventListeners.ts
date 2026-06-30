@@ -1,8 +1,17 @@
 import { useLatest, useDebounceFn } from "ahooks"
+import { useCallback, useEffect, useRef } from "react"
 import { useCanvas } from "../context/CanvasContext"
 import { useCanvasEvents } from "./useCanvasEvent"
 import type { CanvasDesignStorageData, CanvasDesignMethods } from "../types.magic"
 import type { Marker, CanvasDocument } from "../canvas/types"
+import type {
+	CanvasDesignDataChangeMeta,
+	CanvasDesignDataChangeSource,
+	CanvasDesignDataPatch,
+} from "../types"
+import type { CanvasElementNameChange } from "../canvas/EventEmitter"
+
+const CANVAS_DATA_CHANGE_DEBOUNCE_MS = 120
 
 interface UseCanvasEventListenersOptions {
 	/** 是否为只读模式 */
@@ -18,7 +27,14 @@ interface UseCanvasEventListenersOptions {
 	/** marker 数据更新回调（仅在更新时触发） */
 	onMarkerUpdated?: (marker: Marker, markers: Marker[]) => void
 	/** 画布数据变化回调 */
-	onCanvasDesignDataChange?: (canvasData: CanvasDocument) => void
+	onCanvasDesignDataChange?: (
+		canvasData: CanvasDocument,
+		meta?: CanvasDesignDataChangeMeta,
+	) => void
+	onCanvasDesignDataPatchChange?: (
+		patch: CanvasDesignDataPatch,
+		meta?: CanvasDesignDataChangeMeta,
+	) => void
 }
 
 /**
@@ -34,6 +50,7 @@ export function useCanvasEventListeners(options: UseCanvasEventListenersOptions)
 		onMarkerDeleted,
 		onMarkerUpdated,
 		onCanvasDesignDataChange,
+		onCanvasDesignDataPatchChange,
 	} = options
 
 	const { canvas } = useCanvas()
@@ -44,7 +61,11 @@ export function useCanvasEventListeners(options: UseCanvasEventListenersOptions)
 	const onMarkerDeletedRef = useLatest(onMarkerDeleted)
 	const onMarkerUpdatedRef = useLatest(onMarkerUpdated)
 	const onCanvasDesignDataChangeRef = useLatest(onCanvasDesignDataChange)
+	const onCanvasDesignDataPatchChangeRef = useLatest(onCanvasDesignDataPatchChange)
 	const readonlyRef = useLatest(readonly)
+	const pendingCanvasDataChangeMetaRef = useRef<CanvasDesignDataChangeMeta | null>(null)
+	const pendingDeletedElementIdsRef = useRef<Set<string>>(new Set())
+	const canvasDataChangeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
 	// 防抖保存 viewport 到 storage
 	const { run: saveViewportToStorage } = useDebounceFn(
@@ -64,6 +85,140 @@ export function useCanvasEventListeners(options: UseCanvasEventListenersOptions)
 		},
 		{ wait: 300 },
 	)
+
+	const mergeElementNameChanges = useCallback(
+		(
+			previousChanges?: CanvasElementNameChange[],
+			nextChanges?: CanvasElementNameChange[],
+		): CanvasElementNameChange[] | undefined => {
+			if (!previousChanges?.length && !nextChanges?.length) return undefined
+
+			const mergedByElementId = new Map<string, CanvasElementNameChange>()
+			previousChanges?.forEach((change) => {
+				mergedByElementId.set(change.elementId, change)
+			})
+			nextChanges?.forEach((change) => {
+				const previousChange = mergedByElementId.get(change.elementId)
+				mergedByElementId.set(change.elementId, {
+					...change,
+					oldName: previousChange?.oldName ?? change.oldName,
+					oldSrc: previousChange?.oldSrc ?? change.oldSrc,
+				})
+			})
+
+			return Array.from(mergedByElementId.values())
+		},
+		[],
+	)
+
+	const mergePendingCanvasDataChangeMeta = useCallback(
+		(
+			source: CanvasDesignDataChangeSource,
+			changeMeta?: Pick<
+				CanvasDesignDataChangeMeta,
+				"changedElementIds" | "elementNameChanges"
+			>,
+		) => {
+			const previous = pendingCanvasDataChangeMetaRef.current
+			const changedElementIds = changeMeta?.changedElementIds
+			let nextChangedElementIds: string[] | undefined
+			if (changedElementIds && previous?.changedElementIds) {
+				nextChangedElementIds = Array.from(
+					new Set([...previous.changedElementIds, ...changedElementIds]),
+				)
+			} else if (changedElementIds && !previous) {
+				nextChangedElementIds = changedElementIds
+			} else if (previous?.changedElementIds) {
+				nextChangedElementIds = previous.changedElementIds
+			}
+
+			pendingCanvasDataChangeMetaRef.current = {
+				source,
+				changedElementIds: nextChangedElementIds,
+				elementNameChanges: mergeElementNameChanges(
+					previous?.elementNameChanges,
+					changeMeta?.elementNameChanges,
+				),
+			}
+		},
+		[mergeElementNameChanges],
+	)
+
+	const flushCanvasDesignDataChange = useCallback(() => {
+		if (canvasDataChangeTimerRef.current) {
+			clearTimeout(canvasDataChangeTimerRef.current)
+			canvasDataChangeTimerRef.current = null
+		}
+
+		const meta = pendingCanvasDataChangeMetaRef.current
+		pendingCanvasDataChangeMetaRef.current = null
+		const deletedElementIds = Array.from(pendingDeletedElementIdsRef.current)
+		pendingDeletedElementIdsRef.current.clear()
+		if (!canvas || readonlyRef.current) return
+		const metaWithDeletedElementIds: CanvasDesignDataChangeMeta | undefined =
+			meta || deletedElementIds.length > 0
+				? {
+						source: meta?.source ?? "element:change",
+						changedElementIds: meta?.changedElementIds,
+						deletedElementIds,
+						elementNameChanges: meta?.elementNameChanges,
+					}
+				: undefined
+
+		const patchHandler = onCanvasDesignDataPatchChangeRef.current
+		const changedElementIds = metaWithDeletedElementIds?.changedElementIds
+		if (
+			patchHandler &&
+			metaWithDeletedElementIds?.source === "element:change" &&
+			changedElementIds &&
+			changedElementIds.length > 0
+		) {
+			try {
+				const patch = canvas.elementManager.exportDocumentPatch({
+					changedElementIds,
+					deletedElementIds,
+					elementNameChanges: metaWithDeletedElementIds.elementNameChanges,
+					includeTemporary: false,
+				})
+				patchHandler(patch, metaWithDeletedElementIds)
+				return
+			} catch {
+				// Patch export is an optimization path; fall back to the legacy full export below.
+			}
+		}
+
+		if (!onCanvasDesignDataChangeRef.current) return
+
+		// 导出时不包含临时元素，避免保存上传中的图片到外部
+		const canvasData = canvas.exportDocument({ includeTemporary: false })
+		onCanvasDesignDataChangeRef.current(canvasData, metaWithDeletedElementIds)
+	}, [canvas, onCanvasDesignDataChangeRef, onCanvasDesignDataPatchChangeRef, readonlyRef])
+
+	const scheduleCanvasDesignDataChange = useCallback(
+		(
+			source: CanvasDesignDataChangeSource,
+			changeMeta?: Pick<
+				CanvasDesignDataChangeMeta,
+				"changedElementIds" | "elementNameChanges"
+			>,
+		) => {
+			mergePendingCanvasDataChangeMeta(source, changeMeta)
+			if (canvasDataChangeTimerRef.current) {
+				clearTimeout(canvasDataChangeTimerRef.current)
+			}
+			canvasDataChangeTimerRef.current = setTimeout(
+				flushCanvasDesignDataChange,
+				CANVAS_DATA_CHANGE_DEBOUNCE_MS,
+			)
+		},
+		[flushCanvasDesignDataChange, mergePendingCanvasDataChangeMeta],
+	)
+
+	useEffect(() => {
+		return () => {
+			flushCanvasDesignDataChange()
+		}
+	}, [flushCanvasDesignDataChange])
 
 	// 监听 marker 创建前事件
 	useCanvasEvents(
@@ -112,16 +267,38 @@ export function useCanvasEventListeners(options: UseCanvasEventListenersOptions)
 		[canvas],
 	)
 
+	// 删除事件本身不保证携带完整变更元信息，先收集到下一次 element:change flush。
+	useCanvasEvents(
+		["element:deleted"] as const,
+		(event) => {
+			pendingDeletedElementIdsRef.current.add(event.data.elementId)
+		},
+		[canvas],
+	)
+
 	// 监听所有可能导致画布数据变化的事件
 	useCanvasEvents(
 		["element:change", "canvas:clear", "element:temporary:converted"] as const,
-		() => {
-			if (!canvas || !onCanvasDesignDataChangeRef.current || readonlyRef.current) return
-			// 导出时不包含临时元素，避免保存上传中的图片到外部
-			const canvasData = canvas.exportDocument({ includeTemporary: false })
-			onCanvasDesignDataChangeRef.current(canvasData)
+		(changeEvent, clearEvent, temporaryConvertedEvent) => {
+			if (changeEvent) {
+				if (changeEvent.data?.phase === "transient") return
+				scheduleCanvasDesignDataChange("element:change", {
+					changedElementIds: changeEvent.data?.elementIds,
+					elementNameChanges: changeEvent.data?.nameChanges,
+				})
+				return
+			}
+			if (temporaryConvertedEvent) {
+				scheduleCanvasDesignDataChange("element:temporary:converted", {
+					changedElementIds: [temporaryConvertedEvent.data.elementId],
+				})
+				return
+			}
+			if (clearEvent) {
+				scheduleCanvasDesignDataChange("canvas:clear")
+			}
 		},
-		[canvas],
+		[scheduleCanvasDesignDataChange],
 	)
 
 	// 监听 viewport 变化，保存到 storage

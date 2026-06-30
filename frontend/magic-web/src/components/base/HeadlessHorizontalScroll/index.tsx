@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react"
 import { ChevronLeft, ChevronRight } from "lucide-react"
 import { Button } from "@/components/shadcn-ui/button"
 import { cn } from "@/lib/utils"
-import type { MouseEventHandler, ReactNode, RefObject } from "react"
+import type { HTMLAttributes, MouseEventHandler, ReactNode, RefObject } from "react"
 
 type ScrollDirection = "left" | "right"
 const SCROLLABLE_OVERFLOW_Y = new Set(["auto", "scroll", "overlay"])
@@ -54,6 +54,10 @@ interface HeadlessHorizontalScrollProps {
 	controlBackground?: string
 	"data-testid"?: string
 	scrollContainerClassName?: string
+	scrollContainerProps?: Omit<
+		HTMLAttributes<HTMLDivElement>,
+		"children" | "className" | "ref" | "onContextMenu"
+	>
 	scrollContainerRef?: RefObject<HTMLDivElement>
 	onScrollContainerContextMenu?: MouseEventHandler<HTMLDivElement>
 	children: ReactNode
@@ -115,6 +119,7 @@ function HeadlessHorizontalScroll({
 	controlBackground = "rgb(var(--background-rgb))",
 	"data-testid": dataTestId,
 	scrollContainerClassName,
+	scrollContainerProps,
 	scrollContainerRef: externalScrollContainerRef,
 	onScrollContainerContextMenu,
 	children,
@@ -239,6 +244,7 @@ function HeadlessHorizontalScroll({
 		>
 			{showLeftArrow && renderLeftControl(renderProps)}
 			<div
+				{...scrollContainerProps}
 				ref={scrollContainerRef}
 				className={cn("no-scrollbar min-w-0 overflow-x-auto", scrollContainerClassName)}
 				onContextMenu={onScrollContainerContextMenu}

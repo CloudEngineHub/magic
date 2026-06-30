@@ -6,6 +6,7 @@ export namespace RecycleBin {
 		user_id: string
 		nickname: string
 		avatar: string
+		avatar_url?: string
 	}
 
 	export interface ListItem {
@@ -25,6 +26,8 @@ export namespace RecycleBin {
 		extra_data?: {
 			workspace_name?: string
 			project_name?: string
+			relative_file_path?: string
+			is_directory?: boolean
 			parent_info?: {
 				workspace_id?: number
 				workspace_name?: string
@@ -42,12 +45,29 @@ export namespace RecycleBin {
 		page_size?: number
 	}
 
+	export interface CountsParams {
+		keyword?: string
+	}
+
+	export interface CountItem {
+		resource_type: number
+		resource_type_name: string
+		resource_type_label: string
+		count: number
+	}
+
 	export interface CheckItem {
 		id: string
 		resource_type: number
 		resource_id: string
 		resource_name: string
 		parent_id: string | null
+		is_directory?: boolean
+		conflict?: {
+			type?: "parent_missing" | "name_conflict" | string
+			existing_file_id?: string
+			existing_is_directory?: boolean
+		}
 	}
 
 	export interface CheckParams {
@@ -58,6 +78,13 @@ export namespace RecycleBin {
 	export interface RestoreParams {
 		resource_ids: string[]
 		resource_type: number
+		conflict_resolutions?: Record<
+			string,
+			{
+				parent_missing?: "restore_to_root"
+				name_conflict?: "overwrite" | "skip"
+			}
+		>
 	}
 
 	export interface MoveProjectParams {
@@ -91,13 +118,22 @@ export const generateRecycleBinApi = (fetch: HttpClient) => ({
 			genRequestUrl("/api/v1/recycle-bin/list", {}, params),
 		)
 	},
+	getRecycleBinCounts(params?: RecycleBin.CountsParams) {
+		return fetch.get<RecycleBin.CountItem[]>(
+			genRequestUrl("/api/v1/recycle-bin/counts", {}, params),
+		)
+	},
 	checkRecycleBinParent(params: RecycleBin.CheckParams) {
 		return fetch.post<{
 			/** 需移动的项（父级不存在） */
-			items_need_move: RecycleBin.CheckItem[]
+			items_need_move?: RecycleBin.CheckItem[]
 			/** 无需移动的项（父级存在可直接恢复） */
-			items_no_need_move: RecycleBin.CheckItem[]
-		}>(genRequestUrl("/api/v1/recycle-bin/check", {}, params), params)
+			items_no_need_move?: RecycleBin.CheckItem[]
+			/** 新版冲突结构：包含 parent_missing / name_conflict */
+			items_with_conflict?: RecycleBin.CheckItem[]
+			/** 新版无冲突结构 */
+			items_no_conflict?: RecycleBin.CheckItem[]
+		}>(genRequestUrl("/api/v1/recycle-bin/check"), params)
 	},
 	restoreRecycleBinResources(params: RecycleBin.RestoreParams) {
 		return fetch.post<{
@@ -109,8 +145,9 @@ export const generateRecycleBinApi = (fetch: HttpClient) => ({
 				resource_id: string
 				resource_name: string
 				success: boolean
+				error_message?: string
 			}>
-		}>(genRequestUrl("/api/v1/recycle-bin/restore", {}, params), params)
+		}>(genRequestUrl("/api/v1/recycle-bin/restore"), params)
 	},
 	moveRecycleBinProject(params: RecycleBin.MoveProjectParams) {
 		return fetch.post<{ success: boolean }>(
@@ -124,11 +161,11 @@ export const generateRecycleBinApi = (fetch: HttpClient) => ({
 			success: number
 			failed: number
 			results: Array<{ project_id: string; success: boolean; message: string }>
-		}>(genRequestUrl("/api/v1/recycle-bin/batch-move-project", {}, params), params)
+		}>(genRequestUrl("/api/v1/recycle-bin/batch-move-project"), params)
 	},
 	moveRecycleBinTopic(params: RecycleBin.MoveTopicParams) {
 		return fetch.post<{ success: boolean; topic_id: string; message: string }>(
-			genRequestUrl("/api/v1/recycle-bin/move-topic", {}, params),
+			genRequestUrl("/api/v1/recycle-bin/move-topic"),
 			params,
 		)
 	},
@@ -138,7 +175,7 @@ export const generateRecycleBinApi = (fetch: HttpClient) => ({
 			success: number
 			failed: number
 			results: Array<{ topic_id: string; success: boolean; message: string }>
-		}>(genRequestUrl("/api/v1/recycle-bin/batch-move-topic", {}, params), params)
+		}>(genRequestUrl("/api/v1/recycle-bin/batch-move-topic"), params)
 	},
 	permanentDeleteRecycleBin(params: RecycleBin.PermanentDeleteParams) {
 		return fetch.post<{
@@ -148,6 +185,6 @@ export const generateRecycleBinApi = (fetch: HttpClient) => ({
 				resource_id: string
 				resource_name: string
 			}>
-		}>(genRequestUrl("/api/v1/recycle-bin/permanent-delete", {}, params), params)
+		}>(genRequestUrl("/api/v1/recycle-bin/permanent-delete"), params)
 	},
 })

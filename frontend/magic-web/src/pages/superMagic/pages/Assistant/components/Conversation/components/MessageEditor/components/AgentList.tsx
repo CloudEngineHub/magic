@@ -194,7 +194,7 @@ const AgentList = ({
 				</FlexBox>
 			)}
 
-			<div className={styles.list} onScroll={onScroll}>
+			<div className={styles.list} onScroll={onScroll} data-testid="on-scroll">
 				<VirtualList data={state.list} itemHeight={40} itemKey="id">
 					{(item: UserAvailableAgentInfo & { isFirstInCategory?: boolean }) => {
 						return (

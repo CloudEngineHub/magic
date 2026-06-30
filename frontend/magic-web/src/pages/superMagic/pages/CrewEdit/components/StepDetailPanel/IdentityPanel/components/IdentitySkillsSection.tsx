@@ -138,6 +138,7 @@ function IdentitySkillsSectionInner({ disabled = false }: IdentitySkillsSectionP
 								className="ml-1 hidden group-hover/skill:inline-flex"
 								onClick={() => skills.removeSkill(skill.code)}
 								aria-label={`Remove ${skill.label}`}
+								data-testid="remove-skill"
 							>
 								<X className="h-3 w-3" />
 							</button>
@@ -214,6 +215,7 @@ function IdentitySkillsSectionInner({ disabled = false }: IdentitySkillsSectionP
 						"h-5 rounded-md px-2 text-xs font-semibold",
 					)}
 					data-measure-skill-summary
+					data-testid="identity-skills-section-measure-summary-button"
 				/>
 				<Badge
 					variant="outline"

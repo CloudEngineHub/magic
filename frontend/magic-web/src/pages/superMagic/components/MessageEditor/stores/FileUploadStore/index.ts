@@ -10,6 +10,7 @@ import type { TiptapMentionAttributes } from "@/components/business/MentionPanel
 import type { UploadMentionItem } from "@/components/business/MentionPanel/runtime/builtin/domains/upload-files"
 import projectFilesStore, { type ProjectFilesStore } from "@/stores/projectFiles"
 import magicToast from "@/components/base/MagicToaster/utils"
+import { SuperMagicApi } from "@/apis"
 import { generateUniqueFileName } from "../../utils/generateUniqueFileName"
 import { superMagicUploadTokenService } from "../../services/UploadTokenService"
 import { UploadService } from "../../services/UploadService"
@@ -24,12 +25,18 @@ import {
 } from "./validators"
 import { createUploadHandlers } from "./uploadHandlers"
 
+const PASTED_TEXT_TEMP_DIR_NAME = ".tmp"
+
+export interface AddFilesOptions {
+	usePastedTextTempDirectory?: boolean
+	defaultRelativePathPrefix?: string
+}
+
 export interface FileUploadStoreOptions {
 	maxUploadCount?: number
 	maxUploadSize?: number
 	projectId?: string
 	topicId?: string
-	suffixDir?: string
 	onFileUpload?: (files: FileData[]) => void
 	onFileAdded?: (files: FileData[]) => void
 	onFileProgressUpdate?: (
@@ -60,7 +67,6 @@ export class FileUploadStore {
 	maxUploadSize = 1024 * 1024 * 100
 	projectId = ""
 	topicId = ""
-	suffixDir = "uploads"
 	needFilterSameFile = true
 	storageType: "workspace" | "topic" = "workspace"
 	source?: UploadSource
@@ -85,6 +91,7 @@ export class FileUploadStore {
 	private uploadHandlers!: ReturnType<typeof createUploadHandlers>
 	private sessionUploadFileIds = new Set<string>()
 	private sessionSavedProjectFileIds = new Set<string>()
+	private pastedTextTempDirectoryIds = new Map<string, string>()
 	private projectFilesStore: ProjectFilesStore
 
 	constructor(options: FileUploadStoreOptions = {}) {
@@ -117,7 +124,6 @@ export class FileUploadStore {
 			this.maxUploadSize = options.maxUploadSize
 		if ("projectId" in options) this.projectId = options.projectId ?? ""
 		if ("topicId" in options) this.topicId = options.topicId ?? ""
-		if ("suffixDir" in options && options.suffixDir) this.suffixDir = options.suffixDir
 		if ("storageType" in options && options.storageType) this.storageType = options.storageType
 		if ("source" in options) this.source = options.source
 		if ("needFilterSameFile" in options && options.needFilterSameFile !== undefined)
@@ -231,6 +237,47 @@ export class FileUploadStore {
 		})
 	}
 
+	private findRootDirectoryByName(directoryName: string) {
+		return this.projectFilesStore.workspaceFilesList.find(
+			(file) =>
+				file.type === "directory" &&
+				file.file_name === directoryName &&
+				(file.parent_id === undefined || file.parent_id === ""),
+		)
+	}
+
+	private async ensurePastedTextTempDirectory() {
+		if (!this.projectId) return undefined
+
+		const cachedDirectoryId = this.pastedTextTempDirectoryIds.get(this.projectId)
+		if (cachedDirectoryId) return cachedDirectoryId
+
+		const existingDirectory = this.findRootDirectoryByName(PASTED_TEXT_TEMP_DIR_NAME)
+		if (existingDirectory?.file_id) {
+			this.pastedTextTempDirectoryIds.set(this.projectId, existingDirectory.file_id)
+			return existingDirectory.file_id
+		}
+
+		const response = await SuperMagicApi.createFile({
+			project_id: this.projectId,
+			file_name: PASTED_TEXT_TEMP_DIR_NAME,
+			is_directory: true,
+			ignore_duplicate: true,
+		})
+
+		if (response?.file_id) {
+			this.pastedTextTempDirectoryIds.set(this.projectId, response.file_id)
+			return response.file_id
+		}
+
+		logger.warn("create pasted text temp directory returned no file_id", {
+			projectId: this.projectId,
+			response,
+		})
+
+		return undefined
+	}
+
 	private buildUploadParams(
 		fileList: FileData[],
 		customCredentials?: Parameters<UploadService<FileData>["upload"]>[0]["customCredentials"],
@@ -254,11 +301,11 @@ export class FileUploadStore {
 		}
 	}
 
-	validateDuplicateFiles(newFiles: File[], targetSuffixDir: string) {
+	validateDuplicateFiles(newFiles: File[], targetParentId: string | undefined) {
 		return validateDuplicateFiles({
 			newFiles,
 			existingFiles: this.files,
-			targetSuffixDir,
+			targetParentId,
 			needFilterSameFile: this.needFilterSameFile,
 			t,
 			logger,
@@ -283,10 +330,23 @@ export class FileUploadStore {
 		return validateEmptyFiles(files, logger)
 	}
 
-	async addFiles(newFiles: File[], customSuffixDir?: string) {
-		const targetSuffixDir = customSuffixDir ?? this.suffixDir
+	async addFiles(newFiles: File[], parentId?: string, options: AddFilesOptions | string = {}) {
+		const addFilesOptions =
+			typeof options === "string" ? { defaultRelativePathPrefix: options } : options
+		const shouldRequestPastedTextTempDirectory =
+			addFilesOptions.usePastedTextTempDirectory && Boolean(this.projectId)
+		const pastedTextTempDirectoryId = shouldRequestPastedTextTempDirectory
+			? await this.ensurePastedTextTempDirectory()
+			: undefined
+		const shouldUsePastedTextTempDirectory = Boolean(pastedTextTempDirectoryId)
+		const defaultRelativePathPrefix = shouldUsePastedTextTempDirectory
+			? PASTED_TEXT_TEMP_DIR_NAME
+			: addFilesOptions.defaultRelativePathPrefix
+		const targetParentId = shouldUsePastedTextTempDirectory
+			? pastedTextTempDirectoryId
+			: parentId
 
-		const duplicateValidation = this.validateDuplicateFiles(newFiles, targetSuffixDir)
+		const duplicateValidation = this.validateDuplicateFiles(newFiles, targetParentId)
 		let validFiles = duplicateValidation.validFiles
 
 		const sizeValidation = this.validateFileSize(validFiles)
@@ -301,7 +361,7 @@ export class FileUploadStore {
 
 		let fileDataList: FileData[] = []
 		const processedNames: string[] = this.files
-			.filter((f) => f.suffixDir === targetSuffixDir)
+			.filter((f) => f.parentId === targetParentId)
 			.map((f) => f.name)
 
 		for (const file of validFiles) {
@@ -309,7 +369,7 @@ export class FileUploadStore {
 				file.name,
 				this.files,
 				processedNames,
-				targetSuffixDir,
+				targetParentId,
 			)
 			processedNames.push(uniqueFileName)
 
@@ -326,14 +386,25 @@ export class FileUploadStore {
 				name: uniqueFileName,
 				file: renamedFile,
 				status: "init",
-				suffixDir: targetSuffixDir,
+				parentId: targetParentId,
+				defaultRelativePath: defaultRelativePathPrefix
+					? `${defaultRelativePathPrefix}/${uniqueFileName}`
+					: undefined,
+				isHidden: shouldUsePastedTextTempDirectory,
 			})
 		}
 
-		const customCredentials = await superMagicUploadTokenService.getUploadToken(
+		let customCredentials = await superMagicUploadTokenService.getUploadToken(
 			this.projectId,
-			targetSuffixDir,
+			targetParentId,
 		)
+
+		if (shouldUsePastedTextTempDirectory && customCredentials) {
+			customCredentials = superMagicUploadTokenService.changeDir(
+				customCredentials,
+				PASTED_TEXT_TEMP_DIR_NAME,
+			)
+		}
 
 		if (this.projectId && customCredentials) {
 			const projectFileNames = this.projectFilesStore.getFileNamesInFolder(
@@ -341,7 +412,7 @@ export class FileUploadStore {
 			)
 
 			const existingFileNamesInSameDir = this.files
-				.filter((f) => f.suffixDir === targetSuffixDir)
+				.filter((f) => f.parentId === targetParentId)
 				.map((f) => f.name)
 			const processedFileNames: string[] = existingFileNamesInSameDir.concat(projectFileNames)
 
@@ -350,7 +421,7 @@ export class FileUploadStore {
 					fileData.name,
 					this.files,
 					processedFileNames,
-					targetSuffixDir,
+					targetParentId,
 				)
 				processedFileNames.push(finalFileName)
 
@@ -364,7 +435,10 @@ export class FileUploadStore {
 						...fileData,
 						name: finalFileName,
 						file: finalRenamedFile,
-						suffixDir: targetSuffixDir,
+						parentId: targetParentId,
+						defaultRelativePath: defaultRelativePathPrefix
+							? `${defaultRelativePathPrefix}/${finalFileName}`
+							: undefined,
 					}
 				}
 
@@ -396,9 +470,15 @@ export class FileUploadStore {
 
 					const newCustomCredentials = await superMagicUploadTokenService.getUploadToken(
 						this.projectId,
-						targetSuffixDir,
+						targetParentId,
 						true,
 					)
+					const retryCustomCredentials = shouldUsePastedTextTempDirectory
+						? superMagicUploadTokenService.changeDir(
+								newCustomCredentials,
+								PASTED_TEXT_TEMP_DIR_NAME,
+							)
+						: newCustomCredentials
 
 					const newFileDataList = fileDataList
 						.map((file) => {
@@ -420,7 +500,7 @@ export class FileUploadStore {
 					if (newFileDataList.length > 0) {
 						logger.warn("retrying failed uploads", { count: newFileDataList.length })
 						this.uploadService
-							.upload(this.buildUploadParams(newFileDataList, newCustomCredentials))
+							.upload(this.buildUploadParams(newFileDataList, retryCustomCredentials))
 							.then((retryRes) => {
 								if (retryRes.rejected.length > 0) {
 									logger.error("reUpload file failed", retryRes.rejected)
@@ -500,7 +580,7 @@ export class FileUploadStore {
 
 		const customCredentials = await superMagicUploadTokenService.getUploadToken(
 			this.projectId,
-			file.suffixDir ?? this.suffixDir,
+			file.parentId,
 			true,
 		)
 

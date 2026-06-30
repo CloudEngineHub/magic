@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{CARD_TITLE}}</title>
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.1/dist/echarts.min.js"></script>
+    <link rel="stylesheet" href="styles.css">
+</head>
+
+<body>
+    <div class="shell">
+        <aside class="sidebar">
+            <section class="card analysis-source">
+                <div class="hero-topline">
+                    <span>Operations Cockpit</span>
+                    <span>Live Pulse</span>
+                </div>
+                <span class="eyebrow">Operations Cockpit</span>
+                <h1>{{CARD_TITLE}}</h1>
+                <p class="sub">{{CARD_DESCRIPTION}}</p>
+                <p class="meta">{{GENERATED_AT}} · Update #{{UPDATE_COUNT}}</p>
+                <div class="health-bars" aria-label="Operational health split">
+                    <span></span>
+                    <span></span>
+                    <span></span>
+                </div>
+            </section>
+
+            <!-- DATA:summary_START -->
+            <section class="card analysis-source">
+                <span class="pill">Healthy</span>
+                <div class="score">87</div>
+                <p class="sub">Traffic and revenue keep growing, while signup-to-activation remains the main drop-off segment.</p>
+            </section>
+            <!-- DATA:summary_END -->
+
+            <section class="card-soft analysis-source">
+                <p class="sub">Prioritize fixing onboarding; expected activation lift is 5-8%.</p>
+            </section>
+            <section class="card-soft analysis-source">
+                <p class="sub">Private-domain return has the highest ROI, while paid-ad costs continue rising.</p>
+            </section>
+        </aside>
+
+        <main class="main">
+            <!-- DATA:kpi_START -->
+            <section class="card analysis-source">
+                <div class="head">
+                    <div>
+                        <h2>KPI Overview</h2>
+                        <p>Core metrics and trends</p>
+                    </div>
+                </div>
+                <div class="kpi-grid">
+                    <article class="card-soft kpi">
+                        <div class="name">Total visits</div>
+                        <div class="value">428K</div>
+                        <div class="delta up">+18.6%</div>
+                        <div class="spark" data-series="112,126,134,142,155,166,174"></div>
+                    </article>
+                    <article class="card-soft kpi">
+                        <div class="name">New users</div>
+                        <div class="value">18,420</div>
+                        <div class="delta up">+14.3%</div>
+                        <div class="spark" data-series="9,10,11,12,14,15,16"></div>
+                    </article>
+                    <article class="card-soft kpi">
+                        <div class="name">7-day retention</div>
+                        <div class="value">38.7%</div>
+                        <div class="delta flat">-1.9%</div>
+                        <div class="spark" data-series="42,41,41,40,39,39,38.7"></div>
+                    </article>
+                    <article class="card-soft kpi">
+                        <div class="name">Activation rate</div>
+                        <div class="value">63.4%</div>
+                        <div class="delta down">-2.4%</div>
+                        <div class="spark" data-series="69,68,68,67,66,65,63"></div>
+                    </article>
+                    <article class="card-soft kpi">
+                        <div class="name">Paid conversion</div>
+                        <div class="value">4.9%</div>
+                        <div class="delta up">+0.6%</div>
+                        <div class="spark" data-series="3.8,4.1,4.0,4.3,4.5,4.7,4.9"></div>
+                    </article>
+                    <article class="card-soft kpi">
+                        <div class="name">Monthly revenue</div>
+                        <div class="value">¥1.38M</div>
+                        <div class="delta up">+21.4%</div>
+                        <div class="spark" data-series="0.72,0.84,0.93,1.02,1.11,1.24,1.38"></div>
+                    </article>
+                </div>
+            </section>
+            <!-- DATA:kpi_END -->
+
+            <div class="row-2">
+                <!-- DATA:funnel_START -->
+                <section class="card analysis-source">
+                    <div class="head">
+                        <div>
+                            <h2>Conversion funnel</h2>
+                            <p>Visit-to-repeat-purchase efficiency</p>
+                        </div>
+                    </div>
+                    <div class="chart" id="funnelChart"></div>
+                </section>
+                <!-- DATA:funnel_END -->
+
+                <section class="card analysis-source">
+                    <h2>Funnel interpretation</h2>
+                    <div class="list">
+                        <div class="item"><strong>Visit -> signup 12.8%</strong><span>Landing-page match improved.</span></div>
+                        <div class="item"><strong>Signup -> activation 63.4%</strong><span>First-day task completion declined.</span></div>
+                        <div class="item"><strong>Activation -> paid 7.7%</strong><span>High-intent recall is effective.</span></div>
+                    </div>
+                </section>
+            </div>
+
+            <div class="row-2">
+                <!-- DATA:channels_START -->
+                <section class="card analysis-source">
+                    <div class="head">
+                        <div>
+                            <h2>Channel breakdown</h2>
+                            <p>Scale / revenue / cost comparison</p>
+                        </div>
+                    </div>
+                    <div class="chart tall" id="channelChart"></div>
+                </section>
+                <!-- DATA:channels_END -->
+
+                <!-- DATA:alerts_START -->
+                <section class="card analysis-source">
+                    <h2>Alerts and actions</h2>
+                    <div class="list">
+                        <div class="item"><strong class="down">P1 activation rate below threshold</strong><span>Roll back complex forms and add default templates.</span></div>
+                        <div class="item"><strong class="flat">P2 CPA keeps rising</strong><span>Pause low-CTR creative assets.</span></div>
+                        <div class="item"><strong>P3 retention has not translated into revenue</strong><span>Add conversion incentives for returning users.</span></div>
+                    </div>
+                </section>
+                <!-- DATA:alerts_END -->
+            </div>
+
+            <!-- DATA:trend_START -->
+            <section class="card analysis-source">
+                <div class="head">
+                    <div>
+                        <h2>Growth trend</h2>
+                        <p>Traffic / revenue / conversion-rate linkage</p>
+                    </div>
+                    <div class="tabs" id="trendTabs">
+                        <button class="tab active" data-range="7d" type="button">7D</button>
+                        <button class="tab" data-range="14d" type="button">14D</button>
+                        <button class="tab" data-range="30d" type="button">30D</button>
+                    </div>
+                </div>
+                <div class="chart tall" id="trendChart"></div>
+            </section>
+            <!-- DATA:trend_END -->
+
+            <!-- DATA:sources_START -->
+            <section class="card source-panel analysis-source">
+                <div class="source-head">
+                    <div>
+                        <h2>Evidence links</h2>
+                        <p>External pages supporting metric judgments, anomaly alerts, and action recommendations.</p>
+                    </div>
+                    <button class="source-close" id="sourceClose" type="button">Collapse preview</button>
+                </div>
+                <div class="source-grid">
+                    <article class="source-card">
+                        <span class="pill">Data</span>
+                        <strong>Channel advertising daily report</strong>
+                        <p class="sub">Used to verify CPA increases and creative CTR decline.</p>
+                        <div class="source-actions">
+                            <button class="source-preview active" type="button"
+                                data-preview-url="https://example.com/channel-report">Preview</button>
+                            <a href="https://example.com/channel-report" target="_blank"
+                                rel="noopener noreferrer">Open</a>
+                        </div>
+                    </article>
+                    <article class="source-card">
+                        <span class="pill">Product</span>
+                        <strong>Signup-flow redesign record</strong>
+                        <p class="sub">Used to check whether the activation decline is related to the recent redesign.</p>
+                        <div class="source-actions">
+                            <button class="source-preview" type="button"
+                                data-preview-url="https://example.com/release-note">Preview</button>
+                            <a href="https://example.com/release-note" target="_blank"
+                                rel="noopener noreferrer">Open</a>
+                        </div>
+                    </article>
+                </div>
+                <div class="source-frame-wrap">
+                    <div class="source-frame-fallback" id="sourceFallback">If the page blocks embedding, use Open.</div>
+                    <iframe id="sourceFrame" title="Evidence-link preview" sandbox="allow-scripts allow-same-origin allow-popups"
+                        loading="lazy" referrerpolicy="no-referrer"></iframe>
+                </div>
+            </section>
+            <!-- DATA:sources_END -->
+
+            <section class="ai-insight">
+                <div class="insight-header"><span class="insight-icon">✦</span><span>AI Insight</span></div>
+                <p class="insight-text">Activation rate has declined for three consecutive days while first-day task completion also fell. This may be related to the signup-flow redesign; prioritize rollback and A/B validation.</p>
+                <div class="suggestion-chips">
+                    <button class="chip" type="button" data-prompt="Why is activation declining? Analyze funnel stages and recent product changes.">Why is activation declining?</button>
+                    <button class="chip" type="button" data-prompt="Give three executable steps to optimize the conversion funnel, including expected benefit ranges.">How can we optimize the funnel?</button>
+                    <button class="chip" type="button" data-prompt="Analyze recent competitor moves and assess potential impact on our core metrics.">What are competitors doing?</button>
+                    <button class="chip" type="button" data-prompt="Based on current data, write an action plan with priorities, suggested owners, and timing.">Write an action plan</button>
+                </div>
+                <div class="ask-row">
+                    <input class="ask-input" id="askInput" type="text" placeholder="Ask something else...">
+                    <button class="ask-send" id="askSend" type="button">→</button>
+                </div>
+                <div class="config-row">
+                    <div class="select-group">
+                        <label class="select-label" for="agentSelect">AI employee</label>
+                        <select class="select" id="agentSelect">
+                            <option value="">Loading employees...</option>
+                        </select>
+                    </div>
+                    <div class="select-group">
+                        <label class="select-label" for="modelSelect">Model</label>
+                        <select class="select" id="modelSelect">
+                            <option value="auto">Auto select</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="insight-status" id="insightStatus"></div>
+            </section>
+        </main>
+    </div>
+    <script src="scripts.js"></script>
+</body>
+
+</html>

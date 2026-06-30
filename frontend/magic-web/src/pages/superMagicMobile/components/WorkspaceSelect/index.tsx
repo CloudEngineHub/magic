@@ -85,6 +85,7 @@ function WorkspaceSelect(props: WorkspaceSelectProps, ref: Ref<WorkspaceSelectRe
 					"cursor-pointer overflow-hidden transition-colors active:bg-muted",
 				)}
 				onClick={() => hierarchicalWorkspacePopupRef.current?.show()}
+				data-testid="show"
 			>
 				<div className="flex-shrink-0">
 					{onProjectPage ? <ProjectIcon /> : <WorkspaceIcon />}

@@ -31,6 +31,7 @@ function IdentityDetail() {
 				alt=""
 				className="pointer-events-none absolute inset-0 size-full object-cover object-center opacity-60"
 				aria-hidden
+				data-testid="step-detail-panel-image"
 			/>
 
 			<IdentityPanel />

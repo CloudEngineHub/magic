@@ -1,10 +1,11 @@
 import { useTranslation } from "react-i18next"
-import { useRef, useState } from "react"
+import { useMemo, useRef, useState } from "react"
 import { Check } from "lucide-react"
 import MagicModal from "@/components/base/MagicModal"
 import IsolatedHTMLRenderer, {
 	type IsolatedHTMLRendererRef,
 } from "../../contents/HTML/IsolatedHTMLRenderer"
+import { resolvePptScaleContentDimensions } from "../../contents/HTML/utils/slide-dimensions"
 
 interface VersionCompareDialogProps {
 	/** Whether dialog is open */
@@ -56,6 +57,14 @@ function VersionCompareDialog({
 
 	// Selected version state - 'my' or 'server'
 	const [selectedVersion, setSelectedVersion] = useState<"my" | "server">("my")
+	const myVersionScaleContentDimensions = useMemo(
+		() => resolvePptScaleContentDimensions(currentContent),
+		[currentContent],
+	)
+	const serverVersionScaleContentDimensions = useMemo(
+		() => resolvePptScaleContentDimensions(serverContent),
+		[serverContent],
+	)
 
 	// Handle confirm action
 	const handleConfirm = async () => {
@@ -113,6 +122,7 @@ function VersionCompareDialog({
 								: "border-transparent hover:border-border"
 						}`}
 						onClick={() => setSelectedVersion("my")}
+						data-testid="set-selected-version"
 					>
 						<div className="flex items-center justify-between gap-2 rounded-md bg-muted/50 px-3 py-1.5">
 							<div className="flex items-center gap-2">
@@ -136,8 +146,10 @@ function VersionCompareDialog({
 							<IsolatedHTMLRenderer
 								ref={myVersionRendererRef}
 								content={currentContent}
+								rawSourceCode={currentContent}
 								sandboxType="iframe"
 								isPptRender
+								scaleContentDimensions={myVersionScaleContentDimensions}
 								isEditMode={isEditingMyVersion}
 								filePathMapping={filePathMapping}
 								openNewTab={openNewTab}
@@ -158,6 +170,7 @@ function VersionCompareDialog({
 								: "border-transparent hover:border-border"
 						}`}
 						onClick={() => setSelectedVersion("server")}
+						data-testid="set-selected-version-2"
 					>
 						<div className="flex items-center justify-between gap-2 rounded-md bg-muted/50 px-3 py-1.5">
 							<div className="flex items-center gap-2">
@@ -181,8 +194,10 @@ function VersionCompareDialog({
 							<IsolatedHTMLRenderer
 								ref={serverVersionRendererRef}
 								content={serverContent}
+								rawSourceCode={serverContent}
 								sandboxType="iframe"
 								isPptRender
+								scaleContentDimensions={serverVersionScaleContentDimensions}
 								isEditMode={isEditingServerVersion}
 								filePathMapping={filePathMapping}
 								openNewTab={openNewTab}

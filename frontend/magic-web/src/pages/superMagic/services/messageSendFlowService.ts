@@ -36,7 +36,10 @@ import {
 } from "../pages/Workspace/types"
 import { TopicMode } from "../pages/Workspace/TopicMode"
 import { superMagicStore } from "../stores"
+import { optimisticMessageStore } from "../stores/optimisticMessageStore"
+import { getNetworkMonitor } from "@/services/recordSummary/NetworkMonitor"
 import { smartRenameTopicIfUnnamed } from "./topicRename"
+import { shouldSyncChatConversationName, syncChatProjectNameOnly } from "./chatConversationNameSync"
 import { shouldClearEditorAfterSend } from "./messageSendEditorPolicy"
 
 const logger = Logger.createLogger("messageSendService")
@@ -51,6 +54,7 @@ export interface HandleSendParams {
 	isFromQueue?: boolean
 	queueId?: string
 	shouldClearEditorAfterSend?: boolean
+	throwOnError?: boolean
 	extra?: Record<string, unknown>
 }
 
@@ -136,22 +140,12 @@ class MessageSendService {
 	sendContent({ content, options, showLoading = false, context }: SendContentParams) {
 		// 发送前统一处理内容格式
 		if (typeof content === "string") {
-			void this.dispatchMessage({
-				content,
-				showLoading,
-				options,
-				context,
-			})
+			void this.dispatchMessage({ content, showLoading, options, context })
 			return
 		}
 
 		if (!isEmptyJSONContent(content)) {
-			void this.dispatchMessage({
-				jsonContent: content,
-				showLoading,
-				options,
-				context,
-			})
+			void this.dispatchMessage({ jsonContent: content, showLoading, options, context })
 		}
 	}
 
@@ -234,8 +228,8 @@ class MessageSendService {
 
 		// 调用聊天接口发送消息
 		const sendMessage = () => {
-			// 发送消息前需要优先基于当前发送的消息落本地的 superMagicStore 中
-			this.deps.superMagicStore.addUserMessage(chat_topic_id, {
+			const optimisticAnchor = this.deps.superMagicStore.getLatestMessageAnchor(chat_topic_id)
+			const pendingUserMessage = {
 				message: {
 					type: messageType,
 					[messageType]: {
@@ -254,25 +248,23 @@ class MessageSendService {
 					topic_id: chat_topic_id,
 				} as unknown as ConversationMessageSend["message"],
 				conversation_id: chat_conversation_id,
+			}
+
+			this.deps.superMagicStore.addUserMessage(chat_topic_id, pendingUserMessage)
+			optimisticMessageStore.markSending({
+				chat_topic_id,
+				app_message_id: messageId,
+				created_at: date,
+				last_attempt_at: date,
+				...optimisticAnchor,
+				pending_message: pendingUserMessage,
 			})
+			if (getNetworkMonitor().isNetworkOffline()) {
+				optimisticMessageStore.markFailed({ chat_topic_id, app_message_id: messageId })
+				return
+			}
 			this.deps.chatApi
-				.chat(EventType.Chat, {
-					message: {
-						type: messageType,
-						[messageType]: {
-							content,
-							instructs: [{ value: showLoading ? "follow_up" : "normal" }],
-							...mergedSendOptions,
-						},
-						send_timestamp: date,
-						send_time: date,
-						sender_id: this.deps.userStore.user.userInfo?.user_id,
-						app_message_id: messageId,
-						message_id: messageId,
-						topic_id: chat_topic_id,
-					} as unknown as ConversationMessageSend["message"],
-					conversation_id: chat_conversation_id,
-				})
+				.chat(EventType.Chat, pendingUserMessage)
 				.then((res) => {
 					const responseSeq =
 						(res as { data?: { seq?: SeqResponse<ConversationQueryMessage> } })?.data
@@ -280,23 +272,11 @@ class MessageSendService {
 					if (!responseSeq?.message) return
 					// 响应成功后替换 superMagicStore 中对应数据
 					this.deps.superMagicStore.replaceUserMessage(chat_topic_id, responseSeq)
-					// console.log("发送消息后的响应", res, {
-					// 	type: messageType,
-					// 	[messageType]: {
-					// 		content,
-					// 		instructs: [{ value: showLoading ? "follow_up" : "normal" }],
-					// 		...mergedSendOptions,
-					// 	},
-					// 	send_timestamp: date,
-					// 	send_time: date,
-					// 	sender_id: this.deps.userStore.user.userInfo?.user_id,
-					// 	app_message_id: messageId,
-					// 	message_id: messageId,
-					// 	topic_id: chat_topic_id,
-					// })
+					optimisticMessageStore.confirm({ chat_topic_id, app_message_id: messageId })
 				})
 				.catch((error) => {
 					console.log("error", error)
+					optimisticMessageStore.markFailed({ chat_topic_id, app_message_id: messageId })
 				})
 		}
 
@@ -410,19 +390,25 @@ class MessageSendService {
 
 		const model = params.selectedModel
 			? {
-					model_id: params.selectedModel.model_id,
-				}
+				model_id: params.selectedModel.model_id,
+				model_name: params.selectedModel.model_name,
+				model_icon: params.selectedModel.model_icon,
+			}
 			: undefined
 
 		const imageModel = params.selectedImageModel?.model_id
 			? {
-					model_id: params.selectedImageModel.model_id,
-				}
+				model_id: params.selectedImageModel.model_id,
+				model_name: params.selectedImageModel.model_name,
+				model_icon: params.selectedImageModel.model_icon,
+			}
 			: undefined
 		const videoModel = params.selectedVideoModel?.model_id
 			? {
-					model_id: params.selectedVideoModel.model_id,
-				}
+				model_id: params.selectedVideoModel.model_id,
+				model_name: params.selectedVideoModel.model_name,
+				model_icon: params.selectedVideoModel.model_icon,
+			}
 			: undefined
 
 		// 根据话题读取联网搜索开关
@@ -484,7 +470,18 @@ class MessageSendService {
 		topicName: string
 		context?: SendRuntimeContext
 	}) {
-		if (topicName && project && !project.project_name) {
+		if (!topicName || !project) return
+
+		// Chat conversations: topic was already renamed by smartRenameTopic; mirror name on project.
+		if (shouldSyncChatConversationName(project)) {
+			void syncChatProjectNameOnly({
+				projectId: project.id,
+				name: topicName,
+			})
+			return
+		}
+
+		if (!project.project_name) {
 			const workspaceId =
 				(context?.workspaceId ?? context?.selectedWorkspace?.id ?? project.workspace_id) ||
 				""

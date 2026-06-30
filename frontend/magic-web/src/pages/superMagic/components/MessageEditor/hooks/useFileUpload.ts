@@ -4,7 +4,6 @@ import { useTranslation } from "react-i18next"
 import { useUpload } from "@/hooks/useUploadFiles"
 import { FileData, UploadSource } from "../types"
 import { SaveUploadFileToProjectResponse } from "../../../utils/api"
-import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import { superMagicUploadTokenService } from "../services/UploadTokenService"
 import projectFilesStore from "@/stores/projectFiles"
 import { logger as Logger } from "@/utils/log"
@@ -199,9 +198,6 @@ export function useFileUpload(options: UseFileUploadOptions = {}) {
 				} catch (error) {
 					logger.error("save file to project failed", error)
 				}
-
-				// 触发更新文件列表
-				pubsub.publish(PubSubEvents.Update_Attachments)
 
 				// 乐观更新：先把附件写入 projectFilesStore，
 				// 这样 MentionPanel 在附件轮询回来之前也能搜到。

@@ -27,6 +27,7 @@ export function getShareTypeIcon(shareType: ShareType, size?: ShareTypeIconSize)
 					src={publicIcon}
 					alt=""
 					style={{ width: iconSize.public, height: iconSize.public }}
+					data-testid="share-type-helpers-image"
 				/>
 			)
 		case ShareType.PasswordProtected:
@@ -35,6 +36,7 @@ export function getShareTypeIcon(shareType: ShareType, size?: ShareTypeIconSize)
 					src={protectedIcon}
 					alt=""
 					style={{ width: iconSize.protected, height: iconSize.protected }}
+					data-testid="share-type-helpers-image-2"
 				/>
 			)
 		case ShareType.Organization:
@@ -43,6 +45,7 @@ export function getShareTypeIcon(shareType: ShareType, size?: ShareTypeIconSize)
 					src={teamIcon}
 					alt=""
 					style={{ width: iconSize.team, height: iconSize.team }}
+					data-testid="share-type-helpers-image-3"
 				/>
 			)
 		default:

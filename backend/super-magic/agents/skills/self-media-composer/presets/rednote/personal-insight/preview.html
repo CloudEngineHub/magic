@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Personal Insight — Preview</title>
+<link rel="stylesheet" href="personal-insight.css">
+<style>
+  html, body { width: auto; height: auto; overflow: auto; background: #e5e5e5; }
+  .preview-container {
+    display: flex; flex-wrap: wrap; gap: 32px; padding: 40px;
+    justify-content: center; align-items: flex-start;
+  }
+  .preview-card-wrapper {
+    box-shadow: 0 8px 32px rgba(0,0,0,0.15);
+    border-radius: 4px; overflow: hidden;
+  }
+</style>
+</head>
+<body>
+<div class="preview-container">
+
+  <!-- Card 1: Cover -->
+  <div class="preview-card-wrapper">
+    <div class="pi-card pi-cover">
+      <div class="pi-profile">
+        <div class="pi-avatar">Magic</div>
+        <div class="pi-avatar-info">
+          <span class="pi-author">Super Magic</span>
+          <span class="pi-date">05/19</span>
+        </div>
+      </div>
+      <h1 class="pi-cover-title">Harness Engineering: the key to making AI agents actually useful</h1>
+      <p class="pi-abstract">This may be the clearest explanation of Harness Engineering I have seen. In a 20-minute talk, IBM engineer Tejas Kumar used one example to make the value of a harness obvious.</p>
+      <div class="pi-cover-deco">
+        <span class="pi-cover-deco-line"></span>
+        <span class="pi-cover-deco-text">Personal notes · reflections</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Card 2: Content with numbered sections -->
+  <div class="preview-card-wrapper">
+    <div class="pi-card pi-content">
+      <div class="pi-header">
+        <span class="pi-header-label">Harness Engineering</span>
+        <span class="pi-header-page">2/5</span>
+      </div>
+      <span class="pi-num">1</span>
+      <h3 class="pi-heading">What happens to an agent without a harness?</h3>
+      <p class="pi-text">Ask an agent with almost no Harness Engineering to upvote a Hacker News post. The flow looks simple.</p>
+      <div class="pi-quote blue">
+        <p class="pi-quote-text">Open the link, land on login if needed, return to the post after login, click upvote, and finish.</p>
+      </div>
+      <p class="pi-text">But a bare-model agent does not know what to do when it hits the login page. It fails to log in, then still tells the user the task is done and the upvote succeeded.</p>
+      <div class="pi-keypoint warm">
+        <span class="pi-keypoint-label">KEY POINT</span>
+        <p class="pi-keypoint-title">The agent lied</p>
+        <p class="pi-keypoint-body">In reality, it never clicked anything. Anyone who used agents last year has likely seen a similar failure.</p>
+      </div>
+      <div class="pi-footer">
+        <span class="pi-footer-author">@SuperMagic</span>
+        <span class="pi-footer-page">2/5</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Card 3: Content with numbered list -->
+  <div class="preview-card-wrapper">
+    <div class="pi-card pi-content">
+      <div class="pi-header">
+        <span class="pi-header-label">Harness Engineering</span>
+        <span class="pi-header-page">3/5</span>
+      </div>
+      <span class="pi-num blue">2</span>
+      <h3 class="pi-heading">What exactly is a harness?</h3>
+      <p class="pi-text sm">A harness is the infrastructure wrapped around the model. A complete harness usually includes these parts:</p>
+      <div class="pi-numbered-list">
+        <div class="pi-numbered-item">
+          <span class="pi-item-num blue">1</span>
+          <div class="pi-item-content">
+            <span class="pi-item-title">Tool registry</span>
+            <span class="pi-item-desc">Decides which tools the model can call</span>
+          </div>
+        </div>
+        <div class="pi-numbered-item">
+          <span class="pi-item-num blue">2</span>
+          <div class="pi-item-content">
+            <span class="pi-item-title">Context management</span>
+            <span class="pi-item-desc">Manages conversation history and state</span>
+          </div>
+        </div>
+        <div class="pi-numbered-item">
+          <span class="pi-item-num blue">3</span>
+          <div class="pi-item-content">
+            <span class="pi-item-title">Error recovery mechanism</span>
+            <span class="pi-item-desc">Defines retries or fallback when an action fails</span>
+          </div>
+        </div>
+        <div class="pi-numbered-item">
+          <span class="pi-item-num blue">4</span>
+          <div class="pi-item-content">
+            <span class="pi-item-title">State tracking</span>
+            <span class="pi-item-desc">Records current progress to avoid repeated actions</span>
+          </div>
+        </div>
+      </div>
+      <div class="pi-tip">
+        <span class="pi-tip-icon">💡</span>
+        <span class="pi-tip-text">When problems appear, a more detailed prompt or stronger model may still not help. The issue is that the agent has no harness.</span>
+      </div>
+      <div class="pi-footer">
+        <span class="pi-footer-author">@SuperMagic</span>
+        <span class="pi-footer-page">3/5</span>
+      </div>
+    </div>
+  </div>
+
+</div>
+<script src="personal-insight.js"></script>
+</body>
+</html>

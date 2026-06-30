@@ -106,7 +106,7 @@ export default function MemorySuggestion({
 		<>
 			{isMobile && (
 				<div className={styles.header}>
-					<div className={styles.back} onClick={() => setPage(LongTremMemoryPage.List)}>
+					<div className={styles.back} onClick={() => setPage(LongTremMemoryPage.List)} data-testid="set-page">
 						<IconChevronLeft size={24} stroke={1.5} />
 					</div>
 					<Flex flex={1} justify="space-between" align="center">
@@ -115,7 +115,7 @@ export default function MemorySuggestion({
 							{t("memorySuggestionCount", { count: pendingMemoryList.length })}
 						</div>
 					</Flex>
-					<div className={styles.close} onClick={onClose}>
+					<div className={styles.close} onClick={onClose} data-testid="on-close">
 						<IconX size={24} />
 					</div>
 				</div>
@@ -147,6 +147,7 @@ export default function MemorySuggestion({
 												<div
 													className={styles.button}
 													onClick={() => handleEditMemory(memory)}
+													data-testid="handle-edit-memory"
 												>
 													<IconEdit
 														color={colorUsages.text[1]}
@@ -157,6 +158,7 @@ export default function MemorySuggestion({
 												<div
 													className={cx(styles.button, styles.buttonFail)}
 													onClick={() => handleMemoryReject(memory.id)}
+													data-testid="handle-memory-reject"
 												>
 													<IconX
 														color={colorUsages.danger.default}
@@ -170,6 +172,7 @@ export default function MemorySuggestion({
 														styles.buttonSuccess,
 													)}
 													onClick={() => handleMemoryAccept(memory.id)}
+													data-testid="handle-memory-accept"
 												>
 													<IconCheck
 														color={colorUsages.success.default}
@@ -195,6 +198,7 @@ export default function MemorySuggestion({
 													onClick={() =>
 														handleProjectClick(memory.project_id)
 													}
+													data-testid="handle-project-click"
 												>
 													<div>{memory.project_name}</div>
 													<IconChevronRight size={16} />
@@ -217,6 +221,7 @@ export default function MemorySuggestion({
 											<div
 												className={styles.button}
 												onClick={() => handleEditMemory(memory)}
+												data-testid="handle-edit-memory-2"
 											>
 												<IconEdit color={colorUsages.text[1]} size={18} />
 												{t("edit")}
@@ -224,6 +229,7 @@ export default function MemorySuggestion({
 											<div
 												className={cx(styles.button, styles.buttonFail)}
 												onClick={() => handleMemoryReject(memory.id)}
+												data-testid="handle-memory-reject-2"
 											>
 												<IconX
 													color={colorUsages.danger.default}
@@ -234,6 +240,7 @@ export default function MemorySuggestion({
 											<div
 												className={cx(styles.button, styles.buttonSuccess)}
 												onClick={() => handleMemoryAccept(memory.id)}
+												data-testid="handle-memory-accept-2"
 											>
 												<IconCheck
 													color={colorUsages.success.default}

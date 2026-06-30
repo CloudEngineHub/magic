@@ -1,6 +1,5 @@
 import { t } from "i18next"
-import { FileApi } from "@/apis"
-import pubsub, { PubSubEvents } from "@/utils/pubsub"
+import { FileApi, SuperMagicApi } from "@/apis"
 import type { ProjectFilesStore } from "@/stores/projectFiles"
 import { logger as Logger } from "@/utils/log"
 import { superMagicUploadTokenService } from "../../services/UploadTokenService"
@@ -92,21 +91,51 @@ export function createUploadHandlers(context: UploadHandlersContext): UploadHand
 
 			let saveRes: FileData["saveResult"] | undefined
 			try {
-				saveRes = await superMagicUploadTokenService.saveFileToProject({
-					project_id: projectId,
-					topic_id: context.getTopicId(),
-					file_key: response.key,
-					file_name: response.name,
-					file_size: response.size,
-					file_type: "user_upload",
-					storage_type: context.getStorageType(),
-					source: context.getSource() ?? UploadSource.Home,
-				})
+				if (file.isHidden) {
+					const [batchSaveResult] = (await SuperMagicApi.batchSaveFiles({
+						project_id: projectId,
+						parent_id: file.parentId,
+						files: [
+							{
+								project_id: projectId,
+								topic_id: context.getTopicId(),
+								task_id: "",
+								file_key: response.key,
+								file_name: response.name,
+								file_size: response.size,
+								file_type: "user_upload",
+								storage_type: context.getStorageType(),
+								source: context.getSource() ?? UploadSource.Home,
+								relative_file_path: file.defaultRelativePath,
+								is_hidden: true,
+							},
+						],
+					})) as FileData["saveResult"][]
+
+					saveRes = batchSaveResult
+						? {
+								...batchSaveResult,
+								is_hidden: true,
+							}
+						: undefined
+				} else {
+					saveRes = await superMagicUploadTokenService.saveFileToProject({
+						project_id: projectId,
+						topic_id: context.getTopicId(),
+						parent_id: file.parentId,
+						file_key: response.key,
+						file_name: response.name,
+						file_size: response.size,
+						file_type: "user_upload",
+						storage_type: context.getStorageType(),
+						source: context.getSource() ?? UploadSource.Home,
+						relative_file_path: file.defaultRelativePath,
+					})
+				}
 			} catch (error) {
 				logger.error("save file to project failed", error)
 			}
 
-			pubsub.publish(PubSubEvents.Update_Attachments)
 			const projectFilesStore = context.getProjectFilesStore()
 
 			if (saveRes && projectFilesStore.currentSelectedProject?.id === projectId) {
@@ -123,7 +152,7 @@ export function createUploadHandlers(context: UploadHandlersContext): UploadHand
 						file_key: saveRes.file_key,
 						relative_file_path: saveRes.relative_file_path ?? saveRes.file_key,
 						file_size: saveRes.file_size,
-						is_hidden: false,
+						is_hidden: Boolean(file.isHidden),
 						children: [],
 						source: mapUploadSourceToAttachmentSource(context.getSource()),
 						task_id: saveRes.task_id,

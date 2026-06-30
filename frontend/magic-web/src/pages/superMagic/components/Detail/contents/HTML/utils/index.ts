@@ -1,6 +1,6 @@
 import { env } from "@/utils/env"
 import { normalizeConflictingBackgroundDeclarations } from "./background-style"
-import { getEditingScript } from "./editing-script"
+// import { getEditingScript } from "./editing-script"
 
 interface ShouldPromptForServerUpdateOptions {
 	latestContent: string
@@ -172,12 +172,24 @@ export function resolveRelativePath(basePath: string, relativePath: string): str
 }
 
 export function flattenAttachments(items: any[]): any[] {
-	return items.reduce((acc: any[], item) => {
+	const flattenedItems: any[] = []
+	const stack = [...items].reverse()
+
+	while (stack.length > 0) {
+		const item = stack.pop()
+		if (!item) continue
+
 		if (item.is_directory && item.children) {
-			return [...acc, ...flattenAttachments(item.children)]
+			for (let index = item.children.length - 1; index >= 0; index -= 1) {
+				stack.push(item.children[index])
+			}
+			continue
 		}
-		return [...acc, item]
-	}, [])
+
+		flattenedItems.push(item)
+	}
+
+	return flattenedItems
 }
 
 // Helper function to check if a URL is a relative path
@@ -559,49 +571,55 @@ export function rewriteHtmlCdnWithHost(content: string, cdnHost: string): Docume
 		match: (parsed: URL) => boolean
 		rewrite: (href: string, parsed: URL) => string | string[]
 	}[] = [
-		{
-			// "https://fonts.googleapis.com/icon?family=Material+Icons"
-			match: (parsed) =>
-				GOOGLE_FONT_HOSTS.has(parsed.hostname) && parsed.pathname === "/icon",
-			rewrite: () => cdnHost + "/googleapis/icon/v145/index.css",
-		},
-		{
-			// "https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700;900&display=swap"
-			// "https://fonts.googlefonts.cn/css2?family=Ma+Shan+Zheng&display=swap"
-			// "https://fonts.googleapis.com/css?family=Open+Sans:400,700|Lato:300"
-			// "https://fonts.googlefonts.cn/css?family=Open+Sans:400,700|Lato:300"
-			match: (parsed) =>
-				GOOGLE_FONT_HOSTS.has(parsed.hostname) &&
-				(parsed.pathname === "/css2" || parsed.pathname === "/css"),
-			rewrite: (href, parsed) => {
-				const families = parseFontFamilies(parsed)
-				if (families.length === 0) return href.replace(parsed.hostname, "fonts.loli.net")
-				return families.map(
-					(f) => cdnHost + "/google-fonts/css/woff2/" + toSafeFontName(f) + "_woff2.css",
-				)
+			{
+				// "https://fonts.googleapis.com/icon?family=Material+Icons"
+				match: (parsed) =>
+					GOOGLE_FONT_HOSTS.has(parsed.hostname) && parsed.pathname === "/icon",
+				rewrite: () => cdnHost + "/googleapis/icon/v145/index.css",
 			},
-		},
-		{
-			// "https://fonts.googleapis.com/earlyaccess/notosanssc.css"
-			match: (parsed) => GOOGLE_FONT_HOSTS.has(parsed.hostname),
-			rewrite: (href, parsed) => href.replace(parsed.hostname, "fonts.loli.net"),
-		},
-		{
-			// "https://ajax.googleapis.com/ajax/libs/jquery/3.7.1/jquery.min.js"
-			match: (parsed) => parsed.hostname === "ajax.googleapis.com",
-			rewrite: (href) => href.replace("ajax.googleapis.com", "ajax.loli.net"),
-		},
-	]
+			{
+				// "https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700;900&display=swap"
+				// "https://fonts.googlefonts.cn/css2?family=Ma+Shan+Zheng&display=swap"
+				// "https://fonts.googleapis.com/css?family=Open+Sans:400,700|Lato:300"
+				// "https://fonts.googlefonts.cn/css?family=Open+Sans:400,700|Lato:300"
+				match: (parsed) =>
+					GOOGLE_FONT_HOSTS.has(parsed.hostname) &&
+					(parsed.pathname === "/css2" || parsed.pathname === "/css"),
+				rewrite: (href, parsed) => {
+					const families = parseFontFamilies(parsed)
+					if (families.length === 0) return href.replace(parsed.hostname, "fonts.loli.net")
+					return families.map(
+						(f) => cdnHost + "/google-fonts/css/woff2/" + toSafeFontName(f) + "_woff2.css",
+					)
+				},
+			},
+			{
+				// "https://fonts.googleapis.com/earlyaccess/notosanssc.css"
+				match: (parsed) => GOOGLE_FONT_HOSTS.has(parsed.hostname),
+				rewrite: (href, parsed) => href.replace(parsed.hostname, "fonts.loli.net"),
+			},
+			{
+				// "https://ajax.googleapis.com/ajax/libs/jquery/3.7.1/jquery.min.js"
+				match: (parsed) => parsed.hostname === "ajax.googleapis.com",
+				rewrite: (href) => href.replace("ajax.googleapis.com", "ajax.loli.net"),
+			},
+		]
 
-	function applyGoogleRewrite(link: Element, href: string, doc: Document): void {
+	function resolveGoogleRewrite(href: string): string | string[] | null {
 		const parsed = parseHref(href)
-		if (!parsed) return
+		if (!parsed) return null
 
 		const rule = googleRewriteRules.find((r) => r.match(parsed))
-		if (!rule) return
+		if (!rule) return null
 
+		return rule.rewrite(href, parsed)
+	}
+
+	function applyGoogleRewrite(link: Element, href: string, doc: Document): void {
+		const result = resolveGoogleRewrite(href)
+		if (!result) return
+		
 		link.setAttribute("data-original-href", href)
-		const result = rule.rewrite(href, parsed)
 
 		if (typeof result === "string") {
 			link.setAttribute("href", result)
@@ -618,11 +636,78 @@ export function rewriteHtmlCdnWithHost(content: string, cdnHost: string): Docume
 		}
 	}
 
+	function buildGoogleImportReplacement(
+		originalHref: string,
+		rewrittenHrefs: string[],
+		suffix: string,
+	): string {
+		const normalizedSuffix = suffix.trim()
+		console.log(rewrittenHrefs, originalHref, normalizedSuffix)
+		return rewrittenHrefs
+			.map((rewrittenHref) => {
+				const suffixText = normalizedSuffix ? ` ${normalizedSuffix}` : ""
+				return `/*__ORIGINAL_GOOGLE_IMPORT_URL__:${originalHref}__*/ @import url('${rewrittenHref}')${suffixText};`
+			})
+			.join("\n")
+	}
+
+	function applyGoogleRewriteToStyle(style: HTMLStyleElement): void {
+		const styleContent = style.textContent || ""
+		if (
+			!styleContent.includes("@import") ||
+			(!styleContent.includes("fonts.googleapis.com") &&
+				!styleContent.includes("fonts.googlefonts.cn"))
+		) {
+			return
+		}
+
+		/** 匹配 @import 规则
+		 * 形式A：url('...') / url("...") / url(...) 无引号
+		 * 形式B：@import '...' / @import "..."（无 url()）
+		 */
+		const importRegex =
+			/@import\s+(?:url\(\s*(?:'([^']+)'|"([^"]+)"|([^'")\s]+))\s*\)|'([^']+)'|"([^"]+)")([^;]*);?/gi
+
+		style.textContent = styleContent.replace(
+			importRegex,
+			(
+				match,
+				/* 组1 url('xxx') */
+				singleQuotedUrl: string | undefined,
+				/* 组2 url("xxx") */
+				doubleQuotedUrl: string | undefined,
+				/* 组3 url(https://...) */
+				unquotedUrl: string | undefined,
+				/* 组4 @import 'xxx' */
+				singleQuotedPlainUrl: string | undefined,
+				/* 组6 @import "xxx" */
+				doubleQuotedPlainUrl: string | undefined,
+				/* 组7 后缀 */
+				suffix: string = "",
+			) => {
+				const href =
+					singleQuotedUrl ||
+					doubleQuotedUrl ||
+					unquotedUrl ||
+					singleQuotedPlainUrl ||
+					doubleQuotedPlainUrl
+				if (!href) return match
+
+				const result = resolveGoogleRewrite(href)
+				if (!result) return match
+
+				const rewrittenHrefs = Array.isArray(result) ? result : [result]
+				return buildGoogleImportReplacement(href, rewrittenHrefs, suffix)
+			},
+		)
+	}
+
 	const parser = new DOMParser()
 	const htmlDoc = parser.parseFromString(content, "text/html")
 
 	const linkElements = htmlDoc.getElementsByTagName("link")
 	const scriptElements = htmlDoc.getElementsByTagName("script")
+	const styleElements = htmlDoc.getElementsByTagName("style")
 	// 从后向前遍历以避免因移除元素导致的索引问题
 	for (let li = linkElements.length - 1; li >= 0; li--) {
 		const link = linkElements[li]
@@ -710,6 +795,11 @@ export function rewriteHtmlCdnWithHost(content: string, cdnHost: string): Docume
 		}
 	}
 
+	for (let i = 0; i < styleElements.length; i++) {
+		const style = styleElements[i]
+		applyGoogleRewriteToStyle(style)
+	}
+
 	return htmlDoc
 }
 
@@ -767,12 +857,12 @@ export function escapeHTML(html: string): string {
 		.replace(/\n/g, "\\n") // 换行符转为 \n
 }
 
-export function createEditableContent(content: string, isEditMode: boolean = false): string {
-	const editScript = isEditMode ? getEditingScript() : ""
+// export function createEditableContent(content: string, isEditMode: boolean = false): string {
+// 	const editScript = isEditMode ? getEditingScript() : ""
 
-	return `${content}${editScript ? `<script data-injected="true">${editScript}</script>` : ""}
-	`
-}
+// 	return `${content}${editScript ? `<script data-injected="true">${editScript}</script>` : ""}
+// 	`
+// }
 
 /**
  * 过滤HTML字符串中所有带有data-injected="true"属性的标签
@@ -791,6 +881,7 @@ export function filterInjectedTags(htmlString: string, filePathMapping: Map<stri
 			"fetch-interceptor",
 			"media-interceptor",
 			"iframe-chain",
+			"keyboard-interceptor",
 		])
 
 		// 使用DOMParser解析HTML字符串
@@ -830,11 +921,17 @@ export function filterInjectedTags(htmlString: string, filePathMapping: Map<stri
 		// 清理编辑相关的UI元素和属性
 		// 移除编辑工具栏相关的元素
 		const toolbarElements = doc.querySelectorAll(
-			"[data-hover-toolbar], [data-resize-handles], [data-resize-handle], [data-drag-handle], [data-ai-dropdown]",
+			"[data-hover-toolbar], [data-resize-handles], [data-resize-handle], [data-drag-handle], [data-ai-dropdown], [data-drag-indicator]",
 		)
 		toolbarElements.forEach((element) => {
 			element.parentNode?.removeChild(element)
 		})
+
+		// 移除动画暂停样式
+		const animPauseStyle = doc.getElementById("magic-animation-pause")
+		if (animPauseStyle) {
+			animPauseStyle.parentNode?.removeChild(animPauseStyle)
+		}
 
 		// 清理所有元素上的编辑相关属性
 		const allElements = doc.querySelectorAll("*")
@@ -846,6 +943,7 @@ export function filterInjectedTags(htmlString: string, filePathMapping: Map<stri
 			element.removeAttribute("data-drag-handle")
 			element.removeAttribute("data-ai-dropdown")
 			element.removeAttribute("data-ppt-editable")
+			element.removeAttribute("data-listener-added")
 
 			// 移除编辑相关的类名
 			element.classList.remove("magic-ppt-tip-focus")
@@ -892,6 +990,18 @@ export function filterInjectedTags(htmlString: string, filePathMapping: Map<stri
 			const styleContent = element.textContent || element.innerHTML
 			if (styleContent && styleContent.includes("https://tailwindcss.com")) {
 				element.parentNode?.removeChild(element)
+			}
+		})
+
+		// 清理遗留的键盘拦截器脚本（无 data-injected 属性的历史脚本）
+		const allScriptElements = doc.querySelectorAll("script:not([src])")
+		allScriptElements.forEach((script) => {
+			const content = script.textContent || ""
+			if (
+				content.includes("MAGIC_KEYBOARD_SAVE") &&
+				content.includes("window.parent.postMessage")
+			) {
+				script.parentNode?.removeChild(script)
 			}
 		})
 
@@ -946,12 +1056,20 @@ export function filterInjectedTags(htmlString: string, filePathMapping: Map<stri
 
 		// 恢复原始CDN URL（link标签）
 		const linksWithOriginalHref = doc.querySelectorAll("link[data-original-href]")
+		const restoredOriginalHrefs = new Set<string>()
+
 		linksWithOriginalHref.forEach((link) => {
 			const originalHref = link.getAttribute("data-original-href")
-			if (originalHref) {
-				link.setAttribute("href", originalHref)
-				link.removeAttribute("data-original-href")
+			if (!originalHref) return
+
+			if (restoredOriginalHrefs.has(originalHref)) {
+				link.parentNode?.removeChild(link)
+				return
 			}
+
+			restoredOriginalHrefs.add(originalHref)
+			link.setAttribute("href", originalHref)
+			link.removeAttribute("data-original-href")
 		})
 
 		// 恢复相对路径
@@ -987,6 +1105,22 @@ export function filterInjectedTags(htmlString: string, filePathMapping: Map<stri
 		// 恢复CSS中的url()路径
 		const styleElementsForRestore = doc.querySelectorAll("style")
 		styleElementsForRestore.forEach((style) => {
+			if (style.textContent && style.textContent.includes("/*__ORIGINAL_GOOGLE_IMPORT_URL__:")) {
+				const restoredGoogleImports = new Set<string>()
+				style.textContent = style.textContent.replace(
+					/\/\*__ORIGINAL_GOOGLE_IMPORT_URL__:(.*?)__\*\/\s*@import\s+url\(['"].*?['"]\)\s*([^;]*);/g,
+					(match, originalHref, suffix = "") => {
+						const normalizedSuffix = suffix.trim()
+						const restoreKey = `${originalHref}__${normalizedSuffix}`
+						if (restoredGoogleImports.has(restoreKey)) return ""
+
+						restoredGoogleImports.add(restoreKey)
+						const suffixText = normalizedSuffix ? ` ${normalizedSuffix}` : ""
+						return `@import url('${originalHref}')${suffixText};`
+					},
+				)
+			}
+
 			if (style.textContent && style.textContent.includes("/*__ORIGINAL_URL__:")) {
 				style.textContent = style.textContent.replace(
 					/\/\*__ORIGINAL_URL__:(.*?)__\*\/url\(['"].*?['"]\)/g,
@@ -1103,7 +1237,7 @@ function filterInjectedTagsWithRegex(htmlString: string): string {
 	// 匹配带有 data-injected 或历史 data-runtime 属性的标签（包括自闭合标签和配对标签）
 	// 处理所有编辑器已知的注入标记值
 	const injectedTagRegex =
-		/<([a-zA-Z][a-zA-Z0-9]*)[^>]*(?:\s+data-injected\s*=\s*["'](?:true|at-polyfill|fetch-interceptor|media-interceptor|iframe-chain)["']|\s+data-runtime\s*=\s*["']true["'])[^>]*>(?:[\s\S]*?<\/\1>)?/gi
+		/<([a-zA-Z][a-zA-Z0-9]*)[^>]*(?:\s+data-injected\s*=\s*["'](?:true|at-polyfill|fetch-interceptor|media-interceptor|iframe-chain|keyboard-interceptor)["']|\s+data-runtime\s*=\s*["']true["'])[^>]*>(?:[\s\S]*?<\/\1>)?/gi
 
 	// 移除匹配的标签
 	let result = htmlString.replace(injectedTagRegex, "")
@@ -1111,6 +1245,12 @@ function filterInjectedTagsWithRegex(htmlString: string): string {
 	// 移除所有剩余的 data-injected / data-runtime 属性（不管值是什么）
 	result = result.replace(/\s+data-injected\s*=\s*["'][^"']*["']/gi, "")
 	result = result.replace(/\s+data-runtime\s*=\s*["'][^"']*["']/gi, "")
+
+	// 清理遗留的键盘拦截器脚本（无 data-injected 属性的历史脚本）
+	result = result.replace(
+		/<script[^>]*>[\s\S]*?MAGIC_KEYBOARD_SAVE[\s\S]*?window\.parent\.postMessage[\s\S]*?<\/script>/gi,
+		"",
+	)
 
 	// 移除编辑相关的UI元素（通过属性匹配）
 	const toolbarElementRegex =

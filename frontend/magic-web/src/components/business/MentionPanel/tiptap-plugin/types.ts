@@ -95,6 +95,8 @@ export interface MentionPanelPluginOptions {
 	getParentContainer?: () => HTMLElement | null
 	initialLoadOptions?: MentionPanelLoadStateOptions
 	initialNavigationStack?: NavigationItem[]
+	getInitialLoadOptions?: () => MentionPanelLoadStateOptions | undefined
+	getInitialNavigationStack?: () => NavigationItem[] | undefined
 	catalogBehavior?: MentionPanelCatalogBehavior
 	onInsert?: (item: MentionItem) => void
 	onInsertItems?: (items: MentionItem[]) => void
@@ -138,7 +140,9 @@ export type MentionKeyDownHandler = (props: SuggestionKeyDownProps) => boolean
 // Utility functions for TiptapMentionAttributes
 
 // Get unique identifier for different mention types
-export function getMentionUniqueId(attrs: TiptapMentionAttributes): string {
+export function getMentionUniqueId(attrs: TiptapMentionAttributes | null | undefined): string {
+	if (!attrs) return ""
+
 	const data = attrs.data as MentionData
 
 	switch (attrs.type) {
@@ -182,7 +186,9 @@ export function getMentionUniqueId(attrs: TiptapMentionAttributes): string {
 
 // Get display name for mention
 export function getMentionDisplayName(attrs: TiptapMentionAttributes): string {
-	const data = attrs.data as Record<string, unknown>
+	const data = attrs?.data as Record<string, unknown>
+
+	if (!data) return ""
 
 	const t = i18n.t
 
@@ -212,10 +218,12 @@ export function getMentionDisplayName(attrs: TiptapMentionAttributes): string {
 }
 
 // Get description for mention
-export function getMentionDescription(attrs: TiptapMentionAttributes): string {
-	const data = attrs.data as Record<string, unknown>
+export function getMentionDescription(attrs: TiptapMentionAttributes | null | undefined): string {
+	const data = attrs?.data as Record<string, unknown>
 
-	switch (attrs.type) {
+	if (!data) return ""
+
+	switch (attrs?.type) {
 		case MentionItemType.MCP:
 			return (data?.description as string) || ""
 		case MentionItemType.AGENT:
@@ -240,10 +248,12 @@ export function getMentionDescription(attrs: TiptapMentionAttributes): string {
 }
 
 // Get icon for mention
-export function getMentionIcon(attrs: TiptapMentionAttributes): string {
-	const data = attrs.data as MentionData
+export function getMentionIcon(attrs: TiptapMentionAttributes | null | undefined): string {
+	const data = attrs?.data as MentionData
 
-	switch (attrs.type) {
+	if (!data) return ""
+
+	switch (attrs?.type) {
 		case MentionItemType.MCP:
 			return (data as McpMentionData)?.icon as string
 		case MentionItemType.AGENT:

@@ -36,7 +36,7 @@ export const getFileType = (file_extension: string) => {
 		return DetailType.Doc
 	}
 
-	if (ext === "docx") {
+	if (ext === "docx" || ext === "docm") {
 		return DetailType.Docx
 	}
 
@@ -296,14 +296,14 @@ const triggerDownload = (href: string, filename?: string, target?: string) => {
 	document.body.removeChild(link)
 }
 
-const downloadFn = (url: string, filename?: string, target?: string) => {
+const downloadFn = async (url: string, filename?: string, target?: string) => {
 	// APP 环境、钉钉环境、微信/企业微信环境直接打开新窗口
 	if (isInApp() || isDingTalk() || isWechat()) {
 		window.open(url, "_blank")
 		return
 	}
 
-	triggerDownload(url, filename, target)
+	await triggerDownload(url, filename, target)
 }
 
 export const downloadFileWithAnchor = async (url: string, filename?: string, target?: string) => {
@@ -373,8 +373,9 @@ export function getMimeTypeExtensions(ext: string): string[] {
 	const mimeMap: Record<string, string[]> = {
 		// 文档类型
 		pdf: ["pdf"],
-		doc: ["doc", "docx"],
-		docx: ["doc", "docx"],
+		doc: ["doc", "docx", "docm"],
+		docx: ["doc", "docx", "docm"],
+		docm: ["doc", "docx", "docm"],
 		xls: ["xls", "xlsx"],
 		xlsx: ["xls", "xlsx"],
 		ppt: ["ppt", "pptx"],

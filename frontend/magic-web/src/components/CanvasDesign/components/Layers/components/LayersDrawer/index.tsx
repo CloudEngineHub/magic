@@ -5,12 +5,13 @@ import {
 	Eye,
 	EyeClosed,
 	Folder,
-	Image,
 	LockKeyhole,
 	LockOpen,
 	Minimize2 as MinimizeIcon,
+	Search,
 	Type,
 	Video,
+	X,
 } from "lucide-react"
 import { FolderIcon } from "../../../ui/icons"
 import * as TooltipPrimitive from "@radix-ui/react-tooltip"
@@ -35,22 +36,72 @@ import { useLayersUI } from "../../../../context/LayersUIContext"
 import { useElementMenu } from "../../../ElementMenu/ElementMenuContext"
 import { useMagic } from "../../../../context/MagicContext"
 import type { CanvasDesignStorageData } from "../../../../types.magic"
-import { useImageUrls } from "../../../../hooks/useImageUrls"
 import { useCanvasEvent } from "../../../../hooks/useCanvasEvent"
-import { RectangleThumbnail } from "./thumbnails/RectangleThumbnail"
-import { EllipseThumbnail } from "./thumbnails/EllipseThumbnail"
-import { TriangleThumbnail } from "./thumbnails/TriangleThumbnail"
-import { StarThumbnail } from "./thumbnails/StarThumbnail"
+import { RectanglePreview } from "./previews/RectanglePreview"
+import { EllipsePreview } from "./previews/EllipsePreview"
+import { TrianglePreview } from "./previews/TrianglePreview"
+import { StarPreview } from "./previews/StarPreview"
 import { useCanvasDesignI18n } from "../../../../context/I18nContext"
 import type { LayerTreeData } from "../../types"
 import { convertLayerToTreeNode } from "../../../../lib"
-import LayerImageThumbnail from "./thumbnails/ImageThumbnail"
+import LayerImageLowPreview from "./previews/ImageLowPreview"
+
+const LAYER_TREE_VIRTUAL_THRESHOLD = 80
+const LAYER_TREE_ROW_HEIGHT = 34
+
+function normalizeLayerSearchKeyword(value: string) {
+	return value.trim().toLowerCase()
+}
+
+function filterLayerTreeData(
+	nodes: TreeNode<LayerTreeData>[],
+	keyword: string,
+): TreeNode<LayerTreeData>[] {
+	if (!keyword) {
+		return nodes
+	}
+
+	return nodes.reduce<TreeNode<LayerTreeData>[]>((result, node) => {
+		const isMatched = normalizeLayerSearchKeyword(node.label).includes(keyword)
+		if (isMatched) {
+			result.push(node)
+			return result
+		}
+
+		const filteredChildren = node.children ? filterLayerTreeData(node.children, keyword) : []
+		if (filteredChildren.length) {
+			result.push({
+				...node,
+				children: filteredChildren,
+			})
+		}
+
+		return result
+	}, [])
+}
+
+function collectExpandableNodeIds(nodes: TreeNode<LayerTreeData>[], result = new Set<string>()) {
+	nodes.forEach((node) => {
+		if (node.children?.length) {
+			result.add(node.id)
+			collectExpandableNodeIds(node.children, result)
+		}
+	})
+	return result
+}
 
 export default function LayersDrawer() {
 	const { t } = useCanvasDesignI18n()
 	const portalContainer = usePortalContainer()
 	// 从 Context 获取图层面板 UI 状态
-	const { collapsed, width, transitionAnimation, setCollapsed } = useLayersUI()
+	const {
+		collapsed,
+		width,
+		transitionAnimation,
+		setCollapsed,
+		getLayersScrollTop,
+		setLayersScrollTop,
+	} = useLayersUI()
 
 	// 从 Context 获取 methods
 	const { methods } = useMagic()
@@ -69,12 +120,14 @@ export default function LayersDrawer() {
 		}
 		return new Set<string>()
 	})
-
 	// 监听画布 hover 事件，同步到图层面板
 	const [hoveredElementId, setHoveredElementId] = useState<string | null>(null)
+	const [layerSearchValue, setLayerSearchValue] = useState("")
 
 	// 订阅并获取画布数据
-	const elements = useCanvasData((manager) => manager.getAllElements())
+	const elements = useCanvasData((manager) => manager.getAllElements(), ["element:change"], {
+		shouldUpdateOnElementChange: (event) => event.data?.phase !== "transient",
+	})
 
 	// 获取操作方法
 	const { canvas } = useCanvas()
@@ -82,19 +135,32 @@ export default function LayersDrawer() {
 	// 获取元素菜单方法
 	const { openMenu } = useElementMenu()
 
-	// 获取图片 URL 映射（仅在图层展开时获取）
-	const imageUrls = useImageUrls(!collapsed)
-
 	// 从 Context 获取画布 UI 状态
 	const { layerRenamingElementId, setLayerRenamingElementId, selectedElementIds, readonly } =
 		useCanvasUI()
 
 	// 将画布数据转换为树形结构，先按 zIndex 降序排序（zIndex 大的在上面）
 	const treeData = useMemo(() => {
-		if (!elements) return []
+		if (collapsed || !elements) return []
 		const sortedFrames = [...elements].sort((a, b) => (b.zIndex ?? 0) - (a.zIndex ?? 0))
 		return sortedFrames.map((frame) => convertLayerToTreeNode(frame, canvas))
-	}, [elements, canvas])
+	}, [collapsed, elements, canvas])
+
+	const normalizedLayerSearchKeyword = useMemo(
+		() => normalizeLayerSearchKeyword(layerSearchValue),
+		[layerSearchValue],
+	)
+	const isLayerSearching = normalizedLayerSearchKeyword.length > 0
+	const filteredTreeData = useMemo(
+		() => filterLayerTreeData(treeData, normalizedLayerSearchKeyword),
+		[treeData, normalizedLayerSearchKeyword],
+	)
+	const searchExpandedElementIds = useMemo(() => {
+		if (!isLayerSearching) {
+			return expandedElementIds
+		}
+		return collectExpandableNodeIds(filteredTreeData, new Set(expandedElementIds))
+	}, [expandedElementIds, filteredTreeData, isLayerSearching])
 
 	// 获取选中的元素 ID（只读下与画布选区一致，便于高亮与定位）
 	const selectedIds = useMemo(() => selectedElementIds, [selectedElementIds])
@@ -140,6 +206,15 @@ export default function LayersDrawer() {
 		event.stopPropagation()
 	}, [])
 
+	const handleLayerSearchChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
+		setLayerSearchValue(event.target.value)
+	}, [])
+
+	const handleClearLayerSearch = useCallback((event: React.MouseEvent) => {
+		event.stopPropagation()
+		setLayerSearchValue("")
+	}, [])
+
 	const renderLayerNode = useCallback(
 		(node: TreeNode<LayerTreeData>, context: RenderNodeContext) => {
 			const isLocked = node.data?.locked ?? false
@@ -160,44 +235,38 @@ export default function LayersDrawer() {
 					iconContent = <Type size={16} className={styles.layerNodeTextIcon} />
 					break
 				case ElementTypeEnum.Image:
-					const imageUrl = imageUrls.get(node.id)
-					if (imageUrl) {
-						iconContent = (
-							<LayerImageThumbnail
-								element={node.data as ImageElement}
-								src={imageUrl}
-								alt={node.label}
-							/>
-						)
-					} else {
-						iconContent = <Image size={16} className={styles.layerNodeImageIcon} />
-					}
+					iconContent = (
+						<LayerImageLowPreview
+							element={node.data as ImageElement}
+							alt={node.label}
+						/>
+					)
 					break
 				case ElementTypeEnum.Rectangle:
 					iconContent = (
 						<div className={styles.layerNodeElementIcon}>
-							<RectangleThumbnail element={node.data as RectangleElement} />
+							<RectanglePreview element={node.data as RectangleElement} />
 						</div>
 					)
 					break
 				case ElementTypeEnum.Ellipse:
 					iconContent = (
 						<div className={styles.layerNodeElementIcon}>
-							<EllipseThumbnail element={node.data as EllipseElement} />
+							<EllipsePreview element={node.data as EllipseElement} />
 						</div>
 					)
 					break
 				case ElementTypeEnum.Triangle:
 					iconContent = (
 						<div className={styles.layerNodeElementIcon}>
-							<TriangleThumbnail element={node.data as TriangleElement} />
+							<TrianglePreview element={node.data as TriangleElement} />
 						</div>
 					)
 					break
 				case ElementTypeEnum.Star:
 					iconContent = (
 						<div className={styles.layerNodeElementIcon}>
-							<StarThumbnail element={node.data as StarElement} />
+							<StarPreview element={node.data as StarElement} />
 						</div>
 					)
 					break
@@ -305,7 +374,6 @@ export default function LayersDrawer() {
 			readonly,
 			canvas,
 			setLayerRenamingElementId,
-			imageUrls,
 		],
 	)
 
@@ -323,7 +391,7 @@ export default function LayersDrawer() {
 	)
 
 	const handleDoubleClick = useCallback(
-		(event: React.MouseEvent, node: TreeNode<LayerTreeData>) => {
+		(_event: React.MouseEvent, node: TreeNode<LayerTreeData>) => {
 			// readonly 状态下不允许编辑名称
 			if (readonly) {
 				return
@@ -335,19 +403,23 @@ export default function LayersDrawer() {
 	)
 
 	const handleMouseEnter = useCallback(
-		(event: React.MouseEvent, node: TreeNode<LayerTreeData>) => {
+		(_event: React.MouseEvent, node: TreeNode<LayerTreeData>) => {
 			// 在画布上显示 hover 效果
 			canvas?.hoverManager.manualSetHover(node.id)
 		},
 		[canvas?.hoverManager],
 	)
 
-	const handleMouseLeave = useCallback(
-		(event: React.MouseEvent, node: TreeNode<LayerTreeData>) => {
-			// 清除画布上的 hover 效果
-			canvas?.hoverManager.manualSetHover(null)
+	const handleMouseLeave = useCallback(() => {
+		// 清除画布上的 hover 效果
+		canvas?.hoverManager.manualSetHover(null)
+	}, [canvas?.hoverManager])
+
+	const handleLayersScrollTopChange = useCallback(
+		(scrollTop: number) => {
+			setLayersScrollTop(scrollTop)
 		},
-		[canvas?.hoverManager],
+		[setLayersScrollTop],
 	)
 
 	// 监听画框创建事件，自动展开新创建的画框
@@ -398,42 +470,93 @@ export default function LayersDrawer() {
 			}}
 			data-canvas-ui-component
 		>
-			<div className={styles.layersDrawerHeader}>{t("layers.title", "图层")}</div>
-			<div className={styles.layersDrawerBody}>
-				{elements?.length ? (
-					<Tree
-						data={treeData}
-						selectedIds={selectedIds}
-						hoveredIds={hoveredIds}
-						treeNodeContentClassName={
-							readonly ? styles.treeNodeContentReadonly : undefined
-						}
-						onSelect={(_nodes, ids) => {
-							// 智能判断：只有当选中状态发生变化时才自动聚焦
-							// 比较新旧选中的元素ID，判断是否有变化
-							const hasSelectionChanged =
-								ids.length !== selectedElementIds.length ||
-								ids.some((id) => !selectedElementIds.includes(id)) ||
-								selectedElementIds.some((id) => !ids.includes(id))
-							canvas?.selectionManager.replaceSelection(ids, hasSelectionChanged)
-							// 定位到选中的元素
-							if (ids.length > 0) {
-								canvas?.userActionRegistry.execute("view.focus-element", {
-									elementIds: ids,
-								})
-							}
-						}}
-						expandedIds={expandedElementIds}
-						onToggle={toggleExpandedElement}
-						renderNode={renderLayerNode}
-						onContextMenu={handleContextMenu}
-						onDoubleClick={handleDoubleClick}
-						onMouseEnter={handleMouseEnter}
-						onMouseLeave={handleMouseLeave}
-					/>
-				) : (
-					<LayersEmpty />
+			<div className={styles.layersDrawerHeader}>
+				<span className={styles.layersDrawerTitle}>{t("layers.title", "图层")}</span>
+				{!collapsed && !!elements?.length && (
+					<div
+						className={classNames(
+							styles.layersDrawerSearch,
+							layerSearchValue && styles.layersDrawerSearchActive,
+						)}
+					>
+						<Search size={14} className={styles.layersSearchIcon} />
+						<Input
+							className={styles.layersSearchInput}
+							value={layerSearchValue}
+							placeholder={t("layers.search.placeholder", "搜索图层")}
+							onChange={handleLayerSearchChange}
+							onClick={(event) => event.stopPropagation()}
+							onKeyDown={(event) => event.stopPropagation()}
+						/>
+						{layerSearchValue && (
+							<IconButton
+								className={styles.layersSearchClearButton}
+								aria-label={t("layers.search.clear", "清空搜索")}
+								onClick={handleClearLayerSearch}
+							>
+								<X size={12} strokeWidth={2.5} />
+							</IconButton>
+						)}
+					</div>
 				)}
+			</div>
+			<div className={styles.layersDrawerBody}>
+				{!collapsed &&
+					(elements?.length ? (
+						filteredTreeData.length ? (
+							<Tree
+								key={
+									isLayerSearching
+										? `search:${normalizedLayerSearchKeyword}`
+										: "layers"
+								}
+								data={filteredTreeData}
+								selectedIds={selectedIds}
+								hoveredIds={hoveredIds}
+								treeNodeContentClassName={
+									readonly ? styles.treeNodeContentReadonly : undefined
+								}
+								virtualize
+								virtualThreshold={LAYER_TREE_VIRTUAL_THRESHOLD}
+								virtualRowHeight={LAYER_TREE_ROW_HEIGHT}
+								initialScrollTop={isLayerSearching ? 0 : getLayersScrollTop()}
+								onScrollTopChange={
+									isLayerSearching ? undefined : handleLayersScrollTopChange
+								}
+								onSelect={(_nodes, ids) => {
+									// 智能判断：只有当选中状态发生变化时才自动聚焦
+									// 比较新旧选中的元素ID，判断是否有变化
+									const hasSelectionChanged =
+										ids.length !== selectedElementIds.length ||
+										ids.some((id) => !selectedElementIds.includes(id)) ||
+										selectedElementIds.some((id) => !ids.includes(id))
+									canvas?.selectionManager.replaceSelection(
+										ids,
+										hasSelectionChanged,
+									)
+									// 定位到选中的元素
+									if (ids.length > 0) {
+										canvas?.userActionRegistry.execute("view.focus-element", {
+											elementIds: ids,
+										})
+									}
+								}}
+								expandedIds={searchExpandedElementIds}
+								onToggle={toggleExpandedElement}
+								renderNode={renderLayerNode}
+								onContextMenu={handleContextMenu}
+								onDoubleClick={handleDoubleClick}
+								onMouseEnter={handleMouseEnter}
+								onMouseLeave={handleMouseLeave}
+							/>
+						) : (
+							<div className={styles.layersSearchEmpty}>
+								{t("layers.search.empty", "未找到匹配图层")}
+							</div>
+						)
+					) : (
+						<LayersEmpty />
+					))}
 			</div>
 			<div className={styles.layersDrawerFooter}>
 				<Tooltip>

@@ -14,7 +14,7 @@ export default function AppMenu() {
 		<div className={styles.container}>
 			<div className={styles.title}>{t("mobile.my.aboutUs")}</div>
 			<div>
-				<div className={cx(styles.item)} onClick={handleOpenAbout} role="button">
+				<div className={cx(styles.item)} onClick={handleOpenAbout} role="button" data-testid="handle-open-about">
 					<IconInfoCircle className={styles.icon} />
 					<span>{t("mobile.my.productName")}</span>
 				</div>

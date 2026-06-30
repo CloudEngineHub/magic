@@ -26,7 +26,7 @@ export default function SiderDataSourceItem({ data, ...delegateProps }: SiderDat
 	}
 
 	return (
-		<div className={styles.item} onContextMenu={handleContextMenuClick}>
+		<div className={styles.item} onContextMenu={handleContextMenuClick} data-testid="handle-context-menu-click">
 			<div className={styles.arrowIcon}></div>
 			<MagicFileIcon
 				className={styles.fileIcon}

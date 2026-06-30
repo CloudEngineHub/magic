@@ -1,0 +1,195 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Instagram Signal Grid - Preview</title>
+    <link rel="stylesheet" href="ins-signal-grid.css" />
+    <style>
+      html,
+      body {
+        width: auto;
+        height: auto;
+        overflow: auto;
+        background: #e8e8e8;
+      }
+      .preview-container {
+        display: flex;
+        flex-direction: column;
+        gap: 40px;
+        padding: 40px;
+        align-items: center;
+      }
+      .preview-card-wrapper {
+        width: 1080px;
+        height: 1350px;
+        transform: scale(0.5);
+        transform-origin: top center;
+        margin-bottom: -675px;
+        box-shadow: 0 18px 55px rgba(0, 0, 0, 0.16);
+        border-radius: 10px;
+        overflow: hidden;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="preview-container">
+      <div class="preview-card-wrapper">
+        <section class="isg-card isg-cover">
+          <div class="isg-cover-kicker">Instagram Signal Grid</div>
+          <div class="isg-hero-panel">
+            <h1 class="isg-cover-title">Signal<br />Grid</h1>
+          </div>
+          <p class="isg-cover-subtitle">
+            Structured cards for comparisons and decisions
+          </p>
+          <div class="isg-tag-row">
+            <span class="isg-badge">Swipe</span
+            ><span class="isg-badge-muted"
+              >product comparisons and decisions</span
+            >
+          </div>
+        </section>
+      </div>
+      <div class="preview-card-wrapper">
+        <section class="isg-card isg-content">
+          <header class="isg-header">
+            <div>
+              <div class="isg-eyebrow">Performance map</div>
+              <h2 class="isg-title">What makes this post saveable?</h2>
+            </div>
+            <div class="isg-page">02</div>
+          </header>
+          <div class="isg-section-label">Content signals</div>
+          <div class="isg-signature">
+            <div class="isg-signature-cell is-on">FIT</div>
+            <div class="isg-signature-cell is-wide">
+              Reader need is explicit
+            </div>
+            <div class="isg-signature-cell">RISK</div>
+            <div class="isg-signature-cell is-wide">
+              Too many decorative stats
+            </div>
+            <div class="isg-signature-cell is-on">GO</div>
+            <div class="isg-signature-cell is-wide">One decision per card</div>
+          </div>
+          <div class="isg-data-grid">
+            <div class="isg-data-card">
+              <div class="label">Hook clarity</div>
+              <div class="value">82<span class="unit">%</span></div>
+            </div>
+            <div class="isg-data-card">
+              <div class="label">Save intent</div>
+              <div class="value">91<span class="unit">%</span></div>
+            </div>
+          </div>
+          <div class="isg-compare-grid">
+            <div class="isg-compare-card">
+              <span class="isg-badge">Before</span>
+              <p class="isg-item-title">Pretty layout, weak promise</p>
+            </div>
+            <div class="isg-compare-card">
+              <span class="isg-badge-muted">After</span>
+              <p class="isg-item-title">Specific route, stronger payoff</p>
+            </div>
+          </div>
+          <div class="isg-note">
+            Use this preset when the reader needs a clear reason to swipe, save,
+            and act.
+          </div>
+        </section>
+      </div>
+      <div class="preview-card-wrapper">
+        <section class="isg-card isg-content">
+          <header class="isg-header">
+            <div>
+              <div class="isg-eyebrow">Chart card</div>
+              <h2 class="isg-title">Data without dashboard noise</h2>
+            </div>
+            <div class="isg-page">03</div>
+          </header>
+          <div class="isg-section-label">Weekly signal</div>
+          <div id="ins-signal-grid-preview-chart" class="isg-chart"></div>
+          <div class="isg-quote-block">
+            A good carousel turns scattered notes into one clean decision path.
+          </div>
+          <div class="isg-note">
+            <span class="isg-text-positive">Positive:</span> chart has one job.
+            <span class="isg-text-negative">Avoid:</span> decorative numbers
+            with no reader action.
+          </div>
+        </section>
+      </div>
+      <div class="preview-card-wrapper">
+        <section class="isg-card isg-content">
+          <header class="isg-header">
+            <div>
+              <div class="isg-eyebrow">Swipe plan</div>
+              <h2 class="isg-title">A stronger four-card arc</h2>
+            </div>
+            <div class="isg-page">04</div>
+          </header>
+          <div class="isg-list">
+            <div class="isg-list-row is-highlight">
+              <div class="isg-rank">01</div>
+              <div>
+                <div class="isg-item-title">Name the pain fast</div>
+                <div class="isg-item-meta">
+                  Make the reader feel seen in three seconds.
+                </div>
+              </div>
+              <span class="isg-badge">Hook</span>
+            </div>
+            <div class="isg-list-row">
+              <div class="isg-rank">02</div>
+              <div>
+                <div class="isg-item-title">Show the operating model</div>
+                <div class="isg-item-meta">
+                  Use diagrams, rules, and crisp labels.
+                </div>
+              </div>
+              <span class="isg-badge-muted">Body</span>
+            </div>
+            <div class="isg-list-row">
+              <div class="isg-rank">03</div>
+              <div>
+                <div class="isg-item-title">Add a decision cue</div>
+                <div class="isg-item-meta">
+                  Help readers pick the next step.
+                </div>
+              </div>
+              <span class="isg-badge-muted">CTA</span>
+            </div>
+          </div>
+          <div class="isg-divider"></div>
+          <div class="isg-timeline-row">
+            <strong class="isg-text-accent">Day 1</strong
+            ><span class="isg-text-muted"
+              >Draft the reader promise and card rhythm.</span
+            >
+          </div>
+          <div class="isg-progress-bar"><span style="width: 76%"></span></div>
+          <p class="isg-note">
+            <span class="isg-hl">Reusable structure:</span> cover, proof, chart,
+            checklist.
+          </p>
+        </section>
+      </div>
+    </div>
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
+    <script src="ins-signal-grid.js"></script>
+    <script>
+      (function () {
+        var el = document.getElementById("ins-signal-grid-preview-chart");
+        if (el && window.echarts && window.InsSignalGridPresets) {
+          var chart = echarts.init(el);
+          chart.setOption(
+            window.InsSignalGridPresets.get("ins-signal-grid-bar", {
+              categories: ["Hook", "Proof", "Save", "Share"],
+              values: [82, 68, 91, 57],
+            }),
+          );
+        }
+      })();
+    </script>
+  </body>
+</html>

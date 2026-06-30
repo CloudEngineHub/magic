@@ -38,6 +38,7 @@ import { handleCustomDragData } from "./drag-handlers"
 import { calculateRelativePath } from "@/utils/path"
 import { generateTempSrc, isTempPath } from "./temp-path-utils"
 import { normalizeImagePath } from "./utils/url-utils"
+import { runActiveEditor } from "@/utils/tiptapEditorLifecycle"
 
 // Global cache for files being uploaded
 const uploadingFiles = new Map<string, File>()
@@ -90,6 +91,15 @@ export interface SaveImageToProjectOptions {
 	 * Success callback
 	 */
 	onSuccess?: (relativePath: string) => void
+
+	/**
+	 * Async callback to resolve or create the images folder and return its file_id.
+	 * Called before each upload to determine the correct parent_id for saveFileToProject.
+	 * If not provided or returns undefined, the file will be saved without a parent (root level).
+	 * @param folderPath - The calculated folder path (e.g. "docs/images")
+	 * @returns The file_id of the images folder, or undefined to fall back to root
+	 */
+	resolveImagesFolderParentId?: (folderPath: string) => Promise<string | undefined>
 }
 
 const saveImageToProjectPluginKey = new PluginKey("saveImageToProject")
@@ -273,6 +283,7 @@ async function handleSingleImageUpload(
 		maxSize = 5 * 1024 * 1024,
 		onError,
 		onSuccess,
+		resolveImagesFolderParentId,
 	} = options
 
 	// Calculate actual folder path
@@ -290,6 +301,11 @@ async function handleSingleImageUpload(
 			lastModified: file.lastModified,
 		})
 
+		// Resolve the parent folder file_id before uploading
+		const parentFolderId = resolveImagesFolderParentId
+			? await resolveImagesFolderParentId(folderPath).catch(() => undefined)
+			: undefined
+
 		// Create abort controller for cancellation support
 		const controller = new AbortController()
 		uploadControllers.set(tempSrc, controller)
@@ -297,6 +313,7 @@ async function handleSingleImageUpload(
 		// Upload to OSS and save to project with progress tracking
 		const result = await imageStorage.uploadImage(normalizedFile, projectId, folderPath, {
 			signal: controller.signal,
+			parentFolderId,
 			onProgress: (progress) => {
 				// Update node with upload progress
 				updateNodeUploadStatus(view, tempSrc, {
@@ -446,6 +463,7 @@ export const SaveImageToProjectExtension = Extension.create<SaveImageToProjectOp
 			onError: undefined,
 			onStorageUnavailable: undefined,
 			onSuccess: undefined,
+			resolveImagesFolderParentId: undefined,
 		}
 	},
 
@@ -501,7 +519,11 @@ export const SaveImageToProjectExtension = Extension.create<SaveImageToProjectOp
 								// Use editor commands to insert content, which will trigger Markdown extension
 								if (editor) {
 									// Use chain API to ensure the operation is added to history
-									editor.chain().focus().insertContent(textToPaste).run()
+									const inserted = runActiveEditor(editor, (activeEditor) => {
+										activeEditor.chain().focus().insertContent(textToPaste).run()
+										return true
+									}, false)
+									if (!inserted) view.pasteText(textToPaste)
 								} else {
 									// Fallback to pasteText if editor instance is not available
 									view.pasteText(textToPaste)
@@ -626,10 +648,10 @@ export const SaveImageToProjectExtension = Extension.create<SaveImageToProjectOp
 		return {
 			insertProjectImageFromFile:
 				(file: File) =>
-					({ view }) => {
-						handleImageFiles([file], view, options)
-						return true
-					},
+				({ view }) => {
+					handleImageFiles([file], view, options)
+					return true
+				},
 
 			/**
 			 * Insert a project image from an existing path
@@ -637,37 +659,37 @@ export const SaveImageToProjectExtension = Extension.create<SaveImageToProjectOp
 			 */
 			insertProjectImageFromPath:
 				(imagePath: string) =>
-					({ view, tr }) => {
-						const { documentPath } = options
+				({ view, tr }) => {
+					const { documentPath } = options
 
-						// Calculate relative path if documentPath is provided
-						let finalPath: string
-						if (documentPath && imagePath) {
-							finalPath = calculateRelativePath(documentPath, imagePath)
-						} else {
-							// Normalize path (handles data URLs, http/https, and relative paths)
-							finalPath = normalizeImagePath(imagePath)
-						}
+					// Calculate relative path if documentPath is provided
+					let finalPath: string
+					if (documentPath && imagePath) {
+						finalPath = calculateRelativePath(documentPath, imagePath)
+					} else {
+						// Normalize path (handles data URLs, http/https, and relative paths)
+						finalPath = normalizeImagePath(imagePath)
+					}
 
-						// Get current selection position
-						const { from } = view.state.selection
+					// Get current selection position
+					const { from } = view.state.selection
 
-						// Create image node
-						const node = view.state.schema.nodes.image?.create({
-							src: finalPath,
-							uploading: false,
-							uploadProgress: undefined,
-							uploadError: null,
-						})
+					// Create image node
+					const node = view.state.schema.nodes.image?.create({
+						src: finalPath,
+						uploading: false,
+						uploadProgress: undefined,
+						uploadError: null,
+					})
 
-						if (!node) return false
+					if (!node) return false
 
-						// Insert node at current position
-						tr.insert(from, node)
-						view.dispatch(tr)
+					// Insert node at current position
+					tr.insert(from, node)
+					view.dispatch(tr)
 
-						return true
-					},
+					return true
+				},
 		}
 	},
 

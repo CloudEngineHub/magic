@@ -40,3 +40,11 @@ export const filterClickableMessage = (node: any) => {
 export const filterClickableMessageWithoutRevoked = (node: any) => {
 	return filterClickableMessage(node) && node?.status !== MessageStatus.REVOKED
 }
+
+export const filterMessagesWithAttachments = (node: any) => {
+	return (
+		!messageFilter(node) &&
+		!DisabledDetailToolTypes.includes(node?.tool?.name) &&
+		node?.status !== MessageStatus.REVOKED
+	)
+}

@@ -300,9 +300,23 @@ export default memo(function ShareSuccessModal(props: ShareSuccessModalProps) {
 									rel="noopener noreferrer"
 									className="inline break-all text-primary underline"
 									onClick={(e) => e.stopPropagation()}
+									data-testid="share-success-modal"
 								>
 									{urlMatch[0]}
 								</a>
+								<button
+									type="button"
+									className="ml-1 inline-flex translate-y-[2px] items-center justify-center rounded p-0.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+									onClick={(e) => {
+										e.stopPropagation()
+										clipboard.writeText(urlMatch[0])
+										magicToast.success(t("share.copySuccess"))
+									}}
+									title={t("share.copyLink")}
+									data-testid="write-text"
+								>
+									<Copy className="h-3.5 w-3.5" />
+								</button>
 								{parts[1]}
 							</div>
 						)
@@ -483,7 +497,7 @@ export default memo(function ShareSuccessModal(props: ShareSuccessModalProps) {
 						<div className={styles.mobileShareLinkSection}>
 							<div className={styles.mobileLabel}>{t("share.shareLink")}</div>
 							<div className={styles.mobileShareLinkBox}>{renderShareMessage()}</div>
-							<div className={styles.mobileCopyButton} onClick={handleCopyShareLink}>
+							<div className={styles.mobileCopyButton} onClick={handleCopyShareLink} data-testid="handle-copy-share-link">
 								<Copy size={16} />
 								{t("share.copy")}
 							</div>
@@ -503,6 +517,7 @@ export default memo(function ShareSuccessModal(props: ShareSuccessModalProps) {
 							<div
 								className={styles.mobileDownloadButton}
 								onClick={handleDownloadQRCode}
+								data-testid="handle-download-qr-code"
 							>
 								<Download size={16} />
 								{t("share.downloadQRCode")}
@@ -530,9 +545,10 @@ export default memo(function ShareSuccessModal(props: ShareSuccessModalProps) {
 				style={{ zIndex: 1200 }}
 				onPointerDownOutside={(e) => e.preventDefault()}
 				onEscapeKeyDown={(e) => e.preventDefault()}
+				data-testid="on-pointer-down-outside"
 			>
 				{/* Header */}
-				<DialogHeader className="border-b border-border px-3 py-3">
+				<DialogHeader className="border-b border-border px-3 py-3" data-testid="share-success-modal-header">
 					<DialogTitle className="text-base font-semibold">
 						{t("share.successModalTitle")}
 					</DialogTitle>
@@ -609,6 +625,7 @@ export default memo(function ShareSuccessModal(props: ShareSuccessModalProps) {
 								target="_blank"
 								rel="noopener noreferrer"
 								className="text-sm font-medium leading-none text-foreground hover:underline"
+								data-testid="share-success-modal-link"
 							>
 								{t("share.shareLink")}
 							</a>
@@ -619,6 +636,7 @@ export default memo(function ShareSuccessModal(props: ShareSuccessModalProps) {
 								variant="outline"
 								className="w-full gap-2 shadow-xs"
 								onClick={handleCopyShareLink}
+								data-testid="handle-copy-share-link-2"
 							>
 								<Copy className="h-4 w-4" />
 								{t("share.copy")}
@@ -645,6 +663,7 @@ export default memo(function ShareSuccessModal(props: ShareSuccessModalProps) {
 								variant="outline"
 								className="w-[144px] gap-2 shadow-xs"
 								onClick={handleDownloadQRCode}
+								data-testid="handle-download-qr-code-2"
 							>
 								<Download className="h-4 w-4" />
 								{t("share.downloadQRCode")}
@@ -654,7 +673,7 @@ export default memo(function ShareSuccessModal(props: ShareSuccessModalProps) {
 				</div>
 
 				{/* Footer */}
-				<DialogFooter className="border-t border-border px-3 py-3">
+				<DialogFooter className="border-t border-border px-3 py-3" data-testid="share-success-modal-footer">
 					<div className="flex w-full items-center justify-between gap-1.5">
 						<Button
 							variant="outline"
@@ -667,6 +686,7 @@ export default memo(function ShareSuccessModal(props: ShareSuccessModalProps) {
 								onClose()
 							}}
 							className="shadow-xs"
+							data-testid="open-share-management-modal"
 						>
 							{t("share.manageShareLinks")}
 						</Button>
@@ -676,6 +696,7 @@ export default memo(function ShareSuccessModal(props: ShareSuccessModalProps) {
 									variant="ghost"
 									onClick={handleCancelShareClick}
 									className="text-destructive hover:text-destructive"
+									data-testid="handle-cancel-share-click"
 								>
 									{t("share.cancelShare")}
 								</Button>
@@ -685,6 +706,7 @@ export default memo(function ShareSuccessModal(props: ShareSuccessModalProps) {
 									variant="outline"
 									onClick={onEditShare}
 									className="shadow-xs"
+									data-testid="on-edit-share"
 								>
 									{t("share.editShare")}
 								</Button>

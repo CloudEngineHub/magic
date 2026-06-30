@@ -7,7 +7,6 @@ import type {
 	UploadImageResult,
 	UploadImageOptions,
 } from "./interface"
-import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import { normalizeImageName } from "@/services/tiptap-image-storage"
 
 /**
@@ -135,6 +134,7 @@ class ProjectImageStorageService implements ProjectImageStorageInterface {
 			// Step 3: Save to project
 			const saveResult = await superMagicUploadTokenService.saveFileToProject({
 				project_id: projectId,
+				parent_id: options?.parentFolderId,
 				file_key: uploadResult.key,
 				file_name: uploadResult.name,
 				file_size: uploadResult.size,
@@ -142,8 +142,6 @@ class ProjectImageStorageService implements ProjectImageStorageInterface {
 				storage_type: "workspace",
 				source: UploadSource.ProjectFile,
 			})
-
-			pubsub.publish(PubSubEvents.Update_Attachments)
 
 			// Step 4: Return result with file_id and metadata
 			return {

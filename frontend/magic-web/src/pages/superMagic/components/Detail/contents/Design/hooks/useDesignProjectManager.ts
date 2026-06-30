@@ -1,14 +1,19 @@
 import { useState, useRef, useCallback, useEffect, useMemo } from "react"
 import { useTranslation } from "react-i18next"
+import { produce } from "immer"
 import { useImmer } from "use-immer"
 import { useMount, useUnmount } from "ahooks"
 import type { FileHistoryVersion } from "@/pages/superMagic/pages/Workspace/types"
 import { DesignData } from "../types"
 import {
 	DesignProjectManager,
+	type DesignConflict,
 	type DesignProjectManagerOptions,
 	type DesignProjectStateBag,
+	type DesignSaveMetadata,
 } from "../managers"
+import { MAGIC_PROJECT_VERSION_V2 } from "../utils/magicProjectCompression"
+import type { DesignDraftReason } from "../utils/designDraftStorage"
 
 export type UseDesignProjectManagerOptions = DesignProjectManagerOptions
 
@@ -16,18 +21,26 @@ export interface UseDesignProjectManagerReturn {
 	magicProjectJsFileId: string | null
 	designData: DesignData
 	updateDesignData: (updater: (draft: DesignData) => void) => void
-	updateDesignDataAndScheduleSave: (updater: (draft: DesignData) => void) => void
+	updateDesignDataAndScheduleSave: (
+		updater: (draft: DesignData) => void,
+		metadata?: DesignSaveMetadata,
+	) => void
 
 	isInitialLoading: boolean
 	isSaving: boolean
 
-	scheduleAutoSave: () => void
+	scheduleAutoSave: (metadata?: DesignSaveMetadata) => void
 	cancelAutoSave: () => void
+	persistLocalDraft: (
+		designData: DesignData,
+		options?: { immediate?: boolean; reason?: DesignDraftReason },
+	) => void
 	manualSave: () => Promise<void>
 	syncDesignData: (newDesignData: DesignData) => void
 
 	loadFromRemote: () => Promise<void>
-	resetAndReload: () => Promise<void>
+	reloadPreservingLocalDraft: () => Promise<void>
+	reloadDiscardingLocalDraft: () => Promise<void>
 
 	saveToRemote: () => Promise<void>
 	generateContent: (data?: DesignData) => string
@@ -47,12 +60,23 @@ export interface UseDesignProjectManagerReturn {
 
 	isProcessingRevoke: boolean
 	revokeType: "revoke" | "restore" | null
+	conflictState: DesignConflict | null
+	clearConflictState: () => void
+	resolveBlockingConflictWithRemote: () => boolean
+	resolveBlockingConflictWithLocal: () => Promise<boolean>
+	resolveElementConflictWithLocal: (elementId: string) => boolean
+	resolveElementConflictWithRemote: (elementId: string) => boolean
+	resolveEditedElementConflictsWithLocal: (
+		elementIds: string[],
+		nextDesignData: DesignData,
+		metadata?: DesignSaveMetadata,
+	) => boolean
 
 	fileVersionsList: FileHistoryVersion[]
 	fileVersion: number | undefined
 	isNewestVersion: boolean
 	handleChangeFileVersion: (version: number, isNewestVersion: boolean) => Promise<void>
-	handleReturnLatest: () => void
+	handleReturnLatest: () => Promise<void>
 	handleVersionRollback: (version?: number) => Promise<void>
 	fetchFileVersions: () => Promise<FileHistoryVersion[]>
 }
@@ -60,8 +84,12 @@ export interface UseDesignProjectManagerReturn {
 const INITIAL_DESIGN_DATA: DesignData = {
 	type: "design",
 	name: "",
-	version: "1.0.0",
+	version: MAGIC_PROJECT_VERSION_V2,
 	canvas: { elements: [] },
+}
+
+function getTopLevelElementCount(data: DesignData | null | undefined): number {
+	return data?.canvas?.elements?.length ?? 0
 }
 
 export function useDesignProjectManager(
@@ -80,8 +108,10 @@ export function useDesignProjectManager(
 	const [fileVersion, setFileVersion] = useState<number | undefined>(undefined)
 	const [isProcessingRevoke, setIsProcessingRevoke] = useState(false)
 	const [revokeType, setRevokeType] = useState<"revoke" | "restore" | null>(null)
+	const [conflictState, setConflictState] = useState<DesignConflict | null>(null)
 
 	const designDataRef = useRef(designData)
+	const conflictStateRef = useRef<DesignConflict | null>(conflictState)
 	const magicProjectJsFileIdRef = useRef<string | null>(null)
 	const isReadOnlyRef = useRef(isReadOnly)
 	const magicProjectJsVersionRef = useRef<number | null>(null)
@@ -90,14 +120,25 @@ export function useDesignProjectManager(
 	const fileVersionRef = useRef<number | undefined>(undefined)
 
 	designDataRef.current = designData
+	conflictStateRef.current = conflictState
 	magicProjectJsFileIdRef.current = magicProjectJsFileId
 	isReadOnlyRef.current = isReadOnly
 	fileVersionsListRef.current = fileVersionsList
 	fileVersionRef.current = fileVersion
 
+	const updateDesignDataState = useCallback(
+		(updater: (draft: DesignData) => void) => {
+			const nextData = produce(designDataRef.current, updater)
+			designDataRef.current = nextData
+			updateDesignData(() => nextData)
+		},
+		[updateDesignData],
+	)
+
 	const stateBag: DesignProjectStateBag = useMemo(
 		() => ({
 			getDesignData: () => designDataRef.current,
+			getConflictState: () => conflictStateRef.current,
 			getMagicProjectJsFileId: () => magicProjectJsFileIdRef.current,
 			getMagicProjectJsVersion: () => magicProjectJsVersionRef.current,
 			setMagicProjectJsVersion: (v) => {
@@ -110,7 +151,10 @@ export function useDesignProjectManager(
 			getIsReadOnly: () => isReadOnlyRef.current,
 			setters: {
 				setMagicProjectJsFileId,
-				setDesignData: (data) => updateDesignData(() => data),
+				setDesignData: (data) => {
+					designDataRef.current = data
+					updateDesignData(() => data)
+				},
 				setIsInitialLoading,
 				setIsSaving,
 				setIsReadOnly: (v) => {
@@ -121,6 +165,10 @@ export function useDesignProjectManager(
 				setFileVersion,
 				setIsProcessingRevoke,
 				setRevokeType,
+				setConflictState: (v) => {
+					conflictStateRef.current = v
+					setConflictState(v)
+				},
 			},
 		}),
 		[updateDesignData],
@@ -156,9 +204,21 @@ export function useDesignProjectManager(
 	})
 
 	const updateDesignDataAndScheduleSave = useCallback(
-		(updater: (draft: DesignData) => void) => {
-			updateDesignData(updater)
-			manager.scheduleAutoSave()
+		(updater: (draft: DesignData) => void, metadata?: DesignSaveMetadata) => {
+			if (!manager.canUpdateCurrentDesignData()) {
+				return
+			}
+			const previousData = designDataRef.current
+			const nextData = produce(previousData, updater)
+			designDataRef.current = nextData
+			updateDesignData(() => nextData)
+			manager.persistLocalDraft(nextData)
+			manager.scheduleAutoSave({
+				...metadata,
+				beforeElementCount:
+					metadata?.beforeElementCount ?? getTopLevelElementCount(previousData),
+				nextElementCount: metadata?.nextElementCount ?? getTopLevelElementCount(nextData),
+			})
 		},
 		[updateDesignData, manager],
 	)
@@ -172,19 +232,22 @@ export function useDesignProjectManager(
 	return {
 		magicProjectJsFileId,
 		designData,
-		updateDesignData,
+		updateDesignData: updateDesignDataState,
 		updateDesignDataAndScheduleSave,
 
 		isInitialLoading,
 		isSaving,
 
-		scheduleAutoSave: () => manager.scheduleAutoSave(),
+		scheduleAutoSave: (metadata) => manager.scheduleAutoSave(metadata),
 		cancelAutoSave: () => manager.cancelAutoSave(),
+		persistLocalDraft: (data, persistOptions) =>
+			manager.persistLocalDraft(data, persistOptions),
 		manualSave: () => manager.manualSave(),
 		syncDesignData: (data) => manager.syncDesignData(data),
 
 		loadFromRemote: () => manager.loadFromRemote(),
-		resetAndReload: () => manager.resetAndReload(),
+		reloadPreservingLocalDraft: () => manager.reloadPreservingLocalDraft(),
+		reloadDiscardingLocalDraft: () => manager.reloadDiscardingLocalDraft(),
 
 		saveToRemote: () => manager.saveToRemote(),
 		generateContent: (data) => manager.generateContent(data),
@@ -200,6 +263,16 @@ export function useDesignProjectManager(
 
 		isProcessingRevoke,
 		revokeType,
+		conflictState,
+		clearConflictState: () => manager.clearConflictState(),
+		resolveBlockingConflictWithRemote: () => manager.resolveBlockingConflictWithRemote(),
+		resolveBlockingConflictWithLocal: () => manager.resolveBlockingConflictWithLocal(),
+		resolveElementConflictWithLocal: (elementId) =>
+			manager.resolveElementConflictWithLocal(elementId),
+		resolveElementConflictWithRemote: (elementId) =>
+			manager.resolveElementConflictWithRemote(elementId),
+		resolveEditedElementConflictsWithLocal: (elementIds, nextDesignData, metadata) =>
+			manager.resolveEditedElementConflictsWithLocal(elementIds, nextDesignData, metadata),
 
 		fileVersionsList,
 		fileVersion,

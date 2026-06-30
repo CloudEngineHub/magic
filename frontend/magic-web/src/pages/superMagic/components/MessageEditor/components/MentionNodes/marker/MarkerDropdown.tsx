@@ -125,6 +125,7 @@ function MarkerDropdown({
 								onMouseEnter={() => setHoveredIndex(index)}
 								onMouseLeave={() => setHoveredIndex(null)}
 								onClick={() => onSelect?.(index)}
+								data-testid="set-hovered-index"
 							>
 								{imageUrl ? (
 									<HoverCard openDelay={200} closeDelay={80}>
@@ -142,6 +143,7 @@ function MarkerDropdown({
 														alt={suggestion.label}
 														style={cropStyle.imageStyle}
 														onLoad={handleImageLoad}
+														data-testid="handle-image-load"
 													/>
 												</div>
 											</div>
@@ -194,12 +196,13 @@ function MarkerDropdown({
 							existingCustomIndex !== -1 ? existingCustomIndex : suggestions.length
 						onSelect?.(targetIndex, customLabel)
 					}}
+					data-testid="set-hovered-index-2"
 				>
 					<div
 						className="flex flex-none shrink-0 items-center justify-center overflow-hidden rounded-md bg-muted"
 						style={{ width: THUMBNAIL_SIZE, height: THUMBNAIL_SIZE }}
 					>
-						<img src={MarkerIcon} alt="marker" style={{ width: 18, height: 18 }} />
+						<img src={MarkerIcon} alt="marker" style={{ width: 18, height: 18 }}  data-testid="marker-dropdown-image"/>
 					</div>
 					<Input
 						ref={customInputRef}

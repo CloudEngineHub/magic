@@ -61,7 +61,7 @@ function SharedWorkspaceDropdown({
 			{
 				key: "search",
 				label: (
-					<div className="px-1 py-1" onClick={(e) => e.stopPropagation()}>
+					<div className="px-1 py-1" onClick={(e) => e.stopPropagation()} data-testid="shared-workspace-dropdown">
 						<Input
 							placeholder={t("documentCreate.common.searchPlaceholder")}
 							value={searchValue}
@@ -104,18 +104,18 @@ function SharedWorkspaceDropdown({
 			// 空状态
 			...(filteredWorkspaces.length === 0
 				? [
-						{
-							key: "empty",
-							label: (
-								<div className="py-2 text-center text-sm text-muted-foreground">
-									{searchValue
-										? t("documentCreate.common.noSearchResults")
-										: t("documentCreate.project.selection.noWorkspaces")}
-								</div>
-							),
-							disabled: true,
-						},
-					]
+					{
+						key: "empty",
+						label: (
+							<div className="py-2 text-center text-sm text-muted-foreground">
+								{searchValue
+									? t("documentCreate.common.noSearchResults")
+									: t("documentCreate.project.selection.noWorkspaces")}
+							</div>
+						),
+						disabled: true,
+					},
+				]
 				: []),
 		],
 		[t, filteredWorkspaces, selectedWorkspaceId, searchValue, onSelect],

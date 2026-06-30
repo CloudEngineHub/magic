@@ -351,6 +351,30 @@ export class DatabaseManager {
 				})
 			})
 
+		// Version 5: 添加自媒体相关表（草稿、模板、品牌记录）
+		db.version(5)
+			.stores({
+				config: "&key, value",
+				user: "&key, value",
+				account: "&magic_id, deployCode, magic_user_id, organizationCode",
+				cluster: "&deployCode, name",
+				audioChunks: "&id, sessionId, index, timestamp, size, createdAt, updatedAt",
+				"super-project-state":
+					"&id, organization_code, project_id, fileState, treeState, searchState, uiState, createdAt, updatedAt",
+				"super-magic-mode-list": "&key, updatedAt",
+				"recording-session-history":
+					"&id, userId, organizationCode, status, startTime, lastActivityTime, updatedAt",
+				"self-media-brand-records": "&id, userId, organizationCode, updatedAt",
+			})
+			.upgrade(async () => {
+				logger.log("databaseUpgradeToV5", {
+					version: 5,
+					newTables: ["self-media-brand-records"],
+					message:
+						"Successfully upgraded database to version 5, added self-media brand records table",
+				})
+			})
+
 		this.globalDatabase = db
 		return this.globalDatabase
 	}

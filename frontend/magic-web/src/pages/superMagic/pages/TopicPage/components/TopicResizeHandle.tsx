@@ -54,6 +54,7 @@ function TopicResizeHandle({
 					disabled && "pointer-events-none opacity-0",
 					className,
 				)}
+				data-testid="handle-mouse-down"
 			>
 				<div className="relative z-10 flex h-5 shrink-0 items-center justify-center gap-0.5 data-[panel-group-direction=vertical]:h-auto data-[panel-group-direction=vertical]:w-5 data-[panel-group-direction=vertical]:flex-col">
 					<div className="h-full w-px shrink-0 rounded-xs bg-muted-foreground transition-colors duration-200 group-hover:bg-primary data-[panel-group-direction=vertical]:h-px data-[panel-group-direction=vertical]:w-full" />
@@ -68,6 +69,7 @@ function TopicResizeHandle({
 						onMouseUp={() => {
 							setIsDragging(false)
 						}}
+						data-testid="set-is-dragging"
 					/>,
 					document.body,
 				)}

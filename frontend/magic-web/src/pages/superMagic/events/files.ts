@@ -19,9 +19,21 @@ export type SuperMagicLocateFileInTreeArgs = [fileId: string]
 
 /**
  * 请求刷新当前话题的附件列表。
- * 可选附带刷新完成后的回调函数。
+ * Supports legacy callbacks and object payloads; subscribers refresh in page context.
  */
-export type SuperMagicUpdateAttachmentsArgs = [callback?: () => void]
+export interface SuperMagicUpdateAttachmentsPayload {
+	/** Legacy explicit refresh request; subscribers do not use it for filtering. */
+	projectId?: string
+	reason?: string
+	callback?: () => void
+}
+
+export type SuperMagicUpdateAttachmentsArgs = [
+	payloadOrCallback?: SuperMagicUpdateAttachmentsPayload | (() => void),
+]
+
+/** Refresh the Claw scheduled task list, decoupled from the attachment tree. */
+export type SuperMagicRefreshClawScheduledTasksArgs = []
 
 /**
  * 附件列表加载状态变更时通知相关组件。

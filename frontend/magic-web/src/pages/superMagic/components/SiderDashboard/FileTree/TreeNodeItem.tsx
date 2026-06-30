@@ -152,6 +152,7 @@ function TreeNodeItem<T extends TreeNode = TreeNode>(
 							transition: "height 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
 						}}
 						onTransitionEnd={handleTransitionEnd}
+						data-testid="handle-transition-end"
 					>
 						<div ref={contentRef} className={styles.childrenContent}>
 							{children}
@@ -182,6 +183,7 @@ function TreeNodeItem<T extends TreeNode = TreeNode>(
 						e.stopPropagation()
 						handleExpandToggle()
 					}}
+					data-testid="handle-expand-toggle"
 				>
 					<IconChevronRight
 						size={14}
@@ -225,6 +227,7 @@ function TreeNodeItem<T extends TreeNode = TreeNode>(
 						transition: "height 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
 					}}
 					onTransitionEnd={handleTransitionEnd}
+					data-testid="handle-transition-end-2"
 				>
 					<div ref={contentRef} className={styles.childrenContent}>
 						{children}

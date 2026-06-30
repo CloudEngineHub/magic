@@ -6,340 +6,51 @@ import {
 	MAGIC_FETCH_POST_MESSAGE_TARGET_HELPER,
 } from "./fetchInterceptor"
 import { getNestedIframeInterceptorScript } from "./nested-iframe-content"
-import { getIframeRuntimeScript } from "../iframe-bridge/utils/iframe-script"
+import {
+	createEphemeralVirtualStorageContext,
+	getVirtualStorageBridgeScript,
+	type VirtualStorageRuntimeContext,
+} from "./virtual-storage"
 import { configStore } from "@/models/config"
 import { normalizeLocale } from "@/utils/locale"
+import magicApiPreludeScript from "virtual:magic-api"
 
-// Cookie 模拟实现脚本
-const getCookieMockScript = () => {
-	return `
-		// Cookie存储变量
-		if (typeof memoryCookies === 'undefined') {
-			var memoryCookies = {};
-		}
-		
-		// 模拟实现 cookie (WebView 中 document.cookie 可能不可配置，需 try-catch)
-		function setupCookieMock() {
-			try {
-				// 解析cookie字符串为对象
-				function parseCookieString(cookieStr) {
-					const cookies = {};
-					if (!cookieStr) return cookies;
-					
-					cookieStr.split(';').forEach(pair => {
-						const [name, value] = pair.trim().split('=');
-						if (name) cookies[name] = decodeURIComponent(value || '');
-					});
-					return cookies;
-				}
-				
-				// 格式化cookie对象为字符串
-				function formatCookies() {
-					return Object.entries(memoryCookies)
-						.map(([name, data]) => {
-							if (data.expires && new Date() > new Date(data.expires)) {
-								delete memoryCookies[name];
-								return '';
-							}
-							return \`\${name}=\${encodeURIComponent(data.value)}\`;
-						})
-						.filter(Boolean)
-						.join('; ');
-				}
-				
-				// 覆盖document.cookie的getter和setter
-				// 钉钉/WebView 等环境中 document.cookie 可能为 non-configurable，会抛出异常
-				Object.defineProperty(document, 'cookie', {
-					get: function() {
-						return formatCookies();
-					},
-					set: function(cookieString) {
-						const [nameValuePair, ...options] = cookieString.split(';');
-						const [name, value] = nameValuePair.trim().split('=');
-						
-						if (!name) return;
-						
-						memoryCookies[name] = { value: decodeURIComponent(value || '') };
-						
-						// 处理cookie选项
-						options.forEach(option => {
-							const [optName, optValue] = option.trim().split('=');
-							const lowerOptName = optName.toLowerCase();
-							
-							if (lowerOptName === 'expires') {
-								memoryCookies[name].expires = optValue;
-							} else if (lowerOptName === 'max-age') {
-								const seconds = parseInt(optValue);
-								if (!isNaN(seconds)) {
-									const expireDate = new Date();
-									expireDate.setSeconds(expireDate.getSeconds() + seconds);
-									memoryCookies[name].expires = expireDate.toUTCString();
-								}
-							}
-							// 在模拟环境中，我们忽略path, domain, secure等选项
-						});
-						
-						return cookieString;
-					},
-					configurable: true
-				});
-			} catch (e) {
-				// document.cookie 在 WebView/钉钉 等环境中可能不可配置，使用原生 cookie
-				console.warn('Cookie mock skipped:', e && e.message);
-			}
-		}
-		
-		// 立即执行cookie模拟设置
-		setupCookieMock();
-	`
-}
-
-// Storage 模拟实现脚本
-const getStorageMockScript = (markerId?: string) => {
-	const markerKey = markerId || "default"
-	const storageKey = `MAGIC:iframe:storage:${markerKey}`
-	const globalStorageKey = `MAGIC:iframe:storage:global`
-
-	return `
-		// 拦截 sessionStorage 和 localStorage (WebView 中可能不可配置，需 try-catch)
-		function setupStorageMocks() {
-			try {
-				const storageKey = "${storageKey}";
-				const globalStorageKey = "${globalStorageKey}";
-				
-				// 获取原始存储对象的引用
-				const originalLocalStorage = window.localStorage;
-				const originalSessionStorage = window.sessionStorage;
-			
-			// 获取标记存储数据
-			function getMarkerStorage(storageType) {
-				const storage = storageType === 'localStorage' ? originalLocalStorage : originalSessionStorage;
-				return JSON.parse(storage.getItem(storageKey) || '{}');
-			}
-			
-			// 保存标记存储数据
-			function saveMarkerStorage(storageType, markerData) {
-				const storage = storageType === 'localStorage' ? originalLocalStorage : originalSessionStorage;
-				storage.setItem(storageKey, JSON.stringify(markerData));
-			}
-			
-			// 创建存储对象的工厂函数
-			function createStorageProxy(storageType) {
-				return {
-					getItem: function(key) {
-						// 如果请求的是存储键本身，返回 null 避免递归
-						if (key === storageKey) {
-							return null;
-						}
-						// 如果请求的是全局存储键，直接使用原始存储
-						if (key === globalStorageKey) {
-							const storage = storageType === 'localStorage' ? originalLocalStorage : originalSessionStorage;
-							return storage.getItem(key);
-						}
-						const data = getMarkerStorage(storageType);
-						return data[key] || null;
-					},
-					setItem: function(key, value) {
-						// 如果尝试设置存储键本身，忽略该操作避免递归
-						if (key === storageKey) {
-							console.warn('忽略对存储键本身的设置操作:', key);
-							return;
-						}
-						// 如果设置的是全局存储键，直接使用原始存储
-						if (key === globalStorageKey) {
-							const storage = storageType === 'localStorage' ? originalLocalStorage : originalSessionStorage;
-							storage.setItem(key, value);
-							return;
-						}
-						const data = getMarkerStorage(storageType);
-						data[key] = String(value);
-						saveMarkerStorage(storageType, data);
-					},
-					removeItem: function(key) {
-						// 如果尝试删除存储键本身，忽略该操作
-						if (key === storageKey) {
-							console.warn('忽略对存储键本身的删除操作:', key);
-							return;
-						}
-						// 如果删除的是全局存储键，直接使用原始存储
-						if (key === globalStorageKey) {
-							const storage = storageType === 'localStorage' ? originalLocalStorage : originalSessionStorage;
-							storage.removeItem(key);
-							return;
-						}
-						const data = getMarkerStorage(storageType);
-						delete data[key];
-						saveMarkerStorage(storageType, data);
-					},
-					clear: function() {
-						saveMarkerStorage(storageType, {});
-					},
-					key: function(index) {
-						const data = getMarkerStorage(storageType);
-						const keys = Object.keys(data);
-						return keys[index] || null;
-					},
-					get length() {
-						const data = getMarkerStorage(storageType);
-						return Object.keys(data).length;
-					}
-				};
-			}
-
-			// 创建模拟的存储对象
-			const localStorageInjected = createStorageProxy('localStorage');
-			const sessionStorageInjected = createStorageProxy('sessionStorage');
-
-			// 替换全局 sessionStorage
-			Object.defineProperty(window, 'sessionStorage', {
-				value: sessionStorageInjected,
-				writable: false,
-				configurable: true
-			});
-			
-			// 替换全局 localStorage
-			Object.defineProperty(window, 'localStorage', {
-				value: localStorageInjected,
-				writable: false,
-				configurable: true
-			});
-			} catch (e) {
-				// sessionStorage/localStorage 在 WebView/钉钉 等环境中可能不可配置
-				console.warn('Storage mock skipped:', e && e.message);
-			}
-		}
-		
-		// 立即执行存储模拟设置
-		setupStorageMocks();
-	`
-}
-
-// IndexedDB 模拟实现脚本
-const getIndexedDBMockScript = () => {
-	return `
-		// IndexedDB存储变量
-		if (typeof memoryIndexedDB === 'undefined') {
-			var memoryIndexedDB = {
-				databases: {},
-				currentDb: null
-			};
-		}
-		
-		// 模拟 IndexedDB API (WebView 中可能不可配置，需 try-catch)
-		function setupIndexedDBMock() {
-			try {
-			// 模拟 IDBFactory (window.indexedDB 对象)
-			const mockIDBFactory = {
-				open: function(name, version) {
-					const request = new EventTarget();
-					request.result = null;
-
-					// 使用 setTimeout 模拟异步操作
-					setTimeout(() => {
-						// 如果数据库不存在，则创建
-						if (!memoryIndexedDB.databases[name]) {
-							memoryIndexedDB.databases[name] = {
-								name: name,
-								version: version || 1,
-								objectStores: {}
-							};
-						}
-
-						memoryIndexedDB.currentDb = memoryIndexedDB.databases[name];
-						request.result = {
-							name: memoryIndexedDB.currentDb.name,
-							version: memoryIndexedDB.currentDb.version,
-							objectStoreNames: {
-								contains: function(name) {
-									return name in memoryIndexedDB.currentDb.objectStores;
-								},
-								item: function(index) {
-									return Object.keys(memoryIndexedDB.currentDb.objectStores)[index] || null;
-								},
-								get length() {
-									return Object.keys(memoryIndexedDB.currentDb.objectStores).length;
-								}
-							},
-							createObjectStore: function(name, options) {
-								const store = {
-									name: name,
-									keyPath: options?.keyPath,
-									autoIncrement: options?.autoIncrement || false,
-									data: {},
-									getAll: function() {
-										return Object.values(this.data);
-									},
-									get: function(key) {
-										return this.data[key] || null;
-									},
-									put: function(value, key) {
-										const useKey = this.keyPath ? value[this.keyPath] : key;
-										this.data[useKey] = value;
-										return useKey;
-									},
-									delete: function(key) {
-										delete this.data[key];
-									},
-									clear: function() {
-										this.data = {};
-									}
-								};
-								memoryIndexedDB.currentDb.objectStores[name] = store;
-								return store;
-							},
-							transaction: function(storeNames, mode) {
-								return {
-									objectStore: function(name) {
-										return memoryIndexedDB.currentDb.objectStores[name];
-									}
-								};
-							}
-						};
-
-						// 触发成功事件
-						const successEvent = new Event('success');
-						request.dispatchEvent(successEvent);
-					}, 0);
-
-					return request;
-				},
-				deleteDatabase: function(name) {
-					const request = new EventTarget();
-					
-					setTimeout(() => {
-						delete memoryIndexedDB.databases[name];
-						
-						const successEvent = new Event('success');
-						request.dispatchEvent(successEvent);
-					}, 0);
-					
-					return request;
-				}
-			};
-
-			// 替换全局 indexedDB
-			Object.defineProperty(window, 'indexedDB', {
-				value: mockIDBFactory,
-				writable: false,
-				configurable: true
-			});
-			} catch (e) {
-				// indexedDB 在 WebView/钉钉 等环境中可能不可配置
-				console.warn('IndexedDB mock skipped:', e && e.message);
-			}
-		}
-		
-		// 立即执行IndexedDB模拟设置
-		setupIndexedDBMock();
-	`
-}
+type ServiceWorkerMockMode = "off" | "auto" | "on"
 
 // ServiceWorker 模拟实现脚本
-const getServiceWorkerMockScript = () => {
+const getServiceWorkerMockScript = (mode: ServiceWorkerMockMode = "auto") => {
+	if (mode === "off") return ""
+
 	return `
 		// 模拟 ServiceWorker API (WebView 中可能不可配置，需 try-catch)
 		function setupServiceWorkerMock() {
+			var serviceWorkerMockMode = ${JSON.stringify(mode)};
+
+			function isTargetWebView() {
+				var ua = (navigator.userAgent || '').toLowerCase();
+				return (
+					ua.indexOf('dingtalk') !== -1 ||
+					ua.indexOf('aliapp(dingtalk') !== -1 ||
+					ua.indexOf('wxwork') !== -1 ||
+					ua.indexOf('wecom') !== -1 ||
+					ua.indexOf('feishu') !== -1 ||
+					ua.indexOf('lark') !== -1
+				);
+			}
+
+			function shouldEnableMock() {
+				if (serviceWorkerMockMode === 'on') return true;
+				if (serviceWorkerMockMode === 'off') return false;
+				return isTargetWebView();
+			}
+
 			try {
+			if (!shouldEnableMock()) return;
+
+			if ('serviceWorker' in navigator && navigator.serviceWorker) {
+				return;
+			}
+
 			// 创建模拟的 ServiceWorkerContainer
 			const mockServiceWorkerContainer = {
 				// 模拟注册服务工作线程
@@ -399,7 +110,7 @@ const getServiceWorkerMockScript = () => {
 				console.warn('ServiceWorker mock skipped:', e && e.message);
 			}
 		}
-		
+
 		// 立即执行ServiceWorker模拟设置
 		setupServiceWorkerMock();
 	`
@@ -488,7 +199,7 @@ const getDOMContentLoadedScript = (disableParentClickBridge = false) => {
 							// 保存原始尺寸信息
 							const originalWidth = this.style.width || this.getAttribute('width') || this.offsetWidth;
 							const originalHeight = this.style.height || this.getAttribute('height') || this.offsetHeight;
-							
+
 							// 保存原始src到data-src属性（仅当不是占位图时）
 							if (this.src && this.src !== emptyStateSvg && !this.hasAttribute('data-src')) {
 								this.setAttribute('data-src', stripMagicImgRetryFromSrc(this.src));
@@ -504,10 +215,10 @@ const getDOMContentLoadedScript = (disableParentClickBridge = false) => {
 								this.src = buildRetrySrc(originalSrc, retryCount);
 								return
 							}
-							
+
 							// 替换为占位图
 							this.src = emptyStateSvg;
-							
+
 							// 保持原始尺寸，如果有的话
 							if (originalWidth && originalWidth !== '0' && originalWidth !== 0) {
 								this.style.width = typeof originalWidth === 'number' ? originalWidth + 'px' : originalWidth;
@@ -515,16 +226,16 @@ const getDOMContentLoadedScript = (disableParentClickBridge = false) => {
 							if (originalHeight && originalHeight !== '0' && originalHeight !== 0) {
 								this.style.height = typeof originalHeight === 'number' ? originalHeight + 'px' : originalHeight;
 							}
-							
+
 							// 如果没有明确的尺寸，添加默认样式确保SVG能够合理显示
 							if ((!originalWidth || originalWidth === '0' || originalWidth === 0) &&
 							    (!originalHeight || originalHeight === '0' || originalHeight === 0)) {
-							
+
 							}
-							
+
 							// 确保SVG能够正确缩放
 							this.style.objectFit = 'contain';
-							
+
 							this.setAttribute("data-error-handled", "true");
 						});
 						img.setAttribute("data-listener-added", "true");
@@ -630,7 +341,7 @@ const getLinkHandlingScript = () => {
 					href = href.replace(currentOrigin, "");
 					e.preventDefault();
 				} else {
-					return 
+					return
 				}
 				try {
 					window.parent.postMessage({
@@ -651,7 +362,7 @@ const getLinkHandlingScript = () => {
 			document.addEventListener("click", function(event) {
 				// 检查点击的元素是否是 a 标签或其子元素
 				let linkElement = event.target.closest("a");
-				
+
 				if (linkElement && linkElement.href) {
 					const href = linkElement.getAttribute("href");
 
@@ -659,22 +370,22 @@ const getLinkHandlingScript = () => {
 					if (href && href.startsWith("#")) {
 						return;
 					}
-					
+
 					// 检查 href 是否不是以 http 或 https 开头
-					if (href && !href.startsWith("http://") && !href.startsWith("https://")) {
+					if (href && !href.startsWith("http://") && !href.startsWith("https://")&& !href.startsWith("blob:") && !href.startsWith("data:")) {
 						// 阻止默认行为
 						event.preventDefault();
 						event.stopPropagation();
-						
+
 						// 如果当前是编辑模式，不触发通信
 						if (window.slideSelector && window.slideSelector.isEditMode) {
 							console.log('编辑模式下不触发链接通信');
 							return;
 						}
-						
+
 						// 检查是否有 data-auto-edit 属性
 					const autoEdit = linkElement.getAttribute("data-auto-edit") === "true";
-					
+
 					// 通过 postMessage 通知主窗口
 					try {
 						console.log(href)
@@ -704,7 +415,7 @@ const getLinkHandlingScript = () => {
 						console.log('编辑模式下不触发 window.open 通信');
 						return null;
 					}
-					
+
 					// 阻止默认行为，不调用原始的 window.open
 					try {
 						console.log("劫持的 window.open:", url);
@@ -1491,17 +1202,188 @@ function replaceGlobalLetConst(scriptContent: string): string {
 	return result.join("\n")
 }
 
+function getInlineInspectorFallbackScript(enable = false): string {
+	if (!enable) return ""
+
+	return `
+		(function() {
+			var INSPECTOR_MSG = {
+				START: "MAGIC_INSPECTOR_START",
+				STOP: "MAGIC_INSPECTOR_STOP",
+				HOVER: "MAGIC_INSPECTOR_HOVER",
+				SELECT: "MAGIC_INSPECTOR_SELECT",
+				HOVER_END: "MAGIC_INSPECTOR_HOVER_END"
+			};
+			var active = false;
+			var hoveredElement = null;
+			function parsePx(value) {
+				var n = parseFloat(value);
+				return isFinite(n) ? n : 0;
+			}
+			function getBoxSides(computed, prefix) {
+				return {
+					top: parsePx(computed.getPropertyValue(prefix + "-top")),
+					right: parsePx(computed.getPropertyValue(prefix + "-right")),
+					bottom: parsePx(computed.getPropertyValue(prefix + "-bottom")),
+					left: parsePx(computed.getPropertyValue(prefix + "-left"))
+				};
+			}
+			function getElementSelector(element) {
+				if (!element || element.nodeType !== 1) return "";
+				if (element === document.documentElement) return "html";
+				if (element === document.body) return "body";
+				var path = [];
+				var current = element;
+				while (current && current.nodeType === 1 && current !== document.documentElement && current !== document.body) {
+					var selector = current.tagName.toLowerCase();
+					if (current.id) {
+						selector += "#" + current.id;
+						path.unshift(selector);
+						break;
+					}
+					var classes = [];
+					if (current.className && typeof current.className === "string") {
+						classes = current.className.trim().split(/\\s+/).filter(Boolean);
+					}
+					var baseSelector = selector;
+					if (classes.length > 0) {
+						baseSelector += classes.map(function(c) { return "." + c; }).join("");
+					}
+					var parent = current.parentElement;
+					if (parent) {
+						var tag = current.tagName.toLowerCase();
+						var siblings = Array.from(parent.children).filter(function(ch) {
+							return ch.tagName.toLowerCase() === tag;
+						});
+						selector = siblings.length > 1
+							? baseSelector + ":nth-of-type(" + (siblings.indexOf(current) + 1) + ")"
+							: baseSelector;
+					} else {
+						selector = baseSelector;
+					}
+					path.unshift(selector);
+					current = parent;
+				}
+				var selectorPath = path.join(" > ");
+				return element.parentElement === document.body && selectorPath ? "body > " + selectorPath : selectorPath;
+			}
+			function collectElementInfo(el) {
+				var computed = window.getComputedStyle(el);
+				var rect = el.getBoundingClientRect();
+				var computedStyles = {};
+				[
+					"display","position","width","height","color","backgroundColor",
+					"fontSize","fontFamily","fontWeight","lineHeight","textAlign",
+					"opacity","borderRadius","overflow","zIndex","flexDirection",
+					"justifyContent","alignItems"
+				].forEach(function(prop) { computedStyles[prop] = computed[prop] || ""; });
+				var attributes = {};
+				var skipAttrs = ["class", "id", "style"];
+				var attrCount = 0;
+				for (var i = 0; i < el.attributes.length && attrCount < 10; i++) {
+					var attr = el.attributes[i];
+					if (skipAttrs.indexOf(attr.name) === -1) {
+						attributes[attr.name] = attr.value.length > 100 ? attr.value.slice(0, 100) + "…" : attr.value;
+						attrCount++;
+					}
+				}
+				var classList = [];
+				if (el.className && typeof el.className === "string") {
+					classList = el.className.trim().split(/\\s+/).filter(Boolean);
+				}
+				var rawText = (el.textContent || "").trim();
+				return {
+					selector: getElementSelector(el),
+					tagName: el.tagName.toLowerCase(),
+					id: el.id || "",
+					classList: classList,
+					rect: { top: rect.top, left: rect.left, width: rect.width, height: rect.height },
+					margin: getBoxSides(computed, "margin"),
+					padding: getBoxSides(computed, "padding"),
+					border: {
+						top: parsePx(computed.borderTopWidth),
+						right: parsePx(computed.borderRightWidth),
+						bottom: parsePx(computed.borderBottomWidth),
+						left: parsePx(computed.borderLeftWidth)
+					},
+					computedStyles: computedStyles,
+					attributes: attributes,
+					textContent: rawText.length > 120 ? rawText.slice(0, 120) + "…" : rawText,
+					accessibleName: el.getAttribute("aria-label") || el.getAttribute("alt") || el.getAttribute("title") || undefined
+				};
+			}
+			function post(type, info) {
+				try {
+					window.parent.postMessage({ type: type, elementInfo: info, timestamp: Date.now() }, "*");
+				} catch (error) {}
+			}
+			function onMouseMove(event) {
+				if (!active) return;
+				var target = event.target;
+				if (!target || target === document.body || target === document.documentElement) return;
+				if (target.getAttribute && target.getAttribute("data-injected") === "true") return;
+				if (hoveredElement === target) return;
+				hoveredElement = target;
+				post(INSPECTOR_MSG.HOVER, collectElementInfo(target));
+			}
+			function onMouseOut(event) {
+				if (!active) return;
+				var related = event.relatedTarget;
+				if (!related || related === document.documentElement) {
+					hoveredElement = null;
+					post(INSPECTOR_MSG.HOVER_END);
+				}
+			}
+			function onClick(event) {
+				if (!active) return;
+				var target = event.target;
+				if (!target || (target.getAttribute && target.getAttribute("data-injected") === "true")) return;
+				event.preventDefault();
+				event.stopPropagation();
+				event.stopImmediatePropagation();
+				post(INSPECTOR_MSG.SELECT, collectElementInfo(target));
+				deactivate();
+			}
+			function activate() {
+				if (active) return;
+				active = true;
+				hoveredElement = null;
+				document.addEventListener("mousemove", onMouseMove, true);
+				document.addEventListener("mouseout", onMouseOut, true);
+				document.addEventListener("click", onClick, true);
+				document.documentElement.style.cursor = "crosshair";
+			}
+			function deactivate() {
+				if (!active) return;
+				active = false;
+				hoveredElement = null;
+				document.removeEventListener("mousemove", onMouseMove, true);
+				document.removeEventListener("mouseout", onMouseOut, true);
+				document.removeEventListener("click", onClick, true);
+				document.documentElement.style.cursor = "";
+			}
+			window.addEventListener("message", function(event) {
+				if (event.data && event.data.type === INSPECTOR_MSG.START) activate();
+				if (event.data && event.data.type === INSPECTOR_MSG.STOP) deactivate();
+			});
+		})();
+	`
+}
+
 //TAILWIND_CSS_URL和ECHARTS_JS_URL注入后不删除，其他资源注入后删除
 export const getFullContent = (
 	decodedContent: string,
 	markerId?: string,
 	options: GetFullContentOptions = {},
 ) => {
+	const serviceWorkerMockMode = options.serviceWorkerMockMode ?? "auto"
 	const dynamicInterceptionOptions = options.dynamicInterception ?? {}
 	const postMessageTargetStrategy =
 		options.postMessageTargetStrategy ??
 		dynamicInterceptionOptions.postMessageTargetStrategy ??
 		POST_MESSAGE_TARGET_STRATEGIES.SAME_ORIGIN_ANCESTOR
+	const virtualStorageContext =
+		options.virtualStorage ?? createEphemeralVirtualStorageContext(markerId || "default")
 
 	// 使用DOMParser解析原始HTML
 	const parser = new DOMParser()
@@ -1522,13 +1404,43 @@ export const getFullContent = (
 		doc.documentElement.appendChild(body)
 	}
 
+	const initialLang = normalizeLocale(configStore.i18n.language)
+	const firstHeadChild = doc.head.firstChild
+	const injectedHeadFragment = doc.createDocumentFragment()
+
 	// 创建防翻译meta标签
 	const metaNoTranslate = doc.createElement("meta")
 	metaNoTranslate.setAttribute("name", "google")
 	metaNoTranslate.setAttribute("content", "notranslate")
 	metaNoTranslate.setAttribute("data-injected", "true")
-	// 插入到head的最前面
-	doc.head.insertBefore(metaNoTranslate, doc.head.firstChild)
+	injectedHeadFragment.appendChild(metaNoTranslate)
+
+	// 初始语言必须在 Magic API prelude 之前写入，MagicI18nApi 在 install 时读取。
+	const langBootstrapScript = doc.createElement("script")
+	langBootstrapScript.setAttribute("data-injected", "magic-lang")
+	langBootstrapScript.textContent = `window.__MAGIC_INITIAL_LANG__=${JSON.stringify(initialLang)}`
+	injectedHeadFragment.appendChild(langBootstrapScript)
+
+	// Magic API 必须在业务 HTML 的同步脚本之前注册，避免用户脚本抢先调用 window.Magic。
+	const magicApiScriptElement = doc.createElement("script")
+	magicApiScriptElement.setAttribute("data-injected", "magic-api")
+	magicApiScriptElement.textContent = magicApiPreludeScript
+	injectedHeadFragment.appendChild(magicApiScriptElement)
+
+	// 创建注入脚本
+	const scriptElement = doc.createElement("script")
+	scriptElement.setAttribute("data-injected", "true")
+	scriptElement.textContent = `
+			${getPostMessageTargetBootstrapScript(postMessageTargetStrategy)}
+			${getVirtualStorageBridgeScript(virtualStorageContext)}
+			${getServiceWorkerMockScript(serviceWorkerMockMode)}
+		${getDOMContentLoadedScript(options.disableParentClickBridge === true)}
+		${getLinkHandlingScript()}
+		${getNestedIframeInterceptorScript()}
+		${getDynamicResourceInterceptorScript(dynamicInterceptionOptions)}
+		${getInlineInspectorFallbackScript(options.enableInlineInspectorFallback === true)}
+	`
+	injectedHeadFragment.appendChild(scriptElement)
 
 	// 创建基础样式
 	const styleElement = doc.createElement("style")
@@ -1541,33 +1453,8 @@ export const getFullContent = (
 	]
 		.filter(Boolean)
 		.join("\n")
-	doc.head.appendChild(styleElement)
-
-	// 创建注入脚本
-	const scriptElement = doc.createElement("script")
-	scriptElement.setAttribute("data-injected", "true")
-	// 注入初始语言变量，供 iframe-runtime 中 MagicI18nApi 在安装时读取
-	const initialLang = normalizeLocale(configStore.i18n.language)
-	scriptElement.textContent = `
-		window.__MAGIC_INITIAL_LANG__ = "${initialLang}";
-		${getPostMessageTargetBootstrapScript(postMessageTargetStrategy)}
-		${getCookieMockScript()}
-		${getStorageMockScript(markerId)}
-		${getIndexedDBMockScript()}
-		${getServiceWorkerMockScript()}
-		${getDOMContentLoadedScript(options.disableParentClickBridge === true)}
-		${getLinkHandlingScript()}
-		${getNestedIframeInterceptorScript()}
-		${getDynamicResourceInterceptorScript(dynamicInterceptionOptions)}
-	`
-	doc.head.appendChild(scriptElement)
-
-	// 注入 iframe-runtime.js：Phase 1 立即安装 window.Magic.fs / llm；
-	// Phase 2 在收到 { type: "activateEditorRuntime" } 消息后激活编辑器。
-	const runtimeScriptElement = doc.createElement("script")
-	runtimeScriptElement.setAttribute("data-injected", "true")
-	runtimeScriptElement.textContent = getIframeRuntimeScript()
-	doc.head.appendChild(runtimeScriptElement)
+	injectedHeadFragment.appendChild(styleElement)
+	doc.head.insertBefore(injectedHeadFragment, firstHeadChild)
 
 	// 在html标签上添加translate="no"属性
 	doc.documentElement.setAttribute("translate", "no")
@@ -1625,9 +1512,12 @@ interface DynamicResourceInterceptorOptions {
 }
 
 interface GetFullContentOptions {
+	serviceWorkerMockMode?: ServiceWorkerMockMode
 	dynamicInterception?: DynamicResourceInterceptorOptions
 	containOverscroll?: boolean
 	hideVerticalScroll?: boolean
 	disableParentClickBridge?: boolean
+	enableInlineInspectorFallback?: boolean
 	postMessageTargetStrategy?: PostMessageTargetStrategy
+	virtualStorage?: VirtualStorageRuntimeContext
 }

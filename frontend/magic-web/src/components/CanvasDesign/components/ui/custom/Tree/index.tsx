@@ -1,10 +1,35 @@
-import { useState, useCallback, useMemo } from "react"
+import { useState, useCallback, useMemo, useRef, useLayoutEffect } from "react"
+import { useVirtualizer } from "@tanstack/react-virtual"
 import classNames from "classnames"
 import styles from "./index.module.css"
 import TreeNodeItem from "./TreeNodeItem"
 import type { TreeProps, TreeNode, TreeData } from "./types"
 
 export type { TreeNode, TreeProps, TreeData, RenderNodeContext } from "./types"
+
+const DEFAULT_VIRTUAL_THRESHOLD = 80
+const DEFAULT_VIRTUAL_ROW_HEIGHT = 34
+const DEFAULT_VIRTUAL_OVERSCAN = 8
+
+interface VisibleTreeRow<T extends TreeData = TreeData> {
+	node: TreeNode<T>
+	level: number
+}
+
+function flattenVisibleTreeRows<T extends TreeData>(
+	nodes: TreeNode<T>[],
+	expandedIds: Set<string>,
+	level = 0,
+	rows: VisibleTreeRow<T>[] = [],
+) {
+	nodes.forEach((node) => {
+		rows.push({ node, level })
+		if (node.children?.length && expandedIds.has(node.id)) {
+			flattenVisibleTreeRows(node.children, expandedIds, level + 1, rows)
+		}
+	})
+	return rows
+}
 
 export default function Tree<T extends TreeData = TreeData>(props: TreeProps<T>) {
 	const {
@@ -16,6 +41,12 @@ export default function Tree<T extends TreeData = TreeData>(props: TreeProps<T>)
 		onToggle: externalOnToggle,
 		className,
 		treeNodeContentClassName,
+		virtualize = false,
+		virtualThreshold = DEFAULT_VIRTUAL_THRESHOLD,
+		virtualRowHeight = DEFAULT_VIRTUAL_ROW_HEIGHT,
+		virtualOverscan = DEFAULT_VIRTUAL_OVERSCAN,
+		initialScrollTop,
+		onScrollTopChange,
 		renderNode,
 		onContextMenu,
 		onDoubleClick,
@@ -28,6 +59,23 @@ export default function Tree<T extends TreeData = TreeData>(props: TreeProps<T>)
 
 	// 使用外部状态或内部状态
 	const expandedIds = externalExpandedIds ?? internalExpandedIds
+	const scrollRef = useRef<HTMLDivElement>(null)
+
+	const visibleRows = useMemo(
+		() => flattenVisibleTreeRows(data, expandedIds),
+		[data, expandedIds],
+	)
+	const shouldVirtualize = virtualize && visibleRows.length > virtualThreshold
+	const rowVirtualizer = useVirtualizer({
+		count: visibleRows.length,
+		getScrollElement: () => scrollRef.current,
+		estimateSize: () => virtualRowHeight,
+		overscan: virtualOverscan,
+		initialOffset: initialScrollTop ?? 0,
+		getItemKey: (index) => visibleRows[index]?.node.id ?? index,
+		measureElement: (element) => element.getBoundingClientRect().height,
+	})
+	const hasRestoredScrollTopRef = useRef(false)
 
 	// 创建节点映射表，用于快速查找
 	const nodeMap = useMemo(() => {
@@ -90,26 +138,85 @@ export default function Tree<T extends TreeData = TreeData>(props: TreeProps<T>)
 		[selectedIds, onSelect, nodeMap],
 	)
 
+	const handleScroll = useCallback(
+		(event: React.UIEvent<HTMLDivElement>) => {
+			onScrollTopChange?.(event.currentTarget.scrollTop)
+		},
+		[onScrollTopChange],
+	)
+
+	useLayoutEffect(() => {
+		if (hasRestoredScrollTopRef.current || initialScrollTop === undefined) {
+			return
+		}
+
+		hasRestoredScrollTopRef.current = true
+		const frameId = requestAnimationFrame(() => {
+			if (shouldVirtualize) {
+				rowVirtualizer.scrollToOffset(initialScrollTop)
+			} else if (scrollRef.current) {
+				scrollRef.current.scrollTop = initialScrollTop
+			}
+		})
+
+		return () => cancelAnimationFrame(frameId)
+	}, [initialScrollTop, rowVirtualizer, shouldVirtualize])
+
+	const renderTreeNodeItem = (node: TreeNode<T>, level: number, renderChildren = true) => (
+		<TreeNodeItem
+			key={node.id}
+			node={node}
+			level={level}
+			selectedIds={selectedIds}
+			hoveredIds={hoveredIds}
+			expandedIds={expandedIds}
+			treeNodeContentClassName={treeNodeContentClassName}
+			renderChildren={renderChildren}
+			onToggle={handleToggle}
+			onSelect={handleSelect}
+			renderNode={renderNode}
+			onContextMenu={onContextMenu}
+			onDoubleClick={onDoubleClick}
+			onMouseEnter={onMouseEnter}
+			onMouseLeave={onMouseLeave}
+		/>
+	)
+
 	return (
-		<div className={classNames(styles.tree, className)}>
-			{data.map((node) => (
-				<TreeNodeItem
-					key={node.id}
-					node={node}
-					level={0}
-					selectedIds={selectedIds}
-					hoveredIds={hoveredIds}
-					expandedIds={expandedIds}
-					treeNodeContentClassName={treeNodeContentClassName}
-					onToggle={handleToggle}
-					onSelect={handleSelect}
-					renderNode={renderNode}
-					onContextMenu={onContextMenu}
-					onDoubleClick={onDoubleClick}
-					onMouseEnter={onMouseEnter}
-					onMouseLeave={onMouseLeave}
-				/>
-			))}
+		<div ref={scrollRef} className={classNames(styles.tree, className)} onScroll={handleScroll}>
+			{shouldVirtualize ? (
+				<div
+					style={{
+						height: `${rowVirtualizer.getTotalSize()}px`,
+						position: "relative",
+						width: "100%",
+					}}
+				>
+					{rowVirtualizer.getVirtualItems().map((virtualItem) => {
+						const row = visibleRows[virtualItem.index]
+						if (!row) return null
+
+						return (
+							<div
+								key={virtualItem.key}
+								data-index={virtualItem.index}
+								ref={rowVirtualizer.measureElement}
+								style={{
+									position: "absolute",
+									top: 0,
+									left: 0,
+									width: "100%",
+									transform: `translateY(${virtualItem.start}px)`,
+								}}
+							>
+								{renderTreeNodeItem(row.node, row.level, false)}
+							</div>
+						)
+					})}
+				</div>
+			) : (
+				data.map((node) => renderTreeNodeItem(node, 0))
+			)}
 		</div>
 	)
 }

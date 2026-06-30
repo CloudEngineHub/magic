@@ -141,6 +141,7 @@ export function DocumentSyncStatusBadge({
 						className,
 					)}
 					title={isRetrying ? undefined : t("knowledgeDetail.retryTooltip")}
+					data-testid="handle-retry"
 				>
 					{isRetrying ? (
 						<>

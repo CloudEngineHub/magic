@@ -11,6 +11,7 @@ import { InstructionType } from "@/types/bot"
 import { useMessageRenderContext } from "@/components/business/MessageRenderProvider/hooks"
 import { ExtensionName } from "./constants"
 import { useStyles } from "./styles"
+import { runActiveEditor } from "@/utils/tiptapEditorLifecycle"
 
 const QuickInstructionSelectorNodeRender = (props: NodeViewProps) => {
 	const {
@@ -41,7 +42,9 @@ const QuickInstructionSelectorNodeRender = (props: NodeViewProps) => {
 	/** 选择值 */
 	const handleChange = useMemoizedFn((v: string) => {
 		setSelectedValue(v)
-		editor?.commands.updateAttributes(ExtensionName, { value: v })
+		runActiveEditor(editor, (activeEditor) => {
+			activeEditor.commands.updateAttributes(ExtensionName, { value: v })
+		})
 	})
 
 	const arrowIcon = useMemo(() => {

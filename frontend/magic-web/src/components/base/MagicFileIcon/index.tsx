@@ -20,6 +20,8 @@ const iconNameMap: Record<string, string> = {
 	md: "markdown",
 	doc: "word",
 	docx: "word",
+	docm: "word",
+	wps: "word",
 	xls: "excel",
 	xlsx: "excel",
 	csv: "excel",
@@ -89,6 +91,8 @@ const iconNameMap: Record<string, string> = {
 	custom: "custom",
 	customFile: "custom",
 	"self-media": "self-media",
+	"ai-card": "ai-sparkle",
+	"micro-app": "micro-app",
 }
 
 function normalizeExtension(fileExtension?: string): string | null {

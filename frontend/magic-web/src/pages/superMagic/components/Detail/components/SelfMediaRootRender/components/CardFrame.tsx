@@ -16,6 +16,7 @@ import { useTranslation } from "react-i18next"
 import { processHtmlContent } from "../../../contents/HTML/htmlProcessor"
 import { flattenAttachments } from "../../../contents/HTML/utils"
 import type { FileItem } from "../../../contents/HTML/utils/fetchInterceptor"
+import { stabilizeSingleLineTextForSnapdom } from "../../PPTRender/services/snapdomTextStabilizer"
 import type { SelfMediaAttachmentNode } from "../types"
 import { replaceFontAwesomeIconsWithSvg } from "../utils/fontAwesomeSvgFallback"
 
@@ -148,7 +149,7 @@ async function loadCardFrameSource({
 	const urls = await getTemporaryDownloadUrl({ file_ids: [fileId] })
 	const url = urls?.[0]?.url
 	if (!url) throw new Error("noCardUrl")
-	const resp = await fetch(url, { credentials: "omit" })
+	const resp = await fetch(url, { cache: "no-store", credentials: "omit" })
 	if (!resp.ok) throw new Error("loadCardError")
 	const html = await resp.text()
 
@@ -377,22 +378,27 @@ const CardFrame = forwardRef<CardFrameRef, CardFrameProps>(function CardFrame(
 
 			try {
 				await iframeDoc.fonts?.ready
+				const restoreTextStyles = stabilizeSingleLineTextForSnapdom(iframeBody)
 
-				const dataUrl = await Promise.race([
-					(async () => {
-						const result = await snapdom(iframeBody, {
-							width,
-							height,
-							scale: pixelRatio,
-							backgroundColor: "#ffffff",
-							embedFonts: false,
-						})
-						const blob = await result.toBlob({ type: "png" })
-						return blobToDataUrl(blob)
-					})(),
-					timeoutPromise,
-				])
-				return dataUrl
+				try {
+					const dataUrl = await Promise.race([
+						(async () => {
+							const result = await snapdom(iframeBody, {
+								width,
+								height,
+								scale: pixelRatio,
+								backgroundColor: "#ffffff",
+								embedFonts: false,
+							})
+							const blob = await result.toBlob({ type: "png" })
+							return blobToDataUrl(blob)
+						})(),
+						timeoutPromise,
+					])
+					return dataUrl
+				} finally {
+					restoreTextStyles()
+				}
 			} finally {
 				if (timeoutId !== null) window.clearTimeout(timeoutId)
 				svgFallback.restore()
@@ -486,6 +492,7 @@ const CardFrame = forwardRef<CardFrameRef, CardFrameProps>(function CardFrame(
 						onLoaded?.()
 					}}
 					sandbox="allow-scripts allow-same-origin"
+					data-testid="disconnect"
 				/>
 			)}
 		</div>

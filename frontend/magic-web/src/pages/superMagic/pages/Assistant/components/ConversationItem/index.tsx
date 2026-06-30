@@ -73,6 +73,7 @@ function ConversationItem({
 				isActive && "bg-fill-secondary hover:bg-fill-secondary",
 			)}
 			onClick={onClick}
+			data-testid="conversation-item"
 		>
 			<MagicAvatar size={36} src={data.agent_avatar} />
 			<div className="flex w-full min-w-0 max-w-full flex-col gap-0.5 overflow-hidden">

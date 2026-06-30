@@ -1,5 +1,6 @@
 import { useTranslation } from "react-i18next"
 import { Check, CloudOff, Loader2 } from "lucide-react"
+import { selfMediaOverlayStyles } from "../../components/selfMediaOverlayStyles"
 
 type SaveStatus = "idle" | "saving" | "saved" | "error"
 
@@ -14,7 +15,7 @@ export function RednoteEditSaveStatusIndicator({ status }: RednoteEditSaveStatus
 
 	return (
 		<div
-			className="absolute right-3 top-3 z-50 flex items-center gap-1.5 rounded-md border border-border bg-card/95 px-2.5 py-1 text-xs shadow-sm backdrop-blur supports-[backdrop-filter]:bg-card/60"
+			className={`absolute right-3 top-3 z-50 flex items-center gap-1.5 px-2.5 py-1 text-xs ${selfMediaOverlayStyles.floatingPanel}`}
 			data-testid="red-edit-save-status"
 		>
 			{status === "saving" && (

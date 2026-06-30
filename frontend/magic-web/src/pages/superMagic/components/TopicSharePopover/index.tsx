@@ -9,7 +9,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/shadcn-ui/
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/shadcn-ui/dialog"
 import { Button } from "@/components/shadcn-ui/button"
 import { IconCopy, IconChevronRight, IconChevronDown } from "@tabler/icons-react"
-import { Check } from "lucide-react"
+import { Check, Copy } from "lucide-react"
 import MagicIcon from "@/components/base/MagicIcon"
 import CommonPopup from "@/pages/superMagicMobile/components/CommonPopup"
 import { VipSwitch, VipBadge } from "@/pages/superMagic/components/VipSwitch"
@@ -295,9 +295,23 @@ function TopicSharePopoverContent({
 									rel="noopener noreferrer"
 									className="inline break-all text-primary underline"
 									onClick={(e) => e.stopPropagation()}
+									data-testid="topic-share-popover"
 								>
 									{urlMatch[0]}
 								</a>
+								<button
+									type="button"
+									className="ml-1 inline-flex translate-y-[2px] items-center justify-center rounded p-0.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+									onClick={(e) => {
+										e.stopPropagation()
+										clipboard.writeText(urlMatch[0])
+										magicToast.success(t("share.copySuccess"))
+									}}
+									title={t("share.copyLink")}
+									data-testid="write-text"
+								>
+									<Copy className="h-3.5 w-3.5" />
+								</button>
 								{parts[1]}
 							</div>
 						)
@@ -504,6 +518,7 @@ function TopicSharePopoverContent({
 						<div
 							className={styles.advancedHeader}
 							onClick={() => setIsAdvancedOpen(!isAdvancedOpen)}
+							data-testid="set-is-advanced-open"
 						>
 							<span className={styles.advancedTitle}>
 								{t("share.advancedOptions")}

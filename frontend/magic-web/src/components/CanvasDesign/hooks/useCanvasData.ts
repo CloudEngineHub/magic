@@ -34,10 +34,10 @@ export function useCanvasData<T>(
 
 				if (event.type === "element:change") {
 					const changeEvent = event as CanvasEvent<"element:change">
-					if (
+					const shouldUpdate =
 						!options?.shouldUpdateOnElementChange ||
 						options.shouldUpdateOnElementChange(changeEvent)
-					) {
+					if (shouldUpdate) {
 						forceUpdate()
 					}
 					return

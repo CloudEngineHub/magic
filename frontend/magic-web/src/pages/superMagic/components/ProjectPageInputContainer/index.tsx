@@ -26,6 +26,7 @@ import { MOBILE_LAYOUT_CONFIG } from "../MainInputContainer/components/editors/c
 import { createMessageEditorDraftKey } from "../MessageEditor/utils/draftKey"
 import { userStore } from "@/models/user"
 import { useTaskInterrupt } from "@/pages/superMagic/hooks/useTaskInterrupt"
+import { isCachedChatWorkspaceProject } from "@/pages/superMagic/utils/isChatWorkspaceProject"
 
 /**
  * 这个组件作为项目页的编辑器组件
@@ -46,6 +47,7 @@ const ProjectPageInputContainerComponent: React.FC<ProjectPageInputContainerProp
 	setSelectedProject,
 	onEditorBlur,
 	onEditorFocus,
+	onMessageSendReady,
 	onFileClick,
 	selectedWorkspace,
 	attachments,
@@ -57,7 +59,9 @@ const ProjectPageInputContainerComponent: React.FC<ProjectPageInputContainerProp
 	editorLayoutConfig,
 	showTopicModeExamplePortal = true,
 	enableReEditMessageFromPubSub = false,
+	onSendSuccess,
 	onSendComplete,
+	createTopic,
 }) => {
 	const isMobile = useIsMobile()
 	const { taskData: taskDataFromStore } = useTaskData({ selectedTopic })
@@ -199,6 +203,7 @@ const ProjectPageInputContainerComponent: React.FC<ProjectPageInputContainerProp
 			stopEventLoading,
 			handleInterrupt,
 			isEmptyStatus: !!isEmptyStatus,
+			useChatTerminology: isCachedChatWorkspaceProject(selectedProject),
 			messagesLength: (messages ?? []).length,
 			enableMessageSendByContent,
 			modules: {
@@ -220,12 +225,15 @@ const ProjectPageInputContainerComponent: React.FC<ProjectPageInputContainerProp
 				onEditorBlur?.()
 			},
 			onSendComplete,
+			onMessageSendReady,
 			queueContext: {
 				editingQueueItem: messageQueue.editingQueueItem,
 				addToQueue: messageQueue.addToQueue,
 				finishEditQueueItem: messageQueue.finishEditQueueItem,
 			},
 			showTopicExamplesPortal: showTopicModeExamplePortal,
+			onSendSuccess,
+			createTopic,
 		}
 	}, [
 		selectedTopic,
@@ -250,10 +258,13 @@ const ProjectPageInputContainerComponent: React.FC<ProjectPageInputContainerProp
 		attachments,
 		mentionPanelStore,
 		onFileClick,
+		onMessageSendReady,
 		messageQueue.editingQueueItem,
 		messageQueue.addToQueue,
 		messageQueue.finishEditQueueItem,
 		showTopicModeExamplePortal,
+		onSendSuccess,
+		createTopic,
 		onEditorFocus,
 		onEditorBlur,
 		onSendComplete,

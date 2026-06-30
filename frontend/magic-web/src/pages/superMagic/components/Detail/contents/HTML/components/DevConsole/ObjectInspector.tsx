@@ -95,6 +95,7 @@ function PropertyNode({ name, value, depth }: PropertyNodeProps) {
 					isExpandable && "cursor-pointer",
 				)}
 				onClick={toggle}
+				data-testid="toggle"
 			>
 				{isExpandable ? (
 					<ChevronRight
@@ -171,6 +172,7 @@ export function ObjectInspector({ value, isRoot = true }: ObjectInspectorProps) 
 			<div
 				className={cn("flex items-start gap-0.5", isRoot && "cursor-pointer")}
 				onClick={toggle}
+				data-testid="toggle-2"
 			>
 				<ChevronRight
 					size={10}

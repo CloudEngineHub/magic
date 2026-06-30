@@ -1,5 +1,6 @@
 import { act, renderHook } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import { useTopicDesktopLayout } from "../useTopicDesktopLayout"
 import {
 	DEFAULT_WIDTH,
@@ -24,6 +25,7 @@ describe("useTopicDesktopLayout", () => {
 
 	afterEach(() => {
 		vi.unstubAllGlobals()
+		pubsub.clear()
 		localStorage.clear()
 	})
 
@@ -82,6 +84,22 @@ describe("useTopicDesktopLayout", () => {
 
 		act(() => {
 			result.current.ensureExpandedWhenDetailVisible(true)
+		})
+		rerender()
+		expect(result.current.isConversationPanelCollapsed).toBe(false)
+	})
+
+	it("should expand collapsed conversation panel when requested globally", () => {
+		const { result, rerender } = renderHook(() => useTopicDesktopLayout({ isReadOnly: false }))
+
+		act(() => {
+			result.current.toggleConversationPanel()
+		})
+		rerender()
+		expect(result.current.isConversationPanelCollapsed).toBe(true)
+
+		act(() => {
+			pubsub.publish(PubSubEvents.Expand_Topic_Conversation_Panel)
 		})
 		rerender()
 		expect(result.current.isConversationPanelCollapsed).toBe(false)

@@ -5,6 +5,7 @@ declare(strict_types=1);
  * Copyright (c) The Magic , Distributed under the software license
  */
 use App\Application\Audit\Service\PermissionLabelService;
+use App\Application\Authentication\Service\NoopExternalSessionLogoutService;
 use App\Application\Chat\Service\MagicAgentEventAppService;
 use App\Application\Chat\Service\SessionAppService;
 use App\Application\Flow\ExecuteManager\NodeRunner\Cache\StringCache\MysqlStringCache;
@@ -17,6 +18,7 @@ use App\Application\Kernel\Contract\MagicPermissionInterface;
 use App\Application\Kernel\MagicPermission;
 use App\Application\KnowledgeBase\Port\EmbeddingProviderPort;
 use App\Application\KnowledgeBase\Port\FragmentHttpPassthroughPort;
+use App\Application\KnowledgeBase\Port\ThirdPlatformDocumentProviderPort;
 use App\Application\KnowledgeBase\Service\Strategy\DocumentFile\Driver\ExternalFileDocumentFileStrategyDriver;
 use App\Application\KnowledgeBase\Service\Strategy\DocumentFile\Driver\Interfaces\ExternalFileDocumentFileStrategyInterface;
 use App\Application\KnowledgeBase\Service\Strategy\DocumentFile\Driver\Interfaces\ThirdPlatformDocumentFileStrategyInterface;
@@ -237,6 +239,7 @@ use App\Infrastructure\Core\Contract\Authorization\BaseFlowOpenApiCheck;
 use App\Infrastructure\Core\Contract\Authorization\FlowOpenApiCheckInterface;
 use App\Infrastructure\Core\Contract\Flow\CodeExecutor\PHPExecutorInterface;
 use App\Infrastructure\Core\Contract\Flow\CodeExecutor\PythonExecutorInterface;
+use App\Infrastructure\Core\Contract\Session\ExternalSessionLogoutInterface;
 use App\Infrastructure\Core\Contract\Session\SessionInterface;
 use App\Infrastructure\Core\DataIsolation\BaseHandleDataIsolation;
 use App\Infrastructure\Core\DataIsolation\BaseOrganizationInfoManager;
@@ -283,6 +286,7 @@ use App\Infrastructure\ImageGenerate\DefaultWatermarkConfig;
 use App\Infrastructure\ImageGenerate\DefaultWatermarkPolicy;
 use App\Infrastructure\ImageGenerate\NullImageEnhancementProcessor;
 use App\Infrastructure\ImageGenerate\WatermarkPolicyInterface;
+use App\Infrastructure\KnowledgeBase\ThirdPlatform\UnsupportedThirdPlatformDocumentProvider;
 use App\Infrastructure\ModelGateway\FfprobeVideoMediaProbe;
 use App\Infrastructure\ModelGateway\Queue\RedisQueueCoreRepository;
 use App\Infrastructure\ModelGateway\Queue\RedisVideoQueueOperationRepository;
@@ -393,6 +397,7 @@ $dependencies = [
     FragmentGateway::class => FragmentRpcClient::class,
     FragmentHttpPassthroughPort::class => FragmentRpcClient::class,
     EmbeddingProviderPort::class => EmbeddingRpcClient::class,
+    ThirdPlatformDocumentProviderPort::class => UnsupportedThirdPlatformDocumentProvider::class,
     KnowledgeBaseDocumentRepositoryInterface::class => KnowledgeBaseDocumentRepository::class,
     KnowledgeBaseFragmentRepositoryInterface::class => KnowledgeBaseFragmentRepository::class,
 
@@ -496,6 +501,7 @@ $dependencies = [
 
     // 登录校验
     SessionInterface::class => SessionAppService::class,
+    ExternalSessionLogoutInterface::class => NoopExternalSessionLogoutService::class,
 
     // ipc
     DataFormatterInterface::class => JsonDataFormatter::class,

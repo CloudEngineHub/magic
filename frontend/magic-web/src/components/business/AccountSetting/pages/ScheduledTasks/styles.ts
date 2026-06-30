@@ -190,6 +190,9 @@ export const useScheduledItemStyles = createStyles(({ css, prefixCls }) => {
 				border-radius: 6px;
 			}
 		`,
+		monthlySelectorPopup: css`
+			height: 200px;
+		`,
 		timepickerPopup: css`
 			.${prefixCls}-picker-time-panel-cell-selected
 				.${prefixCls}-picker-time-panel-cell-inner {

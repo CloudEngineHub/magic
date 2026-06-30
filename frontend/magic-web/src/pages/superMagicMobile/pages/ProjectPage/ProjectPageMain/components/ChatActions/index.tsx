@@ -18,13 +18,14 @@ const ChatActions = memo(function ChatActions({
 	const { t } = useTranslation("super")
 
 	return (
-		<div className={cn("flex w-full items-start gap-2 px-2 pt-1.5", className)}>
+		<div className={cn("flex w-full items-start gap-2 px-2 pt-1.5", className)} data-testid="project-chat-actions">
 			{onNewTopicClick && (
 				<Button
 					variant="outline"
 					size="sm"
 					onClick={onNewTopicClick}
 					className="h-7 gap-1 rounded-full px-2.5 py-1 text-xs font-normal"
+					data-testid="project-chat-new-topic-button"
 				>
 					<MessageCirclePlus size={16} className="shrink-0" />
 					<span className="whitespace-nowrap">{t("chatActions.newTopic")}</span>
@@ -36,6 +37,7 @@ const ChatActions = memo(function ChatActions({
 					size="sm"
 					onClick={onHistoryTopicsClick}
 					className="h-7 gap-1 rounded-full px-2.5 py-1 text-xs font-normal"
+					data-testid="project-chat-history-topics-button"
 				>
 					<HistoryIcon size={16} className="shrink-0" />
 					<span className="whitespace-nowrap">{t("chatActions.historyTopics")}</span>

@@ -79,7 +79,7 @@ export function ScheduledItem({ value, onChange, disabled }: ScheduledItemProps)
 
 	return (
 		<div className={styles.container}>
-			<div className={styles.column}>
+			<div className="w-24">
 				<MagicSelect
 					value={formValues.scheduleType}
 					onChange={handleScheduleTypeChange}
@@ -122,6 +122,11 @@ export function ScheduledItem({ value, onChange, disabled }: ScheduledItemProps)
 						onChange={(day: string) => updateFormValues({ day })}
 						disabled={disabled}
 						className={styles.selector}
+						classNames={{
+							popup: {
+								root: styles.monthlySelectorPopup,
+							},
+						}}
 						options={DAY_OPTIONS}
 					/>
 				) : null}

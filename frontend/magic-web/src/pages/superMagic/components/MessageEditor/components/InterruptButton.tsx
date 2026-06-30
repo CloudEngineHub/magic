@@ -68,6 +68,7 @@ function InterruptButton({
 					src={InterruptSvg as string}
 					alt=""
 					style={{ width: iconSize, height: iconSize }}
+					data-testid="interrupt-button-image"
 				/>
 			)}
 		</button>

@@ -59,6 +59,7 @@ export default observer(function PublishCreateView({ onClose }: PublishCreateVie
 						<label
 							htmlFor="skill-publish-version-input"
 							className="flex items-center gap-1 text-base font-medium text-foreground"
+							data-testid="publish-create-view-label"
 						>
 							{t("skillEditPage.publishPanel.create.fields.version.label")}
 							<span className="text-destructive" aria-hidden="true">
@@ -84,7 +85,7 @@ export default observer(function PublishCreateView({ onClose }: PublishCreateVie
 					</div>
 
 					<div className="flex flex-col gap-1.5">
-						<label className="text-base font-medium text-foreground">
+						<label className="text-base font-medium text-foreground" data-testid="publish-create-view-label-2">
 							{t("skillEditPage.publishPanel.create.fields.details.label")}
 						</label>
 						<LocaleTextInput

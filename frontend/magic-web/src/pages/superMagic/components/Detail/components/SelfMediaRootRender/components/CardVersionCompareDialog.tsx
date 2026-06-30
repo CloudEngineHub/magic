@@ -11,6 +11,7 @@ import {
 } from "@/components/shadcn-ui/select"
 import type { FileHistoryVersion } from "@/pages/superMagic/pages/Workspace/types"
 import CardFrame from "./CardFrame"
+import { selfMediaOverlayStyles } from "./selfMediaOverlayStyles"
 import type { SelfMediaAttachmentNode } from "../types"
 
 interface CardVersionCompareDialogProps {
@@ -86,18 +87,23 @@ export function CardVersionCompareDialog({
 		<MagicModal
 			open={open}
 			onCancel={() => onOpenChange(false)}
-			title={t("ppt.versionCompare.historyTitle")}
+			title={
+				<div className="flex min-w-0 flex-wrap items-baseline gap-x-3 gap-y-1 pr-8">
+					<span className="shrink-0 text-base font-semibold leading-6 text-foreground">
+						{t("ppt.versionCompare.historyTitle")}
+					</span>
+					<span className="min-w-0 text-xs font-normal !font-normal leading-4 text-muted-foreground">
+						{t("ppt.versionCompare.historyDescription")}
+					</span>
+				</div>
+			}
 			width="95vw"
 			footer={null}
 			closable={true}
-			classNames={{ body: "!p-0" }}
+			classNames={{ body: "!bg-[#f8f8f9] !p-0" }}
 		>
 			<div className="flex flex-col gap-3" data-testid="card-history-version-compare-dialog">
-				<p className="mt-3 px-6 text-sm text-muted-foreground">
-					{t("ppt.versionCompare.historyDescription")}
-				</p>
-
-				<div className="flex h-[65vh] gap-4 overflow-hidden px-6">
+				<div className="flex h-[65vh] gap-4 overflow-hidden px-6 pt-3">
 					{/* 左侧 - 最新版本（复用 CardFrame） */}
 					<div
 						className={`flex min-w-0 flex-1 cursor-pointer flex-col gap-2 rounded-lg border-2 p-2 transition-all ${
@@ -106,6 +112,7 @@ export function CardVersionCompareDialog({
 								: "border-transparent hover:border-border"
 						}`}
 						onClick={() => setSelectedSide("latest")}
+						data-testid="set-selected-side"
 					>
 						<div className="flex items-center gap-2 rounded-md bg-muted/50 px-3 py-1.5">
 							<div
@@ -119,7 +126,9 @@ export function CardVersionCompareDialog({
 									<Check className="h-3 w-3 text-primary-foreground" />
 								)}
 							</div>
-							<span className="text-sm font-medium">{t("common.latestVersion")}</span>
+							<span className="text-sm font-normal text-foreground">
+								{t("common.latestVersion")}
+							</span>
 						</div>
 						<div className="flex-1 overflow-hidden rounded-md border bg-white dark:bg-card">
 							<CardFrame
@@ -139,6 +148,7 @@ export function CardVersionCompareDialog({
 								: "border-transparent hover:border-border"
 						}`}
 						onClick={() => setSelectedSide("history")}
+						data-testid="set-selected-side-2"
 					>
 						<div className="flex items-center justify-between gap-2 rounded-md bg-muted/50 px-3 py-1.5">
 							<div className="flex flex-1 cursor-pointer items-center gap-2">
@@ -153,7 +163,7 @@ export function CardVersionCompareDialog({
 										<Check className="h-3 w-3 text-primary-foreground" />
 									)}
 								</div>
-								<span className="text-sm font-medium">
+								<span className="text-sm font-normal text-foreground">
 									{t("common.historyVersion")}
 								</span>
 							</div>
@@ -196,6 +206,7 @@ export function CardVersionCompareDialog({
 									sandbox="allow-scripts allow-same-origin"
 									className="h-full w-full border-0"
 									title={`${t("common.historyVersion")} v${currentHistoryVersion}`}
+									data-testid="card-version-compare-dialog-iframe"
 								/>
 							) : (
 								<div className="flex h-full items-center justify-center text-sm text-muted-foreground">
@@ -209,14 +220,14 @@ export function CardVersionCompareDialog({
 				<div className="flex justify-end gap-2 px-6 pb-4 pt-2">
 					<button
 						data-testid="card-history-compare-cancel"
-						className="rounded-md border px-4 py-2 text-sm font-medium hover:bg-muted"
+						className={`px-4 py-2 text-sm font-medium ${selfMediaOverlayStyles.secondaryButton}`}
 						onClick={() => onOpenChange(false)}
 					>
 						{t("common.cancel")}
 					</button>
 					<button
 						data-testid="card-history-compare-confirm"
-						className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
+						className={`px-4 py-2 text-sm font-medium ${selfMediaOverlayStyles.primaryButton}`}
 						onClick={handleConfirm}
 					>
 						{selectedSide === "history"

@@ -165,7 +165,7 @@ function EmptyWorkspacePanel({ messages }: EmptyWorkspacePanelProps) {
 				{!isPrivateDeploymentEnv && <LazyCasesWrapper />}
 			</div>
 
-			<div className={styles.shortcutKeysButton} onClick={handleShowShortcutKeys}>
+			<div className={styles.shortcutKeysButton} onClick={handleShowShortcutKeys} data-testid="handle-show-shortcut-keys">
 				<IconKeyboard size={20} />
 			</div>
 

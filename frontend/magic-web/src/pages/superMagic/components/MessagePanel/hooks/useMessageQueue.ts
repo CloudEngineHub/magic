@@ -7,11 +7,18 @@ import { useTranslation } from "react-i18next"
 import { RECORD_SUMMARY_EVENTS } from "@/services/recordSummary/const/events"
 import { SuperMagicApi } from "@/apis"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
-import { useMemoizedFn, useDeepCompareEffect } from "ahooks"
+import { useMemoizedFn, useDeepCompareEffect, useUpdateEffect } from "ahooks"
 import chatWebSocket from "@/apis/clients/chatWebSocket"
 import recordSummaryStore from "@/stores/recordingSummary"
 import { transformMentions } from "../../MessageEditor/utils/mention"
 import magicToast from "@/components/base/MagicToaster/utils"
+import localstorage from "@/utils/localstorage"
+import { platformKey } from "@/utils/storage"
+import { userStore } from "@/models/user"
+import { getNetworkMonitor } from "@/services/recordSummary/NetworkMonitor"
+
+// Local queue only stores items that cannot be submitted to the server while offline; the server queue remains the source of truth after reconnect.
+const CLIENT_MESSAGE_QUEUE_STORAGE_ROOT = "super_magic/message_queue/client"
 
 export interface QueuedMessage {
 	id: string
@@ -27,7 +34,98 @@ export interface QueuedMessage {
 	isDeletingLoading?: boolean // 删除操作的loading状态
 	isSendingLoading?: boolean // 发送操作的loading状态
 	isEditingLoading?: boolean // 编辑操作的loading状态
-	topicContext?: string // 话题归属标识，格式：${projectId}-${topicId}
+	topicContext?: string // Topic ownership identifier, format: ${projectId}-${topicId}
+	clientSyncId?: string // Correlation ID between local queue and server-returned queue, used for dedup and preserving original order after recovery.
+	syncState?: "local" | "submitted" // "local" = only on client; "submitted" = posted to server but not yet returned in server queue list.
+}
+
+interface StoredClientMessageQueue {
+	topics?: Record<string, QueuedMessage[]>
+}
+
+function getClientQueueStorageKey() {
+	// Isolate local queues by user and org to prevent reading another user's offline queue after account switch.
+	const userInfo = userStore.user.userInfo
+	const userId = userInfo?.magic_id || userInfo?.user_id
+	if (!userId) return undefined
+
+	return platformKey(
+		`${CLIENT_MESSAGE_QUEUE_STORAGE_ROOT}/${userId}/${userInfo?.organization_code || "unknown"}`,
+	)
+}
+
+function normalizeClientQueue(
+	queueItems: QueuedMessage[] | undefined,
+	topicContext: string,
+): QueuedMessage[] {
+	// Keep only local-synced queue items for the current topic, dedup by clientSyncId to avoid in-memory / localStorage duplicates.
+	if (!Array.isArray(queueItems) || !topicContext) return []
+
+	const queueMap = new Map<string, QueuedMessage>()
+	queueItems.forEach((item) => {
+		if (!item?.syncState || item.topicContext !== topicContext) return
+		queueMap.set(item.clientSyncId || item.id, item)
+	})
+
+	return Array.from(queueMap.values()).sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0))
+}
+
+function loadClientQueueTopics() {
+	// Read all topic local queue snapshots; topic-level filtering is delegated to normalizeClientQueue.
+	const storageKey = getClientQueueStorageKey()
+	if (!storageKey) return {}
+
+	const storedQueue = localstorage.get(storageKey, true) as StoredClientMessageQueue
+	return storedQueue?.topics || {}
+}
+
+function saveClientQueueTopics(topics: Record<string, QueuedMessage[]>) {
+	// 保存前统一清理空话题和重复项，队列为空时直接删除 storage，避免残留无效快照。
+	const storageKey = getClientQueueStorageKey()
+	if (!storageKey) return
+
+	const normalizedTopics = Object.entries(topics).reduce<Record<string, QueuedMessage[]>>(
+		(acc, [topicContext, queueItems]) => {
+			const normalizedQueue = normalizeClientQueue(queueItems, topicContext)
+			if (normalizedQueue.length > 0) acc[topicContext] = normalizedQueue
+			return acc
+		},
+		{},
+	)
+
+	if (Object.keys(normalizedTopics).length === 0) {
+		localstorage.remove(storageKey)
+		return
+	}
+
+	localstorage.set(storageKey, {
+		topics: normalizedTopics,
+	})
+}
+
+function updateTopicClientQueue(
+	topicContext: string,
+	updater: (queueItems: QueuedMessage[]) => QueuedMessage[],
+) {
+	// All local queue writes go through here to ensure a single source of truth for write, dedup, and sort rules.
+	if (!topicContext) return []
+
+	const currentTopics = loadClientQueueTopics()
+	const nextQueue = normalizeClientQueue(updater(currentTopics[topicContext] || []), topicContext)
+	const nextTopics = { ...currentTopics }
+	if (nextQueue.length > 0) {
+		nextTopics[topicContext] = nextQueue
+	} else {
+		delete nextTopics[topicContext]
+	}
+	saveClientQueueTopics(nextTopics)
+	return nextQueue
+}
+
+function getTopicClientQueue(topicContext: string) {
+	// Restore a single topic's local queue, used to display offline-appended items immediately after refresh.
+	if (!topicContext) return []
+	return normalizeClientQueue(loadClientQueueTopics()[topicContext], topicContext)
 }
 
 export interface UseMessageQueueProps {
@@ -51,15 +149,13 @@ function useMessageQueue({
 	const [queue, setQueue] = useState<QueuedMessage[]>([])
 	const [editingQueueItem, setEditingQueueItem] = useState<QueuedMessage | null>(null)
 	const [isLoading, setIsLoading] = useState(false)
-	// const isProcessingRef = useRef(false)
-	// 操作锁：记录每条消息当前是否有操作在进行
 	const operationLocksRef = useRef<Set<string>>(new Set())
 	// 用户操作意图：记录用户主动操作的消息ID和操作类型（优先级最高）
 	const userOperationIntentRef = useRef<Map<string, "edit" | "delete" | "send">>(new Map())
 	// 用ref存储最新的任务运行状态，避免props更新延迟问题
 	const isTaskRunningRef = useRef(isTaskRunning)
-	// // 用ref存储processNextMessage的引用，避免循环依赖
-	// const processNextMessageRef = useRef<(() => void) | null>(null)
+	const queueRef = useRef(queue)
+	const syncLocalQueueLockRef = useRef(false)
 	// webSocket断连轮询定时器
 	const pollingTimerRef = useRef<NodeJS.Timeout | null>(null)
 	// 轮询间隔时间（10秒）
@@ -69,6 +165,64 @@ function useMessageQueue({
 	useEffect(() => {
 		isTaskRunningRef.current = isTaskRunning
 	}, [isTaskRunning])
+
+	useEffect(() => {
+		queueRef.current = queue
+	}, [queue])
+
+	// Current topic queue ownership key; local queue restoration, dedup, and server reconciliation all rely on this for topic isolation.
+	const currentTopicContext = useMemo(() => {
+		if (!projectId || !topicId) return ""
+		return `${projectId}-${topicId}`
+	}, [projectId, topicId])
+
+	const mergeQueueItems = useMemoizedFn(
+		(serverQueueItems: QueuedMessage[], localQueueItems: QueuedMessage[] = []) => {
+			// Merge server queue with local offline queue by enqueue time, solving out-of-order display (e.g. 2/3/4) after reconnect.
+			return [...serverQueueItems, ...localQueueItems].sort(
+				(a, b) => (a.timestamp || 0) - (b.timestamp || 0),
+			)
+		},
+	)
+
+	const buildLocalQueueId = useMemoizedFn(
+		// No server queue_id when enqueuing offline; the local ID doubles as both display ID and clientSyncId.
+		() => `local-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+	)
+
+	const getNextLocalQueueTimestamp = useMemoizedFn(
+		(topicContext: string = currentTopicContext) => {
+			if (!topicContext) return Date.now()
+
+			const currentQueueItems = getCurrentTopicClientQueue(topicContext)
+			const lastTimestamp = currentQueueItems[currentQueueItems.length - 1]?.timestamp || 0
+			const now = Date.now()
+			// Local offline queue needs monotonically increasing timestamps to avoid sort distortion when 3/4/5 are enqueued in the same millisecond.
+			return now > lastTimestamp ? now : lastTimestamp + 1
+		},
+	)
+
+	const getCurrentTopicClientQueue = useMemoizedFn(
+		(topicContext: string = currentTopicContext) => {
+			// Merge in-memory state and localStorage to prevent losing local queue items during refresh, reconnect, or polling interleaving.
+			if (!topicContext) return []
+
+			const inMemoryQueue = queueRef.current.filter(
+				(item) => Boolean(item.syncState) && item.topicContext === topicContext,
+			)
+			const persistedQueue = getTopicClientQueue(topicContext)
+			const mergedQueueMap = new Map<string, QueuedMessage>()
+
+			persistedQueue.forEach((item) => {
+				mergedQueueMap.set(item.clientSyncId || item.id, item)
+			})
+			inMemoryQueue.forEach((item) => {
+				mergedQueueMap.set(item.clientSyncId || item.id, item)
+			})
+
+			return mergeQueueItems([], Array.from(mergedQueueMap.values()))
+		},
+	)
 
 	// 锁管理函数
 	const acquireLock = useCallback((messageId: string): boolean => {
@@ -100,35 +254,6 @@ function useMessageQueue({
 		console.log(`清除用户操作意图: ${messageId}`)
 	}, [])
 
-	// const hasUserOperationIntent = useCallback((messageId: string): boolean => {
-	// 	return userOperationIntentRef.current.has(messageId)
-	// }, [])
-
-	// // 用户操作完成后检查是否需要恢复队列处理（使用ref避免循环依赖）
-	// const checkQueueAfterUserOperation = useCallback(() => {
-	// 	// 延迟检查，确保当前操作完全完成
-	// 	setTimeout(() => {
-	// 		// 检查是否满足自动处理条件
-	// 		if (
-	// 			!isTaskRunningRef.current && // 没有任务运行
-	// 			!editingQueueItem && // 没有编辑中的消息
-	// 			queue.length > 0 && // 队列不为空
-	// 			projectId && // 有有效的项目ID
-	// 			topicId // 有有效的话题ID
-	// 		) {
-	// 			const currentTopicContext = `${projectId}-${topicId}`
-	// 			const hasPendingMessages = queue.some(
-	// 				(msg) => msg.status === "pending" && msg.topicContext === currentTopicContext,
-	// 			)
-	//
-	// 			// if (hasPendingMessages && processNextMessageRef.current) {
-	// 			// 	console.log("用户操作完成后检测到待处理消息，恢复队列处理")
-	// 			// 	processNextMessageRef.current()
-	// 			// }
-	// 		}
-	// 	}, 100) // 短暂延迟确保状态更新完成
-	// }, [queue, editingQueueItem, projectId, topicId])
-
 	// 状态映射函数：后端数字状态转前端字符串状态
 	const mapStatus = (backendStatus: number): "pending" | "processing" | "failed" => {
 		switch (backendStatus) {
@@ -156,6 +281,7 @@ function useMessageQueue({
 				model?: ModelItem
 				image_model?: ModelItem
 				video_model?: ModelItem
+				client_queue_sync_id?: string
 			}
 		}
 		content: string
@@ -174,6 +300,7 @@ function useMessageQueue({
 			selectedVideoModel?: ModelItem
 			topicMode?: TopicMode
 			agentCode?: string
+			clientSyncId?: string
 		} => {
 			try {
 				// 新格式：包含 instructs, extra, content 的对象
@@ -192,6 +319,7 @@ function useMessageQueue({
 					const imageModel = messageContent.extra?.super_agent?.image_model
 					const videoModel = messageContent.extra?.super_agent?.video_model
 					const agentCode = messageContent.extra?.super_agent?.agent_code
+					const clientSyncId = messageContent.extra?.super_agent?.client_queue_sync_id
 					const topicPattern = messageContent.extra?.super_agent?.topic_pattern as
 						| TopicMode
 						| undefined
@@ -208,6 +336,7 @@ function useMessageQueue({
 							: undefined,
 						topicMode: topicPattern,
 						agentCode,
+						clientSyncId,
 					}
 				}
 
@@ -258,11 +387,12 @@ function useMessageQueue({
 	)
 
 	// 获取队列列表
-	const fetchQueueList = useMemoizedFn(async () => {
+	const fetchQueueList = useMemoizedFn(async (options?: { updateState?: boolean }) => {
 		if (!projectId || !topicId) return
 
 		try {
-			setIsLoading(true)
+			const shouldUpdateState = options?.updateState !== false
+			if (shouldUpdateState) setIsLoading(true)
 
 			// 保存当前编辑状态
 			const currentEditingQueueItemId = editingQueueItem?.id
@@ -292,6 +422,7 @@ function useMessageQueue({
 							selectedVideoModel,
 							topicMode,
 							agentCode,
+							clientSyncId,
 						} = deserializeMessageContent(item.message_content)
 						return {
 							id: item.queue_id.toString(),
@@ -302,21 +433,59 @@ function useMessageQueue({
 							selectedVideoModel,
 							topicMode,
 							agentCode,
+							clientSyncId,
 							timestamp: new Date(item.created_at).getTime(),
 							status: mapStatus(item.status),
 							isDeletingLoading: false,
 							isSendingLoading: false,
 							isEditingLoading: false,
-							topicContext: `${projectId}-${topicId}`, // 添加话题归属标识
+							topicContext: `${projectId}-${topicId}`, // Attach topic ownership identifier
 						}
 					},
 				) || []
 
-			setQueue(queueData)
+			const persistedClientQueue = getCurrentTopicClientQueue(currentTopicContext)
+			const persistedTimestampBySyncId = new Map<string, number>()
+			queueRef.current.forEach((item) => {
+				if (item.topicContext !== currentTopicContext) return
+				if (!item.clientSyncId) return
+				persistedTimestampBySyncId.set(item.clientSyncId, item.timestamp)
+			})
+			persistedClientQueue.forEach((item) => {
+				persistedTimestampBySyncId.set(item.clientSyncId || item.id, item.timestamp)
+			})
+			// Server return time may lag behind local enqueue time; keep using local timestamp for display sort to preserve order after recovery.
+			const queueDataWithClientOrder = queueData.map((item: QueuedMessage) => ({
+				...item,
+				timestamp: item.clientSyncId
+					? (persistedTimestampBySyncId.get(item.clientSyncId) ?? item.timestamp)
+					: item.timestamp,
+			}))
+			// While task 1 is being consumed and task 2 is queued, offline-sent 3/4/5 first enter local queue; after reconnect they are re-submitted to server one by one.
+			// During re-submission, only confirm "this item is persisted" without prematurely cleaning local order snapshot; UI refresh still uses local timestamp to fix user send order.
+			const serverClientSyncIds = new Set(
+				queueDataWithClientOrder
+					.map((item: QueuedMessage) => item.clientSyncId)
+					.filter(Boolean),
+			)
+			if (shouldUpdateState) {
+				updateTopicClientQueue(currentTopicContext, (queueItems) =>
+					queueItems.filter(
+						(item) =>
+							!(item.clientSyncId && serverClientSyncIds.has(item.clientSyncId)),
+					),
+				)
+			}
+			const remainingClientQueue = persistedClientQueue.filter(
+				(item) => !(item.clientSyncId && serverClientSyncIds.has(item.clientSyncId)),
+			)
+			// 只在最终合并后 setQueue，避免先展示服务端顺序再修正导致用户看到短暂错序。
+			const mergedQueueData = mergeQueueItems(queueDataWithClientOrder, remainingClientQueue)
+			if (shouldUpdateState) setQueue(mergedQueueData)
 
 			// 如果之前有编辑状态，检查编辑的消息是否还存在
-			if (currentEditingQueueItemId) {
-				const stillExists = queueData.find(
+			if (shouldUpdateState && currentEditingQueueItemId) {
+				const stillExists = mergedQueueData.find(
 					(item: QueuedMessage) => item.id === currentEditingQueueItemId,
 				)
 				if (stillExists) {
@@ -348,14 +517,13 @@ function useMessageQueue({
 				}
 			}
 
-			// 返回队列数据供调用者使用
-			return queueData
+			return mergedQueueData
 		} catch (error) {
 			console.error("Failed to fetch queue list:", error)
 			// message.error(t("messageQueue.fetchFailed"))
 			return []
 		} finally {
-			setIsLoading(false)
+			if (options?.updateState !== false) setIsLoading(false)
 		}
 	})
 
@@ -437,24 +605,24 @@ function useMessageQueue({
 		let unsubscribe: (() => void) | undefined
 		let cancelled = false
 
-		;(async () => {
-			try {
-				const { initializeService } =
-					await import("@/services/recordSummary/serviceInstance")
+			; (async () => {
+				try {
+					const { initializeService } =
+						await import("@/services/recordSummary/serviceInstance")
 
-				const recordSummaryService = initializeService()
+					const recordSummaryService = initializeService()
 
-				if (cancelled || !recordSummaryService?.on) return
-				unsubscribe = recordSummaryService.on(
-					RECORD_SUMMARY_EVENTS.RECORDING_COMPLETE,
-					() => {
-						fetchQueueList?.()
-					},
-				)
-			} catch (error) {
-				console.error("Failed to bind recording complete listener", error)
-			}
-		})()
+					if (cancelled || !recordSummaryService?.on) return
+					unsubscribe = recordSummaryService.on(
+						RECORD_SUMMARY_EVENTS.RECORDING_COMPLETE,
+						() => {
+							fetchQueueList?.()
+						},
+					)
+				} catch (error) {
+					console.error("Failed to bind recording complete listener", error)
+				}
+			})()
 
 		return () => {
 			cancelled = true
@@ -472,22 +640,29 @@ function useMessageQueue({
 		topicMode?: TopicMode,
 		agentCode?: string,
 		inputMode?: string,
+		clientSyncId?: string,
 	) => {
 		const modelObj = selectedModel
 			? {
-					model_id: selectedModel.model_id,
-				}
+				model_id: selectedModel.model_id,
+				model_name: selectedModel.model_name,
+				model_icon: selectedModel.model_icon,
+			}
 			: { model_id: "auto" }
 
 		const imageModelObj = selectedImageModel?.model_id
 			? {
-					model_id: selectedImageModel.model_id,
-				}
+				model_id: selectedImageModel.model_id,
+				model_name: selectedImageModel.model_name,
+				model_icon: selectedImageModel.model_icon,
+			}
 			: undefined
 		const videoModelObj = selectedVideoModel?.model_id
 			? {
-					model_id: selectedVideoModel.model_id,
-				}
+				model_id: selectedVideoModel.model_id,
+				model_name: selectedVideoModel.model_name,
+				model_icon: selectedVideoModel.model_icon,
+			}
 			: undefined
 
 		// 转换 mention items，自定义发送给 agent 的内容
@@ -507,6 +682,7 @@ function useMessageQueue({
 					chat_mode: "normal",
 					topic_pattern: topicMode || "general",
 					...(agentCode && { agent_code: agentCode }),
+					...(clientSyncId && { client_queue_sync_id: clientSyncId }),
 					model: modelObj,
 					...(imageModelObj && { image_model: imageModelObj }),
 					...(videoModelObj && { video_model: videoModelObj }),
@@ -515,6 +691,98 @@ function useMessageQueue({
 			content: JSON.stringify(content),
 		}
 	}
+
+	const syncLocalQueueMessageToServer = useMemoizedFn(
+		async (
+			queueMessage: QueuedMessage,
+			options?: { silent?: boolean; refreshAfterSuccess?: boolean },
+		) => {
+			// Only re-submit offline-generated local queue items; messages already having a server queue_id continue through the original consume flow.
+			if (!projectId || !topicId || queueMessage.syncState !== "local") return false
+			const isNetworkOffline = getNetworkMonitor().isNetworkOffline()
+			if (isNetworkOffline && !chatWebSocket.isConnected) {
+				return false
+			}
+
+			setQueue((prevQueue) =>
+				prevQueue.map((item) =>
+					item.id === queueMessage.id ? { ...item, isSendingLoading: true } : item,
+				),
+			)
+
+			try {
+				const nextClientSyncId = queueMessage.clientSyncId || queueMessage.id
+				const messageContentData = serializeMessageContent(
+					queueMessage.content,
+					queueMessage.mentionItems,
+					queueMessage.selectedModel,
+					queueMessage.selectedImageModel,
+					queueMessage.selectedVideoModel,
+					queueMessage.topicMode,
+					queueMessage.agentCode,
+					"plan",
+					nextClientSyncId,
+				)
+
+				await SuperMagicApi.addMessageToQueue({
+					project_id: projectId,
+					topic_id: topicId,
+					message_type: "rich_text",
+					message_content: messageContentData,
+				})
+
+				// After successful re-submission, keep the "submitted" placeholder; clean up local snapshot only after server list returns with clientSyncId.
+				updateTopicClientQueue(
+					queueMessage.topicContext || currentTopicContext,
+					(queueItems) =>
+						queueItems.map((item) =>
+							item.id === queueMessage.id
+								? {
+										...item,
+										clientSyncId: nextClientSyncId,
+										isSendingLoading: true,
+										syncState: "submitted",
+									}
+								: item,
+						),
+				)
+				setQueue((prevQueue) =>
+					prevQueue.map((item) =>
+						item.id === queueMessage.id
+							? {
+									...item,
+									clientSyncId: nextClientSyncId,
+									isSendingLoading: true,
+									syncState: "submitted",
+								}
+							: item,
+					),
+				)
+
+				if (options?.refreshAfterSuccess !== false) await fetchQueueList()
+				if (!options?.silent) magicToast.success(t("messageQueue.addSuccess"))
+
+				return true
+			} catch (error) {
+				console.error("Failed to sync local queue message:", error)
+				setQueue((prevQueue) =>
+					prevQueue.map((item) =>
+						item.id === queueMessage.id ? { ...item, isSendingLoading: false } : item,
+					),
+				)
+				updateTopicClientQueue(
+					queueMessage.topicContext || currentTopicContext,
+					(queueItems) =>
+						queueItems.map((item) =>
+							item.id === queueMessage.id
+								? { ...item, isSendingLoading: false }
+								: item,
+						),
+				)
+				return false
+			}
+		},
+	)
 
 	// 添加消息到队列
 	const addToQueue = useCallback(
@@ -529,6 +797,35 @@ function useMessageQueue({
 			if (!projectId || !topicId) {
 				magicToast.error(t("messageQueue.missingInfo"))
 				return
+			}
+
+			if (getNetworkMonitor().isNetworkOffline()) {
+				// Cannot call server queue API while offline during a running task; append to local queue first, then re-submit in original order after reconnect.
+				const localQueueId = buildLocalQueueId()
+				const localQueueMessage: QueuedMessage = {
+					id: localQueueId,
+					content: params.content,
+					mentionItems: params.mentionItems,
+					selectedModel: params.selectedModel ?? undefined,
+					selectedImageModel: params.selectedImageModel ?? undefined,
+					selectedVideoModel: params.selectedVideoModel ?? undefined,
+					topicMode: params.topicMode,
+					agentCode,
+					clientSyncId: localQueueId,
+					timestamp: getNextLocalQueueTimestamp(currentTopicContext),
+					status: "pending",
+					isDeletingLoading: false,
+					isSendingLoading: false,
+					isEditingLoading: false,
+					topicContext: currentTopicContext,
+					syncState: "local",
+				}
+
+				updateTopicClientQueue(currentTopicContext, (queueItems) =>
+					mergeQueueItems(queueItems, [localQueueMessage]),
+				)
+				setQueue((prevQueue) => mergeQueueItems(prevQueue, [localQueueMessage]))
+				return localQueueId
 			}
 
 			try {
@@ -562,12 +859,34 @@ function useMessageQueue({
 				// message.error(t("messageQueue.addFailed"))
 			}
 		},
-		[projectId, topicId, fetchQueueList, t],
+		[
+			agentCode,
+			buildLocalQueueId,
+			currentTopicContext,
+			fetchQueueList,
+			getNextLocalQueueTimestamp,
+			mergeQueueItems,
+			projectId,
+			t,
+			topicId,
+		],
 	)
 
 	// 从队列中删除消息
 	const removeFromQueue = useCallback(
 		async (messageId: string) => {
+			const localQueueMessage = queue.find(
+				(message) => message.id === messageId && message.syncState === "local",
+			)
+			if (localQueueMessage) {
+				updateTopicClientQueue(
+					localQueueMessage.topicContext || currentTopicContext,
+					(queueItems) => queueItems.filter((item) => item.id !== messageId),
+				)
+				setQueue((prevQueue) => prevQueue.filter((item) => item.id !== messageId))
+				return
+			}
+
 			// 🔥 立即设置删除意图
 			// setUserOperationIntent(messageId, "delete")
 
@@ -619,6 +938,8 @@ function useMessageQueue({
 			// setUserOperationIntent,
 			clearUserOperationIntent,
 			// checkQueueAfterUserOperation,
+			currentTopicContext,
+			queue,
 		],
 	)
 
@@ -629,6 +950,20 @@ function useMessageQueue({
 			const currentQueue = queueData || queue
 			const queueMessage = currentQueue.find((msg) => msg.id === messageId)
 			if (!queueMessage) return
+
+			if (queueMessage.syncState === "local") {
+				if (editingQueueItem && editingQueueItem.id === messageId && isUserInitiated) {
+					setEditingQueueItem(null)
+				}
+				await syncLocalQueueMessageToServer(queueMessage, {
+					silent: !isUserInitiated,
+				})
+				return
+			}
+			if (queueMessage.syncState === "submitted") {
+				// "submitted" is still a local re-submission transitional state; must wait for server to return the real queue_id before participating in consumption.
+				return
+			}
 
 			// 新增：验证消息是否属于当前话题
 			const currentTopicContext = `${projectId}-${topicId}`
@@ -689,8 +1024,120 @@ function useMessageQueue({
 				releaseLock(messageId)
 			}
 		},
-		[queue, fetchQueueList, t, editingQueueItem, acquireLock, releaseLock, projectId, topicId],
+		[
+			queue,
+			fetchQueueList,
+			t,
+			editingQueueItem,
+			acquireLock,
+			releaseLock,
+			projectId,
+			topicId,
+			syncLocalQueueMessageToServer,
+		],
 	)
+
+	const consumeNextPendingQueueMessage = useMemoizedFn(
+		async (
+			queueData: QueuedMessage[],
+			options?: {
+				ignoreSyncLock?: boolean
+			},
+		) => {
+			// Scenario: while consuming task 1, user sends 2/3/4 offline; server completes task 1 during disconnect;
+			// after reconnect, 2/3/4 are re-submitted to server queue, but frontend missed the task-end event — need to proactively consume the first pending item.
+			if (!projectId || !topicId || !currentTopicContext) return
+			if (syncLocalQueueLockRef.current && !options?.ignoreSyncLock) return
+			if (getNetworkMonitor().isNetworkOffline()) return
+			if (isTaskRunningRef.current) return
+			if (
+				queueData.some(
+					(item) =>
+						item.topicContext === currentTopicContext && item.status === "processing",
+				)
+			) {
+				return
+			}
+
+			const nextPendingMessage = queueData.find(
+				(item) =>
+					item.topicContext === currentTopicContext &&
+					item.status === "pending" &&
+					!item.syncState,
+			)
+			if (!nextPendingMessage) return
+
+			await sendQueuedMessage(nextPendingMessage.id, false, queueData)
+		},
+	)
+
+	const flushLocalQueueToServer = useMemoizedFn(async () => {
+		// Serial re-submission after reconnect: only submit the next item after the previous one appears in the server queue, preventing 3/4/5 concurrent return disorder.
+		if (!currentTopicContext) return
+		if (syncLocalQueueLockRef.current) return
+		const isNetworkOffline = getNetworkMonitor().isNetworkOffline()
+		if (isNetworkOffline && !chatWebSocket.isConnected) return
+
+		const initialServerPendingHeadId = queueRef.current.find(
+			(item) =>
+				item.topicContext === currentTopicContext &&
+				item.status === "pending" &&
+				!item.syncState,
+		)?.id
+		const localQueueItems = [...getCurrentTopicClientQueue(currentTopicContext)]
+			.filter((item) => item.syncState === "local")
+			.sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0))
+		if (localQueueItems.length === 0) {
+			const latestQueue = await fetchQueueList({ updateState: false })
+			const hasInitialServerPendingHead =
+				!initialServerPendingHeadId ||
+				latestQueue.some((item) => item.id === initialServerPendingHeadId)
+			if (!hasInitialServerPendingHead) return
+			await consumeNextPendingQueueMessage(latestQueue)
+			return
+		}
+
+		syncLocalQueueLockRef.current = true
+		let hasSubmittedQueueMessage = false
+		let latestQueue: QueuedMessage[] = []
+		try {
+			for (const localQueueItem of localQueueItems) {
+				const nextClientSyncId = localQueueItem.clientSyncId || localQueueItem.id
+				const syncResult = await syncLocalQueueMessageToServer(localQueueItem, {
+					silent: true,
+					refreshAfterSuccess: false,
+				})
+				if (!syncResult) break
+
+				latestQueue = await fetchQueueList({ updateState: false })
+				const hasServerQueueItem = latestQueue.some(
+					(queueItem) => queueItem.clientSyncId === nextClientSyncId,
+				)
+				if (!hasServerQueueItem) break
+
+				hasSubmittedQueueMessage = true
+			}
+			if (hasSubmittedQueueMessage) {
+				latestQueue = await fetchQueueList()
+			}
+		} finally {
+			syncLocalQueueLockRef.current = false
+		}
+	})
+
+	useEffect(() => {
+		const flushLocalQueue = () => {
+			void flushLocalQueueToServer()
+		}
+
+		window.addEventListener("online", flushLocalQueue)
+		chatWebSocket.on("open", flushLocalQueue)
+
+		return () => {
+			window.removeEventListener("online", flushLocalQueue)
+			chatWebSocket.off("open", flushLocalQueue)
+		}
+	}, [flushLocalQueueToServer])
 
 	// // 处理下一个队列消息
 	// const processNextMessage = useCallback(
@@ -725,7 +1172,7 @@ function useMessageQueue({
 	// 		// 如果队列为空，直接返回
 	// 		if (currentQueue.length === 0) return
 	//
-	// 		// 新增：检查队列数据的话题归属
+	// 		// Added: check topic ownership of queue data
 	// 		const currentTopicContext = `${projectId}-${topicId}`
 	// 		const validMessages = currentQueue.filter(
 	// 			(msg) => msg.topicContext === currentTopicContext,
@@ -950,8 +1397,8 @@ function useMessageQueue({
 
 		// 2. 如果有有效话题，获取新数据；否则清空队列
 		if (projectId && topicId && isShowLoadingInit) {
-			// 不立即清空队列，让 fetchQueueList 自然更新
-			// 这样 processNextMessage 在数据更新前不会误判
+			// Restore local offline queue first, then fetch server queue, to prevent offline-appended messages from briefly disappearing after refresh.
+			setQueue(getCurrentTopicClientQueue(currentTopicContext))
 			fetchQueueList().then((_queueData) => {
 				// // 数据获取完成后检查是否需要主动处理队列
 				// const hasPendingMessages =
@@ -969,7 +1416,7 @@ function useMessageQueue({
 			// 只有在没有有效话题时才清空
 			setQueue([])
 		}
-	}, [topicId, projectId, isShowLoadingInit])
+	}, [topicId, projectId, isShowLoadingInit, currentTopicContext, getCurrentTopicClientQueue])
 
 	useEffect(() => {
 		const handler = () => {
@@ -978,6 +1425,19 @@ function useMessageQueue({
 		pubsub.subscribe(PubSubEvents.SuperMagicMessageQueueConsumed, handler)
 		return () => pubsub.unsubscribe(PubSubEvents.SuperMagicMessageQueueConsumed, handler)
 	}, [])
+
+	// 任务完成时（isTaskRunning 从 true → false），检查队列并兜底消费。
+	useUpdateEffect(() => {
+		if (!isTaskRunning && projectId && topicId) {
+			const timer = setTimeout(async () => {
+				const latestQueue = await fetchQueueList()
+				if (Array.isArray(latestQueue) && latestQueue.length > 0) {
+					await consumeNextPendingQueueMessage(latestQueue, { ignoreSyncLock: true })
+				}
+			}, 500)
+			return () => clearTimeout(timer)
+		}
+	}, [isTaskRunning])
 
 	// // 当任务完成时，自动处理下一个消息
 	// useUpdateEffect(() => {

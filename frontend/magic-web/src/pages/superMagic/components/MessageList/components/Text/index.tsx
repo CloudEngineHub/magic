@@ -83,11 +83,11 @@ function Text(props: TextProps) {
 							<span className={styles.timestamp}>
 								{formatTimestamp(data?.send_timestamp)}
 							</span>
-							<img src={userInfo?.avatar} alt="avatar" className={styles.avatar} />
+							<img src={userInfo?.avatar} alt="avatar" className={styles.avatar}  data-testid="text-image"/>
 						</>
 					) : (
 						<>
-							<img src={Assistant} alt="avatar" className={styles.avatar} />
+							<img src={Assistant} alt="avatar" className={styles.avatar}  data-testid="text-image-2"/>
 							<span className={styles.timestamp}>
 								{formatTimestamp(data?.send_timestamp)}
 							</span>

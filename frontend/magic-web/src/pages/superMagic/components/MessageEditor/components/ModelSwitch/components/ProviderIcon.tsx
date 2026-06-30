@@ -53,6 +53,7 @@ function ProviderIcon({ provider, className, size = 16 }: ProviderIconProps) {
 				width: size,
 				height: size,
 			}}
+			data-testid="handle-image-error"
 		/>
 	)
 }

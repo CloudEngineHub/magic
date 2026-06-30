@@ -1,4 +1,6 @@
 import { MentionPanelStore } from "@/components/business/MentionPanel/builtin-store"
+import type { HandleSendParams } from "../../services/messageSendFlowService"
+import type { SceneEditorContext } from "../MainInputContainer/components/editors/types"
 import { ProjectListItem, Topic, Workspace } from "../../pages/Workspace/types"
 import { MessageEditorLayoutConfig } from "../MessageEditor"
 import { MessageEditorSize } from "../MessageEditor/types"
@@ -20,6 +22,10 @@ export interface ProjectPageInputContainerProps {
 	containerRef?: React.RefObject<HTMLDivElement>
 	onEditorBlur?: () => void
 	onEditorFocus?: () => void
+	onMessageSendReady?: (
+		sendMessage?: (params: HandleSendParams) => Promise<boolean>,
+		prevSendMessage?: (params: HandleSendParams) => Promise<boolean>,
+	) => void
 	showLoading?: boolean
 	selectedTopic: Topic | null
 	setSelectedTopic: (topic: Topic | null) => void
@@ -62,4 +68,11 @@ export interface ProjectPageInputContainerProps {
 		currentProject: ProjectListItem | null
 		currentTopic: Topic | null
 	}) => void
+	/** 发送成功后把当前项目/话题透传给外层容器，用于项目入口页跳转到新建话题。 */
+	onSendSuccess?: (params: {
+		currentProject: ProjectListItem | null
+		currentTopic: Topic | null
+	}) => void
+	/** Optional override for send-time topic creation (e.g. project entry with detail backfill). */
+	createTopic?: SceneEditorContext["createTopic"]
 }

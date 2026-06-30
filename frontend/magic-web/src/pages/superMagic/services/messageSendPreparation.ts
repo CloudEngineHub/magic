@@ -15,6 +15,7 @@ import {
 	superMagicTopicModelService,
 } from "@/services/superMagic/topicModel"
 import superMagicModeService from "@/services/superMagic/SuperMagicModeService"
+import { shouldCreateFreshTopicForProject } from "./topicProjectConsistency"
 import TopicService from "./topicService"
 import SuperMagicService from "./index"
 import type { CreatedProject, ProjectListItem, Topic, Workspace } from "../pages/Workspace/types"
@@ -67,6 +68,11 @@ export interface PreparedPanelSendResult {
 	context: SendRuntimeContext
 	params: HandleSendParams
 	currentProject: ProjectListItem | null
+	currentTopic: Topic | null
+}
+
+export interface EnsuredMessageProjectResult {
+	currentProject: ProjectListItem
 	currentTopic: Topic | null
 }
 
@@ -188,6 +194,11 @@ export async function preparePanelSend({
 		return null
 	}
 
+	// 移动端 chat 项目页可能暂时挂着旧项目的话题，这里在发送前统一兜底，避免消息写入错误会话。
+	if (shouldCreateFreshTopicForProject(currentProject, currentTopic)) {
+		currentTopic = null
+	}
+
 	if (!currentTopic?.id) {
 		const createdTopic = await resolvedContext.createTopic({
 			selectedProject: currentProject,
@@ -245,6 +256,50 @@ export async function preparePanelSend({
 			value: nextContent,
 			mentionItems: nextMentionItems,
 		},
+		currentProject,
+		currentTopic,
+	}
+}
+
+export async function ensureProjectForMessageContext({
+	context,
+	tabPattern,
+}: {
+	context?: MessageSendPreparationContext
+	tabPattern: TopicMode
+}): Promise<EnsuredMessageProjectResult | null> {
+	const resolvedContext = resolveMessageSendContext(context)
+	let currentProject = resolvedContext.selectedProject
+	let currentTopic = resolvedContext.selectedTopic
+
+	if (currentProject?.id) {
+		return {
+			currentProject,
+			currentTopic,
+		}
+	}
+
+	const createdProject = await resolvedContext.createProject({
+		projectMode: tabPattern,
+		workdir: superMagicUploadTokenService.getLastWorkDir(),
+	})
+
+	if (!createdProject?.project || !createdProject.topic) {
+		return null
+	}
+
+	currentProject = createdProject.project
+	currentTopic = {
+		...createdProject.topic,
+		topic_mode: tabPattern,
+	}
+
+	resolvedContext.setSelectedProject(currentProject)
+	resolvedContext.setSelectedTopic(currentTopic)
+
+	await migrateMcpCache(currentProject.id)
+
+	return {
 		currentProject,
 		currentTopic,
 	}

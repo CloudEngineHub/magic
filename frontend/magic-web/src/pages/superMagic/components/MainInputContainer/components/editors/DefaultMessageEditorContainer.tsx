@@ -13,6 +13,7 @@ import {
 } from "@/pages/superMagic/services/messageSendFlowService"
 import {
 	createTopicForMessageContext,
+	ensureProjectForMessageContext,
 	preparePanelSend,
 } from "@/pages/superMagic/services/messageSendPreparation"
 import { roleStore } from "@/pages/superMagic/stores"
@@ -32,6 +33,8 @@ import {
 } from "@/pages/superMagic/components/MessageEditor/utils"
 import { TaskStatus } from "@/pages/superMagic/pages/Workspace/types"
 import { TopicMode } from "@/pages/superMagic/pages/Workspace/TopicMode"
+
+const ERR_QUEUE_ADD_FAILED = "queue_add_failed"
 
 interface DefaultMessageEditorContainerProps {
 	editorContext?: SceneEditorContext
@@ -60,6 +63,7 @@ export default function DefaultMessageEditorContainer(props: DefaultMessageEdito
 	const [, setIsFocused] = useState(false)
 
 	const mentionPanelStore = editorContext?.mentionPanelStore ?? GlobalMentionPanelStore
+	const onMessageSendReady = editorContext?.onMessageSendReady
 	const _topicStore = editorContext?.topicStore ?? topicStore
 	const scopedMessageSendService = useMemo(
 		() =>
@@ -184,7 +188,7 @@ export default function DefaultMessageEditorContainer(props: DefaultMessageEdito
 		prevEditingQueueItemRef.current = currentEditingItem
 	}, [queueContext?.editingQueueItem, tiptapEditorRef, setFocused])
 
-	const handleSend = useMemoizedFn(async (params: HandleSendParams) => {
+	const handleSend = useMemoizedFn(async (params: HandleSendParams): Promise<boolean> => {
 		let hasStartedSend = false
 		let sendResult:
 			| {
@@ -204,7 +208,7 @@ export default function DefaultMessageEditorContainer(props: DefaultMessageEdito
 				queueContext.finishEditQueueItem(nextValue, params.mentionItems)
 				tiptapEditorRef.current?.clearContentAfterSend()
 				setFocused(false)
-				return
+				return true
 			}
 		}
 
@@ -212,7 +216,7 @@ export default function DefaultMessageEditorContainer(props: DefaultMessageEdito
 		// isSending 基于 useState，赋值异步，无法在创建话题接口响应回来之前生效；
 		// isPreparingSendRef 基于 useRef，赋值同步立即生效，覆盖从发起创建话题到发送消息完成的完整阶段
 		if (!params.value || isSending || isPreparingSendRef.current) {
-			return
+			return false
 		}
 
 		/**
@@ -222,8 +226,12 @@ export default function DefaultMessageEditorContainer(props: DefaultMessageEdito
 		 */
 		const isWaitingForUser = selectedTopic?.task_status === TaskStatus.WAITING_FOR_USER
 
-		if (showLoading && !isWaitingForUser && !params.isFromQueue && queueContext) {
-			queueContext.addToQueue({
+		const shouldQueue = showLoading && !isWaitingForUser && !params.isFromQueue && queueContext
+
+		if (shouldQueue) {
+			// Clear editor immediately to prevent duplicate queue entries on rapid Enter presses.
+			tiptapEditorRef.current?.clearContentAfterSend()
+			const queueId = await queueContext.addToQueue({
 				content: nextValue ?? params.value,
 				mentionItems: params.mentionItems,
 				selectedModel: params.selectedModel,
@@ -231,9 +239,16 @@ export default function DefaultMessageEditorContainer(props: DefaultMessageEdito
 				selectedVideoModel: params.selectedVideoModel,
 				topicMode: params.topicMode,
 			})
-			tiptapEditorRef.current?.clearContentAfterSend()
+			if (!queueId) {
+				// Queue add failed — restore editor content so the user can retry
+				if (nextValue ?? params.value) {
+					tiptapEditorRef.current?.setContent?.(nextValue ?? params.value)
+				}
+				if (params.throwOnError) throw new Error(ERR_QUEUE_ADD_FAILED)
+				return false
+			}
 			setFocused(false)
-			return
+			return true
 		}
 
 		const selectedWorkspace =
@@ -289,6 +304,8 @@ export default function DefaultMessageEditorContainer(props: DefaultMessageEdito
 					setSelectedWorkspace: editorContext?.setSelectedWorkspace,
 					// 与 _topicStore 回退一致，保证 smartRename 写入 topicStore.topics（历史列表合并依赖）。
 					topicStore: _topicStore,
+					createProject: editorContext?.createProject,
+					createTopic: editorContext?.createTopic,
 				},
 				tabPattern: effectiveTopicMode,
 				editorRef: tiptapEditorRef.current,
@@ -296,7 +313,7 @@ export default function DefaultMessageEditorContainer(props: DefaultMessageEdito
 			})
 
 			if (!preparedSend) {
-				return
+				return false
 			}
 
 			sendResult = await scopedMessageSendService.sendPanelMessage({
@@ -322,6 +339,7 @@ export default function DefaultMessageEditorContainer(props: DefaultMessageEdito
 				})
 				sceneStateStore?.incrementSendCount()
 			}
+			return Boolean(sendResult)
 		} finally {
 			// 无论成功、失败、接口报错，都释放锁，保证下次发送可以正常进入
 			isPreparingSendRef.current = false
@@ -338,6 +356,15 @@ export default function DefaultMessageEditorContainer(props: DefaultMessageEdito
 		}
 	})
 
+	useEffect(() => {
+		// 这里只是把稳定的发送函数暴露给外层 ref 桥接；
+		// effect 只依赖注册回调本身，避免 editorContext 整体重建时重复清空/重注册。
+		onMessageSendReady?.(handleSend)
+		return () => {
+			onMessageSendReady?.(undefined, handleSend)
+		}
+	}, [handleSend, onMessageSendReady])
+
 	const handleFocus = useMemoizedFn(() => {
 		setIsFocused(true)
 		editorContext?.onEditorFocus?.()
@@ -348,12 +375,31 @@ export default function DefaultMessageEditorContainer(props: DefaultMessageEdito
 		editorContext?.onEditorBlur?.()
 	})
 
+	const selectedWorkspace =
+		editorContext?.selectedWorkspace ??
+		workspaceStore.selectedWorkspace ??
+		workspaceStore.firstWorkspace
+
+	const handleEnsureProject = useMemoizedFn(async () => {
+		const ensuredProject = await ensureProjectForMessageContext({
+			context: {
+				selectedProject,
+				selectedTopic,
+				selectedWorkspace,
+				setSelectedProject: editorContext?.setSelectedProject,
+				setSelectedTopic: editorContext?.setSelectedTopic,
+				setSelectedWorkspace: editorContext?.setSelectedWorkspace,
+				topicStore: editorContext?.topicStore,
+			},
+			tabPattern: effectiveTopicMode,
+		})
+
+		return ensuredProject?.currentProject ?? null
+	})
+
 	useSandboxPreWarm({
 		selectedTopic,
-		selectedWorkspace:
-			editorContext?.selectedWorkspace ??
-			workspaceStore.selectedWorkspace ??
-			workspaceStore.firstWorkspace,
+		selectedWorkspace,
 		projectId: selectedProject?.id,
 		editorRef: tiptapEditorRef.current?.editor,
 	})
@@ -380,10 +426,6 @@ export default function DefaultMessageEditorContainer(props: DefaultMessageEdito
 				selectedTopic?.agent_code,
 			) ||
 				t("messageEditor.placeholderTask")))
-	const selectedWorkspace =
-		editorContext?.selectedWorkspace ??
-		workspaceStore.selectedWorkspace ??
-		workspaceStore.firstWorkspace
 	const draftKey = editorContext?.draftKey
 
 	const editorStyleProps = useMemo(
@@ -420,6 +462,7 @@ export default function DefaultMessageEditorContainer(props: DefaultMessageEdito
 				onFocus={handleFocus}
 				onBlur={handleBlur}
 				onFileClick={editorContext?.onFileClick}
+				onEnsureProject={handleEnsureProject}
 				attachments={editorContext?.attachments}
 				projectFilesStore={editorContext?.projectFilesStore}
 				topicModelStore={editorContext?.topicModelStore}

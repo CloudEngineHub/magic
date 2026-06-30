@@ -1,0 +1,292 @@
+import { act, renderHook } from "@testing-library/react"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+import {
+	ProjectStatus,
+	TopicMode,
+	type ProjectListItem,
+} from "@/pages/superMagic/pages/Workspace/types"
+import { useChatConversationList } from "../useChatConversationList"
+
+const refreshChatProjectsMock = vi.fn()
+const loadMoreChatProjectsMock = vi.fn()
+const useChatWorkspaceMock = vi.fn()
+
+let chatProjectsMock: ProjectListItem[] = []
+
+function createProject(overrides: Partial<ProjectListItem> = {}): ProjectListItem {
+	return {
+		id: overrides.id ?? "project-1",
+		project_status: overrides.project_status ?? ProjectStatus.WAITING,
+		project_mode: overrides.project_mode ?? TopicMode.Chat,
+		workspace_id: overrides.workspace_id ?? "chat-workspace-1",
+		work_dir: overrides.work_dir ?? "",
+		workspace_name: overrides.workspace_name ?? "Chat",
+		project_name: overrides.project_name ?? "Alpha",
+		current_topic_id: overrides.current_topic_id ?? "",
+		current_topic_status: overrides.current_topic_status ?? "",
+		created_at: overrides.created_at ?? "2026-04-27 10:00:00",
+		updated_at: overrides.updated_at ?? "2026-04-27 10:05:00",
+		last_active_at: overrides.last_active_at ?? "2026-04-27 10:05:00",
+		tag: overrides.tag ?? "",
+		...overrides,
+	}
+}
+
+vi.mock("react-i18next", () => ({
+	initReactI18next: {
+		type: "3rdParty",
+		init: vi.fn(),
+	},
+	useTranslation: () => ({
+		t: (key: string, params?: { count?: number }) => {
+			if (key === "super:chatList.minutesAgo") return `${params?.count ?? 0} minutes ago`
+			if (key === "common:format.yesterday") return "Yesterday"
+			if (key === "super:chat.unnamedChat") return "Unnamed Chat"
+			return key
+		},
+		i18n: { language: "en_US" },
+	}),
+}))
+
+vi.mock("@/providers/TimezoneProvider/hooks", () => ({
+	useTimezone: () => ({
+		timezone: "UTC",
+	}),
+}))
+
+let chatProjectsTotalMock = 0
+let isLoadingChatProjectsMock = false
+
+vi.mock("@/pages/superMagic/hooks/useChatWorkspace", () => ({
+	useChatWorkspace: (options: unknown) => {
+		useChatWorkspaceMock(options)
+		return {
+			chatProjects: chatProjectsMock,
+			chatProjectsTotal: chatProjectsTotalMock,
+			isLoadingChatProjects: isLoadingChatProjectsMock,
+			refreshChatProjects: refreshChatProjectsMock,
+			loadMoreChatProjects: loadMoreChatProjectsMock,
+		}
+	},
+}))
+
+describe("useChatConversationList", () => {
+	beforeEach(() => {
+		vi.useFakeTimers()
+		chatProjectsMock = [createProject()]
+		chatProjectsTotalMock = chatProjectsMock.length
+		isLoadingChatProjectsMock = false
+		refreshChatProjectsMock.mockResolvedValue(chatProjectsMock)
+		loadMoreChatProjectsMock.mockResolvedValue(chatProjectsMock)
+		useChatWorkspaceMock.mockClear()
+	})
+
+	afterEach(() => {
+		vi.clearAllMocks()
+		vi.useRealTimers()
+	})
+
+	it("uses server-side search instead of local filtering", async () => {
+		const { result } = renderHook(() => useChatConversationList())
+
+		expect(useChatWorkspaceMock).toHaveBeenCalledWith({
+			projectsEnabled: true,
+			projectPageSize: 100,
+			projectKeyword: "",
+		})
+
+		act(() => {
+			result.current.setSearchValue("server-side")
+		})
+
+		await act(async () => {
+			await vi.advanceTimersByTimeAsync(250)
+		})
+
+		expect(useChatWorkspaceMock).toHaveBeenLastCalledWith({
+			projectsEnabled: true,
+			projectPageSize: 100,
+			projectKeyword: "server-side",
+		})
+
+		expect(result.current.items).toHaveLength(1)
+		expect(result.current.items[0]?.title).toBe("Alpha")
+		expect(result.current.items[0]?.isRunning).toBe(false)
+	})
+
+	it("keeps optimistic remove until server list no longer contains the id", async () => {
+		chatProjectsMock = [
+			createProject({ id: "project-a" }),
+			createProject({ id: "project-b", project_name: "Beta" }),
+		]
+		refreshChatProjectsMock.mockResolvedValueOnce(chatProjectsMock)
+
+		const { result } = renderHook(() => useChatConversationList())
+
+		act(() => {
+			result.current.optimisticRemove("project-a")
+		})
+
+		expect(result.current.items.map((item) => item.id)).toEqual(["project-b"])
+
+		refreshChatProjectsMock.mockResolvedValueOnce([
+			createProject({ id: "project-a" }),
+			createProject({ id: "project-b", project_name: "Beta" }),
+		])
+
+		await act(async () => {
+			await result.current.reload()
+		})
+
+		expect(result.current.items.map((item) => item.id)).toEqual(["project-b"])
+
+		refreshChatProjectsMock.mockResolvedValueOnce([
+			createProject({ id: "project-b", project_name: "Beta" }),
+		])
+
+		await act(async () => {
+			await result.current.reload()
+		})
+
+		expect(result.current.items.map((item) => item.id)).toEqual(["project-b"])
+	})
+
+	it("exposes isInitialChatListLoading only before the first successful fetch", async () => {
+		chatProjectsMock = []
+		isLoadingChatProjectsMock = true
+
+		const { result, rerender } = renderHook(() => useChatConversationList())
+
+		expect(result.current.isInitialChatListLoading).toBe(true)
+
+		isLoadingChatProjectsMock = false
+		rerender()
+
+		expect(result.current.isInitialChatListLoading).toBe(false)
+	})
+
+	it("keeps isInitialChatListLoading false after silent reload when cached rows exist", async () => {
+		const { result } = renderHook(() => useChatConversationList())
+
+		await act(async () => {
+			await result.current.reload({ silent: true })
+		})
+
+		expect(result.current.isInitialChatListLoading).toBe(false)
+	})
+
+	it("passes silent:true to refreshChatProjects when reload is called with silent option", async () => {
+		const { result } = renderHook(() => useChatConversationList())
+
+		await act(async () => {
+			await result.current.reload({ silent: true })
+		})
+
+		expect(refreshChatProjectsMock).toHaveBeenCalledWith({
+			pageSize: 100,
+			keyword: "",
+			silent: true,
+		})
+	})
+
+	it("preserves server list order from projects/queries without client-side re-sorting", () => {
+		chatProjectsMock = [
+			createProject({
+				id: "older",
+				project_name: "Older",
+				last_active_at: "2026-04-27 10:00:00",
+				updated_at: "2026-04-27 12:00:00",
+			}),
+			createProject({
+				id: "newer",
+				project_name: "Newer",
+				last_active_at: "2026-04-27 11:00:00",
+				updated_at: "2026-04-27 09:00:00",
+			}),
+		]
+
+		const { result } = renderHook(() => useChatConversationList())
+
+		expect(result.current.items.map((item) => item.id)).toEqual(["older", "newer"])
+	})
+
+	it("moves a newly pinned item to the front during optimistic updates", () => {
+		chatProjectsMock = [
+			createProject({ id: "project-a", project_name: "Alpha", is_pinned: false }),
+			createProject({ id: "project-b", project_name: "Beta", is_pinned: false }),
+		]
+
+		const { result } = renderHook(() => useChatConversationList())
+
+		act(() => {
+			result.current.optimisticUpdatePin("project-b", true)
+		})
+
+		expect(result.current.items.map((item) => [item.id, item.isPinned])).toEqual([
+			["project-b", true],
+			["project-a", false],
+		])
+	})
+
+	it("restores server order after reload completes", async () => {
+		chatProjectsMock = [
+			createProject({ id: "project-a", project_name: "Alpha", is_pinned: false }),
+			createProject({ id: "project-b", project_name: "Beta", is_pinned: false }),
+		]
+
+		const { result } = renderHook(() => useChatConversationList())
+
+		act(() => {
+			result.current.optimisticUpdatePin("project-b", true)
+		})
+
+		expect(result.current.items.map((item) => item.id)).toEqual(["project-b", "project-a"])
+
+		refreshChatProjectsMock.mockResolvedValueOnce([
+			createProject({ id: "project-a", project_name: "Alpha", is_pinned: false }),
+			createProject({ id: "project-b", project_name: "Beta", is_pinned: true }),
+		])
+
+		await act(async () => {
+			await result.current.reload({ silent: true })
+		})
+
+		expect(result.current.items.map((item) => item.id)).toEqual(["project-a", "project-b"])
+	})
+
+	it("requests the next page silently when loadMore is called", async () => {
+		chatProjectsMock = [createProject({ id: "project-page-1" })]
+		chatProjectsTotalMock = 2
+
+		const { result } = renderHook(() => useChatConversationList())
+
+		await act(async () => {
+			await result.current.loadMore()
+		})
+
+		expect(loadMoreChatProjectsMock).toHaveBeenCalledWith(2, {
+			pageSize: 100,
+			keyword: "",
+			silent: true,
+		})
+		expect(result.current.isLoadingMore).toBe(false)
+	})
+
+	it("maps running-like project statuses to isRunning", () => {
+		chatProjectsMock = [
+			createProject({ id: "topic-running", current_topic_status: "running" }),
+			createProject({ id: "waiting-user", current_topic_status: "waiting_for_user" }),
+			createProject({ id: "project-running", project_status: ProjectStatus.RUNNING }),
+			createProject({ id: "finished-project", project_status: ProjectStatus.FINISHED }),
+		]
+
+		const { result } = renderHook(() => useChatConversationList())
+
+		expect(result.current.items.map((item) => [item.id, item.isRunning])).toEqual([
+			["topic-running", true],
+			["waiting-user", true],
+			["project-running", true],
+			["finished-project", false],
+		])
+	})
+})

@@ -13,6 +13,8 @@ import { topicStore, workspaceStore } from "@/pages/superMagic/stores/core"
 import { getTemporaryDownloadUrl } from "@/pages/superMagic/utils/api"
 import { downloadFileWithAnchor } from "@/pages/superMagic/utils/handleFIle"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
+import { waitForProjectAttachmentChange } from "@/pages/superMagic/utils/projectAttachments/attachmentMutationWaiter"
+import type { HtmlPermissionScope } from "../types"
 
 interface MagicUploadFileData {
 	/** File 对象（优先使用，通过 postMessage 结构化克隆直接传输） */
@@ -46,14 +48,17 @@ interface MagicDownloadFilesRequest {
 
 interface UseMagicFilesOptions {
 	iframeRef: React.RefObject<HTMLIFrameElement>
+	targetOrigin: string
 	selectedProject?: any
 	attachmentList?: any[]
-	relative_file_path?: string
+	htmlRelativeFolderPath?: string
 	uploadImageFileToProject: (params: {
 		file: File
 		path: string
 		fileSize?: number
-	}) => Promise<{ uploadedRelativeFilePath: string }>
+	}) => Promise<{ uploadedRelativeFilePath: string; storedRelativeFilePath?: string }>
+	/** 执行高风险能力前的授权检查。未提供时保持旧行为。 */
+	authorizePermission?: (scope: HtmlPermissionScope) => Promise<boolean>
 }
 
 interface UseMagicFilesReturn {
@@ -61,6 +66,8 @@ interface UseMagicFilesReturn {
 	handleMagicAddFilesToMessage: (data: MagicAddFilesToMessageRequest) => Promise<void>
 	handleMagicDownloadFiles: (data: MagicDownloadFilesRequest) => Promise<void>
 }
+
+const MAGIC_UPLOAD_FILES_TOAST_KEY = "html-magic-upload-files"
 
 // 从 attachmentList 中递归查找文件（仅内部使用）
 function findFileInAttachments(attachments: any[], targetPath: string): any | null {
@@ -87,10 +94,12 @@ function findFileInAttachments(attachments: any[], targetPath: string): any | nu
 export function useMagicFiles(options: UseMagicFilesOptions): UseMagicFilesReturn {
 	const {
 		iframeRef,
+		targetOrigin,
 		selectedProject,
 		attachmentList,
-		relative_file_path,
+		htmlRelativeFolderPath,
 		uploadImageFileToProject,
+		authorizePermission,
 	} = options
 	const { t } = useTranslation("super")
 
@@ -99,7 +108,7 @@ export function useMagicFiles(options: UseMagicFilesOptions): UseMagicFilesRetur
 	attachmentListRef.current = attachmentList
 
 	const replyToIframe = useMemoizedFn((type: string, requestId: string, payload: object) => {
-		iframeRef.current?.contentWindow?.postMessage({ type, requestId, ...payload }, "*")
+		iframeRef.current?.contentWindow?.postMessage({ type, requestId, ...payload }, targetOrigin)
 	})
 
 	// ─── handleMagicUploadFiles ───────────────────────────────────────────────
@@ -118,6 +127,14 @@ export function useMagicFiles(options: UseMagicFilesOptions): UseMagicFilesRetur
 			return
 		}
 
+		if (!(await ensurePermission("project.files.upload"))) {
+			replyToIframe(replyType, requestId, {
+				success: false,
+				error: "Permission denied: project.files.upload",
+			})
+			return
+		}
+
 		// File size limit: 500MB per file
 		const MAX_FILE_SIZE = 500 * 1024 * 1024
 		const oversizedFiles = files.filter((f) => f.fileSize > MAX_FILE_SIZE)
@@ -130,7 +147,11 @@ export function useMagicFiles(options: UseMagicFilesOptions): UseMagicFilesRetur
 		}
 
 		try {
-			magicToast.loading({ content: t("topicFiles.fileUploading"), duration: 0 })
+			magicToast.loading({
+				key: MAGIC_UPLOAD_FILES_TOAST_KEY,
+				content: t("topicFiles.fileUploading"),
+				duration: 0,
+			})
 
 			// Upload files with concurrency control (max 3 parallel)
 			const CONCURRENCY = 3
@@ -139,6 +160,7 @@ export function useMagicFiles(options: UseMagicFilesOptions): UseMagicFilesRetur
 				path: string
 				success: boolean
 				relative_file_path?: string
+				stored_relative_file_path?: string
 				error?: string
 			}> = []
 
@@ -149,11 +171,12 @@ export function useMagicFiles(options: UseMagicFilesOptions): UseMagicFilesRetur
 						const { filename, path, fileSize } = fileData
 						// Prefer direct File object (zero-copy via structured clone)
 						// Fall back to base64 decoding for backward compatibility
-						const file = fileData.file instanceof File
-							? fileData.file
-							: fileData.base64
-								? await base64ToFile(fileData.base64, filename)
-								: null
+						const file =
+							fileData.file instanceof File
+								? fileData.file
+								: fileData.base64
+									? await base64ToFile(fileData.base64, filename)
+									: null
 
 						if (!file) {
 							throw new Error("No file data provided (neither file nor base64)")
@@ -169,6 +192,9 @@ export function useMagicFiles(options: UseMagicFilesOptions): UseMagicFilesRetur
 							path,
 							success: true as const,
 							relative_file_path: uploadResult.uploadedRelativeFilePath,
+							...(uploadResult.storedRelativeFilePath
+								? { stored_relative_file_path: uploadResult.storedRelativeFilePath }
+								: {}),
 						}
 					}),
 				)
@@ -194,16 +220,22 @@ export function useMagicFiles(options: UseMagicFilesOptions): UseMagicFilesRetur
 
 			replyToIframe(replyType, requestId, { success: true, results })
 
-			pubsub.publish(PubSubEvents.Update_Attachments, () => {
-				magicToast.destroy()
-				magicToast.success(t("topicFiles.fileUploadSuccess"))
+			void waitForProjectAttachmentChange(selectedProject?.id, {
+				operations: ["add"],
+				matchMode: "project-any-apply",
+				fallback: "full-refresh",
+				reason: "html-iframe-magic-upload-files",
+				callback: () => {
+					magicToast.destroy(MAGIC_UPLOAD_FILES_TOAST_KEY)
+					magicToast.success(t("topicFiles.fileUploadSuccess"))
+				},
 			})
 		} catch (err) {
 			replyToIframe(replyType, requestId, {
 				success: false,
 				error: err instanceof Error ? err.message : "Unknown error",
 			})
-			magicToast.destroy()
+			magicToast.destroy(MAGIC_UPLOAD_FILES_TOAST_KEY)
 			magicToast.error(t("topicFiles.fileUploadError", "文件上传失败"))
 		}
 	})
@@ -231,13 +263,21 @@ export function useMagicFiles(options: UseMagicFilesOptions): UseMagicFilesRetur
 				return
 			}
 
+			if (!(await ensurePermission("project.message.write"))) {
+				replyToIframe(replyType, requestId, {
+					success: false,
+					error: "Permission denied: project.message.write",
+				})
+				return
+			}
+
 			try {
 				const foundFiles: any[] = []
 				const notFoundPaths: string[] = []
 				const currentAttachmentList = attachmentListRef.current
 
 				for (const filePath of filePaths) {
-					const resolvedPath = resolveUploadPath(filePath, relative_file_path)
+					const resolvedPath = resolveUploadPath(filePath, htmlRelativeFolderPath)
 					const fileItem = currentAttachmentList
 						? findFileInAttachments(currentAttachmentList, resolvedPath)
 						: null
@@ -337,12 +377,20 @@ export function useMagicFiles(options: UseMagicFilesOptions): UseMagicFilesRetur
 		}
 
 		try {
+			if (!(await ensurePermission("project.files.download"))) {
+				replyToIframe(replyType, requestId, {
+					success: false,
+					error: "Permission denied: project.files.download",
+				})
+				return
+			}
+
 			const foundFiles: Array<{ fileItem: any; originalPath: string }> = []
 			const notFoundPaths: string[] = []
 			const currentAttachmentList = attachmentListRef.current
 
 			for (const filePath of filePaths) {
-				const resolvedPath = resolveUploadPath(filePath, relative_file_path)
+				const resolvedPath = resolveUploadPath(filePath, htmlRelativeFolderPath)
 				const fileItem = currentAttachmentList
 					? findFileInAttachments(currentAttachmentList, resolvedPath)
 					: null
@@ -420,4 +468,9 @@ export function useMagicFiles(options: UseMagicFilesOptions): UseMagicFilesRetur
 	})
 
 	return { handleMagicUploadFiles, handleMagicAddFilesToMessage, handleMagicDownloadFiles }
+
+	async function ensurePermission(scope: HtmlPermissionScope): Promise<boolean> {
+		if (!authorizePermission) return true
+		return authorizePermission(scope)
+	}
 }

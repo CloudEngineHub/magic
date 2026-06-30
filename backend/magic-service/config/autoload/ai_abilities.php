@@ -74,26 +74,43 @@ return [
             ],
         ],
 
-        // 实时语音识别
-        /*'realtime_speech_recognition' => [
-            'code' => 'realtime_speech_recognition',
+        // 知识库嵌入模型
+        'knowledge_base_embedding_model' => [
+            'code' => 'knowledge_base_embedding_model',
             'name' => [
-                'zh_CN' => '实时语音识别',
-                'en_US' => 'Realtime Speech Recognition',
+                'zh_CN' => '知识库嵌入模型',
+                'en_US' => 'Knowledge Base Embedding Model',
             ],
             'description' => [
-                'zh_CN' => '本能力覆盖平台所有语音转文字的应用场景，实时监听音频流并逐步输出准确的文字内容。',
-                'en_US' => 'This capability covers all speech-to-text application scenarios on the platform, monitoring audio streams in real-time and gradually outputting accurate text content.',
+                'zh_CN' => '本能力覆盖平台所有知识库向量化、重建与检索场景，用于统一初始化或切换知识库嵌入模型。',
+                'en_US' => 'This capability covers knowledge base vectorization, rebuild and retrieval scenarios, and is used to initialize or switch the knowledge base embedding model.',
             ],
-            'icon' => 'realtime-speech-icon',
-            'sort_order' => 3,
-            'status' => env('AI_ABILITY_REALTIME_SPEECH_STATUS', true),
+            'icon' => 'knowledge-base-embedding-model-icon',
+            'sort_order' => 24,
+            'status' => env('AI_ABILITY_KNOWLEDGE_BASE_EMBEDDING_MODEL_STATUS', true),
             'config' => [
-                'url' => env('AI_ABILITY_REALTIME_SPEECH_URL', ''),
-                'provider_code' => env('AI_ABILITY_REALTIME_SPEECH_PROVIDER', 'Official'),
-                'api_key' => env('AI_ABILITY_REALTIME_SPEECH_API_KEY', ''),
+                'model_id' => env('KNOWLEDGE_BASE_DEFAULT_EMBEDDING_MODEL', ''),
             ],
-        ],*/
+        ],
+
+        // 知识库视觉理解能力
+        'knowledge_base_visual_understanding' => [
+            'code' => 'knowledge_base_visual_understanding',
+            'name' => [
+                'zh_CN' => '知识库视觉理解能力',
+                'en_US' => 'Knowledge Base Visual Understanding',
+            ],
+            'description' => [
+                'zh_CN' => '开启后使用配置的多模态模型识别知识库图片与 PDF 中的可见文字；关闭时使用 OCR 识别。',
+                'en_US' => 'When enabled, this capability uses the configured multimodal model to extract visible text from knowledge base images and PDFs. When disabled, OCR recognition is used.',
+            ],
+            'icon' => 'knowledge-base-visual-understanding-icon',
+            'sort_order' => 25,
+            'status' => env('AI_ABILITY_KNOWLEDGE_BASE_VISUAL_UNDERSTANDING_STATUS', false),
+            'config' => [
+                'model_id' => env('AI_ABILITY_KNOWLEDGE_BASE_VISUAL_UNDERSTANDING_MODEL_ID', ''),
+            ],
+        ],
 
         // 音频文件识别
         'audio_file_recognition' => [
@@ -394,8 +411,8 @@ return [
         'image_eraser' => [
             'code' => 'image_eraser',
             'name' => [
-                'zh_CN' => '橡皮擦',
-                'en_US' => 'Image Eraser',
+                'zh_CN' => '即梦AI-交互编辑',
+                'en_US' => 'Jimeng AI - Interactive Editing',
             ],
             'description' => [
                 'zh_CN' => '本能力覆盖平台所有图片橡皮擦的应用场景，通过AI技术根据标记区域擦除图片内容，并以自然背景无缝填充。',
@@ -407,6 +424,34 @@ return [
             'config' => [
                 'model_id' => env('AI_ABILITY_IMAGE_ERASER_MODEL_ID', null),
                 'prompt' => env('AI_ABILITY_IMAGE_ERASER_PROMPT', ''),
+                'providers' => [
+                    [
+                        'name' => '官方代理服务',
+                        'enable' => env('AI_ABILITY_IMAGE_ERASER_OFFICIAL_PROXY_ENABLE', env('AI_ABILITY_IMAGE_ERASER_OFFICIAL_ENABLE', true)),
+                        'provider' => 'official_proxy',
+                        'request_url' => env('AI_ABILITY_IMAGE_ERASER_OFFICIAL_PROXY_REQUEST_URL', env('AI_ABILITY_IMAGE_ERASER_OFFICIAL_PROXY_URL', env('AI_ABILITY_IMAGE_ERASER_OFFICIAL_URL', ''))),
+                        'api_key' => env('AI_ABILITY_IMAGE_ERASER_OFFICIAL_PROXY_API_KEY', env('AI_ABILITY_IMAGE_ERASER_OFFICIAL_API_KEY', '')),
+                        'timeout' => env('AI_ABILITY_IMAGE_ERASER_OFFICIAL_PROXY_TIMEOUT', env('AI_ABILITY_IMAGE_ERASER_OFFICIAL_TIMEOUT', 300)),
+                    ],
+                    [
+                        'name' => '火山引擎',
+                        'enable' => env('AI_ABILITY_IMAGE_ERASER_VOLCENGINE_ENABLE', false),
+                        'provider' => 'volcengine',
+                        'access_key' => env('AI_ABILITY_IMAGE_ERASER_VOLCENGINE_ACCESS_KEY', env('AI_ABILITY_IMAGE_ERASER_VOLCENGINE_AK', '')),
+                        'secret_key' => env('AI_ABILITY_IMAGE_ERASER_VOLCENGINE_SECRET_KEY', env('AI_ABILITY_IMAGE_ERASER_VOLCENGINE_SK', '')),
+                        'timeout' => env('AI_ABILITY_IMAGE_ERASER_VOLCENGINE_TIMEOUT', 300),
+                    ],
+                    [
+                        'name' => '火山引擎即梦 Inpainting',
+                        'enable' => env('AI_ABILITY_IMAGE_ERASER_JIMENG_ENABLE', false),
+                        'provider' => 'jimeng',
+                        'access_key' => env('AI_ABILITY_IMAGE_ERASER_JIMENG_ACCESS_KEY', env('AI_ABILITY_IMAGE_ERASER_JIMENG_AK', env('AI_ABILITY_IMAGE_ERASER_VOLCENGINE_ACCESS_KEY', env('AI_ABILITY_IMAGE_ERASER_VOLCENGINE_AK', '')))),
+                        'secret_key' => env('AI_ABILITY_IMAGE_ERASER_JIMENG_SECRET_KEY', env('AI_ABILITY_IMAGE_ERASER_JIMENG_SK', env('AI_ABILITY_IMAGE_ERASER_VOLCENGINE_SECRET_KEY', env('AI_ABILITY_IMAGE_ERASER_VOLCENGINE_SK', '')))),
+                        'prompt' => env('AI_ABILITY_IMAGE_ERASER_JIMENG_PROMPT', '删除'),
+                        'seed' => env('AI_ABILITY_IMAGE_ERASER_JIMENG_SEED', ''),
+                        'timeout' => env('AI_ABILITY_IMAGE_ERASER_JIMENG_TIMEOUT', 300),
+                    ],
+                ],
             ],
         ],
 
@@ -414,8 +459,8 @@ return [
         'image_expand' => [
             'code' => 'image_expand',
             'name' => [
-                'zh_CN' => '扩图',
-                'en_US' => 'Image Expand',
+                'zh_CN' => '即梦AI-智能扩图',
+                'en_US' => 'Jimeng AI - Smart Expand',
             ],
             'description' => [
                 'zh_CN' => '本能力覆盖平台所有图片扩图的应用场景，通过AI技术将图片向外延伸，以符合原图风格、光照和透视的内容填充扩展区域。',
@@ -427,6 +472,53 @@ return [
             'config' => [
                 'model_id' => env('AI_ABILITY_IMAGE_EXPAND_MODEL_ID', null),
                 'prompt' => env('AI_ABILITY_IMAGE_EXPAND_PROMPT', ''),
+                'providers' => [
+                    [
+                        'name' => '官方代理服务',
+                        'enable' => env('AI_ABILITY_IMAGE_EXPAND_OFFICIAL_PROXY_ENABLE', env('AI_ABILITY_IMAGE_EXPAND_OFFICIAL_ENABLE', true)),
+                        'provider' => 'official_proxy',
+                        'request_url' => env('AI_ABILITY_IMAGE_EXPAND_OFFICIAL_PROXY_REQUEST_URL', env('AI_ABILITY_IMAGE_EXPAND_OFFICIAL_PROXY_URL', env('AI_ABILITY_IMAGE_EXPAND_OFFICIAL_URL', ''))),
+                        'api_key' => env('AI_ABILITY_IMAGE_EXPAND_OFFICIAL_PROXY_API_KEY', env('AI_ABILITY_IMAGE_EXPAND_OFFICIAL_API_KEY', '')),
+                        'timeout' => env('AI_ABILITY_IMAGE_EXPAND_OFFICIAL_PROXY_TIMEOUT', env('AI_ABILITY_IMAGE_EXPAND_OFFICIAL_TIMEOUT', 300)),
+                    ],
+                    [
+                        'name' => '火山引擎',
+                        'enable' => env('AI_ABILITY_IMAGE_EXPAND_VOLCENGINE_ENABLE', false),
+                        'provider' => 'volcengine',
+                        'access_key' => env('AI_ABILITY_IMAGE_EXPAND_VOLCENGINE_ACCESS_KEY', env('AI_ABILITY_IMAGE_EXPAND_VOLCENGINE_AK', '')),
+                        'secret_key' => env('AI_ABILITY_IMAGE_EXPAND_VOLCENGINE_SECRET_KEY', env('AI_ABILITY_IMAGE_EXPAND_VOLCENGINE_SK', '')),
+                        'timeout' => env('AI_ABILITY_IMAGE_EXPAND_VOLCENGINE_TIMEOUT', 300),
+                    ],
+                    [
+                        'name' => '火山引擎即梦 Outpainting',
+                        'enable' => env('AI_ABILITY_IMAGE_EXPAND_JIMENG_ENABLE', false),
+                        'provider' => 'jimeng',
+                        'access_key' => env('AI_ABILITY_IMAGE_EXPAND_JIMENG_ACCESS_KEY', env('AI_ABILITY_IMAGE_EXPAND_JIMENG_AK', env('AI_ABILITY_IMAGE_EXPAND_VOLCENGINE_ACCESS_KEY', env('AI_ABILITY_IMAGE_EXPAND_VOLCENGINE_AK', '')))),
+                        'secret_key' => env('AI_ABILITY_IMAGE_EXPAND_JIMENG_SECRET_KEY', env('AI_ABILITY_IMAGE_EXPAND_JIMENG_SK', env('AI_ABILITY_IMAGE_EXPAND_VOLCENGINE_SECRET_KEY', env('AI_ABILITY_IMAGE_EXPAND_VOLCENGINE_SK', '')))),
+                        'prompt' => env('AI_ABILITY_IMAGE_EXPAND_JIMENG_PROMPT', ''),
+                        'seed' => env('AI_ABILITY_IMAGE_EXPAND_JIMENG_SEED', ''),
+                        'timeout' => env('AI_ABILITY_IMAGE_EXPAND_JIMENG_TIMEOUT', 300),
+                    ],
+                ],
+            ],
+        ],
+
+        // 生图提示词补全
+        'image_prompt_completion' => [
+            'code' => 'image_prompt_completion',
+            'name' => [
+                'zh_CN' => '生图提示词补全',
+                'en_US' => 'Image Prompt Completion',
+            ],
+            'description' => [
+                'zh_CN' => '本能力覆盖平台所有生图提示词补全场景，根据用户文本和可选参考图生成可直接用于生图的提示词。',
+                'en_US' => 'This capability covers image prompt completion scenarios on the platform, generating image prompts from user text and optional reference images.',
+            ],
+            'icon' => 'image-prompt-completion-icon',
+            'sort_order' => 22,
+            'status' => env('AI_ABILITY_IMAGE_PROMPT_COMPLETION_STATUS', true),
+            'config' => [
+                'model_id' => env('AI_ABILITY_IMAGE_PROMPT_COMPLETION_MODEL_ID', null),
             ],
         ],
 
@@ -487,6 +579,33 @@ return [
             'status' => env('AI_ABILITY_VIDEO_UNDERSTANDING_STATUS', true),
             'config' => [
                 'model_id' => env('AI_ABILITY_VIDEO_UNDERSTANDING_MODEL_ID', null), // 对应service_provider_models.model_id
+            ],
+        ],
+
+        // 天气查询
+        'weather_forecast' => [
+            'code' => 'weather_forecast',
+            'name' => [
+                'zh_CN' => '天气查询',
+                'en_US' => 'Weather Forecast',
+            ],
+            'description' => [
+                'zh_CN' => '本能力覆盖平台天气数据查询的应用场景，提供精准的天气预报信息，支持多城市、多天数查询。',
+                'en_US' => 'This capability covers weather data query scenarios on the platform, providing accurate weather forecast information with support for multiple cities and forecast days.',
+            ],
+            'icon' => 'weather-forecast-icon',
+            'sort_order' => 21,
+            'status' => env('AI_ABILITY_WEATHER_FORECAST_STATUS', true),
+            'config' => [
+                'providers' => [
+                    [
+                        'name' => 'AiData',
+                        'enable' => true,
+                        'api_key' => env('AIDATA_API_KEY', ''),
+                        'provider' => 'aidata',
+                        'request_url' => env('AIDATA_BASE_URL', ''),
+                    ],
+                ],
             ],
         ],
 

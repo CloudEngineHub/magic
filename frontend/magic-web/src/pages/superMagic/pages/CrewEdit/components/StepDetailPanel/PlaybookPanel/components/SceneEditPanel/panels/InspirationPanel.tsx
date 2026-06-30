@@ -217,6 +217,7 @@ export const InspirationPanel = observer(function InspirationPanel() {
 					<label
 						className="cursor-pointer select-none overflow-hidden text-ellipsis whitespace-nowrap text-sm font-medium text-foreground"
 						onClick={handleSelectAll}
+						data-testid="handle-select-all"
 					>
 						{t("playbook.edit.filter.selectAll")}
 					</label>

@@ -28,6 +28,7 @@ import { CodeEditor } from "@/components/base"
 import { shadow } from "@/utils/shadow"
 import { useMemoizedFn } from "ahooks"
 import { processHtmlContent, type ProcessHtmlContentInput } from "../../contents/HTML/htmlProcessor"
+import { resolvePptScaleContentDimensions } from "../../contents/HTML/utils/slide-dimensions"
 import { usePPTVersionManager } from "./hooks/usePPTVersionManager"
 import { cn } from "@/lib/utils"
 import useShareRoute from "@/pages/superMagic/hooks/useShareRoute"
@@ -52,7 +53,7 @@ interface PPTSlideProps {
 	projectId?: string
 	filePathMapping: Map<string, string>
 	openNewTab: (fileId: string, path: string) => void
-	relative_file_path?: string
+	htmlRelativeFolderPath?: string
 	selectedProject?: any
 	attachmentList?: any[]
 	updateSlideContents: (newContents: Map<number, string>) => void
@@ -104,7 +105,7 @@ const PPTSlide = observer(function PPTSlide({
 	projectId,
 	filePathMapping,
 	openNewTab,
-	relative_file_path,
+	htmlRelativeFolderPath,
 	selectedProject,
 	attachmentList,
 	updateSlideContents,
@@ -135,6 +136,7 @@ const PPTSlide = observer(function PPTSlide({
 	const [pendingDeactivate, setPendingDeactivate] = useState(false)
 	const [isSaving, setIsSaving] = useState(false)
 	const [isRefreshing, setIsRefreshing] = useState(false)
+	const [isAppendPicking, setIsAppendPicking] = useState(false)
 	// 保存 IsolatedHTMLRenderer 暴露的保存函数引用
 	const [triggerSaveRef, setTriggerSaveRef] = useState<
 		(() => Promise<SaveResult | undefined>) | null
@@ -165,6 +167,10 @@ const PPTSlide = observer(function PPTSlide({
 		content: content,
 		rawContent: rawContent,
 	})
+	const scaleContentDimensions = useMemo(
+		() => resolvePptScaleContentDimensions(displayContent.content, displayContent.rawContent),
+		[displayContent.content, displayContent.rawContent],
+	)
 
 	// 历史版本对比弹窗状态
 	const [showHistoryCompareDialog, setShowHistoryCompareDialog] = useState(false)
@@ -172,6 +178,8 @@ const PPTSlide = observer(function PPTSlide({
 		undefined,
 	)
 	const [compareHistoryContent, setCompareHistoryContent] = useState<string>("")
+	/** Ignore stale history version fetch responses when user switches versions quickly */
+	const compareHistorySwitchSeqRef = useRef(0)
 
 	// 处理历史版本内容 - 进行路径替换
 	const processHistoricalContent = useMemoizedFn(async (rawContent: string) => {
@@ -182,7 +190,7 @@ const PPTSlide = observer(function PPTSlide({
 				fileId: fileId,
 				fileName: `slide_${index}.html`,
 				attachmentList: attachmentList,
-				html_relative_path: relative_file_path,
+				html_relative_path: htmlRelativeFolderPath,
 			}
 
 			const result = await processHtmlContent(input)
@@ -376,17 +384,20 @@ const PPTSlide = observer(function PPTSlide({
 
 	// 在对比面板中切换历史版本
 	const handleSwitchHistoryVersion = useMemoizedFn(async (version: number) => {
+		const switchId = ++compareHistorySwitchSeqRef.current
 		try {
-			setCompareHistoryVersion(version)
-			// 获取新版本的内容
 			const historyContent = await getVersionContentForCompare(version)
-			if (historyContent) {
-				// 处理历史版本内容
-				const processedContent = await processHistoricalContent(historyContent)
-				setCompareHistoryContent(processedContent)
+			if (switchId !== compareHistorySwitchSeqRef.current) return
+			if (!historyContent) {
+				throw new Error(`Failed to load history version ${version}`)
 			}
+			const processedContent = await processHistoricalContent(historyContent)
+			if (switchId !== compareHistorySwitchSeqRef.current) return
+			setCompareHistoryContent(processedContent)
+			setCompareHistoryVersion(version)
 		} catch (error) {
 			console.error("Failed to switch history version:", error)
+			throw error
 		}
 	})
 
@@ -659,12 +670,9 @@ const PPTSlide = observer(function PPTSlide({
 		// Fallback to individual slide if main file info is not available
 		if (!fileId) return undefined
 
-		// Extract file name from relative path or use default
-		const fileName = relative_file_path?.split("/").pop() || `slide_${index + 1}.html`
-
 		return {
 			id: fileId,
-			name: fileName,
+			name: `slide_${index + 1}.html`,
 			type: "html",
 			projectId: selectedProject?.id || projectId,
 			projectName: selectedProject?.project_name,
@@ -673,7 +681,6 @@ const PPTSlide = observer(function PPTSlide({
 		mainFileId,
 		mainFileName,
 		fileId,
-		relative_file_path,
 		index,
 		selectedProject?.id,
 		selectedProject?.project_name,
@@ -765,9 +772,11 @@ const PPTSlide = observer(function PPTSlide({
 		) : (
 			<IsolatedHTMLRenderer
 				ref={rendererRef as React.RefObject<IsolatedHTMLRendererRef>}
-				content={content}
+				content={displayContent.content}
+				rawSourceCode={displayContent.rawContent}
 				sandboxType="iframe"
 				isPptRender
+				scaleContentDimensions={scaleContentDimensions}
 				isFullscreen={isFullscreen}
 				isEditMode={isEditMode}
 				isVisible={isActive}
@@ -777,13 +786,14 @@ const PPTSlide = observer(function PPTSlide({
 				onSaveReady={handleSaveReady}
 				filePathMapping={filePathMapping}
 				openNewTab={openNewTab}
-				relative_file_path={relative_file_path}
+				htmlRelativeFolderPath={htmlRelativeFolderPath}
 				selectedProject={selectedProject}
 				attachmentList={attachmentList}
 				setSlideContents={updateSlideContents}
 				slideIndex={index}
 				isPlaybackMode={isPlaybackMode}
 				className="h-[100%-40px]"
+				onAppendPickingChange={setIsAppendPicking}
 			/>
 		)
 	}
@@ -798,6 +808,8 @@ const PPTSlide = observer(function PPTSlide({
 				{showEditToolbar && (
 					<EditToolbar
 						onStartInspector={() => rendererRef.current?.startInspector()}
+						onStartInspectorAppend={() => rendererRef.current?.startInspectorAppend()}
+						isAppendPicking={isAppendPicking}
 						showAIOptimization={allowEdit && !fileVersion}
 						showFileEdit={allowEdit && !fileVersion}
 						isEditMode={isEditMode}

@@ -30,7 +30,12 @@ import { AttachmentItem } from "../../../TopicFilesButton/hooks/types"
 import useShareButtonVisibility from "../../hooks/useShareButtonVisibility"
 import type { HeaderActionConfig } from "../../components/CommonHeaderV2/types"
 import magicToast from "@/components/base/MagicToaster/utils"
-import { exportMarkdownToPdf } from "@/utils/markdownPdfExport"
+import { exportMarkdownToImage } from "@/utils/markdownImageExport"
+import type { ImageExportFormat } from "@magic-web/html2image"
+import { SuperMagicApi } from "@/apis"
+import { SuperMagicApiErrorCode } from "@/pages/superMagic/constants/apiErrorCodes"
+import { requestProjectAttachmentsFullRefresh } from "@/pages/superMagic/services/attachmentsTopicSync"
+import { documentExportService } from "@/pages/superMagic/services/documentExport"
 
 interface TextEditorProps {
 	data?: any
@@ -98,7 +103,9 @@ interface TextEditorProps {
 
 interface MdExportActionProps {
 	handleExportSource: () => void
-	handleExportPDF: (pagination: "slice" | "none") => void
+	handleExportPDF: () => void
+	handleExportImage?: (format: ImageExportFormat) => void
+	handleExportRasterPdf?: (pageMode: "fit" | "paginate") => void
 	isExporting?: boolean
 	showButtonText: boolean
 }
@@ -106,6 +113,8 @@ interface MdExportActionProps {
 const MdExportAction = memo(function MdExportAction({
 	handleExportSource,
 	handleExportPDF,
+	handleExportImage,
+	handleExportRasterPdf,
 	isExporting = false,
 	showButtonText,
 }: MdExportActionProps) {
@@ -113,9 +122,14 @@ const MdExportAction = memo(function MdExportAction({
 		handleExportSource,
 		handleExportPDF,
 		handleExportPPT: undefined,
+		handleExportImage,
+		handleExportRasterPdf,
 		isExporting,
 		supportPPT: false,
 		showButtonText,
+		showExportImage: !!handleExportImage,
+		showExportPdf: true,
+		showExportRasterPdf: !!handleExportRasterPdf,
 	})
 
 	return ExportDropdownButton
@@ -262,14 +276,95 @@ export default memo(function TextEditor(props: TextEditorProps) {
 	}, [data?.file_name, data?.title])
 
 	const relativeFilePath = useMemo(() => {
-		return attachmentList?.find((item) => item.file_id === displayData?.file_id)
-			?.relative_file_path
-	}, [displayData?.file_id, attachmentList])
+		// Primary: look up in the visible attachment list
+		const fromList = attachmentList?.find(
+			(item) => item.file_id === displayData?.file_id,
+		)?.relative_file_path
+		if (fromList) return fromList
+		// Fallback: use relative_file_path directly from the file data (handles hidden files)
+		return displayData?.relative_file_path as string | undefined
+	}, [displayData?.file_id, displayData?.relative_file_path, attachmentList])
 
 	// Use the image URL resolver hook
 	const { imageUrlMap, setImageUrlMap, urlResolver } = useImageUrlResolver({
 		attachments,
 		relativeFilePath,
+	})
+
+	/**
+	 * Strip leading/trailing slashes from a path for comparison.
+	 */
+	const normalizeMdPath = (path: string) => path.replace(/^\/+|\/+$/g, "")
+
+	/**
+	 * Resolve or create the images folder before an image upload.
+	 * - Searches attachmentList for an existing directory matching folderPath.
+	 * - If found, returns its file_id directly.
+	 * - If not found, resolves the parent dir file_id, calls createFile, and returns the new id.
+	 * - On DuplicateFile error, re-searches attachmentList for the existing folder.
+	 * - Returns undefined on any unrecoverable failure (graceful degradation → root).
+	 */
+	const resolveImagesFolderParentId = useMemoizedFn(async (folderPath: string) => {
+		if (!selectedProject?.id) return undefined
+
+		const flatList = (attachmentList as AttachmentItem[] | undefined) ?? []
+		const normalizedFolderPath = normalizeMdPath(folderPath)
+
+		// Step 1: Check if the images folder already exists
+		const existingFolder = flatList.find(
+			(item) =>
+				item.is_directory &&
+				normalizeMdPath(item.relative_file_path || "") === normalizedFolderPath,
+		)
+		if (existingFolder?.file_id) {
+			return existingFolder.file_id
+		}
+
+		// Step 2: Find the parent directory's file_id
+		const lastSlash = normalizedFolderPath.lastIndexOf("/")
+		const parentPath = lastSlash > 0 ? normalizedFolderPath.substring(0, lastSlash) : ""
+		const folderName =
+			lastSlash > 0 ? normalizedFolderPath.substring(lastSlash + 1) : normalizedFolderPath
+
+		let parentDirId: string | undefined
+		if (parentPath) {
+			const parentDir = flatList.find(
+				(item) =>
+					item.is_directory &&
+					normalizeMdPath(item.relative_file_path || "") === parentPath,
+			)
+			parentDirId = parentDir?.file_id
+		}
+
+		// Step 3: Create the images folder
+		try {
+			const result = await SuperMagicApi.createFile({
+				project_id: selectedProject.id,
+				parent_id: parentDirId || "",
+				file_name: folderName,
+				is_directory: true,
+			})
+			const folderId = (result as any)?.file_id as string | undefined
+			return folderId
+		} catch (error: unknown) {
+			const errorObj = error as { code?: number }
+			if (errorObj.code === SuperMagicApiErrorCode.DuplicateFile) {
+				// Folder already exists — refresh and search again
+				requestProjectAttachmentsFullRefresh({
+					projectId: selectedProject.id,
+					reason: "markdown-images-folder-duplicate",
+				})
+				const existing = flatList.find(
+					(item) =>
+						item.is_directory &&
+						normalizeMdPath(item.relative_file_path || "") === normalizedFolderPath,
+				)
+				return existing?.file_id
+			}
+			// Other errors: graceful degradation (save to root)
+			console.error("[MdEditor] Failed to create images folder:", error)
+			return undefined
+		}
 	})
 	// 当数据加载完成（loading 为 false）且内容处理完成（isLoading 为 false）后，才同步 viewMode
 	useEffect(() => {
@@ -436,10 +531,15 @@ export default memo(function TextEditor(props: TextEditorProps) {
 		exportFile?.(displayData?.file_id, fileVersion)
 	})
 
-	const handleExportPDF = useMemoizedFn(async (pagination: "slice" | "none" = "slice") => {
+	const handleExportPDF = useMemoizedFn(async () => {
 		const fileId = displayData?.file_id
 		if (!currentContent) {
 			magicToast.error(t("topicFiles.contextMenu.fileExport.exportFailed"))
+			return
+		}
+		const documentExporter = documentExportService.get()
+		if (!documentExporter) {
+			magicToast.error(t("topicFiles.contextMenu.fileExport.unsupportedInCurrentVersion"))
 			return
 		}
 
@@ -452,11 +552,10 @@ export default memo(function TextEditor(props: TextEditorProps) {
 		})
 
 		try {
-			const { promise } = exportMarkdownToPdf({
+			const { promise } = documentExporter.exportMarkdown({
 				markdown: currentContent,
 				processedContent,
-				fileName: displayData?.file_name || "export.pdf",
-				pagination,
+				fileName: (displayData?.file_name || "export").replace(/\.[^.]+$/, ".pdf"),
 				selectedProject,
 				relativeFilePath: relativeFilePath,
 				attachments,
@@ -485,6 +584,108 @@ export default memo(function TextEditor(props: TextEditorProps) {
 		}
 	})
 
+	const handleExportRasterPdf = useMemoizedFn(async (pageMode: "fit" | "paginate") => {
+		const fileId = displayData?.file_id
+		if (!currentContent) {
+			magicToast.error(t("topicFiles.contextMenu.fileExport.exportFailed"))
+			return
+		}
+		const documentExporter = documentExportService.get()
+		if (!documentExporter) {
+			magicToast.error(t("topicFiles.contextMenu.fileExport.unsupportedInCurrentVersion"))
+			return
+		}
+
+		const toastKey = `md2pdf-raster-${fileId || Date.now()}`
+		setIsExportingPdf(true)
+		magicToast.loading({
+			key: toastKey,
+			content: t("topicFiles.exporting"),
+			duration: 0,
+		})
+
+		try {
+			const { promise } = documentExporter.exportMarkdownRaster({
+				markdown: currentContent,
+				processedContent,
+				fileName: (displayData?.file_name || "export").replace(/\.[^.]+$/, ".pdf"),
+				selectedProject,
+				relativeFilePath: relativeFilePath,
+				attachments,
+				initialImageUrlMap: imageUrlMap,
+				pageMode,
+				onProgress: ({ phase, current, total }) => {
+					if (phase !== "capture" || total <= 1) return
+					magicToast.loading({
+						key: toastKey,
+						content: `${t("topicFiles.exporting")} (${current}/${total})`,
+						duration: 0,
+					})
+				},
+			})
+			await promise
+			magicToast.success({
+				key: toastKey,
+				content: t("topicFiles.exportSuccess"),
+				duration: 1000,
+			})
+		} catch (error) {
+			console.error("[markdownRasterPdfExport] Export failed:", error)
+			magicToast.destroy(toastKey)
+			magicToast.error(t("topicFiles.contextMenu.fileExport.exportFailed"))
+		} finally {
+			setIsExportingPdf(false)
+		}
+	})
+
+	const handleExportImage = useMemoizedFn(async (format: ImageExportFormat = "png") => {
+		if (!currentContent) {
+			magicToast.error(t("topicFiles.contextMenu.fileExport.exportFailed"))
+			return
+		}
+
+		const toastKey = `md-image-export-${displayData?.file_id || Date.now()}`
+		setIsExportingPdf(true)
+		magicToast.loading({
+			key: toastKey,
+			content: t("topicFiles.exporting"),
+			duration: 0,
+		})
+
+		try {
+			const { promise } = exportMarkdownToImage({
+				markdown: currentContent,
+				processedContent,
+				format,
+				fileName: (displayData?.file_name || "export").replace(/\.[^.]+$/, ""),
+				selectedProject,
+				relativeFilePath,
+				attachments,
+				initialImageUrlMap: imageUrlMap,
+				onProgress: ({ phase, current, total }) => {
+					if (phase !== "capture" || total <= 1) return
+					magicToast.loading({
+						key: toastKey,
+						content: `${t("topicFiles.exporting")} (${current}/${total})`,
+						duration: 0,
+					})
+				},
+			})
+			await promise
+			magicToast.success({
+				key: toastKey,
+				content: t("topicFiles.exportSuccess"),
+				duration: 1000,
+			})
+		} catch (error) {
+			console.error("[image-export] Markdown export failed:", error)
+			magicToast.destroy(toastKey)
+			magicToast.error(t("topicFiles.contextMenu.fileExport.exportFailed"))
+		} finally {
+			setIsExportingPdf(false)
+		}
+	})
+
 	const handleCopyMarkdown = useMemoizedFn(() => {
 		navigator.clipboard
 			.writeText(currentContent)
@@ -504,6 +705,8 @@ export default memo(function TextEditor(props: TextEditorProps) {
 					<MdExportAction
 						handleExportSource={handleExportSource}
 						handleExportPDF={handleExportPDF}
+						handleExportImage={handleExportImage}
+						handleExportRasterPdf={handleExportRasterPdf}
 						isExporting={isExporting || isExportingPdf}
 						showButtonText={context.showButtonText}
 					/>
@@ -552,6 +755,7 @@ export default memo(function TextEditor(props: TextEditorProps) {
 		allowEdit,
 		attachmentList,
 		displayData?.file_id,
+		handleExportImage,
 		handleExportPDF,
 		handleExportSource,
 		handleCancel,
@@ -644,6 +848,7 @@ export default memo(function TextEditor(props: TextEditorProps) {
 								attachments={attachments}
 								onOpenFile={openFileTab}
 								placeholder={t("fileViewer.placeholder.content")}
+								resolveImagesFolderParentId={resolveImagesFolderParentId}
 							/>
 						</div>
 					</div>
@@ -678,6 +883,7 @@ export default memo(function TextEditor(props: TextEditorProps) {
 									setInternalViewMode("desktop")
 									onViewModeChange?.("desktop")
 								}}
+								data-testid="set-internal-view-mode"
 							>
 								{t("playbackControl.mdViewModeRender")}
 							</button>
@@ -692,6 +898,7 @@ export default memo(function TextEditor(props: TextEditorProps) {
 									setInternalViewMode("code")
 									onViewModeChange?.("code")
 								}}
+								data-testid="set-internal-view-mode-2"
 							>
 								{t("playbackControl.mdViewModeSource")}
 							</button>
@@ -700,6 +907,7 @@ export default memo(function TextEditor(props: TextEditorProps) {
 							type="button"
 							className="flex h-6 items-center rounded-full border border-border px-3 text-xs text-muted-foreground transition-colors hover:text-foreground"
 							onClick={handleCopyMarkdown}
+							data-testid="handle-copy-markdown"
 						>
 							{t("playbackControl.copyMarkdown")}
 						</button>

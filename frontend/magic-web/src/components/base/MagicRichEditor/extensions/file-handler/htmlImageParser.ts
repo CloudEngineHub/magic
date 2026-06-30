@@ -1,4 +1,5 @@
 import ChatFileService from "@/services/chat/file/ChatFileService"
+import { runActiveEditor } from "@/utils/tiptapEditorLifecycle"
 import { Image } from "../image"
 
 export interface ParsedImageInfo {
@@ -177,7 +178,9 @@ export function processHtmlWithImages(
 		const doc = parser.parseFromString(processedHtml, "text/html")
 		const content = doc.body.innerHTML
 		if (content.trim()) {
-			editor.commands.insertContent(content)
+			runActiveEditor(editor, (activeEditor) => {
+				activeEditor.commands.insertContent(content)
+			})
 		}
 	} catch (e) {
 		console.error("Failed to parse processed HTML:", e)
@@ -214,65 +217,69 @@ function replacePlaceholderWithImage(
 	file: File,
 	onPaste?: (editor: any, files: File[]) => void,
 ) {
-	// Get current document content as text to search for placeholder
-	const htmlContent = editor.getHTML()
-	const placeholderText = "Loading..."
+	runActiveEditor(editor, (activeEditor) => {
+		// Get current document content as text to search for placeholder
+		const htmlContent = activeEditor.getHTML()
+		const placeholderText = "Loading..."
 
-	if (htmlContent.includes(placeholderText)) {
-		// Use editor commands to find and replace the placeholder
-		const { state } = editor
-		const { doc } = state
-		let found = false
+		if (htmlContent.includes(placeholderText)) {
+			// Use editor commands to find and replace the placeholder
+			const { state } = activeEditor
+			const { doc } = state
+			let found = false
 
-		// Find the position of the placeholder text
-		doc.descendants((node: any, pos: number) => {
-			if (found) return false
+			// Find the position of the placeholder text
+			doc.descendants((node: any, pos: number) => {
+				if (found) return false
 
-			if (node.isText && node.text?.includes(placeholderText)) {
-				const text = node.text
-				const startIdx = text.indexOf(placeholderText)
+				if (node.isText && node.text?.includes(placeholderText)) {
+					const text = node.text
+					const startIdx = text.indexOf(placeholderText)
 
-				if (startIdx !== -1) {
-					const from = pos + startIdx
-					const to = pos + startIdx + placeholderText.length
+					if (startIdx !== -1) {
+						const from = pos + startIdx
+						const to = pos + startIdx + placeholderText.length
 
-					// Focus at the placeholder position
-					editor.commands.focus(from)
+						// Focus at the placeholder position
+						activeEditor.commands.focus(from)
 
-					// Select the placeholder text
-					editor.commands.setTextSelection({ from, to })
+						// Select the placeholder text
+						activeEditor.commands.setTextSelection({ from, to })
 
-					// Delete the selected text
-					editor.commands.deleteSelection()
+						// Delete the selected text
+						activeEditor.commands.deleteSelection()
 
-					// Upload and insert the image at current position
-					if (onPaste) {
-						setTimeout(() => {
-							onPaste(editor, [file])
-						}, 10) // Small delay to ensure deletion is processed
+						// Upload and insert the image at current position
+						if (onPaste) {
+							setTimeout(() => {
+								runActiveEditor(editor, (latestEditor) => {
+									onPaste(latestEditor, [file])
+								})
+							}, 10) // Small delay to ensure deletion is processed
+						}
+
+						found = true
+						return false
 					}
+				}
+				return true
+			})
 
-					found = true
-					return false
+			if (!found) {
+				console.warn(`Could not find placeholder text in editor`)
+				// Fallback: just trigger the upload at current position
+				if (onPaste) {
+					onPaste(activeEditor, [file])
 				}
 			}
-			return true
-		})
-
-		if (!found) {
-			console.warn(`Could not find placeholder text in editor`)
+		} else {
+			console.warn(`Placeholder text not found in HTML content`)
 			// Fallback: just trigger the upload at current position
 			if (onPaste) {
-				onPaste(editor, [file])
+				onPaste(activeEditor, [file])
 			}
 		}
-	} else {
-		console.warn(`Placeholder text not found in HTML content`)
-		// Fallback: just trigger the upload at current position
-		if (onPaste) {
-			onPaste(editor, [file])
-		}
-	}
+	})
 }
 
 /**
@@ -283,42 +290,44 @@ function replacePlaceholderWithImage(
 function replacePlaceholderWithError(editor: any, placeholderId: string) {
 	console.log(`❌ Replacing placeholder ${placeholderId} with error message`)
 
-	const htmlContent = editor.getHTML()
-	const placeholderText = "Loading..."
+	runActiveEditor(editor, (activeEditor) => {
+		const htmlContent = activeEditor.getHTML()
+		const placeholderText = "Loading..."
 
-	if (htmlContent.includes(placeholderText)) {
-		const { state } = editor
-		const { doc } = state
-		let found = false
+		if (htmlContent.includes(placeholderText)) {
+			const { state } = activeEditor
+			const { doc } = state
+			let found = false
 
-		// Find the position of the placeholder text
-		doc.descendants((node: any, pos: number) => {
-			if (found) return false
+			// Find the position of the placeholder text
+			doc.descendants((node: any, pos: number) => {
+				if (found) return false
 
-			if (node.isText && node.text?.includes(placeholderText)) {
-				const text = node.text
-				const startIdx = text.indexOf(placeholderText)
+				if (node.isText && node.text?.includes(placeholderText)) {
+					const text = node.text
+					const startIdx = text.indexOf(placeholderText)
 
-				if (startIdx !== -1) {
-					const from = pos + startIdx
-					const to = pos + startIdx + placeholderText.length
+					if (startIdx !== -1) {
+						const from = pos + startIdx
+						const to = pos + startIdx + placeholderText.length
 
-					// Focus at the placeholder position
-					editor.commands.focus(from)
+						// Focus at the placeholder position
+						activeEditor.commands.focus(from)
 
-					// Select the placeholder text
-					editor.commands.setTextSelection({ from, to })
+						// Select the placeholder text
+						activeEditor.commands.setTextSelection({ from, to })
 
-					// Replace with error message
-					editor.commands.insertContent("❌ Image failed to load")
+						// Replace with error message
+						activeEditor.commands.insertContent("❌ Image failed to load")
 
-					found = true
-					return false
+						found = true
+						return false
+					}
 				}
-			}
-			return true
-		})
-	}
+				return true
+			})
+		}
+	})
 }
 
 /**

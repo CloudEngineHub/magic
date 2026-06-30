@@ -10,6 +10,7 @@ import AiCompletionStore from "@/stores/chatNew/editor/AiCompletion"
 import { logger as Logger } from "@/utils/log"
 import { MentionItemType } from "@/components/business/MentionPanel/types"
 import type { CanvasMarkerMentionData } from "@/components/business/MentionPanel/types"
+import { runActiveEditor } from "@/utils/tiptapEditorLifecycle"
 
 const logger = Logger.createLogger("AiCompletionService")
 
@@ -210,15 +211,17 @@ class AiCompletionService {
 
 			// 使用 chain API 确保在一个事务中完成，并设置不加入历史记录
 			// 这样用户撤销/重做时不会意外地恢复空的建议词状态
-			editor
-				.chain()
-				.command(({ tr }) => {
-					tr.setMeta("addToHistory", false)
-					tr.setMeta("suggestionUpdate", true)
-					return true
-				})
-				.updateAttributes("paragraph", { suggestion: "" })
-				.run()
+			runActiveEditor(editor, (activeEditor) => {
+				activeEditor
+					.chain()
+					.command(({ tr }) => {
+						tr.setMeta("addToHistory", false)
+						tr.setMeta("suggestionUpdate", true)
+						return true
+					})
+					.updateAttributes("paragraph", { suggestion: "" })
+					.run()
+			})
 
 			AiCompletionStore.clearSuggestion()
 			AiCompletionTip.hide()
@@ -229,15 +232,17 @@ class AiCompletionService {
 		this.currentSuggestion = suggestion || ""
 
 		// 使用 chain API 在一个事务中完成所有操作，确保不影响历史记录
-		editor
-			.chain()
-			.command(({ tr }) => {
-				tr.setMeta("addToHistory", false)
-				tr.setMeta("suggestionUpdate", true)
-				return true
-			})
-			.updateAttributes("paragraph", { suggestion: suggestion || "" })
-			.run()
+		runActiveEditor(editor, (activeEditor) => {
+			activeEditor
+				.chain()
+				.command(({ tr }) => {
+					tr.setMeta("addToHistory", false)
+					tr.setMeta("suggestionUpdate", true)
+					return true
+				})
+				.updateAttributes("paragraph", { suggestion: suggestion || "" })
+				.run()
+		})
 
 		logger.report("suggestion_lifecycle", {
 			action: "show",
@@ -470,43 +475,45 @@ class AiCompletionService {
 	}) => {
 		if (!editor) return
 
-		// 获取建议词
-		const attr = editor.getAttributes("paragraph")
-		let { suggestion } = attr
+		return runActiveEditor(editor, (activeEditor) => {
+			// 获取建议词
+			const attr = activeEditor.getAttributes("paragraph")
+			let { suggestion } = attr
 
-		if (suggestionText) {
-			suggestion = suggestionText
-		}
+			if (suggestionText) {
+				suggestion = suggestionText
+			}
 
-		// 加强检查，确保建议词有效
-		// 只有在有有效建议词的情况下才执行操作
-		if (suggestion && typeof suggestion === "string" && suggestion.trim().length > 0) {
-			this.isInsertSuggestionChange = true
-			editor.chain().focus().run()
+			// 加强检查，确保建议词有效
+			// 只有在有有效建议词的情况下才执行操作
+			if (suggestion && typeof suggestion === "string" && suggestion.trim().length > 0) {
+				this.isInsertSuggestionChange = true
+				activeEditor.chain().focus().run()
 
-			const currentPosition = editor.state.selection.head
-			const endPosition = editor.state.doc.content.size - 1
-			editor.commands.focus(endPosition)
+				const currentPosition = activeEditor.state.selection.head
+				const endPosition = activeEditor.state.doc.content.size - 1
+				activeEditor.commands.focus(endPosition)
 
-			editor.commands.insertContent(suggestion)
+				activeEditor.commands.insertContent(suggestion)
 
-			logger.report("suggestion_lifecycle", {
-				action: "accept",
-				suggestionLength: suggestion?.length || 0,
-				cursorPosition: currentPosition,
-			})
+				logger.report("suggestion_lifecycle", {
+					action: "accept",
+					suggestionLength: suggestion?.length || 0,
+					cursorPosition: currentPosition,
+				})
 
-			// 增加Tab键点击次数
-			this.addTabCount()
+				// 增加Tab键点击次数
+				this.addTabCount()
 
-			const isNotLastPosition = currentPosition < endPosition
-			if (isNotLastPosition) editor.commands.focus(currentPosition)
+				const isNotLastPosition = currentPosition < endPosition
+				if (isNotLastPosition) activeEditor.commands.focus(currentPosition)
 
-			this.clearSuggestion()
-		}
+				this.clearSuggestion()
+			}
 
-		// 禁用Tab键默认行为
-		return true
+			// 禁用Tab键默认行为
+			return true
+		})
 	}
 
 	/**
@@ -653,11 +660,11 @@ class AiCompletionService {
 										self.currentSuggestion
 									) {
 										const editor = self.instance?.editor
-										if (editor) {
+										runActiveEditor(editor, (activeEditor) => {
 											// Remove restore logging - internal operation
 
 											// 使用 chain API 恢复建议词，确保不记录历史
-											editor
+											activeEditor
 												.chain()
 												.command(({ tr }) => {
 													tr.setMeta("addToHistory", false)
@@ -669,7 +676,7 @@ class AiCompletionService {
 												})
 												.run()
 											AiCompletionStore.setSuggestion(self.currentSuggestion)
-										}
+										})
 										self.isHistoryOperation = false
 									}
 								}, 0)
@@ -793,11 +800,10 @@ class AiCompletionService {
 			this.currentRequest = null
 		}
 
-		// 确保编辑器存在
+		// 用 runActiveEditor 包裹 editor 调用，兼容 worker 环境
 		const editor = this.instance?.editor
-		if (editor) {
-			// 使用 chain API 清除段落属性中的建议词，确保不加入历史记录
-			editor
+		runActiveEditor(editor, (activeEditor) => {
+			activeEditor
 				.chain()
 				.command(({ tr }) => {
 					tr.setMeta("addToHistory", false)
@@ -807,7 +813,7 @@ class AiCompletionService {
 				.updateAttributes("paragraph", { suggestion: "" })
 				.run()
 			AiCompletionStore.clearSuggestion()
-		}
+		})
 
 		// 隐藏提示，不再通过updateSuggestion间接调用
 		AiCompletionTip.hide()
@@ -816,11 +822,24 @@ class AiCompletionService {
 	/**
 	 * 处理输入法组合开始事件（如中文输入）
 	 * 当用户开始使用输入法输入时触发
+	 * 注意：此处不能调用 clearSuggestion()，因为它会 dispatch editor transaction，
+	 * 导致 DOM 更新从而打断正在进行的 IME composition（表现为首字母被直接提交）
 	 */
 	onCompositionStart = () => {
 		if (!this.enabled) return
 		this.composition = true
-		this.clearSuggestion()
+
+		// 取消正在进行的请求，但不 dispatch editor transaction
+		if (this.currentRequest) {
+			this.currentRequest.abort("composition start")
+			this.currentRequest = null
+		}
+
+		// 仅隐藏 UI 提示（不涉及 editor DOM 操作）
+		this.currentSuggestion = ""
+		this.lastRequestText = ""
+		AiCompletionStore.clearSuggestion()
+		AiCompletionTip.hide()
 	}
 
 	/**
@@ -834,7 +853,19 @@ class AiCompletionService {
 		setTimeout(() => {
 			// 再次检查composition状态，确保没有新的composition开始
 			if (!this.composition) {
-				// Remove detailed trigger logging - redundant with fetch success
+				// 清除 onCompositionStart 中跳过的段落 suggestion 属性
+				const editor = this.instance?.editor
+				runActiveEditor(editor, (activeEditor) => {
+					activeEditor
+						.chain()
+						.command(({ tr }) => {
+							tr.setMeta("addToHistory", false)
+							tr.setMeta("suggestionUpdate", true)
+							return true
+						})
+						.updateAttributes("paragraph", { suggestion: "" })
+						.run()
+				})
 				this.triggerFetchSuggestion()
 			}
 		}, 50)

@@ -1,9 +1,11 @@
-import { useIsMobile } from "@/hooks/use-mobile"
+import { useIsMobile } from "@/hooks/useIsMobile"
 import CommonPopup from "@/pages/superMagicMobile/components/CommonPopup"
 import { Modal } from "antd"
+import { cx } from "antd-style"
 import { useEffect, useRef, useState } from "react"
 import { createPortal } from "react-dom"
 import { useTranslation } from "react-i18next"
+import { renderAgreementTemplate } from "@/utils/renderAgreementTemplate"
 import { useStyles } from "./styles"
 import EditorBody from "../Detail/contents/Md/components/EditorBody"
 import agreetment from "./agreetment.md?raw"
@@ -22,9 +24,19 @@ export function WaterMarkFreeModal({
 }) {
 	const { styles } = useStyles()
 	const { i18n, t } = useTranslation("super")
+	const { t: tCommon } = useTranslation("common")
 	const isMobile = useIsMobile()
 	const [hasScrolledToBottom, setHasScrolledToBottom] = useState(false)
 	const contentRef = useRef<HTMLDivElement>(null)
+	const platformName =
+		tCommon("platform.name") || (i18n.language === "en_US" ? "Platform" : "本平台")
+	const agreementMarkdown = renderAgreementTemplate(
+		i18n.language === "en_US" ? agreetmentEn : agreetment,
+		{
+			platformName,
+			domain: typeof window !== "undefined" ? `(${window.location.hostname})` : "",
+		},
+	)
 
 	// 重置滚动状态
 	useEffect(() => {
@@ -55,15 +67,56 @@ export function WaterMarkFreeModal({
 
 	// 协议内容
 	const agreementContent = (
-		<div ref={contentRef} onScroll={handleScroll} className={styles.agreementContent}>
+		<div ref={contentRef} onScroll={handleScroll} className={styles.agreementContent} data-testid="handle-scroll">
 			<EditorBody
 				isLoading={false}
 				viewMode="markdown"
 				language="markdown"
 				isEditMode={false}
 				className={styles.editorBody}
-				content={i18n.language === "en_US" ? agreetmentEn : agreetment}
+				content={agreementMarkdown}
 			/>
+		</div>
+	)
+
+	const mobileAgreementView = (
+		<div className={styles.mobileLayout}>
+			<div
+				ref={contentRef}
+				onScroll={handleScroll}
+				className={cx(styles.agreementContent, styles.agreementContentMobile)}
+				data-testid="handle-scroll-2"
+			>
+				<EditorBody
+					isLoading={false}
+					viewMode="markdown"
+					language="markdown"
+					isEditMode={false}
+					className={styles.editorBody}
+					content={agreementMarkdown}
+				/>
+			</div>
+			<div className={styles.mobileFooter}>
+				<button
+					type="button"
+					className={cx(styles.mobileFooterButton, styles.mobileCancelButton)}
+					onClick={handleCancel}
+					data-testid="handle-cancel"
+				>
+					{t("waterMarkFree.disagree")}
+				</button>
+				<button
+					type="button"
+					disabled={!hasScrolledToBottom}
+					className={cx(styles.mobileFooterButton, styles.mobileOkButton)}
+					onClick={handleOk}
+					data-testid="handle-ok"
+				>
+					{hasScrolledToBottom
+						? t("waterMarkFree.agree")
+						: t("waterMarkFree.readAgreement")}
+				</button>
+			</div>
 		</div>
 	)
 
@@ -81,7 +134,7 @@ export function WaterMarkFreeModal({
 				...customPopupProps,
 			}}
 		>
-			{agreementContent}
+			{mobileAgreementView}
 		</CommonPopup>
 	) : (
 		<Modal

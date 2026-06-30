@@ -1,40 +1,59 @@
 import { useDeepCompareEffect, useMemoizedFn, useUpdateEffect } from "ahooks"
 import { throttle } from "lodash-es"
-import { useMemo, useRef, useState, useEffect, useCallback } from "react"
+import {
+	useMemo,
+	useRef,
+	useState,
+	useEffect,
+	useCallback,
+	useLayoutEffect,
+	type ReactNode,
+} from "react"
+import { createPortal } from "react-dom"
 import { observer } from "mobx-react-lite"
 import MessageList, { MessageListProvider } from "@/pages/superMagic/components/MessageList"
 import { useStyles } from "./styles"
-import { Topic } from "@/pages/superMagic/pages/Workspace/types"
+import type { Topic } from "@/pages/superMagic/pages/Workspace/types"
 import { userStore } from "@/models/user"
 import { useMessageChanges } from "@/pages/superMagic/hooks/useMessageChanges"
 import GlobalMentionPanelStore from "@/components/business/MentionPanel/builtin-store"
 import { topicStore, projectStore, workspaceStore } from "@/pages/superMagic/stores/core"
 import { useTaskData } from "@/pages/superMagic/hooks/useTaskData"
-import SuperMagicService from "@/pages/superMagic/services"
+import SuperMagicService, { loadProjectAttachments } from "@/pages/superMagic/services"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
-import { LongMemoryApi, SuperMagicApi } from "@/apis"
+import { LongMemoryApi } from "@/apis"
+import {
+	measureAttachmentFetch,
+	recordAttachmentsStaleResponseDropped,
+} from "@/pages/superMagic/utils/attachmentPerf"
 import { AttachmentDataProcessor } from "@/pages/superMagic/utils/attachmentDataProcessor"
 import { useAttachmentsPolling } from "@/pages/superMagic/hooks/useAttachmentsPolling"
+import { useProjectAttachmentsChangeRealtime } from "@/pages/superMagic/hooks/useProjectAttachmentsChangeRealtime"
 import projectFilesStore from "@/stores/projectFiles"
 import {
+	normalizeUpdateAttachmentsPayload,
 	releaseAttachmentsRefreshWaitersWithoutFetch,
 	resolveAttachmentsRefreshWaitersForProject,
+	type SuperMagicUpdateAttachmentsRequest,
 	withAttachmentsRefreshWaitersResolved,
 } from "@/pages/superMagic/services/attachmentsTopicSync"
 import { useInterruptAndUndoMessage } from "@/pages/superMagic/hooks/useInterruptAndUndoMessage"
 import { isCollaborationWorkspace } from "@/pages/superMagic/constants"
 import { useNoPermissionCollaborationProject } from "@/pages/superMagic/hooks/useNoPermissionCollaborationProject"
 import { useScopedTopicReadProgress } from "@/pages/superMagic/hooks/useScopedTopicReadProgress"
+import { isReadOnlyProject } from "@/pages/superMagic/utils/permission"
 import { applyOptimisticTopicRunningState } from "@/pages/superMagic/services/topicStatusSyncService"
 import ChatHeader from "./components/ChatHeader"
+import { TopicFilesPopup } from "./components/TopicFilesPopup"
 import { useTopicListActions } from "../ProjectPage/ProjectPageMain/hooks"
 import PreviewDetailPopup, {
 	PreviewDetail,
 	PreviewDetailPopupRef,
 } from "../../components/PreviewDetailPopup"
 import { useTopicMessages } from "@/pages/superMagic/hooks/useTopicMessages"
-import { getFileType, downloadFileWithAnchor } from "@/pages/superMagic/utils/handleFIle"
-import { getTemporaryDownloadUrl } from "@/pages/superMagic/utils/api"
+import { getFileType } from "@/pages/superMagic/utils/handleFIle"
+import { useMobileFilePreviewPubSub } from "@/pages/superMagic/hooks/useMobileFilePreviewPubSub"
+import { useMobileKnowledgeBasePreview } from "@/pages/superMagic/hooks/useMobileKnowledgeBasePreview"
 import { LongMemory } from "@/types/longMemory"
 import { cn } from "@/lib/utils"
 import ProjectPageInputContainer from "@/pages/superMagic/components/ProjectPageInputContainer"
@@ -46,19 +65,90 @@ import ModeAvatar from "@/pages/superMagic/components/ModeAvatar"
 import superMagicModeService from "@/services/superMagic/SuperMagicModeService"
 import { MessageListContextState } from "@/pages/superMagic/components/MessageList/context"
 import { useTopicConversationLoading } from "@/pages/superMagic/hooks/useTopicConversationLoading"
+import { RouteName } from "@/routes/constants"
+import { useLocation } from "react-router"
+import { routesMatch } from "@/routes/history/helpers"
+import {
+	getMobileTopicPageCapabilities,
+	MobileTopicPageKind,
+	resolveMobileTopicPageKind,
+} from "../shared/topicPageCapabilities"
+import { useCreateTopicListener } from "@/pages/superMagic/components/TopicMode/useCreateTopicListener"
+import { Ellipsis } from "lucide-react"
+import { useTranslation } from "react-i18next"
+import { Button } from "@/components/shadcn-ui/button"
+import { PORTAL_IDS } from "@/constants"
+import usePortalTarget from "@/hooks/usePortalTarget"
+import { useIsMobile } from "@/hooks/useIsMobile"
+import ConversationActionsPopup from "@/pages/superMagicMobile/components/ConversationActionsPopup"
+import { MobileSettingsFeedbackSheet } from "@/layouts/BaseLayoutMobile/components/MobileSettings/components/FeedbackSheet"
+import { useConversationFeedbackSheet } from "@/pages/superMagicMobile/hooks/useConversationFeedbackSheet"
+import { useMobileProjectTopicSwitch } from "@/pages/superMagicMobile/hooks/useMobileProjectTopicSwitch"
+import { useProjectTopicConversationActions } from "./hooks/useProjectTopicConversationActions"
 import type { SuperMagicMessageItem } from "@/pages/superMagic/components/MessageList/type"
+import {
+	isAbortError,
+	useLatestAbortableRequest,
+} from "@/pages/superMagic/hooks/useLatestAbortableRequest"
+import { useProjectFirstAttachmentRender } from "@/pages/superMagic/hooks/useProjectFirstAttachmentRender"
+import { resolveTopicPageMessageListFallback } from "./components/TopicPageMessageListFallback"
+import KnowledgeBasePreviewPopup from "@/pages/superMagic/components/KnowledgeBasePreviewPopup"
 
 interface TopicPageProps {
 	onHistoryClick?: () => void
 	className?: string
+	hideHeader?: boolean
+	hideChatActions?: boolean
+	hideTopicActions?: boolean
+	messageListFallbackRender?: ReactNode
+	messageListClassName?: string
+	bodyClassName?: string
+	footerClassName?: string
+	footerInnerClassName?: string
+	pageKind?: MobileTopicPageKind
+	onInitialMessagesLoadingChange?: (isLoading: boolean) => void
+	onInitialMessagesReadyChange?: (isReady: boolean) => void
 }
 
-function TopicPage({ onHistoryClick, className }: TopicPageProps = {}) {
+function TopicPage({
+	onHistoryClick,
+	className,
+	hideHeader = false,
+	hideChatActions = true,
+	hideTopicActions = false,
+	messageListFallbackRender,
+	messageListClassName,
+	bodyClassName,
+	footerClassName,
+	footerInnerClassName,
+	pageKind,
+	onInitialMessagesLoadingChange,
+	onInitialMessagesReadyChange,
+}: TopicPageProps = {}) {
+	const { t } = useTranslation("super")
 	const { styles, cx } = useStyles()
+	const isMobile = useIsMobile()
+	const location = useLocation()
+	const routeName = routesMatch(location.pathname)?.route.name as RouteName | undefined
+	const resolvedPageKind = pageKind ?? resolveMobileTopicPageKind(routeName)
+	const capabilities = getMobileTopicPageCapabilities(resolvedPageKind)
+	const isStandaloneProjectTopicPage = routeName === RouteName.SuperWorkspaceProjectTopicState
+	// 独立项目话题子页由壳层头部承载返回与标题，避免与页内 ChatHeader 叠成双头部。
+	const shouldRenderInlineHeader = !hideHeader && !isStandaloneProjectTopicPage
+	const projectTopicMorePortalTarget = usePortalTarget({
+		portalId: PORTAL_IDS.SUPER_MAGIC_MOBILE_HEADER_RIGHT_MORE_BUTTON,
+		enabled: isMobile && isStandaloneProjectTopicPage,
+	})
+	useCreateTopicListener({
+		enabled: capabilities.canCreateSiblingTopic,
+	})
 
 	// Get state from stores
 	const selectedTopic = topicStore.selectedTopic
 	const selectedProject = projectStore.selectedProject
+	const { switchToProjectTopic } = useMobileProjectTopicSwitch({
+		projectId: selectedProject?.id,
+	})
 	const selectedWorkspace = workspaceStore.selectedWorkspace
 
 	// Get task data
@@ -67,6 +157,31 @@ function TopicPage({ onHistoryClick, className }: TopicPageProps = {}) {
 	// Local state
 	const attachments = projectFilesStore.workspaceFileTree
 	const attachmentList = projectFilesStore.workspaceFilesList
+	const {
+		feedbackSheetOpen: projectTopicFeedbackSheetOpen,
+		feedbackPrefill: projectTopicFeedbackPrefill,
+		openConversationFeedback: openProjectTopicConversationFeedback,
+		closeConversationFeedback: closeProjectTopicConversationFeedback,
+	} = useConversationFeedbackSheet({
+		selectedProject,
+		selectedTopic,
+	})
+	const {
+		actionSheetVisible: projectTopicActionSheetVisible,
+		filesDrawerOpen: projectTopicFilesDrawerOpen,
+		setFilesDrawerOpen: setProjectTopicFilesDrawerOpen,
+		openConversationActionSheet: openProjectTopicActionSheet,
+		closeConversationActionSheet: closeProjectTopicActionSheet,
+		conversationActionGroups: projectTopicActionGroups,
+		conversationActionPopupTitle: projectTopicActionPopupTitle,
+		conversationActionPopupSubtitle: projectTopicActionPopupSubtitle,
+		topicActionComponents: projectTopicActionComponents,
+	} = useProjectTopicConversationActions({
+		selectedProject,
+		selectedTopic,
+		topics: topicStore.topics,
+		onOpenConversationFeedback: openProjectTopicConversationFeedback,
+	})
 
 	// Refs
 	const footerRef = useRef<HTMLDivElement>(null)
@@ -74,7 +189,12 @@ function TopicPage({ onHistoryClick, className }: TopicPageProps = {}) {
 	const [isProgrammaticScroll, setIsProgrammaticScroll] = useState(false)
 	const scrollHeightRef = useRef<number>(0)
 	const scrollTopRef = useRef<number>(0)
+	const { shouldRenderProjectFirstRequest, resetProjectFirstRequestRender } =
+		useProjectFirstAttachmentRender()
+	const { startRequest: startAttachmentsRequest, cancelCurrent: cancelAttachmentsRequest } =
+		useLatestAbortableRequest()
 	const [isShowLoadingInit, setIsShowLoadingInit] = useState(false)
+	const [filesPopupOpen, setFilesPopupOpen] = useState(false)
 
 	// Hooks
 	const { userInfo } = userStore.user
@@ -125,21 +245,36 @@ function TopicPage({ onHistoryClick, className }: TopicPageProps = {}) {
 		},
 	})
 
-	// Calculate isEmptyStatus
-	const isEmptyStatus = messages.length === 0
-
 	// Attachment polling
 	const { checkNowDebounced } = useAttachmentsPolling({
 		projectId: selectedProject?.id,
-		onAttachmentsChange: useCallback(({ tree, list }: { tree: any[]; list: never[] }) => {
-			const processedData = AttachmentDataProcessor.processAttachmentData({ tree, list })
-			projectFilesStore.setWorkspaceFileTree(processedData.tree)
+		autoStart: false,
+		onAttachmentsChange: useCallback(({ tree, list }: { tree: any[]; list: any[] }) => {
+			const processedData = AttachmentDataProcessor.processAttachmentData(
+				{ tree, list },
+				{ preserveList: true },
+			)
+			projectFilesStore.setWorkspaceFileTree(processedData.tree, {
+				list: processedData.list,
+				source: "MobileTopicPage.polling",
+			})
 		}, []),
 		onError: useMemoizedFn((error: any) => {
 			if (isCollaborationWorkspace(selectedWorkspace)) {
 				handleNoPermissionCollaborationProject(error)
 				return
 			}
+		}),
+	})
+
+	useProjectAttachmentsChangeRealtime({
+		projectId: selectedProject?.id,
+		onFallbackError: useMemoizedFn((error: unknown) => {
+			if (isCollaborationWorkspace(selectedWorkspace)) {
+				handleNoPermissionCollaborationProject(error)
+				return
+			}
+			console.error("Failed to refresh realtime attachments:", error)
 		}),
 	})
 
@@ -158,34 +293,101 @@ function TopicPage({ onHistoryClick, className }: TopicPageProps = {}) {
 	})
 	handleTopicMessagesChangeRef.current = handleTopicMessagesChange
 
+	// 让外层壳层区分“真的空会话”和“历史消息首轮还在补齐”，避免欢迎态抢占首屏。
+	useLayoutEffect(() => {
+		onInitialMessagesLoadingChange?.(isMessagesInitialLoading)
+	}, [isMessagesInitialLoading, onInitialMessagesLoadingChange])
+
+	useLayoutEffect(() => {
+		onInitialMessagesReadyChange?.(isSelectedTopicMessagesReady)
+	}, [isSelectedTopicMessagesReady, onInitialMessagesReadyChange])
+
 	// Update attachments
 	const updateAttachments = useMemoizedFn((selectedProject: any, callback?: () => void) => {
 		const projectId = selectedProject?.id as string | undefined
 		if (!projectId) {
+			cancelAttachmentsRequest()
+			resetProjectFirstRequestRender()
 			projectFilesStore.setWorkspaceFileTree([])
 			releaseAttachmentsRefreshWaitersWithoutFetch()
 			return
 		}
+		const request = startAttachmentsRequest()
+		let didCommitFinalSnapshot = false
+
 		try {
+			const shouldRenderIncrementally = shouldRenderProjectFirstRequest(projectId)
+
 			pubsub.publish(PubSubEvents.Update_Attachments_Loading, true)
 			withAttachmentsRefreshWaitersResolved(
 				projectId,
-				SuperMagicApi.getAttachmentsByProjectId({
-					projectId,
-					// @ts-ignore 使用window添加临时的token
-					temporaryToken: window.temporary_token || "",
-				})
-					.then((res: any) => {
-						const processedData = AttachmentDataProcessor.processAttachmentData(res)
-						projectFilesStore.setWorkspaceFileTree(processedData.tree)
+				measureAttachmentFetch("MobileTopicPage.updateAttachments", () =>
+					loadProjectAttachments({
+						projectId,
+						signal: request.signal,
+						onBatchSnapshot: shouldRenderIncrementally
+							? ({ tree, list, phase, isFinal }) => {
+									if (!request.isCurrent()) {
+										recordAttachmentsStaleResponseDropped(
+											"MobileTopicPage.updateAttachments",
+											{ stage: "batch_snapshot", phase },
+										)
+										return
+									}
+									const processedData =
+										AttachmentDataProcessor.processAttachmentData(
+											{ tree, list },
+											{ preserveList: true },
+										)
+									projectFilesStore.setWorkspaceFileTree(processedData.tree, {
+										list: processedData.list,
+										source: `MobileTopicPage.batch.${phase}`,
+									})
+									if (isFinal) {
+										didCommitFinalSnapshot = true
+									}
+								}
+							: undefined,
+					}),
+				)
+					.then((res: Awaited<ReturnType<typeof loadProjectAttachments>>) => {
+						if (!request.isCurrent()) {
+							recordAttachmentsStaleResponseDropped(
+								"MobileTopicPage.updateAttachments",
+								{ stage: "load_result" },
+							)
+							return
+						}
+						if (!didCommitFinalSnapshot) {
+							projectFilesStore.setWorkspaceFileTree(res.tree, {
+								list: res.list,
+								source: "MobileTopicPage.load_result",
+							})
+						}
 						GlobalMentionPanelStore.finishLoadAttachmentsPromise(projectId)
 					})
+					.catch((error: unknown) => {
+						if (isAbortError(error)) return
+						if (!request.isCurrent()) {
+							recordAttachmentsStaleResponseDropped(
+								"MobileTopicPage.updateAttachments",
+								{ stage: "load_error" },
+							)
+							return
+						}
+						console.error("Failed to fetch attachments:", error)
+						projectFilesStore.setWorkspaceFileTree([])
+					})
 					.finally(() => {
-						pubsub.publish(PubSubEvents.Update_Attachments_Loading, false)
+						if (request.isCurrent()) {
+							pubsub.publish(PubSubEvents.Update_Attachments_Loading, false)
+						}
+						request.release()
 						callback?.()
 					}),
 			)
 		} catch (error) {
+			if (isAbortError(error)) return
 			console.error("Failed to fetch attachments:", error)
 			projectFilesStore.setWorkspaceFileTree([])
 			resolveAttachmentsRefreshWaitersForProject(projectId)
@@ -193,20 +395,25 @@ function TopicPage({ onHistoryClick, className }: TopicPageProps = {}) {
 		}
 	})
 
-	useEffect(() => {
-		pubsub.subscribe(PubSubEvents.Update_Attachments, (callback) => {
+	const handleUpdateAttachments = useMemoizedFn(
+		(payloadOrCallback?: SuperMagicUpdateAttachmentsRequest) => {
+			const payload = normalizeUpdateAttachmentsPayload(payloadOrCallback)
+
 			if (selectedProject && selectedTopic) {
-				updateAttachments(selectedProject, callback)
+				updateAttachments(selectedProject, payload?.callback)
 				return
 			}
-			callback?.()
+			payload?.callback?.()
 			releaseAttachmentsRefreshWaitersWithoutFetch()
-		})
+		},
+	)
+
+	useEffect(() => {
+		pubsub.subscribe(PubSubEvents.Update_Attachments, handleUpdateAttachments)
 		return () => {
-			pubsub.unsubscribe(PubSubEvents.Update_Attachments)
+			pubsub.unsubscribe(PubSubEvents.Update_Attachments, handleUpdateAttachments)
 		}
-		// eslint-disable-next-line react-hooks/exhaustive-deps -- 与桌面 TopicPage 一致：仅依赖 project/topic 引用
-	}, [selectedProject, selectedTopic])
+	}, [handleUpdateAttachments])
 
 	// Update attachments when project changes
 	useUpdateEffect(() => {
@@ -216,11 +423,16 @@ function TopicPage({ onHistoryClick, className }: TopicPageProps = {}) {
 			updateAttachments(selectedProject)
 		}
 		return () => {
+			cancelAttachmentsRequest()
 			if (projectId) {
 				GlobalMentionPanelStore.clearInitLoadAttachmentsPromise(projectId)
 			}
 		}
 	}, [selectedProject?.id])
+
+	const refreshTopicFiles = useMemoizedFn(() => {
+		return updateAttachments(selectedProject)
+	})
 
 	// Callback functions
 	const onFileClick = useMemoizedFn((fileItem?: any) => {
@@ -244,6 +456,10 @@ function TopicPage({ onHistoryClick, className }: TopicPageProps = {}) {
 	})
 
 	const onNewTopicClick = useMemoizedFn(() => {
+		if (!capabilities.canCreateSiblingTopic) {
+			return
+		}
+
 		return SuperMagicService.handleCreateTopic({
 			selectedProject,
 		})
@@ -276,6 +492,13 @@ function TopicPage({ onHistoryClick, className }: TopicPageProps = {}) {
 			})
 		},
 	)
+
+	/**
+	 * 话题页文件入口只负责切起独立查看弹层；文件树和预览逻辑继续复用项目详情链路。
+	 */
+	const handleOpenFilesPopup = useMemoizedFn(() => {
+		setFilesPopupOpen(true)
+	})
 
 	const { hasMemoryUpdateMessage } = useMessageChanges(messages)
 
@@ -421,14 +644,20 @@ function TopicPage({ onHistoryClick, className }: TopicPageProps = {}) {
 			selectedTopic?.agent_code,
 		)
 	}, [topicMode, selectedTopic?.agent_code])
+	const resolvedMessageListFallbackRender = useMemo(
+		() => resolveTopicPageMessageListFallback(messageListFallbackRender),
+		[messageListFallbackRender],
+	)
 	const value = useMemo<MessageListContextState>(() => {
 		return {
 			allowRevoke: true,
 			allowUserMessageCopy: true,
 			allowScheduleTaskCreate: true,
 			allowMessageTooltip: true,
-			allowConversationCopy: true,
-			onTopicSwitch: topicStore.setSelectedTopic,
+			// single-topic Chat 不允许从消息卡片复制出兄弟话题，避免出现多话题能力穿透。
+			allowConversationCopy: capabilities.canCreateSiblingTopic,
+			onTopicSwitch: switchToProjectTopic,
+			projectFilesStore,
 			renderAssistantAvatar: topicModeConfig?.mode
 				? ({ className } = {}) => (
 						<ModeAvatar
@@ -439,7 +668,7 @@ function TopicPage({ onHistoryClick, className }: TopicPageProps = {}) {
 					)
 				: undefined,
 		}
-	}, [topicModeConfig])
+	}, [capabilities.canCreateSiblingTopic, switchToProjectTopic, topicModeConfig])
 
 	const setUserSelectDetail = useMemoizedFn((detail: PreviewDetail | null) => {
 		if (!detail) return
@@ -451,106 +680,71 @@ function TopicPage({ onHistoryClick, className }: TopicPageProps = {}) {
 
 	const previewDetailPopupRef = useRef<PreviewDetailPopupRef>(null)
 	const linkPreviewPopupRef = useRef<PreviewDetailPopupRef>(null)
+	const isReadonly = isReadOnlyProject(selectedProject?.user_role)
 
-	// 消息里 HTML 预览组件的全局按钮在移动端复用现有弹层，不走桌面详情面板。
-	useEffect(() => {
-		const handleOpenFileTab = (data: { fileId?: string; fileData?: any }) => {
-			const filePayload = data?.fileData
-			const fileId = filePayload?.file_id || data?.fileId
-
-			// 移动端统一把携带完整 fileData 的打开请求桥接到现有预览弹层；不需要感知来源模块。
-			if (filePayload) {
-				if (!fileId) return
-
-				setUserSelectDetail({
-					type: getFileType(filePayload?.file_extension || ""),
-					data: {
-						...filePayload,
-						file_id: fileId,
-						file_name: filePayload?.file_name || filePayload?.display_filename || "",
-					},
-					currentFileId: fileId,
-				} as PreviewDetail)
-				return
-			}
-
-			onFileClick({
-				file_id: fileId,
-				file_name: filePayload?.file_name,
-			})
-		}
-
-		pubsub.subscribe(PubSubEvents.Open_File_Tab, handleOpenFileTab)
-
-		const handleOpenFileTabByPath = (data: unknown) => {
-			const payload = data as {
-				filePath: string
-				fileName: string
-				action?: "open" | "download"
-			}
-			const normPath = (p: string) => p.replace(/^\//, "")
-			const targetPath = normPath(payload.filePath)
-			const matched = attachmentList.find(
-				(item) =>
-					!item.is_directory && normPath(item.relative_file_path || "") === targetPath,
-			)
-			if (!matched?.file_id) return
-
-			if (payload.action === "download") {
-				getTemporaryDownloadUrl({
-					file_ids: [matched.file_id],
-					is_download: true,
-				}).then((res: any) => {
-					downloadFileWithAnchor(res[0]?.url)
-				})
-			} else {
-				onFileClick({
-					file_id: matched.file_id,
-					file_name: matched.file_name || payload.fileName,
-				})
-			}
-		}
-
-		pubsub.subscribe(PubSubEvents.Open_File_Tab_By_Path, handleOpenFileTabByPath)
-
-		return () => {
-			pubsub.unsubscribe(PubSubEvents.Open_File_Tab, handleOpenFileTab)
-			pubsub.unsubscribe(PubSubEvents.Open_File_Tab_By_Path, handleOpenFileTabByPath)
-		}
-	}, [onFileClick, setUserSelectDetail, attachmentList])
+	// 移动端统一订阅消息节点中的文件预览 / 路径打开事件
+	useMobileFilePreviewPubSub({
+		attachmentList,
+		setUserSelectDetail,
+		onFileClick,
+	})
+	const knowledgeBasePreviewState = useMobileKnowledgeBasePreview()
 
 	return (
-		<div className={cn(styles.container, className)}>
-			<ChatHeader
-				selectedTopic={selectedTopic}
-				openActionsPopup={(topic: Topic) => {
-					openActionsPopup(topic, selectedProject)
-				}}
-				onNewTopicClick={onNewTopicClick}
-				onHistoryClick={onHistoryClick}
-				onShareClick={onShareClick}
-			/>
-			<div className={styles.body} ref={nodesPanelRef}>
+		<div className={cn(styles.container, className)} data-testid="topic-page-root">
+			{projectTopicMorePortalTarget &&
+				createPortal(
+					<Button
+						variant="ghost"
+						className="h-12 w-12 shrink-0 rounded-full p-0 text-foreground hover:bg-transparent active:opacity-70"
+						onClick={openProjectTopicActionSheet}
+						aria-label={t("topic.moreAria")}
+						data-testid="project-topic-header-more-button"
+					>
+						<Ellipsis className="h-[22px] w-[22px]" />
+					</Button>,
+					projectTopicMorePortalTarget,
+				)}
+			{shouldRenderInlineHeader && (
+				<ChatHeader
+					selectedTopic={selectedTopic}
+					openActionsPopup={(topic: Topic) => {
+						openActionsPopup(topic, selectedProject)
+					}}
+					onNewTopicClick={
+						capabilities.canCreateSiblingTopic ? onNewTopicClick : undefined
+					}
+					onHistoryClick={onHistoryClick}
+					onFilesClick={handleOpenFilesPopup}
+					onShareClick={onShareClick}
+				/>
+			)}
+			<div className={cn(styles.body, bodyClassName)} data-testid="topic-page-message-panel">
 				<MessageListProvider value={value}>
 					<MessageList
 						data={messages as any}
 						setSelectedDetail={setUserSelectDetail}
 						selectedTopic={selectedTopic}
-						className={cx(isEmptyStatus && styles.emptyMessageWelcome)}
+						className={cx(messageListClassName)}
+						viewportRef={nodesPanelRef}
 						handlePullMoreMessage={handlePullMoreMessage}
 						showLoading={showLoading}
 						onFileClick={onFileClick}
 						isMessagesLoading={isMessagesInitialLoading}
-						stickyMessageClassName="-top-[1px] pt-2 [--sticky-message-mask-bg:rgb(255_255_255)] [--sticky-message-mask-fade-from:rgb(255_255_255)]"
+						fallbackRender={resolvedMessageListFallbackRender}
 					/>
 				</MessageListProvider>
 			</div>
-			<div ref={footerRef} className={styles.footer}>
-				<div className="flex flex-col">
-					<ChatActions
-						onNewTopicClick={onNewTopicClick}
-						onHistoryTopicsClick={onHistoryClick}
-					/>
+			<div ref={footerRef} className={cn(styles.footer, footerClassName)} data-testid="topic-page-footer">
+				<div className={cn("flex flex-col gap-2", footerInnerClassName)} data-testid="topic-page-input-panel">
+					{!hideChatActions && (
+						<ChatActions
+							onNewTopicClick={
+								capabilities.canCreateSiblingTopic ? onNewTopicClick : undefined
+							}
+							onHistoryTopicsClick={onHistoryClick}
+						/>
+					)}
 					<ProjectPageInputContainer
 						className="mx-auto max-w-3xl rounded-2xl"
 						classNames={{
@@ -574,12 +768,62 @@ function TopicPage({ onHistoryClick, className }: TopicPageProps = {}) {
 					/>
 				</div>
 			</div>
-			{topicActionComponents}
+			{!hideTopicActions &&
+				(isStandaloneProjectTopicPage
+					? projectTopicActionComponents
+					: topicActionComponents)}
+			{isStandaloneProjectTopicPage ? (
+				<ConversationActionsPopup
+					visible={projectTopicActionSheetVisible}
+					title={projectTopicActionPopupTitle}
+					subtitle={projectTopicActionPopupSubtitle}
+					actionGroups={projectTopicActionGroups}
+					onClose={closeProjectTopicActionSheet}
+				/>
+			) : null}
+			{isStandaloneProjectTopicPage ? (
+				<MobileSettingsFeedbackSheet
+					open={projectTopicFeedbackSheetOpen}
+					onClose={closeProjectTopicConversationFeedback}
+					prefill={projectTopicFeedbackPrefill}
+				/>
+			) : null}
+			{isStandaloneProjectTopicPage ? (
+				<TopicFilesPopup
+					open={projectTopicFilesDrawerOpen}
+					onOpenChange={setProjectTopicFilesDrawerOpen}
+					attachments={attachments}
+					attachmentList={attachmentList}
+					selectedProject={selectedProject}
+					selectedTopic={selectedTopic}
+					selectedWorkspace={selectedWorkspace}
+					projects={projectStore.projects}
+					workspaces={workspaceStore.workspaces}
+					projectId={selectedProject?.id}
+					refreshAttachments={refreshTopicFiles}
+				/>
+			) : null}
+			{!isStandaloneProjectTopicPage ? (
+				<TopicFilesPopup
+					open={filesPopupOpen}
+					onOpenChange={setFilesPopupOpen}
+					attachments={attachments}
+					attachmentList={attachmentList}
+					selectedProject={selectedProject}
+					selectedTopic={selectedTopic}
+					selectedWorkspace={selectedWorkspace}
+					projects={projectStore.projects}
+					workspaces={workspaceStore.workspaces}
+					projectId={selectedProject?.id}
+					refreshAttachments={refreshTopicFiles}
+				/>
+			) : null}
 			<PreviewDetailPopup
 				ref={previewDetailPopupRef}
 				setUserSelectDetail={setUserSelectDetail}
 				selectedTopic={selectedTopic}
 				selectedProject={selectedProject}
+				allowEdit={!isReadonly}
 				onOpenNewPopup={(detail, attachmentTree, attachmentList) => {
 					linkPreviewPopupRef.current?.open(detail, attachmentTree, attachmentList)
 				}}
@@ -589,13 +833,16 @@ function TopicPage({ onHistoryClick, className }: TopicPageProps = {}) {
 				selectedTopic={selectedTopic}
 				selectedProject={selectedProject}
 				ref={linkPreviewPopupRef}
-				setUserSelectDetail={(detail: any) => {
+				allowEdit={!isReadonly}
+				setUserSelectDetail={(detail: PreviewDetail | null) => {
+					if (!detail) return
 					linkPreviewPopupRef.current?.open(detail, attachments, attachmentList)
 				}}
 				onClose={() => {
 					// 关闭链接弹层时不做任何操作
 				}}
 			/>
+			<KnowledgeBasePreviewPopup state={knowledgeBasePreviewState} />
 		</div>
 	)
 }

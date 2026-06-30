@@ -406,6 +406,21 @@ class TopicDomainService
         );
     }
 
+    /**
+     * 批量统计用户在项目下的可见话题数量.
+     *
+     * @param int[] $projectIds
+     * @return array<int, int> [project_id => topic_count]
+     */
+    public function countUserVisibleTopicsByProjectIds(array $projectIds, string $userId): array
+    {
+        if (empty($projectIds)) {
+            return [];
+        }
+
+        return $this->topicRepository->countUserVisibleTopicsByProjectIds($projectIds, $userId);
+    }
+
     public function getProjectSidebarTopics(
         int $projectId,
         string $userId,
@@ -700,6 +715,19 @@ class TopicDomainService
         ];
         $data = [
             'agent_image' => $agentImage,
+            'updated_uid' => $dataIsolation->getCurrentUserId(),
+            'updated_at' => date('Y-m-d H:i:s'),
+        ];
+        return $this->topicRepository->updateTopicByCondition($conditions, $data);
+    }
+
+    public function updateTopicAgentCode(DataIsolation $dataIsolation, int $id, string $agentCode): bool
+    {
+        $conditions = [
+            'id' => $id,
+        ];
+        $data = [
+            'agent_code' => $agentCode,
             'updated_uid' => $dataIsolation->getCurrentUserId(),
             'updated_at' => date('Y-m-d H:i:s'),
         ];

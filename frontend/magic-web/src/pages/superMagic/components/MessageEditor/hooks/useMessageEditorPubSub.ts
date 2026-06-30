@@ -13,6 +13,7 @@ import {
 	type MultipleFilesDragData,
 	type PPTSlideDragData,
 } from "../utils/drag"
+import { runActiveEditor, useLatestActiveEditor } from "../utils/editorLifecycle"
 
 interface UseMessageEditorPubSubParams {
 	editor: Editor | null
@@ -46,12 +47,9 @@ function isDragData(data: unknown): data is DragData {
 }
 
 function safeEditorFocus(editor: Editor | null) {
-	if (!editor || editor.isDestroyed) return
-	try {
-		editor.commands.focus()
-	} catch {
-		// view may not be mounted yet during rapid state transitions
-	}
+	runActiveEditor(editor, (activeEditor) => {
+		activeEditor.commands.focus()
+	})
 }
 
 function useMessageEditorPubSub({
@@ -62,6 +60,8 @@ function useMessageEditorPubSub({
 	enableMessageSendByContent,
 	onSendMessageByContent,
 }: UseMessageEditorPubSubParams) {
+	const activeEditorRef = useLatestActiveEditor(editor)
+
 	useEffect(() => {
 		const handleAddFileToChat = (data: {
 			items: TiptapMentionAttributes[]
@@ -77,13 +77,15 @@ function useMessageEditorPubSub({
 							type: "mention",
 							attrs: item,
 						}))
-						editor?.commands.insertContent(mentions)
-						if (autoFocus) {
-							safeEditorFocus(editor)
-							if (isMobile) {
-								editor?.commands.scrollIntoView()
+						runActiveEditor(activeEditorRef.current, (activeEditor) => {
+							activeEditor.commands.insertContent(mentions)
+							if (autoFocus) {
+								activeEditor.commands.focus()
+								if (isMobile) {
+									activeEditor.commands.scrollIntoView()
+								}
 							}
-						}
+						})
 					}
 				})
 			}, 400)
@@ -94,12 +96,14 @@ function useMessageEditorPubSub({
 		return () => {
 			pubsub.unsubscribe(PubSubEvents.Add_File_To_Chat, handleAddFileToChat)
 		}
-	}, [editor, isMobile, draftStore])
+	}, [activeEditorRef, isMobile, draftStore])
 
 	useEffect(() => {
 		const handleInsertDragDataToEditor = (dragData: unknown) => {
-			if (!editor || !isDragData(dragData)) return
-			insertMentionFromDroppedData({ editor, data: dragData })
+			if (!isDragData(dragData)) return
+			runActiveEditor(activeEditorRef.current, (activeEditor) => {
+				insertMentionFromDroppedData({ editor: activeEditor, data: dragData })
+			})
 		}
 
 		pubsub.subscribe(PubSubEvents.Insert_Drag_Data_To_Editor, handleInsertDragDataToEditor)
@@ -110,15 +114,17 @@ function useMessageEditorPubSub({
 				handleInsertDragDataToEditor,
 			)
 		}
-	}, [editor])
+	}, [activeEditorRef])
 
 	const handleAddContent = useMemoizedFn((data: AddContentPayload) => {
 		const { content, extraData } = data
 		if (content) updateContent(content)
 		if (extraData?.hasInput) {
-			editor?.commands?.focusFirstSuperPlaceholder?.()
+			runActiveEditor(activeEditorRef.current, (activeEditor) => {
+				activeEditor.commands.focusFirstSuperPlaceholder?.()
+			})
 		} else {
-			safeEditorFocus(editor)
+			safeEditorFocus(activeEditorRef.current)
 		}
 	})
 
@@ -134,7 +140,7 @@ function useMessageEditorPubSub({
 			// JSONContent object — use directly
 			if (typeof message === "object" && !Array.isArray(message) && message !== null) {
 				updateContent(message)
-				safeEditorFocus(editor)
+				safeEditorFocus(activeEditorRef.current)
 				return
 			}
 			const lines = Array.isArray(message) ? message : [message]
@@ -149,13 +155,13 @@ function useMessageEditorPubSub({
 				content: [{ type: "paragraph", content: inlineNodes }],
 			}
 			updateContent(content)
-			safeEditorFocus(editor)
+			safeEditorFocus(activeEditorRef.current)
 		}
 		pubsub.subscribe(PubSubEvents.Set_Input_Message, handleSetInputMessage)
 		return () => {
 			pubsub.unsubscribe(PubSubEvents.Set_Input_Message, handleSetInputMessage)
 		}
-	}, [editor?.commands, updateContent])
+	}, [activeEditorRef, updateContent])
 
 	useEffect(() => {
 		if (!enableMessageSendByContent) {
@@ -180,37 +186,69 @@ function useMessageEditorPubSub({
 				],
 			}
 			updateContent(content)
-			safeEditorFocus(editor)
+			safeEditorFocus(activeEditorRef.current)
 		}
 		pubsub.subscribe(PubSubEvents.Set_Demo_Text_To_Input, handleInsertDemoText)
 		return () => {
 			pubsub.unsubscribe(PubSubEvents.Set_Demo_Text_To_Input, handleInsertDemoText)
 		}
-	}, [editor, updateContent])
+	}, [activeEditorRef, updateContent])
 
 	useEffect(() => {
-		const handleAppendSuggestion = (text: string) => {
-			if (typeof text !== "string" || !text || !editor) return
+		const handleAppendSuggestion = (input: string | JSONContent) => {
+			if (!input) return
 
-			const newParagraph: JSONContent = {
-				type: "paragraph",
-				content: [{ type: "text", text }],
-			}
-			const currentContent = editor.getJSON()
-			const mergedContent: JSONContent = !editor?.isEmpty
-				? {
-						...currentContent,
-						content: [...(currentContent.content ?? []), newParagraph],
-					}
-				: { type: "doc", content: [newParagraph] }
-			updateContent(mergedContent)
-			safeEditorFocus(editor)
+			// Determine new nodes to append
+			const newNodes: JSONContent[] =
+				typeof input === "string"
+					? [{ type: "paragraph", content: [{ type: "text", text: input }] }]
+					: input.type === "doc"
+						? (input.content ?? [])
+						: [input]
+
+			if (!newNodes.length) return
+
+			runActiveEditor(activeEditorRef.current, (activeEditor) => {
+				const currentContent = activeEditor.getJSON()
+				const mergedContent: JSONContent = !activeEditor.isEmpty
+					? {
+							...currentContent,
+							content: [...(currentContent.content ?? []), ...newNodes],
+						}
+					: { type: "doc", content: newNodes }
+				updateContent(mergedContent)
+				activeEditor.commands.focus()
+			})
 		}
 		pubsub.subscribe(PubSubEvents.Append_Suggestion_To_Editor, handleAppendSuggestion)
 		return () => {
 			pubsub.unsubscribe(PubSubEvents.Append_Suggestion_To_Editor, handleAppendSuggestion)
 		}
-	}, [editor, updateContent])
+	}, [activeEditorRef, updateContent])
+
+	useEffect(() => {
+		const handleAppendContent = (content: JSONContent) => {
+			if (!content || !activeEditorRef.current) return
+
+			const newNodes: JSONContent[] =
+				content.type === "doc" ? (content.content ?? []) : [content]
+			if (newNodes.length === 0) return
+
+			const currentContent = activeEditorRef.current.getJSON()
+			const mergedContent: JSONContent = !activeEditorRef.current?.isEmpty
+				? {
+						...currentContent,
+						content: [...(currentContent.content ?? []), ...newNodes],
+					}
+				: { type: "doc", content: newNodes }
+			updateContent(mergedContent)
+			safeEditorFocus(activeEditorRef.current)
+		}
+		pubsub.subscribe(PubSubEvents.Append_Content_To_Editor, handleAppendContent)
+		return () => {
+			pubsub.unsubscribe(PubSubEvents.Append_Content_To_Editor, handleAppendContent)
+		}
+	}, [activeEditorRef, updateContent])
 }
 
 export default useMessageEditorPubSub

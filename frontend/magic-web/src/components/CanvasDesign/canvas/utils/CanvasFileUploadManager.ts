@@ -14,7 +14,12 @@ import {
 	isVideoFile,
 	isAudioFile,
 } from "./utils"
-import { normalizeUploadFileResponse } from "./pathUtils"
+import {
+	isRemoteOrSpecialPath,
+	normalizePathLocal,
+	normalizeUploadFileResponse,
+	stripCurrentDirectoryPrefix,
+} from "./pathUtils"
 import { getAllExistingNames } from "./elementUtils"
 import { ImageElement as ImageElementClass } from "../element/elements/ImageElement"
 import { VideoElement as VideoElementClass } from "../element/elements/VideoElement"
@@ -22,7 +27,6 @@ import {
 	isDefaultClipboardFilenameFile,
 	type CanvasElementClipboardFileMetadata,
 } from "./CanvasElementClipboard"
-import { logCanvasElementClipboard } from "./CanvasElementClipboardLogger"
 
 /**
  * 上传请求
@@ -64,6 +68,10 @@ export interface UploadFileElementOptions {
 	elementData?: Partial<ImageElementData> | Partial<VideoElementData>
 	/** 是否管理历史记录（默认 true，在批量操作时应设为 false） */
 	manageHistory?: boolean
+	/** 上传完成回调（用于外部同步真实上传进度） */
+	onUploadComplete?: (elementId: string, result: UploadFileResponse) => void
+	/** 上传失败回调（用于外部同步真实上传进度） */
+	onUploadFailed?: (elementId: string, error: Error) => void
 }
 
 /**
@@ -113,17 +121,27 @@ interface PersistedRemoteResourceTransferEntry {
 	updatedAt: number
 }
 
+type RemoteResourceTransferPhase = "download" | "upload"
+
+class RemoteResourceTransferError extends Error {
+	public readonly phase: RemoteResourceTransferPhase
+
+	constructor(phase: RemoteResourceTransferPhase, message: string) {
+		super(message)
+		this.name = "RemoteResourceTransferError"
+		this.phase = phase
+	}
+}
+
 const REMOTE_RESOURCE_TRANSFER_STORAGE_KEY = "canvas-design:remote-resource-transfers:v1"
 const REMOTE_RESOURCE_TRANSFER_TTL = 7 * 24 * 60 * 60 * 1000
 
-function summarizeUploadResult(result: UploadFileResponse) {
-	return {
-		path: result.path,
-		fileName: result.fileName,
-		expiresAt: result.expires_at,
-		source: result.source,
-		hasSrc: Boolean(result.src),
-	}
+function isRemoteResourceDownloadError(error: Error): boolean {
+	return error instanceof RemoteResourceTransferError && error.phase === "download"
+}
+
+function getTransferErrorMessage(error: unknown, fallback: string): string {
+	return error instanceof Error ? error.message : fallback
 }
 
 function getFileContentSignature(file: File): string {
@@ -167,6 +185,9 @@ export class CanvasFileUploadManager {
 	 * 第一次粘贴负责下载+上传；上传中再次粘贴复用同一个 Promise；完成后再次粘贴直接复用 B 画布资源。
 	 */
 	private readonly remoteResourceTransfers = new Map<string, RemoteResourceTransfer>()
+
+	/** 跨画布粘贴时，生成请求里的隐藏参考资源正在后台迁移；此期间资源预览应保持 loading，不触发 not-found toast */
+	private readonly pendingRemoteResourceLoadDeferrals = new Map<string, number>()
 
 	/** 临时元素删除监听（用于同步移除待完成上传） */
 	private readonly handleTemporaryDeleted = (event: { data: { elementId: string } }) => {
@@ -259,6 +280,53 @@ export class CanvasFileUploadManager {
 		return this.currentPendingBatchId
 	}
 
+	public getRemoteResourceLoadDeferralKey(path?: string | null): string | null {
+		const rawPath = path?.trim()
+		if (!rawPath || isRemoteOrSpecialPath(rawPath)) {
+			return null
+		}
+
+		const key = stripCurrentDirectoryPrefix(normalizePathLocal(rawPath))
+		if (!key || key === ".") {
+			return null
+		}
+		return key
+	}
+
+	public shouldDeferRemoteResourceLoad(path: string): boolean {
+		const key = this.getRemoteResourceLoadDeferralKey(path)
+		return !!key && (this.pendingRemoteResourceLoadDeferrals.get(key) ?? 0) > 0
+	}
+
+	public registerPendingRemoteResourceLoadDeferral(path: string): () => void {
+		const key = this.getRemoteResourceLoadDeferralKey(path)
+		if (!key) {
+			return () => undefined
+		}
+
+		const currentCount = this.pendingRemoteResourceLoadDeferrals.get(key) ?? 0
+		this.pendingRemoteResourceLoadDeferrals.set(key, currentCount + 1)
+		let released = false
+		return () => {
+			if (released) {
+				return
+			}
+			released = true
+
+			const nextCount = (this.pendingRemoteResourceLoadDeferrals.get(key) ?? 0) - 1
+			if (nextCount > 0) {
+				this.pendingRemoteResourceLoadDeferrals.set(key, nextCount)
+				return
+			}
+
+			this.pendingRemoteResourceLoadDeferrals.delete(key)
+			this.canvas.eventEmitter.emit({
+				type: "resource:remote-load-deferral-released",
+				data: { path, key },
+			})
+		}
+	}
+
 	public getCompletedRemoteResourceTransfer(options: {
 		sourceCanvasId?: string
 		metadata: CanvasElementClipboardFileMetadata
@@ -283,6 +351,112 @@ export class CanvasFileUploadManager {
 		}
 
 		return null
+	}
+
+	public async getReusableCompletedRemoteResourceTransfer(options: {
+		sourceCanvasId?: string
+		metadata: CanvasElementClipboardFileMetadata
+		allowFileInfoFallback?: boolean
+	}): Promise<UploadFileResponse | null> {
+		const key = this.getRemoteResourceTransferKey(options)
+		if (!key) {
+			return null
+		}
+
+		const completedTransfer = this.getCompletedRemoteResourceTransfer(options)
+		if (!completedTransfer) {
+			return null
+		}
+		const isUsable = await this.isCompletedRemoteResourceTransferUsable(completedTransfer, {
+			allowFileInfoFallback: options.allowFileInfoFallback ?? true,
+		})
+		if (isUsable) {
+			return completedTransfer
+		}
+
+		this.forgetCompletedRemoteResourceTransfer(key)
+		return null
+	}
+
+	public async transferRemoteResource(options: {
+		sourceCanvasId?: string
+		metadata: CanvasElementClipboardFileMetadata
+		onDownloadFailed?: (error: Error) => void
+	}): Promise<UploadFileResponse | null> {
+		const { sourceCanvasId, metadata, onDownloadFailed } = options
+		const sourceRef = metadata.sourceRef
+		const batchId = this.currentPendingBatchId ?? "direct-remote-transfer"
+
+		if (!sourceRef?.ossUrl) {
+			return null
+		}
+
+		if (!this.canvas.magicConfigManager.config?.methods?.uploadFiles) {
+			return null
+		}
+
+		const completedTransfer = await this.getReusableCompletedRemoteResourceTransfer({
+			sourceCanvasId,
+			metadata,
+			allowFileInfoFallback: metadata.role !== "generation-resource",
+		})
+		if (completedTransfer) {
+			return completedTransfer
+		}
+
+		const transferKey = this.getRemoteResourceTransferKey({ sourceCanvasId, metadata })
+		const existingTransfer = transferKey
+			? this.remoteResourceTransfers.get(transferKey)
+			: undefined
+
+		let transferPromise: Promise<UploadFileResponse>
+		if (existingTransfer?.status === "uploading") {
+			transferPromise = existingTransfer.promise
+		} else {
+			if (existingTransfer?.status === "failed" && transferKey) {
+				this.remoteResourceTransfers.delete(transferKey)
+			}
+
+			transferPromise = this.createRemoteResourceTransferPromise({
+				metadata,
+				sourceUrl: sourceRef.ossUrl,
+				batchId,
+				transferKey,
+			})
+
+			if (transferKey) {
+				this.remoteResourceTransfers.set(transferKey, {
+					status: "uploading",
+					promise: transferPromise,
+				})
+				void transferPromise
+					.then((result) => {
+						this.remoteResourceTransfers.set(transferKey, {
+							status: "completed",
+							result,
+						})
+						this.persistCompletedRemoteResourceTransfer(transferKey, result)
+					})
+					.catch((error) => {
+						this.remoteResourceTransfers.set(transferKey, {
+							status: "failed",
+							error: error instanceof Error ? error : new Error(String(error)),
+						})
+					})
+			}
+		}
+
+		try {
+			const result = await transferPromise
+			return result
+		} catch (error) {
+			const transferError =
+				error instanceof Error ? error : new Error("Remote file transfer failed")
+			if (isRemoteResourceDownloadError(transferError)) {
+				onDownloadFailed?.(transferError)
+			}
+			return null
+		}
 	}
 
 	public hasPendingUploadBatch(batchId: string): boolean {
@@ -383,27 +557,10 @@ export class CanvasFileUploadManager {
 	private async uploadSingle(request: UploadRequest): Promise<void> {
 		const { file, onUploadComplete, onUploadFailed } = request
 
-		logCanvasElementClipboard("upload-single:start", {
-			elementId: request.elementId,
-			fileName: file.name,
-			fileType: file.type,
-			fileSize: file.size,
-			uploadSubDir: this.getUploadSubDir(file),
-			overwrite: this.getUploadFileOverwrite(file),
-		})
-
 		// 检查是否有 uploadFiles 方法
 		const uploadFilesMethod = this.canvas.magicConfigManager.config?.methods?.uploadFiles
 		if (!uploadFilesMethod) {
 			const error = new Error("uploadFiles method not available")
-			logCanvasElementClipboard("upload-single:error", {
-				elementId: request.elementId,
-				fileName: file.name,
-				fileType: file.type,
-				fileSize: file.size,
-				message: error.message,
-				error,
-			})
 			onUploadFailed(error)
 			return
 		}
@@ -417,24 +574,9 @@ export class CanvasFileUploadManager {
 					overwrite: this.getUploadFileOverwrite(file, [file]),
 					onUploadComplete: (result) => {
 						const normalizedResult = normalizeUploadFileResponse(result)
-						logCanvasElementClipboard("upload-single:complete", {
-							elementId: request.elementId,
-							fileName: file.name,
-							fileType: file.type,
-							fileSize: file.size,
-							result: summarizeUploadResult(normalizedResult),
-						})
 						onUploadComplete(normalizedResult)
 					},
 					onUploadFailed: (error) => {
-						logCanvasElementClipboard("upload-single:failed", {
-							elementId: request.elementId,
-							fileName: file.name,
-							fileType: file.type,
-							fileSize: file.size,
-							message: error instanceof Error ? error.message : String(error),
-							error,
-						})
 						onUploadFailed(error)
 					},
 				},
@@ -445,14 +587,6 @@ export class CanvasFileUploadManager {
 		} catch (error) {
 			// 上传失败，通知回调
 			const uploadError = error instanceof Error ? error : new Error("Upload failed")
-			logCanvasElementClipboard("upload-single:error", {
-				elementId: request.elementId,
-				fileName: file.name,
-				fileType: file.type,
-				fileSize: file.size,
-				message: uploadError.message,
-				error,
-			})
 			onUploadFailed(uploadError)
 		}
 	}
@@ -471,6 +605,20 @@ export class CanvasFileUploadManager {
 			// 取出队列中的所有请求
 			const requests = [...this.uploadQueue]
 			this.uploadQueue = []
+			const settledRequests = new Set<UploadRequest>()
+			const settleUploadComplete = (
+				request: UploadRequest,
+				result: UploadFileResponse,
+			): void => {
+				if (settledRequests.has(request)) return
+				settledRequests.add(request)
+				request.onUploadComplete(result)
+			}
+			const settleUploadFailed = (request: UploadRequest, error: Error): void => {
+				if (settledRequests.has(request)) return
+				settledRequests.add(request)
+				request.onUploadFailed(error)
+			}
 
 			// 检查是否有 uploadFiles 方法
 			const uploadFilesMethod = this.canvas.magicConfigManager.config?.methods?.uploadFiles
@@ -478,15 +626,7 @@ export class CanvasFileUploadManager {
 				const error = new Error("uploadFiles method not available")
 				// 所有请求都标记为失败
 				for (const request of requests) {
-					logCanvasElementClipboard("upload-queue:error", {
-						elementId: request.elementId,
-						fileName: request.file.name,
-						fileType: request.file.type,
-						fileSize: request.file.size,
-						message: error.message,
-						error,
-					})
-					request.onUploadFailed(error)
+					settleUploadFailed(request, error)
 				}
 				return
 			}
@@ -499,39 +639,12 @@ export class CanvasFileUploadManager {
 				overwrite: this.getUploadFileOverwrite(req.file, requestFiles),
 				onUploadComplete: (result) => {
 					const normalizedResult = normalizeUploadFileResponse(result)
-					logCanvasElementClipboard("upload-queue:complete", {
-						elementId: req.elementId,
-						fileName: req.file.name,
-						fileType: req.file.type,
-						fileSize: req.file.size,
-						result: summarizeUploadResult(normalizedResult),
-					})
-					req.onUploadComplete(normalizedResult)
+					settleUploadComplete(req, normalizedResult)
 				},
 				onUploadFailed: (error) => {
-					logCanvasElementClipboard("upload-queue:failed", {
-						elementId: req.elementId,
-						fileName: req.file.name,
-						fileType: req.file.type,
-						fileSize: req.file.size,
-						message: error instanceof Error ? error.message : String(error),
-						error,
-					})
-					req.onUploadFailed(error)
+					settleUploadFailed(req, error)
 				},
 			}))
-
-			logCanvasElementClipboard("upload-queue:start", {
-				requestCount: requests.length,
-				files: requests.map((request) => ({
-					elementId: request.elementId,
-					fileName: request.file.name,
-					fileType: request.file.type,
-					fileSize: request.file.size,
-					uploadSubDir: this.getUploadSubDir(request.file),
-					overwrite: this.getUploadFileOverwrite(request.file, requestFiles),
-				})),
-			})
 
 			try {
 				// 一次性批量上传所有文件
@@ -543,15 +656,7 @@ export class CanvasFileUploadManager {
 				// 上传失败，所有请求都标记为失败
 				const errorMessage = error instanceof Error ? error.message : "Upload failed"
 				for (const request of requests) {
-					logCanvasElementClipboard("upload-queue:error", {
-						elementId: request.elementId,
-						fileName: request.file.name,
-						fileType: request.file.type,
-						fileSize: request.file.size,
-						message: errorMessage,
-						error,
-					})
-					request.onUploadFailed(new Error(errorMessage))
+					settleUploadFailed(request, new Error(errorMessage))
 				}
 			}
 		} finally {
@@ -621,25 +726,16 @@ export class CanvasFileUploadManager {
 	 * @returns 创建的元素ID，失败返回 null
 	 */
 	public async uploadFileElement(options: UploadFileElementOptions): Promise<string | null> {
-		const { file, position, elementData, manageHistory = true } = options
-
-		logCanvasElementClipboard("upload-file-element:start", {
-			fileName: file.name,
-			fileType: file.type,
-			fileSize: file.size,
+		const {
+			file,
 			position,
-			hasElementData: Boolean(elementData),
 			elementData,
-			manageHistory,
-		})
+			manageHistory = true,
+			onUploadComplete,
+			onUploadFailed,
+		} = options
 
 		if (!this.canvas.magicConfigManager.config?.methods?.uploadFiles) {
-			logCanvasElementClipboard("upload-file-element:skip", {
-				reason: "uploadFiles method not available",
-				fileName: file.name,
-				fileType: file.type,
-				fileSize: file.size,
-			})
 			return null
 		}
 
@@ -656,23 +752,6 @@ export class CanvasFileUploadManager {
 			const elementId = generateElementId()
 			const isVideo = isVideoFile(file)
 			const batchId = this.currentPendingBatchId ?? this.beginPendingUploadBatch()
-
-			logCanvasElementClipboard("upload-file-element:prepare", {
-				fileName: file.name,
-				fileType: file.type,
-				fileSize: file.size,
-				dimensions,
-				position,
-				targetX,
-				targetY,
-				baseName,
-				uniqueName,
-				elementId,
-				elementType: isVideo ? ElementTypeEnum.Video : ElementTypeEnum.Image,
-				batchId,
-				uploadSubDir: this.getUploadSubDir(file),
-				overwrite: this.getUploadFileOverwrite(file),
-			})
 
 			const canvasFileElement = isVideo
 				? ({
@@ -705,14 +784,16 @@ export class CanvasFileUploadManager {
 				this.canvas.elementManager.createTemporary(canvasFileElement, {
 					uploadFiles: [file],
 					onUploadComplete: (elementId) => {
-						logCanvasElementClipboard("upload-file-element:upload-complete", {
-							elementId,
-							fileName: file.name,
-							fileType: file.type,
-							fileSize: file.size,
-							batchId,
-						})
+						const element = this.canvas.elementManager.getElementInstance(elementId)
+						const uploadResult =
+							element instanceof ImageElementClass ||
+							element instanceof VideoElementClass
+								? element.uploadResult
+								: undefined
 						const hasChanged = this.handleUploadCompleteInternal(elementId)
+						if (uploadResult) {
+							onUploadComplete?.(elementId, uploadResult)
+						}
 						if (historyManager && hasChanged) {
 							const pendingBatchId = this.findPendingBatchIdByElement(elementId)
 							if (pendingBatchId) {
@@ -723,16 +804,8 @@ export class CanvasFileUploadManager {
 						}
 					},
 					onUploadFailed: (elementId, error) => {
-						logCanvasElementClipboard("upload-file-element:upload-failed", {
-							elementId,
-							fileName: file.name,
-							fileType: file.type,
-							fileSize: file.size,
-							batchId,
-							message: error instanceof Error ? error.message : String(error),
-							error,
-						})
 						const hasChanged = this.handleUploadFailedInternal(elementId, error)
+						onUploadFailed?.(elementId, error)
 						if (historyManager && hasChanged) {
 							const pendingBatchId = this.findPendingBatchIdByElement(elementId)
 							if (pendingBatchId) {
@@ -744,13 +817,6 @@ export class CanvasFileUploadManager {
 					},
 				})
 				this.registerPendingUploadElement(batchId, elementId)
-				logCanvasElementClipboard("upload-file-element:created", {
-					elementId,
-					fileName: file.name,
-					fileType: file.type,
-					fileSize: file.size,
-					batchId,
-				})
 			} finally {
 				historyManager?.enable()
 				if (!this.currentPendingBatchId) {
@@ -760,16 +826,6 @@ export class CanvasFileUploadManager {
 
 			return elementId
 		} catch (error) {
-			logCanvasElementClipboard("upload-file-element:error", {
-				fileName: file.name,
-				fileType: file.type,
-				fileSize: file.size,
-				position,
-				hasElementData: Boolean(elementData),
-				elementData,
-				message: error instanceof Error ? error.message : String(error),
-				error,
-			})
 			return null
 		}
 	}
@@ -788,35 +844,11 @@ export class CanvasFileUploadManager {
 		} = options
 		const sourceRef = metadata.sourceRef
 
-		logCanvasElementClipboard("upload-remote-file-element:start", {
-			elementId: metadata.elementId,
-			sourceCanvasId,
-			filename: metadata.filename,
-			mimeType: metadata.mimeType,
-			sourceRef,
-			position,
-			hasElementData: Boolean(elementData),
-			elementData,
-			manageHistory,
-		})
-
 		if (!sourceRef?.ossUrl) {
-			logCanvasElementClipboard("upload-remote-file-element:skip", {
-				reason: "missing-source-ref",
-				elementId: metadata.elementId,
-				filename: metadata.filename,
-				mimeType: metadata.mimeType,
-			})
 			return null
 		}
 
 		if (!this.canvas.magicConfigManager.config?.methods?.uploadFiles) {
-			logCanvasElementClipboard("upload-remote-file-element:skip", {
-				reason: "uploadFiles method not available",
-				elementId: metadata.elementId,
-				filename: metadata.filename,
-				mimeType: metadata.mimeType,
-			})
 			return null
 		}
 
@@ -865,10 +897,6 @@ export class CanvasFileUploadManager {
 			this.canvas.elementManager.createTemporary(canvasFileElement, {
 				uploadFiles: [],
 				onUploadComplete: (elementId) => {
-					logCanvasElementClipboard("upload-remote-file-element:upload-complete", {
-						elementId,
-						batchId,
-					})
 					const hasChanged = this.handleUploadCompleteInternal(elementId)
 					if (historyManager && hasChanged) {
 						const pendingBatchId = this.findPendingBatchIdByElement(elementId)
@@ -882,12 +910,6 @@ export class CanvasFileUploadManager {
 					}
 				},
 				onUploadFailed: (elementId, error) => {
-					logCanvasElementClipboard("upload-remote-file-element:upload-failed", {
-						elementId,
-						batchId,
-						message: error instanceof Error ? error.message : String(error),
-						error,
-					})
 					const hasChanged = this.handleUploadFailedInternal(elementId, error)
 					if (historyManager && hasChanged) {
 						const pendingBatchId = this.findPendingBatchIdByElement(elementId)
@@ -902,13 +924,6 @@ export class CanvasFileUploadManager {
 				},
 			})
 			this.registerPendingUploadElement(batchId, elementId)
-			logCanvasElementClipboard("upload-remote-file-element:created", {
-				elementId,
-				sourceElementId: metadata.elementId,
-				filename: metadata.filename,
-				mimeType: metadata.mimeType,
-				batchId,
-			})
 		} finally {
 			historyManager?.enable()
 			if (!this.currentPendingBatchId) {
@@ -953,13 +968,6 @@ export class CanvasFileUploadManager {
 			: undefined
 
 		if (existingTransfer?.status === "completed") {
-			logCanvasElementClipboard("upload-remote-file-element:reuse-completed", {
-				elementId,
-				sourceElementId: metadata.elementId,
-				transferKey,
-				result: summarizeUploadResult(existingTransfer.result),
-				batchId,
-			})
 			this.applyRemoteUploadResult(
 				elementId,
 				existingTransfer.result,
@@ -970,12 +978,6 @@ export class CanvasFileUploadManager {
 		}
 
 		if (existingTransfer?.status === "uploading") {
-			logCanvasElementClipboard("upload-remote-file-element:reuse-uploading", {
-				elementId,
-				sourceElementId: metadata.elementId,
-				transferKey,
-				batchId,
-			})
 			this.attachRemoteResourceTransfer({
 				elementId,
 				metadata,
@@ -1042,42 +1044,73 @@ export class CanvasFileUploadManager {
 		return `${targetCanvasId}:${options.sourceCanvasId}:${sourcePath}`
 	}
 
+	private async isCompletedRemoteResourceTransferUsable(
+		result: UploadFileResponse,
+		options: { allowFileInfoFallback: boolean },
+	): Promise<boolean> {
+		if (!options.allowFileInfoFallback) {
+			return true
+		}
+
+		const getFileResourceMeta =
+			this.canvas.magicConfigManager.config?.methods?.getFileResourceMeta
+		if (getFileResourceMeta) {
+			try {
+				const resourceMeta = await getFileResourceMeta(result.path, {
+					useImageProcess: false,
+				})
+				return resourceMeta.status === "exists"
+			} catch {
+				return false
+			}
+		}
+
+		const getFileInfo = this.canvas.magicConfigManager.config?.methods?.getFileInfo
+		if (!getFileInfo) {
+			return true
+		}
+
+		try {
+			const fileInfo = await getFileInfo(result.path, {
+				useImageProcess: false,
+				forceRefresh: true,
+			})
+			return Boolean(fileInfo?.src)
+		} catch {
+			return false
+		}
+	}
+
 	private async createRemoteResourceTransferPromise(options: {
 		metadata: CanvasElementClipboardFileMetadata
 		sourceUrl: string
 		batchId: string
 		transferKey?: string
 	}): Promise<UploadFileResponse> {
-		const { metadata, sourceUrl, batchId, transferKey } = options
+		const { metadata, sourceUrl } = options
 
-		logCanvasElementClipboard("upload-remote-file-element:download-start", {
-			sourceElementId: metadata.elementId,
-			filename: metadata.filename,
-			mimeType: metadata.mimeType,
-			sourceRef: metadata.sourceRef,
-			transferKey,
-			batchId,
-		})
-
-		const response = await fetch(sourceUrl, { cache: "default" })
-		if (!response.ok) {
-			throw new Error(
-				`Remote file download failed: ${response.status} ${response.statusText}`,
+		let blob: Blob
+		try {
+			const response = await fetch(sourceUrl, { cache: "default" })
+			if (!response.ok) {
+				throw new RemoteResourceTransferError(
+					"download",
+					`Remote file download failed: ${response.status} ${response.statusText}`,
+				)
+			}
+			blob = await response.blob()
+		} catch (error) {
+			if (error instanceof RemoteResourceTransferError) {
+				throw error
+			}
+			throw new RemoteResourceTransferError(
+				"download",
+				getTransferErrorMessage(error, "Remote file download failed"),
 			)
 		}
 
-		const blob = await response.blob()
 		const file = new File([blob], metadata.filename, {
 			type: blob.type || metadata.mimeType,
-		})
-
-		logCanvasElementClipboard("upload-remote-file-element:download-done", {
-			sourceElementId: metadata.elementId,
-			fileName: file.name,
-			fileType: file.type,
-			fileSize: file.size,
-			transferKey,
-			batchId,
 		})
 
 		const uploadFilesMethod = this.canvas.magicConfigManager.config?.methods?.uploadFiles
@@ -1085,46 +1118,34 @@ export class CanvasFileUploadManager {
 			throw new Error("uploadFiles method not available")
 		}
 
-		logCanvasElementClipboard("upload-remote-file-element:upload-start", {
-			sourceElementId: metadata.elementId,
-			fileName: file.name,
-			fileType: file.type,
-			fileSize: file.size,
-			uploadSubDir: this.getUploadSubDir(file),
-			overwrite: this.getUploadFileOverwrite(file, [file]),
-			transferKey,
-			batchId,
-		})
-
-		const uploadResults = await uploadFilesMethod(
-			[
+		let uploadResults: UploadFileResponse[]
+		try {
+			uploadResults = await uploadFilesMethod(
+				[
+					{
+						file,
+						uploadSubDir: this.getUploadSubDir(file),
+						overwrite: this.getUploadFileOverwrite(file, [file]),
+						onUploadComplete: () => undefined,
+						onUploadFailed: () => undefined,
+					},
+				],
+				this.currentReferenceImages,
 				{
-					file,
-					uploadSubDir: this.getUploadSubDir(file),
-					overwrite: this.getUploadFileOverwrite(file, [file]),
-					onUploadComplete: () => {},
-					onUploadFailed: () => {},
+					showSuccessToast: false,
 				},
-			],
-			this.currentReferenceImages,
-			{
-				showSuccessToast: false,
-			},
-		)
+			)
+		} catch (error) {
+			throw new RemoteResourceTransferError(
+				"upload",
+				getTransferErrorMessage(error, "Remote file upload failed"),
+			)
+		}
 		if (!uploadResults?.[0]) {
-			throw new Error("Upload failed: no result returned")
+			throw new RemoteResourceTransferError("upload", "Upload failed: no result returned")
 		}
 
 		const normalizedResult = normalizeUploadFileResponse(uploadResults[0])
-		logCanvasElementClipboard("upload-remote-file-element:upload-done", {
-			sourceElementId: metadata.elementId,
-			fileName: file.name,
-			fileType: file.type,
-			fileSize: file.size,
-			result: summarizeUploadResult(normalizedResult),
-			transferKey,
-			batchId,
-		})
 
 		return normalizedResult
 	}
@@ -1137,7 +1158,7 @@ export class CanvasFileUploadManager {
 		onDownloadFailed?: (error: Error) => void
 		promise: Promise<UploadFileResponse>
 	}): void {
-		const { elementId, metadata, batchId, historyManager, onDownloadFailed, promise } = options
+		const { elementId, batchId, historyManager, onDownloadFailed, promise } = options
 
 		void promise
 			.then((result) => {
@@ -1146,18 +1167,10 @@ export class CanvasFileUploadManager {
 			.catch((error) => {
 				const transferError =
 					error instanceof Error ? error : new Error("Remote file transfer failed")
-				logCanvasElementClipboard("upload-remote-file-element:transfer-failed", {
-					elementId,
-					sourceElementId: metadata.elementId,
-					filename: metadata.filename,
-					mimeType: metadata.mimeType,
-					message: transferError.message,
-					error: transferError,
-					sourceRef: metadata.sourceRef,
-					batchId,
-				})
 				const hasChanged = this.handleUploadFailedInternal(elementId, transferError)
-				onDownloadFailed?.(transferError)
+				if (isRemoteResourceDownloadError(transferError)) {
+					onDownloadFailed?.(transferError)
+				}
 				if (historyManager && hasChanged) {
 					const pendingBatchId = this.findPendingBatchIdByElement(elementId)
 					if (pendingBatchId) {
@@ -1182,11 +1195,6 @@ export class CanvasFileUploadManager {
 			element.uploadResult = result
 		}
 
-		logCanvasElementClipboard("upload-remote-file-element:apply-result", {
-			elementId,
-			result: summarizeUploadResult(result),
-			batchId,
-		})
 		const hasChanged = this.handleUploadCompleteInternal(elementId)
 		if (historyManager && hasChanged) {
 			const pendingBatchId = this.findPendingBatchIdByElement(elementId)
@@ -1257,17 +1265,11 @@ export class CanvasFileUploadManager {
 		if (!uploadResult) return false
 
 		if (element instanceof ImageElementClass) {
-			this.canvas.imageResourceManager.primeCache(uploadResult.path, {
-				src: uploadResult.src,
-				expires_at: uploadResult.expires_at,
-			})
+			this.canvas.imageResourceManager.primeCache(uploadResult.path, uploadResult)
 		}
 
 		if (element instanceof VideoElementClass) {
-			this.canvas.videoResourceManager.primeCache(uploadResult.path, {
-				src: uploadResult.src,
-				expires_at: uploadResult.expires_at,
-			})
+			this.canvas.videoResourceManager.primeCache(uploadResult.path, uploadResult)
 		}
 
 		this.canvas.elementManager.convertToPermament(
@@ -1419,6 +1421,18 @@ export class CanvasFileUploadManager {
 			result,
 			updatedAt: Date.now(),
 		}
+		this.writePersistedRemoteResourceTransfers(persistedMap)
+	}
+
+	private forgetCompletedRemoteResourceTransfer(key: string): void {
+		this.remoteResourceTransfers.delete(key)
+
+		const persistedMap = this.readPersistedRemoteResourceTransfers()
+		if (!persistedMap[key]) {
+			return
+		}
+
+		delete persistedMap[key]
 		this.writePersistedRemoteResourceTransfers(persistedMap)
 	}
 

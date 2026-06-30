@@ -76,7 +76,7 @@ function MyModelsListInner({
 		<>
 			<div className="last:border-b-0 last:pb-0" data-testid="my-models-list">
 				<div className="flex items-center gap-1 pb-1">
-					<img src={MyModelsIcon} alt="" className="size-4" />
+					<img src={MyModelsIcon} alt="" className="size-4"  data-testid="my-models-list-image"/>
 					<span className="text-xs text-foreground">
 						{isPersonalOrganization
 							? t("messageEditor.addModel.myModels")

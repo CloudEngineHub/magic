@@ -61,7 +61,9 @@ class ImageGenerateFactory
 
     public static function createRequestType(ImageGenerateModelType $imageGenerateType, string $modelVersion, ?string $modelId, array $data): ImageGenerateRequest
     {
-        return match ($imageGenerateType) {
+        self::assertGenerateNumWithinLimit($modelVersion, $modelId, $data);
+
+        $request = match ($imageGenerateType) {
             ImageGenerateModelType::Official => self::createOfficialProxyRequest($modelVersion, $modelId, $data),
             ImageGenerateModelType::Volcengine => self::createVolcengineRequest($modelVersion, $modelId, $data),
             ImageGenerateModelType::VolcengineImageGenerateV3 => self::createVolcengineRequest($modelVersion, $modelId, $data),
@@ -76,11 +78,28 @@ class ImageGenerateFactory
             ImageGenerateModelType::AzureOpenAIImageGenerate => self::createAzureOpenAIImageRequest($modelVersion, $modelId, $data),
             default => throw new InvalidArgumentException('not support ' . $imageGenerateType->value),
         };
+
+        self::ensureResolution($request);
+        return $request;
+    }
+
+    private static function assertGenerateNumWithinLimit(string $modelVersion, ?string $modelId, array $data): void
+    {
+        $generateNum = (int) ($data['generate_num'] ?? $data['n'] ?? 1);
+        $maxOutputImages = SizeManager::getMaxOutputImages($modelVersion, $modelId);
+
+        if ($generateNum < 1 || $generateNum > $maxOutputImages) {
+            ExceptionBuilder::throw(
+                ImageGenerateErrorCode::GENERAL_ERROR,
+                'image_generate.output_image_count_exceeds_limit',
+                ['limit' => $maxOutputImages]
+            );
+        }
     }
 
     private static function createOfficialProxyRequest(string $modelVersion, ?string $modelId, array $data): OfficialProxyRequest
     {
-        return new OfficialProxyRequest([
+        $request = new OfficialProxyRequest([
             'prompt' => $data['user_prompt'] ?? '',
             'model' => $data['model'] ?? '',
             'n' => $data['generate_num'] ?? 1,
@@ -88,6 +107,9 @@ class ImageGenerateFactory
             'size' => $data['size'] ?? '1024x1024',
             'images' => $data['reference_images'] ?? [],
         ]);
+
+        $request->setSize((string) ($data['size'] ?? '1024x1024'));
+        return $request;
     }
 
     private static function createGPT4oRequest(string $modelVersion, ?string $modelId, array $data): GPT4oModelRequest
@@ -223,8 +245,9 @@ class ImageGenerateFactory
             $data['model'] ?? 'qwen-image'
         );
 
+        $generateNum = (int) ($data['generate_num'] ?? 1);
         if (isset($data['generate_num'])) {
-            $request->setGenerateNum($data['generate_num']);
+            $request->setGenerateNum($generateNum);
         }
 
         $request->setPromptExtend(true);
@@ -263,16 +286,12 @@ class ImageGenerateFactory
 
         // 设置宽高比和尺寸
         $request->setRatio($ratio);
-        $request->setSize($width . 'x' . $height);
-
-        // 设置分辨率预设（用于 Nano Banana / Nano Banana Pro 模型）
-        if (! empty($scale)) {
-            $request->setResolutionPreset($scale);
-        }
+        $request->setResolution($scale);
 
         // 生成图片数量
+        $generateNum = (int) ($data['generate_num'] ?? 1);
         if (isset($data['generate_num'])) {
-            $request->setGenerateNum($data['generate_num']);
+            $request->setGenerateNum($generateNum);
         }
 
         // 引用图片
@@ -298,8 +317,9 @@ class ImageGenerateFactory
             $data['user_prompt'],
         );
 
+        $generateNum = (int) ($data['generate_num'] ?? 1);
         if (isset($data['generate_num'])) {
-            $request->setGenerateNum($data['generate_num']);
+            $request->setGenerateNum($generateNum);
         }
 
         $referenceImages = self::resolveReferenceImages($data, $imageConfig);
@@ -321,8 +341,16 @@ class ImageGenerateFactory
         }
 
         // 处理图片生成附加配置；当前火山组图选项仍复用这一映射。
+        $sequentialOptions = [];
         if (isset($data['image_generation_config']) && is_array($data['image_generation_config'])) {
-            $request->setSequentialImageGenerationOptions($data['image_generation_config']);
+            $sequentialOptions = $data['image_generation_config'];
+        }
+        if ($generateNum > 1) {
+            $request->setSequentialImageGeneration('auto');
+            $sequentialOptions['max_images'] = $generateNum;
+        }
+        if ($sequentialOptions !== []) {
+            $request->setSequentialImageGenerationOptions($sequentialOptions);
         }
 
         // 处理输出图片格式：根据模型配置校验并解析
@@ -348,14 +376,15 @@ class ImageGenerateFactory
         ];
 
         $request = new OpenRouterRequest(
+            (string) $width,
+            (string) $height,
             $data['model'] ?? $modelVersion,
             $data['user_prompt'] ?? '',
             $imageConfig
         );
-        $request->setWidth((string) $width);
-        $request->setHeight((string) $height);
-        $request->setSize($width . 'x' . $height);
+
         $request->setRatio($ratio);
+        $request->setResolution($scale);
 
         if (isset($data['generate_num'])) {
             $request->setGenerateNum((int) $data['generate_num']);
@@ -386,6 +415,29 @@ class ImageGenerateFactory
         $maxLimit = $imageConfig['max_reference_images'] ?? $defaultMaxLimit;
         if (count($referenceImages) > $maxLimit) {
             ExceptionBuilder::throw(ImageGenerateErrorCode::GENERAL_ERROR, __('image_generate.too_many_reference_images_limit', ['limit' => $maxLimit]));
+        }
+    }
+
+    /**
+     * 仅为未显式设置 resolution 的请求补充分辨率，用于事件计费等内部链路兜底。
+     */
+    private static function ensureResolution(ImageGenerateRequest $request): void
+    {
+        if (! empty($request->getResolution())) {
+            return;
+        }
+
+        if ($request->getWidth() !== '' && $request->getHeight() !== '') {
+            $request->setResolution(
+                SizeManager::resolveResolutionByPixels((int) $request->getWidth(), (int) $request->getHeight())
+            );
+            return;
+        }
+
+        $size = trim($request->getSize());
+        if ($size !== '') {
+            [$width, $height] = SizeManager::parseToWidthHeight($size);
+            $request->setResolution(SizeManager::resolveResolutionByPixels((int) $width, (int) $height));
         }
     }
 }

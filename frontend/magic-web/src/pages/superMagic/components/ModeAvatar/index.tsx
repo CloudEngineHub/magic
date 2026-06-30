@@ -51,6 +51,7 @@ export function ModeAvatar({
 					height={iconSize}
 					draggable={false}
 					className={cn("size-full rounded-full object-cover", imageClassName)}
+					data-testid="mode-avatar-image"
 				/>
 			) : (
 				// hasIcon ? (

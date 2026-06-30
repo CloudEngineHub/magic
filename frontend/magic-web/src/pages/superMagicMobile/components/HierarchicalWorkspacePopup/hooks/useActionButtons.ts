@@ -12,7 +12,10 @@ import {
 	isWorkspaceShortcutProject,
 	isCollaborationWorkspace,
 } from "@/pages/superMagic/constants"
-import { canManageProject } from "@/pages/superMagic/utils/permission"
+import {
+	shouldShowHierarchicalCollaboratorAction,
+} from "@/pages/superMagicMobile/utils/projectActionVisibility"
+import { buildSharedProjectActionPolicy } from "@/pages/superMagicMobile/utils/sharedProjectActionPolicy"
 
 interface ActionItem {
 	type: "workspace" | "topic" | "project"
@@ -30,6 +33,7 @@ interface UseActionButtonsParams {
 	handlePinProject: (project?: ProjectListItem) => void
 	handleCopyCollaborationLink: (project?: ProjectListItem) => void
 	openManageModal: () => void
+	canManageCollaborators: boolean
 	onAddWorkspaceShortcut?: (project: ProjectListItem) => void
 	shortcutNavigateToWorkspace: (project: ProjectListItem) => void
 	cancelWorkspaceShortcut: (project: ProjectListItem) => void
@@ -46,6 +50,7 @@ export function useActionButtons({
 	handlePinProject,
 	handleCopyCollaborationLink,
 	openManageModal,
+	canManageCollaborators,
 	onAddWorkspaceShortcut,
 	shortcutNavigateToWorkspace,
 	cancelWorkspaceShortcut,
@@ -81,6 +86,9 @@ export function useActionButtons({
 				},
 			] as ActionsPopup.ActionButtonConfig[]
 		} else if (currentActionItem.type === "project") {
+			const sharedProjectActionPolicy = buildSharedProjectActionPolicy(
+				currentActionItem.project,
+			)
 			const isOtherCollaborationProjectStatus = isOtherCollaborationProject(
 				currentActionItem.project,
 			)
@@ -116,13 +124,16 @@ export function useActionButtons({
 				},
 				{
 					key: "setCollaborators",
-					label: t("hierarchicalWorkspacePopup.setCollaborators"),
+					label: t("project.addCollaborators"),
 					onClick: () => {
 						openManageModal()
 						closeActionsPopup()
 					},
 					variant: "default",
-					visible: canManageProject(currentActionItem.project?.user_role),
+					visible: shouldShowHierarchicalCollaboratorAction({
+						userRole: currentActionItem.project?.user_role,
+						canManageCollaborators,
+					}),
 				},
 				{
 					key: "addWorkspaceShortcut",
@@ -198,8 +209,18 @@ export function useActionButtons({
 				},
 			] as (ActionsPopup.ActionButtonConfig & { visible: boolean })[]
 
+			const simplifiedActionKeySet = sharedProjectActionPolicy.useSimplifiedSharedProjectActions
+				? new Set(sharedProjectActionPolicy.visibleActionKeys)
+				: null
+
 			return allActions
-				.filter((action) => action.visible)
+				.filter((action) => {
+					if (!action.visible) return false
+					if (simplifiedActionKeySet) {
+						return simplifiedActionKeySet.has(action.key)
+					}
+					return true
+				})
 				.map((action) => {
 					// eslint-disable-next-line @typescript-eslint/no-unused-vars
 					const { visible, ...actionWithoutVisible } = action
@@ -220,6 +241,7 @@ export function useActionButtons({
 		handlePinProject,
 		handleCopyCollaborationLink,
 		openManageModal,
+		canManageCollaborators,
 		shortcutNavigateToWorkspace,
 		cancelWorkspaceShortcut,
 		setDeleteModalVisible,

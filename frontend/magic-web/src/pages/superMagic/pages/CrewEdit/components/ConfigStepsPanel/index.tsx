@@ -774,7 +774,7 @@ function ConfigStepsPanel({ onBack, filesContent }: ConfigStepsPanelProps) {
 				>
 					<div className="flex h-5 w-5 shrink-0 items-center justify-center overflow-hidden rounded-sm">
 						{avatarUrl ? (
-							<img src={avatarUrl} alt="" className="h-full w-full object-cover" />
+							<img src={avatarUrl} alt="" className="h-full w-full object-cover"  data-testid="config-steps-panel-image"/>
 						) : (
 							<RoleIcon className="h-3.5 w-3.5" />
 						)}

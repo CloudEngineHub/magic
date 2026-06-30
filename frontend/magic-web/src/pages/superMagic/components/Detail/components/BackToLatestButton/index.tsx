@@ -15,7 +15,7 @@ function BackToLatestButton({ visible, onClick }: BackToLatestButtonProps) {
 	if (!visible) return null
 
 	return (
-		<div className={styles.container} onClick={onClick}>
+		<div className={styles.container} onClick={onClick} data-testid="back-to-latest-button">
 			<div className={styles.button}>
 				<div className={styles.iconContainer}>
 					<IconChevronsDown size={14} stroke={1.5} />

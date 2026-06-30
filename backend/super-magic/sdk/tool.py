@@ -35,7 +35,7 @@ class ToolSDK:
     def call(
         self,
         tool_name: str,
-        tool_params: Dict[str, Any],
+        tool_params: Optional[Dict[str, Any]] = None,
         tool_call_id: Optional[str] = None,
     ) -> Result:
         """调用工具（同步）
@@ -46,7 +46,7 @@ class ToolSDK:
 
         Args:
             tool_name: 工具名称
-            tool_params: 工具参数字典
+            tool_params: 工具参数字典，不传时使用空字典
             tool_call_id: 可选的工具调用 ID，如果不提供则自动生成
 
         Returns:
@@ -77,7 +77,7 @@ class ToolSDK:
 
         request_data = {
             "tool_name": tool_name,
-            "tool_params": tool_params,
+            "tool_params": tool_params if tool_params is not None else {},
             "tool_call_id": tool_call_id,
             "agent_context_id": agent_context_id,
             "sdk_execution_id": sdk_execution_id,

@@ -27,50 +27,50 @@
 ### PHP 侧
 
 #### 启动与生命周期
-- [`backend/magic-service/start.sh`](/Users/liangpeng/Documents/kk/magic/backend/magic-service/start.sh)
+- [`backend/magic-service/start.sh`](../../start.sh)
   - 只负责迁移并启动 PHP
   - 不直接拉起 Go
-- [`backend/magic-service/app/Infrastructure/Rpc/Listener/StartRpcClientListener.php`](/Users/liangpeng/Documents/kk/magic/backend/magic-service/app/Infrastructure/Rpc/Listener/StartRpcClientListener.php)
+- [`backend/magic-service/app/Infrastructure/Rpc/Listener/StartRpcClientListener.php`](../../app/Infrastructure/Rpc/Listener/StartRpcClientListener.php)
   - 在 `MainCoroutineServerStart` 时尝试启动 Go
   - 然后启动 PHP 侧 `RpcClientManager`
-- [`backend/magic-service/app/Infrastructure/Rpc/Lifecycle/GoEngineBootstrapService.php`](/Users/liangpeng/Documents/kk/magic/backend/magic-service/app/Infrastructure/Rpc/Lifecycle/GoEngineBootstrapService.php)
+- [`backend/magic-service/app/Infrastructure/Rpc/Lifecycle/GoEngineBootstrapService.php`](../../app/Infrastructure/Rpc/Lifecycle/GoEngineBootstrapService.php)
   - 负责首次启动决策：复用已有连接、等待已有 socket，或启动新的 Go 进程
   - 首次启动完成后把 Go 进程句柄交给 supervisor
-- [`backend/magic-service/app/Infrastructure/Rpc/Lifecycle/GoEngineSupervisor.php`](/Users/liangpeng/Documents/kk/magic/backend/magic-service/app/Infrastructure/Rpc/Lifecycle/GoEngineSupervisor.php)
+- [`backend/magic-service/app/Infrastructure/Rpc/Lifecycle/GoEngineSupervisor.php`](../../app/Infrastructure/Rpc/Lifecycle/GoEngineSupervisor.php)
   - 常驻协程托管 Go 进程生命周期
   - 负责检测进程退出、RPC 长时间不健康和 stale socket，并按需重启 Go
-- [`backend/magic-service/app/Infrastructure/Rpc/Lifecycle/GoEngineProcessStarter.php`](/Users/liangpeng/Documents/kk/magic/backend/magic-service/app/Infrastructure/Rpc/Lifecycle/GoEngineProcessStarter.php)
+- [`backend/magic-service/app/Infrastructure/Rpc/Lifecycle/GoEngineProcessStarter.php`](../../app/Infrastructure/Rpc/Lifecycle/GoEngineProcessStarter.php)
   - 默认使用结构化 `proc_open([$executable, ...$args], ..., $workDir, $env)` 启动 Go
   - 不经过 shell，不支持 legacy command 分支
 
 #### RPC Runtime
-- [`backend/magic-service/app/Infrastructure/Rpc/JsonRpc/JsonRpcRuntimeClient.php`](/Users/liangpeng/Documents/kk/magic/backend/magic-service/app/Infrastructure/Rpc/JsonRpc/JsonRpcRuntimeClient.php)
-- [`backend/magic-service/app/Infrastructure/Rpc/JsonRpc/RpcClientManager.php`](/Users/liangpeng/Documents/kk/magic/backend/magic-service/app/Infrastructure/Rpc/JsonRpc/RpcClientManager.php)
-- [`backend/magic-service/app/Infrastructure/Rpc/Registry/RpcServiceRegistry.php`](/Users/liangpeng/Documents/kk/magic/backend/magic-service/app/Infrastructure/Rpc/Registry/RpcServiceRegistry.php)
+- [`backend/magic-service/app/Infrastructure/Rpc/JsonRpc/JsonRpcRuntimeClient.php`](../../app/Infrastructure/Rpc/JsonRpc/JsonRpcRuntimeClient.php)
+- [`backend/magic-service/app/Infrastructure/Rpc/JsonRpc/RpcClientManager.php`](../../app/Infrastructure/Rpc/JsonRpc/RpcClientManager.php)
+- [`backend/magic-service/app/Infrastructure/Rpc/Registry/RpcServiceRegistry.php`](../../app/Infrastructure/Rpc/Registry/RpcServiceRegistry.php)
 
 #### IPC Transport
-- [`backend/magic-service/app/Infrastructure/Transport/Ipc/Uds/UdsFramedTransport.php`](/Users/liangpeng/Documents/kk/magic/backend/magic-service/app/Infrastructure/Transport/Ipc/Uds/UdsFramedTransport.php)
+- [`backend/magic-service/app/Infrastructure/Transport/Ipc/Uds/UdsFramedTransport.php`](../../app/Infrastructure/Transport/Ipc/Uds/UdsFramedTransport.php)
 
 #### 配置
-- [`backend/magic-service/config/autoload/ipc.php`](/Users/liangpeng/Documents/kk/magic/backend/magic-service/config/autoload/ipc.php)
+- [`backend/magic-service/config/autoload/ipc.php`](../../config/autoload/ipc.php)
 
 ### Go 侧
 
 #### 配置加载
-- [`backend/magic-service/go-engine/internal/config/loader.go`](/Users/liangpeng/Documents/kk/magic/backend/magic-service/go-engine/internal/config/loader.go)
+- [`backend/magic-service/go-engine/internal/config/loader.go`](../internal/config/loader.go)
 
 #### IPC Transport / Runtime
-- [`backend/magic-service/go-engine/internal/infrastructure/transport/ipc/unixsocket/server.go`](/Users/liangpeng/Documents/kk/magic/backend/magic-service/go-engine/internal/infrastructure/transport/ipc/unixsocket/server.go)
-- [`backend/magic-service/go-engine/internal/infrastructure/rpc/jsonrpc/server.go`](/Users/liangpeng/Documents/kk/magic/backend/magic-service/go-engine/internal/infrastructure/rpc/jsonrpc/server.go)
-- [`backend/magic-service/go-engine/internal/infrastructure/rpc/jsonrpc/session.go`](/Users/liangpeng/Documents/kk/magic/backend/magic-service/go-engine/internal/infrastructure/rpc/jsonrpc/session.go)
+- [`backend/magic-service/go-engine/internal/infrastructure/transport/ipc/unixsocket/server.go`](../internal/infrastructure/transport/ipc/unixsocket/server.go)
+- [`backend/magic-service/go-engine/internal/infrastructure/rpc/jsonrpc/server.go`](../internal/infrastructure/rpc/jsonrpc/server.go)
+- [`backend/magic-service/go-engine/internal/infrastructure/rpc/jsonrpc/session.go`](../internal/infrastructure/rpc/jsonrpc/session.go)
 
 #### Go -> PHP 回调客户端
-- [`backend/magic-service/go-engine/internal/infrastructure/rpc/jsonrpc/client`](/Users/liangpeng/Documents/kk/magic/backend/magic-service/go-engine/internal/infrastructure/rpc/jsonrpc/client)
+- [`backend/magic-service/go-engine/internal/infrastructure/rpc/jsonrpc/client`](../internal/infrastructure/rpc/jsonrpc/client)
 
 #### 开发态启动
-- [`backend/magic-service/Makefile`](/Users/liangpeng/Documents/kk/magic/backend/magic-service/Makefile)
-- [`backend/magic-service/go-engine/start.sh`](/Users/liangpeng/Documents/kk/magic/backend/magic-service/go-engine/start.sh)
-- [`backend/magic-service/go-engine/.air.toml`](/Users/liangpeng/Documents/kk/magic/backend/magic-service/go-engine/.air.toml)
+- [`backend/magic-service/Makefile`](../../Makefile)
+- [`backend/magic-service/go-engine/start.sh`](../start.sh)
+- [`backend/magic-service/go-engine/.air.toml`](../.air.toml)
 
 ---
 
@@ -80,7 +80,7 @@
 
 Go 当前正式使用的仓库内配置文件名是：
 
-- [`backend/magic-service/magic-go-engine-config.yaml`](/Users/liangpeng/Documents/kk/magic/backend/magic-service/magic-go-engine-config.yaml)
+- [`backend/magic-service/magic-go-engine-config.yaml`](../../magic-go-engine-config.yaml)
 
 Go loader 的默认查找顺序：
 
@@ -88,22 +88,22 @@ Go loader 的默认查找顺序：
 2. 当前工作目录下的 `./magic-go-engine-config.yaml`
 3. 父目录 `../magic-go-engine-config.yaml`
 
-对应实现见 [`backend/magic-service/go-engine/internal/config/loader.go`](/Users/liangpeng/Documents/kk/magic/backend/magic-service/go-engine/internal/config/loader.go#L23)。
+对应实现见 [`backend/magic-service/go-engine/internal/config/loader.go`](../internal/config/loader.go#L23)。
 
 ### 环境变量
 
 Go 不再使用独立 `.env`。当前共享环境变量来源是：
 
-- [`backend/magic-service/.env`](/Users/liangpeng/Documents/kk/magic/backend/magic-service/.env)
-- [`backend/magic-service/.env.example`](/Users/liangpeng/Documents/kk/magic/backend/magic-service/.env.example)
+- [`backend/magic-service/.env`](../../.env)
+- [`backend/magic-service/.env.example`](../../.env.example)
 
-Go loader 会优先读取当前工作目录 `.env`，否则读取父目录 `magic-service/.env`，见 [`backend/magic-service/go-engine/internal/config/loader.go`](/Users/liangpeng/Documents/kk/magic/backend/magic-service/go-engine/internal/config/loader.go#L117)。
+Go loader 会优先读取当前工作目录 `.env`，否则读取父目录 `magic-service/.env`，见 [`backend/magic-service/go-engine/internal/config/loader.go`](../internal/config/loader.go#L117)。
 
 ### PHP IPC 配置
 
 PHP 侧 IPC 启动和连接参数来自：
 
-- [`backend/magic-service/config/autoload/ipc.php`](/Users/liangpeng/Documents/kk/magic/backend/magic-service/config/autoload/ipc.php)
+- [`backend/magic-service/config/autoload/ipc.php`](../../config/autoload/ipc.php)
 
 当前默认 Go 启动命令是：
 
@@ -126,11 +126,11 @@ PHP 会把当前进程环境变量传给 Go，并覆盖/补充 `CONFIG_FILE`。
 
 ### 生产 / 测试环境
 
-1. 容器入口执行 [`backend/magic-service/start.sh`](/Users/liangpeng/Documents/kk/magic/backend/magic-service/start.sh)
+1. 容器入口执行 [`backend/magic-service/start.sh`](../../start.sh)
 2. `start.sh` 先执行 `shell:locker migrate`
 3. `start.sh` 启动 PHP：`php bin/hyperf.php start`
 4. PHP 进入 `MainCoroutineServerStart`
-5. [`StartRpcClientListener`](/Users/liangpeng/Documents/kk/magic/backend/magic-service/app/Infrastructure/Rpc/Listener/StartRpcClientListener.php#L58) 检查 Go socket 是否已可连
+5. [`StartRpcClientListener`](../../app/Infrastructure/Rpc/Listener/StartRpcClientListener.php#L58) 检查 Go socket 是否已可连
 6. 若不可连且允许自动启动，则用 structured `proc_open` 拉起 Go
 7. PHP 启动 `RpcClientManager`，等待 Go socket ready
 8. PHP 与 Go 完成 `ipc.hello` 握手并开始心跳
@@ -146,11 +146,11 @@ cd /opt/www && CONFIG_FILE=./magic-go-engine-config.yaml ./bin/magic-go-engine
 
 ### 本地开发
 
-1. 在 [`backend/magic-service/Makefile`](/Users/liangpeng/Documents/kk/magic/backend/magic-service/Makefile#L12) 下执行 `make dev`
+1. 在 [`backend/magic-service/Makefile`](../../Makefile#L12) 下执行 `make dev`
 2. `make dev` 先清理旧 PHP / Go 进程和旧 socket
 3. `make dev` 调用 `make -C ./go-engine dev`
 4. Go 侧 `start.sh -w` 通过 `air` 热重载，但构建产物仍输出到：
-   - [`backend/magic-service/bin/magic-go-engine`](/Users/liangpeng/Documents/kk/magic/backend/magic-service/bin/magic-go-engine)
+   - [`backend/magic-service/bin/magic-go-engine`](../../bin/magic-go-engine)
 5. `air` 实际运行命令是：
 
 ```bash
@@ -182,8 +182,8 @@ cd .. && CONFIG_FILE=./magic-go-engine-config.yaml ./bin/magic-go-engine
 
 - 统一命名空间：`svc.*`
 - 方法常量落在：
-  - Go: [`backend/magic-service/go-engine/internal/constants/svc_rpc_methods.go`](/Users/liangpeng/Documents/kk/magic/backend/magic-service/go-engine/internal/constants/svc_rpc_methods.go)
-  - PHP: [`backend/magic-service/app/Infrastructure/Rpc/Method/SvcMethods.php`](/Users/liangpeng/Documents/kk/magic/backend/magic-service/app/Infrastructure/Rpc/Method/SvcMethods.php)
+  - Go: [`backend/magic-service/go-engine/internal/constants/svc_rpc_methods.go`](../internal/constants/svc_rpc_methods.go)
+  - PHP: [`backend/magic-service/app/Infrastructure/Rpc/Method/SvcMethods.php`](../../app/Infrastructure/Rpc/Method/SvcMethods.php)
 
 ### 调用方向
 
@@ -261,7 +261,7 @@ cd .. && CONFIG_FILE=./magic-go-engine-config.yaml ./bin/magic-go-engine
 
 ### PHP 侧
 
-- IPC 配置文件：[`backend/magic-service/config/autoload/ipc.php`](/Users/liangpeng/Documents/kk/magic/backend/magic-service/config/autoload/ipc.php)
+- IPC 配置文件：[`backend/magic-service/config/autoload/ipc.php`](../../config/autoload/ipc.php)
 - 默认 Go 启动方式：结构化 `proc_open([$executable, ...$args], ..., $workDir, $env)`
 - 默认 Go executable：`./bin/magic-go-engine`
 - 默认 Go config file：`./magic-go-engine-config.yaml`
@@ -283,8 +283,8 @@ cd .. && CONFIG_FILE=./magic-go-engine-config.yaml ./bin/magic-go-engine
 
 ### Go 侧
 
-- 正式配置文件：[`backend/magic-service/magic-go-engine-config.yaml`](/Users/liangpeng/Documents/kk/magic/backend/magic-service/magic-go-engine-config.yaml)
-- 当前共享 env：[`backend/magic-service/.env`](/Users/liangpeng/Documents/kk/magic/backend/magic-service/.env)
+- 正式配置文件：[`backend/magic-service/magic-go-engine-config.yaml`](../../magic-go-engine-config.yaml)
+- 当前共享 env：[`backend/magic-service/.env`](../../.env)
 - `ipc.engineSocket` 默认值：`./runtime/magic_engine.sock`
 
 ---

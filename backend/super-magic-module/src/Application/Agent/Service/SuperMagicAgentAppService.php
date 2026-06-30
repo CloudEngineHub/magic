@@ -58,12 +58,17 @@ use Dtyq\SuperMagic\Domain\Skill\Entity\ValueObject\SkillDataIsolation;
 use Dtyq\SuperMagic\Domain\Skill\Entity\ValueObject\SkillMentionSource;
 use Dtyq\SuperMagic\Domain\Skill\Service\SkillDomainService;
 use Dtyq\SuperMagic\Domain\Skill\Service\SkillVersionDomainService;
+use Dtyq\SuperMagic\Domain\SuperAgent\Entity\ProjectEntity;
+use Dtyq\SuperMagic\Domain\SuperAgent\Entity\ValueObject\TaskStatus;
 use Dtyq\SuperMagic\Domain\SuperAgent\Service\AgentDomainService;
 use Dtyq\SuperMagic\Domain\SuperAgent\Service\ProjectDomainService;
+use Dtyq\SuperMagic\Domain\SuperAgent\Service\TaskDomainService;
 use Dtyq\SuperMagic\Domain\SuperAgent\Service\TaskFileDomainService;
+use Dtyq\SuperMagic\Domain\SuperAgent\Service\TopicDomainService;
 use Dtyq\SuperMagic\ErrorCode\SuperAgentErrorCode;
 use Dtyq\SuperMagic\ErrorCode\SuperMagicErrorCode;
 use Dtyq\SuperMagic\Infrastructure\Utils\WorkDirectoryUtil;
+use Dtyq\SuperMagic\Interfaces\Agent\DTO\Request\GetMyAvailableAgentsRequestDTO;
 use Dtyq\SuperMagic\Interfaces\Agent\DTO\Request\PublishAgentRequestDTO;
 use Dtyq\SuperMagic\Interfaces\Agent\DTO\Request\QueryAgentsRequestDTO;
 use Dtyq\SuperMagic\Interfaces\Agent\DTO\Request\QueryAgentVersionsRequestDTO;
@@ -79,6 +84,8 @@ class SuperMagicAgentAppService extends AbstractSuperMagicAppService
     private const string REQUIRED_IDENTITY_PATH = '.magic/IDENTITY.md';
 
     private const string KNOWLEDGE_SEARCH_TOOL_CODE = 'search_knowledge';
+
+    private const string AGENT_PUBLISH_EXPORT_TASK_PROMPT = 'Agent Publish Export Task';
 
     #[Inject]
     protected SkillDomainService $skillDomainService;
@@ -118,6 +125,12 @@ class SuperMagicAgentAppService extends AbstractSuperMagicAppService
 
     #[Inject]
     protected AgentDomainService $agentDomainService;
+
+    #[Inject]
+    protected TopicDomainService $topicDomainService;
+
+    #[Inject]
+    protected TaskDomainService $taskDomainService;
 
     #[Transactional]
     public function save(Authenticatable $authorization, SuperMagicAgentEntity $entity, bool $checkPrompt = true): SuperMagicAgentEntity
@@ -479,6 +492,57 @@ class SuperMagicAgentAppService extends AbstractSuperMagicAppService
         $queryCodes = array_values(array_unique(array_merge($marketCodes, $officialCodes)));
 
         return $this->queryPublishedVisibleAgentsByCodes($dataIsolation, $requestDTO, $queryCodes, true);
+    }
+
+    /**
+     * 获取当前用户可用的已发布员工列表.
+     *
+     * @return array{total: int, list: array<int, array{code: string, name: string, description: string}>}
+     */
+    public function getMyAvailableAgents(Authenticatable $authorization, GetMyAvailableAgentsRequestDTO $requestDTO): array
+    {
+        $dataIsolation = $this->createSuperMagicDataIsolation($authorization);
+        $officialCodes = $this->getOfficialAgentCodes($dataIsolation);
+        $availableCodes = array_values(array_unique(array_merge(
+            $this->getAccessibleAgentCodes($dataIsolation, $authorization->getId())['codes'],
+            $officialCodes
+        )));
+        if ($availableCodes === []) {
+            return [
+                'total' => 0,
+                'list' => [],
+            ];
+        }
+
+        $language = $dataIsolation->getLanguage() ?: LanguageEnum::ZH_CN->value;
+        $versionQuery = new AgentVersionQuery();
+        $versionQuery->setCodes($availableCodes);
+        $versionQuery->setPublishedOnly(true);
+        $versionQuery->setIsCurrentVersions(true);
+        $versionQuery->setLanguageCode($language);
+        $versionQuery->setKeywords($requestDTO->getKeywords());
+
+        $dataIsolation->disabled();
+        $result = $this->superMagicAgentVersionDomainService->queries(
+            $dataIsolation,
+            $versionQuery,
+            new Page($requestDTO->getPage(), $requestDTO->getPageSize())
+        );
+
+        $fallbackAgents = $this->loadAgentVersionTextFallbackAgents($dataIsolation, $result['list'], $language);
+        $list = array_map(
+            fn (AgentVersionEntity $version): array => $this->buildAvailableAgentItem(
+                $version,
+                $language,
+                $fallbackAgents[$version->getCode()] ?? null
+            ),
+            $result['list']
+        );
+
+        return [
+            'total' => $result['total'],
+            'list' => $list,
+        ];
     }
 
     /**
@@ -1199,20 +1263,14 @@ class SuperMagicAgentAppService extends AbstractSuperMagicAppService
         $fullPrefix = $this->taskFileDomainService->getFullPrefix($project->getUserOrganizationCode());
         $fullWorkdir = WorkDirectoryUtil::getFullWorkdir($fullPrefix, $project->getWorkDir());
 
-        $sandboxId = WorkDirectoryUtil::generateUniqueCodeFromSnowflakeId($projectId . '_custom_agent');
-        $this->agentDomainService->ensureSandboxRunning(
-            $dataIsolation->getCurrentUserId(),
-            $dataIsolation->getCurrentOrganizationCode(),
-            $sandboxId,
-            (string) $projectId,
-            $fullWorkdir
-        );
+        $sandboxId = $this->initializeAgentPublishSandbox($dataIsolation, $code, $project);
 
         return $this->superMagicAgentDomainService->exportAgentFromSandbox(
             $dataIsolation,
             $code,
             $projectId,
-            $fullWorkdir
+            $fullWorkdir,
+            $sandboxId
         );
     }
 
@@ -1315,6 +1373,69 @@ class SuperMagicAgentAppService extends AbstractSuperMagicAppService
             $accessibleSkillCodes,
             array_values(array_intersect(BuiltinSkill::values(), $skillCodes ?? []))
         )));
+    }
+
+    /**
+     * @return array{code: string, name: string, description: string}
+     */
+    private function buildAvailableAgentItem(
+        AgentVersionEntity $versionEntity,
+        string $language,
+        ?SuperMagicAgentEntity $fallbackAgent = null
+    ): array {
+        return [
+            'code' => $versionEntity->getCode(),
+            'name' => $this->resolveAgentVersionName($versionEntity, $language, $fallbackAgent),
+            'description' => $this->resolveAgentVersionDescription($versionEntity, $language, $fallbackAgent),
+        ];
+    }
+
+    /**
+     * @param array<AgentVersionEntity> $versionEntities
+     * @return array<string, SuperMagicAgentEntity>
+     */
+    private function loadAgentVersionTextFallbackAgents(
+        SuperMagicAgentDataIsolation $dataIsolation,
+        array $versionEntities,
+        string $language
+    ): array {
+        $fallbackCodes = [];
+        foreach ($versionEntities as $versionEntity) {
+            if ($versionEntity->getI18nName($language) === '' || $versionEntity->getI18nDescription($language) === '') {
+                $fallbackCodes[] = $versionEntity->getCode();
+            }
+        }
+
+        $fallbackCodes = array_values(array_unique($fallbackCodes));
+        return $fallbackCodes === []
+            ? []
+            : $this->superMagicAgentDomainService->findByCodes($dataIsolation, $fallbackCodes);
+    }
+
+    private function resolveAgentVersionName(
+        AgentVersionEntity $versionEntity,
+        string $language,
+        ?SuperMagicAgentEntity $fallbackAgent
+    ): string {
+        $name = $versionEntity->getI18nName($language);
+        if ($name === '' && $fallbackAgent !== null) {
+            return $fallbackAgent->getI18nName($language);
+        }
+
+        return $name;
+    }
+
+    private function resolveAgentVersionDescription(
+        AgentVersionEntity $versionEntity,
+        string $language,
+        ?SuperMagicAgentEntity $fallbackAgent
+    ): string {
+        $description = $versionEntity->getI18nDescription($language);
+        if ($description === '' && $fallbackAgent !== null) {
+            return $fallbackAgent->getI18nDescription($language);
+        }
+
+        return $description;
     }
 
     private function hydrateToolSchemas(SuperMagicAgentEntity $agent, mixed $flowDataIsolation): void
@@ -1807,22 +1928,87 @@ class SuperMagicAgentAppService extends AbstractSuperMagicAppService
         $fullPrefix = $this->taskFileDomainService->getFullPrefix($project->getUserOrganizationCode());
         $fullWorkdir = WorkDirectoryUtil::getFullWorkdir($fullPrefix, $project->getWorkDir());
 
-        $sandboxId = WorkDirectoryUtil::generateUniqueCodeFromSnowflakeId($projectId . '_custom_agent');
-        $this->agentDomainService->ensureSandboxRunning(
-            $dataIsolation->getCurrentUserId(),
-            $dataIsolation->getCurrentOrganizationCode(),
-            $sandboxId,
-            (string) $projectId,
-            $fullWorkdir
-        );
+        $sandboxId = $this->initializeAgentPublishSandbox($dataIsolation, $code, $project);
 
         return $this->superMagicAgentDomainService->exportAgentFromSandbox(
             $dataIsolation,
             $code,
             $projectId,
             $fullWorkdir,
+            $sandboxId,
             $sourcePath
         );
+    }
+
+    private function initializeAgentPublishSandbox(
+        SuperMagicAgentDataIsolation $dataIsolation,
+        string $agentCode,
+        ProjectEntity $projectEntity
+    ): string {
+        $topicId = $projectEntity->getCurrentTopicId();
+        if (empty($topicId)) {
+            ExceptionBuilder::throw(SuperAgentErrorCode::TOPIC_NOT_FOUND, 'topic.topic_not_found');
+        }
+
+        $topicEntity = $this->topicDomainService->getTopicById($topicId);
+        if ($topicEntity === null || $topicEntity->getProjectId() !== $projectEntity->getId()) {
+            ExceptionBuilder::throw(SuperAgentErrorCode::TOPIC_NOT_FOUND, 'topic.topic_not_found');
+        }
+
+        $contactDataIsolation = ContactDataIsolation::simpleMake(
+            $dataIsolation->getCurrentOrganizationCode(),
+            $dataIsolation->getCurrentUserId()
+        );
+
+        if ($topicEntity->getAgentCode() !== $agentCode) {
+            $this->topicDomainService->updateTopicAgentCode($contactDataIsolation, $topicEntity->getId(), $agentCode);
+            $topicEntity->setAgentCode($agentCode);
+        }
+
+        $sandboxId = $topicEntity->getSandboxId();
+        if ($sandboxId === (string) $topicEntity->getId()) {
+            $sandboxId = '';
+        }
+        $topicEntity->setSandboxId($sandboxId);
+
+        $taskEntity = $this->taskDomainService->initDefaultTask(
+            $contactDataIsolation,
+            $topicEntity,
+            self::AGENT_PUBLISH_EXPORT_TASK_PROMPT
+        );
+
+        $agentContext = $this->agentDomainService->buildInitAgentContext(
+            dataIsolation: $contactDataIsolation,
+            projectEntity: $projectEntity,
+            topicEntity: $topicEntity,
+            taskEntity: $taskEntity,
+            sandboxId: $sandboxId,
+            skipInitMessage: true
+        );
+        $sandboxId = $this->agentDomainService->ensureSandboxInitialized($contactDataIsolation, $agentContext);
+
+        $this->topicDomainService->updateTopicStatusAndSandboxId(
+            $topicEntity->getId(),
+            $taskEntity->getId(),
+            TaskStatus::FINISHED,
+            $sandboxId
+        );
+        $this->taskDomainService->updateTaskStatus(
+            TaskStatus::FINISHED,
+            $taskEntity->getId(),
+            (string) $taskEntity->getId(),
+            $sandboxId
+        );
+
+        $this->logger->info('Agent publish sandbox initialized through sandbox pool', [
+            'agent_code' => $agentCode,
+            'project_id' => $projectEntity->getId(),
+            'topic_id' => $topicEntity->getId(),
+            'task_id' => $taskEntity->getId(),
+            'sandbox_id' => $sandboxId,
+        ]);
+
+        return $sandboxId;
     }
 
     /**
@@ -2081,14 +2267,21 @@ class SuperMagicAgentAppService extends AbstractSuperMagicAppService
         SuperMagicAgentDataIsolation $dataIsolation,
         array $currentVersionsMap
     ): array {
+        $language = $dataIsolation->getLanguage();
+        $fallbackAgents = $this->loadAgentVersionTextFallbackAgents($dataIsolation, $currentVersionsMap, $language);
+
         $agents = [];
         foreach ($currentVersionsMap as $code => $versionEntity) {
+            $fallbackAgent = $fallbackAgents[$code] ?? null;
+            $name = $this->resolveAgentVersionName($versionEntity, $language, $fallbackAgent);
+            $description = $this->resolveAgentVersionDescription($versionEntity, $language, $fallbackAgent);
+
             $agent = new SuperMagicAgentEntity();
             $agent->setId($versionEntity->getId());
             $agent->setOrganizationCode($versionEntity->getOrganizationCode());
             $agent->setCode($code);
-            $agent->setName($versionEntity->getI18nName($dataIsolation->getLanguage()));
-            $agent->setDescription($versionEntity->getI18nDescription($dataIsolation->getLanguage()));
+            $agent->setName($name);
+            $agent->setDescription($description);
             $agent->setIcon($versionEntity->getIcon());
             $agent->setIconType($versionEntity->getIconType());
             $agent->setType($versionEntity->getType());

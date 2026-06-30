@@ -2,13 +2,28 @@ import type { Node as TiptapNode } from "@tiptap/core"
 import type { ComponentType, RefObject } from "react"
 import type { ModifierAlias } from "./canvas/interaction/shortcuts/types"
 import type { MagicConfig } from "./types.magic"
-import type { CanvasDocument, Marker, PaddingInsetConfig } from "./canvas/types"
+import type {
+	CanvasDeviceInfo,
+	CanvasDesignPluginModuleConfig,
+	CanvasDocument,
+	LayerElement,
+	Marker,
+	PaddingInsetConfig,
+} from "./canvas/types"
+import type { CanvasElementNameChange } from "./canvas/EventEmitter"
 import type { TFunction } from "./context/I18nContext"
+import type { CanvasDocumentMergeElementConflictReason } from "./model"
 import type {
 	ReferenceAssetPerTypeLimits,
 	ReferenceAssetTypeCounts,
 	ReferenceResourceTypeFilter,
 } from "./components/MessageEditor/reference-assets/reference-resource.types"
+import type {
+	CanvasReferenceMentionPanelState,
+	CanvasReferenceMentionProjectFileType,
+} from "./components/MessageEditor/reference-assets/canvasReferenceMention.constants"
+
+export type { CanvasDeviceFormFactor, CanvasDeviceInfo, CanvasDeviceLayout } from "./canvas/types"
 
 /**
  * Mention 面板语言入参（与宿主 MentionPanel LocaleInput 约定一致，避免依赖业务包）
@@ -67,7 +82,7 @@ export interface ReferenceResourcePanelFileData {
 }
 
 export interface ReferenceResourcePanelItem {
-	type: "project_file"
+	type: CanvasReferenceMentionProjectFileType
 	data: ReferenceResourcePanelFileData
 }
 
@@ -121,13 +136,66 @@ export type MentionDataServiceCtor = new (
 
 export interface ReferenceResourcePanelSelectContext {
 	reset?: () => void
+	batch?: {
+		index: number
+		total: number
+	}
 }
 
+export interface ReferenceResourcePanelInitialLoadOptions {
+	itemId: string
+}
+
+export type ReferenceResourcePanelStateValue = CanvasReferenceMentionPanelState
+
+export interface ReferenceResourcePanelNavigationItem {
+	id: string
+	name: string
+	state: ReferenceResourcePanelStateValue
+	catalogId?: string
+	parentId?: string
+}
+
+export interface ReferenceResourcePanelSelectableItem {
+	type?: string
+	isFolder?: boolean
+}
+
+export interface ReferenceResourcePanelCatalogBehaviorArgs {
+	currentState?: ReferenceResourcePanelStateValue
+	currentCatalogId?: string
+	selectedItem: ReferenceResourcePanelSelectableItem
+	enterFolder: boolean
+}
+
+export interface ReferenceResourcePanelCatalogBehavior {
+	getStaticTransition?: (args: {
+		currentState?: ReferenceResourcePanelStateValue
+		itemId: string
+	}) => { state: ReferenceResourcePanelStateValue; catalogId?: string } | null
+	getDynamicTransition?: (
+		args: ReferenceResourcePanelCatalogBehaviorArgs,
+	) => { state: ReferenceResourcePanelStateValue; catalogId?: string } | null
+	shouldEnterFolderDirectly?: (args: ReferenceResourcePanelCatalogBehaviorArgs) => boolean
+	shouldSelectItemDirectly?: (args: ReferenceResourcePanelCatalogBehaviorArgs) => boolean
+}
+
+/**
+ * Host renderer boundary for Canvas reference-resource panels.
+ *
+ * CanvasDesign owns the shared runtime for inline "@" mentions and "select from
+ * project". Host adapters should consume these props as-is and stay
+ * presentation-only; do not rebuild default-directory, filtering, limit, or
+ * folder-navigation logic inside the adapter.
+ */
 export interface ReferenceResourcePanelRendererProps {
 	visible: boolean
 	triggerRef?: RefObject<HTMLElement | null>
 	language?: string
 	dataService?: MentionDataServicePort
+	initialLoadOptions?: ReferenceResourcePanelInitialLoadOptions
+	initialNavigationStack?: ReferenceResourcePanelNavigationItem[]
+	catalogBehavior?: ReferenceResourcePanelCatalogBehavior
 	onSelect: (
 		item: ReferenceResourcePanelItem,
 		context?: ReferenceResourcePanelSelectContext,
@@ -249,6 +317,8 @@ export interface CanvasDesignRef {
 	fitToScreen: () => void
 	/** 热更新画布数据，远端快照可使用 replace 模式确保嵌套元素完整同步 */
 	updateData: (data: CanvasDocument, options?: { mode?: "smart" | "replace" }) => void
+	/** 导出当前画布文档；用于宿主在页面卸载前保存本地草稿 */
+	exportCurrentDocument: () => CanvasDocument | null
 	/** 按资源路径强制刷新画布内已缓存的图片/视频资源 */
 	refreshResources: (resources: CanvasResourceRefreshItem[]) => Promise<void>
 	/** 如果元素不在可视区域，则移动到可视区域 */
@@ -275,6 +345,16 @@ export interface CanvasDesignRef {
 	} | null>
 }
 
+export interface CanvasDesignElementActionHint {
+	id?: string
+	elementId: string
+	reason?: CanvasDocumentMergeElementConflictReason
+	status?: "unresolved" | "resolved"
+	tone?: "warning" | "info" | "error"
+	localExists?: boolean
+	remoteExists?: boolean
+}
+
 export interface CanvasDesignProps {
 	/** 设计项目 ID，用于隔离画布级缓存、SW 离线资源与跨画布粘贴校验 */
 	id: string
@@ -282,12 +362,22 @@ export interface CanvasDesignProps {
 	readonly?: boolean
 	/** Magic 配置 */
 	magic?: MagicConfig
+	/** 插件配置，由宿主注入系统内置插件，并可声明用户插件资源目录 */
+	plugins?: CanvasDesignPluginModuleConfig
 	/** 数据 配置 */
 	data?: {
 		/** 默认画布数据，用于初始化画布 */
 		defaultData?: CanvasDocument
 		/** 画布数据变化回调 */
-		onCanvasDesignDataChange?: (canvasData: CanvasDocument) => void
+		onCanvasDesignDataChange?: (
+			canvasData: CanvasDocument,
+			meta?: CanvasDesignDataChangeMeta,
+		) => void
+		/** 画布数据增量变化回调；宿主接入后可避免普通元素提交时 full export */
+		onCanvasDesignDataPatchChange?: (
+			patch: CanvasDesignDataPatch,
+			meta?: CanvasDesignDataChangeMeta,
+		) => void
 		/** 项目附件树根节点列表，用于 @ / 参考资源面板（保留目录层级） */
 		projectAttachmentMentionTree?: ProjectAttachmentMentionNode[]
 		/** `@文件` 默认进入的项目目录 id，通常为当前设计项目目录 */
@@ -300,6 +390,9 @@ export interface CanvasDesignProps {
 		mentionExtension?: MentionExtensionCtor
 		/** 项目侧资源选择面板渲染器（通过依赖注入传入，实现组件隔离） */
 		referenceResourcePanelRenderer?: ReferenceResourcePanelRenderer
+		/** 元素锚点动作提示；仅展示和回调，不改变元素交互能力 */
+		elementActionHints?: CanvasDesignElementActionHint[]
+		onElementActionHintAction?: (elementId: string, actionKey: string) => void
 	}
 	/** marker 配置 */
 	marker?: {
@@ -323,11 +416,30 @@ export interface CanvasDesignProps {
 	}
 	/** 翻译函数 */
 	t?: TFunction
-	/** 是否移动端 */
-	getIsMobile?: () => boolean
+	/** 获取设备形态、布局和输入能力 */
+	getDevice?: () => CanvasDeviceInfo
 	/**
 	 * 宿主底部存在 fixed 层（如分享页「由超级麦吉创建」徽标）时置为 true，
 	 * 缩放控件上移避免被遮挡；由宿主判断场景后传入，CanvasDesign 不依赖业务路由。
 	 */
 	shareHostBottomChrome?: boolean
+}
+
+export type CanvasDesignDataChangeSource =
+	| "element:change"
+	| "canvas:clear"
+	| "element:temporary:converted"
+
+export interface CanvasDesignDataChangeMeta {
+	source: CanvasDesignDataChangeSource
+	changedElementIds?: string[]
+	deletedElementIds?: string[]
+	elementNameChanges?: CanvasElementNameChange[]
+}
+
+export interface CanvasDesignDataPatch {
+	upserts: Array<{ element: LayerElement; parentId: string | null }>
+	deletedElementIds: string[]
+	changedElementIds: string[]
+	elementNameChanges?: CanvasElementNameChange[]
 }

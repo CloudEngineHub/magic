@@ -19,7 +19,9 @@ export async function smartRenameTopic({
 	updateTopicName,
 }: SmartRenameTopicParams): Promise<string | null> {
 	const trimmedQuestion = userQuestion.trim()
-	if (!topicId || !trimmedQuestion) return null
+	if (!topicId) return null
+	// allow empty question
+	// if (!topicId || !trimmedQuestion) return null
 
 	try {
 		const res = await SuperMagicApi.smartTopicRename({

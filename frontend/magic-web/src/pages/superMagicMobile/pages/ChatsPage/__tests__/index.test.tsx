@@ -1,0 +1,239 @@
+import type { ReactNode } from "react"
+import { fireEvent, render, screen, waitFor } from "@testing-library/react"
+import { describe, expect, it, vi } from "vitest"
+
+const {
+	switchChatProjectMock,
+	deleteProjectMock,
+	pinProjectMock,
+	reloadMock,
+	optimisticRemoveMock,
+	optimisticUpdatePinMock,
+} = vi.hoisted(() => ({
+	switchChatProjectMock: vi.fn(),
+	deleteProjectMock: vi.fn(),
+	pinProjectMock: vi.fn(),
+	reloadMock: vi.fn(),
+	optimisticRemoveMock: vi.fn(),
+	optimisticUpdatePinMock: vi.fn(),
+}))
+
+import ChatsPage from "../index"
+import { SuperMobileShellRouteLayout } from "@/pages/superMagicMobile/components/MobileShell/SuperMobileShellRouteLayout"
+
+vi.mock("react-i18next", () => ({
+	initReactI18next: {
+		type: "3rdParty",
+		init: () => {},
+	},
+	useTranslation: () => ({
+		t: (key: string) => key,
+	}),
+}))
+
+vi.mock("@/routes/components/ViewportRouteGuard", () => ({
+	MobileOnlyRoute: ({ children }: { children: ReactNode }) => <>{children}</>,
+}))
+
+vi.mock("@/pages/superMagic/services", () => ({
+	default: {
+		switchChatProject: switchChatProjectMock,
+		deleteProject: deleteProjectMock,
+		project: {
+			pinProject: pinProjectMock,
+		},
+	},
+}))
+
+vi.mock("@/components/base/MagicToaster/utils", () => ({
+	default: {
+		error: vi.fn(),
+	},
+}))
+
+vi.mock("@/pages/superMagic/stores", () => ({
+	roleStore: {
+		currentRole: null,
+	},
+}))
+
+vi.mock("@/pages/superMagic/pages/Workspace/TopicMode", () => ({
+	TopicMode: {
+		General: "general",
+	},
+}))
+
+vi.mock("@/pages/superMagic/hooks/useChatWorkspace", () => ({
+	useChatWorkspace: () => ({
+		createProjectInChatWorkspace: vi.fn(),
+	}),
+}))
+
+vi.mock("@/pages/superMagicMobile/components/ProjectList/hooks/useProjectActions", () => ({
+	useProjectListActions: () => ({
+		projectActions: [],
+		projectActionComponents: null,
+		updateCurrentActionItem: vi.fn(),
+	}),
+}))
+
+vi.mock("../hooks/useChatConversationList", () => ({
+	useChatConversationList: () => ({
+		items: [
+			{
+				id: "chat-project-1",
+				title: "Mock Chat",
+				timeLabel: "just now",
+				isPinned: false,
+				isRunning: false,
+				project: {
+					id: "chat-project-1",
+					project_name: "Mock Chat",
+					workspace_id: "chat-workspace-1",
+				},
+			},
+		],
+		isLoading: false,
+		searchValue: "",
+		setSearchValue: vi.fn(),
+		debouncedSearchValue: "",
+		isEmpty: false,
+		isSearchEmpty: false,
+		hasMore: false,
+		reload: reloadMock,
+		loadMore: vi.fn(),
+		optimisticRemove: optimisticRemoveMock,
+		optimisticUpdatePin: optimisticUpdatePinMock,
+	}),
+}))
+
+vi.mock("../components/ChatConversationListView", () => ({
+	ChatConversationListView: ({
+		items,
+		onOpenSidebar,
+		onPin,
+	}: {
+		items: Array<{
+			id: string
+			title: string
+			isPinned: boolean
+			project: { id: string; project_name: string; workspace_id: string }
+		}>
+		onOpenSidebar: () => void
+		onPin?: (item: (typeof items)[number]) => void
+	}) => (
+		<div>
+			<button type="button" data-testid="chat-list" onClick={onOpenSidebar}>
+				list
+			</button>
+			<button
+				type="button"
+				data-testid="chat-list-pin"
+				onClick={() => {
+					if (onPin) {
+						onPin(items[0]!)
+					}
+				}}
+			>
+				pin
+			</button>
+		</div>
+	),
+}))
+
+vi.mock("@/pages/superMagicMobile/components/ConversationActionsPopup", () => ({
+	default: () => null,
+}))
+
+vi.mock("@/layouts/BaseLayoutMobile/components/MobileTabBar/constants/tabsConfig.shared", () => ({
+	hasOrganizationAppsShortcuts: () => false,
+}))
+
+vi.mock("@/models/user", () => ({
+	userStore: {
+		user: {
+			isPersonalOrganization: false,
+		},
+	},
+}))
+
+vi.mock("@/platform/native", () => ({
+	getNativePort: () => ({
+		navigation: {
+			changeBottomTab: vi.fn(),
+		},
+	}),
+}))
+
+vi.mock("@/pages/superMagicMobile/components/icons/MagiClawNavIcon", () => ({
+	MagiClawNavIcon: () => null,
+}))
+
+vi.mock("@/routes/hooks/useNavigate", () => ({
+	default: () => vi.fn(),
+}))
+
+vi.mock("@/layouts/BaseLayoutMobile/components/MobileSettings", () => ({
+	MobileSettingsPanel: () => null,
+}))
+
+vi.mock("@/pages/superMagicMobile/components/MobileShell/MobileSettingsContext", () => ({
+	MobileSettingsProvider: ({ children }: { children: ReactNode }) => children,
+}))
+
+vi.mock("@/pages/superMagicMobile/components/MobileShell/useRecentProjectsForMenu", () => ({
+	useRecentProjectsForMenu: () => ({
+		recentItems: [],
+		reloadRecentItems: vi.fn(),
+		loadMoreRecentItems: vi.fn(),
+		hasMore: false,
+	}),
+}))
+
+vi.mock("@/pages/superMagicMobile/components/MobileShell/MobileShellSidebar", () => ({
+	default: () => <div data-testid="mobile-shell-sidebar" />,
+}))
+
+vi.mock("@/pages/superMagicMobile/components/MobileShell/MobileShellAppLayout", () => ({
+	MobileShellAppLayout: ({ panel }: { panel: ReactNode }) => <div data-testid="shell">{panel}</div>,
+}))
+
+describe("ChatsPage", () => {
+	it("pins a chat with optimistic reorder before reloading the chat queries list", async () => {
+		pinProjectMock.mockResolvedValue(undefined)
+		reloadMock.mockResolvedValue(undefined)
+
+		render(<ChatsPage />)
+
+		fireEvent.click(screen.getByTestId("chat-list-pin"))
+
+		await waitFor(() => {
+			expect(pinProjectMock).toHaveBeenCalledWith(
+				expect.objectContaining({
+					id: "chat-project-1",
+					workspace_id: "chat-workspace-1",
+				}),
+				true,
+			)
+			expect(optimisticUpdatePinMock).toHaveBeenCalledWith("chat-project-1", true)
+			expect(reloadMock).toHaveBeenCalledWith({ silent: true })
+		})
+	})
+
+	it("falls back to its own shell when rendered without route shell context", () => {
+		render(<ChatsPage />)
+
+		expect(screen.getByTestId("shell")).toBeInTheDocument()
+		expect(screen.getByTestId("chat-list")).toBeInTheDocument()
+	})
+
+	it("reuses the existing shell context when already wrapped by the route shell", () => {
+		render(
+			<SuperMobileShellRouteLayout activeView="chats" closeSidebarAriaLabel="close">
+				<ChatsPage />
+			</SuperMobileShellRouteLayout>,
+		)
+
+		expect(screen.getByTestId("chat-list")).toBeInTheDocument()
+	})
+})

@@ -1,5 +1,11 @@
 import Konva from "konva"
-import type { CanvasConfig, CanvasDocument, ViewportState, ToolType } from "./types"
+import type {
+	CanvasConfig,
+	CanvasDeviceInfo,
+	CanvasDocument,
+	ViewportState,
+	ToolType,
+} from "./types"
 import { ToolTypeEnum } from "./types"
 import { ViewportController } from "./interaction/ViewportController"
 import { EventEmitter, type CanvasEventMap } from "./EventEmitter"
@@ -10,7 +16,7 @@ import { HoverManager } from "./interaction/HoverManager"
 import { SelectionHighlightManager } from "./interaction/SelectionHighlightManager"
 import { KeyboardManager } from "./interaction/KeyboardManager"
 import { ToolManager } from "./interaction/ToolManager"
-import { isMobile as defaultIsMobile } from "./utils/utils"
+import { getDefaultCanvasDeviceInfo } from "./utils/utils"
 import { AlignmentManager } from "./interaction/AlignmentManager"
 import { FrameManager } from "./interaction/FrameManager"
 import { HistoryManager } from "./interaction/HistoryManager"
@@ -31,16 +37,23 @@ import { BackgroundManager } from "./interaction/BackgroundManager"
 import { CanvasFileUploadManager } from "./utils/CanvasFileUploadManager"
 import { GeometryCacheManager } from "./utils/GeometryCacheManager"
 import { ImageResourceManager } from "./utils/ImageResourceManager"
+import { ImageBatchPollingRegistry } from "./utils/ImageBatchPollingRegistry"
 import { SubmitImageWorkerManager } from "./utils/SubmitImageWorkerManager"
 import { VideoPlaybackManager } from "./utils/VideoPlaybackManager"
 import { VideoResourceManager } from "./utils/VideoResourceManager"
 import { MediaResourceOfflineCacheManager } from "./utils/MediaResourceOfflineCacheManager"
+import { CanvasVisibilityManager } from "./utils/CanvasVisibilityManager"
+import { CanvasResourceScheduler } from "./utils/CanvasResourceScheduler"
+import { CanvasResourceUrlWarmupManager } from "./utils/CanvasResourceUrlWarmupManager"
+import { CanvasRuntimeScheduler } from "./runtime/CanvasRuntimeScheduler"
 import { CropManager } from "./interaction/CropManager"
 import { ExtendManager } from "./interaction/ExtendManager"
 import { EraserManager } from "./interaction/EraserManager"
+import { PluginManager } from "./plugins/PluginManager"
 import { ElementRenameManager } from "./interaction/ElementRenameManager"
 import { TextEditingManager } from "./interaction/TextEditingManager"
 import { TextFormattingManager } from "./interaction/TextFormattingManager"
+import { CanvasInputManager } from "./interaction/input"
 import { isCanvasUIComponentNode } from "./utils/domGuards"
 import { buildVirtualResourceScope } from "./utils/pathUtils"
 import {
@@ -55,6 +68,16 @@ import {
 	conversationActions,
 	downloadActions,
 } from "./user-actions"
+
+function areCanvasDeviceInfoEqual(a: CanvasDeviceInfo, b: CanvasDeviceInfo): boolean {
+	return (
+		a.formFactor === b.formFactor &&
+		a.layout === b.layout &&
+		a.input.touch === b.input.touch &&
+		a.input.coarsePointer === b.input.coarsePointer &&
+		a.input.hover === b.input.hover
+	)
+}
 
 /**
  * Canvas类 - 封装Konva画布的初始化和管理
@@ -81,6 +104,7 @@ export class Canvas {
 	public selectionHighlightManager: SelectionHighlightManager
 	public videoSelectionPlaybackManager: VideoSelectionPlaybackManager
 	public videoPlaybackInteractionManager: VideoPlaybackInteractionManager
+	public inputManager: CanvasInputManager
 	public toolManager: ToolManager
 	public keyboardManager: KeyboardManager
 	public alignmentManager: AlignmentManager
@@ -100,18 +124,24 @@ export class Canvas {
 	public canvasFileUploadManager: CanvasFileUploadManager
 	public geometryCacheManager: GeometryCacheManager
 	public imageResourceManager: ImageResourceManager
+	public imageBatchPollingRegistry: ImageBatchPollingRegistry
 	public submitImageWorkerManager: SubmitImageWorkerManager
 	public videoResourceManager: VideoResourceManager
 	public videoPlaybackManager: VideoPlaybackManager
 	public mediaResourceOfflineCacheManager: MediaResourceOfflineCacheManager
+	public visibilityManager: CanvasVisibilityManager
+	public resourceScheduler: CanvasResourceScheduler
+	public resourceUrlWarmupManager: CanvasResourceUrlWarmupManager
+	public runtimeScheduler: CanvasRuntimeScheduler
 	public cropManager: CropManager
 	public extendManager: ExtendManager
 	public eraserManager: EraserManager
 	public textEditingManager: TextEditingManager
 	public textFormattingManager: TextFormattingManager
+	public pluginManager: PluginManager
 
 	public readonly: boolean
-	public isMobileDevice: boolean
+	public deviceInfo: CanvasDeviceInfo
 	public id: string
 
 	public t?: TFunction
@@ -122,6 +152,9 @@ export class Canvas {
 
 	// window 点击事件处理函数引用（用于移除监听器）
 	private handleWindowClick: ((e: MouseEvent) => void) | null = null
+	private resizeObserver: ResizeObserver | null = null
+	private containerContextMenuHandler: ((e: MouseEvent) => void) | null = null
+	private stageContextMenuHandler: ((e: Konva.KonvaEventObject<MouseEvent>) => void) | null = null
 
 	/**
 	 * 构造函数
@@ -136,8 +169,7 @@ export class Canvas {
 
 		this.readonly = options.defaultReadyonly ?? false
 
-		this.isMobileDevice = defaultIsMobile()
-		this.updateIsMobileDevice(options.getIsMobile)
+		this.deviceInfo = options.getDevice ? options.getDevice() : getDefaultCanvasDeviceInfo()
 
 		// 设置容器可以获得焦点
 		this.container.tabIndex = 0
@@ -173,6 +205,15 @@ export class Canvas {
 		// 创建事件发射器
 		this.eventEmitter = new EventEmitter()
 
+		this.pluginManager = new PluginManager()
+		this.pluginManager.registerMany(options.plugins?.builtin ?? [])
+		void this.pluginManager.loadUserPluginsFromCanvasResources({
+			rootPath: options.plugins?.user?.rootPath,
+			directories: options.plugins?.user?.directories,
+			getFileInfo: options.magic?.methods?.getFileInfo,
+			resolveAbsolutePath: options.magic?.methods?.resolveAbsolutePath,
+		})
+
 		// 初始化 MagicConfigManager
 		this.magicConfigManager = new MagicConfigManager({
 			canvas: this,
@@ -193,11 +234,18 @@ export class Canvas {
 					this.id,
 				),
 		})
+		this.resourceScheduler = new CanvasResourceScheduler()
+		this.resourceUrlWarmupManager = new CanvasResourceUrlWarmupManager({
+			canvas: this,
+		})
+		this.runtimeScheduler = new CanvasRuntimeScheduler({ canvas: this })
 
 		// 初始化 ImageResourceManager（图片资源管理器，每个 Canvas 实例独立）
 		this.imageResourceManager = new ImageResourceManager({
 			canvas: this,
 		})
+
+		this.imageBatchPollingRegistry = new ImageBatchPollingRegistry()
 
 		this.submitImageWorkerManager = new SubmitImageWorkerManager({
 			canvas: this,
@@ -272,6 +320,11 @@ export class Canvas {
 			canvas: this,
 		})
 
+		// 初始化统一输入层（工具与手势仲裁共享）
+		this.inputManager = new CanvasInputManager({
+			canvas: this,
+		})
+
 		this.textEditingManager = new TextEditingManager({
 			canvas: this,
 		})
@@ -331,6 +384,10 @@ export class Canvas {
 
 		// 初始化视频播放交互协调器
 		this.videoPlaybackInteractionManager = new VideoPlaybackInteractionManager({
+			canvas: this,
+		})
+
+		this.visibilityManager = new CanvasVisibilityManager({
 			canvas: this,
 		})
 
@@ -413,11 +470,11 @@ export class Canvas {
 	 * 设置窗口大小变化监听
 	 */
 	private setupResizeHandler(): void {
-		const resizeObserver = new ResizeObserver(() => {
+		this.resizeObserver = new ResizeObserver(() => {
 			this.resize()
 		})
 
-		resizeObserver.observe(this.container)
+		this.resizeObserver.observe(this.container)
 	}
 
 	/**
@@ -434,13 +491,14 @@ export class Canvas {
 	 */
 	private setupContextMenuHandler(): void {
 		// 在容器上禁用右键菜单
-		this.container.addEventListener("contextmenu", (e) => {
+		this.containerContextMenuHandler = (e) => {
 			e.preventDefault()
 			return false
-		})
+		}
+		this.container.addEventListener("contextmenu", this.containerContextMenuHandler)
 
 		// 在 stage 上处理右键菜单
-		this.stage.on("contextmenu", (e) => {
+		this.stageContextMenuHandler = (e) => {
 			e.evt.preventDefault()
 
 			// 如果点击的是 stage 本身（空白区域），触发画布右键菜单事件
@@ -462,7 +520,8 @@ export class Canvas {
 					})
 				}
 			}
-		})
+		}
+		this.stage.on("contextmenu", this.stageContextMenuHandler)
 	}
 
 	/**
@@ -586,35 +645,19 @@ export class Canvas {
 		// 监听 Shift 键（宽高比锁定修饰键，影响 Transformer、裁剪框等）
 		this.eventEmitter.on("keyboard:shift:down", () => {
 			this.setKeepRatioModifier(true)
-			this.elementManager.updateAllElementsDraggable()
-			this.transformManager.setKeepRatio()
-			this.cropManager.setKeepRatio()
-			this.extendManager.setKeepRatio()
 		})
 
 		this.eventEmitter.on("keyboard:shift:up", () => {
 			this.setKeepRatioModifier(false)
-			this.elementManager.updateAllElementsDraggable()
-			this.transformManager.setKeepRatio()
-			this.cropManager.setKeepRatio()
-			this.extendManager.setKeepRatio()
 		})
 
 		// 监听 Meta/Command 键（宽高比锁定修饰键）
 		this.eventEmitter.on("keyboard:meta:down", () => {
 			this.setKeepRatioModifier(true)
-			this.elementManager.updateAllElementsDraggable()
-			this.transformManager.setKeepRatio()
-			this.cropManager.setKeepRatio()
-			this.extendManager.setKeepRatio()
 		})
 
 		this.eventEmitter.on("keyboard:meta:up", () => {
 			this.setKeepRatioModifier(false)
-			this.elementManager.updateAllElementsDraggable()
-			this.transformManager.setKeepRatio()
-			this.cropManager.setKeepRatio()
-			this.extendManager.setKeepRatio()
 		})
 
 		// 修饰键按下期间，选区变化后需要实时刷新拖拽能力：
@@ -727,7 +770,19 @@ export class Canvas {
 	 * @param pressed - 是否按下
 	 */
 	public setKeepRatioModifier(pressed: boolean): void {
+		if (this.keepRatioModifierPressed === pressed) {
+			return
+		}
+
 		this.keepRatioModifierPressed = pressed
+		this.refreshKeepRatioModifierConsumers()
+	}
+
+	/**
+	 * 重置宽高比锁定修饰键状态（窗口失焦/页面隐藏/跨焦点 keyup 时兜底）
+	 */
+	public resetKeepRatioModifier(): void {
+		this.setKeepRatioModifier(false)
 	}
 
 	/**
@@ -736,6 +791,13 @@ export class Canvas {
 	 */
 	public isKeepRatioModifierPressed(): boolean {
 		return this.keepRatioModifierPressed
+	}
+
+	private refreshKeepRatioModifierConsumers(): void {
+		this.elementManager.updateAllElementsDraggable()
+		this.transformManager.setKeepRatio()
+		this.cropManager.setKeepRatio()
+		this.extendManager.setKeepRatio()
 	}
 
 	/**
@@ -747,7 +809,11 @@ export class Canvas {
 
 		this.stage.width(width)
 		this.stage.height(height)
-		this.stage.batchDraw()
+		this.runtimeScheduler.requestLayerDraw("stage", {
+			source: "Canvas",
+			reason: "resize",
+			priority: "normal",
+		})
 
 		// 发布画布大小变化事件
 		this.eventEmitter.emit({ type: "canvas:resize", data: { width, height } })
@@ -765,6 +831,8 @@ export class Canvas {
 	 * @param doc - 画布文档
 	 */
 	public loadDocument(doc: CanvasDocument): void {
+		this.resourceUrlWarmupManager.warmupDocument(doc, "loadDocument")
+
 		// 禁用历史记录，避免在加载时记录
 		this.historyManager.disable()
 
@@ -968,7 +1036,11 @@ export class Canvas {
 		this.elementManager.rerenderAllElementsForLocale()
 		this.nameLabelManager.refreshAfterLocaleChange()
 		this.sizeLabelManager.refreshAfterLocaleChange()
-		this.stage.batchDraw()
+		this.runtimeScheduler.requestLayerDraw("stage", {
+			source: "Canvas",
+			reason: "locale-change",
+			priority: "normal",
+		})
 	}
 
 	/** 清空生图/生视频工具内的模型列表缓存（与 Magic 配置或语言切换对齐） */
@@ -977,11 +1049,20 @@ export class Canvas {
 	}
 
 	/**
-	 * 设置是否为移动设备
-	 * @param isMobileDevice - 是否为移动设备
+	 * 设置设备形态、布局和输入能力
 	 */
-	public updateIsMobileDevice(getIsMobile?: () => boolean): void {
-		this.isMobileDevice = getIsMobile ? getIsMobile() : defaultIsMobile()
+	public updateDeviceInfo(getDevice?: () => CanvasDeviceInfo): void {
+		const previous = this.deviceInfo
+		const current = getDevice ? getDevice() : getDefaultCanvasDeviceInfo()
+		if (areCanvasDeviceInfoEqual(previous, current)) {
+			return
+		}
+
+		this.deviceInfo = current
+		this.eventEmitter.emit({
+			type: "canvas:devicechange",
+			data: { previous, current },
+		})
 	}
 
 	/**
@@ -1023,6 +1104,24 @@ export class Canvas {
 	 * 销毁画布
 	 */
 	public destroy(): void {
+		this.visibilityManager.destroy()
+		this.resourceUrlWarmupManager.destroy()
+		this.resourceScheduler.destroy()
+		this.runtimeScheduler.destroy()
+
+		if (this.resizeObserver) {
+			this.resizeObserver.disconnect()
+			this.resizeObserver = null
+		}
+		if (this.containerContextMenuHandler) {
+			this.container.removeEventListener("contextmenu", this.containerContextMenuHandler)
+			this.containerContextMenuHandler = null
+		}
+		if (this.stageContextMenuHandler) {
+			this.stage.off("contextmenu", this.stageContextMenuHandler)
+			this.stageContextMenuHandler = null
+		}
+
 		// 移除 window 点击监听器
 		if (this.handleWindowClick) {
 			window.removeEventListener("click", this.handleWindowClick, true)
@@ -1035,6 +1134,7 @@ export class Canvas {
 		this.dropOverlayManager.destroy()
 		this.cursorManager.destroy()
 		this.permissionManager.destroy()
+		this.imageBatchPollingRegistry.destroy()
 		this.elementManager.destroy()
 		this.geometryCacheManager.destroy()
 		this.viewportController.destroy()
@@ -1044,6 +1144,7 @@ export class Canvas {
 		this.videoSelectionPlaybackManager.destroy()
 		this.videoPlaybackInteractionManager.destroy()
 		this.toolManager.destroy()
+		this.inputManager.destroy()
 		this.keyboardManager.destroy()
 		this.alignmentManager.destroy()
 		this.frameManager.destroy()
@@ -1055,7 +1156,6 @@ export class Canvas {
 		this.textFormattingManager.destroy()
 		this.nameLabelManager.destroy()
 		this.sizeLabelManager.destroy()
-		this.toolManager.destroy()
 		this.backgroundManager.destroy()
 		this.canvasFileUploadManager.destroy()
 		this.cropManager.destroy()
@@ -1068,6 +1168,7 @@ export class Canvas {
 		this.videoPlaybackManager.destroy()
 		this.videoResourceManager.destroy()
 		this.mediaResourceOfflineCacheManager.destroy()
+		this.pluginManager.destroy()
 		this.stage.destroy()
 	}
 }

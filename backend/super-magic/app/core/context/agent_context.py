@@ -31,6 +31,8 @@ from agentlang.logger import get_logger
 from app.path_manager import PathManager
 from app.core.context.run_interruption import RunCancelState, RunCleanupRegistry, RunCancellationHandle
 from app.core.entity.final_task_state import FinalTaskState
+from app.core.models.agent_model_context import AgentModelContext
+from app.core.context.execution_source import SuperMagicExecutionSource
 from loguru import logger
 from app.infrastructure.storage.types import PlatformType
 from agentlang.llms.token_usage.models import TokenUsageCollection
@@ -43,13 +45,18 @@ logger = get_logger(__name__)
 _CANCEL_BLOCKER_WAIT_TIMEOUT_S: float = 10.0
 
 
-async def _auto_manage_correlation_id(event_type: EventType, data: BaseEventData) -> None:
+async def _auto_manage_correlation_id(
+    event_type: EventType,
+    data: BaseEventData,
+    context_id: Optional[str] = None,
+) -> None:
     """
     自动管理事件关联数据
 
     Args:
         event_type: 事件类型
         data: 事件数据
+        context_id: AgentContext 唯一标识，用于隔离不同 Agent 的事件配对状态
     """
     from agentlang.event import (
         get_correlation_manager,
@@ -80,14 +87,14 @@ async def _auto_manage_correlation_id(event_type: EventType, data: BaseEventData
     if is_before_event(event_type.value):
         # before 事件：生成 correlation_id
         if not data.correlation_id:  # 只有在没有手动设置时才自动生成
-            correlation_id = correlation_manager.generate_for_before_event(event_pair_type)
+            correlation_id = correlation_manager.generate_for_before_event(event_pair_type, context_id)
             data.correlation_id = correlation_id
             logger.info(f"自动生成 correlation_id: {correlation_id} for {event_type}")
 
     elif is_after_event(event_type.value):
         # after 事件：消耗 correlation_id
         if not data.correlation_id:  # 只有在没有手动设置时才自动消耗
-            consumed_correlation_id = correlation_manager.consume_for_after_event(event_pair_type)
+            consumed_correlation_id = correlation_manager.consume_for_after_event(event_pair_type, context_id)
             if consumed_correlation_id:
                 data.correlation_id = consumed_correlation_id
                 logger.info(f"自动消耗 correlation_id: {consumed_correlation_id} for {event_type}")
@@ -116,6 +123,7 @@ class AgentContext(BaseAgentContext):
 
         # 普通路径与隔离路径都走同一初始化逻辑；共享实例由 is_initialized 保护避免重复注册。
         self._init_shared_fields()
+        self.model_context = AgentModelContext()
 
         # 初始化中断事件通知
         self._interruption_event = asyncio.Event()
@@ -178,6 +186,14 @@ class AgentContext(BaseAgentContext):
         """获取当前子 Agent 深度。主 Agent 固定为 0。"""
         return self._subagent_depth
 
+    def is_subagent_context(self) -> bool:
+        """当前上下文是否由 call_subagent 派生。"""
+        return self.get_subagent_depth() > 0
+
+    def is_interactive_main_agent_context(self) -> bool:
+        """当前上下文是否可以直接向终端用户发起交互。"""
+        return bool(getattr(self, "is_main_agent", False)) and not self.is_subagent_context()
+
     def set_subagent_parent_agent_name(self, agent_name: Optional[str]) -> None:
         """记录调用当前子 Agent 的父 Agent 名称。"""
         self._subagent_parent_agent_name = agent_name
@@ -219,15 +235,19 @@ class AgentContext(BaseAgentContext):
                 agent_id=agent_id,
             )
             self._horizon = AgentHorizon(store=store, agent_id=agent_id, agent_context=self)
+            self._horizon_agent_id = agent_id
         return self._horizon
 
     def set_horizon_agent_id(self, agent_id: str) -> None:
         """在 agent.py 完成 ID 分配后调用，确保持久化文件名正确。
 
         若 horizon 还未初始化则直接设置待用 ID；
-        若已初始化则重建（agent_id 改变时需要换文件）。
+        若已初始化且 ID 没变则保留当前实例，避免丢失 init 阶段写入的运行时状态；
+        只有 agent_id 真正改变时才重建（文件名需要切换）。
         """
         if self._horizon is None:
+            self._horizon_agent_id = agent_id
+        elif (self._horizon_agent_id or "main") == agent_id:
             self._horizon_agent_id = agent_id
         else:
             from app.core.horizon import AgentHorizon
@@ -295,6 +315,8 @@ class AgentContext(BaseAgentContext):
             "streaming_sinks": ([], List),
             # Human in the Loop：前端工具调用等待用户完成时的暂停标记
             "user_tool_call_pending_id": (None, Optional[str]),
+            # 当前 Agent run 的触发来源，供 ask_user 等运行态策略读取
+            "execution_source": (SuperMagicExecutionSource.HUMAN_CHAT, SuperMagicExecutionSource),
             # Agent Master 管理
             "agent_code": (None, Optional[str]),  # 当前自定义 Agent 的 agent_code
             # 消息版本协商（v1 / v2），由 set_chat_client_message 提取 dynamic_config.message_version 写入
@@ -358,6 +380,17 @@ class AgentContext(BaseAgentContext):
             Optional[str]: agent_code
         """
         return self.shared_context.get_field("agent_code")
+
+    def set_execution_source(self, source: SuperMagicExecutionSource) -> None:
+        """设置当前 Agent run 的触发来源。"""
+        self.shared_context.update_field("execution_source", source)
+
+    def get_execution_source(self) -> SuperMagicExecutionSource:
+        """获取当前 Agent run 的触发来源。"""
+        source = self.shared_context.get_field("execution_source")
+        if isinstance(source, SuperMagicExecutionSource):
+            return source
+        return SuperMagicExecutionSource.from_raw(source)
 
     def is_magiclaw(self) -> bool:
         """当前会话是否为 magiclaw 模式（龙虾 claw agent）。"""
@@ -643,7 +676,7 @@ class AgentContext(BaseAgentContext):
             Event: 处理后的事件对象
         """
         # 自动处理 correlation_id
-        await _auto_manage_correlation_id(event_type, data)
+        await _auto_manage_correlation_id(event_type, data, self.context_id)
 
         event = Event(event_type, data)
         return await self.get_event_dispatcher().dispatch(event)
@@ -660,7 +693,7 @@ class AgentContext(BaseAgentContext):
             StoppableEvent: 处理后的事件对象
         """
         # 自动处理 correlation_id
-        await _auto_manage_correlation_id(event_type, data)
+        await _auto_manage_correlation_id(event_type, data, self.context_id)
 
         event = StoppableEvent(event_type, data)
         return await self.get_event_dispatcher().dispatch(event)

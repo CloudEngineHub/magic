@@ -89,7 +89,7 @@ function WriteFile(props: NodeProps) {
 				<>
 					<VerticalLine height={28} className="text-input" />
 					<MagicTooltip title={t("playbackControl.viewProcess")}>
-						<div className={cx(styles.button)} onClick={handleOpenPlaybackTab}>
+						<div className={cx(styles.button)} onClick={handleOpenPlaybackTab} data-testid="handle-open-playback-tab">
 							<MonitorPlay size={16} className="text-foreground" />
 						</div>
 					</MagicTooltip>
@@ -103,6 +103,7 @@ function WriteFile(props: NodeProps) {
 				className={cx(styles.button, "mr-[6px]")}
 				onClick={toggle}
 				onMouseEnter={() => loadTextEditor()}
+				data-testid="toggle"
 			>
 				{open ? (
 					<ChevronUp
@@ -128,7 +129,7 @@ function WriteFile(props: NodeProps) {
 	])
 
 	return (
-		<div className={styles.node} onMouseEnter={onMouseEnter} onMouseLeave={onMouseLeave}>
+		<div className={styles.node} onMouseEnter={onMouseEnter} onMouseLeave={onMouseLeave} data-testid="on-mouse-enter">
 			<div className={cx(styles.container, { [styles.containerActive]: open })}>
 				<div className={styles.nodeHeader}>
 					<Flex

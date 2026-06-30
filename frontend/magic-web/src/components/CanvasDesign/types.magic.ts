@@ -124,6 +124,8 @@ export interface ImageModelItem {
 		}[]
 		/** 最大参考图数量 */
 		max_reference_images?: number
+		/** 最大生成数量 */
+		max_output_images?: number
 		/** 尺寸列表 */
 		sizes: {
 			label: string // "1:1"
@@ -427,6 +429,43 @@ export interface GenerateVideoGeneration {
 	sample_count?: number
 }
 
+/** 视频生成结果计费信息 */
+export interface VideoGenerationBillingInfo {
+	/** 本次生成消耗积分；null 表示后端未返回/无需展示 */
+	points?: number | null
+}
+
+/** 视频生成结果参数信息 */
+export interface VideoGenerationInfo {
+	/** 任务类型 */
+	task?: GenerateVideoTask | string
+	/** 输入模式 */
+	input_mode?: VideoInputMode | string
+	/** 宽高比，如 16:9 */
+	aspect_ratio?: string
+	/** 分辨率，如 480p */
+	resolution?: string
+	/** 时长（秒） */
+	duration_seconds?: number | null
+}
+
+/** 视频生成运行时间信息 */
+export interface VideoGenerationRuntimeInfo {
+	/** 开始时间，格式如 2026-06-25 14:32:08 */
+	started_at?: string | null
+	/** 完成时间，格式如 2026-06-25 14:36:20 */
+	finished_at?: string | null
+	/** 生成耗时（秒） */
+	elapsed_seconds?: number | null
+}
+
+/** 画布保存的视频生成结果元信息 */
+export interface VideoGenerationResultMeta {
+	billing?: VideoGenerationBillingInfo | null
+	generation_info?: VideoGenerationInfo | null
+	runtime?: VideoGenerationRuntimeInfo | null
+}
+
 /**
  * 根存储中持久化的默认生视频偏好（非完整 API 请求体）
  */
@@ -503,6 +542,91 @@ export interface GenerateImageResponse {
 	id: string
 }
 
+export interface GeneratedImageResultItem {
+	/** 结果序号，从 1 开始 */
+	index: number
+	/** 文件名 */
+	file_name: string
+	/** 文件 URL */
+	file_url: string | null
+}
+
+/**
+ * 发起多图生成请求参数
+ */
+export interface GenerateImagesRequest extends GenerateImageRequest {
+	/** 本次请求生成图片数量 */
+	generate_num: number
+}
+
+/**
+ * 发起多图生成响应数据
+ */
+export interface GenerateImagesResponse {
+	/** 项目 id */
+	project_id: string
+	/** 图片任务 id */
+	image_id: string
+	/** 模型 id */
+	model_id: string
+	/** 提示词 */
+	prompt: string
+	/** 大小 */
+	size: string
+	/** 分辨率 */
+	resolution?: string
+	/** 文件目录 */
+	file_dir: string
+	/** 生成数量 */
+	generate_num: number
+	/** 状态 */
+	status: GenerationStatus
+	/** 错误信息 */
+	error_message: string | null
+	/** 已返回的图片列表 */
+	images: GeneratedImageResultItem[]
+}
+
+/**
+ * AI 补全图片提示词请求参数
+ */
+export interface CompleteImagePromptRequest {
+	/** 项目 id */
+	project_id?: string
+	/**
+	 * 当前场景拼装后的用户提示词。
+	 *
+	 * 推荐使用后端建议的 5 段结构：
+	 * 1. 任务目标：说明要生成、补全或优化哪类生图提示词
+	 * 2. 当前输入：用户输入框已有内容；为空时写“用户当前未填写”
+	 * 3. 参考图角色：说明参考图用于主体 / 风格 / 背景 / 构图 / 材质 / 分别套用等
+	 * 4. 业务限制：当前场景必须遵守的限制，保持简短
+	 * 5. 补全方向：希望补充的画面维度
+	 *
+	 * 示例：
+	 * 任务目标：为商品换背景的文生背景输入框生成或补全一段背景提示词。
+	 * 当前输入：用户当前未填写
+	 * 参考图角色：共有 1 张商品图，用于理解商品类别、材质、颜色、软硬属性和商业气质；这些商品会分别生成图片，不会放进同一张图。
+	 * 业务限制：背景应适合“自动摆放”；不要描述商品之间的搭配、并排或同框关系；不要改变商品本身颜色、款式、logo、图案或材质。
+	 * 补全方向：补充一个具体可拍摄的商业摄影背景，包括空间、材质、少量道具、光线、色彩氛围、构图留白和物理承托关系。
+	 */
+	user_prompt: string
+	/** 可选模型 id */
+	model_id?: string
+	/** 参考图 */
+	reference_images?: string[]
+	/** 参考图参数 */
+	reference_image_options?: ReferenceImageOptions
+}
+
+/**
+ * AI 补全图片提示词响应
+ */
+export interface CompleteImagePromptResponse {
+	/** 最终可直接写入输入框的提示词 */
+	prompt: string
+}
+
 /** 单条参考图参数 */
 export interface ReferenceImageOptionEntry {
 	path: string
@@ -576,6 +700,7 @@ export const ImageGenerationTaskTypeMap = {
 	RemoveBackground: "remove-background",
 	Eraser: "eraser",
 	Expand: "expand",
+	Batch: "batch",
 } as const
 
 export type ImageGenerationTaskType =
@@ -602,6 +727,10 @@ export interface ImageGenerationTaskMeta {
 	size?: string
 	/** 参考图参数（高清 / 去背景 / 橡皮擦除 / 扩图） */
 	reference_image_options?: ReferenceImageOptions
+	/** 批量生成结果序号，从 1 开始 */
+	output_index?: number
+	/** 批量生成总数 */
+	output_count?: number
 }
 
 /**
@@ -797,6 +926,44 @@ export interface ImageGenerationResultResponse {
 }
 
 /**
+ * 查询多图生成结果请求参数
+ */
+export interface GetImageGenerationResultsParams {
+	/** 项目 id */
+	project_id: string
+	/** 图片任务 id */
+	image_id: string
+}
+
+/**
+ * 查询多图生成结果响应数据
+ */
+export interface ImageGenerationResultsResponse {
+	/** 项目 id */
+	project_id: string
+	/** 图片任务 id */
+	image_id: string
+	/** 模型 id */
+	model_id: string
+	/** 提示词 */
+	prompt: string
+	/** 大小 */
+	size: string
+	/** 分辨率 */
+	resolution?: string
+	/** 文件目录 */
+	file_dir: string
+	/** 生成数量 */
+	generate_num: number
+	/** 状态：pending 待处理，processing 处理中，completed 已完成，failed 失败 */
+	status: GenerationStatus
+	/** 错误信息 */
+	error_message: string | null
+	/** 已返回的图片列表 */
+	images: GeneratedImageResultItem[]
+}
+
+/**
  * 查询视频生成结果请求参数
  */
 export interface GetVideoGenerationResultParams {
@@ -846,6 +1013,12 @@ export interface VideoGenerationResultResponse {
 	poster_file_id: string
 	/** 海报文件 URL */
 	poster_file_url: string
+	/** 计费信息 */
+	billing?: VideoGenerationBillingInfo | null
+	/** 生成参数信息 */
+	generation_info?: VideoGenerationInfo | null
+	/** 运行时间信息 */
+	runtime?: VideoGenerationRuntimeInfo | null
 }
 
 /**
@@ -863,13 +1036,35 @@ export interface GetFileInfoResponse {
 	 * 由路径解析到附件项时填充
 	 */
 	source?: AttachmentSourceEnum
+	/** get-file-url 原始版本字段；当前 superMagic 可能返回 null */
+	version?: string | null
+	/**
+	 * 稳定资源版本；由宿主根据强版本/hash 或附件元信息生成。
+	 * CanvasDesign 只把它当作不透明 token，不依赖宿主 file_id。
+	 */
+	resource_version?: string
+	/** 宿主附件更新时间；仅作为 resource_version 的来源之一，CanvasDesign 不直接依赖该字段 */
+	updated_at?: string
+	/** 压缩资源长度或附件大小；用于辅助版本判断 */
+	content_length?: number
 }
 
-/** 上传子目录枚举值，内部用常量控制 images / videos / audios */
+export interface CanvasFileResourceMeta {
+	status: "exists" | "deleted" | "unknown"
+	fileName?: string
+	source?: AttachmentSourceEnum
+	/** 宿主生成的不透明版本 token；CanvasDesign 资源同一性仍以规范化 path 为准 */
+	resourceVersion?: string | null
+	updatedAt?: string | null
+	contentLength?: number | null
+}
+
+/** 上传子目录枚举值，内部用常量控制 images / videos / audios / plugins */
 export const UploadSubDir = {
 	Images: "images",
 	Videos: "videos",
 	Audios: "audios",
+	Plugins: "plugins",
 } as const
 
 export type UploadSubDirType = (typeof UploadSubDir)[keyof typeof UploadSubDir]
@@ -886,7 +1081,7 @@ export interface UploadFile {
 	 * 如果为 false，则上传的文件会自动重命名
 	 */
 	overwrite?: boolean
-	/** 上传子目录，使用 UploadSubDir.Images | UploadSubDir.Videos | UploadSubDir.Audios */
+	/** 上传子目录，使用 UploadSubDir.Images | UploadSubDir.Videos | UploadSubDir.Audios | UploadSubDir.Plugins */
 	uploadSubDir: UploadSubDirType
 	/** 单个文件上传完成回调 */
 	onUploadComplete: (result: UploadFileResponse) => void
@@ -1128,11 +1323,25 @@ export interface CanvasDesignMethods {
 	 */
 	getVideoModelList?: () => Promise<VideoModelItem[]>
 	/**
+	 * AI 补全图片提示词
+	 * @param params 提示词补全请求参数
+	 * @returns Promise<提示词补全结果>
+	 */
+	completeImagePrompt?: (
+		params: CompleteImagePromptRequest,
+	) => Promise<CompleteImagePromptResponse>
+	/**
 	 * 发起图片生成
 	 * @param params 图片生成请求参数
 	 * @returns Promise<图片生成响应数据>
 	 */
 	generateImage: (params: GenerateImageRequest) => Promise<GenerateImageResponse>
+	/**
+	 * 发起多图生成
+	 * @param params 多图生成请求参数
+	 * @returns Promise<多图生成响应数据>
+	 */
+	generateImages?: (params: GenerateImagesRequest) => Promise<GenerateImagesResponse>
 	/**
 	 * 发起图片去背景
 	 * @param params 去背景请求参数
@@ -1184,6 +1393,14 @@ export interface CanvasDesignMethods {
 		params: GetImageGenerationResultParams,
 	) => Promise<ImageGenerationResultResponse>
 	/**
+	 * 查询多图生成结果
+	 * @param params 查询参数
+	 * @returns Promise<多图生成结果响应数据>
+	 */
+	getImageGenerationResults?: (
+		params: GetImageGenerationResultsParams,
+	) => Promise<ImageGenerationResultsResponse>
+	/**
 	 * 查询视频生成结果
 	 * @param params 查询参数
 	 * @returns Promise<视频生成结果响应数据>
@@ -1224,6 +1441,15 @@ export interface CanvasDesignMethods {
 		path: string,
 		options?: { useImageProcess?: boolean; forceRefresh?: boolean },
 	) => Promise<GetFileInfoResponse>
+	/**
+	 * 获取资源轻量版本信息；用于 cache hit 后台校验，不应触发 OSS 换链或下载 body
+	 * @param path 文件路径
+	 * @param options.useImageProcess 是否按图片资源变体计算版本
+	 */
+	getFileResourceMeta?: (
+		path: string,
+		options?: { useImageProcess?: boolean },
+	) => Promise<CanvasFileResourceMeta>
 	/**
 	 * 将画布中记录的资源路径（如 ./xxx/xx）解析为宿主可识别的绝对路径（必选；画布资源同一性与此对齐）
 	 * @param path 原始资源路径（相对或绝对）

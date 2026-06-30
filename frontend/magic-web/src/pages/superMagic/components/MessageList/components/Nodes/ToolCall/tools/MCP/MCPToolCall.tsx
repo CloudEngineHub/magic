@@ -114,6 +114,7 @@ function MCPToolCallNode(props: NodeProps) {
 			className="w-full flex-none overflow-hidden py-[5px]"
 			onMouseEnter={onMouseEnter}
 			onMouseLeave={onMouseLeave}
+			data-testid="on-mouse-enter"
 		>
 			<div
 				className={cn(
@@ -140,6 +141,7 @@ function MCPToolCallNode(props: NodeProps) {
 						className={cn(mcpToggleButton, "mr-1.5")}
 						onClick={toggle}
 						onMouseEnter={preloadSyntax}
+						data-testid="toggle"
 					>
 						{open ? (
 							<ChevronUp
@@ -164,7 +166,7 @@ function MCPToolCallNode(props: NodeProps) {
 										<span className="text-xs font-normal leading-[1.333] text-foreground">
 											{t("mcpTool.parameters")}
 										</span>
-										<div className={codeBlock} onCopy={handleCopy}>
+										<div className={codeBlock} onCopy={handleCopy} data-testid="handle-copy">
 											<Suspense fallback={null}>
 												<SyntaxHighlighter
 													language="json"
@@ -184,7 +186,7 @@ function MCPToolCallNode(props: NodeProps) {
 										<span className="text-xs font-normal leading-[1.333] text-foreground">
 											{t("mcpTool.result")}
 										</span>
-										<div className={codeBlock} onCopy={handleCopy}>
+										<div className={codeBlock} onCopy={handleCopy} data-testid="handle-copy-2">
 											<Suspense fallback={null}>
 												<SyntaxHighlighter
 													language="json"

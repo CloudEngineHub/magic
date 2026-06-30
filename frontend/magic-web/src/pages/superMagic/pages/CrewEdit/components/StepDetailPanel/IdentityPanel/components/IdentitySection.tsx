@@ -60,6 +60,7 @@ function IdentitySectionInner({ disabled = false, onOpenLocalize }: IdentitySect
 							src={avatarUrl}
 							alt={name}
 							className="h-full w-full rounded-xl object-cover"
+							data-testid="identity-section-image"
 						/>
 					) : (
 						<div className="flex h-full w-full items-center justify-center">

@@ -14,6 +14,7 @@ use Dtyq\SuperMagic\Domain\SuperAgent\Entity\ValueObject\MemberRole;
 use Dtyq\SuperMagic\Domain\SuperAgent\Entity\ValueObject\MemberType;
 use Dtyq\SuperMagic\Domain\SuperAgent\Repository\Facade\ProjectMemberRepositoryInterface;
 use Dtyq\SuperMagic\Domain\SuperAgent\Repository\Facade\ProjectMemberSettingRepositoryInterface;
+use Dtyq\SuperMagic\Domain\SuperAgent\Repository\Facade\ProjectRepositoryInterface;
 use Hyperf\DbConnection\Db;
 
 /**
@@ -26,6 +27,7 @@ class ProjectMemberDomainService
     public function __construct(
         private readonly ProjectMemberRepositoryInterface $projectMemberRepository,
         private readonly ProjectMemberSettingRepositoryInterface $projectMemberSettingRepository,
+        private readonly ProjectRepositoryInterface $projectRepository,
     ) {
     }
 
@@ -129,6 +131,28 @@ class ProjectMemberDomainService
     }
 
     /**
+     * Batch count participated projects by workspace.
+     *
+     * The count uses the same semantics as participated projects with show_collaboration=1:
+     * owned projects in the workspace plus collaboration projects bound to the workspace.
+     *
+     * @return array<int, int> [workspace_id => count]
+     */
+    public function countCooperateProjectsByWorkspaceIds(
+        string $userId,
+        array $workspaceIds,
+        ?array $organizationCodes = null,
+        bool $showHidden = false
+    ): array {
+        return $this->projectMemberRepository->countCooperateProjectsByWorkspaceIds(
+            $userId,
+            $workspaceIds,
+            $organizationCodes,
+            $showHidden
+        );
+    }
+
+    /**
      * Batch get project IDs that have effective collaborators.
      *
      * Effective collaborators are ACTIVE members in MANAGE/EDITOR/VIEWER roles
@@ -218,11 +242,18 @@ class ProjectMemberDomainService
     {
         // 1. 检查数据是否存在，如果不存在先创建默认数据
         $setting = $this->projectMemberSettingRepository->findByUserAndProject($userId, $projectId);
+        $settingCreated = false;
         if ($setting === null) {
             $this->projectMemberSettingRepository->create($userId, $projectId, $organizationCode);
+            $settingCreated = true;
         }
 
-        return $this->projectMemberSettingRepository->updateLastActiveTime($userId, $projectId);
+        $updated = $this->projectMemberSettingRepository->updateLastActiveTime($userId, $projectId);
+        if (! $settingCreated && ! $updated) {
+            return false;
+        }
+
+        return $this->projectRepository->updateUpdatedAtToNow($projectId);
     }
 
     /**

@@ -9,6 +9,7 @@ import { TopicMode } from "@/pages/superMagic/pages/Workspace/TopicMode"
 import superMagicModeService from "@/services/superMagic/SuperMagicModeService"
 import magicToast from "@/components/base/MagicToaster/utils"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
+import { runActiveEditor } from "../utils/editorLifecycle"
 
 const logger = Logger.createLogger("useSharedDataFromApp")
 
@@ -54,9 +55,14 @@ function useSharedDataFromApp({ editor, addFiles, uploadEnabled }: UseSharedData
 					// Handle text content
 					if (data.type === 2 && data.content) {
 						logger.log("Inserting text content", data.content)
-						editor?.chain().insertContent(data.content).focus().run()
-						return
-					}
+						// editor 可能已被销毁（如移动端切换 Tab 导致编辑器卸载），
+						// 此时其 commandManager 已为 null，直接调用 chain() 会抛
+						// "null is not an object (evaluating 'this.commandManager.chain')"。
+							runActiveEditor(editor, (activeEditor) => {
+								activeEditor.chain().insertContent(data.content).focus().run()
+							})
+							return
+						}
 
 					// Handle file sharing with streaming
 					if (data.type === 1 && data.stream) {

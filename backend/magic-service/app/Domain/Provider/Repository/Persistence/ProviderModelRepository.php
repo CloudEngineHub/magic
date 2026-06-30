@@ -20,6 +20,7 @@ use App\Domain\Provider\Repository\Facade\MagicProviderAndModelsInterface;
 use App\Domain\Provider\Repository\Facade\ProviderModelRepositoryInterface;
 use App\Domain\Provider\Repository\Persistence\Model\ProviderConfigModel;
 use App\Domain\Provider\Repository\Persistence\Model\ProviderModelModel;
+use App\Domain\Provider\Support\BillingTierFlatPriceCompatibility;
 use App\ErrorCode\ServiceProviderErrorCode;
 use App\Infrastructure\Core\Exception\ExceptionBuilder;
 use App\Infrastructure\Core\ValueObject\Page;
@@ -46,7 +47,16 @@ class ProviderModelRepository extends AbstractProviderModelRepository implements
         } else {
             $builder->where('model_id', $modelId);
         }
-        $checkStatus && $builder->where('status', Status::Enabled->value);
+        if ($checkStatus) {
+            $builder->where('status', Status::Enabled->value);
+            // 开启的服务商
+            $enabledProviderConfigIds = $this->createBuilder($dataIsolation, ProviderConfigModel::query())
+                ->where('status', Status::Enabled->value)
+                ->whereNull('deleted_at')
+                ->pluck('id')
+                ->toArray();
+            $builder->whereIn('service_provider_config_id', $enabledProviderConfigIds);
+        }
         $result = Db::select($builder->toSql(), $builder->getBindings());
         if (! isset($result[0])) {
             return null;
@@ -110,6 +120,9 @@ class ProviderModelRepository extends AbstractProviderModelRepository implements
         $dto->setOrganizationCode($dataIsolation->getCurrentOrganizationCode());
 
         $data = $dto->toArray();
+        if (isset($data['config']) && is_array($data['config'])) {
+            $data['config'] = BillingTierFlatPriceCompatibility::deriveFlatFields($data['config']);
+        }
         $entity = new ProviderModelEntity($data);
 
         if ($dto->getId()) {

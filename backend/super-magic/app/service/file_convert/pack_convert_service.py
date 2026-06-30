@@ -11,8 +11,11 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from loguru import logger
 
+from app.infrastructure.storage.base import BaseFileProcessor
+from app.infrastructure.storage.factory import StorageFactory
+from app.infrastructure.storage.types import PlatformType
 from app.path_manager import PathManager
-from app.service.file_convert.base_convert_service import BaseConvertService
+from app.service.file_convert.base_convert_service import BaseConvertService, STSTemporaryCredential
 
 
 class PackConvertService(BaseConvertService):
@@ -73,15 +76,12 @@ class PackConvertService(BaseConvertService):
 
             zip_info = {"filename": zip_path.stem, "local_path": str(zip_path), "type": "zip"}
 
-            try:
-                _, oss_key = await self._upload_file_to_storage(zip_path, sts_cred_obj)
-                if oss_key:
-                    zip_info["oss_key"] = oss_key
-                    logger.info(f"ZIP 上传成功，存储键: {oss_key}")
-                else:
-                    logger.warning("ZIP 上传失败，仅返回本地路径")
-            except Exception as upload_error:
-                logger.error(f"上传 ZIP 到对象存储失败: {upload_error}")
+            oss_key = await self._upload_zip_to_storage(zip_path, sts_cred_obj)
+            if not oss_key:
+                raise RuntimeError("ZIP 上传失败，未返回存储键")
+
+            zip_info["oss_key"] = oss_key
+            logger.info(f"ZIP 上传成功，存储键: {oss_key}")
 
             result["files"].append(zip_info)
             return result
@@ -89,9 +89,54 @@ class PackConvertService(BaseConvertService):
         except Exception as e:
             logger.error(f"PACK 打包过程中发生错误: {e}")
             logger.error(traceback.format_exc())
-            raise RuntimeError(f"打包失败: {str(e)}")
+            raise RuntimeError(f"打包失败: {e!s}")
         finally:
             logger.info(f"保留临时文件在目录: {batch_dir}")
+
+    async def _upload_zip_to_storage(
+        self,
+        zip_path: Path,
+        sts_credential: Optional[STSTemporaryCredential],
+    ) -> Optional[str]:
+        if sts_credential:
+            return await self._upload_zip_with_explicit_sts_dir(zip_path, sts_credential)
+
+        _, oss_key = await self._upload_file_to_storage(zip_path, None)
+        return oss_key
+
+    async def _upload_zip_with_explicit_sts_dir(
+        self,
+        zip_path: Path,
+        sts_credential: STSTemporaryCredential,
+    ) -> str:
+        try:
+            platform = PlatformType(sts_credential.platform)
+        except ValueError as exc:
+            raise ValueError(f"不支持的存储平台: {sts_credential.platform}") from exc
+
+        upload_dir = sts_credential.temporary_credential.get("dir")
+        if not isinstance(upload_dir, str) or not upload_dir.strip():
+            raise ValueError("STS凭证中缺少上传目录 dir")
+
+        storage_class = StorageFactory._implementations.get(platform)
+        if not storage_class:
+            raise ValueError(f"不支持的存储平台: {platform.value}")
+
+        upload_config: Dict[str, Any] = {
+            "platform": platform.value,
+            "temporary_credential": sts_credential.temporary_credential,
+        }
+        if sts_credential.expires is not None:
+            upload_config["expires"] = sts_credential.expires
+
+        storage_service = storage_class()
+        storage_service.set_credentials(upload_config)
+
+        object_key = BaseFileProcessor.combine_path(upload_dir, zip_path.name)
+        logger.info(f"开始使用打包接口STS上传ZIP: {zip_path.name}, 存储键: {object_key}")
+        await storage_service.upload(file=str(zip_path), key=object_key)
+
+        return object_key
 
     @staticmethod
     def _normalize_output_name(output_name: Optional[str]) -> str:

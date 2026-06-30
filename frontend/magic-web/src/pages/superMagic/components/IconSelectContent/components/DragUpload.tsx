@@ -140,6 +140,7 @@ const DragUpload = ({ bgColor, imagePreviewUrl, setImagePreviewUrl }: DragUpload
 			onDragEnter={onDragEnter}
 			onDragLeave={onDragLeave}
 			onDrop={onDrop}
+			data-testid="on-drag-enter"
 		>
 			<div className={styles.previewWrapper}>
 				{t("agentEditor.configPanel.preview")}
@@ -151,7 +152,7 @@ const DragUpload = ({ bgColor, imagePreviewUrl, setImagePreviewUrl }: DragUpload
 							className={styles.dragEnteredLoader}
 						/>
 					) : imagePreviewUrl ? (
-						<img src={imagePreviewUrl} className={styles.imagePreview} alt="image" />
+						<img src={imagePreviewUrl} className={styles.imagePreview} alt="image"  data-testid="drag-upload-image"/>
 					) : null}
 				</div>
 			</div>

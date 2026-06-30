@@ -39,6 +39,15 @@ import { ChevronLeft, Plug, Puzzle } from "lucide-react"
 import useGeistFont from "@/styles/fonts/geist"
 import { MentionPanelRootProviders } from "./renderers/context"
 import { resolveMentionPanelRuntime } from "./runtime/default-runtime"
+import {
+	canTogglePendingItem,
+	getMentionItemSelectionKey,
+	getPendingSourceRootId,
+	getSubmittablePendingEntries,
+	isRootDefaultCategoryScreen,
+	type PendingMentionEntry,
+} from "./utils/multiSelect"
+import { prepareMentionItemForPending } from "./utils/multiSelectValidation"
 
 const MentionPanelMobile = lazy(() => import("./MentionPanelMobile"))
 
@@ -64,6 +73,7 @@ const MentionPanel = observer(
 			style,
 			disableKeyboardShortcuts = false,
 			lockDismissToExplicitClose = false,
+			canToggleMultiSelectItem,
 			runtime,
 			dataService,
 			catalogBehavior,
@@ -78,7 +88,16 @@ const MentionPanel = observer(
 
 		// Internal search state
 		const [internalSearchQuery, setInternalSearchQuery] = useState("")
+		const [multiSelectMode, setMultiSelectMode] = useState(false)
+		const [pendingByKey, setPendingByKey] = useState<Map<string, PendingMentionEntry>>(
+			() => new Map(),
+		)
 		const searchInputRef = useRef<HTMLInputElement>(null)
+		const keyboardConfirmHandlerRef = useRef<() => boolean>(() => false)
+		const keyboardMetaEnterHandlerRef = useRef<() => boolean>(() => false)
+		const keyboardNavigateBackHandlerRef = useRef<() => void>(() => undefined)
+		const keyboardEnterFolderHandlerRef = useRef<() => boolean>(() => false)
+		const clearPendingAfterNavigationRef = useRef(false)
 
 		// Internationalization
 		const t = useI18nStatic(language)
@@ -102,6 +121,17 @@ const MentionPanel = observer(
 			onSelect,
 			onClose,
 			enabled: visible && !disableKeyboardShortcuts,
+			keyboardShortcutsEnabled: !isMobile,
+			onKeyboardConfirm: !isMobile ? () => keyboardConfirmHandlerRef.current() : undefined,
+			onKeyboardMetaEnter: !isMobile
+				? () => keyboardMetaEnterHandlerRef.current()
+				: undefined,
+			onKeyboardNavigateBack: !isMobile
+				? () => keyboardNavigateBackHandlerRef.current()
+				: undefined,
+			onKeyboardEnterFolder: !isMobile
+				? () => keyboardEnterFolderHandlerRef.current()
+				: undefined,
 			dataService: resolvedRuntime.dataService,
 			t,
 			catalogBehavior: resolvedRuntime.catalogBehavior,
@@ -110,6 +140,17 @@ const MentionPanel = observer(
 
 		// Destructure focus properties to avoid ESLint dependency warnings
 		const { shouldFocusSearch, clearFocusTrigger } = focus
+
+		const resetLocalMultiSelectState = useCallback(() => {
+			clearPendingAfterNavigationRef.current = false
+			setMultiSelectMode(false)
+			setPendingByKey(new Map())
+		}, [])
+
+		const clearPendingMultiSelectItems = useCallback(() => {
+			clearPendingAfterNavigationRef.current = false
+			setPendingByKey(new Map())
+		}, [])
 
 		// Auto-focus search input when panel becomes visible
 		useEffect(() => {
@@ -155,8 +196,9 @@ const MentionPanel = observer(
 		useEffect(() => {
 			if (!visible) {
 				setInternalSearchQuery("")
+				resetLocalMultiSelectState()
 			}
-		}, [visible])
+		}, [visible, resetLocalMultiSelectState])
 
 		// Sync internal search query with panel state search query
 		// This ensures that when search is changed programmatically (e.g., when entering/exiting folders),
@@ -169,6 +211,41 @@ const MentionPanel = observer(
 
 		// Use state.items directly as history is now integrated in useMentionPanel
 		const displayItems = state.items
+		const canToggleMultiSelectItemForItem = useCallback(
+			(item: MentionItem) => {
+				if (!canTogglePendingItem(item)) return false
+				return canToggleMultiSelectItem ? canToggleMultiSelectItem(item) : true
+			},
+			[canToggleMultiSelectItem],
+		)
+
+		const canUseMultiSelectInCurrentList = useMemo(() => {
+			if (isRootDefaultCategoryScreen(state)) return false
+			return displayItems.some((item) => canToggleMultiSelectItemForItem(item))
+		}, [canToggleMultiSelectItemForItem, displayItems, state])
+
+		const navigationSignature = useMemo(
+			() =>
+				[
+					state.currentState,
+					...state.navigationStack.map(
+						(item) => `${item.state}:${item.catalogId ?? ""}:${item.id}`,
+					),
+				].join("|"),
+			[state.currentState, state.navigationStack],
+		)
+
+		useEffect(() => {
+			if (multiSelectMode && !canUseMultiSelectInCurrentList && pendingByKey.size === 0) {
+				setMultiSelectMode(false)
+			}
+		}, [canUseMultiSelectInCurrentList, multiSelectMode, pendingByKey.size])
+
+		useEffect(() => {
+			if (!clearPendingAfterNavigationRef.current) return
+			clearPendingAfterNavigationRef.current = false
+			clearPendingMultiSelectItems()
+		}, [clearPendingMultiSelectItems, navigationSignature])
 
 		// Create internal ref for DOM element
 		const internalRef = useRef<HTMLDivElement>(null)
@@ -208,6 +285,209 @@ const MentionPanel = observer(
 			}
 		}, [state.selectedIndex, state.items.length])
 
+		const togglePendingForItem = useCallback(
+			async (item: MentionItem) => {
+				if (!canToggleMultiSelectItemForItem(item)) return false
+
+				const key = getMentionItemSelectionKey(item)
+				if (pendingByKey.has(key)) {
+					setPendingByKey((prev) => {
+						const next = new Map(prev)
+						next.delete(key)
+						return next
+					})
+					return true
+				}
+
+				const pendingPreparation = await prepareMentionItemForPending(
+					item,
+					resolvedRuntime.dataService,
+				)
+				if (!pendingPreparation.canSelect) return true
+
+				const sourceRootId = getPendingSourceRootId(state.navigationStack, item)
+				setPendingByKey((prev) => {
+					const next = new Map(prev)
+					if (next.has(key)) next.delete(key)
+					else
+						next.set(key, {
+							item,
+							sourceRootId,
+							mcpValidated: pendingPreparation.mcpValidated,
+						})
+					return next
+				})
+				return true
+			},
+			[
+				canToggleMultiSelectItemForItem,
+				pendingByKey,
+				resolvedRuntime.dataService,
+				state.navigationStack,
+			],
+		)
+
+		const handleClosePanel = useCallback(() => {
+			resetLocalMultiSelectState()
+			onClose?.()
+		}, [onClose, resetLocalMultiSelectState])
+
+		const handleConfirmMultiSelect = useCallback(async () => {
+			const entries = getSubmittablePendingEntries(pendingByKey)
+			if (entries.length === 0) {
+				handleClosePanel()
+				return
+			}
+
+			for (let i = 0; i < entries.length; i++) {
+				const { item, mcpValidated } = entries[i]
+				const isLast = i === entries.length - 1
+				const result = onSelect?.(item, {
+					mcpValidated,
+					batch: {
+						index: i,
+						total: entries.length,
+					},
+					...(isLast
+						? {
+								reset: () => {
+									resetLocalMultiSelectState()
+									actions.reset()
+								},
+							}
+						: undefined),
+				})
+				await Promise.resolve(result)
+			}
+			resetLocalMultiSelectState()
+		}, [actions, handleClosePanel, onSelect, pendingByKey, resetLocalMultiSelectState])
+
+		const handleMultiSelectAction = useCallback(() => {
+			if (!multiSelectMode) {
+				if (!canUseMultiSelectInCurrentList) return false
+				setMultiSelectMode(true)
+				return true
+			}
+			void handleConfirmMultiSelect()
+			return true
+		}, [canUseMultiSelectInCurrentList, handleConfirmMultiSelect, multiSelectMode])
+
+		const canEnterFolderForItem = useCallback(
+			(item: MentionItem, enterFolder = true) => {
+				const currentCatalogId =
+					state.navigationStack[state.navigationStack.length - 1]?.catalogId
+				const shouldEnterFolderDirectly =
+					resolvedRuntime.catalogBehavior.shouldEnterFolderDirectly?.({
+						currentState: state.currentState,
+						currentCatalogId,
+						selectedItem: item,
+						enterFolder,
+					}) ?? false
+				const nextEnterFolder = enterFolder || shouldEnterFolderDirectly
+				const allowUnselectableForFolderNavigation =
+					nextEnterFolder && item.isFolder === true
+
+				if (item.unSelectable && !allowUnselectableForFolderNavigation) {
+					return false
+				}
+
+				if (
+					resolvedRuntime.catalogBehavior.shouldSelectItemDirectly?.({
+						currentState: state.currentState,
+						currentCatalogId,
+						selectedItem: item,
+						enterFolder: nextEnterFolder,
+					})
+				) {
+					return false
+				}
+
+				const targetTransition =
+					resolvedRuntime.catalogBehavior.getStaticTransition?.({
+						currentState: state.currentState,
+						itemId: item.id,
+					}) ??
+					resolvedRuntime.catalogBehavior.getDynamicTransition?.({
+						currentState: state.currentState,
+						currentCatalogId,
+						selectedItem: item,
+						enterFolder: nextEnterFolder,
+					}) ??
+					null
+
+				return Boolean(targetTransition)
+			},
+			[resolvedRuntime.catalogBehavior, state.currentState, state.navigationStack],
+		)
+
+		const handleKeyboardSelectInMultiSelect = useCallback(
+			({ preferEnterFolder = false }: { preferEnterFolder?: boolean } = {}) => {
+				if (!multiSelectMode) return false
+
+				const selectedItem = displayItems[state.selectedIndex]
+				if (!selectedItem) return true
+
+				if (preferEnterFolder && canEnterFolderForItem(selectedItem, true)) {
+					clearPendingAfterNavigationRef.current = true
+					actions.confirmSelection({ enterFolder: true })
+					return true
+				}
+
+				if (canToggleMultiSelectItemForItem(selectedItem)) {
+					void togglePendingForItem(selectedItem)
+					return true
+				}
+
+				return true
+			},
+			[
+				actions,
+				canEnterFolderForItem,
+				canToggleMultiSelectItemForItem,
+				displayItems,
+				multiSelectMode,
+				state.selectedIndex,
+				togglePendingForItem,
+			],
+		)
+
+		const handleKeyboardConfirm = useCallback(() => {
+			if (!multiSelectMode) return false
+			return handleKeyboardSelectInMultiSelect()
+		}, [handleKeyboardSelectInMultiSelect, multiSelectMode])
+
+		const handleKeyboardMetaEnter = useCallback(() => {
+			return handleMultiSelectAction()
+		}, [handleMultiSelectAction])
+
+		const handleKeyboardNavigateBack = useCallback(() => {
+			if (!multiSelectMode) return
+			resetLocalMultiSelectState()
+		}, [multiSelectMode, resetLocalMultiSelectState])
+
+		const handleNavigateBack = useCallback(() => {
+			if (multiSelectMode) resetLocalMultiSelectState()
+			actions.navigateBack()
+		}, [actions, multiSelectMode, resetLocalMultiSelectState])
+
+		const handleNavigateToBreadcrumb = useCallback(
+			(index: number) => {
+				if (multiSelectMode) resetLocalMultiSelectState()
+				actions.navigateToBreadcrumb(index)
+			},
+			[actions, multiSelectMode, resetLocalMultiSelectState],
+		)
+
+		const handleKeyboardEnterFolder = useCallback(() => {
+			if (!multiSelectMode) return false
+			return handleKeyboardSelectInMultiSelect({ preferEnterFolder: true })
+		}, [handleKeyboardSelectInMultiSelect, multiSelectMode])
+
+		keyboardConfirmHandlerRef.current = handleKeyboardConfirm
+		keyboardMetaEnterHandlerRef.current = handleKeyboardMetaEnter
+		keyboardNavigateBackHandlerRef.current = handleKeyboardNavigateBack
+		keyboardEnterFolderHandlerRef.current = handleKeyboardEnterFolder
+
 		// Expose methods via ref
 		useImperativeHandle(
 			ref,
@@ -218,7 +498,7 @@ const MentionPanel = observer(
 				},
 				close: () => {
 					console.log("close")
-					onClose?.()
+					handleClosePanel()
 				},
 				search: (query: string) => {
 					setInternalSearchQuery(query)
@@ -226,12 +506,13 @@ const MentionPanel = observer(
 				},
 				reset: () => {
 					console.log("reset")
+					resetLocalMultiSelectState()
 					actions.reset()
 				},
 				isVisible: () => visible,
 				getCurrentState: () => state.currentState,
 			}),
-			[visible, state.currentState, actions, onClose],
+			[visible, state.currentState, actions, handleClosePanel, resetLocalMultiSelectState],
 		)
 
 		// Handle item click/confirmation
@@ -265,6 +546,33 @@ const MentionPanel = observer(
 				// Update selection index
 				actions.selectItem(index)
 
+				if (multiSelectMode && isRightArrow && canEnterFolderForItem(selectedItem, true)) {
+					clearPendingAfterNavigationRef.current = true
+					setTimeout(() => {
+						actions.confirmSelection({ enterFolder: true })
+					})
+					return
+				}
+
+				if (multiSelectMode) {
+					if (isRootDefaultCategoryScreen(state)) {
+						if (canEnterFolderForItem(selectedItem, false)) {
+							setTimeout(() => actions.confirmSelection({ enterFolder: false }))
+						}
+						return
+					}
+
+					if (canToggleMultiSelectItemForItem(selectedItem)) {
+						void togglePendingForItem(selectedItem)
+						return
+					}
+
+					if (canEnterFolderForItem(selectedItem, false)) {
+						setTimeout(() => actions.confirmSelection({ enterFolder: false }))
+					}
+					return
+				}
+
 				// Use normal confirmation process (history items are handled in useMentionPanel)
 				setTimeout(() => {
 					actions.confirmSelection({ enterFolder })
@@ -272,10 +580,13 @@ const MentionPanel = observer(
 			},
 			[
 				actions,
+				canEnterFolderForItem,
+				canToggleMultiSelectItemForItem,
 				displayItems,
+				multiSelectMode,
 				resolvedRuntime.catalogBehavior,
-				state.currentState,
-				state.navigationStack,
+				state,
+				togglePendingForItem,
 			],
 		)
 
@@ -299,6 +610,16 @@ const MentionPanel = observer(
 			return lastIndex
 		}, [displayItems])
 
+		const multiSelectModifierKeyLabel = useMemo(() => {
+			if (
+				typeof navigator !== "undefined" &&
+				/Mac|iPhone|iPad|iPod/.test(navigator.platform)
+			) {
+				return "⌘"
+			}
+			return "Ctrl"
+		}, [])
+
 		// Virtual list item renderer
 		const renderItem = useCallback(
 			(index: number) => {
@@ -307,6 +628,11 @@ const MentionPanel = observer(
 
 				// Check if this is a history item
 				const isHistoryItem = item.tags?.includes("history")
+				const key = getMentionItemSelectionKey(item)
+				const showCheckbox =
+					multiSelectMode &&
+					canToggleMultiSelectItemForItem(item) &&
+					!isRootDefaultCategoryScreen(state)
 
 				return (
 					<MenuItem
@@ -317,13 +643,17 @@ const MentionPanel = observer(
 						isSearch={Boolean(state.searchQuery.trim())}
 						t={t}
 						onDelete={isHistoryItem ? handleDeleteHistoryItem : undefined}
+						showCheckbox={showCheckbox}
+						checkboxChecked={pendingByKey.has(key)}
 					/>
 				)
 			},
 			[
 				displayItems,
-				state.selectedIndex,
-				state.searchQuery,
+				canToggleMultiSelectItemForItem,
+				multiSelectMode,
+				pendingByKey,
+				state,
 				t,
 				handleDeleteHistoryItem,
 				handleItemClick,
@@ -369,6 +699,11 @@ const MentionPanel = observer(
 
 		const currentNavigationItem = state.navigationStack[state.navigationStack.length - 1]
 		const currentCatalogId = currentNavigationItem?.catalogId
+		const multiSelectActions = t.multiSelectActions ?? { enter: "多选", complete: "完成" }
+		const multiSelectActionLabel = multiSelectMode
+			? multiSelectActions.complete
+			: multiSelectActions.enter
+		const showMultiSelectAction = multiSelectMode || canUseMultiSelectInCurrentList
 
 		const stateHeader = (() => {
 			if (!currentNavigationItem || state.currentState === PanelState.SEARCH) return null
@@ -417,7 +752,7 @@ const MentionPanel = observer(
 									}
 									onClick={
 										index < state.navigationStack.length - 1
-											? () => actions.navigateToBreadcrumb(index)
+											? () => handleNavigateToBreadcrumb(index)
 											: undefined
 									}
 									className={
@@ -450,7 +785,7 @@ const MentionPanel = observer(
 								variant="outline"
 								size="icon"
 								className="border-b-1 size-9 shrink-0 rounded-none border-l-0 border-t-0 border-input shadow-xs"
-								onClick={actions.navigateBack}
+								onClick={handleNavigateBack}
 								role="button"
 								aria-label={t.ariaLabels.goBackButton}
 								tabIndex={-1}
@@ -474,7 +809,12 @@ const MentionPanel = observer(
 
 								{/* Search text - show search placeholder when empty, hide when typing */}
 								{!internalSearchQuery && (
-									<p className="pointer-events-none min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap font-['Geist'] text-sm font-normal leading-5 text-muted-foreground">
+									<p
+										className={cn(
+											"pointer-events-none min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap font-['Geist'] text-sm font-normal leading-5 text-muted-foreground",
+											showMultiSelectAction && "pr-[88px]",
+										)}
+									>
 										{t.searchPlaceholder}
 									</p>
 								)}
@@ -485,10 +825,34 @@ const MentionPanel = observer(
 									type="text"
 									value={internalSearchQuery}
 									onChange={handleSearchChange}
-									className="absolute bottom-0 left-9 right-0 top-0 z-[1] m-0 h-full border-none bg-transparent p-0 pl-1 font-['Geist'] text-sm leading-4 text-foreground/80 outline-none placeholder:text-transparent focus:outline-none"
+									className={cn(
+										"absolute bottom-0 left-9 top-0 z-[1] m-0 h-full border-none bg-transparent p-0 pl-1 font-['Geist'] text-sm leading-4 text-foreground/80 outline-none placeholder:text-transparent focus:outline-none",
+										showMultiSelectAction ? "right-[92px]" : "right-0",
+									)}
 									disabled={disableKeyboardShortcuts}
 									placeholder={t.searchPlaceholder}
 								/>
+								{showMultiSelectAction && (
+									<button
+										type="button"
+										className={cn(
+											"absolute right-0 top-0 z-[2] flex h-full items-center gap-0.5 whitespace-nowrap border-l border-input bg-background px-2 font-['Geist'] text-[11px] leading-[14px] transition-colors hover:bg-accent",
+											multiSelectMode ? "text-primary" : "text-foreground",
+										)}
+										onClick={(event) => {
+											event.preventDefault()
+											event.stopPropagation()
+											handleMultiSelectAction()
+										}}
+										aria-label={`${multiSelectActionLabel} ${multiSelectModifierKeyLabel} Enter`}
+										tabIndex={-1}
+									>
+										<span>{multiSelectActionLabel}</span>
+										<span className="text-muted-foreground">
+											({multiSelectModifierKeyLabel}↵)
+										</span>
+									</button>
+								)}
 							</div>
 						</div>
 					</div>
@@ -618,7 +982,7 @@ const MentionPanel = observer(
 
 		const handleOpenChange = (open: boolean) => {
 			if (!open) {
-				onClose?.()
+				handleClosePanel()
 			}
 		}
 

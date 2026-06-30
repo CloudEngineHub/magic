@@ -28,6 +28,8 @@ export const ERROR_CODES = {
 	TASK_NOT_FOUND: 43212,
 	/** Sandbox errors (43300-43399) */
 	SANDBOX_START_RETRY_EXCEEDED: 43305,
+	/** Project errors */
+	PROJECT_NOT_FOUND: 51200,
 } as const
 
 /**

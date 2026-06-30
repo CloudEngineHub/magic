@@ -29,6 +29,7 @@ import type { FileError } from "./utils"
 import Placeholder from "./components/Placeholder"
 import { useIsMobile } from "@/hooks/useIsMobile"
 import { useImageExtensions } from "./hooks/useImageExtensions"
+import { runActiveEditor } from "@/utils/tiptapEditorLifecycle"
 
 // 自定义历史管理扩展，确保正确处理撤销/重做
 const CustomHistory = Extension.create({
@@ -62,15 +63,17 @@ const CustomHistory = Extension.create({
 							const { isEmpty } = editor
 							const content = editor.getJSON()
 
-							// 如果撤销后编辑器是空的或只有一个内容项，可能是一个中间状态
-							if (isEmpty || (content.content && content.content.length <= 1)) {
-								// 再次尝试撤销（如果可以）来跳过中间状态
-								setTimeout(() => {
-									if (editor.can().undo()) {
-										commands.undo()
-									}
-								}, 0)
-							}
+								// 如果撤销后编辑器是空的或只有一个内容项，可能是一个中间状态
+								if (isEmpty || (content.content && content.content.length <= 1)) {
+									// 再次尝试撤销（如果可以）来跳过中间状态
+									setTimeout(() => {
+										runActiveEditor(editor, (activeEditor) => {
+											if (activeEditor.can().undo()) {
+												commands.undo()
+											}
+										})
+									}, 0)
+								}
 							return true
 						},
 					])
@@ -91,15 +94,17 @@ const CustomHistory = Extension.create({
 							const { isEmpty } = editor
 							const content = editor.getJSON()
 
-							// 如果重做后编辑器是空的或只有一个内容项，可能是一个中间状态
-							if (isEmpty || (content.content && content.content.length <= 1)) {
-								// 再次尝试重做（如果可以）来跳过中间状态
-								setTimeout(() => {
-									if (editor.can().redo()) {
-										commands.redo()
-									}
-								}, 0)
-							}
+								// 如果重做后编辑器是空的或只有一个内容项，可能是一个中间状态
+								if (isEmpty || (content.content && content.content.length <= 1)) {
+									// 再次尝试重做（如果可以）来跳过中间状态
+									setTimeout(() => {
+										runActiveEditor(editor, (activeEditor) => {
+											if (activeEditor.can().redo()) {
+												commands.redo()
+											}
+										})
+									}, 0)
+								}
 							return true
 						},
 					])
@@ -120,15 +125,17 @@ const CustomHistory = Extension.create({
 							const { isEmpty } = editor
 							const content = editor.getJSON()
 
-							// 如果重做后编辑器是空的或只有一个内容项，可能是一个中间状态
-							if (isEmpty || (content.content && content.content.length <= 1)) {
-								// 再次尝试重做（如果可以）来跳过中间状态
-								setTimeout(() => {
-									if (editor.can().redo()) {
-										commands.redo()
-									}
-								}, 0)
-							}
+								// 如果重做后编辑器是空的或只有一个内容项，可能是一个中间状态
+								if (isEmpty || (content.content && content.content.length <= 1)) {
+									// 再次尝试重做（如果可以）来跳过中间状态
+									setTimeout(() => {
+										runActiveEditor(editor, (activeEditor) => {
+											if (activeEditor.can().redo()) {
+												commands.redo()
+											}
+										})
+									}, 0)
+								}
 							return true
 						},
 					])

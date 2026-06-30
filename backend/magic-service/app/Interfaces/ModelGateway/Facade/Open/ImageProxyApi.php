@@ -7,9 +7,13 @@ declare(strict_types=1);
 
 namespace App\Interfaces\ModelGateway\Facade\Open;
 
+use App\Application\ModelGateway\Service\ImageEraserAppService;
+use App\Application\ModelGateway\Service\ImageExpandAppService;
 use App\Application\ModelGateway\Service\ImageLLMAppService;
 use App\Application\ModelGateway\Service\ImageRemoveBackgroundAppService;
 use App\Domain\ModelGateway\Entity\Dto\ImageConvertHighDTO;
+use App\Domain\ModelGateway\Entity\Dto\ImageEraserRequestDTO;
+use App\Domain\ModelGateway\Entity\Dto\ImageExpandRequestDTO;
 use App\Domain\ModelGateway\Entity\Dto\ImageRemoveBackgroundRequestDTO;
 use Hyperf\Di\Annotation\Inject;
 use Hyperf\HttpServer\Contract\RequestInterface;
@@ -21,6 +25,12 @@ class ImageProxyApi extends AbstractOpenApi
 {
     #[Inject]
     protected ImageRemoveBackgroundAppService $imageRemoveBackgroundAppService;
+
+    #[Inject]
+    protected ImageEraserAppService $imageEraserAppService;
+
+    #[Inject]
+    protected ImageExpandAppService $imageExpandAppService;
 
     #[Inject]
     protected ImageLLMAppService $imageLLMAppService;
@@ -58,6 +68,40 @@ class ImageProxyApi extends AbstractOpenApi
         $this->enrichRequestDTO($dto, $this->request->getHeaders());
 
         $response = $this->imageRemoveBackgroundAppService->removeBackground($dto);
+
+        return $response->toArray();
+    }
+
+    /**
+     * 橡皮擦接口.
+     */
+    public function imageEraser(): array
+    {
+        $dto = new ImageEraserRequestDTO($this->request->all());
+        $dto->setAccessToken($this->getAccessToken());
+        $dto->setIps($this->getClientIps());
+        $dto->valid();
+
+        $this->enrichRequestDTO($dto, $this->request->getHeaders());
+
+        $response = $this->imageEraserAppService->erase($dto);
+
+        return $response->toArray();
+    }
+
+    /**
+     * 扩图接口.
+     */
+    public function imageExpand(): array
+    {
+        $dto = new ImageExpandRequestDTO($this->request->all());
+        $dto->setAccessToken($this->getAccessToken());
+        $dto->setIps($this->getClientIps());
+        $dto->valid();
+
+        $this->enrichRequestDTO($dto, $this->request->getHeaders());
+
+        $response = $this->imageExpandAppService->expand($dto);
 
         return $response->toArray();
     }

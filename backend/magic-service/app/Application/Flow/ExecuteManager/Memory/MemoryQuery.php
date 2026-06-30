@@ -29,7 +29,9 @@ class MemoryQuery
 
     private ?array $rangMessageTypes = null;
 
-    public function __construct(ExecutionType $executionType, string $conversationId, string $originConversationId, ?string $topicId = null, int $limit = 10)
+    private string $readerUserId = '';
+
+    public function __construct(ExecutionType $executionType, string $conversationId, string $originConversationId, ?string $topicId = null, int $limit = 10, string $readerUserId = '')
     {
         $memoryType = match ($executionType) {
             ExecutionType::IMChat => MemoryType::IMChat,
@@ -40,6 +42,7 @@ class MemoryQuery
         $this->conversationId = $conversationId;
         $this->originConversationId = $originConversationId;
         $this->topicId = $topicId;
+        $this->readerUserId = $readerUserId;
     }
 
     public function getMemoryType(): MemoryType
@@ -100,5 +103,13 @@ class MemoryQuery
     public function setRangMessageTypes(?array $rangMessageTypes): void
     {
         $this->rangMessageTypes = $rangMessageTypes;
+    }
+
+    /**
+     * 获取记忆读取人用户 ID.
+     */
+    public function getReaderUserId(): string
+    {
+        return $this->readerUserId;
     }
 }

@@ -62,6 +62,7 @@ function WorkspaceActionButtons({
 						e.stopPropagation()
 						onEdit(e)
 					}}
+					data-testid="on-edit"
 				>
 					<IconEdit size={14} />
 				</div>
@@ -260,6 +261,7 @@ function WorkspacesMenu() {
 														e.stopPropagation()
 													}}
 													style={{ userSelect: "text" }}
+													data-testid="handle-workspace-input-change"
 												/>
 											) : (
 												<SmartTooltip maxWidth={320} placement="bottom">

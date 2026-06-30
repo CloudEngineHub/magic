@@ -22,7 +22,7 @@ export default memo(function SwitchRoute() {
 					<IconLayoutGrid className={styles.icon} />
 					<div>{t("workspace.workspace")}</div>
 				</div>
-				<div className={cx(styles.item)} onClick={handleLongMemoryClick}>
+				<div className={cx(styles.item)} onClick={handleLongMemoryClick} data-testid="handle-long-memory-click">
 					<IconBrain className={styles.icon} />
 					<div>
 						{t("longMemory", {

@@ -31,6 +31,7 @@ import EditorBody from "@/pages/superMagic/components/Detail/contents/Md/compone
 import { ProjectListItem, Workspace } from "@/pages/superMagic/pages/Workspace/types"
 import { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks"
 import { observer } from "mobx-react-lite"
+import { runActiveEditor } from "@/utils/tiptapEditorLifecycle"
 
 export interface MobileFloatPanelProps {
 	isWaitingSummarize: boolean
@@ -80,6 +81,7 @@ export interface MobileFloatPanelProps {
 	urlResolver: (relativePath: string) => Promise<string>
 	onImageUploadSuccess?: (relativePath: string) => void
 	editorRef?: React.RefObject<SimpleEditorRef>
+	resolveImagesFolderParentId?: (folderPath: string) => Promise<string | undefined>
 }
 
 function MobileFloatPanel(props: MobileFloatPanelProps) {
@@ -124,6 +126,7 @@ function MobileFloatPanel(props: MobileFloatPanelProps) {
 		folderPath,
 		urlResolver,
 		editorRef,
+		resolveImagesFolderParentId,
 	} = props
 
 	const { handleTouchDown, isDragging, isSnapping, elementRef } = useTouchDraggable({
@@ -148,7 +151,9 @@ function MobileFloatPanel(props: MobileFloatPanelProps) {
 
 	const handleTakeNotes = useCallback(() => {
 		setEditorPopup(true)
-		editorRef?.current?.editor?.commands.focus()
+		runActiveEditor(editorRef?.current?.editor, (editor) => {
+			editor.commands.focus()
+		})
 	}, [editorRef])
 
 	// Determine expand direction based on position
@@ -389,6 +394,7 @@ function MobileFloatPanel(props: MobileFloatPanelProps) {
 							className={styles.editorBody}
 							folderPath={folderPath}
 							onImageUploadSuccess={checkNowDebounced}
+							resolveImagesFolderParentId={resolveImagesFolderParentId}
 							editorRef={editorRef}
 							placeholder={t("recordingSummary.ui.editorPlaceholder")}
 						/>

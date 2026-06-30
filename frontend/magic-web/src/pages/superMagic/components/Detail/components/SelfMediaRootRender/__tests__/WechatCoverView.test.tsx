@@ -99,6 +99,37 @@ beforeEach(() => {
 })
 
 describe("WechatCoverView", () => {
+	it("promotes the active post to the hero slot while preserving its original selection index", () => {
+		const onSelectPost = vi.fn()
+		const posts: SelfMediaPost[] = [
+			{
+				meta: { id: "post-1", title: "First post", feedTitle: "First feed title" },
+				cards: [],
+			},
+			{
+				meta: { id: "post-2", title: "Second post", feedTitle: "Second feed title" },
+				cards: [],
+			},
+			{
+				meta: { id: "post-3", title: "Third post", feedTitle: "Third feed title" },
+				cards: [],
+			},
+		]
+
+		render(<WechatCoverView posts={posts} priorityPostIndex={2} onSelectPost={onSelectPost} />)
+
+		const cards = screen.getAllByTestId(/^wechat-cover-card-/)
+		expect(cards.map((card) => card.getAttribute("data-testid"))).toEqual([
+			"wechat-cover-card-post-3",
+			"wechat-cover-card-post-1",
+			"wechat-cover-card-post-2",
+		])
+
+		screen.getByTestId("wechat-cover-hero-post-3").click()
+
+		expect(onSelectPost).toHaveBeenCalledWith(2)
+	})
+
 	it("renders placeholder text instead of question marks for missing cover meta", () => {
 		render(
 			<WechatCoverView

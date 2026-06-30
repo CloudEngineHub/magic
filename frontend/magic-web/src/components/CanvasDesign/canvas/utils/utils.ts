@@ -5,6 +5,8 @@ import type {
 	ElementType,
 	ImageElement,
 	CanvasFileElement,
+	CanvasDeviceInfo,
+	CanvasDeviceFormFactor,
 } from "../types"
 import type { UploadFileResponse, ImageModelItem } from "../../types.magic"
 import { ElementTypeEnum } from "../types"
@@ -415,17 +417,68 @@ export function toPlainObject<T>(value: T): T {
 	return JSON.parse(JSON.stringify(value)) as T
 }
 
-// utils.ts 中添加
-export function isMobile(): boolean {
+export function isTouchDevice(): boolean {
 	return (
-		/Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
-			navigator.userAgent,
-		) || window.innerWidth < 768
+		(typeof window !== "undefined" && "ontouchstart" in window) ||
+		(typeof navigator !== "undefined" && navigator.maxTouchPoints > 0)
 	)
 }
 
-export function isTouchDevice(): boolean {
-	return "ontouchstart" in window || navigator.maxTouchPoints > 0
+function matchesMedia(query: string): boolean {
+	if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
+		return false
+	}
+	return window.matchMedia(query).matches
+}
+
+function getUserAgent(): string {
+	return typeof navigator === "undefined" ? "" : navigator.userAgent
+}
+
+function getViewportWidth(): number {
+	return typeof window === "undefined" ? 1024 : window.innerWidth
+}
+
+function getDefaultFormFactor(touch: boolean): CanvasDeviceFormFactor {
+	const userAgent = getUserAgent()
+
+	if (/iPad|Tablet|PlayBook|Silk/i.test(userAgent)) {
+		return "tablet"
+	}
+
+	if (/Android/i.test(userAgent) && !/Mobile/i.test(userAgent)) {
+		return "tablet"
+	}
+
+	if (/Macintosh/i.test(userAgent) && touch && getViewportWidth() <= 1366) {
+		return "tablet"
+	}
+
+	if (/Android|webOS|iPhone|iPod|BlackBerry|IEMobile|Opera Mini/i.test(userAgent)) {
+		return "phone"
+	}
+
+	if (touch && getViewportWidth() >= 768 && getViewportWidth() < 1024) {
+		return "tablet"
+	}
+
+	return "desktop"
+}
+
+export function getDefaultCanvasDeviceInfo(): CanvasDeviceInfo {
+	const touch = isTouchDevice()
+	const hover = matchesMedia("(hover: hover)")
+	const coarsePointer = matchesMedia("(pointer: coarse)") || (touch && !hover)
+
+	return {
+		formFactor: getDefaultFormFactor(touch),
+		layout: getViewportWidth() < 768 ? "compact" : "regular",
+		input: {
+			touch,
+			coarsePointer,
+			hover,
+		},
+	}
 }
 
 /**
@@ -824,6 +877,65 @@ export function calculateHorizontalImageLayout(
 
 		return { x: centerX, y: centerY }
 	})
+}
+
+/**
+ * 网格布局：与后端 canvas_layout_utils.py 保持一致的布局逻辑。
+ * 每行最多 maxPerRow 个元素，元素间距 spacing，行内顶部对齐，超出换行。
+ * @param imageDimensions 图片尺寸数组
+ * @param anchorPosition 锚点位置（整体布局的起始参考点，第一个元素中心对齐此位置）
+ * @param spacing 元素之间的间距（默认 200，与后端 DEFAULT_ELEMENT_SPACING 一致）
+ * @param maxPerRow 每行最大元素数量（默认 4，与后端 max_elements_per_row 一致）
+ * @returns 每个图片的中心位置数组
+ */
+export function calculateGridImageLayout(
+	imageDimensions: Array<{ width: number; height: number }>,
+	anchorPosition: { x: number; y: number },
+	spacing: number = 200,
+	maxPerRow: number = 4,
+): Array<{ x: number; y: number }> {
+	if (imageDimensions.length === 0) {
+		return []
+	}
+
+	const positions: Array<{ x: number; y: number }> = []
+
+	// 将元素分成多行
+	const rows: Array<Array<{ width: number; height: number; originalIndex: number }>> = []
+	for (let i = 0; i < imageDimensions.length; i++) {
+		const rowIndex = Math.floor(i / maxPerRow)
+		if (!rows[rowIndex]) {
+			rows[rowIndex] = []
+		}
+		rows[rowIndex].push({ ...imageDimensions[i], originalIndex: i })
+	}
+
+	// 第一个元素的中心对齐 anchorPosition，计算左上角起始点
+	const firstWidth = imageDimensions[0].width
+	const firstHeight = imageDimensions[0].height
+	const startX = anchorPosition.x - firstWidth / 2
+	const startY = anchorPosition.y - firstHeight / 2
+
+	let currentY = startY
+
+	for (const row of rows) {
+		let currentX = startX
+		let rowMaxHeight = 0
+
+		for (const item of row) {
+			// 中心位置
+			const centerX = currentX + item.width / 2
+			const centerY = currentY + item.height / 2
+			positions[item.originalIndex] = { x: centerX, y: centerY }
+
+			currentX += item.width + spacing
+			rowMaxHeight = Math.max(rowMaxHeight, item.height)
+		}
+
+		currentY += rowMaxHeight + spacing
+	}
+
+	return positions
 }
 
 /**

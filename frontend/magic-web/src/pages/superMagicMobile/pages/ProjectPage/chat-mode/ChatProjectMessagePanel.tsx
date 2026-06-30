@@ -1,0 +1,200 @@
+import { observer } from "mobx-react-lite"
+import { ChevronLeft, Ellipsis } from "lucide-react"
+import { useState } from "react"
+import { cn } from "@/lib/utils"
+import { useTranslation } from "react-i18next"
+import { Button } from "@/components/shadcn-ui/button"
+import { projectStore, topicStore } from "@/pages/superMagic/stores/core"
+import { superMagicStore } from "@/pages/superMagic/stores"
+import { usePoppinsFont } from "@/styles/font"
+import useNavigate from "@/routes/hooks/useNavigate"
+import MobileBrandHero from "@/pages/superMagicMobile/components/MobileBrandHero"
+import TopicPage from "@/pages/superMagicMobile/pages/TopicPage"
+import {
+	getMobileTopicPageCapabilities,
+	MobileTopicPageKind,
+} from "@/pages/superMagicMobile/pages/shared/topicPageCapabilities"
+import { useMemoizedFn } from "ahooks"
+import { useChatExpertSwitch } from "@/pages/superMagic/hooks/useChatExpertSwitch"
+
+interface ChatProjectHeroHeaderProps {
+	title: string
+	subtitle: string
+	onBack: () => void
+	onOpenActions: () => void
+}
+
+/**
+ * 对话详情页头部对齐首页的圆形按钮与双行标题节奏，同时保留返回与项目操作入口。
+ */
+function ChatProjectHeroHeader({
+	title,
+	subtitle,
+	onBack,
+	onOpenActions,
+}: ChatProjectHeroHeaderProps) {
+	const { t } = useTranslation(["common"])
+	// Poppins 懒加载器当前只支持 300/400/600/900，这里使用 600 近似标题的中等字重。
+	usePoppinsFont([400, 600])
+
+	return (
+		<header
+			className="mobile-page-header relative flex items-center justify-between pb-0"
+			data-testid="chat-project-hero-header"
+		>
+			<Button
+				type="button"
+				variant="ghost"
+				size="icon"
+				className="flex size-12 shrink-0 rounded-full bg-card text-foreground shadow-[0px_10px_30px_rgba(15,23,42,0.10)] active:scale-95"
+				onClick={onBack}
+				aria-label={t("back")}
+				data-testid="chat-project-hero-back-button"
+			>
+				<ChevronLeft className="size-[22px]" />
+			</Button>
+
+			{/* 标题区域使用 flex 居中，避免 absolute 布局，保证在 header 内始终居中展示 */}
+			<div className="flex min-w-0 flex-1 flex-col items-center justify-center px-3 pt-2 text-center">
+				<h1 className="w-full truncate font-poppins text-[18px] font-medium leading-7 text-foreground">
+					{title}
+				</h1>
+				<p className="w-full truncate font-poppins text-[14px] leading-5 text-muted-foreground">
+					{subtitle}
+				</p>
+			</div>
+
+			{/* 聊天详情页按原型收敛为单一“更多”入口，具体动作在底部 Action Sheet 中统一承载。 */}
+			<Button
+				type="button"
+				variant="ghost"
+				size="icon"
+				className="ml-auto flex size-12 shrink-0 rounded-full bg-card text-foreground shadow-[0px_10px_30px_rgba(15,23,42,0.10)] active:scale-95"
+				onClick={onOpenActions}
+				aria-label={t("more")}
+				data-testid="chat-project-hero-more-button"
+			>
+				<Ellipsis className="size-[22px]" />
+			</Button>
+		</header>
+	)
+}
+
+interface ChatProjectEmptyHeroProps {
+	className?: string
+}
+
+/**
+ * 空态欢迎区直接复用首页文案与品牌图形，确保对话页在“无消息”时和首页保持同一视觉语言。
+ */
+function ChatProjectEmptyHero({ className }: ChatProjectEmptyHeroProps) {
+	return (
+		<div
+			className={cn(
+				"pointer-events-none absolute inset-x-0 top-1/2 flex -translate-y-[58%] justify-center px-6",
+				className,
+			)}
+			data-testid="chat-project-empty-hero"
+		>
+			<MobileBrandHero imageClassName="size-[76px] rounded-[26px]" />
+		</div>
+	)
+}
+
+/**
+ * 对话详情面板继续复用既有 TopicPage 消息与输入逻辑，只在空态时替换为首页化的视觉壳层。
+ */
+interface ChatProjectMessagePanelProps {
+	onOpenActions: () => void
+}
+
+export const ChatProjectMessagePanel = observer(function ChatProjectMessagePanel({
+	onOpenActions,
+}: ChatProjectMessagePanelProps) {
+	const { t } = useTranslation("super")
+	const navigate = useNavigate()
+	const [isInitialMessagesLoading, setIsInitialMessagesLoading] = useState(false)
+	// Track which topic id has finished its first pull; avoids one-frame stale ready after topic switches.
+	const [messagesReadyTopicId, setMessagesReadyTopicId] = useState<string | null>(null)
+	const selectedProject = projectStore.selectedProject
+	const selectedTopic = topicStore.selectedTopic
+	const capabilities = getMobileTopicPageCapabilities(MobileTopicPageKind.SingleTopicChat)
+	// 空态直接订阅 MobX 消息 Map，确保 refreshState 异步补齐消息后能立刻退出欢迎壳层。
+	const topicMessages = selectedTopic?.chat_topic_id
+		? (superMagicStore.messages?.get(selectedTopic.chat_topic_id) ?? [])
+		: []
+	const hasBoundTopic = Boolean(selectedTopic?.id && selectedTopic?.chat_topic_id)
+	const isInitialMessagesReadyForTopic =
+		Boolean(selectedTopic?.id) && messagesReadyTopicId === selectedTopic?.id
+	const isEmptyStatus =
+		hasBoundTopic &&
+		isInitialMessagesReadyForTopic &&
+		topicMessages.length === 0 &&
+		!isInitialMessagesLoading
+	// 刷新恢复时，selectedTopic 会先于消息快照回填；这段窗口应交给 TopicPage 的 loading spinner，
+	// 不能提前挂欢迎壳层，否则已有历史消息的会话会被误判成“空会话”并闪一下首页文案。
+	const shouldMountEmptyHero = isEmptyStatus
+	const shouldConcealMessageList = isEmptyStatus
+
+	const handleInitialMessagesReadyChange = useMemoizedFn((isReady: boolean) => {
+		const topicId = topicStore.selectedTopic?.id ?? null
+		if (!isReady || !topicId) {
+			setMessagesReadyTopicId(null)
+			return
+		}
+
+		setMessagesReadyTopicId(topicId)
+	})
+
+	useChatExpertSwitch()
+
+	/**
+	 * Chat 详情页顶部优先展示当前会话名；仅当会话名缺失时才回退到项目名和未命名文案。
+	 */
+	const projectTitle =
+		selectedTopic?.topic_name?.trim() ||
+		selectedProject?.project_name?.trim() ||
+		t("chat.unnamedChat")
+
+	return (
+		<div
+			className="relative flex min-h-0 flex-1 flex-col overflow-hidden bg-mobile-background"
+			data-testid="chat-project-message-panel"
+		>
+			<ChatProjectHeroHeader
+				title={projectTitle}
+				subtitle={t("chatList.title")}
+				onBack={() => {
+					const fallback = capabilities.resolveBackTarget(selectedProject?.id)
+					navigate({
+						delta: -1,
+						name: fallback.name,
+						params: fallback.params,
+						viewTransition: false,
+					})
+				}}
+				onOpenActions={onOpenActions}
+			/>
+			<div className="relative min-h-0 flex-1 overflow-hidden">
+				{shouldMountEmptyHero ? <ChatProjectEmptyHero /> : null}
+				<TopicPage
+					className="min-h-0 flex-1"
+					hideHeader
+					hideTopicActions
+					pageKind={MobileTopicPageKind.SingleTopicChat}
+					onInitialMessagesLoadingChange={setIsInitialMessagesLoading}
+					onInitialMessagesReadyChange={handleInitialMessagesReadyChange}
+					messageListFallbackRender={<div className="h-full w-full" />}
+					messageListClassName={
+						shouldConcealMessageList ? "pointer-events-none opacity-0" : undefined
+					}
+					bodyClassName={isEmptyStatus ? "bg-transparent" : undefined}
+					footerClassName={isEmptyStatus ? "bg-transparent" : undefined}
+					footerInnerClassName={
+						isEmptyStatus ? "pointer-events-auto mt-auto gap-3" : undefined
+					}
+				/>
+			</div>
+		</div>
+	)
+})

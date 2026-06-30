@@ -14,10 +14,11 @@ interface MCPItemProps {
 	selected?: boolean
 	onClick?: (item: IMCPItem) => void
 	onStatusChange?: (item: IMCPItem) => Promise<void>
+	onManageAuth?: (item: IMCPItem) => void
 }
 
 export function MCPItem(props: MCPItemProps) {
-	const { item, selected, onClick, onStatusChange } = props
+	const { item, selected, onClick, onStatusChange, onManageAuth } = props
 
 	const { t } = useTranslation("agent")
 
@@ -38,6 +39,12 @@ export function MCPItem(props: MCPItemProps) {
 		event?.stopPropagation()
 		event?.preventDefault()
 		onClick?.(item)
+	})
+
+	const triggerManageAuth = useMemoizedFn((event) => {
+		event?.stopPropagation()
+		event?.preventDefault()
+		onManageAuth?.(item)
 	})
 
 	return (
@@ -72,6 +79,17 @@ export function MCPItem(props: MCPItemProps) {
 						>
 							<IconSettings size={13} />
 							{t("mcp.panel.settings")}
+						</button>
+					)}
+					{hasEditRight(item.user_operation) && (
+						<button
+							type="button"
+							className="inline-flex shrink-0 items-center gap-0.5 rounded-[4px] border border-border px-1 text-[10px] font-normal hover:bg-fill focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring active:bg-fill-secondary"
+							onClick={triggerManageAuth}
+							data-testid="agent-mcp-panel-item-manage-auth-button"
+						>
+							<IconSettings size={13} />
+							{t("mcp.panel.manageAuth")}
 						</button>
 					)}
 				</div>

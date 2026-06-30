@@ -44,9 +44,10 @@ function VideoInputEditor({ placeholder, onVideoSubmit, onFileUpload }: VideoInp
 				onKeyDown={handleKeyDown}
 				placeholder={resolvedPlaceholder}
 				className="flex-1 bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground"
+				data-testid="set-video-url"
 			/>
 			<span className="text-sm text-muted-foreground">{t("videoInputEditor.or")}</span>
-			<label className="flex cursor-pointer items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90">
+			<label className="flex cursor-pointer items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90" data-testid="video-input-editor-label">
 				<Upload className="h-4 w-4" />
 				{t("videoInputEditor.upload")}
 				<input
@@ -54,6 +55,7 @@ function VideoInputEditor({ placeholder, onVideoSubmit, onFileUpload }: VideoInp
 					accept="video/*"
 					onChange={handleFileUpload}
 					className="hidden"
+					data-testid="handle-file-upload"
 				/>
 			</label>
 		</div>

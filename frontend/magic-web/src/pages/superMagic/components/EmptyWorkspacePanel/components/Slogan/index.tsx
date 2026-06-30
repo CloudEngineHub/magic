@@ -34,6 +34,7 @@ function Slogan() {
 							src={getAvatarUrl(globalConfig.minimal_logo, DEFAULT_LOGO_HEIGHT)}
 							alt={globalConfig.name_i18n?.[i18n.language as SupportLocales]}
 							draggable={false}
+							data-testid="slogan-image"
 						/>
 					</div>
 				)

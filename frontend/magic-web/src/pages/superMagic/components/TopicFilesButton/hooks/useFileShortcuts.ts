@@ -1,14 +1,18 @@
-import { useEffect, useMemo } from "react"
-import { findTreeNodeByKey, type TreeNodeData } from "../utils/treeDataConverter"
+import { useEffect, useMemo, type MutableRefObject } from "react"
 import type { AttachmentItem } from "./types"
 import { ProjectStateRepository } from "@/models/config/repositories/SuperProjectStateRepository"
 import { useOrganization } from "@/models/user/hooks"
-import { findParentNode, findSlidePageNodeByName } from "./useLocateFile"
+import { findSlidePageItemByName } from "./useLocateFile"
+import {
+	getAttachmentByLookupKey,
+	getParentItemByLookupKey,
+	type AttachmentIndex,
+} from "../utils/attachmentIndex"
 
 interface UseFileShortcutsOptions {
-	hoveredItem: string | null
+	hoveredItemRef: MutableRefObject<string | null>
 	contextMenuItemId: string | null
-	treeData: TreeNodeData[]
+	treeIndex: AttachmentIndex
 	editingVirtualFileId: string | null
 	editingVirtualFolderId: string | null
 	editingVirtualDesignProjectId: string | null
@@ -26,9 +30,9 @@ interface UseFileShortcutsOptions {
  * 处理文件列表相关的键盘快捷键
  */
 export function useFileShortcuts({
-	hoveredItem,
+	hoveredItemRef,
 	contextMenuItemId,
-	treeData,
+	treeIndex,
 	editingVirtualFileId,
 	editingVirtualFolderId,
 	editingVirtualDesignProjectId,
@@ -73,6 +77,7 @@ export function useFileShortcuts({
 			// 优先级 2: 右键菜单打开的文件
 			// 优先级 3: 悬浮的文件
 			// 优先级 4: 当前激活的标签页
+			const hoveredItem = hoveredItemRef.current
 			const targetFileId =
 				contextMenuItemId || hoveredItem || cachedState?.fileState?.activeTabId
 
@@ -90,16 +95,16 @@ export function useFileShortcuts({
 				console.log("📑 Using active tab file:", cachedState?.fileState?.activeTabId)
 			}
 
-			// 查找节点
-			const node = findTreeNodeByKey(treeData, targetFileId)
-			if (!node) {
-				console.warn("⚠️ File node not found in tree:", targetFileId)
+			// Find the file.
+			const item = getAttachmentByLookupKey(treeIndex, targetFileId)
+			if (!item) {
+				console.warn("⚠️ File item not found in tree:", targetFileId)
 				return
 			}
 
 			// 检查是否是 PPT 入口文件
 			const isPPTFile =
-				node.item?.display_config?.type === "slide" && node.item?.display_config?.slides
+				item.display_config?.type === "slide" && item.display_config?.slides
 
 			let targetItem: AttachmentItem | null = null
 
@@ -110,35 +115,35 @@ export function useFileShortcuts({
 					cachedState?.fileState?.pptActiveIndexMap?.[targetFileId] ?? 0
 
 				// 查找父节点
-				const parentNode = findParentNode(treeData, targetFileId)
-				if (!parentNode) {
-					console.warn("⚠️ Parent node not found for PPT entry file:", targetFileId)
+				const parentItem = getParentItemByLookupKey(treeIndex, targetFileId)
+				if (!parentItem) {
+					console.warn("⚠️ Parent item not found for PPT entry file:", targetFileId)
 					return
 				}
 
 				// 从 display_config.slides 获取页面文件名列表
-				const slides = parentNode.item?.display_config?.slides
+				const slides = parentItem.display_config?.slides
 				if (!slides || !Array.isArray(slides)) {
 					console.warn("⚠️ PPT slides array not found, using entry file")
-					targetItem = node.item
+					targetItem = item
 				} else {
 					// 获取当前激活的页面文件名
 					const pageFileName = slides[pptActiveIndex] || slides[0]
 					console.log("📄 Target page file:", pageFileName, "at index:", pptActiveIndex)
 
 					// 查找对应的页面文件节点
-					const pageNode = findSlidePageNodeByName(parentNode, pageFileName)
-					if (pageNode) {
-						console.log("✅ Found page file node:", pageNode.key)
-						targetItem = pageNode.item
+					const pageItem = findSlidePageItemByName(parentItem, pageFileName)
+					if (pageItem) {
+						console.log("✅ Found page file item:", pageItem.file_id || pageItem.file_name)
+						targetItem = pageItem
 					} else {
 						console.warn("⚠️ Page file not found, fallback to entry file")
-						targetItem = node.item
+						targetItem = item
 					}
 				}
 			} else {
-				// 普通文件：直接使用节点
-				targetItem = node.item
+				// Plain file: use the attachment directly.
+				targetItem = item
 			}
 
 			// 验证并添加文件
@@ -167,9 +172,9 @@ export function useFileShortcuts({
 			document.removeEventListener("keydown", handleKeyDown, true)
 		}
 	}, [
-		hoveredItem,
+		hoveredItemRef,
 		contextMenuItemId,
-		treeData,
+		treeIndex,
 		handleAddToCurrentChat,
 		editingVirtualFileId,
 		editingVirtualFolderId,

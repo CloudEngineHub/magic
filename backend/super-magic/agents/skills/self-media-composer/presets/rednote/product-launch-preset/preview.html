@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <title>Product Launch Preset — Preview</title>
+  <link rel="stylesheet" href="product-launch.css"/>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css"/>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;700;900&display=swap"/>
+  <style>
+    html, body {
+      width: auto; height: auto; overflow: auto;
+      background: #D8D8D8;
+      font-family: 'Noto Sans SC', sans-serif;
+    }
+    .preview-title {
+      text-align: center;
+      padding: 40px 0 8px;
+      font-size: 22px; font-weight: 900; color: #111;
+      letter-spacing: 1px;
+    }
+    .preview-subtitle {
+      text-align: center;
+      font-size: 13px; color: #888;
+      margin-bottom: 36px;
+    }
+    .preview-container {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 32px;
+      padding: 0 40px 60px;
+      justify-content: center;
+      align-items: flex-start;
+    }
+    .preview-card-wrapper {
+      box-shadow: 0 8px 32px rgba(0,0,0,0.18);
+      border-radius: 4px;
+      overflow: hidden;
+      width: 540px;
+      height: 720px;
+      position: relative;
+      flex-shrink: 0;
+    }
+    .card-label {
+      text-align: center;
+      font-size: 12px; color: #888;
+      margin-top: 10px; margin-bottom: 4px;
+      letter-spacing: 0.5px;
+    }
+  </style>
+</head>
+<body>
+
+<p class="preview-title">Product Launch Preset</p>
+<p class="preview-subtitle">Product feature launch Rednote card preset · 6 card variants · minimal white style with red top line</p>
+
+<div class="preview-container">
+
+  <!-- ───────────────────────────────────────
+       Card 1: Cover card (pl-cover)
+       Shows: pl-topbar, pl-badge, pl-title-xl, pl-accent, pl-lead-sm, pl-note, pl-mascot
+       ─────────────────────────────────────── -->
+  <div>
+    <p class="card-label">card-00 · Cover card</p>
+    <div class="preview-card-wrapper">
+      <div class="pl-card pl-cover">
+        <div class="pl-topbar"></div>
+        <div class="pl-header">
+          <!-- badge -->
+          <span class="pl-badge" style="position:relative;top:-27px;">Major update</span>
+          <!-- Main title area -->
+          <div style="position:relative;top:-16px;">
+            <h1 class="pl-title-xl" style="position:relative;top:61px;">
+              Turn any<br>
+              webpage / HTML<br>
+              into an editable PPT<br>
+              <span class="pl-accent">Super Magic can do it</span>
+            </h1>
+            <p class="pl-lead-sm" style="position:relative;top:75px;">
+              Text, color blocks, and images - every element<br>
+              becomes an independent PPT element you can edit directly
+            </p>
+          </div>
+          <!-- Bottom brand -->
+          <div class="pl-note" style="position:relative;top:50px;">
+            <span class="pl-note-domain">letsmagic</span>
+            <img class="pl-note-logo"
+                 src="https://cdn.letsmagic.cn/static/img/super-magic-logo-with-white-background.png"
+                 alt="Super Magic">
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ───────────────────────────────────────
+       Card 2: Instruction card
+       Shows: pl-badge, pl-title, pl-lead, pl-img-box, pl-stats-row, pl-data-card
+       ─────────────────────────────────────── -->
+  <div>
+    <p class="card-label">card-01 · Instruction card</p>
+    <div class="preview-card-wrapper">
+      <div class="pl-card pl-content">
+        <div class="pl-topbar"></div>
+        <div class="pl-header">
+          <span class="pl-badge">One step to finish export</span>
+          <h2 class="pl-title">
+            Choose the download format<br>
+            <span class="pl-text-accent">Editable PPT format</span>
+          </h2>
+          <p class="pl-lead">Select the pages you need and download in one click</p>
+          <!-- Image placeholder area -->
+          <div class="pl-img-box is-flex" style="margin-bottom:20px;">
+            <div class="pl-center pl-col pl-gap-sm" style="height:100%;color:#bbb;">
+              <i class="fa-regular fa-image" style="font-size:36px;"></i>
+              <span style="font-size:13px;">Operation panel screenshot</span>
+            </div>
+          </div>
+          <!-- Three-column metrics -->
+          <div class="pl-stats-row">
+            <div class="pl-data-card">
+              <div class="pl-data-num">Element-level</div>
+              <div class="pl-data-label">Independently editable</div>
+            </div>
+            <div class="pl-stats-divider"></div>
+            <div class="pl-data-card">
+              <div class="pl-data-num">High fidelity</div>
+              <div class="pl-data-label">Precise style reconstruction</div>
+            </div>
+            <div class="pl-stats-divider"></div>
+            <div class="pl-data-card">
+              <div class="pl-data-num">Standard format</div>
+              <div class="pl-data-label">Universal .pptx</div>
+            </div>
+          </div>
+          <div class="pl-note no-border">
+            <span class="pl-note-domain">letsmagic</span>
+            <img class="pl-note-logo"
+                 src="https://cdn.letsmagic.cn/static/img/super-magic-logo-with-white-background.png"
+                 alt="Super Magic">
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ───────────────────────────────────────
+       Card 3: Core capability card
+       Shows: pl-badge-red, pl-title, pl-img-box.is-flex
+       ─────────────────────────────────────── -->
+  <div>
+    <p class="card-label">card-02 · Core capability card</p>
+    <div class="preview-card-wrapper">
+      <div class="pl-card pl-content">
+        <div class="pl-topbar"></div>
+        <div class="pl-header">
+          <span class="pl-badge-red">Core capability, not just good enough</span>
+          <h2 class="pl-title">
+            Element-level reconstruction<br>
+            <span class="pl-text-accent">Not screenshot packaging</span>
+          </h2>
+          <p class="pl-lead">Text, color blocks, and images are all reconstructed as independent objects</p>
+          <div class="pl-img-box is-flex">
+            <div class="pl-center pl-col pl-gap-sm" style="height:100%;color:#bbb;">
+              <i class="fa-regular fa-image" style="font-size:36px;"></i>
+              <span style="font-size:13px;">Core capability screenshot</span>
+            </div>
+          </div>
+          <div class="pl-note no-border">
+            <span class="pl-note-domain">letsmagic</span>
+            <img class="pl-note-logo"
+                 src="https://cdn.letsmagic.cn/static/img/super-magic-logo-with-white-background.png"
+                 alt="Super Magic">
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ───────────────────────────────────────
+       Card 4: Feature list card (with chart)
+       Shows: pl-list-row, pl-list-row.is-highlight, pl-divider, pl-tag, pl-badge
+       ─────────────────────────────────────── -->
+  <div>
+    <p class="card-label">card-03 · Feature list card</p>
+    <div class="preview-card-wrapper">
+      <div class="pl-card pl-content">
+        <div class="pl-topbar"></div>
+        <div class="pl-header">
+          <span class="pl-badge">Three core capabilities</span>
+          <h2 class="pl-title" style="margin-bottom:16px;">
+            Why choose<br>
+            <span class="pl-text-accent">Super Magic Export</span>
+          </h2>
+          <!-- Feature list -->
+          <div class="pl-list-row is-highlight">
+            <div class="pl-list-icon"><i class="fa-solid fa-layer-group"></i></div>
+            <div class="pl-list-body">
+              <div class="pl-list-title">Element-level editability</div>
+              <div class="pl-list-desc">Every text block, color block, and image is an independent PPT object</div>
+            </div>
+          </div>
+          <div class="pl-list-row">
+            <div class="pl-list-icon"><i class="fa-solid fa-wand-magic-sparkles" style="color:#E63946;"></i></div>
+            <div class="pl-list-body">
+              <div class="pl-list-title">High-fidelity style reconstruction</div>
+              <div class="pl-list-desc">Colors, fonts, and layout are precisely mapped without distortion</div>
+            </div>
+          </div>
+          <div class="pl-list-row">
+            <div class="pl-list-icon"><i class="fa-solid fa-file-powerpoint" style="color:#E63946;"></i></div>
+            <div class="pl-list-body">
+              <div class="pl-list-title">Standard .pptx format</div>
+              <div class="pl-list-desc">Editable in any version of PowerPoint / WPS</div>
+            </div>
+          </div>
+          <div class="pl-list-row">
+            <div class="pl-list-icon"><i class="fa-solid fa-globe" style="color:#E63946;"></i></div>
+            <div class="pl-list-body">
+              <div class="pl-list-title">Export any HTML</div>
+              <div class="pl-list-desc">Not limited to Super Magic; WeChat articles can also become PPT in one click</div>
+            </div>
+          </div>
+          <div class="pl-divider"></div>
+          <!-- Tag row -->
+          <div class="pl-row pl-gap-sm" style="flex-wrap:wrap;">
+            <span class="pl-tag pl-tag-accent">Productivity tool</span>
+            <span class="pl-tag">AI generated</span>
+            <span class="pl-tag">Workplace essential</span>
+            <span class="pl-tag">Slides</span>
+          </div>
+          <div class="pl-note">
+            <span class="pl-note-domain">letsmagic</span>
+            <img class="pl-note-logo"
+                 src="https://cdn.letsmagic.cn/static/img/super-magic-logo-with-white-background.png"
+                 alt="Super Magic">
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ───────────────────────────────────────
+       Card 5: Data chart card
+       Shows: ECharts product-launch-bar + product-launch-donut, pl-hl
+       ─────────────────────────────────────── -->
+  <div>
+    <p class="card-label">card-04 · Data chart card</p>
+    <div class="preview-card-wrapper">
+      <div class="pl-card pl-content">
+        <div class="pl-topbar"></div>
+        <div class="pl-header">
+          <span class="pl-badge">Let the data speak</span>
+          <h2 class="pl-title" style="margin-bottom:4px;">
+            User growth<span class="pl-hl">exceeded expectations</span><br>
+            <span class="pl-text-accent">quadrupled in three months</span>
+          </h2>
+          <p class="pl-lead">Since launch, monthly active users have continued to climb</p>
+          <!-- Bar chart -->
+          <div id="preview-bar" style="width:100%;height:200px;flex-shrink:0;"></div>
+          <div class="pl-divider"></div>
+          <!-- Donut chart + explanation -->
+          <div class="pl-row pl-gap-md" style="flex:1;align-items:center;">
+            <div id="preview-donut" style="width:140px;height:140px;flex-shrink:0;"></div>
+            <div class="pl-col pl-gap-xs">
+              <div style="font-size:13px;font-weight:700;color:#111;">User satisfaction</div>
+              <div style="font-size:12px;color:#666;">Share of feedback saying it is usable right after export</div>
+              <div class="pl-row pl-gap-xs" style="margin-top:4px;">
+                <span class="pl-tag pl-tag-accent">High fidelity</span>
+                <span class="pl-tag">Time-saving</span>
+              </div>
+            </div>
+          </div>
+          <div class="pl-note">
+            <span class="pl-note-domain">letsmagic</span>
+            <img class="pl-note-logo"
+                 src="https://cdn.letsmagic.cn/static/img/super-magic-logo-with-white-background.png"
+                 alt="Super Magic">
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ───────────────────────────────────────
+       Card 6: CTA ending card
+       Shows: pl-badge-red, pl-img-box.is-fixed, pl-cta-box, pl-text-positive/negative
+       ─────────────────────────────────────── -->
+  <div>
+    <p class="card-label">card-05 · CTA ending card</p>
+    <div class="preview-card-wrapper">
+      <div class="pl-card pl-content">
+        <div class="pl-topbar"></div>
+        <div class="pl-header">
+          <span class="pl-badge-red">Bonus</span>
+          <h2 class="pl-title">
+            WeChat articles can also<br>
+            <span class="pl-text-accent">export to PPT in one click</span>
+          </h2>
+          <p class="pl-lead">Any HTML works - not just Super Magic slides</p>
+          <!-- Illustration area -->
+          <div class="pl-img-box is-fixed">
+            <div class="pl-center pl-col pl-gap-sm" style="height:100%;color:#bbb;">
+              <i class="fa-regular fa-image" style="font-size:36px;"></i>
+              <span style="font-size:13px;">Bonus feature screenshot</span>
+            </div>
+          </div>
+          <!-- Engagement prompt -->
+          <div class="pl-cta-box">
+            <p class="pl-cta-title">Have HTML on hand? Try it.</p>
+            <p class="pl-cta-sub">Search for Super Magic and register for free to try it</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div><!-- /preview-container -->
+
+<script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
+<script src="product-launch.js"></script>
+<script>
+  window.addEventListener('load', function () {
+    if (typeof echarts === 'undefined' || !window.ProductLaunchPresets) return;
+
+    /* Bar chart */
+    var barEl = document.getElementById('preview-bar');
+    if (barEl) {
+      var barChart = echarts.init(barEl);
+      barChart.setOption(ProductLaunchPresets.get('product-launch-bar', {
+        categories: ['Jan', 'Feb', 'Mar', 'Apr'],
+        values: [1200, 2400, 3800, 4900],
+        highlightIndex: 3,
+        unit: ''
+      }));
+    }
+
+    /* Donut chart */
+    var donutEl = document.getElementById('preview-donut');
+    if (donutEl) {
+      var donutChart = echarts.init(donutEl);
+      donutChart.setOption(ProductLaunchPresets.get('product-launch-donut', {
+        value: 92,
+        total: 100,
+        unit: '%',
+        label: 'Satisfaction'
+      }));
+    }
+  });
+</script>
+</body>
+</html>

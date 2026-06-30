@@ -32,6 +32,7 @@ function SceneSwitcher({ scenes, onSceneClick: onSkillClick }: SceneSwitcherProp
 				width={DESKTOP_ICON_SIZE}
 				height={DESKTOP_ICON_SIZE}
 				className="rounded"
+				data-testid="scene-switcher-image"
 			/>
 		) : (
 			<LucideLazyIcon icon={skill.icon} size={DESKTOP_ICON_SIZE} />

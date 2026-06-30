@@ -1,4 +1,5 @@
 import type { ReferenceResourcePanelItem } from "../../../types"
+import { CANVAS_REFERENCE_MENTION_ITEM_TYPE } from "./canvasReferenceMention.constants"
 import type { ReferenceDropProjectFile } from "./useReferenceResourcePanelDataService"
 
 export function getFileExtension(filePath: string): string {
@@ -12,7 +13,7 @@ export function createReferenceResourcePanelItemFromPath(
 	fileName: string,
 ): ReferenceResourcePanelItem {
 	return {
-		type: "project_file",
+		type: CANVAS_REFERENCE_MENTION_ITEM_TYPE.projectFile,
 		data: {
 			file_id: path,
 			file_name: fileName,

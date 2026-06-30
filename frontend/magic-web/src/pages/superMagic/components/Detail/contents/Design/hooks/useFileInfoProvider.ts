@@ -1,11 +1,15 @@
 import { useCallback, useEffect, useRef } from "react"
-import type { GetFileInfoResponse } from "@/components/CanvasDesign/types.magic"
+import type {
+	CanvasFileResourceMeta,
+	GetFileInfoResponse,
+} from "@/components/CanvasDesign/types.magic"
 import { GET_FILE_INFO_NOT_FOUND_ERROR_CODE } from "@/components/CanvasDesign/canvas/utils/resourceLoadFailure"
 import type { FileItem } from "@/pages/superMagic/components/Detail/components/FilesViewer/types"
 import type { DesignAttachmentIndex } from "../utils/designAttachmentIndex"
 import { useTranslation } from "react-i18next"
 import {
 	getFileInfoByPath,
+	getFileResourceMetaByPath,
 	getFileInfoById as getSharedFileInfoById,
 	setFileInfoCache as setSharedFileInfoCache,
 	cleanupFileInfoCache,
@@ -31,6 +35,8 @@ interface DebounceItem {
 interface UseFileInfoProviderOptions {
 	/** 已扁平化的附件列表（从入口传入） */
 	flatAttachments?: FileItem[]
+	/** 附件快照是否已由入口提供；观测过真实快照后，空数组也可能是一个有效快照 */
+	attachmentsReady?: boolean
 	/** 设计目录 ID，用于为 file info cache 建立命名空间 */
 	designProjectId?: string
 	/** 画布目录在项目中的路径段（与 magic.project.js 同级），用于解析 DSL 相对路径（如 `images/...` 或 `./images/...`） */
@@ -43,6 +49,10 @@ interface UseFileInfoProviderReturn {
 		path: string,
 		options?: { useImageProcess?: boolean; forceRefresh?: boolean },
 	) => Promise<GetFileInfoResponse>
+	getFileResourceMeta: (
+		path: string,
+		options?: { useImageProcess?: boolean },
+	) => Promise<CanvasFileResourceMeta>
 	getFileInfoById: (
 		fileId: string,
 		fileName?: string,
@@ -58,6 +68,12 @@ function createFileNotFoundByPathError(path: string, message: string): Error {
 	return error
 }
 
+function createFileInfoRequestCancelledError(): Error {
+	const error = new Error("File info request cancelled")
+	error.name = "AbortError"
+	return error
+}
+
 /**
  * 文件信息提供功能 Hook
  * 职责：根据文件路径获取文件信息
@@ -67,7 +83,13 @@ function createFileNotFoundByPathError(path: string, message: string): Error {
 export function useFileInfoProvider(
 	options: UseFileInfoProviderOptions,
 ): UseFileInfoProviderReturn {
-	const { flatAttachments, designProjectBasePath, designProjectId, attachmentIndex } = options
+	const {
+		flatAttachments,
+		attachmentsReady,
+		designProjectBasePath,
+		designProjectId,
+		attachmentIndex,
+	} = options
 	const { t } = useTranslation("super")
 
 	// 存储每个 path 的防抖项
@@ -75,15 +97,19 @@ export function useFileInfoProvider(
 
 	// 当文件列表变化时，清理已删除文件的缓存
 	useEffect(() => {
-		cleanupFileInfoCache(flatAttachments, designProjectId)
-	}, [flatAttachments, designProjectId])
+		cleanupFileInfoCache(flatAttachments, designProjectId, {
+			hasAttachmentSnapshot: attachmentsReady === true,
+		})
+	}, [flatAttachments, designProjectId, attachmentsReady])
 
 	// 组件卸载时清理所有防抖定时器
 	useEffect(() => {
 		const debounceMap = debounceMapRef.current
 		return () => {
+			const cancelledError = createFileInfoRequestCancelledError()
 			debounceMap.forEach((item) => {
 				clearTimeout(item.timer)
+				item.reject(cancelledError)
 			})
 			debounceMap.clear()
 		}
@@ -103,33 +129,40 @@ export function useFileInfoProvider(
 			const base = designProjectBasePath
 			const attachmentsSnapshotKey = attachmentIndex?.attachmentsSnapshotKey ?? ""
 			const debounceKey = `${path}\0${opts?.useImageProcess === true ? "1" : "0"}\0${opts?.forceRefresh === true ? "1" : "0"}\0${base ?? ""}\0${attachmentsSnapshotKey}`
+			const resolveFileInfo = async (
+				resolve: (value: GetFileInfoResponse) => void,
+				reject: (error: Error) => void,
+			) => {
+				try {
+					const result = await getFileInfoByPath(path, flatAttachments, {
+						...opts,
+						designProjectBasePath: base,
+						designProjectId,
+						attachmentIndex,
+						attachmentsSnapshotKeyOverride: attachmentIndex?.attachmentsSnapshotKey,
+						hasAttachmentSnapshot: attachmentsReady === true,
+					})
+					if (!result) {
+						reject(
+							createFileNotFoundByPathError(
+								path,
+								t("design.errors.fileNotFoundByPath", { path }),
+							),
+						)
+						return
+					}
+					resolve(result)
+				} catch (error) {
+					reject(error as Error)
+				}
+			}
 
 			const existingItem = debounceMap.get(debounceKey)
 			if (existingItem) {
 				clearTimeout(existingItem.timer)
 				const timer = setTimeout(async () => {
 					debounceMap.delete(debounceKey)
-					try {
-						const result = await getFileInfoByPath(path, flatAttachments, {
-							...opts,
-							designProjectBasePath: base,
-							designProjectId,
-							attachmentIndex,
-							attachmentsSnapshotKeyOverride: attachmentIndex?.attachmentsSnapshotKey,
-						})
-						if (!result) {
-							existingItem.reject(
-								createFileNotFoundByPathError(
-									path,
-									t("design.errors.fileNotFoundByPath", { path }),
-								),
-							)
-							return
-						}
-						existingItem.resolve(result)
-					} catch (error) {
-						existingItem.reject(error as Error)
-					}
+					await resolveFileInfo(existingItem.resolve, existingItem.reject)
 				}, DEBOUNCE_DELAY_MS)
 				existingItem.timer = timer
 				return existingItem.promise
@@ -149,27 +182,7 @@ export function useFileInfoProvider(
 
 			const timer = setTimeout(async () => {
 				debounceMap.delete(debounceKey)
-				try {
-					const result = await getFileInfoByPath(path, flatAttachments, {
-						...opts,
-						designProjectBasePath: base,
-						designProjectId,
-						attachmentIndex,
-						attachmentsSnapshotKeyOverride: attachmentIndex?.attachmentsSnapshotKey,
-					})
-					if (!result) {
-						promiseCallbacks.reject(
-							createFileNotFoundByPathError(
-								path,
-								t("design.errors.fileNotFoundByPath", { path }),
-							),
-						)
-						return
-					}
-					promiseCallbacks.resolve(result)
-				} catch (error) {
-					promiseCallbacks.reject(error as Error)
-				}
+				await resolveFileInfo(promiseCallbacks.resolve, promiseCallbacks.reject)
 			}, DEBOUNCE_DELAY_MS)
 
 			debounceMap.set(debounceKey, {
@@ -180,13 +193,32 @@ export function useFileInfoProvider(
 			})
 			return promise
 		},
-		[t, flatAttachments, designProjectBasePath, designProjectId, attachmentIndex],
+		[
+			t,
+			flatAttachments,
+			attachmentsReady,
+			designProjectBasePath,
+			designProjectId,
+			attachmentIndex,
+		],
+	)
+
+	const getFileResourceMeta = useCallback(
+		(path: string): Promise<CanvasFileResourceMeta> => {
+			return getFileResourceMetaByPath(path, flatAttachments, {
+				designProjectBasePath,
+				attachmentIndex,
+				hasAttachmentSnapshot: attachmentsReady === true,
+			})
+		},
+		[flatAttachments, designProjectBasePath, attachmentIndex, attachmentsReady],
 	)
 
 	/**
 	 * 通过 file_id 获取文件信息
 	 * 优势：不依赖 path 和 attachments，直接使用 file_id 获取下载 URL
 	 * 适用场景：上传完成后，API 已返回 file_id，但 attachments 可能还未更新
+	 * 注意：这是 superMagic 上传回填专用链路，不作为 CanvasDesign 资源同一性标识。
 	 */
 	const getFileInfoById = useCallback(
 		async (
@@ -228,6 +260,7 @@ export function useFileInfoProvider(
 
 	return {
 		getFileInfo,
+		getFileResourceMeta,
 		getFileInfoById,
 		setFileInfoCache,
 	}

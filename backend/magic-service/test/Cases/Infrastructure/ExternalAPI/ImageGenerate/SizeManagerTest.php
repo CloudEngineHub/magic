@@ -7,16 +7,17 @@ declare(strict_types=1);
 
 namespace HyperfTest\Cases\Infrastructure\ExternalAPI\ImageGenerate;
 
+use App\Infrastructure\ExternalAPI\ImageGenerateAPI\ImageModelConfig;
 use App\Infrastructure\ExternalAPI\ImageGenerateAPI\SizeManager;
 use Hyperf\Contract\ConfigInterface;
-use HyperfTest\Cases\BaseTest;
 use InvalidArgumentException;
+use PHPUnit\Framework\TestCase;
 
 /**
  * @internal
  * @covers \App\Infrastructure\ExternalAPI\ImageGenerateAPI\SizeManager
  */
-class SizeManagerTest extends BaseTest
+class SizeManagerTest extends TestCase
 {
     /**
      * 测试 Gemini 3.0 Pro 模型的所有 size 格式和边界情况
@@ -1031,6 +1032,14 @@ class SizeManagerTest extends BaseTest
         $this->assertEquals(['1024', '1024'], $result);
     }
 
+    public function testResolveResolutionByPixels()
+    {
+        $this->assertSame('1K', SizeManager::resolveResolutionByPixels(1024, 1024));
+        $this->assertSame('1K', SizeManager::resolveResolutionByPixels(1800, 1200));
+        $this->assertSame('2K', SizeManager::resolveResolutionByPixels(2496, 1664));
+        $this->assertSame('4K', SizeManager::resolveResolutionByPixels(4096, 4096));
+    }
+
     /**
      * 测试 calculateRatio 方法.
      */
@@ -1168,6 +1177,44 @@ class SizeManagerTest extends BaseTest
             $config = SizeManager::matchConfig('totally-different-model', null);
             $this->assertNull($config);
         });
+    }
+
+    public function testGetMaxOutputImagesUsesModelConfigAndDefaultsToOne(): void
+    {
+        $this->withTemporaryImageModelConfigs([
+            [
+                'match' => [
+                    ['field' => 'model_version', 'value' => 'multi-image-model'],
+                ],
+                'config' => [
+                    'max_output_images' => 8,
+                ],
+            ],
+        ], function (): void {
+            $this->assertSame(8, SizeManager::getMaxOutputImages('multi-image-model', null));
+            $this->assertSame(1, SizeManager::getMaxOutputImages('unknown-model', null));
+        });
+    }
+
+    public function testQwenMaxOutputImagesFollowOfficialLimits(): void
+    {
+        $this->assertSame(1, SizeManager::getMaxOutputImages('qwen-image', null));
+        $this->assertSame(1, SizeManager::getMaxOutputImages('qwen-image-plus', null));
+        $this->assertSame(6, SizeManager::getMaxOutputImages('qwen-image-edit-plus', null));
+        $this->assertSame(6, SizeManager::getMaxOutputImages('qwen-image-edit-max', null));
+        $this->assertSame(6, SizeManager::getMaxOutputImages('qwen-image-2.0', null));
+        $this->assertSame(6, SizeManager::getMaxOutputImages('qwen-image-2.0-pro', null));
+    }
+
+    public function testImageModelConfigExposesMaxOutputImages(): void
+    {
+        $config = ImageModelConfig::fromConfig([
+            'sizes' => [],
+            'max_reference_images' => 3,
+            'max_output_images' => 8,
+        ]);
+
+        $this->assertSame(8, $config?->toArray()['max_output_images'] ?? null);
     }
 
     /**

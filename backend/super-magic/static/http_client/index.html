@@ -86,6 +86,16 @@
                 <div class="filetree-header">
                     <span class="filetree-title">工作区文件</span>
                     <div class="filetree-actions">
+                        <button id="uploadWorkspaceBtn" class="icon-btn" title="上传文件到 .workspace 根目录" aria-label="上传文件">
+                            <svg viewBox="0 0 24 24" aria-hidden="true">
+                                <path d="M12 16V5" fill="none" stroke="currentColor" stroke-width="1.8"
+                                    stroke-linecap="round"></path>
+                                <path d="m7.5 9.5 4.5-4.5 4.5 4.5" fill="none" stroke="currentColor" stroke-width="1.8"
+                                    stroke-linecap="round" stroke-linejoin="round"></path>
+                                <path d="M5 18.5h14" fill="none" stroke="currentColor" stroke-width="1.8"
+                                    stroke-linecap="round"></path>
+                            </svg>
+                        </button>
                         <button id="refreshTreeBtn" class="icon-btn" title="刷新" aria-label="刷新工作区文件">
                             <svg viewBox="0 0 24 24" aria-hidden="true">
                                 <path d="M20 12a8 8 0 1 1-2.34-5.66" fill="none" stroke="currentColor"
@@ -105,18 +115,10 @@
                         </button>
                     </div>
                 </div>
-                <div class="mount-dir-row">
-                    <span class="mount-dir-label">挂载目录:</span>
-                    <input type="text" id="mountDirInput" class="mount-dir-input" placeholder="留空为根目录">
-                    <button id="applyMountDirBtn" class="icon-btn" title="应用挂载目录" aria-label="应用挂载目录">
-                        <svg viewBox="0 0 24 24" aria-hidden="true">
-                            <path d="m5 12.5 4.2 4.2L19 7" fill="none" stroke="currentColor" stroke-width="2"
-                                stroke-linecap="round" stroke-linejoin="round"></path>
-                        </svg>
-                    </button>
-                </div>
+                <input id="workspaceUploadInput" class="workspace-upload-input" type="file" multiple aria-hidden="true"
+                    tabindex="-1">
                 <div id="filetreeContainer" class="filetree-container">
-                    <div class="filetree-empty">点击上方按钮选择项目根目录</div>
+                    <div class="filetree-empty">正在加载 .workspace 文件树</div>
                 </div>
             </div>
         </div>
@@ -200,7 +202,8 @@
                         <!-- Agent Code 文本输入（仅 custom_agent 模式显示） -->
                         <div class="model-config" id="customAgentCodeGroup" style="display:none">
                             <input type="text" id="customAgentCodeInput" class="model-id-input"
-                                placeholder="agent_code（必填，如 SMA-xxx）">
+                                placeholder="agent_code（必填，如 SMA-xxx）" list="localCrewAgentOptions">
+                            <datalist id="localCrewAgentOptions"></datalist>
                         </div>
 
                         <!-- Model ID 配置（IM 模式下隐藏） -->
@@ -239,6 +242,20 @@
                                 <option value="v2" selected>消息版本 v2</option>
                                 <option value="v1">消息版本 v1</option>
                                 <option value="">不传版本</option>
+                            </select>
+                        </div>
+
+                        <!-- 执行来源选择 -->
+                        <div class="model-config" id="executionSourceGroup">
+                            <select id="executionSourceSelect" class="agent-mode-select">
+                                <option value="human_chat" selected>来源 human_chat</option>
+                                <option value="open_api">来源 open_api</option>
+                                <option value="message_schedule">来源 message_schedule</option>
+                                <option value="webhook">来源 webhook</option>
+                                <option value="third_party_im">来源 third_party_im</option>
+                                <option value="cron">来源 cron</option>
+                                <option value="system">来源 system</option>
+                                <option value="unknown">来源 unknown</option>
                             </select>
                         </div>
                     </div>
@@ -289,6 +306,14 @@
                                     <button id="historyBtn" class="btn secondary small">历史消息</button>
                                 </div>
                                 <div class="input-footer-middle">
+                                    <button id="clientContextOpenBtn"
+                                        class="btn secondary small client-context-footer-btn">
+                                        client_context
+                                        <span id="clientContextCount" class="client-context-count">0字</span>
+                                    </button>
+                                    <button id="clientContextClearBtn"
+                                        class="btn secondary small client-context-clear-btn"
+                                        style="display:none">清空</button>
                                     <button id="interruptBtn" class="btn danger small">中断任务</button>
                                     <button id="clearChatBtn" class="btn secondary small">清除对话</button>
                                 </div>
@@ -329,9 +354,29 @@
         </div>
     </div>
 
+    <!-- client_context 调试弹窗 -->
+    <div id="clientContextModal" class="client-context-modal-overlay" style="display:none">
+        <div class="client-context-modal-dialog" role="dialog" aria-modal="true"
+            aria-labelledby="clientContextModalTitle">
+            <div class="client-context-modal-header">
+                <div class="client-context-modal-title">
+                    <strong id="clientContextModalTitle">client_context</strong>
+                    <span id="clientContextModalCount">0 字符</span>
+                </div>
+                <div class="client-context-modal-actions">
+                    <button id="clientContextModalClearBtn" class="client-context-modal-clear-btn">清空</button>
+                    <button id="clientContextModalCloseBtn" class="client-context-modal-close-btn">关闭</button>
+                </div>
+            </div>
+            <textarea id="clientContextInput" class="client-context-modal-textarea"
+                placeholder="可选：填入后会覆盖自动生成的 client_context。留空时使用自动上下文。"></textarea>
+        </div>
+    </div>
+
     <script src="https://cdn.jsdelivr.net/npm/marked@9/marked.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-    <script src="js/client.js"></script>
+    <script src="js/micro_app_runtime.js?v=debug-workspace-files-7"></script>
+    <script src="js/client.js?v=debug-execution-source-1"></script>
 </body>
 
 </html>

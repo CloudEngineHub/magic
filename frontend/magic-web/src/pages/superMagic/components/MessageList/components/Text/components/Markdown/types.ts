@@ -1,4 +1,4 @@
-// 收口 Markdown 主入口和 HTML 预览增强链的类型定义，避免入口文件继续膨胀。
+import type { CitationSource } from "@/pages/superMagic/utils/citations"
 
 // Markdown 主入口 props。`isStreaming` 用于区分流式代码态和完成后的预览态。
 export interface MarkdownComponentProps {
@@ -15,6 +15,17 @@ export interface MarkdownComponentProps {
 	 *   混合内容中 fence 外的裸 HTML 转义为纯文本（白名单标签如 file-path 除外）。
 	 */
 	allowRawHtml?: boolean
+	/** 引用来源数据（用于渲染 <citation index="N"></citation> 标记） */
+	citations?: CitationSource[]
+	/** 当前高亮的引用序号 */
+	highlightedCitation?: number | null
+	/** 引用 badge 点击回调 */
+	onCitationClick?: (index: number | null) => void
+	/**
+	 * 是否启用 html fenced code block 的预览组件。
+	 * 默认开启，正文消息保留 HTML 预览；思考内容可关闭，仅按普通代码块展示。
+	 */
+	enableHtmlCodeBlockPreview?: boolean
 	onMouseEnter?: (event: React.MouseEvent<HTMLDivElement>) => void
 	onMouseLeave?: (event: React.MouseEvent<HTMLDivElement>) => void
 }

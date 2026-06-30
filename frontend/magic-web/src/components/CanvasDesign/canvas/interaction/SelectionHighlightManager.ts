@@ -101,6 +101,14 @@ export class SelectionHighlightManager {
 		})
 	}
 
+	private requestSelectionDraw(reason: string): void {
+		this.canvas.runtimeScheduler.requestLayerDraw("selection", {
+			source: "SelectionHighlightManager",
+			reason,
+			priority: "input",
+		})
+	}
+
 	/**
 	 * 更新高亮元素列表
 	 * @param elementIds 当前框选到的元素 ID 数组
@@ -109,11 +117,15 @@ export class SelectionHighlightManager {
 		const newHighlightSet = new Set(elementIds)
 
 		// 移除不再高亮的元素
-		for (const elementId of this.highlightedElementIds) {
+		const elementIdsToRemove: string[] = []
+		this.highlightedElementIds.forEach((elementId) => {
 			if (!newHighlightSet.has(elementId)) {
-				this.removeHighlight(elementId)
+				elementIdsToRemove.push(elementId)
 			}
-		}
+		})
+		elementIdsToRemove.forEach((elementId) => {
+			this.removeHighlight(elementId)
+		})
 
 		// 添加新高亮的元素
 		for (const elementId of elementIds) {
@@ -211,7 +223,7 @@ export class SelectionHighlightManager {
 
 		// 重新创建 highlight（位置会自动更新）
 		this.addHighlight(elementId)
-		this.canvas.selectionLayer.batchDraw()
+		this.requestSelectionDraw("update-highlight")
 	}
 
 	/**
@@ -230,20 +242,24 @@ export class SelectionHighlightManager {
 	 * 清除所有高亮效果
 	 */
 	public clearAllHighlights(): void {
-		for (const elementId of this.highlightedElementIds) {
+		const elementIds: string[] = []
+		this.highlightedElementIds.forEach((elementId) => {
+			elementIds.push(elementId)
+		})
+		elementIds.forEach((elementId) => {
 			this.removeHighlight(elementId)
-		}
-		this.canvas.selectionLayer.batchDraw()
+		})
+		this.requestSelectionDraw("clear")
 	}
 
 	/**
 	 * 隐藏所有高亮边框（拖动时）
 	 */
 	private hideAllHighlights(): void {
-		for (const highlightNode of this.highlightNodes.values()) {
+		this.highlightNodes.forEach((highlightNode) => {
 			highlightNode.hide()
-		}
-		this.canvas.selectionLayer.batchDraw()
+		})
+		this.requestSelectionDraw("hide")
 	}
 
 	/**
@@ -255,24 +271,24 @@ export class SelectionHighlightManager {
 		const elementIds = Array.from(this.highlightedElementIds)
 
 		// 清除旧的边框
-		for (const [elementId, highlightNode] of this.highlightNodes) {
+		this.highlightNodes.forEach((highlightNode, elementId) => {
 			highlightNode.destroy()
 			this.highlightNodes.delete(elementId)
-		}
+		})
 
 		// 重新创建边框（位置会自动更新）
 		for (const elementId of elementIds) {
 			this.addHighlight(elementId)
 		}
 
-		this.canvas.selectionLayer.batchDraw()
+		this.requestSelectionDraw("show")
 	}
 
 	/**
 	 * 更新高亮效果（当 viewport 缩放变化时）
 	 */
 	public updateHighlightStrokeWidth(): void {
-		for (const [elementId, highlightNode] of this.highlightNodes) {
+		this.highlightNodes.forEach((highlightNode, elementId) => {
 			// 尝试使用 Element 的自定义更新方法
 			const element = this.canvas.elementManager.getElementInstance(elementId)
 			if (element && typeof element.updateHoverEffect === "function") {
@@ -291,8 +307,8 @@ export class SelectionHighlightManager {
 					)
 				}
 			}
-		}
-		this.canvas.selectionLayer.batchDraw()
+		})
+		this.requestSelectionDraw("stroke-width")
 	}
 
 	/**

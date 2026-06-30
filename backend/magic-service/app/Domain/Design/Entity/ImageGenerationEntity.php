@@ -53,6 +53,10 @@ class ImageGenerationEntity extends AbstractEntity
 
     protected ?array $imageGenerationConfig = null;
 
+    protected int $generateNum = 1;
+
+    protected ?array $outputImages = null;
+
     protected ImageGenerationType $type;
 
     protected ImageGenerationStatus $status;
@@ -66,6 +70,8 @@ class ImageGenerationEntity extends AbstractEntity
     private ?int $fileDirId = null;
 
     private ?string $fileUrl = null;
+
+    private array $images = [];
 
     public function getFileDirId(): int
     {
@@ -256,6 +262,40 @@ class ImageGenerationEntity extends AbstractEntity
     public function setImageGenerationConfig(?array $imageGenerationConfig): void
     {
         $this->imageGenerationConfig = $imageGenerationConfig;
+    }
+
+    public function getGenerateNum(): int
+    {
+        return max(1, $this->generateNum);
+    }
+
+    public function setGenerateNum(null|int|string $generateNum): void
+    {
+        if (is_string($generateNum) && is_numeric($generateNum)) {
+            $generateNum = (int) $generateNum;
+        }
+
+        $this->generateNum = is_int($generateNum) && $generateNum > 0 ? $generateNum : 1;
+    }
+
+    public function getOutputImages(): ?array
+    {
+        return $this->outputImages;
+    }
+
+    public function setOutputImages(?array $outputImages): void
+    {
+        $this->outputImages = $outputImages;
+    }
+
+    public function getImages(): array
+    {
+        return $this->images;
+    }
+
+    public function setImages(array $images): void
+    {
+        $this->images = $images;
     }
 
     public function getType(): ImageGenerationType

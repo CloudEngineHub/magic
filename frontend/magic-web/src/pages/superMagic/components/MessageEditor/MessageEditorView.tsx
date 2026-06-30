@@ -6,6 +6,7 @@ import type { RefObject, DragEvent, ClipboardEvent, ReactNode } from "react"
 import type { MessageEditorSize } from "./types"
 import TabIcon from "./assets/tab.svg"
 import { cn } from "@/lib/utils"
+import { useEditorPortalSync } from "./hooks/useEditorPortalSync"
 import {
 	messageEditorContainerVariants,
 	messageEditorInnerVariants,
@@ -70,6 +71,10 @@ function MessageEditorView({
 }: MessageEditorViewProps) {
 	const isMobile = useIsMobile()
 
+	// Fix: ensure EditorContent re-renders when editor.contentComponent changes
+	// (works around tiptap PureEditorContent stale portal reference bug)
+	useEditorPortalSync(tiptapEditor)
+
 	return (
 		<>
 			<FlexBox vertical className="h-full gap-2">
@@ -87,7 +92,7 @@ function MessageEditorView({
 					onDragLeave={dragEvents.onDragLeave}
 					onDragOver={dragEvents.onDragOver}
 					onDrop={dragEvents.onDrop}
-					onPaste={onPaste}
+					onPasteCapture={onPaste}
 					data-testid="super-message-editor-container"
 				>
 					<FlexBox

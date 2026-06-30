@@ -1,7 +1,6 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { useCallback, useRef, useState } from "react"
 import { peekProjectAttachmentDragHoverPlainText } from "./projectAttachmentDragHoverBridge"
-import { useMagic } from "../../../context/MagicContext"
-import type { MentionDataServicePort, ReferenceResourcePanelLimitInfo } from "../../../types"
+import type { MentionDataServicePort } from "../../../types"
 import type {
 	ReferenceAssetPerTypeLimits,
 	ReferenceAssetTypeCounts,
@@ -10,6 +9,8 @@ import type {
 } from "./reference-resource.types"
 import { classifyReferenceAssetFile } from "./referenceResourceSelection"
 import { isCanvasRelativeResourcePath } from "../../../canvas/utils/pathUtils"
+import { useCanvasReferenceMentionRuntime } from "./useCanvasReferenceMentionRuntime"
+import { CANVAS_REFERENCE_MENTION_ITEM_TYPE } from "./canvasReferenceMention.constants"
 
 interface UseReferenceResourcePanelDataServiceOptions {
 	maxReferenceFiles?: number
@@ -19,9 +20,9 @@ interface UseReferenceResourcePanelDataServiceOptions {
 	referenceFileInfos: ReferenceResourceFileInfo[]
 	assetLimits?: ReferenceAssetPerTypeLimits
 	currentAssetCounts?: ReferenceAssetTypeCounts
-	/** 传给画布 Mention DataService；搜索列表右侧路径由 MentionPanel 与 file_path 计算（与 MessageEditor 一致） */
+	/** @deprecated 由 useCanvasReferenceMentionRuntime 统一从 CanvasDesign i18n 派生 */
 	projectFilesPathPrefix?: string
-	/** 当前设计根目录显示名，用于 @ 列表副标题拼接 */
+	/** @deprecated 由 useCanvasReferenceMentionRuntime 统一从 MagicContext 派生 */
 	mentionFileSubtitleParentPrefix?: string
 }
 
@@ -88,87 +89,14 @@ interface ResolvedDropState {
 
 const DRAG_DATA_TYPE = {
 	tab: "tab",
-	projectFile: "project_file",
+	projectFile: CANVAS_REFERENCE_MENTION_ITEM_TYPE.projectFile,
 	multipleFiles: "multiple_files",
 } as const
 
 export function useReferenceResourcePanelDataService(
 	options: UseReferenceResourcePanelDataServiceOptions,
 ): MentionDataServicePort | undefined {
-	const { projectAttachmentMentionTree = [], mentionDataServiceCtor } = useMagic()
-	const {
-		maxReferenceFiles,
-		currentReferenceFiles = [],
-		isReferenceFileLimitReached = false,
-		referenceResourceType,
-		referenceFileInfos,
-		assetLimits,
-		currentAssetCounts,
-		projectFilesPathPrefix,
-		mentionFileSubtitleParentPrefix,
-	} = options
-
-	const limitInfoRef = useRef<ReferenceResourcePanelLimitInfo>({
-		maxReferenceFiles,
-		currentReferenceFiles,
-		isReferenceFileLimitReached,
-		referenceResourceType,
-		referenceFileInfos,
-		assetLimits,
-		currentAssetCounts,
-		projectFilesPathPrefix,
-		mentionFileSubtitleParentPrefix,
-	})
-
-	limitInfoRef.current = {
-		maxReferenceFiles,
-		currentReferenceFiles,
-		isReferenceFileLimitReached,
-		referenceResourceType,
-		referenceFileInfos,
-		assetLimits,
-		currentAssetCounts,
-		projectFilesPathPrefix,
-		mentionFileSubtitleParentPrefix,
-	}
-
-	// 附件树走 ref + sync，mentionDataService 实例不因树引用抖动而重建
-	const attachmentTreeRef = useRef(projectAttachmentMentionTree)
-	attachmentTreeRef.current = projectAttachmentMentionTree
-
-	const mentionDataService = useMemo(() => {
-		if (!mentionDataServiceCtor) return undefined
-		// 初始树来自 ref 当前值；后续树变化由 syncProjectAttachmentRoots 写入
-		const service = new mentionDataServiceCtor(attachmentTreeRef.current)
-		service.setLimitInfoGetter?.(() => limitInfoRef.current)
-		return service
-	}, [mentionDataServiceCtor])
-
-	useEffect(() => {
-		// 同步宿主附件树到已创建的 DataService
-		mentionDataService?.syncProjectAttachmentRoots?.(projectAttachmentMentionTree)
-	}, [mentionDataService, projectAttachmentMentionTree])
-
-	useEffect(() => {
-		if (!mentionDataService?.requestRefresh) return
-		queueMicrotask(() => {
-			mentionDataService.requestRefresh?.()
-		})
-	}, [
-		mentionDataService,
-		projectAttachmentMentionTree,
-		maxReferenceFiles,
-		currentReferenceFiles,
-		isReferenceFileLimitReached,
-		referenceResourceType,
-		referenceFileInfos,
-		assetLimits,
-		currentAssetCounts,
-		projectFilesPathPrefix,
-		mentionFileSubtitleParentPrefix,
-	])
-
-	return mentionDataService
+	return useCanvasReferenceMentionRuntime(options).dataService
 }
 
 export function useReferenceResourceDrop(options: UseReferenceResourceDropOptions): {

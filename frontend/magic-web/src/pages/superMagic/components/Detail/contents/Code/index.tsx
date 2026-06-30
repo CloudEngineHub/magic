@@ -1,7 +1,7 @@
 import CommonHeaderV2 from "@/pages/superMagic/components/Detail/components/CommonHeaderV2"
 import { useStyles } from "./style"
 import { Flex } from "antd"
-import { useMemo, useState, useEffect } from "react"
+import { useMemo, useState, useEffect, useRef, type RefObject, type ReactNode } from "react"
 import { useFileData } from "@/pages/superMagic/hooks/useFileData"
 import CodeEditor from "@/components/base/CodeEditor"
 import { shadow } from "@/utils/shadow"
@@ -10,9 +10,22 @@ import AIOptimization from "@/pages/superMagic/components/Detail/components/AIOp
 import CommonFooter from "../../components/CommonFooter"
 import Deleted from "../../components/Deleted"
 import useSaveHandlerRegistration from "../../hooks/useSaveHandlerRegistration"
-import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import FileEditButtons from "@/pages/superMagic/components/Detail/components/EditToolbar/FileEditButtons"
 import type { HeaderActionConfig } from "@/pages/superMagic/components/Detail/components/CommonHeaderV2/types"
+import { useTranslation } from "react-i18next"
+import magicToast from "@/components/base/MagicToaster/utils"
+import useExportMenuItems from "../HTML/useExportMenuItems"
+import { exportHtmlToImage, type ImageExportFormat } from "@magic-web/html2image"
+import { textToHtml } from "../../../../utils/textToHtml"
+
+export interface CodeViewerExtensionContext {
+	fileName: string
+	content: string
+	displayContent: string
+	scopeRef: RefObject<HTMLElement>
+}
+
+export type CodeViewerExtensionRenderer = (context: CodeViewerExtensionContext) => ReactNode
 
 export default function CodeViewer(props: any) {
 	const {
@@ -44,11 +57,16 @@ export default function CodeViewer(props: any) {
 		showFooter,
 		isPlaybackMode,
 		allowDownload,
+		exportFile,
+		isExporting,
+		renderExtensions,
 	} = props
 
 	const { styles, cx } = useStyles()
 	const responsive = useResponsive()
 	const isMobile = responsive.md === false
+	const { t } = useTranslation("super")
+	const extensionScopeRef = useRef<HTMLDivElement>(null)
 
 	const { content: displayContent, file_id } = data
 
@@ -100,9 +118,6 @@ export default function CodeViewer(props: any) {
 			)
 			// 更新 content 状态
 			setContent(editingCodeContent)
-			if (data?.file_name === "magic.project.js") {
-				pubsub.publish(PubSubEvents.Update_Attachments)
-			}
 		}
 		// 不再退出编辑模式
 	})
@@ -146,9 +161,79 @@ export default function CodeViewer(props: any) {
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [viewMode])
 
+	const [isExportingImage, setIsExportingImage] = useState(false)
+
+	const handleExportSource = useMemoizedFn(() => {
+		exportFile?.(file_id, fileVersion)
+	})
+
+	const handleExportImage = useMemoizedFn(async (format: ImageExportFormat = "png") => {
+		const currentContent = content || displayContent
+		if (!currentContent) {
+			magicToast.error(t("topicFiles.contextMenu.fileExport.exportFailed"))
+			return
+		}
+
+		const toastKey = `code-image-export-${file_id || Date.now()}`
+		setIsExportingImage(true)
+		magicToast.loading({
+			key: toastKey,
+			content: t("topicFiles.exporting"),
+			duration: 0,
+		})
+
+		try {
+			// Derive language from file extension
+			const ext = (file_name || "").split(".").pop() || "plaintext"
+			const html = textToHtml(currentContent, { language: ext })
+			await exportHtmlToImage({
+				pages: [html],
+				format,
+				fileName: (file_name || "export").replace(/\.[^.]+$/, ""),
+				onProgress: ({ phase, current, total }) => {
+					if (phase !== "capture" || total <= 1) return
+					magicToast.loading({
+						key: toastKey,
+						content: `${t("topicFiles.exporting")} (${current}/${total})`,
+						duration: 0,
+					})
+				},
+			}).promise
+			magicToast.success({
+				key: toastKey,
+				content: t("topicFiles.exportSuccess"),
+				duration: 1000,
+			})
+		} catch (error) {
+			console.error("[image-export] Code export failed:", error)
+			magicToast.destroy(toastKey)
+			magicToast.error(t("topicFiles.contextMenu.fileExport.exportFailed"))
+		} finally {
+			setIsExportingImage(false)
+		}
+	})
+
+	const { ExportDropdownButton } = useExportMenuItems({
+		handleExportSource,
+		handleExportPDF: () => {},
+		handleExportImage,
+		isExporting: isExporting || isExportingImage,
+		showButtonText: true,
+		supportPPT: false,
+		showExportImage: true,
+		showExportPdf: false,
+	})
+
 	const headerActionConfig = useMemo<HeaderActionConfig>(
 		() => ({
 			customActions: [
+				{
+					key: "code-export-dropdown",
+					zone: "secondary",
+					after: "download",
+					visible: () => !isMobile && allowDownload !== false,
+					render: () => ExportDropdownButton,
+				},
 				{
 					key: "code-ai-optimization",
 					zone: "primary",
@@ -190,10 +275,12 @@ export default function CodeViewer(props: any) {
 			],
 		}),
 		[
+			allowDownload,
 			allowEdit,
 			attachmentList,
 			data?.file_id,
 			file_id,
+			ExportDropdownButton,
 			handleCancel,
 			handleEdit,
 			handleSave,
@@ -217,7 +304,7 @@ export default function CodeViewer(props: any) {
 			fileContent: fileContent || content,
 			currentFile,
 			detailMode,
-			showDownload: allowDownload !== false,
+			showDownload: false,
 			isEditMode,
 			fileVersion,
 			isNewestFileVersion: isNewestVersion,
@@ -258,7 +345,12 @@ export default function CodeViewer(props: any) {
 	)
 
 	return (
-		<Flex vertical className={cx(styles.container, className)}>
+		<Flex
+			ref={extensionScopeRef}
+			vertical
+			className={cx(styles.container, className)}
+			tabIndex={-1}
+		>
 			{showFileHeader && <CommonHeaderV2 {...headerContext} />}
 			{isEditMode ? (
 				<CodeEditor
@@ -294,6 +386,12 @@ export default function CodeViewer(props: any) {
 					isEditMode={isEditMode}
 				/>
 			)}
+			{renderExtensions?.({
+				fileName: file_name || data?.file_name || "file",
+				content,
+				displayContent: displayContent || "",
+				scopeRef: extensionScopeRef,
+			})}
 		</Flex>
 	)
 }

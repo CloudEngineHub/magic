@@ -20,6 +20,26 @@ import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import { usePPTStore } from "../hooks"
 import { TAILWIND_Z_INDEX_CLASSES } from "../../../contents/HTML/constants/z-index"
 
+type DropTarget = {
+	index: number
+	position: "before" | "after"
+}
+
+function normalizeDropTarget(
+	index: number,
+	position: "before" | "after",
+	itemCount: number,
+): DropTarget {
+	if (position === "after" && index < itemCount - 1) {
+		return {
+			index: index + 1,
+			position: "before",
+		}
+	}
+
+	return { index, position }
+}
+
 function PPTSidebar({
 	onSlideClick,
 	onSortChange,
@@ -89,10 +109,7 @@ function PPTSidebar({
 
 	// Manual Drag & Drop State
 	const [draggedIndex, setDraggedIndex] = useState<number | null>(null)
-	const [dropTarget, setDropTarget] = useState<{
-		index: number
-		position: "before" | "after"
-	} | null>(null)
+	const [dropTarget, setDropTarget] = useState<DropTarget | null>(null)
 
 	const handleSlideDragStart = (e: React.DragEvent, index: number) => {
 		setDraggedIndex(index)
@@ -122,17 +139,24 @@ function PPTSidebar({
 			position = e.clientY < midY ? "before" : "after"
 		}
 
-		setDropTarget({ index, position })
+		const normalizedTarget = normalizeDropTarget(index, position, items.length)
+		if (normalizedTarget.index === draggedIndex) {
+			setDropTarget(null)
+			return
+		}
+
+		setDropTarget(normalizedTarget)
 	}
 
 	const handleSlideDragLeave = () => {
 		// keeping this simple, might need debounce if flickering
 	}
 
-	const handleSlideDrop = (e: React.DragEvent, index: number) => {
-		e.preventDefault()
-
-		if (draggedIndex === null || draggedIndex === index) {
+	const commitSlideDrop = (
+		targetIndex: number,
+		targetPosition: "before" | "after" | undefined,
+	) => {
+		if (draggedIndex === null || draggedIndex === targetIndex) {
 			setDraggedIndex(null)
 			setDropTarget(null)
 			return
@@ -143,14 +167,14 @@ function PPTSidebar({
 			const newItemsWithout = currentItems.filter((_, i) => i !== draggedIndex)
 
 			// Calculate insertion index in the *new* array
-			let insertAt = index
+			let insertAt = targetIndex
 
 			// Correction because indices shifted if dragged was before target
-			if (draggedIndex < index) {
-				insertAt = index - 1 // removed one before, so target shifted left
+			if (draggedIndex < targetIndex) {
+				insertAt = targetIndex - 1 // removed one before, so target shifted left
 			}
 
-			if (dropTarget?.position === "after") {
+			if (targetPosition === "after") {
 				insertAt = insertAt + 1
 			}
 
@@ -171,6 +195,29 @@ function PPTSidebar({
 
 		setDraggedIndex(null)
 		setDropTarget(null)
+	}
+
+	const handleSlideDrop = (e: React.DragEvent, index: number) => {
+		e.preventDefault()
+		e.stopPropagation()
+
+		commitSlideDrop(dropTarget?.index ?? index, dropTarget?.position)
+	}
+
+	const handleSlidesListDrop = (e: React.DragEvent) => {
+		e.preventDefault()
+		if (!dropTarget) {
+			setDraggedIndex(null)
+			return
+		}
+
+		commitSlideDrop(dropTarget.index, dropTarget.position)
+	}
+
+	const handleSlidesListDragOver = (e: React.DragEvent) => {
+		if (draggedIndex !== null) {
+			e.preventDefault()
+		}
 	}
 
 	// Reset drag state on global drag end or drop
@@ -368,13 +415,15 @@ function PPTSidebar({
 				{/* Slides list */}
 				<ScrollArea
 					data-testid="ppt-sidebar-slides-list"
+					onDragOver={handleSlidesListDragOver}
+					onDrop={handleSlidesListDrop}
 					className={cn(
 						"flex-1 p-2 [&_[data-slot='scroll-area-viewport']>div]:!flex [&_[data-slot='scroll-area-viewport']>div]:min-h-full",
 						isMobile
 							? // Mobile: horizontal scroll with gap spacing
-							"w-full [&_[data-slot='scroll-area-viewport']>div]:flex-row [&_[data-slot='scroll-area-viewport']>div]:gap-2 [&_[data-slot='scroll-area-viewport']>div]:overflow-x-auto"
+								"w-full [&_[data-slot='scroll-area-viewport']>div]:flex-row [&_[data-slot='scroll-area-viewport']>div]:gap-2 [&_[data-slot='scroll-area-viewport']>div]:overflow-x-auto"
 							: // Desktop: vertical scroll with column direction
-							"overflow-y-auto pr-3 [&_[data-slot='scroll-area-viewport']>div]:flex-col",
+								"overflow-y-auto pr-3 [&_[data-slot='scroll-area-viewport']>div]:flex-col",
 					)}
 				>
 					{hasNoSlides && (
@@ -403,7 +452,12 @@ function PPTSidebar({
 							<div key={item.id} className="relative">
 								{/* Show drop indicator */}
 								{showTopIndicator && (
-									<DropIndicator position={isMobile ? "left" : "top"} />
+									<div
+										data-testid="ppt-sidebar-drop-indicator"
+										data-drop-target={`${idx}-before`}
+									>
+										<DropIndicator position={isMobile ? "left" : "top"} />
+									</div>
 								)}
 
 								<SortableSlideItem
@@ -414,6 +468,7 @@ function PPTSidebar({
 									totalSlides={items.length}
 									mainFileId={mainFileId}
 									slideFileId={store.getFileIdByPath(item.path)}
+									slideFullRelativePath={store.getFullRelativePath(item.path)}
 									scrollContainerRef={scrollContainerRef}
 									onInsertAbove={() => handleInsertSlide(item.index, "before")}
 									onInsertBelow={() => handleInsertSlide(item.index, "after")}
@@ -441,9 +496,9 @@ function PPTSidebar({
 									className={cn(
 										isMobile
 											? // Mobile: horizontal spacing (gap handled by parent)
-											"h-full"
+												"h-full"
 											: // Desktop: vertical spacing
-											"my-1 min-h-[120px]",
+												"my-1 min-h-[120px]",
 										idx === items.length - 1 && !isMobile && "mb-0",
 										isDragging && "opacity-50",
 									)}
@@ -457,7 +512,12 @@ function PPTSidebar({
 
 								{/* Show drop indicator */}
 								{showBottomIndicator && (
-									<DropIndicator position={isMobile ? "right" : "bottom"} />
+									<div
+										data-testid="ppt-sidebar-drop-indicator"
+										data-drop-target={`${idx}-after`}
+									>
+										<DropIndicator position={isMobile ? "right" : "bottom"} />
+									</div>
 								)}
 							</div>
 						)

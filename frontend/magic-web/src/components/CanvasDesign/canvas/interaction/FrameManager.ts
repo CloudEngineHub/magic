@@ -154,27 +154,6 @@ export class FrameManager {
 				frameElement.ensureBorderOnTop()
 			}
 
-			// 重新分配顶层元素的 zIndex（因为移除了选中元素，需要重新排列）
-			const allTopLevelElements = this.canvas.elementManager.getAllElements()
-			const updates: Array<{ id: string; data: Partial<LayerElement> }> = []
-			let zIndex = 1
-
-			// 按当前 zIndex 排序所有顶层元素
-			const sortedTopLevelElements = [...allTopLevelElements].sort(
-				(a, b) => (a.zIndex ?? 0) - (b.zIndex ?? 0),
-			)
-
-			// 重新分配 zIndex，从 1 开始连续递增
-			sortedTopLevelElements.forEach((element) => {
-				updates.push({ id: element.id, data: { zIndex } })
-				zIndex++
-			})
-
-			// 批量更新顶层元素的 zIndex
-			if (updates.length > 0) {
-				this.canvas.elementManager.batchUpdate(updates)
-			}
-
 			// 选中新创建的 Frame
 			this.canvas.selectionManager.select(frameId)
 
@@ -258,9 +237,11 @@ export class FrameManager {
 
 		// 释放所有子元素
 		const releasedElementIds: string[] = []
-		// 收集所有需要重新排序的元素及其目标 zIndex
-		// 格式: { element: LayerElement, targetZIndex: number }
-		const elementsToReorder: Array<{ element: LayerElement; targetZIndex: number }> = []
+		const elementsToReorder: Array<{
+			element: LayerElement
+			frameId: string
+			targetZIndex: number
+		}> = []
 
 		try {
 			elementsToRelease.forEach(({ element: frameElement, children }) => {
@@ -275,6 +256,8 @@ export class FrameManager {
 				if (!frameNode || !layer || !(frameNode instanceof Konva.Group)) {
 					return
 				}
+				const frameLayerIndex = frameNode.getZIndex()
+				const releasedNodesForFrame: Konva.Node[] = []
 
 				// 按子元素在画框内的 zIndex 从大到小排序，保持相对顺序
 				const sortedChildren = [...children].sort(
@@ -304,6 +287,7 @@ export class FrameManager {
 
 					// 将子元素节点添加到主 layer
 					layer.add(childNode)
+					releasedNodesForFrame.push(childNode)
 
 					// 更新子元素数据（坐标，zIndex 稍后统一重新分配）
 					const childData = {
@@ -322,6 +306,7 @@ export class FrameManager {
 					// 记录释放出来的子元素及其在画框内的顺序
 					elementsToReorder.push({
 						element: childData,
+						frameId: frameElement.id,
 						targetZIndex: frameZIndex, // 使用画框的 zIndex 作为基准
 					})
 				})
@@ -337,10 +322,12 @@ export class FrameManager {
 					type: "frame:removed",
 					data: { frameId: frameElement.id },
 				})
+
+				this.repositionReleasedNodesAtFrameIndex(releasedNodesForFrame, frameLayerIndex)
 			})
 
-			// 重新分配所有顶层元素的 zIndex
-			this.reorderTopLevelElements(elementsToReorder)
+			// 只更新释放出来的子元素 zIndex；Konva 节点顺序已按原 frame 位置插回。
+			this.assignReleasedElementZIndexes(elementsToReorder)
 
 			// 选中释放出来的元素
 			if (releasedElementIds.length > 0) {
@@ -362,61 +349,57 @@ export class FrameManager {
 	}
 
 	/**
-	 * 重新分配顶层元素的 zIndex
-	 * 将释放出来的子元素作为一个整体插入到画框位置，保持相对顺序
+	 * 将释放出来的节点插回原 frame 所在的 layer index。
+	 * sortedChildren 是从上到下处理的，Konva 插入时需要从下到上放回，才能保持视觉层级。
+	 */
+	private repositionReleasedNodesAtFrameIndex(
+		releasedNodes: Konva.Node[],
+		frameLayerIndex: number,
+	): void {
+		if (releasedNodes.length === 0) return
+		;[...releasedNodes].reverse().forEach((node, index) => {
+			node.zIndex(frameLayerIndex + index)
+		})
+		this.canvas.runtimeScheduler.requestLayerDraw("content", {
+			source: "FrameManager",
+			reason: "remove-frame-reposition-released-nodes",
+			priority: "normal",
+		})
+	}
+
+	/**
+	 * 重新分配释放元素的 zIndex
+	 * 释放出的子元素用小数 zIndex 填入原 frame 与其上一层之间，不再重排全部顶层元素。
 	 * @param elementsToReorder - 需要重新排序的元素及其目标 zIndex（画框的 zIndex）
 	 */
-	private reorderTopLevelElements(
-		elementsToReorder: Array<{ element: LayerElement; targetZIndex: number }>,
+	private assignReleasedElementZIndexes(
+		elementsToReorder: Array<{ element: LayerElement; frameId: string; targetZIndex: number }>,
 	): void {
 		if (elementsToReorder.length === 0) return
 
-		// 获取所有顶层元素
-		const allTopLevelElements = this.canvas.elementManager.getAllElements()
-
-		// 获取画框的 zIndex（所有释放元素使用相同的 targetZIndex）
-		const frameZIndex = elementsToReorder[0].targetZIndex
-
-		// 获取释放的元素 ID 集合
-		const releasedElementIds = new Set(elementsToReorder.map((item) => item.element.id))
-
-		// 将其他元素分为两组：画框位置以上的元素，画框位置以下的元素
-		const elementsAboveFrame: LayerElement[] = []
-		const elementsBelowFrame: LayerElement[] = []
-
-		allTopLevelElements.forEach((element) => {
-			if (releasedElementIds.has(element.id)) {
-				// 跳过释放的元素
-				return
-			}
-			const elementZIndex = element.zIndex ?? 0
-			if (elementZIndex > frameZIndex) {
-				elementsAboveFrame.push(element)
-			} else if (elementZIndex < frameZIndex) {
-				elementsBelowFrame.push(element)
-			}
-		})
-
-		// 按 zIndex 从大到小排序
-		elementsAboveFrame.sort((a, b) => (b.zIndex ?? 0) - (a.zIndex ?? 0))
-		elementsBelowFrame.sort((a, b) => (b.zIndex ?? 0) - (a.zIndex ?? 0))
-
-		// 释放的元素已经按画框内 zIndex 从大到小排序
-		const releasedElements = elementsToReorder.map((item) => item.element)
-
-		// 合并所有元素：上方元素 + 释放的元素 + 下方元素
-		const finalElements = [...elementsAboveFrame, ...releasedElements, ...elementsBelowFrame]
-
-		// 重新分配 zIndex，从最大值开始连续递减
 		const updates: Array<{ id: string; data: Partial<LayerElement> }> = []
-		finalElements.forEach((element, index) => {
-			const newZIndex = finalElements.length - index
-			updates.push({ id: element.id, data: { zIndex: newZIndex } })
+
+		const groups = new Map<string, typeof elementsToReorder>()
+		elementsToReorder.forEach((item) => {
+			const group = groups.get(item.frameId)
+			if (group) {
+				group.push(item)
+			} else {
+				groups.set(item.frameId, [item])
+			}
 		})
 
-		// 批量更新顶层元素的 zIndex
+		groups.forEach((items) => {
+			const count = items.length
+			const frameZIndex = items[0].targetZIndex
+			items.forEach((item, index) => {
+				const newZIndex = frameZIndex + (count - index) / (count + 1)
+				updates.push({ id: item.element.id, data: { zIndex: newZIndex } })
+			})
+		})
+
 		if (updates.length > 0) {
-			this.canvas.elementManager.batchUpdate(updates)
+			this.canvas.elementManager.batchUpdate(updates, { skipZIndexReorder: true })
 		}
 	}
 

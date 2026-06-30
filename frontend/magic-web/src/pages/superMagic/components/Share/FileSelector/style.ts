@@ -17,6 +17,7 @@ export default createStyles(({ token, css }) => ({
 		display: flex;
 		flex-direction: column;
 		height: 100%;
+		min-height: 0;
 		border-radius: 0 0 0 12px;
 	`,
 
@@ -38,6 +39,8 @@ export default createStyles(({ token, css }) => ({
 
 	treeArea: css`
 		flex: 1;
+		min-height: 0;
+		max-height: 100%;
 		overflow-y: auto;
 		overflow-x: hidden;
 

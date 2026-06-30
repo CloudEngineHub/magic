@@ -3,20 +3,30 @@ import { cn } from "@/lib/utils"
 import useFullscreenMode from "@/hooks/useFullscreenMode"
 import Render from "../../../Render"
 import PlaybackTabContent, { type PlaybackTabContentProps } from "./PlaybackTabContent"
-import { PLAYBACK_TAB_ID } from "../hooks/usePlaybackTab"
+import KnowledgeBaseTabContent from "./KnowledgeBaseTabContent"
+import WebsiteIframeTabContent from "./WebsiteIframeTabContent"
+import { getWebsiteTabData } from "../utils/websiteTabs"
+import type { TabItem } from "../types"
+import type { KnowledgeBaseTabData } from "../hooks/useKnowledgeBaseTab"
+import { getFileViewerTabType } from "../utils/tabType"
+
+type CachedTab = Partial<TabItem> & {
+	id: string
+	refreshKey?: string
+	[key: string]: unknown
+}
 
 interface TabCacheProps {
-	tab: {
-		id: string
-		refreshKey?: string
-		[key: string]: unknown
-	}
+	tab: CachedTab
 	isActive: boolean
 	renderProps: Record<string, unknown>
 	onActiveFileChange?: (fileId: string | null) => void
 	isFullscreen?: boolean
 	openFileTab?: (fileId: string, autoEdit?: boolean) => void
 	playbackProps?: PlaybackTabContentProps
+	/** When true, content fills the viewer without reserving tab bar height */
+	hideTabBar?: boolean
+	knowledgeBaseData?: KnowledgeBaseTabData
 }
 
 /**
@@ -32,8 +42,13 @@ const TabCache = memo(
 		isFullscreen,
 		openFileTab,
 		playbackProps,
+		hideTabBar = false,
+		knowledgeBaseData,
 	}: TabCacheProps) => {
-		const isPlaybackTab = tab.id === PLAYBACK_TAB_ID
+		const tabType = getFileViewerTabType(tab)
+		const isPlaybackTab = tabType === "playback"
+		const isWebsite = tabType === "website"
+		const isKnowledgeBaseTab = tabType === "knowledge_base"
 		const tabContentRef = useRef<HTMLDivElement>(null)
 		const isFullscreenMode = useFullscreenMode()
 
@@ -72,6 +87,7 @@ const TabCache = memo(
 		const effectiveIsFullscreen = isPlaybackTab
 			? playbackProps?.isFullscreen === true
 			: isFullscreenMode || isFullscreen
+		const fillsViewerWithoutTabBar = hideTabBar && !effectiveIsFullscreen
 
 		return (
 			<div
@@ -80,16 +96,22 @@ const TabCache = memo(
 					"left-0 w-full transition-[opacity,visibility] duration-200",
 					effectiveIsFullscreen
 						? "fixed top-0 h-full"
-						: "absolute top-11 h-[calc(100%-44px)]",
+						: fillsViewerWithoutTabBar
+							? "absolute top-0 h-full"
+							: "absolute top-11 h-[calc(100%-44px)]",
 					isPlaybackTab ? "z-[9]" : isActive ? "z-10" : "z-0",
 					isActive
 						? "pointer-events-auto visible opacity-100"
 						: "pointer-events-none invisible opacity-0",
-					isPlaybackTab && "bg-white dark:bg-background",
+					(isPlaybackTab || isKnowledgeBaseTab) && "bg-white dark:bg-background",
 				)}
 			>
 				{isPlaybackTab && playbackProps ? (
 					<PlaybackTabContent {...playbackProps} />
+				) : isWebsite ? (
+					<WebsiteIframeTabContent {...getWebsiteTabData(tab)} isActive={isActive} />
+				) : isKnowledgeBaseTab && knowledgeBaseData ? (
+					<KnowledgeBaseTabContent data={knowledgeBaseData} />
 				) : (
 					<Render
 						key={tab.refreshKey || tab.id}

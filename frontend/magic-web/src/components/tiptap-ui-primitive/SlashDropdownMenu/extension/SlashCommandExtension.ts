@@ -5,6 +5,7 @@ import type { SuggestionOptions, SuggestionProps, SuggestionKeyDownProps } from 
 
 import type { SuggestionItem, SlashMenuConfig } from "../types"
 import SlashDropdownRenderer from "../components/SlashDropdownRenderer"
+import { runActiveEditor } from "@/utils/tiptapEditorLifecycle"
 
 export interface SlashCommandOptions {
 	/** Configuration for slash menu behavior */
@@ -69,7 +70,9 @@ export const SlashCommandExtension = Extension.create<SlashCommandOptions>({
 							renderer = null
 						}
 						storageRef.activeRenderer = null
-						currentProps?.editor?.commands.focus()
+						runActiveEditor(currentProps?.editor, (editor) => {
+							editor.commands.focus()
+						})
 					}
 
 					return {
@@ -181,8 +184,12 @@ export const SlashCommandExtension = Extension.create<SlashCommandOptions>({
 	addKeyboardShortcuts() {
 		return {
 			"Mod-/": () => {
-				const commands = this.editor.commands as { triggerSlashCommand?: () => boolean }
-				return commands.triggerSlashCommand?.() || false
+				return (
+					runActiveEditor(this.editor, (editor) => {
+						const commands = editor.commands as { triggerSlashCommand?: () => boolean }
+						return commands.triggerSlashCommand?.() || false
+					}, false) ?? false
+				)
 			},
 		}
 	},

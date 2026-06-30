@@ -15,6 +15,7 @@ use App\Domain\ModelGateway\Entity\Dto\AbstractRequestDTO;
 use App\Infrastructure\Core\ValueObject\StorageBucketType;
 use App\Infrastructure\ExternalAPI\ImageGenerateAPI\Response\OpenAIFormatResponse;
 use Dtyq\CloudFile\Kernel\Struct\ImageProcessOptions;
+use Dtyq\SuperMagic\Domain\SuperAgent\Entity\TaskFileEntity;
 use Dtyq\SuperMagic\Domain\SuperAgent\Service\TaskFileDomainService;
 
 /**
@@ -73,7 +74,7 @@ abstract class AbstractDesignImageGenerationTaskHandler implements DesignImageGe
         string $relativePath,
         array $linkOptions = [],
     ): ?string {
-        $fileEntity = $this->taskFileDomainService->findEntityByRelativePath($projectId, $relativePath);
+        $fileEntity = $this->getWorkspaceSandboxFileEntity($projectId, $relativePath);
         if ($fileEntity === null) {
             return null;
         }
@@ -84,6 +85,11 @@ abstract class AbstractDesignImageGenerationTaskHandler implements DesignImageGe
             [],
             $linkOptions
         )?->getUrl();
+    }
+
+    protected function getWorkspaceSandboxFileEntity(int $projectId, string $relativePath): ?TaskFileEntity
+    {
+        return $this->taskFileDomainService->findEntityByRelativePath($projectId, $relativePath);
     }
 
     /**
@@ -142,38 +148,63 @@ abstract class AbstractDesignImageGenerationTaskHandler implements DesignImageGe
         return $urls;
     }
 
-    /**
-     * 橡皮擦 / 扩图：含 design-mark 走 Private，其余走 SandBox 工作区。
-     *
-     * @return list<string>
-     */
-    protected function collectEraserExpandReferenceImageUrls(
+    protected function resolveEraserExpandReferenceImageUrl(
         DesignDataIsolation $dataIsolation,
         ImageGenerationEntity $entity,
-        string $workspacePrefix,
-    ): array {
-        $urls = [];
-        $referenceImageOptions = $entity->getReferenceImageOptions() ?? [];
-
-        foreach ($entity->getReferenceImages() ?? [] as $referenceImage) {
-            if (str_contains($referenceImage, 'design-mark/')) {
-                // 临时标记图走私有桶，不携带 options
-                $privateFileKey = ltrim($referenceImage, '/');
-                $url = $this->fileDomainService->getLink(
-                    $dataIsolation->getCurrentOrganizationCode(),
-                    $privateFileKey,
-                    StorageBucketType::Private
-                )?->getUrl();
-            } else {
-                $linkOptions = $this->buildLinkOptionsFromImageOptions($this->findImageOptions($referenceImageOptions, $referenceImage));
-                $url = $this->getWorkspaceSandboxImageUrl($dataIsolation, $entity->getProjectId(), $referenceImage, $linkOptions);
-            }
-            if ($url !== null && $url !== '') {
-                $urls[] = $url;
-            }
+        string $referenceImage,
+        array $linkOptions = [],
+    ): ?string {
+        if (str_contains($referenceImage, 'design-mark/')) {
+            // 临时标记图走私有桶，归一化时可携带图片处理 options。
+            $privateFileKey = ltrim($referenceImage, '/');
+            return $this->fileDomainService->getLink(
+                $dataIsolation->getCurrentOrganizationCode(),
+                $privateFileKey,
+                StorageBucketType::Private,
+                [],
+                $linkOptions
+            )?->getUrl();
         }
 
-        return $urls;
+        if ($linkOptions === []) {
+            $linkOptions = $this->buildEraserExpandReferenceImageLinkOptions($entity, $referenceImage);
+        }
+
+        return $this->getWorkspaceSandboxImageUrl($dataIsolation, $entity->getProjectId(), $referenceImage, $linkOptions);
+    }
+
+    /**
+     * 解析擦除/扩图实际传给模型网关的 image/mask URL。
+     *
+     * @return null|array{0: string, 1: string}
+     */
+    protected function resolveEraserExpandProviderInputUrls(
+        DesignDataIsolation $dataIsolation,
+        ImageGenerationEntity $entity,
+        string $imagePath,
+        string $maskPath,
+    ): ?array {
+        $imageLinkOptions = $this->buildEraserExpandReferenceImageLinkOptions($entity, $imagePath);
+        $imageUrl = $this->resolveEraserExpandReferenceImageUrl($dataIsolation, $entity, $imagePath, $imageLinkOptions);
+        $maskUrl = $this->resolveEraserExpandReferenceImageUrl($dataIsolation, $entity, $maskPath);
+
+        return $this->nonEmptyUrlPair($imageUrl, $maskUrl);
+    }
+
+    /**
+     * 构建擦除/扩图普通参考图的链接处理参数。
+     * design-mark 文件走私有桶且默认无 crop 参数，普通工作区图片会继承前端传入的 crop 配置。
+     *
+     * @return array<string, mixed>
+     */
+    protected function buildEraserExpandReferenceImageLinkOptions(ImageGenerationEntity $entity, string $referenceImage): array
+    {
+        if (str_contains($referenceImage, 'design-mark/')) {
+            return [];
+        }
+
+        $referenceImageOptions = $entity->getReferenceImageOptions() ?? [];
+        return $this->buildLinkOptionsFromImageOptions($this->findImageOptions($referenceImageOptions, $referenceImage));
     }
 
     /**
@@ -197,6 +228,18 @@ abstract class AbstractDesignImageGenerationTaskHandler implements DesignImageGe
         $originalFileName = preg_replace('/_\d{14}$/', '', $originalFileName) ?? '';
 
         return $originalFileName . $joiner . date('YmdHis');
+    }
+
+    /**
+     * @return null|array{0: string, 1: string}
+     */
+    private function nonEmptyUrlPair(?string $imageUrl, ?string $maskUrl): ?array
+    {
+        if ($imageUrl === null || $imageUrl === '' || $maskUrl === null || $maskUrl === '') {
+            return null;
+        }
+
+        return [$imageUrl, $maskUrl];
     }
 
     /**

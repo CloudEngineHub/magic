@@ -1,6 +1,7 @@
 import { renderHook, act } from "@testing-library/react"
 import { describe, it, expect, vi, beforeEach } from "vitest"
 import { useMagicFiles } from "../useMagicFiles"
+import magicToast from "@/components/base/MagicToaster/utils"
 
 // ─── Mocks ────────────────────────────────────────────────────────────────────
 
@@ -71,9 +72,15 @@ vi.mock("@/utils/pubsub", () => ({
 		publish: vi.fn(),
 	},
 	PubSubEvents: {
-		Update_Attachments: "Update_Attachments",
 		Super_Magic_Topic_Mode_Changed: "Super_Magic_Topic_Mode_Changed",
 	},
+}))
+
+vi.mock("@/pages/superMagic/utils/projectAttachments/attachmentMutationWaiter", () => ({
+	waitForProjectAttachmentChange: vi.fn((_projectId: string | undefined, options?: any) => {
+		options?.callback?.()
+		return Promise.resolve()
+	}),
 }))
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -85,6 +92,8 @@ function makeIframeRef(postMessage = vi.fn()) {
 		} as unknown as HTMLIFrameElement,
 	}
 }
+
+const targetOrigin = "https://sandbox.example.com"
 
 // ─── Tests ────────────────────────────────────────────────────────────────────
 
@@ -103,10 +112,51 @@ describe("useMagicFiles", () => {
 	// ─── handleMagicUploadFiles ────────────────────────────────────────────────
 
 	describe("handleMagicUploadFiles()", () => {
+		it("未授权时不上传文件", async () => {
+			const authorizePermission = vi.fn().mockResolvedValue(false)
+			const { result } = renderHook(() =>
+				useMagicFiles({
+					iframeRef,
+					targetOrigin,
+					selectedProject: { id: "proj-1" },
+					uploadImageFileToProject,
+					authorizePermission,
+				}),
+			)
+
+			await act(async () => {
+				await result.current.handleMagicUploadFiles({
+					type: "MAGIC_UPLOAD_FILES_REQUEST",
+					requestId: "req-upload-denied",
+					files: [
+						{
+							base64: "data",
+							filename: "a.txt",
+							path: "./a.txt",
+							fileSize: 4,
+							fileType: "text/plain",
+						},
+					],
+				})
+			})
+
+			expect(authorizePermission).toHaveBeenCalledWith("project.files.upload")
+			expect(uploadImageFileToProject).not.toHaveBeenCalled()
+			expect(iframePostMessage).toHaveBeenCalledWith(
+				expect.objectContaining({
+					type: "MAGIC_UPLOAD_FILES_RESPONSE",
+					requestId: "req-upload-denied",
+					success: false,
+				}),
+				targetOrigin,
+			)
+		})
+
 		it("selectedProject 为 null 时回复 No project selected", async () => {
 			const { result } = renderHook(() =>
 				useMagicFiles({
 					iframeRef,
+					targetOrigin,
 					selectedProject: null,
 					uploadImageFileToProject,
 				}),
@@ -135,7 +185,7 @@ describe("useMagicFiles", () => {
 					success: false,
 					error: "No project selected",
 				}),
-				"*",
+				targetOrigin,
 			)
 		})
 
@@ -143,6 +193,7 @@ describe("useMagicFiles", () => {
 			const { result } = renderHook(() =>
 				useMagicFiles({
 					iframeRef,
+					targetOrigin,
 					selectedProject: { id: "proj-1" },
 					uploadImageFileToProject,
 				}),
@@ -163,7 +214,7 @@ describe("useMagicFiles", () => {
 					success: false,
 					error: "Invalid request data",
 				}),
-				"*",
+				targetOrigin,
 			)
 		})
 
@@ -175,6 +226,7 @@ describe("useMagicFiles", () => {
 			const { result } = renderHook(() =>
 				useMagicFiles({
 					iframeRef,
+					targetOrigin,
 					selectedProject: { id: "proj-1" },
 					uploadImageFileToProject,
 				}),
@@ -209,7 +261,44 @@ describe("useMagicFiles", () => {
 						}),
 					],
 				}),
-				"*",
+				targetOrigin,
+			)
+		})
+
+		it("上传 loading toast 使用固定 key 避免重复展示", async () => {
+			uploadImageFileToProject.mockResolvedValueOnce({
+				uploadedRelativeFilePath: "uploads/a.txt",
+			})
+
+			const { result } = renderHook(() =>
+				useMagicFiles({
+					iframeRef,
+					targetOrigin,
+					selectedProject: { id: "proj-1" },
+					uploadImageFileToProject,
+				}),
+			)
+
+			await act(async () => {
+				await result.current.handleMagicUploadFiles({
+					type: "MAGIC_UPLOAD_FILES_REQUEST",
+					requestId: "req-toast",
+					files: [
+						{
+							base64: "data",
+							filename: "a.txt",
+							path: "./a.txt",
+							fileSize: 4,
+							fileType: "text/plain",
+						},
+					],
+				})
+			})
+
+			expect(magicToast.loading).toHaveBeenCalledWith(
+				expect.objectContaining({
+					key: "html-magic-upload-files",
+				}),
 			)
 		})
 
@@ -219,6 +308,7 @@ describe("useMagicFiles", () => {
 			const { result } = renderHook(() =>
 				useMagicFiles({
 					iframeRef,
+					targetOrigin,
 					selectedProject: { id: "proj-1" },
 					uploadImageFileToProject,
 				}),
@@ -253,7 +343,7 @@ describe("useMagicFiles", () => {
 						}),
 					],
 				}),
-				"*",
+				targetOrigin,
 			)
 		})
 	})
@@ -261,10 +351,45 @@ describe("useMagicFiles", () => {
 	// ─── handleMagicAddFilesToMessage ──────────────────────────────────────────
 
 	describe("handleMagicAddFilesToMessage()", () => {
+		it("未授权时不创建 topic", async () => {
+			const { SuperMagicApi } = await import("@/apis")
+			const authorizePermission = vi.fn().mockResolvedValue(false)
+			const { result } = renderHook(() =>
+				useMagicFiles({
+					iframeRef,
+					targetOrigin,
+					selectedProject: { id: "proj-1", workspace_id: "ws-1" },
+					attachmentList: [{ relative_file_path: "a.csv", file_id: "f-1" }],
+					uploadImageFileToProject,
+					authorizePermission,
+				}),
+			)
+
+			await act(async () => {
+				await result.current.handleMagicAddFilesToMessage({
+					type: "MAGIC_ADD_FILES_TO_MESSAGE_REQUEST",
+					requestId: "req-add-denied",
+					filePaths: ["a.csv"],
+				})
+			})
+
+			expect(authorizePermission).toHaveBeenCalledWith("project.message.write")
+			expect(SuperMagicApi.createTopic).not.toHaveBeenCalled()
+			expect(iframePostMessage).toHaveBeenCalledWith(
+				expect.objectContaining({
+					type: "MAGIC_ADD_FILES_TO_MESSAGE_RESPONSE",
+					requestId: "req-add-denied",
+					success: false,
+				}),
+				targetOrigin,
+			)
+		})
+
 		it("selectedProject 为 null 时回复 No project selected", async () => {
 			const { result } = renderHook(() =>
 				useMagicFiles({
 					iframeRef,
+					targetOrigin,
 					selectedProject: null,
 					uploadImageFileToProject,
 				}),
@@ -285,7 +410,7 @@ describe("useMagicFiles", () => {
 					success: false,
 					error: "No project selected",
 				}),
-				"*",
+				targetOrigin,
 			)
 		})
 
@@ -293,6 +418,7 @@ describe("useMagicFiles", () => {
 			const { result } = renderHook(() =>
 				useMagicFiles({
 					iframeRef,
+					targetOrigin,
 					selectedProject: { id: "proj-1", workspace_id: "ws-1" },
 					attachmentList: [],
 					uploadImageFileToProject,
@@ -314,7 +440,7 @@ describe("useMagicFiles", () => {
 					success: false,
 					error: "No files found",
 				}),
-				"*",
+				targetOrigin,
 			)
 		})
 
@@ -330,6 +456,7 @@ describe("useMagicFiles", () => {
 			const { result } = renderHook(() =>
 				useMagicFiles({
 					iframeRef,
+					targetOrigin,
 					selectedProject: { id: "proj-1", workspace_id: "ws-1" },
 					attachmentList: [{ relative_file_path: "a.csv", file_id: "f-1" }],
 					uploadImageFileToProject,
@@ -349,11 +476,11 @@ describe("useMagicFiles", () => {
 			// 回复和 addMultipleFilesToCurrentChat 在 500ms 后触发
 			expect(iframePostMessage).not.toHaveBeenCalledWith(
 				expect.objectContaining({ success: true }),
-				"*",
+				targetOrigin,
 			)
 
 			await act(async () => {
-				vi.advanceTimersByTime(500)
+				await vi.advanceTimersByTimeAsync(500)
 			})
 
 			expect(addMultipleFilesToCurrentChat).toHaveBeenCalledOnce()
@@ -363,7 +490,7 @@ describe("useMagicFiles", () => {
 					requestId: "req-7",
 					success: true,
 				}),
-				"*",
+				targetOrigin,
 			)
 
 			vi.useRealTimers()
@@ -376,6 +503,7 @@ describe("useMagicFiles", () => {
 			const { result } = renderHook(() =>
 				useMagicFiles({
 					iframeRef,
+					targetOrigin,
 					selectedProject: { id: "proj-1", workspace_id: "ws-1" },
 					attachmentList: [{ relative_file_path: "b.csv", file_id: "f-2" }],
 					uploadImageFileToProject,
@@ -397,7 +525,7 @@ describe("useMagicFiles", () => {
 					success: false,
 					error: "Failed to create topic",
 				}),
-				"*",
+				targetOrigin,
 			)
 		})
 	})
@@ -405,10 +533,45 @@ describe("useMagicFiles", () => {
 	// ─── handleMagicDownloadFiles ──────────────────────────────────────────────
 
 	describe("handleMagicDownloadFiles()", () => {
+		it("未授权时不获取下载链接", async () => {
+			const { getTemporaryDownloadUrl } = await import("@/pages/superMagic/utils/api")
+			const authorizePermission = vi.fn().mockResolvedValue(false)
+			const { result } = renderHook(() =>
+				useMagicFiles({
+					iframeRef,
+					targetOrigin,
+					selectedProject: { id: "proj-1", workspace_id: "ws-1" },
+					attachmentList: [{ relative_file_path: "a.pdf", file_id: "f-1" }],
+					uploadImageFileToProject,
+					authorizePermission,
+				}),
+			)
+
+			await act(async () => {
+				await result.current.handleMagicDownloadFiles({
+					type: "MAGIC_DOWNLOAD_FILES_REQUEST",
+					requestId: "req-download-denied",
+					filePaths: ["a.pdf"],
+				})
+			})
+
+			expect(authorizePermission).toHaveBeenCalledWith("project.files.download")
+			expect(getTemporaryDownloadUrl).not.toHaveBeenCalled()
+			expect(iframePostMessage).toHaveBeenCalledWith(
+				expect.objectContaining({
+					type: "MAGIC_DOWNLOAD_FILES_RESPONSE",
+					requestId: "req-download-denied",
+					success: false,
+				}),
+				targetOrigin,
+			)
+		})
+
 		it("attachmentList 中找不到 file_id 时回复 No files found", async () => {
 			const { result } = renderHook(() =>
 				useMagicFiles({
 					iframeRef,
+					targetOrigin,
 					selectedProject: { id: "proj-1" },
 					attachmentList: [],
 					uploadImageFileToProject,
@@ -430,7 +593,7 @@ describe("useMagicFiles", () => {
 					success: false,
 					error: "No files found",
 				}),
-				"*",
+				targetOrigin,
 			)
 		})
 
@@ -446,6 +609,7 @@ describe("useMagicFiles", () => {
 			const { result } = renderHook(() =>
 				useMagicFiles({
 					iframeRef,
+					targetOrigin,
 					selectedProject: { id: "proj-1" },
 					attachmentList: [
 						{
@@ -477,7 +641,7 @@ describe("useMagicFiles", () => {
 					success: true,
 					result: expect.objectContaining({ successCount: 1, failedCount: 0 }),
 				}),
-				"*",
+				targetOrigin,
 			)
 		})
 
@@ -489,6 +653,7 @@ describe("useMagicFiles", () => {
 			const { result } = renderHook(() =>
 				useMagicFiles({
 					iframeRef,
+					targetOrigin,
 					selectedProject: { id: "proj-1" },
 					attachmentList: [{ relative_file_path: "doc.pdf", file_id: "f-4" }],
 					uploadImageFileToProject,
@@ -510,7 +675,7 @@ describe("useMagicFiles", () => {
 					success: false,
 					result: expect.objectContaining({ successCount: 0, failedCount: 1 }),
 				}),
-				"*",
+				targetOrigin,
 			)
 		})
 
@@ -518,6 +683,7 @@ describe("useMagicFiles", () => {
 			const { result } = renderHook(() =>
 				useMagicFiles({
 					iframeRef,
+					targetOrigin,
 					selectedProject: { id: "proj-1" },
 					uploadImageFileToProject,
 				}),
@@ -538,7 +704,7 @@ describe("useMagicFiles", () => {
 					success: false,
 					error: "Invalid request data",
 				}),
-				"*",
+				targetOrigin,
 			)
 		})
 	})

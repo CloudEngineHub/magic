@@ -27,6 +27,7 @@ function WorkspaceListItem({
 				isSelected && "bg-primary-10",
 			)}
 			onClick={() => onSelect(workspace)}
+			data-testid="on-select"
 		>
 			<div className="flex w-full flex-1 items-center justify-between">
 				<div className="flex w-full min-w-0 items-center gap-2">
@@ -44,7 +45,7 @@ function WorkspaceListItem({
 							onActionClick(workspace)
 						}}
 					/>
-					<div className="flex items-center justify-center" onClick={handleNavigate}>
+					<div className="flex items-center justify-center" onClick={handleNavigate} data-testid="handle-navigate">
 						<MagicIcon
 							size={18}
 							component={IconChevronRight}

@@ -20,8 +20,8 @@ export interface MediaControlsProps {
 	 */
 	progressAlwaysVisible?: boolean
 	duration: number
-	progressRangeRef: RefObject<HTMLInputElement | null>
-	currentTimeLabelRef: RefObject<HTMLSpanElement | null>
+	progressRangeRef: RefObject<HTMLInputElement>
+	currentTimeLabelRef: RefObject<HTMLSpanElement>
 	onProgressInput: (value: number) => void
 	onScrubStart: () => void
 	onScrubEnd: () => void

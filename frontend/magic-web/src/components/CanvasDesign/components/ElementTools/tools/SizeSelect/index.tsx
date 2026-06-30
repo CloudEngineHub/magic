@@ -167,7 +167,9 @@ export default function SizeSelect(props: SizeSelectProps) {
 		const syncOriginalSizeOption = async () => {
 			try {
 				if (selectedMediaElement.type === ElementTypeEnum.Image) {
-					const resource = await canvas.imageResourceManager.getResource(mediaSrc)
+					const resource = await canvas.imageResourceManager.getResource(mediaSrc, {
+						variant: "preview",
+					})
 					if (cancelled) return
 					const naturalWidth = resource?.imageInfo?.naturalWidth ?? 0
 					const naturalHeight = resource?.imageInfo?.naturalHeight ?? 0

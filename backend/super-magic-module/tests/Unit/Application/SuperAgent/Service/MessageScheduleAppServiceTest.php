@@ -11,6 +11,7 @@ use App\Infrastructure\Util\Context\RequestContext;
 use App\Interfaces\Authorization\Web\MagicUserAuthorization;
 use DateTime;
 use Dtyq\SuperMagic\Application\SuperAgent\Service\MessageScheduleAppService;
+use Dtyq\SuperMagic\Application\SuperAgent\Service\OpenMessageScheduleAppService;
 use Dtyq\SuperMagic\Interfaces\SuperAgent\DTO\Request\UpdateMessageScheduleRequestDTO;
 use Dtyq\TaskScheduler\Service\TaskSchedulerDomainService;
 use Exception;
@@ -25,6 +26,160 @@ use Throwable;
  */
 class MessageScheduleAppServiceTest extends TestCase
 {
+    public function testOpenScheduleMessageContentUsesRequestedTopicPattern(): void
+    {
+        $reflection = new ReflectionClass(OpenMessageScheduleAppService::class);
+        $service = $reflection->newInstanceWithoutConstructor();
+        $method = $reflection->getMethod('buildFullMessageContent');
+        $method->setAccessible(true);
+
+        $result = $method->invoke(
+            $service,
+            '更新 AI 卡片',
+            ['model_id' => 'test-model'],
+            'ip-manager'
+        );
+
+        $this->assertSame(
+            'ip-manager',
+            $result['extra']['super_agent']['topic_pattern']
+        );
+    }
+
+    public function testOpenScheduleMessageContentIncludesRequestedAgentCode(): void
+    {
+        $reflection = new ReflectionClass(OpenMessageScheduleAppService::class);
+        $service = $reflection->newInstanceWithoutConstructor();
+        $method = $reflection->getMethod('buildFullMessageContent');
+        $method->setAccessible(true);
+
+        $result = $method->invoke(
+            $service,
+            '更新自定义员工任务',
+            ['model_id' => 'test-model'],
+            'custom_agent',
+            'SMA-custom-agent'
+        );
+
+        $this->assertSame(
+            'SMA-custom-agent',
+            $result['extra']['super_agent']['agent_code']
+        );
+    }
+
+    public function testOpenScheduleJsonContentPreservesMentionNodeInContent(): void
+    {
+        $reflection = new ReflectionClass(OpenMessageScheduleAppService::class);
+        $service = $reflection->newInstanceWithoutConstructor();
+        $method = $reflection->getMethod('buildFullMessageContent');
+        $method->setAccessible(true);
+
+        $mention = [
+            'type' => 'project_file',
+            'file_id' => 'file-1',
+            'file_name' => 'magic.project.js',
+            'file_path' => '股票行情追踪/magic.project.js',
+        ];
+        $richContent = [
+            'type' => 'doc',
+            'content' => [
+                [
+                    'type' => 'paragraph',
+                    'content' => [
+                        [
+                            'type' => 'mention',
+                            'attrs' => $mention,
+                        ],
+                        [
+                            'type' => 'text',
+                            'text' => ' 更新 AI 卡片',
+                        ],
+                    ],
+                ],
+            ],
+        ];
+
+        $result = $method->invoke(
+            $service,
+            json_encode($richContent, JSON_UNESCAPED_UNICODE),
+            ['model_id' => 'test-model'],
+            'ip-manager'
+        );
+
+        $decodedContent = json_decode($result['content'], true);
+
+        $this->assertSame('doc', $decodedContent['type']);
+        $this->assertSame('mention', $decodedContent['content'][0]['content'][0]['type']);
+        $this->assertSame(
+            'magic.project.js',
+            $decodedContent['content'][0]['content'][0]['attrs']['file_name']
+        );
+        $this->assertSame([], $result['extra']['super_agent']['mentions']);
+        $this->assertSame('test-model', $result['extra']['super_agent']['model']['model_id']);
+        $this->assertSame('ip-manager', $result['extra']['super_agent']['topic_pattern']);
+    }
+
+    public function testOpenScheduleJsonContentStringIsNotWrappedAsText(): void
+    {
+        $reflection = new ReflectionClass(OpenMessageScheduleAppService::class);
+        $service = $reflection->newInstanceWithoutConstructor();
+        $method = $reflection->getMethod('buildFullMessageContent');
+        $method->setAccessible(true);
+
+        $jsonContent = json_encode([
+            'type' => 'doc',
+            'content' => [
+                [
+                    'type' => 'paragraph',
+                    'content' => [
+                        [
+                            'type' => 'text',
+                            'text' => '更新 AI 卡片',
+                        ],
+                    ],
+                ],
+            ],
+        ], JSON_UNESCAPED_UNICODE);
+
+        $result = $method->invoke(
+            $service,
+            $jsonContent,
+            ['model_id' => 'test-model'],
+            'ip-manager'
+        );
+
+        $decodedContent = json_decode($result['content'], true);
+
+        $this->assertSame('doc', $decodedContent['type']);
+        $this->assertSame('更新 AI 卡片', $decodedContent['content'][0]['content'][0]['text']);
+        $this->assertNotSame($jsonContent, $decodedContent['content'][0]['content'][0]['text']);
+    }
+
+    public function testOpenScheduleNonDocJsonStringRemainsPlainText(): void
+    {
+        $reflection = new ReflectionClass(OpenMessageScheduleAppService::class);
+        $service = $reflection->newInstanceWithoutConstructor();
+        $method = $reflection->getMethod('buildFullMessageContent');
+        $method->setAccessible(true);
+
+        $plainJsonText = json_encode([
+            'type' => 'note',
+            'content' => '这是一段普通 JSON 文本',
+        ], JSON_UNESCAPED_UNICODE);
+
+        $result = $method->invoke(
+            $service,
+            $plainJsonText,
+            ['model_id' => 'test-model'],
+            'ip-manager'
+        );
+
+        $decodedContent = json_decode($result['content'], true);
+
+        $this->assertSame('doc', $decodedContent['type']);
+        $this->assertSame($plainJsonText, $decodedContent['content'][0]['content'][0]['text']);
+    }
+
     /**
      * Test messageScheduleCallback with missing message_schedule_id.
      * 测试缺少消息定时任务ID参数的情况.

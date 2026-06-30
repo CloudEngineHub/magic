@@ -71,6 +71,7 @@ export function FileUploadZone({ onFilesSelect, disabled, className }: FileUploa
 			onDrop={handleDrop}
 			onDragOver={handleDragOver}
 			onClick={handleClick}
+			data-testid="handle-drop"
 		>
 			{/* 上传图标 - 48x48px */}
 			<div className="flex size-12 items-center justify-center rounded-md border border-border p-2">
@@ -99,6 +100,7 @@ export function FileUploadZone({ onFilesSelect, disabled, className }: FileUploa
 				className="hidden"
 				onChange={handleFileInput}
 				disabled={disabled}
+				data-testid="handle-file-input"
 			/>
 		</div>
 	)

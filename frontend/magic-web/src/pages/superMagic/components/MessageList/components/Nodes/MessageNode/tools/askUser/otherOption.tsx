@@ -1,14 +1,15 @@
-import type { ChangeEvent } from "react"
-import { Input } from "@/components/shadcn-ui/input"
+import { useLayoutEffect, useRef, type ChangeEvent } from "react"
 import enUSSuper from "@/assets/locales/en_US/super.json"
 import zhCNSuper from "@/assets/locales/zh_CN/super.json"
 import type { AskUserLocale } from "@/pages/superMagic/components/MessageList/utils/askUser"
 type AnswerValue = string | readonly string[]
 
 export const ASK_USER_OTHER_SENTINEL = "__ask_user_other__"
+const ASK_USER_OTHER_INPUT_MAX_HEIGHT = 200
+const askUserOtherInputScrollAreaClass =
+	"[scrollbar-width:thin] [scrollbar-color:rgb(var(--muted-foreground-rgb)_/_0.22)_transparent] [&::-webkit-scrollbar]:w-1 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-muted-foreground/20"
 
-export const askUserOtherInputClass =
-	"h-6 min-w-0 flex-1 rounded-md !border-0 bg-background px-2.5 text-left text-xs font-normal leading-4 text-foreground !shadow-none placeholder:text-xs placeholder:text-muted-foreground focus-visible:!border-transparent focus-visible:!ring-0 md:h-6 md:text-xs"
+export const askUserOtherInputClass = `h-auto !min-h-7 max-h-[200px] min-w-0 flex-1 resize-none overflow-hidden rounded-md !border-0 bg-background px-2.5 py-1 text-left text-sm font-normal leading-5 text-foreground !shadow-none outline-none placeholder:text-sm placeholder:text-muted-foreground focus-visible:!border-transparent focus-visible:!ring-0 md:text-sm ${askUserOtherInputScrollAreaClass}`
 
 export function getAskUserRenderableOptions(options: readonly string[]) {
 	return [...options, ASK_USER_OTHER_SENTINEL]
@@ -158,7 +159,7 @@ export function getAskUserDefaultValueHintText({
 interface AskUserOtherInputProps {
 	disabled: boolean
 	placeholder: string
-	onChange: (event: ChangeEvent<HTMLInputElement>) => void
+	onChange: (event: ChangeEvent<HTMLTextAreaElement>) => void
 	onFocus: () => void
 	questionId: string
 	testIdPrefix: "select" | "multi-select"
@@ -174,14 +175,27 @@ export function AskUserOtherInput({
 	testIdPrefix,
 	value,
 }: AskUserOtherInputProps) {
+	const textareaRef = useRef<HTMLTextAreaElement>(null)
+
+	useLayoutEffect(() => {
+		const textarea = textareaRef.current
+		if (!textarea) return
+		textarea.style.height = "auto"
+		const nextHeight = Math.min(textarea.scrollHeight, ASK_USER_OTHER_INPUT_MAX_HEIGHT)
+		textarea.style.height = `${nextHeight}px`
+		textarea.style.overflowY =
+			textarea.scrollHeight > ASK_USER_OTHER_INPUT_MAX_HEIGHT ? "auto" : "hidden"
+	}, [value, placeholder])
+
 	return (
-		<Input
-			type="text"
+		<textarea
+			ref={textareaRef}
 			value={value}
 			onChange={onChange}
 			onFocus={onFocus}
 			placeholder={placeholder}
 			disabled={disabled}
+			rows={1}
 			data-testid={`ask-user-v2-card-${testIdPrefix}-other-input-${questionId}`}
 			className={askUserOtherInputClass}
 		/>

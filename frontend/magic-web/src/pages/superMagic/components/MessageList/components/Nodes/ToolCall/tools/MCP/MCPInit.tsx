@@ -53,6 +53,7 @@ function MCPInitNode(props: NodeProps) {
 			className="w-full flex-none overflow-hidden py-[5px]"
 			onMouseEnter={onMouseEnter}
 			onMouseLeave={onMouseLeave}
+			data-testid="on-mouse-enter"
 		>
 			<div
 				className={cn(
@@ -75,7 +76,7 @@ function MCPInitNode(props: NodeProps) {
 							</div>
 						)}
 					</div>
-					<div className={cn(mcpToggleButton, "mr-1.5")} onClick={toggle}>
+					<div className={cn(mcpToggleButton, "mr-1.5")} onClick={toggle} data-testid="toggle">
 						{open ? (
 							<ChevronUp
 								size={16}

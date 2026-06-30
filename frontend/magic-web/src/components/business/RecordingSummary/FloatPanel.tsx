@@ -12,6 +12,7 @@ import { onSummarizeSuccessDefaultCallback } from "./utils/callback"
 import { useMemoizedFn, useDebounceFn, useUpdateEffect } from "ahooks"
 import { ProjectFilesStore } from "@/stores/projectFiles"
 import { useAttachmentsPolling } from "@/pages/superMagic/hooks/useAttachmentsPolling"
+import { useProjectAttachmentsChangeRealtime } from "@/pages/superMagic/hooks/useProjectAttachmentsChangeRealtime"
 import { createMentionPanelStore } from "@/components/business/MentionPanel/builtin-store"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import { useImageUrlResolver } from "@/pages/superMagic/components/Detail/contents/Md/hooks/useImageUrlResolver"
@@ -19,7 +20,11 @@ import { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/h
 import { useFileChangeCheck } from "./hooks/useFileChangeCheck"
 import type { SimpleEditorRef } from "@/components/tiptap-templates/simple/types"
 import { SuperMagicApi } from "@/apis"
+import { SuperMagicApiErrorCode } from "@/pages/superMagic/constants/apiErrorCodes"
 import useSandboxPreWarm from "@/pages/superMagic/components/MessagePanel/hooks/useSandboxPreWarm"
+import { loadProjectAttachments } from "@/pages/superMagic/services"
+import { requestProjectAttachmentsFullRefresh } from "@/pages/superMagic/services/attachmentsTopicSync"
+import { runActiveEditor } from "@/utils/tiptapEditorLifecycle"
 
 /**
  * 录音纪要浮动面板
@@ -63,14 +68,16 @@ export function RecordingSummaryFloatPanel() {
 	}, [isMobile])
 
 	// File change check hook
-	const { handleAttachmentsChange } = useFileChangeCheck({
+	const { handleAttachmentsChange, checkNoteFileChange } = useFileChangeCheck({
 		currentContent: currentNoteContent,
 		onAttachmentsChange: ({ tree }) => {
 			setAttachments(tree)
 		},
 		onMergedResult: (mergedContent) => {
-			editorRef?.current?.editor?.commands.setContent(mergedContent)
-			editorRef?.current?.editor?.commands.focus()
+			runActiveEditor(editorRef?.current?.editor, (editor) => {
+				editor.commands.setContent(mergedContent)
+				editor.commands.focus()
+			})
 			recordSummaryService.updateNote(mergedContent)
 		},
 	})
@@ -88,7 +95,7 @@ export function RecordingSummaryFloatPanel() {
 			}
 			try {
 				pubsub.publish(PubSubEvents.Update_Attachments_Loading, true)
-				SuperMagicApi.getAttachmentsByProjectId({
+				loadProjectAttachments({
 					projectId: selectedProject?.id,
 					// @ts-ignore 使用window添加临时的token
 					temporaryToken: window.temporary_token || "",
@@ -232,7 +239,21 @@ export function RecordingSummaryFloatPanel() {
 	// Initialize attachments polling
 	const { checkNowDebounced } = useAttachmentsPolling({
 		projectId: selectedProjectId,
+		autoStart: false,
 		onAttachmentsChange: handleAttachmentsChange,
+	})
+
+	useProjectAttachmentsChangeRealtime({
+		projectId: selectedProjectId,
+		store: projectFilesStore,
+		onAttachmentsChange: useMemoizedFn(({ tree, list }) => {
+			_setAttachments(tree)
+			_setAttachmentList(list)
+			void checkNoteFileChange(list)
+		}),
+		onFallbackError: useMemoizedFn((error: unknown) => {
+			console.error("Failed to refresh realtime recording summary attachments:", error)
+		}),
 	})
 
 	// Initialize attachments when project changes
@@ -270,6 +291,51 @@ export function RecordingSummaryFloatPanel() {
 
 	// Get note file path (use preset file path directly)
 	const noteFilePath = noteFile?.file_path ? `/${noteFile.file_path}` : ""
+
+	// Cache for images folder file_id — avoids re-creating on every upload within the same session
+	const imagesFolderIdRef = useRef<string | undefined>(undefined)
+
+	/**
+	 * Resolve or create the images folder under asr_display_dir before an image upload.
+	 * Uses note_file.parent_id (= asr_display_dir.directory_id) as the parent.
+	 */
+	const resolveImagesFolderParentId = useMemoizedFn(async (folderPath: string) => {
+		if (!selectedProjectId) return undefined
+
+		// Return cached value if already resolved in this session
+		if (imagesFolderIdRef.current) return imagesFolderIdRef.current
+
+		// asr_display_dir.directory_id is the parent of the note file
+		const displayDirId = recordSummaryService.getAsrDisplayDir()?.directory_id
+		if (!displayDirId) return undefined
+
+		// Extract the folder name (last segment of folderPath)
+		const folderName = folderPath.split("/").filter(Boolean).pop() || "images"
+
+		try {
+			const result = await SuperMagicApi.createFile({
+				project_id: selectedProjectId,
+				parent_id: displayDirId,
+				file_name: folderName,
+				is_directory: true,
+			})
+			const folderId = (result as any)?.file_id as string | undefined
+			if (folderId) imagesFolderIdRef.current = folderId
+			return folderId
+		} catch (error: unknown) {
+			const errorObj = error as { code?: number }
+			if (errorObj.code === SuperMagicApiErrorCode.DuplicateFile) {
+				// Folder already exists; cached value unavailable (e.g. after remount) — graceful degradation
+				requestProjectAttachmentsFullRefresh({
+					projectId: selectedProjectId,
+					reason: "recording-summary-images-folder-duplicate",
+				})
+				return imagesFolderIdRef.current
+			}
+			console.error("[RecordSummary] Failed to create images folder:", error)
+			return undefined
+		}
+	})
 
 	// URL resolver for project images - converts relative paths to download URLs
 	// Uses shared utility functions for consistent image resolution across the app
@@ -364,6 +430,7 @@ export function RecordingSummaryFloatPanel() {
 						displayDirPath ? getRecordingImagesDirPath(displayDirPath) : "images"
 					}
 					urlResolver={urlResolver}
+					resolveImagesFolderParentId={resolveImagesFolderParentId}
 				/>
 			</>
 		)
@@ -420,6 +487,7 @@ export function RecordingSummaryFloatPanel() {
 				folderPath={displayDirPath ? getRecordingImagesDirPath(displayDirPath) : "images"}
 				editorRef={editorRef}
 				onSave={handleSave}
+				resolveImagesFolderParentId={resolveImagesFolderParentId}
 			/>
 		</>
 	)

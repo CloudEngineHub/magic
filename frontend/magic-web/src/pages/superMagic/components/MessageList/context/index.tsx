@@ -1,6 +1,7 @@
 import { Topic } from "@/pages/superMagic/pages/Workspace/types"
 import type { JSONContent } from "@tiptap/core"
 import { createContext, type PropsWithChildren, type ReactNode, useContext } from "react"
+import type { ProjectFilesStore } from "@/stores/projectFiles"
 
 export interface MessageListContextState {
 	/** 是否允许撤回 */
@@ -15,12 +16,20 @@ export interface MessageListContextState {
 	allowConversationCopy?: boolean
 	/** 是否允许创建新话题 */
 	allowCreateNewTopic?: boolean
+	/** 是否允许"导出对话"入口 */
+	allowExport?: boolean
+	/** 当前是否处于导出选择模式 */
+	exportModeActive?: boolean
+	/** 触发进入导出选择模式（由 MessageList 内部注入） */
+	onExportRequest?: () => void
 	/** 切换当前话题 */
 	onTopicSwitch?: (topic: Topic) => void
 	/** Optional assistant avatar renderer for scoped scenes */
 	renderAssistantAvatar?: (props?: { className?: string }) => ReactNode
 	/** When false, hide the assistant "task completed" status badge */
 	showTaskCompletedBadge?: boolean
+	/** 当前上下文的 projectFilesStore 实例 */
+	projectFilesStore?: ProjectFilesStore
 }
 
 const MessageListContext = createContext<MessageListContextState>({
@@ -30,6 +39,9 @@ const MessageListContext = createContext<MessageListContextState>({
 	allowMessageTooltip: false,
 	allowConversationCopy: false,
 	allowCreateNewTopic: true,
+	allowExport: false,
+	exportModeActive: false,
+	onExportRequest: undefined,
 	onTopicSwitch: undefined,
 	renderAssistantAvatar: undefined,
 })

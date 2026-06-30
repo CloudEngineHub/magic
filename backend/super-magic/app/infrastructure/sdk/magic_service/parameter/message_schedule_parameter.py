@@ -56,24 +56,30 @@ class MessageScheduleParameter(MagicServiceAbstractParameter):
     def __init__(
         self,
         task_name: str,
-        message_content: str,
+        message_content,
         time_config: TimeConfig,
         topic_id: str,
         model_id: str,
         deadline: Optional[str] = None,
         specify_topic: int = 0,
+        topic_pattern: Optional[str] = None,
+        agent_code: Optional[str] = None,
+        message_type: str = 'rich_text',
     ):
         """
         初始化定时任务参数
 
         Args:
             task_name: 任务名称，如 '每日早报'
-            message_content: 消息内容（任务指令）
+            message_content: 消息内容（任务指令），可以是字符串或 JSONContent dict
             time_config: 时间配置对象（仅包含执行计划 type/time/day）
             topic_id: 话题 ID
             model_id: 模型 ID
             deadline: 截止日期，格式 'YYYY-MM-DD HH:MM:SS'，重复任务可选，到期后停止执行
             specify_topic: 是否指定话题，0=否，1=是，默认 0
+            topic_pattern: Agent mode used by the scheduled run, for example 'ip-manager'
+            agent_code: Custom agent code used when topic_pattern is 'custom_agent'
+            message_type: 消息类型，'text' 或 'rich_text'，默认 'rich_text'
         """
         super().__init__()
         self.task_name = task_name
@@ -83,12 +89,15 @@ class MessageScheduleParameter(MagicServiceAbstractParameter):
         self.model_id = model_id
         self.deadline = deadline
         self.specify_topic = specify_topic
+        self.topic_pattern = topic_pattern
+        self.agent_code = agent_code
+        self.message_type = message_type
 
     def get_task_name(self) -> str:
         """获取任务名称"""
         return self.task_name
 
-    def get_message_content(self) -> str:
+    def get_message_content(self):
         """获取消息内容"""
         return self.message_content
 
@@ -118,6 +127,7 @@ class MessageScheduleParameter(MagicServiceAbstractParameter):
         body: Dict[str, Any] = {
             'task_name': self.task_name,
             'message_content': self.message_content,
+            'message_type': self.message_type,
             'time_config': self.time_config.to_dict(),
             'topic_id': self.topic_id,
             'model_id': self.model_id,
@@ -125,6 +135,10 @@ class MessageScheduleParameter(MagicServiceAbstractParameter):
         }
         if self.deadline is not None:
             body['deadline'] = self.deadline
+        if self.topic_pattern is not None:
+            body['topic_pattern'] = self.topic_pattern
+        if self.agent_code is not None:
+            body['agent_code'] = self.agent_code
         return body
 
     def to_query_params(self) -> Dict[str, Any]:
@@ -149,8 +163,8 @@ class MessageScheduleParameter(MagicServiceAbstractParameter):
         if not self.message_content:
             raise ValueError("message_content is required")
 
-        if not isinstance(self.message_content, str):
-            raise ValueError("message_content must be a string")
+        if not isinstance(self.message_content, (str, dict)):
+            raise ValueError("message_content must be a string or dict")
 
         if not isinstance(self.time_config, TimeConfig):
             raise ValueError("time_config must be a TimeConfig instance")
@@ -185,6 +199,12 @@ class MessageScheduleParameter(MagicServiceAbstractParameter):
 
         if self.specify_topic not in (0, 1):
             raise ValueError("specify_topic must be 0 or 1")
+
+        if self.topic_pattern is not None and not isinstance(self.topic_pattern, str):
+            raise ValueError("topic_pattern must be a string")
+
+        if self.agent_code is not None and not isinstance(self.agent_code, str):
+            raise ValueError("agent_code must be a string")
 
 
 class QueryMessageSchedulesParameter(MagicServiceAbstractParameter):
@@ -288,10 +308,11 @@ class UpdateMessageScheduleParameter(MagicServiceAbstractParameter):
         self,
         schedule_id: str,
         task_name: Optional[str] = None,
-        message_content: Optional[str] = None,
+        message_content=None,
         time_config: Optional[TimeConfig] = None,
         deadline: Optional[str] = None,
         enabled: Optional[int] = None,
+        message_type: Optional[str] = None,
     ):
         """
         初始化更新参数
@@ -299,10 +320,11 @@ class UpdateMessageScheduleParameter(MagicServiceAbstractParameter):
         Args:
             schedule_id: 定时任务 ID（路径参数）
             task_name: 任务名称
-            message_content: 消息内容（任务指令）
+            message_content: 消息内容（任务指令），可以是字符串或 JSONContent dict
             time_config: 时间配置对象
             deadline: 截止日期，格式 'YYYY-MM-DD HH:MM:SS'，重复任务到期后停止执行
             enabled: 是否启用，1=启用 0=禁用
+            message_type: 消息类型，'text' 或 'rich_text'
         """
         super().__init__()
         self.schedule_id = schedule_id
@@ -311,6 +333,7 @@ class UpdateMessageScheduleParameter(MagicServiceAbstractParameter):
         self.time_config = time_config
         self.deadline = deadline
         self.enabled = enabled
+        self.message_type = message_type
 
     def get_schedule_id(self) -> str:
         """获取定时任务 ID"""
@@ -323,6 +346,8 @@ class UpdateMessageScheduleParameter(MagicServiceAbstractParameter):
             body['task_name'] = self.task_name
         if self.message_content is not None:
             body['message_content'] = self.message_content
+        if self.message_type is not None:
+            body['message_type'] = self.message_type
         if self.time_config is not None:
             body['time_config'] = self.time_config.to_dict()
         if self.deadline is not None:

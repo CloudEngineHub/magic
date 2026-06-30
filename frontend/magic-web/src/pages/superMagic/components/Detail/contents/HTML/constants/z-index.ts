@@ -57,6 +57,8 @@ export const HTML_EDITOR_Z_INDEX = {
 	FULLSCREEN: {
 		/** PPT Render fullscreen container */
 		CONTAINER: 10000,
+		/** Global floating hint rendered via portal, above split panes and local overlays */
+		FLOATING_HINT: 10010,
 	},
 } as const
 
@@ -84,6 +86,7 @@ export const TAILWIND_Z_INDEX_CLASSES = {
 	},
 	FULLSCREEN: {
 		CONTAINER: "z-[10000]",
+		FLOATING_HINT: "z-[10010]",
 	},
 } as const
 

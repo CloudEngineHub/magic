@@ -42,6 +42,21 @@ import { PPTProvider } from "./contexts/PPTContext"
 import { useContainerShowButtonText } from "@/hooks/useContainerShowButtonText"
 import type { MenuProps } from "antd"
 
+interface ManualSaveResult {
+	fileId?: string
+	cleanContent?: string
+}
+
+function getHtmlRelativeFolderPath(fileItem?: { relative_file_path?: string; file_name?: string }) {
+	const path = fileItem?.relative_file_path
+	if (!path) return undefined
+	if (fileItem?.file_name && path.endsWith(fileItem.file_name)) {
+		return path.slice(0, -fileItem.file_name.length)
+	}
+
+	return path.replace(/[^/]*$/, "") || undefined
+}
+
 interface PPTRenderProps {
 	// ========== 外部依赖（必需） ==========
 	slidePaths: string[]
@@ -95,6 +110,7 @@ interface PPTRenderProps {
  */
 const PPTRender = function PPTRender(props: PPTRenderProps) {
 	const {
+		slidePaths,
 		attachments,
 		attachmentList,
 		mainFileId,
@@ -107,6 +123,13 @@ const PPTRender = function PPTRender(props: PPTRenderProps) {
 
 	const { organizationCode } = useOrganization()
 	const resolvedProjectId = selectedProject?.id || projectId
+	const effectiveDisplayConfig = useMemo(() => {
+		if (!slidePaths?.length) return displayConfig
+		return {
+			...displayConfig,
+			slides: slidePaths,
+		}
+	}, [displayConfig, slidePaths])
 
 	const storeConfig = useMemo(
 		() => ({
@@ -115,7 +138,7 @@ const PPTRender = function PPTRender(props: PPTRenderProps) {
 			projectId: resolvedProjectId,
 			mainFileId,
 			mainFileName,
-			displayConfig,
+			displayConfig: effectiveDisplayConfig,
 			organizationCode,
 			selectedProjectId: selectedProject?.id,
 			enableCache: true,
@@ -127,7 +150,7 @@ const PPTRender = function PPTRender(props: PPTRenderProps) {
 			resolvedProjectId,
 			mainFileId,
 			mainFileName,
-			displayConfig,
+			effectiveDisplayConfig,
 			organizationCode,
 			selectedProject?.id,
 			allowDownload,
@@ -375,22 +398,16 @@ const PPTRenderInner = observer(function PPTRenderInner({
 	// 仅在真正初始化完成且无可用页面时展示空态
 	const isNoSlidesFallbackVisible = store.isReady && !isPendingInit && !hasSlides
 
-	// 计算当前幻灯片的相对文件路径（供 PPTSlide 使用）
-	const relative_file_path = useMemo(() => {
-		const currentPath = store.slidePaths[store.activeIndex]
-		const fileId = store.getFileIdByPath(currentPath)
-		const file_item = attachmentList?.find((item) => item.file_id === fileId)
-		return file_item?.relative_file_path.replace(file_item?.file_name, "")
-	}, [attachmentList, store])
-
 	// 手动保存处理函数 - 使用 useMemoizedFn 避免每次渲染重新创建
-	const handleManualSave = useMemoizedFn(async (saveResult: any, index: number) => {
+	const handleManualSave = useMemoizedFn(async (saveResult: ManualSaveResult, index: number) => {
 		if (!saveResult) return
+		const cleanContent = saveResult.cleanContent || ""
 
 		if (saveResult.fileId) store.markSlideAsManuallySaved(saveResult.fileId)
-		// 更新幻灯片内容并立即生成新缩略图
-		store.updateSlideContent(index, saveResult.cleanContent)
-		store.generateSlideScreenshot(index, saveResult.cleanContent)
+		// 保存后的原始 HTML 需要先经过 PPT 资源路径处理，否则缩略图会用未解析的背景资源截图。
+		const processedContent = await store.updateSlideContent(index, cleanContent)
+		const thumbnailContent = processedContent || cleanContent
+		await store.generateSlideScreenshot(index, thumbnailContent)
 	})
 
 	const registerCloseSaveHandler = useMemoizedFn((handler: (() => Promise<boolean>) | null) => {
@@ -604,6 +621,7 @@ const PPTRenderInner = observer(function PPTRenderInner({
 									? `Slide ${store.activeIndex + 1} of ${store.slideUrls.length}`
 									: t("ppt.noSlidesAvailable")
 							}
+							data-testid="ppt-render-div"
 						>
 							<div className="relative h-full w-full overflow-hidden">
 								{/* 调整宽度时覆盖层防止 iframe 拦截鼠标事件 */}
@@ -664,6 +682,11 @@ const PPTRenderInner = observer(function PPTRenderInner({
 
 								{visibleSlides.map(({ slide, index }) => {
 									const slideFileId = store.getFileIdByPath(slide.path) || ""
+									const slideFileItem = attachmentList?.find(
+										(item) => item.file_id === slideFileId,
+									)
+									const slideHtmlRelativeFolderPath =
+										getHtmlRelativeFolderPath(slideFileItem)
 									return (
 										<PPTSlide
 											key={slide.id}
@@ -685,7 +708,7 @@ const PPTRenderInner = observer(function PPTRenderInner({
 													// 空操作回退
 												})
 											}
-											relative_file_path={relative_file_path}
+											htmlRelativeFolderPath={slideHtmlRelativeFolderPath}
 											selectedProject={selectedProject}
 											attachmentList={attachmentList}
 											attachments={attachments}

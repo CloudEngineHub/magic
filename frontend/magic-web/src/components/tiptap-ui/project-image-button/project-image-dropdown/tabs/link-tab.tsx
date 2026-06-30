@@ -6,6 +6,7 @@ import type { Editor } from "@tiptap/react"
 import { isValidImageUrl } from "../utils/url-validator"
 import { useStyles } from "../styles"
 import FlexBox from "@/components/base/FlexBox"
+import { runActiveEditor } from "@/utils/tiptapEditorLifecycle"
 
 interface LinkTabProps {
 	editor: Editor | null
@@ -24,7 +25,11 @@ export function LinkTab({ editor, onSuccess }: LinkTabProps) {
 		if (!editor || !isValid) return
 
 		// Insert image using the editor command
-		editor.commands.setImage({ src: url.trim() })
+		const inserted = runActiveEditor(editor, (activeEditor) => {
+			activeEditor.commands.setImage({ src: url.trim() })
+			return true
+		}, false)
+		if (!inserted) return
 
 		// Clear input
 		setUrl("")

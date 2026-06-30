@@ -111,6 +111,7 @@ export default memo(function ActionButton({
 						alt="icon"
 						className={iconCommonClasses}
 						style={{ width: size, height: size }}
+						data-testid="action-button-image"
 					/>
 				)}
 				{text && !loading && (

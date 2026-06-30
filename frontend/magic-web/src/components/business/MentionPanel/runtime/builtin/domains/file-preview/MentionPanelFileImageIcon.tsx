@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react"
+import type { ReactNode } from "react"
 import MagicFileIcon from "@/components/base/MagicFileIcon"
 import { cn } from "@/lib/utils"
 import type { MentionItemRendererContext } from "../../../../renderers/types"
@@ -34,6 +35,35 @@ function getMagicFileIconType(context: MentionItemRendererContext): string {
 }
 
 type ImageLoadPhase = "loading" | "loaded" | "error"
+
+function MentionFileImagePreviewBox(props: { iconSize: number; children: ReactNode }) {
+	const { iconSize, children } = props
+
+	return (
+		<div
+			className="relative shrink-0 overflow-hidden rounded bg-muted"
+			style={{
+				width: iconSize,
+				height: iconSize,
+				minWidth: iconSize,
+				minHeight: iconSize,
+				maxWidth: iconSize,
+				maxHeight: iconSize,
+			}}
+		>
+			{children}
+		</div>
+	)
+}
+
+function isDirectoryLikeMentionItem(item: unknown): boolean {
+	return (item as { is_directory?: unknown })?.is_directory === true
+}
+
+function getCustomFolderId(displayConfig?: Record<string, unknown>): string | undefined {
+	const value = displayConfig?._customFolderId
+	return typeof value === "string" && value ? value : undefined
+}
 
 export function MentionPanelFileImageIcon(props: { context: MentionItemRendererContext }) {
 	const { context } = props
@@ -149,9 +179,12 @@ export function MentionPanelFileImageIcon(props: { context: MentionItemRendererC
 			}
 		}
 
-		if (fileDisplayConfig?.type === "custom") {
+		if (
+			fileDisplayConfig?.type === "custom" ||
+			(fileDisplayConfig?.type === "micro-app" && isDirectoryLikeMentionItem(item))
+		) {
 			// 优先使用 _customFolderId（入口文件需从原始 custom 文件夹解析 icon_path）
-			const customFolderId = (fileDisplayConfig as any)?._customFolderId
+			const customFolderId = getCustomFolderId(fileDisplayConfig)
 			const targetFolderId = customFolderId || parentId
 
 			const targetNode = targetFolderId
@@ -179,34 +212,34 @@ export function MentionPanelFileImageIcon(props: { context: MentionItemRendererC
 
 	if (!resolvedPreviewUrl) {
 		return (
-			<div className="relative shrink-0" style={{ width: iconSize, height: iconSize }}>
+			<MentionFileImagePreviewBox iconSize={iconSize}>
 				<div
 					className={cn(
 						"h-full w-full rounded bg-muted",
 						"animate-pulse motion-reduce:animate-none",
 					)}
 				/>
-			</div>
+			</MentionFileImagePreviewBox>
 		)
 	}
 
 	if (imagePhase === "loaded") {
 		return (
-			<img
-				src={resolvedPreviewUrl}
-				alt=""
-				width={iconSize}
-				height={iconSize}
-				className={cn("shrink-0 rounded object-cover")}
-				loading="lazy"
-				decoding="async"
-				referrerPolicy="no-referrer"
-			/>
+			<MentionFileImagePreviewBox iconSize={iconSize}>
+				<img
+					src={resolvedPreviewUrl}
+					alt=""
+					className="block h-full w-full object-cover"
+					loading="lazy"
+					decoding="async"
+					referrerPolicy="no-referrer"
+				/>
+			</MentionFileImagePreviewBox>
 		)
 	}
 
 	return (
-		<div className="relative shrink-0" style={{ width: iconSize, height: iconSize }}>
+		<MentionFileImagePreviewBox iconSize={iconSize}>
 			<div
 				className={cn(
 					"absolute inset-0 rounded bg-muted",
@@ -216,15 +249,13 @@ export function MentionPanelFileImageIcon(props: { context: MentionItemRendererC
 			<img
 				src={resolvedPreviewUrl}
 				alt=""
-				width={iconSize}
-				height={iconSize}
-				className={cn("relative z-[1] shrink-0 rounded object-cover opacity-0")}
+				className="absolute inset-0 z-[1] h-full w-full object-cover opacity-0"
 				loading="lazy"
 				decoding="async"
 				referrerPolicy="no-referrer"
 				onLoad={() => setImagePhase("loaded")}
 				onError={() => setImagePhase("error")}
 			/>
-		</div>
+		</MentionFileImagePreviewBox>
 	)
 }

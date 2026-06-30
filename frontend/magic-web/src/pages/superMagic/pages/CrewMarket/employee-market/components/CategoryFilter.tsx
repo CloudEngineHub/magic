@@ -60,6 +60,7 @@ function CategoryFilter({ categories, activeCategoryId, onCategoryChange }: Cate
 								src={category.logo}
 								alt={category.name}
 								className="size-4 shrink-0 rounded-sm object-cover"
+								data-testid="category-filter-image"
 							/>
 						) : null}
 						{category.name}

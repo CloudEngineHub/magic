@@ -120,6 +120,7 @@ function DraftBoxComponent({
 					type="button"
 					className={draftBoxCloseButtonVariants({ size })}
 					onClick={() => setVisible(false)}
+					data-testid="set-visible"
 				>
 					<IconX size={isMobile ? 20 : 24} />
 				</button>
@@ -172,6 +173,7 @@ function DraftBoxComponent({
 													variant: "delete",
 												})}
 												onClick={() => handleDeleteDraft(draft)}
+												data-testid="handle-delete-draft"
 											>
 												<IconTrash size={14} />
 												{t("draftBox.deleteDraft")}
@@ -182,6 +184,7 @@ function DraftBoxComponent({
 													variant: "use",
 												})}
 												onClick={() => handleUseDraft(draft)}
+												data-testid="handle-use-draft"
 											>
 												{t("draftBox.useDraft")}
 											</button>

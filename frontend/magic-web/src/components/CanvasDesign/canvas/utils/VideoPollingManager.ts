@@ -127,6 +127,11 @@ export class VideoPollingManager {
 		const updateData: Partial<VideoElementData> = {
 			status: result.status,
 			errorMessage: result.error_message ?? undefined,
+			videoGenerationResultMeta: {
+				billing: result.billing ?? null,
+				generation_info: result.generation_info ?? null,
+				runtime: result.runtime ?? null,
+			},
 		}
 
 		if (result.file_dir && result.file_name) {

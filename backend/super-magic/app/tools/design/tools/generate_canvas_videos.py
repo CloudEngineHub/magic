@@ -1,12 +1,13 @@
 """AI 视频生成并添加到画布工具（任务列表版）
 
-每个 task 独立指定 prompt / name / width / height，
+每个 task 独立指定 prompt / name，并可按当前视频模型规则设置 aspect_ratio / duration_seconds / resolution，
 有几个 task 就生成几个视频，并发执行。
 """
 
 from __future__ import annotations
 
 import re
+import uuid
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, ClassVar, Dict, List, Optional
@@ -15,7 +16,10 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 from agentlang.context.tool_context import ToolContext
 from agentlang.tools.tool_result import ToolResult
+from agentlang.utils.metadata import MetadataUtil
 from app.core.entity.message.server_message import DisplayType, ToolDetail
+from app.infrastructure.magic_service.client import MagicServiceClient
+from app.infrastructure.magic_service.exceptions import ApiError
 from app.i18n import i18n
 from app.tools.core import BaseToolParams, tool
 from app.tools.design.tools.base_generate_canvas_elements import (
@@ -25,19 +29,73 @@ from app.tools.design.tools.base_generate_canvas_elements import (
     TaskExecutionResult,
     TaskPlaceholderInfo,
 )
-from app.tools.generate_video import (
-    DEFAULT_POLL_INTERVAL_SECONDS,
-    DEFAULT_POLL_TIMEOUT_SECONDS,
-    GenerateVideo,
-    GenerateVideoParams,
-    LLM_VISIBLE_MAGIC_SERVICE_ERROR_CODES,
-    normalize_video_input_mode_value,
-    normalize_video_task_value,
-)
-from app.utils.async_file_utils import async_mkdir
+from app.utils.async_file_utils import async_exists, async_mkdir
 from app.utils.video_logger import get_video_logger
 
 logger = get_video_logger(__name__)
+
+DEFAULT_CANVAS_ASPECT_RATIO = "16:9"
+DEFAULT_CANVAS_RESOLUTION = "720p"
+
+VIDEO_TASK_ALIASES = {
+    "generater": "generate",
+    "generator": "generate",
+}
+VIDEO_INPUT_MODE_ALIASES = {
+    "video_editing": "video_edit",
+}
+
+def _parse_aspect_ratio(value: str) -> tuple[int, int] | None:
+    match = re.fullmatch(r"\s*(\d+)\s*:\s*(\d+)\s*", value or "")
+    if not match:
+        return None
+    width_ratio = int(match.group(1))
+    height_ratio = int(match.group(2))
+    if width_ratio <= 0 or height_ratio <= 0:
+        return None
+    return width_ratio, height_ratio
+
+
+def _normalize_resolution(value: str) -> str:
+    normalized = str(value or "").strip().lower()
+    return "4k" if normalized in {"4k", "2160p"} else normalized
+
+
+def _resolve_resolution_base_height(resolution: str) -> int | None:
+    normalized_resolution = _normalize_resolution(resolution)
+    if normalized_resolution == "4k":
+        return 2160
+
+    p_match = re.fullmatch(r"(\d+)p", normalized_resolution)
+    if p_match:
+        return int(p_match.group(1))
+
+    k_match = re.fullmatch(r"(\d+)k", normalized_resolution)
+    if k_match:
+        k_value = int(k_match.group(1))
+        if k_value == 2:
+            return 1440
+        return k_value * 540
+
+    return None
+
+
+def _resolve_canvas_dimensions(aspect_ratio: str, resolution: str) -> tuple[int, int]:
+    normalized_aspect_ratio = str(aspect_ratio or "").strip()
+    ratio = _parse_aspect_ratio(normalized_aspect_ratio)
+    if ratio is None:
+        raise ValueError(f"Invalid aspect_ratio: '{aspect_ratio}'. Use W:H format, for example 16:9")
+
+    base_height = _resolve_resolution_base_height(resolution)
+    if base_height is None:
+        raise ValueError(f"Invalid resolution: '{resolution}'. Use values like 720p, 1080p, or 4k")
+
+    base_width = round(base_height * 16 / 9)
+    target_area = base_width * base_height
+    ratio_value = ratio[0] / ratio[1]
+    height = round((target_area / ratio_value) ** 0.5)
+    width = round(height * ratio_value)
+    return width, height
 
 
 def _format_tool_context_for_log(tool_context: Optional[ToolContext]) -> str:
@@ -49,6 +107,22 @@ def _format_tool_context_for_log(tool_context: Optional[ToolContext]) -> str:
         f"tool_name={getattr(tool_context, 'tool_name', '') or ''} "
         f"tool_call_id={getattr(tool_context, 'tool_call_id', '') or ''}"
     )
+
+
+def _normalize_video_task_value(value: Any, default: str = "generate") -> str:
+    normalized = str(value or "").strip()
+    if not normalized:
+        return default
+    normalized = normalized.lower()
+    return VIDEO_TASK_ALIASES.get(normalized, normalized)
+
+
+def _normalize_video_input_mode_value(value: Any) -> str:
+    normalized = str(value or "").strip()
+    if not normalized:
+        return ""
+    normalized = normalized.lower()
+    return VIDEO_INPUT_MODE_ALIASES.get(normalized, normalized)
 
 
 @dataclass
@@ -96,33 +170,18 @@ class VideoTaskSpec(BaseModel):
 
     prompt: str = Field(
         ...,
-        description="""<!--zh: 视频生成提示词。素材路径不要写在这里；有参考素材时，在 prompt 中按数组顺序写 [image1] / [video1] / [audio1]。-->
-Video generation prompt. Do not put asset paths here. When using reference assets, cite them by list order with [image1] / [video1] / [audio1]."""
+        description="""<!--zh: 视频生成提示词。只描述视频内容、动作、风格和镜头；如果传入参考素材，必须在 prompt 中按数组顺序引用：reference_image_paths[0] 用 [image1]，reference_video_paths[0] 用 [video1]，reference_audio_paths[0] 用 [audio1]。例如：基于黑猫肖像 [image1] 制作动画，黑猫缓缓眨眼。-->
+Video generation prompt. Describe only the video content, motion, style, and camera. When passing reference assets, the prompt must cite them by list order: reference_image_paths[0] as [image1], reference_video_paths[0] as [video1], and reference_audio_paths[0] as [audio1]. Example: Animate the black cat portrait [image1] with slow blinking."""
     )
     name: str = Field(
         ...,
         description="""<!--zh: 画布元素名称，应反映具体内容，不要用大类或编号替代。-->
 Canvas element label. Must reflect the specific content of this video — not a generic category or numbered slot."""
     )
-    width: float = Field(
-        ...,
-        description="""<!--zh: 画布中视频元素宽度，必填。它控制画布展示大小，不等同于生成视频真实尺寸。若用户未提供，请优先使用当前视频模型支持的 size/default_size 对应宽度；若已传 size，则同步为 size 的宽度。-->
-Video element width on canvas, required. It controls canvas display size, not the generated video's real pixel size. If the user did not provide it, prefer the width from the current video model's supported size/default_size. If size is provided, mirror size width."""
-    )
-    height: float = Field(
-        ...,
-        description="""<!--zh: 画布中视频元素高度，必填。它控制画布展示大小，不等同于生成视频真实尺寸。若用户未提供，请优先使用当前视频模型支持的 size/default_size 对应高度；若已传 size，则同步为 size 的高度。-->
-Video element height on canvas, required. It controls canvas display size, not the generated video's real pixel size. If the user did not provide it, prefer the height from the current video model's supported size/default_size. If size is provided, mirror size height."""
-    )
-    size: str = Field(
-        "",
-        description="""<!--zh: 视频生成尺寸，可选，字段名必须是 size。例如 1280x720、1920x1080、2160x3840。它控制底层视频生成尺寸，不控制画布展示大小。若已传 size，通常不要再传与它比例冲突的 aspect_ratio。-->
-Video generation size, optional. The parameter name must be size, e.g. 1280x720, 1920x1080, 2160x3840. It controls the underlying generated video dimensions, not canvas layout size. If size is provided, usually avoid passing a conflicting aspect_ratio."""
-    )
-    aspect_ratio: str = Field(
-        "",
-        description="""<!--zh: 生成视频宽高比，可选，例如 16:9、9:16、1:1。它控制生成比例，不控制画布展示大小。若 size 已经明确表达尺寸，除非用户明确要求，否则可以不传 aspect_ratio。-->
-Generated video aspect ratio, optional, e.g. 16:9, 9:16, 1:1. It controls generation ratio, not canvas layout size. If size already defines dimensions, omit aspect_ratio unless the user explicitly asks for it."""
+    aspect_ratio: Optional[str] = Field(
+        None,
+        description="""<!--zh: 生成视频宽高比，可选，例如 16:9、9:16、1:1。用户指定或能根据当前视频模型规则合理推断时，从 <media_model_info> 声明的合法值中选择；不确定时省略。-->
+Generated video aspect ratio, optional, e.g. 16:9, 9:16, 1:1. When the user asks for it, or it can be reasonably inferred from the current video model rules, choose a declared value from <media_model_info>; omit when uncertain."""
     )
     input_mode: str = Field(
         "",
@@ -136,38 +195,38 @@ Video task type, default generate. Use edit with video_edit mode. Do not use gen
     )
     reference_image_paths: List[str] = Field(
         default_factory=list,
-        description="""<!--zh: 参考图路径或 URL 列表。字段名必须是 reference_image_paths。prompt 中按顺序用 [image1]、[image2] 引用。-->
-Reference image path or URL list. Must be reference_image_paths. Cite by list order in prompt as [image1], [image2], etc."""
+        description="""<!--zh: 项目文件树内的参考图相对路径列表，例如 images/cat.png。传入后必须在 prompt 中按数组顺序引用：reference_image_paths[0] 用 [image1]，reference_image_paths[1] 用 [image2]。-->
+Project-relative reference image paths, e.g. images/cat.png. When provided, the prompt must cite them by list order: reference_image_paths[0] as [image1], reference_image_paths[1] as [image2]."""
     )
     reference_video_paths: List[str] = Field(
         default_factory=list,
-        description="""<!--zh: 参考视频路径或 URL 列表。字段名必须是 reference_video_paths。prompt 中按顺序用 [video1]、[video2] 引用。-->
-Reference video path or URL list. Must be reference_video_paths. Cite by list order in prompt as [video1], [video2], etc."""
+        description="""<!--zh: 项目文件树内的参考视频相对路径列表，例如 videos/source.mp4。传入后必须在 prompt 中按数组顺序引用：reference_video_paths[0] 用 [video1]，reference_video_paths[1] 用 [video2]。-->
+Project-relative reference video paths, e.g. videos/source.mp4. When provided, the prompt must cite them by list order: reference_video_paths[0] as [video1], reference_video_paths[1] as [video2]."""
     )
     reference_audio_paths: List[str] = Field(
         default_factory=list,
-        description="""<!--zh: 参考音频路径或 URL 列表。字段名必须是 reference_audio_paths。prompt 中按顺序用 [audio1]、[audio2] 引用。-->
-Reference audio path or URL list. Must be reference_audio_paths. Cite by list order in prompt as [audio1], [audio2], etc."""
+        description="""<!--zh: 项目文件树内的参考音频相对路径列表，例如 audios/source.mp3。传入后必须在 prompt 中按数组顺序引用：reference_audio_paths[0] 用 [audio1]，reference_audio_paths[1] 用 [audio2]。-->
+Project-relative reference audio paths, e.g. audios/source.mp3. When provided, the prompt must cite them by list order: reference_audio_paths[0] as [audio1], reference_audio_paths[1] as [audio2]."""
     )
     frame_start_path: str = Field(
         "",
-        description="""<!--zh: 起始帧图片路径或 URL。字段名必须是 frame_start_path。不要使用 start_frame。-->
-Start frame image path or URL. The parameter name must be frame_start_path. Do not use start_frame."""
+        description="""<!--zh: 项目文件树内的起始帧图片相对路径，例如 images/start.png。字段名必须是 frame_start_path。不要使用 start_frame。-->
+Project-relative start frame image path, e.g. images/start.png. The parameter name must be frame_start_path. Do not use start_frame."""
     )
     frame_end_path: str = Field(
         "",
-        description="""<!--zh: 结束帧图片路径或 URL。字段名必须是 frame_end_path。不要使用 end_frame。-->
-End frame image path or URL. The parameter name must be frame_end_path. Do not use end_frame."""
+        description="""<!--zh: 项目文件树内的结束帧图片相对路径，例如 images/end.png。字段名必须是 frame_end_path。不要使用 end_frame。-->
+Project-relative end frame image path, e.g. images/end.png. The parameter name must be frame_end_path. Do not use end_frame."""
     )
     duration_seconds: Optional[int] = Field(
-        default=None,
-        description="""<!--zh: 视频时长（秒），可选。字段名必须是 duration_seconds。不要使用 duration。示例：4 秒传 duration_seconds=4。-->
-Video duration in seconds, optional. The parameter name must be duration_seconds. Do not use duration. Example: pass duration_seconds=4 for a 4-second video."""
+        None,
+        description="""<!--zh: 视频时长（秒），可选。字段名必须是 duration_seconds。用户指定或能根据当前视频模型规则合理推断时，从 <media_model_info> 声明的合法值中选择；不要使用 duration。-->
+Video duration in seconds, optional. The parameter name must be duration_seconds. When the user asks for it, or it can be reasonably inferred from the current video model rules, choose a declared value from <media_model_info>. Do not use duration."""
     )
-    resolution: str = Field(
-        "",
-        description="""<!--zh: 视频清晰度档位，可选，字段名必须是 resolution。常见值：720p、1080p、4k。不要把 1280x720 这种尺寸传到 resolution；尺寸请用 size。-->
-Video quality/resolution tier, optional. The parameter name must be resolution. Common values: 720p, 1080p, 4k. Do not pass dimensions like 1280x720 here; use size for dimensions."""
+    resolution: Optional[str] = Field(
+        None,
+        description="""<!--zh: 视频清晰度档位，可选，字段名必须是 resolution。常见格式：720p、1080p、4k。用户指定或能根据当前视频模型规则合理推断时，从 <media_model_info> 声明的合法值中选择；不要传 1280x720 这种尺寸。-->
+Video quality/resolution tier, optional. The parameter name must be resolution. Common format: 720p, 1080p, 4k. When the user asks for it, or it can be reasonably inferred from the current video model rules, choose a declared value from <media_model_info>. Do not pass dimensions like 1280x720."""
     )
     fps: Optional[int] = Field(default=None, description="<!--zh: 视频帧率，可选-->Video FPS, optional")
     seed: Optional[int] = Field(default=None, description="<!--zh: 随机种子，可选-->Random seed, optional")
@@ -214,6 +273,10 @@ Optional. When provided, the tool reuses an existing canvas element (e.g. a fail
 
             normalized[field_name] = alias_value
 
+        # width/height used to be public canvas fields. They are now derived from aspect_ratio + resolution.
+        normalized.pop("width", None)
+        normalized.pop("height", None)
+
         return normalized
 
     @field_validator("prompt")
@@ -230,15 +293,44 @@ Optional. When provided, the tool reuses an existing canvas element (e.g. a fail
             raise ValueError("name 不能为空")
         return v
 
+    @field_validator("aspect_ratio")
+    @classmethod
+    def validate_aspect_ratio(cls, value: Optional[str]) -> Optional[str]:
+        if value is None:
+            return None
+        if not isinstance(value, str) or not value.strip():
+            raise ValueError("aspect_ratio must use W:H format, for example 16:9")
+        if _parse_aspect_ratio(value) is None:
+            raise ValueError(f"Invalid aspect_ratio: '{value}'. Use W:H format, for example 16:9")
+        return value.strip()
+
+    @field_validator("duration_seconds")
+    @classmethod
+    def validate_duration_seconds(cls, value: Optional[int]) -> Optional[int]:
+        if value is None:
+            return None
+        if not isinstance(value, int) or value <= 0:
+            raise ValueError("duration_seconds must be a positive integer")
+        return value
+
+    @field_validator("resolution")
+    @classmethod
+    def validate_resolution(cls, value: Optional[str]) -> Optional[str]:
+        if value is None:
+            return None
+        if not isinstance(value, str) or not value.strip():
+            raise ValueError("resolution must use values like 720p, 1080p, or 4k")
+        return _normalize_resolution(value)
+
     @field_validator("input_mode", mode="before")
     @classmethod
     def normalize_input_mode(cls, value: Any) -> str:
-        return normalize_video_input_mode_value(value)
+        return _normalize_video_input_mode_value(value)
 
     @field_validator("task", mode="before")
     @classmethod
     def normalize_task(cls, value: Any) -> str:
-        return normalize_video_task_value(value)
+        return _normalize_video_task_value(value)
 
     @model_validator(mode="after")
     def validate_reference_tokens(self) -> "VideoTaskSpec":
@@ -266,6 +358,13 @@ Optional. When provided, the tool reuses an existing canvas element (e.g. a fail
                 missing_tokens.append(token)
         return missing_tokens
 
+    @property
+    def canvas_dimensions(self) -> tuple[int, int]:
+        return _resolve_canvas_dimensions(
+            self.aspect_ratio or DEFAULT_CANVAS_ASPECT_RATIO,
+            self.resolution or DEFAULT_CANVAS_RESOLUTION,
+        )
+
 
 class GenerateCanvasVideosParams(BaseToolParams):
     """generate_canvas_videos 工具参数"""
@@ -277,59 +376,26 @@ Relative path to the design project (folder containing magic.project.js)"""
     )
     tasks: List[VideoTaskSpec] = Field(
         ...,
-        description="""<!--zh: 视频生成任务列表，每个 task 生成一个视频，最多 4 个。每个 task 必须包含 prompt / name / width / height。width/height 是画布展示尺寸；若用户未指定，请优先使用当前视频模型支持的 size/default_size，或同步已传入的 size。其他字段必须使用本 schema 中的精确字段名。常见正确字段：duration_seconds（不是 duration）、reference_image_paths（不是 images/image）、reference_video_paths（不是 videos/video）、frame_start_path（不是 start_frame）、frame_end_path（不是 end_frame）。使用参考素材时，prompt 必须用 [image1] / [video1] / [audio1] 按数组顺序绑定素材。示例：tasks=[{"prompt":"白色长毛小猫 [image1] 从黑色箱子里探头钻出，黑色短毛小猫 [image2] 从白色箱子里跳出来，橘色虎斑小猫 [image3] 从黄色箱子里爬出。","name":"三色箱子猫咪跳出","width":1280,"height":720,"duration_seconds":4,"resolution":"720p","reference_image_paths":["images/cat1.png","images/cat2.png","images/cat3.png"]}]-->
-Video generation task list. Each task produces one video. Maximum 4 tasks per call. Each task must include prompt, name, width, and height. width/height are canvas display dimensions. If the user did not specify them, prefer the current video model's supported size/default_size, or mirror the provided size. Optional fields must use the exact schema names: duration_seconds (not duration), reference_image_paths (not images/image), reference_video_paths (not videos/video), frame_start_path (not start_frame), frame_end_path (not end_frame). When using reference assets, the prompt must bind them by list order with [image1] / [video1] / [audio1]. Example: tasks=[{"prompt":"White long-haired kitten [image1] peeks out of the black box, black short-haired kitten [image2] jumps out of the white box, orange tabby kitten [image3] climbs out of the yellow box.","name":"three_color_box_cats","width":1280,"height":720,"duration_seconds":4,"resolution":"720p","reference_image_paths":["images/cat1.png","images/cat2.png","images/cat3.png"]}]"""
+        description="""<!--zh: 视频生成任务列表，每个 task 生成一个视频，最多 4 个。每个 task 必须包含 prompt / name。aspect_ratio / duration_seconds / resolution 可选；用户指定或能根据当前视频模型规则合理推断时，从 <media_model_info> 声明的合法值中选择，不确定时省略。其他字段必须使用本 schema 中的精确字段名。常见正确字段：duration_seconds（不是 duration）、reference_image_paths（不是 images/image）、reference_video_paths（不是 videos/video）、frame_start_path（不是 start_frame）、frame_end_path（不是 end_frame）。使用参考素材时，prompt 必须用 [image1] / [video1] / [audio1] 按数组顺序绑定素材。示例：tasks=[{"prompt":"白色长毛小猫 [image1] 从黑色箱子里探头钻出，黑色短毛小猫 [image2] 从白色箱子里跳出来，橘色虎斑小猫 [image3] 从黄色箱子里爬出。","name":"三色箱子猫咪跳出","aspect_ratio":"16:9","duration_seconds":4,"resolution":"720p","reference_image_paths":["images/cat1.png","images/cat2.png","images/cat3.png"]}]-->
+Video generation task list. Each task produces one video. Maximum 4 tasks per call. Each task must include prompt and name. aspect_ratio, duration_seconds, and resolution are optional; when the user asks for them, or they can be reasonably inferred from the current video model rules, choose declared values from <media_model_info>; omit when uncertain. Optional fields must use the exact schema names: duration_seconds (not duration), reference_image_paths (not images/image), reference_video_paths (not videos/video), frame_start_path (not start_frame), frame_end_path (not end_frame). When using reference assets, the prompt must bind them by list order with [image1] / [video1] / [audio1]. Example: tasks=[{"prompt":"White long-haired kitten [image1] peeks out of the black box, black short-haired kitten [image2] jumps out of the white box, orange tabby kitten [image3] climbs out of the yellow box.","name":"three_color_box_cats","aspect_ratio":"16:9","duration_seconds":4,"resolution":"720p","reference_image_paths":["images/cat1.png","images/cat2.png","images/cat3.png"]}]"""
     )
     model_id: str = Field("", description="<!--zh: 可选视频模型 ID，所有任务共用-->Optional video model ID, shared across all tasks")
-    override: bool = Field(False, description="<!--zh: 是否覆盖已有文件-->Whether to override existing files")
-    poll_interval_seconds: int = Field(DEFAULT_POLL_INTERVAL_SECONDS, description="Polling interval in seconds")
-    poll_timeout_seconds: int = Field(DEFAULT_POLL_TIMEOUT_SECONDS, description="Polling timeout in seconds")
-
-    @model_validator(mode="before")
-    @classmethod
-    def validate_task_canvas_dimensions(cls, value: Any) -> Any:
-        if not isinstance(value, dict):
-            return value
-
-        tasks = value.get("tasks")
-        if not isinstance(tasks, list):
-            return value
-
-        missing_fields = []
-        for index, task in enumerate(tasks):
-            if not isinstance(task, dict):
-                continue
-            if task.get("width") in (None, ""):
-                missing_fields.append(f"tasks.{index}.width")
-            if task.get("height") in (None, ""):
-                missing_fields.append(f"tasks.{index}.height")
-
-        if missing_fields:
-            raise ValueError(
-                "generate_canvas_videos requires width and height for every task because they define "
-                "the video element's canvas display size. Missing fields: "
-                f"{', '.join(missing_fields)}. "
-                "Choose width/height from the current video model's supported size/default_size. "
-                "If size is provided, mirror it into width/height for canvas layout unless the user asks otherwise."
-            )
-
-        return value
 
     @classmethod
     def get_custom_error_message(cls, field_name: str, error_type: str) -> str | None:
         if error_type == "extra_forbidden" and field_name == "tasks":
             return (
                 "generate_canvas_videos 的 tasks 中存在未定义参数。"
-                "请只使用 task schema 里的精确字段名：prompt, name, width, height, size, aspect_ratio, input_mode, task, "
+                "请只使用 task schema 里的精确字段名：prompt, name, aspect_ratio, duration_seconds, resolution, input_mode, task, "
                 "reference_image_paths, reference_video_paths, reference_audio_paths, frame_start_path, "
-                "frame_end_path, duration_seconds, resolution, fps, seed, watermark, extensions, element_id。"
+                "frame_end_path, fps, seed, watermark, extensions, element_id。"
                 "常见改名：duration -> duration_seconds；images/image/reference_images -> reference_image_paths；"
                 "videos/video/reference_videos -> reference_video_paths；start_frame -> frame_start_path；"
                 "end_frame -> frame_end_path。"
                 "正确示例：tasks=[{'prompt':'白色长毛小猫 [image1] 从黑色箱子里探头钻出，"
                 "黑色短毛小猫 [image2] 从白色箱子里跳出来，橘色虎斑小猫 [image3] 从黄色箱子里爬出。', "
                 "'name':'三色箱子猫咪跳出', "
-                "'width':1280, 'height':720, 'duration_seconds':4, 'resolution':'720p', "
+                "'aspect_ratio':'16:9', 'duration_seconds':4, 'resolution':'720p', "
                 "'reference_image_paths':['images/cat1.png','images/cat2.png','images/cat3.png']}]."
             )
         return None
@@ -346,8 +412,8 @@ Video generation task list. Each task produces one video. Maximum 4 tasks per ca
 
 @tool()
 class GenerateCanvasVideos(BaseGenerateCanvasElements[GenerateCanvasVideosParams]):
-    """<!--zh: 按任务列表生成 AI 视频并自动添加到画布。每个 task 独立指定提示词和画布尺寸，有几个 task 就生成几个视频，并发执行。-->
-    Generate AI videos and automatically add them to the canvas, one video per task. Each task independently specifies its prompt and canvas dimensions; all tasks run concurrently.
+    """<!--zh: 按任务列表生成 AI 视频并自动添加到画布。每个 task 独立指定提示词，并可按模型规则设置宽高比、时长和清晰度；有几个 task 就生成几个视频，并发执行。-->
+    Generate AI videos and automatically add them to the canvas, one video per task. Each task independently specifies prompt, and may set aspect ratio, duration, and resolution according to model rules; all tasks run concurrently.
     """
 
     # 视频每行最多 4 个（与任务上限一致）
@@ -355,12 +421,10 @@ class GenerateCanvasVideos(BaseGenerateCanvasElements[GenerateCanvasVideosParams
 
     def __init__(self, **data):
         super().__init__(**data)
-        self._generate_tool = GenerateVideo()
+        self._magic_service_client: Optional[MagicServiceClient] = None
+        self._task_video_ids: Dict[int, str] = {}
         # 全局参数缓存，在 execute() 中写入，供 _prepare_task_kwargs / _execute_task_item 读取
         self._model_id: str = ""
-        self._override: bool = False
-        self._poll_interval_seconds: int = DEFAULT_POLL_INTERVAL_SECONDS
-        self._poll_timeout_seconds: int = DEFAULT_POLL_TIMEOUT_SECONDS
 
     async def execute(self, tool_context: ToolContext, params: GenerateCanvasVideosParams) -> ToolResult:
         try:
@@ -370,9 +434,10 @@ class GenerateCanvasVideos(BaseGenerateCanvasElements[GenerateCanvasVideosParams
             )
             # 缓存全局参数（单事件循环语义下安全）
             self._model_id = params.model_id
-            self._override = params.override
-            self._poll_interval_seconds = params.poll_interval_seconds
-            self._poll_timeout_seconds = params.poll_timeout_seconds
+            self._task_video_ids = {}
+            workspace_root = Path(self.base_dir)
+            project_prefix = params.project_path.strip("/")
+            await self._normalize_reference_paths(params.tasks, workspace_root, project_prefix)
             return await self._run_generate_flow(tool_context, params.project_path, params.tasks)
         except Exception as e:
             logger.exception(f"generate_canvas_videos 失败: {e!s}")
@@ -386,10 +451,11 @@ class GenerateCanvasVideos(BaseGenerateCanvasElements[GenerateCanvasVideosParams
     # ------------------------------------------------------------------
 
     def _get_task_placeholder_info(self, task: VideoTaskSpec, idx: int) -> TaskPlaceholderInfo:
+        width, height = task.canvas_dimensions
         return TaskPlaceholderInfo(
             name=task.name,
-            width=float(task.width),
-            height=float(task.height),
+            width=float(width),
+            height=float(height),
             element_type="video",
         )
 
@@ -400,7 +466,6 @@ class GenerateCanvasVideos(BaseGenerateCanvasElements[GenerateCanvasVideosParams
         placeholder: ElementDetail,
         tool_context: ToolContext,
         project_path: Path,
-        resolved_output_path: str = "",
         _relative_project_path: str = "",
         **kwargs: Any,
     ) -> TaskExecutionResult:
@@ -409,114 +474,77 @@ class GenerateCanvasVideos(BaseGenerateCanvasElements[GenerateCanvasVideosParams
             f"{_format_tool_context_for_log(tool_context)}"
         )
 
-        generate_params = GenerateVideoParams(
-            prompt=task.prompt,
-            model_id=self._model_id,
-            input_mode=task.input_mode,
-            task=task.task,
-            video_name=task.name,
-            output_path=resolved_output_path,
-            reference_image_paths=task.reference_image_paths,
-            reference_video_paths=task.reference_video_paths,
-            reference_audio_paths=task.reference_audio_paths,
-            frame_start_path=task.frame_start_path,
-            frame_end_path=task.frame_end_path,
-            size=task.size,
-            width=int(task.width) if task.width is not None else None,
-            height=int(task.height) if task.height is not None else None,
-            aspect_ratio=task.aspect_ratio,
-            duration_seconds=task.duration_seconds,
-            resolution=task.resolution,
-            fps=task.fps,
-            seed=task.seed,
-            watermark=task.watermark,
-            extensions=task.extensions,
-            override=self._override,
-            poll_interval_seconds=self._poll_interval_seconds,
-            poll_timeout_seconds=self._poll_timeout_seconds,
-        )
-        logger.info(
-            f"设计视频子任务下发普通视频工具: index={idx} name={task.name} "
-            f"output_path={resolved_output_path} "
-            f"reference_image_count={len(generate_params.reference_image_paths)} "
-            f"reference_video_count={len(generate_params.reference_video_paths)} "
-            f"reference_audio_count={len(generate_params.reference_audio_paths)} "
-            f"has_frame_start={bool(generate_params.frame_start_path)} "
-            f"has_frame_end={bool(generate_params.frame_end_path)} "
-            f"duration_seconds={generate_params.duration_seconds} "
-            f"task={generate_params.task or ''} input_mode={generate_params.input_mode or ''} "
-            f"resolution={generate_params.resolution or ''} size={generate_params.size or ''} "
-            f"aspect_ratio={generate_params.aspect_ratio or ''}"
-        )
+        project_id = str(kwargs.get("project_id") or "").strip()
+        design_file_dir = str(kwargs.get("design_file_dir") or "").strip()
+        if not project_id:
+            raise ValueError("缺少 project_id，无法创建后台托管的视频任务")
+        if not design_file_dir:
+            raise ValueError("缺少 file_dir，无法创建后台托管的视频任务")
 
-        generate_result = await self._generate_tool.execute_purely(
-            tool_context,
-            generate_params,
-        )
-
-        extra_info = generate_result.extra_info or {}
-        status = str(extra_info.get("status", "failed"))
-        metadata = self._build_generation_metadata(task, extra_info, resolved_output_path)
-
-        logger.info(
-            f"设计视频子任务结束: index={idx} name={task.name} "
-            f"ok={generate_result.ok} status={status}"
-        )
-
-        # 生成成功且已完成
-        if generate_result.ok and status == "succeeded":
-            actual_width = self._normalize_canvas_dimension(metadata.get("actual_width"))
-            actual_height = self._normalize_canvas_dimension(metadata.get("actual_height"))
-            # generate_video 返回的路径是工作区相对路径，前端需要项目相对路径
-            rel_proj = _relative_project_path or str(project_path.name)
-            video_src = self._to_project_relative(extra_info.get("saved_video_relative_path"), rel_proj)
-            poster_src = self._to_project_relative(extra_info.get("saved_poster_relative_path"), rel_proj)
-            update = VideoPlaceholderUpdate(
-                status="completed",
-                src=video_src,
-                poster=poster_src,
-                generateVideoRequest=metadata,
-                width=actual_width,
-                height=actual_height,
-                errorMessage=None,
+        video_id = self._ensure_task_video_id(idx)
+        try:
+            model_id = self._resolve_video_model(self._model_id, tool_context)
+            payload = self._build_design_video_request(
+                task=task,
+                project_id=project_id,
+                video_id=video_id,
+                model_id=model_id,
+                file_dir=design_file_dir,
+                relative_project_path=_relative_project_path,
             )
-            return TaskExecutionResult(index=idx, success=True, placeholder_update=update)
-
-        # 生成成功但轮询超时，视频仍在处理中
-        if generate_result.ok and extra_info.get("timed_out"):
-            pending_status = status or "queued"
+            logger.info(
+                f"设计视频子任务提交后台托管任务: index={idx} name={task.name} "
+                f"project_id={project_id} video_id={video_id} file_dir={design_file_dir} "
+                f"reference_image_count={len(payload.get('inputs', {}).get('reference_images', []))} "
+                f"reference_video_count={len(payload.get('inputs', {}).get('reference_videos', []))} "
+                f"reference_audio_count={len(payload.get('inputs', {}).get('reference_audios', []))} "
+                f"task={payload.get('task') or ''} input_mode={payload.get('input_mode') or ''} "
+                f"aspect_ratio={payload.get('generation', {}).get('aspect_ratio') or ''} "
+                f"resolution={payload.get('generation', {}).get('resolution') or ''} "
+                f"duration_seconds={payload.get('generation', {}).get('duration_seconds') or ''}"
+            )
+            response = await self._get_magic_service_client().generate_design_video(payload)
+        except (ApiError, ValueError) as error:
+            error_message = str(error)
+            payload = self._build_initial_design_video_request(task, video_id)
+            logger.warning(
+                f"设计视频子任务提交失败: index={idx} name={task.name} "
+                f"video_id={video_id} error={error_message}"
+            )
             update = VideoPlaceholderUpdate(
-                status="processing",
-                generateVideoRequest=metadata,
+                status="failed",
+                generateVideoRequest=payload,
+                errorMessage=error_message,
             )
             return TaskExecutionResult(
                 index=idx,
-                success=True,
+                success=False,
                 placeholder_update=update,
-                metadata={
-                    "is_processing": True,
-                    "element_id": placeholder.id,
-                    "element_name": task.name,
-                    "operation_id": str(extra_info.get("operation_id", "")),
-                    "request_id": str(metadata.get("request_id", "")),
-                    "pending_status": pending_status,
-                },
+                error_message=error_message,
             )
 
-        # 失败
-        error_message = self._extract_generate_error_message(generate_result)
-        if generate_result.ok:
-            error_message = f"视频生成未在预期轮询语义下结束，当前状态={status or 'unknown'}"
+        status = str(response.get("status") or "running")
+        logger.info(
+            f"设计视频子任务已提交后台托管: index={idx} name={task.name} "
+            f"video_id={video_id} status={status}"
+        )
+
         update = VideoPlaceholderUpdate(
-            status="failed",
-            generateVideoRequest=metadata,
-            errorMessage=error_message,
+            status="processing",
+            generateVideoRequest=payload,
+            errorMessage=None,
         )
         return TaskExecutionResult(
             index=idx,
-            success=False,
+            success=True,
             placeholder_update=update,
-            error_message=error_message,
+            metadata={
+                "is_processing": True,
+                "element_id": placeholder.id,
+                "element_name": task.name,
+                "video_id": video_id,
+                "pending_status": status,
+            },
         )
 
     # ------------------------------------------------------------------
@@ -538,11 +566,27 @@ class GenerateCanvasVideos(BaseGenerateCanvasElements[GenerateCanvasVideosParams
         if task_result.is_success:
             update = task_result.placeholder_update
             if isinstance(update, VideoPlaceholderUpdate):
+                d["status"] = update.status
+                if update.generateVideoRequest:
+                    d["generateVideoRequest"] = update.generateVideoRequest
                 if update.src:
                     d["src"] = update.src
                 if update.poster:
                     d["poster"] = update.poster
         return d
+
+    def _build_initial_placeholder_update(
+        self,
+        task: VideoTaskSpec,
+        idx: int,
+        element_id: str,
+    ) -> Dict[str, Any]:
+        return {
+            "generateVideoRequest": self._build_initial_design_video_request(
+                task,
+                self._ensure_task_video_id(idx),
+            )
+        }
 
     async def _prepare_task_kwargs(
         self,
@@ -551,25 +595,64 @@ class GenerateCanvasVideos(BaseGenerateCanvasElements[GenerateCanvasVideosParams
     ) -> Dict[str, Any]:
         workspace_path = Path(self.base_dir)
         relative_project_path = project_path.relative_to(workspace_path)
-        resolved_output_path = str(relative_project_path / "videos")
+        design_file_dir = self._format_design_file_dir(str(relative_project_path / "videos"))
+        project_id = self._resolve_project_id()
         await async_mkdir(project_path / "videos", parents=True, exist_ok=True)
         return {
-            "resolved_output_path": resolved_output_path,
+            "design_file_dir": design_file_dir,
+            "project_id": project_id,
             "_relative_project_path": str(relative_project_path),
         }
 
-    def _to_project_relative(self, workspace_rel_path: Optional[str], relative_project_path: str) -> Optional[str]:
-        """将工作区相对路径转为以 ./ 开头的项目相对路径。
+    async def _normalize_reference_paths(
+        self,
+        tasks: List[VideoTaskSpec],
+        workspace_root: Path,
+        project_prefix: str,
+    ) -> None:
+        for task in tasks:
+            task.reference_image_paths = await self._normalize_path_list(
+                task.reference_image_paths, workspace_root, project_prefix
+            )
+            task.reference_video_paths = await self._normalize_path_list(
+                task.reference_video_paths, workspace_root, project_prefix
+            )
+            task.reference_audio_paths = await self._normalize_path_list(
+                task.reference_audio_paths, workspace_root, project_prefix
+            )
+            task.frame_start_path = await self._normalize_path_value(
+                task.frame_start_path, workspace_root, project_prefix
+            )
+            task.frame_end_path = await self._normalize_path_value(
+                task.frame_end_path, workspace_root, project_prefix
+            )
 
-        generate_video 返回的路径是工作区相对的（如 project/videos/a.mp4），
-        新协议约定：项目相对路径统一以 ./ 开头，与 workspace 相对路径（无 ./ 前缀）区分。
-        """
-        if not workspace_rel_path:
-            return workspace_rel_path
-        try:
-            return "./" + str(Path(workspace_rel_path).relative_to(relative_project_path))
-        except ValueError:
-            return workspace_rel_path
+    async def _normalize_path_list(
+        self,
+        paths: List[str],
+        workspace_root: Path,
+        project_prefix: str,
+    ) -> List[str]:
+        return [
+            await self._normalize_path_value(path, workspace_root, project_prefix)
+            for path in paths
+        ]
+
+    async def _normalize_path_value(
+        self,
+        path: str,
+        workspace_root: Path,
+        project_prefix: str,
+    ) -> str:
+        if not path or path.startswith(("http://", "https://")) or Path(path).is_absolute():
+            return path
+
+        normalized = path.lstrip("/")
+        if await async_exists(workspace_root / normalized):
+            return normalized
+        if project_prefix and await async_exists(workspace_root / project_prefix / normalized):
+            return f"{project_prefix}/{normalized}"
+        return normalized
 
     def _build_result_content(
         self,
@@ -600,17 +683,15 @@ class GenerateCanvasVideos(BaseGenerateCanvasElements[GenerateCanvasVideosParams
         if pending_results:
             lines.extend([
                 "",
-                "These video tasks were polled until timeout and are still in progress.",
-                "If the user explicitly asks to check progress later, use query_video_generation. "
-                "Do not switch to generate_canvas_images unless the user explicitly asks for a static image result.",
-                "Pending Operations:",
+                "These video tasks have been submitted as backend async design video tasks.",
+                "The canvas placeholders contain video_id for frontend status polling.",
+                "Pending Videos:",
             ])
             for r in pending_results:
                 m = r.metadata
                 lines.append(
                     f"- {m['element_name']} (element_id: {m['element_id']}), "
-                    f"operation_id: {m['operation_id']}, "
-                    f"request_id: {m.get('request_id') or 'N/A'}, "
+                    f"video_id: {m['video_id']}, "
                     f"status: {m['pending_status']}"
                 )
 
@@ -629,108 +710,221 @@ class GenerateCanvasVideos(BaseGenerateCanvasElements[GenerateCanvasVideosParams
         placeholders: List[ElementDetail],
         task_results: List[TaskExecutionResult],
     ) -> Dict[str, Any]:
-        pending_operations = [
+        pending_videos = [
             {
                 "element_id": r.metadata["element_id"],
                 "element_name": r.metadata["element_name"],
-                "operation_id": r.metadata["operation_id"],
-                "request_id": r.metadata.get("request_id"),
+                "video_id": r.metadata["video_id"],
                 "status": r.metadata["pending_status"],
             }
             for r in task_results
             if r.metadata.get("is_processing")
         ]
         completed_count = sum(1 for r in task_results if r.is_success and not r.metadata.get("is_processing"))
-        processing_count = len(pending_operations)
+        processing_count = len(pending_videos)
         failed_count = sum(1 for r in task_results if r.is_failed)
         return {
             "completed_count": completed_count,
             "processing_count": processing_count,
             "failed_count": failed_count,
-            "pending_operations": pending_operations,
+            "pending_videos": pending_videos,
         }
 
     # ------------------------------------------------------------------
     # 私有辅助
     # ------------------------------------------------------------------
 
-    def _build_generation_metadata(
+    def _get_magic_service_client(self) -> MagicServiceClient:
+        if self._magic_service_client is None:
+            self._magic_service_client = MagicServiceClient()
+        return self._magic_service_client
+
+    def _ensure_task_video_id(self, idx: int) -> str:
+        video_id = self._task_video_ids.get(idx)
+        if not video_id:
+            video_id = self._generate_design_video_id()
+            self._task_video_ids[idx] = video_id
+        return video_id
+
+    @staticmethod
+    def _generate_design_video_id() -> str:
+        return f"vid_{uuid.uuid4().hex}"
+
+    @staticmethod
+    def _resolve_project_id() -> str:
+        if not MetadataUtil.is_initialized():
+            raise ValueError("缺少 project_id，无法创建后台托管的视频任务")
+
+        metadata = MetadataUtil.get_metadata()
+        project_id = metadata.get("project_id")
+        if isinstance(project_id, (str, int)) and str(project_id).strip():
+            return str(project_id).strip()
+        raise ValueError("缺少 project_id，无法创建后台托管的视频任务")
+
+    @staticmethod
+    def _resolve_video_model(requested_model: str, tool_context: Optional[ToolContext] = None) -> str:
+        if requested_model and requested_model.strip():
+            return requested_model.strip()
+
+        if tool_context is not None:
+            agent_context = tool_context.get_extension("agent_context")
+            model_context = getattr(agent_context, "model_context", None) if agent_context else None
+            video_model_id = getattr(model_context, "video_model_id", "") if model_context else ""
+            if video_model_id:
+                logger.info(f"从 AgentContext.model_context 获取视频模型: {video_model_id}")
+                return video_model_id
+
+        raise ValueError("未指定视频模型，且当前会话没有可用的视频模型")
+
+    def _build_initial_design_video_request(
         self,
         task: VideoTaskSpec,
-        extra_info: Dict[str, Any],
-        resolved_output_path: str,
+        video_id: str,
     ) -> Dict[str, Any]:
-        metadata = dict(extra_info.get("metadata") or {})
-        fallback_metadata = {
-            "model_id": self._model_id,
-            "task": task.task,
-            "input_mode": task.input_mode or None,
+        input_mode = self._resolve_design_input_mode(task)
+        payload: Dict[str, Any] = {
+            "video_id": video_id,
+            "model_id": self._model_id or None,
             "prompt": task.prompt,
-            "operation_id": extra_info.get("operation_id", ""),
-            "request_id": extra_info.get("request_id", ""),
-            "size": task.size or None,
-            "requested_width": int(task.width) if task.width is not None else None,
-            "requested_height": int(task.height) if task.height is not None else None,
+            "input_mode": input_mode,
+            "task": task.task or "generate",
+        }
+        generation = self._build_design_generation(task)
+        if generation:
+            payload["generation"] = generation
+        payload["inputs"] = self._build_design_video_inputs(task)
+        if task.extensions:
+            payload["extensions"] = dict(task.extensions)
+        return self._drop_empty_values(payload)
+
+    def _build_design_video_request(
+        self,
+        task: VideoTaskSpec,
+        project_id: str,
+        video_id: str,
+        model_id: str,
+        file_dir: str,
+        relative_project_path: str = "",
+    ) -> Dict[str, Any]:
+        input_mode = self._resolve_design_input_mode(task)
+        payload: Dict[str, Any] = {
+            "project_id": project_id,
+            "video_id": video_id,
+            "model_id": model_id,
+            "prompt": task.prompt,
+            "input_mode": input_mode,
+            "task": task.task or "generate",
+            "file_dir": self._format_design_file_dir(file_dir),
+        }
+
+        payload["inputs"] = self._build_design_video_inputs(task, relative_project_path)
+
+        generation = self._build_design_generation(task)
+        if generation:
+            payload["generation"] = generation
+
+        if task.extensions:
+            payload["extensions"] = dict(task.extensions)
+
+        return self._drop_empty_values(payload)
+
+    def _build_design_video_inputs(
+        self,
+        task: VideoTaskSpec,
+        relative_project_path: str = "",
+    ) -> Dict[str, Any]:
+        inputs: Dict[str, Any] = {
+            "reference_images": [
+                {"uri": self._to_design_workspace_path(path, relative_project_path)}
+                for path in task.reference_image_paths
+            ],
+            "reference_videos": [
+                {"uri": self._to_design_workspace_path(path, relative_project_path)}
+                for path in task.reference_video_paths
+            ],
+            "reference_audios": [
+                {"uri": self._to_design_workspace_path(path, relative_project_path)}
+                for path in task.reference_audio_paths
+            ],
+            "frames": [],
+        }
+
+        frames = []
+        if task.frame_start_path:
+            frames.append({
+                "role": "start",
+                "uri": self._to_design_workspace_path(task.frame_start_path, relative_project_path),
+            })
+        if task.frame_end_path:
+            frames.append({
+                "role": "end",
+                "uri": self._to_design_workspace_path(task.frame_end_path, relative_project_path),
+            })
+        inputs["frames"] = frames
+
+        return inputs
+
+    @staticmethod
+    def _resolve_design_input_mode(task: VideoTaskSpec) -> str:
+        if task.input_mode:
+            return task.input_mode
+        if task.task == "edit":
+            return "video_edit"
+        if task.frame_start_path or task.frame_end_path:
+            return "keyframe_guided"
+        if (
+            task.reference_image_paths
+            or task.reference_video_paths
+            or task.reference_audio_paths
+        ):
+            return "omni_reference"
+        return "standard"
+
+    @staticmethod
+    def _build_design_generation(task: VideoTaskSpec) -> Dict[str, Any]:
+        generation: Dict[str, Any] = {
             "aspect_ratio": task.aspect_ratio or None,
             "duration_seconds": task.duration_seconds,
             "resolution": task.resolution or None,
             "fps": task.fps,
             "seed": task.seed,
             "watermark": task.watermark,
-            "reference_images": list(task.reference_image_paths),
-            "reference_videos": list(task.reference_video_paths),
-            "reference_audios": list(task.reference_audio_paths),
-            "frames": [
-                item
-                for item in (
-                    {"role": "start", "uri": task.frame_start_path} if task.frame_start_path else None,
-                    {"role": "end", "uri": task.frame_end_path} if task.frame_end_path else None,
-                )
-                if item is not None
-            ],
-            "file_dir": resolved_output_path,
         }
-        metadata["file_dir"] = resolved_output_path
-        for key, value in fallback_metadata.items():
-            if key == "file_dir":
-                continue
-            if self._should_fill_generation_metadata(metadata.get(key), value):
-                metadata[key] = value
-        return metadata
+        return GenerateCanvasVideos._drop_empty_values(generation)
+
+    def _to_design_workspace_path(self, path: str, relative_project_path: str = "") -> str:
+        path = (path or "").strip()
+        if not path:
+            raise ValueError("参考素材路径不能为空")
+        if path.startswith(("http://", "https://")):
+            raise ValueError(f"后台托管的视频任务暂不支持外部 URL 参考素材: {path}")
+
+        if path.startswith("./"):
+            if not relative_project_path:
+                raise ValueError(f"无法解析项目相对参考素材路径: {path}")
+            path = str(Path(relative_project_path) / path[2:])
+        elif Path(path).is_absolute():
+            try:
+                path = str(Path(path).resolve().relative_to(Path(self.base_dir).resolve()))
+            except ValueError as exc:
+                raise ValueError(f"参考素材必须位于当前项目文件树内: {path}") from exc
+
+        return "/" + path.strip("/")
 
     @staticmethod
-    def _should_fill_generation_metadata(existing_value: Any, fallback_value: Any) -> bool:
-        if fallback_value is None:
-            return existing_value is None
-        if isinstance(existing_value, str):
-            return not existing_value.strip()
-        if isinstance(existing_value, (list, dict)):
-            return not existing_value
-        return existing_value is None
-
-    @staticmethod
-    def _normalize_canvas_dimension(value: Any) -> Optional[float]:
-        if value is None:
-            return None
-        try:
-            normalized = float(value)
-        except (TypeError, ValueError):
-            return None
-        if normalized <= 0:
-            return None
+    def _format_design_file_dir(file_dir: str) -> str:
+        normalized = "/" + str(file_dir or "").strip("/")
+        if normalized != "/":
+            normalized += "/"
         return normalized
 
     @staticmethod
-    def _extract_generate_error_message(result: ToolResult) -> str:
-        extra_info = result.extra_info or {}
-        raw_error = extra_info.get("raw_error")
-        if isinstance(raw_error, str) and raw_error.strip():
-            return raw_error.strip()
-        error = extra_info.get("error")
-        error_code = str(extra_info.get("error_code") or "").strip()
-        if isinstance(error, str) and error.strip() and error_code in LLM_VISIBLE_MAGIC_SERVICE_ERROR_CODES:
-            return error.strip()
-        return (result.content or "视频生成失败").strip()
+    def _drop_empty_values(payload: Dict[str, Any]) -> Dict[str, Any]:
+        return {
+            key: value
+            for key, value in payload.items()
+            if value is not None and value != "" and value != [] and value != {}
+        }
 
     def _get_remark_content(self, result: ToolResult, arguments: Dict[str, Any] = None) -> str:
         extra_info = result.extra_info or {}

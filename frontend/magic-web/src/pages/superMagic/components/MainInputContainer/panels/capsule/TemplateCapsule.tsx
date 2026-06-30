@@ -77,6 +77,7 @@ const TemplateCapsule = observer(
 											height={24}
 											className="shrink-0 object-contain"
 											loading="lazy"
+											data-testid="template-capsule-image"
 										/>
 									) : (
 										<LucideLazyIcon icon={template.icon_url} size={24} />

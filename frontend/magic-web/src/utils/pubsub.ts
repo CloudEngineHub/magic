@@ -137,8 +137,12 @@ export const PubSubEvents = {
 	Open_File_Tab: "super_magic_open_file_tab",
 	/** 超级麦吉 - 通过文件相对路径打开文件tab（仅有路径时使用，由订阅方在附件树中查找） */
 	Open_File_Tab_By_Path: "super_magic_open_file_tab_by_path",
+	/** 超级麦吉 - 打开知识库文件预览tab（由引用点击触发） */
+	Open_Knowledge_Base_Tab: "super_magic_open_knowledge_base_tab",
 	/** 超级麦吉 - 打开演示模式tab */
 	Open_Playback_Tab: "super_magic_open_playback_tab",
+	/** 超级麦吉 - 展开话题对话面板 */
+	Expand_Topic_Conversation_Panel: "super_magic_expand_topic_conversation_panel",
 	/** 订阅超麦消息队列更新 */
 	SuperMagicMessageQueueConsumed: "PubSub_Super_Magic_Message_Queue",
 	/** 超级麦吉 - WebSocket Intermediate 工程文件变更（订阅方自行处理） */
@@ -149,6 +153,8 @@ export const PubSubEvents = {
 	Update_Attachments_Loading: "update_attachments_loading",
 	/** 超级麦吉 - 更新附件 */
 	Update_Attachments: "update_attachments",
+	/** Super Magic - refresh the Claw scheduled task list. */
+	Refresh_Claw_Scheduled_Tasks: "refresh_claw_scheduled_tasks",
 	/** 超级麦吉 - 进入文件全选 */
 	Select_All_Files: "select_all_files",
 	/** 超级麦吉 - 取消文件全选 */
@@ -200,6 +206,8 @@ export const PubSubEvents = {
 
 	/** 超级麦吉 - 追加建议文本到输入框末尾 */
 	Append_Suggestion_To_Editor: "PubSub_Append_Suggestion_To_Editor",
+	/** 超级麦吉 - 追加 JSONContent 到输入框末尾（不覆盖已有内容） */
+	Append_Content_To_Editor: "PubSub_Append_Content_To_Editor",
 	/** 超级麦吉 - 设置内容当幻灯片添加时 */
 	Set_Content_When_Slide_Added: "set_content_when_slide_added",
 	/** 超级麦吉 - 设置 demo 文本到输入框 */

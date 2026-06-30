@@ -29,11 +29,15 @@ class VideoGeneratedEvent extends AbstractEvent
 
     protected ?int $height = null;
 
+    protected bool $hasAudioOutput = true;
+
     protected ?string $topicId = null;
 
     protected ?string $taskId = null;
 
     protected ?int $projectId = null;
+
+    protected ?string $videoId = null;
 
     protected DateTime $createdAt;
 
@@ -150,6 +154,16 @@ class VideoGeneratedEvent extends AbstractEvent
         $this->height = $height;
     }
 
+    public function hasAudioOutput(): bool
+    {
+        return $this->hasAudioOutput;
+    }
+
+    public function setHasAudioOutput(bool $hasAudioOutput): void
+    {
+        $this->hasAudioOutput = $hasAudioOutput;
+    }
+
     public function getTopicId(): ?string
     {
         return $this->topicId;
@@ -178,6 +192,17 @@ class VideoGeneratedEvent extends AbstractEvent
     public function setProjectId(?int $projectId): void
     {
         $this->projectId = $projectId;
+    }
+
+    public function getVideoId(): ?string
+    {
+        return $this->videoId;
+    }
+
+    public function setVideoId(?string $videoId): void
+    {
+        $videoId = is_string($videoId) ? trim($videoId) : '';
+        $this->videoId = $videoId === '' ? null : $videoId;
     }
 
     public function getCreatedAt(): DateTime

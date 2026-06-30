@@ -15,6 +15,7 @@ import type { DesignAttachmentIndex } from "../utils/designAttachmentIndex"
 import { SuperMagicApi } from "@/apis"
 import { useGetOrCreateImagesDir } from "./useGetOrCreateImagesDir"
 import { useImageGeneration } from "./useImageGeneration"
+import { useImagePromptCompletion } from "./useImagePromptCompletion"
 import { useVideoGeneration } from "./useVideoGeneration"
 import { useFileUpload } from "./useFileUpload"
 import { useFileInfoProvider } from "./useFileInfoProvider"
@@ -52,6 +53,8 @@ interface UseDesignMethodsOptions {
 	}
 	/** 已扁平化的附件列表 */
 	flatAttachments?: FileItem[]
+	/** 附件快照是否已由入口提供；观测过真实快照后，空数组也可能是一个有效快照 */
+	attachmentsReady?: boolean
 	/** 附件索引（路径/file_id 快速解析） */
 	attachmentIndex?: DesignAttachmentIndex | null
 	/** 添加文件到 MessageEditor 的回调函数（已废弃，保留以兼容旧代码） */
@@ -90,6 +93,7 @@ export function useDesignMethods(options: UseDesignMethodsOptions): CanvasDesign
 		selectedTopic,
 		currentFile,
 		flatAttachments,
+		attachmentsReady,
 		attachmentIndex,
 		onAddFilesToMessageEditor,
 		selectedWorkspace,
@@ -113,12 +117,14 @@ export function useDesignMethods(options: UseDesignMethodsOptions): CanvasDesign
 	)
 
 	// 使用各个功能 hook（只传递 flatAttachments）
-	const { getFileInfo, getFileInfoById, setFileInfoCache } = useFileInfoProvider({
-		flatAttachments,
-		designProjectBasePath,
-		designProjectId,
-		attachmentIndex,
-	})
+	const { getFileInfo, getFileResourceMeta, getFileInfoById, setFileInfoCache } =
+		useFileInfoProvider({
+			flatAttachments,
+			attachmentsReady,
+			designProjectBasePath,
+			designProjectId,
+			attachmentIndex,
+		})
 
 	const getOrCreateImagesDir = useGetOrCreateImagesDir({
 		currentFile,
@@ -127,7 +133,13 @@ export function useDesignMethods(options: UseDesignMethodsOptions): CanvasDesign
 		updateAttachments,
 	})
 
-	const { getImageModelList, generateImage, getImageGenerationResult } = useImageGeneration({
+	const {
+		getImageModelList,
+		generateImage,
+		generateImages,
+		getImageGenerationResult,
+		getImageGenerationResults,
+	} = useImageGeneration({
 		projectId,
 		currentFile,
 		flatAttachments,
@@ -135,6 +147,12 @@ export function useDesignMethods(options: UseDesignMethodsOptions): CanvasDesign
 		setFileInfoCache,
 		updateAttachments,
 		getOrCreateImagesDir,
+	})
+
+	const { completeImagePrompt } = useImagePromptCompletion({
+		projectId,
+		flatAttachments,
+		designProjectBasePath,
 	})
 
 	const { getVideoModelList, generateVideo, estimateVideoPoints, getVideoGenerationResult } =
@@ -587,20 +605,24 @@ export function useDesignMethods(options: UseDesignMethodsOptions): CanvasDesign
 	const methods = useMemo<CanvasDesignMethods>(() => {
 		return {
 			getImageModelList,
+			completeImagePrompt,
 			getVideoModelList,
 			generateVideo,
 			estimateVideoPoints,
 			generateImage,
+			generateImages,
 			removeBackground,
 			eraser,
 			expandImage,
 			generateHightImage: generateCanvasHightImage,
 			getConvertHightConfig,
 			getImageGenerationResult,
+			getImageGenerationResults,
 			getVideoGenerationResult,
 			locateProjectFile,
 			uploadFiles,
 			getFileInfo,
+			getFileResourceMeta,
 			resolveAbsolutePath,
 			getVirtualResourceScope,
 			addToConversation,
@@ -625,20 +647,24 @@ export function useDesignMethods(options: UseDesignMethodsOptions): CanvasDesign
 		}
 	}, [
 		getImageModelList,
+		completeImagePrompt,
 		getVideoModelList,
 		generateVideo,
 		estimateVideoPoints,
 		generateImage,
+		generateImages,
 		removeBackground,
 		eraser,
 		expandImage,
 		generateCanvasHightImage,
 		getConvertHightConfig,
 		getImageGenerationResult,
+		getImageGenerationResults,
 		getVideoGenerationResult,
 		locateProjectFile,
 		uploadFiles,
 		getFileInfo,
+		getFileResourceMeta,
 		resolveAbsolutePath,
 		getVirtualResourceScope,
 		addToConversation,

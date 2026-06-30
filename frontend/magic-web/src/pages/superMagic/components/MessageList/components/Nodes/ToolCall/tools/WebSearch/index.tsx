@@ -35,7 +35,7 @@ function WebSearch(props: NodeProps) {
 	const showSuffix = tool.status !== "error" && !isEmpty(tool?.detail)
 
 	return (
-		<div className={styles.node} onMouseEnter={onMouseEnter} onMouseLeave={onMouseLeave}>
+		<div className={styles.node} onMouseEnter={onMouseEnter} onMouseLeave={onMouseLeave} data-testid="on-mouse-enter">
 			<div className={styles.container}>
 				<div className={styles.nodeHeader}>
 					<Flex
@@ -58,7 +58,7 @@ function WebSearch(props: NodeProps) {
 					{showSuffix && (
 						<>
 							<VerticalLine height={28} className="text-input" />
-							<div className={cx(styles.button)} onClick={onClick}>
+							<div className={cx(styles.button)} onClick={onClick} data-testid="web-search">
 								<MonitorPlay size={16} className="text-foreground" />
 							</div>
 						</>

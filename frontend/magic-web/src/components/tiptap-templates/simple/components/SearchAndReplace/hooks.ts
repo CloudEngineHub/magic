@@ -2,6 +2,7 @@ import * as React from "react"
 import type { Editor } from "@tiptap/react"
 import type { Range } from "@tiptap/core"
 import { useMemoizedFn } from "ahooks"
+import { runActiveEditor } from "@/utils/tiptapEditorLifecycle"
 
 export interface UseSearchAndReplaceOptions {
 	editor: Editor | null
@@ -40,11 +41,13 @@ export function useSearchAndReplace({
 		if (!editor) return
 
 		const updateResults = () => {
-			const storage = editor.storage.searchAndReplace
-			if (storage) {
-				setResults([...storage.results])
-				setResultIndex(storage.resultIndex)
-			}
+			runActiveEditor(editor, (activeEditor) => {
+				const storage = activeEditor.storage.searchAndReplace
+				if (storage) {
+					setResults([...storage.results])
+					setResultIndex(storage.resultIndex)
+				}
+			})
 		}
 
 		editor.on("transaction", updateResults)
@@ -55,103 +58,120 @@ export function useSearchAndReplace({
 
 	const setSearchTerm = useMemoizedFn((value: string) => {
 		setSearchTermState(value)
-		if (!editor) return
-		editor.commands.setSearchTerm(value)
+		runActiveEditor(editor, (activeEditor) => {
+			activeEditor.commands.setSearchTerm(value)
+		})
 	})
 
 	const setReplaceTerm = useMemoizedFn((value: string) => {
 		setReplaceTermState(value)
-		if (!editor) return
-		editor.commands.setReplaceTerm(value)
+		runActiveEditor(editor, (activeEditor) => {
+			activeEditor.commands.setReplaceTerm(value)
+		})
 	})
 
 	const toggleCaseSensitive = useMemoizedFn(() => {
 		const next = !caseSensitive
 		setCaseSensitive(next)
-		if (!editor) return
-		editor.commands.setCaseSensitive(next)
+		runActiveEditor(editor, (activeEditor) => {
+			activeEditor.commands.setCaseSensitive(next)
+		})
 	})
 
 	const toggleUseRegex = useMemoizedFn(() => {
 		const next = !useRegex
 		setUseRegex(next)
-		if (!editor) return
 		// disableRegex is the inverse of useRegex
-		editor.commands.setDisableRegex(!next)
+		runActiveEditor(editor, (activeEditor) => {
+			activeEditor.commands.setDisableRegex(!next)
+		})
 	})
 
 	const scrollToResult = useMemoizedFn(() => {
-		if (!editor) return
-		const storage = editor.storage.searchAndReplace
-		if (storage?.results?.length > 0) {
-			const idx = storage.resultIndex
-			const result = storage.results[idx]
-			if (result) {
-				// Use a single chained transaction to set selection + scroll
-				editor.chain().setTextSelection(result.from).scrollIntoView().run()
+		runActiveEditor(editor, (activeEditor) => {
+			const storage = activeEditor.storage.searchAndReplace
+			if (storage?.results?.length > 0) {
+				const idx = storage.resultIndex
+				const result = storage.results[idx]
+				if (result) {
+					// Use a single chained transaction to set selection + scroll
+					activeEditor.chain().setTextSelection(result.from).scrollIntoView().run()
 
-				// Manually scroll the correct container as a fallback for nested overflow
-				requestAnimationFrame(() => {
-					const dom = editor.view.dom
-					// Walk up from editor DOM to find the actual scrollable container
-					let scrollParent: HTMLElement | null = dom.parentElement
-					while (scrollParent) {
-						const style = window.getComputedStyle(scrollParent)
-						if (
-							scrollParent.scrollHeight > scrollParent.clientHeight &&
-							(style.overflowY === "auto" || style.overflowY === "scroll")
-						) {
-							break
-						}
-						scrollParent = scrollParent.parentElement
-					}
-					if (!scrollParent) return
+					// Manually scroll the correct container as a fallback for nested overflow
+					requestAnimationFrame(() => {
+						runActiveEditor(editor, (latestEditor) => {
+							const dom = latestEditor.view.dom
+							// Walk up from editor DOM to find the actual scrollable container
+							let scrollParent: HTMLElement | null = dom.parentElement
+							while (scrollParent) {
+								const style = window.getComputedStyle(scrollParent)
+								if (
+									scrollParent.scrollHeight > scrollParent.clientHeight &&
+									(style.overflowY === "auto" || style.overflowY === "scroll")
+								) {
+									break
+								}
+								scrollParent = scrollParent.parentElement
+							}
+							if (!scrollParent) return
 
-					const currentEl = dom.querySelector(".search-result-current") as HTMLElement | null
-					if (!currentEl) return
+							const currentEl = dom.querySelector(
+								".search-result-current",
+							) as HTMLElement | null
+							if (!currentEl) return
 
-					const containerRect = scrollParent.getBoundingClientRect()
-					const elRect = currentEl.getBoundingClientRect()
+							const containerRect = scrollParent.getBoundingClientRect()
+							const elRect = currentEl.getBoundingClientRect()
 
-					// Scroll only if the element is outside the visible area
-					if (elRect.top < containerRect.top || elRect.bottom > containerRect.bottom) {
-						scrollParent.scrollTop +=
-							elRect.top - containerRect.top - containerRect.height / 2 + elRect.height / 2
-					}
-				})
+							// Scroll only if the element is outside the visible area
+							if (elRect.top < containerRect.top || elRect.bottom > containerRect.bottom) {
+								scrollParent.scrollTop +=
+									elRect.top -
+									containerRect.top -
+									containerRect.height / 2 +
+									elRect.height / 2
+							}
+						})
+					})
+				}
 			}
-		}
+		})
 	})
 
 	const goToNext = useMemoizedFn(() => {
-		if (!editor) return
-		editor.commands.nextSearchResult()
+		runActiveEditor(editor, (activeEditor) => {
+			activeEditor.commands.nextSearchResult()
+		})
 		scrollToResult()
 	})
 
 	const goToPrevious = useMemoizedFn(() => {
-		if (!editor) return
-		editor.commands.previousSearchResult()
+		runActiveEditor(editor, (activeEditor) => {
+			activeEditor.commands.previousSearchResult()
+		})
 		scrollToResult()
 	})
 
 	const replaceCurrent = useMemoizedFn(() => {
-		if (!editor) return
-		editor.commands.replace()
+		runActiveEditor(editor, (activeEditor) => {
+			activeEditor.commands.replace()
+		})
 	})
 
 	const replaceAllMatches = useMemoizedFn(() => {
-		if (!editor) return
-		editor.commands.replaceAll()
+		runActiveEditor(editor, (activeEditor) => {
+			activeEditor.commands.replaceAll()
+		})
 	})
 
 	const clear = useMemoizedFn(() => {
 		setSearchTermState("")
 		setReplaceTermState("")
-		if (!editor) return
-		editor.commands.setSearchTerm("")
-		editor.commands.setReplaceTerm("")
-		editor.commands.resetIndex()
+		runActiveEditor(editor, (activeEditor) => {
+			activeEditor.commands.setSearchTerm("")
+			activeEditor.commands.setReplaceTerm("")
+			activeEditor.commands.resetIndex()
+		})
 	})
 
 	return {

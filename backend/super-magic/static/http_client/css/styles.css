@@ -55,6 +55,63 @@ body {
     overflow: hidden;
 }
 
+.micro-app-runtime-shell {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    background: #fff;
+}
+
+.micro-app-runtime-frame {
+    width: 100%;
+    flex: 1 1 auto;
+    min-height: 0;
+    border: 0;
+    background: #fff;
+}
+
+.micro-app-runtime-debug {
+    flex: 0 0 auto;
+    max-height: 180px;
+    border-top: 1px solid var(--wechat-border);
+    background: rgba(248, 248, 250, 0.96);
+}
+
+.micro-app-runtime-debug summary {
+    cursor: pointer;
+    padding: 7px 12px;
+    font-size: 12px;
+    color: var(--wechat-text-gray);
+    user-select: none;
+}
+
+.micro-app-runtime-log {
+    max-height: 136px;
+    overflow: auto;
+    padding: 0 12px 10px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 11px;
+    line-height: 1.45;
+    color: #333;
+}
+
+.micro-app-runtime-log-row {
+    padding: 2px 0;
+    border-bottom: 1px solid rgba(60, 60, 67, 0.06);
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+.micro-app-runtime-log-error {
+    color: var(--wechat-danger);
+}
+
+.micro-app-runtime-log-warn {
+    color: #9a6700;
+}
+
 .app-container {
     display: flex;
     width: 100vw;
@@ -1585,6 +1642,11 @@ input[type="checkbox"] {
     flex-shrink: 0;
 }
 
+.message-input-panel.message-input-drag-over {
+    background: rgba(0, 122, 255, 0.08);
+    box-shadow: inset 0 0 0 1px rgba(0, 122, 255, 0.35), 0 -12px 34px rgba(0, 0, 0, 0.045);
+}
+
 .input-and-actions {
     display: flex;
     flex-direction: column;
@@ -1841,6 +1903,31 @@ textarea:focus {
     font-size: 12px;
     border-radius: 9px;
     white-space: nowrap;
+}
+
+.client-context-footer-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.client-context-count {
+    padding: 1px 6px;
+    border-radius: 999px;
+    background: rgba(60, 60, 67, 0.08);
+    color: var(--wechat-text-gray);
+    font-family: monospace;
+    font-size: 11px;
+    line-height: 1.45;
+}
+
+.client-context-footer-btn.has-manual-context .client-context-count {
+    background: rgba(0, 122, 255, 0.12);
+    color: #006fe6;
+}
+
+.client-context-clear-btn {
+    color: #d93025;
 }
 
 .secondary-toggle-group {
@@ -2133,6 +2220,100 @@ textarea:focus {
     color: #d70015;
 }
 
+.client-context-modal-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 10000;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    padding: 28px;
+    background: rgba(245, 245, 247, 0.30);
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+}
+
+.client-context-modal-dialog {
+    width: min(760px, calc(100vw - 40px));
+    max-height: min(620px, calc(100vh - 56px));
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    border: 1px solid rgba(0, 0, 0, 0.08);
+    border-radius: 18px;
+    background: #fff;
+    box-shadow: 0 24px 70px rgba(0, 0, 0, 0.18);
+}
+
+.client-context-modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 14px 16px;
+    border-bottom: 1px solid rgba(60, 60, 67, 0.10);
+    background: rgba(250, 250, 252, 0.94);
+}
+
+.client-context-modal-title {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    min-width: 0;
+}
+
+.client-context-modal-title strong {
+    font-family: monospace;
+    font-size: 14px;
+    color: var(--wechat-text-dark);
+}
+
+.client-context-modal-title span {
+    color: var(--wechat-text-gray);
+    font-size: 12px;
+}
+
+.client-context-modal-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+}
+
+.client-context-modal-clear-btn,
+.client-context-modal-close-btn {
+    height: 30px;
+    padding: 4px 12px;
+    border: 1px solid rgba(60, 60, 67, 0.12);
+    border-radius: 8px;
+    background: #fff;
+    color: var(--wechat-text-dark);
+    cursor: pointer;
+    font-size: 12px;
+}
+
+.client-context-modal-clear-btn {
+    color: #d93025;
+}
+
+.client-context-modal-clear-btn:hover,
+.client-context-modal-close-btn:hover {
+    background: rgba(0, 0, 0, 0.04);
+}
+
+.client-context-modal-textarea {
+    width: 100%;
+    min-height: 320px;
+    padding: 14px 16px;
+    border: none;
+    background: #fff;
+    color: var(--wechat-text-dark);
+    resize: vertical;
+    font-family: monospace;
+    font-size: 12px;
+    line-height: 1.55;
+}
+
 .edit-container {
     display: flex;
     flex-direction: column;
@@ -2346,6 +2527,10 @@ input[type="file"] {
     padding: 6px 0;
     margin-top: 5px;
     font-size: 13px;
+}
+
+.workspace-upload-input {
+    display: none !important;
 }
 
 /* 用户回复配置区域 */
@@ -2874,43 +3059,16 @@ input[type="file"] {
     color: var(--wechat-text-dark);
 }
 
-.mount-dir-row {
-    display: flex;
-    align-items: center;
-    gap: 4px;
-    padding: 6px 8px;
-    background: rgba(255, 255, 255, 0.5);
-    border-bottom: 1px solid var(--wechat-border);
-    flex-shrink: 0;
-}
-
-.mount-dir-label {
-    font-size: 11px;
-    color: var(--wechat-text-gray);
-    white-space: nowrap;
-    flex-shrink: 0;
-}
-
-.mount-dir-input {
-    flex: 1;
-    min-width: 0;
-    font-size: 11px;
-    border: 1px solid var(--wechat-border);
-    border-radius: var(--radius-control);
-    padding: 5px 8px;
-    background: rgba(255, 255, 255, 0.72);
-    color: var(--wechat-text-dark);
-    outline: none;
-}
-
-.mount-dir-input:focus {
-    border-color: var(--wechat-green);
-}
-
 .filetree-container {
     flex: 1;
     overflow-y: auto;
     padding: 6px 0;
+}
+
+.filetree-container.ft-drag-over {
+    background: rgba(0, 122, 255, 0.06);
+    outline: 1px dashed rgba(0, 122, 255, 0.45);
+    outline-offset: -4px;
 }
 
 /* 文件树右键：插入 @ 引用 */
@@ -2975,8 +3133,26 @@ input[type="file"] {
     background-color: #f0f0f0;
 }
 
+.ft-node:hover .ft-node-action,
+.ft-node:focus-within .ft-node-action {
+    opacity: 1;
+}
+
 .ft-node.ft-dir {
     font-weight: 500;
+}
+
+.ft-node.ft-micro-app {
+    color: #1d4ed8;
+}
+
+.ft-node.ft-micro-app:hover {
+    background-color: rgba(0, 122, 255, 0.08);
+}
+
+.ft-node.ft-drop-target {
+    background-color: rgba(0, 122, 255, 0.14);
+    color: #0b63ce;
 }
 
 .ft-node.ft-selected {
@@ -2991,8 +3167,38 @@ input[type="file"] {
 }
 
 .ft-name {
+    flex: 1;
+    min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
+}
+
+.ft-node-action {
+    width: 20px;
+    height: 20px;
+    margin-left: auto;
+    padding: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    border: none;
+    border-radius: 4px;
+    background: transparent;
+    color: var(--wechat-text-gray);
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity 0.12s, background-color 0.12s, color 0.12s;
+}
+
+.ft-node-action svg {
+    width: 14px;
+    height: 14px;
+}
+
+.ft-node-action:hover {
+    background-color: rgba(255, 59, 48, 0.12);
+    color: var(--wechat-danger);
 }
 
 .ft-children {
@@ -4149,6 +4355,10 @@ input[type="text"],
 .ft-icon-folderClosed,
 .ft-icon-folderOpen {
     color: #6e6e73;
+}
+
+.ft-icon-microApp {
+    color: #007aff;
 }
 
 .ft-icon-markdown {

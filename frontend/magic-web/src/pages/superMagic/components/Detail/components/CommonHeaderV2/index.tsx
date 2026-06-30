@@ -64,6 +64,8 @@ export default memo(function CommonHeaderV2(props: CommonHeaderV2Props) {
 		getPopupContainer,
 		onLocateFile,
 		extraMoreMenuItems,
+		onCompareVersion,
+		onMoreMenuOpenChange,
 	} = props
 	const { t } = useTranslation("super")
 	const isMobile = useIsMobile()
@@ -258,7 +260,18 @@ export default memo(function CommonHeaderV2(props: CommonHeaderV2Props) {
 						{isCurrent ? <Check size={14} /> : null}
 					</div>
 				),
-				onClick: () => handleChangeFileVersion(item.version, index === 0),
+				onClick: () => {
+					if (index === 0) {
+						// 最新版本：直接切换
+						handleChangeFileVersion(item.version, true)
+					} else if (onCompareVersion) {
+						// 历史版本且提供了对比回调：触发对比弹窗
+						onCompareVersion(item.version)
+					} else {
+						// 历史版本但无对比回调：直接切换
+						handleChangeFileVersion(item.version, false)
+					}
+				},
 			}
 		})
 
@@ -305,6 +318,7 @@ export default memo(function CommonHeaderV2(props: CommonHeaderV2Props) {
 		handleChangeFileVersion,
 		handleLocateFile,
 		isShareRoute,
+		onCompareVersion,
 		t,
 		extraMoreMenuItems,
 	])
@@ -378,6 +392,7 @@ export default memo(function CommonHeaderV2(props: CommonHeaderV2Props) {
 						menu={{ items: moreOperationsDropdownItems }}
 						trigger={["click"]}
 						placement="bottomRight"
+						onOpenChange={onMoreMenuOpenChange}
 						getPopupContainer={
 							actionContext.getPopupContainer
 								? () => actionContext.getPopupContainer?.() ?? document.body
@@ -498,6 +513,7 @@ export default memo(function CommonHeaderV2(props: CommonHeaderV2Props) {
 			moreOperationsDropdownItems,
 			onDownload,
 			onFullscreen,
+			onMoreMenuOpenChange,
 			onOpenUrl,
 			onViewModeChange,
 			showButtonText,
@@ -525,6 +541,7 @@ export default memo(function CommonHeaderV2(props: CommonHeaderV2Props) {
 	if (renderMode === "actions") {
 		return (
 			<>
+				{/* Neutral wrapper: bar chrome belongs at call sites (e.g. mobile preview sheet), not here — Design floating pill nests this inline. */}
 				<div ref={headerContainerRef} className="w-full" data-testid="detail-header">
 					{actionsNode}
 				</div>

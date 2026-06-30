@@ -5,14 +5,28 @@ import {
 	generateRenameMapForDuplicates,
 	renameFilesForUpload,
 	extractCommonFolderPath,
+	generateUniqueFileName,
 } from "../utils/duplicateFileHandler"
 import { UserChoice, type UserChoiceType } from "./duplicateFileConstants"
+import { uploadLogger } from "../utils/uploadLogger"
+import { useFolderConflictHandler } from "./useFolderConflictHandler"
+import {
+	detectDuplicateFilesInTarget,
+	detectUploadFolderConflict,
+	generateRenameMapForDuplicatesInTarget,
+	generateUniqueFolderName,
+	getTargetFolderChildren,
+	isAttachmentIdRef,
+	replaceTopLevelFolderNameInFiles,
+	stripTopLevelFolderFromFiles,
+} from "../utils/folderConflictHandler"
 
 interface UseDuplicateFileHandlerOptions {
 	attachments: AttachmentItem[]
 }
 
 export function useDuplicateFileHandler({ attachments }: UseDuplicateFileHandlerOptions) {
+	const folderConflictHandler = useFolderConflictHandler()
 	// Modal 状态
 	const [modalVisible, setModalVisible] = useState(false)
 	const [currentFileName, setCurrentFileName] = useState("")
@@ -25,11 +39,23 @@ export function useDuplicateFileHandler({ attachments }: UseDuplicateFileHandler
 	const [duplicateFiles, setDuplicateFiles] = useState<Map<string, File>>(new Map())
 	const [currentIndex, setCurrentIndex] = useState(0)
 	const [renameMap, setRenameMap] = useState<Map<string, string>>(new Map())
+	const parentIdOverrideRef = useRef<string | undefined>(undefined)
 
 	// 使用 ref 存储当前的上传回调
 	const onFilesProcessedRef = useRef<
-		((files: File[], targetPath: string) => Promise<void>) | null
+		((files: File[], targetPath: string, parentIdOverride?: string) => Promise<void>) | null
 	>(null)
+
+	const resetDuplicateState = useCallback(() => {
+		setPendingFiles([])
+		setOriginalUploadPath("")
+		setTargetPath("")
+		setFolderPath("")
+		setDuplicateFiles(new Map())
+		setCurrentIndex(0)
+		setRenameMap(new Map())
+		parentIdOverrideRef.current = undefined
+	}, [])
 
 	/**
 	 * 处理单个文件的用户选择
@@ -37,17 +63,25 @@ export function useDuplicateFileHandler({ attachments }: UseDuplicateFileHandler
 	const handleUserChoice = useCallback(
 		async (choice: UserChoiceType, applyToAll: boolean) => {
 			setModalVisible(false)
+			uploadLogger.log("duplicateUserChoice", {
+				choice,
+				applyToAll,
+				currentIndex,
+				duplicatesCount: duplicateFiles.size,
+				originalUploadPath,
+				targetPath,
+				folderPath,
+			})
 
 			// 用户取消
 			if (choice === UserChoice.CANCEL) {
-				// 清空状态
-				setPendingFiles([])
-				setOriginalUploadPath("")
-				setTargetPath("")
-				setFolderPath("")
-				setDuplicateFiles(new Map())
-				setCurrentIndex(0)
-				setRenameMap(new Map())
+				uploadLogger.finishSession({
+					status: "cancelled",
+					reason: "duplicateUserChoiceCancel",
+					originalUploadPath,
+					targetPath,
+				})
+				resetDuplicateState()
 				return
 			}
 
@@ -65,11 +99,14 @@ export function useDuplicateFileHandler({ attachments }: UseDuplicateFileHandler
 					// 需要重命名
 					// 使用相对路径作为 key（而不是 file.name）
 					const singleFileMap = new Map([[currentFileRelativePath, currentFile]])
-					const singleRenameMap = generateRenameMapForDuplicates(
-						singleFileMap,
-						targetPath,
-						attachments,
-					)
+					const singleRenameMap = isAttachmentIdRef(targetPath, attachments)
+						? generateRenameMapForDuplicatesInTarget(
+								singleFileMap,
+								targetPath,
+								attachments,
+								generateUniqueFileName,
+							)
+						: generateRenameMapForDuplicates(singleFileMap, targetPath, attachments)
 					console.log(
 						`🔧 [handleUserChoice] 单个文件重命名映射:`,
 						Array.from(singleRenameMap.entries()),
@@ -89,6 +126,15 @@ export function useDuplicateFileHandler({ attachments }: UseDuplicateFileHandler
 				// 应用重命名
 				const finalFiles = renameFilesForUpload(pendingFiles, currentRenameMap)
 
+				uploadLogger.log("duplicateProcessAllFiles", {
+					originalUploadPath,
+					targetPath,
+					folderPath,
+					filesCount: finalFiles.length,
+					renameCount: currentRenameMap.size,
+					renamedFiles: Array.from(currentRenameMap.entries()),
+				})
+
 				console.log("📤 [processAllFiles] 准备上传文件:")
 				console.log("  ↳ originalUploadPath:", originalUploadPath)
 				console.log("  ↳ finalFiles 详情:")
@@ -98,18 +144,17 @@ export function useDuplicateFileHandler({ attachments }: UseDuplicateFileHandler
 					console.log(`    - name="${file.name}", webkitRelativePath="${webkitPath}"`)
 				})
 
-				// 清空状态
-				setPendingFiles([])
-				setOriginalUploadPath("")
-				setTargetPath("")
-				setFolderPath("")
-				setDuplicateFiles(new Map())
-				setCurrentIndex(0)
-				setRenameMap(new Map())
+				const resolvedParentIdOverride = parentIdOverrideRef.current
+
+				resetDuplicateState()
 
 				// 调用上传回调（使用原始上传路径，不是检测路径）
 				if (onFilesProcessedRef.current) {
-					await onFilesProcessedRef.current(finalFiles, originalUploadPath)
+					await onFilesProcessedRef.current(
+						finalFiles,
+						originalUploadPath,
+						resolvedParentIdOverride,
+					)
 				}
 			}
 
@@ -137,11 +182,18 @@ export function useDuplicateFileHandler({ attachments }: UseDuplicateFileHandler
 								remainingDuplicates.set(name, file)
 							})
 
-						const remainingRenameMap = generateRenameMapForDuplicates(
-							remainingDuplicates,
-							targetPath,
-							attachments,
-						)
+						const remainingRenameMap = isAttachmentIdRef(targetPath, attachments)
+							? generateRenameMapForDuplicatesInTarget(
+									remainingDuplicates,
+									targetPath,
+									attachments,
+									generateUniqueFileName,
+								)
+							: generateRenameMapForDuplicates(
+									remainingDuplicates,
+									targetPath,
+									attachments,
+								)
 						remainingRenameMap.forEach((newName, oldName) => {
 							currentRenameMap.set(oldName, newName)
 						})
@@ -168,7 +220,86 @@ export function useDuplicateFileHandler({ attachments }: UseDuplicateFileHandler
 			folderPath,
 			attachments,
 			pendingFiles,
+			resetDuplicateState,
 		],
+	)
+
+	const beginDuplicateFileFlow = useCallback(
+		(options: {
+			files: File[]
+			originalPath: string
+			actualTargetPath: string
+			folderPath: string
+			duplicates: Map<string, File>
+			parentIdOverride?: string
+		}) => {
+			const {
+				files,
+				originalPath,
+				actualTargetPath,
+				folderPath,
+				duplicates,
+				parentIdOverride,
+			} = options
+
+			setPendingFiles(files)
+			setOriginalUploadPath(originalPath)
+			setTargetPath(actualTargetPath)
+			setFolderPath(folderPath)
+			setDuplicateFiles(duplicates)
+			setCurrentIndex(0)
+			setRenameMap(new Map())
+			parentIdOverrideRef.current = parentIdOverride
+
+			const firstFileRelativePath = Array.from(duplicates.keys())[0]
+			const displayFileName = folderPath
+				? `${folderPath}/${firstFileRelativePath}`
+				: firstFileRelativePath
+			setCurrentFileName(displayFileName)
+			setModalVisible(true)
+
+			uploadLogger.log("duplicateModalOpen", {
+				fileName: displayFileName,
+				duplicatesCount: duplicates.size,
+				originalPath,
+				actualTargetPath,
+			})
+		},
+		[],
+	)
+
+	const processAfterFolderConflict = useCallback(
+		async (options: {
+			files: File[]
+			path: string
+			actualTargetPath: string
+			folderPath: string
+			parentIdOverride?: string
+		}) => {
+			const { files, path, actualTargetPath, folderPath, parentIdOverride } = options
+			const duplicates = isAttachmentIdRef(actualTargetPath, attachments)
+				? detectDuplicateFilesInTarget(files, actualTargetPath, attachments)
+				: detectDuplicateFiles(files, actualTargetPath, attachments)
+
+			if (duplicates.size === 0) {
+				uploadLogger.log("duplicateCheckBypass", {
+					reason: "noDuplicatesAfterFolderConflict",
+					uploadPath: path,
+				})
+				await onFilesProcessedRef.current?.(files, path, parentIdOverride)
+				return
+			}
+
+			beginDuplicateFileFlow({
+				files,
+				originalPath: path,
+				actualTargetPath,
+				folderPath,
+				duplicates,
+				parentIdOverride,
+			})
+		},
+		[attachments, beginDuplicateFileFlow],
 	)
 
 	/**
@@ -181,9 +312,18 @@ export function useDuplicateFileHandler({ attachments }: UseDuplicateFileHandler
 		async (
 			files: File[],
 			path: string,
-			onFilesProcessed: (files: File[], targetPath: string) => Promise<void>,
+			onFilesProcessed: (
+				files: File[],
+				targetPath: string,
+				parentIdOverride?: string,
+			) => Promise<void>,
 		) => {
 			console.log("🔍 [DuplicateHandler] 开始检测同名文件", { originalPath: path })
+			uploadLogger.log("duplicateCheckStart", {
+				originalPath: path,
+				fileCount: files.length,
+				fileNames: files.map((file) => file.name),
+			})
 
 			// 保存上传回调到 ref
 			onFilesProcessedRef.current = onFilesProcessed
@@ -204,11 +344,69 @@ export function useDuplicateFileHandler({ attachments }: UseDuplicateFileHandler
 				extractedFolderPath: folderPath,
 				actualTargetPath,
 			})
+			uploadLogger.log("duplicatePathResolved", {
+				originalPath: path,
+				extractedFolderPath: folderPath,
+				actualTargetPath,
+			})
+
+			const folderConflict = detectUploadFolderConflict(files, path, attachments)
+			if (folderConflict) {
+				const folderConflicts = new Map([
+					[
+						folderConflict.folderName,
+						{
+							...folderConflict,
+							folderId: folderConflict.folderName,
+						},
+					],
+				])
+				const folderChoice = await folderConflictHandler.checkConflicts(folderConflicts)
+				if (!folderChoice.shouldProceed) {
+					uploadLogger.finishSession({
+						status: "cancelled",
+						reason: "folderConflictCancel",
+						originalUploadPath: path,
+						folderPath,
+					})
+					return
+				}
+
+				if (folderChoice.keepBothIds.length > 0) {
+					const nextFolderName = generateUniqueFolderName(
+						folderConflict.folderName,
+						getTargetFolderChildren(path, attachments),
+					)
+					const renamedFiles = replaceTopLevelFolderNameInFiles(files, nextFolderName)
+					await onFilesProcessed(renamedFiles, path)
+					return
+				}
+
+				if (!folderConflict.canMerge || !folderConflict.targetItem?.file_id) {
+					return
+				}
+
+				const mergedFiles = stripTopLevelFolderFromFiles(files)
+				await processAfterFolderConflict({
+					files: mergedFiles,
+					path,
+					actualTargetPath: folderConflict.targetItem.file_id,
+					folderPath: folderConflict.folderName,
+					parentIdOverride: folderConflict.targetItem.file_id,
+				})
+				return
+			}
 
 			// 在实际的目标路径下检测同名文件
-			const duplicates = detectDuplicateFiles(files, actualTargetPath, attachments)
+			const duplicates = isAttachmentIdRef(actualTargetPath, attachments)
+				? detectDuplicateFilesInTarget(files, actualTargetPath, attachments)
+				: detectDuplicateFiles(files, actualTargetPath, attachments)
 
 			console.log("🔍 [DuplicateHandler] 检测结果:", {
+				duplicatesCount: duplicates.size,
+				duplicateNames: Array.from(duplicates.keys()),
+			})
+			uploadLogger.log("duplicateCheckResult", {
 				duplicatesCount: duplicates.size,
 				duplicateNames: Array.from(duplicates.keys()),
 			})
@@ -216,35 +414,25 @@ export function useDuplicateFileHandler({ attachments }: UseDuplicateFileHandler
 			// 如果没有同名文件，直接上传
 			if (duplicates.size === 0) {
 				console.log("✅ [DuplicateHandler] 无同名文件，直接上传")
+				uploadLogger.log("duplicateCheckBypass", {
+					reason: "noDuplicates",
+					uploadPath: path,
+				})
 				await onFilesProcessed(files, path)
 				return
 			}
 
 			// 有同名文件，进入处理流程
 			console.log("⚠️ [DuplicateHandler] 发现同名文件，准备显示 Modal")
-			setPendingFiles(files)
-			setOriginalUploadPath(path) // 保存原始上传路径（传给 createUploadTask）
-			setTargetPath(actualTargetPath) // 保存实际检测路径（用于同名检测和重命名）
-			setFolderPath(folderPath) // 保存文件夹路径（用于显示）
-			setDuplicateFiles(duplicates)
-			setCurrentIndex(0)
-			setRenameMap(new Map())
-
-			// 显示第一个同名文件的弹窗
-			const firstFileRelativePath = Array.from(duplicates.keys())[0]
-			// 如果有文件夹路径，拼接显示完整路径
-			const displayFileName = folderPath
-				? `${folderPath}/${firstFileRelativePath}`
-				: firstFileRelativePath
-			setCurrentFileName(displayFileName)
-			setModalVisible(true)
-
-			console.log("📱 [DuplicateHandler] Modal 状态已设置:", {
-				fileName: displayFileName,
-				shouldShowModal: true,
+			beginDuplicateFileFlow({
+				files,
+				originalPath: path,
+				actualTargetPath,
+				folderPath,
+				duplicates,
 			})
 		},
-		[attachments],
+		[attachments, beginDuplicateFileFlow, folderConflictHandler, processAfterFolderConflict],
 	)
 
 	/**
@@ -282,10 +470,17 @@ export function useDuplicateFileHandler({ attachments }: UseDuplicateFileHandler
 		modalVisible,
 		currentFileName,
 		totalDuplicates: duplicateFiles.size,
+		folderConflictModalVisible: folderConflictHandler.modalVisible,
+		currentFolderName: folderConflictHandler.currentFolderName,
+		totalFolderConflicts: folderConflictHandler.totalConflicts,
+		canMergeFolderConflict: folderConflictHandler.canMerge,
 
 		// Modal 回调
 		handleReplace,
 		handleKeepBoth,
 		handleCancel,
+		handleFolderConflictKeepBoth: folderConflictHandler.handleKeepBoth,
+		handleFolderConflictMerge: folderConflictHandler.handleMerge,
+		handleFolderConflictCancel: folderConflictHandler.handleCancel,
 	}
 }

@@ -108,6 +108,7 @@ function IdentityStep({
 								src={identity.iconUrl}
 								alt="Skill icon"
 								className="size-full object-cover"
+								data-testid="identity-step-image"
 							/>
 						) : (
 							<div className="flex size-full items-center justify-center bg-muted">

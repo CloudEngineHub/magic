@@ -137,7 +137,7 @@ const ChatMobile = observer(() => {
 			<ChatItem
 				key={item.id}
 				data={item}
-				className={cn(index === chatList.length - 1 && "pb-safe-bottom-with-tabbar")}
+				className={cn(index === chatList.length - 1 && "pb-safe-bottom")}
 				onClick={() => handleChatItemClick(item.id)}
 				onMoreClick={() => handleActionClick(Action.More, item.id)}
 				onPinClick={() => handleActionClick(Action.Pin, item.id)}
@@ -171,6 +171,12 @@ const ChatMobile = observer(() => {
 				<div className={cn(styles.container)}>
 					{/* User Header */}
 					<UserHeader
+						onBack={() =>
+							navigate({
+								delta: -1,
+								viewTransition: { type: "slide", direction: "right" },
+							})
+						}
 						wrapperClassName="!border-b-0"
 						center={
 							// Message Types

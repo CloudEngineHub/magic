@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef, useMemo } from "react"
 import { useDebounceFn } from "ahooks"
 import { ProjectStateRepository } from "@/models/config/repositories/SuperProjectStateRepository"
 import { useOrganization } from "@/models/user/hooks/useOrganization"
+import { useSearchExpandedKeys } from "./useSearchExpandedKeys"
 
 interface UseTreeUIOptions {
 	organizationCode?: string
@@ -29,14 +30,21 @@ export function useTreeUI(options?: UseTreeUIOptions) {
 	// Repository
 	const projectStateRepository = useRef(new ProjectStateRepository()).current
 	const [cacheLoaded, setCacheLoaded] = useState(false)
-	// 悬停状态
-	const [hoveredItem, setHoveredItem] = useState<string | null>(null)
+	// Hover state is only for shortcuts; do not let it rerender the tree.
+	const hoveredItemRef = useRef<string | null>(null)
+	const setHoveredItem = useCallback((itemId: string | null) => {
+		hoveredItemRef.current = itemId
+	}, [])
 	// 右键菜单关联的文件 ID - 独立于 hoveredItem，用于保持右键菜单打开时的 hover 样式
 	const [contextMenuItemId, setContextMenuItemId] = useState<string | null>(null)
 
 	// 展开状态 - 分为用户手动展开和搜索自动展开
 	const [userExpandedKeys, setUserExpandedKeys] = useState<React.Key[]>([]) // 用户手动展开的keys
-	const [searchExpandedKeys, setSearchExpandedKeys] = useState<React.Key[]>([]) // 搜索自动展开的keys
+	const { searchExpandedKeys, setSearchExpandedKeys, resetSearchExpandedKeys } =
+		useSearchExpandedKeys({
+			searchValue,
+			matchedItemPaths,
+		})
 
 	// 合并两种展开keys，当有搜索时包含搜索展开的keys
 	const expandedKeys = useMemo(() => {
@@ -51,13 +59,6 @@ export function useTreeUI(options?: UseTreeUIOptions) {
 	// 选择状态（树组件的选择，不是文件选择）
 	const [selectedKeys, setSelectedKeys] = useState<React.Key[]>([])
 
-	// 追踪上一次的搜索值（用于自动展开）
-	const prevSearchValueRef = useRef<string>()
-	const matchedItemPathsRef = useRef<string[]>([])
-
-	// 更新 matchedItemPaths 的 ref（在渲染时同步）
-	matchedItemPathsRef.current = matchedItemPaths
-
 	// 展开/折叠处理
 	const handleExpand = useCallback(
 		(newExpandedKeys: React.Key[]) => {
@@ -70,7 +71,7 @@ export function useTreeUI(options?: UseTreeUIOptions) {
 				setSearchExpandedKeys(newExpandedKeys)
 			}
 		},
-		[searchValue],
+		[searchValue, setSearchExpandedKeys],
 	)
 
 	// 树节点选择处理
@@ -127,31 +128,6 @@ export function useTreeUI(options?: UseTreeUIOptions) {
 
 		loadCacheState()
 	}, [enableCache, organizationCode, projectId, cacheLoaded, projectStateRepository])
-
-	// 防抖更新搜索展开的keys
-	const { run: debouncedUpdateSearchKeys } = useDebounceFn(
-		(paths: string[]) => {
-			setSearchExpandedKeys(paths)
-		},
-		{ wait: 300 }, // 300ms防抖延迟
-	)
-
-	// 自动展开搜索匹配项的父级（只依赖 searchValue）
-	useEffect(() => {
-		// 只在搜索值真正变化时执行
-		if (searchValue !== prevSearchValueRef.current) {
-			prevSearchValueRef.current = searchValue
-
-			// 如果有搜索值且有匹配路径，使用防抖设置搜索展开的keys
-			if (searchValue && matchedItemPathsRef.current.length > 0) {
-				debouncedUpdateSearchKeys(matchedItemPathsRef.current)
-			} else {
-				// 如果搜索值为空，立即清空（不需要防抖）
-				debouncedUpdateSearchKeys.cancel() // 取消待执行的防抖任务
-				setSearchExpandedKeys([])
-			}
-		}
-	}, [searchValue, debouncedUpdateSearchKeys])
 
 	// 防抖保存缓存函数
 	const { run: debouncedSaveTreeState } = useDebounceFn(
@@ -211,10 +187,10 @@ export function useTreeUI(options?: UseTreeUIOptions) {
 		setHoveredItem(null)
 		setContextMenuItemId(null)
 		setUserExpandedKeys([])
-		setSearchExpandedKeys([])
+		resetSearchExpandedKeys()
 		setSelectedKeys([])
 		setCacheLoaded(false) // 重置缓存加载状态
-	}, [])
+	}, [resetSearchExpandedKeys, setHoveredItem])
 
 	// 提供 setExpandedKeys 函数以兼容现有代码
 	const setExpandedKeys = useCallback(
@@ -235,12 +211,13 @@ export function useTreeUI(options?: UseTreeUIOptions) {
 				}
 			}
 		},
-		[searchValue],
+		[searchValue, setSearchExpandedKeys],
 	)
 
 	return {
 		// UI 状态
-		hoveredItem,
+		hoveredItem: hoveredItemRef.current,
+		hoveredItemRef,
 		setHoveredItem,
 		contextMenuItemId,
 		setContextMenuItemId,

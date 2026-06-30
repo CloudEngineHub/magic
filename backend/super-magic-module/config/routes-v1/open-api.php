@@ -6,12 +6,15 @@ declare(strict_types=1);
  */
 use App\Interfaces\Middleware\Auth\ApiKeyMiddleware;
 use App\Interfaces\Middleware\Auth\SandboxUserAuthMiddleware;
+use Dtyq\SuperMagic\Interfaces\Agent\Facade\OpenApi\OpenSuperMagicAgentApi;
 use Dtyq\SuperMagic\Interfaces\Agent\Facade\Sandbox\SkillSandboxApi;
 use Dtyq\SuperMagic\Interfaces\Agent\Facade\Sandbox\SuperMagicAgentSandboxApi;
 use Dtyq\SuperMagic\Interfaces\Share\Facade\ShareApi;
 use Dtyq\SuperMagic\Interfaces\SuperAgent\Facade\InternalApi\FileApi;
 use Dtyq\SuperMagic\Interfaces\SuperAgent\Facade\InternalApi\SandboxApi as InternalSandboxApi;
 use Dtyq\SuperMagic\Interfaces\SuperAgent\Facade\InternalApi\TaskApi as InternalTaskApi;
+use Dtyq\SuperMagic\Interfaces\SuperAgent\Facade\OpenApi\OAuth2CallbackRelayApi;
+use Dtyq\SuperMagic\Interfaces\SuperAgent\Facade\OpenApi\OAuth2CallbackRelayPublicApi;
 use Dtyq\SuperMagic\Interfaces\SuperAgent\Facade\OpenApi\OpenFileApi;
 use Dtyq\SuperMagic\Interfaces\SuperAgent\Facade\OpenApi\OpenMessageScheduleApi;
 use Dtyq\SuperMagic\Interfaces\SuperAgent\Facade\OpenApi\OpenProjectApi;
@@ -30,6 +33,8 @@ Router::addGroup(
             Router::addGroup('/file', static function () {
                 // 创建文件版本
                 Router::post('/versions', [FileApi::class, 'createFileVersion']);
+                // 获取文件最新版本
+                Router::get('/{id}/versions/latest', [FileApi::class, 'getLatestFileVersion']);
             });
         });
     },
@@ -49,6 +54,8 @@ Router::addGroup(
         Router::addGroup('/file', static function () {
             // 创建文件版本
             Router::post('/versions', [FileApi::class, 'createFileVersion']);
+            // 获取文件最新版本
+            Router::get('/{id}/versions/latest', [FileApi::class, 'getLatestFileVersion']);
             // 获取文件树
             Router::post('/tree', [FileApi::class, 'getFileTree']);
             // 扫描对象存储目录下的 .wav 文件并持久化到 task file 表
@@ -78,11 +85,16 @@ Router::addGroup(
     ['middleware' => [SandboxUserAuthMiddleware::class]]
 );
 
+// OAuth2 provider 重定向接收接口；provider 回调不携带沙箱鉴权
+Router::get('/api/v1/open-api/sandbox/oauth2/callback-relay', [OAuth2CallbackRelayPublicApi::class, 'callback']);
+
 // 沙箱开放接口
 Router::addGroup(
     '/api/v1/open-api/sandbox',
     static function () {
         Router::addGroup('/agents', static function () {
+            // 获取当前用户可用的员工列表
+            Router::post('/me/available', [OpenSuperMagicAgentApi::class, 'getMyAvailableAgents']);
             Router::post('/tool-execute', [SuperMagicAgentSandboxApi::class, 'executeTool']);
             Router::post('/agent-execute', [SuperMagicAgentSandboxApi::class, 'executeAgent']);
             Router::get('/{code}/latest-version', [SuperMagicAgentSandboxApi::class, 'showLatestVersion']);
@@ -91,6 +103,12 @@ Router::addGroup(
             Router::put('/{code}/updated-at', [SuperMagicAgentSandboxApi::class, 'touchUpdatedAt']);
             Router::post('/{code}/skills', [SuperMagicAgentSandboxApi::class, 'addAgentSkills']);
             Router::delete('/{code}/skills', [SuperMagicAgentSandboxApi::class, 'removeAgentSkills']);
+        });
+
+        // OAuth2 callback payload 内部操作接口
+        Router::addGroup('/oauth2', static function () {
+            Router::get('/callback-relay/fetch-callback', [OAuth2CallbackRelayApi::class, 'fetchCallback']);
+            Router::delete('/callback-relay/delete-callback', [OAuth2CallbackRelayApi::class, 'deleteCallback']);
         });
 
         // 技能相关

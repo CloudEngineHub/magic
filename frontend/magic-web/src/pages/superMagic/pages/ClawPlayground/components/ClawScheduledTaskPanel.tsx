@@ -105,9 +105,9 @@ export function ClawScheduledTaskPanel({
 			void refreshTasks()
 		}
 
-		pubsub.subscribe(PubSubEvents.Update_Attachments, handleAttachmentUpdate)
+		pubsub.subscribe(PubSubEvents.Refresh_Claw_Scheduled_Tasks, handleAttachmentUpdate)
 		return () => {
-			pubsub.unsubscribe(PubSubEvents.Update_Attachments, handleAttachmentUpdate)
+			pubsub.unsubscribe(PubSubEvents.Refresh_Claw_Scheduled_Tasks, handleAttachmentUpdate)
 		}
 	}, [isActive, refreshTasks, shouldLoadTasks])
 
@@ -141,7 +141,7 @@ export function ClawScheduledTaskPanel({
 				draft,
 				currentTask: modalState.initialTask,
 			})
-			pubsub.publish(PubSubEvents.Update_Attachments)
+			pubsub.publish(PubSubEvents.Refresh_Claw_Scheduled_Tasks)
 			magicToast.success(
 				modalState.mode === "edit"
 					? t("accountPanel.timedTasks.editSuccess")
@@ -166,7 +166,7 @@ export function ClawScheduledTaskPanel({
 			content: task.taskName,
 			onSubmit: async () => {
 				await deleteClawCronTaskFile(task.fileId)
-				pubsub.publish(PubSubEvents.Update_Attachments)
+				pubsub.publish(PubSubEvents.Refresh_Claw_Scheduled_Tasks)
 				magicToast.success(t("accountPanel.timedTasks.taskDeleted"))
 			},
 		})
@@ -186,7 +186,7 @@ export function ClawScheduledTaskPanel({
 				},
 				currentTask: task,
 			})
-			pubsub.publish(PubSubEvents.Update_Attachments)
+			pubsub.publish(PubSubEvents.Refresh_Claw_Scheduled_Tasks)
 			magicToast.success(
 				enabled
 					? t("accountPanel.timedTasks.taskEnabled")

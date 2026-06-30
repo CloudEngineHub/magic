@@ -284,8 +284,17 @@ export function usePPTSidebar({
 
 				// Load the new slide content and generate screenshot
 				try {
-					await store.loadSlideContent(newFileUrl, targetSlideIndex)
-					await store.generateSlideScreenshot(targetSlideIndex)
+					await store.loadSlideContentByFileId(result.newFileId, {
+						path: result.newFilePath,
+						url: newFileUrl,
+						indexHint: targetSlideIndex,
+					})
+					const screenshotIndex = store.slides.findIndex(
+						(slide) => store.getFileIdByPath(slide.path) === result.newFileId,
+					)
+					await store.ensureSlideScreenshot(
+						screenshotIndex === -1 ? targetSlideIndex : screenshotIndex,
+					)
 
 					// Validate that we have the required file information
 					if (!result.newFileId) {
@@ -346,8 +355,6 @@ export function usePPTSidebar({
 					pubsub.publish(PubSubEvents.Set_Content_When_Slide_Added, {
 						content: contentToInsert,
 					})
-
-					pubsub.publish(PubSubEvents.Update_Attachments)
 				} catch (loadError) {
 					console.error("Failed to load slide content or generate screenshot:", loadError)
 					// The slide is still inserted, just not fully loaded
@@ -503,8 +510,6 @@ export function usePPTSidebar({
 						minSlidesCount: 1,
 					})
 
-					pubsub.publish(PubSubEvents.Update_Attachments)
-
 					// Show success toast after API completes
 					magicToast.destroy(toastId)
 					magicToast.success(t("fileViewer.deleteSlideSuccess"))
@@ -636,8 +641,6 @@ export function usePPTSidebar({
 				if (onSortSave) {
 					onSortSave(store.slidePaths)
 				}
-
-				pubsub.publish(PubSubEvents.Update_Attachments)
 			}
 		} catch (error) {
 			console.error("Failed to rename slide:", error)

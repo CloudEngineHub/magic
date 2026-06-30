@@ -72,6 +72,7 @@ export default function LazyImage({
 						opacity: isLoaded ? 1 : 0,
 						transition: "opacity 0.3s ease-in-out",
 					}}
+					data-testid="handle-image-load"
 				/>
 			)}
 			{(!isInView || (!isLoaded && !hasError)) && placeholder}

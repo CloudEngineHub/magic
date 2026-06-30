@@ -8,10 +8,12 @@ import {
 	type MultipleFilesDragData,
 } from "@/pages/superMagic/components/MessageEditor/utils/drag"
 import { SuperMagicApi } from "@/apis"
-import { calculateUploadDirectory } from "../utils/calculateUploadDirectory"
+import {
+	getOrCreateUploadSubDirFileId,
+	validateUploadDirectoryFileId,
+} from "../utils/designAssetDirectory"
 import { normalizePath, findFileBySrc } from "../utils/utils"
 import type { GetOrCreateImagesDirFn } from "./useGetOrCreateImagesDir"
-import { waitForNextAttachmentsRefreshForProject } from "@/pages/superMagic/services/attachmentsTopicSync"
 import {
 	normalizeDesignAttachmentPathForCanvas,
 	resolveDesignDslPathCandidatesToWorkspaceRelative,
@@ -22,6 +24,7 @@ import {
 	validateCanvasFilePath,
 } from "@/components/CanvasDesign/canvas/utils/utils"
 import { UploadSubDir, type UploadSubDirType } from "@/components/CanvasDesign/types.magic"
+import { loadProjectAttachments } from "@/pages/superMagic/services"
 
 interface UseDesignFileCopyOptions {
 	projectId?: string
@@ -100,7 +103,7 @@ export function useDesignFileCopy(options: UseDesignFileCopyOptions): UseDesignF
 
 	const getProjectAttachments = useCallback(
 		async (targetProjectId: string): Promise<FileItem[]> => {
-			const result = await SuperMagicApi.getAttachmentsByProjectId({
+			const result = await loadProjectAttachments({
 				projectId: targetProjectId,
 				temporaryToken: "",
 			})
@@ -108,6 +111,8 @@ export function useDesignFileCopy(options: UseDesignFileCopyOptions): UseDesignF
 		},
 		[],
 	)
+
+	const validateDesignAssetDirectoryFileId = useCallback(validateUploadDirectoryFileId, [])
 
 	const waitForBatchOperation = useCallback(
 		async (result: BatchOperationResult): Promise<void> => {
@@ -135,7 +140,7 @@ export function useDesignFileCopy(options: UseDesignFileCopyOptions): UseDesignF
 
 			throw new Error("Project file copy timed out")
 		},
-		[projectId, sleep],
+		[sleep],
 	)
 
 	const waitForAttachmentVisible = useCallback(
@@ -151,14 +156,6 @@ export function useDesignFileCopy(options: UseDesignFileCopyOptions): UseDesignF
 
 			const maxAttempts = Math.max(1, Math.floor(ATTACHMENT_WAIT_TIMEOUT_MS / 1000))
 			for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
-				updateAttachments()
-				try {
-					await waitForNextAttachmentsRefreshForProject(projectId, {
-						timeoutMs: BATCH_OPERATION_POLL_INTERVAL,
-					})
-				} catch (error) {
-					//
-				}
 
 				const latestAttachments = await getProjectAttachments(projectId)
 				const matchedAttachment = latestAttachments.find(
@@ -241,7 +238,6 @@ export function useDesignFileCopy(options: UseDesignFileCopyOptions): UseDesignF
 		},
 		[
 			projectId,
-			currentFile,
 			flatAttachments,
 			attachmentIndex,
 			designProjectBasePath,
@@ -340,75 +336,36 @@ export function useDesignFileCopy(options: UseDesignFileCopyOptions): UseDesignF
 				normalizedAssetDirPath: string
 				assetDirItem: FileItem
 			} | null> => {
-				const assetDirPath = calculateUploadDirectory(
-					{ currentFile, flatAttachments },
+				const assetDirInfo = await getOrCreateUploadSubDirFileId({
+					currentFile,
+					flatAttachments,
+					projectId,
 					subDir,
-				)
-				if (!assetDirPath) {
+					updateAttachments,
+					validateDirFileId: validateDesignAssetDirectoryFileId,
+				})
+				if (!assetDirInfo) {
 					return null
 				}
 
+				const assetDirPath = assetDirInfo.suffixDir
 				const normalizedAssetDirPath = normalizePath(assetDirPath)
-				let assetDirItem = flatAttachments.find(
-					(item: FileItem) =>
-						item.is_directory &&
-						normalizePath(item.relative_file_path || "") === normalizedAssetDirPath,
-				)
-
-				if (!assetDirItem?.file_id) {
-					const parentDirPath = assetDirPath.includes("/")
-						? assetDirPath.substring(0, assetDirPath.lastIndexOf("/"))
-						: ""
-					const normalizedParentDirPath = normalizePath(parentDirPath)
-					const parentDirItem = flatAttachments.find(
+				const assetDirItem =
+					flatAttachments.find(
+						(item: FileItem) =>
+							item.is_directory && item.file_id === assetDirInfo.assetDirFileId,
+					) ||
+					flatAttachments.find(
 						(item: FileItem) =>
 							item.is_directory &&
-							normalizePath(item.relative_file_path || "") ===
-								normalizedParentDirPath,
-					)
-					const parentDirId = parentDirItem?.file_id || currentFile?.id
-
-					if (!parentDirId) {
-						return null
-					}
-
-					try {
-						const createResponse = await SuperMagicApi.createFile({
-							project_id: projectId,
-							parent_id: parentDirId,
-							file_name: subDir,
-							is_directory: true,
-						})
-
-						if (createResponse?.file_id) {
-							assetDirItem = {
-								file_id: createResponse.file_id,
-								file_name: subDir,
-								relative_file_path: assetDirPath,
-								is_directory: true,
-							} as FileItem
-							updateAttachments()
-						} else {
-							return null
-						}
-					} catch (error: unknown) {
-						const errorObj = error as { code?: number; message?: string }
-						if (errorObj.code === 51168) {
-							updateAttachments()
-							assetDirItem = flatAttachments.find(
-								(item: FileItem) =>
-									item.is_directory &&
-									normalizePath(item.relative_file_path || "") ===
-										normalizedAssetDirPath,
-							)
-							if (!assetDirItem?.file_id) {
-								return null
-							}
-						} else {
-							return null
-						}
-					}
-				}
+							normalizePath(item.relative_file_path || "") === normalizedAssetDirPath,
+					) ||
+					({
+						file_id: assetDirInfo.assetDirFileId,
+						file_name: subDir,
+						relative_file_path: assetDirPath,
+						is_directory: true,
+					} as FileItem)
 
 				return { assetDirPath, normalizedAssetDirPath, assetDirItem }
 			}
@@ -494,6 +451,7 @@ export function useDesignFileCopy(options: UseDesignFileCopyOptions): UseDesignF
 			flatAttachments,
 			designProjectBasePath,
 			updateAttachments,
+			validateDesignAssetDirectoryFileId,
 			copyFileToDesignAssetDirectory,
 		],
 	)

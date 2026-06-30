@@ -5,6 +5,7 @@ import { SCENE_INPUT_IDS, INPUT_CONTAINER_MIN_HEIGHT } from "../MainInputContain
 import { SceneStateProvider, SceneStateStore } from "../MainInputContainer/stores"
 import { ModeToggle } from "../TopicMode"
 import LazyScenePanel from "../MainInputContainer/components/LazyScenePanel"
+import SelfMediaComposerConfigPanel from "../MainInputContainer/components/SelfMediaComposerConfigPanel"
 import { cn } from "@/lib/utils"
 import {
 	SceneEditorContext,
@@ -14,6 +15,7 @@ import { MessageEditorSize } from "../MessageEditor/types"
 import { observer } from "mobx-react-lite"
 import { getEditorSpanClass } from "../MessageEditor/constants/editor_span_map"
 import type { SceneItem } from "../../types/skill"
+import { shouldShowSelfMediaComposerConfigPanel } from "../MainInputContainer/utils/selfMediaComposerConfig"
 
 interface DesktopInputContainerProps {
 	sceneStateStore: SceneStateStore
@@ -48,6 +50,15 @@ function DesktopInputContainer({
 	editorContext,
 	editorNodes,
 }: DesktopInputContainerProps) {
+	const shouldShowModeToggle = editorContext.showModeToggle ?? true
+	const shouldShowHeaderControls = shouldShowModeToggle || shouldShowSceneControls
+	const shouldShowSelfMediaConfig = shouldShowSelfMediaComposerConfigPanel({
+		context: editorContext,
+		hasSelectedScene: Boolean(currentScene),
+		hasAvailableScenes: Boolean(scenes?.length),
+		variant: ScenePanelVariant.TopicPage,
+	})
+
 	return (
 		<SceneStateProvider store={sceneStateStore} variant={ScenePanelVariant.TopicPage}>
 			<div
@@ -65,36 +76,47 @@ function DesktopInputContainer({
 					{editorNodes?.taskDataNode}
 					{editorNodes?.messageQueueNode}
 				</div>
-				<div className="flex w-full items-center gap-4 overflow-hidden">
-					{/* 话题模式切换器 */}
-					<ModeToggle
-						size={editorSize}
-						topicMode={editorContext.topicMode}
-						agentCode={
-							editorContext.agentCode ?? editorContext.selectedTopic?.agent_code
-						}
-						allowChangeMode={(editorContext.messagesLength ?? 0) > 0 ? false : true}
-						onModeChange={editorContext.setTopicMode}
-					/>
-					{shouldShowSceneControls && <div className="h-[60%] w-[1px] bg-border"></div>}
-					{/* 场景切换器 */}
-					{shouldShowSceneControls && (
-						<>
-							{shouldShowCurrentSceneBadge && currentScene ? (
-								<CurrentSceneBadge
-									scene={currentScene}
-									variant="outlineButton"
-									onClose={() => sceneStateStore.setCurrentScene(null)}
-								/>
-							) : (
-								<div
-									id={SCENE_INPUT_IDS.SCENES_SWITCHER}
-									className="min-w-0 flex-1"
-								></div>
-							)}
-						</>
-					)}
-				</div>
+				{shouldShowHeaderControls ? (
+					<div className="flex w-full items-center gap-4 overflow-hidden">
+						{/* 话题模式切换器 */}
+						{shouldShowModeToggle ? (
+							<ModeToggle
+								size={editorSize}
+								topicMode={editorContext.topicMode}
+								agentCode={
+									editorContext.agentCode ??
+									editorContext.selectedTopic?.agent_code
+								}
+								allowChangeMode={
+									editorContext.allowChangeMode ??
+									((editorContext.messagesLength ?? 0) > 0 ? false : true)
+								}
+								useChatTerminology={editorContext.useChatTerminology}
+								onModeChange={editorContext.setTopicMode}
+							/>
+						) : null}
+						{shouldShowModeToggle && shouldShowSceneControls ? (
+							<div className="h-[60%] w-[1px] bg-border"></div>
+						) : null}
+						{/* 场景切换器 */}
+						{shouldShowSceneControls && (
+							<>
+								{shouldShowCurrentSceneBadge && currentScene ? (
+									<CurrentSceneBadge
+										scene={currentScene}
+										variant="outlineButton"
+										onClose={() => sceneStateStore.setCurrentScene(null)}
+									/>
+								) : (
+									<div
+										id={SCENE_INPUT_IDS.SCENES_SWITCHER}
+										className="min-w-0 flex-1"
+									></div>
+								)}
+							</>
+						)}
+					</div>
+				) : null}
 				<div className={cn("w-full", classNames?.editorWrapper)}>
 					<div
 						className={cn(
@@ -121,6 +143,7 @@ function DesktopInputContainer({
 							editorContext={editorContext}
 							editorNodes={editorNodes}
 						/>
+						{shouldShowSelfMediaConfig ? <SelfMediaComposerConfigPanel /> : null}
 					</div>
 				</div>
 			</div>

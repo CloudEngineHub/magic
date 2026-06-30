@@ -5,6 +5,7 @@ import { ImageStorageDatabase } from "@/services/tiptap-image-storage"
 import { projectImageStorage } from "@/services/tiptap-image-project"
 import { logger as Logger } from "@/utils/log"
 import { calculateRelativePath } from "@/utils/path"
+import { runActiveEditor } from "@/utils/tiptapEditorLifecycle"
 
 const logger = Logger.createLogger("ImageMigrationService")
 
@@ -112,7 +113,9 @@ export class ImageMigrationService {
 			}
 
 			// Update editor content with modified JSON
-			editor.commands.setContent(updatedJSON)
+			runActiveEditor(editor, (activeEditor) => {
+				activeEditor.commands.setContent(updatedJSON)
+			})
 
 			// Convert back to Markdown
 			const storage = editor.storage as unknown as { markdown: { getMarkdown: () => string } }
@@ -213,7 +216,9 @@ export class ImageMigrationService {
 
 		// Update editor content if there were changes
 		if (hasChanges) {
-			editor.commands.setContent(newDoc.toJSON())
+			runActiveEditor(editor, (activeEditor) => {
+				activeEditor.commands.setContent(newDoc.toJSON())
+			})
 			logger.log("Converted storage:// images to storageImage nodes")
 		}
 	}

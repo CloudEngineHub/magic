@@ -1,6 +1,14 @@
-import { useState, useCallback, useRef, useEffect, useMemo, type RefObject } from "react"
+import {
+	useState,
+	useCallback,
+	useRef,
+	useEffect,
+	useMemo,
+	type ReactNode,
+	type RefObject,
+} from "react"
 import { useTranslation } from "react-i18next"
-import { type Topic, TaskStatus, MessageStatus, ProjectListItem } from "../../pages/Workspace/types"
+import { type Topic, TaskStatus, ProjectListItem } from "../../pages/Workspace/types"
 import TopicSharePopover from "../TopicSharePopover"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import { useMemoizedFn, useMount } from "ahooks"
@@ -37,7 +45,16 @@ import { MessageHeaderHistoryControl } from "./components/MessageHeaderHistoryCo
 import { IconShare3 } from "@tabler/icons-react"
 import type { TopicStore } from "../../stores/core/topic"
 import { smartRenameTopic } from "../../services/topicRename"
+import {
+	shouldSyncChatConversationName,
+	syncChatProjectNameOnly,
+} from "../../services/chatConversationNameSync"
 import { useFileActionVisibility } from "@/pages/superMagic/providers/file-action-visibility-provider"
+import {
+	resolveMessageHeaderEditableTitle,
+	resolveMessageHeaderTitle,
+} from "@/pages/superMagic/utils/resolve-chat-conversation-display-name"
+import { isTopicShareAllowed } from "@/pages/superMagic/utils/is-topic-share-allowed"
 interface TopicMutationSuccessOptions {
 	onSuccess?: () => Promise<void> | void
 }
@@ -46,6 +63,8 @@ interface MessageHeaderProps {
 	isConversationPanelCollapsed?: boolean
 	onToggleConversationPanel?: () => void
 	onExpandConversationPanel?: () => void
+	/** Closes the layout history panel only when the user is collapsing the conversation pane. */
+	onCloseHistoryPanelWhenCollapsing?: () => void
 	detailPanelVisible?: boolean
 	selectedProject: ProjectListItem | null
 	topicStore: TopicStore
@@ -55,6 +74,8 @@ interface MessageHeaderProps {
 	historyTriggerMode?: "dropdown" | "layout"
 	isHistoryPanelOpen?: boolean
 	onToggleHistoryPanel?: () => void
+	/** Chat detail injects conversation-level overflow actions (share/rename/save/delete). */
+	trailingActions?: ReactNode
 }
 
 export interface MessageHeaderTopicActions {
@@ -125,6 +146,14 @@ function useTopicHistoryPanelController({
 			updateTopicName: topicActions.updateTopicName,
 		})
 		if (!topicName) return
+
+		if (selectedProject && shouldSyncChatConversationName(selectedProject)) {
+			await syncChatProjectNameOnly({
+				projectId: selectedProject.id,
+				name: topicName,
+			})
+		}
+
 		magicToast.success(t("messageHeader.renameTopicSuccess"))
 	})
 
@@ -271,6 +300,8 @@ export const MessageHeaderTopicHistoryPanel = observer(function MessageHeaderTop
 			topics={topics}
 			projectId={selectedProject?.id || ""}
 			selectedTopicId={selectedTopic?.id}
+			isConversationPanelCollapsed={isConversationPanelCollapsed}
+			onExpandConversationPanel={onExpandConversationPanel}
 			editingTopicId={editingTopicId}
 			editingValue={editingValue}
 			onEditingValueChange={setEditingValue}
@@ -301,6 +332,7 @@ function MessageHeader({
 	isConversationPanelCollapsed = false,
 	onToggleConversationPanel,
 	onExpandConversationPanel,
+	onCloseHistoryPanelWhenCollapsing,
 	detailPanelVisible = true,
 	selectedProject,
 	topicStore,
@@ -309,6 +341,7 @@ function MessageHeader({
 	historyTriggerMode = "dropdown",
 	isHistoryPanelOpen = false,
 	onToggleHistoryPanel,
+	trailingActions,
 }: MessageHeaderProps) {
 	const { t } = useTranslation("super")
 	const { hideShareTopic } = useFileActionVisibility()
@@ -336,6 +369,26 @@ function MessageHeader({
 
 	const currentTopicStatus = selectedTopic?.task_status
 
+	/** Chat workspace projects use conversation naming; regular projects keep topic naming. */
+	const headerTitle = useMemo(
+		() =>
+			resolveMessageHeaderTitle({
+				topic: selectedTopic,
+				project: selectedProject,
+				t,
+			}),
+		[selectedProject, selectedTopic, t],
+	)
+	const headerEditableTitle = useMemo(
+		() =>
+			resolveMessageHeaderEditableTitle({
+				topic: selectedTopic,
+				project: selectedProject,
+				t,
+			}),
+		[selectedProject, selectedTopic, t],
+	)
+
 	const [isRenaming, setIsRenaming] = useState(false)
 	const [renamingValue, setRenamingValue] = useState("")
 	const [sharePopoverVisible, setSharePopoverVisible] = useState(false)
@@ -348,8 +401,8 @@ function MessageHeader({
 	const handleRename = useCallback(() => {
 		if (!selectedTopic) return
 		setIsRenaming(true)
-		setRenamingValue(selectedTopic.topic_name || "")
-	}, [selectedTopic])
+		setRenamingValue(headerEditableTitle)
+	}, [headerEditableTitle, selectedTopic])
 
 	const handleRenameSubmit = useMemoizedFn(async () => {
 		if (!selectedTopic || !renamingValue.trim()) {
@@ -359,7 +412,7 @@ function MessageHeader({
 
 		const trimmedName = renamingValue.trim()
 
-		if (trimmedName === selectedTopic.topic_name) {
+		if (trimmedName === headerEditableTitle) {
 			setIsRenaming(false)
 			return
 		}
@@ -388,17 +441,7 @@ function MessageHeader({
 		setRenamingValue("")
 	}, [])
 
-	const isAllowShare = useMemo(() => {
-		if (!messages?.length) {
-			return false
-		}
-		const _revokedMessageIndex = messages.findIndex(
-			(item: { status?: string }) => item?.status === MessageStatus.REVOKED,
-		)
-		const revokedMessageIndex =
-			_revokedMessageIndex !== -1 ? _revokedMessageIndex : messages.length
-		return messages.slice(0, revokedMessageIndex).length > 0
-	}, [messages])
+	const isAllowShare = useMemo(() => isTopicShareAllowed(messages), [messages])
 
 	useEffect(() => {
 		if (isRenaming && inputRef.current) {
@@ -415,7 +458,12 @@ function MessageHeader({
 		setTopicHistoryOpen(false)
 	}, [selectedTopic?.id])
 
+	// Closing the history panel only applies to the collapse action; expanding the
+	// conversation pane should not mutate the persisted history-panel preference.
 	const handleToggleConversationPanel = useMemoizedFn(() => {
+		if (!isConversationPanelCollapsed) {
+			onCloseHistoryPanelWhenCollapsing?.()
+		}
 		onToggleConversationPanel?.()
 	})
 
@@ -455,6 +503,8 @@ function MessageHeader({
 					onSelectTopic: (topic) => {
 						void topicActions.selectTopic(topic)
 					},
+					isConversationPanelCollapsed,
+					onExpandConversationPanel,
 					canDeleteTopic: topics.length > 1,
 					onCreateTopic: handleCreateTopic,
 					onPinTopic: topicActions.pinTopic,
@@ -533,6 +583,14 @@ function MessageHeader({
 								{renderHistoryTrigger("bottomRight")}
 							</>
 						) : null}
+						{trailingActions ? (
+							<div
+								className="flex flex-col items-center"
+								data-testid="message-header-trailing-actions-collapsed"
+							>
+								{trailingActions}
+							</div>
+						) : null}
 					</div>
 				) : (
 					<>
@@ -581,12 +639,9 @@ function MessageHeader({
 									className="min-w-0 flex-1 cursor-pointer truncate text-sm font-normal leading-[1.43] text-foreground transition-colors hover:text-primary"
 									onClick={handleRename}
 									data-testid="message-header-topic-name"
-									data-topic-name={
-										selectedTopic?.topic_name ||
-										t("messageHeader.untitledTopic")
-									}
+									data-topic-name={headerTitle}
 								>
-									{selectedTopic?.topic_name || t("messageHeader.untitledTopic")}
+									{headerTitle}
 								</span>
 							)}
 						</div>
@@ -660,59 +715,62 @@ function MessageHeader({
 								</TopicSharePopover>
 							) : null}
 
-							<DropdownMenu onOpenChange={setTopicMenuOpen}>
-								<DropdownMenuTrigger asChild>
-									<span>
-										<MagicTooltip title={t("messageHeader.topicMenu")}>
-											<span>
-												<Button
-													variant="ghost"
-													size="icon-sm"
-													data-testid="message-header-menu-button"
-													className={cn(
-														headerIconButtonClassName,
-														topicMenuOpen && "bg-accent",
-													)}
-												>
-													<Ellipsis
-														size={16}
-														className="shrink-0 text-foreground"
-													/>
-												</Button>
-											</span>
-										</MagicTooltip>
-									</span>
-								</DropdownMenuTrigger>
-								<DropdownMenuContent align="end" className="w-60">
-									<DropdownMenuItem onClick={handleRename}>
-										<PenLine size={16} className="text-muted-foreground" />
-										{t("messageHeader.rename")}
-									</DropdownMenuItem>
-									<DropdownMenuItem onClick={() => handleAiRename()}>
-										<WandSparkles size={16} className="text-muted-foreground" />
-										{t("messageHeader.aiRename")}
-									</DropdownMenuItem>
-									{!shouldHideTopicEntry ? (
-										<>
-											<DropdownMenuSeparator />
-											<DropdownMenuItem
-												variant="destructive"
-												onClick={() =>
-													selectedTopic &&
-													handleDeleteTopic(
-														selectedTopic.id,
-														selectedTopic.topic_name ||
-															t("messageHeader.untitledTopic"),
-													)
-												}
-											>
-												<Trash2 size={16} />
-												{t("messageHeader.deleteTopic")}
-											</DropdownMenuItem>
-										</>
-									) : null}
-								</DropdownMenuContent>
-							</DropdownMenu>
+							{/* Chat single-topic view hides the entire topic overflow menu (rename / AI rename / delete). */}
+							{!shouldHideTopicEntry ? (
+								<DropdownMenu onOpenChange={setTopicMenuOpen}>
+									<DropdownMenuTrigger asChild>
+										<span>
+											<MagicTooltip title={t("messageHeader.topicMenu")}>
+												<span>
+													<Button
+														variant="ghost"
+														size="icon-sm"
+														data-testid="message-header-menu-button"
+														className={cn(
+															headerIconButtonClassName,
+															topicMenuOpen && "bg-accent",
+														)}
+													>
+														<Ellipsis
+															size={16}
+															className="shrink-0 text-foreground"
+														/>
+													</Button>
+												</span>
+											</MagicTooltip>
+										</span>
+									</DropdownMenuTrigger>
+									<DropdownMenuContent align="end" className="w-60">
+										<DropdownMenuItem onClick={handleRename}>
+											<PenLine size={16} className="text-muted-foreground" />
+											{t("messageHeader.rename")}
+										</DropdownMenuItem>
+										<DropdownMenuItem onClick={() => handleAiRename()}>
+											<WandSparkles
+												size={16}
+												className="text-muted-foreground"
+											/>
+											{t("messageHeader.aiRename")}
+										</DropdownMenuItem>
+										<DropdownMenuSeparator />
+										<DropdownMenuItem
+											variant="destructive"
+											onClick={() =>
+												selectedTopic &&
+												handleDeleteTopic(selectedTopic.id, headerTitle)
+											}
+										>
+											<Trash2 size={16} />
+											{t("messageHeader.deleteTopic")}
+										</DropdownMenuItem>
+									</DropdownMenuContent>
+								</DropdownMenu>
+							) : null}
+							{trailingActions ? (
+								<div data-testid="message-header-trailing-actions">
+									{trailingActions}
+								</div>
+							) : null}
 						</div>
 					</>
 				)}

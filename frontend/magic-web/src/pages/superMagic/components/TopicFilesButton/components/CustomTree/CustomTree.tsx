@@ -1,19 +1,39 @@
-import React, { memo } from "react"
+import React, { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef } from "react"
 import { cx } from "antd-style"
+import { useVirtualizer, type VirtualItem } from "@tanstack/react-virtual"
 import type { TreeNodeData } from "../../utils/treeDataConverter"
+import {
+	getDragReceiverNode,
+	getDragTargetBlockRange,
+	resolveVisibleTreeScrollAnchor,
+	resolveVisibleTreeScrollTopForAnchor,
+	type VisibleTreeScrollAnchor,
+	type VisibleTreeNodeRow,
+} from "../../utils/visibleTreeRows"
 import { useStyles } from "./style"
+import {
+	measureTreeSelect,
+	recordTreeScrollAnchorMissing,
+	recordTreeScrollAnchorRestore,
+	useCustomTreePerfMetrics,
+} from "./useCustomTreePerf"
 
-interface TreeNodeProps {
+const DEFAULT_VIRTUAL_THRESHOLD = 50
+const DESKTOP_ROW_ESTIMATE = 32
+const MOBILE_ROW_ESTIMATE = 42
+type RowRenderVersion = string | number
+
+interface TreeNodeRowProps {
 	node: TreeNodeData
-	expandedKeys: React.Key[]
-	selectedKeys: React.Key[]
-	onExpand: (key: string, node: TreeNodeData) => void
+	dragReceiverNode?: TreeNodeData | null
+	highlightDragTargetNode?: boolean
+	selectedKeySet: Set<string>
+	renderVersion?: RowRenderVersion
 	onSelect: (key: string, node: TreeNodeData) => void
 	titleRender?: (node: TreeNodeData) => React.ReactNode
-	showIcon?: boolean
-	blockNode?: boolean
-	className?: string
+	customTreeNodeClass: string
 	dragTargetNodeClass?: string
+	dragTargetKey?: React.Key | null
 	isDragTargetNode?: (node: TreeNodeData) => boolean
 	// 拖拽事件处理器
 	onDragEnter?: (e: React.DragEvent, node: TreeNodeData) => void
@@ -22,73 +42,80 @@ interface TreeNodeProps {
 	onDrop?: (e: React.DragEvent, node: TreeNodeData) => void
 }
 
-function TreeNode({
+function TreeNodeRow({
 	node,
-	expandedKeys,
-	selectedKeys,
-	onExpand,
+	dragReceiverNode,
+	highlightDragTargetNode = true,
+	selectedKeySet,
 	onSelect,
 	titleRender,
-	blockNode = false,
-	className,
+	customTreeNodeClass,
 	dragTargetNodeClass,
+	dragTargetKey,
 	isDragTargetNode,
 	onDragEnter,
 	onDragLeave,
 	onDragOver,
 	onDrop,
-}: TreeNodeProps) {
-	const hasChildren = node.children && node.children.length > 0
-	const expanded = expandedKeys.includes(node.key)
-	const selected = selectedKeys.includes(node.key)
-	const { styles } = useStyles()
+}: TreeNodeRowProps) {
+	const selected = selectedKeySet.has(String(node.key))
+	const dragTargetNode = dragReceiverNode ?? null
+	const dragReceiverKey = dragTargetNode ? String(dragTargetNode.key) : undefined
 
 	const handleSelect = () => {
-		console.log("fileClick", node.key)
 		onSelect(node.key, node)
 	}
 
+	const isSameDragReceiverTransition = (target: EventTarget | null) => {
+		if (!dragReceiverKey || !(target instanceof Element)) return false
+
+		const relatedReceiver = target.closest<HTMLElement>("[data-drag-receiver-key]")
+		return relatedReceiver?.dataset.dragReceiverKey === dragReceiverKey
+	}
+
 	// 判断是否为拖拽目标节点
-	const isDragTarget = isDragTargetNode ? isDragTargetNode(node) : false
+	const isDragTarget =
+		dragTargetKey !== undefined
+			? dragTargetKey !== null && String(dragTargetKey) === String(node.key)
+			: isDragTargetNode
+				? isDragTargetNode(node)
+				: false
 
-	// 判断是否为文件夹节点
-	const isFolder = node.item?.is_directory
-	// 判断是否为根目录的文件（level === 0 且不是文件夹）
-	const isRootFile = node.level === 0 && !isFolder
-	// 文件夹或根目录的文件都可以接收拖拽（拖拽到根目录文件等同于拖拽到根目录）
-	const canReceiveDrag = isFolder || isRootFile
+	const canReceiveDrag = Boolean(dragTargetNode)
 
-	// 拖拽事件处理器 - 文件夹或根目录的文件都有效
 	const handleDragEnter = (e: React.DragEvent) => {
-		if (canReceiveDrag && onDragEnter) {
-			onDragEnter(e, node)
+		if (canReceiveDrag && onDragEnter && dragTargetNode) {
+			if (isSameDragReceiverTransition(e.relatedTarget)) return
+			onDragEnter(e, dragTargetNode)
 		}
 	}
 
 	const handleDragLeave = (e: React.DragEvent) => {
-		if (canReceiveDrag && onDragLeave) {
-			onDragLeave(e, node)
+		if (canReceiveDrag && onDragLeave && dragTargetNode) {
+			if (isSameDragReceiverTransition(e.relatedTarget)) return
+			onDragLeave(e, dragTargetNode)
 		}
 	}
 
 	const handleDragOver = (e: React.DragEvent) => {
-		if (canReceiveDrag && onDragOver) {
-			onDragOver(e, node)
+		if (canReceiveDrag && onDragOver && dragTargetNode) {
+			onDragOver(e, dragTargetNode)
 		}
 	}
 
 	const handleDrop = (e: React.DragEvent) => {
-		if (canReceiveDrag && onDrop) {
-			onDrop(e, node)
+		if (canReceiveDrag && onDrop && dragTargetNode) {
+			onDrop(e, dragTargetNode)
 		}
 	}
 
 	return (
 		<div
-			className={cx(styles.customTreeNode, {
-				...(isDragTarget && dragTargetNodeClass ? { [dragTargetNodeClass]: true } : {}),
-			})}
-			// 文件夹或根目录的文件都添加拖拽事件处理器
+			className={cx(
+				customTreeNodeClass,
+				highlightDragTargetNode && isDragTarget && dragTargetNodeClass,
+			)}
+			data-drag-receiver-key={dragReceiverKey}
 			{...(canReceiveDrag && {
 				onDragEnter: handleDragEnter,
 				onDragLeave: handleDragLeave,
@@ -102,53 +129,73 @@ function TreeNode({
 					"magic-tree-treenode-selected": selected,
 				})}
 				onClick={handleSelect}
+				data-testid="topic-files-tree-node"
 			>
 				<div className="magic-tree-node-content-wrapper">
 					{titleRender ? titleRender(node) : node.title}
 				</div>
 			</div>
-
-			{/* 子节点 */}
-			{hasChildren && expanded && (
-				<div className="magic-tree-child-tree">
-					{node.children?.map((child) => (
-						<TreeNode
-							key={child.key}
-							node={child}
-							expandedKeys={expandedKeys}
-							selectedKeys={selectedKeys}
-							onExpand={onExpand}
-							onSelect={onSelect}
-							titleRender={titleRender}
-							blockNode={blockNode}
-							className={className}
-							dragTargetNodeClass={dragTargetNodeClass}
-							isDragTargetNode={isDragTargetNode}
-							onDragEnter={onDragEnter}
-							onDragLeave={onDragLeave}
-							onDragOver={onDragOver}
-							onDrop={onDrop}
-						/>
-					))}
-				</div>
-			)}
 		</div>
 	)
 }
 
+function getRowSelected(props: TreeNodeRowProps) {
+	return props.selectedKeySet.has(String(props.node.key))
+}
+
+function getNodeKey(node?: TreeNodeData | null) {
+	return node ? String(node.key) : ""
+}
+
+function getRowDragTarget(props: TreeNodeRowProps) {
+	if (props.dragTargetKey !== undefined) {
+		return (
+			props.dragTargetKey !== null && String(props.dragTargetKey) === String(props.node.key)
+		)
+	}
+	return props.isDragTargetNode ? props.isDragTargetNode(props.node) : false
+}
+
+function areTreeNodeRowPropsEqual(prev: TreeNodeRowProps, next: TreeNodeRowProps) {
+	if (prev.node !== next.node) return false
+	if (prev.renderVersion !== next.renderVersion) return false
+	if (prev.highlightDragTargetNode !== next.highlightDragTargetNode) return false
+	if (prev.onSelect !== next.onSelect) return false
+	if (prev.titleRender !== next.titleRender) return false
+	if (prev.customTreeNodeClass !== next.customTreeNodeClass) return false
+	if (prev.dragTargetNodeClass !== next.dragTargetNodeClass) return false
+	if (prev.onDragEnter !== next.onDragEnter) return false
+	if (prev.onDragLeave !== next.onDragLeave) return false
+	if (prev.onDragOver !== next.onDragOver) return false
+	if (prev.onDrop !== next.onDrop) return false
+	if (getRowSelected(prev) !== getRowSelected(next)) return false
+	if (getNodeKey(prev.dragReceiverNode) !== getNodeKey(next.dragReceiverNode)) return false
+	if (getRowDragTarget(prev) !== getRowDragTarget(next)) return false
+	return true
+}
+
+const MemoTreeNodeRow = memo(TreeNodeRow, areTreeNodeRowPropsEqual)
+
 interface CustomTreeProps {
-	treeData: TreeNodeData[]
+	visibleRows: VisibleTreeNodeRow[]
+	visibleNodes: TreeNodeData[]
+	visibleNodeIndexByKey: ReadonlyMap<string, number>
 	expandedKeys?: React.Key[]
 	selectedKeys?: React.Key[]
-	onExpand?: (expandedKeys: React.Key[], info: { expanded: boolean; node: TreeNodeData }) => void
 	onSelect?: (selectedKeys: React.Key[], info: { selected: boolean; node: TreeNodeData }) => void
 	titleRender?: (node: TreeNodeData) => React.ReactNode
+	getRowRenderVersion?: (row: VisibleTreeNodeRow) => RowRenderVersion
+	rowRenderContextVersion?: RowRenderVersion
 	showIcon?: boolean
 	blockNode?: boolean
 	className?: string
-	switcherIcon?: () => React.ReactNode
 	dragTargetNodeClass?: string
+	dragTargetKey?: React.Key | null
 	isDragTargetNode?: (node: TreeNodeData) => boolean
+	scrollElementRef?: React.RefObject<HTMLElement>
+	scrollToKey?: React.Key | null
+	virtualThreshold?: number
+	isMobile?: boolean
 	// 拖拽事件处理器
 	onDragEnter?: (e: React.DragEvent, node: TreeNodeData) => void
 	onDragLeave?: (e: React.DragEvent, node: TreeNodeData) => void
@@ -157,74 +204,288 @@ interface CustomTreeProps {
 }
 
 function CustomTree({
-	treeData,
+	visibleRows,
+	visibleNodes,
+	visibleNodeIndexByKey,
 	expandedKeys = [],
 	selectedKeys = [],
-	onExpand,
 	onSelect,
 	titleRender,
-	showIcon = true,
-	blockNode = false,
+	getRowRenderVersion,
+	rowRenderContextVersion,
 	className,
-	switcherIcon,
 	dragTargetNodeClass,
+	dragTargetKey,
 	isDragTargetNode,
+	scrollElementRef,
+	scrollToKey,
+	virtualThreshold = DEFAULT_VIRTUAL_THRESHOLD,
+	isMobile = false,
 	onDragEnter,
 	onDragLeave,
 	onDragOver,
 	onDrop,
 }: CustomTreeProps) {
-	const handleExpand = (key: string, node: TreeNodeData) => {
-		if (!onExpand) return
+	const { styles } = useStyles()
+	const selectedKeySet = useMemo(() => new Set(selectedKeys.map(String)), [selectedKeys])
+	const scrollAnchorRef = useRef<VisibleTreeScrollAnchor | null>(null)
+	const previousVisibleNodesRef = useRef<TreeNodeData[] | null>(null)
+	const shouldVirtualize = Boolean(scrollElementRef) && visibleNodes.length > virtualThreshold
+	const rowEstimateSize = isMobile ? MOBILE_ROW_ESTIMATE : DESKTOP_ROW_ESTIMATE
+	const getScrollElement = useCallback(
+		() => scrollElementRef?.current ?? null,
+		[scrollElementRef],
+	)
+	const estimateSize = useCallback(() => rowEstimateSize, [rowEstimateSize])
+	const getItemKey = useCallback(
+		(index: number) => visibleNodes[index]?.key ?? index,
+		[visibleNodes],
+	)
+	const rowVirtualizer = useVirtualizer({
+		count: visibleNodes.length,
+		getScrollElement,
+		estimateSize,
+		overscan: 8,
+		getItemKey,
+	})
+	const virtualItems = shouldVirtualize ? rowVirtualizer.getVirtualItems() : []
+	const totalSize = visibleNodes.length * rowEstimateSize
+	const dragTargetBlockRange = useMemo(
+		() => getDragTargetBlockRange(visibleRows, dragTargetKey),
+		[dragTargetKey, visibleRows],
+	)
+	const rootNodeCount = useMemo(
+		() => visibleRows.reduce((count, row) => count + (row.node.level === 0 ? 1 : 0), 0),
+		[visibleRows],
+	)
+	const dragTargetBlockStyle = useMemo(() => {
+		if (!dragTargetBlockRange) return null
 
-		const expanded = expandedKeys.includes(key)
-		let newExpandedKeys: React.Key[]
+		return {
+			top: dragTargetBlockRange.startIndex * rowEstimateSize,
+			height: Math.max(
+				rowEstimateSize,
+				(dragTargetBlockRange.endIndex - dragTargetBlockRange.startIndex + 1) *
+					rowEstimateSize,
+			),
+		}
+	}, [dragTargetBlockRange, rowEstimateSize])
+	const shouldShowDragTargetBlock = Boolean(dragTargetBlockStyle && dragTargetNodeClass)
 
-		if (expanded) {
-			newExpandedKeys = expandedKeys.filter((k) => k !== key)
-		} else {
-			newExpandedKeys = [...expandedKeys, key]
+	useCustomTreePerfMetrics({
+		rootNodeCount,
+		expandedKeys,
+		selectedKeys,
+		visibleNodeCount: visibleNodes.length,
+		mountedNodeCount: shouldVirtualize ? virtualItems.length : visibleNodes.length,
+		virtualized: shouldVirtualize,
+	})
+
+	const updateScrollAnchor = useCallback(() => {
+		const scrollElement = scrollElementRef?.current
+		if (!scrollElement) return
+
+		scrollAnchorRef.current = resolveVisibleTreeScrollAnchor(
+			visibleNodes,
+			scrollElement.scrollTop,
+			rowEstimateSize,
+		)
+	}, [rowEstimateSize, scrollElementRef, visibleNodes])
+
+	useEffect(() => {
+		const scrollElement = scrollElementRef?.current
+		if (!scrollElement) return undefined
+
+		updateScrollAnchor()
+		scrollElement.addEventListener("scroll", updateScrollAnchor, { passive: true })
+		return () => {
+			scrollElement.removeEventListener("scroll", updateScrollAnchor)
+		}
+	}, [scrollElementRef, updateScrollAnchor])
+
+	useLayoutEffect(() => {
+		const scrollElement = scrollElementRef?.current
+		const visibleNodesChanged = previousVisibleNodesRef.current !== visibleNodes
+
+		if (scrollElement && visibleNodesChanged && !scrollToKey) {
+			const anchor = scrollAnchorRef.current
+			if (anchor) {
+				const nextScrollTop = resolveVisibleTreeScrollTopForAnchor(
+					anchor,
+					visibleNodeIndexByKey,
+					rowEstimateSize,
+				)
+
+				if (nextScrollTop !== null) {
+					const deltaPx = nextScrollTop - scrollElement.scrollTop
+					if (Math.abs(deltaPx) >= 1) {
+						const restoreMode = shouldVirtualize ? "virtualizer" : "scroll_element"
+						if (shouldVirtualize) {
+							rowVirtualizer.scrollToOffset(nextScrollTop, {
+								align: "start",
+								behavior: "auto",
+							})
+						} else {
+							scrollElement.scrollTop = nextScrollTop
+						}
+						recordTreeScrollAnchorRestore({
+							anchor,
+							nextIndex: visibleNodeIndexByKey.get(anchor.key),
+							deltaPx,
+							restoreMode,
+							visibleNodesCount: visibleNodes.length,
+						})
+					}
+				} else {
+					recordTreeScrollAnchorMissing(anchor, visibleNodes.length)
+				}
+			}
 		}
 
-		onExpand(newExpandedKeys, { expanded: !expanded, node })
+		previousVisibleNodesRef.current = visibleNodes
+		updateScrollAnchor()
+	}, [
+		rowEstimateSize,
+		rowVirtualizer,
+		scrollElementRef,
+		scrollToKey,
+		shouldVirtualize,
+		updateScrollAnchor,
+		visibleNodeIndexByKey,
+		visibleNodes,
+	])
+
+	const handleSelect = useCallback(
+		(key: string, node: TreeNodeData) => {
+			if (!onSelect) return
+
+			const isSelected = selectedKeySet.has(String(key))
+			let newSelectedKeys: React.Key[]
+
+			if (isSelected) {
+				newSelectedKeys = selectedKeys.filter((k) => k !== key)
+			} else {
+				newSelectedKeys = [key] // Single-select mode
+			}
+
+			measureTreeSelect(newSelectedKeys, node, () => {
+				onSelect(newSelectedKeys, { selected: !isSelected, node })
+			})
+		},
+		[onSelect, selectedKeySet, selectedKeys],
+	)
+
+	useEffect(() => {
+		if (!scrollToKey || !shouldVirtualize) return
+
+		const index = visibleNodeIndexByKey.get(String(scrollToKey))
+		if (index === undefined) return
+
+		rowVirtualizer.scrollToIndex(index, {
+			align: "center",
+			behavior: "smooth",
+		})
+	}, [rowVirtualizer, scrollToKey, shouldVirtualize, visibleNodeIndexByKey])
+
+	const renderRow = (row: VisibleTreeNodeRow, highlightDragTargetNode = true) => (
+		<MemoTreeNodeRow
+			node={row.node}
+			dragReceiverNode={getDragReceiverNode(row)}
+			highlightDragTargetNode={highlightDragTargetNode}
+			selectedKeySet={selectedKeySet}
+			renderVersion={`${rowRenderContextVersion ?? ""}:${getRowRenderVersion?.(row) ?? ""}`}
+			onSelect={handleSelect}
+			titleRender={titleRender}
+			customTreeNodeClass={styles.customTreeNode}
+			dragTargetNodeClass={dragTargetNodeClass}
+			dragTargetKey={dragTargetKey}
+			isDragTargetNode={isDragTargetNode}
+			onDragEnter={onDragEnter}
+			onDragLeave={onDragLeave}
+			onDragOver={onDragOver}
+			onDrop={onDrop}
+		/>
+	)
+
+	const renderDragTargetBlock = () => {
+		if (!dragTargetBlockStyle || !dragTargetNodeClass) return null
+
+		return (
+			<div
+				className={dragTargetNodeClass}
+				style={{
+					position: "absolute",
+					top: `${dragTargetBlockStyle.top}px`,
+					left: 0,
+					right: 0,
+					height: `${dragTargetBlockStyle.height}px`,
+					pointerEvents: "none",
+					zIndex: 0,
+				}}
+			/>
+		)
 	}
 
-	const handleSelect = (key: string, node: TreeNodeData) => {
-		if (!onSelect) return
+	if (shouldVirtualize) {
+		return (
+			<div
+				className={cx("magic-tree", className)}
+				style={{
+					height: `${totalSize}px`,
+					position: "relative",
+					width: "100%",
+				}}
+			>
+				{renderDragTargetBlock()}
+				{virtualItems.map((virtualItem) => {
+					const row = visibleRows[virtualItem.index]
+					if (!row) return null
 
-		const isSelected = selectedKeys.includes(key)
-		let newSelectedKeys: React.Key[]
-
-		if (isSelected) {
-			newSelectedKeys = selectedKeys.filter((k) => k !== key)
-		} else {
-			newSelectedKeys = [key] // 单选模式
-		}
-
-		onSelect(newSelectedKeys, { selected: !isSelected, node })
+					return (
+						<div
+							key={virtualItem.key}
+							data-index={virtualItem.index}
+							ref={rowVirtualizer.measureElement}
+							style={{
+								position: "absolute",
+								top: 0,
+								left: 0,
+								minHeight: `${rowEstimateSize}px`,
+								width: "100%",
+								transform: `translateY(${virtualItem.index * rowEstimateSize}px)`,
+								zIndex: 1,
+							}}
+						>
+							{renderRow(row, !shouldShowDragTargetBlock)}
+						</div>
+					)
+				})}
+			</div>
+		)
 	}
 
 	return (
-		<div className={cx("magic-tree", className)}>
-			{treeData.map((node) => (
-				<TreeNode
-					key={node.key}
-					node={node}
-					expandedKeys={expandedKeys}
-					selectedKeys={selectedKeys}
-					onExpand={handleExpand}
-					onSelect={handleSelect}
-					titleRender={titleRender}
-					showIcon={showIcon}
-					blockNode={blockNode}
-					className={className}
-					dragTargetNodeClass={dragTargetNodeClass}
-					isDragTargetNode={isDragTargetNode}
-					onDragEnter={onDragEnter}
-					onDragLeave={onDragLeave}
-					onDragOver={onDragOver}
-					onDrop={onDrop}
-				/>
+		<div
+			className={cx("magic-tree", className)}
+			style={{
+				minHeight: `${totalSize}px`,
+				position: "relative",
+				width: "100%",
+			}}
+		>
+			{renderDragTargetBlock()}
+			{visibleRows.map((row, index) => (
+				<div
+					key={row.node.key}
+					data-index={index}
+					style={{
+						position: "relative",
+						minHeight: `${rowEstimateSize}px`,
+						zIndex: 1,
+					}}
+				>
+					{renderRow(row, !shouldShowDragTargetBlock)}
+				</div>
 			))}
 		</div>
 	)

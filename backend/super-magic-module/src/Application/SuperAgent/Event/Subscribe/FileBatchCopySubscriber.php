@@ -230,7 +230,12 @@ class FileBatchCopySubscriber extends ConsumerMessage
                     $targetParentEntity->getFileId(),
                     $keepBothFileIds
                 );
-                if (! empty($children)) {
+                if ($newTargetEntity->getFileId() === $fileId && ! in_array((string) $fileId, $keepBothFileIds, true)) {
+                    $this->logger->info('Skipped directory copy because target directory is source directory itself', [
+                        'source_id' => $fileId,
+                        'target_parent_id' => $targetParentEntity->getFileId(),
+                    ]);
+                } elseif (! empty($children)) {
                     foreach ($children as $child) {
                         $this->copyFile($dataIsolation, $child, $sourceProject, $targetProject, $newTargetEntity, $keepBothFileIds);
                     }
@@ -252,6 +257,16 @@ class FileBatchCopySubscriber extends ConsumerMessage
                     $targetParentEntity->getFileId(),
                     $keepBothFileIds
                 );
+
+                if ($copiedFileEntity->getFileId() === $fileEntity->getFileId()) {
+                    $this->logger->info('Skipped file copy because target file is source file itself', [
+                        'source_id' => $fileId,
+                        'target_parent_id' => $targetParentEntity->getFileId(),
+                    ]);
+                    ++$this->processedFiles;
+                    $this->updateFileCopyingProgress();
+                    return;
+                }
 
                 $this->syncTreeAfterProjectCopy(
                     $copiedFileEntity,
@@ -323,9 +338,10 @@ class FileBatchCopySubscriber extends ConsumerMessage
             $sourceFileName
         );
 
-        // Copying a directory to the same parent should keep both and fall through to rename.
         if ($targetFileEntity !== null && $targetFileEntity->getFileId() === $sourceFileId) {
-            $shouldKeepBoth = true;
+            if (! $shouldKeepBoth) {
+                return $oldFileEntity;
+            }
         }
 
         $newDirName = $sourceFileName;
@@ -339,17 +355,34 @@ class FileBatchCopySubscriber extends ConsumerMessage
         }
 
         if (! $shouldKeepBoth && $targetFileEntity !== null) {
+            // When the existing target with the same name is also a directory, reuse it
+            // (merge into it) instead of deleting and recreating. This preserves the
+            // target directory's existing children and lets inner file conflicts be
+            // resolved per-file (e.g. keep-both renames source copies to "name(1).ext").
             if ($targetFileEntity->getIsDirectory()) {
-                $this->logger->info('Reusing existing directory at new location', [
+                $this->logger->info('Reusing existing target directory for merge copy', [
                     'source_id' => $sourceFileId,
                     'existing_id' => $targetFileEntity->getFileId(),
                     'target_parent_id' => $parentId,
                 ]);
+
                 return $targetFileEntity;
             }
 
-            // Overwrite file with directory in copy mode.
-            $this->magicFSFileDomainService->deleteFile((string) $targetFileEntity->getFileId());
+            // Type mismatch: existing target is a file while source is a directory.
+            // Keep the original overwrite behavior by deleting the conflicting file first.
+            $this->logger->info('Deleting existing target before directory copy overwrite', [
+                'source_id' => $sourceFileId,
+                'existing_id' => $targetFileEntity->getFileId(),
+                'target_parent_id' => $parentId,
+                'existing_is_directory' => $targetFileEntity->getIsDirectory(),
+            ]);
+
+            $this->magicFSFileDomainService->deleteFile(
+                (string) $targetFileEntity->getFileId(),
+                $targetFileEntity->getIsDirectory()
+            );
+            $targetFileEntity = null;
         }
 
         $createdDirectory = $this->magicFSFileDomainService->createFile(
@@ -550,7 +583,7 @@ class FileBatchCopySubscriber extends ConsumerMessage
         }
 
         foreach ($fileTree as $node) {
-            if (empty($node['file_id']) || $node['parent_id'] === $targetParentId) {
+            if (empty($node['file_id'])) {
                 continue;
             }
 

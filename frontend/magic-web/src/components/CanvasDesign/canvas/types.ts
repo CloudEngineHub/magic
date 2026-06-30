@@ -6,6 +6,7 @@ import type {
 	ImageGenerationTaskMeta,
 	IdentifyImageMarkResponse,
 	GenerateVideoRequest,
+	VideoGenerationResultMeta,
 	GenerationStatus,
 } from "../types.magic"
 import type { TFunction } from "../context/I18nContext"
@@ -49,6 +50,20 @@ export interface ExtendSession {
 /**
  * Canvas配置
  */
+export type CanvasDeviceFormFactor = "phone" | "tablet" | "desktop"
+
+export type CanvasDeviceLayout = "compact" | "regular"
+
+export interface CanvasDeviceInfo {
+	formFactor: CanvasDeviceFormFactor
+	layout: CanvasDeviceLayout
+	input: {
+		touch: boolean
+		coarsePointer: boolean
+		hover: boolean
+	}
+}
+
 export interface CanvasConfig {
 	/** 用于挂载Konva画布的DOM元素 */
 	element: HTMLDivElement
@@ -63,8 +78,10 @@ export interface CanvasConfig {
 		methods?: CanvasDesignMethods
 		permissions?: MagicPermissions
 	}
-	/** 判断是否为移动端的函数，如果未提供则使用默认检测 */
-	getIsMobile?: () => boolean
+	/** Plugin configuration injected by the host application. */
+	plugins?: CanvasDesignPluginModuleConfig
+	/** 获取设备形态、布局和输入能力，如果未提供则使用默认检测 */
+	getDevice?: () => CanvasDeviceInfo
 	/** 翻译函数 */
 	t?: TFunction
 }
@@ -327,6 +344,8 @@ export interface VideoElement extends BaseElementProps {
 	// poster?: string
 	/** 视频生成请求参数（请求成功后保存） */
 	generateVideoRequest?: GenerateVideoRequest
+	/** 视频生成结果元信息（计费、生成参数与运行时间） */
+	videoGenerationResultMeta?: VideoGenerationResultMeta
 }
 
 /** 可上传/下载的文件类元素（图片、视频等），用于 uploadFiles / downloadFiles 等接口 */
@@ -457,4 +476,79 @@ export interface ViewportPaddingInsets {
 	right: number
 	top: number
 	bottom: number
+}
+
+export type CanvasDesignPluginSource = "builtin" | "user"
+
+export type CanvasDesignPluginLocaleMessages = Record<string, string>
+
+export type CanvasDesignPluginLocales = Record<string, CanvasDesignPluginLocaleMessages>
+
+export interface CanvasDesignPluginCategory {
+	key: string
+	label?: string
+}
+
+export type CanvasDesignPluginCapability =
+	| "ui.toast"
+	| "ui.close"
+	| "ui.setHeight"
+	| "resources.resolve"
+	| "assets.pickFiles"
+	| "assets.uploadFile"
+	| "assets.fetchBlob"
+	| "ai.getImageModels"
+	| "ai.generateAndPlace"
+	| "ai.completeImagePrompt"
+	| "plugin.storage"
+
+export type CanvasDesignPluginRuntimeVersion = number
+
+export interface CanvasDesignPluginConfig {
+	name: string
+	/** Runtime processor version. It selects CanvasDesign's versioned plugin handler, e.g. runtime/v1. */
+	version: CanvasDesignPluginRuntimeVersion
+	/** Single-character emoji or a relative path to a media asset inside the plugin package. */
+	icon?: string
+	category?: CanvasDesignPluginCategory
+	tags?: string[]
+	label: string
+	description: string
+	/** Relative path to the plugin runtime entry script. */
+	entry: string
+	/** Relative stylesheet path or paths inside the plugin package. */
+	styles?: string | string[]
+	/** Host capabilities the plugin is allowed to call through the runtime bridge. */
+	capabilities?: string[]
+	/** Browser-resolved runtime URL for built-in plugin iframe loading. */
+	runtimeUrl?: string
+	/** Browser-resolved base URL for resolving resources inside the plugin package. */
+	resourceBaseUrl?: string
+	/** Inline runtime script content for built-in or imported user plugins. */
+	runtimeCode?: string
+	/** Inline stylesheet content loaded from styles entries. */
+	styleCode?: string[]
+	/** Resolve a relative resource path inside the plugin package to a browser URL. */
+	resolveResourceUrl?: (path: string) => string | Promise<string>
+	/** Plugin locale messages declared in manifest.json. */
+	locales?: CanvasDesignPluginLocales
+}
+
+export interface CanvasDesignPlugin extends CanvasDesignPluginConfig {
+	/** Plugin source: built-in plugin or user plugin. */
+	source: CanvasDesignPluginSource
+}
+
+export interface CanvasDesignUserPluginLoadConfig {
+	/** Topic-file resource directory that contains user plugins, usually ./plugins. */
+	rootPath: string
+	/** Plugin folder names under rootPath. Each folder is one user plugin package. */
+	directories?: string[]
+}
+
+export interface CanvasDesignPluginModuleConfig {
+	/** Built-in plugins registered by the host application. */
+	builtin?: CanvasDesignPlugin[]
+	/** User plugins loaded from the topic-file resource directory. */
+	user?: CanvasDesignUserPluginLoadConfig
 }

@@ -1,3 +1,4 @@
+import type { ReactNode } from "react"
 import { useTranslation } from "react-i18next"
 import {
 	IconDownload,
@@ -14,27 +15,33 @@ import {
 	IconReplace,
 	IconFolders,
 	IconSquareCheck,
+	IconInfoCircle,
 } from "@tabler/icons-react"
 import IconOpenWindow from "@/enhance/tabler/icons-react/icons/IconOpenWindow"
 import MagicIcon from "@/components/base/MagicIcon"
-import { Flex, message } from "antd"
-import { AttachmentSource, type AttachmentItem } from "./types"
+import { Flex } from "antd"
+import type { AttachmentItem } from "./types"
 import { useStyles } from "../style"
 import { useIsMobile } from "@/hooks/useIsMobile"
 
 import MagicModal from "@/components/base/MagicModal"
 import { MagicSystemFolderIcon } from "../components/MagicSystemFolderIcon"
-import { getAppEntryFile } from "../../MessageList/components/MessageAttachment/utils"
 import VIPTag from "../../VIPTag"
-import { IMAGE_EXTENSIONS } from "../../Detail/hooks/useDetailActions"
 import { DownloadImageMode } from "../../../pages/Workspace/types"
+import {
+	buildSingleFileDownloadMenu,
+	DOWNLOAD_IMAGE_NO_WATERMARK_MENU_KEY,
+	type MobileDownloadMenuItem,
+	type SingleFileDownloadHandlers,
+} from "../utils/build-single-file-download-menu"
 import { createFileMenuItems } from "../components/hooks/useFileMenuItems"
 import { useFileActionVisibility } from "@/pages/superMagic/providers/file-action-visibility-provider"
 import { normalizeMenuItems, type TopicFilesMenuItem } from "../utils/menu-items"
 import { isMagicSystemFolder } from "../utils/magic-system-folder"
-import { isConvertibleFile } from "../../Detail/utils/file"
-import type { TreeNodeData } from "../utils/treeDataConverter"
-import { findNodePath } from "../utils/path-helper"
+import { getAttachmentIndexEntry, type AttachmentIndex } from "../utils/attachmentIndex"
+import { canCreateDesignProjectInMenuTarget } from "../../Detail/contents/Design/utils/designProjectMenuPolicy"
+import { getAttachmentKey } from "../utils/getAttachmentKey"
+import { useMobileDeleteConfirmSheet } from "./useMobileDeleteConfirmSheet"
 
 type MenuItem = TopicFilesMenuItem
 
@@ -45,11 +52,7 @@ interface UseContextMenuOptions {
 	handleShareItem: (item: AttachmentItem) => void
 	handleDeleteItem: (item: AttachmentItem) => void
 	handleDownloadOriginal: (item: AttachmentItem, mode?: DownloadImageMode) => void
-	handleDownloadPdf: (
-		item: AttachmentItem,
-		folderChildren?: AttachmentItem[],
-		pagination?: "slice" | "none",
-	) => void
+	handleDownloadPdf: (item: AttachmentItem, folderChildren?: AttachmentItem[]) => void
 	handleDownloadPpt: (item: AttachmentItem) => void
 	handleDownloadPptx: (item: AttachmentItem, folderChildren?: AttachmentItem[]) => void
 	handleDownloadImage?: (item: AttachmentItem, format: "png" | "jpeg") => void
@@ -59,6 +62,7 @@ interface UseContextMenuOptions {
 	handleAddToNewChat: (item: AttachmentItem) => void
 	handleMoveFile?: (item: AttachmentItem) => void
 	handleReplaceFile?: (item: AttachmentItem) => void
+	handleShowInfo?: (item: AttachmentItem) => void
 	createVirtualFile: (
 		type: "txt" | "md" | "html" | "py" | "go" | "php" | "design" | "customFile",
 		key?: string,
@@ -66,6 +70,8 @@ interface UseContextMenuOptions {
 	) => void
 	createVirtualFolder: (key?: string, parentPath?: string) => void
 	createVirtualDesignProject?: (key?: string, parentPath?: string) => void
+	createVirtualSelfMediaProject?: (key?: string, parentPath?: string) => void
+	createVirtualAICardProject?: (key?: string, parentPath?: string) => void
 	isMoving?: boolean
 	// 新增：多文件选择相关
 	selectedItems?: Set<string>
@@ -88,14 +94,112 @@ interface UseContextMenuOptions {
 	handleEnterMultiSelectMode?: (item: AttachmentItem) => void
 	/* 是否已在多选模式 */
 	isSelectMode?: boolean
-	/* 树形数据，用于检查父级节点 */
-	treeData?: TreeNodeData[]
+	/* File tree index for parent checks */
+	treeIndex?: AttachmentIndex
+	/** Full attachment tree for mobile hierarchy delete confirmation */
+	attachments?: AttachmentItem[]
 }
 
-function isImage(fileExtension?: string): boolean {
-	if (!fileExtension) return false
-	const ext = fileExtension.toLowerCase()
-	return IMAGE_EXTENSIONS.includes(ext)
+function buildFolderPathFromIndex(
+	item: AttachmentItem,
+	treeIndex?: AttachmentIndex,
+): string | undefined {
+	if (!treeIndex || !item.file_id) return undefined
+
+	const entry = getAttachmentIndexEntry(treeIndex, item.file_id)
+	if (!entry) return undefined
+
+	const pathNames = [...treeIndex.getParentItemsById(item.file_id), item]
+		.map((pathItem) => pathItem.name || pathItem.file_name || pathItem.display_filename)
+		.filter(Boolean)
+
+	if (pathNames.length === 0) return "/"
+	return `/${pathNames.join("/")}/`
+}
+
+interface MapDownloadMenuToContextOptions {
+	isFreeTrialVersion?: boolean
+	preloadWaterMarkFreeModal?: () => void
+	t: (key: string) => string
+}
+
+/** Map shared download menu entries to Ant Design context menu items. */
+function mapDownloadMenuToContextItems(
+	entries: MobileDownloadMenuItem[],
+	options: MapDownloadMenuToContextOptions,
+): MenuItem[] {
+	return entries.map((entry) => ({
+		key: entry.key,
+		label:
+			entry.key === DOWNLOAD_IMAGE_NO_WATERMARK_MENU_KEY && options.isFreeTrialVersion ? (
+				<Flex align="center" gap={4}>
+					<span>{entry.label}</span>
+					<VIPTag />
+				</Flex>
+			) : (
+				entry.label
+			),
+		onClick: entry.onClick,
+		onMouseEnter:
+			entry.key === DOWNLOAD_IMAGE_NO_WATERMARK_MENU_KEY
+				? options.preloadWaterMarkFreeModal
+				: undefined,
+		children: entry.children?.length
+			? mapDownloadMenuToContextItems(entry.children, options)
+			: undefined,
+	}))
+}
+
+/** Append download entries from the shared builder onto a context menu list. */
+function appendDownloadContextMenuItems(
+	menuItems: MenuItem[],
+	item: AttachmentItem,
+	handlers: SingleFileDownloadHandlers,
+	t: (key: string) => string,
+	downloadIcon: ReactNode,
+	options: {
+		shouldUseSingleDownloadEntry?: boolean
+		isFreeTrialVersion?: boolean
+		preloadWaterMarkFreeModal?: () => void
+	},
+) {
+	const entries = buildSingleFileDownloadMenu({
+		item,
+		handlers,
+		t,
+		shouldUseSingleDownloadEntry: options.shouldUseSingleDownloadEntry,
+	})
+	if (entries.length === 0) return
+
+	if (item.is_directory && item.display_config?.type !== "slide") {
+		const entry = entries[0]
+		menuItems.push({
+			key: "downloadFolder",
+			label: entry.label,
+			icon: downloadIcon,
+			onClick: entry.onClick,
+		})
+		return
+	}
+
+	const hasSubMenu = entries.length > 1 || entries.some((entry) => entry.children?.length)
+	if (!hasSubMenu) {
+		const entry = entries[0]
+		menuItems.push({
+			key: "download",
+			label: t("topicFiles.contextMenu.download"),
+			icon: downloadIcon,
+			onClick: entry.onClick,
+		})
+		return
+	}
+
+	menuItems.push({
+		key: "download",
+		label: t("topicFiles.contextMenu.download"),
+		icon: downloadIcon,
+		children: mapDownloadMenuToContextItems(entries, { ...options, t }),
+	})
 }
 
 /**
@@ -156,56 +260,14 @@ export function flattenMenuItems(items: MenuItem[]): MenuItem[] {
 /**
  * 检查父级或更父级是否有 display_config
  * @param item - 当前文件/文件夹项
- * @param treeData - 完整的树形数据
+ * @param treeIndex - File tree index
  * @returns 如果父级链中有任何节点带 display_config，返回 true
  */
-function hasDisplayConfigInAncestors(item: AttachmentItem, treeData?: TreeNodeData[]): boolean {
-	if (!treeData || !item.relative_file_path) return false
-
-	const currentPath = item.relative_file_path
-	// 如果是根目录，没有父级
-	if (currentPath === "/" || !currentPath.includes("/")) return false
-
-	// 规范化路径：去掉尾部的 /
-	const normalizePath = (path: string) => path.replace(/\/+$/, "")
-
-	// 递归查找指定路径的节点
-	const findNodeByPath = (nodes: TreeNodeData[], targetPath: string): AttachmentItem | null => {
-		const normalizedTargetPath = normalizePath(targetPath)
-		for (const node of nodes) {
-			const nodePath = node.item.relative_file_path
-			if (nodePath && normalizePath(nodePath) === normalizedTargetPath) {
-				return node.item
-			}
-			if (node.children) {
-				const found = findNodeByPath(node.children, targetPath)
-				if (found) return found
-			}
-		}
-		return null
-	}
-
-	// 获取所有父级路径
-	const pathParts = currentPath.split("/").filter(Boolean)
-
-	// 逐级向上检查每个父级路径
-	for (let i = pathParts.length - 1; i > 0; i--) {
-		const parentPath = "/" + pathParts.slice(0, i).join("/")
-		const parentNode = findNodeByPath(treeData, parentPath)
-
-		// 如果找到父级节点且有 display_config，返回 true
-		if (parentNode?.display_config) {
-			return true
-		}
-	}
-
-	// 检查根目录
-	const rootNode = findNodeByPath(treeData, "/")
-	if (rootNode?.display_config) {
-		return true
-	}
-
-	return false
+function hasDisplayConfigInAncestors(item: AttachmentItem, treeIndex?: AttachmentIndex): boolean {
+	if (!treeIndex || !item.file_id) return false
+	return treeIndex
+		.getParentItemsById(item.file_id)
+		.some((parent) => Boolean(parent.display_config))
 }
 
 /**
@@ -215,6 +277,7 @@ export function useContextMenu(options: UseContextMenuOptions) {
 	const { t } = useTranslation("super")
 	const { styles } = useStyles()
 	const isMobile = useIsMobile()
+	const { deleteConfirmNode, openDeleteConfirm } = useMobileDeleteConfirmSheet()
 	const { hideCopyTo, hideCreateNewTopic, hideMoveTo, hideShareFile } = useFileActionVisibility()
 	const {
 		handleUploadFile,
@@ -235,10 +298,13 @@ export function useContextMenu(options: UseContextMenuOptions) {
 		handleAddToNewChat,
 		handleMoveFile,
 		handleReplaceFile,
+		handleShowInfo,
 		onCopyFile,
 		createVirtualFile,
 		createVirtualFolder,
 		createVirtualDesignProject,
+		createVirtualSelfMediaProject,
+		createVirtualAICardProject,
 		isMoving = false,
 		selectedItems,
 		handleAddMultipleFilesToCurrentChat,
@@ -250,7 +316,8 @@ export function useContextMenu(options: UseContextMenuOptions) {
 		getShortcutHint,
 		handleEnterMultiSelectMode,
 		isSelectMode = false,
-		treeData,
+		treeIndex,
+		attachments = [],
 	} = options
 
 	// 获取文件夹路径 - 优先使用 relative_file_path,否则从树结构中计算
@@ -261,7 +328,7 @@ export function useContextMenu(options: UseContextMenuOptions) {
 				return item.relative_file_path
 			}
 
-			const pathFromTree = item.file_id ? findNodePath(treeData || [], item.file_id) : null
+			const pathFromTree = buildFolderPathFromIndex(item, treeIndex)
 			return pathFromTree || `/${item.name}`
 		}
 		return undefined
@@ -283,8 +350,9 @@ export function useContextMenu(options: UseContextMenuOptions) {
 				children: createFileMenuItems({
 					t,
 					onAddFile: (type) => createVirtualFile(type),
-					// 只在根目录显示新建画布选项
 					onAddDesign: createVirtualDesignProject,
+					onAddSelfMedia: createVirtualSelfMediaProject,
+					onAddAICard: createVirtualAICardProject,
 				}),
 			},
 			{
@@ -327,13 +395,38 @@ export function useContextMenu(options: UseContextMenuOptions) {
 	// 生成菜单项
 	const getMenuItems = (item: AttachmentItem): MenuItem[] => {
 		const menuItems: MenuItem[] = []
+		const downloadIcon = <MagicIcon component={IconDownload} stroke={2} size={18} />
+		const downloadHandlers: SingleFileDownloadHandlers = {
+			handleDownloadOriginal,
+			handleDownloadPdf,
+			handleDownloadPpt,
+			handleDownloadPptx,
+			handleDownloadImage,
+			handleDownloadNoWaterMark,
+			preloadWaterMarkFreeModal,
+		}
+		const downloadMenuOptions = {
+			shouldUseSingleDownloadEntry,
+			isFreeTrialVersion,
+			preloadWaterMarkFreeModal,
+		}
+		const showInfoMenuItems: MenuItem[] = handleShowInfo
+			? [
+					{
+						key: "showInfo",
+						label: t("topicFiles.contextMenu.showInfo"),
+						icon: <MagicIcon component={IconInfoCircle} stroke={2} size={18} />,
+						onClick: () => handleShowInfo(item),
+					},
+				]
+			: []
 
 		if (item.is_directory && "children" in item) {
 			const parentPath = getFolderPath(item)
 			const key = item.file_id
 			// 判断是否允许创建画布：当前项或父级/更父级没有携带 display_config 时才允许
 			const canCreateDesignProject =
-				!item.display_config && !hasDisplayConfigInAncestors(item, treeData)
+				!item.display_config && !hasDisplayConfigInAncestors(item, treeIndex)
 
 			menuItems.push(
 				{
@@ -343,10 +436,17 @@ export function useContextMenu(options: UseContextMenuOptions) {
 					children: createFileMenuItems({
 						t,
 						onAddFile: (type) => createVirtualFile(type, key, parentPath),
-						// 只在当前项和父级或更父级都没有 display_config 时显示新建画布选项
 						onAddDesign:
 							createVirtualDesignProject && canCreateDesignProject
 								? () => createVirtualDesignProject(key, parentPath)
+								: undefined,
+						onAddSelfMedia:
+							createVirtualSelfMediaProject && canCreateDesignProject
+								? () => createVirtualSelfMediaProject(key, parentPath)
+								: undefined,
+						onAddAICard:
+							createVirtualAICardProject && canCreateDesignProject
+								? () => createVirtualAICardProject(key, parentPath)
 								: undefined,
 					}),
 				},
@@ -511,70 +611,19 @@ export function useContextMenu(options: UseContextMenuOptions) {
 							hideCreateNewTopic ? menuItem.key !== "addToNewChat" : true,
 						)),
 				{ type: "divider" as const },
-				// 文件夹下载菜单：根据display_config决定显示方式
-				...(item.display_config && item.display_config?.type === "slide"
-					? [
-							{
-								key: "download",
-								label: t("topicFiles.contextMenu.download"),
-								icon: <MagicIcon component={IconDownload} stroke={2} size={18} />,
-								children: [
-									{
-										key: "downloadOriginal",
-										label: t("topicFiles.contextMenu.downloadOriginal"),
-										onClick: () => handleDownloadOriginal(item),
-									},
-									{
-										key: "downloadPdf",
-										label: t("topicFiles.contextMenu.downloadPdf"),
-										onClick: () => {
-											handleDownloadPdf(item, item.children || [])
-										},
-									},
-									{
-										key: "downloadPpt",
-										label: t("topicFiles.contextMenu.downloadPpt"),
-										onClick: () => {
-											const appEntryFile = getAppEntryFile(
-												item.children || [],
-												item.display_config,
-											)
-											if (appEntryFile) handleDownloadPpt(appEntryFile)
-											else if (item.display_config?.type === "custom")
-												message.error(
-													t("topicFiles.customMainFileNotFound"),
-												)
-										},
-									},
-									{
-										key: "downloadPptx",
-										label: t("topicFiles.contextMenu.downloadPptx"),
-										onClick: () => {
-											const children = item.children || []
-											const appEntryFile = getAppEntryFile(
-												children,
-												item.display_config,
-											)
-											if (appEntryFile) {
-												console.log("children", children)
-												handleDownloadPptx(appEntryFile, children)
-											} else if (item.display_config?.type === "custom")
-												message.error(
-													t("topicFiles.customMainFileNotFound"),
-												)
-										},
-									},
-								],
-							},
-						]
-					: [
-							{
-								key: "downloadFolder",
-								label: t("topicFiles.contextMenu.downloadFolder"),
-								icon: <MagicIcon component={IconDownload} stroke={2} size={18} />,
-								onClick: () => handleDownloadOriginal(item),
-							},
-						]),
+				// Folder download menu: single source via buildSingleFileDownloadMenu (avoids duplicate entries)
+				...(() => {
+					const downloadMenuItems: MenuItem[] = []
+					appendDownloadContextMenuItems(
+						downloadMenuItems,
+						item,
+						downloadHandlers,
+						t,
+						downloadIcon,
+						downloadMenuOptions,
+					)
+					return downloadMenuItems
+				})(),
 				{ type: "divider" as const },
 				...(!hideShareFile
 					? [
@@ -598,6 +647,7 @@ export function useContextMenu(options: UseContextMenuOptions) {
 							},
 						]
 					: []),
+				...showInfoMenuItems,
 				{ type: "divider" as const },
 				{
 					key: "delete",
@@ -613,8 +663,17 @@ export function useContextMenu(options: UseContextMenuOptions) {
 					),
 					disabled: isMoving,
 					onClick: () => {
-						const isFolder = item.is_directory
+						const isFolder = Boolean(item.is_directory)
 						const isMagicFolder = Boolean(isFolder && isMagicSystemFolder(item))
+						if (isMobile) {
+							openDeleteConfirm({
+								attachments,
+								selectedKeys: new Set([getAttachmentKey(item)]),
+								onConfirm: () => handleDeleteItem(item),
+								testIdPrefix: "topic-files-delete-confirm",
+							})
+							return
+						}
 						MagicModal.confirm({
 							title: isFolder
 								? t("topicFiles.contextMenu.deleteFolderTip")
@@ -644,10 +703,6 @@ export function useContextMenu(options: UseContextMenuOptions) {
 			return normalizeMenuItems(filterMenuItems?.(menuItems) || menuItems)
 		} else {
 			// 文件菜单
-			const canConvertToPdf = isConvertibleFile(item, ["html", "md"])
-			const canConvertToPPTX = isConvertibleFile(item, ["html"])
-			const canConvertToImage = isConvertibleFile(item, ["html"])
-
 			menuItems.push(
 				{
 					key: "openFile",
@@ -793,122 +848,14 @@ export function useContextMenu(options: UseContextMenuOptions) {
 				{ type: "divider" as const },
 			)
 
-			// 根据文件类型决定下载菜单的展示方式
-			if (canConvertToPdf || canConvertToPPTX || canConvertToImage) {
-				// 支持转换的文件：显示下载子菜单
-				const downloadChildren: MenuItem[] = [
-					{
-						key: "downloadOriginal",
-						label: t("topicFiles.contextMenu.downloadOriginal"),
-						onClick: () => handleDownloadOriginal(item, DownloadImageMode.Download),
-					},
-				]
-
-				// 添加PDF转换选项
-				if (canConvertToPdf) {
-					downloadChildren.push({
-						key: "downloadPdf",
-						label: t("topicFiles.contextMenu.downloadPdf"),
-						children: [
-							{
-								key: "downloadPdfPaginated",
-								label: t("topicFiles.exportPdfPaginated"),
-								onClick: () => handleDownloadPdf(item, undefined, "slice"),
-							},
-							{
-								key: "downloadPdfFullPage",
-								label: t("topicFiles.exportPdfFullPage"),
-								onClick: () => handleDownloadPdf(item, undefined, "none"),
-							},
-						],
-					})
-				}
-
-				// 添加PPTX转换选项
-				if (canConvertToPPTX) {
-					console.log(item)
-					downloadChildren.push({
-						key: "downloadPpt",
-						label: t("topicFiles.contextMenu.downloadPpt"),
-						onClick: () => handleDownloadPpt(item),
-					})
-					downloadChildren.push({
-						key: "downloadPptx",
-						label: t("topicFiles.contextMenu.downloadPptx"),
-						onClick: () => handleDownloadPptx(item, item.children || []),
-					})
-				}
-
-				// 添加图片导出选项（仅 HTML）
-				if (canConvertToImage && handleDownloadImage) {
-					downloadChildren.push({
-						key: "downloadAsImage",
-						label: t("topicFiles.contextMenu.downloadAsImage"),
-						children: [
-							{
-								key: "downloadImagePng",
-								label: t("topicFiles.exportImagePng"),
-								onClick: () => handleDownloadImage(item, "png"),
-							},
-							{
-								key: "downloadImageJpeg",
-								label: t("topicFiles.exportImageJpeg"),
-								onClick: () => handleDownloadImage(item, "jpeg"),
-							},
-						],
-					})
-				}
-
-				menuItems.push({
-					key: "download",
-					label: t("topicFiles.contextMenu.download"),
-					icon: <MagicIcon component={IconDownload} stroke={2} size={18} />,
-					children: downloadChildren,
-				})
-			} else {
-				const isAIImageFile =
-					isImage(item.file_extension) && item.source === AttachmentSource.AI
-				// 其他文件：直接下载原始文件
-				menuItems.push({
-					key: "download",
-					label: t("topicFiles.contextMenu.download"),
-					icon: <MagicIcon component={IconDownload} stroke={2} size={18} />,
-					onClick: !isAIImageFile
-						? () => handleDownloadOriginal(item, DownloadImageMode.Download)
-						: shouldUseSingleDownloadEntry
-							? () => handleDownloadNoWaterMark?.(item)
-							: undefined,
-					children:
-						isAIImageFile && !shouldUseSingleDownloadEntry
-							? [
-									{
-										key: "downloadImage",
-										label: t("topicFiles.contextMenu.downloadImage"),
-										onClick: () =>
-											handleDownloadOriginal(
-												item,
-												DownloadImageMode.NormalDownload,
-											),
-									},
-									{
-										key: "downloadImageNoWaterMark",
-										label: (
-											<Flex align="center" gap={4}>
-												<span>
-													{t(
-														"topicFiles.contextMenu.downloadImageNoWaterMark",
-													)}
-												</span>
-												{isFreeTrialVersion && <VIPTag />}
-											</Flex>
-										),
-										onClick: () => handleDownloadNoWaterMark?.(item),
-										onMouseEnter: () => preloadWaterMarkFreeModal?.(),
-									},
-								]
-							: undefined,
-				})
-			}
+			appendDownloadContextMenuItems(
+				menuItems,
+				item,
+				downloadHandlers,
+				t,
+				downloadIcon,
+				downloadMenuOptions,
+			)
 
 			menuItems.push(
 				{ type: "divider" as const },
@@ -934,6 +881,7 @@ export function useContextMenu(options: UseContextMenuOptions) {
 							},
 						]
 					: []),
+				...showInfoMenuItems,
 				{ type: "divider" as const },
 				{
 					key: "delete",
@@ -949,8 +897,17 @@ export function useContextMenu(options: UseContextMenuOptions) {
 					),
 					disabled: isMoving,
 					onClick: () => {
-						const isFolder = item.is_directory
+						const isFolder = Boolean(item.is_directory)
 						const isMagicFolder = Boolean(isFolder && isMagicSystemFolder(item))
+						if (isMobile) {
+							openDeleteConfirm({
+								attachments,
+								selectedKeys: new Set([getAttachmentKey(item)]),
+								onConfirm: () => handleDeleteItem(item),
+								testIdPrefix: "topic-files-delete-confirm",
+							})
+							return
+						}
 						MagicModal.confirm({
 							title: isFolder
 								? t("topicFiles.contextMenu.deleteFolderTip")
@@ -984,5 +941,6 @@ export function useContextMenu(options: UseContextMenuOptions) {
 	return {
 		getMenuItems,
 		getBatchDownloadLayerMenuItems,
+		deleteConfirmNode,
 	}
 }

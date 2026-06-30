@@ -34,6 +34,7 @@ import GlobalMentionPanelStore, {
 import { SUPER_PLACEHOLDER_TYPE } from "../extensions/super-placeholder/const"
 import { MentionItemType } from "@/components/business/MentionPanel/types"
 import MarkerMentionNodeView from "../components/MentionNodes/marker/MarkerMentionNodeView"
+import { runActiveEditor } from "../utils/editorLifecycle"
 
 interface UseMessageEditorProps {
 	value?: JSONContent
@@ -381,11 +382,9 @@ export const useMessageEditor = ({
 				return
 			}
 
-			try {
-				tiptapEditor.commands.updatePlaceholder(placeholder)
-			} catch (error) {
-				console.warn("Failed to update placeholder:", error)
-			}
+			runActiveEditor(tiptapEditor, (editor) => {
+				editor.commands.updatePlaceholder(placeholder)
+			})
 		})
 
 		return () => {
@@ -395,19 +394,23 @@ export const useMessageEditor = ({
 
 	// Handle dynamic language updates for MentionExtension
 	useEffect(() => {
-		if (tiptapEditor && shouldEnableMention) {
-			const mentionCommands = tiptapEditor.commands as typeof tiptapEditor.commands &
+		if (shouldEnableMention) {
+			runActiveEditor(tiptapEditor, (editor) => {
+				const mentionCommands = editor.commands as typeof editor.commands &
 				MentionEditorCommands
-			mentionCommands.updateMentionLanguage?.(i18n.language)
+				mentionCommands.updateMentionLanguage?.(i18n.language)
+			})
 		}
 	}, [tiptapEditor, i18n.language, shouldEnableMention])
 
 	// Handle dynamic keyboard shortcuts updates for MentionExtension
 	useEffect(() => {
-		if (tiptapEditor && shouldEnableMention) {
-			const mentionCommands = tiptapEditor.commands as typeof tiptapEditor.commands &
+		if (shouldEnableMention) {
+			runActiveEditor(tiptapEditor, (editor) => {
+				const mentionCommands = editor.commands as typeof editor.commands &
 				MentionEditorCommands
-			mentionCommands.updateMentionKeyboardShortcuts?.(isOAuthInProgress)
+				mentionCommands.updateMentionKeyboardShortcuts?.(isOAuthInProgress)
+			})
 		}
 	}, [tiptapEditor, isOAuthInProgress, shouldEnableMention])
 
@@ -420,20 +423,20 @@ export const useMessageEditor = ({
 		// throws "Applying a mismatched transaction" because our `tr` was created
 		// from a stale state snapshot.
 		const raf = requestAnimationFrame(() => {
-			if (!tiptapEditor.isDestroyed) {
-				tiptapEditor.commands.updateSuperPlaceholderSize(size)
-			}
+			runActiveEditor(tiptapEditor, (editor) => {
+				editor.commands.updateSuperPlaceholderSize(size)
+			})
 		})
 		return () => cancelAnimationFrame(raf)
 	}, [tiptapEditor, size])
 
 	// Handle dynamic enabled state for MentionExtension
 	useEffect(() => {
-		if (tiptapEditor) {
-			const mentionCommands = tiptapEditor.commands as typeof tiptapEditor.commands &
+		runActiveEditor(tiptapEditor, (editor) => {
+			const mentionCommands = editor.commands as typeof editor.commands &
 				MentionEditorCommands
 			mentionCommands.updateMentionEnabled?.(shouldEnableMention)
-		}
+		})
 	}, [tiptapEditor, shouldEnableMention])
 
 	return {

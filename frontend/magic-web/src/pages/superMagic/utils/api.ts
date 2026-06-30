@@ -155,6 +155,10 @@ export interface GetTemporaryDownloadUrlItem {
 	url: string
 	/** 过期时间，格式: 2026-03-03 11:14:03 */
 	expires_at?: string
+	/** 后端资源强版本；当前部分接口可能返回 null */
+	version?: string | null
+	/** 文件更新时间，格式: 2026-03-03 11:14:03 */
+	updated_at?: string
 }
 
 /**
@@ -173,6 +177,7 @@ export const getTemporaryDownloadUrl = async ({
 	file_versions,
 	download_mode,
 	options,
+	enableErrorMessagePrompt = true,
 }: {
 	file_ids: string[]
 	file_versions?: Record<string, number>
@@ -183,6 +188,7 @@ export const getTemporaryDownloadUrl = async ({
 	options?: {
 		xMagicImageProcess?: ImageProcessOptions
 	}
+	enableErrorMessagePrompt?: boolean
 }) => {
 	const isMagicShare = window?.location?.pathname?.includes("magic-share")
 
@@ -235,6 +241,7 @@ export const getTemporaryDownloadUrl = async ({
 				"X-Magic-Image-Process": buildImageProcessQuery(options?.xMagicImageProcess),
 			}),
 		},
+		enableErrorMessagePrompt,
 	})
 }
 
@@ -250,6 +257,7 @@ export const getFileContentById = async (
 		responseType?: "text" | "arrayBuffer" | "blob"
 		file_versions?: Record<string, number>
 		download_mode?: DownloadImageMode
+		xMagicImageProcess?: ImageProcessOptions
 	} = {},
 ): Promise<string | ArrayBuffer | Blob> => {
 	if (!fileId) {
@@ -262,6 +270,9 @@ export const getFileContentById = async (
 			file_ids: [fileId],
 			file_versions: options.file_versions,
 			download_mode: options.download_mode,
+			options: options.xMagicImageProcess
+				? { xMagicImageProcess: options.xMagicImageProcess }
+				: undefined,
 		})
 
 		if (!downloadUrls || !Array.isArray(downloadUrls) || downloadUrls.length === 0) {
@@ -677,6 +688,7 @@ export type SaveUploadFileToProjectResponse = {
 	task_id: string
 	created_at: string
 	relative_file_path: string
+	is_hidden?: boolean
 }
 
 // // 保存用户上传的文件到项目文件

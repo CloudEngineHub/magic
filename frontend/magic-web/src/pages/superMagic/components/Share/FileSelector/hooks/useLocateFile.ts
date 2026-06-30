@@ -1,12 +1,9 @@
 import { useState } from "react"
 import { useMemoizedFn } from "ahooks"
-import {
-	getNodePath,
-	type TreeNodeData,
-} from "@/pages/superMagic/components/TopicFilesButton/utils/treeDataConverter"
+import type { AttachmentIndex } from "@/pages/superMagic/components/TopicFilesButton/utils/attachmentIndex"
 
 interface UseLocateFileOptions {
-	treeData: TreeNodeData[]
+	attachmentIndex: AttachmentIndex
 	expandedKeys: React.Key[]
 	setExpandedKeys: (keys: React.Key[]) => void
 	treeAreaRef: React.RefObject<HTMLDivElement>
@@ -17,7 +14,7 @@ interface UseLocateFileOptions {
  * 负责处理文件在树中的定位、展开和滚动
  */
 export function useLocateFile(options: UseLocateFileOptions) {
-	const { treeData, expandedKeys, setExpandedKeys, treeAreaRef } = options
+	const { attachmentIndex, expandedKeys, setExpandedKeys, treeAreaRef } = options
 
 	// 定位文件状态
 	const [locatingFileId, setLocatingFileId] = useState<string | null>(null)
@@ -27,7 +24,7 @@ export function useLocateFile(options: UseLocateFileOptions) {
 		console.log("📍 Locating file in FileSelector:", fileId)
 
 		// 获取文件的路径（包括所有父文件夹）
-		const path = getNodePath(treeData, fileId)
+		const path = attachmentIndex.getPathKeysById(fileId)
 		console.log("📂 File path:", path)
 
 		// 展开所有父文件夹（排除最后一个，因为那是文件本身）

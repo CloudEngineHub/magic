@@ -3,7 +3,6 @@ import type { AttachmentItem } from "./types"
 
 interface UseFileListAreaDragOptions {
 	allowEdit: boolean
-	handleDrop: (info: any) => Promise<void>
 	// 新增：拖拽移动相关的处理器
 	handleFileDragEnter?: (e: React.DragEvent, targetItem: AttachmentItem | null) => void
 	handleFileDragLeave?: (e: React.DragEvent, targetItem: AttachmentItem | null) => void
@@ -27,7 +26,6 @@ interface UseFileListAreaDragOptions {
 export function useFileListAreaDrag(options: UseFileListAreaDragOptions) {
 	const {
 		allowEdit,
-		handleDrop,
 		handleFileDragEnter,
 		handleFileDragLeave,
 		handleFileDragOver,
@@ -38,7 +36,6 @@ export function useFileListAreaDrag(options: UseFileListAreaDragOptions) {
 	} = options
 
 	// 拖拽状态管理
-	const [draggedNode, setDraggedNode] = useState<any>(null)
 	const [isDragOverFileListArea, setIsDragOverFileListArea] = useState(false)
 
 	// 检查拖拽目标是否为Tree组件或其子元素
@@ -61,17 +58,6 @@ export function useFileListAreaDrag(options: UseFileListAreaDragOptions) {
 			current = current.parentElement
 		}
 		return false
-	}, [])
-
-	// 处理Tree节点开始拖拽
-	const handleTreeDragStart = useCallback((info: any) => {
-		setDraggedNode(info.node)
-	}, [])
-
-	// 处理Tree节点拖拽结束
-	const handleTreeDragEnd = useCallback(() => {
-		setDraggedNode(null)
-		setIsDragOverFileListArea(false)
 	}, [])
 
 	// 处理fileListArea的拖拽结束（确保状态清理）
@@ -144,20 +130,8 @@ export function useFileListAreaDrag(options: UseFileListAreaDragOptions) {
 				handleFileDragOver(e, null) // null表示根目录
 				setIsDragOverFileListArea(true)
 			}
-			// 旧的Tree拖拽逻辑（保持兼容性）
-			else if (draggedNode && allowEdit) {
-				e.preventDefault()
-				setIsDragOverFileListArea(true)
-			}
 		},
-		[
-			draggedNode,
-			allowEdit,
-			allowExternalDrop,
-			isTreeElement,
-			handleFileDragOver,
-			canMoveToRoot,
-		],
+		[allowEdit, allowExternalDrop, isTreeElement, handleFileDragOver, canMoveToRoot],
 	)
 
 	// 处理fileListArea的拖拽离开
@@ -230,30 +204,15 @@ export function useFileListAreaDrag(options: UseFileListAreaDragOptions) {
 					handleFileDrop(e, null) // null表示根目录
 				}
 			}
-			// 3. 旧的Tree拖拽逻辑（保持兼容性）
-			else if (draggedNode && allowEdit) {
-				const mockDropInfo = {
-					dragNode: draggedNode,
-					node: null, // 没有目标节点，表示拖拽到根目录
-					dropPosition: -1, // -1表示拖拽到根目录
-				}
-
-				console.log("Drop to fileListArea (root directory):", mockDropInfo)
-				await handleDrop(mockDropInfo)
-			}
 
 			setIsDragOverFileListArea(false)
 		},
-		[draggedNode, allowEdit, allowExternalDrop, handleDrop, handleFileDrop, isTreeElement],
+		[allowEdit, allowExternalDrop, handleFileDrop, isTreeElement],
 	)
 
 	return {
 		// 状态
 		isDragOverFileListArea,
-		draggedNode,
-		// Tree拖拽事件处理器
-		handleTreeDragStart,
-		handleTreeDragEnd,
 		// fileListArea拖拽事件处理器
 		handleFileListAreaDragEnter,
 		handleFileListAreaDragOver,

@@ -180,6 +180,7 @@ export function DocumentSelector({
 					)}
 					style={{ paddingLeft: `${level * 16 + 8}px` }}
 					onClick={() => isFolder && toggleFolder(node.node_ref)}
+					data-testid="toggle-folder"
 				>
 					{/* 展开/折叠图标 */}
 					{isFolder && node.has_children && (
@@ -252,6 +253,7 @@ export function DocumentSelector({
 						onClick={toggleSelectAll}
 						disabled={disabled}
 						className="text-xs text-primary hover:underline disabled:cursor-not-allowed disabled:opacity-50"
+						data-testid="toggle-select-all"
 					>
 						{isAllSelected
 							? t("documentCreate.common.unselectAll")

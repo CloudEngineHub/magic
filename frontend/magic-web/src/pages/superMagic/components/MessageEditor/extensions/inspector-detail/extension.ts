@@ -10,7 +10,8 @@ import { InspectorDetailComponent } from "./component"
  */
 export const InspectorDetailExtension = Node.create<InspectorDetailOptions>({
 	name: INSPECTOR_DETAIL_TYPE,
-	group: "block",
+	group: "inline",
+	inline: true,
 	atom: true,
 	selectable: true,
 	draggable: false,
@@ -47,16 +48,32 @@ export const InspectorDetailExtension = Node.create<InspectorDetailOptions>({
 				parseHTML: (el) => el.getAttribute("data-text-content") ?? "",
 				renderHTML: (attrs) => ({ "data-text-content": attrs.textContent }),
 			},
+			fileMention: {
+				default: null,
+				parseHTML: (el) => {
+					const raw = el.getAttribute("data-file-mention")
+					if (!raw) return null
+					try {
+						return JSON.parse(raw)
+					} catch {
+						return null
+					}
+				},
+				renderHTML: (attrs) =>
+					attrs.fileMention
+						? { "data-file-mention": JSON.stringify(attrs.fileMention) }
+						: {},
+			},
 		}
 	},
 
 	parseHTML() {
-		return [{ tag: `div[data-type="${this.name}"]` }]
+		return [{ tag: `[data-type="${this.name}"]` }]
 	},
 
 	renderHTML({ HTMLAttributes }) {
 		return [
-			"div",
+			"span",
 			mergeAttributes({ "data-type": this.name }, HTMLAttributes),
 			"[Element Inspector Detail]",
 		]

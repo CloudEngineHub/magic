@@ -15,6 +15,10 @@ from app.core.entity.message.server_message import (
     DisplayType,
     ToolDetail,
 )
+from app.core.context.execution_source import (
+    SuperMagicExecutionSource,
+    is_ask_user_allowed_source,
+)
 from app.tools.core.base_tool_params import BaseToolParams
 from app.tools.core.base_user_tool_call_tool import BaseUserToolCallTool, ResultBuilder, TimeoutAnswerBuilder
 from app.tools.core.tool_decorator import tool
@@ -22,7 +26,10 @@ from app.tools.core.tool_decorator import tool
 logger = get_logger(__name__)
 
 # Python 侧内部超时（秒），与 PHP 侧 Redis TTL=3600s 配合
-INTERNAL_TIMEOUT = 600
+ASK_USER_TIMEOUT_MIN_SECONDS = 10 * 60
+ASK_USER_TIMEOUT_MAX_SECONDS = 30 * 60
+ASK_USER_TIMEOUT_DEFAULT_SECONDS = 10 * 60
+ASK_USER_POLICY_SKIP_SECONDS = 1
 
 class AskUserParams(BaseToolParams):
     questions: str = Field(
@@ -30,8 +37,9 @@ class AskUserParams(BaseToolParams):
 Questions in XML format. Wrap each question in a <question> tag with a `type` attribute (confirm / input / select / multi_select). For select/multi_select, add <option> children. Optional attributes: default, placeholder, min, max.""",
     )
     timeout: int = Field(
-        description="""<!--zh: 等待用户回答的超时秒数（10~600）。根据问题复杂程度自行判断：简单确认填 10~30，需要用户思考或输入内容填 60~180，涉及复杂决策或需要用户查阅资料填 180~600。-->
-How many seconds to wait for the user's answer (10–600). Choose based on the complexity of the question: 10–30 for simple confirmations, 60–180 when the user needs to think or type content, 180–600 for complex decisions or when the user may need to look something up.""",
+        default=ASK_USER_TIMEOUT_DEFAULT_SECONDS,
+        description="""<!--zh: 等待用户回答的超时秒数（600~1800，即 10~30 分钟）。根据问题复杂程度自行判断：简单确认填 600，需要用户思考或输入内容填 900~1200，涉及复杂决策或需要用户查阅资料填 1200~1800。-->
+How many seconds to wait for the user's answer (600–1800, i.e. 10–30 minutes). Choose based on the complexity of the question: 600 for simple confirmations, 900–1200 when the user needs to think or type content, 1200–1800 for complex decisions or when the user may need to look something up.""",
     )
 
 
@@ -67,6 +75,15 @@ class AskUserTool(BaseUserToolCallTool[AskUserParams]):
 - 说明影响范围和后果（涉及多少文件、会不会丢数据、能否恢复）
 - 数量多（>10 项）时先给一句话汇总，再列明细
 - 选项式提问（select/multi_select）时，每个选项附一句描述帮助用户理解区别
+
+交互类型选择优先级：
+- 优先使用 confirm / select / multi_select，让用户通过点击完成回答，减少打字
+- 是/否、继续/取消、允许/不允许这类问题，使用 confirm，不要使用 input
+- 如果可以列出 2~8 个常见答案，使用 select；即使不确定是否覆盖全部情况，也使用 select，因为系统会自动追加"其他"自由输入选项
+- 如果用户可能同时需要多个答案，使用 multi_select，并设置合理的 min/max
+- 只有当答案必须是用户自定义文本，且无法合理提供候选项时，才使用 input
+- 路径、文件名、项目名、账号、密钥、自然语言要求等确实需要用户精确填写的信息，才使用 input
+- 当用户需要回答某个具体问题时，question 是要回答的问题，option 是这个问题的候选答案；不要把多个不同问题放进 option 让用户选择要回答哪个问题
 
 不应调用：
 - 可用合理默认值的偏好问题
@@ -117,6 +134,15 @@ How to write good questions (applies to ALL question types, not only destructive
 - For large sets (>10 items), give a one-line summary first, then the detailed list.
 - For select/multi_select, add a short description to each option to help the user tell them apart.
 
+Interaction type priority:
+- Prefer confirm / select / multi_select so the user can answer by clicking with minimal typing.
+- Use confirm for yes/no, continue/cancel, allow/deny questions; do not use input for these.
+- If you can list 2-8 common answers, use select. Use select even when the list may not cover every case, because the system auto-appends an "Other" free-input option.
+- If the user may need more than one answer, use multi_select with reasonable min/max limits.
+- Only use input when the answer must be custom free text and no useful candidate options can be provided.
+- Use input for exact custom values such as paths, filenames, project names, accounts, secrets, or natural-language requirements that the user must write precisely.
+- When the user needs to answer a specific question, the question text is the question to answer and option elements are candidate answers to that question; do not put multiple different questions in option elements for the user to choose which question to answer.
+
 Do NOT call when:
 - A sensible default exists and the choice is a trivial preference
 - The user already provided the information in this conversation
@@ -149,7 +175,7 @@ For select/multi_select, the system auto-appends an "Other" free-input option.
 Use the `default` attribute to set a fallback when the user times out or skips.
 """
 
-    user_tool_call_timeout = INTERNAL_TIMEOUT
+    user_tool_call_timeout = ASK_USER_TIMEOUT_DEFAULT_SECONDS
 
     async def _prepare(self, tool_context: ToolContext) -> None:
         """Parse questions XML and store for BEFORE_TOOL_CALL card and execute."""
@@ -159,18 +185,46 @@ Use the `default` attribute to set a fallback when the user times out or skips.
         tool_context.arguments["parsed_questions"] = parse_questions_xml(raw_xml)
         tool_context.arguments["status"] = "pending"
 
-        # 用大模型指定的超时覆盖基类写入的默认值，限制在 [10, 600] 秒内
+        source = self._get_execution_source(tool_context)
+        policy_blocked = not is_ask_user_allowed_source(source)
+        tool_context.arguments["ask_user_policy_blocked"] = policy_blocked
+        tool_context.arguments["ask_user_policy_source"] = source.value
+
+        if policy_blocked:
+            tool_context.arguments["expires_at"] = int(time.time()) + ASK_USER_POLICY_SKIP_SECONDS
+            return
+
+        # 用大模型指定的超时覆盖基类写入的默认值，限制在 [600, 1800] 秒内
         raw_timeout = tool_context.arguments.get("timeout")
         if raw_timeout is not None:
-            clamped = max(10, min(600, int(raw_timeout)))
+            clamped = max(
+                ASK_USER_TIMEOUT_MIN_SECONDS,
+                min(ASK_USER_TIMEOUT_MAX_SECONDS, int(raw_timeout)),
+            )
             tool_context.arguments["expires_at"] = int(time.time()) + clamped
+
+    @staticmethod
+    def _get_execution_source(tool_context: ToolContext) -> SuperMagicExecutionSource:
+        try:
+            from app.core.context.agent_context import AgentContext
+            agent_context: AgentContext = tool_context.get_extension_typed("agent_context", AgentContext)
+            return agent_context.get_execution_source()
+        except Exception:
+            return SuperMagicExecutionSource.UNKNOWN
 
     def build_tool_data(self, tool_context: ToolContext) -> dict:
         """提取需要持久化的结构化数据。
 
         将 _prepare 阶段解析好的问题列表打包，服务重启后可用此数据重建回调。
         """
-        return {"parsed_questions": tool_context.arguments.get("parsed_questions", [])}
+        return {
+            "parsed_questions": tool_context.arguments.get("parsed_questions", []),
+            "policy_blocked": bool(tool_context.arguments.get("ask_user_policy_blocked", False)),
+            "policy_source": tool_context.arguments.get(
+                "ask_user_policy_source",
+                SuperMagicExecutionSource.UNKNOWN.value,
+            ),
+        }
 
     def build_result_builder(self, tool_data: dict) -> ResultBuilder:
         """返回将用户回答转为模型上下文的闭包。
@@ -178,7 +232,11 @@ Use the `default` attribute to set a fallback when the user times out or skips.
         闭包捕获当前问题列表，将 response_status 和 answer_json 转换为
         自然语言段落（content）和前端展示数据（extra_info）。
         """
-        return build_ask_user_result_builder(tool_data.get("parsed_questions", []))
+        return build_ask_user_result_builder(
+            tool_data.get("parsed_questions", []),
+            policy_blocked=bool(tool_data.get("policy_blocked", False)),
+            policy_source=str(tool_data.get("policy_source") or SuperMagicExecutionSource.UNKNOWN.value),
+        )
 
     def build_timeout_answer_builder(self, tool_data: dict) -> TimeoutAnswerBuilder:
         """返回超时时构造默认答案的闭包。
@@ -233,7 +291,11 @@ Use the `default` attribute to set a fallback when the user times out or skips.
 
 # ─── ask_user 专属：结果构建与人类可读转换 ────────────────────────────────────
 
-def build_ask_user_result_builder(parsed_questions: List[dict]):
+def build_ask_user_result_builder(
+    parsed_questions: List[dict],
+    policy_blocked: bool = False,
+    policy_source: str = SuperMagicExecutionSource.UNKNOWN.value,
+):
     """返回 ask_user 专属的 result_builder 闭包。
 
     result_builder(response_status, answer_json) -> (content, extra_info)
@@ -243,19 +305,37 @@ def build_ask_user_result_builder(parsed_questions: List[dict]):
             answers: dict = json.loads(answer_json) if answer_json else {}
         except (json.JSONDecodeError, TypeError):
             answers = {}
-        content = _humanize_batch(
-            questions=parsed_questions,
-            response_status=response_status,
-            answers=answers,
-        )
+        if policy_blocked:
+            content = _humanize_policy_blocked(policy_source)
+        else:
+            content = _humanize_batch(
+                questions=parsed_questions,
+                response_status=response_status,
+                answers=answers,
+            )
         extra_info = {
             "status": response_status,
             "answers": answers,
             "questions": parsed_questions,
+            "policy_blocked": policy_blocked,
+            "policy_source": policy_source,
         }
         return content, extra_info
 
     return result_builder
+
+
+def _humanize_policy_blocked(policy_source: str) -> str:
+    return (
+        "Ask User is unavailable because the current execution source is not an "
+        f"interactive human chat (source: {policy_source}). This question was "
+        "automatically skipped by system policy; do not wait for a user answer. "
+        "If there is a safe default, continue with that default. If key "
+        "information is missing, or if the operation is irreversible or risky "
+        "(deletion, overwrite, external sending, payment, or system configuration "
+        "changes), stop that step and explain what the user needs to provide in "
+        "an interactive human chat."
+    )
 
 
 def build_ask_user_timeout_answer_builder(parsed_questions: List[dict]):
@@ -275,20 +355,21 @@ def build_ask_user_timeout_answer_builder(parsed_questions: List[dict]):
 
 
 def _humanize_single(
+    index: int,
     question: str,
     interaction_type: str,
     answer: Union[str, list],
 ) -> str:
-    """Format a single sub-question answer into natural language (answered status)."""
-    if interaction_type == "confirm":
-        return f'"{question}": {answer}'
-    if interaction_type == "input":
-        return f'"{question}": {answer}'
-    if interaction_type == "select":
-        return f'"{question}": selected "{answer}"'
+    """Format a single sub-question answer into a clearly delimited line.
+
+    Uses >>> and <<< as answer delimiters to avoid ambiguity when the answer
+    itself contains quotes, dots, or other punctuation.
+    """
     if interaction_type == "multi_select":
-        return f'"{question}": selected {answer}'
-    return f'"{question}": {answer}'
+        ans_str = ", ".join(answer) if isinstance(answer, list) else str(answer)
+    else:
+        ans_str = str(answer)
+    return f"Q{index}: {question}\nA{index}: {ans_str}"
 
 
 def _humanize_batch(
@@ -352,7 +433,6 @@ def _humanize_batch(
         ans = answers.get(sub_id)
         if ans is None:
             ans = answers.get(f"q-{i}", default)
-        parts.append(_humanize_single(name, interaction_type, ans))
-    summary = "; ".join(parts)
-    return f"The user answered the following questions: {summary}. Proceed accordingly."
-
+        parts.append(_humanize_single(i + 1, name, interaction_type, ans))
+    summary = "\n".join(parts)
+    return f"The user answered the questions (each line after 'An:' is the user's exact raw input):\n{summary}"

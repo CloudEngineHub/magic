@@ -39,6 +39,8 @@ dist-ssr
 coverage
 
 public/config.js
+public/sdk/magic-widget.js
+public/husky.html
 
 CLAUDE.local.md
 
@@ -51,3 +53,9 @@ src/assets/tabler-icons/
 .vite-inspect
 
 pnpm-lock.yaml
+
+enterprise
+customer
+
+# Temporary files
+.tmp

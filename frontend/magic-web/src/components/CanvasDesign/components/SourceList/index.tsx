@@ -10,14 +10,14 @@ import {
 	type ReactNode,
 	type RefCallback,
 } from "react"
-import ReferenceImageThumbnailImage from "../ReferenceImageThumbnailImage"
+import ReferenceMediaPreview from "../ReferenceMediaPreview"
 import * as TooltipPrimitive from "@radix-ui/react-tooltip"
 import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip"
 import { usePortalContainer } from "../ui/custom/PortalContainerContext"
 import styles from "./SourceList.module.css"
 import { cn } from "../../lib/utils"
 
-/** 素材槽位：空槽为「+ 标签」；已配置时由列表内置铺满缩略图与 hover 删除 */
+/** 素材槽位：空槽为「+ 标签」；已配置时由列表内置铺满预览与 hover 删除 */
 export interface SourceListSlotOption {
 	kind: "slot"
 	label: string
@@ -26,7 +26,7 @@ export interface SourceListSlotOption {
 	slotIndex: number
 	/** 可选分组：供业务层传递资源类别，列表本身不展示分组标题 */
 	groupId?: string
-	/** 已选资源路径，有值时渲染缩略图 + hover 删除，不再使用默认「+」内容 */
+	/** 已选资源路径，有值时渲染预览 + hover 删除，不再使用默认「+」内容 */
 	resourcePath?: string
 	resourceFileName?: string
 	onRemoveResource?: () => void
@@ -177,7 +177,7 @@ export default function SourceList(props: SourceListProps) {
 					const slotContent = resourcePath ? (
 						<>
 							<div className={styles.sourceItemInnerFilled}>
-								<ReferenceImageThumbnailImage
+								<ReferenceMediaPreview
 									path={resourcePath}
 									fileName={resourceDisplayName}
 									fillParent

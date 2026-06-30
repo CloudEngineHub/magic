@@ -36,6 +36,8 @@ from app.i18n import i18n
 from app.path_manager import PathManager
 from app.tools.core import BaseToolParams, tool
 from app.tools.abstract_file_tool import AbstractFileTool
+from app.tools.python_snippet_repair import prepare_python_code
+from app.tools.snippet_environment import SnippetEnvironment
 from app.tools.snippet_timeout_registry import SdkSnippetTimeoutRegistry
 from app.utils.process_executor import ProcessExecutor
 
@@ -262,6 +264,7 @@ You can also chain multiple tool results: fetch IDs from one tool, pass to anoth
 
     @staticmethod
     def _build_snippet_extra_env(project_root: Path) -> dict[str, str]:
+        """构建 SDK 代码片段子进程的基础环境变量。"""
         import os
 
         project_root_str = str(project_root)
@@ -293,9 +296,15 @@ You can also chain multiple tool results: fetch IDs from one tool, pass to anoth
                 pass
         return blocked
 
+    @staticmethod
+    def _prepare_python_code(python_code: str) -> str:
+        return prepare_python_code(python_code, logger=logger, caller="run_sdk_snippet")
+
     async def execute(self, tool_context: ToolContext, params: RunSdkSnippetParams) -> ToolResult:
+        python_code = self._prepare_python_code(params.python_code)
+
         # 检查是否包含不允许在 Code Mode 中调用的工具
-        blocked_tools = self._check_code_mode_compatibility(params.python_code)
+        blocked_tools = self._check_code_mode_compatibility(python_code)
         if blocked_tools:
             names = ", ".join(blocked_tools)
             return ToolResult.error(
@@ -320,7 +329,7 @@ You can also chain multiple tool results: fetch IDs from one tool, pass to anoth
 
             try:
                 async with aiofiles.open(script_file_path, 'w', encoding='utf-8') as f:
-                    await f.write(params.python_code)
+                    await f.write(python_code)
                 logger.debug(f"成功写入代码到: {script_file_path}")
             except Exception as e:
                 logger.exception(f"写入 SDK 代码片段失败: {e}")
@@ -328,7 +337,7 @@ You can also chain multiple tool results: fetch IDs from one tool, pass to anoth
 
             command = f"python {script_filename}"
             effective_timeout = SdkSnippetTimeoutRegistry.get_effective_timeout(
-                params.python_code, params.timeout
+                python_code, params.timeout
             )
             if effective_timeout != params.timeout:
                 logger.info(
@@ -346,6 +355,7 @@ You can also chain multiple tool results: fetch IDs from one tool, pass to anoth
                     "无法确定调用方 Agent 标识"
                 )
             extra_env["SUPER_MAGIC_AGENT_CONTEXT_ID"] = agent_ctx.context_id
+            SnippetEnvironment.apply_current_model(extra_env, agent_ctx)
 
             # 每次 Code Mode 执行生成唯一标识，用于精确取消本轮发起的服务端请求
             sdk_execution_id = uuid.uuid4().hex

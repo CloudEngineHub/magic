@@ -117,6 +117,7 @@ function SLCanvas({ hue, saturation, lightness, onChange }: SLCanvasProps) {
 				setIsDragging(true)
 				applyPointer(e.nativeEvent)
 			}}
+			data-testid="set-is-dragging"
 		>
 			{/* Pointer */}
 			<div

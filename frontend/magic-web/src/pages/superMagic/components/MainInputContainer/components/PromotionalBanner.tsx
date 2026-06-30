@@ -16,6 +16,7 @@ function PromotionalBanner({ onCtaClick }: PromotionalBannerProps) {
 					"linear-gradient(5.01852deg, rgb(68, 56, 85) 0%, rgb(0, 0, 0) 100%)",
 			}}
 			onClick={onCtaClick}
+			data-testid="on-cta-click"
 		>
 			<p className="text-sm leading-5 text-white">{t("promotionalBanner.upgradeMessage")}</p>
 			<div className="flex items-center gap-0.5">

@@ -55,6 +55,8 @@ interface ModeToggleProps {
 	/** custom_agent: featured mode.identifier */
 	agentCode?: string | null
 	allowChangeMode: boolean
+	/** When true, confirm popup copy uses chat (对话) instead of topic (话题). */
+	useChatTerminology?: boolean
 	onModeChange?: (mode: TopicMode) => void
 	size?: MessageEditorSize
 }
@@ -80,6 +82,7 @@ function ModeToggle({
 	topicMode,
 	agentCode,
 	allowChangeMode = true,
+	useChatTerminology,
 	onModeChange,
 	size = "default",
 }: ModeToggleProps) {
@@ -226,7 +229,7 @@ function ModeToggle({
 
 		setTimeout(() => {
 			document.body.style.removeProperty("pointer-events")
-			pubsub.publish(PubSubEvents.Create_New_Topic)
+			pubsub.publish(PubSubEvents.Create_New_Topic, { topicMode: targetMode })
 			onModeChange?.(targetMode)
 		}, 0)
 	})
@@ -421,6 +424,10 @@ function ModeToggle({
 	])
 
 	const confirmPopoverContent = useMemo(() => {
+		const modeName = resolveModeText(showNewTopicModal.mode?.name)
+		const transValues = { modeName }
+		const transComponents = { strong: <strong /> }
+
 		return (
 			<div
 				className={cn(
@@ -430,16 +437,21 @@ function ModeToggle({
 				data-testid="super-message-editor-mode-toggle-create-topic-dialog"
 			>
 				<div className="text-xs leading-[18px] text-foreground">
-					<Trans
-						i18nKey="modeToggle.cannotSwitchModeMessage"
-						ns="super"
-						values={{
-							modeName: resolveModeText(showNewTopicModal.mode?.name),
-						}}
-						components={{
-							strong: <strong />,
-						}}
-					/>
+					{useChatTerminology ? (
+						<Trans
+							i18nKey="modeToggle.cannotSwitchModeMessageChat"
+							ns="super"
+							values={transValues}
+							components={transComponents}
+						/>
+					) : (
+						<Trans
+							i18nKey="modeToggle.cannotSwitchModeMessage"
+							ns="super"
+							values={transValues}
+							components={transComponents}
+						/>
+					)}
 				</div>
 				<BlackPurpleButton
 					onClick={handleCreateNewTopic}
@@ -447,12 +459,21 @@ function ModeToggle({
 					data-testid="super-message-editor-mode-toggle-create-topic-button"
 				>
 					<span className="text-xs font-normal leading-4">
-						{t("modeToggle.createNewTopic")}
+						{useChatTerminology
+							? t("modeToggle.createNewChat")
+							: t("modeToggle.createNewTopic")}
 					</span>
 				</BlackPurpleButton>
 			</div>
 		)
-	}, [handleCreateNewTopic, isMobile, resolveModeText, showNewTopicModal.mode?.name, t])
+	}, [
+		handleCreateNewTopic,
+		isMobile,
+		resolveModeText,
+		showNewTopicModal.mode?.name,
+		t,
+		useChatTerminology,
+	])
 
 	const currentModeItem = useMemo(() => {
 		if (!currentMode) return null
@@ -497,7 +518,7 @@ function ModeToggle({
 				className="relative w-fit min-w-0"
 				data-testid="super-message-editor-mode-toggle-root"
 			>
-				<div className="w-fit min-w-0 rounded-md" onClick={() => setOpen(true)}>
+				<div className="w-fit min-w-0 rounded-md" onClick={() => setOpen(true)} data-testid="set-open">
 					{currentModeItem}
 				</div>
 				<MagicPopup

@@ -4,14 +4,13 @@ let currentTaskMode = "plan"; // 当前任务模式，默认为 plan（保留兼
 let currentAgentMode = "magic"; // 当前Agent模式，默认为 magic
 let currentLanguage = "zh_CN"; // 当前语言，默认中文
 let currentMessageVersion = "v2"; // 消息版本，默认 v2
+let currentExecutionSource = "human_chat"; // 当前执行来源，默认人工对话
 let currentFileName = ""; // 存储当前上传的文件名
 let isAdvancedMode = false; // 高级模式开关，开启后直接发送原始 JSON
 let isImMode = false; // IM 渠道模拟模式
 let currentImChannel = "dingtalk"; // 当前 IM 渠道
 let currentImUserId = ""; // 当前 IM 用户 ID
 
-// 工作区挂载目录名，空字符串表示直接展示根目录
-let mountDirName = localStorage.getItem('mountDirName') ?? '.workspace';
 // 用户通过文件选择器选中的原始项目根目录 handle
 let rootDirHandle = null;
 
@@ -67,6 +66,7 @@ const FILE_PREVIEW_INITIALIZED_KEY = 'httpClient.filePreviewInitialized';
 const WORKSPACE_ABSOLUTE_PATH_KEY = 'httpClient.workspaceAbsolutePath';
 const MESSAGE_INPUT_DRAFT_KEY = 'httpClient.messageInputDraft';
 const RAW_JSON_INPUT_DRAFT_KEY = 'httpClient.rawJsonInputDraft';
+const CLIENT_CONTEXT_INPUT_DRAFT_KEY = 'httpClient.clientContextInputDraft';
 const TOOL_DETAIL_MODEL_RATIO_KEY = 'httpClient.toolDetailModelRatio';
 const TOOL_DETAIL_MODEL_COLLAPSED_KEY = 'httpClient.toolDetailModelCollapsed';
 const TOOL_DETAIL_PREVIEW_PATH = '__virtual__/tool-detail.md';
@@ -108,11 +108,10 @@ function getSystemMessageKey(text) {
     if (text.startsWith('切换到 ')) return 'agent-mode-toggle';
     if (text.startsWith('语言已切换为:')) return 'language-toggle';
     if (text.startsWith('消息版本已切换为:')) return 'message-version-toggle';
-    if (text.startsWith('挂载目录已切换为:')) return 'mount-dir';
+    if (text.startsWith('执行来源已切换为:')) return 'execution-source-toggle';
     if (text.startsWith('模型列表已刷新')) return 'model-list-refresh';
-    if (text.startsWith('请先选择项目根目录')) return 'workspace-directory';
     if (text.startsWith('工作区文件读取权限')) return 'workspace-permission';
-    if (text.startsWith('点击上方按钮重新授权读取')) return 'workspace-permission';
+    if (text.startsWith('点击此处或刷新按钮')) return 'workspace-permission';
     if (text.startsWith('已恢复工作区文件读取权限')) return 'workspace-permission';
     return '';
 }
@@ -135,6 +134,11 @@ function restoreInputDrafts() {
     const rawJsonDraft = localStorage.getItem(RAW_JSON_INPUT_DRAFT_KEY);
     if (rawJsonInput && rawJsonDraft !== null && !rawJsonInput.value) {
         rawJsonInput.value = rawJsonDraft;
+    }
+
+    const clientContextDraft = localStorage.getItem(CLIENT_CONTEXT_INPUT_DRAFT_KEY);
+    if (clientContextInput && clientContextDraft !== null && !clientContextInput.value) {
+        clientContextInput.value = clientContextDraft;
     }
 }
 
@@ -340,11 +344,13 @@ function renderClientEntry(entry, options = {}) {
     if (entry.imChannel) {
         const channelLabel = { dingtalk: '钉钉', wechat: '微信', wecom: '企业微信', lark: '飞书' }[entry.imChannel] || entry.imChannel;
         const userIdPart = entry.imUserId ? ` / user=${entry.imUserId}` : '';
-        headerText = `客户端消息 (${entry.time}) - IM渠道: ${channelLabel}${userIdPart}`;
+        const sourcePart = entry.executionSource ? ` - 来源: ${entry.executionSource}` : '';
+        headerText = `客户端消息 (${entry.time}) - IM渠道: ${channelLabel}${userIdPart}${sourcePart}`;
     } else {
         const agentMode = entry.agentMode ? entry.agentMode.toUpperCase() : 'N/A';
         const modelId = entry.modelId ? ` - Model: ${entry.modelId}` : '';
-        headerText = `客户端消息 (${entry.time}) - Agent模式: ${agentMode}${modelId}`;
+        const sourcePart = entry.executionSource ? ` - 来源: ${entry.executionSource}` : '';
+        headerText = `客户端消息 (${entry.time}) - Agent模式: ${agentMode}${modelId}${sourcePart}`;
     }
     const headerLabel = document.createElement('span');
     headerLabel.textContent = headerText;
@@ -373,14 +379,24 @@ const agentCodeInput = document.getElementById('agentCodeInput');
 const agentCodeGroup = document.getElementById('agentCodeGroup');
 const customAgentCodeInput = document.getElementById('customAgentCodeInput');
 const customAgentCodeGroup = document.getElementById('customAgentCodeGroup');
+const localCrewAgentOptions = document.getElementById('localCrewAgentOptions');
 const modelIdInput = document.getElementById('modelIdInput');
 const modelIdSelect = document.getElementById('modelIdSelect');
 const imageModelSelect = document.getElementById('imageModelSelect');
 const videoModelSelect = document.getElementById('videoModelSelect');
 const advancedModeToggle = document.getElementById('advancedModeToggle');
 const rawJsonInput = document.getElementById('rawJsonInput');
+const clientContextInput = document.getElementById('clientContextInput');
+const clientContextOpenBtn = document.getElementById('clientContextOpenBtn');
+const clientContextCount = document.getElementById('clientContextCount');
+const clientContextClearBtn = document.getElementById('clientContextClearBtn');
+const clientContextModal = document.getElementById('clientContextModal');
+const clientContextModalCount = document.getElementById('clientContextModalCount');
+const clientContextModalClearBtn = document.getElementById('clientContextModalClearBtn');
+const clientContextModalCloseBtn = document.getElementById('clientContextModalCloseBtn');
 const languageSelect = document.getElementById('languageSelect');
 const messageVersionSelect = document.getElementById('messageVersionSelect');
+const executionSourceSelect = document.getElementById('executionSourceSelect');
 const imModeToggle = document.getElementById('imModeToggle');
 const rawEventsToggle = document.getElementById('rawEventsToggle');
 const imChannelSelect = document.getElementById('imChannelSelect');
@@ -417,7 +433,83 @@ function initCompactPanelToggle(toggle, body, arrow, storageKey, defaultOpen) {
 const configPanelToggle = document.getElementById('configPanelToggle');
 const configPanelBody = document.getElementById('configPanelBody');
 const configPanelArrow = document.getElementById('configPanelArrow');
+
+function renderLocalCrewOptions(crews) {
+    if (!localCrewAgentOptions) return;
+    localCrewAgentOptions.innerHTML = '';
+    (Array.isArray(crews) ? crews : []).forEach((crew) => {
+        if (!crew || !crew.agent_code) return;
+        const option = document.createElement('option');
+        option.value = crew.agent_code;
+        option.label = crew.domain && crew.crew
+            ? `${crew.domain}/${crew.crew}`
+            : (crew.crew_dir || crew.agent_code);
+        localCrewAgentOptions.appendChild(option);
+    });
+}
+
+async function loadLocalCrewOptions() {
+    if (!localCrewAgentOptions) return;
+    const serverUrl = (serverUrlInput.value.trim() || 'http://127.0.0.1:8002').replace(/\/+$/, '');
+    try {
+        const response = await fetch(`${serverUrl}/api/v1/debug/local-crew/list`);
+        const json = await response.json().catch(() => null);
+        if (!response.ok || json?.code !== 1000) {
+            renderLocalCrewOptions([]);
+            return;
+        }
+        renderLocalCrewOptions(json.data?.crews || []);
+    } catch (error) {
+        renderLocalCrewOptions([]);
+    }
+}
+
 initCompactPanelToggle(configPanelToggle, configPanelBody, configPanelArrow, INIT_CONFIG_PANEL_OPEN_KEY, false);
+
+function refreshClientContextDebugState() {
+    const length = clientContextInput?.value.length || 0;
+    const hasManualContext = length > 0;
+    if (clientContextOpenBtn) clientContextOpenBtn.classList.toggle('has-manual-context', hasManualContext);
+    if (clientContextCount) clientContextCount.textContent = `${length}字`;
+    if (clientContextModalCount) clientContextModalCount.textContent = `${length} 字符`;
+    if (clientContextClearBtn) clientContextClearBtn.style.display = hasManualContext ? '' : 'none';
+    if (clientContextModalClearBtn) clientContextModalClearBtn.disabled = !hasManualContext;
+}
+
+function clearManualClientContext() {
+    if (!clientContextInput) return;
+    clientContextInput.value = '';
+    localStorage.removeItem(CLIENT_CONTEXT_INPUT_DRAFT_KEY);
+    refreshClientContextDebugState();
+    if (clientContextModal?.style.display !== 'none') clientContextInput.focus();
+}
+
+function openClientContextModal() {
+    if (!clientContextModal) return;
+    clientContextModal.style.display = 'flex';
+    refreshClientContextDebugState();
+    setTimeout(() => clientContextInput?.focus(), 50);
+}
+
+function closeClientContextModal() {
+    if (clientContextModal) clientContextModal.style.display = 'none';
+}
+
+function initClientContextModal() {
+    clientContextOpenBtn?.addEventListener('click', openClientContextModal);
+    clientContextClearBtn?.addEventListener('click', clearManualClientContext);
+    clientContextModalCloseBtn?.addEventListener('click', closeClientContextModal);
+    clientContextModalClearBtn?.addEventListener('click', clearManualClientContext);
+    clientContextModal?.addEventListener('click', (event) => {
+        if (event.target === clientContextModal) closeClientContextModal();
+    });
+    document.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape' && clientContextModal?.style.display !== 'none') {
+            closeClientContextModal();
+        }
+    });
+    refreshClientContextDebugState();
+}
 
 // ── MCP 配置面板 ──────────────────────────────────────────────────────────────
 
@@ -1129,6 +1221,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // 初始化 MCP 配置面板
     initMcpPanel();
+    loadLocalCrewOptions();
 
     // 初始化快捷键提示
     initSendHint();
@@ -1138,8 +1231,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // 初始化输入栏自定义选择器
     initCustomSelects();
+    initClientContextModal();
 
     restoreInputDrafts();
+    refreshClientContextDebugState();
 
     // 原始事件默认隐藏，用户打开后才展示调试事件盒
     initRawEventsToggle();
@@ -1178,6 +1273,25 @@ document.addEventListener('DOMContentLoaded', () => {
                 closeMentionPicker();
             }, 180);
         });
+        messageInputEl.addEventListener('dragover', (e) => {
+            if (!hasDraggedFiles(e)) return;
+            e.preventDefault();
+            e.stopPropagation();
+            e.dataTransfer.dropEffect = 'copy';
+            messageInputPanel?.classList.add('message-input-drag-over');
+        });
+        messageInputEl.addEventListener('drop', async (e) => {
+            if (!e.dataTransfer || !e.dataTransfer.files || !e.dataTransfer.files.length) return;
+            e.preventDefault();
+            e.stopPropagation();
+            clearMessageInputDropTarget();
+            try {
+                await uploadFilesFromMessageInput(e.dataTransfer.files);
+            } catch (error) {
+                console.error('聊天框拖拽上传失败', error);
+                showSystemMessage(`上传失败：${error.message || error}`);
+            }
+        });
     }
 
     const rawJsonInput = document.getElementById('rawJsonInput');
@@ -1190,6 +1304,13 @@ document.addEventListener('DOMContentLoaded', () => {
         });
         rawJsonInput.addEventListener('input', () => {
             saveTextDraft(RAW_JSON_INPUT_DRAFT_KEY, rawJsonInput.value);
+        });
+    }
+
+    if (clientContextInput) {
+        clientContextInput.addEventListener('input', () => {
+            saveTextDraft(CLIENT_CONTEXT_INPUT_DRAFT_KEY, clientContextInput.value);
+            refreshClientContextDebugState();
         });
     }
 
@@ -1282,6 +1403,22 @@ document.addEventListener('DOMContentLoaded', () => {
         currentMessageVersion = messageVersionSelect.value;
         refreshCustomSelect(messageVersionSelect);
         messageVersionSelect.addEventListener('change', changeMessageVersion);
+    }
+
+    // 执行来源切换事件
+    if (executionSourceSelect) {
+        const savedSource = localStorage.getItem('selectedExecutionSource');
+        const sourceOptions = Array.from(executionSourceSelect.options).map(option => option.value);
+        if (savedSource !== null && sourceOptions.includes(savedSource)) {
+            currentExecutionSource = savedSource;
+            executionSourceSelect.value = savedSource;
+        } else {
+            currentExecutionSource = executionSourceSelect.value || 'human_chat';
+            executionSourceSelect.value = currentExecutionSource;
+        }
+        currentExecutionSource = executionSourceSelect.value || currentExecutionSource;
+        refreshCustomSelect(executionSourceSelect);
+        executionSourceSelect.addEventListener('change', changeExecutionSource);
     }
 
     // 保留任务模式切换事件（兼容性）
@@ -1643,12 +1780,60 @@ function applyLocalDebugOptions(messageData) {
     if (!messageData || typeof messageData !== 'object') return;
     messageData.dynamic_config = Object.assign({}, messageData.dynamic_config, {
         enable_debug_tool_result_content: true,
+        client_context: buildLocalDebugClientContext(),
+        super_magic_execution_source: currentExecutionSource || 'human_chat',
     });
     if (currentMessageVersion) {
         messageData.dynamic_config.message_version = currentMessageVersion;
     } else {
         delete messageData.dynamic_config.message_version;
     }
+}
+
+function buildLocalDebugClientContext() {
+    return {
+        version: '1.0.0',
+        data: {
+            content: buildLocalDebugClientContextContent(),
+        },
+    };
+}
+
+function buildLocalDebugClientContextContent() {
+    const manualContent = getManualClientContextContent();
+    if (manualContent) return manualContent;
+
+    const openedTabs = [...filePreviewTabs.values()]
+        .map(tab => formatClientContextTabName(tab))
+        .filter(Boolean);
+    const focusedFile = getClientContextFocusedFile();
+
+    if (!openedTabs.length && !focusedFile) return '';
+
+    const tabLines = openedTabs.length
+        ? openedTabs.map(tabName => `- ${tabName}`).join('\n')
+        : 'None';
+    return [
+        'Open tabs:',
+        tabLines,
+        `Focused file: ${focusedFile || 'None'}`,
+    ].join('\n');
+}
+
+function formatClientContextTabName(tab) {
+    if (!tab || typeof tab !== 'object') return '';
+    if (isToolDetailPreviewPath(tab.path)) return tab.title || 'Tool detail';
+    return tab.path || tab.title || '';
+}
+
+function getClientContextFocusedFile() {
+    if (!activeFilePreviewPath || isToolDetailPreviewPath(activeFilePreviewPath)) return '';
+    return activeFilePreviewPath;
+}
+
+function getManualClientContextContent() {
+    if (!clientContextInput) return '';
+    return clientContextInput.value.trim();
 }
 
 // 发送消息
@@ -1994,22 +2179,32 @@ function createChatMessage(prompt, contextType = ContextType.NORMAL, remark = nu
         }
     }
 
-    // custom_agent 模式：强制 task_mode=chat、model_id=auto，并注入完整 dynamic_config
+    // custom_agent 模式：强制 task_mode=chat，并注入完整 dynamic_config
+    // 若用户已在调试面板选了具体模型，保留该选择；否则回落到 auto
     if (currentAgentMode === 'custom_agent') {
         message.task_mode = 'chat';
-        message.model_id = 'auto';
         const customAgentCode = customAgentCodeInput ? customAgentCodeInput.value.trim() : '';
-        message.dynamic_config = Object.assign({}, message.dynamic_config, {
-            models: {
-                auto: {
+        const selectedModelId = message.model_id && message.model_id !== 'auto' ? message.model_id : null;
+        const effectiveModelId = selectedModelId || 'auto';
+        if (!selectedModelId) {
+            message.model_id = 'auto';
+        }
+        // 若已由前面的选模型逻辑注入了 models，不再覆盖；否则注入 auto 配置
+        const existingModels = message.dynamic_config && message.dynamic_config.models;
+        const modelsConfig = (existingModels && Object.keys(existingModels).length > 0)
+            ? existingModels
+            : {
+                [effectiveModelId]: {
                     api_key: '${MAGIC_API_KEY}',
                     api_base_url: '${MAGIC_API_BASE_URL}',
-                    name: 'auto'
+                    name: effectiveModelId
                 }
-            },
-            video_model: {
-                model_id: 'doubao-seedance-2-0-fast-260128'
-            },
+            };
+        message.dynamic_config = Object.assign({}, message.dynamic_config, {
+            models: modelsConfig,
+            video_model: message.dynamic_config && message.dynamic_config.video_model
+                ? message.dynamic_config.video_model
+                : { model_id: 'doubao-seedance-2-0-fast-260128' },
             ...(customAgentCode ? { agent_code: customAgentCode } : {})
         });
     }
@@ -2077,11 +2272,17 @@ function showClientMessage(message) {
     const time = new Date().toLocaleTimeString();
     const imChannel = message.metadata && !message.agent_mode ? currentImChannel : '';
     const imUserId = imChannel && message.metadata ? (message.metadata.agent_user_id || '') : '';
+    const executionSource = (
+        message.dynamic_config &&
+        typeof message.dynamic_config === 'object' &&
+        message.dynamic_config.super_magic_execution_source
+    ) || currentExecutionSource || '';
     pushLog({
         type: 'client',
         prompt: message.prompt || '',
         agentMode: message.agent_mode || '',
         modelId: message.model_id || '',
+        executionSource,
         imChannel,
         imUserId,
         time,
@@ -2091,6 +2292,7 @@ function showClientMessage(message) {
         prompt: message.prompt || '',
         agentMode: message.agent_mode || '',
         modelId: message.model_id || '',
+        executionSource,
         imChannel,
         imUserId,
         time,
@@ -2648,6 +2850,13 @@ function changeMessageVersion() {
     localStorage.setItem('selectedMessageVersion', currentMessageVersion);
     const versionLabel = currentMessageVersion || '不传版本';
     showSystemMessage(`消息版本已切换为: ${versionLabel}`);
+}
+
+// 切换执行来源
+function changeExecutionSource() {
+    currentExecutionSource = executionSourceSelect.value || 'human_chat';
+    localStorage.setItem('selectedExecutionSource', currentExecutionSource);
+    showSystemMessage(`执行来源已切换为: ${currentExecutionSource}`);
 }
 
 // 切换Agent模式
@@ -4650,10 +4859,13 @@ function formatToolDetail(detail) {
     if (detail.type === 'text' && detail.data && detail.data.content) return detail.data.content;
     if (detail.type === 'text' && detail.data && detail.data.message) return detail.data.message;
     if (detail.type === 'terminal' && detail.data) {
-        return [
-            detail.data.command ? `$ ${detail.data.command}` : '',
+        const terminalOutput = detail.data.output || [
             detail.data.stdout || '',
             detail.data.stderr || '',
+        ].filter(Boolean).join('\n');
+        return [
+            detail.data.command ? `$ ${detail.data.command}` : '',
+            terminalOutput,
             typeof detail.data.exit_code === 'number' ? `exit_code: ${detail.data.exit_code}` : '',
         ].filter(Boolean).join('\n');
     }
@@ -5028,6 +5240,7 @@ function insertMentionAtCursor(snippet) {
     ta.value = before + snippet + after;
     const pos = start + snippet.length;
     ta.selectionStart = ta.selectionEnd = pos;
+    ta.dispatchEvent(new Event('input', { bubbles: true }));
     ta.focus();
 }
 
@@ -5065,12 +5278,23 @@ async function collectWorkspaceMentionPaths(dirHandle, pathPrefix, out) {
     }
 }
 
+function collectApiWorkspaceMentionPaths(entries, out) {
+    for (const entry of entries || []) {
+        if (!entry || !entry.path) continue;
+        const kind = entry.type === 'directory' ? 'directory' : 'file';
+        out.push({ kind, path: entry.path });
+        if (kind === 'directory' && Array.isArray(entry.children)) {
+            collectApiWorkspaceMentionPaths(entry.children, out);
+        }
+    }
+}
+
 async function refreshWorkspaceMentionIndex() {
     workspaceMentionIndex = [];
-    if (!workspaceDirHandle) return;
     const out = [];
     try {
-        await collectWorkspaceMentionPaths(workspaceDirHandle, '', out);
+        const data = await debugWorkspaceApi.listTree('', 8);
+        collectApiWorkspaceMentionPaths(data.entries || [], out);
         workspaceMentionIndex = out;
     } catch (e) {
         console.warn('构建 @ 路径索引失败', e);
@@ -5149,13 +5373,6 @@ function renderMentionPickerRows(items) {
     const el = ensureMentionPickerEl();
     if (!el) return;
     el.innerHTML = '';
-    if (!workspaceDirHandle) {
-        const hint = document.createElement('div');
-        hint.className = 'mention-picker-hint';
-        hint.textContent = '请先在工作区选择项目根目录，再使用 @';
-        el.appendChild(hint);
-        return;
-    }
     if (workspaceMentionIndex.length === 0) {
         const hint = document.createElement('div');
         hint.className = 'mention-picker-hint';
@@ -5284,8 +5501,8 @@ function handleMentionPickerKeydown(e) {
 const filetreeContainer = document.getElementById('filetreeContainer');
 const selectWorkspaceBtn = document.getElementById('selectWorkspaceBtn');
 const refreshTreeBtn = document.getElementById('refreshTreeBtn');
-const mountDirInput = document.getElementById('mountDirInput');
-const applyMountDirBtn = document.getElementById('applyMountDirBtn');
+const uploadWorkspaceBtn = document.getElementById('uploadWorkspaceBtn');
+const workspaceUploadInput = document.getElementById('workspaceUploadInput');
 const filePreviewWorkbench = document.getElementById('filePreviewWorkbench');
 const filePreviewTabsEl = document.getElementById('filePreviewTabs');
 const filePreviewMain = filePreviewWorkbench?.querySelector('.file-preview-main') || null;
@@ -5307,8 +5524,87 @@ let activeFilePreviewPath = '';
 let filePreviewScrollPositions = {};
 let filePreviewScrollSaveFrame = null;
 let isRestoringFilePreviewState = false;
+let workspaceUploadTargetDir = '';
 
 const UNSUPPORTED_REMOTE_IMAGE_EXT_RE = /\.(heic|heif|tif|tiff)(?:[?#]|$)/i;
+const DEBUG_WORKSPACE_FILES_API_PREFIX = '/api/v1/debug/workspace-files';
+
+function getDebugWorkspaceApiBase() {
+    const base = (serverUrlInput?.value?.trim() || 'http://127.0.0.1:8002').replace(/\/+$/, '');
+    return `${base}${DEBUG_WORKSPACE_FILES_API_PREFIX}`;
+}
+
+async function requestDebugWorkspaceJson(path, options = {}) {
+    const response = await fetch(`${getDebugWorkspaceApiBase()}${path}`, {
+        headers: {
+            ...(options.body instanceof FormData ? {} : { 'Content-Type': 'application/json' }),
+            ...(options.headers || {}),
+        },
+        ...options,
+    });
+    const json = await response.json().catch(() => null);
+    if (!response.ok || json?.code !== 1000) {
+        throw new Error(json?.message || `HTTP ${response.status}`);
+    }
+    return json.data || {};
+}
+
+function createDebugWorkspaceApiClient() {
+    return {
+        listTree(path = '', depth = 2) {
+            const query = new URLSearchParams({
+                path: path || '',
+                depth: String(depth),
+            });
+            return requestDebugWorkspaceJson(`/tree?${query.toString()}`);
+        },
+        readFile(path) {
+            return requestDebugWorkspaceJson('/content', {
+                method: 'POST',
+                body: JSON.stringify({ path }),
+            });
+        },
+        writeFile(path, content) {
+            return requestDebugWorkspaceJson('/content', {
+                method: 'PUT',
+                body: JSON.stringify({ path, content, create_parent_dirs: true, overwrite: true }),
+            });
+        },
+        deletePath(path, recursive = false) {
+            return requestDebugWorkspaceJson('', {
+                method: 'DELETE',
+                body: JSON.stringify({ path, recursive }),
+            });
+        },
+        movePath(sourcePath, targetPath, overwrite = false) {
+            return requestDebugWorkspaceJson('/move', {
+                method: 'POST',
+                body: JSON.stringify({ source_path: sourcePath, target_path: targetPath, overwrite }),
+            });
+        },
+        uploadFile(targetDir, filename, contentBase64, overwrite = true) {
+            return requestDebugWorkspaceJson('/upload', {
+                method: 'POST',
+                body: JSON.stringify({
+                    target_dir: targetDir || '',
+                    filename,
+                    content_base64: contentBase64,
+                    overwrite,
+                }),
+            });
+        },
+        rawUrl(path) {
+            const query = new URLSearchParams({ path });
+            return `${getDebugWorkspaceApiBase()}/raw?${query.toString()}`;
+        },
+        downloadUrl(path) {
+            const query = new URLSearchParams({ path });
+            return `${getDebugWorkspaceApiBase()}/download?${query.toString()}`;
+        },
+    };
+}
+
+const debugWorkspaceApi = createDebugWorkspaceApiClient();
 
 function normalizeRemoteImageUrl(src) {
     const value = String(src || '').trim();
@@ -5415,6 +5711,10 @@ function buildFileUrl(filePath) {
  * 优先用 file:// URL（需要后端返回过 workspace 路径），否则降级 blob URL。
  */
 function openCurrentPreviewInNewTab() {
+    if (!currentPreviewFile && currentPreviewPath) {
+        window.open(debugWorkspaceApi.rawUrl(currentPreviewPath), '_blank');
+        return;
+    }
     if (!currentPreviewFile) return;
     const fileUrl = buildFileUrl(currentPreviewPath);
     if (fileUrl) {
@@ -5454,6 +5754,171 @@ function hideFilePreview() {
 function getWorkspaceFileBaseName(filePath) {
     const i = filePath.lastIndexOf('/');
     return i >= 0 ? filePath.slice(i + 1) : filePath;
+}
+
+function getWorkspaceParentPath(filePath) {
+    const value = String(filePath || '').replace(/\\/g, '/').replace(/^\/+|\/+$/g, '');
+    const i = value.lastIndexOf('/');
+    return i >= 0 ? value.slice(0, i) : '';
+}
+
+function fileToBase64(file) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+            const result = String(reader.result || '');
+            const commaIndex = result.indexOf(',');
+            resolve(commaIndex >= 0 ? result.slice(commaIndex + 1) : result);
+        };
+        reader.onerror = () => reject(reader.error || new Error('读取上传文件失败'));
+        reader.readAsDataURL(file);
+    });
+}
+
+function triggerWorkspaceDownload(path) {
+    const normalizedPath = String(path || '').replace(/\\/g, '/').replace(/^\/+/, '');
+    if (!normalizedPath) return;
+    const link = document.createElement('a');
+    link.href = debugWorkspaceApi.downloadUrl(normalizedPath);
+    link.download = getWorkspaceFileBaseName(normalizedPath);
+    link.rel = 'noopener';
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+}
+
+async function uploadWorkspaceFiles(files, targetDir = '') {
+    const list = Array.from(files || []).filter(file => file && file.name);
+    if (!list.length) return;
+    const normalizedTargetDir = String(targetDir || '').replace(/\\/g, '/').replace(/^\/+|\/+$/g, '');
+    showSystemMessage(`开始上传 ${list.length} 个文件到 ${normalizedTargetDir || '.workspace 根目录'}`);
+    const uploaded = await uploadWorkspaceFilesToDirectory(list, normalizedTargetDir);
+    if (normalizedTargetDir) expandedDirs.add(normalizedTargetDir);
+    await renderFileTree();
+    await refreshWorkspaceMentionIndex();
+    showSystemMessage(`已上传 ${uploaded.length} 个文件到 ${normalizedTargetDir || '.workspace 根目录'}`);
+    return uploaded;
+}
+
+async function uploadWorkspaceFilesToDirectory(files, targetDir = '') {
+    const list = Array.from(files || []).filter(file => file && file.name);
+    const normalizedTargetDir = String(targetDir || '').replace(/\\/g, '/').replace(/^\/+|\/+$/g, '');
+    const uploaded = [];
+    for (const file of list) {
+        const contentBase64 = await fileToBase64(file);
+        const entry = await debugWorkspaceApi.uploadFile(normalizedTargetDir, file.name, contentBase64, true);
+        uploaded.push(entry);
+    }
+    return uploaded;
+}
+
+function openWorkspaceUploadPicker(targetDir = '') {
+    if (!workspaceUploadInput) return;
+    workspaceUploadTargetDir = String(targetDir || '').replace(/\\/g, '/').replace(/^\/+|\/+$/g, '');
+    workspaceUploadInput.value = '';
+    workspaceUploadInput.click();
+}
+
+function getWorkspaceDropTargetDir(event) {
+    const node = event.target && event.target.closest ? event.target.closest('.ft-node') : null;
+    if (!node || !filetreeContainer || !filetreeContainer.contains(node)) return '';
+    const path = node.dataset.path || '';
+    return node.dataset.type === 'directory' ? path : getWorkspaceParentPath(path);
+}
+
+function clearWorkspaceDropTarget() {
+    filetreeContainer?.classList.remove('ft-drag-over');
+    filetreeContainer?.querySelectorAll('.ft-drop-target').forEach(node => node.classList.remove('ft-drop-target'));
+}
+
+function hasDraggedFiles(event) {
+    return Boolean(event?.dataTransfer && Array.from(event.dataTransfer.types || []).includes('Files'));
+}
+
+function clearMessageInputDropTarget() {
+    messageInputPanel?.classList.remove('message-input-drag-over');
+}
+
+async function uploadFilesFromMessageInput(files) {
+    const list = Array.from(files || []).filter(file => file && file.name);
+    if (!list.length) return;
+    const targetDir = 'uploads';
+    showSystemMessage(`开始上传 ${list.length} 个文件到 uploads`);
+    const uploaded = await uploadWorkspaceFilesToDirectory(list, targetDir);
+    expandedDirs.add(targetDir);
+    await renderFileTree();
+    await refreshWorkspaceMentionIndex();
+    const snippets = uploaded
+        .map(entry => entry && entry.path ? `[@file_path:${normalizeMentionFilePath(entry.path)}]${MENTION_PROMPT_SEPARATOR}` : '')
+        .filter(Boolean)
+        .join('');
+    if (snippets) {
+        insertMentionAtCursor(snippets);
+    }
+    showSystemMessage(`已上传 ${uploaded.length} 个文件，并插入文件引用`);
+}
+
+function isWorkspacePreviewPathAffected(targetPath, previewPath) {
+    const target = String(targetPath || '').replace(/\\/g, '/').replace(/^\/+|\/+$/g, '');
+    const preview = String(previewPath || '').replace(/\\/g, '/').replace(/^\/+|\/+$/g, '');
+    if (!target || !preview) return false;
+    return preview === target || preview.startsWith(`${target}/`);
+}
+
+async function deleteWorkspacePath(path, isDir) {
+    const normalizedPath = String(path || '').replace(/\\/g, '/').replace(/^\/+|\/+$/g, '');
+    if (!normalizedPath) return;
+    await debugWorkspaceApi.deletePath(normalizedPath, Boolean(isDir));
+    for (const item of [...expandedDirs]) {
+        if (item === normalizedPath || item.startsWith(`${normalizedPath}/`)) {
+            expandedDirs.delete(item);
+        }
+    }
+    for (const tabPath of [...filePreviewTabs.keys()]) {
+        if (isWorkspacePreviewPathAffected(normalizedPath, tabPath)) {
+            filePreviewTabs.delete(tabPath);
+        }
+    }
+    if (isWorkspacePreviewPathAffected(normalizedPath, activeFilePreviewPath) || isWorkspacePreviewPathAffected(normalizedPath, currentPreviewPath)) {
+        closeFilePreviewWorkbench();
+    } else {
+        renderFilePreviewTabs();
+        saveFilePreviewState();
+    }
+    await renderFileTree();
+    await refreshWorkspaceMentionIndex();
+    showSystemMessage(`已删除 ${normalizedPath}`);
+}
+
+function confirmDeleteWorkspacePath(path, isDir) {
+    const normalizedPath = String(path || '').replace(/\\/g, '/').replace(/^\/+|\/+$/g, '');
+    if (!normalizedPath) return;
+    const message = isDir
+        ? `确定要删除目录 ${normalizedPath} 及其所有内容吗？`
+        : `确定要删除文件 ${normalizedPath} 吗？`;
+    showConfirmDialog(message, async () => {
+        try {
+            await deleteWorkspacePath(normalizedPath, isDir);
+        } catch (error) {
+            console.error('删除工作区路径失败', error);
+            showSystemMessage(`删除失败：${error.message || error}`);
+        }
+    });
+}
+
+function createWorkspaceDeleteButton(path, isDir) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'ft-node-action ft-node-delete';
+    button.title = isDir ? '删除目录' : '删除文件';
+    button.setAttribute('aria-label', button.title);
+    button.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 7h14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"></path><path d="M9 7V5.5A1.5 1.5 0 0 1 10.5 4h3A1.5 1.5 0 0 1 15 5.5V7" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"></path><path d="M8 10v8.5A1.5 1.5 0 0 0 9.5 20h5a1.5 1.5 0 0 0 1.5-1.5V10" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"></path><path d="M11 11.5v5M13 11.5v5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"></path></svg>';
+    button.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        confirmDeleteWorkspacePath(path, isDir);
+    });
+    return button;
 }
 
 function getWorkspaceFileExt(filePath) {
@@ -5585,6 +6050,7 @@ function appendPreviewMessage(bodyEl, message) {
 
 const PREVIEW_KIND_LABEL = {
     html: 'HTML',
+    'micro-app': '微应用',
     image: '图片',
     video: '视频',
     audio: '音频',
@@ -5803,7 +6269,9 @@ function initFirstOpenFilePreviewPlaceholder() {
 
 function saveFilePreviewState() {
     if (isRestoringFilePreviewState) return;
-    const tabs = [...filePreviewTabs.keys()];
+    const tabs = [...filePreviewTabs.values()]
+        .filter(tab => tab.type !== 'micro-app')
+        .map(tab => tab.path);
     const visible = filePreviewWorkbench ? !filePreviewWorkbench.hidden : false;
     if (!tabs.length && !visible) {
         localStorage.removeItem(FILE_PREVIEW_STATE_KEY);
@@ -5926,6 +6394,9 @@ function renderFilePreviewTabs() {
 }
 
 function resetActivePreviewSurface() {
+    if (window.MicroAppRuntimeHost) {
+        window.MicroAppRuntimeHost.dispose();
+    }
     revokeFilePreviewObjectUrl();
     revokeCanvasBlobUrls();
     const canvasPanel = document.getElementById('canvasRightPanel');
@@ -6330,6 +6801,10 @@ async function activateFilePreviewTab(filePath, options = {}) {
     renderFilePreviewTabs();
     if (tab.type === 'tool-detail') {
         renderToolDetailPreviewTab(tab);
+    } else if (tab.type === 'micro-app') {
+        await renderMicroAppPreviewTab(tab);
+    } else if (tab.type === 'api-file') {
+        await renderApiFilePreviewTab(tab);
     } else {
         await previewFile(tab.handle, tab.path);
     }
@@ -6403,6 +6878,309 @@ async function getWorkspaceFileHandleByPath(filePath) {
     }
 }
 
+async function getWorkspaceDirectoryHandleByPath(dirPath) {
+    if (!workspaceDirHandle) return null;
+    const parts = String(dirPath || '').split('/').filter(Boolean);
+    let dir = workspaceDirHandle;
+    for (const part of parts) {
+        try {
+            dir = await dir.getDirectoryHandle(part, { create: false });
+        } catch (e) {
+            return null;
+        }
+    }
+    return dir;
+}
+
+async function getFileHandleFromDirectory(dirHandle, relativePath) {
+    if (!dirHandle || !relativePath) return null;
+    const parts = String(relativePath).split('/').filter(Boolean);
+    if (!parts.length || parts.includes('..')) return null;
+    let dir = dirHandle;
+    for (const part of parts.slice(0, -1)) {
+        try {
+            dir = await dir.getDirectoryHandle(part, { create: false });
+        } catch (e) {
+            return null;
+        }
+    }
+    try {
+        return await dir.getFileHandle(parts[parts.length - 1], { create: false });
+    } catch (e) {
+        return null;
+    }
+}
+
+function normalizeMicroAppEntry(entry) {
+    const raw = String(entry || 'index.html').trim().replace(/\\/g, '/').replace(/^\/+/, '');
+    const parts = raw.split('/').filter(Boolean);
+    if (!parts.length || parts.includes('..')) return 'index.html';
+    return parts.join('/');
+}
+
+async function readApiMicroAppConfig(dirPath) {
+    const configPath = dirPath ? `${dirPath}/app.json` : 'app.json';
+    try {
+        const data = await debugWorkspaceApi.readFile(configPath);
+        const config = JSON.parse(data.content || '{}');
+        if (!config || config.type !== 'micro-app') return null;
+        return Object.assign({}, config, {
+            entry: normalizeMicroAppEntry(config.entry),
+        });
+    } catch (e) {
+        return null;
+    }
+}
+
+function hasApiMicroAppConfigFile(entry) {
+    if (!entry || entry.type !== 'directory' || !Array.isArray(entry.children)) return false;
+    return entry.children.some(child => child && child.type === 'file' && child.name === 'app.json');
+}
+
+async function openApiMicroAppPreviewTab(dirPath, appConfig) {
+    const entryPath = normalizeMicroAppEntry(appConfig && appConfig.entry);
+    const workspaceEntryPath = dirPath ? `${dirPath}/${entryPath}` : entryPath;
+    try {
+        await debugWorkspaceApi.readFile(workspaceEntryPath);
+    } catch (e) {
+        showSystemMessage(`微应用入口不存在: ${workspaceEntryPath}`);
+        return;
+    }
+    const tabPath = dirPath ? `${dirPath}/` : '/';
+    filePreviewTabs.set(tabPath, {
+        type: 'micro-app',
+        path: tabPath,
+        title: appConfig.name || getWorkspaceFileBaseName(dirPath) || '微应用',
+        appRootHandle: null,
+        appRootPath: dirPath,
+        appConfig,
+        entryPath,
+        entryHandle: null,
+        workspaceApi: debugWorkspaceApi,
+    });
+    await activateFilePreviewTab(tabPath, { resetScroll: true });
+}
+
+async function readMicroAppConfig(dirHandle) {
+    if (!dirHandle) return null;
+    try {
+        const configHandle = await dirHandle.getFileHandle('app.json', { create: false });
+        const text = await (await configHandle.getFile()).text();
+        const config = JSON.parse(text);
+        if (!config || config.type !== 'micro-app') return null;
+        return Object.assign({}, config, {
+            entry: normalizeMicroAppEntry(config.entry),
+        });
+    } catch (e) {
+        return null;
+    }
+}
+
+async function openMicroAppPreviewTab(dirHandle, dirPath, appConfig) {
+    const entryPath = normalizeMicroAppEntry(appConfig && appConfig.entry);
+    const entryHandle = await getFileHandleFromDirectory(dirHandle, entryPath);
+    if (!entryHandle) {
+        showSystemMessage(`微应用入口不存在: ${dirPath}/${entryPath}`);
+        return;
+    }
+    const tabPath = dirPath ? `${dirPath}/` : '/';
+    filePreviewTabs.set(tabPath, {
+        type: 'micro-app',
+        path: tabPath,
+        title: appConfig.name || getWorkspaceFileBaseName(dirPath) || '微应用',
+        appRootHandle: dirHandle,
+        appRootPath: dirPath,
+        appConfig,
+        entryPath,
+        entryHandle,
+    });
+    await activateFilePreviewTab(tabPath, { resetScroll: true });
+}
+
+async function renderMicroAppPreviewTab(tab) {
+    if (!filePreviewBody || !window.MicroAppRuntimeHost) return;
+    resetActivePreviewSurface();
+    currentPreviewFile = null;
+    currentPreviewPath = tab.path;
+    currentPreviewCopyText = '';
+    if (filePreviewOpenBtn) filePreviewOpenBtn.style.display = 'none';
+    if (filePreviewRenderBtn) filePreviewRenderBtn.style.display = 'none';
+    renderFilePreviewMetaRows(filePreviewMeta, [
+        { label: '文件名', value: tab.title || '微应用' },
+        { label: '路径', value: tab.appRootPath || tab.path },
+        { label: '预览类型', value: PREVIEW_KIND_LABEL['micro-app'] },
+        { label: '入口', value: tab.entryPath || 'index.html' },
+        { label: '运行时', value: 'http_client local-adapter' },
+    ]);
+    await window.MicroAppRuntimeHost.render({
+        container: filePreviewBody,
+        appRootHandle: tab.appRootHandle,
+        appRootPath: tab.appRootPath,
+        entryPath: tab.entryPath,
+        entryHandle: tab.entryHandle,
+        appConfig: tab.appConfig,
+        workspaceApi: tab.workspaceApi || debugWorkspaceApi,
+        serverUrlProvider: () => (serverUrlInput.value.trim() || 'http://127.0.0.1:8002'),
+        refreshFileTree: async () => {
+            await renderFileTree();
+            await refreshWorkspaceMentionIndex();
+        },
+        sendAgentMessage: sendMicroAppAgentMessage,
+        fillMessageDraft: fillMicroAppMessageDraft,
+        setInputMessage: setMicroAppInputMessage,
+        uploadWorkspaceFiles: uploadMicroAppWorkspaceFiles,
+        addFilesToMessage: addMicroAppFilesToMessage,
+        downloadWorkspaceFiles: downloadMicroAppWorkspaceFiles,
+    });
+    setFilePreviewWorkbenchVisible(true);
+}
+
+function buildMicroAppPrompt(payload) {
+    if (!payload || typeof payload !== 'object') return '';
+    if (typeof payload.prompt === 'string') return payload.prompt;
+    if (typeof payload.message === 'string') return payload.message;
+    if (typeof payload.content === 'string') return payload.content;
+    if (payload.content && typeof payload.content === 'object') {
+        return JSON.stringify(payload.content, null, 2);
+    }
+    if (typeof payload.text === 'string') return payload.text;
+    return '';
+}
+
+function appendMicroAppPathMentions(prompt, payload) {
+    const parts = [prompt || ''];
+    const paths = [];
+    if (typeof payload.skillPath === 'string' && payload.skillPath.trim()) {
+        paths.push(payload.skillPath.trim());
+    }
+    if (Array.isArray(payload.files)) {
+        for (const item of payload.files) {
+            if (typeof item === 'string' && item.trim()) paths.push(item.trim());
+            else if (item && typeof item.path === 'string' && item.path.trim()) paths.push(item.path.trim());
+        }
+    }
+    for (const path of paths) {
+        parts.push(`[@file_path:${normalizeMentionFilePath(path)}]${MENTION_PROMPT_SEPARATOR}`);
+    }
+    return parts.join(parts[0] ? '\n' : '').trim();
+}
+
+async function sendMicroAppAgentMessage(payload) {
+    const prompt = appendMicroAppPathMentions(buildMicroAppPrompt(payload), payload || {});
+    if (!prompt) {
+        throw new Error('createTopicAndSend requires prompt, message, content, or text');
+    }
+    try {
+        await ensureWebSocketConnected();
+    } catch (e) {
+        showSystemMessage('微应用消息发送失败：无法连接到服务器，请确认服务已启动');
+        throw e;
+    }
+    const message = createChatMessage(prompt);
+    if (payload && typeof payload.agentMode === 'string' && payload.agentMode.trim()) {
+        message.agent_mode = payload.agentMode.trim();
+    }
+    const modelId = payload && (payload.modelId || payload.model || payload.model_id);
+    if (typeof modelId === 'string' && modelId.trim()) {
+        message.model_id = modelId.trim();
+    }
+    if (payload && payload.dynamic_config && typeof payload.dynamic_config === 'object') {
+        message.dynamic_config = Object.assign({}, message.dynamic_config || {}, payload.dynamic_config);
+    }
+    showClientMessage(message);
+    showAssistantActivity('thinking');
+    const responseData = await sendHttpMessage(message);
+    if (!responseData || responseData.code !== 1000) {
+        hideAssistantActivity();
+    }
+    return {
+        messageId: message.message_id,
+        response: responseData,
+    };
+}
+
+async function fillMicroAppMessageDraft(payload) {
+    const prompt = appendMicroAppPathMentions(buildMicroAppPrompt(payload), payload || {});
+    if (!prompt) {
+        throw new Error('draftMessage requires prompt, message, content, or text');
+    }
+    if (!messageInput) {
+        throw new Error('Message input is not available');
+    }
+    messageInput.value = prompt;
+    messageInput.dispatchEvent(new Event('input', { bubbles: true }));
+    messageInput.focus();
+    showSystemMessage('微应用消息已填入聊天框，确认后可手动发送');
+    return {
+        drafted: true,
+        length: prompt.length,
+    };
+}
+
+async function setMicroAppInputMessage(message) {
+    if (!messageInput) {
+        throw new Error('Message input is not available');
+    }
+    const text = String(message == null ? '' : message);
+    messageInput.value = text;
+    messageInput.dispatchEvent(new Event('input', { bubbles: true }));
+    messageInput.focus();
+    showSystemMessage('微应用消息已填入聊天框，确认后可手动发送');
+    return {
+        drafted: true,
+        length: text.length,
+    };
+}
+
+async function uploadMicroAppWorkspaceFiles(files) {
+    const list = Array.from(files || []).filter(item => item && item.file instanceof File);
+    if (!list.length) {
+        throw new Error('uploadFiles: files array cannot be empty');
+    }
+    const uploaded = [];
+    for (const item of list) {
+        const rawPath = normalizeMentionFilePath(item.path || item.filename || item.file.name);
+        const targetPath = rawPath || item.file.name;
+        const targetDir = getWorkspaceParentPath(targetPath);
+        const filename = getWorkspaceFileBaseName(targetPath) || item.filename || item.file.name;
+        const contentBase64 = await fileToBase64(item.file);
+        uploaded.push(await debugWorkspaceApi.uploadFile(targetDir, filename, contentBase64, true));
+        if (targetDir) expandedDirs.add(targetDir);
+    }
+    await renderFileTree();
+    await refreshWorkspaceMentionIndex();
+    showSystemMessage(`微应用已上传 ${uploaded.length} 个文件`);
+    return uploaded;
+}
+
+async function addMicroAppFilesToMessage(filePaths, agentMode) {
+    const paths = Array.from(filePaths || []).filter(path => typeof path === 'string' && path.trim());
+    if (!paths.length) {
+        throw new Error('addFilesToMessage: filePaths array cannot be empty');
+    }
+    const snippets = paths
+        .map(path => `[@file_path:${normalizeMentionFilePath(path)}]${MENTION_PROMPT_SEPARATOR}`)
+        .join('');
+    insertMentionAtCursor(snippets);
+    return {
+        foundCount: paths.length,
+        notFoundPaths: [],
+        agentMode: typeof agentMode === 'string' ? agentMode : undefined,
+    };
+}
+
+async function downloadMicroAppWorkspaceFiles(filePaths) {
+    const paths = Array.from(filePaths || []).filter(path => typeof path === 'string' && path.trim());
+    if (!paths.length) {
+        throw new Error('downloadFiles: filePaths array cannot be empty');
+    }
+    paths.forEach(path => triggerWorkspaceDownload(path));
+    showSystemMessage(`微应用已触发 ${paths.length} 个文件下载`);
+    return {
+        downloadedCount: paths.length,
+    };
+}
+
 async function restorePersistedFilePreviewState() {
     const saved = readFilePreviewState();
     if (!saved) return;
@@ -6423,10 +7201,24 @@ async function restorePersistedFilePreviewState() {
                 restoredPaths.push(filePath);
                 continue;
             }
-            const handle = await getWorkspaceFileHandleByPath(filePath);
-            if (!handle) continue;
-            filePreviewTabs.set(filePath, { handle, path: filePath });
-            restoredPaths.push(filePath);
+            try {
+                const data = await debugWorkspaceApi.readFile(filePath);
+                filePreviewTabs.set(filePath, {
+                    type: 'api-file',
+                    path: filePath,
+                    title: getWorkspaceFileBaseName(filePath),
+                    entry: {
+                        name: getWorkspaceFileBaseName(filePath),
+                        path: filePath,
+                        type: 'file',
+                        size: data.size || 0,
+                        updated_at: data.updated_at || null,
+                    },
+                });
+                restoredPaths.push(filePath);
+            } catch (e) {
+                // 文件不存在或不是文本文件时不恢复该标签页。
+            }
         }
         if (!restoredPaths.length) {
             if (saved.visible) {
@@ -6444,6 +7236,8 @@ async function restorePersistedFilePreviewState() {
         if (activeTab) {
             if (activeTab.type === 'tool-detail') {
                 renderToolDetailPreviewTab(activeTab);
+            } else if (activeTab.type === 'api-file') {
+                await renderApiFilePreviewTab(activeTab);
             } else {
                 await previewFile(activeTab.handle, activeTab.path);
             }
@@ -6462,30 +7256,19 @@ function updateSelectBtn(state) {
     selectWorkspaceBtn.classList.toggle('icon-btn-active', state === 'active');
     selectWorkspaceBtn.classList.toggle('icon-btn-warning', state === 'need-auth');
     if (state === 'active') {
-        selectWorkspaceBtn.title = '切换项目根目录';
+        selectWorkspaceBtn.title = '刷新 .workspace 文件树';
     } else if (state === 'need-auth') {
-        const dirHint = mountDirName || '根目录';
-        selectWorkspaceBtn.title = `点击重新授权读取 ${dirHint}`;
+        selectWorkspaceBtn.title = '重新加载 .workspace 文件树';
     } else {
-        selectWorkspaceBtn.title = '选择项目根目录';
+        selectWorkspaceBtn.title = '加载 .workspace 文件树';
     }
 }
 
 // 激活文件树（已有 handle）
-// 若配置了挂载目录且根目录下存在对应子目录，则自动进入该子目录
 async function activateFiletree(handle, options = {}) {
     rootDirHandle = handle;
-    let target = handle;
-    if (mountDirName) {
-        try {
-            const sub = await handle.getDirectoryHandle(mountDirName, { create: false });
-            target = sub;
-        } catch (e) {
-            // 子目录不存在，直接展示根目录
-        }
-    }
-    workspaceDirHandle = target;
-    await saveHandle(handle); // 存原始根目录 handle，下次恢复时再次尝试进入挂载目录
+    workspaceDirHandle = handle;
+    await saveHandle(handle);
     updateSelectBtn('active');
     await renderFileTree();
     await refreshWorkspaceMentionIndex();
@@ -6493,20 +7276,6 @@ async function activateFiletree(handle, options = {}) {
     if (options.restorePreviewState) {
         await restorePersistedFilePreviewState();
     }
-}
-
-// 应用挂载目录变更
-async function applyMountDir() {
-    const newMountDir = mountDirInput ? mountDirInput.value.trim() : '';
-    mountDirName = newMountDir;
-    localStorage.setItem('mountDirName', mountDirName);
-    if (!rootDirHandle) {
-        showSystemMessage('请先选择项目根目录');
-        return;
-    }
-    closeFilePreviewWorkbench();
-    await activateFiletree(rootDirHandle);
-    showSystemMessage(`挂载目录已切换为: ${mountDirName || '(根目录)'}`);
 }
 
 function showWorkspacePermissionHint(text) {
@@ -6542,8 +7311,7 @@ async function requestWorkspacePermission(handle, options = {}) {
             console.warn('请求目录权限失败', e);
         }
     }
-    const dirHint = mountDirName || '根目录';
-    showWorkspacePermissionHint(`点击此处或上方目录按钮，重新授权读取 ${dirHint}`);
+    showWorkspacePermissionHint('点击此处或刷新按钮，重新加载 .workspace 文件树');
     if (options.showMessage) {
         showSystemMessage('工作区文件读取权限需要点击确认后恢复');
     }
@@ -6552,76 +7320,109 @@ async function requestWorkspacePermission(handle, options = {}) {
 
 // 页面加载时尝试恢复上次的目录
 (async () => {
-    // 初始化挂载目录输入框
-    if (mountDirInput) mountDirInput.value = mountDirName;
-
-    const saved = await loadHandle();
-    if (!saved) return;
-    await requestWorkspacePermission(saved, {
-        showMessage: false,
-        logFailure: true,
-        restorePreviewState: true,
-    });
+    updateSelectBtn('active');
+    await renderFileTree();
+    await refreshWorkspaceMentionIndex();
+    await restorePersistedFilePreviewState();
+    startFiletreeAutoRefresh();
 })();
 
 // 点击选择/切换目录按钮
 if (selectWorkspaceBtn) {
     selectWorkspaceBtn.addEventListener('click', async () => {
-        if (!('showDirectoryPicker' in window)) {
-            alert('当前浏览器不支持 File System Access API，请使用 Chrome / Edge 等现代浏览器。');
-            return;
-        }
         try {
-            // need-auth 状态：权限过期，先尝试对已有根目录重新授权，避免用户重新选
-            if (selectBtnState === 'need-auth' && rootDirHandle) {
-                const granted = await requestWorkspacePermission(rootDirHandle, {
-                    showMessage: true,
-                    showSuccess: true,
-                    logFailure: true,
-                    restorePreviewState: true,
-                });
-                if (granted) {
-                    return;
-                }
-            }
-            // active / default 状态：直接弹出选择器，支持切换到新项目
-            const handle = await window.showDirectoryPicker({ mode: 'read' });
-            closeFilePreviewWorkbench();
-            await activateFiletree(handle);
+            await renderFileTree();
+            await refreshWorkspaceMentionIndex();
+            updateSelectBtn('active');
         } catch (e) {
-            if (e.name !== 'AbortError') console.error('授权目录失败', e);
+            console.error('刷新工作区文件树失败', e);
         }
     });
 }
 
 if (filetreeContainer) {
     filetreeContainer.addEventListener('click', async () => {
-        if (selectBtnState !== 'need-auth' || !rootDirHandle) return;
-        await requestWorkspacePermission(rootDirHandle, {
-            showMessage: true,
-            showSuccess: true,
-            logFailure: true,
-            restorePreviewState: true,
-        });
+        if (selectBtnState !== 'need-auth') return;
+        await renderFileTree();
+        await refreshWorkspaceMentionIndex();
     });
-}
-
-// 挂载目录应用按钮
-if (applyMountDirBtn) {
-    applyMountDirBtn.addEventListener('click', applyMountDir);
-}
-if (mountDirInput) {
-    mountDirInput.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') applyMountDir();
+    filetreeContainer.addEventListener('dragover', (e) => {
+        if (!e.dataTransfer || !Array.from(e.dataTransfer.types || []).includes('Files')) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'copy';
+        clearWorkspaceDropTarget();
+        filetreeContainer.classList.add('ft-drag-over');
+        const targetNode = e.target.closest ? e.target.closest('.ft-node.ft-dir') : null;
+        if (targetNode && filetreeContainer.contains(targetNode)) {
+            targetNode.classList.add('ft-drop-target');
+        }
+    });
+    filetreeContainer.addEventListener('dragleave', (e) => {
+        if (!filetreeContainer.contains(e.relatedTarget)) {
+            clearWorkspaceDropTarget();
+        }
+    });
+    filetreeContainer.addEventListener('drop', async (e) => {
+        if (!e.dataTransfer || !e.dataTransfer.files || !e.dataTransfer.files.length) return;
+        e.preventDefault();
+        const targetDir = getWorkspaceDropTargetDir(e);
+        clearWorkspaceDropTarget();
+        try {
+            await uploadWorkspaceFiles(e.dataTransfer.files, targetDir);
+        } catch (error) {
+            console.error('拖拽上传工作区文件失败', error);
+            showSystemMessage(`上传失败：${error.message || error}`);
+        }
     });
 }
 
 // 手动刷新
 if (refreshTreeBtn) {
     refreshTreeBtn.addEventListener('click', async () => {
-        if (workspaceDirHandle) {
-            await renderFileTree();
-            await refreshWorkspaceMentionIndex();
+        await renderFileTree();
+        await refreshWorkspaceMentionIndex();
+    });
+}
+
+if (uploadWorkspaceBtn) {
+    uploadWorkspaceBtn.addEventListener('click', () => openWorkspaceUploadPicker(''));
+}
+
+if (workspaceUploadInput) {
+    workspaceUploadInput.addEventListener('change', async () => {
+        try {
+            await uploadWorkspaceFiles(workspaceUploadInput.files, workspaceUploadTargetDir);
+        } catch (error) {
+            console.error('上传工作区文件失败', error);
+            showSystemMessage(`上传失败：${error.message || error}`);
+        } finally {
+            workspaceUploadInput.value = '';
+            workspaceUploadTargetDir = '';
+        }
+    });
+}
+
+if (messageInputPanel) {
+    messageInputPanel.addEventListener('dragover', (e) => {
+        if (!hasDraggedFiles(e)) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'copy';
+        messageInputPanel.classList.add('message-input-drag-over');
+    });
+    messageInputPanel.addEventListener('dragleave', (e) => {
+        if (!messageInputPanel.contains(e.relatedTarget)) {
+            clearMessageInputDropTarget();
+        }
+    });
+    messageInputPanel.addEventListener('drop', async (e) => {
+        if (!e.dataTransfer || !e.dataTransfer.files || !e.dataTransfer.files.length) return;
+        e.preventDefault();
+        clearMessageInputDropTarget();
+        try {
+            await uploadFilesFromMessageInput(e.dataTransfer.files);
+        } catch (error) {
+            console.error('聊天输入区拖拽上传失败', error);
+            showSystemMessage(`上传失败：${error.message || error}`);
         }
     });
 }
@@ -6663,23 +7464,312 @@ if (filePreviewRenderBtn) {
 function startFiletreeAutoRefresh() {
     if (filetreeRefreshTimer) clearInterval(filetreeRefreshTimer);
     filetreeRefreshTimer = setInterval(async () => {
-        if (workspaceDirHandle) await renderFileTree();
+        await renderFileTree();
     }, 3000);
+}
+
+async function openApiFilePreviewTab(entry) {
+    if (!entry || !entry.path) return;
+    filePreviewTabs.set(entry.path, {
+        type: 'api-file',
+        path: entry.path,
+        title: entry.name || getWorkspaceFileBaseName(entry.path),
+        entry,
+    });
+    await activateFilePreviewTab(entry.path, { resetScroll: true });
+}
+
+function buildApiFilePreviewDescriptor(entry, kind) {
+    const path = entry?.path || '';
+    return {
+        name: entry?.name || getWorkspaceFileBaseName(path),
+        size: Number(entry?.size) || 0,
+        type: kind === 'html' ? 'text/html' : '',
+        lastModified: entry?.updated_at ? Number(entry.updated_at) * 1000 : Date.now(),
+    };
+}
+
+async function renderApiFilePreviewTab(tab) {
+    if (!filePreviewBody || !filePreviewWorkbench) return;
+    const entry = tab.entry || {};
+    const filePath = entry.path || tab.path;
+    const kindProbe = buildApiFilePreviewDescriptor(entry, '');
+    const kind = isHtmlPreviewable(filePath, kindProbe) ? 'html' : getWorkspacePreviewKind(filePath, kindProbe);
+    const rawUrl = debugWorkspaceApi.rawUrl(filePath);
+    resetActivePreviewSurface();
+    currentPreviewFile = null;
+    currentPreviewPath = filePath;
+    currentPreviewCopyText = '';
+    if (filePreviewRenderBtn) filePreviewRenderBtn.style.display = 'none';
+
+    const setMeta = (previewKind, extraRows = []) => {
+        const descriptor = buildApiFilePreviewDescriptor(entry, previewKind);
+        setFilePreviewMeta(descriptor, filePath, previewKind, extraRows);
+    };
+
+    try {
+        if (kind === 'html') {
+            const data = await debugWorkspaceApi.readFile(filePath);
+            currentPreviewCopyText = data.content || '';
+            setMeta('html', []);
+            const iframe = document.createElement('iframe');
+            iframe.className = 'file-preview-pdf file-preview-html';
+            iframe.title = filePath;
+            iframe.src = rawUrl;
+            filePreviewBody.appendChild(iframe);
+        } else if (kind === 'unsupported') {
+            setMeta(kind, []);
+            appendPreviewMessage(filePreviewBody, '此文件类型无法在浏览器内预览，请使用本地应用打开。');
+        } else if (kind === 'image') {
+            setMeta(kind, []);
+            const img = document.createElement('img');
+            img.className = 'file-preview-image';
+            img.alt = filePath;
+            img.addEventListener('load', () => {
+                setMeta(kind, [{ label: '尺寸', value: `${img.naturalWidth} × ${img.naturalHeight} px` }]);
+            });
+            img.addEventListener('error', () => {
+                filePreviewBody.innerHTML = '';
+                appendPreviewMessage(filePreviewBody, '无法将此文件作为图片显示（可能格式不受当前浏览器支持）。请使用本地应用打开。');
+            });
+            img.src = rawUrl;
+            filePreviewBody.appendChild(img);
+        } else if (kind === 'video') {
+            setMeta(kind, []);
+            const video = document.createElement('video');
+            video.className = 'file-preview-video';
+            video.controls = true;
+            video.playsInline = true;
+            video.preload = 'metadata';
+            video.addEventListener('loadedmetadata', () => {
+                setMeta(kind, [
+                    { label: '分辨率', value: `${video.videoWidth} × ${video.videoHeight} px` },
+                    { label: '时长', value: formatMediaDurationSeconds(video.duration) },
+                ]);
+            });
+            video.addEventListener('error', () => {
+                filePreviewBody.innerHTML = '';
+                appendPreviewMessage(filePreviewBody, '无法播放此视频（可能编码或容器格式不受当前浏览器支持）。请使用本地应用打开。');
+            });
+            video.src = rawUrl;
+            filePreviewBody.appendChild(video);
+        } else if (kind === 'audio') {
+            setMeta(kind, []);
+            const audio = document.createElement('audio');
+            audio.className = 'file-preview-audio';
+            audio.controls = true;
+            audio.preload = 'metadata';
+            audio.addEventListener('loadedmetadata', () => {
+                setMeta(kind, [{ label: '时长', value: formatMediaDurationSeconds(audio.duration) }]);
+            });
+            audio.addEventListener('error', () => {
+                filePreviewBody.innerHTML = '';
+                appendPreviewMessage(filePreviewBody, '无法播放此音频（可能格式不受当前浏览器支持）。请使用本地应用打开。');
+            });
+            audio.src = rawUrl;
+            filePreviewBody.appendChild(audio);
+        } else if (kind === 'pdf') {
+            setMeta(kind, []);
+            const iframe = document.createElement('iframe');
+            iframe.className = 'file-preview-pdf';
+            iframe.title = filePath;
+            iframe.src = rawUrl;
+            filePreviewBody.appendChild(iframe);
+        } else if (kind === 'text') {
+            const data = await debugWorkspaceApi.readFile(filePath);
+            const text = data.content || '';
+            const lineCount = text.split(/\r\n|\r|\n/).length;
+            currentPreviewCopyText = text;
+            setMeta(kind, [
+                { label: '行数', value: String(lineCount) },
+                { label: '字符数', value: String(text.length) },
+            ]);
+            if (isMarkdownPreviewFile(filePath) && window.marked) {
+                filePreviewBody.classList.add('file-preview-body-markdown');
+                const article = document.createElement('article');
+                article.className = 'file-preview-markdown ai-markdown';
+                article.innerHTML = marked.parse(text);
+                enhanceFilePreviewMarkdownImages(article);
+                filePreviewBody.appendChild(article);
+            } else {
+                const pre = document.createElement('pre');
+                pre.className = 'file-preview-content';
+                pre.textContent = text;
+                filePreviewBody.appendChild(pre);
+            }
+
+            if (isMagicProjectJs(filePath)) {
+                const config = await parseMagicProjectConfig(text);
+                if (config?.canvas) {
+                    await addApiCanvasRightPanel(config, filePath);
+                }
+            }
+        }
+        setFilePreviewWorkbenchVisible(true);
+    } catch (e) {
+        console.error('读取 API 工作区文件失败', e);
+        appendPreviewMessage(filePreviewBody, `读取文件失败: ${e.message || e}`);
+        setFilePreviewWorkbenchVisible(true);
+    }
 }
 
 // 读取并渲染文件树
 async function renderFileTree() {
     if (!filetreeContainer) return;
     try {
+        const data = await debugWorkspaceApi.listTree('', 8);
         const frag = document.createDocumentFragment();
-        await buildTreeNodes(workspaceDirHandle, frag, '', 0);
+        await buildApiTreeNodes(data.entries || [], frag, 0);
         filetreeContainer.innerHTML = '';
         filetreeContainer.appendChild(frag);
         if (!filetreeContainer.hasChildNodes() || filetreeContainer.children.length === 0) {
             filetreeContainer.innerHTML = '<div class="filetree-empty">目录为空</div>';
         }
+        updateSelectBtn('active');
     } catch (e) {
         console.error('渲染文件树失败', e);
+        updateSelectBtn('need-auth');
+        if (filetreeContainer) {
+            filetreeContainer.innerHTML = '<div class="filetree-empty">无法加载 .workspace 文件树，请确认 super-magic 后端已启动。</div>';
+        }
+    }
+}
+
+async function buildApiTreeNodes(entries, container, depth) {
+    const sorted = [...(entries || [])].sort((a, b) => {
+        const aDir = a.type === 'directory';
+        const bDir = b.type === 'directory';
+        if (aDir !== bDir) return aDir ? -1 : 1;
+        return String(a.name || '').localeCompare(String(b.name || ''));
+    });
+
+    for (const entry of sorted) {
+        if (!entry || !entry.name) continue;
+        const fullPath = entry.path || entry.name;
+        const isDir = entry.type === 'directory';
+        const microAppConfig = isDir && hasApiMicroAppConfigFile(entry) ? await readApiMicroAppConfig(fullPath) : null;
+
+        const node = document.createElement('div');
+        node.className = `ft-node ${isDir ? 'ft-dir' : 'ft-file'}${microAppConfig ? ' ft-micro-app' : ''}`;
+        node.style.paddingLeft = `${8 + depth * 14}px`;
+        node.dataset.path = fullPath;
+        node.dataset.type = isDir ? 'directory' : 'file';
+
+        const icon = createFileTreeIcon(entry.name, isDir, expandedDirs.has(fullPath), { microApp: !!microAppConfig });
+
+        const name = document.createElement('span');
+        name.className = 'ft-name';
+        name.textContent = entry.name;
+        name.title = microAppConfig ? `微应用: ${microAppConfig.name || entry.name}，单击展开/收起，双击打开` : fullPath;
+
+        node.appendChild(icon);
+        node.appendChild(name);
+        node.appendChild(createWorkspaceDeleteButton(fullPath, isDir));
+        container.appendChild(node);
+
+        if (isDir) {
+            const childContainer = document.createElement('div');
+            childContainer.className = 'ft-children';
+            if (expandedDirs.has(fullPath)) {
+                childContainer.style.display = 'block';
+                await buildApiTreeNodes(entry.children || [], childContainer, depth + 1);
+            } else {
+                childContainer.style.display = 'none';
+            }
+            container.appendChild(childContainer);
+
+            node.addEventListener('click', async (e) => {
+                e.stopPropagation();
+                if (e.detail > 1) return;
+                if (expandedDirs.has(fullPath)) {
+                    expandedDirs.delete(fullPath);
+                    childContainer.style.display = 'none';
+                    childContainer.innerHTML = '';
+                    updateFileTreeIcon(icon, entry.name, true, false, { microApp: !!microAppConfig });
+                } else {
+                    expandedDirs.add(fullPath);
+                    childContainer.innerHTML = '';
+                    await buildApiTreeNodes(entry.children || [], childContainer, depth + 1);
+                    childContainer.style.display = 'block';
+                    updateFileTreeIcon(icon, entry.name, true, true, { microApp: !!microAppConfig });
+                }
+            });
+            if (microAppConfig) {
+                node.addEventListener('dblclick', async (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    await openApiMicroAppPreviewTab(fullPath, microAppConfig);
+                });
+            }
+            node.addEventListener('contextmenu', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                const dirPath = normalizeMentionDirectoryPath(fullPath);
+                const menuItems = [];
+                if (microAppConfig) {
+                    menuItems.push({
+                        label: '打开微应用',
+                        onSelect: () => openApiMicroAppPreviewTab(fullPath, microAppConfig),
+                    });
+                    menuItems.push({
+                        label: expandedDirs.has(fullPath) ? '收起目录' : '展开目录',
+                        onSelect: async () => {
+                            if (expandedDirs.has(fullPath)) {
+                                expandedDirs.delete(fullPath);
+                            } else {
+                                expandedDirs.add(fullPath);
+                            }
+                            await renderFileTree();
+                        },
+                    });
+                }
+                menuItems.push({
+                    label: '上传到此目录',
+                    onSelect: () => openWorkspaceUploadPicker(fullPath),
+                });
+                menuItems.push({
+                    label: '下载目录（zip）',
+                    onSelect: () => triggerWorkspaceDownload(fullPath),
+                });
+                menuItems.push({
+                    label: '删除目录',
+                    onSelect: () => confirmDeleteWorkspacePath(fullPath, true),
+                });
+                menuItems.push({
+                    label: '引用此目录（插入 @）',
+                    onSelect: () => {
+                        insertMentionAtCursor(`[@directory_path:${dirPath}]${MENTION_PROMPT_SEPARATOR}`);
+                    },
+                });
+                openFiletreeContextMenu(e.clientX, e.clientY, menuItems);
+            });
+        } else {
+            node.addEventListener('click', async (e) => {
+                e.stopPropagation();
+                await openApiFilePreviewTab(entry);
+            });
+            node.addEventListener('contextmenu', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                const fp = normalizeMentionFilePath(fullPath);
+                openFiletreeContextMenu(e.clientX, e.clientY, [
+                    {
+                        label: '下载文件',
+                        onSelect: () => triggerWorkspaceDownload(fullPath),
+                    },
+                    {
+                        label: '删除文件',
+                        onSelect: () => confirmDeleteWorkspacePath(fullPath, false),
+                    },
+                    {
+                        label: '引用此文件（插入 @）',
+                        onSelect: () => {
+                            insertMentionAtCursor(`[@file_path:${fp}]${MENTION_PROMPT_SEPARATOR}`);
+                        },
+                    },
+                ]);
+            });
+        }
     }
 }
 
@@ -6698,19 +7788,26 @@ async function buildTreeNodes(dirHandle, container, pathPrefix, depth) {
     for (const entry of entries) {
         const fullPath = pathPrefix ? `${pathPrefix}/${entry.name}` : entry.name;
         const isDir = entry.kind === 'directory';
+        const microAppConfig = isDir ? await readMicroAppConfig(entry) : null;
 
         const node = document.createElement('div');
-        node.className = `ft-node ${isDir ? 'ft-dir' : 'ft-file'}`;
+        node.className = `ft-node ${isDir ? 'ft-dir' : 'ft-file'}${microAppConfig ? ' ft-micro-app' : ''}`;
         node.style.paddingLeft = `${8 + depth * 14}px`;
+        node.dataset.path = fullPath;
+        node.dataset.type = isDir ? 'directory' : 'file';
 
-        const icon = createFileTreeIcon(entry.name, isDir, expandedDirs.has(fullPath));
+        const icon = createFileTreeIcon(entry.name, isDir, expandedDirs.has(fullPath), { microApp: !!microAppConfig });
 
         const name = document.createElement('span');
         name.className = 'ft-name';
         name.textContent = entry.name;
+        if (microAppConfig) {
+            name.title = `微应用: ${microAppConfig.name || entry.name}，单击展开/收起，双击打开`;
+        }
 
         node.appendChild(icon);
         node.appendChild(name);
+        node.appendChild(createWorkspaceDeleteButton(fullPath, isDir));
         container.appendChild(node);
 
         if (isDir) {
@@ -6727,30 +7824,61 @@ async function buildTreeNodes(dirHandle, container, pathPrefix, depth) {
 
             node.addEventListener('click', async (e) => {
                 e.stopPropagation();
+                if (e.detail > 1) return;
                 const isOpen = expandedDirs.has(fullPath);
                 if (isOpen) {
                     expandedDirs.delete(fullPath);
                     childContainer.style.display = 'none';
                     childContainer.innerHTML = '';
-                    updateFileTreeIcon(icon, entry.name, true, false);
+                    updateFileTreeIcon(icon, entry.name, true, false, { microApp: !!microAppConfig });
                 } else {
                     expandedDirs.add(fullPath);
                     childContainer.innerHTML = '';
                     await buildTreeNodes(entry, childContainer, fullPath, depth + 1);
                     childContainer.style.display = 'block';
-                    updateFileTreeIcon(icon, entry.name, true, true);
+                    updateFileTreeIcon(icon, entry.name, true, true, { microApp: !!microAppConfig });
                 }
             });
+            if (microAppConfig) {
+                node.addEventListener('dblclick', async (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    await openMicroAppPreviewTab(entry, fullPath, microAppConfig);
+                });
+            }
             node.addEventListener('contextmenu', (e) => {
                 e.preventDefault();
                 e.stopPropagation();
                 const dirPath = normalizeMentionDirectoryPath(fullPath);
-                openFiletreeContextMenu(e.clientX, e.clientY, [{
+                const menuItems = [];
+                if (microAppConfig) {
+                    menuItems.push({
+                        label: '打开微应用',
+                        onSelect: () => openMicroAppPreviewTab(entry, fullPath, microAppConfig),
+                    });
+                    menuItems.push({
+                        label: expandedDirs.has(fullPath) ? '收起目录' : '展开目录',
+                        onSelect: async () => {
+                            if (expandedDirs.has(fullPath)) {
+                                expandedDirs.delete(fullPath);
+                            } else {
+                                expandedDirs.add(fullPath);
+                            }
+                            await renderFileTree();
+                        },
+                    });
+                }
+                menuItems.push({
+                    label: '删除目录',
+                    onSelect: () => confirmDeleteWorkspacePath(fullPath, true),
+                });
+                menuItems.push({
                     label: '引用此目录（插入 @）',
                     onSelect: () => {
                         insertMentionAtCursor(`[@directory_path:${dirPath}]${MENTION_PROMPT_SEPARATOR}`);
                     },
-                }]);
+                });
+                openFiletreeContextMenu(e.clientX, e.clientY, menuItems);
             });
         } else {
             node.addEventListener('click', async (e) => {
@@ -6761,12 +7889,18 @@ async function buildTreeNodes(dirHandle, container, pathPrefix, depth) {
                 e.preventDefault();
                 e.stopPropagation();
                 const fp = normalizeMentionFilePath(fullPath);
-                openFiletreeContextMenu(e.clientX, e.clientY, [{
-                    label: '引用此文件（插入 @）',
-                    onSelect: () => {
-                        insertMentionAtCursor(`[@file_path:${fp}]${MENTION_PROMPT_SEPARATOR}`);
+                openFiletreeContextMenu(e.clientX, e.clientY, [
+                    {
+                        label: '删除文件',
+                        onSelect: () => confirmDeleteWorkspacePath(fullPath, false),
                     },
-                }]);
+                    {
+                        label: '引用此文件（插入 @）',
+                        onSelect: () => {
+                            insertMentionAtCursor(`[@file_path:${fp}]${MENTION_PROMPT_SEPARATOR}`);
+                        },
+                    },
+                ]);
             });
         }
     }
@@ -6778,12 +7912,36 @@ function isMagicProjectJs(filePath) {
     return getWorkspaceFileBaseName(filePath) === 'magic.project.js';
 }
 
-function parseMagicProjectConfig(text) {
+// v2 画布压缩协议：canvas 字段被压成 MAGICPROJECTDESIGNDATA:// 字符串
+const MAGIC_PROJECT_DESIGN_DATA_PREFIX = 'MAGICPROJECTDESIGNDATA://';
+
+function isCompressedCanvas(value) {
+    return typeof value === 'string' && value.startsWith(MAGIC_PROJECT_DESIGN_DATA_PREFIX);
+}
+
+// 解压 canvas 压缩串：base64 -> gzip 解压 -> JSON。使用浏览器内置 DecompressionStream，无需额外依赖。
+async function decompressCanvasData(encoded) {
+    const b64 = encoded.slice(MAGIC_PROJECT_DESIGN_DATA_PREFIX.length);
+    const binary = atob(b64);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip'));
+    const buf = await new Response(stream).arrayBuffer();
+    return JSON.parse(new TextDecoder('utf-8').decode(buf));
+}
+
+// 解析 magic.project.js：兼容 v1（canvas 为对象）与 v2（canvas 为压缩字符串）
+async function parseMagicProjectConfig(text) {
     try {
         const m = text.match(/window\.magicProjectConfig\s*=\s*(\{[\s\S]*\})/);
         if (!m) return null;
-        return JSON.parse(m[1]);
-    } catch {
+        const config = JSON.parse(m[1]);
+        if (config && isCompressedCanvas(config.canvas)) {
+            config.canvas = await decompressCanvasData(config.canvas);
+        }
+        return config;
+    } catch (e) {
+        console.error('解析 magic.project.js 失败', e);
         return null;
     }
 }
@@ -6815,6 +7973,12 @@ async function resolveCanvasFileBlobUrl(projectDirHandle, relPath) {
     } catch {
         return null;
     }
+}
+
+function joinWorkspacePath(basePath, relPath) {
+    const baseParts = String(basePath || '').split('/').filter(Boolean);
+    const relParts = String(relPath || '').split('/').filter(p => p && p !== '.');
+    return [...baseParts, ...relParts].join('/');
 }
 
 /**
@@ -6944,7 +8108,7 @@ function openCanvasMediaModal(type, blobUrl, posterBlobUrl, name) {
  * 在 containerEl 内渲染画布内容。
  * containerEl 本身需具备 overflow:auto + 固定高度（来自 CSS），函数不修改其样式。
  */
-async function renderCanvasView(config, projectDirHandle, containerEl) {
+async function renderCanvasView(config, resolveMediaUrl, containerEl) {
     const elements = config?.canvas?.elements ?? [];
     if (!elements.length) {
         appendPreviewMessage(containerEl, '画布中没有元素。');
@@ -7062,8 +8226,8 @@ async function renderCanvasView(config, projectDirHandle, containerEl) {
             elDiv.appendChild(makeLabel(el.name || ''));
         } else if (el.type === 'video') {
             // 视频：封面优先，无封面则从视频抓第一帧；点击弹窗播放
-            const posterBlobUrl = el.poster ? await resolveCanvasFileBlobUrl(projectDirHandle, el.poster) : null;
-            const videoBlobUrl = el.src ? await resolveCanvasFileBlobUrl(projectDirHandle, el.src) : null;
+            const posterBlobUrl = el.poster ? await resolveMediaUrl(el.poster) : null;
+            const videoBlobUrl = el.src ? await resolveMediaUrl(el.src) : null;
             // 没有 poster 时从视频文件抓帧作为封面
             let thumbnailUrl = posterBlobUrl;
             if (!thumbnailUrl && videoBlobUrl) {
@@ -7075,7 +8239,7 @@ async function renderCanvasView(config, projectDirHandle, containerEl) {
                 elDiv.addEventListener('click', () => openCanvasMediaModal('video', videoBlobUrl, thumbnailUrl, el.name || ''));
             }
         } else if (el.src) {
-            const blobUrl = await resolveCanvasFileBlobUrl(projectDirHandle, el.src);
+            const blobUrl = await resolveMediaUrl(el.src);
             if (blobUrl) {
                 const img = document.createElement('img');
                 img.src = blobUrl;
@@ -7134,7 +8298,41 @@ async function addCanvasRightPanel(config, filePath) {
         appendPreviewMessage(viewport, '无法访问项目目录，请检查文件系统权限。');
         return;
     }
-    await renderCanvasView(config, projectDirHandle, viewport);
+    const resolveMediaUrl = (relPath) => resolveCanvasFileBlobUrl(projectDirHandle, relPath);
+    await renderCanvasView(config, resolveMediaUrl, viewport);
+}
+
+async function addApiCanvasRightPanel(config, filePath) {
+    if (!filePreviewMain) return;
+    filePreviewMain.classList.add('has-canvas-panel');
+
+    const oldPanel = document.getElementById('canvasRightPanel');
+    if (oldPanel) oldPanel.remove();
+
+    const panel = document.createElement('div');
+    panel.id = 'canvasRightPanel';
+    panel.className = 'canvas-right-panel';
+
+    const panelHeader = document.createElement('div');
+    panelHeader.className = 'canvas-panel-header';
+    const titleEl = document.createElement('span');
+    titleEl.className = 'canvas-panel-title';
+    titleEl.textContent = config.name || filePath;
+    const countEl = document.createElement('span');
+    countEl.className = 'canvas-panel-count';
+    countEl.textContent = `${config.canvas?.elements?.length ?? 0} 个元素`;
+    panelHeader.appendChild(titleEl);
+    panelHeader.appendChild(countEl);
+    panel.appendChild(panelHeader);
+
+    const viewport = document.createElement('div');
+    viewport.className = 'canvas-right-viewport';
+    panel.appendChild(viewport);
+    filePreviewMain.appendChild(panel);
+
+    const projectDirPath = String(filePath || '').split('/').filter(Boolean).slice(0, -1).join('/');
+    const resolveMediaUrl = async (relPath) => debugWorkspaceApi.rawUrl(joinWorkspacePath(projectDirPath, relPath));
+    await renderCanvasView(config, resolveMediaUrl, viewport);
 }
 
 // 预览文件内容：图片/音视频/PDF 用 blob URL，文本读入 pre，其余提示不可预览
@@ -7267,9 +8465,9 @@ async function previewFile(fileHandle, filePath) {
                 filePreviewBody.appendChild(pre);
             }
 
-            // magic.project.js：解析画布配置后在右侧自动展开画布面板
+            // magic.project.js：解析画布配置后在右侧自动展开画布面板（兼容 v1/v2）
             if (isMagicProjectJs(filePath)) {
-                const config = parseMagicProjectConfig(text);
+                const config = await parseMagicProjectConfig(text);
                 if (config?.canvas) {
                     addCanvasRightPanel(config, filePath);
                 }
@@ -7285,6 +8483,7 @@ async function previewFile(fileHandle, filePath) {
 const FILE_TREE_ICON_PATHS = {
     folderClosed: '<path d="M3.5 6.5a2 2 0 0 1 2-2h4l1.7 2H18.5a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2v-10Z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"></path><path d="M4 9.5h16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"></path>',
     folderOpen: '<path d="M3.5 8.5a2 2 0 0 1 2-2h4l1.5 2h7.5a2 2 0 0 1 1.94 2.48l-1.45 5.8a2 2 0 0 1-1.94 1.52H5.18a2 2 0 0 1-1.95-2.44l1.25-5.55A2 2 0 0 1 6.43 8.5H20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"></path>',
+    microApp: '<path d="M4.5 5.5h15v11h-15v-11Z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"></path><path d="M8 19h8M10 16.5 9.3 19M14 16.5l.7 2.5" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"></path><path d="M8 9h3v3H8V9Zm5 0h3v3h-3V9Z" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"></path>',
     file: '<path d="M7 3.5h6.5L18 8v12.5H7V3.5Z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"></path><path d="M13.5 3.8V8H18" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"></path>',
     code: '<path d="M9 9 6 12l3 3" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"></path><path d="m15 9 3 3-3 3" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"></path><path d="m13 7-2 10" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"></path>',
     markdown: '<path d="M4 6.5h16v11H4v-11Z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"></path><path d="M7 14v-4l2.2 2.4L11.4 10v4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"></path><path d="M15 10v4m0 0-1.6-1.6M15 14l1.6-1.6" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"></path>',
@@ -7296,16 +8495,16 @@ const FILE_TREE_ICON_PATHS = {
     spreadsheet: '<path d="M6 4.5h12v15H6v-15Z" fill="none" stroke="currentColor" stroke-width="1.7"></path><path d="M6 9h12M6 13h12M10 4.5v15M14 4.5v15" fill="none" stroke="currentColor" stroke-width="1.2"></path>',
 };
 
-function createFileTreeIcon(name, isDir, isOpen) {
+function createFileTreeIcon(name, isDir, isOpen, options = {}) {
     const icon = document.createElement('span');
     icon.className = 'ft-icon';
-    updateFileTreeIcon(icon, name, isDir, isOpen);
+    updateFileTreeIcon(icon, name, isDir, isOpen, options);
     return icon;
 }
 
-function updateFileTreeIcon(icon, name, isDir, isOpen) {
+function updateFileTreeIcon(icon, name, isDir, isOpen, options = {}) {
     if (!icon) return;
-    const iconType = isDir ? (isOpen ? 'folderOpen' : 'folderClosed') : getFileIconType(name);
+    const iconType = options.microApp ? 'microApp' : (isDir ? (isOpen ? 'folderOpen' : 'folderClosed') : getFileIconType(name));
     icon.className = `ft-icon ft-icon-${iconType}`;
     icon.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true">${FILE_TREE_ICON_PATHS[iconType] || FILE_TREE_ICON_PATHS.file}</svg>`;
 }

@@ -15,12 +15,12 @@ export function useImageOssSrc(imageElement: ImageElement | null) {
 
 	const path = imageElement?.src
 
-	// 初始同步及 path 变化时通过 getResource 获取
+	// 初始同步及 path 变化时只换取 OSS URL，不触发图片解码
 	const syncOssSrc = useCallback(async () => {
 		if (!canvas || !path) return
-		const resource = await canvas.imageResourceManager.getResource(path)
-		if (resource) {
-			setOssSrc(resource.ossSrc)
+		const ossInfo = await canvas.imageResourceManager.ensureFreshOssInfo(path)
+		if (ossInfo) {
+			setOssSrc(ossInfo.ossSrc)
 		}
 	}, [canvas, path])
 
@@ -46,6 +46,7 @@ export function useImageOssSrc(imageElement: ImageElement | null) {
 		"resource:image:loaded",
 		({ data }) => {
 			if (!canvas || !path) return
+			if (data.resource.variant === "low") return
 			const resolveAbs = canvas.magicConfigManager.config?.methods?.resolveAbsolutePath
 			if (
 				resolveCanonicalResourcePath(data.path, resolveAbs) ===

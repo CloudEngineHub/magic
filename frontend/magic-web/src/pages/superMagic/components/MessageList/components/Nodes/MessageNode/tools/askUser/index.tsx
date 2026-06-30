@@ -19,6 +19,7 @@ import {
 	type AskUserResponseStatusValue,
 } from "@/pages/superMagic/components/MessageList/utils/askUserConstants"
 import { sendAskUserToolReply } from "@/pages/superMagic/services/askUserToolReplyService"
+import { clearAskUserV2BrowserNotification } from "@/pages/superMagic/services/askUserBrowserNotificationService"
 import { superMagicStore } from "@/pages/superMagic/stores"
 import { IconLoader2 } from "@tabler/icons-react"
 import { ChevronDown } from "lucide-react"
@@ -161,6 +162,10 @@ function AskUserToolCall(props: DefaultToolProps) {
 				toolCallId: toolId,
 				toolName: ASK_USER_TOOL.name,
 			})
+			clearAskUserV2BrowserNotification({
+				topicId,
+				notificationKey: resolvedQuestionId || toolId,
+			})
 		},
 		[
 			toolId,
@@ -221,6 +226,7 @@ function AskUserToolCall(props: DefaultToolProps) {
 						alt=""
 						className="size-4 shrink-0 overflow-hidden rounded-sm"
 						aria-hidden="true"
+						data-testid="ask-user-image"
 					/>
 					<div className="flex min-w-0 flex-1 items-center gap-2 text-xs font-normal leading-4 text-foreground">
 						<span className="truncate">{tool?.action}</span>

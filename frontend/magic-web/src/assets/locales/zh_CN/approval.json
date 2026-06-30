@@ -260,5 +260,7 @@
 	"validationFailed": "校验失败",
 	"viewDetails": "查看详情",
 	"yiCi": "依次",
-	"zhiFuRen": "支付人"
+	"zhiFuRen": "支付人",
+	"selectAllOrReverse": "全选/反选"
+	
 }

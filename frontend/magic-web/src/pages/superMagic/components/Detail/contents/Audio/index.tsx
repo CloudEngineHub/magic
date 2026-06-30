@@ -296,7 +296,7 @@ export function AudioPreview(props: AudioPreviewProps) {
 					style={error || isLoading ? { display: "none" } : undefined}
 				>
 					<Flex className={styles.controlsLeft} align="center">
-						<div className={styles.iconButton} onClick={togglePlay}>
+						<div className={styles.iconButton} onClick={togglePlay} data-testid="toggle-play">
 							{isPlaying ? (
 								<IconPlayerPause size={20} color="#fff" />
 							) : (
@@ -310,6 +310,7 @@ export function AudioPreview(props: AudioPreviewProps) {
 									className={styles.progressTrack}
 									onClick={onProgressClick}
 									onMouseDown={onProgressMouseDown}
+									data-testid="on-progress-click"
 								>
 									<div
 										className={styles.progressFill}
@@ -319,6 +320,7 @@ export function AudioPreview(props: AudioPreviewProps) {
 										className={styles.progressThumb}
 										style={{ left: `${progressPercent}%` }}
 										onMouseDown={onProgressMouseDown}
+										data-testid="on-progress-mouse-down"
 									/>
 								</div>
 							</div>
@@ -327,7 +329,7 @@ export function AudioPreview(props: AudioPreviewProps) {
 					</Flex>
 
 					<Flex className={styles.controlsRight} align="center">
-						<div className={styles.iconButton} onClick={toggleMute}>
+						<div className={styles.iconButton} onClick={toggleMute} data-testid="toggle-mute">
 							{isMuted || volume === 0 ? (
 								<IconVolumeOff size={20} color="#fff" />
 							) : (
@@ -339,6 +341,7 @@ export function AudioPreview(props: AudioPreviewProps) {
 								className={styles.volumeBar}
 								onClick={onVolumeClick}
 								onMouseDown={onVolumeMouseDown}
+								data-testid="on-volume-click"
 							>
 								<div
 									className={styles.progressFill}
@@ -348,10 +351,11 @@ export function AudioPreview(props: AudioPreviewProps) {
 									className={styles.volumeThumb}
 									style={{ left: `${volumePercent}%` }}
 									onMouseDown={onVolumeMouseDown}
+									data-testid="on-volume-mouse-down"
 								/>
 							</div>
 						</div>
-						<div className={styles.iconButton} onClick={handleDownload}>
+						<div className={styles.iconButton} onClick={handleDownload} data-testid="handle-download">
 							<IconDownload size={20} color="#fff" />
 						</div>
 					</Flex>

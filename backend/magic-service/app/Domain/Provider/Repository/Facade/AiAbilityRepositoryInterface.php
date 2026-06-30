@@ -28,6 +28,15 @@ interface AiAbilityRepositoryInterface
     public function getByCode(ProviderDataIsolation $dataIsolation, AiAbilityCode $code): ?AiAbilityEntity;
 
     /**
+     * 批量获取已存在的AI能力代码.
+     *
+     * @param ProviderDataIsolation $dataIsolation 数据隔离信息
+     * @param array<AiAbilityCode> $codes 能力代码列表
+     * @return array<string> 已存在的能力代码列表
+     */
+    public function getExistingCodes(ProviderDataIsolation $dataIsolation, array $codes): array;
+
+    /**
      * 获取所有AI能力列表.
      *
      * @param ProviderDataIsolation $dataIsolation 数据隔离信息

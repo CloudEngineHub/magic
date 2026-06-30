@@ -15,6 +15,11 @@ export class HoverManager {
 	// Hover 状态
 	private hoveredElementId: string | null = null
 	private hoverNode: Konva.Shape | Konva.Group | null = null
+	private hoverNodeIsDefault = false
+	private pendingHoverTarget: Konva.Node | null = null
+	private hoverRafId: number | null = null
+	private eventUnsubscribers: Array<() => void> = []
+	private isViewportGestureActive = false
 
 	// Hover 边框样式配置（静态属性，供其他类使用）
 	public static readonly HOVER_STROKE = "#3B82F6"
@@ -39,54 +44,173 @@ export class HoverManager {
 		this.canvas.stage.on("mouseleave", this.handleMouseLeave)
 
 		// 监听元素删除事件，如果删除的是 hover 的元素，清除 hover 状态
-		this.canvas.eventEmitter.on("element:deleted", ({ data }) => {
-			const { elementId } = data
-			if (this.hoveredElementId === elementId) {
-				this.clearHover()
-			}
-		})
+		this.eventUnsubscribers.push(
+			this.canvas.eventEmitter.on("element:deleted", ({ data }) => {
+				const { elementId } = data
+				if (this.hoveredElementId === elementId) {
+					this.clearHover()
+				}
+			}),
+		)
 
 		// 监听选中事件，清除 hover（避免冲突）
-		this.canvas.eventEmitter.on("element:select", () => {
-			this.clearHover()
-		})
+		this.eventUnsubscribers.push(
+			this.canvas.eventEmitter.on("element:select", () => {
+				this.clearHover()
+			}),
+		)
 
 		// 监听元素拖拽移动事件，清除 hover
-		this.canvas.eventEmitter.on("elements:transform:dragstart", () => {
-			this.clearHover()
-		})
+		this.eventUnsubscribers.push(
+			this.canvas.eventEmitter.on("elements:transform:dragstart", () => {
+				this.clearHover()
+			}),
+		)
 
-		// 监听视口缩放事件，更新 hover 边框宽度
-		this.canvas.eventEmitter.on("viewport:scale", () => {
-			this.updateHoverStrokeWidth()
-		})
+		// 监听视口缩放事件，鼠标未移动时也要重新命中当前指针下的元素
+		this.eventUnsubscribers.push(
+			this.canvas.eventEmitter.on("viewport:scale", () => {
+				if (this.isViewportGestureActive) {
+					this.clearHover()
+					return
+				}
+				this.refreshHoverAtCurrentPointer()
+				this.updateHoverStrokeWidth()
+			}),
+		)
+
+		// 监听视口平移事件，鼠标未移动时也要重新命中当前指针下的元素
+		this.eventUnsubscribers.push(
+			this.canvas.eventEmitter.on("viewport:pan", () => {
+				if (this.isViewportGestureActive) {
+					this.clearHover()
+					return
+				}
+				this.refreshHoverAtCurrentPointer()
+			}),
+		)
+
+		this.eventUnsubscribers.push(
+			this.canvas.eventEmitter.on("viewport:gesture", ({ data }) => {
+				this.isViewportGestureActive = data.active
+				if (data.active) {
+					this.pendingHoverTarget = null
+					this.cancelHoverFlush()
+					this.clearHover()
+				}
+			}),
+		)
 
 		// 监听文档恢复事件（撤销/恢复时触发）
-		this.canvas.eventEmitter.on("document:restored", () => {
-			// 清除 hover 状态，因为元素位置可能已经改变
-			this.clearHover()
-		})
+		this.eventUnsubscribers.push(
+			this.canvas.eventEmitter.on("document:restored", () => {
+				// 清除 hover 状态，因为元素位置可能已经改变
+				this.clearHover()
+			}),
+		)
 
 		// 监听裁剪模式进入事件，清除 hover（裁剪模式下元素不应显示 hover 效果）
-		this.canvas.eventEmitter.on("crop:enter", () => {
-			this.clearHover()
-		})
+		this.eventUnsubscribers.push(
+			this.canvas.eventEmitter.on("crop:enter", () => {
+				this.clearHover()
+			}),
+		)
 
-		this.canvas.eventEmitter.on("extend:enter", () => {
-			this.clearHover()
-		})
+		this.eventUnsubscribers.push(
+			this.canvas.eventEmitter.on("extend:enter", () => {
+				this.pendingHoverTarget = null
+				this.cancelHoverFlush()
+				this.clearHover()
+			}),
+		)
 
 		// 监听橡皮擦模式进入事件，清除 hover（橡皮擦模式下元素不应显示 hover 效果）
-		this.canvas.eventEmitter.on("eraser:enter", () => {
-			this.clearHover()
-		})
+		this.eventUnsubscribers.push(
+			this.canvas.eventEmitter.on("eraser:enter", () => {
+				this.clearHover()
+			}),
+		)
 	}
 
 	/**
 	 * 处理鼠标移动事件
 	 */
 	private handleMouseMove = (e: Konva.KonvaEventObject<MouseEvent>): void => {
-		const target = e.target
+		if (this.isViewportGestureActive || this.isExtendModeActive()) {
+			this.pendingHoverTarget = null
+			this.cancelHoverFlush()
+			this.clearHover()
+			return
+		}
+
+		this.pendingHoverTarget = e.target
+		this.scheduleHoverFlush()
+	}
+
+	private scheduleHoverFlush(): void {
+		if (this.hoverRafId !== null) return
+		const schedule =
+			typeof requestAnimationFrame === "function"
+				? requestAnimationFrame
+				: (callback: FrameRequestCallback) => window.setTimeout(callback, 16)
+		this.hoverRafId = schedule(() => {
+			this.hoverRafId = null
+			this.flushPendingHover()
+		})
+	}
+
+	private cancelHoverFlush(): void {
+		if (this.hoverRafId === null) return
+		const cancel =
+			typeof cancelAnimationFrame === "function"
+				? cancelAnimationFrame
+				: (id: number) => window.clearTimeout(id)
+		cancel(this.hoverRafId)
+		this.hoverRafId = null
+	}
+
+	private flushPendingHover(): void {
+		const target = this.pendingHoverTarget
+		this.pendingHoverTarget = null
+
+		this.resolveHoverTarget(target)
+	}
+
+	private refreshHoverAtCurrentPointer(): void {
+		if (this.isViewportGestureActive || this.isExtendModeActive()) {
+			this.clearHover()
+			return
+		}
+
+		const pointerPosition = this.canvas.stage.getPointerPosition()
+		if (!pointerPosition) {
+			this.clearHover()
+			return
+		}
+
+		const elementId = this.getElementIdAtPointer(pointerPosition)
+		if (!elementId) {
+			this.clearHover()
+			return
+		}
+
+		if (this.hoveredElementId === elementId) {
+			return
+		}
+
+		this.setHover(elementId)
+	}
+
+	private resolveHoverTarget(target: Konva.Node | null): void {
+		if (this.isViewportGestureActive || this.isExtendModeActive()) {
+			this.clearHover()
+			return
+		}
+
+		if (!target || this.canvas.transformManager.isTransformInteractionActive()) {
+			this.clearHover()
+			return
+		}
 
 		// 获取元素 ID（使用与 isValidElementNode 相同的逻辑）
 		const elementId = this.getElementIdFromNode(target)
@@ -114,6 +238,8 @@ export class HoverManager {
 	 * 处理鼠标离开 stage 事件
 	 */
 	private handleMouseLeave = (): void => {
+		this.pendingHoverTarget = null
+		this.cancelHoverFlush()
 		this.clearHover()
 	}
 
@@ -121,51 +247,79 @@ export class HoverManager {
 	 * 设置 hover 状态
 	 */
 	private setHover(elementId: string): void {
-		// 清除之前的 hover
-		this.clearHover()
+		if (this.isViewportGestureActive || this.isExtendModeActive()) {
+			this.clearHover()
+			return
+		}
 
 		// 如果元素已被选中，不显示 hover 效果
 		if (this.canvas.selectionManager.isSelected(elementId)) {
+			this.clearHover()
 			return
 		}
 
 		// 使用 NodeAdapter 获取元素边界和 hover 效果
 		const adapter = this.canvas.elementManager.getNodeAdapter()
 		const boundingRect = adapter.getElementBounds(elementId)
-		if (!boundingRect) return
+		if (!boundingRect) {
+			this.clearHover()
+			return
+		}
 
 		// 尝试从 Element 获取自定义 hover 效果
 		let hoverNode: Konva.Shape | Konva.Group | null = adapter.createHoverEffect(
 			elementId,
 			this.canvas.stage,
 		)
+		let isDefaultHoverNode = false
 
 		// 如果没有自定义 hover 效果，使用默认的矩形边框
 		if (!hoverNode) {
-			// 创建默认的矩形边框
-			hoverNode = new Konva.Rect({
-				x: boundingRect.x,
-				y: boundingRect.y,
-				width: boundingRect.width,
-				height: boundingRect.height,
-				stroke: HoverManager.HOVER_STROKE,
-				strokeWidth: HoverManager.HOVER_STROKE_WIDTH / this.canvas.stage.scaleX(),
-				listening: false,
-				name: "hover-rect",
-			})
+			isDefaultHoverNode = true
+			if (this.hoverNodeIsDefault && this.hoverNode instanceof Konva.Rect) {
+				hoverNode = this.hoverNode
+				hoverNode.setAttrs({
+					x: boundingRect.x,
+					y: boundingRect.y,
+					width: boundingRect.width,
+					height: boundingRect.height,
+					stroke: HoverManager.HOVER_STROKE,
+					strokeWidth: HoverManager.HOVER_STROKE_WIDTH / this.canvas.stage.scaleX(),
+				})
+			} else {
+				hoverNode = new Konva.Rect({
+					x: boundingRect.x,
+					y: boundingRect.y,
+					width: boundingRect.width,
+					height: boundingRect.height,
+					stroke: HoverManager.HOVER_STROKE,
+					strokeWidth: HoverManager.HOVER_STROKE_WIDTH / this.canvas.stage.scaleX(),
+					listening: false,
+					name: "hover-rect",
+				})
+			}
 		}
 
-		// 添加到图层并移到最上层
-		this.canvas.controlsLayer.add(hoverNode)
+		if (this.hoverNode && this.hoverNode !== hoverNode) {
+			this.hoverNode.destroy()
+		}
+
+		if (!hoverNode.getParent()) {
+			this.canvas.controlsLayer.add(hoverNode)
+		}
 		hoverNode.moveToTop()
-		this.canvas.controlsLayer.batchDraw()
+		this.requestControlsDraw("hover-set")
 
 		// 更新状态
+		const previousHoveredElementId = this.hoveredElementId
 		this.hoverNode = hoverNode
+		this.hoverNodeIsDefault = isDefaultHoverNode
 		this.hoveredElementId = elementId
 
 		// 发出 hover 事件
-		this.canvas.eventEmitter.emit({ type: "element:hover", data: { elementId } })
+		if (previousHoveredElementId !== elementId) {
+			this.canvas.eventEmitter.emit({ type: "element:hover", data: { elementId } })
+		}
 	}
 
 	/**
@@ -185,7 +339,7 @@ export class HoverManager {
 			this.applyHoverStrokeWidth(this.hoverNode)
 		}
 
-		this.canvas.controlsLayer.batchDraw()
+		this.requestControlsDraw("hover-stroke")
 	}
 
 	/**
@@ -209,7 +363,8 @@ export class HoverManager {
 		if (this.hoverNode) {
 			this.hoverNode.destroy()
 			this.hoverNode = null
-			this.canvas.controlsLayer.batchDraw()
+			this.hoverNodeIsDefault = false
+			this.requestControlsDraw("hover-clear")
 		}
 
 		if (this.hoveredElementId) {
@@ -283,6 +438,59 @@ export class HoverManager {
 		return true
 	}
 
+	private getElementIdAtPointer(pointerPosition: { x: number; y: number }): string | null {
+		if (this.canvas.transformManager.isTransformInteractionActive()) {
+			return null
+		}
+
+		const layerTransform = this.canvas.contentLayer.getAbsoluteTransform().copy().invert()
+		const layerPosition = layerTransform.point(pointerPosition)
+		const candidateIds = this.canvas.geometryCacheManager.queryElementIdsByExpandedRect(
+			{
+				x: layerPosition.x,
+				y: layerPosition.y,
+				width: 0,
+				height: 0,
+			},
+			0,
+		)
+
+		let topElementId: string | null = null
+		let topAbsoluteZIndex = Number.NEGATIVE_INFINITY
+		const adapter = this.canvas.elementManager.getNodeAdapter()
+
+		candidateIds.forEach((elementId) => {
+			const elementData = this.canvas.elementManager.getElementData(elementId)
+			if (!this.canvas.permissionManager.canHover(elementData)) return
+			if (this.canvas.transformManager.isTransforming(elementId)) return
+			if (this.canvas.transformManager.isDraggingElement()) return
+
+			const bounds = adapter.getElementBounds(elementId)
+			if (
+				!bounds ||
+				layerPosition.x < bounds.x ||
+				layerPosition.x > bounds.x + bounds.width ||
+				layerPosition.y < bounds.y ||
+				layerPosition.y > bounds.y + bounds.height
+			) {
+				return
+			}
+
+			const node = this.canvas.elementManager.getElementInstance(elementId)?.getNode()
+			const absoluteZIndex = node?.getAbsoluteZIndex() ?? 0
+			if (absoluteZIndex >= topAbsoluteZIndex) {
+				topAbsoluteZIndex = absoluteZIndex
+				topElementId = elementId
+			}
+		})
+
+		return topElementId
+	}
+
+	private isExtendModeActive(): boolean {
+		return Boolean(this.canvas.extendManager?.getExtendingElementId?.())
+	}
+
 	/**
 	 * 获取当前 hover 的元素 ID
 	 */
@@ -308,19 +516,23 @@ export class HoverManager {
 	 * 销毁管理器
 	 */
 	public destroy(): void {
+		this.cancelHoverFlush()
+
 		// 清除 hover 状态
 		this.clearHover()
 
 		// 移除事件监听
 		this.canvas.stage.off("mousemove", this.handleMouseMove)
 		this.canvas.stage.off("mouseleave", this.handleMouseLeave)
-		this.canvas.eventEmitter.off("element:deleted")
-		this.canvas.eventEmitter.off("element:select")
-		this.canvas.eventEmitter.off("elements:transform:dragstart")
-		this.canvas.eventEmitter.off("viewport:scale")
-		this.canvas.eventEmitter.off("document:restored")
-		this.canvas.eventEmitter.off("crop:enter")
-		this.canvas.eventEmitter.off("extend:enter")
-		this.canvas.eventEmitter.off("eraser:enter")
+		this.eventUnsubscribers.forEach((unsubscribe) => unsubscribe())
+		this.eventUnsubscribers = []
+	}
+
+	private requestControlsDraw(reason: string): void {
+		this.canvas.runtimeScheduler.requestLayerDraw("controls", {
+			source: "HoverManager",
+			reason,
+			priority: "input",
+		})
 	}
 }

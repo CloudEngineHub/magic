@@ -226,16 +226,16 @@ export class PublishPanelStore {
 						publishedAt: formatPublishTimestamp(new Date()),
 						specificMembers:
 							submissionDraft.publishTo === "INTERNAL" &&
-							submissionDraft.internalTarget === "MEMBER"
+								submissionDraft.internalTarget === "MEMBER"
 								? [...submissionDraft.specificMembers]
 								: undefined,
 						skillsLibraryReview:
 							submissionDraft.publishTo === "MARKET"
 								? {
-										submit: "done",
-										review: "current",
-										published: "pending",
-									}
+									submit: "done",
+									review: "current",
+									published: "pending",
+								}
 								: undefined,
 					},
 					...this.historyRecords,

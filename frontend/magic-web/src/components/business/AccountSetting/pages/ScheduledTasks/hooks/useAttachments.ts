@@ -1,10 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react"
 import { useDeepCompareEffect, useMemoizedFn, useUnmount } from "ahooks"
-import { SuperMagicApi } from "@/apis"
 import mentionPanelStore from "@/components/business/MentionPanel/builtin-store"
 import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks"
-import type { AttachmentsResponse } from "@/pages/superMagic/hooks/useAttachmentsPolling"
 import type { ProjectListItem } from "@/pages/superMagic/pages/Workspace/types"
+import { loadProjectAttachments } from "@/pages/superMagic/services"
 import { getSuperIdState } from "@/pages/superMagic/utils/query"
 import projectFilesStore from "@/stores/projectFiles"
 
@@ -27,12 +26,11 @@ export function useAttachments({
 
 	const updateAttachments = useMemoizedFn(async (id: string) => {
 		try {
-			const attachmentResponse: AttachmentsResponse =
-				await SuperMagicApi.getAttachmentsByProjectId({
-					projectId: id,
-					// @ts-ignore
-					temporaryToken: window.temporary_token || "",
-				})
+			const attachmentResponse = await loadProjectAttachments({
+				projectId: id,
+				// @ts-ignore
+				temporaryToken: window.temporary_token || "",
+			})
 
 			setAttachments(attachmentResponse?.tree || [])
 

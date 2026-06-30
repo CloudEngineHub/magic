@@ -63,7 +63,7 @@ interface VideoFullscreenPlayerOverlayProps {
 	hasError?: boolean
 	loadFailedMessage?: string
 	closeAriaLabel?: string
-	/** 显式文件名（如资源 fileName / 元素 name），优先于 resourcePath 末段展示 */
+	/** 显式文件名（资源预览传入），优先于 resourcePath 末段展示 */
 	fileName?: string
 	/** 资源 path，用于在无 fileName 时推导展示名 */
 	resourcePath?: string
@@ -479,7 +479,7 @@ export default function VideoFullscreenPlayerOverlay(props: VideoFullscreenPlaye
 		chromeVisible ? chromeStyles.layerVisible : chromeStyles.layerHidden,
 	].join(" ")
 
-	const fileLabel = getFullscreenMediaFileLabel(resourcePath, fileName)
+	const fileLabel = getFullscreenMediaFileLabel(resourcePath || src || "", fileName)
 
 	if (!isClient || !isOpen) {
 		return null

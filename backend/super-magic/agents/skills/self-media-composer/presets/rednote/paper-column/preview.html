@@ -1,0 +1,235 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Paper Column — Preview</title>
+    <link rel="stylesheet" href="paper-column.css" />
+    <style>
+      html,
+      body {
+        width: auto;
+        height: auto;
+        overflow: auto;
+        background: #e5ddd1;
+      }
+      .preview-container {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 32px;
+        padding: 40px;
+        justify-content: center;
+        align-items: flex-start;
+      }
+      .preview-card-wrapper {
+        width: 540px;
+        height: 720px;
+        overflow: hidden;
+        box-shadow: 0 18px 48px rgba(71, 65, 55, 0.16);
+      }
+    </style>
+  </head>
+  <body>
+    <div class="preview-container">
+      <div class="preview-card-wrapper">
+        <section class="em-card em-cover">
+          <div class="em-content">
+            <div class="em-issue-row">
+              <span class="em-kicker">Field Journal</span>
+              <span class="em-meta">Issue 01</span>
+            </div>
+            <div class="em-stack em-gap-md em-mt-lg">
+              <h1 class="em-title-xl">
+                After the rain<br />community garden<br /><span class="em-highlight"
+                  >field notes</span
+                >
+              </h1>
+              <p class="em-subtitle">
+                A path, two benches, and a few planting corners show how space can make people slow down.
+              </p>
+            </div>
+            <div class="em-photo-well em-mt-lg" style="height: 208px">
+              <img
+                src="https://images.unsplash.com/photo-1466692476868-aef1dfb1e735?w=900&q=80"
+                alt="Community garden"
+              />
+            </div>
+            <div class="em-issue-strip">
+              <span class="em-meta">Garden / Slow walk</span>
+              <span class="em-meta">3:4</span>
+            </div>
+          </div>
+        </section>
+      </div>
+
+      <div class="preview-card-wrapper">
+        <section class="em-card">
+          <div class="em-content">
+            <div class="em-section-mark">
+              <span class="em-section-no">02</span>
+              <div>
+                <p class="em-kicker">Observation</p>
+                <h2 class="em-title">Why this place<br />makes people want to stay</h2>
+              </div>
+            </div>
+            <div class="em-marginalia em-mt-lg">
+              <div class="em-stack em-gap-md">
+                <p class="em-body">
+                  After the rain, the garden has no obvious attraction. What draws people in are low details: wet brick joints, half-shaded seats, and a path that loops just enough.
+                </p>
+                <p class="em-body">
+                  These modest arrangements turn a walk from passing through into pausing for a while.
+                </p>
+              </div>
+              <aside class="em-margin-box">
+                <span class="em-chip is-accent">Note</span>
+                <p class="em-note">
+                  The best public spaces are often not louder; they are easier to relax in.
+                </p>
+              </aside>
+            </div>
+            <div class="em-pull-quote em-mt-lg">
+              A slow path can hold people better than a large lawn.
+              <small>Field note</small>
+            </div>
+            <div class="em-issue-strip">
+              <span class="em-meta">After rain</span>
+              <span class="em-meta">02 / 05</span>
+            </div>
+          </div>
+        </section>
+      </div>
+
+      <div class="preview-card-wrapper">
+        <section class="em-card">
+          <div class="em-content">
+            <p class="em-kicker">Page 03 / Ledger</p>
+            <h2 class="em-title">Three details<br />that shape the desire to stay</h2>
+            <div class="em-ledger em-mt-lg">
+              <div class="em-ledger-row">
+                <span class="em-ledger-num">01</span>
+                <div>
+                  <h3 class="em-ledger-title">The path loops</h3>
+                  <p class="em-ledger-desc">
+                    You do not need to retrace your steps, so the walk naturally lasts longer.
+                  </p>
+                </div>
+              </div>
+              <div class="em-ledger-row">
+                <span class="em-ledger-num">02</span>
+                <div>
+                  <h3 class="em-ledger-title">Benches are half-shaded</h3>
+                  <p class="em-ledger-desc">
+                    When sitting down, there is light and a small sense of shelter.
+                  </p>
+                </div>
+              </div>
+              <div class="em-ledger-row">
+                <span class="em-ledger-num">03</span>
+                <div>
+                  <h3 class="em-ledger-title">Plants have layers</h3>
+                  <p class="em-ledger-desc">
+                    The eye does not see everything at once; each step reveals something new.
+                  </p>
+                </div>
+              </div>
+            </div>
+            <div
+              id="paper-column-ledger-chart"
+              style="height: 150px; margin-top: 22px"
+            ></div>
+          </div>
+        </section>
+      </div>
+
+      <div class="preview-card-wrapper">
+        <section class="em-card">
+          <div class="em-content">
+            <p class="em-kicker">Page 04 / Evidence</p>
+            <h2 class="em-title">Turn a walk into<br />observable evidence</h2>
+            <div class="em-evidence-grid em-mt-lg">
+              <div class="em-evidence-card">
+                <span class="em-evidence-label">Path</span>
+                <h3 class="em-evidence-title">The path is just wide enough for two people to walk side by side.</h3>
+              </div>
+              <div class="em-evidence-card">
+                <span class="em-evidence-label">Quote</span>
+                <h3 class="em-evidence-title">"This is much quieter than the big square."</h3>
+              </div>
+              <div class="em-evidence-card">
+                <span class="em-evidence-label">Bench</span>
+                <h3 class="em-evidence-title">The three chairs each face a different view.</h3>
+              </div>
+              <div class="em-evidence-card">
+                <span class="em-evidence-label">Plant</span>
+                <h3 class="em-evidence-title">Low plants make the boundary feel softer.</h3>
+              </div>
+            </div>
+            <div class="em-compare em-mt-lg">
+              <div class="em-compare-panel">
+                <p class="em-compare-title">Only green</p>
+                <p class="em-compare-copy">
+                  Looking only at green area misses how people actually use the space.
+                </p>
+              </div>
+              <div class="em-compare-panel is-accent">
+                <p class="em-compare-title">Real stay</p>
+                <p class="em-compare-copy">
+                  Look at stopping points, sightlines, and paths to know whether a space works.
+                </p>
+              </div>
+            </div>
+          </div>
+        </section>
+      </div>
+
+      <div class="preview-card-wrapper">
+        <section class="em-card">
+          <div class="em-content">
+            <p class="em-kicker">Page 05 / Closing</p>
+            <h2 class="em-title">On your next walk<br />look for these three things</h2>
+            <div class="em-timeline em-mt-lg">
+              <div class="em-timeline-item">
+                <span class="em-timeline-dot"></span>
+                <div>
+                  <h3 class="em-timeline-title">Where do you naturally slow down?</h3>
+                  <p class="em-timeline-desc">
+                    Stopping points reveal space quality better than photo spots.
+                  </p>
+                </div>
+              </div>
+              <div class="em-timeline-item">
+                <span class="em-timeline-dot"></span>
+                <div>
+                  <h3 class="em-timeline-title">Where do you want to sit for ten minutes?</h3>
+                  <p class="em-timeline-desc">
+                    Seat orientation, shade, and sound all affect the choice.
+                  </p>
+                </div>
+              </div>
+            </div>
+            <div
+              id="paper-column-radar-chart"
+              style="height: 176px; margin-top: 24px"
+            ></div>
+            <div class="em-closing-note">
+              <p class="em-meta">Closing note</p>
+              <p class="em-closing-title">
+                A good community garden is more than adding a patch of green to the city.
+              </p>
+            </div>
+          </div>
+        </section>
+      </div>
+    </div>
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
+    <script src="paper-column.js"></script>
+    <script>
+      echarts
+        .init(document.getElementById("paper-column-ledger-chart"))
+        .setOption(PaperColumnPresets.get("ledger-bar"));
+      echarts
+        .init(document.getElementById("paper-column-radar-chart"))
+        .setOption(PaperColumnPresets.get("note-radar"));
+    </script>
+  </body>
+</html>

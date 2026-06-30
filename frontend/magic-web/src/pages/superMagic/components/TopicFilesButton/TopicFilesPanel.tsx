@@ -10,6 +10,7 @@ import { useUploadWithModal } from "./hooks/useUploadWithModal"
 import { useDuplicateFileHandler } from "./hooks/useDuplicateFileHandler"
 import {
 	DuplicateFileModal,
+	FolderConflictModal,
 	SelectModeHeader,
 	NormalModeHeader,
 	SearchModeHeader,
@@ -20,6 +21,18 @@ import magicToast from "@/components/base/MagicToaster/utils"
 import { type PresetFileType } from "./constant"
 import type { TopicFileRowDecorationResolver } from "./topic-file-row-decoration.types"
 import { useUpdateEffect } from "ahooks"
+import { requestProjectAttachmentsFullRefresh } from "../../services/attachmentsTopicSync"
+import { useDebouncedSearchValue } from "./hooks/useDebouncedSearchValue"
+import { useIsMobile } from "@/hooks/useIsMobile"
+import MobileProjectDetailFilesView from "./components/MobileProjectDetailFilesView"
+import { SelectDirectoryModal } from "../SelectPathModal"
+import { useBatchDownload } from "./hooks/useBatchDownload"
+import { useProjectDetailFilesController } from "./hooks/useProjectDetailFilesController"
+import { useCrossProjectFileOperation } from "./hooks/useCrossProjectFileOperation"
+import { useMobileProjectFilesDownload } from "./hooks/useMobileProjectFilesDownload"
+import { getMobileAttachmentKey } from "./utils/get-mobile-attachment-key"
+import ProjectShareSheet from "@/pages/superMagicMobile/components/ProjectShareSheet"
+import { isCachedChatWorkspaceProject } from "@/pages/superMagic/utils/isChatWorkspaceProject"
 
 interface TopicFilesPanelProps {
 	className?: string
@@ -42,6 +55,7 @@ interface TopicFilesPanelProps {
 	isInProject?: boolean
 	// 多选模式变化回调
 	onMultiSelectModeChange?: (isMultiSelectMode: boolean) => void
+	showMobileActions?: boolean
 	// 自定义菜单项过滤器
 	filterMenuItems?: (menuItems: any[]) => any[]
 	// 自定义批量下载菜单过滤器
@@ -49,6 +63,8 @@ interface TopicFilesPanelProps {
 	// 是否允许下载（用于分享页面权限控制）
 	allowDownload?: boolean
 	resolveTopicFileRowDecoration?: TopicFileRowDecorationResolver
+	mobileViewVariant?: "default" | "project-detail" | "chat-sheet"
+	refreshAttachments?: () => Promise<void> | void
 }
 
 export interface TopicFilesPanelRef {
@@ -56,6 +72,7 @@ export interface TopicFilesPanelRef {
 	addFolder: () => void
 	uploadFile: () => void
 	uploadFolder: () => void
+	openBatchMoveByFileIds: (fileIds: string[]) => void
 }
 
 const TopicFilesPanel = forwardRef<TopicFilesPanelRef, TopicFilesPanelProps>(
@@ -77,15 +94,20 @@ const TopicFilesPanel = forwardRef<TopicFilesPanelRef, TopicFilesPanelProps>(
 			workspaces = [],
 			isInProject = false,
 			onMultiSelectModeChange,
+			showMobileActions = false,
 			filterMenuItems,
 			filterBatchDownloadLayerMenuItems,
 			allowDownload,
 			resolveTopicFileRowDecoration,
+			mobileViewVariant = "default",
+			refreshAttachments,
 		},
 		ref,
 	) {
 		const { t } = useTranslation("super")
 		const resolvedTitle = title || t("topicFiles.title")
+		const isMobile = useIsMobile()
+		const isChatProject = isCachedChatWorkspaceProject(selectedProject)
 		const { isShareRoute } = useShareRoute()
 		const [fileFilters] = useState({
 			documents: true,
@@ -98,8 +120,14 @@ const TopicFilesPanel = forwardRef<TopicFilesPanelRef, TopicFilesPanelProps>(
 		const [refreshLoading, setRefreshLoading] = useState(false)
 		const [isSelectMode, setIsSelectMode] = useState(false)
 		const [isSearchMode, setIsSearchMode] = useState(false)
-		const [searchValue, setSearchValue] = useState("")
 		const prevProjectIdRef = useRef<string | undefined>()
+		const {
+			rawSearchValue,
+			debouncedSearchValue,
+			updateSearchValue,
+			commitSearchValue,
+			resetSearchValue,
+		} = useDebouncedSearchValue({ source: "TopicFilesPanel" })
 
 		// 监听 projectId 变化，只在首次加载或切换项目时设置 loading 状态
 		// 避免在任务执行过程中频繁进入 loading 状态
@@ -139,6 +167,119 @@ const TopicFilesPanel = forwardRef<TopicFilesPanelRef, TopicFilesPanelProps>(
 			projectId,
 			selectedProject,
 			selectedTopic,
+		})
+
+		const projectDetailFilesController = useProjectDetailFilesController({
+			projectId,
+			attachments,
+			selectedProject,
+			selectedTopic,
+			setIsSelectMode,
+		})
+
+		const crossProjectOperation = useCrossProjectFileOperation({
+			projectId,
+			selectedWorkspace: selectedWorkspace || null,
+			selectedProject: selectedProject || null,
+			projects,
+			onSuccess: () => {
+				setIsSelectMode(false)
+				projectDetailFilesController.resetMobileSelection()
+			},
+		})
+
+		const handleProjectDetailMoveSubmit = async (params: {
+			path: AttachmentItem[]
+			targetProjectId?: string
+			targetAttachments?: AttachmentItem[]
+			sourceAttachments?: AttachmentItem[]
+		}) => {
+			magicToast.info(t("topicFiles.moving"))
+
+			if (params.targetProjectId && params.targetAttachments && params.sourceAttachments) {
+				await crossProjectOperation.executeMoveOperation({
+					fileIds:
+						projectDetailFilesController.moveSelectorProps.pendingMoveFileIds || [],
+					targetProjectId: params.targetProjectId,
+					targetPath: params.path,
+					targetAttachments: params.targetAttachments,
+					sourceAttachments: params.sourceAttachments,
+				})
+				return
+			}
+
+			await projectDetailFilesController.moveSelectorProps.onSubmit?.({
+				path: params.path,
+			})
+		}
+
+		const handleProjectDetailCopySubmit = async (params: {
+			path: AttachmentItem[]
+			targetProjectId?: string
+			targetAttachments?: AttachmentItem[]
+			sourceAttachments?: AttachmentItem[]
+		}) => {
+			const fileIds = projectDetailFilesController.copySelectorProps.pendingCopyFileIds || []
+
+			magicToast.info(t("topicFiles.copying"))
+
+			if (params.targetProjectId && params.targetAttachments && params.sourceAttachments) {
+				await crossProjectOperation.executeCopyOperation({
+					fileIds,
+					targetProjectId: params.targetProjectId,
+					targetPath: params.path,
+					targetAttachments: params.targetAttachments,
+					sourceAttachments: params.sourceAttachments,
+				})
+				return
+			}
+
+			if (!projectId) return
+
+			await crossProjectOperation.executeCopyOperation({
+				fileIds,
+				targetProjectId: projectId,
+				targetPath: params.path,
+				targetAttachments: attachments,
+				sourceAttachments: attachments,
+			})
+		}
+
+		const [mobileSelectedKeys, setMobileSelectedKeys] = useState<Set<string>>(new Set())
+
+		const mobileProjectFilesDownload = useMobileProjectFilesDownload({
+			projectId,
+			attachments,
+			selectedProject,
+			selectedTopic,
+			onFileClick,
+			refreshAttachments,
+			allowDownload,
+			duplicateFileHandler: projectDetailFilesController.sharedDuplicateHandler,
+		})
+
+		// 聊天文件弹层与项目详情文件页共用同一套移动端文件树，只在最外层视觉壳上做区分。
+		const shouldUseProjectDetailMobileView =
+			isMobile &&
+			(mobileViewVariant === "project-detail" || mobileViewVariant === "chat-sheet")
+
+		const { handleBatchDownload, batchLoading: mobileBatchDownloadLoading } = useBatchDownload({
+			projectId,
+			getItemId: getMobileAttachmentKey,
+			selectedItems: mobileSelectedKeys,
+			setSelectedItems: setMobileSelectedKeys,
+			filteredFiles: attachments,
+			onSelectModeChange: (mode) => {
+				setIsSelectMode(mode)
+				if (!mode) projectDetailFilesController.resetMobileSelection()
+			},
+			attachments,
+			allowEdit,
+			isInProject,
+			removeFile: () => undefined,
+			onBatchShareClick: (fileIds) => {
+				projectDetailFilesController.batchShare(new Set(fileIds))
+			},
 		})
 
 		// 使用 ref 获取 TopicFilesCore 的方法
@@ -183,12 +324,16 @@ const TopicFilesPanel = forwardRef<TopicFilesPanelRef, TopicFilesPanelProps>(
 		// 处理关闭搜索模式
 		const handleCloseSearch = () => {
 			setIsSearchMode(false)
-			setSearchValue("")
+			resetSearchValue()
 		}
 
 		// 处理搜索值变化
 		const handleSearchChange = (value: string) => {
-			setSearchValue(value)
+			updateSearchValue(value)
+		}
+
+		const handleSearchCommit = (value: string) => {
+			commitSearchValue(value)
 		}
 
 		// 处理添加文件功能 - 打开创建文件菜单
@@ -213,9 +358,13 @@ const TopicFilesPanel = forwardRef<TopicFilesPanelRef, TopicFilesPanelProps>(
 
 		const handleRefreshList = () => {
 			setRefreshLoading(true)
-			pubsub.publish(PubSubEvents.Update_Attachments, () => {
-				setRefreshLoading(false)
-				magicToast.success(t("common.refreshSuccess"))
+			requestProjectAttachmentsFullRefresh({
+				projectId,
+				reason: "topic-files-panel-manual-refresh",
+				callback: () => {
+					setRefreshLoading(false)
+					magicToast.success(t("common.refreshSuccess"))
+				},
 			})
 		}
 
@@ -274,116 +423,282 @@ const TopicFilesPanel = forwardRef<TopicFilesPanelRef, TopicFilesPanelProps>(
 			addFolder: handleAddFolder,
 			uploadFile: handleCustomUploadFile,
 			uploadFolder: handleCustomUploadFolder,
+			openBatchMoveByFileIds: (fileIds: string[]) => {
+				if (shouldUseProjectDetailMobileView) {
+					projectDetailFilesController.batchMoveByFileIds(fileIds)
+					return
+				}
+
+				coreRef.current?.openBatchMoveByFileIds(fileIds)
+			},
 		}))
 
 		return (
 			<>
-				<div className={cn("flex h-full flex-col gap-0.5", className)}>
-					{/* Header Section */}
-					{isSearchMode ? (
-						<SearchModeHeader
-							key="search-header"
-							searchValue={searchValue}
-							onSearchChange={handleSearchChange}
-							onClose={handleCloseSearch}
-							className="duration-200 animate-in fade-in"
-						/>
-					) : isSelectMode ? (
-						<SelectModeHeader
-							key="select-header"
-							selectedCount={selectedCount}
-							totalCount={totalCount}
-							onSelectAll={handleSelectAll}
-							onDeselectAll={handleDeselectAll}
-							onCancel={handleCancelSelect}
-							className="duration-200 animate-in fade-in"
+				<div
+					className={cn("flex h-full flex-col gap-0.5", className)}
+					data-testid="topic-files-panel"
+				>
+					{shouldUseProjectDetailMobileView ? (
+						<MobileProjectDetailFilesView
+							attachments={attachments}
+							activeFileId={activeFileId}
+							allowEdit={allowEdit}
+							mobileViewVariant={mobileViewVariant}
+							refreshLoading={refreshLoading}
+							onRefresh={handleRefreshList}
+							selectionResetKey={projectDetailFilesController.selectionResetKey}
+							setUserSelectDetail={setUserSelectDetail}
+							onFileOpen={onFileClick}
+							onSelectionModeChange={setIsSelectMode}
+							onCreateFile={projectDetailFilesController.createFile}
+							onCreateFolder={projectDetailFilesController.createFolder}
+							onUploadFile={projectDetailFilesController.handleCustomUploadFile}
+							allowDownload={mobileProjectFilesDownload.allowDownload}
+							getSingleFileDownloadMenuItems={
+								mobileProjectFilesDownload.getSingleFileDownloadMenuItems
+							}
+							preloadWaterMarkFreeModal={
+								mobileProjectFilesDownload.preloadWaterMarkFreeModal
+							}
+							onSelectedKeysChange={setMobileSelectedKeys}
+							onBatchZipDownload={
+								shouldUseProjectDetailMobileView && allowDownload !== false
+									? handleBatchDownload
+									: undefined
+							}
+							batchDownloadLoading={mobileBatchDownloadLoading}
+							onBatchShare={projectDetailFilesController.batchShare}
+							// Copy does not mutate source files; keep available in read-only views (desktop parity).
+							onBatchCopy={projectDetailFilesController.batchCopy}
+							onBatchMove={
+								allowEdit ? projectDetailFilesController.batchMove : undefined
+							}
+							onBatchDelete={
+								allowEdit ? projectDetailFilesController.batchDelete : undefined
+							}
 						/>
 					) : (
-						<NormalModeHeader
-							key="normal-header"
-							title={resolvedTitle}
-							isShareRoute={isShareRoute}
-							refreshLoading={refreshLoading}
-							allowEdit={allowEdit}
-							onRefresh={handleRefreshList}
-							onSearch={handleSearch}
-							onAddFile={handleAddFile}
-							onAddDesign={handleAddDesign}
-							onAddFolder={handleAddFolder}
-							onUploadFile={handleCustomUploadFile}
-							onUploadFolder={handleCustomUploadFolder}
-							onImportFromOtherProject={handleImportFromOtherProject}
-							onEnterSelectMode={handleEnterSelectMode}
-							className="duration-200 animate-in fade-in"
-						/>
-					)}
+						<>
+							{/* Header Section */}
+							{isSearchMode ? (
+								<SearchModeHeader
+									key="search-header"
+									searchValue={rawSearchValue}
+									onSearchChange={handleSearchChange}
+									onSearchCommit={handleSearchCommit}
+							onClose={handleCloseSearch}
+									className="duration-200 animate-in fade-in"
+								/>
+							) : isSelectMode ? (
+								<SelectModeHeader
+									key="select-header"
+									selectedCount={selectedCount}
+									totalCount={totalCount}
+									onSelectAll={handleSelectAll}
+									onDeselectAll={handleDeselectAll}
+									onCancel={handleCancelSelect}
+									className="duration-200 animate-in fade-in"
+								/>
+							) : (
+								<NormalModeHeader
+									key="normal-header"
+									title={resolvedTitle}
+									isShareRoute={isShareRoute}
+									refreshLoading={refreshLoading}
+									allowEdit={allowEdit}
+									showMobileActions={showMobileActions}
+									onRefresh={handleRefreshList}
+									onSearch={handleSearch}
+									onAddFile={handleAddFile}
+									onAddDesign={handleAddDesign}
+									onAddFolder={handleAddFolder}
+									onUploadFile={handleCustomUploadFile}
+									onUploadFolder={handleCustomUploadFolder}
+									onImportFromOtherProject={handleImportFromOtherProject}
+									onEnterSelectMode={handleEnterSelectMode}
+									className="duration-200 animate-in fade-in"
+								/>
+							)}
 
-					{/* Content Section */}
-					{/* Use TopicFilesCore for content and batch download functionality */}
-					<TopicFilesCore
-						ref={coreRef}
-						attachments={attachments}
-						setUserSelectDetail={setUserSelectDetail}
-						onFileClick={onFileClick}
-						projectId={projectId}
-						fileFilters={fileFilters}
-						handleDownloadAll={handleDownloadAll}
-						allLoading={allLoading}
-						activeFileId={activeFileId}
-						selectedTopic={selectedTopic}
-						isSelectMode={isSelectMode}
-						onSelectionChange={(selectedCount, totalCount) => {
-							setSelectedCount(selectedCount)
-							setTotalCount(totalCount)
-						}}
-						allowEdit={allowEdit}
-						onAttachmentsChange={onAttachmentsChange}
-						onSelectModeChange={setIsSelectMode}
-						selectedProject={selectedProject}
-						handleReplaceFile={handleReplaceFile}
-						duplicateFileHandler={sharedDuplicateHandler}
-						selectedWorkspace={selectedWorkspace}
-						projects={projects}
-						workspaces={workspaces}
-						isInProject={isInProject}
-						externalSearchValue={searchValue}
-						filterMenuItems={filterMenuItems}
-						filterBatchDownloadLayerMenuItems={filterBatchDownloadLayerMenuItems}
-						allowDownload={allowDownload}
-						resolveTopicFileRowDecoration={resolveTopicFileRowDecoration}
-						refreshLoading={refreshLoading}
-					/>
+							{/* Content Section */}
+							{/* Use TopicFilesCore for content and batch download functionality */}
+							<TopicFilesCore
+								ref={coreRef}
+								attachments={attachments}
+								setUserSelectDetail={setUserSelectDetail}
+								onFileClick={onFileClick}
+								projectId={projectId}
+								fileFilters={fileFilters}
+								handleDownloadAll={handleDownloadAll}
+								allLoading={allLoading}
+								activeFileId={activeFileId}
+								selectedTopic={selectedTopic}
+								isSelectMode={isSelectMode}
+								onSelectionChange={(selectedCount, totalCount) => {
+									setSelectedCount(selectedCount)
+									setTotalCount(totalCount)
+								}}
+								allowEdit={allowEdit}
+								onAttachmentsChange={onAttachmentsChange}
+								onSelectModeChange={setIsSelectMode}
+								selectedProject={selectedProject}
+								handleReplaceFile={handleReplaceFile}
+								duplicateFileHandler={sharedDuplicateHandler}
+								selectedWorkspace={selectedWorkspace}
+								projects={projects}
+								workspaces={workspaces}
+								isInProject={isInProject}
+								externalSearchValue={isSearchMode ? debouncedSearchValue : ""}
+								filterMenuItems={filterMenuItems}
+								filterBatchDownloadLayerMenuItems={
+									filterBatchDownloadLayerMenuItems
+								}
+								allowDownload={allowDownload}
+								resolveTopicFileRowDecoration={resolveTopicFileRowDecoration}
+								refreshLoading={refreshLoading}
+							/>
+						</>
+					)}
 				</div>
+				{projectDetailFilesController.deleteConfirmNode}
 
 				{/* UploadModal for selecting storage location */}
-				{selectedProject && (
-					<UploadModal
-						visible={uploadModalVisible}
-						title={resolvedTitle}
-						projectId={selectedProject.id}
-						uploadFiles={selectedUploadFiles}
-						attachments={attachments}
-						isShowCreateDirectory={true}
-						isUploadingFolder={isUploadingFolder}
-						tips={
-							isUploadingFolder
-								? t("selectPathModal.uploadFolderTip")
-								: t("selectPathModal.uploadFileTip")
+				{selectedProject &&
+					(shouldUseProjectDetailMobileView ? (
+						<UploadModal
+							visible={projectDetailFilesController.uploadModalVisible}
+							title={resolvedTitle}
+							projectId={selectedProject.id}
+							uploadFiles={projectDetailFilesController.selectedUploadFiles}
+							attachments={attachments}
+							isShowCreateDirectory={true}
+							isUploadingFolder={projectDetailFilesController.isUploadingFolder}
+							tips={
+								projectDetailFilesController.isUploadingFolder
+									? t("selectPathModal.uploadFolderTip")
+									: t("selectPathModal.uploadFileTip")
+							}
+							onSubmit={projectDetailFilesController.handleUploadModalSubmit}
+							onClose={projectDetailFilesController.handleUploadModalClose}
+						/>
+					) : (
+						<UploadModal
+							visible={uploadModalVisible}
+							title={resolvedTitle}
+							projectId={selectedProject.id}
+							uploadFiles={selectedUploadFiles}
+							attachments={attachments}
+							isShowCreateDirectory={true}
+							isUploadingFolder={isUploadingFolder}
+							tips={
+								isUploadingFolder
+									? t("selectPathModal.uploadFolderTip")
+									: t("selectPathModal.uploadFileTip")
+							}
+							onSubmit={handleUploadModalSubmit}
+							onClose={handleUploadModalClose}
+						/>
+					))}
+
+				{/* 同名文件处理 Modal - 统一处理所有上传方式 */}
+				<FolderConflictModal
+					visible={sharedDuplicateHandler.folderConflictModalVisible}
+					folderName={sharedDuplicateHandler.currentFolderName}
+					totalConflicts={sharedDuplicateHandler.totalFolderConflicts}
+					canMerge={sharedDuplicateHandler.canMergeFolderConflict}
+					onCancel={sharedDuplicateHandler.handleFolderConflictCancel}
+					onMerge={sharedDuplicateHandler.handleFolderConflictMerge}
+					onKeepBoth={sharedDuplicateHandler.handleFolderConflictKeepBoth}
+				/>
+				{shouldUseProjectDetailMobileView ? (
+					<DuplicateFileModal
+						visible={projectDetailFilesController.sharedDuplicateHandler.modalVisible}
+						fileName={
+							projectDetailFilesController.sharedDuplicateHandler.currentFileName
 						}
-						onSubmit={handleUploadModalSubmit}
-						onClose={handleUploadModalClose}
+						totalDuplicates={
+							projectDetailFilesController.sharedDuplicateHandler.totalDuplicates
+						}
+						onCancel={projectDetailFilesController.sharedDuplicateHandler.handleCancel}
+						onReplace={
+							projectDetailFilesController.sharedDuplicateHandler.handleReplace
+						}
+						onKeepBoth={
+							projectDetailFilesController.sharedDuplicateHandler.handleKeepBoth
+						}
+					/>
+				) : (
+					<DuplicateFileModal
+						visible={sharedDuplicateHandler.modalVisible}
+						fileName={sharedDuplicateHandler.currentFileName}
+						totalDuplicates={sharedDuplicateHandler.totalDuplicates}
+						onCancel={sharedDuplicateHandler.handleCancel}
+						onReplace={sharedDuplicateHandler.handleReplace}
+						onKeepBoth={sharedDuplicateHandler.handleKeepBoth}
 					/>
 				)}
 
-				{/* 同名文件处理 Modal - 统一处理所有上传方式 */}
-				<DuplicateFileModal
-					visible={sharedDuplicateHandler.modalVisible}
-					fileName={sharedDuplicateHandler.currentFileName}
-					totalDuplicates={sharedDuplicateHandler.totalDuplicates}
-					onCancel={sharedDuplicateHandler.handleCancel}
-					onReplace={sharedDuplicateHandler.handleReplace}
-					onKeepBoth={sharedDuplicateHandler.handleKeepBoth}
-				/>
+				{shouldUseProjectDetailMobileView &&
+					(projectDetailFilesController.shareFileIds.length > 0 ? (
+						// 项目详情移动端的批量分享入口需要与文件详情入口共用同一套新分享 Sheet，
+						// 否则这里会回退到旧 Web 弹窗，导致第三轮文件分享体验不一致。
+						<ProjectShareSheet
+							open={projectDetailFilesController.shareModalVisible}
+							onClose={projectDetailFilesController.closeShareModal}
+							mode="file"
+							attachments={attachments}
+							defaultSelectedFileIds={projectDetailFilesController.shareFileIds}
+							projectName={selectedProject?.project_name}
+							projectId={projectId}
+						/>
+					) : null)}
+
+				{shouldUseProjectDetailMobileView ? (
+					<>
+						<SelectDirectoryModal
+							{...projectDetailFilesController.moveSelectorProps}
+							mobileCrossProjectConfig={
+								selectedProject
+									? {
+											currentProject: selectedProject,
+											currentWorkspace: selectedWorkspace,
+											sourceAttachments: attachments,
+											isChatProject,
+										}
+									: undefined
+							}
+							onSubmit={handleProjectDetailMoveSubmit}
+						/>
+						<SelectDirectoryModal
+							{...projectDetailFilesController.copySelectorProps}
+							mobileCrossProjectConfig={
+								selectedProject
+									? {
+											currentProject: selectedProject,
+											currentWorkspace: selectedWorkspace,
+											sourceAttachments: attachments,
+											isChatProject,
+										}
+									: undefined
+							}
+							onSubmit={handleProjectDetailCopySubmit}
+						/>
+						<DuplicateFileModal
+							visible={crossProjectOperation.duplicateModalVisible}
+							fileName={crossProjectOperation.currentDuplicateFileName}
+							totalDuplicates={crossProjectOperation.totalDuplicates}
+							onCancel={crossProjectOperation.handleDuplicateCancel}
+							onReplace={crossProjectOperation.handleDuplicateReplace}
+							onKeepBoth={crossProjectOperation.handleDuplicateKeepBoth}
+						/>
+					</>
+				) : null}
+
+				{/* Mobile file list must mount watermark agreement modal (TopicFilesCore does this on desktop). */}
+				{shouldUseProjectDetailMobileView
+					? mobileProjectFilesDownload.agreementModal
+					: null}
 			</>
 		)
 	},

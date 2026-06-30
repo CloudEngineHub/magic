@@ -11,7 +11,7 @@ import type { ImageElement } from "../../canvas/types"
 import type { ReferenceResourceSourceType } from "../MessageEditor/reference-assets/reference-resource.types"
 import type { ReferenceResourcePanelItem } from "../../types"
 import MessageEditor, { type MessageEditorRef } from "../MessageEditor/MessageEditor"
-import { useMessageEditorMention } from "../MessageEditor/useMessageEditorMention"
+import { useCanvasReferenceMention } from "../MessageEditor/useCanvasReferenceMention"
 import { useMentionSync } from "../MessageEditor/useMentionSync"
 import { removeMentionFromString } from "../MessageEditor/tiptap/contentUtils"
 import { ReferenceResourceDropSurface } from "../MessageEditor/reference-assets/ReferenceResourceDropSurface"
@@ -80,7 +80,7 @@ export default function ImageEditorSurface(props: ImageEditorSurfaceProps) {
 	} = config
 
 	const { matchableItems, mentionDataService, mentionExtension, mentionEnabled } =
-		useMessageEditorMention({
+		useCanvasReferenceMention({
 			matchableItems: config.matchableItems,
 			maxReferenceFiles,
 			currentReferenceFiles,
@@ -119,13 +119,12 @@ export default function ImageEditorSurface(props: ImageEditorSurfaceProps) {
 
 	const handleSelectSource = useCallback(
 		(source: ReferenceResourceSourceType) => {
+			if (source !== "local-upload") return
 			handlers.setPopoverOpen(false)
-			if (source === "local-upload") {
-				if (config.isReferenceFileLimitReached) {
-					return
-				}
-				handlers.triggerFileSelect()
+			if (config.isReferenceFileLimitReached) {
+				return
 			}
+			handlers.triggerFileSelect()
 		},
 		[config.isReferenceFileLimitReached, handlers],
 	)

@@ -39,6 +39,7 @@ function FilePathAttachmentListInner({ attachments, className }: FilePathAttachm
 				onClick={(e) => {
 					if (attachments.length > 4) toggleExpanded(e)
 				}}
+				data-testid="toggle-expanded"
 			>
 				<div className="mr-1 text-sm font-medium text-foreground">
 					{t("ui.attachments", { count: attachments.length })}
@@ -57,6 +58,7 @@ function FilePathAttachmentListInner({ attachments, className }: FilePathAttachm
 							key={attachment.filePath}
 							className="w-full cursor-pointer"
 							onClick={() => openFileByPath(attachment)}
+							data-testid="open-file-by-path"
 						>
 							<div
 								className={cn(
@@ -109,6 +111,7 @@ function FilePathAttachmentListInner({ attachments, className }: FilePathAttachm
 								"hover:bg-blue-50 dark:hover:bg-blue-500/10",
 							)}
 							onClick={toggleExpanded}
+							data-testid="toggle-expanded-2"
 						>
 							{t("ui.expandAllFiles")} ({attachments.length})
 						</div>

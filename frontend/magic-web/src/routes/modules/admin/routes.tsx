@@ -1,6 +1,6 @@
 import { lazy } from "react"
 import type { RouteObject } from "react-router"
-import { PlatformPackageRoutes, otherRoutes, RouteName } from "@dtyq/magic-admin"
+import { PlatformPackageRoutes, otherRoutes, RouteName, AiManageRoutes } from "@dtyq/magic-admin"
 import { RoutePath } from "@/constants/routes"
 
 /**
@@ -28,6 +28,7 @@ const routes: Route[] = [
 				element: <Navigate name={RouteName.AdminPlatformAIModel} replace />,
 			},
 			PlatformPackageRoutes,
+			AiManageRoutes,
 			...otherRoutes,
 		],
 	},

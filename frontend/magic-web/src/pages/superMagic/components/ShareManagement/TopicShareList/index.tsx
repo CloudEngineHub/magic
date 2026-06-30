@@ -217,7 +217,7 @@ function TopicShareList({ onClose, projectId }: TopicShareListProps) {
 						</div>
 					</div>
 				</div>
-				<div className={styles.headerClose} onClick={onClose}>
+				<div className={styles.headerClose} onClick={onClose} data-testid="on-close">
 					<IconX size={24} />
 				</div>
 			</div>
@@ -232,7 +232,7 @@ function TopicShareList({ onClose, projectId }: TopicShareListProps) {
 					className={styles.searchInput}
 				/>
 				<Dropdown menu={{ items: batchMenuItems }} trigger={["click"]}>
-					<button className={styles.batchButton}>
+					<button className={styles.batchButton} data-testid="topic-share-list-button">
 						<span>{t("shareManagement.batchOperation")}</span>
 						<IconChevronDown size={20} />
 					</button>
@@ -313,6 +313,7 @@ function TopicShareList({ onClose, projectId }: TopicShareListProps) {
 												navigateToProject(item)
 											}}
 											style={{ cursor: "pointer" }}
+											data-testid="navigate-to-project"
 										>
 											<span>{item.project_name}</span>
 											<IconExternalLink
@@ -355,12 +356,14 @@ function TopicShareList({ onClose, projectId }: TopicShareListProps) {
 									<button
 										className={styles.operationButton}
 										onClick={() => handleSettingShare(item)}
+										data-testid="handle-setting-share"
 									>
 										{t("shareManagement.setting")}
 									</button>
 									<button
 										className={styles.operationButton}
 										onClick={() => handleCancelShare(item)}
+										data-testid="handle-cancel-share"
 									>
 										{t("shareManagement.cancelShare")}
 									</button>

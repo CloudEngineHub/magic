@@ -215,6 +215,7 @@ function InstagramFeedPostCell({
 				<div
 					className="flex shrink-0 cursor-pointer items-center gap-2"
 					onClick={() => onSelectPost(postIdx)}
+					data-testid="on-select-post"
 				>
 					<div
 						className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full p-[2px]"
@@ -228,6 +229,7 @@ function InstagramFeedPostCell({
 				<div
 					className="flex min-w-0 flex-1 cursor-pointer flex-col justify-center"
 					onClick={() => onSelectPost(postIdx)}
+					data-testid="on-select-post-2"
 				>
 					<div className="truncate text-[13px] font-bold tracking-tight text-[#111]">
 						{displayAuthor}
@@ -237,6 +239,7 @@ function InstagramFeedPostCell({
 				<button
 					type="button"
 					className="shrink-0 bg-transparent px-2 py-1 text-[13.5px] font-bold text-[#0095f6]"
+					data-testid="instagram-phone-views-follow-button"
 				>
 					关注
 				</button>
@@ -244,6 +247,7 @@ function InstagramFeedPostCell({
 					type="button"
 					className="flex shrink-0 items-center px-1 py-1 text-[#111]"
 					aria-label="More"
+					data-testid="more-button"
 				>
 					<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
 						<circle cx="5" cy="12" r="1.5" />
@@ -260,6 +264,7 @@ function InstagramFeedPostCell({
 				onPointerUp={bind.onPointerUp}
 				onPointerCancel={bind.onPointerCancel}
 				className="group relative w-full shrink-0 touch-pan-y overflow-hidden bg-[#fafafa]"
+				data-testid="on-pointer-down"
 			>
 				{showContent ? (
 					<div
@@ -326,6 +331,7 @@ function InstagramFeedPostCell({
 							)}
 							onPointerDown={handleControlPointerDown}
 							onClick={prev}
+							data-testid="handle-control-pointer-down"
 						>
 							<ChevronLeft className="h-4 w-4" />
 						</button>
@@ -339,6 +345,7 @@ function InstagramFeedPostCell({
 							)}
 							onPointerDown={handleControlPointerDown}
 							onClick={next}
+							data-testid="handle-control-pointer-down-2"
 						>
 							<ChevronRight className="h-4 w-4" />
 						</button>
@@ -365,6 +372,7 @@ function InstagramFeedPostCell({
 										"h-[6px] w-[6px] rounded-full transition-all",
 										idx === currentIndex ? "bg-[#3897f0]" : "bg-[#dbdbdb]",
 									)}
+									data-testid="handle-control-pointer-down-3"
 								/>
 							))}
 						</div>
@@ -382,6 +390,7 @@ function InstagramFeedPostCell({
 					type="button"
 					className="mt-1 text-[13px] text-[#8e8e8e]"
 					onClick={() => onSelectPost(postIdx)}
+					data-testid="on-select-post-3"
 				>
 					View all {post.meta.commentCount || post.meta.comments?.length || 0} comments
 				</button>
@@ -406,6 +415,9 @@ interface DetailProps {
 	onAddCardToNewChat?: (cardIndex: number) => void
 	/** Increment to force-refresh the currently active card */
 	activeCardExternalRefreshVersion?: number
+	onPreviewFocus?: (
+		event?: React.PointerEvent<HTMLElement> | React.MouseEvent<HTMLElement>,
+	) => void
 }
 
 function InstagramDetailView({
@@ -417,11 +429,10 @@ function InstagramDetailView({
 	onChangeCard,
 	onBackHome,
 	backLabel,
-	onAddCardToCurrentChat,
 	activeCardExternalRefreshVersion,
+	onPreviewFocus,
 }: DetailProps) {
 	const { t } = useTranslation("super")
-	const store = useSelfMediaStore()
 	const [cardRefreshVersions, setCardRefreshVersions] = useState<Record<number, number>>({})
 	const displayAuthor = post.meta.author || t("detail.selfMedia.common.unknownAuthor")
 	const authorInitial = post.meta.author?.[0]?.toUpperCase() || displayAuthor[0]?.toUpperCase()
@@ -458,6 +469,22 @@ function InstagramDetailView({
 		total: post.cards.length,
 		initialIndex: cardIndex,
 	})
+	const handlePreviewPointerDown: React.PointerEventHandler<HTMLDivElement> = (event) => {
+		onPreviewFocus?.(event)
+		bind.onPointerDown(event)
+	}
+	const handlePrevCard = (event: React.MouseEvent<HTMLButtonElement>) => {
+		prev()
+		onPreviewFocus?.(event)
+	}
+	const handleNextCard = (event: React.MouseEvent<HTMLButtonElement>) => {
+		next()
+		onPreviewFocus?.(event)
+	}
+	const handleGoToCard = (idx: number, event: React.MouseEvent<HTMLButtonElement>) => {
+		goTo(idx)
+		onPreviewFocus?.(event)
+	}
 	useEffect(() => {
 		if (currentIndex !== cardIndex) {
 			onChangeCard(currentIndex)
@@ -468,6 +495,7 @@ function InstagramDetailView({
 		<div
 			className="scrollbar-hide flex h-full flex-col overflow-y-auto overflow-x-hidden bg-white"
 			onWheel={handleDetailWheel}
+			data-testid="handle-detail-wheel"
 		>
 			<div className="sticky top-0 z-50 flex shrink-0 items-center justify-between border-b border-[#efefef] bg-white px-2 py-2">
 				<div className="flex items-center gap-3">
@@ -498,6 +526,7 @@ function InstagramDetailView({
 					<button
 						type="button"
 						className="rounded-full border border-[#0095f6] px-3.5 py-1 text-[12px] font-bold text-[#0095f6]"
+						data-testid="instagram-phone-views-follow-button-2"
 					>
 						关注
 					</button>
@@ -505,6 +534,7 @@ function InstagramDetailView({
 						type="button"
 						className="flex items-center p-1 text-[#111]"
 						aria-label="More"
+						data-testid="more-button-2"
 					>
 						<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
 							<circle cx="5" cy="12" r="1.5" />
@@ -516,7 +546,7 @@ function InstagramDetailView({
 			</div>
 			<div
 				ref={bind.ref}
-				onPointerDown={bind.onPointerDown}
+				onPointerDown={handlePreviewPointerDown}
 				onPointerMove={bind.onPointerMove}
 				onPointerUp={bind.onPointerUp}
 				onPointerCancel={bind.onPointerCancel}
@@ -560,7 +590,7 @@ function InstagramDetailView({
 								currentIndex === 0 && "pointer-events-none opacity-0",
 							)}
 							onPointerDown={handleControlPointerDown}
-							onClick={prev}
+							onClick={handlePrevCard}
 							data-testid="instagram-detail-prev-button"
 							aria-label="Previous card"
 						>
@@ -575,7 +605,7 @@ function InstagramDetailView({
 									"pointer-events-none opacity-0",
 							)}
 							onPointerDown={handleControlPointerDown}
-							onClick={next}
+							onClick={handleNextCard}
 							data-testid="instagram-detail-next-button"
 							aria-label="Next card"
 						>
@@ -589,7 +619,7 @@ function InstagramDetailView({
 							key={idx}
 							type="button"
 							onPointerDown={handleControlPointerDown}
-							onClick={() => goTo(idx)}
+							onClick={(event) => handleGoToCard(idx, event)}
 							data-testid={`ig-detail-dot-${idx}`}
 							className={cn(
 								"h-1.5 w-1.5 rounded-full transition-all",
@@ -671,6 +701,7 @@ interface ScrollProps {
 	cardRefs: React.MutableRefObject<Array<Array<CardFrameRef | null>>>
 	postIndex: number
 	onAddCardToCurrentChat?: (cardIndex: number) => void
+	onAddActivePostDirectoryToCurrentChat?: () => void
 }
 
 function InstagramScrollView({
@@ -680,6 +711,7 @@ function InstagramScrollView({
 	cardRefs,
 	postIndex,
 	onAddCardToCurrentChat,
+	onAddActivePostDirectoryToCurrentChat,
 }: ScrollProps) {
 	const store = useSelfMediaStore()
 	const [cardRefreshVersions, setCardRefreshVersions] = useState<Record<number, number>>({})
@@ -715,6 +747,7 @@ function InstagramScrollView({
 							onAddToCurrentChat={
 								onAddCardToCurrentChat ? () => onAddCardToCurrentChat(c) : undefined
 							}
+							onAddPostFolderToCurrentChat={onAddActivePostDirectoryToCurrentChat}
 							onGoToEdit={() => {
 								store.setActiveCardIndex(c)
 								store.setView("edit")
@@ -748,7 +781,15 @@ export interface InstagramFooterLabels {
 function InstagramFooterView({ labels }: { labels: InstagramFooterLabels }) {
 	return (
 		<div className="flex h-[50px] shrink-0 items-center justify-around border-t border-[#dbdbdb] bg-white pb-1 pt-1 text-[#262626]">
-			<svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+			<svg
+				width="24"
+				height="24"
+				viewBox="0 0 24 24"
+				fill="currentColor"
+				role="img"
+				aria-label={labels.home}
+				data-testid="img-svg"
+			>
 				<path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z" />
 			</svg>
 			<svg
@@ -760,6 +801,9 @@ function InstagramFooterView({ labels }: { labels: InstagramFooterLabels }) {
 				strokeWidth="2"
 				strokeLinecap="round"
 				strokeLinejoin="round"
+				role="img"
+				aria-label={labels.search}
+				data-testid="img-svg-2"
 			>
 				<circle cx="11" cy="11" r="8" />
 				<line x1="21" y1="21" x2="16.65" y2="16.65" />
@@ -773,6 +817,9 @@ function InstagramFooterView({ labels }: { labels: InstagramFooterLabels }) {
 				strokeWidth="2"
 				strokeLinecap="round"
 				strokeLinejoin="round"
+				role="img"
+				aria-label={labels.reels}
+				data-testid="img-svg-3"
 			>
 				<polygon points="23 7 16 12 23 17 23 7" />
 				<rect x="1" y="5" width="15" height="14" rx="2" ry="2" />
@@ -786,6 +833,9 @@ function InstagramFooterView({ labels }: { labels: InstagramFooterLabels }) {
 				strokeWidth="2"
 				strokeLinecap="round"
 				strokeLinejoin="round"
+				role="img"
+				aria-label={labels.create}
+				data-testid="img-svg-4"
 			>
 				<polygon points="22 2 15 22 11 13 2 9 22 2" />
 			</svg>
@@ -798,6 +848,9 @@ function InstagramFooterView({ labels }: { labels: InstagramFooterLabels }) {
 				strokeWidth="2"
 				strokeLinecap="round"
 				strokeLinejoin="round"
+				role="img"
+				aria-label={labels.profile}
+				data-testid="img-svg-5"
 			>
 				<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
 				<circle cx="12" cy="7" r="4" />

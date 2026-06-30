@@ -27,8 +27,14 @@ interface EnsurePostLoaded {
 interface WechatCoverViewProps {
 	posts: SelfMediaPost[]
 	attachmentList?: PlatformComponentProps["attachmentList"]
+	priorityPostIndex?: number
 	onSelectPost: (idx: number) => void
 	onEnsurePostLoaded?: EnsurePostLoaded
+}
+
+interface WechatCoverDisplayPost {
+	post: SelfMediaPost
+	originalIndex: number
 }
 
 interface WechatCoverCardProps {
@@ -39,17 +45,16 @@ interface WechatCoverCardProps {
 	scrollRootRef: React.RefObject<HTMLDivElement | null>
 }
 
-function WechatCoverPostSkeleton({ postId }: { postId: string }) {
+function WechatCoverPostLoading({ postId }: { postId: string }) {
 	return (
-		<div data-testid={`wechat-cover-post-loading-${postId}`}>
-			<div className="aspect-[16/9] w-full animate-pulse bg-gradient-to-b from-[#2a2a2a] to-[#1a1a1a]" />
-			<div className="flex items-stretch gap-3 px-3 py-3">
-				<div className="flex min-w-0 flex-1 flex-col justify-center gap-2">
-					<div className="h-4 w-full animate-pulse rounded bg-[#f1f2f4]" />
-					<div className="h-4 w-3/4 animate-pulse rounded bg-[#f1f2f4]" />
-				</div>
-				<div className="h-[72px] w-[72px] flex-shrink-0 animate-pulse rounded-sm bg-[#f1f2f4]" />
-			</div>
+		<div
+			className="flex min-h-[180px] items-center justify-center"
+			data-testid={`wechat-cover-post-loading-${postId}`}
+		>
+			<div
+				className="h-5 w-5 animate-spin rounded-full border-2 border-[#d8dde5] border-t-[#7f8792]"
+				aria-hidden
+			/>
 		</div>
 	)
 }
@@ -126,6 +131,7 @@ function HeroImage({
 					alt={feedTitle || ""}
 					className="h-full w-full object-cover"
 					draggable={false}
+					data-testid="cover-image"
 				/>
 			) : (
 				<div
@@ -167,7 +173,7 @@ function ThumbnailImage({ fileId, enabled }: { fileId?: string; enabled: boolean
 	return (
 		<div className="aspect-square w-[72px] flex-shrink-0 overflow-hidden rounded-sm bg-[#f0f0f0]">
 			{url ? (
-				<img src={url} alt="" className="h-full w-full object-cover" draggable={false} />
+				<img src={url} alt="" className="h-full w-full object-cover" draggable={false}  data-testid="cover-image-2"/>
 			) : (
 				<div
 					className={cn(
@@ -178,6 +184,22 @@ function ThumbnailImage({ fileId, enabled }: { fileId?: string; enabled: boolean
 			)}
 		</div>
 	)
+}
+
+export function buildWechatCoverDisplayPosts(
+	posts: SelfMediaPost[],
+	priorityPostIndex?: number,
+): WechatCoverDisplayPost[] {
+	const items = posts.map((post, originalIndex) => ({ post, originalIndex }))
+	if (
+		priorityPostIndex === undefined ||
+		priorityPostIndex <= 0 ||
+		priorityPostIndex >= items.length
+	) {
+		return items
+	}
+	const [priority] = items.splice(priorityPostIndex, 1)
+	return priority ? [priority, ...items] : items
 }
 
 function AccountHeader({ post }: { post: SelfMediaPost }) {
@@ -268,7 +290,7 @@ function WechatCoverCard({
 			<AccountHeader post={post} />
 
 			{isPostLoading ? (
-				<WechatCoverPostSkeleton postId={post.meta.id} />
+				<WechatCoverPostLoading postId={post.meta.id} />
 			) : (
 				<>
 					<button
@@ -304,8 +326,17 @@ function WechatCoverCard({
 	)
 }
 
-function WechatCoverView({ posts, onSelectPost, onEnsurePostLoaded }: WechatCoverViewProps) {
+function WechatCoverView({
+	posts,
+	priorityPostIndex,
+	onSelectPost,
+	onEnsurePostLoaded,
+}: WechatCoverViewProps) {
 	const scrollRootRef = useRef<HTMLDivElement>(null)
+	const displayPosts = useMemo(
+		() => buildWechatCoverDisplayPosts(posts, priorityPostIndex),
+		[posts, priorityPostIndex],
+	)
 
 	return (
 		<div
@@ -315,11 +346,11 @@ function WechatCoverView({ posts, onSelectPost, onEnsurePostLoaded }: WechatCove
 			data-testid="wechat-cover-view"
 		>
 			<div className="w-full pt-2">
-				{posts.map((post, idx) => (
+				{displayPosts.map(({ post, originalIndex }, idx) => (
 					<WechatCoverCard
 						key={post.meta.id || idx}
 						post={post}
-						postIndex={idx}
+						postIndex={originalIndex}
 						onSelectPost={onSelectPost}
 						onEnsurePostLoaded={onEnsurePostLoaded}
 						scrollRootRef={scrollRootRef}

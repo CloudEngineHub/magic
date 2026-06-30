@@ -34,14 +34,29 @@ export interface SelfMediaComment {
 }
 
 /** Post meta surfaced on feed/detail views */
+export type SelfMediaPostPublishStatus = "planned" | "archived"
+
+export interface SelfMediaStructuredTags {
+	core?: string[]
+	mid?: string[]
+	longtail?: string[]
+	trend?: string[]
+	[key: string]: unknown
+}
+
+export type SelfMediaPostTags = string | string[] | SelfMediaStructuredTags
+
 export interface SelfMediaPostMeta {
 	id: string
 	title?: string
 	subtitle?: string
-	tags?: string
+	tags?: SelfMediaPostTags
 	author?: string
 	feedTitle?: string
 	feedLikes?: string
+	readCount?: string
+	reads?: string
+	publishStatus?: SelfMediaPostPublishStatus
 	commentCount?: string
 	comments?: SelfMediaComment[]
 	[key: string]: any
@@ -80,6 +95,7 @@ export interface SelfMediaPostEntry {
 	id: string
 	name: string
 	entry: string
+	publishStatus?: SelfMediaPostPublishStatus
 }
 
 /** Parsed post.json content for a single post */
@@ -117,6 +133,7 @@ export type SelfMediaView = "feed" | "detail" | "scroll" | "edit" | "code"
 export interface PlatformComponentProps {
 	platform: SelfMediaPlatform
 	attachmentList?: SelfMediaAttachmentNode[]
+	attachments?: SelfMediaAttachmentNode[]
 	/** Whether the user has permission to edit content */
 	allowEdit?: boolean
 	/** Save content callback from the parent Render component */
@@ -129,6 +146,15 @@ export interface PlatformComponentProps {
 	) => Promise<void>
 	/** Currently selected project */
 	selectedProject?: any
+	/** Navigate back to the article home page. */
+	onBackHome?: () => void
+	/** Persist a post title change back to its post.json manifest. */
+	onUpdatePostTitle?: (
+		target: { platform: SelfMediaPlatform; index: number; entry: SelfMediaPostEntry },
+		title: string,
+	) => Promise<boolean | void> | boolean | void
+	/** Open the pre-publish AI diagnosis flow for the active post. */
+	onRequestPrePublishAnalysis?: () => void
 }
 
 /** Component contract every platform implementation must follow */

@@ -23,6 +23,11 @@ import {
 	resolveDesignDslPathToWorkspaceAbsoluteByCandidates,
 } from "../utils/designDslPathUtils"
 import { syncFileInfoAfterGenerationComplete } from "../utils/syncFileInfoAfterGenerationComplete"
+import {
+	calculateUploadDirectory,
+	getOrCreateUploadSubDirFileId,
+	validateUploadDirectoryFileId,
+} from "../utils/designAssetDirectory"
 
 interface UseVideoGenerationOptions {
 	projectId?: string
@@ -68,12 +73,7 @@ export function useVideoGeneration(options: UseVideoGenerationOptions): UseVideo
 	const { t } = useTranslation("super")
 
 	const getVideoModelList = useCallback(async (): Promise<VideoModelItem[]> => {
-		const officialGroups = JSON.parse(
-			JSON.stringify(superMagicModeService.getVideoModelGroupsByMode("general") || []),
-		) as Array<{
-			group: { id: string; name: string; icon: string; sort: number }
-			models: VideoModelItem[]
-		}>
+		const officialGroups = superMagicModeService.getAllVideoModelGroups()
 		const result = officialGroups.flatMap((groupItem) =>
 			(groupItem.models || []).map(
 				(model): VideoModelItem => ({
@@ -131,7 +131,9 @@ export function useVideoGeneration(options: UseVideoGenerationOptions): UseVideo
 				ensureVideosDir: false,
 				pathUnresolvedMessage: t("design.errors.designResourcePathUnresolved"),
 			})
-			const result = await SuperMagicApi.estimateVideoPoints(requestParams)
+			const result = await SuperMagicApi.estimateVideoPoints(requestParams, {
+				enableErrorMessagePrompt: false,
+			})
 			return normalizeEstimateVideoPointsResponse(result)
 		},
 		[projectId, currentFile, flatAttachments, designProjectBasePath, updateAttachments, t],
@@ -212,69 +214,24 @@ async function buildDesignVideoRequestParams(
 		pathUnresolvedMessage,
 	} = options
 	let fileDir = ""
-	let parentDirId: string | undefined = undefined
 	if (currentFile?.id && flatAttachments && flatAttachments.length > 0) {
 		const designProjectFile = flatAttachments.find((item) => item.file_id === currentFile.id)
 
 		if (designProjectFile?.relative_file_path) {
-			const filePath = designProjectFile.relative_file_path
-
-			if (designProjectFile.is_directory) {
-				fileDir = filePath
-				parentDirId = designProjectFile.file_id
-			} else {
-				const fileName = designProjectFile.file_name || currentFile.name
-				if (filePath.endsWith(fileName)) {
-					fileDir = filePath.slice(0, -fileName.length)
-				} else {
-					const lastSlashIndex = filePath.lastIndexOf("/")
-					if (lastSlashIndex >= 0) fileDir = filePath.slice(0, lastSlashIndex + 1)
-				}
-				const parentDirPath = normalizePath(fileDir)
-				if (parentDirPath) {
-					const parentDir = flatAttachments.find(
-						(item) =>
-							item.is_directory &&
-							normalizePath(item.relative_file_path || "") === parentDirPath,
-					)
-					if (parentDir) parentDirId = parentDir.file_id
-				}
-			}
-
-			fileDir = normalizePath(fileDir)
-
-			if (!parentDirId && fileDir) {
-				const parentDir = flatAttachments.find(
-					(item) =>
-						item.is_directory &&
-						normalizePath(item.relative_file_path || "") === fileDir,
-				)
-				if (parentDir) parentDirId = parentDir.file_id
-			}
-
-			const videosDirPath = fileDir
-				? `${fileDir}/${UploadSubDir.Videos}`
-				: UploadSubDir.Videos
-			const normalizedVideosDirPath = normalizePath(videosDirPath)
-			const videosDirExists = flatAttachments.some(
-				(item) =>
-					item.is_directory &&
-					normalizePath(item.relative_file_path || "") === normalizedVideosDirPath,
+			const videosDirPath = calculateUploadDirectory(
+				{ currentFile, flatAttachments },
+				UploadSubDir.Videos,
 			)
 
-			if (!videosDirExists && ensureVideosDir) {
-				try {
-					await SuperMagicApi.createFile({
-						project_id: projectId,
-						parent_id: parentDirId || "",
-						file_name: UploadSubDir.Videos,
-						is_directory: true,
-					})
-					updateAttachments()
-				} catch (error: unknown) {
-					const errorObj = error as { code?: number }
-					if (errorObj.code === 51168) updateAttachments()
-				}
+			if (ensureVideosDir) {
+				await getOrCreateUploadSubDirFileId({
+					currentFile,
+					flatAttachments,
+					projectId,
+					subDir: UploadSubDir.Videos,
+					updateAttachments,
+					validateDirFileId: validateUploadDirectoryFileId,
+				})
 			}
 
 			fileDir = videosDirPath

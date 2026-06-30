@@ -3,7 +3,10 @@ import type { AttachmentItem } from "./types"
 import { MenuProps } from "antd"
 import { collectFileIds } from "../utils/collectFileIds"
 import { collectSelectedItemIds } from "../utils/collectSelectedItemIds"
-import { hasMagicSystemFolderInDeletionSelection } from "../utils/magic-system-folder"
+import {
+	hasMagicSystemFolderInDeletionSelection,
+	resolveBatchDeleteConfirmContentKey,
+} from "../utils/magic-system-folder"
 import {
 	IconDownload,
 	IconFileTypePdf,
@@ -24,8 +27,11 @@ import { getAppEntryFile } from "../../MessageList/components/MessageAttachment/
 import { SuperMagicApi } from "@/apis"
 import useShareRoute from "../../../hooks/useShareRoute"
 import magicToast from "@/components/base/MagicToaster/utils"
+import { createRandomUuidV4 } from "@/utils/create-random-uuid-v4"
 import { useFileActionVisibility } from "@/pages/superMagic/providers/file-action-visibility-provider"
+import { isCachedChatWorkspaceProject } from "@/pages/superMagic/utils/isChatWorkspaceProject"
 import { normalizeMenuItems } from "../utils/menu-items"
+import { useMobileDeleteConfirmSheet } from "./useMobileDeleteConfirmSheet"
 
 interface UseBatchDownloadOptions {
 	projectId?: string
@@ -49,6 +55,7 @@ interface UseBatchDownloadOptions {
 	// 新增：操作完成回调（用于刷新列表）
 	onUpdateAttachments?: () => void
 	removeFile: (fileId: string) => void
+	getParentPathByFileId?: (fileId: string) => AttachmentItem[]
 	isMoving?: boolean
 	// 批量导出进度回调
 	onBatchPdfExportStart?: () => void
@@ -83,6 +90,7 @@ export function useBatchDownload(options: UseBatchDownloadOptions) {
 		moveFileHook,
 		onUpdateAttachments,
 		removeFile,
+		getParentPathByFileId,
 		isMoving = false,
 		onBatchPdfExportStart,
 		onBatchPdfExportProgress,
@@ -97,6 +105,8 @@ export function useBatchDownload(options: UseBatchDownloadOptions) {
 	const [batchLoading, setBatchLoading] = useState(false)
 	const { t } = useTranslation("super")
 	const isMobile = useIsMobile()
+	const isChatProject = isCachedChatWorkspaceProject(selectedProject)
+	const { deleteConfirmNode, openDeleteConfirm } = useMobileDeleteConfirmSheet()
 	const { isShareRoute, isFileShare } = useShareRoute()
 	const { hideCopyTo, hideMoveTo, hideShareFile } = useFileActionVisibility()
 
@@ -131,6 +141,12 @@ export function useBatchDownload(options: UseBatchDownloadOptions) {
 		onSelectModeChange?.(false)
 	}
 
+	const getInitialParentPath = (fileId: string) => {
+		return getParentPathByFileId
+			? getParentPathByFileId(fileId)
+			: getParentPathFromFileId(fileId, attachments)
+	}
+
 	// 检测选中项目中是否包含文件夹
 	const hasSelectedFolders = () => {
 		let foundFolder = false
@@ -157,32 +173,15 @@ export function useBatchDownload(options: UseBatchDownloadOptions) {
 		return selectedItems.size > 0
 	}, [selectedItems])
 
-	// 移动端批量删除（使用 Modal 确认）
+	// Mobile batch delete uses the hierarchy confirmation sheet (same as project-detail).
 	const handleMobileBatchDelete = async () => {
-		const containsFolders = hasSelectedFolders()
-		const touchesMagicFolder = hasMagicSystemFolderInDeletionSelection(
-			filteredFiles,
-			selectedItems,
-			getItemId,
-		)
+		const rootAttachments = attachments?.length ? attachments : filteredFiles
 
-		MagicModal.confirm({
-			title: t("topicFiles.contextMenu.deleteTip"),
-			content: touchesMagicFolder
-				? t("topicFiles.contextMenu.confirmBatchDeleteWithMagicSystemFolder")
-				: containsFolders
-					? t("topicFiles.contextMenu.confirmBatchDeleteWithFolders", {
-							count: selectedItems.size,
-						})
-					: t("topicFiles.contextMenu.confirmBatchDelete", {
-							count: selectedItems.size,
-						}),
-			variant: "destructive",
-			showIcon: true,
-			icon: touchesMagicFolder ? <MagicSystemFolderIcon size={24} /> : undefined,
-			okText: t("topicFiles.contextMenu.delete"),
-			cancelText: t("topicFiles.contextMenu.cancel"),
-			onOk: handleBatchDelete,
+		openDeleteConfirm({
+			attachments: rootAttachments,
+			selectedKeys: selectedItems,
+			onConfirm: handleBatchDelete,
+			testIdPrefix: "topic-files-batch-delete-confirm",
 		})
 	}
 
@@ -194,18 +193,16 @@ export function useBatchDownload(options: UseBatchDownloadOptions) {
 			selectedItems,
 			getItemId,
 		)
+		const contentKey = resolveBatchDeleteConfirmContentKey({
+			containsFolders,
+			touchesMagicFolder,
+		})
 
 		MagicModal.confirm({
 			title: t("topicFiles.contextMenu.deleteTip"),
-			content: touchesMagicFolder
-				? t("topicFiles.contextMenu.confirmBatchDeleteWithMagicSystemFolder")
-				: containsFolders
-					? t("topicFiles.contextMenu.confirmBatchDeleteWithFolders", {
-							count: selectedItems.size,
-						})
-					: t("topicFiles.contextMenu.confirmBatchDelete", {
-							count: selectedItems.size,
-						}),
+			content: t(contentKey, {
+				count: selectedItems.size,
+			}),
 			variant: "destructive",
 			showIcon: true,
 			icon: touchesMagicFolder ? <MagicSystemFolderIcon size={24} /> : undefined,
@@ -236,7 +233,6 @@ export function useBatchDownload(options: UseBatchDownloadOptions) {
 					removeFile(fileId)
 				})
 			}
-			pubsub.publish(PubSubEvents.Update_Attachments)
 			pubsub.publish(PubSubEvents.Cancel_File_Selection)
 			onUpdateAttachments?.()
 			magicToast.success(t("topicFiles.contextMenu.deleteFileSuccess"))
@@ -253,6 +249,7 @@ export function useBatchDownload(options: UseBatchDownloadOptions) {
 	const handleBatchDownload = async () => {
 		if (selectedItems.size === 0 || !projectId) return
 		setBatchLoading(true)
+		const toastId = createRandomUuidV4()
 		try {
 			// 收集选中的文件ID（只收集直接选中的项目，不递归展开文件夹）
 			const selectedFileIds = collectSelectedItemIds(filteredFiles, selectedItems, getItemId)
@@ -262,6 +259,12 @@ export function useBatchDownload(options: UseBatchDownloadOptions) {
 				console.warn("No downloadable files found")
 				return
 			}
+
+			magicToast.loading({
+				key: toastId,
+				content: t("topicFiles.downloading"),
+				duration: 0,
+			})
 
 			// 调用后端创建批量下载任务
 			const data = await SuperMagicApi.createBatchDownload({
@@ -273,6 +276,11 @@ export function useBatchDownload(options: UseBatchDownloadOptions) {
 
 			if (data.status === "ready" && data.download_url) {
 				downloadFileWithAnchor(data.download_url)
+				magicToast.success({
+					key: toastId,
+					content: t("topicFiles.downloadSuccess"),
+					duration: 1000,
+				})
 				setBatchLoading(false)
 				exitSelectMode()
 				return
@@ -281,24 +289,59 @@ export function useBatchDownload(options: UseBatchDownloadOptions) {
 			if (data.status === "processing") {
 				// 每2秒轮询批量状态
 				const timer = setInterval(async () => {
-					const checkData = await SuperMagicApi.checkBatchDownloadStatus(data.batch_key)
-					if (checkData.status === "ready" && checkData.download_url) {
-						downloadFileWithAnchor(checkData.download_url)
+					try {
+						const checkData = await SuperMagicApi.checkBatchDownloadStatus(
+							data.batch_key,
+						)
+						if (checkData.status === "ready" && checkData.download_url) {
+							downloadFileWithAnchor(checkData.download_url)
+							magicToast.success({
+								key: toastId,
+								content: t("topicFiles.downloadSuccess"),
+								duration: 1000,
+							})
+							setBatchLoading(false)
+							exitSelectMode()
+							clearInterval(timer)
+						}
+						if (checkData?.status === "failed") {
+							setBatchLoading(false)
+							clearInterval(timer)
+							magicToast.error({
+								key: toastId,
+								content: checkData.message || t("topicFiles.downloadFailed"),
+								duration: 1000,
+							})
+							return
+						}
+					} catch (error) {
 						setBatchLoading(false)
-						exitSelectMode()
 						clearInterval(timer)
-					}
-					if (checkData?.status === "failed") {
-						setBatchLoading(false)
-						clearInterval(timer)
-						magicToast.error(checkData.message)
-						return
+						console.error("Batch download check failed:", error)
+						magicToast.error({
+							key: toastId,
+							content: t("topicFiles.downloadFailed"),
+							duration: 1000,
+						})
 					}
 				}, 2000)
+				return
 			}
+
+			setBatchLoading(false)
+			magicToast.error({
+				key: toastId,
+				content: t("topicFiles.downloadFailed"),
+				duration: 1000,
+			})
 		} catch (error) {
 			setBatchLoading(false)
 			console.error("Batch download failed:", error)
+			magicToast.error({
+				key: toastId,
+				content: t("topicFiles.downloadFailed"),
+				duration: 1000,
+			})
 		}
 	}
 
@@ -431,8 +474,7 @@ export function useBatchDownload(options: UseBatchDownloadOptions) {
 	const handleBatchShare = () => {
 		if (selectedItems.size === 0 || !onBatchShareClick) return
 
-		// 只收集直接选中的项目ID（包括文件夹），不递归展开子文件
-		// 遵循"在外边勾选了谁，那么文件分享弹层就默认显示谁"的原则
+		// PC multi-select stores the folder row ID itself, so share must preserve direct selections.
 		const selectedFileIds = collectSelectedItemIds(filteredFiles, selectedItems, getItemId)
 
 		if (selectedFileIds.length > 0) {
@@ -447,10 +489,10 @@ export function useBatchDownload(options: UseBatchDownloadOptions) {
 
 		const fileIds = Array.from(selectedItems)
 		const firstFileId = fileIds[0]
-		const parentPath = firstFileId ? getParentPathFromFileId(firstFileId, attachments) : []
+		const parentPath = firstFileId ? getInitialParentPath(firstFileId) : []
 
-		// 如果有跨项目操作所需的数据，使用新的跨项目 Modal
-		if (projects.length > 0 && crossProjectOperation) {
+		// 只有桌面普通项目继续走跨项目 Modal；移动端和 chat 项目回退到目录选择器。
+		if (projects.length > 0 && crossProjectOperation && !isMobile && !isChatProject) {
 			crossProjectOperation.openMoveModal(fileIds, parentPath)
 		} else if (moveFileHook) {
 			// 否则使用原来的 SelectDirectoryModal
@@ -465,7 +507,7 @@ export function useBatchDownload(options: UseBatchDownloadOptions) {
 
 		const fileIds = Array.from(selectedItems)
 		const firstFileId = fileIds[0]
-		const parentPath = firstFileId ? getParentPathFromFileId(firstFileId, attachments) : []
+		const parentPath = firstFileId ? getInitialParentPath(firstFileId) : []
 
 		crossProjectOperation.openCopyModal(fileIds, parentPath)
 	}
@@ -664,5 +706,6 @@ export function useBatchDownload(options: UseBatchDownloadOptions) {
 
 		// 下拉菜单项配置
 		batchMenuItems,
+		deleteConfirmNode,
 	}
 }

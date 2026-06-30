@@ -14,6 +14,13 @@ import {
 	type DataJsFileInfo,
 } from "./utils"
 import { decodeHTMLEntities } from "../utils/full-content"
+import {
+	buildHtmlVirtualStorageNamespace,
+	createVirtualStorageContext,
+	getVirtualStorageBridgeScript,
+	virtualStorageRegistry,
+	type VirtualStorageRuntimeContext,
+} from "../utils/virtual-storage"
 
 /** 与 iframe 内 dashboard 的 configManager.setRenderMode 对齐：mobile / desktop / auto（默认由页面自身决定） */
 export type DashboardIframeRenderMode = "mobile" | "desktop" | "auto"
@@ -30,6 +37,8 @@ interface IsolatedHTMLRendererProps {
 	attachmentList?: FileItem[]
 	currentFileId?: string
 	currentFileName?: string
+	projectId?: string
+	topicId?: string
 }
 
 const useStyles = createStyles(({ css }) => ({
@@ -63,24 +72,32 @@ function IsolatedHTMLRenderer({
 	attachmentList,
 	currentFileId,
 	currentFileName,
+	projectId,
+	topicId,
 }: IsolatedHTMLRendererProps) {
 	const { styles, cx } = useStyles()
-	const renderSiteUrl = useMemo(() => env("MAGIC_HTML_SANDBOX_URL"), [])
-	const renderSiteOrigin = useMemo(() => {
-		if (!renderSiteUrl) return ""
+	const externalRenderSiteUrl = useMemo(() => env("MAGIC_HTML_SANDBOX_URL"), [])
+	const htmlSandboxShellUrl = useMemo(
+		() => externalRenderSiteUrl || "/husky.html",
+		[externalRenderSiteUrl],
+	)
+	const externalRenderSiteOrigin = useMemo(() => {
+		if (!externalRenderSiteUrl) return ""
 		try {
-			return new URL(renderSiteUrl).origin
+			return new URL(externalRenderSiteUrl).origin
 		} catch {
 			return ""
 		}
-	}, [renderSiteUrl])
+	}, [externalRenderSiteUrl])
 
-	const loadedRef = useRef(false)
+	const lastInjectedContentRef = useRef<string>("")
 	const iframeRef = useRef<HTMLIFrameElement>(null)
 	const dashboardCards = useRef<DashboardCard[]>([])
 	const hasDashboardCardsSnapshot = useRef(false)
 	const dataJsFileInfo = useRef<DataJsFileInfo | null>(null)
 	const [iframeLoaded, setIframeLoaded] = useState(false)
+	const [virtualStorageContext, setVirtualStorageContext] =
+		useState<VirtualStorageRuntimeContext | null>(null)
 
 	useEffect(() => {
 		const iframe = iframeRef.current
@@ -96,8 +113,59 @@ function IsolatedHTMLRenderer({
 	}, [content])
 
 	const dashboardContent = useMemo(() => {
-		return decodeHTMLEntities(injectDashboardHTMLScript(contentTrim))
-	}, [contentTrim])
+		const decodedDashboardHtml = decodeHTMLEntities(injectDashboardHTMLScript(contentTrim))
+		if (!virtualStorageContext) return ""
+
+		const parser = new DOMParser()
+		const doc = parser.parseFromString(decodedDashboardHtml, "text/html")
+		if (!doc.head) {
+			const head = doc.createElement("head")
+			doc.documentElement.insertBefore(head, doc.body)
+		}
+
+		const script = doc.createElement("script")
+		script.setAttribute("data-injected", "magic-virtual-storage")
+		script.textContent = getVirtualStorageBridgeScript(virtualStorageContext)
+		doc.head.insertBefore(script, doc.head.firstChild)
+
+		return `<!DOCTYPE html>\n${doc.documentElement.outerHTML}`
+	}, [contentTrim, virtualStorageContext])
+
+	useEffect(() => {
+		let cancelled = false
+		const namespace = buildHtmlVirtualStorageNamespace({
+			projectId,
+			topicId,
+			fileId: currentFileId,
+		})
+
+		setVirtualStorageContext(null)
+		void createVirtualStorageContext({
+			namespace,
+			targetOrigin: window.location.origin,
+		}).then((context) => {
+			if (!cancelled) setVirtualStorageContext(context)
+		})
+
+		return () => {
+			cancelled = true
+		}
+	}, [currentFileId, projectId, topicId])
+
+	useEffect(() => {
+		if (!virtualStorageContext) return
+		const iframeWindow = iframeRef.current?.contentWindow
+		if (!iframeWindow) return
+
+		const registeredContext = {
+			...virtualStorageContext,
+			source: iframeWindow,
+			origin: externalRenderSiteOrigin || window.location.origin,
+			expiresAt: undefined,
+		}
+		virtualStorageRegistry.register(registeredContext)
+		return () => virtualStorageRegistry.unregister(registeredContext)
+	}, [externalRenderSiteOrigin, iframeLoaded, virtualStorageContext])
 
 	// 加载data.js文件
 	const loadDataJsFile = async () => {
@@ -163,43 +231,33 @@ function IsolatedHTMLRenderer({
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [attachments, attachmentList, currentFileId, currentFileName])
 
-	// 初始化 iframe 入口：跨域走渲染站，非跨域沿用同域 document.write
+	// 初始化 iframe 入口：同源与跨域都先加载 sandbox shell，再通过 setContent 注入业务 HTML。
 	useEffect(() => {
 		const iframe = iframeRef.current
 		if (!iframe) return
 
-		if (renderSiteUrl) {
-			if (iframe.src !== renderSiteUrl) {
-				iframe.src = renderSiteUrl
-			}
-			setIframeLoaded(false)
-			loadedRef.current = false
-			return
+		setIframeLoaded(false)
+		lastInjectedContentRef.current = ""
+		if (iframe.getAttribute("src") !== htmlSandboxShellUrl) {
+			iframe.setAttribute("src", htmlSandboxShellUrl)
 		}
+	}, [htmlSandboxShellUrl])
 
-		const doc = iframe.contentDocument
-		if (!doc || loadedRef.current || !dashboardContent) return
-
-		doc.open()
-		doc.write(dashboardContent)
-		doc.close()
-		loadedRef.current = true
-		setIframeLoaded(true)
-	}, [dashboardContent, renderSiteUrl])
-
-	// 跨域渲染站准备好后通过 setContent 注入业务 HTML
+	// sandbox shell 准备好后通过 setContent 注入业务 HTML；同源/跨域共用同一条链路。
 	useEffect(() => {
-		if (!renderSiteUrl || !dashboardContent) return
+		if (!dashboardContent) return
 		if (!iframeLoaded) return
+		if (lastInjectedContentRef.current === dashboardContent) return
 
 		iframeRef.current?.contentWindow?.postMessage(
 			{
 				type: "setContent",
 				content: dashboardContent,
 			},
-			"*",
+			externalRenderSiteOrigin || "*",
 		)
-	}, [dashboardContent, iframeLoaded, renderSiteUrl])
+		lastInjectedContentRef.current = dashboardContent
+	}, [dashboardContent, externalRenderSiteOrigin, iframeLoaded])
 
 	// 接收子容器消息
 	useEffect(() => {
@@ -211,8 +269,7 @@ function IsolatedHTMLRenderer({
 			}
 			if (
 				event.data?.type === "pageLoaded" &&
-				renderSiteOrigin &&
-				event.origin === renderSiteOrigin
+				(externalRenderSiteOrigin ? event.origin === externalRenderSiteOrigin : true)
 			) {
 				setIframeLoaded(true)
 				return
@@ -227,7 +284,7 @@ function IsolatedHTMLRenderer({
 		return () => {
 			window.removeEventListener("message", callback)
 		}
-	}, [renderSiteOrigin])
+	}, [externalRenderSiteOrigin])
 
 	// 发送消息给子容器，编辑状态变更后
 	useEffect(() => {
@@ -237,9 +294,9 @@ function IsolatedHTMLRenderer({
 				type: "editModeChange",
 				isEditMode,
 			},
-			"*",
+			externalRenderSiteOrigin || "*",
 		)
-	}, [iframeLoaded, isEditMode])
+	}, [externalRenderSiteOrigin, iframeLoaded, isEditMode])
 
 	// 与头部预览模式同步：手机框 → mobile，桌面 → desktop（子页内调用 configManager.setRenderMode）
 	useEffect(() => {
@@ -250,9 +307,9 @@ function IsolatedHTMLRenderer({
 				type: "renderModeChange",
 				renderMode: dashboardRenderMode,
 			},
-			"*",
+			externalRenderSiteOrigin || "*",
 		)
-	}, [dashboardRenderMode, iframeLoaded])
+	}, [dashboardRenderMode, externalRenderSiteOrigin, iframeLoaded])
 
 	if (!contentTrim) {
 		return (
@@ -275,10 +332,11 @@ function IsolatedHTMLRenderer({
 				ref={iframeRef}
 				className={styles.iframe}
 				title="HTML Content"
-				src={renderSiteUrl || undefined}
-				sandbox="allow-scripts allow-modals allow-forms allow-same-origin allow-popups"
+				src={htmlSandboxShellUrl}
+				sandbox="allow-scripts allow-modals allow-forms allow-same-origin allow-popups allow-downloads"
 				allow="fullscreen"
 				allowFullScreen
+				data-testid="html-content-iframe"
 			/>
 		</div>
 	)

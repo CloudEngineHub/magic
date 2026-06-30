@@ -27,6 +27,7 @@ function TopicItem({ topic, onClose, onOpenActionsPopup }: TopicItemProps) {
 		<div
 			onClick={handleClick}
 			className="flex cursor-pointer items-center gap-2 rounded-md px-2.5 py-2 transition-colors hover:bg-accent/50 active:bg-accent"
+			data-testid="handle-click"
 		>
 			{/* Status Icon */}
 			<StatusIcon status={topic.task_status} size={16} className="shrink-0" />
@@ -35,7 +36,10 @@ function TopicItem({ topic, onClose, onOpenActionsPopup }: TopicItemProps) {
 			<ModeTag mode={topic.topic_mode || TopicMode.General} agentCode={topic.agent_code} />
 
 			{/* Topic Title */}
-			<span className="flex-1 truncate text-sm font-normal leading-none text-sidebar-foreground">
+			<span
+				className="flex-1 truncate text-sm font-normal leading-none text-sidebar-foreground"
+				data-testid="topic-popup-item-title"
+			>
 				{topic.topic_name || t("topic.unnamedTopic")}
 			</span>
 
@@ -43,6 +47,7 @@ function TopicItem({ topic, onClose, onOpenActionsPopup }: TopicItemProps) {
 			<button
 				onClick={handleMenuClick}
 				className="flex size-4 shrink-0 items-center justify-center text-sidebar-foreground/60 transition-colors hover:text-sidebar-foreground"
+				data-testid="handle-menu-click"
 			>
 				<IconDots size={16} />
 			</button>

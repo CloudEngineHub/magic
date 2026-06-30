@@ -9,15 +9,19 @@ namespace App\Application\ModelGateway\Service;
 
 use App\Domain\ModelGateway\Entity\Dto\ImageConvertHighDTO;
 use App\Domain\ModelGateway\Entity\Dto\TextGenerateImageDTO;
+use App\Domain\ModelGateway\Entity\ValueObject\ImageInput;
 use App\Domain\ModelGateway\Entity\ValueObject\ModelGatewayDataIsolation;
 use App\Domain\Provider\Entity\ValueObject\AiAbilityCode;
 use App\Domain\Provider\Service\AiAbilityDomainService;
 use App\ErrorCode\MagicApiErrorCode;
 use App\Infrastructure\Core\Exception\ExceptionBuilder;
+use App\Infrastructure\Core\ValueObject\StorageBucketType;
 use App\Infrastructure\ExternalAPI\ImageGenerateAPI\Response\OpenAIFormatResponse;
 use App\Infrastructure\Util\SSRF\Exception\SSRFException;
 use App\Infrastructure\Util\SSRF\SSRFUtil;
+use Dtyq\CloudFile\Kernel\Struct\UploadFile;
 use Hyperf\Di\Annotation\Inject;
+use InvalidArgumentException;
 
 use function Hyperf\Translation\__;
 
@@ -59,6 +63,43 @@ class ImageLLMAppService extends LLMAppService
 
         // Use image edit logic
         return $this->convertHighWithImageEdit((string) $modelId, $prompt, $imageConvertHighDTO, $modelGatewayDataIsolation);
+    }
+
+    protected function createImageInput(string $input, string $label): ImageInput
+    {
+        $imageInput = ImageInput::fromString($input);
+        if ($imageInput === null) {
+            throw new InvalidArgumentException(__('common.invalid_format', ['label' => $label]));
+        }
+
+        if ($imageInput->isUrl()) {
+            return ImageInput::fromUrl(SSRFUtil::getSafeUrl($imageInput->getValue(), replaceIp: false));
+        }
+
+        return $imageInput;
+    }
+
+    /**
+     * @return array{0: ImageInput, 1: ImageInput}
+     */
+    protected function normalizeMixedImageInputs(
+        ModelGatewayDataIsolation $dataIsolation,
+        ImageInput $imageInput,
+        ImageInput $maskInput,
+        string $subDir
+    ): array {
+        if ($imageInput->isBase64() === $maskInput->isBase64()) {
+            return [$imageInput, $maskInput];
+        }
+
+        if ($imageInput->isBase64()) {
+            $imageInput = $this->uploadBase64ImageInput($dataIsolation, $imageInput, $subDir);
+        }
+        if ($maskInput->isBase64()) {
+            $maskInput = $this->uploadBase64ImageInput($dataIsolation, $maskInput, $subDir);
+        }
+
+        return [$imageInput, $maskInput];
     }
 
     /**
@@ -105,5 +146,29 @@ class ImageLLMAppService extends LLMAppService
         }
 
         return $response;
+    }
+
+    private function uploadBase64ImageInput(
+        ModelGatewayDataIsolation $dataIsolation,
+        ImageInput $imageInput,
+        string $subDir
+    ): ImageInput {
+        $uploadFile = new UploadFile($imageInput->getValue(), $subDir, '');
+        $organizationCode = $dataIsolation->getCurrentOrganizationCode();
+
+        $this->fileDomainService->uploadByCredential(
+            $organizationCode,
+            $uploadFile,
+            StorageBucketType::Public,
+            true,
+            $imageInput->getMimeType()
+        );
+
+        $fileLink = $this->fileDomainService->getLink($organizationCode, $uploadFile->getKey(), StorageBucketType::Public);
+        if ($fileLink === null || $fileLink->getUrl() === '') {
+            ExceptionBuilder::throw(MagicApiErrorCode::MODEL_RESPONSE_FAIL, 'image_generate.file_upload_failed', ['error' => 'input_url_missing']);
+        }
+
+        return ImageInput::fromUrl($fileLink->getUrl());
     }
 }

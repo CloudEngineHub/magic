@@ -5,6 +5,11 @@ import { useCanvasElements } from "../hooks/useCanvasElement"
 import { useUpdateEffect } from "ahooks"
 import type { ElementToolType } from "../types"
 
+export interface FullscreenMediaElement {
+	elementId: string
+	type: "image" | "video"
+}
+
 interface CanvasUIContextValue {
 	// 当前正在图层列表中重命名的元素 ID
 	layerRenamingElementId: string | null
@@ -30,9 +35,9 @@ interface CanvasUIContextValue {
 	messageHistoryElementId: string | null
 	setMessageHistoryElementId: (id: string | null) => void
 
-	// 当前全屏播放的视频元素 ID（null 表示不显示）
-	fullscreenVideoElementId: string | null
-	setFullscreenVideoElementId: (id: string | null) => void
+	// 当前全屏预览的媒体元素（null 表示不显示）
+	fullscreenMediaElement: FullscreenMediaElement | null
+	setFullscreenMediaElement: (element: FullscreenMediaElement | null) => void
 
 	// 当前正在裁剪的图片元素 ID（null 表示不在裁剪模式）
 	croppingElementId: string | null
@@ -73,8 +78,8 @@ interface CanvasSelectionUIContextValue {
 interface CanvasPanelUIContextValue {
 	messageHistoryElementId: string | null
 	setMessageHistoryElementId: (id: string | null) => void
-	fullscreenVideoElementId: string | null
-	setFullscreenVideoElementId: (id: string | null) => void
+	fullscreenMediaElement: FullscreenMediaElement | null
+	setFullscreenMediaElement: (element: FullscreenMediaElement | null) => void
 }
 
 interface CanvasModeUIContextValue {
@@ -106,7 +111,8 @@ export function CanvasUIProvider({ children, readonly }: CanvasUIProviderProps) 
 	const [isSelecting, setIsSelecting] = useState(false)
 
 	const [messageHistoryElementId, setMessageHistoryElementId] = useState<string | null>(null)
-	const [fullscreenVideoElementId, setFullscreenVideoElementId] = useState<string | null>(null)
+	const [fullscreenMediaElement, setFullscreenMediaElement] =
+		useState<FullscreenMediaElement | null>(null)
 
 	const [croppingElementId, setCroppingElementId] = useState<string | null>(null)
 	const [extendingElementId, setExtendingElementId] = useState<string | null>(null)
@@ -159,9 +165,17 @@ export function CanvasUIProvider({ children, readonly }: CanvasUIProviderProps) 
 	})
 
 	useCanvasEvent(
+		"element:image:fullscreenClick",
+		({ data }) => {
+			setFullscreenMediaElement({ elementId: data.elementId, type: "image" })
+		},
+		[],
+	)
+
+	useCanvasEvent(
 		"element:video:fullscreenClick",
 		({ data }) => {
-			setFullscreenVideoElementId(data.elementId)
+			setFullscreenMediaElement({ elementId: data.elementId, type: "video" })
 		},
 		[],
 	)
@@ -233,10 +247,10 @@ export function CanvasUIProvider({ children, readonly }: CanvasUIProviderProps) 
 		return {
 			messageHistoryElementId,
 			setMessageHistoryElementId,
-			fullscreenVideoElementId,
-			setFullscreenVideoElementId,
+			fullscreenMediaElement,
+			setFullscreenMediaElement,
 		}
-	}, [messageHistoryElementId, fullscreenVideoElementId])
+	}, [messageHistoryElementId, fullscreenMediaElement])
 
 	const modeValue = useMemo<CanvasModeUIContextValue>(() => {
 		return {

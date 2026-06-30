@@ -69,7 +69,12 @@ class OpenMessageScheduleAppService extends AbstractAppService
         $entity->setProjectId((int) $topicEntity->getProjectId());
         $entity->setMessageType('rich_text');
         $entity->setMessageContent(
-            $this->buildFullMessageContent((string) $entity->getMessageContentText(), $this->buildModelFromProviderModelId((string) $entity->getModelId(), $dataIsolation))
+            $this->buildFullMessageContent(
+                (string) $entity->getMessageContentText(),
+                $this->buildModelFromProviderModelId((string) $entity->getModelId(), $dataIsolation),
+                $entity->getTopicPattern(),
+                $entity->getOpenAgentCode()
+            )
         );
 
         // 业务校验当前用户是否有权限访问这个topic话题
@@ -311,20 +316,28 @@ class OpenMessageScheduleAppService extends AbstractAppService
         });
     }
 
-    protected function buildFullMessageContent(string $userText, array $model): array
-    {
+    protected function buildFullMessageContent(
+        string $userText,
+        array $model,
+        string $topicPattern = 'general',
+        string $agentCode = ''
+    ): array {
+        $decoded = json_decode($userText, true);
+        if (is_array($decoded) && ($decoded['type'] ?? null) === 'doc') {
+            return [
+                'content' => json_encode($decoded, JSON_UNESCAPED_UNICODE),
+                'extra' => [
+                    'super_agent' => $this->buildOpenMessageSuperAgentExtra($model, $topicPattern, $agentCode),
+                ],
+            ];
+        }
+
         $escapedText = json_encode($userText, JSON_UNESCAPED_UNICODE);
         $contentJson = '{"type":"doc","content":[{"type":"paragraph","attrs":{"suggestion":""},"content":[{"type":"text","text":' . $escapedText . '}]}]}';
         return [
             'content' => $contentJson,
             'extra' => [
-                'super_agent' => [
-                    'model' => $model,
-                    'mentions' => [],
-                    'chat_mode' => 'normal',
-                    'input_mode' => 'plan',
-                    'topic_pattern' => 'general',
-                ],
+                'super_agent' => $this->buildOpenMessageSuperAgentExtra($model, $topicPattern, $agentCode),
             ],
         ];
     }
@@ -545,6 +558,25 @@ class OpenMessageScheduleAppService extends AbstractAppService
         return false;
     }
 
+    private function buildOpenMessageSuperAgentExtra(
+        array $model,
+        string $topicPattern = 'general',
+        string $agentCode = ''
+    ): array {
+        $superAgentExtra = [
+            'model' => $model,
+            'mentions' => [],
+            'chat_mode' => 'normal',
+            'input_mode' => 'plan',
+            'topic_pattern' => $topicPattern === '' ? 'general' : $topicPattern,
+        ];
+        if ($agentCode !== '') {
+            $superAgentExtra['agent_code'] = $agentCode;
+        }
+
+        return $superAgentExtra;
+    }
+
     private function applyOpenMessageContentUpdates(
         MessageScheduleEntity $messageSchedule,
         OpenMessageScheduleEntity $entity,
@@ -555,7 +587,6 @@ class OpenMessageScheduleAppService extends AbstractAppService
         }
 
         $messageContent = $messageSchedule->getMessageContent();
-
         if ($entity->hasModelIdInput()) {
             // 传了 model_id，查 DB 获取并验证新 model
             $model = $this->buildModelFromProviderModelId(

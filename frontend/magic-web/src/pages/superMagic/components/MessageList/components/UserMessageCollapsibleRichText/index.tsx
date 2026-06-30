@@ -144,15 +144,15 @@ export const UserMessageCollapsibleRichText = memo(function UserMessageCollapsib
 						!isExpanded && USER_MESSAGE_COLLAPSED_CAP,
 						isExpanded && USER_MESSAGE_EXPANDED_MAX,
 						isTruncatable &&
-							!isExpanded &&
-							cn(
-								"cursor-grab outline-none focus-visible:ring-1 focus-visible:ring-ring active:cursor-grabbing",
-								"[&>div]:!cursor-grab [&_a]:cursor-pointer [&_button]:cursor-pointer",
-								"[&_.magic-mention]:cursor-pointer [&_.mention-node-view]:cursor-pointer",
-							),
+						!isExpanded &&
+						cn(
+							"cursor-grab outline-none focus-visible:ring-1 focus-visible:ring-ring active:cursor-grabbing",
+							"[&>div]:!cursor-grab [&_a]:cursor-pointer [&_button]:cursor-pointer",
+							"[&_.magic-mention]:cursor-pointer [&_.mention-node-view]:cursor-pointer",
+						),
 						isTruncatable &&
-							isExpanded &&
-							"outline-none focus-visible:ring-1 focus-visible:ring-ring",
+						isExpanded &&
+						"outline-none focus-visible:ring-1 focus-visible:ring-ring",
 					)}
 					data-testid="user-message-collapsible-text"
 					onClick={handleClick}

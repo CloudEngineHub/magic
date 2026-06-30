@@ -20,6 +20,8 @@ const MySkillsPage = lazy(() => import("@/pages/superMagic/pages/MySkillsPage"))
 const SkillEditPage = lazy(() => import("@/pages/superMagic/pages/SkillEdit"))
 /** My Crew - 我的员工 */
 const MyCrewPage = lazy(() => import("@/pages/superMagic/pages/MyCrewPage"))
+/** Crew Conversation - 员工专属对话 */
+const CrewConversationPage = lazy(() => import("@/pages/superMagic/pages/CrewConversation"))
 
 export const superMagicCrewRoutes = [
 	{
@@ -73,6 +75,14 @@ export const superMagicCrewRoutes = [
 		element: <MyCrewPage />,
 		meta: {
 			title: "routes.myCrew",
+		},
+	},
+	{
+		name: RouteName.CrewConversation,
+		path: `/:clusterCode${RoutePath.CrewConversation}`,
+		element: <CrewConversationPage />,
+		meta: {
+			title: "routes.crewConversation",
 		},
 	},
 ] as Array<RouteObject>

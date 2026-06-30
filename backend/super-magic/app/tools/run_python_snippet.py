@@ -7,9 +7,13 @@ from pydantic import Field, field_validator
 from agentlang.context.tool_context import ToolContext
 from agentlang.tools.tool_result import ToolResult
 from agentlang.logger import get_logger
+from app.path_manager import PathManager
+from app.core.context.agent_context import AgentContext
 from app.core.entity.tool.tool_result_types import TerminalToolResult
 from app.tools.core import BaseToolParams, tool
 from app.tools.abstract_file_tool import AbstractFileTool
+from app.tools.python_snippet_repair import prepare_python_code
+from app.tools.snippet_environment import SnippetEnvironment
 from app.tools.workspace_tool import WorkspaceTool
 from app.utils.process_executor import ProcessExecutor
 from app.utils.terminal_tool_detail_generator import TerminalToolDetailGenerator
@@ -83,6 +87,40 @@ class RunPythonSnippet(AbstractFileTool[RunPythonSnippetParams], WorkspaceTool[R
     ```
     """
 
+    @staticmethod
+    def _prepare_python_code(python_code: str) -> str:
+        return prepare_python_code(python_code, logger=logger, caller="run_python_snippet")
+
+    @staticmethod
+    def _build_python_extra_env(tool_context: ToolContext | None) -> dict[str, str]:
+        """构建 Python 代码片段子进程需要的环境变量。"""
+        import os
+
+        project_root = PathManager.get_project_root()
+        project_root_str = str(project_root)
+        path_parts = [
+            part for part in os.environ.get("PYTHONPATH", "").split(os.pathsep)
+            if part
+        ]
+        if project_root_str in path_parts:
+            path_parts = [part for part in path_parts if part != project_root_str]
+
+        extra_env = {
+            "PYTHONPATH": os.pathsep.join([project_root_str, *path_parts]),
+            "SUPER_MAGIC_PROJECT_ROOT": project_root_str,
+        }
+
+        if tool_context is None:
+            return extra_env
+        try:
+            agent_ctx = tool_context.get_extension_typed("agent_context", AgentContext)
+        except Exception:
+            agent_ctx = None
+        if agent_ctx is not None:
+            extra_env["SUPER_MAGIC_AGENT_CONTEXT_ID"] = agent_ctx.context_id
+            SnippetEnvironment.apply_current_model(extra_env, agent_ctx)
+        return extra_env
+
     async def execute(self, tool_context: ToolContext, params: RunPythonSnippetParams) -> TerminalToolResult:
         """
         执行Python代码片段
@@ -94,9 +132,13 @@ class RunPythonSnippet(AbstractFileTool[RunPythonSnippetParams], WorkspaceTool[R
         Returns:
             TerminalToolResult: 执行结果
         """
-        return await self.execute_purely(params)
+        return await self.execute_purely(params, tool_context)
 
-    async def execute_purely(self, params: RunPythonSnippetParams) -> TerminalToolResult:
+    async def execute_purely(
+        self,
+        params: RunPythonSnippetParams,
+        tool_context: ToolContext | None = None,
+    ) -> TerminalToolResult:
         """
         纯粹执行Python代码片段的核心逻辑
 
@@ -107,6 +149,7 @@ class RunPythonSnippet(AbstractFileTool[RunPythonSnippetParams], WorkspaceTool[R
             TerminalToolResult: 执行结果
         """
         script_file_path = None
+        python_code = self._prepare_python_code(params.python_code)
 
         try:
             # 处理工作目录
@@ -131,7 +174,7 @@ class RunPythonSnippet(AbstractFileTool[RunPythonSnippetParams], WorkspaceTool[R
             # 第一步：写入Python代码到临时文件
             try:
                 async with aiofiles.open(script_file_path, 'w', encoding='utf-8') as f:
-                    await f.write(params.python_code)
+                    await f.write(python_code)
                 logger.debug(f"成功写入Python代码到: {script_file_path}")
             except Exception as e:
                 logger.exception(f"写入Python脚本失败: {e}")
@@ -148,7 +191,8 @@ class RunPythonSnippet(AbstractFileTool[RunPythonSnippetParams], WorkspaceTool[R
             result = await ProcessExecutor.execute_command(
                 command=command,
                 cwd=exec_cwd,
-                timeout=params.timeout
+                timeout=params.timeout,
+                extra_env=self._build_python_extra_env(tool_context),
             )
 
             return result

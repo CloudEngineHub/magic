@@ -50,7 +50,7 @@ export default memo(function TopicIcon({ size = 24, status, className, style }: 
 				...style,
 			}}
 		>
-			<img src={image} alt="" className={styles.image} />
+			<img src={image} alt="" className={styles.image}  data-testid="topic-icon-image"/>
 		</div>
 	)
 })

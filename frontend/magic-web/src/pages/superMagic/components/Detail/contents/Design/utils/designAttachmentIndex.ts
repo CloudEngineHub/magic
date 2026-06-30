@@ -11,7 +11,7 @@ function normalizeRelativePathKey(path: string): string {
  * 在附件列表变更时由 {@link buildDesignAttachmentIndex} 构建一次，沿链路复用。
  */
 export interface DesignAttachmentIndex {
-	/** 构建代数，便于快照缓存与调试 */
+	/** 构建代数，便于快照缓存失效判断 */
 	buildId: number
 	/** 与 {@link buildAttachmentsSnapshotKeyFromFlatFiles} 一致的附件批次签名 */
 	attachmentsSnapshotKey: string
@@ -40,7 +40,7 @@ export function buildAttachmentsSnapshotKeyFromFlatFiles(flatFiles: FileItem[]):
 		.map((item) => {
 			const normalizedPath = normalizeRelativePathKey(item.relative_file_path || "")
 			if (!normalizedPath) return ""
-			return `${normalizedPath}\0${item.file_id || ""}\0${item.updated_at || ""}`
+			return `${normalizedPath}\0${item.file_id || ""}\0${item.updated_at || ""}\0${item.file_size ?? ""}`
 		})
 		.filter(Boolean)
 		.sort()

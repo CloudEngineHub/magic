@@ -1,0 +1,94 @@
+import { renderHook, act } from "@testing-library/react"
+import { describe, expect, it, vi, beforeEach } from "vitest"
+
+import { useImagePromptCompletion } from "../useImagePromptCompletion"
+
+const { completeImagePrompt } = vi.hoisted(() => ({
+	completeImagePrompt: vi.fn(),
+}))
+
+vi.mock("react-i18next", () => ({
+	useTranslation: () => ({
+		t: (key: string, fallback?: string) => fallback ?? key,
+		i18n: { language: "zh_CN" },
+	}),
+}))
+
+vi.mock("@/apis", () => ({
+	SuperMagicApi: {
+		completeImagePrompt,
+	},
+}))
+
+vi.mock("../../utils/designDslPathUtils", () => ({
+	createDesignWorkspacePathExists: vi.fn(() => vi.fn(() => true)),
+	resolveDesignDslPathToWorkspaceAbsoluteByCandidates: vi.fn((imagePath: string) =>
+		imagePath.startsWith("./") ? `/workspace/${imagePath.slice(2)}` : imagePath,
+	),
+}))
+
+describe("useImagePromptCompletion", () => {
+	beforeEach(() => {
+		vi.clearAllMocks()
+		completeImagePrompt.mockResolvedValue({
+			prompt: "浅色无缝背景纸延展成柔和摄影棚空间",
+		})
+	})
+
+	it("injects project_id and resolves reference image paths", async () => {
+		const { result } = renderHook(() =>
+			useImagePromptCompletion({
+				projectId: "project-1",
+				designProjectBasePath: "design",
+				flatAttachments: [],
+			}),
+		)
+
+		await act(async () => {
+			await result.current.completeImagePrompt({
+				user_prompt: "请根据商品图补全文生背景提示词",
+				reference_images: ["./product-a.png"],
+				reference_image_options: [
+					{
+						path: "./product-a.png",
+						crop: { x: 1, y: 2, width: 3, height: 4 },
+					},
+				],
+			})
+		})
+
+		expect(completeImagePrompt).toHaveBeenCalledWith({
+			project_id: "project-1",
+			user_prompt: "请根据商品图补全文生背景提示词",
+			reference_images: ["/workspace/product-a.png"],
+			reference_image_options: [
+				{
+					path: "/workspace/product-a.png",
+					crop: { x: 1, y: 2, width: 3, height: 4 },
+				},
+			],
+		})
+	})
+
+	it("omits model_id when caller does not provide it", async () => {
+		const { result } = renderHook(() =>
+			useImagePromptCompletion({
+				projectId: "project-1",
+			}),
+		)
+
+		await act(async () => {
+			await result.current.completeImagePrompt({
+				user_prompt: "生成背景提示词",
+			})
+		})
+
+		expect(completeImagePrompt).toHaveBeenLastCalledWith({
+			project_id: "project-1",
+			user_prompt: "生成背景提示词",
+			reference_images: undefined,
+			reference_image_options: undefined,
+		})
+		expect(completeImagePrompt.mock.calls.at(-1)?.[0]).not.toHaveProperty("model_id")
+	})
+})

@@ -16,10 +16,7 @@ def _load_agent(agent_name: str):
 @pytest.mark.parametrize(
     ("agent_name", "absent_tools"),
     [
-        ("design", {"generate_videos_to_canvas", "generate_canvas_videos", "query_video_generation"}),
-        ("magic", {"generate_video", "query_video_generation"}),
-        ("slider", {"generate_video", "query_video_generation"}),
-        ("audio-chat", {"generate_video", "query_video_generation"}),
+        ("design", {"generate_videos_to_canvas", "generate_canvas_videos"}),
     ],
 )
 def test_video_tools_not_directly_mounted(agent_name, absent_tools):

@@ -1,6 +1,7 @@
 import { useState, useCallback, useRef } from "react"
 import { SuperMagicApi } from "@/apis"
 import { AttachmentDataProcessor } from "../../superMagic/utils/attachmentDataProcessor"
+import { loadProjectAttachments } from "@/pages/superMagic/services"
 
 interface UseNewFileShareDataReturn {
 	attachments: any
@@ -112,21 +113,19 @@ export default function useNewFileShareData(): UseNewFileShareDataReturn {
 			// 优先使用 resource_id（新格式文件分享）
 			if (resource_id) {
 				getShareResourceFiles({ resource_id, password }).then((res: any) => {
-					// getShareResourceFiles 返回的数据结构和 getAttachmentsByProjectId 一样
+					// getShareResourceFiles returns a project-attachment-compatible shape.
 					// 统一处理 metadata，包括 index.html 文件的特殊逻辑
 					const processedData = AttachmentDataProcessor.processAttachmentData(res)
 					setAttachments(processedData)
 				})
 			} else if (projectId) {
 				// 使用 projectId（旧格式或话题分享）
-				SuperMagicApi.getAttachmentsByProjectId({
+				loadProjectAttachments({
 					projectId,
 					// @ts-ignore 使用window添加临时的token
 					temporaryToken: window?.temporary_token || "",
-				}).then((res: any) => {
-					// 统一处理 metadata，包括 index.html 文件的特殊逻辑，内部自闭环处理验证和返回逻辑
-					const processedData = AttachmentDataProcessor.processAttachmentData(res)
-					setAttachments(processedData)
+				}).then((res) => {
+					setAttachments(res)
 				})
 			}
 		},

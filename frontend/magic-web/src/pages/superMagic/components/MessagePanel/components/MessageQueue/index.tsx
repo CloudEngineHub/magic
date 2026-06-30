@@ -77,6 +77,7 @@ function MessageQueue({
 						className="flex size-[18px] cursor-pointer items-center justify-center text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
 						onClick={handleToggleExpanded}
 						aria-expanded={isExpanded}
+						data-testid="handle-toggle-expanded"
 					>
 						{isExpanded ? <IconChevronUp size={18} /> : <IconChevronDown size={18} />}
 					</button>
@@ -154,6 +155,7 @@ function MessageQueue({
 														if (!message.isDeletingLoading)
 															onRemoveMessage(message.id)
 													}}
+													data-testid="on-remove-message"
 												>
 													{message.isDeletingLoading ? (
 														<Spin size="small" />
@@ -172,6 +174,7 @@ function MessageQueue({
 													onClick={() => {
 														if (!isDisabled) onStartEdit(message.id)
 													}}
+													data-testid="on-start-edit"
 												>
 													<IconEdit size={14} />
 												</div>
@@ -187,6 +190,7 @@ function MessageQueue({
 														if (!message.isSendingLoading)
 															onSendMessage(message.id)
 													}}
+													data-testid="on-send-message"
 												>
 													{message.isSendingLoading ? (
 														<IconArrowUpDashed size={14} />

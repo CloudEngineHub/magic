@@ -22,6 +22,7 @@ import { HeadingThreeIcon } from "@/components/tiptap-icons/heading-three-icon"
 import { HeadingFourIcon } from "@/components/tiptap-icons/heading-four-icon"
 import { HeadingFiveIcon } from "@/components/tiptap-icons/heading-five-icon"
 import { HeadingSixIcon } from "@/components/tiptap-icons/heading-six-icon"
+import { runActiveEditor } from "@/utils/tiptapEditorLifecycle"
 
 export type Level = 1 | 2 | 3 | 4 | 5 | 6
 
@@ -70,106 +71,125 @@ export const HEADING_SHORTCUT_KEYS: Record<Level, string> = {
  * Checks if heading can be toggled in the current editor state
  */
 export function canToggle(editor: Editor | null, level?: Level, turnInto: boolean = true): boolean {
-	if (!editor || !editor.isEditable) return false
-	if (!isNodeInSchema("heading", editor) || isNodeTypeSelected(editor, ["image"])) return false
+	return (
+		runActiveEditor(editor, (activeEditor) => {
+			if (!activeEditor.isEditable) return false
+			if (!isNodeInSchema("heading", activeEditor) || isNodeTypeSelected(activeEditor, ["image"]))
+				return false
 
-	if (!turnInto) {
-		return level ? editor.can().setNode("heading", { level }) : editor.can().setNode("heading")
-	}
+			if (!turnInto) {
+				return level
+					? activeEditor.can().setNode("heading", { level })
+					: activeEditor.can().setNode("heading")
+			}
 
-	try {
-		const view = editor.view
-		const state = view.state
-		const selection = state.selection
+			try {
+				const view = activeEditor.view
+				const state = view.state
+				const selection = state.selection
 
-		if (selection.empty) {
-			const pos = findNodePosition({
-				editor,
-				node: state.selection.$anchor.node(1),
-			})?.pos
-			if (!isValidPosition(pos)) return false
-		}
+				if (selection.empty) {
+					const pos = findNodePosition({
+						editor: activeEditor,
+						node: state.selection.$anchor.node(1),
+					})?.pos
+					if (!isValidPosition(pos)) return false
+				}
 
-		return true
-	} catch {
-		return false
-	}
+				return true
+			} catch {
+				return false
+			}
+		}, false) ?? false
+	)
 }
 
 /**
  * Checks if heading is currently active
  */
 export function isHeadingActive(editor: Editor | null, level?: Level | Level[]): boolean {
-	if (!editor || !editor.isEditable) return false
+	return (
+		runActiveEditor(editor, (activeEditor) => {
+			if (!activeEditor.isEditable) return false
 
-	if (Array.isArray(level)) {
-		return level.some((l) => editor.isActive("heading", { level: l }))
-	}
+			if (Array.isArray(level)) {
+				return level.some((l) => activeEditor.isActive("heading", { level: l }))
+			}
 
-	return level ? editor.isActive("heading", { level }) : editor.isActive("heading")
+			return level
+				? activeEditor.isActive("heading", { level })
+				: activeEditor.isActive("heading")
+		}, false) ?? false
+	)
 }
 
 /**
  * Toggles heading in the editor
  */
 export function toggleHeading(editor: Editor | null, level: Level | Level[]): boolean {
-	if (!editor || !editor.isEditable) return false
+	return (
+		runActiveEditor(editor, (activeEditor) => {
+			if (!activeEditor.isEditable) return false
 
-	const levels = Array.isArray(level) ? level : [level]
-	const toggleLevel = levels.find((l) => canToggle(editor, l))
+			const levels = Array.isArray(level) ? level : [level]
+			const toggleLevel = levels.find((l) => canToggle(activeEditor, l))
 
-	if (!toggleLevel) return false
+			if (!toggleLevel) return false
 
-	try {
-		const view = editor.view
-		let state = view.state
-		let tr = state.tr
+			try {
+				const view = activeEditor.view
+				let state = view.state
+				let tr = state.tr
 
-		// 仅折叠光标扩成块选区；多行选区保留。空块不 NodeSelection，避免 clearNodes 破坏空段
-		if (state.selection.empty) {
-			const pos = findNodePosition({
-				editor,
-				node: state.selection.$anchor.node(1),
-			})?.pos
-			if (!isValidPosition(pos)) return false
+				// 仅折叠光标扩成块选区；多行选区保留。空块不 NodeSelection，避免 clearNodes 破坏空段
+				if (state.selection.empty) {
+					const pos = findNodePosition({
+						editor: activeEditor,
+						node: state.selection.$anchor.node(1),
+					})?.pos
+					if (!isValidPosition(pos)) return false
 
-			const block = state.doc.nodeAt(pos)
-			if (block && block.content.size > 0) {
-				tr = tr.setSelection(NodeSelection.create(state.doc, pos))
-				view.dispatch(tr)
-				state = view.state
+					const block = state.doc.nodeAt(pos)
+					if (block && block.content.size > 0) {
+						tr = tr.setSelection(NodeSelection.create(state.doc, pos))
+						view.dispatch(tr)
+						state = view.state
+					}
+				}
+
+				const selection = state.selection
+				let chain = activeEditor.chain().focus()
+
+				const headingActive = levels.some((l) =>
+					activeEditor.isActive("heading", { level: l }),
+				)
+
+				if (selection instanceof NodeSelection) {
+					const firstChild = selection.node.firstChild?.firstChild
+					const lastChild = selection.node.lastChild?.lastChild
+
+					const from = firstChild ? selection.from + firstChild.nodeSize : selection.from + 1
+
+					const to = lastChild ? selection.to - lastChild.nodeSize : selection.to - 1
+
+					chain = chain.setTextSelection({ from, to })
+					if (!headingActive) {
+						chain = chain.clearNodes()
+					}
+				}
+
+				const toggle = headingActive
+					? chain.setNode("paragraph")
+					: chain.setNode("heading", { level: toggleLevel })
+
+				toggle.run()
+
+				return true
+			} catch {
+				return false
 			}
-		}
-
-		const selection = state.selection
-		let chain = editor.chain().focus()
-
-		const headingActive = levels.some((l) => editor.isActive("heading", { level: l }))
-
-		if (selection instanceof NodeSelection) {
-			const firstChild = selection.node.firstChild?.firstChild
-			const lastChild = selection.node.lastChild?.lastChild
-
-			const from = firstChild ? selection.from + firstChild.nodeSize : selection.from + 1
-
-			const to = lastChild ? selection.to - lastChild.nodeSize : selection.to - 1
-
-			chain = chain.setTextSelection({ from, to })
-			if (!headingActive) {
-				chain = chain.clearNodes()
-			}
-		}
-
-		const toggle = headingActive
-			? chain.setNode("paragraph")
-			: chain.setNode("heading", { level: toggleLevel })
-
-		toggle.run()
-
-		return true
-	} catch {
-		return false
-	}
+		}, false) ?? false
+	)
 }
 
 /**
@@ -182,17 +202,22 @@ export function shouldShowButton(props: {
 }): boolean {
 	const { editor, level, hideWhenUnavailable } = props
 
-	if (!editor || !editor.isEditable) return false
-	if (!isNodeInSchema("heading", editor)) return false
+	const isVisible =
+		runActiveEditor(editor, (activeEditor) => {
+			if (!activeEditor.isEditable) return false
+			if (!isNodeInSchema("heading", activeEditor)) return false
 
-	if (hideWhenUnavailable && !editor.isActive("code")) {
-		if (Array.isArray(level)) {
-			return level.some((l) => canToggle(editor, l))
-		}
-		return canToggle(editor, level)
-	}
+			if (hideWhenUnavailable && !activeEditor.isActive("code")) {
+				if (Array.isArray(level)) {
+					return level.some((l) => canToggle(activeEditor, l))
+				}
+				return canToggle(activeEditor, level)
+			}
 
-	return true
+			return true
+		}, false) ?? false
+
+	return isVisible
 }
 
 /**

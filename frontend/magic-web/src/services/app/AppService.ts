@@ -12,6 +12,7 @@ import { getHomeURL } from "@/utils/redirect"
 import { history } from "@/routes/history"
 import { matchPath } from "react-router"
 import { LoginValueKey } from "@/pages/login/constants"
+import { buildLoginRedirectSearchParams } from "@/pages/login/utils/loginRedirect"
 import { RouteName } from "@/routes/constants"
 import { convertSearchParams, routesMatch } from "@/routes/history/helpers"
 import { AppInitErrorCode, AppInitializationError } from "./errors"
@@ -601,8 +602,9 @@ class AppService extends AbstractAppService<AppInitResultData> {
 			history.replace({
 				name: RouteName.Login,
 				query: convertSearchParams(
-					new URLSearchParams({
-						[LoginValueKey.REDIRECT_URL]: redirectUrl ?? window.location.href,
+					buildLoginRedirectSearchParams({
+						currentHref: window.location.href,
+						redirectTarget: redirectUrl ?? window.location.href,
 					}),
 				),
 			})

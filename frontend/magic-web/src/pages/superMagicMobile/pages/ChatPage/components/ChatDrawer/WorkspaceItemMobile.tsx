@@ -100,6 +100,7 @@ function WorkspaceItemMobile({
 				<div
 					className="flex min-w-0 flex-1 cursor-pointer items-center gap-2"
 					onClick={handleToggle}
+					data-testid="handle-toggle"
 				>
 					<div className="flex size-4 shrink-0 items-center justify-center">
 						<ChevronRight
@@ -122,12 +123,14 @@ function WorkspaceItemMobile({
 					<div
 						className="flex size-6 shrink-0 cursor-pointer items-center justify-center"
 						onClick={handleNewProjectClick}
+						data-testid="handle-new-project-click"
 					>
 						<Plus className="size-4 text-foreground" />
 					</div>
 					<div
 						className="flex size-6 shrink-0 cursor-pointer items-center justify-center"
 						onClick={handleMoreClick}
+						data-testid="handle-more-click"
 					>
 						<MoreHorizontal className="size-4 text-foreground" />
 					</div>
@@ -147,6 +150,7 @@ function WorkspaceItemMobile({
 								key={project.id}
 								project={project}
 								workspaceId={workspace.id}
+								isChatWorkspace={workspace.workspace_type === "chat"}
 								isSwiped={swipedProjectId === project.id}
 								onSwipeChange={(isSwiped) =>
 									handleProjectSwipe(project.id, isSwiped)

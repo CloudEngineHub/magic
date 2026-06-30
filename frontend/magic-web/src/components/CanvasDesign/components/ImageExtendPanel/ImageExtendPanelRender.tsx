@@ -326,16 +326,12 @@ export default function ImageExtendPanelRender(props: ImageExtendPanelRenderProp
 							sourceDimensions: workerResult.sourceDimensions,
 						}
 					: await (async () => {
-							let imageInfo = elementInstance.getImageInfo()
-							let imageSource = await elementInstance.getHTMLImageElement()
-							if (
-								!imageInfo?.naturalWidth ||
-								!imageInfo?.naturalHeight ||
-								!imageSource
-							) {
-								imageSource = await elementInstance.getHTMLImageElement()
-								imageInfo = elementInstance.getImageInfo()
-							}
+							const fullImage = await elementInstance.getFullHTMLImageElement({
+								variant: "full",
+							})
+
+							const imageInfo = elementInstance.getImageInfo()
+							const imageSource = fullImage?.image ?? null
 							if (
 								!imageInfo?.naturalWidth ||
 								!imageInfo?.naturalHeight ||

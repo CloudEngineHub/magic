@@ -136,6 +136,32 @@ class SizeManager
     }
 
     /**
+     * 按总像素区间将最终尺寸归档为 1K / 2K / 4K。
+     *
+     * 这里的分辨率档位用于内部计费和事件透传，不等同于显示器/视频行业中的 4K 定义，
+     * 而是基于正方形基准像素 1024²、2048²、4096² 做区间划分。
+     *
+     * 分界值取相邻基准像素的中点：
+     * - total_pixels < 2,621,440 => 1K
+     * - 2,621,440 <= total_pixels < 10,485,760 => 2K
+     * - total_pixels >= 10,485,760 => 4K
+     */
+    public static function resolveResolutionByPixels(int $width, int $height): string
+    {
+        $totalPixels = $width * $height;
+
+        if ($totalPixels < 2621440) {
+            return '1K';
+        }
+
+        if ($totalPixels < 10485760) {
+            return '2K';
+        }
+
+        return '4K';
+    }
+
+    /**
      * 将分辨率转换成宽高比.
      * @param int $width 宽度
      * @param int $height 高度
@@ -187,7 +213,7 @@ class SizeManager
      * 根据模型版本、名称和 model_id 匹配配置.
      * @param string $modelVersion 模型版本
      * @param null|string $modelId 模型ID
-     * @return null|array 返回配置数组，包含 sizes 和 max_reference_images，如果未匹配到则返回 null
+     * @return null|array 返回配置数组，包含 sizes、max_reference_images、max_output_images 等；如果未匹配到则返回 null
      */
     public static function matchConfig(string $modelVersion, ?string $modelId = null): ?array
     {
@@ -215,6 +241,14 @@ class SizeManager
         }
 
         return null;
+    }
+
+    public static function getMaxOutputImages(string $modelVersion, ?string $modelId = null): int
+    {
+        $config = self::matchConfig($modelVersion, $modelId);
+        $maxOutputImages = (int) ($config['max_output_images'] ?? 1);
+
+        return max(1, $maxOutputImages);
     }
 
     /**

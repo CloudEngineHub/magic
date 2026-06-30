@@ -1,10 +1,10 @@
-import CanvasDesign from "@/components/CanvasDesign"
 // import CanvasDesignHeader from "./components/CanvasDesignHeader"
 import { createStyles } from "antd-style"
 import { useState, useCallback, useRef, useEffect, lazy, Suspense, useMemo } from "react"
 import { DesignData } from "./types"
 import type { FileItem } from "@/pages/superMagic/components/Detail/components/FilesViewer/types"
 import type { Topic, ProjectListItem } from "@/pages/superMagic/pages/Workspace/types"
+import MagicModal from "@/components/base/MagicModal"
 import MagicSpin from "@/components/base/MagicSpin"
 import { useTranslation } from "react-i18next"
 import useShareRoute from "@/pages/superMagic/hooks/useShareRoute"
@@ -18,6 +18,7 @@ import { useDesignProjectManager } from "./hooks/useDesignProjectManager"
 import {
 	getDesignDirectoryInfo,
 	fileItemsToProjectAttachmentMentionTree,
+	normalizePath,
 	normalizeMentionFolderId,
 	resolveActualDesignCurrentFile,
 	resolveDesignProjectBasePathFromAttachments,
@@ -25,11 +26,20 @@ import {
 import { FlexBox } from "@/components/base"
 import { observer } from "mobx-react-lite"
 import workspaceStore from "@/pages/superMagic/stores/core/workspace"
-import type { CanvasDesignRef } from "@/components/CanvasDesign/types"
+import type {
+	CanvasDesignDataChangeMeta,
+	CanvasDesignDataPatch,
+	CanvasDesignRef,
+} from "@/components/CanvasDesign/types"
 import { useDesignFocusElement } from "./hooks/useDesignFocusElement"
 import { useAttachments } from "./hooks/useAttachments"
 import { useCanvasImageFileRenameSync } from "./hooks/useCanvasImageFileRenameSync"
-import type { CanvasDocument, LayerElement } from "@/components/CanvasDesign/canvas/types"
+import type {
+	CanvasDeviceInfo,
+	CanvasDocument,
+	LayerElement,
+} from "@/components/CanvasDesign/canvas/types"
+import { getDefaultCanvasDeviceInfo } from "@/components/CanvasDesign/canvas/utils/utils"
 import CanvasDesignHeaderV2 from "./components/CanvasDesignHeaderV2"
 import { useDesignHeaderProps } from "./components/CanvasDesignHeaderV2/useDesignHeaderProps"
 import { CanvasDesignMentionDataService } from "./adapters/CanvasDesignMentionDataService"
@@ -42,7 +52,22 @@ import type { DesignRemoteUpdateListenerMode } from "./managers/types"
 import { useCanvasResourceRefresh } from "./hooks/useCanvasResourceRefresh"
 import { waitForNextAttachmentsRefreshForProject } from "@/pages/superMagic/services/attachmentsTopicSync"
 import { useNetwork } from "ahooks"
-import { CloudOff } from "lucide-react"
+import { AlertTriangle, CloudOff } from "lucide-react"
+import { needsUpgrade, upgradeCanvasToV2, type UpgradeProgress } from "./utils/canvasVersionUpgrade"
+import { CanvasUpgradeOverlay } from "./components/CanvasUpgradeBanner"
+import { toast } from "sonner"
+import { applyCanvasDocumentPatch } from "@/components/CanvasDesign/model"
+import { prewarmCanvasDesignImageWorker } from "@/components/CanvasDesign/prewarm"
+import { designBuiltinPlugins } from "./plugins/options"
+import { UploadSubDir } from "@/components/CanvasDesign/types.magic"
+import type { DesignDraftReason } from "./utils/designDraftStorage"
+import type { DesignSaveMetadata } from "./managers"
+
+prewarmCanvasDesignImageWorker("super-magic-design-module")
+
+const CanvasDesign = lazy(() => import("@/components/CanvasDesign"))
+
+const REMOTE_CANVAS_UPDATE_SUPPRESS_MS = 500
 
 // 懒加载协议弹窗
 const loadWaterMarkFreeModal = async () => {
@@ -131,7 +156,103 @@ const useStyles = createStyles(({ token }) => ({
 		color: token.colorTextSecondary,
 		whiteSpace: "nowrap",
 	},
+	conflictNotice: {
+		position: "absolute",
+		top: "16px",
+		left: "50%",
+		zIndex: 70,
+		display: "flex",
+		alignItems: "center",
+		gap: "12px",
+		flexWrap: "wrap",
+		width: "min(920px, calc(100% - 32px))",
+		padding: "12px 14px",
+		borderRadius: "8px",
+		border: `1px solid ${token.colorWarningBorder}`,
+		backgroundColor: token.colorWarningBg,
+		boxShadow: token.boxShadowSecondary,
+		color: token.colorText,
+		transform: "translateX(-50%)",
+	},
+	conflictIcon: {
+		flex: "none",
+		color: token.colorWarning,
+	},
+	conflictContent: {
+		display: "flex",
+		flex: 1,
+		flexDirection: "column",
+		gap: "3px",
+		minWidth: 0,
+	},
+	conflictTitle: {
+		fontSize: "13px",
+		fontWeight: 600,
+		lineHeight: "18px",
+	},
+	conflictDescription: {
+		fontSize: "12px",
+		lineHeight: "16px",
+		color: token.colorTextSecondary,
+	},
+	conflictActions: {
+		display: "flex",
+		flex: "none",
+		alignItems: "center",
+		gap: "8px",
+		flexWrap: "wrap",
+	},
+	conflictActionButton: {
+		height: "28px",
+		padding: "0 10px",
+		borderRadius: "6px",
+		border: `1px solid ${token.colorBorder}`,
+		backgroundColor: token.colorBgContainer,
+		color: token.colorText,
+		fontSize: "12px",
+		fontWeight: 500,
+		lineHeight: "26px",
+		cursor: "pointer",
+		whiteSpace: "nowrap",
+		"&[data-variant='primary']": {
+			borderColor: token.colorPrimary,
+			backgroundColor: token.colorPrimary,
+			color: token.colorWhite,
+		},
+		"&:disabled": {
+			cursor: "not-allowed",
+			opacity: 0.6,
+		},
+	},
 }))
+
+function resolveDesignPluginDirectories(options: {
+	flatAttachments?: FileItem[]
+	designProjectBasePath?: string
+}) {
+	const { flatAttachments, designProjectBasePath } = options
+	if (!flatAttachments?.length) return []
+
+	const pluginRootPath = normalizePath(
+		[normalizePath(designProjectBasePath ?? ""), UploadSubDir.Plugins]
+			.filter(Boolean)
+			.join("/"),
+	)
+	const pluginRootPrefix = `${pluginRootPath}/`
+	const directories = new Set<string>()
+
+	flatAttachments.forEach((item) => {
+		if (!item.is_directory || !item.relative_file_path) return
+		const relativePath = normalizePath(item.relative_file_path)
+		if (!relativePath.startsWith(pluginRootPrefix)) return
+
+		const pluginDirectory = relativePath.slice(pluginRootPrefix.length)
+		if (!pluginDirectory || pluginDirectory.includes("/")) return
+		directories.add(pluginDirectory)
+	})
+
+	return Array.from(directories)
+}
 
 interface DesignViewerProps {
 	attachments?: FileItem[]
@@ -172,10 +293,11 @@ function DesignViewer(props: DesignViewerProps) {
 	} = props
 
 	// 文件列表更新处理
-	const { flatAttachments, attachmentIndex, updateAttachments } = useAttachments({
-		attachments,
-		attachmentList,
-	})
+	const { flatAttachments, attachmentsReady, attachmentIndex, updateAttachments } =
+		useAttachments({
+			attachments,
+			attachmentList,
+		})
 
 	const propsElements = props.data?.elements
 
@@ -250,10 +372,39 @@ function DesignViewer(props: DesignViewerProps) {
 		() => fileItemsToProjectAttachmentMentionTree(attachments, designProjectBasePath),
 		[attachments, designProjectBasePath],
 	)
+	const canvasPluginConfig = useMemo(
+		() => ({
+			builtin: designBuiltinPlugins,
+			user: {
+				rootPath: `./${UploadSubDir.Plugins}`,
+				directories: resolveDesignPluginDirectories({
+					flatAttachments,
+					designProjectBasePath,
+				}),
+			},
+		}),
+		[designProjectBasePath, flatAttachments],
+	)
 
 	// CanvasDesign ref（需在 designProjectManager 之前，onRemoteDesignDataUpdate 回调中使用）
 	const canvasDesignRef = useRef<CanvasDesignRef | null>(null)
 	const isApplyingRemoteCanvasUpdateRef = useRef(false)
+	const remoteCanvasUpdateReleaseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+	const suppressCanvasDesignChangeEvents = useCallback((applyUpdate: () => void) => {
+		if (remoteCanvasUpdateReleaseTimerRef.current) {
+			clearTimeout(remoteCanvasUpdateReleaseTimerRef.current)
+			remoteCanvasUpdateReleaseTimerRef.current = null
+		}
+		isApplyingRemoteCanvasUpdateRef.current = true
+		try {
+			applyUpdate()
+		} finally {
+			remoteCanvasUpdateReleaseTimerRef.current = setTimeout(() => {
+				isApplyingRemoteCanvasUpdateRef.current = false
+				remoteCanvasUpdateReleaseTimerRef.current = null
+			}, REMOTE_CANVAS_UPDATE_SUPPRESS_MS)
+		}
+	}, [])
 
 	// 用于跟踪是否已经执行过初始加载，确保只加载一次
 	// 这样可以避免 attachments 数组引用变化导致的重复加载
@@ -279,49 +430,36 @@ function DesignViewer(props: DesignViewerProps) {
 		onRemoteDesignDataUpdate: useCallback(
 			(_oldDesignData: DesignData, newDesignData: DesignData) => {
 				if (newDesignData.canvas) {
-					isApplyingRemoteCanvasUpdateRef.current = true
-					try {
+					suppressCanvasDesignChangeEvents(() => {
 						canvasDesignRef.current?.updateData(newDesignData.canvas)
-					} finally {
-						isApplyingRemoteCanvasUpdateRef.current = false
-					}
+					})
 				}
-				// 暂时注释掉focus调试效果
-				// const diff =
-				// 	updateType === "message"
-				// 		? compareDesignData(oldDesignData, newDesignData)
-				// 		: null
-				// if (updateType === "message" && diff && diff.added.length > 0) {
-				// const firstAdded = diff.added[0]
-				// setTimeout(() => {
-				// 	canvasDesignRef.current?.focusElement([firstAdded.elementId], {
-				// 		animated: true,
-				// 		selectElement: false,
-				// 		panOnly: true,
-				// 		padding: { top: "25%", right: "25%", bottom: "25%", left: "25%" },
-				// 	})
-				// }, 300)
-				// }
 			},
-			[],
+			[suppressCanvasDesignChangeEvents],
 		),
 		onVersionChange: useCallback(
 			(_designData: DesignData, isViewingHistory: boolean) => {
-				refreshCanvasDesign()
-				if (isViewingHistory) refreshCanvasDesign()
+				suppressCanvasDesignChangeEvents(() => {
+					refreshCanvasDesign()
+					if (isViewingHistory) refreshCanvasDesign()
+				})
 			},
-			[refreshCanvasDesign],
+			[refreshCanvasDesign, suppressCanvasDesignChangeEvents],
 		),
 	})
 
 	const {
 		designData,
+		updateDesignData,
 		updateDesignDataAndScheduleSave,
+		persistLocalDraft,
+		syncDesignData,
 		magicProjectJsFileId,
 		isInitialLoading,
 		// isSaving - 迁移后不再用于头部保存状态指示器，暂时注释掉，如需使用可取消注释
 		loadFromRemote,
-		resetAndReload,
+		reloadPreservingLocalDraft,
+		reloadDiscardingLocalDraft,
 		isReadOnly: isReadOnlyState,
 		setIsReadOnly: setIsReadOnlyState,
 		fileVersionsList,
@@ -331,9 +469,125 @@ function DesignViewer(props: DesignViewerProps) {
 		handleReturnLatest,
 		handleVersionRollback,
 		fetchFileVersions,
+		conflictState,
+		resolveElementConflictWithLocal,
+		resolveElementConflictWithRemote,
+		resolveBlockingConflictWithRemote,
+		resolveBlockingConflictWithLocal,
+		resolveEditedElementConflictsWithLocal,
 	} = designProjectManager
 
 	const { isProcessingRevoke, revokeType } = designProjectManager
+	const latestDesignDataRef = useRef(designData)
+	const [isVersionActionLoading, setIsVersionActionLoading] = useState(false)
+
+	useEffect(() => {
+		latestDesignDataRef.current = designData
+	}, [designData])
+
+	// v1 → v2 升级相关状态
+	const [isUpgrading, setIsUpgrading] = useState(false)
+	const [autoUpgradeFailed, setAutoUpgradeFailed] = useState(false)
+	const [upgradeProgress, setUpgradeProgress] = useState<UpgradeProgress>({
+		step: "backup",
+		percent: 0,
+	})
+	const autoUpgradeTaskKeyRef = useRef<string | null>(null)
+
+	const shouldAutoUpgrade = useMemo(
+		() =>
+			!isInitialLoading &&
+			allowEdit &&
+			!isPlaybackMode &&
+			!isShareRoute &&
+			isNewestVersion &&
+			needsUpgrade(designData),
+		[allowEdit, designData, isInitialLoading, isNewestVersion, isPlaybackMode, isShareRoute],
+	)
+
+	const automaticUpgradeKey = useMemo(() => {
+		if (!shouldAutoUpgrade || !projectId || !magicProjectJsFileId) return null
+		return [
+			projectId,
+			magicProjectJsFileId,
+			designData.version,
+			designProjectBasePath ?? "",
+		].join(":")
+	}, [
+		designData.version,
+		designProjectBasePath,
+		magicProjectJsFileId,
+		projectId,
+		shouldAutoUpgrade,
+	])
+
+	useEffect(() => {
+		setAutoUpgradeFailed(false)
+	}, [automaticUpgradeKey])
+
+	const handleUpgrade = useCallback(async () => {
+		if (!magicProjectJsFileId || !projectId || isUpgrading) return
+		setIsUpgrading(true)
+		setAutoUpgradeFailed(false)
+		setUpgradeProgress({ step: "backup", percent: 0 })
+		try {
+			const upgradedData = await upgradeCanvasToV2(
+				designData,
+				{
+					magicProjectJsFileId,
+					projectId,
+					attachments,
+					flatAttachments,
+					designProjectBasePath,
+				},
+				(progress) => setUpgradeProgress(progress),
+			)
+			// 升级函数已经写入远端；这里只同步内存态和可信基线，避免二次自动保存。
+			const nextDesignData: DesignData = {
+				...latestDesignDataRef.current,
+				version: upgradedData.version,
+				canvas: upgradedData.canvas,
+			}
+			latestDesignDataRef.current = nextDesignData
+			updateDesignData(() => nextDesignData)
+			syncDesignData(nextDesignData)
+			updateAttachments()
+			toast.success(t("design.upgrade.success"))
+		} catch (error) {
+			console.error("[Design] upgrade failed:", error)
+			toast.error(t("design.upgrade.failed"))
+			setAutoUpgradeFailed(true)
+		} finally {
+			setIsUpgrading(false)
+		}
+	}, [
+		magicProjectJsFileId,
+		projectId,
+		designData,
+		attachments,
+		flatAttachments,
+		designProjectBasePath,
+		updateDesignData,
+		syncDesignData,
+		updateAttachments,
+		isUpgrading,
+		t,
+	])
+
+	useEffect(() => {
+		if (!automaticUpgradeKey || isOffline || isUpgrading || autoUpgradeFailed) return
+		if (autoUpgradeTaskKeyRef.current === automaticUpgradeKey) return
+
+		autoUpgradeTaskKeyRef.current = automaticUpgradeKey
+		void handleUpgrade()
+	}, [autoUpgradeFailed, automaticUpgradeKey, handleUpgrade, isOffline, isUpgrading])
+
+	const isUpgradeBlockingCanvas =
+		isUpgrading || (shouldAutoUpgrade && !isOffline && !autoUpgradeFailed)
+	const shouldShowUpgradeProgress =
+		isUpgrading || (shouldAutoUpgrade && !isOffline && !autoUpgradeFailed)
+	const shouldShowUpgradeFailed =
+		shouldAutoUpgrade && !isOffline && autoUpgradeFailed && !isUpgrading
 
 	// 当 designProjectBasePath 变化（目录改名）时，重新从远端加载 DSL（修复旧路径引用），再重挂载画布
 	useEffect(() => {
@@ -355,7 +609,7 @@ function DesignViewer(props: DesignViewerProps) {
 					})
 					if (basePathSwitchTaskIdRef.current !== taskId) return
 
-					await resetAndReload()
+					await reloadDiscardingLocalDraft()
 					if (basePathSwitchTaskIdRef.current !== taskId) return
 
 					refreshCanvasDesign()
@@ -366,7 +620,7 @@ function DesignViewer(props: DesignViewerProps) {
 				}
 			})()
 		}
-	}, [designProjectBasePath, projectId, refreshCanvasDesign, resetAndReload])
+	}, [designProjectBasePath, projectId, refreshCanvasDesign, reloadDiscardingLocalDraft])
 
 	// 设计容器 ref
 	const containerRef = useRef<HTMLDivElement>(null)
@@ -435,6 +689,7 @@ function DesignViewer(props: DesignViewerProps) {
 		selectedTopic,
 		currentFile,
 		flatAttachments,
+		attachmentsReady,
 		attachmentIndex,
 		selectedProject,
 		selectedWorkspace,
@@ -490,6 +745,16 @@ function DesignViewer(props: DesignViewerProps) {
 			t,
 		})
 
+	useEffect(
+		() => () => {
+			if (remoteCanvasUpdateReleaseTimerRef.current) {
+				clearTimeout(remoteCanvasUpdateReleaseTimerRef.current)
+				remoteCanvasUpdateReleaseTimerRef.current = null
+			}
+		},
+		[],
+	)
+
 	// 事件处理
 	useDesignFocusElement({
 		designProjectId,
@@ -498,22 +763,177 @@ function DesignViewer(props: DesignViewerProps) {
 		isPlaybackMode,
 	})
 
+	// 获取画布设备信息：布局沿用业务断点，输入能力由画布统一检测
+	const getDevice = useCallback((): CanvasDeviceInfo => {
+		return {
+			...getDefaultCanvasDeviceInfo(),
+			layout: isMobile ? "compact" : "regular",
+		}
+	}, [isMobile])
+
+	const persistCanvasData = useCallback(
+		(canvasData: CanvasDocument, metadata?: DesignSaveMetadata) => {
+			updateDesignDataAndScheduleSave((draft) => {
+				draft.canvas = canvasData
+			}, metadata)
+			latestDesignDataRef.current = {
+				...latestDesignDataRef.current,
+				canvas: canvasData,
+			}
+		},
+		[updateDesignDataAndScheduleSave],
+	)
+
+	const persistCanvasDataPatch = useCallback(
+		(patch: CanvasDesignDataPatch): CanvasDocument | undefined => {
+			let nextCanvasData: CanvasDocument | undefined
+			updateDesignDataAndScheduleSave(
+				(draft) => {
+					nextCanvasData = applyCanvasDocumentPatch(draft.canvas, patch)
+					draft.canvas = nextCanvasData
+				},
+				{
+					source: "canvas-patch",
+					deletedElementIds: patch.deletedElementIds,
+				},
+			)
+			if (nextCanvasData) {
+				latestDesignDataRef.current = {
+					...latestDesignDataRef.current,
+					canvas: nextCanvasData,
+				}
+			}
+			return nextCanvasData
+		},
+		[updateDesignDataAndScheduleSave],
+	)
+
+	const persistCanvasDataLocally = useCallback(
+		(
+			canvasData: CanvasDocument,
+			options?: { immediate?: boolean; reason?: DesignDraftReason },
+		) => {
+			const nextDesignData: DesignData = {
+				...latestDesignDataRef.current,
+				canvas: canvasData,
+			}
+			latestDesignDataRef.current = nextDesignData
+			updateDesignData(() => nextDesignData)
+			persistLocalDraft(nextDesignData, options)
+		},
+		[persistLocalDraft, updateDesignData],
+	)
+
+	const persistCanvasPatchLocally = useCallback(
+		(patch: CanvasDesignDataPatch): CanvasDocument | undefined => {
+			const nextCanvasData = applyCanvasDocumentPatch(
+				latestDesignDataRef.current.canvas,
+				patch,
+			)
+			persistCanvasDataLocally(nextCanvasData)
+			return nextCanvasData
+		},
+		[persistCanvasDataLocally],
+	)
+
+	const resolveEditedElementConflictsFromPatch = useCallback(
+		(patch: CanvasDesignDataPatch, nextCanvasData: CanvasDocument | undefined) => {
+			if (!nextCanvasData) return
+			const editedElementIds = Array.from(
+				new Set([...patch.changedElementIds, ...patch.deletedElementIds]),
+			)
+			if (editedElementIds.length === 0) return
+
+			const nextDesignData: DesignData = {
+				...latestDesignDataRef.current,
+				canvas: nextCanvasData,
+			}
+			resolveEditedElementConflictsWithLocal(editedElementIds, nextDesignData, {
+				source: "canvas-patch",
+				deletedElementIds: patch.deletedElementIds,
+			})
+		},
+		[resolveEditedElementConflictsWithLocal],
+	)
+
+	const persistCurrentCanvasDraftImmediately = useCallback(
+		(reason: DesignDraftReason = "pagehide") => {
+			if (fileVersion !== undefined || isVersionActionLoading) {
+				return
+			}
+			const currentCanvasData = canvasDesignRef.current?.exportCurrentDocument?.()
+			if (currentCanvasData) {
+				persistCanvasDataLocally(currentCanvasData, {
+					immediate: true,
+					reason,
+				})
+				return
+			}
+			persistLocalDraft(latestDesignDataRef.current, {
+				immediate: true,
+				reason,
+			})
+		},
+		[fileVersion, isVersionActionLoading, persistCanvasDataLocally, persistLocalDraft],
+	)
+
+	const persistCurrentCanvasDraftImmediatelyRef = useRef(persistCurrentCanvasDraftImmediately)
+
+	useEffect(() => {
+		persistCurrentCanvasDraftImmediatelyRef.current = persistCurrentCanvasDraftImmediately
+	}, [persistCurrentCanvasDraftImmediately])
+
 	// 重新初始化页面（用于刷新按钮）
 	const handleReinitialize = useCallback(async () => {
-		// 先更新 markersForCanvas
+		// 先更新 markersForCanvas，并保留当前画布内尚未落远端的编辑。
 		setMarkersForCanvas(markerManager.getMarkers(designProjectId ?? ""))
-		await resetAndReload()
+		persistCurrentCanvasDraftImmediately("manual-refresh")
+		await reloadPreservingLocalDraft()
+		refreshCanvasDesign()
 		if (magicProjectJsFileId && fetchFileVersions && !isShareRoute) {
 			await fetchFileVersions()
 		}
 	}, [
-		resetAndReload,
+		reloadPreservingLocalDraft,
+		refreshCanvasDesign,
 		magicProjectJsFileId,
 		fetchFileVersions,
 		isShareRoute,
 		markerManager,
 		designProjectId,
+		persistCurrentCanvasDraftImmediately,
 	])
+
+	const runVersionActionWithLoading = useCallback(
+		async (action: () => Promise<void>) => {
+			if (isVersionActionLoading) return
+			setIsVersionActionLoading(true)
+			try {
+				await action()
+			} finally {
+				setIsVersionActionLoading(false)
+			}
+		},
+		[isVersionActionLoading],
+	)
+
+	const handleChangeFileVersionWithLoading = useCallback(
+		(version: number, isNewestVersionTarget: boolean) =>
+			runVersionActionWithLoading(() =>
+				handleChangeFileVersion(version, isNewestVersionTarget),
+			),
+		[handleChangeFileVersion, runVersionActionWithLoading],
+	)
+
+	const handleReturnLatestWithLoading = useCallback(
+		() => runVersionActionWithLoading(() => handleReturnLatest()),
+		[handleReturnLatest, runVersionActionWithLoading],
+	)
+
+	const handleVersionRollbackWithLoading = useCallback(
+		(version?: number) => runVersionActionWithLoading(() => handleVersionRollback(version)),
+		[handleVersionRollback, runVersionActionWithLoading],
+	)
 
 	// 获取 CommonHeaderV2 的 props（定位到文件时定位到 magic.project.js）
 	const headerProps = useDesignHeaderProps({
@@ -529,24 +949,10 @@ function DesignViewer(props: DesignViewerProps) {
 		allowDownload,
 		containerRef,
 		handleReinitialize,
-		handleChangeFileVersion,
-		handleReturnLatest,
-		handleVersionRollback,
+		handleChangeFileVersion: handleChangeFileVersionWithLoading,
+		handleReturnLatest: handleReturnLatestWithLoading,
+		handleVersionRollback: handleVersionRollbackWithLoading,
 	})
-
-	// 获取是否是移动端
-	const getIsMobile = useCallback(() => {
-		return isMobile
-	}, [isMobile])
-
-	const persistCanvasData = useCallback(
-		(canvasData: CanvasDocument) => {
-			updateDesignDataAndScheduleSave((draft) => {
-				draft.canvas = canvasData
-			})
-		},
-		[updateDesignDataAndScheduleSave],
-	)
 
 	const { handleCanvasDesignDataChange: syncCanvasImageFileRename } =
 		useCanvasImageFileRenameSync({
@@ -562,15 +968,78 @@ function DesignViewer(props: DesignViewerProps) {
 
 	// 处理画布数据变化（用户编辑，触发自动保存）
 	const handleCanvasDesignDataChange = useCallback(
-		(canvasData: CanvasDocument) => {
-			if (isApplyingRemoteCanvasUpdateRef.current) return
-			if (isOffline) return
+		(canvasData: CanvasDocument, meta?: CanvasDesignDataChangeMeta) => {
+			if (isApplyingRemoteCanvasUpdateRef.current) {
+				return
+			}
+			const metadata: DesignSaveMetadata = {
+				source: "canvas-full-export",
+				deletedElementIds: meta?.deletedElementIds,
+			}
+			if (isOffline) {
+				persistCanvasDataLocally(canvasData)
+				resolveEditedElementConflictsWithLocal(meta?.changedElementIds ?? [], {
+					...latestDesignDataRef.current,
+					canvas: canvasData,
+				})
+				return
+			}
 
-			persistCanvasData(canvasData)
-			syncCanvasImageFileRename(canvasData)
+			persistCanvasData(canvasData, metadata)
+			resolveEditedElementConflictsWithLocal(meta?.changedElementIds ?? [], {
+				...latestDesignDataRef.current,
+				canvas: canvasData,
+			})
+			syncCanvasImageFileRename(canvasData, meta)
 		},
-		[isOffline, persistCanvasData, syncCanvasImageFileRename],
+		[
+			isOffline,
+			persistCanvasData,
+			persistCanvasDataLocally,
+			resolveEditedElementConflictsWithLocal,
+			syncCanvasImageFileRename,
+		],
 	)
+
+	const handleCanvasDesignDataPatchChange = useCallback(
+		(patch: CanvasDesignDataPatch, meta?: CanvasDesignDataChangeMeta) => {
+			if (isApplyingRemoteCanvasUpdateRef.current) {
+				return
+			}
+			if (isOffline) {
+				const nextCanvasData = persistCanvasPatchLocally(patch)
+				resolveEditedElementConflictsFromPatch(patch, nextCanvasData)
+				return
+			}
+
+			const nextCanvasData = persistCanvasDataPatch(patch)
+			resolveEditedElementConflictsFromPatch(patch, nextCanvasData)
+			if (nextCanvasData) {
+				syncCanvasImageFileRename(nextCanvasData, meta)
+			}
+		},
+		[
+			isOffline,
+			persistCanvasDataPatch,
+			persistCanvasPatchLocally,
+			resolveEditedElementConflictsFromPatch,
+			syncCanvasImageFileRename,
+		],
+	)
+
+	useEffect(() => {
+		const handlePageLeave = () => {
+			persistCurrentCanvasDraftImmediatelyRef.current()
+		}
+
+		window.addEventListener("pagehide", handlePageLeave)
+		window.addEventListener("beforeunload", handlePageLeave)
+		return () => {
+			handlePageLeave()
+			window.removeEventListener("pagehide", handlePageLeave)
+			window.removeEventListener("beforeunload", handlePageLeave)
+		}
+	}, [])
 
 	useCanvasResourceRefresh({
 		canvasDesignRef,
@@ -709,9 +1178,184 @@ function DesignViewer(props: DesignViewerProps) {
 		refreshCanvasDesign,
 	])
 
+	const conflictNoticeText = useMemo(() => {
+		if (!conflictState) return null
+		if (conflictState.elementConflicts?.some(({ status }) => status === "unresolved")) {
+			return null
+		}
+		const isDraftConflict = conflictState.reason === "draft-remote-advanced"
+		return {
+			title: t(
+				isDraftConflict
+					? "design.conflict.draftConflictTitle"
+					: "design.conflict.syncPausedTitle",
+			),
+			description: t(
+				isDraftConflict
+					? "design.conflict.draftConflictDescription"
+					: "design.conflict.syncPausedDescription",
+			),
+			remoteActionLabel: t(
+				isDraftConflict ? "design.conflict.useRemote" : "design.conflict.useRemoteContinue",
+			),
+			localActionLabel: t(
+				isDraftConflict
+					? "design.conflict.restoreDraftAndSave"
+					: "design.conflict.keepLocalAndSave",
+			),
+			localConfirmTitle: t(
+				isDraftConflict
+					? "design.conflict.restoreDraftConfirmTitle"
+					: "design.conflict.keepLocalConfirmTitle",
+			),
+			localConfirmDescription: t(
+				isDraftConflict
+					? "design.conflict.restoreDraftConfirmDescription"
+					: "design.conflict.keepLocalConfirmDescription",
+			),
+			localConfirmOkText: t(
+				isDraftConflict
+					? "design.conflict.restoreDraftAndSave"
+					: "design.conflict.keepLocalAndSave",
+			),
+		}
+	}, [conflictState, t])
+
+	const unresolvedElementConflictIds = useMemo(
+		() =>
+			(conflictState?.elementConflicts ?? [])
+				.filter(({ status }) => status === "unresolved")
+				.map(({ elementId }) => elementId),
+		[conflictState?.elementConflicts],
+	)
+	const [locallyResolvedElementConflictIds, setLocallyResolvedElementConflictIds] = useState<
+		Set<string>
+	>(() => new Set())
+
+	useEffect(() => {
+		setLocallyResolvedElementConflictIds((prev) => {
+			if (prev.size === 0) return prev
+
+			const unresolvedElementIds = new Set(unresolvedElementConflictIds)
+			const next = new Set(
+				Array.from(prev).filter((elementId) => unresolvedElementIds.has(elementId)),
+			)
+			return next.size === prev.size ? prev : next
+		})
+	}, [unresolvedElementConflictIds])
+
+	const hasUnresolvedElementConflicts = unresolvedElementConflictIds.length > 0
+	const visibleElementConflicts = useMemo(
+		() =>
+			(conflictState?.elementConflicts ?? []).filter(
+				({ elementId, status }) =>
+					status === "unresolved" && !locallyResolvedElementConflictIds.has(elementId),
+			),
+		[conflictState?.elementConflicts, locallyResolvedElementConflictIds],
+	)
+	const elementActionHints = useMemo(
+		() =>
+			visibleElementConflicts.map(
+				({ elementId, reason, status, localElement, remoteElement }) => ({
+					elementId,
+					reason,
+					status,
+					tone: "warning" as const,
+					localExists: !!localElement,
+					remoteExists: !!remoteElement,
+				}),
+			),
+		[visibleElementConflicts],
+	)
+	const shouldBlockCanvasForConflict = !!conflictState && !hasUnresolvedElementConflicts
+	const shouldShowCanvasConflictNotice = shouldBlockCanvasForConflict && !!conflictNoticeText
+	const [blockingConflictResolveAction, setBlockingConflictResolveAction] = useState<
+		"remote" | "local" | null
+	>(null)
+
+	const handleUseRemoteBlockingConflict = useCallback(() => {
+		if (blockingConflictResolveAction) return
+		setBlockingConflictResolveAction("remote")
+		try {
+			const didResolve = resolveBlockingConflictWithRemote()
+			if (!didResolve) {
+				toast.error(t("design.conflict.blockingResolveFailed"))
+			}
+		} finally {
+			setBlockingConflictResolveAction(null)
+		}
+	}, [blockingConflictResolveAction, resolveBlockingConflictWithRemote, t])
+
+	const handleUseLocalBlockingConflict = useCallback(() => {
+		if (blockingConflictResolveAction || !conflictNoticeText) return
+
+		MagicModal.confirm({
+			title: conflictNoticeText.localConfirmTitle,
+			content: conflictNoticeText.localConfirmDescription,
+			okText: conflictNoticeText.localConfirmOkText,
+			cancelText: t("common.cancel"),
+			variant: "destructive",
+			showIcon: true,
+			closable: false,
+			maskClosable: false,
+			centered: true,
+			onOk: () => {
+				void (async () => {
+					setBlockingConflictResolveAction("local")
+					try {
+						const didResolve = await resolveBlockingConflictWithLocal()
+						if (!didResolve) {
+							toast.error(t("design.conflict.blockingResolveFailed"))
+						}
+					} finally {
+						setBlockingConflictResolveAction(null)
+					}
+				})()
+			},
+		})
+	}, [blockingConflictResolveAction, conflictNoticeText, resolveBlockingConflictWithLocal, t])
+
+	const handleUseLocalElementConflict = useCallback(
+		(elementId: string) => {
+			const didResolve = resolveElementConflictWithLocal(elementId)
+			if (!didResolve) {
+				toast.error(t("design.conflict.elementResolveFailed"))
+				return
+			}
+			setLocallyResolvedElementConflictIds((prev) => new Set(prev).add(elementId))
+		},
+		[resolveElementConflictWithLocal, t],
+	)
+
+	const handleUseRemoteElementConflict = useCallback(
+		(elementId: string) => {
+			const didResolve = resolveElementConflictWithRemote(elementId)
+			if (!didResolve) {
+				toast.error(t("design.conflict.elementResolveFailed"))
+				return
+			}
+			setLocallyResolvedElementConflictIds((prev) => new Set(prev).add(elementId))
+		},
+		[resolveElementConflictWithRemote, t],
+	)
+
+	const handleElementActionHintAction = useCallback(
+		(elementId: string, actionKey: string) => {
+			if (actionKey === "use-local") {
+				handleUseLocalElementConflict(elementId)
+				return
+			}
+			if (actionKey === "use-remote") {
+				handleUseRemoteElementConflict(elementId)
+			}
+		},
+		[handleUseLocalElementConflict, handleUseRemoteElementConflict],
+	)
+
 	// 显示历史版本 banner 时预留顶部空间，避免遮挡画布（与 HISTORY_VERSION_BANNER_LAYOUT_HEIGHT_PX 一致）
 	const showVersionBanner = !isNewestVersion && !isMobile && !!fileVersionsList?.length
-	const shouldShowInitialLoading = isInitialLoading || isBasePathSwitching
+	const shouldShowInitialLoading =
+		isInitialLoading || isBasePathSwitching || isVersionActionLoading
 
 	return (
 		<>
@@ -759,9 +1403,50 @@ function DesignViewer(props: DesignViewerProps) {
 							</>
 						)}
 						<div className={styles.designCanvasContainer}>
+							{shouldShowCanvasConflictNotice && (
+								<div
+									className={styles.conflictNotice}
+									role="status"
+									aria-live="polite"
+								>
+									<AlertTriangle className={styles.conflictIcon} size={20} />
+									<div className={styles.conflictContent}>
+										<div className={styles.conflictTitle}>
+											{conflictNoticeText.title}
+										</div>
+										<div className={styles.conflictDescription}>
+											{conflictNoticeText.description}
+										</div>
+									</div>
+									<div className={styles.conflictActions}>
+										<button
+											type="button"
+											className={styles.conflictActionButton}
+											onClick={handleUseRemoteBlockingConflict}
+											disabled={!!blockingConflictResolveAction}
+										>
+											{conflictNoticeText.remoteActionLabel}
+										</button>
+										<button
+											type="button"
+											className={styles.conflictActionButton}
+											data-variant="primary"
+											onClick={handleUseLocalBlockingConflict}
+											disabled={!!blockingConflictResolveAction}
+										>
+											{conflictNoticeText.localActionLabel}
+										</button>
+									</div>
+								</div>
+							)}
 							{isOffline && (
 								<div
 									className={styles.offlineNotice}
+									style={
+										shouldShowCanvasConflictNotice
+											? { top: "104px" }
+											: undefined
+									}
 									role="status"
 									aria-live="polite"
 								>
@@ -776,41 +1461,70 @@ function DesignViewer(props: DesignViewerProps) {
 									</div>
 								</div>
 							)}
-							<CanvasDesign
-								key={`${designProjectId}:${canvasDesignKey}:${designProjectBasePath}`}
-								id={designProjectId}
-								ref={canvasDesignRef}
-								readonly={isReadOnlyState}
-								magic={{
-									methods,
-									permissions: designCanvasMagicPermissions,
-									hostUiLocale,
-								}}
-								viewport={{
-									autoLoadCacheViewport: !isPlaybackMode && !isMobile,
-								}}
-								data={{
-									defaultData: designData.canvas,
-									onCanvasDesignDataChange: handleCanvasDesignDataChange,
-									projectAttachmentMentionTree,
-									defaultProjectAttachmentFolderId,
-									defaultProjectAttachmentFolderName,
-									mentionDataServiceCtor: CanvasDesignMentionDataService,
-									mentionExtension: MentionExtension,
-									referenceResourcePanelRenderer:
-										CanvasDesignReferenceResourcePanel,
-								}}
-								marker={{
-									defaultMarkers: markersForCanvas,
-									onMarkerCreated: handleMarkerCreated,
-									onMarkerDeleted: handleMarkerDeleted,
-									onMarkerUpdated: handleMarkerUpdated,
-									onMarkerRestored: handleMarkerRestored,
-								}}
-								t={canvasDesignTAdapter}
-								getIsMobile={getIsMobile}
-								shareHostBottomChrome={isShareRoute}
-							/>
+							{shouldShowUpgradeProgress && (
+								<CanvasUpgradeOverlay
+									percent={upgradeProgress.percent}
+									title={t("design.upgrade.autoUpgradingTitle")}
+									subtitle={t("design.upgrade.autoUpgradingSubtitle")}
+								/>
+							)}
+							{shouldShowUpgradeFailed && (
+								<CanvasUpgradeOverlay
+									percent={0}
+									status="error"
+									title={t("design.upgrade.failedTitle")}
+									subtitle={t("design.upgrade.failedSubtitle")}
+									actionLabel={t("design.upgrade.retry")}
+									actionDisabled={isUpgrading}
+									onAction={() => void handleUpgrade()}
+								/>
+							)}
+							<Suspense fallback={null}>
+								<CanvasDesign
+									key={`${designProjectId}:${canvasDesignKey}:${designProjectBasePath}`}
+									id={designProjectId}
+									ref={canvasDesignRef}
+									readonly={
+										isReadOnlyState ||
+										isUpgradeBlockingCanvas ||
+										shouldBlockCanvasForConflict
+									}
+									magic={{
+										methods,
+										permissions: designCanvasMagicPermissions,
+										hostUiLocale,
+									}}
+									plugins={canvasPluginConfig}
+									viewport={{
+										autoLoadCacheViewport: !isPlaybackMode && !isMobile,
+									}}
+									data={{
+										defaultData: designData.canvas,
+										onCanvasDesignDataChange: handleCanvasDesignDataChange,
+										onCanvasDesignDataPatchChange:
+											handleCanvasDesignDataPatchChange,
+										elementActionHints,
+										onElementActionHintAction: handleElementActionHintAction,
+										projectAttachmentMentionTree,
+										defaultProjectAttachmentFolderId,
+										defaultProjectAttachmentFolderName,
+										mentionDataServiceCtor: CanvasDesignMentionDataService,
+										mentionExtension: MentionExtension,
+										referenceResourcePanelRenderer:
+											CanvasDesignReferenceResourcePanel,
+									}}
+									marker={{
+										defaultMarkers: markersForCanvas,
+										onMarkerCreated: handleMarkerCreated,
+										onMarkerDeleted: handleMarkerDeleted,
+										onMarkerUpdated: handleMarkerUpdated,
+										onMarkerRestored: handleMarkerRestored,
+									}}
+									t={canvasDesignTAdapter}
+									getDevice={getDevice}
+									shareHostBottomChrome={isShareRoute}
+								/>
+							</Suspense>
 							{/* 撤回/恢复遮罩层 */}
 							{isProcessingRevoke && (
 								<div className={styles.revokeOverlay}>

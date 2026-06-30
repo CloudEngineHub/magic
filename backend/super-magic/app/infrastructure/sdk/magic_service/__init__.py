@@ -15,6 +15,7 @@ from .factory import (
 from .api.agent_api import AgentApi
 from .api.magicbase_api import MagicBaseApi
 from .api.message_schedule_api import MessageScheduleApi
+from .api.oauth2_callback_relay_api import OAuth2CallbackRelayApi
 from .api.share_api import ShareApi
 
 # Parameter classes
@@ -29,6 +30,7 @@ from .parameter.message_schedule_parameter import (
     UpdateMessageScheduleParameter,
     DeleteMessageScheduleParameter,
 )
+from .parameter.oauth2_callback_relay_parameter import OAuth2CallbackRelayParameter
 from .parameter.share_resource_id_parameter import ShareResourceIdParameter
 from .parameter.create_share_parameter import CreateShareParameter, TargetId
 from .parameter.find_similar_share_parameter import FindSimilarShareParameter
@@ -51,6 +53,7 @@ from .result.message_schedule_result import (
     MessageScheduleListResult,
     DeleteMessageScheduleResult,
 )
+from .result.oauth2_callback_relay_result import OAuth2CallbackRelayResult
 from .result.share_result import (
     ShareResourceIdResult,
     ShareResult,
@@ -87,6 +90,7 @@ __all__ = [
     'AgentApi',
     'MagicBaseApi',
     'MessageScheduleApi',
+    'OAuth2CallbackRelayApi',
     'ShareApi',
 
     # Parameter classes
@@ -99,6 +103,7 @@ __all__ = [
     'GetMessageScheduleDetailParameter',
     'UpdateMessageScheduleParameter',
     'DeleteMessageScheduleParameter',
+    'OAuth2CallbackRelayParameter',
     'ShareResourceIdParameter',
     'CreateShareParameter',
     'TargetId',
@@ -118,6 +123,7 @@ __all__ = [
     'MessageScheduleResult',
     'MessageScheduleListResult',
     'DeleteMessageScheduleResult',
+    'OAuth2CallbackRelayResult',
     'ShareResourceIdResult',
     'ShareResult',
     'CancelShareResult',

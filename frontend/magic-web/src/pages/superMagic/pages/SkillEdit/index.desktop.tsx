@@ -10,7 +10,7 @@ import useNavigate from "@/routes/hooks/useNavigate"
 import { RouteName } from "@/routes/constants"
 import { useNamedPageTitle } from "@/pages/superMagic/hooks/useNamedPageTitle"
 import type { SkillVersionItem } from "@/apis/modules/skills"
-import { FUNCTION_PERMISSION_CODE, SuperMagicApi } from "@/apis"
+import { FUNCTION_PERMISSION_CODE } from "@/apis"
 import magicToast from "@/components/base/MagicToaster/utils"
 import { logger } from "@/utils/log"
 import { userStore } from "@/models/user"
@@ -30,9 +30,13 @@ import {
 import { useCompositeDetailPanelController } from "@/pages/superMagic/hooks/useCompositeDetailPanelController"
 import { useDeferUntilFileTabsCacheLoaded } from "@/pages/superMagic/hooks/useDeferUntilFileTabsCacheLoaded"
 import { useAttachmentsPolling } from "@/pages/superMagic/hooks/useAttachmentsPolling"
+import { useProjectAttachmentsChangeRealtime } from "@/pages/superMagic/hooks/useProjectAttachmentsChangeRealtime"
 import { AttachmentDataProcessor } from "@/pages/superMagic/utils/attachmentDataProcessor"
+import { loadProjectAttachments } from "@/pages/superMagic/services"
 import {
+	normalizeUpdateAttachmentsPayload,
 	releaseAttachmentsRefreshWaitersWithoutFetch,
+	type SuperMagicUpdateAttachmentsRequest,
 	withAttachmentsRefreshWaitersResolved,
 } from "@/pages/superMagic/services/attachmentsTopicSync"
 import PublishPanel, { PublishPanelStore } from "@/pages/superMagic/components/PublishPanel"
@@ -125,7 +129,7 @@ function SkillEditErrorFallback({ onBack }: { onBack: () => void }) {
 			data-testid="skill-edit-error"
 		>
 			<p className="text-sm text-destructive">{t("editSkill.errors.fetchFailed")}</p>
-			<button type="button" className="text-sm text-primary hover:underline" onClick={onBack}>
+			<button type="button" className="text-sm text-primary hover:underline" onClick={onBack} data-testid="on-back">
 				{t("back")}
 			</button>
 		</div>
@@ -295,13 +299,12 @@ function SkillEditWorkspace({ skillCode }: { skillCode: string }) {
 			pubsub.publish(PubSubEvents.Update_Attachments_Loading, true)
 			withAttachmentsRefreshWaitersResolved(
 				projectId,
-				SuperMagicApi.getAttachmentsByProjectId({
+				loadProjectAttachments({
 					projectId,
 					temporaryToken,
 				})
 					.then((res) => {
-						const processedData = AttachmentDataProcessor.processAttachmentData(res)
-						store.projectFilesStore.setWorkspaceFileTree(processedData.tree)
+						store.projectFilesStore.setWorkspaceFileTree(res.tree)
 						store.mentionPanelStore.finishLoadAttachmentsPromise(projectId)
 					})
 					.catch((error) => {
@@ -345,6 +348,7 @@ function SkillEditWorkspace({ skillCode }: { skillCode: string }) {
 
 	useAttachmentsPolling({
 		projectId: store.project?.id,
+		autoStart: false,
 		onAttachmentsChange: useCallback(
 			({ tree, list }: { tree: AttachmentItem[]; list: AttachmentItem[] }) => {
 				const processedData = AttachmentDataProcessor.processAttachmentData({ tree, list })
@@ -354,6 +358,14 @@ function SkillEditWorkspace({ skillCode }: { skillCode: string }) {
 		),
 		onError: useMemoizedFn((error: unknown) => {
 			console.error("Failed to poll skill attachments:", error)
+		}),
+	})
+
+	useProjectAttachmentsChangeRealtime({
+		projectId: store.project?.id,
+		store: store.projectFilesStore,
+		onFallbackError: useMemoizedFn((error: unknown) => {
+			console.error("Failed to refresh realtime skill attachments:", error)
 		}),
 	})
 
@@ -370,14 +382,17 @@ function SkillEditWorkspace({ skillCode }: { skillCode: string }) {
 	}, [store.project?.id])
 
 	useEffect(() => {
-		const handleUpdateAttachments = (callback?: () => void) => {
+		const handleUpdateAttachments = (
+			payloadOrCallback?: SuperMagicUpdateAttachmentsRequest,
+		) => {
+			const payload = normalizeUpdateAttachmentsPayload(payloadOrCallback)
 			const pid = store.project?.id
 			if (!pid) {
-				callback?.()
+				payload?.callback?.()
 				releaseAttachmentsRefreshWaitersWithoutFetch()
 				return
 			}
-			updateAttachments(pid, callback)
+			updateAttachments(pid, payload?.callback)
 		}
 
 		pubsub.subscribe(PubSubEvents.Update_Attachments, handleUpdateAttachments)
@@ -452,6 +467,7 @@ function SkillEditWorkspace({ skillCode }: { skillCode: string }) {
 				projectId: store.project?.id,
 				getWorkspaceFilesList: () => store.projectFilesStore.workspaceFilesList,
 				getWorkspaceFileTree: () => store.projectFilesStore.workspaceFileTree,
+				getSkillName: () => store.skill?.name,
 				t,
 			})
 			if (!ensured) return
@@ -678,6 +694,7 @@ function SkillEditWorkspace({ skillCode }: { skillCode: string }) {
 												src={store.skill?.logo}
 												alt=""
 												className="h-full w-full object-cover"
+												data-testid="index-desktop-image"
 											/>
 										) : (
 											<RoleIcon className="h-3.5 w-3.5" />

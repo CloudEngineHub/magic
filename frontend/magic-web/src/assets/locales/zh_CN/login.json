@@ -20,7 +20,7 @@
 		"cancel": "取消",
 		"confirm": "确认"
 	},
-	"copyright": "",
+	"copyright": "Copyright © 2023 广东灯塔引擎科技有限公司 All Rights Reserved.",
 	"device": {
 		"app": "客户端",
 		"dingTalk": "钉钉",
@@ -55,7 +55,7 @@
 			"title": "提示"
 		},
 		"confirm": "立即前往国际站",
-		"content": "检测到您使用的邀请码为超级麦吉国际站专用邀请码，即将为你自动跳转至国际站…"
+		"content": "检测到您使用的邀请码为$t(common:platform.name)国际站专用邀请码，即将为你自动跳转至国际站…"
 	},
 	"larkLogin": "飞书登录",
 	"larkRedirectLogin": "飞书跳转",

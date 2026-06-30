@@ -5,6 +5,7 @@ import {
 	IconTrash,
 	IconPlus,
 	IconList,
+	IconPlayerRecord,
 } from "@tabler/icons-react"
 import { ActionButton } from "../Detail/components/CommonHeader/components"
 import MagicIcon from "@/components/base/MagicIcon"
@@ -49,8 +50,10 @@ export default function SiderTask({
 		onStatusChange,
 		preloadDeleteDangerModal,
 		preloadRunningRecordModal,
+		runNow,
 	} = useScheduleTask({
 		options: {
+			page_size: 20,
 			workspace_id: selectWorkspaceId,
 			project_id: selectProjectId,
 		},
@@ -92,7 +95,12 @@ export default function SiderTask({
 	const { dropdownContent, delegateProps } = useSuperMagicDropdown<TaskItemData>({
 		width: 180,
 		getMenuItems: (taskItem) => {
-			const menuItems = []
+			const menuItems = [{
+				key: "run",
+				label: t("scheduleTask.runTask"),
+				icon: <MagicIcon component={IconPlayerRecord} stroke={2} size={18} />,
+				onClick: () => runNow(taskItem),
+			}]
 
 			if (taskItem.enabled === 1) {
 				menuItems.push({
@@ -179,6 +187,7 @@ export default function SiderTask({
 				className="flex h-[calc(100%-32px)] flex-1 flex-col gap-1 overflow-y-auto overflow-x-hidden px-2 pb-2"
 				onScroll={onScroll}
 				ref={siderTaskRef}
+				data-testid="on-scroll"
 			>
 				{tasks.length ? (
 					tasks.map((item) => (

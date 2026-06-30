@@ -3,7 +3,11 @@ import { useMemoizedFn } from "ahooks"
 import type { TFunction } from "i18next"
 import { SuperMagicApi } from "@/apis"
 import type { Workspace } from "../../../../../pages/Workspace/types"
-import { SHARE_WORKSPACE_ID, MY_CLAW_WORKSPACE_ID } from "../../../../../constants"
+import {
+	SHARE_WORKSPACE_ID,
+	MY_AUDIO_RECORDINGS_WORKSPACE_ID,
+	MY_CLAW_WORKSPACE_ID,
+} from "../../../../../constants"
 
 interface UseWorkspaceManagementOptions {
 	workspaces: Workspace[]
@@ -22,6 +26,9 @@ export function useWorkspaceManagement(options: UseWorkspaceManagementOptions) {
 		}
 		if (workspace.id === MY_CLAW_WORKSPACE_ID) {
 			return t("workspace.myClawWorkspaceName")
+		}
+		if (workspace.id === MY_AUDIO_RECORDINGS_WORKSPACE_ID) {
+			return t("workspace.myAudioRecordingsWorkspaceName")
 		}
 		return workspace.name || t("workspace.unnamedWorkspace")
 	})

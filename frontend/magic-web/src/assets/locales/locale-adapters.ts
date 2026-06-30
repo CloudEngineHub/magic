@@ -1,13 +1,13 @@
+import {
+	getAdminLocaleModules as getMagicAdminLocaleModules,
+	type AdminLocaleModules,
+} from "@dtyq/magic-admin/locales"
+
 type ResourceLoader = () => Promise<unknown>
 
 interface LocaleModules {
 	zhCNModules: Record<string, ResourceLoader>
 	enUSModules: Record<string, ResourceLoader>
-}
-
-interface AdminLocaleModules {
-	adminZhCNModules: Record<string, ResourceLoader>
-	adminEnUSModules: Record<string, ResourceLoader>
 }
 
 export function getLocaleModules(): LocaleModules {
@@ -18,14 +18,7 @@ export function getLocaleModules(): LocaleModules {
 }
 
 export function getAdminLocaleModules(): AdminLocaleModules {
-	return {
-		adminZhCNModules: import.meta.glob(
-			"../../../node_modules/@dtyq/magic-admin/dist/src/locales/zh_CN/**/*.json",
-		),
-		adminEnUSModules: import.meta.glob(
-			"../../../node_modules/@dtyq/magic-admin/dist/src/locales/en_US/**/*.json",
-		),
-	}
+	return getMagicAdminLocaleModules()
 }
 
 export function loadMagicFlowLocale(normalizedLng: string, namespace: string) {

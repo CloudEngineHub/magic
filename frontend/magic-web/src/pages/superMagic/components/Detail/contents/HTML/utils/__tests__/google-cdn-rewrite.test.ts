@@ -15,6 +15,10 @@ function getOriginalHrefs(doc: Document): string[] {
 	)
 }
 
+function getStyleContents(doc: Document): string[] {
+	return Array.from(doc.querySelectorAll("style")).map((el) => el.textContent || "")
+}
+
 describe("google cdn rewrite", () => {
 	describe("fonts.googleapis.com/css2 (single family)", () => {
 		it("should rewrite to internal CDN static CSS path", () => {
@@ -119,6 +123,30 @@ describe("google cdn rewrite", () => {
 			const hrefs = getLinkHrefs(doc)
 
 			expect(hrefs).toContain(`${CDN_HOST}/googleapis/icon/v145/index.css`)
+		})
+	})
+
+	describe("style @import", () => {
+		it("should rewrite google fonts import url inside style tags", () => {
+			const html = `<html><head>
+				<style>
+					@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;700;900&display=swap');
+					body { font-family: 'Noto Sans SC', sans-serif; }
+				</style>
+			</head><body></body></html>`
+
+			const doc = rewriteHtmlCdnWithHost(html, CDN_HOST)
+			const styles = getStyleContents(doc)
+
+			expect(styles.join("\n")).toContain(
+				`${CDN_HOST}/google-fonts/css/woff2/Noto_Sans_SC_woff2.css`,
+			)
+			expect(styles.join("\n")).toContain(
+				"/*__ORIGINAL_GOOGLE_IMPORT_URL__:https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;700;900&display=swap__*/",
+			)
+			expect(styles.join("\n")).not.toContain(
+				"@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;700;900&display=swap');",
+			)
 		})
 	})
 

@@ -70,6 +70,7 @@ function TopicExampleCardsComponent({ topicMode, onCardClick }: TopicExampleCard
 									`box-border flex w-full cursor-pointer items-center gap-1 rounded-lg ${theme.bgColor} px-2.5 py-2 text-[#1c1d23] transition-opacity duration-200 hover:opacity-90 active:opacity-80 dark:text-white`,
 								)}
 								onClick={() => onCardClick(content)}
+								data-testid="on-card-click"
 							>
 								<span className="min-w-0 flex-1 whitespace-pre-wrap text-sm font-normal leading-5 text-[#1c1d23] dark:text-white">
 									{title}
@@ -90,6 +91,7 @@ function TopicExampleCardsComponent({ topicMode, onCardClick }: TopicExampleCard
 				<div
 					className="flex cursor-pointer items-center gap-1 py-2 text-sm font-normal text-[rgba(28,29,35,0.6)] transition-colors duration-200 hover:text-[rgba(28,29,35,0.8)] dark:text-[rgba(255,255,255,0.6)] dark:hover:text-[rgba(255,255,255,0.8)]"
 					onClick={refreshExamples}
+					data-testid="refresh-examples"
 				>
 					<IconRefresh size={16} />
 					<span>{t("superMagicMessageListFallback.refreshButton")}</span>

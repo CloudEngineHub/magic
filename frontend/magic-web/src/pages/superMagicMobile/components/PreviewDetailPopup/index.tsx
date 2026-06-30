@@ -16,7 +16,6 @@ import { useTranslation } from "react-i18next"
 import { useStyles } from "../CommonPopup/styles"
 import { useDetailActions } from "@/pages/superMagic/components/Detail/hooks/useDetailActions"
 import { isEmpty } from "lodash-es"
-import CommonPopup from "../CommonPopup"
 import { useLocation } from "react-router"
 import { copyFileContent } from "@/pages/superMagic/utils/share"
 import { getFileType } from "@/pages/superMagic/utils/handleFIle"
@@ -25,6 +24,7 @@ import MagicFileIcon from "@/components/base/MagicFileIcon"
 import { Flex } from "antd"
 import ToolIcon from "@/pages/superMagic/components/MessageList/components/Tool/components/ToolIcon"
 import { getAttachmentExtension } from "@/pages/superMagic/components/MessageList/components/MessageAttachment/utils"
+import { BookOpen, X } from "lucide-react"
 import IconTerminal from "@/pages/superMagic/assets/svg/terminal.svg"
 import PDFIcon from "@/pages/superMagic/assets/file_icon/pdf.svg"
 import CommonFileIcon from "@/pages/superMagic/assets/svg/file.svg"
@@ -32,6 +32,28 @@ import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesBut
 import type { Topic, ProjectListItem } from "@/pages/superMagic/pages/Workspace/types"
 import { useIsMobile } from "@/hooks/useIsMobile"
 import MagicModal from "@/components/base/MagicModal"
+import MagicPopup from "@/components/base-mobile/MagicPopup"
+import { cn } from "@/lib/utils"
+
+/** Mobile preview sheet: near full viewport; overrides MagicPopup default mt-24 top band. */
+const MOBILE_PREVIEW_SHEET_CLASSNAME = cn(
+	"flex flex-col overflow-hidden rounded-t-[14px] border-0 bg-background p-0",
+	"h-[min(98dvh,calc(100dvh-var(--safe-area-inset-top)-0.5rem))]",
+	"max-h-[calc(100dvh-var(--safe-area-inset-top)-0.5rem)]",
+	"data-[vaul-drawer-direction=bottom]:!mt-[max(0.5rem,var(--safe-area-inset-top))]",
+)
+
+/** Body must stay flex + hidden overflow so Render fills the sheet below actionHeader. */
+const MOBILE_PREVIEW_BODY_CLASSNAME =
+	"flex min-h-0 flex-1 flex-col overflow-hidden !overflow-hidden bg-background p-0"
+import { getPreviewDetailDisplayName, isKnowledgeSearchPreviewDetail } from "./headerMeta"
+
+const OFFICE_DETAIL_TYPES: DetailType[] = [
+	DetailType.Docx,
+	DetailType.Doc,
+	DetailType.Excel,
+	DetailType.PowerPoint,
+]
 
 export interface PreviewDetail<T extends keyof DetailData = keyof DetailData> {
 	type: T
@@ -67,6 +89,7 @@ interface PreviewDetailPopupProps {
 	projectId?: string
 	// 是否允许下载（用于分享页面权限控制）
 	allowDownload?: boolean
+	allowEdit?: boolean
 	onPreviewFileChange?: (fileId: string | null) => void
 	onPreviewFullscreenChange?: (isFullscreen: boolean) => void
 }
@@ -81,6 +104,7 @@ function PreviewDetailPopup(props: PreviewDetailPopupProps, ref: Ref<PreviewDeta
 		onOpenNewPopup,
 		projectId = "",
 		allowDownload,
+		allowEdit,
 		onPreviewFileChange,
 		onPreviewFullscreenChange,
 	} = props
@@ -194,6 +218,12 @@ function PreviewDetailPopup(props: PreviewDetailPopupProps, ref: Ref<PreviewDeta
 
 	const { setUserSelectDetail, onClose } = props
 
+	/** Close mobile preview drawer and notify parent listeners. */
+	const handleClose = useCallback(() => {
+		onClose?.()
+		setVisible(false)
+	}, [onClose])
+
 	const {
 		isFullscreen,
 		isFromNode,
@@ -246,14 +276,21 @@ function PreviewDetailPopup(props: PreviewDetailPopupProps, ref: Ref<PreviewDeta
 	}, [isFullscreen, onPreviewFullscreenChange])
 
 	const RenderComponent = useMemo(() => {
-		// 设计太垃，兼容数据格式
-		const meta = attachmentList.find((item) => item?.file_id === previewDetail?.currentFileId)
 		// 修正 detail 类型（如果 metadata.type 是 design 但 type 是 notSupport，需要修正）
 		const correctedPreviewDetail = correctDetailType(previewDetail, {
 			attachmentList,
 		})
+		if (!correctedPreviewDetail?.type) return null
+
+		// 设计太垃，兼容数据格式
+		const meta = attachmentList.find(
+			(item) => item?.file_id === correctedPreviewDetail?.currentFileId,
+		)
+
+		const previewFilePath = meta?.relative_file_path || ""
 		return (
 			<Render
+				key={previewDetail?.currentFileId}
 				type={correctedPreviewDetail?.type}
 				data={correctedPreviewDetail?.data}
 				attachments={effectiveAttachments}
@@ -292,6 +329,7 @@ function PreviewDetailPopup(props: PreviewDetailPopupProps, ref: Ref<PreviewDeta
 					type:
 						(previewDetail?.data as { file_extension?: string })?.file_extension || "",
 					url: (previewDetail?.data as { file_url?: string })?.file_url || "",
+					relativeFilePath: previewFilePath,
 				}}
 				topicId={previewDetail?.topicId || selectedTopic?.id || ""}
 				openFileTab={openFileTab}
@@ -300,14 +338,25 @@ function PreviewDetailPopup(props: PreviewDetailPopupProps, ref: Ref<PreviewDeta
 				projectId={selectedProject?.id || projectId}
 				isPlaybackMode={!!previewDetail?.isFromNode || false}
 				allowDownload={allowDownload}
+				allowEdit={allowEdit}
 				showFileHeader={!isImmersiveFullscreen}
-				showFooter={!isImmersiveFullscreen && !isShareRoute}
-				className={isImmersiveFullscreen ? "h-full min-h-0 w-full flex-1" : undefined}
+				// Mobile sheet: MagicPopup shows title; toolbar-only header avoids duplicate chrome.
+				headerRenderMode={isMobile ? "actions" : "full"}
+				// Mobile preview hides version footer; desktop keeps version selector when allowed.
+				showFooter={!isMobile && !isImmersiveFullscreen && !isShareRoute}
+				className={
+					isImmersiveFullscreen
+						? "h-full min-h-0 w-full flex-1"
+						: isMobile
+							? "min-h-0 flex-1"
+							: undefined
+				}
 			/>
 		)
 	}, [
 		allFiles.length,
 		allowDownload,
+		allowEdit,
 		attachmentList,
 		currentIndex,
 		effectiveAttachments,
@@ -323,6 +372,7 @@ function PreviewDetailPopup(props: PreviewDetailPopupProps, ref: Ref<PreviewDeta
 		isFromNode,
 		isFullscreen,
 		isImmersiveFullscreen,
+		isMobile,
 		isShareRoute,
 		onClose,
 		openFileTab,
@@ -335,78 +385,22 @@ function PreviewDetailPopup(props: PreviewDetailPopupProps, ref: Ref<PreviewDeta
 		viewMode,
 	])
 
-	const FileIcon = useMemo(() => {
-		// 修正 detail 类型（如果 metadata.type 是 design 但 type 是 notSupport，需要修正）
-		const correctedPreviewDetail = correctDetailType(previewDetail, {
-			attachmentList,
-		})
-		const data = correctedPreviewDetail?.data as {
-			file_extension?: string
-			display_config?: Record<string, unknown>
-		}
-		const file_extension = data?.file_extension || ""
-		// Type assertion for switch - DetailType includes types not in DetailData
-		const currentType = correctedPreviewDetail?.type as DetailType
-		switch (currentType) {
-			case DetailType.Md:
-				return <MagicFileIcon size={20} type="md" />
-			case DetailType.Browser:
-				return <ToolIcon type="use_browser" />
-			case DetailType.Html:
-				return <MagicFileIcon size={20} type={getAttachmentExtension(data) || "html"} />
-			case DetailType.Search:
-				return <ToolIcon type="web_search" />
-			case DetailType.Terminal:
-				return <img src={IconTerminal} alt="terminal" />
-			case DetailType.Text:
-				return <MagicFileIcon size={20} type={file_extension} />
-			case DetailType.Pdf:
-				return <img src={PDFIcon} alt="" />
-			case DetailType.Code:
-				return file_extension ? (
-					<MagicFileIcon type={file_extension} size={20} />
-				) : (
-					<img src={CommonFileIcon} width={20} height={20} alt="" />
-				)
-			case DetailType.Excel:
-				return <MagicFileIcon type={file_extension?.toLowerCase()} size={18} />
-			case DetailType.Image:
-				return <MagicFileIcon size={20} type={file_extension} />
-			case DetailType.FileTree:
-				return <ToolIcon type="list_dir" />
-			case DetailType.Design:
-				return <MagicFileIcon type="design" size={20} />
-			case DetailType.Deleted:
-				return <MagicFileIcon type={file_extension} size={20} />
-			case DetailType.NotSupport:
-			default:
-				return <MagicFileIcon size={20} type={file_extension} />
-		}
-	}, [attachmentList, previewDetail])
-
 	const displayFileName = useMemo(() => {
 		// 修正 detail 类型（如果 metadata.type 是 design 但 type 是 notSupport，需要修正）
 		const correctedPreviewDetail = correctDetailType(previewDetail, {
 			attachmentList,
 		})
-		if (!correctedPreviewDetail?.data) return t("ui.preview")
-
-		const currentType = correctedPreviewDetail.type as DetailType
-		const data = correctedPreviewDetail.data as {
-			name?: string
-			file_name?: string
-			title?: string
-			display_config?: { name?: string }
-		}
-
-		// Design 类型优先使用 data.name
-		if (currentType === DetailType.Design) {
-			return data.name || data.display_config?.name || data.file_name || t("ui.preview")
-		}
-
-		// 其他类型按优先级获取
-		return data.display_config?.name || data.file_name || data.title || t("ui.preview")
+		return getPreviewDetailDisplayName(correctedPreviewDetail, t)
 	}, [attachmentList, previewDetail, t])
+
+	const isOfficePreview = useMemo(() => {
+		const correctedPreviewDetail = correctDetailType(previewDetail, {
+			attachmentList,
+		})
+		return correctedPreviewDetail
+			? OFFICE_DETAIL_TYPES.includes(correctedPreviewDetail.type as DetailType)
+			: false
+	}, [attachmentList, previewDetail])
 
 	if (isFileShare) {
 		return (
@@ -424,37 +418,36 @@ function PreviewDetailPopup(props: PreviewDetailPopupProps, ref: Ref<PreviewDeta
 
 	if (isMobile) {
 		return (
-			<CommonPopup
-				title={
-					<Flex align="center" gap={4}>
-						{FileIcon}
-						<div className={styles.fileName}>{displayFileName}</div>
-					</Flex>
+			<MagicPopup
+				visible={visible}
+				onClose={handleClose}
+				position="bottom"
+				title={displayFileName}
+				headerVariant={hideHeader ? undefined : "actionHeader"}
+				headerTitle={displayFileName}
+				headerLeadingAction={
+					hideHeader
+						? undefined
+						: {
+								icon: <X className="h-[22px] w-[22px]" />,
+								ariaLabel: t("common.close"),
+								onClick: handleClose,
+								testId: "file-preview-popup-close-button",
+							}
 				}
-				hideHeader={hideHeader}
-				popupProps={{
-					position: "bottom",
-					visible,
-					onClose: () => {
-						onClose?.()
-						setVisible(false)
-					},
-					bodyClassName:
-						isShareRoute && previewDetail?.isFromNode
-							? styles.bottomGap
-							: styles.popupBody,
-					// 从节点打开的detail，层级要比底部1020低，从话题文件打开的，层级要比底部的高
-					// style: { zIndex: previewDetail?.isFromNode ? 1019 : 1023 },
-					onMaskClick: () => {
-						setVisible(false)
-					},
-					className: "h-[90%]",
-				}}
+				hideDefaultHandle={hideHeader}
+				className={MOBILE_PREVIEW_SHEET_CLASSNAME}
+				bodyClassName={cn(
+					MOBILE_PREVIEW_BODY_CLASSNAME,
+					isShareRoute && previewDetail?.isFromNode ? styles.bottomGap : styles.popupBody,
+				)}
+				maskClosable
+				data-testid="file-preview-detail-popup-root"
 			>
-				<div className={cx(styles.body)}>
+				<div className="flex min-h-0 flex-1 flex-col bg-background">
 					{!!previewDetail && visible && <>{RenderComponent}</>}
 				</div>
-			</CommonPopup>
+			</MagicPopup>
 		)
 	}
 
@@ -466,6 +459,7 @@ function PreviewDetailPopup(props: PreviewDetailPopupProps, ref: Ref<PreviewDeta
 			onCancel={() => {
 				setVisible(false)
 			}}
+			destroyOnClose={isOfficePreview}
 			closable
 			footer={null}
 			title="文件预览"

@@ -30,7 +30,7 @@ import inspect
 import random
 import time
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Tuple, TypeVar
+from typing import Any, Awaitable, Callable, Dict, List, Optional, Tuple, TypeVar
 
 from agentlang.logger import get_logger
 from app.tools.design.manager.canvas_lock_manager import canvas_lock_manager
@@ -151,12 +151,12 @@ class CanvasManager:
 
     async def run_write_transaction(
         self,
-        mutator: Callable[[MagicProjectConfig], TransactionResultT],
+        mutator: Callable[[MagicProjectConfig], TransactionResultT | Awaitable[TransactionResultT]],
         verify_content: Optional[
             Callable[[MagicProjectConfig, TransactionResultT], bool]
         ] = None,
-        before_write: Optional[Callable[[], Any]] = None,
-        after_write: Optional[Callable[[TransactionResultT], Any]] = None,
+        before_write: Optional[Callable[[], Any | Awaitable[Any]]] = None,
+        after_write: Optional[Callable[[TransactionResultT], Any | Awaitable[Any]]] = None,
     ) -> TransactionResultT:
         """
         在同一把项目锁内完成一次原子写事务：IO 读 -> 内存改 -> IO 写。
@@ -196,11 +196,7 @@ class CanvasManager:
             if verify_content is not None:
                 verifier = lambda verified_config: verify_content(verified_config, result)
 
-            await write_magic_project_js(
-                self.project_path,
-                current_config,
-                content_verifier=verifier,
-            )
+            await self._persist(current_config, verifier)
 
             if after_write is not None:
                 after_result = after_write(result)
@@ -208,6 +204,30 @@ class CanvasManager:
                     await after_result
 
             return result
+
+    async def _persist(
+        self,
+        config: MagicProjectConfig,
+        verifier: Optional[Callable[[MagicProjectConfig], bool]],
+    ) -> None:
+        """把当前配置落盘。
+
+        这是写事务的持久化接缝，由 run_write_transaction 在项目锁内调用。
+        V1 写 v1 对象格式；CanvasManagerV2 覆盖此方法以写压缩格式并拆分重字段。
+        """
+        await write_magic_project_js(
+            self.project_path,
+            config,
+            content_verifier=verifier,
+        )
+
+    async def read_element_details(self) -> Dict[str, Any]:
+        """读取 element-details 文档。
+
+        V1 没有 sidecar，重字段内联在元素上，返回空文档。
+        CanvasManagerV2 覆盖此方法以从 element-details.json 读取。
+        """
+        return {"version": "1.0.0", "elements": {}}
 
     async def query_elements(
         self,

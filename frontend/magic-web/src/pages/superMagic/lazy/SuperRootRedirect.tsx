@@ -1,13 +1,10 @@
-import { useEffect } from "react"
+import { useEffect, useLayoutEffect } from "react"
 import { useParams } from "react-router"
 import { useIsMobile } from "@/hooks/useIsMobile"
 import { userStore } from "@/models/user"
 import { RouteName } from "@/routes/constants"
 import useNavigate from "@/routes/hooks/useNavigate"
-import { baseHistory } from "@/routes/history"
-import { RoutePathMobile } from "@/constants/routes"
-import { configStore } from "@/models/config"
-import { defaultClusterCode } from "@/routes/helpers"
+import { baseHistory, history } from "@/routes/history"
 import SuperMagicService from "../services"
 import {
 	ProjectTopicMapCache,
@@ -15,26 +12,30 @@ import {
 	WorkspaceStateCache,
 } from "../utils/superMagicCache"
 
-/** Single entry for /super index: mobile shell, desktop cache, or workspace home */
+/** Returns true when pathname is bare /{cluster}/super without project/topic segments. */
+function isBareSuperRootPath(pathname: string): boolean {
+	return /^\/[^/]+\/super\/?$/.test(pathname) && !pathname.includes("/mobile-tabs")
+}
+
+/**
+ * Single entry for /super index: render guard for mobile home, mount-only desktop cache restore.
+ */
 export default function SuperRootRedirect() {
 	const navigate = useNavigate()
 	const isMobile = useIsMobile()
 	const { projectId, topicId } = useParams()
+	const shouldRedirectToMobileHome =
+		isMobile && !projectId && !topicId && isBareSuperRootPath(baseHistory.location.pathname)
+
+	// Replace before paint so Super init cannot win the race to legacy mobile-tabs.
+	useLayoutEffect(() => {
+		if (!shouldRedirectToMobileHome) return
+		history.replace({ name: RouteName.MobileHome })
+	}, [shouldRedirectToMobileHome])
 
 	useEffect(() => {
-		// Mobile: /{cluster}/super -> mobile-tabs?tab=super
-		if (isMobile) {
-			if (!projectId && !topicId) {
-				const currentPath = baseHistory.location.pathname
-				const isSuperRootPath = /^\/[^/]+\/super\/?$/.test(currentPath)
-				if (isSuperRootPath && !currentPath.includes("/mobile-tabs")) {
-					const clusterCode = configStore.cluster.clusterCode || defaultClusterCode
-					const targetPath = `/${clusterCode}${RoutePathMobile.MobileTabs}?tab=super`
-					baseHistory.replace(targetPath)
-				}
-			}
-			return
-		}
+		// Desktop-only: restore workspace/project/topic from cache on first mount.
+		if (isMobile) return
 
 		const userInfo = userStore.user.userInfo
 		const cachedState = WorkspaceStateCache.get(userInfo)
@@ -76,7 +77,9 @@ export default function SuperRootRedirect() {
 		}
 
 		void SuperMagicService.navigateToHome()
-	}, [isMobile, navigate, projectId, topicId])
+		// Intentionally omit isMobile: resize mobile/desktop is handled by route entry guards.
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [navigate, projectId, topicId])
 
 	return null
 }

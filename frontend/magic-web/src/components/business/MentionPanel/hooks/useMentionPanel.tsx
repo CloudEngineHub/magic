@@ -27,6 +27,10 @@ interface UseMentionPanelProps<TCatalogId extends string = string> {
 	enabled?: boolean
 	/** 为 false 时仍加载数据，但禁用键盘 Enter/方向键等（移动端多选面板需避免 Enter 直接插入） */
 	keyboardShortcutsEnabled?: boolean
+	onKeyboardConfirm?: () => boolean | void
+	onKeyboardMetaEnter?: () => boolean | void
+	onKeyboardNavigateBack?: () => void
+	onKeyboardEnterFolder?: () => boolean | void
 	t: I18nTexts // I18nTexts from the i18n system
 	catalogBehavior: MentionPanelCatalogBehavior<TCatalogId>
 	buildStoreRequest?: (
@@ -89,6 +93,11 @@ function filterItemsByQuery(items: MentionItem[], query: string): MentionItem[] 
 			return true
 		}
 
+		// Search in package_name (for skills)
+		if (item.package_name?.toLowerCase().includes(lowercaseQuery)) {
+			return true
+		}
+
 		// Search in description
 		if (item.description?.toLowerCase().includes(lowercaseQuery)) {
 			return true
@@ -114,6 +123,7 @@ function filterItemsByQuery(items: MentionItem[], query: string): MentionItem[] 
 				"file_path",
 				"agent_name",
 				"agent_description",
+				"package_name",
 			]
 			for (const key of fieldsToCheck) {
 				const value = (data as Record<string, unknown>)[key]
@@ -150,6 +160,10 @@ export function useMentionPanel<TCatalogId extends string = string>(
 		dataService,
 		enabled = true,
 		keyboardShortcutsEnabled = true,
+		onKeyboardConfirm,
+		onKeyboardMetaEnter,
+		onKeyboardNavigateBack,
+		onKeyboardEnterFolder,
 		t,
 		catalogBehavior,
 		buildStoreRequest,
@@ -197,19 +211,18 @@ export function useMentionPanel<TCatalogId extends string = string>(
 	)
 
 	// Update panel state when data changes
+	// Note: Do NOT re-filter search results here. Items from the search pipeline
+	// (dataSourceHook.items) are already correctly filtered by domain-specific
+	// search plugins. Re-filtering would require duplicating all matching logic
+	// and risk inconsistent field coverage (e.g., package_name, new fields).
+	// Local filtering (CATALOG/FOLDER) is handled in the search action directly.
 	useEffect(() => {
 		setPanelState((prev) => {
 			const newItems = dataSourceHook.items
 
-			// If we have a search query, filter the new items
-			const filteredItems = prev.searchQuery
-				? filterItemsByQuery(newItems, prev.searchQuery)
-				: newItems
-
 			return {
 				...prev,
-				items: filteredItems,
-				// Only update originalItems when not searching to preserve search context
+				items: newItems,
 				originalItems: prev.searchQuery ? prev.originalItems : newItems,
 				loading: dataSourceHook.loading,
 				error: dataSourceHook.error,
@@ -922,8 +935,12 @@ export function useMentionPanel<TCatalogId extends string = string>(
 		onSelectPrevious: selectPrevious,
 		onSelectNext: selectNext,
 		onConfirm: confirmSelection,
+		onBeforeConfirm: onKeyboardConfirm,
+		onMetaEnter: onKeyboardMetaEnter,
 		onNavigateBack: navigateBack,
+		onBeforeNavigateBack: onKeyboardNavigateBack,
 		onEnterFolder: enterFolder,
+		onBeforeEnterFolder: onKeyboardEnterFolder,
 		onExit: exit,
 		enabled: enabled && keyboardShortcutsEnabled,
 		preventDefault: true,
@@ -945,7 +962,40 @@ export function useMentionPanel<TCatalogId extends string = string>(
 			return false
 		}
 
-		return selectedItem?.hasChildren || false
+		const currentCatalogId = getCurrentCatalogId(panelState.navigationStack)
+		const nextEnterFolder = true
+		const allowUnselectableForFolderNavigation =
+			nextEnterFolder && selectedItem.isFolder === true
+
+		if (selectedItem.unSelectable && !allowUnselectableForFolderNavigation) {
+			return false
+		}
+
+		if (
+			catalogBehavior.shouldSelectItemDirectly?.({
+				currentState: panelState.currentState,
+				currentCatalogId,
+				selectedItem,
+				enterFolder: nextEnterFolder,
+			})
+		) {
+			return false
+		}
+
+		const targetTransition =
+			catalogBehavior.getStaticTransition?.({
+				currentState: panelState.currentState,
+				itemId: selectedItem.id,
+			}) ??
+			catalogBehavior.getDynamicTransition?.({
+				currentState: panelState.currentState,
+				currentCatalogId,
+				selectedItem,
+				enterFolder: nextEnterFolder,
+			}) ??
+			null
+
+		return Boolean(targetTransition)
 	})()
 
 	const hasSelection = panelState.items.length > 0

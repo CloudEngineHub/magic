@@ -16,16 +16,17 @@ use App\Infrastructure\ExternalAPI\ImageGenerateAPI\Model\VolcengineArk\Volcengi
 use App\Infrastructure\ExternalAPI\ImageGenerateAPI\Request\AzureOpenAIImageRequest;
 use App\Infrastructure\ExternalAPI\ImageGenerateAPI\Request\FluxModelRequest;
 use App\Infrastructure\ExternalAPI\ImageGenerateAPI\Request\MidjourneyModelRequest;
+use App\Infrastructure\ExternalAPI\ImageGenerateAPI\Request\OpenRouterRequest;
 use App\Infrastructure\ExternalAPI\ImageGenerateAPI\Request\QwenImageModelRequest;
 use App\Infrastructure\ExternalAPI\ImageGenerateAPI\Request\VolcengineModelRequest;
-use HyperfTest\Cases\BaseTest;
+use PHPUnit\Framework\TestCase;
 
 /**
  * @internal
  * @covers \App\Infrastructure\ExternalAPI\ImageGenerateAPI\ImageGenerateFactory
  * @covers \App\Infrastructure\ExternalAPI\ImageGenerateAPI\SizeManager
  */
-class ImageGenerateFactoryTest extends BaseTest
+class ImageGenerateFactoryTest extends TestCase
 {
     /**
      * 测试使用配置文件中存在的模型版本进行精确label匹配
@@ -47,8 +48,7 @@ class ImageGenerateFactoryTest extends BaseTest
         $this->assertEquals('1024', $request->getWidth());
         $this->assertEquals('1024', $request->getHeight());
         $this->assertEquals('1:1', $request->getRatio());
-        // gemini-2.5-flash-image 不支持 resolution preset
-        $this->assertNull($request->getResolutionPreset());
+        $this->assertSame('1K', $request->getResolution());
     }
 
     /**
@@ -89,8 +89,9 @@ class ImageGenerateFactoryTest extends BaseTest
         );
 
         $this->assertInstanceOf(VolcengineArkRequest::class, $request);
-        $this->assertEquals('2048', $request->getWidth());
-        $this->assertEquals('2048', $request->getHeight());
+        $this->assertEquals('1024', $request->getWidth());
+        $this->assertEquals('1024', $request->getHeight());
+        $this->assertSame('1K', $request->getResolution());
     }
 
     /**
@@ -159,6 +160,7 @@ class ImageGenerateFactoryTest extends BaseTest
         $this->assertEquals('1024', $request->getWidth());
         $this->assertEquals('1536', $request->getHeight());
         $this->assertEquals('1024x1536', $request->getSize());
+        $this->assertSame('1K', $request->getResolution());
     }
 
     public function testAzureGptImage2UsesQualityFromImageGenerationConfig(): void
@@ -234,6 +236,33 @@ class ImageGenerateFactoryTest extends BaseTest
         $this->assertEquals('1024', $request->getHeight());
         $this->assertEquals('1820x1024', $request->getSize());
         $this->assertEquals('16:9', $request->getRatio());
+        $this->assertSame('1K', $request->getResolution());
+        $this->assertSame('1K', $request->getGenerationConfig()['imageConfig']['imageSize'] ?? null);
+    }
+
+    public function testOpenRouterRequestCarriesResolution(): void
+    {
+        $data = $this->getCommonData();
+        $data['size'] = '16:9';
+
+        $request = ImageGenerateFactory::createRequestType(
+            ImageGenerateModelType::OpenRouter,
+            'google/gemini-2.5-flash-image-preview',
+            null,
+            $data
+        );
+
+        $this->assertInstanceOf(OpenRouterRequest::class, $request);
+        $this->assertSame('1K', $request->getResolution());
+        $this->assertSame('1K', $request->toArray()['image_config']['image_size'] ?? null);
+
+        $request->setResolution('2K');
+        $this->assertSame('2K', $request->getResolution());
+        $this->assertSame('2K', $request->toArray()['image_config']['image_size'] ?? null);
+
+        $constructedRequest = new OpenRouterRequest('', '', 'm', 'p', ['image_size' => '2K']);
+        $this->assertSame('2K', $constructedRequest->getResolution());
+        $this->assertSame('2K', $constructedRequest->toArray()['image_config']['image_size'] ?? null);
     }
 
     /**
@@ -255,6 +284,7 @@ class ImageGenerateFactoryTest extends BaseTest
         $this->assertInstanceOf(QwenImageModelRequest::class, $request);
         $this->assertEquals('1328', $request->getWidth());
         $this->assertEquals('1328', $request->getHeight());
+        $this->assertSame('1K', $request->getResolution());
     }
 
     /**
@@ -359,9 +389,9 @@ class ImageGenerateFactoryTest extends BaseTest
         );
 
         $this->assertInstanceOf(VolcengineArkRequest::class, $request);
-        // 匹配到第一个 1:1 配置
-        $this->assertEquals('2048', $request->getWidth());
-        $this->assertEquals('2048', $request->getHeight());
+        // 带 total_pixels_range 的模型会按像素范围同比例放大，不直接命中声明尺寸
+        $this->assertEquals('1920', $request->getWidth());
+        $this->assertEquals('1920', $request->getHeight());
     }
 
     /**
@@ -475,7 +505,7 @@ class ImageGenerateFactoryTest extends BaseTest
         $this->assertEquals('672', $request->getHeight());
         $this->assertEquals('1584x672', $request->getSize());
         $this->assertEquals('21:9', $request->getRatio());
-        $this->assertEquals('1K', $request->getResolutionPreset());
+        $this->assertEquals('1K', $request->getResolution());
     }
 
     /**
@@ -497,7 +527,7 @@ class ImageGenerateFactoryTest extends BaseTest
         $this->assertEquals('3168', $request->getWidth());
         $this->assertEquals('1344', $request->getHeight());
         $this->assertEquals('21:9', $request->getRatio());
-        $this->assertEquals('2K', $request->getResolutionPreset());
+        $this->assertEquals('2K', $request->getResolution());
     }
 
     // ==========================================================
@@ -531,7 +561,7 @@ class ImageGenerateFactoryTest extends BaseTest
             $this->assertEquals($testCase['width'], $request->getWidth(), "Width mismatch for size: {$testCase['size']}");
             $this->assertEquals($testCase['height'], $request->getHeight(), "Height mismatch for size: {$testCase['size']}");
             $this->assertEquals($testCase['ratio'], $request->getRatio(), "Ratio mismatch for size: {$testCase['size']}");
-            $this->assertEquals($testCase['preset'], $request->getResolutionPreset(), "Preset mismatch for size: {$testCase['size']}");
+            $this->assertEquals($testCase['preset'], $request->getResolution(), "Resolution mismatch for size: {$testCase['size']}");
         }
     }
 
@@ -562,7 +592,7 @@ class ImageGenerateFactoryTest extends BaseTest
             $this->assertEquals($testCase['width'], $request->getWidth(), "Width mismatch for size: {$testCase['size']}");
             $this->assertEquals($testCase['height'], $request->getHeight(), "Height mismatch for size: {$testCase['size']}");
             $this->assertEquals($testCase['ratio'], $request->getRatio(), "Ratio mismatch for size: {$testCase['size']}");
-            $this->assertEquals($testCase['preset'], $request->getResolutionPreset(), "Preset mismatch for size: {$testCase['size']}");
+            $this->assertEquals($testCase['preset'], $request->getResolution(), "Resolution mismatch for size: {$testCase['size']}");
         }
     }
 
@@ -593,7 +623,7 @@ class ImageGenerateFactoryTest extends BaseTest
             $this->assertEquals($testCase['width'], $request->getWidth(), "Width mismatch for size: {$testCase['size']}");
             $this->assertEquals($testCase['height'], $request->getHeight(), "Height mismatch for size: {$testCase['size']}");
             $this->assertEquals($testCase['ratio'], $request->getRatio(), "Ratio mismatch for size: {$testCase['size']}");
-            $this->assertEquals($testCase['preset'], $request->getResolutionPreset(), "Preset mismatch for size: {$testCase['size']}");
+            $this->assertEquals($testCase['preset'], $request->getResolution(), "Resolution mismatch for size: {$testCase['size']}");
         }
     }
 
@@ -624,7 +654,7 @@ class ImageGenerateFactoryTest extends BaseTest
             $this->assertEquals($testCase['width'], $request->getWidth(), "Width mismatch for size: {$testCase['size']}");
             $this->assertEquals($testCase['height'], $request->getHeight(), "Height mismatch for size: {$testCase['size']}");
             $this->assertEquals($testCase['ratio'], $request->getRatio(), "Ratio mismatch for size: {$testCase['size']}");
-            $this->assertEquals($testCase['preset'], $request->getResolutionPreset(), "Preset mismatch for size: {$testCase['size']}");
+            $this->assertEquals($testCase['preset'], $request->getResolution(), "Resolution mismatch for size: {$testCase['size']}");
         }
     }
 
@@ -655,7 +685,7 @@ class ImageGenerateFactoryTest extends BaseTest
             $this->assertEquals($testCase['width'], $request->getWidth(), "Width mismatch for size: {$testCase['size']}");
             $this->assertEquals($testCase['height'], $request->getHeight(), "Height mismatch for size: {$testCase['size']}");
             $this->assertEquals($testCase['ratio'], $request->getRatio(), "Ratio mismatch for size: {$testCase['size']}");
-            $this->assertEquals($testCase['preset'], $request->getResolutionPreset(), "Preset mismatch for size: {$testCase['size']}");
+            $this->assertEquals($testCase['preset'], $request->getResolution(), "Resolution mismatch for size: {$testCase['size']}");
         }
     }
 
@@ -686,7 +716,7 @@ class ImageGenerateFactoryTest extends BaseTest
             $this->assertEquals($testCase['width'], $request->getWidth(), "Width mismatch for size: {$testCase['size']}");
             $this->assertEquals($testCase['height'], $request->getHeight(), "Height mismatch for size: {$testCase['size']}");
             $this->assertEquals($testCase['ratio'], $request->getRatio(), "Ratio mismatch for size: {$testCase['size']}");
-            $this->assertEquals($testCase['preset'], $request->getResolutionPreset(), "Preset mismatch for size: {$testCase['size']}");
+            $this->assertEquals($testCase['preset'], $request->getResolution(), "Resolution mismatch for size: {$testCase['size']}");
         }
     }
 
@@ -717,7 +747,7 @@ class ImageGenerateFactoryTest extends BaseTest
             $this->assertEquals($testCase['width'], $request->getWidth(), "Width mismatch for size: {$testCase['size']}");
             $this->assertEquals($testCase['height'], $request->getHeight(), "Height mismatch for size: {$testCase['size']}");
             $this->assertEquals($testCase['ratio'], $request->getRatio(), "Ratio mismatch for size: {$testCase['size']}");
-            $this->assertEquals($testCase['preset'], $request->getResolutionPreset(), "Preset mismatch for size: {$testCase['size']}");
+            $this->assertEquals($testCase['preset'], $request->getResolution(), "Resolution mismatch for size: {$testCase['size']}");
         }
     }
 
@@ -748,7 +778,7 @@ class ImageGenerateFactoryTest extends BaseTest
             $this->assertEquals($testCase['width'], $request->getWidth(), "Width mismatch for size: {$testCase['size']}");
             $this->assertEquals($testCase['height'], $request->getHeight(), "Height mismatch for size: {$testCase['size']}");
             $this->assertEquals($testCase['ratio'], $request->getRatio(), "Ratio mismatch for size: {$testCase['size']}");
-            $this->assertEquals($testCase['preset'], $request->getResolutionPreset(), "Preset mismatch for size: {$testCase['size']}");
+            $this->assertEquals($testCase['preset'], $request->getResolution(), "Resolution mismatch for size: {$testCase['size']}");
         }
     }
 
@@ -779,7 +809,7 @@ class ImageGenerateFactoryTest extends BaseTest
             $this->assertEquals($testCase['width'], $request->getWidth(), "Width mismatch for size: {$testCase['size']}");
             $this->assertEquals($testCase['height'], $request->getHeight(), "Height mismatch for size: {$testCase['size']}");
             $this->assertEquals($testCase['ratio'], $request->getRatio(), "Ratio mismatch for size: {$testCase['size']}");
-            $this->assertEquals($testCase['preset'], $request->getResolutionPreset(), "Preset mismatch for size: {$testCase['size']}");
+            $this->assertEquals($testCase['preset'], $request->getResolution(), "Resolution mismatch for size: {$testCase['size']}");
         }
     }
 
@@ -810,7 +840,7 @@ class ImageGenerateFactoryTest extends BaseTest
             $this->assertEquals($testCase['width'], $request->getWidth(), "Width mismatch for size: {$testCase['size']}");
             $this->assertEquals($testCase['height'], $request->getHeight(), "Height mismatch for size: {$testCase['size']}");
             $this->assertEquals($testCase['ratio'], $request->getRatio(), "Ratio mismatch for size: {$testCase['size']}");
-            $this->assertEquals($testCase['preset'], $request->getResolutionPreset(), "Preset mismatch for size: {$testCase['size']}");
+            $this->assertEquals($testCase['preset'], $request->getResolution(), "Resolution mismatch for size: {$testCase['size']}");
         }
     }
 
@@ -851,8 +881,7 @@ class ImageGenerateFactoryTest extends BaseTest
             $this->assertEquals($testCase['width'], $request->getWidth(), "Width mismatch for size: {$testCase['size']}");
             $this->assertEquals($testCase['height'], $request->getHeight(), "Height mismatch for size: {$testCase['size']}");
             $this->assertEquals($testCase['ratio'], $request->getRatio(), "Ratio mismatch for size: {$testCase['size']}");
-            // gemini-2.5-flash-image 不支持 resolution preset
-            $this->assertNull($request->getResolutionPreset(), "Preset should be null for size: {$testCase['size']}");
+            $this->assertSame('1K', $request->getResolution(), "Resolution mismatch for size: {$testCase['size']}");
         }
     }
 
@@ -866,14 +895,14 @@ class ImageGenerateFactoryTest extends BaseTest
     public function testSeedream40AllSizes()
     {
         $sizes = [
-            ['size' => '1:1', 'width' => '2048', 'height' => '2048'],
-            ['size' => '2:3', 'width' => '1664', 'height' => '2496'],
-            ['size' => '3:2', 'width' => '2496', 'height' => '1664'],
-            ['size' => '3:4', 'width' => '1728', 'height' => '2304'],
-            ['size' => '4:3', 'width' => '2304', 'height' => '1728'],
-            ['size' => '9:16', 'width' => '1440', 'height' => '2560'],
-            ['size' => '16:9', 'width' => '2560', 'height' => '1440'],
-            ['size' => '21:9', 'width' => '2048', 'height' => '2048'],
+            ['size' => '1:1', 'width' => '1024', 'height' => '1024'],
+            ['size' => '2:3', 'width' => '784', 'height' => '1177'],
+            ['size' => '3:2', 'width' => '1177', 'height' => '784'],
+            ['size' => '3:4', 'width' => '832', 'height' => '1109'],
+            ['size' => '4:3', 'width' => '1109', 'height' => '832'],
+            ['size' => '9:16', 'width' => '720', 'height' => '1280'],
+            ['size' => '16:9', 'width' => '1280', 'height' => '720'],
+            ['size' => '21:9', 'width' => '1468', 'height' => '628'],
         ];
 
         foreach ($sizes as $testCase) {
@@ -903,7 +932,7 @@ class ImageGenerateFactoryTest extends BaseTest
     public function testSeedream45All1To1Sizes()
     {
         $sizes = [
-            ['size' => '1:1', 'width' => '2048', 'height' => '2048'],
+            ['size' => '1:1', 'width' => '1920', 'height' => '1920'],
             ['size' => '2048x2048', 'width' => '2048', 'height' => '2048'],
             ['size' => '4096x4096', 'width' => '4096', 'height' => '4096'],
         ];
@@ -931,7 +960,7 @@ class ImageGenerateFactoryTest extends BaseTest
     public function testSeedream45All2To3Sizes()
     {
         $sizes = [
-            ['size' => '2:3', 'width' => '1664', 'height' => '2496'],
+            ['size' => '2:3', 'width' => '1567', 'height' => '2353'],
             ['size' => '1664x2496', 'width' => '1664', 'height' => '2496'],
             ['size' => '2731x4096', 'width' => '2731', 'height' => '4096'],
         ];
@@ -959,7 +988,7 @@ class ImageGenerateFactoryTest extends BaseTest
     public function testSeedream45All3To2Sizes()
     {
         $sizes = [
-            ['size' => '3:2', 'width' => '2496', 'height' => '1664'],
+            ['size' => '3:2', 'width' => '2353', 'height' => '1567'],
             ['size' => '2496x1664', 'width' => '2496', 'height' => '1664'],
             ['size' => '4096x2731', 'width' => '4096', 'height' => '2731'],
         ];
@@ -987,7 +1016,7 @@ class ImageGenerateFactoryTest extends BaseTest
     public function testSeedream45All3To4Sizes()
     {
         $sizes = [
-            ['size' => '3:4', 'width' => '1728', 'height' => '2304'],
+            ['size' => '3:4', 'width' => '1663', 'height' => '2218'],
             ['size' => '1728x2304', 'width' => '1728', 'height' => '2304'],
             ['size' => '3072x4096', 'width' => '3072', 'height' => '4096'],
         ];
@@ -1015,7 +1044,7 @@ class ImageGenerateFactoryTest extends BaseTest
     public function testSeedream45All4To3Sizes()
     {
         $sizes = [
-            ['size' => '4:3', 'width' => '2304', 'height' => '1728'],
+            ['size' => '4:3', 'width' => '2218', 'height' => '1663'],
             ['size' => '2304x1728', 'width' => '2304', 'height' => '1728'],
             ['size' => '4096x3072', 'width' => '4096', 'height' => '3072'],
         ];
@@ -1099,7 +1128,7 @@ class ImageGenerateFactoryTest extends BaseTest
     public function testSeedream45All21To9Sizes()
     {
         $sizes = [
-            ['size' => '21:9', 'width' => '2048', 'height' => '2048'],
+            ['size' => '21:9', 'width' => '2936', 'height' => '1256'],
             ['size' => '2048x2048', 'width' => '2048', 'height' => '2048'],
             ['size' => '4096x1755', 'width' => '4096', 'height' => '1755'],
         ];
@@ -1186,6 +1215,104 @@ class ImageGenerateFactoryTest extends BaseTest
             $this->assertEquals($testCase['height'], $request->getHeight(), "Height mismatch for size: {$testCase['size']}");
             $this->assertEquals($testCase['sizeStr'], $request->getSize(), "Size string mismatch for size: {$testCase['size']}");
         }
+    }
+
+    public function testCreateRequestRejectsGenerateNumAboveConfiguredLimit(): void
+    {
+        $this->expectException(BusinessException::class);
+        $this->expectExceptionMessage('当前模型最多支持一次生成 8 张图片，请调整 n 参数。');
+
+        $data = $this->getCommonData();
+        $data['generate_num'] = 9;
+
+        ImageGenerateFactory::createRequestType(
+            ImageGenerateModelType::VolcengineArk,
+            'doubao-seedream-4-0-250828',
+            'seedream-4-0',
+            $data
+        );
+    }
+
+    public function testCreateRequestAllowsGenerateNumAtConfiguredLimit(): void
+    {
+        $data = $this->getCommonData();
+        $data['generate_num'] = 8;
+
+        $request = ImageGenerateFactory::createRequestType(
+            ImageGenerateModelType::VolcengineArk,
+            'doubao-seedream-4-0-250828',
+            'seedream-4-0',
+            $data
+        );
+
+        $this->assertInstanceOf(VolcengineArkRequest::class, $request);
+        $this->assertSame(8, $request->getGenerateNum());
+        $this->assertSame('auto', $request->getSequentialImageGeneration());
+        $this->assertSame(['max_images' => 8], $request->getSequentialImageGenerationOptions());
+    }
+
+    public function testCreateQwenImagePlusKeepsSingleOutputLimit(): void
+    {
+        $this->expectException(BusinessException::class);
+        $this->expectExceptionMessage('当前模型最多支持一次生成 1 张图片，请调整 n 参数。');
+
+        $data = $this->getCommonData();
+        $data['generate_num'] = 2;
+
+        ImageGenerateFactory::createRequestType(
+            ImageGenerateModelType::QwenImage,
+            'qwen-image-plus',
+            null,
+            $data
+        );
+    }
+
+    public function testCreateQwenImageEditPlusAllowsSixOutputs(): void
+    {
+        $data = $this->getCommonData();
+        $data['generate_num'] = 6;
+
+        $request = ImageGenerateFactory::createRequestType(
+            ImageGenerateModelType::QwenImage,
+            'qwen-image-edit-plus',
+            null,
+            $data
+        );
+
+        $this->assertInstanceOf(QwenImageModelRequest::class, $request);
+        $this->assertSame(6, $request->getGenerateNum());
+    }
+
+    public function testCreateQwenImageEditMaxRejectsAboveSixOutputs(): void
+    {
+        $this->expectException(BusinessException::class);
+        $this->expectExceptionMessage('当前模型最多支持一次生成 6 张图片，请调整 n 参数。');
+
+        $data = $this->getCommonData();
+        $data['generate_num'] = 7;
+
+        ImageGenerateFactory::createRequestType(
+            ImageGenerateModelType::QwenImage,
+            'qwen-image-edit-max',
+            null,
+            $data
+        );
+    }
+
+    public function testCreateRequestDefaultsOutputImageLimitToOne(): void
+    {
+        $this->expectException(BusinessException::class);
+        $this->expectExceptionMessage('当前模型最多支持一次生成 1 张图片，请调整 n 参数。');
+
+        $data = $this->getCommonData();
+        $data['generate_num'] = 2;
+
+        ImageGenerateFactory::createRequestType(
+            ImageGenerateModelType::GoogleGemini,
+            'gemini-2.5-flash-image',
+            null,
+            $data
+        );
     }
 
     // ==========================================================

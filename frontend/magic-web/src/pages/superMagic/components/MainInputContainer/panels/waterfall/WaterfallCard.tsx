@@ -43,6 +43,7 @@ function WaterfallCard({ template, isSelected, onClick }: WaterfallCardProps) {
 				isSelected && "ring-2 ring-primary ring-offset-2 ring-offset-background",
 			)}
 			onClick={() => onClick?.(template)}
+			data-testid="waterfall-card"
 		>
 			{/* Image container with fixed aspect ratio to prevent layout shift */}
 			<div className="relative flex w-full flex-col items-start justify-center overflow-hidden rounded-sm">
@@ -59,6 +60,7 @@ function WaterfallCard({ template, isSelected, onClick }: WaterfallCardProps) {
 							className="pointer-events-none size-full object-cover"
 							loading="lazy"
 							onError={() => setHasImageError(true)}
+							data-testid="set-has-image-error"
 						/>
 
 						{/* Hover overlay: gradient + content, visible on group hover */}

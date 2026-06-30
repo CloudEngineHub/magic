@@ -282,6 +282,11 @@ export function exportLayerElement(element: LayerElement): LayerElement {
 			if (element.generateVideoRequest !== undefined) {
 				result.generateVideoRequest = cloneSerializable(element.generateVideoRequest)
 			}
+			if (element.videoGenerationResultMeta !== undefined) {
+				result.videoGenerationResultMeta = cloneSerializable(
+					element.videoGenerationResultMeta,
+				)
+			}
 			return result
 		}
 

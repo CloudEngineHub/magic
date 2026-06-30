@@ -45,7 +45,7 @@ import {
 } from "@/pages/superMagic/constants/resizablePanel"
 import { cn } from "@/lib/utils"
 import { ScrollArea } from "@/components/shadcn-ui/scroll-area"
-import projectFilesStore from "@/stores/projectFiles"
+import { ProjectFilesStore } from "@/stores/projectFiles"
 import useShareRoute from "@/pages/superMagic/hooks/useShareRoute"
 import { calculateDefaultOpenFileId } from "@/pages/superMagic/components/Share/FileSelector/utils"
 import { useShareMenuFilters } from "../../hooks"
@@ -113,6 +113,8 @@ function Topic({
 	// Add activeFileId state management same as workspace
 	const [activeFileId, setActiveFileId] = useState<string | null>(null)
 	const [primaryPreviewFileId, setPrimaryPreviewFileId] = useState<string | null>(null)
+
+	const [projectFilesStore] = useState(() => new ProjectFilesStore())
 
 	const { handleDownloadAll, allLoading } = useDownloadAll({ projectId })
 
@@ -1084,6 +1086,7 @@ function Topic({
 												isLoadAll ? TaskStatus.FINISHED : TaskStatus.RUNNING
 											}
 											stickyMessageClassName="-top-[10px] pt-[10px] [--sticky-message-mask-bg:rgb(255_255_255)] [--sticky-message-mask-fade-from:rgb(255_255_255)]"
+											projectFilesStore={projectFilesStore}
 										/>
 										{!taskIsEnd && messageList?.length > 0 && !hasStarted && (
 											<LoadingMessage />
@@ -1105,7 +1108,10 @@ function Topic({
 			</div>
 
 			{hasStarted && !isFileShare && !isNewFileShare && (
-				<div className="fixed bottom-0 left-0 right-0 z-[1020] box-border h-[50px] bg-background shadow-[0px_0px_1px_0px_rgba(0,0,0,0.3),0px_0px_30px_0px_rgba(0,0,0,0.06)] max-md:h-[calc(50px+var(--safe-area-inset-bottom,env(safe-area-inset-bottom)))]">
+				<div
+					className="fixed bottom-0 left-0 right-0 z-[1020] box-border h-[50px] bg-background shadow-[0px_0px_1px_0px_rgba(0,0,0,0.3),0px_0px_30px_0px_rgba(0,0,0,0.06)] max-md:h-[calc(50px+var(--safe-area-inset-bottom,env(safe-area-inset-bottom)))]"
+					data-testid="share-playback-controls"
+				>
 					<div className="flex flex-col gap-2.5 p-2">
 						<div className="flex flex-1 flex-row items-center justify-between max-md:gap-2.5 [&_img]:h-9 [&_img]:w-auto">
 							{isMobile && <FooterLogo />}
@@ -1136,6 +1142,7 @@ function Topic({
 									}
 									disabled={!messagesWithoutRevoked?.length}
 									className="[&_[data-slot=slider-range]]:bg-foreground [&_[data-slot=slider-thumb]]:hidden [&_[data-slot=slider-track]]:bg-[#d1d1d1]"
+									data-testid="share-playback-slider"
 								/>
 							</div>
 							{isBottom ? (
@@ -1143,6 +1150,7 @@ function Topic({
 									variant="outline"
 									className="h-[30px] rounded-full border-border px-5 py-1.5 text-sm font-normal leading-5 text-foreground"
 									onClick={replay}
+									data-testid="share-playback-replay-button"
 								>
 									{t("share.replay")}
 								</Button>
@@ -1152,6 +1160,7 @@ function Topic({
 									variant="outline"
 									className="h-[30px] rounded-full border-border px-5 py-1.5 text-sm font-normal leading-5 text-foreground"
 									onClick={handleShowResult}
+									data-testid="share-playback-result-button"
 								>
 									{t("share.viewResult")}
 								</Button>
@@ -1161,7 +1170,10 @@ function Topic({
 				</div>
 			)}
 			{!hasStarted && !isFileShare && (
-				<div className="fixed bottom-0 left-0 right-0 z-10 flex h-full animate-fadeInUp flex-col items-center justify-center bg-gradient-to-b from-transparent via-[#F9F9F9] to-[#F9F9F9] px-5 pb-0 pt-[60px] transition-all duration-300 ease-in-out dark:via-background dark:to-background">
+				<div
+					className="fixed bottom-0 left-0 right-0 z-10 flex h-full animate-fadeInUp flex-col items-center justify-center bg-gradient-to-b from-transparent via-[#F9F9F9] to-[#F9F9F9] px-5 pb-0 pt-[60px] transition-all duration-300 ease-in-out dark:via-background dark:to-background"
+					data-testid="share-replay-intro"
+				>
 					<div className="w-[840px] max-md:w-[335px] max-md:max-w-[335px]">
 						<div className="mb-5 flex items-center justify-start gap-2.5 rounded-lg">
 							<div className="relative h-[50px] w-[50px] shrink-0 overflow-hidden rounded-full shadow-[0_8px_32px_rgba(0,0,0,0.12)] transition-all duration-300">
@@ -1188,6 +1200,7 @@ function Topic({
 								<div
 									className="relative h-20 w-20 cursor-pointer overflow-hidden rounded-full shadow-[0_8px_32px_rgba(0,0,0,0.12)] transition-all duration-300 max-md:h-[60px] max-md:w-[60px]"
 									onClick={startShowingMessages}
+									data-testid="share-replay-play-trigger"
 								>
 									<div className="absolute -left-[50px] -top-[50px] h-[150px] w-[150px] cursor-pointer bg-black/80 max-md:-left-[30px] max-md:-top-[30px] max-md:h-[120px] max-md:w-[120px]"></div>
 									<div className="absolute left-1/2 top-1/2 z-10 flex h-[50px] w-[50px] -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full max-md:h-10 max-md:w-10">
@@ -1232,6 +1245,7 @@ function Topic({
 											isLoadAll ? TaskStatus.FINISHED : TaskStatus.RUNNING
 										}
 										stickyMessageClassName="top-0 z-1 [--sticky-message-mask-bg:rgb(255_255_255)] [--sticky-message-mask-fade-from:rgb(255_255_255)]"
+										projectFilesStore={projectFilesStore}
 									/>
 									{!taskIsEnd && messageList?.length > 0 && !hasStarted && (
 										<LoadingMessage />
@@ -1261,6 +1275,7 @@ function Topic({
 									"dark:shadow-[0_0_0_1px_rgba(255,255,255,0.1)] dark:hover:shadow-[0_0_0_1px_rgba(255,255,255,0.15),0_4px_12px_rgba(255,255,255,0.06)]",
 									isMobile && "w-full",
 								)}
+								data-testid="share-replay-start-button"
 							>
 								<IconPlayerPlayFilled
 									size={16}
@@ -1277,6 +1292,7 @@ function Topic({
 									"dark:hover:ring-1 dark:hover:ring-white/10",
 									isMobile && "w-full",
 								)}
+								data-testid="share-replay-result-button"
 							>
 								{t("share.viewResult")}
 							</Button>
@@ -1305,6 +1321,7 @@ function Topic({
 						<div
 							className="flex h-10 cursor-pointer items-center gap-1 rounded-lg p-2.5 text-sm text-foreground"
 							onClick={() => history.replace({ name: RouteName.Login })}
+							data-testid="share-navigation-login-item"
 						>
 							<IconLogin className="size-5" />
 							{t("share.login")}
@@ -1313,6 +1330,7 @@ function Topic({
 						<div
 							className="flex h-10 cursor-pointer items-center gap-1 rounded-lg p-2.5 text-sm text-foreground"
 							onClick={() => history.push({ name: RouteName.Super })}
+							data-testid="share-navigation-workspace-item"
 						>
 							<IconLayoutGrid className="size-5" />
 							{t("share.enterWorkspace")}
@@ -1326,6 +1344,7 @@ function Topic({
 					<div
 						className="flex h-10 cursor-pointer items-center gap-1 rounded-lg p-2.5 text-sm text-foreground"
 						onClick={() => setAttachmentVisible(true)}
+						data-testid="share-navigation-files-item"
 					>
 						<IconFolder className="size-5" /> <span>{t("share.viewProjectFiles")}</span>
 					</div>
@@ -1357,7 +1376,10 @@ function Topic({
 				}}
 				title={t("share.projectFiles")}
 			>
-				<div className="flex flex-1 flex-col gap-2.5 overflow-hidden p-0">
+				<div
+					className="flex flex-1 flex-col gap-2.5 overflow-hidden p-0"
+					data-testid="share-project-files-popup"
+				>
 					<TopicFilesCore
 						ref={topicFilesCoreRef}
 						attachments={attachments.tree}

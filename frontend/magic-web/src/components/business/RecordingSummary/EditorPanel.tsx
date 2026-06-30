@@ -13,7 +13,7 @@ import type {
 
 import("@/components/business/RecordingSummary/internal/editorRuntime").then(
 	({ preloadRecordSummaryFloatPanelIfNeeded }) => {
-		preloadRecordSummaryFloatPanelIfNeeded()
+		preloadRecordSummaryFloatPanelIfNeeded?.()
 	},
 )
 

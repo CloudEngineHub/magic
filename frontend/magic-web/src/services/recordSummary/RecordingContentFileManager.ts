@@ -62,6 +62,10 @@ export class RecordingContentFileManager {
 	private noteFile: ContentFileInfo | null = null
 	private transcriptFile: ContentFileInfo | null = null
 
+	// Cached upload file names (reused across uploads to overwrite the same OSS file)
+	private noteUploadFileName: string | null = null
+	private transcriptUploadFileName: string | null = null
+
 	// Throttle timers
 	private noteThrottleTimer: NodeJS.Timeout | null = null
 	private transcriptThrottleTimer: NodeJS.Timeout | null = null
@@ -123,23 +127,35 @@ export class RecordingContentFileManager {
 		// Parent folder for preset content files is the ASR display directory
 		let displayDirId =
 			this.tokenManager.getDirectories(sessionId)?.asr_display_dir?.directory_id
-		if (!displayDirId) {
-			logger.warn(`ASR display dir missing for session ${sessionId}, refreshing token`)
+
+		// Parent folder for hidden content files is the ASR hidden directory
+		let hiddenDirId = this.tokenManager.getDirectories(sessionId)?.asr_hidden_dir?.directory_id
+
+		if (!displayDirId || !hiddenDirId) {
+			logger.warn(
+				`ASR display dir or hidden dir missing for session ${sessionId}, refreshing token`,
+				{
+					displayDirId,
+					hiddenDirId,
+				},
+			)
 			try {
 				await this.tokenManager.getToken(sessionId, topicId)
 				displayDirId =
 					this.tokenManager.getDirectories(sessionId)?.asr_display_dir?.directory_id
+				hiddenDirId =
+					this.tokenManager.getDirectories(sessionId)?.asr_hidden_dir?.directory_id
 			} catch (error) {
 				logger.error("Failed to refresh token for ASR display directory", error)
 			}
 		}
 
-		if (!displayDirId) {
-			throw new Error("ASR display directory_id not available for content files")
+		if (!displayDirId || !hiddenDirId) {
+			throw new Error("ASR display or hidden directory_id not available for content files")
 		}
 
 		const contentFilesParentId = displayDirId
-
+		const hiddenFilesParentId = hiddenDirId
 		// Initialize note file info from backend
 		this.noteFile = {
 			fileName: presetFiles.note_file.file_name,
@@ -155,7 +171,7 @@ export class RecordingContentFileManager {
 			fileName: presetFiles.transcript_file.file_name,
 			fileId: presetFiles.transcript_file.file_id,
 			filePath: presetFiles.transcript_file.file_path,
-			parentId: contentFilesParentId,
+			parentId: hiddenFilesParentId,
 			lastContent: options?.existingTranscript,
 			isUploading: false,
 		}
@@ -349,10 +365,14 @@ export class RecordingContentFileManager {
 		this.noteFile.isUploading = true
 
 		try {
+			if (!this.noteUploadFileName) {
+				this.noteUploadFileName = await getSnowflakeUploadFileName()
+			}
 			const uploadResult = await this.uploadContentFile(
 				this.noteFile.fileName,
 				content,
 				ContentFileType.Note,
+				this.noteUploadFileName,
 			)
 
 			this.noteFile.lastContent = content
@@ -393,14 +413,18 @@ export class RecordingContentFileManager {
 		this.transcriptFile.isUploading = true
 
 		try {
+			if (!this.transcriptUploadFileName) {
+				this.transcriptUploadFileName = await getSnowflakeUploadFileName()
+			}
 			const uploadResult = await this.uploadContentFile(
 				this.transcriptFile.fileName,
 				content,
 				ContentFileType.Transcript,
+				this.transcriptUploadFileName,
 			)
 
 			this.transcriptFile.lastContent = content
-			await this.reportUploadedContentFile(this.transcriptFile, uploadResult)
+			await this.reportUploadedContentFile(this.transcriptFile, uploadResult, true)
 			this.events.onUploadSuccess?.(
 				ContentFileType.Transcript,
 				this.transcriptFile.fileId,
@@ -425,6 +449,7 @@ export class RecordingContentFileManager {
 		fileName: string,
 		content: string,
 		fileType: ContentFileType,
+		uploadFileName: string,
 	): Promise<{ fileKey: string; fileSize: number }> {
 		if (!this.sessionId) {
 			throw new Error("Session ID not set")
@@ -459,7 +484,6 @@ export class RecordingContentFileManager {
 		// Create file blob
 		const blob = new Blob([content], { type: "text/markdown;charset=utf-8" })
 		const file = new File([blob], fileName, { type: "text/markdown;charset=utf-8" })
-		const uploadFileName = await getSnowflakeUploadFileName()
 
 		// Modify credentials to use display directory
 		const modifiedCredentials = this.modifyCredentialsDirectory(
@@ -559,6 +583,8 @@ export class RecordingContentFileManager {
 		this.sessionId = null
 		this.topicId = null
 		this.projectId = null
+		this.noteUploadFileName = null
+		this.transcriptUploadFileName = null
 
 		logger.log("Content file manager disposed")
 	}
@@ -605,6 +631,7 @@ export class RecordingContentFileManager {
 	private async reportUploadedContentFile(
 		file: ContentFileInfo,
 		uploadResult: { fileKey: string; fileSize: number },
+		isHidden?: boolean,
 	): Promise<void> {
 		if (!this.sessionId || !this.topicId || !this.projectId) {
 			logger.warn("Skip content batch save: missing session context", {
@@ -623,6 +650,8 @@ export class RecordingContentFileManager {
 			fileKey: uploadResult.fileKey,
 			fileName: file.fileName,
 			fileSize: uploadResult.fileSize,
+			...(isHidden ? { isHidden: true } : {}),
+			allowOverwrite: true,
 		})
 	}
 }

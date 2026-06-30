@@ -40,14 +40,14 @@ function formatTime(seconds: number): string {
 
 interface AudioFullscreenOverlayProps {
 	path: string
-	title: string
+	fileName?: string
 	isOpen: boolean
 	onClose: () => void
 	closeAriaLabel?: string
 }
 
 export default function AudioFullscreenOverlay(props: AudioFullscreenOverlayProps) {
-	const { path, title, isOpen, onClose, closeAriaLabel } = props
+	const { path, fileName, isOpen, onClose, closeAriaLabel } = props
 	const { t } = useCanvasDesignI18n()
 
 	const audioRef = useRef<HTMLAudioElement | null>(null)
@@ -274,7 +274,7 @@ export default function AudioFullscreenOverlay(props: AudioFullscreenOverlayProp
 		chromeVisible ? chromeStyles.layerVisible : chromeStyles.layerHidden,
 	].join(" ")
 
-	const fileLabel = getFullscreenMediaFileLabel(path, title)
+	const fileLabel = getFullscreenMediaFileLabel(path, fileName)
 
 	if (!isClient || !isOpen) {
 		return null

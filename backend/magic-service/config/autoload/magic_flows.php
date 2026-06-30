@@ -15,5 +15,10 @@ return [
         ],
     ],
 
+    'breakpoint_retry' => [
+        // 断点重试依赖执行归档，关闭后不再序列化并上传执行上下文。
+        'enabled' => env('MAGIC_FLOW_BREAKPOINT_RETRY_ENABLED', false),
+    ],
+
     'model_aes_key' => env('MAGIC_FLOW_MODEL_AES_KEY'),
 ];

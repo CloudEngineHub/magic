@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Film Vintage — Preview</title>
+    <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@600&family=Noto+Serif+SC:wght@500;700&display=swap"
+        rel="stylesheet">
+    <link rel="stylesheet" href="film-vintage.css">
+    <style>
+        html,
+        body {
+            width: auto;
+            height: auto;
+            overflow: auto;
+            background: #2a2520;
+        }
+
+        .preview-container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 32px;
+            padding: 40px;
+            justify-content: center;
+            align-items: flex-start;
+        }
+
+        .preview-card-wrapper {
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+            overflow: hidden;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="preview-container">
+
+        <!-- Card 1: Cover — film-vintage cover -->
+        <div class="preview-card-wrapper">
+            <div class="fv-card fv-cover">
+                <!-- base cover background image -->
+                <div class="fv-cover-bg">
+                    <img src="https://images.unsplash.com/photo-1480714378408-67cf0d13bc1b?w=600&q=75" alt="cover bg">
+                </div>
+
+                <!-- cover content layer -->
+                <div class="fv-cover-content">
+
+                    <!-- top tag area -->
+                    <div class="fv-row" style="justify-content:space-between; width:100%;">
+                        <div class="fv-badge">FILM VINTAGE</div>
+                        <div
+                            style="font-family:var(--fv-font-mono);font-size:10px;color:rgba(255,255,255,0.4);letter-spacing:0.1em;">
+                            VOL.07</div>
+                    </div>
+
+                    <!-- visual focal area: tilted polaroid and overlapping text -->
+                    <div style="position:relative; margin:60px auto 0; width:280px;">
+                        <!-- polaroid photo body -->
+                        <div class="fv-photo-frame"
+                            style="padding:10px 10px 44px; transform:rotate(-4deg); margin:0; background:#FDFBF7; box-shadow:0 16px 40px rgba(0,0,0,0.6);">
+                            <div class="fv-photo-frame-inner" style="height:320px;">
+                                <img src="https://images.unsplash.com/photo-1480714378408-67cf0d13bc1b?w=600&q=75"
+                                    alt="cover center" />
+                            </div>
+                            <div class="fv-handwriting"
+                                style="position:absolute;bottom:10px;right:16px;color:rgba(0,0,0,0.7);font-size:18px;">
+                                City Walk</div>
+                        </div>
+
+                        <!-- oversized title layered above the polaroid -->
+                        <h1 class="fv-title" style="position:absolute; bottom:-30px; left:-50px; z-index:3;">City Film<br>Wandering Notes
+                        </h1>
+
+                        <!-- small decorative image or emoji -->
+                        <div
+                            style="position:absolute; top:-20px; right:-24px; font-size:36px; transform:rotate(15deg); opacity:0.9;">
+                            🎞️</div>
+                    </div>
+
+                    <!-- bottom info area -->
+                    <div class="fv-col" style="margin-top:auto;">
+                        <p class="fv-subtitle" style="margin-bottom:16px;">Recording the negative-film warmth of the street</p>
+                        <div class="fv-row"
+                            style="justify-content:space-between; border-top:1px solid rgba(255,255,255,0.15); padding-top:16px;">
+                            <p class="fv-author">@SuperMagic</p>
+                            <p
+                                style="font-family:var(--fv-font-mono);font-size:10px;color:rgba(255,255,255,0.7);letter-spacing:0.1em;margin:0;">
+                                KODAK PORTRA 400</p>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+        </div>
+
+        <!-- Card 2: Content — polaroid photo showcase -->
+        <div class="preview-card-wrapper">
+            <div class="fv-card fv-content"
+                style="background:#FAFAFA;display:flex;flex-direction:column;padding:28px 24px 24px;">
+                <div class="fv-section-label">SCENE 01</div>
+                <div class="fv-photo-frame">
+                    <div class="fv-photo-frame-inner">
+                        <img src="https://images.unsplash.com/photo-1480714378408-67cf0d13bc1b?w=600&q=75"
+                            alt="city street" />
+                    </div>
+                    <div class="fv-handwriting" style="position:absolute;bottom:16px;right:20px;color:rgba(0,0,0,0.7);">
+                        OCT. 24 1998</div>
+                </div>
+                <div class="fv-caption">Morning in the old town, where light and shadow cross</div>
+                <div class="fv-meta-row">
+                    <span class="fv-meta-icon">📷</span>
+                    <span class="fv-meta-text">Leica M6 · Portra 400</span>
+                </div>
+                <div class="fv-meta-row">
+                    <span class="fv-meta-icon">📍</span>
+                    <span class="fv-meta-text">Shanghai, China</span>
+                </div>
+                <div class="fv-info-footer">
+                    <div class="fv-info-row">
+                        <span class="fv-info-label">FILM</span>
+                        <span class="fv-info-value">Kodak Portra 400</span>
+                    </div>
+                    <div class="fv-info-row">
+                        <span class="fv-info-label">LENS</span>
+                        <span class="fv-info-value">Summicron 35mm f/2</span>
+                    </div>
+                    <div class="fv-info-row">
+                        <span class="fv-info-label">EXP</span>
+                        <span class="fv-info-value">1/250s · f/5.6 · ISO 400</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Card 3: Content — multi-info showcase -->
+        <div class="preview-card-wrapper">
+            <div class="fv-card fv-content"
+                style="background:#FAFAFA;display:flex;flex-direction:column;padding:28px 24px 24px;">
+                <div class="fv-section-label">GEAR REVIEW</div>
+                <div class="fv-caption">My film photography kit</div>
+                <div class="fv-divider"></div>
+                <div class="fv-col fv-gap-sm" style="flex:1;">
+                    <div class="fv-row fv-gap-sm">
+                        <span class="fv-badge">Recommended</span>
+                        <span class="fv-tag">35mm film</span>
+                        <span class="fv-tag">Manual focus</span>
+                    </div>
+                    <div class="fv-meta-row">
+                        <span class="fv-meta-icon">①</span>
+                        <span class="fv-meta-text">Leica M6 — Classic rangefinder with unbeatable handling</span>
+                    </div>
+                    <div class="fv-meta-row">
+                        <span class="fv-meta-icon">②</span>
+                        <span class="fv-meta-text">Contax T2 — Pocket camera with a sharp lens</span>
+                    </div>
+                    <div class="fv-meta-row">
+                        <span class="fv-meta-icon">③</span>
+                        <span class="fv-meta-text">Mamiya 7 — Medium format with top-tier image quality</span>
+                    </div>
+                    <div class="fv-divider"></div>
+                    <div class="fv-row fv-gap-sm" style="margin-top:auto;">
+                        <span class="fv-badge-outline fv-badge">Film recommendations</span>
+                    </div>
+                    <div class="fv-meta-row" style="border-bottom:none;">
+                        <span class="fv-meta-icon">🎞️</span>
+                        <span class="fv-meta-text">Portra 400 / Gold 200 / Tri-X 400</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Card 4: Content — data showcase with chart -->
+        <div class="preview-card-wrapper">
+            <div class="fv-card fv-content"
+                style="background:#FAFAFA;display:flex;flex-direction:column;padding:28px 24px 24px;">
+                <div class="fv-section-label">DATA</div>
+                <div class="fv-caption">Film usage statistics</div>
+                <div class="fv-divider"></div>
+                <div id="chart-bar" style="width:100%;height:200px;"></div>
+                <div class="fv-divider"></div>
+                <div class="fv-row" style="justify-content:space-between;">
+                    <div class="fv-col fv-center" style="flex:1;">
+                        <div id="chart-donut" style="width:120px;height:120px;"></div>
+                        <span class="fv-text-muted" style="font-size:10px;margin-top:8px;">Color vs black and white</span>
+                    </div>
+                    <div class="fv-col fv-gap-xs" style="flex:1;padding-left:16px;">
+                        <div class="fv-meta-row" style="border:none;padding:4px 0;">
+                            <span class="fv-meta-icon" style="font-size:10px;">●</span>
+                            <span class="fv-meta-text">Portra series 42%</span>
+                        </div>
+                        <div class="fv-meta-row" style="border:none;padding:4px 0;">
+                            <span class="fv-meta-icon" style="font-size:10px;color:var(--fv-accent-light);">●</span>
+                            <span class="fv-meta-text">Gold series 28%</span>
+                        </div>
+                        <div class="fv-meta-row" style="border:none;padding:4px 0;">
+                            <span class="fv-meta-icon" style="font-size:10px;color:var(--fv-muted);">●</span>
+                            <span class="fv-meta-text">Tri-X / HP5 30%</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
+    <script src="film-vintage.js"></script>
+    <script>
+        (function () {
+            // Bar chart demo
+            var barEl = document.getElementById('chart-bar');
+            if (barEl) {
+                var chart = echarts.init(barEl);
+                chart.setOption(FilmVintagePresets.get('film-vintage-bar', {
+                    categories: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'],
+                    values: [8, 12, 6, 15, 10, 18],
+                    highlightIndex: 5
+                }));
+            }
+            // Donut chart demo
+            var donutEl = document.getElementById('chart-donut');
+            if (donutEl) {
+                var chart2 = echarts.init(donutEl);
+                chart2.setOption(FilmVintagePresets.get('film-vintage-donut', {
+                    value: 72,
+                    total: 100,
+                    label: 'Color',
+                    unit: '%'
+                }));
+            }
+        })();
+    </script>
+</body>
+
+</html>

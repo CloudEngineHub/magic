@@ -176,6 +176,7 @@ const WorkspaceSwitcher = observer(function WorkspaceSwitcher() {
 													}
 													aria-current={isSelected ? "page" : undefined}
 													className="text-current no-underline"
+													data-testid="handle-workspace-link-click"
 												>
 													{nextWorkspaceName}
 												</a>

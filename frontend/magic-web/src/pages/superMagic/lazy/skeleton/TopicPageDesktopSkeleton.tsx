@@ -114,7 +114,6 @@ export function TopicPageDesktopSkeletonBase({
 						{/* <ResizeHandleSkeleton /> */}
 						<div
 							className="mx-auto h-full w-full min-w-0 shrink-0"
-						// style={{ width: messagePanelWidth }}
 						>
 							<TopicConversationSkeleton />
 						</div>

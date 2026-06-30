@@ -95,7 +95,7 @@ class RollbackService:
             logger.error(f"获取前一个checkpoint失败: {e}")
             return None
 
-    async def start_rollback(self, target_message_id: str) -> None:
+    async def start_rollback(self, target_message_id: str) -> List[Dict[str, str]]:
         """开始回滚到指定消息的执行前状态
 
         Args:
@@ -130,9 +130,11 @@ class RollbackService:
             await self.checkpoint_service.metadata_manager.set_rollback_in_progress(True)
             try:
                 # 执行回滚到实际目标checkpoint
-                await self.rollback_executor.start_rollback(actual_target_checkpoint_id)
+                success, affected_files = await self.rollback_executor.start_rollback(actual_target_checkpoint_id)
             finally:
                 await self.checkpoint_service.metadata_manager.set_rollback_in_progress(False)
+            if not success:
+                raise RollbackException(ErrorCode.ROLLBACK_GENERAL_ERROR, "回滚执行失败")
             logger.info(f"开始回滚成功完成: {target_message_id}")
 
             # 注意：这里不需要 reload 主 Agent 的内存 chat_history。
@@ -145,6 +147,8 @@ class RollbackService:
             except Exception as version_error:
                 # 版本创建失败不应该影响回滚操作
                 logger.error(f"文件版本创建失败，但回滚操作已成功: {version_error}")
+
+            return affected_files
         except RollbackException:
             raise
         except Exception as e:
@@ -185,7 +189,7 @@ class RollbackService:
             logger.error(f"提交回滚过程中发生错误: {e}")
             raise RollbackException(ErrorCode.ROLLBACK_GENERAL_ERROR, f"提交回滚过程中发生未知错误: {str(e)}")
 
-    async def undo_rollback(self) -> None:
+    async def undo_rollback(self) -> List[Dict[str, str]]:
         """撤回回滚操作，将 current_checkpoint_id 恢复到最新的 checkpoint
 
         将系统状态从当前 checkpoint 恢复到 checkpoints 列表中的最后一个 checkpoint。
@@ -220,14 +224,14 @@ class RollbackService:
             # 3. 检查是否需要撤回回滚
             if current_checkpoint_id == latest_checkpoint_id:
                 logger.info("当前已经是最新状态，无需撤回回滚")
-                return
+                return []
 
             # 4. 执行撤回回滚到最新 checkpoint
             logger.info(f"开始撤回回滚到最新checkpoint: {latest_checkpoint_id}")
             # 通知 magicfs：回滚期间跳过 checkpoint 维护，避免它把工作区改动回灌成 latest_content
             await self.checkpoint_service.metadata_manager.set_rollback_in_progress(True)
             try:
-                success = await self.rollback_executor.undo_rollback(latest_checkpoint_id)
+                success, affected_files = await self.rollback_executor.undo_rollback(latest_checkpoint_id)
             finally:
                 await self.checkpoint_service.metadata_manager.set_rollback_in_progress(False)
             if not success:
@@ -246,6 +250,7 @@ class RollbackService:
                 logger.error(f"文件版本创建失败，但撤回回滚操作已成功: {version_error}")
 
             logger.info(f"撤回回滚成功完成，当前checkpoint: {latest_checkpoint_id}")
+            return affected_files
 
         except RollbackException:
             raise
@@ -290,21 +295,22 @@ class RollbackService:
             file_paths: 文件路径列表
         """
         try:
-            # 将文件路径转换为file_key列表
-            file_keys = []
+            # 将文件路径归一化为本地绝对路径，过滤不存在的文件
+            absolute_paths = []
             for file_path in file_paths:
-                file_key = await self._resolve_file_key_from_xattr(file_path)
-                if file_key:
-                    file_keys.append(file_key)
+                path_obj = Path(file_path)
+                local_path = path_obj if path_obj.is_absolute() else PathManager.get_workspace_dir() / file_path.lstrip("/")
+                if await async_exists(local_path):
+                    absolute_paths.append(str(local_path))
                 else:
-                    logger.warning(f"无法从 magicfs xattr 解析 file_key，跳过: {file_path}")
+                    logger.warning(f"文件不存在，跳过: {local_path}")
 
-            if not file_keys:
-                logger.info("没有有效的file_key，跳过文件版本创建")
+            if not absolute_paths:
+                logger.info("没有有效的文件，跳过文件版本创建")
                 return
 
             # 调用FileVersionService的公共方法创建版本
-            result = await self.file_version_service.create_file_versions(file_keys, edit_type=FileEditType.AI)
+            result = await self.file_version_service.create_file_versions(absolute_paths, edit_type=FileEditType.AI)
 
             # 记录结果
             if result["success"]:
@@ -317,45 +323,3 @@ class RollbackService:
         except Exception as e:
             logger.error(f"异步创建文件版本失败: {e}")
 
-    async def _resolve_file_key_from_xattr(self, file_path: str) -> Optional[str]:
-        """
-        从 magicfs xattr 解析文件对应的对象存储 file_key。
-
-        唯一合法链路: 本地文件 → xattr user.magicfs.s3_key → file_key。
-        不允许根据相对路径拼接 OSS key, 因为 magicfs 实际使用 file_id 作为
-        存储键 (例如 ".../workspace/<file_id>"), 路径拼出来的 key 在后端
-        根本不存在, 会触发 "文件未找到"。
-
-        Args:
-            file_path: checkpoint 中记录的文件路径, 可能是 workspace 下的
-                相对路径, 也可能是历史数据里的绝对路径
-
-        Returns:
-            Optional[str]: 真实的对象存储 file_key; 文件不存在或 xattr 缺失
-            时返回 None, 由调用方跳过。
-        """
-        try:
-            # 归一化为本地绝对路径
-            path_obj = Path(file_path)
-            if path_obj.is_absolute():
-                local_path = path_obj
-            else:
-                local_path = PathManager.get_workspace_dir() / file_path.lstrip("/")
-
-            if not await async_exists(local_path):
-                logger.warning(f"文件不存在，跳过 file_key 解析: {local_path}")
-                return None
-
-            s3_key = await get_s3_key_from_xattr(local_path)
-            if not s3_key:
-                logger.error(
-                    f"文件缺少 magicfs xattr (user.magicfs.s3_key)，跳过 file_key 解析: {local_path}"
-                )
-                return None
-
-            logger.debug(f"文件路径解析成功: {file_path} -> {s3_key}")
-            return s3_key
-
-        except Exception as e:
-            logger.error(f"从 xattr 解析 file_key 失败: {file_path}, 错误: {e}")
-            return None

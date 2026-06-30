@@ -3,6 +3,7 @@ export enum DetailType {
 	Terminal = "terminal",
 	Browser = "browser",
 	Search = "search",
+	KnowledgeSearch = "knowledge_search",
 	Html = "html",
 	Text = "text",
 	Md = "md",
@@ -21,6 +22,7 @@ export enum DetailType {
 	Audio = "audio",
 	Design = "design",
 	SelfMedia = "self-media",
+	AICard = "ai-card",
 }
 
 /** Self-media platform values supported by the dispatcher */
@@ -41,6 +43,12 @@ export interface SelfMediaInitialNavigation {
 	activePlatform?: SelfMediaPlatform
 }
 
+/** In-memory one-shot target when opening ai-card from the file tree */
+export interface AICardInitialNavigation {
+	activeCardId?: string
+	initialView?: "detail" | "dashboard"
+}
+
 /** Self-media folder detail payload */
 export interface DetailSelfMediaData {
 	file_id: string
@@ -58,6 +66,7 @@ export interface DetailData {
 	[DetailType.Terminal]: DetailTerminalData
 	[DetailType.Browser]: DetailBrowserData
 	[DetailType.Search]: DetailSearchData
+	[DetailType.KnowledgeSearch]: any
 	[DetailType.Html]: DetailHTMLData
 	[DetailType.Text]: DetailTextData
 	[DetailType.Md]: DetailMDData
@@ -147,6 +156,7 @@ export interface DetailUniverData {
 	file_name: string
 	file_extension?: string
 	file_id?: string
+	file_url?: string
 }
 
 /** 文件树数据 */

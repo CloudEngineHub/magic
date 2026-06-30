@@ -13,7 +13,7 @@ import { useTranslation } from "react-i18next"
 import { HTMLGuideTourElementId } from "@/pages/superMagic/hooks/useHTMLGuideTour"
 import ActionButton from "@/pages/superMagic/components/Detail/components/CommonHeader/components/ActionButton"
 import { Download } from "lucide-react"
-import type { ImageExportFormat } from "../../../../../../../packages/pdf-export/src"
+import type { ImageExportFormat } from "@magic-web/html2image"
 
 const useStyles = createStyles(({ css, token }) => ({
 	downloadText: css`
@@ -29,23 +29,29 @@ export function useExportMenuItems({
 	handleExportPDF,
 	handleExportPPT,
 	handleExportImage,
+	handleExportRasterPdf,
 	isExporting = false,
 	showButtonText = true,
 	supportPPT = true,
 	handleExportPptx,
 	showExportPptx = false,
 	showExportImage = false,
+	showExportPdf = true,
+	showExportRasterPdf = false,
 }: {
 	handleExportSource: () => void
-	handleExportPDF: (pagination: "slice" | "none") => void
+	handleExportPDF: () => void
 	handleExportPPT?: () => void
 	handleExportImage?: (format: ImageExportFormat) => void
+	handleExportRasterPdf?: (pageMode: "fit" | "paginate") => void
 	isExporting?: boolean
 	showButtonText?: boolean
 	supportPPT?: boolean
 	handleExportPptx?: () => void
 	showExportPptx?: boolean
 	showExportImage?: boolean
+	showExportPdf?: boolean
+	showExportRasterPdf?: boolean
 }) {
 	const { t } = useTranslation("super")
 	const { styles } = useStyles()
@@ -57,23 +63,37 @@ export function useExportMenuItems({
 				icon: <IconFile size={16} stroke={1.5} />,
 				onClick: handleExportSource,
 			},
-			{
-				key: "pdf",
-				label: t("topicFiles.exportPdf"),
-				icon: <IconFileTypePdf size={16} stroke={1.5} />,
-				children: [
-					{
-						key: "pdf-paginated",
-						label: t("topicFiles.exportPdfPaginated"),
-						onClick: () => handleExportPDF("slice"),
-					},
-					{
-						key: "pdf-fullpage",
-						label: t("topicFiles.exportPdfFullPage"),
-						onClick: () => handleExportPDF("none"),
-					},
-				],
-			},
+			...(showExportPdf
+				? [
+						{
+							key: "pdf",
+							label: t("topicFiles.exportPdf"),
+							icon: <IconFileTypePdf size={16} stroke={1.5} />,
+							onClick: () => handleExportPDF(),
+						},
+					]
+				: []),
+			...(showExportRasterPdf && handleExportRasterPdf
+				? [
+						{
+							key: "pdf-raster",
+							label: t("topicFiles.exportPdfRaster"),
+							icon: <IconFileTypePdf size={16} stroke={1.5} />,
+							children: [
+								{
+									key: "pdf-raster-fit",
+									label: t("topicFiles.exportPdfFullPage"),
+									onClick: () => handleExportRasterPdf("fit"),
+								},
+								{
+									key: "pdf-raster-paginate",
+									label: t("topicFiles.exportPdfPaginated"),
+									onClick: () => handleExportRasterPdf("paginate"),
+								},
+							],
+						},
+					]
+				: []),
 			...(showExportImage && handleExportImage
 				? [
 						{
@@ -121,7 +141,10 @@ export function useExportMenuItems({
 			handleExportPPT,
 			handleExportPptx,
 			handleExportImage,
+			handleExportRasterPdf,
 			handleExportSource,
+			showExportPdf,
+			showExportRasterPdf,
 			showExportPptx,
 			showExportImage,
 			supportPPT,

@@ -34,6 +34,7 @@ import {
 } from "./store-helpers/history"
 import { matchesQuery, searchBuiltinMentionItems } from "./store-helpers/search"
 import type { MentionFilePreviewSourceRow } from "./domains/file-preview/preview-utils"
+import { resolveFolderWorkspaceEntryFromTab } from "../../utils/projectReferenceMention"
 
 export type { WorkspaceFile, WorkspaceFolder }
 
@@ -321,28 +322,14 @@ export class MentionPanelStore {
 	}
 
 	private getFolderMentionItemFromTab(tab: TabItem): MentionItem | null {
-		if (
-			tab.fileData.display_config?.type !== "slide" &&
-			tab.fileData.display_config?.type !== "design"
-		) {
-			return null
-		}
+		const folderData = resolveFolderWorkspaceEntryFromTab(tab, {
+			getFolderData: (parentId) => this.projectFilesStore.getFolderData(parentId),
+			workspaceFilesList: this.projectFilesStore.workspaceFilesList,
+		})
 
-		let parentData = this.projectFilesStore.getFolderData(tab.fileData.parent_id)
-		if (!parentData && tab.fileData.relative_file_path) {
-			const filePath = tab.fileData.relative_file_path
-			const lastSlashIndex = filePath.lastIndexOf("/")
-			if (lastSlashIndex >= 0) {
-				const parentPath = filePath.substring(0, lastSlashIndex + 1)
-				parentData = this.projectFilesStore.workspaceFilesList.find(
-					(file) => file.type === "directory" && file.relative_file_path === parentPath,
-				) as WorkspaceFolder | undefined
-			}
-		}
+		if (!folderData) return null
 
-		if (!parentData) return null
-
-		return this.workspaceFilesStore.workspaceFilesToMentionItems([parentData])[0] ?? null
+		return this.workspaceFilesStore.workspaceFilesToMentionItems([folderData])[0] ?? null
 	}
 }
 

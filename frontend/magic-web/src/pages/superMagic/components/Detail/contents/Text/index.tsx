@@ -12,6 +12,10 @@ import useSaveHandlerRegistration from "../../hooks/useSaveHandlerRegistration"
 import FileEditButtons from "@/pages/superMagic/components/Detail/components/EditToolbar/FileEditButtons"
 import type { HeaderActionConfig } from "../../components/CommonHeaderV2/types"
 import { useTranslation } from "react-i18next"
+import magicToast from "@/components/base/MagicToaster/utils"
+import useExportMenuItems from "../HTML/useExportMenuItems"
+import { exportHtmlToImage, type ImageExportFormat } from "@magic-web/html2image"
+import { textToHtml } from "../../../../utils/textToHtml"
 
 export default function Text(props: any) {
 	const {
@@ -40,6 +44,8 @@ export default function Text(props: any) {
 		isPlaybackMode,
 		allowDownload,
 		attachments,
+		exportFile,
+		isExporting,
 	} = props
 
 	const { file_id } = data
@@ -149,9 +155,76 @@ export default function Text(props: any) {
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [viewMode])
 
+	const [isExportingImage, setIsExportingImage] = useState(false)
+
+	const handleExportSource = useMemoizedFn(() => {
+		exportFile?.(file_id, fileVersion)
+	})
+
+	const handleExportImage = useMemoizedFn(async (format: ImageExportFormat = "png") => {
+		if (!content) {
+			magicToast.error(t("topicFiles.contextMenu.fileExport.exportFailed"))
+			return
+		}
+
+		const toastKey = `text-image-export-${file_id || Date.now()}`
+		setIsExportingImage(true)
+		magicToast.loading({
+			key: toastKey,
+			content: t("topicFiles.exporting"),
+			duration: 0,
+		})
+
+		try {
+			const html = textToHtml(content, { language: "plaintext" })
+			await exportHtmlToImage({
+				pages: [html],
+				format,
+				fileName: (data?.file_name || "export").replace(/\.[^.]+$/, ""),
+				onProgress: ({ phase, current, total }) => {
+					if (phase !== "capture" || total <= 1) return
+					magicToast.loading({
+						key: toastKey,
+						content: `${t("topicFiles.exporting")} (${current}/${total})`,
+						duration: 0,
+					})
+				},
+			}).promise
+			magicToast.success({
+				key: toastKey,
+				content: t("topicFiles.exportSuccess"),
+				duration: 1000,
+			})
+		} catch (error) {
+			console.error("[image-export] Text export failed:", error)
+			magicToast.destroy(toastKey)
+			magicToast.error(t("topicFiles.contextMenu.fileExport.exportFailed"))
+		} finally {
+			setIsExportingImage(false)
+		}
+	})
+
+	const { ExportDropdownButton } = useExportMenuItems({
+		handleExportSource,
+		handleExportPDF: () => {},
+		handleExportImage,
+		isExporting: isExporting || isExportingImage,
+		showButtonText: true,
+		supportPPT: false,
+		showExportImage: true,
+		showExportPdf: false,
+	})
+
 	const headerActionConfig = useMemo<HeaderActionConfig>(
 		() => ({
 			customActions: [
+				{
+					key: "text-export-dropdown",
+					zone: "secondary",
+					after: "download",
+					visible: () => !isMobile && allowDownload !== false,
+					render: () => ExportDropdownButton,
+				},
 				{
 					key: "text-ai-optimization",
 					zone: "primary",
@@ -193,6 +266,7 @@ export default function Text(props: any) {
 			],
 		}),
 		[
+			allowDownload,
 			allowEdit,
 			isMobile,
 			data?.file_id,
@@ -201,6 +275,7 @@ export default function Text(props: any) {
 			attachmentList,
 			setIsEditMode,
 			file_id,
+			ExportDropdownButton,
 			handleEdit,
 			handleSave,
 			handleSaveAndExit,
@@ -220,7 +295,7 @@ export default function Text(props: any) {
 		fileContent: fileContent || content,
 		currentFile,
 		detailMode,
-		showDownload: allowDownload !== false,
+		showDownload: false,
 		isEditMode,
 		fileVersion,
 		isNewestFileVersion: isNewestVersion,
@@ -244,13 +319,15 @@ export default function Text(props: any) {
 						setEditingContent(e.target.value)
 					}}
 					style={{
-						height: "calc(100% - 40px)",
+						height: "100%",
 						minHeight: "400px",
 						resize: "none",
 						fontSize: "14px",
 						padding: 12,
 						lineHeight: "20px",
-						borderRadius: 0,
+						borderRadius: "0 0 12px 12px",
+						border: "none",
+						outline: "none",
 					}}
 					placeholder={t("common.enterText") || "Enter text..."}
 				/>

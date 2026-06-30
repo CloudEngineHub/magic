@@ -1,5 +1,5 @@
 import { logger } from "@/utils/log"
-import type { ExternalLogger } from "../../../../packages/html2pptx/src/logger"
+import type { ExternalLogger } from "@magic/html2pptx"
 
 const pptLogger = logger.createLogger("html2pptx")
 
@@ -53,4 +53,256 @@ export function reportPptxExportError(error: unknown, context?: Record<string, u
 			},
 		],
 	})
+}
+
+// ─── PPTX Debug ─────────────────────────────────────────────
+// 在调用方（外部）按需开启完整日志采集，输出含耗时偏移的汇总。
+// 通过 localStorage 切换；window.__pptxDebug 提供控制台快捷入口。
+
+type PptxLogLevel = "debug" | "info" | "warn" | "error"
+
+interface PptxLogEntry {
+	level: PptxLogLevel
+	source: "html2pptx" | "pptFont" | "console"
+	message: string
+	context?: unknown
+	timestamp: number
+}
+
+export interface PptxDebugSession {
+	logger: ExternalLogger
+	logLevel: "debug"
+	entries: () => PptxLogEntry[]
+	stop: () => PptxLogEntry[]
+}
+
+interface InternalSession {
+	collected: PptxLogEntry[]
+	startTime: number
+	stopped: boolean
+}
+
+class PptxDebugger {
+	private sessions = new Set<InternalSession>()
+	private originalWarn: typeof console.warn | null = null
+	private originalError: typeof console.error | null = null
+	private originalFetch: typeof window.fetch | null = null
+	private patched = false
+	private _enabled = false
+
+	get enabled(): boolean {
+		return this._enabled
+	}
+
+	enable(): void {
+		this._enabled = true
+		// keep-console
+		console.info("[pptx-debug] 已开启 PPTX 导出调试模式，下次导出时将输出完整日志（刷新页面即关闭）。")
+	}
+
+	disable(): void {
+		this._enabled = false
+		// keep-console
+		console.info("[pptx-debug] 已关闭 PPTX 导出调试模式。")
+	}
+
+	status(): void {
+		// keep-console
+		console.info(`[pptx-debug] 当前状态：${this.enabled ? "✅ 已开启" : "❌ 已关闭"}`)
+	}
+
+	createSession(): PptxDebugSession {
+		const session: InternalSession = {
+			collected: [],
+			startTime: Date.now(),
+			stopped: false,
+		}
+
+		this.installPatch()
+		this.sessions.add(session)
+
+		const logger: ExternalLogger = {
+			debug: (...args) => {
+				this.captureHtml2pptx(session, "debug", args)
+				// keep-console
+				console.debug("[pptx-debug]", ...args)
+			},
+			info: (...args) => {
+				this.captureHtml2pptx(session, "info", args)
+				// keep-console
+				console.info("[pptx-debug]", ...args)
+			},
+			warn: (...args) => {
+				this.captureHtml2pptx(session, "warn", args)
+				// keep-console
+				console.warn("[pptx-debug]", ...args)
+			},
+			error: (...args) => {
+				this.captureHtml2pptx(session, "error", args)
+				// keep-console
+				console.error("[pptx-debug]", ...args)
+			},
+		}
+
+		const stop = (): PptxLogEntry[] => {
+			if (session.stopped) return [...session.collected]
+			session.stopped = true
+			this.sessions.delete(session)
+			if (this.sessions.size === 0) this.restorePatch()
+			const entries = [...session.collected]
+			// keep-console
+			console.groupCollapsed(
+				`[pptx-debug] Session ended — ${entries.length} entries collected (${Date.now() - session.startTime}ms)`,
+			)
+			entries.forEach((e) => {
+				const fn = console[e.level] || console.log
+				fn.call(console, `  [${e.timestamp}ms] [${e.source}] ${e.message}`, e.context ?? "")
+			})
+			// keep-console
+			console.groupEnd()
+			return entries
+		}
+
+		return { logger, logLevel: "debug", entries: () => [...session.collected], stop }
+	}
+
+	private installPatch(): void {
+		if (this.patched) return
+
+		this.originalWarn = console.warn
+		this.originalError = console.error
+		this.originalFetch = window.fetch
+
+		console.warn = (...args: unknown[]) => {
+			this.captureConsole("warn", args)
+			this.originalWarn!.apply(console, args)
+		}
+
+		console.error = (...args: unknown[]) => {
+			this.captureConsole("error", args)
+			this.originalError!.apply(console, args)
+		}
+
+		window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
+			const url = this.getRequestUrl(input)
+			if (!this.isFontRequest(url)) return this.originalFetch!.call(window, input, init)
+
+			const startedAt = Date.now()
+			try {
+				const response = await this.originalFetch!.call(window, input, init)
+				this.captureForAll({
+					level: response.ok ? "info" : "error",
+					source: "pptFont",
+					message: `[pptFont] Font fetch ${response.ok ? "✅" : "❌"} ${response.status} ${url}`,
+					context: { url, status: response.status, ok: response.ok },
+					startedAt,
+				})
+				return response
+			} catch (err) {
+				this.captureForAll({
+					level: "error",
+					source: "pptFont",
+					message: `[pptFont] Font fetch ❌ network error: ${url} (${String(err)})`,
+					context: { url, error: String(err) },
+					startedAt,
+				})
+				throw err
+			}
+		}
+
+		this.patched = true
+	}
+
+	private restorePatch(): void {
+		if (!this.patched) return
+		if (this.originalWarn) console.warn = this.originalWarn
+		if (this.originalError) console.error = this.originalError
+		if (this.originalFetch) window.fetch = this.originalFetch
+		this.originalWarn = null
+		this.originalError = null
+		this.originalFetch = null
+		this.patched = false
+	}
+
+	private captureHtml2pptx(
+		session: InternalSession,
+		level: PptxLogLevel,
+		args: unknown[],
+	): void {
+		const [message, context] = args
+		session.collected.push({
+			level,
+			source: "html2pptx",
+			message: typeof message === "string" ? message : String(message),
+			context,
+			timestamp: Date.now() - session.startTime,
+		})
+	}
+
+	private captureConsole(level: "warn" | "error", args: unknown[]): void {
+		const message = args.map((a) => (typeof a === "string" ? a : String(a))).join(" ")
+		if (!this.isPptxRelated(message)) return
+		this.captureForAll({
+			level,
+			source: message.includes("[pptFont]") ? "pptFont" : "console",
+			message,
+		})
+	}
+
+	private captureForAll(input: {
+		level: PptxLogLevel
+		source: PptxLogEntry["source"]
+		message: string
+		context?: unknown
+		startedAt?: number
+	}): void {
+		this.sessions.forEach((session) => {
+			session.collected.push({
+				level: input.level,
+				source: input.source,
+				message: input.message,
+				context: input.context,
+				timestamp: (input.startedAt ?? Date.now()) - session.startTime,
+			})
+		})
+	}
+
+	private isPptxRelated(msg: string): boolean {
+		return (
+			msg.includes("[pptx") ||
+			msg.includes("[html2pptx") ||
+			msg.includes("[pptFont") ||
+			msg.includes("font") ||
+			msg.includes("exportPPTX")
+		)
+	}
+
+	private isFontRequest(url: string): boolean {
+		return (
+			url.includes("/font") ||
+			url.includes(".ttf") ||
+			url.includes(".otf") ||
+			url.includes(".woff")
+		)
+	}
+
+	private getRequestUrl(input: RequestInfo | URL): string {
+		if (typeof input === "string") return input
+		if (input instanceof URL) return input.href
+		return input.url || ""
+	}
+}
+
+const pptxDebuggerInstance = new PptxDebugger()
+
+if (typeof window !== "undefined") {
+	;(window as unknown as { __pptxDebug?: PptxDebugger }).__pptxDebug = pptxDebuggerInstance
+}
+
+export function isPptxDebugMode(): boolean {
+	return pptxDebuggerInstance.enabled
+}
+
+export function startPptxDebugSession(): PptxDebugSession {
+	return pptxDebuggerInstance.createSession()
 }

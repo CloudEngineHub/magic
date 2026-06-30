@@ -1,4 +1,5 @@
 import { getFileContentById } from "@/pages/superMagic/utils/api"
+import { parseMagicProjectConfigContent } from "@/pages/superMagic/utils/magicProjectConfigParser"
 import { flattenAttachments, findMatchingFile } from "../../HTML/utils"
 import type { FileItem } from "@/pages/superMagic/components/Detail/components/FilesViewer/types"
 import { DesignData } from "../types"
@@ -22,6 +23,14 @@ import {
 import { getDesignProjectCurrentFileByProjectPath } from "./toolDesignProjectInfo"
 import type { DesignAttachmentIndex } from "./designAttachmentIndex"
 import { cloneDeep } from "lodash-es"
+import {
+	MAGIC_PROJECT_VERSION_V1,
+	compressCanvasData,
+	decompressCanvasData,
+	isCompressedCanvas,
+	isV2Version,
+} from "./magicProjectCompression"
+import { stripHeavyFields } from "./elementDetailsStore"
 
 function layerTreeHasImageOrVideo(elements: LayerElement[] | undefined): boolean {
 	if (!elements?.length) return false
@@ -103,21 +112,32 @@ export function generateMagicProjectJsContent(
 	options?: { projectBasePath?: string },
 ): string {
 	const rawElements = designData.canvas?.elements || []
-	let elements = rawElements
 	const basePath = options?.projectBasePath?.trim()
-	if (basePath) {
-		if (layerTreeHasImageOrVideo(rawElements)) {
-			elements = cloneDeep(rawElements)
-			rewriteLayerElementsPathsForMagicProjectSave(elements, basePath)
-		}
+	const isV2 = isV2Version(designData.version)
+	const needPathRewrite = !!basePath && layerTreeHasImageOrVideo(rawElements)
+
+	// v2 需先克隆再剥离重字段，避免污染内存态；路径改写同样需要克隆
+	let elements = rawElements
+	if (isV2 || needPathRewrite) {
+		elements = cloneDeep(rawElements)
 	}
+	if (needPathRewrite) {
+		rewriteLayerElementsPathsForMagicProjectSave(elements, basePath as string)
+	}
+
+	let canvasField: unknown
+	if (isV2) {
+		stripHeavyFields(elements)
+		canvasField = compressCanvasData({ elements })
+	} else {
+		canvasField = { elements }
+	}
+
 	const config = {
 		version: designData.version || "1.0.0",
 		type: designData.type || "design",
 		name: designData.name || "",
-		canvas: {
-			elements,
-		},
+		canvas: canvasField,
 	}
 
 	// 将对象转换为格式化的 JSON 字符串，然后包装成 JavaScript 代码
@@ -125,6 +145,94 @@ export function generateMagicProjectJsContent(
 	const result = `window.magicProjectConfig = ${jsonString};`
 
 	return result
+}
+
+export type MagicProjectCanvasStatus =
+	| "valid-empty"
+	| "valid-non-empty"
+	| "missing"
+	| "invalid"
+	| "decompress-failed"
+
+export interface MagicProjectJsParseDiagnostics {
+	data: DesignData | null
+	canvasStatus: MagicProjectCanvasStatus
+	error?: string
+}
+
+function buildDesignDataFromMagicProjectConfig(
+	config: Record<string, unknown>,
+	elements: LayerElement[],
+): DesignData {
+	return {
+		type: (config as { type?: string }).type || "design",
+		name: (config as { name?: string }).name || "",
+		version: (config as { version?: string }).version || MAGIC_PROJECT_VERSION_V1,
+		canvas: {
+			elements,
+		},
+	}
+}
+
+/**
+ * 从 magic.project.js 内容中解析设计数据，并保留 canvas 字段诊断信息。
+ *
+ * 这样上游可以区分「明确的合法空画布」和「缺失/异常/解压失败后不确定」，
+ * 避免把不确定状态当成用户主动清空。
+ */
+export function parseMagicProjectJsContentWithDiagnostics(
+	content: string,
+): MagicProjectJsParseDiagnostics {
+	if (!content) {
+		return { data: null, canvasStatus: "invalid", error: "empty-content" }
+	}
+
+	try {
+		const config = parseMagicProjectConfigContent(content)
+
+		if (!config || typeof config !== "object") {
+			return { data: null, canvasStatus: "invalid", error: "invalid-config" }
+		}
+
+		if (!Object.prototype.hasOwnProperty.call(config, "canvas")) {
+			return { data: null, canvasStatus: "missing" }
+		}
+
+		const canvasField = (config as { canvas?: unknown }).canvas
+		let canvasObj: { elements?: unknown } | null = null
+
+		if (isCompressedCanvas(canvasField)) {
+			try {
+				canvasObj = decompressCanvasData(canvasField) as { elements?: unknown } | null
+			} catch (error) {
+				return {
+					data: null,
+					canvasStatus: "decompress-failed",
+					error: error instanceof Error ? error.message : String(error),
+				}
+			}
+		} else if (canvasField && typeof canvasField === "object" && !Array.isArray(canvasField)) {
+			canvasObj = canvasField as { elements?: unknown }
+		} else {
+			return { data: null, canvasStatus: "invalid" }
+		}
+
+		if (!Array.isArray(canvasObj?.elements)) {
+			return { data: null, canvasStatus: "invalid" }
+		}
+
+		const elements = canvasObj.elements as LayerElement[]
+		return {
+			data: buildDesignDataFromMagicProjectConfig(config, elements),
+			canvasStatus: elements.length > 0 ? "valid-non-empty" : "valid-empty",
+		}
+	} catch (error) {
+		return {
+			data: null,
+			canvasStatus: "invalid",
+			error: error instanceof Error ? error.message : String(error),
+		}
+	}
 }
 
 /**
@@ -138,33 +246,27 @@ export function parseMagicProjectJsContent(content: string): DesignData | null {
 	}
 
 	try {
-		// 创建一个临时的 window 对象来执行代码，避免污染全局作用域
-		const tempWindow: { magicProjectConfig?: unknown } = {}
-
-		// 使用 Function 构造函数来执行代码
-		const func = new Function("window", content)
-		func(tempWindow)
-
-		// 提取 magicProjectConfig
-		const config = tempWindow.magicProjectConfig
+		const config = parseMagicProjectConfigContent(content)
 
 		if (!config || typeof config !== "object") {
 			return null
 		}
 
-		// 转换为 DesignData 格式
-		const designData: DesignData = {
-			type: (config as { type?: string }).type || "design",
-			name: (config as { name?: string }).name || "",
-			version: (config as { version?: string }).version || "1.0.0",
-			canvas: {
-				elements:
-					(config as { canvas?: { elements?: LayerElement[] } }).canvas?.elements || [],
-			},
+		// 保持普通加载链路的历史兼容：缺失或异常 canvas 仍按空画布兜底。
+		// 严格区分 missing/invalid/decompress-failed 的逻辑只给 upgrade diagnostics 使用。
+		const canvasField = (config as { canvas?: unknown }).canvas
+		let elements: LayerElement[] = []
+		if (isCompressedCanvas(canvasField)) {
+			const canvasObj = decompressCanvasData(canvasField) as {
+				elements?: LayerElement[]
+			} | null
+			elements = canvasObj?.elements || []
+		} else {
+			elements = (canvasField as { elements?: LayerElement[] } | undefined)?.elements || []
 		}
 
-		return designData
-	} catch (error) {
+		return buildDesignDataFromMagicProjectConfig(config, elements)
+	} catch {
 		return null
 	}
 }
@@ -607,19 +709,10 @@ export function replaceNameInMagicProjectJsContent(
 	}
 
 	try {
-		// 解析 magic.project.js 内容
-		const tempWindow: {
-			magicProjectConfig?: {
-				name?: string
-				canvas?: {
-					elements?: LayerElement[]
-				}
-			}
-		} = {}
-		const func = new Function("window", content)
-		func(tempWindow)
-
-		const config = tempWindow.magicProjectConfig
+		const config = parseMagicProjectConfigContent(content) as {
+			name?: string
+			canvas?: unknown
+		} | null
 		if (!config || typeof config !== "object") {
 			return content
 		}
@@ -632,10 +725,17 @@ export function replaceNameInMagicProjectJsContent(
 			hasReplaced = true
 		}
 
-		// 2. 递归替换 canvas.elements 中所有 ImageElement 的路径字段
-		if (config.canvas?.elements && Array.isArray(config.canvas.elements)) {
-			for (let i = 0; i < config.canvas.elements.length; i++) {
-				const element = config.canvas.elements[i]
+		// 2. 兼容 v2：canvas 为压缩串时先解压，改完路径再压回
+		const rawCanvas = config.canvas
+		const canvasCompressed = isCompressedCanvas(rawCanvas)
+		const canvasObj = (canvasCompressed ? decompressCanvasData(rawCanvas) : rawCanvas) as
+			| { elements?: LayerElement[] }
+			| null
+			| undefined
+
+		if (canvasObj?.elements && Array.isArray(canvasObj.elements)) {
+			for (let i = 0; i < canvasObj.elements.length; i++) {
+				const element = canvasObj.elements[i]
 				const elementRecord = element as unknown as Record<string, unknown>
 
 				if (replacePathsInElement(elementRecord, oldName, newName)) {
@@ -646,6 +746,10 @@ export function replaceNameInMagicProjectJsContent(
 
 		if (!hasReplaced) {
 			return content
+		}
+
+		if (canvasCompressed) {
+			config.canvas = compressCanvasData(canvasObj)
 		}
 
 		// 重新生成文件内容，保持格式一致
@@ -1551,9 +1655,10 @@ export async function packAndDownloadFiles(
 			throw new Error(t("design.errors.cannotGetDownloadUrl"))
 		}
 
-		downloadUrls.forEach((item: { url?: string }, index: number) => {
-			if (item?.url && fileIds[index]) {
-				urlMap.set(fileIds[index], item.url)
+		downloadUrls.forEach((item: { file_id?: string; url?: string }, index: number) => {
+			const fileId = item?.file_id || fileIds[index]
+			if (item?.url && fileId) {
+				urlMap.set(fileId, item.url)
 			}
 		})
 	}

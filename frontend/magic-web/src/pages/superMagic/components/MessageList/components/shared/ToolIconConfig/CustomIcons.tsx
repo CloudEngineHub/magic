@@ -29,6 +29,7 @@ export const SkillIcon = forwardRef<SVGSVGElement, Omit<LucideProps, "ref">>(
 			height={size}
 			viewBox="0 0 16 16"
 			fill="none"
+
 			{...props}
 		>
 			<g clipPath="url(#clip0_14338_843604)">
@@ -55,6 +56,7 @@ export const AgentIcon = forwardRef<SVGSVGElement, Omit<LucideProps, "ref">>(
 			height={size}
 			viewBox="0 0 15 13"
 			fill="none"
+
 			{...props}
 		>
 			<path
@@ -76,6 +78,7 @@ export const WechatIcon = forwardRef<SVGSVGElement, Omit<LucideProps, "ref">>(
 			height={size}
 			viewBox="0 0 18 14"
 			fill="none"
+
 			{...props}
 		>
 			<path
@@ -95,6 +98,7 @@ export const DefaultIcon = forwardRef<SVGSVGElement, Omit<LucideProps, "ref">>(
 			height={size}
 			viewBox="0 0 16 16"
 			fill="none"
+
 			{...props}
 		>
 			<g clipPath="url(#clip0_17221_780322)">

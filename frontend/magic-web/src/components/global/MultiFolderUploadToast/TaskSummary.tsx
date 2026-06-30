@@ -50,6 +50,9 @@ export const TaskSummary: React.FC<TaskSummaryProps> = ({
 	const uploadingTasks = activeTasks.filter(
 		(task) => task.state.isUploading && !task.state.isPaused,
 	).length
+	const creatingFolderTasks = activeTasks.filter(
+		(task) => task.state.currentPhase === "creating_folders",
+	).length
 
 	return (
 		<div className={cx(styles.summary, isEnglish && styles.englishLayout)}>
@@ -63,9 +66,11 @@ export const TaskSummary: React.FC<TaskSummaryProps> = ({
 
 			{/* 左侧：上传速度 */}
 			<div className={styles.speedText}>
-				{t("folderUpload.stats.uploadSpeed", {
-					speed: formatUploadSpeed(averageSpeed),
-				})}
+				{creatingFolderTasks > 0
+					? t("folderUpload.stats.creatingFolders", { count: creatingFolderTasks })
+					: t("folderUpload.stats.uploadSpeed", {
+							speed: formatUploadSpeed(averageSpeed),
+						})}
 			</div>
 
 			{/* 右侧：操作按钮 */}

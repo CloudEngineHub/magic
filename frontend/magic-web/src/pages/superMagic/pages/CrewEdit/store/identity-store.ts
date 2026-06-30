@@ -12,7 +12,6 @@ import {
 } from "@/apis/modules/crew"
 import { SuperMagicApi } from "@/apis"
 import { crewService } from "@/services/crew/CrewService"
-import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import {
 	encodeCrewAgentPrompt,
 	resolveCrewAgentPromptText,
@@ -29,9 +28,11 @@ import {
 	updateIdentityMarkdownContent,
 } from "../utils/identity-markdown"
 import { type CrewCodeController, resolveCrewEditError } from "./shared"
+import { SuperMagicApiErrorCode } from "@/pages/superMagic/constants/apiErrorCodes"
+import { requestProjectAttachmentsFullRefresh } from "@/pages/superMagic/services/attachmentsTopicSync"
 
 const MAGIC_FOLDER_NAME = MAGIC_ROOT_DIRECTORY_NAME
-const DUPLICATE_REMOTE_FILE_CODE = 51168
+const DUPLICATE_REMOTE_FILE_CODE = SuperMagicApiErrorCode.DuplicateFile
 const MAGIC_FOLDER_RESOLVE_RETRY_MS = 200
 const MAGIC_FOLDER_RESOLVE_MAX_RETRIES = 8
 
@@ -72,7 +73,10 @@ async function resolveMagicFolderParentId(options: {
 		const code = (error as { code?: number })?.code
 		if (code !== DUPLICATE_REMOTE_FILE_CODE) return null
 
-		pubsub.publish(PubSubEvents.Update_Attachments)
+		requestProjectAttachmentsFullRefresh({
+			projectId,
+			reason: "crew-identity-magic-folder-duplicate",
+		})
 		for (let i = 0; i < MAGIC_FOLDER_RESOLVE_MAX_RETRIES; i++) {
 			await new Promise((r) => setTimeout(r, MAGIC_FOLDER_RESOLVE_RETRY_MS))
 			parentId = tryFind()
@@ -579,7 +583,6 @@ export class CrewIdentityStore {
 				this.identityMarkdownRawContent = nextContent
 				this.applyIdentityMarkdown(nextIdentityMarkdownData)
 			})
-			pubsub.publish(PubSubEvents.Update_Attachments)
 			return true
 		} catch {
 			return false

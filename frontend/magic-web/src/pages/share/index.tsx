@@ -166,8 +166,6 @@ function Share() {
 	const responsive = useResponsive()
 	const isMobile = responsive.md === false // md breakpoint is typically 768px, so anything smaller is mobile
 	const [isProjectShare, setIsProjectShare] = useState(false)
-	// File sharing state
-	const [isFileShare, setIsFileShare] = useState(false)
 	const [fileId, setFileId] = useState("")
 	// Topic sharing: view_file_list state
 	const [viewFileList, setViewFileList] = useState(false)
@@ -215,7 +213,7 @@ function Share() {
 	const [copyProjectIsRunning, setCopyProjectIsRunning] = useState(false)
 	// 实际验证成功的密码（可能来自 URL 或用户手动输入）
 	const [verifiedPassword, setVerifiedPasswordFn] = useState<string | undefined>(passwordFromUrl)
-	const isRouteFileShare = routeInfo.isFileShare
+	const isFileShare = routeInfo.isFileShare
 	const entryHtmlFileId = useMemo(() => {
 		return resolveImmersiveEntryFileId({
 			attachmentsTree: attachments?.tree || [],
@@ -225,7 +223,7 @@ function Share() {
 		})
 	}, [attachments?.tree, defaultOpenFileId, fileId, routeInfo.isLegacy])
 	const isEntryHtmlPreview = Boolean(entryHtmlFileId) && currentPreviewFileId === entryHtmlFileId
-	const enableImmersiveShareChrome = isMobile && isRouteFileShare && isEntryHtmlPreview
+	const enableImmersiveShareChrome = isMobile && isFileShare && isEntryHtmlPreview
 	const isImmersiveFullscreen = enableImmersiveShareChrome && previewIsFullscreen
 
 	useBackHandler(
@@ -248,13 +246,13 @@ function Share() {
 	useEffect(() => {
 		if (!previewIsFullscreen) return
 		if (!isMobile) return
-		if (!isRouteFileShare) return
+		if (!isFileShare) return
 		if (!entryHtmlFileId) return
 		if (isEntryHtmlPreview) return
 
 		pubsub.publish(PubSubEvents.Exit_Fullscreen)
 		setPreviewIsFullscreen(false)
-	}, [entryHtmlFileId, isEntryHtmlPreview, isMobile, isRouteFileShare, previewIsFullscreen])
+	}, [entryHtmlFileId, isEntryHtmlPreview, isMobile, isFileShare, previewIsFullscreen])
 
 	useTokenRefreshPolling({
 		resourceId,
@@ -326,7 +324,6 @@ function Share() {
 		// Use route info from useShareRoute hook
 		if (routeInfo.isShareRoute) {
 			const params = routeInfo.shareParams
-			setIsFileShare(routeInfo.isFileShare)
 
 			if (routeInfo.isLegacy) {
 				// Legacy format
@@ -571,11 +568,8 @@ function Share() {
 	const shouldEnterSharedProject = useMemo(() => {
 		const currentUserId = toStringId(userInfo?.user_id)
 		const creatorUserId = getShareProjectCreatorUserId(data)
-
-		return Boolean(
-			isProjectShare && projectId && currentUserId && creatorUserId === currentUserId,
-		)
-	}, [data, isProjectShare, projectId, userInfo?.user_id])
+		return Boolean(projectId && currentUserId && creatorUserId === currentUserId)
+	}, [data, projectId, userInfo?.user_id])
 
 	// 是否显示复制项目按钮：旧文件分享 或 allowCopyProjectFiles 为 true 时显示，且用户已登录
 	const showCopyProjectButton = useMemo(() => {
@@ -791,21 +785,33 @@ function Share() {
 				<div className={topicContainerBase} data-testid="share-topbar">
 					{showSuperMagicIcon ? <Logo className="h-[42px] shrink-0 max-md:h-9" /> : null}
 					{isMobile && hasStarted && !isFileShare && (
-						<div className="flex min-w-0 flex-1 items-center gap-2 max-md:gap-1">
+						<div
+							className="flex min-w-0 flex-1 items-center gap-2 max-md:gap-1"
+							data-testid="share-mobile-topic-info"
+						>
 							<StatusIcon status={taskStatus as any} />
-							<span className="min-w-0 flex-1 cursor-pointer overflow-hidden text-ellipsis whitespace-nowrap text-sm font-normal leading-[1.43] text-foreground transition-all duration-200">
+							<span
+								className="min-w-0 flex-1 cursor-pointer overflow-hidden text-ellipsis whitespace-nowrap text-sm font-normal leading-[1.43] text-foreground transition-all duration-200"
+								data-testid="share-mobile-title"
+							>
 								{data?.resource_name || t("messageHeader.untitledTopic")}
 							</span>
 						</div>
 					)}
 					{!isMobile && hasStarted && data?.extra?.show_original_info ? (
-						<div className="ml-[30px] flex min-w-0 flex-1 shrink items-center gap-2.5 overflow-hidden text-ellipsis whitespace-nowrap text-sm font-semibold leading-5 text-foreground/80">
+						<div
+							className="ml-[30px] flex min-w-0 flex-1 shrink items-center gap-2.5 overflow-hidden text-ellipsis whitespace-nowrap text-sm font-semibold leading-5 text-foreground/80"
+							data-testid="share-original-info"
+						>
 							<MagicAvatar src={data?.creator?.avatar_url || UserAvatar} size={24} />
-							<span className="shrink-0 font-semibold text-foreground/80">
+							<span
+								className="shrink-0 font-semibold text-foreground/80"
+								data-testid="share-creator-name"
+							>
 								{data?.creator?.nickname || t("common.unknownUser")}
 							</span>
 							<span className="shrink-0 text-muted-foreground">/</span>
-							<span>
+							<span data-testid="share-title">
 								{data?.resource_name ||
 									(isFileShare
 										? t("common.untitledProject")
@@ -813,8 +819,11 @@ function Share() {
 							</span>
 						</div>
 					) : !isMobile && hasStarted && data?.extra ? (
-						<div className="ml-[30px] flex min-w-0 flex-1 shrink items-center gap-2.5 overflow-hidden text-ellipsis whitespace-nowrap text-sm font-semibold leading-5 text-foreground/80">
-							<span>
+						<div
+							className="ml-[30px] flex min-w-0 flex-1 shrink items-center gap-2.5 overflow-hidden text-ellipsis whitespace-nowrap text-sm font-semibold leading-5 text-foreground/80"
+							data-testid="share-title-info"
+						>
+							<span data-testid="share-title">
 								{data?.resource_name ||
 									(isFileShare
 										? t("common.untitledProject")
@@ -822,7 +831,7 @@ function Share() {
 							</span>
 						</div>
 					) : null}
-					<div className="flex gap-2">
+					<div className="flex gap-2" data-testid="share-topbar-actions">
 						{isMobile && hasStarted && (
 							<Button
 								variant="outline"
@@ -852,12 +861,16 @@ function Share() {
 								className="h-8 gap-1.5 rounded-lg border-black/[0.08] px-1.5 py-1.5 dark:border-white/[0.08]"
 								onClick={handleCopyProject}
 								disabled={copyProjectIsRunning}
+								data-testid="share-copy-project-button"
 							>
 								<IconGitFork size={18} stroke={1.5} className="size-[18px]" />
 								<span className="text-sm font-normal leading-5 text-foreground/80">
 									{t("share.copyProject")}
 								</span>
-								<span className="inline-flex h-[22px] items-center rounded-[4px] bg-fill px-1.5 py-0.5 text-xs font-bold leading-4 text-foreground">
+								<span
+									className="inline-flex h-[22px] items-center rounded-[4px] bg-fill px-1.5 py-0.5 text-xs font-bold leading-4 text-foreground"
+									data-testid="share-copy-project-count"
+								>
 									{formatCopyProjectCount(data?.data?.extended?.fork_num)}
 								</span>
 							</Button>
@@ -881,6 +894,7 @@ function Share() {
 									clearWindowData()
 									history.replace({ name: RouteName.Login })
 								}}
+								data-testid="share-login-button"
 							>
 								{t("share.login")}
 							</Button>
@@ -888,9 +902,15 @@ function Share() {
 					</div>
 				</div>
 			)}
-			<div className="relative h-full overflow-hidden max-md:w-full">
+			<div
+				className="relative h-full overflow-hidden max-md:w-full"
+				data-testid="share-content-container"
+			>
 				{loading && (
-					<div className="flex h-full items-center justify-center">
+					<div
+						className="flex h-full items-center justify-center"
+						data-testid="share-loading"
+					>
 						<MagicSpin />
 					</div>
 				)}

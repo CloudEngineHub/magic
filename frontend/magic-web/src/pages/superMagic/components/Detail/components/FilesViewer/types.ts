@@ -14,7 +14,7 @@ export interface BaseComponentProps {
 	children?: ReactNode
 }
 
-/** 预览策略：打开方声明能力，FilesViewer 按配置执行，不关心文件来源。 */
+/** Preview policy declared by the opener and executed by FilesViewer, independent of file source. */
 export interface FilePreviewPolicy {
 	temporary?: boolean
 	persistTab?: boolean
@@ -22,7 +22,23 @@ export interface FilePreviewPolicy {
 	keepLocalContent?: boolean
 	restoreAsActive?: boolean
 	readonly?: boolean
+	awaitAttachmentSync?: boolean
+	awaitAttachmentPath?: string
 }
+
+export interface WebsitePreset {
+	id: string
+	title?: string
+	titleKey?: string
+	url: string
+	description?: string
+	descriptionKey?: string
+	icon?: "nano-banana-pro" | "gpt-image-2"
+	iconSrc?: string
+}
+
+export type FileViewerTabType = "file" | "website" | "knowledge_base" | "playback"
+export type ActiveDetailTabType = FileViewerTabType | null
 
 // File item interface
 export interface FileItem {
@@ -38,20 +54,25 @@ export interface FileItem {
 	children?: FileItem[]
 	content?: string
 	updated_at?: string
+	resource_version?: string | null
+	version?: string | null
 	display_config?: {
 		type?: "slide" | "design" | "dashboard" | "audio" | "video" | string
 		name?: string
+		description?: string
 		previewPolicy?: FilePreviewPolicy
 	}
 	file_size?: number
 	parent_id?: string | number
 	source?: AttachmentSource
 	project_id?: string
+	is_hidden?: boolean
 }
 
 // Tab item interface
 export interface TabItem {
 	id: string
+	type?: FileViewerTabType
 	name?: string // 组件中使用，但未在接口中定义，先补充，待确认是否删除
 	title: string
 	fileData: FileItem
@@ -69,6 +90,10 @@ export interface TabItem {
 	 * 标记文件是否已被删除
 	 */
 	isDeleted?: boolean
+	/**
+	 * Cached tab has no matching file while the first attachment pass is still loading.
+	 */
+	isLoading?: boolean
 	/**
 	 * 用于强制重新挂载 Render 组件的刷新键
 	 */
@@ -125,6 +150,10 @@ export interface FilesViewerProps extends BaseComponentProps {
 	openFileTab?: (fileItem: any, autoEdit?: boolean) => void
 	activeFileId?: string | null
 	showFileFooter?: boolean
+	/** When false, hides CommonHeaderV2 inside file preview (URL param still works as fallback) */
+	showFileHeader?: boolean
+	/** When true, hides the file tab bar for single-file immersive read-only views */
+	hideTabBar?: boolean
 
 	// Playback tab related props
 	currentTopicStatus?: TaskStatus
@@ -132,7 +161,7 @@ export interface FilesViewerProps extends BaseComponentProps {
 	autoDetail?: any
 	showPlaybackControl?: boolean
 	isFileShare?: boolean
-	onActiveTabChange?: (tabType: "playback" | "file" | null) => void
+	onActiveTabChange?: (tabType: ActiveDetailTabType) => void
 	topicName?: string // 话题名称（用于分享场景）
 	projectId?: string
 	// 是否允许下载（用于分享页面权限控制）
@@ -161,6 +190,17 @@ export interface FilesViewerRef {
 	// Playback tab相关方法
 	openPlaybackTab: (options?: { toolData?: any; forceActivate?: boolean }) => void
 	closePlaybackTab: () => void
+	openWebsiteTab: (preset: WebsitePreset) => void
+	// Knowledge base tab相关方法
+	openKnowledgeBaseTab: (data: {
+		knowledgeBaseId: string
+		documentCode?: string
+		fileKey?: string
+		title: string
+		knowledgeBaseName?: string
+		fileExtension?: string
+	}) => void
+	closeKnowledgeBaseTab: (tabId: string) => void
 }
 
 // Tab component props

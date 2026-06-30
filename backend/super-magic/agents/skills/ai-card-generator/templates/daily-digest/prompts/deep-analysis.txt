@@ -1,0 +1,8 @@
+Please continue deep analysis based on this Daily Digest card:
+
+1. Extract the three most important risks and opportunities
+2. Provide cross-team actions for tomorrow (1-2 each for operations, ads, and content)
+3. Output a directly executable morning-meeting action checklist with suggested owners
+4. Estimate the short-term ROI impact of competitor activity
+
+Please combine revenue, user growth, and content-conversion trends for the final analysis.

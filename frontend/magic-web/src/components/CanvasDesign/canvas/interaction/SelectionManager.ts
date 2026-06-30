@@ -57,9 +57,9 @@ export class SelectionManager {
 		this.canvas.eventEmitter.on("element:rerendered", handleElementChange)
 
 		// 监听拖拽移动事件，实时更新选中元素位置信息
-		this.canvas.eventEmitter.on("elements:transform:dragmove", () => {
+		this.canvas.eventEmitter.on("elements:transform:dragmove", ({ data }) => {
 			if (this.hasSelection()) {
-				this.emitSelectionPosition()
+				this.emitSelectionPosition(data.boundingRect)
 			}
 		})
 
@@ -271,6 +271,11 @@ export class SelectionManager {
 				? Array.from(previousIds).filter((id) => !nextIds.has(id))
 				: []
 			this.emitSelectionChange(deselectedIds)
+			this.canvas.visibilityManager.requestImmediateMediaLoadForElements(elementIds, {
+				reason: "selection:container",
+				priority: "critical",
+				includeDirectImages: false,
+			})
 		}
 
 		if (autoFocus) {
@@ -294,7 +299,9 @@ export class SelectionManager {
 	/**
 	 * 计算并发出选中元素的位置信息
 	 */
-	private emitSelectionPosition(): void {
+	private emitSelectionPosition(
+		boundingRectOverride?: { x: number; y: number; width: number; height: number } | null,
+	): void {
 		// 如果正在吸附，跳过位置更新，避免抖动
 		if (this.isSnapping) {
 			return
@@ -309,6 +316,14 @@ export class SelectionManager {
 				data: {
 					boundingRect: null,
 				},
+			})
+			return
+		}
+
+		if (boundingRectOverride !== undefined) {
+			this.canvas.eventEmitter.emit({
+				type: "selection:position",
+				data: { boundingRect: boundingRectOverride },
 			})
 			return
 		}

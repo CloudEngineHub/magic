@@ -468,6 +468,7 @@ function AskUser(props: NodeProps) {
 					alt=""
 					className="size-4 shrink-0 overflow-hidden rounded-sm"
 					aria-hidden="true"
+					data-testid="ask-user-image"
 				/>
 				<div className="flex min-w-0 flex-1 items-center gap-2 text-xs font-normal leading-4 text-foreground">
 					<span className="truncate">{askUserT(headerTitle)}</span>

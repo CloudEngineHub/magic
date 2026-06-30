@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{CARD_TITLE}}</title>
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.1/dist/echarts.min.js"></script>
+    <link rel="stylesheet" href="styles.css">
+</head>
+
+<body>
+    <div class="frame">
+        <!-- DATA:ticker_START -->
+        <nav class="ticker analysis-source">
+            <span class="brand">Hotspot Radar</span>
+            <span class="item hot">AI agent development ↑86%</span>
+            <span class="item">Edge computing ↑73%</span>
+            <span class="item">Embodied intelligence ↑64%</span>
+            <span class="item">Quantum error correction ↑52%</span>
+            <span class="item">Synthetic biology ↑41%</span>
+            <span class="meta">{{GENERATED_AT}}</span>
+        </nav>
+        <!-- DATA:ticker_END -->
+
+        <div class="grid">
+            <main>
+                <!-- DATA:overview_START -->
+                <section class="card analysis-source">
+                    <div class="overview-hero">
+                        <div>
+                            <div class="hero-topline">
+                                <span>Trend Intelligence</span>
+                                <span>Live Radar</span>
+                            </div>
+                            <span class="eyebrow">{{CARD_TITLE}}</span>
+                            <h1>Heat Index</h1>
+                            <div class="heat-score">92.4</div>
+                            <div class="heat-sub"><span class="level">Extremely hot</span><span class="meta">+14.6% in the past 24h</span>
+                            </div>
+                            <div class="heat-bars" aria-label="Heat dimensions">
+                                <span></span>
+                                <span></span>
+                                <span></span>
+                            </div>
+                        </div>
+                        <div class="pie-wrap">
+                            <div class="chart pie-chart" id="pieChart"></div>
+                        </div>
+                    </div>
+                    <div class="overview-row">
+                        <div class="card-soft">
+                            <h2 class="mini-title">Fastest rising</h2>
+                            <div class="chart" id="risingChart"></div>
+                        </div>
+                        <div class="card-soft">
+                            <h2 class="mini-title">Composite radar</h2>
+                            <div class="chart" id="radarChart"></div>
+                        </div>
+                    </div>
+                </section>
+                <!-- DATA:overview_END -->
+
+                <!-- DATA:hot_list_START -->
+                <section class="card analysis-source">
+                    <h2>Hotspot ranking</h2>
+                    <div class="hot-list">
+                        <div class="hot-item">
+                            <div class="rank top">1</div>
+                            <div>
+                                <div class="title">AI agent development frameworks surge</div>
+                                <div class="desc">Multiple agent frameworks gained thousands of stars in days, sparking developer-community discussion.</div>
+                                <div class="tag-row"><span class="tag t-rising">Surging</span><span
+                                        class="tag t-platform">GitHub</span><span class="tag t-platform">X</span></div>
+                            </div>
+                            <div class="spark" data-series="12,18,24,35,52,68,86"></div>
+                        </div>
+                        <div class="hot-item">
+                            <div class="rank top">2</div>
+                            <div>
+                                <div class="title">Edge computing reaches lower-tier markets</div>
+                                <div class="desc">Operators and device vendors jointly released the MEC 2.0 white paper.</div>
+                                <div class="tag-row"><span class="tag t-rising">Surging</span><span
+                                        class="tag t-platform">WeChat</span></div>
+                            </div>
+                            <div class="spark" data-series="8,14,19,28,40,56,73"></div>
+                        </div>
+                        <div class="hot-item">
+                            <div class="rank mid">3</div>
+                            <div>
+                                <div class="title">Embodied intelligence demos go viral</div>
+                                <div class="desc">Two domestic robotics companies released dexterous-hand operation videos.</div>
+                                <div class="tag-row"><span class="tag t-stable">Sustained</span><span
+                                        class="tag t-platform">Bilibili</span><span class="tag t-platform">Douyin</span></div>
+                            </div>
+                            <div class="spark" data-series="20,25,30,36,42,52,64"></div>
+                        </div>
+                        <div class="hot-item">
+                            <div class="rank mid">4</div>
+                            <div>
+                                <div class="title">Quantum error-correction milestone</div>
+                                <div class="desc">Google announced a breakthrough in a new quantum error-correction threshold.</div>
+                                <div class="tag-row"><span class="tag t-stable">Sustained</span><span
+                                        class="tag t-platform">X</span></div>
+                            </div>
+                            <div class="spark" data-series="10,14,18,28,34,44,52"></div>
+                        </div>
+                        <div class="hot-item">
+                            <div class="rank low">5</div>
+                            <div>
+                                <div class="title">Synthetic biology policy tailwind</div>
+                                <div class="desc">Multiple ministries jointly issued support policies for synthetic biology manufacturing.</div>
+                                <div class="tag-row"><span class="tag t-stable">Sustained</span><span
+                                        class="tag t-platform">Weibo</span></div>
+                            </div>
+                            <div class="spark" data-series="6,9,14,20,26,34,41"></div>
+                        </div>
+                    </div>
+                </section>
+                <!-- DATA:hot_list_END -->
+            </main>
+
+            <aside class="side-col">
+                <!-- DATA:keywords_START -->
+                <section class="card analysis-source">
+                    <h2>Keyword cloud</h2>
+                    <div class="keyword-cloud">
+                        <span class="kw hot">Agent</span><span class="kw hot">MCP</span>
+                        <span class="kw">Large models</span><span class="kw">Edge</span><span class="kw">Robotics</span>
+                        <span class="kw">Quantum</span><span class="kw hot">RAG</span><span class="kw">Synthetic biology</span>
+                        <span class="kw">Open source</span><span class="kw">Inference</span><span class="kw">Multimodal</span>
+                    </div>
+                </section>
+                <!-- DATA:keywords_END -->
+
+                <!-- DATA:platforms_START -->
+                <section class="card analysis-source">
+                    <h2>Platform heat details</h2>
+                    <div class="plat-list">
+                        <div class="plat"><span class="dot dot-coral"></span><strong>Weibo</strong><span class="meta">38% · topic reads
+                                420M</span></div>
+                        <div class="plat"><span class="dot dot-mint"></span><strong>Douyin</strong><span class="meta">25% · views
+                                280M</span></div>
+                        <div class="plat"><span class="dot dot-violet"></span><strong>WeChat</strong><span class="meta">18% · 10w+
+                                12 articles</span></div>
+                        <div class="plat"><span class="dot dot-warn"></span><strong>Rednote</strong><span class="meta">12% · notes
+                                6800</span></div>
+                        <div class="plat"><span class="dot dot-muted"></span><strong>Other</strong><span class="meta">7% ·
+                                forums + Twitter</span></div>
+                    </div>
+                </section>
+                <!-- DATA:platforms_END -->
+
+                <!-- DATA:sources_START -->
+                <section class="card source-panel analysis-source">
+                    <div class="source-head">
+                        <div>
+                            <h2>Sources and originals</h2>
+                            <p class="meta">Keep links that support hotspot judgments; preview them or open in a new tab.</p>
+                        </div>
+                        <button class="source-close" id="sourceClose" type="button">Collapse</button>
+                    </div>
+                    <div class="source-list">
+                        <article class="source-card">
+                            <span class="tag t-platform">GitHub</span>
+                            <strong>Agent framework star-growth ranking</strong>
+                            <p class="desc">Used to verify developer-community discussion and open-source attention.</p>
+                            <div class="source-actions">
+                                <button class="source-preview active" type="button"
+                                    data-preview-url="https://github.com/trending">Preview</button>
+                                <a href="https://github.com/trending" target="_blank" rel="noopener noreferrer">Open</a>
+                            </div>
+                        </article>
+                        <article class="source-card">
+                            <span class="tag t-rising">Media</span>
+                            <strong>MEC 2.0 white paper summary</strong>
+                            <p class="desc">Used to verify policy and industry signals for edge computing moving into lower-tier markets.</p>
+                            <div class="source-actions">
+                                <button class="source-preview" type="button"
+                                    data-preview-url="https://example.com/report">Preview</button>
+                                <a href="https://example.com/report" target="_blank" rel="noopener noreferrer">Open</a>
+                            </div>
+                        </article>
+                    </div>
+                    <div class="source-frame-wrap">
+                        <div class="source-frame-fallback" id="sourceFallback">If the page blocks embedding, use Open.</div>
+                        <iframe id="sourceFrame" title="Hotspot source preview" sandbox="allow-scripts allow-same-origin allow-popups"
+                            loading="lazy" referrerpolicy="no-referrer"></iframe>
+                    </div>
+                </section>
+                <!-- DATA:sources_END -->
+
+                <section class="ai-insight">
+                    <div class="insight-header"><span class="insight-icon">✦</span><span>AI Insight</span></div>
+                    <p class="insight-text">AI agent development is in an explosive phase, leading in both discussion volume and growth speed. Expected window: 48-72h; related content should be produced quickly.</p>
+                    <div class="suggestion-chips">
+                        <button class="chip" type="button" data-prompt="Identify the lifecycle stage and forecast the decay inflection point for hotspot #1.">How long will this hotspot last?</button>
+                        <button class="chip" type="button" data-prompt="Analyze the hotspot trigger factors and likely evolution path.">What triggered it?</button>
+                        <button class="chip" type="button" data-prompt="Recommend the best brand-timing window and risk red lines, including content direction.">How should we ride the trend?</button>
+                        <button class="chip" type="button" data-prompt="Compare competitor moves around this hotspot and propose our differentiated strategy.">What did competitors do?</button>
+                    </div>
+                    <div class="ask-row">
+                        <input class="ask-input" id="askInput" type="text" placeholder="Ask something else...">
+                        <button class="ask-send" id="askSend" type="button">→</button>
+                    </div>
+                    <div class="config-row">
+                        <div class="select-group">
+                            <label class="select-label" for="agentSelect">AI employee</label>
+                            <select class="select" id="agentSelect">
+                                <option value="">Loading employees...</option>
+                            </select>
+                        </div>
+                        <div class="select-group">
+                            <label class="select-label" for="modelSelect">Model</label>
+                            <select class="select" id="modelSelect">
+                                <option value="auto">Auto select</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="insight-status" id="insightStatus"></div>
+                </section>
+            </aside>
+        </div>
+    </div>
+    <script src="scripts.js"></script>
+</body>
+
+</html>

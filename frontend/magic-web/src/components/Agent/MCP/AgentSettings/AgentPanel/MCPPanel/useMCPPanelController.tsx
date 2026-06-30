@@ -45,6 +45,9 @@ export interface MCPPanelController {
 	onStatusChange: (item: IMCPItem) => Promise<void>
 	usableCache: Set<string>
 	selectedCount: number
+	authModalState: { open: boolean; resourceId: string }
+	openManageAuth: (item: IMCPItem) => void
+	closeManageAuth: () => void
 }
 
 export function useMCPPanelController(props: UseMCPPanelControllerProps): MCPPanelController {
@@ -66,6 +69,15 @@ export function useMCPPanelController(props: UseMCPPanelControllerProps): MCPPan
 
 	const [type, setType] = useState(MCPUserGroup.Official)
 	const [searchText, setSearchText] = useState("")
+	const [authModalState, setAuthModalState] = useState({ open: false, resourceId: "" })
+
+	const openManageAuth = useMemoizedFn((item: IMCPItem) => {
+		setAuthModalState({ open: true, resourceId: item.id })
+	})
+
+	const closeManageAuth = useMemoizedFn(() => {
+		setAuthModalState({ open: false, resourceId: "" })
+	})
 	const hasInitializedSearch = useRef(false)
 	const latestSearchTextRef = useRef("")
 	const [usableCache, setUsableCache] = useImmer<Set<string>>(new Set())
@@ -197,5 +209,8 @@ export function useMCPPanelController(props: UseMCPPanelControllerProps): MCPPan
 		onStatusChange,
 		usableCache,
 		selectedCount: usableCache.size,
+		authModalState,
+		openManageAuth,
+		closeManageAuth,
 	}
 }
