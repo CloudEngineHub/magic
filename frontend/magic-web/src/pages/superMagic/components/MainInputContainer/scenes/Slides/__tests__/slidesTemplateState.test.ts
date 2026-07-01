@@ -14,6 +14,7 @@ import {
 
 const officialTemplate: SlidesTemplateItem = {
 	code: "PPT-official",
+	source_type: "SYSTEM",
 	label: {
 		zh_CN: "官方模板",
 		en_US: "Official Template",
@@ -31,6 +32,7 @@ const officialTemplate: SlidesTemplateItem = {
 
 const organizationTemplate: SlidesTemplateItem = {
 	code: "PPT-organization",
+	source_type: "OFFICIAL",
 	label: {
 		zh_CN: "组织模板",
 		en_US: "Organization Template",

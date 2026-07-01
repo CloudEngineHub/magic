@@ -12,10 +12,17 @@ export namespace SlidesTemplate {
 	} as const
 	export type Status = (typeof StatusMap)[keyof typeof StatusMap]
 
+	export const SourceTypeMap = {
+		system: "SYSTEM",
+		official: "OFFICIAL",
+	} as const
+	export type SourceType = (typeof SourceTypeMap)[keyof typeof SourceTypeMap]
+
 	export interface Item {
 		id: string
 		organization_code: string
 		code: string
+		source_type?: SourceType
 		label: LangText
 		description: LangText
 		thumbnail_file_key: string

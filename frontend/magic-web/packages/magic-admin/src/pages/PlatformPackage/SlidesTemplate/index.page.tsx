@@ -21,7 +21,11 @@ import { usePagination } from "@admin/hooks/usePagination"
 import { useIsMobile } from "@admin/hooks/useIsMobile"
 import { SlidesTemplate } from "@admin/types/slidesTemplate"
 import { SlidesTemplateModal } from "./components/SlidesTemplateModal"
-import { getSlidesTemplateStatusByChecked, resolveSlidesTemplateTitle } from "./utils"
+import {
+	getSlidesTemplateStatusByChecked,
+	isSystemSlidesTemplate,
+	resolveSlidesTemplateTitle,
+} from "./utils"
 
 const SlidesTemplateCard = lazy(() => import("./components/SlidesTemplateCard"))
 
@@ -113,6 +117,8 @@ export default function SlidesTemplatePage() {
 	})
 
 	const handleDelete = useMemoizedFn((record: DataType) => {
+		if (isSystemSlidesTemplate(record)) return
+
 		openModal(WarningModal, {
 			open: true,
 			content: resolveSlidesTemplateTitle(record),
@@ -172,6 +178,12 @@ export default function SlidesTemplatePage() {
 			: t("slidesTemplate.status.disabled")
 	})
 
+	const sourceTypeLabel = useMemoizedFn((sourceType?: SlidesTemplate.SourceType) => {
+		return sourceType === SlidesTemplate.SourceTypeMap.system
+			? t("slidesTemplate.source.system")
+			: t("slidesTemplate.source.official")
+	})
+
 	const columns: TableProps<DataType>["columns"] = useMemo(
 		() => [
 			{
@@ -205,6 +217,13 @@ export default function SlidesTemplatePage() {
 				key: "code",
 				width: 240,
 				ellipsis: true,
+			},
+			{
+				title: t("slidesTemplate.columns.source"),
+				dataIndex: "source_type",
+				key: "source_type",
+				width: 120,
+				render: (value: SlidesTemplate.SourceType | undefined) => sourceTypeLabel(value),
 			},
 			{
 				title: t("slidesTemplate.columns.status"),
@@ -252,36 +271,41 @@ export default function SlidesTemplatePage() {
 				title: t("operate"),
 				key: "action",
 				width: 140,
-				render: (_, record) => (
-					<Flex align="center" gap={8}>
-						<Button
-							type="link"
-							className={styles.linkButton}
-							disabled={!hasEditRight}
-							onClick={() => {
-								setSelectedRow(record)
-								setOpen(true)
-							}}
-						>
-							{t("button.edit")}
-						</Button>
-						<Button
-							type="link"
-							danger
-							className={styles.linkButton}
-							disabled={!hasEditRight}
-							onClick={() => handleDelete(record)}
-						>
-							{t("button.delete")}
-						</Button>
-					</Flex>
-				),
+				render: (_, record) => {
+					const disabled = !hasEditRight || isSystemSlidesTemplate(record)
+					return (
+						<Flex align="center" gap={8}>
+							<Button
+								type="link"
+								className={styles.linkButton}
+								disabled={disabled}
+								onClick={() => {
+									if (disabled) return
+									setSelectedRow(record)
+									setOpen(true)
+								}}
+							>
+								{t("button.edit")}
+							</Button>
+							<Button
+								type="link"
+								danger
+								className={styles.linkButton}
+								disabled={disabled}
+								onClick={() => handleDelete(record)}
+							>
+								{t("button.delete")}
+							</Button>
+						</Flex>
+					)
+				},
 			},
 		],
 		[
 			t,
 			styles,
 			statusLabel,
+			sourceTypeLabel,
 			statusLoadingIds,
 			sortLoadingIds,
 			hasEditRight,
@@ -370,9 +394,11 @@ export default function SlidesTemplatePage() {
 							hasEditRight={hasEditRight}
 							handleStatusChange={handleStatusChange}
 							handleEdit={(record) => {
+								if (isSystemSlidesTemplate(record)) return
 								setSelectedRow(record)
 								setOpen(true)
 							}}
+							sourceTypeLabel={sourceTypeLabel}
 							handleDelete={handleDelete}
 						/>
 					}

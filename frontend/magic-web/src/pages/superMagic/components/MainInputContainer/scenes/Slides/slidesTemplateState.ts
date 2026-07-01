@@ -9,6 +9,7 @@ import { TopicMode } from "@/pages/superMagic/pages/Workspace/TopicMode"
 
 export interface SlidesTemplateItem {
 	code: string
+	source_type?: "SYSTEM" | "OFFICIAL"
 	label: {
 		zh_CN: string
 		en_US: string

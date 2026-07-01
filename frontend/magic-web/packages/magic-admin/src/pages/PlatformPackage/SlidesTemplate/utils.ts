@@ -19,6 +19,10 @@ export function getSlidesTemplateStatusByChecked(checked: boolean) {
 	return checked ? SlidesTemplate.StatusMap.enabled : SlidesTemplate.StatusMap.disabled
 }
 
+export function isSystemSlidesTemplate(record: Pick<SlidesTemplate.Item, "source_type">) {
+	return record.source_type === SlidesTemplate.SourceTypeMap.system
+}
+
 export function buildSlidesTemplateSaveParams(
 	values: SlidesTemplateFormValues,
 ): SlidesTemplate.SaveParams {

@@ -202,6 +202,7 @@
 			"code": "Template Code",
 			"name": "Template Name",
 			"sort": "Sort",
+			"source": "Source",
 			"status": "Status",
 			"thumbnail": "Cover",
 			"updatedAt": "Updated At"
@@ -221,6 +222,10 @@
 			"code": "Template Code",
 			"keyword": "Keyword",
 			"status": "Status"
+		},
+		"source": {
+			"official": "Official",
+			"system": "System Built-in"
 		},
 		"status": {
 			"disabled": "Disabled",

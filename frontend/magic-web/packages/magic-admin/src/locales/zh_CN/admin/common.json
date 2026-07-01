@@ -207,6 +207,7 @@
 			"code": "模板编码",
 			"name": "模板名称",
 			"sort": "排序",
+			"source": "来源",
 			"status": "状态",
 			"thumbnail": "封面",
 			"updatedAt": "更新时间"
@@ -226,6 +227,10 @@
 			"code": "模板编码",
 			"keyword": "关键词",
 			"status": "状态"
+		},
+		"source": {
+			"official": "官方模板",
+			"system": "系统内置"
 		},
 		"status": {
 			"disabled": "禁用",

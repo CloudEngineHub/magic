@@ -3,12 +3,14 @@ import { Flex, Image, Switch } from "antd"
 import { useTranslation } from "react-i18next"
 import { MagicButton, MobileCard } from "@admin-components"
 import { SlidesTemplate } from "@admin/types/slidesTemplate"
+import { isSystemSlidesTemplate } from "../utils"
 
 interface SlidesTemplateCardProps {
 	data?: SlidesTemplate.Item
 	onClick?: (data: SlidesTemplate.Item) => void
 	statusLoadingIds: Set<string>
 	hasEditRight: boolean
+	sourceTypeLabel: (sourceType?: SlidesTemplate.SourceType) => string
 	handleStatusChange: (record: SlidesTemplate.Item, checked: boolean) => void
 	handleEdit: (record: SlidesTemplate.Item) => void
 	handleDelete: (record: SlidesTemplate.Item) => void
@@ -19,6 +21,7 @@ function SlidesTemplateCard({
 	onClick,
 	statusLoadingIds,
 	hasEditRight,
+	sourceTypeLabel,
 	handleStatusChange,
 	handleEdit,
 	handleDelete,
@@ -28,6 +31,7 @@ function SlidesTemplateCard({
 	if (!data) return null
 
 	const title = data.label?.zh_CN || data.label?.en_US || "-"
+	const editDisabled = !hasEditRight || isSystemSlidesTemplate(data)
 
 	return (
 		<MobileCard title={title} onClick={() => onClick?.(data)}>
@@ -48,6 +52,9 @@ function SlidesTemplateCard({
 				<span>
 					{t("slidesTemplate.columns.sort")}: {data.sort ?? 0}
 				</span>
+				<span>
+					{t("slidesTemplate.columns.source")}: {sourceTypeLabel(data.source_type)}
+				</span>
 				<Flex align="center" gap={8}>
 					<span>{t("slidesTemplate.columns.status")}:</span>
 					<Switch
@@ -60,7 +67,7 @@ function SlidesTemplateCard({
 				<Flex justify="end" gap={8}>
 					<MagicButton
 						type="link"
-						disabled={!hasEditRight}
+						disabled={editDisabled}
 						onClick={() => handleEdit(data)}
 					>
 						{t("button.edit")}
@@ -68,7 +75,7 @@ function SlidesTemplateCard({
 					<MagicButton
 						type="link"
 						danger
-						disabled={!hasEditRight}
+						disabled={editDisabled}
 						onClick={() => handleDelete(data)}
 					>
 						{t("button.delete")}

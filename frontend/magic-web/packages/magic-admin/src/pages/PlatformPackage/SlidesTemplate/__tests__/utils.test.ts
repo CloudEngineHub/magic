@@ -3,6 +3,7 @@ import { SlidesTemplate } from "../../../../types/slidesTemplate"
 import {
 	buildSlidesTemplateSaveParams,
 	getSlidesTemplateStatusByChecked,
+	isSystemSlidesTemplate,
 	resolveSlidesTemplateTitle,
 } from "../utils"
 
@@ -34,6 +35,20 @@ describe("slides template page utils", () => {
 	it("converts switch checked state to template status", () => {
 		expect(getSlidesTemplateStatusByChecked(true)).toBe(SlidesTemplate.StatusMap.enabled)
 		expect(getSlidesTemplateStatusByChecked(false)).toBe(SlidesTemplate.StatusMap.disabled)
+	})
+
+	it("detects system built-in templates by source type", () => {
+		expect(
+			isSystemSlidesTemplate({
+				source_type: SlidesTemplate.SourceTypeMap.system,
+			}),
+		).toBe(true)
+		expect(
+			isSystemSlidesTemplate({
+				source_type: SlidesTemplate.SourceTypeMap.official,
+			}),
+		).toBe(false)
+		expect(isSystemSlidesTemplate({ source_type: undefined })).toBe(false)
 	})
 
 	it("resolves title with language fallback", () => {
