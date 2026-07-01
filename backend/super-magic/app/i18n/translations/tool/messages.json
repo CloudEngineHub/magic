@@ -203,6 +203,30 @@
         "zh_CN": "文档格式转换",
         "en_US": "Document Format Conversion"
     },
+    "convert_pptx_to_html.before": {
+        "zh_CN": "正在将 {{file_name}} 渲染为 HTML",
+        "en_US": "Rendering {{file_name}} to HTML"
+    },
+    "convert_pptx_to_html.after_success": {
+        "zh_CN": "已将 {{file_name}} 渲染为 HTML（{{rendered}}/{{total}} 页）",
+        "en_US": "Rendered {{file_name}} to HTML ({{rendered}}/{{total}} slides)"
+    },
+    "convert_pptx_to_html.after_failed": {
+        "zh_CN": "{{file_name}} 渲染失败",
+        "en_US": "Failed to render {{file_name}} to HTML"
+    },
+    "convert_pptx_to_html.error": {
+        "zh_CN": "PPTX 转 HTML 失败：{{error}}",
+        "en_US": "PPTX to HTML conversion failed: {{error}}"
+    },
+    "convert_pptx_to_html.detail_title": {
+        "zh_CN": "PPTX 转 HTML",
+        "en_US": "PPTX to HTML Conversion"
+    },
+    "convert_pptx_to_html.detail_error_title": {
+        "zh_CN": "PPTX 转 HTML 失败",
+        "en_US": "PPTX to HTML Conversion Failed"
+    },
     "export_document_markdown.before": {
         "zh_CN": "正在导出 {{file_name}}",
         "en_US": "Exporting {{file_name}}"

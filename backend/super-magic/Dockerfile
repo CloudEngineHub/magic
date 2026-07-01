@@ -112,6 +112,10 @@ RUN --mount=type=cache,id=debian-${DEBIAN_VERSION}-npm-${TARGETARCH},target=/roo
     pnpm --registry="${NPM_REGISTRY}" \
         --cache=/root/.npm \
         install -g typescript@5 && \
+    # install PPTX HTML renderer used by super-magic slide-template conversion
+    npm --registry="${NPM_REGISTRY}" \
+        --cache=/root/.npm \
+        install -g pptx-html-renderer@0.1.0 && \
     # install clawhub cli and add-skills cli
     npm --registry="${NPM_REGISTRY}" \
         --cache=/root/.npm \

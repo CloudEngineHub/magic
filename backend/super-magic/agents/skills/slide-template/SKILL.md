@@ -1,12 +1,12 @@
 ---
 name: slide-template
-description: "Use when the user asks to create slides with a specific style, wants to see available PPT templates before creating, describes a custom template style, or wants to extract a template from an existing PPT project."
-description-cn: "当用户想查看PPT模板、用特定风格制作幻灯片、描述自定义模板风格，或从现有PPT项目中抽象模板时使用。"
+description: "Use when the user asks to create slides with a specific style, wants to see available PPT templates before creating, describes a custom template style, provides a PPTX/PPT file to convert into a platform template, or wants to extract a template from an existing PPT project."
+description-cn: "当用户想查看PPT模板、用特定风格制作幻灯片、描述自定义模板风格、提供 PPTX/PPT 文件转换为平台模板，或从现有PPT项目中抽象模板时使用。"
 ---
 
 # Slide Template Manager
 
-Use this skill to choose a built-in slide template,create a custom template from a style description,or extract one from an existing PPT project.
+Use this skill to choose a built-in slide template,create a custom template from a style description,extract one from a PPTX/PPT file,or extract one from an existing PPT project.
 
 ## Templates
 
@@ -40,6 +40,7 @@ Use this skill to choose a built-in slide template,create a custom template from
 ## Decision
 
 - Explicit template name/dir/alias:use it directly.
+- User provides a PPTX/PPT/presentation template file or URL and asks to convert it into a platform template:read `references/pptx-template-workflow.md` and follow the PPTX Template Workflow first.
 - User describes concrete visual style(colors,materials,layout,decorative elements,visual keywords;配色/材质/版式/装饰/视觉关键词):generate a custom template first,then use it.
 - User only describes scenario/topic/audience(场景/主题/受众) without enough visual specs:recommend 3-5 built-in templates with `ask_user`.
 - `ask_user` options must include name+short description+dir,and include "no template/default style".
@@ -112,6 +113,10 @@ shell_exec(command="cp <skill_dir>/assets/templates/<dir>/theme.css <project>/th
 ## Custom Template Workflow
 
 Use when the user describes a style in text, provides screenshots, or gives an existing PPT project. Read `<skill_dir>/references/custom-template-workflow.md` and follow it before generating custom template files.
+
+## PPTX Template Workflow
+
+Use when the user provides a presentation file such as `.pptx`, `.ppt`, `.potx`, `.pot`, `.ppsx`, a WPS presentation, or a URL to a presentation template and asks to convert it into this platform's reusable template format. Read `<skill_dir>/references/pptx-template-workflow.md` before doing any extraction or generation.
 
 ## Style Specificity & Template Scope
 
