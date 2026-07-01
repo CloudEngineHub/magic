@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { MagiClawNavIcon } from "@/pages/superMagicMobile/components/icons/MagiClawNavIcon"
 import { getAvatarColor } from "@/utils/avatar-color"
@@ -21,6 +21,12 @@ const mockProjectActions = [
 	{ key: "delete", label: "Delete", onClick: vi.fn(), variant: "danger" as const },
 ]
 const useProjectListActionsMock = vi.fn()
+const upgradeActionState = vi.hoisted(() => ({
+	isVisible: false,
+	label: "Upgrade",
+	handleUpgradeClick: vi.fn(),
+	handleUpgradePreload: vi.fn(),
+}))
 
 vi.mock("react-i18next", async (importOriginal) => {
 	const actual = await importOriginal<typeof import("react-i18next")>()
@@ -63,12 +69,12 @@ vi.mock("@/pages/superMagicMobile/components/MobileBrandLogo", () => ({
 	MobileBrandLogo: () => <img data-testid="brand-logo" alt="Configured Brand" />,
 }))
 
-vi.mock("./useMobileShellUpgradeAction", () => ({
+vi.mock("../useMobileShellUpgradeAction", () => ({
 	useMobileShellUpgradeAction: () => ({
-		isVisible: false,
-		label: "",
-		handleUpgradeClick: vi.fn(),
-		handleUpgradePreload: vi.fn(),
+		isVisible: upgradeActionState.isVisible,
+		label: upgradeActionState.label,
+		handleUpgradeClick: upgradeActionState.handleUpgradeClick,
+		handleUpgradePreload: upgradeActionState.handleUpgradePreload,
 	}),
 }))
 
@@ -137,6 +143,10 @@ describe("MobileShellSidebar", () => {
 		defaultUpdateCurrentActionItem.mockReset()
 		chatUpdateCurrentActionItem.mockReset()
 		useProjectListActionsMock.mockReset()
+		upgradeActionState.isVisible = false
+		upgradeActionState.label = "Upgrade"
+		upgradeActionState.handleUpgradeClick.mockReset()
+		upgradeActionState.handleUpgradePreload.mockReset()
 		// Stable implementation so refresh-triggered re-renders do not exhaust one-shot mocks.
 		useProjectListActionsMock.mockImplementation((options?: { mode?: string }) => {
 			if (options?.mode === "chat") {
@@ -222,6 +232,45 @@ describe("MobileShellSidebar", () => {
 		expect(screen.queryByTestId("mobile-chat-home-page-account-pill")).not.toBeInTheDocument()
 	})
 
+	it("keeps shared sidebar singleton test ids stable across page-specific prefixes", () => {
+		upgradeActionState.isVisible = true
+
+		renderSidebar(
+			{
+				activeView: "workspaces",
+				navItems: [],
+				recentItems: [
+					{
+						id: "recent-project",
+						title: "Recent project",
+						inProgress: false,
+						isShared: false,
+						isLinked: false,
+						isChatProject: false,
+					},
+				],
+				onNavigate: vi.fn(),
+				onGoHome: vi.fn(),
+				onRecentNavigate: vi.fn(),
+				reloadRecentItems: vi.fn(),
+				hasMore: false,
+				loadMoreRecentItems: vi.fn(),
+			},
+			"mobile-workspaces-page",
+		)
+
+		expect(screen.getByTestId("mobile-super-shell-brand-button")).toBeInTheDocument()
+		expect(screen.getByTestId("mobile-super-shell-recent-refresh")).toBeInTheDocument()
+		expect(screen.getByTestId("mobile-super-shell-upgrade-button")).toBeInTheDocument()
+		expect(screen.queryByTestId("mobile-workspaces-page-brand-button")).not.toBeInTheDocument()
+		expect(
+			screen.queryByTestId("mobile-workspaces-page-recent-refresh"),
+		).not.toBeInTheDocument()
+		expect(
+			screen.queryByTestId("mobile-workspaces-page-upgrade-button"),
+		).not.toBeInTheDocument()
+	})
+
 	it("wires shell-recent project whitelist and chat actions without pin", () => {
 		renderSidebar({
 			activeView: "chats",
@@ -295,7 +344,10 @@ describe("MobileShellSidebar", () => {
 				loadMoreRecentItems: vi.fn(),
 			})
 
-			const titleButton = screen.getByTestId("mobile-super-shell-recent-project-1")
+			const recentRow = screen.getByTestId("mobile-super-shell-recent-item")
+			const titleButton = within(recentRow).getByTestId(
+				"mobile-super-shell-recent-title-button",
+			)
 			touchStart(titleButton)
 			touchEnd(titleButton)
 
@@ -334,7 +386,10 @@ describe("MobileShellSidebar", () => {
 				loadMoreRecentItems: vi.fn(),
 			})
 
-			const titleButton = screen.getByTestId("mobile-super-shell-recent-project-1")
+			const recentRow = screen.getByTestId("mobile-super-shell-recent-item")
+			const titleButton = within(recentRow).getByTestId(
+				"mobile-super-shell-recent-title-button",
+			)
 			act(() => {
 				touchStart(titleButton)
 				vi.advanceTimersByTime(500)
@@ -372,7 +427,10 @@ describe("MobileShellSidebar", () => {
 				loadMoreRecentItems: vi.fn(),
 			})
 
-			const titleButton = screen.getByTestId("mobile-super-shell-recent-recent-no-project")
+			const recentRow = screen.getByTestId("mobile-super-shell-recent-item")
+			const titleButton = within(recentRow).getByTestId(
+				"mobile-super-shell-recent-title-button",
+			)
 			touchStart(titleButton)
 			vi.advanceTimersByTime(500)
 			touchEnd(titleButton)
@@ -411,7 +469,8 @@ describe("MobileShellSidebar", () => {
 			loadMoreRecentItems: vi.fn(),
 		})
 
-		fireEvent.click(screen.getByTestId("mobile-super-shell-recent-actions-chat-project-1"))
+		const recentRow = screen.getByTestId("mobile-super-shell-recent-item")
+		fireEvent.click(within(recentRow).getByTestId("mobile-super-shell-recent-actions-button"))
 
 		expect(chatOpenActionsPopup).toHaveBeenCalledWith(project)
 		expect(defaultOpenActionsPopup).not.toHaveBeenCalled()
@@ -475,6 +534,28 @@ describe("MobileShellSidebar", () => {
 			chatsButton,
 			screen.getByTestId("mobile-super-shell-nav-workspaces"),
 		])
+	})
+
+	it("keeps shared nav item test ids stable when a page-specific prefix is provided", () => {
+		renderSidebar(
+			{
+				activeView: "workspaces",
+				navItems: [{ key: "workspaces", icon: TestIcon, label: "工作空间" }],
+				recentItems: [],
+				onNavigate: vi.fn(),
+				onGoHome: vi.fn(),
+				onRecentNavigate: vi.fn(),
+				reloadRecentItems: vi.fn(),
+				hasMore: false,
+				loadMoreRecentItems: vi.fn(),
+			},
+			"mobile-workspaces-page",
+		)
+
+		expect(screen.getByTestId("mobile-super-shell-nav-workspaces")).toBeInTheDocument()
+		expect(
+			screen.queryByTestId("mobile-workspaces-page-nav-workspaces"),
+		).not.toBeInTheDocument()
 	})
 
 	it("keeps my crew in the secondary menu group instead of the chats and workspaces group", () => {
