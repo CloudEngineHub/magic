@@ -56,14 +56,14 @@
 		"wiki": "bash .cursor/skills/wiki-generator/scripts/serve-wiki.sh"
 	},
 	"lint-staged": {
-		"./src/**/*.{js,jsx,ts,tsx}": [
+		"{src,enterprise/src,customer/src}/**/*.{js,jsx,ts,tsx}": [
 			"eslint --fix --config .eslintrc.cjs",
 			"prettier --write"
 		],
-		"./src/assets/locales/**/*.json": [
-			"prettier --write"
-		],
-		"package.json": "sort-package-json"
+		"**/*.json": [
+			"prettier --write",
+			"sort-package-json"
+		]
 	},
 	"browserslist": {
 		"production": [
