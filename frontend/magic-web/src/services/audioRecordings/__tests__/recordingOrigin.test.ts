@@ -5,11 +5,17 @@ const {
 	pushMock,
 	genProjectTopicUrlMock,
 	openInNewTabMock,
+	changeBottomTabMock,
+	deviceMocks,
 } = vi.hoisted(() => ({
 	createHrefMock: vi.fn(),
 	pushMock: vi.fn(),
 	genProjectTopicUrlMock: vi.fn(),
 	openInNewTabMock: vi.fn(),
+	changeBottomTabMock: vi.fn(),
+	deviceMocks: {
+		isMagicApp: false,
+	},
 }))
 
 vi.mock("@/routes/history", () => ({
@@ -24,6 +30,20 @@ vi.mock("@/pages/superMagic/utils/project", () => ({
 	openInNewTab: openInNewTabMock,
 }))
 
+vi.mock("@/utils/devices", () => ({
+	get isMagicApp() {
+		return deviceMocks.isMagicApp
+	},
+}))
+
+vi.mock("@/platform/native", () => ({
+	getNativePort: () => ({
+		navigation: {
+			changeBottomTab: changeBottomTabMock,
+		},
+	}),
+}))
+
 import {
 	navigateToRecordSummaryResult,
 	resolveRecordSummaryResultHref,
@@ -36,6 +56,8 @@ describe("recordingOrigin", () => {
 		pushMock.mockReset()
 		genProjectTopicUrlMock.mockReset()
 		openInNewTabMock.mockReset()
+		changeBottomTabMock.mockReset()
+		deviceMocks.isMagicApp = false
 		createHrefMock.mockReturnValue("/global/recordings/project-mobile-001")
 		genProjectTopicUrlMock.mockReturnValue("/global/super/project/topic")
 	})
@@ -100,6 +122,40 @@ describe("recordingOrigin", () => {
 				state: { projectName: "Imported audio" },
 			})
 			expect(openInNewTabMock).not.toHaveBeenCalled()
+		})
+
+		it("opens the native recording tab for audio projects inside Magic App", () => {
+			deviceMocks.isMagicApp = true
+
+			navigateToRecordSummaryResult({
+				projectId: "project-mobile-001",
+				projectMode: "audio",
+				projectName: "Mock imported audio",
+				openInNewTab: false,
+			})
+
+			expect(changeBottomTabMock).toHaveBeenCalledWith({
+				tab: "ai_recording",
+				bottomTabHeight: 0,
+			})
+			expect(pushMock).not.toHaveBeenCalled()
+			expect(openInNewTabMock).not.toHaveBeenCalled()
+		})
+
+		it("opens the native recording tab inside Magic App even when project id is missing", () => {
+			deviceMocks.isMagicApp = true
+
+			navigateToRecordSummaryResult({
+				projectMode: "audio",
+				projectName: "Mock imported audio without id",
+				openInNewTab: false,
+			})
+
+			expect(changeBottomTabMock).toHaveBeenCalledWith({
+				tab: "ai_recording",
+				bottomTabHeight: 0,
+			})
+			expect(pushMock).not.toHaveBeenCalled()
 		})
 
 		it("opens legacy expert-mode results in a new tab by default", () => {

@@ -3,6 +3,8 @@ import { RoutePath } from "@/constants/routes"
 import { RouteName } from "@/routes/constants"
 import { history } from "@/routes/history"
 import { genProjectTopicUrl, openInNewTab } from "@/pages/superMagic/utils/project"
+import { getNativePort } from "@/platform/native"
+import { isMagicApp } from "@/utils/devices"
 import { isAudioProjectMode } from "./audioProjectMode"
 
 export interface RecordSummaryResultNavigationParams {
@@ -51,6 +53,15 @@ export function resolveRecordSummaryResultHref(
  */
 export function navigateToRecordSummaryResult(params: RecordSummaryResultNavigationParams): void {
 	if (isAudioProjectMode(params.projectMode)) {
+		if (isMagicApp) {
+			// Magic App owns the native recording experience, so web notifications hand off to the app tab.
+			void getNativePort().navigation.changeBottomTab({
+				tab: "ai_recording",
+				bottomTabHeight: 0,
+			})
+			return
+		}
+
 		if (!params.projectId) return
 
 		history.push({
