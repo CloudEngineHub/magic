@@ -25,6 +25,7 @@ use Dtyq\AsyncEvent\AsyncEventUtil;
 use Dtyq\SuperMagic\Application\Chat\Service\ChatAppService;
 use Dtyq\SuperMagic\Application\SuperAgent\DTO\Request\CreateAgentProjectRequestDTO;
 use Dtyq\SuperMagic\Application\SuperAgent\DTO\Request\CreateAudioProjectRequestDTO;
+use Dtyq\SuperMagic\Application\SuperAgent\DTO\Request\CreateMicroAppProjectRequestDTO;
 use Dtyq\SuperMagic\Application\SuperAgent\DTO\Request\GetAudioProjectListRequestDTO;
 use Dtyq\SuperMagic\Application\SuperAgent\DTO\Request\ImportAudioFilesRequestDTO;
 use Dtyq\SuperMagic\Application\SuperAgent\DTO\Request\UpdateAudioProjectTagsRequestDTO;
@@ -1812,6 +1813,77 @@ class ProjectAppService extends AbstractAppService
     }
 
     // ========================================
+    // Micro App Project Methods
+    // ========================================
+
+    /**
+     * Create micro app project in the current user's micro app workspace.
+     */
+    public function createMicroAppProject(
+        RequestContext $requestContext,
+        CreateMicroAppProjectRequestDTO $requestDTO
+    ): array {
+        $this->logger->info('Starting micro app project creation');
+
+        $userAuthorization = $requestContext->getUserAuthorization();
+        $dataIsolation = $this->createDataIsolation($userAuthorization);
+
+        $workspaceId = $requestDTO->getWorkspaceId();
+        if ($workspaceId !== '') {
+            if (! ctype_digit($workspaceId)) {
+                ExceptionBuilder::throw(GenericErrorCode::ParameterValidationFailed, 'Invalid workspace_id');
+            }
+            $workspaceIdInt = (int) $workspaceId;
+            $workspaceEntity = $this->validateWorkspaceAccess($dataIsolation, $workspaceIdInt);
+            $this->validateWorkspaceType($workspaceEntity, WorkspaceType::MicroApp, $workspaceIdInt);
+        } else {
+            $workspaceEntity = $this->workspaceDomainService->getOrCreateWorkspaceByType(
+                $dataIsolation,
+                WorkspaceType::MicroApp
+            );
+        }
+
+        Db::beginTransaction();
+        try {
+            $projectEntity = $this->projectDomainService->createProject(
+                $workspaceEntity->getId(),
+                $requestDTO->getProjectName(),
+                $dataIsolation->getCurrentUserId(),
+                $dataIsolation->getCurrentOrganizationCode(),
+                '',
+                '',
+                ProjectMode::GENERAL->value
+            );
+            $this->logger->info(sprintf('Created micro app project, projectId=%s', $projectEntity->getId()));
+
+            $dynamicParams = ! empty($requestDTO->getDynamicParams()) ? $requestDTO->getDynamicParams() : null;
+            $topicEntity = $this->initializeProject($dataIsolation, $workspaceEntity, $projectEntity, $dynamicParams);
+
+            $this->taskFileDomainService->findOrCreateProjectRootDirectory(
+                projectId: $projectEntity->getId(),
+                workDir: $projectEntity->getWorkDir(),
+                userId: $dataIsolation->getCurrentUserId(),
+                organizationCode: $dataIsolation->getCurrentOrganizationCode(),
+                projectOrganizationCode: $projectEntity->getUserOrganizationCode(),
+            );
+
+            Db::commit();
+
+            $projectCreatedEvent = new ProjectCreatedEvent($projectEntity, $userAuthorization);
+            $this->eventDispatcher->dispatch($projectCreatedEvent);
+
+            return [
+                'project' => ProjectItemDTO::fromEntity($projectEntity)->toArray(),
+                'topic' => TopicItemDTO::fromEntity($topicEntity)->toArray(),
+            ];
+        } catch (Throwable $e) {
+            Db::rollBack();
+            $this->logger->error('Create Micro App Project Failed, err: ' . $e->getMessage(), ['request' => $requestDTO->toArray()]);
+            ExceptionBuilder::throw(SuperAgentErrorCode::CREATE_PROJECT_FAILED, trans('project.create_project_failed'));
+        }
+    }
+
+    // ========================================
     // Audio Project Methods
     // ========================================
 
@@ -2879,9 +2951,14 @@ class ProjectAppService extends AbstractAppService
         int $workspaceId
     ): void {
         if ($workspaceEntity->getWorkspaceType() !== $expectedType->value) {
+            $messageKey = match ($expectedType) {
+                WorkspaceType::MicroApp => 'super_agent.invalid_workspace_type_for_micro_app_project',
+                default => 'super_agent.invalid_workspace_type_for_audio_project',
+            };
+
             ExceptionBuilder::throw(
                 SuperAgentErrorCode::INVALID_WORKSPACE_TYPE,
-                trans('super_agent.invalid_workspace_type_for_audio_project'),
+                trans($messageKey),
                 [
                     'workspace_id' => $workspaceId,
                     'expected_type' => $expectedType->value,

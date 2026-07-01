@@ -29,6 +29,13 @@ enum WorkspaceType: string
     case Audio = 'audio';
 
     /**
+     * Micro app workspace type for HTML micro-application projects.
+     * Each user has at most one micro app workspace per organization.
+     * Managed programmatically; not user-selectable via API.
+     */
+    case MicroApp = 'micro_app';
+
+    /**
      * Chat workspace type for conversation sessions.
      * Each user has at most one chat workspace per organization.
      * Managed programmatically; not user-selectable via API.
@@ -59,6 +66,7 @@ enum WorkspaceType: string
             self::Default->value,
             self::Finance->value,
             self::Audio->value,
+            self::MicroApp->value,
             self::Chat->value,
             self::MicroApp->value,
             self::UserSpecial->value,

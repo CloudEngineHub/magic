@@ -12,6 +12,7 @@ use Dtyq\SuperMagic\Interfaces\SuperAgent\Facade\AudioProjectApi;
 use Dtyq\SuperMagic\Interfaces\SuperAgent\Facade\FileApi;
 use Dtyq\SuperMagic\Interfaces\SuperAgent\Facade\FileEditingApi;
 use Dtyq\SuperMagic\Interfaces\SuperAgent\Facade\MessageApi;
+use Dtyq\SuperMagic\Interfaces\SuperAgent\Facade\MicroAppProjectApi;
 use Dtyq\SuperMagic\Interfaces\SuperAgent\Facade\ProjectApi;
 use Dtyq\SuperMagic\Interfaces\SuperAgent\Facade\ProjectInvitationLinkApi;
 use Dtyq\SuperMagic\Interfaces\SuperAgent\Facade\ProjectMemberApi;
@@ -146,6 +147,12 @@ Router::addGroup(
                 // 删除音频标记
                 Router::delete('/{id}', [AudioMarkerApi::class, 'deleteMarker']);
             });
+        });
+
+        // 微应用项目管理
+        Router::addGroup('/micro-app-projects', static function () {
+            // 创建微应用项目
+            Router::post('', [MicroAppProjectApi::class, 'store']);
         });
 
         // 用户级别特殊项目
