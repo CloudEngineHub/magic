@@ -463,8 +463,10 @@ class GlobalConfigApi extends AbstractApi
         $organizationType = $organizationEntity !== null
             ? OrganizationType::from($organizationEntity->getType())
             : OrganizationType::Team;
+        $menuAuthorization = clone $authorization;
+        $menuAuthorization->setOrganizationCode($organizationCode);
 
-        return $this->magicSettingAppService->getAppMenuModules($organizationType);
+        return $this->magicSettingAppService->getAppMenuModules($organizationType, $menuAuthorization);
     }
 
     /**

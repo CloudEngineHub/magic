@@ -8,6 +8,7 @@ declare(strict_types=1);
 namespace App\Domain\AppMenu\Factory;
 
 use App\Domain\AppMenu\Entity\AppMenuEntity;
+use App\Domain\AppMenu\Entity\ValueObject\AppMenuSourceType;
 use App\Domain\AppMenu\Repository\Persistence\Model\AppMenuModel;
 
 class AppMenuFactory
@@ -16,6 +17,8 @@ class AppMenuFactory
     {
         $entity = new AppMenuEntity();
         $entity->setId($model->id);
+        $entity->setOrganizationCode($model->organization_code ?? '');
+        $entity->setSourceType($model->source_type ?? AppMenuSourceType::Official->value);
         $entity->setNameI18n($model->name_i18n ?? []);
         $entity->setIcon($model->icon);
         $entity->setIconUrl($model->icon_url);
@@ -25,6 +28,8 @@ class AppMenuFactory
         $entity->setSortOrder($model->sort_order);
         $entity->setDisplayScope($model->display_scope);
         $entity->setStatus($model->status);
+        $entity->setOrganizationStatus($model->organization_status ?? null);
+        $entity->setOrganizationSortOrder($model->organization_sort_order ?? null);
         $entity->setCreatorId($model->creator_id);
         $entity->setCreatedAt($model->created_at);
         $entity->setUpdatedAt($model->updated_at);

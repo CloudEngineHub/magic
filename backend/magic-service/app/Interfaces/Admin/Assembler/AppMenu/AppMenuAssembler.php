@@ -20,7 +20,7 @@ class AppMenuAssembler
     /**
      * @param array<string, MagicUserEntity> $users
      */
-    public static function createDTO(AppMenuEntity $entity, array $users = []): AppMenuDTO
+    public static function createDTO(AppMenuEntity $entity, array $users = [], bool $isOfficialOrganization = true): AppMenuDTO
     {
         $dto = new AppMenuDTO();
         $iconUrl = '';
@@ -29,15 +29,21 @@ class AppMenuAssembler
         }
 
         $dto->setId($entity->getId());
+        $dto->setOrganizationCode($entity->getOrganizationCode());
+        $dto->setSourceType($entity->getSourceType());
         $dto->setNameI18n($entity->getNameI18n());
         $dto->setIcon($entity->getIcon());
         $dto->setIconUrl($iconUrl);
         $dto->setIconType($entity->getIconType());
         $dto->setPath($entity->getPath());
         $dto->setOpenMethod($entity->getOpenMethod());
-        $dto->setSortOrder($entity->getSortOrder());
+        $dto->setSortOrder($entity->getEffectiveSortOrder());
         $dto->setDisplayScope($entity->getDisplayScope());
-        $dto->setStatus($entity->getStatus());
+        $dto->setStatus($entity->getEffectiveStatus());
+        $dto->setEditable($isOfficialOrganization || $entity->isOrganization());
+        $dto->setCanDelete($isOfficialOrganization || $entity->isOrganization());
+        $dto->setCanConfigVisibility($entity->isOrganization());
+        $dto->setVisibilityConfig($entity->getVisibilityConfig());
         $dto->setCreator($entity->getCreatorId());
         $dto->setCreatedAt($entity->getCreatedAt());
         $dto->setUpdatedAt($entity->getUpdatedAt());
@@ -52,7 +58,7 @@ class AppMenuAssembler
     /**
      * 列表项 DTO，仅含表字段，不含 creator_info 等运营人信息.
      */
-    public static function createListDTO(AppMenuEntity $entity): AppMenuListItemDTO
+    public static function createListDTO(AppMenuEntity $entity, bool $isOfficialOrganization = true): AppMenuListItemDTO
     {
         $dto = new AppMenuListItemDTO();
         $iconUrl = '';
@@ -61,15 +67,21 @@ class AppMenuAssembler
         }
 
         $dto->setId($entity->getId());
+        $dto->setOrganizationCode($entity->getOrganizationCode());
+        $dto->setSourceType($entity->getSourceType());
         $dto->setNameI18n($entity->getNameI18n());
         $dto->setIcon($entity->getIcon());
         $dto->setIconUrl($iconUrl);
         $dto->setIconType($entity->getIconType());
         $dto->setPath($entity->getPath());
         $dto->setOpenMethod($entity->getOpenMethod());
-        $dto->setSortOrder($entity->getSortOrder());
+        $dto->setSortOrder($entity->getEffectiveSortOrder());
         $dto->setDisplayScope($entity->getDisplayScope());
-        $dto->setStatus($entity->getStatus());
+        $dto->setStatus($entity->getEffectiveStatus());
+        $dto->setEditable($isOfficialOrganization || $entity->isOrganization());
+        $dto->setCanDelete($isOfficialOrganization || $entity->isOrganization());
+        $dto->setCanConfigVisibility($entity->isOrganization());
+        $dto->setVisibilityConfig($entity->getVisibilityConfig());
         $dto->setCreatorId($entity->getCreatorId());
         $dto->setCreatedAt($entity->getCreatedAt());
         $dto->setUpdatedAt($entity->getUpdatedAt());
@@ -100,10 +112,10 @@ class AppMenuAssembler
      *
      * @param array<AppMenuEntity> $list
      */
-    public static function createPageListDTO(int $total, array $list, Page $page): PageDTO
+    public static function createPageListDTO(int $total, array $list, Page $page, bool $isOfficialOrganization = true): PageDTO
     {
         $dtoList = array_map(
-            fn (AppMenuEntity $entity): AppMenuListItemDTO => self::createListDTO($entity),
+            fn (AppMenuEntity $entity): AppMenuListItemDTO => self::createListDTO($entity, $isOfficialOrganization),
             $list
         );
 

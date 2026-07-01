@@ -92,4 +92,12 @@ interface ResourceVisibilityRepositoryInterface
      * @return array<ResourceVisibilityEntity>
      */
     public function listByResource(PermissionDataIsolation $dataIsolation, ResourceType $resourceType, string $resourceCode): array;
+
+    /**
+     * 根据资源编码列表批量查询可见性列表.
+     *
+     * @param array<string> $resourceCodes
+     * @return array<ResourceVisibilityEntity>
+     */
+    public function listByResources(PermissionDataIsolation $dataIsolation, ResourceType $resourceType, array $resourceCodes): array;
 }

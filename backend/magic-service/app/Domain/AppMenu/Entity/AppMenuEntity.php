@@ -8,9 +8,11 @@ declare(strict_types=1);
 namespace App\Domain\AppMenu\Entity;
 
 use App\Domain\AppMenu\Entity\ValueObject\AppMenuIconType;
+use App\Domain\AppMenu\Entity\ValueObject\AppMenuSourceType;
 use App\Domain\AppMenu\Entity\ValueObject\AppMenuStatus;
 use App\Domain\AppMenu\Entity\ValueObject\DisplayScope;
 use App\Domain\AppMenu\Entity\ValueObject\OpenMethod;
+use App\Domain\Permission\Entity\ValueObject\ResourceVisibility\VisibilityConfig;
 use App\ErrorCode\GenericErrorCode;
 use App\Infrastructure\Core\AbstractEntity;
 use App\Infrastructure\Core\Exception\ExceptionBuilder;
@@ -19,6 +21,10 @@ use DateTime;
 class AppMenuEntity extends AbstractEntity
 {
     protected ?int $id = null;
+
+    protected string $organizationCode = '';
+
+    protected int $sourceType = AppMenuSourceType::Official->value;
 
     protected array $nameI18n = [];
 
@@ -37,6 +43,12 @@ class AppMenuEntity extends AbstractEntity
     protected int $displayScope = DisplayScope::All->value;
 
     protected int $status = AppMenuStatus::Enabled->value;
+
+    protected ?int $organizationStatus = null;
+
+    protected ?int $organizationSortOrder = null;
+
+    protected ?VisibilityConfig $visibilityConfig = null;
 
     protected string $creatorId = '';
 
@@ -85,6 +97,41 @@ class AppMenuEntity extends AbstractEntity
     public function setId(?int $id): void
     {
         $this->id = $id;
+    }
+
+    public function getOrganizationCode(): string
+    {
+        return $this->organizationCode;
+    }
+
+    public function setOrganizationCode(?string $organizationCode): void
+    {
+        $this->organizationCode = $organizationCode ?? '';
+    }
+
+    public function getSourceType(): int
+    {
+        return $this->sourceType;
+    }
+
+    public function setSourceType(null|int|string $sourceType): void
+    {
+        if ($sourceType === null || $sourceType === '') {
+            $this->sourceType = AppMenuSourceType::Official->value;
+            return;
+        }
+
+        $this->sourceType = AppMenuSourceType::make((int) $sourceType)->value;
+    }
+
+    public function isOfficial(): bool
+    {
+        return $this->sourceType === AppMenuSourceType::Official->value;
+    }
+
+    public function isOrganization(): bool
+    {
+        return $this->sourceType === AppMenuSourceType::Organization->value;
     }
 
     public function getNameI18n(): array
@@ -185,6 +232,53 @@ class AppMenuEntity extends AbstractEntity
     public function setStatus(int $status): void
     {
         $this->status = $status;
+    }
+
+    public function getEffectiveStatus(): int
+    {
+        return $this->organizationStatus ?? $this->status;
+    }
+
+    public function getOrganizationStatus(): ?int
+    {
+        return $this->organizationStatus;
+    }
+
+    public function setOrganizationStatus(null|int|string $organizationStatus): void
+    {
+        if ($organizationStatus === null || $organizationStatus === '') {
+            $this->organizationStatus = null;
+            return;
+        }
+
+        $this->organizationStatus = AppMenuStatus::make((int) $organizationStatus)->value;
+    }
+
+    public function getEffectiveSortOrder(): int
+    {
+        return $this->organizationSortOrder ?? $this->sortOrder;
+    }
+
+    public function getOrganizationSortOrder(): ?int
+    {
+        return $this->organizationSortOrder;
+    }
+
+    public function setOrganizationSortOrder(null|int|string $organizationSortOrder): void
+    {
+        $this->organizationSortOrder = $organizationSortOrder === null || $organizationSortOrder === ''
+            ? null
+            : (int) $organizationSortOrder;
+    }
+
+    public function getVisibilityConfig(): ?VisibilityConfig
+    {
+        return $this->visibilityConfig;
+    }
+
+    public function setVisibilityConfig(?VisibilityConfig $visibilityConfig): void
+    {
+        $this->visibilityConfig = $visibilityConfig;
     }
 
     public function getCreatorId(): string

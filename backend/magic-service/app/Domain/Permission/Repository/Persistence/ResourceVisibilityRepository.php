@@ -22,6 +22,8 @@ class ResourceVisibilityRepository extends MagicAbstractRepository implements Re
 {
     protected array $attributeMaps = [];
 
+    protected bool $filterOrganizationCode = true;
+
     /**
      * 批量插入可见性配置.
      *
@@ -204,6 +206,35 @@ class ResourceVisibilityRepository extends MagicAbstractRepository implements Re
 
         $builder->where('resource_type', $resourceType->value);
         $builder->where('resource_code', $resourceCode);
+
+        $list = [];
+        /** @var ResourceVisibilityModel $model */
+        foreach ($builder->get() as $model) {
+            $list[] = ResourceVisibilityFactory::createEntity($model);
+        }
+
+        return $list;
+    }
+
+    /**
+     * 根据资源编码列表批量查询可见性列表.
+     *
+     * @return array<ResourceVisibilityEntity>
+     */
+    public function listByResources(PermissionDataIsolation $dataIsolation, ResourceType $resourceType, array $resourceCodes): array
+    {
+        $resourceCodes = array_values(array_unique(array_filter(
+            array_map(static fn (mixed $resourceCode): string => (string) $resourceCode, $resourceCodes),
+            static fn (string $resourceCode): bool => $resourceCode !== ''
+        )));
+        if ($resourceCodes === []) {
+            return [];
+        }
+
+        $builder = $this->createBuilder($dataIsolation, ResourceVisibilityModel::query());
+
+        $builder->where('resource_type', $resourceType->value);
+        $builder->whereIn('resource_code', $resourceCodes);
 
         $list = [];
         /** @var ResourceVisibilityModel $model */
