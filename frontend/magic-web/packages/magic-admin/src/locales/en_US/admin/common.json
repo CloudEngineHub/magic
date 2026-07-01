@@ -227,8 +227,12 @@
 			"enabled": "Enabled"
 		},
 		"upload": {
+			"imageDescription": "Click, drag, or paste an image to upload",
+			"imageUploadedDescription": "Image uploaded. Click, drag, or paste to replace it",
 			"onlyImage": "Only image files are supported",
-			"onlyZip": "Only ZIP files are supported"
+			"onlyZip": "Only ZIP files are supported",
+			"zipDescription": "Click or drag a ZIP file to upload",
+			"zipUploadedDescription": "ZIP uploaded. Click or drag to replace it"
 		}
 	},
 	"status": "Status",
