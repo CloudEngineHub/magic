@@ -20,6 +20,7 @@ import {
 	isToolCallsEqual,
 	isToolCallsMatch,
 	isToolCallArgumentsComplete,
+	compactToolCalls,
 	getCharsPerTick,
 	adjustSliceEnd,
 	createStreamState,
@@ -337,7 +338,7 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 				const fn = toolCalls?.[0]?.function
 				if (fn && !Array.isArray(fn) && typeof fn === "object") {
 					const isNewTool = fn.name
-					const toolIndex = toolCalls?.[0]?.index || 0
+					const toolIndex = toolCalls?.[0]?.index ?? 0
 
 					if (isNewTool) {
 						streamState.tool_calls[toolIndex] = toolCalls?.[0]
@@ -621,7 +622,10 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 						Array.isArray(messageNode?.tool_calls) && messageNode.tool_calls.length > 0
 							? (messageNode.tool_calls as ToolCall[])
 							: []
-					streamState.tool_calls = finalToolCalls
+					streamState.tool_calls = this.mergeToolCallsById(
+						compactToolCalls(streamState.tool_calls),
+						compactToolCalls(finalToolCalls),
+					)
 
 					const cache = this.messageMap.get(correlationId) as
 						| RawSuperMagicMessageNode
@@ -1049,7 +1053,9 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 		topicMeta.content.forEach((streamState, correlationId) => {
 			if (streamState.isFinalMessageReceived) return
 
-			const validToolCalls = streamState.tool_calls.filter(isToolCallArgumentsComplete)
+			const validToolCalls = compactToolCalls(streamState.tool_calls).filter(
+				isToolCallArgumentsComplete,
+			)
 
 			streamState.tool_calls = validToolCalls
 			streamState.isFinalMessageReceived = true
@@ -1116,13 +1122,75 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 		}
 	}
 
+	/**
+	 * 以 current 数组既有顺序为基准，按 tool_call.id 合并 incoming：
+	 * - 已有 id：原位补齐 function.arguments / function.label / tool
+	 * - 新 id：追加末尾
+	 * 首现即定序、永不重排，根治流式与最终态顺序不一致。
+	 */
+	private mergeToolCallsById(current: ToolCall[], incoming: ToolCall[]): ToolCall[] {
+		if (current.length === 0) return incoming
+		if (incoming.length === 0) return incoming
+
+		const currentById = new Map(current.map((t) => [t.id, t]))
+		const merged: ToolCall[] = current.map((t) => {
+			const inc = incoming.find((i) => i.id === t.id)
+			if (!inc) return t
+			return {
+				...t,
+				function: {
+					...t.function,
+					arguments: inc.function?.arguments ?? t.function?.arguments ?? "",
+					label: inc.function?.label || t.function?.label || "",
+					name: inc.function?.name || t.function?.name || "",
+				},
+				...(inc.tool ? { tool: inc.tool } : {}),
+			}
+		})
+
+		for (const inc of incoming) {
+			if (!currentById.has(inc.id)) {
+				merged.push(inc)
+			}
+		}
+
+		return merged
+	}
+
+	/**
+	 * 按 existingOrder 的 id 顺序重排 tools：已知 id 保持 existingOrder 顺序，
+	 * 新 id 追加末尾。用于续流前统一排序，保证 streamToolCallsBySingleUnit
+	 * 的 slice 沿用稳定顺序。
+	 */
+	private reorderToolCallsByExisting(existingOrder: ToolCall[], tools: ToolCall[]): ToolCall[] {
+		if (existingOrder.length === 0) return tools
+		if (tools.length === 0) return tools
+
+		const toolById = new Map(tools.map((t) => [t.id, t]))
+		const ordered: ToolCall[] = []
+
+		for (const existing of existingOrder) {
+			const match = toolById.get(existing.id)
+			if (match) {
+				ordered.push(match)
+				toolById.delete(existing.id)
+			}
+		}
+
+		toolById.forEach((remaining) => {
+			ordered.push(remaining)
+		})
+
+		return ordered
+	}
+
 	private resumeFromCurrentStateV2(topicId: string, appMessageId: string): boolean {
 		const streamState = this.getTopicStreamState(topicId, appMessageId)
 		const messageMap = this.messageMap.get(appMessageId) || this.getDefaultNode(appMessageId)
 
 		const finalContent = streamState.content || ""
 		const finalReasoningContent = streamState.reasoning_content || ""
-		const finalTools = streamState.tool_calls || []
+		const finalTools = compactToolCalls(streamState.tool_calls)
 
 		// --------------------------
 		// 1. 续流思考（直接补全）
@@ -1180,22 +1248,18 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 		// 3. 续流工具（基于 topicMeta.tool_calls 续流到 messageMap）
 		// --------------------------
 		if (!Array.isArray(messageMap.tool_calls)) messageMap.tool_calls = []
-		if (!isToolCallsEqual(messageMap.tool_calls, finalTools)) {
-			if (
-				!isToolCallsMatch(
-					messageMap.tool_calls,
-					finalTools.slice(0, messageMap.tool_calls.length),
-				)
-			) {
-				messageMap.tool_calls = finalTools
-			}
+		const orderedFinalTools = this.reorderToolCallsByExisting(
+			messageMap.tool_calls as ToolCall[],
+			finalTools,
+		)
+		if (!isToolCallsEqual(messageMap.tool_calls, orderedFinalTools)) {
 			streamState.stage = "tool"
 
 			console.log("【LS】 tool_calls", streamState.stage)
 			const toolStepResult = this.streamToolCallsBySingleUnit(
 				messageMap,
 				streamState,
-				finalTools,
+				orderedFinalTools,
 			)
 			this.messageMap.set(appMessageId, messageMap)
 			if (!toolStepResult.progressed && toolStepResult.done) return false
@@ -1203,9 +1267,9 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 		}
 
 		if (streamState.isFinalMessageReceived) {
-			if (finalTools.length > 0 && Array.isArray(messageMap.tool_calls)) {
+			if (orderedFinalTools.length > 0 && Array.isArray(messageMap.tool_calls)) {
 				let toolSynced = false
-				finalTools.forEach((ft, i) => {
+				orderedFinalTools.forEach((ft, i) => {
 					if (
 						ft.tool &&
 						messageMap.tool_calls?.[i] &&
@@ -1301,43 +1365,15 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 	}
 
 	/**
-	 * 切回话题时：将不可见期间已完成的流式快照回退到视觉位置，
-	 * 重建 StreamState 并启动打字机追平动画（场景 2）。
+	 * 切回话题时：清理不可见期间保存的流式快照。
+	 * cache (messageMap) 在 flushStreamToCompletion 中已被固化为完整终态，
+	 * 无需回退重建 StreamState、无需重启打字机——observer 直接显示终态。
 	 */
 	private replayPendingSnapshots(topicId: string) {
 		const topicMeta = this.topicMeta.get(topicId)
 		if (!topicMeta?.streamSnapshots?.size) return
 
-		const entries = Array.from(topicMeta.streamSnapshots.entries())
 		topicMeta.streamSnapshots.clear()
-
-		for (const [correlationId, snapshot] of entries) {
-			const cache = this.messageMap.get(correlationId) as RawSuperMagicMessageNode
-			if (!cache) continue
-
-			const fullReasoningContent = (cache.reasoning_content as string) || ""
-			const fullContent = (cache.content as string) || ""
-			const fullToolCalls = Array.isArray(cache.tool_calls)
-				? ([...(cache.tool_calls as ToolCall[])] as ToolCall[])
-				: []
-
-			cache.reasoning_content = snapshot.reasoning_content
-			cache.content = snapshot.content
-			cache.tool_calls = snapshot.tool_calls
-			this.messageMap.set(correlationId, cache)
-
-			const replayState = createStreamState()
-			replayState.reasoning_content = fullReasoningContent
-			replayState.content = fullContent
-			replayState.tool_calls = fullToolCalls
-			replayState.isFinalMessageReceived = true
-			topicMeta.content.set(correlationId, replayState)
-		}
-
-		const firstCorrelationId = entries[0]?.[0]
-		if (firstCorrelationId) {
-			this.startStreamRendering(topicId, firstCorrelationId)
-		}
 	}
 
 	/**

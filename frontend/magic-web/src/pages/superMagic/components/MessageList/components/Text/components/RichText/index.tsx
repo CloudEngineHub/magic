@@ -19,6 +19,15 @@ import type { InspectorDetailAttrs } from "@/pages/superMagic/components/Message
 import InlineMention from "./components/InlineMention"
 import { InspectorDetailReadOnly } from "./components/InspectorDetailReadOnly"
 
+// Schedule a callback on the microtask queue. Falls back to Promise.resolve()
+// for older browsers/WebViews that lack the native queueMicrotask (pre-2019).
+const scheduleMicrotask =
+	typeof queueMicrotask === "function"
+		? queueMicrotask
+		: (cb: () => void) => {
+				Promise.resolve().then(cb)
+			}
+
 const RichText = memo(
 	function RichText(props: RichTextProps) {
 		const { content, className, style, onFileClick, markerClickScene = "messageList" } = props
@@ -48,7 +57,12 @@ const RichText = memo(
 					return {
 						dom,
 						destroy() {
-							root.unmount()
+							// Defer unmount so we never tear down this nested React root
+							// synchronously while the outer React tree is still rendering/committing
+							// (ProseMirror calls destroy() during EditorView teardown, which can
+							// overlap a React render). Avoids React 18's "synchronously unmount a
+							// root while React was already rendering" race-condition warning.
+							scheduleMicrotask(() => root.unmount())
 						},
 					}
 				},
@@ -64,7 +78,9 @@ const RichText = memo(
 					return {
 						dom,
 						destroy() {
-							root.unmount()
+							// See note above: defer to a microtask to avoid unmounting a nested
+							// React root during the outer React render/commit phase.
+							scheduleMicrotask(() => root.unmount())
 						},
 					}
 				},
