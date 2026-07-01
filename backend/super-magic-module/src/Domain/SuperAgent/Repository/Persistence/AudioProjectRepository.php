@@ -158,6 +158,7 @@ class AudioProjectRepository implements AudioProjectRepositoryInterface
                 'a.device_id',
                 'a.duration',
                 'a.file_size',
+                'a.location',
                 'a.tags',
                 'a.current_phase',
                 'a.phase_status',
@@ -256,6 +257,7 @@ class AudioProjectRepository implements AudioProjectRepositoryInterface
             'device_id' => $entity->getDeviceId(),
             'duration' => $entity->getDuration(),
             'file_size' => $entity->getFileSize(),
+            'location' => $entity->getLocation(),
             'tags' => json_encode($entity->getTags(), JSON_UNESCAPED_UNICODE),
             'current_phase' => $entity->getCurrentPhase(),
             'phase_status' => $entity->getPhaseStatus(),
@@ -391,6 +393,7 @@ class AudioProjectRepository implements AudioProjectRepositoryInterface
                 'device_id' => $model->device_id,
                 'duration' => $model->duration,
                 'file_size' => $model->file_size,
+                'location' => $model->location,
                 'tags' => is_string($model->tags) ? json_decode($model->tags ?: '[]', true) : ($model->tags ?? []),
                 'current_phase' => $model->current_phase,
                 'phase_status' => $model->phase_status,
@@ -420,6 +423,7 @@ class AudioProjectRepository implements AudioProjectRepositoryInterface
         $entity->setDeviceId($model->device_id);
         $entity->setDuration($model->duration);
         $entity->setFileSize($model->file_size);
+        $entity->setLocation($model->location);
         // Handle tags: cast may not work in all cases, manually decode if string
         $tags = $model->tags;
         if (is_string($tags)) {

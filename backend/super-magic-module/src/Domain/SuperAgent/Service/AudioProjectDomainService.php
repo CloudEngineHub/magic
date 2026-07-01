@@ -112,7 +112,7 @@ class AudioProjectDomainService
     }
 
     /**
-     * Update recording metadata (duration, fileSize, audioSource, audioFileId).
+     * Update recording metadata (duration, fileSize, audioSource, audioFileId, location).
      *
      * Business Logic: Update audio file metadata after merging.
      * Extracted from: completeMergingPhaseIfExists()
@@ -122,6 +122,7 @@ class AudioProjectDomainService
      * @param null|int $fileSize File size (bytes)
      * @param null|string $audioSource Audio source (recorded/imported)
      * @param null|int $audioFileId Audio file ID
+     * @param null|string $location Recording location
      * @return bool Returns true if project exists and updated, false if not exists
      */
     public function updateRecordingMetadata(
@@ -129,7 +130,8 @@ class AudioProjectDomainService
         ?int $duration = null,
         ?int $fileSize = null,
         ?string $audioSource = null,
-        ?int $audioFileId = null
+        ?int $audioFileId = null,
+        ?string $location = null
     ): bool {
         // Build partial update payload — only include non-null fields to avoid
         // overwriting phase state (current_phase, phase_percent, etc.) that may
@@ -146,6 +148,9 @@ class AudioProjectDomainService
         }
         if ($audioFileId !== null) {
             $data['audio_file_id'] = $audioFileId;
+        }
+        if ($location !== null) {
+            $data['location'] = $location;
         }
 
         if (empty($data)) {

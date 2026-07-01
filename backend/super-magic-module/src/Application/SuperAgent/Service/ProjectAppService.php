@@ -27,6 +27,7 @@ use Dtyq\SuperMagic\Application\SuperAgent\DTO\Request\CreateAgentProjectRequest
 use Dtyq\SuperMagic\Application\SuperAgent\DTO\Request\CreateAudioProjectRequestDTO;
 use Dtyq\SuperMagic\Application\SuperAgent\DTO\Request\GetAudioProjectListRequestDTO;
 use Dtyq\SuperMagic\Application\SuperAgent\DTO\Request\ImportAudioFilesRequestDTO;
+use Dtyq\SuperMagic\Application\SuperAgent\DTO\Request\UpdateAudioProjectMetadataRequestDTO;
 use Dtyq\SuperMagic\Application\SuperAgent\DTO\Request\UpdateAudioProjectTagsRequestDTO;
 use Dtyq\SuperMagic\Application\SuperAgent\DTO\Response\AudioProjectExtraDTO;
 use Dtyq\SuperMagic\Application\SuperAgent\DTO\Response\AudioProjectListResponseDTO;
@@ -2084,6 +2085,64 @@ class ProjectAppService extends AbstractAppService
 
         // Update tags
         $this->audioProjectDomainService->updateTags($projectId, $requestDTO->getTags());
+    }
+
+    /**
+     * Update audio project metadata.
+     */
+    public function updateAudioProjectMetadata(
+        RequestContext $requestContext,
+        int $projectId,
+        UpdateAudioProjectMetadataRequestDTO $requestDTO
+    ): void {
+        $userAuthorization = $requestContext->getUserAuthorization();
+        $dataIsolation = $this->createDataIsolation($userAuthorization);
+
+        $projectEntity = $this->getAccessibleProjectWithEditor(
+            $projectId,
+            $dataIsolation->getCurrentUserId(),
+            $dataIsolation->getCurrentOrganizationCode()
+        );
+
+        if ($projectEntity->getProjectMode() !== ProjectMode::AUDIO->value) {
+            ExceptionBuilder::throw(
+                GenericErrorCode::SystemError,
+                trans('super_agent.invalid_project_mode_for_audio_import'),
+                ['project_id' => $projectId, 'expected_mode' => ProjectMode::AUDIO->value]
+            );
+        }
+
+        $audioProject = $this->audioProjectDomainService->getAudioProjectByProjectId($projectId);
+        if ($audioProject === null) {
+            ExceptionBuilder::throw(SuperAgentErrorCode::PROJECT_NOT_FOUND, 'project.project_not_found');
+        }
+
+        if (! $requestDTO->hasMetadataField()) {
+            return;
+        }
+
+        $audioFileId = $requestDTO->hasAudioFileId() ? $requestDTO->getAudioFileId() : null;
+        if ($audioFileId !== null) {
+            $files = $this->taskFileDomainService->findFilesByProjectIdAndIds($projectId, [$audioFileId]);
+            if (count($files) !== 1) {
+                ExceptionBuilder::throw(SuperAgentErrorCode::FILE_NOT_FOUND, 'file.file_not_found');
+            }
+        }
+
+        $duration = $requestDTO->hasDuration() ? $requestDTO->getDuration() : null;
+        $location = $requestDTO->hasLocation() ? $requestDTO->getLocation() : null;
+        if ($audioFileId === null && $duration === null && $location === null) {
+            return;
+        }
+
+        $this->audioProjectDomainService->updateRecordingMetadata(
+            $projectId,
+            $duration,
+            null,
+            null,
+            $audioFileId,
+            $location
+        );
     }
 
     /**

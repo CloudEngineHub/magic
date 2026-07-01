@@ -26,6 +26,7 @@ use Hyperf\Database\Model\SoftDeletes;
  * @property null|string $device_id
  * @property null|int $duration
  * @property null|int $file_size
+ * @property null|string $location
  * @property null|array $tags
  * @property null|string $current_phase
  * @property null|string $phase_status
@@ -60,6 +61,7 @@ class AudioProjectModel extends AbstractModel
         'device_id',
         'duration',
         'file_size',
+        'location',
         'tags',
         'current_phase',
         'phase_status',
