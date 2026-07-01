@@ -112,10 +112,6 @@ RUN --mount=type=cache,id=debian-${DEBIAN_VERSION}-npm-${TARGETARCH},target=/roo
     pnpm --registry="${NPM_REGISTRY}" \
         --cache=/root/.npm \
         install -g typescript@5 && \
-    # install PPTX HTML renderer used by super-magic slide-template conversion
-    npm --registry="${NPM_REGISTRY}" \
-        --cache=/root/.npm \
-        install -g pptx-html-renderer@0.1.0 && \
     # install clawhub cli and add-skills cli
     npm --registry="${NPM_REGISTRY}" \
         --cache=/root/.npm \
@@ -151,6 +147,7 @@ WORKDIR /app
 COPY requirements_runtime.txt requirements_sandbox.txt .
 ENV PATH="/venv/bin:$PATH"
 ARG PIP_INDEX_URL=https://pypi.org/simple
+ARG NPM_REGISTRY=https://registry.npmjs.org/
 RUN --mount=type=cache,id=debian-${DEBIAN_VERSION}-pip-${TARGETARCH},target=/root/.cache/pip \
     pip config set global.index-url "${PIP_INDEX_URL}" && \
     python3 -m venv /venv && \
@@ -164,6 +161,16 @@ RUN --mount=type=cache,id=debian-${DEBIAN_VERSION}-pip-${TARGETARCH},target=/roo
         -r requirements_runtime.txt \
         -r requirements_sandbox.txt && \
     opentelemetry-bootstrap -a install
+
+COPY app/tools/pptx_to_html/package*.json ./app/tools/pptx_to_html/
+RUN --mount=type=cache,id=debian-${DEBIAN_VERSION}-npm-${TARGETARCH},target=/root/.npm \
+    . ~/.bashrc && \
+    npm --registry="${NPM_REGISTRY}" \
+        --cache=/root/.npm \
+        ci \
+        --omit=dev \
+        --ignore-scripts \
+        --prefix /app/app/tools/pptx_to_html
 
 # matplotlib配置和字体设置
 COPY deploy/setup_font.py /app/deploy/setup_font.py
@@ -231,6 +238,9 @@ COPY --from=venv /usr/share/fonts /usr/share/fonts
 COPY --from=venv /etc/fonts /etc/fonts
 COPY --from=venv /var/cache/fontconfig /var/cache/fontconfig
 COPY --from=builder /app /app
+
+RUN . ~/.bashrc && \
+    node --input-type=module -e "const m = await import('/app/app/tools/pptx_to_html/dom_shims.mjs'); await import(m.sandboxPackageEntryUrl('pptx-html-renderer', 'dist/index.js')); m.sandboxRequire('jszip', 'pptx-html-renderer');"
 
 # 杂项配置
 RUN \

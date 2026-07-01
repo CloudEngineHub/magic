@@ -1,10 +1,11 @@
 import { createRequire } from "node:module";
 import { execFileSync } from "node:child_process";
 import { existsSync } from "node:fs";
-import { join } from "node:path";
-import { pathToFileURL } from "node:url";
+import { dirname, join } from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 const localRequire = createRequire(import.meta.url);
+const toolDir = dirname(fileURLToPath(import.meta.url));
 
 function commandOutput(command, args) {
   try {
@@ -35,6 +36,9 @@ function packageDirFromRequire(requireFn, packageName) {
 }
 
 function sandboxPackageDir(packageName) {
+  const bundled = packageDirFromRoot(join(toolDir, "node_modules"), packageName);
+  if (bundled) return bundled;
+
   const direct = packageDirFromRequire(localRequire, packageName);
   if (direct) return direct;
 

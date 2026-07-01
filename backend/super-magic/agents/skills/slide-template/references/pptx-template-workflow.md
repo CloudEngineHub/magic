@@ -39,7 +39,7 @@ Keep intermediate source copies outside that output directory, because `convert_
 For 16:9 decks, create a resized PPTX copy before HTML extraction so `pptx-html-renderer` renders the source directly at the platform target canvas. Keep the user-provided source file unchanged.
 
 ```bash
-python scripts/resize_pptx_canvas.py \
+python <skill_dir>/scripts/resize_pptx_canvas.py \
   --pptx /absolute/path/to/template.pptx \
   --output /absolute/path/to/.workspace/slide-template-source/brand-template_pptx/normalized-1920x1080.pptx \
   --target-width-px 1920 \
@@ -52,7 +52,7 @@ Use the normalized PPTX path for the HTML extraction command below. In that case
 
 ## 3. Render PPTX To HTML With `convert_pptx_to_html`
 
-Use the `convert_pptx_to_html` tool as the standalone PPTX-to-HTML renderer. It calls `pptx-html-renderer` in the super-magic sandbox and writes `slides-html/slide-*.html`, static renderer assets, and `pptx-html-render.json`. The implementation is centralized under `app/tools/pptx_to_html/`.
+Use the `convert_pptx_to_html` tool as the standalone PPTX-to-HTML renderer. It calls `pptx-html-renderer` in the super-magic sandbox and writes `slides-html/slide-*.html`, static renderer assets, and `pptx-html-render.json`. Do not search for or read internal tool implementation files such as `dom_shims.mjs`, `pptx_to_html_converter.mjs`, or `app/tools/pptx_to_html/*` in the workspace; they are runtime files inside the super-magic image, not user workspace files.
 
 Call it through Code Mode with `run_sdk_snippet` and `sdk.tool.call(...)`. Write the raw HTML package into the stable output directory from step 1. If step 2 normalized the deck, pass the normalized PPTX path as `pptx_path`; it must not be inside `output_dir` when `override=true`.
 
@@ -91,10 +91,10 @@ result = tool.call("convert_pptx_to_html", {
 
 After a successful call, read `result.content` for the render summary and `result.data` for the `pptx-html-render.json` payload (`presentation`, `html`, `assets`, `slides`, risks). This tool stops at the raw HTML evidence package; it does not generate cleaned slides, briefs, or the final platform template.
 
-The compatibility extraction script still runs from this skill directory and calls the same converter before generating cleaned HTML, source bundles, and briefs:
+The compatibility extraction script must be called through the absolute `<skill_dir>` path and calls the same converter before generating cleaned HTML, source bundles, and briefs:
 
 ```bash
-node scripts/extract_pptx_template_from_html.mjs \
+node <skill_dir>/scripts/extract_pptx_template_from_html.mjs \
   --pptx /absolute/path/to/.workspace/slide-template-source/brand-template_pptx/normalized-1920x1080.pptx \
   --output-dir /absolute/path/to/output
 ```
@@ -198,16 +198,16 @@ Produce an internal source-to-template mapping and placeholder plan before autho
 When model assistance is available, use the project-local `using-llm` Python SDK pattern to generate an optional LLM page plan:
 
 ```bash
-python scripts/generate_pptx_llm_page_plan.py \
+python <skill_dir>/scripts/generate_pptx_llm_page_plan.py \
   --source-dir /absolute/path/to/extraction-output
 ```
 
-This writes `llm-page-plan.json`. It should classify each source slide into a reusable `layout_kind`, choose stable page file names, and name replacement slots. `scripts/build_pptx_semantic_template.mjs` consumes this file when present. If the LLM call is unavailable or low confidence, skip it and use deterministic classification; do not block template generation.
+This writes `llm-page-plan.json`. It should classify each source slide into a reusable `layout_kind`, choose stable page file names, and name replacement slots. `<skill_dir>/scripts/build_pptx_semantic_template.mjs` consumes this file when present. If the LLM call is unavailable or low confidence, skip it and use deterministic classification; do not block template generation.
 
 Generate the final visual semantics with LLM visual understanding:
 
 ```bash
-python scripts/generate_pptx_llm_visual_spec.py \
+python <skill_dir>/scripts/generate_pptx_llm_visual_spec.py \
   --source-dir /absolute/path/to/extraction-output \
   --image-dir /absolute/path/to/all-slide-pngs \
   --max-images-per-request 3 \
@@ -242,7 +242,7 @@ When creating the final platform files:
 When you need a deterministic finalizer instead of manually authoring every template file, use the semantic builder:
 
 ```bash
-node scripts/build_pptx_semantic_template.mjs \
+node <skill_dir>/scripts/build_pptx_semantic_template.mjs \
   --source-dir /absolute/path/to/extraction-output \
   --output-dir /absolute/path/to/template-output
 ```
@@ -251,15 +251,15 @@ This builder consumes `pptx-template-brief.json`, optional `llm-page-plan.json`,
 
 The final `visual-spec.md` must be an executable template specification. It must include template identity, design semantics, color/font/spacing/border/shadow/image/SVG rules, a page coverage table, layout/component inventory, slot rules, CSS responsibilities, asset rules, risks, and instructions for generating a new PPT from `pages/*.html`.
 
-`scripts/build_pptx_source_template.mjs` is only a debug/fallback tool. Use it when semantic finalization or LLM generation fails, or when a source-preserved scaffold is needed for inspection:
+`<skill_dir>/scripts/build_pptx_source_template.mjs` is only a debug/fallback tool. Use it when semantic finalization or LLM generation fails, or when a source-preserved scaffold is needed for inspection:
 
 ```bash
-node scripts/build_pptx_source_template.mjs \
+node <skill_dir>/scripts/build_pptx_source_template.mjs \
   --source-dir /absolute/path/to/extraction-output \
   --output-dir /absolute/path/to/template-output
 ```
 
-This fallback script assembles both formats from the extraction output: `visual-spec.md`, `theme.css`, `preview.html`, `pages/*.html`, and `template-pages.md`. It prefers `cleaned-slides/` and `cleaned-theme.css`, falls back to source files, and copies migrated assets into the generated template folder. Do not treat its output as the default final template. Do not use `scripts/build_pptx_source_template.mjs` as the default finalizer. A compressed output such as only a few abstract pages plus a short `visual-spec.md` is incomplete for PPTX conversion.
+This fallback script assembles both formats from the extraction output: `visual-spec.md`, `theme.css`, `preview.html`, `pages/*.html`, and `template-pages.md`. It prefers `cleaned-slides/` and `cleaned-theme.css`, falls back to source files, and copies migrated assets into the generated template folder. Do not treat its output as the default final template. Do not use `<skill_dir>/scripts/build_pptx_source_template.mjs` as the default finalizer. A compressed output such as only a few abstract pages plus a short `visual-spec.md` is incomplete for PPTX conversion.
 
 In the default semantic finalization path:
 
