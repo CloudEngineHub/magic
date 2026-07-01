@@ -516,6 +516,7 @@ function AudioRecordingListPanel({
 				isSubmittingAction={moreTarget != null && store.isSubmittingAction(moreTarget.id)}
 				isSubmittingSummary={moreTarget != null && store.isSubmittingSummary(moreTarget.id)}
 				canCopyToProject={moreTarget ? canCopyAudioProject(moreTarget).canCopy : false}
+				// TODO(audio-recordings): Effective only after backend supports re-summary.
 				showRegenerateAction
 			/>
 

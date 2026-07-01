@@ -209,7 +209,7 @@ describe("AudioRecordingCard", () => {
 		).toHaveTextContent("Waiting")
 	})
 
-	it("shows merge failed chip and disabled retry button placeholder", () => {
+	it("shows merge failed chip without retry button before retry API exists", () => {
 		const onOpen = vi.fn()
 		const onSummarize = vi.fn()
 		render(
@@ -231,10 +231,9 @@ describe("AudioRecordingCard", () => {
 		expect(
 			screen.getByTestId("audio-recording-card-project-1-status-merge-failed"),
 		).toHaveTextContent("Merge failed")
-		const button = screen.getByTestId("audio-recording-card-project-1-merge-retry-button")
-		expect(button).toHaveTextContent("Retry")
-		expect(button).toBeDisabled()
-		fireEvent.click(button)
+		expect(
+			screen.queryByTestId("audio-recording-card-project-1-merge-retry-button"),
+		).not.toBeInTheDocument()
 		expect(onSummarize).not.toHaveBeenCalled()
 	})
 
@@ -295,7 +294,7 @@ describe("AudioRecordingCard", () => {
 		expect(onOpen).toHaveBeenCalledTimes(1)
 	})
 
-	it("shows summary failed chip and retry summary button when summarizing failed", () => {
+	it("shows summary failed chip without retry summary button when summarizing failed", () => {
 		const onSummarize = vi.fn()
 		render(
 			<AudioRecordingCard
@@ -313,10 +312,10 @@ describe("AudioRecordingCard", () => {
 		expect(
 			screen.getByTestId("audio-recording-card-project-1-status-summary-failed"),
 		).toHaveTextContent("Summary failed")
-		const button = screen.getByTestId("audio-recording-card-project-1-summary-button")
-		expect(button).toHaveTextContent("Retry")
-		fireEvent.click(button)
-		expect(onSummarize).toHaveBeenCalledTimes(1)
+		expect(
+			screen.queryByTestId("audio-recording-card-project-1-summary-button"),
+		).not.toBeInTheDocument()
+		expect(onSummarize).not.toHaveBeenCalled()
 	})
 
 	it("shows device id as source label for app recordings", () => {
@@ -451,7 +450,7 @@ describe("AudioRecordingCard", () => {
 		)
 	})
 
-	it("renders regenerate option in more-actions dropdown for summarized items", async () => {
+	it("hides regenerate option in more-actions dropdown for summarized items", async () => {
 		const onSummarize = vi.fn()
 		render(
 			<AudioRecordingCard
@@ -464,13 +463,9 @@ describe("AudioRecordingCard", () => {
 		trigger.focus()
 		fireEvent.keyDown(trigger, { key: "Enter", code: "Enter" })
 
-		const regenerateOption = await screen.findByTestId(
-			"audio-recording-card-project-1-action-regenerate",
-		)
-		expect(regenerateOption).toBeInTheDocument()
-		expect(regenerateOption).toHaveTextContent("Regenerate summary")
-
-		fireEvent.click(regenerateOption)
-		expect(onSummarize).toHaveBeenCalledTimes(1)
+		expect(
+			screen.queryByTestId("audio-recording-card-project-1-action-regenerate"),
+		).not.toBeInTheDocument()
+		expect(onSummarize).not.toHaveBeenCalled()
 	})
 })

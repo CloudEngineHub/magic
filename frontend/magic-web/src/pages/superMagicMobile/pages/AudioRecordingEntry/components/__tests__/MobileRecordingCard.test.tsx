@@ -190,7 +190,7 @@ describe("MobileRecordingCard", () => {
 		expect(waitingIndicator).toHaveTextContent("Waiting")
 	})
 
-	it("shows merge failed chip and disabled retry placeholder", () => {
+	it("shows merge failed chip without retry placeholder before retry API exists", () => {
 		const onOpen = vi.fn()
 		const onSummarize = vi.fn()
 		render(
@@ -209,14 +209,13 @@ describe("MobileRecordingCard", () => {
 		fireEvent.click(screen.getByTestId("mobile-recording-card-proj-beta-002"))
 		expect(onOpen).not.toHaveBeenCalled()
 		expect(screen.getByText("Merge failed")).toBeInTheDocument()
-		const retryButton = screen.getByTestId("mobile-recording-card-merge-retry-proj-beta-002")
-		expect(retryButton).toHaveTextContent("Retry")
-		expect(retryButton).toBeDisabled()
-		fireEvent.click(retryButton)
+		expect(
+			screen.queryByTestId("mobile-recording-card-merge-retry-proj-beta-002"),
+		).not.toBeInTheDocument()
 		expect(onSummarize).not.toHaveBeenCalled()
 	})
 
-	it("shows summary failed chip and retry summary button", () => {
+	it("shows summary failed chip without retry summary button", () => {
 		const onSummarize = vi.fn()
 		render(
 			<MobileRecordingCard
@@ -231,10 +230,10 @@ describe("MobileRecordingCard", () => {
 		)
 
 		expect(screen.getByText("Summary failed")).toBeInTheDocument()
-		const retryButton = screen.getByTestId("mobile-recording-card-summarize-proj-beta-002")
-		expect(retryButton).toHaveTextContent("Retry")
-		fireEvent.click(retryButton)
-		expect(onSummarize).toHaveBeenCalledTimes(1)
+		expect(
+			screen.queryByTestId("mobile-recording-card-summarize-proj-beta-002"),
+		).not.toBeInTheDocument()
+		expect(onSummarize).not.toHaveBeenCalled()
 	})
 
 	it("navigates when summarizing card is clicked even without audio_file_id", () => {

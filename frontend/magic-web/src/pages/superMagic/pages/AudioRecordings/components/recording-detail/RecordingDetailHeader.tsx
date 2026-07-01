@@ -46,6 +46,9 @@ import {
 } from "./RecordingDetailHeaderActionMenu"
 import { useRecordingDetailCapabilities } from "./RecordingDetailProvider"
 
+// TODO(audio-recordings): Flip on after backend exposes a stable re-summary API.
+const ENABLE_REGENERATE_SUMMARY_ACTION = false
+
 interface RecordingDetailExportAvailability {
 	hasAudio: boolean
 	hasTranscript: boolean
@@ -167,6 +170,14 @@ export function RecordingDetailHeader({
 	const StatusBadgeIcon = statusBadge?.icon
 	const copyAvailability = useMemo(() => canCopyAudioProject(projectItem), [projectItem])
 	const canShowCopyToProject = capabilities.canCopyToProject && Boolean(onCopyToProject)
+	const isSummaryFailed =
+		projectItem?.card_status === "summary_failed" ||
+		(projectItem?.current_phase === "summarizing" && projectItem.phase_status === "failed")
+	// TODO(audio-recordings): Allow summary_failed header CTA again after backend supports re-summary.
+	const canShowGenerateSummary =
+		capabilities.canGenerateSummary &&
+		canGenerateSummary &&
+		(!isSummaryFailed || ENABLE_REGENERATE_SUMMARY_ACTION)
 
 	/** i18n labels for recording source resolution — mirrors AudioRecordingCard usage */
 	const sourceLabels = useMemo(
@@ -273,7 +284,7 @@ export function RecordingDetailHeader({
 				</div>
 
 				<div className="flex shrink-0 items-center gap-2">
-					{capabilities.canGenerateSummary && canGenerateSummary ? (
+					{canShowGenerateSummary ? (
 						<Button
 							className={RECORDING_DETAIL_HEADER_PRIMARY_ACTION_CLASS}
 							onClick={onGenerateSummary}

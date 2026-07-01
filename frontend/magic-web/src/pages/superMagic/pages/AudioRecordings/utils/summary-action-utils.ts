@@ -53,7 +53,7 @@ export function coerceIdToString(value: string | number | null | undefined): str
 export function shouldShowSummaryButton(phase: string | null, status: string | null): boolean {
 	if (!phase || !status) return false
 	if (phase === "merging" && status === "completed") return true
-	if (phase === "summarizing" && status === "failed") return true
+	// TODO(audio-recordings): Restore summarizing+failed retry once backend supports a real re-summary API.
 	return false
 }
 
@@ -67,7 +67,7 @@ export function canClickSummaryButton(
 	if (!phase || !status) return false
 	if (phase === "summarizing" && status === "in_progress") return false
 	if (phase === "merging" && status === "completed") return true
-	if (phase === "summarizing" && status === "failed") return true
+	// TODO(audio-recordings): Keep failed summary non-interactive until the retry contract is stable.
 	return false
 }
 
@@ -76,8 +76,8 @@ export function getSummaryButtonVariant(
 	phase: string | null,
 	status: string | null,
 ): SummaryButtonVariant | null {
-	if (phase === "summarizing" && status === "failed") return "retry"
 	if (phase === "merging" && status === "completed") return "generate"
+	// TODO(audio-recordings): Return "retry" here after the backend re-summary API lands.
 	return null
 }
 

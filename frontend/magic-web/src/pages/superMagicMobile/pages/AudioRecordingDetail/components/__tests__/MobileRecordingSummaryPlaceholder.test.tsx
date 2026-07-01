@@ -38,7 +38,7 @@ describe("MobileRecordingSummaryPlaceholder", () => {
 		expect(onGenerate).toHaveBeenCalledTimes(1)
 	})
 
-	it("renders failed state with regenerate summary wording", () => {
+	it("renders failed state without regenerate summary action", () => {
 		render(
 			<MobileRecordingSummaryPlaceholder
 				status="failed"
@@ -49,7 +49,7 @@ describe("MobileRecordingSummaryPlaceholder", () => {
 		)
 
 		expect(screen.getByText("Summary failed")).toBeInTheDocument()
-		expect(screen.getByRole("button", { name: "Regenerate summary" })).toBeInTheDocument()
+		expect(screen.queryByRole("button", { name: "Regenerate summary" })).toBeNull()
 	})
 
 	it("renders generating state without a summary action", () => {

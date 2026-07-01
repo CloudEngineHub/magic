@@ -70,6 +70,9 @@ interface LinearProgressProps {
 const UPLOAD_PROGRESS_NEUTRAL_TRACK = "rgba(24, 24, 27, 0.08)"
 const UPLOAD_PROGRESS_NEUTRAL_FILL = "rgb(24, 24, 27)"
 const UPLOAD_PROGRESS_DESTRUCTIVE = "rgb(239, 68, 68)"
+// TODO(audio-recordings): Flip on after backend exposes stable re-summary and retry-merge APIs.
+const ENABLE_REGENERATE_SUMMARY_ACTION = false
+const ENABLE_RETRY_MERGE_ACTION = false
 
 /** Linear progress bar component for visual file uploads */
 function LinearProgress({
@@ -386,7 +389,8 @@ function CardActionMenu({
 						{copyToProjectLabel}
 					</DropdownMenuItem>
 				) : null}
-				{onRegenerateSummary ? (
+				{/* TODO(audio-recordings): Enable this menu item after backend supports re-summary. */}
+				{ENABLE_REGENERATE_SUMMARY_ACTION && onRegenerateSummary ? (
 					<DropdownMenuItem
 						onClick={handleRegenerateSummary}
 						data-testid={`audio-recording-card-${cardId}-action-regenerate`}
@@ -764,16 +768,14 @@ function AudioRecordingCard({
 						</span>
 					) : null}
 
-					{!isProgressMode && showMergeFailedIndicator ? (
+					{/* TODO(audio-recordings): Enable this retry-merge CTA after backend exposes a stable merge retry API. */}
+					{ENABLE_RETRY_MERGE_ACTION && !isProgressMode && showMergeFailedIndicator ? (
 						<Button
 							type="button"
 							size="sm"
 							variant="outline"
 							disabled
 							onClick={(event) => {
-								// TODO(audio-recordings): Replace this placeholder with the real
-								// retry-merge API flow once backend contract and action wiring land.
-								// Keep the current button non-interactive until that API is ready.
 								event.stopPropagation()
 							}}
 							className={cn(
@@ -865,6 +867,7 @@ function AudioRecordingCard({
 							canCopyToProject={copyAvailability.canCopy}
 							onMoveToGroup={handleMoveToGroup}
 							regenerateSummaryLabel={t("card.regenerateSummary")}
+							// TODO(audio-recordings): Enable summary regeneration after re-summary API lands.
 							onRegenerateSummary={
 								item.card_status === "summarized" && onSummarize
 									? () => onSummarize(item)

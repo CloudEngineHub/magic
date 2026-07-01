@@ -681,6 +681,7 @@ export default function MobileAudioRecordingDetailPage() {
 				canCopyToProject={
 					resolvedActionItem ? canCopyAudioProject(resolvedActionItem).canCopy : false
 				}
+				// TODO(audio-recordings): Effective only after backend supports re-summary.
 				showRegenerateAction
 			/>
 

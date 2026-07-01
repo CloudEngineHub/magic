@@ -17,10 +17,10 @@ describe("summary-action-utils", () => {
 		expect(canClickSummaryButton("merging", "completed", false)).toBe(true)
 	})
 
-	it("shows retry button for summarizing failed", () => {
-		expect(shouldShowSummaryButton("summarizing", "failed")).toBe(true)
-		expect(getSummaryButtonVariant("summarizing", "failed")).toBe("retry")
-		expect(canClickSummaryButton("summarizing", "failed", false)).toBe(true)
+	it("hides retry button for summarizing failed until backend retry API is ready", () => {
+		expect(shouldShowSummaryButton("summarizing", "failed")).toBe(false)
+		expect(getSummaryButtonVariant("summarizing", "failed")).toBeNull()
+		expect(canClickSummaryButton("summarizing", "failed", false)).toBe(false)
 	})
 
 	it("hides button while summarizing in progress", () => {
@@ -102,7 +102,7 @@ describe("summary-action-utils", () => {
 					audio_source: "recorded",
 				},
 			}),
-		).toBe(true)
+		).toBe(false)
 
 		expect(
 			canGenerateSummaryFromDetail({
@@ -169,7 +169,7 @@ describe("summary-action-utils", () => {
 				cardStatus: "summary_failed",
 				extra: baseExtra,
 			}),
-		).toMatchObject({ status: "failed", canGenerate: true, buttonVariant: "retry" })
+		).toMatchObject({ status: "failed", canGenerate: false, buttonVariant: null })
 
 		expect(
 			resolveDetailSummaryVisualState({

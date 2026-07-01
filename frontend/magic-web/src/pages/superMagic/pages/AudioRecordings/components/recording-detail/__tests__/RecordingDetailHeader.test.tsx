@@ -253,7 +253,7 @@ describe("RecordingDetailHeader action styling", () => {
 		expect(badge).toHaveClass("border-amber-500/25", "bg-amber-500/10")
 	})
 
-	it("shows summary CTA again when summary generation failed", () => {
+	it("keeps summary CTA hidden when summary generation failed", () => {
 		render(
 			<RecordingDetailHeader
 				{...baseProps}
@@ -267,7 +267,7 @@ describe("RecordingDetailHeader action styling", () => {
 			/>,
 		)
 
-		expect(screen.getByTestId("recording-detail-generate-summary")).toBeInTheDocument()
+		expect(screen.queryByTestId("recording-detail-generate-summary")).not.toBeInTheDocument()
 		const badge = screen.getByTestId("recording-detail-summary-status")
 		expect(badge).toHaveTextContent("Summary failed")
 		expect(badge).toHaveClass("border-destructive/25", "bg-destructive/10")

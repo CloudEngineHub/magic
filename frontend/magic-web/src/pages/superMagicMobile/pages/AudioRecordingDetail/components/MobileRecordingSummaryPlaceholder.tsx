@@ -3,6 +3,9 @@ import { useTranslation } from "react-i18next"
 import { cn } from "@/lib/utils"
 import type { DetailSummaryVisualStatus } from "@/pages/superMagic/pages/AudioRecordings/utils/summary-action-utils"
 
+// TODO(audio-recordings): Flip on after backend exposes a stable re-summary API.
+const ENABLE_REGENERATE_SUMMARY_ACTION = false
+
 interface MobileRecordingSummaryPlaceholderProps {
 	status: DetailSummaryVisualStatus
 	canGenerate: boolean
@@ -31,6 +34,8 @@ export function MobileRecordingSummaryPlaceholder({
 			? t("detail.empty.summaryFailedHint")
 			: t("detail.notSummarizedHint")
 	const actionLabel = failed ? t("card.regenerateSummary") : t("card.generateSummary")
+	// TODO(audio-recordings): Allow failed-state action after the backend supports re-summary.
+	const showGenerateAction = canGenerate && (!failed || ENABLE_REGENERATE_SUMMARY_ACTION)
 
 	return (
 		<div
@@ -57,7 +62,7 @@ export function MobileRecordingSummaryPlaceholder({
 				<p className="max-w-[280px] text-[14px] leading-6 text-muted-foreground">
 					{description}
 				</p>
-				{canGenerate ? (
+				{showGenerateAction ? (
 					<button
 						type="button"
 						className="mt-5 h-10 rounded-full bg-foreground px-5 text-[14px] font-semibold text-background transition-opacity active:opacity-80 disabled:opacity-50"

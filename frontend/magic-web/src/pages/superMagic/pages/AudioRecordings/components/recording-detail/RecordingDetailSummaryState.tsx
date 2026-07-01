@@ -2,6 +2,9 @@ import { useTranslation } from "react-i18next"
 import { Button } from "@/components/shadcn-ui/button"
 import { RecordingDetailEmptyState } from "./RecordingDetailEmptyState"
 
+// TODO(audio-recordings): Flip on after backend exposes a stable re-summary API.
+const ENABLE_REGENERATE_SUMMARY_ACTION = false
+
 interface RecordingDetailSummaryStateProps {
 	status: "pending" | "generating" | "failed"
 	onGenerateSummary?: () => void
@@ -15,6 +18,7 @@ export function RecordingDetailSummaryState({
 	generating = false,
 }: RecordingDetailSummaryStateProps) {
 	const { t } = useTranslation("audioRecordings")
+	const failedSummaryAction = ENABLE_REGENERATE_SUMMARY_ACTION ? onGenerateSummary : undefined
 
 	if (status === "generating") {
 		return (
@@ -33,10 +37,11 @@ export function RecordingDetailSummaryState({
 				className="flex h-full flex-col items-center justify-center"
 				data-testid="recording-detail-summary-state-failed"
 			>
+				{/* TODO(audio-recordings): Re-enable regenerate action when the backend re-summary API is available. */}
 				<RecordingDetailEmptyState
 					variant="summaryFailed"
-					onAction={onGenerateSummary}
-					actionLabel={t("card.regenerateSummary")}
+					onAction={failedSummaryAction}
+					actionLabel={failedSummaryAction ? t("card.regenerateSummary") : undefined}
 				/>
 			</div>
 		)

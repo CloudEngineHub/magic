@@ -109,7 +109,7 @@ describe("MobileRecordingMoreSheet", () => {
 		)
 	})
 
-	it("shows retry summary label for failed summarizing items", () => {
+	it("hides retry summary action for failed summarizing items", () => {
 		render(
 			<MobileRecordingMoreSheet
 				isOpen
@@ -126,7 +126,8 @@ describe("MobileRecordingMoreSheet", () => {
 			/>,
 		)
 
-		expect(screen.getByText("Regenerate summary")).toBeInTheDocument()
+		expect(screen.queryByText("Regenerate summary")).not.toBeInTheDocument()
+		expect(screen.queryByTestId("mobile-recording-more-summarize")).not.toBeInTheDocument()
 	})
 
 	it("hides summarize action when the recording is already summarized", () => {
@@ -201,7 +202,7 @@ describe("MobileRecordingMoreSheet", () => {
 		expect(toast.info).not.toHaveBeenCalled()
 	})
 
-	it("shows regenerate summary action for summarized items when showRegenerateAction is enabled", () => {
+	it("hides regenerate summary action for summarized items", () => {
 		render(
 			<MobileRecordingMoreSheet
 				isOpen
@@ -210,10 +211,10 @@ describe("MobileRecordingMoreSheet", () => {
 				onRename={vi.fn()}
 				onDelete={vi.fn()}
 				onSummarize={vi.fn()}
-				showRegenerateAction
 			/>,
 		)
 
-		expect(screen.getByText("Regenerate summary")).toBeInTheDocument()
+		expect(screen.queryByText("Regenerate summary")).not.toBeInTheDocument()
+		expect(screen.queryByTestId("mobile-recording-more-summarize")).not.toBeInTheDocument()
 	})
 })
