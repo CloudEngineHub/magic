@@ -58,6 +58,9 @@ class ImageGenerateRequest
     // 输出图片格式（统一使用小写格式，如 png、jpeg、webp 等；空字符串表示使用服务商默认格式）
     protected string $outputFormat = '';
 
+    // 参考图片列表
+    protected array $referImages = [];
+
     public function __construct(
         string $width = '',
         string $height = '',
@@ -135,6 +138,16 @@ class ImageGenerateRequest
     public function setModel(string $model): void
     {
         $this->model = $model;
+    }
+
+    public function getReferImages(): array
+    {
+        return $this->referImages;
+    }
+
+    public function setReferImages(array $referImages): void
+    {
+        $this->referImages = $referImages;
     }
 
     public function getWatermarkConfig(): ?WatermarkConfig

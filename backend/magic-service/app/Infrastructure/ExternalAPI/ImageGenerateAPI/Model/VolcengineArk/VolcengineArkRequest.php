@@ -19,8 +19,6 @@ class VolcengineArkRequest extends ImageGenerateRequest
 
     protected bool $stream = false;
 
-    protected array $referImages = [];
-
     protected array $sequentialImageGenerationOptions = [];
 
     /**
@@ -77,16 +75,6 @@ class VolcengineArkRequest extends ImageGenerateRequest
     public function setStream(bool $stream): void
     {
         $this->stream = $stream;
-    }
-
-    public function getReferImages(): array
-    {
-        return $this->referImages;
-    }
-
-    public function setReferImages(array $referImages): void
-    {
-        $this->referImages = $referImages;
     }
 
     public function getSequentialImageGenerationOptions(): array
