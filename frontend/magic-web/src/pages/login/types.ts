@@ -17,7 +17,6 @@ export type LoginFormValuesMap = {
 	[Login.LoginType.WechatAppLogin]: Login.WechatAppLoginsFormValues
 	[Login.LoginType.AppleLogin]: Login.AppleLoginFormValues
 	[Login.LoginType.GoogleLogin]: Login.GoogleLoginFormValues
-	[Login.LoginType.AntaLogin]: Login.AntaLoginFormValues
 	[Login.LoginType.LarkRedirect]: Login.LarkRedirectFormValues
 	[Login.LoginType.Redirect]: Login.RedirectFormValues
 }
