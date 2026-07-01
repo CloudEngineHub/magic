@@ -10,6 +10,7 @@ import traceback
 import asyncio
 from pathlib import Path
 from typing import List, Dict, Any, Optional
+from urllib.parse import quote
 
 import aiohttp
 from agentlang.logger import get_logger
@@ -223,6 +224,19 @@ class MagicServiceClient:
             "/api/v1/design/generate-video",
             payload,
             operation_name="设计视频生成",
+        )
+
+    async def get_slides_template_file_url(self, code: str) -> Dict[str, Any]:
+        """Resolve a slides template code into its signed package URL."""
+        normalized_code = code.strip() if isinstance(code, str) else ""
+        if not normalized_code:
+            raise ApiError("slides template code is required")
+
+        escaped_code = quote(normalized_code, safe="")
+        return await self._request_json(
+            "GET",
+            f"/api/v1/slides-templates/{escaped_code}/file-url",
+            operation_name="幻灯片模板文件链接获取",
         )
 
     async def _request_json(
