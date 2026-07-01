@@ -76,7 +76,8 @@ export function MobileRecordingSourcePanel({
 
 	return (
 		<div className="flex min-h-0 flex-1 flex-col" data-testid="mobile-recording-source-panel">
-			<div className="sticky top-0 z-10 flex items-center gap-2 bg-[#f7f7f8] px-4 py-3">
+			{/* Keep the source switcher height stable when the transcript-only speaker filter appears. */}
+			<div className="sticky top-0 z-10 flex min-h-[68px] items-center gap-2 bg-[#f7f7f8] px-4 py-3">
 				<div className="flex min-w-0 flex-1">
 					<SourceTabButton
 						active={activeTab === "transcript"}
@@ -139,6 +140,7 @@ export function MobileRecordingSourcePanel({
 						<div className="pb-8">
 							<MobileRecordingMarkdownContent
 								content={notesContent ?? ""}
+								className="px-3"
 								layout="mobile"
 								speakerNameMap={speakerNameMap}
 								onSpeakerClick={onOpenSpeakerSettings}

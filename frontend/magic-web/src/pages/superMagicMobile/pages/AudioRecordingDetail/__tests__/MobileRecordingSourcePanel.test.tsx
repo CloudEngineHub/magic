@@ -58,8 +58,16 @@ vi.mock("@/components/base-mobile/ScrollEdgeFade", () => ({
 }))
 
 vi.mock("../components/MobileRecordingMarkdownContent", () => ({
-	MobileRecordingMarkdownContent: ({ content }: { content: string }) => (
-		<div data-testid="source-markdown-content">{content}</div>
+	MobileRecordingMarkdownContent: ({
+		content,
+		className,
+	}: {
+		content: string
+		className?: string
+	}) => (
+		<div className={className} data-testid="source-markdown-content">
+			{content}
+		</div>
 	),
 }))
 
@@ -78,6 +86,27 @@ vi.mock(
 )
 
 describe("MobileRecordingSourcePanel", () => {
+	it("keeps the source tab header at the speaker-filter height", () => {
+		render(
+			<MobileRecordingSourcePanel
+				transcriptContent="[00:05] Mock transcript"
+				notesContent="Mock notes"
+				playing={false}
+				currentTime={0}
+				scrollPaddingBottom={64}
+				availableSpeakerIds={["Speaker-1", "Speaker-2"]}
+				selectedSpeakerIds={["Speaker-1", "Speaker-2"]}
+				speakerNameMap={{ "Speaker-1": "Speaker-1", "Speaker-2": "Speaker-2" }}
+				onSelectedSpeakerIdsChange={vi.fn()}
+				onOpenSpeakerSettings={vi.fn()}
+				onSeek={vi.fn()}
+			/>,
+		)
+
+		const sourceHeader = screen.getByText("Transcript").closest(".sticky")
+		expect(sourceHeader).toHaveClass("min-h-[68px]")
+	})
+
 	it("wraps transcript content with the shared scroll shadow container", () => {
 		render(
 			<MobileRecordingSourcePanel
@@ -132,6 +161,28 @@ describe("MobileRecordingSourcePanel", () => {
 			}),
 		)
 		expect(screen.getByTestId("source-markdown-content")).toHaveTextContent("Mock notes")
+	})
+
+	it("adds horizontal inset to notes markdown so it aligns with transcript rows", () => {
+		render(
+			<MobileRecordingSourcePanel
+				transcriptContent="[00:05] Mock transcript"
+				notesContent="Mock notes"
+				playing={false}
+				currentTime={0}
+				scrollPaddingBottom={64}
+				availableSpeakerIds={["Speaker-1"]}
+				selectedSpeakerIds={["Speaker-1"]}
+				speakerNameMap={{}}
+				onSelectedSpeakerIdsChange={vi.fn()}
+				onOpenSpeakerSettings={vi.fn()}
+				onSeek={vi.fn()}
+			/>,
+		)
+
+		fireEvent.click(screen.getByText("Notes"))
+
+		expect(screen.getByTestId("source-markdown-content")).toHaveClass("px-3")
 	})
 
 	it("renders the speaker action outside the transcript row button container", () => {

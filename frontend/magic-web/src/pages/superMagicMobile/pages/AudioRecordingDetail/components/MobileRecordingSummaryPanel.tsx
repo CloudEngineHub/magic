@@ -52,7 +52,8 @@ export function MobileRecordingSummaryPanel({
 
 	return (
 		<div className="flex min-h-0 flex-1 flex-col" data-testid="mobile-recording-summary-panel">
-			<div className="sticky top-0 z-10 overflow-x-auto bg-[#f7f7f8] px-4 py-3">
+			{/* Match the source tab header height so switching between Source and Summary never shifts content vertically. */}
+			<div className="sticky top-0 z-10 flex min-h-[68px] items-center overflow-x-auto bg-[#f7f7f8] px-4 py-3">
 				<div className="flex w-max">
 					{summaryFiles.map((file) => (
 						<SummaryTabButton

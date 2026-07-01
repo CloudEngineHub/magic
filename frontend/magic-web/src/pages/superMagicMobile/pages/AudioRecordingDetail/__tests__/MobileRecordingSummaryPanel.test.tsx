@@ -115,6 +115,33 @@ describe("MobileRecordingSummaryPanel", () => {
 		})
 	}
 
+	it("keeps the summary tab header aligned with the source tab header height", () => {
+		resetSharedMocks()
+
+		render(
+			<MobileRecordingSummaryPanel
+				summaryFiles={[
+					createSummaryFileRef("summary", "summary.md"),
+					createSummaryFileRef("topics", "topics.md"),
+				]}
+				summaryContent={{
+					summary: "Summary body",
+					topics: "Topics body",
+				}}
+				attachmentList={[]}
+				scrollPaddingBottom={72}
+				speakerNameMap={{}}
+				onOpenSpeakerSettings={vi.fn()}
+				onTimeClick={vi.fn()}
+			/>,
+		)
+
+		const summaryHeader = screen
+			.getByTestId("mobile-recording-summary-tab-summary")
+			.closest(".sticky")
+		expect(summaryHeader).toHaveClass("min-h-[68px]")
+	})
+
 	it("wraps summary markdown with the shared scroll shadow container", () => {
 		resetSharedMocks()
 
