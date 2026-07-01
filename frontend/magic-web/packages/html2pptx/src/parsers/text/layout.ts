@@ -1,4 +1,4 @@
-import { unionRects } from "../../utils/geometry"
+import { unionRects } from "../../shared/geometry"
 
 export interface VisualLine {
 	text: string

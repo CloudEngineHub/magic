@@ -1,6 +1,6 @@
-import type { PPTShapeNode, Slide } from "../types/index"
-import { mapDashType } from "../utils/line"
-import { inchToPt } from "../utils/unit"
+import type { PPTShapeNode, Slide } from "../ir/node"
+import { mapDashType } from "../shared/line"
+import { inchToPt } from "../shared/unit"
 
 /**
  * 绘制形状到幻灯片
@@ -117,6 +117,26 @@ export function drawShape(slide: Slide, node: PPTShapeNode): void {
 	}
 		
 	const shapeName = (node.shapeType || "rect") as Parameters<typeof slide.addShape>[0]
+	if (node.text) {
+		const text = node.text
+		slide.addText(text.value, {
+			...options,
+			shape: shapeName,
+			fontSize: text.fontSize,
+			fontFace: text.fontFace,
+			color: text.color,
+			bold: text.bold,
+			italic: text.italic,
+			underline: text.underline ? { style: "sng" } : undefined,
+			strike: text.strike,
+			align: text.align,
+			valign: text.valign,
+			margin: text.margin ?? [0, 0, 0, 0],
+			wrap: text.wrap ?? false,
+			fit: "shrink",
+		})
+		return
+	}
+
 	slide.addShape(shapeName, options)
 }
-

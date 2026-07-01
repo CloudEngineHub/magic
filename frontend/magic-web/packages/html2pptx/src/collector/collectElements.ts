@@ -1,4 +1,4 @@
-import type { ElementNode, ComputedStyleInfo } from "../types/index"
+import type { ElementNode, ComputedStyleInfo } from "../ir/dom"
 
 let idCounter = 0
 
@@ -10,26 +10,41 @@ export function collectElements(doc: Document, win: Window): ElementNode[] {
 	idCounter = 0
 	const allNodes: ElementNode[] = []
 
-	// 获取根元素的位置作为偏移基准
-	const rootRect = doc.body.getBoundingClientRect()	
+	// 使用 iframe 视口坐标（与 Range/getClientRects 一致）。
+	// 若减去 body 原点，在 body 被 max-w + mx-auto 等居中时，块级元素会相对文字整体左移。
 
-	// 递归遍历 DOM 树
+	// 递归遍历 DOM 树，对不可见子树提前剪枝
 	function traverse(
 		element: Element,
 		parent: ElementNode | null,
 		depth: number,
-	): ElementNode {
+	): ElementNode | null {
 		const rect = element.getBoundingClientRect()
 		const computedStyle = win.getComputedStyle(element)
-		
+
+		// display:none：整棵子树不渲染，直接剪枝
+		if (computedStyle.display === "none") return null
+
+		// display:contents：元素本身无盒子，子元素仍参与父布局，穿透递归给父节点
+		if (element !== doc.body && computedStyle.display === "contents") {
+			Array.from(element.children).forEach((child) => {
+				const childNode = traverse(child, parent, depth)
+				if (childNode && parent) parent.children.push(childNode)
+			})
+			return null
+		}
+
+		// 零尺寸剪枝：跳过整棵子树（display:none / contents 已在上方处理）
+		if (element !== doc.body && rect.width === 0 && rect.height === 0) return null
+
 		// 构建节点
 		const node: ElementNode = {
 			id: `el-${idCounter++}`,
 			tagName: element.tagName,
 			element,
 			rect: {
-				x: rect.left - rootRect.left,
-				y: rect.top - rootRect.top,
+				x: rect.left,
+				y: rect.top,
 				w: rect.width,
 				h: rect.height,
 			},
@@ -49,7 +64,7 @@ export function collectElements(doc: Document, win: Window): ElementNode[] {
 		// 递归处理子元素
 		Array.from(element.children).forEach((child) => {
 			const childNode = traverse(child, node, depth + 1)
-			node.children.push(childNode)
+			if (childNode) node.children.push(childNode)
 		})
 
 		allNodes.push(node)
@@ -69,8 +84,7 @@ function extractStyles(style: CSSStyleDeclaration): ComputedStyleInfo {
 	return {
 		// 背景
 		backgroundColor: style.backgroundColor,
-		// 合并 background 和 backgroundImage，优先取 backgroundImage
-		backgroundImage: style.backgroundImage !== "none" ? style.backgroundImage : style.background,
+		backgroundImage: style.backgroundImage,
 		backgroundSize: style.backgroundSize,
 		backgroundPosition: style.backgroundPosition,
 		backgroundRepeat: style.backgroundRepeat,

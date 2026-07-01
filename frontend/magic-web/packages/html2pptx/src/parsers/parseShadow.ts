@@ -3,10 +3,10 @@
  * 将 CSS box-shadow 转换为 PPT 阴影格式
  */
 
-import type { PPTShadow } from "../types/index"
-import { colorToHex, getShadowOpacity } from "../utils/color"
-import { pxToPt } from "../utils/unit"
-import { splitByTopLevelComma } from "../utils/string"
+import type { PPTShadow } from "../ir/style"
+import { colorToHex, getShadowOpacity } from "../shared/color"
+import { pxToPt } from "../shared/unit"
+import { splitByTopLevelComma } from "../shared/string"
 
 /** CSS 阴影解析结果 (兼容 box-shadow 和 text-shadow) */
 interface CSSShadow {

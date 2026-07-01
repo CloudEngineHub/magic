@@ -1,4 +1,4 @@
-import type { PPTTextNode, Slide } from "../types/index"
+import type { PPTTextNode, Slide } from "../ir/node"
 
 /** 下划线样式类型 */
 type UnderlineStyle = "sng" | "dbl" | "dash" | "dotted" | "none"

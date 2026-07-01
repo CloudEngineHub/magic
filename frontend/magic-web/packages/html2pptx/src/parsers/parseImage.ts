@@ -1,7 +1,8 @@
-import type { ElementNode, PPTImageNode, PPTNodeBase, SlideConfig } from "../types/index"
-import { log, LogLevel } from "../logger"
-import { getEffectiveOpacity } from "../utils/color"
-import { pxToInch, resolveEffectiveRadius, getGlobalTransform } from "../utils/unit"
+import type { ElementNode } from "../ir/dom"
+import type { PPTImageNode, PPTNodeBase } from "../ir/node"
+import type { SlideConfig } from "../api/options"
+import { computeEffectiveOpacity } from "../shared/color"
+import { pxToInch, resolveEffectiveRadius, getGlobalTransform } from "../shared/unit"
 
 /**
  * 解析图片 (IMG 标签或 background-image)
@@ -14,8 +15,8 @@ export function parseImage(
 ): PPTImageNode | null {
 	const { tagName, style, element, rect } = node
 
-	// 计算累积透明度
-	const opacity = getEffectiveOpacity(element)
+	// 计算累积透明度（复用 ElementNode 已收集的 opacity，避免额外 getComputedStyle）
+	const opacity = computeEffectiveOpacity(node)
 	const transparency = opacity < 1 ? Math.round((1 - opacity) * 100) : undefined
 
 	const radiusPx = resolveEffectiveRadius(node)
@@ -100,90 +101,4 @@ export function parseImage(
 		radius, // 应用圆角
 		rotate, // 应用旋转
 	}
-}
-
-/**
- * 加载图片并获取尺寸
- */
-export function loadImageSize(src: string): Promise<{ w: number; h: number }> {
-	return new Promise((resolve, reject) => {
-		const img = new Image()
-		img.crossOrigin = "anonymous"
-
-		img.onload = () => {
-			resolve({ w: img.width, h: img.height })
-		}
-
-		img.onerror = () => {
-			reject(new Error(`Failed to load image: ${src}`))
-		}
-
-		img.src = src
-	})
-}
-
-/**
- * 判断图片源是否为 GIF 格式
- */
-export function isGifSource(src: string): boolean {
-	if (src.startsWith("data:image/gif")) return true
-	try {
-		const pathname = new URL(src, window.location.href).pathname
-		return pathname.toLowerCase().endsWith(".gif")
-	} catch {
-		return src.toLowerCase().includes(".gif")
-	}
-}
-
-/**
- * 将图片转换为 base64
- * GIF 走 fetch 原始字节以保留动画帧，其余走 Canvas 转 PNG
- */
-export async function imageToBase64(src: string): Promise<string> {
-	if (isGifSource(src)) return fetchAsBase64(src, "image/gif")
-
-	return new Promise((resolve, reject) => {
-		const img = new Image()
-		img.crossOrigin = "anonymous"
-
-		img.onload = () => {
-			const canvas = document.createElement("canvas")
-			canvas.width = img.width
-			canvas.height = img.height
-
-			const ctx = canvas.getContext("2d")
-			if (!ctx) {
-				reject(new Error("Failed to get canvas context"))
-				return
-			}
-
-			ctx.drawImage(img, 0, 0)
-			resolve(canvas.toDataURL("image/png"))
-		}
-
-		img.onerror = () => {
-			reject(new Error(`Failed to convert image to base64: ${src}`))
-		}
-
-		img.src = src
-	})
-}
-
-/**
- * 通过 fetch 获取图片原始字节并转为 base64 data URL，保留完整二进制内容（如 GIF 动画帧）
- */
-async function fetchAsBase64(src: string, mimeType: string): Promise<string> {
-	const response = await fetch(src)
-	if (!response.ok) throw new Error(`Failed to fetch image: ${src} (${response.status})`)
-
-	const blob = await response.blob()
-	return new Promise((resolve, reject) => {
-		const reader = new FileReader()
-		reader.onloadend = () => {
-			if (typeof reader.result === "string") resolve(reader.result)
-			else reject(new Error("FileReader did not return a string"))
-		}
-		reader.onerror = () => reject(new Error(`Failed to read blob for: ${src}`))
-		reader.readAsDataURL(new Blob([blob], { type: mimeType }))
-	})
 }

@@ -1,0 +1,53 @@
+import type { EmbedFontInput, UsedFont } from "./api/font"
+import type { ResourceLoadError, SlideConfig } from "./api/options"
+import type { ElementNode } from "./ir/dom"
+import type { PPTNode } from "./ir/node"
+import type { PackagePresentationInput, SerializablePPTNode } from "./ir/serialize"
+import type { IconBackup } from "./materialize/pseudo-icon"
+import type {
+	PrepareSlideNodesInput,
+	PrepareSlideNodesResult,
+} from "./pipeline/render-slide"
+import type {
+	SandboxInstance,
+	SandboxReadyControllerConstructor,
+} from "./sandbox/htmlRenderSandbox"
+
+export interface RenderSlideRuntime {
+	transformElements?: (
+		elements: ElementNode[],
+		config: SlideConfig,
+		iWindow: Window,
+	) => PPTNode[]
+	materializePseudoIcons?: (document: Document, window: Window) => IconBackup[]
+	restoreIcons?: (backups: IconBackup[]) => void
+	resolveCaptures?: (nodes: PPTNode[], signal?: AbortSignal) => Promise<void>
+	materializeVideoCoverNodes?: (
+		nodes: PPTNode[],
+		signal?: AbortSignal,
+		onResourceError?: (error: ResourceLoadError) => void,
+	) => Promise<void>
+	materializePptImageNodes?: (
+		nodes: PPTNode[],
+		signal?: AbortSignal,
+		onResourceError?: (error: ResourceLoadError) => void,
+	) => Promise<void>
+}
+
+export interface ExportPipelineRuntime extends RenderSlideRuntime {
+	prepareSlideNodes?: (
+		input: PrepareSlideNodesInput,
+	) => Promise<PrepareSlideNodesResult>
+	detectFontsFromNodes?: (slides: SerializablePPTNode[][]) => UsedFont[]
+	packagePresentationInWorker?: (
+		input: PackagePresentationInput & { signal: AbortSignal },
+	) => Promise<void>
+}
+
+export interface Html2PptxRuntime {
+	createSandbox?: (config: SlideConfig) => SandboxInstance
+	sandboxReadyController?: SandboxReadyControllerConstructor
+	pipeline?: ExportPipelineRuntime
+}
+
+export type { EmbedFontInput }

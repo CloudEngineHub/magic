@@ -1,16 +1,18 @@
-import type { ElementNode, PPTTextNode, PPTNodeBase, SlideConfig } from "../types/index"
+import type { ElementNode } from "../ir/dom"
+import type { PPTTextNode, PPTNodeBase } from "../ir/node"
+import type { SlideConfig } from "../api/options"
 import { log, LogLevel } from "../logger"
-import { pxToInch, getGlobalTransform } from "../utils/unit"
+import { pxToInch, getGlobalTransform } from "../shared/unit"
 import {
 	DEFAULT_DPI,
 	TEXT_SAFETY_MARGIN_X,
 	TEXT_SAFETY_MARGIN_Y,
-} from "../utils/constants"
+} from "../shared/constants"
 import {
 	transformText,
 	normalizeTextByWhiteSpace,
 	hasRenderableText,
-} from "../utils/text"
+} from "../shared/text-utils"
 import { splitTextNodeByVisualLines } from "./text/layout"
 import {
 	resolveTextStyle,

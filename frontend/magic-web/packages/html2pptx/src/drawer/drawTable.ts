@@ -1,4 +1,5 @@
-import type { PPTTableNode, PPTTableCellBorder, Slide } from "../types/index"
+import type { PPTTableNode, Slide } from "../ir/node"
+import type { PPTTableCellBorder, PPTTableTextRun } from "../ir/style"
 import { log, LogLevel } from "../logger"
 
 /**
@@ -59,9 +60,12 @@ export function drawTable(
 				cellOptions.rowspan = cell.options.rowspan
 			}
 
-			// 边距
 			if (cell.options?.margin !== undefined) {
 				cellOptions.margin = cell.options.margin
+			}
+
+			if (cell.options?.wrap === false) {
+				cellOptions.wrap = false
 			}
 
 			// 边框
@@ -69,8 +73,19 @@ export function drawTable(
 				cellOptions.border = formatBorder(cell.options.border)
 			}
 
+			// pptxgenjs supports text as string or array of { text, options }
+			let text: string | Array<{ text: string; options?: Record<string, unknown> }> = ""
+			if (Array.isArray(cell.text)) {
+				text = (cell.text as PPTTableTextRun[]).map((run) => ({
+					text: run.text,
+					options: run.options as Record<string, unknown> | undefined,
+				}))
+			} else {
+				text = cell.text
+			}
+
 			return {
-				text: cell.text,
+				text,
 				options: cellOptions,
 			}
 		}),
@@ -89,11 +104,12 @@ export function drawTable(
 	}
 
 	try {
-		slide.addTable(tableRows, options)
+	slide.addTable(tableRows, options)
 	} catch (error) {
 		log(LogLevel.L3, "Failed to add table", { error: String(error) })
 	}
 }
+
 
 /**
  * 格式化边框为 pptxgenjs 格式

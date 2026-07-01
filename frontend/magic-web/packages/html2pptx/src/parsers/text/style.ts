@@ -1,25 +1,29 @@
-import type { ElementNode, PPTTextGradient, PPTShadow } from "../../types/index"
+import type { ElementNode } from "../../ir/dom"
+import type { PPTTextGradient } from "../../ir/node"
+import type { PPTShadow } from "../../ir/style"
 import {
 	colorToHex,
 	getTransparency,
-	getEffectiveOpacity,
+	computeEffectiveOpacity,
 	parseGradient,
 	mergeGradientStopsWithElementOpacity,
-} from "../../utils/color"
+} from "../../shared/color"
 import { parseShadow } from "../parseShadow"
-import { PX_TO_PT_RATIO } from "../../utils/constants"
+import { PX_TO_PT_RATIO } from "../../shared/constants"
 import {
 	mapFontFamily,
 	parseBold,
+	parseFontWeight,
 	parseLetterSpacing,
 	parseLineSpacing,
-} from "../../utils/text"
-import { pxToPt } from "../../utils/unit"
+} from "../../shared/text-utils"
+import { pxToPt } from "../../shared/unit"
 
 /** 从元素计算样式中提取的文本样式 */
 export interface TextStyle {
 	fontSize: number
 	fontFace: string
+	fontWeight: number
 	color: string | PPTTextGradient
 	bold: boolean
 	italic: boolean
@@ -42,19 +46,31 @@ export interface TextStyle {
 
 export function resolveTextStyle(node: ElementNode, scale: number): TextStyle {
 	const { style, tagName } = node
+	const isSvgTextNode = ["TEXT", "TSPAN", "TEXTPATH"].includes(tagName.toUpperCase())
+	const svgComputedFill = isSvgTextNode
+		? node.element.ownerDocument?.defaultView
+				?.getComputedStyle(node.element)
+				.getPropertyValue("fill")
+		: ""
+	const svgFillColor = isSvgTextNode
+		? node.element.namespaceURI === "http://www.w3.org/2000/svg"
+			? node.element.getAttribute("fill") || svgComputedFill || style.color
+			: style.color
+		: style.color
 
 	const fontSize = Math.max(1, Math.floor(style.fontSize * scale * PX_TO_PT_RATIO))
-	const isBold = parseBold(style.fontWeight, tagName)
+	const fontWeight = parseFontWeight(style.fontWeight)
+	const isBold = parseBold(style.fontWeight)
 	const isItalic = style.fontStyle === "italic"
 	const isUnderline = style.textDecoration.includes("underline")
 	const isStrike = style.textDecoration.includes("line-through")
 	const charSpacing = parseLetterSpacing(style.letterSpacing, style.fontSize, scale)
 	const lineSpacing = parseLineSpacing(style.lineHeight, style.fontSize)
 
-	let color: string | PPTTextGradient = colorToHex(style.color)
-	let colorTransparency = getTransparency(style.color)
+	let color: string | PPTTextGradient = colorToHex(svgFillColor)
+	let colorTransparency = getTransparency(svgFillColor)
 	let shouldApplyNodeTransparency = true
-	const elementOpacity = getEffectiveOpacity(node.element)
+	const elementOpacity = computeEffectiveOpacity(node)
 
 	if (
 		style.backgroundImage &&
@@ -112,6 +128,7 @@ export function resolveTextStyle(node: ElementNode, scale: number): TextStyle {
 	return {
 		fontSize,
 		fontFace: mapFontFamily(style.fontFamily),
+		fontWeight,
 		color,
 		bold: isBold,
 		italic: isItalic,

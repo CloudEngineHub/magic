@@ -1,28 +1,30 @@
-import type { ElementNode, PPTNode, PPTNodeBase, SlideConfig } from "../types/index"
-import { pxToInch } from "../utils/unit"
+import type { ElementNode } from "../ir/dom"
+import type { PPTNode, PPTNodeBase } from "../ir/node"
+import type { SlideConfig } from "../api/options"
+import { pxToInch } from "../shared/unit"
 import {
 	hasBackgroundImage,
 	hasMultipleGradientBackgrounds,
 	isImageElement,
-	isTableElement,
-	isMediaElement,
-	isCanvasOrSvgElement,
 	hasShapeContent,
-} from "../utils/element"
-import { calculateZOrder } from "../filter/sortByZOrder"
+} from "../shared/element-predicates"
+import { calculateZOrder } from "../collector/sortByZOrder"
 import {
 	parseShape,
 	parseFragmentedShapeNodes,
 	parseBorderLines,
 	parseImage,
 	parseTextNodes,
-	parseTable,
-	parseMedia,
 } from "../parsers"
+import { dispatchPrimaryParsers } from "../registry/element-registry"
 
 /**
  * 将 ElementNode 转换为 PPTNode 数组
- * 一个 DOM 元素可能产生多个绘制节点（如背景图 + 背景色 + 文本）
+ *
+ * 节点产出策略：
+ *   1) 主元素（IMG / TABLE / VIDEO|AUDIO / CANVAS|SVG）→ 由 element-registry 派发
+ *   2) 通用样式产物（背景图 / 形状 / 单边边框 / 文本）→ 固定流水顺序追加
+ *      （顺序敏感，会影响 zOrder 与多产物互相覆盖关系）
  */
 export function elementToNode(
 	node: ElementNode,
@@ -30,7 +32,7 @@ export function elementToNode(
 	iWindow: Window,
 ): PPTNode[] {
 	const nodes: PPTNode[] = []
-	const { rect, element } = node
+	const { rect } = node
 
 	const base: PPTNodeBase = {
 		type: "",
@@ -41,60 +43,24 @@ export function elementToNode(
 		zOrder: calculateZOrder(node),
 	}
 
-	// 1. 处理 IMG 标签
-	if (isImageElement(node)) {
-		const imageNode = parseImage(node, base, config, iWindow)
-		if (imageNode) nodes.push(imageNode)
-	}
+	const primary = dispatchPrimaryParsers(node, { base, config, iWindow })
+	if (primary.length > 0) nodes.push(...primary)
 
-	// 1.5 处理 TABLE 标签
-	if (isTableElement(node)) {
-		const tableNode = parseTable(node, base, config, iWindow)
-		if (tableNode) nodes.push(tableNode)
-	}
-
-	// 1.6 处理媒体元素 (VIDEO, AUDIO)
-	if (isMediaElement(node)) {
-		const mediaNode = parseMedia(node, base, config, iWindow)
-		if (mediaNode) nodes.push(mediaNode)
-	}
-
-	// 1.7 处理 Canvas/SVG 元素 - 使用截图方式
-	if (isCanvasOrSvgElement(node)) {
-		nodes.push({
-			...base,
-			type: "image",
-			src: "",
-			sizing: "stretch",
-			capture: "snapdom",
-			captureElement: element,
-		})
-	}
-
-	// 2. 处理背景图 (优先级最高，在底层)
 	const isMultiGradientBg = hasMultipleGradientBackgrounds(node.style.backgroundImage)
+	const hasBgImage = !isMultiGradientBg && hasBackgroundImage(node)
 
 	if (isMultiGradientBg) {
-		// 多值渐变背景（如网格线叠加效果）无法用 PPT 原生渐变还原
-		// 降级：仅截取元素 CSS 背景（不含子元素），保留视觉效果
-		nodes.push({
-			...base,
-			zOrder: base.zOrder - 1,
-			type: "image",
-			src: "",
-			sizing: "stretch",
-			capture: "snapdom",
-			captureElement: element,
-			captureBackgroundOnly: true,
-		})
-	} else if (hasBackgroundImage(node)) {
+		// 默认实现不对多重渐变做截图降级，扩展实现可覆盖该逻辑。
+	} else if (hasBgImage) {
 		const bgImageNode = parseImage(node, { ...base, zOrder: base.zOrder - 1 }, config, iWindow)
 		if (bgImageNode) nodes.push(bgImageNode)
 	}
 
-	// 3. 处理形状 (背景色、边框、圆角)
 	if (hasShapeContent(node)) {
-		const shapeBase = isImageElement(node) ? { ...base, zOrder: base.zOrder - 1 } : base
+		// CSS 渲染顺序：background-color < background-image < content
+		// 有背景图时，shape (fill) 需要更低的 zOrder
+		const shapeZOrder = hasBgImage ? base.zOrder - 2 : (isImageElement(node) ? base.zOrder - 1 : base.zOrder)
+		const shapeBase = { ...base, zOrder: shapeZOrder }
 		const fragmentedShapeNodes = isMultiGradientBg ? [] : parseFragmentedShapeNodes(node, shapeBase, config)
 		if (fragmentedShapeNodes.length > 0) {
 			nodes.push(...fragmentedShapeNodes)
@@ -104,11 +70,9 @@ export function elementToNode(
 		}
 	}
 
-	// 3.05 处理单边边框（用线条模拟）
 	const borderLines = parseBorderLines(node, base, config)
 	if (borderLines.length > 0) nodes.push(...borderLines)
 
-	// 4. 处理文本：每个直接文本节点生成一个独立文本框
 	const textNodes = parseTextNodes(node, { ...base, zOrder: base.zOrder + 1 }, config)
 	if (textNodes.length > 0) nodes.push(...textNodes)
 
