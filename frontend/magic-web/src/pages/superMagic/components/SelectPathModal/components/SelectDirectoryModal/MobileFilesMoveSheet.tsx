@@ -17,7 +17,11 @@ import { SuperMagicApi } from "@/apis"
 import { ScrollEdgeFadeContainer } from "@/components/base-mobile/ScrollEdgeFade"
 import { Sheet, SheetContent, SheetTitle } from "@/components/shadcn-ui/sheet"
 import { cn } from "@/lib/utils"
-import { SHARE_WORKSPACE_DATA, SHARE_WORKSPACE_ID } from "@/pages/superMagic/constants"
+import {
+	MY_CLAW_WORKSPACE_ID,
+	SHARE_WORKSPACE_DATA,
+	SHARE_WORKSPACE_ID,
+} from "@/pages/superMagic/constants"
 import MobileBottomSearchBar from "@/pages/superMagicMobile/components/MobileBottomSearchBar"
 import type { ProjectListItem, Workspace } from "@/pages/superMagic/pages/Workspace/types"
 
@@ -73,9 +77,27 @@ type BrowsingWorkspace = Pick<Workspace, "id" | "name"> & {
 }
 
 const CHATS_WORKSPACE_ENTRY_ID = "__mobile-chats__"
+const FIXED_WORKSPACE_IDS = new Set([SHARE_WORKSPACE_ID, MY_CLAW_WORKSPACE_ID])
 
 const HEADER_BUTTON_CLASS =
 	"absolute top-1/2 flex size-12 -translate-y-1/2 items-center justify-center rounded-full shadow-[0px_8px_25px_0px_rgba(0,0,0,0.10)]"
+
+/** Builds the normal-workspace list for recording copy while excluding fixed workspace entries. */
+function createRegularWorkspaceItems(
+	workspaces: Array<Pick<Workspace, "id" | "name" | "project_count" | "workspace_type">>,
+): WorkspaceBrowseItem[] {
+	return workspaces
+		.filter(
+			(workspace) =>
+				!FIXED_WORKSPACE_IDS.has(workspace.id) && workspace.workspace_type !== "chat",
+		)
+		.map((workspace) => ({
+			id: workspace.id,
+			name: workspace.name,
+			project_count: workspace.project_count || 0,
+			entryType: "workspace" as const,
+		}))
+}
 
 function getTemporaryToken() {
 	if (typeof window === "undefined") return ""
@@ -151,15 +173,26 @@ function hasChildDirectories(item: AttachmentItem): boolean {
 function searchWorkspaceItems(
 	items: WorkspaceBrowseItem[],
 	keyword: string,
+	t: ReturnType<typeof useTranslation>["t"],
 ): WorkspaceBrowseItem[] {
 	const normalizedKeyword = keyword.trim().toLowerCase()
 	if (!normalizedKeyword) return items
 
-	return items.filter((item) => item.name.toLowerCase().includes(normalizedKeyword))
+	return items.filter((item) =>
+		getWorkspaceDisplayName(item, t).toLowerCase().includes(normalizedKeyword),
+	)
 }
 
 function resolveChatWorkspaceName(t: ReturnType<typeof useTranslation>["t"]) {
 	return t("mobile.shell.navChats")
+}
+
+function getWorkspaceDisplayName(
+	workspace: Pick<WorkspaceBrowseItem, "name">,
+	t: ReturnType<typeof useTranslation>["t"],
+) {
+	// Workspace names can be empty strings from the API; render a stable fallback instead of blank UI.
+	return workspace.name?.trim() || t("workspace.unnamedWorkspace")
 }
 
 function getProjectDisplayName(
@@ -267,6 +300,7 @@ function WorkspaceRow({
 	const { t } = useTranslation("super")
 	const isSharedWorkspace = workspace.entryType === "shared"
 	const isChatsWorkspace = workspace.entryType === "chats"
+	const workspaceName = getWorkspaceDisplayName(workspace, t)
 	const subtitle = isChatsWorkspace
 		? t("selectPathModal.chatCount", { count: workspace.project_count })
 		: t("workspace.projectCount", { count: workspace.project_count })
@@ -282,7 +316,7 @@ function WorkspaceRow({
 			<Icon className="size-[22px] shrink-0 text-muted-foreground" />
 			<div className="min-w-0 flex-1">
 				<p className="truncate text-[16px] font-medium leading-5 text-foreground">
-					{workspace.name}
+					{workspaceName}
 				</p>
 				<p className="mt-0.5 truncate text-[13px] leading-4 text-muted-foreground">
 					{subtitle}
@@ -427,8 +461,12 @@ function MobileFilesMoveSheet({
 }: MobileFilesMoveSheetProps) {
 	const { t } = useTranslation("super")
 	const supportsCrossProject = Boolean(mobileCrossProjectConfig)
+	const initialViewMode = mobileCrossProjectConfig?.initialViewMode || "directory"
+	const includeSpecialWorkspaces = mobileCrossProjectConfig?.includeSpecialWorkspaces ?? true
+	const allowWorkspaceSubmit = mobileCrossProjectConfig?.allowWorkspaceSubmit ?? false
 	const initialBrowsingWorkspace = useMemo<BrowsingWorkspace | null>(() => {
 		if (!mobileCrossProjectConfig) return null
+		if (initialViewMode === "workspace") return null
 
 		if (mobileCrossProjectConfig.isChatProject) {
 			return {
@@ -439,7 +477,7 @@ function MobileFilesMoveSheet({
 		}
 
 		if (
-			mobileCrossProjectConfig.currentProject.workspace_id === SHARE_WORKSPACE_ID ||
+			mobileCrossProjectConfig.currentProject?.workspace_id === SHARE_WORKSPACE_ID ||
 			mobileCrossProjectConfig.currentWorkspace?.id === SHARE_WORKSPACE_ID
 		) {
 			return {
@@ -456,8 +494,10 @@ function MobileFilesMoveSheet({
 			name: mobileCrossProjectConfig.currentWorkspace.name,
 			entryType: "workspace",
 		}
-	}, [mobileCrossProjectConfig, t])
-	const [viewMode, setViewMode] = useState<MobileSheetViewMode>("directory")
+	}, [initialViewMode, mobileCrossProjectConfig, t])
+	const [viewMode, setViewMode] = useState<MobileSheetViewMode>(
+		supportsCrossProject ? initialViewMode : "directory",
+	)
 	const [workspaceItems, setWorkspaceItems] = useState<WorkspaceBrowseItem[]>([])
 	const [projectItems, setProjectItems] = useState<ProjectListItem[]>([])
 	const [browsingWorkspace, setBrowsingWorkspace] = useState<BrowsingWorkspace | null>(
@@ -473,11 +513,19 @@ function MobileFilesMoveSheet({
 	const [query, setQuery] = useState("")
 	const [isLoading, setIsLoading] = useState(false)
 	const chatWorkspaceRef = useRef<Workspace | null>(null)
+	const openStateResetRef = useRef(false)
+	const initialWorkspaceLoadRef = useRef(false)
 
 	useEffect(() => {
-		if (!visible) return
+		if (!visible) {
+			openStateResetRef.current = false
+			initialWorkspaceLoadRef.current = false
+			return
+		}
+		if (openStateResetRef.current) return
+		openStateResetRef.current = true
 
-		setViewMode("directory")
+		setViewMode(supportsCrossProject ? initialViewMode : "directory")
 		setWorkspaceItems([])
 		setProjectItems([])
 		setBrowsingWorkspace(initialBrowsingWorkspace)
@@ -487,7 +535,15 @@ function MobileFilesMoveSheet({
 		setSelectedPath(null)
 		setQuery("")
 		setIsLoading(false)
-	}, [attachments, defaultPath, initialBrowsingWorkspace, mobileCrossProjectConfig, visible])
+	}, [
+		attachments,
+		defaultPath,
+		initialBrowsingWorkspace,
+		initialViewMode,
+		mobileCrossProjectConfig,
+		supportsCrossProject,
+		visible,
+	])
 
 	/**
 	 * chat workspace 不在普通工作区列表里，弹窗内单独缓存它，避免 workspace 层和 project 层重复请求。
@@ -509,6 +565,22 @@ function MobileFilesMoveSheet({
 	const loadWorkspaces = useCallback(async () => {
 		setIsLoading(true)
 		try {
+			if (!includeSpecialWorkspaces) {
+				const regularWorkspaces =
+					mobileCrossProjectConfig?.workspaces ||
+					(
+						await SuperMagicApi.getWorkspaces({
+							page: 1,
+							page_size: 999,
+						})
+					)?.list ||
+					[]
+
+				// Recording copy must start from normal workspaces only; fixed entries are handled elsewhere.
+				setWorkspaceItems(createRegularWorkspaceItems(regularWorkspaces))
+				return
+			}
+
 			const [workspaceResult, collaborationResult, chatWorkspaceResult] =
 				await Promise.allSettled([
 					SuperMagicApi.getWorkspaces({
@@ -575,7 +647,7 @@ function MobileFilesMoveSheet({
 		} finally {
 			setIsLoading(false)
 		}
-	}, [ensureChatWorkspace, t])
+	}, [ensureChatWorkspace, includeSpecialWorkspaces, mobileCrossProjectConfig?.workspaces, t])
 
 	const loadProjects = useCallback(
 		async (workspace: BrowsingWorkspace) => {
@@ -627,6 +699,27 @@ function MobileFilesMoveSheet({
 		[ensureChatWorkspace],
 	)
 
+	useEffect(() => {
+		if (!visible || !supportsCrossProject || initialViewMode !== "workspace") return
+		if (initialWorkspaceLoadRef.current) return
+		initialWorkspaceLoadRef.current = true
+		void loadWorkspaces()
+	}, [initialViewMode, loadWorkspaces, supportsCrossProject, visible])
+
+	useEffect(() => {
+		if (
+			!visible ||
+			initialViewMode !== "workspace" ||
+			includeSpecialWorkspaces ||
+			!mobileCrossProjectConfig?.workspaces
+		) {
+			return
+		}
+
+		// Recording copy opens before the workspace request resolves, so keep the first screen in sync.
+		setWorkspaceItems(createRegularWorkspaceItems(mobileCrossProjectConfig.workspaces))
+	}, [includeSpecialWorkspaces, initialViewMode, mobileCrossProjectConfig?.workspaces, visible])
+
 	const loadProjectAttachments = useCallback(async (project: ProjectListItem) => {
 		setIsLoading(true)
 		try {
@@ -652,8 +745,8 @@ function MobileFilesMoveSheet({
 		return searchDirectories(activeAttachments, query)
 	}, [activeAttachments, isSearching, query, viewMode])
 	const filteredWorkspaces = useMemo(() => {
-		return searchWorkspaceItems(workspaceItems, query)
-	}, [query, workspaceItems])
+		return searchWorkspaceItems(workspaceItems, query, t)
+	}, [query, t, workspaceItems])
 	const pinnedWorkspaceItems = useMemo(() => {
 		return filteredWorkspaces.filter((workspace) => workspace.entryType !== "workspace")
 	}, [filteredWorkspaces])
@@ -669,6 +762,13 @@ function MobileFilesMoveSheet({
 		const selectedDirectory = selectedPath.at(-1)
 		return selectedDirectory ? getItemId(selectedDirectory) : "root"
 	}, [selectedPath])
+	const canSubmitWorkspace = Boolean(
+		allowWorkspaceSubmit &&
+		viewMode === "project" &&
+		browsingWorkspace?.id &&
+		browsingWorkspace.entryType === "workspace",
+	)
+	const canConfirm = selectedPath !== null || canSubmitWorkspace
 	const breadcrumbSegments = useMemo<BreadcrumbSegment[]>(() => {
 		if (!supportsCrossProject) {
 			return pathStack.map((item, index) => ({
@@ -688,7 +788,7 @@ function MobileFilesMoveSheet({
 		if (browsingWorkspace) {
 			segments.push({
 				key: `workspace-${browsingWorkspace.id}`,
-				label: browsingWorkspace.name,
+				label: getWorkspaceDisplayName(browsingWorkspace, t),
 				onClick: async () => {
 					setSelectedPath(null)
 					setQuery("")
@@ -822,7 +922,7 @@ function MobileFilesMoveSheet({
 		async (workspace: WorkspaceBrowseItem) => {
 			setBrowsingWorkspace({
 				id: workspace.id,
-				name: workspace.name,
+				name: getWorkspaceDisplayName(workspace, t),
 				entryType: workspace.entryType,
 			})
 			setQuery("")
@@ -830,12 +930,12 @@ function MobileFilesMoveSheet({
 			setPathStack([])
 			await loadProjects({
 				id: workspace.id,
-				name: workspace.name,
+				name: getWorkspaceDisplayName(workspace, t),
 				entryType: workspace.entryType,
 			})
 			setViewMode("project")
 		},
-		[loadProjects],
+		[loadProjects, t],
 	)
 
 	const handleProjectDrillIn = useCallback(
@@ -847,6 +947,7 @@ function MobileFilesMoveSheet({
 
 			const isCurrentProject =
 				mobileCrossProjectConfig &&
+				mobileCrossProjectConfig.currentProject &&
 				project.id === mobileCrossProjectConfig.currentProject.id
 			if (isCurrentProject) {
 				setActiveAttachments(attachments)
@@ -873,16 +974,30 @@ function MobileFilesMoveSheet({
 	 * 确认动作继续向旧的 `onSubmit({ path })` 契约回传，避免改动原有移动文件链路。
 	 */
 	function handleConfirm() {
+		if (canSubmitWorkspace && browsingWorkspace) {
+			onSubmit({
+				path: [],
+				targetWorkspaceId: browsingWorkspace.id,
+				targetProjectId: "",
+				targetAttachments: [],
+				sourceAttachments: mobileCrossProjectConfig?.sourceAttachments || [],
+			})
+			onClose()
+			return
+		}
+
 		if (selectedPath === null || viewMode !== "directory") return
 
 		if (
 			supportsCrossProject &&
 			browsingProject?.id &&
 			mobileCrossProjectConfig &&
-			browsingProject.id !== mobileCrossProjectConfig.currentProject.id
+			(!mobileCrossProjectConfig.currentProject ||
+				browsingProject.id !== mobileCrossProjectConfig.currentProject.id)
 		) {
 			onSubmit({
 				path: selectedPath,
+				...(allowWorkspaceSubmit ? { targetWorkspaceId: browsingWorkspace?.id } : {}),
 				targetProjectId: browsingProject.id,
 				targetAttachments: activeAttachments,
 				sourceAttachments: mobileCrossProjectConfig.sourceAttachments,
@@ -924,7 +1039,7 @@ function MobileFilesMoveSheet({
 					<button
 						type="button"
 						onClick={handleConfirm}
-						disabled={selectedPath === null}
+						disabled={!canConfirm}
 						className={cn(
 							HEADER_BUTTON_CLASS,
 							"right-[10px] bg-primary text-primary-foreground active:opacity-80 disabled:opacity-40",

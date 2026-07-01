@@ -5,6 +5,7 @@ import {
 	CheckCircle2,
 	Clock,
 	CloudUpload,
+	Copy,
 	Ellipsis,
 	FileAudio,
 	FolderOpen,
@@ -42,6 +43,7 @@ import {
 	getSummaryButtonVariant,
 	shouldShowSummaryButton,
 } from "../utils/summary-action-utils"
+import { canCopyAudioProject } from "../utils/copy-availability"
 
 interface AudioRecordingCardProps {
 	item: AudioProjectListItem
@@ -51,6 +53,7 @@ interface AudioRecordingCardProps {
 	onOpenProject?: (item: AudioProjectListItem) => void
 	onRename?: (item: AudioProjectListItem) => void
 	onDelete?: (item: AudioProjectListItem) => void
+	onCopyToProject?: (item: AudioProjectListItem) => void
 	onMore?: (item: AudioProjectListItem) => void
 	onRetry?: (item: AudioProjectListItem) => void
 	onMoveToGroup?: (item: AudioProjectListItem) => void
@@ -243,13 +246,17 @@ interface CardActionMenuProps {
 	openProjectLabel: string
 	renameLabel: string
 	deleteLabel: string
+	copyToProjectLabel: string
+	copyUnavailableLabel: string
 	moveToGroupLabel?: string
 	onOpenProject?: () => void
 	onRename?: () => void
 	onDelete?: () => void
+	onCopyToProject?: () => void
 	onRegenerateSummary?: () => void
 	onMoveToGroup?: () => void
 	regenerateSummaryLabel?: string
+	canCopyToProject?: boolean
 }
 
 /** Renders project navigation, rename, and delete actions behind the card ellipsis menu */
@@ -259,13 +266,17 @@ function CardActionMenu({
 	openProjectLabel,
 	renameLabel,
 	deleteLabel,
+	copyToProjectLabel,
+	copyUnavailableLabel,
 	moveToGroupLabel,
 	onOpenProject,
 	onRename,
 	onDelete,
+	onCopyToProject,
 	onRegenerateSummary,
 	onMoveToGroup,
 	regenerateSummaryLabel,
+	canCopyToProject = true,
 }: CardActionMenuProps) {
 	/** Routes to the source project while keeping the card click handler from firing */
 	const handleOpenProject = useCallback(
@@ -290,6 +301,15 @@ function CardActionMenu({
 			onDelete?.()
 		},
 		[onDelete],
+	)
+
+	const handleCopyToProject = useCallback(
+		(event: MouseEvent) => {
+			event.stopPropagation()
+			if (!canCopyToProject) return
+			onCopyToProject?.()
+		},
+		[canCopyToProject, onCopyToProject],
 	)
 
 	const handleRegenerateSummary = useCallback(
@@ -355,6 +375,17 @@ function CardActionMenu({
 						{moveToGroupLabel}
 					</DropdownMenuItem>
 				) : null}
+				{onCopyToProject ? (
+					<DropdownMenuItem
+						disabled={!canCopyToProject}
+						title={!canCopyToProject ? copyUnavailableLabel : undefined}
+						onClick={handleCopyToProject}
+						data-testid={`audio-recording-card-${cardId}-action-copy-to-project`}
+					>
+						<Copy className="h-4 w-4" aria-hidden />
+						{copyToProjectLabel}
+					</DropdownMenuItem>
+				) : null}
 				{onRegenerateSummary ? (
 					<DropdownMenuItem
 						onClick={handleRegenerateSummary}
@@ -386,6 +417,7 @@ function AudioRecordingCard({
 	onOpenProject,
 	onRename,
 	onDelete,
+	onCopyToProject,
 	onMore,
 	onRetry,
 	onMoveToGroup,
@@ -417,6 +449,7 @@ function AudioRecordingCard({
 		item.card_status === "summary_failed" &&
 		item.current_phase === "summarizing" &&
 		item.phase_status === "failed"
+	const copyAvailability = canCopyAudioProject(item)
 
 	const isUploading = item.card_status === "uploading"
 	const isUploadFailed = item.card_status === "upload_failed"
@@ -453,6 +486,10 @@ function AudioRecordingCard({
 	const handleDelete = useCallback(() => {
 		onDelete?.(item)
 	}, [item, onDelete])
+
+	const handleCopyToProject = useCallback(() => {
+		onCopyToProject?.(item)
+	}, [item, onCopyToProject])
 
 	const handleMoveToGroup = useCallback(() => {
 		onMoveToGroup?.(item)
@@ -818,10 +855,14 @@ function AudioRecordingCard({
 							openProjectLabel={t("card.openProject")}
 							renameLabel={t("card.rename")}
 							deleteLabel={t("card.delete")}
+							copyToProjectLabel={t("card.copyToProject")}
+							copyUnavailableLabel={t("copy.unavailable")}
 							moveToGroupLabel={t("card.moveToGroup")}
 							onOpenProject={handleOpenProject}
 							onRename={handleRename}
 							onDelete={handleDelete}
+							onCopyToProject={handleCopyToProject}
+							canCopyToProject={copyAvailability.canCopy}
 							onMoveToGroup={handleMoveToGroup}
 							regenerateSummaryLabel={t("card.regenerateSummary")}
 							onRegenerateSummary={

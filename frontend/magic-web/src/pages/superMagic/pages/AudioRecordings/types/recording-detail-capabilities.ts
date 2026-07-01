@@ -19,6 +19,7 @@ export interface RecordingDetailCapabilities {
 	canMoveGroup: boolean
 	canGenerateSummary: boolean
 	canManageShare: boolean
+	canCopyToProject: boolean
 	canExport: boolean
 	canEditSpeakers: boolean
 	visibleTabKeys: RecordingDetailTabKey[]
@@ -32,6 +33,7 @@ export const OWNER_RECORDING_DETAIL_CAPABILITIES: RecordingDetailCapabilities = 
 	canMoveGroup: true,
 	canGenerateSummary: true,
 	canManageShare: true,
+	canCopyToProject: true,
 	canExport: true,
 	canEditSpeakers: true,
 	visibleTabKeys: [
@@ -56,6 +58,7 @@ export const SHARE_RECORDING_DETAIL_CAPABILITIES: RecordingDetailCapabilities = 
 	canMoveGroup: false,
 	canGenerateSummary: false,
 	canManageShare: false,
+	canCopyToProject: false,
 	canExport: false,
 	canEditSpeakers: false,
 	visibleTabKeys: [

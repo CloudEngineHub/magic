@@ -105,6 +105,7 @@ describe("share recording detail helpers", () => {
 			canMoveGroup: false,
 			canGenerateSummary: false,
 			canManageShare: false,
+			canCopyToProject: false,
 			canEditSpeakers: false,
 			canExport: true,
 		})

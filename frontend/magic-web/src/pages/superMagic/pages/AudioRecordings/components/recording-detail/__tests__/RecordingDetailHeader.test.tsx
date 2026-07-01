@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest"
+import { beforeEach, describe, expect, it, vi } from "vitest"
 import { render, screen } from "@testing-library/react"
 import { RecordingDetailHeader } from "../RecordingDetailHeader"
 import {
@@ -15,6 +15,18 @@ const localStorageMock = vi.hoisted(() => ({
 	length: 0,
 }))
 
+const recordingCapabilitiesMock = vi.hoisted(() => ({
+	current: {
+		canRename: true,
+		canGenerateSummary: true,
+		canExport: true,
+		canManageShare: true,
+		canMoveGroup: true,
+		canCopyToProject: true,
+		canDelete: true,
+	},
+}))
+
 Object.defineProperty(globalThis, "localStorage", {
 	value: localStorageMock,
 	writable: true,
@@ -29,14 +41,7 @@ vi.mock("@/models/config/stores/theme.store", () => ({
 }))
 
 vi.mock("../RecordingDetailProvider", () => ({
-	useRecordingDetailCapabilities: () => ({
-		canRename: true,
-		canGenerateSummary: true,
-		canExport: true,
-		canManageShare: true,
-		canMoveGroup: true,
-		canDelete: true,
-	}),
+	useRecordingDetailCapabilities: () => recordingCapabilitiesMock.current,
 }))
 
 vi.mock("../resolve-summary-type-label", () => ({
@@ -63,6 +68,7 @@ vi.mock("react-i18next", async (importOriginal) => {
 					"card.generateSummary": "Generate summary",
 					"card.moveToGroup": "Move to group",
 					"card.moreActions": "More actions",
+					"card.copyToProject": "Copy to project",
 					"card.notSummarized": "Not summarized",
 					"card.summarized": "Summarized",
 					"card.summarizing": "Summarizing now",
@@ -118,10 +124,23 @@ const baseProps = {
 	onCreateShare: vi.fn(),
 	onManageShare: vi.fn(),
 	onMoveGroup: vi.fn(),
+	onCopyToProject: vi.fn(),
 	onDelete: vi.fn(),
 }
 
 describe("RecordingDetailHeader action styling", () => {
+	beforeEach(() => {
+		recordingCapabilitiesMock.current = {
+			canRename: true,
+			canGenerateSummary: true,
+			canExport: true,
+			canManageShare: true,
+			canMoveGroup: true,
+			canCopyToProject: true,
+			canDelete: true,
+		}
+	})
+
 	it("places back button inline with title using bordered icon trigger", () => {
 		render(<RecordingDetailHeader {...baseProps} />)
 
@@ -269,5 +288,20 @@ describe("RecordingDetailHeader action styling", () => {
 		expect(screen.getByTestId("recording-detail-export-trigger")).toBeInTheDocument()
 		expect(typeof onExportTranscript).toBe("function")
 		expect(typeof onExportAll).toBe("function")
+	})
+
+	it("does not require or render copy action when the capability is disabled", () => {
+		recordingCapabilitiesMock.current = {
+			...recordingCapabilitiesMock.current,
+			canCopyToProject: false,
+			canDelete: false,
+		}
+		const shareLikeProps = { ...baseProps }
+		delete (shareLikeProps as Partial<typeof baseProps>).onCopyToProject
+
+		render(<RecordingDetailHeader {...shareLikeProps} />)
+
+		expect(screen.getByTestId("recording-detail-more-trigger")).toBeInTheDocument()
+		expect(screen.queryByTestId("recording-detail-copy-to-project")).not.toBeInTheDocument()
 	})
 })

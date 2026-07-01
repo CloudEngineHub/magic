@@ -34,11 +34,13 @@ import {
 } from "./components/AudioRecordingGroupDialogs"
 import { AudioRecordingSettingsDialog } from "./components/AudioRecordingSettingsDialog"
 import { AudioRecordingsPrimaryActions } from "./components/AudioRecordingsPrimaryActions"
+import { AudioRecordingCopyDialog } from "./components/AudioRecordingCopyDialog"
 import { registerAudioRecordingsShellRefreshHandler } from "./utils/request-audio-recordings-shell-refresh"
 import {
 	patchAudioRecordingsFilterSession,
 	readAudioRecordingsFilterSession,
 } from "./utils/audio-recordings-filter-session"
+import { useAudioRecordingCopyToProject } from "./hooks/useAudioRecordingCopyToProject"
 
 const SEARCH_DEBOUNCE_MS = 300
 
@@ -96,6 +98,10 @@ function AudioRecordingsDesktop({ scrollViewportRef }: AudioRecordingsDesktopPro
 			refreshGroups(),
 		])
 	}, [store, debouncedKeyword, refreshGroups, hasHydratedFilters])
+
+	const copyController = useAudioRecordingCopyToProject({
+		onSuccess: handleRefresh,
+	})
 
 	// Sync local optimistic items and handle background polling
 	const mergedList = useAudioRecordingsOptimisticSync({
@@ -384,6 +390,9 @@ function AudioRecordingsDesktop({ scrollViewportRef }: AudioRecordingsDesktopPro
 							onOpenProject={(entry) => void handleOpenProjectDetail(entry)}
 							onRename={handleRenameRequest}
 							onDelete={handleDeleteRequest}
+							onCopyToProject={(entry) => {
+								void copyController.openCopyToProject(entry)
+							}}
 							onRetry={(entry) => void facade.retryImport(entry.id)}
 							onMoveToGroup={setMoveTarget}
 							isSubmitting={store.isSubmittingSummary(item.id)}
@@ -453,6 +462,7 @@ function AudioRecordingsDesktop({ scrollViewportRef }: AudioRecordingsDesktopPro
 			/>
 
 			<AudioRecordingSettingsDialog open={isSettingsOpen} onOpenChange={setIsSettingsOpen} />
+			<AudioRecordingCopyDialog controller={copyController} />
 		</div>
 	)
 }

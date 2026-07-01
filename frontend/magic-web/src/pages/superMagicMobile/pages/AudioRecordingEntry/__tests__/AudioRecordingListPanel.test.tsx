@@ -152,6 +152,16 @@ vi.mock("../components/MobileRecordingMoreSheet", () => ({
 		) : null,
 }))
 
+vi.mock("@/pages/superMagic/pages/AudioRecordings/hooks/useAudioRecordingCopyToProject", () => ({
+	useAudioRecordingCopyToProject: () => ({
+		openCopyToProject: vi.fn(),
+	}),
+}))
+
+vi.mock("@/pages/superMagic/pages/AudioRecordings/components/AudioRecordingCopyDialog", () => ({
+	AudioRecordingCopyDialog: () => null,
+}))
+
 vi.mock("../components/MobileRecordingFilterSheet", () => ({
 	MobileRecordingFilterSheet: () => null,
 }))
@@ -521,12 +531,12 @@ describe("AudioRecordingListPanel", () => {
 		mockStore.list = [listItem]
 		listHookState.moreTarget = listItem
 		getAttachmentsByProjectIdMock.mockResolvedValue({
-			tree: [{ file_id: "file-tree-001" }],
+			tree: [{ file_id: "audio-file-001", file_name: "recording-mock.mp3" }],
 			list: [],
 		})
 		processAttachmentDataMock.mockReturnValue({
-			tree: [{ file_id: "file-tree-001" }],
-			list: [{ file_id: "file-flat-001" }],
+			tree: [{ file_id: "audio-file-001", file_name: "recording-mock.mp3" }],
+			list: [{ file_id: "audio-file-001", file_name: "recording-mock.mp3" }],
 		})
 
 		render(<AudioRecordingListPanel />)
@@ -540,7 +550,7 @@ describe("AudioRecordingListPanel", () => {
 			})
 		})
 		expect(processAttachmentDataMock).toHaveBeenCalledWith({
-			tree: [{ file_id: "file-tree-001" }],
+			tree: [{ file_id: "audio-file-001", file_name: "recording-mock.mp3" }],
 			list: [],
 		})
 		expect(await screen.findByTestId("project-share-sheet-proj-alpha-001")).toBeInTheDocument()

@@ -3,6 +3,7 @@ import {
 	AlertTriangle,
 	CheckCircle2,
 	ChevronLeft,
+	Copy,
 	Download,
 	Ellipsis,
 	Loader,
@@ -34,6 +35,7 @@ import {
 	resolveRecordingSourceLabel,
 } from "../../utils/audio-recordings-utils"
 import { resolveSummaryTypeLabel } from "./resolve-summary-type-label"
+import { canCopyAudioProject } from "../../utils/copy-availability"
 import {
 	RECORDING_DETAIL_HEADER_ICON_ACTION_CLASS,
 	RECORDING_DETAIL_HEADER_MENU_CONTENT_CLASS,
@@ -72,6 +74,7 @@ interface RecordingDetailHeaderProps {
 	onCreateShare: () => void
 	onManageShare: () => void
 	onMoveGroup: () => void
+	onCopyToProject?: () => void
 	onDelete: () => void
 }
 
@@ -144,6 +147,7 @@ export function RecordingDetailHeader({
 	onCreateShare,
 	onManageShare,
 	onMoveGroup,
+	onCopyToProject,
 	onDelete,
 }: RecordingDetailHeaderProps) {
 	const { t } = useTranslation("audioRecordings")
@@ -161,6 +165,8 @@ export function RecordingDetailHeader({
 		return resolveDetailSummaryBadge(projectItem, t)
 	}, [projectItem, t])
 	const StatusBadgeIcon = statusBadge?.icon
+	const copyAvailability = useMemo(() => canCopyAudioProject(projectItem), [projectItem])
+	const canShowCopyToProject = capabilities.canCopyToProject && Boolean(onCopyToProject)
 
 	/** i18n labels for recording source resolution — mirrors AudioRecordingCard usage */
 	const sourceLabels = useMemo(
@@ -375,7 +381,7 @@ export function RecordingDetailHeader({
 						</DropdownMenu>
 					) : null}
 
-					{capabilities.canDelete || capabilities.canMoveGroup ? (
+					{capabilities.canDelete || capabilities.canMoveGroup || canShowCopyToProject ? (
 						<DropdownMenu>
 							<DropdownMenuTrigger asChild>
 								<button
@@ -397,6 +403,21 @@ export function RecordingDetailHeader({
 										onClick={onMoveGroup}
 									>
 										{t("card.moveToGroup")}
+									</RecordingDetailHeaderMenuItem>
+								) : null}
+								{canShowCopyToProject ? (
+									<RecordingDetailHeaderMenuItem
+										icon={<Copy />}
+										disabled={!copyAvailability.canCopy}
+										title={
+											!copyAvailability.canCopy
+												? t("copy.unavailable")
+												: undefined
+										}
+										onClick={onCopyToProject}
+										data-testid="recording-detail-copy-to-project"
+									>
+										{t("card.copyToProject")}
 									</RecordingDetailHeaderMenuItem>
 								) : null}
 								{capabilities.canDelete ? (

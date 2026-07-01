@@ -47,10 +47,12 @@ import { RecordingDetailSpeakerDialog } from "./components/recording-detail/Reco
 import { useRecordingDetailShareControls } from "./components/recording-detail/useRecordingDetailShareControls"
 import RecordingShareManagementDialog from "./components/recording-detail/RecordingShareManagementDialog"
 import { AudioRecordingMoveGroupDialog } from "./components/AudioRecordingGroupDialogs"
+import { AudioRecordingCopyDialog } from "./components/AudioRecordingCopyDialog"
 import ShareModal from "@/pages/superMagic/components/Share/Modal"
 import { ShareMode, ShareType } from "@/pages/superMagic/components/Share/types"
 import { createRecordingShareUiConfig } from "@/pages/superMagic/components/Share/utils/recordingShareUiConfig"
 import { AUDIO_RECORDINGS_PAGE_SHELL_CLASS } from "./constants/page-shell"
+import { useAudioRecordingCopyToProject } from "./hooks/useAudioRecordingCopyToProject"
 
 const MobileAudioRecordingDetailPage = lazy(
 	() => import("@/pages/superMagicMobile/pages/AudioRecordingDetail"),
@@ -124,6 +126,9 @@ function AudioRecordingDetailPageDesktop() {
 	const shareControls = useRecordingDetailShareControls({
 		projectId,
 		fileMap,
+	})
+	const copyController = useAudioRecordingCopyToProject({
+		onSuccess: refresh,
 	})
 
 	useEffect(() => {
@@ -340,6 +345,9 @@ function AudioRecordingDetailPageDesktop() {
 					onCreateShare={shareControls.openCreateShare}
 					onManageShare={shareControls.openManageShare}
 					onMoveGroup={() => setMoveGroupOpen(true)}
+					onCopyToProject={() => {
+						if (resolvedItem) void copyController.openCopyToProject(resolvedItem)
+					}}
 					onDelete={() => setDeleteOpen(true)}
 				/>
 
@@ -470,6 +478,7 @@ function AudioRecordingDetailPageDesktop() {
 					projectId={projectId}
 					onClose={shareControls.closeManageShare}
 				/>
+				<AudioRecordingCopyDialog controller={copyController} />
 			</div>
 		</RecordingDetailProvider>
 	)

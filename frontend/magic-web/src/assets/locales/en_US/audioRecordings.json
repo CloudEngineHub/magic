@@ -17,6 +17,7 @@
 	},
 	"card": {
 		"collapseTags": "Collapse",
+		"copyToProject": "Copy to project",
 		"delete": "Delete",
 		"generateSummary": "Generate summary",
 		"mergeFailed": "Merge failed",
@@ -40,6 +41,14 @@
 		"summarizing": "Summarizing now",
 		"summaryFailed": "Summary failed",
 		"waiting": "Waiting"
+	},
+	"copy": {
+		"dialogTitle": "Copy to",
+		"failed": "Failed to copy. Please try again later.",
+		"loadTargetsFailed": "Failed to load target locations. Please try again later.",
+		"noFiles": "This recording has no files to copy.",
+		"success": "Copied successfully",
+		"unavailable": "This status cannot be copied yet"
 	},
 	"defaultName": "Recording on {{datetime}}",
 	"detail": {

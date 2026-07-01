@@ -45,6 +45,9 @@ import type { MobileRecordingGroup } from "@/pages/superMagicMobile/pages/AudioR
 import ProjectShareSheet from "@/pages/superMagicMobile/components/ProjectShareSheet"
 import { buildRecordingShareSelection } from "@/pages/superMagic/pages/AudioRecordings/utils/build-recording-share-selection"
 import { downloadRecordingAudioFile } from "@/pages/superMagic/pages/AudioRecordings/utils/download-recording-audio"
+import { AudioRecordingCopyDialog } from "@/pages/superMagic/pages/AudioRecordings/components/AudioRecordingCopyDialog"
+import { useAudioRecordingCopyToProject } from "@/pages/superMagic/pages/AudioRecordings/hooks/useAudioRecordingCopyToProject"
+import { canCopyAudioProject } from "@/pages/superMagic/pages/AudioRecordings/utils/copy-availability"
 
 const COLLAPSED_PLAYER_HEIGHT = 40
 const EXPANDED_PLAYER_HEIGHT = 182
@@ -111,6 +114,7 @@ export default function MobileAudioRecordingDetailPage() {
 	}, [detailItem?.card_status, locationState?.cardStatus, projectItem?.card_status])
 	const [activeTab, setActiveTab] = useState<MobileRecordingTopTab>(defaultTab)
 	const recordingShareSelection = useMemo(() => buildRecordingShareSelection(fileMap), [fileMap])
+	const copyController = useAudioRecordingCopyToProject()
 
 	useEffect(() => {
 		setActiveTab(defaultTab)
@@ -666,11 +670,17 @@ export default function MobileAudioRecordingDetailPage() {
 				onDelete={handleDelete}
 				onSummarize={handleSummarize}
 				onMoveToGroup={handleOpenMoveGroup}
+				onCopyToProject={(item) => {
+					void copyController.openCopyToProject(item)
+				}}
 				// Wire the more-actions "share" entry to the same share & export sheet opened by the header share button,
 				// matching the prototype's single-share-sheet behavior (RecordingDetailScreen onShare).
 				onShare={openShareExportSheet}
 				isSubmittingAction={actionSubmitting}
 				isSubmittingSummary={summarySubmitting}
+				canCopyToProject={
+					resolvedActionItem ? canCopyAudioProject(resolvedActionItem).canCopy : false
+				}
 				showRegenerateAction
 			/>
 
@@ -709,6 +719,7 @@ export default function MobileAudioRecordingDetailPage() {
 				fileMap={fileMap ?? undefined}
 				defaultSelectedFileIds={recordingShareSelection.defaultSelectedFileIds}
 			/>
+			<AudioRecordingCopyDialog controller={copyController} />
 		</div>
 	)
 }

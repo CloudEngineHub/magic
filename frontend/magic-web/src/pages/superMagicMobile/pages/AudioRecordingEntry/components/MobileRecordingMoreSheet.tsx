@@ -19,9 +19,11 @@ interface MobileRecordingMoreSheetProps {
 	onDelete: (projectId: string) => Promise<boolean>
 	onSummarize?: (item: AudioProjectListItem) => Promise<boolean>
 	onMoveToGroup?: (item: AudioProjectListItem) => void
+	onCopyToProject?: (item: AudioProjectListItem) => void
 	onShare?: () => void
 	isSubmittingAction?: boolean
 	isSubmittingSummary?: boolean
+	canCopyToProject?: boolean
 	hideShareAction?: boolean
 	hideRenameAction?: boolean
 	showRegenerateAction?: boolean
@@ -80,9 +82,11 @@ export function MobileRecordingMoreSheet({
 	onDelete,
 	onSummarize,
 	onMoveToGroup,
+	onCopyToProject,
 	onShare,
 	isSubmittingAction = false,
 	isSubmittingSummary = false,
+	canCopyToProject = true,
 	hideShareAction = false,
 	hideRenameAction = false,
 	showRegenerateAction = false,
@@ -158,6 +162,12 @@ export function MobileRecordingMoreSheet({
 		onMoveToGroup?.(item)
 		handleClose()
 	}, [item, onMoveToGroup, handleClose])
+
+	const handleCopyToProject = useCallback(() => {
+		if (!item || !canCopyToProject) return
+		onCopyToProject?.(item)
+		handleClose()
+	}, [canCopyToProject, handleClose, item, onCopyToProject])
 
 	const handleShare = useCallback(() => {
 		if (onShare) {
@@ -253,8 +263,17 @@ export function MobileRecordingMoreSheet({
 						<MenuItem
 							label={t("super:mobile.recordingEntry.moreSheet.moveToGroup")}
 							dataTestId="mobile-recording-more-move-to-group"
+							showDivider={Boolean(onCopyToProject)}
 							onClick={handleMoveToGroup}
 						/>
+						{onCopyToProject ? (
+							<MenuItem
+								label={t("audioRecordings:card.copyToProject")}
+								dataTestId="mobile-recording-more-copy-to-project"
+								disabled={!canCopyToProject}
+								onClick={handleCopyToProject}
+							/>
+						) : null}
 					</MenuGroup>
 
 					<MenuGroup>

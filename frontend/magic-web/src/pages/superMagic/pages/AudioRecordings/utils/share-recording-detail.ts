@@ -44,6 +44,7 @@ export function buildShareRecordingCapabilities(
 		canMoveGroup: false,
 		canGenerateSummary: false,
 		canManageShare: false,
+		canCopyToProject: false,
 		canExport: allowDownloadProjectFile,
 		canEditSpeakers: false,
 		visibleTabKeys: [

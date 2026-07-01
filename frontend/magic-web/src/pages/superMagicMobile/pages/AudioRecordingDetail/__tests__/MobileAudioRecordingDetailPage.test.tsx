@@ -326,6 +326,16 @@ vi.mock(
 	}),
 )
 
+vi.mock("@/pages/superMagic/pages/AudioRecordings/hooks/useAudioRecordingCopyToProject", () => ({
+	useAudioRecordingCopyToProject: () => ({
+		openCopyToProject: vi.fn(),
+	}),
+}))
+
+vi.mock("@/pages/superMagic/pages/AudioRecordings/components/AudioRecordingCopyDialog", () => ({
+	AudioRecordingCopyDialog: () => null,
+}))
+
 vi.mock("../components/MobileRecordingAudioPlayer", () => ({
 	MobileRecordingAudioPlayer: () => <div data-testid="mobile-recording-audio-player" />,
 }))
@@ -441,6 +451,7 @@ describe("MobileAudioRecordingDetailPage", () => {
 			projectItem: createItem(),
 			mutateAudioProjectItem: vi.fn(),
 			fileMap: {
+				audio: { file_id: "audio-mobile-001", file_name: "recording-mock.mp3" },
 				summaryFiles: [{ type: "summary", fileId: "summary-file", fileName: "summary.md" }],
 				magicProject: { file_id: "magic-project-file-001" },
 				magicProjectConfig: { metadata: { speakers: { "Speaker-1": "Saved Host" } } },
@@ -464,6 +475,8 @@ describe("MobileAudioRecordingDetailPage", () => {
 	})
 
 	it("renders the source panel by default for unsummarized recordings", () => {
+		collectSpeakerIdsFromTextMock.mockReturnValue(["Speaker-1"])
+
 		render(<MobileAudioRecordingDetailPage />)
 
 		expect(screen.getByTestId("mobile-recording-source-panel")).toBeInTheDocument()
@@ -640,7 +653,7 @@ describe("MobileAudioRecordingDetailPage", () => {
 		await waitFor(() => {
 			expect(downloadRecordingAudioFileMock).toHaveBeenCalledWith({
 				fileId: "audio-mobile-001",
-				audioFile: undefined,
+				audioFile: { file_id: "audio-mobile-001", file_name: "recording-mock.mp3" },
 				fallbackName: "Mock mobile recording",
 			})
 		})

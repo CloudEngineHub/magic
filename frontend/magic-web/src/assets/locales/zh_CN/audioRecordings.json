@@ -17,6 +17,7 @@
 	},
 	"card": {
 		"collapseTags": "收起",
+		"copyToProject": "复制到项目",
 		"delete": "删除",
 		"generateSummary": "生成总结",
 		"mergeFailed": "合并失败",
@@ -40,6 +41,14 @@
 		"summarizing": "正在总结",
 		"summaryFailed": "总结失败",
 		"waiting": "等待处理中"
+	},
+	"copy": {
+		"dialogTitle": "复制至",
+		"failed": "复制失败，请稍后重试",
+		"loadTargetsFailed": "加载目标位置失败，请稍后重试",
+		"noFiles": "当前录音没有可复制的文件",
+		"success": "复制成功",
+		"unavailable": "当前状态暂时无法复制"
 	},
 	"defaultName": "{{datetime}} 的录音",
 	"detail": {

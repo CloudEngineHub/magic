@@ -23,6 +23,7 @@ interface RecordingDetailHeaderMenuItemProps {
 	children: ReactNode
 	className?: string
 	disabled?: boolean
+	title?: string
 	onClick?: () => void
 	"data-testid"?: string
 }
@@ -33,12 +34,14 @@ export function RecordingDetailHeaderMenuItem({
 	children,
 	className,
 	disabled = false,
+	title,
 	onClick,
 	"data-testid": dataTestId,
 }: RecordingDetailHeaderMenuItemProps) {
 	return (
 		<DropdownMenuItem
 			disabled={disabled}
+			title={title}
 			data-testid={dataTestId}
 			className={cn(
 				"flex h-9 cursor-pointer items-center gap-2 px-3 text-[13px] font-medium leading-4",

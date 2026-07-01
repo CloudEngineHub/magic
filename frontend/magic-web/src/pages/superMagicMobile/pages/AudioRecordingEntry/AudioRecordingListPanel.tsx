@@ -35,6 +35,9 @@ import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesBut
 import type { RecordingDetailFileMap } from "@/pages/superMagic/pages/AudioRecordings/types/recording-detail"
 import { buildRecordingDetailFileMap } from "@/pages/superMagic/pages/AudioRecordings/utils/recording-detail-files"
 import { buildRecordingShareSelection } from "@/pages/superMagic/pages/AudioRecordings/utils/build-recording-share-selection"
+import { AudioRecordingCopyDialog } from "@/pages/superMagic/pages/AudioRecordings/components/AudioRecordingCopyDialog"
+import { useAudioRecordingCopyToProject } from "@/pages/superMagic/pages/AudioRecordings/hooks/useAudioRecordingCopyToProject"
+import { canCopyAudioProject } from "@/pages/superMagic/pages/AudioRecordings/utils/copy-availability"
 import recordingSummaryStore from "@/stores/recordingSummary"
 import { cn } from "@/lib/utils"
 
@@ -145,6 +148,9 @@ function AudioRecordingListPanel({
 		handleMoveGroupChange,
 		refreshGroups,
 	} = useMobileAudioRecordingsList()
+	const copyController = useAudioRecordingCopyToProject({
+		onSuccess: handleRefresh,
+	})
 
 	// Prioritize store.optimisticItems to guarantee MobX reactive tracking,
 	// falling back to propsOptimisticItems (mainly for unit tests where store is mocked).
@@ -501,11 +507,15 @@ function AudioRecordingListPanel({
 				onDelete={handleDelete}
 				onSummarize={handleSummarize}
 				onMoveToGroup={handleOpenMoveGroup}
+				onCopyToProject={(item) => {
+					void copyController.openCopyToProject(item)
+				}}
 				onShare={() => {
 					void handleShareProject()
 				}}
 				isSubmittingAction={moreTarget != null && store.isSubmittingAction(moreTarget.id)}
 				isSubmittingSummary={moreTarget != null && store.isSubmittingSummary(moreTarget.id)}
+				canCopyToProject={moreTarget ? canCopyAudioProject(moreTarget).canCopy : false}
 				showRegenerateAction
 			/>
 
@@ -530,6 +540,7 @@ function AudioRecordingListPanel({
 				fileMap={shareSheetState?.fileMap}
 				defaultSelectedFileIds={shareSheetState?.defaultSelectedFileIds}
 			/>
+			<AudioRecordingCopyDialog controller={copyController} />
 		</div>
 	)
 }
