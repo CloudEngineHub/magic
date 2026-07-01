@@ -46,6 +46,20 @@ Use this skill to choose a built-in slide template,create a custom template from
 - If the user asks to see templates,show suitable options and mention previews at `<skill_dir>/assets/templates/<dir>/preview.html` (see Built-In Template Workflow for `<skill_dir>`).
 - Editing/fixing/refactoring existing slides does not trigger template selection unless the user asks for a new PPT/project.
 
+## PPT Template File Retrieval
+
+When a PPT template code is already available and the template is not bundled in this skill, if you need to read or download the template zip package, you must first call `get_slides_template_download_url` to get a temporary download URL, then download and read the template files.
+
+```python
+from sdk.tool import tool
+
+result = tool.call("get_slides_template_download_url", {
+    "code": template_code
+})
+
+template_file_url = result.data["template_file_url"]
+```
+
 ## Built-In Template Workflow
 
 Do not resolve this skill's bundled templates under `.magic/skills/slide-template/`. After `read_skills(skill_names=["slide-template"])`, read the absolute skill root from the `<skill_dir>` tag (or parent of `<location>`). In examples below, `<skill_dir>` is that directory. Use `read_files` and `cp` sources only as fully qualified paths: `<skill_dir>/` plus the relative paths listed in this skill.
