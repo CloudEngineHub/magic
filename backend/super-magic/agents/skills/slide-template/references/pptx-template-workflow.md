@@ -28,6 +28,12 @@ For example, `brand-template.pptx` should use:
 .workspace/slide-template-output/brand-template_pptx/
 ```
 
+Keep intermediate source copies outside that output directory, because `convert_pptx_to_html` may clear `output_dir` when `override=true`. For normalized PPTX files, use a separate sibling workspace:
+
+```text
+.workspace/slide-template-source/<source-file-name-with-extension>/
+```
+
 ## 2. Normalize 16:9 PPTX Canvas Before HTML Extraction
 
 For 16:9 decks, create a resized PPTX copy before HTML extraction so `pptx-html-renderer` renders the source directly at the platform target canvas. Keep the user-provided source file unchanged.
@@ -35,7 +41,7 @@ For 16:9 decks, create a resized PPTX copy before HTML extraction so `pptx-html-
 ```bash
 python scripts/resize_pptx_canvas.py \
   --pptx /absolute/path/to/template.pptx \
-  --output /absolute/path/to/output/normalized-1920x1080.pptx \
+  --output /absolute/path/to/.workspace/slide-template-source/brand-template_pptx/normalized-1920x1080.pptx \
   --target-width-px 1920 \
   --target-height-px 1080
 ```
@@ -48,13 +54,13 @@ Use the normalized PPTX path for the HTML extraction command below. In that case
 
 Use the `convert_pptx_to_html` tool as the standalone PPTX-to-HTML renderer. It calls `pptx-html-renderer` in the super-magic sandbox and writes `slides-html/slide-*.html`, static renderer assets, and `pptx-html-render.json`. The implementation is centralized under `app/tools/pptx_to_html/`.
 
-Call it through Code Mode with `run_sdk_snippet` and `sdk.tool.call(...)`. Write the raw HTML package into the same stable output directory from step 1. If step 2 normalized the deck, pass the normalized PPTX path as `pptx_path`.
+Call it through Code Mode with `run_sdk_snippet` and `sdk.tool.call(...)`. Write the raw HTML package into the stable output directory from step 1. If step 2 normalized the deck, pass the normalized PPTX path as `pptx_path`; it must not be inside `output_dir` when `override=true`.
 
 ```python
 from sdk.tool import tool
 
 result = tool.call("convert_pptx_to_html", {
-    "pptx_path": ".workspace/slide-template-output/brand-template_pptx/normalized-1920x1080.pptx",
+    "pptx_path": ".workspace/slide-template-source/brand-template_pptx/normalized-1920x1080.pptx",
     "output_dir": ".workspace/slide-template-output/brand-template_pptx",
     "override": True,
 })
@@ -68,7 +74,7 @@ manifest = result.data
 Parameters:
 
 - `pptx_path`: required. Workspace-relative or absolute path to the source or normalized PPTX.
-- `output_dir`: optional. Must stay inside the workspace. Defaults to `.workspace/pptx-html/<file>_html` when empty; for this workflow, always set it to the step-1 output directory.
+- `output_dir`: optional. Must stay inside the workspace. Defaults to `.workspace/pptx-html/<file>_html` when empty; for this workflow, always set it to the step-1 output directory. Do not place `pptx_path` inside `output_dir` when `override=true`, because the tool clears `output_dir` before rendering.
 - `max_slides`: optional. Debug-only slide cap. Leave empty for full render.
 - `override`: optional. Defaults to `true`. Set to `false` only when you must preserve an existing output directory.
 
@@ -76,7 +82,7 @@ For quick validation only:
 
 ```python
 result = tool.call("convert_pptx_to_html", {
-    "pptx_path": ".workspace/slide-template-output/brand-template_pptx/normalized-1920x1080.pptx",
+    "pptx_path": ".workspace/slide-template-source/brand-template_pptx/normalized-1920x1080.pptx",
     "output_dir": ".workspace/slide-template-output/brand-template_pptx",
     "max_slides": 3,
     "override": True,
@@ -89,7 +95,7 @@ The compatibility extraction script still runs from this skill directory and cal
 
 ```bash
 node scripts/extract_pptx_template_from_html.mjs \
-  --pptx /absolute/path/to/output/normalized-1920x1080.pptx \
+  --pptx /absolute/path/to/.workspace/slide-template-source/brand-template_pptx/normalized-1920x1080.pptx \
   --output-dir /absolute/path/to/output
 ```
 

@@ -46,6 +46,25 @@ def _ensure_safe_output(output_dir: Path, workspace_dir: Path) -> None:
         raise PptxToHtmlError("Output directory must stay inside the workspace") from exc
 
 
+def _path_is_relative_to(path: Path, parent: Path) -> bool:
+    try:
+        path.relative_to(parent)
+    except ValueError:
+        return False
+    return True
+
+
+def _ensure_input_not_deleted_by_override(source_path: Path, output_dir: Path) -> None:
+    resolved_source = source_path.resolve(strict=True)
+    resolved_output = output_dir.resolve(strict=False)
+    if _path_is_relative_to(resolved_source, resolved_output):
+        raise PptxToHtmlError(
+            "Input PPTX is inside output_dir and would be deleted by override. "
+            "Put the source or normalized PPTX in a directory outside output_dir, "
+            "or choose a fresh output_dir."
+        )
+
+
 def _parse_json_error(stdout: str, stderr: str) -> str:
     try:
         payload = json.loads(stdout)
@@ -73,10 +92,14 @@ async def convert_pptx_to_html(
     if target_dir.exists():
         if not override:
             raise PptxToHtmlError(f"Output directory already exists: {target_dir}")
+        _ensure_input_not_deleted_by_override(source_path, target_dir)
         shutil.rmtree(target_dir)
     target_dir.mkdir(parents=True, exist_ok=True)
 
     script_path = Path(__file__).with_name("convert_pptx_to_html.mjs")
+    if not script_path.exists():
+        raise PptxToHtmlError(f"PPTX to HTML converter script is missing: {script_path}")
+
     command = [
         "node",
         str(script_path),

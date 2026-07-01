@@ -66,6 +66,8 @@ a = Analysis(
         ('app/tools/magic_design', 'app/tools/magic_design'),
         # 添加数据分析模板
         ('app/tools/data_analyst_dashboard_template', 'app/tools/data_analyst_dashboard_template'),
+        # 添加 PPTX 转 HTML 渲染脚本
+        ('app/tools/pptx_to_html', 'app/tools/pptx_to_html'),
         # 添加所有js文件
         ('magic_use/js', 'magic_use/js'),
         ('app/i18n/translations', 'app/i18n/translations'),
