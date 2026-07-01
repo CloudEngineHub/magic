@@ -3,7 +3,16 @@
   "version": "1.0.1",
   "private": false,
   "description": "Convert HTML content to PPTX slides",
-  "license": "MIT",
+  "homepage": "https://github.com/dtyq/magic/tree/master/frontend/magic-web/packages/html2pptx#readme",
+  "bugs": {
+    "url": "https://github.com/dtyq/magic/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/dtyq/magic.git",
+    "directory": "frontend/magic-web/packages/html2pptx"
+  },
+  "license": "Apache-2.0",
   "type": "module",
   "exports": {
     ".": {

@@ -1,12 +1,13 @@
-import type { ElementNode, PPTFill } from "../../types/index"
+import type { ElementNode } from "../../ir/dom"
+import type { PPTFill } from "../../ir/style"
 import {
 	colorToHex,
 	getTransparency,
 	hasVisibleBackground,
 	isGradientBackground,
 	parseGradient,
-} from "../../utils/color"
-import { hasUniformBorder } from "../../utils/element"
+} from "../../shared/color"
+import { hasUniformBorder } from "../../shared/element-predicates"
 
 export function canUseFragmentedBackground(node: ElementNode): boolean {
 	const { style } = node

@@ -1,8 +1,10 @@
-import type { ElementNode, PPTShapeNode, PPTNodeBase, SlideConfig, PPTFill } from "../types/index"
-import { log, LogLevel } from "../logger"
-import { colorToHex, getTransparency, hasVisibleBackground, isGradientBackground, parseGradient, parseBlur } from "../utils/color"
-import { hasUniformBorder } from "../utils/element"
-import { pxToInch, parseBorderRadius, isFullyRounded, pxToPt, ptToInch, getGlobalTransform } from "../utils/unit"
+import type { ElementNode } from "../ir/dom"
+import type { PPTShapeNode, PPTNodeBase } from "../ir/node"
+import type { PPTFill } from "../ir/style"
+import type { SlideConfig } from "../api/options"
+import { colorToHex, getTransparency, hasVisibleBackground, isGradientBackground, parseGradient, parseBlur } from "../shared/color"
+import { hasUniformBorder } from "../shared/element-predicates"
+import { pxToInch, parseBorderRadius, isFullyRounded, pxToPt, ptToInch, getGlobalTransform } from "../shared/unit"
 import { parseShadow } from "./parseShadow"
 import { parseBackgroundLayout } from "./parseBackground"
 import { mapBorderStyle } from "./parseBorder"
@@ -25,14 +27,8 @@ export function parseShape(
 ): PPTShapeNode | null {
 	const { style, rect } = node
 
-	// 如果有 url() 背景图，跳过（由 parseImage 处理）
-	// 但渐变背景应该在这里处理
-	const bgImage = style.backgroundImage
-	if (bgImage && bgImage !== "none" && bgImage.includes("url(") && !bgImage.includes("gradient")) {
-		return null
-	}
-
 	// 检查 background-clip: text，如果是文字裁剪，不处理渐变背景（交给文本处理）
+	const bgImage = style.backgroundImage
 	const isTextClip = style.backgroundClip === "text"
 	// 检查是否有渐变背景（但排除 text-clip 的情况，以及调用方主动跳过渐变的情况）
 	const hasGradient = !isTextClip && !options?.skipGradient && isGradientBackground(bgImage)

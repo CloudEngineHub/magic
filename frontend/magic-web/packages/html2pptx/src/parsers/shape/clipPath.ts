@@ -1,5 +1,5 @@
-import type { CustGeomPoint } from "../../types/index"
-import { pxToInch } from "../../utils/unit"
+import type { CustGeomPoint } from "../../ir/node"
+import { pxToInch } from "../../shared/unit"
 
 /**
  * 解析 CSS clip-path: polygon(...) 为 custGeom 路径点

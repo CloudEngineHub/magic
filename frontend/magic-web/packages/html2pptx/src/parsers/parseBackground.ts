@@ -1,4 +1,4 @@
-import type { ComputedStyleInfo } from "../types/index"
+import type { ComputedStyleInfo } from "../ir/dom"
 
 /**
  * 解析 background-size 和 background-position

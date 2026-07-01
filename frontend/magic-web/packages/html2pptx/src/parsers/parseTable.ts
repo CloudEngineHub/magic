@@ -3,17 +3,23 @@
  * 将 HTML <table> 转换为 PPT 表格格式
  */
 
+import type { ElementNode } from "../ir/dom"
+import type { PPTNode, PPTTableNode, PPTNodeBase } from "../ir/node"
 import type {
-	ElementNode,
-	PPTTableNode,
-	PPTNodeBase,
-	SlideConfig,
 	PPTTableRow,
 	PPTTableCell,
 	PPTTableCellBorder,
-} from "../types/index"
-import { colorToHex, hasVisibleBackground, getTransparency } from "../utils/color"
-import { pxToInch } from "../utils/unit"
+	PPTTableTextRun,
+} from "../ir/style"
+import type { SlideConfig } from "../api/options"
+import { colorToHex, getTransparency } from "../shared/color"
+import {
+	calculateColumnWidths,
+	calculateRowHeights,
+	calculateCellMargin,
+	resolveEffectiveBackgroundColor,
+} from "../shared/table-utils"
+import { extractCellTextRuns } from "./table/cellText"
 
 /**
  * 解析 HTML 表格为 PPT 表格节点
@@ -23,7 +29,7 @@ export function parseTable(
 	base: PPTNodeBase,
 	config: SlideConfig,
 	iWindow: Window,
-): PPTTableNode | null {
+): PPTTableNode | PPTNode[] | null {
 	const { element, rect } = node
 
 	if (element.tagName !== "TABLE") return null
@@ -35,7 +41,10 @@ export function parseTable(
 	if (tableRows.length === 0) return null
 
 	// 解析表格结构
-	const { rows, colCount } = parseTableRows(tableRows, iWindow, config)
+	const { rows, colCount } = parseTableRows(
+		tableRows,
+		iWindow,
+	)
 	if (rows.length === 0) return null
 
 	// 计算列宽
@@ -44,13 +53,15 @@ export function parseTable(
 	// 计算行高
 	const rowHeights = calculateRowHeights(tableRows, config)
 
-	return {
+	const tableNode: PPTTableNode = {
 		...base,
 		type: "table",
 		rows,
 		colWidths,
 		rowHeights,
 	}
+
+	return tableNode
 }
 
 /**
@@ -59,10 +70,9 @@ export function parseTable(
 function parseTableRows(
 	tableRows: HTMLTableRowElement[],
 	iWindow: Window,
-	config: SlideConfig,
 ): { rows: PPTTableRow[]; colCount: number } {
 	const rows: PPTTableRow[] = []
-	let maxColCount = 0
+	let maxOriginalColCount = 0
 
 	// 创建合并单元格跟踪矩阵
 	const mergeMatrix: Array<Array<{ skip: boolean; rowspan: number; colspan: number }>> = []
@@ -85,37 +95,44 @@ function parseTableRows(
 				colIndex++
 			}
 
-			// 传入 tr 以便继承行样式
-			const cell = parseCellElement(td as HTMLTableCellElement, tr, iWindow)
-			cells.push(cell)
-
 			// 处理 colspan 和 rowspan
 			const colspan = parseInt(td.getAttribute("colspan") || "1")
 			const rowspan = parseInt(td.getAttribute("rowspan") || "1")
+			const cell = parseCellElement(td as HTMLTableCellElement, tr, iWindow)
+			if (colspan > 1) cell.options = { ...(cell.options ?? {}), colspan }
+			if (rowspan > 1) cell.options = { ...(cell.options ?? {}), rowspan }
+			cells.push(cell)
 
 			// 更新合并矩阵
-			for (let r = 0; r < rowspan; r++) {
-				for (let c = 0; c < colspan; c++) {
-					if (r === 0 && c === 0) continue // 跳过当前单元格
-
-					const targetRow = rowIndex + r
-					const targetCol = colIndex + c
-
-					if (!mergeMatrix[targetRow]) {
-						mergeMatrix[targetRow] = []
-					}
-					mergeMatrix[targetRow][targetCol] = { skip: true, rowspan, colspan }
-				}
-			}
+			markMergedCells(mergeMatrix, rowIndex, colIndex, rowspan, colspan)
 
 			colIndex += colspan
 		})
 
-		maxColCount = Math.max(maxColCount, colIndex)
+		maxOriginalColCount = Math.max(maxOriginalColCount, colIndex)
 		rows.push({ cells })
 	})
 
-	return { rows, colCount: maxColCount }
+	return {
+		rows,
+		colCount: maxOriginalColCount,
+	}
+}
+
+function markMergedCells(
+	mergeMatrix: Array<Array<{ skip: boolean; rowspan: number; colspan: number }>>,
+	rowIndex: number,
+	colIndex: number,
+	rowspan: number,
+	colspan: number,
+): void {
+	for (let r = rowIndex; r < rowIndex + rowspan; r++) {
+		if (!mergeMatrix[r]) mergeMatrix[r] = []
+		for (let c = colIndex; c < colIndex + colspan; c++) {
+			if (r === rowIndex && c === colIndex) continue
+			mergeMatrix[r][c] = { skip: true, rowspan, colspan }
+		}
+	}
 }
 
 /**
@@ -132,14 +149,11 @@ function parseCellElement(
 	const computed = iWindow.getComputedStyle(td)
 	const trComputed = iWindow.getComputedStyle(tr)
 
-	// 获取文本内容
-	const text = td.textContent?.trim() || ""
+	const runs = extractCellTextRuns(td, iWindow)
+	const hasRichText = runs.length > 1 || runs.some((r) => r.options?.breakLine)
 
-	// 解析样式
 	const options: PPTTableCell["options"] = {}
 
-	// 背景色继承链：
-	// cell (td/th) -> row (tr) -> section (thead/tbody/tfoot) -> table
 	const section = tr.parentElement
 	const table = tr.closest("table")
 	const sectionComputed = section ? iWindow.getComputedStyle(section) : null
@@ -154,71 +168,52 @@ function parseCellElement(
 
 	if (effectiveBgColor) {
 		options.fill = colorToHex(effectiveBgColor)
-		// 获取透明度 (0=不透明, 100=完全透明)
 		const transparency = getTransparency(effectiveBgColor)
 		if (transparency > 0) {
 			options.fillTransparency = transparency
 		}
 	}
 
-	// 文字颜色
-	options.color = colorToHex(computed.color)
-
-	// 字号
-	const fontSize = parseFloat(computed.fontSize)
-	if (fontSize && fontSize !== 16) {
-		options.fontSize = Math.round(fontSize * 0.75) // px to pt
+	if (!hasRichText && runs.length > 0) {
+		const first = runs[0]
+		if (first.options?.color) options.color = first.options.color
+		if (first.options?.fontSize) options.fontSize = first.options.fontSize
+		if (first.options?.bold) options.bold = true
 	}
 
-	// 粗体
-	const fontWeight = parseInt(computed.fontWeight)
-	if (fontWeight >= 700 || computed.fontWeight === "bold") {
-		options.bold = true
-	}
-
-	// 对齐
 	const textAlign = computed.textAlign
 	if (textAlign === "center" || textAlign === "right") {
 		options.align = textAlign
 	}
 
-	// 垂直对齐
 	const verticalAlign = computed.verticalAlign
 	if (verticalAlign === "middle" || verticalAlign === "bottom") {
 		options.valign = verticalAlign as "middle" | "bottom"
 	}
 
-	// 边距 (padding + 文本偏移)
 	const margin = calculateCellMargin(td, computed)
 	if (margin) {
 		options.margin = margin
 	}
 
-	// colspan / rowspan
+	const whiteSpace = computed.whiteSpace
+	if (whiteSpace === "nowrap" || whiteSpace === "pre" || whiteSpace === "normal") {
+		options.wrap = false
+	}
+
 	const colspan = parseInt(td.getAttribute("colspan") || "1")
 	const rowspan = parseInt(td.getAttribute("rowspan") || "1")
 	if (colspan > 1) options.colspan = colspan
 	if (rowspan > 1) options.rowspan = rowspan
 
-	// 边框 - 同时考虑单元格和行的边框
 	const border = parseCellBorder(computed, trComputed)
 	if (border) options.border = border
 
-	return { text, options: Object.keys(options).length > 0 ? options : undefined }
-}
+	const text: string | PPTTableTextRun[] = hasRichText
+		? runs
+		: runs.map((r) => r.text).join("")
 
-function resolveEffectiveBackgroundColor(input: {
-	cellBgColor: string
-	rowBgColor: string
-	sectionBgColor?: string
-	tableBgColor?: string
-}): string | null {
-	const { cellBgColor, rowBgColor, sectionBgColor, tableBgColor } = input
-	if (hasVisibleBackground(cellBgColor)) return cellBgColor
-	if (hasVisibleBackground(rowBgColor)) return rowBgColor
-	if (sectionBgColor && hasVisibleBackground(sectionBgColor)) return sectionBgColor
-	if (tableBgColor && hasVisibleBackground(tableBgColor)) return tableBgColor
-	return null
+	return { text, options: Object.keys(options).length > 0 ? options : undefined }
 }
 
 /**
@@ -336,173 +331,4 @@ function parseCellBorder(
 		buildBorder(bottomWidth, bottomColor, bottomStyle),
 		buildBorder(leftWidth, leftColor, leftStyle),
 	]
-}
-
-/**
- * 计算列宽
- */
-function calculateColumnWidths(
-	table: HTMLTableElement,
-	colCount: number,
-	tableWidth: number,
-	config: SlideConfig,
-): number[] {
-	const widths: number[] = []
-
-	// 尝试从 colgroup/col 获取宽度
-	const colElements = table.querySelectorAll("col")
-	if (colElements.length > 0) {
-		Array.from(colElements).forEach((col) => {
-			const style = col.getAttribute("style") || ""
-			const widthMatch = style.match(/width:\s*([\d.]+)(px|%)/)
-			if (widthMatch) {
-				const value = parseFloat(widthMatch[1])
-				const unit = widthMatch[2]
-				if (unit === "%") {
-					widths.push(pxToInch(tableWidth * value / 100, config))
-				} else {
-					widths.push(pxToInch(value, config))
-				}
-			} else {
-				// 没有指定宽度，后面平均分配
-				widths.push(0)
-			}
-		})
-	}
-
-	// 如果没有 col 元素或宽度不完整，从第一行单元格测量
-	if (widths.length === 0 || widths.every((w) => w === 0)) {
-		const firstRow = table.rows[0]
-		if (firstRow) {
-			const cells = Array.from(firstRow.cells)
-			const totalWidth = tableWidth
-			const cellWidths: number[] = []
-
-			cells.forEach((cell) => {
-				const rect = cell.getBoundingClientRect()
-				cellWidths.push(rect.width)
-			})
-
-			// 考虑 colspan
-			let expandedWidths: number[] = []
-			cells.forEach((cell, i) => {
-				const colspan = parseInt(cell.getAttribute("colspan") || "1")
-				const cellWidth = cellWidths[i] || 0
-				const perColWidth = cellWidth / colspan
-
-				for (let c = 0; c < colspan; c++) {
-					expandedWidths.push(perColWidth)
-				}
-			})
-
-			// 补齐到 colCount
-			while (expandedWidths.length < colCount) {
-				expandedWidths.push(totalWidth / colCount)
-			}
-
-			return expandedWidths.map((w) => pxToInch(w, config))
-		}
-	}
-
-	// 补齐列宽
-	const tableWidthInch = pxToInch(tableWidth, config)
-	const avgWidth = tableWidthInch / colCount
-
-	while (widths.length < colCount) {
-		widths.push(avgWidth)
-	}
-
-	// 替换零宽度
-	const nonZeroWidths = widths.filter((w) => w > 0)
-	const avgNonZero = nonZeroWidths.length > 0
-		? nonZeroWidths.reduce((a, b) => a + b, 0) / nonZeroWidths.length
-		: avgWidth
-
-	return widths.map((w) => (w > 0 ? w : avgNonZero))
-}
-
-/**
- * 计算行高
- */
-function calculateRowHeights(
-	tableRows: HTMLTableRowElement[],
-	config: SlideConfig,
-): number[] {
-	const heights: number[] = []
-
-	tableRows.forEach((tr) => {
-		const rect = tr.getBoundingClientRect()
-		heights.push(pxToInch(rect.height, config))
-	})
-
-	return heights
-}
-
-/**
- * 计算单元格边距 (padding + 文本偏移)
- * 返回值单位为英寸 (pptxgenjs 要求)
- */
-function calculateCellMargin(
-	td: HTMLTableCellElement,
-	computed: CSSStyleDeclaration,
-): [number, number, number, number] | undefined {
-	const paddingTopPx = parseFloat(computed.paddingTop) || 0
-	const paddingRightPx = parseFloat(computed.paddingRight) || 0
-	const paddingBottomPx = parseFloat(computed.paddingBottom) || 0
-	const paddingLeftPx = parseFloat(computed.paddingLeft) || 0
-
-	// 默认使用 padding
-	let marginLeftPx = paddingLeftPx
-
-	// 尝试检测是否有图标等元素导致文本偏移
-	// 找到第一个文本节点
-	const textNode = findFirstTextNode(td)
-	if (textNode) {
-		try {
-			const range = td.ownerDocument.createRange()
-			range.selectNode(textNode)
-			const textRect = range.getBoundingClientRect()
-			const tdRect = td.getBoundingClientRect()
-
-			// 计算实际的左侧偏移量
-			// textRect.left - tdRect.left 包含了 borderLeftWidth + paddingLeft + iconWidth + margin
-			// 我们需要去掉 borderLeftWidth
-			const borderLeftWidth = parseFloat(computed.borderLeftWidth) || 0
-			const visualOffset = textRect.left - tdRect.left - borderLeftWidth
-
-			// 如果视觉偏移明显大于 padding-left (允许 2px 误差)，说明有东西挤占了空间
-			if (visualOffset > paddingLeftPx + 2) {
-				marginLeftPx = visualOffset
-			}
-		} catch (e) {
-			// 忽略 Range 错误
-		}
-	}
-
-	const top = pxToInch(paddingTopPx)
-	const right = pxToInch(paddingRightPx)
-	const bottom = pxToInch(paddingBottomPx)
-	const left = pxToInch(marginLeftPx)
-	
-	// 如果都是 0，返回 undefined
-	if (top === 0 && right === 0 && bottom === 0 && left === 0) {
-		return undefined
-	}
-
-	return [top, right, bottom, left]
-}
-
-function findFirstTextNode(element: Element): Node | null {
-	for (const child of Array.from(element.childNodes)) {
-		if (child.nodeType === Node.TEXT_NODE) {
-			if (child.textContent?.trim()) {
-				return child
-			}
-		} else if (child.nodeType === Node.ELEMENT_NODE) {
-			// 递归查找，但不进入某些特定容器？目前简单处理，递归查找
-			const found = findFirstTextNode(child as Element)
-			if (found) return found
-		}
-	}
-	return null
 }
