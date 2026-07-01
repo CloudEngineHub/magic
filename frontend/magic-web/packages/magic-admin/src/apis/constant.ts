@@ -161,6 +161,21 @@ export const RequestUrl = {
 	testAiPowerConnection: "/api/v1/admin/ai-abilities/connectivity-test",
 	/** 获取全局配置 */
 	getGlobalConfig: "/api/v1/settings/global",
+	/** —————— 平台管理 - PPT模板 —————— */
+	/** 查询PPT模板列表 */
+	querySlidesTemplates: "/api/v1/admin/slides-templates/queries",
+	/** 获取PPT模板详情 */
+	getSlidesTemplate: "/api/v1/admin/slides-templates/${id}",
+	/** 创建PPT模板 */
+	createSlidesTemplate: "/api/v1/admin/slides-templates",
+	/** 更新PPT模板 */
+	updateSlidesTemplate: "/api/v1/admin/slides-templates/${id}",
+	/** 更新PPT模板状态 */
+	updateSlidesTemplateStatus: "/api/v1/admin/slides-templates/${id}/status",
+	/** 更新PPT模板排序 */
+	updateSlidesTemplateSort: "/api/v1/admin/slides-templates/${id}/sort",
+	/** 删除PPT模板 */
+	deleteSlidesTemplate: "/api/v1/admin/slides-templates/${id}",
 
 	/** 权限 */
 	/** 获取我的权限列表 */

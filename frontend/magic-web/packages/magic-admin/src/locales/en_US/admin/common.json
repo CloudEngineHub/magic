@@ -169,6 +169,7 @@
 			"providerAccess": "Operations Control",
 			"proxyServer": "Proxy Server",
 			"skillMarket": "Skill Market",
+			"slidesTemplate": "PPT Templates",
 			"systemAgent": "Official crew Management",
 			"systemCapability": "System Capability",
 			"systemSkill": "Skill Management",
@@ -194,6 +195,42 @@
 	"pleaseSelectPlaceholder": "Please select {{name}}",
 	"prePage": "Previous Page",
 	"search": "Search Options",
+	"slidesTemplate": {
+		"addButton": "Add Template",
+		"addTitle": "Add PPT Template",
+		"columns": {
+			"code": "Template Code",
+			"name": "Template Name",
+			"sort": "Sort",
+			"status": "Status",
+			"thumbnail": "Cover",
+			"updatedAt": "Updated At"
+		},
+		"editTitle": "Edit PPT Template",
+		"fields": {
+			"collage": "Preview Collage",
+			"description": "Description",
+			"label": "Template Name",
+			"previewUrl": "Preview URL",
+			"sort": "Sort",
+			"status": "Status",
+			"templateFile": "Template ZIP",
+			"thumbnail": "Cover Image"
+		},
+		"filters": {
+			"code": "Template Code",
+			"keyword": "Keyword",
+			"status": "Status"
+		},
+		"status": {
+			"disabled": "Disabled",
+			"enabled": "Enabled"
+		},
+		"upload": {
+			"onlyImage": "Only image files are supported",
+			"onlyZip": "Only ZIP files are supported"
+		}
+	},
 	"status": "Status",
 	"title": "$t(common:platform.name) Admin Dashboard",
 	"totalItems": "Total {{total}} items",

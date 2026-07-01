@@ -11,6 +11,7 @@ import {
 	IconMenu2,
 	IconCameraAi,
 	IconServerSpark,
+	IconFileTypePpt,
 } from "@tabler/icons-react"
 import { useAdminStore } from "@admin/stores/admin"
 
@@ -29,7 +30,7 @@ function PlatformPackageLayout() {
 	const { isOfficialOrg } = useAdminStore()
 	const { env } = useAdmin()
 
-	const isSaas = env.MAGIC_APP_ENV.startsWith("saas")
+	const isSaas = env?.MAGIC_APP_ENV?.startsWith("saas") ?? false
 
 	const items = useMemo(() => {
 		if (!isOfficialOrg) return []
@@ -119,6 +120,17 @@ function PlatformPackageLayout() {
 									PERMISSION_KEY_MAP.AI_ABILITY_MANAGEMENT_QUERY,
 								) ||
 								permissions.includes(PERMISSION_KEY_MAP.AI_ABILITY_MANAGEMENT_EDIT)
+							)
+						},
+					},
+					{
+						key: RoutePath.PlatformSlidesTemplate,
+						label: t("nav.platformSubMenu.slidesTemplate"),
+						icon: <IconFileTypePpt size={20} />,
+						validate: (permissions: string[], isSuperAdmin?: boolean) => {
+							return (
+								isSuperAdmin ||
+								permissions.includes(PERMISSION_KEY_MAP.SLIDES_TEMPLATE)
 							)
 						},
 					},

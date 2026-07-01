@@ -42,6 +42,10 @@ import type {
 	SuggestionRelationType,
 	SuggestionsMeta,
 } from "@/pages/superMagic/stores/suggestion-types"
+import type {
+	SlidesTemplateListResponse,
+	SlidesTemplateQueryParams,
+} from "@/pages/superMagic/components/MainInputContainer/scenes/Slides/slidesTemplateState"
 
 /** 保存文件内容的响应 */
 export interface SaveFileContentResponse {
@@ -697,6 +701,12 @@ export interface GetConvertHightConfigResponse {
 }
 
 export const generateSuperMagicApi = (fetch: HttpClient) => ({
+	getSlidesTemplates(params: SlidesTemplateQueryParams) {
+		return fetch.get<SlidesTemplateListResponse>(
+			genRequestUrl("/api/v1/slides-templates", {}, params),
+		)
+	},
+
 	/**
 	 * @description 复制新的话题（从话题的消息节点中复制出新话题）
 	 * @param {object} params
