@@ -159,6 +159,23 @@ describe("normalizeAudioProjectListItem", () => {
 		expect(item?.is_summarized).toBe(false)
 	})
 
+	it("maps backend duration_seconds when list duration is not hydrated yet", () => {
+		const item = normalizeAudioProjectListItem({
+			...SAMPLE_SUMMARIZED,
+			project_status: "",
+			current_topic_status: "",
+			extra: {
+				...SAMPLE_SUMMARIZED.extra,
+				duration: undefined,
+				duration_seconds: 23,
+				phase_status: "in_progress",
+			} as AudioProjectApiItem["extra"] & { duration_seconds: number },
+		})
+
+		expect(item?.duration).toBe(23)
+		expect(item?.card_status).toBe("summarizing")
+	})
+
 	it("preserves large string snowflake ids from parseJsonLargeIntAsString output", () => {
 		const item = normalizeAudioProjectListItem({
 			...SAMPLE_MERGING,

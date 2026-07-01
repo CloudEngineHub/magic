@@ -584,6 +584,70 @@ describe("AudioRecordingsStore", () => {
 		expect(store.list[0]?.is_summarized).toBe(true)
 	})
 
+	it("patches list item duration from progress duration_seconds", () => {
+		const store = new AudioRecordingsStore()
+		store.list = [
+			{
+				id: "project-1",
+				project_name: "Mock recording",
+				created_at: 1780657155,
+				duration: 0,
+				tags: [],
+				device_id: "mock-device",
+				audio_source: "recorded",
+				current_phase: "summarizing",
+				phase_status: "in_progress",
+				card_status: "summarizing",
+				is_summarized: false,
+				task_key: "session-mock-duration",
+			},
+		]
+
+		store.patchListItemFromProgress({
+			exists: true,
+			task_key: "session-mock-duration",
+			project_id: "project-1",
+			current_phase: "summarizing",
+			phase_status: "in_progress",
+			duration_seconds: 23,
+		})
+
+		expect(store.list[0]?.duration).toBe(23)
+		expect(store.list[0]?.card_status).toBe("summarizing")
+	})
+
+	it("patches optimistic item duration from progress duration_seconds", () => {
+		const store = new AudioRecordingsStore()
+		store.optimisticItems = [
+			{
+				id: "project-optimistic",
+				project_name: "Mock optimistic recording",
+				created_at: 1780657155,
+				duration: 0,
+				tags: [],
+				device_id: "mock-device",
+				audio_source: "recorded",
+				current_phase: "summarizing",
+				phase_status: "in_progress",
+				card_status: "summarizing",
+				is_summarized: false,
+				task_key: "session-mock-optimistic-duration",
+			},
+		]
+
+		store.patchListItemFromProgress({
+			exists: true,
+			task_key: "session-mock-optimistic-duration",
+			project_id: "project-optimistic",
+			current_phase: "summarizing",
+			phase_status: "in_progress",
+			duration_seconds: 45,
+		})
+
+		expect(store.optimisticItems[0]?.duration).toBe(45)
+		expect(store.optimisticItems[0]?.card_status).toBe("summarizing")
+	})
+
 	it("filters summarized tab to completed items only", async () => {
 		const store = new AudioRecordingsStore()
 		store.setSummaryFilter("summarized")

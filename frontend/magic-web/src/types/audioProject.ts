@@ -43,6 +43,8 @@ export interface QueryAudioProjectsParams {
 /** Nested metadata from the real audio-projects queries API */
 export interface AudioProjectExtra {
 	duration?: number
+	/** Backend may hydrate recorded task duration under progress-compatible field naming */
+	duration_seconds?: number
 	device_id?: string
 	tags?: string[]
 	current_phase?: AudioProjectPhase
@@ -82,6 +84,8 @@ export interface AudioProjectApiItem {
 	device_id?: string
 	create_timestamp?: string
 	duration?: number
+	/** Progress-compatible duration field used before legacy duration is backfilled */
+	duration_seconds?: number
 	tags?: string[]
 }
 

@@ -36,6 +36,13 @@ export type SubmitSummaryResult =
 	| { ok: true }
 	| { ok: false; reason: "busy" | "missingParams" | "missingModel" | "api" }
 
+/** Uses progress duration only after backend reports a real value, preserving known local metadata */
+function resolvePatchedDuration(progressDuration: number | undefined, currentDuration: number) {
+	if (Number.isFinite(progressDuration) && progressDuration !== undefined && progressDuration > 0)
+		return progressDuration
+	return currentDuration
+}
+
 /** MobX store for PC audio recordings list: filters, pagination, and fetch lifecycle */
 export class AudioRecordingsStore {
 	list: AudioProjectListItem[] = []
@@ -310,6 +317,7 @@ export class AudioRecordingsStore {
 				current_phase: (nextPhase as AudioProjectListItem["current_phase"]) ?? null,
 				phase_status: nextStatus ?? null,
 				phase_percent: progress.phase_percent ?? current.phase_percent,
+				duration: resolvePatchedDuration(progress.duration_seconds, current.duration),
 				project_status: isFinished ? "finished" : current.project_status,
 				current_topic_status: isFinished ? "finished" : current.current_topic_status,
 				is_summarized: isFinished ? true : current.is_summarized,
@@ -334,6 +342,7 @@ export class AudioRecordingsStore {
 				current_phase: (nextPhase as AudioProjectListItem["current_phase"]) ?? null,
 				phase_status: nextStatus ?? null,
 				phase_percent: progress.phase_percent ?? current.phase_percent,
+				duration: resolvePatchedDuration(progress.duration_seconds, current.duration),
 				project_status: isFinished ? "finished" : current.project_status,
 				current_topic_status: isFinished ? "finished" : current.current_topic_status,
 				is_summarized: isFinished ? true : current.is_summarized,

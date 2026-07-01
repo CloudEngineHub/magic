@@ -5,6 +5,23 @@ import type {
 } from "@/types/audioProject"
 import { coerceIdToString } from "./summary-action-utils"
 
+/** Picks the first hydrated duration field while letting duration_seconds fill early backend rows */
+function resolveAudioProjectDuration(raw: AudioProjectApiItem): number {
+	const candidates = [
+		raw.extra?.duration,
+		raw.extra?.duration_seconds,
+		raw.duration,
+		raw.duration_seconds,
+	]
+	const positiveDuration = candidates.find(
+		(value) => Number.isFinite(value) && value !== undefined && value > 0,
+	)
+	if (positiveDuration != null) return positiveDuration
+
+	const explicitZeroDuration = candidates.find((value) => value === 0)
+	return explicitZeroDuration ?? 0
+}
+
 /** Resolves PC card status for items that passed the processing-complete gate */
 export function resolveCardStatus(
 	raw: Pick<AudioProjectApiItem, "project_status" | "current_topic_status" | "is_summarized">,
@@ -71,7 +88,7 @@ export function normalizeAudioProjectListItem(
 		id: raw.id,
 		project_name: raw.project_name,
 		created_at: Number.isFinite(createdAt) ? createdAt : 0,
-		duration: extra.duration ?? raw.duration ?? 0,
+		duration: resolveAudioProjectDuration(raw),
 		tags: extra.tags ?? raw.tags ?? [],
 		device_id: extra.device_id ?? raw.device_id ?? "",
 		audio_source: extra.audio_source ?? null,
