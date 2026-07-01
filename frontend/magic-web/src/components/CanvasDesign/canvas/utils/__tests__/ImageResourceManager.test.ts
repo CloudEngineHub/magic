@@ -461,12 +461,69 @@ describe("ImageResourceManager image resources", () => {
 			expect(entry.displaySlots.preview.resource).toBeNull()
 			expect(visibilityManager.invalidateImageLoadRequest).toHaveBeenCalledWith(
 				"image/path.png",
-				undefined,
+				"preview",
 				"decoded-budget",
+				{ scheduleRefresh: true },
 			)
 		} finally {
 			restoreAnimationFrame()
 		}
+	})
+
+	it("clears full decoded eviction dedupe state without scheduling an immediate reload", () => {
+		const restoreAnimationFrame = installImmediateAnimationFrame()
+		try {
+			const { manager, visibilityManager } = createManager()
+			const fullResource = createImageResource("full", {
+				width: 10,
+				height: 10,
+			})
+			const entry = createEntry({
+				fullResource,
+				fullLastAccessAt: 1,
+			})
+			manager.entries.set("image/full.png", entry)
+
+			enforceDecodedBitmapBudget(manager, {
+				reason: "full-request-invalidation",
+				softBudgetBytes: 1000,
+				hardBudgetBytes: 1000,
+				fullBudgetBytes: 0,
+			})
+
+			expect(entry.fullResource).toBeNull()
+			expect(visibilityManager.invalidateImageLoadRequest).toHaveBeenCalledWith(
+				"image/full.png",
+				"full",
+				"decoded-budget",
+				{ scheduleRefresh: false },
+			)
+		} finally {
+			restoreAnimationFrame()
+		}
+	})
+
+	it("protects recently used full resources from soft full-budget eviction", () => {
+		const { manager, visibilityManager } = createManager()
+		const fullResource = createImageResource("full", {
+			width: 10,
+			height: 10,
+		})
+		const entry = createEntry({
+			fullResource,
+			fullLastAccessAt: Date.now(),
+		})
+		manager.entries.set("image/recent-full.png", entry)
+
+		enforceDecodedBitmapBudget(manager, {
+			reason: "recent-full",
+			softBudgetBytes: 1000,
+			hardBudgetBytes: 1000,
+			fullBudgetBytes: 0,
+		})
+
+		expect(entry.fullResource).toBe(fullResource)
+		expect(visibilityManager.invalidateImageLoadRequest).not.toHaveBeenCalled()
 	})
 
 	it("protects active low display leases and allows low eviction after release", async () => {

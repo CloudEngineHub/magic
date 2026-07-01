@@ -108,9 +108,11 @@ const INITIAL_VISIBLE_CRITICAL_WINDOW_MS = 5000
 const MAX_INITIAL_VISIBLE_CONTAINER_IMAGE_REQUESTS = 48
 const VIEWPORT_MOVEMENT_SCALE_REFRESH_RATIO = 1.15
 const IMAGE_VARIANT_SWITCH_COOLDOWN_MS = 450
-const DECODED_IMAGE_RETENTION_GRACE_MS = 1500
+const DECODED_IMAGE_RETENTION_GRACE_MS = 5000
 const FAR_VISIBILITY_DRAIN_GRACE_MS = 3000
 const CONTENT_LAYER_HIT_GRAPH_RESTORE_DELAY_MS = 160
+const VIEWPORT_IDLE_FULL_REQUEST_DELAY_MS = 240
+const VIEWPORT_IDLE_FULL_REFRESH_REASON = "viewport:idle-full"
 // Current default: Konva-only far culling. Far elements stop participating in drawing / hit
 // testing after the 3s drain, while image resources stay cached for fast return.
 const FAR_KONVA_RENDER_VISIBILITY_STRATEGY: CanvasRenderVisibilityStrategy = "hidden"
@@ -284,6 +286,7 @@ export class CanvasVisibilityManager {
 	private farVisibilityDrainTimerId: ReturnType<typeof setTimeout> | null = null
 	private contentLayerHitGraphRestoreTimerId: ReturnType<typeof setTimeout> | null = null
 	private variantSwitchCooldownTimerId: ReturnType<typeof setTimeout> | null = null
+	private viewportIdleFullTimerId: ReturnType<typeof setTimeout> | null = null
 	private scheduledForce = false
 	private scheduledReason = "unknown"
 	private lastQueryCoverRect: Rect | null = null
@@ -292,6 +295,7 @@ export class CanvasVisibilityManager {
 	private containerRootCache: ContainerRootCache | null = null
 	private destroyed = false
 	private lastViewportMovementAt = now()
+	private viewportFullRequestDeferUntil = 0
 	private contentLayerHitGraphSuppressed = false
 	private contentLayerPreviousListening: boolean | null = null
 	private readonly renderVisibilityController: CanvasRenderVisibilityController
@@ -327,13 +331,17 @@ export class CanvasVisibilityManager {
 	}
 
 	private readonly handleViewportPan = (): void => {
-		this.lastViewportMovementAt = now()
+		const currentTime = now()
+		this.lastViewportMovementAt = currentTime
+		this.deferFullRequestsUntilViewportIdle(currentTime)
 		this.suppressContentLayerHitGraphDuringViewportMovement()
 		this.scheduleRefresh("viewport:pan", false)
 	}
 
 	private readonly handleViewportScale = (): void => {
-		this.lastViewportMovementAt = now()
+		const currentTime = now()
+		this.lastViewportMovementAt = currentTime
+		this.deferFullRequestsUntilViewportIdle(currentTime)
 		this.suppressContentLayerHitGraphDuringViewportMovement()
 		this.scheduleRefresh("viewport:scale", true)
 	}
@@ -579,6 +587,7 @@ export class CanvasVisibilityManager {
 		path: string,
 		variant?: ImageResourceVariant,
 		reason = "resource-invalidated",
+		options?: { scheduleRefresh?: boolean },
 	): void {
 		if (this.destroyed) return
 
@@ -597,7 +606,7 @@ export class CanvasVisibilityManager {
 			}
 		})
 
-		if (matched) {
+		if (matched && options?.scheduleRefresh !== false) {
 			this.scheduleRefresh(`image:load-request-invalidated:${reason}`, true)
 		}
 	}
@@ -623,11 +632,15 @@ export class CanvasVisibilityManager {
 		if (this.variantSwitchCooldownTimerId !== null) {
 			clearTimeout(this.variantSwitchCooldownTimerId)
 		}
+		if (this.viewportIdleFullTimerId !== null) {
+			clearTimeout(this.viewportIdleFullTimerId)
+		}
 		this.rafId = null
 		this.drainTimerId = null
 		this.farVisibilityDrainTimerId = null
 		this.contentLayerHitGraphRestoreTimerId = null
 		this.variantSwitchCooldownTimerId = null
+		this.viewportIdleFullTimerId = null
 		this.restoreContentLayerHitGraph()
 		this.registeredImages.clear()
 		this.registeredVideos.clear()
@@ -715,6 +728,36 @@ export class CanvasVisibilityManager {
 			},
 			Math.max(0, delayMs),
 		)
+	}
+
+	private deferFullRequestsUntilViewportIdle(currentTime = now()): void {
+		this.viewportFullRequestDeferUntil = currentTime + VIEWPORT_IDLE_FULL_REQUEST_DELAY_MS
+
+		if (this.viewportIdleFullTimerId !== null) {
+			clearTimeout(this.viewportIdleFullTimerId)
+		}
+
+		this.viewportIdleFullTimerId = setTimeout(() => {
+			this.viewportIdleFullTimerId = null
+			if (this.destroyed) return
+			if (now() < this.viewportFullRequestDeferUntil) return
+			this.scheduleRefresh(VIEWPORT_IDLE_FULL_REFRESH_REASON, true)
+		}, VIEWPORT_IDLE_FULL_REQUEST_DELAY_MS)
+	}
+
+	private shouldDeferFullImageLoads(reason: string, currentTime = now()): boolean {
+		return isViewportMovementReason(reason) || currentTime < this.viewportFullRequestDeferUntil
+	}
+
+	private deferFullImageCandidateIfNeeded(
+		candidate: ImageLoadCandidate,
+		shouldDeferFullImageLoads: boolean,
+	): ImageLoadCandidate {
+		if (!shouldDeferFullImageLoads || candidate.variant !== "full") return candidate
+		return {
+			...candidate,
+			variant: "preview",
+		}
 	}
 
 	private shouldSkipViewportMovementQuery(options: {
@@ -842,6 +885,7 @@ export class CanvasVisibilityManager {
 		const viewportRect = getViewportCanvasRect(this.canvas)
 		const viewportScale = this.canvas.stage.scaleX() || 1
 		const scaleBand = getScaleBand(viewportScale)
+		const shouldDeferFullImageLoads = this.shouldDeferFullImageLoads(reason, startedAt)
 		const nearPadding =
 			Math.max(viewportRect.width, viewportRect.height) * NEAR_VIEWPORT_PADDING_RATIO
 		const queryCoverRect = expandRect(viewportRect, nearPadding)
@@ -937,10 +981,14 @@ export class CanvasVisibilityManager {
 				viewportRect,
 			)
 			if (!candidate) return
-			if (candidate.screenLongEdge >= MIN_VISIBLE_SCREEN_LONG_EDGE_FOR_LOAD) {
-				visibleCandidates.push(candidate)
+			const displayCandidate = this.deferFullImageCandidateIfNeeded(
+				candidate,
+				shouldDeferFullImageLoads,
+			)
+			if (displayCandidate.screenLongEdge >= MIN_VISIBLE_SCREEN_LONG_EDGE_FOR_LOAD) {
+				visibleCandidates.push(displayCandidate)
 			} else {
-				lowDetailVisibleCandidates.push(candidate)
+				lowDetailVisibleCandidates.push(displayCandidate)
 			}
 		})
 
@@ -967,15 +1015,17 @@ export class CanvasVisibilityManager {
 				viewportCenter,
 			})
 			if (visibleContainerMediaCandidates.imageCandidates.length > 0) {
+				const imageCandidates = visibleContainerMediaCandidates.imageCandidates.map(
+					(candidate) =>
+						this.deferFullImageCandidateIfNeeded(candidate, shouldDeferFullImageLoads),
+				)
 				const frameAdjustedImageIds = new Set(
-					visibleContainerMediaCandidates.imageCandidates.map(
-						(candidate) => candidate.elementId,
-					),
+					imageCandidates.map((candidate) => candidate.elementId),
 				)
 				removeCandidatesByIds(visibleCandidates, frameAdjustedImageIds)
 				removeCandidatesByIds(lowDetailVisibleCandidates, frameAdjustedImageIds)
 				removeCandidatesByIds(nearCandidates, frameAdjustedImageIds)
-				visibleCandidates.push(...visibleContainerMediaCandidates.imageCandidates)
+				visibleCandidates.push(...imageCandidates)
 			}
 			if (visibleContainerMediaCandidates.videoCandidates.length > 0) {
 				const frameAdjustedVideoIds = new Set(
@@ -1025,13 +1075,13 @@ export class CanvasVisibilityManager {
 			}
 		})
 		const pendingVisibleCandidates = visibleCandidates.filter((candidate) =>
-			this.shouldRequestImageCandidate(candidate),
+			this.shouldRequestImageCandidate(candidate, { reason }),
 		)
 		const pendingLowDetailVisibleCandidates = lowDetailVisibleCandidates.filter((candidate) =>
-			this.shouldRequestImageCandidate(candidate),
+			this.shouldRequestImageCandidate(candidate, { reason }),
 		)
 		const pendingNearCandidates = nearCandidates.filter((candidate) =>
-			this.shouldRequestImageCandidate(candidate),
+			this.shouldRequestImageCandidate(candidate, { reason }),
 		)
 		const pendingVisibleVideoCandidates = visibleVideoCandidates.filter((candidate) =>
 			this.shouldRequestVideoCandidate(candidate),
@@ -1158,6 +1208,7 @@ export class CanvasVisibilityManager {
 	}): void {
 		const { reason, startedAt, viewportRect, viewportScale } = options
 		if (!isViewportMovementReason(reason)) return
+		const shouldDeferFullImageLoads = this.shouldDeferFullImageLoads(reason, startedAt)
 
 		const registeredImageIds: string[] = []
 		this.registeredImages.forEach((_, elementId) => {
@@ -1200,10 +1251,14 @@ export class CanvasVisibilityManager {
 				viewportRect,
 			)
 			if (!candidate) return
-			if (candidate.screenLongEdge >= MIN_VISIBLE_SCREEN_LONG_EDGE_FOR_LOAD) {
-				visibleCandidates.push(candidate)
+			const displayCandidate = this.deferFullImageCandidateIfNeeded(
+				candidate,
+				shouldDeferFullImageLoads,
+			)
+			if (displayCandidate.screenLongEdge >= MIN_VISIBLE_SCREEN_LONG_EDGE_FOR_LOAD) {
+				visibleCandidates.push(displayCandidate)
 			} else {
-				lowDetailVisibleCandidates.push(candidate)
+				lowDetailVisibleCandidates.push(displayCandidate)
 			}
 		})
 
@@ -1227,10 +1282,10 @@ export class CanvasVisibilityManager {
 			startedAt,
 		)
 		const pendingVisibleCandidates = visibleCandidates.filter((candidate) =>
-			this.shouldRequestImageCandidate(candidate),
+			this.shouldRequestImageCandidate(candidate, { reason }),
 		)
 		const pendingLowDetailVisibleCandidates = lowDetailVisibleCandidates.filter((candidate) =>
-			this.shouldRequestImageCandidate(candidate),
+			this.shouldRequestImageCandidate(candidate, { reason }),
 		)
 		const pendingVisibleVideoCandidates = visibleVideoCandidates.filter((candidate) =>
 			this.shouldRequestVideoCandidate(candidate),
@@ -1295,7 +1350,10 @@ export class CanvasVisibilityManager {
 		}
 	}
 
-	private shouldRequestImageCandidate(candidate: ImageLoadCandidate): boolean {
+	private shouldRequestImageCandidate(
+		candidate: ImageLoadCandidate,
+		options?: { reason?: string },
+	): boolean {
 		const previousState = this.lastRequestedLoadState.get(candidate.elementId)
 		if (!previousState) return true
 		const priorityImproved =
@@ -1305,6 +1363,12 @@ export class CanvasVisibilityManager {
 			previousState.variant !== candidate.variant &&
 			elapsedSinceLastRequest < IMAGE_VARIANT_SWITCH_COOLDOWN_MS
 		) {
+			if (
+				options?.reason === VIEWPORT_IDLE_FULL_REFRESH_REASON &&
+				candidate.variant === "full"
+			) {
+				return true
+			}
 			if (!(priorityImproved && candidate.priority === "critical")) {
 				this.scheduleVariantSwitchCooldownRefresh(
 					IMAGE_VARIANT_SWITCH_COOLDOWN_MS - elapsedSinceLastRequest,

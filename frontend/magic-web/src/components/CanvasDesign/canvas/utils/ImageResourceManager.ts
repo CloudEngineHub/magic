@@ -208,8 +208,29 @@ const COMPRESSED_BODY_CACHE_MAX_BYTES = 256 * 1024 * 1024
 const PREVIEW_LOAD_PIPELINE_CONCURRENCY = 8
 const DECODED_BITMAP_SOFT_BUDGET_BYTES = 160 * 1024 * 1024
 const DECODED_BITMAP_HARD_BUDGET_BYTES = 224 * 1024 * 1024
-const FULL_DECODED_BITMAP_BUDGET_BYTES = 64 * 1024 * 1024
+const BYTES_PER_MIB = 1024 * 1024
+const FULL_DECODED_BITMAP_LOW_MEMORY_BUDGET_BYTES = 64 * BYTES_PER_MIB
+const FULL_DECODED_BITMAP_DEFAULT_BUDGET_BYTES = 128 * BYTES_PER_MIB
+const FULL_DECODED_BITMAP_HIGH_MEMORY_BUDGET_BYTES = 256 * BYTES_PER_MIB
+const FULL_DECODED_BITMAP_EVICTION_GRACE_MS = 5000
 export type ImageResourceLoadPriority = MediaDecodePriority
+
+function getDefaultFullDecodedBitmapBudgetBytes(): number {
+	const deviceMemory =
+		typeof globalThis.navigator === "undefined"
+			? undefined
+			: (globalThis.navigator as Navigator & { deviceMemory?: number }).deviceMemory
+	if (typeof deviceMemory !== "number") {
+		return FULL_DECODED_BITMAP_DEFAULT_BUDGET_BYTES
+	}
+	if (deviceMemory <= 4) {
+		return FULL_DECODED_BITMAP_LOW_MEMORY_BUDGET_BYTES
+	}
+	if (deviceMemory >= 16) {
+		return FULL_DECODED_BITMAP_HIGH_MEMORY_BUDGET_BYTES
+	}
+	return FULL_DECODED_BITMAP_DEFAULT_BUDGET_BYTES
+}
 
 type DecodedBitmapCandidateVariant = ImageDisplayResourceVariant | "full"
 type DecodedBitmapRetentionLevel = "visible" | "near"
@@ -1001,18 +1022,28 @@ export class ImageResourceManager {
 		}
 	}
 
-	private invalidateImageLoadRequestForDecodedEviction(path: string): void {
+	private invalidateImageLoadRequestForDecodedEviction(
+		candidate: DecodedBitmapBudgetCandidate,
+	): void {
 		const visibilityManager = this.canvas.visibilityManager as
 			| {
 					invalidateImageLoadRequest?: (
 						path: string,
 						variant?: ImageResourceVariant,
 						reason?: string,
+						options?: { scheduleRefresh?: boolean },
 					) => void
 			  }
 			| undefined
 
-		visibilityManager?.invalidateImageLoadRequest?.(path, undefined, "decoded-budget")
+		visibilityManager?.invalidateImageLoadRequest?.(
+			candidate.path,
+			candidate.variant,
+			"decoded-budget",
+			{
+				scheduleRefresh: candidate.variant !== "full",
+			},
+		)
 	}
 
 	private evictDecodedBitmapCandidate(
@@ -1022,7 +1053,7 @@ export class ImageResourceManager {
 	): { detachedBytes: number; freedBytes: number } {
 		const detached = this.detachDecodedBitmapCandidate(candidate)
 		if (!detached) return { detachedBytes: 0, freedBytes: 0 }
-		this.invalidateImageLoadRequestForDecodedEviction(candidate.path)
+		this.invalidateImageLoadRequestForDecodedEviction(candidate)
 		if (this.isResourceReferencedByAnyEntry(candidate.resource)) {
 			return { detachedBytes: candidate.bytes, freedBytes: 0 }
 		}
@@ -1051,7 +1082,7 @@ export class ImageResourceManager {
 		)
 		const fullBudgetBytes = Math.max(
 			0,
-			options.fullBudgetBytes ?? FULL_DECODED_BITMAP_BUDGET_BYTES,
+			options.fullBudgetBytes ?? getDefaultFullDecodedBitmapBudgetBytes(),
 		)
 		const budgetState = this.collectDecodedBitmapBudgetCandidates()
 		const { candidates } = budgetState
@@ -1075,10 +1106,14 @@ export class ImageResourceManager {
 			getRetentionLevel(candidate) === "near"
 		const isLowLeaseProtectedCandidate = (candidate: DecodedBitmapBudgetCandidate) =>
 			candidate.variant === "low" && candidate.entry.lowDisplayLeaseCount > 0
+		const isRecentFullProtectedCandidate = (candidate: DecodedBitmapBudgetCandidate) =>
+			candidate.variant === "full" &&
+			now - candidate.lastAccessAt < FULL_DECODED_BITMAP_EVICTION_GRACE_MS
 		const canEvictDuringFullOrSoftBudget = (candidate: DecodedBitmapBudgetCandidate) =>
 			!isExemptCandidate(candidate) &&
 			!isVisiblePinnedCandidate(candidate) &&
 			!isNearProtectedCandidate(candidate) &&
+			!isRecentFullProtectedCandidate(candidate) &&
 			!isLowLeaseProtectedCandidate(candidate)
 		const canEvictDuringHardBudget = (candidate: DecodedBitmapBudgetCandidate) =>
 			!isExemptCandidate(candidate) &&

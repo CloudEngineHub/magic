@@ -238,6 +238,78 @@ describe("CanvasVisibilityManager video load requests", () => {
 })
 
 describe("CanvasVisibilityManager image load requests", () => {
+	it("downgrades full candidates to preview while viewport movement is active", () => {
+		const manager = Object.create(CanvasVisibilityManager.prototype) as CanvasVisibilityManager
+		const deferFullImageCandidateIfNeeded = (
+			manager as unknown as {
+				deferFullImageCandidateIfNeeded: (
+					candidate: ImageCandidate,
+					shouldDeferFullImageLoads: boolean,
+				) => ImageCandidate
+			}
+		).deferFullImageCandidateIfNeeded
+		const candidate = {
+			...createImageCandidate("image-1", "visible"),
+			variant: "full" as ImageResourceVariant,
+			screenLongEdge: 2000,
+		}
+
+		expect(deferFullImageCandidateIfNeeded.call(manager, candidate, true)).toEqual(
+			expect.objectContaining({
+				variant: "preview",
+				screenLongEdge: 2000,
+			}),
+		)
+		expect(deferFullImageCandidateIfNeeded.call(manager, candidate, false)).toEqual(
+			expect.objectContaining({
+				variant: "full",
+			}),
+		)
+	})
+
+	it("allows idle full refreshes to bypass the rapid variant switch cooldown", () => {
+		const manager = Object.create(
+			CanvasVisibilityManager.prototype,
+		) as CanvasVisibilityManager & {
+			lastRequestedLoadState: Map<
+				string,
+				{
+					priority: ImageResourceLoadPriority
+					variant: ImageResourceVariant
+					requestedAt: number
+				}
+			>
+			shouldRequestImageCandidate: (
+				candidate: ImageCandidate,
+				options?: { reason?: string },
+			) => boolean
+			scheduleRefresh: ReturnType<typeof vi.fn>
+		}
+		manager.lastRequestedLoadState = new Map([
+			[
+				"image-1",
+				{
+					priority: "visible",
+					variant: "preview",
+					requestedAt: performance.now(),
+				},
+			],
+		])
+		manager.scheduleRefresh = vi.fn()
+
+		expect(
+			manager.shouldRequestImageCandidate(
+				{
+					...createImageCandidate("image-1", "visible"),
+					variant: "full",
+					screenLongEdge: 2000,
+				},
+				{ reason: "viewport:idle-full" },
+			),
+		).toBe(true)
+		expect(manager.scheduleRefresh).not.toHaveBeenCalled()
+	})
+
 	it("passes display target metadata to image resource loads", () => {
 		const emitImageResourceDisplayTarget = vi.fn()
 		const loadResource = vi.fn()
@@ -632,7 +704,7 @@ describe("CanvasVisibilityManager decoded image retention hints", () => {
 				performance.now(),
 			)
 
-			vi.advanceTimersByTime(1499)
+			vi.advanceTimersByTime(4999)
 			expect(manager.getDecodedImageRetentionSnapshot()).toHaveLength(1)
 
 			vi.advanceTimersByTime(2)
@@ -644,6 +716,27 @@ describe("CanvasVisibilityManager decoded image retention hints", () => {
 })
 
 describe("CanvasVisibilityManager content layer hit graph suppression", () => {
+	it("schedules an idle full refresh after viewport movement settles", () => {
+		vi.useFakeTimers()
+		try {
+			const { handlers, manager } = createConstructedManager()
+			const scheduleRefresh = vi.fn()
+			;(manager as unknown as { scheduleRefresh: typeof scheduleRefresh }).scheduleRefresh =
+				scheduleRefresh
+
+			handlers.get("viewport:pan")?.[0]?.({})
+
+			expect(scheduleRefresh).toHaveBeenCalledWith("viewport:pan", false)
+			vi.advanceTimersByTime(239)
+			expect(scheduleRefresh).not.toHaveBeenCalledWith("viewport:idle-full", true)
+			vi.advanceTimersByTime(1)
+			expect(scheduleRefresh).toHaveBeenCalledWith("viewport:idle-full", true)
+			manager.destroy()
+		} finally {
+			vi.useRealTimers()
+		}
+	})
+
 	it("disables content layer listening during viewport movement and restores it after idle", () => {
 		vi.useFakeTimers()
 		try {
