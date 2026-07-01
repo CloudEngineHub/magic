@@ -10,8 +10,8 @@ from agentlang.config.config import config  # 复用工具方法（环境变量�
 class DynamicConfig:
     """动态配置管理器 - 负责动态配置文件（dynamic_config.yaml）的读写管理
 
-    只处理 ai_abilities、non_human_options 等非模型配置段。
-    模型配置由 ModelConfigManager 统一管理，不再写入此文件。
+    处理 client_context、non_human_options 等请求级动态配置段。
+    模型配置由 ModelConfigManager 统一管理，AI 能力配置由 AIAbilityConfigManager 统一管理。
     """
 
     DYNAMIC_CONFIG_FILE = "dynamic_config.yaml"
