@@ -1,5 +1,6 @@
 import Demo from "../Demo/locales/ja_JP"
 import MultiLangSetting from "../MultiLangSetting/locales/ja_JP"
+import UserSelect from "../UserSelect/locales/ja_JP"
 import SideMenu from "../SideMenu/locales/ja_JP"
 import SearchSelect from "../SearchSelect/locales/ja_JP"
 import ButtonGroup from "../ButtonGroup/locales/ja_JP"
@@ -15,6 +16,7 @@ import TimeFilterPanel from "../TimeFilterPanel/locales/ja_JP"
 export default {
 	Demo,
 	MultiLangSetting,
+	UserSelect,
 	SideMenu,
 	SearchSelect,
 	ButtonGroup,

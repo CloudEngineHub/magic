@@ -42,7 +42,7 @@ const CanvasDesignContent = forwardRef<CanvasDesignRef, CanvasDesignProps>((prop
 		data = {},
 		marker = {},
 		viewport = {},
-		getIsMobile,
+		getDevice,
 		t,
 		shareHostBottomChrome = false,
 	} = props
@@ -77,6 +77,7 @@ const CanvasDesignContent = forwardRef<CanvasDesignRef, CanvasDesignProps>((prop
 	const canvasContainerRef = useRef<HTMLDivElement>(null)
 
 	const canvasInstanceRef = useRef<Canvas | null>(null)
+	const loadDocumentTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
 	// 处理 ref 方法暴露
 	useCanvasDesignRef(ref)
@@ -126,7 +127,7 @@ const CanvasDesignContent = forwardRef<CanvasDesignRef, CanvasDesignProps>((prop
 				methods: methods,
 				permissions: permissions,
 			},
-			getIsMobile: getIsMobile,
+			getDevice: getDevice,
 			t: t,
 		})
 
@@ -147,7 +148,11 @@ const CanvasDesignContent = forwardRef<CanvasDesignRef, CanvasDesignProps>((prop
 		})
 
 		// 确保react层事件都监听了, 再初始化
-		setTimeout(() => {
+		loadDocumentTimerRef.current = setTimeout(() => {
+			loadDocumentTimerRef.current = null
+			if (canvasInstanceRef.current !== canvasInstance) {
+				return
+			}
 			// 使用传入的 defaultCanvasData 或默认空数据
 			// 兼容 useImmer 创建的 Proxy 对象，转换为普通对象
 			canvasInstance.loadDocument(defaultData ? toPlainObject(defaultData) : { elements: [] })
@@ -166,6 +171,10 @@ const CanvasDesignContent = forwardRef<CanvasDesignRef, CanvasDesignProps>((prop
 	})
 
 	useUnmount(() => {
+		if (loadDocumentTimerRef.current) {
+			clearTimeout(loadDocumentTimerRef.current)
+			loadDocumentTimerRef.current = null
+		}
 		const canvasInstance = canvasInstanceRef.current
 		if (!canvasInstance) return
 		canvasInstance.destroy()
@@ -182,8 +191,8 @@ const CanvasDesignContent = forwardRef<CanvasDesignRef, CanvasDesignProps>((prop
 	}, [t, canvas])
 
 	useUpdateEffect(() => {
-		canvas?.updateIsMobileDevice(getIsMobile)
-	}, [getIsMobile, canvas])
+		canvas?.updateDeviceInfo(getDevice)
+	}, [getDevice, canvas])
 
 	useUpdateEffect(() => {
 		canvas?.magicConfigManager.update({
@@ -231,7 +240,7 @@ const CanvasDesignContent = forwardRef<CanvasDesignRef, CanvasDesignProps>((prop
 })
 
 const CanvasDesign = forwardRef<CanvasDesignRef, CanvasDesignProps>((props, ref) => {
-	const { getIsMobile } = props
+	const { getDevice } = props
 
 	const appContainerRef = useRef<HTMLDivElement | null>(null)
 
@@ -269,7 +278,7 @@ const CanvasDesign = forwardRef<CanvasDesignRef, CanvasDesignProps>((props, ref)
 								<CanvasProvider>
 									<CanvasUIProvider readonly={props.readonly}>
 										<ElementMenuProvider>
-											<LayersUIProvider getIsMobile={getIsMobile}>
+											<LayersUIProvider getDevice={getDevice}>
 												<CanvasDesignContent ref={ref} {...props} />
 											</LayersUIProvider>
 										</ElementMenuProvider>

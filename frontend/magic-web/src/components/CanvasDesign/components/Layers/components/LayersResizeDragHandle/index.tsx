@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react"
 import { useLayersUI } from "../../../../context/LayersUIContext"
 
 export default function LayersResizeDragHandle() {
-	const { collapsed, width, resizing, handleResizeStart, isMobile } = useLayersUI()
+	const { collapsed, width, resizing, handleResizeStart, isCompactLayout } = useLayersUI()
 
 	const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
 	const [visible, setVisible] = useState(false)
@@ -20,8 +20,8 @@ export default function LayersResizeDragHandle() {
 		}
 	}, [collapsed])
 
-	// 移动端隐藏拖拽手柄
-	if (isMobile) {
+	// 紧凑布局隐藏拖拽手柄
+	if (isCompactLayout) {
 		return null
 	}
 

@@ -5,6 +5,8 @@ import type { AiManage } from "@admin/types/aiManage"
 interface AdminState {
 	/** Maigc用户权限 */
 	userPermissions: string[]
+	/** 天书功能权限 */
+	teamshareUserPermissions: string[]
 	/** 是否是官方组织 */
 	isOfficialOrg: boolean
 	/** 当前组织套餐信息 */
@@ -25,8 +27,12 @@ interface AdminState {
 	currentRouteItems: Route | null
 	/** Magic权限key */
 	permissionsKeys: string
+	/** 天书权限key */
+	teamsharePermissionsKeys: string
 	setPermissionsKeys: (permissionsKeys: string) => void
+	setTeamsharePermissionsKeys: (teamsharePermissionsKeys: string) => void
 	setUserPermissions: (permissions: string[]) => void
+	setTeamshareUserPermissions: (permissions: string[]) => void
 	setIsOfficialOrg: (isOfficialOrg: boolean) => void
 	setSubscriptionInfo: (subscriptionInfo: AiManage.SubscriptionInfo | null) => void
 	setExtraBreadcrumb: (
@@ -49,9 +55,12 @@ export const useAdminStore = create<AdminState>((set) => ({
 	isPermissionInitialized: false,
 	currentRouteItems: null,
 	permissionsKeys: "",
+	teamsharePermissionsKeys: "",
 	isPersonalOrganization: false,
 	setPermissionsKeys: (permissionsKeys) => set({ permissionsKeys }),
+	setTeamsharePermissionsKeys: (teamsharePermissionsKeys) => set({ teamsharePermissionsKeys }),
 	setUserPermissions: (permissions) => set({ userPermissions: permissions }),
+	setTeamshareUserPermissions: (permissions) => set({ teamshareUserPermissions: permissions }),
 	setExtraBreadcrumb: (items) => set({ extraBreadcrumb: items }),
 	setIsOfficialOrg: (isOfficialOrg) => set({ isOfficialOrg }),
 	setSubscriptionInfo: (subscriptionInfo) => set({ subscriptionInfo }),

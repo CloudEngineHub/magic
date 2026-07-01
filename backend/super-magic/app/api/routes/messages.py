@@ -507,13 +507,7 @@ class MessageProcessor:
         """
         from app.core.entity.message.client_message import AgentMode
 
-        if not agent_mode:
-            return AgentMode.GENERAL.get_agent_type()
-        try:
-            return AgentMode(agent_mode).get_agent_type()
-        except ValueError:
-            # 自定义 agent ID 直接作为 agent_type
-            return str(agent_mode).strip() or AgentMode.GENERAL.get_agent_type()
+        return AgentMode.resolve_agent_type(agent_mode)
 
     async def _handle_dynamic_config(self, dynamic_config_data: Optional[Dict[str, Any]], agent_type: str = ""):
         """处理动态配置注入（容错模式：失败不影响聊天流程）"""

@@ -1,5 +1,11 @@
 import Konva from "konva"
-import type { CanvasConfig, CanvasDocument, ViewportState, ToolType } from "./types"
+import type {
+	CanvasConfig,
+	CanvasDeviceInfo,
+	CanvasDocument,
+	ViewportState,
+	ToolType,
+} from "./types"
 import { ToolTypeEnum } from "./types"
 import { ViewportController } from "./interaction/ViewportController"
 import { EventEmitter, type CanvasEventMap } from "./EventEmitter"
@@ -10,7 +16,7 @@ import { HoverManager } from "./interaction/HoverManager"
 import { SelectionHighlightManager } from "./interaction/SelectionHighlightManager"
 import { KeyboardManager } from "./interaction/KeyboardManager"
 import { ToolManager } from "./interaction/ToolManager"
-import { isMobile as defaultIsMobile } from "./utils/utils"
+import { getDefaultCanvasDeviceInfo } from "./utils/utils"
 import { AlignmentManager } from "./interaction/AlignmentManager"
 import { FrameManager } from "./interaction/FrameManager"
 import { HistoryManager } from "./interaction/HistoryManager"
@@ -47,6 +53,7 @@ import { PluginManager } from "./plugins/PluginManager"
 import { ElementRenameManager } from "./interaction/ElementRenameManager"
 import { TextEditingManager } from "./interaction/TextEditingManager"
 import { TextFormattingManager } from "./interaction/TextFormattingManager"
+import { CanvasInputManager } from "./interaction/input"
 import { isCanvasUIComponentNode } from "./utils/domGuards"
 import { buildVirtualResourceScope } from "./utils/pathUtils"
 import {
@@ -61,6 +68,16 @@ import {
 	conversationActions,
 	downloadActions,
 } from "./user-actions"
+
+function areCanvasDeviceInfoEqual(a: CanvasDeviceInfo, b: CanvasDeviceInfo): boolean {
+	return (
+		a.formFactor === b.formFactor &&
+		a.layout === b.layout &&
+		a.input.touch === b.input.touch &&
+		a.input.coarsePointer === b.input.coarsePointer &&
+		a.input.hover === b.input.hover
+	)
+}
 
 /**
  * Canvas类 - 封装Konva画布的初始化和管理
@@ -87,6 +104,7 @@ export class Canvas {
 	public selectionHighlightManager: SelectionHighlightManager
 	public videoSelectionPlaybackManager: VideoSelectionPlaybackManager
 	public videoPlaybackInteractionManager: VideoPlaybackInteractionManager
+	public inputManager: CanvasInputManager
 	public toolManager: ToolManager
 	public keyboardManager: KeyboardManager
 	public alignmentManager: AlignmentManager
@@ -123,7 +141,7 @@ export class Canvas {
 	public pluginManager: PluginManager
 
 	public readonly: boolean
-	public isMobileDevice: boolean
+	public deviceInfo: CanvasDeviceInfo
 	public id: string
 
 	public t?: TFunction
@@ -151,8 +169,7 @@ export class Canvas {
 
 		this.readonly = options.defaultReadyonly ?? false
 
-		this.isMobileDevice = defaultIsMobile()
-		this.updateIsMobileDevice(options.getIsMobile)
+		this.deviceInfo = options.getDevice ? options.getDevice() : getDefaultCanvasDeviceInfo()
 
 		// 设置容器可以获得焦点
 		this.container.tabIndex = 0
@@ -300,6 +317,11 @@ export class Canvas {
 
 		// 初始化视口控制器
 		this.viewportController = new ViewportController({
+			canvas: this,
+		})
+
+		// 初始化统一输入层（工具与手势仲裁共享）
+		this.inputManager = new CanvasInputManager({
 			canvas: this,
 		})
 
@@ -1027,11 +1049,20 @@ export class Canvas {
 	}
 
 	/**
-	 * 设置是否为移动设备
-	 * @param isMobileDevice - 是否为移动设备
+	 * 设置设备形态、布局和输入能力
 	 */
-	public updateIsMobileDevice(getIsMobile?: () => boolean): void {
-		this.isMobileDevice = getIsMobile ? getIsMobile() : defaultIsMobile()
+	public updateDeviceInfo(getDevice?: () => CanvasDeviceInfo): void {
+		const previous = this.deviceInfo
+		const current = getDevice ? getDevice() : getDefaultCanvasDeviceInfo()
+		if (areCanvasDeviceInfoEqual(previous, current)) {
+			return
+		}
+
+		this.deviceInfo = current
+		this.eventEmitter.emit({
+			type: "canvas:devicechange",
+			data: { previous, current },
+		})
 	}
 
 	/**
@@ -1113,6 +1144,7 @@ export class Canvas {
 		this.videoSelectionPlaybackManager.destroy()
 		this.videoPlaybackInteractionManager.destroy()
 		this.toolManager.destroy()
+		this.inputManager.destroy()
 		this.keyboardManager.destroy()
 		this.alignmentManager.destroy()
 		this.frameManager.destroy()

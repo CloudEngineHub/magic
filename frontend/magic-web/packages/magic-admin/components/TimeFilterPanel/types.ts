@@ -69,6 +69,8 @@ export interface TimeRangeValue {
 	tab: TimeFilterTab
 	/* 模式 */
 	mode: HistoryMode
+	/* 相对时间预设 key，用于面板内高亮对应选项 */
+	presetKey?: TimePresetKey
 }
 
 export interface TimeFilterHistoryItem extends TimeRangeValue {

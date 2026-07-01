@@ -431,6 +431,8 @@ export class ExtendRenderer {
 	}
 
 	private setupStagePointerListener(): void {
+		// InputManager is reserved for primary canvas tools. Extend mode uses this
+		// local listener only to toggle its image transformer affordance.
 		this.stagePointerDownHandler = ({ target }) => {
 			if (target === this.imageProxy || this.isNodeInImageTransformer(target)) {
 				this.setImageTransformerVisible(true)

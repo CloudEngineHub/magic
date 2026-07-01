@@ -4,8 +4,15 @@ import { BaseTool } from "./BaseTool"
 import type { LayerElement } from "../../types"
 import { CropRenderer } from "../CropRenderer"
 import { ExtendRenderer } from "../ExtendRenderer"
-import { resolveManagedElementIdFromKonvaNode } from "../elementNodeUtils"
+import {
+	pickSelectedElementIdAtStagePointer,
+	resolveManagedElementIdFromKonvaNode,
+} from "../elementNodeUtils"
+import type { CanvasNativePointerEvent, CanvasPointerInput, CanvasPointerType } from "../input"
+import { getClientPointFromNativeEvent } from "../input"
 import { isMultiSelectEvent } from "../shortcuts/modifierUtils"
+
+const TOUCH_DIRECT_DRAG_DISTANCE = 8
 
 /**
  * 选择工具 - 提供框选功能
@@ -21,7 +28,12 @@ export class SelectionTool extends BaseTool {
 		elementId: string
 		startClientX: number
 		startClientY: number
+		pointerId?: number
+		pointerType?: CanvasPointerType
+		useWindowListeners: boolean
 	} | null = null
+	private isViewportGestureActive = false
+	private inputUnsubscribers: Array<() => void> = []
 	private readonly TOOL_SELECTION_FILL = "rgba(0, 112, 255, 0.05)"
 	private readonly TOOL_SELECTION_STROKE = "#3B82F6"
 	private readonly TOOL_SELECTION_STROKE_WIDTH = 1
@@ -38,9 +50,15 @@ export class SelectionTool extends BaseTool {
 		this.handleMouseDown = this.handleMouseDown.bind(this)
 		this.handleMouseMove = this.handleMouseMove.bind(this)
 		this.handleMouseUp = this.handleMouseUp.bind(this)
+		this.handlePointerDown = this.handlePointerDown.bind(this)
+		this.handlePointerMove = this.handlePointerMove.bind(this)
+		this.handlePointerUp = this.handlePointerUp.bind(this)
+		this.handlePointerCancel = this.handlePointerCancel.bind(this)
+		this.handleViewportGesture = this.handleViewportGesture.bind(this)
 		this.handleWindowMouseUp = this.handleWindowMouseUp.bind(this)
 		this.handleWindowMouseMove = this.handleWindowMouseMove.bind(this)
 		this.handleElementsDragStart = this.handleElementsDragStart.bind(this)
+		this.handleElementContextMenu = this.handleElementContextMenu.bind(this)
 		this.handlePendingDirectDragMove = this.handlePendingDirectDragMove.bind(this)
 		this.handlePendingDirectDragEnd = this.handlePendingDirectDragEnd.bind(this)
 	}
@@ -54,6 +72,7 @@ export class SelectionTool extends BaseTool {
 
 		// 禁用 stage 的拖拽功能，避免与选择工具冲突
 		this.canvas.stage.draggable(false)
+		this.isViewportGestureActive = this.isViewportGestureInProgress()
 
 		this.setupEventListeners()
 	}
@@ -76,25 +95,190 @@ export class SelectionTool extends BaseTool {
 	 * 设置事件监听器
 	 */
 	private setupEventListeners(): void {
-		this.canvas.stage.on("mousedown", this.handleMouseDown)
-		this.canvas.stage.on("mousemove", this.handleMouseMove)
-		this.canvas.stage.on("mouseup", this.handleMouseUp)
+		this.inputUnsubscribers = [
+			this.canvas.inputManager.on("down", this.handlePointerDown),
+			this.canvas.inputManager.on("move", this.handlePointerMove),
+			this.canvas.inputManager.on("up", this.handlePointerUp),
+			this.canvas.inputManager.on("cancel", this.handlePointerCancel),
+		]
 		// 监听元素拖动开始事件，当元素开始拖动时清除框选矩形
 		this.canvas.eventEmitter.on("elements:transform:dragstart", this.handleElementsDragStart)
+		this.canvas.eventEmitter.on("element:contextmenu", this.handleElementContextMenu)
+		this.canvas.eventEmitter.on("viewport:gesture", this.handleViewportGesture)
 	}
 
 	/**
 	 * 移除事件监听器
 	 */
 	private removeEventListeners(): void {
-		this.canvas.stage.off("mousedown", this.handleMouseDown)
-		this.canvas.stage.off("mousemove", this.handleMouseMove)
-		this.canvas.stage.off("mouseup", this.handleMouseUp)
+		this.inputUnsubscribers.forEach((unsubscribe) => unsubscribe())
+		this.inputUnsubscribers = []
 		this.canvas.eventEmitter.off("elements:transform:dragstart", this.handleElementsDragStart)
+		this.canvas.eventEmitter.off("element:contextmenu", this.handleElementContextMenu)
+		this.canvas.eventEmitter.off("viewport:gesture", this.handleViewportGesture)
 		// 移除 window 的监听器（如果存在）
 		window.removeEventListener("mouseup", this.handleWindowMouseUp)
 		window.removeEventListener("mousemove", this.handleWindowMouseMove)
 		this.clearPendingDirectDrag()
+	}
+
+	private handlePointerDown(input: CanvasPointerInput): void {
+		if (!this.isActive) return
+
+		if (this.isViewportGestureInProgress()) {
+			this.clearPendingDirectDrag()
+			return
+		}
+
+		if (input.pointerType !== "mouse") {
+			this.handleTouchDown(input)
+			return
+		}
+
+		this.handleMouseDown(input.konvaEvent as Konva.KonvaEventObject<MouseEvent>)
+	}
+
+	private handlePointerMove(input: CanvasPointerInput): void {
+		if (!this.isActive) return
+
+		if (input.activePointerCount > 1 || this.isViewportGestureInProgress()) {
+			this.clearPendingDirectDrag()
+			this.cancelSelectionInteraction()
+			return
+		}
+
+		this.handlePendingDirectDragInput(input)
+
+		if (input.pointerType !== "touch") {
+			this.handleMouseMove()
+		}
+	}
+
+	private handlePointerUp(input: CanvasPointerInput): void {
+		if (!this.isActive) return
+
+		if (input.pointerType === "touch") {
+			this.clearPendingDirectDrag()
+			return
+		}
+
+		this.handleMouseUp()
+	}
+
+	private handlePointerCancel(): void {
+		if (!this.isActive) return
+		this.clearPendingDirectDrag()
+		this.cancelSelectionInteraction()
+	}
+
+	private handleTouchDown(input: CanvasPointerInput): void {
+		if (this.isViewportGestureInProgress()) {
+			this.clearPendingDirectDrag()
+			return
+		}
+
+		if (this.canvas.eraserManager.getErasingElementId()) {
+			return
+		}
+
+		if (input.activePointerCount !== 1) {
+			this.clearPendingDirectDrag()
+			return
+		}
+
+		const clickedNode = input.target
+
+		if (this.isDecoratorNode(clickedNode)) {
+			return
+		}
+
+		const elementId = resolveManagedElementIdFromKonvaNode(clickedNode, this.canvas)
+		const isMultiSelect = this.isMultiSelectInput(input)
+		const isValidElement = this.isValidElementNode(clickedNode)
+		const elementData = elementId
+			? this.canvas.elementManager.getElementData(elementId)
+			: undefined
+		const allowModifierDeselect =
+			isMultiSelect &&
+			this.isElementHitTargetNode(clickedNode) &&
+			elementId !== undefined &&
+			this.canvas.selectionManager.isSelected(elementId) &&
+			!this.canvas.permissionManager.canSelect(elementData)
+
+		if (isValidElement || allowModifierDeselect) {
+			if (elementId) {
+				if (isMultiSelect) {
+					this.canvas.selectionManager.toggle(elementId)
+					this.clearPendingDirectDrag()
+					return
+				}
+
+				const wasSelected = this.canvas.selectionManager.isSelected(elementId)
+				if (!wasSelected) {
+					this.canvas.selectionManager.replaceSelection([elementId])
+					this.armPendingDirectDrag(input.nativeEvent, elementId, {
+						pointerId: input.pointerId,
+						pointerType: input.pointerType,
+					})
+				} else if (this.canvas.selectionManager.getSelectionCount() > 1) {
+					this.armPendingMultiSelectionDrag(input.nativeEvent, elementId, {
+						pointerId: input.pointerId,
+						pointerType: input.pointerType,
+					})
+				} else {
+					this.armPendingDirectDrag(input.nativeEvent, elementId, {
+						pointerId: input.pointerId,
+						pointerType: input.pointerType,
+					})
+				}
+			}
+			return
+		}
+
+		if (this.isTransformerHit(clickedNode)) {
+			return
+		}
+
+		if (clickedNode.name() === "multi-selection-proxy") {
+			if (this.handleTouchMultiSelectionProxyDown(input, isMultiSelect)) {
+				return
+			}
+		}
+
+		if (
+			CropRenderer.isCropOverlayNode(clickedNode) ||
+			ExtendRenderer.isExtendOverlayNode(clickedNode)
+		) {
+			return
+		}
+
+		// 触屏空白拖动交给 ViewportController 平移，不进入 PC 框选流程。
+		this.clearPendingDirectDrag()
+		if (!isMultiSelect) {
+			this.canvas.selectionManager.deselectAll()
+		}
+	}
+
+	private handleTouchMultiSelectionProxyDown(
+		input: CanvasPointerInput,
+		isMultiSelect: boolean,
+	): boolean {
+		const elementId = pickSelectedElementIdAtStagePointer(this.canvas, input.stage)
+		if (elementId) {
+			if (!isMultiSelect) {
+				this.armPendingMultiSelectionDrag(input.nativeEvent, elementId, {
+					pointerId: input.pointerId,
+					pointerType: input.pointerType,
+				})
+			}
+			return true
+		}
+
+		this.clearPendingDirectDrag()
+		if (!isMultiSelect) {
+			this.canvas.selectionManager.deselectAll()
+		}
+		return true
 	}
 
 	/**
@@ -192,6 +376,71 @@ export class SelectionTool extends BaseTool {
 			this.startPoint = null
 			this.isMultiSelectMode = false
 		}
+	}
+
+	private handleElementContextMenu(): void {
+		this.clearPendingDirectDrag()
+	}
+
+	private handleViewportGesture(event: { data: { active: boolean } }): void {
+		this.isViewportGestureActive = event.data.active
+		if (!event.data.active) {
+			return
+		}
+
+		this.clearPendingDirectDrag()
+		this.cancelSelectionInteraction()
+		this.stopSelectedElementDrag()
+		this.canvas.transformManager.cancelActiveTransformDrag()
+	}
+
+	private isViewportGestureInProgress(): boolean {
+		return (
+			this.isViewportGestureActive ||
+			this.canvas.viewportController?.isViewportGestureActive?.() === true
+		)
+	}
+
+	private stopSelectedElementDrag(): void {
+		this.canvas.selectionManager.getSelectedIds().forEach((elementId) => {
+			const node = this.canvas.elementManager.getElementInstance(elementId)?.getNode()
+			if (node?.isDragging()) {
+				node.stopDrag()
+			}
+		})
+	}
+
+	private cancelSelectionInteraction(): void {
+		if (!this.isSelecting) {
+			return
+		}
+
+		window.removeEventListener("mouseup", this.handleWindowMouseUp)
+		window.removeEventListener("mousemove", this.handleWindowMouseMove)
+		this.stopEdgeScroll()
+		this.clearToolSelectionRect()
+		this.isSelecting = false
+		this.canvas.eventEmitter.emit({ type: "selection:end", data: undefined })
+		this.startPoint = null
+		this.isMultiSelectMode = false
+	}
+
+	private isDecoratorNode(node: Konva.Node): boolean {
+		let currentNode: Konva.Node | null = node
+		while (currentNode) {
+			if (currentNode.name().startsWith("decorator-")) {
+				return true
+			}
+			currentNode = currentNode.getParent()
+		}
+		return false
+	}
+
+	private isTransformerHit(node: Konva.Node): boolean {
+		return (
+			node.getClassName() === "Transformer" ||
+			node.getParent()?.getClassName() === "Transformer"
+		)
 	}
 
 	private isPointerInsideSelectedElementArea(pointerPos: { x: number; y: number }): boolean {
@@ -433,7 +682,11 @@ export class SelectionTool extends BaseTool {
 		this.isMultiSelectMode = false
 	}
 
-	private armPendingDirectDrag(event: MouseEvent, elementId: string): void {
+	private armPendingDirectDrag(
+		event: CanvasNativePointerEvent,
+		elementId: string,
+		options?: { pointerId?: number; pointerType?: CanvasPointerType },
+	): void {
 		this.clearPendingDirectDrag()
 
 		const node = this.canvas.elementManager.getElementInstance(elementId)?.getNode()
@@ -441,17 +694,35 @@ export class SelectionTool extends BaseTool {
 			return
 		}
 
+		const client = getClientPointFromNativeEvent(event)
+		if (!client) return
+
+		const pointerType = options?.pointerType ?? this.getPointerTypeFromNativeEvent(event)
+		const pointerId = options?.pointerId ?? this.getPointerIdFromNativeEvent(event)
+		const useWindowListeners = pointerType === "mouse"
+
+		this.cancelLongPressForDrag(pointerType)
+
 		this.pendingDirectDrag = {
 			mode: "single",
 			elementId,
-			startClientX: event.clientX,
-			startClientY: event.clientY,
+			startClientX: client.x,
+			startClientY: client.y,
+			pointerId,
+			pointerType,
+			useWindowListeners,
 		}
-		window.addEventListener("mousemove", this.handlePendingDirectDragMove)
-		window.addEventListener("mouseup", this.handlePendingDirectDragEnd)
+		if (useWindowListeners) {
+			window.addEventListener("mousemove", this.handlePendingDirectDragMove)
+			window.addEventListener("mouseup", this.handlePendingDirectDragEnd)
+		}
 	}
 
-	private armPendingMultiSelectionDrag(event: MouseEvent, elementId: string): void {
+	private armPendingMultiSelectionDrag(
+		event: CanvasNativePointerEvent,
+		elementId: string,
+		options?: { pointerId?: number; pointerType?: CanvasPointerType },
+	): void {
 		this.clearPendingDirectDrag()
 
 		const selectedIds = this.canvas.selectionManager.getSelectedIds()
@@ -459,33 +730,71 @@ export class SelectionTool extends BaseTool {
 			return
 		}
 
+		const client = getClientPointFromNativeEvent(event)
+		if (!client) return
+
+		const pointerType = options?.pointerType ?? this.getPointerTypeFromNativeEvent(event)
+		const pointerId = options?.pointerId ?? this.getPointerIdFromNativeEvent(event)
+		const useWindowListeners = pointerType === "mouse"
+
+		this.cancelLongPressForDrag(pointerType)
+
 		this.canvas.transformManager.beginTransformInteractionIntent(selectedIds)
 		this.pendingDirectDrag = {
 			mode: "multi-selection",
 			elementId,
-			startClientX: event.clientX,
-			startClientY: event.clientY,
+			startClientX: client.x,
+			startClientY: client.y,
+			pointerId,
+			pointerType,
+			useWindowListeners,
 		}
-		window.addEventListener("mousemove", this.handlePendingDirectDragMove)
-		window.addEventListener("mouseup", this.handlePendingDirectDragEnd)
+		if (useWindowListeners) {
+			window.addEventListener("mousemove", this.handlePendingDirectDragMove)
+			window.addEventListener("mouseup", this.handlePendingDirectDragEnd)
+		}
 	}
 
 	private handlePendingDirectDragMove(event: MouseEvent): void {
+		this.processPendingDirectDrag(event, { x: event.clientX, y: event.clientY }, event.buttons)
+	}
+
+	private handlePendingDirectDragInput(input: CanvasPointerInput): void {
+		const pending = this.pendingDirectDrag
+		if (!pending || pending.useWindowListeners) return
+		if (pending.pointerId !== undefined && pending.pointerId !== input.pointerId) return
+
+		if (input.activePointerCount > 1 || input.type === "cancel") {
+			this.clearPendingDirectDrag()
+			return
+		}
+
+		this.processPendingDirectDrag(input.nativeEvent, input.client, input.buttons)
+	}
+
+	private processPendingDirectDrag(
+		event: CanvasNativePointerEvent,
+		client: { x: number; y: number },
+		buttons: number,
+	): void {
 		const pending = this.pendingDirectDrag
 		if (!pending) return
 
-		if (event.buttons === 0) {
+		if (buttons === 0) {
 			this.clearPendingDirectDrag()
 			return
 		}
 
 		const distance = Math.max(
-			Math.abs(event.clientX - pending.startClientX),
-			Math.abs(event.clientY - pending.startClientY),
+			Math.abs(client.x - pending.startClientX),
+			Math.abs(client.y - pending.startClientY),
 		)
 
 		if (pending.mode === "multi-selection") {
-			const dragDistance = this.canvas.transformManager.getMultiSelectionDragDistance()
+			const dragDistance = this.getDragActivationDistance(
+				this.canvas.transformManager.getMultiSelectionDragDistance(),
+				pending.pointerType,
+			)
 			if (distance < dragDistance) {
 				return
 			}
@@ -510,7 +819,10 @@ export class SelectionTool extends BaseTool {
 			return
 		}
 
-		const dragDistance = node.dragDistance()
+		const dragDistance = this.getDragActivationDistance(
+			node.dragDistance(),
+			pending.pointerType,
+		)
 		if (distance < dragDistance) {
 			return
 		}
@@ -527,11 +839,48 @@ export class SelectionTool extends BaseTool {
 		if (!this.pendingDirectDrag) return
 		const pending = this.pendingDirectDrag
 		this.pendingDirectDrag = null
-		window.removeEventListener("mousemove", this.handlePendingDirectDragMove)
-		window.removeEventListener("mouseup", this.handlePendingDirectDragEnd)
+		if (pending.useWindowListeners) {
+			window.removeEventListener("mousemove", this.handlePendingDirectDragMove)
+			window.removeEventListener("mouseup", this.handlePendingDirectDragEnd)
+		}
 		if (pending.mode === "multi-selection" && !options?.keepTransformIntent) {
 			this.canvas.transformManager.clearTransformInteractionIntent()
 		}
+	}
+
+	private getDragActivationDistance(distance: number, pointerType?: CanvasPointerType): number {
+		return pointerType === "touch" ? Math.max(distance, TOUCH_DIRECT_DRAG_DISTANCE) : distance
+	}
+
+	private isMultiSelectInput(input: CanvasPointerInput): boolean {
+		return isMultiSelectEvent({
+			metaKey: input.modifiers.meta,
+			ctrlKey: input.modifiers.ctrl,
+			shiftKey: input.modifiers.shift,
+		})
+	}
+
+	private cancelLongPressForDrag(pointerType?: CanvasPointerType): void {
+		if (pointerType === "mouse") return
+		this.canvas.inputManager.cancelLongPress()
+	}
+
+	private getPointerTypeFromNativeEvent(event: CanvasNativePointerEvent): CanvasPointerType {
+		if ("pointerType" in event) {
+			if (event.pointerType === "touch" || event.pointerType === "pen") {
+				return event.pointerType
+			}
+		}
+		if ("touches" in event) return "touch"
+		return "mouse"
+	}
+
+	private getPointerIdFromNativeEvent(event: CanvasNativePointerEvent): number | undefined {
+		if ("pointerId" in event) return event.pointerId
+		if ("changedTouches" in event) {
+			return event.changedTouches[0]?.identifier ?? event.touches[0]?.identifier
+		}
+		return undefined
 	}
 
 	/**

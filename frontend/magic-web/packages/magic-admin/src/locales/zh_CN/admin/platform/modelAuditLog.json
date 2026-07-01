@@ -19,6 +19,7 @@
 	"magicTopicId": "Magic 话题 ID",
 	"modelDisplayName": "模型展示名",
 	"modelVersion": "模型版本",
+	"officialModel": "官方模型",
 	"operationTime": "操作时间",
 	"organizationCode": "组织编码",
 	"phone": "手机号",

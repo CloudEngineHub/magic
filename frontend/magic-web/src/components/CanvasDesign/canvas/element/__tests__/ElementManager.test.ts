@@ -15,7 +15,21 @@ interface DragManagerHarness {
 		}
 		isKeepRatioModifierPressed: () => boolean
 	}
+	elements?: Map<
+		string,
+		{
+			getData: () => LayerElement
+			getNode?: () => Konva.Node
+			setDraggable: ReturnType<typeof vi.fn>
+			setListening: ReturnType<typeof vi.fn>
+		}
+	>
 	canDragElement: (element: LayerElement) => boolean
+	canListenElement: () => boolean
+	disableElementDragging: () => void
+	disableElementDraggingOnly: () => void
+	enableElementDragging: () => void
+	setViewportGestureDraggingDisabled: (disabled: boolean) => void
 }
 
 function createManager(options: { selectedIds?: string[]; canTransform?: boolean } = {}) {
@@ -63,6 +77,118 @@ describe("ElementManager drag eligibility", () => {
 		const manager = createManager({ selectedIds: ["element-1", "element-2"] })
 
 		expect(manager.canDragElement(createElement("element-3"))).toBe(true)
+	})
+
+	it("keeps rerendered nodes non-interactive while element dragging is disabled", () => {
+		const manager = createManager()
+		const elementData = createElement("element-1")
+		const element = {
+			getData: () => elementData,
+			setDraggable: vi.fn(),
+			setListening: vi.fn(),
+		}
+		manager.elements = new Map([["element-1", element]])
+
+		manager.disableElementDragging()
+
+		expect(manager.canDragElement(elementData)).toBe(false)
+		expect(manager.canListenElement()).toBe(false)
+		expect(element.setDraggable).toHaveBeenLastCalledWith(false)
+		expect(element.setListening).toHaveBeenLastCalledWith(false)
+
+		manager.enableElementDragging()
+
+		expect(manager.canDragElement(elementData)).toBe(true)
+		expect(manager.canListenElement()).toBe(true)
+		expect(element.setDraggable).toHaveBeenLastCalledWith(true)
+		expect(element.setListening).toHaveBeenLastCalledWith(true)
+	})
+
+	it("keeps listening enabled when only element dragging is disabled", () => {
+		const manager = createManager()
+		const elementData = createElement("element-1")
+		const element = {
+			getData: () => elementData,
+			setDraggable: vi.fn(),
+			setListening: vi.fn(),
+		}
+		manager.elements = new Map([["element-1", element]])
+
+		manager.disableElementDraggingOnly()
+
+		expect(manager.canDragElement(elementData)).toBe(false)
+		expect(manager.canListenElement()).toBe(true)
+		expect(element.setDraggable).toHaveBeenLastCalledWith(false)
+		expect(element.setListening).not.toHaveBeenCalled()
+	})
+
+	it("stops active element drags and disables draggable during viewport gesture", () => {
+		const manager = createManager()
+		const elementOneData = createElement("element-1")
+		const elementTwoData = createElement("element-2")
+		const nodeOne = new Konva.Group()
+		const nodeTwo = new Konva.Group()
+		vi.spyOn(nodeOne, "isDragging").mockReturnValue(true)
+		vi.spyOn(nodeTwo, "isDragging").mockReturnValue(true)
+		const stopDragOne = vi.spyOn(nodeOne, "stopDrag").mockImplementation(() => undefined)
+		const stopDragTwo = vi.spyOn(nodeTwo, "stopDrag").mockImplementation(() => undefined)
+		const elementOne = {
+			getData: () => elementOneData,
+			getNode: () => nodeOne,
+			setDraggable: vi.fn(),
+			setListening: vi.fn(),
+		}
+		const elementTwo = {
+			getData: () => elementTwoData,
+			getNode: () => nodeTwo,
+			setDraggable: vi.fn(),
+			setListening: vi.fn(),
+		}
+		manager.elements = new Map([
+			["element-1", elementOne],
+			["element-2", elementTwo],
+		])
+
+		manager.setViewportGestureDraggingDisabled(true)
+
+		expect(stopDragOne).toHaveBeenCalledTimes(1)
+		expect(stopDragTwo).toHaveBeenCalledTimes(1)
+		expect(manager.canDragElement(elementOneData)).toBe(false)
+		expect(manager.canDragElement(elementTwoData)).toBe(false)
+		expect(elementOne.setDraggable).toHaveBeenLastCalledWith(false)
+		expect(elementTwo.setDraggable).toHaveBeenLastCalledWith(false)
+
+		manager.setViewportGestureDraggingDisabled(false)
+
+		expect(manager.canDragElement(elementOneData)).toBe(true)
+		expect(manager.canDragElement(elementTwoData)).toBe(true)
+		expect(elementOne.setDraggable).toHaveBeenLastCalledWith(true)
+		expect(elementTwo.setDraggable).toHaveBeenLastCalledWith(true)
+	})
+
+	it("unsubscribes viewport gesture listener on destroy", () => {
+		const manager = Object.create(ElementManager.prototype) as ElementManager
+		const unsubscribe = vi.fn()
+		Object.assign(
+			manager as unknown as {
+				clear: ReturnType<typeof vi.fn>
+				elements: Map<string, never>
+				viewportGestureUnsubscribe?: () => void
+			},
+			{
+				clear: vi.fn(),
+				elements: new Map(),
+				viewportGestureUnsubscribe: unsubscribe,
+			},
+		)
+
+		manager.destroy()
+
+		expect(unsubscribe).toHaveBeenCalledTimes(1)
+		expect(
+			(manager as unknown as { viewportGestureUnsubscribe?: () => void })
+				.viewportGestureUnsubscribe,
+		).toBeUndefined()
 	})
 })
 

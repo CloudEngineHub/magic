@@ -8,6 +8,7 @@ declare(strict_types=1);
 namespace App\Application\Flow\ExecuteManager;
 
 use App\Application\Flow\ExecuteManager\Archive\FlowExecutorArchiveCloud;
+use App\Application\Flow\ExecuteManager\Config\FlowBreakpointRetryConfig;
 use App\Application\Flow\ExecuteManager\ExecutionData\ExecutionData;
 use App\Application\Flow\ExecuteManager\ExecutionData\ExecutionDataCollector;
 use App\Application\Flow\ExecuteManager\ExecutionData\ExecutionFlowCollector;
@@ -507,6 +508,10 @@ class MagicFlowExecutor
 
     private function archiveToCloud(VertexResult $vertexResult): void
     {
+        // 断点重试关闭时，不再保存执行归档。
+        if (! FlowBreakpointRetryConfig::isEnabled()) {
+            return;
+        }
         // 已经运行过的，也不归档
         if ($vertexResult->hasDebugLog('history_vertex_result')) {
             return;

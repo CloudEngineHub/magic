@@ -35,11 +35,6 @@ export interface RecycleBinParentInfo {
 	relative_file_path?: string
 }
 
-export interface RecycleBinDeletedByUser {
-	nickname: string
-	avatar: string
-}
-
 export interface RecycleBinItem {
 	id: string
 	resourceId: string
@@ -47,8 +42,6 @@ export interface RecycleBinItem {
 	category: "workspaces" | "projects" | "topics" | "files"
 	fileKind?: "file" | "folder"
 	title: string
-	deletedBy: string
-	deletedByUser?: RecycleBinDeletedByUser
 	path: string
 	deletedOn: string
 	remainingDays: number
@@ -172,14 +165,6 @@ export function mapRecycleBinItem(item: RecycleBinListItemDto, t: TFunction): Re
 		relativeFilePath,
 		resourceName: item.resource_name,
 	})
-	const deletedBy =
-		item.deleted_by_user?.nickname ?? item.deleted_by_name ?? item.deleted_by ?? ""
-	const deletedByUser = item.deleted_by_user
-		? {
-				nickname: item.deleted_by_user.nickname,
-				avatar: item.deleted_by_user.avatar || item.deleted_by_user.avatar_url || "",
-			}
-		: undefined
 	const resourceType = toResourceType(item.resource_type)
 	const fileKind =
 		resourceType === RESOURCE_TYPE.FILE
@@ -198,8 +183,6 @@ export function mapRecycleBinItem(item: RecycleBinListItemDto, t: TFunction): Re
 			resourceType,
 			t,
 		}),
-		deletedBy,
-		deletedByUser,
 		path,
 		deletedOn: item.deleted_at ?? "",
 		remainingDays: item.remaining_days ?? 0,

@@ -5,6 +5,8 @@ import type {
 	ElementType,
 	ImageElement,
 	CanvasFileElement,
+	CanvasDeviceInfo,
+	CanvasDeviceFormFactor,
 } from "../types"
 import type { UploadFileResponse, ImageModelItem } from "../../types.magic"
 import { ElementTypeEnum } from "../types"
@@ -415,17 +417,68 @@ export function toPlainObject<T>(value: T): T {
 	return JSON.parse(JSON.stringify(value)) as T
 }
 
-// utils.ts 中添加
-export function isMobile(): boolean {
+export function isTouchDevice(): boolean {
 	return (
-		/Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
-			navigator.userAgent,
-		) || window.innerWidth < 768
+		(typeof window !== "undefined" && "ontouchstart" in window) ||
+		(typeof navigator !== "undefined" && navigator.maxTouchPoints > 0)
 	)
 }
 
-export function isTouchDevice(): boolean {
-	return "ontouchstart" in window || navigator.maxTouchPoints > 0
+function matchesMedia(query: string): boolean {
+	if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
+		return false
+	}
+	return window.matchMedia(query).matches
+}
+
+function getUserAgent(): string {
+	return typeof navigator === "undefined" ? "" : navigator.userAgent
+}
+
+function getViewportWidth(): number {
+	return typeof window === "undefined" ? 1024 : window.innerWidth
+}
+
+function getDefaultFormFactor(touch: boolean): CanvasDeviceFormFactor {
+	const userAgent = getUserAgent()
+
+	if (/iPad|Tablet|PlayBook|Silk/i.test(userAgent)) {
+		return "tablet"
+	}
+
+	if (/Android/i.test(userAgent) && !/Mobile/i.test(userAgent)) {
+		return "tablet"
+	}
+
+	if (/Macintosh/i.test(userAgent) && touch && getViewportWidth() <= 1366) {
+		return "tablet"
+	}
+
+	if (/Android|webOS|iPhone|iPod|BlackBerry|IEMobile|Opera Mini/i.test(userAgent)) {
+		return "phone"
+	}
+
+	if (touch && getViewportWidth() >= 768 && getViewportWidth() < 1024) {
+		return "tablet"
+	}
+
+	return "desktop"
+}
+
+export function getDefaultCanvasDeviceInfo(): CanvasDeviceInfo {
+	const touch = isTouchDevice()
+	const hover = matchesMedia("(hover: hover)")
+	const coarsePointer = matchesMedia("(pointer: coarse)") || (touch && !hover)
+
+	return {
+		formFactor: getDefaultFormFactor(touch),
+		layout: getViewportWidth() < 768 ? "compact" : "regular",
+		input: {
+			touch,
+			coarsePointer,
+			hover,
+		},
+	}
 }
 
 /**

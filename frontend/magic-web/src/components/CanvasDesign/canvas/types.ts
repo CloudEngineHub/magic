@@ -50,6 +50,20 @@ export interface ExtendSession {
 /**
  * Canvas配置
  */
+export type CanvasDeviceFormFactor = "phone" | "tablet" | "desktop"
+
+export type CanvasDeviceLayout = "compact" | "regular"
+
+export interface CanvasDeviceInfo {
+	formFactor: CanvasDeviceFormFactor
+	layout: CanvasDeviceLayout
+	input: {
+		touch: boolean
+		coarsePointer: boolean
+		hover: boolean
+	}
+}
+
 export interface CanvasConfig {
 	/** 用于挂载Konva画布的DOM元素 */
 	element: HTMLDivElement
@@ -66,8 +80,8 @@ export interface CanvasConfig {
 	}
 	/** Plugin configuration injected by the host application. */
 	plugins?: CanvasDesignPluginModuleConfig
-	/** 判断是否为移动端的函数，如果未提供则使用默认检测 */
-	getIsMobile?: () => boolean
+	/** 获取设备形态、布局和输入能力，如果未提供则使用默认检测 */
+	getDevice?: () => CanvasDeviceInfo
 	/** 翻译函数 */
 	t?: TFunction
 }

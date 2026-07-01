@@ -212,6 +212,10 @@ function getBaseViteConfig(): UserConfig {
 					),
 				},
 				{
+					find: "@dtyq/magic-admin/locales",
+					replacement: resolve(__dirname, "packages/magic-admin/src/locales/index.ts"),
+				},
+				{
 					find: "@dtyq/magic-admin",
 					replacement: resolve(__dirname, "packages/magic-admin/src/index.ts"),
 				},

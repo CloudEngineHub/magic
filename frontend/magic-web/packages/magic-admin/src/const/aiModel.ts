@@ -1,5 +1,3 @@
-import i18next from "i18next"
-
 export namespace AiModel {
 	/** 业务类型 */
 	export enum BusinessType {
@@ -222,16 +220,6 @@ export namespace AiModel {
 		unRelease = 5,
 		/** 已发布 */
 		release = 6,
-	}
-
-	/** 企业发布状态映射 */
-	export const EnterpriseStatusMap = {
-		[EnterpriseStatus.unRelease]: i18next.t("agentConfig.unPublished", {
-			ns: "admin/ai/agent",
-		}),
-		[EnterpriseStatus.release]: i18next.t("agentConfig.published", {
-			ns: "admin/ai/agent",
-		}),
 	}
 
 	/** 平台发布状态 */

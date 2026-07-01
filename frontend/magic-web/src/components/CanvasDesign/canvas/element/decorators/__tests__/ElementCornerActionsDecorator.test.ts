@@ -1,6 +1,7 @@
 import Konva from "konva"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { ElementCornerActionsDecorator } from "../ElementCornerActionsDecorator"
+import { COLORS } from "../../elements/ImageElement.config"
 
 function createEventEmitterMock() {
 	const handlers = new Map<string, Array<(event: { data?: unknown }) => void>>()
@@ -48,15 +49,27 @@ function createStageGroup() {
 	return { container, group, stage }
 }
 
-function createCanvasMock(options: { hoveredElementId?: string | null; selected?: boolean } = {}) {
+function createCanvasMock(
+	options: { hoveredElementId?: string | null; selected?: boolean; touch?: boolean } = {},
+) {
 	const { handlers, eventEmitter } = createEventEmitterMock()
 	let hoveredElementId = options.hoveredElementId ?? null
+	let selected = options.selected ?? false
 
 	return {
 		canvas: {
 			cursorManager: {
 				restoreToolCursor: vi.fn(),
 				setTemporary: vi.fn(),
+			},
+			deviceInfo: {
+				formFactor: "desktop",
+				layout: "regular",
+				input: {
+					touch: options.touch ?? false,
+					coarsePointer: options.touch ?? false,
+					hover: !(options.touch ?? false),
+				},
 			},
 			eventEmitter,
 			hoverManager: {
@@ -66,7 +79,7 @@ function createCanvasMock(options: { hoveredElementId?: string | null; selected?
 				canUseSelectionToolAffordance: vi.fn(() => true),
 			},
 			selectionManager: {
-				isSelected: vi.fn(() => options.selected ?? false),
+				isSelected: vi.fn(() => selected),
 				replaceSelection: vi.fn(),
 			},
 		},
@@ -74,7 +87,30 @@ function createCanvasMock(options: { hoveredElementId?: string | null; selected?
 		setHoveredElementId: (nextElementId: string | null) => {
 			hoveredElementId = nextElementId
 		},
+		setSelected: (nextSelected: boolean) => {
+			selected = nextSelected
+		},
 	}
+}
+
+function createDecorator(
+	group: Konva.Group,
+	canvas: ReturnType<typeof createCanvasMock>["canvas"],
+) {
+	return new ElementCornerActionsDecorator(group, {
+		elementId: "image-1",
+		canvas: canvas as never,
+		width: 120,
+		height: 80,
+		actions: [
+			{
+				key: "fullscreen",
+				placement: "bottom-right",
+				icon: "fullscreen",
+				onClick: vi.fn(),
+			},
+		],
+	})
 }
 
 describe("ElementCornerActionsDecorator", () => {
@@ -95,20 +131,7 @@ describe("ElementCornerActionsDecorator", () => {
 	it("restores visible actions from the current hovered element when recreated", () => {
 		const { group, stage } = createStageGroup()
 		const { canvas } = createCanvasMock({ hoveredElementId: "image-1" })
-		const decorator = new ElementCornerActionsDecorator(group, {
-			elementId: "image-1",
-			canvas: canvas as never,
-			width: 120,
-			height: 80,
-			actions: [
-				{
-					key: "fullscreen",
-					placement: "bottom-right",
-					icon: "fullscreen",
-					onClick: vi.fn(),
-				},
-			],
-		})
+		const decorator = createDecorator(group, canvas)
 
 		decorator.create()
 
@@ -122,20 +145,7 @@ describe("ElementCornerActionsDecorator", () => {
 	it("updates action visibility when global hover changes", () => {
 		const { group, stage } = createStageGroup()
 		const { canvas, handlers, setHoveredElementId } = createCanvasMock()
-		const decorator = new ElementCornerActionsDecorator(group, {
-			elementId: "image-1",
-			canvas: canvas as never,
-			width: 120,
-			height: 80,
-			actions: [
-				{
-					key: "fullscreen",
-					placement: "bottom-right",
-					icon: "fullscreen",
-					onClick: vi.fn(),
-				},
-			],
-		})
+		const decorator = createDecorator(group, canvas)
 
 		decorator.create()
 		const rootGroup = group.findOne(".decorator-corner-actions")
@@ -148,6 +158,68 @@ describe("ElementCornerActionsDecorator", () => {
 		setHoveredElementId(null)
 		handlers.get("element:hover")?.[0]?.({ data: { elementId: null } })
 		expect(rootGroup?.visible()).toBe(false)
+
+		decorator.destroy()
+		stage.destroy()
+	})
+
+	it("shows actions for a selected element on touch devices", () => {
+		const { group, stage } = createStageGroup()
+		const { canvas, handlers, setSelected } = createCanvasMock({ touch: true })
+		const decorator = createDecorator(group, canvas)
+
+		decorator.create()
+		const rootGroup = group.findOne(".decorator-corner-actions")
+		expect(rootGroup?.visible()).toBe(false)
+
+		setSelected(true)
+		handlers.get("element:select")?.[0]?.({ data: { elementIds: ["image-1"] } })
+		expect(rootGroup?.visible()).toBe(true)
+
+		decorator.destroy()
+		stage.destroy()
+	})
+
+	it("hides touch actions when deselected or dragging starts", () => {
+		const { group, stage } = createStageGroup()
+		const { canvas, handlers, setSelected } = createCanvasMock({ selected: true, touch: true })
+		const decorator = createDecorator(group, canvas)
+
+		decorator.create()
+		const rootGroup = group.findOne(".decorator-corner-actions")
+		expect(rootGroup?.visible()).toBe(true)
+
+		setSelected(false)
+		handlers.get("element:deselect")?.[0]?.({})
+		expect(rootGroup?.visible()).toBe(false)
+
+		setSelected(true)
+		handlers.get("element:select")?.[0]?.({ data: { elementIds: ["image-1"] } })
+		expect(rootGroup?.visible()).toBe(true)
+
+		group.fire("dragstart")
+		expect(rootGroup?.visible()).toBe(false)
+
+		decorator.destroy()
+		stage.destroy()
+	})
+
+	it("uses touch active feedback without entering the mouse hover cursor path", () => {
+		const { group, stage } = createStageGroup()
+		const { canvas } = createCanvasMock({ selected: true, touch: true })
+		const decorator = createDecorator(group, canvas)
+
+		decorator.create()
+		const buttonBg = group.findOne<Konva.Rect>(".decorator-corner-action-fullscreen-button")
+		expect(buttonBg).toBeTruthy()
+
+		buttonBg?.fire("touchstart", { evt: new Event("touchstart") })
+		expect(buttonBg?.fill()).toBe(COLORS.BUTTON_BG_HOVER)
+		expect(canvas.cursorManager.setTemporary).not.toHaveBeenCalled()
+
+		buttonBg?.fire("touchend", { evt: new Event("touchend") })
+		expect(buttonBg?.fill()).toBe(COLORS.BUTTON_BG)
+		expect(canvas.cursorManager.restoreToolCursor).not.toHaveBeenCalled()
 
 		decorator.destroy()
 		stage.destroy()

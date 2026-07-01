@@ -8,6 +8,7 @@ declare(strict_types=1);
 namespace App\Application\Flow\ExecuteManager\Crontab;
 
 use App\Application\Flow\ExecuteManager\Archive\FlowExecutorArchiveCloud;
+use App\Application\Flow\ExecuteManager\Config\FlowBreakpointRetryConfig;
 use App\Application\Flow\ExecuteManager\ExecutionData\ExecutionData;
 use App\Application\Flow\ExecuteManager\MagicFlowExecutor;
 use App\Domain\Flow\Entity\MagicFlowExecuteLogEntity;
@@ -34,6 +35,11 @@ class FlowBreakpointRetryCrontab
 
     public function execute(): void
     {
+        // 断点重试关闭时，不再扫描超时流程。
+        if (! FlowBreakpointRetryConfig::isEnabled()) {
+            return;
+        }
+
         $flowDataIsolation = FlowDataIsolation::create()->disabled();
 
         $page = new Page(1, 200);

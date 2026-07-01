@@ -9,8 +9,6 @@ export interface RecycleBinItemData {
 	id: string
 	type: "workspace" | "project" | "topic" | "file" | "folder"
 	title: string
-	deletedBy: string
-	deletedByUser?: { nickname: string; avatar: string }
 	validDays: number
 	resourceId: string
 	resourceType: number

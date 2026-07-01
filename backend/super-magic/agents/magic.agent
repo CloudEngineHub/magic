@@ -22,8 +22,12 @@ tools:
   - multi_edit_file_range
   - delete_files
   - ask_user
+  - agent_list
+  - call_subagent
+  - wait_for_subagents
 skills:
   system_skills:
+    - name: subagents
     - name: skill-vetter
     - name: using-mcp
     - name: env-manager
@@ -33,13 +37,12 @@ skills:
     - name: deep-research
     - name: using-llm
     - name: using-cron
-    - name: subagents
+    - name: search-agents
     - name: user-info
     - name: lark-cli
     - name: dingtalk-cli
     - name: teamshare-cli
     - name: micro-app-architect
-    - name: agent-info
     - name: document-converter
     - name: using-oauth2
   workspace_skills: "*"

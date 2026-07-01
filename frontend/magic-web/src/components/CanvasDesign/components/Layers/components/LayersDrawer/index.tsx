@@ -125,7 +125,9 @@ export default function LayersDrawer() {
 	const [layerSearchValue, setLayerSearchValue] = useState("")
 
 	// 订阅并获取画布数据
-	const elements = useCanvasData((manager) => manager.getAllElements())
+	const elements = useCanvasData((manager) => manager.getAllElements(), ["element:change"], {
+		shouldUpdateOnElementChange: (event) => event.data?.phase !== "transient",
+	})
 
 	// 获取操作方法
 	const { canvas } = useCanvas()

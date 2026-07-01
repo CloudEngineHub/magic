@@ -37,11 +37,17 @@ export const IMAGE_RESOURCE_DIAGNOSTIC_COUNTERS = [
 	"decodeAttemptCount",
 	"decodeSuccessCount",
 	"decodeFailedCount",
+	"decodedEvictedCount",
+	"decodedEvictedBytes",
+	"decodedEvictedLow",
+	"decodedEvictedPreview",
+	"decodedEvictedFull",
 	"staleRequestDropCount",
 	"getFileInfoCount",
 	"getFileInfoForceRefreshCount",
 	"backgroundRefreshQueuedCount",
 	"backgroundRefreshDedupedCount",
+	"backgroundRefreshSkippedCount",
 	"metadataProbeCount",
 	"metadataUnchangedCount",
 	"metadataChangedCount",
@@ -64,6 +70,14 @@ export interface ImageResourceCurrentSnapshot {
 	previewDecodedBytes: number
 	fullLoaded: number
 	fullDecodedBytes: number
+	decodedBytesTotal: number
+	decodedBudgetSoftBytes: number
+	decodedBudgetHardBytes: number
+	decodedLowLeaseCount: number
+	decodedPinnedBytes: number
+	decodedPinnedCount: number
+	decodedVisiblePinnedCount: number
+	decodedNearProtectedCount: number
 	bodyCacheCount: number
 	bodyCacheBytes: number
 	bodyFetchInFlightCount: number
@@ -112,6 +126,7 @@ export const VIDEO_RESOURCE_DIAGNOSTIC_COUNTERS = [
 	"getFileInfoForceRefreshCount",
 	"backgroundRefreshQueuedCount",
 	"backgroundRefreshDedupedCount",
+	"backgroundRefreshSkippedCount",
 	"metadataProbeCount",
 	"metadataUnchangedCount",
 	"metadataChangedCount",
