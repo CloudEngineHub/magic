@@ -45,7 +45,7 @@
 		"lh:install": "pnpm puppeteer browsers install chrome",
 		"lh:view": "pnpm dlx lighthouse --output html --output-path lh-audit.html --input-path lh-audit.json",
 		"lint": "eslint ./src --ext ts,tsx --format stylish --report-unused-disable-directives",
-		"lint:fix": "eslint ./src --ext js,jsx,ts,tsx --report-unused-disable-directives --max-warnings 0 --fix",
+		"lint:fix": "eslint ./src --ext js,jsx,ts,tsx --report-unused-disable-directives --max-warnings 0 --fix && prettier --write './src/**/*.json'",
 		"prepare": "pnpm run setup:hooks",
 		"preview": "vite preview",
 		"setup:hooks": "node scripts/install-git-hooks.cjs",

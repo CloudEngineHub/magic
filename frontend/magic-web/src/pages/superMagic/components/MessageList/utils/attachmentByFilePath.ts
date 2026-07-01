@@ -1,20 +1,17 @@
+import { extractFilePathMentions } from "@/pages/superMagic/utils/filePathMention"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
 
 /**
  * 从消息 content 中提取所有 [@file_path:...] 引用，按出现顺序返回路径数组。
  *
- * 支持格式：[@file_path:新闻报道/分类一/xxx.md]
+ * 支持格式：
+ * - [@file_path:新闻报道/分类一/xxx.md]
+ * - [@file_path:团队与管理/[当前]/xxx.md]
+ * - [@file_path:"路径/含裸]/特殊字符.html"]
  */
 export function extractFilePathsFromContent(content: string): string[] {
 	if (!content) return []
-	const regex = /\[@file_path:([^\]]+)\]/g
-	const paths: string[] = []
-	let match: RegExpExecArray | null
-	while ((match = regex.exec(content)) !== null) {
-		const path = match[1].trim()
-		if (path) paths.push(path)
-	}
-	return paths
+	return extractFilePathMentions(content).map((match) => match.path)
 }
 
 /**
