@@ -56,6 +56,25 @@ import {
 
 const IMAGE_CONTENT_NODE_NAME = "image-content"
 
+type ImageResourceStructureReason =
+	| "missing-image-node"
+	| "cleared-image-node"
+	| "error-to-image"
+	| "resource-failed"
+
+type ImageResourceMetadataReason = "non-fullsize-full" | "view-priority-blocked"
+
+type ImageResourceIgnoredReason =
+	| "full-resource-retained"
+	| "missing-target-resource"
+	| "same-target-resource"
+
+type ImageResourceReconcileResult =
+	| { type: "patched-content" }
+	| { type: "structure-required"; reason: ImageResourceStructureReason }
+	| { type: "metadata-only"; reason: ImageResourceMetadataReason }
+	| { type: "ignored"; reason: ImageResourceIgnoredReason }
+
 /**
  * 图片元素类
  */
@@ -258,14 +277,16 @@ export class ImageElement extends BaseElement<ImageElementData> {
 		)
 	}
 
-	private syncMountedImageContentNodeWithLoadedResource(): void {
+	private patchMountedImageContentNodeWithLoadedResource(): ImageResourceReconcileResult {
 		const imageNode = this.getMountedImageContentNode()
-		if (!imageNode) return
+		if (!imageNode) {
+			return { type: "structure-required", reason: "missing-image-node" }
+		}
 
 		if (!this.loadedImage) {
 			imageNode.destroy()
 			this.node?.getLayer()?.batchDraw()
-			return
+			return { type: "structure-required", reason: "cleared-image-node" }
 		}
 
 		imageNode.image(this.loadedImage)
@@ -277,6 +298,18 @@ export class ImageElement extends BaseElement<ImageElementData> {
 				: this.getSourceCrop(this.loadedImage),
 		)
 		imageNode.getLayer()?.batchDraw()
+		return { type: "patched-content" }
+	}
+
+	private commitImageResourceReconcile(result: ImageResourceReconcileResult): void {
+		if (result.type !== "structure-required") return
+		this.rerenderWhenTransformIdle()
+	}
+
+	private requireImageResourceStructure(
+		reason: ImageResourceStructureReason,
+	): ImageResourceReconcileResult {
+		return { type: "structure-required", reason }
 	}
 
 	private getVariantViewRank(variant: ImageResourceVariant | undefined): number {
@@ -323,19 +356,34 @@ export class ImageElement extends BaseElement<ImageElementData> {
 
 	private applyDisplayTargetVariant(variant: ImageResourceVariant): void {
 		this.targetDisplayResourceVariant = variant
-		if (this.loadedImageVariant === "full") return
+		if (this.loadedImageVariant === "full") {
+			this.commitImageResourceReconcile({
+				type: "ignored",
+				reason: "full-resource-retained",
+			})
+			return
+		}
 
 		const targetResource = this.peekExactResourceVariant(variant)
-		if (!targetResource) return
+		if (!targetResource) {
+			this.commitImageResourceReconcile({
+				type: "ignored",
+				reason: "missing-target-resource",
+			})
+			return
+		}
 		if (this.loadedImageVariant === targetResource.variant) {
+			this.commitImageResourceReconcile({
+				type: "ignored",
+				reason: "same-target-resource",
+			})
 			return
 		}
 
 		this.applyResourceToView(targetResource)
 		this.isResourceLoading = false
 		this.isErrorState = false
-		this.syncMountedImageContentNodeWithLoadedResource()
-		this.rerenderWhenTransformIdle()
+		this.commitImageResourceReconcile(this.patchMountedImageContentNodeWithLoadedResource())
 	}
 
 	override onMounted(): void {
@@ -749,20 +797,29 @@ export class ImageElement extends BaseElement<ImageElementData> {
 	private applyResourceFromEvent(resource: LoadedResource): void {
 		if (resource.variant === "full" && !resource.isFullSize) {
 			this.applyResourceMetadata(resource)
+			this.commitImageResourceReconcile({
+				type: "metadata-only",
+				reason: "non-fullsize-full",
+			})
 			return
 		}
 
 		const shouldApply = this.shouldApplyResourceToView(resource)
 		if (!shouldApply) {
 			this.applyResourceMetadata(resource)
+			this.commitImageResourceReconcile({
+				type: "metadata-only",
+				reason: "view-priority-blocked",
+			})
 			return
 		}
 
+		const wasErrorState = this.isErrorState
 		this.applyResourceToView(resource)
 		this.imageLoadFailureReason = null
 		this.isErrorState = false
 		this.lastAppliedLoadFailureSignature = null
-		this.syncMountedImageContentNodeWithLoadedResource()
+		const patchResult = this.patchMountedImageContentNodeWithLoadedResource()
 
 		if ((resource.variant === "preview" || resource.variant === "full") && this.ossSrcResolve) {
 			this.ossSrcResolve(resource.ossSrc)
@@ -778,7 +835,9 @@ export class ImageElement extends BaseElement<ImageElementData> {
 			})
 		}
 
-		this.rerenderWhenTransformIdle()
+		this.commitImageResourceReconcile(
+			wasErrorState ? this.requireImageResourceStructure("error-to-image") : patchResult,
+		)
 	}
 
 	/**
@@ -796,13 +855,13 @@ export class ImageElement extends BaseElement<ImageElementData> {
 		this.isResourceLoading = false
 		this.isErrorState = true
 		this.lastAppliedLoadFailureSignature = currentFailureSignature
-		this.syncMountedImageContentNodeWithLoadedResource()
+		this.patchMountedImageContentNodeWithLoadedResource()
 
 		if (isSameFailureAsLastApplied && isStableErrorState) {
 			return
 		}
 
-		this.rerenderWhenTransformIdle()
+		this.commitImageResourceReconcile(this.requireImageResourceStructure("resource-failed"))
 	}
 
 	private getResourceReplacementBeforeClose(
@@ -841,6 +900,7 @@ export class ImageElement extends BaseElement<ImageElementData> {
 	): void {
 		if (this.loadedImage !== closingImage) return
 
+		const wasErrorState = this.isErrorState
 		const replacementResource = this.getResourceReplacementBeforeClose(
 			closingImage,
 			closingVariant,
@@ -853,8 +913,14 @@ export class ImageElement extends BaseElement<ImageElementData> {
 
 		this.isResourceLoading = false
 		this.isErrorState = false
-		this.syncMountedImageContentNodeWithLoadedResource()
-		this.rerenderWhenTransformIdle()
+		const patchResult = this.patchMountedImageContentNodeWithLoadedResource()
+		this.commitImageResourceReconcile(
+			!replacementResource || wasErrorState
+				? this.requireImageResourceStructure(
+						wasErrorState ? "error-to-image" : "cleared-image-node",
+					)
+				: patchResult,
+		)
 	}
 
 	private getImageLoadErrorText(): string {
