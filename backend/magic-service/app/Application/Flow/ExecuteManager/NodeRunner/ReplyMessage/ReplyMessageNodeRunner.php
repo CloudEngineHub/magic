@@ -169,7 +169,7 @@ class ReplyMessageNodeRunner extends NodeRunner
         $LLMMemoryMessage->setOriginalContent(MagicFlowMessage::createContent($IMResponse));
         $LLMMemoryMessage->setTopicId($executionData->getTopicIdString());
         $LLMMemoryMessage->setRequestId($executionData->getId());
-        $LLMMemoryMessage->setUid($executionData->getAgentUserId() ?: $executionData->getOperator()->getUid());
+        $LLMMemoryMessage->setUid($executionData->getOperator()->getUid());
 
         $this->flowMemoryManager->reply(
             memoryType: $this->getMemoryType($executionData),
