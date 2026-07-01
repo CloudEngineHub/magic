@@ -11,6 +11,7 @@ use App\Domain\MagicBase\Entity\MagicBaseRowEntity;
 use App\Domain\MagicBase\Exception\MagicBaseExceptionBuilder;
 use App\Domain\MagicBase\Repository\Facade\MagicBaseRowStoreRepositoryInterface;
 use DateTimeInterface;
+use Hyperf\Logger\LoggerFactory;
 use LogicException;
 use Throwable;
 
@@ -40,7 +41,12 @@ readonly class MagicBaseMongoRowStoreRepository implements MagicBaseRowStoreRepo
                 $document,
                 ['upsert' => true]
             );
-        } catch (Throwable) {
+        } catch (Throwable $exception) {
+            di(LoggerFactory::class)->get(static::class)->error('MongoDB row storage write failed.', [
+                'exception' => $exception::class,
+                'message' => $exception->getMessage(),
+                'trace' => $exception->getTraceAsString(),
+            ]);
             MagicBaseExceptionBuilder::storageUnavailable('MongoDB row storage write failed.');
             throw new LogicException('Unreachable');
         }
