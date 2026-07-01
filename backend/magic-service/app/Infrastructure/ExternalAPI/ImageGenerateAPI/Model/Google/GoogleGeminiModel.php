@@ -334,6 +334,9 @@ class GoogleGeminiModel extends AbstractImageGenerate
             }
         }
 
+        $this->logger->error('Google Gemini生图错误', [
+            'result' => $result,
+        ]);
         throw new Exception(__('image_generate.response_missing_image_data'));
     }
 
@@ -396,6 +399,9 @@ class GoogleGeminiModel extends AbstractImageGenerate
         }
 
         if (! $hasValidImage) {
+            $this->logger->error('Google Gemini生图错误', [
+                'result' => $result,
+            ]);
             throw new Exception(__('image_generate.response_format_error_missing_image'));
         }
     }
