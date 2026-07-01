@@ -24,6 +24,7 @@ from dotenv import dotenv_values
 from agentlang.logger import get_logger
 from app.core.entity.tool.tool_result_types import TerminalToolResult
 from app.path_manager import PathManager
+from app.service.cli_manager import CliManagerService
 from app.service.env_manager import EnvFileStore, EnvIdentityResolver
 from app.tools.shell_exec_utils.bg_prompt_detector import extract_last_line, looks_like_prompt, scan_chunk_for_prompt
 from app.tools.shell_exec_utils.bg_task_models import BackgroundStartResult, PROMPT_QUIET_SECS, PROMPT_QUIET_SECS_SYNC
@@ -119,6 +120,8 @@ class ProcessExecutor:
                     logger.debug(f"已加载用户持久化环境变量，共 {len(user_env)} 个: {env_path}")
         except Exception as e:
             logger.warning(f"加载用户持久化环境变量失败: {e}")
+
+        CliManagerService.apply_path_to_env(env_vars)
 
         return env_vars
 

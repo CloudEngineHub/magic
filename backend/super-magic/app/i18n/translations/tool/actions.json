@@ -499,6 +499,18 @@
         "zh_CN": "查询环境变量",
         "en_US": "Query environment variable"
     },
+    "cli_manager_apply": {
+        "zh_CN": "持久化 CLI",
+        "en_US": "Persist CLI"
+    },
+    "cli_manager_list": {
+        "zh_CN": "查看持久化 CLI",
+        "en_US": "List persisted CLIs"
+    },
+    "cli_manager_remove": {
+        "zh_CN": "移除持久化 CLI",
+        "en_US": "Remove persisted CLI"
+    },
     "add_server": {
         "zh_CN": "添加新服务",
         "en_US": "Add New Service"
