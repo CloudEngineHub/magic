@@ -142,24 +142,6 @@ export function RecycleBinList({
 							</div>
 
 							<div className="mt-1 flex flex-wrap items-center gap-2 text-xs font-normal leading-normal text-muted-foreground">
-								{item.category === "files" && (
-									<>
-										<span className="flex items-center gap-1">
-											{item.deletedByUser?.avatar ? (
-												<img
-													src={item.deletedByUser.avatar}
-													alt=""
-													className="size-4 shrink-0 rounded-full object-cover"
-													referrerPolicy="no-referrer"
-												/>
-											) : null}
-											{t("recycleBin.item.deletedBy", {
-												username: item.deletedBy,
-											})}
-										</span>
-										<Separator orientation="vertical" className="h-3" />
-									</>
-								)}
 								<span>
 									{t("recycleBin.item.pathPrefix")}
 									{item.path}

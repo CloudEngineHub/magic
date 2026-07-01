@@ -50,3 +50,11 @@
 	white-space: nowrap;
 	text-overflow: ellipsis;
 }
+
+@media (hover: none), (pointer: coarse), (any-pointer: coarse) {
+	.topBar.layerHidden {
+		visibility: visible;
+		opacity: 1;
+		pointer-events: none;
+	}
+}

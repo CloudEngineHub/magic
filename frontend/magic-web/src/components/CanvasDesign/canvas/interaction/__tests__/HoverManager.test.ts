@@ -251,6 +251,30 @@ describe("HoverManager", () => {
 		manager.destroy()
 	})
 
+	it("clears and suppresses hover refresh while viewport gesture is active", () => {
+		const raf = installRafMock()
+		const { eventHandlers, getIntersection, manager, requestLayerDraw, target } =
+			createHoverManager({
+				geometryHitIds: ["element-1"],
+			})
+
+		manager.handleMouseMove({ target })
+		raf.flush()
+		expect(manager.hoveredElementId).toBe("element-1")
+
+		eventHandlers.get("viewport:gesture")?.[0]?.({
+			data: { active: true, source: "touch-pinch", pointerCount: 2 },
+		})
+		expect(manager.hoveredElementId).toBeNull()
+
+		getIntersection.mockReturnValue(null)
+		eventHandlers.get("viewport:scale")?.[0]?.({ data: { scale: 2 } })
+
+		expect(manager.hoveredElementId).toBeNull()
+		expect(requestLayerDraw).toHaveBeenCalledTimes(2)
+		manager.destroy()
+	})
+
 	it("does not set hover while extend mode is active", () => {
 		const raf = installRafMock()
 		const { manager, requestLayerDraw, target } = createHoverManager({

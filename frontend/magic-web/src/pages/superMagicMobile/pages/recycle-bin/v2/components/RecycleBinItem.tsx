@@ -8,8 +8,6 @@ export interface RecycleBinItemData {
 	id: string
 	type: "workspace" | "project" | "topic" | "file" | "folder"
 	title: string
-	deletedBy: string
-	deletedByUser?: { nickname: string; avatar: string }
 	/** ISO，用于列表展示删除时间 */
 	deletedAt?: string
 	validDays: number

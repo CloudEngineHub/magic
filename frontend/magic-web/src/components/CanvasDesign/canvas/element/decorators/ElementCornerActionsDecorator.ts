@@ -33,6 +33,7 @@ export class ElementCornerActionsDecorator {
 	private viewportScaleHandler?: () => void
 	private elementTransformHandler?: () => void
 	private hoverChangeHandler?: (event: { data: { elementId: string | null } }) => void
+	private selectHandler?: () => void
 	private deselectHandler?: () => void
 	private mouseEnterHandler?: () => void
 	private mouseLeaveHandler?: () => void
@@ -164,7 +165,7 @@ export class ElementCornerActionsDecorator {
 	}
 
 	private setupButtonEvents(buttonBg: Konva.Rect, action: ElementCornerActionConfig): void {
-		buttonBg.on("mousedown", (e) => {
+		const handleAction = (e: Konva.KonvaEventObject<MouseEvent | TouchEvent>) => {
 			e.cancelBubble = true
 			if (e.evt) {
 				e.evt.stopPropagation()
@@ -177,7 +178,9 @@ export class ElementCornerActionsDecorator {
 
 			this.config.canvas.selectionManager.replaceSelection([this.config.elementId])
 			action.onClick()
-		})
+		}
+
+		buttonBg.on("mousedown tap", handleAction)
 
 		buttonBg.on("mouseup mousemove click tap", (e) => {
 			e.cancelBubble = true
@@ -201,6 +204,30 @@ export class ElementCornerActionsDecorator {
 			}
 			buttonBg.fill(COLORS.BUTTON_BG)
 			this.config.canvas.cursorManager.restoreToolCursor()
+			this.group.getLayer()?.batchDraw()
+		})
+
+		buttonBg.on("touchstart", (e) => {
+			e.cancelBubble = true
+			if (e.evt) {
+				e.evt.stopPropagation()
+			}
+			if (!this.config.canvas.permissionManager.canUseSelectionToolAffordance()) {
+				return
+			}
+			buttonBg.fill(COLORS.BUTTON_BG_HOVER)
+			this.group.getLayer()?.batchDraw()
+		})
+
+		buttonBg.on("touchend touchcancel", (e) => {
+			e.cancelBubble = true
+			if (e.evt) {
+				e.evt.stopPropagation()
+			}
+			if (!this.config.canvas.permissionManager.canUseSelectionToolAffordance()) {
+				return
+			}
+			buttonBg.fill(COLORS.BUTTON_BG)
 			this.group.getLayer()?.batchDraw()
 		})
 	}
@@ -332,6 +359,13 @@ export class ElementCornerActionsDecorator {
 			this.config.canvas.eventEmitter.on("element:hover", this.hoverChangeHandler)
 		}
 
+		if (!this.selectHandler) {
+			this.selectHandler = () => {
+				this.syncHoverStateFromCanvas()
+			}
+			this.config.canvas.eventEmitter.on("element:select", this.selectHandler)
+		}
+
 		if (!this.mouseEnterHandler) {
 			this.mouseEnterHandler = () => {
 				if (!this.config.canvas.permissionManager.canUseSelectionToolAffordance()) {
@@ -393,6 +427,10 @@ export class ElementCornerActionsDecorator {
 			this.config.canvas.eventEmitter.off("element:hover", this.hoverChangeHandler)
 			this.hoverChangeHandler = undefined
 		}
+		if (this.selectHandler) {
+			this.config.canvas.eventEmitter.off("element:select", this.selectHandler)
+			this.selectHandler = undefined
+		}
 		if (this.mouseEnterHandler) {
 			this.group.off("mouseenter", this.mouseEnterHandler)
 			this.mouseEnterHandler = undefined
@@ -426,9 +464,21 @@ export class ElementCornerActionsDecorator {
 			return
 		}
 
+		if (
+			this.shouldUseTouchAffordance() &&
+			this.config.canvas.selectionManager.isSelected(this.config.elementId)
+		) {
+			this.show()
+			return
+		}
+
 		if (!this.config.canvas.selectionManager.isSelected(this.config.elementId)) {
 			this.hide()
 		}
+	}
+
+	private shouldUseTouchAffordance(): boolean {
+		return this.config.canvas.deviceInfo?.input.touch === true
 	}
 
 	public show(): void {

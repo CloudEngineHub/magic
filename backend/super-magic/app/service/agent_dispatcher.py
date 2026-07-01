@@ -387,48 +387,16 @@ class AgentDispatcher(Base):
 
     async def _prepare_crew_agent(self, agent_code: str) -> None:
         """Crew 运行时准备：按需下载定义文件、编译 .agent、设置当前会话的 AgentProfile。"""
-        from app.path_manager import PathManager
-        from app.service.crew_downloader import CrewDownloader
-        from app.service.crew_agent_compiler import CrewAgentCompiler
-        from app.service.crew_agent_cache_manager import CrewAgentCacheManager
         from app.core.entity.agent_profile import AgentProfile
-        from app.utils.async_file_utils import async_read_markdown, async_exists
+        from app.service.crew_agent_runtime_service import CrewAgentRuntimeService
 
-        crew_dir = PathManager.get_crew_agent_dir(agent_code)
-        output_agent_file = PathManager.get_compiled_agent_file(agent_code)
-        identity_file = PathManager.get_crew_identity_file(agent_code)
-        compiler = CrewAgentCompiler()
-        cache_manager = CrewAgentCacheManager()
+        info = await CrewAgentRuntimeService(
+            on_cache_invalidated=self._invalidate_cached_crew_agent,
+        ).ensure_compiled(agent_code)
 
-        if await async_exists(output_agent_file):
-            if not await async_exists(identity_file):
-                logger.warning(f"IDENTITY.md not found for existing crew agent, skip profile setup: {identity_file}")
-                return
-            cache_state = await cache_manager.evaluate_cache(agent_code, crew_dir)
-            if cache_state.stale:
-                logger.info(
-                    f"Crew source cache stale, recompile: agent_code={agent_code}, "
-                    f"reason={cache_state.reason}, file_count={cache_state.source.file_count}"
-                )
-                await cache_manager.clear_compiled_cache(agent_code)
-                self._invalidate_cached_crew_agent(agent_code, cache_state.reason)
-                identity_meta = await compiler.compile(agent_code, crew_dir)
-                await cache_manager.write_manifest(agent_code, crew_dir, cache_state.source)
-            else:
-                logger.info(f"Crew .agent cache fresh, skip download/compile: {output_agent_file}")
-                identity_meta = (await async_read_markdown(identity_file)).meta
-        else:
-            if not await async_exists(identity_file):
-                logger.info(f"Crew files not found locally, downloading: {agent_code}")
-                downloader = CrewDownloader()
-                await downloader.download_and_extract(agent_code, crew_dir)
-            self._invalidate_cached_crew_agent(agent_code, "compiled_cache_missing")
-            identity_meta = await compiler.compile(agent_code, crew_dir)
-            await cache_manager.write_manifest(agent_code, crew_dir)
-
-        name        = identity_meta.get("name", "")
-        role        = identity_meta.get("role", "")
-        description = identity_meta.get("description", "")
+        name        = info.name
+        role        = info.role
+        description = info.description
 
         if name:
             profile = AgentProfile(name=name, role=role, description=description)

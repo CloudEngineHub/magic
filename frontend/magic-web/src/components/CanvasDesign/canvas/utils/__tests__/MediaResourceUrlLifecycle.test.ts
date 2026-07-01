@@ -288,4 +288,66 @@ describe("MediaResourceUrlLifecycle", () => {
 
 		expect(refreshResource).toHaveBeenCalledWith("./images/a.png")
 	})
+
+	it("cools down background metadata refreshes after a cached resource hit", async () => {
+		vi.useFakeTimers()
+		vi.setSystemTime(new Date("2030-01-01T00:00:00Z"))
+		try {
+			const getFileInfo = vi.fn().mockResolvedValue({
+				src: "https://oss.test/image.png",
+				fileName: "image.png",
+				expires_at: "2030-01-01 01:00:00",
+				resource_version: "v1",
+				updated_at: "2030-01-01T00:00:00Z",
+				content_length: 123,
+			})
+			const { lifecycle, incrementDiagnostic } = createLifecycle({ getFileInfo })
+			const entry = createEntry({
+				resourceVersion: "v1",
+			})
+
+			lifecycle.triggerBackgroundMetadataRefresh("./images/a.png", "images/a.png", entry)
+			await entry.backgroundRefreshPromise
+
+			expect(getFileInfo).toHaveBeenCalledTimes(1)
+			expect(incrementDiagnostic).toHaveBeenCalledWith("backgroundRefreshQueuedCount")
+			expect(incrementDiagnostic).toHaveBeenCalledWith("getFileInfoForceRefreshCount")
+
+			lifecycle.triggerBackgroundMetadataRefresh("./images/a.png", "images/a.png", entry)
+
+			expect(getFileInfo).toHaveBeenCalledTimes(1)
+			expect(incrementDiagnostic).toHaveBeenCalledWith("backgroundRefreshSkippedCount")
+
+			vi.setSystemTime(new Date("2030-01-01T00:01:01Z"))
+			lifecycle.triggerBackgroundMetadataRefresh("./images/a.png", "images/a.png", entry)
+			await entry.backgroundRefreshPromise
+
+			expect(getFileInfo).toHaveBeenCalledTimes(2)
+		} finally {
+			vi.useRealTimers()
+		}
+	})
+
+	it("does not cool down lightweight resource metadata probes", async () => {
+		const getFileResourceMeta = vi.fn().mockResolvedValue({
+			status: "exists",
+			source: "workspace",
+			fileName: "image.png",
+			resourceVersion: "v1",
+			updatedAt: "2030-01-01T00:00:00Z",
+			contentLength: 123,
+		})
+		const { lifecycle, incrementDiagnostic } = createLifecycle({ getFileResourceMeta })
+		const entry = createEntry({
+			resourceVersion: "v1",
+		})
+
+		lifecycle.triggerBackgroundMetadataRefresh("./images/a.png", "images/a.png", entry)
+		await entry.backgroundRefreshPromise
+		lifecycle.triggerBackgroundMetadataRefresh("./images/a.png", "images/a.png", entry)
+		await entry.backgroundRefreshPromise
+
+		expect(getFileResourceMeta).toHaveBeenCalledTimes(2)
+		expect(incrementDiagnostic).not.toHaveBeenCalledWith("backgroundRefreshSkippedCount")
+	})
 })

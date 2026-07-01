@@ -25,6 +25,8 @@ export interface VideoPlaybackConsumerState {
 type VideoPlaybackIssueReason = "timer" | "waiting" | "error" | "acquire"
 type VideoPlaybackConsumerStateListener = (state: VideoPlaybackConsumerState) => void
 
+const VIDEO_PLAYBACK_READY_TIMEOUT_MS = 15_000
+
 /** 同一 path 上所有会话的只读快照，便于播放策略判断 */
 export interface PathPlaybackGroupSnapshot {
 	path: string
@@ -326,11 +328,16 @@ export class VideoPlaybackManager {
 	private waitUntilReady(video: HTMLVideoElement, currentTime?: number): Promise<boolean> {
 		return new Promise((resolve) => {
 			let settled = false
+			let timeoutId: ReturnType<typeof setTimeout> | null = null
 
 			const cleanup = () => {
 				video.removeEventListener("loadeddata", handleLoadedData)
 				video.removeEventListener("loadedmetadata", handleLoadedMetadata)
 				video.removeEventListener("error", handleError)
+				if (timeoutId) {
+					clearTimeout(timeoutId)
+					timeoutId = null
+				}
 			}
 
 			const finish = (success: boolean) => {
@@ -369,6 +376,9 @@ export class VideoPlaybackManager {
 			video.addEventListener("loadedmetadata", handleLoadedMetadata)
 			video.addEventListener("loadeddata", handleLoadedData)
 			video.addEventListener("error", handleError)
+			timeoutId = setTimeout(() => {
+				finish(false)
+			}, VIDEO_PLAYBACK_READY_TIMEOUT_MS)
 			video.load()
 
 			if (video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {

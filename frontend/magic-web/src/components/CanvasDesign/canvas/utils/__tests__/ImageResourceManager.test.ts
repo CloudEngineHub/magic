@@ -6,6 +6,7 @@ import {
 	MediaDecodePixelBudgetGate,
 } from "../MediaDecodePixelBudget"
 import { MediaResourceBodyCache } from "../MediaResourceBodyCache"
+import type { DecodedImageRetentionHint } from "../CanvasVisibilityManager"
 
 interface TestImageResource {
 	ossSrc: string
@@ -73,6 +74,9 @@ function createEntry(overrides: Record<string, unknown> = {}) {
 			preview: { resource: null, loadingPromise: null, version: null, lastAccessAt: 1 },
 		},
 		fullResource: null,
+		fullLastAccessAt: 0,
+		lowDisplayLeaseCount: 0,
+		lastDecodedBudgetEnforcedAt: 0,
 		bodyBlob: null,
 		bodyOssSrc: null,
 		bodyCacheKey: null,
@@ -85,8 +89,18 @@ function createEntry(overrides: Record<string, unknown> = {}) {
 
 function createManager() {
 	const eventEmitter = { emit: vi.fn() }
-	const manager = Object.create(ImageResourceManager.prototype) as ImageResourceManager & {
-		canvas: { id: string; eventEmitter: typeof eventEmitter }
+	const canvasFileUploadManager = { shouldDeferRemoteResourceLoad: vi.fn(() => false) }
+	const visibilityManager = {
+		getDecodedImageRetentionSnapshot: vi.fn<() => DecodedImageRetentionHint[]>(() => []),
+		invalidateImageLoadRequest: vi.fn(),
+	}
+	const manager = Object.create(ImageResourceManager.prototype) as {
+		canvas: {
+			id: string
+			eventEmitter: typeof eventEmitter
+			canvasFileUploadManager: typeof canvasFileUploadManager
+			visibilityManager: typeof visibilityManager
+		}
 		managerInstanceId: number
 		destroyed: boolean
 		entries: Map<string, ReturnType<typeof createEntry>>
@@ -95,13 +109,25 @@ function createManager() {
 		decodePixelBudgetGate: MediaDecodePixelBudgetGate
 		bodyCache: MediaResourceBodyCache<ReturnType<typeof createEntry>>
 		diagnostics: ReturnType<typeof createImageResourceDiagnostics>
+		imageResourceLoadedHandlersByPath: Map<string, Set<unknown>>
+		imageResourceLoadFailedHandlersByPath: Map<string, Set<unknown>>
+		imageResourceWillCloseHandlersByPath: Map<string, Set<unknown>>
+		imageResourceDisplayTargetHandlersByElementId: Map<string, Set<unknown>>
+		imageResourceDisplayLoadedHandlersByElementId: Map<string, Set<unknown>>
 		urlLifecycle: {
 			canonicalResourcePath: (path: string) => string
 			clearExpiredOssSrc: () => void
 			applyVirtualResourceBypass: () => void
 		}
+		loadResource: (path: string, options?: Record<string, unknown>) => void
+		getSnapshot: () => ReturnType<ImageResourceManager["getSnapshot"]>
+		getLowImageUrl: (path: string) => Promise<{
+			url: string
+			imageInfo: TestImageResource["imageInfo"]
+			release: () => void
+		} | null>
 	}
-	manager.canvas = { id: "test-canvas", eventEmitter }
+	manager.canvas = { id: "test-canvas", eventEmitter, canvasFileUploadManager, visibilityManager }
 	manager.managerInstanceId = 1
 	manager.destroyed = false
 	manager.entries = new Map()
@@ -112,12 +138,49 @@ function createManager() {
 	)
 	manager.bodyCache = new MediaResourceBodyCache({ ttlMs: 120_000, maxBytes: 256 * 1024 * 1024 })
 	manager.diagnostics = createImageResourceDiagnostics()
+	manager.imageResourceLoadedHandlersByPath = new Map()
+	manager.imageResourceLoadFailedHandlersByPath = new Map()
+	manager.imageResourceWillCloseHandlersByPath = new Map()
+	manager.imageResourceDisplayTargetHandlersByElementId = new Map()
+	manager.imageResourceDisplayLoadedHandlersByElementId = new Map()
 	manager.urlLifecycle = {
 		canonicalResourcePath: (path: string) => path,
 		clearExpiredOssSrc: vi.fn(),
 		applyVirtualResourceBypass: vi.fn(),
 	}
-	return { manager, eventEmitter }
+	return { manager, eventEmitter, visibilityManager }
+}
+
+type EnforceDecodedBitmapBudget = (options: {
+	reason: string
+	exemptResource?: TestImageResource
+	softBudgetBytes?: number
+	hardBudgetBytes?: number
+	fullBudgetBytes?: number
+}) => void
+
+function enforceDecodedBitmapBudget(
+	manager: ReturnType<typeof createManager>["manager"],
+	options: Parameters<EnforceDecodedBitmapBudget>[0],
+) {
+	;(
+		manager as unknown as { enforceDecodedBitmapBudget: EnforceDecodedBitmapBudget }
+	).enforceDecodedBitmapBudget(options)
+}
+
+function installImmediateAnimationFrame() {
+	const originalRequestAnimationFrame = globalThis.requestAnimationFrame
+	vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => {
+		callback(Date.now())
+		return 1
+	})
+	return () => {
+		if (originalRequestAnimationFrame) {
+			vi.stubGlobal("requestAnimationFrame", originalRequestAnimationFrame)
+			return
+		}
+		Reflect.deleteProperty(globalThis, "requestAnimationFrame")
+	}
 }
 
 describe("ImageResourceManager image resources", () => {
@@ -268,14 +331,453 @@ describe("ImageResourceManager image resources", () => {
 				release: expect.any(Function),
 			})
 			expect(createObjectURL).toHaveBeenCalledWith(displayBlob)
+			expect(entry.lowDisplayLeaseCount).toBe(1)
 
 			loaded?.release()
 			loaded?.release()
+			expect(entry.lowDisplayLeaseCount).toBe(0)
 			expect(revokeObjectURL).toHaveBeenCalledTimes(1)
 			expect(revokeObjectURL).toHaveBeenCalledWith("blob:low")
 		} finally {
 			createObjectURL.mockRestore()
 			revokeObjectURL.mockRestore()
+		}
+	})
+
+	it("evicts full decoded resources before old preview resources under budget pressure", () => {
+		const restoreAnimationFrame = installImmediateAnimationFrame()
+		try {
+			const { manager, eventEmitter } = createManager()
+			const fullClose = vi.fn()
+			const oldPreviewClose = vi.fn()
+			const newPreviewClose = vi.fn()
+			const fullResource = createImageResource("full", {
+				width: 10,
+				height: 10,
+				close: fullClose,
+			})
+			const oldPreviewResource = createImageResource("preview", {
+				width: 10,
+				height: 10,
+				close: oldPreviewClose,
+			})
+			const newPreviewResource = createImageResource("preview", {
+				width: 10,
+				height: 10,
+				close: newPreviewClose,
+			})
+			const fullEntry = createEntry({
+				fullResource,
+				fullLastAccessAt: 30,
+			})
+			const oldPreviewEntry = createEntry({
+				displaySlots: {
+					low: { resource: null, loadingPromise: null, version: null, lastAccessAt: 0 },
+					preview: {
+						resource: oldPreviewResource,
+						loadingPromise: null,
+						version: null,
+						lastAccessAt: 10,
+					},
+				},
+			})
+			const newPreviewEntry = createEntry({
+				displaySlots: {
+					low: { resource: null, loadingPromise: null, version: null, lastAccessAt: 0 },
+					preview: {
+						resource: newPreviewResource,
+						loadingPromise: null,
+						version: null,
+						lastAccessAt: 20,
+					},
+				},
+			})
+			manager.entries.set("full.png", fullEntry)
+			manager.entries.set("old-preview.png", oldPreviewEntry)
+			manager.entries.set("new-preview.png", newPreviewEntry)
+
+			enforceDecodedBitmapBudget(manager, {
+				reason: "unit-test",
+				softBudgetBytes: 400,
+				hardBudgetBytes: 400,
+				fullBudgetBytes: Number.MAX_SAFE_INTEGER,
+			})
+
+			expect(fullEntry.fullResource).toBeNull()
+			expect(oldPreviewEntry.displaySlots.preview.resource).toBeNull()
+			expect(newPreviewEntry.displaySlots.preview.resource).toBe(newPreviewResource)
+			expect(fullClose).toHaveBeenCalledTimes(1)
+			expect(oldPreviewClose).toHaveBeenCalledTimes(1)
+			expect(newPreviewClose).not.toHaveBeenCalled()
+			expect(eventEmitter.emit).toHaveBeenCalledWith(
+				expect.objectContaining({
+					type: "resource:image:will-close",
+					data: expect.objectContaining({
+						path: "full.png",
+						variant: "full",
+						reason: "decoded-budget:unit-test",
+					}),
+				}),
+			)
+
+			const snapshot = manager.getSnapshot()
+			expect(snapshot.decodedBytesTotal).toBe(400)
+			expect(snapshot.decodedEvictedCount).toBe(2)
+			expect(snapshot.decodedEvictedFull).toBe(1)
+			expect(snapshot.decodedEvictedPreview).toBe(1)
+		} finally {
+			restoreAnimationFrame()
+		}
+	})
+
+	it("invalidates visibility image load request state after decoded eviction", () => {
+		const restoreAnimationFrame = installImmediateAnimationFrame()
+		try {
+			const { manager, visibilityManager } = createManager()
+			const previewResource = createImageResource("preview", {
+				width: 10,
+				height: 10,
+			})
+			const entry = createEntry({
+				displaySlots: {
+					low: { resource: null, loadingPromise: null, version: null, lastAccessAt: 0 },
+					preview: {
+						resource: previewResource,
+						loadingPromise: null,
+						version: null,
+						lastAccessAt: 1,
+					},
+				},
+			})
+			manager.entries.set("image/path.png", entry)
+
+			enforceDecodedBitmapBudget(manager, {
+				reason: "request-invalidation",
+				softBudgetBytes: 0,
+				hardBudgetBytes: 0,
+				fullBudgetBytes: Number.MAX_SAFE_INTEGER,
+			})
+
+			expect(entry.displaySlots.preview.resource).toBeNull()
+			expect(visibilityManager.invalidateImageLoadRequest).toHaveBeenCalledWith(
+				"image/path.png",
+				undefined,
+				"decoded-budget",
+			)
+		} finally {
+			restoreAnimationFrame()
+		}
+	})
+
+	it("protects active low display leases and allows low eviction after release", async () => {
+		const restoreAnimationFrame = installImmediateAnimationFrame()
+		const createObjectURL = vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:leased-low")
+		const revokeObjectURL = vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => undefined)
+		try {
+			const { manager } = createManager()
+			const lowClose = vi.fn()
+			const displayBlob = new Blob(["low"], { type: "image/webp" })
+			const lowResource = createImageResource("low", {
+				width: 10,
+				height: 10,
+				close: lowClose,
+				displayBlob,
+			})
+			const entry = createEntry({
+				displaySlots: {
+					low: {
+						resource: lowResource,
+						loadingPromise: null,
+						version: null,
+						lastAccessAt: 1,
+					},
+					preview: {
+						resource: null,
+						loadingPromise: null,
+						version: null,
+						lastAccessAt: 0,
+					},
+				},
+			})
+			manager.entries.set("image/path.png", entry)
+
+			const loaded = await manager.getLowImageUrl("image/path.png")
+
+			expect(loaded?.url).toBe("blob:leased-low")
+			expect(entry.lowDisplayLeaseCount).toBe(1)
+
+			enforceDecodedBitmapBudget(manager, {
+				reason: "active-low-lease",
+				softBudgetBytes: 0,
+				hardBudgetBytes: 0,
+				fullBudgetBytes: Number.MAX_SAFE_INTEGER,
+			})
+
+			expect(entry.displaySlots.low.resource).toBe(lowResource)
+			expect(lowClose).not.toHaveBeenCalled()
+
+			loaded?.release()
+			loaded?.release()
+			expect(entry.lowDisplayLeaseCount).toBe(0)
+			expect(revokeObjectURL).toHaveBeenCalledTimes(1)
+
+			enforceDecodedBitmapBudget(manager, {
+				reason: "released-low-lease",
+				softBudgetBytes: 0,
+				hardBudgetBytes: 0,
+				fullBudgetBytes: Number.MAX_SAFE_INTEGER,
+			})
+
+			expect(entry.displaySlots.low.resource).toBeNull()
+			expect(lowClose).toHaveBeenCalledTimes(1)
+			expect(manager.getSnapshot().decodedEvictedLow).toBe(1)
+		} finally {
+			createObjectURL.mockRestore()
+			revokeObjectURL.mockRestore()
+			restoreAnimationFrame()
+		}
+	})
+
+	it("does not evict the exempt resource during the same budget pass", () => {
+		const restoreAnimationFrame = installImmediateAnimationFrame()
+		try {
+			const { manager } = createManager()
+			const exemptClose = vi.fn()
+			const oldClose = vi.fn()
+			const exemptResource = createImageResource("preview", {
+				width: 10,
+				height: 10,
+				close: exemptClose,
+			})
+			const oldResource = createImageResource("preview", {
+				width: 10,
+				height: 10,
+				close: oldClose,
+			})
+			const exemptEntry = createEntry({
+				displaySlots: {
+					low: { resource: null, loadingPromise: null, version: null, lastAccessAt: 0 },
+					preview: {
+						resource: exemptResource,
+						loadingPromise: null,
+						version: null,
+						lastAccessAt: 20,
+					},
+				},
+			})
+			const oldEntry = createEntry({
+				displaySlots: {
+					low: { resource: null, loadingPromise: null, version: null, lastAccessAt: 0 },
+					preview: {
+						resource: oldResource,
+						loadingPromise: null,
+						version: null,
+						lastAccessAt: 10,
+					},
+				},
+			})
+			manager.entries.set("exempt.png", exemptEntry)
+			manager.entries.set("old.png", oldEntry)
+
+			enforceDecodedBitmapBudget(manager, {
+				reason: "exempt",
+				exemptResource,
+				softBudgetBytes: 0,
+				hardBudgetBytes: 0,
+				fullBudgetBytes: Number.MAX_SAFE_INTEGER,
+			})
+
+			expect(exemptEntry.displaySlots.preview.resource).toBe(exemptResource)
+			expect(oldEntry.displaySlots.preview.resource).toBeNull()
+			expect(exemptClose).not.toHaveBeenCalled()
+			expect(oldClose).toHaveBeenCalledTimes(1)
+		} finally {
+			restoreAnimationFrame()
+		}
+	})
+
+	it("keeps visible displayed full decoded resources even when full budget is exceeded", () => {
+		const restoreAnimationFrame = installImmediateAnimationFrame()
+		try {
+			const { manager, visibilityManager } = createManager()
+			const fullClose = vi.fn()
+			const fullResource = createImageResource("full", {
+				width: 20,
+				height: 20,
+				close: fullClose,
+			})
+			const entry = createEntry({
+				fullResource,
+				fullLastAccessAt: 1,
+			})
+			manager.entries.set("image/path.png", entry)
+			visibilityManager.getDecodedImageRetentionSnapshot.mockReturnValue([
+				{
+					elementId: "image-1",
+					path: "image/path.png",
+					visibilityState: "visible",
+					displayedVariant: "full",
+					requestedVariant: "full",
+					screenLongEdge: 2400,
+					lastSeenAt: 1,
+				},
+			])
+
+			enforceDecodedBitmapBudget(manager, {
+				reason: "visible-full",
+				softBudgetBytes: 0,
+				hardBudgetBytes: 0,
+				fullBudgetBytes: 0,
+			})
+
+			expect(entry.fullResource).toBe(fullResource)
+			expect(fullClose).not.toHaveBeenCalled()
+			const snapshot = manager.getSnapshot()
+			expect(snapshot.decodedPinnedBytes).toBe(1600)
+			expect(snapshot.decodedPinnedCount).toBe(1)
+			expect(snapshot.decodedVisiblePinnedCount).toBe(1)
+			expect(snapshot.decodedEvictedFull).toBe(0)
+		} finally {
+			restoreAnimationFrame()
+		}
+	})
+
+	it("keeps visible requested full resources before they are applied to the element", () => {
+		const restoreAnimationFrame = installImmediateAnimationFrame()
+		try {
+			const { manager, visibilityManager } = createManager()
+			const fullClose = vi.fn()
+			const previewClose = vi.fn()
+			const fullResource = createImageResource("full", {
+				width: 10,
+				height: 10,
+				close: fullClose,
+			})
+			const previewResource = createImageResource("preview", {
+				width: 10,
+				height: 10,
+				close: previewClose,
+			})
+			const entry = createEntry({
+				displaySlots: {
+					low: { resource: null, loadingPromise: null, version: null, lastAccessAt: 0 },
+					preview: {
+						resource: previewResource,
+						loadingPromise: null,
+						version: null,
+						lastAccessAt: 1,
+					},
+				},
+				fullResource,
+				fullLastAccessAt: 1,
+			})
+			manager.entries.set("image/path.png", entry)
+			visibilityManager.getDecodedImageRetentionSnapshot.mockReturnValue([
+				{
+					elementId: "image-1",
+					path: "image/path.png",
+					visibilityState: "visible",
+					displayedVariant: "preview",
+					requestedVariant: "full",
+					screenLongEdge: 1800,
+					lastSeenAt: 1,
+				},
+			])
+
+			enforceDecodedBitmapBudget(manager, {
+				reason: "visible-requested-full",
+				softBudgetBytes: 0,
+				hardBudgetBytes: 0,
+				fullBudgetBytes: 0,
+			})
+
+			expect(entry.fullResource).toBe(fullResource)
+			expect(entry.displaySlots.preview.resource).toBe(previewResource)
+			expect(fullClose).not.toHaveBeenCalled()
+			expect(previewClose).not.toHaveBeenCalled()
+			expect(manager.getSnapshot().decodedVisiblePinnedCount).toBe(2)
+		} finally {
+			restoreAnimationFrame()
+		}
+	})
+
+	it("keeps near protected resources during soft pressure and evicts them last under hard pressure", () => {
+		const restoreAnimationFrame = installImmediateAnimationFrame()
+		try {
+			const { manager, visibilityManager } = createManager()
+			const nearClose = vi.fn()
+			const unprotectedClose = vi.fn()
+			const nearPreviewResource = createImageResource("preview", {
+				width: 10,
+				height: 10,
+				close: nearClose,
+			})
+			const unprotectedPreviewResource = createImageResource("preview", {
+				width: 10,
+				height: 10,
+				close: unprotectedClose,
+			})
+			const nearEntry = createEntry({
+				displaySlots: {
+					low: { resource: null, loadingPromise: null, version: null, lastAccessAt: 0 },
+					preview: {
+						resource: nearPreviewResource,
+						loadingPromise: null,
+						version: null,
+						lastAccessAt: 1,
+					},
+				},
+			})
+			const unprotectedEntry = createEntry({
+				displaySlots: {
+					low: { resource: null, loadingPromise: null, version: null, lastAccessAt: 0 },
+					preview: {
+						resource: unprotectedPreviewResource,
+						loadingPromise: null,
+						version: null,
+						lastAccessAt: 1,
+					},
+				},
+			})
+			manager.entries.set("near.png", nearEntry)
+			manager.entries.set("unprotected.png", unprotectedEntry)
+			visibilityManager.getDecodedImageRetentionSnapshot.mockReturnValue([
+				{
+					elementId: "near-image",
+					path: "near.png",
+					visibilityState: "near",
+					displayedVariant: "preview",
+					requestedVariant: "preview",
+					screenLongEdge: 500,
+					lastSeenAt: 1,
+				},
+			])
+
+			enforceDecodedBitmapBudget(manager, {
+				reason: "near-soft",
+				softBudgetBytes: 400,
+				hardBudgetBytes: 800,
+				fullBudgetBytes: Number.MAX_SAFE_INTEGER,
+			})
+
+			expect(nearEntry.displaySlots.preview.resource).toBe(nearPreviewResource)
+			expect(unprotectedEntry.displaySlots.preview.resource).toBeNull()
+			expect(nearClose).not.toHaveBeenCalled()
+			expect(unprotectedClose).toHaveBeenCalledTimes(1)
+			expect(manager.getSnapshot().decodedNearProtectedCount).toBe(1)
+
+			enforceDecodedBitmapBudget(manager, {
+				reason: "near-hard",
+				softBudgetBytes: 0,
+				hardBudgetBytes: 0,
+				fullBudgetBytes: Number.MAX_SAFE_INTEGER,
+			})
+
+			expect(nearEntry.displaySlots.preview.resource).toBeNull()
+			expect(nearClose).toHaveBeenCalledTimes(1)
+			expect(manager.getSnapshot().decodedEvictedPreview).toBe(2)
+		} finally {
+			restoreAnimationFrame()
 		}
 	})
 
@@ -327,7 +829,7 @@ describe("ImageResourceManager load priority defaults", () => {
 	) => "critical" | "visible" | "near" | "background"
 
 	it("preserves explicit priority for body fetch and decode scheduling", () => {
-		const manager = Object.create(ImageResourceManager.prototype) as ImageResourceManager & {
+		const manager = Object.create(ImageResourceManager.prototype) as {
 			getBodyFetchPriorityForVariant: GetPriorityForVariant
 			getDecodePriorityForVariant: GetPriorityForVariant
 		}
@@ -339,7 +841,7 @@ describe("ImageResourceManager load priority defaults", () => {
 	})
 
 	it("keeps existing variant-based priority defaults when no priority is supplied", () => {
-		const manager = Object.create(ImageResourceManager.prototype) as ImageResourceManager & {
+		const manager = Object.create(ImageResourceManager.prototype) as {
 			getBodyFetchPriorityForVariant: GetPriorityForVariant
 			getDecodePriorityForVariant: GetPriorityForVariant
 		}

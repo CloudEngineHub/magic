@@ -11,6 +11,38 @@ describe("EditorRuntime", () => {
 	let runtime: EditorRuntime
 	let postMessageSpy: ReturnType<typeof vi.spyOn>
 
+	/**
+	 * Sends a runtime request through the same message channel used by the host page.
+	 */
+	async function sendRuntimeRequest(type: string, payload?: unknown): Promise<void> {
+		const message: RequestMessage = {
+			version: MESSAGE_PROTOCOL_VERSION,
+			category: MessageCategory.REQUEST,
+			type,
+			payload,
+			requestId: `req-${type.toLowerCase()}`,
+			timestamp: Date.now(),
+			source: "parent",
+		}
+
+		window.dispatchEvent(
+			new MessageEvent("message", {
+				data: message,
+				source: window.parent,
+			}),
+		)
+
+		await new Promise((resolve) => setTimeout(resolve, 10))
+	}
+
+	/**
+	 * Enables edit mode and selects the target element through public runtime requests.
+	 */
+	async function enterEditModeAndSelect(selector: string): Promise<void> {
+		await sendRuntimeRequest("ENTER_EDIT_MODE")
+		await sendRuntimeRequest("REFRESH_SELECTED_ELEMENT", { selector })
+	}
+
 	beforeEach(() => {
 		postMessageSpy = vi.spyOn(window.parent, "postMessage")
 		runtime = new EditorRuntime()
@@ -257,6 +289,142 @@ describe("EditorRuntime", () => {
 			document.body.removeChild(div)
 
 			expect(true).toBe(true)
+		})
+
+		it("does not intercept delete or duplicate shortcuts outside edit mode", async () => {
+			const duplicateEvent = new KeyboardEvent("keydown", {
+				key: "d",
+				ctrlKey: true,
+				bubbles: true,
+				cancelable: true,
+			})
+			const deleteEvent = new KeyboardEvent("keydown", {
+				key: "Delete",
+				bubbles: true,
+				cancelable: true,
+			})
+
+			window.dispatchEvent(duplicateEvent)
+			window.dispatchEvent(deleteEvent)
+
+			await new Promise((resolve) => setTimeout(resolve, 10))
+
+			expect(duplicateEvent.defaultPrevented).toBe(false)
+			expect(deleteEvent.defaultPrevented).toBe(false)
+		})
+
+		it("deletes the selected element with Delete in edit mode", async () => {
+			const target = document.createElement("div")
+			target.id = "shortcut-delete-target"
+			document.body.appendChild(target)
+			await enterEditModeAndSelect("#shortcut-delete-target")
+
+			const event = new KeyboardEvent("keydown", {
+				key: "Delete",
+				bubbles: true,
+				cancelable: true,
+			})
+
+			window.dispatchEvent(event)
+
+			await vi.waitFor(() => {
+				expect(document.querySelector("#shortcut-delete-target")).toBeNull()
+			})
+			expect(event.defaultPrevented).toBe(true)
+		})
+
+		it("duplicates the selected element with Ctrl D in edit mode", async () => {
+			const target = document.createElement("div")
+			target.id = "shortcut-duplicate-target"
+			document.body.appendChild(target)
+			await enterEditModeAndSelect("#shortcut-duplicate-target")
+
+			const ctrlEvent = new KeyboardEvent("keydown", {
+				key: "d",
+				ctrlKey: true,
+				bubbles: true,
+				cancelable: true,
+			})
+
+			window.dispatchEvent(ctrlEvent)
+
+			await vi.waitFor(() => {
+				expect(document.querySelectorAll("#shortcut-duplicate-target")).toHaveLength(2)
+			})
+			expect(ctrlEvent.defaultPrevented).toBe(true)
+		})
+
+		it("duplicates the selected element with Cmd D in edit mode", async () => {
+			const target = document.createElement("div")
+			target.id = "shortcut-cmd-duplicate-target"
+			document.body.appendChild(target)
+			await enterEditModeAndSelect("#shortcut-cmd-duplicate-target")
+
+			const cmdEvent = new KeyboardEvent("keydown", {
+				key: "d",
+				metaKey: true,
+				bubbles: true,
+				cancelable: true,
+			})
+
+			window.dispatchEvent(cmdEvent)
+
+			await vi.waitFor(() => {
+				expect(document.querySelectorAll("#shortcut-cmd-duplicate-target")).toHaveLength(2)
+			})
+			expect(cmdEvent.defaultPrevented).toBe(true)
+		})
+
+		it("does not intercept duplicate shortcut in edit mode without selection", async () => {
+			await sendRuntimeRequest("ENTER_EDIT_MODE")
+
+			const event = new KeyboardEvent("keydown", {
+				key: "d",
+				ctrlKey: true,
+				bubbles: true,
+				cancelable: true,
+			})
+
+			window.dispatchEvent(event)
+
+			await new Promise((resolve) => setTimeout(resolve, 10))
+
+			expect(event.defaultPrevented).toBe(false)
+		})
+
+		it("does not delete or duplicate when the shortcut target is editable", async () => {
+			const target = document.createElement("div")
+			target.id = "shortcut-editable-target"
+			const input = document.createElement("input")
+			const textEditing = document.createElement("span")
+			textEditing.setAttribute("data-text-editing", "true")
+			const nativeEditable = document.createElement("div")
+			nativeEditable.setAttribute("contenteditable", "true")
+			target.append(input, textEditing, nativeEditable)
+			document.body.appendChild(target)
+			await enterEditModeAndSelect("#shortcut-editable-target")
+
+			for (const editableTarget of [input, textEditing, nativeEditable]) {
+				const duplicateEvent = new KeyboardEvent("keydown", {
+					key: "d",
+					ctrlKey: true,
+					bubbles: true,
+					cancelable: true,
+				})
+				const deleteEvent = new KeyboardEvent("keydown", {
+					key: "Backspace",
+					bubbles: true,
+					cancelable: true,
+				})
+
+				editableTarget.dispatchEvent(duplicateEvent)
+				editableTarget.dispatchEvent(deleteEvent)
+			}
+
+			await new Promise((resolve) => setTimeout(resolve, 10))
+
+			expect(document.querySelector("#shortcut-editable-target")).toBe(target)
+			expect(document.querySelectorAll("#shortcut-editable-target")).toHaveLength(1)
 		})
 	})
 

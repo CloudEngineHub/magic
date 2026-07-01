@@ -49,11 +49,19 @@ export interface TimeFilterPanelProps {
 	prefix?: React.ReactNode
 	/* 受控值，传 null 表示清空 */
 	value?: TimeRangeValue | null
+	/* 是否可清除 */
+	clearable?: boolean
 	/* 变化回调 */
 	onChange?: (value: TimeRangeValue | null) => void
 }
 
-function TimeFilterPanel({ defaultPresetKey, prefix, value, onChange }: TimeFilterPanelProps) {
+function TimeFilterPanel({
+	defaultPresetKey,
+	prefix,
+	value,
+	clearable = true,
+	onChange,
+}: TimeFilterPanelProps) {
 	const { styles, cx } = useStyles()
 	const { getLocale } = useAdminComponents()
 	const locale = getLocale("TimeFilterPanel")
@@ -143,6 +151,7 @@ function TimeFilterPanel({ defaultPresetKey, prefix, value, onChange }: TimeFilt
 			label,
 			tab,
 			mode,
+			presetKey,
 			persist = true,
 			closePanel = true,
 		}: {
@@ -151,6 +160,7 @@ function TimeFilterPanel({ defaultPresetKey, prefix, value, onChange }: TimeFilt
 			label: string
 			tab: TimeFilterTab
 			mode: HistoryMode
+			presetKey?: TimePresetKey
 			persist?: boolean
 			closePanel?: boolean
 		}) => {
@@ -160,6 +170,7 @@ function TimeFilterPanel({ defaultPresetKey, prefix, value, onChange }: TimeFilt
 				label,
 				tab,
 				mode,
+				...(presetKey ? { presetKey } : {}),
 			}
 
 			setTimeRangeValue(nextValue)
@@ -234,6 +245,35 @@ function TimeFilterPanel({ defaultPresetKey, prefix, value, onChange }: TimeFilt
 	}, [])
 
 	useEffect(() => {
+		if (!isControlled || !timeRangeValue) return
+
+		setActiveTab(timeRangeValue.tab)
+
+		if (timeRangeValue.mode === HistoryMode.relative && timeRangeValue.presetKey) {
+			setRelativeMode(RelativeMode.preset)
+			setSelectedPresetKey(timeRangeValue.presetKey)
+			return
+		}
+
+		if (timeRangeValue.mode === HistoryMode.custom) {
+			setRelativeMode(RelativeMode.custom)
+			setSelectedPresetKey(null)
+			return
+		}
+
+		if (timeRangeValue.mode === HistoryMode.monthly) {
+			setRelativeMode(RelativeMode.monthly)
+			setSelectedPresetKey(null)
+			return
+		}
+
+		if (timeRangeValue.mode === HistoryMode.absolute) {
+			setSelectedPresetKey(null)
+			setAbsoluteRange([dayjs(timeRangeValue.startDate), dayjs(timeRangeValue.endDate)])
+		}
+	}, [isControlled, timeRangeValue])
+
+	useEffect(() => {
 		if (!isControlled) return
 		if (timeRangeValue?.startDate && timeRangeValue?.endDate) return
 
@@ -258,6 +298,7 @@ function TimeFilterPanel({ defaultPresetKey, prefix, value, onChange }: TimeFilt
 				: locale.preset.last24Hours,
 			tab: TimeFilterTab.relative,
 			mode: HistoryMode.relative,
+			presetKey: defaultPresetKey,
 			persist: false,
 		})
 		setSelectedPresetKey(defaultPresetKey)
@@ -288,6 +329,7 @@ function TimeFilterPanel({ defaultPresetKey, prefix, value, onChange }: TimeFilt
 			label: option ? getPresetLabel(locale, option.labelKey) : locale.preset.last24Hours,
 			tab: TimeFilterTab.relative,
 			mode: HistoryMode.relative,
+			presetKey,
 		})
 	}
 
@@ -654,7 +696,7 @@ function TimeFilterPanel({ defaultPresetKey, prefix, value, onChange }: TimeFilt
 					)}
 				</div>
 				<Space size={6} className={styles.triggerIconWrap}>
-					{timeRangeValue?.label ? (
+					{timeRangeValue?.label && clearable ? (
 						<>
 							<span
 								data-role="time-filter-clear"

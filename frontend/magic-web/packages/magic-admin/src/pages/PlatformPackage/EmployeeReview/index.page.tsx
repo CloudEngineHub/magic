@@ -16,7 +16,6 @@ import { useTranslation } from "react-i18next"
 import { Button, Flex, Modal, Select, message, type TableProps } from "antd"
 import { usePagination } from "@admin/hooks/usePagination"
 import { useApis } from "@admin/apis"
-import { useAdmin } from "@admin/provider/AdminProvider"
 import { useAdminStore } from "@admin/stores/admin"
 import type { PlatformPackage } from "@admin/types/platformPackage"
 import { useIsMobile } from "@admin/hooks/useIsMobile"
@@ -39,15 +38,12 @@ const useStyles = createStyles(({ token }) => ({
 }))
 
 function EmployeeReviewPage() {
-	const OFFICIAL_ORG_CODE = ""
 	const { t } = useTranslation("admin/platform/employeeReview")
 	const { t: tCommon } = useTranslation("admin/common")
 	const { styles } = useStyles()
 	const { PlatformPackageApi } = useApis()
-	const { organization } = useAdmin()
 	const { isOfficialOrg } = useAdminStore()
-	const isOfficialOrganization =
-		isOfficialOrg || organization?.organizationCode === OFFICIAL_ORG_CODE
+	const isOfficialOrganization = isOfficialOrg
 
 	const [data, setData] = useState<DataType[]>([])
 	const [total, setTotal] = useState(0)

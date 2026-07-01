@@ -1,6 +1,7 @@
 import Konva from "konva"
 import { BaseTool, type ToolOptions } from "./BaseTool"
 import { generateElementId } from "../../utils/utils"
+import type { CanvasPointerInput } from "../input"
 
 /**
  * 基础绘制工具配置接口
@@ -16,6 +17,7 @@ export abstract class BaseDrawingTool extends BaseTool {
 	protected startPoint: { x: number; y: number } | null = null
 	protected currentElementId: string | null = null
 	protected previewNode: Konva.Node | null = null
+	private inputUnsubscribers: Array<() => void> = []
 
 	constructor(options: BaseDrawingToolOptions) {
 		super(options)
@@ -27,10 +29,12 @@ export abstract class BaseDrawingTool extends BaseTool {
 	public activate(): void {
 		this.isActive = true
 
-		// 绑定事件
-		this.canvas.stage.on("mousedown", this.handleMouseDown)
-		this.canvas.stage.on("mousemove", this.handleMouseMove)
-		this.canvas.stage.on("mouseup", this.handleMouseUp)
+		this.inputUnsubscribers = [
+			this.canvas.inputManager.on("down", this.handlePointerDown),
+			this.canvas.inputManager.on("move", this.handlePointerMove),
+			this.canvas.inputManager.on("up", this.handlePointerUp),
+			this.canvas.inputManager.on("cancel", this.handlePointerCancel),
+		]
 		window.addEventListener("keydown", this.handleKeyDown)
 	}
 
@@ -43,76 +47,54 @@ export abstract class BaseDrawingTool extends BaseTool {
 		// 清理预览
 		this.clearPreview()
 
-		// 解绑事件
-		this.canvas.stage.off("mousedown", this.handleMouseDown)
-		this.canvas.stage.off("mousemove", this.handleMouseMove)
-		this.canvas.stage.off("mouseup", this.handleMouseUp)
+		this.inputUnsubscribers.forEach((unsubscribe) => unsubscribe())
+		this.inputUnsubscribers = []
 		window.removeEventListener("keydown", this.handleKeyDown)
 
 		// 重置状态
 		this.resetDrawingState()
 	}
 
-	/**
-	 * 处理鼠标按下事件
-	 */
-	private handleMouseDown = (e: Konva.KonvaEventObject<MouseEvent>): void => {
-		// 只处理左键点击
-		if (e.evt.button !== 0) return
+	private handlePointerDown = (input: CanvasPointerInput): void => {
+		if (!this.isActive) return
+		if (input.button !== 0 || input.activePointerCount > 1) return
 
 		// 如果点击在已有元素上，不开始绘制
-		const target = e.target
-		if (target !== this.canvas.stage) return
+		if (input.target !== this.canvas.stage) return
 
-		const pos = this.canvas.stage.getPointerPosition()
-		if (!pos) return
-
-		// 转换为画布坐标（考虑视口缩放和平移）
-		const transform = this.canvas.stage.getAbsoluteTransform().copy().invert()
-		const canvasPos = transform.point(pos)
+		this.preventDefaultForDirectInput(input)
 
 		// 取消所有元素的选中状态
 		this.canvas.selectionManager.deselectAll()
 
 		// 开始绘制
-		this.startDrawing(canvasPos)
+		this.startDrawing(input.canvas)
 	}
 
-	/**
-	 * 处理鼠标移动事件
-	 */
-	private handleMouseMove = (e: Konva.KonvaEventObject<MouseEvent>): void => {
+	private handlePointerMove = (input: CanvasPointerInput): void => {
 		if (!this.isDrawing || !this.startPoint) return
 
-		const pos = this.canvas.stage.getPointerPosition()
-		if (!pos) return
+		if (input.activePointerCount > 1) {
+			this.cancelDrawing()
+			return
+		}
 
-		// 转换为画布坐标（考虑视口缩放和平移）
-		const transform = this.canvas.stage.getAbsoluteTransform().copy().invert()
-		const canvasPos = transform.point(pos)
+		this.preventDefaultForDirectInput(input)
 
-		const width = canvasPos.x - this.startPoint.x
-		const height = canvasPos.y - this.startPoint.y
+		const width = input.canvas.x - this.startPoint.x
+		const height = input.canvas.y - this.startPoint.y
 
 		// 更新预览
 		this.updatePreview(this.startPoint.x, this.startPoint.y, width, height)
 	}
 
-	/**
-	 * 处理鼠标释放事件
-	 */
-	private handleMouseUp = (e: Konva.KonvaEventObject<MouseEvent>): void => {
+	private handlePointerUp = (input: CanvasPointerInput): void => {
 		if (!this.isDrawing || !this.startPoint || !this.currentElementId) return
 
-		const pos = this.canvas.stage.getPointerPosition()
-		if (!pos) return
+		this.preventDefaultForDirectInput(input)
 
-		// 转换为画布坐标（考虑视口缩放和平移）
-		const transform = this.canvas.stage.getAbsoluteTransform().copy().invert()
-		const canvasPos = transform.point(pos)
-
-		const width = canvasPos.x - this.startPoint.x
-		const height = canvasPos.y - this.startPoint.y
+		const width = input.canvas.x - this.startPoint.x
+		const height = input.canvas.y - this.startPoint.y
 
 		// 只有当尺寸大于最小阈值时才创建元素
 		const minSize = 5
@@ -139,6 +121,11 @@ export abstract class BaseDrawingTool extends BaseTool {
 		this.finishDrawing()
 	}
 
+	private handlePointerCancel = (): void => {
+		if (!this.isDrawing) return
+		this.cancelDrawing()
+	}
+
 	/**
 	 * 处理键盘按下事件
 	 */
@@ -147,6 +134,13 @@ export abstract class BaseDrawingTool extends BaseTool {
 		if (this.isDrawing && e.key === "Escape") {
 			e.preventDefault()
 			this.cancelDrawing()
+		}
+	}
+
+	private preventDefaultForDirectInput(input: CanvasPointerInput): void {
+		if (input.pointerType === "mouse") return
+		if (input.nativeEvent.cancelable) {
+			input.nativeEvent.preventDefault()
 		}
 	}
 

@@ -2711,7 +2711,6 @@
 				"title": "Filter"
 			},
 			"item": {
-				"deletedBy": "{{username}} deleted",
 				"more": "More actions",
 				"remainingShort": "{{days}} days left",
 				"selectRow": "Select this item",
@@ -3592,7 +3591,6 @@
 			"retry": "Retry"
 		},
 		"item": {
-			"deletedBy": "{{username}} deleted",
 			"deletedOn": "Deleted on {{date}}",
 			"more": "More actions",
 			"pathPrefix": "Path: ",
@@ -4390,7 +4388,7 @@
 		"shadowSpread": "Spread",
 		"size": "Size",
 		"sizeSettings": "Size Settings",
-		"smallSelectionHint": "Selection too small, please go to toolbar to delete/duplicate or zoom in/out",
+		"smallSelectionHint": "Selection too small. Use the toolbar to copy/delete, or try shortcuts: Delete/Backspace to remove, Ctrl/Cmd+D to duplicate. You can also zoom in first.",
 		"solidColor": "Solid Color",
 		"strikethrough": "Strikethrough",
 		"templateColumns": "Template Columns",

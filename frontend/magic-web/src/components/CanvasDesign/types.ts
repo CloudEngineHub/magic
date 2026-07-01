@@ -3,6 +3,7 @@ import type { ComponentType, RefObject } from "react"
 import type { ModifierAlias } from "./canvas/interaction/shortcuts/types"
 import type { MagicConfig } from "./types.magic"
 import type {
+	CanvasDeviceInfo,
 	CanvasDesignPluginModuleConfig,
 	CanvasDocument,
 	LayerElement,
@@ -21,6 +22,8 @@ import type {
 	CanvasReferenceMentionPanelState,
 	CanvasReferenceMentionProjectFileType,
 } from "./components/MessageEditor/reference-assets/canvasReferenceMention.constants"
+
+export type { CanvasDeviceFormFactor, CanvasDeviceInfo, CanvasDeviceLayout } from "./canvas/types"
 
 /**
  * Mention 面板语言入参（与宿主 MentionPanel LocaleInput 约定一致，避免依赖业务包）
@@ -413,8 +416,8 @@ export interface CanvasDesignProps {
 	}
 	/** 翻译函数 */
 	t?: TFunction
-	/** 是否移动端 */
-	getIsMobile?: () => boolean
+	/** 获取设备形态、布局和输入能力 */
+	getDevice?: () => CanvasDeviceInfo
 	/**
 	 * 宿主底部存在 fixed 层（如分享页「由超级麦吉创建」徽标）时置为 true，
 	 * 缩放控件上移避免被遮挡；由宿主判断场景后传入，CanvasDesign 不依赖业务路由。

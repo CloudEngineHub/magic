@@ -34,6 +34,8 @@ describe("CanvasResourceDiagnostics", () => {
 				memoryHitCount: 0,
 				decodeAttemptCount: 0,
 				cachedResourceHitCount: 0,
+				decodedEvictedCount: 0,
+				backgroundRefreshSkippedCount: 0,
 			}),
 		)
 		expect(createVideoResourceDiagnostics().snapshot()).toEqual(
@@ -41,6 +43,7 @@ describe("CanvasResourceDiagnostics", () => {
 				memoryHitCount: 0,
 				previewLoadAttemptCount: 0,
 				refreshResourceCount: 0,
+				backgroundRefreshSkippedCount: 0,
 			}),
 		)
 	})
@@ -59,6 +62,14 @@ describe("CanvasResourceDiagnostics", () => {
 				previewDecodedBytes: 16,
 				fullLoaded: 0,
 				fullDecodedBytes: 0,
+				decodedBytesTotal: 20,
+				decodedBudgetSoftBytes: 160,
+				decodedBudgetHardBytes: 224,
+				decodedLowLeaseCount: 0,
+				decodedPinnedBytes: 0,
+				decodedPinnedCount: 0,
+				decodedVisiblePinnedCount: 0,
+				decodedNearProtectedCount: 0,
 				bodyCacheCount: 1,
 				bodyCacheBytes: 10,
 				bodyFetchInFlightCount: 0,

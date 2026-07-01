@@ -425,20 +425,35 @@ describe("ImageElement mounted image node sync", () => {
 	})
 
 	it("applies targeted display-loaded resources only to the matching element", () => {
-		const handlers = new Map<string, (event: unknown) => void>()
-		const on = vi.fn((type: string, handler: (event: unknown) => void) => {
-			handlers.set(type, handler)
+		const cleanup = vi.fn()
+		let displayLoadedHandler: ((event: unknown) => void) | undefined
+		const subscribe = vi.fn((key: string, handler: (event: unknown) => void) => {
+			void key
+			void handler
+			return cleanup
 		})
-		const off = vi.fn()
+		const onImageResourceDisplayLoaded = vi.fn(
+			(_elementId: string, handler: (event: unknown) => void) => {
+				displayLoadedHandler = handler
+				return cleanup
+			},
+		)
 		const applyResourceFromEvent = vi.fn()
-		const element = Object.create(ImageElement.prototype) as ImageElement & {
+		const element = Object.create(ImageElement.prototype) as {
 			data: { id: string; src: string }
 			canvas: {
 				magicConfigManager: { config: { methods: Record<string, never> } }
-				eventEmitter: { on: typeof on; off: typeof off }
-				imageResourceManager: { peekResource: ReturnType<typeof vi.fn> }
+				imageResourceManager: {
+					peekResource: ReturnType<typeof vi.fn>
+					onImageResourceLoaded: typeof subscribe
+					onImageResourceDisplayTarget: typeof subscribe
+					onImageResourceDisplayLoaded: typeof onImageResourceDisplayLoaded
+					onImageResourceWillClose: typeof subscribe
+					onImageResourceLoadFailed: typeof subscribe
+				}
 			}
 			applyResourceFromEvent: typeof applyResourceFromEvent
+			resourceSubscriptionCleanups: Array<() => void>
 			removeResourceLoadedListener: () => void
 			setupResourceLoadedListener: () => void
 		}
@@ -460,14 +475,23 @@ describe("ImageElement mounted image node sync", () => {
 		element.data = { id: "image-1", src: "./images/a.png" }
 		element.canvas = {
 			magicConfigManager: { config: { methods: {} } },
-			eventEmitter: { on, off },
-			imageResourceManager: { peekResource: vi.fn(() => null) },
+			imageResourceManager: {
+				peekResource: vi.fn(() => null),
+				onImageResourceLoaded: subscribe,
+				onImageResourceDisplayTarget: subscribe,
+				onImageResourceDisplayLoaded,
+				onImageResourceWillClose: subscribe,
+				onImageResourceLoadFailed: subscribe,
+			},
 		}
 		element.applyResourceFromEvent = applyResourceFromEvent
+		element.resourceSubscriptionCleanups = []
 
 		element.setupResourceLoadedListener()
 
-		handlers.get("resource:image:display-loaded")?.({
+		expect(onImageResourceDisplayLoaded).toHaveBeenCalledWith("image-1", expect.any(Function))
+
+		displayLoadedHandler?.({
 			data: {
 				elementId: "image-2",
 				path: "./images/a.png",
@@ -475,7 +499,7 @@ describe("ImageElement mounted image node sync", () => {
 				reason: "viewport:scale",
 			},
 		})
-		handlers.get("resource:image:display-loaded")?.({
+		displayLoadedHandler?.({
 			data: {
 				elementId: "image-1",
 				path: "./images/a.png",

@@ -10,14 +10,15 @@ import {
 } from "react"
 import type { CanvasDesignStorageData } from "../types.magic"
 import { useMagic } from "./MagicContext"
-import { isMobile as defaultIsMobile } from "../canvas/utils/utils"
+import { getDefaultCanvasDeviceInfo } from "../canvas/utils/utils"
+import type { CanvasDeviceInfo } from "../canvas/types"
 
 interface LayersUIContextValue {
 	collapsed: boolean
 	width: number
 	resizing: boolean
 	transitionAnimation: string
-	isMobile: boolean
+	isCompactLayout: boolean
 	setCollapsed: (collapsed: boolean) => void
 	setWidth: (width: number) => void
 	setResizing: (resizing: boolean) => void
@@ -28,8 +29,8 @@ interface LayersUIContextValue {
 
 const LayersUIContext = createContext<LayersUIContextValue | undefined>(undefined)
 
-export function LayersUIProvider(props: PropsWithChildren<{ getIsMobile?: () => boolean }>) {
-	const { children, getIsMobile = defaultIsMobile } = props
+export function LayersUIProvider(props: PropsWithChildren<{ getDevice?: () => CanvasDeviceInfo }>) {
+	const { children, getDevice = getDefaultCanvasDeviceInfo } = props
 
 	const { methods } = useMagic()
 
@@ -42,8 +43,10 @@ export function LayersUIProvider(props: PropsWithChildren<{ getIsMobile?: () => 
 	const startWidthRef = useRef(0)
 	const layersScrollTopRef = useRef(0)
 
+	const getIsCompactLayout = useCallback(() => getDevice().layout === "compact", [getDevice])
+
 	const [width, setWidth] = useState(() => {
-		if (getIsMobile()) {
+		if (getIsCompactLayout()) {
 			return MIN_WIDTH
 		}
 		if (methods?.getStorage) {
@@ -61,7 +64,7 @@ export function LayersUIProvider(props: PropsWithChildren<{ getIsMobile?: () => 
 	const [transitionAnimation, setTransitionAnimation] = useState(defaultTransitionAnimation)
 	const [resizing, setResizing] = useState(false)
 	const [collapsed, setCollapsed] = useState(() => {
-		if (getIsMobile()) {
+		if (getIsCompactLayout()) {
 			return true
 		}
 		if (methods?.getStorage) {
@@ -103,12 +106,12 @@ export function LayersUIProvider(props: PropsWithChildren<{ getIsMobile?: () => 
 	// 设置 width 的函数，移动端禁用
 	const handleSetWidth = useCallback(
 		(value: number) => {
-			if (getIsMobile()) {
+			if (getIsCompactLayout()) {
 				return
 			}
 			setWidth(value)
 		},
-		[getIsMobile],
+		[getIsCompactLayout],
 	)
 
 	const getLayersScrollTop = useCallback(() => {
@@ -121,7 +124,7 @@ export function LayersUIProvider(props: PropsWithChildren<{ getIsMobile?: () => 
 
 	const handleResizeStart = useCallback(
 		(e: React.MouseEvent) => {
-			if (getIsMobile()) {
+			if (getIsCompactLayout()) {
 				return
 			}
 			e.preventDefault()
@@ -129,7 +132,7 @@ export function LayersUIProvider(props: PropsWithChildren<{ getIsMobile?: () => 
 			startXRef.current = e.clientX
 			startWidthRef.current = width
 		},
-		[width, getIsMobile],
+		[width, getIsCompactLayout],
 	)
 
 	const handleResizeMove = useCallback(
@@ -184,7 +187,7 @@ export function LayersUIProvider(props: PropsWithChildren<{ getIsMobile?: () => 
 		}
 	}, [resizing])
 
-	const isMobileValue = useMemo(() => getIsMobile(), [getIsMobile])
+	const isCompactLayout = useMemo(() => getIsCompactLayout(), [getIsCompactLayout])
 
 	const value: LayersUIContextValue = useMemo(() => {
 		return {
@@ -192,7 +195,7 @@ export function LayersUIProvider(props: PropsWithChildren<{ getIsMobile?: () => 
 			width,
 			resizing,
 			transitionAnimation,
-			isMobile: isMobileValue,
+			isCompactLayout,
 			setCollapsed: handleSetCollapsed,
 			setWidth: handleSetWidth,
 			setResizing,
@@ -210,7 +213,7 @@ export function LayersUIProvider(props: PropsWithChildren<{ getIsMobile?: () => 
 		width,
 		handleSetCollapsed,
 		handleSetWidth,
-		isMobileValue,
+		isCompactLayout,
 	])
 
 	return <LayersUIContext.Provider value={value}>{children}</LayersUIContext.Provider>

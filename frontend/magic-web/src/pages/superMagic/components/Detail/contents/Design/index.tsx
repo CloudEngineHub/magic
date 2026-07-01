@@ -34,7 +34,12 @@ import type {
 import { useDesignFocusElement } from "./hooks/useDesignFocusElement"
 import { useAttachments } from "./hooks/useAttachments"
 import { useCanvasImageFileRenameSync } from "./hooks/useCanvasImageFileRenameSync"
-import type { CanvasDocument, LayerElement } from "@/components/CanvasDesign/canvas/types"
+import type {
+	CanvasDeviceInfo,
+	CanvasDocument,
+	LayerElement,
+} from "@/components/CanvasDesign/canvas/types"
+import { getDefaultCanvasDeviceInfo } from "@/components/CanvasDesign/canvas/utils/utils"
 import CanvasDesignHeaderV2 from "./components/CanvasDesignHeaderV2"
 import { useDesignHeaderProps } from "./components/CanvasDesignHeaderV2/useDesignHeaderProps"
 import { CanvasDesignMentionDataService } from "./adapters/CanvasDesignMentionDataService"
@@ -758,9 +763,12 @@ function DesignViewer(props: DesignViewerProps) {
 		isPlaybackMode,
 	})
 
-	// 获取是否是移动端
-	const getIsMobile = useCallback(() => {
-		return isMobile
+	// 获取画布设备信息：布局沿用业务断点，输入能力由画布统一检测
+	const getDevice = useCallback((): CanvasDeviceInfo => {
+		return {
+			...getDefaultCanvasDeviceInfo(),
+			layout: isMobile ? "compact" : "regular",
+		}
 	}, [isMobile])
 
 	const persistCanvasData = useCallback(
@@ -1513,7 +1521,7 @@ function DesignViewer(props: DesignViewerProps) {
 										onMarkerRestored: handleMarkerRestored,
 									}}
 									t={canvasDesignTAdapter}
-									getIsMobile={getIsMobile}
+									getDevice={getDevice}
 									shareHostBottomChrome={isShareRoute}
 								/>
 							</Suspense>

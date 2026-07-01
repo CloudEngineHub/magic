@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest"
 import type { Canvas } from "../../../Canvas"
 import type { LayerElement } from "../../../types"
+import type { CanvasPointerInput } from "../../input"
 import { SelectionTool } from "../SelectionTool"
 
 function createTool(node: {
@@ -16,6 +17,9 @@ function createTool(node: {
 				getNode: () => node,
 			}),
 		},
+		inputManager: {
+			cancelLongPress: vi.fn(),
+		},
 	} as unknown as Canvas
 	return new SelectionTool({ canvas })
 }
@@ -30,14 +34,138 @@ function createNode() {
 }
 
 type SelectionToolPrivate = {
-	armPendingDirectDrag: (event: MouseEvent, elementId: string) => void
-	armPendingMultiSelectionDrag: (event: MouseEvent, elementId: string) => void
+	canvas: Canvas
+	activate: () => void
+	armPendingDirectDrag: (event: MouseEvent | PointerEvent | TouchEvent, elementId: string) => void
+	armPendingMultiSelectionDrag: (
+		event: MouseEvent | PointerEvent | TouchEvent,
+		elementId: string,
+	) => void
+	handleTouchDown: (input: CanvasPointerInput) => void
+	handlePendingDirectDragInput: (input: CanvasPointerInput) => void
+	handleViewportGesture: (event: { data: { active: boolean } }) => void
 	clearPendingDirectDrag: () => void
 	pendingDirectDrag: unknown
+	isViewportGestureActive: boolean
 }
 
 type SelectionToolBoxPrivate = {
 	findElementsInBox: (box: { x: number; y: number; width: number; height: number }) => string[]
+}
+
+function createPointerEvent(
+	type: string,
+	init: MouseEventInit & { pointerId?: number; pointerType?: string },
+): PointerEvent {
+	const event = new MouseEvent(type, init) as PointerEvent
+	Object.defineProperty(event, "pointerId", {
+		value: init.pointerId ?? 1,
+	})
+	Object.defineProperty(event, "pointerType", {
+		value: init.pointerType ?? "mouse",
+	})
+	return event
+}
+
+function createPointerInput(
+	nativeEvent: PointerEvent,
+	client: { x: number; y: number },
+	options?: Partial<
+		Pick<
+			CanvasPointerInput,
+			"type" | "pointerType" | "target" | "modifiers" | "activePointerCount"
+		>
+	>,
+): CanvasPointerInput {
+	return {
+		type: options?.type ?? "move",
+		pointerId: nativeEvent.pointerId,
+		pointerType: options?.pointerType ?? (nativeEvent.pointerType === "pen" ? "pen" : "touch"),
+		button: 0,
+		buttons: nativeEvent.buttons,
+		client,
+		stage: client,
+		canvas: client,
+		target: options?.target ?? ({} as CanvasPointerInput["target"]),
+		modifiers: options?.modifiers ?? {
+			shift: false,
+			alt: false,
+			meta: false,
+			ctrl: false,
+		},
+		activePointerCount: options?.activePointerCount ?? 1,
+		nativeEvent,
+		konvaEvent: {} as CanvasPointerInput["konvaEvent"],
+	}
+}
+
+function createKonvaNode(
+	id: string,
+	parent: CanvasPointerInput["target"] | null = null,
+	options?: { name?: string; className?: string },
+) {
+	return {
+		id: () => id,
+		name: () => options?.name ?? "",
+		getClassName: () => options?.className ?? "Group",
+		getParent: () => parent,
+		draggable: vi.fn(),
+	} as CanvasPointerInput["target"]
+}
+
+function createTouchSelectionTool(options?: {
+	canSelect?: boolean
+	isSelected?: boolean
+	selectionCount?: number
+	viewportGestureActive?: boolean
+}) {
+	const element = {
+		id: "element-1",
+		type: "rectangle",
+	} as LayerElement
+	const stage = createKonvaNode("stage")
+	const target = createKonvaNode("element-1", stage)
+	const canvas = {
+		stage,
+		contentLayer: {},
+		eraserManager: {
+			getErasingElementId: () => null,
+		},
+		elementManager: {
+			hasElement: (elementId: string) => elementId === "element-1",
+			getElementData: () => element,
+			getElementInstance: () => ({
+				getNode: () => createNode(),
+			}),
+		},
+		permissionManager: {
+			canSelect: vi.fn(() => options?.canSelect ?? true),
+		},
+		selectionManager: {
+			isSelected: vi.fn(() => options?.isSelected ?? false),
+			getSelectionCount: vi.fn(() => options?.selectionCount ?? 1),
+			toggle: vi.fn(),
+			replaceSelection: vi.fn(),
+			deselectAll: vi.fn(),
+		},
+		inputManager: {
+			on: vi.fn(() => vi.fn()),
+			cancelLongPress: vi.fn(),
+		},
+		eventEmitter: {
+			on: vi.fn(),
+			off: vi.fn(),
+		},
+		viewportController: {
+			isViewportGestureActive: vi.fn(() => options?.viewportGestureActive ?? false),
+		},
+	} as unknown as Canvas
+
+	return {
+		canvas,
+		target,
+		tool: new SelectionTool({ canvas }) as unknown as SelectionToolPrivate,
+	}
 }
 
 describe("SelectionTool pending direct drag", () => {
@@ -90,6 +218,461 @@ describe("SelectionTool pending direct drag", () => {
 
 		expect(node.startDrag).toHaveBeenCalledTimes(1)
 		expect(tool.pendingDirectDrag).toBeNull()
+	})
+
+	it("cancels long press when a touch direct drag is armed", () => {
+		const node = createNode()
+		const tool = createTool(node) as unknown as SelectionToolPrivate
+
+		tool.armPendingDirectDrag(
+			createPointerEvent("pointerdown", {
+				clientX: 0,
+				clientY: 0,
+				buttons: 1,
+				pointerId: 4,
+				pointerType: "touch",
+			}),
+			"element-1",
+		)
+
+		expect(tool.canvas.inputManager.cancelLongPress).toHaveBeenCalledTimes(1)
+	})
+
+	it("uses input pointer moves and an 8px minimum threshold for touch direct drag", () => {
+		const node = createNode()
+		const tool = createTool(node) as unknown as SelectionToolPrivate
+
+		tool.armPendingDirectDrag(
+			createPointerEvent("pointerdown", {
+				clientX: 0,
+				clientY: 0,
+				buttons: 1,
+				pointerId: 4,
+				pointerType: "touch",
+			}),
+			"element-1",
+		)
+		window.dispatchEvent(
+			new MouseEvent("mousemove", {
+				clientX: 20,
+				clientY: 0,
+				buttons: 1,
+			}),
+		)
+		expect(node.startDrag).not.toHaveBeenCalled()
+
+		tool.handlePendingDirectDragInput(
+			createPointerInput(
+				createPointerEvent("pointermove", {
+					clientX: 7,
+					clientY: 0,
+					buttons: 1,
+					pointerId: 4,
+					pointerType: "touch",
+				}),
+				{ x: 7, y: 0 },
+			),
+		)
+		expect(node.startDrag).not.toHaveBeenCalled()
+
+		const moveEvent = createPointerEvent("pointermove", {
+			clientX: 9,
+			clientY: 0,
+			buttons: 1,
+			pointerId: 4,
+			pointerType: "touch",
+		})
+		tool.handlePendingDirectDragInput(createPointerInput(moveEvent, { x: 9, y: 0 }))
+
+		expect(node.startDrag).toHaveBeenCalledWith({ evt: moveEvent })
+		expect(tool.pendingDirectDrag).toBeNull()
+	})
+
+	it("cancels touch pending drag and active element drag when viewport gesture starts", () => {
+		const node = {
+			...createNode(),
+			isDragging: vi.fn(() => false),
+			stopDrag: vi.fn(),
+		}
+		const clearTransformInteractionIntent = vi.fn()
+		const cancelActiveTransformDrag = vi.fn()
+		const canvas = {
+			contentLayer: {},
+			elementManager: {
+				getElementInstance: () => ({
+					getNode: () => node,
+				}),
+			},
+			selectionManager: {
+				getSelectedIds: () => ["element-1"],
+			},
+			transformManager: {
+				clearTransformInteractionIntent,
+				cancelActiveTransformDrag,
+			},
+			inputManager: {
+				cancelLongPress: vi.fn(),
+			},
+		} as unknown as Canvas
+		const tool = new SelectionTool({ canvas }) as unknown as SelectionToolPrivate
+
+		tool.armPendingDirectDrag(
+			createPointerEvent("pointerdown", {
+				clientX: 0,
+				clientY: 0,
+				buttons: 1,
+				pointerId: 4,
+				pointerType: "touch",
+			}),
+			"element-1",
+		)
+
+		expect(tool.pendingDirectDrag).not.toBeNull()
+
+		node.isDragging.mockReturnValue(true)
+		tool.handleViewportGesture({ data: { active: true } })
+
+		expect(tool.pendingDirectDrag).toBeNull()
+		expect(node.stopDrag).toHaveBeenCalledTimes(1)
+		expect(cancelActiveTransformDrag).toHaveBeenCalledTimes(1)
+	})
+
+	it("does not arm touch direct drag while viewport gesture is already active", () => {
+		const { canvas, target, tool } = createTouchSelectionTool({
+			canSelect: true,
+			isSelected: false,
+			viewportGestureActive: true,
+		})
+
+		tool.handleTouchDown(
+			createPointerInput(
+				createPointerEvent("pointerdown", {
+					clientX: 0,
+					clientY: 0,
+					buttons: 1,
+					pointerId: 4,
+					pointerType: "touch",
+				}),
+				{ x: 0, y: 0 },
+				{
+					type: "down",
+					target,
+				},
+			),
+		)
+
+		expect(canvas.selectionManager.replaceSelection).not.toHaveBeenCalled()
+		expect(canvas.inputManager.cancelLongPress).not.toHaveBeenCalled()
+		expect(tool.pendingDirectDrag).toBeNull()
+	})
+
+	it("syncs viewport gesture state from controller when activated", () => {
+		const { tool } = createTouchSelectionTool({ viewportGestureActive: true })
+
+		tool.activate()
+
+		expect(tool.isViewportGestureActive).toBe(true)
+	})
+
+	it("cancels long press when a touch multi-selection drag is armed", () => {
+		const beginTransformInteractionIntent = vi.fn()
+		const canvas = {
+			contentLayer: {},
+			selectionManager: {
+				getSelectedIds: () => ["element-1", "element-2"],
+			},
+			transformManager: {
+				beginTransformInteractionIntent,
+				clearTransformInteractionIntent: vi.fn(),
+			},
+			inputManager: {
+				cancelLongPress: vi.fn(),
+			},
+		} as unknown as Canvas
+		const tool = new SelectionTool({ canvas }) as unknown as SelectionToolPrivate
+
+		tool.armPendingMultiSelectionDrag(
+			createPointerEvent("pointerdown", {
+				clientX: 0,
+				clientY: 0,
+				buttons: 1,
+				pointerId: 4,
+				pointerType: "touch",
+			}),
+			"element-1",
+		)
+
+		expect(canvas.inputManager.cancelLongPress).toHaveBeenCalledTimes(1)
+		expect(beginTransformInteractionIntent).toHaveBeenCalledWith(["element-1", "element-2"])
+	})
+
+	it("toggles selection for touch modifier input without arming direct drag", () => {
+		const { canvas, target, tool } = createTouchSelectionTool({
+			canSelect: true,
+			isSelected: false,
+		})
+
+		tool.handleTouchDown(
+			createPointerInput(
+				createPointerEvent("pointerdown", {
+					clientX: 0,
+					clientY: 0,
+					buttons: 1,
+					pointerId: 4,
+					pointerType: "touch",
+					metaKey: true,
+				}),
+				{ x: 0, y: 0 },
+				{
+					type: "down",
+					target,
+					modifiers: {
+						shift: false,
+						alt: false,
+						meta: true,
+						ctrl: false,
+					},
+				},
+			),
+		)
+
+		expect(canvas.selectionManager.toggle).toHaveBeenCalledWith("element-1")
+		expect(canvas.selectionManager.replaceSelection).not.toHaveBeenCalled()
+		expect(canvas.inputManager.cancelLongPress).not.toHaveBeenCalled()
+		expect(tool.pendingDirectDrag).toBeNull()
+	})
+
+	it("allows touch modifier deselect for selected elements that cannot be newly selected", () => {
+		const { canvas, target, tool } = createTouchSelectionTool({
+			canSelect: false,
+			isSelected: true,
+		})
+
+		tool.handleTouchDown(
+			createPointerInput(
+				createPointerEvent("pointerdown", {
+					clientX: 0,
+					clientY: 0,
+					buttons: 1,
+					pointerId: 4,
+					pointerType: "touch",
+					shiftKey: true,
+				}),
+				{ x: 0, y: 0 },
+				{
+					type: "down",
+					target,
+					modifiers: {
+						shift: true,
+						alt: false,
+						meta: false,
+						ctrl: false,
+					},
+				},
+			),
+		)
+
+		expect(canvas.selectionManager.toggle).toHaveBeenCalledWith("element-1")
+		expect(canvas.selectionManager.replaceSelection).not.toHaveBeenCalled()
+		expect(tool.pendingDirectDrag).toBeNull()
+	})
+
+	it("deselects all when touch input starts on blank canvas without modifier", () => {
+		const { canvas, tool } = createTouchSelectionTool()
+
+		tool.handleTouchDown(
+			createPointerInput(
+				createPointerEvent("pointerdown", {
+					clientX: 0,
+					clientY: 0,
+					buttons: 1,
+					pointerId: 4,
+					pointerType: "touch",
+				}),
+				{ x: 0, y: 0 },
+				{
+					type: "down",
+					target: canvas.stage,
+				},
+			),
+		)
+
+		expect(canvas.selectionManager.deselectAll).toHaveBeenCalledTimes(1)
+		expect(tool.pendingDirectDrag).toBeNull()
+	})
+
+	it("keeps selection when touch blank input uses a modifier", () => {
+		const { canvas, tool } = createTouchSelectionTool()
+
+		tool.handleTouchDown(
+			createPointerInput(
+				createPointerEvent("pointerdown", {
+					clientX: 0,
+					clientY: 0,
+					buttons: 1,
+					pointerId: 4,
+					pointerType: "touch",
+					shiftKey: true,
+				}),
+				{ x: 0, y: 0 },
+				{
+					type: "down",
+					target: canvas.stage,
+					modifiers: {
+						shift: true,
+						alt: false,
+						meta: false,
+						ctrl: false,
+					},
+				},
+			),
+		)
+
+		expect(canvas.selectionManager.deselectAll).not.toHaveBeenCalled()
+		expect(tool.pendingDirectDrag).toBeNull()
+	})
+
+	it("deselects all when touch input starts on blank area of multi-selection proxy", () => {
+		const stage = createKonvaNode("stage")
+		const proxy = createKonvaNode("proxy", stage, { name: "multi-selection-proxy" })
+		const canvas = {
+			stage,
+			contentLayer: {
+				getAbsoluteTransform: () => ({
+					copy: () => ({
+						invert: () => ({
+							point: (point: { x: number; y: number }) => point,
+						}),
+					}),
+				}),
+			},
+			eraserManager: {
+				getErasingElementId: () => null,
+			},
+			elementManager: {
+				hasElement: () => false,
+				getElementData: () => undefined,
+				getNodeAdapter: () => ({
+					getElementBounds: () => ({ x: 100, y: 100, width: 20, height: 20 }),
+				}),
+			},
+			permissionManager: {
+				canSelect: vi.fn(() => false),
+			},
+			selectionManager: {
+				isSelected: vi.fn(() => false),
+				getSelectionCount: vi.fn(() => 2),
+				getSelectedIds: vi.fn(() => ["element-1", "element-2"]),
+				toggle: vi.fn(),
+				replaceSelection: vi.fn(),
+				deselectAll: vi.fn(),
+			},
+			inputManager: {
+				cancelLongPress: vi.fn(),
+			},
+		} as unknown as Canvas
+		const tool = new SelectionTool({ canvas }) as unknown as SelectionToolPrivate
+
+		tool.handleTouchDown(
+			createPointerInput(
+				createPointerEvent("pointerdown", {
+					clientX: 0,
+					clientY: 0,
+					buttons: 1,
+					pointerId: 4,
+					pointerType: "touch",
+				}),
+				{ x: 0, y: 0 },
+				{
+					type: "down",
+					target: proxy,
+				},
+			),
+		)
+
+		expect(canvas.selectionManager.deselectAll).toHaveBeenCalledTimes(1)
+		expect(tool.pendingDirectDrag).toBeNull()
+	})
+
+	it("arms touch multi-selection drag when proxy hit is inside a selected element", () => {
+		const beginTransformInteractionIntent = vi.fn()
+		const clearTransformInteractionIntent = vi.fn()
+		const stage = createKonvaNode("stage")
+		const proxy = createKonvaNode("proxy", stage, { name: "multi-selection-proxy" })
+		const canvas = {
+			stage,
+			contentLayer: {
+				getAbsoluteTransform: () => ({
+					copy: () => ({
+						invert: () => ({
+							point: (point: { x: number; y: number }) => point,
+						}),
+					}),
+				}),
+			},
+			eraserManager: {
+				getErasingElementId: () => null,
+			},
+			elementManager: {
+				hasElement: () => false,
+				getElementData: () => undefined,
+				getNodeAdapter: () => ({
+					getElementBounds: (elementId: string) =>
+						elementId === "element-1"
+							? { x: 0, y: 0, width: 20, height: 20 }
+							: undefined,
+				}),
+			},
+			permissionManager: {
+				canSelect: vi.fn(() => false),
+			},
+			selectionManager: {
+				isSelected: vi.fn(() => false),
+				getSelectionCount: vi.fn(() => 2),
+				getSelectedIds: vi.fn(() => ["element-1", "element-2"]),
+				toggle: vi.fn(),
+				replaceSelection: vi.fn(),
+				deselectAll: vi.fn(),
+			},
+			transformManager: {
+				beginTransformInteractionIntent,
+				clearTransformInteractionIntent,
+			},
+			inputManager: {
+				cancelLongPress: vi.fn(),
+			},
+		} as unknown as Canvas
+		const tool = new SelectionTool({ canvas }) as unknown as SelectionToolPrivate
+
+		tool.handleTouchDown(
+			createPointerInput(
+				createPointerEvent("pointerdown", {
+					clientX: 0,
+					clientY: 0,
+					buttons: 1,
+					pointerId: 4,
+					pointerType: "touch",
+				}),
+				{ x: 10, y: 10 },
+				{
+					type: "down",
+					target: proxy,
+				},
+			),
+		)
+
+		expect(canvas.selectionManager.deselectAll).not.toHaveBeenCalled()
+		expect(beginTransformInteractionIntent).toHaveBeenCalledWith(["element-1", "element-2"])
+		expect(canvas.inputManager.cancelLongPress).toHaveBeenCalledTimes(1)
+		expect(clearTransformInteractionIntent).not.toHaveBeenCalled()
+		expect(tool.pendingDirectDrag).toEqual(
+			expect.objectContaining({
+				mode: "multi-selection",
+				elementId: "element-1",
+				pointerId: 4,
+				pointerType: "touch",
+			}),
+		)
 	})
 
 	it("starts multi-selection proxy drag after the pointer moves past proxy dragDistance", () => {

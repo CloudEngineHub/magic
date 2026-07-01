@@ -15,6 +15,17 @@ import {
 } from "./CanvasRenderVisibilityController"
 
 type VisibilityState = "visible" | "near" | "far"
+export type DecodedImageRetentionVisibilityState = Extract<VisibilityState, "visible" | "near">
+
+export interface DecodedImageRetentionHint {
+	elementId: string
+	path: string
+	visibilityState: DecodedImageRetentionVisibilityState
+	requestedVariant?: ImageResourceVariant
+	displayedVariant?: ImageResourceVariant
+	screenLongEdge: number
+	lastSeenAt: number
+}
 
 interface RegisteredImageElement {
 	elementId: string
@@ -97,6 +108,7 @@ const INITIAL_VISIBLE_CRITICAL_WINDOW_MS = 5000
 const MAX_INITIAL_VISIBLE_CONTAINER_IMAGE_REQUESTS = 48
 const VIEWPORT_MOVEMENT_SCALE_REFRESH_RATIO = 1.15
 const IMAGE_VARIANT_SWITCH_COOLDOWN_MS = 450
+const DECODED_IMAGE_RETENTION_GRACE_MS = 1500
 const FAR_VISIBILITY_DRAIN_GRACE_MS = 3000
 const CONTENT_LAYER_HIT_GRAPH_RESTORE_DELAY_MS = 160
 // Current default: Konva-only far culling. Far elements stop participating in drawing / hit
@@ -266,6 +278,7 @@ export class CanvasVisibilityManager {
 	private readonly lastRequestedLoadState = new Map<string, RequestedImageLoadState>()
 	private readonly lastRequestedVideoLoadState = new Map<string, RequestedVideoLoadState>()
 	private readonly lastContainerDisplayVariant = new Map<string, MediaDisplayResourceVariant>()
+	private readonly imageRetentionHints = new Map<string, DecodedImageRetentionHint>()
 	private rafId: number | null = null
 	private drainTimerId: ReturnType<typeof setTimeout> | null = null
 	private farVisibilityDrainTimerId: ReturnType<typeof setTimeout> | null = null
@@ -420,6 +433,7 @@ export class CanvasVisibilityManager {
 		this.registeredImages.set(elementId, { elementId, path })
 		this.lastVisibilityState.delete(elementId)
 		this.lastRequestedLoadState.delete(elementId)
+		this.imageRetentionHints.delete(elementId)
 		this.scheduleRefresh("image:register", true)
 	}
 
@@ -429,6 +443,7 @@ export class CanvasVisibilityManager {
 		this.registeredImages.delete(elementId)
 		this.lastVisibilityState.delete(elementId)
 		this.lastRequestedLoadState.delete(elementId)
+		this.imageRetentionHints.delete(elementId)
 		this.scheduleRefresh("image:unregister", true)
 	}
 
@@ -560,6 +575,33 @@ export class CanvasVisibilityManager {
 		})
 	}
 
+	public invalidateImageLoadRequest(
+		path: string,
+		variant?: ImageResourceVariant,
+		reason = "resource-invalidated",
+	): void {
+		if (this.destroyed) return
+
+		let matched = false
+		this.registeredImages.forEach((registered, elementId) => {
+			if (!this.isSameResourcePath(registered.path, path)) return
+
+			const previousState = this.lastRequestedLoadState.get(elementId)
+			if (variant) {
+				if (!previousState || previousState.variant !== variant) return
+			}
+
+			matched = true
+			if (previousState) {
+				this.lastRequestedLoadState.delete(elementId)
+			}
+		})
+
+		if (matched) {
+			this.scheduleRefresh(`image:load-request-invalidated:${reason}`, true)
+		}
+	}
+
 	public getSnapshot(): CanvasVisibilitySnapshot {
 		return { ...this.statsSnapshot }
 	}
@@ -594,6 +636,7 @@ export class CanvasVisibilityManager {
 		this.lastRequestedLoadState.clear()
 		this.lastRequestedVideoLoadState.clear()
 		this.lastContainerDisplayVariant.clear()
+		this.imageRetentionHints.clear()
 		this.renderVisibilityController.restoreAll()
 		this.canvas.eventEmitter.off("viewport:pan", this.handleViewportPan)
 		this.canvas.eventEmitter.off("viewport:scale", this.handleViewportScale)
@@ -740,6 +783,51 @@ export class CanvasVisibilityManager {
 			previousVariant === "full"
 			? previousVariant
 			: undefined
+	}
+
+	private getDisplayedImageVariant(elementId: string): ImageResourceVariant | undefined {
+		const elementInstance = this.canvas.elementManager.getElementInstance(elementId)
+		const getDisplayResourceVariant = (
+			elementInstance as
+				| {
+						getDisplayResourceVariant?: () => ImageResourceVariant | undefined
+				  }
+				| undefined
+		)?.getDisplayResourceVariant
+		if (typeof getDisplayResourceVariant !== "function") return undefined
+		return getDisplayResourceVariant.call(elementInstance)
+	}
+
+	private updateImageRetentionHints(candidates: ImageLoadCandidate[], lastSeenAt: number): void {
+		candidates.forEach((candidate) => {
+			if (candidate.visibilityState !== "visible" && candidate.visibilityState !== "near") {
+				return
+			}
+			const registered = this.registeredImages.get(candidate.elementId)
+			if (!registered) return
+			this.imageRetentionHints.set(candidate.elementId, {
+				elementId: candidate.elementId,
+				path: registered.path,
+				visibilityState: candidate.visibilityState,
+				requestedVariant: candidate.variant,
+				displayedVariant: this.getDisplayedImageVariant(candidate.elementId),
+				screenLongEdge: candidate.screenLongEdge,
+				lastSeenAt,
+			})
+		})
+	}
+
+	private pruneExpiredImageRetentionHints(currentTime = now()): void {
+		this.imageRetentionHints.forEach((hint, elementId) => {
+			if (currentTime - hint.lastSeenAt > DECODED_IMAGE_RETENTION_GRACE_MS) {
+				this.imageRetentionHints.delete(elementId)
+			}
+		})
+	}
+
+	public getDecodedImageRetentionSnapshot(): DecodedImageRetentionHint[] {
+		this.pruneExpiredImageRetentionHints()
+		return Array.from(this.imageRetentionHints.values(), (hint) => ({ ...hint }))
 	}
 
 	private refreshVisibility(reason: string, force: boolean): void {
@@ -901,6 +989,11 @@ export class CanvasVisibilityManager {
 				visibleVideoCandidates.push(...visibleContainerMediaCandidates.videoCandidates)
 			}
 		}
+
+		this.updateImageRetentionHints(
+			[...visibleCandidates, ...lowDetailVisibleCandidates, ...nearCandidates],
+			startedAt,
+		)
 
 		visibleVideoIds.forEach((elementId) => {
 			const candidate = this.createVideoCandidate(
@@ -1129,6 +1222,10 @@ export class CanvasVisibilityManager {
 				lowDetailVisibleVideoCandidates.push(candidate)
 			}
 		})
+		this.updateImageRetentionHints(
+			[...visibleCandidates, ...lowDetailVisibleCandidates],
+			startedAt,
+		)
 		const pendingVisibleCandidates = visibleCandidates.filter((candidate) =>
 			this.shouldRequestImageCandidate(candidate),
 		)
@@ -1767,14 +1864,11 @@ export class CanvasVisibilityManager {
 			variant: candidate.variant,
 			requestedAt: now(),
 		})
-		this.canvas.eventEmitter.emit({
-			type: "resource:image:display-target",
-			data: {
-				elementId: candidate.elementId,
-				path: candidate.path,
-				variant: candidate.variant,
-				reason,
-			},
+		this.canvas.imageResourceManager.emitImageResourceDisplayTarget({
+			elementId: candidate.elementId,
+			path: candidate.path,
+			variant: candidate.variant,
+			reason,
 		})
 		void this.canvas.imageResourceManager.loadResource(candidate.path, {
 			variant: candidate.variant,

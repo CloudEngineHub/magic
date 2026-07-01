@@ -18,7 +18,10 @@ export function useCanvasElements(elementIds?: string[]): LayerElement[] {
 		shouldSubscribe ? canvas : null,
 		"element:change",
 		({ data }) => {
+			const changedElementIds = data?.elementIds
+			const isTransient = data?.phase === "transient"
 			if (elementIds === undefined) {
+				if (isTransient) return
 				forceUpdate()
 				return
 			}
@@ -27,8 +30,9 @@ export function useCanvasElements(elementIds?: string[]): LayerElement[] {
 				return
 			}
 
-			const changedElementIds = data?.elementIds
-			if (!changedElementIds || changedElementIds.some((id) => elementIds.includes(id))) {
+			const matched =
+				!changedElementIds || changedElementIds.some((id) => elementIds.includes(id))
+			if (matched && !isTransient) {
 				forceUpdate()
 			}
 		},
@@ -70,7 +74,9 @@ export function useCanvasElement(elementId: string | null): LayerElement | null 
 			}
 
 			const changedElementIds = data?.elementIds
-			if (!changedElementIds || changedElementIds.includes(elementId)) {
+			const isTransient = data?.phase === "transient"
+			const matched = !changedElementIds || changedElementIds.includes(elementId)
+			if (matched && !isTransient) {
 				forceUpdate()
 			}
 		},
