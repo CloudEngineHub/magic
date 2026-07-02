@@ -213,6 +213,26 @@ export type MentionData = MentionItemDataMap[MentionDataItemType]
 export type MentionItemDataByType<T extends MentionPanelItemTypeValue> =
 	T extends MentionDataItemType ? MentionItemDataMap[T] : never
 
+export interface MentionImageSourceCrop {
+	x: number
+	y: number
+	width: number
+	height: number
+	displayWidth?: number
+	displayHeight?: number
+}
+
+export interface CanvasElementMentionSourcePreview {
+	kind: "canvas-element"
+	designProjectId?: string
+	elementId: string
+	mediaType: "image" | "video"
+	src: string
+	crop?: MentionImageSourceCrop
+}
+
+export type MentionItemSourcePreview = CanvasElementMentionSourcePreview
+
 // Generic mention result format
 export interface MentionResult<T extends MentionDataItemType = MentionDataItemType> {
 	type: T
@@ -327,6 +347,8 @@ export interface MentionItem<T extends MentionPanelItemTypeValue = MentionPanelI
 
 	// History tracking properties
 	tags?: string[] // Tags for categorization (e.g., "history", "recent")
+	metadata?: Record<string, unknown>
+	sourcePreview?: MentionItemSourcePreview
 
 	// Skill specific properties
 	package_name?: string // Package name

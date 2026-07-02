@@ -41,6 +41,7 @@ export function renderMentionAvatarIcon(params: {
 
 export function renderMentionFolderIcon(context: MentionItemRendererContext) {
 	const { item, platform } = context
+	if (typeof item.icon !== "string") return item.icon ?? null
 	if (item.icon !== "file-folder") return null
 
 	const size = getRendererIconSize(platform)
@@ -107,7 +108,7 @@ export function renderMentionFolderIcon(context: MentionItemRendererContext) {
 
 export function renderMentionFileIcon(context: MentionItemRendererContext) {
 	const { item } = context
-	if (typeof item.icon !== "string") return null
+	if (typeof item.icon !== "string") return item.icon ?? null
 
 	return <MentionPanelFileImageIcon context={context} />
 }

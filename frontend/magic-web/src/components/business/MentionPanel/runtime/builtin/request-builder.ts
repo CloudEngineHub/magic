@@ -29,6 +29,7 @@ export function buildMentionStoreRequest(
 			return {
 				kind: "children",
 				id: itemId,
+				...(t ? { options: { t: t as I18nTexts } } : {}),
 			}
 		case PanelState.CATALOG:
 			if (!catalogId) return null

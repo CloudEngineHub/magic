@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useRef, useState } from "react"
-import type { ReactNode } from "react"
 import MagicFileIcon from "@/components/base/MagicFileIcon"
 import { cn } from "@/lib/utils"
 import type { MentionItemRendererContext } from "../../../../renderers/types"
@@ -18,6 +17,9 @@ import {
 	getFileTreeIconType,
 	type MagicProjectIconContext,
 } from "@/pages/superMagic/components/MessageList/components/MessageAttachment/utils"
+import { getCanvasElementSourcePreview } from "../canvas-elements/item-utils"
+import { CanvasElementResourceIcon } from "../canvas-elements/CanvasElementResourceIcon"
+import { MentionFileImagePreviewBox } from "./MentionFileImagePreviewBox"
 
 function getFileRowIconSize(platform: MentionItemRendererContext["platform"]) {
 	return platform === "desktop" ? 16 : 20
@@ -36,26 +38,6 @@ function getMagicFileIconType(context: MentionItemRendererContext): string {
 
 type ImageLoadPhase = "loading" | "loaded" | "error"
 
-function MentionFileImagePreviewBox(props: { iconSize: number; children: ReactNode }) {
-	const { iconSize, children } = props
-
-	return (
-		<div
-			className="relative shrink-0 overflow-hidden rounded bg-muted"
-			style={{
-				width: iconSize,
-				height: iconSize,
-				minWidth: iconSize,
-				minHeight: iconSize,
-				maxWidth: iconSize,
-				maxHeight: iconSize,
-			}}
-		>
-			{children}
-		</div>
-	)
-}
-
 function isDirectoryLikeMentionItem(item: unknown): boolean {
 	return (item as { is_directory?: unknown })?.is_directory === true
 }
@@ -67,8 +49,21 @@ function getCustomFolderId(displayConfig?: Record<string, unknown>): string | un
 
 export function MentionPanelFileImageIcon(props: { context: MentionItemRendererContext }) {
 	const { context } = props
-	const { item, platform, filePreviewById } = context
-	const iconSize = getFileRowIconSize(platform)
+	const iconSize = getFileRowIconSize(context.platform)
+	const canvasElementPreview = getCanvasElementSourcePreview(context.item)
+	if (canvasElementPreview) {
+		return <CanvasElementResourceIcon preview={canvasElementPreview} iconSize={iconSize} />
+	}
+
+	return <ProjectMentionPanelFileImageIcon context={context} iconSize={iconSize} />
+}
+
+function ProjectMentionPanelFileImageIcon(props: {
+	context: MentionItemRendererContext
+	iconSize: number
+}) {
+	const { context, iconSize } = props
+	const { item, filePreviewById } = context
 
 	const extension =
 		item.type === MentionItemType.PROJECT_FILE

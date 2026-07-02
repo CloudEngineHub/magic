@@ -1,8 +1,10 @@
-import { describe, expect, it } from "vitest"
+import { describe, expect, it, vi } from "vitest"
 import { MentionItemType } from "@/components/business/MentionPanel/types"
 import { CanvasDesignMentionDataService } from "../CanvasDesignMentionDataService"
 import type { ProjectAttachmentMentionNode } from "@/components/CanvasDesign/types"
 import type { I18nTexts } from "@/components/business/MentionPanel/i18n/types"
+import { zhCN } from "@/components/business/MentionPanel/i18n/locales/zh-CN"
+import { ElementTypeEnum, type CanvasDocument } from "@/components/CanvasDesign/canvas/types"
 
 function folderNode(
 	id: string,
@@ -55,5 +57,364 @@ describe("CanvasDesignMentionDataService", () => {
 			type: MentionItemType.PROJECT_FILE,
 			unSelectable: false,
 		})
+	})
+
+	it("injects current canvas elements into the current design folder", async () => {
+		const service = new CanvasDesignMentionDataService([
+			folderNode("design-a", "Design A", [
+				folderNode("design-a/images", "images", [
+					fileNode("cat.png", "design-a/images/cat.png"),
+				]),
+			]),
+		])
+		const document: CanvasDocument = {
+			elements: [
+				{
+					id: "hero",
+					type: ElementTypeEnum.Image,
+					name: "Hero Layer",
+					src: "./images/cat.png",
+					zIndex: 1,
+				},
+				{
+					id: "shape",
+					type: ElementTypeEnum.Rectangle,
+					name: "Shape Layer",
+					zIndex: 2,
+				},
+			],
+		}
+
+		const getCanvasDocument = vi.fn(() => document)
+		service.setCanvasReferenceElementsContext({
+			canvasName: "Design A",
+			rootFolderId: "design-a",
+			getCanvasDocument,
+		})
+
+		const folderResult = await Promise.resolve(
+			service.dispatch({
+				kind: "children",
+				id: "design-a",
+				options: { t: zhCN },
+			}),
+		)
+
+		expect(folderResult.items?.[0]).toMatchObject({
+			id: "canvas-elements",
+			type: MentionItemType.FOLDER,
+			name: "画布元素",
+		})
+		expect(folderResult.items?.[0].description).toBeUndefined()
+		expect(getCanvasDocument).not.toHaveBeenCalled()
+
+		const rootResult = await Promise.resolve(
+			service.dispatch({
+				kind: "default",
+				options: { t: {} as I18nTexts },
+			}),
+		)
+
+		expect(rootResult.items?.some((item) => item.id === "canvas-elements")).toBe(false)
+		expect(getCanvasDocument).not.toHaveBeenCalled()
+
+		const canvasResult = await Promise.resolve(
+			service.dispatch({
+				kind: "children",
+				id: "canvas-elements",
+			}),
+		)
+
+		expect(canvasResult.items).toHaveLength(1)
+		expect(canvasResult.items?.[0]).toMatchObject({
+			type: MentionItemType.PROJECT_FILE,
+			name: "Hero Layer",
+			data: {
+				file_id: "design-a/images/cat.png",
+				file_name: "cat.png",
+				file_path: "design-a/images/cat.png",
+			},
+		})
+		expect(getCanvasDocument).toHaveBeenCalledTimes(1)
+	})
+
+	it("resolves canvas elements when current design files are stored as dsl-relative paths", async () => {
+		const service = new CanvasDesignMentionDataService([
+			folderNode("/design-a/", "Design A", [fileNode("cat.png", "./images/cat.png")]),
+		])
+		service.setCanvasReferenceElementsContext({
+			canvasName: "Design A",
+			rootFolderId: "/design-a",
+			getCanvasDocument: () => ({
+				elements: [
+					{
+						id: "hero",
+						type: ElementTypeEnum.Image,
+						name: "Hero Layer",
+						src: "./images/cat.png",
+						zIndex: 1,
+					},
+				],
+			}),
+		})
+
+		const folderResult = await Promise.resolve(
+			service.dispatch({
+				kind: "children",
+				id: "/design-a",
+				options: { t: zhCN },
+			}),
+		)
+
+		expect(folderResult.items?.[0]).toMatchObject({
+			id: "canvas-elements",
+			type: MentionItemType.FOLDER,
+			name: "画布元素",
+		})
+
+		const canvasResult = await Promise.resolve(
+			service.dispatch({
+				kind: "children",
+				id: "canvas-elements",
+			}),
+		)
+
+		expect(canvasResult.items).toHaveLength(1)
+		expect(canvasResult.items?.[0]).toMatchObject({
+			type: MentionItemType.PROJECT_FILE,
+			name: "Hero Layer",
+			data: {
+				file_id: "./images/cat.png",
+				file_path: "./images/cat.png",
+			},
+		})
+	})
+
+	it("keeps dsl-relative canvas element matches scoped to the current design root", async () => {
+		const service = new CanvasDesignMentionDataService([
+			folderNode("images", "images", [fileNode("cat.png", "images/cat.png")]),
+			folderNode("design-a", "Design A", [fileNode("cat.png", "./images/cat.png")]),
+		])
+		service.setCanvasReferenceElementsContext({
+			canvasName: "Design A",
+			rootFolderId: "design-a",
+			getCanvasDocument: () => ({
+				elements: [
+					{
+						id: "hero",
+						type: ElementTypeEnum.Image,
+						name: "Hero Layer",
+						src: "./images/cat.png",
+						zIndex: 1,
+					},
+				],
+			}),
+		})
+
+		const canvasResult = await Promise.resolve(
+			service.dispatch({
+				kind: "children",
+				id: "canvas-elements",
+			}),
+		)
+
+		expect(canvasResult.items?.[0]).toMatchObject({
+			type: MentionItemType.PROJECT_FILE,
+			name: "Hero Layer",
+			data: {
+				file_id: "./images/cat.png",
+				file_path: "./images/cat.png",
+			},
+		})
+	})
+
+	it("searches current canvas elements by element name", async () => {
+		const service = new CanvasDesignMentionDataService([
+			folderNode("design-a", "Design A", [fileNode("cat.png", "design-a/images/cat.png")]),
+		])
+		service.setCanvasReferenceElementsContext({
+			canvasName: "Design A",
+			rootFolderId: "design-a",
+			getCanvasDocument: () => ({
+				elements: [
+					{
+						id: "hero",
+						type: ElementTypeEnum.Image,
+						name: "Hero Layer",
+						src: "./images/cat.png",
+						zIndex: 1,
+					},
+				],
+			}),
+		})
+
+		const result = await Promise.resolve(
+			service.dispatch({
+				kind: "search",
+				query: "Hero",
+			}),
+		)
+
+		expect(result.items?.[0]).toMatchObject({
+			type: MentionItemType.PROJECT_FILE,
+			name: "Hero Layer",
+			tags: ["canvas-element"],
+			data: {
+				file_name: "cat.png",
+			},
+		})
+	})
+
+	it("does not resolve current canvas relative resources from another design folder", async () => {
+		const service = new CanvasDesignMentionDataService([
+			folderNode("design-a", "Design A", []),
+			folderNode("design-b", "Design B", [
+				folderNode("design-b/images", "images", [
+					fileNode("cat.png", "design-b/images/cat.png"),
+				]),
+			]),
+		])
+		service.setCanvasReferenceElementsContext({
+			canvasName: "Design A",
+			rootFolderId: "design-a",
+			getCanvasDocument: () => ({
+				elements: [
+					{
+						id: "hero",
+						type: ElementTypeEnum.Image,
+						name: "Hero Layer",
+						src: "./images/cat.png",
+						zIndex: 1,
+					},
+				],
+			}),
+		})
+
+		const result = await Promise.resolve(
+			service.dispatch({
+				kind: "children",
+				id: "canvas-elements",
+			}),
+		)
+
+		expect(result.items).toEqual([])
+	})
+
+	it("keeps video canvas elements visible when the current picker only accepts images", async () => {
+		const service = new CanvasDesignMentionDataService([
+			folderNode("design-a", "Design A", [
+				fileNode("cat.png", "design-a/images/cat.png"),
+				fileNode("clip.mp4", "design-a/videos/clip.mp4"),
+			]),
+		])
+		service.setLimitInfoGetter(() => ({
+			referenceResourceType: "image",
+		}))
+		service.setCanvasReferenceElementsContext({
+			canvasName: "Design A",
+			rootFolderId: "design-a",
+			getCanvasDocument: () => ({
+				elements: [
+					{
+						id: "clip",
+						type: ElementTypeEnum.Video,
+						name: "Clip Layer",
+						src: "./videos/clip.mp4",
+						zIndex: 1,
+					},
+				],
+			}),
+		})
+
+		const result = await Promise.resolve(
+			service.dispatch({
+				kind: "children",
+				id: "canvas-elements",
+			}),
+		)
+
+		expect(result.items).toHaveLength(1)
+		expect(result.items?.[0]).toMatchObject({
+			type: MentionItemType.PROJECT_FILE,
+			name: "Clip Layer",
+			unSelectable: true,
+			sourcePreview: {
+				kind: "canvas-element",
+				elementId: "clip",
+				mediaType: "video",
+				src: "./videos/clip.mp4",
+			},
+			data: {
+				file_name: "clip.mp4",
+				file_path: "design-a/videos/clip.mp4",
+			},
+		})
+	})
+
+	it("invalidates current canvas elements cache when refreshing", async () => {
+		const service = new CanvasDesignMentionDataService([
+			folderNode("design-a", "Design A", [
+				fileNode("cat.png", "design-a/images/cat.png"),
+				fileNode("clip.mp4", "design-a/videos/clip.mp4"),
+			]),
+		])
+		const firstDocument: CanvasDocument = {
+			elements: [
+				{
+					id: "hero",
+					type: ElementTypeEnum.Image,
+					name: "Hero Layer",
+					src: "./images/cat.png",
+					zIndex: 1,
+				},
+			],
+		}
+		const nextDocument: CanvasDocument = {
+			elements: [
+				{
+					id: "clip",
+					type: ElementTypeEnum.Video,
+					name: "Clip Layer",
+					src: "./videos/clip.mp4",
+					zIndex: 1,
+				},
+			],
+		}
+		let currentDocument = firstDocument
+		const getCanvasDocument = vi.fn(() => currentDocument)
+		service.setCanvasReferenceElementsContext({
+			canvasName: "Design A",
+			rootFolderId: "design-a",
+			getCanvasDocument,
+		})
+
+		await Promise.resolve(
+			service.dispatch({
+				kind: "children",
+				id: "design-a",
+			}),
+		)
+
+		const firstResult = await Promise.resolve(
+			service.dispatch({
+				kind: "children",
+				id: "canvas-elements",
+			}),
+		)
+		expect(firstResult.items?.map((item) => item.name)).toEqual(["Hero Layer"])
+		expect(getCanvasDocument).toHaveBeenCalledTimes(1)
+
+		currentDocument = nextDocument
+		service.requestRefresh()
+
+		const result = await Promise.resolve(
+			service.dispatch({
+				kind: "children",
+				id: "canvas-elements",
+			}),
+		)
+
+		expect(result.items?.map((item) => item.name)).toEqual(["Clip Layer"])
+		expect(getCanvasDocument).toHaveBeenCalledTimes(2)
 	})
 })

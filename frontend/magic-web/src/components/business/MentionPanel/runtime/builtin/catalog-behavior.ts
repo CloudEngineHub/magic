@@ -1,6 +1,7 @@
 import { MentionItemType, PanelState } from "../../types"
 import type { MentionPanelCatalogBehavior, StateTransition } from "../../types"
 import { MentionPanelBuiltinItemId as BuiltinItemId, MentionPanelCatalogId } from "./catalog-ids"
+import { isCanvasElementsMentionItemId } from "./domains/canvas-elements"
 import { MentionPanelItemType } from "./panel-item-types"
 
 function buildCatalogTransition(catalogId: string): StateTransition<string> {
@@ -15,6 +16,7 @@ const DEFAULT_STATE_TRANSITIONS: Record<PanelState, Record<string, StateTransiti
 		[BuiltinItemId.PERSONAL_DRIVE]: { state: PanelState.FOLDER },
 		[BuiltinItemId.ENTERPRISE_DRIVE]: { state: PanelState.FOLDER },
 		[BuiltinItemId.PROJECT_FILES]: { state: PanelState.FOLDER },
+		[BuiltinItemId.CANVAS_ELEMENTS]: { state: PanelState.FOLDER },
 		[BuiltinItemId.MCP_EXTENSIONS]: buildCatalogTransition(
 			MentionPanelCatalogId.MCP_EXTENSIONS,
 		),
@@ -59,6 +61,10 @@ export const defaultMentionPanelCatalogBehavior: MentionPanelCatalogBehavior<str
 				return null
 		}
 	},
+	shouldEnterFolderDirectly: ({ selectedItem }) =>
+		selectedItem.type === MentionItemType.FOLDER &&
+		selectedItem.isFolder === true &&
+		isCanvasElementsMentionItemId(selectedItem.id),
 	shouldSelectItemDirectly: ({ currentState, currentCatalogId, selectedItem, enterFolder }) =>
 		currentState === PanelState.CATALOG &&
 		currentCatalogId === MentionPanelCatalogId.TABS &&

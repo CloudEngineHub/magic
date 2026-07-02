@@ -5,6 +5,7 @@ import {
 } from "../../../../types"
 import type { MentionItemRenderer } from "../../../../renderers/types"
 import { renderMentionFileIcon, renderMentionFolderIcon } from "../shared/render-utils"
+import { isCanvasElementItem } from "../canvas-elements/item-utils"
 
 function getFolderRelativePath(path?: string) {
 	if (!path) return path
@@ -55,7 +56,10 @@ export const workspaceFilesRendererEntries: Array<[string, MentionItemRenderer]>
 				return getFolderRelativePath(item.description)
 			},
 			getTypeDescription: ({ item, isSearch, t }) => {
+				if (isSearch && isCanvasElementItem(item))
+					return t.defaultItems?.canvasElements || "Canvas Elements"
 				if (isSearch && item.description) return item.description
+				if (!isSearch && item.description && !item.data) return item.description
 				const rootLabel = t.selectPathItemDescription.rootDirectory
 				const directoryPath = (item.data as DirectoryMentionData | undefined)
 					?.directory_path
@@ -90,6 +94,8 @@ export const workspaceFilesRendererEntries: Array<[string, MentionItemRenderer]>
 				)
 			},
 			getTypeDescription: ({ item, isSearch, t }) => {
+				if (isSearch && isCanvasElementItem(item))
+					return t.defaultItems?.canvasElements || "Canvas Elements"
 				if (isSearch && item.description) return item.description
 				const rootLabel = t.selectPathItemDescription.rootDirectory
 				const filePath = (item.data as ProjectFileMentionData | undefined)?.file_path || ""
