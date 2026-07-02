@@ -69,8 +69,12 @@ vi.mock("../components/MobileRecordingSettingsSheet", () => ({
 }))
 
 vi.mock("@/pages/superMagicMobile/components/MobileShell", () => ({
-	MobileShellSidebarToggleButton: ({ testId }: { testId: string }) => (
-		<button type="button" data-testid={testId}>
+	MobileShellSidebarToggleButton: ({
+		testId = "mobile-shell-menu-button",
+	}: {
+		testId?: string
+	}) => (
+		<button type="button" data-testid={`${testId}-open`}>
 			menu
 		</button>
 	),
@@ -107,7 +111,7 @@ describe("AudioRecordingEntryPage", () => {
 		)
 
 		expect(screen.getByTestId("mobile-audio-entry-page")).toBeInTheDocument()
-		expect(screen.getByTestId("mobile-audio-entry-menu-button")).toBeInTheDocument()
+		expect(screen.getByTestId("mobile-shell-menu-button-open")).toBeInTheDocument()
 		expect(screen.getByText("mobile.shell.navRecording")).toBeInTheDocument()
 		expect(screen.getByTestId("mobile-audio-recording-list-panel")).toBeInTheDocument()
 		expect(screen.queryByText("mobile.recordingEntry.placeholder")).toBeNull()

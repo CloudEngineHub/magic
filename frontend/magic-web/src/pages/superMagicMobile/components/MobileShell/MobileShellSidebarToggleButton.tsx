@@ -23,7 +23,7 @@ export interface MobileShellSidebarToggleButtonProps {
  * Prototype-aligned sidebar control: hamburger when closed, X when the drawer is open.
  */
 export function MobileShellSidebarToggleButton({
-	testId = MOBILE_SHELL_MENU_BUTTON_TEST_ID,
+	testId = "mobile-shell-menu-button",
 	variant = "header",
 	className,
 	onFallbackOpen,
@@ -45,10 +45,12 @@ export function MobileShellSidebarToggleButton({
 
 	const ariaLabel = isSidebarOpen ? t("mobile.shell.closeSidebar") : t("mobile.shell.menuAria")
 	const Icon = isSidebarOpen ? X : Menu
+	// Keep the caller-provided base stable while exposing the current click action to E2E selectors.
+	const actionTestId = `${testId}-${isSidebarOpen ? "close" : "open"}`
 
 	if (variant === "icon") {
 		return (
-			<MobileShellIconButton label={ariaLabel} onClick={handleClick} testId={testId}>
+			<MobileShellIconButton label={ariaLabel} onClick={handleClick} testId={actionTestId}>
 				<Icon size={22} className="text-foreground" aria-hidden />
 			</MobileShellIconButton>
 		)
@@ -66,7 +68,7 @@ export function MobileShellSidebarToggleButton({
 					className,
 				)}
 				aria-label={ariaLabel}
-				data-testid={testId}
+				data-testid={actionTestId}
 			>
 				<Icon className="size-[22px] text-foreground" strokeWidth={2} aria-hidden />
 			</Button>
@@ -82,7 +84,7 @@ export function MobileShellSidebarToggleButton({
 				className,
 			)}
 			aria-label={ariaLabel}
-			data-testid={testId}
+			data-testid={actionTestId}
 		>
 			<Icon className="size-[22px] text-foreground" aria-hidden />
 		</button>
