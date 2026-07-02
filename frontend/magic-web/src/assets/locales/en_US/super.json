@@ -3202,6 +3202,9 @@
 		"createFolderNamePlaceholder": "Enter folder name",
 		"createSection": "Create document",
 		"deleteConfirm": {
+			"canvasContentLossWarning": "This operation will delete data or resources required by the canvas content. Some canvas content may disappear.",
+			"canvasMixedWarning": "This operation affects the canvas project entry file and data or resources required by the canvas content. The canvas may fail to open or lose visible content.",
+			"canvasOpenFailureWarning": "This operation will delete the canvas project entry file. The canvas may fail to open.",
 			"emptyLabel": "Empty folder",
 			"fileCount": "{{count}} files",
 			"intro": "Permanently delete the following {{count}} items:",
@@ -4710,6 +4713,15 @@
 		"batchOperation": "Batch Operation",
 		"batchOperations": "Batch Operations",
 		"cancelSelect": "Cancel",
+		"canvasOperationRisk": {
+			"moveContentLossContent": "This operation will move data or resources required by the canvas content. Some canvas content may disappear. Continue?",
+			"moveMixedContent": "This operation affects the canvas project entry file and data or resources required by the canvas content. The canvas may fail to open or lose visible content. Continue?",
+			"moveOpenFailureContent": "This operation will move the canvas project entry file. The canvas may fail to open. Continue?",
+			"renameContentLossContent": "This operation will rename data or resources required by the canvas content. Some canvas content may disappear. Continue?",
+			"renameMixedContent": "This operation affects the canvas project entry file and data or resources required by the canvas content. The canvas may fail to open or lose visible content. Continue?",
+			"renameOpenFailureContent": "This operation will rename the canvas project entry file. The canvas may fail to open. Continue?",
+			"title": "Canvas Project Risk"
+		},
 		"clawPlaygroundTags": {
 			"aboutYou": "About You",
 			"guidelines": "Guidelines",
@@ -4770,6 +4782,9 @@
 			"deleteBatchSubject": "{{count}} selected item(s)",
 			"deleteBatchTipMobile": "Delete Selection?",
 			"deleteBatchWithFoldersDescription": "will be permanently deleted, including folder contents and unselected subfiles. This action cannot be undone.",
+			"deleteCanvasContentLossRiskContent": "This operation will delete data or resources required by the canvas content. Some canvas content may disappear. Continue deleting?",
+			"deleteCanvasMixedRiskContent": "This operation affects the canvas project entry file and data or resources required by the canvas content. The canvas may fail to open or lose visible content. Continue deleting?",
+			"deleteCanvasOpenFailureRiskContent": "This operation will delete the canvas project entry file. The canvas may fail to open. Continue deleting?",
 			"deleteContent": "Confirm to delete {{name}} ?",
 			"deleteFileDescription": "will be permanently deleted. This action cannot be undone.",
 			"deleteFileFailed": "Failed to delete file",
