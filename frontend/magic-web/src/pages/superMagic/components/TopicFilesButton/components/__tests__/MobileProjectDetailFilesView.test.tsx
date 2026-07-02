@@ -3,6 +3,19 @@ import { describe, expect, it, vi } from "vitest"
 import MobileProjectDetailFilesView from "../MobileProjectDetailFilesView"
 import type { AttachmentItem } from "../../hooks/types"
 
+vi.mock("@/models/repository/Cache", () => ({
+	Storage: {
+		get: vi.fn(),
+		set: vi.fn(),
+		remove: vi.fn(),
+		allClear: vi.fn(),
+		key: vi.fn(),
+		getAll: vi.fn(() => []),
+		clearById: vi.fn(),
+		length: 0,
+	},
+}))
+
 vi.mock("react-i18next", () => ({
 	useTranslation: () => ({
 		t: (key: string) => key,
@@ -75,7 +88,7 @@ vi.mock("@/pages/superMagicMobile/components/MobileBottomSearchBar", () => ({
 
 vi.mock("@/components/base-mobile/ScrollEdgeFade", () => ({
 	ScrollEdgeFadeContainer: ({ children }: { children?: React.ReactNode }) => (
-		<div>{children}</div>
+		<div data-testid="mobile-files-scroll-edge-fade">{children}</div>
 	),
 }))
 
@@ -214,5 +227,21 @@ describe("MobileProjectDetailFilesView", () => {
 			throw new Error("Expected breadcrumb button to be rendered")
 		}
 		expect(breadcrumbButton.className).toContain("max-w-[168px]")
+	})
+
+	it("添加按钮脱离滚动渐隐容器以避免被底部搜索栏阴影遮挡", () => {
+		render(
+			<MobileProjectDetailFilesView
+				attachments={[]}
+				allowEdit
+				mobileViewVariant="chat-sheet"
+			/>,
+		)
+
+		const addButton = screen.getByTestId("project-detail-files-add-button")
+		const scrollFadeContainer = screen.getByTestId("mobile-files-scroll-edge-fade")
+
+		expect(scrollFadeContainer).not.toContainElement(addButton)
+		expect(addButton.className).toContain("z-30")
 	})
 })
