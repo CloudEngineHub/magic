@@ -1412,6 +1412,7 @@ class LLMAppService extends AbstractLLMAppService
         $accessContext = null;
         $originalModelId = $proxyModelRequest->getModel();
         $invocationSuccessAudited = false;
+        $modelAuditEnabled = false;
         try {
             // Validate access token and model permissions
             $modelGatewayDataIsolation = $this->createModelGatewayDataIsolationByAccessToken($proxyModelRequest->getAccessToken(), $proxyModelRequest->getBusinessParams());
@@ -1542,6 +1543,7 @@ class LLMAppService extends AbstractLLMAppService
             $proxyModelRequest->addBusinessParam('event_id', (string) IdGenerator::getSnowId());
 
             // Call LLM model to get response
+            $modelAuditEnabled = true;
             /** @var ResponseInterface $response */
             $response = $modelCallFunction($modelGatewayDataIsolation, $model, $proxyModelRequest);
             $invocationSuccessAudited = true;
@@ -1587,7 +1589,7 @@ class LLMAppService extends AbstractLLMAppService
             if ($throwable instanceof OdinException || $throwable instanceof InvalidArgumentException || $throwable instanceof BusinessException) {
                 $message = $throwable->getMessage();
             }
-            if (! $invocationSuccessAudited) {
+            if (! $invocationSuccessAudited && $modelAuditEnabled) {
                 $businessParams = $proxyModelRequest->getBusinessParams();
                 $businessParams['is_success'] = false;
                 $businessParams['response_duration'] = $failLatency;
