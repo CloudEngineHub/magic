@@ -2776,4 +2776,12 @@ export const generateSuperMagicApi = (fetch: HttpClient) => ({
 	getChatWorkspace() {
 		return fetch.get<Workspace>("/api/v1/super-agent/workspaces/app/chat")
 	},
+
+	/**
+	 * @description 获取微应用的特殊 workspace
+	 * @returns 特殊 workspace
+	 */
+	getMicroAppWorkspace() {
+		return fetch.get<Workspace>("/api/v1/super-agent/workspaces/app/micro-app")
+	},
 })

@@ -193,7 +193,7 @@ function AppConversationPanel({
 			},
 			mergeSendParams: ({ defaultParams }) => {
 				return merge(defaultParams, {
-					topicMode: TopicMode.Default,
+					topicMode: TopicMode.MicroApp,
 				})
 			},
 			queueContext: {

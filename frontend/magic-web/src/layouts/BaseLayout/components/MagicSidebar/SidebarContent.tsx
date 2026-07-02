@@ -1,6 +1,6 @@
 import { Suspense, lazy, useState, type MouseEvent } from "react"
 import { useLocation } from "react-router"
-import { ChevronRight, Home, LayoutGrid, MessageCircle, UsersRound } from "lucide-react"
+import { Boxes, ChevronRight, Home, LayoutGrid, MessageCircle, UsersRound } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { WorkspaceList } from "./WorkspaceList"
 import CollapsedWorkspaceMenu from "./CollapsedWorkspaceMenu"
@@ -41,6 +41,7 @@ function SidebarContent({ collapsed }: SidebarContentProps) {
 	const workspaces = workspaceStore.workspaces
 	const selectedWorkspace = workspaceStore.selectedWorkspace
 	const isShareWorkspaceActive = isCollaborationWorkspace(selectedWorkspace)
+	const microAppsRouteUrl = getRoutePath({ name: RouteName.MicroApps })
 	const navigate = useNavigate()
 	const sidebarMarketMenuItems = useSidebarMarketMenuItems()
 	const { superRouteUrl, handleNavigateToSuperHome } = useNavigateToSuperHome()
@@ -60,6 +61,13 @@ function SidebarContent({ collapsed }: SidebarContentProps) {
 		event.preventDefault()
 		if (routesPathMatch(routeName, location.pathname)) return
 		navigate({ name: routeName })
+	}
+
+	function handleNavigateToMicroApps(event: MouseEvent<HTMLAnchorElement>) {
+		if (!shouldHandleAnchorClick(event)) return
+		event.preventDefault()
+		if (microAppsRouteUrl && location.pathname === microAppsRouteUrl) return
+		navigate({ name: RouteName.MicroApps })
 	}
 
 	function renderSidebarMarketMenuItem({
@@ -155,6 +163,29 @@ function SidebarContent({ collapsed }: SidebarContentProps) {
 									)}
 								</SidebarMenuButton>
 							</AppsSubMenu>
+						</SidebarMenuItem>
+						<SidebarMenuItem>
+							<SidebarMenuButton
+								asChild
+								tooltip={collapsed ? t("appsMenu.microApps") : undefined}
+								data-testid="sidebar-content-micro-apps-button"
+								className="text-sidebar-foreground"
+								isActive={
+									routesPathMatch(RouteName.MicroApps, location.pathname) ||
+									routesPathMatch(RouteName.MicroApp, location.pathname)
+								}
+							>
+								<a
+									href={microAppsRouteUrl || "#"}
+									onClick={handleNavigateToMicroApps}
+									className="text-current no-underline"
+								>
+									<Boxes className="h-4 w-4 shrink-0" />
+									<span className="flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-left text-sm leading-5">
+										{t("appsMenu.microApps")}
+									</span>
+								</a>
+							</SidebarMenuButton>
 						</SidebarMenuItem>
 					</SidebarMenu>
 				</SidebarGroupContent>

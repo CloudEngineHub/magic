@@ -7,16 +7,20 @@
 		"aiFinance": "AI Finance",
 		"aiSearch": "AI Search",
 		"apps": "Apps",
+		"microApps": "Micro Apps",
 		"more": "More"
-	},
-	"crewMarket": {
-		"title": "Digital Crew"
 	},
 	"audioRecordings": {
 		"title": "Recordings & summaries"
 	},
-	"officialDocumentWriting": {
-		"title": "Document Writing Assistant"
+	"chats": {
+		"empty": "No conversations",
+		"newChat": "New chat",
+		"refresh": "Refresh conversations",
+		"title": "Chats"
+	},
+	"crewMarket": {
+		"title": "Digital Crew"
 	},
 	"footer": {
 		"defaultUser": "User",
@@ -34,12 +38,6 @@
 	"home": {
 		"title": "Home"
 	},
-	"chats": {
-		"title": "Chats",
-		"newChat": "New chat",
-		"refresh": "Refresh conversations",
-		"empty": "No conversations"
-	},
 	"mobileShell": {
 		"themeToggle": {
 			"switchToDark": "Switch to dark mode",
@@ -48,6 +46,9 @@
 	},
 	"mySkills": {
 		"title": "Skill Library"
+	},
+	"officialDocumentWriting": {
+		"title": "Document Writing Assistant"
 	},
 	"organizationSwitch": {
 		"addAccount": "Add Account",

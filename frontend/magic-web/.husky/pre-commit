@@ -1,3 +1,12 @@
+#!/usr/bin/env sh
+
+# Git GUI clients often use a minimal PATH without node/pnpm.
+if ! command -v node >/dev/null 2>&1; then
+	export NVM_DIR="${NVM_DIR:-$HOME/.nvm}"
+	[ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
+fi
+export PATH="$HOME/Library/pnpm:/opt/homebrew/bin:/usr/local/bin:$PATH"
+
 # Resolve the magic-web project root from this hook's location.
 # Works both in the monorepo (git root != project root) and when
 # magic-web is distributed as a standalone repository.

@@ -34,8 +34,10 @@ export enum RouteName {
 	SuperChatProjectState = "SuperChatProjectState",
 	/**  */
 	SuperWorkspaceProjectTopicState = "SuperWorkspaceProjectTopicState",
+	/** 微应用列表 */
+	MicroApps = "MicroApps",
 	/** 微应用开发页面 */
-	SuperApp = "SuperApp",
+	MicroApp = "MicroApp",
 	/** 协作邀请 */
 	CollaborationInvite = "CollaborationInvite",
 	/** 用户 - 个人中心（移动端） */

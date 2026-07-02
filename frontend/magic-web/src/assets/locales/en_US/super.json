@@ -220,42 +220,6 @@
 			"unlimited": "unlimited"
 		}
 	},
-	"plan": {
-		"actions": {
-			"approve": "Approve and start",
-			"back": "Back",
-			"cancel": "Cancel",
-			"collapse": "Collapse plan card",
-			"expand": "Expand plan card",
-			"requestRevision": "Request changes",
-			"submitRevision": "Submit changes"
-		},
-		"fields": {
-			"unnamedTable": "Unnamed table"
-		},
-		"revisionPlaceholder": "Tell the agent how you want this plan adjusted",
-		"sections": {
-			"acceptanceCriteria": "Acceptance criteria",
-			"assumptions": "Assumptions",
-			"dataModel": "Data model",
-			"files": "Files",
-			"implementationSteps": "Implementation steps",
-			"requirements": "Core requirements",
-			"userFeedback": "Your feedback"
-		},
-		"status": {
-			"approved": "Approved",
-			"cancelled": "Cancelled",
-			"pending": "Pending approval",
-			"revisionRequested": "Changes requested",
-			"submitFailed": "Failed to submit. Please try again later",
-			"timeout": "Timed out"
-		},
-		"title": "Implementation plan",
-		"validation": {
-			"revisionRequired": "Please enter the requested changes first"
-		}
-	},
 	"assistant": {
 		"agentChatPlaceholder": "You can enter your conversation content with \"{{agentName}}\"",
 		"aiChat": "AI Chat",
@@ -2566,6 +2530,32 @@
 		"updateFailed": "Failed to update queue message",
 		"updateSuccess": "Queue message updated successfully"
 	},
+	"microAppPage": {
+		"header": {
+			"backToApps": "Back to micro apps",
+			"entryLabel": "Entry",
+			"entryPlaceholder": "Select entry HTML",
+			"hideFiles": "Hide files",
+			"showFiles": "Show files"
+		},
+		"preview": {
+			"emptyDescription": "Add an HTML file to the project root, or select an entry file in the header.",
+			"emptyTitle": "No entry HTML found"
+		},
+		"previewDialog": {
+			"description": "File preview dialog",
+			"title": "File preview"
+		}
+	},
+	"microAppsPage": {
+		"emptyDescription": "There are no projects in this workspace.",
+		"emptyTitle": "No micro app projects",
+		"errorDescription": "Failed to load the project list. Please retry.",
+		"errorTitle": "Load failed",
+		"refresh": "Refresh",
+		"subtitle": "Projects in the current workspace",
+		"title": "Micro Apps"
+	},
 	"mobile": {
 		"apps": {
 			"emptyDescription": "No application entry is available for the current organization yet.",
@@ -2942,6 +2932,42 @@
 			"untitledTopic": "New chat",
 			"waitingForUser": "Awaiting your reply",
 			"waitingForUserHint": "Awaiting reply"
+		}
+	},
+	"plan": {
+		"actions": {
+			"approve": "Approve and start",
+			"back": "Back",
+			"cancel": "Cancel",
+			"collapse": "Collapse plan card",
+			"expand": "Expand plan card",
+			"requestRevision": "Request changes",
+			"submitRevision": "Submit changes"
+		},
+		"fields": {
+			"unnamedTable": "Unnamed table"
+		},
+		"revisionPlaceholder": "Tell the agent how you want this plan adjusted",
+		"sections": {
+			"acceptanceCriteria": "Acceptance criteria",
+			"assumptions": "Assumptions",
+			"dataModel": "Data model",
+			"files": "Files",
+			"implementationSteps": "Implementation steps",
+			"requirements": "Core requirements",
+			"userFeedback": "Your feedback"
+		},
+		"status": {
+			"approved": "Approved",
+			"cancelled": "Cancelled",
+			"pending": "Pending approval",
+			"revisionRequested": "Changes requested",
+			"submitFailed": "Failed to submit. Please try again later",
+			"timeout": "Timed out"
+		},
+		"title": "Implementation plan",
+		"validation": {
+			"revisionRequired": "Please enter the requested changes first"
 		}
 	},
 	"playbackControl": {
@@ -3647,32 +3673,32 @@
 			"confirmMessage": "Restore {{type}}「{{name}}」to its original location?",
 			"conflictNamesWithEtc": "{{names}}, and more",
 			"duplicateRestoreTarget": "There are files with the same target path and name in this restore batch. By default, only the most recently deleted one will be restored.",
-			"projectMissing": "The file's project does not exist or has been deleted. Please restore the project first.",
-			"projectMissingTip": "{{count}} file(s) belong to projects that do not exist or were deleted. Please restore those projects first.",
-			"projectMissingTipWithNames": "{{count}} file(s) belong to projects that do not exist or were deleted ({{fileNames}}). Please restore those projects first.",
-			"fileNamesWithEtc": "{{names}} and more files",
 			"duplicateRestoreTargetTip": "There are {{count}} file(s) with duplicate target path and name in this batch. By default, only the most recently deleted one will be restored.",
 			"errorMessage": "Parent check failed, please retry later",
 			"fileConflictConfirmMessage": "{{parentMissingCount}} file(s) whose original folder no longer exists will be restored to the original project's root directory. The original project root already contains {{conflictNames}}, and {{nameConflictCount}} file(s) with the same name will need confirmation one by one. Continue?",
 			"fileConflictCountConfirmMessage": "{{parentMissingCount}} file(s) whose original folder no longer exists will be restored to the original project's root directory; another {{nameConflictCount}} conflicting file(s) will need confirmation one by one. Continue?",
-			"nameConflictConfirmMessage": "The original project root already contains {{conflictNames}}, and {{count}} file(s) with the same name will need confirmation one by one. Continue?",
-			"nameConflictCountConfirmMessage": "The original project root already contains {{count}} file(s) with the same name. These files will need confirmation one by one. Continue?",
-			"nameConflictDialogTitle": "Overwrite file \"{{fileName}}\"?",
-			"parentMissingConfirmMessage": "{{count}} file(s) whose original folder no longer exists will be restored to the original project's root directory. Continue?",
+			"fileNamesWithEtc": "{{names}} and more files",
 			"invalidMessage": "Pre-restore check did not pass",
 			"locationLabel": "location",
 			"missingParentMessage": "The original {{parentLabel}} no longer exists. Please select a new {{locationLabel}} to restore 「{{name}}」.",
 			"mixedTypes": "Selected resources have mixed types",
-			"skipNameConflict": "Skip",
-			"processingAllNameConflicts": "Processing...",
-			"pendingNameConflictCount": "{{count}} conflicting file(s) remaining",
+			"nameConflictConfirmMessage": "The original project root already contains {{conflictNames}}, and {{count}} file(s) with the same name will need confirmation one by one. Continue?",
+			"nameConflictCountConfirmMessage": "The original project root already contains {{count}} file(s) with the same name. These files will need confirmation one by one. Continue?",
+			"nameConflictDialogTitle": "Overwrite file \"{{fileName}}\"?",
 			"nameConflictSkipped": "{{count}} file(s) with a name conflict were skipped",
 			"needMoveFiles": "Original projects no longer exist for some items. Please select a project for these {{count}} Files.",
 			"needMoveProjects": "Original workspaces no longer exist for some items. Please select a workspace for these {{count}} projects.",
 			"needMoveTopics": "Original projects no longer exist for some items. Please select a project for these {{count}} Topics.",
 			"noResourcesFound": "No restorable resources found",
 			"parentLabel": "parent",
+			"parentMissingConfirmMessage": "{{count}} file(s) whose original folder no longer exists will be restored to the original project's root directory. Continue?",
+			"pendingNameConflictCount": "{{count}} conflicting file(s) remaining",
+			"processingAllNameConflicts": "Processing...",
+			"projectMissing": "The file's project does not exist or has been deleted. Please restore the project first.",
+			"projectMissingTip": "{{count}} file(s) belong to projects that do not exist or were deleted. Please restore those projects first.",
+			"projectMissingTipWithNames": "{{count}} file(s) belong to projects that do not exist or were deleted ({{fileNames}}). Please restore those projects first.",
 			"selectionName": "{{count}} items",
+			"skipNameConflict": "Skip",
 			"skippedMessage": "No parent check needed, can restore directly",
 			"unknownTarget": "Unknown"
 		},

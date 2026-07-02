@@ -219,42 +219,6 @@
 			"unlimited": "不限"
 		}
 	},
-	"plan": {
-		"actions": {
-			"approve": "确认并开始开发",
-			"back": "返回",
-			"cancel": "取消",
-			"collapse": "折叠计划卡片",
-			"expand": "展开计划卡片",
-			"requestRevision": "提出修改",
-			"submitRevision": "提交修改意见"
-		},
-		"fields": {
-			"unnamedTable": "未命名数据表"
-		},
-		"revisionPlaceholder": "告诉 Agent 你希望怎么调整这个计划",
-		"sections": {
-			"acceptanceCriteria": "验收标准",
-			"assumptions": "默认假设",
-			"dataModel": "数据模型",
-			"files": "文件结构",
-			"implementationSteps": "实现步骤",
-			"requirements": "核心需求",
-			"userFeedback": "你的反馈"
-		},
-		"status": {
-			"approved": "已确认",
-			"cancelled": "已取消",
-			"pending": "待确认",
-			"revisionRequested": "需修改",
-			"submitFailed": "提交失败，请稍后重试",
-			"timeout": "已超时"
-		},
-		"title": "开发计划",
-		"validation": {
-			"revisionRequired": "请先填写修改意见"
-		}
-	},
 	"assistant": {
 		"agentChatPlaceholder": "您可输入您与\"{{agentName}}\"对话的内容",
 		"aiChat": "AI 聊天",
@@ -2566,6 +2530,32 @@
 		"updateFailed": "更新队列消息失败",
 		"updateSuccess": "队列消息已更新"
 	},
+	"microAppPage": {
+		"header": {
+			"backToApps": "返回微应用列表",
+			"entryLabel": "入口",
+			"entryPlaceholder": "选择入口 HTML",
+			"hideFiles": "隐藏文件列表",
+			"showFiles": "展开文件列表"
+		},
+		"preview": {
+			"emptyDescription": "请在项目根目录添加 HTML 文件，或从右上角选择入口文件。",
+			"emptyTitle": "未找到入口 HTML"
+		},
+		"previewDialog": {
+			"description": "文件预览弹窗",
+			"title": "文件预览"
+		}
+	},
+	"microAppsPage": {
+		"emptyDescription": "当前工作区下暂无项目。",
+		"emptyTitle": "暂无微应用项目",
+		"errorDescription": "项目列表加载失败，请重试。",
+		"errorTitle": "加载失败",
+		"refresh": "刷新",
+		"subtitle": "当前工作区下的项目",
+		"title": "微应用"
+	},
 	"mobile": {
 		"apps": {
 			"emptyDescription": "当前组织下暂无可访问的应用入口。",
@@ -2942,6 +2932,42 @@
 			"untitledTopic": "新对话",
 			"waitingForUser": "等待用户回复",
 			"waitingForUserHint": "等待回复"
+		}
+	},
+	"plan": {
+		"actions": {
+			"approve": "确认并开始开发",
+			"back": "返回",
+			"cancel": "取消",
+			"collapse": "折叠计划卡片",
+			"expand": "展开计划卡片",
+			"requestRevision": "提出修改",
+			"submitRevision": "提交修改意见"
+		},
+		"fields": {
+			"unnamedTable": "未命名数据表"
+		},
+		"revisionPlaceholder": "告诉 Agent 你希望怎么调整这个计划",
+		"sections": {
+			"acceptanceCriteria": "验收标准",
+			"assumptions": "默认假设",
+			"dataModel": "数据模型",
+			"files": "文件结构",
+			"implementationSteps": "实现步骤",
+			"requirements": "核心需求",
+			"userFeedback": "你的反馈"
+		},
+		"status": {
+			"approved": "已确认",
+			"cancelled": "已取消",
+			"pending": "待确认",
+			"revisionRequested": "需修改",
+			"submitFailed": "提交失败，请稍后重试",
+			"timeout": "已超时"
+		},
+		"title": "开发计划",
+		"validation": {
+			"revisionRequired": "请先填写修改意见"
 		}
 	},
 	"playbackControl": {
@@ -3649,32 +3675,32 @@
 			"confirmMessage": "将{{type}}「{{name}}」恢复至原位置？",
 			"conflictNamesWithEtc": "{{names}} 等文件",
 			"duplicateRestoreTarget": "同批恢复里有同目标同名文件，系统默认仅恢复最新删除的那个",
-			"projectMissing": "文件所属项目不存在或已删除，请先恢复项目",
-			"projectMissingTip": "有 {{count}} 个文件所属项目不存在或已删除，请先恢复项目。",
-			"projectMissingTipWithNames": "有 {{count}} 个文件所属项目不存在或已删除（{{fileNames}}），请先恢复项目。",
-			"fileNamesWithEtc": "{{names}} 等文件",
 			"duplicateRestoreTargetTip": "选择中的文件有 {{count}} 个同目标同名文件，系统默认仅恢复最新删除的那个",
 			"errorMessage": "父级检查失败，请稍后重试",
 			"fileConflictConfirmMessage": "有 {{parentMissingCount}} 个文件原目录已不存在，将恢复到原项目根目录；原项目根目录已存在同名文件 {{conflictNames}}，这 {{nameConflictCount}} 个文件需要逐个确认。确认继续？",
 			"fileConflictCountConfirmMessage": "有 {{parentMissingCount}} 个文件原目录已不存在，将恢复到原项目根目录；另有 {{nameConflictCount}} 个同名文件需要逐个确认。确认继续？",
-			"nameConflictConfirmMessage": "原项目根目录已存在同名文件 {{conflictNames}}，这 {{count}} 个文件需要逐个确认。确认继续？",
-			"nameConflictCountConfirmMessage": "原项目根目录已存在 {{count}} 个同名文件，这些文件需要逐个确认。确认继续？",
-			"nameConflictDialogTitle": "是否覆盖文件「{{fileName}}」？",
-			"parentMissingConfirmMessage": "有 {{count}} 个文件原目录已不存在，将恢复到原项目根目录。确认恢复？",
+			"fileNamesWithEtc": "{{names}} 等文件",
 			"invalidMessage": "恢复前检查未通过",
 			"locationLabel": "位置",
 			"missingParentMessage": "原{{parentLabel}}已不存在，请选择新的{{locationLabel}}以恢复「{{name}}」。",
 			"mixedTypes": "所选资源类型不一致",
-			"skipNameConflict": "跳过",
-			"processingAllNameConflicts": "处理中...",
-			"pendingNameConflictCount": "还有 {{count}} 个冲突文件待处理",
+			"nameConflictConfirmMessage": "原项目根目录已存在同名文件 {{conflictNames}}，这 {{count}} 个文件需要逐个确认。确认继续？",
+			"nameConflictCountConfirmMessage": "原项目根目录已存在 {{count}} 个同名文件，这些文件需要逐个确认。确认继续？",
+			"nameConflictDialogTitle": "是否覆盖文件「{{fileName}}」？",
 			"nameConflictSkipped": "{{count}} 个同名文件已跳过",
 			"needMoveFiles": "部分项的原项目已不存在，请为这 {{count}} 个文件选择目标项目。",
 			"needMoveProjects": "部分项的原工作区已不存在，请为这 {{count}} 个项目选择目标工作区。",
 			"needMoveTopics": "部分项的原项目已不存在，请为这 {{count}} 个话题选择目标项目。",
 			"noResourcesFound": "未找到可恢复的资源",
 			"parentLabel": "父级",
+			"parentMissingConfirmMessage": "有 {{count}} 个文件原目录已不存在，将恢复到原项目根目录。确认恢复？",
+			"pendingNameConflictCount": "还有 {{count}} 个冲突文件待处理",
+			"processingAllNameConflicts": "处理中...",
+			"projectMissing": "文件所属项目不存在或已删除，请先恢复项目",
+			"projectMissingTip": "有 {{count}} 个文件所属项目不存在或已删除，请先恢复项目。",
+			"projectMissingTipWithNames": "有 {{count}} 个文件所属项目不存在或已删除（{{fileNames}}），请先恢复项目。",
 			"selectionName": "{{count}} 项",
+			"skipNameConflict": "跳过",
 			"skippedMessage": "无需校验父级，可直接恢复",
 			"unknownTarget": "未知"
 		},

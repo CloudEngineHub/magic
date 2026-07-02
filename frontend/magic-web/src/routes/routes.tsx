@@ -116,11 +116,12 @@ const ResponsiveRecycleBin = lazy(() => import("@/pages/recycleBin/ResponsiveRec
 const ChatsPage = lazy(() => import("@/pages/superMagicMobile/pages/ChatsPage"))
 const MobileHomePage = lazy(() => import("@/pages/superMagic/lazy/MobileHomePage"))
 const SuperAppsPage = lazy(() => import("@/pages/superMagic/pages/AppsPage"))
+const MicroAppsPage = lazy(() => import("@/pages/superMagic/pages/MicroAppsPage"))
 const SuperMagicNavigate = lazy(() => import("@/pages/superMagic/lazy/SuperMagicNavigate"))
 const SuperRootRedirect = lazy(() => import("@/pages/superMagic/lazy/SuperRootRedirect"))
 const WorkspacePage = lazy(() => import("@/pages/superMagic/lazy/WorkspacePage"))
 const TopicPage = lazy(() => import("@/pages/superMagic/lazy/TopicPage"))
-const AppPage = lazy(() => import("@/pages/superMagic/lazy/AppPage"))
+const MicroAppPage = lazy(() => import("@/pages/superMagic/lazy/MicroAppPage"))
 const MobileTabs = lazy(() => import("@/pages/mobileTabs"))
 const WorkspacesPage = lazy(() => import("@/pages/superMagicMobile/pages/WorkspacesPage"))
 const SharedWorkspacePage = lazy(() => import("@/pages/superMagicMobile/pages/SharedWorkspacePage"))
@@ -451,9 +452,17 @@ export function registerRoutes(config: RouteConfig = {}): Array<RouteObject> {
 						element: <WorkspacePage />,
 					},
 					{
-						name: RouteName.SuperApp,
-						path: `/:clusterCode${RoutePath.SuperApp}`,
-						element: <AppPage />,
+						name: RouteName.MicroApps,
+						path: `/:clusterCode${RoutePath.MicroApps}`,
+						element: <MicroAppsPage />,
+						meta: {
+							title: "routes.application",
+						},
+					},
+					{
+						name: RouteName.MicroApp,
+						path: `/:clusterCode${RoutePath.MicroApp}`,
+						element: <MicroAppPage />,
 					},
 					{
 						name: RouteName.SuperChatProjectState,

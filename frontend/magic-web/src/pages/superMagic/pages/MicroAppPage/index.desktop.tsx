@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import { useParams } from "react-router"
 import { observer } from "mobx-react-lite"
 import { useTranslation } from "react-i18next"
@@ -7,24 +7,15 @@ import { useDebounceFn, useDeepCompareEffect, useLocalStorageState, useMemoizedF
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import useNavigate from "@/routes/hooks/useNavigate"
 import useResizablePanel from "@/pages/superMagic/hooks/useResizablePanel"
-import Detail, { type DetailRef } from "@/pages/superMagic/components/Detail"
-import { MessageHeaderTopicHistoryPanel } from "@/pages/superMagic/components/MessageHeader"
+import TopicResizeHandle from "@/pages/superMagic/pages/TopicPage/components/TopicResizeHandle"
 import TopicFilesButton from "@/pages/superMagic/components/TopicFilesButton"
 import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks"
-import { useCompositeDetailPanelController } from "@/pages/superMagic/hooks/useCompositeDetailPanelController"
-import { useDeferUntilFileTabsCacheLoaded } from "@/pages/superMagic/hooks/useDeferUntilFileTabsCacheLoaded"
-import { useScopedMessageHeaderTopicActions } from "@/pages/superMagic/hooks/useScopedMessageHeaderTopicActions"
 import { useAttachmentsPolling } from "@/pages/superMagic/hooks/useAttachmentsPolling"
 import { AttachmentDataProcessor } from "@/pages/superMagic/utils/attachmentDataProcessor"
 import {
 	releaseAttachmentsRefreshWaitersWithoutFetch,
 	withAttachmentsRefreshWaitersResolved,
 } from "@/pages/superMagic/services/attachmentsTopicSync"
-import { useTopicFiles } from "@/pages/superMagic/pages/TopicPage/hooks/useTopicFiles"
-import {
-	TOPIC_HISTORY_PANEL_OPEN_STORAGE_KEYS,
-	useTopicHistoryLayoutState,
-} from "@/pages/superMagic/pages/TopicPage/hooks/useTopicHistoryLayoutState"
 import {
 	FileActionVisibilityProvider,
 	HIDE_COPY_MOVE_SHARE_FILE_AND_TOPIC_ACTIONS,
@@ -33,57 +24,52 @@ import { SuperMagicApi } from "@/apis"
 import { useDefaultModeModelListRefreshOnMount } from "@/pages/superMagic/hooks"
 import { useCreateTopicListener } from "@/pages/superMagic/components/TopicMode"
 import { RouteName } from "@/routes/constants"
-import CrewEditPanels from "../CrewEdit/components/CrewEditPanels"
 import { AppStoreProvider, useAppStore } from "./context"
 import AppConversationPanel from "./components/AppConversationPanel"
-import AppSidebar from "./components/AppSidebar"
+import MicroAppHeader from "./components/MicroAppHeader"
+import MicroAppHtmlPreview from "./components/MicroAppHtmlPreview"
+import MicroAppPreviewDialog from "./components/MicroAppPreviewDialog"
+import {
+	collectRootHtmlFiles,
+	getAttachmentId,
+	resolveSelectedHtmlEntry,
+} from "./utils/microAppFiles"
 
 const SIDEBAR_DEFAULT_PX = 280
 const SIDEBAR_MIN_PX = 220
 const SIDEBAR_MAX_PX = 420
-const SIDEBAR_COLLAPSED_PX = 48
-const DETAIL_DEFAULT_PX = 688
-const DETAIL_MIN_PX = 400
-const DETAIL_MAX_PX = 900
 const MESSAGE_PANEL_WIDTH_PX = 360
 
-const APP_SIDEBAR_STORAGE_KEY = "MAGIC:app-page-sidebar-width"
-const APP_SIDEBAR_COLLAPSED_KEY = "MAGIC:app-page-sidebar-collapsed"
-const APP_DETAIL_STORAGE_KEY = "MAGIC:app-page-detail-panel-width"
+const MICRO_APP_SIDEBAR_STORAGE_KEY = "MAGIC:micro-app-page-sidebar-width"
+const MICRO_APP_SIDEBAR_COLLAPSED_KEY = "MAGIC:micro-app-page-sidebar-collapsed"
 
-function AppPageInner({ projectId }: { projectId: string }) {
+function MicroAppPageInner({ projectId }: { projectId: string }) {
 	const { t } = useTranslation("super")
 	const store = useAppStore()
 	const { conversation } = store
 	const navigate = useNavigate()
-	const detailRef = useRef<DetailRef>(null)
-	const [userSelectDetail, setUserSelectDetail] = useState<unknown>()
-	const [isDetailPanelFullscreen, setIsDetailPanelFullscreen] = useState(false)
 	const [isInitialAttachmentsLoaded, setIsInitialAttachmentsLoaded] = useState(false)
+	const [selectedEntryFileId, setSelectedEntryFileId] = useState<string | null>(null)
+	const [previewFile, setPreviewFile] = useState<AttachmentItem | null>(null)
 	const selectedProject = conversation.selectedProject
 	const selectedTopic = conversation.topicStore.selectedTopic
-	const topicActions = useScopedMessageHeaderTopicActions({
-		selectedProject,
-		selectedTopic,
-		topicStore: conversation.topicStore,
-	})
 	const attachments = store.projectFilesStore.workspaceFileTree
 	const attachmentList = store.projectFilesStore.workspaceFilesList
-
-	const handleUserSelectDetail = useMemoizedFn((detail: unknown) => {
-		setUserSelectDetail(detail)
-	})
 
 	const setAttachments = useMemoizedFn((nextAttachments: AttachmentItem[]) => {
 		store.projectFilesStore.setWorkspaceFileTree(nextAttachments)
 	})
 
-	// Initialize store from projectId
 	useEffect(() => {
 		if (projectId && store.projectId !== projectId) {
 			store.initFromProjectId(projectId)
 		}
 	}, [projectId, store])
+
+	useEffect(() => {
+		setSelectedEntryFileId(null)
+		setPreviewFile(null)
+	}, [projectId])
 
 	useDefaultModeModelListRefreshOnMount()
 	useCreateTopicListener({
@@ -118,7 +104,7 @@ function AppPageInner({ projectId }: { projectId: string }) {
 						didLoad = true
 					})
 					.catch((error) => {
-						console.error("Failed to fetch app attachments:", error)
+						console.error("Failed to fetch micro app attachments:", error)
 						store.projectFilesStore.setWorkspaceFileTree([])
 					})
 					.finally(() => {
@@ -130,39 +116,28 @@ function AppPageInner({ projectId }: { projectId: string }) {
 		{ wait: 500 },
 	).run
 
-	const { activeFileId, handleFileClick, topicFilesProps, setActiveFileId } = useTopicFiles({
-		selectedProject,
-		selectedWorkspace: undefined,
-		selectedTopic,
-		projects: [],
-		workspaces: [],
-		attachments,
-		setAttachments,
-		setUserSelectDetail: handleUserSelectDetail,
-		detailRef,
-		isReadOnly: false,
-	})
+	const htmlFiles = useMemo(() => collectRootHtmlFiles(attachmentList), [attachmentList])
+	const selectedEntryFile = useMemo(
+		() =>
+			resolveSelectedHtmlEntry({
+				items: attachmentList,
+				selectedFileId: selectedEntryFileId,
+			}),
+		[attachmentList, selectedEntryFileId],
+	)
 
-	const { shouldShowDetailPanel, topicFilesPropsWithPanel, handleActiveDetailTabChange } =
-		useCompositeDetailPanelController({
-			detailRef,
-			isReadOnly: false,
-			activeFileId,
-			setActiveFileId,
-			handleFileClick,
-			topicFilesProps,
-			resetDeps: [selectedProject?.id],
-			onReset: () => {
-				setUserSelectDetail(undefined)
-				setIsDetailPanelFullscreen(false)
-			},
-		})
+	useEffect(() => {
+		if (!isInitialAttachmentsLoaded) return
 
-	const { onFileTabsCacheLoaded } = useDeferUntilFileTabsCacheLoaded(selectedProject?.id)
+		const nextEntryId = selectedEntryFile ? getAttachmentId(selectedEntryFile) : null
+		if (nextEntryId !== selectedEntryFileId) {
+			setSelectedEntryFileId(nextEntryId)
+		}
+	}, [isInitialAttachmentsLoaded, selectedEntryFile, selectedEntryFileId])
 
 	const [isSidebarCollapsed, setIsSidebarCollapsed] = useLocalStorageState<boolean>(
-		APP_SIDEBAR_COLLAPSED_KEY,
-		{ defaultValue: false },
+		MICRO_APP_SIDEBAR_COLLAPSED_KEY,
+		{ defaultValue: true },
 	)
 
 	const toggleSidebarCollapse = useMemoizedFn(() => {
@@ -170,32 +145,17 @@ function AppPageInner({ projectId }: { projectId: string }) {
 	})
 
 	const {
-		width: expandedSidebarWidthPx,
+		width: sidebarWidthPx,
 		isDragging: isDraggingSidebar,
 		handleMouseDown: onSidebarResizeStart,
 	} = useResizablePanel({
 		minWidth: SIDEBAR_MIN_PX,
 		maxWidth: SIDEBAR_MAX_PX,
 		defaultWidth: SIDEBAR_DEFAULT_PX,
-		storageKey: APP_SIDEBAR_STORAGE_KEY,
+		storageKey: MICRO_APP_SIDEBAR_STORAGE_KEY,
 		direction: "left",
 	})
 
-	const sidebarWidthPx = isSidebarCollapsed ? SIDEBAR_COLLAPSED_PX : expandedSidebarWidthPx
-
-	const {
-		width: detailPanelWidthPx,
-		isDragging: isDraggingDetail,
-		handleMouseDown: onDetailResizeStart,
-	} = useResizablePanel({
-		minWidth: DETAIL_MIN_PX,
-		maxWidth: DETAIL_MAX_PX,
-		defaultWidth: DETAIL_DEFAULT_PX,
-		storageKey: APP_DETAIL_STORAGE_KEY,
-		direction: "left",
-	})
-
-	// Sync projectFilesStore.selectedProject
 	useEffect(() => {
 		store.projectFilesStore.setSelectedProject(selectedProject)
 		return () => {
@@ -203,7 +163,6 @@ function AppPageInner({ projectId }: { projectId: string }) {
 		}
 	}, [selectedProject, store.projectFilesStore])
 
-	// Poll attachments
 	useAttachmentsPolling({
 		projectId: selectedProject?.id,
 		onAttachmentsChange: useCallback(
@@ -215,11 +174,10 @@ function AppPageInner({ projectId }: { projectId: string }) {
 			[store.projectFilesStore],
 		),
 		onError: useMemoizedFn((error: unknown) => {
-			console.error("Failed to poll app attachments:", error)
+			console.error("Failed to poll micro app attachments:", error)
 		}),
 	})
 
-	// Load attachments on project change
 	useDeepCompareEffect(() => {
 		const pid = selectedProject?.id
 		if (!pid) {
@@ -242,7 +200,6 @@ function AppPageInner({ projectId }: { projectId: string }) {
 		}
 	}, [selectedProject?.id])
 
-	// Listen for attachment update events
 	useEffect(() => {
 		const handleUpdateAttachments = (callback?: () => void) => {
 			const pid = selectedProject?.id
@@ -260,42 +217,43 @@ function AppPageInner({ projectId }: { projectId: string }) {
 		}
 	}, [selectedProject?.id, updateAttachments])
 
-	const {
-		isTopicHistoryPanelOpen,
-		openTopicHistoryPanel,
-		closeTopicHistoryPanel,
-		toggleTopicHistoryPanel,
-	} = useTopicHistoryLayoutState({
-		storageKey: TOPIC_HISTORY_PANEL_OPEN_STORAGE_KEYS.crewEdit,
-		isEnabled: true,
+	const handleOpenPreview = useMemoizedFn((fileItem?: AttachmentItem) => {
+		if (!fileItem) return
+		setPreviewFile(fileItem)
 	})
 
-	const detailPanel = (
-		<div className="flex h-full shrink-0 flex-col overflow-hidden border-x border-border">
-			<Detail
-				ref={detailRef}
-				disPlayDetail={userSelectDetail}
-				userSelectDetail={userSelectDetail}
-				setUserSelectDetail={handleUserSelectDetail}
-				attachments={attachments}
-				attachmentList={attachmentList}
-				topicId={selectedTopic?.id}
-				baseShareUrl={`${window.location.origin}/share`}
-				currentTopicStatus={selectedTopic?.task_status}
-				messages={[]}
-				allowEdit
-				selectedTopic={selectedTopic}
-				selectedProject={selectedProject}
-				activeFileId={activeFileId}
-				onActiveFileChange={setActiveFileId}
-				onActiveTabChange={handleActiveDetailTabChange}
-				onFullscreenChange={setIsDetailPanelFullscreen}
-				onFileTabsCacheLoaded={onFileTabsCacheLoaded}
-				projectId={selectedProject?.id}
-				showFallbackWhenEmpty
-			/>
-		</div>
+	const topicFilesProps = useMemo(
+		() => ({
+			attachments,
+			setUserSelectDetail: () => undefined,
+			onFileClick: handleOpenPreview,
+			projectId: selectedProject?.id,
+			activeFileId: previewFile?.file_id || selectedEntryFile?.file_id || null,
+			selectedTopic,
+			onAttachmentsChange: setAttachments,
+			allowEdit: true,
+			selectedWorkspace: undefined,
+			selectedProject,
+			projects: [],
+			workspaces: [],
+			isInProject: true,
+		}),
+		[
+			attachments,
+			handleOpenPreview,
+			previewFile?.file_id,
+			selectedEntryFile?.file_id,
+			selectedProject,
+			selectedTopic,
+			setAttachments,
+		],
 	)
+
+	const handleBackToMicroApps = useMemoizedFn(() => {
+		navigate({
+			name: RouteName.MicroApps,
+		})
+	})
 
 	if (store.initLoading) {
 		return (
@@ -314,7 +272,7 @@ function AppPageInner({ projectId }: { projectId: string }) {
 					className="text-sm text-primary hover:underline"
 					onClick={() => navigate({ name: RouteName.Super })}
 				>
-					{t("topicFiles.backToHome", "返回首页")}
+					{t("microAppPage.header.backToApps")}
 				</button>
 			</div>
 		)
@@ -323,73 +281,87 @@ function AppPageInner({ projectId }: { projectId: string }) {
 	return (
 		<FileActionVisibilityProvider value={HIDE_COPY_MOVE_SHARE_FILE_AND_TOPIC_ACTIONS}>
 			<div
-				className="flex h-full w-full overflow-hidden border border-border rounded-sm"
-				data-testid="app-page"
+				className="flex h-full w-full overflow-hidden rounded-sm border border-border bg-background"
+				data-testid="micro-app-page"
 			>
-				<CrewEditPanels
-					sidebarWidthPx={sidebarWidthPx}
-					detailPanelWidthPx={detailPanelWidthPx}
-					messagePanelWidthPx={MESSAGE_PANEL_WIDTH_PX}
-					showDetailPanel={shouldShowDetailPanel}
-					isDetailPanelFullscreen={isDetailPanelFullscreen}
-					keepDetailMountedWhenHidden
-					historyLayout={{
-						isOpen: isTopicHistoryPanelOpen,
-						onClose: closeTopicHistoryPanel,
-						onToggle: toggleTopicHistoryPanel,
-						renderPanel: ({
-							isConversationPanelCollapsed,
-							onExpandConversationPanel,
-							onClose,
-							closeButtonRef,
-						}) => (
-							<MessageHeaderTopicHistoryPanel
-								selectedProject={selectedProject}
-								topicStore={conversation.topicStore}
-								topicActions={topicActions}
-								isConversationPanelCollapsed={isConversationPanelCollapsed}
-								onExpandConversationPanel={onExpandConversationPanel}
-								hideTopicListModeIcon
-								onClose={onClose}
-								closeButtonRef={closeButtonRef}
-							/>
-						),
+				{!isSidebarCollapsed && (
+					<>
+						<aside
+							className="h-full shrink-0 overflow-hidden border-r border-border bg-background p-2"
+							style={{ width: sidebarWidthPx }}
+							data-testid="micro-app-file-sidebar"
+						>
+							<TopicFilesButton {...topicFilesProps} />
+						</aside>
+						<TopicResizeHandle
+							onMouseDown={(event) => onSidebarResizeStart(event)}
+							className={isDraggingSidebar ? "before:opacity-100" : undefined}
+						/>
+					</>
+				)}
+
+				<main className="flex h-full min-w-0 flex-1 flex-col overflow-hidden">
+					<MicroAppHeader
+						selectedProject={selectedProject}
+						htmlFiles={htmlFiles}
+						selectedEntryId={
+							selectedEntryFile
+								? getAttachmentId(selectedEntryFile)
+								: selectedEntryFileId
+						}
+						isSidebarOpen={!isSidebarCollapsed}
+						onBack={handleBackToMicroApps}
+						onToggleSidebar={toggleSidebarCollapse}
+						onEntryChange={setSelectedEntryFileId}
+					/>
+					<div className="min-h-0 flex-1 overflow-hidden">
+						<MicroAppHtmlPreview
+							entryFile={selectedEntryFile}
+							attachments={attachments}
+							attachmentList={attachmentList}
+							selectedProject={selectedProject}
+							selectedTopic={selectedTopic}
+							projectId={selectedProject?.id}
+							isLoading={!isInitialAttachmentsLoaded}
+							onOpenPreview={handleOpenPreview}
+						/>
+					</div>
+				</main>
+
+				<aside
+					className="h-full shrink-0 overflow-hidden border-l border-border bg-background"
+					style={{ width: MESSAGE_PANEL_WIDTH_PX }}
+					data-testid="micro-app-conversation-panel"
+				>
+					<AppConversationPanel
+						selectedProject={selectedProject}
+						topicStore={conversation.topicStore}
+						mentionPanelStore={store.mentionPanelStore}
+						projectFilesStore={store.projectFilesStore}
+						detailPanelVisible
+					/>
+				</aside>
+
+				<MicroAppPreviewDialog
+					open={previewFile != null}
+					file={previewFile}
+					attachments={attachments}
+					attachmentList={attachmentList}
+					selectedProject={selectedProject}
+					selectedTopic={selectedTopic}
+					projectId={selectedProject?.id}
+					onOpenChange={(open) => {
+						if (!open) setPreviewFile(null)
 					}}
-					onSidebarResizeStart={isSidebarCollapsed ? undefined : onSidebarResizeStart}
-					onDetailResizeStart={onDetailResizeStart}
-					isDraggingSidebar={isDraggingSidebar}
-					isDraggingDetail={isDraggingDetail}
-					sidebar={
-						<AppSidebar
-							selectedProject={selectedProject}
-							topicFilesProps={topicFilesPropsWithPanel}
-							collapsed={!!isSidebarCollapsed}
-							onToggleCollapse={toggleSidebarCollapse}
-							onBack={() => navigate({ name: RouteName.Super })}
-						/>
-					}
-					detailPanel={detailPanel}
-					messagePanel={
-						<AppConversationPanel
-							selectedProject={selectedProject}
-							topicStore={conversation.topicStore}
-							mentionPanelStore={store.mentionPanelStore}
-							projectFilesStore={store.projectFilesStore}
-							detailPanelVisible={shouldShowDetailPanel}
-							historyTriggerMode="layout"
-							isHistoryPanelOpen={isTopicHistoryPanelOpen}
-							onToggleHistoryPanel={toggleTopicHistoryPanel}
-						/>
-					}
 				/>
 			</div>
 		</FileActionVisibilityProvider>
 	)
 }
 
-const AppPageInnerObserver = observer(AppPageInner)
+const MicroAppPageInnerObserver = observer(MicroAppPageInner)
 
-function AppPageDesktop() {
+function MicroAppPageDesktop() {
 	const { projectId } = useParams<{ projectId: string }>()
 	const navigate = useNavigate()
 
@@ -409,9 +381,9 @@ function AppPageDesktop() {
 
 	return (
 		<AppStoreProvider>
-			<AppPageInnerObserver projectId={projectId} />
+			<MicroAppPageInnerObserver projectId={projectId} />
 		</AppStoreProvider>
 	)
 }
 
-export default AppPageDesktop
+export default MicroAppPageDesktop
