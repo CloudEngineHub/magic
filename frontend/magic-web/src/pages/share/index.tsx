@@ -609,6 +609,11 @@ function Share() {
 		return !isMobile || (!hasStarted && isMobile)
 	}, [isFileShare, isMobile, hasStarted])
 
+	const showMobileFolderButton = useMemo(() => {
+		// Legacy shares do not carry the new file-list switch, so keep their mobile entry visible.
+		return isMobile && hasStarted && (routeInfo.isLegacy || viewFileList)
+	}, [hasStarted, isMobile, routeInfo.isLegacy, viewFileList])
+
 	// 检查是否隐藏 header
 	const shouldHideHeader = useMemo(() => {
 		const urlSearchParams = new URLSearchParams(search)
@@ -868,7 +873,7 @@ function Share() {
 						</div>
 					) : null}
 					<div className="flex gap-2" data-testid="share-topbar-actions">
-						{isMobile && hasStarted && (
+						{showMobileFolderButton && (
 							<Button
 								variant="outline"
 								size="icon-sm"
