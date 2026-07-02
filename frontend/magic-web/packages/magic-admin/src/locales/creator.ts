@@ -13,9 +13,8 @@ const DEFAULT_LANGUAGE = "zh_CN"
 const FALLBACK_LANGUAGE = "zh_CN"
 const NAMESPACE_ALIASES: Record<string, string> = {
 	common: "admin/common",
-	interface: "admin/common",
-	message: "admin/common",
 }
+const DEFAULT_NAMESPACES = ["admin/common", "translation"]
 
 function normalizeLanguage(language?: string) {
 	return language || DEFAULT_LANGUAGE
@@ -27,6 +26,21 @@ function normalizeNamespace(namespace: string) {
 
 function getResourcePathSuffix(language: string, namespace: string) {
 	return `/${language}/${normalizeNamespace(namespace)}.json`
+}
+
+function getResourceNamespaces(localeModules: LocaleResourceLoaderMap) {
+	const namespaces = new Set(DEFAULT_NAMESPACES)
+
+	Object.keys(localeModules).forEach((path) => {
+		const normalizedPath = path.replace(/\\/g, "/")
+		const match = normalizedPath.match(/(?:^|\/)[a-z]{2,3}_[A-Z]{2}\/(.+)\.json$/)
+		const namespace = match?.[1]
+
+		if (!namespace?.startsWith("admin/")) return
+		namespaces.add(normalizeNamespace(namespace))
+	})
+
+	return Array.from(namespaces)
 }
 
 function findResourceLoader(
@@ -52,6 +66,7 @@ async function loadResource(
 
 export function createAdminI18n(localeModules: LocaleResourceLoaderMap) {
 	const adminI18n = i18next.createInstance()
+	const namespaces = getResourceNamespaces(localeModules)
 	let initPromise: Promise<I18nInstance> | null = null
 	let backendRegistered = false
 
@@ -73,7 +88,7 @@ export function createAdminI18n(localeModules: LocaleResourceLoaderMap) {
 					lng: nextLanguage,
 					fallbackLng: FALLBACK_LANGUAGE,
 					defaultNS: "admin/common",
-					ns: ["admin/common", "translation"],
+					ns: namespaces,
 					fallbackNS: ["translation"],
 					load: "currentOnly",
 					react: {
