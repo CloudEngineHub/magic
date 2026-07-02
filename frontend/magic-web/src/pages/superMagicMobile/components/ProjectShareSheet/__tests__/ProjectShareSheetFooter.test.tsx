@@ -23,10 +23,10 @@ function createController(
 		mode: "project",
 		projectMode: "",
 		shareMode: ShareMode.Project,
-		projectName: "Demo Project",
-		projectId: "project-1",
+		projectName: "Fictional Project",
+		projectId: "fictional-project-1",
 		formState: {
-			shareName: "Demo Project",
+			shareName: "Fictional Project",
 			shareType: ShareType.Public,
 			shareExpiry: null,
 			password: "abc123",
@@ -51,6 +51,9 @@ function createController(
 		selectedMemberNodes: [],
 		detailMemberNodes: [],
 		detailMemberLoading: false,
+		selectedShareMessageText: "",
+		canNativeShare: false,
+		shareSelectedShareToSystem: vi.fn(),
 		setShareName: vi.fn(),
 		setShareType: vi.fn(),
 		setShareExpiry: vi.fn(),
@@ -119,6 +122,99 @@ describe("ProjectShareSheetFooter", () => {
 		fireEvent.click(screen.getByTestId("project-share-sheet-delete-button"))
 		expect(copySelectedShareUrl).toHaveBeenCalledTimes(1)
 		expect(goToDeleteConfirm).toHaveBeenCalledTimes(1)
+	})
+
+	it("keeps only the native share icon in the link detail actions", () => {
+		render(
+			<ProjectShareSheetFooter
+				controller={createController({
+					view: "linkDetail",
+					canNativeShare: true,
+					selectedShareMessageText: "Fictional share text",
+				})}
+			/>,
+		)
+
+		// The system share affordance keeps its icon, while the text-only actions align visually.
+		expect(
+			screen.getByTestId("project-share-sheet-native-share-button").querySelector("svg"),
+		).toBeInTheDocument()
+		expect(
+			screen.getByTestId("project-share-sheet-copy-link-button").querySelector("svg"),
+		).not.toBeInTheDocument()
+		expect(
+			screen.getByTestId("project-share-sheet-delete-button").querySelector("svg"),
+		).not.toBeInTheDocument()
+	})
+
+	it("renders and triggers native share action only when supported", () => {
+		const shareSelectedShareToSystem = vi.fn()
+
+		const { rerender } = render(
+			<ProjectShareSheetFooter
+				controller={createController({
+					view: "linkDetail",
+					canNativeShare: false,
+					shareSelectedShareToSystem,
+				})}
+			/>,
+		)
+
+		expect(
+			screen.queryByTestId("project-share-sheet-native-share-button"),
+		).not.toBeInTheDocument()
+
+		rerender(
+			<ProjectShareSheetFooter
+				controller={createController({
+					view: "linkDetail",
+					canNativeShare: true,
+					selectedShareMessageText: "Fictional share text",
+					shareSelectedShareToSystem,
+				})}
+			/>,
+		)
+
+		fireEvent.click(screen.getByTestId("project-share-sheet-native-share-button"))
+		expect(shareSelectedShareToSystem).toHaveBeenCalledTimes(1)
+	})
+
+	it("keeps native share disabled until the prebuilt message is ready", () => {
+		const shareSelectedShareToSystem = vi.fn()
+
+		const { rerender } = render(
+			<ProjectShareSheetFooter
+				controller={createController({
+					view: "linkDetail",
+					canNativeShare: true,
+					selectedShareMessageText: "",
+					shareSelectedShareToSystem,
+				})}
+			/>,
+		)
+
+		const button = screen.getByTestId("project-share-sheet-native-share-button")
+		expect(button).toBeDisabled()
+
+		fireEvent.click(button)
+		expect(shareSelectedShareToSystem).not.toHaveBeenCalled()
+
+		rerender(
+			<ProjectShareSheetFooter
+				controller={createController({
+					view: "linkDetail",
+					canNativeShare: true,
+					selectedShareMessageText: "Fictional share text",
+					shareSelectedShareToSystem,
+				})}
+			/>,
+		)
+
+		const readyButton = screen.getByTestId("project-share-sheet-native-share-button")
+		expect(readyButton).toBeEnabled()
+
+		fireEvent.click(readyButton)
+		expect(shareSelectedShareToSystem).toHaveBeenCalledTimes(1)
 	})
 
 	it("renders nothing for views without a bottom action bar", () => {

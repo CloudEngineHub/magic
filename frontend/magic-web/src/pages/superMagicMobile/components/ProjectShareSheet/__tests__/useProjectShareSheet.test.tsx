@@ -18,6 +18,8 @@ const mocks = vi.hoisted(() => ({
 	successToast: vi.fn(),
 	errorToast: vi.fn(),
 	warningToast: vi.fn(),
+	canUseNativeShare: vi.fn(),
+	shareToNativeTarget: vi.fn(),
 	projectShareData: [] as ProjectShareItem[],
 	fileShareData: [] as FileShareItem[],
 	useShareDataCalls: [] as Array<{ resourceType: string; enabled?: boolean }>,
@@ -75,6 +77,11 @@ vi.mock("@/components/base/MagicToaster/utils", () => ({
 		error: mocks.errorToast,
 		warning: mocks.warningToast,
 	},
+}))
+
+vi.mock("@/pages/superMagic/components/Share/utils/nativeShare", () => ({
+	canUseNativeShare: mocks.canUseNativeShare,
+	shareToNativeTarget: mocks.shareToNativeTarget,
 }))
 
 vi.mock("@/pages/superMagic/layouts/MainLayout/hooks/useShareProject", () => ({
@@ -135,6 +142,8 @@ describe("useProjectShareSheet", () => {
 		mocks.getShareResourceMembers.mockResolvedValue({ members: [] })
 		mocks.createOrUpdateShareResource.mockResolvedValue({})
 		mocks.cancelShare.mockResolvedValue(undefined)
+		mocks.canUseNativeShare.mockReturnValue(false)
+		mocks.shareToNativeTarget.mockResolvedValue("shared")
 	})
 
 	it("Sheet 关闭或无 projectId 时不启用分享列表拉取", () => {
@@ -275,6 +284,59 @@ describe("useProjectShareSheet", () => {
 		const copiedText = String(mocks.writeText.mock.calls[0]?.[0])
 		expect(copiedText).not.toMatch(/^https?:\/\//)
 		expect(copiedText.length).toBeGreaterThan(1)
+	})
+
+	it("详情页系统分享使用预先构建的分享文案", async () => {
+		mocks.canUseNativeShare.mockReturnValue(true)
+		mocks.fileShareData = [
+			{
+				resource_id: "fictional-native-share",
+				title: "Fictional Native Share",
+				project_id: "fictional-project-1",
+				project_name: "Fictional Project",
+				workspace_id: "",
+				workspace_name: "",
+				resource_type: ResourceType.FileCollection,
+				share_type: ShareType.PasswordProtected,
+				created_at: "2026-05-05",
+				has_password: true,
+				password: "FAKE12",
+				share_project: false,
+				file_ids: ["fictional-file-1"],
+				extend: { file_count: 1 },
+			},
+		]
+
+		const { result } = renderHook(() =>
+			useProjectShareSheet({
+				open: true,
+				projectId: "fictional-project-1",
+				projectName: "Fictional Project",
+				attachments: [],
+				mode: "file",
+				onClose: vi.fn(),
+			}),
+		)
+
+		act(() => {
+			result.current.goToLinkDetail("fictional-native-share")
+		})
+
+		await waitFor(() => {
+			expect(result.current.selectedShareMessageText).toBeTruthy()
+		})
+
+		await act(async () => {
+			await result.current.shareSelectedShareToSystem()
+		})
+
+		expect(mocks.shareToNativeTarget).toHaveBeenCalledWith(
+			expect.objectContaining({
+				title: "Fictional Native Share",
+				text: result.current.selectedShareMessageText,
+			}),
+		)
+		expect(mocks.errorToast).not.toHaveBeenCalled()
 	})
 
 	it("创建分享时复用现有分享资源保存契约", async () => {

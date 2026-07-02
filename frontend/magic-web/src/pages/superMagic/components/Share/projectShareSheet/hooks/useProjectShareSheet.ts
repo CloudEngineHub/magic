@@ -18,6 +18,11 @@ import {
 	type ProjectShareItem,
 } from "@/pages/superMagic/components/ShareManagement/types"
 import { useShareData } from "@/pages/superMagic/components/ShareManagement/hooks/useShareData"
+import { generateShareUrl } from "@/pages/superMagic/components/ShareManagement/utils/shareTypeHelpers"
+import {
+	canUseNativeShare,
+	shareToNativeTarget,
+} from "@/pages/superMagic/components/Share/utils/nativeShare"
 import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks/types"
 import type {
 	MobileShareItem,
@@ -266,6 +271,8 @@ export function useProjectShareSheet({
 	const [selectedMemberNodes, setSelectedMemberNodes] = useState<TreeNode[]>([])
 	const [detailMemberNodes, setDetailMemberNodes] = useState<TreeNode[]>([])
 	const [detailMemberLoading, setDetailMemberLoading] = useState(false)
+	const [selectedShareMessageText, setSelectedShareMessageText] = useState("")
+	const [canNativeShare] = useState(() => canUseNativeShare())
 	const [formState, setFormState] = useState<ProjectShareFormState>(() =>
 		createInitialFormState(isAudioRecordingScene),
 	)
@@ -340,6 +347,7 @@ export function useProjectShareSheet({
 		setSelectedMemberNodes([])
 		setDetailMemberNodes([])
 		setDetailMemberLoading(false)
+		setSelectedShareMessageText("")
 		setFormState({
 			...createInitialFormState(isAudioRecordingScene),
 			shareName: initialSelectedShare
@@ -472,6 +480,40 @@ export function useProjectShareSheet({
 		view,
 	])
 
+	useEffect(() => {
+		if (!canNativeShare || !open || view !== "linkDetail" || !selectedShare?.resource_id) {
+			setSelectedShareMessageText("")
+			return
+		}
+
+		let isCancelled = false
+		setSelectedShareMessageText("")
+
+		// Prebuild native-share text while the detail view is visible, so the click handler can call Web Share immediately.
+		void buildShareClipboardText({
+			share: selectedShare,
+			projectName,
+			t,
+		})
+			.then((shareMessageText) => {
+				if (!isCancelled) {
+					setSelectedShareMessageText(shareMessageText)
+				}
+			})
+			.catch((error) => {
+				if (!isCancelled) {
+					console.error("Failed to build native share message:", error)
+					setSelectedShareMessageText("")
+				}
+			})
+
+		return () => {
+			isCancelled = true
+		}
+		// The selected share is the real rebuild signal; keeping `t` out avoids repeated async rebuilds in tests with unstable mocks.
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [canNativeShare, open, projectName, selectedShare, view])
+
 	const goTo = useMemoizedFn((nextView: ProjectShareSheetView) => {
 		setViewStack((prev) => [...prev, view])
 		setView(nextView)
@@ -538,6 +580,28 @@ export function useProjectShareSheet({
 		if (!selectedShare?.password) return
 		clipboard.writeText(selectedShare.password)
 		magicToast.success(t("share.copyPasswordSuccess"))
+	})
+
+	/**
+	 * Shares the prebuilt detail message through the mobile system share sheet.
+	 */
+	const shareSelectedShareToSystem = useMemoizedFn(async () => {
+		if (!selectedShare?.resource_id || !selectedShareMessageText) return
+
+		const shareUrl = generateShareUrl(
+			selectedShare.resource_id,
+			selectedShare.password,
+			"files",
+		)
+		const result = await shareToNativeTarget({
+			title: selectedShare.title || projectName,
+			text: selectedShareMessageText,
+			url: shareUrl,
+		})
+
+		if (result === "failed" || result === "unsupported") {
+			magicToast.error(t("share.nativeShareFailed"))
+		}
 	})
 
 	const submitCreateShare = useMemoizedFn(async () => {
@@ -732,6 +796,8 @@ export function useProjectShareSheet({
 		selectedMemberNodes,
 		detailMemberNodes,
 		detailMemberLoading,
+		selectedShareMessageText,
+		canNativeShare,
 		setShareName: (value) => setFormValue("shareName", value),
 		setShareType: (value) => setFormValue("shareType", value),
 		setShareExpiry: (value) => setFormValue("shareExpiry", value),
@@ -760,6 +826,7 @@ export function useProjectShareSheet({
 		refreshShareList,
 		copySelectedShareUrl,
 		copySelectedSharePassword,
+		shareSelectedShareToSystem,
 		submitCreateShare,
 		openEditSelectedShare,
 		confirmCancelShare,

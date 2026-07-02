@@ -77,6 +77,8 @@ export interface ProjectShareSheetController {
 	selectedMemberNodes: TreeNode[]
 	detailMemberNodes: TreeNode[]
 	detailMemberLoading: boolean
+	selectedShareMessageText: string
+	canNativeShare: boolean
 	setShareName: (value: string) => void
 	setShareType: (value: ShareType) => void
 	setShareExpiry: (value: number | null) => void
@@ -101,6 +103,7 @@ export interface ProjectShareSheetController {
 	refreshShareList: () => void
 	copySelectedShareUrl: () => void | Promise<void>
 	copySelectedSharePassword: () => void
+	shareSelectedShareToSystem: () => Promise<void>
 	submitCreateShare: () => Promise<void>
 	openEditSelectedShare: () => void
 	confirmCancelShare: () => Promise<void>
