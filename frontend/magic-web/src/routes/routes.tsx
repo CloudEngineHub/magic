@@ -11,6 +11,7 @@ import {
 	withFlowNamespaces,
 } from "@/routes/helpers"
 import { superMagicCrewRoutes } from "@/routes/modules/superMagicCrewRoutes"
+import { superMagicMicroAppRoutes } from "@/routes/modules/superMagicMicroAppRoutes"
 
 /**
  * @description 路由处理器，需要异步渲染，等待路由生成再渲染再执行对应业务流程
@@ -116,12 +117,10 @@ const ResponsiveRecycleBin = lazy(() => import("@/pages/recycleBin/ResponsiveRec
 const ChatsPage = lazy(() => import("@/pages/superMagicMobile/pages/ChatsPage"))
 const MobileHomePage = lazy(() => import("@/pages/superMagic/lazy/MobileHomePage"))
 const SuperAppsPage = lazy(() => import("@/pages/superMagic/pages/AppsPage"))
-const MicroAppsPage = lazy(() => import("@/pages/superMagic/pages/MicroAppsPage"))
 const SuperMagicNavigate = lazy(() => import("@/pages/superMagic/lazy/SuperMagicNavigate"))
 const SuperRootRedirect = lazy(() => import("@/pages/superMagic/lazy/SuperRootRedirect"))
 const WorkspacePage = lazy(() => import("@/pages/superMagic/lazy/WorkspacePage"))
 const TopicPage = lazy(() => import("@/pages/superMagic/lazy/TopicPage"))
-const MicroAppPage = lazy(() => import("@/pages/superMagic/lazy/MicroAppPage"))
 const MobileTabs = lazy(() => import("@/pages/mobileTabs"))
 const WorkspacesPage = lazy(() => import("@/pages/superMagicMobile/pages/WorkspacesPage"))
 const SharedWorkspacePage = lazy(() => import("@/pages/superMagicMobile/pages/SharedWorkspacePage"))
@@ -451,19 +450,7 @@ export function registerRoutes(config: RouteConfig = {}): Array<RouteObject> {
 						path: `/:clusterCode${RoutePath.SuperWorkspaceState}`,
 						element: <WorkspacePage />,
 					},
-					{
-						name: RouteName.MicroApps,
-						path: `/:clusterCode${RoutePath.MicroApps}`,
-						element: <MicroAppsPage />,
-						meta: {
-							title: "routes.application",
-						},
-					},
-					{
-						name: RouteName.MicroApp,
-						path: `/:clusterCode${RoutePath.MicroApp}`,
-						element: <MicroAppPage />,
-					},
+					...superMagicMicroAppRoutes,
 					{
 						name: RouteName.SuperChatProjectState,
 						path: `/:clusterCode${RoutePath.SuperChatProjectState}`,
