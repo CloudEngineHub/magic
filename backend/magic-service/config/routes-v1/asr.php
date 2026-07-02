@@ -26,5 +26,6 @@ Router::addGroup('/api/v1/asr', static function () {
     Router::post('/tasks/progress/batch', [AsrApi::class, 'getBatchTaskProgress']); // 批量查询任务进度
     Router::post('/tasks/{task_key}/finish-recording', [AsrApi::class, 'finishRecording']); // 手动完成录音（仅合并音频）
     Router::post('/tasks/{task_key}/summarize', [AsrApi::class, 'triggerSummary']); // 手动触发总结
+    Router::post('/tasks/{task_key}/resummarize', [AsrApi::class, 'triggerResummary']); // 手动触发重新总结
     Router::post('/tasks/summarize/batch', [AsrApi::class, 'batchTriggerSummary']); // 批量触发总结
 }, ['middleware' => [RequestContextMiddleware::class]]);

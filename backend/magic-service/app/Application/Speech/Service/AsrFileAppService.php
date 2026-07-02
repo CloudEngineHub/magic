@@ -62,6 +62,15 @@ use Throwable;
  */
 class AsrFileAppService extends AbstractAppService
 {
+    private const RESUMMARY_SCOPE_CONFIGURED_ANALYSIS_FILES = 'configured_analysis_files';
+
+    private const RESUMMARY_SCOPE_TEMPLATE_ANALYSIS_FILES = 'template_analysis_files';
+
+    private const RESUMMARY_SUPPORTED_SCOPES = [
+        self::RESUMMARY_SCOPE_CONFIGURED_ANALYSIS_FILES,
+        self::RESUMMARY_SCOPE_TEMPLATE_ANALYSIS_FILES,
+    ];
+
     private LoggerInterface $logger;
 
     public function __construct(
@@ -750,6 +759,100 @@ class AsrFileAppService extends AbstractAppService
                 'model_id' => $taskStatus->modelId,
             ],
             'message' => 'Summary is being generated, you will receive updates via WebSocket',
+        ];
+    }
+
+    /**
+     * Manually trigger re-summary for an existing audio project.
+     *
+     * @param array<int,string> $specifiedAnalysisTypes
+     */
+    public function triggerResummary(
+        string $taskKey,
+        ?string $modelId,
+        string $analysisScope,
+        array $specifiedAnalysisTypes,
+        MagicUserAuthorization $userAuthorization
+    ): array {
+        $analysisScope = $this->normalizeResummaryAnalysisScope($analysisScope);
+        $specifiedAnalysisTypes = $this->normalizeResummaryAnalysisTypes($specifiedAnalysisTypes);
+
+        $userId = $userAuthorization->getId();
+        $organizationCode = $userAuthorization->getOrganizationCode();
+
+        $taskStatus = $this->asrTaskDomainService->getTaskStatus($taskKey, $userId);
+
+        $audioProject = $this->audioProjectDomainService->getAudioProjectByProjectId(
+            (int) $taskStatus->projectId
+        );
+
+        if ($audioProject === null) {
+            ExceptionBuilder::throw(AsrErrorCode::ProjectNotExist);
+        }
+
+        if (! $this->canManualResummarize($taskStatus)) {
+            ExceptionBuilder::throw(AsrErrorCode::InvalidTaskStatus);
+        }
+
+        $effectiveTopicId = $taskStatus->topicId;
+        if (empty($effectiveTopicId)) {
+            $effectiveTopicId = (string) $audioProject->getTopicId();
+        }
+        if (empty($effectiveTopicId)) {
+            ExceptionBuilder::throw(
+                GenericErrorCode::ParameterMissing,
+                'topic_id is required for re-summary'
+            );
+        }
+
+        $effectiveModelId = $modelId;
+        if (empty($effectiveModelId)) {
+            $effectiveModelId = $taskStatus->modelId;
+        }
+        if (empty($effectiveModelId)) {
+            $effectiveModelId = $audioProject->getModelId();
+        }
+        if (empty($effectiveModelId)) {
+            ExceptionBuilder::throw(
+                GenericErrorCode::ParameterMissing,
+                $this->translator->trans('asr.api.validation.model_id_required')
+            );
+        }
+
+        $this->audioProjectDomainService->updateTopicAndModel(
+            (int) $taskStatus->projectId,
+            (int) $effectiveTopicId,
+            $effectiveModelId
+        );
+
+        $taskStatus->topicId = $effectiveTopicId;
+        $taskStatus->modelId = $effectiveModelId;
+        $this->asrTaskDomainService->saveTaskStatus($taskStatus);
+
+        $this->asrTaskDomainService->startSummarizingPhase($taskStatus);
+
+        $this->sendAutoResummaryChatMessage(
+            $taskStatus,
+            $userId,
+            $organizationCode,
+            $analysisScope,
+            $specifiedAnalysisTypes
+        );
+
+        $taskStatus->updateStatus(AsrTaskStatusEnum::COMPLETED);
+        $this->asrTaskDomainService->saveTaskStatus($taskStatus);
+
+        return [
+            'success' => true,
+            'task_key' => $taskKey,
+            'summary' => [
+                'status' => 'in_progress',
+                'topic_id' => $taskStatus->topicId,
+                'model_id' => $taskStatus->modelId,
+                'analysis_scope' => $analysisScope,
+                'specified_analysis_types' => $specifiedAnalysisTypes,
+            ],
+            'message' => 'Re-summary is being generated, you will receive updates via WebSocket',
         ];
     }
 
@@ -1860,6 +1963,111 @@ class AsrFileAppService extends AbstractAppService
     }
 
     /**
+     * 发送重新总结聊天消息.
+     *
+     * @param array<int,string> $specifiedAnalysisTypes
+     */
+    private function sendResummaryChatMessage(
+        ProcessSummaryTaskDTO $dto,
+        MagicUserAuthorization $userAuthorization,
+        string $analysisScope,
+        array $specifiedAnalysisTypes
+    ): void {
+        $dedupAcquired = false;
+        $dedupKey = null;
+        try {
+            $taskKey = $dto->taskStatus->taskKey ?? '';
+            $userId = $dto->taskStatus->userId ?: $userAuthorization->getId();
+            if ($taskKey !== '' && $userId !== '') {
+                $requestId = (string) CoContext::getOrSetRequestId();
+                $dedupKey = sprintf(
+                    AsrRedisKeys::SUMMARY_CHAT_DEDUP,
+                    md5($userId . ':' . $taskKey . ':resummary:' . $requestId)
+                );
+                $dedupAcquired = (bool) $this->redis->set($dedupKey, '1', ['nx', 'ex' => AsrConfig::SUMMARY_CHAT_DEDUP_TTL]);
+                if (! $dedupAcquired) {
+                    $this->logger->info('检测到重新总结聊天消息已发送，跳过重复发送', [
+                        'task_key' => $taskKey,
+                        'user_id' => $userId,
+                        'dedup_key' => $dedupKey,
+                    ]);
+                    return;
+                }
+            }
+
+            $audioFileData = $this->buildFileDataFromTaskStatus($dto->taskStatus);
+            $noteFileData = $this->buildNoteFileDataFromTaskStatus($dto->taskStatus);
+            $markerFileData = $this->buildMarkerFileDataFromTaskStatus($dto->taskStatus);
+
+            $topicDynamicParams = null;
+            if (! empty($dto->topicId)) {
+                $topicEntity = $this->superAgentTopicDomainService->getTopicById((int) $dto->topicId);
+                $topicDynamicParams = $topicEntity?->getDynamicParams();
+            }
+
+            $resummaryDynamicParams = [
+                'summary_task' => true,
+                're_summary_task' => true,
+                'analysis_scope' => $analysisScope,
+            ];
+            if ($specifiedAnalysisTypes !== []) {
+                $resummaryDynamicParams['specified_analysis_types'] = $specifiedAnalysisTypes;
+            }
+            $dynamicParams = array_merge($topicDynamicParams ?? [], $resummaryDynamicParams);
+
+            $chatRequest = $this->chatMessageAssembler->buildResummaryMessage(
+                $dto,
+                $audioFileData,
+                $noteFileData,
+                $markerFileData,
+                $analysisScope,
+                $specifiedAnalysisTypes,
+                $dynamicParams
+            );
+
+            $messageData = $chatRequest->getData()->getMessage()->getMagicMessage();
+
+            $this->logger->info('sendResummaryChatMessage 准备发送ASR重新总结聊天消息', [
+                'task_key' => $dto->taskStatus->taskKey,
+                'topic_id' => $dto->topicId,
+                'conversation_id' => $dto->conversationId,
+                'model_id' => $dto->modelId,
+                'audio_file_id' => $dto->taskStatus->audioFileId,
+                'audio_file_path' => $dto->taskStatus->filePath,
+                'note_file_id' => $dto->taskStatus->noteFileId,
+                'has_note_file' => $noteFileData !== null,
+                'marker_file_id' => $dto->taskStatus->markerFileId,
+                'has_marker_file' => $markerFileData !== null,
+                'analysis_scope' => $analysisScope,
+                'specified_analysis_types' => $specifiedAnalysisTypes,
+                'message_content' => $messageData->toArray(),
+                'topic_dynamic_params' => $topicDynamicParams,
+                'is_queued' => $this->shouldQueueMessage($dto->topicId),
+                'language' => CoContext::getLanguage(),
+            ]);
+
+            if ($this->shouldQueueMessage($dto->topicId)) {
+                $this->queueChatMessage($dto, $chatRequest, $userAuthorization);
+            } else {
+                $this->magicChatMessageAppService->onChatMessage($chatRequest, $userAuthorization);
+            }
+        } catch (Throwable $e) {
+            if ($dedupAcquired && $dedupKey !== null) {
+                try {
+                    $this->redis->del($dedupKey);
+                } catch (Throwable) {
+                    // ignore
+                }
+            }
+            $this->logger->error('发送重新总结聊天消息失败', [
+                'task_key' => $dto->taskStatus->taskKey,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+        }
+    }
+
+    /**
      * 检查是否应该队列处理消息.
      */
     private function shouldQueueMessage(string $topicId): bool
@@ -2300,6 +2508,41 @@ class AsrFileAppService extends AbstractAppService
     }
 
     /**
+     * 发送自动重新总结聊天消息.
+     *
+     * @param array<int,string> $specifiedAnalysisTypes
+     */
+    private function sendAutoResummaryChatMessage(
+        AsrTaskStatusDTO $taskStatus,
+        string $userId,
+        string $organizationCode,
+        string $analysisScope,
+        array $specifiedAnalysisTypes
+    ): void {
+        $topicEntity = $this->superAgentTopicDomainService->getTopicById((int) $taskStatus->topicId);
+        if ($topicEntity === null) {
+            ExceptionBuilder::throw(AsrErrorCode::TopicNotExistSimple);
+        }
+
+        $chatTopicId = $topicEntity->getChatTopicId();
+        $conversationId = $this->magicChatDomainService->getConversationIdByTopicId($chatTopicId);
+
+        $processSummaryTaskDTO = new ProcessSummaryTaskDTO(
+            $taskStatus,
+            $organizationCode,
+            $taskStatus->projectId,
+            $userId,
+            $taskStatus->topicId,
+            $chatTopicId,
+            $conversationId,
+            $taskStatus->modelId ?? ''
+        );
+
+        $userAuthorization = $this->getUserAuthorizationFromUserId($userId);
+        $this->sendResummaryChatMessage($processSummaryTaskDTO, $userAuthorization, $analysisScope, $specifiedAnalysisTypes);
+    }
+
+    /**
      * Execute async finish recording in coroutine.
      */
     private function executeAsyncFinishRecording(
@@ -2383,5 +2626,44 @@ class AsrFileAppService extends AbstractAppService
             && in_array($taskStatus->status, [AsrTaskStatusDTO::PHASE_MERGING, AsrTaskStatusEnum::AUDIO_PROCESSED])          // Audio processed
             && $taskStatus->recordingStatus === AsrRecordingStatusEnum::STOPPED->value
             && ! empty($taskStatus->audioFileId);                                  // Has audio file
+    }
+
+    private function canManualResummarize(AsrTaskStatusDTO $taskStatus): bool
+    {
+        return $taskStatus->recordingStatus === AsrRecordingStatusEnum::STOPPED->value
+            && ! empty($taskStatus->audioFileId)
+            && ! (
+                $taskStatus->currentPhase === AsrTaskStatusDTO::PHASE_SUMMARIZING
+                && $taskStatus->phaseStatus === AsrTaskStatusDTO::PHASE_STATUS_IN_PROGRESS
+            );
+    }
+
+    private function normalizeResummaryAnalysisScope(string $analysisScope): string
+    {
+        $analysisScope = trim($analysisScope);
+        if ($analysisScope === '') {
+            return self::RESUMMARY_SCOPE_TEMPLATE_ANALYSIS_FILES;
+        }
+
+        if (! in_array($analysisScope, self::RESUMMARY_SUPPORTED_SCOPES, true)) {
+            ExceptionBuilder::throw(
+                GenericErrorCode::ParameterValidationFailed,
+                'analysis_scope must be configured_analysis_files or template_analysis_files'
+            );
+        }
+
+        return $analysisScope;
+    }
+
+    /**
+     * @param array<int|string,mixed> $specifiedAnalysisTypes
+     * @return array<int,string>
+     */
+    private function normalizeResummaryAnalysisTypes(array $specifiedAnalysisTypes): array
+    {
+        $types = array_map(static fn ($type) => trim((string) $type), $specifiedAnalysisTypes);
+        $types = array_filter($types, static fn (string $type) => $type !== '');
+
+        return array_values(array_unique($types));
     }
 }

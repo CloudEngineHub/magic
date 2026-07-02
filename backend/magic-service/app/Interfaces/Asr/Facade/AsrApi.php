@@ -562,6 +562,29 @@ class AsrApi extends AbstractApi
     }
 
     /**
+     * Manually trigger re-summary for an existing recording project.
+     * POST /api/v1/asr/tasks/{task_key}/resummarize.
+     */
+    public function triggerResummary(string $task_key): array
+    {
+        $userAuthorization = $this->getAuthorization();
+
+        $modelId = $this->request->input('model_id');
+        $analysisScope = (string) $this->request->input('analysis_scope', 'template_analysis_files');
+        $specifiedAnalysisTypes = $this->normalizeSpecifiedAnalysisTypes(
+            $this->request->input('specified_analysis_types', [])
+        );
+
+        return $this->asrFileAppService->triggerResummary(
+            $task_key,
+            $modelId,
+            $analysisScope,
+            $specifiedAnalysisTypes,
+            $userAuthorization
+        );
+    }
+
+    /**
      * Batch trigger summary for multiple tasks.
      * POST /api/v1/asr/tasks/summarize/batch.
      */
@@ -1166,6 +1189,34 @@ class AsrApi extends AbstractApi
         }
 
         return (int) $topicItem->getId();
+    }
+
+    /**
+     * Normalize specified re-analysis types from array or comma-separated string.
+     *
+     * @return array<int,string>
+     */
+    private function normalizeSpecifiedAnalysisTypes(mixed $rawTypes): array
+    {
+        if ($rawTypes === null || $rawTypes === '') {
+            return [];
+        }
+
+        if (is_string($rawTypes)) {
+            $rawTypes = explode(',', $rawTypes);
+        }
+
+        if (! is_array($rawTypes)) {
+            ExceptionBuilder::throw(
+                GenericErrorCode::ParameterValidationFailed,
+                'specified_analysis_types must be an array or comma-separated string'
+            );
+        }
+
+        $types = array_map(static fn ($type) => trim((string) $type), $rawTypes);
+        $types = array_filter($types, static fn (string $type) => $type !== '');
+
+        return array_values(array_unique($types));
     }
 
     /**

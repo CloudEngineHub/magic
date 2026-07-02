@@ -1216,7 +1216,15 @@ class ProjectAppService extends AbstractAppService
             ));
 
             // Standard initialization flow (steps 2-6 + 8)
-            $this->initializeProject($dataIsolation, $workspaceEntity, $forkProjectEntity);
+            $topicEntity = $this->initializeProject($dataIsolation, $workspaceEntity, $forkProjectEntity);
+
+            // Copy audio extension data for audio projects. The audio_file_id is
+            // updated after async file migration resolves the new file ID.
+            $this->audioProjectDomainService->copyAudioProjectForFork(
+                $requestDTO->getSourceProjectId(),
+                $forkProjectEntity->getId(),
+                $topicEntity->getId()
+            );
 
             // 7. Skip root directory initialization (fork uses async file migration)
 
@@ -1287,7 +1295,14 @@ class ProjectAppService extends AbstractAppService
 
             $forkProjectRecordEntity = $this->projectDomainService->getForkProjectRecordById($event->getForkRecordId());
 
-            $this->taskFileDomainService->migrateProjectFile($dataIsolation, $sourceProjectEntity, $forkProjectEntity, $forkProjectRecordEntity, $event->getFileIds());
+            $sourceToForkFileIdMap = $this->taskFileDomainService->migrateProjectFile($dataIsolation, $sourceProjectEntity, $forkProjectEntity, $forkProjectRecordEntity, $event->getFileIds());
+            if (! empty($sourceToForkFileIdMap)) {
+                $this->audioProjectDomainService->updateForkedAudioFileIdFromMigrationMap(
+                    $sourceProjectEntity->getId(),
+                    $forkProjectEntity->getId(),
+                    $sourceToForkFileIdMap
+                );
+            }
 
             $this->logger->info(sprintf(
                 'File migration batch completed for fork record ID: %d',

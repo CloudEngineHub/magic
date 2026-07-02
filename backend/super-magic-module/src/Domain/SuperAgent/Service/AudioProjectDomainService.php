@@ -87,6 +87,77 @@ class AudioProjectDomainService
         return $this->audioProjectRepository->findByProjectIds($projectIds);
     }
 
+    /**
+     * Copy audio project extension data for a forked project.
+     *
+     * The fork receives a new topic and copied files, so source task identifiers
+     * and audio file references must not be reused here. The audio_file_id is
+     * patched after file migration builds the source-to-target file ID map.
+     */
+    public function copyAudioProjectForFork(
+        int $sourceProjectId,
+        int $forkProjectId,
+        ?int $forkTopicId
+    ): ?AudioProjectEntity {
+        $sourceAudioProject = $this->getAudioProjectByProjectId($sourceProjectId);
+        if ($sourceAudioProject === null) {
+            return null;
+        }
+
+        $forkAudioProject = new AudioProjectEntity();
+        $forkAudioProject->setProjectId($forkProjectId)
+            ->setTopicId($forkTopicId)
+            ->setModelId($sourceAudioProject->getModelId())
+            ->setTaskKey(null)
+            ->setAutoSummary($sourceAudioProject->isAutoSummary())
+            ->setSource($sourceAudioProject->getSource())
+            ->setAudioSource($sourceAudioProject->getAudioSource())
+            ->setAudioFileId(null)
+            ->setDeviceId($sourceAudioProject->getDeviceId())
+            ->setDuration($sourceAudioProject->getDuration())
+            ->setFileSize($sourceAudioProject->getFileSize())
+            ->setLocation($sourceAudioProject->getLocation())
+            ->setTags($sourceAudioProject->getTags())
+            ->setCurrentPhase($sourceAudioProject->getCurrentPhase())
+            ->setPhaseStatus($sourceAudioProject->getPhaseStatus())
+            ->setPhasePercent($sourceAudioProject->getPhasePercent())
+            ->setPhaseError($sourceAudioProject->getPhaseError());
+
+        $this->audioProjectRepository->save($forkAudioProject);
+
+        return $forkAudioProject;
+    }
+
+    /**
+     * Update the forked audio project to point at the copied audio file.
+     *
+     * @param array<int, int> $sourceToForkFileIdMap source file ID => fork file ID
+     */
+    public function updateForkedAudioFileIdFromMigrationMap(
+        int $sourceProjectId,
+        int $forkProjectId,
+        array $sourceToForkFileIdMap
+    ): bool {
+        $sourceAudioProject = $this->getAudioProjectByProjectId($sourceProjectId);
+        $sourceAudioFileId = $sourceAudioProject?->getAudioFileId();
+        if ($sourceAudioFileId === null) {
+            return false;
+        }
+
+        if (! array_key_exists($sourceAudioFileId, $sourceToForkFileIdMap)) {
+            return false;
+        }
+
+        $forkAudioFileId = (int) $sourceToForkFileIdMap[$sourceAudioFileId];
+        if ($forkAudioFileId <= 0) {
+            return false;
+        }
+
+        return $this->audioProjectRepository->updateByProjectId($forkProjectId, [
+            'audio_file_id' => $forkAudioFileId,
+        ]) > 0;
+    }
+
     // ========== Business Logic Methods (Extracted from *IfExists) ==========
 
     /**

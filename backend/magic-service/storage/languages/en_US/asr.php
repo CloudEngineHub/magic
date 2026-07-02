@@ -168,6 +168,12 @@ return [
         'summary_prefix_with_note' => 'Please help me transform ',
         'summary_middle_with_note' => ' recording content and ',
         'summary_suffix_with_note' => ' my note content into a super artifact',
+        // Re-summary message i18n
+        'resummary_prefix' => 'Please re-summarize this existing recording project: ',
+        'resummary_note_middle' => '. Please refer to this existing note/context file: ',
+        'resummary_base_instruction' => '. Read only magic.project.js, transcript, and notes as first-hand sources. Do not rerun ASR, do not split audio, and do not modify audio, transcript, or notes. Do not read old derived files such as summary, topics, insights, highlights, followup, intent, power_dynamics, metrics, or mindmap.',
+        'resummary_scope_instruction' => 'Call analyze_audio_project with analysis_scope=":analysis_scope" and do not pass specified_analysis_types.',
+        'resummary_specified_instruction' => 'Call analyze_audio_project with specified_analysis_types=:specified_analysis_types.',
     ],
 
     // Exception messages i18n
