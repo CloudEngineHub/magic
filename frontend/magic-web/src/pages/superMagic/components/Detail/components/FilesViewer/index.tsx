@@ -50,6 +50,7 @@ import {
 import {
 	FILE_VIEWER_FULLSCREEN_SAFE_AREA_CLASS_NAME,
 	FILE_VIEWER_FULLSCREEN_VIEWPORT_CLASS_NAME,
+	shouldUseFileViewerFullscreenSafeArea,
 } from "./utils/fullscreenSafeArea"
 
 // 获取文件路径用作tooltip的工具函数
@@ -400,6 +401,7 @@ const FilesViewer = memo(
 				() => ({ isFullscreen, ...otherProps }),
 				[isFullscreen, otherProps],
 			)
+			const shouldUseSafeAreaFullscreen = shouldUseFileViewerFullscreenSafeArea()
 			const currentRenderPropsRef = useRef(currentRenderProps)
 			currentRenderPropsRef.current = currentRenderProps
 			const currentTabId = currentTab?.id
@@ -550,7 +552,9 @@ const FilesViewer = memo(
 						className={cn(
 							"flex h-full min-h-0 min-w-0 flex-col",
 							// Fullscreen fixed layers bypass BaseLayoutPc padding, so this shell reapplies safe-area insets.
-							isFullscreen && FILE_VIEWER_FULLSCREEN_SAFE_AREA_CLASS_NAME,
+							isFullscreen &&
+								shouldUseSafeAreaFullscreen &&
+								FILE_VIEWER_FULLSCREEN_SAFE_AREA_CLASS_NAME,
 						)}
 					>
 						{/* Tab Bar — hidden in immersive read-only mode (e.g. audio recording detail) */}
