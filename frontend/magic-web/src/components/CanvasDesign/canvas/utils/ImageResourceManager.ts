@@ -103,9 +103,17 @@ export interface ImageResourceLoadOptions {
 	variant?: ImageResourceVariant
 	priority?: ImageResourceLoadPriority
 	bypassQueue?: boolean
+	viewportEpoch?: number
+	dropIfViewportStale?: boolean
 	/** 可见性调度发起的显示目标元素；仅用于 full 加载完成后定向唤醒该元素 */
 	displayTargetElementId?: string
 	displayTargetReason?: string
+}
+
+export interface ImageFullAdmissionSnapshot {
+	fullDecodedBytes: number
+	fullLoadingCount: number
+	fullBudgetBytes: number
 }
 
 export interface ResolvedImageOssInfo {
@@ -265,6 +273,7 @@ interface PreviewLoadQueueItem {
 	shouldRefreshCached: boolean
 	variant: ImageResourceVariant
 	priority: ImageResourceLoadPriority
+	options?: ImageResourceLoadOptions
 	queuedAt: number
 	sequence: number
 	resolve: (resource: LoadedResource | null) => void
@@ -349,6 +358,11 @@ export class ImageResourceManager {
 		string,
 		Set<ImageResourceDisplayLoadedHandler>
 	>()
+	private decodedResourceRefCounts = new Map<ImageResource, number>()
+	private fullDecodedResourceRefCounts = new Map<ImageResource, number>()
+	private decodedBytesTotal = 0
+	private fullDecodedBytes = 0
+	private decodedByteTrackingReady = true
 
 	private canonicalResourcePath(path: string): string {
 		return this.urlLifecycle.canonicalResourcePath(path)
@@ -541,6 +555,26 @@ export class ImageResourceManager {
 
 	private markStaleRequestDrop(): void {
 		this.diagnostics.increment("staleRequestDropCount")
+	}
+
+	private isViewportLoadStale(options?: ImageResourceLoadOptions): boolean {
+		if (!options?.dropIfViewportStale || typeof options.viewportEpoch !== "number") {
+			return false
+		}
+		const visibilityManager = this.canvas.visibilityManager as
+			| {
+					isViewportResourceEpochCurrent?: (epoch: number) => boolean
+			  }
+			| undefined
+		const isCurrent = visibilityManager?.isViewportResourceEpochCurrent
+		if (typeof isCurrent !== "function") return false
+		return !isCurrent.call(visibilityManager, options.viewportEpoch)
+	}
+
+	private shouldDropStaleViewportLoad(options?: ImageResourceLoadOptions): boolean {
+		if (!this.isViewportLoadStale(options)) return false
+		this.markStaleRequestDrop()
+		return true
 	}
 
 	private clearCachedFallbackOssSrc(entry: ImageResourceEntry): void {
@@ -768,6 +802,7 @@ export class ImageResourceManager {
 		shouldRefreshCached: boolean,
 		variant: ImageResourceVariant,
 		priority: ImageResourceLoadPriority,
+		options?: ImageResourceLoadOptions,
 	): Promise<LoadedResource | null> {
 		if (this.destroyed) {
 			return Promise.resolve(null)
@@ -783,6 +818,7 @@ export class ImageResourceManager {
 				shouldRefreshCached,
 				variant,
 				priority,
+				options,
 				queuedAt: this.getNow(),
 				sequence: ++this.previewLoadQueueSequence,
 				resolve,
@@ -813,6 +849,7 @@ export class ImageResourceManager {
 				item.shouldRefreshCached,
 				item.variant,
 				item.priority,
+				item.options,
 			)
 				.then((resource) => {
 					item.resolve(resource)
@@ -833,6 +870,128 @@ export class ImageResourceManager {
 	private getDecodedBytes(resource: ImageResource | null): number {
 		if (!resource) return 0
 		return Math.max(1, resource.sourceWidth) * Math.max(1, resource.sourceHeight) * 4
+	}
+
+	private ensureDecodedByteTrackingState(): void {
+		if (!(this.decodedResourceRefCounts instanceof Map)) {
+			this.decodedResourceRefCounts = new Map()
+		}
+		if (!(this.fullDecodedResourceRefCounts instanceof Map)) {
+			this.fullDecodedResourceRefCounts = new Map()
+		}
+		if (typeof this.decodedBytesTotal !== "number") {
+			this.decodedBytesTotal = 0
+		}
+		if (typeof this.fullDecodedBytes !== "number") {
+			this.fullDecodedBytes = 0
+		}
+		if (this.decodedByteTrackingReady !== true) {
+			this.rebuildDecodedByteTrackingFromEntries()
+		}
+	}
+
+	private incrementDecodedResourceRef(
+		counts: Map<ImageResource, number>,
+		resource: ImageResource,
+	): boolean {
+		const previousCount = counts.get(resource) ?? 0
+		counts.set(resource, previousCount + 1)
+		return previousCount === 0
+	}
+
+	private decrementDecodedResourceRef(
+		counts: Map<ImageResource, number>,
+		resource: ImageResource,
+	): boolean {
+		const previousCount = counts.get(resource) ?? 0
+		if (previousCount <= 1) {
+			counts.delete(resource)
+			return previousCount === 1
+		}
+		counts.set(resource, previousCount - 1)
+		return false
+	}
+
+	private retainDecodedResource(
+		resource: ImageResource | null,
+		options?: { full?: boolean },
+	): void {
+		if (!resource) return
+		this.ensureDecodedByteTrackingState()
+		const bytes = this.getDecodedBytes(resource)
+		if (this.incrementDecodedResourceRef(this.decodedResourceRefCounts, resource)) {
+			this.decodedBytesTotal += bytes
+		}
+		if (options?.full) {
+			if (this.incrementDecodedResourceRef(this.fullDecodedResourceRefCounts, resource)) {
+				this.fullDecodedBytes += bytes
+			}
+		}
+	}
+
+	private releaseDecodedResource(
+		resource: ImageResource | null,
+		options?: { full?: boolean },
+	): void {
+		if (!resource) return
+		this.ensureDecodedByteTrackingState()
+		const bytes = this.getDecodedBytes(resource)
+		if (this.decrementDecodedResourceRef(this.decodedResourceRefCounts, resource)) {
+			this.decodedBytesTotal = Math.max(0, this.decodedBytesTotal - bytes)
+		}
+		if (options?.full) {
+			if (this.decrementDecodedResourceRef(this.fullDecodedResourceRefCounts, resource)) {
+				this.fullDecodedBytes = Math.max(0, this.fullDecodedBytes - bytes)
+			}
+		}
+	}
+
+	private rebuildDecodedByteTrackingFromEntries(): void {
+		this.decodedResourceRefCounts = new Map()
+		this.fullDecodedResourceRefCounts = new Map()
+		this.decodedBytesTotal = 0
+		this.fullDecodedBytes = 0
+
+		this.entries?.forEach((entry) => {
+			for (const variant of MEDIA_DISPLAY_RESOURCE_VARIANTS) {
+				const resource = this.getDisplayResource(entry, variant)
+				if (!resource) continue
+				if (this.incrementDecodedResourceRef(this.decodedResourceRefCounts, resource)) {
+					this.decodedBytesTotal += this.getDecodedBytes(resource)
+				}
+			}
+			if (!entry.fullResource) return
+			if (
+				this.incrementDecodedResourceRef(this.decodedResourceRefCounts, entry.fullResource)
+			) {
+				this.decodedBytesTotal += this.getDecodedBytes(entry.fullResource)
+			}
+			if (
+				this.incrementDecodedResourceRef(
+					this.fullDecodedResourceRefCounts,
+					entry.fullResource,
+				)
+			) {
+				this.fullDecodedBytes += this.getDecodedBytes(entry.fullResource)
+			}
+		})
+		this.decodedByteTrackingReady = true
+	}
+
+	private clearDecodedByteTracking(): void {
+		if (this.decodedResourceRefCounts instanceof Map) {
+			this.decodedResourceRefCounts.clear()
+		} else {
+			this.decodedResourceRefCounts = new Map()
+		}
+		if (this.fullDecodedResourceRefCounts instanceof Map) {
+			this.fullDecodedResourceRefCounts.clear()
+		} else {
+			this.fullDecodedResourceRefCounts = new Map()
+		}
+		this.decodedBytesTotal = 0
+		this.fullDecodedBytes = 0
+		this.decodedByteTrackingReady = true
 	}
 
 	private getDecodedBitmapRetentionKey(
@@ -1000,9 +1159,7 @@ export class ImageResourceManager {
 
 		const slot = this.getDisplayResourceSlot(candidate.entry, candidate.variant)
 		if (slot.resource !== candidate.resource) return false
-		slot.resource = null
-		slot.version = null
-		slot.lastAccessAt = 0
+		this.setDisplayResource(candidate.entry, candidate.variant, null, { closePrevious: false })
 		return true
 	}
 
@@ -1084,6 +1241,10 @@ export class ImageResourceManager {
 			0,
 			options.fullBudgetBytes ?? getDefaultFullDecodedBitmapBudgetBytes(),
 		)
+		this.ensureDecodedByteTrackingState()
+		if (this.decodedBytesTotal <= softBudgetBytes && this.fullDecodedBytes <= fullBudgetBytes) {
+			return
+		}
 		const budgetState = this.collectDecodedBitmapBudgetCandidates()
 		const { candidates } = budgetState
 		let { totalBytes, fullBytes } = budgetState
@@ -1283,13 +1444,24 @@ export class ImageResourceManager {
 		entry: ImageResourceEntry,
 		variant: ImageDisplayResourceVariant,
 		resource: ImageResource | null,
-		options?: { version?: string | null; touch?: boolean; closePrevious?: boolean },
+		options?: {
+			version?: string | null
+			touch?: boolean
+			closePrevious?: boolean
+			lastAccessAt?: number
+		},
 	): ImageResource | null {
 		const slot = this.getDisplayResourceSlot(entry, variant)
 		const previousResource = slot.resource
+		if (previousResource !== resource) {
+			this.releaseDecodedResource(previousResource)
+			this.retainDecodedResource(resource)
+		}
 		slot.resource = resource
 		slot.version = options?.version ?? null
-		slot.lastAccessAt = resource && options?.touch !== false ? this.getNow() : 0
+		slot.lastAccessAt = resource
+			? (options?.lastAccessAt ?? (options?.touch !== false ? this.getNow() : 0))
+			: 0
 		const shouldClosePrevious =
 			options?.closePrevious !== false &&
 			!!previousResource &&
@@ -1304,11 +1476,17 @@ export class ImageResourceManager {
 	private setFullResource(
 		entry: ImageResourceEntry,
 		resource: ImageResource | null,
-		options?: { touch?: boolean },
+		options?: { touch?: boolean; lastAccessAt?: number },
 	): ImageResource | null {
 		const previousResource = entry.fullResource
+		if (previousResource !== resource) {
+			this.releaseDecodedResource(previousResource, { full: true })
+			this.retainDecodedResource(resource, { full: true })
+		}
 		entry.fullResource = resource
-		entry.fullLastAccessAt = resource && options?.touch !== false ? this.getNow() : 0
+		entry.fullLastAccessAt = resource
+			? (options?.lastAccessAt ?? (options?.touch !== false ? this.getNow() : 0))
+			: 0
 		return previousResource && previousResource !== resource ? previousResource : null
 	}
 
@@ -1329,10 +1507,7 @@ export class ImageResourceManager {
 
 	private clearDisplayResources(entry: ImageResourceEntry): void {
 		for (const variant of MEDIA_DISPLAY_RESOURCE_VARIANTS) {
-			const slot = this.getDisplayResourceSlot(entry, variant)
-			slot.resource = null
-			slot.version = null
-			slot.lastAccessAt = 0
+			this.setDisplayResource(entry, variant, null, { closePrevious: false })
 		}
 	}
 
@@ -1348,7 +1523,15 @@ export class ImageResourceManager {
 		entry: ImageResourceEntry,
 		slots: ImageDisplayResourceSlots,
 	): void {
-		entry.displaySlots = slots
+		for (const variant of MEDIA_DISPLAY_RESOURCE_VARIANTS) {
+			const slot = slots[variant]
+			this.setDisplayResource(entry, variant, slot.resource, {
+				version: slot.version,
+				lastAccessAt: slot.lastAccessAt,
+				closePrevious: false,
+			})
+			this.setDisplayLoadingPromise(entry, variant, slot.loadingPromise)
+		}
 	}
 
 	private isResourceStillReferenced(entry: ImageResourceEntry, resource: ImageResource): boolean {
@@ -1567,6 +1750,7 @@ export class ImageResourceManager {
 			this.markStaleRequestDrop()
 			return null
 		}
+		if (this.shouldDropStaleViewportLoad(options)) return null
 		if (this.canvas.canvasFileUploadManager.shouldDeferRemoteResourceLoad(path)) {
 			return null
 		}
@@ -1595,6 +1779,7 @@ export class ImageResourceManager {
 			variant,
 			shouldRefreshCached,
 		)
+		if (this.shouldDropStaleViewportLoad(options)) return null
 		if (persistentDisplayResource) {
 			return persistentDisplayResource
 		}
@@ -1606,6 +1791,7 @@ export class ImageResourceManager {
 			this.upgradeQueuedPreviewLoad(normalizedSrc, variant, priority)
 			const result = await loadingPromise
 			if (this.destroyed) return null
+			if (this.shouldDropStaleViewportLoad(options)) return null
 			if (!result) {
 				if (variant === "preview") {
 					this.emitImageResourceLoadFailed({
@@ -1632,6 +1818,7 @@ export class ImageResourceManager {
 						shouldRefreshCached,
 						variant,
 						priority,
+						options,
 					)
 				: this.loadImageResourcePipeline(
 						path,
@@ -1640,12 +1827,14 @@ export class ImageResourceManager {
 						shouldRefreshCached,
 						variant,
 						priority,
+						options,
 					)
 		this.setLoadingPromiseForVariant(entry, variant, promise)
 
 		try {
 			const result = await promise
 			if (this.destroyed) return null
+			if (this.shouldDropStaleViewportLoad(options)) return null
 			if (!result) {
 				if (variant === "preview") {
 					this.emitImageResourceLoadFailed({
@@ -1690,9 +1879,11 @@ export class ImageResourceManager {
 		shouldRefreshCached: boolean,
 		variant: ImageResourceVariant,
 		priority?: ImageResourceLoadPriority,
+		options?: ImageResourceLoadOptions,
 	): Promise<LoadedResource | null> {
+		if (this.shouldDropStaleViewportLoad(options)) return null
 		if (variant === "low") {
-			return this.loadLowResourcePipeline(path, normalizedSrc, entry, priority)
+			return this.loadLowResourcePipeline(path, normalizedSrc, entry, priority, options)
 		}
 
 		const cachedResource = await this.loadCachedImageResource(
@@ -1702,6 +1893,7 @@ export class ImageResourceManager {
 			variant,
 		)
 		if (this.destroyed) return null
+		if (this.shouldDropStaleViewportLoad(options)) return null
 		if (cachedResource) {
 			if (shouldRefreshCached) {
 				this.triggerBackgroundMetadataRefresh(path, normalizedSrc, entry)
@@ -1721,6 +1913,7 @@ export class ImageResourceManager {
 		if (!ossSrc) {
 			ossSrc = await this.exchangeOssSrc(path, entry)
 			if (this.destroyed) return null
+			if (this.shouldDropStaleViewportLoad(options)) return null
 			if (!ossSrc) {
 				if (variant === "preview") {
 					this.emitImageResourceLoadFailed({
@@ -1732,7 +1925,7 @@ export class ImageResourceManager {
 			}
 		}
 
-		return this.loadImageResource(normalizedSrc, ossSrc, entry, variant, priority)
+		return this.loadImageResource(normalizedSrc, ossSrc, entry, variant, priority, 0, options)
 	}
 
 	private async loadLowResourcePipeline(
@@ -1740,22 +1933,33 @@ export class ImageResourceManager {
 		normalizedSrc: string,
 		entry: ImageResourceEntry,
 		priority?: ImageResourceLoadPriority,
+		options?: ImageResourceLoadOptions,
 	): Promise<LoadedResource | null> {
+		if (this.shouldDropStaleViewportLoad(options)) return null
 		const cachedBodyOssSrc = this.bodyCache.getCachedOssSrc(entry)
 		if (cachedBodyOssSrc) {
-			return this.loadImageResource(normalizedSrc, cachedBodyOssSrc, entry, "low", priority)
+			return this.loadImageResource(
+				normalizedSrc,
+				cachedBodyOssSrc,
+				entry,
+				"low",
+				priority,
+				0,
+				options,
+			)
 		}
 
 		let ossSrc = entry.ossSrc
 		if (!ossSrc) {
 			ossSrc = await this.exchangeOssSrc(path, entry)
 			if (this.destroyed) return null
+			if (this.shouldDropStaleViewportLoad(options)) return null
 		}
 		if (!ossSrc) {
 			return null
 		}
 
-		return this.loadImageResource(normalizedSrc, ossSrc, entry, "low", priority)
+		return this.loadImageResource(normalizedSrc, ossSrc, entry, "low", priority, 0, options)
 	}
 
 	/**
@@ -1855,6 +2059,19 @@ export class ImageResourceManager {
 	public getFailureReason(path: string): ResourceLoadFailureReason | null {
 		const canonical = this.urlLifecycle.getCanonicalFromAlias(path)
 		return this.entries.get(canonical)?.lastFailureReason ?? null
+	}
+
+	public getFullAdmissionSnapshot(): ImageFullAdmissionSnapshot {
+		this.ensureDecodedByteTrackingState()
+		let fullLoadingCount = 0
+		this.entries.forEach((entry) => {
+			if (entry.fullLoadingPromise) fullLoadingCount += 1
+		})
+		return {
+			fullDecodedBytes: this.fullDecodedBytes,
+			fullLoadingCount,
+			fullBudgetBytes: getDefaultFullDecodedBitmapBudgetBytes(),
+		}
 	}
 
 	public getSnapshot(): ImageResourceSnapshot {
@@ -2039,8 +2256,9 @@ export class ImageResourceManager {
 			entry.sourceUpdatedAt = previousSourceUpdatedAt
 			entry.contentLength = previousContentLength
 			this.restoreDisplayResourceSlots(entry, previousDisplaySlots)
-			entry.fullResource = previousFullResource
-			entry.fullLastAccessAt = previousFullLastAccessAt
+			this.setFullResource(entry, previousFullResource, {
+				lastAccessAt: previousFullLastAccessAt,
+			})
 			this.bodyCache.restoreState(entry, previousBodyState)
 		}
 		const clearDeletedResourceMetadata = () => {
@@ -2275,10 +2493,12 @@ export class ImageResourceManager {
 		variant: ImageResourceVariant,
 		priority?: ImageResourceLoadPriority,
 		retryCount = 0,
+		options?: ImageResourceLoadOptions,
 	): Promise<MediaResourceBody | null> {
 		if (this.destroyed) {
 			return null
 		}
+		if (this.shouldDropStaleViewportLoad(options)) return null
 		const cacheKey = this.getBodyCacheKey(path, ossSrc, entry)
 		const cachedBody = this.getReusableBody(entry, ossSrc, cacheKey)
 		if (cachedBody) {
@@ -2302,6 +2522,7 @@ export class ImageResourceManager {
 					if (this.destroyed) {
 						return null
 					}
+					if (this.shouldDropStaleViewportLoad(options)) return null
 					const response = await fetch(ossSrc, {
 						cache: "default",
 						signal: abortController.signal,
@@ -2309,6 +2530,7 @@ export class ImageResourceManager {
 					if (this.destroyed) {
 						return null
 					}
+					if (this.shouldDropStaleViewportLoad(options)) return null
 					if (!response.ok) {
 						const needsReExchange = response.status === 401 || response.status === 403
 						if (needsReExchange) {
@@ -2336,6 +2558,7 @@ export class ImageResourceManager {
 									variant,
 									priority,
 									retryCount + 1,
+									options,
 								)
 							}
 						} else {
@@ -2352,6 +2575,7 @@ export class ImageResourceManager {
 					if (this.destroyed) {
 						return null
 					}
+					if (this.shouldDropStaleViewportLoad(options)) return null
 					const body: MediaResourceBody = {
 						blob,
 						ossSrc,
@@ -2385,6 +2609,7 @@ export class ImageResourceManager {
 							variant,
 							priority,
 							retryCount + 1,
+							options,
 						)
 					}
 					this.setFailureReason(entry, "load-error")
@@ -2427,14 +2652,25 @@ export class ImageResourceManager {
 		variant: ImageResourceVariant,
 		priority?: ImageResourceLoadPriority,
 		retryCount = 0,
+		options?: ImageResourceLoadOptions,
 	): Promise<LoadedResource | null> {
-		const body = await this.loadImageBody(path, ossSrc, entry, variant, priority, retryCount)
+		const body = await this.loadImageBody(
+			path,
+			ossSrc,
+			entry,
+			variant,
+			priority,
+			retryCount,
+			options,
+		)
 		if (!body) return null
 		if (this.destroyed) {
 			return null
 		}
+		if (this.shouldDropStaleViewportLoad(options)) return null
 
 		const decodePixelCost = await this.estimateImageDecodePixelCost(body, variant)
+		if (this.shouldDropStaleViewportLoad(options)) return null
 		const decodePriority = this.getDecodePriorityForVariant(variant, priority)
 		const releaseDecodePermit = await this.acquireImageDecodePermit(
 			decodePixelCost,
@@ -2444,20 +2680,28 @@ export class ImageResourceManager {
 			releaseDecodePermit()
 			return null
 		}
+		if (this.shouldDropStaleViewportLoad(options)) {
+			releaseDecodePermit()
+			return null
+		}
 
 		const requestId = this.createWorkerRequestId("img")
 		try {
 			this.diagnostics.increment("decodeAttemptCount")
 			const result = await this.canvas.resourceScheduler.run(
 				"image:decode",
-				() =>
-					this.sendToWorker({
+				() => {
+					if (this.shouldDropStaleViewportLoad(options)) {
+						return Promise.resolve(null)
+					}
+					return this.sendToWorker({
 						ossSrc: body.ossSrc,
 						blob: body.blob,
 						requestId,
 						variant,
 						maxEdge: this.getMaxEdgeForVariant(variant),
-					}),
+					})
+				},
 				{
 					source: "image-resource:decode",
 					canvasId: this.canvas.id,
@@ -2470,6 +2714,10 @@ export class ImageResourceManager {
 				},
 			)
 			if (this.destroyed) {
+				if (result?.imageSource) closeImageSource(result.imageSource)
+				return null
+			}
+			if (this.shouldDropStaleViewportLoad(options)) {
 				if (result?.imageSource) closeImageSource(result.imageSource)
 				return null
 			}
@@ -2496,6 +2744,10 @@ export class ImageResourceManager {
 					this.diagnostics.increment("decodeFailedCount")
 					return null
 				}
+				if (this.shouldDropStaleViewportLoad(options)) {
+					closeImageSource(image)
+					return null
+				}
 			} else {
 				this.setFailureReason(entry, getFailureReasonFromStatusCode(result?.statusCode))
 				this.diagnostics.increment("decodeFailedCount")
@@ -2503,6 +2755,10 @@ export class ImageResourceManager {
 			}
 
 			if (this.destroyed) {
+				if (image) closeImageSource(image)
+				return null
+			}
+			if (this.shouldDropStaleViewportLoad(options)) {
 				if (image) closeImageSource(image)
 				return null
 			}
@@ -2790,6 +3046,7 @@ export class ImageResourceManager {
 			})
 		})
 		this.entries.clear()
+		this.clearDecodedByteTracking()
 		this.imageResourceLoadedHandlersByPath.clear()
 		this.imageResourceLoadFailedHandlersByPath.clear()
 		this.imageResourceWillCloseHandlersByPath.clear()

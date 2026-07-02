@@ -552,7 +552,7 @@ describe("ImageElement mounted image node sync", () => {
 		expect(element.lastAppliedLoadFailureSignature).toBeNull()
 		expect(loadResource).toHaveBeenCalledWith("./images/image.png", {
 			variant: "preview",
-			priority: "critical",
+			priority: "visible",
 		})
 		expect(emit).toHaveBeenCalledWith({
 			type: "element:image:ossSrcReady",

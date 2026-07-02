@@ -1063,7 +1063,7 @@ export class ImageElement extends BaseElement<ImageElementData> {
 		this.isResourceLoading = true
 		this.canvas.imageResourceManager.loadResource(this.data.src, {
 			variant: "preview",
-			priority: "critical",
+			priority: "visible",
 		})
 	}
 

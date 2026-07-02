@@ -97,6 +97,8 @@ const MIN_NEAR_SCREEN_LONG_EDGE_FOR_LOAD = 96
 const LOW_DETAIL_VISIBLE_FALLBACK_LIMIT = 48
 const MAX_VISIBLE_LOAD_REQUESTS_PER_QUERY = 96
 const MAX_NEAR_LOAD_REQUESTS_PER_QUERY = 48
+const MAX_FULL_LOAD_REQUESTS_PER_REFRESH = 4
+const MAX_FULL_LOADING_REQUESTS = 4
 const BACKGROUND_IMAGE_LOAD_REQUESTS_PER_REFRESH = 12
 const MIN_VISIBLE_VIDEO_SCREEN_LONG_EDGE_FOR_LOAD = 96
 const MIN_NEAR_VIDEO_SCREEN_LONG_EDGE_FOR_LOAD = 160
@@ -217,6 +219,16 @@ function sortCandidates(a: LoadCandidateBase, b: LoadCandidateBase): number {
 	return a.distanceToViewportCenter - b.distanceToViewportCenter
 }
 
+function sortFullAdmissionCandidates(a: LoadCandidateBase, b: LoadCandidateBase): number {
+	const priorityDiff = getPriorityRank(a.priority) - getPriorityRank(b.priority)
+	if (priorityDiff !== 0) return priorityDiff
+	const centerDiff = a.distanceToViewportCenter - b.distanceToViewportCenter
+	if (centerDiff !== 0) return centerDiff
+	const longEdgeDiff = b.screenLongEdge - a.screenLongEdge
+	if (longEdgeDiff !== 0) return longEdgeDiff
+	return b.screenArea - a.screenArea
+}
+
 function removeCandidatesByIds<T extends LoadCandidateBase>(
 	candidates: T[],
 	elementIds: Set<string>,
@@ -271,6 +283,10 @@ function isViewportMovementReason(reason: string): boolean {
 	return reason === "viewport:pan" || reason === "viewport:scale"
 }
 
+function isViewportResourceBoundReason(reason: string): boolean {
+	return reason.startsWith("viewport:")
+}
+
 export class CanvasVisibilityManager {
 	private readonly canvas: Canvas
 	private readonly registeredImages = new Map<string, RegisteredImageElement>()
@@ -296,6 +312,7 @@ export class CanvasVisibilityManager {
 	private destroyed = false
 	private lastViewportMovementAt = now()
 	private viewportFullRequestDeferUntil = 0
+	private viewportResourceEpoch = 0
 	private contentLayerHitGraphSuppressed = false
 	private contentLayerPreviousListening: boolean | null = null
 	private readonly renderVisibilityController: CanvasRenderVisibilityController
@@ -333,6 +350,7 @@ export class CanvasVisibilityManager {
 	private readonly handleViewportPan = (): void => {
 		const currentTime = now()
 		this.lastViewportMovementAt = currentTime
+		this.advanceViewportResourceEpoch()
 		this.deferFullRequestsUntilViewportIdle(currentTime)
 		this.suppressContentLayerHitGraphDuringViewportMovement()
 		this.scheduleRefresh("viewport:pan", false)
@@ -341,6 +359,7 @@ export class CanvasVisibilityManager {
 	private readonly handleViewportScale = (): void => {
 		const currentTime = now()
 		this.lastViewportMovementAt = currentTime
+		this.advanceViewportResourceEpoch()
 		this.deferFullRequestsUntilViewportIdle(currentTime)
 		this.suppressContentLayerHitGraphDuringViewportMovement()
 		this.scheduleRefresh("viewport:scale", true)
@@ -537,6 +556,9 @@ export class CanvasVisibilityManager {
 
 		const reason = options?.reason ?? "immediate-elements"
 		const priority = options?.priority ?? "critical"
+		if (isViewportResourceBoundReason(reason)) {
+			this.advanceViewportResourceEpoch()
+		}
 		const includeDirectImages = options?.includeDirectImages ?? true
 		const maxImageCount = options?.maxImageCount ?? 48
 		const imageIds: string[] = []
@@ -672,6 +694,19 @@ export class CanvasVisibilityManager {
 			resolveCanonicalResourcePath(left, resolveAbsolutePath) ===
 			resolveCanonicalResourcePath(right, resolveAbsolutePath)
 		)
+	}
+
+	private getCurrentViewportResourceEpoch(): number {
+		return typeof this.viewportResourceEpoch === "number" ? this.viewportResourceEpoch : 0
+	}
+
+	private advanceViewportResourceEpoch(): number {
+		this.viewportResourceEpoch = this.getCurrentViewportResourceEpoch() + 1
+		return this.viewportResourceEpoch
+	}
+
+	public isViewportResourceEpochCurrent(epoch: number): boolean {
+		return !this.destroyed && epoch === this.getCurrentViewportResourceEpoch()
 	}
 
 	private queueImmediateImageElement(
@@ -1094,13 +1129,19 @@ export class CanvasVisibilityManager {
 		)
 		const shouldDeferNearLoads = isViewportMovementReason(reason)
 
-		const { nearToLoad, visibleToLoad } = this.selectImageCandidatesToLoad({
+		const selectedImageLoads = this.selectImageCandidatesToLoad({
 			pendingLowDetailVisibleCandidates,
 			pendingNearCandidates,
 			pendingVisibleCandidates,
 			reason,
 			shouldDeferNearLoads,
 		})
+		const admittedImageLoads = this.admitOrDowngradeFullCandidates([
+			...selectedImageLoads.visibleToLoad,
+			...selectedImageLoads.nearToLoad,
+		])
+		const visibleToLoad = admittedImageLoads.slice(0, selectedImageLoads.visibleToLoad.length)
+		const nearToLoad = admittedImageLoads.slice(selectedImageLoads.visibleToLoad.length)
 		const visibleVideosToLoad =
 			pendingVisibleVideoCandidates.length > 0
 				? pendingVisibleVideoCandidates
@@ -1294,7 +1335,7 @@ export class CanvasVisibilityManager {
 			(candidate) => this.shouldRequestVideoCandidate(candidate),
 		)
 
-		const visibleToLoad =
+		const selectedVisibleToLoad =
 			pendingVisibleCandidates.length > 0
 				? pendingVisibleCandidates
 						.sort(sortCandidates)
@@ -1302,6 +1343,7 @@ export class CanvasVisibilityManager {
 				: pendingLowDetailVisibleCandidates
 						.sort(sortCandidates)
 						.slice(0, LOW_DETAIL_VISIBLE_FALLBACK_LIMIT)
+		const visibleToLoad = this.admitOrDowngradeFullCandidates(selectedVisibleToLoad)
 		const visibleVideosToLoad =
 			pendingVisibleVideoCandidates.length > 0
 				? pendingVisibleVideoCandidates
@@ -1435,6 +1477,54 @@ export class CanvasVisibilityManager {
 						)
 
 		return { imageLoadRequestBudget, nearToLoad, visibleToLoad }
+	}
+
+	private admitOrDowngradeFullCandidates(candidates: ImageLoadCandidate[]): ImageLoadCandidate[] {
+		if (!candidates.some((candidate) => candidate.variant === "full")) return candidates
+
+		const imageResourceManager = this.canvas.imageResourceManager as
+			| {
+					getFullAdmissionSnapshot?: () => {
+						fullDecodedBytes: number
+						fullLoadingCount: number
+						fullBudgetBytes: number
+					}
+			  }
+			| undefined
+		const snapshot = imageResourceManager?.getFullAdmissionSnapshot?.()
+		const fullLoadingCount = snapshot?.fullLoadingCount ?? 0
+		const fullBudgetReached = snapshot
+			? snapshot.fullDecodedBytes >= snapshot.fullBudgetBytes
+			: false
+		const refreshLimit = fullBudgetReached ? 1 : MAX_FULL_LOAD_REQUESTS_PER_REFRESH
+		let remainingFullAdmissions = Math.max(
+			0,
+			Math.min(refreshLimit, MAX_FULL_LOADING_REQUESTS - fullLoadingCount),
+		)
+		const admittedFullCandidates = new Set(
+			candidates
+				.map((candidate, index) => ({ candidate, index }))
+				.filter(({ candidate }) => candidate.variant === "full")
+				.sort((left, right) => {
+					const diff = sortFullAdmissionCandidates(left.candidate, right.candidate)
+					return diff !== 0 ? diff : left.index - right.index
+				})
+				.slice(0, remainingFullAdmissions)
+				.map(({ candidate }) => candidate),
+		)
+		remainingFullAdmissions = admittedFullCandidates.size
+
+		return candidates.map((candidate) => {
+			if (candidate.variant !== "full") return candidate
+			if (admittedFullCandidates.has(candidate) && remainingFullAdmissions > 0) {
+				remainingFullAdmissions -= 1
+				return candidate
+			}
+			return {
+				...candidate,
+				variant: "preview",
+			}
+		})
 	}
 
 	private scheduleDrainIfNeeded(options: {
@@ -1934,12 +2024,22 @@ export class CanvasVisibilityManager {
 			variant: candidate.variant,
 			reason,
 		})
-		void this.canvas.imageResourceManager.loadResource(candidate.path, {
+		const viewportEpoch = isViewportResourceBoundReason(reason)
+			? this.getCurrentViewportResourceEpoch()
+			: undefined
+		const loadOptions = {
 			variant: candidate.variant,
 			priority: candidate.priority,
 			displayTargetElementId: candidate.elementId,
 			displayTargetReason: reason,
-		})
+			...(viewportEpoch !== undefined
+				? {
+						viewportEpoch,
+						dropIfViewportStale: true,
+					}
+				: {}),
+		}
+		void this.canvas.imageResourceManager.loadResource(candidate.path, loadOptions)
 	}
 
 	private requestVideoLoad(candidate: VideoLoadCandidate, _reason: string, force = false): void {
