@@ -36,6 +36,13 @@ enum WorkspaceType: string
     case Chat = 'chat';
 
     /**
+     * Micro app workspace type for HTML micro app projects.
+     * Each user has at most one micro app workspace per organization.
+     * Managed programmatically; not user-selectable via API.
+     */
+    case MicroApp = 'micro-app';
+
+    /**
      * UserSpecial workspace type for special projects.
      * Used by storeSpecial API to isolate special projects from default workspace.
      */
@@ -53,6 +60,7 @@ enum WorkspaceType: string
             self::Finance->value,
             self::Audio->value,
             self::Chat->value,
+            self::MicroApp->value,
             self::UserSpecial->value,
         ];
     }

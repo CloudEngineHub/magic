@@ -2548,6 +2548,8 @@
 		}
 	},
 	"microAppsPage": {
+		"createProject": "New Project",
+		"createProjectFailed": "Failed to create the project. Please retry.",
 		"emptyDescription": "There are no projects in this workspace.",
 		"emptyTitle": "No micro app projects",
 		"errorDescription": "Failed to load the project list. Please retry.",

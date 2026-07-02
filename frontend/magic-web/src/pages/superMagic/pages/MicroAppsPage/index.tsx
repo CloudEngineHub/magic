@@ -1,10 +1,14 @@
+import { useState } from "react"
 import { useTranslation } from "react-i18next"
-import { ArrowLeft, Boxes, ChevronRight, RefreshCw } from "lucide-react"
+import { ArrowLeft, Boxes, ChevronRight, LoaderCircle, Plus, RefreshCw } from "lucide-react"
+import { SuperMagicApi } from "@/apis"
 import { Button } from "@/components/shadcn-ui/button"
 import { Skeleton } from "@/components/shadcn-ui/skeleton"
+import magicToast from "@/components/base/MagicToaster/utils"
 import useNavigate from "@/routes/hooks/useNavigate"
 import { RouteName } from "@/routes/constants"
 import type { ProjectListItem } from "@/pages/superMagic/pages/Workspace/types"
+import { TopicMode } from "@/pages/superMagic/pages/Workspace/TopicMode"
 import { useMicroAppsPage } from "./hooks/useMicroAppsPage"
 
 function formatProjectTime(value?: string): string {
@@ -57,6 +61,7 @@ export default function MicroAppsPage() {
 	const { t } = useTranslation("super")
 	const navigate = useNavigate()
 	const { workspace, projects, loading, error, refresh } = useMicroAppsPage()
+	const [creating, setCreating] = useState(false)
 
 	const handleOpenProject = (project: ProjectListItem) => {
 		navigate({
@@ -67,6 +72,30 @@ export default function MicroAppsPage() {
 
 	const handleBack = () => {
 		navigate({ name: RouteName.Super })
+	}
+
+	const handleCreateProject = async () => {
+		if (!workspace?.id || creating) return
+
+		setCreating(true)
+		try {
+			const result = await SuperMagicApi.createProject({
+				workspace_id: workspace.id,
+				project_name: "",
+				project_description: "",
+				project_mode: TopicMode.MicroApp,
+			})
+
+			navigate({
+				name: RouteName.MicroApp,
+				params: { projectId: result.project.id },
+			})
+		} catch (createError) {
+			console.error("创建微应用项目失败：", createError)
+			magicToast.error(t("microAppsPage.createProjectFailed"))
+		} finally {
+			setCreating(false)
+		}
 	}
 
 	return (
@@ -98,10 +127,24 @@ export default function MicroAppsPage() {
 					size="sm"
 					className="gap-2"
 					onClick={refresh}
-					disabled={loading}
+					disabled={loading || creating}
 				>
 					<RefreshCw size={14} />
 					{t("microAppsPage.refresh")}
+				</Button>
+				<Button
+					type="button"
+					size="sm"
+					className="gap-2"
+					onClick={handleCreateProject}
+					disabled={!workspace?.id || loading || creating}
+				>
+					{creating ? (
+						<LoaderCircle size={14} className="animate-spin" />
+					) : (
+						<Plus size={14} />
+					)}
+					{t("microAppsPage.createProject")}
 				</Button>
 			</header>
 

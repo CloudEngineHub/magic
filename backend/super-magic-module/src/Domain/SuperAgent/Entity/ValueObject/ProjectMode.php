@@ -27,6 +27,7 @@ enum ProjectMode: string
     case CUSTOM_SKILL = 'custom_skill'; // 自定义 skill 模式
     case MAGICLAW = 'magiclaw'; // magic 龙虾模式
     case CHAT = 'chat';         // 对话模式
+    case MICRO_APP = 'micro-app'; // 微应用开发模式
 
     /**
      * Get all available project modes.
@@ -48,6 +49,7 @@ enum ProjectMode: string
             self::CUSTOM_SKILL->value,
             self::MAGICLAW->value,
             self::CHAT->value,
+            self::MICRO_APP->value,
         ];
     }
 
@@ -82,6 +84,7 @@ enum ProjectMode: string
             self::CUSTOM_SKILL => '自定义 skill 模式',
             self::MAGICLAW => 'magic 龙虾模式',
             self::CHAT => '对话模式',
+            self::MICRO_APP => '微应用开发模式',
         };
     }
 }

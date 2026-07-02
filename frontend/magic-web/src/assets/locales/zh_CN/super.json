@@ -2548,6 +2548,8 @@
 		}
 	},
 	"microAppsPage": {
+		"createProject": "新建项目",
+		"createProjectFailed": "新建项目失败，请重试。",
 		"emptyDescription": "当前工作区下暂无项目。",
 		"emptyTitle": "暂无微应用项目",
 		"errorDescription": "项目列表加载失败，请重试。",
