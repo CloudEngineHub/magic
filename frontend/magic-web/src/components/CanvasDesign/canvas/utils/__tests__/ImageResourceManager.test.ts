@@ -229,6 +229,59 @@ describe("ImageResourceManager image resources", () => {
 		expect(eventEmitter.emit).not.toHaveBeenCalled()
 	})
 
+	it("emits not-found failures even when a low viewport load goes stale", async () => {
+		const { manager, eventEmitter, visibilityManager } = createManager()
+		let isCurrent = true
+		visibilityManager.isViewportResourceEpochCurrent.mockImplementation(() => isCurrent)
+		;(
+			manager as unknown as {
+				loadPersistentDisplayResource: ReturnType<typeof vi.fn>
+			}
+		).loadPersistentDisplayResource = vi.fn(async () => null)
+		;(
+			manager as unknown as { loadLowResourcePipeline: ReturnType<typeof vi.fn> }
+		).loadLowResourcePipeline = vi.fn(
+			async (
+				_path: string,
+				_normalizedSrc: string,
+				entry: ReturnType<typeof createEntry>,
+			) => {
+				;(entry as { lastFailureReason: "not-found" | null }).lastFailureReason =
+					"not-found"
+				isCurrent = false
+				return null
+			},
+		)
+
+		const result = await (
+			manager as unknown as {
+				loadImageInternal: (
+					path: string,
+					options: {
+						variant: ImageResourceVariant
+						bypassQueue: boolean
+						viewportEpoch: number
+						dropIfViewportStale: boolean
+					},
+				) => Promise<unknown>
+			}
+		).loadImageInternal.call(manager, "./images/missing.png", {
+			variant: "low",
+			bypassQueue: true,
+			viewportEpoch: 1,
+			dropIfViewportStale: true,
+		})
+
+		expect(result).toBeNull()
+		expect(eventEmitter.emit).toHaveBeenCalledWith({
+			type: "resource:image:load-failed",
+			data: {
+				path: "./images/missing.png",
+				reason: "not-found",
+			},
+		})
+	})
+
 	it("drops stale viewport loads after body fetch before decode", async () => {
 		const { manager, visibilityManager } = createManager()
 		const loadImageResource = (

@@ -1791,7 +1791,11 @@ export class ImageResourceManager {
 			this.upgradeQueuedPreviewLoad(normalizedSrc, variant, priority)
 			const result = await loadingPromise
 			if (this.destroyed) return null
-			if (this.shouldDropStaleViewportLoad(options)) return null
+			const isStaleViewportLoad = this.shouldDropStaleViewportLoad(options)
+			if (!result && this.emitNotFoundLoadFailedIfNeeded(normalizedSrc, entry)) {
+				return null
+			}
+			if (isStaleViewportLoad) return null
 			if (!result) {
 				if (variant === "preview") {
 					this.emitImageResourceLoadFailed({
@@ -1834,7 +1838,11 @@ export class ImageResourceManager {
 		try {
 			const result = await promise
 			if (this.destroyed) return null
-			if (this.shouldDropStaleViewportLoad(options)) return null
+			const isStaleViewportLoad = this.shouldDropStaleViewportLoad(options)
+			if (!result && this.emitNotFoundLoadFailedIfNeeded(normalizedSrc, entry)) {
+				return null
+			}
+			if (isStaleViewportLoad) return null
 			if (!result) {
 				if (variant === "preview") {
 					this.emitImageResourceLoadFailed({
@@ -1855,6 +1863,18 @@ export class ImageResourceManager {
 				this.setLoadingPromiseForVariant(entry, variant, null)
 			}
 		}
+	}
+
+	private emitNotFoundLoadFailedIfNeeded(
+		normalizedSrc: string,
+		entry: ImageResourceEntry,
+	): boolean {
+		if (entry.lastFailureReason !== "not-found") return false
+		this.emitImageResourceLoadFailed({
+			path: normalizedSrc,
+			reason: "not-found",
+		})
+		return true
 	}
 
 	private emitVariantLoadFailed(
@@ -2059,6 +2079,17 @@ export class ImageResourceManager {
 	public getFailureReason(path: string): ResourceLoadFailureReason | null {
 		const canonical = this.urlLifecycle.getCanonicalFromAlias(path)
 		return this.entries.get(canonical)?.lastFailureReason ?? null
+	}
+
+	public markResourceLoadFailed(path: string, reason: ResourceLoadFailureReason): void {
+		if (this.destroyed) return
+		const normalizedSrc = this.canonicalResourcePath(path)
+		const entry = this.getOrCreateEntry(normalizedSrc)
+		this.setFailureReason(entry, reason)
+		this.emitImageResourceLoadFailed({
+			path: normalizedSrc,
+			reason,
+		})
 	}
 
 	public getFullAdmissionSnapshot(): ImageFullAdmissionSnapshot {
