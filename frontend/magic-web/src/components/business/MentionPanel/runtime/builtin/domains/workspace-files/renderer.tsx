@@ -12,7 +12,7 @@ function getFolderRelativePath(path?: string) {
 
 	const paths = path.split("/").slice(0, -2)
 	const nextPath = paths.join("/")
-	return nextPath || ""
+	return normalizeDisplayParentPath(nextPath)
 }
 
 function getFileRelativePath(path?: string) {
@@ -20,11 +20,23 @@ function getFileRelativePath(path?: string) {
 
 	const paths = path.split("/").slice(0, -1)
 	const nextPath = paths.join("/")
-	return nextPath || ""
+	return normalizeDisplayParentPath(nextPath)
 }
 
 /** 与 CanvasDesignMentionDataService 约定：在 DSL 相对路径前拼接设计根目录显示名 */
 const MENTION_FILE_SUBTITLE_PARENT_PREFIX_KEY = "mentionFileSubtitleParentPrefix"
+
+function normalizeDisplayParentPath(parentPath?: string, rootDirectoryLabel?: string): string {
+	if (!parentPath) return ""
+
+	const normalized = parentPath.replace(/\\/g, "/").trim()
+	const withoutCurrentDir = normalized.replace(/^(\.\/)+/, "").replace(/\/+$/, "")
+	if (!withoutCurrentDir || withoutCurrentDir === ".") {
+		return rootDirectoryLabel || ""
+	}
+
+	return withoutCurrentDir
+}
 
 function readSubtitleParentPrefix(item: {
 	metadata?: Record<string, unknown>
@@ -69,7 +81,7 @@ export const workspaceFilesRendererEntries: Array<[string, MentionItemRenderer]>
 				if (directoryResult.endsWith("/")) {
 					directoryResult = directoryResult.slice(0, -1) || rootLabel
 				}
-				const parent = directoryResult || rootLabel
+				const parent = normalizeDisplayParentPath(directoryResult, rootLabel) || rootLabel
 				return withSubtitleParentPrefix(
 					isSearch ? readSubtitleParentPrefix(item) : undefined,
 					parent,
@@ -104,7 +116,7 @@ export const workspaceFilesRendererEntries: Array<[string, MentionItemRenderer]>
 				if (result.endsWith("/")) {
 					result = result.slice(0, -1) || rootLabel
 				}
-				const parent = result || rootLabel
+				const parent = normalizeDisplayParentPath(result, rootLabel) || rootLabel
 				return withSubtitleParentPrefix(
 					isSearch ? readSubtitleParentPrefix(item) : undefined,
 					parent,
