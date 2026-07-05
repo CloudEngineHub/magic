@@ -443,7 +443,7 @@ sequenceDiagram
 
 | 分层 | 消息 | 方向 |
 | --- | --- | --- |
-| shell 生命周期 | `iframeReady`、`pageLoaded`、`contentLoaded`、`domReady`、`renderComplete`、`pageFullyLoaded`、`contentMetrics`、`iframeError` | iframe -> 宿主 |
+| shell 生命周期 | `iframeReady`、`pageLoaded`、`contentLoaded`、`domReady`、`renderComplete`、`pageFullyLoaded`、`contentMetrics`、`MAGIC_HTML_SANDBOX_TELEMETRY` | iframe -> 宿主 |
 | 内容控制 | `setContent`、`setAnimationState`、`editModeChange`、`activateEditorRuntime` | 宿主 -> iframe |
 | 相对资源 | `MAGIC_FETCH_URL_REQUEST` / `MAGIC_FETCH_URL_RESPONSE` | 双向 |
 | 嵌套 iframe | `MAGIC_IFRAME_CONTENT_REQUEST` / `MAGIC_IFRAME_CONTENT_RESPONSE` | 双向 |
@@ -507,7 +507,7 @@ iframe 注入的 Magic API 由唯一 TS 源 `iframe-api/magic-api/*.ts` 定义�
 
 | 问题 | 排查路径 |
 | --- | --- |
-| 页面空白 | 看 shell 是否发 `iframeReady/pageLoaded`，再看 `setContent` 是否发送，最后看 `iframeError`。 |
+| 页面空白 | 看 shell 是否发 `iframeReady/pageLoaded`，再看 `setContent` 是否发送，最后看 `stage=iframe_failure` 及 `failureType`。 |
 | 图片或脚本 404 | 看元素是否有 `data-original-path`，父级是否收到 `MAGIC_FETCH_URL_REQUEST`，`findMatchingFile` 是否按正确目录解析。 |
 | 嵌套 iframe 空白 | 看是否发送 `MAGIC_IFRAME_CONTENT_REQUEST`，响应是否 `not-found` 或 `cycleDetected`。 |
 | Magic API 不存在 | 看 head 最前是否有 `data-injected="magic-api"`，是否收到 `MAGIC_API_PRELUDE_ERROR`。 |
@@ -528,4 +528,3 @@ iframe 注入的 Magic API 由唯一 TS 源 `iframe-api/magic-api/*.ts` 定义�
 8. `window.Magic.fs.readFile/writeFile/listFiles/watchFile` 正常返回。
 9. `window.Magic.llm` 不泄露 token，错误响应能回到 iframe。
 10. 编辑保存后不落盘临时 URL、注入脚本、`srcdoc`。
-

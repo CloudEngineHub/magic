@@ -318,8 +318,9 @@ describe("SuperMagicStore streaming", () => {
 								name: "read_webpages_as_markdown",
 								label: "深度阅读多个网页内容",
 								arguments: JSON.stringify({
-									urls: Array.from({ length: 30 }, (_, index) =>
-										`https://example.com/${index}`,
+									urls: Array.from(
+										{ length: 30 },
+										(_, index) => `https://example.com/${index}`,
 									),
 								}),
 							},
@@ -345,14 +346,10 @@ describe("SuperMagicStore streaming", () => {
 			}),
 		)
 
-		store.receiveChunk(
-			createChunkMessage({ correlationId: "corr-next", content: "下一条" }),
-		)
+		store.receiveChunk(createChunkMessage({ correlationId: "corr-next", content: "下一条" }))
 		vi.runAllTimers()
 
-		expect(store.toolResponseMap.get("topic-1")?.get("tool-call-1")?.status).toBe(
-			"finished",
-		)
+		expect(store.toolResponseMap.get("topic-1")?.get("tool-call-1")?.status).toBe("finished")
 		expect(store.getStreamState("topic-1", "corr-next")).toBeTruthy()
 	})
 
@@ -385,7 +382,7 @@ describe("SuperMagicStore streaming", () => {
 		})
 	})
 
-	it("切回话题时回放打字机动画（场景 2）", () => {
+	it("切回已完成话题直接终态，不回放打字机动画（场景 2）", () => {
 		const store = new SuperMagicStore()
 		store.setActiveTopicId("topic-active")
 		store.setTest("topic-1")
@@ -400,22 +397,20 @@ describe("SuperMagicStore streaming", () => {
 		)
 		vi.runAllTimers()
 
+		// cache 已被 flushStreamToCompletion 固化为完整终态
 		expect((store.getMessageNode("corr-replay") as any)?.content).toBe("replay me")
 
+		// 切回话题
 		store.setActiveTopicId("topic-1")
 
-		const rewoundNode = store.getMessageNode("corr-replay") as any
-		expect(rewoundNode.content.length).toBeLessThan("replay me".length)
+		// 不回退内容、不重建 StreamState、不启动定时器
+		const node = store.getMessageNode("corr-replay") as any
+		expect(node.content).toBe("replay me")
 
 		const topicMeta = (store as any).getTopicMetadata("topic-1")
-		expect(topicMeta.content.size).toBe(1)
-		const replayState = topicMeta.content.get("corr-replay")
-		expect(replayState.content).toBe("replay me")
-		expect(replayState.isFinalMessageReceived).toBe(true)
-
-		vi.runAllTimers()
-		expect((store.getMessageNode("corr-replay") as any)?.content).toBe("replay me")
 		expect(topicMeta.content.size).toBe(0)
+		expect(topicMeta.timer).toBeNull()
+		expect(topicMeta.streamSnapshots.size).toBe(0)
 	})
 
 	it("非活跃话题 chunk 积累后切回，从断点继续流式", () => {
@@ -462,5 +457,153 @@ describe("SuperMagicStore streaming", () => {
 		const topicMeta = (store as any).getTopicMetadata("topic-1")
 		const timerCount = topicMeta.timer ? 1 : 0
 		expect(timerCount).toBeLessThanOrEqual(1)
+	})
+
+	it("乱序 chunk + final 不同序，工具调用视觉顺序保持首现顺序不变", () => {
+		const store = new SuperMagicStore()
+		store.setActiveTopicId("topic-1")
+		store.setTest("topic-1")
+
+		// chunk 按 index 0, 1, 2 依次到达三个工具
+		const makeToolChunk = (index: number, id: string, name: string) => ({
+			type: "super_magic_chunk" as const,
+			topic_id: "topic-1",
+			super_magic_chunk: {
+				i: 1,
+				correlation_id: "corr-tools",
+				choices: [
+					{
+						finish_reason: null,
+						delta: {
+							content: "",
+							reasoning_content: "",
+							tool_calls: [
+								{
+									index,
+									id,
+									type: "function",
+									function: { name, label: name, arguments: "" },
+								},
+							],
+						},
+					},
+				],
+			},
+		})
+
+		store.receiveChunk(makeToolChunk(0, "tool-a", "search") as any)
+		store.receiveChunk(makeToolChunk(1, "tool-b", "read_file") as any)
+		store.receiveChunk(makeToolChunk(2, "tool-c", "write_file") as any)
+		vi.runAllTimers()
+
+		// 流式首现顺序: tool-a, tool-b, tool-c
+		const nodeBeforeFinal = store.getMessageNode("corr-tools") as any
+		expect(nodeBeforeFinal.tool_calls.map((t: any) => t.id)).toEqual([
+			"tool-a",
+			"tool-b",
+			"tool-c",
+		])
+
+		// final 到达时后端数组顺序为 tool-c, tool-a, tool-b（与流式不同）
+		store.enqueueMessage(
+			"topic-1",
+			createAssistantEnvelope({
+				appMessageId: "raw-tools-final",
+				correlationId: "corr-tools",
+				content: "",
+				nodeOverrides: {
+					tool_calls: [
+						{
+							id: "tool-c",
+							type: "function",
+							index: 0,
+							function: {
+								name: "write_file",
+								label: "write_file",
+								arguments: '{"path":"c.txt"}',
+							},
+						},
+						{
+							id: "tool-a",
+							type: "function",
+							index: 1,
+							function: {
+								name: "search",
+								label: "search",
+								arguments: '{"q":"hello"}',
+							},
+						},
+						{
+							id: "tool-b",
+							type: "function",
+							index: 2,
+							function: {
+								name: "read_file",
+								label: "read_file",
+								arguments: '{"path":"b.txt"}',
+							},
+						},
+					],
+				},
+			}),
+		)
+		vi.runAllTimers()
+
+		// 视觉顺序仍为首现顺序 tool-a, tool-b, tool-c
+		const nodeAfterFinal = store.getMessageNode("corr-tools") as any
+		const ids = (nodeAfterFinal.tool_calls || []).map((t: any) => t.id)
+		expect(ids).toEqual(["tool-a", "tool-b", "tool-c"])
+
+		// arguments 应从 final 合并补齐
+		const argsMap = Object.fromEntries(
+			(nodeAfterFinal.tool_calls || []).map((t: any) => [t.id, t.function?.arguments]),
+		)
+		expect(argsMap["tool-a"]).toBe('{"q":"hello"}')
+		expect(argsMap["tool-b"]).toBe('{"path":"b.txt"}')
+		expect(argsMap["tool-c"]).toBe('{"path":"c.txt"}')
+	})
+
+	it("切走后台 final 再切回，直接终态、无 timer、无 StreamState 重建", () => {
+		const store = new SuperMagicStore()
+		store.setActiveTopicId("topic-1")
+		store.setTest("topic-1")
+
+		// 1. 在 topic-1 上开始流式
+		store.receiveChunk(createChunkMessage({ correlationId: "corr-bg", content: "partial" }))
+		vi.runAllTimers()
+
+		const partialNode = store.getMessageNode("corr-bg") as any
+		expect(partialNode).toBeTruthy()
+
+		// 2. 切走到其他话题
+		store.setActiveTopicId("topic-other")
+
+		// 3. 后台收到 final 消息
+		store.enqueueMessage(
+			"topic-1",
+			createAssistantEnvelope({
+				appMessageId: "raw-bg-final",
+				correlationId: "corr-bg",
+				content: "partial complete final",
+			}),
+		)
+		vi.runAllTimers()
+
+		// cache 应已被 flushStreamToCompletion 固化为完整终态
+		const bgNode = store.getMessageNode("corr-bg") as any
+		expect(bgNode.content).toBe("partial complete final")
+
+		// 4. 切回 topic-1
+		store.setActiveTopicId("topic-1")
+
+		// 切回后应直接终态：不创建 timer、不重建 StreamState
+		const topicMeta = (store as any).getTopicMetadata("topic-1")
+		expect(topicMeta.timer).toBeNull()
+		expect(topicMeta.content.size).toBe(0)
+		expect(topicMeta.streamSnapshots.size).toBe(0)
+
+		// 内容保持完整终态
+		const finalNode = store.getMessageNode("corr-bg") as any
+		expect(finalNode.content).toBe("partial complete final")
 	})
 })

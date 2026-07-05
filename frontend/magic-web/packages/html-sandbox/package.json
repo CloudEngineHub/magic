@@ -37,6 +37,10 @@
 			"types": "./src/utils/parentOrigin.ts",
 			"import": "./dist/utils/parentOrigin.js"
 		},
+		"./telemetry": {
+			"types": "./src/telemetry/index.ts",
+			"import": "./dist/telemetry/index.js"
+		},
 		"./index.html": "./dist/index.html"
 	},
 	"main": "./dist/index.js",
