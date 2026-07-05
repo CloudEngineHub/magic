@@ -15,7 +15,7 @@ from typing import Any
 from app.utils.async_file_utils import async_exists, async_try_read_json
 
 from ..constants import DEFAULT_IMAGE_UNDERSTANDING_MAX_IMAGES, INDEX_FILENAME, READING_STATE_FILENAME
-from ..structure.range_parser import RangeParser, compact_numeric_ranges
+from ..structure.range_parser import compact_numeric_ranges
 from .reading_state import ReadingStateStore
 
 
@@ -53,7 +53,7 @@ class DocumentReadingPlanner:
             "unit_type": index.get("unit_type", ""),
             "total_units": index.get("total_units", 0),
             "sampled_ranges": [],
-            "extracted_ranges": [chunk.get("source_range", "").removeprefix("pages:") for chunk in index.get("chunks", []) if chunk.get("source_range")],
+            "extracted_ranges": [str(chunk.get("source_range") or "") for chunk in index.get("chunks", []) if chunk.get("source_range")],
             "visually_understood_images": [],
             "unread_ranges": [],
             "discovered_sections": [],
@@ -99,7 +99,7 @@ class DocumentReadingPlanner:
         consumed: set[int] = set()
         for key in ("sampled_ranges", "extracted_ranges"):
             for range_text in state.get(key) or []:
-                consumed.update(RangeParser.parse_numeric(str(range_text).removeprefix("pages:"), total))
+                consumed.update(ReadingStateStore._parse_read_units(str(range_text), total))
         unread = [unit for unit in range(1, total + 1) if unit not in consumed]
         return compact_numeric_ranges(unread[:max_units]) if unread else ""
 

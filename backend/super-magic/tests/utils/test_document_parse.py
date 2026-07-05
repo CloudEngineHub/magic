@@ -33,6 +33,7 @@ from app.utils.document_parse.service.document_inspector import DocumentInspecto
 from app.utils.document_parse.service.document_reading_planner import DocumentReadingPlanner
 from app.utils.document_parse.service.document_sampler import DocumentSampler
 from app.utils.document_parse.service.document_summarizer import DocumentSummarizer
+from app.utils.document_parse.service.reading_state import ReadingStateStore
 from app.utils.document_parse.structure.chunk_store import ChunkStore
 from app.utils.document_parse.structure.image_feature_analyzer import ImageFeatureAnalyzer
 from app.utils.document_parse.structure.image_watermark_detector import ImageWatermarkDetector
@@ -55,6 +56,123 @@ def _save_mock_content_image(path: Path, size: tuple[int, int] = (32, 16), color
 
 def test_range_parser_compacts_numeric_ranges():
     assert RangeParser.parse_numeric("1-3,5,7-8", total=10) == [1, 2, 3, 5, 7, 8]
+
+
+def test_range_parser_expands_all_when_total_is_known():
+    assert RangeParser.parse_numeric("all", total=4) == [1, 2, 3, 4]
+
+
+def test_document_sampler_accepts_all_range_with_sampling_limit():
+    assert DocumentSampler._select_sample_range(16, "all", max_units=3) == "1-3"
+
+
+def test_document_reading_planner_accepts_all_range_from_index():
+    state = {
+        "total_units": 16,
+        "unit_type": "slide",
+        "sampled_ranges": [],
+        "extracted_ranges": ["all"],
+    }
+
+    assert DocumentReadingPlanner._next_range(state, max_units=5) == ""
+
+
+def test_document_reading_planner_accepts_prefixed_slide_ranges_from_index():
+    state = DocumentReadingPlanner._state_from_index(
+        {
+            "source_path": "/tmp/mock.pptx",
+            "file_type": "powerpoint",
+            "unit_type": "slide",
+            "total_units": 6,
+            "chunks": [{"source_range": "slides:1-4"}],
+        },
+        Path("/tmp/out"),
+    )
+
+    assert DocumentReadingPlanner._next_range(state, max_units=5) == "5-6"
+
+
+def test_document_image_understander_accepts_all_range_filters():
+    index = {
+        "total_units": 2,
+        "assets": [
+            {"asset_type": "page_snapshot", "path": "assets/page1.png", "source_range": "pages:1"},
+            {"asset_type": "page_snapshot", "path": "assets/page2.png", "source_range": "pages:2"},
+        ],
+    }
+
+    selected = DocumentImageUnderstander._select_assets(index, Path("/tmp/out"), [], "all", None, False)
+
+    assert [asset["path"] for asset in selected] == ["assets/page1.png", "assets/page2.png"]
+
+
+def test_document_image_understander_accepts_all_chunk_range():
+    asset = {"asset_type": "page_snapshot", "path": "assets/page1.png", "source_range": "pages:1"}
+
+    assert DocumentImageUnderstander._asset_in_chunk_ranges(asset, ["all"], total_units=2) is True
+
+
+def test_export_markdown_existing_chunks_accept_requested_all_range():
+    chunks = [{"source_range": "slides:1-4"}]
+
+    assert ExportDocumentMarkdown._chunks_cover_requested_range(chunks, "all", total_units=4) is True
+
+
+async def test_reading_state_normalizes_all_extracted_range_for_slides(tmp_path: Path):
+    state = await ReadingStateStore().mark_extracted(
+        tmp_path,
+        source_path="/tmp/mock.pptx",
+        total_units=16,
+        unit_type="slide",
+        file_type="powerpoint",
+        extracted_range="all",
+    )
+
+    assert state["extracted_ranges"] == ["1-16"]
+    assert state["unread_ranges"] == []
+
+
+async def test_reading_state_normalizes_prefixed_all_range_for_pages(tmp_path: Path):
+    state = await ReadingStateStore().mark_sampled(
+        tmp_path,
+        source_path="/tmp/mock.pdf",
+        total_units=4,
+        unit_type="page",
+        file_type="pdf",
+        sampled_range="pages:all",
+        sample_path="samples/mock.md",
+        recommendations=[],
+    )
+
+    assert state["sampled_ranges"] == ["1-4"]
+    assert state["unread_ranges"] == []
+
+
+async def test_reading_state_accepts_legacy_all_range(tmp_path: Path):
+    store = ReadingStateStore()
+    await store.save(
+        tmp_path,
+        {
+            "source_path": "/tmp/mock.pptx",
+            "output_dir": str(tmp_path),
+            "file_type": "powerpoint",
+            "unit_type": "slide",
+            "total_units": 16,
+            "sampled_ranges": [],
+            "extracted_ranges": ["all"],
+        },
+    )
+
+    state = await store.initialize(
+        tmp_path,
+        source_path="/tmp/mock.pptx",
+        total_units=16,
+        unit_type="slide",
+        file_type="powerpoint",
+    )
+
+    assert state["extracted_ranges"] == ["all"]
+    assert state["unread_ranges"] == []
 
 
 def test_image_feature_analyzer_flags_solid_color_images(tmp_path: Path):
