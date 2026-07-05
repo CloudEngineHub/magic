@@ -203,29 +203,25 @@
         "zh_CN": "文档格式转换",
         "en_US": "Document Format Conversion"
     },
-    "convert_pptx_to_html.before": {
-        "zh_CN": "正在将 {{file_name}} 渲染为 HTML",
-        "en_US": "Rendering {{file_name}} to HTML"
+    "convert_pptx_to_slide_template.before": {
+        "zh_CN": "正在将 {{file_name}} 转换为幻灯片模板",
+        "en_US": "Converting {{file_name}} to a slide template"
     },
-    "convert_pptx_to_html.after_success": {
-        "zh_CN": "已将 {{file_name}} 渲染为 HTML（{{rendered}}/{{total}} 页）",
-        "en_US": "Rendered {{file_name}} to HTML ({{rendered}}/{{total}} slides)"
+    "convert_pptx_to_slide_template.after_success": {
+        "zh_CN": "已生成模板 {{template_id}}（{{slide_count}} 页）",
+        "en_US": "Generated template {{template_id}} ({{slide_count}} slides)"
     },
-    "convert_pptx_to_html.after_failed": {
-        "zh_CN": "{{file_name}} 渲染失败",
-        "en_US": "Failed to render {{file_name}} to HTML"
+    "convert_pptx_to_slide_template.error": {
+        "zh_CN": "PPTX 转幻灯片模板失败：{{error}}",
+        "en_US": "PPTX to slide template conversion failed: {{error}}"
     },
-    "convert_pptx_to_html.error": {
-        "zh_CN": "PPTX 转 HTML 失败：{{error}}",
-        "en_US": "PPTX to HTML conversion failed: {{error}}"
+    "convert_pptx_to_slide_template.detail_title": {
+        "zh_CN": "PPTX 转幻灯片模板",
+        "en_US": "PPTX to Slide Template"
     },
-    "convert_pptx_to_html.detail_title": {
-        "zh_CN": "PPTX 转 HTML",
-        "en_US": "PPTX to HTML Conversion"
-    },
-    "convert_pptx_to_html.detail_error_title": {
-        "zh_CN": "PPTX 转 HTML 失败",
-        "en_US": "PPTX to HTML Conversion Failed"
+    "convert_pptx_to_slide_template.detail_error_title": {
+        "zh_CN": "PPTX 转幻灯片模板失败",
+        "en_US": "PPTX to Slide Template Failed"
     },
     "export_document_markdown.before": {
         "zh_CN": "正在导出 {{file_name}}",

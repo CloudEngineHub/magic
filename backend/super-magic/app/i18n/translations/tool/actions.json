@@ -71,9 +71,9 @@
         "zh_CN": "转换文档格式",
         "en_US": "Convert document format"
     },
-    "convert_pptx_to_html": {
-        "zh_CN": "转换 PPTX 为 HTML",
-        "en_US": "Convert PPTX to HTML"
+    "convert_pptx_to_slide_template": {
+        "zh_CN": "转换 PPTX 为幻灯片模板",
+        "en_US": "Convert PPTX to slide template"
     },
     "export_document_markdown": {
         "zh_CN": "导出 Markdown",

@@ -53,7 +53,7 @@ a = Analysis(
         ('.super-magic-project-root', '.'),  # 项目根目录标志文件，供 skill 脚本定位根目录
         ('agents', 'agents'),  # 添加agents目录
         ('config', 'config'),  # 添加config目录
-        ('static', 'static'),
+        ('static', 'static'), 
         # 添加SDK目录作为数据文件（不加密，保持源代码可读）
         ('sdk', 'sdk'),
         # 添加幻灯片模板文件
@@ -66,8 +66,6 @@ a = Analysis(
         ('app/tools/magic_design', 'app/tools/magic_design'),
         # 添加数据分析模板
         ('app/tools/data_analyst_dashboard_template', 'app/tools/data_analyst_dashboard_template'),
-        # 添加 PPTX 转 HTML 渲染脚本
-        ('app/tools/pptx_to_html', 'app/tools/pptx_to_html'),
         # 添加所有js文件
         ('magic_use/js', 'magic_use/js'),
         ('app/i18n/translations', 'app/i18n/translations'),

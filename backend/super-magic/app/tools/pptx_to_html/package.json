@@ -1,9 +1,0 @@
-{
-  "name": "@dtyq/super-magic-pptx-to-html-runtime",
-  "version": "0.1.0",
-  "private": true,
-  "type": "module",
-  "dependencies": {
-    "pptx-html-renderer": "0.1.0"
-  }
-}

@@ -8,6 +8,10 @@ description-cn: "当用户想查看PPT模板、用特定风格制作幻灯片、
 
 Use this skill to choose a built-in slide template,create a custom template from a style description,extract one from a PPTX/PPT file,or extract one from an existing PPT project.
 
+## Template Metadata
+
+Each platform template should use the unified `template.json` contract in `references/template-json-spec.md`. The file separates backend-ready fields (`backend_payload`) from automation metadata (`files`,`taxonomy`,`generation`,`quality`,`license`) so generated templates, PPTX-derived templates, and manually authored templates can share one structure.
+
 ## Templates
 
 | dir | name | visual cue | trigger keywords |
@@ -116,7 +120,7 @@ Use when the user describes a style in text, provides screenshots, or gives an e
 
 ## PPTX Template Workflow
 
-Use when the user provides a presentation file such as `.pptx`, `.ppt`, `.potx`, `.pot`, `.ppsx`, a WPS presentation, or a URL to a presentation template and asks to convert it into this platform's reusable template format. Read `<skill_dir>/references/pptx-template-workflow.md` before doing any extraction or generation.
+Use when the user provides a presentation file such as `.pptx`, `.ppt`, `.potx`, `.pot`, `.ppsx`, a WPS presentation, or a URL to a presentation template and asks to convert it into this platform's reusable template format. Read `<skill_dir>/references/pptx-template-workflow.md`, then call `convert_pptx_to_slide_template`. Do not call the old raw HTML renderer tool or run this skill's old PPTX extraction scripts.
 
 ## Style Specificity & Template Scope
 
@@ -128,5 +132,5 @@ Use when the user provides a presentation file such as `.pptx`, `.ppt`, `.potx`,
 ## Output
 
 - Built-in/custom workflow output:a complete slide project generated through `creating-slides`.
-- Custom template output must include `visual-spec.md`,`theme.css`,`preview.html`.
+- PPTX template conversion output:a template project folder containing `template.json`,`magic.project.js`,`index.html`,`theme.css`,`slide-bridge.js`,`images/`,`slides/*.html`,plus a sibling `<template-id>-template.zip`.
 - Do not paste raw HTML in chat.
