@@ -1114,10 +1114,10 @@ importers:
         specifier: ^5.4.5
         version: 5.7.3
       vite:
-        specifier: ^6.0.3
-        version: 6.4.3(@types/node@22.19.20)(jiti@2.7.0)(less@4.6.4)(lightningcss@1.32.0)(sass-embedded@1.100.0)(sass@1.100.0)(sugarss@2.0.0)(terser@5.48.0)(tsx@4.22.4)(yaml@2.9.0)
+        specifier: ^8.0.3
+        version: 8.0.16(@types/node@22.19.20)(@vitejs/devtools@0.1.24)(esbuild@0.24.0)(jiti@2.7.0)(less@4.6.4)(sass-embedded@1.100.0)(sass@1.100.0)(terser@5.48.0)(tsx@4.22.4)(yaml@2.9.0)
       vitest:
-        specifier: ^3.0.7
+        specifier: ^3.2.4
         version: 3.2.6(@types/debug@4.1.13)(@types/node@22.19.20)(jiti@2.7.0)(jsdom@26.1.0(canvas@3.2.3))(less@4.6.4)(lightningcss@1.32.0)(sass-embedded@1.100.0)(sass@1.100.0)(sugarss@2.0.0)(terser@5.48.0)(tsx@4.22.4)(yaml@2.9.0)
 
   packages/magic-admin:

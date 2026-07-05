@@ -29,7 +29,7 @@
   ],
   "scripts": {
     "build": "pnpm exec vite build --config ./vite.config.ts --mode production && pnpm run build:types",
-    "build:types": "tsc -p ./tsconfig.build.json --emitDeclarationOnly",
+    "build:types": "tsc -p ./tsconfig.json --emitDeclarationOnly",
     "dev": "pnpm exec vite --config ./vite.config.ts",
     "prepublishOnly": "pnpm run typecheck && pnpm run test && pnpm run build",
     "preview": "pnpm exec vite preview --config ./vite.config.ts --mode production",
@@ -43,8 +43,8 @@
     "@zumer/snapdom": "^2.0.2",
     "pptxgenjs": "^4.0.1",
     "typescript": "^5.4.5",
-    "vite": "^6.0.3",
-    "vitest": "^3.0.7"
+    "vite": "^8.0.3",
+    "vitest": "^3.2.4"
   },
   "peerDependencies": {
     "@zumer/snapdom": "^2.0.2",
