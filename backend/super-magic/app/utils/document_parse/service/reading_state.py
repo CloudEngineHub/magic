@@ -15,7 +15,7 @@ from typing import Any
 from app.utils.async_file_utils import async_mkdir, async_try_read_json, async_write_json
 
 from ..constants import READING_STATE_FILENAME
-from ..structure.range_parser import RangeParser, compact_numeric_ranges
+from .reading_range_parser import ReadingRangeParser
 
 
 class ReadingStateStore:
@@ -86,7 +86,7 @@ class ReadingStateStore:
             file_type=file_type,
             metadata=metadata,
         )
-        sampled_range = self._normalize_range_text(sampled_range, total_units, unit_type)
+        sampled_range = ReadingRangeParser.normalize_for_state(sampled_range, total_units, unit_type)
         state["sampled_ranges"] = self._append_unique(state.get("sampled_ranges"), sampled_range)
         state["sample_files"] = self._append_unique(state.get("sample_files"), sample_path)
         state["recommended_next_actions"] = recommendations
@@ -111,7 +111,7 @@ class ReadingStateStore:
             unit_type=unit_type,
             file_type=file_type,
         )
-        extracted_range = self._normalize_range_text(extracted_range, total_units, unit_type)
+        extracted_range = ReadingRangeParser.normalize_for_state(extracted_range, total_units, unit_type)
         state["extracted_ranges"] = self._append_unique(state.get("extracted_ranges"), extracted_range)
         state["unread_ranges"] = self._compute_unread_ranges(state)
         return await self.save(output_dir, state)
@@ -166,48 +166,10 @@ class ReadingStateStore:
         return result
 
     @staticmethod
-    def _normalize_range_text(range_text: str, total_units: int, unit_type: str) -> str:
-        """将阅读状态中的全量标记规范化为数字范围。"""
-
-        text = str(range_text or "").strip()
-        normalized = (
-            text
-            .removeprefix("pages:")
-            .removeprefix("slides:")
-            .removeprefix("sections:")
-            .strip()
-        )
-        if normalized.lower() == "all" and total_units > 0 and unit_type in {"page", "slide"}:
-            return compact_numeric_ranges(range(1, total_units + 1))
-        return text
-
-    @staticmethod
-    def _parse_read_units(range_text: str, total_units: int) -> list[int]:
-        """解析阅读状态中的范围文本，并兼容历史全量标记。"""
-
-        text = str(range_text or "").strip()
-        normalized = (
-            text
-            .removeprefix("pages:")
-            .removeprefix("slides:")
-            .removeprefix("sections:")
-            .strip()
-        )
-        if normalized.lower() == "all":
-            return list(range(1, total_units + 1))
-        return RangeParser.parse_numeric(normalized, total_units)
-
-    @staticmethod
     def _compute_unread_ranges(state: dict[str, Any]) -> list[str]:
         """根据已读范围计算剩余未读范围。"""
 
         total_units = int(state.get("total_units") or 0)
         unit_type = str(state.get("unit_type") or "")
-        if total_units <= 0 or unit_type not in {"page", "slide"}:
-            return []
-        read_units: set[int] = set()
-        for range_text in (state.get("extracted_ranges") or []) + (state.get("sampled_ranges") or []):
-            read_units.update(ReadingStateStore._parse_read_units(str(range_text), total_units))
-        unread = [unit for unit in range(1, total_units + 1) if unit not in read_units]
-        compact = compact_numeric_ranges(unread)
-        return [compact] if compact else []
+        consumed_ranges = (state.get("extracted_ranges") or []) + (state.get("sampled_ranges") or [])
+        return ReadingRangeParser.compute_unread_ranges(total_units, unit_type, consumed_ranges)

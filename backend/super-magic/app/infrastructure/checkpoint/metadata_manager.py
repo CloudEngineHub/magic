@@ -233,12 +233,12 @@ class CheckpointMetadataManager:
         """确保__INITIAL__checkpoint已创建"""
         try:
             # 检查__INITIAL__是否已存在
-            if self.storage.checkpoint_exists(VirtualCheckpoint.INITIAL):
+            if await self.storage.checkpoint_exists(VirtualCheckpoint.INITIAL):
                 logger.debug("__INITIAL__checkpoint已存在")
                 return True
 
             # 创建__INITIAL__checkpoint目录
-            self.storage.create_checkpoint_directory(VirtualCheckpoint.INITIAL)
+            await self.storage.create_checkpoint_directory(VirtualCheckpoint.INITIAL)
 
             # 创建checkpoint信息
             from datetime import datetime

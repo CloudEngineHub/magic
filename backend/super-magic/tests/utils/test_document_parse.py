@@ -1239,6 +1239,9 @@ async def test_export_small_pdf_defaults_to_simple_artifacts(tmp_path: Path):
 
     assert result.ok
     assert result.extra_info["artifact_mode"] == "simple"
+    assert result.data["artifact_mode"] == "simple"
+    assert result.data["file_type"] == "pdf"
+    assert result.data["combined_path"] == str(output_dir / "document.md")
     assert (output_dir / "document.md").exists()
     assert not (output_dir / "chunks").exists()
     assert not (output_dir / "document.index.json").exists()
@@ -1302,6 +1305,10 @@ async def test_export_large_pdf_defaults_to_progressive_artifacts(tmp_path: Path
 
     assert result.ok
     assert result.extra_info["artifact_mode"] == "progressive"
+    assert result.data["artifact_mode"] == "progressive"
+    assert result.data["file_type"] == "pdf"
+    assert result.data["combined_path"] == str(output_dir / "document.md")
+    assert result.data["index_path"] == str(output_dir / "document.index.json")
     assert (output_dir / "document.md").exists()
     assert (output_dir / "chunks").exists()
     assert (output_dir / "document.index.json").exists()
@@ -1401,6 +1408,8 @@ async def test_export_large_document_reuses_existing_chunks_with_visual_writebac
 
     assert result.ok
     assert result.extra_info["reused_existing_chunks"] is True
+    assert result.data["combined_path"] == str(output_dir / "document.md")
+    assert result.data["index_path"] == str(output_dir / "document.index.json")
     assert "Recognized page text." in (output_dir / "document.md").read_text(encoding="utf-8")
     assert "<!-- document-converter-visual:assets/page_0001.png -->" in (output_dir / "document.md").read_text(encoding="utf-8")
 
