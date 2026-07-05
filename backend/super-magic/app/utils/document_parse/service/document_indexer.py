@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
 
 from app.utils.async_file_utils import async_exists, async_read_json, async_read_text
@@ -14,7 +15,11 @@ from ..output.outline_writer import OutlineWriter
 
 
 class DocumentIndexer:
+    """文档索引构建服务。"""
+
     async def build_from_extraction(self, path: Path, output_dir: Path, extraction: ExtractionResult) -> DocumentStructure:
+        """从渐进式提取结果构建完整索引和目录文件。"""
+
         driver = get_document_driver_registry().get_driver(path)
         profile = await driver.inspect(path)
         structure = extraction.to_structure(
@@ -22,6 +27,7 @@ class DocumentIndexer:
             title=profile.title,
             unit_type=profile.unit_type,
         )
+        structure.total_units = max(profile.total_units or 0, structure.total_units or 0)
         existing = await self._read_mergeable_existing(output_dir, structure)
         if existing:
             structure = await self._merge_structures(output_dir, existing, structure)
@@ -29,11 +35,45 @@ class DocumentIndexer:
         await OutlineWriter.write(output_dir, structure)
         return structure
 
+    async def build_simple_from_extraction(
+        self,
+        path: Path,
+        output_dir: Path,
+        extraction: ExtractionResult,
+        main_markdown_path: Path,
+    ) -> DocumentStructure:
+        """从 simple 导出结果构建轻量索引，不创建 chunks 和 reading state。"""
+
+        driver = get_document_driver_registry().get_driver(path)
+        profile = await driver.inspect(path)
+        structure = extraction.to_structure(
+            file_type=profile.file_type,
+            title=profile.title,
+            unit_type=profile.unit_type,
+        )
+        structure.total_units = max(profile.total_units or 0, structure.total_units or 0)
+        try:
+            markdown_rel_path = str(main_markdown_path.relative_to(output_dir))
+        except ValueError:
+            markdown_rel_path = str(main_markdown_path)
+        structure.chunks = [replace(chunk, path=markdown_rel_path) for chunk in structure.chunks]
+        structure.metadata = {
+            **profile.metadata,
+            **structure.metadata,
+            "artifact_mode": "simple",
+        }
+        await IndexWriter.write(output_dir, structure)
+        return structure
+
     async def read(self, index_path: Path) -> DocumentStructure:
+        """读取已生成的 document.index.json。"""
+
         data = await async_read_json(index_path)
         return self._structure_from_dict(data)
 
     async def build_empty(self, path: Path, output_dir: Path) -> DocumentStructure:
+        """为暂未提取内容的文档构建空索引。"""
+
         driver = get_document_driver_registry().get_driver(path)
         profile = await driver.inspect(path)
         structure = DocumentStructure(
