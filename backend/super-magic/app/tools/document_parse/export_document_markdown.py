@@ -256,6 +256,7 @@ class ExportDocumentMarkdown(AbstractFileTool[ExportDocumentMarkdownParams], Wor
             await MarkdownWriter.write_combined(combined_path, extraction.chunks, input_path.stem)
             await self._copy_simple_optional_dir(temp_dir, output_dir, ASSETS_DIRNAME)
             await self._copy_simple_optional_dir(temp_dir, output_dir, VISUAL_RESULTS_DIRNAME)
+            structure = await DocumentIndexer().build_simple_from_extraction(input_path, output_dir, extraction, combined_path)
         finally:
             if await async_exists(temp_dir):
                 await async_rmtree(temp_dir)
@@ -271,6 +272,7 @@ class ExportDocumentMarkdown(AbstractFileTool[ExportDocumentMarkdownParams], Wor
             f"- Output directory: `{output_dir}`",
             f"- Main Markdown: `{combined_path}`",
             f"- Chunk count: {len(extraction.chunks)}",
+            f"- Index: `{output_dir / INDEX_FILENAME}`",
         ]
         if file_type == "spreadsheet":
             content_lines.append("- Note: spreadsheet files may need targeted sheet/range extraction for large tables.")
@@ -281,16 +283,19 @@ class ExportDocumentMarkdown(AbstractFileTool[ExportDocumentMarkdownParams], Wor
         extra["artifact_mode"] = "simple"
         extra["combined_path"] = str(combined_path)
         extra["main_markdown_path"] = str(combined_path)
-        extra["index_path"] = None
+        extra["index_path"] = str(output_dir / INDEX_FILENAME)
         extra["outline_path"] = None
         extra["reading_state_path"] = None
+        extra["structure"] = structure.to_dict()
         data = self._build_sdk_data(
             artifact_mode="simple",
-            file_type=file_type,
-            total_units=extraction.total_units,
+            file_type=structure.file_type,
+            unit_type=structure.unit_type,
+            total_units=structure.total_units,
             output_dir=str(output_dir),
             combined_path=str(combined_path),
             main_markdown_path=str(combined_path),
+            index_path=str(output_dir / INDEX_FILENAME),
         )
         return ToolResult(content=prepend_correction_note("\n".join(content_lines), correction_note), data=data, extra_info=extra)
 

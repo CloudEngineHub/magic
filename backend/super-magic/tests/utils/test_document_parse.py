@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 
 import pytest
@@ -1242,11 +1243,15 @@ async def test_export_small_pdf_defaults_to_simple_artifacts(tmp_path: Path):
     assert result.data["artifact_mode"] == "simple"
     assert result.data["file_type"] == "pdf"
     assert result.data["combined_path"] == str(output_dir / "document.md")
+    assert result.data["index_path"] == str(output_dir / "document.index.json")
     assert (output_dir / "document.md").exists()
     assert not (output_dir / "chunks").exists()
-    assert not (output_dir / "document.index.json").exists()
+    assert (output_dir / "document.index.json").exists()
     assert not (output_dir / "document.outline.md").exists()
     assert not (output_dir / "document.reading_state.json").exists()
+    index = json.loads((output_dir / "document.index.json").read_text(encoding="utf-8"))
+    assert index["chunks"][0]["path"] == "document.md"
+    assert index["metadata"]["artifact_mode"] == "simple"
 
 
 @pytest.mark.asyncio
@@ -1276,6 +1281,7 @@ async def test_export_small_scanned_pdf_simple_artifacts_keep_assets(tmp_path: P
     assert result.ok
     assert result.extra_info["artifact_mode"] == "simple"
     assert (output_dir / "document.md").exists()
+    assert (output_dir / "document.index.json").exists()
     assert (output_dir / "assets").exists()
     assert "![" in (output_dir / "document.md").read_text(encoding="utf-8")
     assert not (output_dir / "chunks").exists()
@@ -1450,6 +1456,64 @@ async def test_generic_driver_normalizes_parser_images_to_assets(tmp_path: Path)
     assert assets[0].path == "assets/sample_docx_image_0001.png"
     assert (output_dir / assets[0].path).exists()
     assert rewritten == "![image](assets/sample_docx_image_0001.png)"
+
+
+@pytest.mark.asyncio
+async def test_powerpoint_driver_preserves_slide_image_ranges(tmp_path: Path, monkeypatch):
+    source = tmp_path / "mock.pptx"
+    source.write_bytes(b"mock pptx")
+    raw_images = tmp_path / "raw-images"
+    raw_images.mkdir()
+    colors = ["blue", "red", "green", "purple", "orange"]
+    for slide in range(1, 6):
+        _save_mock_content_image(raw_images / f"slide_{slide:02d}_image.png", size=(32, 18), color=colors[slide - 1])
+    output_dir = tmp_path / "mock.document"
+    output_dir.mkdir()
+
+    class FakeParser:
+        """模拟底层文件解析器。"""
+
+        async def parse(self, path: Path, output_path: Path, **kwargs):
+            """写入带幻灯片编号注释的 Markdown 和图片目录。"""
+
+            content = "\n\n".join(
+                [
+                    f"<!-- Slide number: {slide} -->\n\n![slide_{slide:02d}_image.png](./raw-images/slide_{slide:02d}_image.png)"
+                    for slide in range(1, 6)
+                ]
+            )
+            output_path.write_text(content, encoding="utf-8")
+            return ParseResult(
+                metadata=ParseMetadata(additional_info={"slide_count": 5}),
+                success=True,
+                output_file_path=output_path,
+                output_images_dir=str(raw_images),
+            )
+
+    monkeypatch.setattr("app.utils.file_parse.get_file_parser", lambda: FakeParser())
+    monkeypatch.setattr(
+        "app.utils.document_parse.drivers.powerpoint_driver.PptxStructureReader.read_slide_titles",
+        lambda path: [],
+    )
+
+    extraction = await PowerPointDocumentDriver().extract(source, output_dir, ranges="1-5")
+
+    assert extraction.total_units == 5
+    assert extraction.pages_processed == 5
+    assert [asset.metadata["slide"] for asset in extraction.assets] == [1, 2, 3, 4, 5]
+    assert [asset.source_range for asset in extraction.assets] == ["slides:1", "slides:2", "slides:3", "slides:4", "slides:5"]
+    selected = DocumentImageUnderstander._select_assets(
+        {
+            "total_units": extraction.total_units,
+            "assets": [asset.__dict__ for asset in extraction.assets],
+        },
+        output_dir,
+        [],
+        "1-5",
+        None,
+        force=True,
+    )
+    assert len(selected) == 5
 
 
 def test_generic_driver_appends_missing_image_links():

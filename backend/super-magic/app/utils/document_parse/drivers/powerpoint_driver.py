@@ -9,17 +9,26 @@ from .generic import GenericMarkItDownDriver
 
 
 class PowerPointDocumentDriver(GenericMarkItDownDriver):
+    """PowerPoint 文档解析驱动。"""
+
     file_type = "powerpoint"
     unit_type = "slide"
     supported_extensions = POWERPOINT_EXTENSIONS
 
     async def inspect(self, path):
         profile = await super().inspect(path)
-        if path.suffix.lower() == ".pptx":
-            titles = PptxStructureReader.read_slide_titles(path)
-            if titles:
-                profile.outline = VirtualOutlineBuilder.by_names("slide", titles)
-                profile.total_units = len(titles)
-                profile.samples = [{"slide": index + 1, "title": title} for index, title in enumerate(titles[:10])]
+        titles = PptxStructureReader.read_slide_titles(path)
+        if titles:
+            profile.outline = VirtualOutlineBuilder.by_names("slide", titles)
+            profile.total_units = len(titles)
+            profile.samples = [{"slide": index + 1, "title": title} for index, title in enumerate(titles[:10])]
         profile.recommended_strategy = "treat each slide as a chunk; summarize slide by slide"
         return profile
+
+    def _resolve_total_units(self, path, content, parse_result, chunks):
+        """优先使用 PPTX 结构读取到的真实幻灯片数量。"""
+
+        titles = PptxStructureReader.read_slide_titles(path)
+        if titles:
+            return len(titles)
+        return super()._resolve_total_units(path, content, parse_result, chunks)
