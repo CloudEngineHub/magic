@@ -8,6 +8,7 @@ declare(strict_types=1);
 namespace Test\Cases\Domain\SlidesTemplate;
 
 use App\Domain\SlidesTemplate\Entity\SlidesTemplateEntity;
+use App\Domain\SlidesTemplate\Entity\ValueObject\SlidesTemplateSourceType;
 use App\Domain\SlidesTemplate\Entity\ValueObject\SlidesTemplateStatus;
 use PHPUnit\Framework\TestCase;
 
@@ -33,12 +34,21 @@ class SlidesTemplateEntityTest extends TestCase
         $this->assertSame(0, SlidesTemplateStatus::Disabled->value);
     }
 
+    public function testSourceTypeEnumIdentifiesCustomAndSystemTemplates(): void
+    {
+        $this->assertTrue(SlidesTemplateSourceType::System->isSystem());
+        $this->assertFalse(SlidesTemplateSourceType::Custom->isSystem());
+        $this->assertSame('CUSTOM', SlidesTemplateSourceType::Custom->value);
+        $this->assertSame('SYSTEM', SlidesTemplateSourceType::System->value);
+    }
+
     public function testToArrayKeepsTemplateCoreFields(): void
     {
         $entity = new SlidesTemplateEntity();
         $entity->setId('123')
             ->setOrganizationCode('OFFICIAL_ORG')
             ->setCode('PPT-65f2c8a42d7b0-12345678')
+            ->setSourceType(SlidesTemplateSourceType::System)
             ->setLabel([
                 'zh_CN' => '职场白皮书',
                 'en_US' => 'Corporate Whitepaper',
@@ -60,6 +70,7 @@ class SlidesTemplateEntityTest extends TestCase
             'id' => 123,
             'organization_code' => 'OFFICIAL_ORG',
             'code' => 'PPT-65f2c8a42d7b0-12345678',
+            'source_type' => 'SYSTEM',
             'label' => [
                 'zh_CN' => '职场白皮书',
                 'en_US' => 'Corporate Whitepaper',

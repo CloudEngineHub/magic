@@ -15,6 +15,7 @@ use Hyperf\Database\Model\SoftDeletes;
  * @property int $id
  * @property string $organization_code
  * @property string $code
+ * @property string $source_type
  * @property array $label
  * @property array $description
  * @property string $thumbnail_file_key
@@ -39,6 +40,7 @@ class SlidesTemplateModel extends AbstractModel
         'id',
         'organization_code',
         'code',
+        'source_type',
         'label',
         'description',
         'thumbnail_file_key',
@@ -53,6 +55,7 @@ class SlidesTemplateModel extends AbstractModel
 
     protected array $casts = [
         'id' => 'integer',
+        'source_type' => 'string',
         'label' => 'array',
         'description' => 'array',
         'status' => 'integer',

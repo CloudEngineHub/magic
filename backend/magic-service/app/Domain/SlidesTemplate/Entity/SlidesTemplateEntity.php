@@ -7,6 +7,7 @@ declare(strict_types=1);
 
 namespace App\Domain\SlidesTemplate\Entity;
 
+use App\Domain\SlidesTemplate\Entity\ValueObject\SlidesTemplateSourceType;
 use App\Domain\SlidesTemplate\Entity\ValueObject\SlidesTemplateStatus;
 use App\Infrastructure\Core\AbstractEntity;
 
@@ -17,6 +18,8 @@ class SlidesTemplateEntity extends AbstractEntity
     protected string $organizationCode = '';
 
     protected string $code = '';
+
+    protected SlidesTemplateSourceType $sourceType = SlidesTemplateSourceType::Custom;
 
     protected array $label = [];
 
@@ -66,6 +69,7 @@ class SlidesTemplateEntity extends AbstractEntity
             'id' => $this->id,
             'organization_code' => $this->organizationCode,
             'code' => $this->code,
+            'source_type' => $this->sourceType->value,
             'label' => $this->label,
             'description' => $this->description,
             'thumbnail_file_key' => $this->thumbnailFileKey,
@@ -114,6 +118,22 @@ class SlidesTemplateEntity extends AbstractEntity
     public function setCode(string $code): self
     {
         $this->code = $code;
+        return $this;
+    }
+
+    public function getSourceType(): SlidesTemplateSourceType
+    {
+        return $this->sourceType;
+    }
+
+    public function setSourceType(null|SlidesTemplateSourceType|string $sourceType): self
+    {
+        if ($sourceType === null || $sourceType === '') {
+            $this->sourceType = SlidesTemplateSourceType::Custom;
+            return $this;
+        }
+
+        $this->sourceType = $sourceType instanceof SlidesTemplateSourceType ? $sourceType : SlidesTemplateSourceType::from($sourceType);
         return $this;
     }
 

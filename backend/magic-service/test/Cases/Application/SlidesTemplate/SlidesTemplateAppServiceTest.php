@@ -12,6 +12,7 @@ use App\Application\SlidesTemplate\Service\SlidesTemplateAppService;
 use App\Domain\SlidesTemplate\Entity\SlidesTemplateDataIsolation;
 use App\Domain\SlidesTemplate\Entity\SlidesTemplateEntity;
 use App\Domain\SlidesTemplate\Entity\ValueObject\Query\SlidesTemplateQuery;
+use App\Domain\SlidesTemplate\Entity\ValueObject\SlidesTemplateSourceType;
 use App\Domain\SlidesTemplate\Entity\ValueObject\SlidesTemplateStatus;
 use App\Domain\SlidesTemplate\Service\SlidesTemplateDomainService;
 use App\ErrorCode\SlidesTemplateErrorCode;
@@ -230,6 +231,57 @@ class SlidesTemplateAppServiceTest extends TestCase
         $this->assertSame('user-1', $result->getCreatedUid());
         $this->assertSame('user-1', $result->getUpdatedUid());
         $this->assertSame(100, $result->getSort());
+        $this->assertSame(SlidesTemplateSourceType::Custom, $result->getSourceType());
+    }
+
+    public function testAdminUpdateKeepsExistingSourceType(): void
+    {
+        $dataIsolation = $this->makeDataIsolation('OFFICIAL_ORG', ['OFFICIAL_ORG']);
+        $request = $this->createMock(SaveSlidesTemplateRequest::class);
+        $request->method('getLabel')->willReturn([
+            'zh_CN' => '职场白皮书',
+            'en_US' => 'Corporate Whitepaper',
+        ]);
+        $request->method('getDescription')->willReturn([
+            'zh_CN' => '适用于企业汇报。',
+            'en_US' => 'For business reviews.',
+        ]);
+        $request->method('getThumbnailFileKey')->willReturn('');
+        $request->method('getCollageFileKey')->willReturn(null);
+        $request->method('getTemplateFileKey')->willReturn('');
+        $request->method('getPreviewUrl')->willReturn(null);
+        $request->method('getStatus')->willReturn(SlidesTemplateStatus::Enabled->value);
+        $request->method('getSort')->willReturn(100);
+
+        $existing = new SlidesTemplateEntity();
+        $existing->setId(123)
+            ->setOrganizationCode('OFFICIAL_ORG')
+            ->setCode('PPT-65f2c8a42d7b0-12345678')
+            ->setSourceType(SlidesTemplateSourceType::System)
+            ->setCreatedUid('system');
+
+        $capturedTemplate = null;
+        $domainService = $this->createMock(SlidesTemplateDomainService::class);
+        $domainService
+            ->expects($this->once())
+            ->method('findByIdOrFail')
+            ->with($this->isInstanceOf(SlidesTemplateDataIsolation::class), 123)
+            ->willReturn($existing);
+        $domainService
+            ->expects($this->once())
+            ->method('update')
+            ->willReturnCallback(static function (SlidesTemplateDataIsolation $dataIsolation, SlidesTemplateEntity $entity) use (&$capturedTemplate): SlidesTemplateEntity {
+                $capturedTemplate = $entity;
+                return $entity;
+            });
+
+        $service = new AdminSlidesTemplateAppService($domainService);
+        $result = $service->update($dataIsolation, 123, $request);
+
+        $this->assertSame($capturedTemplate, $result);
+        $this->assertSame(SlidesTemplateSourceType::System, $result->getSourceType());
+        $this->assertSame('system', $result->getCreatedUid());
+        $this->assertSame('user-1', $result->getUpdatedUid());
     }
 
     private function makeDataIsolation(string $organizationCode, array $officialOrganizationCodes): SlidesTemplateDataIsolation

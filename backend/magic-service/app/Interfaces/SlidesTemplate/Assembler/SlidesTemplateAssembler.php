@@ -45,6 +45,7 @@ class SlidesTemplateAssembler
         $dto->setId($template->getId());
         $dto->setOrganizationCode($template->getOrganizationCode());
         $dto->setCode($template->getCode());
+        $dto->setSourceType($template->getSourceType()->value);
         $dto->setLabel(I18nTextDTO::fromArray($template->getLabel()));
         $dto->setDescription(I18nTextDTO::fromArray($template->getDescription()));
         $dto->setThumbnailFileKey($template->getThumbnailFileKey());
@@ -81,6 +82,7 @@ class SlidesTemplateAssembler
     {
         $dto = new SlidesTemplatePublicItemDTO();
         $dto->setCode($template->getCode());
+        $dto->setSourceType($template->getSourceType()->value);
         $dto->setLabel(I18nTextDTO::fromArray($template->getLabel()));
         $dto->setDescription(I18nTextDTO::fromArray($template->getDescription()));
         $dto->setThumbnailUrl($template->getThumbnailUrl());
@@ -95,6 +97,7 @@ class SlidesTemplateAssembler
     {
         $dto = new SlidesTemplateFileUrlDTO();
         $dto->setCode($template->getCode());
+        $dto->setSourceType($template->getSourceType()->value);
         $dto->setLabel(I18nTextDTO::fromArray($template->getLabel()));
         $dto->setTemplateFileUrl($template->getTemplateFileUrl());
         return $dto;

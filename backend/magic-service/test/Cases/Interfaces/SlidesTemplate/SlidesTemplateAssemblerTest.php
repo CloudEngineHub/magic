@@ -8,6 +8,7 @@ declare(strict_types=1);
 namespace Test\Cases\Interfaces\SlidesTemplate;
 
 use App\Domain\SlidesTemplate\Entity\SlidesTemplateEntity;
+use App\Domain\SlidesTemplate\Entity\ValueObject\SlidesTemplateSourceType;
 use App\Infrastructure\Core\ValueObject\Page;
 use App\Interfaces\SlidesTemplate\Assembler\SlidesTemplateAssembler;
 use App\Interfaces\SlidesTemplate\DTO\Response\AdminSlidesTemplateDetailDTO;
@@ -35,6 +36,7 @@ class SlidesTemplateAssemblerTest extends TestCase
             'total' => 1,
             'list' => [[
                 'code' => 'PPT-65f2c8a42d7b0-12345678',
+                'source_type' => 'SYSTEM',
                 'label' => [
                     'zh_CN' => '职场白皮书',
                     'en_US' => 'Corporate Whitepaper',
@@ -62,8 +64,10 @@ class SlidesTemplateAssemblerTest extends TestCase
         $this->assertInstanceOf(AdminSlidesTemplateDetailDTO::class, $detailDTO);
         $this->assertInstanceOf(SlidesTemplateFileUrlDTO::class, $fileUrlDTO);
         $this->assertSame('https://signed.example/template.zip', $detailDTO->getTemplateFileUrl());
+        $this->assertSame('SYSTEM', $detailDTO->getSourceType());
         $this->assertSame([
             'code' => 'PPT-65f2c8a42d7b0-12345678',
+            'source_type' => 'SYSTEM',
             'label' => [
                 'zh_CN' => '职场白皮书',
                 'en_US' => 'Corporate Whitepaper',
@@ -78,6 +82,7 @@ class SlidesTemplateAssemblerTest extends TestCase
         $template->setId(123)
             ->setOrganizationCode('CURRENT_ORG')
             ->setCode('PPT-65f2c8a42d7b0-12345678')
+            ->setSourceType(SlidesTemplateSourceType::System)
             ->setLabel([
                 'zh_CN' => '职场白皮书',
                 'en_US' => 'Corporate Whitepaper',

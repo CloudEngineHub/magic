@@ -18,6 +18,7 @@ class SlidesTemplateFactory
         $entity->setId($model->id);
         $entity->setOrganizationCode($model->organization_code);
         $entity->setCode($model->code);
+        $entity->setSourceType($model->source_type ?? null);
         $entity->setLabel($model->label ?? []);
         $entity->setDescription($model->description ?? []);
         $entity->setThumbnailFileKey($model->thumbnail_file_key);

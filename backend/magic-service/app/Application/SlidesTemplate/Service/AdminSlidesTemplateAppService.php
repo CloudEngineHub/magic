@@ -10,6 +10,7 @@ namespace App\Application\SlidesTemplate\Service;
 use App\Domain\SlidesTemplate\Entity\SlidesTemplateDataIsolation;
 use App\Domain\SlidesTemplate\Entity\SlidesTemplateEntity;
 use App\Domain\SlidesTemplate\Entity\ValueObject\Query\SlidesTemplateQuery;
+use App\Domain\SlidesTemplate\Entity\ValueObject\SlidesTemplateSourceType;
 use App\Domain\SlidesTemplate\Entity\ValueObject\SlidesTemplateStatus;
 use App\ErrorCode\SlidesTemplateErrorCode;
 use App\Infrastructure\Core\DataIsolation\BaseDataIsolation;
@@ -59,6 +60,7 @@ class AdminSlidesTemplateAppService extends AbstractSlidesTemplateAppService
 
         $template = $this->buildEntityFromRequest($request);
         $template->setCode(SlidesTemplateEntity::generateNewCode());
+        $template->setSourceType(SlidesTemplateSourceType::Custom);
         $template->setOrganizationCode($dataIsolation->getCurrentOrganizationCode());
         $template->setCreatedUid($dataIsolation->getCurrentUserId());
         $template->setUpdatedUid($dataIsolation->getCurrentUserId());
@@ -79,6 +81,7 @@ class AdminSlidesTemplateAppService extends AbstractSlidesTemplateAppService
         $template->setId($existing->getId());
         $template->setOrganizationCode($existing->getOrganizationCode());
         $template->setCode($existing->getCode());
+        $template->setSourceType($existing->getSourceType());
         $template->setCreatedUid($existing->getCreatedUid());
         $template->setUpdatedUid($dataIsolation->getCurrentUserId());
 
