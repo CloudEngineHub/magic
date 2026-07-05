@@ -4,51 +4,11 @@
   "title": "Slide Template Metadata",
   "type": "object",
   "additionalProperties": false,
-  "required": [
-    "schema_version",
-    "template_id",
-    "template_dir",
-    "package_type",
-    "backend_payload",
-    "files",
-    "slides",
-    "taxonomy",
-    "generation",
-    "quality",
-    "license"
-  ],
+  "required": ["schema_version", "template_id", "name", "files", "slides", "source", "warnings"],
   "properties": {
     "schema_version": { "type": "string", "const": "1.0.0" },
-    "template_id": { "type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$" },
-    "template_dir": { "type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$" },
-    "package_type": {
-      "type": "string",
-      "enum": ["html_slide_template", "html_slide_template_project"]
-    },
-    "backend_payload": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "label",
-        "description",
-        "thumbnail_file_key",
-        "collage_file_key",
-        "template_file_key",
-        "preview_url",
-        "status",
-        "sort"
-      ],
-      "properties": {
-        "label": { "$ref": "#/$defs/i18nTextShort" },
-        "description": { "$ref": "#/$defs/i18nTextLong" },
-        "thumbnail_file_key": { "type": "string", "maxLength": 512 },
-        "collage_file_key": { "type": ["string", "null"], "maxLength": 512 },
-        "template_file_key": { "type": "string", "maxLength": 512 },
-        "preview_url": { "type": ["string", "null"], "maxLength": 1024 },
-        "status": { "type": "integer", "enum": [0, 1] },
-        "sort": { "type": "integer" }
-      }
-    },
+    "template_id": { "type": "string", "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)*$" },
+    "name": { "type": "string" },
     "files": {
       "type": "object",
       "additionalProperties": false,
@@ -59,103 +19,28 @@
         "theme_css": { "type": "string" },
         "slides_dir": { "type": "string" },
         "images_dir": { "type": "string" },
-        "package_zip": { "type": "string" }
+        "package_zip": { "type": "string" },
+        "thumbnail_image": { "type": "string" },
+        "collage_image": { "type": "string" }
       }
     },
     "slides": {
       "type": "array",
       "items": { "$ref": "#/$defs/templateSlide" }
     },
-    "taxonomy": {
+    "source": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["industries", "scenes", "styles", "layout_pack", "languages", "keywords"],
+      "required": ["kind", "file", "canvas"],
       "properties": {
-        "industries": { "$ref": "#/$defs/stringArray" },
-        "scenes": { "$ref": "#/$defs/stringArray" },
-        "styles": { "$ref": "#/$defs/stringArray" },
-        "layout_pack": { "$ref": "#/$defs/stringArray" },
-        "languages": { "$ref": "#/$defs/stringArray" },
-        "keywords": { "$ref": "#/$defs/stringArray" }
+        "kind": { "type": "string", "enum": ["original", "pptx_import", "project_extract"] },
+        "file": { "type": "string" },
+        "canvas": { "type": "object" }
       }
     },
-    "generation": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["batch_id", "method", "source_kind", "model", "created_at", "inspiration_urls", "source_files"],
-      "properties": {
-        "batch_id": { "type": "string" },
-        "method": { "type": "string" },
-        "source_kind": {
-          "type": "string",
-          "enum": ["original", "licensed", "cc", "research_only", "pptx_import"]
-        },
-        "model": { "type": "string" },
-        "created_at": { "type": "string" },
-        "inspiration_urls": { "$ref": "#/$defs/stringArray" },
-        "source_files": { "$ref": "#/$defs/stringArray" },
-        "source_canvas": { "type": "object" }
-      }
-    },
-    "quality": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["review_status", "score", "similarity_score", "checks", "notes"],
-      "properties": {
-        "review_status": {
-          "type": "string",
-          "enum": ["draft", "pending_review", "approved", "rejected", "needs_fix", "published", "disabled"]
-        },
-        "score": { "type": "number" },
-        "similarity_score": { "type": ["number", "null"] },
-        "checks": {
-          "type": "object",
-          "additionalProperties": false,
-          "required": [
-            "html_valid",
-            "preview_rendered",
-            "text_overflow",
-            "asset_localized",
-            "zip_created",
-            "backend_payload_ready"
-          ],
-          "properties": {
-            "html_valid": { "type": "boolean" },
-            "preview_rendered": { "type": "boolean" },
-            "text_overflow": { "type": "boolean" },
-            "asset_localized": { "type": "boolean" },
-            "zip_created": { "type": "boolean" },
-            "backend_payload_ready": { "type": "boolean" }
-          }
-        },
-        "notes": { "$ref": "#/$defs/stringArray" }
-      }
-    },
-    "license": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "status",
-        "copyright_risk",
-        "requires_attribution",
-        "attribution_text",
-        "third_party_assets",
-        "asset_sources"
-      ],
-      "properties": {
-        "status": {
-          "type": "string",
-          "enum": ["owned", "licensed", "cc_by", "cc0", "unknown", "research_only"]
-        },
-        "copyright_risk": {
-          "type": "string",
-          "enum": ["low", "medium", "high", "unknown"]
-        },
-        "requires_attribution": { "type": "boolean" },
-        "attribution_text": { "type": "string" },
-        "third_party_assets": { "type": "boolean" },
-        "asset_sources": { "type": "array" }
-      }
+    "warnings": {
+      "type": "array",
+      "items": { "type": "string" }
     }
   },
   "$defs": {
@@ -173,7 +58,10 @@
           "items": { "$ref": "#/$defs/templateSlot" }
         },
         "best_for": { "type": "string" },
-        "risks": { "$ref": "#/$defs/stringArray" }
+        "risks": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
       }
     },
     "templateSlot": {
@@ -186,28 +74,6 @@
         "role": { "type": "string" },
         "sample": { "type": "string" }
       }
-    },
-    "i18nTextShort": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["zh_CN", "en_US"],
-      "properties": {
-        "zh_CN": { "type": "string", "maxLength": 100 },
-        "en_US": { "type": "string", "maxLength": 100 }
-      }
-    },
-    "i18nTextLong": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["zh_CN", "en_US"],
-      "properties": {
-        "zh_CN": { "type": "string", "maxLength": 1000 },
-        "en_US": { "type": "string", "maxLength": 1000 }
-      }
-    },
-    "stringArray": {
-      "type": "array",
-      "items": { "type": "string" }
     }
   }
 }

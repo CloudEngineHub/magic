@@ -10,7 +10,7 @@ Use this skill to choose a built-in slide template,create a custom template from
 
 ## Template Metadata
 
-Each platform template should use the unified `template.json` contract in `references/template-json-spec.md`. The file separates backend-ready fields (`backend_payload`) from automation metadata (`files`,`taxonomy`,`generation`,`quality`,`license`) so generated templates, PPTX-derived templates, and manually authored templates can share one structure.
+Each platform template should use the lightweight `template.json` contract in `references/template-json-spec.md`. The file indexes template files, reusable slides, source metadata, and conversion warnings; upload-specific backend payloads are built outside this template index.
 
 ## Templates
 

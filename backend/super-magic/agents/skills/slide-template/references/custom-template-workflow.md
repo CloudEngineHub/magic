@@ -31,7 +31,7 @@ The folder should be directly previewable as a slide project. Do not create `pre
 - `magic.project.js`: slide project config. It may start with an empty `slides` array if no sample pages are generated yet.
 - `index.html`: copy or generate the standard slide project entry.
 - `slide-bridge.js`: copy the standard slide bridge.
-- `template.json`: follow `references/template-json-spec.md`; set `generation.source_kind` to `original` unless the source is licensed or imported.
+- `template.json`: follow `references/template-json-spec.md`; use `source.kind` to record the template source.
 - `slides/`: optional sample template pages. If sample pages are generated, each page must include `data-slot` attributes for replaceable content and be listed in `template.json.slides`.
 - `images/`: local assets only.
 
@@ -49,12 +49,11 @@ The folder should be directly previewable as a slide project. Do not create `pre
 
 Use `template.json` as the only metadata entrypoint:
 
-- `backend_payload.status` defaults to `0`.
-- Upload-dependent file keys remain empty until assets are uploaded.
+- `schema_version`, `template_id`, and `name` identify the template.
 - `files.package_zip` points to the sibling ZIP when one is created, for example `../<template-id>-template.zip`.
 - `slides` records the generated sample pages. Use an empty array if no sample pages are present.
-- `taxonomy` records industry, scene, style, layout, language, and keywords.
-- `license` records ownership and third-party asset risk.
+- `source` records source kind, source file when available, and canvas size.
+- `warnings` records non-fatal generation or conversion issues.
 
 ## 6. Using The Template
 

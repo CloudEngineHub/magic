@@ -106,7 +106,9 @@ class ConvertPptxToSlideTemplate(WorkspaceTool[ConvertPptxToSlideTemplateParams]
         content = (
             f"PPTX converted to slide template project: {result.slide_count} slides. "
             f"Template directory: {result.template_dir}. "
-            f"Package: {result.zip_path}"
+            f"Package: {result.zip_path}. "
+            f"Thumbnail: {result.payload.get('thumbnail_image', '')}. "
+            f"Collage: {result.payload.get('collage_image', '')}"
         )
         return ToolResult(
             content=content,
@@ -115,6 +117,8 @@ class ConvertPptxToSlideTemplate(WorkspaceTool[ConvertPptxToSlideTemplateParams]
                 "template_dir": str(result.template_dir),
                 "zip_path": str(result.zip_path),
                 "template_json": str(result.template_json_path),
+                "thumbnail_image": result.payload.get("thumbnail_image", ""),
+                "collage_image": result.payload.get("collage_image", ""),
             },
         )
 
@@ -186,6 +190,8 @@ class ConvertPptxToSlideTemplate(WorkspaceTool[ConvertPptxToSlideTemplateParams]
             f"- Template directory: `{data.get('template_dir', '')}`",
             f"- Package: `{data.get('zip_path', '')}`",
             f"- Metadata: `{data.get('template_json', '')}`",
+            f"- Thumbnail: `{data.get('thumbnail_image', '')}`",
+            f"- Collage: `{data.get('collage_image', '')}`",
         ]
         warnings = data.get("warnings") if isinstance(data.get("warnings"), list) else []
         if warnings:

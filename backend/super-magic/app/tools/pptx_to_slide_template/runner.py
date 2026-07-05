@@ -4,12 +4,13 @@ import re
 import shutil
 import zipfile
 from dataclasses import dataclass
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from app.tools.pptx_to_slide_template.html_attrs import convert_source_data_selectors_to_classes, strip_source_data_attributes
+from app.tools.pptx_to_slide_template.preview_assets import generate_preview_images
 from app.tools.pptx_to_slide_template.svg_assets import externalize_large_inline_svgs
+from app.tools.pptx_to_slide_template.template_metadata import build_template_json
 
 
 class PptxToSlideTemplateError(Exception):
@@ -275,88 +276,6 @@ def _write_magic_project(template_dir: Path, template_id: str, slide_files: List
     (template_dir / "magic.project.js").write_text(content, encoding="utf-8")
 
 
-def _build_template_json(
-    *,
-    template_id: str,
-    source_path: Path,
-    deck: Dict[str, Any],
-    report: Dict[str, Any],
-    slides: List[Dict[str, Any]],
-    copied_assets: bool,
-) -> Dict[str, Any]:
-    now = datetime.now(timezone.utc).isoformat()
-    label = source_path.stem
-    warnings = report.get("warnings", []) if isinstance(report.get("warnings"), list) else []
-    return {
-        "schema_version": "1.0.0",
-        "template_id": template_id,
-        "template_dir": template_id,
-        "package_type": "html_slide_template_project",
-        "backend_payload": {
-            "label": {"zh_CN": label, "en_US": label},
-            "description": {
-                "zh_CN": f"由 {source_path.name} 转换生成的 HTML 幻灯片模板项目。",
-                "en_US": f"HTML slide template project converted from {source_path.name}.",
-            },
-            "thumbnail_file_key": "",
-            "collage_file_key": "",
-            "template_file_key": "",
-            "preview_url": "",
-            "status": 0,
-            "sort": 0,
-        },
-        "files": {
-            "entry_html": "index.html",
-            "project_config": "magic.project.js",
-            "theme_css": "theme.css",
-            "slides_dir": "slides",
-            "images_dir": "images",
-            "package_zip": f"../{template_id}-template.zip",
-        },
-        "slides": slides,
-        "taxonomy": {
-            "industries": [],
-            "scenes": ["pptx-import"],
-            "styles": [],
-            "layout_pack": sorted({slide["layout"] for slide in slides}),
-            "languages": [],
-            "keywords": [source_path.stem],
-        },
-        "generation": {
-            "batch_id": "",
-            "method": "pptx_to_slide_template_project",
-            "source_kind": "pptx_import",
-            "model": "deterministic",
-            "created_at": now,
-            "inspiration_urls": [],
-            "source_files": [source_path.name],
-            "source_canvas": deck.get("canvas", {}),
-        },
-        "quality": {
-            "review_status": "pending_review",
-            "score": 0,
-            "similarity_score": None,
-            "checks": {
-                "html_valid": True,
-                "preview_rendered": True,
-                "text_overflow": False,
-                "asset_localized": copied_assets,
-                "zip_created": True,
-                "backend_payload_ready": False,
-            },
-            "notes": [str(item.get("message") or item) for item in warnings],
-        },
-        "license": {
-            "status": "unknown",
-            "copyright_risk": "medium",
-            "requires_attribution": False,
-            "attribution_text": "",
-            "third_party_assets": copied_assets,
-            "asset_sources": [],
-        },
-    }
-
-
 def _zip_template_dir(template_dir: Path, zip_path: Path) -> None:
     if zip_path.exists():
         zip_path.unlink()
@@ -452,13 +371,24 @@ async def convert_pptx_to_slide_template(
         )
 
     _write_magic_project(template_dir, resolved_template_id, slide_files)
-    template_payload = _build_template_json(
+    warnings = [str(item.get("message") or item) for item in report.get("warnings", [])] if isinstance(report.get("warnings"), list) else []
+    if not slide_index:
+        warnings.append("No slide HTML files were copied into the template project")
+
+    preview_files: Dict[str, str] = {}
+    try:
+        preview_files = await generate_preview_images(source_path, template_dir)
+    except Exception as exc:
+        warnings.append(f"Preview images were not generated: {exc}")
+
+    template_payload = build_template_json(
         template_id=resolved_template_id,
         source_path=source_path,
         deck=deck,
         report=report,
         slides=slide_index,
-        copied_assets=copied_assets,
+        preview_files=preview_files,
+        warnings=warnings,
     )
     template_json_path = template_dir / "template.json"
     template_json_path.write_text(json.dumps(template_payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
@@ -466,10 +396,6 @@ async def convert_pptx_to_slide_template(
 
     if not debug:
         shutil.rmtree(render_dir, ignore_errors=True)
-
-    warnings = [str(item.get("message") or item) for item in report.get("warnings", [])] if isinstance(report.get("warnings"), list) else []
-    if not slide_index:
-        warnings.append("No slide HTML files were copied into the template project")
 
     return PptxToSlideTemplateResult(
         output_root=output_root,
@@ -484,6 +410,8 @@ async def convert_pptx_to_slide_template(
             "template_dir": str(template_dir),
             "zip_path": str(zip_path),
             "template_json": str(template_json_path),
+            "thumbnail_image": str(template_dir / preview_files["thumbnail_image"]) if "thumbnail_image" in preview_files else "",
+            "collage_image": str(template_dir / preview_files["collage_image"]) if "collage_image" in preview_files else "",
             "slide_count": len(slide_index),
             "warnings": warnings,
             "bundle_result": bundle_result,

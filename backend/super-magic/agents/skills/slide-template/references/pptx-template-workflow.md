@@ -38,6 +38,9 @@ The generated package uses a slide-project-like structure:
 │   ├── theme.css
 │   ├── slide-bridge.js
 │   ├── images/
+│   ├── previews/
+│   │   ├── cover.png
+│   │   └── collage.png
 │   └── slides/
 │       ├── slide-001.html
 │       ├── slide-002.html
@@ -51,12 +54,11 @@ The ZIP file must be a sibling of `<template-dir>/`. It must not be placed under
 
 `template.json` is the only metadata entrypoint. It must follow `references/template-json-spec.md` and include:
 
-- `backend_payload`: backend-ready fields for creating or updating template records.
-- `files`: `entry_html`, `project_config`, `theme_css`, `slides_dir`, `images_dir`, and the sibling `package_zip`.
+- `schema_version`, `template_id`, and `name`.
+- `files`: `entry_html`, `project_config`, `theme_css`, `slides_dir`, `images_dir`, the sibling `package_zip`, plus optional `thumbnail_image` and `collage_image` when preview generation succeeds.
 - `slides`: page index with file, title, layout, source slide number, slots, suitable use, and risks.
-- `generation.source_kind`: `pptx_import`.
-- `quality`: conversion checks and warnings.
-- `license`: copyright and third-party asset status.
+- `source`: source kind, source PPTX filename, and source canvas.
+- `warnings`: non-fatal conversion or preview generation issues.
 
 Do not generate `template-pages.md` or `template-pages.json`; page selection data belongs in `template.json.slides`.
 
@@ -84,6 +86,8 @@ After the tool completes, verify:
 - `<template-dir>/magic.project.js` lists every generated slide file.
 - `<template-dir>/index.html` can load the project shell.
 - `<template-dir>/slides/*.html` load `../theme.css` and reference local `../images/...` assets.
+- `<template-dir>/previews/cover.png` is the first-slide preview image when preview generation succeeds.
+- `<template-dir>/previews/collage.png` is a matrix preview containing up to the first 9 slides when preview generation succeeds.
 - Slide HTML contains `data-slot` attributes for replaceable text, images, or charts where available.
 - Default slide HTML does not contain renderer-only source attributes such as `data-element-id` or `data-source-shape-id`.
 - Large decorative SVG paths are stored under `images/vectors/` by default instead of embedded inline.
