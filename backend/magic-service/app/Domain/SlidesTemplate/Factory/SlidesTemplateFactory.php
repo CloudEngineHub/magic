@@ -21,6 +21,7 @@ class SlidesTemplateFactory
         $entity->setSourceType($model->source_type ?? null);
         $entity->setLabel($model->label ?? []);
         $entity->setDescription($model->description ?? []);
+        $entity->setSearchText($model->search_text);
         $entity->setThumbnailFileKey($model->thumbnail_file_key);
         $entity->setCollageFileKey($model->collage_file_key);
         $entity->setTemplateFileKey($model->template_file_key);

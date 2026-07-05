@@ -51,12 +51,14 @@ class SlidesTemplateDomainService
 
     public function create(SlidesTemplateDataIsolation $dataIsolation, SlidesTemplateEntity $entity): SlidesTemplateEntity
     {
+        $this->refreshSearchText($entity);
         return $this->slidesTemplateRepository->save($dataIsolation, $entity);
     }
 
     public function update(SlidesTemplateDataIsolation $dataIsolation, SlidesTemplateEntity $entity): SlidesTemplateEntity
     {
         $this->findByIdOrFail($dataIsolation, (string) $entity->getId());
+        $this->refreshSearchText($entity);
         return $this->slidesTemplateRepository->save($dataIsolation, $entity);
     }
 
@@ -79,5 +81,10 @@ class SlidesTemplateDomainService
         if (! $this->slidesTemplateRepository->delete($dataIsolation, $id)) {
             ExceptionBuilder::throw(SlidesTemplateErrorCode::TEMPLATE_NOT_FOUND);
         }
+    }
+
+    private function refreshSearchText(SlidesTemplateEntity $entity): void
+    {
+        $entity->setSearchText(SlidesTemplateSearchTextBuilder::build($entity));
     }
 }

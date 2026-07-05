@@ -52,12 +52,9 @@ class SlidesTemplateRepository extends AbstractRepository implements SlidesTempl
         }
 
         if ($query->getKeyword() !== null) {
-            $keyword = str_replace(['%', '_', '\\'], ['\%', '\_', '\\\\'], $query->getKeyword());
-            $keywordLike = '%' . $keyword . '%';
-            $builder->where(static function ($subQuery) use ($keywordLike) {
-                $subQuery->where('code', 'LIKE', $keywordLike)
-                    ->orWhere('label', 'LIKE', $keywordLike);
-            });
+            $keyword = mb_strtolower($query->getKeyword(), 'UTF-8');
+            $keywordLike = '%' . addcslashes($keyword, '\%_') . '%';
+            $builder->where('search_text', 'LIKE', $keywordLike);
         }
 
         $builder->orderBy('sort', 'desc')->orderBy('id', 'desc');

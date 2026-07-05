@@ -25,6 +25,8 @@ class SlidesTemplateEntity extends AbstractEntity
 
     protected array $description = [];
 
+    protected ?string $searchText = null;
+
     protected string $thumbnailFileKey = '';
 
     protected ?string $thumbnailUrl = null;
@@ -72,6 +74,7 @@ class SlidesTemplateEntity extends AbstractEntity
             'source_type' => $this->sourceType->value,
             'label' => $this->label,
             'description' => $this->description,
+            'search_text' => $this->searchText,
             'thumbnail_file_key' => $this->thumbnailFileKey,
             'collage_file_key' => $this->collageFileKey,
             'template_file_key' => $this->templateFileKey,
@@ -156,6 +159,17 @@ class SlidesTemplateEntity extends AbstractEntity
     public function setDescription(array $description): self
     {
         $this->description = $description;
+        return $this;
+    }
+
+    public function getSearchText(): ?string
+    {
+        return $this->searchText;
+    }
+
+    public function setSearchText(?string $searchText): self
+    {
+        $this->searchText = $searchText;
         return $this;
     }
 
