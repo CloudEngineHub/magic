@@ -24,8 +24,8 @@ Input PPTX file path, supports workspace-relative path or absolute path.""",
     )
     output_dir: str = Field(
         "",
-        description="""<!--zh: 输出根目录，必须位于工作区内。为空时默认写入 `.workspace/slide-templates/`。模板文件夹和 ZIP 会写在该目录下。-->
-Output root directory. Must be inside workspace. Defaults to `.workspace/slide-templates/` when empty.""",
+        description="""<!--zh: 输出根目录，必须位于工作区内。为空时默认写入 `slide-templates/`。模板文件夹和 ZIP 会写在该目录下。-->
+Output root directory. Must be inside workspace. Defaults to `slide-templates/` when empty.""",
     )
     template_id: str = Field(
         "",

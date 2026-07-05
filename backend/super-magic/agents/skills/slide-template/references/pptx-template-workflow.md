@@ -11,7 +11,7 @@ from sdk.tool import tool
 
 result = tool.call("convert_pptx_to_slide_template", {
     "pptx_path": "<workspace-relative-or-absolute-pptx-path>",
-    "output_dir": ".workspace/slide-templates",
+    "output_dir": "",
     "override": True,
     "debug": False,
     "preserve_source_data_attrs": False,

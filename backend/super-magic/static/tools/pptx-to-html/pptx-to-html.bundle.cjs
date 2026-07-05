@@ -18011,7 +18011,7 @@ function normalizeHexColor(value) {
 // src/ooxml/units.ts
 function defaultCanvas(size) {
   const ratio = size.cx / size.cy;
-  if (Math.abs(ratio - 16 / 9) < 0.04) return { width: 1280, height: 720 };
+  if (Math.abs(ratio - 16 / 9) < 0.04) return { width: 1920, height: 1080 };
   if (Math.abs(ratio - 4 / 3) < 0.04) return { width: 1024, height: 768 };
   return { width: 1280, height: Math.round(1280 / ratio) };
 }

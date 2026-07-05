@@ -49,7 +49,7 @@ def _resolve_output_root(output_dir: str, workspace_dir: Path) -> Path:
     if output_dir:
         path = Path(output_dir)
         return path if path.is_absolute() else workspace_dir / path
-    return workspace_dir / ".workspace" / "slide-templates"
+    return workspace_dir / "slide-templates"
 
 
 def _ensure_safe_output_root(output_root: Path, workspace_dir: Path) -> None:
