@@ -174,6 +174,14 @@ class TestErrorFirstSamplingProcessor:
         proc.shutdown(5000)
         inner.shutdown.assert_called_once_with(5000)
 
+    def test_shutdown_falls_back_when_inner_rejects_timeout(self):
+        inner = MagicMock(spec=SpanProcessor)
+        inner.shutdown.side_effect = [TypeError("takes 1 positional argument but 2 were given"), None]
+        proc = _ErrorFirstSamplingProcessor(inner, 0.1)
+        assert proc.shutdown(5000) is True
+        assert inner.shutdown.call_count == 2
+        inner.shutdown.assert_has_calls([call(5000), call()])
+
     def test_force_flush_forwarded(self):
         inner = MagicMock(spec=SpanProcessor)
         inner.force_flush.return_value = True

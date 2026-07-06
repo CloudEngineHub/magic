@@ -172,10 +172,15 @@ class _ErrorFirstSamplingProcessor(SpanProcessor):
             self._inner.on_end(span)
 
     def shutdown(self, timeout_millis: int = 30000) -> bool:
-        return self._inner.shutdown(timeout_millis)
+        # BatchSpanProcessor.shutdown() takes no args; forward timeout only when supported.
+        try:
+            return bool(self._inner.shutdown(timeout_millis))
+        except TypeError:
+            self._inner.shutdown()
+            return True
 
     def force_flush(self, timeout_millis: int = 30000) -> bool:
-        return self._inner.force_flush(timeout_millis)
+        return bool(self._inner.force_flush(timeout_millis))
 
 
 def is_telemetry_enabled() -> bool:
