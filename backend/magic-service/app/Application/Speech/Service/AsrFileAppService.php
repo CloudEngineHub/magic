@@ -109,6 +109,8 @@ class AsrFileAppService extends AbstractAppService
         SummaryRequestDTO $summaryRequest,
         MagicUserAuthorization $userAuthorization
     ): array {
+        $sandboxId = null;
+
         try {
             $userId = $userAuthorization->getId();
             $organizationCode = $userAuthorization->getOrganizationCode();
@@ -120,7 +122,8 @@ class AsrFileAppService extends AbstractAppService
 
             // 2. 验证任务状态（如果有file_id则跳过）
             if (! $summaryRequest->hasFileId()) {
-                $this->validationService->validateTaskStatus($summaryRequest->taskKey, $userId);
+                $taskStatus = $this->validationService->validateTaskStatus($summaryRequest->taskKey, $userId);
+                $sandboxId = $taskStatus->sandboxId;
             }
 
             // 3. 验证项目权限
@@ -150,6 +153,7 @@ class AsrFileAppService extends AbstractAppService
                 'success' => true,
                 'task_status' => null,
                 'conversation_id' => $conversationId,
+                'sandbox_id' => $sandboxId,
                 'chat_result' => true,
                 'topic_name' => $topicName,
                 'project_name' => $projectName,
@@ -165,6 +169,7 @@ class AsrFileAppService extends AbstractAppService
                 'error' => $e->getMessage(),
                 'task_status' => null,
                 'conversation_id' => null,
+                'sandbox_id' => $sandboxId,
                 'chat_result' => ['success' => false, 'message_sent' => false, 'error' => $e->getMessage()],
             ];
         }
@@ -753,6 +758,7 @@ class AsrFileAppService extends AbstractAppService
         return [
             'success' => true,
             'task_key' => $taskKey,
+            'sandbox_id' => $taskStatus->sandboxId,
             'summary' => [
                 'status' => 'in_progress',
                 'topic_id' => $taskStatus->topicId,
@@ -845,6 +851,7 @@ class AsrFileAppService extends AbstractAppService
         return [
             'success' => true,
             'task_key' => $taskKey,
+            'sandbox_id' => $taskStatus->sandboxId,
             'summary' => [
                 'status' => 'in_progress',
                 'topic_id' => $taskStatus->topicId,
@@ -1002,6 +1009,7 @@ class AsrFileAppService extends AbstractAppService
                 return [
                     'success' => true,
                     'task_key' => $taskKey,
+                    'sandbox_id' => $taskStatus->sandboxId,
                     'phase' => $taskStatus->currentPhase,
                     'status' => $taskStatus->phaseStatus,
                     'percent' => $taskStatus->phasePercent,
@@ -1024,6 +1032,7 @@ class AsrFileAppService extends AbstractAppService
         return [
             'success' => true,
             'task_key' => $taskKey,
+            'sandbox_id' => $taskStatus->sandboxId,
             'phase' => AsrTaskStatusDTO::PHASE_MERGING,
             'status' => AsrTaskStatusDTO::PHASE_STATUS_IN_PROGRESS,
             'percent' => 0,

@@ -328,9 +328,12 @@ class SkillApi extends AbstractApi
 
         $requestDTO = PublishSkillRequestDTO::fromRequest($this->request);
 
-        $skillVersionEntity = $this->userSkillAppService->publishSkill($requestContext, $code, $requestDTO);
+        $publishResult = $this->userSkillAppService->publishSkill($requestContext, $code, $requestDTO);
 
-        return SkillAssembler::createPublishVersionResponseDTO($skillVersionEntity)->toArray();
+        $response = SkillAssembler::createPublishVersionResponseDTO($publishResult->version)->toArray();
+        $response['sandbox_id'] = $publishResult->sandboxId;
+
+        return $response;
     }
 
     public function getVersionList(RequestContext $requestContext, string $code): array

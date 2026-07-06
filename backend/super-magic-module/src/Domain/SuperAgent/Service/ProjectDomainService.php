@@ -460,6 +460,23 @@ class ProjectDomainService
         return $result;
     }
 
+    public function getCurrentTopicSandboxId(int $projectId): ?string
+    {
+        $project = $this->getProjectNotUserId($projectId);
+        $topicId = $project->getCurrentTopicId();
+        if (empty($topicId)) {
+            return null;
+        }
+
+        $topic = $this->topicRepository->getTopicById((int) $topicId);
+        if ($topic === null) {
+            return null;
+        }
+
+        $sandboxId = $topic->getSandboxId();
+        return $sandboxId === '' ? null : $sandboxId;
+    }
+
     /**
      * Batch get project names by IDs.
      *

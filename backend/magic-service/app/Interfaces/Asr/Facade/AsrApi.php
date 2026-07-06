@@ -153,17 +153,19 @@ class AsrApi extends AbstractApi
             $result = $this->asrFileAppService->processSummaryWithChat($summaryRequest, $userAuthorization);
 
             if (! $result['success']) {
-                return $this->buildSummaryResponse(false, $summaryRequest, $result['error']);
+                return $this->buildSummaryResponse(false, $summaryRequest, $result);
             }
 
-            return $this->buildSummaryResponse(true, $summaryRequest, null, $result);
+            return $this->buildSummaryResponse(true, $summaryRequest, $result);
         } catch (Throwable $e) {
             $this->logger->error('ASR总结处理异常', [
                 'task_key' => $summaryRequest->taskKey,
                 'error' => $e->getMessage(),
                 'trace' => $e->getTraceAsString(),
             ]);
-            return $this->buildSummaryResponse(false, $summaryRequest, sprintf('处理异常: %s', $e->getMessage()));
+            return $this->buildSummaryResponse(false, $summaryRequest, [
+                'error' => sprintf('处理异常: %s', $e->getMessage()),
+            ]);
         }
     }
 
@@ -849,15 +851,16 @@ class AsrApi extends AbstractApi
     /**
      * 构建总结响应.
      */
-    private function buildSummaryResponse(bool $success, SummaryRequestDTO $request, ?string $error = null, ?array $result = null): array
+    private function buildSummaryResponse(bool $success, SummaryRequestDTO $request, ?array $result = null): array
     {
         if (! $success) {
             return [
                 'success' => false,
-                'error' => $error,
+                'error' => $result['error'] ?? null,
                 'task_key' => $request->taskKey,
                 'project_id' => $request->projectId,
                 'topic_id' => $request->topicId,
+                'sandbox_id' => $result['sandbox_id'] ?? null,
                 'topic_name' => null,
                 'project_name' => null,
                 'workspace_name' => null,
@@ -869,6 +872,7 @@ class AsrApi extends AbstractApi
             'task_key' => $request->taskKey,
             'project_id' => $request->projectId,
             'topic_id' => $request->topicId,
+            'sandbox_id' => $result['sandbox_id'] ?? null,
             'conversation_id' => $result['conversation_id'] ?? null,
             'topic_name' => $result['topic_name'] ?? null,
             'project_name' => $result['project_name'] ?? null,

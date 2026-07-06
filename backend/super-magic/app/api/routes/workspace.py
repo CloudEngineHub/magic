@@ -172,6 +172,8 @@ async def export_workspace_endpoint(request: WorkspaceExportRequest) -> BaseResp
             code=request.code,
             upload_config=request.upload_config,
             source_path=request.source_path,
+            archive_root=request.archive_root,
+            file_name=request.file_name,
         )
         response_data = WorkspaceExportData.model_validate(result)
 
