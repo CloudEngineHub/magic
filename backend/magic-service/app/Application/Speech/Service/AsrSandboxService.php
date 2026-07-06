@@ -291,7 +291,7 @@ class AsrSandboxService extends AbstractAppService
             $intelligentTitle
         );
 
-        $this->logger->info('准备调用沙箱 finish', [
+        $this->logger->info('准备提交沙箱 ASR 合并', [
             'task_key' => $taskStatus->taskKey,
             'intelligent_title' => $intelligentTitle,
             'audio_config' => $audioConfig->toArray(),
@@ -303,7 +303,7 @@ class AsrSandboxService extends AbstractAppService
         // 记录开始时间
         $finishStartTime = microtime(true);
 
-        // 首次调用 finish
+        // 首次调用 finish：提交“上传已完成，可以合并”的命令。
         $response = $this->asrRecorder->finishTask(
             $sandboxId,
             $taskStatus->taskKey,
@@ -313,6 +313,29 @@ class AsrSandboxService extends AbstractAppService
             $transcriptFileConfig,
             $markerFileConfig
         );
+
+        if ($this->isTransportFailureResponse($response)) {
+            $submitErrorMessage = $response->getErrorMessage() ?? '提交沙箱 ASR 合并失败';
+            $this->logger->warning('提交沙箱 ASR 合并状态未知，尝试查询任务状态', [
+                'task_key' => $taskStatus->taskKey,
+                'sandbox_id' => $sandboxId,
+                'code' => $response->code,
+                'message' => $response->message,
+            ]);
+
+            $queryResponse = $this->asrRecorder->queryTask($sandboxId, $taskStatus->taskKey, '.workspace');
+            if ($this->isTransportFailureResponse($queryResponse)) {
+                $this->logger->error('提交沙箱 ASR 合并失败，且无法通过查询确认任务状态', [
+                    'task_key' => $taskStatus->taskKey,
+                    'sandbox_id' => $sandboxId,
+                    'finish_error' => $submitErrorMessage,
+                    'query_error' => $queryResponse->getErrorMessage(),
+                ]);
+                ExceptionBuilder::throw(AsrErrorCode::SandboxMergeFailed, '', ['message' => $submitErrorMessage]);
+            }
+
+            $response = $queryResponse;
+        }
 
         // 轮询等待完成（基于预设时间与休眠间隔）
         $timeoutSeconds = AsrConfig::SANDBOX_MERGE_TIMEOUT;
@@ -331,7 +354,7 @@ class AsrSandboxService extends AbstractAppService
             ++$attempt;
 
             $statusString = $response->getStatus();
-            $status = SandboxAsrStatusEnum::from($statusString);
+            $status = SandboxAsrStatusEnum::fromString($statusString) ?? SandboxAsrStatusEnum::ERROR;
 
             // 检查完成状态或错误状态
             $result = $this->checkAndHandleResponseStatus(
@@ -351,7 +374,7 @@ class AsrSandboxService extends AbstractAppService
             $elapsedSeconds = (int) ($currentTime - $finishStartTime);
             if ($attempt % AsrConfig::SANDBOX_MERGE_LOG_FREQUENCY === 0 || ($currentTime - $lastLogTime) >= $logInterval) {
                 $remainingSeconds = max(0, $timeoutSeconds - $elapsedSeconds);
-                $this->logger->info('等待沙箱音频合并', [
+                $this->logger->info('等待并查询沙箱 ASR 合并状态', [
                     'task_key' => $taskStatus->taskKey,
                     'sandbox_id' => $sandboxId,
                     'attempt' => $attempt,
@@ -370,20 +393,26 @@ class AsrSandboxService extends AbstractAppService
 
             sleep($pollingInterval);
 
-            // 继续轮询
-            $response = $this->asrRecorder->finishTask(
-                $sandboxId,
-                $taskStatus->taskKey,
-                '.workspace',
-                $audioConfig,
-                $noteFileConfig,
-                $transcriptFileConfig
-            );
+            // 继续轮询：finish 只提交一次，后续只查询状态。
+            $queryResponse = $this->asrRecorder->queryTask($sandboxId, $taskStatus->taskKey, '.workspace');
+            if ($this->isTransportFailureResponse($queryResponse)) {
+                $this->logger->warning('查询沙箱 ASR 合并状态失败，将继续轮询', [
+                    'task_key' => $taskStatus->taskKey,
+                    'sandbox_id' => $sandboxId,
+                    'attempt' => $attempt,
+                    'code' => $queryResponse->code,
+                    'message' => $queryResponse->message,
+                    'error_message' => $queryResponse->getErrorMessage(),
+                ]);
+                continue;
+            }
+
+            $response = $queryResponse;
         }
 
         // 时间即将耗尽，进行最后一次检查
         $statusString = $response->getStatus();
-        $status = SandboxAsrStatusEnum::from($statusString);
+        $status = SandboxAsrStatusEnum::fromString($statusString) ?? SandboxAsrStatusEnum::ERROR;
         $result = $this->checkAndHandleResponseStatus(
             $response,
             $status,
@@ -408,6 +437,11 @@ class AsrSandboxService extends AbstractAppService
         ]);
 
         ExceptionBuilder::throw(AsrErrorCode::SandboxMergeTimeout);
+    }
+
+    private function isTransportFailureResponse(AsrRecorderResponse $response): bool
+    {
+        return ! $response->isSuccess() && ! $response->hasTaskStatus();
     }
 
     /**

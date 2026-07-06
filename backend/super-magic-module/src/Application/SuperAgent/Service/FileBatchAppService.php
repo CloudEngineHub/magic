@@ -158,7 +158,8 @@ class FileBatchAppService extends AbstractAppService
             $batchKey,
             null,
             count($leafFiles),
-            'Processing, please check status later'
+            'Processing, please check status later',
+            $this->normalizeSandboxId($sandboxId)
         );
     }
 
@@ -293,7 +294,8 @@ class FileBatchAppService extends AbstractAppService
             $batchKey,
             null,
             count($leafFiles),
-            'Processing, please check status later'
+            'Processing, please check status later',
+            $this->normalizeSandboxId($sandboxId)
         );
     }
 
@@ -362,6 +364,7 @@ class FileBatchAppService extends AbstractAppService
 
         $status = $taskStatus['status'] ?? '';
         if ($status === 'ready') {
+            $sandboxId = $this->normalizeSandboxId((string) ($taskStatus['sandbox_id'] ?? ''));
             $latestFileUpdateTime = $this->getLatestFileUpdateTime($userFiles);
             $cacheUpdatedAt = (int) ($taskStatus['updated_at'] ?? 0);
 
@@ -389,17 +392,20 @@ class FileBatchAppService extends AbstractAppService
                 $batchKey,
                 $downloadUrl,
                 (int) ($taskStatus['result']['file_count'] ?? count($userFiles)),
-                'Files are ready'
+                'Files are ready',
+                $sandboxId
             );
         }
 
         if ($status === 'processing') {
+            $sandboxId = $this->normalizeSandboxId((string) ($taskStatus['sandbox_id'] ?? ''));
             return new CreateBatchDownloadResponseDTO(
                 'processing',
                 $batchKey,
                 null,
                 (int) ($taskStatus['progress']['total'] ?? count($userFiles)),
-                'Processing, please check status later'
+                'Processing, please check status later',
+                $sandboxId
             );
         }
 
@@ -598,6 +604,11 @@ class FileBatchAppService extends AbstractAppService
         ]);
 
         return $sandboxId;
+    }
+
+    private function normalizeSandboxId(string $sandboxId): ?string
+    {
+        return $sandboxId === '' ? null : $sandboxId;
     }
 
     private function resolveReusableBatchPackSandboxId(TopicEntity $topicEntity): string
