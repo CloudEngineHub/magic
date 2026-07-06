@@ -91,7 +91,18 @@ export async function generatePluginImages(canvas: Canvas, params: PluginGenerat
 	})
 
 	if (params.select && elementIds.length > 0) {
-		canvas.selectionManager.select(elementIds[elementIds.length - 1])
+		const selectedElementId = elementIds[elementIds.length - 1]
+		canvas.selectionManager.select(selectedElementId)
+		const scheduleFocus =
+			typeof requestAnimationFrame === "function" ? requestAnimationFrame : setTimeout
+		scheduleFocus(() => {
+			canvas.viewportController.focusOnElements([selectedElementId], {
+				animated: true,
+				panOnly: true,
+				selectElement: [selectedElementId],
+				ensureFullyVisible: true,
+			})
+		})
 	}
 
 	return { elementIds }
