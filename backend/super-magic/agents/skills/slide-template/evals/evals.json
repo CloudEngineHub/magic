@@ -4,37 +4,37 @@
     {
       "id": 1,
       "prompt": "帮我用科技深色风格做一个 AI 发展趋势的 PPT，10页左右",
-      "expected_output": "先加载 slide-template，根据“科技深色风格”推荐 3-5 个模板，并使用 ask_user 询问用户选择；选项需包含模板名称、简短描述和目录名，例如深夜代码室（tech-dark）：深蓝黑底 + 电光青，适合 AI、架构、代码、技术发布；同时提供不使用模板的选项，不直接开始生成",
+      "expected_output": "先加载 slide-template。若上下文已有平台模板候选列表，则根据“科技深色风格”推荐 3-5 个候选模板，并使用 ask_user 询问用户选择；选项需包含模板名称、简短描述和 template code，同时提供不使用模板的选项。若上下文没有模板候选或明确 code，则询问用户提供 template code、从平台模板面板选择，或确认不使用模板；不得展示旧内置模板目录或编造 code。用户选定 code 后，通过 run_sdk_snippet 调用 get_slides_template_download_url 获取 template_file_url，下载解压 ZIP 后先读取 template.json，再根据 files/slides 字段加载 theme.css、visual-spec.md、preview.html 和/或 slides/*.html 等可用资源，再继续生成",
       "files": []
     },
     {
       "id": 2,
       "prompt": "我要做一个季度业绩汇报 PPT，想要商务简约风格，内容关于 2025 年 Q1 销售数据",
-      "expected_output": "先加载 slide-template，根据“季度业绩汇报”和“商务简约风格”推荐 3-5 个模板，并使用 ask_user 询问用户选择；选项需包含模板名称、简短描述和目录名，例如职场白皮书（business-minimal）：白底 + 专业蓝，适合企业汇报、季度总结、商业提案；同时提供不使用模板的选项，不直接开始生成",
+      "expected_output": "先加载 slide-template。若上下文已有平台模板候选列表，则根据“季度业绩汇报”和“商务简约风格”推荐 3-5 个候选模板，并使用 ask_user 询问用户选择；选项需包含模板名称、简短描述和 template code，同时提供不使用模板的选项。若上下文没有模板候选或明确 code，则询问用户提供 template code、从平台模板面板选择，或确认不使用模板；不得展示旧内置模板目录或编造 code。用户选定 code 后，通过 get_slides_template_download_url 获取模板 ZIP 下载链接，下载解压后先读取 template.json，再根据 files/slides 字段加载 theme.css、visual-spec.md、preview.html 和/或 slides/*.html 等可用资源",
       "files": []
     },
     {
       "id": 3,
       "prompt": "先给我看看有哪些 PPT 模板可以选，我还没决定用哪个",
-      "expected_output": "加载 slide-template，使用 ask_user 展示 3-5 套可选模板；每个选项需包含模板名称、简短描述和目录名，并告知用户可打开对应 preview.html 文件预览；同时提供不使用模板的选项，不直接开始制作幻灯片",
+      "expected_output": "加载 slide-template。若上下文已有平台模板候选列表，则使用 ask_user 展示 3-5 套可选模板；每个选项需包含模板名称、简短描述和 template code，同时提供不使用模板的选项。若上下文没有平台模板候选列表或 code，则说明本 skill 不再内置模板列表，要求用户从平台模板面板选择或提供 template code；不得列出旧 assets/templates 目录或 preview.html 路径",
       "files": []
     },
     {
       "id": 4,
       "prompt": "帮我做一个论文答辩 PPT，学术风格，主题是机器学习在医疗影像诊断中的应用",
-      "expected_output": "先加载 slide-template，根据“论文答辩”和“学术风格”推荐 3-5 个模板，并使用 ask_user 询问用户选择；选项需包含模板名称、简短描述和目录名，例如论文蓝图册（academic-research）：白底 + 深海军蓝 + 青绿，适合论文答辩、学术报告、研究分享；同时提供不使用模板的选项，不直接开始生成",
+      "expected_output": "先加载 slide-template。若上下文已有平台模板候选列表，则根据“论文答辩”和“学术风格”推荐 3-5 个候选模板，并使用 ask_user 询问用户选择；选项需包含模板名称、简短描述和 template code，同时提供不使用模板的选项。若上下文没有模板候选或明确 code，则询问用户提供 template code、从平台模板面板选择，或确认不使用模板；不得展示旧内置模板目录或编造 code。用户选定 code 后，通过 get_slides_template_download_url 获取模板 ZIP，下载解压后先读取 template.json，再根据 files/slides 字段加载 theme.css、visual-spec.md、preview.html 和/或 slides/*.html 等可用资源",
       "files": []
     },
     {
       "id": 5,
       "prompt": "做一个互联网产品发布会 PPT，要时尚一点，有渐变感，介绍我们的新 App",
-      "expected_output": "先加载 slide-template，根据“互联网产品发布会”“时尚”和“渐变感”推荐 3-5 个模板，并使用 ask_user 询问用户选择；选项需包含模板名称、简短描述和目录名，例如玻璃糖果风（gradient-fashion）：紫粉橙黄渐变 + 玻璃拟态，适合互联网产品、新媒体、年轻品牌、App 推介；同时提供不使用模板的选项，不直接开始生成",
+      "expected_output": "先加载 slide-template。若上下文已有平台模板候选列表，则根据“互联网产品发布会”“时尚”和“渐变感”推荐 3-5 个候选模板，并使用 ask_user 询问用户选择；选项需包含模板名称、简短描述和 template code，同时提供不使用模板的选项。若上下文没有模板候选或明确 code，则询问用户提供 template code、从平台模板面板选择，或确认不使用模板；不得展示旧内置模板目录或编造 code。用户选定 code 后，通过 get_slides_template_download_url 获取模板 ZIP，下载解压后先读取 template.json，再根据 files/slides 字段加载 theme.css、visual-spec.md、preview.html 和/或 slides/*.html 等可用资源",
       "files": []
     },
     {
       "id": 6,
       "prompt": "帮我做一个公司战略 PPT，模板风格我想要黑金奢华、细线网格、杂志封面感、大标题压迫感",
-      "expected_output": "加载 slide-template，识别用户正在描述自定义模板风格；按 custom template workflow 生成新的类 PPT 项目模板目录，包含 template.json、magic.project.js、index.html、theme.css、slide-bridge.js、images/、slides/；template.json 必须遵循 references/template-json-spec.md；随后读取 template.json/theme.css，并使用该新模板生成 PPT，不强行套用内置模板推荐",
+      "expected_output": "加载 slide-template，识别用户正在描述自定义模板风格；按 custom template workflow 生成新的类 PPT 项目模板目录，包含 template.json、magic.project.js、index.html、theme.css、slide-bridge.js、images/、slides/；template.json 必须遵循 references/template-json-spec.md；随后读取 template.json/theme.css，并使用该新模板生成 PPT，不强行要求平台 template code，也不套用旧内置模板目录",
       "files": []
     },
     {
