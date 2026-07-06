@@ -18735,16 +18735,25 @@ function parseRunStyle(source, theme) {
   };
 }
 function parseFontSlots(source, theme) {
-  const latinRaw = attr(child(source, "a:latin"), "typeface");
-  const eastAsianRaw = attr(child(source, "a:ea"), "typeface");
-  const complexScriptRaw = attr(child(source, "a:cs"), "typeface");
+  const latin = child(source, "a:latin");
+  const eastAsian = child(source, "a:ea");
+  const complexScript = child(source, "a:cs");
+  const latinRaw = attr(latin, "typeface");
+  const eastAsianRaw = attr(eastAsian, "typeface");
+  const complexScriptRaw = attr(complexScript, "typeface");
   return {
     fontFamilyLatin: resolveThemeFontTypeface(latinRaw, theme),
     fontFamilyLatinRaw: latinRaw,
+    fontFamilyLatinPanose: attr(latin, "panose"),
+    fontFamilyLatinCharset: attr(latin, "charset"),
     fontFamilyEastAsian: resolveThemeFontTypeface(eastAsianRaw, theme),
     fontFamilyEastAsianRaw: eastAsianRaw,
+    fontFamilyEastAsianPanose: attr(eastAsian, "panose"),
+    fontFamilyEastAsianCharset: attr(eastAsian, "charset"),
     fontFamilyComplexScript: resolveThemeFontTypeface(complexScriptRaw, theme),
-    fontFamilyComplexScriptRaw: complexScriptRaw
+    fontFamilyComplexScriptRaw: complexScriptRaw,
+    fontFamilyComplexScriptPanose: attr(complexScript, "panose"),
+    fontFamilyComplexScriptCharset: attr(complexScript, "charset")
   };
 }
 function resolveThemeFontTypeface(value, theme) {
@@ -19870,8 +19879,17 @@ function extractChartTextStyleFromTextProperties(textProperties, theme) {
   const parsed = {
     ...typeof style.fontFamily === "string" ? { fontFamily: style.fontFamily } : {},
     ...typeof style.fontFamilyLatin === "string" ? { fontFamilyLatin: style.fontFamilyLatin } : {},
+    ...typeof style.fontFamilyLatinRaw === "string" ? { fontFamilyLatinRaw: style.fontFamilyLatinRaw } : {},
+    ...typeof style.fontFamilyLatinPanose === "string" ? { fontFamilyLatinPanose: style.fontFamilyLatinPanose } : {},
+    ...typeof style.fontFamilyLatinCharset === "string" ? { fontFamilyLatinCharset: style.fontFamilyLatinCharset } : {},
     ...typeof style.fontFamilyEastAsian === "string" ? { fontFamilyEastAsian: style.fontFamilyEastAsian } : {},
+    ...typeof style.fontFamilyEastAsianRaw === "string" ? { fontFamilyEastAsianRaw: style.fontFamilyEastAsianRaw } : {},
+    ...typeof style.fontFamilyEastAsianPanose === "string" ? { fontFamilyEastAsianPanose: style.fontFamilyEastAsianPanose } : {},
+    ...typeof style.fontFamilyEastAsianCharset === "string" ? { fontFamilyEastAsianCharset: style.fontFamilyEastAsianCharset } : {},
     ...typeof style.fontFamilyComplexScript === "string" ? { fontFamilyComplexScript: style.fontFamilyComplexScript } : {},
+    ...typeof style.fontFamilyComplexScriptRaw === "string" ? { fontFamilyComplexScriptRaw: style.fontFamilyComplexScriptRaw } : {},
+    ...typeof style.fontFamilyComplexScriptPanose === "string" ? { fontFamilyComplexScriptPanose: style.fontFamilyComplexScriptPanose } : {},
+    ...typeof style.fontFamilyComplexScriptCharset === "string" ? { fontFamilyComplexScriptCharset: style.fontFamilyComplexScriptCharset } : {},
     ...typeof style.fontSize === "number" ? { fontSize: style.fontSize } : {},
     ...typeof style.fontSizeRaw === "string" ? { fontSizeRaw: style.fontSizeRaw } : {},
     ...typeof style.color === "string" ? { color: style.color } : {},
@@ -20026,31 +20044,53 @@ async function parseChartStylePart(pkg, sourcePath, theme) {
   const phClrSlots = collectPhClrSlots(root);
   const chartAreaMods = parseChartAreaMods(root);
   const refs = collectChartStyleRefs(root);
+  const fontRefColors = collectFontRefColors(root, theme);
   const areaDefaults = parseAreaDefaults(root, theme);
   const axisDefaults = parseChartStyleAxisDefaults(root, theme);
   const gridlineDefaults = parseChartStyleGridlineDefaults(root, theme);
+  const lineDefaults = parseChartStyleLineDefaults(root, theme);
   const seriesLineDefault = parseChartStyleSeriesLineDefault(root, theme);
   const markerLineDefault = parseChartStyleMarkerLineDefault(root, theme);
+  const trendlineLineDefault = parseChartStyleTrendlineLineDefault(root, theme);
   const markerLayout = parseMarkerLayout(root);
   const dataLabelCalloutFrame = parseDataLabelCalloutFrame(root, theme);
+  const dataTableFrame = parseDataTableFrame(root, theme);
+  const upDownBarDefaults = parseUpDownBarDefaults(root, theme);
   const textDefaults = parseTextDefaults(root, theme);
+  const namespaces = parseRootNamespaces(root);
   return {
     id: attr(root, "id"),
     sourcePath,
+    ...namespaces.length > 0 ? { namespaces } : {},
     ...chartAreaMods.length > 0 ? { chartAreaMods } : {},
     ...refs.length > 0 ? { refs } : {},
+    ...fontRefColors.length > 0 ? { fontRefColors } : {},
     ...areaDefaults.length > 0 ? { areaDefaults } : {},
     ...axisDefaults ? { axisDefaults } : {},
     ...gridlineDefaults ? { gridlineDefaults } : {},
+    ...lineDefaults ? { lineDefaults } : {},
     ...seriesLineDefault ? { seriesLineDefault } : {},
     ...markerLineDefault ? { markerLineDefault } : {},
+    ...trendlineLineDefault ? { trendlineLineDefault } : {},
     ...markerLayout ? { markerLayout } : {},
     ...dataLabelCalloutFrame ? { dataLabelCalloutFrame } : {},
+    ...dataTableFrame ? { dataTableFrame } : {},
+    ...upDownBarDefaults ? { upDownBarDefaults } : {},
     ...textDefaults.length > 0 ? { textDefaults } : {},
     phClrCount: phClrSlots.length,
     phClrContexts: unique2(phClrSlots.map((slot) => slot.context)),
     ...phClrSlots.length > 0 ? { phClrSlots } : {}
   };
+}
+function parseRootNamespaces(root) {
+  const current = node(root);
+  if (!current) return [];
+  return Object.entries(current).flatMap(([key, value]) => {
+    if (typeof value !== "string") return [];
+    if (key === "xmlns") return [{ prefix: "default", uri: value }];
+    if (key.startsWith("xmlns:")) return [{ prefix: key.slice("xmlns:".length), uri: value }];
+    return [];
+  });
 }
 var areaDefaultContextKeys = ["cs:chartArea", "cs:plotArea", "cs:plotArea3D", "cs:floor", "cs:wall"];
 function parseAreaDefaults(root, theme) {
@@ -20125,6 +20165,14 @@ function parseMarkerLayout(style) {
 function parseDataLabelCalloutFrame(root, theme) {
   return extractChartAreaStyle(child(child(root, "cs:dataLabelCallout"), "cs:spPr"), theme);
 }
+function parseDataTableFrame(root, theme) {
+  return extractChartAreaStyle(child(child(root, "cs:dataTable"), "cs:spPr"), theme);
+}
+function parseUpDownBarDefaults(root, theme) {
+  const up = extractChartAreaStyle(child(child(root, "cs:upBar"), "cs:spPr"), theme);
+  const down = extractChartAreaStyle(child(child(root, "cs:downBar"), "cs:spPr"), theme);
+  return up || down ? { ...up ? { up } : {}, ...down ? { down } : {} } : void 0;
+}
 function parseChartStyleAxisDefaults(root, theme) {
   const category = parseChartStyleAxisDefault(child(root, "cs:categoryAxis"), "cs:categoryAxis", theme);
   const value = parseChartStyleAxisDefault(child(root, "cs:valueAxis"), "cs:valueAxis", theme);
@@ -20135,6 +20183,21 @@ function parseChartStyleGridlineDefaults(root, theme) {
   const minor = extractChartLineStyle(child(child(root, "cs:gridlineMinor"), "cs:spPr"), theme);
   return major || minor ? { ...major ? { major } : {}, ...minor ? { minor } : {} } : void 0;
 }
+var auxiliaryLineDefaultKeys = [
+  ["leaderLine", "cs:leaderLine"],
+  ["seriesLine", "cs:seriesLine"],
+  ["hiLoLine", "cs:hiLoLine"],
+  ["dropLine", "cs:dropLine"],
+  ["errorBar", "cs:errorBar"],
+  ["dataPointWireframe", "cs:dataPointWireframe"]
+];
+function parseChartStyleLineDefaults(root, theme) {
+  const defaults = Object.fromEntries(auxiliaryLineDefaultKeys.flatMap(([key, xmlKey]) => {
+    const line8 = extractChartLineStyle(child(child(root, xmlKey), "cs:spPr"), theme);
+    return line8 ? [[key, line8]] : [];
+  }));
+  return Object.keys(defaults).length > 0 ? defaults : void 0;
+}
 function parseChartStyleSeriesLineDefault(root, theme) {
   const source = child(root, "cs:dataPointLine");
   if (!source) return void 0;
@@ -20142,6 +20205,11 @@ function parseChartStyleSeriesLineDefault(root, theme) {
 }
 function parseChartStyleMarkerLineDefault(root, theme) {
   const source = child(root, "cs:dataPointMarker");
+  if (!source) return void 0;
+  return extractChartLineStyle(child(source, "cs:spPr") ?? source, theme);
+}
+function parseChartStyleTrendlineLineDefault(root, theme) {
+  const source = child(root, "cs:trendline");
   if (!source) return void 0;
   return extractChartLineStyle(child(source, "cs:spPr") ?? source, theme);
 }
@@ -20223,6 +20291,32 @@ function chartStyleRefType(key) {
   if (key === "cs:effectRef") return "effect";
   if (key === "cs:fontRef") return "font";
   return void 0;
+}
+function collectFontRefColors(value, theme, currentKey = "root", semanticContext = currentKey, path8 = []) {
+  const current = node(value);
+  if (!current) return [];
+  const entries = [];
+  const idx = attr(current, "idx");
+  if (currentKey === "cs:fontRef" && idx) {
+    const color = parseColorInfo(current, theme);
+    if (color) {
+      entries.push({
+        context: semanticContext,
+        path: path8.join("/"),
+        idx,
+        color
+      });
+    }
+  }
+  for (const [key, childValue] of Object.entries(current)) {
+    if (key === "#text" || typeof childValue !== "object") continue;
+    const values = Array.isArray(childValue) ? childValue : [childValue];
+    const nextSemanticContext = key.startsWith("cs:") && !chartStyleRefType(key) ? key : semanticContext;
+    for (const item of values) {
+      entries.push(...collectFontRefColors(item, theme, key, nextSemanticContext, [...path8, key]));
+    }
+  }
+  return entries;
 }
 function collectPhClrSlots(value, currentKey = "root", semanticContext = currentKey, path8 = [], semanticNode = void 0, ancestors = []) {
   const current = node(value);
@@ -20394,6 +20488,7 @@ function extractChartSeries(chart, theme) {
       ...numberProp2("order", numberAttr4(child(ser, "c:order"), "val")),
       ...stringProp3("uniqueId", attr(child(uniqueIdExtension, "c16:uniqueId"), "val")),
       ...stringProp3("uniqueIdExtUri", attr(uniqueIdExtension, "uri")),
+      ...stringProp3("uniqueIdExtNamespace", attr(uniqueIdExtension, "xmlns:c16")),
       ...booleanProp4("invertIfNegative", parseBoolean6(attr(child(ser, "c:invertIfNegative"), "val"))),
       ...booleanProp4("smooth", parseBoolean6(attr(child(ser, "c:smooth"), "val"))),
       ...markerProp(extractSeriesMarker(ser)),
@@ -20721,6 +20816,7 @@ function extractAxis(axis, theme) {
   const line8 = extractChartLineStyle(child(axis, "c:spPr"), theme);
   const fill = extractAxisFill(child(axis, "c:spPr"));
   const majorGridlineLine = extractChartLineStyle(child(child(axis, "c:majorGridlines"), "c:spPr"), theme);
+  const minorGridlineLine = extractChartLineStyle(child(child(axis, "c:minorGridlines"), "c:spPr"), theme);
   const labelStyle = extractChartAxisTextStyle(axis, theme);
   const title = child(axis, "c:title");
   const titleStyle = extractChartTitleTextStyle(title, theme);
@@ -20737,6 +20833,7 @@ function extractAxis(axis, theme) {
     majorGridlines: hasChild(axis, "c:majorGridlines"),
     ...majorGridlineLine ? { majorGridlineLine } : {},
     minorGridlines: hasChild(axis, "c:minorGridlines"),
+    ...minorGridlineLine ? { minorGridlineLine } : {},
     ...numFmt ? { numFmt } : {},
     majorTickMark: attr(child(axis, "c:majorTickMark"), "val"),
     minorTickMark: attr(child(axis, "c:minorTickMark"), "val"),
@@ -21246,13 +21343,13 @@ function parsePictureEffects(pic, theme) {
     effects.sharpenSoften = {
       amount,
       cssBlur: softenBlurRadius(amount),
+      svgSharpen: sharpenFilterStrength(amount),
       unsupportedCss: amount == null || amount >= 0 ? true : void 0
     };
   }
   if (hasDescendant(pic, "a14:backgroundRemoval")) {
-    effects.backgroundRemoval = {
-      unsupportedCss: true
-    };
+    const backgroundRemoval = findFirst(pic, "a14:backgroundRemoval");
+    effects.backgroundRemoval = parseBackgroundRemoval(backgroundRemoval);
   }
   const duotone = findFirst(pic, "a:duotone");
   if (duotone) {
@@ -21285,6 +21382,33 @@ function parseBrightnessContrast(source) {
     cssContrast: contrast != null ? fixedPercentageToCssRatio(contrast) : void 0
   };
 }
+function parseBackgroundRemoval(source) {
+  const foregroundMarks = parseBackgroundRemovalMarks(source, "a14:foregroundMark");
+  const backgroundMarks = parseBackgroundRemovalMarks(source, "a14:backgroundMark");
+  return {
+    top: numericAttr2(source, "t"),
+    bottom: numericAttr2(source, "b"),
+    left: numericAttr2(source, "l"),
+    right: numericAttr2(source, "r"),
+    foregroundMarks: foregroundMarks.length > 0 ? foregroundMarks : void 0,
+    backgroundMarks: backgroundMarks.length > 0 ? backgroundMarks : void 0,
+    unsupportedCss: true
+  };
+}
+function parseBackgroundRemovalMarks(source, key) {
+  const current = node(source);
+  if (!current) return [];
+  return asArray(current[key]).flatMap((item) => {
+    const mark = {
+      x1: numericAttr2(item, "x1"),
+      y1: numericAttr2(item, "y1"),
+      x2: numericAttr2(item, "x2"),
+      y2: numericAttr2(item, "y2")
+    };
+    const entries = Object.entries(mark).filter(([, value]) => value != null);
+    return entries.length > 0 ? [Object.fromEntries(entries)] : [];
+  });
+}
 function hasDescendant(value, key) {
   const current = node(value);
   if (!current) return false;
@@ -21304,6 +21428,10 @@ function fixedPercentageToCssRatio(value) {
 function softenBlurRadius(amount) {
   if (amount == null || amount >= 0) return void 0;
   return Number(Math.min(6, Math.abs(amount) / 25e3).toFixed(4));
+}
+function sharpenFilterStrength(amount) {
+  if (amount == null || amount <= 0) return void 0;
+  return Number(Math.min(1, amount / 1e5).toFixed(4));
 }
 function collectPictureEffectOrder(value, order = []) {
   const current = node(value);
@@ -21653,6 +21781,7 @@ function collectModel3dAssets(choice, context, rels, index) {
   const mediaType = extensionOf(rel.resolvedPath);
   const modelAssetId = `${context.slideId}-model3d-${String(index).padStart(3, "0")}`;
   const rasterRelationshipId = attr(findFirst(choice, "am3d:blip"), "r:embed");
+  const alternateContentChoiceRequires = attr(choice, "Requires");
   context.assets.push({
     id: modelAssetId,
     sourcePath: rel.resolvedPath,
@@ -21662,7 +21791,8 @@ function collectModel3dAssets(choice, context, rels, index) {
       relationshipId: relId,
       mediaType,
       description: attr(findFirst(choice, "p:cNvPr"), "descr"),
-      rasterRelationshipId
+      rasterRelationshipId,
+      alternateContentChoiceRequires
     }
   });
   const rasterRel = rasterRelationshipId ? rels.get(rasterRelationshipId) : void 0;
@@ -21700,16 +21830,18 @@ function parseModel3dFallback(frame, context) {
     modelMediaType: modelAsset?.metadata?.mediaType,
     modelRelationshipId,
     rasterRelationshipId,
+    alternateContentChoiceRequires: modelAsset?.metadata?.alternateContentChoiceRequires,
     objectName: attr(findFirst(frame, "p:cNvPr"), "name"),
-    modelScene: modelSceneMetadata(model)
+    modelScene: modelSceneMetadata(model, context.theme)
   };
 }
-function modelSceneMetadata(model) {
+function modelSceneMetadata(model, theme = { colors: {} }) {
   const scene = {
     camera: modelCamera(model),
     transform: modelTransform(model),
     viewportSize: numberAttr6(findFirst(model, "am3d:objViewport"), "viewportSz"),
-    lighting: modelLighting(model)
+    lighting: modelLighting(model, theme),
+    rasterRenderer: modelRasterRenderer(model)
   };
   const defined = Object.fromEntries(Object.entries(scene).filter(([, value]) => value != null));
   return Object.keys(defined).length > 0 ? defined : void 0;
@@ -21745,11 +21877,12 @@ function modelTransform(model) {
     scale: nonEmptyObject(parsed.scale)
   });
 }
-function modelLighting(model) {
+function modelLighting(model, theme) {
   const ambientLight = findFirst(model, "am3d:ambientLight");
   const pointLights = [];
   for (const light of asArray(node(model)?.["am3d:ptLight"])) {
     const parsed = nonEmptyObject({
+      color: parseColorInfo(findFirst(light, "am3d:clr"), theme),
       radius: numberAttr6(light, "rad"),
       intensity: ratioAttrs(findFirst(light, "am3d:intensity")),
       position: vectorAttrs(findFirst(light, "am3d:pos"), ["x", "y", "z"])
@@ -21758,10 +21891,19 @@ function modelLighting(model) {
   }
   return nonEmptyObject({
     ambient: ambientLight ? nonEmptyObject({
+      color: parseColorInfo(findFirst(ambientLight, "am3d:clr"), theme),
       illuminance: ratioAttrs(findFirst(ambientLight, "am3d:illuminance"))
     }) : void 0,
     pointLightCount: pointLights.length > 0 ? pointLights.length : void 0,
     pointLights: pointLights.length > 0 ? pointLights : void 0
+  });
+}
+function modelRasterRenderer(model) {
+  const raster = findFirst(model, "am3d:raster");
+  if (!raster) return void 0;
+  return nonEmptyObject({
+    name: attr(raster, "rName"),
+    version: attr(raster, "rVer")
   });
 }
 function vectorAttrs(source, names) {
@@ -21791,6 +21933,7 @@ function parseDiagramDataModel(dataModel, sourcePath) {
   const points = findAll(dataModel, "dgm:pt").map(parsePoint);
   const connections = findAll(dataModel, "dgm:cxn").map(parseConnection);
   const styleTypes = diagramStyleTypes(dataModel);
+  const extensions = diagramDataModelExtensions(dataModel);
   if (points.length === 0 && connections.length === 0) return void 0;
   return {
     sourcePath,
@@ -21799,6 +21942,7 @@ function parseDiagramDataModel(dataModel, sourcePath) {
     ...styleTypes,
     points,
     connections,
+    ...extensions.length > 0 ? { extensions } : {},
     graphMetrics: diagramGraphMetrics(points, connections)
   };
 }
@@ -21832,7 +21976,16 @@ function diagramGraphMetrics(points, connections) {
     missingSourceCount,
     missingDestinationCount,
     maxOutgoingConnections: maxCount(outgoing),
-    maxIncomingConnections: maxCount(incoming)
+    maxIncomingConnections: maxCount(incoming),
+    presentationPointCount: points.filter((point8) => point8.type === "pres" || hasPresentationPointMetadata(point8)).length,
+    presentationConnectionCount: connections.filter((connection) => isPresentationConnection(connection)).length,
+    presentationNames: uniqueSorted(points.map((point8) => point8.presName)),
+    presentationStyleLabels: uniqueSorted(points.map((point8) => point8.presStyleLabel)),
+    presentationLayoutVarCounts: countBy(points.flatMap((point8) => Object.keys(point8.presLayoutVars ?? {}))),
+    placeholderPointCount: points.filter(hasPlaceholderMetadata).length,
+    placeholderTexts: uniqueSorted(points.map((point8) => point8.placeholderText)),
+    transitionConnectionPointCount: points.filter(hasTransitionConnectionMetadata).length,
+    transitionConnectionIds: uniqueSorted(points.map((point8) => point8.connectionId))
   };
 }
 function countBy(values) {
@@ -21846,14 +21999,28 @@ function maxCount(values) {
 }
 function parsePoint(point8) {
   const prSet = child(point8, "dgm:prSet");
+  const placeholderRaw = attr(prSet, "phldr");
   return compact({
     modelId: attr(point8, "modelId"),
     type: attr(point8, "type"),
+    connectionId: attr(point8, "cxnId"),
     text: pointText(point8),
+    placeholder: placeholderRaw == null ? void 0 : placeholderRaw === "1",
+    placeholderRaw,
+    placeholderText: attr(prSet, "phldrT"),
     presAssocId: attr(prSet, "presAssocID"),
     presName: attr(prSet, "presName"),
-    presStyleLabel: attr(prSet, "presStyleLbl")
+    presStyleLabel: attr(prSet, "presStyleLbl"),
+    presStyleIndex: attr(prSet, "presStyleIdx"),
+    presStyleCount: attr(prSet, "presStyleCnt"),
+    presLayoutVars: parsePresentationLayoutVars(child(prSet, "dgm:presLayoutVars"))
   });
+}
+function hasPlaceholderMetadata(point8) {
+  return point8.placeholder != null || point8.placeholderText != null;
+}
+function hasTransitionConnectionMetadata(point8) {
+  return point8.connectionId != null;
 }
 function parseConnection(connection) {
   return compact({
@@ -21862,8 +22029,35 @@ function parseConnection(connection) {
     sourceId: attr(connection, "srcId"),
     destinationId: attr(connection, "destId"),
     sourceOrder: attr(connection, "srcOrd"),
-    destinationOrder: attr(connection, "destOrd")
+    destinationOrder: attr(connection, "destOrd"),
+    presId: attr(connection, "presId"),
+    parTransId: attr(connection, "parTransId"),
+    sibTransId: attr(connection, "sibTransId")
   });
+}
+function parsePresentationLayoutVars(value) {
+  const result = compact({
+    bulletEnabled: attr(child(value, "dgm:bulletEnabled"), "val"),
+    resizeHandles: attr(child(value, "dgm:resizeHandles"), "val"),
+    dir: hasChildKey(value, "dgm:dir") ? true : void 0,
+    chMax: attr(child(value, "dgm:chMax"), "val"),
+    chPref: attr(child(value, "dgm:chPref"), "val")
+  });
+  return Object.keys(result).length > 0 ? result : void 0;
+}
+function hasChildKey(value, key) {
+  return node(value)?.[key] != null;
+}
+function hasPresentationPointMetadata(point8) {
+  return Boolean(
+    point8.presAssocId || point8.presName || point8.presStyleLabel || point8.presStyleIndex || point8.presStyleCount || point8.presLayoutVars
+  );
+}
+function isPresentationConnection(connection) {
+  return connection.type === "presOf" || connection.type === "presParOf" || Boolean(connection.presId || connection.parTransId || connection.sibTransId);
+}
+function uniqueSorted(values) {
+  return [...new Set(values.filter((value) => !!value))].sort((left, right) => left.localeCompare(right));
 }
 function diagramStyleTypes(dataModel) {
   const docPoint = findAll(dataModel, "dgm:pt").find((point8) => attr(point8, "type") === "doc");
@@ -21872,6 +22066,18 @@ function diagramStyleTypes(dataModel) {
     layoutTypeId: attr(prSet, "loTypeId"),
     quickStyleTypeId: attr(prSet, "qsTypeId"),
     colorStyleTypeId: attr(prSet, "csTypeId")
+  });
+}
+function diagramDataModelExtensions(dataModel) {
+  return findAll(dataModel, "a:ext").flatMap((extension2) => {
+    const dataModelExt = child(extension2, "dsp:dataModelExt");
+    if (!dataModelExt) return [];
+    const result = compact({
+      relId: attr(dataModelExt, "relId"),
+      uri: attr(extension2, "uri"),
+      minVer: attr(dataModelExt, "minVer")
+    });
+    return Object.keys(result).length > 0 ? [result] : [];
   });
 }
 function pointText(point8) {
@@ -21926,20 +22132,59 @@ function parseDiagramShape(shape, index, theme) {
   if (!supportedDiagramShapeTypes.has(shapeType)) return void 0;
   const textBody = child(shape, "dsp:txBody");
   const rotation = rotationDegrees(spPr);
+  const styleRefs = parseDiagramStyleRefs(child(shape, "dsp:style"), theme);
+  const rawEffectList = valueAt(spPr, "a:effectLst");
+  const effectList = parseDiagramEffectList(spPr);
   const fill = parseFill(spPr, theme);
-  const line8 = parseLine(spPr, theme);
+  const line8 = parseDiagramLine(spPr, theme);
+  if (rawEffectList != null && !effectList) return void 0;
   if (!isSafeFill(fill) || !isSafeLine(line8)) return void 0;
   return {
     index,
     modelId: attr(shape, "modelId"),
     box,
-    textBox: rawBox(child(shape, "dsp:txXfrm")),
+    ...textBoxTransform(child(shape, "dsp:txXfrm")),
     ...rotation ? { rotation } : {},
     shapeType,
     geometry,
+    ...styleRefs.length > 0 ? { styleRefs } : {},
+    ...effectList ? { effectList } : {},
     fill,
     line: line8,
     ...textBody ? { text: parseTextBody(textBody, theme) } : {}
+  };
+}
+function textBoxTransform(source) {
+  const box = rawBox(source);
+  const rotationRaw = attr(source, "rot");
+  const rotation = rotationDegreesFromRaw(rotationRaw);
+  return {
+    ...box ? { textBox: box } : {},
+    ...rotation ? { textBoxRotation: rotation } : {},
+    ...rotationRaw ? { textBoxRotationRaw: rotationRaw } : {}
+  };
+}
+function parseDiagramEffectList(spPr) {
+  const effectList = valueAt(spPr, "a:effectLst");
+  if (effectList == null) return void 0;
+  return isEmptyElement(effectList) ? "empty" : void 0;
+}
+function parseDiagramStyleRefs(style, theme) {
+  return [
+    parseDiagramStyleRef(child(style, "a:lnRef"), "line", theme),
+    parseDiagramStyleRef(child(style, "a:fillRef"), "fill", theme),
+    parseDiagramStyleRef(child(style, "a:effectRef"), "effect", theme),
+    parseDiagramStyleRef(child(style, "a:fontRef"), "font", theme)
+  ].filter((item) => Boolean(item));
+}
+function parseDiagramStyleRef(source, type, theme) {
+  const idx = attr(source, "idx");
+  if (!idx) return void 0;
+  const color = parseColorInfo(source, theme);
+  return {
+    type,
+    idx,
+    ...color ? { color } : {}
   };
 }
 function isSafeFill(fill) {
@@ -21947,7 +22192,49 @@ function isSafeFill(fill) {
 }
 function isSafeLine(line8) {
   const fill = line8?.fill;
-  return line8 == null || fill == null || fill.type === "solid";
+  return line8 == null || line8.visible === false || fill == null || fill.type === "solid" || fill.type === "none";
+}
+function parseDiagramLine(source, theme) {
+  const line8 = child(source, "a:ln");
+  if (!line8) return void 0;
+  const widthRaw = attr(line8, "w");
+  const width = numberAttr7(line8, "w") ?? 9525;
+  const fill = parseFill(line8, theme);
+  const base = {
+    width: width / 12700,
+    widthRaw,
+    dash: attr(child(line8, "a:prstDash"), "val") ?? "solid",
+    cap: attr(line8, "cap"),
+    join: parseDiagramLineJoin(line8),
+    miterLimitRaw: attr(child(line8, "a:miter"), "lim"),
+    compound: attr(line8, "cmpd"),
+    align: attr(line8, "algn")
+  };
+  if (valueAt(line8, "a:noFill") != null) {
+    return {
+      ...base,
+      visible: false,
+      fill: { type: "none" }
+    };
+  }
+  const parsed = parseLine(source, theme) ?? {};
+  return {
+    ...parsed,
+    ...base,
+    visible: true,
+    fill
+  };
+}
+function parseDiagramLineJoin(line8) {
+  if (valueAt(line8, "a:bevel") != null) return "bevel";
+  if (valueAt(line8, "a:miter") != null) return "miter";
+  if (valueAt(line8, "a:round") != null) return "round";
+  return void 0;
+}
+function isEmptyElement(value) {
+  if (value == null) return true;
+  if (typeof value !== "object" || Array.isArray(value)) return value === "";
+  return Object.keys(value).filter((key) => key !== "#text" && !key.startsWith("xmlns")).length === 0;
 }
 function rawBox(source) {
   if (!source) return void 0;
@@ -21977,7 +22264,10 @@ function numberAttr7(source, name) {
   return Number.isFinite(parsed) ? parsed : void 0;
 }
 function rotationDegrees(source) {
-  const raw = numberAttr7(child(source, "a:xfrm"), "rot");
+  return rotationDegreesFromRaw(attr(child(source, "a:xfrm"), "rot"));
+}
+function rotationDegreesFromRaw(value) {
+  const raw = value == null || value === "" ? void 0 : Number(value);
   return raw ? raw / 6e4 : void 0;
 }
 var supportedDiagramShapeTypes = /* @__PURE__ */ new Set(["rect", "ellipse", "rightArrow", "pie"]);
@@ -22003,7 +22293,7 @@ async function parseDiagramFallback(frame, context, rels, id, zIndex) {
   const dataPath = parts.find((part) => part.role === "data")?.sourcePath;
   const dataXml = dataPath && context.pkg.fileExists(dataPath) ? await context.pkg.readXml(dataPath) : void 0;
   const dataModel = dataXml && dataPath ? parseDiagramDataModel(dataXml, dataPath) : void 0;
-  const drawingRelId = diagramDrawingRelationshipId(dataXml);
+  const drawingRelId = diagramDrawingRelationshipId(dataModel, dataXml);
   if (!drawingRelId) return diagramFallback(context, id, uri, zIndex, parts, dataModel);
   const drawingRel = rels.get(drawingRelId);
   if (drawingRel) parts.push(diagramPart(id, "drawing", drawingRelId, drawingRel));
@@ -22058,8 +22348,8 @@ function diagramPart(ownerId, role, relationshipId, rel) {
     outputPath: `assets/diagrams/${ownerId}-${role}.xml`
   };
 }
-function diagramDrawingRelationshipId(dataXml) {
-  return attr(findFirst(dataXml, "dsp:dataModelExt"), "relId");
+function diagramDrawingRelationshipId(dataModel, dataXml) {
+  return dataModel?.extensions?.find((extension2) => extension2.relId)?.relId ?? attr(findFirst(dataXml, "dsp:dataModelExt"), "relId");
 }
 function diagramFrameSize(frame) {
   const xfrm = child(frame, "p:xfrm");
@@ -37989,8 +38279,17 @@ function asChartTextStyle(value) {
   const style = {
     fontFamily: asOptionalString2(source.fontFamily),
     fontFamilyLatin: asOptionalString2(source.fontFamilyLatin),
+    fontFamilyLatinRaw: asOptionalString2(source.fontFamilyLatinRaw),
+    fontFamilyLatinPanose: asOptionalString2(source.fontFamilyLatinPanose),
+    fontFamilyLatinCharset: asOptionalString2(source.fontFamilyLatinCharset),
     fontFamilyEastAsian: asOptionalString2(source.fontFamilyEastAsian),
+    fontFamilyEastAsianRaw: asOptionalString2(source.fontFamilyEastAsianRaw),
+    fontFamilyEastAsianPanose: asOptionalString2(source.fontFamilyEastAsianPanose),
+    fontFamilyEastAsianCharset: asOptionalString2(source.fontFamilyEastAsianCharset),
     fontFamilyComplexScript: asOptionalString2(source.fontFamilyComplexScript),
+    fontFamilyComplexScriptRaw: asOptionalString2(source.fontFamilyComplexScriptRaw),
+    fontFamilyComplexScriptPanose: asOptionalString2(source.fontFamilyComplexScriptPanose),
+    fontFamilyComplexScriptCharset: asOptionalString2(source.fontFamilyComplexScriptCharset),
     fontSize: asNumber2(source.fontSize),
     fontSizeRaw: asOptionalString2(source.fontSizeRaw),
     color: asOptionalString2(source.color),
@@ -38023,8 +38322,17 @@ function chartTextStyleDataAttributes(prefix, style) {
   return [
     attrString2(`data-${prefix}-font-family`, style.fontFamily),
     attrString2(`data-${prefix}-font-family-latin`, style.fontFamilyLatin),
+    attrString2(`data-${prefix}-font-family-latin-raw`, style.fontFamilyLatinRaw),
+    attrString2(`data-${prefix}-font-family-latin-panose`, style.fontFamilyLatinPanose),
+    attrString2(`data-${prefix}-font-family-latin-charset`, style.fontFamilyLatinCharset),
     attrString2(`data-${prefix}-font-family-east-asian`, style.fontFamilyEastAsian),
+    attrString2(`data-${prefix}-font-family-east-asian-raw`, style.fontFamilyEastAsianRaw),
+    attrString2(`data-${prefix}-font-family-east-asian-panose`, style.fontFamilyEastAsianPanose),
+    attrString2(`data-${prefix}-font-family-east-asian-charset`, style.fontFamilyEastAsianCharset),
     attrString2(`data-${prefix}-font-family-complex-script`, style.fontFamilyComplexScript),
+    attrString2(`data-${prefix}-font-family-complex-script-raw`, style.fontFamilyComplexScriptRaw),
+    attrString2(`data-${prefix}-font-family-complex-script-panose`, style.fontFamilyComplexScriptPanose),
+    attrString2(`data-${prefix}-font-family-complex-script-charset`, style.fontFamilyComplexScriptCharset),
     attrString2(`data-${prefix}-font-size`, style.fontSize == null ? void 0 : String(style.fontSize)),
     attrString2(`data-${prefix}-font-size-raw`, style.fontSizeRaw),
     attrString2(`data-${prefix}-color`, style.color),
@@ -38725,15 +39033,21 @@ function chartStyleOverrideDataAttributes(styleOverride) {
 function chartStyleDataAttributes(style) {
   if (!style) return [];
   const styleRefs = asChartStyleRefs(style.refs);
+  const namespaces = asChartStyleNamespaces(style.namespaces);
+  const fontRefColors = asChartStyleFontRefColors(style.fontRefColors);
   const colorStyle = asChartStyle(style.colorStyle);
   const phClrSlots = asChartStyleSlots(style.phClrSlots);
   const areaDefaults = asChartStyleAreaDefaults(style.areaDefaults);
   const axisDefaults = asChartStyleAxisDefaults(style.axisDefaults);
   const textDefaults = asChartStyleTextDefaults(style.textDefaults);
+  const lineDefaults = asChartStyleLineDefaults(style.lineDefaults);
   const colorVariations = asChartStyleColorVariations(colorStyle?.variations);
   return [
     attrString6("data-chart-style-id", asOptionalString6(style.id)),
     attrString6("data-chart-style-source", asOptionalString6(style.sourcePath)),
+    attrString6("data-chart-style-namespace-count", namespaces ? String(namespaces.length) : void 0),
+    attrString6("data-chart-style-namespace-prefixes", namespaces ? namespaces.map((item) => item.prefix).join(",") : void 0),
+    attrString6("data-chart-style-namespace-uris", namespaces ? namespaces.map((item) => item.uri).join(",") : void 0),
     attrString6("data-chart-style-chart-area-mods", asStringList(style.chartAreaMods)?.join(",")),
     attrString6("data-chart-style-ref-count", styleRefs ? String(styleRefs.length) : void 0),
     attrString6("data-chart-style-ref-contexts", styleRefs ? unique3(styleRefs.map((ref) => ref.context)).join(",") : void 0),
@@ -38741,12 +39055,17 @@ function chartStyleDataAttributes(style) {
     attrString6("data-chart-style-ref-paths", styleRefs ? styleRefs.map((ref) => `${ref.context}:${ref.path ?? ""}`).filter((item) => !item.endsWith(":")).join(",") : void 0),
     attrString6("data-chart-style-ref-indexes", styleRefs ? styleRefs.map((ref) => `${ref.context}:${ref.type}:${ref.idx ?? ""}`).filter((item) => !item.endsWith(":")).join(",") : void 0),
     attrString6("data-chart-style-ref-style-colors", styleRefs ? styleRefs.map((ref) => `${ref.context}:${ref.type}:${ref.styleClr ?? ""}`).filter((item) => !item.endsWith(":")).join(",") : void 0),
+    ...chartStyleFontRefColorDataAttributes(fontRefColors),
     attrString6("data-chart-style-area-default-count", areaDefaults ? String(areaDefaults.length) : void 0),
     attrString6("data-chart-style-area-default-contexts", areaDefaults ? areaDefaults.map((item) => item.context).join(",") : void 0),
     attrString6("data-chart-style-area-default-mod-contexts", areaDefaults ? areaDefaults.filter((item) => item.hasMods).map((item) => item.context).join(",") : void 0),
     attrString6("data-chart-style-axis-default-count", axisDefaults ? String(axisDefaults.length) : void 0),
     attrString6("data-chart-style-axis-default-types", axisDefaults ? axisDefaults.map((axis) => axis.type).join(",") : void 0),
     attrString6("data-chart-style-axis-default-font-refs", axisDefaults ? axisDefaults.map((axis) => `${axis.type}:${axis.fontRefIdx ?? ""}`).filter((item) => !item.endsWith(":")).join(",") : void 0),
+    attrString6("data-chart-style-axis-default-font-ref-color", axisDefaults ? axisDefaults.map((axis) => `${axis.type}:${axis.fontRefColor?.color ?? ""}`).filter((item) => !item.endsWith(":")).join(",") : void 0),
+    attrString6("data-chart-style-axis-default-font-ref-color-source", axisDefaults ? axisDefaults.map((axis) => `${axis.type}:${axis.fontRefColor?.source ?? ""}`).filter((item) => !item.endsWith(":")).join(",") : void 0),
+    attrString6("data-chart-style-axis-default-font-ref-color-scheme", axisDefaults ? axisDefaults.map((axis) => `${axis.type}:${axis.fontRefColor?.scheme ?? ""}`).filter((item) => !item.endsWith(":")).join(",") : void 0),
+    attrString6("data-chart-style-axis-default-font-ref-color-resolved", axisDefaults ? axisDefaults.map((axis) => `${axis.type}:${axis.fontRefColor?.resolvedColor ?? ""}`).filter((item) => !item.endsWith(":")).join(",") : void 0),
     attrString6("data-chart-style-axis-default-line-types", axisDefaults ? axisDefaults.filter((axis) => axis.hasLine).map((axis) => axis.type).join(",") : void 0),
     attrString6("data-chart-style-axis-default-font-size", axisDefaults ? axisDefaults.map((axis) => `${axis.type}:${axis.fontSize ?? ""}`).filter((item) => !item.endsWith(":")).join(",") : void 0),
     attrString6("data-chart-style-axis-default-font-size-raw", axisDefaults ? axisDefaults.map((axis) => `${axis.type}:${axis.fontSizeRaw ?? ""}`).filter((item) => !item.endsWith(":")).join(",") : void 0),
@@ -38766,10 +39085,19 @@ function chartStyleDataAttributes(style) {
     attrString6("data-chart-style-marker-line-cap", asOptionalString6(style.markerLineDefault?.cap)),
     attrString6("data-chart-style-marker-line-dash", asOptionalString6(style.markerLineDefault?.dash)),
     attrString6("data-chart-style-marker-line-join", asOptionalString6(style.markerLineDefault?.join)),
+    ...chartStyleSingleLineDefaultDataAttributes("chart-style-trendline-line", asChartStyleLineDefault(style.trendlineLineDefault)),
+    ...chartStyleLineDefaultDataAttributes(lineDefaults),
     ...chartFrameStyleDataAttributes("chart-style-data-label-callout-frame", style.dataLabelCalloutFrame),
+    ...chartFrameStyleDataAttributes("chart-style-data-table-frame", style.dataTableFrame),
+    ...chartFrameStyleDataAttributes("chart-style-up-bar-frame", style.upDownBarDefaults?.up),
+    ...chartFrameStyleDataAttributes("chart-style-down-bar-frame", style.upDownBarDefaults?.down),
     attrString6("data-chart-style-text-default-count", textDefaults ? String(textDefaults.length) : void 0),
     attrString6("data-chart-style-text-default-contexts", textDefaults ? textDefaults.map((item) => item.context).join(",") : void 0),
     attrString6("data-chart-style-text-default-font-refs", textDefaults ? textDefaults.map((item) => `${item.context}:${item.fontRefIdx ?? ""}`).filter((item) => !item.endsWith(":")).join(",") : void 0),
+    attrString6("data-chart-style-text-default-font-ref-color", textDefaults ? textDefaults.map((item) => `${item.context}:${item.fontRefColor?.color ?? ""}`).filter((item) => !item.endsWith(":")).join(",") : void 0),
+    attrString6("data-chart-style-text-default-font-ref-color-source", textDefaults ? textDefaults.map((item) => `${item.context}:${item.fontRefColor?.source ?? ""}`).filter((item) => !item.endsWith(":")).join(",") : void 0),
+    attrString6("data-chart-style-text-default-font-ref-color-scheme", textDefaults ? textDefaults.map((item) => `${item.context}:${item.fontRefColor?.scheme ?? ""}`).filter((item) => !item.endsWith(":")).join(",") : void 0),
+    attrString6("data-chart-style-text-default-font-ref-color-resolved", textDefaults ? textDefaults.map((item) => `${item.context}:${item.fontRefColor?.resolvedColor ?? ""}`).filter((item) => !item.endsWith(":")).join(",") : void 0),
     attrString6("data-chart-style-text-default-font-size", textDefaults ? textDefaults.map((item) => `${item.context}:${item.fontSize ?? ""}`).filter((item) => !item.endsWith(":")).join(",") : void 0),
     attrString6("data-chart-style-text-default-font-size-raw", textDefaults ? textDefaults.map((item) => `${item.context}:${item.fontSizeRaw ?? ""}`).filter((item) => !item.endsWith(":")).join(",") : void 0),
     attrString6("data-chart-style-text-default-bold", textDefaults ? textDefaults.map((item) => `${item.context}:${item.bold ?? ""}`).filter((item) => !item.endsWith(":")).join(",") : void 0),
@@ -38796,6 +39124,100 @@ function chartStyleDataAttributes(style) {
     attrString6("data-chart-color-style-variation-transforms", colorVariations ? JSON.stringify(colorVariations) : void 0)
   ].filter(Boolean);
 }
+function asChartStyleNamespaces(value) {
+  if (!Array.isArray(value)) return void 0;
+  const namespaces = value.flatMap((item) => {
+    if (item == null || typeof item !== "object" || Array.isArray(item)) return [];
+    const prefix = asOptionalString6(item.prefix);
+    const uri = asOptionalString6(item.uri);
+    return prefix && uri ? [{ prefix, uri }] : [];
+  });
+  return namespaces.length > 0 ? namespaces : void 0;
+}
+function asChartStyleLineDefaults(value) {
+  if (value == null || typeof value !== "object" || Array.isArray(value)) return void 0;
+  const defaults = Object.entries(value).flatMap(([key, raw]) => {
+    if (raw == null || typeof raw !== "object" || Array.isArray(raw)) return [];
+    const line8 = raw;
+    const parsed = {
+      context: key,
+      ...asOptionalBoolean4(line8.visible) != null ? { visible: asOptionalBoolean4(line8.visible) } : {},
+      ...asOptionalString6(line8.color) ? { color: asOptionalString6(line8.color) } : {},
+      ...asOptionalString6(line8.colorSource) ? { colorSource: asOptionalString6(line8.colorSource) } : {},
+      ...asOptionalString6(line8.colorScheme) ? { colorScheme: asOptionalString6(line8.colorScheme) } : {},
+      ...asOptionalString6(line8.colorResolved) ? { colorResolved: asOptionalString6(line8.colorResolved) } : {},
+      ...asOptionalString6(line8.widthRaw) ? { widthRaw: asOptionalString6(line8.widthRaw) } : {},
+      ...asNumber5(line8.width) != null ? { width: asNumber5(line8.width) } : {},
+      ...asOptionalString6(line8.cap) ? { cap: asOptionalString6(line8.cap) } : {},
+      ...asOptionalString6(line8.compound) ? { compound: asOptionalString6(line8.compound) } : {},
+      ...asOptionalString6(line8.align) ? { align: asOptionalString6(line8.align) } : {},
+      ...asOptionalString6(line8.dash) ? { dash: asOptionalString6(line8.dash) } : {},
+      ...asOptionalString6(line8.join) ? { join: asOptionalString6(line8.join) } : {}
+    };
+    return [parsed];
+  });
+  return defaults.length > 0 ? defaults : void 0;
+}
+function asChartStyleLineDefault(value) {
+  if (value == null || typeof value !== "object" || Array.isArray(value)) return void 0;
+  const line8 = value;
+  const parsed = {
+    context: "trendline",
+    ...asOptionalBoolean4(line8.visible) != null ? { visible: asOptionalBoolean4(line8.visible) } : {},
+    ...asOptionalString6(line8.color) ? { color: asOptionalString6(line8.color) } : {},
+    ...asOptionalString6(line8.colorSource) ? { colorSource: asOptionalString6(line8.colorSource) } : {},
+    ...asOptionalString6(line8.colorScheme) ? { colorScheme: asOptionalString6(line8.colorScheme) } : {},
+    ...asOptionalString6(line8.colorResolved) ? { colorResolved: asOptionalString6(line8.colorResolved) } : {},
+    ...asOptionalString6(line8.widthRaw) ? { widthRaw: asOptionalString6(line8.widthRaw) } : {},
+    ...asNumber5(line8.width) != null ? { width: asNumber5(line8.width) } : {},
+    ...asOptionalString6(line8.cap) ? { cap: asOptionalString6(line8.cap) } : {},
+    ...asOptionalString6(line8.compound) ? { compound: asOptionalString6(line8.compound) } : {},
+    ...asOptionalString6(line8.align) ? { align: asOptionalString6(line8.align) } : {},
+    ...asOptionalString6(line8.dash) ? { dash: asOptionalString6(line8.dash) } : {},
+    ...asOptionalString6(line8.join) ? { join: asOptionalString6(line8.join) } : {}
+  };
+  return Object.keys(parsed).length > 1 ? parsed : void 0;
+}
+function chartStyleSingleLineDefaultDataAttributes(prefix, line8) {
+  if (!line8) return [];
+  return [
+    attrString6(`data-${prefix}-visible`, boolString4(line8.visible)),
+    attrString6(`data-${prefix}-color`, line8.color),
+    attrString6(`data-${prefix}-color-source`, line8.colorSource),
+    attrString6(`data-${prefix}-color-scheme`, line8.colorScheme),
+    attrString6(`data-${prefix}-color-resolved`, line8.colorResolved),
+    attrString6(`data-${prefix}-width-raw`, line8.widthRaw),
+    attrString6(`data-${prefix}-width`, numberString3(line8.width)),
+    attrString6(`data-${prefix}-cap`, line8.cap),
+    attrString6(`data-${prefix}-compound`, line8.compound),
+    attrString6(`data-${prefix}-align`, line8.align),
+    attrString6(`data-${prefix}-dash`, line8.dash),
+    attrString6(`data-${prefix}-join`, line8.join)
+  ].filter(Boolean);
+}
+function chartStyleLineDefaultDataAttributes(defaults) {
+  if (!defaults || defaults.length === 0) return [];
+  const valueFor = (reader) => {
+    const values = defaults.map((item) => `${item.context}:${asOptionalString6(reader(item)) ?? ""}`).filter((item) => !item.endsWith(":"));
+    return values.length > 0 ? values.join(",") : void 0;
+  };
+  return [
+    attrString6("data-chart-style-line-default-count", String(defaults.length)),
+    attrString6("data-chart-style-line-default-contexts", defaults.map((item) => item.context).join(",")),
+    attrString6("data-chart-style-line-default-visible", valueFor((item) => item.visible)),
+    attrString6("data-chart-style-line-default-color", valueFor((item) => item.color)),
+    attrString6("data-chart-style-line-default-color-source", valueFor((item) => item.colorSource)),
+    attrString6("data-chart-style-line-default-color-scheme", valueFor((item) => item.colorScheme)),
+    attrString6("data-chart-style-line-default-color-resolved", valueFor((item) => item.colorResolved)),
+    attrString6("data-chart-style-line-default-width-raw", valueFor((item) => item.widthRaw)),
+    attrString6("data-chart-style-line-default-width", valueFor((item) => item.width)),
+    attrString6("data-chart-style-line-default-cap", valueFor((item) => item.cap)),
+    attrString6("data-chart-style-line-default-compound", valueFor((item) => item.compound)),
+    attrString6("data-chart-style-line-default-align", valueFor((item) => item.align)),
+    attrString6("data-chart-style-line-default-dash", valueFor((item) => item.dash)),
+    attrString6("data-chart-style-line-default-join", valueFor((item) => item.join))
+  ].filter(Boolean);
+}
 function asChartStyleAreaDefaults(value) {
   if (!Array.isArray(value)) return void 0;
   const defaults = value.flatMap((item) => {
@@ -38806,6 +39228,39 @@ function asChartStyleAreaDefaults(value) {
   });
   return defaults.length > 0 ? defaults : void 0;
 }
+function asChartStyleFontRefColors(value) {
+  if (!Array.isArray(value)) return void 0;
+  const colors = value.flatMap((item) => {
+    if (item == null || typeof item !== "object" || Array.isArray(item)) return [];
+    const source = item;
+    const context = asOptionalString6(source.context);
+    if (!context) return [];
+    return [{
+      context,
+      ...asOptionalString6(source.path) ? { path: asOptionalString6(source.path) } : {},
+      ...asOptionalString6(source.idx) ? { idx: asOptionalString6(source.idx) } : {},
+      ...asChartStyleColor(source.color) ? { color: asChartStyleColor(source.color) } : {}
+    }];
+  });
+  return colors.length > 0 ? colors : void 0;
+}
+function chartStyleFontRefColorDataAttributes(colors) {
+  if (!colors || colors.length === 0) return [];
+  const valueFor = (reader) => {
+    const values = colors.map((item) => `${item.context}:${asOptionalString6(reader(item)) ?? ""}`).filter((item) => !item.endsWith(":"));
+    return values.length > 0 ? values.join(",") : void 0;
+  };
+  return [
+    attrString6("data-chart-style-font-ref-color-count", String(colors.length)),
+    attrString6("data-chart-style-font-ref-color-contexts", colors.map((item) => item.context).join(",")),
+    attrString6("data-chart-style-font-ref-color-paths", valueFor((item) => item.path)),
+    attrString6("data-chart-style-font-ref-color-indexes", valueFor((item) => item.idx)),
+    attrString6("data-chart-style-font-ref-color", valueFor((item) => item.color?.color)),
+    attrString6("data-chart-style-font-ref-color-source", valueFor((item) => item.color?.source)),
+    attrString6("data-chart-style-font-ref-color-scheme", valueFor((item) => item.color?.scheme)),
+    attrString6("data-chart-style-font-ref-color-resolved", valueFor((item) => item.color?.resolvedColor))
+  ].filter(Boolean);
+}
 function asChartStyleTextDefaults(value) {
   if (!Array.isArray(value)) return void 0;
   const defaults = value.flatMap((item) => {
@@ -38813,16 +39268,29 @@ function asChartStyleTextDefaults(value) {
     const context = asOptionalString6(item.context);
     if (!context) return [];
     const fontRefIdx = asOptionalString6(item.fontRefIdx);
+    const fontRefColor = asChartStyleColor(item.fontRefColor);
     const runStyle = item.defaultRunStyle;
     const bodyPr = asChartStyleTextDefaultBodyPr(item.bodyPr);
     return [{
       context,
       ...fontRefIdx ? { fontRefIdx } : {},
+      ...fontRefColor ? { fontRefColor } : {},
       ...runMetricAttributes(runStyle),
       ...bodyPr ? { bodyPr } : {}
     }];
   });
   return defaults.length > 0 ? defaults : void 0;
+}
+function asChartStyleColor(value) {
+  if (value == null || typeof value !== "object" || Array.isArray(value)) return void 0;
+  const color = value;
+  const parsed = {
+    ...asOptionalString6(color.color) ? { color: asOptionalString6(color.color) } : {},
+    ...asOptionalString6(color.source) ? { source: asOptionalString6(color.source) } : {},
+    ...asOptionalString6(color.scheme) ? { scheme: asOptionalString6(color.scheme) } : {},
+    ...asOptionalString6(color.resolvedColor) ? { resolvedColor: asOptionalString6(color.resolvedColor) } : {}
+  };
+  return Object.keys(parsed).length > 0 ? parsed : void 0;
 }
 function chartStyleTextDefaultBodyPrDataAttributes(textDefaults) {
   const bodyDefaults = textDefaults?.filter((item) => item.bodyPr && Object.keys(item.bodyPr).length > 0);
@@ -38862,9 +39330,11 @@ function asChartStyleAxisDefaults(value) {
     const axis = source[type];
     if (axis == null || typeof axis !== "object" || Array.isArray(axis)) return [];
     const fontRefIdx = asOptionalString6(axis.fontRefIdx);
+    const fontRefColor = asChartStyleColor(axis.fontRefColor);
     return [{
       type,
       ...fontRefIdx ? { fontRefIdx } : {},
+      ...fontRefColor ? { fontRefColor } : {},
       ...runMetricAttributes(axis.defaultRunStyle),
       hasLine: axis.line != null
     }];
@@ -39455,6 +39925,9 @@ function renderChartAxisLine(axisName, axis, coords) {
   const attrs = [
     attrString7("data-axis", axisName),
     attrString7("stroke", line8?.color),
+    attrString7("data-line-color-source", line8?.colorSource),
+    attrString7("data-line-color-scheme", line8?.colorScheme),
+    attrString7("data-line-color-resolved", line8?.colorResolved),
     attrString7("stroke-width", width == null ? void 0 : round7(width)),
     attrString7("stroke-linecap", line8?.cap ? svgLineCap(line8.cap) : void 0),
     attrString7("data-line-compound", line8?.compound),
@@ -39477,6 +39950,7 @@ function renderVerticalMajorGridlines(margin, plotW, plotH, valueAxis, scale) {
 function renderVerticalMinorGridlines(margin, plotW, plotH, valueAxis, scale) {
   if (valueAxis?.minorGridlines !== true || valueAxis.visible === false) return "";
   const attrs = chartLineAttrs("value", valueAxis.minorGridlineLine);
+  if (!attrs) return "";
   const lines = minorTickValues(valueAxis, scale).map((value) => {
     const y = round7(margin.top + plotH - (value - scale.min) / scale.range * plotH);
     return `<line class="chart-gridline chart-gridline-minor"${attrs} data-value="${round7(value)}" x1="${margin.left}" y1="${y}" x2="${round7(margin.left + plotW)}" y2="${y}"></line>`;
@@ -39505,6 +39979,7 @@ function renderHorizontalMajorGridlines(margin, plotW, plotH, valueAxis, scale) 
 function renderHorizontalMinorGridlines(margin, plotW, plotH, valueAxis, scale) {
   if (valueAxis?.minorGridlines !== true || valueAxis.visible === false) return "";
   const attrs = chartLineAttrs("value", valueAxis.minorGridlineLine);
+  if (!attrs) return "";
   const lines = minorTickValues(valueAxis, scale).map((value) => {
     const x = round7(margin.left + (value - scale.min) / scale.range * plotW);
     return `<line class="chart-gridline chart-gridline-minor"${attrs} data-value="${round7(value)}" x1="${x}" y1="${margin.top}" x2="${x}" y2="${round7(margin.top + plotH)}"></line>`;
@@ -39654,6 +40129,9 @@ function chartLineAttrs(axisName, line8) {
   const attrs = [
     attrString7("data-axis", axisName),
     attrString7("stroke", line8?.color),
+    attrString7("data-line-color-source", line8?.colorSource),
+    attrString7("data-line-color-scheme", line8?.colorScheme),
+    attrString7("data-line-color-resolved", line8?.colorResolved),
     attrString7("stroke-width", width == null ? void 0 : round7(width)),
     attrString7("stroke-linecap", line8?.cap ? svgLineCap(line8.cap) : void 0),
     attrString7("data-line-compound", line8?.compound),
@@ -39732,16 +40210,31 @@ function seriesMetadataAttributes(item) {
     typeof item?.order === "number" ? ` data-series-order="${item.order}"` : "",
     item?.uniqueId ? ` data-series-unique-id="${escapeHtml(item.uniqueId)}"` : "",
     item?.uniqueIdExtUri ? ` data-series-unique-id-ext-uri="${escapeHtml(item.uniqueIdExtUri)}"` : "",
+    item?.uniqueIdExtNamespace ? ` data-series-unique-id-ext-namespace="${escapeHtml(item.uniqueIdExtNamespace)}"` : "",
     typeof item?.smooth === "boolean" ? ` data-series-smooth="${String(item.smooth)}"` : "",
     item?.sourceRefs?.name ? ` data-series-name-ref="${escapeHtml(item.sourceRefs.name)}"` : "",
     item?.sourceRefs?.categories ? ` data-series-category-ref="${escapeHtml(item.sourceRefs.categories)}"` : "",
     item?.sourceRefs?.values ? ` data-series-value-ref="${escapeHtml(item.sourceRefs.values)}"` : "",
     typeof item?.line?.visible === "boolean" ? ` data-series-line-visible="${String(item.line.visible)}"` : "",
+    ...seriesFillAttributes(item?.fill),
     ...seriesCacheAttributes("name", item?.nameCache),
     ...seriesCacheAttributes("category", item?.categoryCache),
     ...seriesCacheAttributes("value", item?.valueCache),
     item?.valueCache?.formatCode ? ` data-series-value-cache-format-code="${escapeHtml(item.valueCache.formatCode)}"` : ""
   ].join("");
+}
+function seriesFillAttributes(fill) {
+  if (!fill) return [];
+  const color = asOptionalString7(fill.color);
+  const source = asOptionalString7(fill.source);
+  const scheme = asOptionalString7(fill.scheme);
+  const resolvedColor = asOptionalString7(fill.resolvedColor);
+  return [
+    color ? ` data-series-fill-color="${escapeHtml(color)}"` : "",
+    source ? ` data-series-fill-source="${escapeHtml(source)}"` : "",
+    scheme ? ` data-series-fill-scheme="${escapeHtml(scheme)}"` : "",
+    resolvedColor ? ` data-series-fill-resolved="${escapeHtml(resolvedColor)}"` : ""
+  ];
 }
 function asSourceRefs(value) {
   if (value == null || typeof value !== "object" || Array.isArray(value)) return void 0;
@@ -39826,6 +40319,9 @@ function definedLineFields(line8) {
   return {
     ...line8.visible != null ? { visible: line8.visible } : {},
     ...line8.color != null ? { color: line8.color } : {},
+    ...line8.colorSource != null ? { colorSource: line8.colorSource } : {},
+    ...line8.colorScheme != null ? { colorScheme: line8.colorScheme } : {},
+    ...line8.colorResolved != null ? { colorResolved: line8.colorResolved } : {},
     ...line8.width != null ? { width: line8.width } : {},
     ...line8.cap != null ? { cap: line8.cap } : {},
     ...line8.compound != null ? { compound: line8.compound } : {},
@@ -39843,6 +40339,9 @@ function lineStyle(line8) {
   const style = {
     ...typeof line8.visible === "boolean" ? { visible: line8.visible } : {},
     ...typeof line8.color === "string" ? { color: line8.color } : {},
+    ...typeof line8.colorSource === "string" ? { colorSource: line8.colorSource } : {},
+    ...typeof line8.colorScheme === "string" ? { colorScheme: line8.colorScheme } : {},
+    ...typeof line8.colorResolved === "string" ? { colorResolved: line8.colorResolved } : {},
     ...typeof line8.width === "number" && Number.isFinite(line8.width) ? { width: line8.width } : {},
     ...typeof line8.cap === "string" ? { cap: line8.cap } : {},
     ...typeof line8.compound === "string" ? { compound: line8.compound } : {},
@@ -40286,6 +40785,7 @@ function asSeries(value) {
     order: asNumber8(item?.order),
     uniqueId: asOptionalString8(item?.uniqueId),
     uniqueIdExtUri: asOptionalString8(item?.uniqueIdExtUri),
+    uniqueIdExtNamespace: asOptionalString8(item?.uniqueIdExtNamespace),
     smooth: typeof item?.smooth === "boolean" ? item.smooth : void 0,
     sourceRefs: asSourceRefs(item?.sourceRefs),
     nameCache: asSeriesCache(item?.nameCache),
@@ -40453,13 +40953,16 @@ function asAxisLine2(value) {
   if (value == null || typeof value !== "object" || Array.isArray(value)) return void 0;
   const visible = typeof value.visible === "boolean" ? value.visible : void 0;
   const color = asHexColor(value.color);
+  const colorSource = asOptionalString8(value.colorSource);
+  const colorScheme = asOptionalString8(value.colorScheme);
+  const colorResolved = asHexColor(value.colorResolved);
   const width = asNumber8(value.width);
   const cap = asOptionalString8(value.cap);
   const compound = asOptionalString8(value.compound);
   const align = asOptionalString8(value.align);
   const join = asOptionalString8(value.join);
   const dash = asOptionalString8(value.dash);
-  return visible != null || color || width != null || cap || compound || align || join || dash ? { visible, color, width, cap, compound, align, join, dash } : void 0;
+  return visible != null || color || colorSource || colorScheme || colorResolved || width != null || cap || compound || align || join || dash ? { visible, color, colorSource, colorScheme, colorResolved, width, cap, compound, align, join, dash } : void 0;
 }
 function asRecord2(value) {
   return value != null && typeof value === "object" && !Array.isArray(value) ? value : void 0;
@@ -40578,6 +41081,18 @@ function asNumber8(value) {
 }
 function round9(value) {
   return Math.round(value * 100) / 100;
+}
+
+// src/render/renderElementOrder.ts
+function orderedElements(elements) {
+  return elements.map((element, index) => ({ element, index })).sort((left, right) => {
+    const leftZ = zIndexValue(left.element);
+    const rightZ = zIndexValue(right.element);
+    return leftZ === rightZ ? left.index - right.index : leftZ - rightZ;
+  }).map(({ element }) => element);
+}
+function zIndexValue(element) {
+  return Number.isFinite(element.zIndex) ? element.zIndex : 0;
 }
 
 // src/render/renderEffectFilterDefs.ts
@@ -42739,6 +43254,23 @@ function layerEffectsJson(items) {
 var cssFilterEffectNames = /* @__PURE__ */ new Set(["luminance", "saturation"]);
 var unsupportedCssEffectNames = /* @__PURE__ */ new Set(["colorTemperature", "sharpenSoften", "backgroundRemoval"]);
 
+// src/render/renderPictureEffectAttributes.ts
+function backgroundRemovalAttributePairs(effect, prefix = "data-background-removal") {
+  const foregroundMarks = Array.isArray(effect?.foregroundMarks) ? effect.foregroundMarks : [];
+  const backgroundMarks = Array.isArray(effect?.backgroundMarks) ? effect.backgroundMarks : [];
+  return [
+    [`${prefix}-top`, effect?.top],
+    [`${prefix}-right`, effect?.right],
+    [`${prefix}-bottom`, effect?.bottom],
+    [`${prefix}-left`, effect?.left],
+    [`${prefix}-foreground-mark-count`, foregroundMarks.length > 0 ? foregroundMarks.length : void 0],
+    [`${prefix}-background-mark-count`, backgroundMarks.length > 0 ? backgroundMarks.length : void 0],
+    [`${prefix}-foreground-marks`, foregroundMarks.length > 0 ? JSON.stringify(foregroundMarks) : void 0],
+    [`${prefix}-background-marks`, backgroundMarks.length > 0 ? JSON.stringify(backgroundMarks) : void 0],
+    [`${prefix}-unsupported-css`, effect?.unsupportedCss === true ? "true" : void 0]
+  ];
+}
+
 // src/render/renderPictureFilterDefs.ts
 function renderPictureFilterDefs(slide) {
   const filters = slide.elements.filter((element) => element.type === "image").flatMap((element) => renderDuotoneFilter(slide.id, element));
@@ -42791,8 +43323,8 @@ function component01(hex3) {
 }
 
 // src/render/renderPictureCss.ts
-function pictureFilterToCss(effects, slideId, element) {
-  const filters = pictureEffectOrder(effects).flatMap((name) => pictureEffectFilterToCss(name, effects, slideId, element));
+function pictureFilterToCss(effects, slideId, element, options = {}) {
+  const filters = pictureEffectOrder(effects).flatMap((name) => pictureEffectFilterToCss(name, effects, slideId, element, options));
   return filters.length > 0 ? filters.join(" ") : void 0;
 }
 function imageTileBackgroundImage(tile) {
@@ -42850,7 +43382,7 @@ function pictureEffectOrder(effects) {
   const fallback = ["grayscale", "luminance", "saturation", "colorTemperature", "sharpenSoften", "duotone", "outerShadow", "glow", "blur"];
   return [...order, ...fallback].filter((name, index, values) => values.indexOf(name) === index);
 }
-function pictureEffectFilterToCss(name, effects, slideId, element) {
+function pictureEffectFilterToCss(name, effects, slideId, element, options) {
   if (name === "grayscale" && effects?.grayscale?.enabled) return ["grayscale(1)"];
   if (name === "luminance") {
     return [
@@ -42865,6 +43397,7 @@ function pictureEffectFilterToCss(name, effects, slideId, element) {
   }
   if (name === "saturation" && effects?.saturation?.cssSaturation != null) return [`saturate(${cssNumber4(effects.saturation.cssSaturation)})`];
   if (name === "sharpenSoften" && effects?.sharpenSoften?.cssBlur != null) return [`blur(${cssNumber4(effects.sharpenSoften.cssBlur)}px)`];
+  if (name === "sharpenSoften" && effects?.sharpenSoften?.svgSharpen != null && options.sharpenFilterUrl) return [`url(#${options.sharpenFilterUrl})`];
   if (name === "outerShadow" && effects?.outerShadow) {
     const svgFilter = slideId && element ? centeredScaledShadowFilterUrl(slideId, element) : void 0;
     if (svgFilter) return [svgFilter];
@@ -42908,6 +43441,7 @@ function imageFillAttributes(fill, assetPrefix) {
   const saturation = effects.saturation;
   const colorTemperature = effects.colorTemperature;
   const sharpenSoften = effects.sharpenSoften;
+  const backgroundRemoval = effects.backgroundRemoval;
   const attrs = [
     fill.type ? ` data-fill-type="${escapeHtml(fill.type)}"` : void 0,
     fill.src ? ` data-fill-src="${escapeHtml(assetPrefix + fill.src)}"` : void 0,
@@ -42930,7 +43464,9 @@ function imageFillAttributes(fill, assetPrefix) {
     colorTemperature?.unsupportedCss === true ? ` data-fill-color-temperature-unsupported-css="true"` : void 0,
     sharpenSoften?.amount != null ? ` data-fill-sharpen-soften="${escapeHtml(String(sharpenSoften.amount))}"` : void 0,
     sharpenSoften?.cssBlur != null ? ` data-fill-sharpen-soften-css-blur="${escapeHtml(String(sharpenSoften.cssBlur))}"` : void 0,
+    sharpenSoften?.svgSharpen != null ? ` data-fill-sharpen-soften-svg-sharpen="${escapeHtml(String(sharpenSoften.svgSharpen))}"` : void 0,
     sharpenSoften?.unsupportedCss === true ? ` data-fill-sharpen-soften-unsupported-css="true"` : void 0,
+    ...attributePairsToStrings(backgroundRemovalAttributePairs(backgroundRemoval, "data-fill-background-removal")),
     Array.isArray(effects.effectOrder) ? ` data-fill-picture-effect-order="${escapeHtml(effects.effectOrder.join(" "))}"` : void 0,
     ...attributePairsToStrings(pictureEffectLayerAttributePairs(fill.effectLayerSources, assetPrefix, "data-fill-effect-layer"))
   ];
@@ -42941,9 +43477,12 @@ function attributePairsToStrings(pairs) {
 }
 function imagePatternDef(id, fill, assetPrefix) {
   const rect = imagePatternRect(fill.fillRect);
-  const filter = pictureFilterToCss(fill.effects);
+  const sharpenFilterId = sharpenSvgFilterId(id, fill.effects);
+  const filter = pictureFilterToCss(fill.effects, void 0, void 0, sharpenFilterId ? { sharpenFilterUrl: sharpenFilterId } : {});
   const style = filter ? ` style="filter: ${escapeHtml(filter)}"` : "";
-  return `        <pattern id="${escapeHtml(id)}" patternUnits="objectBoundingBox" patternContentUnits="objectBoundingBox" x="0" y="0" width="1" height="1">
+  const sharpenFilter = sharpenFilterId ? `${sharpenSvgFilterDef(sharpenFilterId, fill.effects)}
+` : "";
+  return `${sharpenFilter}        <pattern id="${escapeHtml(id)}" patternUnits="objectBoundingBox" patternContentUnits="objectBoundingBox" x="0" y="0" width="1" height="1">
           <image href="${escapeHtml(assetPrefix + String(fill.src))}" x="${formatPatternNumber(rect.x)}" y="${formatPatternNumber(rect.y)}" width="${formatPatternNumber(rect.width)}" height="${formatPatternNumber(rect.height)}" preserveAspectRatio="none"${style}></image>
         </pattern>`;
 }
@@ -42965,9 +43504,20 @@ function finitePercent(value) {
 function formatPatternNumber(value) {
   return Number(value.toFixed(6)).toString();
 }
+function sharpenSvgFilterId(patternId, effects) {
+  return typeof effects?.sharpenSoften?.svgSharpen === "number" ? `${patternId}-sharpen-filter` : void 0;
+}
+function sharpenSvgFilterDef(id, effects) {
+  const strength = Math.max(0, Math.min(1, Number(effects?.sharpenSoften?.svgSharpen ?? 0)));
+  const side = Number((-strength).toFixed(4));
+  const center = Number((1 + 4 * strength).toFixed(4));
+  return `        <filter id="${escapeHtml(id)}" color-interpolation-filters="sRGB">
+          <feConvolveMatrix order="3" preserveAlpha="true" edgeMode="duplicate" divisor="1" kernelMatrix="0 ${side} 0 ${side} ${center} ${side} 0 ${side} 0"></feConvolveMatrix>
+        </filter>`;
+}
 function hasPictureEffects(fill) {
   const effects = fill?.effects;
-  const metadataOnly = /* @__PURE__ */ new Set(["effectOrder", "luminance", "saturation", "colorTemperature", "sharpenSoften"]);
+  const metadataOnly = /* @__PURE__ */ new Set(["effectOrder", "luminance", "saturation", "colorTemperature", "sharpenSoften", "backgroundRemoval"]);
   const blocking = Object.keys(effects ?? {}).filter((key) => !metadataOnly.has(key));
   return blocking.length > 0;
 }
@@ -43033,7 +43583,7 @@ ${defsContent}
       </defs>
 ` : "";
   const className = `shape shape-vector shape-${escapeHtml(shapeType)}`;
-  return `    <svg class="${className}" data-element-id="${element.id}" data-role="${element.role}"${sourceShapeAttributes(element)}${geometryAttributes(element)}${shadowAttributes(element.effects?.outerShadow)}${imageFillAttributes(element.fill, assetPrefix)}${lineAttributes(line8)} viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
+  return `    <svg class="${className}" data-element-id="${element.id}" data-role="${element.role}"${sourceShapeAttributes(element)}${geometryAttributes(element)}${shadowAttributes(element.effects?.outerShadow)}${imageFillAttributes(element.fill, assetPrefix)}${svgImageFillMaskAttributes(element)}${lineAttributes(line8)} viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
 ${defs}      ${geometryElement(geometry, fill.value, stroke.attrs)}
     </svg>`;
 }
@@ -43325,6 +43875,11 @@ function geometryAttributes(element) {
   ];
   return attrs.filter(Boolean).join("");
 }
+function svgImageFillMaskAttributes(element) {
+  const fill = element.fill;
+  if (element.shapeType !== "custGeom" || fill?.type !== "image" || !canRenderShapeSvgImageFill(element)) return "";
+  return ` data-fill-mask-render-mode="customGeometrySvgPattern"`;
+}
 function sourceShapeAttributes(element) {
   return renderAttributes(sourceShapeAttributePairs(element));
 }
@@ -43501,14 +44056,19 @@ function tabStopsData(value) {
 
 // src/render/renderTextDirection.ts
 function effectiveTextDirection(direction, text) {
-  if (direction !== "rtl") return typeof direction === "string" ? direction : void 0;
-  if (text == null) return "rtl";
   const value = String(text ?? "");
-  if (isDirectionMetadataText(value)) return "rtl";
-  return hasStrongRtlText(value) ? "rtl" : "ltr";
+  if (typeof direction === "string") return "ltr";
+  if (isDirectionMetadataText(value)) return void 0;
+  return hasStrongRtlText(value) || hasCjkText(value) ? "ltr" : void 0;
+}
+function effectiveCssTextDirection(direction, text) {
+  return effectiveTextDirection(direction, text);
 }
 function hasStrongRtlText(text) {
   return /[\u0590-\u08ff\ufb1d-\ufdff\ufe70-\ufefc]/u.test(text);
+}
+function hasCjkText(text) {
+  return /[\u3040-\u30ff\u3400-\u9fff\uf900-\ufaff]/u.test(text);
 }
 function isDirectionMetadataText(text) {
   return text.replace(/[\s\u200b\u200c\u200d\ufeff]/gu, "").length === 0;
@@ -43578,7 +44138,7 @@ ${declarations.map((item) => `  ${item};`).join("\n")}
 function paragraphStyleDeclarations(style, bullet, text) {
   const tabStops = tabStopsData(style.tabStops);
   const tabStopsCount = tabStopCount(style.tabStops);
-  const direction = effectiveTextDirection(style.direction, text);
+  const direction = effectiveCssTextDirection(style.direction, text);
   const declarations = [
     ...textAlignDeclarations(style.textAlign),
     direction ? `direction: ${direction}` : void 0,
@@ -43756,7 +44316,7 @@ function runStyleDeclarationsForText(style, autoFit, text) {
   const fontSize = scaledTextFontSize(style.fontSize, autoFit);
   const decorationStyle = textDecorationStyleToCss(style);
   const textFill = textFillToCss(style.textFill);
-  const direction = effectiveTextDirection(style.direction, text);
+  const direction = effectiveCssTextDirection(style.direction, text);
   return [
     fontFamilyDeclaration(style),
     fontSize ? `font-size: ${fontSize}px` : void 0,
@@ -43888,7 +44448,7 @@ function textBoxDeclarations(element, effectFilter) {
     ...textBoxVerticalAlignDeclarations(bodyStyle),
     bodyStyle.columnCount && bodyStyle.columnCount > 1 ? `column-count: ${bodyStyle.columnCount}` : void 0,
     bodyStyle.columnGap ? `column-gap: ${bodyStyle.columnGap}` : void 0,
-    ...verticalTextDeclarations(bodyStyle.verticalText),
+    ...verticalTextDeclarations(element, bodyStyle.verticalText),
     ...overflowDeclarations(bodyStyle),
     bodyStyle.forceAntialias ? "-webkit-font-smoothing: antialiased" : void 0,
     typeof bodyStyle.textRotation === "number" ? "transform-origin: center center" : void 0,
@@ -43960,14 +44520,18 @@ function verticalAlignToFlexCss(value) {
   if (value === "b") return "flex-end";
   return "flex-start";
 }
-function verticalTextDeclarations(value) {
+function verticalTextDeclarations(element, value) {
   if (!value || value === "horz") return [];
+  if (!hasVerticalTextRoom(element)) return [];
   const textOrientation = value === "wordArtVert" || value === "wordArtVertRtl" || value === "eaVert" ? "upright" : "mixed";
   return [
     "writing-mode: vertical-rl",
     `text-orientation: ${textOrientation}`,
     `--ppt-vertical-text: ${value}`
   ];
+}
+function hasVerticalTextRoom(element) {
+  return element.box.h >= element.box.w;
 }
 function overflowDeclarations(bodyStyle) {
   const verticalOverflow = bodyStyle.verticalOverflow;
@@ -44075,22 +44639,17 @@ function nextFlipState(element, inheritedFlip) {
     seenV: inheritedFlip.seenV || flipV
   };
 }
+function textReadableFlipState(element, inheritedFlip) {
+  return element.type === "text" ? inheritedFlip : nextFlipState(element, inheritedFlip);
+}
 function transformDeclaration(element) {
   const bodyStyle = element.type === "text" ? element.text?.bodyStyle ?? {} : {};
+  const includeElementFlip = element.type !== "text";
   const transforms = [
     element.rotation ? `rotate(${element.rotation}deg)` : void 0,
     typeof bodyStyle.textRotation === "number" ? `rotate(${bodyStyle.textRotation}deg)` : void 0,
-    element.flipH ? "scaleX(-1)" : void 0,
-    element.flipV ? "scaleY(-1)" : void 0
-  ].filter(Boolean);
-  return transforms.length > 0 ? `transform: ${transforms.join(" ")}` : void 0;
-}
-function textReadableContentTransformDeclaration(element, inheritedFlip) {
-  if (element.type !== "text") return void 0;
-  const effectiveFlip = nextFlipState(element, inheritedFlip);
-  const transforms = [
-    effectiveFlip.h ? "scaleX(-1)" : void 0,
-    effectiveFlip.v ? "scaleY(-1)" : void 0
+    includeElementFlip && element.flipH ? "scaleX(-1)" : void 0,
+    includeElementFlip && element.flipV ? "scaleY(-1)" : void 0
   ].filter(Boolean);
   return transforms.length > 0 ? `transform: ${transforms.join(" ")}` : void 0;
 }
@@ -44128,6 +44687,8 @@ body {
   background: #ffffff;
   box-shadow: 0 10px 30px rgba(15, 23, 42, 0.12);
   isolation: isolate;
+  direction: ltr;
+  unicode-bidi: isolate;
 }
 
 .text {
@@ -44141,6 +44702,24 @@ body {
   display: contents;
 }
 
+.text[data-readable-flip-horizontal="true"] {
+  --ppt-readable-scale-x: -1;
+}
+
+.text[data-readable-flip-vertical="true"] {
+  --ppt-readable-scale-y: -1;
+}
+
+.text[data-readable-flip-horizontal="true"] .text-readable-content,
+.text[data-readable-flip-vertical="true"] .text-readable-content {
+  display: block;
+  width: 100%;
+  height: 100%;
+  box-sizing: border-box;
+  transform: scaleX(var(--ppt-readable-scale-x, 1)) scaleY(var(--ppt-readable-scale-y, 1));
+  transform-origin: center center;
+}
+
 .list {
   padding-left: 1.4em;
 }
@@ -44149,6 +44728,7 @@ body {
   display: block;
   position: relative;
   z-index: 1;
+  unicode-bidi: isolate;
 }
 
 .text-outline-gradient-run {
@@ -44365,7 +44945,7 @@ ${slides}
 }
 function renderSlideScopedCss(slide, assetPrefix = "") {
   const background = backgroundDeclarations(slide.background, assetPrefix).map((item) => `  ${item};`).join("\n");
-  const elements = slide.elements.map((element) => renderElementCss(slide.id, element)).join("\n");
+  const elements = orderedElements(slide.elements).map((element) => renderElementCss(slide.id, element)).join("\n");
   return `[data-slide-id="${slide.id}"] {
 ${background}
 }
@@ -44373,6 +44953,7 @@ ${background}
 ${elements}`;
 }
 function renderElementCss(slideId, element, inheritedFlip = noFlipState) {
+  const readableFlip = element.type === "text" ? textReadableFlipState(element, inheritedFlip) : void 0;
   const declarations = [
     "position: absolute",
     `left: ${element.box.x}px`,
@@ -44381,6 +44962,7 @@ function renderElementCss(slideId, element, inheritedFlip = noFlipState) {
     `height: ${element.box.h}px`,
     transformDeclaration(element),
     element.zIndex != null ? `z-index: ${element.zIndex}` : void 0,
+    ...textReadableFlipRootDeclarations(readableFlip),
     ...styleDeclarations(slideId, element)
   ].filter(Boolean);
   const elementCss = `[data-slide-id="${slideId}"] [data-element-id="${element.id}"] {
@@ -44390,20 +44972,30 @@ ${declarations.map((item) => `  ${item};`).join("\n")}
   const imageTileFlipCss = element.type === "image" ? renderImageTileFlipCss(slideId, element) : "";
   const shapeFillTileFlipCss = element.type === "shape" ? renderShapeFillTileFlipCss(slideId, element) : "";
   const textCss = element.type === "text" ? renderTextScopedCss(slideId, element) : "";
-  const textReadableCss = element.type === "text" ? renderTextReadableContentCss(slideId, element, inheritedFlip) : "";
+  const textReadableFlipCss = element.type === "text" ? renderTextReadableFlipCss(slideId, element, readableFlip) : "";
   const groupCss = element.type === "group" ? groupChildrenCss(slideId, element, inheritedFlip) : "";
-  return [elementCss, imageSourceCss, imageTileFlipCss, shapeFillTileFlipCss, textCss, textReadableCss, groupCss].filter(Boolean).join("\n\n");
+  return [elementCss, imageSourceCss, imageTileFlipCss, shapeFillTileFlipCss, textCss, textReadableFlipCss, groupCss].filter(Boolean).join("\n\n");
 }
-function renderTextReadableContentCss(slideId, element, inheritedFlip) {
-  const transform2 = textReadableContentTransformDeclaration(element, inheritedFlip);
-  if (!transform2) return "";
-  const declarations = [
+function textReadableFlipRootDeclarations(readableFlip) {
+  if (!readableFlip) return [];
+  return [
+    readableFlip.h ? "--ppt-readable-scale-x: -1" : void 0,
+    readableFlip.v ? "--ppt-readable-scale-y: -1" : void 0
+  ].filter(Boolean);
+}
+function renderTextReadableFlipCss(slideId, element, readableFlip) {
+  if (!readableFlip) return "";
+  if (!readableFlip.h && !readableFlip.v) return "";
+  const contentDeclarations = [
     "display: block",
-    transform2,
+    "width: 100%",
+    "height: 100%",
+    "box-sizing: border-box",
+    "transform: scaleX(var(--ppt-readable-scale-x, 1)) scaleY(var(--ppt-readable-scale-y, 1))",
     "transform-origin: center center"
   ];
   return `[data-slide-id="${slideId}"] [data-element-id="${element.id}"] .text-readable-content {
-${declarations.map((item) => `  ${item};`).join("\n")}
+${contentDeclarations.map((item) => `  ${item};`).join("\n")}
 }`;
 }
 function styleDeclarations(slideId, element) {
@@ -44476,7 +45068,7 @@ function groupChildrenCss(slideId, element, inheritedFlip) {
   const children2 = element.children;
   if (!Array.isArray(children2)) return "";
   const nextFlip = nextFlipState(element, inheritedFlip);
-  return children2.map((child2) => renderElementCss(slideId, child2, nextFlip)).filter(Boolean).join("\n\n");
+  return orderedElements(children2).map((child2) => renderElementCss(slideId, child2, nextFlip)).filter(Boolean).join("\n\n");
 }
 function connectorDeclarations(element) {
   const effects = element.effects;
@@ -44539,6 +45131,52 @@ function cssNumber10(value) {
   return Number(value.toFixed(4)).toString();
 }
 
+// src/render/renderTextBodyAttributes.ts
+function textBodyAttributePairs(bodyStyle) {
+  const autoFit = bodyStyle?.autoFit ?? {};
+  return [
+    ["data-text-fit", autoFit.type],
+    ["data-font-scale", autoFit.fontScale],
+    ["data-font-scale-raw", autoFit.fontScaleRaw],
+    ["data-line-space-reduction", autoFit.lineSpaceReduction],
+    ["data-line-space-reduction-raw", autoFit.lineSpaceReductionRaw],
+    ["data-anchor", bodyStyle?.verticalAlign],
+    ["data-anchor-ctr", booleanData2(bodyStyle?.anchorCenter)],
+    ["data-anchor-ctr-raw", bodyStyle?.anchorCenterRaw],
+    ["data-wrap", bodyStyle?.wrap],
+    ["data-vertical-overflow", bodyStyle?.verticalOverflow],
+    ["data-horizontal-overflow", bodyStyle?.horizontalOverflow],
+    ["data-inset-left", bodyStyle?.paddingLeft],
+    ["data-inset-left-raw", bodyStyle?.paddingLeftRaw],
+    ["data-inset-right", bodyStyle?.paddingRight],
+    ["data-inset-right-raw", bodyStyle?.paddingRightRaw],
+    ["data-inset-top", bodyStyle?.paddingTop],
+    ["data-inset-top-raw", bodyStyle?.paddingTopRaw],
+    ["data-inset-bottom", bodyStyle?.paddingBottom],
+    ["data-inset-bottom-raw", bodyStyle?.paddingBottomRaw],
+    ["data-column-count", bodyStyle?.columnCount],
+    ["data-column-gap", bodyStyle?.columnGap],
+    ["data-rtl-columns", booleanData2(bodyStyle?.rtlColumns)],
+    ["data-rtl-columns-raw", bodyStyle?.rtlColumnsRaw],
+    ["data-vertical-text", bodyStyle?.verticalText],
+    ["data-text-rotation", bodyStyle?.textRotation],
+    ["data-text-warp", bodyStyle?.textWarp],
+    ["data-text-warp-source", bodyStyle?.textWarpSource],
+    ["data-text-warp-adjustments", Array.isArray(bodyStyle?.textWarpAdjustments) ? JSON.stringify(bodyStyle.textWarpAdjustments) : void 0],
+    ["data-spacing-first-last-paragraph", booleanData2(bodyStyle?.spacingFirstLastParagraph)],
+    ["data-spacing-first-last-paragraph-raw", bodyStyle?.spacingFirstLastParagraphRaw],
+    ["data-compat-line-spacing", booleanData2(bodyStyle?.compatLineSpacing)],
+    ["data-compat-line-spacing-raw", bodyStyle?.compatLineSpacingRaw],
+    ["data-from-word-art", booleanData2(bodyStyle?.fromWordArt)],
+    ["data-from-word-art-raw", bodyStyle?.fromWordArtRaw],
+    ["data-force-antialias", booleanData2(bodyStyle?.forceAntialias)],
+    ["data-force-antialias-raw", bodyStyle?.forceAntialiasRaw]
+  ];
+}
+function booleanData2(value) {
+  return value === true ? "true" : value === false ? "false" : void 0;
+}
+
 // src/render/renderDiagramDrawing.ts
 function renderDiagramDrawing(value) {
   if (value == null || typeof value !== "object" || Array.isArray(value)) return "";
@@ -44569,10 +45207,15 @@ function renderDiagramShape(value) {
     `data-diagram-shape-index="${escapeHtml(shape.index ?? "")}"`,
     shape.modelId ? `data-diagram-model-id="${escapeHtml(shape.modelId)}"` : void 0,
     `data-shape-type="${escapeHtml(shapeType)}"`,
+    attrString8("data-diagram-text-box-rotation", shape.textBoxRotation),
+    attrString8("data-diagram-text-box-rotation-raw", shape.textBoxRotationRaw),
+    diagramGeometryAdjustmentsAttr(shape.geometry),
+    ...diagramStyleRefAttrs(shape.styleRefs),
+    attrString8("data-effect-list", shape.effectList),
     transformAttr(x, y, width, height, numberValue(shape.rotation))
   ].filter(Boolean).join(" ");
   const fill = fillValue(shape.fill);
-  const stroke = strokeAttrs(shape.line);
+  const stroke = strokeAttrs(shape.line, shape.box);
   const text = renderDiagramText(shape);
   return `      <g ${attrs}>
         <svg x="0" y="0" width="${formatNumber28(width)}" height="${formatNumber28(height)}" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
@@ -44604,10 +45247,93 @@ function renderDiagramText(shape) {
     weight ? `font-weight="${escapeHtml(weight)}"` : void 0,
     fontStyle ? `font-style="${fontStyle}"` : void 0,
     `text-anchor="middle"`,
-    `dominant-baseline="middle"`
+    `dominant-baseline="middle"`,
+    ...diagramTextMetadataAttrs(shape.text),
+    renderAttributes(textBodyAttributePairs(shape.text?.bodyStyle)).trim()
   ].filter(Boolean).join(" ");
   return `
         <text class="diagram-text" ${attrs}>${escapeHtml(text)}</text>`;
+}
+function diagramTextMetadataAttrs(text) {
+  if (text == null || typeof text !== "object" || Array.isArray(text)) return [];
+  const paragraphs = Array.isArray(text.paragraphs) ? text.paragraphs : [];
+  const runs = paragraphs.flatMap((paragraph) => Array.isArray(paragraph?.runs) ? paragraph.runs : []);
+  const visibleRuns = runs.filter((run) => String(run?.text ?? "").trim().length > 0);
+  const firstRun = visibleRuns[0] ?? runs[0] ?? {};
+  const runStyle = firstRun.style ?? {};
+  const firstParagraph = paragraphs.find((paragraph) => String(paragraph?.runs?.map((run) => run?.text ?? "").join("") ?? "").trim().length > 0) ?? paragraphs[0] ?? {};
+  const paragraphStyle = firstParagraph.style ?? {};
+  const bullet = firstParagraph.bullet ?? {};
+  const spacing = paragraphStyle.spacing ?? {};
+  return [
+    attrString8("data-diagram-text-paragraph-count", paragraphs.length > 0 ? paragraphs.length : void 0),
+    attrString8("data-diagram-text-paragraph-align", paragraphStyle.textAlign),
+    attrString8("data-diagram-text-paragraph-level", paragraphStyle.level),
+    attrString8("data-diagram-text-paragraph-level-raw", paragraphStyle.levelRaw),
+    attrString8("data-diagram-text-paragraph-margin-left", paragraphStyle.marginLeft),
+    attrString8("data-diagram-text-paragraph-margin-left-raw", paragraphStyle.marginLeftRaw),
+    attrString8("data-diagram-text-paragraph-margin-right", paragraphStyle.marginRight),
+    attrString8("data-diagram-text-paragraph-margin-right-raw", paragraphStyle.marginRightRaw),
+    attrString8("data-diagram-text-paragraph-indent", paragraphStyle.textIndent),
+    attrString8("data-diagram-text-paragraph-indent-raw", paragraphStyle.textIndentRaw),
+    attrString8("data-diagram-text-paragraph-tab-size", paragraphStyle.tabSize),
+    attrString8("data-diagram-text-paragraph-tab-size-raw", paragraphStyle.tabSizeRaw),
+    attrString8("data-diagram-text-paragraph-tab-size-source", paragraphStyle.tabSizeSource),
+    attrString8("data-diagram-text-paragraph-font-align", paragraphStyle.fontAlign),
+    attrString8("data-diagram-text-bullet-type", bullet.type),
+    attrString8("data-diagram-text-bullet-char", bullet.type === "bullet" ? bullet.char : void 0),
+    attrString8("data-diagram-text-number-format", bullet.type === "number" ? bullet.format : void 0),
+    attrString8("data-diagram-text-number-start", bullet.type === "number" ? bullet.startAt : void 0),
+    ...diagramSpacingAttrs("line-spacing", spacing.line),
+    ...diagramSpacingAttrs("space-before", spacing.before),
+    ...diagramSpacingAttrs("space-after", spacing.after),
+    attrString8("data-diagram-text-run-count", visibleRuns.length > 0 ? visibleRuns.length : void 0),
+    attrString8("data-diagram-text-run-langs", joinDefined(visibleRuns.map((run) => run?.style?.language))),
+    attrString8("data-diagram-text-run-alt-langs", joinDefined(visibleRuns.map((run) => run?.style?.alternateLanguage))),
+    attrString8("data-diagram-text-run-dirty", joinDefined(visibleRuns.map((run) => booleanData3(run?.style?.dirty)))),
+    attrString8("data-diagram-text-font-size", runStyle.fontSize),
+    attrString8("data-diagram-text-font-size-raw", runStyle.fontSizeRaw),
+    attrString8("data-diagram-text-kerning", runStyle.kerning),
+    attrString8("data-diagram-text-kerning-raw", runStyle.kerningRaw)
+  ].filter((item) => Boolean(item));
+}
+function diagramSpacingAttrs(name, spacing) {
+  return [
+    attrString8(`data-diagram-text-${name}-type`, spacing?.type),
+    attrString8(`data-diagram-text-${name}-raw`, spacing?.rawValue),
+    attrString8(`data-diagram-text-${name}-value`, spacing?.value),
+    attrString8(`data-diagram-text-${name}-css`, spacing?.cssValue)
+  ].filter((item) => Boolean(item));
+}
+function joinDefined(values) {
+  const filtered = values.filter((value) => value != null && value !== "");
+  return filtered.length > 0 ? filtered.join(",") : void 0;
+}
+function diagramGeometryAdjustmentsAttr(geometry) {
+  if (geometry == null || typeof geometry !== "object" || Array.isArray(geometry)) return void 0;
+  const adjustments = geometry.adjustments;
+  return Array.isArray(adjustments) && adjustments.length > 0 ? `data-geometry-adjustments="${escapeHtml(JSON.stringify(adjustments))}"` : void 0;
+}
+function diagramStyleRefAttrs(styleRefs) {
+  if (!Array.isArray(styleRefs) || styleRefs.length === 0) return [];
+  return [
+    attrString8("data-style-refs", JSON.stringify(styleRefs)),
+    ...styleRefs.flatMap((ref) => diagramStyleRefAttrList(ref))
+  ].filter((item) => Boolean(item));
+}
+function diagramStyleRefAttrList(ref) {
+  if (ref == null || typeof ref !== "object" || Array.isArray(ref)) return [];
+  const current = ref;
+  const type = String(current.type ?? "");
+  if (!["line", "fill", "effect", "font"].includes(type)) return [];
+  const color = current.color ?? {};
+  return [
+    attrString8(`data-style-ref-${type}-idx`, current.idx),
+    attrString8(`data-style-ref-${type}-color`, color.color),
+    attrString8(`data-style-ref-${type}-color-source`, color.source),
+    attrString8(`data-style-ref-${type}-color-scheme`, color.scheme),
+    attrString8(`data-style-ref-${type}-color-resolved`, color.resolvedColor)
+  ].filter((item) => Boolean(item));
 }
 function geometryElement2(geometry, fill, stroke) {
   if (geometry.tag === "compound") {
@@ -44630,15 +45356,59 @@ function fillValue(fill) {
   if (current.type === "none") return "none";
   return typeof current.color === "string" ? escapeHtml(current.color) : "none";
 }
-function strokeAttrs(line8) {
+function strokeAttrs(line8, box) {
   if (line8 == null || typeof line8 !== "object" || Array.isArray(line8)) return `stroke="none"`;
   const current = line8;
-  const width = (numberValue(current.width) ?? 0.75) * 12700;
+  const width = normalizedStrokeWidth(current, box);
+  const dash = svgDashArray(current.dash, width);
+  if (current.visible === false) {
+    return [
+      `stroke="none"`,
+      ...lineDataAttrs(current, width, dash)
+    ].join(" ");
+  }
   return [
-    `stroke="${escapeHtml(current.color ?? "#111827")}"`,
+    `stroke="${escapeHtml(current.color ?? current.fill?.color ?? "#111827")}"`,
     `stroke-width="${formatNumber28(width)}"`,
-    `stroke-linejoin="round"`
-  ].join(" ");
+    `stroke-linecap="${svgLineCap(current.cap)}"`,
+    `stroke-linejoin="${svgLineJoin(current.join)}"`,
+    dash ? `stroke-dasharray="${escapeHtml(dash)}"` : void 0,
+    ...lineDataAttrs(current, width, dash)
+  ].filter(Boolean).join(" ");
+}
+function lineDataAttrs(line8, normalizedWidth, dash) {
+  const fill = line8.fill ?? {};
+  return [
+    attrString8("data-line-visible", line8.visible === false ? "false" : line8.visible === true ? "true" : void 0),
+    attrString8("data-line-width", line8.width),
+    attrString8("data-line-width-raw", line8.widthRaw),
+    attrString8("data-line-normalized-width", formatNumber28(normalizedWidth)),
+    attrString8("data-line-cap", line8.cap),
+    attrString8("data-line-compound", line8.compound),
+    attrString8("data-line-align", line8.align),
+    attrString8("data-line-dash", line8.dash),
+    attrString8("data-line-dasharray", dash),
+    attrString8("data-line-join", line8.join),
+    attrString8("data-line-miter-limit-raw", line8.miterLimitRaw),
+    attrString8("data-line-fill-type", fill.type),
+    attrString8("data-line-color-source", fill.colorSource),
+    attrString8("data-line-color-scheme", fill.colorScheme),
+    attrString8("data-line-color-resolved", fill.colorResolved)
+  ].filter((item) => Boolean(item));
+}
+function normalizedStrokeWidth(line8, box) {
+  const raw = numberValue(line8.widthRaw) ?? (numberValue(line8.width) ?? 0.75) * 12700;
+  const width = numberValue(box?.w);
+  const height = numberValue(box?.h);
+  const basis = Math.min(width && width > 0 ? width : raw, height && height > 0 ? height : raw);
+  return basis > 0 ? raw / basis * 100 : 0.75;
+}
+function attrString8(name, value) {
+  if (value == null || value === false || value === "") return void 0;
+  return `${name}="${escapeHtml(value)}"`;
+}
+function booleanData3(value) {
+  return value === true ? "true" : value === false ? "false" : void 0;
 }
 function transformAttr(x, y, width, height, rotation) {
   const translate = `translate(${formatNumber28(x)} ${formatNumber28(y)})`;
@@ -44679,6 +45449,7 @@ function renderFallback(element, assetPrefix) {
     ["data-model-media-type", fallback.modelMediaType],
     ["data-model-relationship-id", fallback.modelRelationshipId],
     ["data-raster-relationship-id", fallback.rasterRelationshipId],
+    ["data-model-alternate-content-choice-requires", fallback.alternateContentChoiceRequires],
     ["data-model-scene", fallback.modelScene ? JSON.stringify(fallback.modelScene) : void 0],
     ["data-diagram-uri", fallback.diagramUri],
     ["data-diagram-relationship-ids", fallback.sourceRelationshipIds],
@@ -44691,6 +45462,19 @@ function renderFallback(element, assetPrefix) {
     ["data-diagram-layout-type-id", fallback.diagramDataModel?.layoutTypeId],
     ["data-diagram-quick-style-type-id", fallback.diagramDataModel?.quickStyleTypeId],
     ["data-diagram-color-style-type-id", fallback.diagramDataModel?.colorStyleTypeId],
+    ["data-diagram-data-model-extension-count", fallback.diagramDataModel?.extensions?.length],
+    ["data-diagram-data-model-extension-relationship-ids", spaceSeparated(fallback.diagramDataModel?.extensions?.map((extension2) => extension2.relId))],
+    ["data-diagram-data-model-extension-uris", jsonData(fallback.diagramDataModel?.extensions?.map((extension2) => extension2.uri).filter(Boolean))],
+    ["data-diagram-data-model-extension-min-versions", jsonData(fallback.diagramDataModel?.extensions?.map((extension2) => extension2.minVer).filter(Boolean))],
+    ["data-diagram-presentation-point-count", fallback.diagramDataModel?.graphMetrics?.presentationPointCount],
+    ["data-diagram-presentation-connection-count", fallback.diagramDataModel?.graphMetrics?.presentationConnectionCount],
+    ["data-diagram-presentation-names", jsonData(fallback.diagramDataModel?.graphMetrics?.presentationNames)],
+    ["data-diagram-presentation-style-labels", jsonData(fallback.diagramDataModel?.graphMetrics?.presentationStyleLabels)],
+    ["data-diagram-presentation-layout-var-counts", jsonData(fallback.diagramDataModel?.graphMetrics?.presentationLayoutVarCounts)],
+    ["data-diagram-placeholder-point-count", fallback.diagramDataModel?.graphMetrics?.placeholderPointCount],
+    ["data-diagram-placeholder-texts", jsonData(fallback.diagramDataModel?.graphMetrics?.placeholderTexts)],
+    ["data-diagram-transition-connection-point-count", fallback.diagramDataModel?.graphMetrics?.transitionConnectionPointCount],
+    ["data-diagram-transition-connection-ids", jsonData(fallback.diagramDataModel?.graphMetrics?.transitionConnectionIds)],
     ["data-diagram-data-model", fallback.diagramDataModel ? JSON.stringify(fallback.diagramDataModel) : void 0],
     ["data-diagram-drawing-source", fallback.diagramDrawing?.sourcePath],
     ["data-diagram-drawing-shape-count", fallback.diagramDrawing?.shapeCount],
@@ -44700,6 +45484,16 @@ function renderFallback(element, assetPrefix) {
   const diagramDrawing = fallback.fallbackType === "diagram" ? renderDiagramDrawing(fallback.diagramDrawing) : "";
   const caption = diagramDrawing ? "" : `<figcaption>${escapeHtml(fallback.reason)}</figcaption>`;
   return `    <figure class="fallback fallback-${escapeHtml(fallback.fallbackType)}"${attrs} style="margin:0">${preview}${diagramDrawing}${caption}</figure>`;
+}
+function jsonData(value) {
+  if (Array.isArray(value) && value.length === 0) return void 0;
+  if (value && typeof value === "object" && Object.keys(value).length === 0) return void 0;
+  return value == null ? void 0 : JSON.stringify(value);
+}
+function spaceSeparated(values) {
+  if (!Array.isArray(values)) return void 0;
+  const filtered = values.filter((value) => typeof value === "string" && value.length > 0);
+  return filtered.length > 0 ? filtered.join(" ") : void 0;
 }
 function renderFallbackPreview(fallback, assetPrefix) {
   const image = fallback.src && webImageMediaTypes.has(String(fallback.mediaType ?? "")) ? `<img class="fallback-preview" src="${escapeHtml(assetPrefix + fallback.src)}" alt="">` : "";
@@ -44734,7 +45528,7 @@ function renderGroup(element, assetPrefix, renderChild) {
     ["data-source-element-count", group.sourceElementCount],
     ...shadowAttributePairs(group.effects?.outerShadow)
   ]);
-  const content = children2.map((child2) => renderChild(child2, assetPrefix)).filter(Boolean).join("\n");
+  const content = orderedElements(children2).map((child2) => renderChild(child2, assetPrefix)).filter(Boolean).join("\n");
   return `    <div class="group ppt-group"${attrs}>
 ${content}
     </div>`;
@@ -44823,22 +45617,28 @@ function renderRunAttributes(run, index, options) {
     ["data-font-family", style.fontFamily],
     ["data-font-family-latin", style.fontFamilyLatin],
     ["data-font-family-latin-raw", style.fontFamilyLatinRaw],
+    ["data-font-family-latin-panose", style.fontFamilyLatinPanose],
+    ["data-font-family-latin-charset", style.fontFamilyLatinCharset],
     ["data-font-family-east-asian", style.fontFamilyEastAsian],
     ["data-font-family-east-asian-raw", style.fontFamilyEastAsianRaw],
+    ["data-font-family-east-asian-panose", style.fontFamilyEastAsianPanose],
+    ["data-font-family-east-asian-charset", style.fontFamilyEastAsianCharset],
     ["data-font-family-complex-script", style.fontFamilyComplexScript],
     ["data-font-family-complex-script-raw", style.fontFamilyComplexScriptRaw],
+    ["data-font-family-complex-script-panose", style.fontFamilyComplexScriptPanose],
+    ["data-font-family-complex-script-charset", style.fontFamilyComplexScriptCharset],
     ["data-font-size", style.fontSize],
     ["data-font-size-raw", style.fontSizeRaw],
-    ["data-bold", booleanData2(style.bold)],
+    ["data-bold", booleanData4(style.bold)],
     ["data-bold-raw", style.boldRaw],
-    ["data-italic", booleanData2(style.italic)],
+    ["data-italic", booleanData4(style.italic)],
     ["data-italic-raw", style.italicRaw],
     ["data-alt-lang", style.alternateLanguage],
-    ["data-dirty", booleanData2(style.dirty)],
-    ["data-smt-clean", booleanData2(style.smtClean)],
-    ["data-kumimoji", booleanData2(style.kumimoji)],
-    ["data-no-proof", booleanData2(style.noProof)],
-    ["data-error", booleanData2(style.error)],
+    ["data-dirty", booleanData4(style.dirty)],
+    ["data-smt-clean", booleanData4(style.smtClean)],
+    ["data-kumimoji", booleanData4(style.kumimoji)],
+    ["data-no-proof", booleanData4(style.noProof)],
+    ["data-error", booleanData4(style.error)],
     ["data-underline-type", style.underlineType],
     ["data-strike", style.strike],
     ["data-strike-type", style.strikeType],
@@ -44851,13 +45651,13 @@ function renderRunAttributes(run, index, options) {
     ["data-kerning-raw", style.kerningRaw],
     ["data-capitalization", style.capitalization],
     ["data-capitalization-type", style.capitalizationType],
-    ["data-normalize-height", booleanData2(style.normalizeHeight)],
+    ["data-normalize-height", booleanData4(style.normalizeHeight)],
     ["data-normalize-height-raw", style.normalizeHeightRaw],
     ["data-text-fill-type", style.textFillType],
     ["data-text-fill-gradient-kind", textFill?.kind],
     ["data-text-fill-gradient-angle", textFill?.angle],
     ["data-text-fill-gradient-stop-count", Array.isArray(textFill?.stops) ? textFill.stops.length : void 0],
-    ["data-text-fill-gradient-scaled", booleanData2(textFill?.scaled)],
+    ["data-text-fill-gradient-scaled", booleanData4(textFill?.scaled)],
     ["data-text-outline-type", textOutline?.type],
     ["data-text-outline-color", textOutline?.color],
     ["data-text-outline-color-source", textOutline?.colorSource],
@@ -44870,15 +45670,15 @@ function renderRunAttributes(run, index, options) {
     ["data-text-outline-gradient-kind", textOutlineFill?.kind],
     ["data-text-outline-gradient-angle", textOutlineFill?.angle],
     ["data-text-outline-gradient-stop-count", Array.isArray(textOutlineFill?.stops) ? textOutlineFill.stops.length : void 0],
-    ["data-text-outline-gradient-scaled", booleanData2(textOutlineFill?.scaled)],
-    ["data-text-outline-supported-svg", booleanData2(textOutline?.supportedSvg)],
+    ["data-text-outline-gradient-scaled", booleanData4(textOutlineFill?.scaled)],
+    ["data-text-outline-supported-svg", booleanData4(textOutline?.supportedSvg)],
     ["data-symbol-font-family", style.symbolFontFamily],
     ["data-symbol-char", style.symbolChar],
     ["data-hyperlink-type", hyperlink?.type],
     ["data-hyperlink-trigger", hyperlink?.trigger],
     ["data-hyperlink-url", hyperlink?.href],
-    ["data-hyperlink-safe", booleanData2(hyperlink?.safe)],
-    ["data-hyperlink-history", booleanData2(hyperlink?.history)],
+    ["data-hyperlink-safe", booleanData4(hyperlink?.safe)],
+    ["data-hyperlink-history", booleanData4(hyperlink?.history)],
     ["data-hyperlink-relationship-id", hyperlink?.relationshipId],
     ["data-hyperlink-raw-target", hyperlink?.rawTarget],
     ["data-hyperlink-target-mode", hyperlink?.targetMode],
@@ -44897,7 +45697,7 @@ function inlineRunStyle(style, autoFit, text) {
 function renderAttributes2(attrs) {
   return attrs.filter(([, value]) => value != null && value !== false && value !== "").map(([name, value]) => ` ${name}="${escapeHtml(value)}"`).join("");
 }
-function booleanData2(value) {
+function booleanData4(value) {
   return value === true ? "true" : value === false ? "false" : void 0;
 }
 function hasVisibleGlyph(value) {
@@ -44931,6 +45731,7 @@ function shapeImageFillAttributePairs(fill, assetPrefix) {
   const saturation = effects.saturation;
   const colorTemperature = effects.colorTemperature;
   const sharpenSoften = effects.sharpenSoften;
+  const backgroundRemoval = effects.backgroundRemoval;
   return [
     ["data-fill-type", fill?.type],
     ["data-fill-src", fill?.src ? assetPrefix + fill.src : void 0],
@@ -44970,6 +45771,7 @@ function shapeImageFillAttributePairs(fill, assetPrefix) {
     ["data-fill-sharpen-soften", sharpenSoften?.amount],
     ["data-fill-sharpen-soften-css-blur", sharpenSoften?.cssBlur],
     ["data-fill-sharpen-soften-unsupported-css", sharpenSoften?.unsupportedCss === true ? "true" : void 0],
+    ...backgroundRemovalAttributePairs(backgroundRemoval, "data-fill-background-removal"),
     ["data-fill-picture-effect-order", Array.isArray(effects.effectOrder) ? effects.effectOrder.join(" ") : void 0],
     ...pictureEffectLayerAttributePairs(fill?.effectLayerSources, assetPrefix, "data-fill-effect-layer"),
     ["style", shapeImageFillStyle(fill, assetPrefix)]
@@ -45073,7 +45875,7 @@ function renderSlideZoom(element, assetPrefix) {
     ["data-target-slide-ref", zoom.targetSlideRef],
     ["data-creation-id", zoom.creationId],
     ["data-zoom-id", zoom.zoomId],
-    ["data-return-to-parent", booleanData3(zoom.returnToParent)],
+    ["data-return-to-parent", booleanData5(zoom.returnToParent)],
     ["data-transition-duration-ms", zoom.transitionDurationMs]
   ]);
   const image = zoom.src ? `<img class="slide-zoom-preview" src="${escapeHtml(assetPrefix + zoom.src)}" alt="${escapeHtml(zoom.alt ?? "Slide zoom preview")}">` : "";
@@ -45083,7 +45885,7 @@ function slideZoomHref(targetSlideRef, assetPrefix) {
   if (typeof targetSlideRef !== "string" || targetSlideRef.length === 0) return void 0;
   return assetPrefix === "../" ? `./${targetSlideRef}.html` : `#${targetSlideRef}`;
 }
-function booleanData3(value) {
+function booleanData5(value) {
   return value === true ? "true" : value === false ? "false" : void 0;
 }
 
@@ -45103,52 +45905,6 @@ function renderSvgPicture(element, attrs, assetPrefix) {
       </defs>
       <image href="${escapeHtml(assetPrefix + element.src)}" x="${x.offset}" y="${y.offset}" width="${x.size}" height="${y.size}" preserveAspectRatio="none" clip-path="url(#${escapeHtml(clipId)})"></image>
     </svg>`;
-}
-
-// src/render/renderTextBodyAttributes.ts
-function textBodyAttributePairs(bodyStyle) {
-  const autoFit = bodyStyle?.autoFit ?? {};
-  return [
-    ["data-text-fit", autoFit.type],
-    ["data-font-scale", autoFit.fontScale],
-    ["data-font-scale-raw", autoFit.fontScaleRaw],
-    ["data-line-space-reduction", autoFit.lineSpaceReduction],
-    ["data-line-space-reduction-raw", autoFit.lineSpaceReductionRaw],
-    ["data-anchor", bodyStyle?.verticalAlign],
-    ["data-anchor-ctr", booleanData4(bodyStyle?.anchorCenter)],
-    ["data-anchor-ctr-raw", bodyStyle?.anchorCenterRaw],
-    ["data-wrap", bodyStyle?.wrap],
-    ["data-vertical-overflow", bodyStyle?.verticalOverflow],
-    ["data-horizontal-overflow", bodyStyle?.horizontalOverflow],
-    ["data-inset-left", bodyStyle?.paddingLeft],
-    ["data-inset-left-raw", bodyStyle?.paddingLeftRaw],
-    ["data-inset-right", bodyStyle?.paddingRight],
-    ["data-inset-right-raw", bodyStyle?.paddingRightRaw],
-    ["data-inset-top", bodyStyle?.paddingTop],
-    ["data-inset-top-raw", bodyStyle?.paddingTopRaw],
-    ["data-inset-bottom", bodyStyle?.paddingBottom],
-    ["data-inset-bottom-raw", bodyStyle?.paddingBottomRaw],
-    ["data-column-count", bodyStyle?.columnCount],
-    ["data-column-gap", bodyStyle?.columnGap],
-    ["data-rtl-columns", booleanData4(bodyStyle?.rtlColumns)],
-    ["data-rtl-columns-raw", bodyStyle?.rtlColumnsRaw],
-    ["data-vertical-text", bodyStyle?.verticalText],
-    ["data-text-rotation", bodyStyle?.textRotation],
-    ["data-text-warp", bodyStyle?.textWarp],
-    ["data-text-warp-source", bodyStyle?.textWarpSource],
-    ["data-text-warp-adjustments", Array.isArray(bodyStyle?.textWarpAdjustments) ? JSON.stringify(bodyStyle.textWarpAdjustments) : void 0],
-    ["data-spacing-first-last-paragraph", booleanData4(bodyStyle?.spacingFirstLastParagraph)],
-    ["data-spacing-first-last-paragraph-raw", bodyStyle?.spacingFirstLastParagraphRaw],
-    ["data-compat-line-spacing", booleanData4(bodyStyle?.compatLineSpacing)],
-    ["data-compat-line-spacing-raw", bodyStyle?.compatLineSpacingRaw],
-    ["data-from-word-art", booleanData4(bodyStyle?.fromWordArt)],
-    ["data-from-word-art-raw", bodyStyle?.fromWordArtRaw],
-    ["data-force-antialias", booleanData4(bodyStyle?.forceAntialias)],
-    ["data-force-antialias-raw", bodyStyle?.forceAntialiasRaw]
-  ];
-}
-function booleanData4(value) {
-  return value === true ? "true" : value === false ? "false" : void 0;
 }
 
 // src/render/renderTable.ts
@@ -45182,12 +45938,12 @@ function tableMetadataAttributePairs(style) {
   const options = style?.options ?? {};
   return [
     ["data-table-style-id", style?.styleId],
-    ["data-table-band-row", booleanData5(options.bandRow)],
-    ["data-table-band-col", booleanData5(options.bandCol)],
-    ["data-table-first-row", booleanData5(options.firstRow)],
-    ["data-table-last-row", booleanData5(options.lastRow)],
-    ["data-table-first-col", booleanData5(options.firstCol)],
-    ["data-table-last-col", booleanData5(options.lastCol)]
+    ["data-table-band-row", booleanData6(options.bandRow)],
+    ["data-table-band-col", booleanData6(options.bandCol)],
+    ["data-table-first-row", booleanData6(options.firstRow)],
+    ["data-table-last-row", booleanData6(options.lastRow)],
+    ["data-table-first-col", booleanData6(options.firstCol)],
+    ["data-table-last-col", booleanData6(options.lastCol)]
   ];
 }
 function renderTableCellAttributes(cell) {
@@ -45203,7 +45959,7 @@ function renderTableCellAttributes(cell) {
     ["data-col-span", colSpan > 1 ? colSpan : void 0],
     ["data-row-span", rowSpan > 1 ? rowSpan : void 0],
     ["data-cell-anchor", style.verticalAlign],
-    ["data-cell-anchor-ctr", booleanData5(style.anchorCenter)],
+    ["data-cell-anchor-ctr", booleanData6(style.anchorCenter)],
     ["data-fill-type", fill.type],
     ["data-fill-color", fill.color],
     ["data-fill-color-source", fill.colorSource],
@@ -45216,7 +45972,7 @@ function renderTableCellAttributes(cell) {
     ["data-cell-text-font-family", textStyle.fontFamily],
     ["data-cell-text-font-family-source", textStyle.fontFamilySource],
     ["data-cell-text-font-family-ref", textStyle.fontFamilyRef],
-    ["data-cell-text-bold", booleanData5(textStyle.bold)],
+    ["data-cell-text-bold", booleanData6(textStyle.bold)],
     ["data-cell-text-bold-raw", textStyle.boldRaw],
     ...tableBorderAttributePairs("left", borders.left),
     ...tableBorderAttributePairs("right", borders.right),
@@ -45254,16 +46010,16 @@ function renderTableParagraphAttributes(paragraph, index) {
     ["data-bullet-type", bullet.type],
     ["data-bullet-char", bullet.type === "bullet" ? bullet.char : void 0],
     ["data-bullet-color", bullet.color],
-    ["data-bullet-color-follow-text", booleanData5(bullet.colorFollowText)],
+    ["data-bullet-color-follow-text", booleanData6(bullet.colorFollowText)],
     ["data-bullet-font-family", bullet.fontFamily],
     ["data-bullet-font-charset", bullet.fontCharset],
     ["data-bullet-font-pitch-family", bullet.fontPitchFamily],
-    ["data-bullet-font-follow-text", booleanData5(bullet.fontFollowText)],
+    ["data-bullet-font-follow-text", booleanData6(bullet.fontFollowText)],
     ["data-bullet-size-type", bullet.sizeType],
     ["data-bullet-size-raw", bullet.sizeRaw],
     ["data-bullet-size-value", bullet.sizeValue],
     ["data-bullet-size-css", bullet.sizeCss],
-    ["data-bullet-size-follow-text", booleanData5(bullet.sizeFollowText)],
+    ["data-bullet-size-follow-text", booleanData6(bullet.sizeFollowText)],
     ["data-number-format", bullet.type === "number" ? bullet.format : void 0],
     ["data-number-start", bullet.type === "number" ? bullet.startAt : void 0],
     ["data-text-align", style.textAlign],
@@ -45339,7 +46095,7 @@ function tableBorderDeclaration(side, line8) {
 function renderAttributes3(attrs) {
   return attrs.filter(([, value]) => value != null && value !== false && value !== "").map(([name, value]) => ` ${name}="${escapeHtml(value)}"`).join("");
 }
-function booleanData5(value) {
+function booleanData6(value) {
   return value === true ? "true" : value === false ? "false" : void 0;
 }
 function kebabCase(value) {
@@ -45407,7 +46163,7 @@ ${input.body}
 `;
 }
 function renderSlideSection(slide, assetPrefix) {
-  const elements = slide.elements.map((element) => renderElement(element, assetPrefix)).join("\n");
+  const elements = orderedElements(slide.elements).map((element) => renderElement(element, assetPrefix, noFlipState)).join("\n");
   const pictureFilters = renderPictureFilterDefs(slide);
   const effectFilters = renderEffectFilterDefs(slide);
   const content = [pictureFilters, effectFilters, elements].filter(Boolean).join("\n");
@@ -45438,14 +46194,14 @@ function slideBackgroundAttributePairs(background, assetPrefix) {
     ["data-background-gradient-angle", background?.angle],
     ["data-background-gradient-path", background?.path],
     ["data-background-gradient-stop-count", Array.isArray(background?.stops) ? background.stops.length : void 0],
-    ["data-background-gradient-scaled", booleanData6(background?.scaled)],
-    ["data-background-gradient-rot-with-shape", booleanData6(background?.rotateWithShape)],
+    ["data-background-gradient-scaled", booleanData7(background?.scaled)],
+    ["data-background-gradient-rot-with-shape", booleanData7(background?.rotateWithShape)],
     ["data-background-gradient-flip", background?.flip],
     ["data-background-gradient-fill-to-rect", gradientFillToRect ? JSON.stringify(gradientFillToRect) : void 0],
     ["data-background-gradient-tile-rect", background?.tileRect ? JSON.stringify(background.tileRect) : void 0],
     ["data-background-theme-style-source", background?.themeStyleSource],
     ["data-background-theme-style-index", background?.themeStyleIndex],
-    ["data-background-inherited", booleanData6(background?.inherited)],
+    ["data-background-inherited", booleanData7(background?.inherited)],
     ["data-background-inherited-source", background?.inheritedSource],
     ["data-background-unsupported", background?.unsupported === true ? "true" : void 0],
     ["data-background-reason", background?.reason],
@@ -45470,11 +46226,11 @@ function slideBackgroundAttributePairs(background, assetPrefix) {
     ["data-background-tile-scale-y", tile?.scaleY]
   ];
 }
-function renderElement(element, assetPrefix) {
+function renderElement(element, assetPrefix, inheritedFlip) {
   if (element.hidden) return "";
   switch (element.type) {
     case "text":
-      return renderText(element, assetPrefix);
+      return renderText(element, assetPrefix, inheritedFlip);
     case "image":
       return renderImage(element, assetPrefix);
     case "shape":
@@ -45484,7 +46240,9 @@ function renderElement(element, assetPrefix) {
     case "connector":
       return renderConnectorSvg(element);
     case "group":
-      return renderGroup(element, assetPrefix, renderElement);
+      return renderGroup(element, assetPrefix, (child2, childAssetPrefix) => {
+        return renderElement(child2, childAssetPrefix, nextFlipState(element, inheritedFlip));
+      });
     case "table":
       return renderTable(element);
     case "chart":
@@ -45510,6 +46268,7 @@ function renderImage(element, assetPrefix) {
   const glow = effects.glow;
   const colorTemperature = effects.colorTemperature;
   const sharpenSoften = effects.sharpenSoften;
+  const backgroundRemoval = effects.backgroundRemoval;
   const crop = element.crop;
   const fillMode = element.fillMode;
   const tile = element.tile;
@@ -45537,12 +46296,12 @@ function renderImage(element, assetPrefix) {
     ["data-crop-top", crop?.top],
     ["data-crop-right", crop?.right],
     ["data-crop-bottom", crop?.bottom],
-    ["data-raster-fallback", booleanData6(element.rasterFallback)],
+    ["data-raster-fallback", booleanData7(element.rasterFallback)],
     ["data-fallback-reason", element.fallbackReason],
     ["data-source-element-count", element.sourceElementCount],
     ["data-alpha-mod-fix", alpha?.amount],
-    ["data-grayscale", booleanData6(grayscale?.enabled)],
-    ["data-luminance", booleanData6(luminance?.enabled)],
+    ["data-grayscale", booleanData7(grayscale?.enabled)],
+    ["data-luminance", booleanData7(luminance?.enabled)],
     ["data-luminance-bright", luminance?.bright],
     ["data-luminance-contrast", luminance?.contrast],
     ["data-css-brightness", luminance?.brightness],
@@ -45554,6 +46313,7 @@ function renderImage(element, assetPrefix) {
     ["data-sharpen-soften", sharpenSoften?.amount],
     ["data-sharpen-soften-css-blur", sharpenSoften?.cssBlur],
     ["data-sharpen-soften-unsupported-css", sharpenSoften?.unsupportedCss === true ? "true" : void 0],
+    ...backgroundRemovalAttributePairs(backgroundRemoval),
     ...shadowAttributePairs(outerShadow),
     ["data-glow-radius", glow?.radius],
     ["data-glow-color", glow?.color],
@@ -45604,19 +46364,19 @@ function shapeFillAttributePairs(fill) {
     ["data-fill-gradient-angle", fill?.angle],
     ["data-fill-gradient-path", fill?.path],
     ["data-fill-gradient-flip", fill?.flip],
-    ["data-fill-gradient-scaled", booleanData6(fill?.scaled)],
-    ["data-fill-gradient-rot-with-shape", booleanData6(fill?.rotateWithShape)],
+    ["data-fill-gradient-scaled", booleanData7(fill?.scaled)],
+    ["data-fill-gradient-rot-with-shape", booleanData7(fill?.rotateWithShape)],
     ["data-fill-gradient-tile-rect", fill?.tileRect ? JSON.stringify(fill.tileRect) : void 0],
     ["data-fill-gradient-fill-to-rect", fill?.fillToRect ? JSON.stringify(fill.fillToRect) : void 0]
   ];
 }
-function renderText(element, assetPrefix) {
-  if (element.role === "list") return renderList(element);
+function renderText(element, assetPrefix, inheritedFlip) {
+  if (element.role === "list") return renderList(element, inheritedFlip);
   const tag = element.role === "title" ? "h1" : element.role === "subtitle" ? "p" : element.role === "heading" ? "h2" : "p";
   const className = `text ${element.role}`;
   const text = element.text;
   const paragraphs = text?.paragraphs ?? [];
-  const attrs = renderTextElementAttributes(element, assetPrefix);
+  const attrs = renderTextElementAttributes(element, assetPrefix, inheritedFlip);
   const outline = renderShapeOutlineSvg(element);
   const content = paragraphs.length > 0 ? paragraphs.map((paragraph, index) => `<span class="paragraph"${renderParagraphAttributes(paragraph, index)}>${renderRuns(paragraphRunsForRender(paragraph), { gradientIdPrefix: `${element.id}-p-${index}` })}</span>`).join("") : renderRuns([{ text: text?.plain ?? "" }], { gradientIdPrefix: `${element.id}-plain` });
   const warped = renderTextWarpSvg(element, text);
@@ -45649,7 +46409,7 @@ function textWarpPlainText(text) {
     return paragraphRunsForRender(paragraph).filter((run) => run.type !== "endParaRPr").map((run) => run.type === "tab" ? "	" : run.text ?? "").join("");
   }).join("\n");
 }
-function renderList(element) {
+function renderList(element, inheritedFlip) {
   const text = element.text;
   const paragraphs = text?.paragraphs ?? [];
   const tag = isNumberedList(paragraphs) ? "ol" : "ul";
@@ -45657,11 +46417,14 @@ function renderList(element) {
     const content = renderRuns(paragraphRunsForRender(paragraph), { gradientIdPrefix: `${element.id}-p-${index}` });
     return `<li${renderParagraphAttributes(paragraph, index)}><span class="text-readable-content">${content}</span></li>`;
   }).join("");
+  const readableFlip = textReadableFlipState(element, inheritedFlip);
   const attrs = renderAttributes([
     ["data-element-id", element.id],
     ["data-role", "list"],
     ...sourceShapeAttributePairs(element),
     ...geometryAttributePairs(element),
+    ["data-readable-flip-horizontal", booleanData7(readableFlip.h)],
+    ["data-readable-flip-vertical", booleanData7(readableFlip.v)],
     ...shadowAttributePairs(element.style?.effects?.outerShadow),
     ...textBodyAttributePairs(text?.bodyStyle),
     ["data-list-type", tag === "ol" ? "number" : "bullet"],
@@ -45671,14 +46434,17 @@ function renderList(element) {
   ]);
   return `    <${tag} class="text list"${attrs}>${items}</${tag}>`;
 }
-function renderTextElementAttributes(element, assetPrefix) {
+function renderTextElementAttributes(element, assetPrefix, inheritedFlip) {
   const text = element.text;
   const fill = element.style?.fill;
+  const readableFlip = textReadableFlipState(element, inheritedFlip);
   return renderAttributes([
     ["data-element-id", element.id],
     ["data-role", element.role],
     ...sourceShapeAttributePairs(element),
     ...geometryAttributePairs(element),
+    ["data-readable-flip-horizontal", booleanData7(readableFlip.h)],
+    ["data-readable-flip-vertical", booleanData7(readableFlip.v)],
     ...shadowAttributePairs(element.style?.effects?.outerShadow),
     ...textBodyAttributePairs(text?.bodyStyle),
     ...shapeFillAttributePairs(fill),
@@ -45702,16 +46468,16 @@ function renderParagraphAttributes(paragraph, index) {
     ["data-bullet-type", bullet.type],
     ["data-bullet-char", bullet.type === "bullet" ? bullet.char : void 0],
     ["data-bullet-color", bullet.color],
-    ["data-bullet-color-follow-text", booleanData6(bullet.colorFollowText)],
+    ["data-bullet-color-follow-text", booleanData7(bullet.colorFollowText)],
     ["data-bullet-font-family", bullet.fontFamily],
     ["data-bullet-font-charset", bullet.fontCharset],
     ["data-bullet-font-pitch-family", bullet.fontPitchFamily],
-    ["data-bullet-font-follow-text", booleanData6(bullet.fontFollowText)],
+    ["data-bullet-font-follow-text", booleanData7(bullet.fontFollowText)],
     ["data-bullet-size-type", bullet.sizeType],
     ["data-bullet-size-raw", bullet.sizeRaw],
     ["data-bullet-size-value", bullet.sizeValue],
     ["data-bullet-size-css", bullet.sizeCss],
-    ["data-bullet-size-follow-text", booleanData6(bullet.sizeFollowText)],
+    ["data-bullet-size-follow-text", booleanData7(bullet.sizeFollowText)],
     ["data-number-format", bullet.type === "number" ? bullet.format : void 0],
     ["data-number-start", bullet.type === "number" ? bullet.startAt : void 0],
     ["data-paragraph-level", style.level],
@@ -45730,11 +46496,11 @@ function renderParagraphAttributes(paragraph, index) {
     ["data-tab-stops", tabStopsData(style.tabStops)],
     ["data-tab-stop-count", tabStopCount(style.tabStops)],
     ["data-font-align", style.fontAlign],
-    ["data-east-asian-line-break", booleanData6(style.eastAsianLineBreak)],
+    ["data-east-asian-line-break", booleanData7(style.eastAsianLineBreak)],
     ["data-east-asian-line-break-raw", style.eastAsianLineBreakRaw],
-    ["data-latin-line-break", booleanData6(style.latinLineBreak)],
+    ["data-latin-line-break", booleanData7(style.latinLineBreak)],
     ["data-latin-line-break-raw", style.latinLineBreakRaw],
-    ["data-hanging-punctuation", booleanData6(style.hangingPunctuation)],
+    ["data-hanging-punctuation", booleanData7(style.hangingPunctuation)],
     ["data-hanging-punctuation-raw", style.hangingPunctuationRaw],
     ...spacingAttributePairs("line-spacing", spacing.line),
     ...spacingAttributePairs("space-before", spacing.before),
@@ -45764,7 +46530,7 @@ function commonBulletChar(paragraphs) {
   if (chars.length === 0) return void 0;
   return chars.every((char) => char === chars[0]) ? chars[0] : void 0;
 }
-function booleanData6(value) {
+function booleanData7(value) {
   return value === true ? "true" : value === false ? "false" : void 0;
 }
 function lineAttributePairs(element) {
@@ -45781,7 +46547,7 @@ function lineAttributePairs(element) {
     ["data-line-gradient-kind", fill.kind],
     ["data-line-gradient-angle", fill.angle],
     ["data-line-gradient-stop-count", Array.isArray(fill.stops) ? fill.stops.length : void 0],
-    ["data-line-gradient-scaled", booleanData6(fill.scaled)]
+    ["data-line-gradient-scaled", booleanData7(fill.scaled)]
   ];
 }
 
