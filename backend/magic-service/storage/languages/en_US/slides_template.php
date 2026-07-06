@@ -39,5 +39,5 @@ return [
     'page_size_min' => 'Page size must be at least 1',
     'page_size_max' => 'Page size cannot exceed 200',
     'keyword_max' => 'Keyword cannot exceed 100 characters',
-    'code_max' => 'Template code cannot exceed 100 characters',
+    'code_max' => 'Template code cannot exceed 64 characters',
 ];

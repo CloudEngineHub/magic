@@ -21,7 +21,7 @@ class SaveSlidesTemplateRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'code' => 'nullable|string|max:100|regex:/^PPT-[A-Za-z0-9]+(-[A-Za-z0-9]+)*$/',
+            'code' => 'nullable|string|max:64|regex:/^PPT-[A-Za-z0-9]+(-[A-Za-z0-9]+)*$/',
             'label' => 'required|array',
             'label.zh_CN' => 'required|string|max:100',
             'label.en_US' => 'required|string|max:100',
