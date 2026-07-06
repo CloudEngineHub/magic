@@ -10,7 +10,8 @@ import { useTranslation } from "react-i18next"
 import { useMemoizedFn } from "ahooks"
 import { useEffect } from "react"
 import { history } from "@/routes/history"
-import { RouteName } from "@/routes/constants"
+import { useLocation } from "react-router"
+import { getVectorKnowledgeDetailRoute } from "@/pages/vectorKnowledge/utils"
 
 interface Props {
 	documentConfig?: {
@@ -36,10 +37,11 @@ export default function VectorKnowledgeConfiguration({
 	const { styles } = useVectorKnowledgeConfigurationStyles()
 
 	const { t } = useTranslation("flow")
+	const location = useLocation()
 
 	/** 跳转文档列表 */
 	const navigateToDocumentList = useMemoizedFn((knowledgeBaseCode: string) => {
-		history.push({ name: RouteName.VectorKnowledgeDetail, query: { code: knowledgeBaseCode } })
+		history.push(getVectorKnowledgeDetailRoute(location.pathname, knowledgeBaseCode))
 	})
 
 	const {
