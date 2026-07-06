@@ -10,6 +10,9 @@ return [
     'not_found' => '幻灯片模板不存在',
     'code_generate_failed' => '幻灯片模板编码生成失败',
     'file_url_generate_failed' => '幻灯片模板文件链接生成失败',
+    'code_already_exists' => '幻灯片模板编码已存在',
+    'code_string' => '模板编码必须是字符串',
+    'code_regex' => '模板编码必须以 PPT- 开头，且只能使用字母、数字和中划线',
     'label_required' => '模板名称是必需的',
     'label_array' => '模板名称必须是数组',
     'label_zh_cn_required' => '模板中文名称是必需的',
@@ -36,5 +39,5 @@ return [
     'page_size_min' => '每页数量必须大于等于1',
     'page_size_max' => '每页数量不能超过200',
     'keyword_max' => '关键词不能超过100个字符',
-    'code_max' => '模板编码不能超过64个字符',
+    'code_max' => '模板编码不能超过100个字符',
 ];

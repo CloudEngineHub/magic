@@ -59,7 +59,7 @@ class AdminSlidesTemplateAppService extends AbstractSlidesTemplateAppService
         $this->assertOfficialOrganization($dataIsolation);
 
         $template = $this->buildEntityFromRequest($request);
-        $template->setCode(SlidesTemplateEntity::generateNewCode());
+        $template->setCode($request->getCode() ?? SlidesTemplateEntity::generateNewCode());
         $template->setSourceType(SlidesTemplateSourceType::Custom);
         $template->setOrganizationCode($dataIsolation->getCurrentOrganizationCode());
         $template->setCreatedUid($dataIsolation->getCurrentUserId());

@@ -15,6 +15,8 @@ use App\Domain\SlidesTemplate\Repository\Facade\SlidesTemplateRepositoryInterfac
 use App\ErrorCode\SlidesTemplateErrorCode;
 use App\Infrastructure\Core\Exception\ExceptionBuilder;
 use App\Infrastructure\Core\ValueObject\Page;
+use Hyperf\Database\Exception\QueryException;
+use Throwable;
 
 class SlidesTemplateDomainService
 {
@@ -51,8 +53,20 @@ class SlidesTemplateDomainService
 
     public function create(SlidesTemplateDataIsolation $dataIsolation, SlidesTemplateEntity $entity): SlidesTemplateEntity
     {
+        if ($this->slidesTemplateRepository->existsByCode($entity->getCode())) {
+            ExceptionBuilder::throw(SlidesTemplateErrorCode::CODE_ALREADY_EXISTS);
+        }
+
         $this->refreshSearchText($entity);
-        return $this->slidesTemplateRepository->save($dataIsolation, $entity);
+        try {
+            return $this->slidesTemplateRepository->save($dataIsolation, $entity);
+        } catch (Throwable $throwable) {
+            if ($this->isDuplicateCodeException($throwable)) {
+                ExceptionBuilder::throw(SlidesTemplateErrorCode::CODE_ALREADY_EXISTS);
+            }
+
+            throw $throwable;
+        }
     }
 
     public function update(SlidesTemplateDataIsolation $dataIsolation, SlidesTemplateEntity $entity): SlidesTemplateEntity
@@ -86,5 +100,12 @@ class SlidesTemplateDomainService
     private function refreshSearchText(SlidesTemplateEntity $entity): void
     {
         $entity->setSearchText(SlidesTemplateSearchTextBuilder::build($entity));
+    }
+
+    private function isDuplicateCodeException(Throwable $throwable): bool
+    {
+        return $throwable instanceof QueryException
+            && (string) $throwable->getCode() === '23000'
+            && str_contains($throwable->getMessage(), 'Duplicate entry');
     }
 }

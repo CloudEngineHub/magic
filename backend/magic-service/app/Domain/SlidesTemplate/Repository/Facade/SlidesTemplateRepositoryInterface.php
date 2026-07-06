@@ -18,6 +18,8 @@ interface SlidesTemplateRepositoryInterface
 
     public function findByCode(SlidesTemplateDataIsolation $dataIsolation, string $code): ?SlidesTemplateEntity;
 
+    public function existsByCode(string $code): bool;
+
     /**
      * @return array{total: int, list: SlidesTemplateEntity[]}
      */

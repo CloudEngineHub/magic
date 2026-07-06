@@ -28,4 +28,7 @@ enum SlidesTemplateErrorCode: int
 
     #[ErrorMessage('slides_template.file_url_generate_failed')]
     case FILE_URL_GENERATE_FAILED = 47004;
+
+    #[ErrorMessage('slides_template.code_already_exists')]
+    case CODE_ALREADY_EXISTS = 47005;
 }

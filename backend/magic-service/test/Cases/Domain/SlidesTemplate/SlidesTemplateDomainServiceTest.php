@@ -13,15 +13,100 @@ use App\Domain\SlidesTemplate\Entity\ValueObject\Query\SlidesTemplateQuery;
 use App\Domain\SlidesTemplate\Entity\ValueObject\SlidesTemplateSourceType;
 use App\Domain\SlidesTemplate\Repository\Facade\SlidesTemplateRepositoryInterface;
 use App\Domain\SlidesTemplate\Service\SlidesTemplateDomainService;
+use App\ErrorCode\SlidesTemplateErrorCode;
+use App\Infrastructure\Core\Exception\BusinessException;
 use App\Infrastructure\Core\ValueObject\Page;
+use Hyperf\Context\ApplicationContext;
+use Hyperf\Contract\ConfigInterface;
+use Hyperf\Contract\TranslatorInterface;
 use PHPUnit\Framework\TestCase;
+use Psr\Container\ContainerInterface;
 use ReflectionClass;
+use RuntimeException;
 
 /**
  * @internal
  */
 class SlidesTemplateDomainServiceTest extends TestCase
 {
+    private static bool $hadOriginalContainer = false;
+
+    private static ?ContainerInterface $originalContainer = null;
+
+    public static function setUpBeforeClass(): void
+    {
+        self::$hadOriginalContainer = ApplicationContext::hasContainer();
+        self::$originalContainer = self::$hadOriginalContainer ? ApplicationContext::getContainer() : null;
+
+        ApplicationContext::setContainer(new class implements ContainerInterface {
+            public function get(string $id)
+            {
+                return match ($id) {
+                    ConfigInterface::class => new class implements ConfigInterface {
+                        public function get(string $key, mixed $default = null): mixed
+                        {
+                            return match ($key) {
+                                'error_message' => [
+                                    'exception_class' => BusinessException::class,
+                                    'error_code_mapper' => [
+                                        SlidesTemplateErrorCode::class => [47000, 47999],
+                                    ],
+                                ],
+                                default => $default,
+                            };
+                        }
+
+                        public function has(string $keys): bool
+                        {
+                            return $keys === 'error_message';
+                        }
+
+                        public function set(string $key, mixed $value): void
+                        {
+                        }
+                    },
+                    TranslatorInterface::class => new class implements TranslatorInterface {
+                        public function trans(string $key, array $replace = [], ?string $locale = null): string
+                        {
+                            return $key;
+                        }
+
+                        public function transChoice(string $key, $number, array $replace = [], ?string $locale = null): string
+                        {
+                            return $key;
+                        }
+
+                        public function getLocale(): string
+                        {
+                            return 'zh_CN';
+                        }
+
+                        public function setLocale(string $locale)
+                        {
+                            return $this;
+                        }
+                    },
+                    default => throw new RuntimeException('Unexpected container dependency: ' . $id),
+                };
+            }
+
+            public function has(string $id): bool
+            {
+                return in_array($id, [ConfigInterface::class, TranslatorInterface::class], true);
+            }
+        });
+    }
+
+    public static function tearDownAfterClass(): void
+    {
+        $property = (new ReflectionClass(ApplicationContext::class))->getProperty('container');
+        $property->setAccessible(true);
+        $property->setValue(null, self::$hadOriginalContainer ? self::$originalContainer : null);
+
+        self::$hadOriginalContainer = false;
+        self::$originalContainer = null;
+    }
+
     public function testCreateBuildsSearchTextBeforeSaving(): void
     {
         $repository = new CapturingSlidesTemplateRepository();
@@ -34,6 +119,18 @@ class SlidesTemplateDomainServiceTest extends TestCase
             'ppt-business-minimal system 职场白皮书 corporate whitepaper 适用于企业汇报 for business reviews',
             $repository->savedEntity?->toArray()['search_text'] ?? null
         );
+    }
+
+    public function testCreateThrowsBusinessExceptionWhenCodeAlreadyExists(): void
+    {
+        $repository = new CapturingSlidesTemplateRepository();
+        $repository->codeExists = true;
+        $service = new SlidesTemplateDomainService($repository);
+
+        $this->expectException(BusinessException::class);
+        $this->expectExceptionCode(SlidesTemplateErrorCode::CODE_ALREADY_EXISTS->value);
+
+        $service->create($this->makeDataIsolation(), $this->makeTemplate());
     }
 
     public function testUpdateRebuildsSearchTextBeforeSaving(): void
@@ -92,6 +189,8 @@ class CapturingSlidesTemplateRepository implements SlidesTemplateRepositoryInter
 
     public ?SlidesTemplateEntity $entityToFind = null;
 
+    public bool $codeExists = false;
+
     public function findById(SlidesTemplateDataIsolation $dataIsolation, int|string $id): ?SlidesTemplateEntity
     {
         return $this->entityToFind;
@@ -100,6 +199,11 @@ class CapturingSlidesTemplateRepository implements SlidesTemplateRepositoryInter
     public function findByCode(SlidesTemplateDataIsolation $dataIsolation, string $code): ?SlidesTemplateEntity
     {
         return $this->entityToFind;
+    }
+
+    public function existsByCode(string $code): bool
+    {
+        return $this->codeExists;
     }
 
     public function queries(SlidesTemplateDataIsolation $dataIsolation, SlidesTemplateQuery $query, Page $page): array

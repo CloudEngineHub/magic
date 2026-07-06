@@ -21,6 +21,7 @@ class SaveSlidesTemplateRequest extends FormRequest
     public function rules(): array
     {
         return [
+            'code' => 'nullable|string|max:100|regex:/^PPT-[A-Za-z0-9]+(-[A-Za-z0-9]+)*$/',
             'label' => 'required|array',
             'label.zh_CN' => 'required|string|max:100',
             'label.en_US' => 'required|string|max:100',
@@ -39,6 +40,9 @@ class SaveSlidesTemplateRequest extends FormRequest
     public function messages(): array
     {
         return [
+            'code.string' => __('slides_template.code_string'),
+            'code.max' => __('slides_template.code_max'),
+            'code.regex' => __('slides_template.code_regex'),
             'label.required' => __('slides_template.label_required'),
             'label.array' => __('slides_template.label_array'),
             'label.zh_CN.required' => __('slides_template.label_zh_cn_required'),
@@ -64,6 +68,12 @@ class SaveSlidesTemplateRequest extends FormRequest
             'status.in' => __('slides_template.status_in'),
             'sort.integer' => __('slides_template.sort_integer'),
         ];
+    }
+
+    public function getCode(): ?string
+    {
+        $code = trim((string) $this->input('code', ''));
+        return $code === '' ? null : $code;
     }
 
     public function getLabel(): array

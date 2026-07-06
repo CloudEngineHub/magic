@@ -39,6 +39,11 @@ class SlidesTemplateRepository extends AbstractRepository implements SlidesTempl
         return $model ? SlidesTemplateFactory::modelToEntity($model) : null;
     }
 
+    public function existsByCode(string $code): bool
+    {
+        return SlidesTemplateModel::withTrashed()->where('code', $code)->exists();
+    }
+
     public function queries(SlidesTemplateDataIsolation $dataIsolation, SlidesTemplateQuery $query, Page $page): array
     {
         $builder = $this->createBuilder($dataIsolation, SlidesTemplateModel::query());

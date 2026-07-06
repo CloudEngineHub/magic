@@ -15,13 +15,72 @@ use App\Interfaces\SlidesTemplate\DTO\Response\AdminSlidesTemplateDetailDTO;
 use App\Interfaces\SlidesTemplate\DTO\Response\SlidesTemplateFileUrlDTO;
 use App\Interfaces\SlidesTemplate\DTO\Response\SlidesTemplatePageDTO;
 use App\Interfaces\SlidesTemplate\DTO\Response\SlidesTemplatePublicItemDTO;
+use Hyperf\Codec\Packer\PhpSerializerPacker;
+use Hyperf\Context\ApplicationContext;
+use Hyperf\Contract\ConfigInterface;
 use PHPUnit\Framework\TestCase;
+use Psr\Container\ContainerInterface;
+use ReflectionClass;
+use RuntimeException;
 
 /**
  * @internal
  */
 class SlidesTemplateAssemblerTest extends TestCase
 {
+    private static bool $hadOriginalContainer = false;
+
+    private static ?ContainerInterface $originalContainer = null;
+
+    public static function setUpBeforeClass(): void
+    {
+        self::$hadOriginalContainer = ApplicationContext::hasContainer();
+        self::$originalContainer = self::$hadOriginalContainer ? ApplicationContext::getContainer() : null;
+
+        ApplicationContext::setContainer(new class implements ContainerInterface {
+            public function get(string $id)
+            {
+                return match ($id) {
+                    PhpSerializerPacker::class => new PhpSerializerPacker(),
+                    ConfigInterface::class => new class implements ConfigInterface {
+                        public function get(string $key, mixed $default = null): mixed
+                        {
+                            return match ($key) {
+                                'service_provider.office_organization' => 'OFFICIAL_ORG',
+                                default => $default,
+                            };
+                        }
+
+                        public function has(string $keys): bool
+                        {
+                            return $keys === 'service_provider.office_organization';
+                        }
+
+                        public function set(string $key, mixed $value): void
+                        {
+                        }
+                    },
+                    default => throw new RuntimeException('Unexpected container dependency: ' . $id),
+                };
+            }
+
+            public function has(string $id): bool
+            {
+                return in_array($id, [ConfigInterface::class, PhpSerializerPacker::class], true);
+            }
+        });
+    }
+
+    public static function tearDownAfterClass(): void
+    {
+        $property = (new ReflectionClass(ApplicationContext::class))->getProperty('container');
+        $property->setAccessible(true);
+        $property->setValue(null, self::$hadOriginalContainer ? self::$originalContainer : null);
+
+        self::$hadOriginalContainer = false;
+        self::$originalContainer = null;
+    }
+
     public function testCreatePublicPageDTOKeepsResponseFieldNames(): void
     {
         $template = $this->makeTemplate();

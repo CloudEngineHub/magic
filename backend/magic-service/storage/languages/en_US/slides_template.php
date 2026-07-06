@@ -10,6 +10,9 @@ return [
     'not_found' => 'Slides template not found',
     'code_generate_failed' => 'Failed to generate slides template code',
     'file_url_generate_failed' => 'Failed to generate slides template file URL',
+    'code_already_exists' => 'Slides template code already exists',
+    'code_string' => 'Template code must be a string',
+    'code_regex' => 'Template code must start with PPT- and contain only letters, numbers, and hyphens',
     'label_required' => 'Template label is required',
     'label_array' => 'Template label must be an array',
     'label_zh_cn_required' => 'Template Chinese label is required',
@@ -36,5 +39,5 @@ return [
     'page_size_min' => 'Page size must be at least 1',
     'page_size_max' => 'Page size cannot exceed 200',
     'keyword_max' => 'Keyword cannot exceed 100 characters',
-    'code_max' => 'Template code cannot exceed 64 characters',
+    'code_max' => 'Template code cannot exceed 100 characters',
 ];

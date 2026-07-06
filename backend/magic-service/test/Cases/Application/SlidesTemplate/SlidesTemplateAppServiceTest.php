@@ -234,6 +234,43 @@ class SlidesTemplateAppServiceTest extends TestCase
         $this->assertSame(SlidesTemplateSourceType::Custom, $result->getSourceType());
     }
 
+    public function testAdminCreateUsesCustomCodeBeforeSaving(): void
+    {
+        $dataIsolation = $this->makeDataIsolation('OFFICIAL_ORG', ['OFFICIAL_ORG']);
+        $request = $this->createMock(SaveSlidesTemplateRequest::class);
+        $request->method('getCode')->willReturn('PPT-business-minimal');
+        $request->method('getLabel')->willReturn([
+            'zh_CN' => '职场白皮书',
+            'en_US' => 'Corporate Whitepaper',
+        ]);
+        $request->method('getDescription')->willReturn([
+            'zh_CN' => '适用于企业汇报。',
+            'en_US' => 'For business reviews.',
+        ]);
+        $request->method('getThumbnailFileKey')->willReturn('');
+        $request->method('getCollageFileKey')->willReturn(null);
+        $request->method('getTemplateFileKey')->willReturn('');
+        $request->method('getPreviewUrl')->willReturn(null);
+        $request->method('getStatus')->willReturn(SlidesTemplateStatus::Enabled->value);
+        $request->method('getSort')->willReturn(100);
+
+        $domainService = $this->createMock(SlidesTemplateDomainService::class);
+        $domainService
+            ->expects($this->once())
+            ->method('create')
+            ->with(
+                $this->callback(static fn (SlidesTemplateDataIsolation $actual): bool => $actual->getCurrentOrganizationCode() === 'OFFICIAL_ORG'),
+                $this->callback(static fn (SlidesTemplateEntity $entity): bool => $entity->getCode() === 'PPT-business-minimal')
+            )
+            ->willReturnCallback(static fn (SlidesTemplateDataIsolation $dataIsolation, SlidesTemplateEntity $entity): SlidesTemplateEntity => $entity->setId(123));
+
+        $service = new AdminSlidesTemplateAppService($domainService);
+        $result = $service->create($dataIsolation, $request);
+
+        $this->assertSame('PPT-business-minimal', $result->getCode());
+        $this->assertSame(SlidesTemplateSourceType::Custom, $result->getSourceType());
+    }
+
     public function testAdminUpdateKeepsExistingSourceType(): void
     {
         $dataIsolation = $this->makeDataIsolation('OFFICIAL_ORG', ['OFFICIAL_ORG']);
