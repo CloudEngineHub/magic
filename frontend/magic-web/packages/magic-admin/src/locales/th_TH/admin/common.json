@@ -15,6 +15,7 @@
 		"remove": "ลบออก",
 		"reset": "รีเซ็ต",
 		"save": "บันทึก",
+		"search": "ค้นหา",
 		"upload": "อัปโหลด"
 	},
 	"confirmClose": "ยืนยันการปิด",
@@ -130,6 +131,7 @@
 	"pleaseSelectPlaceholder": "กรุณาเลือก{{name}}",
 	"prePage": "หน้าก่อนหน้า",
 	"search": "ตัวเลือกการค้นหา",
+	"sortOrder": "ลำดับการเรียง",
 	"status": "สถานะ",
 	"title": "$t(common:platform.name) แดชบอร์ดผู้ดูแลระบบ",
 	"totalItems": "ทั้งหมด {{total}} รายการ",

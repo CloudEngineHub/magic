@@ -50,7 +50,7 @@ function SlidesTemplateCard({
 					{t("slidesTemplate.columns.code")}: {data.code}
 				</span>
 				<span>
-					{t("slidesTemplate.columns.sort")}: {data.sort ?? 0}
+					{t("sortOrder")}: {data.sort ?? 0}
 				</span>
 				<span>
 					{t("slidesTemplate.columns.source")}: {sourceTypeLabel(data.source_type)}

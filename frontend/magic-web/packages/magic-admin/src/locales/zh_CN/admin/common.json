@@ -71,6 +71,7 @@
 		"remove": "移除",
 		"reset": "重置",
 		"save": "保存",
+		"search": "搜索",
 		"upload": "上传"
 	},
 	"confirmClose": "确认关闭",
@@ -245,6 +246,7 @@
 			"zipUploadedDescription": "ZIP 已上传，可点击或拖拽替换"
 		}
 	},
+	"sortOrder": "排序值",
 	"status": "状态",
 	"title": "$t(common:platform.name)管理后台",
 	"totalItems": "共{{total}}条",

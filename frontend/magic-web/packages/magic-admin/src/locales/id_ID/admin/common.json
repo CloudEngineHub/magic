@@ -15,6 +15,7 @@
 		"remove": "Hapus",
 		"reset": "Atur Ulang",
 		"save": "Simpan",
+		"search": "Cari",
 		"upload": "Unggah"
 	},
 	"confirmClose": "Konfirmasi Tutup",
@@ -130,6 +131,7 @@
 	"pleaseSelectPlaceholder": "Silakan pilih {{name}}",
 	"prePage": "Halaman Sebelumnya",
 	"search": "Opsi Pencarian",
+	"sortOrder": "Urutan Sortir",
 	"status": "Status",
 	"title": "$t(common:platform.name) Dasbor Admin",
 	"totalItems": "Total {{total}} item",
