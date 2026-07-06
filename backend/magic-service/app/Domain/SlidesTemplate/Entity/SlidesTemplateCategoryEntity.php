@@ -36,6 +36,11 @@ class SlidesTemplateCategoryEntity extends AbstractEntity
 
     protected int $templateCount = 0;
 
+    public static function generateNewCode(): string
+    {
+        return 'PPT-CATE-' . str_replace('.', '-', uniqid('', true));
+    }
+
     public function toArray(): array
     {
         $result = [

@@ -65,6 +65,7 @@ class AdminSlidesTemplateCategoryAppService extends AbstractKernelAppService
         $this->assertOfficialOrganization($dataIsolation);
 
         $category = $this->buildEntityFromRequest($request);
+        $category->setCode($request->getCode() ?: SlidesTemplateCategoryEntity::generateNewCode());
         $category->setOrganizationCode($dataIsolation->getCurrentOrganizationCode());
         $category->setCreatedUid($dataIsolation->getCurrentUserId());
         $category->setUpdatedUid($dataIsolation->getCurrentUserId());
@@ -80,6 +81,7 @@ class AdminSlidesTemplateCategoryAppService extends AbstractKernelAppService
         $existing = $this->slidesTemplateCategoryDomainService->findByIdOrFail($dataIsolation, $id);
         $category = $this->buildEntityFromRequest($request);
         $category->setId($existing->getId());
+        $category->setCode($request->getCode() ?: $existing->getCode());
         $category->setOrganizationCode($existing->getOrganizationCode());
         $category->setCreatedUid($existing->getCreatedUid());
         $category->setUpdatedUid($dataIsolation->getCurrentUserId());
@@ -142,7 +144,6 @@ class AdminSlidesTemplateCategoryAppService extends AbstractKernelAppService
     private function buildEntityFromRequest(SaveSlidesTemplateCategoryRequest $request): SlidesTemplateCategoryEntity
     {
         $category = new SlidesTemplateCategoryEntity();
-        $category->setCode($request->getCode());
         $category->setNameI18n($request->getNameI18n());
         $category->setStatus($request->getStatus());
         $category->setSort($request->getSort());
