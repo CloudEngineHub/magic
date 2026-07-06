@@ -148,17 +148,27 @@ function SlidesPresetCard({
 						{label}
 					</div>
 				)}
-				<div className="absolute inset-0 z-20 flex items-center justify-center gap-2.5 bg-black/0 opacity-0 transition-all duration-200 group-focus-within:bg-black/30 group-focus-within:opacity-100 group-hover:bg-black/30 group-hover:opacity-100">
+				<div
+					className={cn(
+						"absolute inset-0 z-20 flex items-center justify-center gap-2.5 bg-black/0 opacity-0 transition-all duration-200 group-focus-within:bg-black/30 group-focus-within:opacity-100 group-hover:bg-black/30 group-hover:opacity-100",
+						isSelected && "bg-black/30 opacity-100",
+					)}
+				>
 					<Button
 						type="button"
 						size="sm"
 						variant="default"
 						data-testid="slides-preset-card-use-button"
-						className="h-7 translate-y-2 gap-1 rounded-full px-2 text-xs font-medium opacity-0 shadow-lg transition-all duration-300 hover:scale-105 group-focus-within:translate-y-0 group-focus-within:opacity-100 group-hover:translate-y-0 group-hover:opacity-100"
+						className={cn(
+							"h-7 translate-y-2 gap-1 rounded-full px-2 text-xs font-medium opacity-0 shadow-lg transition-all duration-300 hover:scale-105 group-focus-within:translate-y-0 group-focus-within:opacity-100 group-hover:translate-y-0 group-hover:opacity-100",
+							isSelected && "translate-y-0 opacity-100",
+						)}
 						onClick={handleUseClick}
 					>
 						<Check className="size-3.5" />
-						{t("playbook.edit.presets.form.select")}
+						{isSelected
+							? t("playbook.edit.presets.form.selected")
+							: t("playbook.edit.presets.form.select")}
 					</Button>
 					{canPreview && (
 						<Button
@@ -166,7 +176,7 @@ function SlidesPresetCard({
 							size="sm"
 							variant="secondary"
 							data-testid="slides-preset-card-preview-button"
-							className="h-7 translate-y-2 gap-1 rounded-full bg-background/95 px-2 text-xs font-medium opacity-0 shadow-lg transition-all duration-300 hover:scale-105 group-focus-within:translate-y-0 group-focus-within:opacity-100 group-hover:translate-y-0 group-hover:opacity-100"
+							className="hidden h-7 translate-y-2 gap-1 rounded-full bg-background/95 px-2 text-xs font-medium opacity-0 shadow-lg transition-all duration-300 hover:scale-105 group-focus-within:inline-flex group-focus-within:translate-y-0 group-focus-within:opacity-100 group-hover:inline-flex group-hover:translate-y-0 group-hover:opacity-100"
 							onClick={handlePreviewClick}
 						>
 							<Eye className="size-3.5" />

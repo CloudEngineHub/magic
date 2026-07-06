@@ -15,6 +15,7 @@
 		"remove": "Retirer",
 		"reset": "Réinitialiser",
 		"save": "Enregistrer",
+		"search": "Rechercher",
 		"upload": "Télécharger"
 	},
 	"confirmClose": "Confirmer la Fermeture",
@@ -130,6 +131,7 @@
 	"pleaseSelectPlaceholder": "Veuillez sélectionner {{name}}",
 	"prePage": "Page Précédente",
 	"search": "Options de Recherche",
+	"sortOrder": "Ordre de Tri",
 	"status": "Statut",
 	"title": "$t(common:platform.name) Tableau de Bord Admin",
 	"totalItems": "Total {{total}} éléments",

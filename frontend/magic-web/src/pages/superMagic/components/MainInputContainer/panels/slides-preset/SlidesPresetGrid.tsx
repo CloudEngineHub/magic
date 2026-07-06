@@ -89,7 +89,7 @@ const SlidesPresetGrid = observer(
 								whileInView="visible"
 								initial="hidden"
 								viewport={{ once: true, amount: 0.1 }}
-								whileHover={{ scale: 1.15, y: -6, zIndex: 40 }}
+								whileHover={{ scale: 1.05, y: -6, zIndex: 40 }}
 								transition={{ type: "spring", stiffness: 300, damping: 20 }}
 								className="relative flex size-full will-change-transform"
 							>

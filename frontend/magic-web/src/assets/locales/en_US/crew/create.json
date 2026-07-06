@@ -640,6 +640,7 @@
 					"presetValue": "Preset Value",
 					"preview": "Preview",
 					"select": "Select",
+					"selected": "Selected",
 					"selectedTemplate": "Template \"{{name}}\" selected",
 					"setAsDefault": "Set as Default",
 					"titleCreate": "Create",

@@ -1,8 +1,8 @@
 import { lazy, useEffect, useMemo, useRef, useState } from "react"
 import { createStyles } from "antd-style"
 import { debounce } from "lodash-es"
-import type { SearchItem } from "@admin-components"
-import {
+import type {
+	SearchItem,
 	getSyncedTimeFilterValue,
 	SearchItemType,
 	StatusTag,
@@ -354,7 +354,7 @@ function SkillMarketPage() {
 				render: (value: number) => value ?? "-",
 			},
 			{
-				title: t("sortOrder"),
+				title: tCommon("sortOrder"),
 				dataIndex: "sort_order",
 				key: "sort_order",
 				width: 180,
@@ -398,6 +398,7 @@ function SkillMarketPage() {
 		],
 		[
 			t,
+			tCommon,
 			getLocalizedText,
 			renderDescriptionText,
 			styles.desc,

@@ -242,7 +242,7 @@ export default function SlidesTemplatePage() {
 				),
 			},
 			{
-				title: t("slidesTemplate.columns.sort"),
+				title: t("sortOrder"),
 				dataIndex: "sort",
 				key: "sort",
 				width: 120,
@@ -271,6 +271,7 @@ export default function SlidesTemplatePage() {
 				title: t("operate"),
 				key: "action",
 				width: 140,
+				fixed: "right",
 				render: (_, record) => {
 					const disabled = !hasEditRight || isSystemSlidesTemplate(record)
 					return (
@@ -362,7 +363,7 @@ export default function SlidesTemplatePage() {
 				onChange={(value) => setFilterDraft((prev) => ({ ...prev, status: value }))}
 			/>
 			<MagicButton type="primary" icon={<IconSearch size={16} />} onClick={submitFilters}>
-				{t("search")}
+				{t("button.search")}
 			</MagicButton>
 			<MagicButton onClick={resetFilters}>{t("button.reset")}</MagicButton>
 			<MagicButton icon={<IconRefresh size={16} />} onClick={() => refresh()}>

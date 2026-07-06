@@ -638,6 +638,7 @@
 					"presetValue": "预设值",
 					"preview": "预览",
 					"select": "选择",
+					"selected": "已选择",
 					"selectedTemplate": "已选择「{{name}}」模板",
 					"setAsDefault": "设为默认",
 					"titleCreate": "创建",

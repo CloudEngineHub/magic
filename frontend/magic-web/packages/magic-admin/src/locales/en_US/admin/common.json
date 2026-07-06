@@ -71,6 +71,7 @@
 		"remove": "Remove",
 		"reset": "Reset",
 		"save": "Save",
+		"search": "Search",
 		"upload": "Upload"
 	},
 	"confirmClose": "Confirm Close",
@@ -240,6 +241,7 @@
 			"zipUploadedDescription": "ZIP uploaded. Click or drag to replace it"
 		}
 	},
+	"sortOrder": "Sort Order",
 	"status": "Status",
 	"title": "$t(common:platform.name) Admin Dashboard",
 	"totalItems": "Total {{total}} items",
