@@ -259,6 +259,7 @@ class ResourceShareDomainService
             'share_project',            // 是否分享整个项目
             'share_range',              // 团队分享范围（用于列表组装 share_scope）
             'target_ids',               // 团队分享目标（仅用于列表计数，不直接对外返回）
+            'extra',                    // 分享扩展配置
             'deleted_at',               // 删除时间
         ];
 
@@ -293,6 +294,10 @@ class ResourceShareDomainService
                 } elseif ($field === 'expire_at') {
                     // expire_at 字段：格式化日期为 Y/m/d 格式
                     $filteredItem[$field] = DateFormatUtil::formatExpireAt($itemArray[$field] ?? null);
+                } elseif ($field === 'extra') {
+                    // extra 字段：分享扩展配置
+                    $extra = $itemArray[$field] ?? [];
+                    $filteredItem[$field] = is_array($extra) ? $extra : [];
                 } else {
                     // NULL 字段：可以返回 null（如 project_id, default_open_file_id, share_range 等）
                     $filteredItem[$field] = $itemArray[$field] ?? null;
