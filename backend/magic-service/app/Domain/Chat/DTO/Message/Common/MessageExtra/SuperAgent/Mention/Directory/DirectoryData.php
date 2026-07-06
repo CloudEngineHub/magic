@@ -21,6 +21,8 @@ final class DirectoryData extends AbstractDTO implements MentionDataInterface
 
     protected ?array $directoryMetadata;
 
+    protected ?string $projectId;
+
     public function __construct(array $data = [])
     {
         parent::__construct($data);
@@ -58,5 +60,15 @@ final class DirectoryData extends AbstractDTO implements MentionDataInterface
     public function getDirectoryMetadata(): ?array
     {
         return $this->directoryMetadata ?? null;
+    }
+
+    public function getProjectId(): ?string
+    {
+        return $this->projectId ?? null;
+    }
+
+    public function setProjectId(?string $projectId): void
+    {
+        $this->projectId = $projectId;
     }
 }

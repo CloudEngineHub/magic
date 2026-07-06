@@ -41,6 +41,7 @@ final class DirectoryMention extends AbstractMention
             'type' => MentionType::PROJECT_DIRECTORY->value,
             'directory_path' => $data->getDirectoryPath(),
             'directory_metadata' => $data->getDirectoryMetadata(),
+            'project_id' => $data->getProjectId(),
         ];
     }
 }

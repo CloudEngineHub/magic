@@ -1056,6 +1056,85 @@ class SandboxGatewayService extends AbstractSandboxOS implements SandboxGatewayI
         }
     }
 
+    public function mountReferencedProject(
+        string $sandboxId,
+        string $projectId,
+        string $projectSpaceRootFileId,
+        string $authorization
+    ): GatewayResult {
+        if (! $this->isEnabledSandbox()) {
+            $this->logger->debug('[Sandbox][Gateway] Local debugging mode: skipping referenced project mount', [
+                'sandbox_id' => $sandboxId,
+                'project_id' => $projectId,
+            ]);
+            return GatewayResult::success();
+        }
+
+        $payload = [
+            'project_id' => $projectId,
+            'project_space_root_file_id' => $projectSpaceRootFileId,
+            'authorization' => $authorization,
+        ];
+
+        $this->logger->info('[Sandbox][Gateway] Mounting referenced project', [
+            'sandbox_id' => $sandboxId,
+            'project_id' => $projectId,
+        ]);
+
+        try {
+            return retry(3, function () use ($sandboxId, $payload) {
+                try {
+                    $response = $this->getClient()->post(
+                        $this->buildApiPath(sprintf('api/v1/sandboxes/%s/referenced-projects', $sandboxId)),
+                        [
+                            'headers' => $this->getCommonHeaders(),
+                            'json' => $payload,
+                            'timeout' => 60,
+                        ]
+                    );
+
+                    $body = $response->getBody()->getContents();
+                    $responseData = Json::decode($body);
+                    $result = GatewayResult::fromApiResponse($responseData ?? []);
+
+                    if ($result->isSuccess()) {
+                        $this->logger->info('[Sandbox][Gateway] Referenced project mounted', [
+                            'sandbox_id' => $sandboxId,
+                            'project_id' => $projectId,
+                        ]);
+                    } else {
+                        $this->logger->error('[Sandbox][Gateway] Failed to mount referenced project', [
+                            'sandbox_id' => $sandboxId,
+                            'project_id' => $projectId,
+                            'code' => $result->getCode(),
+                            'message' => $result->getMessage(),
+                        ]);
+                    }
+                    return $result;
+                } catch (GuzzleException $e) {
+                    if (! $this->isRetryableError($e)) {
+                        return GatewayResult::error('HTTP request failed: ' . $e->getMessage());
+                    }
+                    throw $e;
+                } catch (Exception $e) {
+                    $this->logger->error('[Sandbox][Gateway] Unexpected error when mounting referenced project', [
+                        'sandbox_id' => $sandboxId,
+                        'project_id' => $projectId,
+                        'error' => $e->getMessage(),
+                    ]);
+                    return GatewayResult::error('Unexpected error: ' . $e->getMessage());
+                }
+            }, 2000);
+        } catch (Throwable $e) {
+            $this->logger->error('[Sandbox][Gateway] All retry attempts failed for referenced project mount', [
+                'sandbox_id' => $sandboxId,
+                'project_id' => $projectId,
+                'error' => $e->getMessage(),
+            ]);
+            return GatewayResult::error('HTTP request failed after retries: ' . $e->getMessage());
+        }
+    }
+
     protected function getCommonHeaders(): array
     {
         $requestId = CoContext::getRequestId() ?: (string) IdGenerator::getSnowId();

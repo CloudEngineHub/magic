@@ -68,6 +68,7 @@ use Hyperf\Context\ApplicationContext;
 use Hyperf\Logger\LoggerFactory;
 use Hyperf\Server\Exception\ServerException;
 use Psr\Log\LoggerInterface;
+use RuntimeException;
 use Throwable;
 
 use function Hyperf\Translation\trans;
@@ -1361,6 +1362,29 @@ class AgentDomainService
         }
     }
 
+    /**
+     * Mount referenced projects (cross-project @mentions) into the sandbox
+     * as a read-only space. Access control is the caller's responsibility —
+     * this method assumes the caller has already verified the user can access
+     * every target project.
+     *
+     * @param string[] $projectIds
+     * @throws RuntimeException when any mount fails
+     */
+    public function mountReferencedProjects(
+        DataIsolation $dataIsolation,
+        string $sandboxId,
+        array $projectIds
+    ): void {
+        if (empty($projectIds)) {
+            return;
+        }
+
+        foreach ($projectIds as $projectId) {
+            $this->mountSingleReferencedProject($dataIsolation, $sandboxId, $projectId);
+        }
+    }
+
     private function refreshInitContextSandboxId(AgentContext $agentContext, string $sandboxId): void
     {
         $initContext = $agentContext->getInitContext();
@@ -1871,5 +1895,41 @@ class AgentDomainService
         }
 
         return $mentions;
+    }
+
+    /**
+     * Mount a single referenced project. Resolves the root file ID and calls
+     * the sandbox gateway.
+     */
+    private function mountSingleReferencedProject(
+        DataIsolation $dataIsolation,
+        string $sandboxId,
+        string $projectId
+    ): void {
+        $authorization = $this->getAuthorizationByUserId($dataIsolation->getCurrentUserId());
+        $taskFileDomainService = ApplicationContext::getContainer()->get(TaskFileDomainService::class);
+        $rootFileId = (string) $taskFileDomainService->getProjectRootFileId((int) $projectId);
+
+        $result = $this->gateway->mountReferencedProject(
+            $sandboxId,
+            $projectId,
+            $rootFileId,
+            $authorization
+        );
+
+        if (! $result->isSuccess()) {
+            $this->logger->error('[Sandbox][Domain] Failed to mount referenced project', [
+                'sandbox_id' => $sandboxId,
+                'project_id' => $projectId,
+                'code' => $result->getCode(),
+                'message' => $result->getMessage(),
+            ]);
+            throw new RuntimeException($result->getMessage());
+        }
+
+        $this->logger->info('[Sandbox][Domain] Referenced project mounted', [
+            'sandbox_id' => $sandboxId,
+            'project_id' => $projectId,
+        ]);
     }
 }

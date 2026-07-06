@@ -36,6 +36,7 @@ final class ProjectFileMention extends AbstractMention
             'file_key' => $data->getFileKey(),
             'file_path' => $data->getFilePath(),
             'file_name' => $data->getFileName(),
+            'project_id' => $data->getProjectId(),
         ];
     }
 }
