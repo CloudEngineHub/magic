@@ -1,9 +1,24 @@
 import { act, fireEvent, render, screen } from "@testing-library/react"
-import { describe, expect, it, vi } from "vitest"
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest"
 import type { OptionItem } from "../../types"
 import SlidesPresetGrid from "../SlidesPresetGrid"
 
 describe("SlidesPresetGrid", () => {
+	beforeAll(() => {
+		vi.stubGlobal(
+			"IntersectionObserver",
+			vi.fn(() => ({
+				disconnect: vi.fn(),
+				observe: vi.fn(),
+				unobserve: vi.fn(),
+			})),
+		)
+	})
+
+	afterAll(() => {
+		vi.unstubAllGlobals()
+	})
+
 	const mockTemplates: OptionItem[] = [
 		{
 			value: "academic-research",
@@ -37,6 +52,16 @@ describe("SlidesPresetGrid", () => {
 		fireEvent.click(screen.getByText("Academic Research"))
 
 		expect(handleTemplateClick).toHaveBeenCalledWith(mockTemplates[0])
+	})
+
+	it("keeps the selected template action visible", () => {
+		render(<SlidesPresetGrid templates={mockTemplates} selectedTemplate={mockTemplates[0]} />)
+
+		const useButton = screen.getAllByTestId("slides-preset-card-use-button")[0]
+
+		expect(useButton).toHaveTextContent("playbook.edit.presets.form.selected")
+		expect(useButton.className).toContain("opacity-100")
+		expect(useButton.className).toContain("translate-y-0")
 	})
 
 	it("opens preview without selecting the template", () => {
