@@ -26,9 +26,10 @@ from app.tools.image_search_utils.drivers.base import ImageSearchResultItem
 
 logger = get_logger(__name__)
 
-# Constants
+# 常量配置
 VISUAL_ANALYSIS_BATCH_SIZE = 10  # Maximum concurrent visual analysis tasks per batch
 IMAGE_DOWNLOAD_CONCURRENCY = 20  # Maximum concurrent image downloads
+IMAGE_SEARCH_DOWNLOAD_TIMEOUT_SECONDS = 15  # 图片候选下载专用短超时
 
 
 @dataclass
@@ -930,50 +931,62 @@ Keyword Diversification Principles:
         if not images:
             return
 
-        # Create semaphore to limit concurrent downloads
+        # 限制图片候选下载并发数
         semaphore = asyncio.Semaphore(IMAGE_DOWNLOAD_CONCURRENCY)
 
         tasks = []
-        for img in images:
-            # Use cache_only mode - pass empty file_path to trigger cache mode
+        for url, grouped_images in self._group_images_by_url(images).items():
+            # 使用 cache_only 模式，空 file_path 会触发缓存下载
             download_params = DownloadFromUrlParams(
-                url=img.url,
-                file_path="",  # Empty path triggers cache_only mode
+                url=url,
+                file_path="",  # 空路径触发 cache_only 模式
                 override=True
             )
 
-            task = self._download_single_image_with_semaphore(img, download_params, semaphore)
+            task = self._download_image_group_with_semaphore(url, grouped_images, download_params, semaphore)
             tasks.append(task)
 
-        # Execute downloads concurrently with concurrency control
+        # 并发执行去重后的下载任务
         await asyncio.gather(*tasks, return_exceptions=True)
 
-    async def _download_single_image_with_semaphore(self, img: FilteredImage, params: DownloadFromUrlParams, semaphore: asyncio.Semaphore) -> None:
-        """Download a single image using cache_only mode with semaphore control
+    def _group_images_by_url(self, images: List[FilteredImage]) -> Dict[str, List[FilteredImage]]:
+        """按 URL 聚合同批图片候选，避免重复下载。"""
+        images_by_url: Dict[str, List[FilteredImage]] = {}
+        for img in images:
+            if not img.url:
+                continue
+            images_by_url.setdefault(img.url, []).append(img)
+        return images_by_url
 
-        Args:
-            img: Image to download
-            params: Download parameters
-            semaphore: Semaphore to control concurrency
-        """
+    async def _download_image_group_with_semaphore(
+        self,
+        url: str,
+        images: List[FilteredImage],
+        params: DownloadFromUrlParams,
+        semaphore: asyncio.Semaphore
+    ) -> None:
+        """在并发限制内下载同一 URL 的图片候选组。"""
         async with semaphore:
-            await self._download_single_image(img, params)
+            await self._download_image_group(url, images, params)
 
-    async def _download_single_image(self, img: FilteredImage, params: DownloadFromUrlParams) -> None:
-        """Download a single image using cache_only mode
-
-        Args:
-            img: Image to download
-            params: Download parameters
-        """
+    async def _download_image_group(self, url: str, images: List[FilteredImage], params: DownloadFromUrlParams) -> None:
+        """下载同一 URL 的图片候选，并同步写回所有重复项的本地路径。"""
         try:
-            result = await self._download_tool.execute_purely(params, cache_only=True)
+            result = await self._download_tool.execute_purely(
+                params,
+                cache_only=True,
+                timeout_seconds=IMAGE_SEARCH_DOWNLOAD_TIMEOUT_SECONDS,
+            )
             if result.ok and result.extra_info:
-                img.local_path = result.extra_info.get("file_path")
-            else:
-                logger.warning(f"下载失败: {img.url} - {result.content or 'Unknown error'}")
+                local_path = result.extra_info.get("file_path")
+                if local_path:
+                    for img in images:
+                        img.local_path = local_path
+                    return
+
+            logger.warning(f"下载失败: {url} - {result.content or 'Unknown error'}")
         except Exception as e:
-            logger.warning(f"下载图片异常: {img.url} - {e}")
+            logger.warning(f"下载图片异常: {url} - {e}")
 
     async def _analyze_images_with_visual_understanding_for_requirement(self, images: List[FilteredImage], requirement_data: Dict[str, Any]) -> None:
         """Analyze images using visual understanding tool for a specific requirement
