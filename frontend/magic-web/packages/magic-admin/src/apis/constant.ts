@@ -176,6 +176,20 @@ export const RequestUrl = {
 	updateSlidesTemplateSort: "/api/v1/admin/slides-templates/${id}/sort",
 	/** 删除PPT模板 */
 	deleteSlidesTemplate: "/api/v1/admin/slides-templates/${id}",
+	/** 查询PPT模板分类列表 */
+	querySlidesTemplateCategories: "/api/v1/admin/slides-template-categories/queries",
+	/** 获取PPT模板分类详情 */
+	getSlidesTemplateCategory: "/api/v1/admin/slides-template-categories/${id}",
+	/** 创建PPT模板分类 */
+	createSlidesTemplateCategory: "/api/v1/admin/slides-template-categories",
+	/** 更新PPT模板分类 */
+	updateSlidesTemplateCategory: "/api/v1/admin/slides-template-categories/${id}",
+	/** 更新PPT模板分类状态 */
+	updateSlidesTemplateCategoryStatus: "/api/v1/admin/slides-template-categories/${id}/status",
+	/** 更新PPT模板分类排序 */
+	updateSlidesTemplateCategorySort: "/api/v1/admin/slides-template-categories/${id}/sort",
+	/** 删除PPT模板分类 */
+	deleteSlidesTemplateCategory: "/api/v1/admin/slides-template-categories/${id}",
 
 	/** 权限 */
 	/** 获取我的权限列表 */

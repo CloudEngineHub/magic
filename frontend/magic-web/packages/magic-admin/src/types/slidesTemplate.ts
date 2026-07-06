@@ -23,6 +23,7 @@ export namespace SlidesTemplate {
 		organization_code: string
 		code: string
 		source_type?: SourceType
+		category_code?: string | null
 		label: LangText
 		description: LangText
 		thumbnail_file_key: string
@@ -43,16 +44,46 @@ export namespace SlidesTemplate {
 	export interface QueryParams extends PageParams {
 		keyword?: string
 		code?: string
+		category_code?: string
 		status?: Status | null
 	}
 
 	export interface SaveParams {
+		category_code?: string | null
 		label: LangText
 		description: LangText
 		thumbnail_file_key: string
 		collage_file_key?: string | null
 		template_file_key: string
 		preview_url?: string | null
+		status?: Status
+		sort?: number
+	}
+
+	export interface CategoryItem {
+		id: string
+		organization_code: string
+		code: string
+		name_i18n: LangText
+		sort: number
+		template_count: number
+		is_official: boolean
+		status: Status
+		created_uid?: string
+		updated_uid?: string
+		created_at?: string
+		updated_at?: string
+	}
+
+	export interface CategoryQueryParams extends PageParams {
+		keyword?: string
+		code?: string
+		status?: Status | null
+	}
+
+	export interface CategorySaveParams {
+		code?: string
+		name_i18n: LangText
 		status?: Status
 		sort?: number
 	}

@@ -1,6 +1,7 @@
 import { SlidesTemplate } from "../../../types/slidesTemplate"
 
 export interface SlidesTemplateFormValues {
+	category_code?: string | null
 	label: SlidesTemplate.LangText
 	description: SlidesTemplate.LangText
 	thumbnail_file_key: string
@@ -11,8 +12,19 @@ export interface SlidesTemplateFormValues {
 	sort?: number | null
 }
 
+export interface SlidesTemplateCategoryFormValues {
+	code?: string
+	name_i18n: SlidesTemplate.LangText
+	status?: boolean
+	sort?: number | null
+}
+
 export function resolveSlidesTemplateTitle(record: SlidesTemplate.Item) {
 	return record.label?.zh_CN || record.label?.en_US || record.code
+}
+
+export function resolveSlidesTemplateCategoryName(record: SlidesTemplate.CategoryItem) {
+	return record.name_i18n?.zh_CN || record.name_i18n?.en_US || record.code
 }
 
 export function getSlidesTemplateStatusByChecked(checked: boolean) {
@@ -27,12 +39,25 @@ export function buildSlidesTemplateSaveParams(
 	values: SlidesTemplateFormValues,
 ): SlidesTemplate.SaveParams {
 	return {
+		category_code: values.category_code || null,
 		label: values.label,
 		description: values.description,
 		thumbnail_file_key: values.thumbnail_file_key,
 		collage_file_key: values.collage_file_key || null,
 		template_file_key: values.template_file_key,
 		preview_url: values.preview_url || null,
+		status: getSlidesTemplateStatusByChecked(Boolean(values.status)),
+		sort: values.sort ?? 0,
+	}
+}
+
+export function buildSlidesTemplateCategorySaveParams(
+	values: SlidesTemplateCategoryFormValues,
+): SlidesTemplate.CategorySaveParams {
+	const code = values.code?.trim()
+	return {
+		...(code ? { code } : {}),
+		name_i18n: values.name_i18n,
 		status: getSlidesTemplateStatusByChecked(Boolean(values.status)),
 		sort: values.sort ?? 0,
 	}

@@ -43,6 +43,8 @@ import type {
 	SuggestionsMeta,
 } from "@/pages/superMagic/stores/suggestion-types"
 import type {
+	SlidesTemplateCategoryListResponse,
+	SlidesTemplateCategoryQueryParams,
 	SlidesTemplateListResponse,
 	SlidesTemplateQueryParams,
 } from "@/pages/superMagic/components/MainInputContainer/scenes/Slides/slidesTemplateState"
@@ -704,6 +706,12 @@ export const generateSuperMagicApi = (fetch: HttpClient) => ({
 	getSlidesTemplates(params: SlidesTemplateQueryParams) {
 		return fetch.get<SlidesTemplateListResponse>(
 			genRequestUrl("/api/v1/slides-templates", {}, params),
+		)
+	},
+
+	getSlidesTemplateCategories(params: SlidesTemplateCategoryQueryParams) {
+		return fetch.get<SlidesTemplateCategoryListResponse>(
+			genRequestUrl("/api/v1/slides-template-categories", {}, params),
 		)
 	},
 

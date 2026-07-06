@@ -1,6 +1,5 @@
 import { memo, useEffect, useMemo, useRef, useState } from "react"
-import { Flex, Form, InputNumber, Switch, message } from "antd"
-import { IconCheck, IconUpload } from "@tabler/icons-react"
+import { Flex, Form, InputNumber, Select, Switch, message } from "antd"
 import { useMemoizedFn } from "ahooks"
 import { useTranslation } from "react-i18next"
 import {
@@ -9,7 +8,6 @@ import {
 	MagicInput,
 	MagicModal,
 	MultiLangSetting,
-	UploadButton,
 	type Lang,
 	type MagicModalProps,
 } from "@admin-components"
@@ -19,13 +17,17 @@ import type { Upload } from "@admin/types/upload"
 import { genFileData } from "@admin/utils/file"
 import { SlidesTemplate } from "@admin/types/slidesTemplate"
 import { buildSlidesTemplateSaveParams } from "../utils"
+import {
+	SlidesTemplateUploadField,
+	type SlidesTemplateFileField,
+} from "./SlidesTemplateUploadField"
 
 interface SlidesTemplateModalProps extends MagicModalProps {
 	info?: SlidesTemplate.Item | null
+	categoryOptions?: Array<{ label: string; value: string }>
 	onSuccess?: () => void
 }
 
-type FileField = "thumbnail_file_key" | "collage_file_key" | "template_file_key"
 type LangField = "label" | "description"
 type LangErrorState = Record<LangField, boolean>
 type FieldPath = Array<string | number>
@@ -35,30 +37,14 @@ type FormValidationError = {
 	}>
 }
 
-interface UploadFieldProps {
-	field: FileField
-	label: string
-	required?: boolean
-	accept: string
-	description: string
-	uploadedDescription: string
-	previewUrl?: string
-	uploading: boolean
-	uploaded?: boolean
-	uploadedText: string
-	pasteable?: boolean
-	dragging?: boolean
-	disabled?: boolean
-	onDragEnter: (field: FileField) => void
-	onDragLeave: (field: FileField) => void
-	onUpload: (field: FileField, files: FileList) => void
-}
-
 type ImageFileField = "thumbnail_file_key" | "collage_file_key"
 
 const IMAGE_ACCEPT = "image/*"
 const ZIP_ACCEPT = ".zip,application/zip,application/x-zip-compressed"
-const IMAGE_FILE_FIELDS = new Set<FileField>(["thumbnail_file_key", "collage_file_key"])
+const IMAGE_FILE_FIELDS = new Set<SlidesTemplateFileField>([
+	"thumbnail_file_key",
+	"collage_file_key",
+])
 const DEFAULT_LANG_ERRORS: LangErrorState = {
 	label: false,
 	description: false,
@@ -74,158 +60,15 @@ const getLangErrors = (errorFields: FormValidationError["errorFields"] = []): La
 	description: errorFields.some((field) => isSameFieldPath(field.name, ["description", "en_US"])),
 })
 
-const UploadField = memo(
-	({
-		field,
-		label,
-		required,
-		accept,
-		description,
-		uploadedDescription,
-		previewUrl,
-		uploading,
-		uploaded,
-		uploadedText,
-		pasteable,
-		dragging,
-		disabled,
-		onDragEnter,
-		onDragLeave,
-		onUpload,
-	}: UploadFieldProps) => {
-		const [focused, setFocused] = useState(false)
-
-		const active = dragging || focused
-		const borderColor = active ? "#315CEC" : uploaded ? "#BFE7CD" : "#E5E7EB"
-		const background = dragging
-			? "rgba(49, 92, 236, 0.08)"
-			: focused
-				? "rgba(49, 92, 236, 0.04)"
-				: uploaded
-					? "rgba(26, 159, 85, 0.04)"
-					: "#FFFFFF"
-		const boxShadow = focused && !dragging ? "0 0 0 3px rgba(49, 92, 236, 0.12)" : "none"
-
-		const handleDragOver = useMemoizedFn((event: React.DragEvent<HTMLDivElement>) => {
-			event.preventDefault()
-			if (disabled) return
-			event.dataTransfer.dropEffect = "copy"
-			onDragEnter(field)
-		})
-
-		const handleDragLeave = useMemoizedFn((event: React.DragEvent<HTMLDivElement>) => {
-			if (event.currentTarget.contains(event.relatedTarget as Node | null)) return
-			onDragLeave(field)
-		})
-
-		const handleDrop = useMemoizedFn((event: React.DragEvent<HTMLDivElement>) => {
-			event.preventDefault()
-			onDragLeave(field)
-			if (disabled) return
-			const { files } = event.dataTransfer
-			if (files.length) onUpload(field, files)
-		})
-
-		const handlePaste = useMemoizedFn((event: React.ClipboardEvent<HTMLDivElement>) => {
-			if (!pasteable || disabled) return
-			const { files } = event.clipboardData
-			if (!files.length) return
-			event.preventDefault()
-			onUpload(field, files)
-		})
-
-		const handleMouseDown = useMemoizedFn((event: React.MouseEvent<HTMLDivElement>) => {
-			if (disabled) return
-			event.currentTarget.focus()
-		})
-
-		const handleFocus = useMemoizedFn(() => {
-			if (!disabled) setFocused(true)
-		})
-
-		const handleBlur = useMemoizedFn((event: React.FocusEvent<HTMLDivElement>) => {
-			if (event.currentTarget.contains(event.relatedTarget as Node | null)) return
-			setFocused(false)
-		})
-
-		return (
-			<Form.Item label={label} required={required}>
-				<Flex
-					vertical
-					gap={8}
-					tabIndex={disabled ? undefined : 0}
-					onDragOver={handleDragOver}
-					onDragLeave={handleDragLeave}
-					onDrop={handleDrop}
-					onPaste={handlePaste}
-					onMouseDown={handleMouseDown}
-					onFocus={handleFocus}
-					onBlur={handleBlur}
-					style={{
-						width: "100%",
-						minHeight: 64,
-						padding: 10,
-						border: `1px dashed ${borderColor}`,
-						borderRadius: 8,
-						boxShadow,
-						outline: "none",
-						background,
-						boxSizing: "border-box",
-						transition:
-							"border-color 0.2s ease, background 0.2s ease, box-shadow 0.2s ease",
-					}}
-				>
-					<Flex align="center" gap={12} wrap="wrap">
-						<UploadButton
-							loading={uploading}
-							disabled={disabled}
-							onFileChange={(files) => onUpload(field, files)}
-							icon={
-								uploaded && !uploading ? (
-									<IconCheck size={20} color="#1a9f55" />
-								) : (
-									<IconUpload size={20} />
-								)
-							}
-							multiple={false}
-							accept={accept}
-							type="default"
-						>
-							{uploaded && !uploading ? uploadedText : label}
-						</UploadButton>
-						<span
-							style={{
-								color: uploaded ? "#1a9f55" : "#6B7280",
-								fontSize: 13,
-								lineHeight: "20px",
-							}}
-						>
-							{uploaded ? uploadedDescription : description}
-						</span>
-					</Flex>
-					{previewUrl ? (
-						<img
-							src={previewUrl}
-							alt={label}
-							style={{ width: 160, height: 96, objectFit: "cover", borderRadius: 8 }}
-							draggable={false}
-						/>
-					) : null}
-					<Form.Item
-						name={field}
-						hidden
-						rules={required ? [{ required: true, message: "" }] : undefined}
-					>
-						<MagicInput />
-					</Form.Item>
-				</Flex>
-			</Form.Item>
-		)
-	},
-)
-
 export const SlidesTemplateModal = memo(
-	({ info, onCancel, onOk, onSuccess, ...rest }: SlidesTemplateModalProps) => {
+	({
+		info,
+		categoryOptions = [],
+		onCancel,
+		onOk,
+		onSuccess,
+		...rest
+	}: SlidesTemplateModalProps) => {
 		const { t } = useTranslation("admin/common")
 		const { SlidesTemplateApi } = useApis()
 		const [form] = Form.useForm()
@@ -235,9 +78,11 @@ export const SlidesTemplateModal = memo(
 			thumbnail_file_key: "",
 			collage_file_key: "",
 		})
-		const [uploadingField, setUploadingField] = useState<FileField | null>(null)
-		const [draggingField, setDraggingField] = useState<FileField | null>(null)
-		const [uploadedFields, setUploadedFields] = useState<Record<FileField, boolean>>({
+		const [uploadingField, setUploadingField] = useState<SlidesTemplateFileField | null>(null)
+		const [draggingField, setDraggingField] = useState<SlidesTemplateFileField | null>(null)
+		const [uploadedFields, setUploadedFields] = useState<
+			Record<SlidesTemplateFileField, boolean>
+		>({
 			thumbnail_file_key: false,
 			collage_file_key: false,
 			template_file_key: false,
@@ -257,6 +102,7 @@ export const SlidesTemplateModal = memo(
 					zh_CN: info?.description?.zh_CN ?? "",
 					en_US: info?.description?.en_US ?? "",
 				},
+				category_code: info?.category_code ?? undefined,
 				thumbnail_file_key: info?.thumbnail_file_key ?? "",
 				collage_file_key: info?.collage_file_key ?? "",
 				template_file_key: info?.template_file_key ?? "",
@@ -329,8 +175,9 @@ export const SlidesTemplateModal = memo(
 			return true
 		})
 
-		const isImageField = useMemoizedFn((field: FileField): field is ImageFileField =>
-			IMAGE_FILE_FIELDS.has(field),
+		const isImageField = useMemoizedFn(
+			(field: SlidesTemplateFileField): field is ImageFileField =>
+				IMAGE_FILE_FIELDS.has(field),
 		)
 
 		const validateZip = useMemoizedFn((file: File) => {
@@ -341,53 +188,55 @@ export const SlidesTemplateModal = memo(
 			return true
 		})
 
-		const handleUpload = useMemoizedFn(async (field: FileField, files: FileList) => {
-			if (uploadingField) return
+		const handleUpload = useMemoizedFn(
+			async (field: SlidesTemplateFileField, files: FileList) => {
+				if (uploadingField) return
 
-			const fileList = Array.from(files).map(genFileData)
-			if (!fileList.length) return
+				const fileList = Array.from(files).map(genFileData)
+				if (!fileList.length) return
 
-			if (field === "template_file_key") {
+				if (field === "template_file_key") {
+					const file = fileList[0].file
+					if (!file || !validateZip(file)) return
+					setUploadingField(field)
+					try {
+						const { fullfilled } = await upload(fileList)
+						if (fullfilled.length) {
+							form.setFieldValue(field, fullfilled[0].value.key)
+							setUploadedFields((prev) => ({ ...prev, [field]: true }))
+							message.success(t("message.uploadSuccess"))
+						}
+					} finally {
+						setUploadingField(null)
+					}
+					return
+				}
+
 				const file = fileList[0].file
-				if (!file || !validateZip(file)) return
+				if (!file || !isImageField(field) || !validateImage(file)) return
+
+				setImagePreviewUrl(field, URL.createObjectURL(file), true)
 				setUploadingField(field)
 				try {
 					const { fullfilled } = await upload(fileList)
 					if (fullfilled.length) {
-						form.setFieldValue(field, fullfilled[0].value.key)
+						const fileKey = fullfilled[0].value.key
+						form.setFieldValue(field, fileKey)
 						setUploadedFields((prev) => ({ ...prev, [field]: true }))
 						message.success(t("message.uploadSuccess"))
 					}
 				} finally {
 					setUploadingField(null)
 				}
-				return
-			}
+			},
+		)
 
-			const file = fileList[0].file
-			if (!file || !isImageField(field) || !validateImage(file)) return
-
-			setImagePreviewUrl(field, URL.createObjectURL(file), true)
-			setUploadingField(field)
-			try {
-				const { fullfilled } = await upload(fileList)
-				if (fullfilled.length) {
-					const fileKey = fullfilled[0].value.key
-					form.setFieldValue(field, fileKey)
-					setUploadedFields((prev) => ({ ...prev, [field]: true }))
-					message.success(t("message.uploadSuccess"))
-				}
-			} finally {
-				setUploadingField(null)
-			}
-		})
-
-		const handleDragEnter = useMemoizedFn((field: FileField) => {
+		const handleDragEnter = useMemoizedFn((field: SlidesTemplateFileField) => {
 			if (uploadingField) return
 			setDraggingField(field)
 		})
 
-		const handleDragLeave = useMemoizedFn((field: FileField) => {
+		const handleDragLeave = useMemoizedFn((field: SlidesTemplateFileField) => {
 			setDraggingField((current) => (current === field ? null : current))
 		})
 
@@ -490,7 +339,21 @@ export const SlidesTemplateModal = memo(
 						</Flex>
 					</Form.Item>
 
-					<UploadField
+					<Form.Item label={t("slidesTemplate.fields.category")} name="category_code">
+						<Select
+							allowClear
+							showSearch
+							placeholder={t("slidesTemplate.fields.category")}
+							options={categoryOptions}
+							filterOption={(input, option) =>
+								String(option?.label ?? "")
+									.toLowerCase()
+									.includes(input.toLowerCase())
+							}
+						/>
+					</Form.Item>
+
+					<SlidesTemplateUploadField
 						field="thumbnail_file_key"
 						label={t("slidesTemplate.fields.thumbnail")}
 						required
@@ -510,7 +373,7 @@ export const SlidesTemplateModal = memo(
 						onDragLeave={handleDragLeave}
 						onUpload={handleUpload}
 					/>
-					<UploadField
+					<SlidesTemplateUploadField
 						field="collage_file_key"
 						label={t("slidesTemplate.fields.collage")}
 						accept={IMAGE_ACCEPT}
@@ -527,7 +390,7 @@ export const SlidesTemplateModal = memo(
 						onDragLeave={handleDragLeave}
 						onUpload={handleUpload}
 					/>
-					<UploadField
+					<SlidesTemplateUploadField
 						field="template_file_key"
 						label={t("slidesTemplate.fields.templateFile")}
 						required

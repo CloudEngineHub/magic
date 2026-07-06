@@ -9,6 +9,7 @@ import {
 	createSlidesPresetPanelConfig,
 	groupSlidesTemplates,
 	isSlidesMode,
+	type SlidesTemplateCategoryItem,
 	type SlidesTemplateItem,
 } from "../slidesTemplateState"
 
@@ -48,6 +49,30 @@ const organizationTemplate: SlidesTemplateItem = {
 	is_official: false,
 }
 
+const businessCategory: SlidesTemplateCategoryItem = {
+	id: "1",
+	code: "PPT-CATE-business",
+	name_i18n: {
+		zh_CN: "商务",
+		en_US: "Business",
+	},
+	sort: 100,
+	template_count: 1,
+	is_official: true,
+}
+
+const educationCategory: SlidesTemplateCategoryItem = {
+	id: "2",
+	code: "PPT-CATE-education",
+	name_i18n: {
+		zh_CN: "教育",
+		en_US: "Education",
+	},
+	sort: 90,
+	template_count: 1,
+	is_official: true,
+}
+
 describe("slides template state", () => {
 	it("detects PPT topic mode", () => {
 		expect(isSlidesMode(TopicMode.PPT)).toBe(true)
@@ -57,24 +82,82 @@ describe("slides template state", () => {
 	it("groups official and organization templates", () => {
 		const groups = groupSlidesTemplates([organizationTemplate, officialTemplate])
 
-		expect(groups).toHaveLength(2)
-		expect(groups[0].group_key).toBe("official")
-		expect(groups[0].children?.[0].value).toBe(officialTemplate.code)
-		expect(groups[1].group_key).toBe("organization")
-		expect(groups[1].children?.[0].value).toBe(organizationTemplate.code)
+		expect(groups).toHaveLength(3)
+		expect(groups[0].group_key).toBe("all")
+		expect(groups[0].group_icon).toBeUndefined()
+		expect(groups[0].group_name).toEqual({ zh_CN: "全部", en_US: "All" })
+		expect(groups[0].children?.map((child) => child.value)).toEqual([
+			organizationTemplate.code,
+			officialTemplate.code,
+		])
+		expect(groups[1].group_key).toBe("official")
+		expect(groups[1].group_icon).toBeUndefined()
+		expect(groups[1].children?.[0].value).toBe(officialTemplate.code)
+		expect(groups[2].group_key).toBe("organization")
+		expect(groups[2].group_icon).toBeUndefined()
+		expect(groups[2].children?.[0].value).toBe(organizationTemplate.code)
 	})
 
 	it("omits organization group when there are no organization templates", () => {
 		const groups = groupSlidesTemplates([officialTemplate])
 
-		expect(groups).toHaveLength(1)
-		expect(groups[0].group_key).toBe("official")
+		expect(groups).toHaveLength(2)
+		expect(groups[0].group_key).toBe("all")
+		expect(groups[1].group_key).toBe("official")
 	})
 
-	it("does not render config panels when API returns no templates", () => {
+	it("groups templates by category order when categories are available", () => {
+		const businessTemplate = {
+			...officialTemplate,
+			code: "PPT-business",
+			category_code: businessCategory.code,
+		}
+		const educationTemplate = {
+			...organizationTemplate,
+			code: "PPT-education",
+			category_code: educationCategory.code,
+		}
+		const groups = groupSlidesTemplates(
+			[educationTemplate, businessTemplate],
+			[businessCategory, educationCategory],
+		)
+
+		expect(groups.map((group) => group.group_key)).toEqual([
+			"all",
+			businessCategory.code,
+			educationCategory.code,
+		])
+		expect(groups[1].group_name).toEqual(businessCategory.name_i18n)
+		expect(groups[1].group_icon).toBeUndefined()
+		expect(groups[1].children?.[0].value).toBe(businessTemplate.code)
+		expect(groups[2].children?.[0].value).toBe(educationTemplate.code)
+	})
+
+	it("keeps templates without matched category in other group", () => {
+		const groups = groupSlidesTemplates([organizationTemplate], [businessCategory])
+
+		expect(groups).toHaveLength(3)
+		expect(groups[0].group_key).toBe("all")
+		expect(groups[1].group_key).toBe(businessCategory.code)
+		expect(groups[1].children).toEqual([])
+		expect(groups[2].group_key).toBe("other")
+		expect(groups[2].group_name).toEqual({ zh_CN: "其他", en_US: "Other" })
+		expect(groups[2].group_icon).toBeUndefined()
+		expect(groups[2].children?.[0].value).toBe(organizationTemplate.code)
+	})
+
+	it("does not add all and other visible groups when categories are empty", () => {
+		const groups = groupSlidesTemplates([organizationTemplate], [])
+
+		expect(groups).toHaveLength(1)
+		expect(groups[0].group_key).toBe("all")
+		expect(groups[0].children?.[0].value).toBe(organizationTemplate.code)
+	})
+
+	it("keeps the slides preset panel when API returns no templates", () => {
 		const sceneConfig = createSlidesFixedSceneConfig([])
 
-		expect(sceneConfig.config.scenes_config).toEqual({})
+		expect(sceneConfig.config.scenes_config.presets).toBeDefined()
 	})
 
 	it("preserves static page, size, and language fields when templates exist", () => {

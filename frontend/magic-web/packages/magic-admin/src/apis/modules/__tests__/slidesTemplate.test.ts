@@ -45,6 +45,7 @@ describe("SlidesTemplateApi", () => {
 		const client = createClient()
 		const api = generateSlidesTemplateApi(client as never)
 		const payload = {
+			category_code: "PPT-CATE-business",
 			label: { zh_CN: "模板", en_US: "Template" },
 			description: { zh_CN: "描述", en_US: "Description" },
 			thumbnail_file_key: "thumb.png",
@@ -60,5 +61,56 @@ describe("SlidesTemplateApi", () => {
 
 		expect(client.post).toHaveBeenCalledWith(RequestUrl.createSlidesTemplate, payload)
 		expect(client.put).toHaveBeenCalledWith("/api/v1/admin/slides-templates/123", payload)
+	})
+
+	it("maps category query API", () => {
+		const client = createClient()
+		const api = generateSlidesTemplateApi(client as never)
+		const params = { page: 1, page_size: 20, keyword: "business" }
+
+		api.category.query(params)
+
+		expect(client.post).toHaveBeenCalledWith(RequestUrl.querySlidesTemplateCategories, params)
+	})
+
+	it("maps category detail, status, sort, and delete APIs", () => {
+		const client = createClient()
+		const api = generateSlidesTemplateApi(client as never)
+
+		api.category.detail("123")
+		api.category.updateStatus("123", 1)
+		api.category.updateSort("123", 100)
+		api.category.delete("123")
+
+		expect(client.get).toHaveBeenCalledWith("/api/v1/admin/slides-template-categories/123")
+		expect(client.put).toHaveBeenCalledWith(
+			"/api/v1/admin/slides-template-categories/123/status",
+			{ status: 1 },
+		)
+		expect(client.put).toHaveBeenCalledWith(
+			"/api/v1/admin/slides-template-categories/123/sort",
+			{ sort: 100 },
+		)
+		expect(client.delete).toHaveBeenCalledWith("/api/v1/admin/slides-template-categories/123")
+	})
+
+	it("maps category create and update payloads", () => {
+		const client = createClient()
+		const api = generateSlidesTemplateApi(client as never)
+		const payload = {
+			code: "PPT-CATE-business",
+			name_i18n: { zh_CN: "商务", en_US: "Business" },
+			status: 1,
+			sort: 10,
+		}
+
+		api.category.create(payload)
+		api.category.update("123", payload)
+
+		expect(client.post).toHaveBeenCalledWith(RequestUrl.createSlidesTemplateCategory, payload)
+		expect(client.put).toHaveBeenCalledWith(
+			"/api/v1/admin/slides-template-categories/123",
+			payload,
+		)
 	})
 })

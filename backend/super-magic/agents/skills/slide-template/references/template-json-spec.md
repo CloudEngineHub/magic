@@ -10,6 +10,7 @@
 ```
 
 ZIP 必须与模板目录平级。
+`previews/` 不属于模板源码目录，也不能进入 ZIP。预览图由脚本从 `slides/*.html` 渲染生成，路径记录在发布产物的 `manifest.json` 或 `publish.json` 中。
 
 ## 2. 顶层结构
 
@@ -30,7 +31,7 @@ ZIP 必须与模板目录平级。
 - `schema_version`：模板索引格式版本。
 - `template_id`：模板目录名和包名基础 ID。
 - `name`：展示名，PPTX 转换时默认使用源文件名。
-- `files`：模板入口、资源目录、ZIP、预览图路径。
+- `files`：模板入口、资源目录和 ZIP 路径。
 - `slides`：可复用页面列表，也是后续生成 PPT 的主要机器入口。
 - `source`：来源文件和源画布信息。
 - `warnings`：转换或预览图生成过程中的非致命问题。
@@ -39,27 +40,22 @@ ZIP 必须与模板目录平级。
 
 ```json
 {
-  "entry_html": "index.html",
-  "project_config": "magic.project.js",
+  "visual_spec": "visual-spec.md",
   "theme_css": "theme.css",
   "slides_dir": "slides",
   "images_dir": "images",
-  "package_zip": "../business-minimal-finance-qbr-blue-001-template.zip",
-  "thumbnail_image": "previews/cover.png",
-  "collage_image": "previews/collage.png"
+  "package_zip": "../business-minimal-finance-qbr-blue-001-template.zip"
 }
 ```
 
 约束：
 
-- `entry_html` 是预览入口，通常为 `index.html`。
-- `project_config` 是 `magic.project.js`。
+- `visual_spec` 是模板设计说明，通常为 `visual-spec.md`。
 - `theme_css` 是所有模板页共享样式。
 - `slides_dir` 存放可复用页面模板，每页必须能加载 `../theme.css`。
 - `images_dir` 存放本地化资源。
 - `package_zip` 指向模板目录的平级 ZIP。
-- `thumbnail_image` 是封面图 PNG，通常为 `previews/cover.png`。
-- `collage_image` 是最多 9 页的拼接预览 PNG，通常为 `previews/collage.png`。
+- 封面图、拼接图等预览图不写入模板包内 `template.json.files`。生成脚本应把它们写到 artifact，并由 artifact manifest 或发布状态记录路径。
 
 ## 4. `slides`
 

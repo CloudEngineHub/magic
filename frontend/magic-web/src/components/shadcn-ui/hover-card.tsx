@@ -11,14 +11,22 @@ function HoverCardTrigger({ ...props }: React.ComponentProps<typeof HoverCardPri
 	return <HoverCardPrimitive.Trigger data-slot="hover-card-trigger" {...props} />
 }
 
+type HoverCardContentProps = React.ComponentProps<typeof HoverCardPrimitive.Content> & {
+	container?: HTMLElement | null
+}
+
 function HoverCardContent({
 	className,
 	align = "center",
 	sideOffset = 4,
+	container,
 	...props
-}: React.ComponentProps<typeof HoverCardPrimitive.Content>) {
+}: HoverCardContentProps) {
 	return (
-		<HoverCardPrimitive.Portal data-slot="hover-card-portal">
+		<HoverCardPrimitive.Portal
+			data-slot="hover-card-portal"
+			{...(container ? { container } : {})}
+		>
 			<HoverCardPrimitive.Content
 				data-slot="hover-card-content"
 				align={align}

@@ -12,16 +12,13 @@
     "files": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["entry_html", "project_config", "theme_css", "slides_dir", "images_dir", "package_zip"],
+      "required": ["visual_spec", "theme_css", "slides_dir", "images_dir", "package_zip"],
       "properties": {
-        "entry_html": { "type": "string" },
-        "project_config": { "type": "string" },
+        "visual_spec": { "type": "string" },
         "theme_css": { "type": "string" },
         "slides_dir": { "type": "string" },
         "images_dir": { "type": "string" },
-        "package_zip": { "type": "string" },
-        "thumbnail_image": { "type": "string" },
-        "collage_image": { "type": "string" }
+        "package_zip": { "type": "string" }
       }
     },
     "slides": {

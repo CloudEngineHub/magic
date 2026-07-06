@@ -1,0 +1,222 @@
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { SuperMagicApi } from "@/apis"
+import {
+	ALL_SLIDES_TEMPLATE_GROUP_KEY,
+	SLIDES_TEMPLATE_CATEGORY_PAGE_SIZE,
+	SLIDES_TEMPLATE_PAGE_SIZE,
+	groupSlidesTemplates,
+	toTemplateOption,
+	type SlidesTemplateCategoryItem,
+	type SlidesTemplateItem,
+} from "./slidesTemplateState"
+
+const SEARCH_DEBOUNCE_MS = 300
+
+function mergeTemplates(
+	currentTemplates: SlidesTemplateItem[],
+	nextTemplates: SlidesTemplateItem[],
+) {
+	const templateMap = new Map(currentTemplates.map((template) => [template.code, template]))
+	nextTemplates.forEach((template) => {
+		templateMap.set(template.code, template)
+	})
+	return Array.from(templateMap.values())
+}
+
+export function useSlidesTemplatePanelState() {
+	const [templates, setTemplates] = useState<SlidesTemplateItem[]>([])
+	const [categories, setCategories] = useState<SlidesTemplateCategoryItem[]>([])
+	const [categoryLoadFailed, setCategoryLoadFailed] = useState(false)
+	const [selectedGroupKey, setSelectedGroupKey] = useState(ALL_SLIDES_TEMPLATE_GROUP_KEY)
+	const [keyword, setKeyword] = useState("")
+	const [debouncedKeyword, setDebouncedKeyword] = useState("")
+	const [page, setPage] = useState(1)
+	const [total, setTotal] = useState(0)
+	const [isLoading, setIsLoading] = useState(true)
+	const [isRefreshing, setIsRefreshing] = useState(false)
+	const [isLoadingMore, setIsLoadingMore] = useState(false)
+	const requestSeqRef = useRef(0)
+	const mountedRef = useRef(true)
+	const hasLoadedTemplatesRef = useRef(false)
+	const appendRequestInFlightRef = useRef(false)
+	const templateOptionCacheRef = useRef(
+		new Map<
+			string,
+			{ source: SlidesTemplateItem; option: ReturnType<typeof toTemplateOption> }
+		>(),
+	)
+
+	useEffect(() => {
+		mountedRef.current = true
+
+		return () => {
+			mountedRef.current = false
+			requestSeqRef.current += 1
+		}
+	}, [])
+
+	useEffect(() => {
+		const timer = window.setTimeout(() => {
+			setDebouncedKeyword(keyword.trim())
+		}, SEARCH_DEBOUNCE_MS)
+
+		return () => window.clearTimeout(timer)
+	}, [keyword])
+
+	useEffect(() => {
+		let cancelled = false
+
+		SuperMagicApi.getSlidesTemplateCategories({
+			page: 1,
+			page_size: SLIDES_TEMPLATE_CATEGORY_PAGE_SIZE,
+		})
+			.then((response) => {
+				if (cancelled) return
+				setCategories(response.list ?? [])
+				setCategoryLoadFailed(false)
+			})
+			.catch((error) => {
+				if (cancelled) return
+				console.error("Failed to fetch slides template categories", error)
+				setCategories([])
+				setCategoryLoadFailed(true)
+			})
+
+		return () => {
+			cancelled = true
+		}
+	}, [])
+
+	const categoryCodeSet = useMemo(
+		() => new Set(categories.map((category) => category.code)),
+		[categories],
+	)
+	const selectedCategoryCode = categoryCodeSet.has(selectedGroupKey)
+		? selectedGroupKey
+		: undefined
+
+	const fetchTemplates = useCallback(
+		async (nextPage: number, mode: "replace" | "append") => {
+			if (mode === "append" && appendRequestInFlightRef.current) return
+
+			const requestSeq = ++requestSeqRef.current
+			if (mode === "replace") {
+				appendRequestInFlightRef.current = false
+				setPage(1)
+				setIsLoadingMore(false)
+				if (hasLoadedTemplatesRef.current) {
+					setIsRefreshing(true)
+				} else {
+					setIsLoading(true)
+				}
+			} else {
+				appendRequestInFlightRef.current = true
+				setIsLoadingMore(true)
+			}
+
+			try {
+				const response = await SuperMagicApi.getSlidesTemplates({
+					page: nextPage,
+					page_size: SLIDES_TEMPLATE_PAGE_SIZE,
+					...(debouncedKeyword ? { keyword: debouncedKeyword } : {}),
+					...(selectedCategoryCode ? { category_code: selectedCategoryCode } : {}),
+				})
+				if (!mountedRef.current || requestSeq !== requestSeqRef.current) return
+
+				const nextTemplates = response.list ?? []
+				setTemplates((currentTemplates) =>
+					mode === "replace"
+						? nextTemplates
+						: mergeTemplates(currentTemplates, nextTemplates),
+				)
+				setPage(response.page ?? nextPage)
+				setTotal(response.total ?? nextTemplates.length)
+				hasLoadedTemplatesRef.current = true
+			} catch (error) {
+				if (!mountedRef.current || requestSeq !== requestSeqRef.current) return
+				console.error("Failed to fetch slides templates", error)
+				if (mode === "replace" && !hasLoadedTemplatesRef.current) setTemplates([])
+			} finally {
+				if (mountedRef.current && requestSeq === requestSeqRef.current) {
+					if (mode === "append") appendRequestInFlightRef.current = false
+					setIsLoading(false)
+					setIsRefreshing(false)
+					setIsLoadingMore(false)
+				}
+			}
+		},
+		[debouncedKeyword, selectedCategoryCode],
+	)
+
+	useEffect(() => {
+		fetchTemplates(1, "replace")
+	}, [fetchTemplates])
+
+	const groups = useMemo(() => {
+		return categoryLoadFailed
+			? groupSlidesTemplates(templates)
+			: groupSlidesTemplates(templates, categories)
+	}, [categories, categoryLoadFailed, templates])
+
+	useEffect(() => {
+		if (groups.some((group) => group.group_key === selectedGroupKey)) return
+		setSelectedGroupKey(ALL_SLIDES_TEMPLATE_GROUP_KEY)
+	}, [groups, selectedGroupKey])
+
+	const selectedGroup = groups.find((group) => group.group_key === selectedGroupKey)
+	const isServerBackedGroup =
+		selectedGroupKey === ALL_SLIDES_TEMPLATE_GROUP_KEY || Boolean(selectedCategoryCode)
+	const serverBackedTemplateOptions = useMemo(() => {
+		const cache = templateOptionCacheRef.current
+		const activeCodes = new Set<string>()
+
+		const options = templates.map((template) => {
+			activeCodes.add(template.code)
+			const cached = cache.get(template.code)
+			if (cached?.source === template) return cached.option
+
+			const option = toTemplateOption(template)
+			cache.set(template.code, { source: template, option })
+			return option
+		})
+
+		for (const code of cache.keys()) {
+			if (!activeCodes.has(code)) cache.delete(code)
+		}
+
+		return options
+	}, [templates])
+	const templateOptions = isServerBackedGroup
+		? serverBackedTemplateOptions
+		: (selectedGroup?.children ?? [])
+	const hasMore = templates.length < total
+
+	const loadMore = useCallback(() => {
+		if (
+			isLoading ||
+			isRefreshing ||
+			isLoadingMore ||
+			appendRequestInFlightRef.current ||
+			!hasMore
+		) {
+			return
+		}
+		fetchTemplates(page + 1, "append")
+	}, [fetchTemplates, hasMore, isLoading, isLoadingMore, isRefreshing, page])
+
+	return {
+		groups,
+		hasMore,
+		isLoading,
+		isRefreshing,
+		isLoadingMore,
+		keyword,
+		loadMore,
+		selectedGroupKey,
+		setKeyword,
+		setSelectedGroupKey,
+		templateOptions,
+	}
+}
+
+export type SlidesTemplatePanelState = ReturnType<typeof useSlidesTemplatePanelState>
