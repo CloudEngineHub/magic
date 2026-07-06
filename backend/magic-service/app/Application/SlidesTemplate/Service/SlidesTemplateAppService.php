@@ -27,6 +27,7 @@ class SlidesTemplateAppService extends AbstractSlidesTemplateAppService
 
         $query = new SlidesTemplateQuery();
         $query->setKeyword($request->getKeyword());
+        $query->setCategoryCode($request->getCategoryCode());
         $query->setStatus(SlidesTemplateStatus::Enabled->value);
 
         $page = new Page($request->getPage(), $request->getPageSize());

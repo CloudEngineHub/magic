@@ -20,6 +20,7 @@ use App\Interfaces\Permission\Facade\RoleApi;
 use App\Interfaces\Provider\Facade\AiAbilityApi;
 use App\Interfaces\Provider\Facade\ServiceProviderApi;
 use App\Interfaces\SlidesTemplate\Facade\AdminSlidesTemplateApi;
+use App\Interfaces\SlidesTemplate\Facade\AdminSlidesTemplateCategoryApi;
 use Hyperf\HttpServer\Router\Router;
 
 // 组织管理后台路由
@@ -159,6 +160,16 @@ Router::addGroup('/api/v1/admin', static function () {
     }, ['middleware' => [RequestContextMiddleware::class]]);
 
     // 幻灯片模板管理
+    Router::addGroup('/slides-template-categories', static function () {
+        Router::post('/queries', [AdminSlidesTemplateCategoryApi::class, 'queries']);
+        Router::get('/{id:\d+}', [AdminSlidesTemplateCategoryApi::class, 'detail']);
+        Router::post('', [AdminSlidesTemplateCategoryApi::class, 'create']);
+        Router::put('/{id:\d+}', [AdminSlidesTemplateCategoryApi::class, 'update']);
+        Router::put('/{id:\d+}/status', [AdminSlidesTemplateCategoryApi::class, 'updateStatus']);
+        Router::put('/{id:\d+}/sort', [AdminSlidesTemplateCategoryApi::class, 'updateSort']);
+        Router::delete('/{id:\d+}', [AdminSlidesTemplateCategoryApi::class, 'delete']);
+    }, ['middleware' => [RequestContextMiddleware::class]]);
+
     Router::addGroup('/slides-templates', static function () {
         Router::post('/queries', [AdminSlidesTemplateApi::class, 'queries']);
         Router::get('/{id:\d+}', [AdminSlidesTemplateApi::class, 'detail']);

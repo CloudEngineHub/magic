@@ -20,6 +20,7 @@ return new class extends Migration {
             $table->string('organization_code', 64)->comment('模板所属组织编码；一期仅官方组织可创建和管理');
             $table->string('code', 64)->comment('模板唯一编码，全局唯一；创建时由后端自动生成，格式 PPT-uniqid');
             $table->string('source_type', 32)->default('CUSTOM')->comment('模板来源类型：CUSTOM=自定义，SYSTEM=系统内置');
+            $table->string('category_code', 64)->nullable()->comment('幻灯片模板分类编码');
             $table->json('label')->comment('模板名称，多语言，zh_CN/en_US 必填');
             $table->json('description')->comment('模板描述，多语言，zh_CN/en_US 必填');
             $table->string('thumbnail_file_key', 512)->comment('封面缩略图文件 key，接口返回 thumbnail_url');
@@ -34,6 +35,7 @@ return new class extends Migration {
             $table->softDeletes();
 
             $table->unique('code', 'uk_code');
+            $table->index(['category_code', 'status', 'sort', 'id'], 'idx_category_code_status_sort');
             $table->index(['organization_code', 'status', 'sort', 'id'], 'idx_org_status_sort');
             $table->index(['status', 'sort', 'id'], 'idx_status_sort');
             $table->index('deleted_at', 'idx_deleted_at');

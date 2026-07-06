@@ -11,7 +11,7 @@ use Hyperf\Validation\Request\FormRequest;
 
 use function Hyperf\Translation\__;
 
-class PublicQuerySlidesTemplateRequest extends FormRequest
+class AdminQuerySlidesTemplateCategoryRequest extends FormRequest
 {
     public function authorize(): bool
     {
@@ -24,7 +24,8 @@ class PublicQuerySlidesTemplateRequest extends FormRequest
             'page' => 'nullable|integer|min:1',
             'page_size' => 'nullable|integer|min:1|max:200',
             'keyword' => 'nullable|string|max:100',
-            'category_code' => 'nullable|string|max:64',
+            'code' => 'nullable|string|max:64',
+            'status' => 'nullable|integer|in:0,1',
         ];
     }
 
@@ -37,7 +38,8 @@ class PublicQuerySlidesTemplateRequest extends FormRequest
             'page_size.min' => __('slides_template.page_size_min'),
             'page_size.max' => __('slides_template.page_size_max'),
             'keyword.max' => __('slides_template.keyword_max'),
-            'category_code.max' => __('slides_template.category_code_max'),
+            'code.max' => __('slides_template.category_code_max'),
+            'status.in' => __('slides_template.status_in'),
         ];
     }
 
@@ -57,9 +59,15 @@ class PublicQuerySlidesTemplateRequest extends FormRequest
         return $keyword === '' ? null : $keyword;
     }
 
-    public function getCategoryCode(): ?string
+    public function getCode(): ?string
     {
-        $categoryCode = trim((string) $this->input('category_code', ''));
-        return $categoryCode === '' ? null : $categoryCode;
+        $code = trim((string) $this->input('code', ''));
+        return $code === '' ? null : $code;
+    }
+
+    public function getStatus(): ?int
+    {
+        $status = $this->input('status');
+        return $status === null || $status === '' ? null : (int) $status;
     }
 }

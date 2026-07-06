@@ -19,6 +19,7 @@ class SlidesTemplateFactory
         $entity->setOrganizationCode($model->organization_code);
         $entity->setCode($model->code);
         $entity->setSourceType($model->source_type ?? null);
+        $entity->setCategoryCode($model->category_code ?? null);
         $entity->setLabel($model->label ?? []);
         $entity->setDescription($model->description ?? []);
         $entity->setSearchText($model->search_text);

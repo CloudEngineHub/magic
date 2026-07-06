@@ -15,15 +15,7 @@ use Hyperf\Database\Model\SoftDeletes;
  * @property int $id
  * @property string $organization_code
  * @property string $code
- * @property string $source_type
- * @property null|string $category_code
- * @property array $label
- * @property array $description
- * @property null|string $search_text
- * @property string $thumbnail_file_key
- * @property null|string $collage_file_key
- * @property string $template_file_key
- * @property null|string $preview_url
+ * @property array $name_i18n
  * @property int $status
  * @property int $sort
  * @property null|string $created_uid
@@ -32,25 +24,17 @@ use Hyperf\Database\Model\SoftDeletes;
  * @property null|Carbon $updated_at
  * @property null|Carbon $deleted_at
  */
-class SlidesTemplateModel extends AbstractModel
+class SlidesTemplateCategoryModel extends AbstractModel
 {
     use SoftDeletes;
 
-    protected ?string $table = 'magic_slides_templates';
+    protected ?string $table = 'magic_slides_template_categories';
 
     protected array $fillable = [
         'id',
         'organization_code',
         'code',
-        'source_type',
-        'category_code',
-        'label',
-        'description',
-        'search_text',
-        'thumbnail_file_key',
-        'collage_file_key',
-        'template_file_key',
-        'preview_url',
+        'name_i18n',
         'status',
         'sort',
         'created_uid',
@@ -59,11 +43,7 @@ class SlidesTemplateModel extends AbstractModel
 
     protected array $casts = [
         'id' => 'integer',
-        'source_type' => 'string',
-        'category_code' => 'string',
-        'label' => 'array',
-        'description' => 'array',
-        'search_text' => 'string',
+        'name_i18n' => 'array',
         'status' => 'integer',
         'sort' => 'integer',
         'created_at' => 'datetime',

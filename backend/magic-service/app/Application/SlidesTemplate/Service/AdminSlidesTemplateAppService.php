@@ -12,6 +12,8 @@ use App\Domain\SlidesTemplate\Entity\SlidesTemplateEntity;
 use App\Domain\SlidesTemplate\Entity\ValueObject\Query\SlidesTemplateQuery;
 use App\Domain\SlidesTemplate\Entity\ValueObject\SlidesTemplateSourceType;
 use App\Domain\SlidesTemplate\Entity\ValueObject\SlidesTemplateStatus;
+use App\Domain\SlidesTemplate\Service\SlidesTemplateCategoryDomainService;
+use App\Domain\SlidesTemplate\Service\SlidesTemplateDomainService;
 use App\ErrorCode\SlidesTemplateErrorCode;
 use App\Infrastructure\Core\DataIsolation\BaseDataIsolation;
 use App\Infrastructure\Core\Exception\ExceptionBuilder;
@@ -22,6 +24,13 @@ use Qbhy\HyperfAuth\Authenticatable;
 
 class AdminSlidesTemplateAppService extends AbstractSlidesTemplateAppService
 {
+    public function __construct(
+        SlidesTemplateDomainService $slidesTemplateDomainService,
+        private readonly SlidesTemplateCategoryDomainService $slidesTemplateCategoryDomainService,
+    ) {
+        parent::__construct($slidesTemplateDomainService);
+    }
+
     /**
      * @return array{page: Page, total: int, list: SlidesTemplateEntity[]}
      */
@@ -30,7 +39,7 @@ class AdminSlidesTemplateAppService extends AbstractSlidesTemplateAppService
         $dataIsolation = $this->createSlidesTemplateDataIsolation($authorization);
         $this->assertOfficialOrganization($dataIsolation);
 
-        $query = $this->buildQuery($request->getKeyword(), $request->getCode(), $request->getStatus());
+        $query = $this->buildQuery($request->getKeyword(), $request->getCode(), $request->getCategoryCode(), $request->getStatus());
         $page = new Page($request->getPage(), $request->getPageSize());
         $result = $this->slidesTemplateDomainService->queries($dataIsolation, $query, $page);
         $this->resolveAssetUrls($result['list'], includeTemplateFileUrl: false);
@@ -58,6 +67,7 @@ class AdminSlidesTemplateAppService extends AbstractSlidesTemplateAppService
         $dataIsolation = $this->createSlidesTemplateDataIsolation($authorization);
         $this->assertOfficialOrganization($dataIsolation);
 
+        $this->assertCategoryExists($dataIsolation, $request->getCategoryCode());
         $template = $this->buildEntityFromRequest($request);
         $template->setCode($request->getCode() ?? SlidesTemplateEntity::generateNewCode());
         $template->setSourceType(SlidesTemplateSourceType::Custom);
@@ -76,6 +86,7 @@ class AdminSlidesTemplateAppService extends AbstractSlidesTemplateAppService
         $dataIsolation = $this->createSlidesTemplateDataIsolation($authorization);
         $this->assertOfficialOrganization($dataIsolation);
 
+        $this->assertCategoryExists($dataIsolation, $request->getCategoryCode());
         $existing = $this->slidesTemplateDomainService->findByIdOrFail($dataIsolation, $id);
         $template = $this->buildEntityFromRequest($request);
         $template->setId($existing->getId());
@@ -127,11 +138,12 @@ class AdminSlidesTemplateAppService extends AbstractSlidesTemplateAppService
         }
     }
 
-    private function buildQuery(?string $keyword, ?string $code, ?int $status): SlidesTemplateQuery
+    private function buildQuery(?string $keyword, ?string $code, ?string $categoryCode, ?int $status): SlidesTemplateQuery
     {
         $query = new SlidesTemplateQuery();
         $query->setKeyword($keyword);
         $query->setCode($code);
+        $query->setCategoryCode($categoryCode);
         $query->setStatus($status);
         return $query;
     }
@@ -139,6 +151,7 @@ class AdminSlidesTemplateAppService extends AbstractSlidesTemplateAppService
     private function buildEntityFromRequest(SaveSlidesTemplateRequest $request): SlidesTemplateEntity
     {
         $template = new SlidesTemplateEntity();
+        $template->setCategoryCode($request->getCategoryCode());
         $template->setLabel($request->getLabel());
         $template->setDescription($request->getDescription());
         $template->setThumbnailFileKey($request->getThumbnailFileKey());
@@ -148,5 +161,14 @@ class AdminSlidesTemplateAppService extends AbstractSlidesTemplateAppService
         $template->setStatus($request->getStatus());
         $template->setSort($request->getSort());
         return $template;
+    }
+
+    private function assertCategoryExists(SlidesTemplateDataIsolation $dataIsolation, ?string $categoryCode): void
+    {
+        if ($categoryCode === null) {
+            return;
+        }
+
+        $this->slidesTemplateCategoryDomainService->findByCodeOrFail($dataIsolation, $categoryCode);
     }
 }

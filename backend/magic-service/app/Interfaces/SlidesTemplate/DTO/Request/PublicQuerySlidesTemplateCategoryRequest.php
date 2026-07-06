@@ -11,7 +11,7 @@ use Hyperf\Validation\Request\FormRequest;
 
 use function Hyperf\Translation\__;
 
-class PublicQuerySlidesTemplateRequest extends FormRequest
+class PublicQuerySlidesTemplateCategoryRequest extends FormRequest
 {
     public function authorize(): bool
     {
@@ -24,7 +24,6 @@ class PublicQuerySlidesTemplateRequest extends FormRequest
             'page' => 'nullable|integer|min:1',
             'page_size' => 'nullable|integer|min:1|max:200',
             'keyword' => 'nullable|string|max:100',
-            'category_code' => 'nullable|string|max:64',
         ];
     }
 
@@ -37,7 +36,6 @@ class PublicQuerySlidesTemplateRequest extends FormRequest
             'page_size.min' => __('slides_template.page_size_min'),
             'page_size.max' => __('slides_template.page_size_max'),
             'keyword.max' => __('slides_template.keyword_max'),
-            'category_code.max' => __('slides_template.category_code_max'),
         ];
     }
 
@@ -48,18 +46,12 @@ class PublicQuerySlidesTemplateRequest extends FormRequest
 
     public function getPageSize(): int
     {
-        return (int) $this->input('page_size', 20);
+        return (int) $this->input('page_size', 200);
     }
 
     public function getKeyword(): ?string
     {
         $keyword = trim((string) $this->input('keyword', ''));
         return $keyword === '' ? null : $keyword;
-    }
-
-    public function getCategoryCode(): ?string
-    {
-        $categoryCode = trim((string) $this->input('category_code', ''));
-        return $categoryCode === '' ? null : $categoryCode;
     }
 }

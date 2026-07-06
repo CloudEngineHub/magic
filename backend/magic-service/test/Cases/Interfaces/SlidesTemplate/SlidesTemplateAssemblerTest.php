@@ -7,10 +7,12 @@ declare(strict_types=1);
 
 namespace Test\Cases\Interfaces\SlidesTemplate;
 
+use App\Domain\SlidesTemplate\Entity\SlidesTemplateCategoryEntity;
 use App\Domain\SlidesTemplate\Entity\SlidesTemplateEntity;
 use App\Domain\SlidesTemplate\Entity\ValueObject\SlidesTemplateSourceType;
 use App\Infrastructure\Core\ValueObject\Page;
 use App\Interfaces\SlidesTemplate\Assembler\SlidesTemplateAssembler;
+use App\Interfaces\SlidesTemplate\Assembler\SlidesTemplateCategoryAssembler;
 use App\Interfaces\SlidesTemplate\DTO\Response\AdminSlidesTemplateDetailDTO;
 use App\Interfaces\SlidesTemplate\DTO\Response\SlidesTemplateFileUrlDTO;
 use App\Interfaces\SlidesTemplate\DTO\Response\SlidesTemplatePageDTO;
@@ -96,6 +98,7 @@ class SlidesTemplateAssemblerTest extends TestCase
             'list' => [[
                 'code' => 'PPT-65f2c8a42d7b0-12345678',
                 'source_type' => 'SYSTEM',
+                'category_code' => 'PPT-CATE-business',
                 'label' => [
                     'zh_CN' => '职场白皮书',
                     'en_US' => 'Corporate Whitepaper',
@@ -127,12 +130,43 @@ class SlidesTemplateAssemblerTest extends TestCase
         $this->assertSame([
             'code' => 'PPT-65f2c8a42d7b0-12345678',
             'source_type' => 'SYSTEM',
+            'category_code' => 'PPT-CATE-business',
             'label' => [
                 'zh_CN' => '职场白皮书',
                 'en_US' => 'Corporate Whitepaper',
             ],
             'template_file_url' => 'https://signed.example/template.zip',
         ], $fileUrlDTO->toArray());
+    }
+
+    public function testCreatePublicCategoryPageDTOIncludesTemplateCount(): void
+    {
+        $category = new SlidesTemplateCategoryEntity();
+        $category->setId(123)
+            ->setOrganizationCode('OFFICIAL_ORG')
+            ->setCode('PPT-CATE-business')
+            ->setNameI18n(['zh_CN' => '商务', 'en_US' => 'Business'])
+            ->setSort(100)
+            ->setTemplateCount(3);
+
+        $dto = SlidesTemplateCategoryAssembler::createPageDTO([$category], new Page(1, 200), 1, false);
+
+        $this->assertSame([
+            'page' => 1,
+            'page_size' => 200,
+            'total' => 1,
+            'list' => [[
+                'id' => '123',
+                'code' => 'PPT-CATE-business',
+                'name_i18n' => [
+                    'zh_CN' => '商务',
+                    'en_US' => 'Business',
+                ],
+                'sort' => 100,
+                'template_count' => 3,
+                'is_official' => true,
+            ]],
+        ], $dto->toArray());
     }
 
     private function makeTemplate(): SlidesTemplateEntity
@@ -142,6 +176,7 @@ class SlidesTemplateAssemblerTest extends TestCase
             ->setOrganizationCode('CURRENT_ORG')
             ->setCode('PPT-65f2c8a42d7b0-12345678')
             ->setSourceType(SlidesTemplateSourceType::System)
+            ->setCategoryCode('PPT-CATE-business')
             ->setLabel([
                 'zh_CN' => '职场白皮书',
                 'en_US' => 'Corporate Whitepaper',

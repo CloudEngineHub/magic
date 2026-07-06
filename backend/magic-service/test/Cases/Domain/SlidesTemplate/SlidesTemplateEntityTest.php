@@ -42,6 +42,15 @@ class SlidesTemplateEntityTest extends TestCase
         $this->assertSame('SYSTEM', SlidesTemplateSourceType::System->value);
     }
 
+    public function testCategoryCodeCanBeStoredOnTemplate(): void
+    {
+        $entity = new SlidesTemplateEntity();
+        $entity->setCategoryCode('PPT-CATE-business');
+
+        $this->assertSame('PPT-CATE-business', $entity->getCategoryCode());
+        $this->assertSame('PPT-CATE-business', $entity->toArray()['category_code'] ?? null);
+    }
+
     public function testToArrayKeepsTemplateCoreFields(): void
     {
         $entity = new SlidesTemplateEntity();

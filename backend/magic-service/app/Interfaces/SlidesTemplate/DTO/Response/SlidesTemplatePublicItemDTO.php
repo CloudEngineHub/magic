@@ -15,6 +15,8 @@ class SlidesTemplatePublicItemDTO extends AbstractDTO
 
     public string $sourceType = '';
 
+    public ?string $categoryCode = null;
+
     public I18nTextDTO $label;
 
     public I18nTextDTO $description;
@@ -54,6 +56,16 @@ class SlidesTemplatePublicItemDTO extends AbstractDTO
     public function setSourceType(?string $sourceType): void
     {
         $this->sourceType = $sourceType ?? '';
+    }
+
+    public function getCategoryCode(): ?string
+    {
+        return $this->categoryCode;
+    }
+
+    public function setCategoryCode(?string $categoryCode): void
+    {
+        $this->categoryCode = $categoryCode;
     }
 
     public function getLabel(): I18nTextDTO

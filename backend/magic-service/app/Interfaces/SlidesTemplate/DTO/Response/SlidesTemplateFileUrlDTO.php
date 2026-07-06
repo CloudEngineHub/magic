@@ -15,6 +15,8 @@ class SlidesTemplateFileUrlDTO extends AbstractDTO
 
     public string $sourceType = '';
 
+    public ?string $categoryCode = null;
+
     public I18nTextDTO $label;
 
     public ?string $templateFileUrl = null;
@@ -43,6 +45,16 @@ class SlidesTemplateFileUrlDTO extends AbstractDTO
     public function setSourceType(?string $sourceType): void
     {
         $this->sourceType = $sourceType ?? '';
+    }
+
+    public function getCategoryCode(): ?string
+    {
+        return $this->categoryCode;
+    }
+
+    public function setCategoryCode(?string $categoryCode): void
+    {
+        $this->categoryCode = $categoryCode;
     }
 
     public function getLabel(): I18nTextDTO

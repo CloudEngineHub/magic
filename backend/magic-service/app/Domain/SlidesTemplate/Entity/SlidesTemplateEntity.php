@@ -21,6 +21,8 @@ class SlidesTemplateEntity extends AbstractEntity
 
     protected SlidesTemplateSourceType $sourceType = SlidesTemplateSourceType::Custom;
 
+    protected ?string $categoryCode = null;
+
     protected array $label = [];
 
     protected array $description = [];
@@ -72,6 +74,7 @@ class SlidesTemplateEntity extends AbstractEntity
             'organization_code' => $this->organizationCode,
             'code' => $this->code,
             'source_type' => $this->sourceType->value,
+            'category_code' => $this->categoryCode,
             'label' => $this->label,
             'description' => $this->description,
             'search_text' => $this->searchText,
@@ -137,6 +140,18 @@ class SlidesTemplateEntity extends AbstractEntity
         }
 
         $this->sourceType = $sourceType instanceof SlidesTemplateSourceType ? $sourceType : SlidesTemplateSourceType::from($sourceType);
+        return $this;
+    }
+
+    public function getCategoryCode(): ?string
+    {
+        return $this->categoryCode;
+    }
+
+    public function setCategoryCode(?string $categoryCode): self
+    {
+        $categoryCode = trim((string) $categoryCode);
+        $this->categoryCode = $categoryCode === '' ? null : $categoryCode;
         return $this;
     }
 

@@ -9,11 +9,13 @@ namespace Test\Cases\Application\SlidesTemplate;
 
 use App\Application\SlidesTemplate\Service\AdminSlidesTemplateAppService;
 use App\Application\SlidesTemplate\Service\SlidesTemplateAppService;
+use App\Domain\SlidesTemplate\Entity\SlidesTemplateCategoryEntity;
 use App\Domain\SlidesTemplate\Entity\SlidesTemplateDataIsolation;
 use App\Domain\SlidesTemplate\Entity\SlidesTemplateEntity;
 use App\Domain\SlidesTemplate\Entity\ValueObject\Query\SlidesTemplateQuery;
 use App\Domain\SlidesTemplate\Entity\ValueObject\SlidesTemplateSourceType;
 use App\Domain\SlidesTemplate\Entity\ValueObject\SlidesTemplateStatus;
+use App\Domain\SlidesTemplate\Service\SlidesTemplateCategoryDomainService;
 use App\Domain\SlidesTemplate\Service\SlidesTemplateDomainService;
 use App\ErrorCode\SlidesTemplateErrorCode;
 use App\Infrastructure\Core\Exception\BusinessException;
@@ -115,10 +117,7 @@ class SlidesTemplateAppServiceTest extends TestCase
     public function testQueriesUseCurrentAndOfficialEnabledTemplates(): void
     {
         $dataIsolation = $this->makeDataIsolation('CURRENT_ORG', ['OFFICIAL_ORG']);
-        $request = $this->createMock(PublicQuerySlidesTemplateRequest::class);
-        $request->method('getKeyword')->willReturn(null);
-        $request->method('getPage')->willReturn(1);
-        $request->method('getPageSize')->willReturn(20);
+        $request = new TestPublicQuerySlidesTemplateRequest(categoryCode: 'PPT-CATE-business');
 
         $domainService = $this->createMock(SlidesTemplateDomainService::class);
         $domainService
@@ -127,7 +126,8 @@ class SlidesTemplateAppServiceTest extends TestCase
             ->with(
                 $this->callback(static fn (SlidesTemplateDataIsolation $actual): bool => $actual->isContainOfficialOrganization()
                     && $actual->getOrganizationCodes() === ['CURRENT_ORG', 'OFFICIAL_ORG']),
-                $this->callback(static fn (SlidesTemplateQuery $query): bool => $query->getStatus() === SlidesTemplateStatus::Enabled->value),
+                $this->callback(static fn (SlidesTemplateQuery $query): bool => $query->getStatus() === SlidesTemplateStatus::Enabled->value
+                    && $query->getCategoryCode() === 'PPT-CATE-business'),
                 $this->callback(static fn (Page $page): bool => $page->getPage() === 1 && $page->getPageNum() === 20)
             )
             ->willReturn(['total' => 0, 'list' => []]);
@@ -181,7 +181,7 @@ class SlidesTemplateAppServiceTest extends TestCase
         $domainService = $this->createMock(SlidesTemplateDomainService::class);
         $domainService->expects($this->never())->method('delete');
 
-        $service = new AdminSlidesTemplateAppService($domainService);
+        $service = $this->makeAdminSlidesTemplateAppService($domainService);
 
         $this->expectException(BusinessException::class);
         $this->expectExceptionCode(SlidesTemplateErrorCode::ONLY_OFFICIAL_ORGANIZATION_CAN_MANAGE->value);
@@ -222,7 +222,7 @@ class SlidesTemplateAppServiceTest extends TestCase
                 return $entity->setId(123);
             });
 
-        $service = new AdminSlidesTemplateAppService($domainService);
+        $service = $this->makeAdminSlidesTemplateAppService($domainService);
         $result = $service->create($dataIsolation, $request);
 
         $this->assertSame($capturedTemplate, $result);
@@ -264,11 +264,60 @@ class SlidesTemplateAppServiceTest extends TestCase
             )
             ->willReturnCallback(static fn (SlidesTemplateDataIsolation $dataIsolation, SlidesTemplateEntity $entity): SlidesTemplateEntity => $entity->setId(123));
 
-        $service = new AdminSlidesTemplateAppService($domainService);
+        $service = $this->makeAdminSlidesTemplateAppService($domainService);
         $result = $service->create($dataIsolation, $request);
 
         $this->assertSame('PPT-business-minimal', $result->getCode());
         $this->assertSame(SlidesTemplateSourceType::Custom, $result->getSourceType());
+    }
+
+    public function testAdminCreateStoresCategoryCodeAfterValidatingCategory(): void
+    {
+        $dataIsolation = $this->makeDataIsolation('OFFICIAL_ORG', ['OFFICIAL_ORG']);
+        $request = $this->createMock(SaveSlidesTemplateRequest::class);
+        $request->method('getCategoryCode')->willReturn('PPT-CATE-business');
+        $request->method('getLabel')->willReturn([
+            'zh_CN' => '职场白皮书',
+            'en_US' => 'Corporate Whitepaper',
+        ]);
+        $request->method('getDescription')->willReturn([
+            'zh_CN' => '适用于企业汇报。',
+            'en_US' => 'For business reviews.',
+        ]);
+        $request->method('getThumbnailFileKey')->willReturn('');
+        $request->method('getCollageFileKey')->willReturn(null);
+        $request->method('getTemplateFileKey')->willReturn('');
+        $request->method('getPreviewUrl')->willReturn(null);
+        $request->method('getStatus')->willReturn(SlidesTemplateStatus::Enabled->value);
+        $request->method('getSort')->willReturn(100);
+
+        $category = new SlidesTemplateCategoryEntity();
+        $category->setCode('PPT-CATE-business');
+
+        $categoryDomainService = $this->createMock(SlidesTemplateCategoryDomainService::class);
+        $categoryDomainService
+            ->expects($this->once())
+            ->method('findByCodeOrFail')
+            ->with(
+                $this->callback(static fn (SlidesTemplateDataIsolation $actual): bool => $actual->getCurrentOrganizationCode() === 'OFFICIAL_ORG'),
+                'PPT-CATE-business'
+            )
+            ->willReturn($category);
+
+        $domainService = $this->createMock(SlidesTemplateDomainService::class);
+        $domainService
+            ->expects($this->once())
+            ->method('create')
+            ->with(
+                $this->isInstanceOf(SlidesTemplateDataIsolation::class),
+                $this->callback(static fn (SlidesTemplateEntity $entity): bool => $entity->getCategoryCode() === 'PPT-CATE-business')
+            )
+            ->willReturnCallback(static fn (SlidesTemplateDataIsolation $dataIsolation, SlidesTemplateEntity $entity): SlidesTemplateEntity => $entity->setId(123));
+
+        $service = $this->makeAdminSlidesTemplateAppService($domainService, $categoryDomainService);
+        $result = $service->create($dataIsolation, $request);
+
+        $this->assertSame('PPT-CATE-business', $result->getCategoryCode());
     }
 
     public function testAdminUpdateKeepsExistingSourceType(): void
@@ -312,7 +361,7 @@ class SlidesTemplateAppServiceTest extends TestCase
                 return $entity;
             });
 
-        $service = new AdminSlidesTemplateAppService($domainService);
+        $service = $this->makeAdminSlidesTemplateAppService($domainService);
         $result = $service->update($dataIsolation, 123, $request);
 
         $this->assertSame($capturedTemplate, $result);
@@ -334,6 +383,18 @@ class SlidesTemplateAppServiceTest extends TestCase
         $dataIsolation->setOfficialOrganizationCodes($officialOrganizationCodes);
         return $dataIsolation;
     }
+
+    private function makeAdminSlidesTemplateAppService(
+        SlidesTemplateDomainService $domainService,
+        ?SlidesTemplateCategoryDomainService $categoryDomainService = null,
+    ): AdminSlidesTemplateAppService {
+        if ($categoryDomainService === null) {
+            $categoryDomainService = $this->createMock(SlidesTemplateCategoryDomainService::class);
+            $categoryDomainService->expects($this->never())->method('findByCodeOrFail');
+        }
+
+        return new AdminSlidesTemplateAppService($domainService, $categoryDomainService);
+    }
 }
 
 class TestableSlidesTemplateAppService extends SlidesTemplateAppService
@@ -353,5 +414,36 @@ class TestableSlidesTemplateAppService extends SlidesTemplateAppService
             );
         }
         return $result;
+    }
+}
+
+class TestPublicQuerySlidesTemplateRequest extends PublicQuerySlidesTemplateRequest
+{
+    public function __construct(
+        private readonly ?string $categoryCode = null,
+        private readonly ?string $keyword = null,
+        private readonly int $page = 1,
+        private readonly int $pageSize = 20,
+    ) {
+    }
+
+    public function getKeyword(): ?string
+    {
+        return $this->keyword;
+    }
+
+    public function getCategoryCode(): ?string
+    {
+        return $this->categoryCode;
+    }
+
+    public function getPage(): int
+    {
+        return $this->page;
+    }
+
+    public function getPageSize(): int
+    {
+        return $this->pageSize;
     }
 }

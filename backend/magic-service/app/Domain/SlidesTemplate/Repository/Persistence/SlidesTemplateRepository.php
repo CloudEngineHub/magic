@@ -52,6 +52,10 @@ class SlidesTemplateRepository extends AbstractRepository implements SlidesTempl
             $builder->where('code', $query->getCode());
         }
 
+        if ($query->getCategoryCode() !== null) {
+            $builder->where('category_code', $query->getCategoryCode());
+        }
+
         if ($query->getStatus() !== null) {
             $builder->where('status', $query->getStatus());
         }

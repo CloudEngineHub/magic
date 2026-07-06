@@ -7,13 +7,11 @@ declare(strict_types=1);
 
 namespace App\Domain\SlidesTemplate\Entity\ValueObject\Query;
 
-class SlidesTemplateQuery
+class SlidesTemplateCategoryQuery
 {
     private ?string $keyword = null;
 
     private ?string $code = null;
-
-    private ?string $categoryCode = null;
 
     private ?int $status = null;
 
@@ -37,17 +35,6 @@ class SlidesTemplateQuery
     {
         $code = trim((string) $code);
         $this->code = $code === '' ? null : $code;
-    }
-
-    public function getCategoryCode(): ?string
-    {
-        return $this->categoryCode;
-    }
-
-    public function setCategoryCode(?string $categoryCode): void
-    {
-        $categoryCode = trim((string) $categoryCode);
-        $this->categoryCode = $categoryCode === '' ? null : $categoryCode;
     }
 
     public function getStatus(): ?int

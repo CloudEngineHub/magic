@@ -215,7 +215,9 @@ use App\Domain\Provider\Service\ModelFilter\DefaultOrganizationModelFilter;
 use App\Domain\Provider\Service\ModelFilter\DefaultPackageFilter;
 use App\Domain\Provider\Service\ModelFilter\OrganizationBasedModelFilterInterface;
 use App\Domain\Provider\Service\ModelFilter\PackageFilterInterface;
+use App\Domain\SlidesTemplate\Repository\Facade\SlidesTemplateCategoryRepositoryInterface;
 use App\Domain\SlidesTemplate\Repository\Facade\SlidesTemplateRepositoryInterface;
+use App\Domain\SlidesTemplate\Repository\Persistence\SlidesTemplateCategoryRepository;
 use App\Domain\SlidesTemplate\Repository\Persistence\SlidesTemplateRepository;
 use App\Domain\SuperAgent\Service\UsageCalculator\DefaultUsageCalculator;
 use App\Domain\SuperAgent\Service\UsageCalculator\UsageCalculatorInterface;
@@ -559,6 +561,7 @@ $dependencies = [
     ModeGroupRelationRepositoryInterface::class => ModeGroupRelationRepository::class,
 
     // slides template
+    SlidesTemplateCategoryRepositoryInterface::class => SlidesTemplateCategoryRepository::class,
     SlidesTemplateRepositoryInterface::class => SlidesTemplateRepository::class,
 
     OrganizationBasedModelFilterInterface::class => DefaultOrganizationModelFilter::class,
