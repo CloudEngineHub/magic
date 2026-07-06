@@ -304,12 +304,12 @@ export function useCrossProjectFileOperation(options: UseCrossProjectFileOperati
 			let keepBothIds =
 				data.targetProjectId === projectId
 					? collectSameParentOperationIds(
-							fileIds,
+							effectiveFileIds,
 							data.sourceAttachments,
 							data.targetPath,
 						)
 					: []
-			const conflictDetectionIds = fileIds.filter((id) => !keepBothIds.includes(id))
+			const conflictDetectionIds = effectiveFileIds.filter((id) => !keepBothIds.includes(id))
 
 			const folderConflicts =
 				conflictDetectionIds.length > 0
@@ -330,7 +330,7 @@ export function useCrossProjectFileOperation(options: UseCrossProjectFileOperati
 			}
 
 			// 1. Check duplicates. "Keep both" renames the top folder, so skip inner paths.
-			const duplicateDetectionIds = fileIds.filter((id) => !keepBothIds.includes(id))
+			const duplicateDetectionIds = effectiveFileIds.filter((id) => !keepBothIds.includes(id))
 			const duplicates =
 				duplicateDetectionIds.length > 0
 					? detectDuplicateFilesForMove(
