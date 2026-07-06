@@ -50,9 +50,11 @@ vi.mock("../../PPTRender", () => ({
 	default: ({
 		slidePaths,
 		onSortSave,
+		openNewTab,
 	}: {
 		slidePaths?: string[]
 		onSortSave?: (slidePaths: string[]) => void
+		openNewTab?: (fileId: string, path: string) => void
 	}) => (
 		<div data-testid="ppt-render" data-slide-paths={JSON.stringify(slidePaths || [])}>
 			<button
@@ -65,6 +67,11 @@ vi.mock("../../PPTRender", () => ({
 						"slides/slide-2.html",
 					])
 				}
+			/>
+			<button
+				type="button"
+				data-testid="open-slide-new-tab"
+				onClick={() => openNewTab?.("slide-file", "slides/slide-1.html")}
 			/>
 		</div>
 	),
@@ -275,5 +282,45 @@ describe("PPTRootRender", () => {
 		expect(screen.getByTestId("ppt-render").dataset.slidePaths).toBe(
 			JSON.stringify(["slides/slide-1.html"]),
 		)
+	})
+
+	it("opens a slide from displayData children in a new tab", async () => {
+		const openFileTab = vi.fn()
+		const slideFile = {
+			file_id: "slide-file",
+			file_name: "slide-1.html",
+			relative_file_path: "deck/slides/slide-1.html",
+			parent_id: "deck-folder",
+		}
+		const folder = {
+			file_id: "deck-folder",
+			file_name: "2026前沿UI设计盘点",
+			is_directory: true,
+			relative_file_path: "deck",
+			display_config: {
+				type: "slide",
+				slides: ["slides/slide-1.html"],
+			},
+			children: [slideFile],
+		}
+
+		render(
+			<PPTRootRender
+				data={folder}
+				attachmentList={[]}
+				attachments={[]}
+				displayConfig={folder.display_config}
+				activeFileId="deck-folder"
+				openFileTab={openFileTab}
+			/>,
+		)
+
+		await waitFor(() => {
+			expect(screen.queryByTestId("ppt-render")).not.toBeNull()
+		})
+
+		fireEvent.click(screen.getByTestId("open-slide-new-tab"))
+
+		expect(openFileTab).toHaveBeenCalledWith(slideFile)
 	})
 })

@@ -28,6 +28,21 @@ function collectAttachmentNodes(items: any[] | undefined, result: any[] = []): a
 	return result
 }
 
+function findAttachmentNodeByFileId(items: any[] | undefined, fileId: string): any | undefined {
+	if (!fileId) return undefined
+	if (!Array.isArray(items)) return undefined
+
+	const directItem = items.find((item: any) => item?.file_id === fileId)
+	if (directItem) return directItem
+
+	for (const item of items) {
+		const childItem = findAttachmentNodeByFileId(item?.children, fileId)
+		if (childItem) return childItem
+	}
+
+	return undefined
+}
+
 function mergeAttachmentNodes(items: any[]): any[] {
 	const map = new Map<string, any>()
 	for (const item of items) {
@@ -361,7 +376,7 @@ export default memo(function PPTRootRender(props: PPTRootRenderProps) {
 				return
 			}
 
-			const fileItem = attachmentList?.find((item: any) => item.file_id === fileId)
+			const fileItem = findAttachmentNodeByFileId(pptAttachmentList, fileId)
 			if (!fileItem) {
 				console.warn("openNewTab: fileItem not found", { fileId })
 				return
@@ -369,7 +384,7 @@ export default memo(function PPTRootRender(props: PPTRootRenderProps) {
 
 			openFileTab?.(fileItem)
 		},
-		[attachmentList, openFileTab],
+		[pptAttachmentList, openFileTab],
 	)
 
 	// 仅在首次没有任何可渲染 slides 时阻塞；后续 magic.project.js 更新走后台拉取，
