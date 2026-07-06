@@ -187,7 +187,19 @@ vi.mock("../components/AudioRecordingDeleteDialog", () => ({
 }))
 
 vi.mock("../components/AudioRecordingGroupDialogs", () => ({
-	AudioRecordingGroupManageDialog: () => null,
+	AudioRecordingGroupManageDialog: ({
+		onCreateGroup,
+	}: {
+		onCreateGroup: (name: string) => Promise<unknown>
+	}) => (
+		<button
+			type="button"
+			data-testid="mock-create-group-from-manage"
+			onClick={() => void onCreateGroup("Mock created group")}
+		>
+			Create group
+		</button>
+	),
 	AudioRecordingMoveGroupDialog: () => null,
 }))
 
@@ -243,8 +255,14 @@ describe("AudioRecordingsDesktop", () => {
 		})
 	})
 
-	it("renders the default empty state without secondary description copy", () => {
+	it("renders the default empty state without secondary description copy", async () => {
 		render(<AudioRecordingsDesktop />)
+
+		await waitFor(() => {
+			expect(screen.getByTestId("audio-recordings-group-filter-trigger")).toHaveTextContent(
+				"2",
+			)
+		})
 
 		expect(screen.getByTestId("audio-recordings-empty")).toBeInTheDocument()
 		expect(screen.getByText("No recordings")).toBeInTheDocument()
@@ -261,5 +279,104 @@ describe("AudioRecordingsDesktop", () => {
 		await waitFor(() => {
 			expect(screen.getByText("No search data")).toBeInTheDocument()
 		})
+	})
+
+	it("resets a stale persisted group id after group metadata loads", async () => {
+		sessionStorage.setItem(
+			AUDIO_RECORDINGS_FILTER_SESSION_KEY,
+			JSON.stringify({
+				summaryFilter: "all",
+				datePreset: "all",
+				sortBy: "updated_at",
+				sortOrder: "desc",
+				searchKeyword: "",
+				groupId: "mock-stale-group-id",
+			}),
+		)
+
+		render(<AudioRecordingsDesktop />)
+
+		await waitFor(() => {
+			expect(storeMock.setWorkspaceId).toHaveBeenCalledWith("-1")
+		})
+
+		expect(
+			JSON.parse(sessionStorage.getItem(AUDIO_RECORDINGS_FILTER_SESSION_KEY) ?? "{}"),
+		).toMatchObject({
+			groupId: "-1",
+		})
+		expect(screen.getByTestId("audio-recordings-group-filter-trigger")).toHaveTextContent("All")
+	})
+
+	it("keeps the newly created group selected after refreshing group metadata", async () => {
+		let resolveCreatedGroups: (value: unknown) => void = () => undefined
+		const createdGroupsPromise = new Promise((resolve) => {
+			resolveCreatedGroups = resolve
+		})
+		groupsServiceMock.createGroup.mockResolvedValue({
+			id: "mock-created-group-id",
+			name: "Mock created group",
+			projectCount: 0,
+			isVirtual: false,
+		})
+		groupsServiceMock.listGroups
+			.mockResolvedValueOnce({
+				groups: [
+					{
+						id: "mock-group-id",
+						name: "Mock group",
+						projectCount: 2,
+						isVirtual: false,
+					},
+				],
+				totalCount: 2,
+				ungroupedCount: 0,
+			})
+			.mockReturnValueOnce(createdGroupsPromise)
+
+		render(<AudioRecordingsDesktop />)
+
+		await waitFor(() => {
+			expect(screen.getByTestId("audio-recordings-group-filter-trigger")).toHaveTextContent(
+				"2",
+			)
+		})
+
+		fireEvent.click(screen.getByTestId("mock-create-group-from-manage"))
+
+		await waitFor(() => {
+			expect(groupsServiceMock.createGroup).toHaveBeenCalledWith("Mock created group")
+		})
+		await new Promise((resolve) => {
+			setTimeout(resolve, 0)
+		})
+
+		resolveCreatedGroups({
+			groups: [
+				{
+					id: "mock-group-id",
+					name: "Mock group",
+					projectCount: 2,
+					isVirtual: false,
+				},
+				{
+					id: "mock-created-group-id",
+					name: "Mock created group",
+					projectCount: 0,
+					isVirtual: false,
+				},
+			],
+			totalCount: 2,
+			ungroupedCount: 0,
+		})
+
+		await waitFor(() => {
+			expect(
+				JSON.parse(sessionStorage.getItem(AUDIO_RECORDINGS_FILTER_SESSION_KEY) ?? "{}"),
+			).toMatchObject({
+				groupId: "mock-created-group-id",
+			})
+		})
+		expect(storeMock.setWorkspaceId).toHaveBeenLastCalledWith("mock-created-group-id")
 	})
 })

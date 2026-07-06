@@ -39,6 +39,7 @@ import { registerAudioRecordingsShellRefreshHandler } from "./utils/request-audi
 import {
 	patchAudioRecordingsFilterSession,
 	readAudioRecordingsFilterSession,
+	resolveAvailableAudioRecordingGroupId,
 } from "./utils/audio-recordings-filter-session"
 import { useAudioRecordingCopyToProject } from "./hooks/useAudioRecordingCopyToProject"
 
@@ -71,10 +72,21 @@ function AudioRecordingsDesktop({ scrollViewportRef }: AudioRecordingsDesktopPro
 	const [totalGroupCount, setTotalGroupCount] = useState(0)
 	const [ungroupedCount, setUngroupedCount] = useState(0)
 	const [currentGroupId, setCurrentGroupId] = useState(initialFilterSession.groupId)
+	const [hasLoadedGroups, setHasLoadedGroups] = useState(false)
 	const [groupLoading, setGroupLoading] = useState(false)
 	const [isManageGroupsOpen, setIsManageGroupsOpen] = useState(false)
 	const [isSettingsOpen, setIsSettingsOpen] = useState(false)
 	const [moveTarget, setMoveTarget] = useState<AudioProjectListItem | null>(null)
+
+	/** Keeps the active group filter aligned across UI state, store queries, and session cache. */
+	const handleGroupChange = useCallback(
+		(groupId: string) => {
+			setCurrentGroupId(groupId)
+			store.setWorkspaceId(groupId)
+			patchAudioRecordingsFilterSession({ groupId })
+		},
+		[store],
+	)
 
 	// Fetch recording groups metadata
 	const refreshGroups = useCallback(async () => {
@@ -84,6 +96,7 @@ function AudioRecordingsDesktop({ scrollViewportRef }: AudioRecordingsDesktopPro
 			setGroups(result.groups)
 			setTotalGroupCount(result.totalCount)
 			setUngroupedCount(result.ungroupedCount)
+			setHasLoadedGroups(true)
 		} catch (error) {
 			console.error("Failed to load recording groups:", error)
 		} finally {
@@ -142,6 +155,14 @@ function AudioRecordingsDesktop({ scrollViewportRef }: AudioRecordingsDesktopPro
 	}, [handleRefresh])
 
 	useEffect(() => {
+		if (!hasLoadedGroups) return
+		const availableGroupId = resolveAvailableAudioRecordingGroupId(currentGroupId, groups)
+		if (availableGroupId !== currentGroupId) {
+			handleGroupChange(availableGroupId)
+		}
+	}, [currentGroupId, groups, handleGroupChange, hasLoadedGroups])
+
+	useEffect(() => {
 		if (!hasHydratedFilters) return
 		if (isSearchComposing) return
 		void store.fetchList({ page: 1, keyword: debouncedKeyword.trim() })
@@ -172,13 +193,6 @@ function AudioRecordingsDesktop({ scrollViewportRef }: AudioRecordingsDesktopPro
 		patchAudioRecordingsFilterSession({ datePreset: value })
 	}
 
-	/** Keeps the active group filter aligned across UI state, store queries, and session cache. */
-	function handleGroupChange(groupId: string) {
-		setCurrentGroupId(groupId)
-		store.setWorkspaceId(groupId)
-		patchAudioRecordingsFilterSession({ groupId })
-	}
-
 	/** Persists search text without changing the existing debounce-based request cadence. */
 	function handleSearchKeywordChange(value: string) {
 		setSearchKeyword(value)
@@ -194,8 +208,8 @@ function AudioRecordingsDesktop({ scrollViewportRef }: AudioRecordingsDesktopPro
 	// Group Manage callbacks — manage dialog switches list filter after create
 	const handleCreateGroupFromManage = async (name: string) => {
 		const created = await recordingGroupsService.createGroup(name)
-		handleGroupChange(created.id)
 		await refreshGroups()
+		handleGroupChange(created.id)
 		return created
 	}
 
