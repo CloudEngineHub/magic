@@ -1,8 +1,7 @@
-import json
-
 import pytest
 
 from agentlang.context.tool_context import ToolContext
+from app.i18n import i18n
 from app.infrastructure.magic_service.client import MagicServiceClient
 from app.infrastructure.magic_service.config import MagicServiceConfig
 from app.tools.get_slides_template_download_url import (
@@ -74,13 +73,74 @@ async def test_get_slides_template_download_url_tool_returns_template_url(monkey
         params,
     )
 
-    payload = json.loads(result.content)
-
     assert result.ok is True
     assert clients[0].code == "ppt-business-minimal"
     assert result.data["template_file_url"] == "https://example.test/template.zip"
-    assert payload["code"] == "ppt-business-minimal"
-    assert payload["template_file_url"] == "https://example.test/template.zip"
+    assert "Slides template package URL resolved." in result.content
+    assert "- code: ppt-business-minimal" in result.content
+    assert "- label: 职场白皮书" in result.content
+    assert "- template_file_url: https://example.test/template.zip" in result.content
+
+
+@pytest.mark.asyncio
+async def test_get_slides_template_download_url_tool_i18n_and_detail(monkeypatch):
+    class FakeMagicServiceClient:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return None
+
+        async def get_slides_template_file_url(self, code):
+            return {
+                "code": code,
+                "label": {"zh_CN": "职场白皮书", "en_US": "Corporate Whitepaper"},
+                "template_file_url": "https://example.test/template.zip",
+            }
+
+    monkeypatch.setattr(
+        "app.tools.get_slides_template_download_url.MagicServiceClient",
+        FakeMagicServiceClient,
+    )
+
+    tool = GetSlidesTemplateDownloadUrl()
+    arguments = {"code": "ppt-business-minimal"}
+    context = ToolContext(tool_name="get_slides_template_download_url", arguments=arguments)
+
+    try:
+        i18n.set_language("zh_CN")
+        before = await tool.get_before_tool_call_friendly_action_and_remark(
+            "get_slides_template_download_url",
+            context,
+            arguments,
+        )
+        assert before["action"] == "获取幻灯片模板下载链接"
+        assert before["remark"] == "正在获取模板 ppt-business-minimal 的下载链接"
+
+        result = await tool.execute(context, GetSlidesTemplateDownloadUrlParams(**arguments))
+        after = await tool.get_after_tool_call_friendly_action_and_remark(
+            "get_slides_template_download_url",
+            context,
+            result,
+            0.1,
+            arguments,
+        )
+        detail = await tool.get_tool_detail(context, result, arguments)
+        assert after["remark"] == "已获取模板 ppt-business-minimal 的下载链接"
+        assert detail is not None
+        assert "幻灯片模板下载链接" in detail.data.content
+        assert "[download](https://example.test/template.zip)" in detail.data.content
+
+        i18n.set_language("en_US")
+        before_en = await tool.get_before_tool_call_friendly_action_and_remark(
+            "get_slides_template_download_url",
+            context,
+            arguments,
+        )
+        assert before_en["action"] == "Get slide template download URL"
+        assert before_en["remark"] == "Getting download URL for template ppt-business-minimal"
+    finally:
+        i18n.reset_language()
 
 
 def test_get_slides_template_download_url_tool_is_code_mode_only():
