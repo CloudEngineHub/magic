@@ -9,13 +9,13 @@ import {
 	lazy,
 	Suspense,
 } from "react"
-import type { RefObject } from "react"
+import type { CSSProperties, RefObject } from "react"
 import { observer } from "mobx-react-lite"
-import { Virtuoso, VirtuosoHandle } from "react-virtuoso"
+import { Virtuoso, VirtuosoGrid, VirtuosoHandle } from "react-virtuoso"
 
 // Types
 import type { MentionItem, MentionPanelProps, MentionPanelRef } from "./types"
-import { PanelState } from "./types"
+import { MentionPanelViewMode, PanelState } from "./types"
 
 // Hooks
 import { useMentionPanel } from "./hooks/useMentionPanel"
@@ -25,6 +25,8 @@ import { createDefaultConfig } from "./constants"
 
 // Components
 import MenuItem from "./components/MenuItem"
+import GalleryItem from "./components/GalleryItem"
+import { MENTION_PANEL_GALLERY_PREVIEW_LAYER_CLASS } from "./components/GalleryPreviewDialog"
 import MagicIcon from "../../base/MagicIcon"
 import {
 	IconArrowBack,
@@ -50,6 +52,11 @@ import {
 import { prepareMentionItemForPending } from "./utils/multiSelectValidation"
 
 const MentionPanelMobile = lazy(() => import("./MentionPanelMobile"))
+const GalleryPreviewDialog = lazy(() => import("./components/GalleryPreviewDialog"))
+
+const LIST_PANEL_WIDTH = 320
+const GALLERY_PANEL_WIDTH = 600
+const GALLERY_PANEL_HEIGHT = 468
 
 /**
  * MentionPanel - Mention panel component with multi-state support
@@ -74,6 +81,8 @@ const MentionPanel = observer(
 			disableKeyboardShortcuts = false,
 			lockDismissToExplicitClose = false,
 			canToggleMultiSelectItem,
+			viewMode = MentionPanelViewMode.LIST,
+			galleryOptions,
 			runtime,
 			dataService,
 			catalogBehavior,
@@ -89,6 +98,7 @@ const MentionPanel = observer(
 		// Internal search state
 		const [internalSearchQuery, setInternalSearchQuery] = useState("")
 		const [multiSelectMode, setMultiSelectMode] = useState(false)
+		const [previewItem, setPreviewItem] = useState<MentionItem | null>(null)
 		const [pendingByKey, setPendingByKey] = useState<Map<string, PendingMentionEntry>>(
 			() => new Map(),
 		)
@@ -102,6 +112,16 @@ const MentionPanel = observer(
 		// Internationalization
 		const t = useI18nStatic(language)
 		const defaultConfig = useMemo(() => createDefaultConfig(t), [t])
+		const isGalleryMode = viewMode === MentionPanelViewMode.GALLERY && !isMobile
+		const panelWidth = isGalleryMode ? GALLERY_PANEL_WIDTH : LIST_PANEL_WIDTH
+		const panelHeight = isGalleryMode ? GALLERY_PANEL_HEIGHT : defaultConfig.height
+		const panelSizeStyle = useMemo<CSSProperties>(
+			() => ({
+				width: panelWidth,
+				height: panelHeight,
+			}),
+			[panelHeight, panelWidth],
+		)
 		const resolvedRuntime = useMemo(
 			() =>
 				resolveMentionPanelRuntime({
@@ -196,6 +216,7 @@ const MentionPanel = observer(
 		useEffect(() => {
 			if (!visible) {
 				setInternalSearchQuery("")
+				setPreviewItem(null)
 				resetLocalMultiSelectState()
 			}
 		}, [visible, resetLocalMultiSelectState])
@@ -261,13 +282,13 @@ const MentionPanel = observer(
 				searchHeaderHeight + keyboardHintsHeight + breadcrumbHeight + panelPadding
 
 			return {
-				height: Math.max(defaultConfig.height - reservedHeight, 160),
+				height: Math.max(panelHeight - reservedHeight, 160),
 			}
-		}, [defaultConfig])
+		}, [defaultConfig, panelHeight])
 
 		// Auto-scroll to selected item when selectedIndex changes
 		useEffect(() => {
-			if (!virtuosoRef.current || state.selectedIndex < 0) {
+			if (isGalleryMode || !virtuosoRef.current || state.selectedIndex < 0) {
 				return
 			}
 
@@ -283,7 +304,7 @@ const MentionPanel = observer(
 			return () => {
 				cancelAnimationFrame(frame)
 			}
-		}, [state.selectedIndex, state.items.length])
+		}, [isGalleryMode, state.selectedIndex, state.items.length])
 
 		const togglePendingForItem = useCallback(
 			async (item: MentionItem) => {
@@ -660,6 +681,45 @@ const MentionPanel = observer(
 			],
 		)
 
+		const renderGalleryItem = useCallback(
+			(index: number) => {
+				const item = displayItems[index]
+				if (!item) return null
+
+				const key = getMentionItemSelectionKey(item)
+				const showCheckbox =
+					multiSelectMode &&
+					canToggleMultiSelectItemForItem(item) &&
+					!isRootDefaultCategoryScreen(state)
+
+				return (
+					<GalleryItem
+						key={`${viewMode}-${item.id}-${index}`}
+						item={item}
+						selected={index === state.selectedIndex}
+						onClick={(e) => handleItemClick(index, e)}
+						onPreview={setPreviewItem}
+						isSearch={Boolean(state.searchQuery.trim())}
+						t={t}
+						showCheckbox={showCheckbox}
+						checkboxChecked={pendingByKey.has(key)}
+						enablePreview={galleryOptions?.enablePreviewModal}
+					/>
+				)
+			},
+			[
+				canToggleMultiSelectItemForItem,
+				displayItems,
+				galleryOptions?.enablePreviewModal,
+				handleItemClick,
+				multiSelectMode,
+				pendingByKey,
+				state,
+				t,
+				viewMode,
+			],
+		)
+
 		// Don't render if not visible
 		if (!isMobile && !visible) return null
 
@@ -694,7 +754,7 @@ const MentionPanel = observer(
 
 		const panelClassName = cn(
 			// Base styles matching Figma design
-			"z-dropdown flex w-80 flex-col items-start overflow-hidden rounded-lg border border-solid border-border bg-popover shadow-md",
+			"z-dropdown flex origin-top-left flex-col items-start overflow-hidden rounded-lg border border-solid border-border bg-popover shadow-md transition-[width,height] duration-200 ease-out will-change-[width,height]",
 			className,
 		)
 
@@ -873,7 +933,12 @@ const MentionPanel = observer(
 					{/* Menu Items */}
 					<div
 						ref={menuListRef}
-						className="[&_div[data-virtuoso-scroller]]:scrollbar-thin [&_div[data-virtuoso-scroller]]:scrollbar-thumb-border [&_div[data-virtuoso-scroller]]:scrollbar-track-transparent [&_div[data-virtuoso-scroller]]:scrollbar-thumb-rounded flex flex-1 flex-col gap-0 overflow-hidden p-1 transition-all duration-200 ease-out [&_div[data-virtuoso-scroller]]:mr-0.5"
+						className={cn(
+							"flex flex-1 flex-col gap-0 overflow-hidden transition-all duration-200 ease-out",
+							isGalleryMode
+								? "p-2 [&_div[data-virtuoso-scroller]::-webkit-scrollbar]:hidden [&_div[data-virtuoso-scroller]]:[-ms-overflow-style:none] [&_div[data-virtuoso-scroller]]:[scrollbar-width:none]"
+								: "[&_div[data-virtuoso-scroller]]:scrollbar-thin [&_div[data-virtuoso-scroller]]:scrollbar-thumb-border [&_div[data-virtuoso-scroller]]:scrollbar-track-transparent [&_div[data-virtuoso-scroller]]:scrollbar-thumb-rounded p-1 [&_div[data-virtuoso-scroller]]:mr-0.5",
+						)}
 						style={menuListStyle}
 						role="listbox"
 					>
@@ -898,6 +963,18 @@ const MentionPanel = observer(
 							<div className="flex flex-col items-center justify-center p-5 text-center text-xs text-muted-foreground">
 								{t.empty}
 							</div>
+						) : isGalleryMode ? (
+							<VirtuosoGrid
+								totalCount={displayItems.length}
+								itemContent={renderGalleryItem}
+								computeItemKey={(index) => displayItems[index]?.id ?? index}
+								listClassName="grid auto-rows-min grid-cols-4 gap-2 pr-0.5"
+								itemClassName="min-w-0"
+								style={{
+									height: "100%",
+									width: "100%",
+								}}
+							/>
 						) : (
 							<Virtuoso
 								ref={virtuosoRef}
@@ -956,6 +1033,15 @@ const MentionPanel = observer(
 						)}
 					</div>
 				</div>
+				{isGalleryMode && galleryOptions?.enablePreviewModal && previewItem && (
+					<Suspense fallback={null}>
+						<GalleryPreviewDialog
+							item={previewItem}
+							items={displayItems}
+							onItemChange={setPreviewItem}
+						/>
+					</Suspense>
+				)}
 			</MentionPanelRootProviders>
 		)
 
@@ -968,7 +1054,7 @@ const MentionPanel = observer(
 					className={cn("fixed", panelClassName)}
 					style={{
 						...style,
-						height: defaultConfig.height,
+						...panelSizeStyle,
 					}}
 					role="dialog"
 					aria-modal="true"
@@ -1013,6 +1099,13 @@ const MentionPanel = observer(
 					onInteractOutside={(event) => {
 						const root = internalRef.current
 						const target = event.target
+						if (
+							target instanceof Element &&
+							target.closest(`.${MENTION_PANEL_GALLERY_PREVIEW_LAYER_CLASS}`)
+						) {
+							event.preventDefault()
+							return
+						}
 						if (lockDismissToExplicitClose) {
 							event.preventDefault()
 							return
@@ -1039,7 +1132,7 @@ const MentionPanel = observer(
 					}}
 					style={{
 						...style,
-						height: defaultConfig.height,
+						...panelSizeStyle,
 					}}
 					role="dialog"
 					aria-modal="true"

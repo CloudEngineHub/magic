@@ -4,10 +4,11 @@ import { act, fireEvent, render, screen, waitFor, within } from "@testing-librar
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import MentionPanel from "../index"
 import { defaultMentionPanelCatalogBehavior } from "../catalogBehavior"
-import { MentionItemType, PanelState } from "../types"
+import { MentionItemType, MentionPanelViewMode, PanelState } from "../types"
 import type { MentionItem, MentionPanelCatalogBehavior } from "../types"
 
-const { mockPrepareMentionItemForPending } = vi.hoisted(() => ({
+const { mockFilePreviewById, mockPrepareMentionItemForPending } = vi.hoisted(() => ({
+	mockFilePreviewById: {} as Record<string, string>,
 	mockPrepareMentionItemForPending: vi.fn(),
 }))
 
@@ -71,6 +72,27 @@ vi.mock("../hooks/useMentionPanel", () => ({
 	},
 }))
 
+vi.mock("../runtime/builtin/domains/file-preview/useMentionPanelFilePreviewById", () => ({
+	useMentionPanelFilePreviewById: () => mockFilePreviewById,
+}))
+
+vi.mock("@/components/base/MagicImagePreview", () => ({
+	default: ({ children }: { children?: ReactNode }) => (
+		<div data-testid="magic-image-preview">{children}</div>
+	),
+}))
+
+vi.mock("@/components/other/SmartTooltip", () => ({
+	default: ({ children }: { children?: ReactNode }) => <span>{children}</span>,
+}))
+
+vi.mock("@/assets/locales/locale-adapters", () => ({
+	getAdminLocaleModules: () => ({}),
+	getLocaleModules: () => ({ zhCNModules: {}, enUSModules: {} }),
+	loadFallbackLocale: vi.fn(),
+	loadMagicFlowLocale: vi.fn(),
+}))
+
 vi.mock("../runtime/default-runtime", () => ({
 	resolveMentionPanelRuntime: (props: {
 		dataService?: unknown
@@ -106,6 +128,17 @@ vi.mock("react-virtuoso", () => ({
 			</div>
 		)
 	}),
+	VirtuosoGrid: ({
+		totalCount,
+		itemContent,
+	}: {
+		totalCount: number
+		itemContent: (index: number) => ReactNode
+	}) => (
+		<div data-testid="virtuoso-grid">
+			{Array.from({ length: totalCount }, (_, index) => itemContent(index))}
+		</div>
+	),
 }))
 
 vi.mock("../hooks/useI18n", () => ({
@@ -197,6 +230,9 @@ describe("MentionPanel", () => {
 		mockSelectItem.mockReset()
 		mockConfirmSelection.mockReset()
 		mockReset.mockReset()
+		Object.keys(mockFilePreviewById).forEach((key) => {
+			delete mockFilePreviewById[key]
+		})
 		mockPrepareMentionItemForPending.mockReset()
 		mockPrepareMentionItemForPending.mockResolvedValue({
 			canSelect: true,
@@ -224,6 +260,138 @@ describe("MentionPanel", () => {
 			<MentionPanel catalogBehavior={defaultMentionPanelCatalogBehavior} />,
 		)
 		expect(container.firstChild).toBeTruthy()
+	})
+
+	it("should keep list mode as the default item layout", () => {
+		setCatalogState([
+			{
+				id: "file-1",
+				name: "File 1",
+				type: MentionItemType.PROJECT_FILE,
+			},
+		])
+
+		render(<MentionPanel visible={true} catalogBehavior={defaultMentionPanelCatalogBehavior} />)
+
+		expect(screen.getByTestId("virtuoso-list")).toBeInTheDocument()
+		expect(screen.queryByTestId("mention-panel-gallery-item")).not.toBeInTheDocument()
+	})
+
+	it("should render gallery cards without hiding disabled files", () => {
+		setCatalogState([
+			{
+				id: "image-1",
+				name: "Image 1",
+				type: MentionItemType.PROJECT_FILE,
+				extension: "png",
+				data: {
+					file_id: "image-1",
+					file_name: "Image 1",
+					file_path: "/Image 1.png",
+					file_extension: "png",
+				},
+			},
+			{
+				id: "doc-1",
+				name: "Doc 1",
+				type: MentionItemType.PROJECT_FILE,
+				unSelectable: true,
+				extension: "pdf",
+				data: {
+					file_id: "doc-1",
+					file_name: "Doc 1",
+					file_path: "/Doc 1.pdf",
+					file_extension: "pdf",
+				},
+			},
+		])
+		mockFilePreviewById["image-1"] = "https://example.com/image.png"
+
+		render(
+			<MentionPanel
+				visible={true}
+				viewMode={MentionPanelViewMode.GALLERY}
+				galleryOptions={{ enablePreviewModal: true }}
+				catalogBehavior={defaultMentionPanelCatalogBehavior}
+			/>,
+		)
+
+		expect(screen.queryByTestId("virtuoso-list")).not.toBeInTheDocument()
+		expect(screen.getByTestId("virtuoso-grid")).toBeInTheDocument()
+		const cards = screen.getAllByTestId("mention-panel-gallery-item")
+		expect(cards).toHaveLength(2)
+		expect(within(cards[1]).getByText("Doc 1")).toBeInTheDocument()
+		expect(cards[1]).toHaveAttribute("aria-disabled", "true")
+	})
+
+	it("should select a gallery image by card click and keep preview click isolated", async () => {
+		setCatalogState([
+			{
+				id: "image-1",
+				name: "Image 1",
+				type: MentionItemType.PROJECT_FILE,
+				extension: "png",
+				data: {
+					file_id: "image-1",
+					file_name: "Image 1",
+					file_path: "/Image 1.png",
+					file_extension: "png",
+				},
+			},
+		])
+		mockFilePreviewById["image-1"] = "https://example.com/image.png"
+
+		render(
+			<MentionPanel
+				visible={true}
+				viewMode={MentionPanelViewMode.GALLERY}
+				galleryOptions={{ enablePreviewModal: true }}
+				catalogBehavior={defaultMentionPanelCatalogBehavior}
+			/>,
+		)
+
+		fireEvent.click(screen.getByTestId("mention-panel-gallery-preview-button"))
+
+		expect(mockSelectItem).not.toHaveBeenCalled()
+		expect(mockConfirmSelection).not.toHaveBeenCalled()
+		expect(await screen.findByTestId("magic-image-preview")).toBeInTheDocument()
+
+		fireEvent.click(screen.getByTestId("mention-panel-gallery-item"))
+
+		await waitFor(() => {
+			expect(mockSelectItem).toHaveBeenCalledWith(0)
+			expect(mockConfirmSelection).toHaveBeenCalledWith({ enterFolder: false })
+		})
+	})
+
+	it("should not select a disabled gallery file", () => {
+		vi.useFakeTimers()
+		try {
+			setCatalogState([
+				{
+					id: "doc-1",
+					name: "Doc 1",
+					type: MentionItemType.PROJECT_FILE,
+					unSelectable: true,
+				},
+			])
+
+			render(
+				<MentionPanel
+					visible={true}
+					viewMode={MentionPanelViewMode.GALLERY}
+					catalogBehavior={defaultMentionPanelCatalogBehavior}
+				/>,
+			)
+
+			fireEvent.click(screen.getByTestId("mention-panel-gallery-item"))
+			vi.runAllTimers()
+
+			expect(mockSelectItem).not.toHaveBeenCalled()
+			expect(mockConfirmSelection).not.toHaveBeenCalled()
+		} finally {
+			vi.useRealTimers()
+		}
 	})
 
 	it("should enter folder when clicking right arrow icon", () => {

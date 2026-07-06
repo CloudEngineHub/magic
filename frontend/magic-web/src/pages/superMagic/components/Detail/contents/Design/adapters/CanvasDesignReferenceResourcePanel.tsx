@@ -1,7 +1,10 @@
 import MentionPanel from "@/components/business/MentionPanel"
+import { MENTION_PANEL_GALLERY_PREVIEW_LAYER_CLASS } from "@/components/business/MentionPanel/components/GalleryPreviewDialog"
 import {
+	MentionPanelViewMode,
 	PanelState,
 	type MentionItem,
+	type MentionPanelGalleryOptions,
 	type ProjectFileMentionData,
 } from "@/components/business/MentionPanel/types"
 import type {
@@ -24,6 +27,8 @@ interface CanvasMentionPanelProps {
 	initialLoadOptions?: ReferenceResourcePanelRendererProps["initialLoadOptions"]
 	initialNavigationStack?: ReferenceResourcePanelRendererProps["initialNavigationStack"]
 	lockDismissToExplicitClose?: boolean
+	viewMode?: MentionPanelViewMode
+	galleryOptions?: MentionPanelGalleryOptions
 	onSelect: (item: MentionItem, context?: ReferenceResourcePanelSelectContext) => void
 	onClose: () => void
 	canToggleMultiSelectItem?: (item: MentionItem) => boolean
@@ -70,6 +75,7 @@ export function CanvasDesignReferenceResourcePanel(props: ReferenceResourcePanel
 		function handlePointerDown(event: PointerEvent) {
 			const target = event.target
 			if (!(target instanceof Element)) return
+			if (target.closest(`.${MENTION_PANEL_GALLERY_PREVIEW_LAYER_CLASS}`)) return
 			if (target.closest(`.${PANEL_CLASS_NAME}`)) return
 			if (triggerRef?.current instanceof Node && triggerRef.current.contains(target)) return
 			onClose()
@@ -91,6 +97,8 @@ export function CanvasDesignReferenceResourcePanel(props: ReferenceResourcePanel
 			initialLoadOptions={initialLoadOptions}
 			initialNavigationStack={initialNavigationStack}
 			lockDismissToExplicitClose
+			viewMode={MentionPanelViewMode.GALLERY}
+			galleryOptions={{ enablePreviewModal: true }}
 			onSelect={(item, context) => {
 				const panelItem = toReferenceResourcePanelItem(item)
 				if (!panelItem) return
