@@ -71,6 +71,10 @@ const getVitestBaseConfig = () => {
 					),
 				},
 				{
+					find: "@dtyq/html-sandbox/telemetry",
+					replacement: resolve(__dirname, "packages/html-sandbox/src/telemetry/index.ts"),
+				},
+				{
 					find: "@dtyq/html-sandbox",
 					replacement: resolve(__dirname, "packages/html-sandbox/src/index.ts"),
 				},

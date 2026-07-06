@@ -338,13 +338,73 @@ readonly class ResourceVisibilityDomainService
         ResourceType $resourceType,
         string $resourceCode
     ): VisibilityConfig {
+        $visibilityConfigs = $this->getVisibilityConfigs($dataIsolation, $resourceType, [$resourceCode]);
+
+        return $visibilityConfigs[$resourceCode] ?? $this->createNoneVisibilityConfig();
+    }
+
+    /**
+     * 批量获取可见性配置(高层封装).
+     *
+     * @param BaseDataIsolation|PermissionDataIsolation $dataIsolation 数据隔离对象
+     * @param ResourceType $resourceType 资源类型
+     * @param array<string> $resourceCodes 资源编码列表
+     * @return array<string, VisibilityConfig>
+     */
+    public function getVisibilityConfigs(
+        BaseDataIsolation|PermissionDataIsolation $dataIsolation,
+        ResourceType $resourceType,
+        array $resourceCodes
+    ): array {
         if (! $dataIsolation instanceof PermissionDataIsolation) {
             $dataIsolation = PermissionDataIsolation::createByBaseDataIsolation($dataIsolation);
         }
 
-        // 查询所有可见性实体
-        $entities = $this->listResourceVisibility($dataIsolation, $resourceType, $resourceCode);
+        $resourceCodes = array_values(array_unique(array_filter(
+            array_map(static fn (mixed $resourceCode): string => (string) $resourceCode, $resourceCodes),
+            static fn (string $resourceCode): bool => $resourceCode !== ''
+        )));
+        if ($resourceCodes === []) {
+            return [];
+        }
 
+        $entitiesByResourceCode = [];
+        $userIds = [];
+        $departmentIds = [];
+        $entities = $this->resourceVisibilityRepository->listByResources($dataIsolation, $resourceType, $resourceCodes);
+        foreach ($entities as $entity) {
+            $resourceCode = $entity->getResourceCode();
+            $entitiesByResourceCode[$resourceCode][] = $entity;
+
+            if ($entity->getPrincipalType() === PrincipalType::USER) {
+                $userIds[] = $entity->getPrincipalId();
+            } elseif ($entity->getPrincipalType() === PrincipalType::DEPARTMENT) {
+                $departmentIds[] = $entity->getPrincipalId();
+            }
+        }
+
+        $usersById = $this->getVisibilityUsersByIds($userIds);
+        $departmentsById = $this->getVisibilityDepartmentsByIds($departmentIds);
+
+        $visibilityConfigs = [];
+        foreach ($resourceCodes as $resourceCode) {
+            $visibilityConfigs[$resourceCode] = $this->createVisibilityConfigFromEntities(
+                $entitiesByResourceCode[$resourceCode] ?? [],
+                $usersById,
+                $departmentsById
+            );
+        }
+
+        return $visibilityConfigs;
+    }
+
+    /**
+     * @param array<ResourceVisibilityEntity> $entities
+     * @param array<string, array{id: string, nickname: string, avatar: string}> $usersById
+     * @param array<string, array{id: string, name: string}> $departmentsById
+     */
+    private function createVisibilityConfigFromEntities(array $entities, array $usersById, array $departmentsById): VisibilityConfig
+    {
         $visibilityConfig = new VisibilityConfig();
 
         // 没有任何记录，visibility_type = 0
@@ -362,57 +422,89 @@ readonly class ResourceVisibilityDomainService
         // 其他情况，visibility_type = 2
         $visibilityConfig->setVisibilityType(VisibilityType::SPECIFIC);
 
-        // 收集用户ID和部门ID
-        $userIds = [];
-        $departmentIds = [];
-
         foreach ($entities as $entity) {
             $principalType = $entity->getPrincipalType();
             $principalId = $entity->getPrincipalId();
 
             if ($principalType === PrincipalType::USER) {
-                $userIds[] = $principalId;
+                if (isset($usersById[$principalId])) {
+                    $visibilityConfig->addUser(new VisibilityUser($usersById[$principalId]));
+                }
             } elseif ($principalType === PrincipalType::DEPARTMENT) {
-                $departmentIds[] = $principalId;
+                if (isset($departmentsById[$principalId])) {
+                    $visibilityConfig->addDepartment(new VisibilityDepartment($departmentsById[$principalId]));
+                }
             }
         }
 
-        // 使用 Db 直接查询用户信息
-        if (! empty($userIds)) {
-            $userIds = array_unique($userIds);
-            $usersData = Db::table('magic_contact_users')
-                ->whereIn('user_id', $userIds)
-                ->whereNull('deleted_at')
-                ->select(['user_id', 'nickname', 'avatar_url'])
-                ->get()->toArray();
+        return $visibilityConfig;
+    }
 
-            foreach ($usersData as $userData) {
-                $user = new VisibilityUser([
-                    'id' => $userData['user_id'],
-                    'nickname' => $userData['nickname'] ?? '',
-                    'avatar' => $userData['avatar_url'] ?? '',
-                ]);
-                $visibilityConfig->addUser($user);
-            }
+    /**
+     * @param array<string> $userIds
+     * @return array<string, array{id: string, nickname: string, avatar: string}>
+     */
+    private function getVisibilityUsersByIds(array $userIds): array
+    {
+        $userIds = array_values(array_unique(array_filter($userIds)));
+        if ($userIds === []) {
+            return [];
         }
 
-        // 使用 Db 直接查询部门信息
-        if (! empty($departmentIds)) {
-            $departmentIds = array_unique($departmentIds);
-            $departmentsData = Db::table('magic_contact_departments')
-                ->whereIn('department_id', $departmentIds)
-                ->whereNull('deleted_at')
-                ->select(['department_id', 'name'])
-                ->get()->toArray();
+        $usersData = Db::table('magic_contact_users')
+            ->whereIn('user_id', $userIds)
+            ->whereNull('deleted_at')
+            ->select(['user_id', 'nickname', 'avatar_url'])
+            ->get()
+            ->toArray();
 
-            foreach ($departmentsData as $departmentData) {
-                $department = new VisibilityDepartment([
-                    'id' => $departmentData['department_id'],
-                    'name' => $departmentData['name'] ?? '',
-                ]);
-                $visibilityConfig->addDepartment($department);
-            }
+        $usersById = [];
+        foreach ($usersData as $userData) {
+            $userId = (string) $userData['user_id'];
+            $usersById[$userId] = [
+                'id' => $userId,
+                'nickname' => (string) ($userData['nickname'] ?? ''),
+                'avatar' => (string) ($userData['avatar_url'] ?? ''),
+            ];
         }
+
+        return $usersById;
+    }
+
+    /**
+     * @param array<string> $departmentIds
+     * @return array<string, array{id: string, name: string}>
+     */
+    private function getVisibilityDepartmentsByIds(array $departmentIds): array
+    {
+        $departmentIds = array_values(array_unique(array_filter($departmentIds)));
+        if ($departmentIds === []) {
+            return [];
+        }
+
+        $departmentsData = Db::table('magic_contact_departments')
+            ->whereIn('department_id', $departmentIds)
+            ->whereNull('deleted_at')
+            ->select(['department_id', 'name'])
+            ->get()
+            ->toArray();
+
+        $departmentsById = [];
+        foreach ($departmentsData as $departmentData) {
+            $departmentId = (string) $departmentData['department_id'];
+            $departmentsById[$departmentId] = [
+                'id' => $departmentId,
+                'name' => (string) ($departmentData['name'] ?? ''),
+            ];
+        }
+
+        return $departmentsById;
+    }
+
+    private function createNoneVisibilityConfig(): VisibilityConfig
+    {
+        $visibilityConfig = new VisibilityConfig();
+        $visibilityConfig->setVisibilityType(VisibilityType::NONE);
 
         return $visibilityConfig;
     }

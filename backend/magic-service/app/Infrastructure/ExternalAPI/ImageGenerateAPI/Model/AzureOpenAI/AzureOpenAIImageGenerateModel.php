@@ -314,7 +314,7 @@ class AzureOpenAIImageGenerateModel extends AbstractImageGenerate
 
         $hasValidImage = false;
         foreach ($result['data'] as $item) {
-            if (isset($item['b64_json']) && ! empty($item['b64_json'])) {
+            if (! empty($item['b64_json']) || ! empty($item['url'])) {
                 $hasValidImage = true;
                 break;
             }
@@ -341,19 +341,23 @@ class AzureOpenAIImageGenerateModel extends AbstractImageGenerate
         $currentUsage = $response->getUsage() ?? new ImageUsage();
 
         foreach ($azureResult['data'] as $item) {
-            if (! isset($item['b64_json']) || empty($item['b64_json'])) {
+            $base64Image = (string) ($item['b64_json'] ?? '');
+            $imageUrl = (string) ($item['url'] ?? '');
+
+            if ($base64Image === '' && $imageUrl === '') {
                 continue;
             }
 
-            // 处理水印（将base64转换为URL）
-            $processedUrl = $item['b64_json'];
+            $processedUrl = $base64Image !== '' ? $base64Image : $imageUrl;
             try {
-                $processedUrl = $this->watermarkProcessor->addWatermarkToBase64($item['b64_json'], $imageGenerateRequest);
+                $processedUrl = $base64Image !== ''
+                    ? $this->watermarkProcessor->addWatermarkToBase64($base64Image, $imageGenerateRequest)
+                    : $this->watermarkProcessor->addWatermarkToUrl($imageUrl, $imageGenerateRequest);
             } catch (Exception $e) {
                 $this->logger->error('Azure OpenAI添加图片数据：水印处理失败', [
                     'error' => $e->getMessage(),
                 ]);
-                // 水印处理失败时使用原始base64数据
+                // 水印处理失败时使用原始图片数据
             }
 
             // 只返回URL格式，与其他模型保持一致
