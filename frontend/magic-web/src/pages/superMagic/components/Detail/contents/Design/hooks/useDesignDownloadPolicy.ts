@@ -1,6 +1,6 @@
 import { useMemoizedFn } from "ahooks"
-import type { CanvasFileElement } from "@/components/CanvasDesign/canvas/types"
-import type { MagicPermissions } from "@/components/CanvasDesign/types.magic"
+import type { CanvasFileElement } from "@/components/CanvasDesign/runtime/document/types"
+import type { MagicPermissions } from "@/components/CanvasDesign/public/magic-types"
 
 export interface HandleHighQualityDownloadOptions {
 	fileElements: CanvasFileElement[]

@@ -16,11 +16,9 @@ import type {
 	GetImageGenerationResultParams,
 	ImageGenerationResultResponse,
 	ImageGenerationResultsResponse,
-} from "@/components/CanvasDesign/types.magic"
-import type {
 	GenerateImagesRequest,
 	GenerateImagesResponse,
-} from "@/components/CanvasDesign/types.magic"
+} from "@/components/CanvasDesign/public/magic-types"
 import type { FileItem } from "@/pages/superMagic/components/Detail/components/FilesViewer/types"
 import MyModelsIcon from "@/pages/superMagic/components/MessageEditor/components/ModelSwitch/assets/my-models-icon.svg"
 import type { GetOrCreateImagesDirFn } from "./useGetOrCreateImagesDir"

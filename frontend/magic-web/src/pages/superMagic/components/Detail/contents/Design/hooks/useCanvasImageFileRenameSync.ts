@@ -4,8 +4,11 @@ import type {
 	CanvasDocument,
 	ImageElement,
 	LayerElement,
-} from "@/components/CanvasDesign/canvas/types"
-import type { CanvasDesignDataChangeMeta, CanvasDesignRef } from "@/components/CanvasDesign/types"
+} from "@/components/CanvasDesign/runtime/document/types"
+import type {
+	CanvasDesignDataChangeMeta,
+	CanvasDesignRef,
+} from "@/components/CanvasDesign/public/props"
 import { SuperMagicApi } from "@/apis"
 import magicToast from "@/components/base/MagicToaster/utils"
 import type { FileItem } from "@/pages/superMagic/components/Detail/components/FilesViewer/types"

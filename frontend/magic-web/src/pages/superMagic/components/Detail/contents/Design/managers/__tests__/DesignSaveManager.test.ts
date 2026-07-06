@@ -4,7 +4,7 @@ import { DesignSaveManager, type DesignSaveLifecycleHandlers } from "../DesignSa
 import type { DesignProjectManagerOptions, DesignProjectStateBag } from "../types"
 import type { DesignData } from "../../types"
 import { hashDesignDataComparable } from "../../utils/designContentHash"
-import type { LayerElement } from "@/components/CanvasDesign/canvas/types"
+import type { LayerElement } from "@/components/CanvasDesign/runtime/document/types"
 
 vi.mock("@/apis", () => ({
 	SuperMagicApi: {

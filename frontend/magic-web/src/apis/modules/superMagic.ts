@@ -31,7 +31,7 @@ import type {
 	IdentifyImageMarkResponse,
 	ReferenceImageOptions,
 	RemoveBackgroundRequest,
-} from "@/components/CanvasDesign/types.magic"
+} from "@/components/CanvasDesign/public/magic-types"
 import type { PlaybookItem } from "./crew"
 import { genRequestUrl } from "@/utils/http"
 import { generateRecordingSummaryApi } from "./superMagic/recordSummary"

@@ -6,7 +6,7 @@ import type {
 } from "@/apis/modules/superMagic"
 import type { FileItem } from "@/pages/superMagic/components/Detail/components/FilesViewer/types"
 import superMagicModeService from "@/services/superMagic/SuperMagicModeService"
-import { UploadSubDir } from "@/components/CanvasDesign/types.magic"
+import { UploadSubDir } from "@/components/CanvasDesign/public/magic-types"
 import type {
 	EstimateVideoPointsResponse,
 	GenerationStatus,
@@ -15,7 +15,7 @@ import type {
 	GenerateVideoResponse,
 	GetVideoGenerationResultParams,
 	VideoGenerationResultResponse,
-} from "@/components/CanvasDesign/types.magic"
+} from "@/components/CanvasDesign/public/magic-types"
 import { normalizePath } from "../utils/utils"
 import { useTranslation } from "react-i18next"
 import {

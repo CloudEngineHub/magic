@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
-import type { LayerElement } from "@/components/CanvasDesign/canvas/types"
+import type { LayerElement } from "@/components/CanvasDesign/runtime/document/types"
 import { DesignProjectManager } from "../DesignProjectManager"
 import type { DesignConflict, DesignProjectManagerOptions, DesignProjectStateBag } from "../types"
 import type { DesignData } from "../../types"

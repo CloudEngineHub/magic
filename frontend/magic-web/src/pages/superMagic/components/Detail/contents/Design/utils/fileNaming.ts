@@ -1,5 +1,5 @@
 import type { FileItem } from "@/pages/superMagic/components/Detail/components/FilesViewer/types"
-import type { UploadFile } from "@/components/CanvasDesign/types.magic"
+import type { UploadFile } from "@/components/CanvasDesign/public/magic-types"
 import { collectFilesInDirectory, splitFileName } from "./utils"
 
 interface PrepareFilesForUploadParams {

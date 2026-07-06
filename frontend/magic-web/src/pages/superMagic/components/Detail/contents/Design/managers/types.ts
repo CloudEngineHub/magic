@@ -1,6 +1,6 @@
 import type { DesignData } from "../types"
-import type { LayerElement } from "@/components/CanvasDesign/canvas/types"
-import type { CanvasDocumentMergeElementConflictReason } from "@/components/CanvasDesign/model"
+import type { LayerElement } from "@/components/CanvasDesign/runtime/document/types"
+import type { CanvasDocumentMergeElementConflictReason } from "@/components/CanvasDesign/runtime/document"
 import type { FileItem } from "@/pages/superMagic/components/Detail/components/FilesViewer/types"
 import type { DesignAttachmentIndex } from "../utils/designAttachmentIndex"
 import type { FileHistoryVersion } from "@/pages/superMagic/pages/Workspace/types"

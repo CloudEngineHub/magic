@@ -22,8 +22,8 @@ import {
 	SUPPORTED_AUDIO_EXTENSIONS,
 	SUPPORTED_VIDEO_EXTENSIONS,
 	validateCanvasFilePath,
-} from "@/components/CanvasDesign/canvas/utils/utils"
-import { UploadSubDir, type UploadSubDirType } from "@/components/CanvasDesign/types.magic"
+} from "@/components/CanvasDesign/runtime/shared/ids"
+import { UploadSubDir, type UploadSubDirType } from "@/components/CanvasDesign/public/magic-types"
 import { loadProjectAttachments } from "@/pages/superMagic/services"
 
 interface UseDesignFileCopyOptions {
@@ -156,7 +156,6 @@ export function useDesignFileCopy(options: UseDesignFileCopyOptions): UseDesignF
 
 			const maxAttempts = Math.max(1, Math.floor(ATTACHMENT_WAIT_TIMEOUT_MS / 1000))
 			for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
-
 				const latestAttachments = await getProjectAttachments(projectId)
 				const matchedAttachment = latestAttachments.find(
 					(item) =>

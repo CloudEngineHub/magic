@@ -3,7 +3,7 @@ import {
 	ElementTypeEnum,
 	type CanvasFileElement,
 	type ImageElement,
-} from "@/components/CanvasDesign/canvas/types"
+} from "@/components/CanvasDesign/runtime/document/types"
 import type { FileItem } from "@/pages/superMagic/components/Detail/components/FilesViewer/types"
 import type { DesignAttachmentIndex } from "../utils/designAttachmentIndex"
 import { getTemporaryDownloadUrl } from "@/pages/superMagic/utils/api"
@@ -27,7 +27,7 @@ import { CropOptions, ImageFormat, ImageProcessOptions } from "@/utils/image-pro
 import {
 	CanvasImageSourceDimensions,
 	DownloadImageOptions,
-} from "@/components/CanvasDesign/types.magic"
+} from "@/components/CanvasDesign/public/magic-types"
 
 function cropConfigToCropOptions(config: {
 	x: number

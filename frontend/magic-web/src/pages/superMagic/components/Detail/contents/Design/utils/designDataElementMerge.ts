@@ -7,7 +7,7 @@ import {
 	type CanvasDocumentMergeConflictReason,
 	type CanvasDocumentMergeElementConflictReason,
 	type CanvasDocumentMergeResult,
-} from "@/components/CanvasDesign/model"
+} from "@/components/CanvasDesign/runtime/document"
 import type { DesignData } from "../types"
 
 export type DesignDataElementMergeConflictReason =

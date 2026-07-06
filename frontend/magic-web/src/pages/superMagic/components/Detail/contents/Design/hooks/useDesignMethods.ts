@@ -8,7 +8,7 @@ import type {
 	GenerateExtendedImageRequest,
 	IdentifyImageMarkRequest,
 	RemoveBackgroundRequest,
-} from "@/components/CanvasDesign/types.magic"
+} from "@/components/CanvasDesign/public/magic-types"
 import type { GenerateHightImageResponse as ApiGenerateHightImageResponse } from "@/apis/modules/superMagic"
 import type { FileItem } from "@/pages/superMagic/components/Detail/components/FilesViewer/types"
 import type { DesignAttachmentIndex } from "../utils/designAttachmentIndex"
@@ -38,7 +38,7 @@ import {
 import {
 	buildReferenceImageOptions,
 	getReferenceImageCrop,
-} from "@/components/CanvasDesign/canvas/utils/imageCropUtils"
+} from "@/components/CanvasDesign/runtime/resources/image/imageCropUtils"
 import { clipboard } from "@/utils/clipboard-helpers"
 import type { UseDesignDownloadPolicyResult } from "./useDesignDownloadPolicy"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"

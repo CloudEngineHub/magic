@@ -8,12 +8,12 @@ import type {
 	GenerateHightImageRequest,
 	GenerateHightImageResponse,
 	GetConvertHightConfigResponse,
-} from "@/components/CanvasDesign/types.magic"
+} from "@/components/CanvasDesign/public/magic-types"
 import type { FileItem } from "@/pages/superMagic/components/Detail/components/FilesViewer/types"
 import {
 	buildReferenceImageOptions,
 	getReferenceImageCrop,
-} from "@/components/CanvasDesign/canvas/utils/imageCropUtils"
+} from "@/components/CanvasDesign/runtime/resources/image/imageCropUtils"
 import { useTranslation } from "react-i18next"
 import {
 	createDesignWorkspacePathExists,

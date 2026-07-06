@@ -6,7 +6,7 @@ import {
 	type ImageElement,
 	type LayerElement,
 	type VideoElement,
-} from "@/components/CanvasDesign/canvas/types"
+} from "@/components/CanvasDesign/runtime/document/types"
 import type { FileItem } from "@/pages/superMagic/components/Detail/components/FilesViewer/types"
 import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks/types"
 import type { SuperMagicFileChangeMessage } from "@/types/chat/intermediate_message"
@@ -26,7 +26,7 @@ import {
 	normalizePathLocal,
 	stripCurrentDirectoryPrefix,
 	stripPathEdgeSlashes,
-} from "@/components/CanvasDesign/canvas/utils/pathUtils"
+} from "@/components/CanvasDesign/runtime/shared/path/pathUtils"
 import {
 	findFileBySrc,
 	loadMagicProjectJsContent,

@@ -1,4 +1,4 @@
-import type { LayerElement } from "@/components/CanvasDesign/canvas/types"
+import type { LayerElement } from "@/components/CanvasDesign/runtime/document/types"
 import {
 	formatCanvasRelativeResourcePath,
 	hasCurrentDirectoryPrefix,
@@ -6,7 +6,7 @@ import {
 	isRemoteOrSpecialPath,
 	stripCurrentDirectoryPrefix,
 	stripPathEdgeSlashes,
-} from "@/components/CanvasDesign/canvas/utils/pathUtils"
+} from "@/components/CanvasDesign/runtime/shared/path/pathUtils"
 
 /**
  * 与 {@link normalizePath}（Design）一致：去掉首尾 `/`，用于与 relative_file_path 比对

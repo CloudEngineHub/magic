@@ -1,10 +1,13 @@
 import { describe, expect, it, vi } from "vitest"
 import { MentionItemType } from "@/components/business/MentionPanel/types"
 import { CanvasDesignMentionDataService } from "../CanvasDesignMentionDataService"
-import type { ProjectAttachmentMentionNode } from "@/components/CanvasDesign/types"
+import type { ProjectAttachmentMentionNode } from "@/components/CanvasDesign/public/props"
 import type { I18nTexts } from "@/components/business/MentionPanel/i18n/types"
 import { zhCN } from "@/components/business/MentionPanel/i18n/locales/zh-CN"
-import { ElementTypeEnum, type CanvasDocument } from "@/components/CanvasDesign/canvas/types"
+import {
+	ElementTypeEnum,
+	type CanvasDocument,
+} from "@/components/CanvasDesign/runtime/document/types"
 
 function folderNode(
 	id: string,

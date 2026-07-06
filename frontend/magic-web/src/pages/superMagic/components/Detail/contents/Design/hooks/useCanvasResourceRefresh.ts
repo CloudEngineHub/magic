@@ -1,12 +1,15 @@
 import { useEffect, useRef, type RefObject } from "react"
-import type { CanvasDesignRef, CanvasResourceRefreshItem } from "@/components/CanvasDesign/types"
+import type {
+	CanvasDesignRef,
+	CanvasResourceRefreshItem,
+} from "@/components/CanvasDesign/public/props"
 import {
 	ElementTypeEnum,
 	type CanvasDocument,
 	type ImageElement,
 	type LayerElement,
 	type VideoElement,
-} from "@/components/CanvasDesign/canvas/types"
+} from "@/components/CanvasDesign/runtime/document/types"
 import type { FileItem } from "@/pages/superMagic/components/Detail/components/FilesViewer/types"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import type { SuperMagicFileChangeMessage } from "@/types/chat/intermediate_message"

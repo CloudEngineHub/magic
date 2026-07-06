@@ -11,8 +11,8 @@ import type {
 	ReferenceResourcePanelItem,
 	ReferenceResourcePanelRendererProps,
 	ReferenceResourcePanelSelectContext,
-} from "@/components/CanvasDesign/types"
-import { CANVAS_REFERENCE_MENTION_ITEM_TYPE } from "@/components/CanvasDesign/components/MessageEditor/reference-assets/canvasReferenceMention.constants"
+} from "@/components/CanvasDesign/public/props"
+import { CANVAS_REFERENCE_MENTION_ITEM_TYPE } from "@/components/CanvasDesign/ui/editors/message/reference-assets/canvasReferenceMention.constants"
 import type { ComponentType } from "react"
 import { useEffect } from "react"
 

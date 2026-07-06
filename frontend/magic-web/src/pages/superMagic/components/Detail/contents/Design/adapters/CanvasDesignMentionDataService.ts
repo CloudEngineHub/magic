@@ -17,19 +17,19 @@ import {
 import type {
 	CanvasReferenceElementsContext,
 	ProjectAttachmentMentionNode,
-} from "@/components/CanvasDesign/types"
+} from "@/components/CanvasDesign/public/props"
 import type {
 	ReferenceAssetPerTypeLimits,
 	ReferenceAssetTypeCounts,
 	ReferenceResourceFileInfo,
 	ReferenceResourceTypeFilter,
-} from "@/components/CanvasDesign/components/MessageEditor/reference-assets/reference-resource.types"
+} from "@/components/CanvasDesign/ui/editors/message/reference-assets/reference-resource.types"
 import {
 	classifyReferenceAssetFile,
 	isReferenceAssetTypeCapacityBlocked,
 	isReferenceResourceCurrentlySelected,
 	isReferenceResourceTypeAllowed,
-} from "@/components/CanvasDesign/components/MessageEditor/reference-assets/referenceResourceSelection"
+} from "@/components/CanvasDesign/ui/editors/message/reference-assets/referenceResourceSelection"
 import {
 	isCanvasElementsMentionItemId,
 	MentionPanelCanvasElementsStore,

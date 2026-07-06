@@ -26,7 +26,7 @@ const dragLoggerMock = vi.hoisted(() => ({
 }))
 
 vi.mock(
-	"@/components/CanvasDesign/components/MessageEditor/reference-assets/projectAttachmentDragHoverBridge",
+	"@/components/CanvasDesign/ui/editors/message/reference-assets/projectAttachmentDragHoverBridge",
 	() => ({
 		clearProjectAttachmentDragHoverPlainText: vi.fn(),
 		setProjectAttachmentDragHoverPlainText: vi.fn(),

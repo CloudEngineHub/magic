@@ -48,7 +48,7 @@ import {
 import {
 	tryApplyCanvasDocumentPatch,
 	tryMergeCanvasElementsByField,
-} from "@/components/CanvasDesign/model"
+} from "@/components/CanvasDesign/runtime/document"
 
 type ElementLevelMergeConflictResult = Extract<
 	DesignDataElementMergeResult,

@@ -1,5 +1,5 @@
-import type { CanvasDocument, LayerElement } from "@/components/CanvasDesign/canvas/types"
-import { type ImageGenerationTaskMeta } from "@/components/CanvasDesign/types.magic"
+import type { CanvasDocument, LayerElement } from "@/components/CanvasDesign/runtime/document/types"
+import { type ImageGenerationTaskMeta } from "@/components/CanvasDesign/public/magic-types"
 import { normalizePath } from "./utils"
 import { resolveDesignDslPathCandidatesToWorkspaceRelative } from "./designDslPathUtils"
 

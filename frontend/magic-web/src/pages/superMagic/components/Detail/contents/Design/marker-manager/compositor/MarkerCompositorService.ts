@@ -1,14 +1,18 @@
-import type { Marker, MarkerArea, ImageElement } from "@/components/CanvasDesign/canvas/types"
-import { MarkerTypeEnum } from "@/components/CanvasDesign/canvas/types"
+import type {
+	Marker,
+	MarkerArea,
+	ImageElement,
+} from "@/components/CanvasDesign/runtime/document/types"
+import { MarkerTypeEnum } from "@/components/CanvasDesign/runtime/document/types"
 import type {
 	IdentifyImageMarkRequest,
 	IdentifyImageMarkResponse,
 	UploadPrivateFile,
 	UploadPrivateFileResponse,
-} from "@/components/CanvasDesign/types.magic"
-import { getPersistedSourceCrop } from "@/components/CanvasDesign/canvas/utils/imageCropUtils"
+} from "@/components/CanvasDesign/public/magic-types"
+import { getPersistedSourceCrop } from "@/components/CanvasDesign/runtime/resources/image/imageCropUtils"
 import { drawMarkerOnCanvas } from "./markerDrawers"
-import { generateUUID } from "@/components/CanvasDesign/canvas/utils/utils"
+import { generateUUID } from "@/components/CanvasDesign/runtime/shared/ids"
 
 /** 用于合成的图片信息 */
 interface ImageInfoForComposite {

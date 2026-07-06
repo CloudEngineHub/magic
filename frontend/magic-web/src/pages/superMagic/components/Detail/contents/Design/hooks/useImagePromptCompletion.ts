@@ -4,7 +4,7 @@ import { SuperMagicApi } from "@/apis"
 import type {
 	CompleteImagePromptRequest,
 	CompleteImagePromptResponse,
-} from "@/components/CanvasDesign/types.magic"
+} from "@/components/CanvasDesign/public/magic-types"
 import type { FileItem } from "@/pages/superMagic/components/Detail/components/FilesViewer/types"
 import {
 	createDesignWorkspacePathExists,

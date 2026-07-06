@@ -5,8 +5,8 @@ import type {
 	GenerateVideoRequest,
 	StoredVideoModeDraftsMap,
 	StoredVideoModeInputDraft,
-} from "@/components/CanvasDesign/types.magic"
-import { CanvasDesignRootStorageData } from "@/components/CanvasDesign/types.magic"
+} from "@/components/CanvasDesign/public/magic-types"
+import { CanvasDesignRootStorageData } from "@/components/CanvasDesign/public/magic-types"
 import { normalizeDesignStoragePathForCanvas } from "../utils/designDslPathUtils"
 
 interface UseCanvasStorageOptions {

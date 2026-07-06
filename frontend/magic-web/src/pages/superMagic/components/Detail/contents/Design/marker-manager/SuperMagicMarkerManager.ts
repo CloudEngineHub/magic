@@ -1,11 +1,11 @@
-import type { Marker, ImageElement } from "@/components/CanvasDesign/canvas/types"
-import { ElementTypeEnum } from "@/components/CanvasDesign/canvas/types"
+import type { Marker, ImageElement } from "@/components/CanvasDesign/runtime/document/types"
+import { ElementTypeEnum } from "@/components/CanvasDesign/runtime/document/types"
 import type {
 	IdentifyImageMarkRequest,
 	IdentifyImageMarkResponse,
 	UploadPrivateFile,
 	UploadPrivateFileResponse,
-} from "@/components/CanvasDesign/types.magic"
+} from "@/components/CanvasDesign/public/magic-types"
 import {
 	MentionItemType,
 	type CanvasMarkerMentionData,

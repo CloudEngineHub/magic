@@ -4,16 +4,16 @@ import { flattenAttachments, findMatchingFile } from "../../HTML/utils"
 import type { FileItem } from "@/pages/superMagic/components/Detail/components/FilesViewer/types"
 import { DesignData } from "../types"
 import { IMAGE_EXTENSIONS } from "@/constants/file"
-import type { LayerElement } from "@/components/CanvasDesign/canvas/types"
+import type { LayerElement } from "@/components/CanvasDesign/runtime/document/types"
 import { t } from "i18next"
 import { AttachmentSource } from "@/pages/superMagic/components/TopicFilesButton/hooks/types"
 import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks/types"
-import type { ProjectAttachmentMentionNode } from "@/components/CanvasDesign/types"
+import type { ProjectAttachmentMentionNode } from "@/components/CanvasDesign/public/props"
 import { ImageFormat, ImageProcessOptions } from "@/utils/image-processing"
 import {
 	ImageGenerationTaskMeta,
 	ImageGenerationTaskTypeMap,
-} from "@/components/CanvasDesign/types.magic"
+} from "@/components/CanvasDesign/public/magic-types"
 import {
 	isDesignDslCanvasRelativeResourcePath,
 	normalizeDesignAttachmentPathForCanvas,

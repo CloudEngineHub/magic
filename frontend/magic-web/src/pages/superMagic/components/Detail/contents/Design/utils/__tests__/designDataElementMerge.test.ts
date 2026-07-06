@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import type { LayerElement } from "@/components/CanvasDesign/canvas/types"
+import type { LayerElement } from "@/components/CanvasDesign/runtime/document/types"
 import type { DesignData } from "../../types"
 import { mergeDesignDataByElement } from "../designDataElementMerge"
 

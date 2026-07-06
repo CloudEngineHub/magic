@@ -1,8 +1,11 @@
 import type {
 	CanvasFileResourceMeta,
 	GetFileInfoResponse,
-} from "@/components/CanvasDesign/types.magic"
-import { parseExpiresAt, isOssExpired } from "@/components/CanvasDesign/canvas/utils/ossExpiryUtils"
+} from "@/components/CanvasDesign/public/magic-types"
+import {
+	parseExpiresAt,
+	isOssExpired,
+} from "@/components/CanvasDesign/runtime/resources/offline-cache/ossExpiryUtils"
 import type { FileItem } from "@/pages/superMagic/components/Detail/components/FilesViewer/types"
 import {
 	getTemporaryDownloadUrl,

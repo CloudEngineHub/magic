@@ -31,7 +31,7 @@ import type {
 	CanvasDesignDataChangeMeta,
 	CanvasDesignDataPatch,
 	CanvasDesignRef,
-} from "@/components/CanvasDesign/types"
+} from "@/components/CanvasDesign/public/props"
 import { useDesignFocusElement } from "./hooks/useDesignFocusElement"
 import { useAttachments } from "./hooks/useAttachments"
 import { useCanvasImageFileRenameSync } from "./hooks/useCanvasImageFileRenameSync"
@@ -39,8 +39,8 @@ import type {
 	CanvasDeviceInfo,
 	CanvasDocument,
 	LayerElement,
-} from "@/components/CanvasDesign/canvas/types"
-import { getDefaultCanvasDeviceInfo } from "@/components/CanvasDesign/canvas/utils/utils"
+} from "@/components/CanvasDesign/runtime/document/types"
+import { getDefaultCanvasDeviceInfo } from "@/components/CanvasDesign/runtime/shared/ids"
 import CanvasDesignHeaderV2 from "./components/CanvasDesignHeaderV2"
 import { useDesignHeaderProps } from "./components/CanvasDesignHeaderV2/useDesignHeaderProps"
 import { CanvasDesignMentionDataService } from "./adapters/CanvasDesignMentionDataService"
@@ -59,12 +59,14 @@ import { AlertTriangle, CloudOff } from "lucide-react"
 import { needsUpgrade, upgradeCanvasToV2, type UpgradeProgress } from "./utils/canvasVersionUpgrade"
 import { CanvasUpgradeOverlay } from "./components/CanvasUpgradeBanner"
 import { toast } from "sonner"
-import { applyCanvasDocumentPatch } from "@/components/CanvasDesign/model"
+import { applyCanvasDocumentPatch } from "@/components/CanvasDesign/runtime/document"
 import { prewarmCanvasDesignImageWorker } from "@/components/CanvasDesign/prewarm"
 import { designBuiltinPlugins } from "./plugins/options"
-import { UploadSubDir } from "@/components/CanvasDesign/types.magic"
+import { UploadSubDir } from "@/components/CanvasDesign/public/magic-types"
 import type { DesignDraftReason } from "./utils/designDraftStorage"
 import type { DesignSaveMetadata } from "./managers"
+import { canUseDesignPlugins } from "./utils/pluginAccess"
+import { userStore } from "@/models/user"
 
 prewarmCanvasDesignImageWorker("super-magic-design-module")
 
@@ -695,6 +697,7 @@ function DesignViewer(props: DesignViewerProps) {
 			...downloadPolicy.permissions,
 			isFreeTrialVersion,
 			elementMenuConversationActions: isNewestVersion && !isShareRoute,
+			showPluginEntry: canUseDesignPlugins(userStore.user.organizationCode),
 		}),
 		[downloadPolicy.permissions, isFreeTrialVersion, isNewestVersion, isShareRoute],
 	)

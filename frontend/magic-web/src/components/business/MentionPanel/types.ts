@@ -1,6 +1,6 @@
 import type { ReactNode, CSSProperties } from "react"
 import type { I18nTexts, LocaleInput } from "./i18n/types"
-import type { MarkerType } from "@/components/CanvasDesign/canvas/types"
+import type { MarkerType } from "@/components/CanvasDesign/runtime/document/types"
 import type { MentionItemRenderer } from "./renderers/types"
 import type { MentionPanelItemType as MentionPanelItemTypeValue } from "./runtime/builtin/panel-item-types"
 

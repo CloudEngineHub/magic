@@ -2,8 +2,8 @@ import { useCallback, useEffect, useRef } from "react"
 import type {
 	CanvasFileResourceMeta,
 	GetFileInfoResponse,
-} from "@/components/CanvasDesign/types.magic"
-import { GET_FILE_INFO_NOT_FOUND_ERROR_CODE } from "@/components/CanvasDesign/canvas/utils/resourceLoadFailure"
+} from "@/components/CanvasDesign/public/magic-types"
+import { GET_FILE_INFO_NOT_FOUND_ERROR_CODE } from "@/components/CanvasDesign/runtime/resources/media-common/resourceLoadFailure"
 import type { FileItem } from "@/pages/superMagic/components/Detail/components/FilesViewer/types"
 import type { DesignAttachmentIndex } from "../utils/designAttachmentIndex"
 import { useTranslation } from "react-i18next"

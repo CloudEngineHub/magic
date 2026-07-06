@@ -3,7 +3,7 @@ import type {
 	UploadFileResponse,
 	UploadFile,
 	UploadSubDirType,
-} from "@/components/CanvasDesign/types.magic"
+} from "@/components/CanvasDesign/public/magic-types"
 import type { BatchSaveInfo } from "@/stores/folderUpload/types"
 import magicToast from "@/components/base/MagicToaster/utils"
 import { normalizeDesignAttachmentPathForCanvas } from "./designDslPathUtils"

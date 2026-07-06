@@ -11,7 +11,7 @@ import {
 	type UploadPrivateFileResponse,
 	UploadSubDir,
 	type UploadSubDirType,
-} from "@/components/CanvasDesign/types.magic"
+} from "@/components/CanvasDesign/public/magic-types"
 import magicToast from "@/components/base/MagicToaster/utils"
 import type { Topic } from "@/pages/superMagic/pages/Workspace/types"
 import type { FileItem } from "@/pages/superMagic/components/Detail/components/FilesViewer/types"

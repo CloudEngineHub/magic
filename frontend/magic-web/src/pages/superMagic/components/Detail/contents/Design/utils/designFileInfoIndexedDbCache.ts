@@ -1,5 +1,5 @@
 import Dexie, { type Table } from "dexie"
-import type { GetFileInfoResponse } from "@/components/CanvasDesign/types.magic"
+import type { GetFileInfoResponse } from "@/components/CanvasDesign/public/magic-types"
 
 export interface DesignFileInfoIndexedDbEntry {
 	cacheKey: string

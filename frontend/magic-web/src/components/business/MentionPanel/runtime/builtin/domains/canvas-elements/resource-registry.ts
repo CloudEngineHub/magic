@@ -1,5 +1,5 @@
 import { useSyncExternalStore } from "react"
-import type { Canvas } from "@/components/CanvasDesign/canvas/Canvas"
+import type { Canvas } from "@/components/CanvasDesign/runtime/core/Canvas"
 
 type CanvasGetter = () => Canvas | null | undefined
 
