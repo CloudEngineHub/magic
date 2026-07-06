@@ -71,7 +71,7 @@ vi.mock("react-i18next", async (importOriginal) => {
 					"card.copyToProject": "Copy to project",
 					"card.notSummarized": "Not summarized",
 					"card.summarized": "Summarized",
-					"card.summarizing": "Summarizing now",
+					"card.summarizing": "Summarizing",
 					"card.summaryFailed": "Summary failed",
 					"card.sourceRecorded": "Recorded",
 					"actions.deleteTitle": "Delete",
@@ -226,7 +226,7 @@ describe("RecordingDetailHeader action styling", () => {
 
 		expect(screen.queryByTestId("recording-detail-generate-summary")).not.toBeInTheDocument()
 		const badge = screen.getByTestId("recording-detail-summary-status")
-		expect(badge).toHaveTextContent("Summarizing now")
+		expect(badge).toHaveTextContent("Summarizing")
 		expect(badge).toHaveClass("border-sky-500/25", "bg-sky-500/10")
 		expect(badge.querySelector("svg")).toHaveClass("animate-spin")
 	})

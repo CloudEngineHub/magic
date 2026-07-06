@@ -139,6 +139,24 @@ vi.mock("../hooks/useAudioRecordingsOptimisticSync", () => ({
 	useAudioRecordingsOptimisticSync: ({ storeList }: { storeList: unknown[] }) => storeList,
 }))
 
+vi.mock("../hooks/useAudioRecordingCopyToProject", () => ({
+	useAudioRecordingCopyToProject: () => ({
+		visible: false,
+		copyTarget: null,
+		sourceAttachments: [],
+		sourceFileIds: [],
+		workspaces: [],
+		folderConflictModalVisible: false,
+		duplicateModalVisible: false,
+		isPreparing: false,
+		isOperating: false,
+		operationProgress: 0,
+		openCopyToProject: vi.fn(),
+		closeCopyDialog: vi.fn(),
+		submitCopy: vi.fn(),
+	}),
+}))
+
 vi.mock("../stores/audio-recordings-store", () => ({
 	audioRecordingsStore: storeMock,
 }))
@@ -175,6 +193,10 @@ vi.mock("../components/AudioRecordingGroupDialogs", () => ({
 
 vi.mock("../components/AudioRecordingSettingsDialog", () => ({
 	AudioRecordingSettingsDialog: () => null,
+}))
+
+vi.mock("../components/AudioRecordingCopyDialog", () => ({
+	AudioRecordingCopyDialog: () => null,
 }))
 
 import AudioRecordingsDesktop from "../AudioRecordingsDesktop"
@@ -218,6 +240,26 @@ describe("AudioRecordingsDesktop", () => {
 			JSON.parse(sessionStorage.getItem(AUDIO_RECORDINGS_FILTER_SESSION_KEY) ?? "{}"),
 		).toMatchObject({
 			summaryFilter: "not_summarized",
+		})
+	})
+
+	it("renders the default empty state without secondary description copy", () => {
+		render(<AudioRecordingsDesktop />)
+
+		expect(screen.getByTestId("audio-recordings-empty")).toBeInTheDocument()
+		expect(screen.getByText("No recordings")).toBeInTheDocument()
+		expect(screen.queryByText("No data")).toBeNull()
+	})
+
+	it("keeps the search empty state explanation when keyword filtering has no result", async () => {
+		render(<AudioRecordingsDesktop />)
+
+		fireEvent.change(screen.getByPlaceholderText("Search recordings"), {
+			target: { value: "missing recording" },
+		})
+
+		await waitFor(() => {
+			expect(screen.getByText("No search data")).toBeInTheDocument()
 		})
 	})
 })

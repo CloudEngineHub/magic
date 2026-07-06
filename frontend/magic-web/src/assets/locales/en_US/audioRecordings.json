@@ -38,7 +38,7 @@
 		"sourceRecorded": "Phone mic",
 		"summarize": "Summarize",
 		"summarized": "Summarized",
-		"summarizing": "Summarizing now",
+		"summarizing": "Summarizing",
 		"summaryFailed": "Summary failed",
 		"waiting": "Waiting"
 	},
@@ -120,7 +120,7 @@
 		"speakerSettingsHint": "Renaming a speaker updates every paragraph they speak.",
 		"speakerSettingsSave": "Save",
 		"speakerSettingsTitle": "Speaker names",
-		"summarizing": "Generating summary...",
+		"summarizing": "Summarizing",
 		"summarizingHint": "All summary views will appear when it is ready.",
 		"tabs": {
 			"followup": "Follow-up",
@@ -144,7 +144,7 @@
 		"untitled": "Untitled recording"
 	},
 	"empty": {
-		"description": "Recordings from the app will appear here",
+		"description": "Recordings will appear here",
 		"noCustomGroups": "No custom groups yet",
 		"search": "No matching recordings",
 		"title": "No recordings yet"
@@ -179,7 +179,7 @@
 			"transcript": "Transcript"
 		}
 	},
-	"subtitle": "View and manage recordings and AI summaries from the app.",
+	"subtitle": "View and manage audio recordings and AI summaries.",
 	"summary": {
 		"missingModel": "Unable to load summary model. Please try again later.",
 		"missingParams": "Missing parameters required for summary. Please refresh the list.",

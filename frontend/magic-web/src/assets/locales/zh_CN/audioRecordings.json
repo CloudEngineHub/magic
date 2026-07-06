@@ -38,7 +38,7 @@
 		"sourceRecorded": "手机麦克风",
 		"summarize": "总结",
 		"summarized": "已总结",
-		"summarizing": "正在总结",
+		"summarizing": "正在总结中",
 		"summaryFailed": "总结失败",
 		"waiting": "等待处理中"
 	},
@@ -120,7 +120,7 @@
 		"speakerSettingsHint": "修改姓名后，全文使用该说话人的段落会同步更新。",
 		"speakerSettingsSave": "保存",
 		"speakerSettingsTitle": "说话人名称",
-		"summarizing": "总结中...",
+		"summarizing": "正在总结中",
 		"summarizingHint": "完成后会展示所有总结视图。",
 		"tabs": {
 			"followup": "待办事项",
@@ -144,7 +144,7 @@
 		"untitled": "未命名录音"
 	},
 	"empty": {
-		"description": "APP 端录制的项目会出现在这里",
+		"description": "录音项目会出现在这里",
 		"noCustomGroups": "暂无自定义分组",
 		"search": "没有匹配的录音",
 		"title": "暂无录音"
@@ -179,7 +179,7 @@
 			"transcript": "转写"
 		}
 	},
-	"subtitle": "查看与管理 APP 端录制的音频与智能纪要。",
+	"subtitle": "查看与管理音频录制与智能纪要。",
 	"summary": {
 		"missingModel": "无法获取总结模型，请稍后重试",
 		"missingParams": "缺少总结所需参数，请刷新列表后重试",

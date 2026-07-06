@@ -23,7 +23,7 @@ vi.mock("react-i18next", () => ({
 				"card.mergeFailed": "Merge failed",
 				"card.processing": "Processing",
 				"card.regenerateSummary": "Regenerate summary",
-				"card.summarizing": "Summarizing now",
+				"card.summarizing": "Summarizing",
 				"card.notSummarized": "Not summarized",
 				"card.summarize": "Summarize",
 				"card.generateSummary": "Generate summary",
@@ -150,7 +150,7 @@ describe("AudioRecordingCard", () => {
 		expect(onOpen).toHaveBeenCalledTimes(1)
 		expect(
 			screen.getByTestId("audio-recording-card-project-1-status-summarizing"),
-		).toHaveTextContent("Summarizing now")
+		).toHaveTextContent("Summarizing")
 		expect(
 			screen.getByTestId("audio-recording-card-project-1-status-summarizing"),
 		).toBeDisabled()

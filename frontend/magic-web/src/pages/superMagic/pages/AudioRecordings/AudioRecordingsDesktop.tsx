@@ -310,7 +310,9 @@ function AudioRecordingsDesktop({ scrollViewportRef }: AudioRecordingsDesktopPro
 	}
 
 	const isRefreshing = store.loading && !store.loadingMore
-	const emptyMessage = debouncedKeyword.trim() ? t("empty.search") : t("empty.description")
+	const isSearchEmptyState = Boolean(debouncedKeyword.trim())
+	// Keep the default empty state concise while preserving search-specific guidance.
+	const emptyMessage = isSearchEmptyState ? t("empty.search") : ""
 
 	return (
 		<div
@@ -372,7 +374,9 @@ function AudioRecordingsDesktop({ scrollViewportRef }: AudioRecordingsDesktopPro
 					data-testid="audio-recordings-empty"
 				>
 					<p className="text-sm font-medium text-foreground">{t("empty.title")}</p>
-					<p className="mt-1 text-sm text-muted-foreground">{emptyMessage}</p>
+					{emptyMessage ? (
+						<p className="mt-1 text-sm text-muted-foreground">{emptyMessage}</p>
+					) : null}
 				</div>
 			) : null}
 
