@@ -156,12 +156,19 @@ vi.mock("../hooks/useI18n", () => ({
 			panel: "Mention panel",
 			retryButton: "Retry loading",
 			menuItem: "Menu item",
+			previewImage: "Preview image",
+			viewMode: "View mode",
+			listView: "List view",
+			galleryView: "Gallery view",
 		},
 		keyboardHints: {
 			navigate: "Navigate",
 			confirm: "Confirm",
 			goBack: "Go back",
 			goForward: "Go forward",
+		},
+		navigationActions: {
+			enter: "Enter",
 		},
 	}),
 }))
@@ -275,6 +282,54 @@ describe("MentionPanel", () => {
 
 		expect(screen.getByTestId("virtuoso-list")).toBeInTheDocument()
 		expect(screen.queryByTestId("mention-panel-gallery-item")).not.toBeInTheDocument()
+		expect(screen.queryByTestId("mention-panel-view-mode-switcher")).not.toBeInTheDocument()
+	})
+
+	it("should switch between gallery and list layouts when gallery mode is enabled", () => {
+		setCatalogState([
+			{
+				id: "image-1",
+				name: "Image 1",
+				type: MentionItemType.PROJECT_FILE,
+				extension: "png",
+				data: {
+					file_id: "image-1",
+					file_name: "Image 1",
+					file_path: "/Image 1.png",
+					file_extension: "png",
+				},
+			},
+		])
+
+		render(
+			<MentionPanel
+				visible={true}
+				viewMode={MentionPanelViewMode.GALLERY}
+				catalogBehavior={defaultMentionPanelCatalogBehavior}
+			/>,
+		)
+
+		expect(screen.getByTestId("mention-panel-view-mode-switcher")).toBeInTheDocument()
+		expect(screen.getByTestId("virtuoso-grid")).toBeInTheDocument()
+		expect(screen.queryByTestId("virtuoso-list")).not.toBeInTheDocument()
+		expect(screen.getByTestId("mention-panel-view-mode-gallery")).toHaveAttribute(
+			"aria-pressed",
+			"true",
+		)
+
+		fireEvent.click(screen.getByTestId("mention-panel-view-mode-list"))
+
+		expect(screen.getByTestId("virtuoso-list")).toBeInTheDocument()
+		expect(screen.queryByTestId("virtuoso-grid")).not.toBeInTheDocument()
+		expect(screen.getByTestId("mention-panel-view-mode-list")).toHaveAttribute(
+			"aria-pressed",
+			"true",
+		)
+
+		fireEvent.click(screen.getByTestId("mention-panel-view-mode-gallery"))
+
+		expect(screen.getByTestId("virtuoso-grid")).toBeInTheDocument()
+		expect(screen.queryByTestId("virtuoso-list")).not.toBeInTheDocument()
 	})
 
 	it("should render gallery cards without hiding disabled files", () => {
@@ -362,6 +417,70 @@ describe("MentionPanel", () => {
 			expect(mockSelectItem).toHaveBeenCalledWith(0)
 			expect(mockConfirmSelection).toHaveBeenCalledWith({ enterFolder: false })
 		})
+	})
+
+	it("should enter a gallery folder from the arrow trigger", () => {
+		vi.useFakeTimers()
+		try {
+			setCatalogState([
+				{
+					id: "folder-1",
+					name: "Folder 1",
+					type: MentionItemType.FOLDER,
+					hasChildren: true,
+					isFolder: true,
+				},
+			])
+
+			render(
+				<MentionPanel
+					visible={true}
+					viewMode={MentionPanelViewMode.GALLERY}
+					catalogBehavior={defaultMentionPanelCatalogBehavior}
+				/>,
+			)
+
+			fireEvent.click(screen.getByTestId("mention-panel-gallery-enter-folder-trigger"))
+			vi.runAllTimers()
+
+			expect(mockSelectItem).toHaveBeenCalledWith(0)
+			expect(mockConfirmSelection).toHaveBeenCalledWith({ enterFolder: true })
+		} finally {
+			vi.useRealTimers()
+		}
+	})
+
+	it("should fall back to a file icon when a gallery thumbnail fails to load", () => {
+		setCatalogState([
+			{
+				id: "image-1",
+				name: "Image 1",
+				type: MentionItemType.PROJECT_FILE,
+				extension: "png",
+				data: {
+					file_id: "image-1",
+					file_name: "Image 1",
+					file_path: "/Image 1.png",
+					file_extension: "png",
+				},
+			},
+		])
+		mockFilePreviewById["image-1"] = "https://example.com/broken.png"
+
+		render(
+			<MentionPanel
+				visible={true}
+				viewMode={MentionPanelViewMode.GALLERY}
+				galleryOptions={{ enablePreviewModal: true }}
+				catalogBehavior={defaultMentionPanelCatalogBehavior}
+			/>,
+		)
+
+		fireEvent.error(screen.getByTestId("mention-panel-gallery-preview-image"))
+
+		expect(screen.queryByTestId("mention-panel-gallery-preview-image")).not.toBeInTheDocument()
+		expect(screen.queryByTestId("mention-panel-gallery-preview-button")).not.toBeInTheDocument()
+		expect(screen.getByText("PNG")).toBeInTheDocument()
 	})
 
 	it("should not select a disabled gallery file", () => {

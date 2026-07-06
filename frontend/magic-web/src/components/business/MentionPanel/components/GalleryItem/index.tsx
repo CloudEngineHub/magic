@@ -1,4 +1,4 @@
-import { memo } from "react"
+import { memo, useEffect, useState } from "react"
 import SmartTooltip from "@/components/other/SmartTooltip"
 import { Button } from "@/components/shadcn-ui/button"
 import { cn } from "@/lib/utils"
@@ -77,8 +77,28 @@ const GalleryItem = memo(function GalleryItem(props: GalleryItemProps) {
 	const { isImage, previewUrl } = getProjectImagePreview(item, filePreviewById)
 	const isFolderLike = isFolderLikeItem(item)
 	const isDisabled = Boolean(item.unSelectable && !isFolderLike)
-	const canPreview = Boolean(enablePreview && isImage && previewUrl)
+	const [imagePreviewFailed, setImagePreviewFailed] = useState(false)
+	const [previewWaitExpired, setPreviewWaitExpired] = useState(false)
+
+	const hasImagePreview = Boolean(previewUrl && !imagePreviewFailed)
+	const showImageLoading = isImage && !previewUrl && !previewWaitExpired
+	const canPreview = Boolean(enablePreview && hasImagePreview)
 	const extensionLabel = getFileExtensionLabel(item)
+
+	useEffect(() => {
+		setImagePreviewFailed(false)
+		setPreviewWaitExpired(false)
+
+		if (!isImage || previewUrl) return
+
+		const timeoutId = setTimeout(() => {
+			setPreviewWaitExpired(true)
+		}, 1500)
+
+		return () => {
+			clearTimeout(timeoutId)
+		}
+	}, [isImage, item.id, previewUrl])
 
 	function handleClick(event?: React.MouseEvent) {
 		if (isDisabled) {
@@ -136,7 +156,7 @@ const GalleryItem = memo(function GalleryItem(props: GalleryItemProps) {
 					!isImage && !isFolderLike && "bg-muted/20",
 				)}
 			>
-				{previewUrl ? (
+				{hasImagePreview ? (
 					<img
 						src={previewUrl}
 						alt=""
@@ -144,8 +164,10 @@ const GalleryItem = memo(function GalleryItem(props: GalleryItemProps) {
 						loading="lazy"
 						decoding="async"
 						referrerPolicy="no-referrer"
+						onError={() => setImagePreviewFailed(true)}
+						data-testid="mention-panel-gallery-preview-image"
 					/>
-				) : isImage ? (
+				) : showImageLoading ? (
 					<div className="h-full w-full animate-pulse bg-muted motion-reduce:animate-none" />
 				) : isFolderLike ? (
 					<div className="flex size-14 items-center justify-center rounded-md border bg-background text-foreground shadow-sm transition-transform duration-150 group-hover/gallery-card:scale-[1.03]">
@@ -186,7 +208,7 @@ const GalleryItem = memo(function GalleryItem(props: GalleryItemProps) {
 						className="absolute right-1.5 top-1.5 size-6 rounded bg-background/90 text-foreground opacity-0 shadow-sm transition-opacity hover:bg-background group-hover/gallery-card:opacity-100"
 						onClick={handlePreview}
 						tabIndex={-1}
-						aria-label={`Preview ${item.name}`}
+						aria-label={`${t.ariaLabels.previewImage}: ${item.name}`}
 						data-testid="mention-panel-gallery-preview-button"
 					>
 						<Maximize2 className="size-3.5" />
@@ -219,9 +241,18 @@ const GalleryItem = memo(function GalleryItem(props: GalleryItemProps) {
 					</SmartTooltip>
 				</span>
 				{isFolderLike && (
-					<span className="flex size-5 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors group-hover/gallery-card:bg-background group-hover/gallery-card:text-foreground">
+					<Button
+						type="button"
+						variant="ghost"
+						size="icon"
+						className="flex size-5 shrink-0 rounded-full p-0 text-muted-foreground transition-colors group-hover/gallery-card:bg-background group-hover/gallery-card:text-foreground"
+						tabIndex={-1}
+						aria-label={`${t.navigationActions.enter}: ${item.name}`}
+						data-right-arrow
+						data-testid="mention-panel-gallery-enter-folder-trigger"
+					>
 						<ChevronRight className="size-3.5" />
-					</span>
+					</Button>
 				)}
 			</div>
 		</div>

@@ -26,6 +26,7 @@ import { createDefaultConfig } from "./constants"
 // Components
 import MenuItem from "./components/MenuItem"
 import GalleryItem from "./components/GalleryItem"
+import ViewModeSwitcher from "./components/ViewModeSwitcher"
 import { MENTION_PANEL_GALLERY_PREVIEW_LAYER_CLASS } from "./components/GalleryPreviewDialog"
 import MagicIcon from "../../base/MagicIcon"
 import {
@@ -99,6 +100,7 @@ const MentionPanel = observer(
 		const [internalSearchQuery, setInternalSearchQuery] = useState("")
 		const [multiSelectMode, setMultiSelectMode] = useState(false)
 		const [previewItem, setPreviewItem] = useState<MentionItem | null>(null)
+		const [internalViewMode, setInternalViewMode] = useState<MentionPanelViewMode>(viewMode)
 		const [pendingByKey, setPendingByKey] = useState<Map<string, PendingMentionEntry>>(
 			() => new Map(),
 		)
@@ -112,7 +114,11 @@ const MentionPanel = observer(
 		// Internationalization
 		const t = useI18nStatic(language)
 		const defaultConfig = useMemo(() => createDefaultConfig(t), [t])
-		const isGalleryMode = viewMode === MentionPanelViewMode.GALLERY && !isMobile
+
+		const canSwitchViewMode = viewMode === MentionPanelViewMode.GALLERY && !isMobile
+		const activeViewMode = canSwitchViewMode ? internalViewMode : viewMode
+		const isGalleryMode = activeViewMode === MentionPanelViewMode.GALLERY && !isMobile
+
 		const panelWidth = isGalleryMode ? GALLERY_PANEL_WIDTH : LIST_PANEL_WIDTH
 		const panelHeight = isGalleryMode ? GALLERY_PANEL_HEIGHT : defaultConfig.height
 		const panelSizeStyle = useMemo<CSSProperties>(
@@ -132,6 +138,10 @@ const MentionPanel = observer(
 				}),
 			[runtime, dataService, catalogBehavior, buildStoreRequest],
 		)
+
+		useEffect(() => {
+			setInternalViewMode(viewMode)
+		}, [viewMode])
 
 		// Main panel logic
 		const { state, actions, computed, dataSource, focus } = useMentionPanel({
@@ -210,6 +220,11 @@ const MentionPanel = observer(
 		// Handle search area click to focus input
 		const handleSearchAreaClick = useCallback(() => {
 			searchInputRef.current?.focus()
+		}, [])
+
+		const handleViewModeChange = useCallback((nextViewMode: MentionPanelViewMode) => {
+			setInternalViewMode(nextViewMode)
+			if (nextViewMode !== MentionPanelViewMode.GALLERY) setPreviewItem(null)
 		}, [])
 
 		// Clear search when panel closes
@@ -694,7 +709,7 @@ const MentionPanel = observer(
 
 				return (
 					<GalleryItem
-						key={`${viewMode}-${item.id}-${index}`}
+						key={item.id}
 						item={item}
 						selected={index === state.selectedIndex}
 						onClick={(e) => handleItemClick(index, e)}
@@ -716,7 +731,6 @@ const MentionPanel = observer(
 				pendingByKey,
 				state,
 				t,
-				viewMode,
 			],
 		)
 
@@ -858,7 +872,10 @@ const MentionPanel = observer(
 						{/* Search area */}
 						<div className="flex min-w-0 flex-1 flex-col items-start gap-2">
 							<div
-								className="relative flex h-9 w-full cursor-text items-center gap-1 overflow-hidden rounded-t-lg border-b border-input bg-background px-3 py-1 shadow-xs"
+								className={cn(
+									"relative flex h-9 w-full cursor-text items-center gap-1 overflow-hidden border-b border-input bg-background px-3 py-1 shadow-xs",
+									canSwitchViewMode ? "rounded-tl-lg" : "rounded-t-lg",
+								)}
 								onClick={handleSearchAreaClick}
 								role="searchbox"
 								aria-label="Search input area"
@@ -916,6 +933,13 @@ const MentionPanel = observer(
 								)}
 							</div>
 						</div>
+						{canSwitchViewMode && (
+							<ViewModeSwitcher
+								isGalleryMode={isGalleryMode}
+								t={t}
+								onViewModeChange={handleViewModeChange}
+							/>
+						)}
 					</div>
 
 					{/* Search query display (when in search state) */}
