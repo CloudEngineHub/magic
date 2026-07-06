@@ -1,9 +1,9 @@
 import MagicPopup from "@/components/base-mobile/MagicPopup"
 import MagicPullToRefresh from "@/components/base-mobile/MagicPullToRefresh"
 import { ScrollEdgeFadeContainer } from "@/components/base-mobile/ScrollEdgeFade"
-import MagicFileIcon from "@/components/base/MagicFileIcon"
 import magicToast from "@/components/base/MagicToaster/utils"
 import MobilePathBreadcrumb from "@/pages/superMagic/components/MobilePathBreadcrumb"
+import { DataEmptyState } from "@/pages/superMagicMobile/components/DataEmptyState"
 import { Input } from "@/components/shadcn-ui/input"
 import { Button } from "@/components/shadcn-ui/button"
 import { cn } from "@/lib/utils"
@@ -11,24 +11,18 @@ import { isEmpty } from "lodash-es"
 import { observer } from "mobx-react-lite"
 import type { FileItem } from "@/pages/superMagic/components/Detail/components/FilesViewer/types"
 import { detectContentTypeRender } from "@/pages/superMagic/components/Detail/components/FilesViewer/utils/preview"
-import {
-	getAppEntryFile,
-	getAttachmentType,
-	getChildrenForCustomMetadataIconPath,
-} from "@/pages/superMagic/components/MessageList/components/MessageAttachment/utils"
+import { getAppEntryFile } from "@/pages/superMagic/components/MessageList/components/MessageAttachment/utils"
 import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks/types"
-import { findFileInTree } from "@/pages/superMagic/components/TopicFilesButton/hooks/fileSelectionUtils"
 import MobileBottomSearchBar from "@/pages/superMagicMobile/components/MobileBottomSearchBar"
 import { formatFileSize } from "@/utils/string"
 import { Check, Plus, Upload, X } from "lucide-react"
 import { type ReactNode, useEffect, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
 import type { PresetFileType } from "../constant"
-import { isMagicSystemFolder } from "../utils/magic-system-folder"
 import MobileFilesSelectionBar from "./MobileFilesSelectionBar"
 import { MobileFileDownloadSheet } from "./MobileFileDownloadSheet"
-import { CustomFolderMagicIcon } from "./CustomFolderMagicIcon"
-import { TopicFileIcon, type TopicFileMagicVariant } from "./TopicFileIcon"
+import { MobileAttachmentRowIcon } from "./MobileAttachmentRowIcon"
+import { TopicFileIcon } from "./TopicFileIcon"
 import {
 	menuItemsIncludeNoWaterMarkDownload,
 	type MobileDownloadMenuItem,
@@ -147,45 +141,8 @@ const FILE_TYPE_LABEL_KEYS = {
 	design: "projectDetail.fileType.design",
 } as const
 
-const MAGIC_CHILD_FOLDER_VARIANTS: Record<string, TopicFileMagicVariant> = {
-	cron: "magic-cron",
-	skills: "magic-skills",
-	memory: "magic-memory",
-}
-
-const MAGIC_FILE_VARIANTS: Record<string, TopicFileMagicVariant> = {
-	skills: "magic-file-skills",
-	agents: "magic-file-agent",
-	heartbeat: "magic-file-heartbeat",
-	identity: "magic-file-identity",
-	soul: "magic-file-soul",
-	tools: "magic-file-tools",
-	user: "magic-file-user",
-	bootstrap: "magic-file-bootstrap",
-	memory: "magic-file-memory",
-}
-
 function normalizeFileExtension(fileExtension?: string): string {
 	return fileExtension?.replace(/^\./, "").toLowerCase() || ""
-}
-
-function getNormalizedPathSegments(item: AttachmentItem): string[] {
-	const pathCandidates = [item.relative_file_path, item.path]
-
-	for (const pathCandidate of pathCandidates) {
-		if (!pathCandidate) continue
-		const segments = pathCandidate
-			.replace(/\\/g, "/")
-			.split("/")
-			.map((segment) => segment.trim())
-			.filter(Boolean)
-
-		if (segments.length > 0) {
-			return segments
-		}
-	}
-
-	return []
 }
 
 function collectSearchResults(
@@ -235,30 +192,6 @@ function toFileItem(item: AttachmentItem): FileItem {
 		file_extension: item.file_extension,
 		file_size: item.file_size,
 	}
-}
-
-function resolveAttachmentMagicVariant(item: AttachmentItem): TopicFileMagicVariant | undefined {
-	if (isMagicSystemFolder(item)) {
-		return "magic-root"
-	}
-
-	const pathSegments = getNormalizedPathSegments(item)
-	if (!pathSegments.includes(".magic")) {
-		return undefined
-	}
-
-	const attachmentName = getAttachmentDisplayName(item).trim().toLowerCase()
-
-	if (item.is_directory) {
-		return MAGIC_CHILD_FOLDER_VARIANTS[attachmentName]
-	}
-
-	if (normalizeFileExtension(item.file_extension) !== "md") {
-		return undefined
-	}
-
-	const baseName = attachmentName.replace(/\.md$/i, "")
-	return MAGIC_FILE_VARIANTS[baseName]
 }
 
 /**
@@ -442,48 +375,6 @@ function MobileProjectDetailFilesView({
 	 */
 	function renderCreateFileIcon(fileExtension?: string) {
 		return <TopicFileIcon fileExtension={fileExtension} />
-	}
-
-	/** Resolve a node anywhere in the attachment tree by file_id (for custom folder icons). */
-	function findAttachmentInTree(fileId: string): AttachmentItem | undefined {
-		const found = findFileInTree(attachments as Record<string, unknown>[], fileId)
-		return (found as AttachmentItem | null) ?? undefined
-	}
-
-	/**
-	 * 行级图标在视图层完成业务判断，让 `.magic` 与目录状态规则更容易顺着页面阅读。
-	 */
-	function renderRowIcon(item: AttachmentItem) {
-		if (item.is_directory && !isEmpty(item.display_config)) {
-			if (item.display_config?.type === "custom") {
-				return (
-					<CustomFolderMagicIcon
-						displayConfig={item.display_config}
-						childrenItems={getChildrenForCustomMetadataIconPath(item, (id) =>
-							findAttachmentInTree(id),
-						)}
-						typeFallback="custom"
-						size={MOBILE_ATTACHMENT_ROW_ICON_SIZE}
-					/>
-				)
-			}
-
-			return (
-				<MagicFileIcon
-					type={getAttachmentType(item) || item.file_extension}
-					size={MOBILE_ATTACHMENT_ROW_ICON_SIZE}
-				/>
-			)
-		}
-
-		return (
-			<TopicFileIcon
-				isDirectory={item.is_directory}
-				magicVariant={resolveAttachmentMagicVariant(item)}
-				hasChildren={getVisibleAttachmentChildren(item).length > 0}
-				fileExtension={item.file_extension}
-			/>
-		)
 	}
 
 	/**
@@ -819,7 +710,13 @@ function MobileProjectDetailFilesView({
 						onClick={() => handleFolderRowClick(item)}
 						data-testid="mobile-folder-button"
 					>
-						{renderAttachmentIconCell(renderRowIcon(item))}
+						{renderAttachmentIconCell(
+							<MobileAttachmentRowIcon
+								item={item}
+								attachments={attachments}
+								size={MOBILE_ATTACHMENT_ROW_ICON_SIZE}
+							/>,
+						)}
 						<div className="min-w-0 flex-1">
 							<p
 								className={cn(
@@ -874,7 +771,13 @@ function MobileProjectDetailFilesView({
 						onClick={() => onFileOpen?.(item)}
 						data-testid="mobile-file-button"
 					>
-						{renderAttachmentIconCell(renderRowIcon(item))}
+						{renderAttachmentIconCell(
+							<MobileAttachmentRowIcon
+								item={item}
+								attachments={attachments}
+								size={MOBILE_ATTACHMENT_ROW_ICON_SIZE}
+							/>,
+						)}
 						<div className="min-w-0 flex-1">
 							<p
 								className={cn(
@@ -899,6 +802,7 @@ function MobileProjectDetailFilesView({
 		)
 	}
 
+	/** Selects the mobile file-list placeholder for loading, search-empty, and default-empty states. */
 	const renderEmptyState = () => {
 		if (refreshLoading) {
 			return (
@@ -913,12 +817,12 @@ function MobileProjectDetailFilesView({
 
 		if (isSearching) {
 			return (
-				<div
-					className="flex flex-1 items-center justify-center px-6 text-center text-sm text-muted-foreground"
-					data-testid="mobile-files-search-empty"
-				>
-					{t("search.searchEmptyDescription", { keyword: searchValue })}
-				</div>
+				<DataEmptyState
+					variant="chatFilesSearch"
+					compact
+					className="min-h-0 flex-1 py-12"
+					testId="mobile-files-search-empty"
+				/>
 			)
 		}
 
