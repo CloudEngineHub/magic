@@ -698,6 +698,18 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 			fileInfo: UploadFileResponse,
 			options?: { retainResourceSlot?: boolean },
 		) => {
+			const previousInfo = frameImageInfos[slotIndex]
+			if (
+				previousInfo?.path === fileInfo.path ||
+				frameImageInfos.some(
+					(info, index) => index !== slotIndex && info?.path === fileInfo.path,
+				)
+			) {
+				if (!options?.retainResourceSlot) {
+					resetSelectedResourceSlot()
+				}
+				return
+			}
 			setFrameImageInfos((prev) => {
 				const next = [...prev]
 				next[slotIndex] = {
@@ -712,7 +724,7 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 				resetSelectedResourceSlot()
 			}
 		},
-		[resetSelectedResourceSlot],
+		[frameImageInfos, resetSelectedResourceSlot],
 	)
 
 	const replaceReferenceImageAt = useCallback(
@@ -739,6 +751,17 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 							: undefined
 					: undefined
 			const previousInfo = referenceImageInfos[slotIndex]
+			if (
+				previousInfo?.path === fileInfo.path ||
+				referenceImageInfos.some(
+					(info, index) => index !== slotIndex && info.path === fileInfo.path,
+				)
+			) {
+				if (!options?.retainResourceSlot) {
+					resetSelectedResourceSlot()
+				}
+				return
+			}
 			const normalizedFileInfo: VideoReferenceAssetInfo = {
 				path: fileInfo.path,
 				src: fileInfo.src || fileInfo.path,
@@ -748,9 +771,9 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 			const deduped = referenceImageInfos.filter((info) => info.path !== fileInfo.path)
 			const nextInfos = [...deduped]
 			const shouldReplaceExisting =
-				Boolean(previousInfo) &&
-				previousInfo?.assetType === assetType &&
-				(!expectedAssetTypes || expectedAssetTypes.includes(previousInfo?.assetType))
+				previousInfo !== undefined &&
+				previousInfo.assetType === assetType &&
+				(!expectedAssetTypes || expectedAssetTypes.includes(previousInfo.assetType))
 			if (shouldReplaceExisting) {
 				nextInfos[slotIndex] = normalizedFileInfo
 			} else {
@@ -762,27 +785,31 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 				currentInputModeConfig,
 			)
 			setReferenceImageInfos(limitedInfos)
+			const nextProtectedReferencePaths =
+				shouldReplaceExisting && previousInfo?.path
+					? protectedReferencePaths.map((path) =>
+							path === previousInfo.path ? normalizedFileInfo.path : path,
+						)
+					: protectedReferencePaths
 			updateProtectedReferencePaths(
 				pruneProtectedReferencePaths(
 					limitedInfos.map((info) => info.path),
-					protectedReferencePaths,
+					nextProtectedReferencePaths,
 				),
 			)
-			setPrompt((currentPrompt) => {
-				if (
-					shouldReplaceExisting &&
-					previousInfo?.path &&
-					previousInfo.path !== normalizedFileInfo.path
-				) {
-					return removeMentionFromString(
-						currentPrompt,
-						previousInfo.path,
-						previousInfo.fileName,
-					)
-				}
-				return currentPrompt
-			})
-			if (limitedInfos.some((info) => info.path === normalizedFileInfo.path)) {
+			if (shouldReplaceExisting && previousInfo?.path) {
+				messageEditorRef?.current?.replaceMentionItemByPath(
+					previousInfo.path,
+					createReferenceResourcePanelItemFromPath(
+						normalizedFileInfo.path,
+						normalizedFileInfo.fileName,
+					),
+				)
+			}
+			if (
+				!shouldReplaceExisting &&
+				limitedInfos.some((info) => info.path === normalizedFileInfo.path)
+			) {
 				scheduleReferenceMentionInserts([normalizedFileInfo], {
 					placement: options?.mentionPlacement ?? "cursor",
 				})
@@ -799,6 +826,7 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 			referenceImageInfos,
 			protectedReferencePaths,
 			updateProtectedReferencePaths,
+			messageEditorRef,
 		],
 	)
 
@@ -859,7 +887,10 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 		batchUploadBaseRef.current = sel
 			? { inputTab: sel.inputTab, startSlot: sel.slotIndex }
 			: null
-		rawTriggerFileSelect()
+		rawTriggerFileSelect({
+			maxSelectedFiles: sel?.path ? 1 : undefined,
+			ignoreReferenceFileCapacity: Boolean(sel?.path),
+		})
 	}, [isUploading, rawTriggerFileSelect])
 
 	const uploadReferenceFiles = useCallback(
@@ -874,6 +905,8 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 			await rawUploadFiles(files, {
 				currentReferenceFiles: currentReferenceImages,
 				maxReferenceFiles: maxReferenceImages,
+				maxSelectedFiles: files.length,
+				ignoreReferenceFileCapacity: false,
 			})
 		},
 		[
@@ -1198,6 +1231,7 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 				slotKey?: string
 				referenceAssetKind?: VideoReferenceAssetKind
 				referenceAssetKinds?: VideoReferenceAssetKind[]
+				path?: string
 			},
 		) => {
 			const targetPaths = inputTab === "frame" ? currentFrameImages : currentReferenceImages
@@ -1207,7 +1241,7 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 				slotKey: options?.slotKey,
 				referenceAssetKind: options?.referenceAssetKind,
 				referenceAssetKinds: options?.referenceAssetKinds,
-				path: targetPaths[slotIndex],
+				path: options?.path ?? targetPaths[slotIndex],
 			}
 			selectedResourceSlotRef.current = nextSlot
 			setSelectedResourceSlot(nextSlot)

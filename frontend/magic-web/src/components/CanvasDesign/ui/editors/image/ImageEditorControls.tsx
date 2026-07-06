@@ -17,7 +17,10 @@ import EditorModelSelect from "../video/model-config/EditorModelSelect"
 import type { ImageEditorConfig } from "./useImageEditorConfig"
 import ReferenceResourceSlotPopover from "../message/reference-assets/ReferenceResourceSlotPopover"
 import type { ReferenceResourceSourceType } from "../message/reference-assets/reference-resource.types"
-import type { ReferenceResourcePanelItem } from "../../../public/props"
+import type {
+	ReferenceResourcePanelItem,
+	ReferenceResourcePanelSelectContext,
+} from "../../../public/props"
 import SizeIconPreview from "../../primitives/custom/SizeIconPreview/index"
 import SourceList, {
 	type SourceListOption,
@@ -41,7 +44,7 @@ interface ImageEditorReferenceSlotPopoverProps {
 	slotKey: string
 	isPopoverOpen: boolean
 	selectedSlotKey: string | null
-	onSelectSlot: (slotKey: string) => void
+	onSelectSlot: () => void
 	onPopoverOpenChange: (open: boolean) => void
 	onMouseEnter: () => void
 	onMouseLeave: () => void
@@ -49,7 +52,12 @@ interface ImageEditorReferenceSlotPopoverProps {
 	referencePopoverState: ImageEditorReferencePopoverState
 	referenceResourceType: ImageEditorConfig["referenceResourceType"]
 	referenceFileInfos: ImageEditorConfig["referenceFileInfos"]
-	onProjectSelect?: (item: ReferenceResourcePanelItem) => void
+	onProjectSelect?: (
+		item: ReferenceResourcePanelItem,
+		context?: ReferenceResourcePanelSelectContext,
+	) => void
+	enableProjectSelectMultiSelect?: boolean
+	maxProjectSelectBatchCount?: number
 	slotRootRef?: SourceListRenderItemParams["slotRootRef"]
 }
 
@@ -73,6 +81,8 @@ const ImageEditorReferenceSlotPopover = forwardRef<
 		referenceResourceType,
 		referenceFileInfos,
 		onProjectSelect,
+		enableProjectSelectMultiSelect,
+		maxProjectSelectBatchCount,
 		slotRootRef,
 	} = props
 
@@ -93,7 +103,7 @@ const ImageEditorReferenceSlotPopover = forwardRef<
 			slotRootRef={handleSlotRootRef}
 			isPopoverOpen={isPopoverOpen}
 			selectedSlotKey={selectedSlotKey}
-			onActivateSlot={() => onSelectSlot(slotKey)}
+			onActivateSlot={onSelectSlot}
 			onPopoverOpenChange={onPopoverOpenChange}
 			onMouseEnter={onMouseEnter}
 			onMouseLeave={onMouseLeave}
@@ -104,6 +114,8 @@ const ImageEditorReferenceSlotPopover = forwardRef<
 			referenceResourceType={referenceResourceType}
 			referenceFileInfos={referenceFileInfos}
 			onProjectSelect={onProjectSelect}
+			enableProjectSelectMultiSelect={enableProjectSelectMultiSelect}
+			maxProjectSelectBatchCount={maxProjectSelectBatchCount}
 		/>
 	)
 })
@@ -121,7 +133,10 @@ interface ImageEditorControlsProps {
 	config: ImageEditorConfig
 	hoveredMentionPath?: string | null
 	onSelectSource: (source: ReferenceResourceSourceType) => void
-	onProjectSelect?: (item: ReferenceResourcePanelItem) => void
+	onProjectSelect?: (
+		item: ReferenceResourcePanelItem,
+		context?: ReferenceResourcePanelSelectContext,
+	) => void
 	/** 参考文件删除回调，传入时优先使用（用于同步到 TipTap） */
 	onReferenceFileRemove?: (path: string) => void
 	onPreviewMediaResource?: (resource: MediaResourceFullscreenPreviewItem) => void
@@ -165,6 +180,17 @@ export default function ImageEditorControls(props: ImageEditorControlsProps) {
 			setSelectedReferenceSlotKey(null)
 		}
 	}, [isPopoverOpen])
+
+	const handleSelectReferenceSlot = useCallback(
+		(option: SourceListOption) => {
+			setSelectedReferenceSlotKey(option.value)
+			handlers.prepareReferenceSlotSelection(option.slotIndex, {
+				slotKey: option.value,
+				path: option.resourcePath,
+			})
+		},
+		[handlers],
+	)
 
 	const canAddReferenceFile =
 		maxReferenceFiles === undefined || currentReferenceFiles.length < maxReferenceFiles
@@ -250,7 +276,7 @@ export default function ImageEditorControls(props: ImageEditorControlsProps) {
 					slotKey={referencePopoverState.slotKey}
 					isPopoverOpen={isPopoverOpen}
 					selectedSlotKey={selectedReferenceSlotKey}
-					onSelectSlot={setSelectedReferenceSlotKey}
+					onSelectSlot={() => handleSelectReferenceSlot(option)}
 					onPopoverOpenChange={handlers.setPopoverOpen}
 					onMouseEnter={handlers.handlePopoverMouseEnter}
 					onMouseLeave={handlers.handlePopoverMouseLeave}
@@ -259,6 +285,8 @@ export default function ImageEditorControls(props: ImageEditorControlsProps) {
 					referenceResourceType={referenceResourceType}
 					referenceFileInfos={referenceFileInfos}
 					onProjectSelect={onProjectSelect}
+					enableProjectSelectMultiSelect={!option.resourcePath}
+					maxProjectSelectBatchCount={option.resourcePath ? 1 : undefined}
 					slotRootRef={slotRootRef}
 				/>
 			)
@@ -275,6 +303,7 @@ export default function ImageEditorControls(props: ImageEditorControlsProps) {
 			referenceFileInfos,
 			onProjectSelect,
 			hoveredMentionPath,
+			handleSelectReferenceSlot,
 		],
 	)
 

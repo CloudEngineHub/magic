@@ -42,6 +42,8 @@ interface VideoEditorEmptyReferenceSlotPopoverProps {
 		options?: {
 			slotKey?: string
 			referenceAssetKind?: VideoReferenceAssetKind
+			referenceAssetKinds?: VideoReferenceAssetKind[]
+			path?: string
 		},
 	) => void
 	onPopoverOpenChange: (open: boolean) => void
@@ -54,6 +56,7 @@ interface VideoEditorEmptyReferenceSlotPopoverProps {
 	referenceResourceType: ReferenceResourceType
 	referenceFileInfos: VideoEditorConfig["referenceImageInfos"]
 	referenceAssetKind?: VideoReferenceAssetKind
+	referenceAssetKinds?: VideoReferenceAssetKind[]
 	assetLimits?: VideoEditorConfig["referenceAssetLimits"]
 	currentAssetCounts?: VideoEditorConfig["referenceAssetCounts"]
 	onProjectSelect?: (
@@ -61,6 +64,8 @@ interface VideoEditorEmptyReferenceSlotPopoverProps {
 		context?: ReferenceResourcePanelSelectContext,
 	) => void
 	onProjectSelectPanelOpenChange: (open: boolean) => void
+	enableProjectSelectMultiSelect?: boolean
+	maxProjectSelectBatchCount?: number
 }
 
 const VideoEditorReferenceSlotPopover = forwardRef<
@@ -87,10 +92,13 @@ const VideoEditorReferenceSlotPopover = forwardRef<
 		referenceResourceType,
 		referenceFileInfos,
 		referenceAssetKind,
+		referenceAssetKinds,
 		assetLimits,
 		currentAssetCounts,
 		onProjectSelect,
 		onProjectSelectPanelOpenChange,
+		enableProjectSelectMultiSelect,
+		maxProjectSelectBatchCount,
 		slotRootRef,
 	} = props
 
@@ -115,6 +123,8 @@ const VideoEditorReferenceSlotPopover = forwardRef<
 				onPrepareResourceSlotSelection(inputTab, option.slotIndex, {
 					slotKey,
 					referenceAssetKind,
+					referenceAssetKinds,
+					path: option.resourcePath,
 				})
 			}
 			onPopoverOpenChange={onPopoverOpenChange}
@@ -130,6 +140,8 @@ const VideoEditorReferenceSlotPopover = forwardRef<
 			currentAssetCounts={currentAssetCounts}
 			onProjectSelect={onProjectSelect}
 			onProjectSelectPanelOpenChange={onProjectSelectPanelOpenChange}
+			enableProjectSelectMultiSelect={enableProjectSelectMultiSelect}
+			maxProjectSelectBatchCount={maxProjectSelectBatchCount}
 		/>
 	)
 })
@@ -154,6 +166,8 @@ interface VideoEditorControlsProps {
 		options?: {
 			slotKey?: string
 			referenceAssetKind?: VideoReferenceAssetKind
+			referenceAssetKinds?: VideoReferenceAssetKind[]
+			path?: string
 		},
 	) => void
 	onSelectSource: (source: ReferenceResourceSourceType) => void
@@ -532,6 +546,7 @@ export default function VideoEditorControls(props: VideoEditorControlsProps) {
 				isLimitReached: boolean
 				referenceResourceType: ReferenceResourceType
 				referenceFileInfos: VideoEditorConfig["referenceImageInfos"]
+				referenceAssetKinds?: VideoReferenceAssetKind[]
 				assetLimits?: VideoEditorConfig["referenceAssetLimits"]
 				currentAssetCounts?: VideoEditorConfig["referenceAssetCounts"]
 			},
@@ -546,6 +561,7 @@ export default function VideoEditorControls(props: VideoEditorControlsProps) {
 					isLimitReached,
 					referenceResourceType: slotReferenceResourceType,
 					referenceFileInfos: slotReferenceFileInfos,
+					referenceAssetKinds,
 					assetLimits,
 					currentAssetCounts,
 				} = resolvePopoverState(option)
@@ -622,10 +638,13 @@ export default function VideoEditorControls(props: VideoEditorControlsProps) {
 						referenceResourceType={slotReferenceResourceType}
 						referenceFileInfos={slotReferenceFileInfos}
 						referenceAssetKind={referenceAssetKind}
+						referenceAssetKinds={referenceAssetKinds}
 						assetLimits={assetLimits}
 						currentAssetCounts={currentAssetCounts}
 						onProjectSelect={onProjectSelect}
 						onProjectSelectPanelOpenChange={handlers.setReferenceProjectPanelOpen}
+						enableProjectSelectMultiSelect={!option.resourcePath}
+						maxProjectSelectBatchCount={option.resourcePath ? 1 : undefined}
 					/>
 				)
 			}

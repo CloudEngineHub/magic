@@ -9,7 +9,10 @@ import { ArrowUp, LoaderCircle } from "lucide-react"
 import { useCanvas } from "../../../app/providers/CanvasProvider"
 import type { ImageElement } from "../../../runtime/document/types"
 import type { ReferenceResourceSourceType } from "../message/reference-assets/reference-resource.types"
-import type { ReferenceResourcePanelItem } from "../../../public/props"
+import type {
+	ReferenceResourcePanelItem,
+	ReferenceResourcePanelSelectContext,
+} from "../../../public/props"
 import MessageEditor, { type MessageEditorRef } from "../message/MessageEditor"
 import { useCanvasReferenceMention } from "../message/useCanvasReferenceMention"
 import { useMentionSync } from "../message/useMentionSync"
@@ -124,19 +127,29 @@ export default function ImageEditorSurface(props: ImageEditorSurfaceProps) {
 		(source: ReferenceResourceSourceType) => {
 			if (source !== "local-upload") return
 			handlers.setPopoverOpen(false)
-			if (config.isReferenceFileLimitReached) {
+			if (!config.selectedReferenceSlot?.path && config.isReferenceFileLimitReached) {
 				return
 			}
 			handlers.triggerFileSelect()
 		},
-		[config.isReferenceFileLimitReached, handlers],
+		[config.isReferenceFileLimitReached, config.selectedReferenceSlot?.path, handlers],
 	)
 
 	const handleProjectSelect = useCallback(
-		(item: ReferenceResourcePanelItem) => {
+		(item: ReferenceResourcePanelItem, context?: ReferenceResourcePanelSelectContext) => {
+			const selectedSlot = config.selectedReferenceSlot
+			if (selectedSlot?.path) {
+				handlers.replaceReferenceFileAt(selectedSlot.slotIndex, {
+					path: item.data.file_path,
+					src: item.data.file_path,
+					fileName: item.data.file_name,
+				})
+				context?.reset?.()
+				return
+			}
 			editorRef.current?.insertMentionItems([item])
 		},
-		[editorRef],
+		[config.selectedReferenceSlot, editorRef, handlers],
 	)
 
 	const canAcceptReferenceDrop =
@@ -259,7 +272,7 @@ export default function ImageEditorSurface(props: ImageEditorSurfaceProps) {
 				ref={fileInputRef}
 				type="file"
 				accept={fileInputAccept}
-				multiple
+				multiple={!config.selectedReferenceSlot?.path}
 				style={{ display: "none" }}
 				onChange={handlers.handleFileChange}
 			/>

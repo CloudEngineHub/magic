@@ -7,6 +7,7 @@ import { useCanvasDesignI18n } from "../../../app/providers/I18nProvider"
 import type { GenerateImageRequest, UploadFileResponse } from "../../../public/magic-types"
 import { ImageElement as ImageElementClass } from "../../../runtime/elements/image/ImageElement"
 import { useFileInput } from "../message/useFileInput"
+import type { MessageEditorRef } from "../message/MessageEditor"
 import { useReferenceImagesState } from "./useReferenceImagesState"
 import type {
 	ReferenceResourceFileInfo,
@@ -18,6 +19,7 @@ import {
 	type PromptPlaceholderReference,
 } from "../message/reference-assets/promptPlaceholderCodec"
 import { appendMentionToString } from "../message/tiptap/contentUtils"
+import { createReferenceResourcePanelItemFromPath } from "../message/reference-assets/createReferenceResourcePanelItem"
 import {
 	decodePromptPlaceholdersWithLabels,
 	createPromptPlaceholderTokenFactory,
@@ -58,7 +60,13 @@ interface UseImageEditorConfigOptions {
 	originalImageSrc?: string
 	originalImageName?: string
 	/** 编辑器 focus 的 ref，上传完成后用于聚焦 */
-	editorFocusRef?: React.RefObject<{ focus: () => void } | null>
+	editorFocusRef?: React.RefObject<MessageEditorRef | null>
+}
+
+export interface ImageReferenceSlotInfo {
+	slotIndex: number
+	slotKey?: string
+	path?: string
 }
 
 export interface ImageEditorConfig {
@@ -98,6 +106,7 @@ export interface ImageEditorConfig {
 		  }
 		| undefined
 	isPopoverOpen: boolean
+	selectedReferenceSlot: ImageReferenceSlotInfo | null
 	referenceResourceType: ReferenceResourceType
 	fileInputAccept: string
 	/** 画布图片的源图裁剪，用于参考列表「当前图片」预览与画布可视区域一致 */
@@ -127,6 +136,18 @@ export interface ImageEditorConfig {
 		restoreQuickEditConfigToUi: () => void
 		/** 二次编辑「重新生成」：清除临时草稿后，将 UI 完整恢复为元素上已保存的 generateImageRequest */
 		restoreOriginalGenerateImageRequestToUi: () => void
+		prepareReferenceSlotSelection: (
+			slotIndex: number,
+			options?: {
+				slotKey?: string
+				path?: string
+			},
+		) => void
+		replaceReferenceFileAt: (
+			slotIndex: number,
+			fileInfo: UploadFileResponse,
+			options?: { retainReferenceSlot?: boolean },
+		) => void
 		triggerFileSelect: () => void
 		uploadFiles: (files: File[]) => Promise<void>
 		handleFileChange: (event: React.ChangeEvent<HTMLInputElement>) => void
@@ -158,6 +179,8 @@ export function useImageEditorConfig(options: UseImageEditorConfigOptions): Imag
 	>({})
 	const [isPopoverOpen, setIsPopoverOpen] = useState<boolean>(false)
 	const [protectedReferencePaths, setProtectedReferencePaths] = useState<string[]>([])
+	const [selectedReferenceSlot, setSelectedReferenceSlot] =
+		useState<ImageReferenceSlotInfo | null>(null)
 
 	// 标记是否已经恢复过临时数据
 	const hasRestoredRef = useRef<boolean>(false)
@@ -171,6 +194,32 @@ export function useImageEditorConfig(options: UseImageEditorConfigOptions): Imag
 	const isApplyingRestoreRef = useRef<boolean>(false)
 	// 标记是否正在删除参考图（用于防止删除时弹窗关闭）
 	const isRemovingReferenceImageRef = useRef<boolean>(false)
+	const selectedReferenceSlotRef = useRef<ImageReferenceSlotInfo | null>(null)
+	const fileUploadSlotRef = useRef<ImageReferenceSlotInfo | null>(null)
+
+	const resetSelectedReferenceSlot = useCallback(() => {
+		selectedReferenceSlotRef.current = null
+		setSelectedReferenceSlot(null)
+	}, [])
+
+	const prepareReferenceSlotSelection = useCallback(
+		(
+			slotIndex: number,
+			options?: {
+				slotKey?: string
+				path?: string
+			},
+		) => {
+			const nextSlot: ImageReferenceSlotInfo = {
+				slotIndex,
+				slotKey: options?.slotKey,
+				path: options?.path,
+			}
+			selectedReferenceSlotRef.current = nextSlot
+			setSelectedReferenceSlot(nextSlot)
+		},
+		[],
+	)
 
 	// 获取当前模型的最大参考文件数量限制（需要提前计算，供 useReferenceImagesState 使用）
 	const maxReferenceFiles = useMemo(() => {
@@ -386,30 +435,165 @@ export function useImageEditorConfig(options: UseImageEditorConfigOptions): Imag
 		[referenceFileInfos],
 	)
 
-	// 使用文件输入 hook
-	const { fileInputRef, triggerFileSelect, uploadFiles, handleFileChange, isUploading } =
-		useFileInput({
-			methods,
-			currentReferenceFiles,
-			canvas: canvas || undefined,
-			elementId: imageElement.id,
-			maxReferenceFiles,
-			accept: fileInputAccept,
-			onFileUploaded: useCallback(
-				(result: UploadFileResponse) => {
-					// 同步参考文件状态（从 Element 读取最新数据，包含新上传的文件）
-					// syncFromElement 会立即更新 referenceFileInfos，从而更新 matchableItems
-					syncFromElement()
+	const appendReferenceFile = useCallback(
+		(fileInfo: UploadFileResponse) => {
+			if (!canvas) return false
+			const elementInstance = canvas.elementManager.getElementInstance(imageElement.id)
+			if (!(elementInstance instanceof ImageElementClass)) return false
 
-					// 记录待添加的文件名，等待 matchableItems 更新后再添加到 prompt
-					const fileName = result.fileName || result.path?.split("/").pop() || ""
-					if (fileName) {
-						pendingFileNameRef.current = fileName
-					}
+			const currentInfos = elementInstance.getReferenceImageInfos()
+			if (currentInfos.some((info) => info.path === fileInfo.path)) {
+				syncFromElement()
+				return false
+			}
+			if (maxReferenceFiles !== undefined && currentInfos.length >= maxReferenceFiles) {
+				syncFromElement()
+				return false
+			}
+
+			elementInstance.saveReferenceImageInfos([
+				{
+					path: fileInfo.path,
+					src: fileInfo.src || fileInfo.path,
+					fileName: fileInfo.fileName || fileInfo.path.split("/").pop() || fileInfo.path,
 				},
-				[syncFromElement],
-			),
+			])
+			syncFromElement()
+			return true
+		},
+		[canvas, imageElement.id, maxReferenceFiles, syncFromElement],
+	)
+
+	const replaceReferenceFileAt = useCallback(
+		(
+			slotIndex: number,
+			fileInfo: UploadFileResponse,
+			options?: { retainReferenceSlot?: boolean },
+		) => {
+			if (!canvas) return
+			const elementInstance = canvas.elementManager.getElementInstance(imageElement.id)
+			if (!(elementInstance instanceof ImageElementClass)) return
+
+			const currentInfos =
+				elementInstance.getReferenceImageInfos() as ReferenceResourceFileInfo[]
+			const previousInfo = currentInfos[slotIndex]
+
+			if (
+				previousInfo?.path === fileInfo.path ||
+				currentInfos.some(
+					(info, index) => index !== slotIndex && info.path === fileInfo.path,
+				)
+			) {
+				if (!options?.retainReferenceSlot) {
+					resetSelectedReferenceSlot()
+				}
+				return
+			}
+
+			const normalizedInfo: ReferenceResourceFileInfo = {
+				path: fileInfo.path,
+				src: fileInfo.src || fileInfo.path,
+				fileName: fileInfo.fileName || fileInfo.path.split("/").pop() || fileInfo.path,
+			}
+			const nextInfos = [...currentInfos]
+			nextInfos[slotIndex] = normalizedInfo
+			const compactNextInfos = nextInfos.filter(Boolean)
+
+			elementInstance.setReferenceImageInfos(compactNextInfos)
+			syncFromElement()
+
+			if (previousInfo?.path) {
+				const nextProtectedReferencePaths = protectedReferencePaths.map((path) =>
+					path === previousInfo.path ? normalizedInfo.path : path,
+				)
+				updateProtectedReferencePaths(
+					pruneProtectedReferencePaths(
+						compactNextInfos.map((info) => info.path),
+						nextProtectedReferencePaths,
+					),
+				)
+				editorFocusRef?.current?.replaceMentionItemByPath(
+					previousInfo.path,
+					createReferenceResourcePanelItemFromPath(
+						normalizedInfo.path,
+						normalizedInfo.fileName,
+					),
+				)
+			}
+
+			if (!options?.retainReferenceSlot) {
+				resetSelectedReferenceSlot()
+			}
+		},
+		[
+			canvas,
+			imageElement.id,
+			protectedReferencePaths,
+			syncFromElement,
+			updateProtectedReferencePaths,
+			editorFocusRef,
+			resetSelectedReferenceSlot,
+		],
+	)
+
+	// 使用文件输入 hook
+	const {
+		fileInputRef,
+		triggerFileSelect: rawTriggerFileSelect,
+		uploadFiles: rawUploadFiles,
+		handleFileChange,
+		isUploading,
+	} = useFileInput({
+		methods,
+		currentReferenceFiles,
+		canvas: canvas || undefined,
+		elementId: imageElement.id,
+		maxReferenceFiles,
+		accept: fileInputAccept,
+		shouldSaveToElement: false,
+		onFileUploaded: useCallback(
+			(result: UploadFileResponse) => {
+				const selectedUploadSlot = fileUploadSlotRef.current
+				if (selectedUploadSlot?.path) {
+					replaceReferenceFileAt(selectedUploadSlot.slotIndex, result)
+					return
+				}
+
+				const didAppend = appendReferenceFile(result)
+				if (!didAppend) return
+
+				// 记录待添加的文件名，等待 matchableItems 更新后再添加到 prompt
+				const fileName = result.fileName || result.path?.split("/").pop() || ""
+				if (fileName) {
+					pendingFileNameRef.current = fileName
+				}
+			},
+			[appendReferenceFile, replaceReferenceFileAt],
+		),
+		onUploadSessionEnd: useCallback(() => {
+			fileUploadSlotRef.current = null
+		}, []),
+	})
+
+	const triggerFileSelect = useCallback(() => {
+		const selectedSlot = selectedReferenceSlotRef.current
+		fileUploadSlotRef.current = selectedSlot
+		rawTriggerFileSelect({
+			maxSelectedFiles: selectedSlot?.path ? 1 : undefined,
+			ignoreReferenceFileCapacity: Boolean(selectedSlot?.path),
 		})
+	}, [rawTriggerFileSelect])
+
+	const uploadFiles = useCallback(
+		async (files: File[]) => {
+			fileUploadSlotRef.current = null
+			await rawUploadFiles(files, {
+				maxSelectedFiles: files.length,
+				ignoreReferenceFileCapacity: false,
+			})
+		},
+		[rawUploadFiles],
+	)
 
 	// 监听 matchableItems 的变化，当检测到新上传的文件时，自动追加到 prompt
 	useEffect(() => {
@@ -1139,6 +1323,7 @@ export function useImageEditorConfig(options: UseImageEditorConfigOptions): Imag
 		currentSelectValue,
 		ratioOption,
 		isPopoverOpen,
+		selectedReferenceSlot,
 		referenceResourceType,
 		fileInputAccept,
 		hasRestoredRef,
@@ -1164,6 +1349,8 @@ export function useImageEditorConfig(options: UseImageEditorConfigOptions): Imag
 			cancelPendingDraftPersistence,
 			restoreQuickEditConfigToUi,
 			restoreOriginalGenerateImageRequestToUi,
+			prepareReferenceSlotSelection,
+			replaceReferenceFileAt,
 			triggerFileSelect,
 			uploadFiles,
 			handleFileChange,

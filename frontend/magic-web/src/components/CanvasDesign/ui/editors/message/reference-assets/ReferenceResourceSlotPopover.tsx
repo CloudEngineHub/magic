@@ -37,6 +37,8 @@ interface ReferenceResourceSlotPopoverProps {
 		context?: ReferenceResourcePanelSelectContext,
 	) => void
 	onProjectSelectPanelOpenChange?: (open: boolean) => void
+	enableProjectSelectMultiSelect?: boolean
+	maxProjectSelectBatchCount?: number
 }
 
 export default function ReferenceResourceSlotPopover(props: ReferenceResourceSlotPopoverProps) {
@@ -62,6 +64,8 @@ export default function ReferenceResourceSlotPopover(props: ReferenceResourceSlo
 		currentAssetCounts,
 		onProjectSelect,
 		onProjectSelectPanelOpenChange,
+		enableProjectSelectMultiSelect,
+		maxProjectSelectBatchCount,
 	} = props
 
 	return (
@@ -85,7 +89,8 @@ export default function ReferenceResourceSlotPopover(props: ReferenceResourceSlo
 			currentAssetCounts={currentAssetCounts}
 			onProjectSelect={onProjectSelect}
 			onProjectSelectPanelOpenChange={onProjectSelectPanelOpenChange}
-			maxProjectSelectBatchCount={1}
+			enableProjectSelectMultiSelect={enableProjectSelectMultiSelect}
+			maxProjectSelectBatchCount={maxProjectSelectBatchCount}
 			trigger={
 				<div
 					ref={slotRootRef}

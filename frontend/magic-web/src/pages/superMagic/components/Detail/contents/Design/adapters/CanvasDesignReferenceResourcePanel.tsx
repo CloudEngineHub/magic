@@ -29,6 +29,7 @@ interface CanvasMentionPanelProps {
 	lockDismissToExplicitClose?: boolean
 	viewMode?: MentionPanelViewMode
 	galleryOptions?: MentionPanelGalleryOptions
+	enableMultiSelect?: boolean
 	onSelect: (item: MentionItem, context?: ReferenceResourcePanelSelectContext) => void
 	onClose: () => void
 	canToggleMultiSelectItem?: (item: MentionItem) => boolean
@@ -65,6 +66,7 @@ export function CanvasDesignReferenceResourcePanel(props: ReferenceResourcePanel
 		initialLoadOptions,
 		initialNavigationStack,
 		catalogBehavior,
+		enableMultiSelect,
 		onSelect,
 		onClose,
 	} = props
@@ -99,6 +101,7 @@ export function CanvasDesignReferenceResourcePanel(props: ReferenceResourcePanel
 			lockDismissToExplicitClose
 			viewMode={MentionPanelViewMode.GALLERY}
 			galleryOptions={{ enablePreviewModal: true }}
+			enableMultiSelect={enableMultiSelect}
 			onSelect={(item, context) => {
 				const panelItem = toReferenceResourcePanelItem(item)
 				if (!panelItem) return

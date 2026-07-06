@@ -18,6 +18,8 @@ interface UseFileInputOptions {
 	elementId?: string
 	maxReferenceFiles?: number
 	accept?: string
+	/** 本次文件选择最多处理多少个文件；替换场景传 1。 */
+	maxSelectedFiles?: number
 	/** 默认上传后写入元素参考资源；视频编辑器可关闭，自行按槽位分发 */
 	shouldSaveToElement?: boolean
 	/** 一次文件选择流程结束（含未选文件、校验失败、上传结束），用于清理临时上下文 */
@@ -27,6 +29,13 @@ interface UseFileInputOptions {
 interface UploadFilesOverrides {
 	currentReferenceFiles?: string[]
 	maxReferenceFiles?: number
+	maxSelectedFiles?: number
+	ignoreReferenceFileCapacity?: boolean
+}
+
+interface TriggerFileSelectOptions {
+	maxSelectedFiles?: number
+	ignoreReferenceFileCapacity?: boolean
 }
 
 export function useFileInput(options: UseFileInputOptions) {
@@ -38,53 +47,85 @@ export function useFileInput(options: UseFileInputOptions) {
 		elementId,
 		maxReferenceFiles,
 		accept,
+		maxSelectedFiles,
 		shouldSaveToElement = true,
 		onUploadSessionEnd,
 	} = options
 
 	const fileInputRef = useRef<HTMLInputElement | null>(null)
+	const nextFileSelectMaxSelectedFilesRef = useRef<number | undefined>(undefined)
+	const nextFileSelectIgnoreCapacityRef = useRef<boolean | undefined>(undefined)
 	const [isUploading, setIsUploading] = useState(false)
 
+	const finishUploadSession = useCallback(() => {
+		nextFileSelectMaxSelectedFilesRef.current = undefined
+		nextFileSelectIgnoreCapacityRef.current = undefined
+		onUploadSessionEnd?.()
+	}, [onUploadSessionEnd])
+
 	// 触发文件选择对话框
-	const triggerFileSelect = useCallback(() => {
-		if (fileInputRef.current && accept) {
-			fileInputRef.current.accept = accept
-		}
-		fileInputRef.current?.click()
-	}, [accept])
+	const triggerFileSelect = useCallback(
+		(options?: TriggerFileSelectOptions) => {
+			nextFileSelectMaxSelectedFilesRef.current = options?.maxSelectedFiles
+			nextFileSelectIgnoreCapacityRef.current = options?.ignoreReferenceFileCapacity
+			if (fileInputRef.current && accept) {
+				fileInputRef.current.accept = accept
+			}
+			if (fileInputRef.current) {
+				fileInputRef.current.multiple = options?.maxSelectedFiles === 1 ? false : true
+			}
+			fileInputRef.current?.click()
+		},
+		[accept],
+	)
 
 	const uploadFiles = useCallback(
 		async (selectedFiles: File[], overrides?: UploadFilesOverrides) => {
 			const nextCurrentReferenceFiles =
 				overrides?.currentReferenceFiles ?? currentReferenceFiles ?? []
 			const nextMaxReferenceFiles = overrides?.maxReferenceFiles ?? maxReferenceFiles
+			const nextMaxSelectedFiles =
+				overrides?.maxSelectedFiles ??
+				nextFileSelectMaxSelectedFilesRef.current ??
+				maxSelectedFiles
+			const ignoreReferenceFileCapacity =
+				overrides?.ignoreReferenceFileCapacity ??
+				nextFileSelectIgnoreCapacityRef.current ??
+				false
 			const currentCount = nextCurrentReferenceFiles.length
 
 			let allowedCount: number | undefined
-			if (nextMaxReferenceFiles !== undefined) {
+			if (!ignoreReferenceFileCapacity && nextMaxReferenceFiles !== undefined) {
 				allowedCount = Math.max(0, nextMaxReferenceFiles - currentCount)
 			}
 
-			if (selectedFiles.length === 0 || !methods?.uploadFiles) {
-				onUploadSessionEnd?.()
+			const selectedFilesWithinSelectionLimit =
+				nextMaxSelectedFiles !== undefined
+					? selectedFiles.slice(0, Math.max(0, Math.floor(nextMaxSelectedFiles)))
+					: selectedFiles
+
+			if (selectedFilesWithinSelectionLimit.length === 0 || !methods?.uploadFiles) {
+				finishUploadSession()
 				return
 			}
 
 			if (allowedCount === 0) {
-				onUploadSessionEnd?.()
+				finishUploadSession()
 				return
 			}
 
 			const filesToUpload =
-				allowedCount !== undefined ? selectedFiles.slice(0, allowedCount) : selectedFiles
+				allowedCount !== undefined
+					? selectedFilesWithinSelectionLimit.slice(0, allowedCount)
+					: selectedFilesWithinSelectionLimit
 
 			if (filesToUpload.length === 0) {
-				onUploadSessionEnd?.()
+				finishUploadSession()
 				return
 			}
 
 			if (!canvas) {
-				onUploadSessionEnd?.()
+				finishUploadSession()
 				return
 			}
 
@@ -121,18 +162,19 @@ export function useFileInput(options: UseFileInputOptions) {
 				//
 			} finally {
 				setIsUploading(false)
-				onUploadSessionEnd?.()
+				finishUploadSession()
 			}
 		},
 		[
 			methods,
 			currentReferenceFiles,
 			maxReferenceFiles,
+			maxSelectedFiles,
 			canvas,
 			shouldSaveToElement,
 			elementId,
 			onFileUploaded,
-			onUploadSessionEnd,
+			finishUploadSession,
 		],
 	)
 

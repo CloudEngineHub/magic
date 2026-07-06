@@ -197,6 +197,7 @@ export interface VideoEditorConfig {
 				slotKey?: string
 				referenceAssetKind?: VideoReferenceAssetKind
 				referenceAssetKinds?: VideoReferenceAssetKind[]
+				path?: string
 			},
 		) => void
 		replaceFrameImageAt: (

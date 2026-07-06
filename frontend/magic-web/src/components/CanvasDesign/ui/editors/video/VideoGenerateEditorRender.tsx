@@ -255,10 +255,21 @@ export default function VideoGenerateEditorRender(props: VideoGenerateEditorRend
 				src: item.data.file_path,
 				fileName: item.data.file_name,
 			}
+			const targetSlotIndex =
+				selectedSlot.path || !context?.batch
+					? selectedSlot.slotIndex
+					: selectedSlot.slotIndex + context.batch.index
+			const retainResourceSlot = Boolean(
+				context?.batch && context.batch.index < context.batch.total - 1,
+			)
 			if (selectedSlot.inputTab === "frame") {
-				handlers.replaceFrameImageAt(selectedSlot.slotIndex, nextFileInfo)
+				handlers.replaceFrameImageAt(targetSlotIndex, nextFileInfo, {
+					retainResourceSlot,
+				})
 			} else {
-				handlers.replaceReferenceImageAt(selectedSlot.slotIndex, nextFileInfo)
+				handlers.replaceReferenceImageAt(targetSlotIndex, nextFileInfo, {
+					retainResourceSlot,
+				})
 			}
 			context?.reset?.()
 		},
@@ -540,7 +551,7 @@ export default function VideoGenerateEditorRender(props: VideoGenerateEditorRend
 				ref={config.fileInputRef}
 				type="file"
 				accept={config.fileInputAccept}
-				multiple
+				multiple={!config.selectedResourceSlot?.path}
 				style={{ display: "none" }}
 				onChange={handlers.handleFileChange}
 			/>

@@ -81,6 +81,8 @@ interface ReferenceResourcePopoverProps {
 	onProjectSelectPanelOpenChange?: (visible: boolean) => void
 	/** 当前入口一次项目多选最多提交多少项；如单 slot 替换场景传 1 */
 	maxProjectSelectBatchCount?: number
+	/** 是否允许项目文件面板多选；默认 true。替换场景应关闭。 */
+	enableProjectSelectMultiSelect?: boolean
 }
 
 export default function ReferenceResourcePopover(props: ReferenceResourcePopoverProps) {
@@ -109,6 +111,7 @@ export default function ReferenceResourcePopover(props: ReferenceResourcePopover
 		sourceActionClassName,
 		onProjectSelectPanelOpenChange,
 		maxProjectSelectBatchCount,
+		enableProjectSelectMultiSelect = true,
 	} = props
 	const { t } = useCanvasDesignI18n()
 	const { referenceResourcePanelRenderer: ReferenceResourcePanelRenderer } = useMagic()
@@ -424,6 +427,7 @@ export default function ReferenceResourcePopover(props: ReferenceResourcePopover
 					visible={isProjectSelectVisible}
 					triggerRef={internalTriggerRef as React.RefObject<HTMLElement | null>}
 					language="zh-CN"
+					enableMultiSelect={enableProjectSelectMultiSelect}
 					onSelect={handleProjectSelect}
 					onClose={handleProjectSelectClose}
 					dataService={projectSelectRuntime.dataService}

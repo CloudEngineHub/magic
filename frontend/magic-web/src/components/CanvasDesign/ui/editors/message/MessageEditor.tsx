@@ -90,6 +90,7 @@ export interface MessageEditorRef {
 		items: ReferenceResourcePanelItem[],
 		options?: InsertCanvasMentionItemsOptions,
 	) => void
+	replaceMentionItemByPath: (oldPath: string, item: ReferenceResourcePanelItem) => boolean
 }
 
 const MessageEditor = forwardRef<MessageEditorRef, MessageEditorProps>(
@@ -277,6 +278,10 @@ const MessageEditor = forwardRef<MessageEditorRef, MessageEditorProps>(
 					getPreferredSelectionRange,
 					syncSelectionRange,
 				)
+			},
+			replaceMentionItemByPath: (oldPath: string, item: ReferenceResourcePanelItem) => {
+				if (!editor) return false
+				return replaceMentionItemByPathInEditor(editor, oldPath, item)
 			},
 		}))
 
@@ -528,6 +533,38 @@ function insertMentionItemsToEditor(
 			activeEditor.commands.focus()
 		})
 	}, 0)
+}
+
+function replaceMentionItemByPathInEditor(
+	editor: NonNullable<ReturnType<typeof useEditor>>,
+	oldPath: string,
+	item: ReferenceResourcePanelItem,
+): boolean {
+	if (!oldPath) return false
+
+	return runActiveEditor(
+		editor,
+		(activeEditor) => {
+			const targetPositions: number[] = []
+			activeEditor.state.doc.descendants((node, pos) => {
+				if (node.type.name !== "mention") return true
+				const data = node.attrs?.data as { file_path?: string } | undefined
+				if (data?.file_path !== oldPath) return true
+				targetPositions.push(pos)
+				return true
+			})
+
+			if (targetPositions.length === 0) return false
+
+			const tr = activeEditor.state.tr
+			targetPositions.forEach((targetPos) => {
+				tr.setNodeMarkup(targetPos, undefined, item)
+			})
+			activeEditor.view.dispatch(tr)
+			return true
+		},
+		false,
+	)
 }
 
 export default MessageEditor

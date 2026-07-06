@@ -207,6 +207,8 @@ export interface ReferenceResourcePanelRendererProps {
 	visible: boolean
 	triggerRef?: RefObject<HTMLElement | null>
 	language?: string
+	/** 是否允许面板多选。默认 true；单槽替换场景传 false。 */
+	enableMultiSelect?: boolean
 	dataService?: MentionDataServicePort
 	initialLoadOptions?: ReferenceResourcePanelInitialLoadOptions
 	initialNavigationStack?: ReferenceResourcePanelNavigationItem[]
