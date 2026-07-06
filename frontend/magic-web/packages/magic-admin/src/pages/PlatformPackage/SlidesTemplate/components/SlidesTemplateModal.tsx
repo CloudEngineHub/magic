@@ -26,6 +26,14 @@ interface SlidesTemplateModalProps extends MagicModalProps {
 }
 
 type FileField = "thumbnail_file_key" | "collage_file_key" | "template_file_key"
+type LangField = "label" | "description"
+type LangErrorState = Record<LangField, boolean>
+type FieldPath = Array<string | number>
+type FormValidationError = {
+	errorFields?: Array<{
+		name?: unknown
+	}>
+}
 
 interface UploadFieldProps {
 	field: FileField
@@ -51,6 +59,20 @@ type ImageFileField = "thumbnail_file_key" | "collage_file_key"
 const IMAGE_ACCEPT = "image/*"
 const ZIP_ACCEPT = ".zip,application/zip,application/x-zip-compressed"
 const IMAGE_FILE_FIELDS = new Set<FileField>(["thumbnail_file_key", "collage_file_key"])
+const DEFAULT_LANG_ERRORS: LangErrorState = {
+	label: false,
+	description: false,
+}
+
+const isSameFieldPath = (name: unknown, path: FieldPath) => {
+	if (!Array.isArray(name)) return false
+	return path.length === name.length && path.every((item, index) => item === name[index])
+}
+
+const getLangErrors = (errorFields: FormValidationError["errorFields"] = []): LangErrorState => ({
+	label: errorFields.some((field) => isSameFieldPath(field.name, ["label", "en_US"])),
+	description: errorFields.some((field) => isSameFieldPath(field.name, ["description", "en_US"])),
+})
 
 const UploadField = memo(
 	({
@@ -208,6 +230,7 @@ export const SlidesTemplateModal = memo(
 		const { SlidesTemplateApi } = useApis()
 		const [form] = Form.useForm()
 		const [loading, setLoading] = useState(false)
+		const [langErrors, setLangErrors] = useState<LangErrorState>(DEFAULT_LANG_ERRORS)
 		const [previewUrls, setPreviewUrls] = useState({
 			thumbnail_file_key: "",
 			collage_file_key: "",
@@ -277,6 +300,7 @@ export const SlidesTemplateModal = memo(
 				collage_file_key: Boolean(info?.collage_file_key),
 				template_file_key: Boolean(info?.template_file_key),
 			})
+			setLangErrors(DEFAULT_LANG_ERRORS)
 		}, [form, info, initialValues, rest.open, revokeObjectPreviewUrl])
 
 		useEffect(() => {
@@ -286,13 +310,15 @@ export const SlidesTemplateModal = memo(
 			}
 		}, [revokeObjectPreviewUrl])
 
-		const updateLangField = useMemoizedFn((key: "label" | "description", value: Lang) => {
+		const updateLangField = useMemoizedFn((key: LangField, value: Lang) => {
 			form.setFieldsValue({
 				[key]: {
 					...form.getFieldValue(key),
 					...value,
 				},
 			})
+			form.setFields([{ name: [key, "en_US"], errors: [] }])
+			setLangErrors((prev) => ({ ...prev, [key]: false }))
 		})
 
 		const validateImage = useMemoizedFn((file: File) => {
@@ -367,12 +393,14 @@ export const SlidesTemplateModal = memo(
 
 		const onInnerCancel = useMemoizedFn((e?: React.MouseEvent<HTMLButtonElement>) => {
 			form.resetFields()
-			onCancel?.(e!)
+			setLangErrors(DEFAULT_LANG_ERRORS)
+			if (e) onCancel?.(e)
 		})
 
 		const onInnerOk = useMemoizedFn(async (e) => {
 			try {
 				const values = await form.validateFields()
+				setLangErrors(DEFAULT_LANG_ERRORS)
 				setLoading(true)
 				const payload = buildSlidesTemplateSaveParams(values)
 
@@ -382,8 +410,12 @@ export const SlidesTemplateModal = memo(
 				message.success(info ? t("message.updateSuccess") : t("message.createSuccess"))
 				onOk?.(e)
 				onSuccess?.()
-			} catch {
-				// API and form layers already surface validation and request errors.
+			} catch (error) {
+				const nextLangErrors = getLangErrors((error as FormValidationError)?.errorFields)
+				setLangErrors(nextLangErrors)
+				if (nextLangErrors.label || nextLangErrors.description) {
+					message.error(t("message.pleaseInputRequiredFields"))
+				}
 			} finally {
 				setLoading(false)
 			}
@@ -424,6 +456,7 @@ export const SlidesTemplateModal = memo(
 								required
 								supportLangs={[LanguageType.en_US]}
 								info={label}
+								danger={langErrors.label}
 								onSave={(value) => updateLangField("label", value)}
 							/>
 						</Flex>
@@ -451,6 +484,7 @@ export const SlidesTemplateModal = memo(
 								supportLangs={[LanguageType.en_US]}
 								supportType="textarea"
 								info={description}
+								danger={langErrors.description}
 								onSave={(value) => updateLangField("description", value)}
 							/>
 						</Flex>
