@@ -248,14 +248,20 @@ export default function Document({
 	}
 
 	/** 跳转文档配置页面 */
-	const handleFileConfig = useMemoizedFn((record: Knowledge.EmbedDocumentDetail) => {
-		history.push({
-			...getVectorKnowledgeCreateRoute(location.pathname),
+	const getDocumentConfigRoute = useMemoizedFn((record: Knowledge.EmbedDocumentDetail) => {
+		const route = getVectorKnowledgeCreateRoute(location.pathname)
+		return {
+			...route,
 			query: {
+				...(route.query || {}),
 				knowledgeBaseCode,
 				documentCode: record.code,
 			},
-		})
+		}
+	})
+
+	const handleFileConfig = useMemoizedFn((record: Knowledge.EmbedDocumentDetail) => {
+		history.push(getDocumentConfigRoute(record))
 	})
 
 	/**
