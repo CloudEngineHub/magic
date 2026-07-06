@@ -75,6 +75,10 @@
         "zh_CN": "转换 PPTX 为幻灯片模板",
         "en_US": "Convert PPTX to slide template"
     },
+    "get_slides_template_download_url": {
+        "zh_CN": "获取幻灯片模板下载链接",
+        "en_US": "Get slide template download URL"
+    },
     "export_document_markdown": {
         "zh_CN": "导出 Markdown",
         "en_US": "Export Markdown"

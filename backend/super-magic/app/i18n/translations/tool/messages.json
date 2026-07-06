@@ -223,6 +223,34 @@
         "zh_CN": "PPTX 转幻灯片模板失败",
         "en_US": "PPTX to Slide Template Failed"
     },
+    "get_slides_template_download_url.before": {
+        "zh_CN": "正在获取模板 {{template_code}} 的下载链接",
+        "en_US": "Getting download URL for template {{template_code}}"
+    },
+    "get_slides_template_download_url.after_success": {
+        "zh_CN": "已获取模板 {{template_code}} 的下载链接",
+        "en_US": "Got download URL for template {{template_code}}"
+    },
+    "get_slides_template_download_url.after_failed": {
+        "zh_CN": "模板 {{template_code}} 下载链接获取失败",
+        "en_US": "Failed to get download URL for template {{template_code}}"
+    },
+    "get_slides_template_download_url.detail_title": {
+        "zh_CN": "幻灯片模板下载链接",
+        "en_US": "Slide Template Download URL"
+    },
+    "get_slides_template_download_url.detail_code": {
+        "zh_CN": "模板 code",
+        "en_US": "Template code"
+    },
+    "get_slides_template_download_url.detail_label": {
+        "zh_CN": "模板名称",
+        "en_US": "Template name"
+    },
+    "get_slides_template_download_url.detail_url": {
+        "zh_CN": "下载链接",
+        "en_US": "Download URL"
+    },
     "export_document_markdown.before": {
         "zh_CN": "正在导出 {{file_name}}",
         "en_US": "Exporting {{file_name}}"

@@ -1,13 +1,14 @@
 """Get slides template package download URL by code."""
 
-import json
-from typing import ClassVar
+from typing import Any, ClassVar, Dict, Optional
 
 from pydantic import Field, field_validator
 
 from agentlang.context.tool_context import ToolContext
 from agentlang.logger import get_logger
 from agentlang.tools.tool_result import ToolResult
+from app.core.entity.message.server_message import DisplayType, FileContent, ToolDetail
+from app.i18n import i18n
 from app.infrastructure.magic_service.client import MagicServiceClient
 from app.tools.core import BaseTool, BaseToolParams, tool
 
@@ -39,10 +40,12 @@ class GetSlidesTemplateDownloadUrl(BaseTool[GetSlidesTemplateDownloadUrlParams])
     """<!--zh
     根据幻灯片模板 code 获取模板 zip 包的临时下载链接。
     仅在 skill 或 Code Mode 已拿到明确模板 code，需要下载或读取模板文件时使用。
+    返回结构化数据中的 template_file_url，可直接作为后续下载地址。
     -->
     Get a temporary download URL for a slides template zip package by code.
     Use this only when a skill or Code Mode already has an explicit template code and needs to download
     or inspect the template files.
+    The returned data contains template_file_url, which can be used directly as the next download URL.
     """
 
     code_mode_only: ClassVar[bool] = True
@@ -85,10 +88,116 @@ Do not guess it, invent it, change its casing, or rename it.
             if not payload.get("template_file_url"):
                 return ToolResult.error(f"Slides template '{code}' does not have a template_file_url.")
             return ToolResult(
-                content=json.dumps(payload, ensure_ascii=False, indent=2),
+                content=self._build_model_content(payload),
                 data=payload,
                 extra_info=payload,
             )
         except Exception as exc:
             logger.error(f"Failed to get slides template download URL (code={code}): {exc}")
             return ToolResult.error(f"Failed to get slides template download URL: {exc}")
+
+    @staticmethod
+    def _template_label(payload: Dict[str, Any]) -> str:
+        label = payload.get("label")
+        if isinstance(label, dict):
+            return str(label.get("en_US") or label.get("zh_CN") or next(iter(label.values()), "")).strip()
+        return str(label or "").strip()
+
+    @classmethod
+    def _build_model_content(cls, payload: Dict[str, Any]) -> str:
+        lines = [
+            "Slides template package URL resolved.",
+            f"- code: {payload.get('code', '')}",
+        ]
+        label = cls._template_label(payload)
+        if label:
+            lines.append(f"- label: {label}")
+        lines.append(f"- template_file_url: {payload.get('template_file_url', '')}")
+        return "\n".join(lines)
+
+    @staticmethod
+    def _argument_code(arguments: Optional[Dict[str, Any]]) -> str:
+        if not arguments:
+            return ""
+        return str(arguments.get("code") or "").strip()
+
+    async def get_before_tool_call_friendly_action_and_remark(
+        self,
+        tool_name: str,
+        tool_context: ToolContext,
+        arguments: Dict[str, Any] | None = None,
+    ) -> Dict:
+        return {
+            "tool_name": tool_name,
+            "action": i18n.translate("get_slides_template_download_url", category="tool.actions"),
+            "remark": i18n.translate(
+                "get_slides_template_download_url.before",
+                category="tool.messages",
+                template_code=self._argument_code(arguments) or "-",
+            ),
+        }
+
+    async def get_after_tool_call_friendly_action_and_remark(
+        self,
+        tool_name: str,
+        tool_context: ToolContext,
+        result: ToolResult,
+        execution_time: float,
+        arguments: Dict[str, Any] | None = None,
+    ) -> Dict:
+        action = i18n.translate("get_slides_template_download_url", category="tool.actions")
+        code = self._argument_code(arguments)
+        if not result.ok:
+            return {
+                "tool_name": tool_name,
+                "action": action,
+                "remark": i18n.translate(
+                    "get_slides_template_download_url.after_failed",
+                    category="tool.messages",
+                    template_code=code or "-",
+                ),
+            }
+
+        data = result.data if isinstance(result.data, dict) else {}
+        return {
+            "tool_name": tool_name,
+            "action": action,
+            "remark": i18n.translate(
+                "get_slides_template_download_url.after_success",
+                category="tool.messages",
+                template_code=str(data.get("code") or code or "-"),
+            ),
+        }
+
+    async def get_tool_detail(
+        self,
+        tool_context: ToolContext,
+        result: ToolResult,
+        arguments: Dict[str, Any] | None = None,
+    ) -> Optional[ToolDetail]:
+        if not result.ok:
+            return None
+
+        data = result.data if isinstance(result.data, dict) else {}
+        template_file_url = str(data.get("template_file_url") or "")
+        if not template_file_url:
+            return None
+
+        label = self._template_label(data)
+        title = i18n.translate("get_slides_template_download_url.detail_title", category="tool.messages")
+        code_label = i18n.translate("get_slides_template_download_url.detail_code", category="tool.messages")
+        name_label = i18n.translate("get_slides_template_download_url.detail_label", category="tool.messages")
+        url_label = i18n.translate("get_slides_template_download_url.detail_url", category="tool.messages")
+        lines = [
+            f"# {title}",
+            "",
+            f"- {code_label}: `{data.get('code', '')}`",
+        ]
+        if label:
+            lines.append(f"- {name_label}: {label}")
+        lines.append(f"- {url_label}: [download]({template_file_url})")
+
+        return ToolDetail(
+            type=DisplayType.MD,
+            data=FileContent(file_name="slides_template_download_url.md", content="\n".join(lines)),
+        )
