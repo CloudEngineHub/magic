@@ -45,11 +45,11 @@ class ScheduledTaskList(BaseScheduledTaskTool[ScheduledTaskListParams]):
             )
             result = await self.magic_service_sdk().message_schedule.query_message_schedules_async(parameter)
             raw = result.get_raw_data()
-            item_fields = ("id", "task_name", "task_describe", "status", "enabled", "time_config", "deadline")
+            item_fields = ("id", "task_name", "task_describe", "agent_mode", "status", "enabled", "time_config", "deadline")
             data = {
                 "total": raw.get("total", 0),
                 "schedules": [
-                    self.whitelist_fields(item, item_fields)
+                    self.whitelist_fields(self.normalize_schedule_fields(item), item_fields)
                     for item in raw.get("list", [])
                     if isinstance(item, dict)
                 ],

@@ -36,12 +36,14 @@ class ScheduledTaskGet(BaseScheduledTaskTool[ScheduledTaskGetParams]):
                 "task_name",
                 "task_describe",
                 "message_content",
+                "agent_mode",
                 "time_config",
                 "status",
                 "enabled",
                 "deadline",
             )
-            return self.success_result(self.whitelist_fields(result.get_raw_data(), fields))
+            data = self.normalize_schedule_fields(result.get_raw_data())
+            return self.success_result(self.whitelist_fields(data, fields))
         except Exception as exc:
             return ToolResult.error(
                 f"scheduled_task_get failed: {exc}",

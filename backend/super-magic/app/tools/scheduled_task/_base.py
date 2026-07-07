@@ -274,6 +274,36 @@ class BaseScheduledTaskTool(BaseTool[P], Generic[P], ABC):
 
         return "custom_agent", normalized_mode, normalized_mode
 
+    @classmethod
+    def resolve_schedule_agent_mode(cls, data: dict[str, Any]) -> str:
+        """从 magic-service 返回字段解析用户友好的 agent_mode。"""
+        raw_agent_mode = cls.stringify_agent_mode(data.get("agent_mode"))
+        if raw_agent_mode:
+            return raw_agent_mode
+
+        topic_pattern = cls.stringify_agent_mode(data.get("topic_pattern"))
+        agent_code = cls.stringify_agent_mode(data.get("agent_code"))
+        if topic_pattern == "custom_agent" and agent_code:
+            return agent_code
+        if not topic_pattern and agent_code:
+            return agent_code
+        if not topic_pattern:
+            return ""
+
+        resolved_known_mode = cls.resolve_known_agent_mode(topic_pattern)
+        if resolved_known_mode:
+            return resolved_known_mode[1]
+        return topic_pattern
+
+    @classmethod
+    def normalize_schedule_fields(cls, data: dict[str, Any]) -> dict[str, Any]:
+        """补齐定时任务展示层需要的友好字段。"""
+        normalized = dict(data)
+        agent_mode = cls.resolve_schedule_agent_mode(normalized)
+        if agent_mode:
+            normalized["agent_mode"] = agent_mode
+        return normalized
+
     @staticmethod
     def text_to_json_content(text: str) -> dict[str, Any]:
         """将纯文本转换为 Tiptap JSONContent。"""
@@ -496,19 +526,21 @@ class BaseScheduledTaskTool(BaseTool[P], Generic[P], ABC):
         headers = [
             self.tool_message("scheduled_task.detail.id"),
             self.tool_message("scheduled_task.detail.task_name"),
+            self.tool_message("scheduled_task.detail.agent_mode"),
             self.tool_message("scheduled_task.detail.task_status"),
             self.tool_message("scheduled_task.detail.enabled"),
             self.tool_message("scheduled_task.detail.deadline"),
             self.tool_message("scheduled_task.detail.time_config"),
         ]
-        lines.extend(["", "| " + " | ".join(headers) + " |", "| --- | --- | --- | --- | --- | --- |"])
+        lines.extend(["", "| " + " | ".join(headers) + " |", "| --- | --- | --- | --- | --- | --- | --- |"])
         for item in schedules:
             if not isinstance(item, dict):
                 continue
             lines.append(
-                "| {id} | {task_name} | {status} | {enabled} | {deadline} | {time_config} |".format(
+                "| {id} | {task_name} | {agent_mode} | {status} | {enabled} | {deadline} | {time_config} |".format(
                     id=self.table_cell(self.format_value(item.get("id"), max_length=80)),
                     task_name=self.table_cell(self.format_value(item.get("task_name"), max_length=80)),
+                    agent_mode=self.table_cell(self.format_value(item.get("agent_mode"), max_length=80)),
                     status=self.table_cell(self.format_value(item.get("status"), max_length=80)),
                     enabled=self.table_cell(self.enabled_label(item.get("enabled"))),
                     deadline=self.table_cell(self.format_value(item.get("deadline"), max_length=80)),
