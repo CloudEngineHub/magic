@@ -17,8 +17,15 @@ async def test_magic_service_client_resolves_slides_template_file_url_endpoint()
             super().__init__(MagicServiceConfig(api_base_url="https://magic.example.test"))
             self.call = None
 
-        async def _request_json(self, method, path, payload=None, operation_name="Magic Service API"):
-            self.call = (method, path, payload, operation_name)
+        async def _request_json(
+            self,
+            method,
+            path,
+            payload=None,
+            operation_name="Magic Service API",
+            params=None,
+        ):
+            self.call = (method, path, payload, operation_name, params)
             return {
                 "code": "ppt/a b?",
                 "label": {"zh_CN": "职场白皮书"},
@@ -27,13 +34,25 @@ async def test_magic_service_client_resolves_slides_template_file_url_endpoint()
 
     client = RecordingMagicServiceClient()
 
-    result = await client.get_slides_template_file_url(" ppt/a b? ")
+    result = await client.get_slides_template_file_url(
+        " ppt/a b? ",
+        {
+            "topic_id": " topic-1 ",
+            "project_id": "project-1",
+            "task_id": "",
+            "message_id": None,
+        },
+    )
 
     assert client.call == (
         "GET",
         "/api/v1/slides-templates/ppt%2Fa%20b%3F/file-url",
         None,
         "幻灯片模板文件链接获取",
+        {
+            "topic_id": "topic-1",
+            "project_id": "project-1",
+        },
     )
     assert result["template_file_url"] == "https://example.test/template.zip"
 
@@ -45,6 +64,7 @@ async def test_get_slides_template_download_url_tool_returns_template_url(monkey
     class FakeMagicServiceClient:
         def __init__(self):
             self.code = None
+            self.access_context = None
             clients.append(self)
 
         async def __aenter__(self):
@@ -53,8 +73,9 @@ async def test_get_slides_template_download_url_tool_returns_template_url(monkey
         async def __aexit__(self, exc_type, exc, tb):
             return None
 
-        async def get_slides_template_file_url(self, code):
+        async def get_slides_template_file_url(self, code, access_context=None):
             self.code = code
+            self.access_context = access_context
             return {
                 "code": code,
                 "label": {"zh_CN": "职场白皮书"},
@@ -69,12 +90,33 @@ async def test_get_slides_template_download_url_tool_returns_template_url(monkey
     tool = GetSlidesTemplateDownloadUrl()
     params = GetSlidesTemplateDownloadUrlParams(code=" ppt-business-minimal ")
     result = await tool.execute(
-        ToolContext(tool_name="get_slides_template_download_url", arguments={}),
+        ToolContext(
+            tool_call_id="call-1",
+            tool_name="get_slides_template_download_url",
+            arguments={},
+            metadata={
+                "topic_id": "topic-1",
+                "chat_topic_id": "chat-topic-1",
+                "project_id": "project-1",
+                "super_magic_task_id": "   ",
+                "task_id": "legacy-task-1",
+                "message_id": "message-1",
+            },
+        ),
         params,
     )
 
     assert result.ok is True
     assert clients[0].code == "ppt-business-minimal"
+    assert clients[0].access_context == {
+        "topic_id": "topic-1",
+        "chat_topic_id": "chat-topic-1",
+        "project_id": "project-1",
+        "task_id": "legacy-task-1",
+        "message_id": "message-1",
+        "tool_call_id": "call-1",
+        "tool_name": "get_slides_template_download_url",
+    }
     assert result.data["template_file_url"] == "https://example.test/template.zip"
     assert "Slides template package URL resolved." in result.content
     assert "- code: ppt-business-minimal" in result.content
@@ -91,7 +133,7 @@ async def test_get_slides_template_download_url_tool_i18n_and_detail(monkeypatch
         async def __aexit__(self, exc_type, exc, tb):
             return None
 
-        async def get_slides_template_file_url(self, code):
+        async def get_slides_template_file_url(self, code, access_context=None):
             return {
                 "code": code,
                 "label": {"zh_CN": "职场白皮书", "en_US": "Corporate Whitepaper"},

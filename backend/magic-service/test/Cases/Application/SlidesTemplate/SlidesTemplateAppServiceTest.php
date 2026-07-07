@@ -15,11 +15,13 @@ use App\Domain\SlidesTemplate\Entity\SlidesTemplateEntity;
 use App\Domain\SlidesTemplate\Entity\ValueObject\Query\SlidesTemplateQuery;
 use App\Domain\SlidesTemplate\Entity\ValueObject\SlidesTemplateSourceType;
 use App\Domain\SlidesTemplate\Entity\ValueObject\SlidesTemplateStatus;
+use App\Domain\SlidesTemplate\Event\SlidesTemplateUsedEvent;
 use App\Domain\SlidesTemplate\Service\SlidesTemplateCategoryDomainService;
 use App\Domain\SlidesTemplate\Service\SlidesTemplateDomainService;
 use App\ErrorCode\SlidesTemplateErrorCode;
 use App\Infrastructure\Core\Exception\BusinessException;
 use App\Infrastructure\Core\ValueObject\Page;
+use App\Interfaces\SlidesTemplate\DTO\Request\AdminQuerySlidesTemplateRequest;
 use App\Interfaces\SlidesTemplate\DTO\Request\PublicQuerySlidesTemplateRequest;
 use App\Interfaces\SlidesTemplate\DTO\Request\SaveSlidesTemplateRequest;
 use Dtyq\CloudFile\Kernel\Struct\FileLink;
@@ -174,6 +176,42 @@ class SlidesTemplateAppServiceTest extends TestCase
         ], $service->fileLinkCalls);
     }
 
+    public function testGetTemplateFileUrlDispatchesTemplateUsedEventAfterUrlResolved(): void
+    {
+        $dataIsolation = $this->makeDataIsolation('CURRENT_ORG', ['OFFICIAL_ORG']);
+        $template = new SlidesTemplateEntity();
+        $template->setOrganizationCode('OFFICIAL_ORG')
+            ->setCode('PPT-65f2c8a42d7b0-123456')
+            ->setLabel(['zh_CN' => '职场白皮书', 'en_US' => 'Corporate Whitepaper'])
+            ->setTemplateFileKey('slides/templates/business.zip')
+            ->setThumbnailFileKey('slides/thumbnails/business.png');
+
+        $domainService = $this->createMock(SlidesTemplateDomainService::class);
+        $domainService
+            ->expects($this->once())
+            ->method('findEnabledByCodeOrFail')
+            ->willReturn($template);
+
+        $accessContext = [
+            'topic_id' => 'topic-1',
+            'project_id' => 'project-1',
+            'task_id' => 'task-1',
+        ];
+
+        $service = new TestableSlidesTemplateAppService($domainService);
+        $result = $service->getTemplateFileUrl($dataIsolation, 'PPT-65f2c8a42d7b0-123456', $accessContext);
+
+        $this->assertSame($template, $result);
+        $this->assertCount(1, $service->dispatchedEvents);
+        $event = $service->dispatchedEvents[0];
+        $this->assertInstanceOf(SlidesTemplateUsedEvent::class, $event);
+        $this->assertSame($template, $event->getTemplate());
+        $this->assertSame($accessContext, $event->getAccessContext());
+        $this->assertSame('CURRENT_ORG', $event->getOrganizationCode());
+        $this->assertSame('user-1', $event->getUserId());
+        $this->assertSame('user-1', $event->getUserName());
+    }
+
     public function testAdminDeleteRejectsNonOfficialOrganization(): void
     {
         $dataIsolation = $this->makeDataIsolation('CURRENT_ORG', ['OFFICIAL_ORG']);
@@ -320,6 +358,54 @@ class SlidesTemplateAppServiceTest extends TestCase
         $this->assertSame('PPT-CATE-business', $result->getCategoryCode());
     }
 
+    public function testAdminQueriesResolveCategoriesForCurrentPage(): void
+    {
+        $dataIsolation = $this->makeDataIsolation('OFFICIAL_ORG', ['OFFICIAL_ORG']);
+        $request = new TestAdminQuerySlidesTemplateRequest();
+
+        $template = new SlidesTemplateEntity();
+        $template->setId(123)
+            ->setOrganizationCode('OFFICIAL_ORG')
+            ->setCode('PPT-65f2c8a42d7b0-12345678')
+            ->setCategoryCode('PPT-CATE-business')
+            ->setThumbnailFileKey('');
+
+        $uncategorizedTemplate = new SlidesTemplateEntity();
+        $uncategorizedTemplate->setId(124)
+            ->setOrganizationCode('OFFICIAL_ORG')
+            ->setCode('PPT-65f2c8a42d7b0-87654321')
+            ->setThumbnailFileKey('');
+
+        $category = new SlidesTemplateCategoryEntity();
+        $category->setId(456)
+            ->setOrganizationCode('OFFICIAL_ORG')
+            ->setCode('PPT-CATE-business')
+            ->setNameI18n(['zh_CN' => '商务', 'en_US' => 'Business']);
+
+        $domainService = $this->createMock(SlidesTemplateDomainService::class);
+        $domainService
+            ->expects($this->once())
+            ->method('queries')
+            ->with(
+                $this->callback(static fn (SlidesTemplateDataIsolation $actual): bool => $actual->getCurrentOrganizationCode() === 'OFFICIAL_ORG'),
+                $this->isInstanceOf(SlidesTemplateQuery::class),
+                $this->callback(static fn (Page $page): bool => $page->getPage() === 1 && $page->getPageNum() === 20)
+            )
+            ->willReturn(['total' => 2, 'list' => [$template, $uncategorizedTemplate]]);
+
+        $categoryDomainService = new TestSlidesTemplateCategoryDomainService([
+            'PPT-CATE-business' => $category,
+        ]);
+
+        $service = $this->makeAdminSlidesTemplateAppService($domainService, $categoryDomainService);
+        $result = $service->queries($dataIsolation, $request);
+
+        $this->assertSame([$template, $uncategorizedTemplate], $result['list']);
+        $this->assertSame(['PPT-CATE-business' => $category], $result['categories']);
+        $this->assertCount(1, $categoryDomainService->findByCodesCalls);
+        $this->assertSame(['PPT-CATE-business'], $categoryDomainService->findByCodesCalls[0]['codes']);
+    }
+
     public function testAdminUpdateKeepsExistingSourceType(): void
     {
         $dataIsolation = $this->makeDataIsolation('OFFICIAL_ORG', ['OFFICIAL_ORG']);
@@ -401,6 +487,8 @@ class TestableSlidesTemplateAppService extends SlidesTemplateAppService
 {
     public array $fileLinkCalls = [];
 
+    public array $dispatchedEvents = [];
+
     public function getPrivateFileLinks(string $organizationCode, array $fileLinks): array
     {
         $this->fileLinkCalls[] = [$organizationCode, $fileLinks];
@@ -414,6 +502,11 @@ class TestableSlidesTemplateAppService extends SlidesTemplateAppService
             );
         }
         return $result;
+    }
+
+    protected function dispatchSlidesTemplateUsedEvent(SlidesTemplateUsedEvent $event): void
+    {
+        $this->dispatchedEvents[] = $event;
     }
 }
 
@@ -445,5 +538,74 @@ class TestPublicQuerySlidesTemplateRequest extends PublicQuerySlidesTemplateRequ
     public function getPageSize(): int
     {
         return $this->pageSize;
+    }
+}
+
+class TestAdminQuerySlidesTemplateRequest extends AdminQuerySlidesTemplateRequest
+{
+    public function __construct()
+    {
+    }
+
+    public function getPage(): int
+    {
+        return 1;
+    }
+
+    public function getPageSize(): int
+    {
+        return 20;
+    }
+
+    public function getKeyword(): ?string
+    {
+        return null;
+    }
+
+    public function getCode(): ?string
+    {
+        return null;
+    }
+
+    public function getCategoryCode(): ?string
+    {
+        return null;
+    }
+
+    public function getStatus(): ?int
+    {
+        return null;
+    }
+}
+
+class TestSlidesTemplateCategoryDomainService extends SlidesTemplateCategoryDomainService
+{
+    public array $findByCodesCalls = [];
+
+    /**
+     * @param array<string, SlidesTemplateCategoryEntity> $categoriesByCode
+     */
+    public function __construct(
+        private readonly array $categoriesByCode,
+    ) {
+    }
+
+    /**
+     * @return SlidesTemplateCategoryEntity[]
+     */
+    public function findByCodes(SlidesTemplateDataIsolation $dataIsolation, array $codes): array
+    {
+        $this->findByCodesCalls[] = [
+            'dataIsolation' => $dataIsolation,
+            'codes' => $codes,
+        ];
+
+        $categories = [];
+        foreach ($codes as $code) {
+            if (isset($this->categoriesByCode[$code])) {
+                $categories[] = $this->categoriesByCode[$code];
+            }
+        }
+        return $categories;
     }
 }

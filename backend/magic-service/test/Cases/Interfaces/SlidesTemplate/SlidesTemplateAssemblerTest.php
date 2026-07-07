@@ -127,6 +127,7 @@ class SlidesTemplateAssemblerTest extends TestCase
         $this->assertInstanceOf(SlidesTemplateFileUrlDTO::class, $fileUrlDTO);
         $this->assertSame('https://signed.example/template.zip', $detailDTO->getTemplateFileUrl());
         $this->assertSame('SYSTEM', $detailDTO->getSourceType());
+        $this->assertArrayNotHasKey('category', $detailDTO->toArray());
         $this->assertSame([
             'code' => 'PPT-65f2c8a42d7b0-12345678',
             'source_type' => 'SYSTEM',
@@ -137,6 +138,69 @@ class SlidesTemplateAssemblerTest extends TestCase
             ],
             'template_file_url' => 'https://signed.example/template.zip',
         ], $fileUrlDTO->toArray());
+    }
+
+    public function testCreateAdminPageDTOIncludesCategory(): void
+    {
+        $template = $this->makeTemplate();
+        $category = new SlidesTemplateCategoryEntity();
+        $category->setId(456)
+            ->setOrganizationCode('OFFICIAL_ORG')
+            ->setCode('PPT-CATE-business')
+            ->setNameI18n(['zh_CN' => '商务', 'en_US' => 'Business'])
+            ->setSort(200);
+
+        $dto = SlidesTemplateAssembler::createPageDTO(
+            [$template],
+            new Page(1, 20),
+            1,
+            true,
+            false,
+            ['PPT-CATE-business' => $category]
+        );
+
+        $item = $dto->getList()[0]->toArray();
+        $this->assertSame([
+            'id' => '456',
+            'code' => 'PPT-CATE-business',
+            'name_i18n' => [
+                'zh_CN' => '商务',
+                'en_US' => 'Business',
+            ],
+            'status' => 1,
+            'sort' => 200,
+            'is_official' => true,
+        ], $item['category']);
+        $this->assertArrayNotHasKey('template_count', $item['category']);
+        unset($item['category']);
+
+        $this->assertSame([
+            'id' => '123',
+            'organization_code' => 'CURRENT_ORG',
+            'code' => 'PPT-65f2c8a42d7b0-12345678',
+            'source_type' => 'SYSTEM',
+            'category_code' => 'PPT-CATE-business',
+            'label' => [
+                'zh_CN' => '职场白皮书',
+                'en_US' => 'Corporate Whitepaper',
+            ],
+            'description' => [
+                'zh_CN' => '适用于企业汇报。',
+                'en_US' => 'For business reviews.',
+            ],
+            'thumbnail_file_key' => 'slides/thumb.png',
+            'thumbnail_url' => 'https://signed.example/thumb.png',
+            'collage_file_key' => 'slides/collage.png',
+            'collage_url' => 'https://signed.example/collage.png',
+            'template_file_key' => 'slides/template.zip',
+            'preview_url' => 'https://www.letsmagic.cn/share/files/1',
+            'status' => 1,
+            'sort' => 100,
+            'created_uid' => 'user-1',
+            'updated_uid' => 'user-2',
+            'created_at' => null,
+            'updated_at' => null,
+        ], $item);
     }
 
     public function testCreatePublicCategoryPageDTOIncludesTemplateCount(): void

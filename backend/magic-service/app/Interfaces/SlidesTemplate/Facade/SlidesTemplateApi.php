@@ -10,6 +10,7 @@ namespace App\Interfaces\SlidesTemplate\Facade;
 use App\Application\SlidesTemplate\Service\SlidesTemplateAppService;
 use App\Infrastructure\Core\AbstractApi;
 use App\Interfaces\SlidesTemplate\Assembler\SlidesTemplateAssembler;
+use App\Interfaces\SlidesTemplate\DTO\Request\GetSlidesTemplateFileUrlRequest;
 use App\Interfaces\SlidesTemplate\DTO\Request\PublicQuerySlidesTemplateRequest;
 use Dtyq\ApiResponse\Annotation\ApiResponse;
 
@@ -35,9 +36,14 @@ class SlidesTemplateApi extends AbstractApi
         )->toArray();
     }
 
-    public function getFileUrl(string $code): array
+    public function getFileUrl(GetSlidesTemplateFileUrlRequest $request, string $code): array
     {
-        $template = $this->slidesTemplateAppService->getTemplateFileUrl($this->getAuthorization(), $code);
+        $request->validated();
+        $template = $this->slidesTemplateAppService->getTemplateFileUrl(
+            $this->getAuthorization(),
+            $code,
+            $request->getAccessContext()
+        );
 
         return SlidesTemplateAssembler::createFileUrlDTO($template)->toArray();
     }

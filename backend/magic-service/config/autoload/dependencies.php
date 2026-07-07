@@ -59,6 +59,7 @@ use App\Domain\Audit\Contract\PermissionLabelServiceInterface;
 use App\Domain\Audit\ModelCall\Repository\Facade\AuditLogRepositoryInterface;
 use App\Domain\Audit\ModelCall\Repository\Persistence\AuditLogRepository;
 use App\Domain\Audit\Repository\Facade\AdminOperationLogRepositoryInterface;
+use App\Domain\Audit\ResourceAccess\Repository\Facade\ResourceAccessLogRepositoryInterface;
 use App\Domain\Authentication\Repository\ApiKeyProviderRepository;
 use App\Domain\Authentication\Repository\Facade\ApiKeyProviderRepositoryInterface;
 use App\Domain\Authentication\Repository\Facade\AuthenticationRepositoryInterface;
@@ -227,6 +228,7 @@ use App\Domain\Token\Repository\Facade\MagicTokenRepositoryInterface;
 use App\Domain\Token\Repository\Persistence\MagicTokenRepository;
 use App\Infrastructure\Audit\Permission\PermissionLabelProvider;
 use App\Infrastructure\Audit\Repository\AdminOperationLogRepository;
+use App\Infrastructure\Audit\Repository\ResourceAccessLogRepository;
 use App\Infrastructure\Core\Broadcast\Publisher\AmqpPublisher;
 use App\Infrastructure\Core\Broadcast\Publisher\PublisherInterface;
 use App\Infrastructure\Core\Broadcast\Subscriber\AmqpSubscriber;
@@ -454,6 +456,7 @@ $dependencies = [
     // audit (操作日志)
     AdminOperationLogRepositoryInterface::class => AdminOperationLogRepository::class,
     AuditLogRepositoryInterface::class => AuditLogRepository::class,
+    ResourceAccessLogRepositoryInterface::class => ResourceAccessLogRepository::class,
     PermissionLabelProviderInterface::class => PermissionLabelProvider::class,
     PermissionLabelServiceInterface::class => PermissionLabelService::class,
 
