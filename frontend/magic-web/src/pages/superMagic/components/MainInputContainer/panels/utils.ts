@@ -109,11 +109,15 @@ function getOptionValue(option: OptionItem): string {
 }
 
 /** Flatten OptionGroup children and flat OptionItems into a single OptionItem array */
-function flattenFieldOptions(field: FieldItem): OptionItem[] {
+export function flattenFieldOptions(field: FieldItem): OptionItem[] {
 	const groups = field.options.filter(isOptionGroup) as OptionGroup[]
 	return groups.length
 		? groups.flatMap((g) => g.children ?? [])
 		: (field.options.filter((o) => !isOptionGroup(o)) as OptionItem[])
+}
+
+export function hasSelectableOptions(field: FieldItem | undefined): boolean {
+	return Boolean(field && flattenFieldOptions(field).length > 0)
 }
 
 function getSelectedOptionLabel(field: FieldItem, locale: string): string {

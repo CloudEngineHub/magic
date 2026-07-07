@@ -6,4 +6,9 @@ export default {
 	th_TH: "Thaï",
 	pleaseInput: "Veuillez saisir",
 	zh_CN: "Chinois",
+	confirmClose: "Confirmer la fermeture",
+	unsavedChanges: "Les modifications non enregistrées seront perdues après fermeture. Continuer ?",
+	discard: "Fermer",
+	continueEditing: "Continuer l'édition",
+	saveAndClose: "Enregistrer et fermer",
 }

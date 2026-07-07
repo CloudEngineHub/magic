@@ -183,6 +183,22 @@ describe("SlidesTemplatePanel", () => {
 		await waitFor(() => expect(container).toBeEmptyDOMElement())
 	})
 
+	it("does not render when the first page list is empty even if total is non-zero", async () => {
+		vi.mocked(SuperMagicApi.getSlidesTemplates).mockResolvedValue({
+			page: 1,
+			page_size: 20,
+			total: 1,
+			list: [],
+		})
+
+		const { container } = render(
+			<SlidesTemplatePanel config={createSlidesPresetPanelConfig([])} />,
+		)
+
+		await waitFor(() => expect(SuperMagicApi.getSlidesTemplates).toHaveBeenCalled())
+		await waitFor(() => expect(container).toBeEmptyDOMElement())
+	})
+
 	it("keeps topic page selector compact and opens shared template content in a floating panel", async () => {
 		render(
 			<SlidesTemplatePanel

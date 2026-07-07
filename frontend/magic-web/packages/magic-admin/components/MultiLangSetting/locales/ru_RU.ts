@@ -6,4 +6,9 @@ export default {
 	th_TH: "Тайский",
 	pleaseInput: "Пожалуйста, введите",
 	zh_CN: "Китайский",
+	confirmClose: "Подтвердить закрытие",
+	unsavedChanges: "Несохраненные изменения будут потеряны после закрытия. Закрыть?",
+	discard: "Закрыть",
+	continueEditing: "Продолжить редактирование",
+	saveAndClose: "Сохранить и закрыть",
 }

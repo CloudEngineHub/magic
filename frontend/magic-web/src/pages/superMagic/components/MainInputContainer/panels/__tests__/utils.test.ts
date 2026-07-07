@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 import { getPromptRichTextPlainText, serializePromptRichTextLocaleValue } from "../promptRichText"
-import { buildConcatenatedPresetContent } from "../utils"
+import { buildConcatenatedPresetContent, hasSelectableOptions } from "../utils"
 import type { FieldItem } from "../types"
 
 function expectPresetContentText(fields: FieldItem[], locale: string, expected: string) {
@@ -193,5 +193,21 @@ describe("MainInputContainer panel utils", () => {
 			},
 		})
 		expect(getPromptRichTextPlainText(content)).toBe("@Render with Oil painting.")
+	})
+
+	it("treats empty option groups as no selectable options", () => {
+		const field: FieldItem = {
+			data_key: "template",
+			label: { default: "Template" },
+			options: [
+				{
+					group_key: "empty",
+					group_name: { default: "Empty" },
+					children: [],
+				},
+			],
+		}
+
+		expect(hasSelectableOptions(field)).toBe(false)
 	})
 })

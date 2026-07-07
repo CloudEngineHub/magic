@@ -137,7 +137,7 @@ export function useSlidesTemplatePanelState() {
 				setTotal(nextTotal)
 				if (mode === "replace" && isAllTemplatesQuery) {
 					setHasCheckedAnyTemplate(true)
-					setHasAnyTemplate(nextTotal > 0)
+					setHasAnyTemplate(nextTemplates.length > 0)
 				}
 				hasLoadedTemplatesRef.current = true
 			} catch (error) {

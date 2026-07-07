@@ -13,6 +13,7 @@ import { type FieldPanelConfig, type FieldItem, type OptionItem, OptionViewType 
 import { ScenePanelVariant } from "../components/LazyScenePanel/types"
 import { useTranslation } from "react-i18next"
 import FilterCapsuleItem from "./FilterCapsuleItem"
+import { findComplexField, hasSelectableOptions } from "./utils"
 
 interface FieldConfigPanelProps {
 	config: FieldPanelConfig
@@ -42,6 +43,13 @@ const FieldConfigPanel = observer(
 		const store = useMemo(() => new TemplatePanelStore(), [])
 		const sceneStateStore = useOptionalSceneStateStore()
 		const inputScopeKey = sceneStateStore?.inputScopeKey ?? ""
+		const configFieldItems = config.field?.items ?? []
+		const isTemplatePanel =
+			config.field?.view_type === OptionViewType.GRID ||
+			config.field?.view_type === OptionViewType.SLIDES_PRESET
+		const hasTemplateOptions = hasSelectableOptions(findComplexField(configFieldItems))
+		const shouldHidePanel =
+			configFieldItems.length === 0 || (isTemplatePanel && !hasTemplateOptions)
 
 		// Initialize store when config or input scope changes
 		useEffect(() => {
@@ -60,8 +68,8 @@ const FieldConfigPanel = observer(
 		useEffect(() => {
 			if (readOnly) return
 
-			onPresetContentChange?.(concatenatedContent)
-		}, [concatenatedContent, onPresetContentChange, readOnly])
+			onPresetContentChange?.(shouldHidePanel ? undefined : concatenatedContent)
+		}, [concatenatedContent, onPresetContentChange, readOnly, shouldHidePanel])
 
 		const handleFilterChange = (filterId: string, value: string) => {
 			if (readOnly) return
@@ -92,7 +100,7 @@ const FieldConfigPanel = observer(
 			store.setCurrentGroupKey(groupKey)
 		}
 
-		if (config.field?.items.length === 0) {
+		if (shouldHidePanel) {
 			return null
 		}
 

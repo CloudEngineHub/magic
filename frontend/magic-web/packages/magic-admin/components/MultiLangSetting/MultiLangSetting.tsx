@@ -1,12 +1,13 @@
 import { IconWorld } from "@tabler/icons-react"
-import { Form, Input, Popover } from "antd"
-import { memo, useEffect, useMemo, useState } from "react"
+import { Button, Flex, Form, Input, Popover } from "antd"
+import { memo, useEffect, useMemo, useRef, useState } from "react"
 import { useMemoizedFn } from "ahooks"
 import type { PopoverProps } from "antd/lib"
 import { LanguageType as LangType, useAdminComponents } from "../AdminComponentsProvider"
 import type { MagicButtonProps } from "../MagicButton"
 import MagicButton from "../MagicButton"
 import ButtonGroup from "../ButtonGroup"
+import MagicModal from "../MagicModal"
 import type { Lang } from "./types"
 import { useStyles } from "./style"
 
@@ -54,10 +55,37 @@ const MultiLangSetting = memo(
 		const locale = getLocale("MultiLangSetting")
 
 		const [open, setOpen] = useState(false)
+		const confirmingCloseRef = useRef(false)
 
 		const [form] = Form.useForm()
 
-		const onCancel = useMemoizedFn(() => {
+		const getInitialValues = useMemoizedFn(() => {
+			const source = info as Record<string, string | undefined> | undefined
+			return supportLangs.reduce<Record<string, string>>((values, lang) => {
+				values[lang] = source?.[lang] ?? ""
+				return values
+			}, {})
+		})
+
+		const resetFormToInitialValues = useMemoizedFn(() => {
+			form.resetFields()
+			form.setFieldsValue(getInitialValues())
+		})
+
+		const hasUnsavedChanges = useMemoizedFn(() => {
+			const currentValues = form.getFieldsValue(supportLangs) as Record<
+				string,
+				string | undefined
+			>
+			const initialValues = getInitialValues()
+
+			return supportLangs.some(
+				(lang) => (currentValues[lang] ?? "") !== (initialValues[lang] ?? ""),
+			)
+		})
+
+		const closeWithoutSaving = useMemoizedFn(() => {
+			resetFormToInitialValues()
 			setOpen(false)
 		})
 
@@ -68,16 +96,70 @@ const MultiLangSetting = memo(
 			form.resetFields()
 		})
 
+		const handleSaveAndClose = useMemoizedFn(async (closeConfirm?: () => void) => {
+			await onInnerSave()
+			closeConfirm?.()
+			confirmingCloseRef.current = false
+		})
+
+		const requestClose = useMemoizedFn(() => {
+			if (!hasUnsavedChanges()) {
+				closeWithoutSaving()
+				return
+			}
+
+			if (confirmingCloseRef.current) return
+			confirmingCloseRef.current = true
+			let closeConfirm: (() => void) | undefined
+			const confirmModal = MagicModal.confirm({
+				centered: true,
+				title: locale.confirmClose,
+				content: locale.unsavedChanges,
+				footer: () => (
+					<Flex justify="end" gap={4} align="center">
+						<Button
+							type="default"
+							onClick={() => {
+								confirmingCloseRef.current = false
+								closeConfirm?.()
+							}}
+						>
+							{locale.continueEditing}
+						</Button>
+						<Button
+							type="default"
+							danger
+							onClick={() => {
+								confirmingCloseRef.current = false
+								closeWithoutSaving()
+								closeConfirm?.()
+							}}
+						>
+							{locale.discard}
+						</Button>
+						<Button
+							type="primary"
+							onClick={() => handleSaveAndClose(closeConfirm)}
+						>
+							{locale.saveAndClose}
+						</Button>
+					</Flex>
+				),
+				afterClose: () => {
+					confirmingCloseRef.current = false
+				},
+			})
+			closeConfirm = confirmModal.destroy
+		})
+
 		const onButtonClick = useMemoizedFn((event: React.MouseEvent<HTMLButtonElement>) => {
 			onClick?.(event)
 			if (!clickToToggle) setOpen(true)
 		})
 
 		useEffect(() => {
-			if (info) {
-				form.setFieldsValue({ ...info })
-			}
-		}, [info, form])
+			resetFormToInitialValues()
+		}, [info, resetFormToInitialValues])
 
 		const content = useMemo(() => {
 			return (
@@ -108,7 +190,7 @@ const MultiLangSetting = memo(
 							</Form.Item>
 						)
 					})}
-					<ButtonGroup onCancel={onCancel} onSave={onInnerSave} />
+					<ButtonGroup onCancel={requestClose} onSave={onInnerSave} />
 				</Form>
 			)
 		}, [
@@ -116,7 +198,7 @@ const MultiLangSetting = memo(
 			styles.form,
 			styles.formItem,
 			supportLangs,
-			onCancel,
+			requestClose,
 			onInnerSave,
 			locale,
 			required,
@@ -132,8 +214,11 @@ const MultiLangSetting = memo(
 				placement="bottom"
 				content={content}
 				onOpenChange={(visible) => {
-					if (clickToToggle) setOpen(visible)
-					else if (!visible) setOpen(false)
+					if (visible) {
+						if (clickToToggle) setOpen(true)
+						return
+					}
+					requestClose()
 				}}
 				trigger={clickToToggle ? "click" : undefined}
 				{...popoverProps}

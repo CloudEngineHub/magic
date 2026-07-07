@@ -114,6 +114,23 @@ describe("useSlidesTemplatePanelState", () => {
 		expect(result.current.templateOptions[0].value).toBe(businessTemplate.code)
 	})
 
+	it("marks all templates as empty when the first page list is empty", async () => {
+		vi.mocked(SuperMagicApi.getSlidesTemplates).mockResolvedValue({
+			page: 1,
+			page_size: SLIDES_TEMPLATE_PAGE_SIZE,
+			total: 1,
+			list: [],
+		})
+
+		const { result } = renderHook(() => useSlidesTemplatePanelState())
+
+		await waitFor(() => expect(result.current.isLoading).toBe(false))
+
+		expect(result.current.hasCheckedAnyTemplate).toBe(true)
+		expect(result.current.hasAnyTemplate).toBe(false)
+		expect(result.current.templateOptions).toHaveLength(0)
+	})
+
 	it("finishes loading under React StrictMode", async () => {
 		const { result } = renderHook(() => useSlidesTemplatePanelState(), {
 			wrapper: StrictModeWrapper,
