@@ -37,7 +37,7 @@ import { genRequestUrl } from "@/utils/http"
 import { generateRecordingSummaryApi } from "./superMagic/recordSummary"
 import { generateAudioProjectsApi } from "./superMagic/audioProjects"
 import { generateCollaborationApi } from "./superMagic/collaboration"
-import { buildImageProcessQuery } from "@/utils/image-processing"
+import { buildImageProcessQuery, type ImageProcessOptions } from "@/utils/image-processing"
 import type {
 	SuggestionRelationType,
 	SuggestionsMeta,
@@ -703,9 +703,19 @@ export interface GetConvertHightConfigResponse {
 }
 
 export const generateSuperMagicApi = (fetch: HttpClient) => ({
-	getSlidesTemplates(params: SlidesTemplateQueryParams) {
+	getSlidesTemplates(
+		params: SlidesTemplateQueryParams,
+		options?: { xMagicImageProcess?: ImageProcessOptions },
+	) {
 		return fetch.get<SlidesTemplateListResponse>(
 			genRequestUrl("/api/v1/slides-templates", {}, params),
+			{
+				headers: {
+					...(options?.xMagicImageProcess && {
+						"X-Magic-Image-Process": buildImageProcessQuery(options.xMagicImageProcess),
+					}),
+				},
+			},
 		)
 	},
 

@@ -3,6 +3,7 @@ import { act, renderHook, waitFor } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { SuperMagicApi } from "@/apis"
 import {
+	SLIDES_TEMPLATE_IMAGE_PROCESS,
 	SLIDES_TEMPLATE_PAGE_SIZE,
 	type SlidesTemplateCategoryItem,
 	type SlidesTemplateItem,
@@ -13,6 +14,10 @@ const apiMock = vi.hoisted(() => ({
 	getSlidesTemplateCategories: vi.fn(),
 	getSlidesTemplates: vi.fn(),
 }))
+
+const slidesTemplateImageOptions = {
+	xMagicImageProcess: SLIDES_TEMPLATE_IMAGE_PROCESS,
+}
 
 vi.mock("@/apis", () => ({
 	SuperMagicApi: apiMock,
@@ -106,10 +111,13 @@ describe("useSlidesTemplatePanelState", () => {
 			).toBe(true),
 		)
 
-		expect(SuperMagicApi.getSlidesTemplates).toHaveBeenCalledWith({
-			page: 1,
-			page_size: SLIDES_TEMPLATE_PAGE_SIZE,
-		})
+		expect(SuperMagicApi.getSlidesTemplates).toHaveBeenCalledWith(
+			{
+				page: 1,
+				page_size: SLIDES_TEMPLATE_PAGE_SIZE,
+			},
+			slidesTemplateImageOptions,
+		)
 		expect(result.current.groups[0].group_key).toBe("all")
 		expect(result.current.templateOptions[0].value).toBe(businessTemplate.code)
 	})
@@ -281,11 +289,14 @@ describe("useSlidesTemplatePanelState", () => {
 		})
 
 		await waitFor(() =>
-			expect(SuperMagicApi.getSlidesTemplates).toHaveBeenLastCalledWith({
-				page: 1,
-				page_size: SLIDES_TEMPLATE_PAGE_SIZE,
-				category_code: businessCategory.code,
-			}),
+			expect(SuperMagicApi.getSlidesTemplates).toHaveBeenLastCalledWith(
+				{
+					page: 1,
+					page_size: SLIDES_TEMPLATE_PAGE_SIZE,
+					category_code: businessCategory.code,
+				},
+				slidesTemplateImageOptions,
+			),
 		)
 
 		act(() => {
@@ -294,12 +305,15 @@ describe("useSlidesTemplatePanelState", () => {
 
 		await waitFor(
 			() =>
-				expect(SuperMagicApi.getSlidesTemplates).toHaveBeenLastCalledWith({
-					page: 1,
-					page_size: SLIDES_TEMPLATE_PAGE_SIZE,
-					category_code: businessCategory.code,
-					keyword: "whitepaper",
-				}),
+				expect(SuperMagicApi.getSlidesTemplates).toHaveBeenLastCalledWith(
+					{
+						page: 1,
+						page_size: SLIDES_TEMPLATE_PAGE_SIZE,
+						category_code: businessCategory.code,
+						keyword: "whitepaper",
+					},
+					slidesTemplateImageOptions,
+				),
 			{ timeout: 1000 },
 		)
 	})

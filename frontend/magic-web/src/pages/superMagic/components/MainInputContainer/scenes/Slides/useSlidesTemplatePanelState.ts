@@ -3,6 +3,7 @@ import { SuperMagicApi } from "@/apis"
 import {
 	ALL_SLIDES_TEMPLATE_GROUP_KEY,
 	SLIDES_TEMPLATE_CATEGORY_PAGE_SIZE,
+	SLIDES_TEMPLATE_IMAGE_PROCESS,
 	SLIDES_TEMPLATE_PAGE_SIZE,
 	groupSlidesTemplates,
 	toTemplateOption,
@@ -118,12 +119,17 @@ export function useSlidesTemplatePanelState() {
 			}
 
 			try {
-				const response = await SuperMagicApi.getSlidesTemplates({
-					page: nextPage,
-					page_size: SLIDES_TEMPLATE_PAGE_SIZE,
-					...(debouncedKeyword ? { keyword: debouncedKeyword } : {}),
-					...(selectedCategoryCode ? { category_code: selectedCategoryCode } : {}),
-				})
+				const response = await SuperMagicApi.getSlidesTemplates(
+					{
+						page: nextPage,
+						page_size: SLIDES_TEMPLATE_PAGE_SIZE,
+						...(debouncedKeyword ? { keyword: debouncedKeyword } : {}),
+						...(selectedCategoryCode ? { category_code: selectedCategoryCode } : {}),
+					},
+					{
+						xMagicImageProcess: SLIDES_TEMPLATE_IMAGE_PROCESS,
+					},
+				)
 				if (!mountedRef.current || requestSeq !== requestSeqRef.current) return
 
 				const nextTemplates = response.list ?? []
