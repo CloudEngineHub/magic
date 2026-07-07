@@ -221,7 +221,7 @@ class SlidesTemplateCategoryRepository extends AbstractRepository implements Sli
         return $list;
     }
 
-    private function findModelByCode(SlidesTemplateDataIsolation $dataIsolation, string $code, bool $withTrashed): ?SlidesTemplateCategoryModel
+    private function findModelByCode(SlidesTemplateDataIsolation $dataIsolation, string $code, bool $withTrashed): null｜Model|SlidesTemplateCategoryModel
     {
         $query = $withTrashed ? SlidesTemplateCategoryModel::withTrashed() : SlidesTemplateCategoryModel::query();
         $builder = $this->createBuilder($dataIsolation, $query);
