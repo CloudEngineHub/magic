@@ -31,6 +31,7 @@ import { ossUploadService } from "@/stores/folderUpload/uploadService"
 import { Button } from "@/components/shadcn-ui/button"
 import { cn } from "@/lib/utils"
 import { createRandomUuidV4 } from "@/utils/create-random-uuid-v4"
+import { unshadow } from "@/utils/shadow"
 import {
 	documentExportService,
 	type DocumentExport,
@@ -215,10 +216,14 @@ export default function Render(props: any) {
 			const projectIdValue = selectedProject?.id || projectId
 			const contentStr =
 				typeof newContent === "string" ? newContent : JSON.stringify(newContent)
+			const uploadContent =
+				enable_shadow && contentStr.startsWith("SHADOWED_")
+					? unshadow(contentStr)
+					: contentStr
 
 			if (fileKey && projectIdValue) {
 				const uploadedPath = await ossUploadService.uploadContentByFileKey(
-					contentStr,
+					uploadContent,
 					fileKey,
 					projectIdValue,
 					data?.file_name || "content.html",
