@@ -1,9 +1,9 @@
 /**
- * 线条相关工具函数
+ * Line-related utility functions
  */
 
 /**
- * 映射 CSS 边框样式到 PPT 虚线类型
+ * Map CSS border styles to PPT dash types
  */
 export function mapDashType(style: "solid" | "dashed" | "dotted"): string {
 	switch (style) {

@@ -1,8 +1,8 @@
 /**
- * 按顶层逗号分割字符串（忽略括号内的逗号）
+ * Split a string by top-level commas, ignoring commas inside parentheses
  *
- * 适用于 CSS 渐变参数、多值 background-image、多重 box-shadow 等场景，
- * 这些值中的 rgb()/rgba() 等函数内部也包含逗号，不应被分割。
+ * Useful for CSS gradient parameters, multi-value background-image, multiple box-shadow values, and similar cases,
+ * because functions such as rgb()/rgba() inside these values also contain commas and should not be split.
  */
 export function splitByTopLevelComma(value: string): string[] {
 	const parts: string[] = []

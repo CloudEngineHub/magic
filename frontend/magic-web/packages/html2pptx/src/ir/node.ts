@@ -11,12 +11,12 @@ import type {
 import type { SlideConfig } from "../api/options"
 
 /**
- * PPT 中间表示层 (IR)：管线各阶段间传递的"PPT 节点"数据形态。
- * 与 pptxgenjs 实例对接，但本身只是数据，不直接操作 SDK。
+ * PPT intermediate representation (IR): the PPT node data shape passed between pipeline stages.
+ * It integrates with pptxgenjs instances, but is plain data and does not operate on the SDK directly.
  */
 
 // ============================================================================
-// 基础类型
+// Base types
 // ============================================================================
 
 export type PPTXGenCore = typeof PptxGenJS
@@ -24,28 +24,28 @@ export type Pptx = InstanceType<PPTXGenCore>
 export type Slide = ReturnType<Pptx["addSlide"]>
 
 // ============================================================================
-// 节点联合与基础结构
+// Node unions and base structure
 // ============================================================================
 
-/** PPT 节点基础属性 */
+/** Base PPT node properties */
 export interface PPTNodeBase {
-	/** 节点类型 */
+	/** Node type */
 	type: string
-	/** X 坐标 (英寸) */
+	/** X coordinate in inches */
 	x: number
-	/** Y 坐标 (英寸) */
+	/** Y coordinate in inches */
 	y: number
-	/** 宽度 (英寸) */
+	/** Width in inches */
 	w: number
-	/** 高度 (英寸) */
+	/** Height in inches */
 	h: number
-	/** 绘制顺序 */
+	/** Draw order */
 	zOrder: number
-	/** 旋转角度 (度) */
+	/** Rotation angle in degrees */
 	rotate?: number
 }
 
-/** custGeom 路径点 */
+/** custGeom path points */
 export type CustGeomPoint =
 	| { x: number; y: number; moveTo?: boolean }
 	| { x: number; y: number; curve: { type: "quadratic"; x1: number; y1: number } }
@@ -53,26 +53,26 @@ export type CustGeomPoint =
 	| { x: number; y: number; curve: { type: "arc"; hR: number; wR: number; stAng: number; swAng: number } }
 	| { close: true }
 
-/** 形状节点 */
+/** Shape node */
 export interface PPTShapeNode extends PPTNodeBase {
 	type: "shape"
-	/** 形状类型 */
+	/** Shape type */
 	shapeType: "rect" | "roundRect" | "ellipse" | "custGeom"
-	/** 填充 */
+	/** Fill */
 	fill: PPTFill | null
-	/** 边框线 */
+	/** Border line */
 	line: PPTLine | null
-	/** 阴影 */
+	/** Shadow */
 	shadow: PPTShadow | null
-	/** 圆角半径 (英寸) */
+	/** Corner radius in inches */
 	radius?: number
-	/** custGeom 路径点 (shapeType === "custGeom" 时使用) */
+	/** custGeom path points (used when shapeType === "custGeom") */
 	points?: CustGeomPoint[]
-	/** 柔化边缘半径 (磅) */
+	/** Soft-edge radius in points */
 	softEdge?: number
-	/** 旋转角度 (度) */
+	/** Rotation angle in degrees */
 	rotate?: number
-	/** 形状内文本；用于 badge 等需要文本和形状共同居中的场景 */
+	/** Text inside a shape, used for badges and similar cases where text and shape must be centered together */
 	text?: {
 		value: string
 		fontSize: number
@@ -89,39 +89,39 @@ export interface PPTShapeNode extends PPTNodeBase {
 	}
 }
 
-/** 图片节点 */
+/** Image node */
 export interface PPTImageNode extends PPTNodeBase {
 	type: "image"
-	/** 图片源 (URL 或 base64) */
+	/** Image source (URL or base64) */
 	src: string
 	/**
-	 * 图片二进制（worker 处理后透传）。存在时优先于 `src`：
-	 * 主线程不再持有大块 base64，打包 worker 内即将写入前才转 data URL，
-	 * 并以 transferable 移交（detach）以立即释放主线程内存。
+	 * Image bytes transferred after worker processing. When present, they take precedence over `src`:
+	 * the main thread no longer keeps large base64 strings; the packaging worker converts to a data URL right before writing,
+	 * and transfers them as transferable data to detach and release main-thread memory immediately.
 	 */
 	srcBytes?: { data: ArrayBuffer; mime: string }
-	/** 截图来源 */
+	/** Capture source */
 	capture?: "snapdom"
-	/** 截图目标元素 */
+	/** Capture target element */
 	captureElement?: Element
-	/** 仅截取元素背景（不含子元素），用于多值渐变背景的降级处理 */
+	/** Capture only the element background without children, used as fallback for multi-gradient backgrounds */
 	captureBackgroundOnly?: boolean
-	/** SVG 根节点截图时排除文本，仅保留图形部分 */
+	/** Exclude text when capturing the SVG root; keep only graphics */
 	captureExcludeSvgText?: boolean
-	/** 缩放模式 */
+	/** Sizing mode */
 	sizing: "cover" | "contain" | "crop" | "stretch"
-	/** 裁剪区域 */
+	/** Crop rectangle */
 	cropRect?: { x: number; y: number; w: number; h: number }
-	/** 圆角半径 */
+	/** Corner radius */
 	radius?: number
-	/** 透明度 (0-100) */
+	/** Transparency (0-100) */
 	transparency?: number
 }
 
-/** 文本渐变 */
+/** Text gradient */
 export type PPTTextGradient = PPTLinearGradientFill | PPTRadialGradientFill
 
-/** 富文本片段样式（内部保留 fontWeight 用于字体检测，绘制时会剥离） */
+/** Rich text run style; fontWeight is kept internally for font detection and stripped during drawing */
 export interface PPTTextRunOptions {
 	fontSize?: number
 	fontFace?: string
@@ -135,52 +135,52 @@ export interface PPTTextRunOptions {
 	transparency?: number
 }
 
-/** 单个 PPT 文本框内的富文本片段 */
+/** Rich text run within one PPT text box */
 export interface PPTTextRun {
 	text: string
 	options?: PPTTextRunOptions
 }
 
-/** 文本节点（legacy 可按 DOM Text Node 拆分，inline-rich 可携带多个富文本片段） */
+/** Text node; legacy may split by DOM Text Node, while inline-rich can carry multiple rich text runs */
 export interface PPTTextNode extends PPTNodeBase {
 	type: "text"
-	/** 纯文本内容，或一个文本框内的富文本片段 */
+	/** Plain text content, or rich text runs within one text box */
 	text: string | PPTTextRun[]
-	/** 字号 (pt) */
+	/** Font size (pt) */
 	fontSize: number
-	/** 字体 */
+	/** Font */
 	fontFace: string
-	/** 字重 */
+	/** Font weight */
 	fontWeight: number
-	/** 颜色 (HEX 或 渐变对象) */
+	/** Color (HEX or gradient object) */
 	color: string | PPTTextGradient
-	/** 粗体 */
+	/** Bold */
 	bold: boolean
-	/** 斜体 */
+	/** Italic */
 	italic: boolean
-	/** 下划线 */
+	/** Underline */
 	underline: boolean
-	/** 删除线 */
+	/** Strikethrough */
 	strike?: boolean
-	/** 水平对齐 */
+	/** Horizontal alignment */
 	align?: "left" | "center" | "right" | "justify"
-	/** 垂直对齐 */
+	/** Vertical alignment */
 	valign?: "top" | "middle" | "bottom"
-	/** 行距 */
+	/** Line spacing */
 	lineSpacing?: number
-	/** 是否换行 */
+	/** Whether text wraps */
 	wrap?: boolean
-	/** 透明度 (0-100) */
+	/** Transparency (0-100) */
 	transparency?: number
-	/** 字间距 (pt) */
+	/** Character spacing in points */
 	charSpacing?: number
-	/** 阴影 */
+	/** Shadow */
 	shadow?: PPTShadow | null
-	/** 外边距 (pt) */
+	/** Margin in points */
 	margin?: [number, number, number, number]
-	/** 旋转角度 (度) */
+	/** Rotation angle in degrees */
 	rotate?: number
-	/** 文本描边 (模拟 text-stroke) */
+	/** Text outline, used to simulate text-stroke */
 	outline?: {
 		color: string
 		size: number
@@ -188,59 +188,59 @@ export interface PPTTextNode extends PPTNodeBase {
 	}
 }
 
-/** 表格节点 */
+/** Table node */
 export interface PPTTableNode extends PPTNodeBase {
 	type: "table"
-	/** 表格行 */
+	/** Table rows */
 	rows: PPTTableRow[]
-	/** 列宽 (英寸) */
+	/** Column widths in inches */
 	colWidths: number[]
-	/** 行高 (英寸) */
+	/** Row heights in inches */
 	rowHeights?: number[]
 }
 
-/** 单边边框线节点 */
+/** Per-side border line node */
 export interface PPTBorderLineNode extends PPTNodeBase {
 	type: "borderLine"
-	/** 边框位置 */
+	/** Border side */
 	side: "top" | "right" | "bottom" | "left"
-	/** 线条样式 */
+	/** Line style */
 	line: PPTLine
-	/** 自定义几何路径（圆角边框时使用填充形状代替直线） */
+	/** Custom geometry path, used when rounded borders are rendered as filled shapes instead of straight lines */
 	points?: CustGeomPoint[]
-	/** 填充颜色（圆角边框填充用） */
+	/** Fill color for rounded border fills */
 	fillColor?: string
-	/** 填充透明度 (0-100) */
+	/** Fill transparency (0-100) */
 	fillTransparency?: number
 }
 
-/** 媒体节点 */
+/** Media node */
 export interface PPTMediaNode extends PPTNodeBase {
 	type: "media"
-	/** 媒体类型 */
+	/** Media type */
 	mediaType: "video" | "audio" | "online"
-	/** 媒体路径 (URL) */
+	/** Media path (URL) */
 	path?: string
-	/** 媒体数据 (base64) */
+	/** Media data (base64) */
 	data?: string
-	/** 在线视频链接 (YouTube 等) */
+	/** Online video link, such as YouTube */
 	link?: string
-	/** 封面：poster 或物化后的 JPEG data URL */
+	/** Cover: poster or materialized JPEG data URL */
 	cover?: string
 	/**
-	 * 封面二进制（worker 处理后透传）。存在时优先于 `cover`，
-	 * 与图片节点的 `srcBytes` 同理：打包 worker 内即将写入前才转 data URL。
+	 * Cover bytes transferred after worker processing. When present, they take precedence over `cover`,
+	 * like image-node `srcBytes`: the packaging worker converts them to a data URL right before writing.
 	 */
 	coverBytes?: { data: ArrayBuffer; mime: string }
-	/** 是否自动播放 */
+	/** Whether to autoplay */
 	autoplay?: boolean
-	/** 文件扩展名 */
+	/** File extension */
 	extn?: string
-	/** 仅主线程物化用，序列化前剥离；无 poster 时指向 `<video>` 以截首帧 */
+	/** Only used for main-thread materialization and stripped before serialization; points to `<video>` for first-frame capture when there is no poster */
 	coverCaptureElement?: HTMLVideoElement
 }
 
-/** PPT 节点联合类型 */
+/** PPT node union type */
 export type PPTNode =
 	| PPTShapeNode
 	| PPTImageNode
@@ -250,21 +250,21 @@ export type PPTNode =
 	| PPTMediaNode
 
 // ============================================================================
-// 解析器上下文
+// Parser context
 // ============================================================================
 
-/** 解析器上下文（保留对外兼容；包内目前未直接使用） */
+/** Parser context kept for external compatibility; currently not used directly inside the package */
 export interface ParserContext {
-	/** 当前 PPTX 实例 */
+	/** Current PPTX instance */
 	pptx: Pptx
-	/** 当前幻灯片 */
+	/** Current slide */
 	slide: Slide
-	/** 当前元素节点 */
+	/** Current element node */
 	node: ElementNode
-	/** iframe window 对象 */
+	/** iframe window object */
 	iWindow: Window
-	/** iframe document 对象 */
+	/** iframe document object */
 	iDocument: Document
-	/** 幻灯片配置 */
+	/** Slide configuration */
 	config: SlideConfig
 }

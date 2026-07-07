@@ -3,7 +3,7 @@ import type { PPTTableCellBorder, PPTTableTextRun } from "../ir/style"
 import { log, LogLevel } from "../logger"
 
 /**
- * 绘制表格到幻灯片
+ * Draw a table onto the slide
  */
 export function drawTable(
 	slide: Slide,
@@ -11,12 +11,12 @@ export function drawTable(
 ): void {
 	const { rows, colWidths, rowHeights, x, y, w } = node
 
-	// 转换为 pptxgenjs 格式
+	// Convert to pptxgenjs format
 	const tableRows = rows.map((row) =>
 		row.cells.map((cell) => {
 			const cellOptions: Record<string, unknown> = {}
 
-			// 背景色（支持透明度）
+			// Background color with transparency support
 			if (cell.options?.fill) {
 				const fillObj: { color: string; transparency?: number } = {
 					color: cell.options.fill,
@@ -27,32 +27,32 @@ export function drawTable(
 				cellOptions.fill = fillObj
 			}
 
-			// 文字颜色
+			// Text color
 			if (cell.options?.color) {
 				cellOptions.color = cell.options.color
 			}
 
-			// 字号
+			// Font size
 			if (cell.options?.fontSize) {
 				cellOptions.fontSize = cell.options.fontSize
 			}
 
-			// 粗体
+			// Bold
 			if (cell.options?.bold) {
 				cellOptions.bold = cell.options.bold
 			}
 
-			// 水平对齐
+			// Horizontal alignment
 			if (cell.options?.align) {
 				cellOptions.align = cell.options.align
 			}
 
-			// 垂直对齐
+			// Vertical alignment
 			if (cell.options?.valign) {
 				cellOptions.valign = cell.options.valign
 			}
 
-			// 合并单元格
+			// Merged cells
 			if (cell.options?.colspan) {
 				cellOptions.colspan = cell.options.colspan
 			}
@@ -68,7 +68,7 @@ export function drawTable(
 				cellOptions.wrap = false
 			}
 
-			// 边框
+			// Border
 			if (cell.options?.border) {
 				cellOptions.border = formatBorder(cell.options.border)
 			}
@@ -98,7 +98,7 @@ export function drawTable(
 		colW: colWidths,
 	}
 
-	// 添加行高
+	// Add row heights
 	if (rowHeights && rowHeights.length > 0) {
 		options.rowH = rowHeights
 	}
@@ -112,21 +112,21 @@ export function drawTable(
 
 
 /**
- * 格式化边框为 pptxgenjs 格式
+ * Format borders for pptxgenjs
  */
 function formatBorder(
 	border: PPTTableCellBorder | [PPTTableCellBorder, PPTTableCellBorder, PPTTableCellBorder, PPTTableCellBorder],
 ): unknown {
 	if (Array.isArray(border)) {
-		// 四边不同: [top, right, bottom, left]
+		// Different sides: [top, right, bottom, left]
 		return border.map((b) => formatSingleBorder(b))
 	}
-	// 四边相同
+	// Same on all sides
 	return formatSingleBorder(border)
 }
 
 /**
- * 格式化单边边框
+ * Format a per-side border
  */
 function formatSingleBorder(border: PPTTableCellBorder): Record<string, unknown> {
 	const result: Record<string, unknown> = {}
@@ -134,7 +134,7 @@ function formatSingleBorder(border: PPTTableCellBorder): Record<string, unknown>
 	if (border.color) result.color = border.color
 	if (border.pt !== undefined) result.pt = border.pt
 	if (border.type) result.type = border.type
-	// 支持边框透明度（需要 pptxgenjs 补丁支持）
+	// Support border transparency (requires the pptxgenjs patch)
 	if (border.transparency !== undefined && border.transparency > 0) {
 		result.transparency = border.transparency
 	}

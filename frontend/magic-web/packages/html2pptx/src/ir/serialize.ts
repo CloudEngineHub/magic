@@ -11,8 +11,8 @@ import type { SlideConfig } from "../api/options"
 import type { EmbedFontInput } from "../api/font"
 
 /**
- * 序列化层：跨 Worker 边界的 PPT 节点形态 + 包装函数。
- * 主线程 → Worker 的 postMessage 必须使用 SerializablePPTNode（已剥离 DOM 引用）。
+ * Serialization layer: PPT node shapes and wrappers used across the worker boundary.
+ * Main-thread to worker postMessage must use SerializablePPTNode with DOM references removed.
  */
 
 export interface SerializablePPTImageNode
@@ -40,16 +40,16 @@ export type SerializablePPTNode =
 	| SerializablePPTMediaNode
 
 // ============================================================================
-// Worker 消息契约
+// Worker message contract
 // ============================================================================
 
 export interface PackagePresentationInput {
 	config: SlideConfig
 	fileName: string
 	slides: SerializablePPTNode[][]
-	/** 每页幻灯片的背景色 (hex without #)，长度与 slides 对齐 */
+	/** Background color for each slide (hex without #), aligned with slides */
 	slideBackgrounds?: (string | null)[]
-	/** 需要嵌入的字体列表，由主线程提前下载好 ArrayBuffer 后传入 */
+	/** Fonts to embed, passed in as ArrayBuffers downloaded by the main thread in advance */
 	embedFonts?: EmbedFontInput[]
 }
 
@@ -73,11 +73,11 @@ export type PackagePresentationWorkerResponse =
 	| PackagePresentationWorkerError
 
 // ============================================================================
-// 节点 → 可序列化节点
+// Node to serializable node
 // ============================================================================
 
 /**
- * 将 PPT 节点剥离 DOM 引用，使其可通过 postMessage 传给 Worker。
+ * Remove DOM references from PPT nodes so they can be sent to the worker through postMessage.
  */
 export function serializePptNodes(nodes: PPTNode[]): SerializablePPTNode[] {
 	return nodes.map((node) => {

@@ -1,7 +1,7 @@
 import { createAbortError } from "../sandbox/abort"
 
 /**
- * 若信号已中止则抛出 AbortError
+ * Throw AbortError if the signal has already been aborted
  */
 export function ensureNotAborted(signal: AbortSignal): void {
 	if (signal.aborted) throw createAbortError()

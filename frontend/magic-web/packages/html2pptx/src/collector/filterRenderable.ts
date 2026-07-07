@@ -10,7 +10,7 @@ import {
 
 
 /**
- * 判断元素是否有可绘制内容
+ * Determine whether an element has drawable content
  *
  */
 function hasRenderableContent(node: ElementNode): boolean {
@@ -34,7 +34,7 @@ function hasRenderableContent(node: ElementNode): boolean {
 }
 
 /**
- * 判断节点是否位于布局表格的单元格内（布局表格的后代应独立处理）
+ * Determine whether a node is inside a layout-table cell, whose descendants should be handled independently
  */
 function isInsideLayoutTableCell(node: ElementNode): boolean {
 	const el = node.element
@@ -49,14 +49,14 @@ function isInsideLayoutTableCell(node: ElementNode): boolean {
 
 
 /**
- * 过滤出需要绘制的元素
+ * Filter elements that need drawing
  *
- * 新方案下每个元素独立处理：
- * - 内联文本元素（SPAN, STRONG 等）不再被父元素"代理"，而是自行生成文本框
- * - 表格内部元素及单元格内后代由 TABLE 统一处理（纯文本）；
- *   单元格内的 IMG/SVG/CANVAS 仍单独参与 transform，避免图标丢失。
- * - 布局表格（role=presentation 或包含嵌套表格且无边框）的后代元素独立处理，
- *   不受"表格内部过滤"逻辑限制。
+ * In the new approach, each element is handled independently:
+ * - Inline text elements such as SPAN and STRONG are no longer proxied by parents; they generate their own text boxes
+ * - Elements inside tables and cell descendants are handled by TABLE as plain text;
+ *   IMG/SVG/CANVAS inside cells still participate in transform separately to avoid losing icons.
+ * - Descendants of layout tables (role=presentation or nested tables without borders) are handled independently,
+ *   without being constrained by the table-internal filtering logic.
  */
 export function filterRenderable(nodes: ElementNode[]): ElementNode[] {
 	return nodes.filter((node) => {

@@ -38,7 +38,7 @@ export class SandboxReadyController {
 	}
 
 	restore(): void {
-		// 默认实现没有额外拦截器需要恢复，扩展实现可覆盖该逻辑。
+		// The default implementation has no extra interceptors to restore; extensions can override this logic.
 	}
 }
 

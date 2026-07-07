@@ -1,5 +1,5 @@
 /**
- * 颜色工具函数
+ * Color utility functions
  */
 
 import type { ElementNode } from "../ir/dom"
@@ -10,7 +10,7 @@ const effectiveOpacityCache = new WeakMap<Element, number>()
 const nodeOpacityCache = new WeakMap<ElementNode, number>()
 
 /**
- * 解析 RGBA/RGB 颜色为 HEX 格式 (不含 #)
+ * Parse RGBA/RGB colors into HEX format without #
  */
 export function colorToHex(color: unknown): string {
 	if (!color || typeof color !== "string") return "000000"
@@ -62,8 +62,8 @@ export function colorToHex(color: unknown): string {
 }
 
 /**
- * 从颜色字符串提取透明度 (0-100)
- * 0 = 完全不透明, 100 = 完全透明
+ * Extract transparency from a color string (0-100)
+ * 0 = fully opaque, 100 = fully transparent
  */
 export function getTransparency(color: unknown): number {
 	if (!color || typeof color !== "string" || color === "transparent") return 100
@@ -78,9 +78,9 @@ export function getTransparency(color: unknown): number {
 }
 
 /**
- * 从颜色字符串提取不透明度 (0-1) 用于阴影
- * 0.0 = 完全透明, 1.0 = 完全不透明
- * 这与 PPT 其他部分的 transparency (0-100, 100=完全透明) 是相反的
+ * Extract opacity from a color string (0-1) for shadows
+ * 0.0 = fully transparent, 1.0 = fully opaque
+ * This is the inverse of transparency used elsewhere in PPT (0-100, 100=fully transparent)
  */
 export function getShadowOpacity(color: string): number {
 	if (!color || color === "transparent") return 0
@@ -95,7 +95,7 @@ export function getShadowOpacity(color: string): number {
 }
 
 /**
- * 判断颜色是否可见 (非透明)
+ * Determine whether a color is visible (not transparent)
  */
 export function isVisibleColor(color: string): boolean {
 	if (!color) return false
@@ -107,14 +107,14 @@ export function isVisibleColor(color: string): boolean {
 }
 
 /**
- * 判断是否有可见的背景色
+ * Determine whether there is a visible background color
  */
 export function hasVisibleBackground(backgroundColor: string): boolean {
 	return isVisibleColor(backgroundColor)
 }
 
 /**
- * 解析 CSS opacity 值，返回 0-1 的数值
+ * Parse a CSS opacity value and return a 0-1 number
  */
 export function parseOpacityValue(value: string): number {
 	const parsed = parseFloat(value)
@@ -123,7 +123,7 @@ export function parseOpacityValue(value: string): number {
 }
 
 /**
- * 计算元素及其所有祖先的累积透明度
+ * Calculate cumulative transparency for an element and all ancestors
  */
 export function getEffectiveOpacity(element: Element): number {
 	const doc = element.ownerDocument
@@ -152,8 +152,8 @@ export function getEffectiveOpacity(element: Element): number {
 }
 
 /**
- * 基于 ElementNode 树计算累积透明度，复用 collector 已收集的 style.opacity，
- * 避免额外的 getComputedStyle 调用
+ * Calculate cumulative transparency from the ElementNode tree, reusing style.opacity collected by the collector,
+ * avoiding extra getComputedStyle calls
  */
 export function computeEffectiveOpacity(node: ElementNode): number {
 	const cached = nodeOpacityCache.get(node)
@@ -172,7 +172,7 @@ export function computeEffectiveOpacity(node: ElementNode): number {
 
 
 /**
- * 判断是否有可见的边框
+ * Determine whether there is a visible border
  */
 export function hasVisibleBorder(
 	borderStyle: string,
@@ -186,7 +186,7 @@ export function hasVisibleBorder(
 }
 
 /**
- * 解析带透明度的颜色，返回 HEX 和透明度
+ * Parse a color with transparency and return HEX plus transparency
  */
 export function parseColorWithTransparency(color: string): {
 	color: string
@@ -205,7 +205,7 @@ export function parseColorWithTransparency(color: string): {
 }
 
 /**
- * 判断是否是渐变背景
+ * Determine whether the background is a gradient
  */
 export function isGradientBackground(backgroundImage: string): boolean {
 	if (!backgroundImage || backgroundImage === "none") return false
@@ -213,7 +213,7 @@ export function isGradientBackground(backgroundImage: string): boolean {
 }
 
 /**
- * 解析 CSS 渐变为 PPT 渐变格式
+ * Parse a CSS gradient into PPT gradient format
  */
 export function parseGradient(backgroundImage: string): {
 	type: "gradient"
@@ -238,7 +238,7 @@ export function parseGradient(backgroundImage: string): {
 }
 
 /**
- * 提取渐变函数的内容（支持嵌套括号如 rgb(), rgba()）
+ * Extract gradient function content, supporting nested parentheses such as rgb() and rgba()
  */
 function extractGradientContent(str: string, funcName: string): string | null {
 	const startIndex = str.indexOf(funcName + "(")
@@ -261,7 +261,7 @@ function extractGradientContent(str: string, funcName: string): string | null {
 }
 
 /**
- * 解析线性渐变
+ * Parse a linear gradient
  */
 function parseLinearGradient(content: string): {
 	type: "gradient"
@@ -301,12 +301,12 @@ function parseLinearGradient(content: string): {
 
 function cssAngleToPptAngle(cssDeg: number): number {
 	const css = ((cssDeg % 360) + 360) % 360
-	// CSS: 0=上, 90=右；PPT: 0=右, 90=下
+	// CSS: 0=up, 90=right; PPT: 0=right, 90=down
 	return (css + 270) % 360
 }
 
 /**
- * 解析径向渐变
+ * Parse a radial gradient
  */
 function parseRadialGradient(content: string): {
 	type: "gradient"
@@ -339,7 +339,7 @@ function parseRadialGradient(content: string): {
 }
 
 /**
- * 方向转角度
+ * Convert direction to angle
  */
 function directionToAngle(direction: string): number {
 	const dirMap: Record<string, number> = {
@@ -360,7 +360,7 @@ function directionToAngle(direction: string): number {
 }
 
 /**
- * 解析颜色节点
+ * Parse a color stop
  */
 function parseColorStops(parts: string[]): Array<{ position: number; color: string; transparency?: number }> {
 	const stops: Array<{ position: number; color: string; transparency?: number }> = []
@@ -404,7 +404,7 @@ function parseColorStops(parts: string[]): Array<{ position: number; color: stri
 }
 
 /**
- * 解析 CSS filter 中的 blur 值 (像素)
+ * Parse the blur value in a CSS filter in pixels
  */
 export function parseBlur(filter: string): number | null {
 	if (!filter || filter === "none") return null
@@ -413,8 +413,8 @@ export function parseBlur(filter: string): number | null {
 }
 
 /**
- * 提取渐变的第一个颜色
- * 如果文字使用了渐变，取第一个颜色作为纯色，并保留其透明度
+ * Extract the first color from a gradient
+ * If text uses a gradient, take the first color as the solid color and preserve its transparency
  */
 export function extractFirstColorFromGradient(
 	backgroundImage: string,
@@ -431,7 +431,7 @@ export function extractFirstColorFromGradient(
 }
 
 /**
- * 将元素整体 opacity 合并到渐变 stops 透明度中
+ * Merge the element-level opacity into gradient stop transparency
  */
 export function mergeGradientStopsWithElementOpacity(
 	gradient: PPTTextGradient,

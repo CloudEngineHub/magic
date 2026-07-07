@@ -12,10 +12,10 @@ import { canUseFragmentedBackground, resolveFragmentFill } from "./shape/fragmen
 import { parseClipPathPolygon } from "./shape/clipPath"
 
 /**
- * 解析形状 (背景色、边框、圆角、渐变)
+ * Parse shapes (background color, border, corner radius, gradient)
  */
 export interface ParseShapeOptions {
-	/** 跳过渐变解析（渐变已由截图处理，仅保留纯色填充和边框） */
+	/** Skip gradient parsing because the gradient is handled by screenshot; keep only solid fill and border */
 	skipGradient?: boolean
 }
 
@@ -27,37 +27,37 @@ export function parseShape(
 ): PPTShapeNode | null {
 	const { style, rect } = node
 
-	// 检查 background-clip: text，如果是文字裁剪，不处理渐变背景（交给文本处理）
+	// Check background-clip: text; if text clipping is used, leave the gradient background to text handling
 	const bgImage = style.backgroundImage
 	const isTextClip = style.backgroundClip === "text"
-	// 检查是否有渐变背景（但排除 text-clip 的情况，以及调用方主动跳过渐变的情况）
+	// Check for gradient backgrounds, excluding text-clip cases and caller-requested gradient skipping
 	const hasGradient = !isTextClip && !options?.skipGradient && isGradientBackground(bgImage)
-	// 检查是否有可见的纯色填充
+	// Check for a visible solid fill
 	const hasFill = hasVisibleBackground(style.backgroundColor)
-	// 检查四边边框是否一致（不一致的边框会由 parseBorderLines 处理）
+	// Check whether all four borders are identical; inconsistent borders are handled by parseBorderLines
 	const hasBorder = hasUniformBorder(style)
 
-	// 如果都没有，不生成形状节点
+	// If none exist, do not generate a shape node
 	if (!hasFill && !hasBorder && !hasGradient) return null
 
-	// 解析填充
+	// Parse fill
 	let fill: PPTFill | null = null
 
-	// 优先使用渐变背景
+	// Prefer gradient background
 	if (hasGradient) {
 		const gradient = parseGradient(bgImage)
 		if (gradient) {
-			// 检查所有 stop 是否都不透明
+			// Check whether all stops are opaque
 			const hasTransparency = gradient.stops.some((stop) => {
 				const transparency = stop.transparency ?? 0
 				return transparency > 0
 			})
 
 			if (!hasTransparency) {
-				// 只有当渐变色本身没有透明度时，才考虑 opacity
+				// Only consider opacity when the gradient colors themselves have no transparency
 				const opacity = parseFloat(style.opacity)
 				if (opacity < 1) {
-					// 只有当完全不透明时，才应用 opacity
+					// Apply opacity only when fully opaque
 					const newTransparency = Math.round((1 - opacity) * 100)
 					gradient.stops.forEach((stop) => {
 						stop.transparency = newTransparency
@@ -68,11 +68,11 @@ export function parseShape(
 		}
 	}
 
-	// 没有渐变时使用纯色
+	// Use solid color when there is no gradient
 	if (!fill && hasFill) {
 		let transparency = getTransparency(style.backgroundColor)
 
-		// 如果颜色本身是不透明的，但设置了 opacity，则使用 opacity 作为透明度
+		// If the color itself is opaque but opacity is set, use opacity as transparency
 		if (transparency === 0) {
 			const opacity = parseFloat(style.opacity)
 			if (opacity < 1) {
@@ -87,10 +87,10 @@ export function parseShape(
 		}
 	}
 
-	// 解析边框（只处理四边一致的情况）
+	// Parse borders, only handling the all-sides-identical case
 	let line = null
 	if (hasBorder) {
-		// 四边一致时使用任意一边（这里用 top）
+		// When all sides are identical, use any side; top is used here
 		const borderWidthPx = parseFloat(style.borderTopWidth) || 1
 		const borderTransparency = getTransparency(style.borderTopColor)
 		line = {
@@ -101,11 +101,11 @@ export function parseShape(
 		}
 	}
 
-	// 解析圆角
+	// Parse corner radius
 	const radiusPx = parseBorderRadius(style.borderRadius, rect.w, rect.h)
 	const radius = pxToInch(radiusPx, config)
 
-	// 判断形状类型
+	// Determine shape type
 	const clipPoints = parseClipPathPolygon(style.clipPath, base.w, base.h)
 	let shapeType: "rect" | "roundRect" | "ellipse" | "custGeom" = "rect"
 	if (clipPoints) {
@@ -119,10 +119,10 @@ export function parseShape(
 		}
 	}
 
-	// 解析阴影
+	// Parse shadow
 	const shadow = parseShadow(style.boxShadow)
 
-	// 解析 blur 滤镜，转换为柔化边缘
+	// Parse blur filter and convert it to soft edges
 	const blurPx = parseBlur(style.filter)
 	let softEdge = blurPx && blurPx > 0 ? pxToPt(blurPx) : undefined
 
@@ -131,55 +131,55 @@ export function parseShape(
 	const { rotation, scaleX, scaleY } = getGlobalTransform(node)
 	let rotate = rotation !== 0 ? rotation : undefined
 
-	// 检查是否有自定义背景尺寸/位置
-	// 不论是渐变还是纯色填充，只要设置了 background-size/position 都应该生效
+	// Check for custom background size/position
+	// Whether the fill is gradient or solid, background-size/position should apply when set
 	let bgLayout = null
 	if (hasGradient || hasFill) {
 		bgLayout = parseBackgroundLayout(style, node.layout.offsetWidth, node.layout.offsetHeight)
 	}
 
-	// 有背景调整，或有旋转/缩放时，重新计算 geometry
+	// Recalculate geometry when background adjustment, rotation, or scale is present
 	if (bgLayout || rotate || Math.abs(scaleX - 1) > 0.01 || Math.abs(scaleY - 1) > 0.01) {
 		const elemW = node.layout.offsetWidth
 		const elemH = node.layout.offsetHeight
 		
-		// 目标尺寸 (未缩放)
+		// Target size before scaling
 		const targetW = bgLayout ? bgLayout.w : elemW
 		const targetH = bgLayout ? bgLayout.h : elemH
 		
-		// 目标相对于元素左上角的中心点偏移 (未缩放)
+		// Target center offset relative to the element top-left before scaling
 		const targetCenterX = bgLayout ? bgLayout.x + bgLayout.w / 2 : elemW / 2
 		const targetCenterY = bgLayout ? bgLayout.y + bgLayout.h / 2 : elemH / 2
 		
-		// 元素几何中心相对于元素左上角的偏移
+		// Element geometry center offset relative to the element top-left
 		const elemCenterX = elemW / 2
 		const elemCenterY = elemH / 2
 		
-		// 偏移量 (从元素中心指向目标中心)
+		// Offset from the element center to the target center
 		const dx = targetCenterX - elemCenterX
 		const dy = targetCenterY - elemCenterY
 		
-		// 应用旋转 (将偏移量旋转)
+		// Apply rotation by rotating the offset
 		const rad = (rotation || 0) * Math.PI / 180
 		const cos = Math.cos(rad)
 		const sin = Math.sin(rad)
 		
-		// 旋转后的偏移量 (先缩放再旋转，假设 transform-origin 为 center)
+		// Rotated offset after scaling, assuming transform-origin is center
 		const scaledDx = dx * scaleX
 		const scaledDy = dy * scaleY
 		
 		const rotatedDx = scaledDx * cos - scaledDy * sin
 		const rotatedDy = scaledDx * sin + scaledDy * cos
 		
-		// 元素的全局中心 (基于 bounding rect)
+		// Element global center based on bounding rect
 		const globalElemCenterX = rect.x + rect.w / 2
 		const globalElemCenterY = rect.y + rect.h / 2
 		
-		// 目标的全局中心
+		// Target global center
 		const globalTargetCenterX = globalElemCenterX + rotatedDx
 		const globalTargetCenterY = globalElemCenterY + rotatedDy
 		
-		// 目标的最终尺寸 (应用缩放)
+		// Final target size after scaling
 		const finalW = targetW * scaleX
 		const finalH = targetH * scaleY
 		
@@ -190,12 +190,12 @@ export function parseShape(
 	}
 
 	if (softEdge) {
-		// 增加模糊半径的转换系数，让模糊效果更明显
-		// PPT 的软边缘效果比 CSS blur 要弱，所以放大系数
+		// Increase the blur-radius conversion factor to make blur more visible
+		// PPT soft edges are weaker than CSS blur, so amplify the factor
 		softEdge = Math.min(100, softEdge * 2.5)
 
-		// 扩大形状尺寸
-		// 左右各增加 softEdge 的大小
+		// Expand the shape size
+		// Add softEdge size on both left and right
 		const expansion = ptToInch(softEdge)
 		finalRect.x -= expansion
 		finalRect.y -= expansion
@@ -218,8 +218,8 @@ export function parseShape(
 }
 
 /**
- * 通用分片背景解析：当元素在浏览器中被拆成多个渲染片段时，
- * 逐片段生成 shape，避免背景被合并成单一大矩形。
+ * Generic fragmented-background parsing: when the browser splits an element into multiple render fragments,
+ * generate one shape per fragment to avoid merging the background into one large rectangle.
  */
 export function parseFragmentedShapeNodes(
 	node: ElementNode,

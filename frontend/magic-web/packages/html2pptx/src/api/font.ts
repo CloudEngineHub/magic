@@ -1,6 +1,6 @@
 /**
- * 字体相关公共契约：消费方通过 fontResolver 提供字体下载/嵌入。
- * 包内只负责"检测使用了哪些字体"，不负责字体获取与加载。
+ * Public font contracts: consumers provide font download/embedding through fontResolver.
+ * This package only detects which fonts are used; it does not fetch or load fonts.
  */
 
 export interface EmbedFontInput {

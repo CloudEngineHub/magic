@@ -21,8 +21,8 @@ const registry: Record<SerializablePPTNode["type"], DrawerFn> = {
 }
 
 /**
- * 通过注册表派发节点绘制：
- * Worker 内由统一入口分派，新增节点类型只需在 registry 中加一行。
+ * Dispatch node drawing through the registry:
+ * Inside the worker, a unified entry dispatches drawing; adding a node type only requires one registry entry.
  */
 export async function drawByRegistry(
 	slide: Slide,

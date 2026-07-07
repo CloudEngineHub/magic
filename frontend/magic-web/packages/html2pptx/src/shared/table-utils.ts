@@ -1,6 +1,6 @@
 /**
- * 表格工具函数
- * 提供表格解析过程中使用的各类辅助计算方法
+ * Table utility functions
+ * Provide helper calculations used during table parsing
  */
 
 import type { SlideConfig } from "../api/options"
@@ -8,14 +8,14 @@ import { hasVisibleBackground } from "./color"
 import { pxToInch } from "./unit"
 
 /**
- * 获取被 text-overflow: ellipsis 截断后的可见文本
+ * Get visible text truncated by text-overflow: ellipsis
  *
- * 当元素同时满足 overflow:hidden + text-overflow:ellipsis 且
- * 内容实际溢出时，克隆一个同样式的隐藏容器，利用浏览器真实排版
- * 通过二分查找定位能容纳的最大字符数，末尾追加省略号。
+ * When an element has both overflow:hidden and text-overflow:ellipsis and
+ * its content actually overflows, clone a hidden container with the same styles and use real browser layout
+ * to binary-search the maximum number of characters that fit, then append an ellipsis.
  *
- * 相比 Canvas measureText，这种方式能正确反映 padding、border、
- * letter-spacing、font kerning 等所有 CSS 属性对文本宽度的影响。
+ * Compared with Canvas measureText, this correctly reflects padding, border,
+ * letter-spacing, font kerning, and all other CSS effects on text width.
  */
 export function getEllipsisText(
 	el: Element,
@@ -84,16 +84,16 @@ export function getEllipsisText(
 }
 
 /**
- * 计算表格列宽（单位：英寸）
+ * Calculate table column widths in inches
  *
- * 优先从 <col> 元素读取显式宽度；若不存在或全部为 0，
- * 则从第一行单元格的实际渲染宽度测量，同时处理 colspan 展开。
- * 最终补齐至 colCount 列并将零宽列替换为平均值。
+ * Prefer explicit widths from <col> elements; if none exist or all are 0,
+ * measure the actual rendered widths of first-row cells while expanding colspan.
+ * Finally pad to colCount columns and replace zero-width columns with the average width.
  *
- * @param table - HTML 表格元素
- * @param colCount - 列数
- * @param tableWidth - 表格总宽度（px）
- * @param config - 幻灯片配置（用于 px→inch 换算）
+ * @param table - HTML table element
+ * @param colCount - Column count
+ * @param tableWidth - Total table width in px
+ * @param config - Slide configuration used for px-to-inch conversion
  */
 export function calculateColumnWidths(
 	table: HTMLTableElement,
@@ -169,12 +169,12 @@ export function calculateColumnWidths(
 }
 
 /**
- * 计算表格行高（单位：英寸）
+ * Calculate table row heights in inches
  *
- * 直接从每行的渲染高度转换而来。
+ * Converted directly from each rendered row height.
  *
- * @param tableRows - 表格行元素数组
- * @param config - 幻灯片配置（用于 px→inch 换算）
+ * @param tableRows - Array of table row elements
+ * @param config - Slide configuration used for px-to-inch conversion
  */
 export function calculateRowHeights(
 	tableRows: HTMLTableRowElement[],
@@ -187,14 +187,14 @@ export function calculateRowHeights(
 }
 
 /**
- * 计算单元格内边距（单位：英寸）
+ * Calculate table cell margins in inches
  *
- * 除了读取 CSS padding，还会检测文本节点的实际左侧偏移量，
- * 用于处理单元格内图标等元素导致的额外文本缩进。
+ * Besides reading CSS padding, also detect the actual left offset of text nodes,
+ * to handle extra text indentation caused by icons and similar elements inside cells.
  *
- * @param td - 单元格元素
- * @param computed - 单元格的计算样式
- * @returns [top, right, bottom, left] 或 undefined（全部为 0 时）
+ * @param td - Cell element
+ * @param computed - Computed style for the cell
+ * @returns [top, right, bottom, left] or undefined when all values are 0
  */
 export function calculateCellMargin(
 	td: HTMLTableCellElement,
@@ -235,7 +235,7 @@ export function calculateCellMargin(
 				textSpanR = visualOffset + textRect.width
 			}
 		} catch {
-			// 忽略 Range 错误
+			// Ignore Range errors
 		}
 	}
 
@@ -282,11 +282,11 @@ export function calculateCellMargin(
 }
 
 /**
- * 递归查找元素内第一个非空文本节点
+ * Recursively find the first non-empty text node inside an element
  *
- * 用于 calculateCellMargin 定位文本的实际渲染位置。
+ * Used by calculateCellMargin to locate the actual rendered text position.
  *
- * @param element - 起始元素
+ * @param element - Starting element
  */
 export function findFirstTextNode(element: Element): Node | null {
 	for (const child of Array.from(element.childNodes)) {
@@ -301,12 +301,12 @@ export function findFirstTextNode(element: Element): Node | null {
 }
 
 /**
- * 解析单元格背景色继承链
+ * Resolve the cell background-color inheritance chain
  *
- * 按优先级依次检查：单元格 → 行 → 区段（thead/tbody/tfoot）→ 表格，
- * 返回第一个可见的背景色；若均透明则返回 null。
+ * Check in priority order: cell -> row -> section (thead/tbody/tfoot) -> table,
+ * returning the first visible background color, or null if all are transparent.
  *
- * @param input - 各层级的 backgroundColor 值
+ * @param input - backgroundColor values for each level
  */
 export function resolveEffectiveBackgroundColor(input: {
 	cellBgColor: string
@@ -323,20 +323,20 @@ export function resolveEffectiveBackgroundColor(input: {
 }
 
 /**
- * 从单元格向下查找最深层的文字样式元素
+ * Find the deepest text-style element under a cell
  *
- * 沿着"唯一可见子元素"链逐层深入，返回最终到达的元素。
- * 用于从实际包裹文本的元素（而非 td 自身）上读取文字样式
- * （颜色、字号、粗体等）。
+ * Walk down the single-visible-child chain and return the final element reached.
+ * Used to read text styles from the element that actually wraps the text, rather than from td itself
+ * (color, font size, bold, and related styles).
  *
- * 例如 `<td><div class="text-orange-500">P0</div></td>`
- * 会返回 `<div>`，使得 parseTable 能读取到橙色等样式。
+ * For example, `<td><div class="text-orange-500">P0</div></td>`
+ * returns `<div>`, allowing parseTable to read orange and related styles.
  *
- * 如果单元格有多个子元素或直接包含文本，返回 null，
- * 调用方将回退到使用 td 自身的样式。
+ * If the cell has multiple child elements or contains direct text, return null,
+ * so the caller falls back to using the td styles.
  *
- * @param cell - 表格单元格元素
- * @param iWindow - iframe window（用于获取计算样式）
+ * @param cell - Table cell element
+ * @param iWindow - iframe window used to get computed styles
  */
 export function findDeepestTextElement(cell: HTMLTableCellElement, iWindow: Window): Element | null {
 	let current: Element = cell

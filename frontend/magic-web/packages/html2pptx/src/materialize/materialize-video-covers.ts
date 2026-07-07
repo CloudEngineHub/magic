@@ -6,5 +6,5 @@ export async function materializeVideoCoverNodes(
 	_signal?: AbortSignal,
 	_onResourceError?: (error: ResourceLoadError) => void,
 ): Promise<void> {
-	// 默认实现不主动截取视频首帧，扩展实现可覆盖该逻辑。
+	// The default implementation does not actively capture the first video frame; extensions can override this logic.
 }

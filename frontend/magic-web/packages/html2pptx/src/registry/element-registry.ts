@@ -28,11 +28,11 @@ export interface ElementParserEntry {
 }
 
 /**
- * 主元素 parser 注册表：负责 IMG / TABLE / VIDEO|AUDIO / CANVAS|SVG 等
- * "主元素 → 主节点"的派发。
+ * Primary-element parser registry: handles IMG / TABLE / VIDEO|AUDIO / CANVAS|SVG and similar elements
+ * for primary-element to primary-node dispatch.
  *
- * 通用样式产物（背景图、形状、边框线、文本）由 elementToNode 内的固定流水
- * 顺序产出，不在此注册（顺序敏感、产物互相影响 zOrder）。
+ * General style artifacts (background images, shapes, border lines, text) are emitted by the fixed pipeline inside elementToNode,
+ * and are not registered here because ordering matters and artifacts affect one another's zOrder.
  */
 const primaryParsers: ElementParserEntry[] = [
 	{

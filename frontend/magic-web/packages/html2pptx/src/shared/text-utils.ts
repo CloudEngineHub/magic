@@ -1,8 +1,8 @@
 import { PX_TO_PT_RATIO } from "./constants"
 
 /**
- * 解析 line-height 并转换为 PPT 的 lineSpacing (倍数)
- * PPT 默认单倍行距是 1.0，CSS normal 约为 1.2
+ * Parse line-height and convert it to PPT lineSpacing as a multiplier
+ * PPT default single spacing is 1.0, while CSS normal is about 1.2
  */
 export function parseLineSpacing(lineHeight: string, fontSizePx: number): number | undefined {
 	if (!lineHeight || lineHeight === "normal") return undefined
@@ -31,8 +31,8 @@ export function parseLineSpacing(lineHeight: string, fontSizePx: number): number
 }
 
 /**
- * 解析 letter-spacing 并转换为 PPT 的 charSpacing (pt)
- * PPT charSpacing 单位是 points
+ * Parse letter-spacing and convert it to PPT charSpacing in points
+ * PPT charSpacing is measured in points
  */
 export function parseLetterSpacing(
 	letterSpacing: string,
@@ -57,7 +57,7 @@ export function parseLetterSpacing(
 }
 
 /**
- * 解析是否粗体
+ * Parse whether text is bold
  */
 export function parseBold(fontWeight: string): boolean {
 	const weight = parseInt(fontWeight)
@@ -72,8 +72,8 @@ export function parseFontWeight(fontWeight: string): number {
 }
 
 /**
- * 从 font-family 栈中取第一个字体名。
- * 字体若在 manifest 中会被嵌入；不在 manifest 中则由 PowerPoint 自行匹配相近字体。
+ * Take the first font name from the font-family stack.
+ * Fonts in the manifest are embedded; fonts outside the manifest are matched by PowerPoint to a nearby font.
  */
 export function mapFontFamily(fontFamily: string): string {
 	const first = fontFamily.split(",")[0].replace(/['"]/g, "").trim()
@@ -97,7 +97,7 @@ export function parseLineHeightPx(lineHeight: string, fontSize: number): number 
 }
 
 /**
- * 根据 text-transform 属性转换文本
+ * Transform text according to the text-transform property.
  */
 export function transformText(text: string, textTransform: string): string {
 	if (!text) return text

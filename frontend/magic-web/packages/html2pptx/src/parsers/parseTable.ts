@@ -1,6 +1,6 @@
 /**
- * 表格解析器
- * 将 HTML <table> 转换为 PPT 表格格式
+ * Table parser.
+ * Converts HTML <table> elements into PPT table nodes.
  */
 
 import type { ElementNode } from "../ir/dom"
@@ -22,7 +22,7 @@ import {
 import { extractCellTextRuns } from "./table/cellText"
 
 /**
- * 解析 HTML 表格为 PPT 表格节点
+ * Parse an HTML table into a PPT table node.
  */
 export function parseTable(
 	node: ElementNode,
@@ -36,21 +36,21 @@ export function parseTable(
 
 	const tableElement = element as HTMLTableElement
 
-	// 获取当前 table 的行（不包含嵌套 table 的行）
+	// Get rows from the current table, excluding rows from nested tables.
 	const tableRows = Array.from(tableElement.rows)
 	if (tableRows.length === 0) return null
 
-	// 解析表格结构
+	// Parse the table structure.
 	const { rows, colCount } = parseTableRows(
 		tableRows,
 		iWindow,
 	)
 	if (rows.length === 0) return null
 
-	// 计算列宽
+	// Calculate column widths.
 	const colWidths = calculateColumnWidths(tableElement, colCount, rect.w, config)
 
-	// 计算行高
+	// Calculate row heights.
 	const rowHeights = calculateRowHeights(tableRows, config)
 
 	const tableNode: PPTTableNode = {
@@ -65,7 +65,7 @@ export function parseTable(
 }
 
 /**
- * 解析表格行
+ * Parse table rows.
  */
 function parseTableRows(
 	tableRows: HTMLTableRowElement[],
@@ -74,28 +74,28 @@ function parseTableRows(
 	const rows: PPTTableRow[] = []
 	let maxOriginalColCount = 0
 
-	// 创建合并单元格跟踪矩阵
+	// Create the merged-cell tracking matrix.
 	const mergeMatrix: Array<Array<{ skip: boolean; rowspan: number; colspan: number }>> = []
 
 	tableRows.forEach((tr, rowIndex) => {
 		const cells: PPTTableCell[] = []
-		// 只取当前行的直属单元格，避免误取嵌套表格单元格
+		// Only use direct cells from the current row to avoid nested table cells.
 		const tdElements = Array.from(tr.cells)
 
 		let colIndex = 0
 
-		// 初始化当前行的合并矩阵
+		// Initialize the merge matrix for the current row.
 		if (!mergeMatrix[rowIndex]) {
 			mergeMatrix[rowIndex] = []
 		}
 
 		tdElements.forEach((td) => {
-			// 跳过被 rowspan 占用的列
+			// Skip columns occupied by rowspan cells.
 			while (mergeMatrix[rowIndex]?.[colIndex]?.skip) {
 				colIndex++
 			}
 
-			// 处理 colspan 和 rowspan
+			// Handle colspan and rowspan.
 			const colspan = parseInt(td.getAttribute("colspan") || "1")
 			const rowspan = parseInt(td.getAttribute("rowspan") || "1")
 			const cell = parseCellElement(td as HTMLTableCellElement, tr, iWindow)
@@ -103,7 +103,7 @@ function parseTableRows(
 			if (rowspan > 1) cell.options = { ...(cell.options ?? {}), rowspan }
 			cells.push(cell)
 
-			// 更新合并矩阵
+			// Update the merge matrix.
 			markMergedCells(mergeMatrix, rowIndex, colIndex, rowspan, colspan)
 
 			colIndex += colspan
@@ -136,9 +136,9 @@ function markMergedCells(
 }
 
 /**
- * 解析单元格元素
- * @param td - 单元格元素 (td/th)
- * @param tr - 所在行元素 (用于继承行样式)
+ * Parse a table cell element.
+ * @param td - Cell element (td/th)
+ * @param tr - Row element used for inherited row styles
  * @param iWindow - iframe window
  */
 function parseCellElement(
@@ -217,15 +217,15 @@ function parseCellElement(
 }
 
 /**
- * 解析单元格边框
- * @param computed - 单元格的计算样式
- * @param trComputed - 行的计算样式 (用于继承行边框)
+ * Parse table cell borders.
+ * @param computed - Computed style for the cell
+ * @param trComputed - Computed style for the row, used for inherited row borders
  */
 function parseCellBorder(
 	computed: CSSStyleDeclaration,
 	trComputed: CSSStyleDeclaration,
 ): PPTTableCellBorder | [PPTTableCellBorder, PPTTableCellBorder, PPTTableCellBorder, PPTTableCellBorder] | undefined {
-	// 单元格边框
+	// Cell borders.
 	let topWidth = parseFloat(computed.borderTopWidth) || 0
 	let rightWidth = parseFloat(computed.borderRightWidth) || 0
 	let bottomWidth = parseFloat(computed.borderBottomWidth) || 0
@@ -241,7 +241,7 @@ function parseCellBorder(
 	let bottomStyle = computed.borderBottomStyle
 	let leftStyle = computed.borderLeftStyle
 
-	// 如果单元格没有边框，尝试从行继承
+	// If the cell has no border, try inheriting from the row.
 	const trTopWidth = parseFloat(trComputed.borderTopWidth) || 0
 	const trRightWidth = parseFloat(trComputed.borderRightWidth) || 0
 	const trBottomWidth = parseFloat(trComputed.borderBottomWidth) || 0
@@ -268,7 +268,7 @@ function parseCellBorder(
 		leftStyle = trComputed.borderLeftStyle
 	}
 
-	// 没有边框
+	// No border.
 	if (topWidth === 0 && rightWidth === 0 && bottomWidth === 0 && leftWidth === 0) {
 		return undefined
 	}
@@ -287,7 +287,7 @@ function parseCellBorder(
 		}
 	}
 
-	// 构建单边边框（支持透明度）
+	// Build per-side borders, including transparency.
 	const buildBorder = (
 		width: number,
 		color: string,
@@ -301,7 +301,7 @@ function parseCellBorder(
 			pt: width * 0.75,
 			type: mapBorderStyle(style),
 		}
-		// 获取透明度并添加到边框对象
+		// Add transparency to the border object when needed.
 		const transparency = getTransparency(color)
 		if (transparency > 0) {
 			border.transparency = transparency
@@ -309,7 +309,7 @@ function parseCellBorder(
 		return border
 	}
 
-	// 如果四边相同，返回单一边框
+	// Return a single border when all four sides are identical.
 	if (
 		topWidth === rightWidth &&
 		rightWidth === bottomWidth &&
@@ -324,7 +324,7 @@ function parseCellBorder(
 		return buildBorder(topWidth, topColor, topStyle)
 	}
 
-	// 四边不同，返回数组 [top, right, bottom, left]
+	// Four different sides: return [top, right, bottom, left].
 	return [
 		buildBorder(topWidth, topColor, topStyle),
 		buildBorder(rightWidth, rightColor, rightStyle),

@@ -1,9 +1,9 @@
 import { colorToHex, hasVisibleBackground } from "../shared/color"
 
 /**
- * 提取 body/html 元素的背景色，作为 PPT 幻灯片背景。
- * 优先取 body，若 body 透明则取 html。
- * 返回 hex 色值（不含 #），若无可见背景色则返回 null。
+ * Extract the body/html background color for use as the PPT slide background.
+ * Prefer body; if body is transparent, use html.
+ * Return a hex color without #, or null if there is no visible background color.
  */
 export function extractBodyBackground(doc: Document, win: Window): string | null {
 	const body = doc.body

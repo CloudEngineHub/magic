@@ -19,12 +19,12 @@ import {
 import { dispatchPrimaryParsers } from "../registry/element-registry"
 
 /**
- * 将 ElementNode 转换为 PPTNode 数组
+ * Convert an ElementNode into PPTNode objects
  *
- * 节点产出策略：
- *   1) 主元素（IMG / TABLE / VIDEO|AUDIO / CANVAS|SVG）→ 由 element-registry 派发
- *   2) 通用样式产物（背景图 / 形状 / 单边边框 / 文本）→ 固定流水顺序追加
- *      （顺序敏感，会影响 zOrder 与多产物互相覆盖关系）
+ * Node emission strategy:
+ *   1) Primary elements (IMG / TABLE / VIDEO|AUDIO / CANVAS|SVG) -> dispatched by element-registry
+ *   2) General style artifacts (background image / shape / per-side border / text) -> appended in fixed pipeline order
+ *      (order-sensitive, affects zOrder and overlap between artifacts)
  */
 export function elementToNode(
 	node: ElementNode,
@@ -50,15 +50,15 @@ export function elementToNode(
 	const hasBgImage = !isMultiGradientBg && hasBackgroundImage(node)
 
 	if (isMultiGradientBg) {
-		// 默认实现不对多重渐变做截图降级，扩展实现可覆盖该逻辑。
+		// The default implementation does not screenshot-fallback multi-gradient backgrounds; extensions can override this.
 	} else if (hasBgImage) {
 		const bgImageNode = parseImage(node, { ...base, zOrder: base.zOrder - 1 }, config, iWindow)
 		if (bgImageNode) nodes.push(bgImageNode)
 	}
 
 	if (hasShapeContent(node)) {
-		// CSS 渲染顺序：background-color < background-image < content
-		// 有背景图时，shape (fill) 需要更低的 zOrder
+		// CSS paint order: background-color < background-image < content
+		// When a background image exists, the shape fill needs a lower zOrder
 		const shapeZOrder = hasBgImage ? base.zOrder - 2 : (isImageElement(node) ? base.zOrder - 1 : base.zOrder)
 		const shapeBase = { ...base, zOrder: shapeZOrder }
 		const fragmentedShapeNodes = isMultiGradientBg ? [] : parseFragmentedShapeNodes(node, shapeBase, config)
@@ -81,7 +81,7 @@ export function elementToNode(
 }
 
 /**
- * 批量转换元素
+ * Transform elements in batch
  */
 export function transformElements(
 	elements: ElementNode[],

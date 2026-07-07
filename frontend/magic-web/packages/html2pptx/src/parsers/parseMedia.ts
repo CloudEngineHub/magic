@@ -1,6 +1,6 @@
 /**
- * 媒体解析器
- * 将 HTML <video> 和 <audio> 转换为 PPT 媒体格式
+ * Media parser.
+ * Converts HTML <video> and <audio> elements into PPT media nodes.
  */
 
 import type { ElementNode } from "../ir/dom"
@@ -10,7 +10,7 @@ import { log, LogLevel } from "../logger"
 import { pxToInch } from "../shared/unit"
 
 /**
- * 解析媒体元素
+ * Parse a media element.
  */
 export function parseMedia(
 	node: ElementNode,
@@ -32,7 +32,7 @@ export function parseMedia(
 }
 
 /**
- * 解析 video 元素
+ * Parse a video element.
  */
 function parseVideoElement(
 	node: ElementNode,
@@ -101,7 +101,7 @@ function resolveVideoMediaBase(
 }
 
 /**
- * 解析 audio 元素
+ * Parse an audio element.
  */
 function parseAudioElement(
 	audio: HTMLAudioElement,
@@ -127,7 +127,7 @@ function parseAudioElement(
 
 
 /**
- * 获取文件扩展名
+ * Get the file extension from a media URL.
  */
 function getFileExtension(url: string): string | undefined {
 	try {

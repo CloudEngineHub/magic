@@ -6,27 +6,27 @@ import { runExport } from "./pipeline/export-slides"
 import type { Html2PptxRuntime } from "./runtime"
 
 /**
- * 导出 HTML 为 PPTX 文件
+ * Export HTML as a PPTX file
  *
- * 支持并发：每次调用返回独立的 { promise, cancel }，互不干扰。
+ * Supports concurrent exports: each call returns an independent { promise, cancel } pair.
  *
- * @param content - HTML 内容字符串，或多页 HTML 数组
- * @param options - 导出选项
- * @returns ExportHandle — promise 等待完成，cancel() 取消本次导出
+ * @param content - HTML content string, or an array of HTML pages
+ * @param options - export options
+ * @returns ExportHandle - promise waits for completion, and cancel() aborts this export
  *
  * @example
  * ```ts
- * // 基础用法
+ * // Basic usage
  * const { promise } = exportPPTX('<div class="slide">...</div>')
  * await promise
  *
- * // 接入 console
+ * // Use console logging
  * exportPPTX(html, { logger: console })
  *
- * // 只收 warn 以上
+ * // Only collect warn and above
  * exportPPTX(html, { logger: console, logLevel: "warn" })
  *
- * // 并发导出，各自独立取消
+ * // Concurrent exports with independent cancellation
  * const exportA = exportPPTX(htmlA)
  * const exportB = exportPPTX(htmlB, { fileName: 'b.pptx' })
  * exportA.cancel()

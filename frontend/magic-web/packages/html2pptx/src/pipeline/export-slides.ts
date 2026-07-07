@@ -23,7 +23,7 @@ export interface ExportTaskInput {
 	htmlSlides: string[]
 	sandbox: SandboxInstance
 	skipFailedPages: boolean
-	/** 任意尺寸模式（自适应宽度 + 自动分页），默认 false 走 PPT 固定尺寸模式 */
+	/** Auto-size mode (adaptive width + automatic pagination); default false uses fixed-size PPT mode */
 	autoSize: boolean
 	onSlideProgress?: (context: ExportPageContext) => void
 	onResourceError?: (error: ResourceLoadError) => void
@@ -41,15 +41,15 @@ interface RenderedSlide {
 }
 
 /**
- * 执行单文件多页导出：依次渲染每页 HTML 并写入同一个 PPTX。
+ * Run a single-file multi-page export: render each HTML page in sequence and write it into one PPTX.
  *
- * 两种模式：
- * - PPT 模式（`autoSize=false`，默认）：严格按 `config.slideWidth/slideHeight` 输出，
- *   超出内容由 PPT 页面边界裁切，不测量、不分页、不做宽度上限校验。
- * - 任意尺寸模式（`autoSize=true`）：按 HTML 真实尺寸自适应：
- *   - 真实高度超出 → 按 `slideHeight` 切片为多页
- *   - 真实宽度超出 → 自动扩展 `slideWidth`，所有页共享一个最大宽度 layout
- *   - 任一页宽度 > 5376px（PPT 56 英寸上限）则直接 throw
+ * Two modes:
+ * - PPT mode (`autoSize=false`, default): output strictly using `config.slideWidth/slideHeight`,
+ *   overflowing content is clipped by PPT page bounds; no measuring, pagination, or width-limit checks are performed.
+ * - Auto-size mode (`autoSize=true`): adapt to the actual HTML dimensions:
+ *   - Actual height overflow -> split into multiple pages by `slideHeight`
+ *   - Actual width overflow -> expand `slideWidth`; all pages share the maximum-width layout
+ *   - Throw directly if any page width exceeds 5376px, the PPT 56-inch limit
  */
 export async function runExport({
 	config,
@@ -179,8 +179,8 @@ async function resolveFontsWithResolver(
 }
 
 /**
- * 单页宽度超过 PPT 56 英寸硬上限时直接报错。
- * 缩放降级会破坏"1:1 还原"的承诺，所以选择显式失败。
+ * Fail immediately when a single page exceeds PPT's hard 56-inch width limit.
+ * Scale-down fallback would break the 1:1 fidelity promise, so this fails explicitly.
  */
 function assertWithinPptWidthLimit(widthPx: number, slideIndex: number): void {
 	if (widthPx > MAX_PPT_PAGE_PX) {
@@ -191,9 +191,9 @@ function assertWithinPptWidthLimit(widthPx: number, slideIndex: number): void {
 }
 
 /**
- * 构建最终统一的 PPT layout 配置：
- * - 任意尺寸模式：slideWidth/htmlWidth 取所有页中的最大测量宽度
- * - PPT 模式：原样返回 baseConfig，严格遵循调用方传入的固定尺寸
+ * Build the final unified PPT layout configuration:
+ * - Auto-size mode: slideWidth/htmlWidth use the maximum measured width across all pages
+ * - PPT mode: return baseConfig unchanged and strictly follow the caller-provided fixed size
  */
 function buildFinalConfig({
 	baseConfig,
@@ -219,8 +219,8 @@ function buildFinalConfig({
 }
 
 /**
- * 任意尺寸模式：把每个输入 HTML 的节点按 slideHeight 切片为若干 PPT 页；
- * PPT 模式：原样输出，每个 HTML 对应单页 PPT，超出部分由页面边界裁切。
+ * Auto-size mode: split each input HTML's nodes into PPT pages by slideHeight;
+ * PPT mode: output as-is, one PPT page per HTML input, with overflow clipped by page bounds.
  */
 function expandSlidesByPagination({
 	renderedSlides,

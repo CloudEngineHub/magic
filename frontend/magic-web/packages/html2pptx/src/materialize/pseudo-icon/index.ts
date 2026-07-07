@@ -9,5 +9,5 @@ export function materializePseudoIcons(_document: Document, _window: Window): Ic
 }
 
 export function restoreIcons(_backups: IconBackup[]): void {
-	// 默认实现不实体化伪元素图标，扩展实现可覆盖该逻辑。
+	// The default implementation does not materialize pseudo-element icons; extensions can override this logic.
 }
