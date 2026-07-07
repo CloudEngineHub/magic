@@ -780,6 +780,7 @@ const PPTSlide = observer(function PPTSlide({
 				isFullscreen={isFullscreen}
 				isEditMode={isEditMode}
 				isVisible={isActive}
+				isTabActive={isActive}
 				isSaving={isSaving}
 				saveEditContent={saveEditContent}
 				fileId={fileId}
