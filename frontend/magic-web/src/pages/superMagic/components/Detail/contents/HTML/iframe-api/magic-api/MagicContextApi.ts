@@ -35,9 +35,8 @@ export class MagicContextApi extends BaseRuntimeBridgeApiPlugin {
 
 	install(): void {
 		if (!window.Magic) window.Magic = {}
-		if (window.Magic.getContext) return
 
-		window.Magic.getContext = (): Promise<MagicContext> => {
+		const requestContext = (): Promise<MagicContext> => {
 			return this.request<MagicContext>("MAGIC_CONTEXT_GET_REQUEST", {}, 15000, (data) => {
 				const content = data["content"]
 				if (!content || typeof content !== "object") {
@@ -45,6 +44,17 @@ export class MagicContextApi extends BaseRuntimeBridgeApiPlugin {
 				}
 				return content as MagicContext
 			})
+		}
+
+		const getContextFn = window.Magic.getContext ?? requestContext
+
+		if (!window.Magic.getContext) {
+			window.Magic.getContext = getContextFn
+		}
+
+		window.Magic.context = {
+			...window.Magic.context,
+			getContext: window.Magic.context?.getContext ?? getContextFn,
 		}
 	}
 }

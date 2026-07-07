@@ -1,4 +1,5 @@
 import { memo } from "react"
+import type { ReactNode } from "react"
 import { useTranslation } from "react-i18next"
 
 import { Button } from "@/components/shadcn-ui/button"
@@ -11,6 +12,7 @@ interface SelectModeHeaderProps {
 	onSelectAll: () => void
 	onDeselectAll: () => void
 	onCancel: () => void
+	headerTrailingAction?: ReactNode
 	className?: string
 }
 
@@ -20,6 +22,7 @@ function SelectModeHeader({
 	onSelectAll,
 	onDeselectAll,
 	onCancel,
+	headerTrailingAction,
 	className,
 }: SelectModeHeaderProps) {
 	const { t } = useTranslation("super")
@@ -39,7 +42,10 @@ function SelectModeHeader({
 		<div
 			className={cn("flex h-8 w-full shrink-0 items-center justify-between px-2", className)}
 		>
-			<label className="flex cursor-pointer items-center gap-2 p-0" data-testid="select-mode-header-label">
+			<label
+				className="flex cursor-pointer items-center gap-2 p-0"
+				data-testid="select-mode-header-label"
+			>
 				<Checkbox
 					checked={isIndeterminate ? "indeterminate" : isAllSelected}
 					data-testid="file-select-all-checkbox"
@@ -49,17 +55,22 @@ function SelectModeHeader({
 					{t("topicFiles.selectAll")}
 				</span>
 			</label>
-			<Button
-				variant="outline"
-				size="sm"
-				onClick={onCancel}
-				data-testid="file-select-cancel-button"
-				className="h-7 px-3 py-2"
-			>
-				<span className="text-sm font-medium leading-5">
-					{t("topicFiles.cancelSelect")}
-				</span>
-			</Button>
+			<div className="flex items-center gap-1">
+				<Button
+					variant="outline"
+					size="sm"
+					onClick={onCancel}
+					data-testid="file-select-cancel-button"
+					className="h-7 px-3 py-2"
+				>
+					<span className="text-sm font-medium leading-5">
+						{t("topicFiles.cancelSelect")}
+					</span>
+				</Button>
+				{headerTrailingAction ? (
+					<div className="flex items-center">{headerTrailingAction}</div>
+				) : null}
+			</div>
 		</div>
 	)
 }

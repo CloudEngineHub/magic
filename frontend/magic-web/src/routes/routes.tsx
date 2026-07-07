@@ -11,7 +11,10 @@ import {
 	withFlowNamespaces,
 } from "@/routes/helpers"
 import { superMagicCrewRoutes } from "@/routes/modules/superMagicCrewRoutes"
-import { superMagicMicroAppRoutes } from "@/routes/modules/superMagicMicroAppRoutes"
+import {
+	microAppPublicRoutes,
+	superMagicMicroAppRoutes,
+} from "@/routes/modules/superMagicMicroAppRoutes"
 
 /**
  * @description 路由处理器，需要异步渲染，等待路由生成再渲染再执行对应业务流程
@@ -517,6 +520,7 @@ export function registerRoutes(config: RouteConfig = {}): Array<RouteObject> {
 			path: RoutePath.SuperMagicShare,
 			element: <SuperMagicShare />,
 		},
+		...microAppPublicRoutes,
 		{
 			name: RouteName.SuperMagicFileShare,
 			path: RoutePath.SuperMagicFileShare,

@@ -2517,6 +2517,13 @@
 		"exitEdit": "退出编辑",
 		"fetchFailed": "获取队列列表失败",
 		"missingInfo": "项目或话题信息缺失",
+		"mobile": {
+			"collapse": "收起队列",
+			"count": "{{count}} 条",
+			"emptyContent": "⋯",
+			"expand": "展开队列",
+			"title": "队列中"
+		},
 		"operationInProgress": "该消息正在处理中，请稍后再试",
 		"removeFromQueue": "从队列移除",
 		"sendFailed": "发送消息失败",
@@ -2531,11 +2538,46 @@
 		"updateSuccess": "队列消息已更新"
 	},
 	"microAppPage": {
+		"databasePanel": {
+			"columnKey": "字段 Key",
+			"columnName": "字段名称",
+			"columns": "列",
+			"dataTab": "数据",
+			"dataType": "类型",
+			"loadRowsFailed": "数据加载失败",
+			"loadTableFailed": "表结构加载失败",
+			"loadTablesFailed": "表列表加载失败",
+			"loading": "加载中",
+			"loadingTable": "加载表结构",
+			"next": "下一页",
+			"no": "否",
+			"noColumns": "暂无字段",
+			"noMatchedTables": "没有匹配的表",
+			"noRows": "暂无数据",
+			"noTables": "暂无数据表",
+			"pageInfo": "第 {{page}} / {{totalPages}} 页",
+			"permission": "权限",
+			"previous": "上一页",
+			"refresh": "刷新",
+			"required": "必填",
+			"retry": "重试",
+			"searchTables": "搜索表",
+			"status": "状态",
+			"structureTab": "结构",
+			"title": "数据库",
+			"totalRows": "{{total}} 行",
+			"yes": "是"
+		},
 		"header": {
 			"backToApps": "返回微应用列表",
+			"codeFiles": "代码文件",
 			"entryLabel": "入口",
 			"entryPlaceholder": "选择入口 HTML",
+			"hideConversation": "隐藏对话面板",
+			"hideDatabase": "隐藏数据库",
 			"hideFiles": "隐藏文件列表",
+			"showConversation": "展开对话面板",
+			"showDatabase": "展开数据库",
 			"showFiles": "展开文件列表"
 		},
 		"preview": {
@@ -2545,7 +2587,48 @@
 		"previewDialog": {
 			"description": "文件预览弹窗",
 			"title": "文件预览"
+		},
+		"previewMode": {
+			"default": "默认预览",
+			"phone": "手机预览",
+			"source": "源码预览"
+		},
+		"publish": {
+			"button": "发布",
+			"buttonTooltip": "发布给别人使用",
+			"copyLink": "复制链接",
+			"copyShareText": "复制分享文案",
+			"copySuccess": "链接已复制",
+			"description": "配置访问范围后，其他人可以通过发布链接使用这个微应用。",
+			"loadFailed": "发布信息加载失败",
+			"password": "访问密码",
+			"passwordHint": "密码长度 4-32 位。",
+			"passwordInvalid": "密码长度需为 4-32 位",
+			"publish": "发布",
+			"published": "已发布",
+			"publishedAt": "发布时间：{{time}}",
+			"quickShareDescription": "复制链接或完整分享文案，发送给需要访问的人。",
+			"quickShareTitle": "快捷分享",
+			"resetPassword": "重置密码",
+			"saveFailed": "发布失败，请重试",
+			"saveSuccess": "发布设置已保存",
+			"shareTextCopySuccess": "分享文案已复制",
+			"title": "发布微应用",
+			"unpublish": "下架",
+			"unpublishConfirmContent": "下架后，其他人将无法继续通过发布链接使用这个微应用。",
+			"unpublishConfirmTitle": "确定下架这个微应用吗？",
+			"unpublishFailed": "下架失败，请重试",
+			"unpublishSuccess": "微应用已下架",
+			"update": "保存设置"
 		}
+	},
+	"microAppShare": {
+		"errorTitle": "微应用不可访问",
+		"noEntryDescription": "发布内容中没有可运行的根目录 HTML 文件。",
+		"noEntryTitle": "未找到入口 HTML",
+		"passwordDescription": "请输入发布者设置的访问密码。",
+		"passwordTitle": "访问微应用",
+		"title": "微应用"
 	},
 	"microAppsPage": {
 		"createProject": "新建项目",
@@ -2554,8 +2637,17 @@
 		"emptyTitle": "暂无微应用项目",
 		"errorDescription": "项目列表加载失败，请重试。",
 		"errorTitle": "加载失败",
+		"publishedEmptyDescription": "发布者把微应用分享给你后，会显示在这里。",
+		"publishedEmptyTitle": "暂无可访问的微应用",
 		"refresh": "刷新",
+		"shareType": {
+			"organization": "团队可见",
+			"password": "密码访问",
+			"public": "公开访问"
+		},
 		"subtitle": "当前工作区下的项目",
+		"tabProjects": "我的项目",
+		"tabPublished": "已发布微应用",
 		"title": "微应用"
 	},
 	"mobile": {

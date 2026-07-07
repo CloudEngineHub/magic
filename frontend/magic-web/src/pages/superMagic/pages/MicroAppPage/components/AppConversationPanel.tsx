@@ -2,6 +2,7 @@ import { useMemo } from "react"
 import { observer } from "mobx-react-lite"
 import { useMemoizedFn } from "ahooks"
 import { JSONContent } from "@tiptap/react"
+import { AppWindow } from "lucide-react"
 import ConversationPanelScaffold from "@/pages/superMagic/components/ConversationPanelScaffold"
 import ConversationEmptyState from "@/pages/superMagic/components/ConversationPanelScaffold/ConversationEmptyState"
 import type { SuperMagicMessageItem } from "@/pages/superMagic/components/MessageList/type"
@@ -260,6 +261,7 @@ function AppConversationPanel({
 			currentTopicStatus={selectedTopic?.task_status}
 			handleSendMsg={handleSendMsg}
 			isMessagesLoading={isMessagesInitialLoading}
+			className="px-2 bg-sidebar rounded-none"
 		/>
 	)
 }
@@ -274,9 +276,20 @@ function AppConversationEmptyState({
 	return (
 		<ConversationEmptyState
 			className={className}
+			icon={<AppConversationEmptyIcon variant={variant} />}
 			title="开始对话"
 			subtitle="发送消息开始与 AI 对话"
 			variant={variant}
+		/>
+	)
+}
+
+function AppConversationEmptyIcon({ variant }: { variant: "compact" | "hero" }) {
+	return (
+		<AppWindow
+			className={variant === "hero" ? "size-14" : "size-11"}
+			strokeWidth={1.6}
+			aria-hidden
 		/>
 	)
 }

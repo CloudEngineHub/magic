@@ -2517,6 +2517,13 @@
 		"exitEdit": "Exit Edit",
 		"fetchFailed": "Failed to fetch queue list",
 		"missingInfo": "Project or topic information is missing",
+		"mobile": {
+			"collapse": "Collapse queue",
+			"count": "{{count}} items",
+			"emptyContent": "⋯",
+			"expand": "Expand queue",
+			"title": "Queued"
+		},
 		"operationInProgress": "This message is being processed, please try again later",
 		"removeFromQueue": "Remove from queue",
 		"sendFailed": "Failed to send message",
@@ -2531,11 +2538,46 @@
 		"updateSuccess": "Queue message updated successfully"
 	},
 	"microAppPage": {
+		"databasePanel": {
+			"columnKey": "Column key",
+			"columnName": "Column name",
+			"columns": "columns",
+			"dataTab": "Data",
+			"dataType": "Type",
+			"loadRowsFailed": "Failed to load rows",
+			"loadTableFailed": "Failed to load table schema",
+			"loadTablesFailed": "Failed to load tables",
+			"loading": "Loading",
+			"loadingTable": "Loading table",
+			"next": "Next",
+			"no": "No",
+			"noColumns": "No columns",
+			"noMatchedTables": "No matching tables",
+			"noRows": "No rows",
+			"noTables": "No tables",
+			"pageInfo": "Page {{page}} / {{totalPages}}",
+			"permission": "Permission",
+			"previous": "Previous",
+			"refresh": "Refresh",
+			"required": "Required",
+			"retry": "Retry",
+			"searchTables": "Search tables",
+			"status": "Status",
+			"structureTab": "Structure",
+			"title": "Database",
+			"totalRows": "{{total}} rows",
+			"yes": "Yes"
+		},
 		"header": {
 			"backToApps": "Back to micro apps",
+			"codeFiles": "Code files",
 			"entryLabel": "Entry",
 			"entryPlaceholder": "Select entry HTML",
+			"hideConversation": "Hide conversation",
+			"hideDatabase": "Hide database",
 			"hideFiles": "Hide files",
+			"showConversation": "Show conversation",
+			"showDatabase": "Show database",
 			"showFiles": "Show files"
 		},
 		"preview": {
@@ -2545,7 +2587,48 @@
 		"previewDialog": {
 			"description": "File preview dialog",
 			"title": "File preview"
+		},
+		"previewMode": {
+			"default": "Default preview",
+			"phone": "Phone preview",
+			"source": "Source preview"
+		},
+		"publish": {
+			"button": "Publish",
+			"buttonTooltip": "Publish for others to use",
+			"copyLink": "Copy link",
+			"copyShareText": "Copy share text",
+			"copySuccess": "Link copied",
+			"description": "After you configure access, others can use this micro app through the published link.",
+			"loadFailed": "Failed to load publish settings",
+			"password": "Access password",
+			"passwordHint": "Password must be 4-32 characters.",
+			"passwordInvalid": "Password must be 4-32 characters",
+			"publish": "Publish",
+			"published": "Published",
+			"publishedAt": "Published at: {{time}}",
+			"quickShareDescription": "Copy the link or full share text and send it to people who need access.",
+			"quickShareTitle": "Quick share",
+			"resetPassword": "Reset password",
+			"saveFailed": "Failed to publish. Please retry.",
+			"saveSuccess": "Publish settings saved",
+			"shareTextCopySuccess": "Share text copied",
+			"title": "Publish micro app",
+			"unpublish": "Unpublish",
+			"unpublishConfirmContent": "After unpublishing, others can no longer use this micro app through the published link.",
+			"unpublishConfirmTitle": "Unpublish this micro app?",
+			"unpublishFailed": "Failed to unpublish. Please retry.",
+			"unpublishSuccess": "Micro app unpublished",
+			"update": "Save settings"
 		}
+	},
+	"microAppShare": {
+		"errorTitle": "Micro app unavailable",
+		"noEntryDescription": "The published content does not include a runnable root HTML file.",
+		"noEntryTitle": "No entry HTML found",
+		"passwordDescription": "Enter the access password set by the publisher.",
+		"passwordTitle": "Open micro app",
+		"title": "Micro app"
 	},
 	"microAppsPage": {
 		"createProject": "New Project",
@@ -2554,8 +2637,17 @@
 		"emptyTitle": "No micro app projects",
 		"errorDescription": "Failed to load the project list. Please retry.",
 		"errorTitle": "Load failed",
+		"publishedEmptyDescription": "Micro apps shared with you will appear here.",
+		"publishedEmptyTitle": "No accessible micro apps",
 		"refresh": "Refresh",
+		"shareType": {
+			"organization": "Team visible",
+			"password": "Password access",
+			"public": "Public access"
+		},
 		"subtitle": "Projects in the current workspace",
+		"tabProjects": "My Projects",
+		"tabPublished": "Published Apps",
 		"title": "Micro Apps"
 	},
 	"mobile": {

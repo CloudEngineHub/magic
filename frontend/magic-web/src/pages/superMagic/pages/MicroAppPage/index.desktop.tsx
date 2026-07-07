@@ -1,8 +1,8 @@
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { Suspense, lazy, useCallback, useEffect, useMemo, useState } from "react"
 import { useParams } from "react-router"
 import { observer } from "mobx-react-lite"
 import { useTranslation } from "react-i18next"
-import { Loader2 } from "lucide-react"
+import { File, Loader2, PanelLeftClose, PanelRightOpen } from "lucide-react"
 import { useDebounceFn, useDeepCompareEffect, useLocalStorageState, useMemoizedFn } from "ahooks"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import useNavigate from "@/routes/hooks/useNavigate"
@@ -26,9 +26,11 @@ import { useCreateTopicListener } from "@/pages/superMagic/components/TopicMode"
 import { RouteName } from "@/routes/constants"
 import { AppStoreProvider, useAppStore } from "./context"
 import AppConversationPanel from "./components/AppConversationPanel"
-import MicroAppHeader from "./components/MicroAppHeader"
+import MicroAppHeader, { type MicroAppPreviewMode } from "./components/MicroAppHeader"
 import MicroAppHtmlPreview from "./components/MicroAppHtmlPreview"
+import MicroAppPanelToggleButton from "./components/MicroAppPanelToggleButton"
 import MicroAppPreviewDialog from "./components/MicroAppPreviewDialog"
+import MicroAppPublishDialog from "./components/MicroAppPublishDialog"
 import {
 	collectRootHtmlFiles,
 	getAttachmentId,
@@ -38,10 +40,17 @@ import {
 const SIDEBAR_DEFAULT_PX = 280
 const SIDEBAR_MIN_PX = 220
 const SIDEBAR_MAX_PX = 420
-const MESSAGE_PANEL_WIDTH_PX = 360
+const MESSAGE_PANEL_DEFAULT_PX = 360
+const MESSAGE_PANEL_MIN_PX = 320
+const MESSAGE_PANEL_MAX_PX = 560
+const COLLAPSED_RAIL_WIDTH_PX = 40
 
 const MICRO_APP_SIDEBAR_STORAGE_KEY = "MAGIC:micro-app-page-sidebar-width"
 const MICRO_APP_SIDEBAR_COLLAPSED_KEY = "MAGIC:micro-app-page-sidebar-collapsed"
+const MICRO_APP_MESSAGE_PANEL_STORAGE_KEY = "MAGIC:micro-app-page-message-panel-width"
+const MICRO_APP_MESSAGE_PANEL_COLLAPSED_KEY = "MAGIC:micro-app-page-message-panel-collapsed"
+
+const MicroAppDatabasePanel = lazy(() => import("./components/MicroAppDatabasePanel"))
 
 function MicroAppPageInner({ projectId }: { projectId: string }) {
 	const { t } = useTranslation("super")
@@ -51,6 +60,9 @@ function MicroAppPageInner({ projectId }: { projectId: string }) {
 	const [isInitialAttachmentsLoaded, setIsInitialAttachmentsLoaded] = useState(false)
 	const [selectedEntryFileId, setSelectedEntryFileId] = useState<string | null>(null)
 	const [previewFile, setPreviewFile] = useState<AttachmentItem | null>(null)
+	const [publishDialogOpen, setPublishDialogOpen] = useState(false)
+	const [isDatabasePanelOpen, setIsDatabasePanelOpen] = useState(false)
+	const [previewMode, setPreviewMode] = useState<MicroAppPreviewMode>("desktop")
 	const selectedProject = conversation.selectedProject
 	const selectedTopic = conversation.topicStore.selectedTopic
 	const attachments = store.projectFilesStore.workspaceFileTree
@@ -69,6 +81,8 @@ function MicroAppPageInner({ projectId }: { projectId: string }) {
 	useEffect(() => {
 		setSelectedEntryFileId(null)
 		setPreviewFile(null)
+		setPublishDialogOpen(false)
+		setIsDatabasePanelOpen(false)
 	}, [projectId])
 
 	useDefaultModeModelListRefreshOnMount()
@@ -144,16 +158,37 @@ function MicroAppPageInner({ projectId }: { projectId: string }) {
 		setIsSidebarCollapsed((prev) => !prev)
 	})
 
+	const [isMessagePanelCollapsed, setIsMessagePanelCollapsed] = useLocalStorageState<boolean>(
+		MICRO_APP_MESSAGE_PANEL_COLLAPSED_KEY,
+		{ defaultValue: false },
+	)
+
+	const toggleMessagePanelCollapse = useMemoizedFn(() => {
+		setIsMessagePanelCollapsed((prev) => !prev)
+	})
+
 	const {
 		width: sidebarWidthPx,
 		isDragging: isDraggingSidebar,
-		handleMouseDown: onSidebarResizeStart,
+		handleResizeStart: onSidebarResizeStart,
 	} = useResizablePanel({
 		minWidth: SIDEBAR_MIN_PX,
 		maxWidth: SIDEBAR_MAX_PX,
 		defaultWidth: SIDEBAR_DEFAULT_PX,
 		storageKey: MICRO_APP_SIDEBAR_STORAGE_KEY,
 		direction: "left",
+	})
+
+	const {
+		width: messagePanelWidthPx,
+		isDragging: isDraggingMessagePanel,
+		handleResizeStart: onMessagePanelResizeStart,
+	} = useResizablePanel({
+		minWidth: MESSAGE_PANEL_MIN_PX,
+		maxWidth: MESSAGE_PANEL_MAX_PX,
+		defaultWidth: MESSAGE_PANEL_DEFAULT_PX,
+		storageKey: MICRO_APP_MESSAGE_PANEL_STORAGE_KEY,
+		direction: "right",
 	})
 
 	useEffect(() => {
@@ -255,6 +290,16 @@ function MicroAppPageInner({ projectId }: { projectId: string }) {
 		})
 	})
 
+	const handleOpenPublishDialog = useMemoizedFn(() => {
+		if (!selectedProject?.id || htmlFiles.length === 0) return
+		setPublishDialogOpen(true)
+	})
+
+	const handleToggleDatabasePanel = useMemoizedFn(() => {
+		if (!selectedProject?.id) return
+		setIsDatabasePanelOpen((current) => !current)
+	})
+
 	if (store.initLoading) {
 		return (
 			<div className="flex h-full w-full items-center justify-center">
@@ -281,40 +326,71 @@ function MicroAppPageInner({ projectId }: { projectId: string }) {
 	return (
 		<FileActionVisibilityProvider value={HIDE_COPY_MOVE_SHARE_FILE_AND_TOPIC_ACTIONS}>
 			<div
-				className="flex h-full w-full overflow-hidden rounded-sm border border-border bg-background"
+				className="flex h-full w-full flex-col overflow-hidden rounded-sm border border-border bg-background"
 				data-testid="micro-app-page"
 			>
-				{!isSidebarCollapsed && (
-					<>
-						<aside
-							className="h-full shrink-0 overflow-hidden border-r border-border bg-background p-2"
-							style={{ width: sidebarWidthPx }}
-							data-testid="micro-app-file-sidebar"
-						>
-							<TopicFilesButton {...topicFilesProps} />
-						</aside>
-						<TopicResizeHandle
-							onMouseDown={(event) => onSidebarResizeStart(event)}
-							className={isDraggingSidebar ? "before:opacity-100" : undefined}
-						/>
-					</>
-				)}
+				<MicroAppHeader
+					selectedProject={selectedProject}
+					htmlFiles={htmlFiles}
+					selectedEntryId={
+						selectedEntryFile ? getAttachmentId(selectedEntryFile) : selectedEntryFileId
+					}
+					isDatabasePanelOpen={isDatabasePanelOpen}
+					previewMode={previewMode}
+					onBack={handleBackToMicroApps}
+					onToggleDatabasePanel={handleToggleDatabasePanel}
+					onEntryChange={setSelectedEntryFileId}
+					onPreviewModeChange={setPreviewMode}
+					onPublish={handleOpenPublishDialog}
+				/>
 
-				<main className="flex h-full min-w-0 flex-1 flex-col overflow-hidden">
-					<MicroAppHeader
-						selectedProject={selectedProject}
-						htmlFiles={htmlFiles}
-						selectedEntryId={
-							selectedEntryFile
-								? getAttachmentId(selectedEntryFile)
-								: selectedEntryFileId
-						}
-						isSidebarOpen={!isSidebarCollapsed}
-						onBack={handleBackToMicroApps}
-						onToggleSidebar={toggleSidebarCollapse}
-						onEntryChange={setSelectedEntryFileId}
-					/>
-					<div className="min-h-0 flex-1 overflow-hidden">
+				<div className="flex min-h-0 flex-1 overflow-hidden">
+					{!isSidebarCollapsed && (
+						<>
+							<aside
+								className="flex h-full shrink-0 flex-col overflow-hidden border-r border-border bg-background"
+								style={{ width: sidebarWidthPx }}
+								data-testid="micro-app-file-sidebar"
+							>
+								<div className="min-h-0 flex-1 overflow-hidden py-1">
+									<TopicFilesButton
+										{...topicFilesProps}
+										title={t("microAppPage.header.codeFiles")}
+										headerTrailingAction={
+											<MicroAppPanelToggleButton
+												icon={<PanelLeftClose size={16} />}
+												label={t("microAppPage.header.hideFiles")}
+												testId="micro-app-file-sidebar-collapse"
+												side="right"
+												onClick={toggleSidebarCollapse}
+											/>
+										}
+									/>
+								</div>
+							</aside>
+							<TopicResizeHandle
+								onResizeStart={onSidebarResizeStart}
+								className={isDraggingSidebar ? "before:opacity-100" : undefined}
+							/>
+						</>
+					)}
+					{isSidebarCollapsed ? (
+						<aside
+							className="flex h-full shrink-0 justify-center border-r border-border bg-background py-2"
+							style={{ width: COLLAPSED_RAIL_WIDTH_PX }}
+							data-testid="micro-app-file-sidebar-rail"
+						>
+							<MicroAppPanelToggleButton
+								icon={<File size={16} />}
+								label={t("microAppPage.header.showFiles")}
+								testId="micro-app-file-sidebar-expand"
+								side="right"
+								onClick={toggleSidebarCollapse}
+							/>
+						</aside>
+					) : null}
+
+					<main className="flex h-full min-w-0 flex-1 flex-col overflow-hidden">
 						<MicroAppHtmlPreview
 							entryFile={selectedEntryFile}
 							attachments={attachments}
@@ -323,24 +399,53 @@ function MicroAppPageInner({ projectId }: { projectId: string }) {
 							selectedTopic={selectedTopic}
 							projectId={selectedProject?.id}
 							isLoading={!isInitialAttachmentsLoaded}
+							previewMode={previewMode}
+							onPreviewModeChange={setPreviewMode}
 							onOpenPreview={handleOpenPreview}
 						/>
-					</div>
-				</main>
+					</main>
 
-				<aside
-					className="h-full shrink-0 overflow-hidden border-l border-border bg-background"
-					style={{ width: MESSAGE_PANEL_WIDTH_PX }}
-					data-testid="micro-app-conversation-panel"
-				>
-					<AppConversationPanel
-						selectedProject={selectedProject}
-						topicStore={conversation.topicStore}
-						mentionPanelStore={store.mentionPanelStore}
-						projectFilesStore={store.projectFilesStore}
-						detailPanelVisible
-					/>
-				</aside>
+					{!isMessagePanelCollapsed && (
+						<>
+							<TopicResizeHandle
+								onResizeStart={onMessagePanelResizeStart}
+								className={
+									isDraggingMessagePanel ? "before:opacity-100" : undefined
+								}
+							/>
+							<aside
+								className="h-full shrink-0 overflow-hidden border-l border-border bg-background"
+								style={{ width: messagePanelWidthPx }}
+								data-testid="micro-app-conversation-panel"
+							>
+								<AppConversationPanel
+									selectedProject={selectedProject}
+									topicStore={conversation.topicStore}
+									mentionPanelStore={store.mentionPanelStore}
+									projectFilesStore={store.projectFilesStore}
+									detailPanelVisible
+									isConversationPanelCollapsed={false}
+									onToggleConversationPanel={toggleMessagePanelCollapse}
+								/>
+							</aside>
+						</>
+					)}
+					{isMessagePanelCollapsed ? (
+						<aside
+							className="flex h-full shrink-0 justify-center border-l border-border bg-background py-2"
+							style={{ width: COLLAPSED_RAIL_WIDTH_PX }}
+							data-testid="micro-app-conversation-rail"
+						>
+							<MicroAppPanelToggleButton
+								icon={<PanelRightOpen size={16} />}
+								label={t("microAppPage.header.showConversation")}
+								testId="micro-app-conversation-expand"
+								side="left"
+								onClick={toggleMessagePanelCollapse}
+							/>
+						</aside>
+					) : null}
+				</div>
 
 				<MicroAppPreviewDialog
 					open={previewFile != null}
@@ -350,10 +455,24 @@ function MicroAppPageInner({ projectId }: { projectId: string }) {
 					selectedProject={selectedProject}
 					selectedTopic={selectedTopic}
 					projectId={selectedProject?.id}
-					onOpenChange={(open) => {
-						if (!open) setPreviewFile(null)
-					}}
+					onOpenChange={(open) => !open && setPreviewFile(null)}
 				/>
+				<MicroAppPublishDialog
+					open={publishDialogOpen}
+					projectId={selectedProject?.id}
+					projectName={selectedProject?.project_name}
+					onOpenChange={setPublishDialogOpen}
+				/>
+				{isDatabasePanelOpen ? (
+					<Suspense fallback={null}>
+						<MicroAppDatabasePanel
+							open={isDatabasePanelOpen}
+							projectId={selectedProject?.id}
+							projectName={selectedProject?.project_name}
+							onOpenChange={setIsDatabasePanelOpen}
+						/>
+					</Suspense>
+				) : null}
 			</div>
 		</FileActionVisibilityProvider>
 	)

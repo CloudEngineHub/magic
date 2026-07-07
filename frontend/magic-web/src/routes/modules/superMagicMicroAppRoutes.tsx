@@ -5,6 +5,7 @@ import { RouteName } from "@/routes/constants"
 
 const MicroAppsPage = lazy(() => import("@/pages/superMagic/pages/MicroAppsPage"))
 const MicroAppPage = lazy(() => import("@/pages/superMagic/lazy/MicroAppPage"))
+const MicroAppSharePage = lazy(() => import("@/pages/share/microApp"))
 
 export const superMagicMicroAppRoutes: RouteObject[] = [
 	{
@@ -19,5 +20,13 @@ export const superMagicMicroAppRoutes: RouteObject[] = [
 		name: RouteName.MicroApp,
 		path: `/:clusterCode${RoutePath.MicroApp}`,
 		element: <MicroAppPage />,
+	},
+]
+
+export const microAppPublicRoutes: RouteObject[] = [
+	{
+		name: RouteName.MicroAppShare,
+		path: RoutePath.MicroAppShare,
+		element: <MicroAppSharePage />,
 	},
 ]

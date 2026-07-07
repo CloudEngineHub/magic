@@ -38,6 +38,8 @@ export enum RouteName {
 	MicroApps = "MicroApps",
 	/** 微应用开发页面 */
 	MicroApp = "MicroApp",
+	/** 微应用访问页面 */
+	MicroAppShare = "MicroAppShare",
 	/** 协作邀请 */
 	CollaborationInvite = "CollaborationInvite",
 	/** 用户 - 个人中心（移动端） */
