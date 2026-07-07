@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useState } from "react"
 import type { RefObject } from "react"
 import { Check, Loader2 } from "lucide-react"
 import { useDebounce } from "ahooks"
@@ -14,11 +14,33 @@ import AudioRecordingCard from "./components/AudioRecordingCard"
 import { AudioRecordingDeleteDialog } from "./components/AudioRecordingDeleteDialog"
 import { AudioRecordingRenameDialog } from "./components/AudioRecordingRenameDialog"
 import AudioRecordingsFilters, {
-	resolveDatePresetRange,
 	type AudioRecordingsDatePreset,
 } from "./components/AudioRecordingsFilters"
-import { AudioRecordingsStore } from "./stores/audio-recordings-store"
+import { resolveDatePresetRange } from "./utils/resolve-date-preset-range"
+import { audioRecordingsStore } from "./stores/audio-recordings-store"
 import { resolveRecordingDisplayName } from "./utils/audio-recordings-utils"
+import { useRecordingEntryFacade } from "./hooks/useRecordingEntryFacade"
+import { useAudioRecordingsOptimisticSync } from "./hooks/useAudioRecordingsOptimisticSync"
+import {
+	recordingGroupsService,
+	audioRecordingsService,
+	ALL_RECORDING_GROUP_ID,
+	UNGROUPED_RECORDING_GROUP_ID,
+	type AudioRecordingGroup,
+} from "@/services/audioRecordings"
+import {
+	AudioRecordingGroupManageDialog,
+	AudioRecordingMoveGroupDialog,
+} from "./components/AudioRecordingGroupDialogs"
+import { AudioRecordingSettingsDialog } from "./components/AudioRecordingSettingsDialog"
+import { AudioRecordingsPrimaryActions } from "./components/AudioRecordingsPrimaryActions"
+import { AudioRecordingCopyDialog } from "./components/AudioRecordingCopyDialog"
+import { registerAudioRecordingsShellRefreshHandler } from "./utils/request-audio-recordings-shell-refresh"
+import {
+	patchAudioRecordingsFilterSession,
+	readAudioRecordingsFilterSession,
+} from "./utils/audio-recordings-filter-session"
+import { useAudioRecordingCopyToProject } from "./hooks/useAudioRecordingCopyToProject"
 
 const SEARCH_DEBOUNCE_MS = 300
 
@@ -26,19 +48,68 @@ interface AudioRecordingsDesktopProps {
 	scrollViewportRef?: RefObject<HTMLDivElement | null>
 }
 
-/** Desktop list panel: header, filters, cards, and infinite scroll for audio recordings */
+/** Desktop list panel container driving group selection, settings modal, file imports, and infinite card feed */
 function AudioRecordingsDesktop({ scrollViewportRef }: AudioRecordingsDesktopProps) {
-	const { t } = useTranslation("audioRecordings")
+	const { t } = useTranslation(["audioRecordings", "super"])
 	const navigate = useNavigate()
-	const storeRef = useRef(new AudioRecordingsStore())
-	const store = storeRef.current
+	const store = audioRecordingsStore
+	const facade = useRecordingEntryFacade()
+	const [initialFilterSession] = useState(() => readAudioRecordingsFilterSession())
 
-	const [searchKeyword, setSearchKeyword] = useState("")
+	const [searchKeyword, setSearchKeyword] = useState(initialFilterSession.searchKeyword)
 	const [isSearchComposing, setIsSearchComposing] = useState(false)
-	const [datePreset, setDatePreset] = useState<AudioRecordingsDatePreset>("all")
+	const [datePreset, setDatePreset] = useState<AudioRecordingsDatePreset>(
+		initialFilterSession.datePreset,
+	)
+	const [hasHydratedFilters, setHasHydratedFilters] = useState(false)
 	const [renameTarget, setRenameTarget] = useState<AudioProjectListItem | null>(null)
 	const [deleteTargetIds, setDeleteTargetIds] = useState<string[] | null>(null)
 	const debouncedKeyword = useDebounce(searchKeyword, { wait: SEARCH_DEBOUNCE_MS })
+
+	// Group and Dialog management states
+	const [groups, setGroups] = useState<AudioRecordingGroup[]>([])
+	const [totalGroupCount, setTotalGroupCount] = useState(0)
+	const [ungroupedCount, setUngroupedCount] = useState(0)
+	const [currentGroupId, setCurrentGroupId] = useState(initialFilterSession.groupId)
+	const [groupLoading, setGroupLoading] = useState(false)
+	const [isManageGroupsOpen, setIsManageGroupsOpen] = useState(false)
+	const [isSettingsOpen, setIsSettingsOpen] = useState(false)
+	const [moveTarget, setMoveTarget] = useState<AudioProjectListItem | null>(null)
+
+	// Fetch recording groups metadata
+	const refreshGroups = useCallback(async () => {
+		setGroupLoading(true)
+		try {
+			const result = await recordingGroupsService.listGroups()
+			setGroups(result.groups)
+			setTotalGroupCount(result.totalCount)
+			setUngroupedCount(result.ungroupedCount)
+		} catch (error) {
+			console.error("Failed to load recording groups:", error)
+		} finally {
+			setGroupLoading(false)
+		}
+	}, [])
+
+	const handleRefresh = useCallback(async () => {
+		if (!hasHydratedFilters) return
+		await Promise.all([
+			store.fetchList({ page: 1, keyword: debouncedKeyword.trim() }),
+			refreshGroups(),
+		])
+	}, [store, debouncedKeyword, refreshGroups, hasHydratedFilters])
+
+	const copyController = useAudioRecordingCopyToProject({
+		onSuccess: handleRefresh,
+	})
+
+	// Sync local optimistic items and handle background polling
+	const mergedList = useAudioRecordingsOptimisticSync({
+		storeList: store.list,
+		optimisticItems: facade.optimisticItems,
+		onResolveOptimisticItem: facade.clearOptimisticItem,
+		onRefresh: handleRefresh,
+	})
 
 	const handleAutoLoadMore = useCallback(() => {
 		void store.loadMore()
@@ -52,17 +123,31 @@ function AudioRecordingsDesktop({ scrollViewportRef }: AudioRecordingsDesktopPro
 
 	useEffect(() => {
 		store.registerPollerCallbacks()
+		void refreshGroups()
 		return () => {
 			store.disposePoller()
 			store.reset()
 		}
-	}, [store])
+	}, [store, refreshGroups])
+
+	// Restore query filters before the first fetch so refresh/re-entry uses the saved session state.
+	useEffect(() => {
+		store.hydrateFiltersFromSession(initialFilterSession)
+		setHasHydratedFilters(true)
+	}, [store, initialFilterSession])
+
+	// Keep list + group metadata in sync when a recording finishes on this page.
+	useEffect(() => {
+		return registerAudioRecordingsShellRefreshHandler(handleRefresh)
+	}, [handleRefresh])
 
 	useEffect(() => {
+		if (!hasHydratedFilters) return
 		if (isSearchComposing) return
 		void store.fetchList({ page: 1, keyword: debouncedKeyword.trim() })
 	}, [
 		store,
+		hasHydratedFilters,
 		debouncedKeyword,
 		isSearchComposing,
 		store.summaryFilter,
@@ -70,16 +155,83 @@ function AudioRecordingsDesktop({ scrollViewportRef }: AudioRecordingsDesktopPro
 		store.createdAtEnd,
 		store.sortBy,
 		store.sortOrder,
+		currentGroupId, // Re-query list on group switcher change
 	])
 
+	/** Applies the selected summary tab and mirrors it into the session filter snapshot. */
 	function handleSummaryFilterChange(value: typeof store.summaryFilter) {
 		store.setSummaryFilter(value)
+		patchAudioRecordingsFilterSession({ summaryFilter: value })
 	}
 
+	/** Recomputes rolling date ranges while storing only the stable preset key. */
 	function handleDatePresetChange(value: AudioRecordingsDatePreset) {
 		setDatePreset(value)
 		const range = resolveDatePresetRange(value)
 		store.setDateRange(range.start, range.end)
+		patchAudioRecordingsFilterSession({ datePreset: value })
+	}
+
+	/** Keeps the active group filter aligned across UI state, store queries, and session cache. */
+	function handleGroupChange(groupId: string) {
+		setCurrentGroupId(groupId)
+		store.setWorkspaceId(groupId)
+		patchAudioRecordingsFilterSession({ groupId })
+	}
+
+	/** Persists search text without changing the existing debounce-based request cadence. */
+	function handleSearchKeywordChange(value: string) {
+		setSearchKeyword(value)
+		patchAudioRecordingsFilterSession({ searchKeyword: value })
+	}
+
+	/** Persists the combined sort dropdown as the API-level sort field and direction. */
+	function handleSortChange(sortBy: typeof store.sortBy, sortOrder: typeof store.sortOrder) {
+		store.setSort(sortBy, sortOrder)
+		patchAudioRecordingsFilterSession({ sortBy, sortOrder })
+	}
+
+	// Group Manage callbacks — manage dialog switches list filter after create
+	const handleCreateGroupFromManage = async (name: string) => {
+		const created = await recordingGroupsService.createGroup(name)
+		handleGroupChange(created.id)
+		await refreshGroups()
+		return created
+	}
+
+	// Move dialog create only refreshes groups; selection stays inside the dialog
+	const handleCreateGroupFromMove = async (name: string) => {
+		const created = await recordingGroupsService.createGroup(name)
+		await refreshGroups()
+		return created
+	}
+
+	const handleRenameGroup = async (id: string, name: string) => {
+		await recordingGroupsService.renameGroup(id, name)
+		await refreshGroups()
+	}
+
+	const handleDeleteGroup = async (id: string) => {
+		await recordingGroupsService.deleteGroup(id)
+		if (currentGroupId === id) {
+			handleGroupChange(ALL_RECORDING_GROUP_ID)
+		}
+		await refreshGroups()
+		void store.fetchList({ page: 1, keyword: debouncedKeyword.trim() })
+	}
+
+	// Move item to group callback
+	const handleMoveGroupChange = async (targetGroupId: string) => {
+		if (!moveTarget) return
+		try {
+			await audioRecordingsService.batchMoveProjects([moveTarget.id], targetGroupId)
+			await refreshGroups()
+			void store.fetchList({ page: 1, keyword: debouncedKeyword.trim() })
+			setMoveTarget(null)
+			toast.success(t("super:mobile.recordingEntry.groupSheet.moveSuccess"))
+		} catch {
+			toast.error(t("super:mobile.recordingEntry.groupSheet.moveFailed"))
+		}
 	}
 
 	function handleOpenDetail(item: AudioProjectListItem) {
@@ -108,11 +260,6 @@ function AudioRecordingsDesktop({ scrollViewportRef }: AudioRecordingsDesktopPro
 		})
 	}
 
-	/** Re-fetch page 1 with current filters so users can pick up APP-side status changes */
-	function handleRefresh() {
-		void store.fetchList({ page: 1, keyword: debouncedKeyword.trim() })
-	}
-
 	function handleRenameRequest(item: AudioProjectListItem) {
 		setRenameTarget(item)
 	}
@@ -137,6 +284,8 @@ function AudioRecordingsDesktop({ scrollViewportRef }: AudioRecordingsDesktopPro
 		if (success) {
 			toast.success(t("actions.deleteSuccess"))
 			setDeleteTargetIds(null)
+			// Trigger groups count refresh since projects are deleted
+			void refreshGroups()
 			return
 		}
 
@@ -168,13 +317,22 @@ function AudioRecordingsDesktop({ scrollViewportRef }: AudioRecordingsDesktopPro
 			className="mt-5 flex w-full min-w-0 flex-col gap-5 sm:gap-6"
 			data-testid="audio-recordings-desktop"
 		>
-			<div className="flex min-w-0 flex-col gap-2">
-				<h1 className="break-words bg-gradient-to-br from-foreground via-foreground/90 to-muted-foreground bg-clip-text text-2xl font-bold leading-tight text-transparent sm:text-3xl lg:text-4xl">
-					{t("pageTitle")}
-				</h1>
-				<p className="hidden max-w-2xl break-words text-sm text-muted-foreground">
-					{t("subtitle")}
-				</p>
+			<div className="flex min-w-0 flex-wrap items-start justify-between gap-3">
+				<div className="flex min-w-0 flex-col gap-2">
+					<h1 className="break-words bg-gradient-to-br from-foreground via-foreground/90 to-muted-foreground bg-clip-text text-2xl font-bold leading-tight text-transparent sm:text-3xl lg:text-4xl">
+						{t("pageTitle")}
+					</h1>
+					<p className="hidden max-w-2xl break-words text-sm text-muted-foreground">
+						{t("subtitle")}
+					</p>
+				</div>
+				{/* Desktop creation actions live beside the page title so the filter row stays query-focused. */}
+				<AudioRecordingsPrimaryActions
+					onOpenSettings={() => setIsSettingsOpen(true)}
+					onImportFiles={(files) => void facade.importAudioFiles(files)}
+					onStartRecording={() => void facade.startRecording()}
+					isStartingRecording={facade.startupState === "starting"}
+				/>
 			</div>
 
 			<AudioRecordingsFilters
@@ -185,11 +343,17 @@ function AudioRecordingsDesktop({ scrollViewportRef }: AudioRecordingsDesktopPro
 				sortOrder={store.sortOrder}
 				searchKeyword={searchKeyword}
 				isRefreshing={isRefreshing}
+				groups={groups}
+				totalGroupCount={totalGroupCount}
+				ungroupedCount={ungroupedCount}
+				currentGroupId={currentGroupId}
+				onGroupChange={handleGroupChange}
+				onManageGroups={() => setIsManageGroupsOpen(true)}
 				onSummaryFilterChange={handleSummaryFilterChange}
 				onDatePresetChange={handleDatePresetChange}
-				onSortByChange={(value) => store.setSort(value, store.sortOrder)}
-				onSortOrderChange={(value) => store.setSort(store.sortBy, value)}
-				onSearchKeywordChange={setSearchKeyword}
+				onSortByChange={(value) => handleSortChange(value, store.sortOrder)}
+				onSortOrderChange={(value) => handleSortChange(store.sortBy, value)}
+				onSearchKeywordChange={handleSearchKeywordChange}
 				onSearchCompositionStart={() => setIsSearchComposing(true)}
 				onSearchCompositionEnd={() => setIsSearchComposing(false)}
 				onRefresh={handleRefresh}
@@ -202,7 +366,7 @@ function AudioRecordingsDesktop({ scrollViewportRef }: AudioRecordingsDesktopPro
 				</div>
 			) : null}
 
-			{!store.showInitialSkeleton && store.isEmpty ? (
+			{!store.showInitialSkeleton && mergedList.length === 0 ? (
 				<div
 					className="flex flex-col items-center justify-center rounded-xl border border-dashed border-border py-16 text-center"
 					data-testid="audio-recordings-empty"
@@ -212,12 +376,12 @@ function AudioRecordingsDesktop({ scrollViewportRef }: AudioRecordingsDesktopPro
 				</div>
 			) : null}
 
-			{!store.showInitialSkeleton && store.list.length > 0 ? (
+			{!store.showInitialSkeleton && mergedList.length > 0 ? (
 				<div
 					className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3"
 					data-testid="audio-recordings-card-list"
 				>
-					{store.list.map((item) => (
+					{mergedList.map((item) => (
 						<AudioRecordingCard
 							key={item.id}
 							item={item}
@@ -226,6 +390,11 @@ function AudioRecordingsDesktop({ scrollViewportRef }: AudioRecordingsDesktopPro
 							onOpenProject={(entry) => void handleOpenProjectDetail(entry)}
 							onRename={handleRenameRequest}
 							onDelete={handleDeleteRequest}
+							onCopyToProject={(entry) => {
+								void copyController.openCopyToProject(entry)
+							}}
+							onRetry={(entry) => void facade.retryImport(entry.id)}
+							onMoveToGroup={setMoveTarget}
 							isSubmitting={store.isSubmittingSummary(item.id)}
 						/>
 					))}
@@ -239,7 +408,7 @@ function AudioRecordingsDesktop({ scrollViewportRef }: AudioRecordingsDesktopPro
 				</div>
 			) : null}
 
-			{!store.hasMore && store.list.length > 0 && !store.loading ? (
+			{!store.hasMore && mergedList.length > 0 && !store.loading ? (
 				<div
 					className="flex items-center justify-center gap-1 py-2 opacity-30"
 					data-testid="audio-recordings-no-more"
@@ -266,6 +435,34 @@ function AudioRecordingsDesktop({ scrollViewportRef }: AudioRecordingsDesktopPro
 				onClose={() => setDeleteTargetIds(null)}
 				onConfirm={handleDeleteConfirm}
 			/>
+
+			<AudioRecordingGroupManageDialog
+				open={isManageGroupsOpen}
+				onOpenChange={setIsManageGroupsOpen}
+				groups={groups}
+				onCreateGroup={handleCreateGroupFromManage}
+				onRenameGroup={handleRenameGroup}
+				onDeleteGroup={handleDeleteGroup}
+				isSubmitting={groupLoading}
+			/>
+
+			<AudioRecordingMoveGroupDialog
+				open={moveTarget != null}
+				onOpenChange={(open) => {
+					if (!open) setMoveTarget(null)
+				}}
+				groups={groups}
+				ungroupedCount={ungroupedCount}
+				selectedGroupId={moveTarget?.workspace_id ?? UNGROUPED_RECORDING_GROUP_ID}
+				onSelect={handleMoveGroupChange}
+				onCreateGroup={handleCreateGroupFromMove}
+				onRenameGroup={handleRenameGroup}
+				onDeleteGroup={handleDeleteGroup}
+				isSubmitting={groupLoading}
+			/>
+
+			<AudioRecordingSettingsDialog open={isSettingsOpen} onOpenChange={setIsSettingsOpen} />
+			<AudioRecordingCopyDialog controller={copyController} />
 		</div>
 	)
 }

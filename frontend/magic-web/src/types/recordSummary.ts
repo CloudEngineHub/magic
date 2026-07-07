@@ -78,6 +78,11 @@ export interface RecordingSession {
 	 * 音频源配置
 	 */
 	audioSource?: AudioSourceConfig
+	/**
+	 * Whether realtime transcription is enabled for this session.
+	 * Missing means legacy sessions keep the historical default of enabled.
+	 */
+	transcriptionEnabled?: boolean
 }
 
 // 合并后的分片数据

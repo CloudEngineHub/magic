@@ -18,6 +18,7 @@ vi.mock("react-i18next", async (importOriginal) => {
 				if (key === "workspace.addWorkspace") return "添加工作区"
 				if (key === "mobile.shell.menuAria") return "菜单"
 				if (key === "workspace.sharedWorkspace") return "共享工作区"
+				if (key === "workspace.unnamedWorkspace") return "未命名工作区"
 				if (key === "workspace.collaborationProjectsDescV2") return "他人共享的项目"
 				if (key === "workspace.noWorkspaces") return "暂无工作区"
 				if (key === "mobile.emptyState.variants.workspace.title") return "暂无工作空间"
@@ -84,8 +85,8 @@ vi.mock("@/pages/superMagicMobile/components/MobileShell", () => ({
 			{children}
 		</button>
 	),
-	MobileShellSidebarToggleButton: ({ testId }: { testId: string }) => (
-		<button type="button" data-testid={testId}>
+	MobileShellSidebarToggleButton: ({ testId }: { testId?: string }) => (
+		<button type="button" data-testid={testId ?? "mobile-shell-menu-button"}>
 			menu
 		</button>
 	),
@@ -157,6 +158,32 @@ describe("WorkspaceListView", () => {
 			"取消置顶",
 		)
 		expect(screen.getByTestId("workspace-item-ws-pinned-pin-badge")).not.toBeNull()
+	})
+
+	it("renders unnamed fallback for blank workspace names", () => {
+		render(
+			<WorkspaceListView
+				{...defaultProps}
+				workspaces={[
+					{
+						id: "ws-blank",
+						name: "   ",
+						is_archived: 0,
+						is_pinned: false,
+						current_topic_id: "topic-blank",
+						current_project_id: null,
+						workspace_status: WorkspaceStatus.FINISHED,
+						cooperate_project_count: 0,
+						project_count: 0,
+						workspace_type: "default",
+					},
+				]}
+				isWorkspaceEmpty={false}
+			/>,
+		)
+
+		expect(screen.getByText("未命名工作区")).toBeInTheDocument()
+		expect(screen.queryByText("-")).toBeNull()
 	})
 
 	it("renders pin swipe action for unpinned workspaces", () => {

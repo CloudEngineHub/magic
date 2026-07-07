@@ -15,6 +15,7 @@ export default memo(function ShareNameField(props: ShareNameFieldProps) {
 		attachments = [],
 		shareProject = false,
 		projectName,
+		projectMode,
 	} = props
 
 	const { t } = useTranslation("super")
@@ -28,6 +29,7 @@ export default memo(function ShareNameField(props: ShareNameFieldProps) {
 		attachments,
 		shareProject,
 		projectName,
+		projectMode,
 	})
 
 	return (

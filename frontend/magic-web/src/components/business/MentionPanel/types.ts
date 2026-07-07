@@ -507,6 +507,7 @@ export interface MenuItemProps extends BaseComponentProps {
 	item: MentionItem
 	selected?: boolean
 	onClick?: (event?: React.MouseEvent) => void
+	onCheckboxClick?: (event?: React.MouseEvent) => void
 	onDelete?: (item: MentionItem) => void
 	isSearch?: boolean
 	t: I18nTexts

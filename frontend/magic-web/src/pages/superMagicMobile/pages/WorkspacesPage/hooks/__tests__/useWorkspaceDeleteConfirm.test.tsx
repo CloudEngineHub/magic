@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react"
+import { fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { describe, expect, it, vi } from "vitest"
 
 import { useWorkspaceDeleteConfirm } from "../useWorkspaceDeleteConfirm"
@@ -45,8 +45,10 @@ vi.mock("@/components/base-mobile/MagicPopup", () => ({
 
 function TestHarness({
 	onDeleteWorkspace,
+	workspaceName = "测试工作区",
 }: {
 	onDeleteWorkspace: (id: string) => Promise<void>
+	workspaceName?: string
 }) {
 	const { requestDeleteWorkspace, deleteConfirmNode } = useWorkspaceDeleteConfirm({
 		onDeleteWorkspace,
@@ -60,7 +62,7 @@ function TestHarness({
 				onClick={() =>
 					requestDeleteWorkspace({
 						id: "ws-1",
-						name: "测试工作区",
+						name: workspaceName,
 					} as never)
 				}
 			>
@@ -82,6 +84,19 @@ describe("useWorkspaceDeleteConfirm", () => {
 		)
 
 		fireEvent.click(screen.getByTestId("mobile-workspace-delete-confirm-confirm"))
-		expect(onDeleteWorkspace).toHaveBeenCalledWith("ws-1")
+		await waitFor(() => {
+			expect(onDeleteWorkspace).toHaveBeenCalledWith("ws-1")
+		})
+	})
+
+	it("uses unnamed workspace fallback for blank names", () => {
+		const onDeleteWorkspace = vi.fn(async () => undefined)
+		render(<TestHarness onDeleteWorkspace={onDeleteWorkspace} workspaceName="   " />)
+
+		fireEvent.click(screen.getByTestId("trigger-delete"))
+
+		expect(screen.getByTestId("mobile-workspace-delete-confirm-message")).toHaveTextContent(
+			"未命名工作区",
+		)
 	})
 })

@@ -30,7 +30,14 @@ function ClawPlaygroundDesktop() {
 	const { t: tSuper } = useTranslation("super")
 	const clawBrandValues = getClawBrandTranslationValues()
 	const navigate = useNavigate()
-	const { code, store, selectedProject, attachments, attachmentList } = useClawPlaygroundCore()
+	const {
+		code,
+		store,
+		selectedProject,
+		attachments,
+		attachmentList,
+		checkAttachmentsNowDebounced,
+	} = useClawPlaygroundCore()
 	const { dialog, handleConfirmUpgradeSandbox } = useClawSandboxUpgradeAction({ store })
 	const detailRef = useRef<DetailRef>(null)
 	const [userSelectDetail, setUserSelectDetail] = useState<unknown>()
@@ -176,6 +183,7 @@ function ClawPlaygroundDesktop() {
 						detailPanelVisible={shouldShowDetailPanel}
 						clawCode={code}
 						onOpenSkillsPanel={() => setIsSkillsPanelOpen(true)}
+						onTerminalTopicStatusChange={checkAttachmentsNowDebounced}
 					/>
 				)}
 			/>

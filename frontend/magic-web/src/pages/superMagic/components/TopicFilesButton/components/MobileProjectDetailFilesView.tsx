@@ -797,12 +797,14 @@ function MobileProjectDetailFilesView({
 		return (
 			<div
 				key={key}
+				data-file-id={item.file_id || undefined}
+				data-file-kind="folder"
+				data-testid="project-detail-mobile-file-row"
 				className={cn(
 					"overflow-hidden bg-card",
 					isChatSheetVariant ? "rounded-xl" : "rounded-xl",
 				)}
 				style={isChatSheetVariant ? { boxShadow: CHAT_SHEET_CARD_SHADOW } : undefined}
-				data-testid="mobile-folder-item"
 			>
 				<div
 					className={cn(
@@ -849,13 +851,15 @@ function MobileProjectDetailFilesView({
 		return (
 			<div
 				key={key}
+				data-file-id={item.file_id || undefined}
+				data-file-kind="file"
+				data-testid="project-detail-mobile-file-row"
 				className={cn(
 					"overflow-hidden bg-card",
 					isChatSheetVariant ? "rounded-xl" : "rounded-xl",
 					isActive && "ring-1 ring-foreground/10",
 				)}
 				style={isChatSheetVariant ? { boxShadow: CHAT_SHEET_CARD_SHADOW } : undefined}
-				data-testid="mobile-file-item"
 			>
 				<div
 					className={cn(
@@ -1013,26 +1017,26 @@ function MobileProjectDetailFilesView({
 							)}
 						</div>
 					</MagicPullToRefresh>
-
-					{/* 添加按钮占据与原型一致的底栏上方位置；进入多选后隐藏，让底部操作区成为唯一主操作。 */}
-					{allowEdit && !hasSelection && (
-						<Button
-							type="button"
-							size="icon"
-							className={cn(
-								"absolute bottom-1 right-2 z-20 h-12 w-12 rounded-full bg-foreground text-background hover:bg-foreground/90",
-							)}
-							onClick={() => setAddSheetOpen(true)}
-							aria-label={t("projectDetail.fabFilesAria")}
-							data-testid="project-detail-files-add-button"
-						>
-							<Plus className="size-[22px]" strokeWidth={2} />
-						</Button>
-					)}
 				</ScrollEdgeFadeContainer>
+
+				{/* Keep the file action FAB outside ScrollEdgeFadeContainer's isolated stacking context so the bottom search shadow cannot cover it. */}
+				{allowEdit && !hasSelection && (
+					<Button
+						type="button"
+						size="icon"
+						className={cn(
+							"absolute bottom-1 right-2 z-30 h-12 w-12 rounded-full bg-foreground text-background hover:bg-foreground/90",
+						)}
+						onClick={() => setAddSheetOpen(true)}
+						aria-label={t("projectDetail.fabFilesAria")}
+						data-testid="project-detail-files-add-button"
+					>
+						<Plus className="size-[22px]" strokeWidth={2} />
+					</Button>
+				)}
 			</div>
 
-			<div className="relative shrink-0 bg-mobile-background">
+			<div className="relative z-10 shrink-0 bg-mobile-background">
 				{hasSelection ? (
 					<MobileFilesSelectionBar
 						isAllSelected={isAllSelected}

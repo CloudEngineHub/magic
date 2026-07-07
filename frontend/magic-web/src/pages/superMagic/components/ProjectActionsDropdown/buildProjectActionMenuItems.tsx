@@ -1,4 +1,4 @@
-import { isCommercial } from "@/utils/env"
+import { isMagicApp } from "@/utils/devices"
 import { IconLink, IconUsersPlus, IconLayersLinked } from "@tabler/icons-react"
 import { MenuProps } from "antd"
 import { TFunction } from "i18next"
@@ -38,6 +38,7 @@ export function buildProjectActionMenuItems<T extends ProjectItemLike>({
 	onAddWorkspaceShortcut,
 	onCancelWorkspaceShortcut,
 	onShortcutNavigateToWorkspace,
+	onOpenInNewWindow,
 	onCopyCollaborationLink,
 	onTransferProject,
 }: BuildProjectActionMenuItemsParams<T>): Exclude<MenuProps["items"], undefined> {
@@ -45,6 +46,8 @@ export function buildProjectActionMenuItems<T extends ProjectItemLike>({
 	const isOwnerStatus = isOwner(item.user_role)
 	const isWorkspaceShortcutProjectStatus = isWorkspaceShortcutProject(item)
 	const hasBoundWorkspace = Boolean(item.bind_workspace_id && item.bind_workspace_id !== "0")
+	// Magic App WebView has no stable multi-window desktop semantics, so hide this browser-only action.
+	const canOpenInNewWindow = !isMagicApp && !!onOpenInNewWindow
 
 	return normalizeVisibleMenuItems([
 		{
@@ -58,7 +61,7 @@ export function buildProjectActionMenuItems<T extends ProjectItemLike>({
 					<span>{t("project.openInNewWindow")}</span>
 				</div>
 			),
-			visible: true,
+			visible: canOpenInNewWindow,
 		},
 		{
 			key: ProjectActionMenuKey.Pin,

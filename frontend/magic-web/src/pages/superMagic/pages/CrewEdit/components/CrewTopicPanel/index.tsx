@@ -52,6 +52,7 @@ interface CrewTopicPanelProps {
 	crewId: string
 	mentionPanelStore: MentionPanelStore
 	projectFilesStore: ProjectFilesStore
+	onTerminalTopicStatusChange?: () => void
 }
 
 function CrewTopicPanel({
@@ -67,10 +68,12 @@ function CrewTopicPanel({
 	topicStore,
 	mentionPanelStore,
 	projectFilesStore,
+	onTerminalTopicStatusChange,
 }: CrewTopicPanelProps) {
 	const { t } = useTranslation("crew/create")
 	const { conversation } = useCrewEditStore()
 	const selectedTopic = topicStore.selectedTopic
+	const attachments = projectFilesStore.workspaceFileTree
 	const sharedTopicModelStore = useMemo(() => createSuperMagicTopicModelStore(), [])
 
 	useRefreshTopicDetailOnTaskComplete({
@@ -93,6 +96,7 @@ function CrewTopicPanel({
 		topicStore,
 		selectedTopic,
 		isSelectedTopicMessagesReady,
+		onTerminalTopicStatusChange,
 	})
 	const { messages, showLoading } = useTopicConversationLoading({
 		selectedTopic,
@@ -181,6 +185,7 @@ function CrewTopicPanel({
 			setSelectedTopic: topicStore.setSelectedTopic,
 			mentionPanelStore,
 			projectFilesStore,
+			attachments,
 			topicModelStore,
 			layoutConfig: DEFAULT_LAYOUT_CONFIG,
 			showLoading,
@@ -215,6 +220,7 @@ function CrewTopicPanel({
 		topicStore,
 		mentionPanelStore,
 		projectFilesStore,
+		attachments,
 		topicModelStore,
 		showLoading,
 		crewId,

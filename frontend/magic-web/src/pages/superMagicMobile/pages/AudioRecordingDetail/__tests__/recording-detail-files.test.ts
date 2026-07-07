@@ -1,0 +1,266 @@
+import { describe, expect, it } from "vitest"
+import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks/types"
+import {
+	buildRecordingDetailFileMap,
+	flattenRecordingAttachments,
+} from "../utils/recording-detail-files"
+import type { MagicProjectConfig } from "../types"
+
+/** Builds a minimal attachment row so file-map tests stay focused on lookup behavior. */
+function createAttachment(overrides: Partial<AttachmentItem> = {}): AttachmentItem {
+	return {
+		file_id: "file-mock-001",
+		file_name: "mock-file.md",
+		filename: "mock-file.md",
+		file_extension: "md",
+		is_directory: false,
+		path: "/mock-file.md",
+		children: [],
+		...overrides,
+	}
+}
+
+/** Builds a directory-like attachment node for tree flattening scenarios. */
+function createFolder(
+	name: string,
+	children: AttachmentItem[],
+	overrides: Partial<AttachmentItem> = {},
+): AttachmentItem {
+	return {
+		file_id: `folder-${name}`,
+		name,
+		path: `/${name}`,
+		is_directory: true,
+		children,
+		...overrides,
+	}
+}
+
+/** Creates a stable config object that mirrors magic.project.js file mappings. */
+function createMagicProjectConfig(files: Record<string, string>): MagicProjectConfig {
+	return {
+		version: "1.0.0",
+		type: "audio",
+		name: "Mock recording bundle",
+		files,
+	}
+}
+
+describe("recording detail files", () => {
+	it("flattens tree and list attachments without duplicating the same file", () => {
+		const transcript = createAttachment({
+			file_id: "file-transcript-001",
+			file_name: "transcript.md",
+			filename: "transcript.md",
+			path: "/transcript.md",
+		})
+		const audio = createAttachment({
+			file_id: "file-audio-001",
+			file_name: "session.wav",
+			filename: "session.wav",
+			file_extension: "wav",
+			path: "/session.wav",
+		})
+
+		const result = flattenRecordingAttachments(
+			[createFolder("recording", [transcript, audio])],
+			[transcript],
+		)
+
+		expect(result).toEqual([transcript, audio])
+	})
+
+	it("prefers configured files from magic.project.js and keeps summary tabs in stable order", () => {
+		const files = [
+			createAttachment({
+				file_id: "file-audio-001",
+				file_name: "audio/session.wav",
+				filename: "session.wav",
+				file_extension: "wav",
+				path: "/audio/session.wav",
+				relative_file_path: "audio/session.wav",
+			}),
+			createAttachment({
+				file_id: "file-transcript-001",
+				file_name: "transcript/full.md",
+				filename: "full.md",
+				path: "/transcript/full.md",
+				relative_file_path: "transcript/full.md",
+			}),
+			createAttachment({
+				file_id: "file-notes-001",
+				file_name: "notes/live.md",
+				filename: "live.md",
+				path: "/notes/live.md",
+				relative_file_path: "notes/live.md",
+			}),
+			createAttachment({
+				file_id: "file-summary-001",
+				file_name: "summary/meeting-summary.md",
+				filename: "meeting-summary.md",
+				path: "/summary/meeting-summary.md",
+				relative_file_path: "summary/meeting-summary.md",
+			}),
+			createAttachment({
+				file_id: "file-topics-001",
+				file_name: "summary/topics.md",
+				filename: "topics.md",
+				path: "/summary/topics.md",
+				relative_file_path: "summary/topics.md",
+			}),
+			createAttachment({
+				file_id: "file-intent-001",
+				file_name: "summary/intent.md",
+				filename: "intent.md",
+				path: "/summary/intent.md",
+				relative_file_path: "summary/intent.md",
+			}),
+			createAttachment({
+				file_id: "file-metrics-001",
+				file_name: "summary/metrics.html",
+				filename: "metrics.html",
+				file_extension: "html",
+				path: "/summary/metrics.html",
+				relative_file_path: "summary/metrics.html",
+			}),
+			createAttachment({
+				file_id: "file-custom-001",
+				file_name: "summary/custom-view.md",
+				filename: "custom-view.md",
+				path: "/summary/custom-view.md",
+				relative_file_path: "summary/custom-view.md",
+			}),
+			createAttachment({
+				file_id: "file-project-001",
+				file_name: "magic.project.js",
+				filename: "magic.project.js",
+				file_extension: "js",
+				path: "/magic.project.js",
+			}),
+		]
+
+		const result = buildRecordingDetailFileMap({
+			tree: [createFolder("root", files)],
+			list: [],
+			magicProjectConfig: createMagicProjectConfig({
+				audio: "audio/session.wav",
+				transcript: "transcript/full.md",
+				notes: "notes/live.md",
+				summary: "summary/meeting-summary.md",
+				topics: "summary/topics.md",
+				intent: "summary/intent.md",
+				metrics: "summary/metrics.html",
+				custom_outline: "summary/custom-view.md",
+			}),
+		})
+
+		expect(result.audio?.file_id).toBe("file-audio-001")
+		expect(result.transcript?.file_id).toBe("file-transcript-001")
+		expect(result.notes?.file_id).toBe("file-notes-001")
+		expect(result.magicProject?.file_id).toBe("file-project-001")
+		expect(result.summaryFiles.map((file) => file.type)).toEqual([
+			"summary",
+			"topics",
+			"metrics",
+			"intent",
+		])
+		expect(result.summaryFiles[2]).toMatchObject({
+			type: "metrics",
+			fileName: "summary/metrics.html",
+		})
+	})
+
+	it("falls back to file hints when magic.project.js is absent or incomplete", () => {
+		const files = [
+			createAttachment({
+				file_id: "file-audio-001",
+				file_name: "raw-audio.m4a",
+				filename: "raw-audio.m4a",
+				file_extension: "m4a",
+				path: "/raw-audio.m4a",
+			}),
+			createAttachment({
+				file_id: "file-transcript-001",
+				file_name: "recording-transcript.md",
+				filename: "recording-transcript.md",
+				path: "/recording-transcript.md",
+			}),
+			createAttachment({
+				file_id: "file-notes-001",
+				file_name: "stream-notes.md",
+				filename: "stream-notes.md",
+				path: "/stream-notes.md",
+			}),
+		]
+
+		const result = buildRecordingDetailFileMap({
+			tree: [],
+			list: files,
+			magicProjectConfig: undefined,
+		})
+
+		expect(result.audio?.file_id).toBe("file-audio-001")
+		expect(result.transcript?.file_id).toBe("file-transcript-001")
+		expect(result.notes?.file_id).toBe("file-notes-001")
+		expect(result.summaryFiles).toEqual([])
+	})
+
+	it("limits configured lookups to the current audio bundle so sibling bundles cannot steal files", () => {
+		const currentBundleFiles = [
+			createAttachment({
+				file_id: "current-project-config",
+				file_name: "recording-a/magic.project.js",
+				filename: "magic.project.js",
+				file_extension: "js",
+				path: "/recording-a/magic.project.js",
+				relative_file_path: "recording-a/magic.project.js",
+			}),
+			createAttachment({
+				file_id: "current-audio",
+				file_name: "recording-a/session.wav",
+				filename: "session.wav",
+				file_extension: "wav",
+				path: "/recording-a/session.wav",
+				relative_file_path: "recording-a/session.wav",
+			}),
+			createAttachment({
+				file_id: "current-transcript",
+				file_name: "recording-a/transcript.md",
+				filename: "transcript.md",
+				path: "/recording-a/transcript.md",
+				relative_file_path: "recording-a/transcript.md",
+			}),
+		]
+		const siblingBundleFiles = [
+			createAttachment({
+				file_id: "sibling-audio",
+				file_name: "recording-b/session.wav",
+				filename: "session.wav",
+				file_extension: "wav",
+				path: "/recording-b/session.wav",
+				relative_file_path: "recording-b/session.wav",
+			}),
+			createAttachment({
+				file_id: "sibling-transcript",
+				file_name: "recording-b/transcript.md",
+				filename: "transcript.md",
+				path: "/recording-b/transcript.md",
+				relative_file_path: "recording-b/transcript.md",
+			}),
+		]
+
+		const result = buildRecordingDetailFileMap({
+			tree: [createFolder("root", [...currentBundleFiles, ...siblingBundleFiles])],
+			list: [],
+			magicProjectConfig: createMagicProjectConfig({
+				audio: "session.wav",
+				transcript: "transcript.md",
+			}),
+			bundleRootPath: "recording-a",
+		})
+
+		expect(result.magicProject?.file_id).toBe("current-project-config")
+		expect(result.audio?.file_id).toBe("current-audio")
+		expect(result.transcript?.file_id).toBe("current-transcript")
+	})
+})

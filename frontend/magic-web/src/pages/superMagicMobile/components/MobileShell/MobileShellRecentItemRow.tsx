@@ -72,6 +72,9 @@ export type RecentItemActionSource = "more" | "longPress"
 /** Max finger movement (px) still treated as a tap; scrolling beyond this suppresses navigation. */
 const RECENT_ITEM_TAP_MOVE_THRESHOLD = 10
 
+// Shared recent-row selectors stay stable across routes and API-provided project ids.
+const MOBILE_SHELL_RECENT_ITEM_TEST_ID_PREFIX = "mobile-super-shell-recent"
+
 /** Clears browser text selection so long-press context menus do not leave highlighted copy. */
 function clearTextSelection() {
 	if (typeof window === "undefined") return
@@ -84,6 +87,7 @@ function clearTextSelection() {
 
 export interface MobileShellRecentItemRowProps {
 	item: MobileShellMenuRecentItem
+	/** Kept for caller compatibility; shared sidebar selectors are intentionally route-agnostic. */
 	testIdPrefix: string
 	moreAriaLabel: string
 	onRecentNavigate: (item: MobileShellMenuRecentItem) => void
@@ -97,7 +101,6 @@ export interface MobileShellRecentItemRowProps {
 /** Single row in the shell sidebar "Recently used" list with tap-to-navigate and long-press menu. */
 export function MobileShellRecentItemRow({
 	item,
-	testIdPrefix,
 	moreAriaLabel,
 	onRecentNavigate,
 	onOpenActions,
@@ -184,11 +187,14 @@ export function MobileShellRecentItemRow({
 
 	return (
 		// Single grid row: title column shrinks; more button stays right-aligned and vertically centered.
-		<div className="grid h-9 w-full min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center rounded-lg">
+		<div
+			className="grid h-9 w-full min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center rounded-lg"
+			data-testid={`${MOBILE_SHELL_RECENT_ITEM_TEST_ID_PREFIX}-item`}
+		>
 			<button
 				ref={titleRef}
 				type="button"
-				data-testid={`${testIdPrefix}-recent-${item.id}`}
+				data-testid={`${MOBILE_SHELL_RECENT_ITEM_TEST_ID_PREFIX}-title-button`}
 				onContextMenu={(event) => event.preventDefault()}
 				onTouchStart={handleTitleTouchStart}
 				onTouchMove={handleTitleTouchMove}
@@ -220,7 +226,7 @@ export function MobileShellRecentItemRow({
 				type="button"
 				disabled={!item.project}
 				onClick={handleOpenActionsFromMore}
-				data-testid={`${testIdPrefix}-recent-actions-${item.id}`}
+				data-testid={`${MOBILE_SHELL_RECENT_ITEM_TEST_ID_PREFIX}-actions-button`}
 				className={cn(
 					"flex size-9 shrink-0 items-center justify-center self-center rounded-lg text-foreground [-webkit-tap-highlight-color:transparent]",
 					!item.project && "opacity-40",

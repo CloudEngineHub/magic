@@ -517,8 +517,21 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 				})
 
 				refreshCoordinator.markTaskCreated({ filesCount: files.length, parentId })
+				uploadLogger.log("createUploadTaskSuccess", {
+					uploadType: "folder",
+					filesCount: files.length,
+					parentId,
+				})
+				uploadLogger.finishSession({
+					uploadType: "folder",
+					status: "task_created",
+					filesCount: files.length,
+					parentId,
+					parentIdSource,
+				})
 				console.log(`✅ Successfully created folder upload task with ${files.length} files`)
 			} catch (error) {
+				refreshCoordinator.markTaskCreateFailed({ filesCount: files.length, parentId })
 				uploadLogger.logError("createUploadTask", error, {
 					uploadType: "folder",
 					filesCount: files.length,

@@ -53,7 +53,7 @@ vi.mock("@/routes/components/ViewportRouteGuard", () => ({
 vi.mock("../components/ChatPageHeader", () => ({
 	__esModule: true,
 	default: ({ onMenuClick }: { onMenuClick: () => void }) => (
-		<button type="button" data-testid="chat-page-header-menu-button" onClick={onMenuClick}>
+		<button type="button" data-testid="mobile-shell-menu-button" onClick={onMenuClick}>
 			menu
 		</button>
 	),
@@ -215,7 +215,7 @@ describe("MobileHomePage", () => {
 
 		render(<MobileHomePage />)
 
-		expect(screen.getByTestId("chat-page-header-menu-button")).toBeInTheDocument()
+		expect(screen.getByTestId("mobile-shell-menu-button")).toBeInTheDocument()
 		expect(screen.getByTestId("mobile-input-container")).toBeInTheDocument()
 	})
 })

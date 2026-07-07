@@ -3,7 +3,12 @@ import { fireEvent, render, screen } from "@testing-library/react"
 import AudioRecordingCard from "../AudioRecordingCard"
 import type { AudioProjectListItem } from "@/types/audioProject"
 
+vi.mock("@/services/audioRecordings", () => ({
+	ALL_RECORDING_GROUP_ID: "mock-all-group",
+}))
+
 vi.mock("react-i18next", () => ({
+	initReactI18next: { type: "3rdParty", init: vi.fn() },
 	useTranslation: () => ({
 		t: (key: string, options?: Record<string, unknown>) => {
 			if (key === "card.moreTags") return `+${options?.count}`
@@ -11,17 +16,26 @@ vi.mock("react-i18next", () => ({
 				"card.sourceRecorded": "Phone mic",
 				"card.sourceImported": "Imported audio",
 				"card.sourceDevice": "Device recording",
+				"card.sourcePc": "PC",
 				"card.summarized": "Summarized",
+				"card.waiting": "Waiting",
+				"card.summaryFailed": "Summary failed",
+				"card.mergeFailed": "Merge failed",
+				"card.processing": "Processing",
+				"card.regenerateSummary": "Regenerate summary",
 				"card.summarizing": "Summarizing now",
 				"card.notSummarized": "Not summarized",
 				"card.summarize": "Summarize",
 				"card.generateSummary": "Generate summary",
-				"card.retrySummary": "Retry summary",
+				"card.retrySummary": "Retry",
+				"card.retryMerge": "Retry",
 				"card.collapseTags": "Collapse",
 				"card.moreActions": "More actions",
 				"card.openProject": "View project details",
 				"card.rename": "Rename",
 				"card.delete": "Delete",
+				"mobile.recordingEntry.progress.uploading": "Uploading",
+				"mobile.recordingEntry.progress.transferFailed": "Upload failed",
 			}
 			return labels[key] ?? key
 		},
@@ -117,7 +131,7 @@ describe("AudioRecordingCard", () => {
 		expect(onOpen).not.toHaveBeenCalled()
 	})
 
-	it("shows summarizing spinner while summary is in progress", () => {
+	it("shows summarizing spinner while summary is in progress and opens detail on click", () => {
 		const onOpen = vi.fn()
 		render(
 			<AudioRecordingCard
@@ -133,13 +147,131 @@ describe("AudioRecordingCard", () => {
 		)
 
 		fireEvent.click(screen.getByTestId("audio-recording-card-project-1"))
-		expect(onOpen).not.toHaveBeenCalled()
+		expect(onOpen).toHaveBeenCalledTimes(1)
 		expect(
 			screen.getByTestId("audio-recording-card-project-1-status-summarizing"),
 		).toHaveTextContent("Summarizing now")
 		expect(
+			screen.getByTestId("audio-recording-card-project-1-status-summarizing"),
+		).toBeDisabled()
+		expect(
 			screen.queryByTestId("audio-recording-card-project-1-summary-button"),
 		).not.toBeInTheDocument()
+	})
+
+	it("shows processing status and does not open detail while merging is in progress", () => {
+		const onOpen = vi.fn()
+		render(
+			<AudioRecordingCard
+				item={createItem({
+					card_status: "processing",
+					is_summarized: false,
+					current_phase: "merging",
+					phase_status: "in_progress",
+					project_status: "",
+				})}
+				onOpen={onOpen}
+			/>,
+		)
+
+		fireEvent.click(screen.getByTestId("audio-recording-card-project-1"))
+		expect(onOpen).not.toHaveBeenCalled()
+		expect(
+			screen.getByTestId("audio-recording-card-project-1-status-processing"),
+		).toHaveTextContent("Processing")
+		expect(
+			screen.getByTestId("audio-recording-card-project-1-status-processing"),
+		).toBeDisabled()
+		expect(
+			screen.queryByTestId("audio-recording-card-project-1-summary-button"),
+		).not.toBeInTheDocument()
+	})
+
+	it("shows waiting status and blocks navigation before merge begins", () => {
+		const onOpen = vi.fn()
+		render(
+			<AudioRecordingCard
+				item={createItem({
+					card_status: "waiting",
+					is_summarized: false,
+					current_phase: "waiting",
+					phase_status: null,
+					project_status: "",
+				})}
+				onOpen={onOpen}
+			/>,
+		)
+
+		fireEvent.click(screen.getByTestId("audio-recording-card-project-1"))
+		expect(onOpen).not.toHaveBeenCalled()
+		expect(
+			screen.getByTestId("audio-recording-card-project-1-status-waiting"),
+		).toHaveTextContent("Waiting")
+	})
+
+	it("shows merge failed chip without retry button before retry API exists", () => {
+		const onOpen = vi.fn()
+		const onSummarize = vi.fn()
+		render(
+			<AudioRecordingCard
+				item={createItem({
+					card_status: "merge_failed",
+					is_summarized: false,
+					current_phase: "merging",
+					phase_status: "failed",
+					project_status: "",
+				})}
+				onOpen={onOpen}
+				onSummarize={onSummarize}
+			/>,
+		)
+
+		fireEvent.click(screen.getByTestId("audio-recording-card-project-1"))
+		expect(onOpen).not.toHaveBeenCalled()
+		expect(
+			screen.getByTestId("audio-recording-card-project-1-status-merge-failed"),
+		).toHaveTextContent("Merge failed")
+		expect(
+			screen.queryByTestId("audio-recording-card-project-1-merge-retry-button"),
+		).not.toBeInTheDocument()
+		expect(onSummarize).not.toHaveBeenCalled()
+	})
+
+	it("opens detail for summarizing items without audio_file_id", () => {
+		const onOpen = vi.fn()
+		render(
+			<AudioRecordingCard
+				item={createItem({
+					card_status: "summarizing",
+					is_summarized: false,
+					current_phase: "summarizing",
+					phase_status: "in_progress",
+					project_status: "",
+				})}
+				onOpen={onOpen}
+			/>,
+		)
+
+		fireEvent.click(screen.getByTestId("audio-recording-card-project-1"))
+		expect(onOpen).toHaveBeenCalledTimes(1)
+	})
+
+	it("shows pending duration placeholder while summarizing duration is unavailable", () => {
+		render(
+			<AudioRecordingCard
+				item={createItem({
+					card_status: "summarizing",
+					is_summarized: false,
+					current_phase: "summarizing",
+					phase_status: "in_progress",
+					duration: 0,
+				})}
+			/>,
+		)
+
+		const durationEl = screen.getByTestId("audio-recording-card-project-1-duration")
+		expect(durationEl).toHaveTextContent("--:--")
+		expect(durationEl.querySelector(".animate-pulse")).toBeNull()
 	})
 
 	it("opens raw audio preview for summarizing items with audio_file_id", () => {
@@ -162,12 +294,12 @@ describe("AudioRecordingCard", () => {
 		expect(onOpen).toHaveBeenCalledTimes(1)
 	})
 
-	it("shows retry summary button when summarizing failed", () => {
+	it("shows summary failed chip without retry summary button when summarizing failed", () => {
 		const onSummarize = vi.fn()
 		render(
 			<AudioRecordingCard
 				item={createItem({
-					card_status: "summarizing",
+					card_status: "summary_failed",
 					is_summarized: false,
 					current_phase: "summarizing",
 					phase_status: "failed",
@@ -177,16 +309,20 @@ describe("AudioRecordingCard", () => {
 			/>,
 		)
 
-		const button = screen.getByTestId("audio-recording-card-project-1-summary-button")
-		expect(button).toHaveTextContent("Retry summary")
-		fireEvent.click(button)
-		expect(onSummarize).toHaveBeenCalledTimes(1)
+		expect(
+			screen.getByTestId("audio-recording-card-project-1-status-summary-failed"),
+		).toHaveTextContent("Summary failed")
+		expect(
+			screen.queryByTestId("audio-recording-card-project-1-summary-button"),
+		).not.toBeInTheDocument()
+		expect(onSummarize).not.toHaveBeenCalled()
 	})
 
-	it("shows device id as source label", () => {
+	it("shows device id as source label for app recordings", () => {
 		render(
 			<AudioRecordingCard
 				item={createItem({
+					source: "app",
 					device_id: "Redmi K70 Ultra",
 					card_status: "not_summarized",
 					is_summarized: false,
@@ -199,51 +335,36 @@ describe("AudioRecordingCard", () => {
 		)
 	})
 
-	it("keeps tags on the same row as source badges inside meta row", () => {
-		render(<AudioRecordingCard item={createItem()} />)
-
-		const metaRow = screen.getByTestId("audio-recording-card-project-1-meta-row")
-		const tagsRow = screen.getByTestId("audio-recording-card-project-1-tags")
-
-		expect(metaRow).toContainElement(tagsRow)
-		expect(metaRow).toContainElement(
-			screen.getByTestId("audio-recording-card-project-1-source-row"),
-		)
-		expect(metaRow).toHaveClass("overflow-x-auto")
-		expect(tagsRow).toHaveTextContent("Team")
-	})
-
-	it("shows end fade when meta row content overflows", () => {
-		const elementProto = Object.getOwnPropertyDescriptor(HTMLElement.prototype, "scrollWidth")
-		const clientProto = Object.getOwnPropertyDescriptor(HTMLElement.prototype, "clientWidth")
-
-		Object.defineProperty(HTMLElement.prototype, "scrollWidth", {
-			configurable: true,
-			get() {
-				return 480
-			},
-		})
-		Object.defineProperty(HTMLElement.prototype, "clientWidth", {
-			configurable: true,
-			get() {
-				return 200
-			},
-		})
-
+	it("shows fixed PC label for pc source recordings", () => {
 		render(
 			<AudioRecordingCard
 				item={createItem({
-					tags: ["录音时长异常", "单方语音交互", "变更风险提示", "版本管理预留"],
+					source: "pc",
+					device_id: "Web",
+					card_status: "not_summarized",
+					is_summarized: false,
 				})}
 			/>,
 		)
 
-		expect(
-			screen.getByTestId("audio-recording-card-project-1-meta-fade-end"),
-		).toBeInTheDocument()
+		expect(screen.getByTestId("audio-recording-card-project-1-source")).toHaveTextContent("PC")
+	})
 
-		if (elementProto) Object.defineProperty(HTMLElement.prototype, "scrollWidth", elementProto)
-		if (clientProto) Object.defineProperty(HTMLElement.prototype, "clientWidth", clientProto)
+	it("shows fixed phone label for h5 source recordings ignoring device_id", () => {
+		render(
+			<AudioRecordingCard
+				item={createItem({
+					source: "h5",
+					device_id: "Web",
+					card_status: "not_summarized",
+					is_summarized: false,
+				})}
+			/>,
+		)
+
+		expect(screen.getByTestId("audio-recording-card-project-1-source")).toHaveTextContent(
+			"Phone mic",
+		)
 	})
 
 	it("keeps summarized badge on the same row as the device source", () => {
@@ -261,27 +382,33 @@ describe("AudioRecordingCard", () => {
 		).toHaveTextContent("Summarized")
 	})
 
-	it("expands hidden tags when the more-tags control is clicked", () => {
-		render(<AudioRecordingCard item={createItem()} />)
-
-		expect(screen.getByText("Team")).toBeInTheDocument()
-		expect(screen.getByText("Review")).toBeInTheDocument()
-		expect(screen.queryByText("Extra")).not.toBeInTheDocument()
-
-		fireEvent.click(screen.getByTestId("audio-recording-card-project-1-tags-expand"))
-
-		expect(screen.getByText("Extra")).toBeInTheDocument()
-		expect(
-			screen.getByTestId("audio-recording-card-project-1-tags-collapse"),
-		).toBeInTheDocument()
-	})
-
 	it("renders duration in metadata row", () => {
 		render(<AudioRecordingCard item={createItem({ duration: 754 })} />)
 
 		expect(screen.getByTestId("audio-recording-card-project-1-duration")).toHaveTextContent(
 			"12:34",
 		)
+	})
+
+	it("uses neutral uploading colors that match the prototype hierarchy", () => {
+		render(
+			<AudioRecordingCard
+				item={createItem({
+					card_status: "uploading",
+					is_summarized: false,
+					transferStatus: "transferring",
+					transferProgress: 0.45,
+				})}
+			/>,
+		)
+
+		const progressbar = screen.getByRole("progressbar")
+		expect(progressbar).toHaveStyle({ background: "rgba(24, 24, 27, 0.08)" })
+		expect(progressbar.firstElementChild).toHaveStyle({
+			backgroundColor: "rgb(24, 24, 27)",
+		})
+		expect(screen.getByText("Uploading")).toHaveStyle({ color: "rgb(24, 24, 27)" })
+		expect(screen.getByText("45%")).toHaveStyle({ color: "rgb(24, 24, 27)" })
 	})
 
 	it("renders the more-actions menu trigger", () => {
@@ -321,5 +448,24 @@ describe("AudioRecordingCard", () => {
 		expect(screen.getByRole("heading", { level: 3 })).toHaveTextContent(
 			"2026/06/06 11:05 的录音",
 		)
+	})
+
+	it("hides regenerate option in more-actions dropdown for summarized items", async () => {
+		const onSummarize = vi.fn()
+		render(
+			<AudioRecordingCard
+				item={createItem({ card_status: "summarized" })}
+				onSummarize={onSummarize}
+			/>,
+		)
+
+		const trigger = screen.getByTestId("audio-recording-card-project-1-more-actions")
+		trigger.focus()
+		fireEvent.keyDown(trigger, { key: "Enter", code: "Enter" })
+
+		expect(
+			screen.queryByTestId("audio-recording-card-project-1-action-regenerate"),
+		).not.toBeInTheDocument()
+		expect(onSummarize).not.toHaveBeenCalled()
 	})
 })

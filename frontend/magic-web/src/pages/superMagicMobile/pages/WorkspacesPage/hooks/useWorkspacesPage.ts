@@ -102,10 +102,13 @@ export function useWorkspacesPage(): UseWorkspacesPageReturn {
 
 	// 当前工作空间列表遵循 page_size: 999 + 前端本地搜索，原始数据与过滤结果要分别保留。
 	const allWorkspaces = workspaceStore.workspaces
+	const unnamedWorkspaceName = t("workspace.unnamedWorkspace")
 	const filteredWorkspaces = !debouncedSearchValue
 		? allWorkspaces
 		: allWorkspaces.filter((ws) =>
-				(ws.name ?? "").toLowerCase().includes(debouncedSearchValue.toLowerCase()),
+				(ws.name?.trim() || unnamedWorkspaceName)
+					.toLowerCase()
+					.includes(debouncedSearchValue.toLowerCase()),
 			)
 	// 将“数据为空”和“搜索为空”拆成显式状态，避免视图层把过滤后的列表长度误判为真实空态。
 	const isWorkspaceEmpty = !isLoading && !debouncedSearchValue && allWorkspaces.length === 0

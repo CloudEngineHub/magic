@@ -4,16 +4,21 @@ import { AttachmentItem } from "../../../TopicFilesButton/hooks"
 
 export interface SelectDirectorySubmitParams {
 	path: AttachmentItem[]
+	targetWorkspaceId?: string
 	targetProjectId?: string
 	targetAttachments?: AttachmentItem[]
 	sourceAttachments?: AttachmentItem[]
 }
 
 export interface MobileCrossProjectConfig {
-	currentProject: Pick<ProjectListItem, "id" | "project_name" | "workspace_id">
+	currentProject?: Pick<ProjectListItem, "id" | "project_name" | "workspace_id">
 	currentWorkspace?: Pick<Workspace, "id" | "name">
 	sourceAttachments: AttachmentItem[]
 	isChatProject?: boolean
+	initialViewMode?: "workspace" | "project" | "directory"
+	workspaces?: Array<Pick<Workspace, "id" | "name" | "project_count" | "workspace_type">>
+	includeSpecialWorkspaces?: boolean
+	allowWorkspaceSubmit?: boolean
 }
 
 export interface SelectDirectoryModalProps {

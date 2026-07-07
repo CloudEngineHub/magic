@@ -11,6 +11,7 @@ import {
 import { Input } from "@/components/shadcn-ui/input"
 import type { AudioProjectListItem } from "@/types/audioProject"
 import { resolveRecordingDisplayName } from "../utils/audio-recordings-utils"
+import { shouldSuppressInputAutoFocusInMagicApp } from "@/utils/inputFocusPolicy"
 
 interface AudioRecordingRenameDialogProps {
 	open: boolean
@@ -30,6 +31,7 @@ export function AudioRecordingRenameDialog({
 }: AudioRecordingRenameDialogProps) {
 	const { t } = useTranslation("audioRecordings")
 	const [nameInput, setNameInput] = useState("")
+	const shouldAutoFocusInput = !shouldSuppressInputAutoFocusInMagicApp()
 
 	useEffect(() => {
 		if (!open || !item) return
@@ -48,6 +50,12 @@ export function AudioRecordingRenameDialog({
 			<DialogContent
 				className="sm:max-w-[425px]"
 				data-testid="audio-recording-rename-dialog"
+				onOpenAutoFocus={(event) => {
+					if (!shouldAutoFocusInput) {
+						// Radix focuses the first field by default; block it in Magic App WebView.
+						event.preventDefault()
+					}
+				}}
 				onCloseAutoFocus={(event) => {
 					event.preventDefault()
 				}}
@@ -57,7 +65,8 @@ export function AudioRecordingRenameDialog({
 				</DialogHeader>
 				<div>
 					<Input
-						autoFocus
+						// Keep desktop rename efficient while avoiding iPad WebView keyboard occlusion.
+						autoFocus={shouldAutoFocusInput}
 						maxLength={100}
 						value={nameInput}
 						placeholder={t("actions.renamePlaceholder")}

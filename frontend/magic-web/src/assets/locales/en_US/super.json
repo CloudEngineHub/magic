@@ -2527,6 +2527,13 @@
 		"taskPending": "Pending",
 		"taskProcessing": "Processing",
 		"title": "Task Queue",
+		"mobile": {
+			"collapse": "Collapse queue",
+			"count": "{{count}} items",
+			"emptyContent": "⋯",
+			"expand": "Expand queue",
+			"title": "Queued"
+		},
 		"updateFailed": "Failed to update queue message",
 		"updateSuccess": "Queue message updated successfully"
 	},
@@ -2678,6 +2685,146 @@
 			"shareManagement": "My Share",
 			"title": "Navigation",
 			"workspace": "Workspace"
+		},
+		"recordingEntry": {
+			"active": {
+				"audioSourceUnavailable": "No usable audio input is available. Please check your microphone device and try again.",
+				"backAria": "Back to recordings list",
+				"browserNotSupported": "This browser does not support recording yet. Please switch to a browser with microphone support.",
+				"cancel": "Cancel recording",
+				"defaultTitle": "Current recording",
+				"enableTranscription": "Enable transcription",
+				"enableTranscriptionFailed": "Failed to enable transcription. Please try again later.",
+				"enablingTranscription": "Enabling",
+				"finishAria": "Finish recording and generate summary",
+				"notesPlaceholder": "Capture key points while recording...",
+				"pause": "Pause",
+				"permissionDenied": "Microphone permission was denied. Please allow microphone access and try again.",
+				"renameAria": "Edit recording title",
+				"resume": "Resume",
+				"startFailed": "Failed to start recording. Please check microphone permission and try again.",
+				"startFailedTitle": "Recording ran into a problem",
+				"startTimedOut": "Recording startup timed out. Please check microphone permission and try again.",
+				"starting": "Starting recording",
+				"startingHint": "Requesting microphone access and initializing recording. Please wait...",
+				"statusPaused": "Paused",
+				"statusRecording": "Recording",
+				"tabNotes": "Notes",
+				"tabTranscript": "Transcript",
+				"transcriptionDisabledDescription": "Turn it on to transcribe the recording in real time.",
+				"transcriptionDisabledTitle": "Realtime transcription"
+			},
+			"fabAria": "Start recording",
+			"fabComingSoon": "Recording is coming soon",
+			"filterSheet": {
+				"closeAria": "Close filter",
+				"dateRange": {
+					"all": "All time",
+					"label": "Date range",
+					"month": "Last 30 days",
+					"today": "Today",
+					"week": "Last 7 days"
+				},
+				"resetAria": "Reset filters",
+				"title": "Filter"
+			},
+			"groupSheet": {
+				"all": "All",
+				"backAria": "Back",
+				"closeAria": "Close groups",
+				"confirmAria": "Confirm",
+				"createFailed": "Failed to create group",
+				"createSuccess": "Group created successfully",
+				"createTitle": "New group",
+				"deleteConfirm": "Delete \"{{name}}\"? Recordings in it will be moved to Ungrouped.",
+				"deleteGroup": "Delete group",
+				"deleteGroupAria": "Delete group",
+				"deleteTitle": "Delete group",
+				"groupNameLabel": "Group name",
+				"groupNamePlaceholder": "For example: customer interviews",
+				"manageGroups": "Manage groups",
+				"manageTitle": "Manage groups",
+				"moreGroupAria": "More actions for {{name}}",
+				"moveFailed": "Failed to move. Please try again later.",
+				"moveSuccess": "Moved successfully",
+				"newGroup": "New group",
+				"rename": "Rename",
+				"renameLabel": "Group name",
+				"renamePlaceholder": "Enter a new name",
+				"renameTitle": "Rename group",
+				"title": "Groups",
+				"ungrouped": "Ungrouped",
+				"unnamedGroup": "Unnamed group"
+			},
+			"importComingSoon": "Import is coming soon",
+			"importSheet": {
+				"closeAria": "Close",
+				"fromFiles": "Import from Files",
+				"fromFilesSub": "Choose an audio file from local storage",
+				"title": "Import Audio"
+			},
+			"moreSheet": {
+				"backAria": "Back",
+				"closeAria": "Close",
+				"comingSoon": "Coming soon",
+				"confirmAria": "Confirm",
+				"delete": "Delete",
+				"deleteConfirm": "Delete \"{{name}}\"? This cannot be undone.",
+				"deleteTitle": "Delete recording",
+				"downloadOriginal": "Download original file",
+				"generateSummary": "Generate summary",
+				"moveToGroup": "Move to group",
+				"regenerateSummary": "Regenerate summary",
+				"rename": "Rename",
+				"renameLabel": "Recording name",
+				"renamePlaceholder": "Enter a new name",
+				"share": "Share",
+				"untitled": "Untitled recording"
+			},
+			"moveGroupSheet": {
+				"closeAria": "Close",
+				"title": "Move to group"
+			},
+			"placeholder": "Recordings & summaries coming soon",
+			"progress": {
+				"transferFailed": "Upload failed",
+				"uploading": "Uploading"
+			},
+			"settings": {
+				"autoSummaryEnabled": {
+					"description": "Automatically generate a summary after transcription",
+					"label": "Auto Summarize"
+				},
+				"backAria": "Back",
+				"closeAria": "Close",
+				"model": {
+					"description": "AI model used to generate summaries",
+					"label": "AI Model",
+					"title": "AI Model"
+				},
+				"saveFailed": "Failed to save settings. Please try again.",
+				"sections": {
+					"summary": "Summary",
+					"transcription": "Transcription"
+				},
+				"settingsAria": "Recording settings",
+				"title": "Recording Settings",
+				"transcriptionEnabled": {
+					"description": "Automatically start transcription when recording begins",
+					"label": "Auto Transcribe"
+				}
+			},
+			"startMissingWorkspace": "Recording is unavailable right now. Please enter a workspace first.",
+			"summarySheet": {
+				"closeAria": "Close",
+				"title": "Summary status"
+			},
+			"toolbar": {
+				"clearSearchAria": "Exit search",
+				"filterAria": "Filter",
+				"searchAria": "Search",
+				"uploadAria": "Upload audio"
+			}
 		},
 		"recycleBin": {
 			"actions": "More actions",
@@ -3556,7 +3703,8 @@
 			"contentWillBeSavedTo": "Content will be saved to \"{{projectName}}\"",
 			"organizingRecording": "We're preparing your recording summary and will notify you once it's ready.",
 			"title": "Please wait a moment",
-			"understood": "Got it"
+			"understood": "Got it",
+			"viewOnAudioRecordingsPage": "When it's ready, open Recordings & Notes to view it."
 		}
 	},
 	"recycleBin": {
@@ -3611,32 +3759,32 @@
 			"confirmMessage": "Restore {{type}}「{{name}}」to its original location?",
 			"conflictNamesWithEtc": "{{names}}, and more",
 			"duplicateRestoreTarget": "There are files with the same target path and name in this restore batch. By default, only the most recently deleted one will be restored.",
-			"projectMissing": "The file's project does not exist or has been deleted. Please restore the project first.",
-			"projectMissingTip": "{{count}} file(s) belong to projects that do not exist or were deleted. Please restore those projects first.",
-			"projectMissingTipWithNames": "{{count}} file(s) belong to projects that do not exist or were deleted ({{fileNames}}). Please restore those projects first.",
-			"fileNamesWithEtc": "{{names}} and more files",
 			"duplicateRestoreTargetTip": "There are {{count}} file(s) with duplicate target path and name in this batch. By default, only the most recently deleted one will be restored.",
 			"errorMessage": "Parent check failed, please retry later",
 			"fileConflictConfirmMessage": "{{parentMissingCount}} file(s) whose original folder no longer exists will be restored to the original project's root directory. The original project root already contains {{conflictNames}}, and {{nameConflictCount}} file(s) with the same name will need confirmation one by one. Continue?",
 			"fileConflictCountConfirmMessage": "{{parentMissingCount}} file(s) whose original folder no longer exists will be restored to the original project's root directory; another {{nameConflictCount}} conflicting file(s) will need confirmation one by one. Continue?",
-			"nameConflictConfirmMessage": "The original project root already contains {{conflictNames}}, and {{count}} file(s) with the same name will need confirmation one by one. Continue?",
-			"nameConflictCountConfirmMessage": "The original project root already contains {{count}} file(s) with the same name. These files will need confirmation one by one. Continue?",
-			"nameConflictDialogTitle": "Overwrite file \"{{fileName}}\"?",
-			"parentMissingConfirmMessage": "{{count}} file(s) whose original folder no longer exists will be restored to the original project's root directory. Continue?",
+			"fileNamesWithEtc": "{{names}} and more files",
 			"invalidMessage": "Pre-restore check did not pass",
 			"locationLabel": "location",
 			"missingParentMessage": "The original {{parentLabel}} no longer exists. Please select a new {{locationLabel}} to restore 「{{name}}」.",
 			"mixedTypes": "Selected resources have mixed types",
-			"skipNameConflict": "Skip",
-			"processingAllNameConflicts": "Processing...",
-			"pendingNameConflictCount": "{{count}} conflicting file(s) remaining",
+			"nameConflictConfirmMessage": "The original project root already contains {{conflictNames}}, and {{count}} file(s) with the same name will need confirmation one by one. Continue?",
+			"nameConflictCountConfirmMessage": "The original project root already contains {{count}} file(s) with the same name. These files will need confirmation one by one. Continue?",
+			"nameConflictDialogTitle": "Overwrite file \"{{fileName}}\"?",
 			"nameConflictSkipped": "{{count}} file(s) with a name conflict were skipped",
 			"needMoveFiles": "Original projects no longer exist for some items. Please select a project for these {{count}} Files.",
 			"needMoveProjects": "Original workspaces no longer exist for some items. Please select a workspace for these {{count}} projects.",
 			"needMoveTopics": "Original projects no longer exist for some items. Please select a project for these {{count}} Topics.",
 			"noResourcesFound": "No restorable resources found",
 			"parentLabel": "parent",
+			"parentMissingConfirmMessage": "{{count}} file(s) whose original folder no longer exists will be restored to the original project's root directory. Continue?",
+			"pendingNameConflictCount": "{{count}} conflicting file(s) remaining",
+			"processingAllNameConflicts": "Processing...",
+			"projectMissing": "The file's project does not exist or has been deleted. Please restore the project first.",
+			"projectMissingTip": "{{count}} file(s) belong to projects that do not exist or were deleted. Please restore those projects first.",
+			"projectMissingTipWithNames": "{{count}} file(s) belong to projects that do not exist or were deleted ({{fileNames}}). Please restore those projects first.",
 			"selectionName": "{{count}} items",
+			"skipNameConflict": "Skip",
 			"skippedMessage": "No parent check needed, can restore directly",
 			"unknownTarget": "Unknown"
 		},
@@ -3920,6 +4068,7 @@
 		"moreSettings": "Settings",
 		"multiFileShareName": "File Share_{{mainFileName}} and {{count}} files",
 		"name": "Name",
+		"nativeShareFailed": "Failed to share. Please try again.",
 		"navigation": "Navigation",
 		"newProjectDescription": "By default, the copied project will retain the same name as the original. If you need to distinguish between different projects more clearly, you can also customize the name as needed.",
 		"newProjectName": "New project name",
@@ -3950,9 +4099,13 @@
 		"projectFiles": "Project Files",
 		"projectShareGenerated": "Project Sharing",
 		"projectShareName": "Project Share_{{projectName}}",
+		"pureMode": "Pure Mode",
+		"pureModeDescription": "Display the entry file in fullscreen and hide the header",
 		"publicAccess": "Public Access",
 		"publicAccessDescription": "Anyone can access via link. Content may be indexed by search engines. Please be aware of data security",
 		"qrCode": "Share QR Code",
+		"recordingShareCreateTitle": "Share",
+		"recordingShareName": "Recording Share_{{projectName}}",
 		"replay": "Replay",
 		"replayWillStartIn": "Replay will start in {{countdown}} seconds",
 		"resetPassword": "Reset",
@@ -4006,6 +4159,7 @@
 		"shareProjectDescription": "When enabled, visitors will have access to all files in the project.",
 		"shareRange": "Share Range",
 		"shareTitle": "Share",
+		"shareToSystem": "Share to",
 		"shareTopic": "Share topic",
 		"showFileList": "Show File List",
 		"showFileListDescription": "When enabled, visitors can view file list",

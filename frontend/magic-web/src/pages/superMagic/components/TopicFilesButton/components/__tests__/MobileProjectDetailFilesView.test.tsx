@@ -3,13 +3,26 @@ import { describe, expect, it, vi } from "vitest"
 import MobileProjectDetailFilesView from "../MobileProjectDetailFilesView"
 import type { AttachmentItem } from "../../hooks/types"
 
+vi.mock("@/models/repository/Cache", () => ({
+	Storage: {
+		get: vi.fn(),
+		set: vi.fn(),
+		remove: vi.fn(),
+		allClear: vi.fn(),
+		key: vi.fn(),
+		getAll: vi.fn(() => []),
+		clearById: vi.fn(),
+		length: 0,
+	},
+}))
+
 vi.mock("react-i18next", () => ({
 	useTranslation: () => ({
 		t: (key: string) => key,
 	}),
 	initReactI18next: {
 		type: "3rdParty",
-		init: () => {},
+		init: vi.fn(),
 	},
 }))
 
@@ -75,7 +88,7 @@ vi.mock("@/pages/superMagicMobile/components/MobileBottomSearchBar", () => ({
 
 vi.mock("@/components/base-mobile/ScrollEdgeFade", () => ({
 	ScrollEdgeFadeContainer: ({ children }: { children?: React.ReactNode }) => (
-		<div>{children}</div>
+		<div data-testid="mobile-files-scroll-edge-fade">{children}</div>
 	),
 }))
 
@@ -95,9 +108,12 @@ vi.mock("../TopicFileIcon", () => ({
 	TopicFileIcon: () => <div />,
 }))
 
-vi.mock("@/pages/superMagic/components/TopicFilesButton/utils/build-single-file-download-menu", () => ({
-	menuItemsIncludeNoWaterMarkDownload: vi.fn(() => false),
-}))
+vi.mock(
+	"@/pages/superMagic/components/TopicFilesButton/utils/build-single-file-download-menu",
+	() => ({
+		menuItemsIncludeNoWaterMarkDownload: vi.fn(() => false),
+	}),
+)
 
 vi.mock("@/pages/superMagic/components/TopicFilesButton/utils/magic-system-folder", () => ({
 	isMagicSystemFolder: vi.fn(() => false),
@@ -109,19 +125,54 @@ vi.mock("@/pages/superMagic/components/TopicFilesButton/utils/getAttachmentKey",
 	getVisibleAttachmentChildren: (item: AttachmentItem) => item.children || [],
 }))
 
-vi.mock("@/pages/superMagic/components/TopicFilesButton/utils/mobileAttachmentTreeSelection", () => ({
-	collectAttachmentsBySelectedKeys: vi.fn(() => []),
-	collectCurrentViewSelectableKeys: vi.fn(() => ["mock-file-id"]),
-	getAttachmentNodeSelectionState: vi.fn(() => "none"),
-	toggleAllInCurrentView: vi.fn((_: string[], selected: Set<string>) => selected),
-	toggleAttachmentSelection: vi.fn((_: string, selected: Set<string>) => selected),
-}))
+vi.mock(
+	"@/pages/superMagic/components/TopicFilesButton/utils/mobileAttachmentTreeSelection",
+	() => ({
+		collectAttachmentsBySelectedKeys: vi.fn(() => []),
+		collectCurrentViewSelectableKeys: vi.fn(() => ["mock-file-id"]),
+		getAttachmentNodeSelectionState: vi.fn(() => "none"),
+		toggleAllInCurrentView: vi.fn((_: string[], selected: Set<string>) => selected),
+		toggleAttachmentSelection: vi.fn((_: string, selected: Set<string>) => selected),
+	}),
+)
 
 vi.mock("../MobileFileSelectionCheckbox", () => ({
 	default: () => null,
 }))
 
 describe("MobileProjectDetailFilesView", () => {
+	it("为移动端文件列表的每一行提供稳定的自动化选择器", () => {
+		const attachments: AttachmentItem[] = [
+			{
+				file_id: "folder-alpha",
+				name: "测试目录",
+				is_directory: true,
+				children: [],
+			},
+			{
+				file_id: "file-beta",
+				file_name: "sample-doc.md",
+				is_directory: false,
+				file_extension: "md",
+			},
+		]
+
+		render(
+			<MobileProjectDetailFilesView
+				attachments={attachments}
+				mobileViewVariant="project-detail"
+			/>,
+		)
+
+		const rows = screen.getAllByTestId("project-detail-mobile-file-row")
+
+		expect(rows).toHaveLength(2)
+		expect(rows[0]).toHaveAttribute("data-file-id", "folder-alpha")
+		expect(rows[0]).toHaveAttribute("data-file-kind", "folder")
+		expect(rows[1]).toHaveAttribute("data-file-id", "file-beta")
+		expect(rows[1]).toHaveAttribute("data-file-kind", "file")
+	})
+
 	it("深层路径栏支持横向滚动并放宽单段文本展示宽度", () => {
 		const attachments: AttachmentItem[] = [
 			{
@@ -134,8 +185,7 @@ describe("MobileProjectDetailFilesView", () => {
 						file_id: "folder-2",
 						name: ".magic-第二层超长目录",
 						is_directory: true,
-						relative_file_path:
-							"/测试特殊长目录名称第一层/.magic-第二层超长目录",
+						relative_file_path: "/测试特殊长目录名称第一层/.magic-第二层超长目录",
 						children: [
 							{
 								file_id: "folder-3",
@@ -152,18 +202,17 @@ describe("MobileProjectDetailFilesView", () => {
 		]
 
 		const { container } = render(
-			<MobileProjectDetailFilesView attachments={attachments} mobileViewVariant="project-detail" />,
+			<MobileProjectDetailFilesView
+				attachments={attachments}
+				mobileViewVariant="project-detail"
+			/>,
 		)
 
 		expect(screen.getByTestId("project-detail-mobile-back-button")).toBeInTheDocument()
 		expect(screen.getByTestId("project-detail-mobile-home-button")).toBeInTheDocument()
 
-		fireEvent.click(
-			screen.getAllByRole("button", { name: /测试特殊长目录名称第一层/ })[0],
-		)
-		fireEvent.click(
-			screen.getAllByRole("button", { name: /\.magic-第二层超长目录/ })[0],
-		)
+		fireEvent.click(screen.getAllByRole("button", { name: /测试特殊长目录名称第一层/ })[0])
+		fireEvent.click(screen.getAllByRole("button", { name: /\.magic-第二层超长目录/ })[0])
 
 		const scrollContainer = container.querySelector(".overflow-x-auto")
 		expect(scrollContainer).toBeTruthy()
@@ -178,5 +227,21 @@ describe("MobileProjectDetailFilesView", () => {
 			throw new Error("Expected breadcrumb button to be rendered")
 		}
 		expect(breadcrumbButton.className).toContain("max-w-[168px]")
+	})
+
+	it("添加按钮脱离滚动渐隐容器以避免被底部搜索栏阴影遮挡", () => {
+		render(
+			<MobileProjectDetailFilesView
+				attachments={[]}
+				allowEdit
+				mobileViewVariant="chat-sheet"
+			/>,
+		)
+
+		const addButton = screen.getByTestId("project-detail-files-add-button")
+		const scrollFadeContainer = screen.getByTestId("mobile-files-scroll-edge-fade")
+
+		expect(scrollFadeContainer).not.toContainElement(addButton)
+		expect(addButton.className).toContain("z-30")
 	})
 })

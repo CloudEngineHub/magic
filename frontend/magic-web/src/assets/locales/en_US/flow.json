@@ -638,6 +638,7 @@
 		"oldVersionTip": "Vector knowledge base has been upgraded, the current old version vector knowledge base can still be used normally, but re-vectorization is temporarily not supported, it is recommended to create a new vector knowledge base",
 		"onlySupportJpgPng": "Only supports JPG/PNG format images",
 		"operation": "Operation",
+		"paginationItemsPerPage": "/Page",
 		"paragraph": "Paragraph",
 		"paragraphDesc": "This mode splits text into paragraphs based on the delimiter and maximum block length, using the split text as the parent block for retrieval",
 		"parentChildSegment": "Parent-Child Segment",

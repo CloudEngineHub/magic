@@ -9,6 +9,26 @@ const { mockViewRef } = vi.hoisted(() => ({
 	mockViewRef: { current: "manage" as ProjectShareSheetView },
 }))
 
+vi.hoisted(() => {
+	const storageMock = {
+		getItem: () => null,
+		setItem: vi.fn(),
+		removeItem: vi.fn(),
+		clear: vi.fn(),
+		key: vi.fn(),
+		length: 0,
+	}
+
+	Object.defineProperty(globalThis, "localStorage", {
+		value: storageMock,
+		configurable: true,
+	})
+	Object.defineProperty(globalThis, "sessionStorage", {
+		value: storageMock,
+		configurable: true,
+	})
+})
+
 interface MockCommonPopupProps {
 	children: ReactNode
 	popupProps?: {
@@ -61,6 +81,7 @@ vi.mock("../hooks/useProjectShareSheet", () => ({
 	useProjectShareSheet: () => ({
 		open: true,
 		mode: "project",
+		projectMode: "",
 		shareMode: ShareMode.Project,
 		view: mockViewRef.current,
 		viewStack: ["create"],
@@ -82,11 +103,19 @@ vi.mock("../hooks/useProjectShareSheet", () => ({
 		isCheckingShare: false,
 		advancedOpen: false,
 		defaultSelectedFileIds: ["file-1"],
+		selectedFileIds: ["file-1"],
+		groupedShareItems: [],
+		enableInlineFileSelection: false,
 		selectedFileItems: [],
 		selectedFileHierarchy: [],
 		selectedFileCount: 0,
 		memberSelectorOpen: false,
 		selectedMemberNodes: [],
+		detailMemberNodes: [],
+		detailMemberLoading: false,
+		selectedShareMessageText: "",
+		canNativeShare: false,
+		shareSelectedShareToSystem: vi.fn(),
 		setShareName: vi.fn(),
 		setShareType: vi.fn(),
 		setShareExpiry: vi.fn(),
@@ -96,6 +125,8 @@ vi.mock("../hooks/useProjectShareSheet", () => ({
 		setShareTargets: vi.fn(),
 		setAdvancedSettings: vi.fn(),
 		setAdvancedOpen: vi.fn(),
+		setSelectedFileIds: vi.fn(),
+		toggleShareFileId: vi.fn(),
 		openMemberSelector: vi.fn(),
 		closeMemberSelector: vi.fn(),
 		setSelectedMemberNodes: vi.fn(),

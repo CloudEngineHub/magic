@@ -211,7 +211,7 @@ const CollapsedWorkspaceMenuWorkspaceItem = observer(function CollapsedWorkspace
 								variant="ghost"
 								size="sm"
 								className={cn(
-									"h-8 w-full justify-start gap-2 px-2 font-normal hover:bg-sidebar-accent",
+									"h-8 w-full justify-start gap-2 px-2 font-normal [-webkit-tap-highlight-color:transparent] hover:bg-sidebar-accent",
 									isActive && "bg-sidebar-accent",
 								)}
 								onMouseEnter={() => {
@@ -252,13 +252,14 @@ const CollapsedWorkspaceMenuWorkspaceItem = observer(function CollapsedWorkspace
 									<div
 										data-testid={workspaceMoreTriggerTestId}
 										className={cn(
-											"flex h-4 w-4 shrink-0 cursor-pointer items-center justify-center rounded-full transition-opacity hover:bg-sidebar-accent",
+											"flex h-4 w-4 shrink-0 cursor-pointer items-center justify-center rounded-full transition-opacity [-webkit-tap-highlight-color:transparent] hover:bg-sidebar-accent",
 											isActive
 												? "text-sidebar-accent-foreground"
 												: "text-sidebar-foreground",
 											isWorkspaceHovered
 												? "opacity-100"
 												: "pointer-events-none opacity-0",
+											"no-hover:pointer-events-auto no-hover:opacity-100",
 										)}
 										onClick={(e) => {
 											e.stopPropagation()
@@ -315,7 +316,7 @@ const CollapsedWorkspaceMenuWorkspaceItem = observer(function CollapsedWorkspace
 						>
 							<a
 								href={getWorkspaceRouteUrl(workspace.id)}
-								className="text-current no-underline"
+								className="text-current no-underline [-webkit-tap-highlight-color:transparent]"
 								onClick={handleWorkspaceHomeClick}
 							>
 								<Home
@@ -340,7 +341,7 @@ const CollapsedWorkspaceMenuWorkspaceItem = observer(function CollapsedWorkspace
 						</Button>
 						<button
 							type="button"
-							className="flex h-8 w-full items-center gap-2 rounded-md px-2 hover:bg-sidebar-accent"
+							className="flex h-8 w-full items-center gap-2 rounded-md px-2 [-webkit-tap-highlight-color:transparent] hover:bg-sidebar-accent"
 							onClick={() => setIsCreatingProject(true)}
 							data-testid="sidebar-collapsed-workspace-add-project"
 						>

@@ -1,4 +1,5 @@
 import i18next from "i18next"
+import { Bluetooth, Monitor, Smartphone, Upload, type LucideIcon } from "lucide-react"
 import type {
 	AudioProjectListItem,
 	AudioProjectSortBy,
@@ -7,12 +8,14 @@ import type {
 	QueryAudioProjectsParams,
 } from "@/types/audioProject"
 import { formatTime } from "@/utils/string"
-
+import { ALL_RECORDING_GROUP_ID } from "@/services/audioRecordings/RecordingGroupsConstants"
 /** Maps UI summary filter to API current_phase values (coarse server-side filter) */
 export function resolveSummaryPhaseFilter(
 	filter: AudioRecordingSummaryFilter,
 ): string[] | undefined {
-	if (filter === "not_summarized") return ["merging"]
+	// "Not summarized" spans queued work and merge-stage work, so request both
+	// backend phases before the client refines them into waiting/processing/ready cards.
+	if (filter === "not_summarized") return ["waiting", "merging"]
 	if (filter === "summarized") return ["summarizing"]
 	return undefined
 }
@@ -23,7 +26,15 @@ export function applyClientSummaryFilter(
 	filter: AudioRecordingSummaryFilter,
 ): AudioProjectListItem[] {
 	if (filter === "not_summarized") {
-		return items.filter((item) => item.card_status === "not_summarized")
+		// Treat queued / merge-related backend states as part of the same
+		// "not summarized yet" bucket so users can track the full pre-summary pipeline.
+		return items.filter(
+			(item) =>
+				item.card_status === "waiting" ||
+				item.card_status === "not_summarized" ||
+				item.card_status === "processing" ||
+				item.card_status === "merge_failed",
+		)
 	}
 	if (filter === "summarized") {
 		return items.filter((item) => item.card_status === "summarized")
@@ -42,12 +53,14 @@ export function buildAudioProjectsQueryParams(options: {
 	sortBy: AudioProjectSortBy
 	sortOrder: AudioProjectSortOrder
 	projectIds?: string[]
+	workspaceId?: string
 }): QueryAudioProjectsParams {
 	const params: QueryAudioProjectsParams = {
 		page: options.page,
 		page_size: options.pageSize,
 		is_hidden: 0,
 		sort_by: options.sortBy,
+		workspace_id: ALL_RECORDING_GROUP_ID,
 		sort_order: options.sortOrder,
 	}
 
@@ -60,13 +73,16 @@ export function buildAudioProjectsQueryParams(options: {
 	if (options.createdAtStart != null) params.created_at_start = options.createdAtStart
 	if (options.createdAtEnd != null) params.created_at_end = options.createdAtEnd
 	if (options.projectIds?.length) params.project_ids = options.projectIds
+	if (options.workspaceId != null && options.workspaceId !== ALL_RECORDING_GROUP_ID) {
+		params.workspace_id = options.workspaceId
+	}
 
 	return params
 }
 
-/** Formats recording duration in seconds to mm:ss or h:mm:ss */
+/** Formats recording duration in seconds to mm:ss or hh:mm:ss for shared list and session UI. */
 export function formatRecordingDuration(seconds: number): string {
-	if (!Number.isFinite(seconds) || seconds <= 0) return "0:00"
+	if (!Number.isFinite(seconds) || seconds <= 0) return "00:00"
 
 	const totalSeconds = Math.floor(seconds)
 	const hours = Math.floor(totalSeconds / 3600)
@@ -74,15 +90,44 @@ export function formatRecordingDuration(seconds: number): string {
 	const remainingSeconds = totalSeconds % 60
 
 	if (hours > 0) {
-		return `${hours}:${String(minutes).padStart(2, "0")}:${String(remainingSeconds).padStart(2, "0")}`
+		return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:${String(remainingSeconds).padStart(2, "0")}`
 	}
 
-	return `${minutes}:${String(remainingSeconds).padStart(2, "0")}`
+	return `${String(minutes).padStart(2, "0")}:${String(remainingSeconds).padStart(2, "0")}`
+}
+
+/** Treat missing summarizing duration as pending instead of a literal zero-length recording. */
+export function isRecordingDurationPending(
+	item: Pick<AudioProjectListItem, "card_status" | "duration">,
+): boolean {
+	return (
+		(item.card_status === "summarizing" || item.card_status === "processing") &&
+		(!Number.isFinite(item.duration) || item.duration <= 0)
+	)
 }
 
 /** Whether the card should navigate to the summarized HTML detail page */
 export function isAudioProjectDetailReady(item: AudioProjectListItem): boolean {
 	return item.card_status === "summarized"
+}
+
+/** Whether the detail summary tab should render completed summary content */
+export function isAudioProjectSummaryReady(
+	item: Pick<AudioProjectListItem, "card_status" | "current_phase" | "phase_status">,
+): boolean {
+	if (item.card_status === "summarized") return true
+	return item.current_phase === "summarizing" && item.phase_status === "completed"
+}
+
+/** Whether the detail summary tab is in the summarizing placeholder state and should poll */
+export function isAudioProjectSummarizing(
+	item: Pick<AudioProjectListItem, "card_status" | "current_phase" | "phase_status">,
+): boolean {
+	if (item.card_status === "summarizing") return true
+	if (item.current_phase !== "summarizing") return false
+	// Match resolveCardStatus: phase present without a terminal status is still in progress.
+	if (item.phase_status === "completed" || item.phase_status === "failed") return false
+	return true
 }
 
 /** Whether the card can open raw audio playback while summary is pending or in progress */
@@ -92,9 +137,19 @@ export function canPreviewRawAudioRecording(item: AudioProjectListItem): boolean
 	return item.card_status === "not_summarized" || item.card_status === "summarizing"
 }
 
-/** Whether the card can open a preview: HTML summary, or raw audio before summary completes */
+/** Whether the card can open detail: summarized HTML, raw audio preview, or summarizing placeholder */
 export function isAudioProjectPreviewReady(item: AudioProjectListItem): boolean {
 	if (item.card_status === "summarized") return true
+	// Summarizing items should open detail (placeholder + polling) even before audio_file_id hydrates.
+	if (item.card_status === "summarizing") return true
+	// Queueing / merge states stay visible in the list but should not open a half-ready detail page.
+	if (
+		item.card_status === "waiting" ||
+		item.card_status === "processing" ||
+		item.card_status === "merge_failed"
+	) {
+		return false
+	}
 	return canPreviewRawAudioRecording(item)
 }
 
@@ -131,17 +186,60 @@ export function resolveRecordingDisplayName(
 	return formatRecordingDefaultName(createdAt)
 }
 
-/** Resolves source label from normalized fields: device name preferred, then audio_source fallback */
+/** Resolves source label from normalized fields:
+ * - audio_source === 'imported': always show sourceImported
+ * - source === 'device': prefer device_id (device name) or sourceDevice fallback
+ * - source === 'app': prefer device_id name or sourceRecorded fallback
+ * - source === 'pc': fixed sourcePc label (device_id ignored — not user-meaningful)
+ * - source === 'h5' or legacy: fixed sourceRecorded label
+ *
+ * Consumed by both H5 MobileRecordingCard and PC AudioRecordingCard.
+ */
 export function resolveRecordingSourceLabel(
 	item: AudioProjectListItem,
-	labels: { sourceRecorded: string; sourceImported: string; sourceDevice: string },
+	labels: {
+		sourceRecorded: string
+		sourceImported: string
+		sourceDevice: string
+		sourcePc: string
+	},
 ): string {
-	const deviceName = item.device_id?.trim()
-	if (deviceName) return deviceName
-
 	if (item.audio_source === "imported") return labels.sourceImported
-	if (item.audio_source === "recorded") return labels.sourceRecorded
+
+	const deviceName = item.device_id?.trim()
+
+	if (item.source === "device") {
+		// External Bluetooth/recording device — prefer backend device name
+		return deviceName || labels.sourceDevice
+	}
+
+	if (item.source === "app") {
+		// Recorded via mobile app — show device name if available, else generic label
+		return deviceName || labels.sourceRecorded
+	}
+
+	// PC web recordings use a fixed label; the generic "Web" device_id is not user-meaningful
+	if (item.source === "pc") return labels.sourcePc
+
+	// h5 and legacy fallback: fixed label, ignore device_id
 	return labels.sourceRecorded
+}
+
+/**
+ * Picks the source icon based on extra.source + audio_source:
+ * - imported audio_source → Upload (regardless of source field)
+ * - 'device' → Bluetooth (external recorder)
+ * - 'pc' → Monitor (desktop web)
+ * - 'app', 'h5', or fallback → Smartphone
+ *
+ * Shared by both H5 MobileRecordingCard and PC AudioRecordingCard so the
+ * icon mapping stays single-sourced across platforms.
+ */
+export function resolveRecordingSourceIcon(item: AudioProjectListItem): LucideIcon {
+	if (item.audio_source === "imported") return Upload
+	if (item.source === "device") return Bluetooth
+	if (item.source === "pc") return Monitor
+	return Smartphone
 }
 
 /** Converts Date to unix timestamp (seconds) at start of local day */

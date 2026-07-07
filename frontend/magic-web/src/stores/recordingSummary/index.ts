@@ -14,6 +14,8 @@ import { ProjectListItem, Topic, Workspace } from "@/pages/superMagic/pages/Work
 import { TopicMode } from "@/pages/superMagic/pages/Workspace/TopicMode"
 import { ModelItem } from "@/pages/superMagic/components/MessageEditor/components/ModelSwitch/types"
 import superMagicModeService from "@/services/superMagic/SuperMagicModeService"
+import { isAudioProjectMode } from "@/services/audioRecordings"
+import { resolveIsOtherTabRecording } from "./resolveIsOtherTabRecording"
 
 /**
  * 录音纪要状态管理
@@ -113,15 +115,15 @@ class RecordingSummaryStore {
 			max: number
 		}
 	} = {
-			hasVoiceError: false,
-			hasRecordingError: false,
-			hasChunkError: false,
-			isRetrying: false,
-			retryInfo: {
-				current: 0,
-				max: 3,
-			},
-		}
+		hasVoiceError: false,
+		hasRecordingError: false,
+		hasChunkError: false,
+		isRetrying: false,
+		retryInfo: {
+			current: 0,
+			max: 3,
+		},
+	}
 
 	businessData = {
 		/**
@@ -158,6 +160,10 @@ class RecordingSummaryStore {
 		 * 音频源配置
 		 */
 		audioSource: undefined as import("@/types/recordSummary").AudioSourceConfig | undefined,
+		/**
+		 * Whether realtime transcription is enabled for the active session.
+		 */
+		transcriptionEnabled: true,
 	}
 
 	/**
@@ -174,13 +180,13 @@ class RecordingSummaryStore {
 			sessionId?: string
 		}
 	} = {
-			tabStatus: "inactive",
-			activeTabData: {
-				message: [],
-				duration: "00:00:00",
-				isRecording: false,
-			},
-		}
+		tabStatus: "inactive",
+		activeTabData: {
+			message: [],
+			duration: "00:00:00",
+			isRecording: false,
+		},
+	}
 
 	// ==== 代理属性和方法，保持向后兼容 ====
 
@@ -429,6 +435,9 @@ class RecordingSummaryStore {
 					if (state.audioSource) {
 						this.businessData.audioSource = state.audioSource
 					}
+					if (typeof state.transcriptionEnabled === "boolean") {
+						this.businessData.transcriptionEnabled = state.transcriptionEnabled
+					}
 				}
 			} catch (error) {
 				console.warn("Failed to load recording summary state:", error)
@@ -458,6 +467,7 @@ class RecordingSummaryStore {
 					topic: this.businessData.topic,
 					chatTopic: this.businessData.chatTopic,
 					audioSource: this.businessData.audioSource,
+					transcriptionEnabled: this.businessData.transcriptionEnabled,
 				}
 				localStorage.setItem(this.storageKey, JSON.stringify(state))
 			} catch (error) {
@@ -483,6 +493,7 @@ class RecordingSummaryStore {
 		model,
 		userId,
 		audioSource,
+		transcriptionEnabled = true,
 	}: {
 		workspace: Workspace | null
 		model: ModelItem
@@ -491,6 +502,7 @@ class RecordingSummaryStore {
 		topic?: Topic | null
 		chatTopic?: Topic | null
 		audioSource?: AudioSourceConfig
+		transcriptionEnabled?: boolean
 	}) {
 		this.businessData = {
 			workspace,
@@ -500,6 +512,7 @@ class RecordingSummaryStore {
 			model,
 			userId,
 			audioSource,
+			transcriptionEnabled,
 		}
 		this.isVisible = true
 		this.status = "recording"
@@ -510,8 +523,10 @@ class RecordingSummaryStore {
 		// 初始化浮动面板位置
 		this.floatPanel.initializePosition()
 		this.floatPanel.setExpanded(true)
-		// PC 端默认展开 AI 聊天，移动端默认收起
-		this.floatPanel.setExpandedAiChat(!this.floatPanel.isMobile)
+		// Legacy summary projects expand AiChat on desktop; audio-recordings mode keeps it hidden.
+		const shouldExpandAiChat =
+			!this.floatPanel.isMobile && !isAudioProjectMode(project?.project_mode)
+		this.floatPanel.setExpandedAiChat(shouldExpandAiChat)
 		this.floatPanel.setEnterAnimationStatus(true)
 
 		setTimeout(() => {
@@ -554,6 +569,7 @@ class RecordingSummaryStore {
 	 */
 	hide() {
 		this.isVisible = false
+		this.floatPanel.setExternallyHidden(false)
 		this.saveToStorage()
 	}
 
@@ -588,6 +604,7 @@ class RecordingSummaryStore {
 					this.businessData.model = session.model
 					this.businessData.userId = session.userId
 					this.businessData.audioSource = session.audioSource
+					this.businessData.transcriptionEnabled = session.transcriptionEnabled ?? true
 
 					const lastMessage = last(session.textContent)
 					if (lastMessage) {
@@ -635,6 +652,7 @@ class RecordingSummaryStore {
 	reset() {
 		this.floatPanel.cleanup()
 		this.isVisible = false
+		this.floatPanel.setExternallyHidden(false)
 		this.status = "init"
 		this.isPausing = false
 		this.isContinuing = false
@@ -644,6 +662,7 @@ class RecordingSummaryStore {
 		this.businessData.chatTopic = null
 		this.businessData.model = null
 		this.businessData.audioSource = undefined
+		this.businessData.transcriptionEnabled = true
 		this.message = []
 		this.note = {
 			content: "",
@@ -804,6 +823,12 @@ class RecordingSummaryStore {
 	updateTabStatus(status: TabStatus) {
 		this.multiTabState.tabStatus = status
 
+		// Once this tab becomes the active lock holder again, any mirrored
+		// "other tab is recording" snapshot is stale and must stop hiding local UI.
+		if (status === "active") {
+			this.multiTabState.activeTabData.isRecording = false
+		}
+
 		// 如果当前 tab 失去活跃状态，需要处理录音状态同步
 		if (status === "inactive") {
 			// 如果当前tab之前是录音状态，现在变为非活跃，说明录音已结束
@@ -833,7 +858,11 @@ class RecordingSummaryStore {
 	 * 检查当前是否有其他 tab 正在录音
 	 */
 	get isOtherTabRecording(): boolean {
-		return this.multiTabState.activeTabData.isRecording
+		return resolveIsOtherTabRecording({
+			localStatus: this.status,
+			tabStatus: this.multiTabState.tabStatus,
+			mirroredIsRecording: this.multiTabState.activeTabData.isRecording,
+		})
 	}
 
 	/**
@@ -896,6 +925,14 @@ class RecordingSummaryStore {
 	 */
 	setAudioSource(audioSource: import("@/types/recordSummary").AudioSourceConfig | undefined) {
 		this.businessData.audioSource = audioSource
+		this.saveToStorage()
+	}
+
+	/**
+	 * Updates the active session transcription flag after users enable it mid-recording.
+	 */
+	setTranscriptionEnabled(transcriptionEnabled: boolean) {
+		this.businessData.transcriptionEnabled = transcriptionEnabled
 		this.saveToStorage()
 	}
 

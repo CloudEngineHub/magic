@@ -1,5 +1,5 @@
 /** Supported background tokens for scroll edge fade gradients. */
-export type ScrollEdgeFadeColor = "muted" | "background" | "mobile-background"
+export type ScrollEdgeFadeColor = "muted" | "background" | "mobile-background" | "card"
 
 /**
  * Tailwind `from-*` utility for each fade token (matches page `bg-*` semantics via theme rgbColor).
@@ -8,6 +8,7 @@ export const scrollEdgeFadeFromClass: Record<ScrollEdgeFadeColor, string> = {
 	muted: "from-muted",
 	background: "from-background",
 	"mobile-background": "from-mobile-background",
+	card: "from-card",
 }
 
 /**
@@ -16,6 +17,7 @@ export const scrollEdgeFadeFromClass: Record<ScrollEdgeFadeColor, string> = {
 export function getScrollEdgeFadeRgb(fadeColor: ScrollEdgeFadeColor): string {
 	if (fadeColor === "muted") return "rgb(var(--muted-rgb) / 1)"
 	if (fadeColor === "mobile-background") return "rgb(var(--mobile-background-rgb) / 1)"
+	if (fadeColor === "card") return "rgb(var(--card-rgb) / 1)"
 	return "rgb(var(--background-rgb) / 1)"
 }
 

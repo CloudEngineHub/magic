@@ -3,7 +3,7 @@ import { clipboard } from "@/utils/clipboard-helpers"
 import { useTranslation } from "react-i18next"
 import { Dialog, DialogContent } from "@/components/shadcn-ui/dialog"
 import { Button } from "@/components/shadcn-ui/button"
-import { Download, Copy, X } from "lucide-react"
+import { Download, X } from "lucide-react"
 import { useIsMobile } from "@/hooks/useIsMobile"
 import MagicPopup from "@/components/base-mobile/MagicPopup"
 import type { OpenableProps } from "@/utils/react"
@@ -17,10 +17,13 @@ interface FileDownloadModalProps {
 	downloadUrl: string
 	onDownload?: () => void
 	onCopyLink?: () => void
+	/** Raises only this detached desktop dialog when it is opened from another modal. */
+	modalZIndex?: number
 }
 
+/** Renders a lightweight download prompt for downloads triggered outside the normal app tree. */
 export default memo(function FileDownloadModal(props: OpenableProps<FileDownloadModalProps>) {
-	const { open, onClose, fileName, downloadUrl, onDownload, onCopyLink } = props
+	const { open, onClose, fileName, downloadUrl, onDownload, onCopyLink, modalZIndex } = props
 
 	// 内部状态管理 open，用于控制关闭动画
 	// 由于 openLightModal 每次都创建新实例，open 永远是 true，不需要同步
@@ -128,6 +131,8 @@ export default memo(function FileDownloadModal(props: OpenableProps<FileDownload
 		<Dialog open={internalOpen} onOpenChange={(isOpen) => !isOpen && handleClose()}>
 			<DialogContent
 				className="w-[500px] max-w-[calc(100vw-2rem)] gap-0 p-0 sm:max-w-[500px]"
+				// Allow derived desktop modals to opt into a higher layer without changing default downloads.
+				style={modalZIndex ? { zIndex: modalZIndex } : undefined}
 				onPointerDownOutside={(e) => e.preventDefault()}
 				onEscapeKeyDown={(e) => e.preventDefault()}
 			>

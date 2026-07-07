@@ -74,6 +74,10 @@ const MCP = withFlowNamespaces(() => import("@/pages/flow/pages/mcp"))
  * @description 向量知识库模块
  */
 const VectorKnowledgeLayout = lazy(() => import("@/pages/vectorKnowledge/layouts"))
+/** 列表 */
+const VectorKnowledgeList = withFlowNamespaces(
+	() => import("@/pages/vectorKnowledge/components/List"),
+)
 /** 创建 */
 const VectorKnowledgeCreate = lazy(() => import("@/pages/vectorKnowledge/components/Create"))
 /** 详情 */
@@ -244,14 +248,6 @@ export function registerRoutes(config: RouteConfig = {}): Array<RouteObject> {
 		splitPersistentMobileShellRoutes([
 			...superMagicCrewRoutes,
 			{
-				name: RouteName.AudioRecordings,
-				path: `/:clusterCode${RoutePath.AudioRecordings}`,
-				element: <AudioRecordingsPage />,
-				meta: {
-					title: "routes.audioRecordings",
-				},
-			},
-			{
 				name: RouteName.AudioRecordingDetail,
 				path: `/:clusterCode${RoutePath.AudioRecordingDetail}`,
 				element: <AudioRecordingDetailPage />,
@@ -353,12 +349,27 @@ export function registerRoutes(config: RouteConfig = {}): Array<RouteObject> {
 						path: `/:clusterCode${RoutePath.Flows}`,
 						element: <FlowList />,
 					},
+					{
+						name: RouteName.FlowVectorKnowledgeCreate,
+						path: `/:clusterCode${RoutePath.FlowVectorKnowledgeCreate}`,
+						element: <VectorKnowledgeCreate />,
+					},
+					{
+						name: RouteName.FlowVectorKnowledgeDetail,
+						path: `/:clusterCode${RoutePath.FlowVectorKnowledgeDetail}`,
+						element: <VectorKnowledgeDetail />,
+					},
 				],
 			},
 			{
 				path: `/:clusterCode${RoutePath.VectorKnowledge}`,
 				element: <VectorKnowledgeLayout />,
 				children: [
+					{
+						name: RouteName.VectorKnowledge,
+						path: `/:clusterCode${RoutePath.VectorKnowledgeList}`,
+						element: <VectorKnowledgeList />,
+					},
 					{
 						name: RouteName.VectorKnowledgeCreate,
 						path: `/:clusterCode${RoutePath.VectorKnowledgeCreate}`,
@@ -404,6 +415,14 @@ export function registerRoutes(config: RouteConfig = {}): Array<RouteObject> {
 						element: <ChatsPage />,
 						meta: {
 							title: "routes.superChats",
+						},
+					},
+					{
+						name: RouteName.AudioRecordings,
+						path: `/:clusterCode${RoutePath.AudioRecordings}`,
+						element: <AudioRecordingsPage />,
+						meta: {
+							title: "routes.audioRecordings",
 						},
 					},
 					{

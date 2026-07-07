@@ -1,5 +1,6 @@
 import animate from "tailwindcss-animate"
 import colors from "tailwindcss/colors"
+import plugin from "tailwindcss/plugin"
 
 function rgbColor(colorVar, alphaValue = "1") {
 	return `rgb(var(${colorVar}-rgb) / calc(${alphaValue} * <alpha-value>))`
@@ -7,6 +8,9 @@ function rgbColor(colorVar, alphaValue = "1") {
 
 const config = {
 	darkMode: ["class"],
+	future: {
+		hoverOnlyWhenSupported: true,
+	},
 	content: {
 		relative: true,
 		files: [
@@ -286,7 +290,13 @@ const config = {
 			},
 		},
 	},
-	plugins: [animate],
+	plugins: [
+		animate,
+		plugin(({ addVariant }) => {
+			// Desktop layout and input capability are separate: iPad can render desktop UI while still using coarse touch input.
+			addVariant("no-hover", "@media (hover: none) and (pointer: coarse)")
+		}),
+	],
 }
 
 export default config

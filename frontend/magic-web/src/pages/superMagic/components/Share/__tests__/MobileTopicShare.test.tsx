@@ -1,6 +1,11 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { SuperMagicApi } from "@/apis"
+import magicToast from "@/components/base/MagicToaster/utils"
+import {
+	canUseNativeShare,
+	shareToNativeTarget,
+} from "@/pages/superMagic/components/Share/utils/nativeShare"
 import { clipboard } from "@/utils/clipboard-helpers"
 import MobileTopicShare from "../MobileTopicShare"
 import { ShareType } from "../types"
@@ -17,11 +22,27 @@ vi.mock("@/utils/clipboard-helpers", () => ({
 	},
 }))
 
+vi.mock("@/models/user", () => ({
+	userStore: {
+		user: {
+			userInfo: {
+				nickname: "Fictional Share Tester",
+				real_name: "Fictional Backup Tester",
+			},
+		},
+	},
+}))
+
 vi.mock("@/components/base/MagicToaster/utils", () => ({
 	default: {
 		success: vi.fn(),
 		error: vi.fn(),
 	},
+}))
+
+vi.mock("@/pages/superMagic/components/Share/utils/nativeShare", () => ({
+	canUseNativeShare: vi.fn(() => false),
+	shareToNativeTarget: vi.fn(),
 }))
 
 vi.mock("@/apis", () => ({
@@ -34,6 +55,8 @@ vi.mock("@/apis", () => ({
 describe("MobileTopicShare", () => {
 	beforeEach(() => {
 		vi.clearAllMocks()
+		vi.mocked(canUseNativeShare).mockReturnValue(false)
+		vi.mocked(shareToNativeTarget).mockResolvedValue("shared")
 	})
 
 	it("未开启分享时只展示主开关卡片，不展示链接和高级设置", () => {
@@ -126,6 +149,121 @@ describe("MobileTopicShare", () => {
 		expect(copiedText).toContain("share.createdBy.footerLine")
 		expect(copiedText).not.toBe("https://example.com/topic-1")
 		expect(copiedText.split("\n").length).toBeGreaterThan(3)
+	})
+
+	it("浏览器不支持系统分享时不展示分享至按钮", () => {
+		vi.mocked(canUseNativeShare).mockReturnValue(false)
+
+		render(
+			<MobileTopicShare
+				type={ShareType.Public}
+				topicTitle="Fictional Topic Unsupported"
+				shareContext={{
+					resource_id: "fictional-topic-unsupported",
+					share_url: "https://example.invalid/topic-unsupported",
+				}}
+				extraData={{
+					passwordEnabled: false,
+					shareUrl: "https://example.invalid/topic-unsupported",
+				}}
+				setExtraData={vi.fn()}
+			/>,
+		)
+
+		expect(
+			screen.queryByTestId("mobile-topic-share-native-share-button"),
+		).not.toBeInTheDocument()
+	})
+
+	it("浏览器支持系统分享时展示分享至按钮且复制链接保持纯文字", () => {
+		vi.mocked(canUseNativeShare).mockReturnValue(true)
+
+		render(
+			<MobileTopicShare
+				type={ShareType.Public}
+				topicTitle="Fictional Topic Visual"
+				shareContext={{
+					resource_id: "fictional-topic-visual",
+					share_url: "https://example.invalid/topic-visual",
+				}}
+				extraData={{
+					passwordEnabled: false,
+					shareUrl: "https://example.invalid/topic-visual",
+				}}
+				setExtraData={vi.fn()}
+			/>,
+		)
+
+		expect(screen.getByTestId("mobile-topic-share-native-share-button")).toHaveTextContent(
+			"share.shareToSystem",
+		)
+		expect(
+			screen.getByTestId("mobile-topic-share-native-share-button").querySelector("svg"),
+		).toBeInTheDocument()
+		expect(
+			screen.getByTestId("mobile-topic-share-copy-link-button").querySelector("svg"),
+		).toBeNull()
+	})
+
+	it("点击分享至按钮会使用已生成的话题分享文案调用系统分享", async () => {
+		vi.mocked(canUseNativeShare).mockReturnValue(true)
+
+		render(
+			<MobileTopicShare
+				type={ShareType.Public}
+				topicTitle="Fictional Topic Native"
+				shareContext={{
+					resource_id: "fictional-topic-native",
+					share_url: "https://example.invalid/topic-native",
+				}}
+				extraData={{
+					passwordEnabled: false,
+					shareUrl: "https://example.invalid/topic-native",
+				}}
+				setExtraData={vi.fn()}
+			/>,
+		)
+
+		fireEvent.click(screen.getByTestId("mobile-topic-share-native-share-button"))
+
+		await waitFor(() => {
+			expect(shareToNativeTarget).toHaveBeenCalledWith(
+				expect.objectContaining({
+					title: "Fictional Topic Native",
+					url: "https://example.invalid/topic-native",
+				}),
+			)
+		})
+		const payload = vi.mocked(shareToNativeTarget).mock.calls[0]?.[0]
+		expect(payload?.text).toContain("share.shareMessageTopic")
+		expect(payload?.text).toContain("share.shareMessageTopicLink")
+	})
+
+	it("系统分享失败时展示失败提示", async () => {
+		vi.mocked(canUseNativeShare).mockReturnValue(true)
+		vi.mocked(shareToNativeTarget).mockResolvedValue("failed")
+
+		render(
+			<MobileTopicShare
+				type={ShareType.Public}
+				topicTitle="Fictional Topic Failed"
+				shareContext={{
+					resource_id: "fictional-topic-failed",
+					share_url: "https://example.invalid/topic-failed",
+				}}
+				extraData={{
+					passwordEnabled: false,
+					shareUrl: "https://example.invalid/topic-failed",
+				}}
+				setExtraData={vi.fn()}
+			/>,
+		)
+
+		fireEvent.click(screen.getByTestId("mobile-topic-share-native-share-button"))
+
+		await waitFor(() => {
+			expect(magicToast.error).toHaveBeenCalledWith("share.nativeShareFailed")
+		})
 	})
 
 	it("开启密码保护时复制文案中的链接仍包含 password 参数", () => {

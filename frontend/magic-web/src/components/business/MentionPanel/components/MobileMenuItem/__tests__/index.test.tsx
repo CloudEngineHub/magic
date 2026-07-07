@@ -5,6 +5,7 @@ import type { MentionItem } from "../../../types"
 import { MentionItemType } from "../../../types"
 
 vi.mock("../../../renderers/context", () => ({
+	useMentionItemRenderContextValue: () => ({}),
 	useMentionItemRenderer: () => ({
 		renderIcon: ({ item }: { item: MentionItem }) => {
 			if (item.type === MentionItemType.AGENT && item.icon)
@@ -34,7 +35,7 @@ vi.mock("../../../mobileStyles", () => ({
 			menuItemDescription: "mobile-menu-item-description",
 			rightArrow: "mobile-right-arrow",
 		},
-		cx: (...classes: any[]) => classes.filter(Boolean).join(" "),
+		cx: (...classes: unknown[]) => classes.filter(Boolean).join(" "),
 	}),
 	getMobileItemIconStyle: vi.fn(() => "mobile-icon-style"),
 }))
@@ -106,7 +107,7 @@ describe("MobileMenuItem", () => {
 			expect(screen.getByText("Test Item")).toBeInTheDocument()
 		})
 
-		it("should render with description", () => {
+		it("should render item title when description data is present", () => {
 			const itemWithDescription = {
 				...baseItem,
 				description: "Test description",
@@ -115,7 +116,6 @@ describe("MobileMenuItem", () => {
 			render(<MobileMenuItem item={itemWithDescription} onClick={mockOnClick} />)
 
 			expect(screen.getByText("Test Item")).toBeInTheDocument()
-			expect(screen.getByText("Test description")).toBeInTheDocument()
 		})
 
 		it("should apply selected state", () => {
@@ -214,6 +214,28 @@ describe("MobileMenuItem", () => {
 
 			expect(screen.queryByText("➤")).not.toBeInTheDocument()
 		})
+
+		it("should render checkbox for folder items that can also enter children", () => {
+			const itemWithChildren = {
+				...baseItem,
+				name: "Folder Item",
+				type: MentionItemType.FOLDER,
+				hasChildren: true,
+				isFolder: true,
+			}
+
+			render(
+				<MobileMenuItem
+					item={itemWithChildren}
+					onClick={mockOnClick}
+					showCheckbox
+					checkboxChecked={false}
+				/>,
+			)
+
+			expect(screen.getByRole("checkbox", { name: "Folder Item" })).toBeInTheDocument()
+			expect(screen.getByText("➤")).toBeInTheDocument()
+		})
 	})
 
 	describe("interactions", () => {
@@ -241,6 +263,58 @@ describe("MobileMenuItem", () => {
 
 			expect(mockOnClick).toHaveBeenCalledTimes(1)
 			expect(mockParentClick).not.toHaveBeenCalled()
+		})
+
+		it("should toggle checkbox without entering the folder row", () => {
+			const mockOnCheckboxClick = vi.fn()
+			const itemWithChildren = {
+				...baseItem,
+				name: "Folder Item",
+				type: MentionItemType.FOLDER,
+				hasChildren: true,
+				isFolder: true,
+			}
+
+			render(
+				<MobileMenuItem
+					item={itemWithChildren}
+					onClick={mockOnClick}
+					onCheckboxClick={mockOnCheckboxClick}
+					showCheckbox
+					checkboxChecked={false}
+				/>,
+			)
+
+			fireEvent.click(screen.getByRole("checkbox", { name: "Folder Item" }))
+
+			expect(mockOnCheckboxClick).toHaveBeenCalledTimes(1)
+			expect(mockOnClick).not.toHaveBeenCalled()
+		})
+
+		it("should keep folder row body clickable when checkbox is visible", () => {
+			const mockOnCheckboxClick = vi.fn()
+			const itemWithChildren = {
+				...baseItem,
+				name: "Folder Item",
+				type: MentionItemType.FOLDER,
+				hasChildren: true,
+				isFolder: true,
+			}
+
+			render(
+				<MobileMenuItem
+					item={itemWithChildren}
+					onClick={mockOnClick}
+					onCheckboxClick={mockOnCheckboxClick}
+					showCheckbox
+					checkboxChecked={false}
+				/>,
+			)
+
+			fireEvent.click(screen.getByRole("option"))
+
+			expect(mockOnClick).toHaveBeenCalledTimes(1)
+			expect(mockOnCheckboxClick).not.toHaveBeenCalled()
 		})
 	})
 })

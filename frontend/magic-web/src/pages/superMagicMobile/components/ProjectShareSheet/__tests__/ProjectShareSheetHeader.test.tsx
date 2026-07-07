@@ -16,6 +16,7 @@ vi.mock("react-i18next", () => ({
 
 			const labels: Record<string, string> = {
 				"projectShare.fileModeCreateTitle": "文件分享",
+				"share.recordingShareCreateTitle": "分享",
 				"projectShare.createTitle": "项目分享",
 				"projectShare.manageTitle": "分享管理",
 				"projectShare.linkDetailTitle": "分享详情",
@@ -42,6 +43,7 @@ function createController(
 		view: "linkDetail",
 		viewStack: ["create"],
 		mode: "file",
+		projectMode: "",
 		shareMode: ShareMode.File,
 		projectName: "测试项目",
 		projectId: "project-1",
@@ -79,6 +81,9 @@ function createController(
 		isCheckingShare: false,
 		advancedOpen: false,
 		defaultSelectedFileIds: ["folder-1"],
+		selectedFileIds: ["folder-1"],
+		groupedShareItems: [],
+		enableInlineFileSelection: false,
 		selectedFileItems: [],
 		selectedFileHierarchy: [
 			{
@@ -91,6 +96,11 @@ function createController(
 		selectedFileCount: 21,
 		memberSelectorOpen: false,
 		selectedMemberNodes: [],
+		detailMemberNodes: [],
+		detailMemberLoading: false,
+		selectedShareMessageText: "",
+		canNativeShare: false,
+		shareSelectedShareToSystem: vi.fn(),
 		setShareName: vi.fn(),
 		setShareType: vi.fn(),
 		setShareExpiry: vi.fn(),
@@ -100,6 +110,8 @@ function createController(
 		setShareTargets: vi.fn(),
 		setAdvancedSettings: vi.fn(),
 		setAdvancedOpen: vi.fn(),
+		setSelectedFileIds: vi.fn(),
+		toggleShareFileId: vi.fn(),
 		openMemberSelector: vi.fn(),
 		closeMemberSelector: vi.fn(),
 		setSelectedMemberNodes: vi.fn(),
@@ -123,6 +135,22 @@ function createController(
 }
 
 describe("ProjectShareSheetHeader", () => {
+	it("录音分享创建页标题显示为「分享」而非「文件分享」", () => {
+		render(
+			<ProjectShareSheetHeader
+				controller={createController({
+					view: "create",
+					viewStack: [],
+					projectMode: "audio",
+				})}
+				projectName="测试录音"
+			/>,
+		)
+
+		expect(screen.getByTestId("project-share-sheet-header")).toHaveTextContent("分享")
+		expect(screen.getByTestId("project-share-sheet-header")).not.toHaveTextContent("文件分享")
+	})
+
 	it("文件分享详情标题遇到未替换模板时回退为真实文件名摘要", () => {
 		render(<ProjectShareSheetHeader controller={createController()} projectName="测试项目" />)
 

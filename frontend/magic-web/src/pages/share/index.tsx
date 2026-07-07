@@ -41,6 +41,9 @@ import { MagicAvatar } from "@/components/base"
 import useBackHandler from "@/utils/historyStackManager/hooks"
 import { useSharePermission } from "./hooks/useSharePermission"
 import UserAvatar from "@/assets/logos/user-avatar.svg"
+import { RecordingDetailShareDesktop } from "@/pages/superMagic/pages/AudioRecordings/components/recording-detail/RecordingDetailShareDesktop"
+import ShareMobileAudioRecordingDetailPage from "@/pages/superMagicMobile/pages/AudioRecordingDetail/ShareMobileAudioRecordingDetailPage"
+import { shouldRenderAudioRecordingShareShell } from "@/pages/superMagic/pages/AudioRecordings/utils/share-recording-detail"
 import {
 	calculateDefaultOpenFileId,
 	findFileInTree,
@@ -48,6 +51,10 @@ import {
 import { getAppEntryFile } from "@/pages/superMagic/components/MessageList/components/MessageAttachment/utils"
 import { getFileType } from "@/pages/superMagic/utils/handleFIle"
 import SuperMagicService from "@/pages/superMagic/services"
+import {
+	resolveMobileAudioShareCreatedByBadgeBottom,
+	resolveMobileAudioShareTopbarOffset,
+} from "./utils/audio-share-topbar-offset"
 // import { fixJsonPropertyNames } from "../flow/components/FlowAssistant/utils/streamUtils"
 
 const topicContainerBase =
@@ -106,6 +113,24 @@ function resolveImmersiveEntryFileId(params: {
 function toStringId(id: unknown): string {
 	if (id === null || id === undefined) return ""
 	return String(id)
+}
+
+function isTrueLike(value: unknown): boolean {
+	if (value === true) return true
+	if (typeof value === "number") return value === 1
+	if (typeof value === "string") return ["true", "1"].includes(value.trim().toLowerCase())
+	return false
+}
+
+function getSharePureMode(shareData: any): boolean {
+	return [
+		shareData?.extra?.pure_mode,
+		shareData?.pure_mode,
+		shareData?.data?.extra?.pure_mode,
+		shareData?.data?.pure_mode,
+		shareData?.data?.data?.extra?.pure_mode,
+		shareData?.data?.data?.pure_mode,
+	].some(isTrueLike)
 }
 
 function getShareProjectCreatorUserId(shareData: ShareDataLike): string {
@@ -223,8 +248,21 @@ function Share() {
 		})
 	}, [attachments?.tree, defaultOpenFileId, fileId, routeInfo.isLegacy])
 	const isEntryHtmlPreview = Boolean(entryHtmlFileId) && currentPreviewFileId === entryHtmlFileId
+	const shareDisplayOptions = useMemo(() => {
+		const urlSearchParams = new URLSearchParams(search)
+		const isPureMode = getSharePureMode(data)
+
+		return {
+			forceFullscreenMode: isPureMode || urlSearchParams.get("fullscreen") === "true",
+			hideHeader: isPureMode || urlSearchParams.has("hideHeader"),
+			showFileHeader:
+				isPureMode || urlSearchParams.get("showFileHeader") === "false" ? false : undefined,
+		}
+	}, [data, search])
 	const enableImmersiveShareChrome = isMobile && isFileShare && isEntryHtmlPreview
-	const isImmersiveFullscreen = enableImmersiveShareChrome && previewIsFullscreen
+	const effectivePreviewIsFullscreen =
+		shareDisplayOptions.forceFullscreenMode || previewIsFullscreen
+	const isImmersiveFullscreen = enableImmersiveShareChrome && effectivePreviewIsFullscreen
 
 	useBackHandler(
 		isImmersiveFullscreen,
@@ -571,6 +609,17 @@ function Share() {
 		return Boolean(projectId && currentUserId && creatorUserId === currentUserId)
 	}, [data, projectId, userInfo?.user_id])
 
+	/** Routes audio-mode share payloads into the readonly recording detail shell once share files are hydrated. */
+	const shouldRenderAudioShareShell = useMemo(
+		() =>
+			Boolean(projectId) &&
+			shouldRenderAudioRecordingShareShell({
+				projectMode: data?.data?.project_mode,
+				attachments,
+			}),
+		[attachments, data?.data?.project_mode, projectId],
+	)
+
 	// 是否显示复制项目按钮：旧文件分享 或 allowCopyProjectFiles 为 true 时显示，且用户已登录
 	const showCopyProjectButton = useMemo(() => {
 		if (!isProjectShare || !isLogined) return false
@@ -591,11 +640,32 @@ function Share() {
 		return !isMobile || (!hasStarted && isMobile)
 	}, [isFileShare, isMobile, hasStarted])
 
-	// 检查是否隐藏 header
-	const shouldHideHeader = useMemo(() => {
-		const urlSearchParams = new URLSearchParams(search)
-		return urlSearchParams.has("hideHeader")
-	}, [search])
+	const showMobileFolderButton = useMemo(() => {
+		// Legacy shares do not carry the new file-list switch, so keep their mobile entry visible.
+		return isMobile && hasStarted && (routeInfo.isLegacy || viewFileList)
+	}, [hasStarted, isMobile, routeInfo.isLegacy, viewFileList])
+
+	const isShareDataReady = !isEmpty(data)
+	// 检查是否隐藏 header。pure_mode 优先，URL 参数作为老链接兼容。
+	const shouldHideHeader = shareDisplayOptions.hideHeader || (isFileShare && !isShareDataReady)
+	const mobileAudioShareTopbarOffset = useMemo(
+		() =>
+			resolveMobileAudioShareTopbarOffset({
+				isMobile,
+				shouldHideHeader,
+				shouldRenderAudioShareShell,
+			}),
+		[isMobile, shouldHideHeader, shouldRenderAudioShareShell],
+	)
+	const createdByBadgeBottom = useMemo(() => {
+		// Keep the default share footer behavior for every scene except the readonly mobile audio shell.
+		const defaultBottom = routeInfo.isFileShare || !hasStarted ? "12px" : "64px"
+		return resolveMobileAudioShareCreatedByBadgeBottom({
+			defaultBottom,
+			isMobile,
+			shouldRenderAudioShareShell,
+		})
+	}, [hasStarted, isMobile, routeInfo.isFileShare, shouldRenderAudioShareShell])
 
 	const clearWindowData = useMemoizedFn(() => {
 		// @ts-ignore
@@ -832,7 +902,7 @@ function Share() {
 						</div>
 					) : null}
 					<div className="flex gap-2" data-testid="share-topbar-actions">
-						{isMobile && hasStarted && (
+						{showMobileFolderButton && (
 							<Button
 								variant="outline"
 								size="icon-sm"
@@ -875,7 +945,7 @@ function Share() {
 								</span>
 							</Button>
 						)}
-						{showWorkspaceButton ? (
+						{showWorkspaceButton && !shouldRenderAudioShareShell ? (
 							<WorkspaceButton
 								label={
 									shouldEnterSharedProject
@@ -931,35 +1001,57 @@ function Share() {
 						isFileShare={routeInfo.isFileShare}
 					/>
 				)}
-				{(!isEmpty(data) || isFileShare || isProjectShare) && !error && (
-					<ShareContent
-						isMobile={isMobile}
-						data={data}
-						attachments={attachments}
-						isLogined={isLogined}
-						isFileShare={isFileShare || isProjectShare}
-						isProjectShare={isProjectShare}
-						fileId={fileId}
-						defaultOpenFileId={defaultOpenFileId}
-						enableImmersiveShareChrome={enableImmersiveShareChrome}
-						isImmersiveFullscreen={isImmersiveFullscreen}
-						projectId={projectId}
-						topicId={resourceId}
-						showAllProjectFiles={showAllProjectFiles || viewFileList}
-						viewFileList={viewFileList}
-						showCreatedByBadge={data?.extra?.hide_created_by_super_magic === false}
-						allowDownloadProjectFile={allowDownloadProjectFile}
+				{(!isEmpty(data) || isFileShare || isProjectShare) && !error ? (
+					shouldRenderAudioShareShell ? (
+						isMobile ? (
+							<ShareMobileAudioRecordingDetailPage
+								projectId={projectId}
+								resourceName={data?.data?.project_name || data?.resource_name}
+								allowDownloadProjectFile={allowDownloadProjectFile}
+								topbarOffset={mobileAudioShareTopbarOffset}
+								attachments={attachments}
+							/>
+						) : (
+							<RecordingDetailShareDesktop
+								projectId={projectId}
+								resourceName={data?.data?.project_name || data?.resource_name}
+								allowDownloadProjectFile={allowDownloadProjectFile}
+								attachments={attachments}
+							/>
+						)
+					) : (
+						<ShareContent
+							isMobile={isMobile}
+							data={data}
+							attachments={attachments}
+							isLogined={isLogined}
+							isFileShare={isFileShare || isProjectShare}
+							isProjectShare={isProjectShare}
+							fileId={fileId}
+							defaultOpenFileId={defaultOpenFileId}
+							enableImmersiveShareChrome={enableImmersiveShareChrome}
+							isImmersiveFullscreen={isImmersiveFullscreen}
+							projectId={projectId}
+							topicId={resourceId}
+							showAllProjectFiles={showAllProjectFiles || viewFileList}
+							viewFileList={viewFileList}
+							showCreatedByBadge={data?.extra?.hide_created_by_super_magic === false}
+							allowDownloadProjectFile={allowDownloadProjectFile}
+							forceFullscreenMode={shareDisplayOptions.forceFullscreenMode}
+						hidePreviewHeader={shareDisplayOptions.hideHeader}
+						showFileHeader={shareDisplayOptions.showFileHeader}
 						onPreviewFileChange={setCurrentPreviewFileId}
-						onPreviewFullscreenChange={setPreviewIsFullscreen}
-					/>
-				)}
+							onPreviewFullscreenChange={setPreviewIsFullscreen}
+						/>
+					)
+				) : null}
 			</div>
 			{/* 由超级麦吉创造按钮：默认不显示，只有 hide_created_by_super_magic 为 false 时才显示 */}
 			<CreatedByBadge
 				visible={
 					!isImmersiveFullscreen && data?.extra?.hide_created_by_super_magic === false
 				}
-				style={{ bottom: routeInfo.isFileShare || !hasStarted ? "12px" : "64px" }}
+				style={{ bottom: createdByBadgeBottom }}
 			/>
 		</div>
 	)

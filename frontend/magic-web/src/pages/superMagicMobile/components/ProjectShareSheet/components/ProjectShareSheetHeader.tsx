@@ -1,6 +1,7 @@
 import { Check, Settings, X } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import type { ProjectShareSheetController } from "../types"
+import { isAudioProjectMode } from "@/services/audioRecordings/audioProjectMode"
 
 interface ProjectShareSheetHeaderProps {
 	controller: ProjectShareSheetController
@@ -51,8 +52,9 @@ export default function ProjectShareSheetHeader({
 	})()
 	const canGoBack = controller.viewStack.length > 0
 	const titleMap: Record<typeof controller.view, string> = {
-		create:
-			controller.mode === "file"
+		create: isAudioProjectMode(controller.projectMode)
+			? t("share.recordingShareCreateTitle")
+			: controller.mode === "file"
 				? t("projectShare.fileModeCreateTitle")
 				: t("projectShare.createTitle"),
 		manage: t("projectShare.manageTitle"),

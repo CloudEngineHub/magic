@@ -1,5 +1,4 @@
 import { useMemoizedFn } from "ahooks"
-import { isEmpty } from "lodash-es"
 import { useEffect, useLayoutEffect, useRef, useState } from "react"
 import { SuperMagicApi } from "@/apis"
 import { superMagicStore } from "@/pages/superMagic/stores"
@@ -26,7 +25,6 @@ const FOREGROUND_SYNC_DEDUPE_MS = 1000
 
 interface UseTopicMessagesParams {
 	selectedTopic: Topic | null
-	checkNowDebounced?: () => void
 }
 
 interface PullMessageParams {
@@ -97,7 +95,7 @@ function shouldContinueForegroundRecovery(pulledItems: any[], recoveryAnchorAppM
 /**
  * 管理当前话题的消息拉取、增量同步、前台恢复和分页加载。
  */
-export function useTopicMessages({ selectedTopic, checkNowDebounced }: UseTopicMessagesParams) {
+export function useTopicMessages({ selectedTopic }: UseTopicMessagesParams) {
 	// topic_id和page_token的映射
 	const topicPageTokenMap = useRef<Record<string, string>>({})
 	const topicNotHaveMoreMessageMap = useRef<Record<string, boolean>>({})
@@ -180,26 +178,6 @@ export function useTopicMessages({ selectedTopic, checkNowDebounced }: UseTopicM
 					order,
 				})
 				const pulledItems = response?.items || []
-				const renderableMessages = pulledItems
-					.filter(shouldIncludeFetchedMessage)
-					?.map((item: any) => {
-						const data = item?.seq?.message?.general_agent_card
-							? item?.seq?.message?.general_agent_card
-							: item?.seq?.message
-						return {
-							...data,
-							seq_id: item?.seq?.seq_id,
-							messageStatus: item?.seq?.message?.status,
-						}
-					})
-					.filter((item: any) => !isEmpty(item))
-				const hasAttachments = renderableMessages.some(
-					(item: any) =>
-						item?.attachments?.length > 0 || item?.tool?.attachments?.length > 0,
-				)
-				if (hasAttachments) {
-					checkNowDebounced?.()
-				}
 				if (updatePageToken && response?.page_token) {
 					// 服务端返回的 page_token 既供“手动加载更多”继续向旧消息翻页，
 					// 也供前台恢复场景继续拼接第二段补拉窗口。

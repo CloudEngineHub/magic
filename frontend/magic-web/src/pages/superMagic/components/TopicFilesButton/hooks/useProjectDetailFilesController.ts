@@ -23,6 +23,7 @@ interface UseProjectDetailFilesControllerOptions {
 	selectedProject?: any
 	selectedTopic?: any
 	setIsSelectMode: (value: boolean) => void
+	onMoveSuccess?: () => void
 }
 
 /**
@@ -34,6 +35,7 @@ export function useProjectDetailFilesController({
 	selectedProject,
 	selectedTopic,
 	setIsSelectMode,
+	onMoveSuccess,
 }: UseProjectDetailFilesControllerOptions) {
 	const { t } = useTranslation("super")
 	const [shareModalVisible, setShareModalVisible] = useState(false)
@@ -67,16 +69,17 @@ export function useProjectDetailFilesController({
 		onMoveSuccess: () => {
 			setIsSelectMode(false)
 			setSelectionResetKey((prev) => prev + 1)
+			onMoveSuccess?.()
 		},
 	})
 
 	const copyFileSelector = useCopyFileSelector({
 		projectId,
 		attachments,
-		onCopySuccess: async () => {
-			await refreshAttachments?.()
+		onCopySuccess: () => {
 			setIsSelectMode(false)
 			setSelectionResetKey((prev) => prev + 1)
+			onMoveSuccess?.()
 		},
 	})
 
