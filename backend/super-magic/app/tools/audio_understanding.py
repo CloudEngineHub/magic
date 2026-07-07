@@ -1082,10 +1082,9 @@ class AudioUnderstanding(WorkspaceTool[AudioUnderstandingParams]):
         """
         Lightweight integrity check for ISO BMFF containers (mp4/m4a/mov/3gp).
 
-        Reads only box headers (no full decode) to detect a truncated file: if
-        any top-level box claims to extend beyond the actual file size, the file
-        is incomplete (e.g. interrupted recording or upload) and its sample index
-        (moov) cannot be parsed, so neither players nor ASR can open it.
+        Reads only box headers (no full decode) to detect a clearly truncated
+        sample index: if the top-level moov box claims to extend beyond the
+        actual file size, neither players nor ASR can parse it.
 
         Returns a short reason string when corruption is detected, otherwise
         None (including when the format is not ISO BMFF or the check itself
@@ -1105,8 +1104,14 @@ class AudioUnderstanding(WorkspaceTool[AudioUnderstandingParams]):
         """
         Synchronously walk top-level ISO BMFF boxes and report truncation.
 
-        Returns a reason string if a box overflows the file or a header is
-        malformed, otherwise None. Runs in a thread pool via ``_detect_corruption``.
+        Returns a reason string if the critical moov box overflows the file,
+        otherwise None. Runs in a thread pool via ``_detect_corruption``.
+
+        ISO BMFF variants such as 3gp/3g2 may carry compatibility, vendor, or
+        tail-reserved boxes that this lightweight top-level scan does not fully
+        understand. Treat non-moov overflows or malformed trailing boxes as
+        inconclusive so healthy files are not blocked before the real decoder
+        gets a chance to inspect them.
         """
         file_size = file_path.stat().st_size
         if file_size < 8:
@@ -1136,10 +1141,14 @@ class AudioUnderstanding(WorkspaceTool[AudioUnderstandingParams]):
                     break
 
                 if box_size < header_len:
-                    return f"invalid box size {box_size} for box '{box_type}'"
+                    if box_type == "moov":
+                        return f"invalid box size {box_size} for box '{box_type}'"
+                    return None
 
                 box_end = pos + box_size
                 if box_end > file_size:
+                    if box_type != "moov":
+                        return None
                     missing = box_end - file_size
                     return (
                         f"box '{box_type}' claims to end at byte {box_end} but the file "
