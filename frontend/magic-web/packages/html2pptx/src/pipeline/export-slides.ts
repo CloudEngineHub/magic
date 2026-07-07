@@ -15,6 +15,7 @@ import { prepareSlideNodes } from "./render-slide"
 import { sliceByPageHeight } from "./slice-nodes"
 import { detectFontsFromNodes } from "../font/detectFontsFromNodes"
 import type { ExportPipelineRuntime } from "../runtime"
+import { DEFAULT_TEXT_MERGE_MODE } from "./text-merge-mode"
 
 export interface ExportTaskInput {
 	config: SlideConfig
@@ -64,6 +65,7 @@ export async function runExport({
 	fontMissPolicy,
 	runtime,
 }: ExportTaskInput): Promise<void> {
+	const textMergeMode = DEFAULT_TEXT_MERGE_MODE
 	const activePrepareSlideNodes = runtime?.prepareSlideNodes ?? prepareSlideNodes
 	const activePackagePresentationInWorker =
 		runtime?.packagePresentationInWorker ?? packagePresentationInWorker
@@ -98,6 +100,7 @@ export async function runExport({
 				sandbox,
 				signal,
 				onResourceError,
+				textMergeMode,
 				runtime,
 			})
 			if (autoSize) assertWithinPptWidthLimit(totalWidth, i)

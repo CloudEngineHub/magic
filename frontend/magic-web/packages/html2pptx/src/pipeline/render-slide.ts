@@ -15,6 +15,7 @@ import {
 import type { RenderSlideRuntime } from "../runtime"
 import { ensureNotAborted } from "./abort-guard"
 import { extractBodyBackground } from "./slide-background"
+import { DEFAULT_TEXT_MERGE_MODE, type TextMergeMode } from "./text-merge-mode"
 
 export interface PrepareSlideNodesInput {
 	config: SlideConfig
@@ -22,6 +23,7 @@ export interface PrepareSlideNodesInput {
 	sandbox: SandboxInstance
 	signal: AbortSignal
 	onResourceError?: (error: ResourceLoadError) => void
+	textMergeMode?: TextMergeMode
 	runtime?: RenderSlideRuntime
 }
 
@@ -48,6 +50,7 @@ export async function prepareSlideNodes({
 	sandbox,
 	signal,
 	onResourceError,
+	textMergeMode = DEFAULT_TEXT_MERGE_MODE,
 	runtime,
 }: PrepareSlideNodesInput): Promise<PrepareSlideNodesResult> {
 	ensureNotAborted(signal)
@@ -77,7 +80,9 @@ export async function prepareSlideNodes({
 
 		const sortedElements = sortByZOrder(renderableElements)
 
-		const pptNodes = activeTransformElements(sortedElements, config, iWindow)
+		const pptNodes = activeTransformElements(sortedElements, config, iWindow, {
+			textMergeMode,
+		})
 		log(LogLevel.L2, `转换为 ${pptNodes.length} 个绘制节点`, {
 			totalWidth,
 			totalHeight,

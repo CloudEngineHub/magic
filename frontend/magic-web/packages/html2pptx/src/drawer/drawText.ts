@@ -1,11 +1,11 @@
-import type { PPTTextNode, Slide } from "../ir/node"
+import type { PPTTextNode, PPTTextRun, Slide } from "../ir/node"
 
 /** 下划线样式类型 */
 type UnderlineStyle = "sng" | "dbl" | "dash" | "dotted" | "none"
 
 /**
  * 绘制文本到幻灯片
- * 每个 PPTTextNode 对应一个独立的纯文本框
+ * 每个 PPTTextNode 对应一个独立文本框，可用 rich text runs 保留局部样式
  */
 export function drawText(slide: Slide, node: PPTTextNode): void {
 	const {
@@ -84,6 +84,35 @@ export function drawText(slide: Slide, node: PPTTextNode): void {
 	if (transparency && transparency > 0) {
 		options.transparency = transparency
 	}
-	
-	slide.addText(text, options)
+
+	slide.addText(resolveTextInput(text), options)
+}
+
+function resolveTextInput(
+	text: PPTTextNode["text"],
+): string | Array<{ text: string; options?: Record<string, unknown> }> {
+	if (typeof text === "string") return text
+	return text.map((run) => ({
+		text: run.text,
+		options: resolveRunOptions(run),
+	}))
+}
+
+function resolveRunOptions(run: PPTTextRun): Record<string, unknown> | undefined {
+	const options = run.options
+	if (!options) return undefined
+
+	const {
+		fontWeight,
+		underline,
+		strike,
+		...rest
+	} = options
+	void fontWeight
+
+	const output: Record<string, unknown> = { ...rest }
+	if (underline) output.underline = { style: "sng" as UnderlineStyle }
+	if (strike) output.strike = true
+
+	return Object.keys(output).length > 0 ? output : undefined
 }

@@ -121,11 +121,31 @@ export interface PPTImageNode extends PPTNodeBase {
 /** 文本渐变 */
 export type PPTTextGradient = PPTLinearGradientFill | PPTRadialGradientFill
 
-/** 文本节点（每个 DOM Text Node 对应一个独立文本框） */
+/** 富文本片段样式（内部保留 fontWeight 用于字体检测，绘制时会剥离） */
+export interface PPTTextRunOptions {
+	fontSize?: number
+	fontFace?: string
+	fontWeight?: number
+	color?: string
+	bold?: boolean
+	italic?: boolean
+	underline?: boolean
+	strike?: boolean
+	charSpacing?: number
+	transparency?: number
+}
+
+/** 单个 PPT 文本框内的富文本片段 */
+export interface PPTTextRun {
+	text: string
+	options?: PPTTextRunOptions
+}
+
+/** 文本节点（legacy 可按 DOM Text Node 拆分，inline-rich 可携带多个富文本片段） */
 export interface PPTTextNode extends PPTNodeBase {
 	type: "text"
-	/** 纯文本内容 */
-	text: string
+	/** 纯文本内容，或一个文本框内的富文本片段 */
+	text: string | PPTTextRun[]
 	/** 字号 (pt) */
 	fontSize: number
 	/** 字体 */

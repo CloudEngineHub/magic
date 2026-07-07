@@ -12,12 +12,14 @@ import type {
 	SandboxInstance,
 	SandboxReadyControllerConstructor,
 } from "./sandbox/htmlRenderSandbox"
+import type { TextMergeMode } from "./pipeline/text-merge-mode"
 
 export interface RenderSlideRuntime {
 	transformElements?: (
 		elements: ElementNode[],
 		config: SlideConfig,
 		iWindow: Window,
+		options?: { textMergeMode?: TextMergeMode },
 	) => PPTNode[]
 	materializePseudoIcons?: (document: Document, window: Window) => IconBackup[]
 	restoreIcons?: (backups: IconBackup[]) => void

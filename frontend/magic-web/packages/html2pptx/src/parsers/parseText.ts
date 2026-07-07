@@ -14,10 +14,12 @@ import {
 	hasRenderableText,
 } from "../shared/text-utils"
 import { splitTextNodeByVisualLines } from "./text/layout"
-import {
-	resolveTextStyle,
-} from "./text/style"
+import { resolveTextStyle } from "./text/style"
 export type { TextStyle } from "./text/style"
+
+interface ParseTextNodesOptions {
+	mergeVisualLines?: boolean
+}
 
 /**
  * 解析元素的直接文本节点，每个 DOM Text Node 生成一个独立的 PPT 文本框
@@ -31,6 +33,7 @@ export function parseTextNodes(
 	node: ElementNode,
 	base: PPTNodeBase,
 	config: SlideConfig,
+	options: ParseTextNodesOptions = {},
 ): PPTTextNode[] {
 	const { element, style } = node
 	if (!element) return []
@@ -65,6 +68,74 @@ export function parseTextNodes(
 				transformScale !== 1
 					? Math.round(textStyle.fontSize * transformScale)
 					: textStyle.fontSize
+
+			if (options.mergeVisualLines && visualLines.length > 1) {
+				let text = normalizeTextByWhiteSpace({
+					text: childNode.textContent ?? "",
+					whiteSpace,
+				})
+				if (!hasRenderableText({ text, whiteSpace })) continue
+
+				text = transformText(text, style.textTransform)
+
+				const bounds = unionVisualLineBounds(visualLines)
+				if (!bounds) continue
+
+				const spacingBuffer = textStyle.charSpacing
+					? textStyle.charSpacing * text.length * 0.5
+					: 0
+				const contentLeft = node.rect.x + parseCssPx(style.paddingLeft)
+				const contentRight = node.rect.x + node.rect.w - parseCssPx(style.paddingRight)
+				const hasFlowAlignment =
+					style.textAlign === "center" ||
+					style.textAlign === "right" ||
+					style.textAlign === "justify"
+
+				let x = hasFlowAlignment && contentRight > contentLeft ? contentLeft : bounds.left
+				let y = bounds.top
+				let w = Math.max(
+					0,
+					Math.max(bounds.right, contentRight > x ? contentRight : bounds.right) -
+						x +
+						TEXT_SAFETY_MARGIN_X * 2 +
+						spacingBuffer,
+				)
+				let h = Math.max(
+					0,
+					bounds.bottom - bounds.top + TEXT_SAFETY_MARGIN_Y * 2,
+				)
+
+				if (Math.abs(rotateAngle) === 90 || Math.abs(rotateAngle) === 270) {
+					const cx = x + w / 2
+					const cy = y + h / 2
+					const temp = w
+					w = h
+					h = temp
+					x = cx - w / 2
+					y = cy - h / 2
+				}
+
+				const textBase: PPTNodeBase = {
+					...base,
+					x: pxToInch(x, config),
+					y: pxToInch(y, config),
+					w: pxToInch(w, config),
+					h: pxToInch(h, config),
+				}
+
+				if (textBase.w <= 0 || textBase.h <= 0) continue
+
+				results.push({
+					...textBase,
+					type: "text",
+					text,
+					...textStyle,
+					fontSize: finalFontSize,
+					rotate: rotateAngle !== 0 ? rotateAngle : undefined,
+					wrap: true,
+				})
+				continue
+			}
 
 			for (const line of visualLines) {
 				let text = normalizeTextByWhiteSpace({
@@ -131,4 +202,26 @@ export function parseTextNodes(
 	}
 
 	return results
+}
+
+function unionVisualLineBounds(
+	visualLines: Array<{ rect: { left: number; right: number; top: number; bottom: number } }>,
+): { left: number; right: number; top: number; bottom: number } | null {
+	return visualLines.reduce<{ left: number; right: number; top: number; bottom: number } | null>(
+		(bounds, line) => {
+			if (!bounds) return { ...line.rect }
+			return {
+				left: Math.min(bounds.left, line.rect.left),
+				right: Math.max(bounds.right, line.rect.right),
+				top: Math.min(bounds.top, line.rect.top),
+				bottom: Math.max(bounds.bottom, line.rect.bottom),
+			}
+		},
+		null,
+	)
+}
+
+function parseCssPx(value: string): number {
+	const parsed = Number.parseFloat(value)
+	return Number.isFinite(parsed) ? parsed : 0
 }
