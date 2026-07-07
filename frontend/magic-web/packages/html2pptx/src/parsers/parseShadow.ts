@@ -1,6 +1,6 @@
 /**
- * 阴影解析器
- * 将 CSS box-shadow 转换为 PPT 阴影格式
+ * Shadow parser.
+ * Converts CSS box-shadow into the PPT shadow format.
  */
 
 import type { PPTShadow } from "../ir/style"
@@ -8,35 +8,35 @@ import { colorToHex, getShadowOpacity } from "../shared/color"
 import { pxToPt } from "../shared/unit"
 import { splitByTopLevelComma } from "../shared/string"
 
-/** CSS 阴影解析结果 (兼容 box-shadow 和 text-shadow) */
+/** Parsed CSS shadow result, compatible with box-shadow and text-shadow */
 interface CSSShadow {
 	inset: boolean
 	offsetX: number // px
 	offsetY: number // px
 	blur: number // px
-	spread: number // px (text-shadow 始终为 0)
+	spread: number // px; always 0 for text-shadow
 	color: string
 }
 
 /**
- * 解析 CSS box-shadow 为 PPT 阴影格式
- * 统一处理 box-shadow 和 text-shadow
- * 注意：PPT 不支持 inner 阴影，inset 会被忽略（或当作 outer 处理）
+ * Parse CSS box-shadow into PPT shadow format
+ * Handle box-shadow and text-shadow uniformly
+ * Note: PPT does not support inner shadows, so inset is ignored or treated as outer
  */
 export function parseShadow(value: string): PPTShadow | null {
 	if (!value || value === "none") return null
 
-	// 解析 CSS box-shadow / text-shadow
+	// Parse CSS box-shadow / text-shadow
 	const cssShadow = parseCSSShadow(value)
 	if (!cssShadow) return null
 
-	// 笛卡尔坐标 → 极坐标
+	// Cartesian coordinates -> polar coordinates
 	const { angle, distance } = cartesianToPolar(cssShadow.offsetX, cssShadow.offsetY)
 
 const opacity = getShadowOpacity(cssShadow.color)
 
 	return {
-		type: "outer", // 强制为 outer，因为 PPT 实际上不支持 inner
+		type: "outer", // Force outer because PPT does not actually support inner shadows
 		angle,
 		blur: pxToPt(cssShadow.blur),
 		offset: pxToPt(distance),
@@ -45,8 +45,8 @@ const opacity = getShadowOpacity(cssShadow.color)
 	}
 }
 /**
- * 解析 CSS 阴影字符串
- * 支持格式：
+ * Parse a CSS shadow string
+ * Supported format:
  * - "10px 10px 5px rgba(0,0,0,0.5)"
  * - "inset 2px 2px 4px 0px #000"
  * - "5px 5px 10px 2px red"
@@ -55,15 +55,15 @@ function parseCSSShadow(value: string): CSSShadow | null {
 	const trimmed = value.trim()
 	if (!trimmed || trimmed === "none") return null
 
-	// 检查是否有多个阴影
-	// 遍历所有阴影，找到第一个可见的阴影（非全透明且有模糊或偏移）
+	// Check whether there are multiple shadows
+	// Iterate all shadows and find the first visible one, not fully transparent and with blur or offset
 	const shadows = splitByTopLevelComma(trimmed)
 	let targetShadow = shadows[0]
 
 	for (const shadow of shadows) {
 		const { color } = extractColor(shadow)
 		const opacity = getShadowOpacity(color)
-		// 如果阴影完全透明 (opacity === 0)，则跳过
+		// Skip shadows that are fully transparent (opacity === 0)
 		if (opacity > 0) {
 			targetShadow = shadow
 			break
@@ -72,14 +72,14 @@ function parseCSSShadow(value: string): CSSShadow | null {
 
 	if (!targetShadow) return null
 
-	// 检查 inset
+	// Check inset
 	const inset = targetShadow.includes("inset")
 	const withoutInset = targetShadow.replace(/\binset\b/gi, "").trim()
 
-	// 提取颜色（可能在开头或结尾）
+	// Extract color, which may appear at the beginning or end
 	const { color, remaining } = extractColor(withoutInset)
 
-	// 解析数值部分
+	// Parse numeric parts
 	const numbers = remaining.match(/-?[\d.]+px/g)
 	if (!numbers || numbers.length < 2) return null
 
@@ -97,10 +97,10 @@ function parseCSSShadow(value: string): CSSShadow | null {
 
 
 /**
- * 从字符串中提取颜色
+ * Extract color from a string
  */
 function extractColor(str: string): { color: string; remaining: string } {
-	// 匹配 rgb/rgba
+	// Match rgb/rgba
 	const rgbMatch = str.match(/rgba?\([^)]+\)/i)
 	if (rgbMatch) {
 		return {
@@ -109,7 +109,7 @@ function extractColor(str: string): { color: string; remaining: string } {
 		}
 	}
 
-	// 匹配 HEX
+	// Match HEX
 	const hexMatch = str.match(/#[0-9a-fA-F]{3,8}\b/)
 	if (hexMatch) {
 		return {
@@ -118,7 +118,7 @@ function extractColor(str: string): { color: string; remaining: string } {
 		}
 	}
 
-	// 匹配命名颜色（在数值之后）
+	// Match named colors after numeric values
 	const parts = str.split(/\s+/)
 	const numericParts: string[] = []
 	let colorPart = ""
@@ -138,21 +138,21 @@ function extractColor(str: string): { color: string; remaining: string } {
 }
 
 /**
- * 笛卡尔坐标转极坐标
- * @param x - 水平偏移 (正值向右)
- * @param y - 垂直偏移 (正值向下)
+ * Convert Cartesian coordinates to polar coordinates
+ * @param x - Horizontal offset; positive is right
+ * @param y - Vertical offset; positive is down
  * @returns { angle, distance }
  */
 function cartesianToPolar(x: number, y: number): { angle: number; distance: number } {
-	// 计算距离
+	// Calculate distance
 	const distance = Math.sqrt(x * x + y * y)
 
-	// 计算角度 (atan2 返回弧度，-π 到 π)
-	// CSS: x正向右，y正向下
-	// PPT: 0度向右，顺时针
+	// Calculate angle; atan2 returns radians from -pi to pi
+	// CSS: positive x is right, positive y is down
+	// PPT: 0 degrees points right, clockwise
 	let angle = Math.atan2(y, x) * (180 / Math.PI)
 
-	// 转换为 0-360 度
+	// Convert to 0-360 degrees
 	if (angle < 0) angle += 360
 
 	return {

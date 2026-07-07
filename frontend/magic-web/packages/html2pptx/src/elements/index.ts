@@ -1,16 +1,16 @@
 /**
- * 元素聚合入口（element-domain facade）。
+ * Element aggregation entry point (element-domain facade).
  *
- * 按元素类型聚合 parse + draw 的查找面。每个子目录对应一种元素：
- *   - shape  / image / text / table / media / border  → 主元素
- *   - shared                                         → 跨元素共享 parse（背景、阴影）
+ * Aggregates parse + draw lookup surfaces by element type. Each subdirectory corresponds to one element kind:
+ *   - shape  / image / text / table / media / border  -> primary elements
+ *   - shared                                         -> cross-element shared parsers (background, shadow)
  *
- * 真实实现位于 `parsers/` 与 `drawer/`：
- *   - `parsers/`：按解析阶段组织的具体 parser 实现
- *   - `drawer/` ：按节点类型组织的 worker 端绘制实现
+ * Concrete implementations live in `parsers/` and `drawer`:
+ *   - `parsers/`:parser implementations organized by parse stage
+ *   - `drawer/` :worker-side draw implementations organized by node type
  *
- * 本目录仅做 re-export，提供"按元素查找"的入口面，
- * 与 `registry/` 注册表配合用于派发。
+ * This directory only re-exports modules and provides an element-based lookup entry point,
+ * working with the `registry/` modules for dispatch.
  */
 export * from "./shape"
 export * from "./image"

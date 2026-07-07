@@ -29,20 +29,20 @@ export interface PrepareSlideNodesInput {
 
 export interface PrepareSlideNodesResult {
 	pptNodes: PPTNode[]
-	/** 实测内容宽度（px） */
+	/** Measured content width in px */
 	totalWidth: number
-	/** 实测内容高度（px），用于判断是否需要分页 */
+	/** Measured content height in px, used to determine whether pagination is needed */
 	totalHeight: number
-	/** body/html 的背景色 (hex without #)，用作 PPT slide background */
+	/** body/html background color (hex without #), used as the PPT slide background */
 	bodyBackground: string | null
 }
 
 /**
- * 单页渲染前置阶段：
- * render HTML → materialize icons → collect → filter → sort → transform → prepare
+ * Single-page pre-render stage:
+ * render HTML -> materialize icons -> collect -> filter -> sort -> transform -> prepare
  *
- * 返回的 `pptNodes` 坐标已是英寸（基于 96 DPI 的 1:1 映射），
- * 可被 sliceByPageHeight 进一步切片为多页 PPT。
+ * Returned `pptNodes` coordinates are already in inches, based on a 1:1 mapping at 96 DPI,
+ * and can be further split into multiple PPT pages by sliceByPageHeight.
  */
 export async function prepareSlideNodes({
 	config,

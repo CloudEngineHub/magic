@@ -15,30 +15,30 @@ import {
 } from "./waitSandboxReady"
 import type { ResourceLoadError } from "../api/options"
 
-/** 沙箱渲染结果 */
+/** Sandbox render result */
 export interface SandboxRenderResult {
 	iWindow: Window
 	iDocument: Document
-	/** 实测内容宽度（px），含横向溢出部分 */
+	/** Measured content width in px, including horizontal overflow */
 	totalWidth: number
-	/** 实测内容高度（px），含纵向溢出部分（用于自动分页） */
+	/** Measured content height in px, including vertical overflow for automatic pagination */
 	totalHeight: number
 }
 
-/** 沙箱实例接口 */
+/** Sandbox instance interface */
 export interface SandboxInstance {
-	/** iframe 元素 */
+	/** iframe element */
 	iframe: HTMLIFrameElement
-	/** iframe window 对象 */
+	/** iframe window object */
 	window: Window
-	/** iframe document 对象 */
+	/** iframe document object */
 	document: Document
-	/** 渲染 HTML 内容 */
+	/** Render HTML content */
 	render: (
 		html: string,
 		options?: { signal?: AbortSignal; onResourceError?: (error: ResourceLoadError) => void },
 	) => Promise<SandboxRenderResult>
-	/** 销毁沙箱 */
+	/** Destroy the sandbox */
 	destroy: () => void
 }
 
@@ -63,8 +63,8 @@ export interface HtmlRenderSandboxOptions {
 }
 
 /**
- * 一个 HTML 渲染沙箱实例，对应一个隐藏 iframe。
- * 多页导出会复用同一个实例串行渲染；同一实例不支持并发 render。
+ * One HTML render sandbox instance backed by a hidden iframe.
+ * Multi-page export reuses the same instance for serial rendering; one instance does not support concurrent render calls.
  */
 export class HtmlRenderSandbox implements SandboxInstance {
 	readonly iframe: HTMLIFrameElement
@@ -162,7 +162,7 @@ export class HtmlRenderSandbox implements SandboxInstance {
 				signal?.addEventListener("abort", onAbort, { once: true })
 				const normalizedHtml = normalizeSandboxHtml(html)
 
-				// 显式清空上一页文档，再安装 ready controller，确保不漏掉本页 load 与资源事件。
+				// Explicitly clear the previous page document before installing the ready controller so this page's load and resource events are not missed.
 				iframeDocument.open()
 				lifecycleState.readyController = new this.ReadyController({
 					iframeWindow,

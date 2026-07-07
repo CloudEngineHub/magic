@@ -1,11 +1,11 @@
 /**
- * DOM 收集层数据契约：collector 阶段从 iframe DOM 中抽取的中间表示。
- * 不依赖任何业务模块。
+ * DOM collection-layer contract: the intermediate representation extracted from the iframe DOM during collection.
+ * Does not depend on any business modules.
  */
 
-/** 计算样式信息 (精简版) */
+/** Computed style information (reduced form) */
 export interface ComputedStyleInfo {
-	// 背景
+	// Background
 	backgroundColor: string
 	backgroundImage: string
 	backgroundSize: string
@@ -15,12 +15,12 @@ export interface ComputedStyleInfo {
 	objectFit: string
 	objectPosition: string
 
-	// 边框
+	// Border
 	borderRadius: string
 	borderWidth: string
 	borderColor: string
 	borderStyle: string
-	// 单边边框
+	// Per-side border
 	borderTopWidth: string
 	borderRightWidth: string
 	borderBottomWidth: string
@@ -34,7 +34,7 @@ export interface ComputedStyleInfo {
 	borderBottomStyle: string
 	borderLeftStyle: string
 
-	// 文字
+	// Text
 	color: string
 	fontSize: number
 	fontFamily: string
@@ -55,7 +55,7 @@ export interface ComputedStyleInfo {
 	marginBottom: string
 	marginLeft: string
 
-	// 布局
+	// Layout
 	display: string
 	position: string
 	opacity: string
@@ -63,69 +63,69 @@ export interface ComputedStyleInfo {
 	overflow: string
 	zIndex: string
 
-	// Flex/Grid 对齐
+	// Flex/Grid alignment
 	alignItems: string
 	justifyContent: string
 	alignContent: string
 	alignSelf: string
 	flexDirection: string
 
-	// 阴影
+	// Shadow
 	boxShadow: string
 	textShadow: string
 
-	// 变换
+	// Transform
 	transform: string
 
-	// 滤镜
+	// Filter
 	filter: string
 
-	// 裁剪
+	// Clipping
 	clipPath: string
 
-	// 文本转换
+	// Text transform
 	textTransform: string
 
-	// WebKit 专属 (text-stroke，与 lib.dom.d.ts 一致)
+	// WebKit-only properties (text-stroke, aligned with lib.dom.d.ts)
 	webkitTextStroke?: string
 	webkitTextStrokeWidth?: string
 	webkitTextStrokeColor?: string
 }
 
-/** DOM 元素节点 */
+/** DOM element node */
 export interface ElementNode {
-	/** 唯一标识 */
+	/** Unique identifier */
 	id: string
-	/** 元素类型 */
+	/** Element type */
 	tagName: string
-	/** 原始 DOM 引用 */
+	/** Original DOM reference */
 	element: Element
-	/** 位置和尺寸 (像素) */
+	/** Position and size in pixels */
 	rect: {
 		x: number
 		y: number
 		w: number
 		h: number
 	}
-	/** 布局尺寸 (无变换的原始尺寸) */
+	/** Layout size, before transforms */
 	layout: {
 		offsetWidth: number
 		offsetHeight: number
 	}
-	/** 计算后的样式 */
+	/** Computed styles */
 	style: ComputedStyleInfo
-	/** 直接文本内容 */
+	/** Direct text content */
 	textContent: string | null
-	/** 子元素 */
+	/** Child elements */
 	children: ElementNode[]
-	/** 父元素引用 */
+	/** Parent element reference */
 	parent: ElementNode | null
-	/** DOM 深度 */
+	/** DOM depth */
 	depth: number
-	/** z-index 数值 */
+	/** z-index value */
 	zIndex: number
-	/** DOM 遍历顺序（用于同级元素排序，后来居上） */
+	/** DOM traversal order for sibling sorting; later elements are above */
 	domOrder: number
-	/** 绘制顺序（由 sortByZOrder 计算后挂载） */
+	/** Paint order attached after sortByZOrder computes it */
 	paintOrder?: number
 }

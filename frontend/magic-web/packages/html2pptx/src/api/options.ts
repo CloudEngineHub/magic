@@ -1,89 +1,89 @@
 import type { ExternalLogger, LogLevelLabel } from "../logger"
 import type { FontMissPolicy, FontResolver } from "./font"
 
-/** 幻灯片配置 */
+/** Slide configuration */
 export interface SlideConfig {
-	/** 设计稿宽度 (px) */
+	/** Design width in pixels */
 	htmlWidth: number
-	/** 设计稿高度 (px) */
+	/** Design height in pixels */
 	htmlHeight: number
-	/** PPT 宽度 (英寸) */
+	/** PPT Width in inches */
 	slideWidth: number
-	/** PPT 高度 (英寸) */
+	/** PPT Height in inches */
 	slideHeight: number
 }
 
-/** 导出选项 */
+/** Export options */
 export interface ExportOptions {
-	/** 文件名 */
+	/** Output file name */
 	fileName?: string
-	/** 幻灯片配置 */
+	/** Slide configuration overrides */
 	config?: Partial<SlideConfig>
-	/** 导出模式 */
+	/** Export mode */
 	exportMode?: "single"
-	/** 页面失败时是否跳过并继续导出后续页面 */
+	/** Skip failed pages and continue exporting later pages */
 	skipFailedPages?: boolean
 	/**
-	 * 任意尺寸模式开关（默认 `false`，即标准 PPT 模式）。
+	 * Auto-size mode switch (defaults to `false`, standard PPT mode).
 	 *
-	 * - `false`（默认 / PPT 模式）：严格按 `config.slideWidth/slideHeight` 输出单页，
-	 *   超出内容由 PPT 页面边界裁切，导出尺寸固定且与设计稿无关。
-	 * - `true`（任意尺寸模式）：根据 HTML 真实尺寸自适应：
-	 *   - 真实宽度 > `config.htmlWidth` 时，自动扩展 `slideWidth` 至最大测量宽度
-	 *   - 真实高度 > `config.htmlHeight` 时，按 `slideHeight` 切片为多页 PPT
-	 *   - 任一页宽度超过 PowerPoint 单页 56 英寸上限 (5376px) 时直接抛错
+	 * - `false` (default / PPT mode): output one page strictly using `config.slideWidth/slideHeight`,
+	 *   overflowing content is clipped by the PPT page bounds, and the export size stays fixed independently of the design size.
+	 * - `true` (auto-size mode): adapt to the actual HTML dimensions:
+	 *   - when actual width exceeds `config.htmlWidth`, expand `slideWidth` to the maximum measured width
+	 *   - when actual height exceeds `config.htmlHeight`, split into multiple PPT pages by `slideHeight`
+	 *   - throw immediately if any page width exceeds PowerPoint's 56-inch single-page limit (5376px)
 	 */
 	autoSize?: boolean
-	/** 每页渲染开始时的进度回调 */
+	/** Progress callback invoked when each slide starts rendering */
 	onSlideProgress?: (context: ExportPageContext) => void
 	/**
-	 * 资源（图片、视频封面等）加载失败、被跳过时的回调。
-	 * 失败资源不会中断导出，仅用于提示用户。可能就同一资源多次触发，调用方需自行去重。
+	 * Callback invoked when resources such as images or video posters fail to load or are skipped.
+	 * Failed resources do not stop export and are only used for user notification. The same resource may trigger multiple times, so callers should deduplicate if needed.
 	 */
 	onResourceLoadError?: (error: ResourceLoadError) => void
-	/** 最低输出级别，低于此级别的日志会被忽略，默认 "info" */
+	/** Minimum output level; logs below this level are ignored. Defaults to "info" */
 	logLevel?: LogLevelLabel
-	/** 传入外部 logger，直接传 console 即可；方法均为可选 */
+	/** External logger. Passing console is supported; all methods are optional */
 	logger?: ExternalLogger
-	/** 字体解析器。包内只提供已使用字体列表，manifest、CDN、私有化路径均由业务层处理。 */
+	/** Font resolver. The package only reports used fonts; manifests, CDNs, and private paths are handled by the host application */
 	fontResolver?: FontResolver
 	/**
-	 * 字体缺失时的处理策略，默认 'fallback-with-warning'
-	 * - 'fallback-with-warning'：跳过该字体并打印警告，其余字体正常嵌入
-	 * - 'no-embed'：静默跳过
-	 * - 'fail'：抛出错误，终止导出
+	 * Policy for missing fonts; defaults to 'fallback-with-warning'.
+	 * - 'fallback-with-warning': skip that font and print a warning; embed the remaining fonts normally
+	 * - 'no-embed': skip silently
+	 * - 'fail': throw an error and stop export
 	 */
 	fontMissPolicy?: FontMissPolicy
 }
 
-/** 资源加载失败信息 */
+/** Resource load failure information */
 export interface ResourceLoadError {
-	/** 资源地址（可能被截断） */
+	/** Resource URL, possibly truncated */
 	url: string
-	/** 资源类型，如 image / video / script / style */
+	/** Resource kind, such as image, video, script, or style */
 	kind: string
-	/** 失败原因：超时或加载错误 */
+	/** Failure reason: timeout or load error */
 	reason: "timeout" | "load-error"
 }
 
-/** exportPPTX 的返回句柄，用于等待完成或主动取消 */
+/** Return handle from exportPPTX, used to wait for completion or cancel actively */
 export interface ExportHandle {
-	/** 等待导出完成（成功 resolve，失败/取消 reject） */
+	/** Wait for export completion; resolves on success and rejects on failure or cancelation */
 	promise: Promise<void>
-	/** 取消本次导出 */
+	/** Cancel this export */
 	cancel: () => void
 }
 
-/** 逐页导出上下文 */
+/** Per-slide export context */
 export interface ExportPageContext {
-	/** 当前页索引（从 0 开始） */
+	/** Current page index, starting from 0 */
 	index: number
-	/** 总页数 */
+	/** Total page count */
 	total: number
-	/** 当前页 HTML */
+	/** HTML for the current page */
 	html: string
-	/** 当前页导出文件名 */
+	/** Output file name for the current page */
 	fileName: string
-	/** 幻灯片配置 */
+	/** Slide configuration */
 	config: SlideConfig
 }

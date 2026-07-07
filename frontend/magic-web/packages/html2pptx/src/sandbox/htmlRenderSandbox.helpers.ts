@@ -1,6 +1,6 @@
 import { READY_STATE_FALLBACK_MS } from "../shared/constants"
 
-/** 创建离屏隐藏 iframe，作为 HTML 渲染沙箱容器 */
+/** Create an offscreen hidden iframe as the HTML render sandbox container */
 export function createHiddenIframe({
 	htmlWidth,
 	htmlHeight,
@@ -27,7 +27,7 @@ export function createHiddenIframe({
 		"sandbox",
 		"allow-scripts allow-modals allow-forms allow-same-origin allow-popups",
 	)
-	/** 便于沙箱内 video 解码、seek 首帧（与 muted 等配合） */
+	/** Help videos decode and seek to the first frame inside the sandbox, together with muted and related attributes */
 	iframe.setAttribute("allow", "autoplay")
 	iframe.setAttribute("translate", "no")
 	return iframe
@@ -37,7 +37,7 @@ export function normalizeSandboxHtml(html: string): string {
 	return injectExportPatches(injectVideoCrossOriginAnonymous(decodeInlineScriptEntities(html)))
 }
 
-/** 判断文档是否已达到可进入导出渲染阶段的状态 */
+/** Determine whether the document is ready to enter the export render stage */
 export function isDocumentReadyForRender({
 	iframeDocument,
 	renderStartedAt,
@@ -55,8 +55,8 @@ export function isDocumentReadyForRender({
 }
 
 /**
- * 测量文档真实内容尺寸，用于自动分页与 PPT 页面宽度自适应。
- * 兜底取 iframe 自身尺寸，确保短内容也能撑满至少一页。
+ * Measure the document's actual content size for automatic pagination and PPT page width adaptation.
+ * Fallback to the iframe size itself so short content still fills at least one page.
  */
 export function measureContentSize({
 	iframeDocument,
@@ -87,9 +87,9 @@ export function measureContentSize({
 }
 
 /**
- * 为未声明 crossorigin 的 `<video>` 开始标签注入 `crossorigin="anonymous"`（单次扫描，O(n)）。
- * 实现用 `[^>]*` 匹配到第一个 `>`：若属性值里含未转义的 `>` 会截断错误，需在模板中避免或手写 crossorigin。
- * script/style 内若出现字面量 `<video...>` 也会被替换，导出 HTML 一般不含此类片段。
+ * Inject `crossorigin="anonymous"` into opening `<video>` tags that do not declare crossorigin, using a single O(n) scan.
+ * The implementation matches up to the first `>` with `[^>]*`; unescaped `>` inside attribute values would truncate incorrectly, so templates should avoid that or write crossorigin manually.
+ * Literal `<video...>` text inside script/style would also be replaced, though exported HTML normally does not contain such fragments.
  */
 function injectVideoCrossOriginAnonymous(html: string): string {
 	return html.replace(/<video\b([^>]*)>/gi, (full) => {
@@ -98,7 +98,7 @@ function injectVideoCrossOriginAnonymous(html: string): string {
 	})
 }
 
-/** 解码内联 script 中被 HTML 转义的字符，避免脚本内容失真 */
+/** Decode HTML-escaped characters inside inline scripts to avoid script content corruption */
 function decodeInlineScriptEntities(rawHtml: string): string {
 	return rawHtml.replace(
 		/<script\b([^>]*)>([\s\S]*?)<\/script>/gi,
@@ -117,11 +117,11 @@ function decodeInlineScriptEntities(rawHtml: string): string {
 }
 
 /**
- * 注入导出补丁：
- * 1. Mock IntersectionObserver —— 立即触发回调（isIntersecting: true），
- *    避免滚动触发的 fade-in 动画在离屏 iframe 中永远不执行。
- * 2. 禁用 CSS animation / transition —— 确保元素保持最终静态样式，
- *    防止 @keyframes 中 opacity:0 导致元素被判定为不可见。
+ * Inject export patches:
+ * 1. Mock IntersectionObserver by firing callbacks immediately with isIntersecting: true,
+ *    so scroll-triggered fade-in animations do not stay inactive forever inside the offscreen iframe.
+ * 2. Disable CSS animation / transition to keep elements in their final static styles,
+ *    preventing opacity:0 inside @keyframes from making elements appear invisible.
  */
 const EXPORT_PATCHES = `<script>
 (function(){

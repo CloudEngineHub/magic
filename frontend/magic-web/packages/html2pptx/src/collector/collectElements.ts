@@ -3,17 +3,17 @@ import type { ElementNode, ComputedStyleInfo } from "../ir/dom"
 let idCounter = 0
 
 /**
- * 收集 DOM 元素信息
- * 遍历所有 DOM 元素，测量位置、尺寸，收集计算样式
+ * Collect DOM element information
+ * Traverse all DOM elements, measure position and size, and collect computed styles
  */
 export function collectElements(doc: Document, win: Window): ElementNode[] {
 	idCounter = 0
 	const allNodes: ElementNode[] = []
 
-	// 使用 iframe 视口坐标（与 Range/getClientRects 一致）。
-	// 若减去 body 原点，在 body 被 max-w + mx-auto 等居中时，块级元素会相对文字整体左移。
+	// Use iframe viewport coordinates, matching Range/getClientRects.
+	// Subtracting the body origin would shift block elements left relative to text when the body is centered with max-width and mx-auto.
 
-	// 递归遍历 DOM 树，对不可见子树提前剪枝
+	// Traverse the DOM tree recursively and prune invisible subtrees early
 	function traverse(
 		element: Element,
 		parent: ElementNode | null,
@@ -22,10 +22,10 @@ export function collectElements(doc: Document, win: Window): ElementNode[] {
 		const rect = element.getBoundingClientRect()
 		const computedStyle = win.getComputedStyle(element)
 
-		// display:none：整棵子树不渲染，直接剪枝
+		// display:none means the whole subtree is not rendered, so prune it directly
 		if (computedStyle.display === "none") return null
 
-		// display:contents：元素本身无盒子，子元素仍参与父布局，穿透递归给父节点
+		// display:contents has no box of its own; children still participate in parent layout, so recurse through to the parent
 		if (element !== doc.body && computedStyle.display === "contents") {
 			Array.from(element.children).forEach((child) => {
 				const childNode = traverse(child, parent, depth)
@@ -34,10 +34,10 @@ export function collectElements(doc: Document, win: Window): ElementNode[] {
 			return null
 		}
 
-		// 零尺寸剪枝：跳过整棵子树（display:none / contents 已在上方处理）
+		// Zero-size pruning: skip the whole subtree (display:none / contents are handled above)
 		if (element !== doc.body && rect.width === 0 && rect.height === 0) return null
 
-		// 构建节点
+		// Build the node
 		const node: ElementNode = {
 			id: `el-${idCounter++}`,
 			tagName: element.tagName,
@@ -58,10 +58,10 @@ export function collectElements(doc: Document, win: Window): ElementNode[] {
 			parent,
 			depth,
 			zIndex: parseZIndex(computedStyle.zIndex),
-			domOrder: idCounter, // DOM 遍历顺序，后来居上
+			domOrder: idCounter, // DOM traversal order; later elements paint above earlier ones
 		}
 
-		// 递归处理子元素
+		// Process child elements recursively
 		Array.from(element.children).forEach((child) => {
 			const childNode = traverse(child, node, depth + 1)
 			if (childNode) node.children.push(childNode)
@@ -71,18 +71,18 @@ export function collectElements(doc: Document, win: Window): ElementNode[] {
 		return node
 	}
 
-	// 从 body 元素开始遍历（包含 body 本身，以获取背景色/背景图等）
+	// Start traversal from the body element, including body itself to capture background color/image and related styles
 	traverse(doc.body, null, 0)
 
 	return allNodes
 }
 
 /**
- * 提取计算样式的关键属性
+ * Extract key computed style properties
  */
 function extractStyles(style: CSSStyleDeclaration): ComputedStyleInfo {
 	return {
-		// 背景
+		// Background
 		backgroundColor: style.backgroundColor,
 		backgroundImage: style.backgroundImage,
 		backgroundSize: style.backgroundSize,
@@ -92,12 +92,12 @@ function extractStyles(style: CSSStyleDeclaration): ComputedStyleInfo {
 		objectFit: style.objectFit,
 		objectPosition: style.objectPosition,
 
-		// 边框
+		// Border
 		borderRadius: style.borderRadius,
 		borderWidth: style.borderWidth,
 		borderColor: style.borderColor,
 		borderStyle: style.borderStyle,
-		// 单边边框（使用 getPropertyValue 确保兼容性）
+		// Per-side borders (use getPropertyValue for compatibility)
 		borderTopWidth: style.borderTopWidth,
 		borderRightWidth: style.borderRightWidth,
 		borderBottomWidth: style.borderBottomWidth,
@@ -111,7 +111,7 @@ function extractStyles(style: CSSStyleDeclaration): ComputedStyleInfo {
 		borderBottomStyle: style.borderBottomStyle,
 		borderLeftStyle: style.borderLeftStyle,
 
-		// 文字
+		// Text
 		color: style.color,
 		fontSize: parseFloat(style.fontSize) || 16,
 		fontFamily: normalizeFontFamily(style.fontFamily),
@@ -132,7 +132,7 @@ function extractStyles(style: CSSStyleDeclaration): ComputedStyleInfo {
 		marginBottom: style.marginBottom,
 		marginLeft: style.marginLeft,
 
-		// 布局
+		// Layout
 		display: style.display,
 		position: style.position,
 		opacity: style.opacity,
@@ -140,30 +140,30 @@ function extractStyles(style: CSSStyleDeclaration): ComputedStyleInfo {
 		overflow: style.overflow,
 		zIndex: style.zIndex,
 
-		// Flex/Grid 对齐
+		// Flex/Grid alignment
 		alignItems: style.alignItems,
 		justifyContent: style.justifyContent,
 		alignContent: style.alignContent,
 		alignSelf: style.alignSelf,
 		flexDirection: style.flexDirection,
 
-		// 阴影
+		// Shadow
 		boxShadow: style.boxShadow,
 		textShadow: style.textShadow,
 
-		// 变换
+		// Transform
 		transform: style.transform,
 
-		// 滤镜
+		// Filter
 		filter: style.filter,
 
-		// 裁剪
+		// Clipping
 		clipPath: style.clipPath || "none",
 
-		// 文本转换
+		// Text transform
 		textTransform: style.textTransform,
 
-		// WebKit 专属 (text-stroke，lib.dom.d.ts 已声明)
+		// WebKit-only properties (text-stroke, already declared in lib.dom.d.ts)
 		webkitTextStroke: style.webkitTextStroke,
 		webkitTextStrokeWidth: style.webkitTextStrokeWidth || undefined,
 		webkitTextStrokeColor: style.webkitTextStrokeColor || undefined,
@@ -171,8 +171,8 @@ function extractStyles(style: CSSStyleDeclaration): ComputedStyleInfo {
 }
 
 /**
- * 获取元素的直接文本内容（不包含子元素的文本）
- * 将换行和多余空格折叠成单个空格（模拟浏览器的渲染行为）
+ * Get the element's direct text content, excluding child element text
+ * Collapse line breaks and extra spaces into a single space, matching browser rendering
  */
 function getDirectTextContent(element: Element): string | null {
 	let text = ""
@@ -181,13 +181,13 @@ function getDirectTextContent(element: Element): string | null {
 			text += node.textContent || ""
 		}
 	})
-	// 将换行和多余空格折叠成单个空格（模拟 CSS white-space: normal 的行为）
+	// Collapse line breaks and extra spaces into one space, matching CSS white-space: normal
 	const normalized = text.replace(/\s+/g, " ").trim()
 	return normalized || null
 }
 
 /**
- * 解析 z-index 值
+ * Parse the z-index value
  */
 function parseZIndex(value: string): number {
 	if (value === "auto") return 0
@@ -195,12 +195,12 @@ function parseZIndex(value: string): number {
 }
 
 /**
- * 规范化字体名称
+ * Normalize the font name
  */
 function normalizeFontFamily(fontFamily: string): string {
 	if (!fontFamily) return "Arial"
 
-	// 取第一个字体，移除引号
+	// Take the first font and remove quotes
 	const first = fontFamily.split(",")[0].trim()
 	return first.replace(/['"]/g, "") || "Arial"
 }

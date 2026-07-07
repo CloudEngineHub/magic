@@ -1,17 +1,17 @@
 import { SLICE_EPSILON } from "../shared/constants"
 
-/** 切片所需的最小节点形状（含 y/h，单位英寸） */
+/** Minimal node shape needed for slicing, including y/h in inches */
 export interface SliceableNode {
 	y: number
 	h: number
 }
 
 export interface SliceByPageHeightInput<T extends SliceableNode> {
-	/** 单页 PPT 节点（坐标单位为英寸） */
+	/** Single-page PPT nodes with coordinates in inches */
 	nodes: T[]
-	/** 单页高度（英寸） */
+	/** Single-page height in inches */
 	pageHeightInch: number
-	/** 内容总高度（英寸），用于决定页数 */
+	/** Total content height in inches, used to determine page count */
 	totalHeightInch: number
 }
 
@@ -27,17 +27,17 @@ function isSliceableTable(node: SliceableNode): node is SliceableTableNode {
 }
 
 /**
- * 对表格节点按绝对坐标范围 [pageStart, pageEnd) 做行级切割。
- * 返回仅包含该页可见行的新表格节点（y 已平移到页面坐标系），
- * 若该页无可见行则返回 null。
+ * Slice table nodes by row using the absolute coordinate range [pageStart, pageEnd).
+ * Return a new table node containing only rows visible on that page, with y translated into page coordinates,
+ * or null if that page has no visible rows.
  *
- * 行归属规则：以行的顶部位置（rowStart）决定归属页，即
- * `rowStart >= pageStart && rowStart < pageEnd`。
- * 这确保每行只出现在一个页面（不重复），且页内 y 坐标始终 ≥ 0。
- * 跨页边界的行会在所属页的底部被 PPT 页面边界裁切。
+ * Row ownership rule: the row top position (rowStart) determines the owning page:
+ * `rowStart >= pageStart && rowStart < pageEnd`.
+ * This ensures each row appears on only one page without duplication and that in-page y is always >= 0.
+ * Rows crossing a page boundary are clipped by the PPT page bounds at the bottom of their owning page.
  *
- * pptxgenjs 表格对象不会被 PPT 页面边界自动按行裁切，
- * 必须在生成阶段就确保每页只包含属于该页的行，否则会出现行重复或缺失。
+ * pptxgenjs table objects are not automatically clipped row-by-row by PPT page bounds,
+ * so generation must ensure each page contains only rows owned by that page, otherwise rows may be duplicated or missing.
  */
 function sliceTableByPage<T extends SliceableTableNode>(
 	node: T,
@@ -53,11 +53,11 @@ function sliceTableByPage<T extends SliceableTableNode>(
 		const rowStart = cumY
 		cumY += node.rowHeights[i]
 
-		// 行按其顶部位置归属：rowStart 落在 [pageStart, pageEnd) 区间内才纳入本页
+		// Rows are owned by their top position: include a row only when rowStart falls within [pageStart, pageEnd)
 		if (rowStart >= pageStart && rowStart < pageEnd) {
 			if (firstRowIndex === -1) {
 				firstRowIndex = i
-				slicedY = rowStart - pageStart // 始终 >= 0
+				slicedY = rowStart - pageStart // Always >= 0
 			}
 			lastRowIndex = i
 		}
@@ -76,10 +76,10 @@ function sliceTableByPage<T extends SliceableTableNode>(
 }
 
 /**
- * 按页高对节点做垂直切片：
- * - 普通节点：每页保留所有与页面区间相交的节点，y 平移到当前页坐标系
- * - 表格节点：按行做精确切割，每页只包含属于该页的行（pptxgenjs 表格不支持页面边界自动裁切）
- * - 不做"避免切断元素"的智能搜索，保持规则简单且可预测
+ * Slice nodes vertically by page height:
+ * - Regular nodes: each page keeps all nodes intersecting the page interval, with y translated into the current page coordinate system
+ * - Table nodes: slice precisely by row, and each page contains only rows owned by that page because pptxgenjs tables do not support automatic page-bound clipping
+ * - Do not perform smart searching to avoid cutting elements; keep the rule simple and predictable
  */
 export function sliceByPageHeight<T extends SliceableNode>({
 	nodes,

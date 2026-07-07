@@ -19,7 +19,7 @@ import {
 } from "../../shared/text-utils"
 import { pxToPt } from "../../shared/unit"
 
-/** 从元素计算样式中提取的文本样式 */
+/** Text style extracted from an element's computed style */
 export interface TextStyle {
 	fontSize: number
 	fontFace: string
@@ -28,15 +28,15 @@ export interface TextStyle {
 	bold: boolean
 	italic: boolean
 	underline: boolean
-	/** 删除线 (text-decoration: line-through) */
+	/** Strikethrough (text-decoration: line-through) */
 	strike?: boolean
 	align?: "left" | "center" | "right" | "justify"
 	valign?: "top" | "middle" | "bottom"
 	transparency?: number
-	charSpacing?: number // 字间距 (pt)
-	lineSpacing?: number // 行间距 (倍数)
+	charSpacing?: number // Character spacing in points
+	lineSpacing?: number // Line spacing multiplier
 	shadow?: PPTShadow | null
-	margin: [number, number, number, number] // 外边距 (pt)
+	margin: [number, number, number, number] // Margin in points
 	outline?: {
 		color: string
 		size: number

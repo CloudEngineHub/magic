@@ -17,8 +17,8 @@ interface MediaOptions {
 }
 
 /**
- * 绘制媒体到幻灯片。
- * 新版导出链路中，媒体在当前执行上下文内直接物化并写入。
+ * Draw media onto the slide.
+ * In the current export pipeline, media is materialized and written directly in this execution context.
  */
 export async function drawMedia(
 	slide: Slide,
@@ -49,7 +49,7 @@ export async function drawMedia(
 
 		case "video":
 		case "audio":
-			// cover：HTML poster，或 materializeVideoCoverNodes 写入的首帧 data URL（可能由字节透传后在此转换）
+			// cover: HTML poster, or the first-frame data URL written by materializeVideoCoverNodes (possibly converted here from transferred bytes)
 			if (cover && mediaType === "video" && cover.startsWith("data:")) options.cover = cover
 			if (extn) options.extn = extn
 
@@ -94,8 +94,8 @@ async function fetchAsDataUrl(url: string): Promise<string> {
 }
 
 /**
- * 解析视频封面：优先用透传的二进制字节（打包 worker 内转 data URL），
- * 否则回退到 `cover`（poster / 首帧截图 data URL）。
+ * Resolve the video cover: prefer transferred binary bytes converted to a data URL inside the packaging worker,
+ * otherwise fall back to `cover` (poster / first-frame screenshot data URL).
  */
 function resolveCover(node: PPTMediaNode): string | undefined {
 	const bytes = node.coverBytes

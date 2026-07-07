@@ -1,11 +1,11 @@
 import type { PPTTextNode, PPTTextRun, Slide } from "../ir/node"
 
-/** 下划线样式类型 */
+/** Underline style type */
 type UnderlineStyle = "sng" | "dbl" | "dash" | "dotted" | "none"
 
 /**
- * 绘制文本到幻灯片
- * 每个 PPTTextNode 对应一个独立文本框，可用 rich text runs 保留局部样式
+ * Draw text onto the slide
+ * Each PPTTextNode maps to one text box; rich text runs can preserve local styling
  */
 export function drawText(slide: Slide, node: PPTTextNode): void {
 	const {
@@ -40,15 +40,15 @@ export function drawText(slide: Slide, node: PPTTextNode): void {
 		italic,
 		underline: underline ? { style: "sng" as UnderlineStyle } : undefined,
 		strike: strike ? true : undefined,
-		charSpacing, // 应用字间距
-		lineSpacingMultiple: lineSpacing ?? undefined, // 单行文本禁用，避免 line-height 二次生效
+		charSpacing, // Apply character spacing
+		lineSpacingMultiple: lineSpacing ?? undefined, // Disable this for single-line text to avoid applying line-height twice
 		margin: margin ?? [0, 0, 0, 0],
 		wrap: node.wrap ?? true,
-		rotate: rotate, // 应用旋转角度
-		outline, // 应用文本描边
+		rotate: rotate, // Apply rotation
+		outline, // Apply text outline
 	}
 
-	// 颜色处理
+	// Color handling
 	if (typeof color !== "string" && color.type === "gradient") {
 		const stops = color.stops.map((s) => ({
 			position: Math.round(s.position * 100),
@@ -80,7 +80,7 @@ export function drawText(slide: Slide, node: PPTTextNode): void {
 		options.color = color
 	}
 
-	// 透明度
+	// Transparency
 	if (transparency && transparency > 0) {
 		options.transparency = transparency
 	}

@@ -1,16 +1,16 @@
 /**
- * 设备能力探测：基于 CPU 核心数与设备内存的通用判断，供并发/降采样等场景复用。
+ * Device capability detection based on CPU core count and device memory, reused by concurrency/downsampling scenarios.
  */
 
-/** 设备内存 ≤ 4GB 视为低内存设备 */
+/** Treat devices with memory <= 4 GB as low-memory devices */
 export function isLowMemoryDevice(): boolean {
 	const mem = (navigator as { deviceMemory?: number }).deviceMemory
 	return typeof mem === "number" && mem > 0 && mem <= 4
 }
 
 /**
- * 设备内存信息缺失（Safari / Firefox 不支持 navigator.deviceMemory）。
- * 此时无法确认是否为弱机，按保守策略对待，避免把老旧设备误判成中高端机。
+ * Device memory information is missing because Safari / Firefox do not support navigator.deviceMemory.
+ * In this case the device capability is unknown, so use a conservative strategy to avoid misclassifying old devices as mid/high-end.
  */
 export function isMemoryInfoUnavailable(): boolean {
 	const mem = (navigator as { deviceMemory?: number }).deviceMemory
@@ -18,8 +18,8 @@ export function isMemoryInfoUnavailable(): boolean {
 }
 
 /**
- * 老旧/弱机判定：低内存（≤4GB）、内存信息缺失、或 CPU 核心数 ≤ 2。
- * 命中后并发与质量等旋钮统一降到最低档，避免压垮设备。
+ * Old/weak device detection: low memory (<=4 GB), missing memory info, or CPU cores <= 2.
+ * When matched, lower concurrency and quality controls to the minimum to avoid overwhelming the device.
  */
 export function isLowEndDevice(): boolean {
 	const cores = (typeof navigator !== "undefined" && navigator.hardwareConcurrency) || 0
@@ -27,8 +27,8 @@ export function isLowEndDevice(): boolean {
 }
 
 /**
- * 受控并发数：老旧/弱机统一为 1，强机器按核心数取 2~4。
- * 让 fetch/snapdom 等 IO 并行进行，同时避免弱机器内存压力过大。
+ * Controlled concurrency: old/weak devices use 1; stronger machines use 2-4 based on core count.
+ * This lets fetch/snapdom and other IO run in parallel while avoiding excessive memory pressure on weak devices.
  */
 export function getImageConcurrency(): number {
 	if (isLowEndDevice()) return 1
@@ -37,16 +37,16 @@ export function getImageConcurrency(): number {
 }
 
 /**
- * snapdom 预截图并发：老旧/弱机统一为 1，强机器固定 3。
+ * snapdom pre-capture concurrency: old/weak devices use 1; stronger machines use 3.
  */
 export function getCaptureConcurrency(): number {
 	return isLowEndDevice() ? 1 : 3
 }
 
 /**
- * JPEG 编码质量：老旧/弱机降到低档（省内存与编码耗时），强机器保持高质量。
- * @param highEnd 强机器质量（默认 0.85）
- * @param lowEnd 弱机器质量（默认 0.72）
+ * JPEG quality: lower quality on old/weak devices to save memory and encoding time; keep high quality on stronger machines.
+ * @param highEnd quality for stronger machines (default 0.85)
+ * @param lowEnd quality for weaker machines (default 0.72)
  */
 export function getJpegQuality(highEnd = 0.85, lowEnd = 0.72): number {
 	return isLowEndDevice() ? lowEnd : highEnd

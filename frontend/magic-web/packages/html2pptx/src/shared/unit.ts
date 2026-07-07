@@ -3,37 +3,37 @@ import type { ElementNode } from "../ir/dom"
 import { log, LogLevel } from "../logger"
 import { DEFAULT_DPI } from "./constants"
 
-/** PowerPoint 单页尺寸上限：56 英寸 = 5376 px @96DPI */
+/** PowerPoint single-page size limit: 56 inches = 5376 px at 96 DPI */
 export const MAX_PPT_PAGE_INCH = 56
 export const MAX_PPT_PAGE_PX = MAX_PPT_PAGE_INCH * DEFAULT_DPI
 
-/** 默认配置 */
+/** Default configuration */
 export const DEFAULT_CONFIG: SlideConfig = {
 	htmlWidth: 1920,
 	htmlHeight: 1080,
-	slideWidth: 1920 / DEFAULT_DPI,  // 20 英寸
-	slideHeight: 1080 / DEFAULT_DPI, // 11.25 英寸
+	slideWidth: 1920 / DEFAULT_DPI,  // 20 inches
+	slideHeight: 1080 / DEFAULT_DPI, // 11.25 inches
 }
 
 /**
- * 像素转英寸 - 直接按 96 DPI 转换
- * HTML 多大像素，PPT 就多大英寸（1:1 等比例）
+ * Convert pixels to inches directly at 96 DPI
+ * HTML pixels map to PPT inches at a 1:1 proportional scale
  *
- * 例如：96px → 1 英寸，192px → 2 英寸
+ * For example: 96px -> 1 inch, 192px -> 2 inches
  */
 export function pxToInch(px: number, _config?: SlideConfig): number {
 	return px / DEFAULT_DPI
 }
 
 /**
- * 英寸转像素
+ * Convert inches to pixels
  */
 export function inchToPx(inch: number, _config?: SlideConfig): number {
 	return inch * DEFAULT_DPI
 }
 
 /**
- * 解析 CSS 尺寸值，支持 px、%、em、rem、vw、vh 等单位
+ * Parse CSS size values, supporting px, %, em, rem, vw, vh, and related units
  */
 export function parseCSSSize(
 	value: string,
@@ -56,7 +56,7 @@ export function parseCSSSize(
 			return (containerSize * num) / 100
 		case "em":
 		case "rem":
-			return num * 16 // 假设基准字号 16px
+			return num * 16 // Assume a base font size of 16px
 		case "vw":
 			return (viewportWidth * num) / 100
 		case "vh":
@@ -71,8 +71,8 @@ export function parseCSSSize(
 }
 
 /**
- * 解析 border-radius，返回像素值
- * 对于多值的情况，返回其中最小的非零值，以避免巨大的圆角
+ * Parse border-radius and return a pixel value
+ * For multi-value radii, return the smallest non-zero value to avoid huge corners
  */
 export function parseBorderRadius(
 	value: string,
@@ -113,9 +113,9 @@ export function parseBorderRadius(
 }
 
 /**
- * 解析元素的有效圆角半径（像素）
- * 优先使用自身 border-radius；若为 0，则继承父级 overflow:hidden + border-radius 的裁剪效果
- * 用于图片等子元素在父容器裁剪场景下获得正确圆角（如头像容器）
+ * Resolve the effective corner radius of an element in pixels
+ * Prefer the element's own border-radius; if it is 0, inherit the clipping effect from a parent with overflow:hidden and border-radius
+ * Used so child elements such as images get the correct radius when clipped by a parent container, such as avatar containers
  */
 export function resolveEffectiveRadius(node: {
 	style: { borderRadius: string; overflow?: string }
@@ -141,9 +141,9 @@ export function resolveEffectiveRadius(node: {
 }
 
 /**
- * 判断是否应该使用椭圆形状
- * 只有当元素接近正方形且 border-radius >= 50% 时才使用椭圆
- * 长条形元素即使有大圆角也应该使用 roundRect（胶囊形）
+ * Determine whether an ellipse shape should be used
+ * Use an ellipse only when the element is nearly square and border-radius >= 50%
+ * Long elements should use roundRect (pill shape) even with large corner radii
  */
 export function isFullyRounded(
 	borderRadius: string,
@@ -177,30 +177,30 @@ export function isFullyRounded(
 }
 
 /**
- * 英寸转磅 (pt)
+ * Convert inches to points
  */
 export function inchToPt(inch: number): number {
 	return inch * 72
 }
 
 /**
- * 磅转英寸
+ * Convert points to inches
  */
 export function ptToInch(pt: number): number {
 	return pt / 72
 }
 
 /**
- * 像素转磅
- * 1 inch = 96 px = 72 pt，所以 pt = px * 0.75
+ * Convert pixels to points
+ * 1 inch = 96 px = 72 pt, so pt = px * 0.75
  */
 export function pxToPt(px: number): number {
 	return px * 0.75
 }
 
 /**
- * 递归获取元素的累积变换 (旋转角度和缩放比例)
- * @param node 元素节点
+ * Recursively get the cumulative transform for an element, including rotation angle and scale
+ * @param node Element node
  */
 export function getGlobalTransform(
 	node: ElementNode,

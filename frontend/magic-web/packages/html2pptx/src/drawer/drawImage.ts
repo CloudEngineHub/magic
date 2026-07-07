@@ -63,8 +63,8 @@ export function drawImage(slide: Slide, node: PPTImageNode): void {
 }
 
 /**
- * 解析图片源：优先用透传的二进制字节（在打包 worker 内即转 base64 data URL，
- * 避免主线程长期持有大块 base64），否则回退到 `src`（远程 URL / data URL / 兜底）。
+ * Resolve the image source: prefer transferred binary bytes, converted to a base64 data URL inside the packaging worker,
+ * so the main thread does not keep large base64 strings; otherwise fall back to `src` (remote URL / data URL / fallback).
  */
 function resolveImageSrc(node: PPTImageNode): string {
 	const bytes = node.srcBytes

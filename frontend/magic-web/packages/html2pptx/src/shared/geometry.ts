@@ -1,5 +1,5 @@
 /**
- * 合并多个矩形为一个包围盒
+ * Merge multiple rectangles into one bounding box
  */
 export function unionRects(rects: DOMRect[]): {
 	left: number

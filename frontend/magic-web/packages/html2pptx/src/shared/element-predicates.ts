@@ -2,16 +2,16 @@ import type { ElementNode, ComputedStyleInfo } from "../ir/dom"
 import { hasVisibleBackground, isGradientBackground } from "./color"
 import { splitByTopLevelComma } from "./string"
 
-/** 表格内部元素（由 TABLE 元素统一处理） */
+/** Elements inside tables, handled by the TABLE element */
 const TABLE_CHILD_TAGS = ["THEAD", "TBODY", "TFOOT", "TR", "TD", "TH", "COLGROUP", "COL", "CAPTION"]
 
 /**
- * 判断一个 TABLE 是否为布局表格（而非数据表格）。
- * 布局表格常见于邮件 HTML，使用 table 纯做定位，不应渲染为 PPT 表格对象。
+ * Determine whether a TABLE is a layout table rather than a data table.
+ * Layout tables are common in email HTML and use tables only for positioning, so they should not render as PPT table objects.
  *
- * 启发式：满足以下条件之一即视为布局表格：
- *   1. role="presentation" 或 role="none"
- *   2. 无任何可见边框 + 包含嵌套 TABLE 子元素
+ * Heuristic: treat as a layout table if any of the following are true:
+ *   1. role="presentation" or role="none"
+ *   2. no visible borders and contains nested TABLE descendants
  */
 export function isLayoutTable(node: ElementNode): boolean {
 	const el = node.element as HTMLTableElement
@@ -35,8 +35,8 @@ export function isLayoutTable(node: ElementNode): boolean {
 }
 
 /**
- * 判断 parseShape 是否可能产出节点
- * 条件：有背景色、或渐变背景、或四边一致边框（任一满足即可）
+ * Determine whether parseShape may produce a node
+ * Condition: background color, gradient background, or uniform borders on all sides; any one is enough
  */
 export function hasShapeContent(node: ElementNode): boolean {
 	const { style } = node
@@ -49,8 +49,8 @@ export function hasShapeContent(node: ElementNode): boolean {
 }
 
 /**
- * 判断元素是否有直接文本子节点（直属 Text Node）
- * 直接检查 DOM 结构，与 parseTextNodes 的遍历逻辑一致
+ * Determine whether an element has direct text child nodes
+ * Check the DOM structure directly, matching parseTextNodes traversal logic
  */
 export function hasDirectTextChild(node: ElementNode): boolean {
 	return Array.from(node.element.childNodes).some((child) => child.nodeType === Node.TEXT_NODE)
@@ -58,7 +58,7 @@ export function hasDirectTextChild(node: ElementNode): boolean {
 
 
 /**
- * 四边边框是否完全一致
+ * Whether all four borders are identical
  */
 export function hasUniformBorder(style: ComputedStyleInfo): boolean {
 	const topWidth = parseFloat(style.borderTopWidth) || 0
@@ -94,9 +94,9 @@ export function hasUniformBorder(style: ComputedStyleInfo): boolean {
 }
 
 /**
- * 判断背景是否包含多个渐变值（逗号分隔的顶层渐变函数）
- * 例如：两个 linear-gradient 叠加实现网格线效果
- * 这类背景无法用 PPT 原生渐变还原，需要截图降级
+ * Determine whether the background contains multiple gradient values, separated by top-level commas
+ * For example, two stacked linear-gradients used to draw grid lines
+ * These backgrounds cannot be represented with native PPT gradients and need screenshot fallback
  */
 export function hasMultipleGradientBackgrounds(bgImage: string): boolean {
 	if (!bgImage || bgImage === "none") return false
@@ -108,7 +108,7 @@ export function hasMultipleGradientBackgrounds(bgImage: string): boolean {
 }
 
 /**
- * 判断是否有背景图 (排除渐变，渐变由 parseShape 处理)
+ * Determine whether there is a background image, excluding gradients handled by parseShape
  */
 export function hasBackgroundImage(node: ElementNode): boolean {
 	const bgImage = node.style.backgroundImage
@@ -120,28 +120,28 @@ export function hasBackgroundImage(node: ElementNode): boolean {
 }
 
 /**
- * 判断是否是图片元素
+ * Determine whether this is an image element
  */
 export function isImageElement(node: ElementNode): boolean {
 	return node.tagName === "IMG"
 }
 
 /**
- * 判断是否是表格元素
+ * Determine whether this is a table element
  */
 export function isTableElement(node: ElementNode): boolean {
 	return node.tagName === "TABLE"
 }
 
 /**
- * 判断是否是媒体元素
+ * Determine whether this is a media element
  */
 export function isMediaElement(node: ElementNode): boolean {
 	return node.tagName === "VIDEO" || node.tagName === "AUDIO"
 }
 
 /**
- * 判断是否是需要截图的元素（Canvas、SVG）
+ * Determine whether this element needs screenshot capture, such as Canvas or SVG
  */
 export function isCanvasOrSvgElement(node: ElementNode): boolean {
 	const tag = node.tagName.toUpperCase()
@@ -150,16 +150,16 @@ export function isCanvasOrSvgElement(node: ElementNode): boolean {
 
 
 /**
- * 判断是否是表格内部元素（由 TABLE 统一处理）
+ * Determine whether this is an element inside a table, handled by TABLE
  */
 export function isTableChildElement(node: ElementNode): boolean {
 	return TABLE_CHILD_TAGS.includes(node.tagName)
 }
 
 /**
- * 判断元素是否位于表格单元格内部（非 TD/TH 自身，而是其后代）。
- * 文本类节点若单独绘制会与 parseTable 的 td.textContent 重复；
- * IMG/SVG 需单独绘制，见 filterRenderable 中的放行逻辑。
+ * Determine whether an element is inside a table cell, excluding TD/TH themselves and targeting descendants.
+ * Text-like nodes would duplicate parseTable td.textContent if drawn separately;
+ * IMG/SVG need separate drawing; see the allow-list logic in filterRenderable.
  */
 export function isInsideTableCell(node: ElementNode): boolean {
 	if (TABLE_CHILD_TAGS.includes(node.tagName) || node.tagName === "TABLE") return false
@@ -167,7 +167,7 @@ export function isInsideTableCell(node: ElementNode): boolean {
 }
 
 /**
- * 位于表格单元格内、且应由 transform 单独产出的图形节点（parseTable 仅导出单元格纯文本）
+ * Graphic nodes inside table cells that should be emitted separately by transform; parseTable exports only plain cell text
  */
 export function isTableCellStandaloneGraphicElement(node: ElementNode): boolean {
 	const t = node.tagName.toUpperCase()
@@ -176,7 +176,7 @@ export function isTableCellStandaloneGraphicElement(node: ElementNode): boolean 
 
 
 /**
- * 判断元素是否可见
+ * Determine whether an element is visible
  */
 export function isVisible(node: ElementNode): boolean {
 	const { style, rect, tagName } = node
