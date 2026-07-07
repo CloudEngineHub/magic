@@ -7,9 +7,13 @@ declare(strict_types=1);
 
 namespace App\Application\Kernel\DTO;
 
+use App\Application\Kernel\Enum\MaintenanceType;
+
 class GlobalConfig
 {
     private bool $isMaintenance = false;
+
+    private MaintenanceType $maintenanceType = MaintenanceType::GlobalNotice;
 
     private string $maintenanceDescription = '';
 
@@ -30,6 +34,20 @@ class GlobalConfig
     public function setIsMaintenance(bool $isMaintenance): void
     {
         $this->isMaintenance = $isMaintenance;
+    }
+
+    public function getMaintenanceType(): MaintenanceType
+    {
+        return $this->maintenanceType;
+    }
+
+    public function setMaintenanceType(MaintenanceType|string $maintenanceType): void
+    {
+        if (is_string($maintenanceType)) {
+            $maintenanceType = MaintenanceType::tryFrom($maintenanceType) ?? MaintenanceType::default();
+        }
+
+        $this->maintenanceType = $maintenanceType;
     }
 
     public function getMaintenanceDescription(): string
@@ -56,6 +74,7 @@ class GlobalConfig
     {
         return [
             'is_maintenance' => $this->isMaintenance,
+            'maintenance_type' => $this->maintenanceType->value,
             'maintenance_description' => $this->maintenanceDescription,
             'bootstrap_status' => $this->bootstrapStatus,
         ];
@@ -65,6 +84,7 @@ class GlobalConfig
     {
         $instance = new self();
         $instance->setIsMaintenance((bool) ($data['is_maintenance'] ?? false));
+        $instance->setMaintenanceType((string) ($data['maintenance_type'] ?? MaintenanceType::default()->value));
         $instance->setMaintenanceDescription((string) ($data['maintenance_description'] ?? ''));
         $instance->setBootstrapStatus((string) ($data['bootstrap_status'] ?? ''));
         return $instance;

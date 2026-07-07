@@ -8,6 +8,7 @@ declare(strict_types=1);
 namespace HyperfTest\Cases\Api\Kernel;
 
 use App\Application\Kernel\DTO\GlobalConfig;
+use App\Application\Kernel\Enum\MaintenanceType;
 use App\Application\Kernel\Service\MagicSettingAppService;
 use Hyperf\Context\ApplicationContext;
 use HyperfTest\Cases\Api\AbstractHttpTest;
@@ -39,13 +40,15 @@ class GlobalConfigApiTest extends AbstractHttpTest
 
     public function testGetGlobalConfigDefault(): void
     {
-        $this->setBootstrapStatus('');
+        $config = new GlobalConfig();
+        $this->getMagicSettingAppService()->save($config);
 
         $response = $this->get($this->url, [], $this->getCommonHeaders());
         $this->assertSame(1000, $response['code']);
         $data = $response['data'];
         $this->assertArrayValueTypesEquals([
             'is_maintenance' => false,
+            'maintenance_type' => MaintenanceType::GlobalNotice->value,
             'maintenance_description' => '',
             'need_initial' => true,
         ], $data, '默认全局配置结构不符', false, true);
@@ -101,6 +104,7 @@ class GlobalConfigApiTest extends AbstractHttpTest
 
         $payload = [
             'is_maintenance' => true,
+            'maintenance_type' => MaintenanceType::SiteClose->value,
             'maintenance_description' => 'unit test maintenance',
         ];
 
@@ -153,6 +157,7 @@ class GlobalConfigApiTest extends AbstractHttpTest
 
         // 验证包含维护模式配置
         $this->assertArrayHasKey('is_maintenance', $data);
+        $this->assertArrayHasKey('maintenance_type', $data);
         $this->assertArrayHasKey('maintenance_description', $data);
         $this->assertArrayHasKey('need_initial', $data);
         $this->assertArrayHasKey('bootstrap_status', $data);
@@ -185,11 +190,13 @@ class GlobalConfigApiTest extends AbstractHttpTest
         // 验证基本结构
         $this->assertIsArray($data);
         $this->assertArrayHasKey('is_maintenance', $data);
+        $this->assertArrayHasKey('maintenance_type', $data);
         $this->assertArrayHasKey('maintenance_description', $data);
         $this->assertArrayHasKey('bootstrap_status', $data);
 
         // 验证类型
         $this->assertIsBool($data['is_maintenance']);
+        $this->assertIsString($data['maintenance_type']);
         $this->assertIsString($data['maintenance_description']);
         $this->assertIsBool($data['need_initial']);
         $this->assertIsString($data['bootstrap_status']);

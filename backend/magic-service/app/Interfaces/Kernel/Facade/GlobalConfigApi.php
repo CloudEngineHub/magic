@@ -36,6 +36,7 @@ use App\Infrastructure\Util\Redis\GlobalConfigCacheUtil;
 use App\Interfaces\Agent\Assembler\AgentAssembler;
 use App\Interfaces\Authorization\Web\MagicUserAuthorization;
 use App\Interfaces\Flow\Assembler\ToolSet\MagicFlowToolSetAssembler;
+use App\Interfaces\Kernel\DTO\Request\GlobalConfigUpdateRequest;
 use App\Interfaces\MCP\Assembler\MCPServerAssembler;
 use Dtyq\ApiResponse\Annotation\ApiResponse;
 use Hyperf\Coroutine\Parallel;
@@ -436,13 +437,17 @@ class GlobalConfigApi extends AbstractApi
     }
 
     #[CheckPermission(MagicResourceEnum::PLATFORM_SETTING_MAINTENANCE, MagicOperationEnum::EDIT)]
-    public function updateGlobalConfig(RequestInterface $request): array
+    public function updateGlobalConfig(GlobalConfigUpdateRequest $request): array
     {
-        $isMaintenance = (bool) $request->input('is_maintenance', false);
-        $description = (string) $request->input('maintenance_description', '');
+        $payload = $request->validated();
+        $isMaintenance = (bool) ($payload['is_maintenance'] ?? false);
+        $description = (string) ($payload['maintenance_description'] ?? '');
 
         $config = $this->magicSettingAppService->get();
         $config->setIsMaintenance($isMaintenance);
+        if (array_key_exists('maintenance_type', $payload)) {
+            $config->setMaintenanceType((string) $payload['maintenance_type']);
+        }
         $config->setMaintenanceDescription($description);
 
         $this->magicSettingAppService->save($config);
