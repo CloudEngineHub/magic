@@ -541,6 +541,40 @@ class AsrApi extends AbstractApi
     }
 
     /**
+     * Recover finish recording (merge audio files only).
+     * POST /api/v1/asr/tasks/{task_key}/finish-recording/recover.
+     */
+    public function recoverFinishRecording(string $task_key): array
+    {
+        $userAuthorization = $this->getAuthorization();
+        $userId = $userAuthorization->getId();
+        $organizationCode = $userAuthorization->getOrganizationCode();
+        $generatedTitle = $this->request->input('generated_title');
+        $asrStreamContent = $this->request->input('asr_stream_content', '');
+        $asrStreamContent = is_string($asrStreamContent) ? $asrStreamContent : '';
+        if (! empty($asrStreamContent)) {
+            $asrStreamContent = mb_substr($asrStreamContent, 0, 10000);
+        }
+
+        $taskStatus = $this->asrFileAppService->loadRecoverFinishRecordingTaskStatus(
+            $task_key,
+            $userId,
+            $organizationCode
+        );
+
+        if (! empty($asrStreamContent)) {
+            $taskStatus->asrStreamContent = $asrStreamContent;
+            $this->asrFileAppService->saveTaskStatusToRedis($taskStatus);
+        }
+
+        return $this->asrFileAppService->triggerRecoverFinishRecordingAsync(
+            $taskStatus,
+            $organizationCode,
+            $generatedTitle
+        );
+    }
+
+    /**
      * Manually trigger summary.
      * POST /api/v1/asr/tasks/{task_key}/summarize.
      */

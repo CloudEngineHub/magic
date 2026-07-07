@@ -52,6 +52,8 @@ class AudioProjectEntity extends AbstractEntity
 
     protected ?string $phaseError = null;
 
+    protected ?array $extra = null;
+
     protected ?string $createdAt = null;
 
     protected ?string $updatedAt = null;
@@ -167,6 +169,17 @@ class AudioProjectEntity extends AbstractEntity
     public function setPhaseError(?string $phaseError): self
     {
         $this->phaseError = $phaseError;
+        return $this;
+    }
+
+    public function getExtra(): ?array
+    {
+        return $this->extra;
+    }
+
+    public function setExtra(?array $extra): self
+    {
+        $this->extra = $extra;
         return $this;
     }
 
@@ -427,6 +440,7 @@ class AudioProjectEntity extends AbstractEntity
             'phase_status' => $this->phaseStatus,
             'phase_percent' => $this->phasePercent,
             'phase_error' => $this->phaseError,
+            'extra' => $this->extra,
             'created_at' => $this->createdAt,
             'updated_at' => $this->updatedAt,
         ];

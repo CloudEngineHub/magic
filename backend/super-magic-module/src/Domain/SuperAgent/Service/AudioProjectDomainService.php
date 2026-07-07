@@ -235,6 +235,28 @@ class AudioProjectDomainService
     }
 
     /**
+     * Deep-merge audio project extra data without touching other columns.
+     */
+    public function mergeAudioProjectExtra(int $projectId, array $extraPatch): bool
+    {
+        if (empty($extraPatch)) {
+            return true;
+        }
+
+        $audioProject = $this->getAudioProjectByProjectId($projectId);
+        if ($audioProject === null) {
+            return false;
+        }
+
+        $mergedExtra = $this->mergeAssocRecursive($audioProject->getExtra() ?? [], $extraPatch);
+        $affected = $this->audioProjectRepository->updateByProjectId($projectId, [
+            'extra' => $mergedExtra,
+        ]);
+
+        return $affected >= 0;
+    }
+
+    /**
      * Update topic and model configuration.
      *
      * Business Logic: Update AI task configuration (topic and model).
@@ -345,5 +367,19 @@ class AudioProjectDomainService
     public function save(AudioProjectEntity $audioProject): void
     {
         $this->audioProjectRepository->save($audioProject);
+    }
+
+    private function mergeAssocRecursive(array $base, array $patch): array
+    {
+        foreach ($patch as $key => $value) {
+            if (is_array($value) && isset($base[$key]) && is_array($base[$key])) {
+                $base[$key] = $this->mergeAssocRecursive($base[$key], $value);
+                continue;
+            }
+
+            $base[$key] = $value;
+        }
+
+        return $base;
     }
 }

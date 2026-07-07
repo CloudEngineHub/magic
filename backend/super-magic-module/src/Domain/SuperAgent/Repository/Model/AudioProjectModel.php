@@ -32,6 +32,7 @@ use Hyperf\Database\Model\SoftDeletes;
  * @property null|string $phase_status
  * @property int $phase_percent
  * @property null|string $phase_error
+ * @property null|array $extra
  * @property null|Carbon $created_at
  * @property null|Carbon $updated_at
  * @property null|Carbon $deleted_at
@@ -67,6 +68,7 @@ class AudioProjectModel extends AbstractModel
         'phase_status',
         'phase_percent',
         'phase_error',
+        'extra',
         'created_at',
         'updated_at',
     ];
@@ -84,6 +86,7 @@ class AudioProjectModel extends AbstractModel
         'file_size' => 'integer',
         'phase_percent' => 'integer',
         'tags' => 'array',
+        'extra' => 'array',
         'created_at' => 'datetime',
         'updated_at' => 'datetime',
         'deleted_at' => 'datetime',
