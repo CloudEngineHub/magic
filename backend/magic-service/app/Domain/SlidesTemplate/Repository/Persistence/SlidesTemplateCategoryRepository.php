@@ -44,6 +44,19 @@ class SlidesTemplateCategoryRepository extends AbstractRepository implements Sli
         return $model ? SlidesTemplateCategoryFactory::modelToEntity($model) : null;
     }
 
+    public function findByCodes(SlidesTemplateDataIsolation $dataIsolation, array $codes): array
+    {
+        $codes = array_values(array_unique(array_filter($codes, static fn (string $code): bool => $code !== '')));
+        if ($codes === []) {
+            return [];
+        }
+
+        $builder = $this->createBuilder($dataIsolation, SlidesTemplateCategoryModel::query());
+        $models = $builder->whereIn('code', $codes)->get();
+
+        return $this->modelsToEntities($models);
+    }
+
     public function existsByCode(string $code): bool
     {
         return SlidesTemplateCategoryModel::withTrashed()->where('code', $code)->exists();

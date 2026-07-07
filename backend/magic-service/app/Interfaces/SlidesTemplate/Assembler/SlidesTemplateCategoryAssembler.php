@@ -11,6 +11,7 @@ use App\Domain\SlidesTemplate\Entity\SlidesTemplateCategoryEntity;
 use App\Infrastructure\Core\ValueObject\Page;
 use App\Infrastructure\Util\OfficialOrganizationUtil;
 use App\Interfaces\SlidesTemplate\DTO\Response\AdminSlidesTemplateCategoryItemDTO;
+use App\Interfaces\SlidesTemplate\DTO\Response\AdminSlidesTemplateCategorySummaryDTO;
 use App\Interfaces\SlidesTemplate\DTO\Response\I18nTextDTO;
 use App\Interfaces\SlidesTemplate\DTO\Response\SlidesTemplateCategoryItemDTO;
 use App\Interfaces\SlidesTemplate\DTO\Response\SlidesTemplateCategoryPageDTO;
@@ -49,6 +50,18 @@ class SlidesTemplateCategoryAssembler
     {
         $dto = new SlidesTemplateCategoryItemDTO();
         self::fillBase($dto, $category);
+        return $dto;
+    }
+
+    public static function createAdminSummaryDTO(SlidesTemplateCategoryEntity $category): AdminSlidesTemplateCategorySummaryDTO
+    {
+        $dto = new AdminSlidesTemplateCategorySummaryDTO();
+        $dto->setId($category->getId());
+        $dto->setCode($category->getCode());
+        $dto->setNameI18n(I18nTextDTO::fromArray($category->getNameI18n()));
+        $dto->setStatus($category->getStatus()->value);
+        $dto->setSort($category->getSort());
+        $dto->setIsOfficial(OfficialOrganizationUtil::isOfficialOrganization($category->getOrganizationCode()));
         return $dto;
     }
 

@@ -44,6 +44,15 @@ class SlidesTemplateCategoryDomainService
     }
 
     /**
+     * @param string[] $codes
+     * @return SlidesTemplateCategoryEntity[]
+     */
+    public function findByCodes(SlidesTemplateDataIsolation $dataIsolation, array $codes): array
+    {
+        return $this->slidesTemplateCategoryRepository->findByCodes($dataIsolation, $codes);
+    }
+
+    /**
      * @return array{total: int, list: SlidesTemplateCategoryEntity[]}
      */
     public function queries(SlidesTemplateDataIsolation $dataIsolation, SlidesTemplateCategoryQuery $query, Page $page): array

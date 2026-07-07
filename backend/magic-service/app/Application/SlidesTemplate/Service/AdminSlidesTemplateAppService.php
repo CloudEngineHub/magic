@@ -7,6 +7,7 @@ declare(strict_types=1);
 
 namespace App\Application\SlidesTemplate\Service;
 
+use App\Domain\SlidesTemplate\Entity\SlidesTemplateCategoryEntity;
 use App\Domain\SlidesTemplate\Entity\SlidesTemplateDataIsolation;
 use App\Domain\SlidesTemplate\Entity\SlidesTemplateEntity;
 use App\Domain\SlidesTemplate\Entity\ValueObject\Query\SlidesTemplateQuery;
@@ -32,7 +33,7 @@ class AdminSlidesTemplateAppService extends AbstractSlidesTemplateAppService
     }
 
     /**
-     * @return array{page: Page, total: int, list: SlidesTemplateEntity[]}
+     * @return array{page: Page, total: int, list: SlidesTemplateEntity[], categories: array<string, SlidesTemplateCategoryEntity>}
      */
     public function queries(Authenticatable|BaseDataIsolation $authorization, AdminQuerySlidesTemplateRequest $request): array
     {
@@ -43,11 +44,13 @@ class AdminSlidesTemplateAppService extends AbstractSlidesTemplateAppService
         $page = new Page($request->getPage(), $request->getPageSize());
         $result = $this->slidesTemplateDomainService->queries($dataIsolation, $query, $page);
         $this->resolveAssetUrls($result['list'], includeTemplateFileUrl: false);
+        $categories = $this->resolveCategories($dataIsolation, $result['list']);
 
         return [
             'page' => $page,
             'total' => $result['total'],
             'list' => $result['list'],
+            'categories' => $categories,
         ];
     }
 
@@ -170,5 +173,31 @@ class AdminSlidesTemplateAppService extends AbstractSlidesTemplateAppService
         }
 
         $this->slidesTemplateCategoryDomainService->findByCodeOrFail($dataIsolation, $categoryCode);
+    }
+
+    /**
+     * @param SlidesTemplateEntity[] $templates
+     * @return array<string, SlidesTemplateCategoryEntity>
+     */
+    private function resolveCategories(SlidesTemplateDataIsolation $dataIsolation, array $templates): array
+    {
+        $categoryCodes = [];
+        foreach ($templates as $template) {
+            $categoryCode = $template->getCategoryCode();
+            if ($categoryCode !== null) {
+                $categoryCodes[$categoryCode] = $categoryCode;
+            }
+        }
+
+        if ($categoryCodes === []) {
+            return [];
+        }
+
+        $categories = $this->slidesTemplateCategoryDomainService->findByCodes($dataIsolation, array_values($categoryCodes));
+        $categoryMap = [];
+        foreach ($categories as $category) {
+            $categoryMap[$category->getCode()] = $category;
+        }
+        return $categoryMap;
     }
 }
