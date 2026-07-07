@@ -6,7 +6,7 @@ import { useDebounceFn, useMemoizedFn, useMount, useRequest } from "ahooks"
 import { useTranslation } from "react-i18next"
 import { IconCategory } from "@tabler/icons-react"
 import type { TableButton } from "@admin-components"
-import { MobileList, TableWithFilters, WarningModal } from "@admin-components"
+import { MobileList, StatusTag, TableWithFilters, WarningModal } from "@admin-components"
 import { useApis } from "@admin/apis"
 import { PERMISSION_KEY_MAP } from "@admin/const/common"
 import useRights from "@admin/hooks/useRights"
@@ -23,6 +23,7 @@ import {
 } from "./components/SlidesTemplateToolbar"
 import {
 	getSlidesTemplateStatusByChecked,
+	getSlidesTemplateStatusColor,
 	isSystemSlidesTemplate,
 	resolveSlidesTemplateCategoryName,
 	resolveSlidesTemplateTitle,
@@ -37,7 +38,7 @@ const COLUMN_WIDTH = {
 	name: 180,
 	code: 240,
 	source: 120,
-	category: 160,
+	category: 220,
 	updatedAt: 180,
 } as const
 
@@ -118,7 +119,6 @@ export default function SlidesTemplatePage() {
 
 	useMount(() => {
 		run(params)
-		runCategories()
 	})
 
 	const refresh = useMemoizedFn((nextParams = params) => {
@@ -126,6 +126,11 @@ export default function SlidesTemplatePage() {
 	})
 
 	const refreshCategories = useMemoizedFn(() => {
+		runCategories()
+	})
+
+	const ensureCategories = useMemoizedFn(() => {
+		if (categories.length) return
 		runCategories()
 	})
 
@@ -217,14 +222,25 @@ export default function SlidesTemplatePage() {
 			: t("slidesTemplate.source.official")
 	})
 
-	const categoryNameMap = useMemo(() => {
-		return new Map(
-			categories.map((category) => [
-				category.code,
-				resolveSlidesTemplateCategoryName(category),
-			]),
+	const renderCategory = useMemoizedFn((record: DataType) => {
+		const category = record.category
+		const text = category
+			? resolveSlidesTemplateCategoryName(category)
+			: (record.category_code ?? "-")
+
+		if (!category) {
+			return <OverflowTooltipText text={text} style={{ maxWidth: COLUMN_WIDTH.category }} />
+		}
+
+		return (
+			<Flex align="center" gap={6} style={{ maxWidth: COLUMN_WIDTH.category }}>
+				<OverflowTooltipText text={text} style={{ maxWidth: COLUMN_WIDTH.category - 76 }} />
+				<StatusTag color={getSlidesTemplateStatusColor(category.status)} bordered={false}>
+					{statusLabel(category.status)}
+				</StatusTag>
+			</Flex>
 		)
-	}, [categories])
+	})
 
 	const categoryOptions = useMemo(
 		() =>
@@ -292,16 +308,11 @@ export default function SlidesTemplatePage() {
 			},
 			{
 				title: t("slidesTemplate.columns.category"),
-				dataIndex: "category_code",
-				key: "category_code",
+				dataIndex: "category",
+				key: "category",
 				width: COLUMN_WIDTH.category,
 				ellipsis: { showTitle: false },
-				render: (value: string | null | undefined) => (
-					<OverflowTooltipText
-						text={value ? (categoryNameMap.get(value) ?? value) : "-"}
-						style={{ maxWidth: COLUMN_WIDTH.category }}
-					/>
-				),
+				render: (_, record) => renderCategory(record),
 			},
 			{
 				title: t("slidesTemplate.columns.status"),
@@ -366,6 +377,7 @@ export default function SlidesTemplatePage() {
 								disabled={disabled}
 								onClick={() => {
 									if (disabled) return
+									ensureCategories()
 									setSelectedRow(record)
 									setOpen(true)
 								}}
@@ -391,13 +403,14 @@ export default function SlidesTemplatePage() {
 			styles,
 			statusLabel,
 			sourceTypeLabel,
-			categoryNameMap,
+			renderCategory,
 			statusLoadingIds,
 			sortLoadingIds,
 			hasEditRight,
 			handleStatusChange,
 			handleSortChange,
 			handleDelete,
+			ensureCategories,
 		],
 	)
 
@@ -414,12 +427,13 @@ export default function SlidesTemplatePage() {
 				type: "primary",
 				disabled: !hasEditRight,
 				onClick: () => {
+					ensureCategories()
 					setSelectedRow(null)
 					setOpen(true)
 				},
 			},
 		],
-		[hasEditRight, t],
+		[ensureCategories, hasEditRight, t],
 	)
 
 	const toolbar = (
@@ -432,6 +446,7 @@ export default function SlidesTemplatePage() {
 			onSubmit={submitFilters}
 			onReset={resetFilters}
 			onRefresh={() => refresh()}
+			onCategoryDropdownOpen={ensureCategories}
 			t={t}
 		/>
 	)
@@ -460,12 +475,12 @@ export default function SlidesTemplatePage() {
 							handleStatusChange={handleStatusChange}
 							handleEdit={(record) => {
 								if (isSystemSlidesTemplate(record)) return
+								ensureCategories()
 								setSelectedRow(record)
 								setOpen(true)
 							}}
 							sourceTypeLabel={sourceTypeLabel}
 							handleDelete={handleDelete}
-							categoryNameMap={categoryNameMap}
 						/>
 					}
 					paginationConfig={paginationConfig}

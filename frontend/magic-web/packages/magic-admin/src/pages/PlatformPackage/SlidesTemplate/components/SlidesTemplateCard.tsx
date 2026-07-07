@@ -1,16 +1,19 @@
 import { memo } from "react"
 import { Flex, Image, Switch } from "antd"
 import { useTranslation } from "react-i18next"
-import { MagicButton, MobileCard } from "@admin-components"
+import { MagicButton, MobileCard, StatusTag } from "@admin-components"
 import { SlidesTemplate } from "@admin/types/slidesTemplate"
-import { isSystemSlidesTemplate } from "../utils"
+import {
+	getSlidesTemplateStatusColor,
+	isSystemSlidesTemplate,
+	resolveSlidesTemplateCategoryName,
+} from "../utils"
 
 interface SlidesTemplateCardProps {
 	data?: SlidesTemplate.Item
 	onClick?: (data: SlidesTemplate.Item) => void
 	statusLoadingIds: Set<string>
 	hasEditRight: boolean
-	categoryNameMap: Map<string, string>
 	sourceTypeLabel: (sourceType?: SlidesTemplate.SourceType) => string
 	handleStatusChange: (record: SlidesTemplate.Item, checked: boolean) => void
 	handleEdit: (record: SlidesTemplate.Item) => void
@@ -22,7 +25,6 @@ function SlidesTemplateCard({
 	onClick,
 	statusLoadingIds,
 	hasEditRight,
-	categoryNameMap,
 	sourceTypeLabel,
 	handleStatusChange,
 	handleEdit,
@@ -34,6 +36,9 @@ function SlidesTemplateCard({
 
 	const title = data.label?.zh_CN || data.label?.en_US || "-"
 	const editDisabled = !hasEditRight || isSystemSlidesTemplate(data)
+	const categoryName = data.category
+		? resolveSlidesTemplateCategoryName(data.category)
+		: (data.category_code ?? "-")
 
 	return (
 		<MobileCard title={title} onClick={() => onClick?.(data)}>
@@ -58,11 +63,21 @@ function SlidesTemplateCard({
 					{t("slidesTemplate.columns.source")}: {sourceTypeLabel(data.source_type)}
 				</span>
 				<span>
-					{t("slidesTemplate.columns.category")}:{" "}
-					{data.category_code
-						? (categoryNameMap.get(data.category_code) ?? data.category_code)
-						: "-"}
+					{t("slidesTemplate.columns.category")}: {categoryName}
 				</span>
+				{data.category ? (
+					<Flex align="center" gap={8}>
+						<span>{t("slidesTemplate.category.columns.status")}:</span>
+						<StatusTag
+							color={getSlidesTemplateStatusColor(data.category.status)}
+							bordered={false}
+						>
+							{data.category.status === SlidesTemplate.StatusMap.enabled
+								? t("slidesTemplate.status.enabled")
+								: t("slidesTemplate.status.disabled")}
+						</StatusTag>
+					</Flex>
+				) : null}
 				<Flex align="center" gap={8}>
 					<span>{t("slidesTemplate.columns.status")}:</span>
 					<Switch

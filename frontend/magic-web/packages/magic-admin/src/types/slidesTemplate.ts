@@ -24,6 +24,7 @@ export namespace SlidesTemplate {
 		code: string
 		source_type?: SourceType
 		category_code?: string | null
+		category?: CategoryItem | null
 		label: LangText
 		description: LangText
 		thumbnail_file_key: string
@@ -82,7 +83,6 @@ export namespace SlidesTemplate {
 	}
 
 	export interface CategorySaveParams {
-		code?: string
 		name_i18n: LangText
 		status?: Status
 		sort?: number

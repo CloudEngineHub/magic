@@ -27,6 +27,8 @@ export interface MultiLangSettingProps extends MagicButtonProps {
 	popoverProps?: PopoverProps
 	/** 是否禁用 */
 	disabled?: boolean
+	/** 点击按钮展开或收起 */
+	clickToToggle?: boolean
 }
 
 const MultiLangSetting = memo(
@@ -42,6 +44,8 @@ const MultiLangSetting = memo(
 		danger,
 		popoverProps,
 		disabled,
+		clickToToggle,
+		onClick,
 		...props
 	}: MultiLangSettingProps) => {
 		const { styles, cx } = useStyles()
@@ -62,6 +66,11 @@ const MultiLangSetting = memo(
 			onSave?.(values)
 			setOpen(false)
 			form.resetFields()
+		})
+
+		const onButtonClick = useMemoizedFn((event: React.MouseEvent<HTMLButtonElement>) => {
+			onClick?.(event)
+			if (!clickToToggle) setOpen(true)
 		})
 
 		useEffect(() => {
@@ -123,10 +132,10 @@ const MultiLangSetting = memo(
 				placement="bottom"
 				content={content}
 				onOpenChange={(visible) => {
-					if (!visible) {
-						setOpen(false)
-					}
+					if (clickToToggle) setOpen(visible)
+					else if (!visible) setOpen(false)
 				}}
+				trigger={clickToToggle ? "click" : undefined}
 				{...popoverProps}
 			>
 				<MagicButton
@@ -137,7 +146,7 @@ const MultiLangSetting = memo(
 					)}
 					style={style}
 					icon={<IconWorld size={20} />}
-					onClick={() => setOpen(true)}
+					onClick={onButtonClick}
 					{...props}
 				/>
 			</Popover>

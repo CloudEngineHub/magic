@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useState, type ReactNode } from "react"
 import { Button } from "@/components/shadcn-ui/button"
 import { Label } from "@/components/shadcn-ui/label"
 import MagicDropdown from "@/components/base/MagicDropdown"
@@ -31,6 +31,7 @@ interface FilterBarProps {
 	variant?: ScenePanelVariant
 	scrollContainerClassName?: string
 	compact?: boolean
+	prefix?: ReactNode
 }
 
 function FilterBar({
@@ -39,6 +40,7 @@ function FilterBar({
 	variant,
 	scrollContainerClassName,
 	compact = false,
+	prefix,
 }: FilterBarProps) {
 	const lt = useLocaleText()
 	const { t } = useTranslation()
@@ -108,13 +110,14 @@ function FilterBar({
 				scrollContainerClassName,
 			)}
 		>
-			{filters.length > 0 && (
+			{(prefix || filters.length > 0) && (
 				<div
 					className={cn(
 						"flex shrink-0 items-center",
 						isCompactMobile ? "gap-2" : "gap-4",
 					)}
 				>
+					{prefix}
 					{filters.map((filter) => {
 						if (isComplexField(filter)) {
 							const {

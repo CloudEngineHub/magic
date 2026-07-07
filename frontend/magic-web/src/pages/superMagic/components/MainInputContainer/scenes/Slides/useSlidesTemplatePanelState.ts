@@ -35,6 +35,8 @@ export function useSlidesTemplatePanelState() {
 	const [isLoading, setIsLoading] = useState(true)
 	const [isRefreshing, setIsRefreshing] = useState(false)
 	const [isLoadingMore, setIsLoadingMore] = useState(false)
+	const [hasCheckedAnyTemplate, setHasCheckedAnyTemplate] = useState(false)
+	const [hasAnyTemplate, setHasAnyTemplate] = useState(true)
 	const requestSeqRef = useRef(0)
 	const mountedRef = useRef(true)
 	const hasLoadedTemplatesRef = useRef(false)
@@ -99,6 +101,7 @@ export function useSlidesTemplatePanelState() {
 		async (nextPage: number, mode: "replace" | "append") => {
 			if (mode === "append" && appendRequestInFlightRef.current) return
 
+			const isAllTemplatesQuery = !debouncedKeyword && !selectedCategoryCode
 			const requestSeq = ++requestSeqRef.current
 			if (mode === "replace") {
 				appendRequestInFlightRef.current = false
@@ -124,13 +127,18 @@ export function useSlidesTemplatePanelState() {
 				if (!mountedRef.current || requestSeq !== requestSeqRef.current) return
 
 				const nextTemplates = response.list ?? []
+				const nextTotal = response.total ?? nextTemplates.length
 				setTemplates((currentTemplates) =>
 					mode === "replace"
 						? nextTemplates
 						: mergeTemplates(currentTemplates, nextTemplates),
 				)
 				setPage(response.page ?? nextPage)
-				setTotal(response.total ?? nextTemplates.length)
+				setTotal(nextTotal)
+				if (mode === "replace" && isAllTemplatesQuery) {
+					setHasCheckedAnyTemplate(true)
+					setHasAnyTemplate(nextTotal > 0)
+				}
 				hasLoadedTemplatesRef.current = true
 			} catch (error) {
 				if (!mountedRef.current || requestSeq !== requestSeqRef.current) return
@@ -206,6 +214,8 @@ export function useSlidesTemplatePanelState() {
 
 	return {
 		groups,
+		hasAnyTemplate,
+		hasCheckedAnyTemplate,
 		hasMore,
 		isLoading,
 		isRefreshing,

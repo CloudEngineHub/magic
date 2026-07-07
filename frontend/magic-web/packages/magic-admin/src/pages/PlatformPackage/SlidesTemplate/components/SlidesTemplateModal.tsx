@@ -279,6 +279,7 @@ export const SlidesTemplateModal = memo(
 				onCancel={onInnerCancel}
 				onOk={onInnerOk}
 				okButtonProps={{ loading, disabled: uploadingField !== null }}
+				maskClosable={false}
 				centered
 				destroyOnHidden
 				{...rest}
@@ -303,6 +304,7 @@ export const SlidesTemplateModal = memo(
 							</Form.Item>
 							<MultiLangSetting
 								required
+								clickToToggle
 								supportLangs={[LanguageType.en_US]}
 								info={label}
 								danger={langErrors.label}
@@ -330,6 +332,7 @@ export const SlidesTemplateModal = memo(
 							</Form.Item>
 							<MultiLangSetting
 								required
+								clickToToggle
 								supportLangs={[LanguageType.en_US]}
 								supportType="textarea"
 								info={description}

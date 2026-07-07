@@ -4,6 +4,7 @@ import {
 	buildSlidesTemplateCategorySaveParams,
 	buildSlidesTemplateSaveParams,
 	getSlidesTemplateStatusByChecked,
+	getSlidesTemplateStatusColor,
 	isSystemSlidesTemplate,
 	resolveSlidesTemplateCategoryName,
 	resolveSlidesTemplateTitle,
@@ -54,23 +55,20 @@ describe("slides template page utils", () => {
 
 	it("builds category save params from form values", () => {
 		const payload = buildSlidesTemplateCategorySaveParams({
-			code: " PPT-CATE-business ",
 			name_i18n: { zh_CN: "商务", en_US: "Business" },
 			status: true,
 			sort: null,
 		})
 
 		expect(payload).toEqual({
-			code: "PPT-CATE-business",
 			name_i18n: { zh_CN: "商务", en_US: "Business" },
 			status: SlidesTemplate.StatusMap.enabled,
 			sort: 0,
 		})
 	})
 
-	it("omits empty category code from category save params", () => {
+	it("builds category save params without code", () => {
 		const payload = buildSlidesTemplateCategorySaveParams({
-			code: "",
 			name_i18n: { zh_CN: "商务", en_US: "Business" },
 			status: true,
 			sort: 1,
@@ -86,6 +84,11 @@ describe("slides template page utils", () => {
 	it("converts switch checked state to template status", () => {
 		expect(getSlidesTemplateStatusByChecked(true)).toBe(SlidesTemplate.StatusMap.enabled)
 		expect(getSlidesTemplateStatusByChecked(false)).toBe(SlidesTemplate.StatusMap.disabled)
+	})
+
+	it("resolves status tag color", () => {
+		expect(getSlidesTemplateStatusColor(SlidesTemplate.StatusMap.enabled)).toBe("success")
+		expect(getSlidesTemplateStatusColor(SlidesTemplate.StatusMap.disabled)).toBe("error")
 	})
 
 	it("detects system built-in templates by source type", () => {

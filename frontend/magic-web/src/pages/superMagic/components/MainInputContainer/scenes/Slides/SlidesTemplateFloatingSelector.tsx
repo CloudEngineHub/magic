@@ -122,64 +122,76 @@ function SlidesTemplateFloatingSelector({
 		</div>
 	)
 
+	const selector = isMobile ? (
+		<>
+			{trigger}
+			<MagicPopup
+				visible={open}
+				onClose={() => setOpen(false)}
+				className="rounded-t-[14px] border-0 bg-muted"
+				bodyClassName="rounded-t-[14px] border-0 bg-muted p-0 overflow-hidden"
+				handlerClassName="bg-muted-foreground mb-1.5 h-1 w-20 rounded-full"
+				title={title}
+			>
+				<div
+					className="flex h-[min(640px,calc(100vh-var(--safe-area-inset-top)-var(--safe-area-inset-bottom)-44px))] min-h-0 flex-col gap-2 overflow-hidden bg-muted"
+					data-testid="slides-template-floating-selector-mobile-popup"
+				>
+					<div className="relative flex h-14 shrink-0 flex-row items-center justify-center">
+						<button
+							type="button"
+							onClick={() => setOpen(false)}
+							className="absolute left-2 top-1/2 flex h-12 w-12 -translate-y-1/2 items-center justify-center rounded-full bg-card"
+							style={{ boxShadow: "0px 8px 25px 0px rgba(0,0,0,0.10)" }}
+							aria-label={t("playbook.edit.presets.close")}
+							data-testid="slides-template-floating-selector-mobile-close"
+						>
+							<X className="h-[22px] w-[22px] text-foreground" />
+						</button>
+						<div className="max-w-[247px] truncate text-center text-lg font-semibold leading-none text-foreground">
+							{title}
+						</div>
+					</div>
+					<div className="min-h-0 flex-1 overflow-hidden px-2 pb-4">{panelContent}</div>
+				</div>
+			</MagicPopup>
+		</>
+	) : (
+		<MagicDropdown
+			trigger={["click"]}
+			open={open}
+			onOpenChange={setOpen}
+			popupRender={() => panelContent}
+			overlayClassName="w-[min(90vw,760px)] min-w-[360px] overflow-visible rounded-lg border border-border bg-popover p-3 shadow-xl"
+		>
+			{trigger}
+		</MagicDropdown>
+	)
+
+	if (isCompactMobile) {
+		return (
+			<div className="min-w-0 flex-1 overflow-hidden">
+				<FilterBar
+					filters={simpleFields}
+					onFilterChange={onFilterChange}
+					variant={variant}
+					compact={compact}
+					prefix={selector}
+					scrollContainerClassName="px-0 justify-start"
+				/>
+			</div>
+		)
+	}
+
 	return (
 		<div
 			className={cn(
 				"flex min-w-0 items-center gap-2",
 				isMobile && "flex-col items-start gap-1",
-				isCompactMobile && "block",
 			)}
 		>
-			{isCompactMobile ? null : (
-				<Label className="shrink-0 text-sm font-normal text-foreground">{title}</Label>
-			)}
-			{isMobile ? (
-				<>
-					{trigger}
-					<MagicPopup
-						visible={open}
-						onClose={() => setOpen(false)}
-						className="rounded-t-[14px] border-0 bg-muted"
-						bodyClassName="rounded-t-[14px] border-0 bg-muted p-0 overflow-hidden"
-						handlerClassName="bg-muted-foreground mb-1.5 h-1 w-20 rounded-full"
-						title={title}
-					>
-						<div
-							className="flex h-[min(640px,calc(100vh-var(--safe-area-inset-top)-var(--safe-area-inset-bottom)-44px))] min-h-0 flex-col gap-2 overflow-hidden bg-muted"
-							data-testid="slides-template-floating-selector-mobile-popup"
-						>
-							<div className="relative flex h-14 shrink-0 flex-row items-center justify-center">
-								<button
-									type="button"
-									onClick={() => setOpen(false)}
-									className="absolute left-2 top-1/2 flex h-12 w-12 -translate-y-1/2 items-center justify-center rounded-full bg-card"
-									style={{ boxShadow: "0px 8px 25px 0px rgba(0,0,0,0.10)" }}
-									aria-label={t("playbook.edit.presets.close")}
-									data-testid="slides-template-floating-selector-mobile-close"
-								>
-									<X className="h-[22px] w-[22px] text-foreground" />
-								</button>
-								<div className="max-w-[247px] truncate text-center text-lg font-semibold leading-none text-foreground">
-									{title}
-								</div>
-							</div>
-							<div className="min-h-0 flex-1 overflow-hidden px-2 pb-4">
-								{panelContent}
-							</div>
-						</div>
-					</MagicPopup>
-				</>
-			) : (
-				<MagicDropdown
-					trigger={["click"]}
-					open={open}
-					onOpenChange={setOpen}
-					popupRender={() => panelContent}
-					overlayClassName="w-[min(90vw,760px)] min-w-[360px] overflow-visible rounded-lg border border-border bg-popover p-3 shadow-xl"
-				>
-					{trigger}
-				</MagicDropdown>
-			)}
+			<Label className="shrink-0 text-sm font-normal text-foreground">{title}</Label>
+			{selector}
 			{simpleFields.length > 0 ? (
 				<div className="min-w-0 flex-1">
 					<FilterBar
