@@ -40,7 +40,35 @@ class MagicDepartmentUserRepository implements MagicDepartmentUserRepositoryInte
      */
     public function getDepartmentUsersByUserIdsInMagic(array $userIds): array
     {
+        if (empty($userIds)) {
+            return [];
+        }
         $query = $this->departmentUserModel->newQuery()->whereIn('user_id', $userIds);
+        $departmentUsers = Db::select($query->toSql(), $query->getBindings());
+        return $this->getDepartmentUserEntities($departmentUsers);
+    }
+
+    /**
+     * @return MagicDepartmentUserEntity[]
+     */
+    public function getDepartmentUsersByUserIdsInActiveDepartments(array $userIds, ?string $organizationCode = null): array
+    {
+        if (empty($userIds)) {
+            return [];
+        }
+        $query = $this->departmentUserModel->newQuery()
+            ->from('magic_contact_department_users as du')
+            ->select('du.*')
+            ->join('magic_contact_departments as d', function ($join) {
+                $join->on('d.department_id', '=', 'du.department_id')
+                    ->on('d.organization_code', '=', 'du.organization_code')
+                    ->whereNull('d.deleted_at');
+            })
+            ->whereIn('du.user_id', $userIds)
+            ->whereNull('du.deleted_at');
+        if ($organizationCode !== null && $organizationCode !== '') {
+            $query->where('du.organization_code', $organizationCode);
+        }
         $departmentUsers = Db::select($query->toSql(), $query->getBindings());
         return $this->getDepartmentUserEntities($departmentUsers);
     }
@@ -136,6 +164,31 @@ class MagicDepartmentUserRepository implements MagicDepartmentUserRepositoryInte
             ->whereIn('magic_id', $magicIds)
             ->where('department_id', $departmentId)
             ->delete();
+    }
+
+    public function deleteDepartmentUsersByDepartmentIds(array $departmentIds, string $magicOrganizationCode): int
+    {
+        if (empty($departmentIds)) {
+            return 0;
+        }
+        return (int) $this->departmentUserModel->newQuery()
+            ->where('organization_code', $magicOrganizationCode)
+            ->whereIn('department_id', $departmentIds)
+            ->delete();
+    }
+
+    public function getMagicIdsByDepartmentIds(array $departmentIds, string $organizationCode): array
+    {
+        if (empty($departmentIds)) {
+            return [];
+        }
+        return $this->departmentUserModel->newQuery()
+            ->where('organization_code', $organizationCode)
+            ->whereIn('department_id', $departmentIds)
+            ->whereNull('deleted_at')
+            ->distinct()
+            ->pluck('magic_id')
+            ->toArray();
     }
 
     /**
