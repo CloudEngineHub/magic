@@ -16,7 +16,6 @@ use App\Domain\SlidesTemplate\Repository\Persistence\Model\SlidesTemplateModel;
 use App\Infrastructure\Core\AbstractRepository;
 use App\Infrastructure\Core\ValueObject\Page;
 use App\Infrastructure\Util\IdGenerator\IdGenerator;
-use Hyperf\Database\Model\Model;
 
 class SlidesTemplateRepository extends AbstractRepository implements SlidesTemplateRepositoryInterface
 {
@@ -140,10 +139,12 @@ class SlidesTemplateRepository extends AbstractRepository implements SlidesTempl
         return $model !== null && (bool) $model->delete();
     }
 
-    private function findModelByCode(SlidesTemplateDataIsolation $dataIsolation, string $code, bool $withTrashed): null|Model|SlidesTemplateModel
+    private function findModelByCode(SlidesTemplateDataIsolation $dataIsolation, string $code, bool $withTrashed): ?SlidesTemplateModel
     {
         $query = $withTrashed ? SlidesTemplateModel::withTrashed() : SlidesTemplateModel::query();
         $builder = $this->createBuilder($dataIsolation, $query);
-        return $builder->where('code', $code)->first();
+        $model = $builder->where('code', $code)->first();
+
+        return $model instanceof SlidesTemplateModel ? $model : null;
     }
 }
