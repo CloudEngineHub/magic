@@ -71,11 +71,9 @@ export const OTHER_SLIDES_TEMPLATE_GROUP_KEY = "other"
 export const SLIDES_TEMPLATE_PAGE_SIZE = 20
 export const SLIDES_TEMPLATE_CATEGORY_PAGE_SIZE = 200
 export const SLIDES_TEMPLATE_IMAGE_PROCESS: ImageProcessOptions = {
-	resize: { w: 1200, m: "lfit" },
+	resize: { w: 1200 },
 	quality: 82,
 	format: "webp",
-	autoOrient: 1,
-	interlace: 1,
 }
 
 export function isSlidesMode(topicMode: TopicMode | undefined) {
