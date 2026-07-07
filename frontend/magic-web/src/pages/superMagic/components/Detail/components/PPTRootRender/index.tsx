@@ -18,6 +18,16 @@ interface PendingLocalSlidePaths {
 	slidePaths: string[]
 }
 
+interface PPTEntryData {
+	file_id: string
+	file_name?: string
+	content?: string
+	is_directory?: boolean
+	relative_file_path?: string
+	display_config?: Record<string, any>
+	children?: any[]
+}
+
 function collectAttachmentNodes(items: any[] | undefined, result: any[] = []): any[] {
 	if (!Array.isArray(items)) return result
 	for (const item of items) {
@@ -129,6 +139,7 @@ export default memo(function PPTRootRender(props: PPTRootRenderProps) {
 	const [magicProjectContent, setMagicProjectContent] = useState<string>()
 	const [magicProjectLoading, setMagicProjectLoading] = useState(false)
 	const pendingLocalSlidePathsRef = useRef<PendingLocalSlidePaths | null>(null)
+	const entryData = displayData as PPTEntryData | undefined
 	// 标记是否至少完成过一次内容解析，避免路径计算中误展示空态
 	const [hasProcessedContent, setHasProcessedContent] = useState(false)
 	const pptAttachmentList = useMemo(() => {
@@ -145,9 +156,9 @@ export default memo(function PPTRootRender(props: PPTRootRenderProps) {
 		const entryFile = pptAttachmentList.find(
 			(item: any) => item?.file_id === displayData.file_id,
 		)
-		const isDirectoryEntry = Boolean(displayData?.is_directory)
+		const isDirectoryEntry = Boolean(entryData?.is_directory)
 		const entryFolderPath = isDirectoryEntry
-			? normalizeDirectoryPath(displayData?.relative_file_path)
+			? normalizeDirectoryPath(entryData?.relative_file_path)
 			: normalizeFolderPath(entryFile?.relative_file_path, getAttachmentFileName(entryFile))
 		const targetPath = entryFolderPath
 			? `${entryFolderPath}${MAGIC_PROJECT_FILE_NAME}`
@@ -168,8 +179,8 @@ export default memo(function PPTRootRender(props: PPTRootRenderProps) {
 	}, [
 		pptAttachmentList,
 		displayData?.file_id,
-		displayData?.is_directory,
-		displayData?.relative_file_path,
+		entryData?.is_directory,
+		entryData?.relative_file_path,
 	])
 
 	// 同步派生 slidePaths：解析完成前先用 displayConfig.slides 快速首屏；
@@ -188,8 +199,9 @@ export default memo(function PPTRootRender(props: PPTRootRenderProps) {
 		return originalSlidesPaths
 	}, [displayConfig?.slides, hasProcessedContent, magicProjectFile?.file_id, originalSlidesPaths])
 
+	const entryContentFileId = entryData?.is_directory ? "" : displayData?.file_id || ""
 	const { fileData: htmlFileData, loading } = useFileData({
-		file_id: displayData?.file_id || "",
+		file_id: entryContentFileId,
 		isEditing: false,
 		updatedAt,
 		activeFileId,

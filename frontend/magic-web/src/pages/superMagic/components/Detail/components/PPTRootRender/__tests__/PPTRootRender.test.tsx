@@ -264,6 +264,12 @@ describe("PPTRootRender", () => {
 			/>,
 		)
 
+		expect(mockState.useFileData).toHaveBeenCalledWith(
+			expect.objectContaining({
+				file_id: "",
+			}),
+		)
+
 		await waitFor(() => {
 			expect(mockState.getFileContentById).toHaveBeenCalledWith("magic-project-file", {
 				responseType: "text",
