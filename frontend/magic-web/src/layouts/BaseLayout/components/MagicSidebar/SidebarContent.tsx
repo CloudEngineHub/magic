@@ -1,6 +1,14 @@
 import { Suspense, lazy, useState, type MouseEvent } from "react"
 import { useLocation } from "react-router"
-import { Boxes, ChevronRight, Home, LayoutGrid, MessageCircle, UsersRound } from "lucide-react"
+import {
+	Boxes,
+	ChevronRight,
+	Home,
+	LayoutGrid,
+	MessageCircle,
+	UsersRound,
+	Sparkles,
+} from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { WorkspaceList } from "./WorkspaceList"
 import CollapsedWorkspaceMenu from "./CollapsedWorkspaceMenu"

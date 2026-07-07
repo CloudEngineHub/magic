@@ -16,6 +16,16 @@ Do not expose schema creation inside HTML pages. HTML code should only read and 
 
 Project memory uses `HTML-APP.md` for the latest human-readable data model. Do not edit it directly with file-editing tools. MagicBase schema tools maintain `.magicbase/migrations.json`; after successful table or column changes, they refresh the latest MagicBase data model in `HTML-APP.md`. If tools report a `Pending` migration at the start of a later task, query MagicBase first so confirmable records can be repaired before more schema work.
 
+MagicBase exposes a simplified MySQL-like column model. Use only these `data_type` values when creating tables or columns: `text`, `number`, `datetime`, `boolean`, `json`.
+
+Model UI choices with MySQL-like columns:
+
+- Single-choice UI values use `text`.
+- Multiple-choice UI values use `json` and write an array, such as `["office", "gaming"]`.
+- User IDs, department IDs, attachment IDs/URLs, and foreign-key values use `text` unless the app truly needs a JSON array/object.
+- Do not use low-code field types such as `single_select`, `multi_select`, `user`, `department`, `attachment`, or `reference`; MagicBase no longer exposes them as column types.
+- Relations are separate metadata. Create ordinary key columns such as `customer_id: text`, then create a MagicBase relation between source and target columns when joined reads are needed.
+
 ## Current User Context (`window.Magic.getContext`)
 
 Use `window.Magic.getContext()` whenever a micro-app needs current-user display, creators, owners, assignees, collaborators, "my data versus all data", or edit/delete permission checks.
@@ -124,13 +134,9 @@ Correct `create_magicbase_table` pattern for personal todos:
     {
       "column_key": "status",
       "column_name": "Status",
-      "data_type": "single_select",
+      "data_type": "text",
       "is_required": true,
-      "default_value": "pending",
-      "options": [
-        { "label": "Pending", "value": "pending", "color": "blue" },
-        { "label": "Completed", "value": "completed", "color": "green" }
-      ]
+      "default_value": "pending"
     },
     {
       "column_key": "creator_user_id",
@@ -216,6 +222,7 @@ const newRow = await window.Magic.db.createRow(TABLE_ID_FROM_MAGICBASE_TOOL, {
 - Parameters: `tableId: string`、`data: Record<string, unknown>`、`select?: string[]`（可选，指定返回字段）
 - Return: `Promise<object>` — the created row
 - The `data` object must contain only dynamic column keys from the actual table schema. Do not write `created_at`, `updated_at`, `id`, `record_id`, `created_by`, `project_id`, `table_id`, or `organization_code` into `data`; request them through `select` if you need them in the response.
+- Match values to the MySQL-like column type. For `json` columns, pass arrays/objects directly; do not stringify or join arrays before calling `createRow`.
 
 ### Query rows `queryRows(tableId, query)`
 
@@ -278,6 +285,7 @@ const updated = await window.Magic.db.updateRow(TABLE_ID_FROM_MAGICBASE_TOOL, "r
 - Parameters: `tableId: string`、`recordId: string`、`data: Record<string, unknown>`、`select?: string[]`
 - Return: `Promise<object>` — the updated row
 - The `data` object must contain only dynamic column keys from the actual table schema. Do not write system fields such as `updated_at`; MagicBase updates them automatically and they can be returned through `select`.
+- Match values to the MySQL-like column type. For `json` columns, pass arrays/objects directly; do not stringify or join arrays before calling `updateRow`.
 
 ### Delete a row `deleteRow(tableId, recordId)`
 

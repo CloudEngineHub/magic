@@ -120,16 +120,10 @@ final class MagicBaseConst
     ];
 
     public const DATA_TYPES = [
-        ColumnType::Text->value,
-        ColumnType::Number->value,
-        ColumnType::Datetime->value,
-        ColumnType::Boolean->value,
-        ColumnType::SingleSelect->value,
-        ColumnType::MultiSelect->value,
-        ColumnType::User->value,
-        ColumnType::Department->value,
-        ColumnType::Attachment->value,
-        ColumnType::Json->value,
-        ColumnType::Reference->value,
+        'text',
+        'number',
+        'datetime',
+        'boolean',
+        'json',
     ];
 }

@@ -6,6 +6,8 @@ from typing import Any, Dict, List, Optional
 
 from .magicbase_base_parameter import MagicBaseBaseParameter
 
+MAGICBASE_MYSQL_LIKE_DATA_TYPES = {"text", "number", "datetime", "boolean", "json"}
+
 
 class CreateMagicBaseTableParameter(MagicBaseBaseParameter):
     """Parameter for POST /api/v1/magicbase/projects/{projectId}/tables."""
@@ -38,7 +40,7 @@ class CreateMagicBaseTableParameter(MagicBaseBaseParameter):
         body: Dict[str, Any] = {
             "table_key": self.table_key,
             "table_name": self.table_name,
-            "columns": self.columns,
+            "columns": [self._column_to_body(column) for column in self.columns],
         }
         if self.description is not None:
             body["description"] = self.description
@@ -56,3 +58,14 @@ class CreateMagicBaseTableParameter(MagicBaseBaseParameter):
             raise ValueError("table_name is required")
         if not self.columns:
             raise ValueError("columns is required")
+        for index, column in enumerate(self.columns):
+            if not isinstance(column, dict):
+                raise ValueError(f"columns[{index}] must be an object")
+            data_type = str(column.get("data_type") or column.get("dataType") or "").strip()
+            if data_type not in MAGICBASE_MYSQL_LIKE_DATA_TYPES:
+                allowed = ", ".join(sorted(MAGICBASE_MYSQL_LIKE_DATA_TYPES))
+                raise ValueError(f"columns[{index}].data_type must be one of: {allowed}")
+
+    @staticmethod
+    def _column_to_body(column: Dict[str, Any]) -> Dict[str, Any]:
+        return {key: value for key, value in column.items() if key != "options"}

@@ -35,7 +35,6 @@ class MagicBaseColumnDomainService
      *     data_type?: string,
      *     is_required?: bool,
      *     default_value?: mixed,
-     *     options?: null|array<string, mixed>|list<mixed>,
      *     dynamic_permission?: null|array{read_scope?: string, edit_scope?: string}
      * } $payload
      */
@@ -51,16 +50,10 @@ class MagicBaseColumnDomainService
         $defaultValue = $payload['default_value'] ?? null;
         if ($defaultValue !== null) {
             $isValid = match (ColumnType::tryFrom($dataType)) {
-                ColumnType::Text,
-                ColumnType::SingleSelect,
-                ColumnType::User,
-                ColumnType::Department,
-                ColumnType::Attachment,
-                ColumnType::Reference => is_string($defaultValue),
+                ColumnType::Text => is_string($defaultValue),
                 ColumnType::Number => is_numeric($defaultValue),
                 ColumnType::Datetime => is_string($defaultValue),
                 ColumnType::Boolean => is_bool($defaultValue) || $defaultValue === 0 || $defaultValue === 1 || $defaultValue === '0' || $defaultValue === '1',
-                ColumnType::MultiSelect => is_array($defaultValue),
                 ColumnType::Json => is_array($defaultValue) || is_object($defaultValue) || is_string($defaultValue),
                 default => false,
             };

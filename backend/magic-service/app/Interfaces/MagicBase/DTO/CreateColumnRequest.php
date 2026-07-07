@@ -21,8 +21,6 @@ class CreateColumnRequest extends AbstractMagicBaseDTO
 
     protected mixed $defaultValue = null;
 
-    protected ?array $options = null;
-
     protected ?MagicBaseColumnDynamicPermission $dynamicPermission = null;
 
     public function getColumnKey(): string
@@ -73,16 +71,6 @@ class CreateColumnRequest extends AbstractMagicBaseDTO
     public function setDefaultValue(mixed $value): void
     {
         $this->defaultValue = $value;
-    }
-
-    public function getOptions(): ?array
-    {
-        return $this->options;
-    }
-
-    public function setOptions(null|array|string $value): void
-    {
-        $this->options = is_string($value) ? (json_decode($value, true) ?: null) : (is_array($value) ? $value : null);
     }
 
     public function getDynamicPermission(): ?MagicBaseColumnDynamicPermission

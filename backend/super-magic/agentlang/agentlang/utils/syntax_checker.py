@@ -81,7 +81,9 @@ class SyntaxChecker:
         result: SyntaxCheckResult
 
         if file_extension in [".html", ".htm"]:
-            result = await SyntaxChecker.check_html_syntax(file_path)
+            # Temporarily skip browser-backed HTML runtime checks. In server mode
+            # this waits for the browser service and can block ordinary file writes.
+            result = SyntaxCheckResult(is_valid=True)
         elif file_extension == ".json":
             result = SyntaxChecker.check_json_syntax(content)
         elif file_extension in [".js", ".jsx"]:

@@ -1,6 +1,7 @@
 from unittest.mock import patch
 
 import pytest
+from pydantic import ValidationError
 
 from app.infrastructure.sdk.magic_service.api.magicbase_api import MagicBaseApi
 from app.infrastructure.sdk.magic_service.parameter import (
@@ -92,6 +93,60 @@ def test_magicbase_result_normalizes_camel_and_snake_case():
     tables = MagicBaseTablesResult([{"id": 201, "table_key": "logs", "table_name": "Logs"}]).to_dict()
     assert tables["tables"][0]["table_id"] == "201"
     assert tables["tables"][0]["table_key"] == "logs"
+
+
+def test_magicbase_table_parameter_strips_legacy_column_options():
+    parameter = CreateMagicBaseTableParameter(
+        project_id="100",
+        table_key="survey",
+        table_name="Survey",
+        columns=[
+            {
+                "column_key": "status",
+                "column_name": "Status",
+                "data_type": "text",
+                "options": [{"label": "Open", "value": "open"}],
+            }
+        ],
+    )
+
+    body = parameter.to_body()
+
+    assert "options" not in body["columns"][0]
+
+
+def test_magicbase_sdk_parameters_reject_legacy_low_code_types():
+    with pytest.raises(ValueError):
+        CreateMagicBaseColumnParameter(
+            project_id="100",
+            table_id="200",
+            column_key="usage_purpose",
+            column_name="Usage Purpose",
+            data_type="multi_select",
+        ).validate()
+
+    with pytest.raises(ValueError):
+        CreateMagicBaseTableParameter(
+            project_id="100",
+            table_key="survey",
+            table_name="Survey",
+            columns=[
+                {
+                    "column_key": "usage_purpose",
+                    "column_name": "Usage Purpose",
+                    "data_type": "multi_select",
+                }
+            ],
+        ).validate()
+
+
+def test_magicbase_column_definition_rejects_legacy_low_code_types():
+    with pytest.raises(ValidationError):
+        MagicbaseColumnDefinition(
+            column_key="usage_purpose",
+            column_name="Usage Purpose",
+            data_type="multi_select",
+        )
 
 
 @pytest.mark.asyncio

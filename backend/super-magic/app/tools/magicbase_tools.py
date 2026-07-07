@@ -29,6 +29,8 @@ from app.service.html_app_memory_service import (
 from app.tools.core import BaseTool, BaseToolParams, tool
 from app.utils.init_client_message_util import InitClientMessageUtil
 
+MAGICBASE_MYSQL_LIKE_DATA_TYPES = {"text", "number", "datetime", "boolean", "json"}
+
 
 def _now_text() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
@@ -53,6 +55,14 @@ def _coerce_permission_object(value: Any, field_name: str) -> Optional[Dict[str,
     raise ValueError(f"{field_name} must be an object")
 
 
+def _validate_mysql_like_data_type(value: str) -> str:
+    data_type = str(value).strip()
+    if data_type not in MAGICBASE_MYSQL_LIKE_DATA_TYPES:
+        allowed = ", ".join(sorted(MAGICBASE_MYSQL_LIKE_DATA_TYPES))
+        raise ValueError(f"data_type must be one of: {allowed}")
+    return data_type
+
+
 def _column_id(column: Dict[str, Any]) -> str:
     return str(column.get("column_id") or column.get("columnId") or column.get("id") or "").strip()
 
@@ -69,7 +79,7 @@ def _normalize_column(column: Dict[str, Any]) -> Dict[str, Any]:
         "data_type": column.get("data_type") or column.get("dataType") or "",
         "is_required": column.get("is_required") if "is_required" in column else column.get("isRequired", False),
     }
-    for key in ("default_value", "options", "dynamic_permission"):
+    for key in ("default_value", "dynamic_permission"):
         if column.get(key) is not None:
             normalized[key] = column.get(key)
     return {key: value for key, value in normalized.items() if value not in ("", None)}
@@ -279,7 +289,7 @@ Human-readable column name shown to users."""
     )
     data_type: str = Field(
         description="""<!--zh: 字段类型。必须使用 MagicBase 支持的枚举值。-->
-Column data type. Must be one of: text, number, datetime, boolean, single_select, multi_select, user, department, attachment, json, reference."""
+Column data type. Must be one of the MySQL-like MagicBase types: text, number, datetime, boolean, json."""
     )
     is_required: bool = Field(
         default=False,
@@ -291,16 +301,16 @@ Whether this column is required."""
         description="""<!--zh: 默认值，不需要默认值时留空。-->
 Default value. Leave empty when no default is needed."""
     )
-    options: Any = Field(
-        default=None,
-        description="""<!--zh: single_select、multi_select 等类型需要的选项配置。-->
-Options for types such as single_select and multi_select. The shape depends on MagicBase; omit it when not needed."""
-    )
     dynamic_permission: Optional[Dict[str, Any]] = Field(
         default=None,
         description="""<!--zh: 字段动态权限配置，可选。-->
 Optional column dynamic permission object, for example {"read_scope": "public", "edit_scope": "public"}. Pass it as an object, not as a JSON string."""
     )
+
+    @field_validator("data_type")
+    @classmethod
+    def _validate_data_type(cls, value: str) -> str:
+        return _validate_mysql_like_data_type(value)
 
     @field_validator("dynamic_permission", mode="before")
     @classmethod
@@ -316,8 +326,6 @@ Optional column dynamic permission object, for example {"read_scope": "public", 
         }
         if self.default_value is not None:
             body["default_value"] = self.default_value
-        if self.options is not None:
-            body["options"] = self.options
         if self.dynamic_permission is not None:
             body["dynamic_permission"] = self.dynamic_permission
         return body
@@ -558,7 +566,7 @@ Human-readable column name shown to users."""
     )
     data_type: str = Field(
         description="""<!--zh: 字段类型。必须使用 MagicBase 支持的枚举值。-->
-Column data type. Must be one of: text, number, datetime, boolean, single_select, multi_select, user, department, attachment, json, reference."""
+Column data type. Must be one of the MySQL-like MagicBase types: text, number, datetime, boolean, json."""
     )
     is_required: bool = Field(
         default=False,
@@ -570,16 +578,16 @@ Whether this column is required."""
         description="""<!--zh: 默认值，不需要默认值时留空。-->
 Default value. Leave empty when no default is needed."""
     )
-    options: Any = Field(
-        default=None,
-        description="""<!--zh: single_select、multi_select 等类型需要的选项配置。-->
-Options for types such as single_select and multi_select. The shape depends on MagicBase; omit it when not needed."""
-    )
     dynamic_permission: Optional[Dict[str, Any]] = Field(
         default=None,
         description="""<!--zh: 字段动态权限配置，可选。-->
 Optional column dynamic permission object, for example {"read_scope": "public", "edit_scope": "public"}. Pass it as an object, not as a JSON string."""
     )
+
+    @field_validator("data_type")
+    @classmethod
+    def _validate_data_type(cls, value: str) -> str:
+        return _validate_mysql_like_data_type(value)
 
     @field_validator("dynamic_permission", mode="before")
     @classmethod
@@ -627,7 +635,6 @@ Do not call file-editing tools just to maintain schema migrations. Ordinary proj
                 "data_type": params.data_type,
                 "is_required": params.is_required,
                 "default_value": params.default_value,
-                "options": params.options,
                 "dynamic_permission": params.dynamic_permission,
             }
         )
@@ -652,7 +659,6 @@ Do not call file-editing tools just to maintain schema migrations. Ordinary proj
                     data_type=params.data_type,
                     is_required=params.is_required,
                     default_value=params.default_value,
-                    options=params.options,
                     dynamic_permission=params.dynamic_permission,
                 )
             )

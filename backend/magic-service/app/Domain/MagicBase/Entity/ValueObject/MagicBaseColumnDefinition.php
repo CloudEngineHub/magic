@@ -9,16 +9,12 @@ namespace App\Domain\MagicBase\Entity\ValueObject;
 
 readonly class MagicBaseColumnDefinition
 {
-    /**
-     * @param null|array<string, mixed>|list<mixed> $options
-     */
     public function __construct(
         private string $columnKey,
         private string $columnName,
         private string $dataType,
         private bool $required = false,
         private mixed $defaultValue = null,
-        private ?array $options = null,
         private ?MagicBaseColumnDynamicPermission $dynamicPermission = null,
     ) {
     }
@@ -30,7 +26,6 @@ readonly class MagicBaseColumnDefinition
      *     data_type?: string,
      *     is_required?: bool,
      *     default_value?: mixed,
-     *     options?: null|array<string, mixed>|list<mixed>,
      *     dynamic_permission?: null|array{read_scope?: string, edit_scope?: string}
      * } $payload
      */
@@ -42,7 +37,6 @@ readonly class MagicBaseColumnDefinition
             (string) ($payload['data_type'] ?? ''),
             (bool) ($payload['is_required'] ?? false),
             $payload['default_value'] ?? null,
-            is_array($payload['options'] ?? null) ? $payload['options'] : null,
             is_array($payload['dynamic_permission'] ?? null) ? MagicBaseColumnDynamicPermission::fromArray($payload['dynamic_permission']) : null,
         );
     }
@@ -72,14 +66,6 @@ readonly class MagicBaseColumnDefinition
         return $this->defaultValue;
     }
 
-    /**
-     * @return null|array<string, mixed>|list<mixed>
-     */
-    public function getOptions(): ?array
-    {
-        return $this->options;
-    }
-
     public function getDynamicPermission(): ?MagicBaseColumnDynamicPermission
     {
         return $this->dynamicPermission;
@@ -92,7 +78,6 @@ readonly class MagicBaseColumnDefinition
      *     data_type: string,
      *     is_required: bool,
      *     default_value: mixed,
-     *     options?: null|array<string, mixed>|list<mixed>,
      *     dynamic_permission?: array{read_scope: string, edit_scope: string}
      * }
      */
@@ -105,9 +90,6 @@ readonly class MagicBaseColumnDefinition
             'is_required' => $this->required,
             'default_value' => $this->defaultValue,
         ];
-        if ($this->options !== null) {
-            $payload['options'] = $this->options;
-        }
         if ($this->dynamicPermission !== null) {
             $payload['dynamic_permission'] = $this->dynamicPermission->toArray();
         }

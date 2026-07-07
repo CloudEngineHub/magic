@@ -6,6 +6,8 @@ from typing import Any, Dict, Optional
 
 from .magicbase_base_parameter import MagicBaseBaseParameter
 
+MAGICBASE_MYSQL_LIKE_DATA_TYPES = {"text", "number", "datetime", "boolean", "json"}
+
 
 class CreateMagicBaseColumnParameter(MagicBaseBaseParameter):
     """Parameter for POST /api/v1/magicbase/projects/{projectId}/tables/{tableId}/columns."""
@@ -19,7 +21,6 @@ class CreateMagicBaseColumnParameter(MagicBaseBaseParameter):
         data_type: str,
         is_required: bool = False,
         default_value: Any = None,
-        options: Any = None,
         dynamic_permission: Optional[Dict[str, Any]] = None,
         authorization: Optional[str] = None,
         organization_code: Optional[str] = None,
@@ -35,7 +36,6 @@ class CreateMagicBaseColumnParameter(MagicBaseBaseParameter):
         self.data_type = data_type.strip() if data_type else ""
         self.is_required = is_required
         self.default_value = default_value
-        self.options = options
         self.dynamic_permission = dynamic_permission
 
     def to_body(self) -> Dict[str, Any]:
@@ -47,8 +47,6 @@ class CreateMagicBaseColumnParameter(MagicBaseBaseParameter):
         }
         if self.default_value is not None:
             body["default_value"] = self.default_value
-        if self.options is not None:
-            body["options"] = self.options
         if self.dynamic_permission is not None:
             body["dynamic_permission"] = self.dynamic_permission
         return body
@@ -65,3 +63,6 @@ class CreateMagicBaseColumnParameter(MagicBaseBaseParameter):
             raise ValueError("column_name is required")
         if not self.data_type:
             raise ValueError("data_type is required")
+        if self.data_type not in MAGICBASE_MYSQL_LIKE_DATA_TYPES:
+            allowed = ", ".join(sorted(MAGICBASE_MYSQL_LIKE_DATA_TYPES))
+            raise ValueError(f"data_type must be one of: {allowed}")

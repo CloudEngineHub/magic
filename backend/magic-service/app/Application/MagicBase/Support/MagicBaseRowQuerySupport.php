@@ -54,7 +54,7 @@ readonly class MagicBaseRowQuerySupport
             if (! is_string($field)) {
                 continue;
             }
-            if (in_array($field, ['id', 'created_at', 'updated_at', 'created_by'], true)) {
+            if (in_array($field, ['id', 'record_id', 'created_at', 'updated_at', 'created_by'], true)) {
                 $result[$field] = $this->formatRootField($row, $field);
                 continue;
             }
@@ -199,7 +199,7 @@ readonly class MagicBaseRowQuerySupport
     public function readFieldValue(MagicBaseRowEntity $row, string $field): mixed
     {
         return match ($field) {
-            'id' => (string) $row->getRecordId(),
+            'id', 'record_id' => (string) $row->getRecordId(),
             'created_at' => $this->formatDatetime($row->getCreatedAt()),
             'updated_at' => $this->formatDatetime($row->getUpdatedAt()),
             'created_by' => $row->getCreatedBy(),

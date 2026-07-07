@@ -13,11 +13,5 @@ enum ColumnType: string
     case Number = 'number';
     case Datetime = 'datetime';
     case Boolean = 'boolean';
-    case SingleSelect = 'single_select';
-    case MultiSelect = 'multi_select';
-    case User = 'user';
-    case Department = 'department';
-    case Attachment = 'attachment';
     case Json = 'json';
-    case Reference = 'reference';
 }

@@ -84,7 +84,7 @@ readonly class MagicBaseTableAppService
                     'data_type' => trim((string) $columnPayload['data_type']),
                     'is_required' => (bool) ($columnPayload['is_required'] ?? false),
                     'default_value' => $columnPayload['default_value'] ?? null,
-                    'options' => isset($columnPayload['options']) && is_array($columnPayload['options']) ? $columnPayload['options'] : null,
+                    'options' => null,
                     'status' => MagicBaseConst::STATUS_ENABLED,
                     'dynamic_permission' => $this->columnDomainService->normalizeDynamicPermission($columnDynamicPermission)->toArray(),
                     'created_at' => $now,
@@ -217,7 +217,7 @@ readonly class MagicBaseTableAppService
                 'data_type' => trim((string) $payload['data_type']),
                 'is_required' => (bool) ($payload['is_required'] ?? false),
                 'default_value' => $payload['default_value'] ?? null,
-                'options' => isset($payload['options']) && is_array($payload['options']) ? $payload['options'] : null,
+                'options' => null,
                 'status' => MagicBaseConst::STATUS_ENABLED,
                 'dynamic_permission' => $this->columnDomainService->normalizeDynamicPermission(
                     is_array($payload['dynamic_permission'] ?? null) ? $payload['dynamic_permission'] : null
@@ -264,7 +264,7 @@ readonly class MagicBaseTableAppService
             $column->setDataType(trim((string) $merged['data_type']));
             $column->setIsRequired((bool) ($merged['is_required'] ?? false));
             $column->setDefaultValue($merged['default_value'] ?? null);
-            $column->setOptions(isset($merged['options']) && is_array($merged['options']) ? $merged['options'] : null);
+            $column->setOptions(null);
             $column->setDynamicPermission($this->columnDomainService->normalizeDynamicPermission(
                 is_array($merged['dynamic_permission'] ?? null) ? $merged['dynamic_permission'] : null
             ));

@@ -23,7 +23,6 @@ def normalize_magicbase_column(data: Dict[str, Any]) -> Dict[str, Any]:
         "data_type": _pick(data, "data_type", "dataType", default=""),
         "is_required": bool(_pick(data, "is_required", "isRequired", default=False)),
         "default_value": _pick(data, "default_value", "defaultValue"),
-        "options": _pick(data, "options", default=None),
         "raw": data,
     }
 

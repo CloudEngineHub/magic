@@ -72,7 +72,6 @@ class MagicBaseAssembler
             $request->getDataType(),
             $request->getIsRequired(),
             $request->getDefaultValue(),
-            $request->getOptions(),
             $request->getDynamicPermission(),
         );
     }

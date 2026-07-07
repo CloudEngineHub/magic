@@ -25,8 +25,6 @@ class MagicBaseColumnResponseDTO extends AbstractMagicBaseDTO
 
     protected mixed $defaultValue = null;
 
-    protected ?array $options = null;
-
     protected string $status = '';
 
     protected ?array $dynamicPermission = null;

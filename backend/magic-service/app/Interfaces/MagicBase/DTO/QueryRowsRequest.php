@@ -66,8 +66,30 @@ class QueryRowsRequest extends AbstractMagicBaseDTO
         return $this->select;
     }
 
-    public function setSelect(null|int|string $value): void
+    public function setSelect(null|array|int|string $value): void
     {
-        $this->select = $value === null ? '' : (string) $value;
+        $this->select = $this->normalizeSelect($value);
+    }
+
+    private function normalizeSelect(null|array|int|string $value): string
+    {
+        if ($value === null) {
+            return '';
+        }
+        if (! is_array($value)) {
+            return trim((string) $value);
+        }
+
+        $fields = [];
+        foreach ($value as $field) {
+            if (! is_scalar($field)) {
+                continue;
+            }
+            $field = trim((string) $field);
+            if ($field !== '') {
+                $fields[] = $field;
+            }
+        }
+        return implode(',', $fields);
     }
 }
