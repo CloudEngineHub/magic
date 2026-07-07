@@ -225,7 +225,6 @@ class SlidesTemplateCategoryRepository extends AbstractRepository implements Sli
     {
         $query = $withTrashed ? SlidesTemplateCategoryModel::withTrashed() : SlidesTemplateCategoryModel::query();
         $builder = $this->createBuilder($dataIsolation, $query);
-        /** @var null|SlidesTemplateCategoryModel $model */
         return $builder->where('code', $code)->first();
     }
 }
