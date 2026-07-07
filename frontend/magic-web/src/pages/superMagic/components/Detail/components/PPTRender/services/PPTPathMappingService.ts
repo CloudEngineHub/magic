@@ -43,6 +43,23 @@ export class PPTPathMappingService {
 		return result
 	}
 
+	private normalizeDirectoryPath(relativePath?: string): string | undefined {
+		if (!relativePath) return undefined
+		const path = relativePath.replace(/\/+$/, "")
+		return path ? `${path}/` : ""
+	}
+
+	private getBaseFolderPath(mainFile: any): string | undefined {
+		if (!mainFile?.relative_file_path) return undefined
+		if (mainFile?.is_directory) {
+			return this.normalizeDirectoryPath(mainFile.relative_file_path)
+		}
+		if (mainFile?.file_name && mainFile.relative_file_path.endsWith(mainFile.file_name)) {
+			return mainFile.relative_file_path.slice(0, -mainFile.file_name.length)
+		}
+		return this.normalizeDirectoryPath(mainFile.relative_file_path.replace(/[^/]*$/, ""))
+	}
+
 	private getPPTFolderIndex(): PPTFolderIndex {
 		if (this.pptFolderIndexCache) return this.pptFolderIndexCache
 
@@ -50,10 +67,7 @@ export class PPTPathMappingService {
 		const mainFile = allAttachments.find(
 			(item: any) => item?.file_id === this.config.mainFileId,
 		)
-		const baseFolderPath =
-			mainFile?.relative_file_path && mainFile?.file_name
-				? mainFile.relative_file_path.replace(mainFile.file_name, "")
-				: undefined
+		const baseFolderPath = this.getBaseFolderPath(mainFile)
 		const byFileId = new Map<string, any>()
 		const byRelativePath = new Map<string, any>()
 
@@ -81,9 +95,8 @@ export class PPTPathMappingService {
 	 */
 	extractFileIdFromPath(path: string): string | undefined {
 		const pptFolderIndex = this.getPPTFolderIndex()
-		const mainFile = pptFolderIndex.mainFile
 
-		if (!mainFile || !mainFile.relative_file_path || !mainFile.file_name) {
+		if (!pptFolderIndex.mainFile || pptFolderIndex.baseFolderPath === undefined) {
 			this.logger.warn("主文件未找到或缺少必需字段", {
 				operation: "extractFileIdFromPath",
 				metadata: {
@@ -94,11 +107,8 @@ export class PPTPathMappingService {
 			return undefined
 		}
 
-		// Extract base folder path from main file's relative_file_path
-		const baseFolderPath = mainFile.relative_file_path.replace(mainFile.file_name, "")
-
 		// Resolve relative path to absolute path
-		const absolutePath = this.resolveRelativePath(baseFolderPath, path)
+		const absolutePath = this.resolveRelativePath(pptFolderIndex.baseFolderPath, path)
 
 		// Find file by absolute path
 		const file = pptFolderIndex.byRelativePath.get(absolutePath)
@@ -274,7 +284,7 @@ export class PPTPathMappingService {
 	getFullRelativePath(path: string): string | undefined {
 		const { mainFile, baseFolderPath } = this.getPPTFolderIndex()
 
-		if (!mainFile?.relative_file_path || !mainFile?.file_name || baseFolderPath === undefined) {
+		if (!mainFile?.relative_file_path || baseFolderPath === undefined) {
 			return undefined
 		}
 

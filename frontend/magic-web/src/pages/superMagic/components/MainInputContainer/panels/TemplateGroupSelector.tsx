@@ -15,6 +15,7 @@ interface TemplateGroupSelectorProps {
 	className?: string
 	leftControlClassName?: string
 	rightControlClassName?: string
+	showEmptyGroups?: boolean
 	"data-testid"?: string
 }
 
@@ -27,6 +28,7 @@ const TemplateGroupSelector = observer(
 		className,
 		leftControlClassName,
 		rightControlClassName,
+		showEmptyGroups = false,
 		"data-testid": dataTestId = "template-group-selector",
 	}: TemplateGroupSelectorProps) => {
 		const lt = useLocaleText()
@@ -48,7 +50,7 @@ const TemplateGroupSelector = observer(
 							)
 
 					// if the group has no children, don't render the button
-					if (group.children?.length === 0) {
+					if (!showEmptyGroups && group.children?.length === 0) {
 						return null
 					}
 

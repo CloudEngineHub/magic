@@ -1,18 +1,12 @@
 import { lazy, useMemo, useState } from "react"
-import { Button, Flex, Image, InputNumber, Select, Switch, message } from "antd"
+import { Button, Flex, Image, InputNumber, Switch, message } from "antd"
 import type { TableProps } from "antd/lib"
 import { createStyles } from "antd-style"
 import { useDebounceFn, useMemoizedFn, useMount, useRequest } from "ahooks"
 import { useTranslation } from "react-i18next"
-import { IconSearch, IconRefresh } from "@tabler/icons-react"
+import { IconCategory } from "@tabler/icons-react"
 import type { TableButton } from "@admin-components"
-import {
-	MagicButton,
-	MagicInput,
-	MobileList,
-	TableWithFilters,
-	WarningModal,
-} from "@admin-components"
+import { MobileList, TableWithFilters, WarningModal } from "@admin-components"
 import { useApis } from "@admin/apis"
 import { PERMISSION_KEY_MAP } from "@admin/const/common"
 import useRights from "@admin/hooks/useRights"
@@ -20,10 +14,17 @@ import { useOpenModal } from "@admin/hooks/useOpenModal"
 import { usePagination } from "@admin/hooks/usePagination"
 import { useIsMobile } from "@admin/hooks/useIsMobile"
 import { SlidesTemplate } from "@admin/types/slidesTemplate"
+import { SlidesTemplateCategoryModal } from "./components/SlidesTemplateCategoryModal"
 import { SlidesTemplateModal } from "./components/SlidesTemplateModal"
+import { OverflowTooltipText } from "./components/OverflowTooltipText"
+import {
+	SlidesTemplateToolbar,
+	type SlidesTemplateFilterDraft,
+} from "./components/SlidesTemplateToolbar"
 import {
 	getSlidesTemplateStatusByChecked,
 	isSystemSlidesTemplate,
+	resolveSlidesTemplateCategoryName,
 	resolveSlidesTemplateTitle,
 } from "./utils"
 
@@ -31,6 +32,14 @@ const SlidesTemplateCard = lazy(() => import("./components/SlidesTemplateCard"))
 
 type DataType = SlidesTemplate.Item
 type ParamsType = SlidesTemplate.QueryParams
+
+const COLUMN_WIDTH = {
+	name: 180,
+	code: 240,
+	source: 120,
+	category: 160,
+	updatedAt: 180,
+} as const
 
 const useStyles = createStyles(({ token }) => ({
 	container: {
@@ -59,14 +68,17 @@ export default function SlidesTemplatePage() {
 	const isMobile = useIsMobile()
 
 	const [open, setOpen] = useState(false)
+	const [categoryOpen, setCategoryOpen] = useState(false)
 	const [selectedRow, setSelectedRow] = useState<DataType | null>(null)
 	const [data, setData] = useState<DataType[]>([])
+	const [categories, setCategories] = useState<SlidesTemplate.CategoryItem[]>([])
 	const [total, setTotal] = useState(0)
 	const [params, setParams] = useState<ParamsType>({ page: 1, page_size: 20 })
-	const [filterDraft, setFilterDraft] = useState({
+	const [filterDraft, setFilterDraft] = useState<SlidesTemplateFilterDraft>({
 		keyword: "",
 		code: "",
-		status: undefined as SlidesTemplate.Status | undefined,
+		category_code: undefined,
+		status: undefined,
 	})
 	const [statusLoadingIds, setStatusLoadingIds] = useState<Set<string>>(new Set())
 	const [sortLoadingIds, setSortLoadingIds] = useState<Set<string>>(new Set())
@@ -89,12 +101,32 @@ export default function SlidesTemplatePage() {
 		},
 	)
 
+	const { run: runCategories } = useRequest(
+		() =>
+			SlidesTemplateApi.category.query({
+				page: 1,
+				page_size: 200,
+				status: SlidesTemplate.StatusMap.enabled,
+			}),
+		{
+			manual: true,
+			onSuccess: (res) => {
+				setCategories(res.list)
+			},
+		},
+	)
+
 	useMount(() => {
 		run(params)
+		runCategories()
 	})
 
 	const refresh = useMemoizedFn((nextParams = params) => {
 		run(nextParams)
+	})
+
+	const refreshCategories = useMemoizedFn(() => {
+		runCategories()
 	})
 
 	const submitFilters = useMemoizedFn(() => {
@@ -103,6 +135,7 @@ export default function SlidesTemplatePage() {
 			page_size: params.page_size,
 			keyword: filterDraft.keyword.trim() || undefined,
 			code: filterDraft.code.trim() || undefined,
+			category_code: filterDraft.category_code || undefined,
 			status: filterDraft.status ?? null,
 		}
 		setParams(nextParams)
@@ -111,7 +144,7 @@ export default function SlidesTemplatePage() {
 
 	const resetFilters = useMemoizedFn(() => {
 		const nextParams: ParamsType = { page: 1, page_size: params.page_size }
-		setFilterDraft({ keyword: "", code: "", status: undefined })
+		setFilterDraft({ keyword: "", code: "", category_code: undefined, status: undefined })
 		setParams(nextParams)
 		run(nextParams)
 	})
@@ -184,6 +217,24 @@ export default function SlidesTemplatePage() {
 			: t("slidesTemplate.source.official")
 	})
 
+	const categoryNameMap = useMemo(() => {
+		return new Map(
+			categories.map((category) => [
+				category.code,
+				resolveSlidesTemplateCategoryName(category),
+			]),
+		)
+	}, [categories])
+
+	const categoryOptions = useMemo(
+		() =>
+			categories.map((category) => ({
+				label: resolveSlidesTemplateCategoryName(category),
+				value: category.code,
+			})),
+		[categories],
+	)
+
 	const columns: TableProps<DataType>["columns"] = useMemo(
 		() => [
 			{
@@ -207,23 +258,50 @@ export default function SlidesTemplatePage() {
 				title: t("slidesTemplate.columns.name"),
 				dataIndex: "label",
 				key: "label",
-				width: 180,
-				ellipsis: true,
-				render: (_, record) => resolveSlidesTemplateTitle(record),
+				width: COLUMN_WIDTH.name,
+				ellipsis: { showTitle: false },
+				render: (_, record) => (
+					<OverflowTooltipText
+						text={resolveSlidesTemplateTitle(record)}
+						style={{ maxWidth: COLUMN_WIDTH.name }}
+					/>
+				),
 			},
 			{
 				title: t("slidesTemplate.columns.code"),
 				dataIndex: "code",
 				key: "code",
-				width: 240,
-				ellipsis: true,
+				width: COLUMN_WIDTH.code,
+				ellipsis: { showTitle: false },
+				render: (value: string) => (
+					<OverflowTooltipText text={value} style={{ maxWidth: COLUMN_WIDTH.code }} />
+				),
 			},
 			{
 				title: t("slidesTemplate.columns.source"),
 				dataIndex: "source_type",
 				key: "source_type",
-				width: 120,
-				render: (value: SlidesTemplate.SourceType | undefined) => sourceTypeLabel(value),
+				width: COLUMN_WIDTH.source,
+				ellipsis: { showTitle: false },
+				render: (value: SlidesTemplate.SourceType | undefined) => (
+					<OverflowTooltipText
+						text={sourceTypeLabel(value)}
+						style={{ maxWidth: COLUMN_WIDTH.source }}
+					/>
+				),
+			},
+			{
+				title: t("slidesTemplate.columns.category"),
+				dataIndex: "category_code",
+				key: "category_code",
+				width: COLUMN_WIDTH.category,
+				ellipsis: { showTitle: false },
+				render: (value: string | null | undefined) => (
+					<OverflowTooltipText
+						text={value ? (categoryNameMap.get(value) ?? value) : "-"}
+						style={{ maxWidth: COLUMN_WIDTH.category }}
+					/>
+				),
 			},
 			{
 				title: t("slidesTemplate.columns.status"),
@@ -264,8 +342,14 @@ export default function SlidesTemplatePage() {
 				title: t("slidesTemplate.columns.updatedAt"),
 				dataIndex: "updated_at",
 				key: "updated_at",
-				width: 180,
-				ellipsis: true,
+				width: COLUMN_WIDTH.updatedAt,
+				ellipsis: { showTitle: false },
+				render: (value: string) => (
+					<OverflowTooltipText
+						text={value}
+						style={{ maxWidth: COLUMN_WIDTH.updatedAt }}
+					/>
+				),
 			},
 			{
 				title: t("operate"),
@@ -307,6 +391,7 @@ export default function SlidesTemplatePage() {
 			styles,
 			statusLabel,
 			sourceTypeLabel,
+			categoryNameMap,
 			statusLoadingIds,
 			sortLoadingIds,
 			hasEditRight,
@@ -318,6 +403,12 @@ export default function SlidesTemplatePage() {
 
 	const buttons: TableButton[] = useMemo(
 		() => [
+			{
+				text: t("slidesTemplate.category.manageButton"),
+				icon: <IconCategory size={16} />,
+				disabled: !hasEditRight,
+				onClick: () => setCategoryOpen(true),
+			},
 			{
 				text: t("slidesTemplate.addButton"),
 				type: "primary",
@@ -332,44 +423,17 @@ export default function SlidesTemplatePage() {
 	)
 
 	const toolbar = (
-		<Flex gap={8} wrap="wrap" className={styles.toolbar}>
-			<MagicInput
-				value={filterDraft.keyword}
-				placeholder={t("slidesTemplate.filters.keyword")}
-				style={{ width: 220 }}
-				onChange={(event) =>
-					setFilterDraft((prev) => ({ ...prev, keyword: event.target.value }))
-				}
-				onPressEnter={submitFilters}
-			/>
-			<MagicInput
-				value={filterDraft.code}
-				placeholder={t("slidesTemplate.filters.code")}
-				style={{ width: 260 }}
-				onChange={(event) =>
-					setFilterDraft((prev) => ({ ...prev, code: event.target.value }))
-				}
-				onPressEnter={submitFilters}
-			/>
-			<Select
-				allowClear
-				value={filterDraft.status}
-				placeholder={t("slidesTemplate.filters.status")}
-				style={{ width: 160 }}
-				options={[
-					{ label: statusLabel(SlidesTemplate.StatusMap.enabled), value: 1 },
-					{ label: statusLabel(SlidesTemplate.StatusMap.disabled), value: 0 },
-				]}
-				onChange={(value) => setFilterDraft((prev) => ({ ...prev, status: value }))}
-			/>
-			<MagicButton type="primary" icon={<IconSearch size={16} />} onClick={submitFilters}>
-				{t("button.search")}
-			</MagicButton>
-			<MagicButton onClick={resetFilters}>{t("button.reset")}</MagicButton>
-			<MagicButton icon={<IconRefresh size={16} />} onClick={() => refresh()}>
-				{t("button.reload")}
-			</MagicButton>
-		</Flex>
+		<SlidesTemplateToolbar
+			className={styles.toolbar}
+			filterDraft={filterDraft}
+			categoryOptions={categoryOptions}
+			statusLabel={statusLabel}
+			onFilterDraftChange={setFilterDraft}
+			onSubmit={submitFilters}
+			onReset={resetFilters}
+			onRefresh={() => refresh()}
+			t={t}
+		/>
 	)
 
 	const { paginationConfig } = usePagination({
@@ -401,6 +465,7 @@ export default function SlidesTemplatePage() {
 							}}
 							sourceTypeLabel={sourceTypeLabel}
 							handleDelete={handleDelete}
+							categoryNameMap={categoryNameMap}
 						/>
 					}
 					paginationConfig={paginationConfig}
@@ -412,6 +477,8 @@ export default function SlidesTemplatePage() {
 						extra={toolbar}
 						columns={columns}
 						buttons={buttons}
+						justify="end"
+						tableLayout="fixed"
 						dataSource={data}
 						rowKey="id"
 						extraHeight={142}
@@ -424,9 +491,21 @@ export default function SlidesTemplatePage() {
 				<SlidesTemplateModal
 					open={open}
 					info={selectedRow}
+					categoryOptions={categoryOptions}
 					onCancel={() => setOpen(false)}
 					onOk={() => setOpen(false)}
 					onSuccess={() => refresh()}
+				/>
+			)}
+			{categoryOpen && (
+				<SlidesTemplateCategoryModal
+					open={categoryOpen}
+					hasEditRight={hasEditRight}
+					onCancel={() => setCategoryOpen(false)}
+					onSuccess={() => {
+						refreshCategories()
+						refresh()
+					}}
 				/>
 			)}
 		</>

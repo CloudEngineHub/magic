@@ -10,6 +10,7 @@ import { TopicMode } from "@/pages/superMagic/pages/Workspace/TopicMode"
 export interface SlidesTemplateItem {
 	code: string
 	source_type?: "SYSTEM" | "OFFICIAL"
+	category_code?: string | null
 	label: {
 		zh_CN: string
 		en_US: string
@@ -29,6 +30,7 @@ export interface SlidesTemplateQueryParams {
 	page?: number
 	page_size?: number
 	keyword?: string
+	category_code?: string
 }
 
 export interface SlidesTemplateListResponse {
@@ -38,7 +40,35 @@ export interface SlidesTemplateListResponse {
 	list: SlidesTemplateItem[]
 }
 
-export const SLIDES_TEMPLATE_PAGE_SIZE = 200
+export interface SlidesTemplateCategoryItem {
+	id: string
+	code: string
+	name_i18n: {
+		zh_CN: string
+		en_US: string
+	}
+	sort: number
+	template_count: number
+	is_official: boolean
+}
+
+export interface SlidesTemplateCategoryQueryParams {
+	page?: number
+	page_size?: number
+	keyword?: string
+}
+
+export interface SlidesTemplateCategoryListResponse {
+	page: number
+	page_size: number
+	total: number
+	list: SlidesTemplateCategoryItem[]
+}
+
+export const ALL_SLIDES_TEMPLATE_GROUP_KEY = "all"
+export const OTHER_SLIDES_TEMPLATE_GROUP_KEY = "other"
+export const SLIDES_TEMPLATE_PAGE_SIZE = 20
+export const SLIDES_TEMPLATE_CATEGORY_PAGE_SIZE = 200
 
 export function isSlidesMode(topicMode: TopicMode | undefined) {
 	return topicMode === TopicMode.PPT
@@ -87,16 +117,21 @@ const slidesStaticFields: NonNullable<FieldPanelConfig["field"]>["items"] = [
 	},
 ]
 
-export function groupSlidesTemplates(templates: SlidesTemplateItem[]): OptionGroup[] {
+export function groupSlidesTemplates(
+	templates: SlidesTemplateItem[],
+	categories?: SlidesTemplateCategoryItem[],
+): OptionGroup[] {
+	const groups: OptionGroup[] = [createAllSlidesTemplateGroup(templates)]
+
+	if (categories) return [...groups, ...groupSlidesTemplatesByCategory(templates, categories)]
+
 	const officialTemplates = templates.filter((template) => template.is_official)
 	const organizationTemplates = templates.filter((template) => !template.is_official)
-	const groups: OptionGroup[] = []
 
 	if (officialTemplates.length) {
 		groups.push({
 			group_key: "official",
 			group_name: { zh_CN: "官方模板", en_US: "Official Templates" },
-			group_icon: "LayoutTemplate",
 			children: officialTemplates.map(toTemplateOption),
 		})
 	}
@@ -105,7 +140,6 @@ export function groupSlidesTemplates(templates: SlidesTemplateItem[]): OptionGro
 		groups.push({
 			group_key: "organization",
 			group_name: { zh_CN: "组织模板", en_US: "Organization Templates" },
-			group_icon: "Building2",
 			children: organizationTemplates.map(toTemplateOption),
 		})
 	}
@@ -113,8 +147,53 @@ export function groupSlidesTemplates(templates: SlidesTemplateItem[]): OptionGro
 	return groups
 }
 
-export function createSlidesPresetPanelConfig(templates: SlidesTemplateItem[]): FieldPanelConfig {
-	const groups = groupSlidesTemplates(templates)
+function createAllSlidesTemplateGroup(templates: SlidesTemplateItem[]): OptionGroup {
+	return {
+		group_key: ALL_SLIDES_TEMPLATE_GROUP_KEY,
+		group_name: { zh_CN: "全部", en_US: "All" },
+		children: templates.map(toTemplateOption),
+	}
+}
+
+function groupSlidesTemplatesByCategory(
+	templates: SlidesTemplateItem[],
+	categories: SlidesTemplateCategoryItem[],
+): OptionGroup[] {
+	const groups: OptionGroup[] = []
+	const groupedTemplateCodes = new Set<string>()
+
+	categories.forEach((category) => {
+		const children = templates
+			.filter((template) => template.category_code === category.code)
+			.map(toTemplateOption)
+
+		children.forEach((child) => groupedTemplateCodes.add(String(child.value)))
+		groups.push({
+			group_key: category.code,
+			group_name: category.name_i18n,
+			children,
+		})
+	})
+
+	const otherTemplates = categories.length
+		? templates.filter((template) => !groupedTemplateCodes.has(template.code))
+		: []
+	if (otherTemplates.length) {
+		groups.push({
+			group_key: OTHER_SLIDES_TEMPLATE_GROUP_KEY,
+			group_name: { zh_CN: "其他", en_US: "Other" },
+			children: otherTemplates.map(toTemplateOption),
+		})
+	}
+
+	return groups
+}
+
+export function createSlidesPresetPanelConfig(
+	templates: SlidesTemplateItem[],
+	categories?: SlidesTemplateCategoryItem[],
+): FieldPanelConfig {
+	const groups = groupSlidesTemplates(templates, categories)
 	return {
 		type: SkillPanelType.FIELD,
 		title: { zh_CN: "模板", en_US: "Preset" },
@@ -135,10 +214,11 @@ export function createSlidesPresetPanelConfig(templates: SlidesTemplateItem[]): 
 	}
 }
 
-export function createSlidesFixedSceneConfig(templates: SlidesTemplateItem[]) {
-	const panels: SkillPanelConfig[] = templates.length
-		? [createSlidesPresetPanelConfig(templates)]
-		: []
+export function createSlidesFixedSceneConfig(
+	templates: SlidesTemplateItem[] = [],
+	categories?: SlidesTemplateCategoryItem[],
+) {
+	const panels: SkillPanelConfig[] = [createSlidesPresetPanelConfig(templates, categories)]
 
 	return {
 		placeholder: {
@@ -153,7 +233,7 @@ export function createSlidesFixedSceneConfig(templates: SlidesTemplateItem[]) {
 	}
 }
 
-function toTemplateOption(template: SlidesTemplateItem) {
+export function toTemplateOption(template: SlidesTemplateItem) {
 	return {
 		value: template.code,
 		label: template.label,

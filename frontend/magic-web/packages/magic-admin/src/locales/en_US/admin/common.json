@@ -199,7 +199,34 @@
 	"slidesTemplate": {
 		"addButton": "Add Template",
 		"addTitle": "Add PPT Template",
+		"category": {
+			"addButton": "Add Category",
+			"addTitle": "Add PPT Template Category",
+			"codeRule": "Category code must be PPT-CATE-xxx. The suffix only supports lowercase letters, numbers, and hyphens.",
+			"columns": {
+				"code": "Category Code",
+				"name": "Category Name",
+				"status": "Status",
+				"templateCount": "Templates",
+				"updatedAt": "Updated At"
+			},
+			"editTitle": "Edit PPT Template Category",
+			"fields": {
+				"code": "Category Code",
+				"name": "Category Name",
+				"sort": "Sort",
+				"status": "Status"
+			},
+			"filters": {
+				"code": "Category Code",
+				"keyword": "Keyword",
+				"status": "Status"
+			},
+			"manageButton": "Categories",
+			"manageTitle": "Category Management"
+		},
 		"columns": {
+			"category": "Category",
 			"code": "Template Code",
 			"name": "Template Name",
 			"sort": "Sort",
@@ -210,6 +237,7 @@
 		},
 		"editTitle": "Edit PPT Template",
 		"fields": {
+			"category": "Category",
 			"collage": "Preview Collage",
 			"description": "Description",
 			"label": "Template Name",
@@ -220,6 +248,7 @@
 			"thumbnail": "Cover Image"
 		},
 		"filters": {
+			"category": "Category",
 			"code": "Template Code",
 			"keyword": "Keyword",
 			"status": "Status"

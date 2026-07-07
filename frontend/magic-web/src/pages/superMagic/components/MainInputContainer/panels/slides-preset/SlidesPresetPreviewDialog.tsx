@@ -7,7 +7,6 @@ import {
 	DialogTitle,
 } from "@/components/shadcn-ui/dialog"
 import { Button } from "@/components/shadcn-ui/button"
-import magicToast from "@/components/base/MagicToaster/utils"
 import type { OptionItem } from "../types"
 import { useLocaleText } from "../hooks/useLocaleText"
 import { X } from "lucide-react"
@@ -35,7 +34,6 @@ function SlidesPresetPreviewDialog({
 	function handleSelect() {
 		if (!template) return
 		onSelect?.(template)
-		magicToast.success(t("playbook.edit.presets.form.selectedTemplate", { name: title }))
 		onOpenChange(false)
 	}
 

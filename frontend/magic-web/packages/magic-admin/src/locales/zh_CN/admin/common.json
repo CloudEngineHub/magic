@@ -204,7 +204,34 @@
 	"slidesTemplate": {
 		"addButton": "新增模板",
 		"addTitle": "新增 PPT 模板",
+		"category": {
+			"addButton": "新增分类",
+			"addTitle": "新增 PPT 模板分类",
+			"codeRule": "分类编码格式为 PPT-CATE-xxx，后缀仅支持小写字母、数字和中划线",
+			"columns": {
+				"code": "分类编码",
+				"name": "分类名称",
+				"status": "状态",
+				"templateCount": "模板数",
+				"updatedAt": "更新时间"
+			},
+			"editTitle": "编辑 PPT 模板分类",
+			"fields": {
+				"code": "分类编码",
+				"name": "分类名称",
+				"sort": "排序值",
+				"status": "启用状态"
+			},
+			"filters": {
+				"code": "分类编码",
+				"keyword": "关键词",
+				"status": "状态"
+			},
+			"manageButton": "分类管理",
+			"manageTitle": "分类管理"
+		},
 		"columns": {
+			"category": "分类",
 			"code": "模板编码",
 			"name": "模板名称",
 			"sort": "排序",
@@ -215,6 +242,7 @@
 		},
 		"editTitle": "编辑 PPT 模板",
 		"fields": {
+			"category": "所属分类",
 			"collage": "预览拼图",
 			"description": "模板描述",
 			"label": "模板名称",
@@ -225,6 +253,7 @@
 			"thumbnail": "封面图"
 		},
 		"filters": {
+			"category": "分类",
 			"code": "模板编码",
 			"keyword": "关键词",
 			"status": "状态"

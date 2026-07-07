@@ -10,7 +10,6 @@ import { Eye, Image as ImageIcon, Check } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/shadcn-ui/hover-card"
 import { Button } from "@/components/shadcn-ui/button"
-import magicToast from "@/components/base/MagicToaster/utils"
 import { cn } from "@/lib/utils"
 import type { OptionItem } from "../types"
 import { useLocaleText } from "../hooks/useLocaleText"
@@ -22,6 +21,9 @@ interface SlidesPresetCardProps {
 	onClick?: (template: OptionItem) => void
 	onPreviewClick?: (template: OptionItem) => void
 	onPreviewPreload?: (template: OptionItem) => void
+	canUseHoverPreview?: boolean
+	showHoverDetails?: boolean
+	hoverDetailsContainer?: HTMLElement | null
 }
 
 const PREVIEW_PRELOAD_DELAY_MS = 1000
@@ -32,6 +34,9 @@ function SlidesPresetCard({
 	onClick,
 	onPreviewClick,
 	onPreviewPreload,
+	canUseHoverPreview = false,
+	showHoverDetails = true,
+	hoverDetailsContainer,
 }: SlidesPresetCardProps) {
 	const lt = useLocaleText()
 	const { t } = useTranslation("crew/create")
@@ -50,7 +55,6 @@ function SlidesPresetCard({
 	}, [])
 
 	function handleClick() {
-		magicToast.success(t("playbook.edit.presets.form.selectedTemplate", { name: label }))
 		onClick?.(template)
 	}
 
@@ -74,7 +78,7 @@ function SlidesPresetCard({
 	}
 
 	function handlePreviewIntentStart() {
-		if (!canPreview || preloadTimerRef.current) return
+		if (!canUseHoverPreview || !canPreview || preloadTimerRef.current) return
 
 		preloadTimerRef.current = setTimeout(() => {
 			preloadTimerRef.current = null
@@ -108,20 +112,21 @@ function SlidesPresetCard({
 			data-template-id={testIdSuffix}
 			className={cn(
 				"group relative flex size-full cursor-pointer flex-col gap-2 rounded-xl p-2 outline-none transition-colors duration-200",
-				"hover:bg-sidebar-accent focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
+				"focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
+				canUseHoverPreview && "hover:bg-sidebar-accent",
 				isSelected && "bg-primary/5 ring-2 ring-inset ring-primary",
 			)}
 			onClick={handleClick}
 			onKeyDown={handleKeyDown}
-			onMouseEnter={handlePreviewIntentStart}
-			onMouseLeave={handleMouseLeave}
-			onFocus={handlePreviewIntentStart}
-			onBlur={handleBlur}
+			onMouseEnter={canUseHoverPreview ? handlePreviewIntentStart : undefined}
+			onMouseLeave={canUseHoverPreview ? handleMouseLeave : undefined}
+			onFocus={canUseHoverPreview ? handlePreviewIntentStart : undefined}
+			onBlur={canUseHoverPreview ? handleBlur : undefined}
 		>
 			<div
 				className={cn(
 					"relative aspect-[16/9] w-full overflow-hidden rounded-lg border border-border/50 bg-background shadow-sm transition-all duration-200",
-					"group-hover:border-primary/30 group-hover:shadow-md",
+					canUseHoverPreview && "group-hover:border-primary/30 group-hover:shadow-md",
 				)}
 			>
 				{template.thumbnail_url ? (
@@ -135,7 +140,8 @@ function SlidesPresetCard({
 							src={template.thumbnail_url}
 							alt={label}
 							className={cn(
-								"pointer-events-none size-full object-cover transition-all duration-300 ease-out group-hover:scale-[1.02]",
+								"pointer-events-none size-full object-cover transition-all duration-300 ease-out",
+								canUseHoverPreview && "group-hover:scale-[1.02]",
 								isThumbnailLoaded ? "opacity-100" : "opacity-0",
 							)}
 							loading="lazy"
@@ -144,13 +150,19 @@ function SlidesPresetCard({
 						/>
 					</>
 				) : (
-					<div className="flex size-full items-center justify-center bg-muted/30 px-3 text-center text-sm text-muted-foreground transition-transform duration-300 ease-out group-hover:scale-[1.02]">
+					<div
+						className={cn(
+							"flex size-full items-center justify-center bg-muted/30 px-3 text-center text-sm text-muted-foreground transition-transform duration-300 ease-out",
+							canUseHoverPreview && "group-hover:scale-[1.02]",
+						)}
+					>
 						{label}
 					</div>
 				)}
 				<div
 					className={cn(
-						"absolute inset-0 z-20 flex items-center justify-center gap-2.5 bg-black/0 opacity-0 transition-all duration-200 group-focus-within:bg-black/30 group-focus-within:opacity-100 group-hover:bg-black/30 group-hover:opacity-100",
+						"absolute inset-0 z-20 flex items-center justify-center gap-2.5 bg-black/0 opacity-0 transition-all duration-200 group-focus-within:bg-black/30 group-focus-within:opacity-100",
+						canUseHoverPreview && "group-hover:bg-black/30 group-hover:opacity-100",
 						isSelected && "bg-black/30 opacity-100",
 					)}
 				>
@@ -160,7 +172,9 @@ function SlidesPresetCard({
 						variant="default"
 						data-testid="slides-preset-card-use-button"
 						className={cn(
-							"h-7 translate-y-2 gap-1 rounded-full px-2 text-xs font-medium opacity-0 shadow-lg transition-all duration-300 hover:scale-105 group-focus-within:translate-y-0 group-focus-within:opacity-100 group-hover:translate-y-0 group-hover:opacity-100",
+							"h-7 translate-y-2 gap-1 rounded-full px-2 text-xs font-medium opacity-0 shadow-lg transition-all duration-300 group-focus-within:translate-y-0 group-focus-within:opacity-100",
+							canUseHoverPreview &&
+								"hover:scale-105 group-hover:translate-y-0 group-hover:opacity-100",
 							isSelected && "translate-y-0 opacity-100",
 						)}
 						onClick={handleUseClick}
@@ -176,7 +190,11 @@ function SlidesPresetCard({
 							size="sm"
 							variant="secondary"
 							data-testid="slides-preset-card-preview-button"
-							className="hidden h-7 translate-y-2 gap-1 rounded-full bg-background/95 px-2 text-xs font-medium opacity-0 shadow-lg transition-all duration-300 hover:scale-105 group-focus-within:inline-flex group-focus-within:translate-y-0 group-focus-within:opacity-100 group-hover:inline-flex group-hover:translate-y-0 group-hover:opacity-100"
+							className={cn(
+								"hidden h-7 translate-y-2 gap-1 rounded-full bg-background/95 px-2 text-xs font-medium opacity-0 shadow-lg transition-all duration-300 group-focus-within:inline-flex group-focus-within:translate-y-0 group-focus-within:opacity-100",
+								canUseHoverPreview &&
+									"hover:scale-105 group-hover:inline-flex group-hover:translate-y-0 group-hover:opacity-100",
+							)}
 							onClick={handlePreviewClick}
 						>
 							<Eye className="size-3.5" />
@@ -185,13 +203,18 @@ function SlidesPresetCard({
 					)}
 				</div>
 			</div>
-			<div className="truncate text-center text-sm font-medium leading-5 text-foreground/90 transition-colors duration-200 group-hover:text-foreground">
+			<div
+				className={cn(
+					"truncate text-center text-sm font-medium leading-5 text-foreground/90 transition-colors duration-200",
+					canUseHoverPreview && "group-hover:text-foreground",
+				)}
+			>
 				{label}
 			</div>
 		</div>
 	)
 
-	if (template.collage_url || template.description) {
+	if (showHoverDetails && canUseHoverPreview && (template.collage_url || template.description)) {
 		const description = template.description ? lt(template.description) : ""
 		const subText = template.sub_text ? lt(template.sub_text) : ""
 
@@ -199,11 +222,13 @@ function SlidesPresetCard({
 			<HoverCard openDelay={150} closeDelay={100}>
 				<HoverCardTrigger asChild>{cardContent}</HoverCardTrigger>
 				<HoverCardContent
+					container={hoverDetailsContainer}
 					side="right"
 					align="start"
 					sideOffset={16}
+					style={{ zIndex: "calc(var(--z-index-popup, 1000) + 1)" }}
 					className={cn(
-						"pointer-events-none z-[100] w-[420px] overflow-hidden rounded-xl border border-border/50 bg-card p-0 shadow-2xl backdrop-blur-xl",
+						"pointer-events-none w-[420px] overflow-hidden rounded-xl border border-border/50 bg-card p-0 shadow-2xl backdrop-blur-xl",
 						"data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2",
 					)}
 				>

@@ -25,6 +25,37 @@ export interface SlideItem {
 	index: number
 }
 
+function collectAttachmentNodes(items: any[] | undefined, result: any[] = []): any[] {
+	if (!Array.isArray(items)) return result
+
+	for (const item of items) {
+		if (!item) continue
+		result.push(item)
+		collectAttachmentNodes(item.children, result)
+	}
+
+	return result
+}
+
+function normalizeDirectoryPath(relativePath?: string): string {
+	if (!relativePath) return "/"
+	const path = relativePath.replace(/\/+$/, "")
+	return path ? `${path}/` : "/"
+}
+
+function getFileRelativeFolderPath(currentFile: any): string {
+	if (!currentFile?.relative_file_path) return "/"
+
+	if (currentFile.is_directory) {
+		return normalizeDirectoryPath(currentFile.relative_file_path)
+	}
+
+	const lastSlashIndex = currentFile.relative_file_path.lastIndexOf("/")
+	if (lastSlashIndex === -1) return "/"
+
+	return currentFile.relative_file_path.substring(0, lastSlashIndex + 1)
+}
+
 /**
  * Find magic.project.js file in the same directory as the HTML file
  */
@@ -40,7 +71,7 @@ export async function findMagicProjectJsFile(params: {
 	}
 
 	try {
-		const allFiles = flattenAttachments(attachments)
+		const allFiles = collectAttachmentNodes(attachments)
 
 		// Find the current file
 		const currentFile = allFiles.find((file: any) => file.file_id === currentFileId)
@@ -50,16 +81,7 @@ export async function findMagicProjectJsFile(params: {
 		}
 
 		// Get the folder path from the current file's relative path
-		let fileRelativeFolderPath = "/"
-		if (currentFile.relative_file_path) {
-			const lastSlashIndex = currentFile.relative_file_path.lastIndexOf("/")
-			if (lastSlashIndex !== -1) {
-				fileRelativeFolderPath = currentFile.relative_file_path.substring(
-					0,
-					lastSlashIndex + 1,
-				)
-			}
-		}
+		const fileRelativeFolderPath = getFileRelativeFolderPath(currentFile)
 
 		// Construct target path: folderPath + magic.project.js
 		const targetPath = fileRelativeFolderPath + "magic.project.js"

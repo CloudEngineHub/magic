@@ -1,0 +1,289 @@
+import { StrictMode, type ReactNode } from "react"
+import { act, renderHook, waitFor } from "@testing-library/react"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+import { SuperMagicApi } from "@/apis"
+import {
+	SLIDES_TEMPLATE_PAGE_SIZE,
+	type SlidesTemplateCategoryItem,
+	type SlidesTemplateItem,
+} from "../slidesTemplateState"
+import { useSlidesTemplatePanelState } from "../useSlidesTemplatePanelState"
+
+const apiMock = vi.hoisted(() => ({
+	getSlidesTemplateCategories: vi.fn(),
+	getSlidesTemplates: vi.fn(),
+}))
+
+vi.mock("@/apis", () => ({
+	SuperMagicApi: apiMock,
+}))
+
+const businessCategory: SlidesTemplateCategoryItem = {
+	id: "1",
+	code: "PPT-CATE-business",
+	name_i18n: {
+		zh_CN: "商务",
+		en_US: "Business",
+	},
+	sort: 100,
+	template_count: 2,
+	is_official: true,
+}
+
+const businessTemplate: SlidesTemplateItem = {
+	code: "PPT-business",
+	source_type: "OFFICIAL",
+	category_code: businessCategory.code,
+	label: {
+		zh_CN: "商务模板",
+		en_US: "Business Template",
+	},
+	description: {
+		zh_CN: "商务模板描述",
+		en_US: "Business template description",
+	},
+	sort: 100,
+	is_official: true,
+}
+
+const educationTemplate: SlidesTemplateItem = {
+	...businessTemplate,
+	code: "PPT-education",
+	category_code: "PPT-CATE-education",
+	label: {
+		zh_CN: "教育模板",
+		en_US: "Education Template",
+	},
+}
+
+function resolveCategories() {
+	vi.mocked(SuperMagicApi.getSlidesTemplateCategories).mockResolvedValue({
+		page: 1,
+		page_size: 200,
+		total: 1,
+		list: [businessCategory],
+	})
+}
+
+function StrictModeWrapper({ children }: { children: ReactNode }) {
+	return <StrictMode>{children}</StrictMode>
+}
+
+function createDeferred<T>() {
+	let resolve!: (value: T) => void
+	let reject!: (error: unknown) => void
+	const promise = new Promise<T>((promiseResolve, promiseReject) => {
+		resolve = promiseResolve
+		reject = promiseReject
+	})
+
+	return { promise, resolve, reject }
+}
+
+describe("useSlidesTemplatePanelState", () => {
+	beforeEach(() => {
+		vi.clearAllMocks()
+		resolveCategories()
+		vi.mocked(SuperMagicApi.getSlidesTemplates).mockResolvedValue({
+			page: 1,
+			page_size: SLIDES_TEMPLATE_PAGE_SIZE,
+			total: 1,
+			list: [businessTemplate],
+		})
+	})
+
+	afterEach(() => {
+		vi.useRealTimers()
+	})
+
+	it("loads the first page and keeps the all group first", async () => {
+		const { result } = renderHook(() => useSlidesTemplatePanelState())
+
+		await waitFor(() => expect(result.current.isLoading).toBe(false))
+		await waitFor(() =>
+			expect(
+				result.current.groups.some((group) => group.group_key === businessCategory.code),
+			).toBe(true),
+		)
+
+		expect(SuperMagicApi.getSlidesTemplates).toHaveBeenCalledWith({
+			page: 1,
+			page_size: SLIDES_TEMPLATE_PAGE_SIZE,
+		})
+		expect(result.current.groups[0].group_key).toBe("all")
+		expect(result.current.templateOptions[0].value).toBe(businessTemplate.code)
+	})
+
+	it("finishes loading under React StrictMode", async () => {
+		const { result } = renderHook(() => useSlidesTemplatePanelState(), {
+			wrapper: StrictModeWrapper,
+		})
+
+		await waitFor(() => expect(result.current.isLoading).toBe(false))
+
+		expect(result.current.templateOptions[0].value).toBe(businessTemplate.code)
+	})
+
+	it("appends the next page when loading more", async () => {
+		vi.mocked(SuperMagicApi.getSlidesTemplates)
+			.mockResolvedValueOnce({
+				page: 1,
+				page_size: SLIDES_TEMPLATE_PAGE_SIZE,
+				total: 2,
+				list: [businessTemplate],
+			})
+			.mockResolvedValueOnce({
+				page: 2,
+				page_size: SLIDES_TEMPLATE_PAGE_SIZE,
+				total: 2,
+				list: [educationTemplate],
+			})
+
+		const { result } = renderHook(() => useSlidesTemplatePanelState())
+
+		await waitFor(() => expect(result.current.isLoading).toBe(false))
+
+		act(() => {
+			result.current.loadMore()
+		})
+
+		await waitFor(() => expect(SuperMagicApi.getSlidesTemplates).toHaveBeenCalledTimes(2))
+		expect(result.current.templateOptions.map((template) => template.value)).toEqual([
+			businessTemplate.code,
+			educationTemplate.code,
+		])
+	})
+
+	it("deduplicates repeated load-more calls before React updates loading state", async () => {
+		const nextPageResponse = createDeferred<{
+			page: number
+			page_size: number
+			total: number
+			list: SlidesTemplateItem[]
+		}>()
+
+		vi.mocked(SuperMagicApi.getSlidesTemplates)
+			.mockResolvedValueOnce({
+				page: 1,
+				page_size: SLIDES_TEMPLATE_PAGE_SIZE,
+				total: 2,
+				list: [businessTemplate],
+			})
+			.mockReturnValueOnce(nextPageResponse.promise)
+
+		const { result } = renderHook(() => useSlidesTemplatePanelState())
+
+		await waitFor(() => expect(result.current.isLoading).toBe(false))
+
+		act(() => {
+			result.current.loadMore()
+			result.current.loadMore()
+		})
+
+		expect(SuperMagicApi.getSlidesTemplates).toHaveBeenCalledTimes(2)
+
+		await act(async () => {
+			nextPageResponse.resolve({
+				page: 2,
+				page_size: SLIDES_TEMPLATE_PAGE_SIZE,
+				total: 2,
+				list: [educationTemplate],
+			})
+			await nextPageResponse.promise
+		})
+
+		expect(result.current.templateOptions.map((template) => template.value)).toEqual([
+			businessTemplate.code,
+			educationTemplate.code,
+		])
+	})
+
+	it("keeps old templates visible while replacing results", async () => {
+		const nextResult = createDeferred<{
+			page: number
+			page_size: number
+			total: number
+			list: SlidesTemplateItem[]
+		}>()
+
+		vi.mocked(SuperMagicApi.getSlidesTemplates)
+			.mockResolvedValueOnce({
+				page: 1,
+				page_size: SLIDES_TEMPLATE_PAGE_SIZE,
+				total: 1,
+				list: [businessTemplate],
+			})
+			.mockReturnValueOnce(nextResult.promise)
+
+		const { result } = renderHook(() => useSlidesTemplatePanelState())
+
+		await waitFor(() => expect(result.current.isLoading).toBe(false))
+		await waitFor(() =>
+			expect(
+				result.current.groups.some((group) => group.group_key === businessCategory.code),
+			).toBe(true),
+		)
+
+		act(() => {
+			result.current.setSelectedGroupKey(businessCategory.code)
+		})
+
+		await waitFor(() => expect(result.current.isRefreshing).toBe(true))
+		expect(result.current.templateOptions.map((template) => template.value)).toEqual([
+			businessTemplate.code,
+		])
+
+		await act(async () => {
+			nextResult.resolve({
+				page: 1,
+				page_size: SLIDES_TEMPLATE_PAGE_SIZE,
+				total: 1,
+				list: [educationTemplate],
+			})
+			await nextResult.promise
+		})
+
+		await waitFor(() => expect(result.current.isRefreshing).toBe(false))
+		expect(result.current.templateOptions.map((template) => template.value)).toEqual([
+			educationTemplate.code,
+		])
+	})
+
+	it("passes category and keyword params to the template query", async () => {
+		const { result } = renderHook(() => useSlidesTemplatePanelState())
+
+		await waitFor(() => expect(result.current.isLoading).toBe(false))
+		await waitFor(() =>
+			expect(
+				result.current.groups.some((group) => group.group_key === businessCategory.code),
+			).toBe(true),
+		)
+
+		act(() => {
+			result.current.setSelectedGroupKey(businessCategory.code)
+		})
+
+		await waitFor(() =>
+			expect(SuperMagicApi.getSlidesTemplates).toHaveBeenLastCalledWith({
+				page: 1,
+				page_size: SLIDES_TEMPLATE_PAGE_SIZE,
+				category_code: businessCategory.code,
+			}),
+		)
+
+		act(() => {
+			result.current.setKeyword(" whitepaper ")
+		})
+
+		await waitFor(
+			() =>
+				expect(SuperMagicApi.getSlidesTemplates).toHaveBeenLastCalledWith({
+					page: 1,
+					page_size: SLIDES_TEMPLATE_PAGE_SIZE,
+					category_code: businessCategory.code,
+					keyword: "whitepaper",
+				}),
+			{ timeout: 1000 },
+		)
+	})
+})

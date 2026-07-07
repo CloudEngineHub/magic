@@ -379,6 +379,44 @@ describe("PPTSlide", () => {
 		)
 	})
 
+	it("向 HTML renderer 传入当前 slide 激活状态用于选中框挂载", () => {
+		const { rerender } = renderPPTSlide({ isActive: true })
+
+		expect(mockState.renderedIsolatedProps).toHaveBeenLastCalledWith(
+			expect.objectContaining({
+				isVisible: true,
+				isTabActive: true,
+			}),
+		)
+
+		rerender(
+			<PPTSlide
+				index={0}
+				isActive={false}
+				content="<div>slide</div>"
+				rawContent="<div>slide</div>"
+				isFullscreen={false}
+				fileId="slide-1"
+				filePathMapping={new Map()}
+				openNewTab={vi.fn()}
+				updateSlideContents={vi.fn()}
+				allowEdit={true}
+				loadingState="loaded"
+				attachmentList={[]}
+				saveEditContent={mockState.saveEditContent}
+				onManualSave={mockState.onManualSave}
+				onDeactivate={mockState.onDeactivate}
+			/>,
+		)
+
+		expect(mockState.renderedIsolatedProps).toHaveBeenLastCalledWith(
+			expect.objectContaining({
+				isVisible: false,
+				isTabActive: false,
+			}),
+		)
+	})
+
 	it("点击保存后保持编辑态", async () => {
 		renderPPTSlide()
 

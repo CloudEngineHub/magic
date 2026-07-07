@@ -4,33 +4,31 @@ Use when the user describes a style in text, provides screenshots, or gives an e
 
 ## 1. Inputs
 
-- Existing PPT project: use `list_dir`, then read `template.json` if present, `magic.project.js`, `theme.css`, and 2-3 representative slide HTML pages.
+- Existing template package: use `list_dir`, then read `template.json` if present, `visual-spec.md`, `theme.css`, and 2-3 representative slide HTML pages.
 - Screenshot: use `visual_understanding` to extract palette, background, font hierarchy, container style, decorative elements, and style keywords.
 - Text: infer the same design spec from the user's words.
 
 ## 2. Output Structure
 
-Generate a standalone template project folder at the workspace root, not inside this skill:
+Generate a standalone template package folder at the workspace root, not inside this skill:
 
 ```text
 <template-dir>/
 ├── template.json
-├── magic.project.js
-├── index.html
+├── visual-spec.md
 ├── theme.css
-├── slide-bridge.js
 ├── images/
 └── slides/
 ```
 
-The folder should be directly previewable as a slide project. Do not create `preview.html`, `template-pages.md`, `template-pages.json`, `source.css`, or a nested `packages/` directory for the default output.
+The folder should be a lightweight reusable template package. Do not create `magic.project.js`, `index.html`, `slide-bridge.js`, `preview.html`, `template-pages.md`, `template-pages.json`, `source.css`, or a nested `packages/` directory for the default output.
+
+`previews/` may be generated only as a build or publishing artifact by a script that renders `slides/*.html`. Do not place `previews/` inside the template source folder, and do not include it in the template ZIP.
 
 ## 3. Required Files
 
+- `visual-spec.md`: template design rules, including palette, typography, layouts, chart rules, image rules, slot policy, and avoid rules.
 - `theme.css`: template-specific design system, including canvas reset, variables, typography, decorations, components, chart colors, and reusable visual helpers.
-- `magic.project.js`: slide project config. It may start with an empty `slides` array if no sample pages are generated yet.
-- `index.html`: copy or generate the standard slide project entry.
-- `slide-bridge.js`: copy the standard slide bridge.
 - `template.json`: follow `references/template-json-spec.md`; use `source.kind` to record the template source.
 - `slides/`: optional sample template pages. If sample pages are generated, each page must include `data-slot` attributes for replaceable content and be listed in `template.json.slides`.
 - `images/`: local assets only.
@@ -51,6 +49,7 @@ Use `template.json` as the only metadata entrypoint:
 
 - `schema_version`, `template_id`, and `name` identify the template.
 - `files.package_zip` points to the sibling ZIP when one is created, for example `../<template-id>-template.zip`.
+- Preview image paths belong in the publishing artifact manifest or publish state, not in the source template package.
 - `slides` records the generated sample pages. Use an empty array if no sample pages are present.
 - `source` records source kind, source file when available, and canvas size.
 - `warnings` records non-fatal generation or conversion issues.

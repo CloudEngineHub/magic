@@ -10,6 +10,7 @@ interface SlidesTemplateCardProps {
 	onClick?: (data: SlidesTemplate.Item) => void
 	statusLoadingIds: Set<string>
 	hasEditRight: boolean
+	categoryNameMap: Map<string, string>
 	sourceTypeLabel: (sourceType?: SlidesTemplate.SourceType) => string
 	handleStatusChange: (record: SlidesTemplate.Item, checked: boolean) => void
 	handleEdit: (record: SlidesTemplate.Item) => void
@@ -21,6 +22,7 @@ function SlidesTemplateCard({
 	onClick,
 	statusLoadingIds,
 	hasEditRight,
+	categoryNameMap,
 	sourceTypeLabel,
 	handleStatusChange,
 	handleEdit,
@@ -54,6 +56,12 @@ function SlidesTemplateCard({
 				</span>
 				<span>
 					{t("slidesTemplate.columns.source")}: {sourceTypeLabel(data.source_type)}
+				</span>
+				<span>
+					{t("slidesTemplate.columns.category")}:{" "}
+					{data.category_code
+						? (categoryNameMap.get(data.category_code) ?? data.category_code)
+						: "-"}
 				</span>
 				<Flex align="center" gap={8}>
 					<span>{t("slidesTemplate.columns.status")}:</span>

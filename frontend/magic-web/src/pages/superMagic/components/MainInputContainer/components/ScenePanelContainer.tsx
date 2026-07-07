@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useMemo, useRef } from "react"
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef } from "react"
 import type { JSONContent } from "@tiptap/core"
 import { FieldConfigPanel, GuidePanel } from "../panels"
 import {
 	SkillPanelType,
+	OptionViewType,
 	OptionItem,
 	FieldItem,
 	GuideItem,
@@ -14,6 +15,8 @@ import SkillPanelSkeleton from "./skeleton/SkillPanelSkeleton"
 import { observer } from "mobx-react-lite"
 import { ScenePanelVariant } from "./LazyScenePanel/types"
 import { useOptionalScenePanelVariant, useOptionalSceneStateStore } from "../stores"
+
+const SlidesTemplatePanel = lazy(() => import("../scenes/Slides/SlidesTemplatePanel"))
 
 interface ScenePanelContainerProps {
 	panels?: SkillPanelConfigArray
@@ -117,6 +120,27 @@ function ScenePanelContainer({
 				}
 			>
 				{fieldPanels?.map(({ config, panelKey }) => {
+					if (config.field?.view_type === OptionViewType.SLIDES_PRESET) {
+						return (
+							<Suspense
+								key={panelKey}
+								fallback={<SkillPanelSkeleton variant={variant} />}
+							>
+								<SlidesTemplatePanel
+									config={config}
+									onTemplateSelect={onTemplateSelect}
+									onFilterChange={onFilterChange}
+									onPresetContentChange={createPresetContentChangeHandler(
+										panelKey,
+									)}
+									readOnly={readOnly}
+									variant={variant}
+									compact={compact}
+								/>
+							</Suspense>
+						)
+					}
+
 					return (
 						<FieldConfigPanel
 							key={panelKey}
@@ -142,6 +166,27 @@ function ScenePanelContainer({
 
 				switch (config.type) {
 					case SkillPanelType.FIELD:
+						if (config.field?.view_type === OptionViewType.SLIDES_PRESET) {
+							return (
+								<Suspense
+									key={key}
+									fallback={<SkillPanelSkeleton variant={variant} />}
+								>
+									<SlidesTemplatePanel
+										config={config}
+										onTemplateSelect={onTemplateSelect}
+										onFilterChange={onFilterChange}
+										onPresetContentChange={createPresetContentChangeHandler(
+											key,
+										)}
+										readOnly={readOnly}
+										variant={variant}
+										compact={compact}
+									/>
+								</Suspense>
+							)
+						}
+
 						return (
 							<FieldConfigPanel
 								key={key}
