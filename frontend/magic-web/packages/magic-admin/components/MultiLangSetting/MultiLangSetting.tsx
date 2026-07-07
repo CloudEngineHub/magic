@@ -110,7 +110,9 @@ const MultiLangSetting = memo(
 
 			if (confirmingCloseRef.current) return
 			confirmingCloseRef.current = true
-			let closeConfirm: (() => void) | undefined
+			const closeConfirm = {
+				current: undefined as (() => void) | undefined,
+			}
 			const confirmModal = MagicModal.confirm({
 				centered: true,
 				title: locale.confirmClose,
@@ -121,7 +123,7 @@ const MultiLangSetting = memo(
 							type="default"
 							onClick={() => {
 								confirmingCloseRef.current = false
-								closeConfirm?.()
+								closeConfirm.current?.()
 							}}
 						>
 							{locale.continueEditing}
@@ -132,14 +134,14 @@ const MultiLangSetting = memo(
 							onClick={() => {
 								confirmingCloseRef.current = false
 								closeWithoutSaving()
-								closeConfirm?.()
+								closeConfirm.current?.()
 							}}
 						>
 							{locale.discard}
 						</Button>
 						<Button
 							type="primary"
-							onClick={() => handleSaveAndClose(closeConfirm)}
+							onClick={() => handleSaveAndClose(closeConfirm.current)}
 						>
 							{locale.saveAndClose}
 						</Button>
@@ -149,7 +151,7 @@ const MultiLangSetting = memo(
 					confirmingCloseRef.current = false
 				},
 			})
-			closeConfirm = confirmModal.destroy
+			closeConfirm.current = confirmModal.destroy
 		})
 
 		const onButtonClick = useMemoizedFn((event: React.MouseEvent<HTMLButtonElement>) => {

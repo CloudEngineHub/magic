@@ -44,10 +44,9 @@ vi.mock("antd", async () => {
 	}: {
 		form: ReturnType<typeof createForm>
 		children: React.ReactNode
-	}) =>
-		React.createElement(FormContext.Provider, { value: form }, children)
+	}) => React.createElement(FormContext.Provider, { value: form }, children)
 	Form.useForm = () => React.useMemo(() => [createForm()] as const, [])
-	Form.Item = ({ name, children }: { name: string; children: React.ReactElement }) => {
+	const FormItem = ({ name, children }: { name: string; children: React.ReactElement }) => {
 		const form = React.useContext(FormContext)
 		if (!form) return children
 
@@ -59,6 +58,7 @@ vi.mock("antd", async () => {
 			},
 		})
 	}
+	Form.Item = FormItem
 
 	const Input = (props: React.InputHTMLAttributes<HTMLInputElement>) =>
 		React.createElement("input", props)
