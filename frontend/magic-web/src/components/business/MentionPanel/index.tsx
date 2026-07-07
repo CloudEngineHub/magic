@@ -58,6 +58,10 @@ const GalleryPreviewDialog = lazy(() => import("./components/GalleryPreviewDialo
 const LIST_PANEL_WIDTH = 320
 const GALLERY_PANEL_WIDTH = 600
 const GALLERY_PANEL_HEIGHT = 468
+const GALLERY_GRID_INCREASE_VIEWPORT_BY = {
+	top: GALLERY_PANEL_HEIGHT,
+	bottom: GALLERY_PANEL_HEIGHT,
+}
 
 /**
  * MentionPanel - Mention panel component with multi-state support
@@ -992,6 +996,7 @@ const MentionPanel = observer(
 								totalCount={displayItems.length}
 								itemContent={renderGalleryItem}
 								computeItemKey={(index) => displayItems[index]?.id ?? index}
+								increaseViewportBy={GALLERY_GRID_INCREASE_VIEWPORT_BY}
 								listClassName="grid auto-rows-min grid-cols-4 gap-2 pr-0.5"
 								itemClassName="min-w-0"
 								style={{

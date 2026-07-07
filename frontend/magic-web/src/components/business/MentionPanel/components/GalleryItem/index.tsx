@@ -161,7 +161,7 @@ const GalleryItem = memo(function GalleryItem(props: GalleryItemProps) {
 						src={previewUrl}
 						alt=""
 						className="block h-full w-full object-cover"
-						loading="lazy"
+						loading="eager"
 						decoding="async"
 						referrerPolicy="no-referrer"
 						onError={() => setImagePreviewFailed(true)}
