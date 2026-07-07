@@ -160,6 +160,7 @@ function SlidesTemplatePanel({
 	const complexField = findComplexField(fieldItems)
 
 	if (!complexField) return null
+	if (slidesState.hasCheckedAnyTemplate && !slidesState.hasAnyTemplate) return null
 
 	if (variant && [ScenePanelVariant.TopicPage, ScenePanelVariant.Mobile].includes(variant)) {
 		return (

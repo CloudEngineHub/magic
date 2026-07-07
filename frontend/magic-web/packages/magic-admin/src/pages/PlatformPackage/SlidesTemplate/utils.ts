@@ -13,7 +13,6 @@ export interface SlidesTemplateFormValues {
 }
 
 export interface SlidesTemplateCategoryFormValues {
-	code?: string
 	name_i18n: SlidesTemplate.LangText
 	status?: boolean
 	sort?: number | null
@@ -29,6 +28,10 @@ export function resolveSlidesTemplateCategoryName(record: SlidesTemplate.Categor
 
 export function getSlidesTemplateStatusByChecked(checked: boolean) {
 	return checked ? SlidesTemplate.StatusMap.enabled : SlidesTemplate.StatusMap.disabled
+}
+
+export function getSlidesTemplateStatusColor(status: SlidesTemplate.Status) {
+	return status === SlidesTemplate.StatusMap.enabled ? "success" : "error"
 }
 
 export function isSystemSlidesTemplate(record: Pick<SlidesTemplate.Item, "source_type">) {
@@ -54,9 +57,7 @@ export function buildSlidesTemplateSaveParams(
 export function buildSlidesTemplateCategorySaveParams(
 	values: SlidesTemplateCategoryFormValues,
 ): SlidesTemplate.CategorySaveParams {
-	const code = values.code?.trim()
 	return {
-		...(code ? { code } : {}),
 		name_i18n: values.name_i18n,
 		status: getSlidesTemplateStatusByChecked(Boolean(values.status)),
 		sort: values.sort ?? 0,

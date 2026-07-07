@@ -31,7 +31,6 @@ type FormValidationError = {
 const DEFAULT_LANG_ERRORS: CategoryLangErrorState = {
 	name_i18n: false,
 }
-const CATEGORY_CODE_PATTERN = /^PPT-CATE-[a-z0-9-]+$/
 
 const isSameFieldPath = (name: unknown, path: FieldPath) => {
 	if (!Array.isArray(name)) return false
@@ -55,7 +54,6 @@ export const SlidesTemplateCategoryFormModal = memo(
 
 		const initialValues = useMemo(
 			() => ({
-				code: info?.code ?? "",
 				name_i18n: {
 					zh_CN: info?.name_i18n?.zh_CN ?? "",
 					en_US: info?.name_i18n?.en_US ?? "",
@@ -126,23 +124,12 @@ export const SlidesTemplateCategoryFormModal = memo(
 				onCancel={onInnerCancel}
 				onOk={onInnerOk}
 				okButtonProps={{ loading }}
+				maskClosable={false}
 				centered
 				destroyOnHidden
 				{...rest}
 			>
 				<MagicForm afterRequiredMask colon={false} form={form}>
-					<Form.Item
-						label={t("slidesTemplate.category.fields.code")}
-						name="code"
-						rules={[
-							{
-								pattern: CATEGORY_CODE_PATTERN,
-								message: t("slidesTemplate.category.codeRule"),
-							},
-						]}
-					>
-						<MagicInput maxLength={64} disabled={Boolean(info?.id)} />
-					</Form.Item>
 					<Form.Item label={t("slidesTemplate.category.fields.name")} required>
 						<Flex gap={10}>
 							<Form.Item
@@ -162,6 +149,7 @@ export const SlidesTemplateCategoryFormModal = memo(
 							</Form.Item>
 							<MultiLangSetting
 								required
+								clickToToggle
 								supportLangs={[LanguageType.en_US]}
 								info={name}
 								danger={langErrors.name_i18n}

@@ -21,6 +21,7 @@ interface SlidesTemplateToolbarProps {
 	onSubmit: () => void
 	onReset: () => void
 	onRefresh: () => void
+	onCategoryDropdownOpen?: () => void
 	t: TFunction
 }
 
@@ -34,6 +35,7 @@ export const SlidesTemplateToolbar = memo(
 		onSubmit,
 		onReset,
 		onRefresh,
+		onCategoryDropdownOpen,
 		t,
 	}: SlidesTemplateToolbarProps) => {
 		return (
@@ -71,6 +73,9 @@ export const SlidesTemplateToolbar = memo(
 							.toLowerCase()
 							.includes(input.toLowerCase())
 					}
+					onOpenChange={(open) => {
+						if (open) onCategoryDropdownOpen?.()
+					}}
 					onChange={(value) =>
 						onFilterDraftChange((prev) => ({ ...prev, category_code: value }))
 					}

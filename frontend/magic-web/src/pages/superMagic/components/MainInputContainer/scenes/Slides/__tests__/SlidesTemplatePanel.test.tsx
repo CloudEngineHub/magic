@@ -76,6 +76,8 @@ function createSlidesTemplatePanelContentState(
 ): SlidesTemplatePanelState {
 	return {
 		groups: [],
+		hasAnyTemplate: true,
+		hasCheckedAnyTemplate: true,
 		hasMore: false,
 		isLoading: false,
 		isRefreshing: false,
@@ -165,6 +167,22 @@ describe("SlidesTemplatePanel", () => {
 		})
 	})
 
+	it("does not render when there are no templates", async () => {
+		vi.mocked(SuperMagicApi.getSlidesTemplates).mockResolvedValue({
+			page: 1,
+			page_size: 20,
+			total: 0,
+			list: [],
+		})
+
+		const { container } = render(
+			<SlidesTemplatePanel config={createSlidesPresetPanelConfig([])} />,
+		)
+
+		await waitFor(() => expect(SuperMagicApi.getSlidesTemplates).toHaveBeenCalled())
+		await waitFor(() => expect(container).toBeEmptyDOMElement())
+	})
+
 	it("keeps topic page selector compact and opens shared template content in a floating panel", async () => {
 		render(
 			<SlidesTemplatePanel
@@ -185,6 +203,28 @@ describe("SlidesTemplatePanel", () => {
 		fireEvent.click(screen.getByTestId("slides-template-search-toggle"))
 		expect(await screen.findByTestId("slides-template-search-input")).toBeInTheDocument()
 		await screen.findByText("Business Template")
+	})
+
+	it("keeps mobile compact selector and filters on the same row", async () => {
+		render(
+			<SlidesTemplatePanel
+				config={createSlidesPresetPanelConfig([])}
+				variant={ScenePanelVariant.Mobile}
+				compact
+			/>,
+		)
+
+		const trigger = await screen.findByTestId("slides-template-floating-selector-trigger")
+		const scrollItemContainer = trigger.parentElement
+		const filterTriggers = await screen.findAllByTestId("mobile-scene-panel-filter-trigger")
+
+		expect(scrollItemContainer).toHaveClass("flex")
+		expect(scrollItemContainer).not.toHaveClass("flex-col")
+		expect(scrollItemContainer).not.toHaveClass("block")
+		expect(filterTriggers).toHaveLength(3)
+		filterTriggers.forEach((filterTrigger) => {
+			expect(scrollItemContainer).toContainElement(filterTrigger)
+		})
 	})
 
 	it("expands search input when keyword already exists", () => {
