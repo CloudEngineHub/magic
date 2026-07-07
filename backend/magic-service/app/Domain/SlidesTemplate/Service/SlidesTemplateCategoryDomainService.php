@@ -70,9 +70,7 @@ class SlidesTemplateCategoryDomainService
 
     public function create(SlidesTemplateDataIsolation $dataIsolation, SlidesTemplateCategoryEntity $entity): SlidesTemplateCategoryEntity
     {
-        if ($this->slidesTemplateCategoryRepository->existsByCode($entity->getCode())) {
-            ExceptionBuilder::throw(SlidesTemplateErrorCode::CATEGORY_CODE_ALREADY_EXISTS);
-        }
+        $this->prepareRestoreDeletedCategory($dataIsolation, $entity);
 
         try {
             return $this->slidesTemplateCategoryRepository->save($dataIsolation, $entity);
@@ -109,6 +107,20 @@ class SlidesTemplateCategoryDomainService
         if (! $this->slidesTemplateCategoryRepository->delete($dataIsolation, $id)) {
             ExceptionBuilder::throw(SlidesTemplateErrorCode::CATEGORY_NOT_FOUND);
         }
+    }
+
+    private function prepareRestoreDeletedCategory(SlidesTemplateDataIsolation $dataIsolation, SlidesTemplateCategoryEntity $entity): void
+    {
+        $existing = $this->slidesTemplateCategoryRepository->findByCodeWithTrashed($dataIsolation, $entity->getCode());
+        if (! $existing) {
+            return;
+        }
+
+        if ($existing->getDeletedAt() === null) {
+            ExceptionBuilder::throw(SlidesTemplateErrorCode::CATEGORY_CODE_ALREADY_EXISTS);
+        }
+
+        $entity->setId($existing->getId());
     }
 
     private function isDuplicateCodeException(Throwable $throwable): bool

@@ -32,16 +32,16 @@ class SlidesTemplateRepository extends AbstractRepository implements SlidesTempl
 
     public function findByCode(SlidesTemplateDataIsolation $dataIsolation, string $code): ?SlidesTemplateEntity
     {
-        $builder = $this->createBuilder($dataIsolation, SlidesTemplateModel::query());
-        /** @var null|SlidesTemplateModel $model */
-        $model = $builder->where('code', $code)->first();
+        $model = $this->findModelByCode($dataIsolation, $code, false);
 
         return $model ? SlidesTemplateFactory::modelToEntity($model) : null;
     }
 
-    public function existsByCode(string $code): bool
+    public function findByCodeWithTrashed(SlidesTemplateDataIsolation $dataIsolation, string $code): ?SlidesTemplateEntity
     {
-        return SlidesTemplateModel::withTrashed()->where('code', $code)->exists();
+        $model = $this->findModelByCode($dataIsolation, $code, true);
+
+        return $model ? SlidesTemplateFactory::modelToEntity($model) : null;
     }
 
     public function queries(SlidesTemplateDataIsolation $dataIsolation, SlidesTemplateQuery $query, Page $page): array
@@ -91,7 +91,7 @@ class SlidesTemplateRepository extends AbstractRepository implements SlidesTempl
             $model->id = $id;
         } else {
             /** @var null|SlidesTemplateModel $model */
-            $model = $this->createBuilder($dataIsolation, SlidesTemplateModel::query())
+            $model = $this->createBuilder($dataIsolation, SlidesTemplateModel::withTrashed())
                 ->where('id', $entity->getId())
                 ->first();
             if (! $model) {
@@ -99,6 +99,9 @@ class SlidesTemplateRepository extends AbstractRepository implements SlidesTempl
             }
         }
 
+        if ($model->trashed()) {
+            $model->restore();
+        }
         $model->fill($this->getAttributes($entity));
         $model->save();
 
@@ -134,5 +137,13 @@ class SlidesTemplateRepository extends AbstractRepository implements SlidesTempl
             ->first();
 
         return $model !== null && (bool) $model->delete();
+    }
+
+    private function findModelByCode(SlidesTemplateDataIsolation $dataIsolation, string $code, bool $withTrashed): ?SlidesTemplateModel
+    {
+        $query = $withTrashed ? SlidesTemplateModel::withTrashed() : SlidesTemplateModel::query();
+        $builder = $this->createBuilder($dataIsolation, $query);
+        /** @var null|SlidesTemplateModel $model */
+        return $builder->where('code', $code)->first();
     }
 }

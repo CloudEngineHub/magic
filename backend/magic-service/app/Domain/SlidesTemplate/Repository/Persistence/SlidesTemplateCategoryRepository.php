@@ -37,9 +37,14 @@ class SlidesTemplateCategoryRepository extends AbstractRepository implements Sli
 
     public function findByCode(SlidesTemplateDataIsolation $dataIsolation, string $code): ?SlidesTemplateCategoryEntity
     {
-        $builder = $this->createBuilder($dataIsolation, SlidesTemplateCategoryModel::query());
-        /** @var null|SlidesTemplateCategoryModel $model */
-        $model = $builder->where('code', $code)->first();
+        $model = $this->findModelByCode($dataIsolation, $code, false);
+
+        return $model ? SlidesTemplateCategoryFactory::modelToEntity($model) : null;
+    }
+
+    public function findByCodeWithTrashed(SlidesTemplateDataIsolation $dataIsolation, string $code): ?SlidesTemplateCategoryEntity
+    {
+        $model = $this->findModelByCode($dataIsolation, $code, true);
 
         return $model ? SlidesTemplateCategoryFactory::modelToEntity($model) : null;
     }
@@ -55,11 +60,6 @@ class SlidesTemplateCategoryRepository extends AbstractRepository implements Sli
         $models = $builder->whereIn('code', $codes)->get();
 
         return $this->modelsToEntities($models);
-    }
-
-    public function existsByCode(string $code): bool
-    {
-        return SlidesTemplateCategoryModel::withTrashed()->where('code', $code)->exists();
     }
 
     public function queries(SlidesTemplateDataIsolation $dataIsolation, SlidesTemplateCategoryQuery $query, Page $page): array
@@ -126,7 +126,7 @@ class SlidesTemplateCategoryRepository extends AbstractRepository implements Sli
             $model->id = IdGenerator::getSnowId();
         } else {
             /** @var null|SlidesTemplateCategoryModel $model */
-            $model = $this->createBuilder($dataIsolation, SlidesTemplateCategoryModel::query())
+            $model = $this->createBuilder($dataIsolation, SlidesTemplateCategoryModel::withTrashed())
                 ->where('id', $entity->getId())
                 ->first();
             if (! $model) {
@@ -134,6 +134,9 @@ class SlidesTemplateCategoryRepository extends AbstractRepository implements Sli
             }
         }
 
+        if ($model->trashed()) {
+            $model->restore();
+        }
         $model->fill($this->getAttributes($entity));
         $model->save();
 
@@ -216,5 +219,13 @@ class SlidesTemplateCategoryRepository extends AbstractRepository implements Sli
             $list[] = SlidesTemplateCategoryFactory::modelToEntity($model);
         }
         return $list;
+    }
+
+    private function findModelByCode(SlidesTemplateDataIsolation $dataIsolation, string $code, bool $withTrashed): ?SlidesTemplateCategoryModel
+    {
+        $query = $withTrashed ? SlidesTemplateCategoryModel::withTrashed() : SlidesTemplateCategoryModel::query();
+        $builder = $this->createBuilder($dataIsolation, $query);
+        /** @var null|SlidesTemplateCategoryModel $model */
+        return $builder->where('code', $code)->first();
     }
 }

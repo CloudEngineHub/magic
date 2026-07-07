@@ -18,13 +18,13 @@ interface SlidesTemplateCategoryRepositoryInterface
 
     public function findByCode(SlidesTemplateDataIsolation $dataIsolation, string $code): ?SlidesTemplateCategoryEntity;
 
+    public function findByCodeWithTrashed(SlidesTemplateDataIsolation $dataIsolation, string $code): ?SlidesTemplateCategoryEntity;
+
     /**
      * @param string[] $codes
      * @return SlidesTemplateCategoryEntity[]
      */
     public function findByCodes(SlidesTemplateDataIsolation $dataIsolation, array $codes): array;
-
-    public function existsByCode(string $code): bool;
 
     /**
      * @return array{total: int, list: SlidesTemplateCategoryEntity[]}

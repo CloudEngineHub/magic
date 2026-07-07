@@ -53,9 +53,7 @@ class SlidesTemplateDomainService
 
     public function create(SlidesTemplateDataIsolation $dataIsolation, SlidesTemplateEntity $entity): SlidesTemplateEntity
     {
-        if ($this->slidesTemplateRepository->existsByCode($entity->getCode())) {
-            ExceptionBuilder::throw(SlidesTemplateErrorCode::CODE_ALREADY_EXISTS);
-        }
+        $this->prepareRestoreDeletedTemplate($dataIsolation, $entity);
 
         $this->refreshSearchText($entity);
         try {
@@ -100,6 +98,20 @@ class SlidesTemplateDomainService
     private function refreshSearchText(SlidesTemplateEntity $entity): void
     {
         $entity->setSearchText(SlidesTemplateSearchTextBuilder::build($entity));
+    }
+
+    private function prepareRestoreDeletedTemplate(SlidesTemplateDataIsolation $dataIsolation, SlidesTemplateEntity $entity): void
+    {
+        $existing = $this->slidesTemplateRepository->findByCodeWithTrashed($dataIsolation, $entity->getCode());
+        if (! $existing) {
+            return;
+        }
+
+        if ($existing->getDeletedAt() === null) {
+            ExceptionBuilder::throw(SlidesTemplateErrorCode::CODE_ALREADY_EXISTS);
+        }
+
+        $entity->setId($existing->getId());
     }
 
     private function isDuplicateCodeException(Throwable $throwable): bool

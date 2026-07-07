@@ -124,13 +124,43 @@ class SlidesTemplateDomainServiceTest extends TestCase
     public function testCreateThrowsBusinessExceptionWhenCodeAlreadyExists(): void
     {
         $repository = new CapturingSlidesTemplateRepository();
-        $repository->codeExists = true;
+        $repository->entityWithTrashed = $this->makeTemplate()->setId(123);
         $service = new SlidesTemplateDomainService($repository);
 
         $this->expectException(BusinessException::class);
         $this->expectExceptionCode(SlidesTemplateErrorCode::CODE_ALREADY_EXISTS->value);
 
         $service->create($this->makeDataIsolation(), $this->makeTemplate());
+    }
+
+    public function testCreateRestoresDeletedTemplateWithSameCodeAndUsesNewCreator(): void
+    {
+        $repository = new CapturingSlidesTemplateRepository();
+        $repository->entityWithTrashed = $this->makeTemplate()
+            ->setId(123)
+            ->setCreatedUid('old-user')
+            ->setUpdatedUid('old-user')
+            ->setDeletedAt('2026-07-01 10:00:00');
+        $service = new SlidesTemplateDomainService($repository);
+
+        $template = $this->makeTemplate()
+            ->setLabel([
+                'zh_CN' => '新的模板',
+                'en_US' => 'New Template',
+            ])
+            ->setCreatedUid('new-user')
+            ->setUpdatedUid('new-user');
+
+        $result = $service->create($this->makeDataIsolation(), $template);
+
+        $this->assertSame($template, $result);
+        $this->assertSame(123, $repository->savedEntity?->getId());
+        $this->assertSame('new-user', $repository->savedEntity?->getCreatedUid());
+        $this->assertSame('new-user', $repository->savedEntity?->getUpdatedUid());
+        $this->assertSame(
+            'ppt-business-minimal system 新的模板 new template 适用于企业汇报 for business reviews',
+            $repository->savedEntity?->toArray()['search_text'] ?? null
+        );
     }
 
     public function testUpdateRebuildsSearchTextBeforeSaving(): void
@@ -189,7 +219,7 @@ class CapturingSlidesTemplateRepository implements SlidesTemplateRepositoryInter
 
     public ?SlidesTemplateEntity $entityToFind = null;
 
-    public bool $codeExists = false;
+    public ?SlidesTemplateEntity $entityWithTrashed = null;
 
     public function findById(SlidesTemplateDataIsolation $dataIsolation, int|string $id): ?SlidesTemplateEntity
     {
@@ -201,9 +231,9 @@ class CapturingSlidesTemplateRepository implements SlidesTemplateRepositoryInter
         return $this->entityToFind;
     }
 
-    public function existsByCode(string $code): bool
+    public function findByCodeWithTrashed(SlidesTemplateDataIsolation $dataIsolation, string $code): ?SlidesTemplateEntity
     {
-        return $this->codeExists;
+        return $this->entityWithTrashed;
     }
 
     public function queries(SlidesTemplateDataIsolation $dataIsolation, SlidesTemplateQuery $query, Page $page): array
