@@ -131,6 +131,16 @@ export class AudioRecordingsService {
 		})
 	}
 
+	/** Triggers the backend re-summary API for an existing ASR task using the resolved model only. */
+	async resubmitSummary(item: AudioProjectListItem, modelId: string): Promise<void> {
+		if (!item.task_key) return
+
+		await SuperMagicApi.resummarizeRecordedTask({
+			task_key: item.task_key,
+			model_id: modelId,
+		})
+	}
+
 	/** Loads display title for detail header when navigation state omits projectName */
 	async fetchProjectDisplayName(
 		projectId: string,

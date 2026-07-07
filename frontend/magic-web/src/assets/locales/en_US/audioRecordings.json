@@ -25,7 +25,6 @@
 		"moreTags": "+{{count}}",
 		"moveToGroup": "Move to group",
 		"notSummarized": "Not summarized",
-		"openProject": "View project details",
 		"processing": "Processing",
 		"regenerateSummary": "Regenerate summary",
 		"rename": "Rename",
@@ -183,6 +182,7 @@
 	"summary": {
 		"missingModel": "Unable to load summary model. Please try again later.",
 		"missingParams": "Missing parameters required for summary. Please refresh the list.",
+		"retryMergeTodo": "Merge retry is not supported yet. Waiting for the backend API.",
 		"submitFailed": "Failed to submit summary. Please try again later."
 	},
 	"title": "Recordings & summaries"

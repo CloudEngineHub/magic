@@ -65,6 +65,32 @@ export interface SummarizeRecordedTaskResponse {
 	}
 }
 
+export type ResummarizeAnalysisScope = "template_analysis_files" | "configured_analysis_files"
+
+export type ResummarizeAnalysisType =
+	| "topics"
+	| "summary"
+	| "followup"
+	| "power_dynamics"
+	| "intent"
+	| "metrics"
+	| "mindmap"
+	| "insights"
+	| "highlights"
+
+export interface ResummarizeRecordedTaskResponse {
+	success: boolean
+	task_key: string
+	message?: string
+	summary?: {
+		status?: string
+		topic_id?: string
+		model_id?: string
+		analysis_scope?: ResummarizeAnalysisScope
+		specified_analysis_types?: ResummarizeAnalysisType[]
+	}
+}
+
 export interface FinishRecordingTaskResponse {
 	success: boolean
 	task_key: string
@@ -267,6 +293,18 @@ export const generateRecordingSummaryApi = (fetch: HttpClient) => ({
 		return fetch.post<SummarizeRecordedTaskResponse>(
 			genRequestUrl(`/api/v1/asr/tasks/${encodeURIComponent(task_key)}/summarize`),
 			{ topic_id, model_id },
+		)
+	},
+
+	/**
+	 * @description 重新触发已有 ASR 任务的总结生成。
+	 * Backend also supports optional analysis_scope and specified_analysis_types fields,
+	 * but the current product flow intentionally submits only model_id.
+	 */
+	resummarizeRecordedTask({ task_key, model_id }: { task_key: string; model_id: string }) {
+		return fetch.post<ResummarizeRecordedTaskResponse>(
+			genRequestUrl(`/api/v1/asr/tasks/${encodeURIComponent(task_key)}/resummarize`),
+			{ model_id },
 		)
 	},
 

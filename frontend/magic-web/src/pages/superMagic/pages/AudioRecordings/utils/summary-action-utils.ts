@@ -10,6 +10,10 @@ export interface SummarySubmitExtra {
 	model_id?: string
 }
 
+export interface ResummarySubmitExtra {
+	task_key?: string
+}
+
 export interface DetailSummaryActionEligibilityInput {
 	phase: string | null
 	status: string | null
@@ -53,7 +57,7 @@ export function coerceIdToString(value: string | number | null | undefined): str
 export function shouldShowSummaryButton(phase: string | null, status: string | null): boolean {
 	if (!phase || !status) return false
 	if (phase === "merging" && status === "completed") return true
-	// TODO(audio-recordings): Restore summarizing+failed retry once backend supports a real re-summary API.
+	if (phase === "summarizing" && status === "failed") return true
 	return false
 }
 
@@ -67,7 +71,7 @@ export function canClickSummaryButton(
 	if (!phase || !status) return false
 	if (phase === "summarizing" && status === "in_progress") return false
 	if (phase === "merging" && status === "completed") return true
-	// TODO(audio-recordings): Keep failed summary non-interactive until the retry contract is stable.
+	if (phase === "summarizing" && status === "failed") return true
 	return false
 }
 
@@ -77,7 +81,7 @@ export function getSummaryButtonVariant(
 	status: string | null,
 ): SummaryButtonVariant | null {
 	if (phase === "merging" && status === "completed") return "generate"
-	// TODO(audio-recordings): Return "retry" here after the backend re-summary API lands.
+	if (phase === "summarizing" && status === "failed") return "retry"
 	return null
 }
 
@@ -88,11 +92,27 @@ export function canSubmitSummary(extra: SummarySubmitExtra): boolean {
 	return true
 }
 
+/** Validates the minimal backend contract required by the re-summary API. */
+export function canSubmitResummary(extra: ResummarySubmitExtra): boolean {
+	return Boolean(extra.task_key)
+}
+
+/** Whether an already summarized recording can expose an explicit regenerate action. */
+export function canRegenerateSummarizedSummary(isSubmitting = false): boolean {
+	return !isSubmitting
+}
+
 /** Reuses the card CTA rules so detail header visibility never drifts from the list behavior. */
 export function canGenerateSummaryFromDetail(input: DetailSummaryActionEligibilityInput): boolean {
 	const { phase, status, isSubmitting = false, extra } = input
-	if (!canSubmitSummary(extra)) return false
 	if (!shouldShowSummaryButton(phase, status)) return false
+	if (phase === "summarizing" && status === "failed") {
+		return (
+			canSubmitResummary({ task_key: extra.task_key }) &&
+			canClickSummaryButton(phase, status, isSubmitting)
+		)
+	}
+	if (!canSubmitSummary(extra)) return false
 	return canClickSummaryButton(phase, status, isSubmitting)
 }
 

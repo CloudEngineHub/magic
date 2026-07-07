@@ -44,11 +44,15 @@ describe("RecordingDetailSummaryState", () => {
 		expect(screen.queryByRole("button")).toBeNull()
 	})
 
-	it("renders failed state without regenerate action", () => {
-		render(<RecordingDetailSummaryState status="failed" onGenerateSummary={vi.fn()} />)
+	it("renders failed state with regenerate action", () => {
+		const onGenerateSummary = vi.fn()
+		render(
+			<RecordingDetailSummaryState status="failed" onGenerateSummary={onGenerateSummary} />,
+		)
 
 		expect(screen.getByTestId("recording-detail-summary-state-failed")).toBeInTheDocument()
 		expect(screen.getByText("Summary failed")).toBeInTheDocument()
-		expect(screen.queryByRole("button", { name: "Regenerate summary" })).toBeNull()
+		fireEvent.click(screen.getByRole("button", { name: "Regenerate summary" }))
+		expect(onGenerateSummary).toHaveBeenCalledTimes(1)
 	})
 })

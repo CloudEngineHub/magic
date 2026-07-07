@@ -67,13 +67,52 @@ describe("shouldResolveOptimisticItem", () => {
 		).toBe(false)
 	})
 
-	it("returns true when transferStatus is done and card_status is summarizing", () => {
+	it("keeps local summarizing when authoritative row is still not summarized", () => {
 		expect(
 			shouldResolveOptimisticItem(
 				makeOptimisticItem({ transferStatus: "done", card_status: "summarizing" }),
 				makeAuthoritativeItem({ card_status: "not_summarized" }),
 			),
 		).toBe(false)
+	})
+
+	it("keeps local summarizing when authoritative row still has the previous summarized state", () => {
+		expect(
+			shouldResolveOptimisticItem(
+				makeOptimisticItem({ transferStatus: "done", card_status: "summarizing" }),
+				makeAuthoritativeItem({
+					current_phase: "summarizing",
+					phase_status: "completed",
+					card_status: "summarized",
+				}),
+			),
+		).toBe(false)
+	})
+
+	it("keeps local summarizing when authoritative row still has the previous failed state", () => {
+		expect(
+			shouldResolveOptimisticItem(
+				makeOptimisticItem({ transferStatus: "done", card_status: "summarizing" }),
+				makeAuthoritativeItem({
+					current_phase: "summarizing",
+					phase_status: "failed",
+					card_status: "summary_failed",
+				}),
+			),
+		).toBe(false)
+	})
+
+	it("clears local summarizing once authoritative row reports summarizing", () => {
+		expect(
+			shouldResolveOptimisticItem(
+				makeOptimisticItem({ transferStatus: "done", card_status: "summarizing" }),
+				makeAuthoritativeItem({
+					current_phase: "summarizing",
+					phase_status: "in_progress",
+					card_status: "summarizing",
+				}),
+			),
+		).toBe(true)
 	})
 
 	it("returns true when card_status is not_summarized", () => {
@@ -105,7 +144,7 @@ describe("shouldResolveOptimisticItem", () => {
 		).toBe(true)
 	})
 
-	it("returns true when transferStatus is undefined (no upload phase)", () => {
+	it("keeps local summarizing when transferStatus is undefined and authoritative row is stale", () => {
 		expect(
 			shouldResolveOptimisticItem(
 				makeOptimisticItem({ transferStatus: undefined }),

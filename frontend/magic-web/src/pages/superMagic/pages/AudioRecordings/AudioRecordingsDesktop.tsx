@@ -7,7 +7,6 @@ import { toast } from "sonner"
 import { useTranslation } from "react-i18next"
 import useNavigate from "@/routes/hooks/useNavigate"
 import { RouteName } from "@/routes/constants"
-import SuperMagicService from "@/pages/superMagic/services"
 import type { AudioProjectListItem } from "@/types/audioProject"
 import { useAutoLoadMoreSentinel } from "@/pages/superMagic/hooks/useAutoLoadMoreSentinel"
 import AudioRecordingCard from "./components/AudioRecordingCard"
@@ -260,20 +259,6 @@ function AudioRecordingsDesktop({ scrollViewportRef }: AudioRecordingsDesktopPro
 		})
 	}
 
-	/** Initializes Super state before leaving the recordings shell for the backing project page */
-	async function handleOpenProjectDetail(item: AudioProjectListItem) {
-		try {
-			await SuperMagicService.initializeState({ projectId: item.id })
-		} catch (error) {
-			console.error("Failed to initialize project state before navigation:", error)
-		}
-
-		navigate({
-			name: RouteName.SuperWorkspaceProjectState,
-			params: { projectId: item.id },
-		})
-	}
-
 	function handleRenameRequest(item: AudioProjectListItem) {
 		setRenameTarget(item)
 	}
@@ -321,6 +306,30 @@ function AudioRecordingsDesktop({ scrollViewportRef }: AudioRecordingsDesktopPro
 		if (result.reason === "api") {
 			toast.error(t("summary.submitFailed"))
 		}
+	}
+
+	/** Submits a re-summary request immediately without a secondary scope dialog. */
+	async function handleResummarize(item: AudioProjectListItem) {
+		const result = await store.resubmitSummary(item)
+		if (result.ok) return
+
+		if (result.reason === "missingParams") {
+			toast.error(t("summary.missingParams"))
+			return
+		}
+		if (result.reason === "missingModel") {
+			toast.error(t("summary.missingModel"))
+			return
+		}
+		if (result.reason === "api") {
+			toast.error(t("summary.submitFailed"))
+		}
+	}
+
+	/** Keeps the re-merge affordance visible while the backend retry API is still unavailable. */
+	function handleRetryMerge() {
+		// TODO(audio-recordings): Replace this placeholder with the backend retry-merge API when provided.
+		toast.info(t("summary.retryMergeTodo"))
 	}
 
 	const isRefreshing = store.loading && !store.loadingMore
@@ -404,8 +413,17 @@ function AudioRecordingsDesktop({ scrollViewportRef }: AudioRecordingsDesktopPro
 							key={item.id}
 							item={item}
 							onOpen={handleOpenDetail}
-							onSummarize={(entry) => void handleSummarize(entry)}
-							onOpenProject={(entry) => void handleOpenProjectDetail(entry)}
+							onSummarize={(entry) => {
+								if (
+									entry.card_status === "summarized" ||
+									entry.card_status === "summary_failed"
+								) {
+									void handleResummarize(entry)
+									return
+								}
+								void handleSummarize(entry)
+							}}
+							onRetryMerge={handleRetryMerge}
 							onRename={handleRenameRequest}
 							onDelete={handleDeleteRequest}
 							onCopyToProject={(entry) => {

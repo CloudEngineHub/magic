@@ -25,6 +25,7 @@ import {
 	buildOptimisticSummarizingProject,
 	deleteAudioRecordingProjects,
 	renameAudioRecordingProject,
+	resubmitAudioRecordingSummary,
 	submitAudioRecordingSummary,
 } from "../utils/audio-recording-actions"
 import { resolveDatePresetRange } from "../utils/resolve-date-preset-range"
@@ -224,6 +225,53 @@ export class AudioRecordingsStore {
 		})
 	}
 
+	/**
+	 * Patches both authoritative and optimistic caches before the backend responds, so
+	 * PC/H5 list cards immediately switch to the summarizing state after a user action.
+	 */
+	private applyOptimisticSummarizingState(item: AudioProjectListItem) {
+		const listIndex = this.list.findIndex((entry) => entry.id === item.id)
+		const baseItem = listIndex >= 0 ? this.list[listIndex] : item
+		const optimisticItem = buildOptimisticSummarizingProject(baseItem)
+
+		if (listIndex >= 0) {
+			this.list[listIndex] = optimisticItem
+		}
+		this.optimisticItems = [
+			optimisticItem,
+			...this.optimisticItems.filter((entry) => entry.id !== item.id),
+		]
+	}
+
+	/**
+	 * Restores local caches when an optimistic summary submission fails before the
+	 * backend accepts the task, preventing cards from staying in a false loading state.
+	 */
+	private rollbackOptimisticSummarizingState({
+		itemId,
+		previousListItem,
+		previousOptimisticItem,
+	}: {
+		itemId: string
+		previousListItem?: AudioProjectListItem
+		previousOptimisticItem?: AudioProjectListItem
+	}) {
+		const listIndex = this.list.findIndex((entry) => entry.id === itemId)
+		if (listIndex >= 0 && previousListItem) {
+			this.list[listIndex] = previousListItem
+		}
+
+		if (previousOptimisticItem) {
+			this.optimisticItems = [
+				previousOptimisticItem,
+				...this.optimisticItems.filter((entry) => entry.id !== itemId),
+			]
+			return
+		}
+
+		this.optimisticItems = this.optimisticItems.filter((entry) => entry.id !== itemId)
+	}
+
 	async fetchList(options: { page?: number; keyword?: string } = {}) {
 		const page = options.page ?? 1
 		const keyword = resolveKeywordParam(options, this.keyword)
@@ -388,6 +436,47 @@ export class AudioRecordingsStore {
 			})
 
 			summaryProgressPoller.addTask(taskKey)
+			return { ok: true }
+		} finally {
+			runInAction(() => {
+				this.submittingIds.delete(item.id)
+			})
+		}
+	}
+
+	/** Triggers re-summary for a single list item and starts progress polling */
+	async resubmitSummary(item: AudioProjectListItem): Promise<SubmitSummaryResult> {
+		if (this.submittingIds.has(item.id)) return { ok: false, reason: "busy" }
+
+		const taskKey = item.task_key
+		if (!taskKey) return { ok: false, reason: "missingParams" }
+		const previousListItem = this.list.find((entry) => entry.id === item.id)
+		const previousOptimisticItem = this.optimisticItems.find((entry) => entry.id === item.id)
+
+		runInAction(() => {
+			this.submittingIds.add(item.id)
+			this.applyOptimisticSummarizingState(item)
+		})
+
+		try {
+			const result = await resubmitAudioRecordingSummary(item)
+			if (!result.ok) {
+				runInAction(() => {
+					this.rollbackOptimisticSummarizingState({
+						itemId: item.id,
+						previousListItem,
+						previousOptimisticItem,
+					})
+				})
+				return result
+			}
+
+			summaryProgressPoller.addTask(taskKey)
+			// Refresh only after the list has hydrated once; detail-only or test-created stores
+			// should not clear a locally patched row by starting an initial page-1 load.
+			if (this.hasLoadedOnce) {
+				void this.fetchList({ page: 1, keyword: this.keyword })
+			}
 			return { ok: true }
 		} finally {
 			runInAction(() => {

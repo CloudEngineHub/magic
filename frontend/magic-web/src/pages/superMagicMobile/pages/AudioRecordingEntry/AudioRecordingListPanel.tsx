@@ -277,6 +277,40 @@ function AudioRecordingListPanel({
 		return false
 	}
 
+	/** Routes completed or failed summary attempts to direct re-summary without a scope dialog. */
+	async function handleSummaryAction(item: AudioProjectListItem) {
+		if (item.card_status === "summarized" || item.card_status === "summary_failed") {
+			return handleResummarize(item)
+		}
+		return handleSummarize(item)
+	}
+
+	/** Submits direct re-summary through the shared list store. */
+	async function handleResummarize(item: AudioProjectListItem) {
+		const result = await store.resubmitSummary(item)
+		if (result.ok) return true
+
+		if (result.reason === "missingParams") {
+			toast.error(t("audioRecordings:summary.missingParams"))
+			return false
+		}
+		if (result.reason === "missingModel") {
+			toast.error(t("audioRecordings:summary.missingModel"))
+			return false
+		}
+		if (result.reason === "api") {
+			toast.error(t("audioRecordings:summary.submitFailed"))
+			return false
+		}
+		return false
+	}
+
+	/** Keeps the re-merge affordance visible while the backend retry API is still unavailable. */
+	function handleRetryMerge() {
+		// TODO(audio-recordings): Replace this placeholder with the backend retry-merge API when provided.
+		toast.info(t("audioRecordings:summary.retryMergeTodo"))
+	}
+
 	async function handleRename(projectId: string, name: string) {
 		const success = await store.renameProject(projectId, name)
 		if (success) {
@@ -434,9 +468,12 @@ function AudioRecordingListPanel({
 												key={item.id}
 												item={item}
 												onOpen={handleOpenDetail}
-												onSummarize={(entry) => void handleSummarize(entry)}
+												onSummarize={(entry) =>
+													void handleSummaryAction(entry)
+												}
 												onMore={handleOpenMore}
 												onRetry={(entry) => void onRetryUpload?.(entry.id)}
+												onRetryMerge={handleRetryMerge}
 												isSubmitting={store.isSubmittingSummary(item.id)}
 											/>
 										))}
@@ -505,7 +542,7 @@ function AudioRecordingListPanel({
 				onClose={handleCloseMore}
 				onRename={handleRename}
 				onDelete={handleDelete}
-				onSummarize={handleSummarize}
+				onSummarize={handleSummaryAction}
 				onMoveToGroup={handleOpenMoveGroup}
 				onCopyToProject={(item) => {
 					void copyController.openCopyToProject(item)
@@ -516,7 +553,6 @@ function AudioRecordingListPanel({
 				isSubmittingAction={moreTarget != null && store.isSubmittingAction(moreTarget.id)}
 				isSubmittingSummary={moreTarget != null && store.isSubmittingSummary(moreTarget.id)}
 				canCopyToProject={moreTarget ? canCopyAudioProject(moreTarget).canCopy : false}
-				// TODO(audio-recordings): Effective only after backend supports re-summary.
 				showRegenerateAction
 			/>
 

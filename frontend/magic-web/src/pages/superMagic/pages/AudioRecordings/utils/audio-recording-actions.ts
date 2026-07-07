@@ -1,6 +1,6 @@
 import { audioRecordingsService } from "@/services/audioRecordings/AudioRecordingsService"
 import type { AudioProjectListItem } from "@/types/audioProject"
-import { canSubmitSummary } from "./summary-action-utils"
+import { canSubmitResummary, canSubmitSummary } from "./summary-action-utils"
 
 export type SubmitAudioRecordingSummaryResult =
 	| { ok: true }
@@ -26,6 +26,25 @@ export async function submitAudioRecordingSummary(
 
 	try {
 		await audioRecordingsService.submitSummary(item, modelId)
+		return { ok: true }
+	} catch {
+		return { ok: false, reason: "api" }
+	}
+}
+
+/** Validates and submits a re-summary request using the shared recordings service contract. */
+export async function resubmitAudioRecordingSummary(
+	item: AudioProjectListItem,
+): Promise<SubmitAudioRecordingSummaryResult> {
+	if (!canSubmitResummary({ task_key: item.task_key })) {
+		return { ok: false, reason: "missingParams" }
+	}
+
+	const modelId = await audioRecordingsService.resolveModelIdForSubmit(item.model_id)
+	if (!modelId) return { ok: false, reason: "missingModel" }
+
+	try {
+		await audioRecordingsService.resubmitSummary(item, modelId)
 		return { ok: true }
 	} catch {
 		return { ok: false, reason: "api" }

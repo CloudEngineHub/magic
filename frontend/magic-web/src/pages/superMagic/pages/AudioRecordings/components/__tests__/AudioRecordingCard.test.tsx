@@ -31,7 +31,6 @@ vi.mock("react-i18next", () => ({
 				"card.retryMerge": "Retry",
 				"card.collapseTags": "Collapse",
 				"card.moreActions": "More actions",
-				"card.openProject": "View project details",
 				"card.rename": "Rename",
 				"card.delete": "Delete",
 				"mobile.recordingEntry.progress.uploading": "Uploading",
@@ -209,9 +208,9 @@ describe("AudioRecordingCard", () => {
 		).toHaveTextContent("Waiting")
 	})
 
-	it("shows merge failed chip without retry button before retry API exists", () => {
+	it("shows merge failed chip with retry placeholder action", () => {
 		const onOpen = vi.fn()
-		const onSummarize = vi.fn()
+		const onRetryMerge = vi.fn()
 		render(
 			<AudioRecordingCard
 				item={createItem({
@@ -222,7 +221,7 @@ describe("AudioRecordingCard", () => {
 					project_status: "",
 				})}
 				onOpen={onOpen}
-				onSummarize={onSummarize}
+				onRetryMerge={onRetryMerge}
 			/>,
 		)
 
@@ -232,9 +231,10 @@ describe("AudioRecordingCard", () => {
 			screen.getByTestId("audio-recording-card-project-1-status-merge-failed"),
 		).toHaveTextContent("Merge failed")
 		expect(
-			screen.queryByTestId("audio-recording-card-project-1-merge-retry-button"),
-		).not.toBeInTheDocument()
-		expect(onSummarize).not.toHaveBeenCalled()
+			screen.getByTestId("audio-recording-card-project-1-merge-retry-button"),
+		).toHaveTextContent("Retry")
+		fireEvent.click(screen.getByTestId("audio-recording-card-project-1-merge-retry-button"))
+		expect(onRetryMerge).toHaveBeenCalledWith(expect.objectContaining({ id: "project-1" }))
 	})
 
 	it("opens detail for summarizing items without audio_file_id", () => {
@@ -294,7 +294,7 @@ describe("AudioRecordingCard", () => {
 		expect(onOpen).toHaveBeenCalledTimes(1)
 	})
 
-	it("shows summary failed chip without retry summary button when summarizing failed", () => {
+	it("shows summary failed chip with retry summary button when summarizing failed", () => {
 		const onSummarize = vi.fn()
 		render(
 			<AudioRecordingCard
@@ -312,10 +312,10 @@ describe("AudioRecordingCard", () => {
 		expect(
 			screen.getByTestId("audio-recording-card-project-1-status-summary-failed"),
 		).toHaveTextContent("Summary failed")
-		expect(
-			screen.queryByTestId("audio-recording-card-project-1-summary-button"),
-		).not.toBeInTheDocument()
-		expect(onSummarize).not.toHaveBeenCalled()
+		const button = screen.getByTestId("audio-recording-card-project-1-summary-button")
+		expect(button).toHaveTextContent("Retry")
+		fireEvent.click(button)
+		expect(onSummarize).toHaveBeenCalledWith(expect.objectContaining({ id: "project-1" }))
 	})
 
 	it("shows device id as source label for app recordings", () => {
@@ -419,27 +419,22 @@ describe("AudioRecordingCard", () => {
 		).toBeInTheDocument()
 	})
 
-	it("opens the project detail action without opening the recording preview", async () => {
-		const onOpen = vi.fn()
-		const onOpenProject = vi.fn()
-		render(
-			<AudioRecordingCard
-				item={createItem()}
-				onOpen={onOpen}
-				onOpenProject={onOpenProject}
-			/>,
-		)
+	it("does not render the temporary project detail action in the more-actions dropdown", () => {
+		render(<AudioRecordingCard item={createItem()} onRename={vi.fn()} onDelete={vi.fn()} />)
 
 		const trigger = screen.getByTestId("audio-recording-card-project-1-more-actions")
 		trigger.focus()
 		fireEvent.keyDown(trigger, { key: "Enter", code: "Enter" })
-		fireEvent.click(
-			await screen.findByTestId("audio-recording-card-project-1-action-open-project"),
-		)
 
-		expect(onOpenProject).toHaveBeenCalledTimes(1)
-		expect(onOpenProject).toHaveBeenCalledWith(expect.objectContaining({ id: "project-1" }))
-		expect(onOpen).not.toHaveBeenCalled()
+		expect(
+			screen.queryByTestId("audio-recording-card-project-1-action-open-project"),
+		).not.toBeInTheDocument()
+		expect(
+			screen.getByTestId("audio-recording-card-project-1-action-rename"),
+		).toBeInTheDocument()
+		expect(
+			screen.getByTestId("audio-recording-card-project-1-action-delete"),
+		).toBeInTheDocument()
 	})
 
 	it("shows created_at fallback title when project name is empty", () => {
@@ -450,7 +445,7 @@ describe("AudioRecordingCard", () => {
 		)
 	})
 
-	it("hides regenerate option in more-actions dropdown for summarized items", async () => {
+	it("shows regenerate option in more-actions dropdown for summarized items", async () => {
 		const onSummarize = vi.fn()
 		render(
 			<AudioRecordingCard
@@ -463,9 +458,9 @@ describe("AudioRecordingCard", () => {
 		trigger.focus()
 		fireEvent.keyDown(trigger, { key: "Enter", code: "Enter" })
 
-		expect(
-			screen.queryByTestId("audio-recording-card-project-1-action-regenerate"),
-		).not.toBeInTheDocument()
-		expect(onSummarize).not.toHaveBeenCalled()
+		fireEvent.click(
+			await screen.findByTestId("audio-recording-card-project-1-action-regenerate"),
+		)
+		expect(onSummarize).toHaveBeenCalledWith(expect.objectContaining({ id: "project-1" }))
 	})
 })
