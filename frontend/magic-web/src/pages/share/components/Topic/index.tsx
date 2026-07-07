@@ -67,6 +67,9 @@ function Topic({
 	viewFileList,
 	showCreatedByBadge,
 	allowDownloadProjectFile,
+	forceFullscreenMode,
+	hidePreviewHeader,
+	showFileHeader,
 	onPreviewFileChange,
 	onPreviewFullscreenChange,
 }: {
@@ -87,11 +90,15 @@ function Topic({
 	viewFileList?: boolean
 	showCreatedByBadge?: boolean
 	allowDownloadProjectFile?: boolean
+	forceFullscreenMode?: boolean
+	hidePreviewHeader?: boolean
+	showFileHeader?: boolean
 	onPreviewFileChange?: (fileId: string | null) => void
 	onPreviewFullscreenChange?: (isFullscreen: boolean) => void
 }) {
 	const { t } = useTranslation("super")
-	const isFullscreenMode = useFullscreenMode()
+	const isUrlFullscreenMode = useFullscreenMode()
+	const isFullscreenMode = Boolean(forceFullscreenMode) || isUrlFullscreenMode
 
 	const [taskData, setTaskData] = useState<TaskData | null>(null)
 	const previewDetailPopupRef = useRef(null) as any
@@ -122,6 +129,7 @@ function Topic({
 
 	// 判断是否是新格式文件分享（多个文件，无fileId）
 	const isNewFileShare = isFileShare && !fileId
+	const shouldRenderFullscreenFileOnly = isFullscreenMode && Boolean(isFileShare) && !isMobile
 
 	// 使用分享页面菜单过滤 Hook
 	const { filterShareMenuItems, filterBatchDownloadLayerMenuItems } = useShareMenuFilters({
@@ -774,9 +782,15 @@ function Topic({
 					} else {
 						// PC端：直接设置Detail并打开文件tab
 						if (isFileShare) {
-							setTimeout(() => {
+							const openFileTab = () => {
 								detailRef.current?.openFileTab(fileToOpen)
-							}, 100)
+							}
+
+							if (shouldRenderFullscreenFileOnly) {
+								requestAnimationFrame(openFileTab)
+							} else {
+								setTimeout(openFileTab, 100)
+							}
 						} else {
 							setUserDetail(fileDetail)
 							pubsub.publish(PubSubEvents.Maximize_File)
@@ -811,6 +825,7 @@ function Topic({
 		showAllProjectFiles,
 		detailRef,
 		messagesWithoutRevoked?.length,
+		shouldRenderFullscreenFileOnly,
 	])
 
 	const replay = useCallback(() => {
@@ -847,6 +862,10 @@ function Topic({
 	// 判断是否显示项目文件栏
 	const shouldShowProjectSider = useMemo(() => {
 		const isNewTopicShare = isShareRoute && !isLegacy
+		if (shouldRenderFullscreenFileOnly) {
+			return false
+		}
+
 		// 如果 viewFileList 为 false，则不显示项目文件栏（仅对新分享格式生效）
 		if (viewFileList === false && (isNewFileShare || isNewTopicShare)) {
 			return false
@@ -880,6 +899,7 @@ function Topic({
 		isFileShare,
 		showAllProjectFiles,
 		viewFileList,
+		shouldRenderFullscreenFileOnly,
 	])
 
 	return (
@@ -911,6 +931,9 @@ function Topic({
 							allowDownload={allowDownloadProjectFile}
 							enableImmersiveShareChrome={enableImmersiveShareChrome}
 							isImmersiveFullscreen={isImmersiveFullscreen}
+							hideHeader={hidePreviewHeader}
+							showFileHeader={showFileHeader}
+							forceFullscreenMode={forceFullscreenMode}
 							onPreviewFileChange={(fileId) => {
 								setPrimaryPreviewFileId(fileId)
 								onPreviewFileChange?.(fileId)
@@ -934,6 +957,9 @@ function Topic({
 								}}
 								isFileShare={false}
 								allowDownload={allowDownloadProjectFile}
+								hideHeader={hidePreviewHeader}
+								showFileHeader={showFileHeader}
+								forceFullscreenMode={forceFullscreenMode}
 								onPreviewFileChange={onPreviewFileChange}
 								onPreviewFullscreenChange={onPreviewFullscreenChange}
 							/>
@@ -994,8 +1020,12 @@ function Topic({
 						isMobile ? null : (
 							<div
 								className={cn(
-									"mr-2 flex-1 overflow-y-hidden rounded-lg transition-all duration-300 ease-in-out",
-									!isFullscreenMode && "my-2 border border-border bg-card",
+									shouldRenderFullscreenFileOnly
+										? "h-full min-h-0 w-full flex-1 overflow-hidden bg-transparent"
+										: "mr-2 flex-1 overflow-y-hidden rounded-lg transition-all duration-300 ease-in-out",
+									!isFullscreenMode &&
+										!shouldRenderFullscreenFileOnly &&
+										"my-2 border border-border bg-card",
 									!shouldShowProjectSider && "m-0 border-none bg-transparent",
 								)}
 							>
@@ -1021,6 +1051,12 @@ function Topic({
 									topicName={resource_name}
 									projectId={projectId}
 									allowDownload={allowDownloadProjectFile}
+									hideTabBar={shouldRenderFullscreenFileOnly}
+									showFileHeader={
+										showFileHeader ??
+										(shouldRenderFullscreenFileOnly ? false : undefined)
+									}
+									forceFullscreenMode={forceFullscreenMode}
 								/>
 							</div>
 						)}

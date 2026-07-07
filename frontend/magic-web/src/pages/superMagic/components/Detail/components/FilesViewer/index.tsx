@@ -87,7 +87,8 @@ const FilesViewer = memo(
 			// Props are passed directly to hook
 			const tabAttachments = props.attachments ?? props.attachmentList
 			const { t } = useTranslation("super")
-			const isFullscreenMode = useFullscreenMode()
+			const isUrlFullscreenMode = useFullscreenMode()
+			const isFullscreenMode = Boolean(props.forceFullscreenMode) || isUrlFullscreenMode
 			const [expandPanelVisible, setExpandPanelVisible] = useState(false)
 			const [commonWebsiteDialogOpen, setCommonWebsiteDialogOpen] = useState(false)
 			const [commonWebsiteInitialValues, setCommonWebsiteInitialValues] =
@@ -293,7 +294,7 @@ const FilesViewer = memo(
 
 			// Notify parent about fullscreen state changes via callback
 			useEffect(() => {
-				props.onFullscreenChange?.(!!fullscreenFileId)
+				props.onFullscreenChange?.(Boolean(props.forceFullscreenMode) || !!fullscreenFileId)
 			}, [fullscreenFileId, props])
 
 			// 监听activeTab变化，自动滚动到对应位置
@@ -397,9 +398,11 @@ const FilesViewer = memo(
 
 			const currentTab = activeTab
 			const { isFullscreen, ...otherProps } = getRenderProps(currentTab)
+			const effectiveIsFullscreen =
+				Boolean(props.forceFullscreenMode) || Boolean(isFullscreen)
 			const currentRenderProps = useMemo(
-				() => ({ isFullscreen, ...otherProps }),
-				[isFullscreen, otherProps],
+				() => ({ isFullscreen: effectiveIsFullscreen, ...otherProps }),
+				[effectiveIsFullscreen, otherProps],
 			)
 			const shouldUseSafeAreaFullscreen = shouldUseFileViewerFullscreenSafeArea()
 			const currentRenderPropsRef = useRef(currentRenderProps)
@@ -516,7 +519,7 @@ const FilesViewer = memo(
 							isActive={isActive}
 							renderProps={renderProps}
 							onActiveFileChange={props?.onActiveFileChange}
-							isFullscreen={isFullscreen}
+							isFullscreen={effectiveIsFullscreen}
 							openFileTab={openFileTab}
 							playbackProps={playbackProps}
 							hideTabBar={props.hideTabBar}
@@ -529,7 +532,7 @@ const FilesViewer = memo(
 				tabs,
 				activeTab?.id,
 				getFromCache,
-				isFullscreen,
+				effectiveIsFullscreen,
 				currentRenderProps,
 				props?.onActiveFileChange,
 				shouldRenderTab,
@@ -545,14 +548,14 @@ const FilesViewer = memo(
 				<div
 					className={cn(
 						"flex h-full flex-col",
-						isFullscreen && FILE_VIEWER_FULLSCREEN_VIEWPORT_CLASS_NAME,
+						effectiveIsFullscreen && FILE_VIEWER_FULLSCREEN_VIEWPORT_CLASS_NAME,
 					)}
 				>
 					<div
 						className={cn(
 							"flex h-full min-h-0 min-w-0 flex-col",
 							// Fullscreen fixed layers bypass BaseLayoutPc padding, so this shell reapplies safe-area insets.
-							isFullscreen &&
+							effectiveIsFullscreen &&
 								shouldUseSafeAreaFullscreen &&
 								FILE_VIEWER_FULLSCREEN_SAFE_AREA_CLASS_NAME,
 						)}

@@ -4101,6 +4101,8 @@
 		"projectFiles": "项目文件",
 		"projectShareGenerated": "项目分享",
 		"projectShareName": "项目分享_{{projectName}}",
+		"pureMode": "纯净模式",
+		"pureModeDescription": "全屏显示入口文件并隐藏头部",
 		"publicAccess": "公开访问",
 		"publicAccessDescription": "任何人可通过链接访问，分享内容可能会被搜索引擎收录，请注意数据安全",
 		"qrCode": "分享二维码",

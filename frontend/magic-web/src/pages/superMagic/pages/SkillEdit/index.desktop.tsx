@@ -346,8 +346,9 @@ function SkillEditWorkspace({ skillCode }: { skillCode: string }) {
 		}
 	}, [])
 
-	useAttachmentsPolling({
+	const { checkNowDebounced: checkAttachmentsNowDebounced } = useAttachmentsPolling({
 		projectId: store.project?.id,
+		store: store.projectFilesStore,
 		autoStart: false,
 		onAttachmentsChange: useCallback(
 			({ tree, list }: { tree: AttachmentItem[]; list: AttachmentItem[] }) => {
@@ -600,6 +601,7 @@ function SkillEditWorkspace({ skillCode }: { skillCode: string }) {
 					topicStore={topicStore}
 					mentionPanelStore={store.mentionPanelStore}
 					projectFilesStore={store.projectFilesStore}
+					onTerminalTopicStatusChange={checkAttachmentsNowDebounced}
 					isConversationPanelCollapsed={isConversationPanelCollapsed}
 					onToggleConversationPanel={onToggleConversationPanel}
 					onExpandConversationPanel={onExpandConversationPanel}

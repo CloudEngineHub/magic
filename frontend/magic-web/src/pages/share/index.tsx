@@ -115,6 +115,24 @@ function toStringId(id: unknown): string {
 	return String(id)
 }
 
+function isTrueLike(value: unknown): boolean {
+	if (value === true) return true
+	if (typeof value === "number") return value === 1
+	if (typeof value === "string") return ["true", "1"].includes(value.trim().toLowerCase())
+	return false
+}
+
+function getSharePureMode(shareData: any): boolean {
+	return [
+		shareData?.extra?.pure_mode,
+		shareData?.pure_mode,
+		shareData?.data?.extra?.pure_mode,
+		shareData?.data?.pure_mode,
+		shareData?.data?.data?.extra?.pure_mode,
+		shareData?.data?.data?.pure_mode,
+	].some(isTrueLike)
+}
+
 function getShareProjectCreatorUserId(shareData: ShareDataLike): string {
 	return (
 		toStringId(shareData?.data?.user_id) ||
@@ -230,8 +248,21 @@ function Share() {
 		})
 	}, [attachments?.tree, defaultOpenFileId, fileId, routeInfo.isLegacy])
 	const isEntryHtmlPreview = Boolean(entryHtmlFileId) && currentPreviewFileId === entryHtmlFileId
+	const shareDisplayOptions = useMemo(() => {
+		const urlSearchParams = new URLSearchParams(search)
+		const isPureMode = getSharePureMode(data)
+
+		return {
+			forceFullscreenMode: isPureMode || urlSearchParams.get("fullscreen") === "true",
+			hideHeader: isPureMode || urlSearchParams.has("hideHeader"),
+			showFileHeader:
+				isPureMode || urlSearchParams.get("showFileHeader") === "false" ? false : undefined,
+		}
+	}, [data, search])
 	const enableImmersiveShareChrome = isMobile && isFileShare && isEntryHtmlPreview
-	const isImmersiveFullscreen = enableImmersiveShareChrome && previewIsFullscreen
+	const effectivePreviewIsFullscreen =
+		shareDisplayOptions.forceFullscreenMode || previewIsFullscreen
+	const isImmersiveFullscreen = enableImmersiveShareChrome && effectivePreviewIsFullscreen
 
 	useBackHandler(
 		isImmersiveFullscreen,
@@ -614,11 +645,9 @@ function Share() {
 		return isMobile && hasStarted && (routeInfo.isLegacy || viewFileList)
 	}, [hasStarted, isMobile, routeInfo.isLegacy, viewFileList])
 
-	// 检查是否隐藏 header
-	const shouldHideHeader = useMemo(() => {
-		const urlSearchParams = new URLSearchParams(search)
-		return urlSearchParams.has("hideHeader")
-	}, [search])
+	const isShareDataReady = !isEmpty(data)
+	// 检查是否隐藏 header。pure_mode 优先，URL 参数作为老链接兼容。
+	const shouldHideHeader = shareDisplayOptions.hideHeader || (isFileShare && !isShareDataReady)
 	const mobileAudioShareTopbarOffset = useMemo(
 		() =>
 			resolveMobileAudioShareTopbarOffset({
@@ -1008,7 +1037,10 @@ function Share() {
 							viewFileList={viewFileList}
 							showCreatedByBadge={data?.extra?.hide_created_by_super_magic === false}
 							allowDownloadProjectFile={allowDownloadProjectFile}
-							onPreviewFileChange={setCurrentPreviewFileId}
+							forceFullscreenMode={shareDisplayOptions.forceFullscreenMode}
+						hidePreviewHeader={shareDisplayOptions.hideHeader}
+						showFileHeader={shareDisplayOptions.showFileHeader}
+						onPreviewFileChange={setCurrentPreviewFileId}
 							onPreviewFullscreenChange={setPreviewIsFullscreen}
 						/>
 					)

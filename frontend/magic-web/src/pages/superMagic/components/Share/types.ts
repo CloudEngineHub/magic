@@ -80,6 +80,7 @@ export interface ShareExtraData {
 	view_file_list?: boolean // 话题分享：可查看文件列表
 	project_id?: string
 	allowDownloadProjectFile?: boolean // 允许下载及导出（后端字段: allow_download_project_file）
+	pureMode?: boolean // 纯净模式（后端字段: pure_mode）
 }
 
 export interface ShareProps {

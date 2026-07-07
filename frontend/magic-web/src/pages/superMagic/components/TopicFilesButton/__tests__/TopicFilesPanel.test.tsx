@@ -4,6 +4,7 @@ import TopicFilesPanel from "../TopicFilesPanel"
 
 const selectDirectoryModalSpy = vi.fn()
 const executeMoveOperationSpy = vi.fn()
+const crossProjectOperationOptionsSpy = vi.fn()
 const executeCopyOperationSpy = vi.fn()
 
 vi.mock("react-i18next", () => ({
@@ -13,6 +14,7 @@ vi.mock("react-i18next", () => ({
 }))
 
 vi.mock("ahooks", () => ({
+	useMemoizedFn: (fn: (...args: any[]) => any) => fn,
 	useUpdateEffect: vi.fn(),
 }))
 
@@ -143,16 +145,19 @@ vi.mock("../hooks/useProjectDetailFilesController", () => ({
 }))
 
 vi.mock("../hooks/useCrossProjectFileOperation", () => ({
-	useCrossProjectFileOperation: () => ({
-		executeMoveOperation: executeMoveOperationSpy,
-		executeCopyOperation: executeCopyOperationSpy,
+	useCrossProjectFileOperation: (options: Record<string, unknown>) => {
+		crossProjectOperationOptionsSpy(options)
+		return {
+			executeMoveOperation: executeMoveOperationSpy,
+			executeCopyOperation: executeCopyOperationSpy,
 		duplicateModalVisible: false,
-		currentDuplicateFileName: "",
-		totalDuplicates: 0,
-		handleDuplicateCancel: vi.fn(),
-		handleDuplicateReplace: vi.fn(),
-		handleDuplicateKeepBoth: vi.fn(),
-	}),
+			currentDuplicateFileName: "",
+			totalDuplicates: 0,
+			handleDuplicateCancel: vi.fn(),
+			handleDuplicateReplace: vi.fn(),
+			handleDuplicateKeepBoth: vi.fn(),
+		}
+	},
 }))
 
 const mobileProjectDetailFilesViewPropsSpy = vi.fn()
@@ -166,6 +171,7 @@ vi.mock("../components/MobileProjectDetailFilesView", () => ({
 
 vi.mock("../components", () => ({
 	DuplicateFileModal: () => null,
+	FolderConflictModal: () => null,
 	SelectModeHeader: () => <div />,
 	NormalModeHeader: () => <div />,
 	SearchModeHeader: () => <div />,
@@ -200,6 +206,7 @@ describe("TopicFilesPanel", () => {
 	it("在项目详情移动端跨项目确认时带上待移动文件 ID 执行移动", async () => {
 		selectDirectoryModalSpy.mockClear()
 		executeMoveOperationSpy.mockClear()
+		crossProjectOperationOptionsSpy.mockClear()
 
 		render(
 			<TopicFilesPanel
@@ -285,6 +292,7 @@ describe("TopicFilesPanel", () => {
 
 	it("在项目详情移动端默认开启跨工作区项目移动配置", () => {
 		selectDirectoryModalSpy.mockClear()
+		crossProjectOperationOptionsSpy.mockClear()
 
 		render(
 			<TopicFilesPanel
@@ -317,6 +325,7 @@ describe("TopicFilesPanel", () => {
 
 	it("在项目详情移动端对话项目也开启跨工作区项目移动配置", () => {
 		selectDirectoryModalSpy.mockClear()
+		crossProjectOperationOptionsSpy.mockClear()
 
 		render(
 			<TopicFilesPanel
@@ -378,6 +387,7 @@ describe("TopicFilesPanel", () => {
 
 	it("在项目详情移动端多选分享时使用新的文件分享 Sheet", () => {
 		selectDirectoryModalSpy.mockClear()
+		crossProjectOperationOptionsSpy.mockClear()
 
 		render(
 			<TopicFilesPanel
@@ -391,5 +401,43 @@ describe("TopicFilesPanel", () => {
 		const shareSheet = screen.getByTestId("project-share-sheet")
 		expect(shareSheet).toHaveAttribute("data-mode", "file")
 		expect(shareSheet).toHaveAttribute("data-file-ids", "file-1,file-2")
+	})
+
+	it("在项目详情移动端跨项目移动成功后立即移除源项目文件并刷新附件", () => {
+		selectDirectoryModalSpy.mockClear()
+		executeMoveOperationSpy.mockClear()
+		crossProjectOperationOptionsSpy.mockClear()
+		const onAttachmentsChange = vi.fn()
+		const refreshAttachments = vi.fn()
+
+		render(
+			<TopicFilesPanel
+				attachments={[
+					{ file_id: "file-1", type: "file", file_name: "a.txt" },
+					{ file_id: "file-2", type: "file", file_name: "b.txt" },
+				]}
+				projectId="project-1"
+				selectedProject={{
+					id: "project-1",
+					project_name: "测试项目",
+					workspace_id: "workspace-1",
+				}}
+				selectedWorkspace={{ id: "workspace-1", name: "测试工作区" }}
+				mobileViewVariant="project-detail"
+				onAttachmentsChange={onAttachmentsChange}
+				refreshAttachments={refreshAttachments}
+			/>,
+		)
+
+		const hookOptions = crossProjectOperationOptionsSpy.mock.calls.at(-1)?.[0] as {
+			onSuccess?: (result: { operationType: "move" | "copy"; fileIds: string[] }) => void
+		}
+
+		hookOptions.onSuccess?.({ operationType: "move", fileIds: ["file-1"] })
+
+		expect(onAttachmentsChange).toHaveBeenCalledWith([
+			{ file_id: "file-2", type: "file", file_name: "b.txt" },
+		])
+		expect(refreshAttachments).toHaveBeenCalled()
 	})
 })

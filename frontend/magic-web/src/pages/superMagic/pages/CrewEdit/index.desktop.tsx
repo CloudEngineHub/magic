@@ -396,8 +396,9 @@ function CrewEditInner({ crewId }: { crewId: string }) {
 		}
 	}, [selectedProject, store.projectFilesStore])
 
-	useAttachmentsPolling({
+	const { checkNowDebounced: checkAttachmentsNowDebounced } = useAttachmentsPolling({
 		projectId: selectedProject?.id,
+		store: store.projectFilesStore,
 		autoStart: false,
 		onAttachmentsChange: useCallback(
 			({ tree, list }: { tree: AttachmentItem[]; list: AttachmentItem[] }) => {
@@ -602,6 +603,7 @@ function CrewEditInner({ crewId }: { crewId: string }) {
 							topicStore={conversation.topicStore}
 							mentionPanelStore={store.mentionPanelStore}
 							projectFilesStore={store.projectFilesStore}
+							onTerminalTopicStatusChange={checkAttachmentsNowDebounced}
 							isConversationPanelCollapsed={
 								shouldShowDetailPanel ? layout.isConversationPanelCollapsed : false
 							}

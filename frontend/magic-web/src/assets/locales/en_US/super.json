@@ -4099,6 +4099,8 @@
 		"projectFiles": "Project Files",
 		"projectShareGenerated": "Project Sharing",
 		"projectShareName": "Project Share_{{projectName}}",
+		"pureMode": "Pure Mode",
+		"pureModeDescription": "Display the entry file in fullscreen and hide the header",
 		"publicAccess": "Public Access",
 		"publicAccessDescription": "Anyone can access via link. Content may be indexed by search engines. Please be aware of data security",
 		"qrCode": "Share QR Code",

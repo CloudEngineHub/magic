@@ -125,6 +125,7 @@ export default memo(function FileShareModal(props: FileShareModalProps) {
 		hideCreatorInfo: false,
 		allowDownloadProjectFile: true,
 		showOriginalInfo: true,
+		pureMode: false,
 	})
 
 	// State: resource ID (use external if provided, otherwise fetch and cache)
@@ -566,6 +567,7 @@ export default memo(function FileShareModal(props: FileShareModalProps) {
 				hideCreatorInfo: extra?.hide_created_by_super_magic ?? false,
 				showOriginalInfo: extra?.show_original_info ?? true,
 				allowDownloadProjectFile: extra?.allow_download_project_file ?? true,
+				pureMode: extra?.pure_mode ?? false,
 			})
 
 			// Load shareProject from top level field
@@ -672,6 +674,7 @@ export default memo(function FileShareModal(props: FileShareModalProps) {
 					hide_created_by_super_magic: extraData.hideCreatorInfo ?? false,
 					show_original_info: extraData.showOriginalInfo ?? true,
 					allow_download_project_file: extraData.allowDownloadProjectFile ?? true,
+					pure_mode: extraData.pureMode ?? false,
 				},
 				project_id: projectId, // 传递项目ID
 			})
@@ -680,6 +683,12 @@ export default memo(function FileShareModal(props: FileShareModalProps) {
 			if (!hasResourceIdCreated.current) {
 				hasResourceIdCreated.current = true
 			}
+
+			const shareUrl = generateShareUrl(
+				currentResourceId as string,
+				extraData.passwordEnabled ? extraData.password : undefined,
+				"files",
+			)
 
 			// Step 3: Generate share message and copy to clipboard (silently, no toast)
 			try {
@@ -699,12 +708,6 @@ export default memo(function FileShareModal(props: FileShareModalProps) {
 						console.error("Failed to fetch file details:", error)
 					}
 				}
-
-				const shareUrl = generateShareUrl(
-					currentResourceId as string,
-					extraData.passwordEnabled ? extraData.password : undefined,
-					"files",
-				)
 
 				const shareMessageText = generateShareMessageText({
 					fileCount: actualFileCount,
@@ -736,11 +739,7 @@ export default memo(function FileShareModal(props: FileShareModalProps) {
 				shareName: shareName,
 				fileCount: actualFileCount,
 				mainFileName: apiResult?.main_file_name || t("share.untitled"),
-				shareUrl: generateShareUrl(
-					currentResourceId as string,
-					extraData.passwordEnabled ? extraData.password : undefined,
-					"files",
-				),
+				shareUrl,
 				password: extraData.passwordEnabled ? extraData.password : undefined,
 				expire_at: apiResult?.data?.expire_at || apiResult?.expire_at, // 使用后端返回的 expire_at
 				shareType: shareType,
@@ -772,6 +771,7 @@ export default memo(function FileShareModal(props: FileShareModalProps) {
 		extraData.hideCreatorInfo,
 		extraData.showOriginalInfo,
 		extraData.allowDownloadProjectFile,
+		extraData.pureMode,
 		effectiveViewFileList,
 		defaultOpenFileId,
 		projectId,
@@ -917,6 +917,7 @@ export default memo(function FileShareModal(props: FileShareModalProps) {
 									showOriginalInfo: extraData.showOriginalInfo,
 									hideCreatorInfo: extraData.hideCreatorInfo,
 									allowDownloadProjectFile: extraData.allowDownloadProjectFile,
+									pureMode: extraData.pureMode,
 								}}
 								onChange={handleAdvancedSettingsChange}
 								mode={ShareMode.File}
@@ -1067,6 +1068,7 @@ export default memo(function FileShareModal(props: FileShareModalProps) {
 									showOriginalInfo: extraData.showOriginalInfo,
 									hideCreatorInfo: extraData.hideCreatorInfo,
 									allowDownloadProjectFile: extraData.allowDownloadProjectFile,
+									pureMode: extraData.pureMode,
 								}}
 								onChange={handleAdvancedSettingsChange}
 								mode={ShareMode.File}

@@ -70,6 +70,14 @@ export default memo(function ShareAdvancedSettings(props: ShareAdvancedSettingsP
 				modes: [ShareMode.File],
 			},
 			{
+				key: "pureMode",
+				labelKey: "share.pureMode",
+				descriptionKey: "share.pureModeDescription",
+				isVip: false,
+				defaultValue: false,
+				modes: [ShareMode.File],
+			},
+			{
 				key: "hideCreatorInfo",
 				labelKey: "share.hideCreatorInfo",
 				descriptionKey: "share.hideCreatorInfoDescription",

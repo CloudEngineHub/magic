@@ -1491,6 +1491,7 @@ export const generateSuperMagicApi = (fetch: HttpClient) => ({
 			view_file_list?: boolean
 			hide_created_by_super_magic?: boolean
 			allow_download_project_file?: boolean
+			pure_mode?: boolean
 		}
 		project_id?: string
 	}) {

@@ -159,6 +159,17 @@ export function useTopicDetailPanelController({
 				}, DETAIL_OPEN_DELAY_MS)
 				scheduleFileOpenFallback()
 			}
+
+			if (payload.action !== "download") {
+				window.setTimeout(() => {
+					detailRef.current?.openFileTab?.({
+						file_name: payload.fileName,
+						relative_file_path: targetPath,
+						file_path: targetPath,
+					})
+				}, DETAIL_OPEN_DELAY_MS)
+				scheduleFileOpenFallback()
+			}
 		}
 
 		const handleOpenKnowledgeBaseTab = (data: unknown) => {
