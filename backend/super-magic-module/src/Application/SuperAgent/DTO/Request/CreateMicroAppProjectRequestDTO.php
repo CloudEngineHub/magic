@@ -44,7 +44,7 @@ class CreateMicroAppProjectRequestDTO extends AbstractRequestDTO
         return $this->workspaceId;
     }
 
-    public function setWorkspaceId(int|string|null $workspaceId): void
+    public function setWorkspaceId(null|int|string $workspaceId): void
     {
         $this->workspaceId = (string) ($workspaceId ?? '');
     }

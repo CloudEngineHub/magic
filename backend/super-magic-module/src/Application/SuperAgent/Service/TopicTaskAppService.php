@@ -811,7 +811,7 @@ class TopicTaskAppService extends AbstractAppService
         }
 
         $tool = $payload->getTool();
-        if (! is_array($tool) || ! in_array(($tool['name'] ?? ''), ['ask_user', 'plan'], true)) {
+        if (! is_array($tool) || ! in_array($tool['name'] ?? '', ['ask_user', 'plan'], true)) {
             return null;
         }
 

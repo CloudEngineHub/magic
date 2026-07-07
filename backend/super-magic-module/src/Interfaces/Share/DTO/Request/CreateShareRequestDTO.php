@@ -139,6 +139,129 @@ class CreateShareRequestDTO extends AbstractDTO
     }
 
     /**
+     * 从数组中创建DTO，用于应用服务内部复用分享创建逻辑.
+     */
+    public static function fromArray(array $data): self
+    {
+        $dto = new self();
+        $rules = $dto->rules();
+        $messages = $dto->messages();
+
+        $validator = di(ValidatorFactoryInterface::class)->make($data, $rules, $messages);
+        if ($validator->fails()) {
+            throw new ValidationException($validator);
+        }
+
+        $dto->resourceId = (string) ($data['resource_id'] ?? '');
+        $dto->resourceType = (int) ($data['resource_type'] ?? 0);
+        $dto->shareType = (int) ($data['share_type'] ?? 0);
+        $dto->resourceName = (string) ($data['resource_name'] ?? '');
+
+        if (array_key_exists('target_ids', $data)) {
+            $dto->presentFields[] = 'target_ids';
+            $dto->targetIds = $data['target_ids'] ?? [];
+        } else {
+            $dto->targetIds = null;
+        }
+
+        if (array_key_exists('file_ids', $data)) {
+            $dto->presentFields[] = 'file_ids';
+            $dto->fileIds = $data['file_ids'] ?? [];
+        } else {
+            $dto->fileIds = null;
+        }
+
+        if (array_key_exists('password', $data)) {
+            $dto->presentFields[] = 'password';
+            $dto->password = $data['password'] === null ? null : (string) $data['password'];
+        } else {
+            $dto->password = null;
+        }
+
+        if (array_key_exists('expire_days', $data)) {
+            $dto->presentFields[] = 'expire_days';
+            $expireDaysValue = $data['expire_days'];
+            if ($expireDaysValue === null || $expireDaysValue === '' || $expireDaysValue === '0') {
+                $dto->expireDays = null;
+            } else {
+                $dto->expireDays = (int) $expireDaysValue;
+            }
+        } else {
+            $dto->expireDays = null;
+        }
+
+        if (array_key_exists('share_range', $data)) {
+            $dto->presentFields[] = 'share_range';
+            $dto->shareRange = $data['share_range'] === null ? null : (string) $data['share_range'];
+        } else {
+            $dto->shareRange = null;
+        }
+
+        if (array_key_exists('extra', $data)) {
+            $dto->presentFields[] = 'extra';
+            $dto->extra = $data['extra'] ?? [];
+        } else {
+            $dto->extra = null;
+        }
+
+        if (array_key_exists('default_open_file_id', $data)) {
+            $dto->presentFields[] = 'default_open_file_id';
+            $dto->defaultOpenFileId = $data['default_open_file_id'] === null ? null : (string) $data['default_open_file_id'];
+        } else {
+            $dto->defaultOpenFileId = null;
+        }
+
+        if (array_key_exists('project_id', $data)) {
+            $dto->presentFields[] = 'project_id';
+            $dto->projectId = $data['project_id'] === null ? null : (string) $data['project_id'];
+        } else {
+            $dto->projectId = null;
+        }
+
+        if (array_key_exists('file_paths', $data)) {
+            $dto->presentFields[] = 'file_paths';
+            $dto->filePaths = $data['file_paths'] ?? [];
+        } else {
+            $dto->filePaths = [];
+        }
+
+        if (array_key_exists('share_project', $data)) {
+            $dto->presentFields[] = 'share_project';
+            $shareProjectValue = $data['share_project'];
+            if (is_string($shareProjectValue)) {
+                $dto->shareProject = filter_var($shareProjectValue, FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE) ?? false;
+            } elseif (is_bool($shareProjectValue)) {
+                $dto->shareProject = $shareProjectValue;
+            } else {
+                $dto->shareProject = (bool) $shareProjectValue;
+            }
+        } else {
+            $dto->shareProject = false;
+        }
+
+        if (array_key_exists('show_share_url', $data)) {
+            $showShareUrlValue = $data['show_share_url'];
+            if (is_string($showShareUrlValue)) {
+                $dto->showShareUrl = filter_var($showShareUrlValue, FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE) ?? false;
+            } elseif (is_bool($showShareUrlValue)) {
+                $dto->showShareUrl = $showShareUrlValue;
+            } else {
+                $dto->showShareUrl = (bool) $showShareUrlValue;
+            }
+        } else {
+            $dto->showShareUrl = false;
+        }
+
+        if ($dto->resourceType === ResourceType::FileCollection->value && $dto->shareProject) {
+            $dto->resourceType = ResourceType::Project->value;
+        }
+
+        $dto->validateExtra();
+
+        return $dto;
+    }
+
+    /**
      * 从请求中创建DTO.
      */
     public static function fromRequest(RequestInterface $request): self

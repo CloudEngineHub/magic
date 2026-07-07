@@ -10,31 +10,31 @@ namespace App\ErrorCode;
 use App\Infrastructure\Core\Exception\Annotation\ErrorMessage;
 
 /**
- * 错误码范围: 47000-47999.
+ * 错误码范围: 48000-48999.
  */
 enum MagicBaseErrorCode: int
 {
     #[ErrorMessage('magicbase.validate_failed')]
-    case ValidateFailed = 47000;
+    case ValidateFailed = 48000;
 
     #[ErrorMessage('magicbase.parameter_missing')]
-    case ParameterMissing = 47001;
+    case ParameterMissing = 48001;
 
     #[ErrorMessage('magicbase.resource_not_found')]
-    case ResourceNotFound = 47002;
+    case ResourceNotFound = 48002;
 
     #[ErrorMessage('magicbase.access_denied')]
-    case AccessDenied = 47003;
+    case AccessDenied = 48003;
 
     #[ErrorMessage('magicbase.unsupported_query')]
-    case UnsupportedQuery = 47004;
+    case UnsupportedQuery = 48004;
 
     #[ErrorMessage('magicbase.storage_unavailable')]
-    case StorageUnavailable = 47005;
+    case StorageUnavailable = 48005;
 
     #[ErrorMessage('magicbase.relation_invalid')]
-    case RelationInvalid = 47006;
+    case RelationInvalid = 48006;
 
     #[ErrorMessage('magicbase.permission_invalid')]
-    case PermissionInvalid = 47007;
+    case PermissionInvalid = 48007;
 }

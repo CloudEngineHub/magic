@@ -153,6 +153,12 @@ Router::addGroup(
         Router::addGroup('/micro-app-projects', static function () {
             // 创建微应用项目
             Router::post('', [MicroAppProjectApi::class, 'store']);
+            // 获取已发布微应用列表
+            Router::get('/published/queries', [MicroAppProjectApi::class, 'publishedList']);
+            // 发布微应用
+            Router::post('/{projectId}/publish', [MicroAppProjectApi::class, 'publish']);
+            // 下架微应用
+            Router::delete('/{projectId}/publish', [MicroAppProjectApi::class, 'unpublish']);
         });
 
         // 用户级别特殊项目
