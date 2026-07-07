@@ -1,5 +1,5 @@
 import MentionPanel from "@/components/business/MentionPanel"
-import { MENTION_PANEL_GALLERY_PREVIEW_LAYER_CLASS } from "@/components/business/MentionPanel/components/GalleryPreviewDialog"
+import { isMentionPanelGalleryPreviewTarget } from "@/components/business/MentionPanel/components/GalleryPreviewDialog"
 import {
 	MentionPanelViewMode,
 	PanelState,
@@ -75,7 +75,7 @@ export function CanvasDesignReferenceResourcePanel(props: ReferenceResourcePanel
 		function handlePointerDown(event: PointerEvent) {
 			const target = event.target
 			if (!(target instanceof Element)) return
-			if (target.closest(`.${MENTION_PANEL_GALLERY_PREVIEW_LAYER_CLASS}`)) return
+			if (isMentionPanelGalleryPreviewTarget(target)) return
 			if (target.closest(`.${PANEL_CLASS_NAME}`)) return
 			if (triggerRef?.current instanceof Node && triggerRef.current.contains(target)) return
 			onClose()

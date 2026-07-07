@@ -27,7 +27,7 @@ import { createDefaultConfig } from "./constants"
 import MenuItem from "./components/MenuItem"
 import GalleryItem from "./components/GalleryItem"
 import ViewModeSwitcher from "./components/ViewModeSwitcher"
-import { MENTION_PANEL_GALLERY_PREVIEW_LAYER_CLASS } from "./components/GalleryPreviewDialog"
+import { isMentionPanelGalleryPreviewTarget } from "./components/GalleryPreviewDialog"
 import MagicIcon from "../../base/MagicIcon"
 import {
 	IconArrowBack,
@@ -1123,10 +1123,7 @@ const MentionPanel = observer(
 					onInteractOutside={(event) => {
 						const root = internalRef.current
 						const target = event.target
-						if (
-							target instanceof Element &&
-							target.closest(`.${MENTION_PANEL_GALLERY_PREVIEW_LAYER_CLASS}`)
-						) {
+						if (isMentionPanelGalleryPreviewTarget(target)) {
 							event.preventDefault()
 							return
 						}

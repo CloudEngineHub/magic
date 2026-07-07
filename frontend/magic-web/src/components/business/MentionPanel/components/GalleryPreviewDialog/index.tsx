@@ -12,6 +12,16 @@ const MagicImagePreview = lazy(() => import("@/components/base/MagicImagePreview
 
 export const MENTION_PANEL_GALLERY_PREVIEW_LAYER_CLASS = "mention-panel-gallery-preview-layer"
 
+/**
+ * 判断是否为 MentionPanel Gallery Preview 的 target
+ * @param target - 事件目标
+ * @returns 是否为 MentionPanel Gallery Preview 的 target
+ */
+export function isMentionPanelGalleryPreviewTarget(target: EventTarget | null) {
+	if (!(target instanceof Element)) return false
+	return Boolean(target.closest(`.${MENTION_PANEL_GALLERY_PREVIEW_LAYER_CLASS}`))
+}
+
 interface GalleryPreviewDialogProps {
 	item: MentionItem | null
 	items: MentionItem[]
