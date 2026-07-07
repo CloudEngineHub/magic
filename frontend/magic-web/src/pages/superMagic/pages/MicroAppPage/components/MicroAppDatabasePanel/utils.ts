@@ -34,7 +34,9 @@ export function buildMagicBaseSelect(table?: MagicBaseTable | null): string {
 }
 
 export function getDefaultSort(table?: MagicBaseTable | null): MagicBaseSortRule | null {
-	const hasCreatedAt = getEnabledColumns(table).some((column) => column.column_key === "created_at")
+	const hasCreatedAt = getEnabledColumns(table).some(
+		(column) => column.column_key === "created_at",
+	)
 	return hasCreatedAt ? { field: "created_at", order: "desc" } : null
 }
 

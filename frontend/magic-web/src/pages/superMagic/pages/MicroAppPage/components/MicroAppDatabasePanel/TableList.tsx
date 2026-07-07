@@ -102,7 +102,10 @@ export default function TableList({
 											{table.table_name || table.table_key}
 										</span>
 										{table.status ? (
-											<Badge variant="outline" className="shrink-0 rounded-md">
+											<Badge
+												variant="outline"
+												className="shrink-0 rounded-md"
+											>
 												{table.status}
 											</Badge>
 										) : null}

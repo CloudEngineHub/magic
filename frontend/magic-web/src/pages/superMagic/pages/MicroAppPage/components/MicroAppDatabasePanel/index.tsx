@@ -158,7 +158,9 @@ export default function MicroAppDatabasePanel({
 							<SheetTitle className="truncate text-sm">
 								{t("microAppPage.databasePanel.title")}
 							</SheetTitle>
-							<SheetDescription className="truncate text-xs">{subtitle}</SheetDescription>
+							<SheetDescription className="truncate text-xs">
+								{subtitle}
+							</SheetDescription>
 						</div>
 						<Button
 							type="button"
@@ -211,7 +213,9 @@ export default function MicroAppDatabasePanel({
 													t("microAppPage.databasePanel.loadingTable")}
 											</h3>
 											<p className="mt-1 truncate text-xs text-muted-foreground">
-												{selectedTable?.description || selectedTable?.table_key || "-"}
+												{selectedTable?.description ||
+													selectedTable?.table_key ||
+													"-"}
 											</p>
 										</div>
 										<div className="shrink-0 text-xs text-muted-foreground">
@@ -232,7 +236,8 @@ export default function MicroAppDatabasePanel({
 												aria-selected={activeTab === "data"}
 												className={cn(
 													"inline-flex h-7 items-center justify-center rounded-md px-2 py-1 text-xs text-foreground transition-colors",
-													activeTab === "data" && "bg-background shadow-sm",
+													activeTab === "data" &&
+														"bg-background shadow-sm",
 												)}
 												onClick={() => setActiveTab("data")}
 											>
@@ -244,7 +249,8 @@ export default function MicroAppDatabasePanel({
 												aria-selected={activeTab === "structure"}
 												className={cn(
 													"inline-flex h-7 items-center justify-center rounded-md px-2 py-1 text-xs text-foreground transition-colors",
-													activeTab === "structure" && "bg-background shadow-sm",
+													activeTab === "structure" &&
+														"bg-background shadow-sm",
 												)}
 												onClick={() => setActiveTab("structure")}
 											>
@@ -290,7 +296,9 @@ export default function MicroAppDatabasePanel({
 																variant="outline"
 																onClick={() => refreshRows()}
 															>
-																{t("microAppPage.databasePanel.retry")}
+																{t(
+																	"microAppPage.databasePanel.retry",
+																)}
 															</Button>
 														</div>
 													) : (
@@ -299,7 +307,9 @@ export default function MicroAppDatabasePanel({
 																columns={gridColumns}
 																rows={rows}
 																sort={sort}
-																loading={rowsLoading || tableLoading}
+																loading={
+																	rowsLoading || tableLoading
+																}
 																onSortChange={handleSortChange}
 															/>
 															<ScrollBar orientation="horizontal" />
@@ -335,7 +345,9 @@ export default function MicroAppDatabasePanel({
 											variant="outline"
 											className="h-8"
 											disabled={page <= 1}
-											onClick={() => setPage((current) => Math.max(1, current - 1))}
+											onClick={() =>
+												setPage((current) => Math.max(1, current - 1))
+											}
 										>
 											{t("microAppPage.databasePanel.previous")}
 										</Button>
@@ -346,7 +358,9 @@ export default function MicroAppDatabasePanel({
 											className="h-8"
 											disabled={page >= totalPages}
 											onClick={() =>
-												setPage((current) => Math.min(totalPages, current + 1))
+												setPage((current) =>
+													Math.min(totalPages, current + 1),
+												)
 											}
 										>
 											{t("microAppPage.databasePanel.next")}

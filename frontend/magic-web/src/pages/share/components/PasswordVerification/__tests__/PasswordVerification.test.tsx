@@ -71,8 +71,6 @@ describe("PasswordVerification", () => {
 			target: { value: "abcd1234efgh5678ijkl9012mnop3456ZZ" },
 		})
 
-		expect(screen.getByTestId("password-input")).toHaveValue(
-			"abcd1234efgh5678ijkl9012mnop3456",
-		)
+		expect(screen.getByTestId("password-input")).toHaveValue("abcd1234efgh5678ijkl9012mnop3456")
 	})
 })

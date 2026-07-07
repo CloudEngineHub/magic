@@ -6,7 +6,9 @@ import { microAppPublicRoutes, superMagicMicroAppRoutes } from "../superMagicMic
 describe("superMagicMicroAppRoutes", () => {
 	it("registers workspace micro app routes", () => {
 		const listRoute = superMagicMicroAppRoutes.find((item) => item.name === RouteName.MicroApps)
-		const detailRoute = superMagicMicroAppRoutes.find((item) => item.name === RouteName.MicroApp)
+		const detailRoute = superMagicMicroAppRoutes.find(
+			(item) => item.name === RouteName.MicroApp,
+		)
 
 		expect(RoutePath.MicroApps).toBe("/super/micro-apps")
 		expect(RoutePath.MicroApp).toBe("/super/micro-app/:projectId")
@@ -15,7 +17,9 @@ describe("superMagicMicroAppRoutes", () => {
 	})
 
 	it("registers public micro app share route", () => {
-		const shareRoute = microAppPublicRoutes.find((item) => item.name === RouteName.MicroAppShare)
+		const shareRoute = microAppPublicRoutes.find(
+			(item) => item.name === RouteName.MicroAppShare,
+		)
 
 		expect(RoutePath.MicroAppShare).toBe("/micro-app/:resourceId")
 		expect(shareRoute?.path).toBe("/micro-app/:resourceId")

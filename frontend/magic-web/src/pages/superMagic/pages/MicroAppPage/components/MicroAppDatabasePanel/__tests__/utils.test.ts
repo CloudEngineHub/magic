@@ -70,7 +70,8 @@ describe("MicroAppDatabasePanel utils", () => {
 	})
 
 	it("adds row-only keys after schema columns", () => {
-		expect(buildGridColumns(table, [{ id: "1", brand: "Apple", extra: "x" }]).map((c) => c.key))
-			.toEqual(["id", "brand", "created_at", "extra"])
+		expect(
+			buildGridColumns(table, [{ id: "1", brand: "Apple", extra: "x" }]).map((c) => c.key),
+		).toEqual(["id", "brand", "created_at", "extra"])
 	})
 })

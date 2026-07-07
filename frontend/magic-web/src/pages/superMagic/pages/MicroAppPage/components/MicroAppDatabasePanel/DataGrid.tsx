@@ -22,13 +22,7 @@ interface DataGridProps {
 	onSortChange: (field: string) => void
 }
 
-function SortIcon({
-	columnKey,
-	sort,
-}: {
-	columnKey: string
-	sort: MagicBaseSortRule | null
-}) {
+function SortIcon({ columnKey, sort }: { columnKey: string; sort: MagicBaseSortRule | null }) {
 	if (sort?.field !== columnKey) {
 		return <ChevronsUpDown className="size-3.5 text-muted-foreground" />
 	}

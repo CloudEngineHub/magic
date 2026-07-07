@@ -104,7 +104,10 @@ export default function MicroAppSharePage() {
 	}
 
 	return (
-		<div className="h-screen w-screen overflow-hidden bg-background" data-testid="micro-app-share-page">
+		<div
+			className="h-screen w-screen overflow-hidden bg-background"
+			data-testid="micro-app-share-page"
+		>
 			<main className="h-full w-full overflow-hidden">
 				{loading ? (
 					<div
