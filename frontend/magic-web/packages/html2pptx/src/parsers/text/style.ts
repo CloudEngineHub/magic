@@ -66,6 +66,12 @@ export function resolveTextStyle(node: ElementNode, scale: number): TextStyle {
 	const isStrike = style.textDecoration.includes("line-through")
 	const charSpacing = parseLetterSpacing(style.letterSpacing, style.fontSize, scale)
 	const lineSpacing = parseLineSpacing(style.lineHeight, style.fontSize)
+	const align =
+		style.textAlign === "center" ||
+		style.textAlign === "right" ||
+		style.textAlign === "justify"
+			? style.textAlign
+			: undefined
 
 	let color: string | PPTTextGradient = colorToHex(svgFillColor)
 	let colorTransparency = getTransparency(svgFillColor)
@@ -134,6 +140,7 @@ export function resolveTextStyle(node: ElementNode, scale: number): TextStyle {
 		italic: isItalic,
 		underline: isUnderline,
 		strike: isStrike,
+		align,
 		transparency,
 		charSpacing,
 		lineSpacing,

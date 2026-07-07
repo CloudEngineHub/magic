@@ -73,7 +73,8 @@ export function elementToNode(
 	const borderLines = parseBorderLines(node, base, config)
 	if (borderLines.length > 0) nodes.push(...borderLines)
 
-	const textNodes = parseTextNodes(node, { ...base, zOrder: base.zOrder + 1 }, config)
+	const textBase = { ...base, zOrder: base.zOrder + 1 }
+	const textNodes = parseTextNodes(node, textBase, config)
 	if (textNodes.length > 0) nodes.push(...textNodes)
 
 	return nodes
@@ -86,6 +87,7 @@ export function transformElements(
 	elements: ElementNode[],
 	config: SlideConfig,
 	iWindow: Window,
+	_options: { textMergeMode?: unknown } = {},
 ): PPTNode[] {
 	const allNodes: PPTNode[] = []
 
