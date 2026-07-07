@@ -4,31 +4,31 @@
     {
       "id": 1,
       "prompt": "帮我用科技深色风格做一个 AI 发展趋势的 PPT，10页左右",
-      "expected_output": "先加载 slide-template。若上下文已有平台模板候选列表，则根据“科技深色风格”推荐 3-5 个候选模板，并使用 ask_user 询问用户选择；选项需包含模板名称、简短描述和 template code，同时提供不使用模板的选项。若上下文没有模板候选或明确 code，则询问用户提供 template code、从平台模板面板选择，或确认不使用模板；不得展示旧内置模板目录或编造 code。用户选定 code 后，通过 run_sdk_snippet 调用 get_slides_template_download_url 获取 template_file_url，下载解压 ZIP 后先读取 template.json，再根据 files/slides 字段加载 theme.css、visual-spec.md、preview.html 和/或 slides/*.html 等可用资源，再继续生成",
+      "expected_output": "先加载 slide-template。若上下文已有平台模板候选列表，则根据“科技深色风格”推荐 3-5 个候选模板，并使用 ask_user 询问用户选择；选项需包含模板名称、简短描述和 template code，同时提供不使用模板的选项。若上下文没有模板候选或明确 code，则询问用户提供 template code、从平台模板面板选择，或确认不使用模板；不得展示旧内置模板目录或编造 code。用户选定 code 后，通过 run_sdk_snippet 调用 get_slides_template_download_url 获取 template_file_url，下载解压 ZIP 后先读取 template.json，再根据 files/slides 字段加载 theme.css、visual-spec.md、slides/*.html 和本地 images 等可用资源；template.json 应使用 schema_version=1.0、PPT-... template_id、label/description 和 slides[].file/title/layout/description，category_code 可选且不依赖旧 preview.html 或 slots 元数据，再继续生成",
       "files": []
     },
     {
       "id": 2,
       "prompt": "我要做一个季度业绩汇报 PPT，想要商务简约风格，内容关于 2025 年 Q1 销售数据",
-      "expected_output": "先加载 slide-template。若上下文已有平台模板候选列表，则根据“季度业绩汇报”和“商务简约风格”推荐 3-5 个候选模板，并使用 ask_user 询问用户选择；选项需包含模板名称、简短描述和 template code，同时提供不使用模板的选项。若上下文没有模板候选或明确 code，则询问用户提供 template code、从平台模板面板选择，或确认不使用模板；不得展示旧内置模板目录或编造 code。用户选定 code 后，通过 get_slides_template_download_url 获取模板 ZIP 下载链接，下载解压后先读取 template.json，再根据 files/slides 字段加载 theme.css、visual-spec.md、preview.html 和/或 slides/*.html 等可用资源",
+      "expected_output": "先加载 slide-template。若上下文已有平台模板候选列表，则根据“季度业绩汇报”和“商务简约风格”推荐 3-5 个候选模板，并使用 ask_user 询问用户选择；选项需包含模板名称、简短描述和 template code，同时提供不使用模板的选项。若上下文没有模板候选或明确 code，则询问用户提供 template code、从平台模板面板选择，或确认不使用模板；不得展示旧内置模板目录或编造 code。用户选定 code 后，通过 get_slides_template_download_url 获取模板 ZIP 下载链接，下载解压后先读取 template.json，再根据 files/slides 字段加载 theme.css、visual-spec.md、slides/*.html 和本地 images 等可用资源；不依赖旧 preview.html 或 slots 元数据",
       "files": []
     },
     {
       "id": 3,
       "prompt": "先给我看看有哪些 PPT 模板可以选，我还没决定用哪个",
-      "expected_output": "加载 slide-template。若上下文已有平台模板候选列表，则使用 ask_user 展示 3-5 套可选模板；每个选项需包含模板名称、简短描述和 template code，同时提供不使用模板的选项。若上下文没有平台模板候选列表或 code，则说明本 skill 不再内置模板列表，要求用户从平台模板面板选择或提供 template code；不得列出旧 assets/templates 目录或 preview.html 路径",
+      "expected_output": "加载 slide-template。若上下文已有平台模板候选列表，则使用 ask_user 展示 3-5 套可选模板；每个选项需包含模板名称、简短描述和 template code，同时提供不使用模板的选项。若上下文没有平台模板候选列表或 code，则说明本 skill 不再内置模板列表，要求用户从平台模板面板选择或提供 template code；不得列出旧 assets/templates 目录或 preview.html 路径；下载后的模板应按新版 HTML slide template project 读取 template.json、visual-spec.md、theme.css、images/ 和 slides/*.html",
       "files": []
     },
     {
       "id": 4,
       "prompt": "帮我做一个论文答辩 PPT，学术风格，主题是机器学习在医疗影像诊断中的应用",
-      "expected_output": "先加载 slide-template。若上下文已有平台模板候选列表，则根据“论文答辩”和“学术风格”推荐 3-5 个候选模板，并使用 ask_user 询问用户选择；选项需包含模板名称、简短描述和 template code，同时提供不使用模板的选项。若上下文没有模板候选或明确 code，则询问用户提供 template code、从平台模板面板选择，或确认不使用模板；不得展示旧内置模板目录或编造 code。用户选定 code 后，通过 get_slides_template_download_url 获取模板 ZIP，下载解压后先读取 template.json，再根据 files/slides 字段加载 theme.css、visual-spec.md、preview.html 和/或 slides/*.html 等可用资源",
+      "expected_output": "先加载 slide-template。若上下文已有平台模板候选列表，则根据“论文答辩”和“学术风格”推荐 3-5 个候选模板，并使用 ask_user 询问用户选择；选项需包含模板名称、简短描述和 template code，同时提供不使用模板的选项。若上下文没有模板候选或明确 code，则询问用户提供 template code、从平台模板面板选择，或确认不使用模板；不得展示旧内置模板目录或编造 code。用户选定 code 后，通过 get_slides_template_download_url 获取模板 ZIP，下载解压后先读取 template.json，再根据 files/slides 字段加载 theme.css、visual-spec.md、slides/*.html 和本地 images 等可用资源；不依赖旧 preview.html 或 slots 元数据",
       "files": []
     },
     {
       "id": 5,
       "prompt": "做一个互联网产品发布会 PPT，要时尚一点，有渐变感，介绍我们的新 App",
-      "expected_output": "先加载 slide-template。若上下文已有平台模板候选列表，则根据“互联网产品发布会”“时尚”和“渐变感”推荐 3-5 个候选模板，并使用 ask_user 询问用户选择；选项需包含模板名称、简短描述和 template code，同时提供不使用模板的选项。若上下文没有模板候选或明确 code，则询问用户提供 template code、从平台模板面板选择，或确认不使用模板；不得展示旧内置模板目录或编造 code。用户选定 code 后，通过 get_slides_template_download_url 获取模板 ZIP，下载解压后先读取 template.json，再根据 files/slides 字段加载 theme.css、visual-spec.md、preview.html 和/或 slides/*.html 等可用资源",
+      "expected_output": "先加载 slide-template。若上下文已有平台模板候选列表，则根据“互联网产品发布会”“时尚”和“渐变感”推荐 3-5 个候选模板，并使用 ask_user 询问用户选择；选项需包含模板名称、简短描述和 template code，同时提供不使用模板的选项。若上下文没有模板候选或明确 code，则询问用户提供 template code、从平台模板面板选择，或确认不使用模板；不得展示旧内置模板目录或编造 code。用户选定 code 后，通过 get_slides_template_download_url 获取模板 ZIP，下载解压后先读取 template.json，再根据 files/slides 字段加载 theme.css、visual-spec.md、slides/*.html 和本地 images 等可用资源；不依赖旧 preview.html 或 slots 元数据",
       "files": []
     },
     {
@@ -40,13 +40,13 @@
     {
       "id": 7,
       "prompt": "我上传了一个 brand-template.pptx，帮我把它转成平台可复用的 PPT 模板",
-      "expected_output": "加载 slide-template 后识别这是 PPTX 转平台模板任务；读取 references/pptx-template-workflow.md；调用 convert_pptx_to_slide_template 工具，默认 preserve_source_data_attrs=false 且 externalize_inline_svg=true；输出轻量模板包目录 template.json、visual-spec.md、theme.css、images/、slides/*.html；template.json 必须包含 schema_version、template_id、name、files、slides、source、warnings，其中 files.package_zip 指向与模板文件夹平级的 <template-id>-template.zip；预览图只能由脚本从 slides/*.html 生成到 artifact，不能进入模板 ZIP，也不写入 template.json.files；slides 记录每页 file、title、layout、source_slide、slots、best_for、risks；slides/*.html 默认只保留 data-role 和 data-slot 相关语义属性，不保留 data-element-id、data-source-shape-id 等渲染器追溯属性；大型非 slot inline SVG 默认外置到 images/vectors/*.svg，HTML 中只保留本地 img 引用；不再调用旧 raw HTML 工具，不运行旧 extraction/finalizer 脚本，不生成 template-pages.md、template-pages.json、默认 source.css、preview.html、previews/ 或 packages/ 子目录",
+      "expected_output": "加载 slide-template 后识别这是 PPTX 转平台模板任务；读取 references/pptx-template-workflow.md；调用 convert_pptx_to_slide_template 工具，默认 preserve_source_data_attrs=false、externalize_inline_svg=true、create_zip=false；先输出待二次调整的轻量模板源码目录 template.json、theme.css、images/、slides/*.html，而不是立即把它当最终模板 ZIP，也不由工具脚本生成统一 visual-spec.md；工具返回后不能结束，需要继续读取转换后的 template.json、theme.css、代表性 slides/*.html 和预览 artifact，由大模型分析实际页面风格，生成 visual-spec.md，更新 template.json.files.visual_spec，并优化 template.json、theme.css、images/、slides/*.html；template.json 必须包含 schema_version、template_id、label、description、files、slides、source、warnings，其中 schema_version 固定为 1.0，template_id 使用 PPT-...，category_code 可选；预览图只能由脚本从 slides/*.html 生成到 artifact，不能进入模板源码目录或 ZIP，也不写入 template.json.files；slides 只记录每页 file、title、layout、description，不写 source_slide、slots、best_for、risks；slides/*.html 默认只保留 data-role 和 data-slot 相关语义属性，不保留 data-element-id、data-source-shape-id 等渲染器追溯属性；大型非 slot inline SVG 默认外置到 images/vectors/*.svg，HTML 中只保留本地 img 引用；轻量 QA 确认符合最新模板规范后，在结束对话时询问用户是否要把优化后的模板打包成与模板文件夹平级的 <template-id>-template.zip；未获确认前不自动打包；不再调用旧 raw HTML 工具，不运行旧 extraction/finalizer 脚本，不生成 template-pages.md、template-pages.json、默认 source.css、preview.html、previews/ 或 packages/ 子目录",
       "files": []
     },
     {
       "id": 8,
       "prompt": "帮我下载几个公开 PPTX 模板，验证一下这个 PPTX 转模板流程能不能跑通",
-      "expected_output": "加载 slide-template 并进入 PPTX Template Workflow；下载公开可访问的 PPTX 样本到 .workspace/slide-template-validation/pptx-samples/；对每个样本调用 convert_pptx_to_slide_template，并把结果写入 .workspace/slide-template-validation/results/<sample-name>/；验证每个结果包含 template.json、visual-spec.md、theme.css、images/、slides/*.html，以及与模板文件夹平级的 <template-id>-template.zip；验证 template.json.slides 记录页面索引和 slots，slides/*.html 使用 ../theme.css、../images/... 并包含 data-slot；验证默认 slides/*.html 不包含 data-element-id、data-source-shape-id 等渲染器追溯属性；验证大型非 slot inline SVG 默认外置到 images/vectors/*.svg；验证预览图由脚本从 slides/*.html 生成到 artifact；验证 ZIP 不包含中间渲染产物、原始 PPTX、template-pages.*、默认 source.css、preview.html、previews/ 或 packages/ 子目录；汇报每个样本是否成功、页数、ZIP 路径和失败原因，不提交下载样本或验证产物",
+      "expected_output": "加载 slide-template 并进入 PPTX Template Workflow；下载公开可访问的 PPTX 样本到 .workspace/slide-template-validation/pptx-samples/；对每个样本调用 convert_pptx_to_slide_template，并把结果写入 .workspace/slide-template-validation/results/<sample-name>/；验证每个结果先输出待二次调整的模板源码目录，包含 template.json、theme.css、images/、slides/*.html，默认 create_zip=false 时不要求立即存在 <template-id>-template.zip，也不要求工具脚本已生成 visual-spec.md；工具返回后继续基于转换内容优化：读取 template.json/theme.css/slides/*.html 和预览 artifact，由大模型分析实际页面风格生成 visual-spec.md，更新 template.json.files.visual_spec，优化元数据、CSS、页面 HTML、资源引用和 data-slot 提示；验证 template.json 符合新版 schema：schema_version=1.0、PPT-... template_id、label/description、files、slides、source、warnings，category_code 可选，且 slides 只记录 file、title、layout、description；验证 slides/*.html 使用 ../theme.css、../images/... 并包含 data-slot 编辑提示；验证默认 slides/*.html 不包含 data-element-id、data-source-shape-id 等渲染器追溯属性；验证大型非 slot inline SVG 默认外置到 images/vectors/*.svg；验证预览图由脚本从 slides/*.html 生成到 artifact；轻量 QA 通过后在结束对话时询问用户是否要生成与模板文件夹平级的最终 <template-id>-template.zip，并说明 ZIP 会排除中间渲染产物、原始 PPTX、template-pages.*、默认 source.css、preview.html、previews/ 或 packages/ 子目录；汇报每个样本是否成功、页数、草稿目录和失败原因，不提交下载样本或验证产物",
       "files": []
     }
   ]
