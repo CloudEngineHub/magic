@@ -24,8 +24,7 @@ class GetSlidesTemplateFileUrlRequest extends FormRequest
             'project_id' => 'nullable|string|max:64',
             'task_id' => 'nullable|string|max:64',
             'message_id' => 'nullable|string|max:64',
-            'tool_call_id' => 'nullable|string|max:100',
-            'tool_name' => 'nullable|string|max:100',
+            'source' => 'nullable|string|max:64',
         ];
     }
 

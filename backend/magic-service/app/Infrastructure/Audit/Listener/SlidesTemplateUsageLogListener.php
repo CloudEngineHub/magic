@@ -24,6 +24,8 @@ class SlidesTemplateUsageLogListener implements ListenerInterface
 
     private const string OPERATION = 'use';
 
+    private const string SOURCE_SUPER_MAGIC_TOOL = 'super_magic_tool';
+
     public function __construct(
         private readonly ContainerInterface $container
     ) {
@@ -67,7 +69,6 @@ class SlidesTemplateUsageLogListener implements ListenerInterface
             ->setResourceOwnerOrganizationCode($template->getOrganizationCode())
             ->setOperation(self::OPERATION)
             ->setSource($this->resolveSource($accessContext))
-            ->setSourceDetail($this->limitString($accessContext['tool_name'] ?? null, 128))
             ->setStatus('success')
             ->setIp($request ? RequestHelper::getClientIp($request) : null)
             ->setUserAgent($this->limitString($request ? RequestHelper::getUserAgent($request) : null, 512))
@@ -104,7 +105,7 @@ class SlidesTemplateUsageLogListener implements ListenerInterface
      */
     private function resolveActorType(array $accessContext): string
     {
-        return trim((string) ($accessContext['tool_name'] ?? '')) === '' ? 'user' : 'tool';
+        return trim((string) ($accessContext['source'] ?? '')) === self::SOURCE_SUPER_MAGIC_TOOL ? 'tool' : 'user';
     }
 
     /**
@@ -112,7 +113,8 @@ class SlidesTemplateUsageLogListener implements ListenerInterface
      */
     private function resolveSource(array $accessContext): string
     {
-        return trim((string) ($accessContext['tool_name'] ?? '')) === '' ? 'api' : 'super_magic_tool';
+        $source = $this->limitString($accessContext['source'] ?? null, 64);
+        return $source ?? 'api';
     }
 
     private function resolveResourceName(array $label): ?string

@@ -46,9 +46,7 @@ class SlidesTemplateUsageLogListenerTest extends TestCase
                 'topic_id' => 'topic-1',
                 'project_id' => 'project-1',
                 'task_id' => 'task-1',
-                'tool_call_id' => 'tool-call-1',
-                'tool_name' => 'get_slides_template_download_url',
-                'source' => 'custom_source',
+                'source' => 'super_magic_tool',
             ]
         ));
 
@@ -64,12 +62,14 @@ class SlidesTemplateUsageLogListenerTest extends TestCase
         $this->assertSame('OFFICIAL_ORG', $entity->getResourceOwnerOrganizationCode());
         $this->assertSame('use', $entity->getOperation());
         $this->assertSame('super_magic_tool', $entity->getSource());
-        $this->assertSame('get_slides_template_download_url', $entity->getSourceDetail());
+        $this->assertNull($entity->getSourceDetail());
         $this->assertSame('success', $entity->getStatus());
         $this->assertSame('topic-1', $entity->getContext()['topic_id']);
         $this->assertSame('project-1', $entity->getContext()['project_id']);
         $this->assertSame('task-1', $entity->getContext()['task_id']);
-        $this->assertSame('tool-call-1', $entity->getContext()['tool_call_id']);
+        $this->assertSame('super_magic_tool', $entity->getContext()['source']);
+        $this->assertArrayNotHasKey('tool_call_id', $entity->getContext());
+        $this->assertArrayNotHasKey('tool_name', $entity->getContext());
         $this->assertSame('PPT-CATE-business', $entity->getResourceSnapshot()['category_code']);
         $this->assertSame('SYSTEM', $entity->getResourceSnapshot()['source_type']);
     }

@@ -114,8 +114,7 @@ async def test_get_slides_template_download_url_tool_returns_template_url(monkey
         "project_id": "project-1",
         "task_id": "legacy-task-1",
         "message_id": "message-1",
-        "tool_call_id": "call-1",
-        "tool_name": "get_slides_template_download_url",
+        "source": "super_magic_tool",
     }
     assert result.data["template_file_url"] == "https://example.test/template.zip"
     assert "Slides template package URL resolved." in result.content

@@ -132,8 +132,7 @@ Do not guess it, invent it, change its casing, or rename it.
             "project_id": tool_context.get_metadata("project_id"),
             "task_id": task_id,
             "message_id": tool_context.get_metadata("message_id"),
-            "tool_call_id": tool_context.tool_call_id,
-            "tool_name": tool_context.tool_name,
+            "source": "super_magic_tool",
         }
 
     async def get_before_tool_call_friendly_action_and_remark(
