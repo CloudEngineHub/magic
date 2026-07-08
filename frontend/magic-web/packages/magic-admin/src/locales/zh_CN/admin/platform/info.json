@@ -22,6 +22,11 @@
 	"mainAgentPrompt": "主 Agent 提示词",
 	"maintainDesc": "维护描述",
 	"maintainStatus": "维护状态",
+	"maintainType": "维护类型",
+	"maintenanceTypeOptions": {
+		"fullSiteShutdown": "全站关闭",
+		"globalNotice": "全局提示"
+	},
 	"otherInfo": "其它信息",
 	"platformDefaultLanguage": "平台默认语言",
 	"platformDefaultLanguageOptions": {

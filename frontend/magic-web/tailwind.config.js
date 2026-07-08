@@ -265,6 +265,10 @@ const config = {
 					"0%": { backgroundPosition: "200% 0%" },
 					"100%": { backgroundPosition: "-200% 0%" },
 				},
+				"maintenance-notice-marquee": {
+					"0%": { transform: "translateX(0)" },
+					"100%": { transform: "translateX(-50%)" },
+				},
 			},
 			animation: {
 				"slide-in-from-left": "slide-in-from-left 0.3s ease-out",
@@ -284,6 +288,8 @@ const config = {
 				scan: "scan 2s linear infinite",
 				"gradient-flow": "gradient-flow 20s linear infinite",
 				"spin-slow": "spin 1.5s linear infinite",
+				"maintenance-notice-marquee":
+					"maintenance-notice-marquee var(--maintenance-notice-duration, 18s) linear infinite",
 			},
 			fontFamily: {
 				poppins: ["Poppins", "sans-serif"],
