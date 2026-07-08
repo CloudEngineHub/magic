@@ -1678,13 +1678,58 @@ function populateModelSelects(textModels, imageModels, videoModels) {
 }
 
 // 设置默认配置
+function isPlainObject(value) {
+    return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+function normalizeMessageSubscriptionItem(config) {
+    if (!isPlainObject(config)) return config;
+    const normalized = { ...config };
+    if (!normalized.auth_scheme) normalized.auth_scheme = 'header_token';
+    if (!isPlainObject(normalized.headers)) normalized.headers = {};
+    if (!isPlainObject(normalized.auth_config)) normalized.auth_config = {};
+    if (normalized.enable_obfuscation === undefined) normalized.enable_obfuscation = true;
+    return normalized;
+}
+
+function normalizeInitConfig(config) {
+    if (!isPlainObject(config)) {
+        throw new Error('初始化配置顶层必须是对象');
+    }
+
+    const normalized = { ...config };
+    const subscriptionConfig = normalized.message_subscription_config;
+    if (Array.isArray(subscriptionConfig)) {
+        normalized.message_subscription_config = subscriptionConfig.map(normalizeMessageSubscriptionItem);
+    } else if (isPlainObject(subscriptionConfig)) {
+        normalized.message_subscription_config = [normalizeMessageSubscriptionItem(subscriptionConfig)];
+    }
+    return normalized;
+}
+
+function formatInitConfig(config) {
+    return JSON.stringify(config, null, 2);
+}
+
+function updateInitConfigContent(config) {
+    const content = formatInitConfig(config);
+    uploadConfigContent.value = content;
+    localStorage.setItem('savedConfigContent', content);
+}
+
 function setupDefaultConfigs() {
     // 尝试从 localStorage 加载保存的配置
     const savedConfig = localStorage.getItem('savedConfigContent');
     const savedFileName = localStorage.getItem('savedConfigFileName');
 
     if (savedConfig) {
-        uploadConfigContent.value = savedConfig;
+        try {
+            const normalizedConfig = normalizeInitConfig(JSON.parse(savedConfig));
+            uploadConfigContent.value = formatInitConfig(normalizedConfig);
+            localStorage.setItem('savedConfigContent', uploadConfigContent.value);
+        } catch (e) {
+            uploadConfigContent.value = savedConfig;
+        }
         if (savedFileName) {
             currentFileName = savedFileName;
             updateFileNameDisplay();
@@ -1701,7 +1746,7 @@ function setupDefaultConfigs() {
         if (this.value && this.value !== "请上传配置文件") {
             try {
                 // 尝试解析验证 JSON
-                JSON.parse(this.value);
+                normalizeInitConfig(JSON.parse(this.value));
                 localStorage.setItem('savedConfigContent', this.value);
                 scheduleSocketIoReconnectFromConfig();
             } catch (e) {
@@ -1944,7 +1989,8 @@ async function sendInitMessage() {
 
     try {
         // 解析配置内容
-        const configData = JSON.parse(uploadConfigContent.value);
+        const configData = normalizeInitConfig(JSON.parse(uploadConfigContent.value));
+        updateInitConfigContent(configData);
         connectSocketIoStreamFromConfig(configData);
 
         // 显示客户端消息
@@ -1982,14 +2028,15 @@ function handleConfigFileUpload(event) {
         try {
             // 验证JSON格式
             const content = e.target.result;
-            JSON.parse(content); // 验证是否为有效JSON
+            const configData = normalizeInitConfig(JSON.parse(content));
+            const normalizedContent = formatInitConfig(configData);
 
-            uploadConfigContent.value = content;
+            uploadConfigContent.value = normalizedContent;
 
             // 保存到 localStorage
-            localStorage.setItem('savedConfigContent', content);
+            localStorage.setItem('savedConfigContent', normalizedContent);
             localStorage.setItem('savedConfigFileName', currentFileName);
-            connectSocketIoStreamFromConfig();
+            connectSocketIoStreamFromConfig(configData);
 
             showSystemMessage(`配置文件 "${file.name}" 上传成功并已保存`);
         } catch (error) {
@@ -3492,7 +3539,7 @@ function getUploadedConfig() {
     const rawConfig = uploadConfigContent && uploadConfigContent.value;
     if (!rawConfig || rawConfig === "请上传配置文件") return null;
     try {
-        return JSON.parse(rawConfig);
+        return normalizeInitConfig(JSON.parse(rawConfig));
     } catch (e) {
         return null;
     }

@@ -39,6 +39,7 @@ class UserMessageDTO
         private readonly string $chatMessageType = '',
         private ?array $dynamicParams = null,
         private ?SuperAgentExtra $extra = null,
+        private ?array $messageSubscriptionConfig = null,
     ) {
     }
 
@@ -180,6 +181,16 @@ class UserMessageDTO
         $this->extra = $extra;
     }
 
+    public function getMessageSubscriptionConfig(): ?array
+    {
+        return $this->messageSubscriptionConfig;
+    }
+
+    public function setMessageSubscriptionConfig(?array $config): void
+    {
+        $this->messageSubscriptionConfig = $config;
+    }
+
     /**
      * Create DTO from array.
      */
@@ -212,6 +223,9 @@ class UserMessageDTO
             extra: isset($data['extra']) && is_array($data['extra'])
                 ? new SuperAgentExtra($data['extra'])
                 : null,
+            messageSubscriptionConfig: isset($data['message_subscription_config']) && is_array($data['message_subscription_config'])
+                ? $data['message_subscription_config']
+                : null,
         );
     }
 
@@ -243,6 +257,7 @@ class UserMessageDTO
             'chat_message_type' => $this->chatMessageType,
             'dynamic_params' => $this->dynamicParams,
             'extra' => $this->extra?->toArray(),
+            'message_subscription_config' => $this->messageSubscriptionConfig,
         ];
     }
 }
