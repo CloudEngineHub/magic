@@ -1,5 +1,4 @@
-import { createAbortError } from "../sandbox/abort"
-import { RESOURCE_LOAD_TIMEOUT_MS } from "../shared/constants"
+import { fetchBlobWithLimit } from "../shared/fetch"
 
 export interface ImageRoundingParams {
 	radiusPx: number
@@ -20,24 +19,6 @@ export function computeTargetMaxPx(w: number, h: number): number {
 	return Math.max(1, Math.round(Math.max(w, h) * 96))
 }
 
-export async function fetchWithLimit(
-	src: string,
-	signal?: AbortSignal,
-): Promise<Response> {
-	const controller = new AbortController()
-	const timeout = setTimeout(() => {
-		controller.abort(new Error(`fetch timeout(${RESOURCE_LOAD_TIMEOUT_MS}ms): ${src}`))
-	}, RESOURCE_LOAD_TIMEOUT_MS)
-	const onAbort = () => controller.abort(createAbortError())
-	signal?.addEventListener("abort", onAbort, { once: true })
-	try {
-		return await fetch(src, { signal: controller.signal })
-	} finally {
-		clearTimeout(timeout)
-		signal?.removeEventListener("abort", onAbort)
-	}
-}
-
 export async function materializeImage(
 	src: string,
 	_targetMaxPx?: number,
@@ -49,9 +30,8 @@ export async function materializeImage(
 
 export async function imageToBase64(src: string, signal?: AbortSignal): Promise<string> {
 	if (src.startsWith("data:")) return src
-	const response = await fetchWithLimit(src, signal)
+	const { response, blob } = await fetchBlobWithLimit(src, signal)
 	if (!response.ok) throw new Error(`Failed to fetch image: ${response.status}`)
-	const blob = await response.blob()
 	return new Promise<string>((resolve, reject) => {
 		const reader = new FileReader()
 		reader.onloadend = () => {

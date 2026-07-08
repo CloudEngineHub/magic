@@ -9,7 +9,7 @@ import {
 	drawText,
 } from "../drawer"
 
-type DrawerFn = (slide: Slide, node: never) => void | Promise<void>
+type DrawerFn = (slide: Slide, node: never, signal?: AbortSignal) => void | Promise<void>
 
 const registry: Record<SerializablePPTNode["type"], DrawerFn> = {
 	shape: (slide, node) => drawShape(slide, node as never),
@@ -17,7 +17,7 @@ const registry: Record<SerializablePPTNode["type"], DrawerFn> = {
 	text: (slide, node) => drawText(slide, node as never),
 	table: (slide, node) => drawTable(slide, node as never),
 	borderLine: (slide, node) => drawBorderLine(slide, node as never),
-	media: (slide, node) => drawMedia(slide, node as never),
+	media: (slide, node, signal) => drawMedia(slide, node as never, signal),
 }
 
 /**
@@ -27,8 +27,9 @@ const registry: Record<SerializablePPTNode["type"], DrawerFn> = {
 export async function drawByRegistry(
 	slide: Slide,
 	node: SerializablePPTNode,
+	signal?: AbortSignal,
 ): Promise<void> {
 	const drawer = registry[node.type]
 	if (!drawer) return
-	await drawer(slide, node as never)
+	await drawer(slide, node as never, signal)
 }

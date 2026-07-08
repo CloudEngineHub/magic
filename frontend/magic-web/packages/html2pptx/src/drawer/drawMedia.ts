@@ -1,6 +1,7 @@
 import type { PPTMediaNode, Slide } from "../ir/node"
 import { log, LogLevel } from "../logger"
 import { throwIfAborted, withAbort } from "../sandbox/abort"
+import { fetchArrayBufferWithLimit } from "../shared/fetch"
 import { bytesToDataUrl } from "./data-url"
 
 interface MediaOptions {
@@ -63,10 +64,11 @@ export async function drawMedia(
 				} else {
 					try {
 						options.data = await withAbort({
-							task: fetchAsDataUrl(path),
+							task: fetchAsDataUrl(path, signal),
 							signal,
 						})
 					} catch (error) {
+						throwIfAborted(signal)
 						log(LogLevel.L3, "Failed to convert media to data URL, fallback to path", {
 							error: String(error),
 						})
@@ -84,11 +86,10 @@ export async function drawMedia(
 	}
 }
 
-async function fetchAsDataUrl(url: string): Promise<string> {
-	const response = await fetch(url)
+async function fetchAsDataUrl(url: string, signal?: AbortSignal): Promise<string> {
+	const { response, buffer } = await fetchArrayBufferWithLimit(url, signal)
 	if (!response.ok) throw new Error(`Failed to fetch media: ${url} (${response.status})`)
 
-	const buffer = await response.arrayBuffer()
 	const mimeType = response.headers.get("content-type") ?? "application/octet-stream"
 	return bytesToDataUrl(buffer, mimeType)
 }
