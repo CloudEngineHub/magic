@@ -83,7 +83,7 @@ Do not guess it, invent it, change its casing, or rename it.
 
         try:
             async with MagicServiceClient() as client:
-                payload = await client.get_slides_template_file_url(code)
+                payload = await client.get_slides_template_file_url(code, self._access_context(tool_context))
 
             if not payload.get("template_file_url"):
                 return ToolResult.error(f"Slides template '{code}' does not have a template_file_url.")
@@ -120,6 +120,20 @@ Do not guess it, invent it, change its casing, or rename it.
         if not arguments:
             return ""
         return str(arguments.get("code") or "").strip()
+
+    @staticmethod
+    def _access_context(tool_context: ToolContext) -> Dict[str, Any]:
+        task_id = str(tool_context.get_metadata("super_magic_task_id") or "").strip()
+        if not task_id:
+            task_id = str(tool_context.get_metadata("task_id") or "").strip()
+        return {
+            "topic_id": tool_context.get_metadata("topic_id"),
+            "chat_topic_id": tool_context.get_metadata("chat_topic_id"),
+            "project_id": tool_context.get_metadata("project_id"),
+            "task_id": task_id,
+            "message_id": tool_context.get_metadata("message_id"),
+            "source": "super_magic_tool",
+        }
 
     async def get_before_tool_call_friendly_action_and_remark(
         self,

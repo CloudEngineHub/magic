@@ -41,6 +41,12 @@ class AdminSlidesTemplateItemDTO extends AbstractDTO
 
     public int $sort = 0;
 
+    public int $baseUsageCount = 0;
+
+    public int $actualUsageCount = 0;
+
+    public int $usageCount = 0;
+
     public ?string $createdUid = null;
 
     public ?string $updatedUid = null;
@@ -204,6 +210,36 @@ class AdminSlidesTemplateItemDTO extends AbstractDTO
     public function setSort(null|int|string $sort): void
     {
         $this->sort = $sort === null ? 0 : (int) $sort;
+    }
+
+    public function getBaseUsageCount(): int
+    {
+        return $this->baseUsageCount;
+    }
+
+    public function setBaseUsageCount(null|int|string $baseUsageCount): void
+    {
+        $this->baseUsageCount = $baseUsageCount === null ? 0 : (int) $baseUsageCount;
+    }
+
+    public function getActualUsageCount(): int
+    {
+        return $this->actualUsageCount;
+    }
+
+    public function setActualUsageCount(null|int|string $actualUsageCount): void
+    {
+        $this->actualUsageCount = $actualUsageCount === null ? 0 : (int) $actualUsageCount;
+    }
+
+    public function getUsageCount(): int
+    {
+        return $this->usageCount;
+    }
+
+    public function setUsageCount(null|int|string $usageCount): void
+    {
+        $this->usageCount = $usageCount === null ? 0 : (int) $usageCount;
     }
 
     public function getCreatedUid(): ?string

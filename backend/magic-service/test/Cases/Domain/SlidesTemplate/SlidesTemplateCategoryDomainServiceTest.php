@@ -7,12 +7,12 @@ declare(strict_types=1);
 
 namespace Test\Cases\Domain\SlidesTemplate;
 
+use App\Domain\SlidesTemplate\Entity\SlidesTemplateCategoryEntity;
 use App\Domain\SlidesTemplate\Entity\SlidesTemplateDataIsolation;
-use App\Domain\SlidesTemplate\Entity\SlidesTemplateEntity;
-use App\Domain\SlidesTemplate\Entity\ValueObject\Query\SlidesTemplateQuery;
-use App\Domain\SlidesTemplate\Entity\ValueObject\SlidesTemplateSourceType;
-use App\Domain\SlidesTemplate\Repository\Facade\SlidesTemplateRepositoryInterface;
-use App\Domain\SlidesTemplate\Service\SlidesTemplateDomainService;
+use App\Domain\SlidesTemplate\Entity\ValueObject\Query\SlidesTemplateCategoryQuery;
+use App\Domain\SlidesTemplate\Entity\ValueObject\SlidesTemplateCategoryStatus;
+use App\Domain\SlidesTemplate\Repository\Facade\SlidesTemplateCategoryRepositoryInterface;
+use App\Domain\SlidesTemplate\Service\SlidesTemplateCategoryDomainService;
 use App\ErrorCode\SlidesTemplateErrorCode;
 use App\Infrastructure\Core\Exception\BusinessException;
 use App\Infrastructure\Core\ValueObject\Page;
@@ -27,7 +27,7 @@ use RuntimeException;
 /**
  * @internal
  */
-class SlidesTemplateDomainServiceTest extends TestCase
+class SlidesTemplateCategoryDomainServiceTest extends TestCase
 {
     private static bool $hadOriginalContainer = false;
 
@@ -107,100 +107,51 @@ class SlidesTemplateDomainServiceTest extends TestCase
         self::$originalContainer = null;
     }
 
-    public function testCreateBuildsSearchTextBeforeSaving(): void
-    {
-        $repository = new CapturingSlidesTemplateRepository();
-        $service = new SlidesTemplateDomainService($repository);
-
-        $template = $this->makeTemplate();
-        $service->create($this->makeDataIsolation(), $template);
-
-        $this->assertSame(
-            'ppt-business-minimal system 职场白皮书 corporate whitepaper 适用于企业汇报 for business reviews',
-            $repository->savedEntity?->toArray()['search_text'] ?? null
-        );
-    }
-
     public function testCreateThrowsBusinessExceptionWhenCodeAlreadyExists(): void
     {
-        $repository = new CapturingSlidesTemplateRepository();
-        $repository->entityWithTrashed = $this->makeTemplate()->setId(123);
-        $service = new SlidesTemplateDomainService($repository);
+        $repository = new CapturingSlidesTemplateCategoryRepository();
+        $repository->entityWithTrashed = $this->makeCategory()->setId(123);
+        $service = new SlidesTemplateCategoryDomainService($repository);
 
         $this->expectException(BusinessException::class);
-        $this->expectExceptionCode(SlidesTemplateErrorCode::CODE_ALREADY_EXISTS->value);
+        $this->expectExceptionCode(SlidesTemplateErrorCode::CATEGORY_CODE_ALREADY_EXISTS->value);
 
-        $service->create($this->makeDataIsolation(), $this->makeTemplate());
+        $service->create($this->makeDataIsolation(), $this->makeCategory());
     }
 
-    public function testCreateRestoresDeletedTemplateWithSameCodeAndUsesNewCreator(): void
+    public function testCreateRestoresDeletedCategoryWithSameCodeAndUsesNewCreator(): void
     {
-        $repository = new CapturingSlidesTemplateRepository();
-        $repository->entityWithTrashed = $this->makeTemplate()
+        $repository = new CapturingSlidesTemplateCategoryRepository();
+        $repository->entityWithTrashed = $this->makeCategory()
             ->setId(123)
-            ->setActualUsageCount(7)
             ->setCreatedUid('old-user')
             ->setUpdatedUid('old-user')
             ->setDeletedAt('2026-07-01 10:00:00');
-        $service = new SlidesTemplateDomainService($repository);
+        $service = new SlidesTemplateCategoryDomainService($repository);
 
-        $template = $this->makeTemplate()
-            ->setLabel([
-                'zh_CN' => '新的模板',
-                'en_US' => 'New Template',
-            ])
+        $category = $this->makeCategory()
+            ->setNameI18n(['zh_CN' => '新分类', 'en_US' => 'New Category'])
             ->setCreatedUid('new-user')
             ->setUpdatedUid('new-user');
 
-        $result = $service->create($this->makeDataIsolation(), $template);
+        $result = $service->create($this->makeDataIsolation(), $category);
 
-        $this->assertSame($template, $result);
+        $this->assertSame($category, $result);
         $this->assertSame(123, $repository->savedEntity?->getId());
-        $this->assertSame(7, $repository->savedEntity?->getActualUsageCount());
+        $this->assertSame(['zh_CN' => '新分类', 'en_US' => 'New Category'], $repository->savedEntity?->getNameI18n());
         $this->assertSame('new-user', $repository->savedEntity?->getCreatedUid());
         $this->assertSame('new-user', $repository->savedEntity?->getUpdatedUid());
-        $this->assertSame(
-            'ppt-business-minimal system 新的模板 new template 适用于企业汇报 for business reviews',
-            $repository->savedEntity?->toArray()['search_text'] ?? null
-        );
     }
 
-    public function testUpdateRebuildsSearchTextBeforeSaving(): void
+    private function makeCategory(): SlidesTemplateCategoryEntity
     {
-        $repository = new CapturingSlidesTemplateRepository();
-        $repository->entityToFind = $this->makeTemplate()->setId(123);
-        $service = new SlidesTemplateDomainService($repository);
+        $category = new SlidesTemplateCategoryEntity();
+        $category->setCode('PPT-CATE-business')
+            ->setNameI18n(['zh_CN' => '商务', 'en_US' => 'Business'])
+            ->setStatus(SlidesTemplateCategoryStatus::Enabled)
+            ->setSort(100);
 
-        $template = $this->makeTemplate()
-            ->setId(123)
-            ->setLabel([
-                'zh_CN' => '季度总结',
-                'en_US' => 'Quarterly Review',
-            ]);
-
-        $service->update($this->makeDataIsolation(), $template);
-
-        $this->assertSame(
-            'ppt-business-minimal system 季度总结 quarterly review 适用于企业汇报 for business reviews',
-            $repository->savedEntity?->toArray()['search_text'] ?? null
-        );
-    }
-
-    private function makeTemplate(): SlidesTemplateEntity
-    {
-        $template = new SlidesTemplateEntity();
-        $template->setCode('PPT-BUSINESS-MINIMAL')
-            ->setSourceType(SlidesTemplateSourceType::System)
-            ->setLabel([
-                'zh_CN' => '职场白皮书',
-                'en_US' => 'Corporate Whitepaper',
-            ])
-            ->setDescription([
-                'zh_CN' => '适用于企业汇报',
-                'en_US' => 'For business reviews',
-            ]);
-
-        return $template;
+        return $category;
     }
 
     private function makeDataIsolation(): SlidesTemplateDataIsolation
@@ -215,35 +166,45 @@ class SlidesTemplateDomainServiceTest extends TestCase
     }
 }
 
-class CapturingSlidesTemplateRepository implements SlidesTemplateRepositoryInterface
+class CapturingSlidesTemplateCategoryRepository implements SlidesTemplateCategoryRepositoryInterface
 {
-    public ?SlidesTemplateEntity $savedEntity = null;
+    public ?SlidesTemplateCategoryEntity $savedEntity = null;
 
-    public ?SlidesTemplateEntity $entityToFind = null;
+    public ?SlidesTemplateCategoryEntity $entityToFind = null;
 
-    public ?SlidesTemplateEntity $entityWithTrashed = null;
+    public ?SlidesTemplateCategoryEntity $entityWithTrashed = null;
 
-    public function findById(SlidesTemplateDataIsolation $dataIsolation, int|string $id): ?SlidesTemplateEntity
+    public function findById(SlidesTemplateDataIsolation $dataIsolation, int|string $id): ?SlidesTemplateCategoryEntity
     {
         return $this->entityToFind;
     }
 
-    public function findByCode(SlidesTemplateDataIsolation $dataIsolation, string $code): ?SlidesTemplateEntity
+    public function findByCode(SlidesTemplateDataIsolation $dataIsolation, string $code): ?SlidesTemplateCategoryEntity
     {
         return $this->entityToFind;
     }
 
-    public function findByCodeWithTrashed(SlidesTemplateDataIsolation $dataIsolation, string $code): ?SlidesTemplateEntity
+    public function findByCodeWithTrashed(SlidesTemplateDataIsolation $dataIsolation, string $code): ?SlidesTemplateCategoryEntity
     {
         return $this->entityWithTrashed;
     }
 
-    public function queries(SlidesTemplateDataIsolation $dataIsolation, SlidesTemplateQuery $query, Page $page): array
+    public function findByCodes(SlidesTemplateDataIsolation $dataIsolation, array $codes): array
+    {
+        return [];
+    }
+
+    public function queries(SlidesTemplateDataIsolation $dataIsolation, SlidesTemplateCategoryQuery $query, Page $page): array
     {
         return ['total' => 0, 'list' => []];
     }
 
-    public function save(SlidesTemplateDataIsolation $dataIsolation, SlidesTemplateEntity $entity): SlidesTemplateEntity
+    public function queriesWithTemplateCount(SlidesTemplateDataIsolation $dataIsolation, SlidesTemplateCategoryQuery $query, Page $page): array
+    {
+        return ['total' => 0, 'list' => []];
+    }
+
+    public function save(SlidesTemplateDataIsolation $dataIsolation, SlidesTemplateCategoryEntity $entity): SlidesTemplateCategoryEntity
     {
         $this->savedEntity = $entity;
         return $entity;
@@ -255,11 +216,6 @@ class CapturingSlidesTemplateRepository implements SlidesTemplateRepositoryInter
     }
 
     public function updateSort(SlidesTemplateDataIsolation $dataIsolation, int|string $id, int $sort, string $updatedUid): bool
-    {
-        return true;
-    }
-
-    public function incrementActualUsageCount(SlidesTemplateDataIsolation $dataIsolation, string $code): bool
     {
         return true;
     }

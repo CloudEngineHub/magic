@@ -31,5 +31,7 @@ interface SlidesTemplateRepositoryInterface
 
     public function updateSort(SlidesTemplateDataIsolation $dataIsolation, int|string $id, int $sort, string $updatedUid): bool;
 
+    public function incrementActualUsageCount(SlidesTemplateDataIsolation $dataIsolation, string $code): bool;
+
     public function delete(SlidesTemplateDataIsolation $dataIsolation, int|string $id): bool;
 }

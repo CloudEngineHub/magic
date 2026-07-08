@@ -35,6 +35,8 @@ return [
     'preview_url_max' => '预览链接不能超过1024个字符',
     'status_in' => '状态必须是0（不可用）或1（可用）',
     'sort_integer' => '排序值必须是整数',
+    'base_usage_count_integer' => '基础使用次数必须是整数',
+    'base_usage_count_min' => '基础使用次数不能小于0',
     'page_integer' => '页码必须是整数',
     'page_min' => '页码必须大于等于1',
     'page_size_integer' => '每页数量必须是整数',

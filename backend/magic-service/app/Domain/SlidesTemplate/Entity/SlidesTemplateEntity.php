@@ -47,6 +47,10 @@ class SlidesTemplateEntity extends AbstractEntity
 
     protected int $sort = 0;
 
+    protected int $baseUsageCount = 0;
+
+    protected int $actualUsageCount = 0;
+
     protected ?string $createdUid = null;
 
     protected ?string $updatedUid = null;
@@ -84,6 +88,8 @@ class SlidesTemplateEntity extends AbstractEntity
             'preview_url' => $this->previewUrl,
             'status' => $this->status->value,
             'sort' => $this->sort,
+            'base_usage_count' => $this->baseUsageCount,
+            'actual_usage_count' => $this->actualUsageCount,
             'created_uid' => $this->createdUid,
             'updated_uid' => $this->updatedUid,
             'created_at' => $this->createdAt,
@@ -285,6 +291,33 @@ class SlidesTemplateEntity extends AbstractEntity
     {
         $this->sort = (int) $sort;
         return $this;
+    }
+
+    public function getBaseUsageCount(): int
+    {
+        return $this->baseUsageCount;
+    }
+
+    public function setBaseUsageCount(null|int|string $baseUsageCount): self
+    {
+        $this->baseUsageCount = max(0, (int) $baseUsageCount);
+        return $this;
+    }
+
+    public function getActualUsageCount(): int
+    {
+        return $this->actualUsageCount;
+    }
+
+    public function setActualUsageCount(null|int|string $actualUsageCount): self
+    {
+        $this->actualUsageCount = max(0, (int) $actualUsageCount);
+        return $this;
+    }
+
+    public function getUsageCount(): int
+    {
+        return $this->baseUsageCount + $this->actualUsageCount;
     }
 
     public function getCreatedUid(): ?string

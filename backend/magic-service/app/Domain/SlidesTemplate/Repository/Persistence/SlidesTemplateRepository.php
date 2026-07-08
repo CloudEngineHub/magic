@@ -129,6 +129,13 @@ class SlidesTemplateRepository extends AbstractRepository implements SlidesTempl
             ]) > 0;
     }
 
+    public function incrementActualUsageCount(SlidesTemplateDataIsolation $dataIsolation, string $code): bool
+    {
+        return $this->createBuilder($dataIsolation, SlidesTemplateModel::query())
+            ->where('code', $code)
+            ->increment('actual_usage_count') > 0;
+    }
+
     public function delete(SlidesTemplateDataIsolation $dataIsolation, int|string $id): bool
     {
         /** @var null|SlidesTemplateModel $model */
@@ -143,6 +150,8 @@ class SlidesTemplateRepository extends AbstractRepository implements SlidesTempl
     {
         $query = $withTrashed ? SlidesTemplateModel::withTrashed() : SlidesTemplateModel::query();
         $builder = $this->createBuilder($dataIsolation, $query);
-        return $builder->where('code', $code)->first();
+        $model = $builder->where('code', $code)->first();
+
+        return $model instanceof SlidesTemplateModel ? $model : null;
     }
 }

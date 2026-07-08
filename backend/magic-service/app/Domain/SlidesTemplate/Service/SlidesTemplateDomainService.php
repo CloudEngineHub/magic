@@ -88,6 +88,11 @@ class SlidesTemplateDomainService
         }
     }
 
+    public function incrementActualUsageCount(SlidesTemplateDataIsolation $dataIsolation, string $code): void
+    {
+        $this->slidesTemplateRepository->incrementActualUsageCount($dataIsolation, $code);
+    }
+
     public function delete(SlidesTemplateDataIsolation $dataIsolation, int|string $id): void
     {
         if (! $this->slidesTemplateRepository->delete($dataIsolation, $id)) {
@@ -112,6 +117,7 @@ class SlidesTemplateDomainService
         }
 
         $entity->setId($existing->getId());
+        $entity->setActualUsageCount($existing->getActualUsageCount());
     }
 
     private function isDuplicateCodeException(Throwable $throwable): bool
