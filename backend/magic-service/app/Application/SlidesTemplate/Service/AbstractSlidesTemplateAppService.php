@@ -49,26 +49,34 @@ abstract class AbstractSlidesTemplateAppService extends AbstractKernelAppService
             return;
         }
 
-        $pathsByOrg = [];
+        $publicPathsByOrg = [];
+        $privatePathsByOrg = [];
         foreach ($templates as $template) {
-            $this->appendFilePath($pathsByOrg, $template->getOrganizationCode(), $template->getThumbnailFileKey());
-            $this->appendFilePath($pathsByOrg, $template->getOrganizationCode(), $template->getCollageFileKey());
+            $this->appendFilePath($publicPathsByOrg, $template->getOrganizationCode(), $template->getThumbnailFileKey());
+            $this->appendFilePath($publicPathsByOrg, $template->getOrganizationCode(), $template->getCollageFileKey());
+            $this->appendFilePaths($publicPathsByOrg, $template->getOrganizationCode(), $template->getPreviewImageFileKeys());
             if ($includeTemplateFileUrl) {
-                $this->appendFilePath($pathsByOrg, $template->getOrganizationCode(), $template->getTemplateFileKey());
+                $this->appendFilePath($privatePathsByOrg, $template->getOrganizationCode(), $template->getTemplateFileKey());
             }
         }
 
-        $linksByOrg = [];
-        foreach ($pathsByOrg as $organizationCode => $paths) {
-            $linksByOrg[$organizationCode] = $this->getPrivateFileLinks($organizationCode, array_values(array_unique($paths)));
+        $publicLinksByOrg = [];
+        foreach ($publicPathsByOrg as $organizationCode => $paths) {
+            $publicLinksByOrg[$organizationCode] = $this->getPublicFileLinks($organizationCode, array_values(array_unique($paths)));
+        }
+
+        $privateLinksByOrg = [];
+        foreach ($privatePathsByOrg as $organizationCode => $paths) {
+            $privateLinksByOrg[$organizationCode] = $this->getPrivateFileLinks($organizationCode, array_values(array_unique($paths)));
         }
 
         foreach ($templates as $template) {
             $organizationCode = $template->getOrganizationCode();
-            $template->setThumbnailUrl($this->resolveUrl($linksByOrg, $organizationCode, $template->getThumbnailFileKey()));
-            $template->setCollageUrl($this->resolveUrl($linksByOrg, $organizationCode, $template->getCollageFileKey()));
+            $template->setThumbnailUrl($this->resolveUrl($publicLinksByOrg, $organizationCode, $template->getThumbnailFileKey()));
+            $template->setCollageUrl($this->resolveUrl($publicLinksByOrg, $organizationCode, $template->getCollageFileKey()));
+            $template->setPreviewImageUrls($this->resolveUrls($publicLinksByOrg, $organizationCode, $template->getPreviewImageFileKeys()));
             if ($includeTemplateFileUrl) {
-                $template->setTemplateFileUrl($this->resolveUrl($linksByOrg, $organizationCode, $template->getTemplateFileKey()));
+                $template->setTemplateFileUrl($this->resolveUrl($privateLinksByOrg, $organizationCode, $template->getTemplateFileKey()));
             }
         }
     }
@@ -91,6 +99,13 @@ abstract class AbstractSlidesTemplateAppService extends AbstractKernelAppService
         $pathsByOrg[$organizationCode][] = $fileKey;
     }
 
+    private function appendFilePaths(array &$pathsByOrg, string $organizationCode, array $fileKeys): void
+    {
+        foreach ($fileKeys as $fileKey) {
+            $this->appendFilePath($pathsByOrg, $organizationCode, $fileKey);
+        }
+    }
+
     private function resolveUrl(array $linksByOrg, string $organizationCode, ?string $fileKey): ?string
     {
         if ($fileKey === null || $fileKey === '') {
@@ -99,5 +114,17 @@ abstract class AbstractSlidesTemplateAppService extends AbstractKernelAppService
 
         $fileLink = $linksByOrg[$organizationCode][$fileKey] ?? null;
         return $fileLink instanceof FileLink ? $fileLink->getUrl() : null;
+    }
+
+    private function resolveUrls(array $linksByOrg, string $organizationCode, array $fileKeys): array
+    {
+        $urls = [];
+        foreach ($fileKeys as $fileKey) {
+            $url = $this->resolveUrl($linksByOrg, $organizationCode, $fileKey);
+            if ($url !== null) {
+                $urls[] = $url;
+            }
+        }
+        return $urls;
     }
 }

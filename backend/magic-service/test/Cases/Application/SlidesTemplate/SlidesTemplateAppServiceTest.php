@@ -184,6 +184,49 @@ class SlidesTemplateAppServiceTest extends TestCase
         ], $service->fileLinkCalls);
     }
 
+    public function testQueriesResolveImageAssetsFromPublicBucket(): void
+    {
+        $dataIsolation = $this->makeDataIsolation('CURRENT_ORG', ['OFFICIAL_ORG']);
+        $request = new TestPublicQuerySlidesTemplateRequest();
+
+        $template = new SlidesTemplateEntity();
+        $template->setOrganizationCode('OFFICIAL_ORG')
+            ->setCode('PPT-65f2c8a42d7b0-123456')
+            ->setThumbnailFileKey('slides/thumbnails/business.png')
+            ->setCollageFileKey('slides/collages/business.png')
+            ->setPreviewImageFileKeys([
+                'slides/previews/business-1.png',
+                'slides/previews/business-2.png',
+            ])
+            ->setTemplateFileKey('slides/templates/business.zip');
+
+        $domainService = $this->createMock(SlidesTemplateDomainService::class);
+        $domainService
+            ->expects($this->once())
+            ->method('queries')
+            ->willReturn(['total' => 1, 'list' => [$template]]);
+
+        $service = new TestableSlidesTemplateAppService($domainService);
+        $result = $service->queries($dataIsolation, $request);
+
+        $this->assertSame([$template], $result['list']);
+        $this->assertSame('https://public.example/OFFICIAL_ORG/slides/thumbnails/business.png', $template->getThumbnailUrl());
+        $this->assertSame('https://public.example/OFFICIAL_ORG/slides/collages/business.png', $template->getCollageUrl());
+        $this->assertSame([
+            'https://public.example/OFFICIAL_ORG/slides/previews/business-1.png',
+            'https://public.example/OFFICIAL_ORG/slides/previews/business-2.png',
+        ], $template->getPreviewImageUrls());
+        $this->assertSame([
+            ['OFFICIAL_ORG', [
+                'slides/thumbnails/business.png',
+                'slides/collages/business.png',
+                'slides/previews/business-1.png',
+                'slides/previews/business-2.png',
+            ]],
+        ], $service->publicFileLinkCalls);
+        $this->assertSame([], $service->fileLinkCalls);
+    }
+
     public function testGetTemplateFileUrlDispatchesTemplateUsedEventAfterUrlResolved(): void
     {
         $dataIsolation = $this->makeDataIsolation('CURRENT_ORG', ['OFFICIAL_ORG']);
@@ -502,6 +545,8 @@ class TestableSlidesTemplateAppService extends SlidesTemplateAppService
 {
     public array $fileLinkCalls = [];
 
+    public array $publicFileLinkCalls = [];
+
     public array $dispatchedEvents = [];
 
     public function getPrivateFileLinks(string $organizationCode, array $fileLinks): array
@@ -513,6 +558,21 @@ class TestableSlidesTemplateAppService extends SlidesTemplateAppService
             $result[$fileLink] = new FileLink(
                 $fileLink,
                 'https://signed.example/' . $organizationCode . '/' . $fileLink,
+                time() + 3600
+            );
+        }
+        return $result;
+    }
+
+    public function getPublicFileLinks(string $organizationCode, array $fileLinks): array
+    {
+        $this->publicFileLinkCalls[] = [$organizationCode, $fileLinks];
+
+        $result = [];
+        foreach ($fileLinks as $fileLink) {
+            $result[$fileLink] = new FileLink(
+                $fileLink,
+                'https://public.example/' . $organizationCode . '/' . $fileLink,
                 time() + 3600
             );
         }

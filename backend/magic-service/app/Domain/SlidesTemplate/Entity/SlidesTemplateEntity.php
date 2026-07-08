@@ -37,6 +37,10 @@ class SlidesTemplateEntity extends AbstractEntity
 
     protected ?string $collageUrl = null;
 
+    protected array $previewImageFileKeys = [];
+
+    protected array $previewImageUrls = [];
+
     protected string $templateFileKey = '';
 
     protected ?string $templateFileUrl = null;
@@ -84,6 +88,7 @@ class SlidesTemplateEntity extends AbstractEntity
             'search_text' => $this->searchText,
             'thumbnail_file_key' => $this->thumbnailFileKey,
             'collage_file_key' => $this->collageFileKey,
+            'preview_image_file_keys' => $this->previewImageFileKeys,
             'template_file_key' => $this->templateFileKey,
             'preview_url' => $this->previewUrl,
             'status' => $this->status->value,
@@ -238,6 +243,28 @@ class SlidesTemplateEntity extends AbstractEntity
         return $this;
     }
 
+    public function getPreviewImageFileKeys(): array
+    {
+        return $this->previewImageFileKeys;
+    }
+
+    public function setPreviewImageFileKeys(?array $previewImageFileKeys): self
+    {
+        $this->previewImageFileKeys = $this->normalizeStringList($previewImageFileKeys ?? []);
+        return $this;
+    }
+
+    public function getPreviewImageUrls(): array
+    {
+        return $this->previewImageUrls;
+    }
+
+    public function setPreviewImageUrls(?array $previewImageUrls): self
+    {
+        $this->previewImageUrls = $this->normalizeStringList($previewImageUrls ?? []);
+        return $this;
+    }
+
     public function getTemplateFileKey(): string
     {
         return $this->templateFileKey;
@@ -373,5 +400,20 @@ class SlidesTemplateEntity extends AbstractEntity
     {
         $this->deletedAt = $deletedAt === null ? null : (string) $deletedAt;
         return $this;
+    }
+
+    private function normalizeStringList(array $values): array
+    {
+        $list = [];
+        foreach ($values as $value) {
+            if (! is_string($value)) {
+                continue;
+            }
+            $value = trim($value);
+            if ($value !== '') {
+                $list[] = $value;
+            }
+        }
+        return $list;
     }
 }

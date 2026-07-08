@@ -42,7 +42,7 @@ class AdminSlidesTemplateCategoryAppService extends AbstractKernelAppService
         $query->setStatus($request->getStatus());
 
         $page = new Page($request->getPage(), $request->getPageSize());
-        $result = $this->slidesTemplateCategoryDomainService->queries($dataIsolation, $query, $page);
+        $result = $this->slidesTemplateCategoryDomainService->queriesWithTemplateCount($dataIsolation, $query, $page);
 
         return [
             'page' => $page,

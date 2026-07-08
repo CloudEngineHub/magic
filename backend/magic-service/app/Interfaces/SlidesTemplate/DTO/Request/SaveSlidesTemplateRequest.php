@@ -31,6 +31,8 @@ class SaveSlidesTemplateRequest extends FormRequest
             'description.en_US' => 'required|string|max:1000',
             'thumbnail_file_key' => 'required|string|max:512',
             'collage_file_key' => 'nullable|string|max:512',
+            'preview_image_file_keys' => 'nullable|array',
+            'preview_image_file_keys.*' => 'string|max:512',
             'template_file_key' => 'required|string|max:512',
             'preview_url' => 'nullable|url|max:1024',
             'status' => 'nullable|integer|in:0,1',
@@ -65,6 +67,9 @@ class SaveSlidesTemplateRequest extends FormRequest
             'thumbnail_file_key.max' => __('slides_template.file_key_max'),
             'collage_file_key.string' => __('slides_template.file_key_string'),
             'collage_file_key.max' => __('slides_template.file_key_max'),
+            'preview_image_file_keys.array' => __('slides_template.preview_image_file_keys_array'),
+            'preview_image_file_keys.*.string' => __('slides_template.file_key_string'),
+            'preview_image_file_keys.*.max' => __('slides_template.file_key_max'),
             'template_file_key.required' => __('slides_template.template_file_key_required'),
             'template_file_key.string' => __('slides_template.file_key_string'),
             'template_file_key.max' => __('slides_template.file_key_max'),
@@ -108,6 +113,26 @@ class SaveSlidesTemplateRequest extends FormRequest
     {
         $fileKey = trim((string) $this->input('collage_file_key', ''));
         return $fileKey === '' ? null : $fileKey;
+    }
+
+    public function getPreviewImageFileKeys(): array
+    {
+        $fileKeys = $this->input('preview_image_file_keys', []);
+        if (! is_array($fileKeys)) {
+            return [];
+        }
+
+        $result = [];
+        foreach ($fileKeys as $fileKey) {
+            if (! is_string($fileKey)) {
+                continue;
+            }
+            $fileKey = trim($fileKey);
+            if ($fileKey !== '') {
+                $result[] = $fileKey;
+            }
+        }
+        return $result;
     }
 
     public function getTemplateFileKey(): string

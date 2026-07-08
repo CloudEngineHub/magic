@@ -33,6 +33,10 @@ class AdminSlidesTemplateItemDTO extends AbstractDTO
 
     public ?string $collageUrl = null;
 
+    public array $previewImageFileKeys = [];
+
+    public array $previewImageUrls = [];
+
     public string $templateFileKey = '';
 
     public ?string $previewUrl = null;
@@ -172,6 +176,26 @@ class AdminSlidesTemplateItemDTO extends AbstractDTO
         $this->collageUrl = $collageUrl;
     }
 
+    public function getPreviewImageFileKeys(): array
+    {
+        return $this->previewImageFileKeys;
+    }
+
+    public function setPreviewImageFileKeys(?array $previewImageFileKeys): void
+    {
+        $this->previewImageFileKeys = $this->normalizeStringList($previewImageFileKeys ?? []);
+    }
+
+    public function getPreviewImageUrls(): array
+    {
+        return $this->previewImageUrls;
+    }
+
+    public function setPreviewImageUrls(?array $previewImageUrls): void
+    {
+        $this->previewImageUrls = $this->normalizeStringList($previewImageUrls ?? []);
+    }
+
     public function getTemplateFileKey(): string
     {
         return $this->templateFileKey;
@@ -280,5 +304,16 @@ class AdminSlidesTemplateItemDTO extends AbstractDTO
     public function setUpdatedAt(?string $updatedAt): void
     {
         $this->updatedAt = $updatedAt;
+    }
+
+    private function normalizeStringList(array $values): array
+    {
+        $list = [];
+        foreach ($values as $value) {
+            if (is_string($value) && $value !== '') {
+                $list[] = $value;
+            }
+        }
+        return $list;
     }
 }

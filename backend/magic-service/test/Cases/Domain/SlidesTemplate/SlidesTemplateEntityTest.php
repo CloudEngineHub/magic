@@ -90,6 +90,7 @@ class SlidesTemplateEntityTest extends TestCase
             ],
             'thumbnail_file_key' => 'slides/thumb.png',
             'collage_file_key' => 'slides/collage.png',
+            'preview_image_file_keys' => [],
             'template_file_key' => 'slides/template.zip',
             'preview_url' => 'https://www.letsmagic.cn/share/files/1',
             'status' => 1,

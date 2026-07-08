@@ -31,6 +31,7 @@ return [
     'template_file_key_required' => '模板 ZIP 文件 key 是必需的',
     'file_key_string' => '文件 key 必须是字符串',
     'file_key_max' => '文件 key 不能超过512个字符',
+    'preview_image_file_keys_array' => '模板预览多图文件 key 必须是数组',
     'preview_url_url' => '预览链接格式不正确',
     'preview_url_max' => '预览链接不能超过1024个字符',
     'status_in' => '状态必须是0（不可用）或1（可用）',

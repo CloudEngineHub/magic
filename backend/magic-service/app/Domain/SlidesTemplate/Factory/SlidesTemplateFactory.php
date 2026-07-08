@@ -25,6 +25,7 @@ class SlidesTemplateFactory
         $entity->setSearchText($model->search_text);
         $entity->setThumbnailFileKey($model->thumbnail_file_key);
         $entity->setCollageFileKey($model->collage_file_key);
+        $entity->setPreviewImageFileKeys($model->preview_image_file_keys ?? []);
         $entity->setTemplateFileKey($model->template_file_key);
         $entity->setPreviewUrl($model->preview_url);
         $entity->setStatus($model->status);

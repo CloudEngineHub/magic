@@ -69,6 +69,8 @@ class SlidesTemplateAssembler
         $dto->setThumbnailUrl($template->getThumbnailUrl());
         $dto->setCollageFileKey($template->getCollageFileKey());
         $dto->setCollageUrl($template->getCollageUrl());
+        $dto->setPreviewImageFileKeys($template->getPreviewImageFileKeys());
+        $dto->setPreviewImageUrls($template->getPreviewImageUrls());
         $dto->setTemplateFileKey($template->getTemplateFileKey());
         $dto->setPreviewUrl($template->getPreviewUrl());
         $dto->setStatus($template->getStatus()->value);
@@ -108,6 +110,7 @@ class SlidesTemplateAssembler
         $dto->setDescription(I18nTextDTO::fromArray($template->getDescription()));
         $dto->setThumbnailUrl($template->getThumbnailUrl());
         $dto->setCollageUrl($template->getCollageUrl());
+        $dto->setPreviewImageUrls($template->getPreviewImageUrls());
         $dto->setPreviewUrl($template->getPreviewUrl());
         $dto->setSort($template->getSort());
         $dto->setUsageCount($template->getUsageCount());

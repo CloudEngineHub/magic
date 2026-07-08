@@ -31,6 +31,7 @@ return [
     'template_file_key_required' => 'Template ZIP file key is required',
     'file_key_string' => 'File key must be a string',
     'file_key_max' => 'File key cannot exceed 512 characters',
+    'preview_image_file_keys_array' => 'Template preview image file keys must be an array',
     'preview_url_url' => 'Preview URL format is invalid',
     'preview_url_max' => 'Preview URL cannot exceed 1024 characters',
     'status_in' => 'Status must be 0 (disabled) or 1 (enabled)',

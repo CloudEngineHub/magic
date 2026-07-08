@@ -160,6 +160,7 @@ class AdminSlidesTemplateAppService extends AbstractSlidesTemplateAppService
         $template->setDescription($request->getDescription());
         $template->setThumbnailFileKey($request->getThumbnailFileKey());
         $template->setCollageFileKey($request->getCollageFileKey());
+        $template->setPreviewImageFileKeys($request->getPreviewImageFileKeys());
         $template->setTemplateFileKey($request->getTemplateFileKey());
         $template->setPreviewUrl($request->getPreviewUrl());
         $template->setStatus($request->getStatus());

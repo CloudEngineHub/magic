@@ -200,7 +200,7 @@ class SlidesTemplateCategoryRepository extends AbstractRepository implements Sli
     private function joinEnabledTemplates(Builder $builder, SlidesTemplateDataIsolation $dataIsolation): void
     {
         $organizationCodes = array_values(array_filter($dataIsolation->getOrganizationCodes()));
-        $builder->join('magic_slides_templates AS t', static function (JoinClause $join) use ($organizationCodes): void {
+        $builder->leftJoin('magic_slides_templates AS t', static function (JoinClause $join) use ($organizationCodes): void {
             $join->on('t.category_code', '=', 'magic_slides_template_categories.code')
                 ->where('t.status', '=', SlidesTemplateStatus::Enabled->value)
                 ->whereNull('t.deleted_at');

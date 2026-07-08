@@ -25,6 +25,8 @@ class SlidesTemplatePublicItemDTO extends AbstractDTO
 
     public ?string $collageUrl = null;
 
+    public array $previewImageUrls = [];
+
     public ?string $previewUrl = null;
 
     public int $sort = 0;
@@ -108,6 +110,21 @@ class SlidesTemplatePublicItemDTO extends AbstractDTO
     public function setCollageUrl(?string $collageUrl): void
     {
         $this->collageUrl = $collageUrl;
+    }
+
+    public function getPreviewImageUrls(): array
+    {
+        return $this->previewImageUrls;
+    }
+
+    public function setPreviewImageUrls(?array $previewImageUrls): void
+    {
+        $this->previewImageUrls = [];
+        foreach ($previewImageUrls ?? [] as $previewImageUrl) {
+            if (is_string($previewImageUrl) && $previewImageUrl !== '') {
+                $this->previewImageUrls[] = $previewImageUrl;
+            }
+        }
     }
 
     public function getPreviewUrl(): ?string

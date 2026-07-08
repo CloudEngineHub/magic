@@ -22,6 +22,7 @@ use Hyperf\Database\Model\SoftDeletes;
  * @property null|string $search_text
  * @property string $thumbnail_file_key
  * @property null|string $collage_file_key
+ * @property null|array $preview_image_file_keys
  * @property string $template_file_key
  * @property null|string $preview_url
  * @property int $status
@@ -51,6 +52,7 @@ class SlidesTemplateModel extends AbstractModel
         'search_text',
         'thumbnail_file_key',
         'collage_file_key',
+        'preview_image_file_keys',
         'template_file_key',
         'preview_url',
         'status',
@@ -67,6 +69,7 @@ class SlidesTemplateModel extends AbstractModel
         'category_code' => 'string',
         'label' => 'array',
         'description' => 'array',
+        'preview_image_file_keys' => 'array',
         'search_text' => 'string',
         'status' => 'integer',
         'sort' => 'integer',
