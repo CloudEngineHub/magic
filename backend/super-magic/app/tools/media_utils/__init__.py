@@ -10,6 +10,12 @@ from .constants import DISABLE_THINKING_BODY
 from .presigned_url import generate_presigned_url
 from .batch_media_resolve import MediaResolveResult, BatchMediaResolveResults
 from .format_utils import extract_media_source_name
+from .video_format_utils import (
+    VIDEO_MIME_MAP,
+    VideoFormatCheckResult,
+    VideoFormatGuard,
+    get_video_mime_type,
+)
 
 __all__ = [
     "DISABLE_THINKING_BODY",
@@ -17,4 +23,8 @@ __all__ = [
     "MediaResolveResult",
     "BatchMediaResolveResults",
     "extract_media_source_name",
+    "VIDEO_MIME_MAP",
+    "VideoFormatCheckResult",
+    "VideoFormatGuard",
+    "get_video_mime_type",
 ]
