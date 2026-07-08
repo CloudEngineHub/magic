@@ -24,13 +24,18 @@ Input PPTX file path, supports workspace-relative path or absolute path.""",
     )
     output_dir: str = Field(
         "",
-        description="""<!--zh: 输出根目录，必须位于工作区内。为空时默认写入 `slide-templates/`。模板文件夹和 ZIP 会写在该目录下。-->
-Output root directory. Must be inside workspace. Defaults to `slide-templates/` when empty.""",
+        description="""<!--zh: 输出根目录，必须位于工作区内。为空时默认写入 `slide-templates/`。本工具只写入转换草稿，不创建最终 ZIP。草稿目录可包含 `magic.project.js` 用于预览。-->
+Output root directory. Must be inside workspace. Defaults to `slide-templates/` when empty. This tool only writes the conversion draft and does not create the final ZIP. The draft directory may include `magic.project.js` for preview.""",
     )
     template_id: str = Field(
         "",
-        description="""<!--zh: 可选模板 ID。为空时根据 PPTX 文件名生成小写 kebab-case ID。-->
-Optional template id. Defaults to a lowercase kebab-case id generated from the PPTX filename.""",
+        description="""<!--zh: 可选模板 ID。为空时根据 PPTX 文件名生成 `PPT-...` ID。-->
+Optional template id. Defaults to a `PPT-...` id generated from the PPTX filename.""",
+    )
+    category_code: str = Field(
+        "",
+        description="""<!--zh: 可选模板分类编码。为空时不写入 template.json，分类可由平台或二次调整阶段决定。-->
+Optional template category code. When empty, it is omitted from template.json and can be decided by the platform or post-conversion refinement.""",
     )
     max_slides: Optional[int] = Field(
         None,
@@ -57,6 +62,11 @@ Whether to keep original renderer data-* attributes in final slides/*.html. Defa
         description="""<!--zh: 是否将较大的非 slot inline SVG 外置到 images/vectors/，并在 HTML 中改为 img 引用。默认开启，以降低 HTML 噪音。-->
 Whether to externalize large non-slot inline SVG blocks into images/vectors/ and replace them with img references. Defaults to true to reduce HTML noise.""",
     )
+    create_zip: bool = Field(
+        False,
+        description="""<!--zh: 已废弃，必须保持 false。PPTX 转换产物需要二次调整后再形成最终模板压缩包。-->
+Deprecated and must remain false. Converted PPTX templates require post-conversion refinement before final packaging.""",
+    )
 
 
 @tool(name="convert_pptx_to_slide_template")
@@ -66,15 +76,18 @@ class ConvertPptxToSlideTemplate(WorkspaceTool[ConvertPptxToSlideTemplateParams]
     """<!--zh
     将 PPTX 文件转换为平台可用的 HTML 幻灯片模板项目。
 
+    默认输出的是待二次调整的模板源码目录，不立即生成最终 ZIP。
+
     输出结构：
     - `<template-dir>/template.json`
     - `<template-dir>/magic.project.js`
-    - `<template-dir>/index.html`
     - `<template-dir>/theme.css`
-    - `<template-dir>/slide-bridge.js`
     - `<template-dir>/images/`
     - `<template-dir>/slides/*.html`
-    - `<template-id>-template.zip`（与模板文件夹平级）
+    - `<output-root>/artifacts/<template-id>/previews/`
+
+    `visual-spec.md` 需要在工具调用后由大模型根据转换产物的实际视觉风格分析生成。
+    `magic.project.js` 只用于转换草稿预览，最终 `<template-id>-template.zip` 必须在二次调整完成后再生成，且不包含该文件。
     -->
     Convert a PPTX file into a reusable HTML slide template project.
     """
@@ -93,20 +106,22 @@ class ConvertPptxToSlideTemplate(WorkspaceTool[ConvertPptxToSlideTemplateParams]
                 pptx_path=params.pptx_path,
                 output_dir=params.output_dir,
                 template_id=params.template_id,
+                category_code=params.category_code,
                 max_slides=params.max_slides,
                 override=params.override,
                 debug=params.debug,
                 preserve_source_data_attrs=params.preserve_source_data_attrs,
                 externalize_inline_svg=params.externalize_inline_svg,
+                create_zip=params.create_zip,
                 workspace_dir=workspace_dir,
             )
         except PptxToSlideTemplateError as exc:
             return ToolResult.error(str(exc))
 
         content = (
-            f"PPTX converted to slide template project: {result.slide_count} slides. "
+            f"PPTX converted to slide template draft: {result.slide_count} slides. "
             f"Template directory: {result.template_dir}. "
-            f"Package: {result.zip_path}. "
+            f"Package: not created; refine before final packaging. "
             f"Thumbnail: {result.payload.get('thumbnail_image', '')}. "
             f"Collage: {result.payload.get('collage_image', '')}"
         )
@@ -116,7 +131,12 @@ class ConvertPptxToSlideTemplate(WorkspaceTool[ConvertPptxToSlideTemplateParams]
             extra_info={
                 "template_dir": str(result.template_dir),
                 "zip_path": str(result.zip_path),
+                "zip_created": False,
+                "requires_refinement": True,
+                "requires_visual_spec": True,
+                "preview_dir": str(result.preview_dir),
                 "template_json": str(result.template_json_path),
+                "magic_project": str(result.magic_project_path),
                 "thumbnail_image": result.payload.get("thumbnail_image", ""),
                 "collage_image": result.payload.get("collage_image", ""),
             },
@@ -189,7 +209,12 @@ class ConvertPptxToSlideTemplate(WorkspaceTool[ConvertPptxToSlideTemplateParams]
             f"- Slides: {data.get('slide_count', 0)}",
             f"- Template directory: `{data.get('template_dir', '')}`",
             f"- Package: `{data.get('zip_path', '')}`",
+            f"- Package created: `{data.get('zip_created', False)}`",
+            f"- Requires refinement: `{data.get('requires_refinement', True)}`",
+            f"- Requires visual spec: `{data.get('requires_visual_spec', True)}`",
             f"- Metadata: `{data.get('template_json', '')}`",
+            f"- Magic project draft config: `{data.get('magic_project', '')}`",
+            f"- Preview artifact directory: `{data.get('preview_dir', '')}`",
             f"- Thumbnail: `{data.get('thumbnail_image', '')}`",
             f"- Collage: `{data.get('collage_image', '')}`",
         ]

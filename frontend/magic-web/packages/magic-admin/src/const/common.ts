@@ -86,8 +86,10 @@ export const PERMISSION_KEY_MAP: Record<string, string> = {
 	AI_ABILITY_MANAGEMENT_QUERY: "platform.ai.ability.query",
 	/** 系统技能/能力管理-编辑 */
 	AI_ABILITY_MANAGEMENT_EDIT: "platform.ai.ability.edit",
-	/** PPT模板配置 */
-	SLIDES_TEMPLATE: "platform.setting.slides_template",
+	/** PPT模板配置-查询 */
+	SLIDES_TEMPLATE_QUERY: "platform.setting.slides_template.query",
+	/** PPT模板配置-编辑 */
+	SLIDES_TEMPLATE_EDIT: "platform.setting.slides_template.edit",
 	/** 平台管理 - 员工审核 - 查询 */
 	PLATFORM_EMPLOYEE_REVIEW_QUERY: "platform.agent.review.query",
 	/** 平台管理 - 员工审核 - 编辑 */
@@ -137,7 +139,8 @@ export const PLATFORM_AGENT_MANAGEMENT = [
 	PERMISSION_KEY_MAP.MODE_MANAGEMENT_EDIT,
 	PERMISSION_KEY_MAP.AI_ABILITY_MANAGEMENT_QUERY,
 	PERMISSION_KEY_MAP.AI_ABILITY_MANAGEMENT_EDIT,
-	PERMISSION_KEY_MAP.SLIDES_TEMPLATE,
+	PERMISSION_KEY_MAP.SLIDES_TEMPLATE_QUERY,
+	PERMISSION_KEY_MAP.SLIDES_TEMPLATE_EDIT,
 	PERMISSION_KEY_MAP.PLATFORM_EMPLOYEE_REVIEW_QUERY,
 	PERMISSION_KEY_MAP.PLATFORM_EMPLOYEE_REVIEW_EDIT,
 	PERMISSION_KEY_MAP.PLATFORM_EMPLOYEE_MARKET_QUERY,

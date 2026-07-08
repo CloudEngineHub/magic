@@ -2,12 +2,14 @@ import asyncio
 import json
 import re
 import shutil
-import zipfile
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from app.tools.pptx_to_slide_template.html_attrs import convert_source_data_selectors_to_classes, strip_source_data_attributes
+from app.tools.pptx_to_slide_template.html_attrs import (
+    convert_source_data_selectors_to_classes,
+    strip_source_data_attributes,
+)
 from app.tools.pptx_to_slide_template.preview_assets import generate_preview_images
 from app.tools.pptx_to_slide_template.svg_assets import externalize_large_inline_svgs
 from app.tools.pptx_to_slide_template.template_metadata import build_template_json
@@ -22,15 +24,40 @@ class PptxToSlideTemplateResult:
     output_root: Path
     template_dir: Path
     zip_path: Path
+    preview_dir: Path
     template_json_path: Path
+    magic_project_path: Path
     slide_count: int
     warnings: List[str]
     payload: Dict[str, Any]
 
 
 def _safe_slug(value: str, fallback: str = "pptx-template") -> str:
-    slug = re.sub(r"[^A-Za-z0-9._-]+", "-", value).strip(".-").lower()
+    slug = re.sub(r"[^A-Za-z0-9]+", "-", value).strip("-").lower()
     return slug or fallback
+
+
+def _template_id(value: str) -> str:
+    raw = value.strip()
+    if raw.lower().startswith("ppt-"):
+        raw = raw[4:]
+    return f"PPT-{_safe_slug(raw, 'pptx-template')}"
+
+
+VALID_CATEGORY_CODES = {
+    "PPT-CATE-business-report",
+    "PPT-CATE-startup-pitch",
+    "PPT-CATE-product-growth",
+    "PPT-CATE-sales-marketing",
+    "PPT-CATE-education-training",
+    "PPT-CATE-academic-research",
+    "PPT-CATE-technology-engineering",
+    "PPT-CATE-government-organization",
+    "PPT-CATE-healthcare",
+    "PPT-CATE-culture-creative",
+}
+
+ECHARTS_RUNTIME_RELATIVE_PATH = Path("static/js/echarts/6.0.0/echarts.min.js")
 
 
 def _resolve_workspace_path(path_value: str, workspace_dir: Path) -> Path:
@@ -69,6 +96,11 @@ def _static_bundle_path() -> Path:
     return root / "static" / "tools" / "pptx-to-html" / "pptx-to-html.bundle.cjs"
 
 
+def _static_echarts_runtime_path() -> Path:
+    root = Path(__file__).resolve().parents[3]
+    return root / ECHARTS_RUNTIME_RELATIVE_PATH
+
+
 def _parse_json_from_stdout(stdout: str) -> Dict[str, Any]:
     text = stdout.strip()
     if not text:
@@ -82,11 +114,14 @@ def _parse_json_from_stdout(stdout: str) -> Dict[str, Any]:
         return json.loads(match.group(1))
 
 
-async def _run_bundle(source_path: Path, render_dir: Path) -> Dict[str, Any]:
+def _bundle_command(source_path: Path, render_dir: Path) -> List[str]:
     bundle_path = _static_bundle_path()
     if not bundle_path.exists():
         raise PptxToSlideTemplateError(f"PPTX renderer bundle is missing: {bundle_path}")
-    command = [
+    echarts_runtime_path = _static_echarts_runtime_path()
+    if not echarts_runtime_path.exists():
+        raise PptxToSlideTemplateError(f"ECharts runtime is missing: {echarts_runtime_path}")
+    return [
         "node",
         str(bundle_path),
         str(source_path),
@@ -96,8 +131,14 @@ async def _run_bundle(source_path: Path, render_dir: Path) -> Dict[str, Any]:
         "paged",
         "--raster-fallback",
         "placeholder",
+        "--echarts-runtime",
+        str(echarts_runtime_path),
         "--json",
     ]
+
+
+async def _run_bundle(source_path: Path, render_dir: Path) -> Dict[str, Any]:
+    command = _bundle_command(source_path, render_dir)
     process = await asyncio.create_subprocess_exec(
         *command,
         stdout=asyncio.subprocess.PIPE,
@@ -116,20 +157,6 @@ def _text_from_element(element: Dict[str, Any]) -> str:
     if isinstance(text, dict):
         return str(text.get("plain") or "").strip()
     return ""
-
-
-def _slide_title(slide: Dict[str, Any]) -> str:
-    for element in slide.get("elements", []):
-        if element.get("type") == "text" and element.get("role") in {"title", "subtitle"}:
-            text = _text_from_element(element)
-            if text:
-                return re.sub(r"\s+", " ", text)[:80]
-    for element in slide.get("elements", []):
-        if element.get("type") == "text":
-            text = _text_from_element(element)
-            if text:
-                return re.sub(r"\s+", " ", text)[:80]
-    return f"Slide {slide.get('index') or ''}".strip()
 
 
 def _layout_kind(slide: Dict[str, Any]) -> str:
@@ -213,12 +240,6 @@ def _rewrite_slide_html(html: str, slots: List[Dict[str, Any]], preserve_source_
         rewritten = strip_source_data_attributes(rewritten)
     if externalize_inline_svg:
         rewritten = externalize_large_inline_svgs(rewritten, vectors_dir=vectors_dir, slide_id=slide_id)
-    bridge = '  <script src="../slide-bridge.js"></script>\n'
-    if "slide-bridge.js" not in rewritten:
-        if "</body>" in rewritten:
-            rewritten = rewritten.replace("</body>", f"{bridge}</body>")
-        else:
-            rewritten = f"{rewritten}\n{bridge}"
     return rewritten
 
 
@@ -256,34 +277,20 @@ def _copy_render_assets(render_dir: Path, template_dir: Path) -> bool:
     return True
 
 
-def _copy_project_shell(template_dir: Path) -> None:
-    magic_slide_dir = Path(__file__).resolve().parents[1] / "magic_slide"
-    shutil.copy2(magic_slide_dir / "index.html", template_dir / "index.html")
-    shutil.copy2(magic_slide_dir / "slide-bridge.js", template_dir / "slide-bridge.js")
-
-
-def _write_magic_project(template_dir: Path, template_id: str, slide_files: List[str]) -> None:
+def _write_magic_project(template_dir: Path, project_name: str, slide_files: List[str]) -> Path:
     config = {
         "version": "1.0.0",
         "type": "slide",
-        "name": template_id,
+        "name": project_name,
         "slides": slide_files,
     }
     content = (
         f"window.magicProjectConfig = {json.dumps(config, ensure_ascii=False, indent=2)};\n"
         "window.magicProjectConfigure(window.magicProjectConfig);\n"
     )
-    (template_dir / "magic.project.js").write_text(content, encoding="utf-8")
-
-
-def _zip_template_dir(template_dir: Path, zip_path: Path) -> None:
-    if zip_path.exists():
-        zip_path.unlink()
-    with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
-        for path in sorted(template_dir.rglob("*")):
-            if not path.is_file():
-                continue
-            archive.write(path, path.relative_to(template_dir).as_posix())
+    path = template_dir / "magic.project.js"
+    path.write_text(content, encoding="utf-8")
+    return path
 
 
 def _load_json(path: Path) -> Dict[str, Any]:
@@ -295,31 +302,41 @@ async def convert_pptx_to_slide_template(
     pptx_path: str,
     output_dir: str = "",
     template_id: str = "",
+    category_code: str = "",
     max_slides: Optional[int] = None,
     override: bool = True,
     debug: bool = False,
     preserve_source_data_attrs: bool = False,
     externalize_inline_svg: bool = True,
+    create_zip: bool = False,
     workspace_dir: Path,
 ) -> PptxToSlideTemplateResult:
     source_path = _resolve_workspace_path(pptx_path, workspace_dir)
     if not source_path.exists() or not source_path.is_file():
         raise PptxToSlideTemplateError(f"Input file does not exist or is not a file: {pptx_path}")
+    if category_code and category_code not in VALID_CATEGORY_CODES:
+        raise PptxToSlideTemplateError(f"Invalid category_code: {category_code}")
+    if create_zip:
+        raise PptxToSlideTemplateError(
+            "PPTX conversion output requires post-conversion refinement before final packaging"
+        )
 
-    resolved_template_id = _safe_slug(template_id or source_path.stem)
+    resolved_template_id = _template_id(template_id or source_path.stem)
     output_root = _resolve_output_root(output_dir, workspace_dir)
     _ensure_safe_output_root(output_root, workspace_dir)
     template_dir = output_root / resolved_template_id
     render_dir = output_root / f".{resolved_template_id}-rendered"
     zip_path = output_root / f"{resolved_template_id}-template.zip"
+    preview_dir = output_root / "artifacts" / resolved_template_id
 
-    if template_dir.exists() or zip_path.exists() or render_dir.exists():
+    if template_dir.exists() or zip_path.exists() or render_dir.exists() or preview_dir.exists():
         if not override:
             raise PptxToSlideTemplateError(f"Output already exists for template: {resolved_template_id}")
         if _path_is_relative_to(source_path.resolve(strict=True), template_dir.resolve(strict=False)):
             raise PptxToSlideTemplateError("Input PPTX is inside template output directory and would be deleted")
         shutil.rmtree(template_dir, ignore_errors=True)
         shutil.rmtree(render_dir, ignore_errors=True)
+        shutil.rmtree(preview_dir, ignore_errors=True)
         if zip_path.exists():
             zip_path.unlink()
 
@@ -337,62 +354,70 @@ async def convert_pptx_to_slide_template(
     theme_css = _rewrite_theme_css((render_dir / "styles.css").read_text(encoding="utf-8"))
     (template_dir / "theme.css").write_text(theme_css, encoding="utf-8")
     copied_assets = _copy_render_assets(render_dir, template_dir)
-    _copy_project_shell(template_dir)
 
     slides_dir = template_dir / "slides"
     vectors_dir = template_dir / "images" / "vectors"
     slides_dir.mkdir(parents=True, exist_ok=True)
     slide_index: List[Dict[str, Any]] = []
-    slide_files: List[str] = []
     for slide in rendered_slides:
         slide_id = str(slide.get("id") or f"slide-{int(slide.get('index') or 0):03d}")
+        slide_number = int(slide.get("index") or len(slide_index) + 1)
+        output_slide_id = f"slide-{slide_number:03d}"
         source_slide = render_dir / "slides" / f"{slide_id}.html"
         if not source_slide.exists():
             continue
-        file_name = f"{slide_id}.html"
+        file_name = f"{output_slide_id}.html"
         slots = _build_slide_slots(slide)
-        html = _rewrite_slide_html(source_slide.read_text(encoding="utf-8"), slots, preserve_source_data_attrs, externalize_inline_svg, vectors_dir, slide_id)
+        html = _rewrite_slide_html(
+            source_slide.read_text(encoding="utf-8"),
+            slots,
+            preserve_source_data_attrs,
+            externalize_inline_svg,
+            vectors_dir,
+            output_slide_id,
+        )
         (slides_dir / file_name).write_text(html, encoding="utf-8")
         slide_path = f"slides/{file_name}"
-        slide_files.append(slide_path)
+        layout = _layout_kind(slide)
         slide_index.append(
             {
                 "file": slide_path,
-                "title": _slide_title(slide),
-                "layout": _layout_kind(slide),
-                "source_slide": int(slide.get("index") or 0),
-                "slots": [
-                    {key: value for key, value in slot.items() if key != "element_id"}
-                    for slot in slots
-                ],
-                "best_for": _layout_kind(slide),
-                "risks": [],
+                "title": f"Converted Slide {slide_number:03d}",
+                "layout": layout,
+                "description": f"Converted {layout} layout from source slide {slide_number}. Review and refine before final packaging.",
             }
         )
 
-    _write_magic_project(template_dir, resolved_template_id, slide_files)
+    magic_project_path = _write_magic_project(
+        template_dir,
+        source_path.stem,
+        [str(slide["file"]) for slide in slide_index],
+    )
+
     warnings = [str(item.get("message") or item) for item in report.get("warnings", [])] if isinstance(report.get("warnings"), list) else []
     if not slide_index:
         warnings.append("No slide HTML files were copied into the template project")
+    if not copied_assets:
+        warnings.append("No render assets were copied; verify whether the source PPTX used local images")
+    warnings.append("Converted PPTX template is a draft. Generate visual-spec.md from PPT style analysis before final packaging.")
 
     preview_files: Dict[str, str] = {}
     try:
-        preview_files = await generate_preview_images(source_path, template_dir)
+        preview_files = await generate_preview_images(source_path, preview_dir)
     except Exception as exc:
         warnings.append(f"Preview images were not generated: {exc}")
 
     template_payload = build_template_json(
         template_id=resolved_template_id,
+        category_code=category_code,
         source_path=source_path,
         deck=deck,
         report=report,
         slides=slide_index,
-        preview_files=preview_files,
         warnings=warnings,
     )
     template_json_path = template_dir / "template.json"
     template_json_path.write_text(json.dumps(template_payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    _zip_template_dir(template_dir, zip_path)
 
     if not debug:
         shutil.rmtree(render_dir, ignore_errors=True)
@@ -401,17 +426,25 @@ async def convert_pptx_to_slide_template(
         output_root=output_root,
         template_dir=template_dir,
         zip_path=zip_path,
+        preview_dir=preview_dir,
         template_json_path=template_json_path,
+        magic_project_path=magic_project_path,
         slide_count=len(slide_index),
         warnings=warnings,
         payload={
             "template_id": resolved_template_id,
+            "category_code": category_code,
             "output_root": str(output_root),
             "template_dir": str(template_dir),
             "zip_path": str(zip_path),
+            "zip_created": False,
+            "requires_refinement": True,
+            "requires_visual_spec": True,
+            "preview_dir": str(preview_dir),
             "template_json": str(template_json_path),
-            "thumbnail_image": str(template_dir / preview_files["thumbnail_image"]) if "thumbnail_image" in preview_files else "",
-            "collage_image": str(template_dir / preview_files["collage_image"]) if "collage_image" in preview_files else "",
+            "magic_project": str(magic_project_path),
+            "thumbnail_image": str(preview_dir / preview_files["thumbnail_image"]) if "thumbnail_image" in preview_files else "",
+            "collage_image": str(preview_dir / preview_files["collage_image"]) if "collage_image" in preview_files else "",
             "slide_count": len(slide_index),
             "warnings": warnings,
             "bundle_result": bundle_result,

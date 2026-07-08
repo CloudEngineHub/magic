@@ -17716,7 +17716,7 @@ function firstChild(value, keys) {
 function findFirst(value, key) {
   const current = node(value);
   if (!current) return void 0;
-  if (current[key]) return node(current[key]) ?? node(asArray(current[key])[0]);
+  if (Object.prototype.hasOwnProperty.call(current, key)) return node(current[key]) ?? node(asArray(current[key])[0]) ?? {};
   for (const childValue of Object.values(current)) {
     if (Array.isArray(childValue)) {
       for (const item of childValue) {
@@ -17954,14 +17954,39 @@ async function parseTheme(pkg, themePath) {
       const color = normalizeHexColor(attr(colorNode, "lastClr") ?? attr(colorNode, "val"));
       if (color) colors[name] = `#${color}`;
     }
+    applyDefaultColorMap(colors);
   }
-  const majorFont = attr(child(findFirst(xml, "a:majorFont"), "a:latin"), "typeface");
-  const minorFont = attr(child(findFirst(xml, "a:minorFont"), "a:latin"), "typeface");
+  const majorFontNode = findFirst(xml, "a:majorFont");
+  const minorFontNode = findFirst(xml, "a:minorFont");
+  const majorFontLatin = attr(child(majorFontNode, "a:latin"), "typeface");
+  const majorFontEastAsian = attr(child(majorFontNode, "a:ea"), "typeface");
+  const majorFontComplexScript = attr(child(majorFontNode, "a:cs"), "typeface");
+  const minorFontLatin = attr(child(minorFontNode, "a:latin"), "typeface");
+  const minorFontEastAsian = attr(child(minorFontNode, "a:ea"), "typeface");
+  const minorFontComplexScript = attr(child(minorFontNode, "a:cs"), "typeface");
+  const majorFont = majorFontLatin;
+  const minorFont = minorFontLatin;
   const fillStyles = parseFillStyles(findFirst(xml, "a:fillStyleLst"));
   const backgroundFillStyles = parseFillStyles(findFirst(xml, "a:bgFillStyleLst"));
   const effectStyles = parseEffectStyles(findFirst(xml, "a:effectStyleLst"));
   const shapeTextListDefaults = parseShapeTextListDefaults(xml);
-  return { colors, majorFont, minorFont, fillStyles, backgroundFillStyles, effectStyles, shapeTextListDefaults };
+  const textBoxTextListDefaults = parseTextBoxTextListDefaults(xml);
+  return {
+    colors,
+    majorFont,
+    minorFont,
+    majorFontLatin,
+    majorFontEastAsian,
+    majorFontComplexScript,
+    minorFontLatin,
+    minorFontEastAsian,
+    minorFontComplexScript,
+    fillStyles,
+    backgroundFillStyles,
+    effectStyles,
+    shapeTextListDefaults,
+    textBoxTextListDefaults
+  };
 }
 function resolveSchemeColor(theme, value) {
   if (!value) return void 0;
@@ -18000,12 +18025,22 @@ function parseShapeTextListDefaults(xml) {
   const listStyle = child(child(findFirst(xml, "a:objectDefaults"), "a:spDef"), "a:lstStyle");
   return listStyle ? textListStyleFromNode(listStyle) : void 0;
 }
+function parseTextBoxTextListDefaults(xml) {
+  const listStyle = child(child(findFirst(xml, "a:objectDefaults"), "a:txDef"), "a:lstStyle");
+  return listStyle ? textListStyleFromNode(listStyle) : void 0;
+}
 function hasUnsupportedEffectStyleChildren(effectStyle) {
   if (effectStyle == null || typeof effectStyle !== "object" || Array.isArray(effectStyle)) return false;
   return Object.keys(effectStyle).some((key) => key.includes(":") && key !== "a:effectLst" && key !== "#text");
 }
 function normalizeHexColor(value) {
   return value && /^[0-9a-fA-F]{6}$/.test(value) ? value : void 0;
+}
+function applyDefaultColorMap(colors) {
+  colors.bg1 = colors.lt1 ?? colors.bg1;
+  colors.tx1 = colors.dk1 ?? colors.tx1;
+  colors.bg2 = colors.lt2 ?? colors.bg2;
+  colors.tx2 = colors.dk2 ?? colors.tx2;
 }
 
 // src/ooxml/units.ts
@@ -18321,7 +18356,7 @@ function applyColorTransforms(color, source) {
   if (shade != null) transformed = scaleRgb(transformed, Number(shade) / 1e5);
   if (tint != null) transformed = tintRgb(transformed, Number(tint) / 1e5);
   if (lumMod != null || lumOff != null) {
-    transformed = luminanceRgb(
+    transformed = luminanceHsl(
       transformed,
       lumMod != null ? Number(lumMod) / 1e5 : 1,
       lumOff != null ? Number(lumOff) / 1e5 : 0
@@ -18373,12 +18408,13 @@ function tintRgb(rgb, factor) {
     b: clampColor(rgb.b + (255 - rgb.b) * factor)
   };
 }
-function luminanceRgb(rgb, mod, off) {
-  return {
-    r: clampColor(rgb.r * mod + 255 * off),
-    g: clampColor(rgb.g * mod + 255 * off),
-    b: clampColor(rgb.b * mod + 255 * off)
-  };
+function luminanceHsl(rgb, mod, off) {
+  const hsl = rgbToHsl(rgb);
+  return hslToRgb({
+    h: hsl.h,
+    s: hsl.s,
+    l: clampUnit(hsl.l * mod + off)
+  });
 }
 function hslRgb(rgb, satMod, satOff, hueMod, hueOff) {
   const hsl = rgbToHsl(rgb);
@@ -18487,10 +18523,11 @@ function parseGradientFill(gradient, theme) {
   }));
   const linear = child(gradient, "a:lin");
   const path8 = child(gradient, "a:path");
+  const implicitLinear = !linear && !path8 && stops.length > 0;
   const tileRect = valueAt(gradient, "a:tileRect");
   return {
     type: "gradient",
-    kind: linear ? "linear" : path8 ? "path" : "unknown",
+    kind: linear || implicitLinear ? "linear" : path8 ? "path" : "unknown",
     angle: linear ? Number(attr(linear, "ang") ?? 0) / 6e4 : void 0,
     scaled: parseBooleanAttribute(linear, "scaled"),
     path: attr(path8, "path"),
@@ -18498,8 +18535,9 @@ function parseGradientFill(gradient, theme) {
     flip: attr(gradient, "flip"),
     tileRect: tileRect != null ? parseTileRect(tileRect) : void 0,
     rotateWithShape: attr(gradient, "rotWithShape") === "1" || void 0,
+    implicit: implicitLinear || void 0,
     stops,
-    unsupported: !linear && !path8
+    unsupported: !linear && !path8 && !implicitLinear
   };
 }
 function parseTileRect(rect) {
@@ -18547,6 +18585,7 @@ function parseLine(source, theme) {
     dash: attr(child(line8, "a:prstDash"), "val") ?? "solid",
     cap: attr(line8, "cap"),
     join: parseLineJoin(line8),
+    miterLimitRaw: attr(child(line8, "a:miter"), "lim"),
     compound: attr(line8, "cmpd"),
     align: attr(line8, "algn"),
     headEnd: parseLineEnd(child(line8, "a:headEnd")),
@@ -18555,6 +18594,7 @@ function parseLine(source, theme) {
 }
 function lineFallbackColor(fill) {
   if (fill?.type === "solid" && typeof fill.color === "string") return fill.color;
+  if (fill?.type === "pattern" && typeof fill.foregroundColor === "string") return fill.foregroundColor;
   if (fill?.type !== "gradient" || !Array.isArray(fill.stops)) return void 0;
   const firstStop = fill.stops.find((stop) => stop && typeof stop === "object");
   return typeof firstStop?.color === "string" ? firstStop.color : void 0;
@@ -18641,7 +18681,8 @@ function parseShadowEffect(source, theme) {
   const skewX = angleAttr(source, "kx");
   const skewY = angleAttr(source, "ky");
   const centeredScaled = isCenteredScaledOuterShadow(source, dist, scaleX, scaleY, skewX, skewY);
-  const unsupportedCss = (scaleX != null || scaleY != null || skewX != null || skewY != null) && !centeredScaled;
+  const hasNonNoopTransform = scaleX != null && scaleX !== 1 || scaleY != null && scaleY !== 1 || skewX != null && skewX !== 0 || skewY != null && skewY !== 0;
+  const unsupportedCss = hasNonNoopTransform && !centeredScaled;
   return {
     x: emuToPx(Math.cos(radians) * dist),
     y: emuToPx(Math.sin(radians) * dist),
@@ -18690,6 +18731,7 @@ function parseRunStyle(source, theme) {
   const baseline = attr(source, "baseline");
   const rtl = attr(source, "rtl") ?? attr(child(source, "a:rtl"), "val");
   const symbol2 = child(source, "a:sym");
+  const highlight = child(source, "a:highlight");
   const letterSpacingValue = parseScaledNumber(spacing, 100);
   const kerningValue = parseScaledNumber(kerning, 100);
   const baselineValue = parseScaledNumber(baseline, 1e3);
@@ -18708,6 +18750,10 @@ function parseRunStyle(source, theme) {
     italicRaw: attr(source, "i"),
     underline: parseUnderline(underline),
     underlineType: underline,
+    underlineLine: parseUnderlineLine(source, theme),
+    underlineLineFollowText: valueAt(source, "a:uLnTx") != null ? true : void 0,
+    underlineFillFollowText: valueAt(source, "a:uFillTx") != null ? true : void 0,
+    underlineFill: parseFill(child(source, "a:uFill"), theme),
     strike: parseStrike(strike),
     strikeType: strike,
     letterSpacing: letterSpacingValue != null ? `${letterSpacingValue}pt` : void 0,
@@ -18717,7 +18763,7 @@ function parseRunStyle(source, theme) {
     kerningRaw: kerning,
     capitalization: parseCapitalization(capitalization),
     capitalizationType: capitalization,
-    normalizeHeight: normalizeHeight != null ? normalizeHeight === "1" : void 0,
+    normalizeHeight: normalizeHeight != null ? parseBooleanAttrValue(normalizeHeight) : void 0,
     normalizeHeightRaw: normalizeHeight,
     baseline: baselineValue,
     baselineRaw: baseline,
@@ -18728,8 +18774,9 @@ function parseRunStyle(source, theme) {
     kumimoji: parseBooleanAttribute(source, "kumimoji"),
     noProof: parseBooleanAttribute(source, "noProof"),
     error: parseBooleanAttribute(source, "err"),
-    direction: rtl == null ? void 0 : rtl === "1" ? "rtl" : "ltr",
+    direction: rtl == null ? void 0 : parseBooleanAttrValue(rtl) ? "rtl" : "ltr",
     directionRaw: rtl,
+    highlightColor: parseColor(highlight, theme),
     textFillType: textFill?.type,
     textFill,
     symbolFontFamily: attr(symbol2, "typeface"),
@@ -18737,6 +18784,18 @@ function parseRunStyle(source, theme) {
     textOutline: parseTextOutline(source, theme),
     effects: parseEffects(source, theme),
     color: parseColor(child(source, "a:solidFill") ?? source, theme)
+  };
+}
+function parseUnderlineLine(source, theme) {
+  const line8 = child(source, "a:uLn");
+  if (!line8 || valueAt(line8, "a:noFill") != null) return void 0;
+  const widthRaw = attr(line8, "w");
+  const fill = parseFill(line8, theme);
+  return {
+    widthRaw,
+    width: Number(widthRaw ?? 9525) / 12700,
+    dash: attr(child(line8, "a:prstDash"), "val"),
+    fill
   };
 }
 function parseFontSlots(source, theme) {
@@ -18749,6 +18808,7 @@ function parseFontSlots(source, theme) {
   return {
     fontFamilyLatin: resolveThemeFontTypeface(latinRaw, theme),
     fontFamilyLatinRaw: latinRaw,
+    fontFamilyLatinFallback: latinThemeFallbackTypeface(latinRaw, theme),
     fontFamilyLatinPanose: attr(latin, "panose"),
     fontFamilyLatinCharset: attr(latin, "charset"),
     fontFamilyEastAsian: resolveThemeFontTypeface(eastAsianRaw, theme),
@@ -18761,11 +18821,25 @@ function parseFontSlots(source, theme) {
     fontFamilyComplexScriptCharset: attr(complexScript, "charset")
   };
 }
+function latinThemeFallbackTypeface(value, theme) {
+  if (!value) return void 0;
+  if (/^\+mn-(ea|cs)$/.test(value)) return theme.minorFontLatin ?? theme.minorFont;
+  if (/^\+mj-(ea|cs)$/.test(value)) return theme.majorFontLatin ?? theme.majorFont;
+  return void 0;
+}
 function resolveThemeFontTypeface(value, theme) {
   if (!value) return void 0;
-  if (/^\+mn-[a-z]+$/.test(value)) return theme.minorFont ?? "Aptos";
-  if (/^\+mj-[a-z]+$/.test(value)) return theme.majorFont ?? "Aptos";
+  if (/^\+mn-[a-z]+$/.test(value)) return resolveThemeFontSlot(value, theme, "minor");
+  if (/^\+mj-[a-z]+$/.test(value)) return resolveThemeFontSlot(value, theme, "major");
   return value;
+}
+function resolveThemeFontSlot(value, theme, family) {
+  const latin = family === "major" ? theme.majorFontLatin ?? theme.majorFont : theme.minorFontLatin ?? theme.minorFont;
+  const eastAsian = family === "major" ? theme.majorFontEastAsian : theme.minorFontEastAsian;
+  const complexScript = family === "major" ? theme.majorFontComplexScript : theme.minorFontComplexScript;
+  if (value.endsWith("-ea")) return eastAsian || latin || "Aptos";
+  if (value.endsWith("-cs")) return complexScript || latin || "Aptos";
+  return latin || "Aptos";
 }
 function firstDefined(...values) {
   return values.find((value) => value != null);
@@ -18808,6 +18882,9 @@ function parseUnderline(value) {
 function parseBooleanAttribute(source, name) {
   const value = attr(source, name);
   if (value == null) return void 0;
+  return parseBooleanAttrValue(value);
+}
+function parseBooleanAttrValue(value) {
   return value === "1" || value === "true";
 }
 function parseScaledNumber(value, divisor) {
@@ -19001,7 +19078,7 @@ function parseBackgroundImageFill(bgPr, context) {
 }
 
 // src/ooxml/parseTextBodyStyle.ts
-function parseBodyStyle(bodyPr) {
+function parseBodyStyle(bodyPr, options = {}) {
   const style = {};
   const insetMap = [
     ["lIns", "paddingLeft", "paddingLeftRaw"],
@@ -19012,7 +19089,8 @@ function parseBodyStyle(bodyPr) {
   for (const [source, target, rawTarget] of insetMap) {
     const value = attr(bodyPr, source);
     if (value != null) {
-      style[target] = emuToCssPx(Number(value));
+      const cssValue2 = parseEmuCssPx(value, options.pointToPxScale);
+      if (cssValue2 != null) style[target] = cssValue2;
       style[rawTarget] = value;
     }
   }
@@ -19022,40 +19100,40 @@ function parseBodyStyle(bodyPr) {
   if (wrap) style.wrap = wrap;
   const anchorCtr = attr(bodyPr, "anchorCtr");
   if (anchorCtr != null) {
-    style.anchorCenter = anchorCtr === "1";
+    style.anchorCenter = isTruthyAttr(anchorCtr);
     style.anchorCenterRaw = anchorCtr;
   }
   const columns = attr(bodyPr, "numCol");
   if (columns != null) style.columnCount = Number(columns);
   const columnGap = attr(bodyPr, "spcCol");
-  if (columnGap != null) style.columnGap = emuToCssPx(Number(columnGap));
+  if (columnGap != null) style.columnGap = parseEmuCssPx(columnGap, options.pointToPxScale);
   const vertical = attr(bodyPr, "vert");
   if (vertical) style.verticalText = vertical;
   const rot = attr(bodyPr, "rot");
   if (rot) style.textRotation = Number(rot) / 6e4;
   const spcFirstLastPara = attr(bodyPr, "spcFirstLastPara");
   if (spcFirstLastPara != null) {
-    style.spacingFirstLastParagraph = spcFirstLastPara === "1";
+    style.spacingFirstLastParagraph = isTruthyAttr(spcFirstLastPara);
     style.spacingFirstLastParagraphRaw = spcFirstLastPara;
   }
   const rtlCol = attr(bodyPr, "rtlCol");
   if (rtlCol != null) {
-    style.rtlColumns = rtlCol === "1";
+    style.rtlColumns = isTruthyAttr(rtlCol);
     style.rtlColumnsRaw = rtlCol;
   }
   const compatLnSpc = attr(bodyPr, "compatLnSpc");
   if (compatLnSpc != null) {
-    style.compatLineSpacing = compatLnSpc === "1";
+    style.compatLineSpacing = isTruthyAttr(compatLnSpc);
     style.compatLineSpacingRaw = compatLnSpc;
   }
   const fromWordArt = attr(bodyPr, "fromWordArt");
   if (fromWordArt != null) {
-    style.fromWordArt = fromWordArt === "1";
+    style.fromWordArt = isTruthyAttr(fromWordArt);
     style.fromWordArtRaw = fromWordArt;
   }
   const forceAA = attr(bodyPr, "forceAA");
   if (forceAA != null) {
-    style.forceAntialias = forceAA === "1";
+    style.forceAntialias = isTruthyAttr(forceAA);
     style.forceAntialiasRaw = forceAA;
   }
   const verticalOverflow = attr(bodyPr, "vertOverflow");
@@ -19105,8 +19183,16 @@ function parseAutoFitRatio(value) {
   const number4 = Number(value);
   return Number.isFinite(number4) ? number4 / 1e5 : void 0;
 }
-function emuToCssPx(value) {
-  return `${Math.round(value / 914400 * 96 * 100) / 100}px`;
+function isTruthyAttr(value) {
+  return value === "1" || value === "true";
+}
+function parseEmuCssPx(value, pointToPxScale) {
+  const number4 = Number(value);
+  return Number.isFinite(number4) ? emuToCssPx(number4, pointToPxScale) : void 0;
+}
+function emuToCssPx(value, pointToPxScale) {
+  const px = typeof pointToPxScale === "number" && Number.isFinite(pointToPxScale) ? value / 12700 * pointToPxScale : value / 914400 * 96;
+  return `${Math.round(px * 100) / 100}px`;
 }
 
 // src/ooxml/runStyleDefaults.ts
@@ -19131,7 +19217,7 @@ function mergeDefinedStyles(...styles) {
 function parseTextBody(txBody, theme, options = {}) {
   const bodyPr = child(txBody, "a:bodyPr");
   const listStyle = mergeTextListStyleDefaults(options.listDefaults, parseTextListStyle(txBody));
-  const paragraphs = children(txBody, "a:p").map((paragraph) => {
+  const paragraphs = children(txBody, "a:p").map((paragraph, paragraphIndex) => {
     const pPr = child(paragraph, "a:pPr");
     const level = paragraphLevel(pPr);
     const defaultPPr = listStyle.paragraphStyleFor(level);
@@ -19140,17 +19226,17 @@ function parseTextBody(txBody, theme, options = {}) {
     return {
       level,
       alignment: attr(pPr, "algn"),
-      bullet: parseBullet(pPr, defaultPPr, theme, options),
+      bullet: parseBullet(pPr, defaultPPr, theme, options, paragraphIndex),
       style: {
-        ...parseParagraphStyle(defaultPPr),
-        ...parseParagraphStyle(pPr)
+        ...parseParagraphStyle(defaultPPr, options),
+        ...parseParagraphStyle(pPr, options)
       },
       endStyle: applyFontSizePx(parseRunStyle(child(paragraph, "a:endParaRPr"), theme), options.pointToPxScale),
       runs
     };
   });
   return {
-    bodyStyle: parseBodyStyle(bodyPr),
+    bodyStyle: parseBodyStyle(bodyPr, { pointToPxScale: options.pointToPxScale }),
     plain: paragraphs.map((paragraph) => paragraph.runs.map((run) => run.text).join("")).join("\n").trim(),
     paragraphs
   };
@@ -19260,19 +19346,19 @@ function isSafeHyperlink(value) {
     return value.startsWith("#") || value.startsWith("/");
   }
 }
-function parseBullet(pPr, defaultPPr, theme, options) {
+function parseBullet(pPr, defaultPPr, theme, options, paragraphIndex) {
   const style = {
     ...parseBulletStyle(defaultPPr, theme, options),
     ...parseBulletStyle(pPr, theme, options)
   };
-  const explicit = parseBulletType(pPr, style);
+  const explicit = parseBulletType(pPr, style, options, paragraphIndex);
   if (explicit) return explicit;
-  const inherited = parseBulletType(defaultPPr, style);
+  const inherited = parseBulletType(defaultPPr, style, options, paragraphIndex);
   if (inherited) return inherited;
   if (Object.keys(style).length > 0) return { type: "inherited", ...style };
   return void 0;
 }
-function parseBulletType(pPr, style) {
+function parseBulletType(pPr, style, options, paragraphIndex) {
   const bullet = child(pPr, "a:buChar");
   if (bullet) {
     return {
@@ -19291,9 +19377,48 @@ function parseBulletType(pPr, style) {
       ...style
     };
   }
+  const imageBullet = parseImageBullet(child(pPr, "a:buBlip"), options, paragraphIndex);
+  if (imageBullet) return { ...imageBullet, ...style };
   if (valueAt(pPr, "a:buBlip") != null) return { type: "image", unsupported: true, ...style };
   if (valueAt(pPr, "a:buNone") != null) return { type: "none", ...style };
   return void 0;
+}
+function parseImageBullet(buBlip, options, paragraphIndex) {
+  if (!buBlip) return void 0;
+  const relationshipId = attr(findFirst(buBlip, "a:blip"), "r:embed") ?? attr(findFirst(buBlip, "a:blip"), "r:link");
+  const rel = relationshipId ? options.rels?.get(relationshipId) : void 0;
+  const base = {
+    type: "image",
+    relationshipId,
+    relationshipType: rel ? relationshipKind(rel.type) : void 0,
+    sourcePath: rel?.resolvedPath
+  };
+  if (!rel || !options.assets || !options.slideId || !options.elementId) return { ...base, unsupported: true };
+  const mediaType = extensionOf(rel.resolvedPath);
+  const renderable = webImageExtensions2.has(mediaType);
+  const assetId = `${options.elementId}-bullet-${String(paragraphIndex + 1).padStart(3, "0")}`;
+  const outputPath = `${renderable ? "assets/images" : "assets/media"}/${options.slideId}-bullet-${String(paragraphIndex + 1).padStart(3, "0")}.${mediaType}`;
+  options.assets.push({
+    id: assetId,
+    sourcePath: rel.resolvedPath,
+    outputPath,
+    type: relationshipKind(rel.type),
+    metadata: {
+      usage: "textBulletImage",
+      textElementId: options.elementId,
+      paragraphIndex,
+      relationshipId,
+      mediaType,
+      renderable
+    }
+  });
+  return {
+    ...base,
+    assetId,
+    mediaType,
+    src: outputPath,
+    unsupported: renderable ? void 0 : true
+  };
 }
 function parseBulletStyle(pPr, theme, options) {
   const style = {};
@@ -19330,23 +19455,23 @@ function parseBulletStyle(pPr, theme, options) {
   if (valueAt(pPr, "a:buSzTx") != null) style.sizeFollowText = true;
   return style;
 }
-function parseParagraphStyle(pPr) {
+function parseParagraphStyle(pPr, options = {}) {
   const style = {};
   const alignment = attr(pPr, "algn");
   if (alignment) style.textAlign = alignment;
   const marginLeft = attr(pPr, "marL");
   if (marginLeft != null) {
-    style.marginLeft = parseEmuCssPx(marginLeft);
+    style.marginLeft = parseEmuCssPx2(marginLeft, options.pointToPxScale);
     style.marginLeftRaw = marginLeft;
   }
   const marginRight = attr(pPr, "marR");
   if (marginRight != null) {
-    style.marginRight = parseEmuCssPx(marginRight);
+    style.marginRight = parseEmuCssPx2(marginRight, options.pointToPxScale);
     style.marginRightRaw = marginRight;
   }
   const indent = attr(pPr, "indent");
   if (indent != null) {
-    style.textIndent = parseEmuCssPx(indent);
+    style.textIndent = parseEmuCssPx2(indent, options.pointToPxScale);
     style.textIndentRaw = indent;
   }
   const level = attr(pPr, "lvl");
@@ -19356,16 +19481,16 @@ function parseParagraphStyle(pPr) {
   }
   const rtl = attr(pPr, "rtl");
   if (rtl != null) {
-    style.direction = rtl === "1" ? "rtl" : "ltr";
+    style.direction = parseBooleanAttr(rtl) ? "rtl" : "ltr";
     style.directionRaw = rtl;
   }
   const defaultTabSize = attr(pPr, "defTabSz");
   if (defaultTabSize != null) {
-    style.tabSize = emuToCssPx2(Number(defaultTabSize));
+    style.tabSize = parseEmuCssPx2(defaultTabSize, options.pointToPxScale);
     style.tabSizeRaw = defaultTabSize;
     style.tabSizeSource = "defTabSz";
   }
-  const tabStops = parseTabStops(child(pPr, "a:tabLst"));
+  const tabStops = parseTabStops(child(pPr, "a:tabLst"), options);
   if (tabStops.length > 0) {
     style.tabStops = tabStops;
     if (style.tabSize == null) {
@@ -19380,17 +19505,17 @@ function parseParagraphStyle(pPr) {
   if (fontAlign) style.fontAlign = fontAlign;
   const eastAsianLineBreak = attr(pPr, "eaLnBrk");
   if (eastAsianLineBreak != null) {
-    style.eastAsianLineBreak = eastAsianLineBreak === "1";
+    style.eastAsianLineBreak = parseBooleanAttr(eastAsianLineBreak);
     style.eastAsianLineBreakRaw = eastAsianLineBreak;
   }
   const latinLineBreak = attr(pPr, "latinLnBrk");
   if (latinLineBreak != null) {
-    style.latinLineBreak = latinLineBreak === "1";
+    style.latinLineBreak = parseBooleanAttr(latinLineBreak);
     style.latinLineBreakRaw = latinLineBreak;
   }
   const hangingPunctuation = attr(pPr, "hangingPunct");
   if (hangingPunctuation != null) {
-    style.hangingPunctuation = hangingPunctuation === "1";
+    style.hangingPunctuation = parseBooleanAttr(hangingPunctuation);
     style.hangingPunctuationRaw = hangingPunctuation;
   }
   const spacing = {};
@@ -19416,18 +19541,21 @@ function parseFiniteNumber(value) {
   const number4 = Number(value);
   return Number.isFinite(number4) ? number4 : void 0;
 }
-function parseEmuCssPx(value) {
-  const number4 = parseFiniteNumber(value);
-  return number4 == null ? void 0 : emuToCssPx2(number4);
+function parseBooleanAttr(value) {
+  return value === "1" || value === "true";
 }
-function parseTabStops(tabList) {
+function parseEmuCssPx2(value, pointToPxScale) {
+  const number4 = parseFiniteNumber(value);
+  return number4 == null ? void 0 : emuToCssPx2(number4, pointToPxScale);
+}
+function parseTabStops(tabList, options) {
   return children(tabList, "a:tab").map((tab) => {
     const pos = attr(tab, "pos");
     const algn = attr(tab, "algn");
     const leader = attr(tab, "leader");
     const position = pos != null ? Number(pos) : void 0;
     return {
-      pos: position != null && Number.isFinite(position) ? emuToCssPx2(position) : void 0,
+      pos: position != null && Number.isFinite(position) ? emuToCssPx2(position, options.pointToPxScale) : void 0,
       algn,
       leader
     };
@@ -19460,9 +19588,11 @@ function parseSpacing(spacing) {
   }
   return void 0;
 }
-function emuToCssPx2(value) {
-  return `${Math.round(value / 914400 * 96 * 100) / 100}px`;
+function emuToCssPx2(value, pointToPxScale) {
+  const px = typeof pointToPxScale === "number" && Number.isFinite(pointToPxScale) ? value / 12700 * pointToPxScale : value / 914400 * 96;
+  return `${Math.round(px * 100) / 100}px`;
 }
+var webImageExtensions2 = /* @__PURE__ */ new Set(["png", "jpg", "jpeg", "gif", "svg", "webp"]);
 
 // src/ooxml/parseTable.ts
 function parseTable(source, theme, options = {}) {
@@ -19477,8 +19607,8 @@ function parseTable(source, theme, options = {}) {
     return {
       height: Number(attr(row, "h") ?? 0),
       cells: children(row, "a:tc").flatMap((cell) => {
-        const hMerge = isTruthyAttr(attr(cell, "hMerge"));
-        const vMerge = isTruthyAttr(attr(cell, "vMerge"));
+        const hMerge = isTruthyAttr2(attr(cell, "hMerge"));
+        const vMerge = isTruthyAttr2(attr(cell, "vMerge"));
         const colSpan = Number(attr(cell, "gridSpan") ?? 1);
         const rowSpan = Number(attr(cell, "rowSpan") ?? 1);
         const currentColumn = columnIndex;
@@ -19514,7 +19644,7 @@ function tableStyleOptions(tblPr) {
   const options = {};
   for (const name of ["bandRow", "bandCol", "firstRow", "lastRow", "firstCol", "lastCol"]) {
     const value = attr(tblPr, name);
-    if (value != null) options[name] = isTruthyAttr(value);
+    if (value != null) options[name] = isTruthyAttr2(value);
   }
   return options;
 }
@@ -19536,7 +19666,7 @@ function parseTableCellStyle(tcPr, theme) {
   const anchor = attr(tcPr, "anchor");
   if (anchor) style.verticalAlign = anchor;
   const anchorCenter = attr(tcPr, "anchorCtr");
-  if (anchorCenter != null) style.anchorCenter = isTruthyAttr(anchorCenter);
+  if (anchorCenter != null) style.anchorCenter = isTruthyAttr2(anchorCenter);
   const paddingMap = {
     marL: "paddingLeft",
     marR: "paddingRight",
@@ -19546,6 +19676,11 @@ function parseTableCellStyle(tcPr, theme) {
   for (const [source, target] of Object.entries(paddingMap)) {
     const value = attr(tcPr, source);
     if (value != null) style[target] = emuToCssPx3(Number(value));
+  }
+  const rtl = attr(tcPr, "rtl");
+  if (rtl != null) {
+    style.rightToLeft = isTruthyAttr2(rtl);
+    style.rightToLeftRaw = rtl;
   }
   const metadata = tableCellMetadata(tcPr);
   if (Object.keys(metadata).length > 0) style.metadata = metadata;
@@ -19585,7 +19720,7 @@ function hasTableCellStyle(style) {
 function hasTableStyle(style) {
   return Object.values(style).some((value) => value != null);
 }
-function isTruthyAttr(value) {
+function isTruthyAttr2(value) {
   return value === "1" || value === "true";
 }
 function emuToCssPx3(value) {
@@ -19680,6 +19815,7 @@ function mergeMissingRunStyle(runStyle, textStyle) {
   for (const [key, value] of Object.entries(textStyle)) {
     if (value === void 0 || merged[key] !== void 0) continue;
     if ((key === "fontWeight" || key === "bold") && merged.bold === false) continue;
+    if (key === "underline" && merged.underlineType === "none") continue;
     merged[key] = value;
   }
   return merged;
@@ -19850,30 +19986,6 @@ function parseBoolean(value) {
   return void 0;
 }
 
-// src/ooxml/parseChartLayout.ts
-function extractManualLayout(container) {
-  const manualLayout = child(child(container, "c:layout"), "c:manualLayout");
-  if (!manualLayout) return void 0;
-  const layout = {
-    target: attr(child(manualLayout, "c:layoutTarget"), "val"),
-    xMode: attr(child(manualLayout, "c:xMode"), "val"),
-    yMode: attr(child(manualLayout, "c:yMode"), "val"),
-    wMode: attr(child(manualLayout, "c:wMode"), "val"),
-    hMode: attr(child(manualLayout, "c:hMode"), "val"),
-    x: numberAttr2(child(manualLayout, "c:x"), "val"),
-    y: numberAttr2(child(manualLayout, "c:y"), "val"),
-    w: numberAttr2(child(manualLayout, "c:w"), "val"),
-    h: numberAttr2(child(manualLayout, "c:h"), "val")
-  };
-  return Object.values(layout).some((value) => value != null) ? layout : void 0;
-}
-function numberAttr2(value, name) {
-  const text = attr(value, name);
-  if (text == null || text.trim() === "") return void 0;
-  const parsed = Number(text);
-  return Number.isFinite(parsed) ? parsed : void 0;
-}
-
 // src/shared/chartTextRotation.ts
 function isChartAutoRotationSentinel(value) {
   return value === "-60000000";
@@ -19897,6 +20009,7 @@ function extractChartTextStyleFromTextProperties(textProperties, theme) {
   const parsed = {
     ...typeof style.fontFamily === "string" ? { fontFamily: style.fontFamily } : {},
     ...typeof style.fontFamilyLatin === "string" ? { fontFamilyLatin: style.fontFamilyLatin } : {},
+    ...typeof style.fontFamilyLatinFallback === "string" ? { fontFamilyLatinFallback: style.fontFamilyLatinFallback } : {},
     ...typeof style.fontFamilyLatinRaw === "string" ? { fontFamilyLatinRaw: style.fontFamilyLatinRaw } : {},
     ...typeof style.fontFamilyLatinPanose === "string" ? { fontFamilyLatinPanose: style.fontFamilyLatinPanose } : {},
     ...typeof style.fontFamilyLatinCharset === "string" ? { fontFamilyLatinCharset: style.fontFamilyLatinCharset } : {},
@@ -19964,6 +20077,86 @@ function parseBoolean2(value) {
   return void 0;
 }
 
+// src/ooxml/parseChartDataLabels.ts
+function extractDataLabels(source, theme) {
+  const dataLabels = child(source, "c:dLbls");
+  if (!dataLabels) return void 0;
+  const textStyle = dataLabelTextStyle(extractChartTextStyleFromTextProperties(child(dataLabels, "c:txPr"), theme));
+  const separator = valueAt(dataLabels, "c:separator");
+  const parsed = {
+    position: attr(child(dataLabels, "c:dLblPos"), "val"),
+    showLegendKey: parseBoolean3(attr(child(dataLabels, "c:showLegendKey"), "val")),
+    showVal: parseBoolean3(attr(child(dataLabels, "c:showVal"), "val")),
+    showCatName: parseBoolean3(attr(child(dataLabels, "c:showCatName"), "val")),
+    showSerName: parseBoolean3(attr(child(dataLabels, "c:showSerName"), "val")),
+    showPercent: parseBoolean3(attr(child(dataLabels, "c:showPercent"), "val")),
+    showBubbleSize: parseBoolean3(attr(child(dataLabels, "c:showBubbleSize"), "val")),
+    ...separator != null ? { separator: textValue(separator) } : {},
+    ...textStyle ? { textStyle } : {}
+  };
+  const flags = [
+    parsed.showLegendKey,
+    parsed.showVal,
+    parsed.showCatName,
+    parsed.showSerName,
+    parsed.showPercent,
+    parsed.showBubbleSize
+  ];
+  return {
+    ...parsed,
+    allHidden: flags.every((value) => value === false)
+  };
+}
+function dataLabelTextStyle(style) {
+  if (!style) return void 0;
+  const parsed = {
+    ...style.fontFamily ? { fontFamily: style.fontFamily } : {},
+    ...style.fontFamilyLatin ? { fontFamilyLatin: style.fontFamilyLatin } : {},
+    ...style.fontFamilyEastAsian ? { fontFamilyEastAsian: style.fontFamilyEastAsian } : {},
+    ...style.fontFamilyComplexScript ? { fontFamilyComplexScript: style.fontFamilyComplexScript } : {},
+    ...style.fontSize != null ? { fontSize: style.fontSize } : {},
+    ...style.fontSizeRaw ? { fontSizeRaw: style.fontSizeRaw } : {},
+    ...style.color ? { color: style.color } : {},
+    ...style.bold != null ? { bold: style.bold } : {},
+    ...style.italic != null ? { italic: style.italic } : {},
+    ...style.kerning != null ? { kerning: style.kerning } : {},
+    ...style.kerningRaw ? { kerningRaw: style.kerningRaw } : {},
+    ...style.spacing != null ? { spacing: style.spacing } : {},
+    ...style.spacingRaw ? { spacingRaw: style.spacingRaw } : {}
+  };
+  return Object.keys(parsed).length > 0 ? parsed : void 0;
+}
+function parseBoolean3(value) {
+  if (value == null) return void 0;
+  if (value === "1" || value === "true") return true;
+  if (value === "0" || value === "false") return false;
+  return void 0;
+}
+
+// src/ooxml/parseChartLayout.ts
+function extractManualLayout(container) {
+  const manualLayout = child(child(container, "c:layout"), "c:manualLayout");
+  if (!manualLayout) return void 0;
+  const layout = {
+    target: attr(child(manualLayout, "c:layoutTarget"), "val"),
+    xMode: attr(child(manualLayout, "c:xMode"), "val"),
+    yMode: attr(child(manualLayout, "c:yMode"), "val"),
+    wMode: attr(child(manualLayout, "c:wMode"), "val"),
+    hMode: attr(child(manualLayout, "c:hMode"), "val"),
+    x: numberAttr2(child(manualLayout, "c:x"), "val"),
+    y: numberAttr2(child(manualLayout, "c:y"), "val"),
+    w: numberAttr2(child(manualLayout, "c:w"), "val"),
+    h: numberAttr2(child(manualLayout, "c:h"), "val")
+  };
+  return Object.values(layout).some((value) => value != null) ? layout : void 0;
+}
+function numberAttr2(value, name) {
+  const text = attr(value, name);
+  if (text == null || text.trim() === "") return void 0;
+  const parsed = Number(text);
+  return Number.isFinite(parsed) ? parsed : void 0;
+}
+
 // src/ooxml/parseChartLegend.ts
 function extractLegend(chartRoot, theme) {
   const legend = child(chartRoot, "c:legend");
@@ -19974,7 +20167,7 @@ function extractLegend(chartRoot, theme) {
   const entries = children(legend, "c:legendEntry").map((entry) => extractLegendEntry(entry, theme)).filter(hasLegendEntryValue);
   return {
     position: attr(child(legend, "c:legendPos"), "val"),
-    overlay: parseBoolean3(attr(child(legend, "c:overlay"), "val")),
+    overlay: parseBoolean4(attr(child(legend, "c:overlay"), "val")),
     ...layout ? { layout } : {},
     ...labelStyle ? { labelStyle } : {},
     ...area ? { area } : {},
@@ -19985,7 +20178,7 @@ function extractLegendEntry(entry, theme) {
   const labelStyle = extractChartAxisTextStyle(entry, theme);
   return {
     ...numberProp("index", numberAttr3(child(entry, "c:idx"), "val")),
-    ...booleanProp2("deleted", parseBoolean3(attr(child(entry, "c:delete"), "val"))),
+    ...booleanProp2("deleted", parseBoolean4(attr(child(entry, "c:delete"), "val"))),
     ...labelStyle ? { labelStyle } : {}
   };
 }
@@ -20004,7 +20197,7 @@ function numberProp(key, value) {
 function booleanProp2(key, value) {
   return value == null ? {} : { [key]: value };
 }
-function parseBoolean3(value) {
+function parseBoolean4(value) {
   if (value == null) return void 0;
   if (value === "1" || value === "true") return true;
   if (value === "0" || value === "false") return false;
@@ -20259,7 +20452,7 @@ function chartStyleDefaultRunStyle(defRPr) {
   const kerning = kerningRaw == null ? void 0 : Number(kerningRaw) / 100;
   const spacing = spacingRaw == null ? void 0 : Number(spacingRaw) / 100;
   const baseline = baselineRaw == null ? void 0 : Number(baselineRaw) / 100;
-  const bold = parseBoolean4(boldRaw);
+  const bold = parseBoolean5(boldRaw);
   const parsed = {
     ...fontSizeRaw ? { fontSizeRaw } : {},
     ...Number.isFinite(fontSize) ? { fontSize } : {},
@@ -20274,7 +20467,7 @@ function chartStyleDefaultRunStyle(defRPr) {
   };
   return Object.keys(parsed).length > 0 ? parsed : void 0;
 }
-function parseBoolean4(value) {
+function parseBoolean5(value) {
   if (value == null) return void 0;
   if (value === "1" || value === "true") return true;
   if (value === "0" || value === "false") return false;
@@ -20423,7 +20616,7 @@ function extractChartTitleMeta(title, theme) {
   return {
     present: true,
     empty: text ? false : true,
-    overlay: parseBoolean5(attr(child(title, "c:overlay"), "val")),
+    overlay: parseBoolean6(attr(child(title, "c:overlay"), "val")),
     ...textStyle ? { textStyle } : {},
     ...runs.length > 0 ? { runs } : {},
     ...area ? { area } : {}
@@ -20447,7 +20640,7 @@ function extractChartTitleRuns(title, theme) {
         text: textValue(valueAt(run, "a:t")),
         ...stringProp2("lang", attr(rPr, "lang")),
         ...stringProp2("altLang", attr(rPr, "altLang")),
-        ...booleanProp3("dirty", parseBoolean5(dirtyRaw)),
+        ...booleanProp3("dirty", parseBoolean6(dirtyRaw)),
         ...stringProp2("dirtyRaw", dirtyRaw),
         ...objectProp2("style", runStyle)
       };
@@ -20468,6 +20661,7 @@ function extractTitleRunStyle(rPr, theme) {
   const parsed = {
     ...typeof style.fontFamily === "string" ? { fontFamily: style.fontFamily } : {},
     ...typeof style.fontFamilyLatin === "string" ? { fontFamilyLatin: style.fontFamilyLatin } : {},
+    ...typeof style.fontFamilyLatinFallback === "string" ? { fontFamilyLatinFallback: style.fontFamilyLatinFallback } : {},
     ...typeof style.fontFamilyEastAsian === "string" ? { fontFamilyEastAsian: style.fontFamilyEastAsian } : {},
     ...typeof style.fontFamilyComplexScript === "string" ? { fontFamilyComplexScript: style.fontFamilyComplexScript } : {},
     ...typeof style.fontSize === "number" ? { fontSize: style.fontSize } : {},
@@ -20476,7 +20670,11 @@ function extractTitleRunStyle(rPr, theme) {
     ...typeof style.bold === "boolean" ? { bold: style.bold } : {},
     ...typeof style.italic === "boolean" ? { italic: style.italic } : {},
     ...typeof style.symbolFontFamily === "string" ? { symbolFontFamily: style.symbolFontFamily } : {},
-    ...typeof style.symbolChar === "string" ? { symbolChar: style.symbolChar } : {}
+    ...typeof style.symbolChar === "string" ? { symbolChar: style.symbolChar } : {},
+    ...typeof style.kerning === "number" ? { kerning: style.kerning } : {},
+    ...typeof style.kerningRaw === "string" ? { kerningRaw: style.kerningRaw } : {},
+    ...typeof style.letterSpacingValue === "number" ? { spacing: style.letterSpacingValue } : {},
+    ...typeof style.letterSpacingRaw === "string" ? { spacingRaw: style.letterSpacingRaw } : {}
   };
   return Object.keys(parsed).length > 0 ? parsed : void 0;
 }
@@ -20484,7 +20682,7 @@ function mergeTitleRunStyle(base, override) {
   const merged = { ...base ?? {}, ...override ?? {} };
   return Object.keys(merged).length > 0 ? merged : void 0;
 }
-function parseBoolean5(value) {
+function parseBoolean6(value) {
   if (value == null) return void 0;
   if (value === "1" || value === "true") return true;
   if (value === "0" || value === "false") return false;
@@ -20509,18 +20707,21 @@ function extractChartSeries(chart, theme) {
       ...stringProp3("uniqueId", attr(child(uniqueIdExtension, "c16:uniqueId"), "val")),
       ...stringProp3("uniqueIdExtUri", attr(uniqueIdExtension, "uri")),
       ...stringProp3("uniqueIdExtNamespace", attr(uniqueIdExtension, "xmlns:c16")),
-      ...booleanProp4("invertIfNegative", parseBoolean6(attr(child(ser, "c:invertIfNegative"), "val"))),
-      ...booleanProp4("smooth", parseBoolean6(attr(child(ser, "c:smooth"), "val"))),
+      ...booleanProp4("invertIfNegative", parseBoolean7(attr(child(ser, "c:invertIfNegative"), "val"))),
+      ...booleanProp4("smooth", parseBoolean7(attr(child(ser, "c:smooth"), "val"))),
       ...markerProp(extractSeriesMarker(ser)),
+      ...dataLabelsProp(extractDataLabels(ser, theme)),
       ...extractSeriesStyle(ser, theme)
     };
   });
 }
 function extractChartCategories(ser) {
   const cat = child(ser, "c:cat");
-  const stringPoints = children(findFirst(cat, "c:strCache"), "c:pt");
-  if (stringPoints.length > 0) return stringPoints.map((pt) => textValue(valueAt(pt, "c:v")));
-  return children(findFirst(cat, "c:numCache"), "c:pt").map((pt) => textValue(valueAt(pt, "c:v")));
+  const stringCache = findFirst(cat, "c:strCache");
+  const stringPoints = children(stringCache, "c:pt");
+  if (stringPoints.length > 0) return indexedPointValues(stringCache, stringPoints, (pt) => textValue(valueAt(pt, "c:v")), "");
+  const numberCache = findFirst(cat, "c:numCache");
+  return indexedPointValues(numberCache, children(numberCache, "c:pt"), (pt) => textValue(valueAt(pt, "c:v")), "");
 }
 function extractChartCategoryValueType(ser) {
   const cat = child(ser, "c:cat");
@@ -20584,7 +20785,11 @@ function stringProp3(key, value) {
 }
 function extractNumCache(ser) {
   const val = child(ser, "c:val");
-  return children(findFirst(val, "c:numCache"), "c:pt").map((pt) => Number(textValue(valueAt(pt, "c:v")))).filter((value) => Number.isFinite(value));
+  const cache = findFirst(val, "c:numCache");
+  return indexedPointValues(cache, children(cache, "c:pt"), (pt) => {
+    const value = Number(textValue(valueAt(pt, "c:v")));
+    return Number.isFinite(value) ? value : void 0;
+  }, void 0);
 }
 function extractStringCache(ref) {
   const cache = child(ref, "c:strCache");
@@ -20593,7 +20798,7 @@ function extractStringCache(ref) {
   if (points.length === 0) return void 0;
   const pointCount = numberAttr4(child(cache, "c:ptCount"), "val");
   const indexes = points.map((pt) => numberAttr4(pt, "idx")).filter((value) => value != null);
-  const values = points.map((pt) => textValue(valueAt(pt, "c:v")));
+  const values = indexedPointValues(cache, points, (pt) => textValue(valueAt(pt, "c:v")), "");
   return {
     ...pointCount != null ? { pointCount } : {},
     indexes,
@@ -20608,7 +20813,10 @@ function extractNumberCache(cache) {
   if (points.length === 0) return void 0;
   const pointCount = numberAttr4(child(cache, "c:ptCount"), "val");
   const indexes = points.map((pt) => numberAttr4(pt, "idx")).filter((value) => value != null);
-  const values = points.map((pt) => Number(textValue(valueAt(pt, "c:v"))));
+  const values = indexedPointValues(cache, points, (pt) => {
+    const value = Number(textValue(valueAt(pt, "c:v")));
+    return Number.isFinite(value) ? value : void 0;
+  }, void 0);
   return {
     ...pointCount != null ? { pointCount } : {},
     indexes,
@@ -20620,11 +20828,13 @@ function extractNumberCache(cache) {
 function extractSeriesStyle(ser, theme) {
   const shapeProperties = child(ser, "c:spPr");
   const fill = extractSolidFill(shapeProperties, theme);
+  const negativeFill = extractSolidFill(findFirst(child(ser, "c:extLst"), "c14:invertSolidFillFmt"), theme);
   const line8 = extractSeriesLine(shapeProperties, theme);
   const effects = parseEffects(shapeProperties, theme);
   return {
     ...fill?.color || line8?.color ? { color: fill?.color ?? String(line8?.color) } : {},
     ...fill ? { fill } : {},
+    ...negativeFill ? { negativeFill } : {},
     ...line8 ? { line: line8 } : {},
     ...effects ? { effects } : {}
   };
@@ -20647,6 +20857,19 @@ function extractSolidFill(source, theme) {
 }
 function hasSequentialIndexes(indexes, pointLength) {
   return indexes.length === pointLength && indexes.every((value, index) => value === index);
+}
+function indexedPointValues(cache, points, valueFor, missing) {
+  const pointCount = numberAttr4(child(cache, "c:ptCount"), "val");
+  const indexes = points.map((pt) => numberAttr4(pt, "idx"));
+  if (!canRebuildIndexedCache(indexes, pointCount)) return points.map(valueFor);
+  const values = Array.from({ length: pointCount }, () => missing);
+  points.forEach((point8, index) => {
+    values[indexes[index]] = valueFor(point8);
+  });
+  return values;
+}
+function canRebuildIndexedCache(indexes, pointCount) {
+  return pointCount != null && Number.isInteger(pointCount) && pointCount >= 0 && indexes.length > 0 && new Set(indexes).size === indexes.length && indexes.every((value) => value != null && Number.isInteger(value) && value >= 0 && value < pointCount);
 }
 function numberAttr4(value, name) {
   const text = attr(value, name);
@@ -20672,7 +20895,10 @@ function extractSeriesMarker(ser) {
 function markerProp(value) {
   return value ? { marker: value } : {};
 }
-function parseBoolean6(value) {
+function dataLabelsProp(value) {
+  return value ? { dataLabels: value } : {};
+}
+function parseBoolean7(value) {
   if (value == null) return void 0;
   if (value === "1" || value === "true") return true;
   if (value === "0" || value === "false") return false;
@@ -20713,28 +20939,28 @@ async function parseChart(pkg, chartPath, theme = { colors: {} }) {
     chartType: chartKey.replace("c:", "").replace("Chart", ""),
     direction: attr(child(chart, "c:barDir"), "val"),
     grouping: attr(child(chart, "c:grouping"), "val"),
-    smooth: parseBoolean7(attr(child(chart, "c:smooth"), "val")),
+    smooth: parseBoolean8(attr(child(chart, "c:smooth"), "val")),
     axisIds: children(chart, "c:axId").map((axis) => attr(axis, "val")).filter((value) => value != null),
     ...numberProp3("gapWidth", percentNumberAttr(child(chart, "c:gapWidth"), "val")),
     ...numberProp3("overlap", percentNumberAttr(child(chart, "c:overlap"), "val")),
     title: extractChartTitle(child(chartRoot, "c:title")),
     titleMeta: extractChartTitleMeta(child(chartRoot, "c:title"), theme),
-    autoTitleDeleted: parseBoolean7(attr(child(chartRoot, "c:autoTitleDeleted"), "val")),
+    autoTitleDeleted: parseBoolean8(attr(child(chartRoot, "c:autoTitleDeleted"), "val")),
     chartArea: extractChartAreaStyle(child(chartRoot, "c:spPr"), theme),
     ...chartSpace ? { chartSpace } : {},
     language: attr(findFirst(xml, "c:lang"), "val"),
-    date1904: parseBoolean7(attr(findFirst(xml, "c:date1904"), "val")),
-    roundedCorners: parseBoolean7(attr(findFirst(xml, "c:roundedCorners"), "val")),
-    varyColors: parseBoolean7(attr(child(chart, "c:varyColors"), "val")),
+    date1904: parseBoolean8(attr(findFirst(xml, "c:date1904"), "val")),
+    roundedCorners: parseBoolean8(attr(findFirst(xml, "c:roundedCorners"), "val")),
+    varyColors: parseBoolean8(attr(child(chart, "c:varyColors"), "val")),
     legend: extractLegend(chartRoot, theme),
     plotAreaLayout: extractManualLayout(plotArea),
     plotArea: extractChartAreaStyle(child(plotArea, "c:spPr"), theme),
     displayBlanksAs: attr(child(chartRoot, "c:dispBlanksAs"), "val"),
-    displayNaAsBlank: parseBoolean7(attr(findFirst(child(chartRoot, "c:extLst"), "c16r3:dispNaAsBlank"), "val")),
+    displayNaAsBlank: parseBoolean8(attr(findFirst(child(chartRoot, "c:extLst"), "c16r3:dispNaAsBlank"), "val")),
     ...dataDisplayOptions16 ? { dataDisplayOptions16 } : {},
     ...chartExtensions ? { chartExtensions } : {},
-    plotVisibleOnly: parseBoolean7(attr(child(chartRoot, "c:plotVisOnly"), "val")),
-    showDataLabelsOverMax: parseBoolean7(attr(child(chartRoot, "c:showDLblsOverMax"), "val")),
+    plotVisibleOnly: parseBoolean8(attr(child(chartRoot, "c:plotVisOnly"), "val")),
+    showDataLabelsOverMax: parseBoolean8(attr(child(chartRoot, "c:showDLblsOverMax"), "val")),
     ...externalData ? { externalData } : {},
     ...styleOverride ? { styleOverride } : {},
     dataLabels: extractDataLabels(chart, theme),
@@ -20773,7 +20999,7 @@ function extractDataDisplayOptions16(chartRoot) {
   return {
     extensionUri: attr(extension2, "uri"),
     containerType: "c16r3:dataDisplayOptions16",
-    displayNaAsBlank: parseBoolean7(attr(child(container, "c16r3:dispNaAsBlank"), "val"))
+    displayNaAsBlank: parseBoolean8(attr(child(container, "c16r3:dispNaAsBlank"), "val"))
   };
 }
 async function extractChartStyle(pkg, chartPath, theme) {
@@ -20795,51 +21021,9 @@ function mergeChartSpaceNamespaces(chartSpace, namespaces) {
     namespaces
   };
 }
-function extractDataLabels(chart, theme) {
-  const dataLabels = child(chart, "c:dLbls");
-  if (!dataLabels) return void 0;
-  const textStyle = dataLabelTextStyle(extractChartTextStyleFromTextProperties(child(dataLabels, "c:txPr"), theme));
-  const parsed = {
-    position: attr(child(dataLabels, "c:dLblPos"), "val"),
-    showLegendKey: parseBoolean7(attr(child(dataLabels, "c:showLegendKey"), "val")),
-    showVal: parseBoolean7(attr(child(dataLabels, "c:showVal"), "val")),
-    showCatName: parseBoolean7(attr(child(dataLabels, "c:showCatName"), "val")),
-    showSerName: parseBoolean7(attr(child(dataLabels, "c:showSerName"), "val")),
-    showPercent: parseBoolean7(attr(child(dataLabels, "c:showPercent"), "val")),
-    showBubbleSize: parseBoolean7(attr(child(dataLabels, "c:showBubbleSize"), "val")),
-    ...textStyle ? { textStyle } : {}
-  };
-  const flags = [
-    parsed.showLegendKey,
-    parsed.showVal,
-    parsed.showCatName,
-    parsed.showSerName,
-    parsed.showPercent,
-    parsed.showBubbleSize
-  ];
-  return {
-    ...parsed,
-    allHidden: flags.every((value) => value === false)
-  };
-}
-function dataLabelTextStyle(style) {
-  if (!style) return void 0;
-  const parsed = {
-    ...style.fontFamily ? { fontFamily: style.fontFamily } : {},
-    ...style.fontFamilyLatin ? { fontFamilyLatin: style.fontFamilyLatin } : {},
-    ...style.fontFamilyEastAsian ? { fontFamilyEastAsian: style.fontFamilyEastAsian } : {},
-    ...style.fontFamilyComplexScript ? { fontFamilyComplexScript: style.fontFamilyComplexScript } : {},
-    ...style.fontSize != null ? { fontSize: style.fontSize } : {},
-    ...style.fontSizeRaw ? { fontSizeRaw: style.fontSizeRaw } : {},
-    ...style.color ? { color: style.color } : {},
-    ...style.bold != null ? { bold: style.bold } : {},
-    ...style.italic != null ? { italic: style.italic } : {}
-  };
-  return Object.keys(parsed).length > 0 ? parsed : void 0;
-}
 function extractAxis(axis, theme) {
   if (!axis) return void 0;
-  const deleted = parseBoolean7(attr(child(axis, "c:delete"), "val"));
+  const deleted = parseBoolean8(attr(child(axis, "c:delete"), "val"));
   const scaling = extractAxisScaling(child(axis, "c:scaling"));
   const numFmt = extractAxisNumFmt(child(axis, "c:numFmt"));
   const line8 = extractChartLineStyle(child(axis, "c:spPr"), theme);
@@ -20867,10 +21051,12 @@ function extractAxis(axis, theme) {
     majorTickMark: attr(child(axis, "c:majorTickMark"), "val"),
     minorTickMark: attr(child(axis, "c:minorTickMark"), "val"),
     tickLblPos: attr(child(axis, "c:tickLblPos"), "val"),
+    ...numberProp3("tickLabelSkip", numberAttr5(child(axis, "c:tickLblSkip"), "val")),
+    ...numberProp3("tickMarkSkip", numberAttr5(child(axis, "c:tickMarkSkip"), "val")),
     labelAlignment: attr(child(axis, "c:lblAlgn"), "val"),
     ...numberProp3("labelOffset", numberAttr5(child(axis, "c:lblOffset"), "val")),
-    auto: parseBoolean7(attr(child(axis, "c:auto"), "val")),
-    noMultiLevelLabels: parseBoolean7(attr(child(axis, "c:noMultiLvlLbl"), "val")),
+    auto: parseBoolean8(attr(child(axis, "c:auto"), "val")),
+    noMultiLevelLabels: parseBoolean8(attr(child(axis, "c:noMultiLvlLbl"), "val")),
     crosses: attr(child(axis, "c:crosses"), "val"),
     crossBetween: attr(child(axis, "c:crossBetween"), "val"),
     ...line8 ? { line: line8 } : {},
@@ -20890,7 +21076,7 @@ function extractAxisScaling(scaling) {
 function extractAxisNumFmt(numFmt) {
   if (!numFmt) return void 0;
   const formatCode = attr(numFmt, "formatCode");
-  const sourceLinked = parseBoolean7(attr(numFmt, "sourceLinked"));
+  const sourceLinked = parseBoolean8(attr(numFmt, "sourceLinked"));
   return formatCode || sourceLinked != null ? { formatCode, sourceLinked } : void 0;
 }
 function hasChild(value, key) {
@@ -20911,7 +21097,7 @@ function percentNumberAttr(value, name) {
 function numberProp3(key, value) {
   return value == null ? {} : { [key]: value };
 }
-function parseBoolean7(value) {
+function parseBoolean8(value) {
   if (value == null) return void 0;
   if (value === "1" || value === "true") return true;
   if (value === "0" || value === "false") return false;
@@ -21344,6 +21530,10 @@ function parsePictureEffects(pic, theme) {
       enabled: true
     };
   }
+  const biLevel = findFirst(pic, "a:biLevel");
+  if (biLevel) {
+    effects.biLevel = parseBiLevel(biLevel);
+  }
   if (hasDescendant(pic, "a:lum")) {
     const luminance = findFirst(pic, "a:lum");
     effects.luminance = parseBrightnessContrast(luminance);
@@ -21417,6 +21607,16 @@ function parseBrightnessContrast(source) {
     cssContrast: contrast != null ? fixedPercentageToCssRatio(contrast) : void 0
   };
 }
+function parseBiLevel(source) {
+  const thresh = numericAttr2(source, "thresh");
+  const validThresh = thresh != null && thresh >= 0 && thresh <= 1e5;
+  return {
+    enabled: true,
+    thresh,
+    threshold: validThresh ? fixedPercentageToUnit(thresh) : void 0,
+    renderMode: validThresh ? "svg-filter" : "metadata"
+  };
+}
 function parseBackgroundRemoval(source) {
   const foregroundMarks = parseBackgroundRemovalMarks(source, "a14:foregroundMark");
   const backgroundMarks = parseBackgroundRemovalMarks(source, "a14:backgroundMark");
@@ -21460,6 +21660,9 @@ function hasDescendant(value, key) {
 function fixedPercentageToCssRatio(value) {
   return Number(Math.max(0, Math.min(2, 1 + value / 1e5)).toFixed(4));
 }
+function fixedPercentageToUnit(value) {
+  return Number(Math.max(0, Math.min(1, value / 1e5)).toFixed(4));
+}
 function softenBlurRadius(amount) {
   if (amount == null || amount >= 0) return void 0;
   return Number(Math.min(6, Math.abs(amount) / 25e3).toFixed(4));
@@ -21491,6 +21694,7 @@ function pictureEffectName(key) {
   if (key === "a:outerShdw") return "outerShadow";
   if (key === "a:glow") return "glow";
   if (key === "a:grayscl") return "grayscale";
+  if (key === "a:biLevel") return "biLevel";
   if (key === "a:lum") return "luminance";
   if (key === "a14:brightnessContrast") return "luminance";
   if (key === "a14:saturation") return "saturation";
@@ -21837,15 +22041,70 @@ function layerSizeMetadata(fileProbe, mainFileProbe) {
 }
 
 // src/ooxml/sourceMetadata.ts
-function sourceMetadata(cNvPr) {
+function sourceMetadata(cNvPr, rels) {
   return {
     sourceShapeId: attr(cNvPr, "id"),
     sourceShapeName: attr(cNvPr, "name"),
-    sourceCreationId: sourceCreationId(cNvPr)
+    sourceDescription: attr(cNvPr, "descr"),
+    sourceCreationId: sourceCreationId(cNvPr),
+    sourceHyperlink: sourceHyperlink(cNvPr, rels)
   };
 }
 function sourceCreationId(cNvPr) {
   return attr(findFirst(child(cNvPr, "a:extLst"), "a16:creationId"), "id");
+}
+function sourceHyperlink(cNvPr, rels) {
+  const clickLink = child(cNvPr, "a:hlinkClick");
+  const mouseOverLink = child(cNvPr, "a:hlinkMouseOver");
+  const link = clickLink ?? mouseOverLink;
+  if (!link) return void 0;
+  const relationshipId = attr(link, "r:id");
+  const rel = relationshipId ? rels?.get(relationshipId) : void 0;
+  const history = attr(link, "history");
+  const base = {
+    trigger: clickLink ? "click" : "mouseOver",
+    relationshipId,
+    action: attr(link, "action"),
+    tooltip: attr(link, "tooltip"),
+    history: history == null ? void 0 : history === "1",
+    rawTarget: rel?.target,
+    targetMode: rel?.targetMode,
+    relationshipType: rel ? relationshipKind(rel.type) : void 0
+  };
+  if (rel && relationshipKind(rel.type) === "hyperlink") {
+    return {
+      ...base,
+      type: "url",
+      href: rel.target,
+      safe: isSafeHyperlink2(rel.target)
+    };
+  }
+  if (rel && relationshipKind(rel.type) === "slide") {
+    return {
+      ...base,
+      type: "slide",
+      target: rel.resolvedPath,
+      safe: true,
+      action: "go-to-slide"
+    };
+  }
+  if (base.action?.includes("hlinksldjump")) {
+    return {
+      ...base,
+      type: "slide",
+      safe: true,
+      action: "go-to-slide"
+    };
+  }
+  return Object.values(base).some((value) => value != null) ? { ...base, type: "action", safe: false } : void 0;
+}
+function isSafeHyperlink2(value) {
+  try {
+    const url2 = new URL(value);
+    return ["http:", "https:", "mailto:", "tel:"].includes(url2.protocol);
+  } catch {
+    return value.startsWith("#") || value.startsWith("/");
+  }
 }
 
 // src/ooxml/parsePictureElement.ts
@@ -21859,7 +22118,7 @@ async function parsePicture(pic, context, rels, zIndex) {
   const cNvPr = child(child(pic, "p:nvPicPr"), "p:cNvPr");
   const alt = attr(cNvPr, "descr") ?? attr(cNvPr, "name") ?? "";
   const media = parseMediaReference(pic, rels);
-  const source = sourceMetadata(cNvPr);
+  const source = sourceMetadata(cNvPr, rels);
   if (media) {
     const mediaExt = extensionOf(media.rel.resolvedPath);
     const mediaOutputPath = `${media.kind === "video" ? "assets/videos" : "assets/audio"}/${context.slideId}-${media.kind}-${String(zIndex).padStart(3, "0")}.${mediaExt}`;
@@ -21905,7 +22164,7 @@ async function parsePicture(pic, context, rels, zIndex) {
     return void 0;
   }
   const mediaType = extensionOf(rel.resolvedPath);
-  const isRenderableImage = webImageExtensions2.has(mediaType);
+  const isRenderableImage = webImageExtensions3.has(mediaType);
   const outputBaseName = `${context.slideId}-image-${String(zIndex).padStart(3, "0")}`;
   const outputPath = `${isRenderableImage ? "assets/images" : "assets/media"}/${outputBaseName}.${mediaType}`;
   context.assets.push({
@@ -21951,6 +22210,7 @@ async function parsePicture(pic, context, rels, zIndex) {
     fillMode: parsePictureFillMode(pic),
     tile: parsePictureTile(pic),
     crop: parseSourceRect(pic),
+    fillRect: parseFillRect(pic),
     effects: parsePictureEffects(pic, context.theme),
     directSourceEffects: parseDirectSourcePictureEffects(pic, context.theme),
     effectLayerSources: effectLayerSources.length > 0 ? effectLayerSources : void 0
@@ -21967,7 +22227,7 @@ function parseMediaReference(pic, rels) {
 }
 function mediaPosterAsset(context, id, zIndex, kind, rel) {
   const mediaType = extensionOf(rel.resolvedPath);
-  if (!webImageExtensions2.has(mediaType)) return void 0;
+  if (!webImageExtensions3.has(mediaType)) return void 0;
   const outputPath = `assets/images/${context.slideId}-${kind}-${String(zIndex).padStart(3, "0")}-poster.${mediaType}`;
   return {
     outputPath,
@@ -21990,7 +22250,7 @@ function mimeTypeFor(extension2, kind) {
   if (type === "wav") return "audio/wav";
   return `${kind}/${type || "octet-stream"}`;
 }
-var webImageExtensions2 = /* @__PURE__ */ new Set(["png", "jpg", "jpeg", "gif", "svg", "webp"]);
+var webImageExtensions3 = /* @__PURE__ */ new Set(["png", "jpg", "jpeg", "gif", "svg", "webp"]);
 
 // src/ooxml/parseMediaTiming.ts
 function parseMediaTimings(slide) {
@@ -22020,7 +22280,7 @@ function parseMediaTimings(slide) {
     const entry = timingFor(timings, shapeId);
     const volume = parseNumber(attr(mediaNode, "vol"));
     if (volume != null) entry.volume = volume;
-    const display = parseBoolean8(attr(child(mediaNode, "p:cTn"), "display"));
+    const display = parseBoolean9(attr(child(mediaNode, "p:cTn"), "display"));
     if (display != null) entry.display = display;
   }
   return timings;
@@ -22046,7 +22306,7 @@ function parseNumber(value) {
   const result = Number(value);
   return Number.isFinite(result) ? result : void 0;
 }
-function parseBoolean8(value) {
+function parseBoolean9(value) {
   if (value == null) return void 0;
   if (value === "1" || value === "true") return true;
   if (value === "0" || value === "false") return false;
@@ -22264,7 +22524,7 @@ function stringArray(value) {
 }
 
 // src/ooxml/parseModel3dFallback.ts
-var webImageExtensions3 = /* @__PURE__ */ new Set(["png", "jpg", "jpeg", "gif", "svg", "webp"]);
+var webImageExtensions4 = /* @__PURE__ */ new Set(["png", "jpg", "jpeg", "gif", "svg", "webp"]);
 async function collectModel3dAssets(choice, context, rels, index) {
   const model = findFirst(choice, "am3d:model3d");
   const relId = attr(model, "r:embed");
@@ -22295,7 +22555,7 @@ async function collectModel3dAssets(choice, context, rels, index) {
   context.assets.push({
     id: `${modelAssetId}-preview`,
     sourcePath: rasterRel.resolvedPath,
-    outputPath: `${webImageExtensions3.has(rasterMediaType) ? "assets/images" : "assets/media"}/${modelAssetId}-preview.${rasterMediaType}`,
+    outputPath: `${webImageExtensions4.has(rasterMediaType) ? "assets/images" : "assets/media"}/${modelAssetId}-preview.${rasterMediaType}`,
     type: relationshipKind(rasterRel.type),
     metadata: {
       usage: "model3dPreview",
@@ -23015,7 +23275,7 @@ function preservedGroupElement(group, elements, context, zIndex, options = {}) {
   );
   if (box.w <= 0 || box.h <= 0) return void 0;
   const cNvPr = child(child(group, "p:nvGrpSpPr"), "p:cNvPr");
-  const source = sourceMetadata(cNvPr);
+  const source = sourceMetadata(cNvPr, options.rels);
   return {
     id: elementId(context.slideId, zIndex),
     type: "group",
@@ -23119,6 +23379,82 @@ function round2(value) {
   return Math.round(value * 100) / 100;
 }
 
+// src/ooxml/rasterizeComplexGroup.ts
+function rasterizeComplexGroup(group, elements, context, zIndex, rels) {
+  if (elements.length < 200) return void 0;
+  if (!elements.every((element) => element.type === "shape" || element.type === "connector")) return void 0;
+  const box = unionBox(elements);
+  if (!box || box.w <= 0 || box.h <= 0) return void 0;
+  const id = elementId(context.slideId, zIndex);
+  const outputPath = `assets/fallback/${id}-complex-group.png`;
+  const cNvPr = child(child(group, "p:nvGrpSpPr"), "p:cNvPr");
+  const source = sourceMetadata(cNvPr, rels);
+  context.assets.push({
+    id,
+    sourcePath: context.slidePath,
+    outputPath,
+    type: "rasterFallback",
+    metadata: {
+      reason: "complex-vector-group",
+      slideId: context.slideId,
+      slideIndex: context.index,
+      slidePath: context.slidePath,
+      box,
+      sourceShapeId: source.sourceShapeId,
+      sourceShapeName: source.sourceShapeName,
+      sourceCreationId: source.sourceCreationId,
+      sourceElementCount: elements.length
+    },
+    internal: {
+      sourceGroupXml: serializeXml({ "p:grpSp": group })
+    }
+  });
+  context.warnings.push({
+    slideId: context.slideId,
+    elementId: id,
+    code: "complex-vector-group-fallback",
+    message: `Complex decorative group with ${elements.length} elements was emitted as a raster fallback candidate.`
+  });
+  return {
+    id,
+    type: "image",
+    role: "decorative",
+    box,
+    zIndex,
+    src: outputPath,
+    alt: "",
+    fillMode: "stretch",
+    rasterFallback: true,
+    fallbackReason: "complex-vector-group",
+    ...source,
+    sourceElementCount: elements.length
+  };
+}
+function serializeXml(value) {
+  const builder = new json2xml_default({
+    ignoreAttributes: false,
+    attributeNamePrefix: "",
+    textNodeName: "#text",
+    format: false,
+    suppressEmptyNode: true
+  });
+  return builder.build(value);
+}
+function unionBox(elements) {
+  const boxes = elements.map((element) => element.box).filter((box) => box.w > 0 && box.h > 0);
+  if (boxes.length === 0) return void 0;
+  const left = Math.min(...boxes.map((box) => box.x));
+  const top = Math.min(...boxes.map((box) => box.y));
+  const right = Math.max(...boxes.map((box) => box.x + box.w));
+  const bottom = Math.max(...boxes.map((box) => box.y + box.h));
+  return {
+    x: Math.round(left * 100) / 100,
+    y: Math.round(top * 100) / 100,
+    w: Math.round((right - left) * 100) / 100,
+    h: Math.round((bottom - top) * 100) / 100
+  };
+}
+
 // src/ooxml/placeholderRef.ts
 function parseShapePlaceholderRef(shape) {
   const nv = child(shape, "p:nvSpPr");
@@ -23133,7 +23469,7 @@ function parsePlaceholderRef(ph) {
 }
 
 // src/ooxml/parseShapeFill.ts
-var webImageExtensions4 = /* @__PURE__ */ new Set(["png", "jpg", "jpeg", "gif", "svg", "webp"]);
+var webImageExtensions5 = /* @__PURE__ */ new Set(["png", "jpg", "jpeg", "gif", "svg", "webp"]);
 async function parseShapeImageFill(spPr, context, rels, id, zIndex) {
   const blipFill = child(spPr, "a:blipFill");
   if (!blipFill) return void 0;
@@ -23144,7 +23480,7 @@ async function parseShapeImageFill(spPr, context, rels, id, zIndex) {
     return { type: "image", unsupported: true, reason: "missing-image-relationship", relationshipId: relId };
   }
   const mediaType = extensionOf(rel.resolvedPath);
-  const isRenderableImage = webImageExtensions4.has(mediaType);
+  const isRenderableImage = webImageExtensions5.has(mediaType);
   const outputBaseName = `${context.slideId}-shape-fill-${String(zIndex).padStart(3, "0")}`;
   const outputPath = `${isRenderableImage ? "assets/images" : "assets/media"}/${outputBaseName}.${mediaType}`;
   context.assets.push({
@@ -23316,6 +23652,7 @@ async function parseSlide(context) {
   return {
     id: context.slideId,
     index: context.index,
+    sourcePath: context.slidePath,
     width: slideContext.canvas.width,
     height: slideContext.canvas.height,
     background: parseSlideBackground(slide, {
@@ -23345,7 +23682,7 @@ async function parseDrawableChild(item, context, rels, order, preservePlainGroup
     return { elements: element ? [element] : [], nextOrder: order + 1 };
   }
   if (item.key === "p:cxnSp") {
-    const element = parseConnector(item.value, context, order);
+    const element = parseConnector(item.value, context, rels, order);
     return { elements: element ? [element] : [], nextOrder: order + 1 };
   }
   if (item.key === "p:grpSp") {
@@ -23381,19 +23718,27 @@ function markInherited(element, sourceLayer, sourcePath) {
 async function parseShape(shape, context, rels, zIndex) {
   const nv = child(shape, "p:nvSpPr");
   const cNvPr = child(nv, "p:cNvPr");
-  const source = sourceMetadata(cNvPr);
+  const source = sourceMetadata(cNvPr, rels);
   const hidden = attr(cNvPr, "hidden") === "1";
   const spPr = child(shape, "p:spPr");
-  const { box, rotation, flipH, flipV } = parseElementTransform(spPr, context);
   const txBody = child(shape, "p:txBody");
   const styleRef = child(shape, "p:style");
   const ph = child(child(nv, "p:nvPr"), "p:ph");
   const placeholder = attr(ph, "type");
   const placeholderRef = parseShapePlaceholderRef(shape);
-  const listDefaults = mergeTextListStyleDefaults(context.theme.shapeTextListDefaults, context.placeholderListDefaults?.listStyleFor(placeholderRef));
   const shapeDefaults = context.placeholderShapeDefaults?.shapePropertiesFor(placeholderRef) ?? [];
-  const text = txBody ? parseTextBody(txBody, context.theme, { rels, listDefaults, pointToPxScale: pointToCanvasPxScale(context.size, context.canvas) }) : void 0;
+  const { box, rotation, flipH, flipV } = parseElementTransformWithDefaults(spPr, shapeDefaults, context);
   const id = elementId(context.slideId, zIndex);
+  const objectListDefaults = attr(child(nv, "p:cNvSpPr"), "txBox") === "1" ? context.theme.textBoxTextListDefaults : context.theme.shapeTextListDefaults;
+  const listDefaults = mergeTextListStyleDefaults(objectListDefaults, context.placeholderListDefaults?.listStyleFor(placeholderRef));
+  const text = txBody ? parseTextBody(txBody, context.theme, {
+    rels,
+    assets: context.assets,
+    slideId: context.slideId,
+    elementId: id,
+    listDefaults,
+    pointToPxScale: pointToCanvasPxScale(context.size, context.canvas)
+  }) : void 0;
   const { shapeType, geometry } = parsePresetGeometry(spPr, "rect");
   const fill = await parseShapeFillWithDefaults(spPr, styleRef, shapeDefaults, context, rels, id, zIndex);
   const line8 = parseShapeLineWithDefaults(spPr, shapeDefaults, context);
@@ -23460,10 +23805,10 @@ async function parseShape(shape, context, rels, zIndex) {
     effects
   };
 }
-function parseConnector(connector, context, zIndex) {
+function parseConnector(connector, context, rels, zIndex) {
   const nv = child(connector, "p:nvCxnSpPr");
   const cNvPr = child(nv, "p:cNvPr");
-  const source = sourceMetadata(cNvPr);
+  const source = sourceMetadata(cNvPr, rels);
   const hidden = attr(cNvPr, "hidden") === "1";
   const spPr = child(connector, "p:spPr");
   const { box, rotation, flipH, flipV } = parseElementTransform(spPr, context);
@@ -23491,7 +23836,7 @@ function parseConnector(connector, context, zIndex) {
 async function parseGraphicFrame(frame, context, rels, zIndex) {
   const { box, rotation, flipH, flipV } = parseElementTransform(frame, context);
   const cNvPr = child(child(frame, "p:nvGraphicFramePr"), "p:cNvPr");
-  const source = sourceMetadata(cNvPr);
+  const source = sourceMetadata(cNvPr, rels);
   const hidden = attr(cNvPr, "hidden") === "1" || attr(cNvPr, "hidden") === "true";
   const id = elementId(context.slideId, zIndex);
   const slideZoom = parseSlideZoomFrame(frame, context);
@@ -23597,9 +23942,9 @@ async function parseGroup(group, context, rels, startOrder, preservePlainGroups 
     elements.push(...result.elements);
     order = result.nextOrder;
   }
-  const groupElement = preservedGroupElement(group, elements, context, startOrder, { allowWithoutEffects: preservePlainGroups });
+  const groupElement = preservedGroupElement(group, elements, context, startOrder, { allowWithoutEffects: preservePlainGroups, rels });
   if (groupElement) return { elements: [groupElement], nextOrder: reserveGroupId ? order : order + 1 };
-  const rasterFallback = rasterizeComplexGroup(group, elements, context, startOrder);
+  const rasterFallback = rasterizeComplexGroup(group, elements, context, startOrder, rels);
   if (rasterFallback) return { elements: [rasterFallback], nextOrder: order };
   return { elements, nextOrder: order };
 }
@@ -23612,82 +23957,16 @@ function shouldReserveGroupContainerId(group, preservePlainGroups) {
   if (ordered.some((item) => item.key === "p:graphicFrame" || item.key === "mc:AlternateContent")) return false;
   return preservePlainGroups || hasSimpleShadow;
 }
-function rasterizeComplexGroup(group, elements, context, zIndex) {
-  if (elements.length < 200) return void 0;
-  if (!elements.every((element) => element.type === "shape" || element.type === "connector")) return void 0;
-  const box = unionBox(elements);
-  if (!box || box.w <= 0 || box.h <= 0) return void 0;
-  const id = elementId(context.slideId, zIndex);
-  const outputPath = `assets/fallback/${id}-complex-group.png`;
-  const cNvPr = child(child(group, "p:nvGrpSpPr"), "p:cNvPr");
-  const source = sourceMetadata(cNvPr);
-  context.assets.push({
-    id,
-    sourcePath: context.slidePath,
-    outputPath,
-    type: "rasterFallback",
-    metadata: {
-      reason: "complex-vector-group",
-      slideId: context.slideId,
-      slideIndex: context.index,
-      slidePath: context.slidePath,
-      box,
-      sourceShapeId: source.sourceShapeId,
-      sourceShapeName: source.sourceShapeName,
-      sourceCreationId: source.sourceCreationId,
-      sourceElementCount: elements.length
-    },
-    internal: {
-      sourceGroupXml: serializeXml({ "p:grpSp": group })
-    }
-  });
-  context.warnings.push({
-    slideId: context.slideId,
-    elementId: id,
-    code: "complex-vector-group-fallback",
-    message: `Complex decorative group with ${elements.length} elements was emitted as a raster fallback candidate.`
-  });
-  return {
-    id,
-    type: "image",
-    role: "decorative",
-    box,
-    zIndex,
-    src: outputPath,
-    alt: "",
-    fillMode: "stretch",
-    rasterFallback: true,
-    fallbackReason: "complex-vector-group",
-    ...source,
-    sourceElementCount: elements.length
-  };
-}
-function serializeXml(value) {
-  const builder = new json2xml_default({
-    ignoreAttributes: false,
-    attributeNamePrefix: "",
-    textNodeName: "#text",
-    format: false,
-    suppressEmptyNode: true
-  });
-  return builder.build(value);
-}
-function unionBox(elements) {
-  const boxes = elements.map((element) => element.box).filter((box) => box.w > 0 && box.h > 0);
-  if (boxes.length === 0) return void 0;
-  const left = Math.min(...boxes.map((box) => box.x));
-  const top = Math.min(...boxes.map((box) => box.y));
-  const right = Math.max(...boxes.map((box) => box.x + box.w));
-  const bottom = Math.max(...boxes.map((box) => box.y + box.h));
-  return {
-    x: Math.round(left * 100) / 100,
-    y: Math.round(top * 100) / 100,
-    w: Math.round((right - left) * 100) / 100,
-    h: Math.round((bottom - top) * 100) / 100
-  };
-}
 function parseElementTransform(source, context) {
   return parseTransformWithMapper(source, context.size, context.canvas, context.coordinateMapper ?? identityMapper());
+}
+function parseElementTransformWithDefaults(source, defaults, context) {
+  if (child(source, "a:xfrm")) return parseElementTransform(source, context);
+  for (let index = defaults.length - 1; index >= 0; index -= 1) {
+    const spPr = defaults[index]?.spPr;
+    if (child(spPr, "a:xfrm")) return parseElementTransform(spPr, context);
+  }
+  return parseElementTransform(source, context);
 }
 
 // node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/classic/external.js
@@ -38326,7 +38605,7 @@ function maxFontSize(element) {
 function hasBullets(element) {
   return element.text?.paragraphs?.some((paragraph) => {
     const type = paragraph.bullet?.type;
-    return type === "bullet" || type === "number";
+    return type === "bullet" || type === "number" || type === "image";
   }) ?? false;
 }
 function isMetric(text) {
@@ -38442,7 +38721,7 @@ function matchPlaceholder2(entries, placeholder) {
   if (!placeholder) return void 0;
   if (placeholder.idx != null) {
     const match = entries.find((entry) => entry.ref.idx === placeholder.idx);
-    return match ? { spPr: match.spPr, style: match.style, rels: match.rels } : void 0;
+    if (match) return { spPr: match.spPr, style: match.style, rels: match.rels };
   }
   if (placeholder.type == null) return void 0;
   const matches = entries.filter((entry) => entry.ref.type === placeholder.type);
@@ -38554,18 +38833,28 @@ function parseTableTextStyle(source, theme) {
   if (!source) return void 0;
   const color = parseColorInfo(source, theme);
   const bold = parseOnOff(attr(source, "b"));
+  const italic = parseOnOff(attr(source, "i"));
+  const fontSizeRaw = attr(source, "sz");
+  const fontSize = scaledPointSize(fontSizeRaw);
+  const underline = attr(source, "u");
   const font = parseTableTextFont(source, theme);
   const style = {
     fontFamily: font?.family,
     fontFamilySource: font?.source,
     fontFamilyRef: font?.ref,
+    fontSize,
+    fontSizeRaw,
     color: color?.color,
     colorSource: color?.source,
     colorScheme: color?.scheme,
     colorResolved: color?.resolvedColor,
     fontWeight: bold === true ? 700 : void 0,
     bold,
-    boldRaw: attr(source, "b")
+    boldRaw: attr(source, "b"),
+    italic,
+    italicRaw: attr(source, "i"),
+    underline: parseUnderline2(underline),
+    underlineType: underline
   };
   const defined = Object.fromEntries(Object.entries(style).filter(([, value]) => value !== void 0));
   return Object.keys(defined).length > 0 ? defined : void 0;
@@ -38586,10 +38875,22 @@ function parseOnOff(value) {
   if (["0", "false", "off"].includes(value)) return false;
   return void 0;
 }
+function scaledPointSize(value) {
+  if (value == null) return void 0;
+  const number4 = Number(value);
+  return Number.isFinite(number4) ? number4 / 100 : void 0;
+}
+function parseUnderline2(value) {
+  if (!value || value === "none") return void 0;
+  return value;
+}
 
 // src/render/escape.ts
 function escapeHtml(value) {
   return String(value ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+function jsonScriptContent(value) {
+  return JSON.stringify(value).replace(/&/g, "\\u0026").replace(/</g, "\\u003c").replace(/>/g, "\\u003e").replace(/\u2028/g, "\\u2028").replace(/\u2029/g, "\\u2029");
 }
 
 // src/render/renderAttributes.ts
@@ -38610,11 +38911,25 @@ function geometryAttributePairs(element) {
   ];
 }
 function sourceShapeAttributePairs(element) {
+  const hyperlink = element.sourceHyperlink;
   return [
     ["data-source-shape-id", element.sourceShapeId],
     ["data-source-shape-name", element.sourceShapeName],
+    ["data-source-description", element.sourceDescription],
     ["data-source-creation-id", element.sourceCreationId],
-    ["data-source-group-path", element.sourceGroupPath]
+    ["data-source-group-path", element.sourceGroupPath],
+    ["data-source-hyperlink-type", hyperlink?.type],
+    ["data-source-hyperlink-trigger", hyperlink?.trigger],
+    ["data-source-hyperlink-url", hyperlink?.href],
+    ["data-source-hyperlink-safe", booleanData(hyperlink?.safe)],
+    ["data-source-hyperlink-history", booleanData(hyperlink?.history)],
+    ["data-source-hyperlink-relationship-id", hyperlink?.relationshipId],
+    ["data-source-hyperlink-raw-target", hyperlink?.rawTarget],
+    ["data-source-hyperlink-target-mode", hyperlink?.targetMode],
+    ["data-source-hyperlink-relationship-type", hyperlink?.relationshipType],
+    ["data-source-action", hyperlink?.action],
+    ["data-source-action-target", hyperlink?.target],
+    ["title", hyperlink?.tooltip]
   ];
 }
 function renderAttributes(attrs) {
@@ -38715,19 +39030,20 @@ function cssNumber(value) {
 }
 
 // src/render/renderChartArea.ts
-function renderChartAreaBackground(area, width, height) {
-  return renderChartFrameBackground(area, "chart-area-bg", 0, 0, width, height);
+function renderChartAreaBackground(area, width, height, roundedCorners = false) {
+  return renderChartFrameBackground(area, "chart-area-bg", 0, 0, width, height, roundedCorners);
 }
 function renderPlotAreaBackground(area, x, y, width, height) {
   return renderChartFrameBackground(area, "plot-area-bg", x, y, width, height);
 }
-function renderChartFrameBackground(area, className, x, y, width, height) {
+function renderChartFrameBackground(area, className, x, y, width, height, roundedCorners = false) {
   const style = asChartAreaStyle(area);
   if (!style) return "";
   const fill = chartAreaFill(style);
   const stroke = chartAreaStroke(style);
   if (fill === "none" && stroke === "none") return "";
-  return `<rect class="${className}" x="${numberString(x)}" y="${numberString(y)}" width="${numberString(width)}" height="${numberString(height)}" fill="${fill}"${chartAreaStrokeAttributes(style)}></rect>`;
+  const radius = roundedCorners ? chartAreaCornerRadius(width, height) : void 0;
+  return `<rect class="${className}" x="${numberString(x)}" y="${numberString(y)}" width="${numberString(width)}" height="${numberString(height)}"${radius == null ? "" : ` rx="${numberString(radius)}" ry="${numberString(radius)}"`} fill="${fill}"${chartAreaStrokeAttributes(style)}></rect>`;
 }
 function chartAreaDataAttributes(area) {
   return chartFrameStyleDataAttributes("chart-area", area);
@@ -38782,6 +39098,9 @@ function chartAreaStrokeAttributes(style) {
     attrString("stroke-dasharray", style.line?.dash ? svgDashArray(style.line.dash, width ?? 1) : void 0)
   ].filter(Boolean);
   return attrs.length > 0 ? ` ${attrs.join(" ")}` : "";
+}
+function chartAreaCornerRadius(width, height) {
+  return Math.max(1, Math.min(16, Math.round(Math.min(width, height) * 0.04 * 100) / 100));
 }
 function asChartAreaStyle(value) {
   if (value == null || typeof value !== "object" || Array.isArray(value)) return void 0;
@@ -38844,6 +39163,31 @@ function asNumber(value) {
   return Number.isFinite(parsed) ? parsed : void 0;
 }
 
+// src/render/renderFontFamilyFallbacks.ts
+var webFontFallbacks = /* @__PURE__ */ new Map([
+  ["microsoft yahei", ["Noto Sans SC"]],
+  ["\u5FAE\u8F6F\u96C5\u9ED1", ["Noto Sans SC"]]
+]);
+function fontFamiliesWithWebFallbacks(families) {
+  const result = [];
+  for (const family of families) {
+    appendUnique(result, family);
+    for (const fallback of webFontFallbackFamilies(family)) appendUnique(result, fallback);
+  }
+  return result;
+}
+function webFontFallbackFamilies(family) {
+  return webFontFallbacks.get(normalizeFontFamily(family).toLowerCase()) ?? [];
+}
+function appendUnique(target, value) {
+  const normalized = normalizeFontFamily(value);
+  if (!normalized) return;
+  if (!target.some((item) => item.toLowerCase() === normalized.toLowerCase())) target.push(normalized);
+}
+function normalizeFontFamily(value) {
+  return value.split(",")[0]?.trim().replace(/^['"]|['"]$/g, "").replace(/\s+/g, " ") ?? "";
+}
+
 // src/render/renderChartTextStyle.ts
 function asChartTextStyle(value) {
   if (value == null || typeof value !== "object" || Array.isArray(value)) return void 0;
@@ -38851,6 +39195,7 @@ function asChartTextStyle(value) {
   const style = {
     fontFamily: asOptionalString2(source.fontFamily),
     fontFamilyLatin: asOptionalString2(source.fontFamilyLatin),
+    fontFamilyLatinFallback: asOptionalString2(source.fontFamilyLatinFallback),
     fontFamilyLatinRaw: asOptionalString2(source.fontFamilyLatinRaw),
     fontFamilyLatinPanose: asOptionalString2(source.fontFamilyLatinPanose),
     fontFamilyLatinCharset: asOptionalString2(source.fontFamilyLatinCharset),
@@ -38894,6 +39239,7 @@ function chartTextStyleDataAttributes(prefix, style) {
   return [
     attrString2(`data-${prefix}-font-family`, style.fontFamily),
     attrString2(`data-${prefix}-font-family-latin`, style.fontFamilyLatin),
+    attrString2(`data-${prefix}-font-family-latin-fallback`, style.fontFamilyLatinFallback),
     attrString2(`data-${prefix}-font-family-latin-raw`, style.fontFamilyLatinRaw),
     attrString2(`data-${prefix}-font-family-latin-panose`, style.fontFamilyLatinPanose),
     attrString2(`data-${prefix}-font-family-latin-charset`, style.fontFamilyLatinCharset),
@@ -38948,12 +39294,13 @@ function chartTextSvgAttributes(style) {
 }
 function fontFamilyList(style) {
   const families = [
+    style.fontFamilyLatinFallback,
     style.fontFamily,
     style.fontFamilyLatin,
     style.fontFamilyEastAsian,
     style.fontFamilyComplexScript
   ].filter((item) => !!item);
-  const unique5 = [...new Set(families)];
+  const unique5 = fontFamiliesWithWebFallbacks([...new Set(families)]);
   if (unique5.length === 0) return void 0;
   return unique5.map(cssFontFamilyName).join(", ");
 }
@@ -39020,6 +39367,8 @@ function axisDataAttributes(prefix, axis) {
     attrString3(`data-${prefix}-axis-major-tick-mark`, axis.majorTickMark),
     attrString3(`data-${prefix}-axis-minor-tick-mark`, axis.minorTickMark),
     attrString3(`data-${prefix}-axis-tick-lbl-pos`, axis.tickLblPos),
+    attrString3(`data-${prefix}-axis-tick-label-skip`, axis.tickLabelSkip == null ? void 0 : String(axis.tickLabelSkip)),
+    attrString3(`data-${prefix}-axis-tick-mark-skip`, axis.tickMarkSkip == null ? void 0 : String(axis.tickMarkSkip)),
     attrString3(`data-${prefix}-axis-label-alignment`, axis.labelAlignment),
     attrString3(`data-${prefix}-axis-label-offset`, axis.labelOffset == null ? void 0 : String(axis.labelOffset)),
     attrString3(`data-${prefix}-axis-auto`, boolString3(axis.auto)),
@@ -39051,6 +39400,8 @@ function asAxis(value) {
   const majorTickMark = asOptionalString3(axis.majorTickMark);
   const minorTickMark = asOptionalString3(axis.minorTickMark);
   const tickLblPos = asOptionalString3(axis.tickLblPos);
+  const tickLabelSkip = asNumber3(axis.tickLabelSkip);
+  const tickMarkSkip = asNumber3(axis.tickMarkSkip);
   const labelAlignment = asOptionalString3(axis.labelAlignment);
   const labelOffset = asNumber3(axis.labelOffset);
   const auto = asOptionalBoolean3(axis.auto);
@@ -39060,7 +39411,7 @@ function asAxis(value) {
   const line8 = asAxisLine(axis.line);
   const fill = asAxisFill(axis.fill);
   const labelStyle = asChartAxisTextStyle(axis.labelStyle);
-  return id || crossAxisId || title || titleStyle || visible != null || position || scaling || majorUnit != null || minorUnit != null || majorGridlines != null || majorGridlineLine || minorGridlines != null || minorGridlineLine || numFmt || majorTickMark || minorTickMark || tickLblPos || labelAlignment || labelOffset != null || auto != null || noMultiLevelLabels != null || crosses || crossBetween || line8 || fill || labelStyle ? { id, crossAxisId, title, titleStyle, visible, position, scaling, majorUnit, minorUnit, majorGridlines, majorGridlineLine, minorGridlines, minorGridlineLine, numFmt, majorTickMark, minorTickMark, tickLblPos, labelAlignment, labelOffset, auto, noMultiLevelLabels, crosses, crossBetween, line: line8, fill, labelStyle } : void 0;
+  return id || crossAxisId || title || titleStyle || visible != null || position || scaling || majorUnit != null || minorUnit != null || majorGridlines != null || majorGridlineLine || minorGridlines != null || minorGridlineLine || numFmt || majorTickMark || minorTickMark || tickLblPos || tickLabelSkip != null || tickMarkSkip != null || labelAlignment || labelOffset != null || auto != null || noMultiLevelLabels != null || crosses || crossBetween || line8 || fill || labelStyle ? { id, crossAxisId, title, titleStyle, visible, position, scaling, majorUnit, minorUnit, majorGridlines, majorGridlineLine, minorGridlines, minorGridlineLine, numFmt, majorTickMark, minorTickMark, tickLblPos, tickLabelSkip, tickMarkSkip, labelAlignment, labelOffset, auto, noMultiLevelLabels, crosses, crossBetween, line: line8, fill, labelStyle } : void 0;
 }
 function asAxisFill(value) {
   if (value == null || typeof value !== "object" || Array.isArray(value)) return void 0;
@@ -39172,23 +39523,24 @@ function seriesMetadataAttributes(item) {
     item?.sourceRefs?.values ? ` data-series-value-ref="${escapeHtml(item.sourceRefs.values)}"` : "",
     typeof item?.line?.visible === "boolean" ? ` data-series-line-visible="${String(item.line.visible)}"` : "",
     ...seriesFillAttributes(item?.fill),
+    ...seriesFillAttributes(item?.negativeFill, "negative-fill"),
     ...seriesCacheAttributes("name", item?.nameCache),
     ...seriesCacheAttributes("category", item?.categoryCache),
     ...seriesCacheAttributes("value", item?.valueCache),
     item?.valueCache?.formatCode ? ` data-series-value-cache-format-code="${escapeHtml(item.valueCache.formatCode)}"` : ""
   ].join("");
 }
-function seriesFillAttributes(fill) {
+function seriesFillAttributes(fill, name = "fill") {
   if (!fill) return [];
   const color = asOptionalString4(fill.color);
   const source = asOptionalString4(fill.source);
   const scheme = asOptionalString4(fill.scheme);
   const resolvedColor = asOptionalString4(fill.resolvedColor);
   return [
-    color ? ` data-series-fill-color="${escapeHtml(color)}"` : "",
-    source ? ` data-series-fill-source="${escapeHtml(source)}"` : "",
-    scheme ? ` data-series-fill-scheme="${escapeHtml(scheme)}"` : "",
-    resolvedColor ? ` data-series-fill-resolved="${escapeHtml(resolvedColor)}"` : ""
+    color ? ` data-series-${name}-color="${escapeHtml(color)}"` : "",
+    source ? ` data-series-${name}-source="${escapeHtml(source)}"` : "",
+    scheme ? ` data-series-${name}-scheme="${escapeHtml(scheme)}"` : "",
+    resolvedColor ? ` data-series-${name}-resolved="${escapeHtml(resolvedColor)}"` : ""
   ];
 }
 function asSourceRefs(value) {
@@ -39248,29 +39600,45 @@ function asLegend(value) {
 function renderLegend(legend, items, width, height, margin) {
   if (!legend || items.length === 0) return "";
   const position = legend.position ?? "r";
+  const verticalLegend = isVerticalLegend(legend);
   const rightLegend = isRightLegend(legend);
+  const leftLegend = isLeftLegend(legend);
+  const topLegend = isTopLegend(legend);
   const visibleItems = items.filter((item) => legendEntryForItem(legend, item)?.deleted !== true);
   if (visibleItems.length === 0) return "";
   const manualBox = legendLayoutBox(legend, width, height);
-  const originX = manualBox ? 0 : rightLegend ? width - margin.right + 18 : margin.left;
-  const originY = manualBox ? manualLegendBaseline(manualBox, rightLegend) : rightLegend ? margin.top + (position === "tr" ? 0 : 12) : height - 28;
-  const itemGap = legendItemGap(visibleItems.length, rightLegend, manualBox) ?? (rightLegend ? 20 : 92);
+  const originX = manualBox ? 0 : rightLegend ? width - margin.right + 18 : leftLegend ? 24 : margin.left;
+  const originY = manualBox ? manualLegendBaseline(manualBox, verticalLegend) : verticalLegend ? margin.top + (position === "tr" ? 0 : 12) : topLegend ? margin.top - 30 : height - 28;
+  const itemGap = legendItemGap(visibleItems.length, verticalLegend, manualBox) ?? (verticalLegend ? 20 : 92);
   const entries = visibleItems.map((item, index) => {
     const entry = legendEntryForItem(legend, item);
     const style = entry?.labelStyle ?? legend.labelStyle;
-    const x = rightLegend ? originX : originX + index * itemGap;
-    const y = rightLegend ? originY + index * itemGap : originY;
+    const x = verticalLegend ? originX : originX + index * itemGap;
+    const y = verticalLegend ? originY + index * itemGap : originY;
     return `<g class="chart-legend-item" data-series="${escapeHtml(item.label)}" data-legend-entry-index="${item.index}"${seriesMetadataAttributes(item.series)}><rect x="${round3(x)}" y="${round3(y - 10)}" width="10" height="10" fill="${item.color}"></rect><text x="${round3(x + 16)}" y="${round3(y)}" class="chart-legend-label"${legendLabelAttributes(style)}>${escapeHtml(item.label)}</text></g>`;
   }).join("\n        ");
   const layoutBox = manualBox?.width != null && manualBox.height != null ? `<rect class="chart-legend-layout-box" x="0" y="0" width="${manualBox.width}" height="${manualBox.height}" fill="none" stroke="none"></rect>
         ` : "";
+  const background = manualBox?.width != null && manualBox.height != null ? legendBackground(legend.area, manualBox.width, manualBox.height) : "";
   const transform2 = manualBox ? ` transform="translate(${manualBox.x} ${manualBox.y})"` : "";
   return `<g class="chart-legend" data-legend-position="${escapeHtml(position)}"${legend.overlay == null ? "" : ` data-legend-overlay="${legend.overlay}"`}${legendLayoutAttributes(legend)}${transform2}>
-        ${layoutBox}${entries}
+        ${background}${layoutBox}${entries}
         </g>`;
 }
 function isRightLegend(legend) {
   return legend?.position === "r" || legend?.position === "tr";
+}
+function isBottomLegend(legend) {
+  return legend?.position === "b";
+}
+function isLeftLegend(legend) {
+  return legend?.position === "l";
+}
+function isTopLegend(legend) {
+  return legend?.position === "t";
+}
+function isVerticalLegend(legend) {
+  return isRightLegend(legend) || isLeftLegend(legend);
 }
 function legendLayoutDataAttributes(legend) {
   const layout = legend?.layout;
@@ -39329,16 +39697,21 @@ function legendLayoutBox(legend, chartWidth, chartHeight) {
     height: positiveLayoutSize(layout.h, chartHeight)
   };
 }
+function legendBackground(area, width, height) {
+  const background = renderChartFrameBackground(area, "chart-legend-bg", 0, 0, width, height);
+  return background ? `${background}
+        ` : "";
+}
 function positiveLayoutSize(value, total) {
   return value != null && value > 0 ? round3(value * total) : void 0;
 }
-function manualLegendBaseline(box, rightLegend) {
-  if (rightLegend) return Math.min(14, Math.max(10, (box.height ?? 28) / 2));
+function manualLegendBaseline(box, verticalLegend) {
+  if (verticalLegend) return Math.min(14, Math.max(10, (box.height ?? 28) / 2));
   return Math.max(12, round3(((box.height ?? 24) + 8) / 2));
 }
-function legendItemGap(count, rightLegend, box) {
+function legendItemGap(count, verticalLegend, box) {
   if (!box || count <= 0) return void 0;
-  const size = rightLegend ? box.height : box.width;
+  const size = verticalLegend ? box.height : box.width;
   return size == null ? void 0 : round3(size / count);
 }
 function legendLabelAttributes(style) {
@@ -39399,6 +39772,7 @@ function asTitleMeta(value) {
   return present != null || empty != null || overlay != null || textStyle || runs || area ? { present, empty, overlay, textStyle, runs, area } : void 0;
 }
 function hasTitleSpace(title, titleMeta) {
+  if (titleMeta?.overlay === true) return false;
   if (title) return true;
   return titleMeta?.present === true && titleMeta.overlay !== true;
 }
@@ -39638,7 +40012,8 @@ function asDataLabels(value) {
     showCatName: asOptionalBoolean4(labels.showCatName),
     showSerName: asOptionalBoolean4(labels.showSerName),
     showPercent: asOptionalBoolean4(labels.showPercent),
-    showBubbleSize: asOptionalBoolean4(labels.showBubbleSize)
+    showBubbleSize: asOptionalBoolean4(labels.showBubbleSize),
+    separator: typeof labels.separator === "string" ? labels.separator : void 0
   };
   return Object.values(parsed).some((item) => item != null) ? parsed : void 0;
 }
@@ -39653,6 +40028,7 @@ function dataLabelsDataAttributes(dataLabels) {
     attrString6("data-chart-data-labels-show-ser-name", boolString4(dataLabels.showSerName)),
     attrString6("data-chart-data-labels-show-percent", boolString4(dataLabels.showPercent)),
     attrString6("data-chart-data-labels-show-bubble-size", boolString4(dataLabels.showBubbleSize)),
+    attrString6("data-chart-data-labels-separator", dataLabels.separator),
     ...chartTextStyleDataAttributes("chart-data-labels", dataLabels.textStyle)
   ].filter(Boolean);
 }
@@ -40114,1146 +40490,22 @@ function asNumber6(value) {
   return Number.isFinite(parsed) ? parsed : void 0;
 }
 
-// src/render/renderChartSeriesOrder.ts
-function orderedSeries(series) {
-  if (!hasUniqueFiniteOrders(series)) return series;
-  return [...series].sort((left, right) => (left.order ?? 0) - (right.order ?? 0));
-}
-function hasUniqueFiniteOrders(series) {
-  if (series.length === 0) return false;
-  const orders = series.map((item) => item.order);
-  if (!orders.every((order) => Number.isFinite(order))) return false;
-  return new Set(orders).size === orders.length;
-}
-
-// src/render/renderEcharts.ts
-var ECHARTS_CDN_URL = "https://cdn.jsdelivr.net/npm/echarts@6/dist/echarts.min.js";
-function hasCharts(deckOrSlide) {
-  const deck = deckOrSlide;
-  if (Array.isArray(deck.slides)) return deck.slides.some((slide) => hasCharts(slide));
-  return collectElements(deckOrSlide.elements).some((element) => element.type === "chart");
-}
-function renderEchartsRuntimeScripts() {
-  return `<script src="${ECHARTS_CDN_URL}"></script>
-  <script>
-  (() => {
-    function initCharts() {
-      if (!window.echarts) return;
-      document.querySelectorAll("[data-echarts-chart]").forEach((container) => {
-        const figure = container.closest("figure.chart");
-        const optionNode = figure ? figure.querySelector("script[data-chart-echarts-option]") : null;
-        if (!figure || !optionNode || container.dataset.echartsReady === "true") return;
-        let option;
-        try {
-          option = JSON.parse(optionNode.textContent || "{}");
-        } catch {
-          return;
-        }
-        const chart = window.echarts.init(container);
-        chart.setOption(option);
-        container.dataset.echartsReady = "true";
-        figure.classList.add("chart-echarts-ready");
-        if (typeof ResizeObserver !== "undefined") {
-          const observer = new ResizeObserver(() => chart.resize());
-          observer.observe(container);
-        } else {
-          window.addEventListener("resize", () => chart.resize());
-        }
-      });
-    }
-    if (document.readyState === "loading") {
-      document.addEventListener("DOMContentLoaded", initCharts, { once: true });
-    } else {
-      initCharts();
-    }
-  })();
-  </script>`;
-}
-function renderEchartsContainer(chartId, chartType) {
-  return `<div class="chart-echarts" data-echarts-chart="${escapeHtml(chartId)}" data-echarts-chart-type="${escapeHtml(chartType)}"></div>`;
-}
-function renderEchartsOptionScript(chartId, chartType, data) {
-  const option = chartEchartsOption(chartType, data);
-  return `<script type="application/json" data-chart-echarts-option="${escapeHtml(chartId)}">${escapeHtml(JSON.stringify(option))}</script>`;
-}
-function chartEchartsOption(chartType, data) {
-  const chartData = asRecord3(data) ?? {};
-  if (chartType === "pie" || chartType === "doughnut") return pieOption(chartData, chartType === "doughnut");
-  if (chartType === "bar") return cartesianOption(chartData, "bar", asOptionalString8(chartData.direction) === "bar");
-  if (chartType === "line") return cartesianOption(chartData, "line", false);
-  if (chartType === "area") return cartesianOption(chartData, "line", false, true);
-  return {
-    title: titleOption(chartData),
-    dataset: { source: datasetSource(chartData) },
-    series: []
-  };
-}
-function cartesianOption(data, seriesType, horizontal, area = false) {
-  const categories = asStrings(data.categories);
-  const series = chartSeries(data.series);
-  return compactObject({
-    title: titleOption(data),
-    tooltip: { trigger: "axis" },
-    legend: legendOption(data.legend),
-    grid: { containLabel: true },
-    dataset: { source: datasetSource({ categories, series }) },
-    xAxis: horizontal ? valueAxisOption(data.axes) : categoryAxisOption(data.axes),
-    yAxis: horizontal ? categoryAxisOption(data.axes) : valueAxisOption(data.axes),
-    series: series.map((item) => compactObject({
-      type: seriesType,
-      name: item.name,
-      encode: horizontal ? { x: item.name, y: "category" } : { x: "category", y: item.name },
-      stack: isStacked(data.grouping) ? "total" : void 0,
-      smooth: seriesType === "line" ? item.smooth ?? asBoolean(data.smooth) : void 0,
-      areaStyle: area ? {} : void 0,
-      itemStyle: item.color ? { color: item.color } : void 0,
-      lineStyle: lineStyleOption(item),
-      showSymbol: seriesType === "line" && item.marker?.symbol === "none" ? false : void 0,
-      symbol: seriesType === "line" ? echartsSymbol(item.marker?.symbol) : void 0,
-      symbolSize: seriesType === "line" ? item.marker?.size : void 0
-    }))
-  });
-}
-function pieOption(data, doughnut) {
-  const categories = asStrings(data.categories);
-  const series = chartSeries(data.series);
-  const first = series[0] ?? { name: "Series 1", values: [] };
-  return compactObject({
-    title: titleOption(data),
-    tooltip: { trigger: "item" },
-    legend: legendOption(data.legend),
-    series: [{
-      type: "pie",
-      name: first.name,
-      radius: doughnut ? ["45%", "70%"] : "70%",
-      data: first.values.map((value, index) => compactObject({
-        name: categories[index] ?? String(index + 1),
-        value,
-        itemStyle: first.color ? { color: first.color } : void 0
-      }))
-    }]
-  });
-}
-function titleOption(data) {
-  const title = asOptionalString8(data.title);
-  return title ? { text: title, left: "center" } : void 0;
-}
-function legendOption(value) {
-  const legend = asRecord3(value);
-  if (!legend) return void 0;
-  const position = asOptionalString8(legend.position);
-  return compactObject({
-    show: true,
-    orient: position === "l" || position === "r" ? "vertical" : void 0,
-    left: position === "l" ? "left" : position === "r" ? "right" : "center",
-    top: position === "t" ? "top" : position === "b" ? "bottom" : void 0
-  });
-}
-function categoryAxisOption(axes) {
-  const axis = asRecord3(asRecord3(axes)?.category);
-  return compactObject({
-    type: "category",
-    name: asOptionalString8(axis?.title),
-    inverse: asRecord3(axis?.scaling)?.orientation === "maxMin",
-    axisLine: axisLineOption(axis?.line),
-    axisLabel: axisTextOption(axis?.labelStyle)
-  });
-}
-function valueAxisOption(axes) {
-  const axis = asRecord3(asRecord3(axes)?.value);
-  const scaling = asRecord3(axis?.scaling);
-  return compactObject({
-    type: "value",
-    name: asOptionalString8(axis?.title),
-    min: asNumber7(scaling?.min),
-    max: asNumber7(scaling?.max),
-    inverse: scaling?.orientation === "maxMin",
-    axisLine: axisLineOption(axis?.line),
-    axisLabel: axisTextOption(axis?.labelStyle),
-    splitLine: splitLineOption(axis?.majorGridlineLine)
-  });
-}
-function splitLineOption(line8) {
-  const parsed = asRecord3(line8);
-  if (!parsed) return void 0;
-  if (parsed.visible === false) return { show: false };
-  return compactObject({ lineStyle: lineStyleOption({ line: parsed, name: "", values: [] }) });
-}
-function axisLineOption(line8) {
-  const parsed = asRecord3(line8);
-  if (!parsed) return void 0;
-  if (parsed.visible === false) return { show: false };
-  return { lineStyle: lineStyleOption({ line: parsed, name: "", values: [] }) };
-}
-function axisTextOption(style) {
-  const parsed = asRecord3(style);
-  if (!parsed) return void 0;
-  return compactObject({
-    color: asOptionalString8(parsed.color),
-    fontFamily: asOptionalString8(parsed.fontFamily),
-    fontSize: asNumber7(parsed.fontSizePx) ?? asNumber7(parsed.fontSize),
-    fontWeight: asNumber7(parsed.fontWeight),
-    fontStyle: parsed.italic === true ? "italic" : void 0
-  });
-}
-function lineStyleOption(item) {
-  const line8 = asRecord3(item.line);
-  if (!line8 && !item.color) return void 0;
-  if (line8?.visible === false) return { opacity: 0 };
-  return compactObject({
-    color: asOptionalString8(line8?.color) ?? item.color,
-    width: asNumber7(line8?.width),
-    type: lineDashType(line8?.dash)
-  });
-}
-function lineDashType(value) {
-  const dash = asOptionalString8(value);
-  if (!dash || dash === "solid") return void 0;
-  if (dash === "dot" || dash === "sysDot") return "dotted";
-  return "dashed";
-}
-function datasetSource(data) {
-  const categories = asStrings(data.categories);
-  const series = chartSeries(data.series);
-  return [
-    ["category", ...series.map((item) => item.name)],
-    ...categories.map((category, categoryIndex) => [
-      category,
-      ...series.map((item) => item.values[categoryIndex] ?? null)
-    ])
-  ];
-}
-function chartSeries(value) {
-  if (!Array.isArray(value)) return [];
-  return orderedSeries(value.map((item, index) => ({
-    name: String(item?.name ?? `Series ${index + 1}`),
-    values: Array.isArray(item?.values) ? item.values.map(asNullableNumber) : [],
-    index: asNumber7(item?.index),
-    order: asNumber7(item?.order),
-    color: asOptionalString8(item?.color) ?? asOptionalString8(item?.fill?.color),
-    smooth: asBoolean(item?.smooth),
-    line: asRecord3(item?.line),
-    marker: asRecord3(item?.marker)
-  })));
-}
-function isStacked(value) {
-  return value === "stacked" || value === "percentStacked";
-}
-function echartsSymbol(value) {
-  const symbol2 = asOptionalString8(value);
-  if (!symbol2 || symbol2 === "circle") return void 0;
-  if (symbol2 === "square") return "rect";
-  return symbol2;
-}
-function collectElements(elements) {
-  return elements.flatMap((element) => {
-    const children2 = element.children;
-    return Array.isArray(children2) ? [element, ...collectElements(children2)] : [element];
-  });
-}
-function compactObject(value) {
-  return Object.fromEntries(Object.entries(value).filter(([, entry]) => entry !== void 0));
-}
-function asRecord3(value) {
-  return value != null && typeof value === "object" && !Array.isArray(value) ? value : void 0;
-}
-function asStrings(value) {
-  return Array.isArray(value) ? value.map((item) => String(item)) : [];
-}
-function asOptionalString8(value) {
-  if (value == null) return void 0;
-  const text = String(value).trim();
-  return text || void 0;
-}
-function asNumber7(value) {
-  if (value == null || value === "") return void 0;
-  const parsed = Number(value);
-  return Number.isFinite(parsed) ? parsed : void 0;
-}
-function asNullableNumber(value) {
-  if (value == null || value === "") return null;
-  const parsed = Number(value);
-  return Number.isFinite(parsed) ? parsed : null;
-}
-function asBoolean(value) {
-  return typeof value === "boolean" ? value : void 0;
-}
-
-// src/render/renderChartAxisScale.ts
-function valueScaleRatio(value, scale, axis) {
-  const normal = clamp2((value - scale.min) / scale.range, 0, 1);
-  return axis?.scaling?.orientation === "maxMin" ? 1 - normal : normal;
-}
-function valueAxisY(top, plotH, value, scale, axis) {
-  return round5(top + plotH - valueScaleRatio(value, scale, axis) * plotH);
-}
-function valueAxisX(left, plotW, value, scale, axis) {
-  return round5(left + valueScaleRatio(value, scale, axis) * plotW);
-}
-function categoryVisualIndex(index, count, axis) {
-  return axis?.scaling?.orientation === "maxMin" ? Math.max(0, count - 1 - index) : index;
-}
-function categoryPosition(index, count, plotSize, mode, axis) {
-  const visualIndex = categoryVisualIndex(index, count, axis);
-  if (mode === "bar") return (visualIndex + 0.5) / Math.max(1, count) * plotSize;
-  return count <= 1 ? plotSize / 2 : visualIndex / (count - 1) * plotSize;
-}
-function clamp2(value, min, max) {
-  return Math.min(max, Math.max(min, value));
-}
-function round5(value) {
-  return Math.round(value * 100) / 100;
-}
-
-// src/render/renderChartDataLabels.ts
-function renderVerticalBarValueLabels(categories, series, labels, margin, plotH, scale, groupW, barW, barStart, barStep, valueAxis, categoryAxis) {
-  return categories.flatMap((category, categoryIndex) => series.map((item, seriesIndex) => {
-    const visualIndex = categoryVisualIndex(categoryIndex, categories.length, categoryAxis);
-    const value = item.values[categoryIndex] ?? 0;
-    const zeroY = valueAxisY(margin.top, plotH, 0, scale, valueAxis);
-    const valueY = valueAxisY(margin.top, plotH, value, scale, valueAxis);
-    const barY = Math.min(valueY, zeroY);
-    const barH = Math.abs(zeroY - valueY);
-    const barX = margin.left + visualIndex * groupW + barStart + seriesIndex * barStep;
-    const x = round6(barX + (barW - 2) / 2);
-    const y = verticalValueLabelY(labels?.position, barY, barH, margin.top, plotH, value < 0);
-    return valueLabelText(category, item.name, value, x, y, "middle", labels?.textStyle);
-  })).join("\n        ");
-}
-function renderHorizontalBarValueLabels(categories, series, labels, margin, plotW, scale, groupH, barH, barStart, barStep, valueAxis, categoryAxis) {
-  const right = margin.left + plotW;
-  return categories.flatMap((category, categoryIndex) => series.map((item, seriesIndex) => {
-    const visualIndex = categoryVisualIndex(categoryIndex, categories.length, categoryAxis);
-    const value = item.values[categoryIndex] ?? 0;
-    const zeroX = valueAxisX(margin.left, plotW, 0, scale, valueAxis);
-    const valueX = valueAxisX(margin.left, plotW, value, scale, valueAxis);
-    const x = Math.min(zeroX, valueX);
-    const width = Math.abs(valueX - zeroX);
-    const y = margin.top + visualIndex * groupH + barStart + seriesIndex * barStep + (barH - 2) / 2 + 4;
-    const label = horizontalValueLabelPosition(labels?.position, x, width, margin.left, right, value < 0);
-    return valueLabelText(category, item.name, value, round6(label.x), round6(y), label.anchor, labels?.textStyle);
-  })).join("\n        ");
-}
-function hasBasicValueDataLabels(data) {
-  const labels = asDataLabels2(data?.dataLabels);
-  if (labels?.showVal !== true) return false;
-  return labels.showLegendKey !== true && labels.showCatName !== true && labels.showSerName !== true && labels.showPercent !== true && labels.showBubbleSize !== true;
-}
-function hasBasicPercentStackedBarPercentDataLabels(data, series, categoryCount) {
-  const labels = asDataLabels2(data?.dataLabels);
-  if (labels?.showPercent !== true || labels.position !== "ctr") return false;
-  if (labels.showLegendKey !== false || labels.showVal !== false || labels.showCatName !== false || labels.showSerName !== false || labels.showBubbleSize !== false) return false;
-  if (series.length === 0 || categoryCount <= 0) return false;
-  for (let categoryIndex = 0; categoryIndex < categoryCount; categoryIndex += 1) {
-    let total = 0;
-    for (const item of series) {
-      const value = item.values[categoryIndex] ?? 0;
-      if (!Number.isFinite(value) || value < 0) return false;
-      total += value;
-    }
-    if (total <= 0) return false;
-  }
-  return true;
-}
-function hasBasicPiePercentDataLabels(data) {
-  const labels = asDataLabels2(data?.dataLabels);
-  if (labels?.showPercent !== true) return false;
-  return labels.showLegendKey !== true && labels.showVal !== true && labels.showSerName !== true && labels.showBubbleSize !== true;
-}
-function renderVerticalPercentStackedBarPercentLabels(rects, sourceSeries, labels) {
-  return rects.map((rect) => {
-    const rawValue = sourceSeries[rect.seriesIndex]?.values[rect.categoryIndex] ?? 0;
-    const percent2 = rect.value / 100;
-    const text = formatPercent(percent2);
-    return percentStackedBarLabelText(rect, rawValue, percent2, round6(rect.x + rect.width / 2), round6(rect.y + rect.height / 2 + 4), text, labels?.textStyle);
-  }).join("\n        ");
-}
-function renderHorizontalPercentStackedBarPercentLabels(rects, sourceSeries, labels) {
-  return rects.map((rect) => {
-    const rawValue = sourceSeries[rect.seriesIndex]?.values[rect.categoryIndex] ?? 0;
-    const percent2 = rect.value / 100;
-    const text = formatPercent(percent2);
-    return percentStackedBarLabelText(rect, rawValue, percent2, round6(rect.x + rect.width / 2), round6(rect.y + rect.height / 2 + 4), text, labels?.textStyle);
-  }).join("\n        ");
-}
-function renderPiePercentDataLabels(labels, values, dataLabels, options) {
-  const total = values.reduce((sum, value) => sum + Math.max(0, value), 0);
-  if (total <= 0) return "";
-  let start = -Math.PI / 2;
-  return values.map((value, index) => {
-    const positive = Math.max(0, value);
-    const angle = positive / total * Math.PI * 2;
-    const mid = start + angle / 2;
-    start += angle;
-    if (positive <= 0) return "";
-    const labelRadius = options.innerRadius > 0 ? options.innerRadius + (options.radius - options.innerRadius) * 0.58 : options.radius * 0.62;
-    const x = round6(options.cx + Math.cos(mid) * labelRadius);
-    const y = round6(options.cy + Math.sin(mid) * labelRadius + 4);
-    const category = labels[index] ?? String(index + 1);
-    const percent2 = positive / total;
-    const text = dataLabels?.showCatName === true ? `${category} ${formatPercent(percent2)}` : formatPercent(percent2);
-    return pieLabelText(category, options.seriesName, value, percent2, x, y, text, dataLabels?.textStyle);
-  }).filter(Boolean).join("\n        ");
-}
-function valueLabelText(category, seriesName, value, x, y, anchor, style) {
-  return `<text class="chart-data-label" data-category="${escapeHtml(category)}" data-series="${escapeHtml(seriesName)}" data-value="${round6(value)}" x="${x}" y="${y}" text-anchor="${anchor}"${dataLabelStyleAttributes(style)}>${escapeHtml(String(value))}</text>`;
-}
-function pieLabelText(category, seriesName, value, percent2, x, y, text, style) {
-  return `<text class="chart-data-label chart-data-label-pie" data-category="${escapeHtml(category)}" data-series="${escapeHtml(seriesName)}" data-value="${round6(value)}" data-percent="${round6(percent2)}" x="${x}" y="${y}" text-anchor="middle"${dataLabelStyleAttributes(style)}>${escapeHtml(text)}</text>`;
-}
-function percentStackedBarLabelText(rect, value, percent2, x, y, text, style) {
-  return `<text class="chart-data-label chart-data-label-bar-percent" data-category="${escapeHtml(rect.category)}" data-series="${escapeHtml(rect.series)}" data-value="${round6(value)}" data-percent="${round6(percent2)}" x="${x}" y="${y}" text-anchor="middle"${dataLabelStyleAttributes(style)}>${escapeHtml(text)}</text>`;
-}
-function verticalValueLabelY(position, barY, barH, plotTop, plotH, negative) {
-  const plotBottom = plotTop + plotH;
-  if (position === "ctr") return round6(barY + barH / 2 + 4);
-  if (position === "inEnd") return round6(negative ? barY + barH - 6 : barY + 14);
-  if (position === "inBase") return round6(negative ? barY + 14 : barY + barH - 6);
-  if (negative) return round6(barY + barH + 14 <= plotBottom ? barY + barH + 14 : barY + barH - 6);
-  return round6(barY > plotTop + 16 ? barY - 6 : barY + 14);
-}
-function horizontalValueLabelPosition(position, barX, barW, plotLeft, plotRight, negative) {
-  const barEnd = barX + barW;
-  if (position === "ctr") return { x: barEnd - barW / 2, anchor: "middle" };
-  if (position === "inEnd") return negative ? { x: barX + 6, anchor: "start" } : { x: barEnd - 6, anchor: "end" };
-  if (position === "inBase") return negative ? { x: barEnd - 6, anchor: "end" } : { x: barX + 6, anchor: "start" };
-  if (negative) {
-    const outsideX2 = barX - 6;
-    return outsideX2 >= plotLeft + 4 ? { x: outsideX2, anchor: "end" } : { x: barX + 6, anchor: "start" };
-  }
-  const outsideX = barEnd + 6;
-  return outsideX <= plotRight - 4 ? { x: outsideX, anchor: "start" } : { x: barEnd - 6, anchor: "end" };
-}
-function asDataLabels2(value) {
-  if (value == null || typeof value !== "object" || Array.isArray(value)) return void 0;
-  return {
-    showLegendKey: typeof value.showLegendKey === "boolean" ? value.showLegendKey : void 0,
-    position: typeof value.position === "string" ? value.position : void 0,
-    textStyle: asChartTextStyle(value.textStyle),
-    showVal: typeof value.showVal === "boolean" ? value.showVal : void 0,
-    showCatName: typeof value.showCatName === "boolean" ? value.showCatName : void 0,
-    showSerName: typeof value.showSerName === "boolean" ? value.showSerName : void 0,
-    showPercent: typeof value.showPercent === "boolean" ? value.showPercent : void 0,
-    showBubbleSize: typeof value.showBubbleSize === "boolean" ? value.showBubbleSize : void 0
-  };
-}
-function dataLabelStyleAttributes(style) {
-  const attrs = chartTextSvgAttributes(style);
-  return attrs.length > 0 ? ` ${attrs.join(" ")}` : "";
-}
-function formatPercent(value) {
-  const percent2 = value * 100;
-  const rounded = Math.round(percent2 * 10) / 10;
-  return `${Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1)}%`;
-}
-function round6(value) {
-  return Math.round(value * 100) / 100;
-}
-
-// src/render/renderChartStackedBars.ts
-var DEFAULT_BAR_GAP_WIDTH = 150;
-function barClusterLayout(groupSize, seriesCount, gapWidth, overlap, stacked) {
-  const gap = validGapWidth(gapWidth) ? gapWidth : DEFAULT_BAR_GAP_WIDTH;
-  const overlapRatio = !stacked && validOverlap(overlap) ? overlap : 0;
-  const barCount = stacked ? 1 : Math.max(1, seriesCount);
-  const denominator = barCount - (barCount - 1) * (overlapRatio / 100) + gap / 100;
-  const thickness = Math.max(4, groupSize / denominator);
-  const step = stacked ? 0 : thickness * (1 - overlapRatio / 100);
-  const used = thickness + step * (barCount - 1);
-  return {
-    start: (groupSize - used) / 2,
-    thickness,
-    step
-  };
-}
-function validGapWidth(value) {
-  return value != null && Number.isFinite(value) && value >= 0 && value <= 500;
-}
-function validOverlap(value) {
-  return value != null && Number.isFinite(value) && value >= -100 && value <= 100;
-}
-function verticalStackedBarRects(categories, series, margin, plotH, scale, groupW, barW, offsetX, fillFor, valueAxis, categoryAxis) {
-  return categories.flatMap((category, categoryIndex) => {
-    const visualIndex = categoryVisualIndex(categoryIndex, categories.length, categoryAxis);
-    let positiveBase = 0;
-    let negativeBase = 0;
-    return series.map((item, seriesIndex) => {
-      const value = item.values[categoryIndex] ?? 0;
-      const previous = value >= 0 ? positiveBase : negativeBase;
-      const next = previous + value;
-      const yNext = valueAxisY(margin.top, plotH, next, scale, valueAxis);
-      const yPrevious = valueAxisY(margin.top, plotH, previous, scale, valueAxis);
-      if (value >= 0) positiveBase = next;
-      else negativeBase = next;
-      const x = margin.left + visualIndex * groupW + offsetX;
-      return {
-        category,
-        categoryIndex,
-        series: item.name,
-        seriesIndex,
-        value,
-        x: round7(x),
-        y: round7(Math.min(yNext, yPrevious)),
-        width: round7(barW - 2),
-        height: round7(Math.abs(yPrevious - yNext)),
-        fill: fillFor(item, seriesIndex, categoryIndex)
-      };
-    });
-  });
-}
-function horizontalStackedBarRects(categories, series, margin, plotW, scale, groupH, barH, offsetY, fillFor, valueAxis, categoryAxis) {
-  return categories.flatMap((category, categoryIndex) => {
-    const visualIndex = categoryVisualIndex(categoryIndex, categories.length, categoryAxis);
-    let positiveBase = 0;
-    let negativeBase = 0;
-    return series.map((item, seriesIndex) => {
-      const value = item.values[categoryIndex] ?? 0;
-      const previous = value >= 0 ? positiveBase : negativeBase;
-      const next = previous + value;
-      const xPrevious = valueAxisX(margin.left, plotW, previous, scale, valueAxis);
-      const xNext = valueAxisX(margin.left, plotW, next, scale, valueAxis);
-      if (value >= 0) positiveBase = next;
-      else negativeBase = next;
-      const y = margin.top + visualIndex * groupH + offsetY;
-      return {
-        category,
-        categoryIndex,
-        series: item.name,
-        seriesIndex,
-        value,
-        x: round7(Math.min(xPrevious, xNext)),
-        y: round7(y),
-        width: round7(Math.abs(xNext - xPrevious)),
-        height: round7(barH - 2),
-        fill: fillFor(item, seriesIndex, categoryIndex)
-      };
-    });
-  });
-}
-function round7(value) {
-  return Math.round(value * 100) / 100;
-}
-
-// src/render/renderChartBarStacking.ts
-function barStackingMode(grouping) {
-  if (grouping === "stacked" || grouping === "percentStacked") return grouping;
-  return "none";
-}
-function percentStackedSeries(series, categoryCount) {
-  const totals = Array.from({ length: categoryCount }, (_, categoryIndex) => {
-    return series.reduce((sum, item) => sum + Math.max(0, item.values[categoryIndex] ?? 0), 0);
-  });
-  return series.map((item) => ({
-    ...item,
-    values: Array.from({ length: categoryCount }, (_, categoryIndex) => {
-      const total = totals[categoryIndex] ?? 0;
-      if (total <= 0) return 0;
-      return Math.max(0, item.values[categoryIndex] ?? 0) / total * 100;
-    })
-  }));
-}
-
-// src/render/renderChartLineStacking.ts
-function lineStackingMode(grouping) {
-  if (grouping === "stacked") return "stacked";
-  if (grouping === "percentStacked") return "percentStacked";
-  return "none";
-}
-function stackedLineSeries(series, categoryCount) {
-  const totals = Array.from({ length: categoryCount }, () => 0);
-  return series.map((item) => {
-    const values = Array.from({ length: categoryCount }, (_, categoryIndex) => {
-      const value = item.values[categoryIndex] ?? 0;
-      if (Number.isFinite(value)) totals[categoryIndex] += value;
-      return totals[categoryIndex];
-    });
-    return { ...item, values };
-  });
-}
-function hasOnlyNonNegativeLineValues(series) {
-  const values = series.flatMap((item) => item.values);
-  return values.length > 0 && values.every((value) => Number.isFinite(value) && value >= 0);
-}
-
-// src/render/chartValueScale.ts
-function computeValueScale(series, valueAxis, stacked = false) {
-  const values = stacked ? stackedCategoryTotals(series) : series.flatMap((item) => item.values).filter(Number.isFinite);
-  const dataMax = Math.max(1, ...values);
-  const dataMin = Math.min(0, ...values);
-  const min = valueAxis?.scaling?.min ?? (dataMin < 0 ? niceFloor(dataMin) : 0);
-  const configuredMax = valueAxis?.scaling?.max;
-  const max = configuredMax != null && configuredMax > min ? configuredMax : Math.max(niceCeil(dataMax), min + 1);
-  return { min, max, range: max - min };
-}
-function computePercentStackedValueScale(valueAxis) {
-  const min = valueAxis?.scaling?.min ?? 0;
-  const configuredMax = valueAxis?.scaling?.max;
-  const max = configuredMax != null && configuredMax > min ? configuredMax : Math.max(100, min + 1);
-  return { min, max, range: max - min };
-}
-function stackedCategoryTotals(series) {
-  const categoryCount = Math.max(0, ...series.map((item) => item.values.length));
-  return Array.from({ length: categoryCount }, (_, categoryIndex) => {
-    const totals = series.reduce((sum, item) => {
-      const value = item.values[categoryIndex] ?? 0;
-      if (!Number.isFinite(value)) return sum;
-      return value >= 0 ? { positive: sum.positive + value, negative: sum.negative } : { positive: sum.positive, negative: sum.negative + value };
-    }, { positive: 0, negative: 0 });
-    return [totals.positive, totals.negative];
-  }).flat();
-}
-function niceCeil(value) {
-  if (!Number.isFinite(value) || value <= 0) return 1;
-  const exponent = Math.floor(Math.log10(value));
-  const magnitude = 10 ** exponent;
-  const normalized = value / magnitude;
-  const nice = normalized <= 1 ? 1 : normalized <= 2 ? 2 : normalized <= 5 ? 5 : 10;
-  return nice * magnitude;
-}
-function niceFloor(value) {
-  if (!Number.isFinite(value) || value >= 0) return 0;
-  return -niceCeil(Math.abs(value));
-}
-
-// src/render/renderEffectCss.ts
-function shadowToCss(shadow) {
-  if (!shadow) return void 0;
-  if (shadow?.renderMode === "centered-scaled-shadow-filter") return void 0;
-  if (shadow?.unsupportedCss === true) return void 0;
-  return `${shadow.x ?? 0}px ${shadow.y ?? 0}px ${shadow.blur ?? 0}px ${shadow.color ?? "rgba(0, 0, 0, 0.25)"}`;
-}
-function glowToCss(glow) {
-  return `0 0 ${glow.radius ?? 0}px ${glow.color ?? "rgba(255, 255, 255, 0.5)"}`;
-}
-function textShadowToCss(effects) {
-  const shadows = [
-    effects?.outerShadow ? shadowToCss(effects.outerShadow) : void 0,
-    effects?.glow ? glowToCss(effects.glow) : void 0
-  ].filter(Boolean);
-  return shadows.length > 0 ? shadows.join(", ") : void 0;
-}
-function boxShadowToCss(effects) {
-  const shadows = [
-    effects?.outerShadow ? shadowToCss(effects.outerShadow) : void 0,
-    effects?.glow ? glowToCss(effects.glow) : void 0
-  ].filter(Boolean);
-  return shadows.length > 0 ? shadows.join(", ") : void 0;
-}
-function filterToCss(effects) {
-  const shadow = shadowToCss(effects?.outerShadow);
-  const filters = [
-    shadow ? `drop-shadow(${shadow})` : void 0,
-    effects?.glow ? `drop-shadow(${glowToCss(effects.glow)})` : void 0
-  ].filter(Boolean);
-  return filters.length > 0 ? filters.join(" ") : void 0;
-}
-function reflectionToCss(reflection) {
-  const gap = reflection.distance ?? 0;
-  const start = reflection.startOpacity ?? 0.25;
-  const end = reflection.endOpacity ?? 0;
-  const startPos = reflection.startPosition ?? 0;
-  const endPos = reflection.endPosition ?? 100;
-  return `below ${gap}px linear-gradient(to bottom, rgba(0, 0, 0, ${start}) ${startPos}%, rgba(0, 0, 0, ${end}) ${endPos}%)`;
-}
-
-// src/render/renderSvgGradient.ts
-function renderSvgLinearGradientDef(id, fill, indent = "        ") {
-  const direction = linearGradientDirection(typeof fill.angle === "number" ? fill.angle : 180);
-  const stops = fill.stops.map((stop) => {
-    const offset = Number(stop.position ?? 0);
-    return `${indent}<stop offset="${escapeHtml(String(offset))}%" stop-color="${escapeHtml(stop.color ?? "#ffffff")}"></stop>`;
-  }).join("\n");
-  return `${indent}<linearGradient id="${escapeHtml(id)}" gradientUnits="objectBoundingBox" x1="${direction.x1}%" y1="${direction.y1}%" x2="${direction.x2}%" y2="${direction.y2}%">
-${stops}
-${indent}</linearGradient>`;
-}
-function linearGradientDirection(angle) {
-  const radians = angle * Math.PI / 180;
-  const dx = Math.sin(radians);
-  const dy = -Math.cos(radians);
-  const scale = 50 / Math.max(Math.abs(dx), Math.abs(dy), 1e-4);
-  return {
-    x1: formatNumber2(50 - dx * scale),
-    y1: formatNumber2(50 - dy * scale),
-    x2: formatNumber2(50 + dx * scale),
-    y2: formatNumber2(50 + dy * scale)
-  };
-}
-function formatNumber2(value) {
-  return Number(value.toFixed(4)).toString();
-}
-
-// src/render/renderChartSeriesStyle.ts
-function renderLineChartSeriesStyle(item, seriesIndex, fallbackColor, chartId) {
-  const line8 = asRecord4(item.line);
-  const width = asNumber8(line8?.width) ?? 3;
-  const fill = asRecord4(line8?.fill);
-  const gradient = supportedLinearGradient(fill) ? fill : void 0;
-  const gradientId = gradient ? `${safeId(chartId)}-series-${seriesIndex + 1}-line-gradient` : "";
-  const defs = gradient ? renderSvgLinearGradientDef(gradientId, gradient, "          ") : "";
-  const stroke = gradient ? `url(#${gradientId})` : asString(line8?.color) ?? fallbackColor;
-  const dash = svgDashArray(line8?.dash, width);
-  const filter = filterToCss(item.effects);
-  const lineAttrs = [
-    `stroke="${escapeHtml(stroke)}"`,
-    `stroke-width="${formatNumber3(width)}"`,
-    `stroke-linecap="${escapeHtml(svgLineCap(line8?.cap))}"`,
-    `stroke-linejoin="${escapeHtml(svgLineJoin(line8?.join))}"`,
-    dash ? `stroke-dasharray="${escapeHtml(dash)}"` : "",
-    filter ? `style="filter: ${escapeHtml(filter)}"` : ""
-  ].filter(Boolean).join(" ");
-  return {
-    defs,
-    strokeAttributes: `${lineAttrs}${seriesLineMetadata(line8)}${seriesEffectMetadata(item.effects)}${seriesMarkerAttributes(item)}`,
-    pointFill: asString(line8?.color) ?? fallbackColor,
-    metadataAttributes: `${seriesLineMetadata(line8)}${seriesEffectMetadata(item.effects)}${seriesMarkerAttributes(item)}`
-  };
-}
-function shouldRenderSeriesMarkers(item) {
-  if (!item.marker) return true;
-  if (item.marker?.source === "chartStyleUnsupported") return false;
-  if (item.marker?.symbol === "none") return false;
-  const size = asNumber8(item.marker.size);
-  if (size != null && size <= 0) return false;
-  if (item.marker.symbol === "square") return size != null && size > 0;
-  return item.marker.symbol === "circle";
-}
-function seriesMarkerRadius(item) {
-  const size = asNumber8(item.marker?.size);
-  return size != null && size > 0 ? size : 4;
-}
-function seriesMarkerAttributes(item) {
-  const line8 = asRecord4(item.marker?.line);
-  return [
-    item.marker?.symbol ? ` data-series-marker-symbol="${escapeHtml(item.marker.symbol)}"` : "",
-    asNumber8(item.marker?.size) != null ? ` data-series-marker-size="${formatNumber3(asNumber8(item.marker?.size))}"` : "",
-    item.marker?.source ? ` data-series-marker-source="${escapeHtml(item.marker.source)}"` : "",
-    line8?.visible === false ? ` data-series-marker-line-visible="false"` : "",
-    asNumber8(line8?.width) != null ? ` data-series-marker-line-width="${formatNumber3(asNumber8(line8?.width))}"` : "",
-    asString(line8?.cap) ? ` data-series-marker-line-cap="${escapeHtml(asString(line8?.cap))}"` : "",
-    asString(line8?.join) ? ` data-series-marker-line-join="${escapeHtml(asString(line8?.join))}"` : "",
-    asString(line8?.dash) ? ` data-series-marker-line-dash="${escapeHtml(asString(line8?.dash))}"` : "",
-    asString(line8?.colorScheme) ? ` data-series-marker-line-color-scheme="${escapeHtml(asString(line8?.colorScheme))}"` : ""
-  ].join("");
-}
-function seriesLineMetadata(line8) {
-  if (!line8) return "";
-  const fill = asRecord4(line8.fill);
-  const gradientStops = gradientStopsMetadata(fill);
-  return [
-    asNumber8(line8.width) != null ? ` data-series-line-width="${formatNumber3(asNumber8(line8.width))}"` : "",
-    asString(line8.cap) ? ` data-series-line-cap="${escapeHtml(asString(line8.cap))}"` : "",
-    asString(line8.join) ? ` data-series-line-join="${escapeHtml(asString(line8.join))}"` : "",
-    asString(line8.dash) ? ` data-series-line-dash="${escapeHtml(asString(line8.dash))}"` : "",
-    fill?.type ? ` data-series-line-fill-type="${escapeHtml(String(fill.type))}"` : "",
-    fill?.kind ? ` data-series-line-gradient-kind="${escapeHtml(String(fill.kind))}"` : "",
-    asNumber8(fill?.angle) != null ? ` data-series-line-gradient-angle="${formatNumber3(asNumber8(fill?.angle))}"` : "",
-    asBooleanString(fill?.scaled) ? ` data-series-line-gradient-scaled="${escapeHtml(asBooleanString(fill?.scaled))}"` : "",
-    asString(fill?.flip) ? ` data-series-line-gradient-flip="${escapeHtml(asString(fill?.flip))}"` : "",
-    asBooleanString(fill?.rotateWithShape) ? ` data-series-line-gradient-rot-with-shape="${escapeHtml(asBooleanString(fill?.rotateWithShape))}"` : "",
-    gradientStops ? ` data-series-line-gradient-stop-count="${gradientStops.count}"` : "",
-    gradientStops ? ` data-series-line-gradient-stops="${escapeHtml(JSON.stringify(gradientStops.stops))}"` : ""
-  ].join("");
-}
-function gradientStopsMetadata(fill) {
-  if (!Array.isArray(fill?.stops)) return void 0;
-  const stops = fill.stops.map((stop) => {
-    const item = asRecord4(stop);
-    if (!item) return void 0;
-    const position = asNumber8(item.position);
-    const color = asString(item.color);
-    if (position == null && color == null) return void 0;
-    return {
-      ...position != null ? { position } : {},
-      ...color ? { color } : {}
-    };
-  }).filter((stop) => Boolean(stop));
-  return stops.length > 0 ? { count: stops.length, stops } : void 0;
-}
-function seriesEffectMetadata(effects) {
-  const shadow = asRecord4(effects?.outerShadow);
-  if (!shadow) return "";
-  return [
-    ` data-series-shadow="outer"`,
-    asString(shadow.color) ? ` data-series-shadow-color="${escapeHtml(asString(shadow.color))}"` : "",
-    asNumber8(shadow.blur) != null ? ` data-series-shadow-blur="${formatNumber3(asNumber8(shadow.blur))}"` : "",
-    asNumber8(shadow.distance) != null ? ` data-series-shadow-distance="${formatNumber3(asNumber8(shadow.distance))}"` : "",
-    asNumber8(shadow.direction) != null ? ` data-series-shadow-direction="${formatNumber3(asNumber8(shadow.direction))}"` : ""
-  ].join("");
-}
-function supportedLinearGradient(fill) {
-  return fill?.type === "gradient" && fill.kind === "linear" && Array.isArray(fill.stops) && fill.stops.length >= 2;
-}
-function asRecord4(value) {
-  return value != null && typeof value === "object" && !Array.isArray(value) ? value : void 0;
-}
-function asString(value) {
-  return typeof value === "string" && value.trim() ? value : void 0;
-}
-function asNumber8(value) {
-  if (value == null || value === "") return void 0;
-  const number4 = Number(value);
-  return Number.isFinite(number4) ? number4 : void 0;
-}
-function asBooleanString(value) {
-  if (typeof value === "boolean") return String(value);
-  if (value === "true" || value === "false") return value;
-  return void 0;
-}
-function formatNumber3(value) {
-  return Number(value.toFixed(2)).toString();
-}
-function safeId(value) {
-  return value.replace(/[^a-zA-Z0-9_-]+/g, "-");
-}
-
-// src/render/renderChartAxisAttrs.ts
-function formatAxisValue(value, formatCode) {
-  if (formatCode === "#,##0") return new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 }).format(value);
-  if (!formatCode || formatCode === "General") return Number.isInteger(value) ? String(value) : String(round8(value));
-  return Number.isInteger(value) ? String(value) : String(round8(value));
-}
-function formatCategoryValue(value, formatCode, categoryValueType) {
-  if (formatCode !== "#,##0" || categoryValueType !== "number") return value;
-  const number4 = Number(value);
-  return Number.isFinite(number4) ? formatAxisValue(number4, formatCode) : value;
-}
-function isRightLegend2(legend) {
-  return legend.position === "r" || legend.position === "tr";
-}
-function round8(value) {
-  return Number(value.toFixed(2));
-}
-function clamp3(value, min, max) {
-  return Math.min(max, Math.max(min, value));
-}
-function attrString7(name, value) {
-  return value == null || value === "" ? "" : `${name}="${escapeHtml(String(value))}"`;
-}
-function chartLineAttrs(axisName, line8) {
-  if (line8?.visible === false) return void 0;
-  const attrs = [
-    attrString7("data-axis", axisName),
-    ...chartLinePaintAttrs(line8)
-  ].filter(Boolean);
-  return attrs.length > 0 ? ` ${attrs.join(" ")}` : ` data-axis="${axisName}"`;
-}
-function chartTickLineAttrs(line8) {
-  if (line8?.visible === false) return "";
-  const attrs = chartLinePaintAttrs(line8).filter(Boolean);
-  return attrs.length > 0 ? ` ${attrs.join(" ")}` : "";
-}
-function chartLabelAttrs(style, x, y) {
-  if (!style) return "";
-  const rotation = normalizedRotation(style.bodyRotation);
-  const attrs = [
-    ...chartTextAttrsList(style),
-    attrString7("transform", rotation == null ? void 0 : `rotate(${rotation} ${round8(x)} ${round8(y)})`)
-  ].filter(Boolean);
-  return attrs.length > 0 ? ` ${attrs.join(" ")}` : "";
-}
-function chartTextAttrs(style) {
-  if (!style) return "";
-  const attrs = chartTextAttrsList(style);
-  return attrs.length > 0 ? ` ${attrs.join(" ")}` : "";
-}
-function chartLinePaintAttrs(line8) {
-  const width = line8?.width && Number.isFinite(line8.width) ? line8.width : void 0;
-  return [
-    attrString7("stroke", line8?.color),
-    attrString7("data-line-color-source", line8?.colorSource),
-    attrString7("data-line-color-scheme", line8?.colorScheme),
-    attrString7("data-line-color-resolved", line8?.colorResolved),
-    attrString7("stroke-width", width == null ? void 0 : round8(width)),
-    attrString7("stroke-linecap", line8?.cap ? svgLineCap(line8.cap) : void 0),
-    attrString7("data-line-compound", line8?.compound),
-    attrString7("data-line-align", line8?.align),
-    attrString7("stroke-linejoin", line8?.join ? svgLineJoin(line8.join) : void 0),
-    attrString7("stroke-dasharray", line8?.dash ? svgDashArray(line8.dash, width ?? 1) : void 0)
-  ];
-}
-function chartTextAttrsList(style) {
-  return chartTextSvgAttributes(style);
-}
-function normalizedRotation(value) {
-  if (value == null || !Number.isFinite(value)) return void 0;
-  let normalized = value % 360;
-  if (normalized > 180) normalized -= 360;
-  if (normalized <= -180) normalized += 360;
-  const rounded = round8(normalized);
-  return Math.abs(rounded) < 0.01 ? void 0 : rounded;
-}
-
-// src/render/renderChartAxis.ts
-function renderValueAxisTicks(margin, plotH, valueAxis, scale) {
-  if (!valueAxis || valueAxis.visible === false) return "";
-  const minorTicks = minorTickValues(valueAxis, scale).map((value) => {
-    const y = valueAxisY(margin.top, plotH, value, scale, valueAxis);
-    return renderMinorTickMark(margin.left, y, valueAxis.minorTickMark, value, valueAxis.line);
-  });
-  const majorTicks = axisTickValues(valueAxis, scale).map((value) => {
-    const y = valueAxisY(margin.top, plotH, value, scale, valueAxis);
-    return [
-      renderMajorTickMark(margin.left, y, valueAxis.majorTickMark, value, valueAxis.line),
-      renderTickLabel(margin.left, y, valueAxis, value)
-    ].filter(Boolean).join("");
-  });
-  return [...minorTicks, ...majorTicks].filter(Boolean).join("\n        ");
-}
-function renderCategoryAxisTicks(margin, plotW, plotH, categories, categoryAxis, mode, categoryValueType, axisY = margin.top + plotH) {
-  if (categoryAxis?.visible === false || categories.length === 0) return "";
-  return categories.map((category, index) => {
-    const x = round8(margin.left + categoryPosition(index, categories.length, plotW, mode, categoryAxis));
-    return [
-      categoryAxis ? renderCategoryTickMark(x, axisY, categoryAxis.majorTickMark, category, categoryAxis.line) : "",
-      renderCategoryTickLabel(x, axisY, categoryAxis, category, categoryValueType)
-    ].filter(Boolean).join("");
-  }).filter(Boolean).join("\n        ");
-}
-function renderHorizontalValueAxisTicks(margin, plotW, plotH, valueAxis, scale) {
-  if (!valueAxis || valueAxis.visible === false) return "";
-  const axisY = margin.top + plotH;
-  const minorTicks = minorTickValues(valueAxis, scale).map((value) => {
-    const x = valueAxisX(margin.left, plotW, value, scale, valueAxis);
-    return renderHorizontalMinorValueTickMark(x, axisY, valueAxis.minorTickMark, value, valueAxis.line);
-  });
-  const majorTicks = axisTickValues(valueAxis, scale).map((value) => {
-    const x = valueAxisX(margin.left, plotW, value, scale, valueAxis);
-    return [
-      renderHorizontalValueTickMark(x, axisY, valueAxis.majorTickMark, value, valueAxis.line),
-      renderHorizontalValueTickLabel(x, axisY, valueAxis, value)
-    ].filter(Boolean).join("");
-  });
-  return [...minorTicks, ...majorTicks].filter(Boolean).join("\n        ");
-}
-function renderLeftCategoryAxisTicks(margin, plotH, categories, categoryAxis, categoryValueType, axisX = margin.left) {
-  if (categoryAxis?.visible === false || categories.length === 0) return "";
-  return categories.map((category, index) => {
-    const y = round8(margin.top + categoryPosition(index, categories.length, plotH, "bar", categoryAxis));
-    return [
-      categoryAxis ? renderLeftCategoryTickMark(axisX, y, categoryAxis.majorTickMark, category, categoryAxis.line) : "",
-      renderLeftCategoryTickLabel(axisX, y, categoryAxis, category, categoryValueType)
-    ].filter(Boolean).join("");
-  }).filter(Boolean).join("\n        ");
-}
-function renderVerticalAxisTitles(width, height, margin, plotW, plotH, axes, legend) {
-  const categoryTitle = axes.category?.visible !== false && axes.category?.title ? `<text class="chart-axis-title chart-axis-title-category"${chartTextAttrs(axes.category.titleStyle)} x="${round8(margin.left + plotW / 2)}" y="${height - (legend && !isRightLegend2(legend) ? 78 : 42)}" text-anchor="middle">${escapeHtml(axes.category.title)}</text>` : "";
-  const valueTitle = axes.value?.visible !== false && axes.value?.title ? `<text class="chart-axis-title chart-axis-title-value"${chartTextAttrs(axes.value.titleStyle)} x="18" y="${round8(margin.top + plotH / 2)}" text-anchor="middle" transform="rotate(-90 18 ${round8(margin.top + plotH / 2)})">${escapeHtml(axes.value.title)}</text>` : "";
-  return [categoryTitle, valueTitle].filter(Boolean).join("\n        ");
-}
-function renderHorizontalAxisTitles(width, height, margin, plotW, plotH, axes, legend) {
-  const valueTitle = axes.value?.visible !== false && axes.value?.title ? `<text class="chart-axis-title chart-axis-title-value"${chartTextAttrs(axes.value.titleStyle)} x="${round8(margin.left + plotW / 2)}" y="${height - (legend && !isRightLegend2(legend) ? 78 : 42)}" text-anchor="middle">${escapeHtml(axes.value.title)}</text>` : "";
-  const categoryTitle = axes.category?.visible !== false && axes.category?.title ? `<text class="chart-axis-title chart-axis-title-category"${chartTextAttrs(axes.category.titleStyle)} x="18" y="${round8(margin.top + plotH / 2)}" text-anchor="middle" transform="rotate(-90 18 ${round8(margin.top + plotH / 2)})">${escapeHtml(axes.category.title)}</text>` : "";
-  return [categoryTitle, valueTitle].filter(Boolean).join("\n        ");
-}
-function renderChartAxisLine(axisName, axis, coords) {
-  if (axis?.visible === false || axis?.line?.visible === false) return "";
-  const line8 = axis?.line;
-  const width = line8?.width && Number.isFinite(line8.width) ? line8.width : void 0;
-  const attrs = [
-    attrString7("data-axis", axisName),
-    attrString7("stroke", line8?.color),
-    attrString7("data-line-color-source", line8?.colorSource),
-    attrString7("data-line-color-scheme", line8?.colorScheme),
-    attrString7("data-line-color-resolved", line8?.colorResolved),
-    attrString7("stroke-width", width == null ? void 0 : round8(width)),
-    attrString7("stroke-linecap", line8?.cap ? svgLineCap(line8.cap) : void 0),
-    attrString7("data-line-compound", line8?.compound),
-    attrString7("data-line-align", line8?.align),
-    attrString7("stroke-linejoin", line8?.join ? svgLineJoin(line8.join) : void 0),
-    attrString7("stroke-dasharray", line8?.dash ? svgDashArray(line8.dash, width ?? 1) : void 0)
-  ].filter(Boolean);
-  return `<line class="chart-axis" x1="${round8(coords.x1)}" y1="${round8(coords.y1)}" x2="${round8(coords.x2)}" y2="${round8(coords.y2)}"${attrs.length > 0 ? ` ${attrs.join(" ")}` : ""}></line>`;
-}
-function renderVerticalMajorGridlines(margin, plotW, plotH, valueAxis, scale) {
-  if (valueAxis?.majorGridlines !== true || valueAxis.visible === false) return "";
-  const attrs = chartLineAttrs("value", valueAxis.majorGridlineLine);
-  if (!attrs) return "";
-  const lines = majorGridlineValues(valueAxis, scale).map((value) => {
-    const y = valueAxisY(margin.top, plotH, value, scale, valueAxis);
-    return `<line class="chart-gridline chart-gridline-major"${attrs} data-value="${round8(value)}" x1="${margin.left}" y1="${y}" x2="${round8(margin.left + plotW)}" y2="${y}"></line>`;
-  });
-  return lines.join("\n        ");
-}
-function renderVerticalMinorGridlines(margin, plotW, plotH, valueAxis, scale) {
-  if (valueAxis?.minorGridlines !== true || valueAxis.visible === false) return "";
-  const attrs = chartLineAttrs("value", valueAxis.minorGridlineLine);
-  if (!attrs) return "";
-  const lines = minorTickValues(valueAxis, scale).map((value) => {
-    const y = valueAxisY(margin.top, plotH, value, scale, valueAxis);
-    return `<line class="chart-gridline chart-gridline-minor"${attrs} data-value="${round8(value)}" x1="${margin.left}" y1="${y}" x2="${round8(margin.left + plotW)}" y2="${y}"></line>`;
-  });
-  return lines.join("\n        ");
-}
-function renderBottomCategoryMajorGridlines(margin, plotW, plotH, categories, categoryAxis, mode) {
-  if (categoryAxis?.majorGridlines !== true || categoryAxis.visible === false || categories.length === 0) return "";
-  const attrs = chartLineAttrs("category", categoryAxis.majorGridlineLine);
-  if (!attrs) return "";
-  return categories.map((category, index) => {
-    const x = round8(margin.left + categoryPosition(index, categories.length, plotW, mode, categoryAxis));
-    return `<line class="chart-gridline chart-gridline-major"${attrs} data-category="${escapeHtml(category)}" x1="${x}" y1="${margin.top}" x2="${x}" y2="${round8(margin.top + plotH)}"></line>`;
-  }).join("\n        ");
-}
-function renderHorizontalMajorGridlines(margin, plotW, plotH, valueAxis, scale) {
-  if (valueAxis?.majorGridlines !== true || valueAxis.visible === false) return "";
-  const attrs = chartLineAttrs("value", valueAxis.majorGridlineLine);
-  if (!attrs) return "";
-  const lines = majorGridlineValues(valueAxis, scale).map((value) => {
-    const x = valueAxisX(margin.left, plotW, value, scale, valueAxis);
-    return `<line class="chart-gridline chart-gridline-major"${attrs} data-value="${round8(value)}" x1="${x}" y1="${margin.top}" x2="${x}" y2="${round8(margin.top + plotH)}"></line>`;
-  });
-  return lines.join("\n        ");
-}
-function renderHorizontalMinorGridlines(margin, plotW, plotH, valueAxis, scale) {
-  if (valueAxis?.minorGridlines !== true || valueAxis.visible === false) return "";
-  const attrs = chartLineAttrs("value", valueAxis.minorGridlineLine);
-  if (!attrs) return "";
-  const lines = minorTickValues(valueAxis, scale).map((value) => {
-    const x = valueAxisX(margin.left, plotW, value, scale, valueAxis);
-    return `<line class="chart-gridline chart-gridline-minor"${attrs} data-value="${round8(value)}" x1="${x}" y1="${margin.top}" x2="${x}" y2="${round8(margin.top + plotH)}"></line>`;
-  });
-  return lines.join("\n        ");
-}
-function renderLeftCategoryMajorGridlines(margin, plotW, plotH, categories, categoryAxis) {
-  if (categoryAxis?.majorGridlines !== true || categoryAxis.visible === false || categories.length === 0) return "";
-  const attrs = chartLineAttrs("category", categoryAxis.majorGridlineLine);
-  if (!attrs) return "";
-  return categories.map((category, index) => {
-    const y = round8(margin.top + categoryPosition(index, categories.length, plotH, "bar", categoryAxis));
-    return `<line class="chart-gridline chart-gridline-major"${attrs} data-category="${escapeHtml(category)}" x1="${margin.left}" y1="${y}" x2="${round8(margin.left + plotW)}" y2="${y}"></line>`;
-  }).join("\n        ");
-}
-function axisTickValues(valueAxis, scale) {
-  const unit = automaticOrExplicitMajorUnit(valueAxis, scale);
-  if (unit == null) return [0, 1, 2, 3, 4, 5].map((step) => round8(scale.min + scale.range * step / 5));
-  const start = Math.ceil(scale.min / unit) * unit;
-  const values = [];
-  for (let value = start; value <= scale.max + unit / 1e3; value += unit) {
-    values.push(round8(value));
-    if (values.length > 100) break;
-  }
-  return values;
-}
-function automaticOrExplicitMajorUnit(valueAxis, scale) {
-  const explicit = valueAxis.majorUnit;
-  if (explicit != null && Number.isFinite(explicit) && explicit > 0) return explicit;
-  if (!Number.isFinite(scale.range) || scale.range <= 0) return void 0;
-  return niceTickUnit(scale.range / 5);
-}
-function niceTickUnit(target) {
-  if (!Number.isFinite(target) || target <= 0) return void 0;
-  const exponent = Math.floor(Math.log10(target));
-  const magnitude = 10 ** exponent;
-  const normalized = target / magnitude;
-  const nice = normalized <= 1 ? 1 : normalized <= 2 ? 2 : normalized <= 5 ? 5 : 10;
-  return nice * magnitude;
-}
-function majorGridlineValues(valueAxis, scale) {
-  return axisTickValues(valueAxis, scale).filter((value) => value > scale.min && value < scale.max);
-}
-function minorTickValues(valueAxis, scale) {
-  const unit = valueAxis.minorUnit;
-  if (unit == null || !Number.isFinite(unit) || unit <= 0) return [];
-  const majorValues = new Set(axisTickValues(valueAxis, scale).map((value) => round8(value)));
-  const start = Math.ceil(scale.min / unit) * unit;
-  const values = [];
-  for (let value = start; value <= scale.max + unit / 1e3; value += unit) {
-    const rounded = round8(value);
-    if (rounded > scale.min && rounded < scale.max && !majorValues.has(rounded)) values.push(rounded);
-    if (values.length > 200) break;
-  }
-  return values;
-}
-function renderMajorTickMark(axisX, y, value, tickValue, line8) {
-  const mark = value ?? "cross";
-  if (mark === "none") return "";
-  const [x1, x2] = mark === "in" ? [axisX, axisX + 6] : mark === "cross" ? [axisX - 3, axisX + 3] : [axisX - 6, axisX];
-  return `<line class="chart-axis-tick chart-axis-tick-major" data-axis="value" data-value="${round8(tickValue)}" x1="${x1}" y1="${y}" x2="${x2}" y2="${y}"${chartTickLineAttrs(line8)}></line>`;
-}
-function renderMinorTickMark(axisX, y, value, tickValue, line8) {
-  const mark = value ?? "none";
-  if (!["in", "out", "cross"].includes(mark)) return "";
-  const [x1, x2] = mark === "in" ? [axisX, axisX + 4] : mark === "cross" ? [axisX - 2, axisX + 2] : [axisX - 4, axisX];
-  return `<line class="chart-axis-tick chart-axis-tick-minor" data-axis="value" data-value="${round8(tickValue)}" x1="${x1}" y1="${y}" x2="${x2}" y2="${y}"${chartTickLineAttrs(line8)}></line>`;
-}
-function renderCategoryTickMark(x, axisY, value, category, line8) {
-  const mark = value ?? "cross";
-  if (mark === "none") return "";
-  const [y1, y2] = mark === "in" ? [axisY, axisY - 6] : mark === "cross" ? [axisY - 3, axisY + 3] : [axisY, axisY + 6];
-  return `<line class="chart-axis-tick chart-axis-tick-major" data-axis="category" data-category="${escapeHtml(category)}" x1="${x}" y1="${y1}" x2="${x}" y2="${y2}"${chartTickLineAttrs(line8)}></line>`;
-}
-function renderHorizontalValueTickMark(x, axisY, value, tickValue, line8) {
-  const mark = value ?? "cross";
-  if (mark === "none") return "";
-  const [y1, y2] = mark === "in" ? [axisY, axisY - 6] : mark === "cross" ? [axisY - 3, axisY + 3] : [axisY, axisY + 6];
-  return `<line class="chart-axis-tick chart-axis-tick-major" data-axis="value" data-value="${round8(tickValue)}" x1="${x}" y1="${y1}" x2="${x}" y2="${y2}"${chartTickLineAttrs(line8)}></line>`;
-}
-function renderHorizontalMinorValueTickMark(x, axisY, value, tickValue, line8) {
-  const mark = value ?? "none";
-  if (!["in", "out", "cross"].includes(mark)) return "";
-  const [y1, y2] = mark === "in" ? [axisY, axisY - 4] : mark === "cross" ? [axisY - 2, axisY + 2] : [axisY, axisY + 4];
-  return `<line class="chart-axis-tick chart-axis-tick-minor" data-axis="value" data-value="${round8(tickValue)}" x1="${x}" y1="${y1}" x2="${x}" y2="${y2}"${chartTickLineAttrs(line8)}></line>`;
-}
-function renderLeftCategoryTickMark(axisX, y, value, category, line8) {
-  const mark = value ?? "cross";
-  if (mark === "none") return "";
-  const [x1, x2] = mark === "in" ? [axisX, axisX + 6] : mark === "cross" ? [axisX - 3, axisX + 3] : [axisX - 6, axisX];
-  return `<line class="chart-axis-tick chart-axis-tick-major" data-axis="category" data-category="${escapeHtml(category)}" x1="${x1}" y1="${y}" x2="${x2}" y2="${y}"${chartTickLineAttrs(line8)}></line>`;
-}
-function renderTickLabel(axisX, y, axis, value) {
-  const position = axis.tickLblPos ?? "nextTo";
-  if (position === "none") return "";
-  const x = position === "high" ? axisX + 10 : axisX - 10;
-  const labelY = round8(y + 4);
-  const anchor = position === "high" ? "start" : "end";
-  return `<text class="chart-axis-label chart-axis-label-value"${chartLabelAttrs(axis.labelStyle, x, labelY)} data-axis="value" data-value="${round8(value)}" x="${x}" y="${labelY}" text-anchor="${anchor}">${escapeHtml(formatAxisValue(value, axis.numFmt?.formatCode))}</text>`;
-}
-function renderCategoryTickLabel(x, axisY, axis, category, categoryValueType) {
-  const position = axis?.tickLblPos ?? "nextTo";
-  if (position === "none") return "";
-  const offset = categoryLabelOffset(axis, position === "high" ? 12 : 20);
-  const y = position === "high" ? axisY - offset : axisY + offset;
-  const labelY = round8(y);
-  return `<text class="chart-axis-label chart-axis-label-category"${chartLabelAttrs(axis?.labelStyle, x, labelY)} data-axis="category" data-category="${escapeHtml(category)}" x="${x}" y="${labelY}" text-anchor="middle">${escapeHtml(formatCategoryValue(category, axis?.numFmt?.formatCode, categoryValueType))}</text>`;
-}
-function renderHorizontalValueTickLabel(x, axisY, axis, value) {
-  const position = axis.tickLblPos ?? "nextTo";
-  if (position === "none") return "";
-  const y = position === "high" ? axisY - 12 : axisY + 20;
-  const labelY = round8(y);
-  return `<text class="chart-axis-label chart-axis-label-value"${chartLabelAttrs(axis.labelStyle, x, labelY)} data-axis="value" data-value="${round8(value)}" x="${x}" y="${labelY}" text-anchor="middle">${escapeHtml(formatAxisValue(value, axis.numFmt?.formatCode))}</text>`;
-}
-function renderLeftCategoryTickLabel(axisX, y, axis, category, categoryValueType) {
-  const position = axis?.tickLblPos ?? "nextTo";
-  if (position === "none") return "";
-  const offset = categoryLabelOffset(axis, 10);
-  const x = position === "high" ? axisX + offset : axisX - offset;
-  const labelY = round8(y + 4);
-  const anchor = position === "high" ? "start" : "end";
-  return `<text class="chart-axis-label chart-axis-label-category"${chartLabelAttrs(axis?.labelStyle, x, labelY)} data-axis="category" data-category="${escapeHtml(category)}" x="${x}" y="${labelY}" text-anchor="${anchor}">${escapeHtml(formatCategoryValue(category, axis?.numFmt?.formatCode, categoryValueType))}</text>`;
-}
-function categoryLabelOffset(axis, defaultPx) {
-  const raw = axis?.labelOffset;
-  if (raw == null || !Number.isFinite(raw)) return defaultPx;
-  return round8(defaultPx * clamp3(raw, 0, 1e3) / 100);
-}
-
 // src/render/renderChartPlotArea.ts
 function applyPlotAreaLayout(margin, width, height, layout) {
-  const manual = asSafeManualLayout(layout);
+  const manual = safePlotAreaManualLayout(layout);
   if (!manual) return margin;
   const left = manual.x * width;
   const top = manual.y * height;
   const plotW = manual.w * width;
   const plotH = manual.h * height;
   return {
-    top: round9(top),
-    right: round9(width - left - plotW),
-    bottom: round9(height - top - plotH),
-    left: round9(left)
+    top: round5(top),
+    right: round5(width - left - plotW),
+    bottom: round5(height - top - plotH),
+    left: round5(left)
   };
 }
-function asSafeManualLayout(value) {
+function safePlotAreaManualLayout(value) {
   if (value == null || typeof value !== "object" || Array.isArray(value)) return void 0;
   const layout = value;
   if (layout.target && layout.target !== "inner") return void 0;
@@ -41271,82 +40523,20 @@ function numberInUnit(value) {
   const parsed = Number(value);
   return Number.isFinite(parsed) && parsed >= 0 && parsed <= 1 ? parsed : void 0;
 }
-function round9(value) {
+function round5(value) {
   return Math.round(value * 100) / 100;
 }
 
-// src/render/renderChartAxisDefaults.ts
-function chartStyleAxisLineDefaults(data) {
-  const category = axisDefaultLineStyle(data?.style?.axisDefaults?.category);
-  const value = axisDefaultLineStyle(data?.style?.axisDefaults?.value);
-  const majorGridline = lineStyle(data?.style?.gridlineDefaults?.major);
-  const minorGridline = lineStyle(data?.style?.gridlineDefaults?.minor);
-  const axis = category || value ? { ...category ? { category } : {}, ...value ? { value } : {} } : void 0;
-  const gridline = majorGridline || minorGridline ? { ...majorGridline ? { major: majorGridline } : {}, ...minorGridline ? { minor: minorGridline } : {} } : void 0;
-  return axis || gridline ? { ...axis ? { axis } : {}, ...gridline ? { gridline } : {} } : void 0;
+// src/render/renderChartSeriesOrder.ts
+function orderedSeries(series) {
+  if (!hasUniqueFiniteOrders(series)) return series;
+  return [...series].sort((left, right) => (left.order ?? 0) - (right.order ?? 0));
 }
-function applyAxisLineDefaults(axes, defaults) {
-  if (!defaults) return axes;
-  return {
-    ...axes,
-    category: applySingleAxisLineDefaults(axes.category, defaults.axis?.category, defaults.gridline),
-    value: applySingleAxisLineDefaults(axes.value, defaults.axis?.value, defaults.gridline)
-  };
-}
-function applySingleAxisLineDefaults(axis, defaults, gridlineDefaults) {
-  if (!axis || !defaults && !gridlineDefaults?.major && !gridlineDefaults?.minor) return axis;
-  return {
-    ...axis,
-    ...defaults ? { line: {
-      ...defaults,
-      ...definedLineFields(axis.line)
-    } } : {},
-    ...gridlineDefaults?.major ? { majorGridlineLine: {
-      ...gridlineDefaults.major,
-      ...definedLineFields(axis.majorGridlineLine)
-    } } : {},
-    ...gridlineDefaults?.minor ? { minorGridlineLine: {
-      ...gridlineDefaults.minor,
-      ...definedLineFields(axis.minorGridlineLine)
-    } } : {}
-  };
-}
-function definedLineFields(line8) {
-  if (!line8) return {};
-  return {
-    ...line8.visible != null ? { visible: line8.visible } : {},
-    ...line8.color != null ? { color: line8.color } : {},
-    ...line8.colorSource != null ? { colorSource: line8.colorSource } : {},
-    ...line8.colorScheme != null ? { colorScheme: line8.colorScheme } : {},
-    ...line8.colorResolved != null ? { colorResolved: line8.colorResolved } : {},
-    ...line8.width != null ? { width: line8.width } : {},
-    ...line8.cap != null ? { cap: line8.cap } : {},
-    ...line8.compound != null ? { compound: line8.compound } : {},
-    ...line8.align != null ? { align: line8.align } : {},
-    ...line8.join != null ? { join: line8.join } : {},
-    ...line8.dash != null ? { dash: line8.dash } : {}
-  };
-}
-function axisDefaultLineStyle(axisDefault) {
-  if (axisDefault == null || typeof axisDefault !== "object" || Array.isArray(axisDefault)) return void 0;
-  return lineStyle(axisDefault.line);
-}
-function lineStyle(line8) {
-  if (line8 == null || typeof line8 !== "object" || Array.isArray(line8)) return void 0;
-  const style = {
-    ...typeof line8.visible === "boolean" ? { visible: line8.visible } : {},
-    ...typeof line8.color === "string" ? { color: line8.color } : {},
-    ...typeof line8.colorSource === "string" ? { colorSource: line8.colorSource } : {},
-    ...typeof line8.colorScheme === "string" ? { colorScheme: line8.colorScheme } : {},
-    ...typeof line8.colorResolved === "string" ? { colorResolved: line8.colorResolved } : {},
-    ...typeof line8.width === "number" && Number.isFinite(line8.width) ? { width: line8.width } : {},
-    ...typeof line8.cap === "string" ? { cap: line8.cap } : {},
-    ...typeof line8.compound === "string" ? { compound: line8.compound } : {},
-    ...typeof line8.align === "string" ? { align: line8.align } : {},
-    ...typeof line8.join === "string" ? { join: line8.join } : {},
-    ...typeof line8.dash === "string" ? { dash: line8.dash } : {}
-  };
-  return Object.keys(style).length > 0 ? style : void 0;
+function hasUniqueFiniteOrders(series) {
+  if (series.length === 0) return false;
+  const orders = series.map((item) => item.order);
+  if (!orders.every((order) => Number.isFinite(order))) return false;
+  return new Set(orders).size === orders.length;
 }
 
 // src/render/renderChartTextDefaults.ts
@@ -41463,403 +40653,331 @@ function textDefaultStyle(textDefault) {
   return Object.keys(style).length > 0 ? style : void 0;
 }
 
-// src/render/renderChart.ts
-var palette = ["#2563eb", "#f97316", "#16a34a", "#9333ea", "#0891b2", "#e11d48"];
-var defaultChartViewport = { width: 640, height: 360 };
-function renderChartFigure(element) {
-  const chartType = String(element.chartType ?? "unknown");
-  const data = element.data ?? {};
-  const svg = renderChartSvg(chartType, data, element.id, chartViewport(chartType, element.box));
-  const attrs = renderAttributes([
-    ["data-element-id", element.id],
-    ["data-role", "chart"],
-    ...sourceShapeAttributePairs(element)
-  ]);
-  return `    <figure class="chart chart-${escapeHtml(chartType)}"${attrs}>
-      ${renderEchartsContainer(element.id, chartType)}
-      ${svg}
-      ${renderEchartsOptionScript(element.id, chartType, data)}
-      <script type="application/json" data-chart-data="${element.id}">${escapeHtml(JSON.stringify(data))}</script>
-    </figure>`;
+// src/render/renderEcharts.ts
+var ECHARTS_VENDOR_OUTPUT_PATH = "assets/vendor/echarts.min.js";
+var ECHARTS_CDN_SCRIPT_SRC = "https://cdn.jsdelivr.net/npm/echarts@6.1.0/dist/echarts.min.js";
+function hasCharts(deckOrSlide) {
+  const deck = deckOrSlide;
+  if (Array.isArray(deck.slides)) return deck.slides.some((slide) => hasCharts(slide));
+  return collectElements(deckOrSlide.elements).some((element) => element.type === "chart");
 }
-function renderChartSvg(chartType, data, chartId, viewport) {
-  if (chartType === "bar") return renderBarChart(data, viewport);
-  if (chartType === "line") return renderLineChart(data, false, chartId, viewport);
-  if (chartType === "area") return renderLineChart(data, true, chartId, viewport);
-  if (chartType === "pie" || chartType === "doughnut") return renderPieChart(data, chartType === "doughnut");
-  return `<div class="chart-renderer chart-unsupported" data-chart-type="${escapeHtml(chartType)}">Unsupported chart: ${escapeHtml(chartType)}</div>`;
-}
-function chartViewport(chartType, box) {
-  if (chartType !== "bar" && chartType !== "line" && chartType !== "area") return defaultChartViewport;
-  if (!Number.isFinite(box?.w) || !Number.isFinite(box?.h) || box.w <= 0 || box.h <= 0) return defaultChartViewport;
-  return {
-    width: defaultChartViewport.width,
-    height: round10(defaultChartViewport.width * box.h / box.w)
-  };
-}
-function renderBarChart(data, viewport) {
-  if (asOptionalString9(data.direction) === "bar") return renderHorizontalBarChart(data, viewport);
-  const categories = asStrings2(data.categories);
-  const series = orderedSeries(asSeries(data.series));
-  const { width, height } = viewport;
-  const title = asOptionalString9(data.title);
-  const textDefaults = chartSpaceTextDefaults(data);
-  const styleTextDefaults = chartStyleTextDefaults(data);
-  const axisTextDefaults = chartStyleAxisTextDefaults(data);
-  const axisLineDefaults = chartStyleAxisLineDefaults(data);
-  const titleMeta = applyTitleTextDefaults(asTitleMeta(data.titleMeta), title, textDefaults, styleTextDefaults?.title);
-  const legend = applyLegendTextDefaults(asLegend(data.legend), textDefaults, styleTextDefaults?.legend);
-  const axes = applyAxisTextDefaults(applyAxisLineDefaults(asAxes2(data.axes), axisLineDefaults), textDefaults, axisTextDefaults, styleTextDefaults?.axisTitle);
-  const dataLabels = applyDataLabelTextDefaults(data.dataLabels, textDefaults, styleTextDefaults?.dataLabel);
-  const titleSpace = hasTitleSpace(title, titleMeta);
-  const rightLegend = isRightLegend(legend);
-  const margin = applyPlotAreaLayout({
-    top: titleSpace ? 52 : 24,
-    right: rightLegend ? 136 : 28,
-    bottom: 56 + (axes.category?.title ? 22 : 0) + (legend && !rightLegend ? 34 : 0),
-    left: 48 + (axes.value?.title ? 24 : 0)
-  }, width, height, data.plotAreaLayout);
-  const plotW = width - margin.left - margin.right;
-  const plotH = height - margin.top - margin.bottom;
-  const stacking = barStackingMode(asOptionalString9(data?.grouping));
-  const stacked = stacking !== "none";
-  const renderSeries = stacking === "percentStacked" ? percentStackedSeries(series, categories.length) : series;
-  const scale = stacking === "percentStacked" ? computePercentStackedValueScale(axes.value) : computeValueScale(series, axes.value, stacked);
-  const groupW = plotW / Math.max(1, categories.length);
-  const layout = barClusterLayout(groupW, series.length, asNumber9(data.gapWidth), asNumber9(data.overlap), stacked);
-  const barW = layout?.thickness ?? Math.max(4, groupW * 0.7 / (stacked ? 1 : Math.max(1, series.length)));
-  const barStart = layout?.start ?? groupW * 0.15;
-  const barStep = layout?.step ?? barW;
-  const showValueLabels = stacking === "percentStacked" ? false : hasBasicValueDataLabels(data);
-  const stackedRects = stacked ? verticalStackedBarRects(categories, renderSeries, margin, plotH, scale, groupW, barW, barStart, (item, seriesIndex, categoryIndex) => seriesFill(data, series, item, seriesIndex, categoryIndex), axes.value, axes.category) : [];
-  const bars = stacked ? stackedRects.map((rect) => `<rect class="chart-bar chart-bar-stacked" data-category="${escapeHtml(rect.category)}" data-series="${escapeHtml(rect.series)}"${seriesInvertIfNegativeAttribute(series[rect.seriesIndex])}${seriesMetadataAttributes(series[rect.seriesIndex])} x="${rect.x}" y="${rect.y}" width="${rect.width}" height="${rect.height}" fill="${rect.fill}"><title>${escapeHtml(rect.series)} ${escapeHtml(rect.category)}: ${rect.value}</title></rect>`).join("\n        ") : categories.flatMap((category, categoryIndex) => {
-    return series.map((item, seriesIndex) => {
-      const value = item.values[categoryIndex] ?? 0;
-      const zeroY = valueAxisY(margin.top, plotH, 0, scale, axes.value);
-      const valueY = valueAxisY(margin.top, plotH, value, scale, axes.value);
-      const visualIndex = categoryVisualIndex(categoryIndex, categories.length, axes.category);
-      const x = margin.left + visualIndex * groupW + barStart + seriesIndex * barStep;
-      const y = Math.min(valueY, zeroY);
-      const barH = Math.abs(zeroY - valueY);
-      const fill = seriesFill(data, series, item, seriesIndex, categoryIndex);
-      return `<rect class="chart-bar" data-category="${escapeHtml(category)}" data-series="${escapeHtml(item.name)}"${seriesInvertIfNegativeAttribute(item)}${seriesMetadataAttributes(item)} x="${round10(x)}" y="${round10(y)}" width="${round10(barW - 2)}" height="${round10(barH)}" fill="${fill}"><title>${escapeHtml(item.name)} ${escapeHtml(category)}: ${value}</title></rect>`;
-    });
-  }).join("\n        ");
-  const percentLabels = stacking === "percentStacked" && hasBasicPercentStackedBarPercentDataLabels({ dataLabels }, series, categories.length) ? renderVerticalPercentStackedBarPercentLabels(stackedRects, series, dataLabels) : "";
-  const valueLabels = percentLabels || (showValueLabels ? renderVerticalBarValueLabels(categories, series, dataLabels, margin, plotH, scale, groupW, barW, barStart, barStep, axes.value, axes.category) : "");
-  const axisTitles = renderVerticalAxisTitles(width, height, margin, plotW, plotH, axes, legend);
-  const chartTitle = renderChartTitle(title, titleMeta, width);
-  const areas = chartAreasWithDefaults(data);
-  const chartArea = renderChartAreaBackground(areas.chartArea, width, height);
-  const plotArea = renderPlotAreaBackground(areas.plotArea, margin.left, margin.top, plotW, plotH);
-  const chartLegend = renderLegend(legend, legendItems(series, categories, data), width, height, margin);
-  const categoryAxisY = verticalCategoryAxisY(margin, plotH, axes.category, axes.value, scale);
-  const gridlines = [
-    renderVerticalMinorGridlines(margin, plotW, plotH, axes.value, scale),
-    renderVerticalMajorGridlines(margin, plotW, plotH, axes.value, scale),
-    renderBottomCategoryMajorGridlines(margin, plotW, plotH, categories, axes.category, "bar")
-  ].filter(Boolean).join("\n        ");
-  const valueTicks = renderValueAxisTicks(margin, plotH, axes.value, scale);
-  const categoryTicks = renderCategoryAxisTicks(margin, plotW, plotH, categories, axes.category, "bar", asCategoryValueType2(data.categoryValueType), categoryAxisY);
-  const xAxis = renderChartAxisLine("category", axes.category, { x1: margin.left, y1: categoryAxisY, x2: margin.left + plotW, y2: categoryAxisY });
-  const yAxis = renderChartAxisLine("value", axes.value, { x1: margin.left, y1: margin.top, x2: margin.left, y2: margin.top + plotH });
-  return `<svg class="chart-svg" viewBox="0 0 ${width} ${height}" role="img" aria-label="${escapeHtml(title ? `${title} bar chart` : "bar chart")}"${chartDataAttributes(effectiveBarChartData({ ...data, ...areas }))}>
-        ${chartArea}
-        ${chartTitle}
-        ${plotArea}
-        ${gridlines}
-        ${xAxis}
-        ${yAxis}
-        ${valueTicks}
-        ${categoryTicks}
-        ${bars}
-        ${valueLabels}
-        ${axisTitles}
-        ${chartLegend}
-      </svg>`;
-}
-function renderHorizontalBarChart(data, viewport) {
-  const categories = asStrings2(data.categories);
-  const series = orderedSeries(asSeries(data.series));
-  const { width, height } = viewport;
-  const title = asOptionalString9(data.title);
-  const textDefaults = chartSpaceTextDefaults(data);
-  const styleTextDefaults = chartStyleTextDefaults(data);
-  const axisTextDefaults = chartStyleAxisTextDefaults(data);
-  const axisLineDefaults = chartStyleAxisLineDefaults(data);
-  const titleMeta = applyTitleTextDefaults(asTitleMeta(data.titleMeta), title, textDefaults, styleTextDefaults?.title);
-  const legend = applyLegendTextDefaults(asLegend(data.legend), textDefaults, styleTextDefaults?.legend);
-  const axes = applyAxisTextDefaults(applyAxisLineDefaults(asAxes2(data.axes), axisLineDefaults), textDefaults, axisTextDefaults, styleTextDefaults?.axisTitle);
-  const dataLabels = applyDataLabelTextDefaults(data.dataLabels, textDefaults, styleTextDefaults?.dataLabel);
-  const titleSpace = hasTitleSpace(title, titleMeta);
-  const rightLegend = isRightLegend(legend);
-  const margin = applyPlotAreaLayout({
-    top: titleSpace ? 52 : 24,
-    right: rightLegend ? 136 : 28,
-    bottom: 56 + (axes.value?.title ? 22 : 0) + (legend && !rightLegend ? 34 : 0),
-    left: 96 + (axes.category?.title ? 24 : 0)
-  }, width, height, data.plotAreaLayout);
-  const plotW = width - margin.left - margin.right;
-  const plotH = height - margin.top - margin.bottom;
-  const stacking = barStackingMode(asOptionalString9(data?.grouping));
-  const stacked = stacking !== "none";
-  const renderSeries = stacking === "percentStacked" ? percentStackedSeries(series, categories.length) : series;
-  const scale = stacking === "percentStacked" ? computePercentStackedValueScale(axes.value) : computeValueScale(series, axes.value, stacked);
-  const groupH = plotH / Math.max(1, categories.length);
-  const layout = barClusterLayout(groupH, series.length, asNumber9(data.gapWidth), asNumber9(data.overlap), stacked);
-  const barH = layout?.thickness ?? Math.max(4, groupH * 0.7 / (stacked ? 1 : Math.max(1, series.length)));
-  const barStart = layout?.start ?? groupH * 0.15;
-  const barStep = layout?.step ?? barH;
-  const showValueLabels = stacking === "percentStacked" ? false : hasBasicValueDataLabels(data);
-  const stackedRects = stacked ? horizontalStackedBarRects(categories, renderSeries, margin, plotW, scale, groupH, barH, barStart, (item, seriesIndex, categoryIndex) => seriesFill(data, series, item, seriesIndex, categoryIndex), axes.value, axes.category) : [];
-  const bars = stacked ? stackedRects.map((rect) => `<rect class="chart-bar chart-bar-stacked" data-category="${escapeHtml(rect.category)}" data-series="${escapeHtml(rect.series)}"${seriesInvertIfNegativeAttribute(series[rect.seriesIndex])}${seriesMetadataAttributes(series[rect.seriesIndex])} x="${rect.x}" y="${rect.y}" width="${rect.width}" height="${rect.height}" fill="${rect.fill}"><title>${escapeHtml(rect.series)} ${escapeHtml(rect.category)}: ${rect.value}</title></rect>`).join("\n        ") : categories.flatMap((category, categoryIndex) => series.map((item, seriesIndex) => {
-    const value = item.values[categoryIndex] ?? 0;
-    const zeroX = valueAxisX(margin.left, plotW, 0, scale, axes.value);
-    const valueX = valueAxisX(margin.left, plotW, value, scale, axes.value);
-    const x = Math.min(zeroX, valueX);
-    const barW = Math.abs(valueX - zeroX);
-    const visualIndex = categoryVisualIndex(categoryIndex, categories.length, axes.category);
-    const y = margin.top + visualIndex * groupH + barStart + seriesIndex * barStep;
-    const fill = seriesFill(data, series, item, seriesIndex, categoryIndex);
-    return `<rect class="chart-bar" data-category="${escapeHtml(category)}" data-series="${escapeHtml(item.name)}"${seriesInvertIfNegativeAttribute(item)}${seriesMetadataAttributes(item)} x="${round10(x)}" y="${round10(y)}" width="${round10(barW)}" height="${round10(barH - 2)}" fill="${fill}"><title>${escapeHtml(item.name)} ${escapeHtml(category)}: ${value}</title></rect>`;
-  })).join("\n        ");
-  const percentLabels = stacking === "percentStacked" && hasBasicPercentStackedBarPercentDataLabels({ dataLabels }, series, categories.length) ? renderHorizontalPercentStackedBarPercentLabels(stackedRects, series, dataLabels) : "";
-  const valueLabels = percentLabels || (showValueLabels ? renderHorizontalBarValueLabels(categories, series, dataLabels, margin, plotW, scale, groupH, barH, barStart, barStep, axes.value, axes.category) : "");
-  const chartTitle = renderChartTitle(title, titleMeta, width);
-  const areas = chartAreasWithDefaults(data);
-  const chartArea = renderChartAreaBackground(areas.chartArea, width, height);
-  const plotArea = renderPlotAreaBackground(areas.plotArea, margin.left, margin.top, plotW, plotH);
-  const chartLegend = renderLegend(legend, legendItems(series, categories, data), width, height, margin);
-  const gridlines = [
-    renderHorizontalMinorGridlines(margin, plotW, plotH, axes.value, scale),
-    renderHorizontalMajorGridlines(margin, plotW, plotH, axes.value, scale),
-    renderLeftCategoryMajorGridlines(margin, plotW, plotH, categories, axes.category)
-  ].filter(Boolean).join("\n        ");
-  const valueTicks = renderHorizontalValueAxisTicks(margin, plotW, plotH, axes.value, scale);
-  const categoryAxisX = horizontalCategoryAxisX(margin, plotW, axes.category, axes.value, scale);
-  const categoryTicks = renderLeftCategoryAxisTicks(margin, plotH, categories, axes.category, asCategoryValueType2(data.categoryValueType), categoryAxisX);
-  const xAxis = renderChartAxisLine("value", axes.value, { x1: margin.left, y1: margin.top + plotH, x2: margin.left + plotW, y2: margin.top + plotH });
-  const yAxis = renderChartAxisLine("category", axes.category, { x1: categoryAxisX, y1: margin.top, x2: categoryAxisX, y2: margin.top + plotH });
-  const axisTitles = renderHorizontalAxisTitles(width, height, margin, plotW, plotH, axes, legend);
-  return `<svg class="chart-svg" viewBox="0 0 ${width} ${height}" role="img" aria-label="${escapeHtml(title ? `${title} horizontal bar chart` : "horizontal bar chart")}"${chartDataAttributes(effectiveBarChartData({ ...data, ...areas }))}>
-        ${chartArea}
-        ${chartTitle}
-        ${plotArea}
-        ${gridlines}
-        ${xAxis}
-        ${yAxis}
-        ${valueTicks}
-        ${categoryTicks}
-        ${bars}
-        ${valueLabels}
-        ${axisTitles}
-        ${chartLegend}
-      </svg>`;
-}
-function renderLineChart(data, filled, chartId, viewport) {
-  const categories = asStrings2(data.categories);
-  const series = orderedSeries(asSeries(data.series));
-  const { width, height } = viewport;
-  const title = asOptionalString9(data.title);
-  const textDefaults = chartSpaceTextDefaults(data);
-  const styleTextDefaults = chartStyleTextDefaults(data);
-  const axisTextDefaults = chartStyleAxisTextDefaults(data);
-  const axisLineDefaults = chartStyleAxisLineDefaults(data);
-  const titleMeta = applyTitleTextDefaults(asTitleMeta(data.titleMeta), title, textDefaults, styleTextDefaults?.title);
-  const legend = applyLegendTextDefaults(asLegend(data.legend), textDefaults, styleTextDefaults?.legend);
-  const axes = applyAxisTextDefaults(applyAxisLineDefaults(asAxes2(data.axes), axisLineDefaults), textDefaults, axisTextDefaults, styleTextDefaults?.axisTitle);
-  const titleSpace = hasTitleSpace(title, titleMeta);
-  const rightLegend = isRightLegend(legend);
-  const margin = applyPlotAreaLayout({
-    top: titleSpace ? 52 : 24,
-    right: rightLegend ? 136 : 28,
-    bottom: 56 + (axes.category?.title ? 22 : 0) + (legend && !rightLegend ? 34 : 0),
-    left: 48 + (axes.value?.title ? 24 : 0)
-  }, width, height, data.plotAreaLayout);
-  const plotW = width - margin.left - margin.right;
-  const plotH = height - margin.top - margin.bottom;
-  const stacking = lineStackingMode(asOptionalString9(data?.grouping));
-  const renderSeries = stacking === "stacked" && hasOnlyNonNegativeLineValues(series) ? stackedLineSeries(series, categories.length) : series;
-  const scale = computeValueScale(renderSeries, axes.value);
-  const paths = renderSeries.map((item, seriesIndex) => {
-    const sourceItem = series[seriesIndex] ?? item;
-    const color = seriesFill(data, series, sourceItem, seriesIndex, seriesIndex);
-    const styledItem = applyChartStyleSeriesLineDefault(
-      applyChartStyleMarkerLineDefault(
-        applyChartStyleMarkerLayout(sourceItem, data.style?.markerLayout),
-        data.style?.markerLineDefault
-      ),
-      data.style?.seriesLineDefault
-    );
-    const points = item.values.map((value, index) => {
-      const x = margin.left + categoryPosition(index, categories.length, plotW, "point", axes.category);
-      const y = valueAxisY(margin.top, plotH, value, scale, axes.value);
-      return [round10(x), round10(y)];
-    });
-    const d = lineSeriesPath(points, (styledItem.smooth ?? data.smooth) === true);
-    const style = renderLineChartSeriesStyle(styledItem, seriesIndex, color, chartId);
-    const metadata = `${seriesMetadataAttributes(styledItem)}${style.metadataAttributes}`;
-    const seriesNameAttr = ` data-series="${escapeHtml(styledItem.name)}"`;
-    const area = filled && points.length > 0 ? `<path class="chart-area"${seriesNameAttr}${metadata} d="${d} L ${points[points.length - 1][0]} ${margin.top + plotH} L ${points[0][0]} ${margin.top + plotH} Z" fill="${color}" opacity="0.18"></path>` : "";
-    const linePath = styledItem.line?.visible === false ? "" : `<path class="chart-line"${seriesNameAttr}${seriesMetadataAttributes(styledItem)} d="${d}" fill="none" ${style.strokeAttributes}></path>`;
-    const markerRadius = seriesMarkerRadius(styledItem);
-    const dots = shouldRenderSeriesMarkers(styledItem) ? points.map(([x, y], index) => renderSeriesMarker(styledItem, categories[index] ?? "", metadata, x, y, markerRadius, style.pointFill)).join("\n        ") : "";
-    return `${style.defs ? `<defs>
-${style.defs}
-        </defs>` : ""}${area}${linePath}${dots}`;
-  }).join("\n        ");
-  const axisTitles = renderVerticalAxisTitles(width, height, margin, plotW, plotH, axes, legend);
-  const chartTitle = renderChartTitle(title, titleMeta, width);
-  const areas = chartAreasWithDefaults(data);
-  const chartArea = renderChartAreaBackground(areas.chartArea, width, height);
-  const plotArea = renderPlotAreaBackground(areas.plotArea, margin.left, margin.top, plotW, plotH);
-  const chartLegend = renderLegend(legend, legendItems(series, categories, data), width, height, margin);
-  const categoryAxisY = verticalCategoryAxisY(margin, plotH, axes.category, axes.value, scale);
-  const gridlines = [
-    renderVerticalMinorGridlines(margin, plotW, plotH, axes.value, scale),
-    renderVerticalMajorGridlines(margin, plotW, plotH, axes.value, scale),
-    renderBottomCategoryMajorGridlines(margin, plotW, plotH, categories, axes.category, "point")
-  ].filter(Boolean).join("\n        ");
-  const valueTicks = renderValueAxisTicks(margin, plotH, axes.value, scale);
-  const categoryTicks = renderCategoryAxisTicks(margin, plotW, plotH, categories, axes.category, "point", asCategoryValueType2(data.categoryValueType), categoryAxisY);
-  const xAxis = renderChartAxisLine("category", axes.category, { x1: margin.left, y1: categoryAxisY, x2: margin.left + plotW, y2: categoryAxisY });
-  const yAxis = renderChartAxisLine("value", axes.value, { x1: margin.left, y1: margin.top, x2: margin.left, y2: margin.top + plotH });
-  return `<svg class="chart-svg" viewBox="0 0 ${width} ${height}" role="img" aria-label="${escapeHtml(title ? `${title} ${filled ? "area" : "line"} chart` : `${filled ? "area" : "line"} chart`)}"${chartDataAttributes({ ...data, ...areas, chartType: filled ? "area" : "line" })}>
-        ${chartArea}
-        ${chartTitle}
-        ${plotArea}
-        ${gridlines}
-        ${xAxis}
-        ${yAxis}
-        ${valueTicks}
-        ${categoryTicks}
-        ${paths}
-        ${axisTitles}
-        ${chartLegend}
-      </svg>`;
-}
-function renderPieChart(data, doughnut) {
-  const series = orderedSeries(asSeries(data.series));
-  const values = series[0]?.values ?? [];
-  const labels = asStrings2(data.categories);
-  const total = values.reduce((sum, value) => sum + Math.max(0, value), 0) || 1;
-  const textDefaults = chartSpaceTextDefaults(data);
-  const styleTextDefaults = chartStyleTextDefaults(data);
-  const dataLabels = applyDataLabelTextDefaults(data.dataLabels, textDefaults, styleTextDefaults?.dataLabel);
-  let start = -Math.PI / 2;
-  const slices = values.map((value, index) => {
-    const angle = Math.max(0, value) / total * Math.PI * 2;
-    const end = start + angle;
-    const path8 = describeArc(180, 180, doughnut ? 110 : 140, start, end, doughnut ? 64 : 0);
-    start = end;
-    return `<path class="chart-slice" data-category="${escapeHtml(labels[index] ?? String(index + 1))}"${seriesMetadataAttributes(series[0])} d="${path8}" fill="${seriesFill(data, series, series[0], 0, index)}"><title>${escapeHtml(labels[index] ?? "")}: ${value}</title></path>`;
-  }).join("\n        ");
-  const valueLabels = series.length === 1 && values.every((value) => value >= 0) && hasBasicPiePercentDataLabels({ dataLabels }) ? renderPiePercentDataLabels(labels, values, dataLabels, { cx: 180, cy: 180, radius: doughnut ? 110 : 140, innerRadius: doughnut ? 64 : 0, seriesName: series[0]?.name ?? "Series 1" }) : "";
-  const title = asOptionalString9(data.title);
-  const titleMeta = applyTitleTextDefaults(asTitleMeta(data.titleMeta), title, textDefaults, styleTextDefaults?.title);
-  const chartTitle = renderChartTitle(title, titleMeta, 360);
-  const areas = chartAreasWithDefaults(data);
-  const chartArea = renderChartAreaBackground(areas.chartArea, 360, 360);
-  const legend = renderLegend(applyLegendTextDefaults(asLegend(data.legend), textDefaults, styleTextDefaults?.legend), legendItems(series, labels, data), 360, 360, { top: hasTitleSpace(title, titleMeta) ? 40 : 16, right: 24, bottom: 24, left: 24 });
-  return `<svg class="chart-svg" viewBox="0 0 360 360" role="img" aria-label="${escapeHtml(title ? `${title} ${doughnut ? "doughnut" : "pie"} chart` : `${doughnut ? "doughnut" : "pie"} chart`)}"${chartDataAttributes({ ...data, chartArea: areas.chartArea })}>
-        ${chartArea}
-        ${chartTitle}
-        ${slices}
-        ${valueLabels}
-        ${legend}
-      </svg>`;
-}
-function lineSeriesPath(points, smooth) {
-  if (smooth) {
-    const curvedPath = uniformCatmullRomToCubicBezierPath(points.map(([x, y]) => ({ x, y })));
-    if (curvedPath) return curvedPath;
-  }
-  return points.map(([x, y], index) => `${index === 0 ? "M" : "L"} ${x} ${y}`).join(" ");
-}
-function describeArc(cx, cy, radius, start, end, innerRadius) {
-  const large = end - start > Math.PI ? 1 : 0;
-  const startOuter = point(cx, cy, radius, start);
-  const endOuter = point(cx, cy, radius, end);
-  if (innerRadius <= 0) {
-    return `M ${cx} ${cy} L ${startOuter.x} ${startOuter.y} A ${radius} ${radius} 0 ${large} 1 ${endOuter.x} ${endOuter.y} Z`;
-  }
-  const startInner = point(cx, cy, innerRadius, start);
-  const endInner = point(cx, cy, innerRadius, end);
-  return `M ${startOuter.x} ${startOuter.y} A ${radius} ${radius} 0 ${large} 1 ${endOuter.x} ${endOuter.y} L ${endInner.x} ${endInner.y} A ${innerRadius} ${innerRadius} 0 ${large} 0 ${startInner.x} ${startInner.y} Z`;
-}
-function point(cx, cy, radius, angle) {
-  return { x: round10(cx + Math.cos(angle) * radius), y: round10(cy + Math.sin(angle) * radius) };
-}
-function asStrings2(value) {
-  return Array.isArray(value) ? value.map((item) => String(item)) : [];
-}
-function asCategoryValueType2(value) {
-  return value === "string" || value === "number" ? value : void 0;
-}
-function asSeries(value) {
-  if (!Array.isArray(value)) return [];
-  return value.map((item, index) => ({
-    name: String(item?.name ?? `Series ${index + 1}`),
-    values: Array.isArray(item?.values) ? item.values.map(Number).filter(Number.isFinite) : [],
-    index: asNumber9(item?.index),
-    order: asNumber9(item?.order),
-    uniqueId: asOptionalString9(item?.uniqueId),
-    uniqueIdExtUri: asOptionalString9(item?.uniqueIdExtUri),
-    uniqueIdExtNamespace: asOptionalString9(item?.uniqueIdExtNamespace),
-    smooth: typeof item?.smooth === "boolean" ? item.smooth : void 0,
-    sourceRefs: asSourceRefs(item?.sourceRefs),
-    nameCache: asSeriesCache(item?.nameCache),
-    categoryCache: asSeriesCache(item?.categoryCache),
-    valueCache: asValueCache(item?.valueCache),
-    invertIfNegative: typeof item?.invertIfNegative === "boolean" ? item.invertIfNegative : void 0,
-    color: asHexColor(item?.color) ?? asHexColor(item?.fill?.color),
-    fill: asRecord5(item?.fill),
-    line: asRecord5(item?.line),
-    effects: asRecord5(item?.effects),
-    marker: asSeriesMarker(item?.marker)
-  }));
-}
-function applyChartStyleMarkerLayout(item, markerLayout) {
-  if (item.marker) return item;
-  if (markerLayout == null || typeof markerLayout !== "object" || Array.isArray(markerLayout)) return item;
-  const symbol2 = asOptionalString9(markerLayout.symbol);
-  const size = asNumber9(markerLayout.size);
-  if (symbol2 !== "circle" && symbol2 !== "none") {
-    return symbol2 ? {
-      ...item,
-      marker: {
-        symbol: symbol2,
-        ...size != null ? { size } : {},
-        source: "chartStyleUnsupported"
-      }
-    } : item;
-  }
-  return {
-    ...item,
-    marker: {
-      symbol: symbol2,
-      ...size != null ? { size } : {},
-      source: "chartStyle"
+function renderEchartsRuntimeScripts(scriptSrc = ECHARTS_CDN_SCRIPT_SRC) {
+  return `<script src="${escapeHtml(scriptSrc)}"></script>
+  <script>
+  (() => {
+    function initCharts() {
+      if (!window.echarts) return;
+      document.querySelectorAll("[data-echarts-chart]").forEach((container) => {
+        const figure = container.closest("figure.chart");
+        const optionNode = figure ? figure.querySelector("script[data-chart-echarts-option]") : null;
+        if (!figure || !optionNode || container.dataset.echartsReady === "true") return;
+        let option;
+        try {
+          option = JSON.parse(optionNode.textContent || "{}");
+        } catch {
+          return;
+        }
+        const chart = window.echarts.init(container);
+        chart.setOption(option);
+        container.dataset.echartsReady = "true";
+        figure.classList.add("chart-echarts-ready");
+        if (typeof ResizeObserver !== "undefined") {
+          const observer = new ResizeObserver(() => chart.resize());
+          observer.observe(container);
+        } else {
+          window.addEventListener("resize", () => chart.resize());
+        }
+      });
     }
-  };
-}
-function applyChartStyleMarkerLineDefault(item, markerLineDefault) {
-  const defaults = asSeriesLine(markerLineDefault);
-  if (!defaults) return item;
-  const marker = item.marker ?? {};
-  const localLine = asRecord5(marker.line);
-  return {
-    ...item,
-    marker: {
-      ...marker,
-      line: {
-        ...defaults,
-        ...definedSeriesLineFields(localLine)
-      }
+    if (document.readyState === "loading") {
+      document.addEventListener("DOMContentLoaded", initCharts, { once: true });
+    } else {
+      initCharts();
     }
+  })();
+  </script>`;
+}
+function renderEchartsContainer(chartId, chartType) {
+  return `<div class="chart-echarts" data-echarts-chart="${escapeHtml(chartId)}" data-echarts-chart-type="${escapeHtml(chartType)}"></div>`;
+}
+function renderEchartsOptionScript(chartId, chartType, data) {
+  const option = chartEchartsOption(chartType, data);
+  return `<script type="application/json" data-chart-echarts-option="${escapeHtml(chartId)}">${jsonScriptContent(option)}</script>`;
+}
+function chartEchartsOption(chartType, data) {
+  const chartData = asRecord3(data) ?? {};
+  if (chartType === "pie" || chartType === "doughnut") return pieOption(chartData, chartType === "doughnut");
+  if (chartType === "bar") return cartesianOption(chartData, "bar", asOptionalString8(chartData.direction) === "bar");
+  if (chartType === "line") return cartesianOption(chartData, "line", false);
+  if (chartType === "area") return cartesianOption(chartData, "line", false, true);
+  return {
+    title: titleOption(chartData),
+    dataset: { source: datasetSource(chartData) },
+    series: []
   };
 }
-function applyChartStyleSeriesLineDefault(item, seriesLineDefault) {
+function cartesianOption(data, seriesType, horizontal, area = false) {
+  const categories = asStrings(data.categories);
+  const series = chartSeries(data.series);
+  const textContext = textContextForChart(data);
+  const chartLabels = effectiveDataLabels(asRecord3(data.dataLabels), textContext);
+  const axes = effectiveAxes(data.axes, textContext);
+  const stacked = isStacked(data.grouping);
+  const supportsDataLabels = !area || isStandardLineOrAreaGrouping(data.grouping);
+  return compactObject({
+    title: titleOption(data, textContext),
+    tooltip: { trigger: "axis" },
+    legend: legendOption(effectiveLegend(data.legend, textContext)),
+    grid: gridOption(data.plotAreaLayout),
+    dataset: { source: datasetSource({ categories, series }) },
+    xAxis: horizontal ? valueAxisOption(axes) : categoryAxisOption(axes, "bottom"),
+    yAxis: horizontal ? categoryAxisOption(axes, "left") : valueAxisOption(axes),
+    series: series.map((item) => {
+      const chartStyle = asRecord3(data.style);
+      const styledItem = seriesType === "line" ? applySeriesMarkerLayout(applySeriesLineDefault(item, chartStyle?.seriesLineDefault), chartStyle?.markerLayout) : item;
+      return compactObject({
+        type: seriesType,
+        name: item.name,
+        encode: horizontal ? { x: item.name, y: "category" } : { x: "category", y: item.name },
+        stack: stacked ? "total" : void 0,
+        smooth: seriesType === "line" ? item.smooth ?? asBoolean(data.smooth) : void 0,
+        areaStyle: area ? {} : void 0,
+        itemStyle: item.color ? { color: item.color } : void 0,
+        lineStyle: lineStyleOption(styledItem, { strokeEnds: seriesType === "line" }),
+        barCategoryGap: seriesType === "bar" ? barCategoryGapOption(data.gapWidth) : void 0,
+        barGap: seriesType === "bar" ? barGapOption(data.overlap, stacked) : void 0,
+        label: supportsDataLabels ? dataLabelOption(effectiveDataLabels(item.dataLabels, textContext) ?? chartLabels, seriesType, horizontal, stacked) : void 0,
+        showSymbol: seriesType === "line" && styledItem.marker?.symbol === "none" ? false : void 0,
+        symbol: seriesType === "line" ? echartsSymbol(styledItem.marker?.symbol) : void 0,
+        symbolSize: seriesType === "line" ? styledItem.marker?.size : void 0
+      });
+    })
+  });
+}
+function isStandardLineOrAreaGrouping(value) {
+  const grouping = asOptionalString8(value);
+  return grouping == null || grouping === "standard";
+}
+function pieOption(data, doughnut) {
+  const categories = asStrings(data.categories);
+  const series = chartSeries(data.series);
+  const first = series[0] ?? { name: "Series 1", values: [] };
+  const textContext = textContextForChart(data);
+  const dataLabels = effectiveDataLabels(data.dataLabels, textContext);
+  return compactObject({
+    title: titleOption(data, textContext),
+    tooltip: { trigger: "item" },
+    legend: legendOption(effectiveLegend(data.legend, textContext)),
+    series: [{
+      type: "pie",
+      name: first.name,
+      radius: doughnut ? ["45%", "70%"] : "70%",
+      label: pieDataLabelOption(dataLabels),
+      data: first.values.map((value, index) => compactObject({
+        name: categories[index] ?? String(index + 1),
+        value,
+        itemStyle: first.color ? { color: first.color } : void 0
+      }))
+    }]
+  });
+}
+function pieDataLabelOption(labels) {
+  if (!labels || labels.showPercent !== true) return void 0;
+  const textStyle = asRecord3(labels.textStyle);
+  const separator = dataLabelSeparator(labels);
+  return compactObject({
+    show: true,
+    formatter: labels.showCatName === true ? `{b}${separator}{d}%` : "{d}%",
+    ...dataLabelTextStyleOption(textStyle)
+  });
+}
+function dataLabelSeparator(labels, fallback = " ") {
+  return typeof labels.separator === "string" && !/[\r\n]/.test(labels.separator) ? labels.separator : fallback;
+}
+function titleOption(data, textContext = textContextForChart(data)) {
+  const title = asOptionalString8(data.title);
+  const titleMeta = applyTitleTextDefaults(asRecord3(data.titleMeta), title, textContext.chartSpace, asRecord3(textContext.styleDefaults?.title));
+  const textStyle = chartTextStyleOption(asRecord3(titleMeta?.textStyle));
+  return title ? compactObject({ text: title, left: "center", textStyle }) : void 0;
+}
+function legendOption(value) {
+  const legend = asRecord3(value);
+  if (!legend) return void 0;
+  const position = asOptionalString8(legend.position);
+  const manualLayout = legendManualLayoutOption(legend);
+  return compactObject({
+    show: true,
+    orient: position === "l" || position === "r" ? "vertical" : void 0,
+    left: manualLayout?.left ?? (position === "l" ? "left" : position === "r" ? "right" : "center"),
+    top: manualLayout?.top ?? (position === "t" ? "top" : position === "b" ? "bottom" : void 0),
+    width: manualLayout?.width,
+    height: manualLayout?.height,
+    textStyle: chartTextStyleOption(asRecord3(legend.labelStyle))
+  });
+}
+function legendManualLayoutOption(legend) {
+  const layout = asRecord3(legend.layout);
+  if (!layout) return void 0;
+  if (!isEdgeMode(layout.xMode) || !isEdgeMode(layout.yMode) || !isEdgeMode(layout.wMode) || !isEdgeMode(layout.hMode)) return void 0;
+  const x = unitRatio(layout.x);
+  const y = unitRatio(layout.y);
+  if (x == null || y == null) return void 0;
+  const w = positiveUnitRatio(layout.w);
+  const h = positiveUnitRatio(layout.h);
+  return compactObject({
+    left: percentString(x),
+    top: percentString(y),
+    width: w == null ? void 0 : percentString(w),
+    height: h == null ? void 0 : percentString(h)
+  });
+}
+function gridOption(layout) {
+  const manual = safePlotAreaManualLayout(layout);
+  if (!manual) return { containLabel: true };
+  return {
+    containLabel: true,
+    left: percentString(manual.x),
+    top: percentString(manual.y),
+    width: percentString(manual.w),
+    height: percentString(manual.h)
+  };
+}
+function textContextForChart(data) {
+  return {
+    chartSpace: chartSpaceTextDefaults(data),
+    styleDefaults: chartStyleTextDefaults(data),
+    axisDefaults: chartStyleAxisTextDefaults(data)
+  };
+}
+function effectiveLegend(value, textContext) {
+  return applyLegendTextDefaults(asRecord3(value), textContext.chartSpace, asRecord3(textContext.styleDefaults?.legend));
+}
+function effectiveAxes(value, textContext) {
+  return applyAxisTextDefaults(asRecord3(value) ?? {}, textContext.chartSpace, textContext.axisDefaults, asRecord3(textContext.styleDefaults?.axisTitle));
+}
+function effectiveDataLabels(value, textContext) {
+  return applyDataLabelTextDefaults(asRecord3(value), textContext.chartSpace, asRecord3(textContext.styleDefaults?.dataLabel));
+}
+function categoryAxisOption(axes, placement) {
+  const axis = asRecord3(asRecord3(axes)?.category);
+  return compactObject({
+    show: axisVisibleOption(axis),
+    type: "category",
+    name: asOptionalString8(axis?.title),
+    nameTextStyle: chartTextStyleOption(asRecord3(axis?.titleStyle)),
+    inverse: asRecord3(axis?.scaling)?.orientation === "maxMin",
+    axisLine: axisLineOption(axis?.line),
+    axisTick: axisTickOption(axis?.majorTickMark, axis?.visible, axis?.line, axisInterval(axis?.tickMarkSkip)),
+    axisLabel: axisLabelOption(axis?.labelStyle, axis?.tickLblPos, axis?.visible, categoryAxisLabelMargin(axis, placement), axisInterval(axis?.tickLabelSkip))
+  });
+}
+function valueAxisOption(axes) {
+  const axis = asRecord3(asRecord3(axes)?.value);
+  const scaling = asRecord3(axis?.scaling);
+  return compactObject({
+    show: axisVisibleOption(axis),
+    type: "value",
+    name: asOptionalString8(axis?.title),
+    nameTextStyle: chartTextStyleOption(asRecord3(axis?.titleStyle)),
+    min: asNumber7(scaling?.min),
+    max: asNumber7(scaling?.max),
+    inverse: scaling?.orientation === "maxMin",
+    axisLine: axisLineOption(axis?.line),
+    axisTick: axisTickOption(axis?.majorTickMark, axis?.visible, axis?.line),
+    axisLabel: axisLabelOption(axis?.labelStyle, axis?.tickLblPos, axis?.visible),
+    splitLine: splitLineOption(axis?.majorGridlines, axis?.majorGridlineLine, axis?.visible)
+  });
+}
+function axisVisibleOption(axis) {
+  return axis?.visible === false ? false : void 0;
+}
+function splitLineOption(majorGridlines, line8, axisVisible) {
+  if (axisVisible === false || majorGridlines === false) return { show: false };
+  const parsed = asRecord3(line8);
+  if (!parsed) return void 0;
+  if (parsed.visible === false) return { show: false };
+  return compactObject({
+    show: majorGridlines === true ? true : void 0,
+    lineStyle: lineStyleOption({ line: parsed, name: "", values: [] })
+  });
+}
+function axisLineOption(line8) {
+  const parsed = asRecord3(line8);
+  if (!parsed) return void 0;
+  if (parsed.visible === false) return { show: false };
+  return { lineStyle: lineStyleOption({ line: parsed, name: "", values: [] }) };
+}
+function axisTickOption(value, axisVisible, line8, interval) {
+  if (axisVisible === false) return { show: false };
+  const mark = asOptionalString8(value);
+  if (!mark && interval == null) return void 0;
+  if (mark === "none") return { show: false };
+  const supportedMark = mark && ["in", "out", "cross"].includes(mark) ? mark : void 0;
+  return compactObject({
+    show: supportedMark ? true : void 0,
+    inside: supportedMark === "in" ? true : supportedMark === "out" ? false : void 0,
+    interval,
+    lineStyle: supportedMark ? axisTickLineStyleOption(line8) : void 0
+  });
+}
+function axisTickLineStyleOption(line8) {
+  const parsed = asRecord3(line8);
+  if (!parsed || parsed.visible === false) return void 0;
+  return compactObject({
+    color: asOptionalString8(parsed.color),
+    width: asNumber7(parsed.width),
+    type: lineDashType(parsed.dash)
+  });
+}
+function axisLabelOption(style, tickLabelPosition, axisVisible, margin, interval) {
+  const base = axisTextOption(style);
+  if (axisVisible === false || tickLabelPosition === "none") return compactObject({ show: false, ...base ?? {} });
+  return compactObject({ ...base ?? {}, margin, interval });
+}
+function axisInterval(value) {
+  const skip = asNumber7(value);
+  return skip != null && Number.isInteger(skip) && skip > 1 ? skip - 1 : void 0;
+}
+function axisTextOption(style) {
+  return chartTextStyleOption(asRecord3(style));
+}
+function chartTextStyleOption(style) {
+  if (!style) return void 0;
+  return compactObject({
+    color: asOptionalString8(style.color),
+    fontFamily: textStyleFontFamily(style),
+    fontSize: asNumber7(style.fontSizePx) ?? asNumber7(style.fontSize),
+    fontWeight: style.bold === true ? 700 : asNumber7(style.fontWeight),
+    fontStyle: style.italic === true ? "italic" : void 0
+  });
+}
+function dataLabelTextStyleOption(style) {
+  return compactObject({
+    color: asOptionalString8(style?.color),
+    fontFamily: textStyleFontFamily(style),
+    fontSize: asNumber7(style?.fontSizePx) ?? asNumber7(style?.fontSize),
+    fontWeight: style?.bold === true ? 700 : asNumber7(style?.fontWeight),
+    fontStyle: style?.italic === true ? "italic" : void 0
+  });
+}
+function lineStyleOption(item, options = {}) {
+  const line8 = asRecord3(item.line);
+  if (!line8 && !item.color) return void 0;
+  if (line8?.visible === false) return { opacity: 0 };
+  const shadow = asRecord3(item.effects?.outerShadow);
+  return compactObject({
+    color: lineColorOption(line8) ?? item.color,
+    width: asNumber7(line8?.width),
+    type: lineDashType(line8?.dash),
+    cap: options.strokeEnds ? lineCapOption(line8?.cap) : void 0,
+    join: options.strokeEnds ? lineJoinOption(line8?.join) : void 0,
+    shadowColor: shadowColorOption(shadow),
+    shadowBlur: shadowValueOption(shadow?.blur),
+    shadowOffsetX: shadowValueOption(shadow?.x),
+    shadowOffsetY: shadowValueOption(shadow?.y)
+  });
+}
+function applySeriesLineDefault(item, seriesLineDefault) {
   const defaults = asSeriesLine(seriesLineDefault);
   if (!defaults) return item;
   return {
@@ -41870,8 +40988,1480 @@ function applyChartStyleSeriesLineDefault(item, seriesLineDefault) {
     }
   };
 }
+function asSeriesLine(value) {
+  const source = asRecord3(value);
+  if (!source) return void 0;
+  const line8 = compactObject({
+    visible: asBoolean(source.visible),
+    color: asOptionalString8(source.color),
+    width: asNumber7(source.width),
+    cap: asOptionalString8(source.cap),
+    join: asOptionalString8(source.join),
+    dash: asOptionalString8(source.dash),
+    fill: asRecord3(source.fill),
+    colorScheme: asOptionalString8(source.colorScheme)
+  });
+  return Object.keys(line8).length > 0 ? line8 : void 0;
+}
+function definedSeriesLineFields(line8) {
+  if (!line8) return {};
+  return compactObject({
+    visible: asBoolean(line8.visible),
+    color: asOptionalString8(line8.color),
+    width: asNumber7(line8.width),
+    cap: asOptionalString8(line8.cap),
+    join: asOptionalString8(line8.join),
+    dash: asOptionalString8(line8.dash),
+    fill: asRecord3(line8.fill)
+  });
+}
+function applySeriesMarkerLayout(item, markerLayout) {
+  if (item.marker) return item;
+  const marker = asSeriesMarkerLayout(markerLayout);
+  return marker ? { ...item, marker } : item;
+}
+function asSeriesMarkerLayout(value) {
+  const source = asRecord3(value);
+  if (!source) return void 0;
+  const symbol2 = asOptionalString8(source.symbol);
+  if (!isBasicMarkerSymbol(symbol2)) return void 0;
+  return {
+    symbol: symbol2,
+    size: asNumber7(source.size)
+  };
+}
+function isBasicMarkerSymbol(value) {
+  return value === "circle" || value === "none" || value === "square" || value === "triangle" || value === "diamond";
+}
+function lineCapOption(value) {
+  const cap = asOptionalString8(value);
+  if (cap === "rnd" || cap === "round") return "round";
+  if (cap === "sq" || cap === "square") return "square";
+  if (cap === "flat" || cap === "butt") return "butt";
+  return void 0;
+}
+function lineJoinOption(value) {
+  const join = asOptionalString8(value);
+  if (join === "round") return "round";
+  if (join === "bevel") return "bevel";
+  if (join === "miter") return "miter";
+  return void 0;
+}
+function lineColorOption(line8) {
+  const gradient = echartsLinearGradient(asRecord3(line8?.fill));
+  return gradient ?? asOptionalString8(line8?.color);
+}
+function echartsLinearGradient(fill) {
+  if (fill?.type !== "gradient" || fill.kind !== "linear") return void 0;
+  const colorStops = gradientColorStops(fill.stops);
+  if (colorStops.length === 0) return void 0;
+  const direction = linearGradientDirection(asNumber7(fill.angle) ?? 180);
+  return {
+    type: "linear",
+    ...direction,
+    colorStops
+  };
+}
+function gradientColorStops(value) {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((item) => {
+    const stop = asRecord3(item);
+    const color = asOptionalString8(stop?.color);
+    if (!color) return [];
+    const position = asNumber7(stop?.position) ?? 0;
+    return [{ offset: Math.min(1, Math.max(0, position / 100)), color }];
+  });
+}
+function linearGradientDirection(angle) {
+  const radians = angle * Math.PI / 180;
+  const dx = Math.sin(radians);
+  const dy = -Math.cos(radians);
+  const scale = 0.5 / Math.max(Math.abs(dx), Math.abs(dy), 1e-4);
+  return {
+    x: roundNumber(0.5 - dx * scale),
+    y: roundNumber(0.5 - dy * scale),
+    x2: roundNumber(0.5 + dx * scale),
+    y2: roundNumber(0.5 + dy * scale)
+  };
+}
+function shadowColorOption(shadow) {
+  if (!shadow || shadow.unsupportedCss === true || shadow.renderMode === "centered-scaled-shadow-filter") return void 0;
+  return asOptionalString8(shadow.color);
+}
+function shadowValueOption(value) {
+  return asNumber7(value);
+}
+function dataLabelOption(labels, seriesType, horizontal, stacked) {
+  const parsed = asRecord3(labels);
+  if (!parsed || !isBasicShowValueDataLabels(parsed)) return void 0;
+  const textStyle = asRecord3(parsed?.textStyle);
+  return compactObject({
+    show: true,
+    position: seriesType === "bar" ? barLabelPosition(parsed?.position, horizontal, stacked) : "top",
+    formatter: cartesianDataLabelFormatter(parsed),
+    ...dataLabelTextStyleOption(textStyle)
+  });
+}
+function cartesianDataLabelFormatter(labels) {
+  const separator = dataLabelSeparator(labels, ",");
+  const parts = [
+    labels.showCatName === true ? "{b}" : void 0,
+    labels.showSerName === true ? "{a}" : void 0,
+    "{c}"
+  ].filter((part) => part != null);
+  return parts.length > 1 ? parts.join(separator) : void 0;
+}
+function barCategoryGapOption(value) {
+  const gapWidth = asNumber7(value) ?? 150;
+  return gapWidth >= 0 && gapWidth <= 500 ? percentString(gapWidth / 100) : void 0;
+}
+function barGapOption(value, stacked) {
+  if (stacked) return void 0;
+  const overlap = asNumber7(value) ?? 0;
+  return overlap >= -100 && overlap <= 100 ? percentString(-overlap / 100) : void 0;
+}
+function categoryAxisLabelMargin(axis, placement) {
+  const position = axis?.tickLblPos ?? "nextTo";
+  if (position === "none") return void 0;
+  const defaultPx = placement === "bottom" && position === "high" ? 12 : placement === "bottom" ? 20 : 10;
+  return scaledLabelOffset(axis?.labelOffset, defaultPx);
+}
+function scaledLabelOffset(value, defaultPx) {
+  const parsed = asNumber7(value);
+  if (parsed == null) return defaultPx;
+  return Math.round(defaultPx * Math.min(1e3, Math.max(0, parsed)) / 100 * 100) / 100;
+}
+function textStyleFontFamily(style) {
+  const families = [
+    style?.fontFamilyLatinFallback,
+    style?.fontFamily,
+    style?.fontFamilyLatin,
+    style?.fontFamilyEastAsian,
+    style?.fontFamilyComplexScript
+  ].map(asOptionalString8).filter((value) => !!value);
+  return fontFamiliesWithWebFallbacks([...new Set(families)]).join(", ") || void 0;
+}
+function barLabelPosition(position, horizontal, stacked) {
+  if (stacked && (position == null || position === "ctr")) return "inside";
+  if (position === "ctr") return "inside";
+  if (position === "inEnd") return horizontal ? "insideRight" : "insideTop";
+  if (position === "inBase") return horizontal ? "insideLeft" : "insideBottom";
+  return horizontal ? "right" : "top";
+}
+function isBasicShowValueDataLabels(labels) {
+  if (!labels || labels.showVal !== true) return false;
+  return labels.showLegendKey !== true && labels.showPercent !== true && labels.showBubbleSize !== true && !(typeof labels.separator === "string" && /[\r\n]/.test(labels.separator));
+}
+function lineDashType(value) {
+  const dash = asOptionalString8(value);
+  if (!dash || dash === "solid") return void 0;
+  if (dash === "dot" || dash === "sysDot") return "dotted";
+  return "dashed";
+}
+function datasetSource(data) {
+  const categories = asStrings(data.categories);
+  const series = chartSeries(data.series);
+  return [
+    ["category", ...series.map((item) => item.name)],
+    ...categories.map((category, categoryIndex) => [
+      category,
+      ...series.map((item) => item.values[categoryIndex] ?? null)
+    ])
+  ];
+}
+function chartSeries(value) {
+  if (!Array.isArray(value)) return [];
+  return orderedSeries(value.map((item, index) => ({
+    name: String(item?.name ?? `Series ${index + 1}`),
+    values: Array.isArray(item?.values) ? item.values.map(asNullableNumber) : [],
+    index: asNumber7(item?.index),
+    order: asNumber7(item?.order),
+    color: asOptionalString8(item?.color) ?? asOptionalString8(item?.fill?.color),
+    smooth: asBoolean(item?.smooth),
+    line: asRecord3(item?.line),
+    marker: asRecord3(item?.marker),
+    dataLabels: asRecord3(item?.dataLabels),
+    effects: asRecord3(item?.effects)
+  })));
+}
+function isStacked(value) {
+  return value === "stacked" || value === "percentStacked";
+}
+function echartsSymbol(value) {
+  const symbol2 = asOptionalString8(value);
+  if (!symbol2 || symbol2 === "circle") return void 0;
+  if (symbol2 === "square") return "rect";
+  return symbol2;
+}
+function collectElements(elements) {
+  return elements.flatMap((element) => {
+    const children2 = element.children;
+    return Array.isArray(children2) ? [element, ...collectElements(children2)] : [element];
+  });
+}
+function compactObject(value) {
+  return Object.fromEntries(Object.entries(value).filter(([, entry]) => entry !== void 0));
+}
+function asRecord3(value) {
+  return value != null && typeof value === "object" && !Array.isArray(value) ? value : void 0;
+}
+function asStrings(value) {
+  return Array.isArray(value) ? value.map((item) => String(item)) : [];
+}
+function asOptionalString8(value) {
+  if (value == null) return void 0;
+  const text = String(value).trim();
+  return text || void 0;
+}
+function asNumber7(value) {
+  if (value == null || value === "") return void 0;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : void 0;
+}
+function unitRatio(value) {
+  const parsed = asNumber7(value);
+  return parsed != null && parsed >= 0 && parsed <= 1 ? parsed : void 0;
+}
+function positiveUnitRatio(value) {
+  const parsed = unitRatio(value);
+  return parsed != null && parsed > 0 ? parsed : void 0;
+}
+function isEdgeMode(value) {
+  const mode = asOptionalString8(value);
+  return mode == null || mode === "edge";
+}
+function percentString(value) {
+  return `${Math.round(value * 1e4) / 100}%`;
+}
+function roundNumber(value) {
+  return Math.round(value * 1e4) / 1e4;
+}
+function asNullableNumber(value) {
+  if (value == null || value === "") return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+function asBoolean(value) {
+  return typeof value === "boolean" ? value : void 0;
+}
+
+// src/shared/chartNumberFormats.ts
+function isBasicNumberFormatCode(formatCode) {
+  return formatCode === "#,##0" || formatCode === "#,##0.0" || formatCode === "0.0" || formatCode === "0%" || formatCode === "0.0%";
+}
+
+// src/render/renderChartAxisAttrs.ts
+function formatAxisValue(value, formatCode) {
+  if (formatCode === "#,##0") return new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 }).format(value);
+  if (formatCode === "#,##0.0") return new Intl.NumberFormat("en-US", { minimumFractionDigits: 1, maximumFractionDigits: 1 }).format(value);
+  if (formatCode === "0.0") return value.toFixed(1);
+  if (formatCode === "0%") return `${Math.round(value * 100)}%`;
+  if (formatCode === "0.0%") return `${(value * 100).toFixed(1)}%`;
+  if (!formatCode || formatCode === "General") return Number.isInteger(value) ? String(value) : String(round6(value));
+  return Number.isInteger(value) ? String(value) : String(round6(value));
+}
+function formatCategoryValue(value, formatCode, categoryValueType) {
+  if (!isBasicNumberFormatCode(formatCode) || categoryValueType !== "number") return value;
+  const number4 = Number(value);
+  return Number.isFinite(number4) ? formatAxisValue(number4, formatCode) : value;
+}
+function isBottomLegend2(legend) {
+  return legend.position === "b";
+}
+function round6(value) {
+  return Number(value.toFixed(2));
+}
+function clamp2(value, min, max) {
+  return Math.min(max, Math.max(min, value));
+}
+function attrString7(name, value) {
+  return value == null || value === "" ? "" : `${name}="${escapeHtml(String(value))}"`;
+}
+function chartLineAttrs(axisName, line8) {
+  if (line8?.visible === false) return void 0;
+  const attrs = [
+    attrString7("data-axis", axisName),
+    ...chartLinePaintAttrs(line8)
+  ].filter(Boolean);
+  return attrs.length > 0 ? ` ${attrs.join(" ")}` : ` data-axis="${axisName}"`;
+}
+function chartTickLineAttrs(line8) {
+  if (line8?.visible === false) return "";
+  const attrs = chartLinePaintAttrs(line8).filter(Boolean);
+  return attrs.length > 0 ? ` ${attrs.join(" ")}` : "";
+}
+function chartLabelAttrs(style, x, y) {
+  if (!style) return "";
+  const rotation = normalizedRotation(style.bodyRotation);
+  const attrs = [
+    ...chartTextAttrsList(style),
+    attrString7("transform", rotation == null ? void 0 : `rotate(${rotation} ${round6(x)} ${round6(y)})`)
+  ].filter(Boolean);
+  return attrs.length > 0 ? ` ${attrs.join(" ")}` : "";
+}
+function chartTextAttrs(style) {
+  if (!style) return "";
+  const attrs = chartTextAttrsList(style);
+  return attrs.length > 0 ? ` ${attrs.join(" ")}` : "";
+}
+function chartLinePaintAttrs(line8) {
+  const width = line8?.width && Number.isFinite(line8.width) ? line8.width : void 0;
+  return [
+    attrString7("stroke", line8?.color),
+    attrString7("data-line-color-source", line8?.colorSource),
+    attrString7("data-line-color-scheme", line8?.colorScheme),
+    attrString7("data-line-color-resolved", line8?.colorResolved),
+    attrString7("stroke-width", width == null ? void 0 : round6(width)),
+    attrString7("stroke-linecap", line8?.cap ? svgLineCap(line8.cap) : void 0),
+    attrString7("data-line-compound", line8?.compound),
+    attrString7("data-line-align", line8?.align),
+    attrString7("stroke-linejoin", line8?.join ? svgLineJoin(line8.join) : void 0),
+    attrString7("stroke-dasharray", line8?.dash ? svgDashArray(line8.dash, width ?? 1) : void 0)
+  ];
+}
+function chartTextAttrsList(style) {
+  return chartTextSvgAttributes(style);
+}
+function normalizedRotation(value) {
+  if (value == null || !Number.isFinite(value)) return void 0;
+  let normalized = value % 360;
+  if (normalized > 180) normalized -= 360;
+  if (normalized <= -180) normalized += 360;
+  const rounded = round6(normalized);
+  return Math.abs(rounded) < 0.01 ? void 0 : rounded;
+}
+
+// src/render/renderChartAxisScale.ts
+function valueScaleRatio(value, scale, axis) {
+  const normal = clamp3((value - scale.min) / scale.range, 0, 1);
+  return axis?.scaling?.orientation === "maxMin" ? 1 - normal : normal;
+}
+function valueAxisY(top, plotH, value, scale, axis) {
+  return round7(top + plotH - valueScaleRatio(value, scale, axis) * plotH);
+}
+function valueAxisX(left, plotW, value, scale, axis) {
+  return round7(left + valueScaleRatio(value, scale, axis) * plotW);
+}
+function categoryVisualIndex(index, count, axis) {
+  return axis?.scaling?.orientation === "maxMin" ? Math.max(0, count - 1 - index) : index;
+}
+function categoryPosition(index, count, plotSize, mode, axis) {
+  const visualIndex = categoryVisualIndex(index, count, axis);
+  if (mode === "bar") return (visualIndex + 0.5) / Math.max(1, count) * plotSize;
+  return count <= 1 ? plotSize / 2 : visualIndex / (count - 1) * plotSize;
+}
+function clamp3(value, min, max) {
+  return Math.min(max, Math.max(min, value));
+}
+function round7(value) {
+  return Math.round(value * 100) / 100;
+}
+
+// src/render/renderChartDataLabels.ts
+function renderVerticalBarValueLabels(categories, series, labels, margin, plotH, scale, groupW, barW, barStart, barStep, valueAxis, categoryAxis) {
+  return categories.flatMap((category, categoryIndex) => series.map((item, seriesIndex) => {
+    const itemLabels = asDataLabels2(item.dataLabels) ?? labels;
+    if (!hasBasicShowValueDataLabels(itemLabels)) return "";
+    const visualIndex = categoryVisualIndex(categoryIndex, categories.length, categoryAxis);
+    const value = item.values[categoryIndex] ?? 0;
+    const zeroY = valueAxisY(margin.top, plotH, 0, scale, valueAxis);
+    const valueY = valueAxisY(margin.top, plotH, value, scale, valueAxis);
+    const barY = Math.min(valueY, zeroY);
+    const barH = Math.abs(zeroY - valueY);
+    const barX = margin.left + visualIndex * groupW + barStart + seriesIndex * barStep;
+    const x = round8(barX + (barW - 2) / 2);
+    const y = verticalValueLabelY(itemLabels?.position, barY, barH, margin.top, plotH, value < 0);
+    return valueLabelText(category, item.name, value, x, y, "middle", itemLabels, item.valueCache?.formatCode);
+  })).join("\n        ");
+}
+function renderHorizontalBarValueLabels(categories, series, labels, margin, plotW, scale, groupH, barH, barStart, barStep, valueAxis, categoryAxis) {
+  const right = margin.left + plotW;
+  return categories.flatMap((category, categoryIndex) => series.map((item, seriesIndex) => {
+    const itemLabels = asDataLabels2(item.dataLabels) ?? labels;
+    if (!hasBasicShowValueDataLabels(itemLabels)) return "";
+    const visualIndex = categoryVisualIndex(categoryIndex, categories.length, categoryAxis);
+    const value = item.values[categoryIndex] ?? 0;
+    const zeroX = valueAxisX(margin.left, plotW, 0, scale, valueAxis);
+    const valueX = valueAxisX(margin.left, plotW, value, scale, valueAxis);
+    const x = Math.min(zeroX, valueX);
+    const width = Math.abs(valueX - zeroX);
+    const y = margin.top + visualIndex * groupH + barStart + seriesIndex * barStep + (barH - 2) / 2 + 4;
+    const label = horizontalValueLabelPosition(itemLabels?.position, x, width, margin.left, right, value < 0);
+    return valueLabelText(category, item.name, value, round8(label.x), round8(y), label.anchor, itemLabels, item.valueCache?.formatCode);
+  })).join("\n        ");
+}
+function hasBasicValueDataLabels(data) {
+  const labels = asDataLabels2(data?.dataLabels);
+  return hasBasicShowValueDataLabels(labels);
+}
+function hasBasicLineValueDataLabels(data) {
+  const labels = asDataLabels2(data?.dataLabels);
+  return hasBasicLineShowValueDataLabels(labels);
+}
+function hasBasicLineSeriesValueDataLabels(series) {
+  return series.some((item) => hasBasicLineShowValueDataLabels(asDataLabels2(item.dataLabels)));
+}
+function hasBasicStackedBarValueDataLabels(series) {
+  return series.some((item) => hasBasicShowValueDataLabels(asDataLabels2(item.dataLabels)));
+}
+function hasBasicSeriesValueDataLabels(series) {
+  return series.some((item) => hasBasicShowValueDataLabels(asDataLabels2(item.dataLabels)));
+}
+function renderVerticalStackedBarValueLabels(rects, sourceSeries, chartLabels) {
+  return rects.map((rect) => {
+    const labels = asDataLabels2(sourceSeries[rect.seriesIndex]?.dataLabels) ?? chartLabels;
+    if (!hasBasicShowValueDataLabels(labels)) return "";
+    return stackedBarLabelText(rect, rect.value, round8(rect.x + rect.width / 2), round8(rect.y + rect.height / 2 + 4), labels, sourceSeries[rect.seriesIndex]?.valueCache?.formatCode);
+  }).filter(Boolean).join("\n        ");
+}
+function renderHorizontalStackedBarValueLabels(rects, sourceSeries, chartLabels) {
+  return rects.map((rect) => {
+    const labels = asDataLabels2(sourceSeries[rect.seriesIndex]?.dataLabels) ?? chartLabels;
+    if (!hasBasicShowValueDataLabels(labels)) return "";
+    return stackedBarLabelText(rect, rect.value, round8(rect.x + rect.width / 2), round8(rect.y + rect.height / 2 + 4), labels, sourceSeries[rect.seriesIndex]?.valueCache?.formatCode);
+  }).filter(Boolean).join("\n        ");
+}
+function hasBasicPercentStackedBarPercentDataLabels(data, series, categoryCount) {
+  const labels = asDataLabels2(data?.dataLabels);
+  if (!isBasicPercentStackedPercentDataLabels(labels) && !series.some((item) => isBasicPercentStackedPercentDataLabels(asDataLabels2(item.dataLabels)))) return false;
+  return hasSafePercentStackedValues(series, categoryCount);
+}
+function hasSafePercentStackedValues(series, categoryCount) {
+  if (series.length === 0 || categoryCount <= 0) return false;
+  for (let categoryIndex = 0; categoryIndex < categoryCount; categoryIndex += 1) {
+    let total = 0;
+    for (const item of series) {
+      const value = item.values[categoryIndex] ?? 0;
+      if (!Number.isFinite(value) || value < 0) return false;
+      total += value;
+    }
+    if (total <= 0) return false;
+  }
+  return true;
+}
+function isBasicPercentStackedPercentDataLabels(labels) {
+  if (labels?.showPercent !== true || labels.position !== "ctr") return false;
+  return labels.showLegendKey !== true && labels.showVal !== true && labels.showCatName !== true && labels.showSerName !== true && labels.showBubbleSize !== true;
+}
+function hasBasicPiePercentDataLabels(data) {
+  const labels = asDataLabels2(data?.dataLabels);
+  if (!labels || labels.showLegendKey === true || labels.showBubbleSize === true) return false;
+  return labels.showVal === true || labels.showPercent === true;
+}
+function renderVerticalPercentStackedBarPercentLabels(rects, sourceSeries, labels) {
+  return rects.map((rect) => {
+    const itemLabels = percentStackedPercentLabelsForRect(sourceSeries[rect.seriesIndex], labels);
+    if (!itemLabels) return "";
+    const rawValue = sourceSeries[rect.seriesIndex]?.values[rect.categoryIndex] ?? 0;
+    const percent2 = rect.value / 100;
+    const text = formatPercent(percent2);
+    return percentStackedBarLabelText(rect, rawValue, percent2, round8(rect.x + rect.width / 2), round8(rect.y + rect.height / 2 + 4), text, itemLabels.textStyle);
+  }).filter(Boolean).join("\n        ");
+}
+function renderHorizontalPercentStackedBarPercentLabels(rects, sourceSeries, labels) {
+  return rects.map((rect) => {
+    const itemLabels = percentStackedPercentLabelsForRect(sourceSeries[rect.seriesIndex], labels);
+    if (!itemLabels) return "";
+    const rawValue = sourceSeries[rect.seriesIndex]?.values[rect.categoryIndex] ?? 0;
+    const percent2 = rect.value / 100;
+    const text = formatPercent(percent2);
+    return percentStackedBarLabelText(rect, rawValue, percent2, round8(rect.x + rect.width / 2), round8(rect.y + rect.height / 2 + 4), text, itemLabels.textStyle);
+  }).filter(Boolean).join("\n        ");
+}
+function percentStackedPercentLabelsForRect(series, chartLabels) {
+  const labels = asDataLabels2(series?.dataLabels) ?? chartLabels;
+  return isBasicPercentStackedPercentDataLabels(labels) ? labels : void 0;
+}
+function renderPiePercentDataLabels(labels, values, dataLabels, options) {
+  const total = values.reduce((sum, value) => sum + Math.max(0, value), 0);
+  if (total <= 0) return "";
+  let start = -Math.PI / 2;
+  return values.map((value, index) => {
+    const positive = Math.max(0, value);
+    const angle = positive / total * Math.PI * 2;
+    const mid = start + angle / 2;
+    start += angle;
+    if (positive <= 0) return "";
+    const labelRadius = options.innerRadius > 0 ? options.innerRadius + (options.radius - options.innerRadius) * 0.58 : options.radius * 0.62;
+    const x = round8(options.cx + Math.cos(mid) * labelRadius);
+    const y = round8(options.cy + Math.sin(mid) * labelRadius + 4);
+    const category = labels[index] ?? String(index + 1);
+    const percent2 = positive / total;
+    const text = formatPieDataLabelText(category, options.seriesName, value, percent2, dataLabels, options.valueFormatCode);
+    return pieLabelText(category, options.seriesName, value, percent2, x, y, text, dataLabels?.textStyle);
+  }).filter(Boolean).join("\n        ");
+}
+function formatPieDataLabelText(category, seriesName, value, percent2, labels, formatCode) {
+  const parts = [
+    labels?.showCatName === true ? category : void 0,
+    labels?.showSerName === true ? seriesName : void 0,
+    labels?.showVal === true ? formatLabelValue(value, formatCode) : void 0,
+    labels?.showPercent === true ? formatPercent(percent2) : void 0
+  ].filter((part) => part != null);
+  return parts.join(dataLabelSeparator2(labels, " "));
+}
+function dataLabelSeparator2(labels, fallback = " ") {
+  return typeof labels?.separator === "string" ? labels.separator : fallback;
+}
+function renderLineValueLabels(categories, series, labels, margin, plotW, plotH, scale, valueAxis, categoryAxis) {
+  return series.flatMap((item) => item.values.map((value, categoryIndex) => {
+    const itemLabels = asDataLabels2(item.dataLabels) ?? labels;
+    if (!hasBasicLineShowValueDataLabels(itemLabels) || !Number.isFinite(value)) return "";
+    const category = categories[categoryIndex] ?? String(categoryIndex + 1);
+    const x = margin.left + categoryPosition(categoryIndex, categories.length, plotW, "point", categoryAxis);
+    const y = valueAxisY(margin.top, plotH, value, scale, valueAxis);
+    const label = lineValueLabelPosition(itemLabels?.position, x, y);
+    return valueLabelText(category, item.name, value, label.x, label.y, label.anchor, itemLabels, item.valueCache?.formatCode);
+  })).join("\n        ");
+}
+function valueLabelText(category, seriesName, value, x, y, anchor, labels, formatCode) {
+  return `<text class="chart-data-label" data-category="${escapeHtml(category)}" data-series="${escapeHtml(seriesName)}" data-value="${round8(value)}" x="${x}" y="${y}" text-anchor="${anchor}"${dataLabelStyleAttributes(labels?.textStyle)}>${dataLabelTextContent(formatDataLabelText(category, seriesName, value, labels, formatCode), x)}</text>`;
+}
+function stackedBarLabelText(rect, value, x, y, labels, formatCode) {
+  return `<text class="chart-data-label chart-data-label-bar-stacked-value" data-category="${escapeHtml(rect.category)}" data-series="${escapeHtml(rect.series)}" data-value="${round8(value)}" x="${x}" y="${y}" text-anchor="middle"${dataLabelStyleAttributes(labels?.textStyle)}>${dataLabelTextContent(formatDataLabelText(rect.category, rect.series, value, labels, formatCode), x)}</text>`;
+}
+function pieLabelText(category, seriesName, value, percent2, x, y, text, style) {
+  return `<text class="chart-data-label chart-data-label-pie" data-category="${escapeHtml(category)}" data-series="${escapeHtml(seriesName)}" data-value="${round8(value)}" data-percent="${round8(percent2)}" x="${x}" y="${y}" text-anchor="middle"${dataLabelStyleAttributes(style)}>${dataLabelTextContent(text, x)}</text>`;
+}
+function percentStackedBarLabelText(rect, value, percent2, x, y, text, style) {
+  return `<text class="chart-data-label chart-data-label-bar-percent" data-category="${escapeHtml(rect.category)}" data-series="${escapeHtml(rect.series)}" data-value="${round8(value)}" data-percent="${round8(percent2)}" x="${x}" y="${y}" text-anchor="middle"${dataLabelStyleAttributes(style)}>${dataLabelTextContent(text, x)}</text>`;
+}
+function dataLabelTextContent(text, x) {
+  const lines = text.split(/\r\n|\r|\n/);
+  if (lines.length === 1) return escapeHtml(text);
+  return lines.map((line8, index) => `<tspan x="${x}"${index === 0 ? "" : ' dy="1.2em"'}>${escapeHtml(line8)}</tspan>`).join("");
+}
+function verticalValueLabelY(position, barY, barH, plotTop, plotH, negative) {
+  const plotBottom = plotTop + plotH;
+  if (position === "ctr") return round8(barY + barH / 2 + 4);
+  if (position === "inEnd") return round8(negative ? barY + barH - 6 : barY + 14);
+  if (position === "inBase") return round8(negative ? barY + 14 : barY + barH - 6);
+  if (negative) return round8(barY + barH + 14 <= plotBottom ? barY + barH + 14 : barY + barH - 6);
+  return round8(barY > plotTop + 16 ? barY - 6 : barY + 14);
+}
+function horizontalValueLabelPosition(position, barX, barW, plotLeft, plotRight, negative) {
+  const barEnd = barX + barW;
+  if (position === "ctr") return { x: barEnd - barW / 2, anchor: "middle" };
+  if (position === "inEnd") return negative ? { x: barX + 6, anchor: "start" } : { x: barEnd - 6, anchor: "end" };
+  if (position === "inBase") return negative ? { x: barEnd - 6, anchor: "end" } : { x: barX + 6, anchor: "start" };
+  if (negative) {
+    const outsideX2 = barX - 6;
+    return outsideX2 >= plotLeft + 4 ? { x: outsideX2, anchor: "end" } : { x: barX + 6, anchor: "start" };
+  }
+  const outsideX = barEnd + 6;
+  return outsideX <= plotRight - 4 ? { x: outsideX, anchor: "start" } : { x: barEnd - 6, anchor: "end" };
+}
+function lineValueLabelPosition(position, pointX2, pointY2) {
+  if (position === "l") return { x: round8(pointX2 - 8), y: round8(pointY2 + 4), anchor: "end" };
+  if (position === "t") return { x: round8(pointX2), y: round8(pointY2 - 8), anchor: "middle" };
+  if (position === "b") return { x: round8(pointX2), y: round8(pointY2 + 16), anchor: "middle" };
+  if (position === "ctr") return { x: round8(pointX2), y: round8(pointY2 + 4), anchor: "middle" };
+  return { x: round8(pointX2 + 8), y: round8(pointY2 + 4), anchor: "start" };
+}
+function asDataLabels2(value) {
+  if (value == null || typeof value !== "object" || Array.isArray(value)) return void 0;
+  return {
+    showLegendKey: typeof value.showLegendKey === "boolean" ? value.showLegendKey : void 0,
+    position: typeof value.position === "string" ? value.position : void 0,
+    textStyle: asChartTextStyle(value.textStyle),
+    showVal: typeof value.showVal === "boolean" ? value.showVal : void 0,
+    showCatName: typeof value.showCatName === "boolean" ? value.showCatName : void 0,
+    showSerName: typeof value.showSerName === "boolean" ? value.showSerName : void 0,
+    showPercent: typeof value.showPercent === "boolean" ? value.showPercent : void 0,
+    showBubbleSize: typeof value.showBubbleSize === "boolean" ? value.showBubbleSize : void 0,
+    separator: typeof value.separator === "string" ? value.separator : void 0
+  };
+}
+function hasBasicShowValueDataLabels(labels) {
+  if (labels?.showVal !== true) return false;
+  return labels.showLegendKey !== true && labels.showPercent !== true && labels.showBubbleSize !== true;
+}
+function hasBasicLineShowValueDataLabels(labels) {
+  return hasBasicShowValueDataLabels(labels) && (labels?.position == null || ["r", "l", "t", "b", "ctr"].includes(labels.position));
+}
+function dataLabelStyleAttributes(style) {
+  const attrs = chartTextSvgAttributes(style);
+  return attrs.length > 0 ? ` ${attrs.join(" ")}` : "";
+}
+function formatLabelValue(value, formatCode) {
+  return isBasicNumberFormatCode(formatCode) ? formatAxisValue(value, formatCode) : String(value);
+}
+function formatDataLabelText(category, seriesName, value, labels, formatCode) {
+  const parts = [
+    labels?.showCatName === true ? category : void 0,
+    labels?.showSerName === true ? seriesName : void 0,
+    formatLabelValue(value, formatCode)
+  ].filter((part) => part != null);
+  return parts.join(dataLabelSeparator2(labels, ","));
+}
+function formatPercent(value) {
+  const percent2 = value * 100;
+  const rounded = Math.round(percent2 * 10) / 10;
+  return `${Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1)}%`;
+}
+function round8(value) {
+  return Math.round(value * 100) / 100;
+}
+
+// src/render/renderChartLineStacking.ts
+function lineStackingMode(grouping) {
+  if (grouping === "stacked") return "stacked";
+  if (grouping === "percentStacked") return "percentStacked";
+  return "none";
+}
+function stackedLineSeries(series, categoryCount) {
+  const totals = Array.from({ length: categoryCount }, () => 0);
+  return series.map((item) => {
+    const values = Array.from({ length: categoryCount }, (_, categoryIndex) => {
+      const value = item.values[categoryIndex] ?? 0;
+      if (Number.isFinite(value)) totals[categoryIndex] += value;
+      return totals[categoryIndex];
+    });
+    return { ...item, values };
+  });
+}
+function percentStackedLineSeries(series, categoryCount) {
+  const totals = Array.from({ length: categoryCount }, (_, categoryIndex) => {
+    return series.reduce((sum, item) => sum + Math.max(0, item.values[categoryIndex] ?? 0), 0);
+  });
+  const cumulative = Array.from({ length: categoryCount }, () => 0);
+  return series.map((item) => ({
+    ...item,
+    values: Array.from({ length: categoryCount }, (_, categoryIndex) => {
+      const total = totals[categoryIndex] ?? 0;
+      const percent2 = total > 0 ? Math.max(0, item.values[categoryIndex] ?? 0) / total * 100 : 0;
+      cumulative[categoryIndex] += percent2;
+      return cumulative[categoryIndex];
+    })
+  }));
+}
+function hasOnlyNonNegativeLineValues(series) {
+  const values = series.flatMap((item) => item.values);
+  return values.length > 0 && values.every((value) => Number.isFinite(value) && value >= 0);
+}
+function hasPositiveLineCategoryTotals(series, categoryCount) {
+  return categoryCount > 0 && Array.from({ length: categoryCount }, (_, categoryIndex) => {
+    return series.reduce((sum, item) => sum + (item.values[categoryIndex] ?? 0), 0);
+  }).every((total) => Number.isFinite(total) && total > 0);
+}
+
+// src/render/chartValueScale.ts
+function computeValueScale(series, valueAxis, stacked = false) {
+  const values = stacked ? stackedCategoryTotals(series) : series.flatMap((item) => item.values).filter(Number.isFinite);
+  const dataMax = Math.max(1, ...values);
+  const dataMin = Math.min(0, ...values);
+  const min = valueAxis?.scaling?.min ?? (dataMin < 0 ? niceFloor(dataMin) : 0);
+  const configuredMax = valueAxis?.scaling?.max;
+  const max = configuredMax != null && configuredMax > min ? configuredMax : Math.max(niceCeil(dataMax), min + 1);
+  return { min, max, range: max - min };
+}
+function computePercentStackedValueScale(valueAxis) {
+  const min = valueAxis?.scaling?.min ?? 0;
+  const configuredMax = valueAxis?.scaling?.max;
+  const max = configuredMax != null && configuredMax > min ? configuredMax : Math.max(100, min + 1);
+  return { min, max, range: max - min };
+}
+function stackedCategoryTotals(series) {
+  const categoryCount = Math.max(0, ...series.map((item) => item.values.length));
+  return Array.from({ length: categoryCount }, (_, categoryIndex) => {
+    const totals = series.reduce((sum, item) => {
+      const value = item.values[categoryIndex] ?? 0;
+      if (!Number.isFinite(value)) return sum;
+      return value >= 0 ? { positive: sum.positive + value, negative: sum.negative } : { positive: sum.positive, negative: sum.negative + value };
+    }, { positive: 0, negative: 0 });
+    return [totals.positive, totals.negative];
+  }).flat();
+}
+function niceCeil(value) {
+  if (!Number.isFinite(value) || value <= 0) return 1;
+  const exponent = Math.floor(Math.log10(value));
+  const magnitude = 10 ** exponent;
+  const normalized = value / magnitude;
+  const nice = normalized <= 1 ? 1 : normalized <= 2 ? 2 : normalized <= 5 ? 5 : 10;
+  return nice * magnitude;
+}
+function niceFloor(value) {
+  if (!Number.isFinite(value) || value >= 0) return 0;
+  return -niceCeil(Math.abs(value));
+}
+
+// src/render/renderChartBlankValues.ts
+function chartBlankMode(value) {
+  return value === "span" || value === "zero" ? value : "gap";
+}
+function seriesWithDisplayedBlankValues(series, displayBlanksAs) {
+  if (chartBlankMode(displayBlanksAs) !== "zero") return series;
+  return series.map((item) => ({
+    ...item,
+    values: item.values.map((value) => Number.isFinite(value) ? value : 0)
+  }));
+}
+function linePointSegments(values, displayBlanksAs, pointForValue) {
+  const mode = chartBlankMode(displayBlanksAs);
+  const segments = [[]];
+  for (const [index, rawValue] of values.entries()) {
+    const value = Number.isFinite(rawValue) ? rawValue : void 0;
+    if (value == null) {
+      if (mode === "zero") {
+        segments[segments.length - 1].push(pointForValue(0, index));
+      } else if (mode === "gap" && segments[segments.length - 1].length > 0) {
+        segments.push([]);
+      }
+      continue;
+    }
+    segments[segments.length - 1].push(pointForValue(value, index));
+  }
+  return segments.filter((segment) => segment.length > 0);
+}
+
+// src/shared/chartMarkerSymbols.ts
+var basicChartMarkerSymbols = ["circle", "square", "triangle", "diamond"];
+function isBasicChartMarkerSymbol(value) {
+  return typeof value === "string" && basicChartMarkerSymbols.includes(value);
+}
+
+// src/render/renderEffectCss.ts
+function shadowToCss(shadow) {
+  if (!shadow) return void 0;
+  if (shadow?.renderMode === "centered-scaled-shadow-filter") return void 0;
+  if (shadow?.unsupportedCss === true) return void 0;
+  return `${shadow.x ?? 0}px ${shadow.y ?? 0}px ${shadow.blur ?? 0}px ${shadow.color ?? "rgba(0, 0, 0, 0.25)"}`;
+}
+function glowToCss(glow) {
+  return `0 0 ${glow.radius ?? 0}px ${glow.color ?? "rgba(255, 255, 255, 0.5)"}`;
+}
+function textShadowToCss(effects) {
+  const shadows = [
+    effects?.outerShadow ? shadowToCss(effects.outerShadow) : void 0,
+    effects?.glow ? glowToCss(effects.glow) : void 0
+  ].filter(Boolean);
+  return shadows.length > 0 ? shadows.join(", ") : void 0;
+}
+function boxShadowToCss(effects) {
+  const shadows = [
+    effects?.outerShadow ? shadowToCss(effects.outerShadow) : void 0,
+    effects?.glow ? glowToCss(effects.glow) : void 0
+  ].filter(Boolean);
+  return shadows.length > 0 ? shadows.join(", ") : void 0;
+}
+function filterToCss(effects) {
+  const shadow = shadowToCss(effects?.outerShadow);
+  const filters = [
+    shadow ? `drop-shadow(${shadow})` : void 0,
+    effects?.glow ? `drop-shadow(${glowToCss(effects.glow)})` : void 0
+  ].filter(Boolean);
+  return filters.length > 0 ? filters.join(" ") : void 0;
+}
+function reflectionToCss(reflection) {
+  const gap = reflection.distance ?? 0;
+  const start = reflection.startOpacity ?? 0.25;
+  const end = reflection.endOpacity ?? 0;
+  const startPos = reflection.startPosition ?? 0;
+  const endPos = reflection.endPosition ?? 100;
+  return `below ${gap}px linear-gradient(to bottom, rgba(0, 0, 0, ${start}) ${startPos}%, rgba(0, 0, 0, ${end}) ${endPos}%)`;
+}
+
+// src/render/renderSvgGradient.ts
+function renderSvgLinearGradientDef(id, fill, indent = "        ") {
+  const direction = linearGradientDirection2(typeof fill.angle === "number" ? fill.angle : 180);
+  const stops = fill.stops.map((stop) => {
+    const offset = Number(stop.position ?? 0);
+    return `${indent}<stop offset="${escapeHtml(String(offset))}%" stop-color="${escapeHtml(stop.color ?? "#ffffff")}"></stop>`;
+  }).join("\n");
+  return `${indent}<linearGradient id="${escapeHtml(id)}" gradientUnits="objectBoundingBox" x1="${direction.x1}%" y1="${direction.y1}%" x2="${direction.x2}%" y2="${direction.y2}%">
+${stops}
+${indent}</linearGradient>`;
+}
+function linearGradientDirection2(angle) {
+  const radians = angle * Math.PI / 180;
+  const dx = Math.sin(radians);
+  const dy = -Math.cos(radians);
+  const scale = 50 / Math.max(Math.abs(dx), Math.abs(dy), 1e-4);
+  return {
+    x1: formatNumber2(50 - dx * scale),
+    y1: formatNumber2(50 - dy * scale),
+    x2: formatNumber2(50 + dx * scale),
+    y2: formatNumber2(50 + dy * scale)
+  };
+}
+function formatNumber2(value) {
+  return Number(value.toFixed(4)).toString();
+}
+
+// src/render/renderChartSeriesStyle.ts
+function renderLineChartSeriesStyle(item, seriesIndex, fallbackColor, chartId) {
+  const line8 = asRecord4(item.line);
+  const width = asNumber8(line8?.width) ?? 3;
+  const fill = asRecord4(line8?.fill);
+  const gradient = supportedLinearGradient(fill) ? fill : void 0;
+  const gradientId = gradient ? `${safeId(chartId)}-series-${seriesIndex + 1}-line-gradient` : "";
+  const defs = gradient ? renderSvgLinearGradientDef(gradientId, gradient, "          ") : "";
+  const stroke = gradient ? `url(#${gradientId})` : asString(line8?.color) ?? fallbackColor;
+  const dash = svgDashArray(line8?.dash, width);
+  const filter = filterToCss(item.effects);
+  const lineAttrs = [
+    `stroke="${escapeHtml(stroke)}"`,
+    `stroke-width="${formatNumber3(width)}"`,
+    `stroke-linecap="${escapeHtml(svgLineCap(line8?.cap))}"`,
+    `stroke-linejoin="${escapeHtml(svgLineJoin(line8?.join))}"`,
+    dash ? `stroke-dasharray="${escapeHtml(dash)}"` : "",
+    filter ? `style="filter: ${escapeHtml(filter)}"` : ""
+  ].filter(Boolean).join(" ");
+  return {
+    defs,
+    strokeAttributes: `${lineAttrs}${seriesLineMetadata(line8)}${seriesEffectMetadata(item.effects)}${seriesMarkerAttributes(item, fallbackColor)}`,
+    pointFill: asString(line8?.color) ?? fallbackColor,
+    metadataAttributes: `${seriesLineMetadata(line8)}${seriesEffectMetadata(item.effects)}${seriesMarkerAttributes(item, fallbackColor)}`
+  };
+}
+function shouldRenderSeriesMarkers(item) {
+  if (!item.marker) return true;
+  if (item.marker?.source === "chartStyleUnsupported") return false;
+  if (item.marker?.symbol === "none") return false;
+  const size = asNumber8(item.marker.size);
+  if (item.marker?.line && item.marker.symbol == null && size == null) return true;
+  if (size != null && size <= 0) return false;
+  if (item.marker.symbol === "circle") return true;
+  return isBasicChartMarkerSymbol(item.marker.symbol) && size != null && size > 0;
+}
+function seriesMarkerRadius(item) {
+  const size = asNumber8(item.marker?.size);
+  return size != null && size > 0 ? size : 4;
+}
+function seriesMarkerAttributes(item, fallbackColor) {
+  const line8 = asRecord4(item.marker?.line);
+  const lineColor = line8 && line8.visible !== false ? asString(line8.color) ?? fallbackColor : void 0;
+  return [
+    item.marker?.symbol ? ` data-series-marker-symbol="${escapeHtml(item.marker.symbol)}"` : "",
+    asNumber8(item.marker?.size) != null ? ` data-series-marker-size="${formatNumber3(asNumber8(item.marker?.size))}"` : "",
+    item.marker?.source ? ` data-series-marker-source="${escapeHtml(item.marker.source)}"` : "",
+    line8?.visible === false ? ` data-series-marker-line-visible="false"` : "",
+    lineColor ? ` data-series-marker-line-color="${escapeHtml(lineColor)}"` : "",
+    asString(line8?.colorSource) ? ` data-series-marker-line-color-source="${escapeHtml(asString(line8?.colorSource))}"` : "",
+    asString(line8?.colorResolved) ? ` data-series-marker-line-color-resolved="${escapeHtml(asString(line8?.colorResolved))}"` : "",
+    asNumber8(line8?.width) != null ? ` data-series-marker-line-width="${formatNumber3(asNumber8(line8?.width))}"` : "",
+    asString(line8?.cap) ? ` data-series-marker-line-cap="${escapeHtml(asString(line8?.cap))}"` : "",
+    asString(line8?.join) ? ` data-series-marker-line-join="${escapeHtml(asString(line8?.join))}"` : "",
+    asString(line8?.dash) ? ` data-series-marker-line-dash="${escapeHtml(asString(line8?.dash))}"` : "",
+    asString(line8?.colorScheme) ? ` data-series-marker-line-color-scheme="${escapeHtml(asString(line8?.colorScheme))}"` : ""
+  ].join("");
+}
+function seriesLineMetadata(line8) {
+  if (!line8) return "";
+  const fill = asRecord4(line8.fill);
+  const gradientStops = gradientStopsMetadata(fill);
+  return [
+    asNumber8(line8.width) != null ? ` data-series-line-width="${formatNumber3(asNumber8(line8.width))}"` : "",
+    asString(line8.cap) ? ` data-series-line-cap="${escapeHtml(asString(line8.cap))}"` : "",
+    asString(line8.join) ? ` data-series-line-join="${escapeHtml(asString(line8.join))}"` : "",
+    asString(line8.dash) ? ` data-series-line-dash="${escapeHtml(asString(line8.dash))}"` : "",
+    fill?.type ? ` data-series-line-fill-type="${escapeHtml(String(fill.type))}"` : "",
+    fill?.kind ? ` data-series-line-gradient-kind="${escapeHtml(String(fill.kind))}"` : "",
+    asNumber8(fill?.angle) != null ? ` data-series-line-gradient-angle="${formatNumber3(asNumber8(fill?.angle))}"` : "",
+    asBooleanString(fill?.scaled) ? ` data-series-line-gradient-scaled="${escapeHtml(asBooleanString(fill?.scaled))}"` : "",
+    asString(fill?.flip) ? ` data-series-line-gradient-flip="${escapeHtml(asString(fill?.flip))}"` : "",
+    asBooleanString(fill?.rotateWithShape) ? ` data-series-line-gradient-rot-with-shape="${escapeHtml(asBooleanString(fill?.rotateWithShape))}"` : "",
+    gradientStops ? ` data-series-line-gradient-stop-count="${gradientStops.count}"` : "",
+    gradientStops ? ` data-series-line-gradient-stops="${escapeHtml(JSON.stringify(gradientStops.stops))}"` : ""
+  ].join("");
+}
+function gradientStopsMetadata(fill) {
+  if (!Array.isArray(fill?.stops)) return void 0;
+  const stops = fill.stops.map((stop) => {
+    const item = asRecord4(stop);
+    if (!item) return void 0;
+    const position = asNumber8(item.position);
+    const color = asString(item.color);
+    if (position == null && color == null) return void 0;
+    return {
+      ...position != null ? { position } : {},
+      ...color ? { color } : {}
+    };
+  }).filter((stop) => Boolean(stop));
+  return stops.length > 0 ? { count: stops.length, stops } : void 0;
+}
+function seriesEffectMetadata(effects) {
+  const shadow = asRecord4(effects?.outerShadow);
+  if (!shadow) return "";
+  return [
+    ` data-series-shadow="outer"`,
+    asString(shadow.color) ? ` data-series-shadow-color="${escapeHtml(asString(shadow.color))}"` : "",
+    asNumber8(shadow.blur) != null ? ` data-series-shadow-blur="${formatNumber3(asNumber8(shadow.blur))}"` : "",
+    asNumber8(shadow.distance) != null ? ` data-series-shadow-distance="${formatNumber3(asNumber8(shadow.distance))}"` : "",
+    asNumber8(shadow.direction) != null ? ` data-series-shadow-direction="${formatNumber3(asNumber8(shadow.direction))}"` : ""
+  ].join("");
+}
+function supportedLinearGradient(fill) {
+  return fill?.type === "gradient" && fill.kind === "linear" && Array.isArray(fill.stops) && fill.stops.length >= 2;
+}
+function asRecord4(value) {
+  return value != null && typeof value === "object" && !Array.isArray(value) ? value : void 0;
+}
+function asString(value) {
+  return typeof value === "string" && value.trim() ? value : void 0;
+}
+function asNumber8(value) {
+  if (value == null || value === "") return void 0;
+  const number4 = Number(value);
+  return Number.isFinite(number4) ? number4 : void 0;
+}
+function asBooleanString(value) {
+  if (typeof value === "boolean") return String(value);
+  if (value === "true" || value === "false") return value;
+  return void 0;
+}
+function formatNumber3(value) {
+  return Number(value.toFixed(2)).toString();
+}
+function safeId(value) {
+  return value.replace(/[^a-zA-Z0-9_-]+/g, "-");
+}
+
+// src/render/renderChartAxis.ts
+function renderValueAxisTicks(margin, plotH, valueAxis, scale) {
+  if (!valueAxis || valueAxis.visible === false) return "";
+  const minorTicks = minorTickValues(valueAxis, scale).map((value) => {
+    const y = valueAxisY(margin.top, plotH, value, scale, valueAxis);
+    return renderMinorTickMark(margin.left, y, valueAxis.minorTickMark, value, valueAxis.line);
+  });
+  const majorTicks = axisTickValues(valueAxis, scale).map((value) => {
+    const y = valueAxisY(margin.top, plotH, value, scale, valueAxis);
+    return [
+      renderMajorTickMark(margin.left, y, valueAxis.majorTickMark, value, valueAxis.line),
+      renderTickLabel(margin.left, y, valueAxis, value)
+    ].filter(Boolean).join("");
+  });
+  return [...minorTicks, ...majorTicks].filter(Boolean).join("\n        ");
+}
+function renderCategoryAxisTicks(margin, plotW, plotH, categories, categoryAxis, mode, categoryValueType, axisY = margin.top + plotH) {
+  if (categoryAxis?.visible === false || categories.length === 0) return "";
+  return categories.map((category, index) => {
+    const x = round6(margin.left + categoryPosition(index, categories.length, plotW, mode, categoryAxis));
+    return [
+      categoryAxis && shouldRenderCategoryIndex(index, categoryAxis.tickMarkSkip) ? renderCategoryTickMark(x, axisY, categoryAxis.majorTickMark, category, categoryAxis.line) : "",
+      shouldRenderCategoryIndex(index, categoryAxis?.tickLabelSkip) ? renderCategoryTickLabel(x, axisY, categoryAxis, category, categoryValueType) : ""
+    ].filter(Boolean).join("");
+  }).filter(Boolean).join("\n        ");
+}
+function renderHorizontalValueAxisTicks(margin, plotW, plotH, valueAxis, scale) {
+  if (!valueAxis || valueAxis.visible === false) return "";
+  const axisY = margin.top + plotH;
+  const minorTicks = minorTickValues(valueAxis, scale).map((value) => {
+    const x = valueAxisX(margin.left, plotW, value, scale, valueAxis);
+    return renderHorizontalMinorValueTickMark(x, axisY, valueAxis.minorTickMark, value, valueAxis.line);
+  });
+  const majorTicks = axisTickValues(valueAxis, scale).map((value) => {
+    const x = valueAxisX(margin.left, plotW, value, scale, valueAxis);
+    return [
+      renderHorizontalValueTickMark(x, axisY, valueAxis.majorTickMark, value, valueAxis.line),
+      renderHorizontalValueTickLabel(x, axisY, valueAxis, value)
+    ].filter(Boolean).join("");
+  });
+  return [...minorTicks, ...majorTicks].filter(Boolean).join("\n        ");
+}
+function renderLeftCategoryAxisTicks(margin, plotH, categories, categoryAxis, categoryValueType, axisX = margin.left) {
+  if (categoryAxis?.visible === false || categories.length === 0) return "";
+  return categories.map((category, index) => {
+    const y = round6(margin.top + categoryPosition(index, categories.length, plotH, "bar", categoryAxis));
+    return [
+      categoryAxis && shouldRenderCategoryIndex(index, categoryAxis.tickMarkSkip) ? renderLeftCategoryTickMark(axisX, y, categoryAxis.majorTickMark, category, categoryAxis.line) : "",
+      shouldRenderCategoryIndex(index, categoryAxis?.tickLabelSkip) ? renderLeftCategoryTickLabel(axisX, y, categoryAxis, category, categoryValueType) : ""
+    ].filter(Boolean).join("");
+  }).filter(Boolean).join("\n        ");
+}
+function renderVerticalAxisTitles(width, height, margin, plotW, plotH, axes, legend) {
+  const categoryTitle = axes.category?.visible !== false && axes.category?.title ? `<text class="chart-axis-title chart-axis-title-category"${chartTextAttrs(axes.category.titleStyle)} x="${round6(margin.left + plotW / 2)}" y="${height - (legend && isBottomLegend2(legend) ? 78 : 42)}" text-anchor="middle">${escapeHtml(axes.category.title)}</text>` : "";
+  const valueTitle = axes.value?.visible !== false && axes.value?.title ? `<text class="chart-axis-title chart-axis-title-value"${chartTextAttrs(axes.value.titleStyle)} x="18" y="${round6(margin.top + plotH / 2)}" text-anchor="middle" transform="rotate(-90 18 ${round6(margin.top + plotH / 2)})">${escapeHtml(axes.value.title)}</text>` : "";
+  return [categoryTitle, valueTitle].filter(Boolean).join("\n        ");
+}
+function renderHorizontalAxisTitles(width, height, margin, plotW, plotH, axes, legend) {
+  const valueTitle = axes.value?.visible !== false && axes.value?.title ? `<text class="chart-axis-title chart-axis-title-value"${chartTextAttrs(axes.value.titleStyle)} x="${round6(margin.left + plotW / 2)}" y="${height - (legend && isBottomLegend2(legend) ? 78 : 42)}" text-anchor="middle">${escapeHtml(axes.value.title)}</text>` : "";
+  const categoryTitle = axes.category?.visible !== false && axes.category?.title ? `<text class="chart-axis-title chart-axis-title-category"${chartTextAttrs(axes.category.titleStyle)} x="18" y="${round6(margin.top + plotH / 2)}" text-anchor="middle" transform="rotate(-90 18 ${round6(margin.top + plotH / 2)})">${escapeHtml(axes.category.title)}</text>` : "";
+  return [categoryTitle, valueTitle].filter(Boolean).join("\n        ");
+}
+function renderChartAxisLine(axisName, axis, coords) {
+  if (axis?.visible === false || axis?.line?.visible === false) return "";
+  const line8 = axis?.line;
+  const width = line8?.width && Number.isFinite(line8.width) ? line8.width : void 0;
+  const attrs = [
+    attrString7("data-axis", axisName),
+    attrString7("stroke", line8?.color),
+    attrString7("data-line-color-source", line8?.colorSource),
+    attrString7("data-line-color-scheme", line8?.colorScheme),
+    attrString7("data-line-color-resolved", line8?.colorResolved),
+    attrString7("stroke-width", width == null ? void 0 : round6(width)),
+    attrString7("stroke-linecap", line8?.cap ? svgLineCap(line8.cap) : void 0),
+    attrString7("data-line-compound", line8?.compound),
+    attrString7("data-line-align", line8?.align),
+    attrString7("stroke-linejoin", line8?.join ? svgLineJoin(line8.join) : void 0),
+    attrString7("stroke-dasharray", line8?.dash ? svgDashArray(line8.dash, width ?? 1) : void 0)
+  ].filter(Boolean);
+  return `<line class="chart-axis" x1="${round6(coords.x1)}" y1="${round6(coords.y1)}" x2="${round6(coords.x2)}" y2="${round6(coords.y2)}"${attrs.length > 0 ? ` ${attrs.join(" ")}` : ""}></line>`;
+}
+function renderVerticalMajorGridlines(margin, plotW, plotH, valueAxis, scale) {
+  if (valueAxis?.majorGridlines !== true || valueAxis.visible === false) return "";
+  const attrs = chartLineAttrs("value", valueAxis.majorGridlineLine);
+  if (!attrs) return "";
+  const lines = majorGridlineValues(valueAxis, scale).map((value) => {
+    const y = valueAxisY(margin.top, plotH, value, scale, valueAxis);
+    return `<line class="chart-gridline chart-gridline-major"${attrs} data-value="${round6(value)}" x1="${margin.left}" y1="${y}" x2="${round6(margin.left + plotW)}" y2="${y}"></line>`;
+  });
+  return lines.join("\n        ");
+}
+function renderVerticalMinorGridlines(margin, plotW, plotH, valueAxis, scale) {
+  if (valueAxis?.minorGridlines !== true || valueAxis.visible === false) return "";
+  const attrs = chartLineAttrs("value", valueAxis.minorGridlineLine);
+  if (!attrs) return "";
+  const lines = minorTickValues(valueAxis, scale).map((value) => {
+    const y = valueAxisY(margin.top, plotH, value, scale, valueAxis);
+    return `<line class="chart-gridline chart-gridline-minor"${attrs} data-value="${round6(value)}" x1="${margin.left}" y1="${y}" x2="${round6(margin.left + plotW)}" y2="${y}"></line>`;
+  });
+  return lines.join("\n        ");
+}
+function renderBottomCategoryMajorGridlines(margin, plotW, plotH, categories, categoryAxis, mode) {
+  if (categoryAxis?.majorGridlines !== true || categoryAxis.visible === false || categories.length === 0) return "";
+  const attrs = chartLineAttrs("category", categoryAxis.majorGridlineLine);
+  if (!attrs) return "";
+  return categories.map((category, index) => {
+    const x = round6(margin.left + categoryPosition(index, categories.length, plotW, mode, categoryAxis));
+    return `<line class="chart-gridline chart-gridline-major"${attrs} data-category="${escapeHtml(category)}" x1="${x}" y1="${margin.top}" x2="${x}" y2="${round6(margin.top + plotH)}"></line>`;
+  }).join("\n        ");
+}
+function renderHorizontalMajorGridlines(margin, plotW, plotH, valueAxis, scale) {
+  if (valueAxis?.majorGridlines !== true || valueAxis.visible === false) return "";
+  const attrs = chartLineAttrs("value", valueAxis.majorGridlineLine);
+  if (!attrs) return "";
+  const lines = majorGridlineValues(valueAxis, scale).map((value) => {
+    const x = valueAxisX(margin.left, plotW, value, scale, valueAxis);
+    return `<line class="chart-gridline chart-gridline-major"${attrs} data-value="${round6(value)}" x1="${x}" y1="${margin.top}" x2="${x}" y2="${round6(margin.top + plotH)}"></line>`;
+  });
+  return lines.join("\n        ");
+}
+function renderHorizontalMinorGridlines(margin, plotW, plotH, valueAxis, scale) {
+  if (valueAxis?.minorGridlines !== true || valueAxis.visible === false) return "";
+  const attrs = chartLineAttrs("value", valueAxis.minorGridlineLine);
+  if (!attrs) return "";
+  const lines = minorTickValues(valueAxis, scale).map((value) => {
+    const x = valueAxisX(margin.left, plotW, value, scale, valueAxis);
+    return `<line class="chart-gridline chart-gridline-minor"${attrs} data-value="${round6(value)}" x1="${x}" y1="${margin.top}" x2="${x}" y2="${round6(margin.top + plotH)}"></line>`;
+  });
+  return lines.join("\n        ");
+}
+function renderLeftCategoryMajorGridlines(margin, plotW, plotH, categories, categoryAxis) {
+  if (categoryAxis?.majorGridlines !== true || categoryAxis.visible === false || categories.length === 0) return "";
+  const attrs = chartLineAttrs("category", categoryAxis.majorGridlineLine);
+  if (!attrs) return "";
+  return categories.map((category, index) => {
+    const y = round6(margin.top + categoryPosition(index, categories.length, plotH, "bar", categoryAxis));
+    return `<line class="chart-gridline chart-gridline-major"${attrs} data-category="${escapeHtml(category)}" x1="${margin.left}" y1="${y}" x2="${round6(margin.left + plotW)}" y2="${y}"></line>`;
+  }).join("\n        ");
+}
+function axisTickValues(valueAxis, scale) {
+  const unit = automaticOrExplicitMajorUnit(valueAxis, scale);
+  if (unit == null) return [0, 1, 2, 3, 4, 5].map((step) => round6(scale.min + scale.range * step / 5));
+  const start = Math.ceil(scale.min / unit) * unit;
+  const values = [];
+  for (let value = start; value <= scale.max + unit / 1e3; value += unit) {
+    values.push(round6(value));
+    if (values.length > 100) break;
+  }
+  return values;
+}
+function automaticOrExplicitMajorUnit(valueAxis, scale) {
+  const explicit = valueAxis.majorUnit;
+  if (explicit != null && Number.isFinite(explicit) && explicit > 0) return explicit;
+  if (!Number.isFinite(scale.range) || scale.range <= 0) return void 0;
+  return niceTickUnit(scale.range / 5);
+}
+function niceTickUnit(target) {
+  if (!Number.isFinite(target) || target <= 0) return void 0;
+  const exponent = Math.floor(Math.log10(target));
+  const magnitude = 10 ** exponent;
+  const normalized = target / magnitude;
+  const nice = normalized <= 1 ? 1 : normalized <= 2 ? 2 : normalized <= 5 ? 5 : 10;
+  return nice * magnitude;
+}
+function majorGridlineValues(valueAxis, scale) {
+  return axisTickValues(valueAxis, scale).filter((value) => value > scale.min && value < scale.max);
+}
+function minorTickValues(valueAxis, scale) {
+  const unit = valueAxis.minorUnit;
+  if (unit == null || !Number.isFinite(unit) || unit <= 0) return [];
+  const majorValues = new Set(axisTickValues(valueAxis, scale).map((value) => round6(value)));
+  const start = Math.ceil(scale.min / unit) * unit;
+  const values = [];
+  for (let value = start; value <= scale.max + unit / 1e3; value += unit) {
+    const rounded = round6(value);
+    if (rounded > scale.min && rounded < scale.max && !majorValues.has(rounded)) values.push(rounded);
+    if (values.length > 200) break;
+  }
+  return values;
+}
+function renderMajorTickMark(axisX, y, value, tickValue, line8) {
+  const mark = value ?? "cross";
+  if (mark === "none") return "";
+  const [x1, x2] = mark === "in" ? [axisX, axisX + 6] : mark === "cross" ? [axisX - 3, axisX + 3] : [axisX - 6, axisX];
+  return `<line class="chart-axis-tick chart-axis-tick-major" data-axis="value" data-value="${round6(tickValue)}" x1="${x1}" y1="${y}" x2="${x2}" y2="${y}"${chartTickLineAttrs(line8)}></line>`;
+}
+function renderMinorTickMark(axisX, y, value, tickValue, line8) {
+  const mark = value ?? "none";
+  if (!["in", "out", "cross"].includes(mark)) return "";
+  const [x1, x2] = mark === "in" ? [axisX, axisX + 4] : mark === "cross" ? [axisX - 2, axisX + 2] : [axisX - 4, axisX];
+  return `<line class="chart-axis-tick chart-axis-tick-minor" data-axis="value" data-value="${round6(tickValue)}" x1="${x1}" y1="${y}" x2="${x2}" y2="${y}"${chartTickLineAttrs(line8)}></line>`;
+}
+function renderCategoryTickMark(x, axisY, value, category, line8) {
+  const mark = value ?? "cross";
+  if (mark === "none") return "";
+  const [y1, y2] = mark === "in" ? [axisY, axisY - 6] : mark === "cross" ? [axisY - 3, axisY + 3] : [axisY, axisY + 6];
+  return `<line class="chart-axis-tick chart-axis-tick-major" data-axis="category" data-category="${escapeHtml(category)}" x1="${x}" y1="${y1}" x2="${x}" y2="${y2}"${chartTickLineAttrs(line8)}></line>`;
+}
+function renderHorizontalValueTickMark(x, axisY, value, tickValue, line8) {
+  const mark = value ?? "cross";
+  if (mark === "none") return "";
+  const [y1, y2] = mark === "in" ? [axisY, axisY - 6] : mark === "cross" ? [axisY - 3, axisY + 3] : [axisY, axisY + 6];
+  return `<line class="chart-axis-tick chart-axis-tick-major" data-axis="value" data-value="${round6(tickValue)}" x1="${x}" y1="${y1}" x2="${x}" y2="${y2}"${chartTickLineAttrs(line8)}></line>`;
+}
+function renderHorizontalMinorValueTickMark(x, axisY, value, tickValue, line8) {
+  const mark = value ?? "none";
+  if (!["in", "out", "cross"].includes(mark)) return "";
+  const [y1, y2] = mark === "in" ? [axisY, axisY - 4] : mark === "cross" ? [axisY - 2, axisY + 2] : [axisY, axisY + 4];
+  return `<line class="chart-axis-tick chart-axis-tick-minor" data-axis="value" data-value="${round6(tickValue)}" x1="${x}" y1="${y1}" x2="${x}" y2="${y2}"${chartTickLineAttrs(line8)}></line>`;
+}
+function renderLeftCategoryTickMark(axisX, y, value, category, line8) {
+  const mark = value ?? "cross";
+  if (mark === "none") return "";
+  const [x1, x2] = mark === "in" ? [axisX, axisX + 6] : mark === "cross" ? [axisX - 3, axisX + 3] : [axisX - 6, axisX];
+  return `<line class="chart-axis-tick chart-axis-tick-major" data-axis="category" data-category="${escapeHtml(category)}" x1="${x1}" y1="${y}" x2="${x2}" y2="${y}"${chartTickLineAttrs(line8)}></line>`;
+}
+function renderTickLabel(axisX, y, axis, value) {
+  const position = axis.tickLblPos ?? "nextTo";
+  if (position === "none") return "";
+  const x = position === "high" ? axisX + 10 : axisX - 10;
+  const labelY = round6(y + 4);
+  const anchor = position === "high" ? "start" : "end";
+  return `<text class="chart-axis-label chart-axis-label-value"${chartLabelAttrs(axis.labelStyle, x, labelY)} data-axis="value" data-value="${round6(value)}" x="${x}" y="${labelY}" text-anchor="${anchor}">${escapeHtml(formatAxisValue(value, axis.numFmt?.formatCode))}</text>`;
+}
+function renderCategoryTickLabel(x, axisY, axis, category, categoryValueType) {
+  const position = axis?.tickLblPos ?? "nextTo";
+  if (position === "none") return "";
+  const offset = categoryLabelOffset(axis, position === "high" ? 12 : 20);
+  const y = position === "high" ? axisY - offset : axisY + offset;
+  const labelY = round6(y);
+  return `<text class="chart-axis-label chart-axis-label-category"${chartLabelAttrs(axis?.labelStyle, x, labelY)} data-axis="category" data-category="${escapeHtml(category)}" x="${x}" y="${labelY}" text-anchor="middle">${escapeHtml(formatCategoryValue(category, axis?.numFmt?.formatCode, categoryValueType))}</text>`;
+}
+function renderHorizontalValueTickLabel(x, axisY, axis, value) {
+  const position = axis.tickLblPos ?? "nextTo";
+  if (position === "none") return "";
+  const y = position === "high" ? axisY - 12 : axisY + 20;
+  const labelY = round6(y);
+  return `<text class="chart-axis-label chart-axis-label-value"${chartLabelAttrs(axis.labelStyle, x, labelY)} data-axis="value" data-value="${round6(value)}" x="${x}" y="${labelY}" text-anchor="middle">${escapeHtml(formatAxisValue(value, axis.numFmt?.formatCode))}</text>`;
+}
+function renderLeftCategoryTickLabel(axisX, y, axis, category, categoryValueType) {
+  const position = axis?.tickLblPos ?? "nextTo";
+  if (position === "none") return "";
+  const offset = categoryLabelOffset(axis, 10);
+  const x = position === "high" ? axisX + offset : axisX - offset;
+  const labelY = round6(y + 4);
+  const anchor = position === "high" ? "start" : "end";
+  return `<text class="chart-axis-label chart-axis-label-category"${chartLabelAttrs(axis?.labelStyle, x, labelY)} data-axis="category" data-category="${escapeHtml(category)}" x="${x}" y="${labelY}" text-anchor="${anchor}">${escapeHtml(formatCategoryValue(category, axis?.numFmt?.formatCode, categoryValueType))}</text>`;
+}
+function categoryLabelOffset(axis, defaultPx) {
+  const raw = axis?.labelOffset;
+  if (raw == null || !Number.isFinite(raw)) return defaultPx;
+  return round6(defaultPx * clamp2(raw, 0, 1e3) / 100);
+}
+function shouldRenderCategoryIndex(index, skip) {
+  if (skip == null || !Number.isInteger(skip) || skip <= 1) return true;
+  return index % skip === 0;
+}
+
+// src/render/renderChartAxisDefaults.ts
+function chartStyleAxisLineDefaults(data) {
+  const category = axisDefaultLineStyle(data?.style?.axisDefaults?.category);
+  const value = axisDefaultLineStyle(data?.style?.axisDefaults?.value);
+  const majorGridline = lineStyle(data?.style?.gridlineDefaults?.major);
+  const minorGridline = lineStyle(data?.style?.gridlineDefaults?.minor);
+  const axis = category || value ? { ...category ? { category } : {}, ...value ? { value } : {} } : void 0;
+  const gridline = majorGridline || minorGridline ? { ...majorGridline ? { major: majorGridline } : {}, ...minorGridline ? { minor: minorGridline } : {} } : void 0;
+  return axis || gridline ? { ...axis ? { axis } : {}, ...gridline ? { gridline } : {} } : void 0;
+}
+function applyAxisLineDefaults(axes, defaults) {
+  if (!defaults) return axes;
+  return {
+    ...axes,
+    category: applySingleAxisLineDefaults(axes.category, defaults.axis?.category, defaults.gridline),
+    value: applySingleAxisLineDefaults(axes.value, defaults.axis?.value, defaults.gridline)
+  };
+}
+function applySingleAxisLineDefaults(axis, defaults, gridlineDefaults) {
+  if (!axis || !defaults && !gridlineDefaults?.major && !gridlineDefaults?.minor) return axis;
+  return {
+    ...axis,
+    ...defaults ? { line: {
+      ...defaults,
+      ...definedLineFields(axis.line)
+    } } : {},
+    ...gridlineDefaults?.major ? { majorGridlineLine: {
+      ...gridlineDefaults.major,
+      ...definedLineFields(axis.majorGridlineLine)
+    } } : {},
+    ...gridlineDefaults?.minor ? { minorGridlineLine: {
+      ...gridlineDefaults.minor,
+      ...definedLineFields(axis.minorGridlineLine)
+    } } : {}
+  };
+}
+function definedLineFields(line8) {
+  if (!line8) return {};
+  return {
+    ...line8.visible != null ? { visible: line8.visible } : {},
+    ...line8.color != null ? { color: line8.color } : {},
+    ...line8.colorSource != null ? { colorSource: line8.colorSource } : {},
+    ...line8.colorScheme != null ? { colorScheme: line8.colorScheme } : {},
+    ...line8.colorResolved != null ? { colorResolved: line8.colorResolved } : {},
+    ...line8.width != null ? { width: line8.width } : {},
+    ...line8.cap != null ? { cap: line8.cap } : {},
+    ...line8.compound != null ? { compound: line8.compound } : {},
+    ...line8.align != null ? { align: line8.align } : {},
+    ...line8.join != null ? { join: line8.join } : {},
+    ...line8.dash != null ? { dash: line8.dash } : {}
+  };
+}
+function axisDefaultLineStyle(axisDefault) {
+  if (axisDefault == null || typeof axisDefault !== "object" || Array.isArray(axisDefault)) return void 0;
+  return lineStyle(axisDefault.line);
+}
+function lineStyle(line8) {
+  if (line8 == null || typeof line8 !== "object" || Array.isArray(line8)) return void 0;
+  const style = {
+    ...typeof line8.visible === "boolean" ? { visible: line8.visible } : {},
+    ...typeof line8.color === "string" ? { color: line8.color } : {},
+    ...typeof line8.colorSource === "string" ? { colorSource: line8.colorSource } : {},
+    ...typeof line8.colorScheme === "string" ? { colorScheme: line8.colorScheme } : {},
+    ...typeof line8.colorResolved === "string" ? { colorResolved: line8.colorResolved } : {},
+    ...typeof line8.width === "number" && Number.isFinite(line8.width) ? { width: line8.width } : {},
+    ...typeof line8.cap === "string" ? { cap: line8.cap } : {},
+    ...typeof line8.compound === "string" ? { compound: line8.compound } : {},
+    ...typeof line8.align === "string" ? { align: line8.align } : {},
+    ...typeof line8.join === "string" ? { join: line8.join } : {},
+    ...typeof line8.dash === "string" ? { dash: line8.dash } : {}
+  };
+  return Object.keys(style).length > 0 ? style : void 0;
+}
+
+// src/render/renderChartBarStacking.ts
+function barStackingMode(grouping) {
+  if (grouping === "stacked" || grouping === "percentStacked") return grouping;
+  return "none";
+}
+function percentStackedSeries(series, categoryCount) {
+  const totals = Array.from({ length: categoryCount }, (_, categoryIndex) => {
+    return series.reduce((sum, item) => sum + Math.max(0, item.values[categoryIndex] ?? 0), 0);
+  });
+  return series.map((item) => ({
+    ...item,
+    values: Array.from({ length: categoryCount }, (_, categoryIndex) => {
+      const total = totals[categoryIndex] ?? 0;
+      if (total <= 0) return 0;
+      return Math.max(0, item.values[categoryIndex] ?? 0) / total * 100;
+    })
+  }));
+}
+
+// src/render/renderChartStackedBars.ts
+var DEFAULT_BAR_GAP_WIDTH = 150;
+function barClusterLayout(groupSize, seriesCount, gapWidth, overlap, stacked) {
+  const gap = validGapWidth(gapWidth) ? gapWidth : DEFAULT_BAR_GAP_WIDTH;
+  const overlapRatio = !stacked && validOverlap(overlap) ? overlap : 0;
+  const barCount = stacked ? 1 : Math.max(1, seriesCount);
+  const denominator = barCount - (barCount - 1) * (overlapRatio / 100) + gap / 100;
+  const thickness = Math.max(4, groupSize / denominator);
+  const step = stacked ? 0 : thickness * (1 - overlapRatio / 100);
+  const used = thickness + step * (barCount - 1);
+  return {
+    start: (groupSize - used) / 2,
+    thickness,
+    step
+  };
+}
+function validGapWidth(value) {
+  return value != null && Number.isFinite(value) && value >= 0 && value <= 500;
+}
+function validOverlap(value) {
+  return value != null && Number.isFinite(value) && value >= -100 && value <= 100;
+}
+function verticalStackedBarRects(categories, series, margin, plotH, scale, groupW, barW, offsetX, fillFor, valueAxis, categoryAxis) {
+  return categories.flatMap((category, categoryIndex) => {
+    const visualIndex = categoryVisualIndex(categoryIndex, categories.length, categoryAxis);
+    let positiveBase = 0;
+    let negativeBase = 0;
+    return series.map((item, seriesIndex) => {
+      const value = item.values[categoryIndex] ?? 0;
+      const previous = value >= 0 ? positiveBase : negativeBase;
+      const next = previous + value;
+      const yNext = valueAxisY(margin.top, plotH, next, scale, valueAxis);
+      const yPrevious = valueAxisY(margin.top, plotH, previous, scale, valueAxis);
+      if (value >= 0) positiveBase = next;
+      else negativeBase = next;
+      const x = margin.left + visualIndex * groupW + offsetX;
+      return {
+        category,
+        categoryIndex,
+        series: item.name,
+        seriesIndex,
+        value,
+        x: round9(x),
+        y: round9(Math.min(yNext, yPrevious)),
+        width: round9(barW - 2),
+        height: round9(Math.abs(yPrevious - yNext)),
+        fill: fillFor(item, seriesIndex, categoryIndex)
+      };
+    });
+  });
+}
+function horizontalStackedBarRects(categories, series, margin, plotW, scale, groupH, barH, offsetY, fillFor, valueAxis, categoryAxis) {
+  return categories.flatMap((category, categoryIndex) => {
+    const visualIndex = categoryVisualIndex(categoryIndex, categories.length, categoryAxis);
+    let positiveBase = 0;
+    let negativeBase = 0;
+    return series.map((item, seriesIndex) => {
+      const value = item.values[categoryIndex] ?? 0;
+      const previous = value >= 0 ? positiveBase : negativeBase;
+      const next = previous + value;
+      const xPrevious = valueAxisX(margin.left, plotW, previous, scale, valueAxis);
+      const xNext = valueAxisX(margin.left, plotW, next, scale, valueAxis);
+      if (value >= 0) positiveBase = next;
+      else negativeBase = next;
+      const y = margin.top + visualIndex * groupH + offsetY;
+      return {
+        category,
+        categoryIndex,
+        series: item.name,
+        seriesIndex,
+        value,
+        x: round9(Math.min(xPrevious, xNext)),
+        y: round9(y),
+        width: round9(Math.abs(xNext - xPrevious)),
+        height: round9(barH - 2),
+        fill: fillFor(item, seriesIndex, categoryIndex)
+      };
+    });
+  });
+}
+function round9(value) {
+  return Math.round(value * 100) / 100;
+}
+
+// src/render/renderChartBarStroke.ts
+function barSeriesStrokeAttributes(item) {
+  const line8 = asRecord5(item?.line);
+  const fill = asRecord5(line8?.fill);
+  if (!line8 || line8.visible === false || fill?.type !== "solid") return "";
+  const color = asString2(line8.color);
+  if (!color) return "";
+  const width = asNumber9(line8.width);
+  if (width != null && width <= 0) return "";
+  const dash = svgDashArray(line8.dash, width ?? 1);
+  const cap = supportedLineCap(asString2(line8.cap));
+  const join = supportedLineJoin(asString2(line8.join));
+  return [
+    ` data-series-line-color="${escapeHtml(color)}"`,
+    width != null ? ` data-series-line-width="${formatNumber4(width)}"` : "",
+    cap ? ` data-series-line-cap="${escapeHtml(cap)}"` : "",
+    join ? ` data-series-line-join="${escapeHtml(join)}"` : "",
+    dash ? ` data-series-line-dash="${escapeHtml(asString2(line8.dash))}"` : "",
+    ` stroke="${escapeHtml(color)}"`,
+    width != null && width > 0 ? ` stroke-width="${formatNumber4(width)}"` : "",
+    cap ? ` stroke-linecap="${escapeHtml(svgLineCap(cap))}"` : "",
+    join ? ` stroke-linejoin="${escapeHtml(svgLineJoin(join))}"` : "",
+    dash ? ` stroke-dasharray="${escapeHtml(dash)}"` : ""
+  ].join("");
+}
+function asRecord5(value) {
+  return value != null && typeof value === "object" && !Array.isArray(value) ? value : void 0;
+}
+function asString2(value) {
+  return typeof value === "string" && value.trim() ? value : void 0;
+}
+function asNumber9(value) {
+  if (value == null || value === "") return void 0;
+  const number4 = Number(value);
+  return Number.isFinite(number4) ? number4 : void 0;
+}
+function supportedLineCap(value) {
+  return value === "flat" || value === "sq" || value === "rnd" ? value : void 0;
+}
+function supportedLineJoin(value) {
+  return value === "bevel" || value === "miter" || value === "round" ? value : void 0;
+}
+function formatNumber4(value) {
+  return Number(value.toFixed(2)).toString();
+}
+
+// src/render/renderChartSeriesInput.ts
+function asSeriesLine2(value) {
+  if (value == null || typeof value !== "object" || Array.isArray(value)) return void 0;
+  const source = value;
+  const line8 = {
+    ...typeof source.visible === "boolean" ? { visible: source.visible } : {},
+    ...asHexColor(source.color) ? { color: asHexColor(source.color) } : {},
+    ...asOptionalString9(source.colorSource) ? { colorSource: asOptionalString9(source.colorSource) } : {},
+    ...asHexColor(source.colorResolved) ? { colorResolved: asHexColor(source.colorResolved) } : {},
+    ...asNumber10(source.width) != null ? { width: asNumber10(source.width) } : {},
+    ...asOptionalString9(source.cap) ? { cap: asOptionalString9(source.cap) } : {},
+    ...asOptionalString9(source.join) ? { join: asOptionalString9(source.join) } : {},
+    ...asOptionalString9(source.dash) ? { dash: asOptionalString9(source.dash) } : {},
+    ...asOptionalString9(source.colorScheme) ? { colorScheme: asOptionalString9(source.colorScheme) } : {}
+  };
+  return Object.keys(line8).length > 0 ? line8 : void 0;
+}
+function definedSeriesLineFields2(line8) {
+  if (!line8) return {};
+  return {
+    ...typeof line8.visible === "boolean" ? { visible: line8.visible } : {},
+    ...asHexColor(line8.color) ? { color: asHexColor(line8.color) } : {},
+    ...asOptionalString9(line8.colorSource) ? { colorSource: asOptionalString9(line8.colorSource) } : {},
+    ...asHexColor(line8.colorResolved) ? { colorResolved: asHexColor(line8.colorResolved) } : {},
+    ...asNumber10(line8.width) != null ? { width: asNumber10(line8.width) } : {},
+    ...asOptionalString9(line8.cap) ? { cap: asOptionalString9(line8.cap) } : {},
+    ...asOptionalString9(line8.join) ? { join: asOptionalString9(line8.join) } : {},
+    ...asOptionalString9(line8.dash) ? { dash: asOptionalString9(line8.dash) } : {},
+    ...asRecord6(line8.fill) ? { fill: asRecord6(line8.fill) } : {}
+  };
+}
+function asSeriesMarker(value) {
+  if (value == null || typeof value !== "object" || Array.isArray(value)) return void 0;
+  const symbol2 = asOptionalString9(value.symbol);
+  const size = asNumber10(value.size);
+  const line8 = asSeriesLine2(value.line);
+  return symbol2 || size != null || line8 ? { ...symbol2 ? { symbol: symbol2 } : {}, ...size != null ? { size } : {}, ...line8 ? { line: line8 } : {} } : void 0;
+}
+function asRecord6(value) {
+  return value != null && typeof value === "object" && !Array.isArray(value) ? value : void 0;
+}
+function asOptionalString9(value) {
+  if (value == null) return void 0;
+  const text = String(value).trim();
+  return text || void 0;
+}
+function asHexColor(value) {
+  if (typeof value !== "string") return void 0;
+  const normalized = value.replace(/^#/, "");
+  return /^[0-9a-fA-F]{6}$/.test(normalized) ? `#${normalized.toLowerCase()}` : void 0;
+}
+function asNumber10(value) {
+  if (value == null || value === "") return void 0;
+  const number4 = Number(value);
+  return Number.isFinite(number4) ? number4 : void 0;
+}
+
+// src/render/renderChartShared.ts
+var palette = ["#2563eb", "#f97316", "#16a34a", "#9333ea", "#0891b2", "#e11d48"];
+function legendReservesSpace(legend) {
+  return !!legend && legend.overlay !== true;
+}
 function chartAreasWithDefaults(data) {
-  const style = asRecord5(data?.style);
+  const style = asRecord7(data?.style);
   return {
     chartArea: applyChartAreaDefault(data?.chartArea, chartStyleAreaDefault(style, "cs:chartArea")),
     plotArea: applyChartAreaDefault(data?.plotArea, chartStyleAreaDefault(style, "cs:plotArea"))
@@ -41879,12 +42469,12 @@ function chartAreasWithDefaults(data) {
 }
 function chartStyleAreaDefault(style, context) {
   const defaults = Array.isArray(style?.areaDefaults) ? style.areaDefaults : [];
-  const match = defaults.find((item) => asOptionalString9(item?.context) === context);
-  return asRecord5(match?.area);
+  const match = defaults.find((item) => asOptionalString10(item?.context) === context);
+  return asRecord7(match?.area);
 }
 function applyChartAreaDefault(localArea, defaultArea) {
-  const local = asRecord5(localArea);
-  const defaults = asRecord5(defaultArea);
+  const local = asRecord7(localArea);
+  const defaults = asRecord7(defaultArea);
   if (!defaults) return local;
   if (!local) return defaults;
   const fill = mergeChartAreaPart(defaults.fill, local.fill);
@@ -41910,32 +42500,6 @@ function definedObjectFields(value) {
   const fields = Object.fromEntries(Object.entries(value).filter((entry) => entry[1] != null));
   return Object.keys(fields).length > 0 ? fields : void 0;
 }
-function asSeriesLine(value) {
-  if (value == null || typeof value !== "object" || Array.isArray(value)) return void 0;
-  const source = value;
-  const line8 = {
-    ...typeof source.visible === "boolean" ? { visible: source.visible } : {},
-    ...asHexColor(source.color) ? { color: asHexColor(source.color) } : {},
-    ...asNumber9(source.width) != null ? { width: asNumber9(source.width) } : {},
-    ...asOptionalString9(source.cap) ? { cap: asOptionalString9(source.cap) } : {},
-    ...asOptionalString9(source.join) ? { join: asOptionalString9(source.join) } : {},
-    ...asOptionalString9(source.dash) ? { dash: asOptionalString9(source.dash) } : {},
-    ...asOptionalString9(source.colorScheme) ? { colorScheme: asOptionalString9(source.colorScheme) } : {}
-  };
-  return Object.keys(line8).length > 0 ? line8 : void 0;
-}
-function definedSeriesLineFields(line8) {
-  if (!line8) return {};
-  return {
-    ...typeof line8.visible === "boolean" ? { visible: line8.visible } : {},
-    ...asHexColor(line8.color) ? { color: asHexColor(line8.color) } : {},
-    ...asNumber9(line8.width) != null ? { width: asNumber9(line8.width) } : {},
-    ...asOptionalString9(line8.cap) ? { cap: asOptionalString9(line8.cap) } : {},
-    ...asOptionalString9(line8.join) ? { join: asOptionalString9(line8.join) } : {},
-    ...asOptionalString9(line8.dash) ? { dash: asOptionalString9(line8.dash) } : {},
-    ...asRecord5(line8.fill) ? { fill: asRecord5(line8.fill) } : {}
-  };
-}
 function asAxes2(value) {
   if (value == null || typeof value !== "object" || Array.isArray(value)) return {};
   return {
@@ -41945,83 +42509,59 @@ function asAxes2(value) {
 }
 function asAxis2(value) {
   if (value == null || typeof value !== "object" || Array.isArray(value)) return void 0;
-  const id = asOptionalString9(value.id);
-  const crossAxisId = asOptionalString9(value.crossAxisId);
-  const title = asOptionalString9(value.title);
-  const titleStyle = asRecord5(value.titleStyle);
+  const id = asOptionalString10(value.id);
+  const crossAxisId = asOptionalString10(value.crossAxisId);
+  const title = asOptionalString10(value.title);
+  const titleStyle = asRecord7(value.titleStyle);
   const visible = typeof value.visible === "boolean" ? value.visible : void 0;
-  const position = asOptionalString9(value.position);
+  const position = asOptionalString10(value.position);
   const scaling = asAxisScaling2(value.scaling);
-  const majorUnit = asNumber9(value.majorUnit);
-  const minorUnit = asNumber9(value.minorUnit);
+  const majorUnit = asNumber11(value.majorUnit);
+  const minorUnit = asNumber11(value.minorUnit);
   const majorGridlines = typeof value.majorGridlines === "boolean" ? value.majorGridlines : void 0;
   const majorGridlineLine = asAxisLine2(value.majorGridlineLine);
   const minorGridlines = typeof value.minorGridlines === "boolean" ? value.minorGridlines : void 0;
   const minorGridlineLine = asAxisLine2(value.minorGridlineLine);
   const numFmt = asAxisNumFmt2(value.numFmt);
-  const majorTickMark = asOptionalString9(value.majorTickMark);
-  const minorTickMark = asOptionalString9(value.minorTickMark);
-  const tickLblPos = asOptionalString9(value.tickLblPos);
-  const labelOffset = asNumber9(value.labelOffset);
-  const crosses = asOptionalString9(value.crosses);
-  const crossBetween = asOptionalString9(value.crossBetween);
+  const majorTickMark = asOptionalString10(value.majorTickMark);
+  const minorTickMark = asOptionalString10(value.minorTickMark);
+  const tickLblPos = asOptionalString10(value.tickLblPos);
+  const tickLabelSkip = asNumber11(value.tickLabelSkip);
+  const tickMarkSkip = asNumber11(value.tickMarkSkip);
+  const labelOffset = asNumber11(value.labelOffset);
+  const crosses = asOptionalString10(value.crosses);
+  const crossBetween = asOptionalString10(value.crossBetween);
   const line8 = asAxisLine2(value.line);
-  const labelStyle = asRecord5(value.labelStyle);
-  return id || crossAxisId || title || titleStyle || visible != null || position || scaling || majorUnit != null || minorUnit != null || majorGridlines != null || majorGridlineLine || minorGridlines != null || minorGridlineLine || numFmt || majorTickMark || minorTickMark || tickLblPos || labelOffset != null || crosses || crossBetween || line8 || labelStyle ? { id, crossAxisId, title, titleStyle, visible, position, scaling, majorUnit, minorUnit, majorGridlines, majorGridlineLine, minorGridlines, minorGridlineLine, numFmt, majorTickMark, minorTickMark, tickLblPos, labelOffset, crosses, crossBetween, line: line8, labelStyle } : void 0;
+  const labelStyle = asRecord7(value.labelStyle);
+  return id || crossAxisId || title || titleStyle || visible != null || position || scaling || majorUnit != null || minorUnit != null || majorGridlines != null || majorGridlineLine || minorGridlines != null || minorGridlineLine || numFmt || majorTickMark || minorTickMark || tickLblPos || tickLabelSkip != null || tickMarkSkip != null || labelOffset != null || crosses || crossBetween || line8 || labelStyle ? { id, crossAxisId, title, titleStyle, visible, position, scaling, majorUnit, minorUnit, majorGridlines, majorGridlineLine, minorGridlines, minorGridlineLine, numFmt, majorTickMark, minorTickMark, tickLblPos, tickLabelSkip, tickMarkSkip, labelOffset, crosses, crossBetween, line: line8, labelStyle } : void 0;
 }
 function asAxisLine2(value) {
   if (value == null || typeof value !== "object" || Array.isArray(value)) return void 0;
   const visible = typeof value.visible === "boolean" ? value.visible : void 0;
-  const color = asHexColor(value.color);
-  const colorSource = asOptionalString9(value.colorSource);
-  const colorScheme = asOptionalString9(value.colorScheme);
-  const colorResolved = asHexColor(value.colorResolved);
-  const width = asNumber9(value.width);
-  const cap = asOptionalString9(value.cap);
-  const compound = asOptionalString9(value.compound);
-  const align = asOptionalString9(value.align);
-  const join = asOptionalString9(value.join);
-  const dash = asOptionalString9(value.dash);
+  const color = asHexColor2(value.color);
+  const colorSource = asOptionalString10(value.colorSource);
+  const colorScheme = asOptionalString10(value.colorScheme);
+  const colorResolved = asHexColor2(value.colorResolved);
+  const width = asNumber11(value.width);
+  const cap = asOptionalString10(value.cap);
+  const compound = asOptionalString10(value.compound);
+  const align = asOptionalString10(value.align);
+  const join = asOptionalString10(value.join);
+  const dash = asOptionalString10(value.dash);
   return visible != null || color || colorSource || colorScheme || colorResolved || width != null || cap || compound || align || join || dash ? { visible, color, colorSource, colorScheme, colorResolved, width, cap, compound, align, join, dash } : void 0;
-}
-function asRecord5(value) {
-  return value != null && typeof value === "object" && !Array.isArray(value) ? value : void 0;
-}
-function asSeriesMarker(value) {
-  if (value == null || typeof value !== "object" || Array.isArray(value)) return void 0;
-  const symbol2 = asOptionalString9(value.symbol);
-  const size = asNumber9(value.size);
-  return symbol2 || size != null ? { ...symbol2 ? { symbol: symbol2 } : {}, ...size != null ? { size } : {} } : void 0;
 }
 function asAxisScaling2(value) {
   if (value == null || typeof value !== "object" || Array.isArray(value)) return void 0;
-  const min = asNumber9(value.min);
-  const max = asNumber9(value.max);
-  const orientation = asOptionalString9(value.orientation);
+  const min = asNumber11(value.min);
+  const max = asNumber11(value.max);
+  const orientation = asOptionalString10(value.orientation);
   return min == null && max == null && !orientation ? void 0 : { min, max, orientation };
 }
 function asAxisNumFmt2(value) {
   if (value == null || typeof value !== "object" || Array.isArray(value)) return void 0;
-  const formatCode = asOptionalString9(value.formatCode);
+  const formatCode = asOptionalString10(value.formatCode);
   const sourceLinked = typeof value.sourceLinked === "boolean" ? value.sourceLinked : void 0;
   return formatCode || sourceLinked != null ? { formatCode, sourceLinked } : void 0;
-}
-function effectiveBarChartData(data) {
-  return {
-    ...data,
-    chartType: "bar",
-    grouping: asOptionalString9(data?.grouping) ?? "clustered",
-    gapWidth: effectiveBarGapWidth(data?.gapWidth),
-    overlap: effectiveBarOverlap(data?.overlap)
-  };
-}
-function effectiveBarGapWidth(value) {
-  const gapWidth = asNumber9(value);
-  return gapWidth != null && gapWidth >= 0 && gapWidth <= 500 ? gapWidth : DEFAULT_BAR_GAP_WIDTH;
-}
-function effectiveBarOverlap(value) {
-  const overlap = asNumber9(value);
-  return overlap != null && overlap >= -100 && overlap <= 100 ? overlap : 0;
 }
 function verticalCategoryAxisY(margin, plotH, categoryAxis, valueAxis, scale) {
   if (categoryAxis?.crosses === "max") return valueAxisY(margin.top, plotH, scale.max, scale, valueAxis);
@@ -42058,20 +42598,520 @@ function seriesFill(data, series, item, seriesIndex, pointIndex) {
   }
   return item?.color ?? chartPalette[seriesIndex % chartPalette.length] ?? palette[seriesIndex % palette.length];
 }
+function seriesBarFill(data, series, item, seriesIndex, pointIndex, value) {
+  if (value < 0 && item?.invertIfNegative === true) {
+    const negativeColor = asHexColor2(item.negativeFill?.color);
+    if (negativeColor) return negativeColor;
+  }
+  return seriesFill(data, series, item, seriesIndex, pointIndex);
+}
+function chartColorStylePalette(data) {
+  if (asOptionalString10(data?.style?.colorStyle?.method) !== "cycle") return void 0;
+  const colors = Array.isArray(data?.style?.colorStyle?.colors) ? data.style.colorStyle.colors.map(asHexColor2).filter((color) => color != null) : [];
+  return colors.length > 0 ? colors : void 0;
+}
 function seriesInvertIfNegativeAttribute(item) {
   return typeof item?.invertIfNegative === "boolean" ? ` data-invert-if-negative="${String(item.invertIfNegative)}"` : "";
 }
+function asStrings2(value) {
+  return Array.isArray(value) ? value.map((item) => String(item)) : [];
+}
+function asCategoryValueType2(value) {
+  return value === "string" || value === "number" ? value : void 0;
+}
+function asSeries(value) {
+  if (!Array.isArray(value)) return [];
+  return value.map((item, index) => ({
+    name: String(item?.name ?? `Series ${index + 1}`),
+    values: asOptionalNumberValues(item?.values),
+    index: asNumber11(item?.index),
+    order: asNumber11(item?.order),
+    uniqueId: asOptionalString10(item?.uniqueId),
+    uniqueIdExtUri: asOptionalString10(item?.uniqueIdExtUri),
+    uniqueIdExtNamespace: asOptionalString10(item?.uniqueIdExtNamespace),
+    smooth: typeof item?.smooth === "boolean" ? item.smooth : void 0,
+    sourceRefs: asSourceRefs(item?.sourceRefs),
+    nameCache: asSeriesCache(item?.nameCache),
+    categoryCache: asSeriesCache(item?.categoryCache),
+    valueCache: asValueCache(item?.valueCache),
+    invertIfNegative: typeof item?.invertIfNegative === "boolean" ? item.invertIfNegative : void 0,
+    color: asHexColor2(item?.color) ?? asHexColor2(item?.fill?.color),
+    fill: asRecord7(item?.fill),
+    negativeFill: asRecord7(item?.negativeFill),
+    line: asRecord7(item?.line),
+    effects: asRecord7(item?.effects),
+    marker: asSeriesMarker(item?.marker),
+    dataLabels: asRecord7(item?.dataLabels)
+  }));
+}
+function asOptionalNumberValues(value) {
+  if (!Array.isArray(value)) return [];
+  return value.map((item) => {
+    const number4 = Number(item);
+    return Number.isFinite(number4) ? number4 : void 0;
+  });
+}
+function applyChartStyleMarkerLayout(item, markerLayout) {
+  if (item.marker) return item;
+  if (markerLayout == null || typeof markerLayout !== "object" || Array.isArray(markerLayout)) return item;
+  const symbol2 = asOptionalString10(markerLayout.symbol);
+  const size = asNumber11(markerLayout.size);
+  if (!isBasicMarkerSymbol2(symbol2)) {
+    return symbol2 ? {
+      ...item,
+      marker: {
+        symbol: symbol2,
+        ...size != null ? { size } : {},
+        source: "chartStyleUnsupported"
+      }
+    } : item;
+  }
+  return {
+    ...item,
+    marker: {
+      symbol: symbol2,
+      ...size != null ? { size } : {},
+      source: "chartStyle"
+    }
+  };
+}
+function isBasicMarkerSymbol2(value) {
+  return value === "circle" || value === "none" || value === "square" || value === "triangle" || value === "diamond";
+}
+function applyChartStyleMarkerLineDefault(item, markerLineDefault) {
+  const defaults = asSeriesLine2(markerLineDefault);
+  if (!defaults) return item;
+  const marker = item.marker ?? {};
+  const localLine = asRecord7(marker.line);
+  return {
+    ...item,
+    marker: {
+      ...marker,
+      line: {
+        ...defaults,
+        ...definedSeriesLineFields2(localLine)
+      }
+    }
+  };
+}
+function applyChartStyleSeriesLineDefault(item, seriesLineDefault) {
+  const defaults = asSeriesLine2(seriesLineDefault);
+  if (!defaults) return item;
+  return {
+    ...item,
+    line: {
+      ...defaults,
+      ...definedSeriesLineFields2(item.line)
+    }
+  };
+}
+function asRecord7(value) {
+  return value != null && typeof value === "object" && !Array.isArray(value) ? value : void 0;
+}
+function asOptionalString10(value) {
+  if (value == null) return void 0;
+  const text = String(value).trim();
+  return text || void 0;
+}
+function asHexColor2(value) {
+  if (typeof value !== "string") return void 0;
+  const normalized = value.replace(/^#/, "");
+  return /^[0-9a-fA-F]{6}$/.test(normalized) ? `#${normalized.toLowerCase()}` : void 0;
+}
+function asNumber11(value) {
+  if (value == null || value === "") return void 0;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : void 0;
+}
+function round10(value) {
+  return Math.round(value * 100) / 100;
+}
+
+// src/render/renderBarChart.ts
+function renderBarChart(data, viewport) {
+  if (asOptionalString10(data.direction) === "bar") return renderHorizontalBarChart(data, viewport);
+  const categories = asStrings2(data.categories);
+  const series = orderedSeries(asSeries(data.series));
+  const { width, height } = viewport;
+  const title = asOptionalString10(data.title);
+  const textDefaults = chartSpaceTextDefaults(data);
+  const styleTextDefaults = chartStyleTextDefaults(data);
+  const axisTextDefaults = chartStyleAxisTextDefaults(data);
+  const axisLineDefaults = chartStyleAxisLineDefaults(data);
+  const titleMeta = applyTitleTextDefaults(asTitleMeta(data.titleMeta), title, textDefaults, styleTextDefaults?.title);
+  const legend = applyLegendTextDefaults(asLegend(data.legend), textDefaults, styleTextDefaults?.legend);
+  const axes = applyAxisTextDefaults(applyAxisLineDefaults(asAxes2(data.axes), axisLineDefaults), textDefaults, axisTextDefaults, styleTextDefaults?.axisTitle);
+  const dataLabels = applyDataLabelTextDefaults(data.dataLabels, textDefaults, styleTextDefaults?.dataLabel);
+  const titleSpace = hasTitleSpace(title, titleMeta);
+  const rightLegend = isRightLegend(legend);
+  const leftLegend = isLeftLegend(legend);
+  const topLegend = isTopLegend(legend);
+  const bottomLegend = isBottomLegend(legend);
+  const reserveLegendSpace = legendReservesSpace(legend);
+  const margin = applyPlotAreaLayout({
+    top: (titleSpace ? 52 : 24) + (reserveLegendSpace && topLegend ? 34 : 0),
+    right: reserveLegendSpace && rightLegend ? 136 : 28,
+    bottom: 56 + (axes.category?.title ? 22 : 0) + (reserveLegendSpace && bottomLegend ? 34 : 0),
+    left: 48 + (axes.value?.title ? 24 : 0) + (reserveLegendSpace && leftLegend ? 108 : 0)
+  }, width, height, data.plotAreaLayout);
+  const plotW = width - margin.left - margin.right;
+  const plotH = height - margin.top - margin.bottom;
+  const stacking = barStackingMode(asOptionalString10(data?.grouping));
+  const stacked = stacking !== "none";
+  const renderSeries = stacking === "percentStacked" ? percentStackedSeries(series, categories.length) : series;
+  const scale = stacking === "percentStacked" ? computePercentStackedValueScale(axes.value) : computeValueScale(series, axes.value, stacked);
+  const groupW = plotW / Math.max(1, categories.length);
+  const layout = barClusterLayout(groupW, series.length, asNumber11(data.gapWidth), asNumber11(data.overlap), stacked);
+  const barW = layout?.thickness ?? Math.max(4, groupW * 0.7 / (stacked ? 1 : Math.max(1, series.length)));
+  const barStart = layout?.start ?? groupW * 0.15;
+  const barStep = layout?.step ?? barW;
+  const showValueLabels = stacking === "percentStacked" ? false : hasBasicValueDataLabels(data);
+  const showSeriesValueLabels = !stacked && hasBasicSeriesValueDataLabels(series);
+  const showStackedSeriesValueLabels = stacking === "stacked" && hasBasicStackedBarValueDataLabels(series);
+  const stackedRects = stacked ? verticalStackedBarRects(categories, renderSeries, margin, plotH, scale, groupW, barW, barStart, (item, seriesIndex, categoryIndex) => seriesBarFill(data, series, series[seriesIndex] ?? item, seriesIndex, categoryIndex, item.values[categoryIndex] ?? 0), axes.value, axes.category) : [];
+  const bars = stacked ? stackedRects.map((rect) => `<rect class="chart-bar chart-bar-stacked" data-category="${escapeHtml(rect.category)}" data-series="${escapeHtml(rect.series)}"${seriesInvertIfNegativeAttribute(series[rect.seriesIndex])}${seriesMetadataAttributes(series[rect.seriesIndex])} x="${rect.x}" y="${rect.y}" width="${rect.width}" height="${rect.height}" fill="${rect.fill}"${barSeriesStrokeAttributes(series[rect.seriesIndex])}><title>${escapeHtml(rect.series)} ${escapeHtml(rect.category)}: ${rect.value}</title></rect>`).join("\n        ") : categories.flatMap((category, categoryIndex) => {
+    return series.map((item, seriesIndex) => {
+      const value = item.values[categoryIndex] ?? 0;
+      const zeroY = valueAxisY(margin.top, plotH, 0, scale, axes.value);
+      const valueY = valueAxisY(margin.top, plotH, value, scale, axes.value);
+      const visualIndex = categoryVisualIndex(categoryIndex, categories.length, axes.category);
+      const x = margin.left + visualIndex * groupW + barStart + seriesIndex * barStep;
+      const y = Math.min(valueY, zeroY);
+      const barH = Math.abs(zeroY - valueY);
+      const fill = seriesBarFill(data, series, item, seriesIndex, categoryIndex, value);
+      return `<rect class="chart-bar" data-category="${escapeHtml(category)}" data-series="${escapeHtml(item.name)}"${seriesInvertIfNegativeAttribute(item)}${seriesMetadataAttributes(item)} x="${round10(x)}" y="${round10(y)}" width="${round10(barW - 2)}" height="${round10(barH)}" fill="${fill}"${barSeriesStrokeAttributes(item)}><title>${escapeHtml(item.name)} ${escapeHtml(category)}: ${value}</title></rect>`;
+    });
+  }).join("\n        ");
+  const percentLabels = stacking === "percentStacked" && hasBasicPercentStackedBarPercentDataLabels({ dataLabels }, series, categories.length) ? renderVerticalPercentStackedBarPercentLabels(stackedRects, series, dataLabels) : "";
+  const valueLabels = percentLabels || (showStackedSeriesValueLabels ? renderVerticalStackedBarValueLabels(stackedRects, series, dataLabels) : showValueLabels || showSeriesValueLabels ? renderVerticalBarValueLabels(categories, series, dataLabels, margin, plotH, scale, groupW, barW, barStart, barStep, axes.value, axes.category) : "");
+  const axisTitles = renderVerticalAxisTitles(width, height, margin, plotW, plotH, axes, legend);
+  const chartTitle = renderChartTitle(title, titleMeta, width);
+  const areas = chartAreasWithDefaults(data);
+  const chartArea = renderChartAreaBackground(areas.chartArea, width, height, data.roundedCorners === true);
+  const plotArea = renderPlotAreaBackground(areas.plotArea, margin.left, margin.top, plotW, plotH);
+  const chartLegend = renderLegend(legend, legendItems(series, categories, data), width, height, margin);
+  const categoryAxisY = verticalCategoryAxisY(margin, plotH, axes.category, axes.value, scale);
+  const gridlines = [
+    renderVerticalMinorGridlines(margin, plotW, plotH, axes.value, scale),
+    renderVerticalMajorGridlines(margin, plotW, plotH, axes.value, scale),
+    renderBottomCategoryMajorGridlines(margin, plotW, plotH, categories, axes.category, "bar")
+  ].filter(Boolean).join("\n        ");
+  const valueTicks = renderValueAxisTicks(margin, plotH, axes.value, scale);
+  const categoryTicks = renderCategoryAxisTicks(margin, plotW, plotH, categories, axes.category, "bar", asCategoryValueType2(data.categoryValueType), categoryAxisY);
+  const xAxis = renderChartAxisLine("category", axes.category, { x1: margin.left, y1: categoryAxisY, x2: margin.left + plotW, y2: categoryAxisY });
+  const yAxis = renderChartAxisLine("value", axes.value, { x1: margin.left, y1: margin.top, x2: margin.left, y2: margin.top + plotH });
+  return `<svg class="chart-svg" viewBox="0 0 ${width} ${height}" role="img" aria-label="${escapeHtml(title ? `${title} bar chart` : "bar chart")}"${chartDataAttributes(effectiveBarChartData({ ...data, ...areas }))}>
+        ${chartArea}
+        ${chartTitle}
+        ${plotArea}
+        ${gridlines}
+        ${xAxis}
+        ${yAxis}
+        ${valueTicks}
+        ${categoryTicks}
+        ${bars}
+        ${valueLabels}
+        ${axisTitles}
+        ${chartLegend}
+      </svg>`;
+}
+function renderHorizontalBarChart(data, viewport) {
+  const categories = asStrings2(data.categories);
+  const series = orderedSeries(asSeries(data.series));
+  const { width, height } = viewport;
+  const title = asOptionalString10(data.title);
+  const textDefaults = chartSpaceTextDefaults(data);
+  const styleTextDefaults = chartStyleTextDefaults(data);
+  const axisTextDefaults = chartStyleAxisTextDefaults(data);
+  const axisLineDefaults = chartStyleAxisLineDefaults(data);
+  const titleMeta = applyTitleTextDefaults(asTitleMeta(data.titleMeta), title, textDefaults, styleTextDefaults?.title);
+  const legend = applyLegendTextDefaults(asLegend(data.legend), textDefaults, styleTextDefaults?.legend);
+  const axes = applyAxisTextDefaults(applyAxisLineDefaults(asAxes2(data.axes), axisLineDefaults), textDefaults, axisTextDefaults, styleTextDefaults?.axisTitle);
+  const dataLabels = applyDataLabelTextDefaults(data.dataLabels, textDefaults, styleTextDefaults?.dataLabel);
+  const titleSpace = hasTitleSpace(title, titleMeta);
+  const rightLegend = isRightLegend(legend);
+  const leftLegend = isLeftLegend(legend);
+  const topLegend = isTopLegend(legend);
+  const bottomLegend = isBottomLegend(legend);
+  const reserveLegendSpace = legendReservesSpace(legend);
+  const margin = applyPlotAreaLayout({
+    top: (titleSpace ? 52 : 24) + (reserveLegendSpace && topLegend ? 34 : 0),
+    right: reserveLegendSpace && rightLegend ? 136 : 28,
+    bottom: 56 + (axes.value?.title ? 22 : 0) + (reserveLegendSpace && bottomLegend ? 34 : 0),
+    left: 96 + (axes.category?.title ? 24 : 0) + (reserveLegendSpace && leftLegend ? 108 : 0)
+  }, width, height, data.plotAreaLayout);
+  const plotW = width - margin.left - margin.right;
+  const plotH = height - margin.top - margin.bottom;
+  const stacking = barStackingMode(asOptionalString10(data?.grouping));
+  const stacked = stacking !== "none";
+  const renderSeries = stacking === "percentStacked" ? percentStackedSeries(series, categories.length) : series;
+  const scale = stacking === "percentStacked" ? computePercentStackedValueScale(axes.value) : computeValueScale(series, axes.value, stacked);
+  const groupH = plotH / Math.max(1, categories.length);
+  const layout = barClusterLayout(groupH, series.length, asNumber11(data.gapWidth), asNumber11(data.overlap), stacked);
+  const barH = layout?.thickness ?? Math.max(4, groupH * 0.7 / (stacked ? 1 : Math.max(1, series.length)));
+  const barStart = layout?.start ?? groupH * 0.15;
+  const barStep = layout?.step ?? barH;
+  const showValueLabels = stacking === "percentStacked" ? false : hasBasicValueDataLabels(data);
+  const showSeriesValueLabels = !stacked && hasBasicSeriesValueDataLabels(series);
+  const showStackedSeriesValueLabels = stacking === "stacked" && hasBasicStackedBarValueDataLabels(series);
+  const stackedRects = stacked ? horizontalStackedBarRects(categories, renderSeries, margin, plotW, scale, groupH, barH, barStart, (item, seriesIndex, categoryIndex) => seriesBarFill(data, series, series[seriesIndex] ?? item, seriesIndex, categoryIndex, item.values[categoryIndex] ?? 0), axes.value, axes.category) : [];
+  const bars = stacked ? stackedRects.map((rect) => `<rect class="chart-bar chart-bar-stacked" data-category="${escapeHtml(rect.category)}" data-series="${escapeHtml(rect.series)}"${seriesInvertIfNegativeAttribute(series[rect.seriesIndex])}${seriesMetadataAttributes(series[rect.seriesIndex])} x="${rect.x}" y="${rect.y}" width="${rect.width}" height="${rect.height}" fill="${rect.fill}"${barSeriesStrokeAttributes(series[rect.seriesIndex])}><title>${escapeHtml(rect.series)} ${escapeHtml(rect.category)}: ${rect.value}</title></rect>`).join("\n        ") : categories.flatMap((category, categoryIndex) => series.map((item, seriesIndex) => {
+    const value = item.values[categoryIndex] ?? 0;
+    const zeroX = valueAxisX(margin.left, plotW, 0, scale, axes.value);
+    const valueX = valueAxisX(margin.left, plotW, value, scale, axes.value);
+    const x = Math.min(zeroX, valueX);
+    const barW = Math.abs(valueX - zeroX);
+    const visualIndex = categoryVisualIndex(categoryIndex, categories.length, axes.category);
+    const y = margin.top + visualIndex * groupH + barStart + seriesIndex * barStep;
+    const fill = seriesBarFill(data, series, item, seriesIndex, categoryIndex, value);
+    return `<rect class="chart-bar" data-category="${escapeHtml(category)}" data-series="${escapeHtml(item.name)}"${seriesInvertIfNegativeAttribute(item)}${seriesMetadataAttributes(item)} x="${round10(x)}" y="${round10(y)}" width="${round10(barW)}" height="${round10(barH - 2)}" fill="${fill}"${barSeriesStrokeAttributes(item)}><title>${escapeHtml(item.name)} ${escapeHtml(category)}: ${value}</title></rect>`;
+  })).join("\n        ");
+  const percentLabels = stacking === "percentStacked" && hasBasicPercentStackedBarPercentDataLabels({ dataLabels }, series, categories.length) ? renderHorizontalPercentStackedBarPercentLabels(stackedRects, series, dataLabels) : "";
+  const valueLabels = percentLabels || (showStackedSeriesValueLabels ? renderHorizontalStackedBarValueLabels(stackedRects, series, dataLabels) : showValueLabels || showSeriesValueLabels ? renderHorizontalBarValueLabels(categories, series, dataLabels, margin, plotW, scale, groupH, barH, barStart, barStep, axes.value, axes.category) : "");
+  const chartTitle = renderChartTitle(title, titleMeta, width);
+  const areas = chartAreasWithDefaults(data);
+  const chartArea = renderChartAreaBackground(areas.chartArea, width, height, data.roundedCorners === true);
+  const plotArea = renderPlotAreaBackground(areas.plotArea, margin.left, margin.top, plotW, plotH);
+  const chartLegend = renderLegend(legend, legendItems(series, categories, data), width, height, margin);
+  const gridlines = [
+    renderHorizontalMinorGridlines(margin, plotW, plotH, axes.value, scale),
+    renderHorizontalMajorGridlines(margin, plotW, plotH, axes.value, scale),
+    renderLeftCategoryMajorGridlines(margin, plotW, plotH, categories, axes.category)
+  ].filter(Boolean).join("\n        ");
+  const valueTicks = renderHorizontalValueAxisTicks(margin, plotW, plotH, axes.value, scale);
+  const categoryAxisX = horizontalCategoryAxisX(margin, plotW, axes.category, axes.value, scale);
+  const categoryTicks = renderLeftCategoryAxisTicks(margin, plotH, categories, axes.category, asCategoryValueType2(data.categoryValueType), categoryAxisX);
+  const xAxis = renderChartAxisLine("value", axes.value, { x1: margin.left, y1: margin.top + plotH, x2: margin.left + plotW, y2: margin.top + plotH });
+  const yAxis = renderChartAxisLine("category", axes.category, { x1: categoryAxisX, y1: margin.top, x2: categoryAxisX, y2: margin.top + plotH });
+  const axisTitles = renderHorizontalAxisTitles(width, height, margin, plotW, plotH, axes, legend);
+  return `<svg class="chart-svg" viewBox="0 0 ${width} ${height}" role="img" aria-label="${escapeHtml(title ? `${title} horizontal bar chart` : "horizontal bar chart")}"${chartDataAttributes(effectiveBarChartData({ ...data, ...areas }))}>
+        ${chartArea}
+        ${chartTitle}
+        ${plotArea}
+        ${gridlines}
+        ${xAxis}
+        ${yAxis}
+        ${valueTicks}
+        ${categoryTicks}
+        ${bars}
+        ${valueLabels}
+        ${axisTitles}
+        ${chartLegend}
+      </svg>`;
+}
+function effectiveBarChartData(data) {
+  return {
+    ...data,
+    chartType: "bar",
+    grouping: asOptionalString10(data?.grouping) ?? "clustered",
+    gapWidth: effectiveBarGapWidth(data?.gapWidth),
+    overlap: effectiveBarOverlap(data?.overlap)
+  };
+}
+function effectiveBarGapWidth(value) {
+  const gapWidth = asNumber11(value);
+  return gapWidth != null && gapWidth >= 0 && gapWidth <= 500 ? gapWidth : DEFAULT_BAR_GAP_WIDTH;
+}
+function effectiveBarOverlap(value) {
+  const overlap = asNumber11(value);
+  return overlap != null && overlap >= -100 && overlap <= 100 ? overlap : 0;
+}
+
+// src/render/renderChart.ts
+var defaultChartViewport = { width: 640, height: 360 };
+function renderChartFigure(element) {
+  const chartType = String(element.chartType ?? "unknown");
+  const data = element.data ?? {};
+  const svg = renderChartSvg(chartType, data, element.id, chartViewport(chartType, element.box));
+  const attrs = renderAttributes([
+    ["data-element-id", element.id],
+    ["data-role", "chart"],
+    ...sourceShapeAttributePairs(element)
+  ]);
+  return `    <figure class="chart chart-${escapeHtml(chartType)}"${attrs}>
+      ${renderEchartsContainer(element.id, chartType)}
+      ${svg}
+      ${renderEchartsOptionScript(element.id, chartType, data)}
+      <script type="application/json" data-chart-data="${escapeHtml(element.id)}">${jsonScriptContent(data)}</script>
+    </figure>`;
+}
+function renderChartSvg(chartType, data, chartId, viewport) {
+  if (chartType === "bar") return renderBarChart(data, viewport);
+  if (chartType === "line") return renderLineChart(data, false, chartId, viewport);
+  if (chartType === "area") return renderLineChart(data, true, chartId, viewport);
+  if (chartType === "pie" || chartType === "doughnut") return renderPieChart(data, chartType === "doughnut");
+  return `<div class="chart-renderer chart-unsupported" data-chart-type="${escapeHtml(chartType)}">Unsupported chart: ${escapeHtml(chartType)}</div>`;
+}
+function chartViewport(chartType, box) {
+  if (chartType !== "bar" && chartType !== "line" && chartType !== "area") return defaultChartViewport;
+  if (!Number.isFinite(box?.w) || !Number.isFinite(box?.h) || box.w <= 0 || box.h <= 0) return defaultChartViewport;
+  return {
+    width: defaultChartViewport.width,
+    height: round10(defaultChartViewport.width * box.h / box.w)
+  };
+}
+function renderLineChart(data, filled, chartId, viewport) {
+  const categories = asStrings2(data.categories);
+  const series = orderedSeries(asSeries(data.series));
+  const displayedSeries = seriesWithDisplayedBlankValues(series, data.displayBlanksAs);
+  const { width, height } = viewport;
+  const title = asOptionalString10(data.title);
+  const textDefaults = chartSpaceTextDefaults(data);
+  const styleTextDefaults = chartStyleTextDefaults(data);
+  const axisTextDefaults = chartStyleAxisTextDefaults(data);
+  const axisLineDefaults = chartStyleAxisLineDefaults(data);
+  const titleMeta = applyTitleTextDefaults(asTitleMeta(data.titleMeta), title, textDefaults, styleTextDefaults?.title);
+  const legend = applyLegendTextDefaults(asLegend(data.legend), textDefaults, styleTextDefaults?.legend);
+  const axes = applyAxisTextDefaults(applyAxisLineDefaults(asAxes2(data.axes), axisLineDefaults), textDefaults, axisTextDefaults, styleTextDefaults?.axisTitle);
+  const titleSpace = hasTitleSpace(title, titleMeta);
+  const rightLegend = isRightLegend(legend);
+  const leftLegend = isLeftLegend(legend);
+  const topLegend = isTopLegend(legend);
+  const bottomLegend = isBottomLegend(legend);
+  const reserveLegendSpace = legendReservesSpace(legend);
+  const margin = applyPlotAreaLayout({
+    top: (titleSpace ? 52 : 24) + (reserveLegendSpace && topLegend ? 34 : 0),
+    right: reserveLegendSpace && rightLegend ? 136 : 28,
+    bottom: 56 + (axes.category?.title ? 22 : 0) + (reserveLegendSpace && bottomLegend ? 34 : 0),
+    left: 48 + (axes.value?.title ? 24 : 0) + (reserveLegendSpace && leftLegend ? 108 : 0)
+  }, width, height, data.plotAreaLayout);
+  const plotW = width - margin.left - margin.right;
+  const plotH = height - margin.top - margin.bottom;
+  const stacking = lineStackingMode(asOptionalString10(data?.grouping));
+  const percentStacked = stacking === "percentStacked" && hasOnlyNonNegativeLineValues(displayedSeries) && hasPositiveLineCategoryTotals(displayedSeries, categories.length);
+  const renderSeries = percentStacked ? percentStackedLineSeries(displayedSeries, categories.length) : stacking === "stacked" && hasOnlyNonNegativeLineValues(displayedSeries) ? stackedLineSeries(displayedSeries, categories.length) : displayedSeries;
+  const scale = percentStacked ? computePercentStackedValueScale(axes.value) : computeValueScale(renderSeries, axes.value);
+  const dataLabels = applyDataLabelTextDefaults(data.dataLabels, textDefaults, styleTextDefaults?.dataLabel);
+  const paths = renderSeries.map((item, seriesIndex) => {
+    const sourceItem = series[seriesIndex] ?? item;
+    const color = seriesFill(data, series, sourceItem, seriesIndex, seriesIndex);
+    const styledItem = applyChartStyleSeriesLineDefault(
+      applyChartStyleMarkerLineDefault(
+        applyChartStyleMarkerLayout(sourceItem, data.style?.markerLayout),
+        data.style?.markerLineDefault
+      ),
+      data.style?.seriesLineDefault
+    );
+    const pointSegments = linePointSegments(item.values, data.displayBlanksAs, (value, index) => {
+      const x = margin.left + categoryPosition(index, categories.length, plotW, "point", axes.category);
+      const y = valueAxisY(margin.top, plotH, value, scale, axes.value);
+      return { x: round10(x), y: round10(y), categoryIndex: index };
+    });
+    const pointRecords = pointSegments.flat();
+    const pathSegments = pointSegments.map((segment) => ({
+      records: segment,
+      d: lineSeriesPath(segment.map((point8) => [point8.x, point8.y]), (styledItem.smooth ?? data.smooth) === true)
+    }));
+    const style = renderLineChartSeriesStyle(styledItem, seriesIndex, color, chartId);
+    const metadata = `${seriesMetadataAttributes(styledItem)}${style.metadataAttributes}`;
+    const seriesNameAttr = ` data-series="${escapeHtml(styledItem.name)}"`;
+    const area = filled ? pathSegments.map((segment) => {
+      const points = segment.records.map((point8) => [point8.x, point8.y]);
+      return points.length > 1 ? `<path class="chart-area"${seriesNameAttr}${metadata} d="${segment.d} L ${points[points.length - 1][0]} ${margin.top + plotH} L ${points[0][0]} ${margin.top + plotH} Z" fill="${color}" opacity="0.18"></path>` : "";
+    }).filter(Boolean).join("\n        ") : "";
+    const linePath = styledItem.line?.visible === false ? "" : pathSegments.map((segment) => `<path class="chart-line"${seriesNameAttr}${seriesMetadataAttributes(styledItem)} d="${segment.d}" fill="none" ${style.strokeAttributes}></path>`).join("\n        ");
+    const markerRadius = seriesMarkerRadius(styledItem);
+    const dots = shouldRenderSeriesMarkers(styledItem) ? pointRecords.map((point8) => renderSeriesMarker(styledItem, categories[point8.categoryIndex] ?? "", metadata, point8.x, point8.y, markerRadius, style.pointFill)).join("\n        ") : "";
+    return `${style.defs ? `<defs>
+${style.defs}
+        </defs>` : ""}${area}${linePath}${dots}`;
+  }).join("\n        ");
+  const showLineValueLabels = hasBasicLineValueDataLabels({ dataLabels }) || hasBasicLineSeriesValueDataLabels(series);
+  const valueLabels = stacking === "none" && showLineValueLabels ? renderLineValueLabels(categories, displayedSeries, dataLabels, margin, plotW, plotH, scale, axes.value, axes.category) : "";
+  const axisTitles = renderVerticalAxisTitles(width, height, margin, plotW, plotH, axes, legend);
+  const chartTitle = renderChartTitle(title, titleMeta, width);
+  const areas = chartAreasWithDefaults(data);
+  const chartArea = renderChartAreaBackground(areas.chartArea, width, height, data.roundedCorners === true);
+  const plotArea = renderPlotAreaBackground(areas.plotArea, margin.left, margin.top, plotW, plotH);
+  const chartLegend = renderLegend(legend, legendItems(series, categories, data), width, height, margin);
+  const categoryAxisY = verticalCategoryAxisY(margin, plotH, axes.category, axes.value, scale);
+  const gridlines = [
+    renderVerticalMinorGridlines(margin, plotW, plotH, axes.value, scale),
+    renderVerticalMajorGridlines(margin, plotW, plotH, axes.value, scale),
+    renderBottomCategoryMajorGridlines(margin, plotW, plotH, categories, axes.category, "point")
+  ].filter(Boolean).join("\n        ");
+  const valueTicks = renderValueAxisTicks(margin, plotH, axes.value, scale);
+  const categoryTicks = renderCategoryAxisTicks(margin, plotW, plotH, categories, axes.category, "point", asCategoryValueType2(data.categoryValueType), categoryAxisY);
+  const xAxis = renderChartAxisLine("category", axes.category, { x1: margin.left, y1: categoryAxisY, x2: margin.left + plotW, y2: categoryAxisY });
+  const yAxis = renderChartAxisLine("value", axes.value, { x1: margin.left, y1: margin.top, x2: margin.left, y2: margin.top + plotH });
+  return `<svg class="chart-svg" viewBox="0 0 ${width} ${height}" role="img" aria-label="${escapeHtml(title ? `${title} ${filled ? "area" : "line"} chart` : `${filled ? "area" : "line"} chart`)}"${chartDataAttributes({ ...data, ...areas, chartType: filled ? "area" : "line" })}>
+        ${chartArea}
+        ${chartTitle}
+        ${plotArea}
+        ${gridlines}
+        ${xAxis}
+        ${yAxis}
+        ${valueTicks}
+        ${categoryTicks}
+        ${paths}
+        ${valueLabels}
+        ${axisTitles}
+        ${chartLegend}
+      </svg>`;
+}
+function renderPieChart(data, doughnut) {
+  const series = orderedSeries(asSeries(data.series));
+  const values = (series[0]?.values ?? []).map((value) => Number.isFinite(value) ? value : 0);
+  const labels = asStrings2(data.categories);
+  const total = values.reduce((sum, value) => sum + Math.max(0, value), 0) || 1;
+  const textDefaults = chartSpaceTextDefaults(data);
+  const styleTextDefaults = chartStyleTextDefaults(data);
+  const dataLabels = applyDataLabelTextDefaults(data.dataLabels, textDefaults, styleTextDefaults?.dataLabel);
+  let start = -Math.PI / 2;
+  const slices = values.map((value, index) => {
+    const angle = Math.max(0, value) / total * Math.PI * 2;
+    const end = start + angle;
+    const path8 = describeArc(180, 180, doughnut ? 110 : 140, start, end, doughnut ? 64 : 0);
+    start = end;
+    return `<path class="chart-slice" data-category="${escapeHtml(labels[index] ?? String(index + 1))}"${seriesMetadataAttributes(series[0])} d="${path8}" fill="${seriesFill(data, series, series[0], 0, index)}"><title>${escapeHtml(labels[index] ?? "")}: ${value}</title></path>`;
+  }).join("\n        ");
+  const valueLabels = series.length === 1 && values.every((value) => value >= 0) && hasBasicPiePercentDataLabels({ dataLabels }) ? renderPiePercentDataLabels(labels, values, dataLabels, { cx: 180, cy: 180, radius: doughnut ? 110 : 140, innerRadius: doughnut ? 64 : 0, seriesName: series[0]?.name ?? "Series 1", valueFormatCode: series[0]?.valueCache?.formatCode }) : "";
+  const title = asOptionalString10(data.title);
+  const titleMeta = applyTitleTextDefaults(asTitleMeta(data.titleMeta), title, textDefaults, styleTextDefaults?.title);
+  const chartTitle = renderChartTitle(title, titleMeta, 360);
+  const areas = chartAreasWithDefaults(data);
+  const chartArea = renderChartAreaBackground(areas.chartArea, 360, 360, data.roundedCorners === true);
+  const legend = renderLegend(applyLegendTextDefaults(asLegend(data.legend), textDefaults, styleTextDefaults?.legend), legendItems(series, labels, data), 360, 360, { top: hasTitleSpace(title, titleMeta) ? 40 : 16, right: 24, bottom: 24, left: 24 });
+  return `<svg class="chart-svg" viewBox="0 0 360 360" role="img" aria-label="${escapeHtml(title ? `${title} ${doughnut ? "doughnut" : "pie"} chart` : `${doughnut ? "doughnut" : "pie"} chart`)}"${chartDataAttributes({ ...data, chartArea: areas.chartArea })}>
+        ${chartArea}
+        ${chartTitle}
+        ${slices}
+        ${valueLabels}
+        ${legend}
+      </svg>`;
+}
+function lineSeriesPath(points, smooth) {
+  if (smooth) {
+    const curvedPath = uniformCatmullRomToCubicBezierPath(points.map(([x, y]) => ({ x, y })));
+    if (curvedPath) return curvedPath;
+  }
+  return points.map(([x, y], index) => `${index === 0 ? "M" : "L"} ${x} ${y}`).join(" ");
+}
+function describeArc(cx, cy, radius, start, end, innerRadius) {
+  const large = end - start > Math.PI ? 1 : 0;
+  const startOuter = point(cx, cy, radius, start);
+  const endOuter = point(cx, cy, radius, end);
+  if (innerRadius <= 0) {
+    return `M ${cx} ${cy} L ${startOuter.x} ${startOuter.y} A ${radius} ${radius} 0 ${large} 1 ${endOuter.x} ${endOuter.y} Z`;
+  }
+  const startInner = point(cx, cy, innerRadius, start);
+  const endInner = point(cx, cy, innerRadius, end);
+  return `M ${startOuter.x} ${startOuter.y} A ${radius} ${radius} 0 ${large} 1 ${endOuter.x} ${endOuter.y} L ${endInner.x} ${endInner.y} A ${innerRadius} ${innerRadius} 0 ${large} 0 ${startInner.x} ${startInner.y} Z`;
+}
+function point(cx, cy, radius, angle) {
+  return { x: round10(cx + Math.cos(angle) * radius), y: round10(cy + Math.sin(angle) * radius) };
+}
 function markerLinePaintAttributes(item, fallbackColor) {
-  const line8 = asRecord5(item.marker?.line);
+  const line8 = asRecord7(item.marker?.line);
   if (!line8 || line8.visible === false) return "";
-  const stroke = asHexColor(line8.color) ?? fallbackColor;
-  const width = asNumber9(line8.width);
+  const stroke = asHexColor2(line8.color) ?? fallbackColor;
+  const width = asNumber11(line8.width);
   const dash = svgDashArray(line8.dash, width);
   return [
     ` stroke="${escapeHtml(stroke)}"`,
     width != null ? ` stroke-width="${round10(width)}"` : "",
-    asOptionalString9(line8.cap) ? ` stroke-linecap="${escapeHtml(asOptionalString9(line8.cap))}"` : "",
-    asOptionalString9(line8.join) ? ` stroke-linejoin="${escapeHtml(asOptionalString9(line8.join))}"` : "",
+    asOptionalString10(line8.cap) ? ` stroke-linecap="${escapeHtml(asOptionalString10(line8.cap))}"` : "",
+    asOptionalString10(line8.join) ? ` stroke-linejoin="${escapeHtml(asOptionalString10(line8.join))}"` : "",
     dash ? ` stroke-dasharray="${escapeHtml(dash)}"` : ""
   ].join("");
 }
@@ -42082,30 +43122,15 @@ function renderSeriesMarker(item, category, metadata, x, y, size, fill) {
     const side = round10(size * 2);
     return `<rect class="chart-point chart-point-square" ${common} x="${round10(x - size)}" y="${round10(y - size)}" width="${side}" height="${side}" ${paint}></rect>`;
   }
+  if (item.marker?.symbol === "triangle") {
+    const d = `M${round10(x)} ${round10(y - size)}L${round10(x + size)} ${round10(y + size)}H${round10(x - size)}Z`;
+    return `<path class="chart-point chart-point-triangle" ${common} d="${d}" ${paint}></path>`;
+  }
+  if (item.marker?.symbol === "diamond") {
+    const d = `M${round10(x)} ${round10(y - size)}L${round10(x + size)} ${round10(y)}L${round10(x)} ${round10(y + size)}L${round10(x - size)} ${round10(y)}Z`;
+    return `<path class="chart-point chart-point-diamond" ${common} d="${d}" ${paint}></path>`;
+  }
   return `<circle class="chart-point" ${common} cx="${x}" cy="${y}" r="${size}" ${paint}></circle>`;
-}
-function chartColorStylePalette(data) {
-  if (asOptionalString9(data?.style?.colorStyle?.method) !== "cycle") return void 0;
-  const colors = Array.isArray(data?.style?.colorStyle?.colors) ? data.style.colorStyle.colors.map(asHexColor).filter((color) => color != null) : [];
-  return colors.length > 0 ? colors : void 0;
-}
-function asOptionalString9(value) {
-  if (value == null) return void 0;
-  const text = String(value).trim();
-  return text || void 0;
-}
-function asHexColor(value) {
-  if (typeof value !== "string") return void 0;
-  const normalized = value.replace(/^#/, "");
-  return /^[0-9a-fA-F]{6}$/.test(normalized) ? `#${normalized.toLowerCase()}` : void 0;
-}
-function asNumber9(value) {
-  if (value == null || value === "") return void 0;
-  const parsed = Number(value);
-  return Number.isFinite(parsed) ? parsed : void 0;
-}
-function round10(value) {
-  return Math.round(value * 100) / 100;
 }
 
 // src/render/renderElementOrder.ts
@@ -42122,7 +43147,10 @@ function zIndexValue(element) {
 
 // src/render/renderEffectFilterDefs.ts
 function renderEffectFilterDefs(slide) {
-  const filters = collectElements2(slide.elements).flatMap((element) => renderCenteredScaledShadowFilter(slide.id, element));
+  const filters = collectElements2(slide.elements).flatMap((element) => [
+    ...renderCenteredScaledShadowFilter(slide.id, element),
+    ...renderSoftEdgeFilter(slide.id, element)
+  ]);
   if (filters.length === 0) return "";
   return `    <svg class="effect-filters" aria-hidden="true" width="0" height="0" focusable="false">
       <defs>
@@ -42139,6 +43167,9 @@ function collectElements2(elements) {
 function centeredScaledShadowFilterUrl(slideId, element) {
   return centeredScaledShadowFilterSpec(element) ? `url(#${centeredScaledShadowFilterId(slideId, element)})` : void 0;
 }
+function softEdgeFilterUrl(slideId, element) {
+  return softEdgeFilterSpec(element) ? `url(#${softEdgeFilterId(slideId, element)})` : void 0;
+}
 function renderCenteredScaledShadowFilter(slideId, element) {
   const spec = centeredScaledShadowFilterSpec(element);
   if (!spec) return [];
@@ -42152,8 +43183,20 @@ function renderCenteredScaledShadowFilter(slideId, element) {
           <feMerge><feMergeNode in="shadow"/><feMergeNode in="SourceGraphic"/></feMerge>
         </filter>`];
 }
+function renderSoftEdgeFilter(slideId, element) {
+  const spec = softEdgeFilterSpec(element);
+  if (!spec) return [];
+  const id = escapeHtml(softEdgeFilterId(slideId, element));
+  return [`        <filter id="${id}" x="-50%" y="-50%" width="200%" height="200%" color-interpolation-filters="sRGB">
+          <feGaussianBlur in="SourceAlpha" stdDeviation="${spec.radius}" result="softEdgeAlpha"/>
+          <feComposite in="SourceGraphic" in2="softEdgeAlpha" operator="in" result="softEdge"/>
+        </filter>`];
+}
 function centeredScaledShadowFilterId(slideId, element) {
   return `${slideId}-${element.id}-centered-scaled-shadow-filter`;
+}
+function softEdgeFilterId(slideId, element) {
+  return `${slideId}-${element.id}-soft-edge-filter`;
 }
 function centeredScaledShadowFilterSpec(element) {
   if (element.type !== "shape" && element.type !== "image") return void 0;
@@ -42174,6 +43217,12 @@ function centeredScaledShadowFilterSpec(element) {
     color: color.color,
     opacity: cssNumber2(color.opacity)
   };
+}
+function softEdgeFilterSpec(element) {
+  if (element.type !== "shape" && element.type !== "image") return void 0;
+  const radius = finiteNumber(element.effects?.softEdge?.radius);
+  if (radius == null || radius <= 0) return void 0;
+  return { radius: cssNumber2(radius) };
 }
 function shadowColor(value) {
   const color = typeof value === "string" ? value : "rgba(0, 0, 0, 0.25)";
@@ -42264,6 +43313,7 @@ function renderPatternFillCss(fill) {
   const background = fill.backgroundColor ?? "transparent";
   const pattern = String(fill.pattern ?? "");
   if (pattern === "pct5") return `background: radial-gradient(${foreground} 0.75px, ${background} 0.75px) 0 0 / 12px 12px`;
+  if (isSupportedPercentPattern(pattern)) return `background-color: ${background}; background-image: ${svgPatternDataUrl(percentPatternSvg(pattern, foreground, background))}; background-size: 12px 12px`;
   if (pattern === "solidDmnd") return `background-color: ${background}; background-image: ${svgPatternDataUrl(`<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 12 12"><path d="M6 1L11 6L6 11L1 6Z" fill="${foreground}"/></svg>`)}; background-size: 12px 12px`;
   if (pattern.includes("Horz")) return `background: repeating-linear-gradient(0deg, ${background} 0 5px, ${foreground} 5px 6px, ${background} 6px 12px)`;
   if (pattern.includes("Vert")) return `background: repeating-linear-gradient(90deg, ${background} 0 5px, ${foreground} 5px 6px, ${background} 6px 12px)`;
@@ -42283,6 +43333,7 @@ ${body}
 }
 function patternSvgBody(pattern, foreground) {
   if (pattern === "pct5") return `          <circle cx="6" cy="6" r="0.75" fill="${foreground}"></circle>`;
+  if (isSupportedPercentPattern(pattern)) return percentPatternDots(pattern).map((dot) => `          <circle cx="${dot.x}" cy="${dot.y}" r="${dot.r}" fill="${foreground}"></circle>`).join("\n");
   if (pattern === "solidDmnd") return `          <path d="M6 1L11 6L6 11L1 6Z" fill="${foreground}"></path>`;
   const path8 = patternPath(pattern);
   return `          <path d="${path8}" stroke="${foreground}" stroke-width="1" fill="none"></path>`;
@@ -42296,6 +43347,30 @@ function patternPath(pattern) {
 }
 function svgPatternDataUrl(svg) {
   return `url("data:image/svg+xml,${encodeURIComponent(svg)}")`;
+}
+function isSupportedPercentPattern(pattern) {
+  return ["pct10", "pct20", "pct25", "pct50"].includes(pattern);
+}
+function percentPatternSvg(pattern, foreground, background) {
+  const dots = percentPatternDots(pattern).map((dot) => `<circle cx="${dot.x}" cy="${dot.y}" r="${dot.r}" fill="${foreground}"/>`).join("");
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 12 12"><rect width="12" height="12" fill="${background}"/>${dots}</svg>`;
+}
+function percentPatternDots(pattern) {
+  const radius = 0.75;
+  if (pattern === "pct10") return [{ x: 3, y: 3, r: radius }, { x: 9, y: 9, r: radius }];
+  if (pattern === "pct20") return [{ x: 3, y: 3, r: radius }, { x: 9, y: 3, r: radius }, { x: 3, y: 9, r: radius }, { x: 9, y: 9, r: radius }];
+  if (pattern === "pct25") return [{ x: 3, y: 3, r: radius }, { x: 9, y: 3, r: radius }, { x: 6, y: 6, r: radius }, { x: 3, y: 9, r: radius }, { x: 9, y: 9, r: radius }];
+  return [
+    { x: 3, y: 3, r: radius },
+    { x: 6, y: 3, r: radius },
+    { x: 9, y: 3, r: radius },
+    { x: 3, y: 6, r: radius },
+    { x: 6, y: 6, r: radius },
+    { x: 9, y: 6, r: radius },
+    { x: 3, y: 9, r: radius },
+    { x: 6, y: 9, r: radius },
+    { x: 9, y: 9, r: radius }
+  ];
 }
 
 // src/render/renderArrowCalloutGeometry.ts
@@ -42510,13 +43585,13 @@ function adjustment(element, name, fallback) {
 function pathFromPoints(points, width, height) {
   return points.map(([x, y], index) => {
     const command = index === 0 ? "M" : "L";
-    return `${command}${formatNumber4(x / width * 100)} ${formatNumber4(y / height * 100)}`;
+    return `${command}${formatNumber5(x / width * 100)} ${formatNumber5(y / height * 100)}`;
   }).join("") + "Z";
 }
 function clamp5(value, min, max) {
   return Math.min(max, Math.max(min, value));
 }
-function formatNumber4(value) {
+function formatNumber5(value) {
   if (Math.abs(value) < 1e-4) return "0";
   return Number(value.toFixed(3)).toString();
 }
@@ -42569,10 +43644,10 @@ function line(x, y, width, height) {
   return `L${point2(x, y, width, height)}`;
 }
 function arc(rx, ry, rotation, largeArc, sweep, x, y, width, height) {
-  return `A${formatNumber5(rx / width * 100)} ${formatNumber5(ry / height * 100)} ${rotation} ${largeArc} ${sweep} ${point2(x, y, width, height)}`;
+  return `A${formatNumber6(rx / width * 100)} ${formatNumber6(ry / height * 100)} ${rotation} ${largeArc} ${sweep} ${point2(x, y, width, height)}`;
 }
 function point2(x, y, width, height) {
-  return `${formatNumber5(x / width * 100)} ${formatNumber5(y / height * 100)}`;
+  return `${formatNumber6(x / width * 100)} ${formatNumber6(y / height * 100)}`;
 }
 function adjustmentValue(element, name, fallback) {
   const adjustments = Array.isArray(element?.geometry?.adjustments) ? element.geometry.adjustments : [];
@@ -42582,7 +43657,7 @@ function adjustmentValue(element, name, fallback) {
 function clamp6(value, min, max) {
   return Math.min(max, Math.max(min, value));
 }
-function formatNumber5(value) {
+function formatNumber6(value) {
   if (Math.abs(value) < 1e-4) return "0";
   return Number(value.toFixed(3)).toString();
 }
@@ -42652,7 +43727,7 @@ function bevelGeometry(element) {
   };
 }
 function path2(points, width, height) {
-  return points.map(([x, y], index) => `${index === 0 ? "M" : "L"}${formatNumber6(x / width * 100)} ${formatNumber6(y / height * 100)}`).join("") + "Z";
+  return points.map(([x, y], index) => `${index === 0 ? "M" : "L"}${formatNumber7(x / width * 100)} ${formatNumber7(y / height * 100)}`).join("") + "Z";
 }
 function adjustmentValue2(element, name, fallback) {
   const adjustments = Array.isArray(element?.geometry?.adjustments) ? element.geometry.adjustments : [];
@@ -42662,7 +43737,7 @@ function adjustmentValue2(element, name, fallback) {
 function clamp7(value, min, max) {
   return Math.min(max, Math.max(min, value));
 }
-function formatNumber6(value) {
+function formatNumber7(value) {
   if (Math.abs(value) < 1e-4) return "0";
   return Number(value.toFixed(3)).toString();
 }
@@ -42699,10 +43774,10 @@ function bentUpArrowPath(element) {
   ].join("");
 }
 function move2(x, y, width, height) {
-  return `M${formatNumber7(x / width * 100)} ${formatNumber7(y / height * 100)}`;
+  return `M${formatNumber8(x / width * 100)} ${formatNumber8(y / height * 100)}`;
 }
 function line2(x, y, width, height) {
-  return `L${formatNumber7(x / width * 100)} ${formatNumber7(y / height * 100)}`;
+  return `L${formatNumber8(x / width * 100)} ${formatNumber8(y / height * 100)}`;
 }
 function adjustmentValue3(element, name, fallback) {
   const adjustments = Array.isArray(element?.geometry?.adjustments) ? element.geometry.adjustments : [];
@@ -42712,7 +43787,7 @@ function adjustmentValue3(element, name, fallback) {
 function clamp8(value, min, max) {
   return Math.min(max, Math.max(min, value));
 }
-function formatNumber7(value) {
+function formatNumber8(value) {
   if (Math.abs(value) < 1e-4) return "0";
   return Number(value.toFixed(3)).toString();
 }
@@ -42761,15 +43836,15 @@ function ellipsePoint(cx, cy, rx, ry, deg) {
   return { x: cx + rx * Math.cos(rad), y: cy + ry * Math.sin(rad) };
 }
 function arc2(rx, ry, largeArc, sweep, end, width, height) {
-  return `A${formatNumber8(rx / width * 100)} ${formatNumber8(ry / height * 100)} 0 ${largeArc} ${sweep} ${point3(end, width, height)}`;
+  return `A${formatNumber9(rx / width * 100)} ${formatNumber9(ry / height * 100)} 0 ${largeArc} ${sweep} ${point3(end, width, height)}`;
 }
 function point3(item, width, height) {
-  return `${formatNumber8(item.x / width * 100)} ${formatNumber8(item.y / height * 100)}`;
+  return `${formatNumber9(item.x / width * 100)} ${formatNumber9(item.y / height * 100)}`;
 }
 function clamp9(value, min, max) {
   return Math.min(max, Math.max(min, value));
 }
-function formatNumber8(value) {
+function formatNumber9(value) {
   if (Math.abs(value) < 1e-4) return "0";
   return Number(value.toFixed(3)).toString();
 }
@@ -42786,7 +43861,7 @@ function chordPath(element) {
     return "M0 50A50 50 0 1 1 100 50A50 50 0 1 1 0 50Z";
   }
   const largeArc = sweepDegrees > 180 ? 1 : 0;
-  return `M${formatNumber9(start.x)} ${formatNumber9(start.y)}A50 50 0 ${largeArc} 1 ${formatNumber9(end.x)} ${formatNumber9(end.y)}Z`;
+  return `M${formatNumber10(start.x)} ${formatNumber10(start.y)}A50 50 0 ${largeArc} 1 ${formatNumber10(end.x)} ${formatNumber10(end.y)}Z`;
 }
 function ellipsePoint2(element, angleValue) {
   const width = Math.max(1, Number(element?.box?.w ?? 100));
@@ -42809,7 +43884,7 @@ function clampAngle(value) {
 function positiveSweepDegrees(startAngle, endAngle) {
   return (endAngle - startAngle + fullCircleUnits) % fullCircleUnits / 6e4;
 }
-function formatNumber9(value) {
+function formatNumber10(value) {
   if (Math.abs(value) < 1e-4) return "0";
   return Number(value.toFixed(3)).toString();
 }
@@ -42823,7 +43898,7 @@ function cornerPath(element) {
   const adj2 = clamp10(adjustmentValue5(element, "adj2", 5e4), 0, 1e5 * width / shortestSide);
   const x1 = shortestSide * adj2 / 1e5 / width * 100;
   const y1 = 100 - shortestSide * adj1 / 1e5 / height * 100;
-  return `M0 0L${formatNumber10(x1)} 0L${formatNumber10(x1)} ${formatNumber10(y1)}H100V100H0Z`;
+  return `M0 0L${formatNumber11(x1)} 0L${formatNumber11(x1)} ${formatNumber11(y1)}H100V100H0Z`;
 }
 function adjustmentValue5(element, name, fallback) {
   const adjustments = Array.isArray(element?.geometry?.adjustments) ? element.geometry.adjustments : [];
@@ -42833,7 +43908,7 @@ function adjustmentValue5(element, name, fallback) {
 function clamp10(value, min, max) {
   return Math.min(max, Math.max(min, value));
 }
-function formatNumber10(value) {
+function formatNumber11(value) {
   if (Math.abs(value) < 1e-4) return "0";
   return Number(value.toFixed(3)).toString();
 }
@@ -42979,7 +44054,7 @@ function arc3(cx, cy, rx, ry, startDegrees, endDegrees, prefix, width, height, m
   const largeArc = Math.abs(delta) > 180 ? 1 : 0;
   const reflected = mirrorX !== mirrorY;
   const sweep = reflected ? delta >= 0 ? 0 : 1 : delta >= 0 ? 1 : 0;
-  return `${prefix}${point4(startX, startY, width, height, mirrorX, mirrorY)}A${formatNumber11(rx / width * 100)} ${formatNumber11(ry / height * 100)} 0 ${largeArc} ${sweep} ${point4(endX, endY, width, height, mirrorX, mirrorY)}`;
+  return `${prefix}${point4(startX, startY, width, height, mirrorX, mirrorY)}A${formatNumber12(rx / width * 100)} ${formatNumber12(ry / height * 100)} 0 ${largeArc} ${sweep} ${point4(endX, endY, width, height, mirrorX, mirrorY)}`;
 }
 function move3(x, y, width, height, mirrorX, mirrorY) {
   return `M${point4(x, y, width, height, mirrorX, mirrorY)}`;
@@ -42990,7 +44065,7 @@ function line3(x, y, width, height, mirrorX, mirrorY) {
 function point4(x, y, width, height, mirrorX, mirrorY) {
   const normalizedX = (mirrorX ? width - x : x) / width * 100;
   const normalizedY = (mirrorY ? height - y : y) / height * 100;
-  return `${formatNumber11(normalizedX)} ${formatNumber11(normalizedY)}`;
+  return `${formatNumber12(normalizedX)} ${formatNumber12(normalizedY)}`;
 }
 function adjustmentValue6(element, name, fallback) {
   const adjustments = Array.isArray(element?.geometry?.adjustments) ? element.geometry.adjustments : [];
@@ -43003,7 +44078,7 @@ function clamp11(value, min, max) {
 function degrees(value) {
   return value * 180 / Math.PI;
 }
-function formatNumber11(value) {
+function formatNumber12(value) {
   if (Math.abs(value) < 1e-4) return "0";
   return Number(value.toFixed(3)).toString();
 }
@@ -43053,7 +44128,7 @@ function cubeGeometry(element) {
   };
 }
 function path3(points, width, height) {
-  return points.map(([x, y], index) => `${index === 0 ? "M" : "L"}${formatNumber12(x / width * 100)} ${formatNumber12(y / height * 100)}`).join("") + "Z";
+  return points.map(([x, y], index) => `${index === 0 ? "M" : "L"}${formatNumber13(x / width * 100)} ${formatNumber13(y / height * 100)}`).join("") + "Z";
 }
 function adjustmentValue7(element, name, fallback) {
   const adjustments = Array.isArray(element?.geometry?.adjustments) ? element.geometry.adjustments : [];
@@ -43063,7 +44138,7 @@ function adjustmentValue7(element, name, fallback) {
 function clamp12(value, min, max) {
   return Math.min(max, Math.max(min, value));
 }
-function formatNumber12(value) {
+function formatNumber13(value) {
   if (Math.abs(value) < 1e-4) return "0";
   return Number(value.toFixed(3)).toString();
 }
@@ -43071,7 +44146,7 @@ function formatNumber12(value) {
 // src/render/renderDiagStripeGeometry.ts
 function diagStripePath(element) {
   const value = clamp13(adjustmentValue8(element, "adj", 5e4), 0, 1e5) / 1e3;
-  const edge = formatNumber13(value);
+  const edge = formatNumber14(value);
   return `M0 ${edge}L${edge} 0H100L0 100Z`;
 }
 function adjustmentValue8(element, name, fallback) {
@@ -43082,7 +44157,7 @@ function adjustmentValue8(element, name, fallback) {
 function clamp13(value, min, max) {
   return Math.min(max, Math.max(min, value));
 }
-function formatNumber13(value) {
+function formatNumber14(value) {
   if (Math.abs(value) < 1e-4) return "0";
   return Number(value.toFixed(3)).toString();
 }
@@ -43090,10 +44165,10 @@ function formatNumber13(value) {
 // src/render/renderFrameGeometry.ts
 function frameGeometry(element) {
   const thickness = percentAdjustment(element, "adj1", 12.5);
-  const x = formatNumber14(shortestSideToWidthPercent(element, thickness));
-  const y = formatNumber14(shortestSideToHeightPercent(element, thickness));
-  const right = formatNumber14(100 - Number(x));
-  const bottom = formatNumber14(100 - Number(y));
+  const x = formatNumber15(shortestSideToWidthPercent(element, thickness));
+  const y = formatNumber15(shortestSideToHeightPercent(element, thickness));
+  const right = formatNumber15(100 - Number(x));
+  const bottom = formatNumber15(100 - Number(y));
   return {
     tag: "compound",
     parts: [
@@ -43118,7 +44193,7 @@ function shortestSideToHeightPercent(element, value) {
   const height = Math.max(1, Number(element?.box?.h ?? 100));
   return Math.min(100, Math.max(0, value * Math.min(width, height) / height));
 }
-function formatNumber14(value) {
+function formatNumber15(value) {
   return Number(value.toFixed(3)).toString();
 }
 
@@ -43137,9 +44212,9 @@ function halfFramePath(element) {
   const y2 = height - x1 * height / width;
   return [
     "M0 0H100",
-    `L${formatNumber15(x2 / width * 100)} ${formatNumber15(y1 / height * 100)}`,
-    `H${formatNumber15(x1 / width * 100)}`,
-    `V${formatNumber15(y2 / height * 100)}`,
+    `L${formatNumber16(x2 / width * 100)} ${formatNumber16(y1 / height * 100)}`,
+    `H${formatNumber16(x1 / width * 100)}`,
+    `V${formatNumber16(y2 / height * 100)}`,
     "L0 100Z"
   ].join("");
 }
@@ -43151,7 +44226,7 @@ function adjustmentValue9(element, name, fallback) {
 function clamp14(value, min, max) {
   return Math.min(max, Math.max(min, value));
 }
-function formatNumber15(value) {
+function formatNumber16(value) {
   if (Math.abs(value) < 1e-4) return "0";
   return Number(value.toFixed(3)).toString();
 }
@@ -43195,10 +44270,10 @@ function leftUpArrowPath(element) {
   ].join("");
 }
 function move4(x, y, width, height) {
-  return `M${formatNumber16(x / width * 100)} ${formatNumber16(y / height * 100)}`;
+  return `M${formatNumber17(x / width * 100)} ${formatNumber17(y / height * 100)}`;
 }
 function line4(x, y, width, height) {
-  return `L${formatNumber16(x / width * 100)} ${formatNumber16(y / height * 100)}`;
+  return `L${formatNumber17(x / width * 100)} ${formatNumber17(y / height * 100)}`;
 }
 function adjustmentValue10(element, name, fallback) {
   const adjustments = Array.isArray(element?.geometry?.adjustments) ? element.geometry.adjustments : [];
@@ -43208,7 +44283,7 @@ function adjustmentValue10(element, name, fallback) {
 function clamp15(value, min, max) {
   return Math.min(max, Math.max(min, value));
 }
-function formatNumber16(value) {
+function formatNumber17(value) {
   if (Math.abs(value) < 1e-4) return "0";
   return Number(value.toFixed(3)).toString();
 }
@@ -43259,10 +44334,10 @@ function leftRightUpArrowPath(element) {
   ].join("");
 }
 function move5(x, y, width, height) {
-  return `M${formatNumber17(x / width * 100)} ${formatNumber17(y / height * 100)}`;
+  return `M${formatNumber18(x / width * 100)} ${formatNumber18(y / height * 100)}`;
 }
 function line5(x, y, width, height) {
-  return `L${formatNumber17(x / width * 100)} ${formatNumber17(y / height * 100)}`;
+  return `L${formatNumber18(x / width * 100)} ${formatNumber18(y / height * 100)}`;
 }
 function adjustmentValue11(element, name, fallback) {
   const adjustments = Array.isArray(element?.geometry?.adjustments) ? element.geometry.adjustments : [];
@@ -43272,7 +44347,7 @@ function adjustmentValue11(element, name, fallback) {
 function clamp16(value, min, max) {
   return Math.min(max, Math.max(min, value));
 }
-function formatNumber17(value) {
+function formatNumber18(value) {
   if (Math.abs(value) < 1e-4) return "0";
   return Number(value.toFixed(3)).toString();
 }
@@ -43281,8 +44356,8 @@ function formatNumber17(value) {
 function canGeometry(element) {
   const depth = canDepthPercent(element);
   const bottom = 100 - depth;
-  const depthValue = formatNumber18(depth);
-  const bottomValue = formatNumber18(bottom);
+  const depthValue = formatNumber19(depth);
+  const bottomValue = formatNumber19(bottom);
   return {
     tag: "compound",
     parts: [
@@ -43304,9 +44379,9 @@ function stripedRightArrowGeometry(element) {
   return {
     tag: "compound",
     parts: [
-      { tag: "path", part: "stripe-1", d: `M0 ${formatNumber18(y1)}H${formatNumber18(stripe1)}V${formatNumber18(y2)}H0Z` },
-      { tag: "path", part: "stripe-2", d: `M${formatNumber18(stripe2Left)} ${formatNumber18(y1)}H${formatNumber18(stripe2Right)}V${formatNumber18(y2)}H${formatNumber18(stripe2Left)}Z` },
-      { tag: "path", part: "body", d: `M${formatNumber18(bodyX)} ${formatNumber18(y1)}H${formatNumber18(headX)}V0L100 50L${formatNumber18(headX)} 100V${formatNumber18(y2)}H${formatNumber18(bodyX)}Z` }
+      { tag: "path", part: "stripe-1", d: `M0 ${formatNumber19(y1)}H${formatNumber19(stripe1)}V${formatNumber19(y2)}H0Z` },
+      { tag: "path", part: "stripe-2", d: `M${formatNumber19(stripe2Left)} ${formatNumber19(y1)}H${formatNumber19(stripe2Right)}V${formatNumber19(y2)}H${formatNumber19(stripe2Left)}Z` },
+      { tag: "path", part: "body", d: `M${formatNumber19(bodyX)} ${formatNumber19(y1)}H${formatNumber19(headX)}V0L100 50L${formatNumber19(headX)} 100V${formatNumber19(y2)}H${formatNumber19(bodyX)}Z` }
     ]
   };
 }
@@ -43340,7 +44415,7 @@ function maxWidthShortestSideAdjustment(element, value) {
   const height = Math.max(1, Number(element?.box?.h ?? 100));
   return value * width / Math.min(width, height);
 }
-function formatNumber18(value) {
+function formatNumber19(value) {
   return Number(value.toFixed(3)).toString();
 }
 
@@ -43392,10 +44467,10 @@ function point5(value, width, height) {
   return `${xPercent(value.x, width)} ${yPercent(value.y, height)}`;
 }
 function xPercent(value, width) {
-  return formatNumber19(value / width * 100);
+  return formatNumber20(value / width * 100);
 }
 function yPercent(value, height) {
-  return formatNumber19(value / height * 100);
+  return formatNumber20(value / height * 100);
 }
 function adjustmentValue13(element, name, fallback) {
   const adjustments = Array.isArray(element?.geometry?.adjustments) ? element.geometry.adjustments : [];
@@ -43405,7 +44480,7 @@ function adjustmentValue13(element, name, fallback) {
 function clamp17(value, min, max) {
   return Math.min(max, Math.max(min, value));
 }
-function formatNumber19(value) {
+function formatNumber20(value) {
   if (Math.abs(value) < 1e-4) return "0";
   return Number(value.toFixed(3)).toString();
 }
@@ -43413,13 +44488,13 @@ function formatNumber19(value) {
 // src/render/renderPolygonGeometry.ts
 function hexagonPath(element) {
   const inset = shortestSideToWidthPercent3(element, adjustmentValue14(element, "adj", 25));
-  return `M0 50L${formatNumber20(inset)} 0H${formatNumber20(100 - inset)}L100 50L${formatNumber20(100 - inset)} 100H${formatNumber20(inset)}Z`;
+  return `M0 50L${formatNumber21(inset)} 0H${formatNumber21(100 - inset)}L100 50L${formatNumber21(100 - inset)} 100H${formatNumber21(inset)}Z`;
 }
 function octagonPath(element) {
   const rawInset = Math.min(50, Math.max(0, adjustmentValue14(element, "adj", 29.289)));
   const insetX = shortestSideToWidthPercent3(element, rawInset);
   const insetY = shortestSideToHeightPercent3(element, rawInset);
-  return `M0 ${formatNumber20(insetY)}L${formatNumber20(insetX)} 0H${formatNumber20(100 - insetX)}L100 ${formatNumber20(insetY)}V${formatNumber20(100 - insetY)}L${formatNumber20(100 - insetX)} 100H${formatNumber20(insetX)}L0 ${formatNumber20(100 - insetY)}Z`;
+  return `M0 ${formatNumber21(insetY)}L${formatNumber21(insetX)} 0H${formatNumber21(100 - insetX)}L100 ${formatNumber21(insetY)}V${formatNumber21(100 - insetY)}L${formatNumber21(100 - insetX)} 100H${formatNumber21(insetX)}L0 ${formatNumber21(100 - insetY)}Z`;
 }
 function heptagonPath() {
   const hc = 50;
@@ -43432,7 +44507,7 @@ function heptagonPath() {
   const dy1 = shd2 * 62349 / 1e5;
   const dy2 = shd2 * 22252 / 1e5;
   const dy3 = shd2 * 90097 / 1e5;
-  return `M${formatNumber20(hc - dx1)} ${formatNumber20(svc + dy2)}L${formatNumber20(hc - dx2)} ${formatNumber20(svc - dy1)}L50 0L${formatNumber20(hc + dx2)} ${formatNumber20(svc - dy1)}L${formatNumber20(hc + dx1)} ${formatNumber20(svc + dy2)}L${formatNumber20(hc + dx3)} ${formatNumber20(svc + dy3)}H${formatNumber20(hc - dx3)}Z`;
+  return `M${formatNumber21(hc - dx1)} ${formatNumber21(svc + dy2)}L${formatNumber21(hc - dx2)} ${formatNumber21(svc - dy1)}L50 0L${formatNumber21(hc + dx2)} ${formatNumber21(svc - dy1)}L${formatNumber21(hc + dx1)} ${formatNumber21(svc + dy2)}L${formatNumber21(hc + dx3)} ${formatNumber21(svc + dy3)}H${formatNumber21(hc - dx3)}Z`;
 }
 function decagonPath() {
   const hc = 50;
@@ -43442,7 +44517,7 @@ function decagonPath() {
   const dx2 = hc * Math.cos(72 * Math.PI / 180);
   const dy1 = shd2 * Math.sin(72 * Math.PI / 180);
   const dy2 = shd2 * Math.sin(36 * Math.PI / 180);
-  return `M0 50L${formatNumber20(hc - dx1)} ${formatNumber20(vc - dy2)}L${formatNumber20(hc - dx2)} ${formatNumber20(vc - dy1)}H${formatNumber20(hc + dx2)}L${formatNumber20(hc + dx1)} ${formatNumber20(vc - dy2)}L100 50L${formatNumber20(hc + dx1)} ${formatNumber20(vc + dy2)}L${formatNumber20(hc + dx2)} ${formatNumber20(vc + dy1)}H${formatNumber20(hc - dx2)}L${formatNumber20(hc - dx1)} ${formatNumber20(vc + dy2)}Z`;
+  return `M0 50L${formatNumber21(hc - dx1)} ${formatNumber21(vc - dy2)}L${formatNumber21(hc - dx2)} ${formatNumber21(vc - dy1)}H${formatNumber21(hc + dx2)}L${formatNumber21(hc + dx1)} ${formatNumber21(vc - dy2)}L100 50L${formatNumber21(hc + dx1)} ${formatNumber21(vc + dy2)}L${formatNumber21(hc + dx2)} ${formatNumber21(vc + dy1)}H${formatNumber21(hc - dx2)}L${formatNumber21(hc - dx1)} ${formatNumber21(vc + dy2)}Z`;
 }
 function dodecagonPath() {
   const x1 = 100 * 2894 / 21600;
@@ -43453,7 +44528,7 @@ function dodecagonPath() {
   const y2 = 100 * 7906 / 21600;
   const y3 = 100 * 13694 / 21600;
   const y4 = 100 * 18706 / 21600;
-  return `M0 ${formatNumber20(y2)}L${formatNumber20(x1)} ${formatNumber20(y1)}L${formatNumber20(x2)} 0H${formatNumber20(x3)}L${formatNumber20(x4)} ${formatNumber20(y1)}L100 ${formatNumber20(y2)}V${formatNumber20(y3)}L${formatNumber20(x4)} ${formatNumber20(y4)}L${formatNumber20(x3)} 100H${formatNumber20(x2)}L${formatNumber20(x1)} ${formatNumber20(y4)}L0 ${formatNumber20(y3)}Z`;
+  return `M0 ${formatNumber21(y2)}L${formatNumber21(x1)} ${formatNumber21(y1)}L${formatNumber21(x2)} 0H${formatNumber21(x3)}L${formatNumber21(x4)} ${formatNumber21(y1)}L100 ${formatNumber21(y2)}V${formatNumber21(y3)}L${formatNumber21(x4)} ${formatNumber21(y4)}L${formatNumber21(x3)} 100H${formatNumber21(x2)}L${formatNumber21(x1)} ${formatNumber21(y4)}L0 ${formatNumber21(y3)}Z`;
 }
 function adjustmentValue14(element, name, fallback) {
   const adjustments = Array.isArray(element?.geometry?.adjustments) ? element.geometry.adjustments : [];
@@ -43471,7 +44546,7 @@ function shortestSideToHeightPercent3(element, value) {
   const height = Math.max(1, Number(element?.box?.h ?? 100));
   return Math.min(100, Math.max(0, value * Math.min(width, height) / height));
 }
-function formatNumber20(value) {
+function formatNumber21(value) {
   if (Math.abs(value) < 0.01) return "0";
   if (Math.abs(value - 100) < 0.01) return "100";
   return Number(value.toFixed(3)).toString();
@@ -43499,24 +44574,24 @@ function rectVariantPath(shapeType, element) {
 function round1RectPath(element) {
   const { x, y } = shortestSidePercent(element, percentAdjustment2(element, "adj", 16.667));
   if (x <= 0 || y <= 0) return "M0 0H100V100H0Z";
-  return `M0 0H${formatNumber21(100 - x)}A${formatNumber21(x)} ${formatNumber21(y)} 0 0 1 100 ${formatNumber21(y)}V100H0Z`;
+  return `M0 0H${formatNumber22(100 - x)}A${formatNumber22(x)} ${formatNumber22(y)} 0 0 1 100 ${formatNumber22(y)}V100H0Z`;
 }
 function round2DiagRectPath(element) {
   const topLeft = shortestSidePercent(element, percentAdjustment2(element, "adj1", 16.667));
   const bottomRight = shortestSidePercent(element, percentAdjustment2(element, "adj2", 0));
-  const bottomRightCorner = bottomRight.x > 0 && bottomRight.y > 0 ? `V${formatNumber21(100 - bottomRight.y)}A${formatNumber21(bottomRight.x)} ${formatNumber21(bottomRight.y)} 0 0 1 ${formatNumber21(100 - bottomRight.x)} 100` : "V100";
-  const topLeftCorner = topLeft.x > 0 && topLeft.y > 0 ? `V${formatNumber21(topLeft.y)}A${formatNumber21(topLeft.x)} ${formatNumber21(topLeft.y)} 0 0 1 ${formatNumber21(topLeft.x)} 0` : "V0";
-  return `M${formatNumber21(topLeft.x)} 0H100${bottomRightCorner}H0${topLeftCorner}Z`;
+  const bottomRightCorner = bottomRight.x > 0 && bottomRight.y > 0 ? `V${formatNumber22(100 - bottomRight.y)}A${formatNumber22(bottomRight.x)} ${formatNumber22(bottomRight.y)} 0 0 1 ${formatNumber22(100 - bottomRight.x)} 100` : "V100";
+  const topLeftCorner = topLeft.x > 0 && topLeft.y > 0 ? `V${formatNumber22(topLeft.y)}A${formatNumber22(topLeft.x)} ${formatNumber22(topLeft.y)} 0 0 1 ${formatNumber22(topLeft.x)} 0` : "V0";
+  return `M${formatNumber22(topLeft.x)} 0H100${bottomRightCorner}H0${topLeftCorner}Z`;
 }
 function snip2SameRectPath(element) {
   const top = shortestSidePercent(element, percentAdjustment2(element, "adj1", 16.667));
   const bottom = shortestSidePercent(element, percentAdjustment2(element, "adj2", 0));
-  return `M${formatNumber21(top.x)} 0H${formatNumber21(100 - top.x)}L100 ${formatNumber21(top.y)}V${formatNumber21(100 - bottom.y)}L${formatNumber21(100 - bottom.x)} 100H${formatNumber21(bottom.x)}L0 ${formatNumber21(100 - bottom.y)}V${formatNumber21(top.y)}Z`;
+  return `M${formatNumber22(top.x)} 0H${formatNumber22(100 - top.x)}L100 ${formatNumber22(top.y)}V${formatNumber22(100 - bottom.y)}L${formatNumber22(100 - bottom.x)} 100H${formatNumber22(bottom.x)}L0 ${formatNumber22(100 - bottom.y)}V${formatNumber22(top.y)}Z`;
 }
 function snip2DiagRectPath(element) {
   const left = shortestSidePercent(element, percentAdjustment2(element, "adj1", 0));
   const right = shortestSidePercent(element, percentAdjustment2(element, "adj2", 16.667));
-  return `M${formatNumber21(left.x)} 0H${formatNumber21(100 - right.x)}L100 ${formatNumber21(right.y)}V${formatNumber21(100 - left.y)}L${formatNumber21(100 - left.x)} 100H${formatNumber21(right.x)}L0 ${formatNumber21(100 - right.y)}V${formatNumber21(left.y)}Z`;
+  return `M${formatNumber22(left.x)} 0H${formatNumber22(100 - right.x)}L100 ${formatNumber22(right.y)}V${formatNumber22(100 - left.y)}L${formatNumber22(100 - left.x)} 100H${formatNumber22(right.x)}L0 ${formatNumber22(100 - right.y)}V${formatNumber22(left.y)}Z`;
 }
 function percentAdjustment2(element, name, fallback) {
   const adjustments = Array.isArray(element?.geometry?.adjustments) ? element.geometry.adjustments : [];
@@ -43533,7 +44608,7 @@ function shortestSidePercent(element, value) {
     y: Math.min(100, Math.max(0, value * shortest / height))
   };
 }
-function formatNumber21(value) {
+function formatNumber22(value) {
   if (Math.abs(value) < 1e-4) return "0";
   return Number(value.toFixed(3)).toString();
 }
@@ -43563,6 +44638,7 @@ var svgPresetGeometryTypes = /* @__PURE__ */ new Set([
   "chord",
   "teardrop",
   "diagStripe",
+  "flowChartProcess",
   "flowChartConnector",
   "round2SameRect",
   ...rectVariantShapeTypes,
@@ -43642,12 +44718,12 @@ function adjustment3(element, name, fallback) {
   return typeof value === "number" && Number.isFinite(value) ? value : fallback;
 }
 function pointX(value, width) {
-  return formatNumber22(value / width * 100);
+  return formatNumber23(value / width * 100);
 }
 function pointY(value, height) {
-  return formatNumber22(value / height * 100);
+  return formatNumber23(value / height * 100);
 }
-function formatNumber22(value) {
+function formatNumber23(value) {
   return Number(value.toFixed(3)).toString();
 }
 
@@ -43661,8 +44737,8 @@ function teardropPath(element) {
   return [
     "M0 50",
     "A50 50 0 0 1 50 0",
-    `Q${formatNumber23(x2)} 0 ${formatNumber23(x1)} ${formatNumber23(y1)}`,
-    `Q100 ${formatNumber23(y2)} 100 50`,
+    `Q${formatNumber24(x2)} 0 ${formatNumber24(x1)} ${formatNumber24(y1)}`,
+    `Q100 ${formatNumber24(y2)} 100 50`,
     "A50 50 0 0 1 50 100",
     "A50 50 0 0 1 0 50",
     "Z"
@@ -43676,7 +44752,7 @@ function adjustmentValue15(element, name, fallback) {
 function clamp18(value, min, max) {
   return Math.min(max, Math.max(min, value));
 }
-function formatNumber23(value) {
+function formatNumber24(value) {
   if (Math.abs(value) < 1e-4) return "0";
   return Number(value.toFixed(3)).toString();
 }
@@ -43738,10 +44814,10 @@ function line6(x, y, width, height) {
   return `L${point6(x, y, width, height)}`;
 }
 function arc4(rx, ry, rotation, largeArc, sweep, x, y, width, height) {
-  return `A${formatNumber24(rx / width * 100)} ${formatNumber24(ry / height * 100)} ${rotation} ${largeArc} ${sweep} ${point6(x, y, width, height)}`;
+  return `A${formatNumber25(rx / width * 100)} ${formatNumber25(ry / height * 100)} ${rotation} ${largeArc} ${sweep} ${point6(x, y, width, height)}`;
 }
 function point6(x, y, width, height) {
-  return `${formatNumber24(x / width * 100)} ${formatNumber24(y / height * 100)}`;
+  return `${formatNumber25(x / width * 100)} ${formatNumber25(y / height * 100)}`;
 }
 function adjustmentValue16(element, name, fallback) {
   const adjustments = Array.isArray(element?.geometry?.adjustments) ? element.geometry.adjustments : [];
@@ -43751,7 +44827,7 @@ function adjustmentValue16(element, name, fallback) {
 function clamp19(value, min, max) {
   return Math.min(max, Math.max(min, value));
 }
-function formatNumber24(value) {
+function formatNumber25(value) {
   if (Math.abs(value) < 1e-4) return "0";
   return Number(value.toFixed(3)).toString();
 }
@@ -43815,7 +44891,7 @@ function arc5(cx, cy, rx, ry, startDegrees, endDegrees, width, height) {
   const delta = endDegrees - startDegrees;
   const largeArc = Math.abs(delta) > 180 ? 1 : 0;
   const sweep = delta >= 0 ? 1 : 0;
-  return `A${formatNumber25(rx / width * 100)} ${formatNumber25(ry / height * 100)} 0 ${largeArc} ${sweep} ${point7(endX, endY, width, height)}`;
+  return `A${formatNumber26(rx / width * 100)} ${formatNumber26(ry / height * 100)} 0 ${largeArc} ${sweep} ${point7(endX, endY, width, height)}`;
 }
 function move7(x, y, width, height) {
   return `M${point7(x, y, width, height)}`;
@@ -43824,14 +44900,14 @@ function line7(x, y, width, height) {
   return `L${point7(x, y, width, height)}`;
 }
 function point7(x, y, width, height) {
-  return `${formatNumber25(x / width * 100)} ${formatNumber25(y / height * 100)}`;
+  return `${formatNumber26(x / width * 100)} ${formatNumber26(y / height * 100)}`;
 }
 function adjustmentValue17(element, name, fallback) {
   const adjustments = Array.isArray(element?.geometry?.adjustments) ? element.geometry.adjustments : [];
   const item = adjustments.find((candidate) => candidate?.name === name);
   return typeof item?.value === "number" && Number.isFinite(item.value) ? item.value : fallback;
 }
-function formatNumber25(value) {
+function formatNumber26(value) {
   if (Math.abs(value) < 1e-4) return "0";
   return Number(value.toFixed(3)).toString();
 }
@@ -43894,6 +44970,8 @@ function presetShapeGeometry(shapeType, element) {
       return { tag: "path", d: teardropPath(element) };
     case "diagStripe":
       return { tag: "path", d: diagStripePath(element) };
+    case "flowChartProcess":
+      return { tag: "path", d: "M0 0H100V100H0Z" };
     case "flowChartConnector":
       return { tag: "ellipse" };
     case "round2SameRect":
@@ -43983,32 +45061,32 @@ function arcPath(element) {
   const end = arcPoint(endAngle);
   const sweep = positiveSweepDegrees2(startAngle, endAngle);
   const largeArc = sweep > 180 ? 1 : 0;
-  return `M${formatNumber26(start.x)} ${formatNumber26(start.y)}A50 50 0 ${largeArc} 1 ${formatNumber26(end.x)} ${formatNumber26(end.y)}`;
+  return `M${formatNumber27(start.x)} ${formatNumber27(start.y)}A50 50 0 ${largeArc} 1 ${formatNumber27(end.x)} ${formatNumber27(end.y)}`;
 }
 function trianglePoints(element) {
   const apexX = widePercentAdjustment(element, "adj", 50);
-  return `${formatNumber26(apexX)},0 100,100 0,100`;
+  return `${formatNumber27(apexX)},0 100,100 0,100`;
 }
 function trapezoidPath(element) {
   const inset = horizontalShortestSidePercentAdjustment(element, "adj", 25, 50);
   const rightInset = 100 - inset;
-  return `M0 100L${formatNumber26(inset)} 0H${formatNumber26(rightInset)}L100 100Z`;
+  return `M0 100L${formatNumber27(inset)} 0H${formatNumber27(rightInset)}L100 100Z`;
 }
 function homePlatePath(element) {
   const inset = horizontalShortestSidePercentAdjustment(element, "adj", 50, 100);
   const shoulderX = 100 - inset;
-  return `M0 0H${formatNumber26(shoulderX)}L100 50L${formatNumber26(shoulderX)} 100H0Z`;
+  return `M0 0H${formatNumber27(shoulderX)}L100 50L${formatNumber27(shoulderX)} 100H0Z`;
 }
 function chevronPath(element) {
   const inset = horizontalShortestSidePercentAdjustment(element, "adj", 50, 100);
   const shoulderX = 100 - inset;
-  return `M0 0H${formatNumber26(shoulderX)}L100 50L${formatNumber26(shoulderX)} 100H0L${formatNumber26(inset)} 50Z`;
+  return `M0 0H${formatNumber27(shoulderX)}L100 50L${formatNumber27(shoulderX)} 100H0L${formatNumber27(inset)} 50Z`;
 }
 function round2SameRectPath(element) {
   const radius = percentAdjustment3(element, "adj1", 16);
   if (radius <= 0) return "M0 0H100V100H0Z";
-  const left = formatNumber26(radius);
-  const right = formatNumber26(100 - radius);
+  const left = formatNumber27(radius);
+  const right = formatNumber27(100 - radius);
   return `M${left} 0H${right}Q100 0 100 ${left}V100H0V${left}Q0 0 ${left} 0Z`;
 }
 function piePath(element) {
@@ -44018,7 +45096,7 @@ function piePath(element) {
   const end = arcPoint(endAngle);
   const sweep = positiveSweepDegrees2(startAngle, endAngle);
   const largeArc = sweep > 180 ? 1 : 0;
-  return `M50 50L${formatNumber26(start.x)} ${formatNumber26(start.y)}A50 50 0 ${largeArc} 1 ${formatNumber26(end.x)} ${formatNumber26(end.y)}Z`;
+  return `M50 50L${formatNumber27(start.x)} ${formatNumber27(start.y)}A50 50 0 ${largeArc} 1 ${formatNumber27(end.x)} ${formatNumber27(end.y)}Z`;
 }
 function rightArrowPath(element) {
   const shaftHalfHeight = halfPercentAdjustment(element, "adj1", 25);
@@ -44026,7 +45104,7 @@ function rightArrowPath(element) {
   const headX = 100 - headLength;
   const top = 50 - shaftHalfHeight;
   const bottom = 50 + shaftHalfHeight;
-  return `M0 ${formatNumber26(top)}H${formatNumber26(headX)}V0L100 50L${formatNumber26(headX)} 100V${formatNumber26(bottom)}H0Z`;
+  return `M0 ${formatNumber27(top)}H${formatNumber27(headX)}V0L100 50L${formatNumber27(headX)} 100V${formatNumber27(bottom)}H0Z`;
 }
 function leftArrowPath(element) {
   const shaftHalfHeight = halfPercentAdjustment(element, "adj1", 25);
@@ -44034,14 +45112,14 @@ function leftArrowPath(element) {
   const headX = headLength;
   const top = 50 - shaftHalfHeight;
   const bottom = 50 + shaftHalfHeight;
-  return `M100 ${formatNumber26(top)}H${formatNumber26(headX)}V0L0 50L${formatNumber26(headX)} 100V${formatNumber26(bottom)}H100Z`;
+  return `M100 ${formatNumber27(top)}H${formatNumber27(headX)}V0L0 50L${formatNumber27(headX)} 100V${formatNumber27(bottom)}H100Z`;
 }
 function upArrowPath(element) {
   const shaftHalfWidth = halfPercentAdjustment(element, "adj1", 25);
   const headLength = arrowHeadLengthVerticalPercent(element, "adj2", 50);
   const left = 50 - shaftHalfWidth;
   const right = 50 + shaftHalfWidth;
-  return `M${formatNumber26(left)} 100V${formatNumber26(headLength)}H0L50 0L100 ${formatNumber26(headLength)}H${formatNumber26(right)}V100Z`;
+  return `M${formatNumber27(left)} 100V${formatNumber27(headLength)}H0L50 0L100 ${formatNumber27(headLength)}H${formatNumber27(right)}V100Z`;
 }
 function downArrowPath(element) {
   const shaftHalfWidth = halfPercentAdjustment(element, "adj1", 25);
@@ -44049,7 +45127,7 @@ function downArrowPath(element) {
   const headY = 100 - headLength;
   const left = 50 - shaftHalfWidth;
   const right = 50 + shaftHalfWidth;
-  return `M${formatNumber26(left)} 0V${formatNumber26(headY)}H0L50 100L100 ${formatNumber26(headY)}H${formatNumber26(right)}V0Z`;
+  return `M${formatNumber27(left)} 0V${formatNumber27(headY)}H0L50 100L100 ${formatNumber27(headY)}H${formatNumber27(right)}V0Z`;
 }
 function leftRightArrowPath(element) {
   const shaftHalfHeight = halfPercentAdjustment(element, "adj1", 25);
@@ -44058,7 +45136,7 @@ function leftRightArrowPath(element) {
   const rightHeadX = 100 - headLength;
   const top = 50 - shaftHalfHeight;
   const bottom = 50 + shaftHalfHeight;
-  return `M0 50L${formatNumber26(leftHeadX)} 0V${formatNumber26(top)}H${formatNumber26(rightHeadX)}V0L100 50L${formatNumber26(rightHeadX)} 100V${formatNumber26(bottom)}H${formatNumber26(leftHeadX)}V100Z`;
+  return `M0 50L${formatNumber27(leftHeadX)} 0V${formatNumber27(top)}H${formatNumber27(rightHeadX)}V0L100 50L${formatNumber27(rightHeadX)} 100V${formatNumber27(bottom)}H${formatNumber27(leftHeadX)}V100Z`;
 }
 function upDownArrowPath(element) {
   const shaftHalfWidth = halfPercentAdjustment(element, "adj1", 25);
@@ -44067,7 +45145,7 @@ function upDownArrowPath(element) {
   const bottomHeadY = 100 - headLength;
   const left = 50 - shaftHalfWidth;
   const right = 50 + shaftHalfWidth;
-  return `M50 0L100 ${formatNumber26(topHeadY)}H${formatNumber26(right)}V${formatNumber26(bottomHeadY)}H100L50 100L0 ${formatNumber26(bottomHeadY)}H${formatNumber26(left)}V${formatNumber26(topHeadY)}H0Z`;
+  return `M50 0L100 ${formatNumber27(topHeadY)}H${formatNumber27(right)}V${formatNumber27(bottomHeadY)}H100L50 100L0 ${formatNumber27(bottomHeadY)}H${formatNumber27(left)}V${formatNumber27(topHeadY)}H0Z`;
 }
 function quadArrowPath(element) {
   const a2 = percentAdjustmentWithMax2(element, "adj2", 22.5, 50);
@@ -44091,7 +45169,7 @@ function quadArrowPath(element) {
   const y3 = 50 - dy3;
   const y4 = 50 + dy3;
   const y6 = 100 - y1;
-  return `M0 50L${formatNumber26(x1)} ${formatNumber26(y2)}V${formatNumber26(y3)}H${formatNumber26(x3)}V${formatNumber26(y1)}H${formatNumber26(x2)}L50 0L${formatNumber26(x5)} ${formatNumber26(y1)}H${formatNumber26(x4)}V${formatNumber26(y3)}H${formatNumber26(x6)}V${formatNumber26(y2)}L100 50L${formatNumber26(x6)} ${formatNumber26(y5)}V${formatNumber26(y4)}H${formatNumber26(x4)}V${formatNumber26(y6)}H${formatNumber26(x5)}L50 100L${formatNumber26(x2)} ${formatNumber26(y6)}H${formatNumber26(x3)}V${formatNumber26(y4)}H${formatNumber26(x1)}V${formatNumber26(y5)}Z`;
+  return `M0 50L${formatNumber27(x1)} ${formatNumber27(y2)}V${formatNumber27(y3)}H${formatNumber27(x3)}V${formatNumber27(y1)}H${formatNumber27(x2)}L50 0L${formatNumber27(x5)} ${formatNumber27(y1)}H${formatNumber27(x4)}V${formatNumber27(y3)}H${formatNumber27(x6)}V${formatNumber27(y2)}L100 50L${formatNumber27(x6)} ${formatNumber27(y5)}V${formatNumber27(y4)}H${formatNumber27(x4)}V${formatNumber27(y6)}H${formatNumber27(x5)}L50 100L${formatNumber27(x2)} ${formatNumber27(y6)}H${formatNumber27(x3)}V${formatNumber27(y4)}H${formatNumber27(x1)}V${formatNumber27(y5)}Z`;
 }
 function notchedRightArrowPath(element) {
   const a1 = percentAdjustmentWithMax2(element, "adj1", 50, 100);
@@ -44100,12 +45178,12 @@ function notchedRightArrowPath(element) {
   const y1 = 50 - a1 / 2;
   const y2 = 50 + a1 / 2;
   const notchX = shortestSideToWidthPercent4(element, a1 * a2 / 100);
-  return `M0 ${formatNumber26(y1)}H${formatNumber26(headX)}V0L100 50L${formatNumber26(headX)} 100V${formatNumber26(y2)}H0L${formatNumber26(notchX)} 50Z`;
+  return `M0 ${formatNumber27(y1)}H${formatNumber27(headX)}V0L100 50L${formatNumber27(headX)} 100V${formatNumber27(y2)}H0L${formatNumber27(notchX)} 50Z`;
 }
 function plusPath(element) {
   const arm = percentAdjustment3(element, "adj", 38);
   const opposite = 100 - arm;
-  return `M${formatNumber26(arm)} 0H${formatNumber26(opposite)}V${formatNumber26(arm)}H100V${formatNumber26(opposite)}H${formatNumber26(opposite)}V100H${formatNumber26(arm)}V${formatNumber26(opposite)}H0V${formatNumber26(arm)}H${formatNumber26(arm)}Z`;
+  return `M${formatNumber27(arm)} 0H${formatNumber27(opposite)}V${formatNumber27(arm)}H100V${formatNumber27(opposite)}H${formatNumber27(opposite)}V100H${formatNumber27(arm)}V${formatNumber27(opposite)}H0V${formatNumber27(arm)}H${formatNumber27(arm)}Z`;
 }
 function donutPath(element) {
   const innerRadius = percentAdjustment3(element, "adj", 25);
@@ -44113,12 +45191,12 @@ function donutPath(element) {
   if (innerRadius <= 0) return outerPath;
   const top = 50 - innerRadius;
   const bottom = 50 + innerRadius;
-  return `${outerPath}ZM50 ${formatNumber26(top)}A${formatNumber26(innerRadius)} ${formatNumber26(innerRadius)} 0 1 0 50 ${formatNumber26(bottom)}A${formatNumber26(innerRadius)} ${formatNumber26(innerRadius)} 0 1 0 50 ${formatNumber26(top)}Z`;
+  return `${outerPath}ZM50 ${formatNumber27(top)}A${formatNumber27(innerRadius)} ${formatNumber27(innerRadius)} 0 1 0 50 ${formatNumber27(bottom)}A${formatNumber27(innerRadius)} ${formatNumber27(innerRadius)} 0 1 0 50 ${formatNumber27(top)}Z`;
 }
 function snip1RectPath(element) {
   const snip = percentAdjustment3(element, "adj", 16.667);
   const start = 100 - snip;
-  return `M0 0H${formatNumber26(start)}L100 ${formatNumber26(snip)}V100H0Z`;
+  return `M0 0H${formatNumber27(start)}L100 ${formatNumber27(snip)}V100H0Z`;
 }
 function snipRoundRectPath(element) {
   const round11 = percentAdjustment3(element, "adj1", 16.667);
@@ -44128,8 +45206,8 @@ function snipRoundRectPath(element) {
   const snipX = shortestSideToWidthPercent4(element, snip);
   const snipY = shortestSideToHeightPercent4(element, snip);
   const x2 = 100 - snipX;
-  const topLeft = roundX > 0 && roundY > 0 ? `V${formatNumber26(roundY)}A${formatNumber26(roundX)} ${formatNumber26(roundY)} 0 0 1 ${formatNumber26(roundX)} 0` : "V0";
-  return `M${formatNumber26(roundX)} 0H${formatNumber26(x2)}L100 ${formatNumber26(snipY)}V100H0${topLeft}Z`;
+  const topLeft = roundX > 0 && roundY > 0 ? `V${formatNumber27(roundY)}A${formatNumber27(roundX)} ${formatNumber27(roundY)} 0 0 1 ${formatNumber27(roundX)} 0` : "V0";
+  return `M${formatNumber27(roundX)} 0H${formatNumber27(x2)}L100 ${formatNumber27(snipY)}V100H0${topLeft}Z`;
 }
 function roundRectPath(element) {
   const geometry = element?.geometry;
@@ -44140,10 +45218,10 @@ function roundRectPath(element) {
   const rx = Math.min(50, radiusPx / width * 100);
   const ry = Math.min(50, radiusPx / height * 100);
   if (rx <= 0 || ry <= 0) return "M0 0H100V100H0Z";
-  const x = formatNumber26(rx);
-  const y = formatNumber26(ry);
-  const right = formatNumber26(100 - rx);
-  const bottom = formatNumber26(100 - ry);
+  const x = formatNumber27(rx);
+  const y = formatNumber27(ry);
+  const right = formatNumber27(100 - rx);
+  const bottom = formatNumber27(100 - ry);
   return `M${x} 0H${right}Q100 0 100 ${y}V${bottom}Q100 100 ${right} 100H${x}Q0 100 0 ${bottom}V${y}Q0 0 ${x} 0Z`;
 }
 function angleAdjustment(element, name, fallback) {
@@ -44229,7 +45307,7 @@ function positiveSweepDegrees2(startAngle, endAngle) {
 function normalizeDegrees(value) {
   return (value % 360 + 360) % 360;
 }
-function formatNumber26(value) {
+function formatNumber27(value) {
   return Number(value.toFixed(3)).toString();
 }
 
@@ -44373,6 +45451,7 @@ ${indent}</filter>`;
 // src/render/renderPictureFilterDefs.ts
 function renderPictureFilterDefs(slide) {
   const filters = imageElements(slide.elements).flatMap((element) => [
+    ...renderBiLevelFilter(slide.id, element),
     ...renderDuotoneFilter(slide.id, element),
     ...renderSharpenFilter(slide.id, element)
   ]);
@@ -44395,8 +45474,35 @@ function pictureDuotoneFilterId(slideId, element) {
 function pictureDuotoneFilterUrl(slideId, element) {
   return duotoneColors(element).length >= 2 ? `url(#${pictureDuotoneFilterId(slideId, element)})` : void 0;
 }
+function pictureBiLevelFilterId(slideId, element) {
+  return `${slideId}-${element.id}-bi-level-filter`;
+}
+function pictureBiLevelFilterUrl(slideId, element) {
+  return biLevelThreshold(element) != null ? `url(#${pictureBiLevelFilterId(slideId, element)})` : void 0;
+}
 function pictureSharpenFilterId(slideId, element) {
   return sharpenSvgFilterId(`${slideId}-${element.id}`, element.effects);
+}
+function renderBiLevelFilter(slideId, element) {
+  const threshold = biLevelThreshold(element);
+  if (threshold == null) return [];
+  const id = escapeHtml(pictureBiLevelFilterId(slideId, element));
+  const intercept = formatNumber28(0.5 - threshold);
+  return [`        <filter id="${id}" color-interpolation-filters="sRGB">
+          <feColorMatrix type="matrix" values="0.2126 0.7152 0.0722 0 0 0.2126 0.7152 0.0722 0 0 0.2126 0.7152 0.0722 0 0 0 0 0 1 0" result="luminance"/>
+          <feComponentTransfer in="luminance" result="thresholdShift">
+            <feFuncR type="linear" slope="1" intercept="${intercept}"/>
+            <feFuncG type="linear" slope="1" intercept="${intercept}"/>
+            <feFuncB type="linear" slope="1" intercept="${intercept}"/>
+            <feFuncA type="identity"/>
+          </feComponentTransfer>
+          <feComponentTransfer in="thresholdShift">
+            <feFuncR type="discrete" tableValues="0 1"/>
+            <feFuncG type="discrete" tableValues="0 1"/>
+            <feFuncB type="discrete" tableValues="0 1"/>
+            <feFuncA type="identity"/>
+          </feComponentTransfer>
+        </filter>`];
 }
 function renderDuotoneFilter(slideId, element) {
   const colors = duotoneColors(element);
@@ -44422,6 +45528,13 @@ function renderSharpenFilter(slideId, element) {
 function duotoneColors(element) {
   const colors = element.effects?.duotone?.colors;
   return Array.isArray(colors) ? colors.filter((color) => typeof color === "string") : [];
+}
+function biLevelThreshold(element) {
+  const threshold = element.effects?.biLevel?.threshold;
+  return typeof threshold === "number" && Number.isFinite(threshold) ? Math.max(0, Math.min(1, threshold)) : void 0;
+}
+function formatNumber28(value) {
+  return Number(value.toFixed(4)).toString();
 }
 function rgb01(color) {
   const match = color.match(/^#([0-9a-f]{6})$/i);
@@ -44494,11 +45607,15 @@ ${declarations.map((item) => `  ${item};`).join("\n")}
 }
 function pictureEffectOrder(effects) {
   const order = Array.isArray(effects?.effectOrder) ? effects.effectOrder : [];
-  const fallback = ["grayscale", "luminance", "saturation", "colorTemperature", "sharpenSoften", "duotone", "outerShadow", "glow", "blur"];
+  const fallback = ["grayscale", "biLevel", "luminance", "saturation", "colorTemperature", "sharpenSoften", "duotone", "outerShadow", "glow", "blur"];
   return [...order, ...fallback].filter((name, index, values) => values.indexOf(name) === index);
 }
 function pictureEffectFilterToCss(name, effects, slideId, element, options) {
   if (name === "grayscale" && effects?.grayscale?.enabled) return ["grayscale(1)"];
+  if (name === "biLevel") {
+    const svgFilter = slideId && element ? pictureBiLevelFilterUrl(slideId, element) : void 0;
+    return svgFilter ? [svgFilter] : [];
+  }
   if (name === "luminance") {
     return [
       effects?.luminance?.brightness != null ? `brightness(${cssNumber4(effects.luminance.brightness)})` : void 0,
@@ -44520,12 +45637,13 @@ function pictureEffectFilterToCss(name, effects, slideId, element, options) {
     return shadow ? [`drop-shadow(${shadow})`] : [];
   }
   if (name === "glow" && effects?.glow) return [`drop-shadow(${glowToCss(effects.glow)})`];
-  if (name === "blur") return blurFilterToCss(effects);
+  if (name === "blur") return blurFilterToCss(effects, slideId, element);
   return [];
 }
-function blurFilterToCss(effects) {
+function blurFilterToCss(effects, slideId, element) {
+  const softEdgeFilter = slideId && element ? softEdgeFilterUrl(slideId, element) : void 0;
   return [
-    effects?.softEdge?.radius != null ? `blur(${cssNumber4(effects.softEdge.radius)}px)` : void 0,
+    softEdgeFilter ?? (effects?.softEdge?.radius != null ? `blur(${cssNumber4(effects.softEdge.radius)}px)` : void 0),
     effects?.blur?.radius != null ? `blur(${cssNumber4(effects.blur.radius)}px)` : void 0
   ].filter(Boolean);
 }
@@ -44552,6 +45670,7 @@ function imageFillAttributes(fill, assetPrefix) {
   if (fill?.type !== "image") return "";
   const fillRect = fill.fillRect;
   const effects = fill.effects ?? {};
+  const grayscale = effects.grayscale;
   const luminance = effects.luminance;
   const saturation = effects.saturation;
   const colorTemperature = effects.colorTemperature;
@@ -44568,6 +45687,7 @@ function imageFillAttributes(fill, assetPrefix) {
     fillRect?.top != null ? ` data-fill-rect-top="${escapeHtml(String(fillRect.top))}"` : void 0,
     fillRect?.right != null ? ` data-fill-rect-right="${escapeHtml(String(fillRect.right))}"` : void 0,
     fillRect?.bottom != null ? ` data-fill-rect-bottom="${escapeHtml(String(fillRect.bottom))}"` : void 0,
+    grayscale?.enabled === true ? ` data-fill-grayscale="true"` : void 0,
     luminance?.enabled === true ? ` data-fill-luminance="true"` : void 0,
     luminance?.bright != null ? ` data-fill-luminance-bright="${escapeHtml(String(luminance.bright))}"` : void 0,
     luminance?.contrast != null ? ` data-fill-luminance-contrast="${escapeHtml(String(luminance.contrast))}"` : void 0,
@@ -44622,7 +45742,7 @@ function formatPatternNumber(value) {
 }
 function hasPictureEffects(fill) {
   const effects = fill?.effects;
-  const metadataOnly = /* @__PURE__ */ new Set(["effectOrder", "luminance", "saturation", "colorTemperature", "sharpenSoften", "backgroundRemoval"]);
+  const metadataOnly = /* @__PURE__ */ new Set(["effectOrder", "grayscale", "luminance", "saturation", "colorTemperature", "sharpenSoften", "backgroundRemoval"]);
   const blocking = Object.keys(effects ?? {}).filter((key) => !metadataOnly.has(key));
   return blocking.length > 0;
 }
@@ -44674,7 +45794,7 @@ function isConnectorGeometry(shapeType) {
 function isShapeSvgElement(element) {
   const shapeType = element.shapeType;
   if (shapeType === "custGeom") return customShapeGeometry(element) != null;
-  return isSvgGeometry(shapeType) || isBasicSvgLineGeometry(shapeType) && hasLinearGradientLine(element);
+  return isSvgGeometry(shapeType) || isBasicSvgLineGeometry(shapeType) && hasSvgOnlyLineFill(element);
 }
 function renderShapeSvg(element, assetPrefix = "") {
   const shapeType = String(element.shapeType ?? "rect");
@@ -44710,8 +45830,9 @@ ${defs}      ${geometryElement(geometry, "none", stroke.attrs)}
 function isBasicSvgLineGeometry(shapeType) {
   return typeof shapeType === "string" && ["rect", "ellipse", "roundRect"].includes(shapeType);
 }
-function hasLinearGradientLine(element) {
+function hasSvgOnlyLineFill(element) {
   const fill = element.line?.fill;
+  if (fill?.type === "pattern") return true;
   return fill?.type === "gradient" && fill?.kind === "linear" && Array.isArray(fill.stops);
 }
 function renderConnectorSvg(element) {
@@ -44721,6 +45842,7 @@ function renderConnectorSvg(element) {
   const markerPaint = stroke.markerPaint;
   const strokeWidth = line8.width ?? 1;
   const dash = svgDashArray(line8.dash, strokeWidth);
+  const miterLimit = miterLimitValue(line8.miterLimitRaw);
   const markerDefs = renderMarkerDefsContent(element, markerPaint);
   const markerStart = markerUrl(element, "head", line8.headEnd);
   const markerEnd = markerUrl(element, "tail", line8.tailEnd);
@@ -44735,6 +45857,7 @@ function renderConnectorSvg(element) {
     `stroke-width="${escapeHtml(String(strokeWidth))}"`,
     `stroke-linecap="${svgLineCap(line8.cap)}"`,
     `stroke-linejoin="${svgLineJoin(line8.join)}"`,
+    miterLimit ? `stroke-miterlimit="${miterLimit}"` : void 0,
     dash ? `stroke-dasharray="${dash}"` : void 0,
     markerAttrs || void 0
   ].filter(Boolean).join(" ");
@@ -44770,7 +45893,7 @@ function geometryPartElement(geometry, fill, stroke) {
 function connectorPath(shapeType, element) {
   switch (shapeType) {
     case "bentConnector3":
-      return `M0 0H${formatNumber27(connectorAdjustment(element, "adj1", 50))}V100H100`;
+      return `M0 0H${formatNumber29(connectorAdjustment(element, "adj1", 50))}V100H100`;
     case "bentConnector4":
       return bentConnector4Path(element);
     case "curvedConnector3":
@@ -44790,12 +45913,12 @@ function curvedConnector3Path(element) {
   const x2 = connectorAdjustment(element, "adj1", 50);
   const x1 = x2 / 2;
   const x3 = (100 + x2) / 2;
-  return `M0 0C${formatNumber27(x1)} 0 ${formatNumber27(x2)} 25 ${formatNumber27(x2)} 50C${formatNumber27(x2)} 75 ${formatNumber27(x3)} 100 100 100`;
+  return `M0 0C${formatNumber29(x1)} 0 ${formatNumber29(x2)} 25 ${formatNumber29(x2)} 50C${formatNumber29(x2)} 75 ${formatNumber29(x3)} 100 100 100`;
 }
 function bentConnector4Path(element) {
   const x = connectorAdjustment(element, "adj1", 50);
   const y = connectorAdjustment(element, "adj2", 50);
-  return `M0 0H${formatNumber27(x)}V${formatNumber27(y)}H100V100`;
+  return `M0 0H${formatNumber29(x)}V${formatNumber29(y)}H100V100`;
 }
 function paintFill(element, assetPrefix = "") {
   const fill = element.fill ?? {};
@@ -44857,6 +45980,17 @@ function paintStroke(element) {
       defs: linearStrokeGradientDef(id, gradient)
     };
   }
+  if (line8.fill?.type === "pattern") {
+    const id = `${element.id}-line-pattern`;
+    const value = `url(#${escapeHtml(id)})`;
+    const attrs2 = strokeAttributes(line8, line8.width ?? 1, value);
+    return {
+      attrs: attrs2.join(" "),
+      value,
+      markerPaint: line8.color,
+      defs: patternFillDef(id, line8.fill)
+    };
+  }
   const attrs = strokeAttributes(line8, line8.width ?? 1);
   return {
     attrs: attrs.join(" "),
@@ -44872,11 +46006,13 @@ function linearStrokeGradientDef(id, fill) {
 }
 function strokeAttributes(line8, width, color = line8.color, dashWidth = width) {
   const dash = svgDashArray(line8.dash, dashWidth);
+  const miterLimit = miterLimitValue(line8.miterLimitRaw);
   return [
     `stroke="${escapeHtml(color)}"`,
-    `stroke-width="${escapeHtml(formatNumber27(width))}"`,
+    `stroke-width="${escapeHtml(formatNumber29(width))}"`,
     `stroke-linecap="${svgLineCap(line8.cap)}"`,
     `stroke-linejoin="${svgLineJoin(line8.join)}"`,
+    miterLimit ? `stroke-miterlimit="${miterLimit}"` : void 0,
     dash ? `stroke-dasharray="${dash}"` : void 0
   ].filter(Boolean);
 }
@@ -44894,7 +46030,7 @@ function renderCompoundPaths(path8, attrs, line8, markerAttrs = "", direction = 
     return `      <path d="${escapedPath}" fill="none" ${strokeAttrs2}${transformAttribute(direction, alignOffset + stroke.offset)} data-line-compound-part="${stroke.part}"></path>`;
   });
   if (markerAttrs) {
-    paths.push(`      <path d="${escapedPath}" fill="none" stroke="transparent" stroke-width="${escapeHtml(formatNumber27(width))}" ${markerAttrs}${transformAttribute(direction, alignOffset)} data-line-compound-part="marker"></path>`);
+    paths.push(`      <path d="${escapedPath}" fill="none" stroke="transparent" stroke-width="${escapeHtml(formatNumber29(width))}" ${markerAttrs}${transformAttribute(direction, alignOffset)} data-line-compound-part="marker"></path>`);
   }
   return paths.join("\n");
 }
@@ -44941,12 +46077,16 @@ function lineAlignmentOffset(align, width) {
 }
 function transformAttribute(direction, offset) {
   if (Math.abs(offset) < 1e-3) return "";
-  const x = formatNumber27(direction.x * offset);
-  const y = formatNumber27(direction.y * offset);
+  const x = formatNumber29(direction.x * offset);
+  const y = formatNumber29(direction.y * offset);
   return ` transform="translate(${x} ${y})"`;
 }
-function formatNumber27(value) {
+function formatNumber29(value) {
   return Number(value.toFixed(3)).toString();
+}
+function miterLimitValue(value) {
+  const raw = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(raw) && raw > 0 ? formatNumber29(raw / 1e5) : void 0;
 }
 function lineAttributes(line8) {
   const fill = line8.fill ?? {};
@@ -44955,10 +46095,14 @@ function lineAttributes(line8) {
     line8.align ? ` data-line-align="${escapeHtml(line8.align)}"` : void 0,
     line8.cap ? ` data-line-cap="${escapeHtml(line8.cap)}"` : void 0,
     line8.join ? ` data-line-join="${escapeHtml(line8.join)}"` : void 0,
+    line8.miterLimitRaw != null ? ` data-line-miter-limit-raw="${escapeHtml(String(line8.miterLimitRaw))}"` : void 0,
     line8.dash ? ` data-line-dash="${escapeHtml(line8.dash)}"` : void 0,
     dashMetadata(line8.dash) ? ` data-line-dasharray="${escapeHtml(dashMetadata(line8.dash) ?? "")}"` : void 0,
     line8.width != null ? ` data-line-width="${escapeHtml(String(line8.width))}"` : void 0,
     fill.type ? ` data-line-fill-type="${escapeHtml(fill.type)}"` : void 0,
+    fill.pattern ? ` data-line-pattern="${escapeHtml(fill.pattern)}"` : void 0,
+    fill.foregroundColor ? ` data-line-pattern-foreground-color="${escapeHtml(fill.foregroundColor)}"` : void 0,
+    fill.backgroundColor ? ` data-line-pattern-background-color="${escapeHtml(fill.backgroundColor)}"` : void 0,
     fill.kind ? ` data-line-gradient-kind="${escapeHtml(fill.kind)}"` : void 0,
     fill.angle != null ? ` data-line-gradient-angle="${escapeHtml(String(fill.angle))}"` : void 0,
     Array.isArray(fill.stops) ? ` data-line-gradient-stop-count="${escapeHtml(String(fill.stops.length))}"` : void 0,
@@ -45107,6 +46251,81 @@ function cssNumber5(value) {
   return Number(value.toFixed(4));
 }
 
+// src/render/renderBackgroundCss.ts
+function backgroundDeclarations(fill, assetPrefix) {
+  if (fill?.type !== "image") return [fillToCss(fill)];
+  if (!fill.src || fill.unsupported) return ["background: transparent"];
+  return [
+    `background-image: ${cssUrl(assetPrefix + fill.src)}`,
+    `background-repeat: ${fill.fillMode === "tile" ? "repeat" : "no-repeat"}`,
+    `background-position: ${backgroundImagePosition(fill)}`,
+    `background-size: ${backgroundImageSize(fill)}`
+  ];
+}
+function fillToCss(fill) {
+  if (fill?.type === "solid") return `background: ${fill.color}`;
+  if (fill?.type === "gradient" && Array.isArray(fill.stops)) {
+    const stops = gradientStopsToCss(fill.stops);
+    if (fill.kind === "path") return `background: ${radialGradientCss(fill, stops)}`;
+    const angle = typeof fill.angle === "number" ? fill.angle : 180;
+    return `background: linear-gradient(${angle}deg, ${stops})`;
+  }
+  if (fill?.type === "pattern") return renderPatternFillCss(fill);
+  return "background: transparent";
+}
+function imageFitToCss(fillMode) {
+  if (fillMode === "stretch") return "fill";
+  return "cover";
+}
+function tilePositionToCss(tile) {
+  const [x, y] = tileAlignmentToPercent(tile?.algn);
+  return `${positionAxisToCss(x, tile?.offsetX)} ${positionAxisToCss(y, tile?.offsetY)}`;
+}
+function tileSizeToCss(tile) {
+  const scaleX = finiteNumber2(tile?.scaleX);
+  const scaleY = finiteNumber2(tile?.scaleY);
+  if (scaleX == null && scaleY == null) return "auto";
+  return `${cssNumber6((scaleX ?? 1) * 100)}% ${cssNumber6((scaleY ?? 1) * 100)}%`;
+}
+function backgroundImagePosition(fill) {
+  if (fill.fillMode === "tile") return tilePositionToCss(fill.tile);
+  if (fill.crop) {
+    return `${cropBackgroundPositionAxis(fill.crop.left, fill.crop.right)} ${cropBackgroundPositionAxis(fill.crop.top, fill.crop.bottom)}`;
+  }
+  return "center";
+}
+function backgroundImageSize(fill) {
+  if (fill.fillMode === "tile") return tileSizeToCss(fill.tile);
+  if (fill.crop) return cropBackgroundSize(fill.crop);
+  return fill.fillMode === "stretch" ? "100% 100%" : "cover";
+}
+function cssUrl(value) {
+  return `url("${value.replace(/["\\\n\r\f]/g, "\\$&")}")`;
+}
+function tileAlignmentToPercent(alignment) {
+  if (alignment === "t") return [50, 0];
+  if (alignment === "tr") return [100, 0];
+  if (alignment === "l") return [0, 50];
+  if (alignment === "ctr") return [50, 50];
+  if (alignment === "r") return [100, 50];
+  if (alignment === "bl") return [0, 100];
+  if (alignment === "b") return [50, 100];
+  if (alignment === "br") return [100, 100];
+  return [0, 0];
+}
+function positionAxisToCss(percent2, offset) {
+  const offsetNumber = finiteNumber2(offset) ?? 0;
+  if (offsetNumber === 0) return `${percent2}%`;
+  const operator = offsetNumber < 0 ? "-" : "+";
+  return `calc(${percent2}% ${operator} ${cssNumber6(Math.abs(offsetNumber))}px)`;
+}
+function cssNumber6(value) {
+  return Number(value.toFixed(4)).toString();
+}
+function finiteNumber2(value) {
+  return typeof value === "number" && Number.isFinite(value) ? value : void 0;
+}
+
 // src/render/renderGeometryCss.ts
 function geometryBorderRadiusDeclaration(element) {
   const shapeType = element.shapeType;
@@ -45117,15 +46336,108 @@ function geometryBorderRadiusDeclaration(element) {
 function roundRectRadius(element) {
   const geometry = element.geometry;
   const ratio = typeof geometry?.roundRadiusRatio === "number" ? geometry.roundRadiusRatio : 1 / 6;
-  return cssNumber6(Math.max(0, Math.min(element.box.w, element.box.h) * ratio));
+  return cssNumber7(Math.max(0, Math.min(element.box.w, element.box.h) * ratio));
 }
-function cssNumber6(value) {
+function cssNumber7(value) {
   return Number.isInteger(value) ? String(value) : value.toFixed(2).replace(/\.?0+$/, "");
+}
+
+// src/render/renderImageSourceCss.ts
+function renderImageFillAreaCss(slideId, element) {
+  const crop = element.crop;
+  const fillRect = element.fillRect;
+  if (!crop || element.fillMode === "tile") return "";
+  const rect = imageSourceRectForFillRect(fillRect);
+  if (!rect) return "";
+  const declarations = [
+    "position: absolute",
+    "display: block",
+    "overflow: hidden",
+    `left: ${cssNumber8(rect.left)}%`,
+    `top: ${cssNumber8(rect.top)}%`,
+    `width: ${cssNumber8(rect.width)}%`,
+    `height: ${cssNumber8(rect.height)}%`
+  ];
+  return `[data-slide-id="${slideId}"] [data-element-id="${element.id}"] > .image-fill-area {
+${declarations.map((item) => `  ${item};`).join("\n")}
+}`;
+}
+function renderImageSourceCss(slideId, element) {
+  const crop = element.crop;
+  const fillRect = element.fillRect;
+  if (element.fillMode === "tile") return "";
+  const hasFillArea = Boolean(crop && hasInsetFillRect(fillRect));
+  const sourceRect = crop ? imageSourceRectForCrop(crop) : imageSourceRectForFillRect(fillRect);
+  if (!sourceRect) return "";
+  const declarations = [
+    "position: absolute",
+    `left: ${cssNumber8(sourceRect.left)}%`,
+    `top: ${cssNumber8(sourceRect.top)}%`,
+    `width: ${cssNumber8(sourceRect.width)}%`,
+    `height: ${cssNumber8(sourceRect.height)}%`,
+    "object-fit: fill"
+  ];
+  const selector = hasFillArea ? `[data-slide-id="${slideId}"] [data-element-id="${element.id}"] > .image-fill-area > .image-source` : `[data-slide-id="${slideId}"] [data-element-id="${element.id}"] > .image-source`;
+  return `${selector} {
+${declarations.map((item) => `  ${item};`).join("\n")}
+}`;
+}
+function imageSourceRectForCrop(crop) {
+  const x = cropSourceAxis(crop.left, crop.right);
+  const y = cropSourceAxis(crop.top, crop.bottom);
+  return { left: x.offset, top: y.offset, width: x.size, height: y.size };
+}
+function imageSourceRectForFillRect(fillRect) {
+  if (!hasInsetFillRect(fillRect)) return void 0;
+  const left = finiteNumber3(fillRect?.left) ?? 0;
+  const top = finiteNumber3(fillRect?.top) ?? 0;
+  const right = finiteNumber3(fillRect?.right) ?? 0;
+  const bottom = finiteNumber3(fillRect?.bottom) ?? 0;
+  return {
+    left,
+    top,
+    width: 100 - left - right,
+    height: 100 - top - bottom
+  };
+}
+function hasInsetFillRect(fillRect) {
+  return ["left", "top", "right", "bottom"].some((key) => finiteNumber3(fillRect?.[key]) != null);
+}
+function finiteNumber3(value) {
+  return typeof value === "number" && Number.isFinite(value) ? value : void 0;
+}
+function cssNumber8(value) {
+  return Number(value.toFixed(4)).toString();
+}
+
+// src/render/renderImageElementCss.ts
+function imageElementDeclarations(slideId, element) {
+  const crop = element.crop;
+  const fillRect = element.fillRect;
+  const effects = element.effects ?? {};
+  const fillMode = element.fillMode;
+  const isTile = fillMode === "tile";
+  const tile = element.tile;
+  const hasFillRect = !isTile && hasInsetFillRect(fillRect);
+  const sharpenFilterUrl = pictureSharpenFilterId(slideId, element);
+  const filter = pictureFilterToCss(effects, slideId, element, sharpenFilterUrl ? { sharpenFilterUrl } : {});
+  return [
+    isTile ? "overflow: hidden" : crop || hasFillRect ? "overflow: hidden" : void 0,
+    geometryBorderRadiusDeclaration(element),
+    isTile ? tileFlipCustomProperty(tile) : void 0,
+    isTile ? `background-image: ${imageTileBackgroundImage(tile)}` : void 0,
+    isTile ? "background-repeat: repeat" : void 0,
+    isTile ? `background-position: ${tilePositionToCss(tile)}` : void 0,
+    isTile ? `background-size: ${tileSizeToCss(tile)}` : void 0,
+    !crop && !hasFillRect && fillMode && !isTile ? `object-fit: ${imageFitToCss(fillMode)}` : void 0,
+    effects.alphaModFix?.opacity != null ? `opacity: ${effects.alphaModFix.opacity}` : void 0,
+    filter ? `filter: ${filter}` : void 0
+  ].filter(Boolean);
 }
 
 // src/render/renderParagraphRuns.ts
 function paragraphRunsForRender(paragraph) {
-  const runs = [...paragraph?.runs ?? []];
+  const runs = runsWithTabStops(paragraph);
   const endStyle = paragraph?.endStyle;
   if (hasStyle(endStyle)) {
     runs.push({
@@ -45135,6 +46447,15 @@ function paragraphRunsForRender(paragraph) {
     });
   }
   return runs;
+}
+function runsWithTabStops(paragraph) {
+  const tabStops = Array.isArray(paragraph?.style?.tabStops) ? paragraph.style.tabStops : [];
+  let tabIndex = 0;
+  return (paragraph?.runs ?? []).map((run) => {
+    if (run?.type !== "tab") return run;
+    const tabStop = tabStops[tabIndex++];
+    return tabStop && typeof tabStop === "object" && !Array.isArray(tabStop) ? { ...run, tabStop, tabStopIndex: tabIndex - 1 } : run;
+  });
 }
 function hasStyle(value) {
   return value != null && typeof value === "object" && !Array.isArray(value) && Object.values(value).some((item) => item !== void 0);
@@ -45173,6 +46494,44 @@ function isDirectionMetadataText(text) {
   return text.replace(/[\s\u200b\u200c\u200d\ufeff]/gu, "").length === 0;
 }
 
+// src/render/renderTextFontFamilyCss.ts
+function fontFamilyCssValueForTextStyle(style, text) {
+  const families = [
+    style.symbolFontFamily,
+    style.fontFamily,
+    style.fontFamilyLatin,
+    style.fontFamilyLatinFallback,
+    style.fontFamilyEastAsian,
+    style.fontFamilyComplexScript
+  ].filter((value) => typeof value === "string" && value.trim() !== "");
+  return fontFamilyCssValueForFamilies([...new Set(families)], text);
+}
+function fontFamilyCssValueForFamilies(families, text) {
+  const unique5 = preferLatinFontForLatinText(fontFamiliesWithWebFallbacks(families), text);
+  return unique5.length > 0 ? [...unique5, "var(--font-primary)"].join(", ") : void 0;
+}
+function containsCjk(text) {
+  return typeof text === "string" && /[\u3400-\u9fff\uf900-\ufaff]/u.test(text);
+}
+function preferLatinFontForLatinText(families, text) {
+  if (!isLatinOnlyText(text) || families.length < 2) return families;
+  const first = families[0];
+  if (!first || !isCjkUiFont(first)) return families;
+  const latinIndex = families.findIndex((family) => isCommonLatinFont(family));
+  if (latinIndex <= 0) return families;
+  const latin = families[latinIndex];
+  return [latin, ...families.filter((_, index) => index !== latinIndex)];
+}
+function isLatinOnlyText(text) {
+  return typeof text === "string" && /[A-Za-z0-9]/u.test(text) && !containsCjk(text);
+}
+function isCjkUiFont(fontFamily) {
+  return /(?:Microsoft YaHei|微软雅黑|Noto Sans CJK|Noto Sans SC|Source Han Sans|思源黑体|SimHei|黑体|SimSun|宋体|PingFang SC|Hiragino Sans GB)/i.test(fontFamily);
+}
+function isCommonLatinFont(fontFamily) {
+  return /^(?:Arial|Aptos|Calibri|Helvetica|Segoe UI|Times New Roman|Georgia|Verdana|Tahoma)$/i.test(fontFamily.trim());
+}
+
 // src/render/renderTextFit.ts
 function scaledTextFontSize(fontSize, autoFit) {
   if (typeof fontSize !== "number") return void 0;
@@ -45188,13 +46547,13 @@ function textLineHeight(autoFit) {
 }
 
 // src/render/renderTextCss.ts
-function renderTextScopedCss(slideId, element) {
+function renderTextScopedCss(slideId, element, assetPrefix = "") {
   return [
     renderCounterStyleCss(element),
     renderListRootCss(slideId, element),
     renderParagraphCss(slideId, element),
     renderRunCss(slideId, element),
-    renderListMarkerCss(slideId, element),
+    renderListMarkerCss(slideId, element, assetPrefix),
     renderParagraphBoundaryCss(slideId, element)
   ].filter(Boolean).join("\n\n");
 }
@@ -45245,12 +46604,13 @@ function paragraphStyleDeclarations(style, bullet, text) {
     ...textAlignDeclarations(style.textAlign),
     direction ? `direction: ${direction}` : void 0,
     style.tabSize ? `tab-size: ${style.tabSize}` : void 0,
+    style.tabSize ? `--ppt-tab-leader-width: ${style.tabSize}` : void 0,
     tabStopsCount ? `--ppt-tab-stop-count: ${tabStopsCount}` : void 0,
     tabStops ? `--ppt-tab-stops: "${escapeCssString(tabStops)}"` : void 0,
     style.fontAlign ? `vertical-align: ${fontAlignToCss(String(style.fontAlign))}` : void 0,
     style.eastAsianLineBreak === true ? "line-break: strict" : void 0,
     style.eastAsianLineBreak === false ? "line-break: auto" : void 0,
-    style.latinLineBreak === false ? "word-break: keep-all" : void 0,
+    style.latinLineBreak === false && !containsCjk(text) ? "word-break: keep-all" : void 0,
     style.latinLineBreak === true ? "word-break: normal" : void 0,
     style.hangingPunctuation === true ? "hanging-punctuation: allow-end" : void 0,
     style.marginRight ? `margin-right: ${style.marginRight}` : void 0,
@@ -45258,7 +46618,7 @@ function paragraphStyleDeclarations(style, bullet, text) {
     cssValue(style.marginBottom) ? `margin-bottom: ${cssValue(style.marginBottom)}` : void 0,
     cssValue(style.lineHeight) ? `line-height: ${cssValue(style.lineHeight)}` : void 0
   ].filter(Boolean);
-  if (bullet?.type === "bullet" || bullet?.type === "number") {
+  if (bullet?.type === "bullet" || bullet?.type === "number" || bullet?.type === "image") {
     return [...declarations, ...listItemLayoutDeclarations(style)];
   }
   return [
@@ -45318,7 +46678,7 @@ function renderRunCss(slideId, element) {
   const autoFit = element.text?.bodyStyle?.autoFit;
   return paragraphs.flatMap((paragraph, paragraphIndex) => {
     return paragraphRunsForRender(paragraph).map((run, runIndex) => {
-      const declarations = runStyleDeclarationsForText(run.style ?? {}, autoFit, run.text);
+      const declarations = runStyleDeclarationsForText(run.style ?? {}, autoFit, run.text, paragraph.style ?? {});
       if (declarations.length === 0) return "";
       return `[data-slide-id="${slideId}"] [data-element-id="${element.id}"] [data-paragraph-index="${paragraphIndex}"] [data-run-index="${runIndex}"] {
 ${declarations.map((item) => `  ${item};`).join("\n")}
@@ -45326,23 +46686,24 @@ ${declarations.map((item) => `  ${item};`).join("\n")}
     });
   }).filter(Boolean).join("\n\n");
 }
-function renderListMarkerCss(slideId, element) {
+function renderListMarkerCss(slideId, element, assetPrefix) {
   const paragraphs = element.text?.paragraphs ?? [];
   const autoFit = element.text?.bodyStyle?.autoFit;
   return paragraphs.map((paragraph, index) => {
     const bullet = paragraph?.bullet ?? {};
-    const declarations = listMarkerDeclarations(bullet, firstVisibleRunStyle(paragraph), autoFit);
+    const visibleRun = firstVisibleRun(paragraph);
+    const declarations = listMarkerDeclarations(bullet, visibleRun?.style ?? {}, visibleRun?.text, autoFit, assetPrefix);
     if (declarations.length === 0) return "";
     return `[data-slide-id="${slideId}"] [data-element-id="${element.id}"] [data-paragraph-index="${index}"]::before {
 ${declarations.map((item) => `  ${item};`).join("\n")}
 }`;
   }).filter(Boolean).join("\n\n");
 }
-function listMarkerDeclarations(bullet, textStyle, autoFit) {
+function listMarkerDeclarations(bullet, textStyle, text, autoFit, assetPrefix) {
   if (bullet.type === "bullet" && typeof bullet.char === "string") {
     return [
       ...markerBaseDeclarations(`"${escapeCssString(bullet.char)}"`),
-      ...markerStyleDeclarations(bullet, textStyle, autoFit)
+      ...markerStyleDeclarations(bullet, textStyle, text, autoFit)
     ];
   }
   if (bullet.type === "number") {
@@ -45350,35 +46711,57 @@ function listMarkerDeclarations(bullet, textStyle, autoFit) {
     return [
       "counter-increment: ppt-list",
       ...markerBaseDeclarations(numberFormatContent(format)),
-      ...markerStyleDeclarations(bullet, textStyle, autoFit)
+      ...markerStyleDeclarations(bullet, textStyle, text, autoFit)
+    ];
+  }
+  if (bullet.type === "image" && typeof bullet.src === "string" && bullet.unsupported !== true) {
+    return [
+      ...markerBaseDeclarations('""'),
+      ...markerImageDeclarations(bullet, textStyle, autoFit, assetPrefix)
     ];
   }
   return [];
 }
-function markerStyleDeclarations(bullet, textStyle, autoFit) {
+function markerStyleDeclarations(bullet, textStyle, text, autoFit) {
   const textFontSize = scaledRunFontSize(textStyle, autoFit);
   return [
     markerColorDeclaration(bullet, textStyle),
-    markerFontFamilyDeclaration(bullet, textStyle),
+    markerFontFamilyDeclaration(bullet, textStyle, text),
     typeof bullet.sizeCss === "string" ? `font-size: ${bullet.sizeCss}` : bullet.sizeFollowText ? markerFontSizeDeclaration(textFontSize) : void 0
   ].filter(Boolean);
 }
-function firstVisibleRunStyle(paragraph) {
+function firstVisibleRun(paragraph) {
   const run = paragraphRunsForRender(paragraph).find((item) => item?.text && item.type !== "break" && item.type !== "tab");
-  return run?.style ?? {};
+  return run ? { text: run.text, style: run.style ?? {} } : void 0;
 }
 function markerColorDeclaration(bullet, textStyle) {
   if (typeof bullet.color === "string") return `color: ${bullet.color}`;
   if (!bullet.colorFollowText) return void 0;
   return typeof textStyle.color === "string" ? `color: ${textStyle.color}` : "color: inherit";
 }
-function markerFontFamilyDeclaration(bullet, textStyle) {
-  if (typeof bullet.fontFamily === "string") return `font-family: ${bullet.fontFamily}, var(--font-primary)`;
+function markerFontFamilyDeclaration(bullet, textStyle, text) {
+  if (typeof bullet.fontFamily === "string") return `font-family: ${markerFontFamilyCssValue(bullet.fontFamily)}`;
   if (!bullet.fontFollowText) return void 0;
-  return typeof textStyle.fontFamily === "string" ? `font-family: ${textStyle.fontFamily}, var(--font-primary)` : "font-family: inherit";
+  const value = fontFamilyCssValueForTextStyle2(textStyle, text);
+  return value ? `font-family: ${value}` : "font-family: inherit";
+}
+function markerFontFamilyCssValue(family) {
+  return fontFamilyCssValueForFamilies([family]) ?? "var(--font-primary)";
 }
 function markerFontSizeDeclaration(value) {
   return value != null ? `font-size: ${value}px` : "font-size: inherit";
+}
+function markerImageDeclarations(bullet, textStyle, autoFit, assetPrefix) {
+  const textFontSize = scaledRunFontSize(textStyle, autoFit);
+  const size = typeof bullet.sizeCss === "string" ? bullet.sizeCss : bullet.sizeFollowText && textFontSize != null ? `${textFontSize}px` : "1em";
+  return [
+    `width: ${size}`,
+    `height: ${size}`,
+    `background-image: ${cssUrl2(`${assetPrefix}${bullet.src}`)}`,
+    "background-repeat: no-repeat",
+    "background-position: center",
+    "background-size: contain"
+  ];
 }
 function counterStartValue(value) {
   const number4 = typeof value === "number" ? value : Number(value);
@@ -45414,26 +46797,35 @@ function numberFormatToCss(format) {
 function escapeCssString(value) {
   return value.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
 }
-function runStyleDeclarationsForText(style, autoFit, text) {
+function cssUrl2(value) {
+  return `url("${value.replace(/["\\\n\r\f]/g, "\\$&")}")`;
+}
+function runStyleDeclarationsForText(style, autoFit, text, inheritedStyle = {}) {
   const fontSize = scaledRunFontSize(style, autoFit);
   const decorationStyle = textDecorationStyleToCss(style);
   const textFill = textFillToCss(style.textFill);
   const direction = effectiveCssTextDirection(style.direction, text);
   return [
-    fontFamilyDeclaration(style),
+    fontFamilyDeclaration(style, text),
     fontSize ? `font-size: ${fontSize}px` : void 0,
     style.fontWeight ? `font-weight: ${style.fontWeight}` : void 0,
     style.italic ? "font-style: italic" : void 0,
     style.underline || style.strike ? `text-decoration: ${textDecorationToCss(style)}` : void 0,
     decorationStyle ? `text-decoration-style: ${decorationStyle}` : void 0,
+    style.underline && (style.underlineLineFollowText || style.underlineFillFollowText) ? "text-decoration-color: currentColor" : void 0,
+    underlineColorDeclaration(style),
+    underlineLineThicknessDeclaration(style),
     style.strike === "double" ? "text-decoration-style: double" : void 0,
     style.letterSpacing ? `letter-spacing: ${style.letterSpacing}` : void 0,
     style.kerning != null ? `font-kerning: normal` : void 0,
+    style.kumimoji === true ? "text-combine-upright: all" : void 0,
     style.capitalization === "uppercase" ? "text-transform: uppercase" : void 0,
     style.capitalization === "small-caps" ? "font-variant-caps: small-caps" : void 0,
     typeof style.baseline === "number" ? `vertical-align: ${style.baseline}%` : void 0,
+    typeof style.baseline !== "number" && inheritedStyle.fontAlign ? `vertical-align: ${fontAlignToCss(String(inheritedStyle.fontAlign))}` : void 0,
     style.normalizeHeight ? "font-size-adjust: from-font" : void 0,
     direction ? `direction: ${direction}` : void 0,
+    style.highlightColor ? `background-color: ${style.highlightColor}` : void 0,
     textOutlineToCss(style.textOutline),
     textShadowToCss(style.effects) ? `text-shadow: ${textShadowToCss(style.effects)}` : void 0,
     style.effects?.reflection ? `-webkit-box-reflect: ${reflectionToCss(style.effects.reflection)}` : void 0,
@@ -45441,15 +46833,12 @@ function runStyleDeclarationsForText(style, autoFit, text) {
     !textFill.length && style.color ? `color: ${style.color}` : void 0
   ].filter(Boolean);
 }
-function fontFamilyDeclaration(style) {
-  const families = [
-    style.fontFamily,
-    style.fontFamilyLatin,
-    style.fontFamilyEastAsian,
-    style.fontFamilyComplexScript
-  ].filter((value) => typeof value === "string" && value.trim() !== "");
-  const unique5 = [...new Set(families)];
-  return unique5.length > 0 ? `font-family: ${[...unique5, "var(--font-primary)"].join(", ")}` : void 0;
+function fontFamilyDeclaration(style, text) {
+  const value = fontFamilyCssValueForTextStyle(style, text);
+  return value ? `font-family: ${value}` : void 0;
+}
+function fontFamilyCssValueForTextStyle2(style, text) {
+  return fontFamilyCssValueForTextStyle(style, text);
 }
 function paragraphText(paragraph) {
   return paragraphRunsForRender(paragraph).map((run) => run.text ?? "").join("");
@@ -45473,7 +46862,7 @@ function textOutlineToCss(outline) {
   const value = outline;
   if (value.supportedCss !== true) return void 0;
   if (typeof value.width !== "number" || typeof value.color !== "string") return void 0;
-  return `-webkit-text-stroke: ${cssNumber7(value.width)}px ${value.color}`;
+  return `-webkit-text-stroke: ${cssNumber9(value.width)}px ${value.color}`;
 }
 function renderParagraphBoundaryCss(slideId, element) {
   const bodyStyle = element.text?.bodyStyle ?? {};
@@ -45516,6 +46905,9 @@ function textDecorationToCss(style) {
 }
 function textDecorationStyleToCss(style) {
   if (style.strike) return void 0;
+  if (!style.underline) return void 0;
+  const lineDash = underlineLineDashToCss(style.underlineLine);
+  if (lineDash) return lineDash;
   const underline = String(style.underline ?? "").toLowerCase();
   if (underline === "dbl") return "double";
   if (underline.includes("wavy")) return "wavy";
@@ -45523,7 +46915,27 @@ function textDecorationStyleToCss(style) {
   if (underline.includes("dash")) return "dashed";
   return void 0;
 }
-function cssNumber7(value) {
+function underlineLineDashToCss(line8) {
+  if (!line8 || typeof line8 !== "object") return void 0;
+  const dash = String(line8.dash ?? "").toLowerCase();
+  if (dash === "dot" || dash === "sysdot") return "dotted";
+  if (dash.includes("dash")) return "dashed";
+  return void 0;
+}
+function underlineColorDeclaration(style) {
+  const fill = style.underlineFill;
+  if (!style.underline) return void 0;
+  if (fill?.type === "none") return "text-decoration-color: transparent";
+  if (fill?.type === "solid" && typeof fill.color === "string") return `text-decoration-color: ${fill.color}`;
+  const line8 = style.underlineLine;
+  const lineFill = line8?.fill;
+  return lineFill?.type === "solid" && typeof lineFill.color === "string" ? `text-decoration-color: ${lineFill.color}` : void 0;
+}
+function underlineLineThicknessDeclaration(style) {
+  const line8 = style.underlineLine;
+  return style.underline && typeof line8?.width === "number" && Number.isFinite(line8.width) && line8.width > 0 ? `text-decoration-thickness: ${line8.width}px` : void 0;
+}
+function cssNumber9(value) {
   return Number(value.toFixed(4)).toString();
 }
 
@@ -45555,9 +46967,9 @@ function textBoxDeclarations(element, effectFilter) {
     bodyStyle.forceAntialias ? "-webkit-font-smoothing: antialiased" : void 0,
     typeof bodyStyle.textRotation === "number" ? "transform-origin: center center" : void 0,
     autoFit.type ? `--ppt-text-fit: ${autoFit.type}` : void 0,
-    typeof autoFit.fontScale === "number" ? `--ppt-font-scale: ${cssNumber8(autoFit.fontScale)}` : void 0,
-    typeof autoFit.lineSpaceReduction === "number" ? `--ppt-line-space-reduction: ${cssNumber8(autoFit.lineSpaceReduction)}` : void 0,
-    firstRun.fontFamily ? `font-family: ${firstRun.fontFamily}, var(--font-primary)` : void 0,
+    typeof autoFit.fontScale === "number" ? `--ppt-font-scale: ${cssNumber10(autoFit.fontScale)}` : void 0,
+    typeof autoFit.lineSpaceReduction === "number" ? `--ppt-line-space-reduction: ${cssNumber10(autoFit.lineSpaceReduction)}` : void 0,
+    firstRun.fontFamily ? `font-family: ${fontFamiliesWithWebFallbacks([firstRun.fontFamily]).join(", ")}, var(--font-primary)` : void 0,
     scaledFontSize ? `font-size: ${scaledFontSize}px` : void 0,
     firstRun.fontWeight ? `font-weight: ${firstRun.fontWeight}` : void 0,
     firstRun.color ? `color: ${firstRun.color}` : void 0,
@@ -45650,83 +47062,8 @@ function overflowToCss(value) {
   if (value === "overflow") return "visible";
   return "visible";
 }
-function cssNumber8(value) {
+function cssNumber10(value) {
   return Number(value.toFixed(4)).toString();
-}
-
-// src/render/renderBackgroundCss.ts
-function backgroundDeclarations(fill, assetPrefix) {
-  if (fill?.type !== "image") return [fillToCss(fill)];
-  if (!fill.src || fill.unsupported) return ["background: transparent"];
-  return [
-    `background-image: ${cssUrl(assetPrefix + fill.src)}`,
-    `background-repeat: ${fill.fillMode === "tile" ? "repeat" : "no-repeat"}`,
-    `background-position: ${backgroundImagePosition(fill)}`,
-    `background-size: ${backgroundImageSize(fill)}`
-  ];
-}
-function fillToCss(fill) {
-  if (fill?.type === "solid") return `background: ${fill.color}`;
-  if (fill?.type === "gradient" && Array.isArray(fill.stops)) {
-    const stops = gradientStopsToCss(fill.stops);
-    if (fill.kind === "path") return `background: ${radialGradientCss(fill, stops)}`;
-    const angle = typeof fill.angle === "number" ? fill.angle : 180;
-    return `background: linear-gradient(${angle}deg, ${stops})`;
-  }
-  if (fill?.type === "pattern") return renderPatternFillCss(fill);
-  return "background: transparent";
-}
-function imageFitToCss(fillMode) {
-  if (fillMode === "stretch") return "fill";
-  return "cover";
-}
-function tilePositionToCss(tile) {
-  const [x, y] = tileAlignmentToPercent(tile?.algn);
-  return `${positionAxisToCss(x, tile?.offsetX)} ${positionAxisToCss(y, tile?.offsetY)}`;
-}
-function tileSizeToCss(tile) {
-  const scaleX = finiteNumber2(tile?.scaleX);
-  const scaleY = finiteNumber2(tile?.scaleY);
-  if (scaleX == null && scaleY == null) return "auto";
-  return `${cssNumber9((scaleX ?? 1) * 100)}% ${cssNumber9((scaleY ?? 1) * 100)}%`;
-}
-function backgroundImagePosition(fill) {
-  if (fill.fillMode === "tile") return tilePositionToCss(fill.tile);
-  if (fill.crop) {
-    return `${cropBackgroundPositionAxis(fill.crop.left, fill.crop.right)} ${cropBackgroundPositionAxis(fill.crop.top, fill.crop.bottom)}`;
-  }
-  return "center";
-}
-function backgroundImageSize(fill) {
-  if (fill.fillMode === "tile") return tileSizeToCss(fill.tile);
-  if (fill.crop) return cropBackgroundSize(fill.crop);
-  return fill.fillMode === "stretch" ? "100% 100%" : "cover";
-}
-function cssUrl(value) {
-  return `url("${value.replace(/["\\\n\r\f]/g, "\\$&")}")`;
-}
-function tileAlignmentToPercent(alignment) {
-  if (alignment === "t") return [50, 0];
-  if (alignment === "tr") return [100, 0];
-  if (alignment === "l") return [0, 50];
-  if (alignment === "ctr") return [50, 50];
-  if (alignment === "r") return [100, 50];
-  if (alignment === "bl") return [0, 100];
-  if (alignment === "b") return [50, 100];
-  if (alignment === "br") return [100, 100];
-  return [0, 0];
-}
-function positionAxisToCss(percent2, offset) {
-  const offsetNumber = finiteNumber2(offset) ?? 0;
-  if (offsetNumber === 0) return `${percent2}%`;
-  const operator = offsetNumber < 0 ? "-" : "+";
-  return `calc(${percent2}% ${operator} ${cssNumber9(Math.abs(offsetNumber))}px)`;
-}
-function cssNumber9(value) {
-  return Number(value.toFixed(4)).toString();
-}
-function finiteNumber2(value) {
-  return typeof value === "number" && Number.isFinite(value) ? value : void 0;
 }
 
 // src/render/renderTransformCss.ts
@@ -45902,7 +47239,8 @@ body {
   object-fit: cover;
 }
 
-.image-crop {
+.image-crop,
+.image-fill-rect {
   overflow: hidden;
 }
 
@@ -46079,14 +47417,14 @@ ${slides}
 }
 function renderSlideScopedCss(slide, assetPrefix = "") {
   const background = backgroundDeclarations(slide.background, assetPrefix).map((item) => `  ${item};`).join("\n");
-  const elements = orderedElements(slide.elements).map((element) => renderElementCss(slide.id, element)).join("\n");
+  const elements = orderedElements(slide.elements).map((element) => renderElementCss(slide.id, element, assetPrefix)).join("\n");
   return `[data-slide-id="${slide.id}"] {
 ${background}
 }
 
 ${elements}`;
 }
-function renderElementCss(slideId, element, inheritedFlip = noFlipState) {
+function renderElementCss(slideId, element, assetPrefix = "", inheritedFlip = noFlipState) {
   const readableFlip = element.type === "text" ? textReadableFlipState(element, inheritedFlip) : void 0;
   const declarations = [
     "position: absolute",
@@ -46102,13 +47440,14 @@ function renderElementCss(slideId, element, inheritedFlip = noFlipState) {
   const elementCss = `[data-slide-id="${slideId}"] [data-element-id="${element.id}"] {
 ${declarations.map((item) => `  ${item};`).join("\n")}
 }`;
+  const imageFillAreaCss = element.type === "image" ? renderImageFillAreaCss(slideId, element) : "";
   const imageSourceCss = element.type === "image" ? renderImageSourceCss(slideId, element) : "";
   const imageTileFlipCss = element.type === "image" ? renderImageTileFlipCss(slideId, element) : "";
   const shapeFillTileFlipCss = element.type === "shape" ? renderShapeFillTileFlipCss(slideId, element) : "";
-  const textCss = element.type === "text" ? renderTextScopedCss(slideId, element) : "";
+  const textCss = element.type === "text" ? renderTextScopedCss(slideId, element, assetPrefix) : "";
   const textReadableFlipCss = element.type === "text" ? renderTextReadableFlipCss(slideId, element, readableFlip) : "";
-  const groupCss = element.type === "group" ? groupChildrenCss(slideId, element, inheritedFlip) : "";
-  return [elementCss, imageSourceCss, imageTileFlipCss, shapeFillTileFlipCss, textCss, textReadableFlipCss, groupCss].filter(Boolean).join("\n\n");
+  const groupCss = element.type === "group" ? groupChildrenCss(slideId, element, assetPrefix, inheritedFlip) : "";
+  return [elementCss, imageFillAreaCss, imageSourceCss, imageTileFlipCss, shapeFillTileFlipCss, textCss, textReadableFlipCss, groupCss].filter(Boolean).join("\n\n");
 }
 function textReadableFlipRootDeclarations(readableFlip) {
   if (!readableFlip) return [];
@@ -46141,8 +47480,9 @@ function styleDeclarations(slideId, element) {
   if (element.type === "shape") {
     if (isConnectorGeometry(element.shapeType)) return connectorDeclarations(element);
     const effects = element.effects;
+    const softEdgeFilter = softEdgeFilterUrl(slideId, element);
     if (isShapeSvgElement(element)) {
-      const filter = combineFilterCss(centeredScaledShadowFilterUrl(slideId, element), filterToCss(effects), blurFilterToCss2(effects));
+      const filter = combineFilterCss(centeredScaledShadowFilterUrl(slideId, element), softEdgeFilter, filterToCss(effects), blurFilterToCss2(effects, Boolean(softEdgeFilter)));
       return [
         filter ? `filter: ${filter}` : void 0,
         effects?.reflection ? `-webkit-box-reflect: ${reflectionToCss(effects.reflection)}` : void 0
@@ -46151,7 +47491,7 @@ function styleDeclarations(slideId, element) {
     const fill = element.fill;
     const line8 = element.line;
     const boxShadow = boxShadowWithInnerToCss(effects);
-    const effectFilter = combineFilterCss(centeredScaledShadowFilterUrl(slideId, element), blurFilterToCss2(effects));
+    const effectFilter = combineFilterCss(centeredScaledShadowFilterUrl(slideId, element), softEdgeFilter, blurFilterToCss2(effects, Boolean(softEdgeFilter)));
     const shapeTileFlip = fill?.type === "image" && fill.fillMode === "tile" && tileFlipCustomProperty(fill.tile);
     return [
       shapeTileFlip ? "overflow: hidden" : void 0,
@@ -46177,33 +47517,15 @@ function styleDeclarations(slideId, element) {
     ].filter(Boolean);
   }
   if (element.type === "image") {
-    const crop = element.crop;
-    const effects = element.effects ?? {};
-    const fillMode = element.fillMode;
-    const isTile = fillMode === "tile";
-    const tile = element.tile;
-    const sharpenFilterUrl = pictureSharpenFilterId(slideId, element);
-    const filter = pictureFilterToCss(effects, slideId, element, sharpenFilterUrl ? { sharpenFilterUrl } : {});
-    return [
-      isTile ? "overflow: hidden" : crop ? "overflow: hidden" : void 0,
-      geometryBorderRadiusDeclaration(element),
-      isTile ? tileFlipCustomProperty(tile) : void 0,
-      isTile ? `background-image: ${imageTileBackgroundImage(tile)}` : void 0,
-      isTile ? "background-repeat: repeat" : void 0,
-      isTile ? `background-position: ${tilePositionToCss(tile)}` : void 0,
-      isTile ? `background-size: ${tileSizeToCss(tile)}` : void 0,
-      !crop && fillMode && !isTile ? `object-fit: ${imageFitToCss(fillMode)}` : void 0,
-      effects.alphaModFix?.opacity != null ? `opacity: ${effects.alphaModFix.opacity}` : void 0,
-      filter ? `filter: ${filter}` : void 0
-    ].filter(Boolean);
+    return imageElementDeclarations(slideId, element);
   }
   return [];
 }
-function groupChildrenCss(slideId, element, inheritedFlip) {
+function groupChildrenCss(slideId, element, assetPrefix, inheritedFlip) {
   const children2 = element.children;
   if (!Array.isArray(children2)) return "";
   const nextFlip = nextFlipState(element, inheritedFlip);
-  return orderedElements(children2).map((child2) => renderElementCss(slideId, child2, nextFlip)).filter(Boolean).join("\n\n");
+  return orderedElements(children2).map((child2) => renderElementCss(slideId, child2, assetPrefix, nextFlip)).filter(Boolean).join("\n\n");
 }
 function connectorDeclarations(element) {
   const effects = element.effects;
@@ -46234,10 +47556,10 @@ function innerShadowToCss(shadow) {
   if (shadow?.unsupportedCss === true) return "";
   return `inset ${shadow.x ?? 0}px ${shadow.y ?? 0}px ${shadow.blur ?? 0}px ${shadow.color ?? "rgba(0, 0, 0, 0.25)"}`;
 }
-function blurFilterToCss2(effects) {
+function blurFilterToCss2(effects, skipSoftEdge = false) {
   const filters = [
-    effects?.softEdge?.radius != null ? `blur(${cssNumber10(effects.softEdge.radius)}px)` : void 0,
-    effects?.blur?.radius != null ? `blur(${cssNumber10(effects.blur.radius)}px)` : void 0
+    !skipSoftEdge && effects?.softEdge?.radius != null ? `blur(${cssNumber11(effects.softEdge.radius)}px)` : void 0,
+    effects?.blur?.radius != null ? `blur(${cssNumber11(effects.blur.radius)}px)` : void 0
   ].filter(Boolean);
   return filters.length > 0 ? filters.join(" ") : void 0;
 }
@@ -46245,24 +47567,7 @@ function combineFilterCss(...filters) {
   const values = filters.filter(Boolean);
   return values.length > 0 ? values.join(" ") : void 0;
 }
-function renderImageSourceCss(slideId, element) {
-  const crop = element.crop;
-  if (!crop) return "";
-  const x = cropSourceAxis(crop.left, crop.right);
-  const y = cropSourceAxis(crop.top, crop.bottom);
-  const declarations = [
-    "position: absolute",
-    `left: ${cssNumber10(x.offset)}%`,
-    `top: ${cssNumber10(y.offset)}%`,
-    `width: ${cssNumber10(x.size)}%`,
-    `height: ${cssNumber10(y.size)}%`,
-    "object-fit: fill"
-  ];
-  return `[data-slide-id="${slideId}"] [data-element-id="${element.id}"] > .image-source {
-${declarations.map((item) => `  ${item};`).join("\n")}
-}`;
-}
-function cssNumber10(value) {
+function cssNumber11(value) {
   return Number(value.toFixed(4)).toString();
 }
 
@@ -46322,7 +47627,7 @@ function renderDiagramDrawing(value) {
   if (!width || !height || !Array.isArray(drawing.shapes)) return "";
   const content = drawing.shapes.map((shape) => renderDiagramShape(shape)).filter(Boolean).join("\n");
   if (!content) return "";
-  return `<svg class="diagram-drawing-svg" viewBox="0 0 ${formatNumber28(width)} ${formatNumber28(height)}" role="img" aria-label="SmartArt diagram drawing preview">
+  return `<svg class="diagram-drawing-svg" viewBox="0 0 ${formatNumber30(width)} ${formatNumber30(height)}" role="img" aria-label="SmartArt diagram drawing preview">
 ${content}
     </svg>`;
 }
@@ -46356,7 +47661,7 @@ function renderDiagramShape(value) {
   const stroke = strokeAttrs(shape.line, shape.box);
   const text = renderDiagramText(shape);
   return `      <g ${attrs}>
-        <svg x="0" y="0" width="${formatNumber28(width)}" height="${formatNumber28(height)}" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
+        <svg x="0" y="0" width="${formatNumber30(width)}" height="${formatNumber30(height)}" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
           ${geometryElement2(geometry, fill, stroke)}
         </svg>${text}
       </g>`;
@@ -46370,29 +47675,67 @@ function renderDiagramText(shape) {
   const y = (numberValue(box?.y) ?? numberValue(parent?.y) ?? 0) - (numberValue(parent?.y) ?? 0);
   const width = numberValue(box?.w) ?? numberValue(parent?.w) ?? 0;
   const height = numberValue(box?.h) ?? numberValue(parent?.h) ?? 0;
+  const innerBox = textInnerBox({ x, y, width, height }, shape.text?.bodyStyle);
   const style = firstRunStyle(shape.text);
   const fontSize = (numberValue(style?.fontSize) ?? 14) * 12700;
-  const fontFamily = String(style?.fontFamily ?? diagramStyleRefFontFamily(shape.styleRefs) ?? "Aptos");
+  const fontFamily = fontFamiliesWithWebFallbacks([String(style?.fontFamily ?? diagramStyleRefFontFamily(shape.styleRefs) ?? "Aptos")]).join(", ");
   const color = String(style?.color ?? diagramStyleRefColor(shape.styleRefs, "font") ?? "#111827");
   const weight = style?.fontWeight ?? (style?.bold === true ? 700 : void 0);
   const fontStyle = style?.italic === true ? "italic" : void 0;
+  const alignment = diagramTextAlignment(shape.text);
+  const textX = diagramTextX(innerBox, alignment);
+  const textAnchor = diagramTextAnchor(alignment);
   const attrs = [
-    `x="${formatNumber28(x + width / 2)}"`,
-    `y="${formatNumber28(y + height / 2)}"`,
+    `x="${formatNumber30(textX)}"`,
+    `y="${formatNumber30(innerBox.y + innerBox.height / 2)}"`,
     `fill="${escapeHtml(color)}"`,
     `font-family="${escapeHtml(fontFamily)}"`,
-    `font-size="${formatNumber28(fontSize)}"`,
+    `font-size="${formatNumber30(fontSize)}"`,
     weight ? `font-weight="${escapeHtml(weight)}"` : void 0,
     fontStyle ? `font-style="${fontStyle}"` : void 0,
-    `text-anchor="middle"`,
+    `text-anchor="${textAnchor}"`,
     `dominant-baseline="middle"`,
     attrString8("data-diagram-text-line-count", lines.length > 1 ? lines.length : void 0),
     ...diagramTextMetadataAttrs(shape.text),
     renderAttributes(textBodyAttributePairs(shape.text?.bodyStyle)).trim()
   ].filter(Boolean).join(" ");
-  const content = renderDiagramTextContent(lines, x + width / 2);
+  const content = renderDiagramTextContent(lines, textX);
   return `
         <text class="diagram-text" ${attrs}>${content}</text>`;
+}
+function diagramTextAlignment(text) {
+  const paragraphs = Array.isArray(text?.paragraphs) ? text.paragraphs : [];
+  const paragraph = paragraphs.find((item) => paragraphLines(item).length > 0) ?? paragraphs[0];
+  const value = paragraph?.style?.textAlign;
+  return value === "l" || value === "r" || value === "ctr" ? value : "ctr";
+}
+function diagramTextX(innerBox, alignment) {
+  if (alignment === "l") return innerBox.x;
+  if (alignment === "r") return innerBox.x + innerBox.width;
+  return innerBox.x + innerBox.width / 2;
+}
+function diagramTextAnchor(alignment) {
+  if (alignment === "l") return "start";
+  if (alignment === "r") return "end";
+  return "middle";
+}
+function textInnerBox(box, bodyStyle) {
+  const left = nonNegativeNumber(bodyStyle?.paddingLeftRaw) ?? 0;
+  const right = nonNegativeNumber(bodyStyle?.paddingRightRaw) ?? 0;
+  const top = nonNegativeNumber(bodyStyle?.paddingTopRaw) ?? 0;
+  const bottom = nonNegativeNumber(bodyStyle?.paddingBottomRaw) ?? 0;
+  const horizontalInsetsFit = left + right <= box.width;
+  const verticalInsetsFit = top + bottom <= box.height;
+  return {
+    x: box.x + (horizontalInsetsFit ? left : 0),
+    y: box.y + (verticalInsetsFit ? top : 0),
+    width: horizontalInsetsFit ? box.width - left - right : box.width,
+    height: verticalInsetsFit ? box.height - top - bottom : box.height
+  };
+}
+function nonNegativeNumber(value) {
+  const number4 = numberValue(value);
+  return number4 != null && number4 >= 0 ? number4 : void 0;
 }
 function diagramTextLines(text) {
   const paragraphs = Array.isArray(text?.paragraphs) ? text.paragraphs : [];
@@ -46427,7 +47770,7 @@ function renderDiagramTextContent(lines, x) {
   const firstDy = -(lines.length - 1) * 0.6;
   return lines.map((line8, index) => {
     const dy = index === 0 ? firstDy : 1.2;
-    return `<tspan x="${formatNumber28(x)}" dy="${formatNumber28(dy)}em">${escapeHtml(line8)}</tspan>`;
+    return `<tspan x="${formatNumber30(x)}" dy="${formatNumber30(dy)}em">${escapeHtml(line8)}</tspan>`;
   }).join("");
 }
 function diagramTextMetadataAttrs(text) {
@@ -46586,10 +47929,10 @@ function strokeAttrs(line8, box) {
   }
   return [
     `stroke="${escapeHtml(current.color ?? current.fill?.color ?? "#111827")}"`,
-    `stroke-width="${formatNumber28(width)}"`,
+    `stroke-width="${formatNumber30(width)}"`,
     `stroke-linecap="${svgLineCap(current.cap)}"`,
     `stroke-linejoin="${svgLineJoin(current.join)}"`,
-    attrString8("stroke-miterlimit", miterLimitValue(current.miterLimitRaw)),
+    attrString8("stroke-miterlimit", miterLimitValue2(current.miterLimitRaw)),
     dash ? `stroke-dasharray="${escapeHtml(dash)}"` : void 0,
     ...lineDataAttrs(current, width, dash)
   ].filter(Boolean).join(" ");
@@ -46600,7 +47943,7 @@ function lineDataAttrs(line8, normalizedWidth, dash) {
     attrString8("data-line-visible", line8.visible === false ? "false" : line8.visible === true ? "true" : void 0),
     attrString8("data-line-width", line8.width),
     attrString8("data-line-width-raw", line8.widthRaw),
-    attrString8("data-line-normalized-width", formatNumber28(normalizedWidth)),
+    attrString8("data-line-normalized-width", formatNumber30(normalizedWidth)),
     attrString8("data-line-cap", line8.cap),
     attrString8("data-line-compound", line8.compound),
     attrString8("data-line-align", line8.align),
@@ -46621,9 +47964,9 @@ function normalizedStrokeWidth(line8, box) {
   const basis = Math.min(width && width > 0 ? width : raw, height && height > 0 ? height : raw);
   return basis > 0 ? raw / basis * 100 : 0.75;
 }
-function miterLimitValue(value) {
+function miterLimitValue2(value) {
   const raw = numberValue(value);
-  return raw != null && raw > 0 ? formatNumber28(raw / 1e5) : void 0;
+  return raw != null && raw > 0 ? formatNumber30(raw / 1e5) : void 0;
 }
 function attrString8(name, value) {
   if (value == null || value === false || value === "") return void 0;
@@ -46633,15 +47976,15 @@ function booleanData3(value) {
   return value === true ? "true" : value === false ? "false" : void 0;
 }
 function transformAttr(x, y, width, height, rotation, flipH, flipV) {
-  const translate = `translate(${formatNumber28(x)} ${formatNumber28(y)})`;
-  const rotate = rotation ? ` rotate(${formatNumber28(rotation)} ${formatNumber28(width / 2)} ${formatNumber28(height / 2)})` : "";
+  const translate = `translate(${formatNumber30(x)} ${formatNumber30(y)})`;
+  const rotate = rotation ? ` rotate(${formatNumber30(rotation)} ${formatNumber30(width / 2)} ${formatNumber30(height / 2)})` : "";
   const flip = flipTransform(width, height, flipH, flipV);
   return `transform="${translate}${rotate}${flip}"`;
 }
 function flipTransform(width, height, flipH, flipV) {
-  if (flipH && flipV) return ` translate(${formatNumber28(width)} ${formatNumber28(height)}) scale(-1 -1)`;
-  if (flipH) return ` translate(${formatNumber28(width)} 0) scale(-1 1)`;
-  if (flipV) return ` translate(0 ${formatNumber28(height)}) scale(1 -1)`;
+  if (flipH && flipV) return ` translate(${formatNumber30(width)} ${formatNumber30(height)}) scale(-1 -1)`;
+  if (flipH) return ` translate(${formatNumber30(width)} 0) scale(-1 1)`;
+  if (flipV) return ` translate(0 ${formatNumber30(height)}) scale(1 -1)`;
   return "";
 }
 function firstRunStyle(text) {
@@ -46654,7 +47997,7 @@ function numberValue(value) {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : void 0;
 }
-function formatNumber28(value) {
+function formatNumber30(value) {
   return Number(value.toFixed(3)).toString();
 }
 
@@ -46683,6 +48026,7 @@ function renderFallback(element, assetPrefix) {
     ["data-model-scene", fallback.modelScene ? JSON.stringify(fallback.modelScene) : void 0],
     ["data-model-profile", fallback.modelProfile ? JSON.stringify(fallback.modelProfile) : void 0],
     ["data-model-asset-version", fallback.modelProfile?.assetVersion],
+    ["data-model-asset-generator", fallback.modelProfile?.assetGenerator],
     ["data-model-scene-count", fallback.modelProfile?.sceneCount],
     ["data-model-node-count", fallback.modelProfile?.nodeCount],
     ["data-model-mesh-count", fallback.modelProfile?.meshCount],
@@ -46690,6 +48034,15 @@ function renderFallback(element, assetPrefix) {
     ["data-model-material-count", fallback.modelProfile?.materialCount],
     ["data-model-texture-count", fallback.modelProfile?.textureCount],
     ["data-model-image-count", fallback.modelProfile?.imageCount],
+    ["data-model-animation-count", fallback.modelProfile?.animationCount],
+    ["data-model-skin-count", fallback.modelProfile?.skinCount],
+    ["data-model-camera-count", fallback.modelProfile?.cameraCount],
+    ["data-model-embedded-buffer-count", fallback.modelProfile?.embeddedBufferCount],
+    ["data-model-external-buffer-uri-count", fallback.modelProfile?.externalBufferUriCount],
+    ["data-model-image-buffer-view-count", fallback.modelProfile?.imageBufferViewCount],
+    ["data-model-external-image-uri-count", fallback.modelProfile?.externalImageUriCount],
+    ["data-model-extensions-used", spaceSeparated(fallback.modelProfile?.extensionsUsed)],
+    ["data-model-extensions-required", spaceSeparated(fallback.modelProfile?.extensionsRequired)],
     ["data-model-runtime-risk-notes", spaceSeparated(fallback.modelProfile?.runtimeRiskNotes)],
     ["data-diagram-uri", fallback.diagramUri],
     ["data-diagram-relationship-ids", fallback.sourceRelationshipIds],
@@ -46794,6 +48147,7 @@ ${content}
 var fontFamilyKeys = /* @__PURE__ */ new Set([
   "fontFamily",
   "fontFamilyLatin",
+  "fontFamilyLatinFallback",
   "fontFamilyEastAsian",
   "fontFamilyComplexScript"
 ]);
@@ -46867,34 +48221,13 @@ function googleFontFamiliesForDeck(deck) {
 function googleFontFamiliesForSlide(slide) {
   return googleFontFamiliesForValue(slide);
 }
-function renderGoogleFontsScript(families) {
+function renderGoogleFontsLinks(families) {
   const unique5 = uniqueGoogleFontFamilies(families);
   if (unique5.length === 0) return "";
-  const json2 = JSON.stringify(unique5).replace(/</g, "\\u003c");
-  return `<script type="application/json" id="ppt-google-font-families">${json2}</script>
-  <script>
-  (() => {
-    const node = document.getElementById("ppt-google-font-families");
-    if (!node) return;
-    let families = [];
-    try {
-      families = JSON.parse(node.textContent || "[]");
-    } catch {
-      return;
-    }
-    for (const family of families) {
-      if (typeof family !== "string" || !family.trim()) continue;
-      const link = document.createElement("link");
-      link.rel = "stylesheet";
-      link.href = "https://fonts.googleapis.com/css2?family=" + encodeGoogleFontFamily(family) + "&display=swap";
-      link.dataset.googleFontFamily = family;
-      document.head.appendChild(link);
-    }
-    function encodeGoogleFontFamily(value) {
-      return encodeURIComponent(value.trim()).replace(/%20/g, "+");
-    }
-  })();
-  </script>`;
+  return unique5.map((family) => {
+    const href = `https://fonts.googleapis.com/css2?family=${encodeGoogleFontFamily(family)}&display=swap`;
+    return `<link rel="stylesheet" href="${href}" data-google-font-family="${escapeHtml(family)}">`;
+  }).join("\n  ");
 }
 function googleFontFamiliesForValue(value) {
   const found = /* @__PURE__ */ new Set();
@@ -46911,8 +48244,11 @@ function collectFontFamilies(value, found, seen) {
   }
   for (const [key, nested] of Object.entries(value)) {
     if (fontFamilyKeys.has(key) && typeof nested === "string") {
-      const family = normalizeFontFamily(nested);
+      const family = normalizeFontFamily2(nested);
       if (isGoogleFontCandidate(family)) found.add(family);
+      for (const fallback of webFontFallbackFamilies(family)) {
+        if (isGoogleFontCandidate(fallback)) found.add(fallback);
+      }
       continue;
     }
     collectFontFamilies(nested, found, seen);
@@ -46921,14 +48257,17 @@ function collectFontFamilies(value, found, seen) {
 function uniqueGoogleFontFamilies(families) {
   const byLower = /* @__PURE__ */ new Map();
   for (const family of families) {
-    const normalized = normalizeFontFamily(family);
+    const normalized = normalizeFontFamily2(family);
     if (!isGoogleFontCandidate(normalized)) continue;
     byLower.set(normalized.toLowerCase(), normalized);
   }
   return [...byLower.values()].sort((a, b) => a.localeCompare(b));
 }
-function normalizeFontFamily(value) {
+function normalizeFontFamily2(value) {
   return value.split(",")[0]?.trim().replace(/^['"]|['"]$/g, "").replace(/\s+/g, " ") ?? "";
+}
+function encodeGoogleFontFamily(value) {
+  return encodeURIComponent(value.trim()).replace(/%20/g, "+");
 }
 function isGoogleFontCandidate(family) {
   if (!family) return false;
@@ -46936,6 +48275,263 @@ function isGoogleFontCandidate(family) {
   if (genericFamilies.has(lower) || systemFontFamilies.has(lower)) return false;
   if (family.startsWith("+")) return false;
   return /^[\w .'-]+$/.test(family);
+}
+
+// src/render/renderSoftEdgeAttributes.ts
+function softEdgeAttributePairs(softEdge) {
+  return [
+    ["data-soft-edge-radius", softEdge?.radius],
+    ["data-soft-edge-render-mode", softEdge?.radius != null ? "alpha-mask-filter" : void 0]
+  ];
+}
+
+// src/render/renderSvgPicture.ts
+var svgPictureShapeTypes = [
+  "triangle",
+  "rtTriangle",
+  "diamond",
+  "ellipse",
+  "parallelogram",
+  "pentagon",
+  "hexagon",
+  "octagon",
+  "trapezoid",
+  "homePlate",
+  "chevron",
+  "corner",
+  "halfFrame",
+  "rightArrow",
+  "leftArrow",
+  "upArrow",
+  "downArrow",
+  "heptagon",
+  "decagon",
+  "dodecagon",
+  "round2SameRect",
+  "snip1Rect",
+  "plus",
+  "flowChartConnector",
+  "flowChartMagneticDisk",
+  "leftRightArrow",
+  "upDownArrow",
+  "quadArrow",
+  "rightArrowCallout",
+  "leftArrowCallout",
+  "leftRightArrowCallout",
+  "quadArrowCallout",
+  "upArrowCallout",
+  "flowChartProcess",
+  "round1Rect",
+  "snip2SameRect",
+  "snip2DiagRect",
+  "round2DiagRect",
+  "snipRoundRect",
+  "wedgeRoundRectCallout",
+  "bentUpArrow",
+  "leftUpArrow",
+  "leftRightUpArrow",
+  "bentArrow",
+  "uturnArrow",
+  "curvedRightArrow",
+  "curvedLeftArrow",
+  "curvedUpArrow",
+  "curvedDownArrow",
+  "stripedRightArrow",
+  "notchedRightArrow",
+  "donut",
+  "diagStripe",
+  "pie",
+  "chord",
+  "blockArc",
+  "teardrop",
+  "swooshArrow",
+  "noSmoking",
+  "can",
+  "cube",
+  "bevel",
+  "frame"
+];
+var svgPictureShapeTypeSet = new Set(svgPictureShapeTypes);
+function canRenderSvgPicture(element) {
+  return svgPictureShapeType(element) != null && element.fillMode !== "tile" && !hasInsetFillRect2(element.fillRect);
+}
+function renderSvgPicture(element, attrs, assetPrefix) {
+  const crop = element.crop ?? {};
+  const x = cropSourceAxis(crop.left, crop.right);
+  const y = cropSourceAxis(crop.top, crop.bottom);
+  const shapeType = svgPictureShapeType(element) ?? "triangle";
+  const clipId = `${element.id}-picture-clip`;
+  const alt = escapeHtml(element.alt);
+  return `    <svg class="image image-vector image-${escapeHtml(shapeType)}"${attrs} viewBox="0 0 100 100" preserveAspectRatio="none" role="img" aria-label="${alt}">
+      <defs>
+        <clipPath id="${escapeHtml(clipId)}" clipPathUnits="userSpaceOnUse">${clipPathShape(shapeType, element)}</clipPath>
+      </defs>
+      <image href="${escapeHtml(assetPrefix + element.src)}" x="${x.offset}" y="${y.offset}" width="${x.size}" height="${y.size}" preserveAspectRatio="none" clip-path="url(#${escapeHtml(clipId)})"></image>
+    </svg>`;
+}
+function svgPictureShapeType(element) {
+  const shapeType = element.shapeType;
+  if (isSvgPictureShapeType(shapeType)) return shapeType;
+  const geometryType = element.geometry?.type;
+  return isSvgPictureShapeType(geometryType) ? geometryType : void 0;
+}
+function isSvgPictureShapeType(value) {
+  return typeof value === "string" && svgPictureShapeTypeSet.has(value);
+}
+function clipPathShape(shapeType, element) {
+  return clipPathGeometry(presetShapeGeometry(shapeType, element));
+}
+function clipPathGeometry(geometry) {
+  if (geometry.tag === "compound") return geometry.parts.filter((part) => part.fill !== false).map(clipPathGeometryPart).join("");
+  return clipPathGeometryPart(geometry);
+}
+function clipPathGeometryPart(geometry) {
+  if (geometry.tag === "ellipse") return '<ellipse cx="50" cy="50" rx="50" ry="50"></ellipse>';
+  if (geometry.tag === "polygon") return `<polygon points="${escapeHtml(geometry.points ?? "")}"></polygon>`;
+  const fillRule = geometry.fillRule ? ` clip-rule="${geometry.fillRule}"` : "";
+  return `<path d="${escapeHtml(geometry.d ?? "")}"${fillRule}></path>`;
+}
+function hasInsetFillRect2(fillRect) {
+  return ["left", "top", "right", "bottom"].some((key) => typeof fillRect?.[key] === "number" && Number.isFinite(fillRect[key]));
+}
+
+// src/render/renderImageElement.ts
+function renderImage(element, assetPrefix) {
+  const effects = element.effects ?? {};
+  const alpha = effects.alphaModFix;
+  const grayscale = effects.grayscale;
+  const biLevel = effects.biLevel;
+  const luminance = effects.luminance;
+  const duotone = effects.duotone;
+  const outerShadow = effects.outerShadow;
+  const glow = effects.glow;
+  const colorTemperature = effects.colorTemperature;
+  const sharpenSoften = effects.sharpenSoften;
+  const backgroundRemoval = effects.backgroundRemoval;
+  const crop = element.crop;
+  const fillRect = element.fillRect;
+  const fillMode = element.fillMode;
+  const tile = element.tile;
+  const isTile = fillMode === "tile";
+  const hasFillRect = !isTile && hasInsetFillRect3(fillRect);
+  const className = ["image", element.role === "heroImage" ? "hero-image" : void 0, isTile ? "image-tile" : void 0, hasFillRect ? "image-fill-rect" : void 0].filter(Boolean).join(" ");
+  const src = escapeHtml(assetPrefix + element.src);
+  const rawSrc = assetPrefix + element.src;
+  const attrs = renderAttributes([
+    ["data-element-id", element.id],
+    ["data-role", element.role],
+    ...sourceShapeAttributePairs(element),
+    ...geometryAttributePairs(element),
+    ["data-fill-mode", fillMode],
+    ["data-tile-tx", tile?.tx],
+    ["data-tile-ty", tile?.ty],
+    ["data-tile-sx", tile?.sx],
+    ["data-tile-sy", tile?.sy],
+    ["data-tile-flip", tile?.flip],
+    ["data-tile-algn", tile?.algn],
+    ["data-tile-offset-x", tile?.offsetX],
+    ["data-tile-offset-y", tile?.offsetY],
+    ["data-tile-scale-x", tile?.scaleX],
+    ["data-tile-scale-y", tile?.scaleY],
+    ["data-crop-left", crop?.left],
+    ["data-crop-top", crop?.top],
+    ["data-crop-right", crop?.right],
+    ["data-crop-bottom", crop?.bottom],
+    ["data-fill-rect-enabled", fillRect?.enabled === true ? "true" : void 0],
+    ["data-fill-rect-left", fillRect?.left],
+    ["data-fill-rect-top", fillRect?.top],
+    ["data-fill-rect-right", fillRect?.right],
+    ["data-fill-rect-bottom", fillRect?.bottom],
+    ["data-raster-fallback", booleanData4(element.rasterFallback)],
+    ["data-fallback-reason", element.fallbackReason],
+    ["data-source-element-count", element.sourceElementCount],
+    ["data-alpha-mod-fix", alpha?.amount],
+    ["data-grayscale", booleanData4(grayscale?.enabled)],
+    ["data-bi-level", booleanData4(biLevel?.enabled)],
+    ["data-bi-level-thresh", biLevel?.thresh],
+    ["data-bi-level-threshold", biLevel?.threshold],
+    ["data-bi-level-render-mode", biLevel?.renderMode],
+    ["data-luminance", booleanData4(luminance?.enabled)],
+    ["data-luminance-bright", luminance?.bright],
+    ["data-luminance-contrast", luminance?.contrast],
+    ["data-css-brightness", luminance?.brightness],
+    ["data-css-contrast", luminance?.cssContrast],
+    ["data-duotone-colors", Array.isArray(duotone?.colors) ? duotone.colors.join(" ") : void 0],
+    ["data-duotone-render-mode", duotone?.renderMode],
+    ["data-color-temperature", colorTemperature?.value],
+    ["data-color-temperature-unsupported-css", colorTemperature?.unsupportedCss === true ? "true" : void 0],
+    ["data-sharpen-soften", sharpenSoften?.amount],
+    ["data-sharpen-soften-css-blur", sharpenSoften?.cssBlur],
+    ["data-sharpen-soften-svg-sharpen", sharpenSoften?.svgSharpen],
+    ["data-sharpen-soften-unsupported-css", sharpenSoften?.unsupportedCss === true ? "true" : void 0],
+    ...backgroundRemovalAttributePairs(backgroundRemoval),
+    ...shadowAttributePairs(outerShadow),
+    ...softEdgeAttributePairs(effects.softEdge),
+    ["data-glow-radius", glow?.radius],
+    ["data-glow-color", glow?.color],
+    ["data-picture-effect-order", Array.isArray(effects.effectOrder) ? effects.effectOrder.join(" ") : void 0],
+    ...directSourceEffectAttributePairs(element.directSourceEffects),
+    ...pictureEffectLayerAttributePairs(element.effectLayerSources, assetPrefix),
+    ["style", isTile ? `--ppt-image-url: ${cssUrl3(rawSrc)};` : void 0]
+  ]);
+  const alt = escapeHtml(element.alt);
+  if (canRenderSvgPicture(element)) return renderSvgPicture(element, attrs, assetPrefix);
+  if (isTile) {
+    return `    <div class="${className}"${attrs}><img class="image-source" src="${src}" alt="${alt}"></div>`;
+  }
+  if (crop && hasFillRect) {
+    const cropClassName = [className, "image-crop"].filter(Boolean).join(" ");
+    return `    <div class="${cropClassName}"${attrs}><span class="image-fill-area"><img class="image-source" src="${src}" alt="${alt}"></span></div>`;
+  }
+  if (crop) {
+    const cropClassName = [className, "image-crop"].filter(Boolean).join(" ");
+    return `    <div class="${cropClassName}"${attrs}><img class="image-source" src="${src}" alt="${alt}"></div>`;
+  }
+  if (hasFillRect) {
+    return `    <div class="${className}"${attrs}><img class="image-source" src="${src}" alt="${alt}"></div>`;
+  }
+  return `    <img class="${className}"${attrs} src="${src}" alt="${alt}">`;
+}
+function hasImageFill(element) {
+  return element.fill?.type === "image";
+}
+function cssUrl3(value) {
+  return `url("${value.replace(/["\\\n\r\f]/g, "\\$&")}")`;
+}
+function hasInsetFillRect3(fillRect) {
+  return ["left", "top", "right", "bottom"].some((key) => finiteNumber4(fillRect?.[key]) != null);
+}
+function finiteNumber4(value) {
+  return typeof value === "number" && Number.isFinite(value) ? value : void 0;
+}
+function booleanData4(value) {
+  return value === true ? "true" : value === false ? "false" : void 0;
+}
+
+// src/render/renderLineAttributes.ts
+function lineAttributePairs(element) {
+  const line8 = element.line ?? element.style?.line ?? {};
+  const fill = line8.fill ?? {};
+  return [
+    ["data-line-compound", line8.compound],
+    ["data-line-align", line8.align],
+    ["data-line-cap", line8.cap],
+    ["data-line-join", line8.join],
+    ["data-line-miter-limit-raw", line8.miterLimitRaw],
+    ["data-line-dash", line8.dash],
+    ["data-line-width", line8.width],
+    ["data-line-fill-type", fill.type],
+    ["data-line-pattern", fill.pattern],
+    ["data-line-pattern-foreground-color", fill.foregroundColor],
+    ["data-line-pattern-background-color", fill.backgroundColor],
+    ["data-line-gradient-kind", fill.kind],
+    ["data-line-gradient-angle", fill.angle],
+    ["data-line-gradient-stop-count", Array.isArray(fill.stops) ? fill.stops.length : void 0],
+    ["data-line-gradient-scaled", booleanData5(fill.scaled)]
+  ];
+}
+function booleanData5(value) {
+  return value === true ? "true" : value === false ? "false" : void 0;
 }
 
 // src/render/renderMedia.ts
@@ -46990,7 +48586,8 @@ function renderRun(run, index, options) {
     return `<a class="run-link"${attrs} href="${escapeHtml(hyperlink.href)}" target="_blank" rel="noopener noreferrer">${content}</a>`;
   }
   if (hyperlink?.safe === true && hyperlink.action === "go-to-slide") {
-    return `<a class="run-link"${attrs}>${content}</a>`;
+    const href = typeof hyperlink.target === "string" ? options.slideHrefForTarget?.(hyperlink.target) : void 0;
+    return href ? `<a class="run-link"${attrs} href="${escapeHtml(href)}">${content}</a>` : `<a class="run-link"${attrs}>${content}</a>`;
   }
   return `<span${attrs}>${content}</span>`;
 }
@@ -47009,18 +48606,26 @@ function renderRunAttributes(run, index, options) {
   const textOutline = style.textOutline;
   const textOutlineFill = textOutline?.fill;
   const textFill = style.textFill;
+  const underlineLineFill = style.underlineLine?.fill;
   const direction = effectiveTextDirection(style.direction, run.text);
+  const tabStop = run.type === "tab" ? run.tabStop : void 0;
   const attrs = [
     ["data-run-index", index],
     ["data-run-type", run.type],
+    ["data-tab-stop-index", tabStop ? run.tabStopIndex : void 0],
+    ["data-tab-stop-pos", tabStop?.pos],
+    ["data-tab-stop-align", tabStop?.algn],
+    ["data-tab-stop-leader", tabStop?.leader],
     ["data-field-id", field.id],
     ["data-field-type", field.type],
     ["lang", style.language],
     ["dir", direction],
     ["data-direction-raw", style.directionRaw],
+    ["data-highlight-color", style.highlightColor],
     ["data-font-family", style.fontFamily],
     ["data-font-family-latin", style.fontFamilyLatin],
     ["data-font-family-latin-raw", style.fontFamilyLatinRaw],
+    ["data-font-family-latin-fallback", style.fontFamilyLatinFallback],
     ["data-font-family-latin-panose", style.fontFamilyLatinPanose],
     ["data-font-family-latin-charset", style.fontFamilyLatinCharset],
     ["data-font-family-east-asian", style.fontFamilyEastAsian],
@@ -47034,17 +48639,32 @@ function renderRunAttributes(run, index, options) {
     ["data-font-size", style.fontSize],
     ["data-font-size-px", style.fontSizePx],
     ["data-font-size-raw", style.fontSizeRaw],
-    ["data-bold", booleanData4(style.bold)],
+    ["data-bold", booleanData6(style.bold)],
     ["data-bold-raw", style.boldRaw],
-    ["data-italic", booleanData4(style.italic)],
+    ["data-italic", booleanData6(style.italic)],
     ["data-italic-raw", style.italicRaw],
     ["data-alt-lang", style.alternateLanguage],
-    ["data-dirty", booleanData4(style.dirty)],
-    ["data-smt-clean", booleanData4(style.smtClean)],
-    ["data-kumimoji", booleanData4(style.kumimoji)],
-    ["data-no-proof", booleanData4(style.noProof)],
-    ["data-error", booleanData4(style.error)],
+    ["data-dirty", booleanData6(style.dirty)],
+    ["data-smt-clean", booleanData6(style.smtClean)],
+    ["data-kumimoji", booleanData6(style.kumimoji)],
+    ["data-no-proof", booleanData6(style.noProof)],
+    ["data-error", booleanData6(style.error)],
     ["data-underline-type", style.underlineType],
+    ["data-underline-line-width", style.underlineLine?.width],
+    ["data-underline-line-width-raw", style.underlineLine?.widthRaw],
+    ["data-underline-line-dash", style.underlineLine?.dash],
+    ["data-underline-line-fill-type", underlineLineFill?.type],
+    ["data-underline-line-fill-color", underlineLineFill?.color],
+    ["data-underline-line-fill-color-source", underlineLineFill?.colorSource],
+    ["data-underline-line-fill-color-scheme", underlineLineFill?.colorScheme],
+    ["data-underline-line-fill-color-resolved", underlineLineFill?.colorResolved],
+    ["data-underline-line-follow-text", booleanData6(style.underlineLineFollowText)],
+    ["data-underline-fill-follow-text", booleanData6(style.underlineFillFollowText)],
+    ["data-underline-fill-type", style.underlineFill?.type],
+    ["data-underline-fill-color", style.underlineFill?.color],
+    ["data-underline-fill-color-source", style.underlineFill?.colorSource],
+    ["data-underline-fill-color-scheme", style.underlineFill?.colorScheme],
+    ["data-underline-fill-color-resolved", style.underlineFill?.colorResolved],
     ["data-strike", style.strike],
     ["data-strike-type", style.strikeType],
     ["data-baseline", style.baseline],
@@ -47056,13 +48676,13 @@ function renderRunAttributes(run, index, options) {
     ["data-kerning-raw", style.kerningRaw],
     ["data-capitalization", style.capitalization],
     ["data-capitalization-type", style.capitalizationType],
-    ["data-normalize-height", booleanData4(style.normalizeHeight)],
+    ["data-normalize-height", booleanData6(style.normalizeHeight)],
     ["data-normalize-height-raw", style.normalizeHeightRaw],
     ["data-text-fill-type", style.textFillType],
     ["data-text-fill-gradient-kind", textFill?.kind],
     ["data-text-fill-gradient-angle", textFill?.angle],
     ["data-text-fill-gradient-stop-count", Array.isArray(textFill?.stops) ? textFill.stops.length : void 0],
-    ["data-text-fill-gradient-scaled", booleanData4(textFill?.scaled)],
+    ["data-text-fill-gradient-scaled", booleanData6(textFill?.scaled)],
     ["data-text-outline-type", textOutline?.type],
     ["data-text-outline-color", textOutline?.color],
     ["data-text-outline-color-source", textOutline?.colorSource],
@@ -47075,15 +48695,15 @@ function renderRunAttributes(run, index, options) {
     ["data-text-outline-gradient-kind", textOutlineFill?.kind],
     ["data-text-outline-gradient-angle", textOutlineFill?.angle],
     ["data-text-outline-gradient-stop-count", Array.isArray(textOutlineFill?.stops) ? textOutlineFill.stops.length : void 0],
-    ["data-text-outline-gradient-scaled", booleanData4(textOutlineFill?.scaled)],
-    ["data-text-outline-supported-svg", booleanData4(textOutline?.supportedSvg)],
+    ["data-text-outline-gradient-scaled", booleanData6(textOutlineFill?.scaled)],
+    ["data-text-outline-supported-svg", booleanData6(textOutline?.supportedSvg)],
     ["data-symbol-font-family", style.symbolFontFamily],
     ["data-symbol-char", style.symbolChar],
     ["data-hyperlink-type", hyperlink?.type],
     ["data-hyperlink-trigger", hyperlink?.trigger],
     ["data-hyperlink-url", hyperlink?.href],
-    ["data-hyperlink-safe", booleanData4(hyperlink?.safe)],
-    ["data-hyperlink-history", booleanData4(hyperlink?.history)],
+    ["data-hyperlink-safe", booleanData6(hyperlink?.safe)],
+    ["data-hyperlink-history", booleanData6(hyperlink?.history)],
     ["data-hyperlink-relationship-id", hyperlink?.relationshipId],
     ["data-hyperlink-raw-target", hyperlink?.rawTarget],
     ["data-hyperlink-target-mode", hyperlink?.targetMode],
@@ -47091,18 +48711,32 @@ function renderRunAttributes(run, index, options) {
     ["data-action", hyperlink?.action],
     ["data-action-target", hyperlink?.target],
     ["title", hyperlink?.tooltip],
-    ["style", options.inlineStyle ? inlineRunStyle(style, options.autoFit, run.text) : void 0]
+    ["style", runStyleAttribute(style, options, run.text, tabStop)]
   ];
   return renderAttributes2(attrs);
 }
-function inlineRunStyle(style, autoFit, text) {
-  const declarations = runStyleDeclarationsForText(style, autoFit, text);
+function runStyleAttribute(style, options, text, tabStop) {
+  const declarations = [
+    ...options.inlineStyle ? runStyleDeclarationsForText(style, options.autoFit, text, options.inheritedStyle) : [],
+    ...tabLeaderDeclarations(tabStop)
+  ];
   return declarations.length > 0 ? `${declarations.join("; ")};` : void 0;
+}
+function tabLeaderDeclarations(tabStop) {
+  if (tabStop?.leader !== "dot") return [];
+  return [
+    "display: inline-block",
+    "width: var(--ppt-tab-leader-width, 4em)",
+    "min-width: 1em",
+    "height: 0.75em",
+    "border-bottom: 1px dotted currentColor",
+    "vertical-align: baseline"
+  ];
 }
 function renderAttributes2(attrs) {
   return attrs.filter(([, value]) => value != null && value !== false && value !== "").map(([name, value]) => ` ${name}="${escapeHtml(value)}"`).join("");
 }
-function booleanData4(value) {
+function booleanData6(value) {
   return value === true ? "true" : value === false ? "false" : void 0;
 }
 function hasVisibleGlyph(value) {
@@ -47132,6 +48766,7 @@ function shapeImageFillAttributePairs(fill, assetPrefix) {
   const crop = fill?.crop;
   const fillRect = fill?.fillRect;
   const effects = fill?.effects ?? {};
+  const grayscale = effects.grayscale;
   const luminance = effects.luminance;
   const saturation = effects.saturation;
   const colorTemperature = effects.colorTemperature;
@@ -47164,6 +48799,7 @@ function shapeImageFillAttributePairs(fill, assetPrefix) {
     ["data-fill-rect-top", fillRect?.top],
     ["data-fill-rect-right", fillRect?.right],
     ["data-fill-rect-bottom", fillRect?.bottom],
+    ["data-fill-grayscale", grayscale?.enabled === true ? "true" : void 0],
     ["data-fill-luminance", luminance?.enabled === true ? "true" : void 0],
     ["data-fill-luminance-bright", luminance?.bright],
     ["data-fill-luminance-contrast", luminance?.contrast],
@@ -47175,6 +48811,7 @@ function shapeImageFillAttributePairs(fill, assetPrefix) {
     ["data-fill-color-temperature-unsupported-css", colorTemperature?.unsupportedCss === true ? "true" : void 0],
     ["data-fill-sharpen-soften", sharpenSoften?.amount],
     ["data-fill-sharpen-soften-css-blur", sharpenSoften?.cssBlur],
+    ["data-fill-sharpen-soften-svg-sharpen", sharpenSoften?.svgSharpen],
     ["data-fill-sharpen-soften-unsupported-css", sharpenSoften?.unsupportedCss === true ? "true" : void 0],
     ...backgroundRemovalAttributePairs(backgroundRemoval, "data-fill-background-removal"),
     ["data-fill-picture-effect-order", Array.isArray(effects.effectOrder) ? effects.effectOrder.join(" ") : void 0],
@@ -47185,7 +48822,7 @@ function shapeImageFillAttributePairs(fill, assetPrefix) {
 }
 function shapeImageFillStyle(fill, assetPrefix) {
   if (fill?.type !== "image" || !fill.src || fill.unsupported) return void 0;
-  const imageUrl = cssUrl2(assetPrefix + fill.src);
+  const imageUrl = cssUrl4(assetPrefix + fill.src);
   const flipProperty = tileFlipCustomProperty(fill.tile);
   const declarations = [
     fill.fillMode === "tile" && flipProperty ? `--ppt-shape-fill-url: ${imageUrl}` : void 0,
@@ -47203,7 +48840,7 @@ function shapeImagePosition(fill) {
   if (fill.crop) {
     return `${cropPositionAxis(fill.crop.left, fill.crop.right)} ${cropPositionAxis(fill.crop.top, fill.crop.bottom)}`;
   }
-  if (hasInsetFillRect(fill.fillRect)) return fillRectPosition(fill.fillRect);
+  if (hasInsetFillRect4(fill.fillRect)) return fillRectPosition(fill.fillRect);
   return "center";
 }
 function shapeImageSize(fill) {
@@ -47211,7 +48848,7 @@ function shapeImageSize(fill) {
   if (fill.crop) {
     return cropBackgroundSize(fill.crop);
   }
-  if (hasInsetFillRect(fill.fillRect)) return fillRectSize(fill.fillRect);
+  if (hasInsetFillRect4(fill.fillRect)) return fillRectSize(fill.fillRect);
   return fill.fillMode === "stretch" ? "100% 100%" : "cover";
 }
 function cropPositionAxis(start, end) {
@@ -47222,21 +48859,21 @@ function tilePositionToCss2(tile) {
   return `${positionAxisToCss2(x, tile?.offsetX)} ${positionAxisToCss2(y, tile?.offsetY)}`;
 }
 function tileSizeToCss2(tile) {
-  const scaleX = finiteNumber3(tile?.scaleX);
-  const scaleY = finiteNumber3(tile?.scaleY);
+  const scaleX = finiteNumber5(tile?.scaleX);
+  const scaleY = finiteNumber5(tile?.scaleY);
   if (scaleX == null && scaleY == null) return "auto";
-  return `${cssNumber11((scaleX ?? 1) * 100)}% ${cssNumber11((scaleY ?? 1) * 100)}%`;
+  return `${cssNumber12((scaleX ?? 1) * 100)}% ${cssNumber12((scaleY ?? 1) * 100)}%`;
 }
-function hasInsetFillRect(fillRect) {
-  return ["left", "top", "right", "bottom"].some((key) => finiteNumber3(fillRect?.[key]) != null);
+function hasInsetFillRect4(fillRect) {
+  return ["left", "top", "right", "bottom"].some((key) => finiteNumber5(fillRect?.[key]) != null);
 }
 function fillRectPosition(fillRect) {
-  return `left ${cssNumber11(finiteNumber3(fillRect?.left) ?? 0)}% top ${cssNumber11(finiteNumber3(fillRect?.top) ?? 0)}%`;
+  return `left ${cssNumber12(finiteNumber5(fillRect?.left) ?? 0)}% top ${cssNumber12(finiteNumber5(fillRect?.top) ?? 0)}%`;
 }
 function fillRectSize(fillRect) {
-  const width = 100 - (finiteNumber3(fillRect?.left) ?? 0) - (finiteNumber3(fillRect?.right) ?? 0);
-  const height = 100 - (finiteNumber3(fillRect?.top) ?? 0) - (finiteNumber3(fillRect?.bottom) ?? 0);
-  return `${cssNumber11(width)}% ${cssNumber11(height)}%`;
+  const width = 100 - (finiteNumber5(fillRect?.left) ?? 0) - (finiteNumber5(fillRect?.right) ?? 0);
+  const height = 100 - (finiteNumber5(fillRect?.top) ?? 0) - (finiteNumber5(fillRect?.bottom) ?? 0);
+  return `${cssNumber12(width)}% ${cssNumber12(height)}%`;
 }
 function tileAlignmentToPercent2(alignment) {
   if (alignment === "t") return [50, 0];
@@ -47250,18 +48887,18 @@ function tileAlignmentToPercent2(alignment) {
   return [0, 0];
 }
 function positionAxisToCss2(percent2, offset) {
-  const offsetNumber = finiteNumber3(offset) ?? 0;
+  const offsetNumber = finiteNumber5(offset) ?? 0;
   if (offsetNumber === 0) return `${percent2}%`;
   const operator = offsetNumber < 0 ? "-" : "+";
-  return `calc(${percent2}% ${operator} ${cssNumber11(Math.abs(offsetNumber))}px)`;
+  return `calc(${percent2}% ${operator} ${cssNumber12(Math.abs(offsetNumber))}px)`;
 }
-function finiteNumber3(value) {
+function finiteNumber5(value) {
   return typeof value === "number" && Number.isFinite(value) ? value : void 0;
 }
-function cssNumber11(value) {
+function cssNumber12(value) {
   return Number(value.toFixed(4)).toString();
 }
-function cssUrl2(value) {
+function cssUrl4(value) {
   return `url("${value.replace(/["\\\n\r\f]/g, "\\$&")}")`;
 }
 
@@ -47281,7 +48918,7 @@ function renderSlideZoom(element, assetPrefix) {
     ["data-target-slide-ref", zoom.targetSlideRef],
     ["data-creation-id", zoom.creationId],
     ["data-zoom-id", zoom.zoomId],
-    ["data-return-to-parent", booleanData5(zoom.returnToParent)],
+    ["data-return-to-parent", booleanData7(zoom.returnToParent)],
     ["data-transition-duration-ms", zoom.transitionDurationMs]
   ]);
   const image = zoom.src ? `<img class="slide-zoom-preview" src="${escapeHtml(assetPrefix + zoom.src)}" alt="${escapeHtml(zoom.alt ?? "Slide zoom preview")}">` : "";
@@ -47291,34 +48928,17 @@ function slideZoomHref(targetSlideRef, assetPrefix) {
   if (typeof targetSlideRef !== "string" || targetSlideRef.length === 0) return void 0;
   return assetPrefix === "../" ? `./${targetSlideRef}.html` : `#${targetSlideRef}`;
 }
-function booleanData5(value) {
+function booleanData7(value) {
   return value === true ? "true" : value === false ? "false" : void 0;
 }
 
-// src/render/renderSvgPicture.ts
-function canRenderSvgPicture(element) {
-  return element.shapeType === "triangle" && element.fillMode !== "tile";
-}
-function renderSvgPicture(element, attrs, assetPrefix) {
-  const crop = element.crop ?? {};
-  const x = cropSourceAxis(crop.left, crop.right);
-  const y = cropSourceAxis(crop.top, crop.bottom);
-  const clipId = `${element.id}-picture-clip`;
-  const alt = escapeHtml(element.alt);
-  return `    <svg class="image image-vector image-${escapeHtml(String(element.shapeType))}"${attrs} viewBox="0 0 100 100" preserveAspectRatio="none" role="img" aria-label="${alt}">
-      <defs>
-        <clipPath id="${escapeHtml(clipId)}" clipPathUnits="userSpaceOnUse"><polygon points="50,0 100,100 0,100"></polygon></clipPath>
-      </defs>
-      <image href="${escapeHtml(assetPrefix + element.src)}" x="${x.offset}" y="${y.offset}" width="${x.size}" height="${y.size}" preserveAspectRatio="none" clip-path="url(#${escapeHtml(clipId)})"></image>
-    </svg>`;
-}
-
 // src/render/renderTable.ts
-function renderTable(element) {
+function renderTable(element, options = {}) {
   const rows = (element.rows ?? []).map((row, rowIndex) => {
-    const cells = (row.cells ?? []).map((cell, cellIndex) => `<td${renderTableCellAttributes(cell)}>${renderTableCellContent(cell, `${element.id}-r-${rowIndex}-c-${cellIndex}`)}</td>`).join("");
-    return `<tr>${cells}</tr>`;
+    const cells = (row.cells ?? []).map((cell, cellIndex) => `<td${renderTableCellAttributes(cell)}>${renderTableCellContent(cell, `${element.id}-r-${rowIndex}-c-${cellIndex}`, options)}</td>`).join("");
+    return `<tr${renderTableRowAttributes(row)}>${cells}</tr>`;
   }).join("");
+  const colgroup = renderTableColGroup(element.columns);
   const style = element.style;
   const attrs = renderAttributes3([
     ["data-element-id", element.id],
@@ -47326,7 +48946,28 @@ function renderTable(element) {
     ...sourceShapeAttributePairs(element),
     ...tableMetadataAttributePairs(style)
   ]);
-  return `    <table class="${tableClassName(style)}"${attrs}><tbody>${rows}</tbody></table>`;
+  return `    <table class="${tableClassName(style)}"${attrs}>${colgroup}<tbody>${rows}</tbody></table>`;
+}
+function renderTableRowAttributes(row) {
+  const height = Number(row?.height);
+  const finiteHeight = Number.isFinite(height) ? height : void 0;
+  return renderAttributes3([
+    ["data-row-height", finiteHeight],
+    ["style", finiteHeight != null && finiteHeight > 0 ? `height: ${emuToCssPx4(finiteHeight)};` : void 0]
+  ]);
+}
+function renderTableColGroup(columns) {
+  if (!Array.isArray(columns) || columns.length === 0) return "";
+  const cols = columns.map((width) => renderTableColumn(width)).join("");
+  return cols ? `<colgroup>${cols}</colgroup>` : "";
+}
+function renderTableColumn(width) {
+  const emu = typeof width === "number" ? width : Number(width);
+  if (!Number.isFinite(emu)) return "";
+  return `<col${renderAttributes3([
+    ["data-column-width", emu],
+    ["style", emu > 0 ? `width: ${emuToCssPx4(emu)};` : void 0]
+  ])}>`;
 }
 function tableClassName(style) {
   const options = style?.options ?? {};
@@ -47344,12 +48985,12 @@ function tableMetadataAttributePairs(style) {
   const options = style?.options ?? {};
   return [
     ["data-table-style-id", style?.styleId],
-    ["data-table-band-row", booleanData6(options.bandRow)],
-    ["data-table-band-col", booleanData6(options.bandCol)],
-    ["data-table-first-row", booleanData6(options.firstRow)],
-    ["data-table-last-row", booleanData6(options.lastRow)],
-    ["data-table-first-col", booleanData6(options.firstCol)],
-    ["data-table-last-col", booleanData6(options.lastCol)]
+    ["data-table-band-row", booleanData8(options.bandRow)],
+    ["data-table-band-col", booleanData8(options.bandCol)],
+    ["data-table-first-row", booleanData8(options.firstRow)],
+    ["data-table-last-row", booleanData8(options.lastRow)],
+    ["data-table-first-col", booleanData8(options.firstCol)],
+    ["data-table-last-col", booleanData8(options.lastCol)]
   ];
 }
 function renderTableCellAttributes(cell) {
@@ -47365,7 +49006,9 @@ function renderTableCellAttributes(cell) {
     ["data-col-span", colSpan > 1 ? colSpan : void 0],
     ["data-row-span", rowSpan > 1 ? rowSpan : void 0],
     ["data-cell-anchor", style.verticalAlign],
-    ["data-cell-anchor-ctr", booleanData6(style.anchorCenter)],
+    ["data-cell-anchor-ctr", booleanData8(style.anchorCenter)],
+    ["data-cell-right-to-left", booleanData8(style.rightToLeft)],
+    ["data-cell-right-to-left-raw", style.rightToLeftRaw],
     ["data-fill-type", fill.type],
     ["data-fill-color", fill.color],
     ["data-fill-color-source", fill.colorSource],
@@ -47378,7 +49021,7 @@ function renderTableCellAttributes(cell) {
     ["data-cell-text-font-family", textStyle.fontFamily],
     ["data-cell-text-font-family-source", textStyle.fontFamilySource],
     ["data-cell-text-font-family-ref", textStyle.fontFamilyRef],
-    ["data-cell-text-bold", booleanData6(textStyle.bold)],
+    ["data-cell-text-bold", booleanData8(textStyle.bold)],
     ["data-cell-text-bold-raw", textStyle.boldRaw],
     ...tableBorderAttributePairs("left", borders.left),
     ...tableBorderAttributePairs("right", borders.right),
@@ -47389,28 +49032,146 @@ function renderTableCellAttributes(cell) {
   ];
   return renderAttributes3(attrs);
 }
-function renderTableCellContent(cell, cellId) {
+function renderTableCellContent(cell, cellId, options) {
   const textBody = cell.textBody;
   const paragraphs = textBody?.paragraphs ?? [];
   if (paragraphs.length === 0) return escapeHtml(cell.text ?? "");
   const autoFit = textBody?.bodyStyle?.autoFit;
+  let numberValue2;
   const content = paragraphs.map((paragraph, index) => {
-    return `<span class="table-paragraph paragraph"${renderTableParagraphAttributes(paragraph, index, autoFit)}>${renderRuns(paragraphRunsForRender(paragraph), { inlineStyle: true, autoFit, gradientIdPrefix: `${cellId}-p-${index}` })}</span>`;
+    const runs = paragraphRunsForRender(paragraph);
+    numberValue2 = nextTableNumberValue(paragraph?.bullet, numberValue2);
+    const marker = renderTableParagraphMarker(paragraph, numberValue2, autoFit);
+    return `<span class="table-paragraph paragraph"${renderTableParagraphAttributes(paragraph, index, paragraphs.length, textBody?.bodyStyle)}>${marker}${renderRuns(runs, { inlineStyle: true, autoFit, inheritedStyle: paragraph?.style ?? {}, gradientIdPrefix: `${cellId}-p-${index}`, slideHrefForTarget: options.slideHrefForTarget })}</span>`;
   }).join("");
   return `<div class="table-cell-content"${renderTableTextBodyAttributes(textBody?.bodyStyle)}>${content}</div>`;
+}
+function renderTableParagraphMarker(paragraph, numberValue2, autoFit) {
+  const bullet = paragraph?.bullet ?? {};
+  const text = tableMarkerText(bullet, numberValue2);
+  if (!text) return "";
+  const visibleRun = firstVisibleRun2(paragraph);
+  const declarations = tableMarkerStyleDeclarations(bullet, visibleRun?.style ?? {}, visibleRun?.text, autoFit);
+  const attrs = [
+    ["class", "table-marker"],
+    ["aria-hidden", "true"],
+    ["style", declarations.length > 0 ? `${declarations.join("; ")};` : void 0]
+  ];
+  return `<span${renderAttributes3(attrs)}>${escapeHtml(text)}</span>`;
+}
+function nextTableNumberValue(bullet, previous) {
+  if (bullet?.type !== "number") return previous;
+  return tableMarkerStartValue(bullet.startAt) ?? (previous == null ? 1 : previous + 1);
+}
+function tableMarkerText(bullet, numberValue2) {
+  if (bullet.type === "bullet" && typeof bullet.char === "string") return bullet.char;
+  if (bullet.type !== "number" || numberValue2 == null) return void 0;
+  const format = typeof bullet.format === "string" ? bullet.format : "arabicPeriod";
+  const number4 = tableMarkerNumber(numberValue2, format);
+  if (!number4) return void 0;
+  if (format.includes("ParenBoth")) return `(${number4}) `;
+  if (format.includes("ParenR")) return `${number4}) `;
+  if (format.includes("Period")) return `${number4}. `;
+  return `${number4} `;
+}
+function tableMarkerNumber(value, format) {
+  if (!Number.isInteger(value) || value < 1) return void 0;
+  if (format.startsWith("alphaLc")) return alphaMarker(value, "abcdefghijklmnopqrstuvwxyz");
+  if (format.startsWith("alphaUc")) return alphaMarker(value, "ABCDEFGHIJKLMNOPQRSTUVWXYZ");
+  if (format.startsWith("romanLc")) return romanMarker(value).toLowerCase();
+  if (format.startsWith("romanUc")) return romanMarker(value);
+  return String(value);
+}
+function alphaMarker(value, alphabet) {
+  let remaining = value;
+  let result = "";
+  while (remaining > 0) {
+    remaining -= 1;
+    result = alphabet[remaining % alphabet.length] + result;
+    remaining = Math.floor(remaining / alphabet.length);
+  }
+  return result;
+}
+function romanMarker(value) {
+  const pairs = [
+    [1e3, "M"],
+    [900, "CM"],
+    [500, "D"],
+    [400, "CD"],
+    [100, "C"],
+    [90, "XC"],
+    [50, "L"],
+    [40, "XL"],
+    [10, "X"],
+    [9, "IX"],
+    [5, "V"],
+    [4, "IV"],
+    [1, "I"]
+  ];
+  let remaining = Math.min(value, 3999);
+  let result = "";
+  for (const [amount, letter] of pairs) {
+    while (remaining >= amount) {
+      result += letter;
+      remaining -= amount;
+    }
+  }
+  return result;
+}
+function tableMarkerStyleDeclarations(bullet, textStyle, text, autoFit) {
+  const textFontSize = scaledRunFontSize(textStyle, autoFit);
+  return [
+    "position: absolute",
+    "left: 0",
+    "top: 0",
+    "min-width: 1.1em",
+    "transform: translateX(-100%)",
+    "padding-right: 0.3em",
+    "text-align: right",
+    markerColorDeclaration2(bullet, textStyle),
+    markerFontFamilyDeclaration2(bullet, textStyle, text),
+    typeof bullet.sizeCss === "string" ? `font-size: ${bullet.sizeCss}` : bullet.sizeFollowText ? markerFontSizeDeclaration2(textFontSize) : void 0
+  ].filter(Boolean);
+}
+function firstVisibleRun2(paragraph) {
+  const run = paragraphRunsForRender(paragraph).find((item) => item?.text && item.type !== "break" && item.type !== "tab");
+  return run ? { text: run.text, style: run.style ?? {} } : void 0;
+}
+function markerColorDeclaration2(bullet, textStyle) {
+  if (typeof bullet.color === "string") return `color: ${bullet.color}`;
+  if (!bullet.colorFollowText) return void 0;
+  return typeof textStyle.color === "string" ? `color: ${textStyle.color}` : "color: inherit";
+}
+function markerFontFamilyDeclaration2(bullet, textStyle, text) {
+  if (typeof bullet.fontFamily === "string") return `font-family: ${markerFontFamilyCssValue2(bullet.fontFamily)}`;
+  if (!bullet.fontFollowText) return void 0;
+  const value = fontFamilyCssValueForTextStyle(textStyle, text);
+  return value ? `font-family: ${value}` : "font-family: inherit";
+}
+function markerFontFamilyCssValue2(family) {
+  return fontFamilyCssValueForTextStyle({ fontFamily: family }) ?? "var(--font-primary)";
+}
+function markerFontSizeDeclaration2(value) {
+  return value != null ? `font-size: ${value}px` : "font-size: inherit";
+}
+function tableMarkerStartValue(value) {
+  const number4 = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(number4) ? number4 : void 0;
 }
 function renderTableTextBodyAttributes(bodyStyle) {
   return renderAttributes3(textBodyAttributePairs(bodyStyle));
 }
-function renderTableParagraphAttributes(paragraph, index, autoFit) {
+function renderTableParagraphAttributes(paragraph, index, paragraphCount, bodyStyle) {
   const style = paragraph?.style ?? {};
   const bullet = paragraph?.bullet ?? {};
   const text = paragraphRunsForRender(paragraph).map((run) => run.text ?? "").join("");
   const declarations = paragraphStyleDeclarations(style, bullet, text);
+  const autoFit = bodyStyle?.autoFit;
   const autoFitLineHeight = tableAutoFitLineHeight(autoFit);
   if (autoFitLineHeight != null && !declarations.some((item) => item.startsWith("line-height:"))) {
     declarations.push(`line-height: ${autoFitLineHeight}`);
   }
+  declarations.push(...tableParagraphBoundaryDeclarations(index, paragraphCount, bodyStyle));
   const direction = effectiveTextDirection(style.direction, text);
   const attrs = [
     ["data-paragraph-index", index],
@@ -47421,16 +49182,20 @@ function renderTableParagraphAttributes(paragraph, index, autoFit) {
     ["data-bullet-type", bullet.type],
     ["data-bullet-char", bullet.type === "bullet" ? bullet.char : void 0],
     ["data-bullet-color", bullet.color],
-    ["data-bullet-color-follow-text", booleanData6(bullet.colorFollowText)],
+    ["data-bullet-color-follow-text", booleanData8(bullet.colorFollowText)],
     ["data-bullet-font-family", bullet.fontFamily],
     ["data-bullet-font-charset", bullet.fontCharset],
     ["data-bullet-font-pitch-family", bullet.fontPitchFamily],
-    ["data-bullet-font-follow-text", booleanData6(bullet.fontFollowText)],
+    ["data-bullet-font-follow-text", booleanData8(bullet.fontFollowText)],
     ["data-bullet-size-type", bullet.sizeType],
     ["data-bullet-size-raw", bullet.sizeRaw],
     ["data-bullet-size-value", bullet.sizeValue],
     ["data-bullet-size-css", bullet.sizeCss],
-    ["data-bullet-size-follow-text", booleanData6(bullet.sizeFollowText)],
+    ["data-bullet-size-follow-text", booleanData8(bullet.sizeFollowText)],
+    ["data-bullet-image-src", bullet.type === "image" ? bullet.src : void 0],
+    ["data-bullet-image-relationship-id", bullet.type === "image" ? bullet.relationshipId : void 0],
+    ["data-bullet-image-media-type", bullet.type === "image" ? bullet.mediaType : void 0],
+    ["data-bullet-image-unsupported", bullet.type === "image" ? booleanData8(bullet.unsupported) : void 0],
     ["data-number-format", bullet.type === "number" ? bullet.format : void 0],
     ["data-number-start", bullet.type === "number" ? bullet.startAt : void 0],
     ["data-text-align", style.textAlign],
@@ -47449,6 +49214,13 @@ function renderTableParagraphAttributes(paragraph, index, autoFit) {
     ["style", declarations.length > 0 ? `${declarations.join("; ")};` : void 0]
   ];
   return renderAttributes3(attrs);
+}
+function tableParagraphBoundaryDeclarations(index, paragraphCount, bodyStyle) {
+  if (bodyStyle?.spacingFirstLastParagraph !== false) return [];
+  return [
+    index === 0 ? "margin-top: 0" : void 0,
+    index === paragraphCount - 1 ? "margin-bottom: 0" : void 0
+  ].filter(Boolean);
 }
 function tableAutoFitLineHeight(autoFit) {
   if (autoFit?.type !== "normal" || typeof autoFit.lineSpaceReduction !== "number" || !Number.isFinite(autoFit.lineSpaceReduction)) return void 0;
@@ -47478,6 +49250,9 @@ function tableCellStyle(style) {
     style.paddingTop ? `padding-top: ${style.paddingTop}` : void 0,
     style.paddingBottom ? `padding-bottom: ${style.paddingBottom}` : void 0,
     tableVerticalAlignDeclaration(style),
+    ...tableCellDirectionDeclarations(style),
+    ...tableHorizontalOverflowDeclarations(style.metadata?.horzOverflow),
+    ...tableVerticalTextDeclarations(style.metadata?.vert),
     tableBorderDeclaration("left", style.borders?.left),
     tableBorderDeclaration("right", style.borders?.right),
     tableBorderDeclaration("top", style.borders?.top),
@@ -47485,9 +49260,39 @@ function tableCellStyle(style) {
   ].filter(Boolean);
   return declarations.length > 0 ? `${declarations.join("; ")};` : void 0;
 }
+function tableHorizontalOverflowDeclarations(value) {
+  if (value === "clip") return ["overflow: hidden"];
+  if (value === "overflow") return ["overflow: visible"];
+  if (value === "ellipsis") return ["overflow: hidden", "text-overflow: ellipsis", "white-space: nowrap"];
+  return [];
+}
+function tableVerticalTextDeclarations(value) {
+  const verticalText = tableVerticalTextValue(value);
+  if (!verticalText || verticalText === "horz") return [];
+  const textOrientation = verticalText === "wordArtVert" || verticalText === "wordArtVertRtl" || verticalText === "eaVert" ? "upright" : "mixed";
+  return [
+    "writing-mode: vertical-rl",
+    `text-orientation: ${textOrientation}`,
+    `--ppt-table-cell-vertical-text: ${verticalText}`
+  ];
+}
+function tableVerticalTextValue(value) {
+  return typeof value === "string" && ["horz", "vert", "vert270", "wordArtVert", "wordArtVertRtl", "eaVert"].includes(value) ? value : void 0;
+}
+function tableCellDirectionDeclarations(style) {
+  if (typeof style.rightToLeft !== "boolean") return [];
+  return [`direction: ${style.rightToLeft ? "rtl" : "ltr"}`, "unicode-bidi: isolate"];
+}
 function tableFillDeclaration(fill) {
   if (fill?.type === "solid" && fill.color) return `background-color: ${fill.color}`;
   if (fill?.type === "none") return "background-color: transparent";
+  if (fill?.type === "gradient" && Array.isArray(fill.stops)) {
+    const stops = gradientStopsToCss(fill.stops);
+    if (fill.kind === "path") return `background: ${radialGradientCss(fill, stops)}`;
+    const angle = typeof fill.angle === "number" ? fill.angle : 180;
+    return `background: linear-gradient(${angle}deg, ${stops})`;
+  }
+  if (fill?.type === "pattern") return renderPatternFillCss(fill);
   return void 0;
 }
 function tableVerticalAlignDeclaration(style) {
@@ -47510,31 +49315,45 @@ function tableBorderDeclaration(side, line8) {
 function renderAttributes3(attrs) {
   return attrs.filter(([, value]) => value != null && value !== false && value !== "").map(([name, value]) => ` ${name}="${escapeHtml(value)}"`).join("");
 }
-function booleanData6(value) {
+function booleanData8(value) {
   return value === true ? "true" : value === false ? "false" : void 0;
 }
 function kebabCase(value) {
   return value.replace(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`);
 }
+function emuToCssPx4(value) {
+  return `${Math.round(value / 914400 * 96 * 100) / 100}px`;
+}
 
 // src/render/renderTextWarp.ts
 function renderTextWarpSvg(element, text) {
   const bodyStyle = text?.bodyStyle ?? {};
-  if (bodyStyle.textWarp !== "textArchUp") return "";
+  if (!basicTextWarpPresets.has(bodyStyle.textWarp)) return "";
   if (Array.isArray(bodyStyle.textWarpAdjustments) && bodyStyle.textWarpAdjustments.length > 0) return "";
   const content = textWarpPlainText(text);
   if (!content.trim()) return "";
   const width = Math.max(1, Math.round(element.box.w));
   const height = Math.max(1, Math.round(element.box.h));
-  const pathId = `${element.id}-text-arch-up-path`;
-  const startY = Math.round(height * 0.72);
-  const controlY = Math.round(height * 0.08);
-  const inset = Math.max(4, Math.round(width * 0.04));
-  const d = `M ${inset} ${startY} Q ${Math.round(width / 2)} ${controlY} ${Math.max(inset, width - inset)} ${startY}`;
+  const warp = String(bodyStyle.textWarp);
+  const pathId = `${element.id}-${warp.replace(/[A-Z]/g, (match) => `-${match.toLowerCase()}`)}-path`;
+  const d = textWarpPath(warp, width, height);
   return `<svg class="text-warp-svg" viewBox="0 0 ${width} ${height}" preserveAspectRatio="none" aria-hidden="true" direction="ltr" data-text-warp-render-mode="basicSvg">
       <defs><path id="${escapeHtml(pathId)}" d="${escapeHtml(d)}"></path></defs>
       <text class="text-warp-path-text" dominant-baseline="middle" text-anchor="middle" direction="ltr" unicode-bidi="isolate"><textPath href="#${escapeHtml(pathId)}" startOffset="50%" direction="ltr" unicode-bidi="isolate">${escapeHtml(content)}</textPath></text>
     </svg>`;
+}
+function textWarpPath(warp, width, height) {
+  if (warp === "textCircle") {
+    const cx = Math.round(width / 2);
+    const cy = Math.round(height / 2);
+    const radius = Math.max(4, Math.round(Math.min(width, height) * 0.42));
+    return `M ${cx} ${cy - radius} A ${radius} ${radius} 0 1 1 ${cx - 0.01} ${cy - radius} Z`;
+  }
+  const archDown = warp === "textArchDown";
+  const startY = Math.round(height * (archDown ? 0.28 : 0.72));
+  const controlY = Math.round(height * (archDown ? 0.92 : 0.08));
+  const inset = Math.max(4, Math.round(width * 0.04));
+  return `M ${inset} ${startY} Q ${Math.round(width / 2)} ${controlY} ${Math.max(inset, width - inset)} ${startY}`;
 }
 function textWarpPlainText(text) {
   const paragraphs = Array.isArray(text?.paragraphs) ? text.paragraphs : [];
@@ -47543,33 +49362,38 @@ function textWarpPlainText(text) {
     return paragraphRunsForRender(paragraph).filter((run) => run.type !== "endParaRPr").map((run) => run.type === "tab" ? "	" : run.text ?? "").join("");
   }).join("\n");
 }
+var basicTextWarpPresets = /* @__PURE__ */ new Set(["textArchUp", "textArchDown", "textCircle"]);
 
 // src/render/renderHtml.ts
-function renderDeckHtml(deck) {
+function renderDeckHtml(deck, options = {}) {
+  const context = renderContextForDeck(deck, "deck");
   const slides = deck.slides.map((slide) => {
-    return renderSlideSection(slide, "");
+    return renderSlideSection(slide, "", context);
   }).join("\n\n");
   return renderDocument({
     title: deck.source.fileName,
     stylesheetHref: "./styles.css",
     googleFontFamilies: googleFontFamiliesForDeck(deck),
     includeEcharts: hasCharts(deck),
+    echartsScriptSrc: options.echartsScriptSrc,
     body: `<main class="deck" data-template-version="${deck.version}">
 ${slides}
 </main>`
   });
 }
-function renderSlideHtml(deck, slideId) {
+function renderSlideHtml(deck, slideId, options = {}) {
   const slide = deck.slides.find((item) => item.id === slideId);
   if (!slide) throw new Error(`Unknown slide id: ${slideId}`);
+  const context = renderContextForDeck(deck, "single");
   return renderDocument({
     title: `${deck.source.fileName} - ${slide.id}`,
     stylesheetHref: "../styles.css",
     googleFontFamilies: googleFontFamiliesForSlide(slide),
     includeEcharts: hasCharts(slide),
+    echartsScriptSrc: options.echartsScriptSrc,
     inlineStyle: renderSlideScopedCss(slide, "../"),
     body: `<main class="deck deck-single" data-template-version="${deck.version}">
-${renderSlideSection(slide, "../")}
+${renderSlideSection(slide, "../", context)}
 </main>`
   });
 }
@@ -47595,9 +49419,9 @@ function renderDocument(input) {
 ${input.inlineStyle}
   </style>` : "";
   const googleFonts = input.googleFontFamilies ? `
-  ${renderGoogleFontsScript(input.googleFontFamilies)}` : "";
+  ${renderGoogleFontsLinks(input.googleFontFamilies)}` : "";
   const echarts = input.includeEcharts ? `
-  ${renderEchartsRuntimeScripts()}` : "";
+  ${renderEchartsRuntimeScripts(input.echartsScriptSrc)}` : "";
   return `<!doctype html>
 <html lang="zh-CN">
 <head>
@@ -47612,8 +49436,32 @@ ${input.body}
 </html>
 `;
 }
-function renderSlideSection(slide, assetPrefix) {
-  const elements = orderedElements(slide.elements).map((element) => renderElement(element, assetPrefix, noFlipState)).join("\n");
+function renderContextForDeck(deck, mode) {
+  const slideIdsByPath = /* @__PURE__ */ new Map();
+  const slideIdsByIndex = /* @__PURE__ */ new Map();
+  for (const slide of deck.slides) {
+    if (typeof slide.sourcePath === "string") slideIdsByPath.set(normalizeSlideTarget(slide.sourcePath), slide.id);
+    slideIdsByPath.set(`ppt/slides/slide${slide.index}.xml`, slide.id);
+    slideIdsByIndex.set(slide.index, slide.id);
+  }
+  return {
+    slideHrefForTarget(target) {
+      const normalized = normalizeSlideTarget(target);
+      const slideId = slideIdsByPath.get(normalized) ?? slideIdsByIndex.get(slideIndexFromTarget(normalized));
+      if (!slideId) return void 0;
+      return mode === "deck" ? `#${slideId}` : `./${slideId}.html`;
+    }
+  };
+}
+function normalizeSlideTarget(target) {
+  return target.replace(/^\/+/, "").replace(/\\/g, "/");
+}
+function slideIndexFromTarget(target) {
+  const match = /(?:^|\/)slide(\d+)\.xml$/i.exec(target);
+  return match ? Number(match[1]) : NaN;
+}
+function renderSlideSection(slide, assetPrefix, context) {
+  const elements = orderedElements(slide.elements).map((element) => renderElement(element, assetPrefix, noFlipState, context)).join("\n");
   const pictureFilters = renderPictureFilterDefs(slide);
   const effectFilters = renderEffectFilterDefs(slide);
   const content = [pictureFilters, effectFilters, elements].filter(Boolean).join("\n");
@@ -47644,14 +49492,14 @@ function slideBackgroundAttributePairs(background, assetPrefix) {
     ["data-background-gradient-angle", background?.angle],
     ["data-background-gradient-path", background?.path],
     ["data-background-gradient-stop-count", Array.isArray(background?.stops) ? background.stops.length : void 0],
-    ["data-background-gradient-scaled", booleanData7(background?.scaled)],
-    ["data-background-gradient-rot-with-shape", booleanData7(background?.rotateWithShape)],
+    ["data-background-gradient-scaled", booleanData9(background?.scaled)],
+    ["data-background-gradient-rot-with-shape", booleanData9(background?.rotateWithShape)],
     ["data-background-gradient-flip", background?.flip],
     ["data-background-gradient-fill-to-rect", gradientFillToRect ? JSON.stringify(gradientFillToRect) : void 0],
     ["data-background-gradient-tile-rect", background?.tileRect ? JSON.stringify(background.tileRect) : void 0],
     ["data-background-theme-style-source", background?.themeStyleSource],
     ["data-background-theme-style-index", background?.themeStyleIndex],
-    ["data-background-inherited", booleanData7(background?.inherited)],
+    ["data-background-inherited", booleanData9(background?.inherited)],
     ["data-background-inherited-source", background?.inheritedSource],
     ["data-background-unsupported", background?.unsupported === true ? "true" : void 0],
     ["data-background-reason", background?.reason],
@@ -47676,119 +49524,70 @@ function slideBackgroundAttributePairs(background, assetPrefix) {
     ["data-background-tile-scale-y", tile?.scaleY]
   ];
 }
-function renderElement(element, assetPrefix, inheritedFlip) {
+function renderElement(element, assetPrefix, inheritedFlip, context) {
   if (element.hidden) return "";
+  let rendered;
   switch (element.type) {
     case "text":
-      return renderText(element, assetPrefix, inheritedFlip);
+      rendered = renderText(element, assetPrefix, inheritedFlip, context);
+      break;
     case "image":
-      return renderImage(element, assetPrefix);
+      rendered = renderImage(element, assetPrefix);
+      break;
     case "shape":
-      if (isConnectorGeometry(element.shapeType)) return renderConnectorSvg(element);
-      if (isShapeSvgElement(element) && (!hasImageFill(element) || canRenderShapeSvgImageFill(element))) return renderShapeSvg(element, assetPrefix);
-      return `    <div class="shape shape-${escapeHtml(element.shapeType)}"${renderShapeAttributes(element, assetPrefix)}></div>`;
+      if (isConnectorGeometry(element.shapeType)) rendered = renderConnectorSvg(element);
+      else if (isShapeSvgElement(element) && (!hasImageFill(element) || canRenderShapeSvgImageFill(element))) rendered = renderShapeSvg(element, assetPrefix);
+      else rendered = `    <div class="shape shape-${escapeHtml(element.shapeType)}"${renderShapeAttributes(element, assetPrefix)}></div>`;
+      break;
     case "connector":
-      return renderConnectorSvg(element);
+      rendered = renderConnectorSvg(element);
+      break;
     case "group":
-      return renderGroup(element, assetPrefix, (child2, childAssetPrefix) => {
-        return renderElement(child2, childAssetPrefix, nextFlipState(element, inheritedFlip));
+      rendered = renderGroup(element, assetPrefix, (child2, childAssetPrefix) => {
+        return renderElement(child2, childAssetPrefix, nextFlipState(element, inheritedFlip), context);
       });
+      break;
     case "table":
-      return renderTable(element);
+      rendered = renderTable(element, { slideHrefForTarget: context.slideHrefForTarget });
+      break;
     case "chart":
-      return renderChartFigure(element);
+      rendered = renderChartFigure(element);
+      break;
     case "slideZoom":
-      return renderSlideZoom(element, assetPrefix);
+      rendered = renderSlideZoom(element, assetPrefix);
+      break;
     case "video":
     case "audio":
-      return renderMedia(element, assetPrefix);
+      rendered = renderMedia(element, assetPrefix);
+      break;
     case "fallback":
-      return renderFallback(element, assetPrefix);
+      rendered = renderFallback(element, assetPrefix);
+      break;
     default:
-      return `    <div class="fallback" data-element-id="${element.id}" data-role="fallback"></div>`;
+      rendered = `    <div class="fallback" data-element-id="${element.id}" data-role="fallback"></div>`;
+      break;
   }
+  return wrapElementHyperlink(element, rendered, context);
 }
-function renderImage(element, assetPrefix) {
-  const effects = element.effects ?? {};
-  const alpha = effects.alphaModFix;
-  const grayscale = effects.grayscale;
-  const luminance = effects.luminance;
-  const duotone = effects.duotone;
-  const outerShadow = effects.outerShadow;
-  const glow = effects.glow;
-  const colorTemperature = effects.colorTemperature;
-  const sharpenSoften = effects.sharpenSoften;
-  const backgroundRemoval = effects.backgroundRemoval;
-  const crop = element.crop;
-  const fillMode = element.fillMode;
-  const tile = element.tile;
-  const isTile = fillMode === "tile";
-  const className = ["image", element.role === "heroImage" ? "hero-image" : void 0, isTile ? "image-tile" : void 0].filter(Boolean).join(" ");
-  const src = escapeHtml(assetPrefix + element.src);
-  const rawSrc = assetPrefix + element.src;
-  const attrs = renderAttributes([
-    ["data-element-id", element.id],
-    ["data-role", element.role],
-    ...sourceShapeAttributePairs(element),
-    ...geometryAttributePairs(element),
-    ["data-fill-mode", fillMode],
-    ["data-tile-tx", tile?.tx],
-    ["data-tile-ty", tile?.ty],
-    ["data-tile-sx", tile?.sx],
-    ["data-tile-sy", tile?.sy],
-    ["data-tile-flip", tile?.flip],
-    ["data-tile-algn", tile?.algn],
-    ["data-tile-offset-x", tile?.offsetX],
-    ["data-tile-offset-y", tile?.offsetY],
-    ["data-tile-scale-x", tile?.scaleX],
-    ["data-tile-scale-y", tile?.scaleY],
-    ["data-crop-left", crop?.left],
-    ["data-crop-top", crop?.top],
-    ["data-crop-right", crop?.right],
-    ["data-crop-bottom", crop?.bottom],
-    ["data-raster-fallback", booleanData7(element.rasterFallback)],
-    ["data-fallback-reason", element.fallbackReason],
-    ["data-source-element-count", element.sourceElementCount],
-    ["data-alpha-mod-fix", alpha?.amount],
-    ["data-grayscale", booleanData7(grayscale?.enabled)],
-    ["data-luminance", booleanData7(luminance?.enabled)],
-    ["data-luminance-bright", luminance?.bright],
-    ["data-luminance-contrast", luminance?.contrast],
-    ["data-css-brightness", luminance?.brightness],
-    ["data-css-contrast", luminance?.cssContrast],
-    ["data-duotone-colors", Array.isArray(duotone?.colors) ? duotone.colors.join(" ") : void 0],
-    ["data-duotone-render-mode", duotone?.renderMode],
-    ["data-color-temperature", colorTemperature?.value],
-    ["data-color-temperature-unsupported-css", colorTemperature?.unsupportedCss === true ? "true" : void 0],
-    ["data-sharpen-soften", sharpenSoften?.amount],
-    ["data-sharpen-soften-css-blur", sharpenSoften?.cssBlur],
-    ["data-sharpen-soften-svg-sharpen", sharpenSoften?.svgSharpen],
-    ["data-sharpen-soften-unsupported-css", sharpenSoften?.unsupportedCss === true ? "true" : void 0],
-    ...backgroundRemovalAttributePairs(backgroundRemoval),
-    ...shadowAttributePairs(outerShadow),
-    ["data-glow-radius", glow?.radius],
-    ["data-glow-color", glow?.color],
-    ["data-picture-effect-order", Array.isArray(effects.effectOrder) ? effects.effectOrder.join(" ") : void 0],
-    ...directSourceEffectAttributePairs(element.directSourceEffects),
-    ...pictureEffectLayerAttributePairs(element.effectLayerSources, assetPrefix),
-    ["style", isTile ? `--ppt-image-url: ${cssUrl3(rawSrc)};` : void 0]
-  ]);
-  const alt = escapeHtml(element.alt);
-  if (canRenderSvgPicture(element)) return renderSvgPicture(element, attrs, assetPrefix);
-  if (isTile) {
-    return `    <div class="${className}"${attrs}><img class="image-source" src="${src}" alt="${alt}"></div>`;
-  }
-  if (crop) {
-    const cropClassName = [className, "image-crop"].filter(Boolean).join(" ");
-    return `    <div class="${cropClassName}"${attrs}><img class="image-source" src="${src}" alt="${alt}"></div>`;
-  }
-  return `    <img class="${className}"${attrs} src="${src}" alt="${alt}">`;
+function wrapElementHyperlink(element, html, context) {
+  const hyperlink = element.sourceHyperlink;
+  if (hyperlink?.safe !== true) return html;
+  if (element.type === "text" && hasRunHyperlinks(element.text?.paragraphs)) return html;
+  const href = elementHyperlinkHref(hyperlink, context);
+  if (!href) return html;
+  const externalAttrs = hyperlink.type === "url" ? ` target="_blank" rel="noopener noreferrer"` : "";
+  return `    <a class="element-link" href="${escapeHtml(href)}"${externalAttrs}>
+${html}
+    </a>`;
 }
-function hasImageFill(element) {
-  return element.fill?.type === "image";
+function elementHyperlinkHref(hyperlink, context) {
+  if (hyperlink?.type === "url" && typeof hyperlink.href === "string") return hyperlink.href;
+  if (hyperlink?.type === "slide" && typeof hyperlink.target === "string") return context.slideHrefForTarget?.(hyperlink.target);
+  return void 0;
 }
-function cssUrl3(value) {
-  return `url("${value.replace(/["\\\n\r\f]/g, "\\$&")}")`;
+function hasRunHyperlinks(paragraphs) {
+  if (!Array.isArray(paragraphs)) return false;
+  return paragraphs.some((paragraph) => Array.isArray(paragraph?.runs) && paragraph.runs.some((run) => run?.style?.hyperlink));
 }
 function renderShapeAttributes(element, assetPrefix) {
   const fill = element.fill ?? {};
@@ -47798,6 +49597,7 @@ function renderShapeAttributes(element, assetPrefix) {
     ...sourceShapeAttributePairs(element),
     ...geometryAttributePairs(element),
     ...shadowAttributePairs(element.effects?.outerShadow),
+    ...softEdgeAttributePairs(element.effects?.softEdge),
     ...shapeFillAttributePairs(fill),
     ...lineAttributePairs(element),
     ...shapeImageFillAttributePairs(fill, assetPrefix)
@@ -47815,15 +49615,16 @@ function shapeFillAttributePairs(fill) {
     ["data-fill-gradient-kind", fill?.kind],
     ["data-fill-gradient-angle", fill?.angle],
     ["data-fill-gradient-path", fill?.path],
+    ["data-fill-gradient-implicit", booleanData9(fill?.implicit)],
     ["data-fill-gradient-flip", fill?.flip],
-    ["data-fill-gradient-scaled", booleanData7(fill?.scaled)],
-    ["data-fill-gradient-rot-with-shape", booleanData7(fill?.rotateWithShape)],
+    ["data-fill-gradient-scaled", booleanData9(fill?.scaled)],
+    ["data-fill-gradient-rot-with-shape", booleanData9(fill?.rotateWithShape)],
     ["data-fill-gradient-tile-rect", fill?.tileRect ? JSON.stringify(fill.tileRect) : void 0],
     ["data-fill-gradient-fill-to-rect", fill?.fillToRect ? JSON.stringify(fill.fillToRect) : void 0]
   ];
 }
-function renderText(element, assetPrefix, inheritedFlip) {
-  if (element.role === "list") return renderList(element, inheritedFlip);
+function renderText(element, assetPrefix, inheritedFlip, context) {
+  if (element.role === "list") return renderList(element, assetPrefix, inheritedFlip, context);
   const tag = element.role === "title" ? "h1" : element.role === "subtitle" ? "p" : element.role === "heading" ? "h2" : "p";
   const className = `text ${element.role}`;
   const text = element.text;
@@ -47832,29 +49633,29 @@ function renderText(element, assetPrefix, inheritedFlip) {
   const readableFlip = textReadableFlipState(element, inheritedFlip);
   const contentAttrs = renderTextReadableContentAttributes(readableFlip);
   const outline = renderShapeOutlineSvg(element);
-  const content = paragraphs.length > 0 ? paragraphs.map((paragraph, index) => `<span class="paragraph"${renderParagraphAttributes(paragraph, index)}>${renderRuns(paragraphRunsForRender(paragraph), { gradientIdPrefix: `${element.id}-p-${index}` })}</span>`).join("") : renderRuns([{ text: text?.plain ?? "" }], { gradientIdPrefix: `${element.id}-plain` });
+  const content = paragraphs.length > 0 ? paragraphs.map((paragraph, index) => `<span class="paragraph"${renderParagraphAttributes(paragraph, index, assetPrefix)}>${renderRuns(paragraphRunsForRender(paragraph), { gradientIdPrefix: `${element.id}-p-${index}`, slideHrefForTarget: context.slideHrefForTarget })}</span>`).join("") : renderRuns([{ text: text?.plain ?? "" }], { gradientIdPrefix: `${element.id}-plain`, slideHrefForTarget: context.slideHrefForTarget });
   const warped = renderTextWarpSvg(element, text);
   const bodyContent = warped ? `${outline}<span class="text-warp-source">${content}</span>${warped}` : `${outline}${content}`;
   const body = `<span class="text-readable-content"${contentAttrs}>${bodyContent}</span>`;
   return `    <${tag} class="${className}"${attrs}>${body}</${tag}>`;
 }
-function renderList(element, inheritedFlip) {
+function renderList(element, assetPrefix, inheritedFlip, context) {
   const text = element.text;
   const paragraphs = text?.paragraphs ?? [];
   const tag = isNumberedList(paragraphs) ? "ol" : "ul";
   const readableFlip = textReadableFlipState(element, inheritedFlip);
   const contentAttrs = renderTextReadableContentAttributes(readableFlip);
   const items = paragraphs.map((paragraph, index) => {
-    const content = renderRuns(paragraphRunsForRender(paragraph), { gradientIdPrefix: `${element.id}-p-${index}` });
-    return `<li${renderParagraphAttributes(paragraph, index)}><span class="text-readable-content"${contentAttrs}>${content}</span></li>`;
+    const content = renderRuns(paragraphRunsForRender(paragraph), { gradientIdPrefix: `${element.id}-p-${index}`, slideHrefForTarget: context.slideHrefForTarget });
+    return `<li${renderParagraphAttributes(paragraph, index, assetPrefix)}><span class="text-readable-content"${contentAttrs}>${content}</span></li>`;
   }).join("");
   const attrs = renderAttributes([
     ["data-element-id", element.id],
     ["data-role", "list"],
     ...sourceShapeAttributePairs(element),
     ...geometryAttributePairs(element),
-    ["data-readable-flip-horizontal", booleanData7(readableFlip.h)],
-    ["data-readable-flip-vertical", booleanData7(readableFlip.v)],
+    ["data-readable-flip-horizontal", booleanData9(readableFlip.h)],
+    ["data-readable-flip-vertical", booleanData9(readableFlip.v)],
     ...shadowAttributePairs(element.style?.effects?.outerShadow),
     ...textBodyAttributePairs(text?.bodyStyle),
     ["data-list-type", tag === "ol" ? "number" : "bullet"],
@@ -47889,8 +49690,8 @@ function renderTextElementAttributes(element, assetPrefix, inheritedFlip) {
     ["data-role", element.role],
     ...sourceShapeAttributePairs(element),
     ...geometryAttributePairs(element),
-    ["data-readable-flip-horizontal", booleanData7(readableFlip.h)],
-    ["data-readable-flip-vertical", booleanData7(readableFlip.v)],
+    ["data-readable-flip-horizontal", booleanData9(readableFlip.h)],
+    ["data-readable-flip-vertical", booleanData9(readableFlip.v)],
     ...shadowAttributePairs(element.style?.effects?.outerShadow),
     ...textBodyAttributePairs(text?.bodyStyle),
     ...shapeFillAttributePairs(fill),
@@ -47902,7 +49703,7 @@ function isNumberedList(paragraphs) {
   const bullets = paragraphs.map((paragraph) => paragraph?.bullet?.type).filter(Boolean);
   return bullets.length > 0 && bullets.every((type) => type === "number");
 }
-function renderParagraphAttributes(paragraph, index) {
+function renderParagraphAttributes(paragraph, index, assetPrefix = "") {
   const style = paragraph?.style ?? {};
   const bullet = paragraph?.bullet ?? {};
   const spacing = style.spacing ?? {};
@@ -47914,16 +49715,20 @@ function renderParagraphAttributes(paragraph, index) {
     ["data-bullet-type", bullet.type],
     ["data-bullet-char", bullet.type === "bullet" ? bullet.char : void 0],
     ["data-bullet-color", bullet.color],
-    ["data-bullet-color-follow-text", booleanData7(bullet.colorFollowText)],
+    ["data-bullet-color-follow-text", booleanData9(bullet.colorFollowText)],
     ["data-bullet-font-family", bullet.fontFamily],
     ["data-bullet-font-charset", bullet.fontCharset],
     ["data-bullet-font-pitch-family", bullet.fontPitchFamily],
-    ["data-bullet-font-follow-text", booleanData7(bullet.fontFollowText)],
+    ["data-bullet-font-follow-text", booleanData9(bullet.fontFollowText)],
     ["data-bullet-size-type", bullet.sizeType],
     ["data-bullet-size-raw", bullet.sizeRaw],
     ["data-bullet-size-value", bullet.sizeValue],
     ["data-bullet-size-css", bullet.sizeCss],
-    ["data-bullet-size-follow-text", booleanData7(bullet.sizeFollowText)],
+    ["data-bullet-size-follow-text", booleanData9(bullet.sizeFollowText)],
+    ["data-bullet-image-src", bullet.type === "image" && bullet.src ? assetPrefix + bullet.src : void 0],
+    ["data-bullet-image-relationship-id", bullet.type === "image" ? bullet.relationshipId : void 0],
+    ["data-bullet-image-media-type", bullet.type === "image" ? bullet.mediaType : void 0],
+    ["data-bullet-image-unsupported", bullet.type === "image" ? booleanData9(bullet.unsupported) : void 0],
     ["data-number-format", bullet.type === "number" ? bullet.format : void 0],
     ["data-number-start", bullet.type === "number" ? bullet.startAt : void 0],
     ["data-paragraph-level", style.level],
@@ -47942,11 +49747,11 @@ function renderParagraphAttributes(paragraph, index) {
     ["data-tab-stops", tabStopsData(style.tabStops)],
     ["data-tab-stop-count", tabStopCount(style.tabStops)],
     ["data-font-align", style.fontAlign],
-    ["data-east-asian-line-break", booleanData7(style.eastAsianLineBreak)],
+    ["data-east-asian-line-break", booleanData9(style.eastAsianLineBreak)],
     ["data-east-asian-line-break-raw", style.eastAsianLineBreakRaw],
-    ["data-latin-line-break", booleanData7(style.latinLineBreak)],
+    ["data-latin-line-break", booleanData9(style.latinLineBreak)],
     ["data-latin-line-break-raw", style.latinLineBreakRaw],
-    ["data-hanging-punctuation", booleanData7(style.hangingPunctuation)],
+    ["data-hanging-punctuation", booleanData9(style.hangingPunctuation)],
     ["data-hanging-punctuation-raw", style.hangingPunctuationRaw],
     ...spacingAttributePairs("line-spacing", spacing.line),
     ...spacingAttributePairs("space-before", spacing.before),
@@ -47976,25 +49781,8 @@ function commonBulletChar(paragraphs) {
   if (chars.length === 0) return void 0;
   return chars.every((char) => char === chars[0]) ? chars[0] : void 0;
 }
-function booleanData7(value) {
+function booleanData9(value) {
   return value === true ? "true" : value === false ? "false" : void 0;
-}
-function lineAttributePairs(element) {
-  const line8 = element.line ?? element.style?.line ?? {};
-  const fill = line8.fill ?? {};
-  return [
-    ["data-line-compound", line8.compound],
-    ["data-line-align", line8.align],
-    ["data-line-cap", line8.cap],
-    ["data-line-join", line8.join],
-    ["data-line-dash", line8.dash],
-    ["data-line-width", line8.width],
-    ["data-line-fill-type", fill.type],
-    ["data-line-gradient-kind", fill.kind],
-    ["data-line-gradient-angle", fill.angle],
-    ["data-line-gradient-stop-count", Array.isArray(fill.stops) ? fill.stops.length : void 0],
-    ["data-line-gradient-scaled", booleanData7(fill.scaled)]
-  ];
 }
 
 // src/render/renderOverviewHtml.ts
@@ -48414,22 +50202,31 @@ async function convertPptxToHtml(options) {
     slides
   }));
   await materializeRasterFallbackAssets(options.input, deck, assets, warnings, options.rasterFallbackMode ?? "placeholder");
+  await materializeEchartsRuntimeAsset(deck, assets, options.echartsRuntimePath);
   const report = buildReport(options.input, deck, warnings);
-  await writeOutput(options.outDir, pkg, deck, assets, report, options.mode ?? "paged");
+  await writeOutput(options.outDir, pkg, deck, assets, report, {
+    mode: options.mode ?? "paged",
+    echartsScriptSrc: options.echartsScriptSrc,
+    useLocalEchartsRuntime: Boolean(options.echartsRuntimePath)
+  });
   return { deck, assets, report };
 }
-async function writeOutput(outDir, pkg, deck, assets, report, mode) {
+async function writeOutput(outDir, pkg, deck, assets, report, options) {
   await (0, import_promises4.mkdir)(outDir, { recursive: true });
   await writeText(import_node_path3.default.join(outDir, "template.json"), `${JSON.stringify(deck, null, 2)}
 `);
-  if (mode === "deck") {
-    await writeText(import_node_path3.default.join(outDir, "index.html"), renderDeckHtml(deck));
+  if (options.mode === "deck") {
+    await writeText(import_node_path3.default.join(outDir, "index.html"), renderDeckHtml(deck, {
+      echartsScriptSrc: echartsScriptSrcForOutput("deck", options)
+    }));
     await writeText(import_node_path3.default.join(outDir, "styles.css"), renderDeckCss(deck));
   } else {
     await writeText(import_node_path3.default.join(outDir, "index.html"), renderIndexHtml(deck));
     await writeText(import_node_path3.default.join(outDir, "overview.html"), renderOverviewHtml(deck));
     for (const slide of deck.slides) {
-      await writeText(import_node_path3.default.join(outDir, "slides", `${slide.id}.html`), renderSlideHtml(deck, slide.id));
+      await writeText(import_node_path3.default.join(outDir, "slides", `${slide.id}.html`), renderSlideHtml(deck, slide.id, {
+        echartsScriptSrc: echartsScriptSrcForOutput("single", options)
+      }));
     }
     await writeText(import_node_path3.default.join(outDir, "styles.css"), renderGlobalCss(deck));
   }
@@ -48453,6 +50250,27 @@ async function writeOutput(outDir, pkg, deck, assets, report, mode) {
     await writeBuffer(import_node_path3.default.join(outDir, asset.outputPath), await pkg.readBuffer(asset.sourcePath));
   }
 }
+function echartsScriptSrcForOutput(mode, options) {
+  if (options.echartsScriptSrc) return options.echartsScriptSrc;
+  if (!options.useLocalEchartsRuntime) return void 0;
+  return mode === "deck" ? "./assets/vendor/echarts.min.js" : "../assets/vendor/echarts.min.js";
+}
+async function materializeEchartsRuntimeAsset(deck, assets, echartsRuntimePath) {
+  if (!echartsRuntimePath) return;
+  if (!hasCharts(deck)) return;
+  if (assets.some((asset) => asset.type === "vendor" && asset.outputPath === ECHARTS_VENDOR_OUTPUT_PATH)) return;
+  const sourcePath = import_node_path3.default.resolve(echartsRuntimePath);
+  assets.push({
+    id: "vendor-echarts",
+    sourcePath,
+    outputPath: ECHARTS_VENDOR_OUTPUT_PATH,
+    type: "vendor",
+    metadata: {
+      runtimeSource: "custom-file"
+    },
+    generatedContent: await (0, import_promises4.readFile)(sourcePath)
+  });
+}
 function buildReport(input, deck, warnings) {
   const stats = {};
   for (const element of deck.slides.flatMap((slide) => slide.elements)) {
@@ -48475,12 +50293,16 @@ async function main() {
   const outputModeIndex = args.indexOf("--output-mode");
   const legacyModeIndex = args.indexOf("--mode");
   const rasterFallbackIndex = args.indexOf("--raster-fallback");
+  const echartsRuntimeIndex = args.indexOf("--echarts-runtime");
+  const echartsSrcIndex = args.indexOf("--echarts-src");
   const jsonOutput = args.includes("--json");
   const outDir = outIndex >= 0 ? args[outIndex + 1] : void 0;
   const mode = outputModeIndex >= 0 ? args[outputModeIndex + 1] : legacyModeIndex >= 0 ? args[legacyModeIndex + 1] : "paged";
   const rasterFallbackMode = rasterFallbackIndex >= 0 ? args[rasterFallbackIndex + 1] : "placeholder";
+  const echartsRuntimePath = echartsRuntimeIndex >= 0 ? args[echartsRuntimeIndex + 1] : void 0;
+  const echartsScriptSrc = echartsSrcIndex >= 0 ? args[echartsSrcIndex + 1] : void 0;
   if (!input || !outDir) {
-    console.error("Usage: pptx-template convert input.pptx --out output [--output-mode paged|deck] [--raster-fallback placeholder|render|skip] [--json]");
+    console.error("Usage: pptx-template convert input.pptx --out output [--output-mode paged|deck] [--raster-fallback placeholder|render|skip] [--echarts-runtime path/to/echarts.min.js] [--echarts-src https://cdn.example/echarts.min.js] [--json]");
     process.exitCode = 1;
     return;
   }
@@ -48498,7 +50320,9 @@ async function main() {
     input: import_node_path4.default.resolve(input),
     outDir: import_node_path4.default.resolve(outDir),
     mode,
-    rasterFallbackMode
+    rasterFallbackMode,
+    ...echartsRuntimePath ? { echartsRuntimePath: import_node_path4.default.resolve(echartsRuntimePath) } : {},
+    ...echartsScriptSrc ? { echartsScriptSrc } : {}
   });
   if (jsonOutput) {
     console.log(JSON.stringify({

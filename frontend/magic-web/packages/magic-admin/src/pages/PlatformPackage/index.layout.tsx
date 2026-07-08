@@ -130,7 +130,8 @@ function PlatformPackageLayout() {
 						validate: (permissions: string[], isSuperAdmin?: boolean) => {
 							return (
 								isSuperAdmin ||
-								permissions.includes(PERMISSION_KEY_MAP.SLIDES_TEMPLATE)
+								permissions.includes(PERMISSION_KEY_MAP.SLIDES_TEMPLATE_QUERY) ||
+								permissions.includes(PERMISSION_KEY_MAP.SLIDES_TEMPLATE_EDIT)
 							)
 						},
 					},

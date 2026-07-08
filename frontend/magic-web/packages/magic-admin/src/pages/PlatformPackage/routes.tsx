@@ -209,7 +209,9 @@ export default {
 					title: "nav.platformSubMenu.slidesTemplate",
 					validate: (permissions: string[], isSuperAdmin?: boolean) => {
 						return (
-							isSuperAdmin || permissions.includes(PERMISSION_KEY_MAP.SLIDES_TEMPLATE)
+							isSuperAdmin ||
+							permissions.includes(PERMISSION_KEY_MAP.SLIDES_TEMPLATE_QUERY) ||
+							permissions.includes(PERMISSION_KEY_MAP.SLIDES_TEMPLATE_EDIT)
 						)
 					},
 				},
