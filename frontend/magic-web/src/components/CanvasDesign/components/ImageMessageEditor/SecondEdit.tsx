@@ -22,9 +22,11 @@ import type { GenerateImageRequest } from "../../types.magic"
 import { useImageEditorConfig } from "./useImageEditorConfig"
 import { useFloatingComponent } from "../../hooks/useFloatingComponent"
 import ImageEditorSurface from "./ImageEditorSurface"
+import type { MediaResourceFullscreenPreviewItem } from "../MediaResourceFullscreenPreview"
 
 interface SecondEditProps {
 	imageElement: ImageElement
+	onPreviewMediaResource?: (resource: MediaResourceFullscreenPreviewItem) => void
 }
 
 export default function SecondEdit(props: SecondEditProps) {
@@ -384,6 +386,7 @@ export default function SecondEdit(props: SecondEditProps) {
 				isDropEnabled={isEditing}
 				className={styles.imageMessageEditor}
 				style={{ visibility: isVisible ? "visible" : "hidden" }}
+				onPreviewMediaResource={props.onPreviewMediaResource}
 			/>
 		)
 	}

@@ -9,16 +9,23 @@ import { useCanvasDesignI18n } from "../../context/I18nContext"
 import { useImageEditorConfig } from "./useImageEditorConfig"
 import { useUpdateEffect } from "ahooks"
 import ImageEditorSurface from "./ImageEditorSurface"
+import type { MediaResourceFullscreenPreviewItem } from "../MediaResourceFullscreenPreview"
 
 interface ImageMessageEditorRenderProps {
 	imageElement: ImageElement
 	autoFocus?: boolean
 	/** 与 autoFocus 联用：挂载后将光标置于提示词末尾 */
 	autoFocusAtDocumentEnd?: boolean
+	onPreviewMediaResource?: (resource: MediaResourceFullscreenPreviewItem) => void
 }
 
 export default function ImageMessageEditorRender(props: ImageMessageEditorRenderProps) {
-	const { imageElement, autoFocus = false, autoFocusAtDocumentEnd = false } = props
+	const {
+		imageElement,
+		autoFocus = false,
+		autoFocusAtDocumentEnd = false,
+		onPreviewMediaResource,
+	} = props
 
 	const { t } = useCanvasDesignI18n()
 	const { selectedElements } = useCanvasSelectionUI()
@@ -136,6 +143,7 @@ export default function ImageMessageEditorRender(props: ImageMessageEditorRender
 			isSending={isSending}
 			autoFocus={autoFocus}
 			autoFocusAtDocumentEnd={autoFocusAtDocumentEnd}
+			onPreviewMediaResource={onPreviewMediaResource}
 		/>
 	)
 }

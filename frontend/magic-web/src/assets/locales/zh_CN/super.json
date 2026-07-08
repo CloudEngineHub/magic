@@ -3204,6 +3204,9 @@
 		"createFolderNamePlaceholder": "输入文件夹名",
 		"createSection": "新建文档",
 		"deleteConfirm": {
+			"canvasContentLossWarning": "该操作会删除画布内容依赖的数据或资源，可能导致画布内容显示丢失。",
+			"canvasMixedWarning": "该操作会影响画布项目入口文件以及内容依赖的数据或资源，可能导致画布无法打开或内容显示丢失。",
+			"canvasOpenFailureWarning": "该操作会删除画布项目入口文件，可能导致画布无法打开。",
 			"emptyLabel": "空文件夹",
 			"fileCount": "{{count}} 个文件",
 			"intro": "将永久删除以下 {{count}} 个项目：",
@@ -4725,6 +4728,15 @@
 		"batchOperation": "批量操作",
 		"batchOperations": "批量操作",
 		"cancelSelect": "取消",
+		"canvasOperationRisk": {
+			"moveContentLossContent": "该操作会移动画布内容依赖的数据或资源，可能导致画布内容显示丢失。是否继续？",
+			"moveMixedContent": "该操作会影响画布项目入口文件以及内容依赖的数据或资源，可能导致画布无法打开或内容显示丢失。是否继续？",
+			"moveOpenFailureContent": "该操作会移动画布项目入口文件，可能导致画布无法打开。是否继续？",
+			"renameContentLossContent": "该操作会重命名画布内容依赖的数据或资源，可能导致画布内容显示丢失。是否继续？",
+			"renameMixedContent": "该操作会影响画布项目入口文件以及内容依赖的数据或资源，可能导致画布无法打开或内容显示丢失。是否继续？",
+			"renameOpenFailureContent": "该操作会重命名画布项目入口文件，可能导致画布无法打开。是否继续？",
+			"title": "画布项目风险提示"
+		},
 		"clawPlaygroundTags": {
 			"aboutYou": "关于你",
 			"guidelines": "指南",
@@ -4785,6 +4797,9 @@
 			"deleteBatchSubject": "选中的 {{count}} 项",
 			"deleteBatchTipMobile": "删除操作确认",
 			"deleteBatchWithFoldersDescription": "将被永久删除，包含文件夹内容和子级未选中文件，此操作无法撤销。",
+			"deleteCanvasContentLossRiskContent": "该操作会删除画布内容依赖的数据或资源，可能导致画布内容显示丢失。是否继续删除？",
+			"deleteCanvasMixedRiskContent": "该操作会影响画布项目入口文件以及内容依赖的数据或资源，可能导致画布无法打开或内容显示丢失。是否继续删除？",
+			"deleteCanvasOpenFailureRiskContent": "该操作会删除画布项目入口文件，可能导致画布无法打开。是否继续删除？",
 			"deleteContent": "确认删除 {{name}} ?",
 			"deleteFileDescription": "将被永久删除，此操作无法撤销。",
 			"deleteFileFailed": "删除文件失败",

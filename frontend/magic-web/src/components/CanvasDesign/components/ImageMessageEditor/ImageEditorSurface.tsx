@@ -31,6 +31,7 @@ import { Button } from "../ui/button"
 import ImageEditorControls from "./ImageEditorControls"
 import type { ImageEditorConfig } from "./useImageEditorConfig"
 import styles from "./index.module.css"
+import type { MediaResourceFullscreenPreviewItem } from "../MediaResourceFullscreenPreview"
 
 interface ImageEditorSurfaceProps {
 	imageElement: ImageElement
@@ -47,6 +48,7 @@ interface ImageEditorSurfaceProps {
 	isDropEnabled?: boolean
 	className?: string
 	style?: CSSProperties
+	onPreviewMediaResource?: (resource: MediaResourceFullscreenPreviewItem) => void
 }
 
 export default function ImageEditorSurface(props: ImageEditorSurfaceProps) {
@@ -65,6 +67,7 @@ export default function ImageEditorSurface(props: ImageEditorSurfaceProps) {
 		isDropEnabled = true,
 		className,
 		style,
+		onPreviewMediaResource,
 	} = props
 	const { canvas } = useCanvas()
 	const [hasScrollbar, setHasScrollbar] = useState(false)
@@ -285,6 +288,7 @@ export default function ImageEditorSurface(props: ImageEditorSurfaceProps) {
 				onSelectSource={handleSelectSource}
 				onProjectSelect={handleProjectSelect}
 				onReferenceFileRemove={handleReferenceFileRemoveFromPopover}
+				onPreviewMediaResource={onPreviewMediaResource}
 				renderSendButton={() => (
 					<Button
 						className={styles.sendButton}

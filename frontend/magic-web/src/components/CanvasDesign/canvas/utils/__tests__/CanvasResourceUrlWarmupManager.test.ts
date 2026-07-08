@@ -22,6 +22,9 @@ function createVideo(id: string, src: string): LayerElement {
 
 function createCanvasMock(elements: Record<string, LayerElement>, getFileInfo = vi.fn()) {
 	const eventEmitter = new EventEmitter()
+	const imageResourceManager = {
+		markResourceLoadFailed: vi.fn(),
+	}
 	return {
 		id: "canvas-1",
 		eventEmitter,
@@ -37,6 +40,7 @@ function createCanvasMock(elements: Record<string, LayerElement>, getFileInfo = 
 				},
 			},
 		},
+		imageResourceManager,
 	}
 }
 
@@ -185,6 +189,28 @@ describe("CanvasResourceUrlWarmupManager", () => {
 			failedCount: 0,
 			successCount: 1,
 		})
+		manager.destroy()
+	})
+
+	it("propagates failed image warmup to the image resource manager", async () => {
+		const getFileInfo = vi.fn(async () => {
+			throw new Error("未找到路径对应的文件: ./images/missing.png")
+		})
+		const elements = {
+			image: createImage("image", "./images/missing.png"),
+		}
+		const canvas = createCanvasMock(elements, getFileInfo)
+		const manager = new CanvasResourceUrlWarmupManager({
+			canvas: canvas as unknown as Canvas,
+		})
+
+		manager.warmupCurrentDocument("initial")
+		await flushWarmupTimer()
+
+		expect(canvas.imageResourceManager.markResourceLoadFailed).toHaveBeenCalledWith(
+			"./images/missing.png",
+			"not-found",
+		)
 		manager.destroy()
 	})
 })
