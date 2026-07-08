@@ -1,6 +1,7 @@
-import { createContext, useContext, useMemo, useEffect } from "react"
+import { createContext, useContext, useMemo, useEffect, useState } from "react"
 import type { PropsWithChildren } from "react"
 import { ConfigProvider } from "antd"
+import { I18nextProvider } from "react-i18next"
 import magicClient from "@admin/apis/clients/magic"
 import {
 	LanguageType,
@@ -13,6 +14,7 @@ import type { LocaleType } from "../../../components/locales"
 import type { AdminProviderContextType, AdminProviderProps } from "./types"
 import { AppEnv } from "./types"
 import { languageManager } from "../../utils/locale"
+import { adminI18n, initAdminI18n } from "@admin/locales"
 
 const defaultLanguage = LanguageType.zh_CN
 const defaultTheme = ThemeType.LIGHT
@@ -50,6 +52,7 @@ const AdminProviderContext = createContext<AdminProviderContextType>(defaultCont
 
 function AdminProvider(props: PropsWithChildren<AdminProviderProps>) {
 	const { theme, language, children, ...rest } = props
+	const [i18nReady, setI18nReady] = useState(adminI18n.isInitialized)
 
 	const safeLanguage =
 		language && Object.keys(locales).includes(language) ? language : defaultLanguage
@@ -57,6 +60,18 @@ function AdminProvider(props: PropsWithChildren<AdminProviderProps>) {
 	// 同步语言到全局 languageManager，供 openModal 等使用
 	useEffect(() => {
 		languageManager.setLanguage(safeLanguage)
+	}, [safeLanguage])
+
+	useEffect(() => {
+		let cancelled = false
+		setI18nReady(false)
+		initAdminI18n(safeLanguage).then(() => {
+			if (!cancelled) setI18nReady(true)
+		})
+
+		return () => {
+			cancelled = true
+		}
 	}, [safeLanguage])
 
 	const value = useMemo(() => {
@@ -75,11 +90,15 @@ function AdminProvider(props: PropsWithChildren<AdminProviderProps>) {
 
 	return (
 		<AdminProviderContext.Provider value={value}>
-			<ConfigProvider locale={locale}>
-				<MagicThemeProvider>
-					<SearchComponentProvider>{children}</SearchComponentProvider>
-				</MagicThemeProvider>
-			</ConfigProvider>
+			<I18nextProvider i18n={adminI18n}>
+				<ConfigProvider locale={locale}>
+					<MagicThemeProvider>
+						<SearchComponentProvider>
+							{i18nReady ? children : null}
+						</SearchComponentProvider>
+					</MagicThemeProvider>
+				</ConfigProvider>
+			</I18nextProvider>
 		</AdminProviderContext.Provider>
 	)
 }

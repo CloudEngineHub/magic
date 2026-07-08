@@ -140,8 +140,6 @@ export type { TopMenuProps } from "./TopMenu/TopMenu"
 export { default as SideMenu } from "./SideMenu/SideMenu"
 export type { SideMenuProps, SideMenuItem } from "./SideMenu/SideMenu"
 
-export { default as LoadingFallback } from "./LoadingFallback/LoadingFallback"
-
 export { default as ConfigCard } from "./ConfigCard"
 export type { ConfigCardProps } from "./ConfigCard"
 
