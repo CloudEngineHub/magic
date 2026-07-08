@@ -124,6 +124,55 @@ class GlobalConfigApiTest extends AbstractHttpTest
         $this->assertSame($needInitial, (bool) $getData['need_initial']);
     }
 
+    public function testUpdateGlobalConfigRefreshesAllSettingsCache(): void
+    {
+        $initialConfig = new GlobalConfig();
+        $initialConfig->setIsMaintenance(true);
+        $initialConfig->setMaintenanceType(MaintenanceType::GlobalNotice);
+        $initialConfig->setMaintenanceDescription('cached maintenance notice');
+        $this->getMagicSettingAppService()->save($initialConfig);
+
+        $cachedResponse = $this->get('/api/v1/settings/all', [], $this->getCommonHeaders());
+        $this->assertSame(1000, $cachedResponse['code']);
+        $this->assertSame(
+            MaintenanceType::GlobalNotice->value,
+            $cachedResponse['data']['global_config']['maintenance_type'] ?? null
+        );
+
+        $payload = [
+            'is_maintenance' => true,
+            'maintenance_type' => MaintenanceType::SiteClose->value,
+            'maintenance_description' => 'site close maintenance notice',
+        ];
+        $putResponse = $this->put($this->url, $payload, $this->getCommonHeaders());
+        $this->assertSame(1000, $putResponse['code']);
+
+        $freshResponse = $this->get('/api/v1/settings/all', [], $this->getCommonHeaders());
+        $this->assertSame(1000, $freshResponse['code']);
+        $freshGlobalConfig = $freshResponse['data']['global_config'] ?? [];
+        $this->assertSame(MaintenanceType::SiteClose->value, $freshGlobalConfig['maintenance_type'] ?? null);
+        $this->assertSame('site close maintenance notice', $freshGlobalConfig['maintenance_description'] ?? null);
+    }
+
+    public function testUpdateGlobalConfigPreservesOmittedFields(): void
+    {
+        $initialConfig = new GlobalConfig();
+        $initialConfig->setIsMaintenance(true);
+        $initialConfig->setMaintenanceType(MaintenanceType::GlobalNotice);
+        $initialConfig->setMaintenanceDescription('keep existing description');
+        $this->getMagicSettingAppService()->save($initialConfig);
+
+        $putResponse = $this->put($this->url, [
+            'maintenance_type' => MaintenanceType::SiteClose->value,
+        ], $this->getCommonHeaders());
+        $this->assertSame(1000, $putResponse['code']);
+
+        $data = $putResponse['data'];
+        $this->assertTrue($data['is_maintenance'] ?? false);
+        $this->assertSame(MaintenanceType::SiteClose->value, $data['maintenance_type'] ?? null);
+        $this->assertSame('keep existing description', $data['maintenance_description'] ?? null);
+    }
+
     public function testGetGlobalConfigWithPlatformSettings(): void
     {
         // 首先设置平台设置
