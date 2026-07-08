@@ -28,7 +28,7 @@ function MaintenancePage() {
 					<img
 						src={logo}
 						alt=""
-						className="mb-7 max-h-[72px] max-w-[180px] object-contain"
+						className="mb-7 max-h-[72px] max-w-[240px] object-contain"
 					/>
 				)}
 				<div className="w-full min-w-0 whitespace-pre-wrap break-words text-lg font-medium leading-7 text-foreground">

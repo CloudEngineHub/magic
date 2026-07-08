@@ -46,7 +46,7 @@ function MaintenanceNotice() {
 	return (
 		<div
 			ref={noticeRef}
-			className="relative w-full shrink-0 overflow-hidden whitespace-nowrap bg-primary px-4 py-2 text-center text-sm font-medium leading-5 text-primary-foreground"
+			className="relative mb-2.5 w-full shrink-0 overflow-hidden whitespace-nowrap border-b border-orange-100 bg-orange-50 px-4 py-3 text-center text-sm font-medium leading-5 text-orange-500 md:mb-1"
 		>
 			{shouldScroll ? (
 				<div
