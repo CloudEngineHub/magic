@@ -146,7 +146,16 @@ readonly class AsrTaskDomainService
     public function saveTaskStatusWithDatabaseSync(AsrTaskStatusDTO $taskStatus, int $ttl = 604800): void
     {
         // 1. Always write to Redis first
-        $this->asrTaskRepository->save($taskStatus, $ttl);
+        $redisSaved = $this->asrTaskRepository->save($taskStatus, $ttl);
+
+        if (! $redisSaved) {
+            $this->logger->error('Redis write failed in saveTaskStatusWithDatabaseSync — Redis/DB may be inconsistent', [
+                'task_key' => $taskStatus->taskKey,
+                'phase_status' => $taskStatus->phaseStatus,
+                'current_phase' => $taskStatus->currentPhase,
+                'project_id' => $taskStatus->projectId,
+            ]);
+        }
 
         // 2. Sync phase state to Database
         if (! empty($taskStatus->projectId)) {

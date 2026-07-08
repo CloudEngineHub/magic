@@ -277,15 +277,52 @@ class AsrSandboxService extends AbstractAppService
         $finishStartTime = microtime(true);
         $queryResponse = $this->asrRecorder->queryTask($sandboxId, $taskStatus->taskKey, '.workspace');
         if ($this->isTransportFailureResponse($queryResponse)) {
-            $errorMessage = $queryResponse->getErrorMessage() ?? '查询沙箱 ASR 合并状态失败';
-            $this->logger->error('恢复 finish-recording 时无法查询沙箱状态', [
+            $this->logger->warning('恢复 finish-recording 时沙箱不可达，尝试重建沙箱', [
                 'task_key' => $taskStatus->taskKey,
                 'sandbox_id' => $sandboxId,
                 'code' => $queryResponse->code,
                 'message' => $queryResponse->message,
-                'error_message' => $errorMessage,
             ]);
-            ExceptionBuilder::throw(AsrErrorCode::SandboxMergeFailed, '', ['message' => $errorMessage]);
+
+            try {
+                $projectEntity = $this->getAccessibleProjectWithEditor(
+                    (int) $taskStatus->projectId,
+                    $taskStatus->userId,
+                    $organizationCode
+                );
+                $fullPrefix = $this->taskFileDomainService->getFullPrefix($organizationCode);
+                $fullWorkdir = WorkDirectoryUtil::getFullWorkdir($fullPrefix, $projectEntity->getWorkDir());
+
+                $actualSandboxId = $this->ensureSandboxWorkspaceReady(
+                    $taskStatus,
+                    $taskStatus->projectId,
+                    $fullWorkdir,
+                    $taskStatus->userId,
+                    $organizationCode
+                );
+
+                $taskStatus->sandboxId = $actualSandboxId;
+                $taskStatus->sandboxTaskCreated = true;
+
+                $this->logger->info('finish-recording 恢复：沙箱重建成功，直接提交合并', [
+                    'task_key' => $taskStatus->taskKey,
+                    'old_sandbox_id' => $sandboxId,
+                    'new_sandbox_id' => $actualSandboxId,
+                ]);
+
+                $mergeResult = $this->callSandboxFinishAndWait($taskStatus, $fileTitle);
+                $taskStatus->updateStatus($targetStatus);
+
+                return $mergeResult;
+            } catch (Throwable $e) {
+                $errorMessage = $queryResponse->getErrorMessage() ?? '沙箱不可达且重建失败';
+                $this->logger->error('恢复 finish-recording 时沙箱重建失败', [
+                    'task_key' => $taskStatus->taskKey,
+                    'sandbox_id' => $sandboxId,
+                    'error' => $e->getMessage(),
+                ]);
+                ExceptionBuilder::throw(AsrErrorCode::SandboxMergeFailed, '', ['message' => $errorMessage]);
+            }
         }
 
         $statusString = $queryResponse->getStatus();

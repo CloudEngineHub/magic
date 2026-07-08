@@ -1379,8 +1379,6 @@ class AsrFileAppService extends AbstractAppService
                 'audio_file_id' => $taskStatus->audioFileId,
             ]);
         } catch (Throwable $e) {
-            $this->failRecoverMergingPhaseIfPossible($taskKey, $userId, $organizationCode, $e->getMessage());
-
             $this->logger->error('Finish recording recovery failed', [
                 'task_key' => $taskKey,
                 'error' => $e->getMessage(),
@@ -1857,7 +1855,8 @@ class AsrFileAppService extends AbstractAppService
         string $error
     ): void {
         try {
-            $taskStatus = $this->loadRecoverFinishRecordingTaskStatus($taskKey, $userId, $organizationCode);
+            $taskStatus = $this->asrTaskDomainService->getTaskStatusWithPermission($taskKey, $userId, $organizationCode);
+            $this->hydrateRecoverSandboxContext($taskStatus);
             if ($taskStatus->isEmpty()) {
                 return;
             }
