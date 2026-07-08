@@ -27,9 +27,13 @@ import BaseLayoutMobile from "../BaseLayoutMobile"
 import { observer } from "mobx-react-lite"
 import HeaderLogo from "./components/HeaderLogo"
 import { useBaseLayoutPcEffects } from "./hooks"
+import { i18nStore } from "@/models/config/stores/i18n.store"
 
 const BaseLayoutPc = () => {
 	const { t } = useTranslation("admin/common")
+	const { t: tMainCommon } = useTranslation("common", {
+		i18n: i18nStore.i18n.instance,
+	})
 	const { styles, cx } = useStyles()
 
 	const location = useLocation()
@@ -86,7 +90,9 @@ const BaseLayoutPc = () => {
 						onClick={() => navigate({ name: RouteName.AdminHome })}
 					>
 						<HeaderLogo width={40} />
-						<div className={styles.title}>{t("title")}</div>
+						<div className={styles.title}>
+							{t("title", { platformName: tMainCommon("platform.name") })}
+						</div>
 					</Flex>
 					<TopMenu items={items} pathname={pathname} navigate={baseNavigate} />
 					<Flex gap={12} align="center">

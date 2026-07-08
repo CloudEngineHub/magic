@@ -2517,6 +2517,13 @@
 		"exitEdit": "Exit Edit",
 		"fetchFailed": "Failed to fetch queue list",
 		"missingInfo": "Project or topic information is missing",
+		"mobile": {
+			"collapse": "Collapse queue",
+			"count": "{{count}} items",
+			"emptyContent": "⋯",
+			"expand": "Expand queue",
+			"title": "Queued"
+		},
 		"operationInProgress": "This message is being processed, please try again later",
 		"removeFromQueue": "Remove from queue",
 		"sendFailed": "Failed to send message",
@@ -2527,13 +2534,6 @@
 		"taskPending": "Pending",
 		"taskProcessing": "Processing",
 		"title": "Task Queue",
-		"mobile": {
-			"collapse": "Collapse queue",
-			"count": "{{count}} items",
-			"emptyContent": "⋯",
-			"expand": "Expand queue",
-			"title": "Queued"
-		},
 		"updateFailed": "Failed to update queue message",
 		"updateSuccess": "Queue message updated successfully"
 	},
@@ -3202,6 +3202,9 @@
 		"createFolderNamePlaceholder": "Enter folder name",
 		"createSection": "Create document",
 		"deleteConfirm": {
+			"canvasContentLossWarning": "This operation will delete data or resources required by the canvas content. Some canvas content may disappear.",
+			"canvasMixedWarning": "This operation affects the canvas project entry file and data or resources required by the canvas content. The canvas may fail to open or lose visible content.",
+			"canvasOpenFailureWarning": "This operation will delete the canvas project entry file. The canvas may fail to open.",
 			"emptyLabel": "Empty folder",
 			"fileCount": "{{count}} files",
 			"intro": "Permanently delete the following {{count}} items:",
@@ -3275,6 +3278,9 @@
 		"defaultNameOrganization": "Organization Share",
 		"defaultNamePassword": "Password Link",
 		"defaultNamePublic": "Public Link",
+		"defaultOpenFileDescription": "Choose the file that opens by default after visiting the link",
+		"defaultOpenFileLabel": "Default open file",
+		"defaultOpenFileSearchPlaceholder": "Search files",
 		"deleteConfirmDescription": "People with this link will no longer be able to access the share after it is canceled.",
 		"deleteConfirmMessage": "Cancel \"{{name}}\"? People with this link will no longer be able to access the share.",
 		"deleteConfirmTitle": "Cancel shared link",
@@ -4099,10 +4105,10 @@
 		"projectFiles": "Project Files",
 		"projectShareGenerated": "Project Sharing",
 		"projectShareName": "Project Share_{{projectName}}",
-		"pureMode": "Pure Mode",
-		"pureModeDescription": "Display the entry file in fullscreen and hide the header",
 		"publicAccess": "Public Access",
 		"publicAccessDescription": "Anyone can access via link. Content may be indexed by search engines. Please be aware of data security",
+		"pureMode": "Pure Mode",
+		"pureModeDescription": "Display the entry file in fullscreen and hide the header",
 		"qrCode": "Share QR Code",
 		"recordingShareCreateTitle": "Share",
 		"recordingShareName": "Recording Share_{{projectName}}",
@@ -4586,7 +4592,10 @@
 		],
 		"actionTitle": "If you want to actively intervene",
 		"mainText": "Task execution is taking too long, which may be due to the following reasons:",
-		"reasonList": ["AI is processing complex tasks", "Network connection is unstable"],
+		"reasonList": [
+			"AI is processing complex tasks",
+			"Network connection is unstable"
+		],
 		"statusText": "If you don't take any action, AI will continue trying"
 	},
 	"tool": {
@@ -4712,6 +4721,15 @@
 		"batchOperation": "Batch Operation",
 		"batchOperations": "Batch Operations",
 		"cancelSelect": "Cancel",
+		"canvasOperationRisk": {
+			"moveContentLossContent": "This operation will move data or resources required by the canvas content. Some canvas content may disappear. Continue?",
+			"moveMixedContent": "This operation affects the canvas project entry file and data or resources required by the canvas content. The canvas may fail to open or lose visible content. Continue?",
+			"moveOpenFailureContent": "This operation will move the canvas project entry file. The canvas may fail to open. Continue?",
+			"renameContentLossContent": "This operation will rename data or resources required by the canvas content. Some canvas content may disappear. Continue?",
+			"renameMixedContent": "This operation affects the canvas project entry file and data or resources required by the canvas content. The canvas may fail to open or lose visible content. Continue?",
+			"renameOpenFailureContent": "This operation will rename the canvas project entry file. The canvas may fail to open. Continue?",
+			"title": "Canvas Project Risk"
+		},
 		"clawPlaygroundTags": {
 			"aboutYou": "About You",
 			"guidelines": "Guidelines",
@@ -4743,6 +4761,9 @@
 			"confirmBatchDelete": "Confirm Delete {{count}} Files?",
 			"confirmBatchDeleteWithFolders": "Selection includes folders, subfiles not selected will also be deleted",
 			"confirmBatchDeleteWithMagicSystemFolder": "Your selection includes the .magic system folder. After deletion, some capabilities may stop working and this cannot be undone. Proceed with caution.",
+			"copyPath": "Copy Path",
+			"copyPathFailed": "Failed to copy path",
+			"copyPathSuccess": "Path copied",
 			"copyTo": "Copy to",
 			"createAICardFailed": "Failed to create AI card project",
 			"createAICardSuccess": "AI card project created successfully",
@@ -4772,6 +4793,9 @@
 			"deleteBatchSubject": "{{count}} selected item(s)",
 			"deleteBatchTipMobile": "Delete Selection?",
 			"deleteBatchWithFoldersDescription": "will be permanently deleted, including folder contents and unselected subfiles. This action cannot be undone.",
+			"deleteCanvasContentLossRiskContent": "This operation will delete data or resources required by the canvas content. Some canvas content may disappear. Continue deleting?",
+			"deleteCanvasMixedRiskContent": "This operation affects the canvas project entry file and data or resources required by the canvas content. The canvas may fail to open or lose visible content. Continue deleting?",
+			"deleteCanvasOpenFailureRiskContent": "This operation will delete the canvas project entry file. The canvas may fail to open. Continue deleting?",
 			"deleteContent": "Confirm to delete {{name}} ?",
 			"deleteFileDescription": "will be permanently deleted. This action cannot be undone.",
 			"deleteFileFailed": "Failed to delete file",

@@ -2517,6 +2517,13 @@
 		"exitEdit": "退出编辑",
 		"fetchFailed": "获取队列列表失败",
 		"missingInfo": "项目或话题信息缺失",
+		"mobile": {
+			"collapse": "收起队列",
+			"count": "{{count}} 条",
+			"emptyContent": "⋯",
+			"expand": "展开队列",
+			"title": "队列中"
+		},
 		"operationInProgress": "该消息正在处理中，请稍后再试",
 		"removeFromQueue": "从队列移除",
 		"sendFailed": "发送消息失败",
@@ -2527,13 +2534,6 @@
 		"taskPending": "等待中",
 		"taskProcessing": "处理中",
 		"title": "任务队列",
-		"mobile": {
-			"collapse": "收起队列",
-			"count": "{{count}} 条",
-			"emptyContent": "⋯",
-			"expand": "展开队列",
-			"title": "队列中"
-		},
 		"updateFailed": "更新队列消息失败",
 		"updateSuccess": "队列消息已更新"
 	},
@@ -3204,6 +3204,9 @@
 		"createFolderNamePlaceholder": "输入文件夹名",
 		"createSection": "新建文档",
 		"deleteConfirm": {
+			"canvasContentLossWarning": "该操作会删除画布内容依赖的数据或资源，可能导致画布内容显示丢失。",
+			"canvasMixedWarning": "该操作会影响画布项目入口文件以及内容依赖的数据或资源，可能导致画布无法打开或内容显示丢失。",
+			"canvasOpenFailureWarning": "该操作会删除画布项目入口文件，可能导致画布无法打开。",
 			"emptyLabel": "空文件夹",
 			"fileCount": "{{count}} 个文件",
 			"intro": "将永久删除以下 {{count}} 个项目：",
@@ -3277,6 +3280,9 @@
 		"defaultNameOrganization": "组织分享",
 		"defaultNamePassword": "密码链接",
 		"defaultNamePublic": "公开链接",
+		"defaultOpenFileDescription": "选择访问链接后默认打开的文件",
+		"defaultOpenFileLabel": "默认打开文件",
+		"defaultOpenFileSearchPlaceholder": "搜索文件",
 		"deleteConfirmDescription": "取消后，已获得链接的人将无法继续访问该分享。",
 		"deleteConfirmMessage": "确定取消「{{name}}」吗？取消后，已获得链接的人将无法继续访问该分享。",
 		"deleteConfirmTitle": "取消分享链接",
@@ -4101,10 +4107,10 @@
 		"projectFiles": "项目文件",
 		"projectShareGenerated": "项目分享",
 		"projectShareName": "项目分享_{{projectName}}",
-		"pureMode": "纯净模式",
-		"pureModeDescription": "全屏显示入口文件并隐藏头部",
 		"publicAccess": "公开访问",
 		"publicAccessDescription": "任何人可通过链接访问，分享内容可能会被搜索引擎收录，请注意数据安全",
+		"pureMode": "纯净模式",
+		"pureModeDescription": "全屏显示入口文件并隐藏头部",
 		"qrCode": "分享二维码",
 		"recordingShareCreateTitle": "分享",
 		"recordingShareName": "录音分享_{{projectName}}",
@@ -4589,7 +4595,10 @@
 		],
 		"actionTitle": "若您希望主动干预",
 		"mainText": "任务执行时间过长，可能是如下原因导致：",
-		"reasonList": ["AI 处理复杂任务中", "网络连接不稳定"],
+		"reasonList": [
+			"AI 处理复杂任务中",
+			"网络连接不稳定"
+		],
 		"statusText": "若您暂不操作，AI 会继续尝试"
 	},
 	"tool": {
@@ -4725,6 +4734,15 @@
 		"batchOperation": "批量操作",
 		"batchOperations": "批量操作",
 		"cancelSelect": "取消",
+		"canvasOperationRisk": {
+			"moveContentLossContent": "该操作会移动画布内容依赖的数据或资源，可能导致画布内容显示丢失。是否继续？",
+			"moveMixedContent": "该操作会影响画布项目入口文件以及内容依赖的数据或资源，可能导致画布无法打开或内容显示丢失。是否继续？",
+			"moveOpenFailureContent": "该操作会移动画布项目入口文件，可能导致画布无法打开。是否继续？",
+			"renameContentLossContent": "该操作会重命名画布内容依赖的数据或资源，可能导致画布内容显示丢失。是否继续？",
+			"renameMixedContent": "该操作会影响画布项目入口文件以及内容依赖的数据或资源，可能导致画布无法打开或内容显示丢失。是否继续？",
+			"renameOpenFailureContent": "该操作会重命名画布项目入口文件，可能导致画布无法打开。是否继续？",
+			"title": "画布项目风险提示"
+		},
 		"clawPlaygroundTags": {
 			"aboutYou": "关于你",
 			"guidelines": "指南",
@@ -4756,6 +4774,9 @@
 			"confirmBatchDelete": "确认删除{{count}}个文件？",
 			"confirmBatchDeleteWithFolders": "选中项包含文件夹，子级未选中文件也将被删除",
 			"confirmBatchDeleteWithMagicSystemFolder": "你选择删除的文件中包含 .magic 系统文件夹。删除后，部分功能及能力可能无法正常使用，且此操作不可撤销，请谨慎操作。",
+			"copyPath": "复制路径",
+			"copyPathFailed": "复制路径失败",
+			"copyPathSuccess": "已复制路径",
 			"copyTo": "复制至",
 			"createAICardFailed": "创建 AI 卡片项目失败",
 			"createAICardSuccess": "创建 AI 卡片项目成功",
@@ -4785,6 +4806,9 @@
 			"deleteBatchSubject": "选中的 {{count}} 项",
 			"deleteBatchTipMobile": "删除操作确认",
 			"deleteBatchWithFoldersDescription": "将被永久删除，包含文件夹内容和子级未选中文件，此操作无法撤销。",
+			"deleteCanvasContentLossRiskContent": "该操作会删除画布内容依赖的数据或资源，可能导致画布内容显示丢失。是否继续删除？",
+			"deleteCanvasMixedRiskContent": "该操作会影响画布项目入口文件以及内容依赖的数据或资源，可能导致画布无法打开或内容显示丢失。是否继续删除？",
+			"deleteCanvasOpenFailureRiskContent": "该操作会删除画布项目入口文件，可能导致画布无法打开。是否继续删除？",
 			"deleteContent": "确认删除 {{name}} ?",
 			"deleteFileDescription": "将被永久删除，此操作无法撤销。",
 			"deleteFileFailed": "删除文件失败",

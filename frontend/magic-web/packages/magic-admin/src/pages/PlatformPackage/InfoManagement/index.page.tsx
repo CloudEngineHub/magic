@@ -1,4 +1,4 @@
-import { Flex, Form, message } from "antd"
+import { Flex, Form, Radio, message } from "antd"
 import { useTranslation } from "react-i18next"
 import { SubHeader, MagicSwitch, MagicInput, BaseLayout } from "@admin-components"
 import { useAdminStore } from "@admin/stores/admin"
@@ -28,15 +28,20 @@ const InfoManagementPage = () => {
 
 	const [globalConfig, setGlobalConfig] = useState<PlatformPackage.GlobalConfig>({
 		is_maintenance: false,
+		maintenance_type: "global_notice",
 		maintenance_description: "",
 	})
 
-	const [form] = Form.useForm()
+	const [form] = Form.useForm<PlatformPackage.GlobalConfig>()
 
 	useMount(() => {
 		PlatformPackageApi.getGlobalConfig().then((res) => {
-			form.setFieldsValue(res)
-			setGlobalConfig(res)
+			const nextConfig = {
+				maintenance_type: "global_notice" as PlatformPackage.MaintenanceType,
+				...res,
+			}
+			form.setFieldsValue(nextConfig)
+			setGlobalConfig(nextConfig)
 		})
 	})
 
@@ -75,6 +80,20 @@ const InfoManagementPage = () => {
 				<Flex vertical className={styles.formWrapper}>
 					<Form.Item label={t("maintainStatus")} name="is_maintenance">
 						<MagicSwitch />
+					</Form.Item>
+					<Form.Item label={t("maintainType")} name="maintenance_type">
+						<Radio.Group
+							options={[
+								{
+									label: t("maintenanceTypeOptions.globalNotice"),
+									value: "global_notice",
+								},
+								{
+									label: t("maintenanceTypeOptions.fullSiteShutdown"),
+									value: "site_close",
+								},
+							]}
+						/>
 					</Form.Item>
 					<Form.Item label={t("maintainDesc")} name="maintenance_description">
 						<MagicInput.TextArea rows={4} placeholder={tCommon("pleaseInput")} />

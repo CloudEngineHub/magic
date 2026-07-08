@@ -19,6 +19,49 @@ function isLikelyLegacyCanvasRelativePath(path: string): boolean {
 	return isCanvasRelativeResourcePath(path)
 }
 
+export function isDesignDslCanvasRelativeResourcePath(path: string): boolean {
+	const trimmed = path.trim()
+	if (!trimmed || isRemoteOrSpecialPath(trimmed)) return false
+
+	const resourcePath = hasCurrentDirectoryPrefix(trimmed)
+		? stripCurrentDirectoryPrefix(trimmed)
+		: stripEdgeSlashes(trimmed)
+
+	return isLikelyLegacyCanvasRelativePath(resourcePath)
+}
+
+export interface StrictDesignDslCanvasResourceCandidates {
+	/** Workspace-relative paths that must live under the current design base path. */
+	workspaceRelative: string[]
+	/** DSL-relative paths that are valid only when the file is inside the current design root. */
+	rootRelative: string[]
+}
+
+export function resolveStrictDesignDslCanvasResourceCandidates(
+	path: string,
+	projectBasePath: string | undefined,
+): StrictDesignDslCanvasResourceCandidates {
+	const empty: StrictDesignDslCanvasResourceCandidates = {
+		workspaceRelative: [],
+		rootRelative: [],
+	}
+	const trimmed = path.trim()
+	const base = stripEdgeSlashes(projectBasePath?.trim() ?? "")
+	if (!trimmed || !base || !isDesignDslCanvasRelativeResourcePath(trimmed)) return empty
+
+	const resourcePath = stripEdgeSlashes(
+		hasCurrentDirectoryPrefix(trimmed)
+			? stripCurrentDirectoryPrefix(trimmed)
+			: stripEdgeSlashes(trimmed),
+	)
+	if (!resourcePath || !isLikelyLegacyCanvasRelativePath(resourcePath)) return empty
+
+	return {
+		workspaceRelative: [stripEdgeSlashes(`${base}/${resourcePath}`)],
+		rootRelative: [resourcePath],
+	}
+}
+
 function formatCurrentDirectoryPath(path: string): string {
 	return formatCanvasRelativeResourcePath(path)
 }

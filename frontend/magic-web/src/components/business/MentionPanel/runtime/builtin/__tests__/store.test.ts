@@ -3,6 +3,7 @@ import mentionPanelStore from "../store"
 import projectFilesStore from "@/stores/projectFiles"
 import { MentionItemType, MentionItem } from "../../../types"
 import { MentionPanelCatalogId } from "../../../businessTypes"
+import { zhCN } from "../../../i18n/locales/zh-CN"
 import { BotApi, CrewApi, FlowApi, GlobalApi } from "@/apis"
 import type { GetSettingsGlobalDataResponse } from "@/apis/types"
 import type { GetUserAvailableAgentListResponse } from "@/types/bot"
@@ -11,6 +12,7 @@ import type { SkillDomainItem } from "../domains/skills/types"
 import { type ProjectListItem, ProjectStatus } from "@/pages/superMagic/pages/Workspace/types"
 import { TopicMode } from "@/pages/superMagic/pages/Workspace/TopicMode"
 import { AttachmentSource } from "@/pages/superMagic/components/TopicFilesButton/hooks/types"
+import { ElementTypeEnum } from "@/components/CanvasDesign/canvas/types"
 
 interface TestWorkspaceEntry {
 	type: "file" | "directory"
@@ -83,6 +85,11 @@ vi.mock("@/stores/projectFiles", () => {
 				(item) => item.type === "directory" && item.file_id === fileId,
 			)
 		},
+		getFolderData(folderId: string | number | undefined) {
+			return this.workspaceFilesList.find(
+				(item) => item.type === "directory" && String(item.file_id) === String(folderId),
+			)
+		},
 	}
 
 	return {
@@ -113,6 +120,16 @@ async function getSkillItems(): Promise<MentionItem[]> {
 	const result = await mentionPanelStore.dispatch({
 		kind: "catalog",
 		catalogId: MentionPanelCatalogId.SKILLS,
+	})
+	return result.items ?? []
+}
+
+async function getDefaultItems(): Promise<MentionItem[]> {
+	const result = await mentionPanelStore.dispatch({
+		kind: "default",
+		options: {
+			t: zhCN,
+		},
 	})
 	return result.items ?? []
 }
@@ -284,6 +301,7 @@ describe("MentionPanelStore Sorting Algorithm", () => {
 		store.uploadFilesStore.items = []
 		store.skillsStore.currentSkillQueryKey = "__default__"
 		mentionPanelStore.setCurrentTabs([])
+		mentionPanelStore.clearActiveCanvasElementsContext()
 
 		vi.mocked(CrewApi.getMentionSkills).mockResolvedValue([])
 
@@ -709,6 +727,116 @@ describe("MentionPanelStore Sorting Algorithm", () => {
 			})
 
 			expect(validation.isValid).toBe(true)
+		})
+
+		it("should show active canvas elements as a root category after project files", async () => {
+			projectFilesStore.setSelectedProject(createTestProject("test-project"))
+			mentionPanelStore.setActiveCanvasElementsContext({
+				designProjectId: "design-dir",
+				canvasName: "pink-jk-pikachu-design",
+				getCanvasDocument: () => ({
+					elements: [
+						{
+							id: "hero",
+							type: ElementTypeEnum.Image,
+							name: "Hero Layer",
+							src: "./images/hero.png",
+							zIndex: 1,
+						},
+					],
+				}),
+				resolveFileBySrc: () =>
+					({
+						file_id: "file-hero",
+						file_name: "hero.png",
+						file_extension: "png",
+						relative_file_path: "/design/images/hero.png",
+						is_directory: false,
+					}) as any,
+			})
+
+			const items = await getDefaultItems()
+			const projectFilesIndex = items.findIndex((item) => item.id === "project-files")
+			const canvasElementsIndex = items.findIndex((item) => item.id === "canvas-elements")
+
+			expect(projectFilesIndex).toBeGreaterThanOrEqual(0)
+			expect(canvasElementsIndex).toBe(projectFilesIndex + 1)
+			expect(items[canvasElementsIndex]).toMatchObject({
+				type: MentionItemType.FOLDER,
+				name: "画布元素",
+				description: "pink-jk-pikachu-design",
+				hasChildren: true,
+				isFolder: true,
+			})
+		})
+
+		it("should show canvas elements root lazily without scanning an empty active canvas", async () => {
+			projectFilesStore.setSelectedProject(createTestProject("test-project"))
+			const getCanvasDocument = vi.fn(() => ({
+				elements: [
+					{
+						id: "shape",
+						type: ElementTypeEnum.Rectangle,
+						name: "Shape Layer",
+						zIndex: 1,
+					},
+				],
+			}))
+			mentionPanelStore.setActiveCanvasElementsContext({
+				designProjectId: "design-dir",
+				canvasName: "empty-design",
+				getCanvasDocument,
+				resolveFileBySrc: () => null,
+			})
+
+			const items = await getDefaultItems()
+			const canvasElementsItem = items.find((item) => item.id === "canvas-elements")
+
+			expect(canvasElementsItem).toMatchObject({
+				type: MentionItemType.FOLDER,
+				name: "画布元素",
+				description: "empty-design",
+			})
+			expect(getCanvasDocument).not.toHaveBeenCalled()
+		})
+
+		it("should include active canvas elements in global search by layer name", async () => {
+			projectFilesStore.setSelectedProject(createTestProject("test-project"))
+			mentionPanelStore.setActiveCanvasElementsContext({
+				designProjectId: "design-dir",
+				canvasName: "pink-jk-pikachu-design",
+				getCanvasDocument: () => ({
+					elements: [
+						{
+							id: "hero",
+							type: ElementTypeEnum.Image,
+							name: "Hero Layer",
+							src: "./images/hero.png",
+							zIndex: 1,
+						},
+					],
+				}),
+				resolveFileBySrc: () =>
+					({
+						file_id: "file-hero",
+						file_name: "hero.png",
+						file_extension: "png",
+						relative_file_path: "/design/images/hero.png",
+						is_directory: false,
+					}) as any,
+			})
+
+			const results = await searchItems("Hero")
+
+			expect(results[0]).toMatchObject({
+				type: MentionItemType.PROJECT_FILE,
+				name: "Hero Layer",
+				tags: ["canvas-element"],
+				data: {
+					file_id: "file-hero",
+					file_name: "hero.png",
+				},
+			})
 		})
 
 		it("should resolve an open dashboard entry tab to its parent folder mention", async () => {

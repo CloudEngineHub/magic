@@ -2551,6 +2551,162 @@
         "zh_CN": "移除接口文档「{{operation_id}}」失败",
         "en_US": "Failed to remove API doc \"{{operation_id}}\""
     },
+    "scheduled_task.operation.running": {
+        "zh_CN": "正在处理定时任务",
+        "en_US": "Handling scheduled task"
+    },
+    "scheduled_task.operation.done": {
+        "zh_CN": "定时任务处理完成",
+        "en_US": "Scheduled task operation completed"
+    },
+    "scheduled_task.error.default": {
+        "zh_CN": "定时任务操作失败，请查看工具调用结果。",
+        "en_US": "Scheduled task operation failed. Check the tool result."
+    },
+    "scheduled_task.create.creating": {
+        "zh_CN": "正在创建定时任务「{{target}}」",
+        "en_US": "Creating scheduled task \"{{target}}\""
+    },
+    "scheduled_task.create.created": {
+        "zh_CN": "定时任务「{{target}}」已创建",
+        "en_US": "Scheduled task \"{{target}}\" created"
+    },
+    "scheduled_task.create.failed": {
+        "zh_CN": "创建定时任务「{{target}}」失败：{{error}}",
+        "en_US": "Failed to create scheduled task \"{{target}}\": {{error}}"
+    },
+    "scheduled_task.list.listing": {
+        "zh_CN": "正在查询定时任务",
+        "en_US": "Listing scheduled tasks"
+    },
+    "scheduled_task.list.listed": {
+        "zh_CN": "已查询定时任务，共 {{count}} 条",
+        "en_US": "Scheduled tasks listed, {{count}} total"
+    },
+    "scheduled_task.list.failed": {
+        "zh_CN": "查询定时任务失败：{{error}}",
+        "en_US": "Failed to list scheduled tasks: {{error}}"
+    },
+    "scheduled_task.get.getting": {
+        "zh_CN": "正在查看定时任务「{{target}}」",
+        "en_US": "Getting scheduled task \"{{target}}\""
+    },
+    "scheduled_task.get.got": {
+        "zh_CN": "已查看定时任务「{{target}}」",
+        "en_US": "Scheduled task \"{{target}}\" loaded"
+    },
+    "scheduled_task.get.failed": {
+        "zh_CN": "查看定时任务「{{target}}」失败：{{error}}",
+        "en_US": "Failed to get scheduled task \"{{target}}\": {{error}}"
+    },
+    "scheduled_task.update.updating": {
+        "zh_CN": "正在更新定时任务「{{target}}」",
+        "en_US": "Updating scheduled task \"{{target}}\""
+    },
+    "scheduled_task.update.updated": {
+        "zh_CN": "定时任务「{{target}}」已更新",
+        "en_US": "Scheduled task \"{{target}}\" updated"
+    },
+    "scheduled_task.update.failed": {
+        "zh_CN": "更新定时任务「{{target}}」失败：{{error}}",
+        "en_US": "Failed to update scheduled task \"{{target}}\": {{error}}"
+    },
+    "scheduled_task.delete.deleting": {
+        "zh_CN": "正在删除定时任务「{{target}}」",
+        "en_US": "Deleting scheduled task \"{{target}}\""
+    },
+    "scheduled_task.delete.deleted": {
+        "zh_CN": "定时任务「{{target}}」已删除",
+        "en_US": "Scheduled task \"{{target}}\" deleted"
+    },
+    "scheduled_task.delete.failed": {
+        "zh_CN": "删除定时任务「{{target}}」失败：{{error}}",
+        "en_US": "Failed to delete scheduled task \"{{target}}\": {{error}}"
+    },
+    "scheduled_task.detail.title": {
+        "zh_CN": "定时任务操作结果",
+        "en_US": "Scheduled task result"
+    },
+    "scheduled_task.detail.list_title": {
+        "zh_CN": "定时任务列表",
+        "en_US": "Scheduled tasks"
+    },
+    "scheduled_task.detail.operation": {
+        "zh_CN": "操作",
+        "en_US": "Operation"
+    },
+    "scheduled_task.detail.result_status": {
+        "zh_CN": "状态",
+        "en_US": "Status"
+    },
+    "scheduled_task.detail.success": {
+        "zh_CN": "成功",
+        "en_US": "Success"
+    },
+    "scheduled_task.detail.failed": {
+        "zh_CN": "失败",
+        "en_US": "Failed"
+    },
+    "scheduled_task.detail.error": {
+        "zh_CN": "错误",
+        "en_US": "Error"
+    },
+    "scheduled_task.detail.id": {
+        "zh_CN": "任务 ID",
+        "en_US": "Task ID"
+    },
+    "scheduled_task.detail.task_name": {
+        "zh_CN": "任务名称",
+        "en_US": "Task name"
+    },
+    "scheduled_task.detail.task_describe": {
+        "zh_CN": "任务描述",
+        "en_US": "Description"
+    },
+    "scheduled_task.detail.agent_mode": {
+        "zh_CN": "员工模式",
+        "en_US": "Agent mode"
+    },
+    "scheduled_task.detail.task_status": {
+        "zh_CN": "任务状态",
+        "en_US": "Task status"
+    },
+    "scheduled_task.detail.enabled": {
+        "zh_CN": "启用状态",
+        "en_US": "Enabled"
+    },
+    "scheduled_task.detail.enabled_yes": {
+        "zh_CN": "已启用",
+        "en_US": "Enabled"
+    },
+    "scheduled_task.detail.enabled_no": {
+        "zh_CN": "已禁用",
+        "en_US": "Disabled"
+    },
+    "scheduled_task.detail.deadline": {
+        "zh_CN": "截止时间",
+        "en_US": "Deadline"
+    },
+    "scheduled_task.detail.time_config": {
+        "zh_CN": "时间配置",
+        "en_US": "Time config"
+    },
+    "scheduled_task.detail.total": {
+        "zh_CN": "总数",
+        "en_US": "Total"
+    },
+    "scheduled_task.detail.no_schedules": {
+        "zh_CN": "当前没有匹配的定时任务。",
+        "en_US": "No matching scheduled tasks."
+    },
+    "scheduled_task.detail.all_tasks": {
+        "zh_CN": "全部定时任务",
+        "en_US": "all scheduled tasks"
+    },
+    "scheduled_task.detail.empty": {
+        "zh_CN": "-",
+        "en_US": "-"
+    },
     "call_simple_tool.calling": {
         "zh_CN": "正在调用工具流",
         "en_US": "Calling tool flow"

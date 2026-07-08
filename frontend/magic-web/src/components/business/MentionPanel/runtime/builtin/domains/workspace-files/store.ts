@@ -13,7 +13,11 @@ export class MentionPanelWorkspaceFilesStore {
 
 	constructor(dependencies: WorkspaceFilesStoreDependencies) {
 		this.projectFilesStore = dependencies.projectFilesStore
-		makeAutoObservable(this, {}, { autoBind: true })
+		makeAutoObservable<MentionPanelWorkspaceFilesStore, "projectFilesStore">(
+			this,
+			{ projectFilesStore: false },
+			{ autoBind: true },
+		)
 	}
 
 	workspaceFilesToMentionItems(files: WorkspaceEntry[]): MentionItem[] {

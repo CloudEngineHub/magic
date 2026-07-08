@@ -149,6 +149,15 @@ from app.tools.oauth2 import (
     OAuth2UpsertApp,
 )
 
+# 定时任务工具集（code_mode_only=True，只允许通过 sdk.tool.call 调用）
+from app.tools.scheduled_task import (
+    ScheduledTaskCreate,
+    ScheduledTaskDelete,
+    ScheduledTaskGet,
+    ScheduledTaskList,
+    ScheduledTaskUpdate,
+)
+
 # Remote 工具集（将 magic-service mention 中的 tool / agent 以本地工具形态转发）
 from app.tools.remote import (
     CallSimpleAgent,
@@ -307,6 +316,13 @@ __all__ = [
     "OAuth2StartAuthorization",
     "OAuth2UpsertApiDoc",
     "OAuth2UpsertApp",
+
+    # 定时任务工具集
+    "ScheduledTaskCreate",
+    "ScheduledTaskDelete",
+    "ScheduledTaskGet",
+    "ScheduledTaskList",
+    "ScheduledTaskUpdate",
 
     # Remote 工具集
     "CallSimpleAgent",

@@ -158,6 +158,7 @@ class AudioProjectRepository implements AudioProjectRepositoryInterface
                 'a.device_id',
                 'a.duration',
                 'a.file_size',
+                'a.location',
                 'a.tags',
                 'a.current_phase',
                 'a.phase_status',
@@ -256,6 +257,7 @@ class AudioProjectRepository implements AudioProjectRepositoryInterface
             'device_id' => $entity->getDeviceId(),
             'duration' => $entity->getDuration(),
             'file_size' => $entity->getFileSize(),
+            'location' => $entity->getLocation(),
             'tags' => json_encode($entity->getTags(), JSON_UNESCAPED_UNICODE),
             'current_phase' => $entity->getCurrentPhase(),
             'phase_status' => $entity->getPhaseStatus(),
@@ -263,6 +265,9 @@ class AudioProjectRepository implements AudioProjectRepositoryInterface
             'phase_error' => $entity->getPhaseError(),
             'updated_at' => date('Y-m-d H:i:s'),
         ];
+        if ($entity->getExtra() !== null) {
+            $data['extra'] = $this->encodeNullableArray($entity->getExtra());
+        }
 
         if ($entity->getId() > 0) {
             // Update existing record (cast doesn't apply here, need manual JSON encode)
@@ -293,6 +298,9 @@ class AudioProjectRepository implements AudioProjectRepositoryInterface
         // Handle tags field: if it's an array, encode it to JSON
         if (isset($data['tags']) && is_array($data['tags'])) {
             $data['tags'] = json_encode($data['tags'], JSON_UNESCAPED_UNICODE);
+        }
+        if (array_key_exists('extra', $data) && is_array($data['extra'])) {
+            $data['extra'] = $this->encodeNullableArray($data['extra']);
         }
 
         // Automatically add updated_at timestamp
@@ -391,6 +399,7 @@ class AudioProjectRepository implements AudioProjectRepositoryInterface
                 'device_id' => $model->device_id,
                 'duration' => $model->duration,
                 'file_size' => $model->file_size,
+                'location' => $model->location,
                 'tags' => is_string($model->tags) ? json_decode($model->tags ?: '[]', true) : ($model->tags ?? []),
                 'current_phase' => $model->current_phase,
                 'phase_status' => $model->phase_status,
@@ -420,6 +429,7 @@ class AudioProjectRepository implements AudioProjectRepositoryInterface
         $entity->setDeviceId($model->device_id);
         $entity->setDuration($model->duration);
         $entity->setFileSize($model->file_size);
+        $entity->setLocation($model->location);
         // Handle tags: cast may not work in all cases, manually decode if string
         $tags = $model->tags;
         if (is_string($tags)) {
@@ -430,9 +440,33 @@ class AudioProjectRepository implements AudioProjectRepositoryInterface
         $entity->setPhaseStatus($model->phase_status);
         $entity->setPhasePercent($model->phase_percent ?? 0);
         $entity->setPhaseError($model->phase_error);
+        $entity->setExtra($this->decodeNullableArray($model->extra ?? null));
         $entity->setCreatedAt($model->created_at?->format('Y-m-d H:i:s'));
         $entity->setUpdatedAt($model->updated_at?->format('Y-m-d H:i:s'));
 
         return $entity;
+    }
+
+    private function encodeNullableArray(?array $value): ?string
+    {
+        if ($value === null) {
+            return null;
+        }
+
+        return json_encode($value, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    }
+
+    private function decodeNullableArray(mixed $value): ?array
+    {
+        if (is_array($value)) {
+            return $value;
+        }
+
+        if (! is_string($value) || $value === '') {
+            return null;
+        }
+
+        $decoded = json_decode($value, true);
+        return is_array($decoded) ? $decoded : null;
     }
 }

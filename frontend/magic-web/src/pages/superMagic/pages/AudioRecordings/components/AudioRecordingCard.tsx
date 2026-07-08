@@ -50,12 +50,12 @@ interface AudioRecordingCardProps {
 	layout?: "desktop" | "mobile"
 	onOpen?: (item: AudioProjectListItem) => void
 	onSummarize?: (item: AudioProjectListItem) => void
-	onOpenProject?: (item: AudioProjectListItem) => void
 	onRename?: (item: AudioProjectListItem) => void
 	onDelete?: (item: AudioProjectListItem) => void
 	onCopyToProject?: (item: AudioProjectListItem) => void
 	onMore?: (item: AudioProjectListItem) => void
 	onRetry?: (item: AudioProjectListItem) => void
+	onRetryMerge?: (item: AudioProjectListItem) => void
 	onMoveToGroup?: (item: AudioProjectListItem) => void
 	isSubmitting?: boolean
 }
@@ -70,10 +70,6 @@ interface LinearProgressProps {
 const UPLOAD_PROGRESS_NEUTRAL_TRACK = "rgba(24, 24, 27, 0.08)"
 const UPLOAD_PROGRESS_NEUTRAL_FILL = "rgb(24, 24, 27)"
 const UPLOAD_PROGRESS_DESTRUCTIVE = "rgb(239, 68, 68)"
-// TODO(audio-recordings): Flip on after backend exposes stable re-summary and retry-merge APIs.
-const ENABLE_REGENERATE_SUMMARY_ACTION = false
-const ENABLE_RETRY_MERGE_ACTION = false
-
 /** Linear progress bar component for visual file uploads */
 function LinearProgress({
 	value,
@@ -246,13 +242,11 @@ function SummaryLoadingButton({
 interface CardActionMenuProps {
 	cardId: string
 	label: string
-	openProjectLabel: string
 	renameLabel: string
 	deleteLabel: string
 	copyToProjectLabel: string
 	copyUnavailableLabel: string
 	moveToGroupLabel?: string
-	onOpenProject?: () => void
 	onRename?: () => void
 	onDelete?: () => void
 	onCopyToProject?: () => void
@@ -266,13 +260,11 @@ interface CardActionMenuProps {
 function CardActionMenu({
 	cardId,
 	label,
-	openProjectLabel,
 	renameLabel,
 	deleteLabel,
 	copyToProjectLabel,
 	copyUnavailableLabel,
 	moveToGroupLabel,
-	onOpenProject,
 	onRename,
 	onDelete,
 	onCopyToProject,
@@ -281,15 +273,6 @@ function CardActionMenu({
 	regenerateSummaryLabel,
 	canCopyToProject = true,
 }: CardActionMenuProps) {
-	/** Routes to the source project while keeping the card click handler from firing */
-	const handleOpenProject = useCallback(
-		(event: MouseEvent) => {
-			event.stopPropagation()
-			onOpenProject?.()
-		},
-		[onOpenProject],
-	)
-
 	const handleRename = useCallback(
 		(event: MouseEvent) => {
 			event.stopPropagation()
@@ -356,13 +339,6 @@ function CardActionMenu({
 			</DropdownMenuTrigger>
 			<DropdownMenuContent align="end" className="min-w-[120px]">
 				<DropdownMenuItem
-					onClick={handleOpenProject}
-					data-testid={`audio-recording-card-${cardId}-action-open-project`}
-				>
-					<FolderOpen className="h-4 w-4" aria-hidden />
-					{openProjectLabel}
-				</DropdownMenuItem>
-				<DropdownMenuItem
 					onClick={handleRename}
 					data-testid={`audio-recording-card-${cardId}-action-rename`}
 				>
@@ -389,8 +365,7 @@ function CardActionMenu({
 						{copyToProjectLabel}
 					</DropdownMenuItem>
 				) : null}
-				{/* TODO(audio-recordings): Enable this menu item after backend supports re-summary. */}
-				{ENABLE_REGENERATE_SUMMARY_ACTION && onRegenerateSummary ? (
+				{onRegenerateSummary ? (
 					<DropdownMenuItem
 						onClick={handleRegenerateSummary}
 						data-testid={`audio-recording-card-${cardId}-action-regenerate`}
@@ -418,12 +393,12 @@ function AudioRecordingCard({
 	layout = "desktop",
 	onOpen,
 	onSummarize,
-	onOpenProject,
 	onRename,
 	onDelete,
 	onCopyToProject,
 	onMore,
 	onRetry,
+	onRetryMerge,
 	onMoveToGroup,
 	isSubmitting = false,
 }: AudioRecordingCardProps) {
@@ -499,10 +474,13 @@ function AudioRecordingCard({
 		onMoveToGroup?.(item)
 	}, [item, onMoveToGroup])
 
-	/** Opens the backing Super project without entering the audio preview detail page */
-	const handleOpenProject = useCallback(() => {
-		onOpenProject?.(item)
-	}, [item, onOpenProject])
+	const handleRetryMerge = useCallback(
+		(event: MouseEvent) => {
+			event.stopPropagation()
+			onRetryMerge?.(item)
+		},
+		[item, onRetryMerge],
+	)
 
 	const displayName = resolveRecordingDisplayName(item.project_name, item.created_at)
 	const sourceLabel = resolveRecordingSourceLabel(item, {
@@ -768,16 +746,12 @@ function AudioRecordingCard({
 						</span>
 					) : null}
 
-					{/* TODO(audio-recordings): Enable this retry-merge CTA after backend exposes a stable merge retry API. */}
-					{ENABLE_RETRY_MERGE_ACTION && !isProgressMode && showMergeFailedIndicator ? (
+					{!isProgressMode && showMergeFailedIndicator ? (
 						<Button
 							type="button"
 							size="sm"
 							variant="outline"
-							disabled
-							onClick={(event) => {
-								event.stopPropagation()
-							}}
+							onClick={handleRetryMerge}
 							className={cn(
 								"h-8 shrink-0 gap-1 rounded-full border border-destructive/30 bg-transparent px-3 font-medium text-destructive hover:bg-destructive/10 hover:text-destructive disabled:opacity-100",
 								isMobile && "text-[13px] leading-5",
@@ -854,20 +828,17 @@ function AudioRecordingCard({
 						<CardActionMenu
 							cardId={item.id}
 							label={t("card.moreActions")}
-							openProjectLabel={t("card.openProject")}
 							renameLabel={t("card.rename")}
 							deleteLabel={t("card.delete")}
 							copyToProjectLabel={t("card.copyToProject")}
 							copyUnavailableLabel={t("copy.unavailable")}
 							moveToGroupLabel={t("card.moveToGroup")}
-							onOpenProject={handleOpenProject}
 							onRename={handleRename}
 							onDelete={handleDelete}
 							onCopyToProject={handleCopyToProject}
 							canCopyToProject={copyAvailability.canCopy}
 							onMoveToGroup={handleMoveToGroup}
 							regenerateSummaryLabel={t("card.regenerateSummary")}
-							// TODO(audio-recordings): Enable summary regeneration after re-summary API lands.
 							onRegenerateSummary={
 								item.card_status === "summarized" && onSummarize
 									? () => onSummarize(item)

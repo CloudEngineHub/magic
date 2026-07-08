@@ -118,6 +118,10 @@ class AsrTaskStatusDTO
 
     public ?string $uploadGeneratedTitle = null; // upload-tokens 生成的标题（用于 summary 复用）
 
+    public ?string $finishOutputFilename = null; // finish 提交给沙箱的输出文件名（不含扩展名）
+
+    public ?string $expectedAudioFileName = null; // finish 预期生成的音频文件名
+
     // ===== 新增：异步阶段管理字段 =====
     public ?string $currentPhase = null; // 当前阶段：merging|summarizing
 
@@ -182,6 +186,8 @@ class AsrTaskStatusDTO
         $this->markerContent = self::getStringValue($data, ['marker_content', 'markerContent']);
         $this->language = $data['language'] ?? null;
         $this->uploadGeneratedTitle = self::getStringValue($data, ['upload_generated_title', 'uploadGeneratedTitle']);
+        $this->finishOutputFilename = self::getStringValue($data, ['finish_output_filename', 'finishOutputFilename']);
+        $this->expectedAudioFileName = self::getStringValue($data, ['expected_audio_file_name', 'expectedAudioFileName']);
 
         // 异步阶段管理字段
         $this->currentPhase = self::getStringValue($data, ['current_phase', 'currentPhase']);
@@ -244,6 +250,8 @@ class AsrTaskStatusDTO
             'marker_content' => $this->markerContent,
             'language' => $this->language,
             'upload_generated_title' => $this->uploadGeneratedTitle,
+            'finish_output_filename' => $this->finishOutputFilename,
+            'expected_audio_file_name' => $this->expectedAudioFileName,
             // 异步阶段管理字段
             'current_phase' => $this->currentPhase,
             'phase_status' => $this->phaseStatus,

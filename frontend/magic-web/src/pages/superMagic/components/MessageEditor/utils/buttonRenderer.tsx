@@ -94,6 +94,20 @@ export interface ButtonRendererContext {
 
 type ButtonRenderer = (context: ButtonRendererContext) => React.ReactNode
 
+function getMessageTokenUsage(message: Record<string, unknown>): TokenUsage | undefined {
+	const node =
+		(superMagicStore.getMessageNode(message.app_message_id as string) as
+			| Record<string, unknown>
+			| undefined) ||
+		(superMagicStore.getMessageNode(message.correlation_id as string) as
+			| Record<string, unknown>
+			| undefined) ||
+		(message.debug as Record<string, unknown> | undefined)
+	const tokenUsage = node?.token_usage as TokenUsage | undefined
+
+	return tokenUsage && typeof tokenUsage.total_tokens === "number" ? tokenUsage : undefined
+}
+
 // Button renderer registry
 export const BUTTON_RENDERERS: Record<ToolbarButton, ButtonRenderer> = {
 	[ToolbarButton.DRAFT_BOX]: (ctx) => (
@@ -279,11 +293,9 @@ export const BUTTON_RENDERERS: Record<ToolbarButton, ButtonRenderer> = {
 		// 从后往前找到最后一条有 token_usage 数据的消息
 		let tokenUsage: TokenUsage | undefined
 		for (let i = messages.length - 1; i >= 0; i--) {
-			const tu = (messages[i].debug as Record<string, unknown>)?.token_usage as
-				| TokenUsage
-				| undefined
-			if (tu && typeof tu.total_tokens === "number") {
-				tokenUsage = tu
+			const usage = getMessageTokenUsage(messages[i] as Record<string, unknown>)
+			if (usage) {
+				tokenUsage = usage
 				break
 			}
 		}

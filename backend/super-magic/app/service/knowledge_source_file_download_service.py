@@ -221,11 +221,6 @@ class KnowledgeSourceFileDownloadService:
             logger.warning(f"读取 init_client_message 失败，无法附加 magic-service 认证头: {e}")
             return headers
 
-        message_headers = (config.get("message_subscription_config") or {}).get("headers") or {}
-        token = message_headers.get("token")
-        if token:
-            headers["token"] = str(token)
-
         metadata = config.get("metadata") or {}
         organization_code = metadata.get("organization_code") or metadata.get("organizationCode")
         if organization_code:

@@ -15,9 +15,11 @@ import {
 	ImageGenerationTaskTypeMap,
 } from "@/components/CanvasDesign/types.magic"
 import {
+	isDesignDslCanvasRelativeResourcePath,
 	normalizeDesignAttachmentPathForCanvas,
 	rewriteLayerElementsPathsForMagicProjectSave,
 	resolveDesignDslPathCandidatesToWorkspaceRelative,
+	resolveStrictDesignDslCanvasResourceCandidates,
 	normalizeMagicProjectDirToBase,
 } from "./designDslPathUtils"
 import { getDesignProjectCurrentFileByProjectPath } from "./toolDesignProjectInfo"
@@ -1941,14 +1943,31 @@ export function findFileBySrc(
 	flatAttachments: FileItem[],
 	designProjectBasePath?: string,
 	attachmentIndex?: DesignAttachmentIndex | null,
+	options?: {
+		strictCanvasRelativeResource?: boolean
+	},
 ): FileItem | null {
 	if (!src || !flatAttachments || flatAttachments.length === 0) {
 		return null
 	}
-	const resolvedCandidates =
-		designProjectBasePath && src
-			? resolveDesignDslPathCandidatesToWorkspaceRelative(src, designProjectBasePath)
-			: [src]
+	const shouldUseStrictCanvasResourceMatch =
+		options?.strictCanvasRelativeResource === true &&
+		Boolean(designProjectBasePath) &&
+		isDesignDslCanvasRelativeResourcePath(src)
+	const strictCanvasResourceCandidates = shouldUseStrictCanvasResourceMatch
+		? resolveStrictDesignDslCanvasResourceCandidates(src, designProjectBasePath)
+		: null
+	let resolvedCandidates: string[]
+	if (strictCanvasResourceCandidates?.workspaceRelative.length) {
+		resolvedCandidates = strictCanvasResourceCandidates.workspaceRelative
+	} else if (designProjectBasePath && src) {
+		resolvedCandidates = resolveDesignDslPathCandidatesToWorkspaceRelative(
+			src,
+			designProjectBasePath,
+		)
+	} else {
+		resolvedCandidates = [src]
+	}
 	const normalizedCandidates = resolvedCandidates.map((candidate) => normalizePath(candidate))
 	const normalizedSrc = normalizedCandidates[0] || normalizePath(src)
 
@@ -1977,6 +1996,10 @@ export function findFileBySrc(
 			const itemPath = normalizePath(item.relative_file_path)
 			return normalizedCandidates.includes(itemPath)
 		})
+	}
+
+	if (shouldUseStrictCanvasResourceMatch) {
+		return fileItem || null
 	}
 
 	// 方法1.5: 如果目录名变化，尝试按多段后缀匹配（至少目录 + 文件名）

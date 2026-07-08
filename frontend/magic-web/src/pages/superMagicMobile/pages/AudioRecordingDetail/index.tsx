@@ -19,6 +19,7 @@ import {
 	deleteAudioRecordingProjects,
 	moveAudioRecordingProjects,
 	renameAudioRecordingProject,
+	resubmitAudioRecordingSummary,
 	submitAudioRecordingSummary,
 } from "@/pages/superMagic/pages/AudioRecordings/utils/audio-recording-actions"
 import {
@@ -452,6 +453,46 @@ export default function MobileAudioRecordingDetailPage() {
 		}
 	}
 
+	/** Routes summary actions to initial generation or direct re-summary based on current detail state. */
+	async function handleSummaryAction(item: AudioProjectListItem) {
+		if (
+			summaryReady ||
+			summaryVisualState.status === "failed" ||
+			item.card_status === "summarized"
+		) {
+			return handleResummarize()
+		}
+		return handleSummarize(item)
+	}
+
+	/** Submits direct re-summary and immediately flips the mobile detail into summarizing state. */
+	async function handleResummarize() {
+		if (!resolvedActionItem || summarySubmitting) return false
+
+		setSummarySubmitting(true)
+		try {
+			const result = await resubmitAudioRecordingSummary(resolvedActionItem)
+			if (!result.ok) {
+				if (result.reason === "missingParams") {
+					toast.error(t("summary.missingParams"))
+				} else if (result.reason === "missingModel") {
+					toast.error(t("summary.missingModel"))
+				} else {
+					toast.error(t("summary.submitFailed"))
+				}
+				return false
+			}
+
+			const optimisticItem = buildOptimisticSummarizingProject(resolvedActionItem)
+			setDetailItem(optimisticItem)
+			mutateAudioProjectItem(optimisticItem)
+			setActiveTab("summary")
+			return true
+		} finally {
+			setSummarySubmitting(false)
+		}
+	}
+
 	/** Moves the current project to another group and patches local metadata without reloading the page. */
 	async function handleMoveGroup(targetGroupId: string) {
 		if (!detailItem || actionSubmitting) return
@@ -601,7 +642,7 @@ export default function MobileAudioRecordingDetailPage() {
 							submitting={summarySubmitting}
 							onGenerate={() => {
 								if (!resolvedActionItem) return
-								void handleSummarize(resolvedActionItem)
+								void handleSummaryAction(resolvedActionItem)
 							}}
 						/>
 					)
@@ -668,7 +709,7 @@ export default function MobileAudioRecordingDetailPage() {
 					}
 				}}
 				onDelete={handleDelete}
-				onSummarize={handleSummarize}
+				onSummarize={handleSummaryAction}
 				onMoveToGroup={handleOpenMoveGroup}
 				onCopyToProject={(item) => {
 					void copyController.openCopyToProject(item)
@@ -681,7 +722,6 @@ export default function MobileAudioRecordingDetailPage() {
 				canCopyToProject={
 					resolvedActionItem ? canCopyAudioProject(resolvedActionItem).canCopy : false
 				}
-				// TODO(audio-recordings): Effective only after backend supports re-summary.
 				showRegenerateAction
 			/>
 

@@ -223,23 +223,37 @@ Step 4 - analyze audio project: Execute analysis
 
 识别条件：
 - 项目已存在配置文件（magic.project.js）
-- 用户要求"重新分析"
+- 用户要求"重新总结"、"重新分析"、"重新生成纪要"、"重新跑洞察/金句/待办"等
 
 执行步骤：
 1. 读取 magic.project.js
 2. 读取文字稿+笔记
-3. 调用 analyze（跳过 setup）
+3. 若用户泛泛要求重新总结整个项目：调用 analyze_audio_project，analysis_scope 传 "template_analysis_files"，不要传 specified_analysis_types
+4. 若用户明确只要求某些维度：调用 analyze_audio_project，并用 specified_analysis_types 指定这些维度
+
+边界：
+- 跳过 setup_audio_project
+- 禁止调用 audio_understanding、split_audio 或任何 ASR 合并相关能力，除非用户明确要求重新转写
+- 只读取一手信息：magic.project.js、文字稿、笔记
+- 禁止读取旧的纪要、章节主题、洞察、金句、待办等派生文件
 -->
 Reanalyze existing project (skip setup)
 
 Recognition conditions:
 - Project already has configuration file (magic.project.js)
-- User requests "reanalyze"
+- User requests "reanalyze", "resummarize", "regenerate minutes", "rerun insights/highlights/follow-up", or similar
 
 Execution steps:
 1. Read magic.project.js
 2. Read transcript + notes
-3. Call analyze (skip setup)
+3. If user broadly requests full project resummary: call analyze_audio_project with analysis_scope set to "template_analysis_files" and do not pass specified_analysis_types
+4. If user explicitly requests only certain dimensions: call analyze_audio_project with specified_analysis_types for those dimensions
+
+Boundaries:
+- Skip setup_audio_project
+- Never call audio_understanding, split_audio, or any ASR merge capability unless the user explicitly asks to re-transcribe
+- Read only first-hand information: magic.project.js, transcript, notes
+- Never read old derived files such as minutes, chapter topics, insights, highlights, or follow-up
 </scenario_reanalyze_project>
 
 <scenario_update_speakers>

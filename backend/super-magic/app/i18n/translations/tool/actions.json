@@ -563,6 +563,26 @@
         "zh_CN": "移除 OAuth2 接口文档",
         "en_US": "Remove OAuth2 API doc"
     },
+    "scheduled_task_create": {
+        "zh_CN": "创建定时任务",
+        "en_US": "Create scheduled task"
+    },
+    "scheduled_task_list": {
+        "zh_CN": "查询定时任务",
+        "en_US": "List scheduled tasks"
+    },
+    "scheduled_task_get": {
+        "zh_CN": "查看定时任务",
+        "en_US": "Get scheduled task"
+    },
+    "scheduled_task_update": {
+        "zh_CN": "更新定时任务",
+        "en_US": "Update scheduled task"
+    },
+    "scheduled_task_delete": {
+        "zh_CN": "删除定时任务",
+        "en_US": "Delete scheduled task"
+    },
     "call_simple_tool": {
         "zh_CN": "调用工具",
         "en_US": "Use Tool"

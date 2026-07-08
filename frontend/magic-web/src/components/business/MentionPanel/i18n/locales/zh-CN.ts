@@ -48,6 +48,7 @@ export const zhCN: I18nTexts = {
 		agents: "智能体",
 		skills: "技能",
 		tools: "工具",
+		canvasElements: "画布元素",
 		uploadFiles: "上传的文件",
 		projectFiles2: "项目文件",
 	},

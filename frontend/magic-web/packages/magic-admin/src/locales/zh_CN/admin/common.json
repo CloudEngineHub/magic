@@ -200,7 +200,7 @@
 	"prePage": "上一页",
 	"search": "搜索选项",
 	"status": "状态",
-	"title": "$t(common:platform.name)管理后台",
+	"title": "{{platformName}}管理后台",
 	"totalItems": "共{{total}}条",
 	"unsavedChanges": "您有未保存的更改，确定要关闭吗？"
 }

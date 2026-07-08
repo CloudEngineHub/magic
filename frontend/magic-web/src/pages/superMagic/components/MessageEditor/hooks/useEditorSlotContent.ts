@@ -1,4 +1,3 @@
-import { useMemo } from "react"
 import { renderSlot } from "../utils/buttonRenderer"
 import { GAP_SIZE_MAP } from "../constants/constant"
 import type { MessageEditorProps } from "../types"
@@ -18,39 +17,36 @@ export default function useEditorSlotContent({
 	buttonContext,
 	size,
 }: UseEditorSlotContentParams) {
-	return useMemo(
-		() => ({
-			topBarLeftContent: renderSlot(
-				layoutConfig?.topBarLeft ?? [],
-				buttonContext,
-				GAP_SIZE_MAP[size],
-			),
-			topBarRightContent: renderSlot(
-				layoutConfig?.topBarRight ?? [],
-				buttonContext,
-				GAP_SIZE_MAP[size],
-			),
-			bottomLeftContent: renderSlot(
-				layoutConfig?.bottomLeft ?? [],
-				buttonContext,
-				GAP_SIZE_MAP[size],
-			),
-			bottomRightContent: renderSlot(
-				layoutConfig?.bottomRight ?? [],
-				buttonContext,
-				GAP_SIZE_MAP[size],
-			),
-			outsideBottomContent: renderSlot(
-				layoutConfig?.outsideBottom ?? [],
-				buttonContext,
-				GAP_SIZE_MAP[size],
-			),
-			outsideTopContent: renderSlot(
-				layoutConfig?.outsideTop ?? [],
-				buttonContext,
-				GAP_SIZE_MAP[size],
-			),
-		}),
-		[buttonContext, layoutConfig, size],
-	)
+	return {
+		topBarLeftContent: renderSlot(
+			layoutConfig?.topBarLeft ?? [],
+			buttonContext,
+			GAP_SIZE_MAP[size],
+		),
+		topBarRightContent: renderSlot(
+			layoutConfig?.topBarRight ?? [],
+			buttonContext,
+			GAP_SIZE_MAP[size],
+		),
+		bottomLeftContent: renderSlot(
+			layoutConfig?.bottomLeft ?? [],
+			buttonContext,
+			GAP_SIZE_MAP[size],
+		),
+		bottomRightContent: renderSlot(
+			layoutConfig?.bottomRight ?? [],
+			buttonContext,
+			GAP_SIZE_MAP[size],
+		),
+		outsideBottomContent: renderSlot(
+			layoutConfig?.outsideBottom ?? [],
+			buttonContext,
+			GAP_SIZE_MAP[size],
+		),
+		outsideTopContent: renderSlot(
+			layoutConfig?.outsideTop ?? [],
+			buttonContext,
+			GAP_SIZE_MAP[size],
+		),
+	}
 }

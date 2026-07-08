@@ -30,7 +30,6 @@ use Dtyq\SuperMagic\Infrastructure\ExternalAPI\SandboxOS\Workspace\Request\Expor
 use Dtyq\SuperMagic\Infrastructure\ExternalAPI\SandboxOS\Workspace\Request\ImportWorkspaceRequest;
 use Dtyq\SuperMagic\Infrastructure\ExternalAPI\SandboxOS\Workspace\WorkspaceExporterInterface;
 use Dtyq\SuperMagic\Infrastructure\ExternalAPI\SandboxOS\Workspace\WorkspaceImporterInterface;
-use Dtyq\SuperMagic\Infrastructure\Utils\WorkDirectoryUtil;
 use Hyperf\DbConnection\Annotation\Transactional;
 use Hyperf\DbConnection\Db;
 use Throwable;
@@ -123,29 +122,33 @@ class SkillDomainService
     }
 
     /**
-     * Export agent workspace from sandbox to object storage.
+     * Export skill workspace from sandbox to private object storage.
      *
-     * @param SkillDataIsolation $dataIsolation Data isolation context
-     * @param string $code Agent code, e.g. "SMA-xxx"
-     * @param int $projectId Associated project ID
-     * @param string $fullWorkdir Full working directory path on object storage
      * @return array{file_key: string, metadata: array} Export result containing file_key and metadata
      */
-    public function exportAgentFromSandbox(SkillDataIsolation $dataIsolation, string $code, int $projectId, string $fullWorkdir): array
-    {
-        // Build sandbox ID (same strategy as file converter)
-        $sandboxId = WorkDirectoryUtil::generateUniqueCodeFromSnowflakeId($projectId . '_custom_agent');
-
-        // Build upload_config: STS credentials for private bucket, matches sandbox API contract
+    public function exportSkillFromSandbox(
+        SkillDataIsolation $dataIsolation,
+        string $code,
+        string $sandboxId,
+        string $sourcePath,
+        string $archiveRoot,
+        string $fileName
+    ): array {
         $uploadConfig = $this->cloudFileRepository->getStsTemporaryCredential(
             $dataIsolation->getCurrentOrganizationCode(),
             StorageBucketType::Private,
-            '/skill_export',
+            'skills/' . $code,
             options: ['internal_endpoint' => true]
         );
 
-        // Call sandbox workspace export API via proxy request
-        $request = new ExportWorkspaceRequest(ProjectMode::SKILL_CREATOR->value, $code, $uploadConfig);
+        $request = new ExportWorkspaceRequest(
+            ProjectMode::SKILL_CREATOR->value,
+            $code,
+            $uploadConfig,
+            $sourcePath,
+            $archiveRoot,
+            $fileName
+        );
         $response = $this->workspaceExporter->export($sandboxId, $request);
 
         if (! $response->isSuccess()) {

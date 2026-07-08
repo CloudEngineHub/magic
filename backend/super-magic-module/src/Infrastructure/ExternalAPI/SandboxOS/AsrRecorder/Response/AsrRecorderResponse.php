@@ -34,7 +34,7 @@ class AsrRecorderResponse
             return new self(
                 $result->getCode(),
                 $result->getMessage(),
-                []
+                $result->getData()
             );
         }
 
@@ -72,6 +72,14 @@ class AsrRecorderResponse
     public function getStatus(): string
     {
         return $this->data['status'] ?? 'error';
+    }
+
+    /**
+     * 响应 data 是否包含沙箱任务状态.
+     */
+    public function hasTaskStatus(): bool
+    {
+        return isset($this->data['status']) && is_string($this->data['status']) && $this->data['status'] !== '';
     }
 
     /**
@@ -122,7 +130,9 @@ class AsrRecorderResponse
      */
     public function getErrorMessage(): ?string
     {
-        return $this->data['error_message'] ?? null;
+        return $this->data['error_message']
+            ?? $this->data['error']
+            ?? ($this->message !== '' ? $this->message : null);
     }
 
     /**

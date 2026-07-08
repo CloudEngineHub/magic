@@ -477,9 +477,7 @@ export function useFilesViewer(props: FilesViewerProps) {
 		const result: Array<PlaybackTabItem | KnowledgeBaseTabItem | TabItem> = []
 		if (playbackTab) result.push(playbackTab)
 		// 知识库 tabs 和文件 tabs 按 create_at 排序混排
-		const mixed = [...knowledgeBaseTabs, ...tabs].sort(
-			(a, b) => (a.create_at || 0) - (b.create_at || 0),
-		)
+		const mixed = [...knowledgeBaseTabs, ...tabs]
 		result.push(...mixed)
 		return result
 	}, [playbackTab, knowledgeBaseTabs, tabs])

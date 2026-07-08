@@ -13,6 +13,8 @@ interface FilesDeleteConfirmSheetProps {
 	onConfirm: () => void | Promise<void>
 	selectedHierarchy: DeleteConfirmHierarchyGroup[]
 	magicWarningVariant?: "none" | "single" | "multi"
+	canvasWarning?: boolean
+	canvasWarningContent?: string
 	testIdPrefix?: string
 }
 
@@ -58,6 +60,8 @@ export function FilesDeleteConfirmSheet({
 	onConfirm,
 	selectedHierarchy,
 	magicWarningVariant = "none",
+	canvasWarning = false,
+	canvasWarningContent,
 	testIdPrefix = "mobile-files-batch-delete-confirm",
 }: FilesDeleteConfirmSheetProps) {
 	const { t } = useTranslation("super")
@@ -185,7 +189,14 @@ export function FilesDeleteConfirmSheet({
 					className={cn("shrink-0 px-[14px] pt-2")}
 					style={{ paddingBottom: "max(var(--safe-area-inset-bottom), 16px)" }}
 				>
-					{magicWarningKey ? (
+					{canvasWarning ? (
+						<div className="rounded-lg bg-destructive/10 px-3 py-2.5">
+							<p className="text-[14px] leading-5 text-destructive">
+								{canvasWarningContent ||
+									t("projectDetail.deleteConfirm.canvasMixedWarning")}
+							</p>
+						</div>
+					) : magicWarningKey ? (
 						<div className="rounded-lg bg-destructive/10 px-3 py-2.5">
 							<p className="text-[14px] leading-5 text-destructive">
 								{t(magicWarningKey)}

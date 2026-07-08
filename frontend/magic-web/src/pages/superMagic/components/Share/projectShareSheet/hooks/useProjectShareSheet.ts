@@ -10,6 +10,12 @@ import {
 	calculateDefaultShareName,
 	generateSharePassword,
 } from "@/pages/superMagic/components/Share/utils"
+import {
+	calculateDefaultOpenFileId,
+	canSetAsDefault,
+	findFileInTree,
+	isFileDescendantOfSelectedFolders,
+} from "@/pages/superMagic/components/Share/FileSelector/utils"
 import { useShareProject } from "@/pages/superMagic/layouts/MainLayout/hooks/useShareProject"
 import {
 	SharedResourceType,
@@ -210,6 +216,189 @@ function countSelectedHierarchyFiles(nodes: SelectedFileHierarchyNode[]): number
 	}, 0)
 }
 
+/**
+ * Checks whether a default-open candidate still belongs to the current share selection.
+ */
+function isDefaultOpenFileInSelection(
+	fileId: string,
+	selectedFileIds: string[],
+	attachments: AttachmentItem[],
+): boolean {
+	if (selectedFileIds.includes(fileId)) {
+		return true
+	}
+
+	const selectedIdSet = new Set(selectedFileIds)
+	const stack = [...attachments]
+
+	while (stack.length > 0) {
+		const item = stack.pop()
+		if (!item?.file_id) {
+			if (item?.children?.length) {
+				stack.push(...item.children)
+			}
+			continue
+		}
+
+		if (selectedIdSet.has(item.file_id) && item.children?.length) {
+			const childrenStack = [...item.children]
+			while (childrenStack.length > 0) {
+				const child = childrenStack.pop()
+				if (child?.file_id === fileId) {
+					return true
+				}
+				if (child?.children?.length) {
+					childrenStack.push(...child.children)
+				}
+			}
+			continue
+		}
+
+		if (item.children?.length) {
+			stack.push(...item.children)
+		}
+	}
+
+	// Some flat payloads only preserve parent_id, so keep the existing helper as a compatibility fallback.
+	return isFileDescendantOfSelectedFolders(fileId, selectedFileIds, attachments)
+}
+
+/**
+ * Finds an attachment by ID using the current tree payload without relying on parent metadata.
+ */
+function findAttachmentInTree(
+	attachments: AttachmentItem[],
+	fileId: string,
+): AttachmentItem | undefined {
+	const stack = [...attachments]
+
+	while (stack.length > 0) {
+		const item = stack.pop()
+		if (!item) {
+			continue
+		}
+
+		if (item.file_id === fileId) {
+			return item
+		}
+
+		if (item.children?.length) {
+			stack.push(...item.children)
+		}
+	}
+
+	return undefined
+}
+
+/**
+ * Resolves the file ID used for default-open behavior in mobile file shares.
+ */
+function resolveDefaultOpenFileId({
+	defaultOpenFileId,
+	selectedFileIds,
+	attachments,
+}: {
+	defaultOpenFileId?: string
+	selectedFileIds: string[]
+	attachments: AttachmentItem[]
+}): string | undefined {
+	if (selectedFileIds.length === 0 || attachments.length === 0) {
+		return undefined
+	}
+
+	if (
+		defaultOpenFileId &&
+		canSetAsDefault(findAttachmentInTree(attachments, defaultOpenFileId) ?? {}) &&
+		isDefaultOpenFileInSelection(defaultOpenFileId, selectedFileIds, attachments)
+	) {
+		return defaultOpenFileId
+	}
+
+	return calculateDefaultOpenFileId(selectedFileIds, attachments) ?? undefined
+}
+
+/**
+ * Finds a default-open attachment from the flat list first, falling back to the tree only when needed.
+ */
+function findDefaultOpenFileItem({
+	fileId,
+	attachmentList,
+	attachments,
+}: {
+	fileId?: string
+	attachmentList: AttachmentItem[]
+	attachments: AttachmentItem[]
+}): AttachmentItem | undefined {
+	if (!fileId) {
+		return undefined
+	}
+
+	return (
+		attachmentList.find((item) => item.file_id === fileId) ||
+		(findFileInTree(
+			attachments as unknown as Record<string, unknown>[],
+			fileId,
+		) as AttachmentItem | null) ||
+		undefined
+	)
+}
+
+/**
+ * Builds the selectable default-open scope as a pruned tree plus a flat candidate list.
+ * Folders stay in the tree for navigation, while only openable files/folders become candidates.
+ */
+function buildDefaultOpenFileScope({
+	attachments,
+	selectedFileIds,
+	includeWholeTree,
+}: {
+	attachments: AttachmentItem[]
+	selectedFileIds: string[]
+	includeWholeTree: boolean
+}): { tree: AttachmentItem[]; candidates: AttachmentItem[] } {
+	const selectedIdSet = new Set(selectedFileIds)
+	const candidates: AttachmentItem[] = []
+
+	const visit = (item: AttachmentItem, forceIncludeChildren: boolean): AttachmentItem | null => {
+		const itemId = item.file_id
+		const isSelectedRoot = includeWholeTree || Boolean(itemId && selectedIdSet.has(itemId))
+		const shouldIncludeChildren = forceIncludeChildren || isSelectedRoot
+		const childNodes = (item.children || [])
+			.map((child) => visit(child, shouldIncludeChildren))
+			.filter((child): child is AttachmentItem => Boolean(child))
+
+		if (item.is_hidden || !itemId) {
+			return childNodes.length > 0
+				? ({ ...item, children: childNodes } as AttachmentItem)
+				: null
+		}
+
+		if (shouldIncludeChildren && canSetAsDefault(item)) {
+			candidates.push(item)
+		}
+
+		if (shouldIncludeChildren || childNodes.length > 0) {
+			return {
+				...item,
+				children: childNodes,
+			}
+		}
+
+		return null
+	}
+
+	if (attachments.length === 0) {
+		return { tree: [], candidates }
+	}
+
+	return {
+		tree: attachments
+			.map((item) => visit(item, includeWholeTree))
+			.filter((item): item is AttachmentItem => Boolean(item)),
+		candidates,
+	}
+}
+
 const DINGTALK_AVATAR_SIZE_SUFFIX_PATTERN = /@\d+w_\d+h$/
 
 function normalizeDetailMemberNode(node: TreeNode): TreeNode {
@@ -239,6 +428,7 @@ export function useProjectShareSheet({
 	projectId,
 	projectName,
 	attachments,
+	attachmentList,
 	fileMap,
 	defaultSelectedFileIds,
 	defaultOpenFileId,
@@ -260,6 +450,11 @@ export function useProjectShareSheet({
 	const shareableAttachments = isAudioRecordingScene
 		? recordingShareSelection.shareableFiles
 		: attachments
+	const shareableAttachmentList = useMemo(
+		() =>
+			isAudioRecordingScene ? recordingShareSelection.shareableFiles : (attachmentList ?? []),
+		[attachmentList, isAudioRecordingScene, recordingShareSelection.shareableFiles],
+	)
 	const [view, setView] = useState<ProjectShareSheetView>("create")
 	const [viewStack, setViewStack] = useState<ProjectShareSheetView[]>([])
 	const [selectedShareId, setSelectedShareId] = useState<string | null>(null)
@@ -277,6 +472,8 @@ export function useProjectShareSheet({
 		createInitialFormState(isAudioRecordingScene),
 	)
 	const [selectedFileIds, setSelectedFileIds] = useState<string[]>([])
+	const [userDefaultOpenFileId, setUserDefaultOpenFileId] = useState<string | undefined>()
+	const [defaultOpenFilePickerOpen, setDefaultOpenFilePickerOpen] = useState(false)
 
 	const shareProject = useShareProject({
 		attachments: shareableAttachments,
@@ -312,6 +509,53 @@ export function useProjectShareSheet({
 		selectedFileIds,
 		shareProject.defaultSelectedFileIds,
 	])
+	const defaultOpenFileScope = useMemo(() => {
+		if (isAudioRecordingScene) {
+			return { tree: [], candidates: [] }
+		}
+
+		return buildDefaultOpenFileScope({
+			attachments: shareableAttachments,
+			selectedFileIds: effectiveSelectedFileIds,
+			includeWholeTree: effectiveMode === "project",
+		})
+	}, [effectiveMode, effectiveSelectedFileIds, isAudioRecordingScene, shareableAttachments])
+	const autoDefaultOpenFileId = useMemo(() => {
+		if (isAudioRecordingScene) {
+			return undefined
+		}
+
+		return resolveDefaultOpenFileId({
+			defaultOpenFileId,
+			selectedFileIds: effectiveSelectedFileIds,
+			attachments: shareableAttachments,
+		})
+	}, [defaultOpenFileId, effectiveSelectedFileIds, isAudioRecordingScene, shareableAttachments])
+	const effectiveDefaultOpenFileId = useMemo(() => {
+		if (isAudioRecordingScene) {
+			return undefined
+		}
+
+		const userDefaultFile = userDefaultOpenFileId
+			? defaultOpenFileScope.candidates.find((item) => item.file_id === userDefaultOpenFileId)
+			: undefined
+
+		return userDefaultFile?.file_id || autoDefaultOpenFileId
+	}, [
+		autoDefaultOpenFileId,
+		defaultOpenFileScope.candidates,
+		isAudioRecordingScene,
+		userDefaultOpenFileId,
+	])
+	const defaultOpenFileItem = useMemo(
+		() =>
+			findDefaultOpenFileItem({
+				fileId: effectiveDefaultOpenFileId,
+				attachmentList: shareableAttachmentList,
+				attachments: shareableAttachments,
+			}),
+		[effectiveDefaultOpenFileId, shareableAttachmentList, shareableAttachments],
+	)
 
 	// Share-management list API requires login; only fetch when the sheet is open.
 	const shouldFetchShareLists = open && Boolean(projectId)
@@ -348,6 +592,8 @@ export function useProjectShareSheet({
 		setDetailMemberNodes([])
 		setDetailMemberLoading(false)
 		setSelectedShareMessageText("")
+		setUserDefaultOpenFileId(undefined)
+		setDefaultOpenFilePickerOpen(false)
 		setFormState({
 			...createInitialFormState(isAudioRecordingScene),
 			shareName: initialSelectedShare
@@ -355,7 +601,7 @@ export function useProjectShareSheet({
 				: buildDefaultShareNameForSheet({
 						mode: effectiveMode,
 						projectMode,
-						defaultOpenFileId,
+						defaultOpenFileId: effectiveDefaultOpenFileId,
 						attachments: shareableAttachments,
 						effectiveSelectedFileIds: isAudioRecordingScene
 							? recordingShareSelection.defaultSelectedFileIds
@@ -559,6 +805,26 @@ export function useProjectShareSheet({
 		}))
 	})
 
+	const openDefaultOpenFilePicker = useMemoizedFn(() => {
+		if (defaultOpenFileScope.candidates.length === 0) return
+		setDefaultOpenFilePickerOpen(true)
+	})
+
+	const closeDefaultOpenFilePicker = useMemoizedFn(() => {
+		setDefaultOpenFilePickerOpen(false)
+	})
+
+	const selectDefaultOpenFile = useMemoizedFn((fileId: string) => {
+		// Only accept IDs from the current share scope so the submitted payload cannot escape the visible picker.
+		const selectedCandidate = defaultOpenFileScope.candidates.find(
+			(item) => item.file_id === fileId,
+		)
+		if (!selectedCandidate?.file_id) return
+
+		setUserDefaultOpenFileId(selectedCandidate.file_id)
+		setDefaultOpenFilePickerOpen(false)
+	})
+
 	const copySelectedShareUrl = useMemoizedFn(async () => {
 		if (!selectedShare?.resource_id) return
 
@@ -630,7 +896,7 @@ export function useProjectShareSheet({
 			const fallbackShareName =
 				effectiveMode === "file"
 					? calculateDefaultShareName(
-							defaultOpenFileId,
+							effectiveDefaultOpenFileId,
 							selectedFileItems,
 							shareableAttachments,
 							t,
@@ -663,7 +929,9 @@ export function useProjectShareSheet({
 						: undefined,
 				password,
 				file_ids: submittedFileIds,
-				default_open_file_id: effectiveMode === "file" ? defaultOpenFileId : undefined,
+				default_open_file_id: isAudioRecordingScene
+					? undefined
+					: effectiveDefaultOpenFileId,
 				share_project: isAudioRecordingScene ? false : effectiveMode === "project",
 				project_id: projectId,
 				extra: {
@@ -792,6 +1060,11 @@ export function useProjectShareSheet({
 		selectedFileItems,
 		selectedFileHierarchy,
 		selectedFileCount,
+		defaultOpenFileId: effectiveDefaultOpenFileId,
+		defaultOpenFileItem,
+		defaultOpenFileCandidates: defaultOpenFileScope.candidates,
+		defaultOpenFileCandidateTree: defaultOpenFileScope.tree,
+		defaultOpenFilePickerOpen,
 		memberSelectorOpen,
 		selectedMemberNodes,
 		detailMemberNodes,
@@ -827,6 +1100,9 @@ export function useProjectShareSheet({
 		copySelectedShareUrl,
 		copySelectedSharePassword,
 		shareSelectedShareToSystem,
+		openDefaultOpenFilePicker,
+		closeDefaultOpenFilePicker,
+		selectDefaultOpenFile,
 		submitCreateShare,
 		openEditSelectedShare,
 		confirmCancelShare,

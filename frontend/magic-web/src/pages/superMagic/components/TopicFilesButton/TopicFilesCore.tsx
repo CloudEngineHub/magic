@@ -2027,6 +2027,7 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 					}}
 					mode="file"
 					attachments={attachments}
+					attachmentList={attachments}
 					projectName={shareFileInfo?.projectName || selectedProject?.project_name}
 					projectId={projectId}
 					defaultSelectedFileIds={

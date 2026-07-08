@@ -49,10 +49,15 @@ const MobileMenuItem = memo(function MobileMenuItem(props: MenuItemProps) {
 			// Checkbox toggles selection while the rest of a folder row drills into children.
 			if ((event.target as HTMLElement).closest("[data-mobile-checkbox]")) return
 			if ((event.target as HTMLElement).closest("[data-right-arrow]")) return
+			if (item.unSelectable) {
+				event.preventDefault()
+				event.stopPropagation()
+				return
+			}
 			event.stopPropagation()
 			onClick?.(event)
 		},
-		[onClick],
+		[item.unSelectable, onClick],
 	)
 
 	// Isolate checkbox taps from row navigation so folder rows can support both actions.
@@ -168,12 +173,18 @@ const MobileMenuItem = memo(function MobileMenuItem(props: MenuItemProps) {
 	return (
 		<div
 			key={item.id}
-			className={cx(styles.menuItem, selected && "selected", className)}
+			className={cx(
+				styles.menuItem,
+				selected && "selected",
+				item.unSelectable && "disabled",
+				className,
+			)}
 			style={style}
 			onClick={handleRowClick}
 			role="option"
 			aria-selected={selected}
-			tabIndex={selected ? 0 : -1}
+			aria-disabled={item.unSelectable}
+			tabIndex={selected && !item.unSelectable ? 0 : -1}
 			data-testid="mention-panel-menu-item"
 			{...restProps}
 		>

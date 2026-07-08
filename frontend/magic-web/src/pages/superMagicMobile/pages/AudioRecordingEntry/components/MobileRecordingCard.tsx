@@ -8,6 +8,7 @@ interface MobileRecordingCardProps {
 	onSummarize?: (item: AudioProjectListItem) => void
 	onMore?: (item: AudioProjectListItem) => void
 	onRetry?: (item: AudioProjectListItem) => void
+	onRetryMerge?: (item: AudioProjectListItem) => void
 	isSubmitting?: boolean
 }
 

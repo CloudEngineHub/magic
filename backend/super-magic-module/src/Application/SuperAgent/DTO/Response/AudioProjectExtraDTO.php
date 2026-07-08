@@ -25,6 +25,7 @@ class AudioProjectExtraDTO
         public readonly ?string $deviceId,
         public readonly ?int $duration,
         public readonly ?int $fileSize,
+        public readonly ?string $location,
         public readonly array $tags,
         public readonly string $currentPhase,
         public readonly ?string $phaseStatus,
@@ -49,6 +50,7 @@ class AudioProjectExtraDTO
             deviceId: $entity->getDeviceId(),
             duration: $entity->getDuration(),
             fileSize: $entity->getFileSize(),
+            location: $entity->getLocation(),
             tags: $entity->getTags(),
             currentPhase: $entity->getCurrentPhase(),
             phaseStatus: $entity->getPhaseStatus(),
@@ -73,6 +75,7 @@ class AudioProjectExtraDTO
             deviceId: $data['device_id'] ?? null,
             duration: isset($data['duration']) ? (int) $data['duration'] : null,
             fileSize: isset($data['file_size']) ? (int) $data['file_size'] : null,
+            location: $data['location'] ?? null,
             tags: isset($data['tags']) && is_string($data['tags'])
                 ? json_decode($data['tags'], true)
                 : ($data['tags'] ?? []),
@@ -99,6 +102,7 @@ class AudioProjectExtraDTO
             'device_id' => $this->deviceId,
             'duration' => $this->duration,
             'file_size' => $this->fileSize,
+            'location' => $this->location,
             'tags' => $this->tags,
             'current_phase' => $this->currentPhase,
             'phase_status' => $this->phaseStatus,

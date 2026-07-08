@@ -2,11 +2,6 @@ import type { AudioProjectListItem } from "@/types/audioProject"
 
 const OPTIMISTIC_UPLOADING_TRANSFER = new Set(["transferring", "failed"])
 const OPTIMISTIC_UPLOADING_CARD = new Set(["uploading", "upload_failed"])
-const AUTHORITATIVE_SUMMARY_CAUGHT_UP_CARD = new Set([
-	"summarizing",
-	"summarized",
-	"summary_failed",
-])
 
 /**
  * Decides whether an optimistic item should be cleared (replaced by the
@@ -34,12 +29,13 @@ export function shouldResolveOptimisticItem(
 		OPTIMISTIC_UPLOADING_CARD.has(optimisticItem.card_status)
 	if (isUploading) return false
 
-	// Keep a local summarizing state until the backend row itself catches up; otherwise
-	// a stale `not_summarized` authoritative row would regress the card back to "Generate Summary".
+	// Keep a local summarizing state until the backend row itself reports summarizing.
+	// A stale summarized/summary_failed row can be from the previous summary attempt, so
+	// resolving it too early would regress the card right after re-summary starts.
 	if (
 		optimisticItem.card_status === "summarizing" &&
 		authoritativeItem &&
-		!AUTHORITATIVE_SUMMARY_CAUGHT_UP_CARD.has(authoritativeItem.card_status)
+		authoritativeItem.card_status !== "summarizing"
 	) {
 		return false
 	}

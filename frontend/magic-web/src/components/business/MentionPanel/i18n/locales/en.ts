@@ -48,6 +48,7 @@ export const en: I18nTexts = {
 		agents: "Agents",
 		skills: "Skills",
 		tools: "Tools",
+		canvasElements: "Canvas Elements",
 		uploadFiles: "Upload Files",
 		projectFiles2: "Project Files",
 	},

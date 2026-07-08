@@ -301,6 +301,16 @@ export const useMobileStyles = createStyles(({ token, css, responsive }) => {
 				margin-bottom: 0;
 			}
 
+			&.disabled {
+				cursor: not-allowed;
+				opacity: 0.5;
+			}
+
+			&.disabled:active {
+				background: transparent;
+				transform: none;
+			}
+
 			&.last-history-item {
 				margin-bottom: 8px;
 				position: relative;

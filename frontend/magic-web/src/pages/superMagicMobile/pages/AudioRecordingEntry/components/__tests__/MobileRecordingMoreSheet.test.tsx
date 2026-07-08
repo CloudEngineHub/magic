@@ -109,7 +109,8 @@ describe("MobileRecordingMoreSheet", () => {
 		)
 	})
 
-	it("hides retry summary action for failed summarizing items", () => {
+	it("shows retry summary action for failed summarizing items", () => {
+		const onSummarize = vi.fn()
 		render(
 			<MobileRecordingMoreSheet
 				isOpen
@@ -122,15 +123,18 @@ describe("MobileRecordingMoreSheet", () => {
 				onClose={vi.fn()}
 				onRename={vi.fn()}
 				onDelete={vi.fn()}
-				onSummarize={vi.fn()}
+				onSummarize={onSummarize}
 			/>,
 		)
 
-		expect(screen.queryByText("Regenerate summary")).not.toBeInTheDocument()
-		expect(screen.queryByTestId("mobile-recording-more-summarize")).not.toBeInTheDocument()
+		fireEvent.click(screen.getByTestId("mobile-recording-more-summarize"))
+		expect(onSummarize).toHaveBeenCalledWith(
+			expect.objectContaining({ id: "project-move-target" }),
+		)
 	})
 
-	it("hides summarize action when the recording is already summarized", () => {
+	it("shows regenerate summary action when the recording is already summarized", () => {
+		const onSummarize = vi.fn()
 		render(
 			<MobileRecordingMoreSheet
 				isOpen
@@ -138,11 +142,15 @@ describe("MobileRecordingMoreSheet", () => {
 				onClose={vi.fn()}
 				onRename={vi.fn()}
 				onDelete={vi.fn()}
-				onSummarize={vi.fn()}
+				onSummarize={onSummarize}
+				showRegenerateAction
 			/>,
 		)
 
-		expect(screen.queryByTestId("mobile-recording-more-summarize")).toBeNull()
+		fireEvent.click(screen.getByTestId("mobile-recording-more-summarize"))
+		expect(onSummarize).toHaveBeenCalledWith(
+			expect.objectContaining({ id: "project-move-target" }),
+		)
 	})
 
 	it("hides summarize action while summarizing is already in progress", () => {
@@ -202,7 +210,7 @@ describe("MobileRecordingMoreSheet", () => {
 		expect(toast.info).not.toHaveBeenCalled()
 	})
 
-	it("hides regenerate summary action for summarized items", () => {
+	it("can hide regenerate summary action for summarized items when caller does not opt in", () => {
 		render(
 			<MobileRecordingMoreSheet
 				isOpen

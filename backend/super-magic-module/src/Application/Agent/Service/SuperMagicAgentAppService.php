@@ -30,6 +30,7 @@ use App\Infrastructure\ExternalAPI\Sms\Enum\LanguageEnum;
 use App\Infrastructure\Util\File\EasyFileTools;
 use App\Infrastructure\Util\OfficialOrganizationUtil;
 use Dtyq\AsyncEvent\AsyncEventUtil;
+use Dtyq\SuperMagic\Application\Agent\DTO\PublishAgentResultDTO;
 use Dtyq\SuperMagic\Domain\Agent\Entity\AgentMarketEntity;
 use Dtyq\SuperMagic\Domain\Agent\Entity\AgentPlaybookEntity;
 use Dtyq\SuperMagic\Domain\Agent\Entity\AgentSkillEntity;
@@ -917,7 +918,7 @@ class SuperMagicAgentAppService extends AbstractSuperMagicAppService
      * - `MARKET` 只新增市场分发能力，不主动清理现有组织内可见范围
      * - 一旦从市场重新切回组织内范围，需要将市场状态下线，并重建当前 Agent 的可见范围
      */
-    public function publishAgent(Authenticatable $authorization, string $code, PublishAgentRequestDTO $requestDTO): AgentVersionEntity
+    public function publishAgent(Authenticatable $authorization, string $code, PublishAgentRequestDTO $requestDTO): PublishAgentResultDTO
     {
         $dataIsolation = $this->createSuperMagicDataIsolation($authorization);
 
@@ -959,7 +960,7 @@ class SuperMagicAgentAppService extends AbstractSuperMagicAppService
         $versionEntity->setPublishTargetType(PublishTargetType::PRIVATE);
         $versionEntity->setPublishTargetValue(null);
 
-        return $this->publishPreparedAgentVersion($authorization, $dataIsolation, $code, $agentEntity, $versionEntity, false);
+        return $this->publishPreparedAgentVersion($authorization, $dataIsolation, $code, $agentEntity, $versionEntity, false)->version;
     }
 
     /**
@@ -1893,11 +1894,6 @@ class SuperMagicAgentAppService extends AbstractSuperMagicAppService
     }
 
     /**
-     * Export agent workspace to object storage via sandbox.
-     *
-     * @return array{file_key: string, metadata: array} Export result
-     */
-    /**
      * Validate that IDENTITY.md exists in the agent project before publishing.
      */
     private function validateIdentityMdExists(int $projectId): void
@@ -1911,6 +1907,9 @@ class SuperMagicAgentAppService extends AbstractSuperMagicAppService
         }
     }
 
+    /**
+     * @return array{file_key: string, metadata: array, sandbox_id: string}
+     */
     private function exportFileFromProject(
         Authenticatable $authorization,
         string $code,
@@ -1930,7 +1929,7 @@ class SuperMagicAgentAppService extends AbstractSuperMagicAppService
 
         $sandboxId = $this->initializeAgentPublishSandbox($dataIsolation, $code, $project);
 
-        return $this->superMagicAgentDomainService->exportAgentFromSandbox(
+        $exportResult = $this->superMagicAgentDomainService->exportAgentFromSandbox(
             $dataIsolation,
             $code,
             $projectId,
@@ -1938,6 +1937,9 @@ class SuperMagicAgentAppService extends AbstractSuperMagicAppService
             $sandboxId,
             $sourcePath
         );
+        $exportResult['sandbox_id'] = $sandboxId;
+
+        return $exportResult;
     }
 
     private function initializeAgentPublishSandbox(
@@ -2449,7 +2451,8 @@ class SuperMagicAgentAppService extends AbstractSuperMagicAppService
         SuperMagicAgentEntity $agentEntity,
         AgentVersionEntity $versionEntity,
         bool $shouldExportFile
-    ): AgentVersionEntity {
+    ): PublishAgentResultDTO {
+        $sandboxId = null;
         if ($shouldExportFile) {
             $projectId = $agentEntity->getProjectId();
             $projectEntity = $this->projectDomainService->getProjectNotUserId($projectId);
@@ -2465,6 +2468,7 @@ class SuperMagicAgentAppService extends AbstractSuperMagicAppService
             $sourcePath = $this->resolvePublishExportSourcePath($agentEntity->getProjectId());
             $this->validateIdentityMdExists($agentEntity->getProjectId());
             $fileMetadata = $this->exportFileFromProject($authorization, $code, $agentEntity->getProjectId(), $sourcePath);
+            $sandboxId = $fileMetadata['sandbox_id'];
             $agentEntity->setFileKey($fileMetadata['file_key']);
         } else {
             $agentEntity->setFileKey('');
@@ -2482,7 +2486,7 @@ class SuperMagicAgentAppService extends AbstractSuperMagicAppService
             throw $throwable;
         }
 
-        return $versionEntity;
+        return new PublishAgentResultDTO($versionEntity, $sandboxId);
     }
 
     /**

@@ -76,6 +76,7 @@ export interface I18nTexts {
 		agents: string
 		skills: string
 		tools: string
+		canvasElements: string
 		projectFiles2: string
 	}
 

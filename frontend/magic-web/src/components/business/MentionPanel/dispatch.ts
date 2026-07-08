@@ -31,6 +31,7 @@ export interface SearchRequest extends MentionStoreRequestBase {
 export interface ChildrenRequest extends MentionStoreRequestBase {
 	kind: "children"
 	id: string
+	options?: MentionRequestOptions
 }
 
 export interface CatalogRequest extends MentionStoreRequestBase {

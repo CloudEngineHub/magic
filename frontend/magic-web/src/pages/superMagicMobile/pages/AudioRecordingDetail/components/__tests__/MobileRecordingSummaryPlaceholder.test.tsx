@@ -38,18 +38,20 @@ describe("MobileRecordingSummaryPlaceholder", () => {
 		expect(onGenerate).toHaveBeenCalledTimes(1)
 	})
 
-	it("renders failed state without regenerate summary action", () => {
+	it("renders failed state with regenerate summary action", () => {
+		const onGenerate = vi.fn()
 		render(
 			<MobileRecordingSummaryPlaceholder
 				status="failed"
 				canGenerate
 				submitting={false}
-				onGenerate={vi.fn()}
+				onGenerate={onGenerate}
 			/>,
 		)
 
 		expect(screen.getByText("Summary failed")).toBeInTheDocument()
-		expect(screen.queryByRole("button", { name: "Regenerate summary" })).toBeNull()
+		fireEvent.click(screen.getByRole("button", { name: "Regenerate summary" }))
+		expect(onGenerate).toHaveBeenCalledTimes(1)
 	})
 
 	it("renders generating state without a summary action", () => {

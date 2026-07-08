@@ -145,6 +145,8 @@ const AuthCallback = lazy(() => import("@/pages/auth/callback"))
 
 /** 系统初始化流程页面 */
 const InitializationPage = lazy(() => import("@/pages/initialization"))
+/** 系统维护页面 */
+const MaintenancePage = lazy(() => import("@/pages/maintenance"))
 
 /** 全局布局 */
 const ClusterLayout = lazy(() => import("@/layouts/ClusterLayout"))
@@ -528,6 +530,11 @@ export function registerRoutes(config: RouteConfig = {}): Array<RouteObject> {
 			name: RouteName.Initialization,
 			path: RoutePath.Initialization,
 			element: <InitializationPage />,
+		},
+		{
+			name: RouteName.Maintenance,
+			path: RoutePath.Maintenance,
+			element: <MaintenancePage />,
 		},
 		{
 			name: RouteName.SuperMagicShare,

@@ -87,7 +87,7 @@ class AgentDispatcher(Base):
             return
 
         self.agent_context: Optional[AgentContext] = None
-        self.http_stream: Optional[HTTPSubscriptionStream] = None
+        self.http_streams: list[HTTPSubscriptionStream] = []
         self.is_workspace_initialized: bool = False  # 工作区初始化状态标志
         self.agent_service = AgentService()  # 创建AgentService实例
         self.agents: Dict[str, Agent] = {}  # 用于存储不同类型的agent
@@ -266,11 +266,14 @@ class AgentDispatcher(Base):
 
         # HTTP订阅流 - 通过环境变量控制是否启用
         enable_http_stream = os.getenv("ENABLE_HTTP_SUBSCRIPTION_STREAM", "true").lower() == "true"
-        if init_message.message_subscription_config and not self.http_stream:
+        configs = init_message.message_subscription_config or []
+        if configs and not self.http_streams:
             if enable_http_stream:
-                self.http_stream = HTTPSubscriptionStream(init_message.message_subscription_config)
-                self.agent_context.add_stream(self.http_stream)
-                logger.info("创建和添加了HTTP订阅流")
+                for subscription_config in configs:
+                    stream = HTTPSubscriptionStream(subscription_config)
+                    self.http_streams.append(stream)
+                    self.agent_context.add_stream(stream)
+                logger.info(f"创建和添加了 {len(self.http_streams)} 个 HTTP订阅流")
             else:
                 logger.info("HTTP订阅流已通过环境变量 ENABLE_HTTP_SUBSCRIPTION_STREAM 禁用，跳过创建")
 

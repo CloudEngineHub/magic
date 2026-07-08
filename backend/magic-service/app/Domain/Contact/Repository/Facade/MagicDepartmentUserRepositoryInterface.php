@@ -23,6 +23,11 @@ interface MagicDepartmentUserRepositoryInterface
      */
     public function getDepartmentUsersByUserIdsInMagic(array $userIds): array;
 
+    /**
+     * @return MagicDepartmentUserEntity[]
+     */
+    public function getDepartmentUsersByUserIdsInActiveDepartments(array $userIds, ?string $organizationCode = null): array;
+
     public function getDepartmentUsersByDepartmentId(string $departmentId, string $organizationCode, int $limit, int $offset): DepartmentUsersPageResponseDTO;
 
     /**
@@ -37,6 +42,13 @@ interface MagicDepartmentUserRepositoryInterface
     public function updateDepartmentUser(string $magicDepartmentUserPrimaryId, array $updateData): int;
 
     public function deleteDepartmentUsersByMagicIds(array $magicIds, string $departmentId, string $magicOrganizationCode): int;
+
+    public function deleteDepartmentUsersByDepartmentIds(array $departmentIds, string $magicOrganizationCode): int;
+
+    /**
+     * @return string[]
+     */
+    public function getMagicIdsByDepartmentIds(array $departmentIds, string $organizationCode): array;
 
     public function searchDepartmentUsersByJobTitle(string $keyword, string $magicOrganizationCode): array;
 }

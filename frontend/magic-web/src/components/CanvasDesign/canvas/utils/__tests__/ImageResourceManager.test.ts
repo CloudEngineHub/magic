@@ -93,6 +93,7 @@ function createManager() {
 	const visibilityManager = {
 		getDecodedImageRetentionSnapshot: vi.fn<() => DecodedImageRetentionHint[]>(() => []),
 		invalidateImageLoadRequest: vi.fn(),
+		isViewportResourceEpochCurrent: vi.fn((epoch: number) => epoch === 1),
 	}
 	const manager = Object.create(ImageResourceManager.prototype) as {
 		canvas: {
@@ -168,6 +169,24 @@ function enforceDecodedBitmapBudget(
 	).enforceDecodedBitmapBudget(options)
 }
 
+function setDisplayResource(
+	manager: ReturnType<typeof createManager>["manager"],
+	entry: ReturnType<typeof createEntry>,
+	variant: "low" | "preview",
+	resource: TestImageResource | null,
+) {
+	;(
+		manager as unknown as {
+			setDisplayResource: (
+				entry: ReturnType<typeof createEntry>,
+				variant: "low" | "preview",
+				resource: TestImageResource | null,
+				options: { closePrevious: boolean },
+			) => void
+		}
+	).setDisplayResource(entry, variant, resource, { closePrevious: false })
+}
+
 function installImmediateAnimationFrame() {
 	const originalRequestAnimationFrame = globalThis.requestAnimationFrame
 	vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => {
@@ -184,6 +203,256 @@ function installImmediateAnimationFrame() {
 }
 
 describe("ImageResourceManager image resources", () => {
+	it("drops stale viewport loads before starting resource work", async () => {
+		const { manager, eventEmitter } = createManager()
+		const loadImageInternal = (
+			manager as unknown as {
+				loadImageInternal: (
+					path: string,
+					options: {
+						variant: ImageResourceVariant
+						viewportEpoch: number
+						dropIfViewportStale: boolean
+					},
+				) => Promise<unknown>
+			}
+		).loadImageInternal
+
+		const result = await loadImageInternal.call(manager, "./images/stale.png", {
+			variant: "preview",
+			viewportEpoch: 0,
+			dropIfViewportStale: true,
+		})
+
+		expect(result).toBeNull()
+		expect(manager.getSnapshot().staleRequestDropCount).toBe(1)
+		expect(eventEmitter.emit).not.toHaveBeenCalled()
+	})
+
+	it("emits not-found failures even when a low viewport load goes stale", async () => {
+		const { manager, eventEmitter, visibilityManager } = createManager()
+		let isCurrent = true
+		visibilityManager.isViewportResourceEpochCurrent.mockImplementation(() => isCurrent)
+		;(
+			manager as unknown as {
+				loadPersistentDisplayResource: ReturnType<typeof vi.fn>
+			}
+		).loadPersistentDisplayResource = vi.fn(async () => null)
+		;(
+			manager as unknown as { loadLowResourcePipeline: ReturnType<typeof vi.fn> }
+		).loadLowResourcePipeline = vi.fn(
+			async (
+				_path: string,
+				_normalizedSrc: string,
+				entry: ReturnType<typeof createEntry>,
+			) => {
+				;(entry as { lastFailureReason: "not-found" | null }).lastFailureReason =
+					"not-found"
+				isCurrent = false
+				return null
+			},
+		)
+
+		const result = await (
+			manager as unknown as {
+				loadImageInternal: (
+					path: string,
+					options: {
+						variant: ImageResourceVariant
+						bypassQueue: boolean
+						viewportEpoch: number
+						dropIfViewportStale: boolean
+					},
+				) => Promise<unknown>
+			}
+		).loadImageInternal.call(manager, "./images/missing.png", {
+			variant: "low",
+			bypassQueue: true,
+			viewportEpoch: 1,
+			dropIfViewportStale: true,
+		})
+
+		expect(result).toBeNull()
+		expect(eventEmitter.emit).toHaveBeenCalledWith({
+			type: "resource:image:load-failed",
+			data: {
+				path: "./images/missing.png",
+				reason: "not-found",
+			},
+		})
+	})
+
+	it("drops stale viewport loads after body fetch before decode", async () => {
+		const { manager, visibilityManager } = createManager()
+		const loadImageResource = (
+			manager as unknown as {
+				loadImageResource: (
+					path: string,
+					ossSrc: string,
+					entry: ReturnType<typeof createEntry>,
+					variant: ImageResourceVariant,
+					priority: "visible",
+					retryCount: number,
+					options: {
+						viewportEpoch: number
+						dropIfViewportStale: boolean
+					},
+				) => Promise<unknown>
+				loadImageBody: ReturnType<typeof vi.fn>
+				estimateImageDecodePixelCost: ReturnType<typeof vi.fn>
+			}
+		).loadImageResource
+		const entry = createEntry()
+		manager.entries.set("images/body-stale.png", entry)
+		;(manager as unknown as { loadImageBody: ReturnType<typeof vi.fn> }).loadImageBody = vi.fn(
+			async () => ({
+				blob: new Blob(["body"]),
+				ossSrc: "https://example.test/body-stale.png",
+				cacheKey: "body-stale",
+				byteSize: 4,
+			}),
+		)
+		;(
+			manager as unknown as { estimateImageDecodePixelCost: ReturnType<typeof vi.fn> }
+		).estimateImageDecodePixelCost = vi.fn()
+		visibilityManager.isViewportResourceEpochCurrent.mockReturnValue(false)
+
+		const result = await loadImageResource.call(
+			manager,
+			"images/body-stale.png",
+			"https://example.test/body-stale.png",
+			entry,
+			"preview",
+			"visible",
+			0,
+			{ viewportEpoch: 1, dropIfViewportStale: true },
+		)
+
+		expect(result).toBeNull()
+		expect(
+			(manager as unknown as { estimateImageDecodePixelCost: ReturnType<typeof vi.fn> })
+				.estimateImageDecodePixelCost,
+		).not.toHaveBeenCalled()
+		expect(manager.getSnapshot().staleRequestDropCount).toBe(1)
+	})
+
+	it("closes decoded image results when the viewport epoch goes stale before commit", async () => {
+		const { manager, visibilityManager } = createManager()
+		const close = vi.fn()
+		const release = vi.fn()
+		let isCurrent = true
+		visibilityManager.isViewportResourceEpochCurrent.mockImplementation(() => isCurrent)
+		;(
+			manager.canvas as unknown as {
+				resourceScheduler: {
+					run: ReturnType<typeof vi.fn>
+				}
+			}
+		).resourceScheduler = {
+			run: vi.fn(async (_kind: string, task: () => Promise<unknown>) => {
+				const result = await task()
+				isCurrent = false
+				return result
+			}),
+		}
+		const entry = createEntry()
+		manager.entries.set("images/decode-stale.png", entry)
+		;(manager as unknown as { loadImageBody: ReturnType<typeof vi.fn> }).loadImageBody = vi.fn(
+			async () => ({
+				blob: new Blob(["body"]),
+				ossSrc: "https://example.test/decode-stale.png",
+				cacheKey: "decode-stale",
+				byteSize: 4,
+			}),
+		)
+		;(
+			manager as unknown as { estimateImageDecodePixelCost: ReturnType<typeof vi.fn> }
+		).estimateImageDecodePixelCost = vi.fn(async () => 1)
+		;(
+			manager as unknown as { acquireImageDecodePermit: ReturnType<typeof vi.fn> }
+		).acquireImageDecodePermit = vi.fn(async () => release)
+		;(manager as unknown as { sendToWorker: ReturnType<typeof vi.fn> }).sendToWorker = vi.fn(
+			async () => ({
+				imageSource: { width: 10, height: 10, close } as unknown as ImageBitmap,
+				imageInfo: {
+					naturalWidth: 10,
+					naturalHeight: 10,
+					fileSize: 100,
+					mimeType: "image/png",
+					filename: "decode-stale.png",
+				},
+				variant: "preview",
+			}),
+		)
+
+		const result = await (
+			manager as unknown as {
+				loadImageResource: (
+					path: string,
+					ossSrc: string,
+					entry: ReturnType<typeof createEntry>,
+					variant: ImageResourceVariant,
+					priority: "visible",
+					retryCount: number,
+					options: {
+						viewportEpoch: number
+						dropIfViewportStale: boolean
+					},
+				) => Promise<unknown>
+			}
+		).loadImageResource.call(
+			manager,
+			"images/decode-stale.png",
+			"https://example.test/decode-stale.png",
+			entry,
+			"preview",
+			"visible",
+			0,
+			{ viewportEpoch: 1, dropIfViewportStale: true },
+		)
+
+		expect(result).toBeNull()
+		expect(close).toHaveBeenCalledTimes(1)
+		expect(release).toHaveBeenCalledTimes(1)
+		expect(entry.displaySlots.preview.resource).toBeNull()
+		expect(manager.getSnapshot().staleRequestDropCount).toBe(1)
+	})
+
+	it("keeps non-viewport loads active even when the viewport epoch would be stale", async () => {
+		const { manager, visibilityManager } = createManager()
+		const previewResource = createImageResource("preview")
+		const entry = createEntry({
+			displaySlots: {
+				low: { resource: null, loadingPromise: null, version: null, lastAccessAt: 1 },
+				preview: {
+					resource: previewResource,
+					loadingPromise: null,
+					version: null,
+					lastAccessAt: 1,
+				},
+			},
+		})
+		manager.entries.set("images/non-viewport.png", entry)
+		visibilityManager.isViewportResourceEpochCurrent.mockReturnValue(false)
+
+		const result = await (
+			manager as unknown as {
+				loadImageInternal: (
+					path: string,
+					options: { variant: ImageResourceVariant },
+				) => Promise<unknown>
+			}
+		).loadImageInternal.call(manager, "images/non-viewport.png", { variant: "preview" })
+
+		expect(result).toEqual(
+			expect.objectContaining({
+				image: previewResource.image,
+				variant: "preview",
+			}),
+		)
+		expect(manager.getSnapshot().staleRequestDropCount).toBe(0)
+	})
+
 	it("emits targeted display-loaded only for display-driven full loads", async () => {
 		const { manager, eventEmitter } = createManager()
 		const fullResource = createImageResource("full")
@@ -344,6 +613,32 @@ describe("ImageResourceManager image resources", () => {
 		}
 	})
 
+	it("skips decoded budget candidate scans while tracked bytes are below budget", () => {
+		const { manager } = createManager()
+		const entry = createEntry()
+		const previewResource = createImageResource("preview", {
+			width: 10,
+			height: 10,
+		})
+		manager.entries.set("tracked-preview.png", entry)
+		setDisplayResource(manager, entry, "preview", previewResource)
+		const collectCandidates = vi.spyOn(
+			manager as unknown as {
+				collectDecodedBitmapBudgetCandidates: () => unknown
+			},
+			"collectDecodedBitmapBudgetCandidates",
+		)
+
+		enforceDecodedBitmapBudget(manager, {
+			reason: "below-budget",
+			softBudgetBytes: 1000,
+			hardBudgetBytes: 1000,
+			fullBudgetBytes: Number.MAX_SAFE_INTEGER,
+		})
+
+		expect(collectCandidates).not.toHaveBeenCalled()
+	})
+
 	it("evicts full decoded resources before old preview resources under budget pressure", () => {
 		const restoreAnimationFrame = installImmediateAnimationFrame()
 		try {
@@ -461,12 +756,69 @@ describe("ImageResourceManager image resources", () => {
 			expect(entry.displaySlots.preview.resource).toBeNull()
 			expect(visibilityManager.invalidateImageLoadRequest).toHaveBeenCalledWith(
 				"image/path.png",
-				undefined,
+				"preview",
 				"decoded-budget",
+				{ scheduleRefresh: true },
 			)
 		} finally {
 			restoreAnimationFrame()
 		}
+	})
+
+	it("clears full decoded eviction dedupe state without scheduling an immediate reload", () => {
+		const restoreAnimationFrame = installImmediateAnimationFrame()
+		try {
+			const { manager, visibilityManager } = createManager()
+			const fullResource = createImageResource("full", {
+				width: 10,
+				height: 10,
+			})
+			const entry = createEntry({
+				fullResource,
+				fullLastAccessAt: 1,
+			})
+			manager.entries.set("image/full.png", entry)
+
+			enforceDecodedBitmapBudget(manager, {
+				reason: "full-request-invalidation",
+				softBudgetBytes: 1000,
+				hardBudgetBytes: 1000,
+				fullBudgetBytes: 0,
+			})
+
+			expect(entry.fullResource).toBeNull()
+			expect(visibilityManager.invalidateImageLoadRequest).toHaveBeenCalledWith(
+				"image/full.png",
+				"full",
+				"decoded-budget",
+				{ scheduleRefresh: false },
+			)
+		} finally {
+			restoreAnimationFrame()
+		}
+	})
+
+	it("protects recently used full resources from soft full-budget eviction", () => {
+		const { manager, visibilityManager } = createManager()
+		const fullResource = createImageResource("full", {
+			width: 10,
+			height: 10,
+		})
+		const entry = createEntry({
+			fullResource,
+			fullLastAccessAt: Date.now(),
+		})
+		manager.entries.set("image/recent-full.png", entry)
+
+		enforceDecodedBitmapBudget(manager, {
+			reason: "recent-full",
+			softBudgetBytes: 1000,
+			hardBudgetBytes: 1000,
+			fullBudgetBytes: 0,
+		})
+
+		expect(entry.fullResource).toBe(fullResource)
+		expect(visibilityManager.invalidateImageLoadRequest).not.toHaveBeenCalled()
 	})
 
 	it("protects active low display leases and allows low eviction after release", async () => {

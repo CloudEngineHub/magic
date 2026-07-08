@@ -7,6 +7,7 @@ import * as AiPowerTypes from "./platformPackage/aiPower"
 /** 平台套餐 */
 export namespace PlatformPackage {
 	export type GlobalConfig = Common.GlobalConfig
+	export type MaintenanceType = Common.MaintenanceType
 	export type NameI18N = Common.NameI18N
 	export import PackageType = Common.PackageType
 	export import SubscriptionType = Common.SubscriptionType

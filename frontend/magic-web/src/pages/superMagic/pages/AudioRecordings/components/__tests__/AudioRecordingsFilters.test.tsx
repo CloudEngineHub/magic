@@ -20,6 +20,10 @@ vi.mock("react-i18next", () => ({
 				"filters.sortByUpdatedDesc": "By last updated",
 				"filters.sortByCreatedDesc": "By created time",
 				"actions.startRecording": "Start Recording",
+				"super:mobile.recordingEntry.groupSheet.all": "All",
+				"super:mobile.recordingEntry.groupSheet.ungrouped": "Ungrouped",
+				"super:mobile.recordingEntry.groupSheet.manageGroups": "Manage groups",
+				"super:mobile.recordingEntry.groupSheet.unnamedGroup": "Unnamed group",
 			}
 			return labels[key] ?? key
 		},
@@ -174,5 +178,19 @@ describe("AudioRecordingsFilters", () => {
 		// 4. Click manage groups button
 		fireEvent.click(screen.getByTestId("audio-recordings-group-manage-trigger"))
 		expect(onManageGroups).toHaveBeenCalled()
+	})
+
+	it("falls back to all recordings when the current group id is missing from loaded groups", () => {
+		renderFilters({
+			groups: [
+				{ id: "mock-group-id", name: "Mock group", projectCount: 2, isVirtual: false },
+			],
+			totalGroupCount: 5,
+			ungroupedCount: 3,
+			currentGroupId: "mock-stale-group-id",
+		})
+
+		expect(screen.getByTestId("audio-recordings-group-filter-trigger")).toHaveTextContent("All")
+		expect(screen.getByTestId("audio-recordings-group-filter-trigger")).toHaveTextContent("5")
 	})
 })

@@ -18,7 +18,17 @@ vi.mock("@/models/repository/Cache", () => ({
 
 vi.mock("react-i18next", () => ({
 	useTranslation: () => ({
-		t: (key: string) => key,
+		// Keep this focused mock close to the empty-state copy used by the view under test.
+		t: (key: string) => {
+			if (key === "mobile.emptyState.variants.chatFilesSearch.title") {
+				return "No matching files"
+			}
+			if (key === "mobile.emptyState.variants.chatFilesSearch.description") {
+				return "Try a different search term."
+			}
+
+			return key
+		},
 	}),
 	initReactI18next: {
 		type: "3rdParty",
@@ -83,7 +93,22 @@ vi.mock("@/pages/superMagic/components/TopicFilesButton/hooks/fileSelectionUtils
 }))
 
 vi.mock("@/pages/superMagicMobile/components/MobileBottomSearchBar", () => ({
-	default: () => <div />,
+	// Preserve the search input contract so the view test exercises real state updates.
+	default: ({
+		value,
+		onValueChange,
+		testIdPrefix,
+	}: {
+		value: string
+		onValueChange: (value: string) => void
+		testIdPrefix: string
+	}) => (
+		<input
+			value={value}
+			onChange={(event) => onValueChange(event.target.value)}
+			data-testid={`${testIdPrefix}-input`}
+		/>
+	),
 }))
 
 vi.mock("@/components/base-mobile/ScrollEdgeFade", () => ({
@@ -243,5 +268,38 @@ describe("MobileProjectDetailFilesView", () => {
 
 		expect(scrollFadeContainer).not.toContainElement(addButton)
 		expect(addButton.className).toContain("z-30")
+	})
+
+	it("搜索无结果时还原原型空态并在剩余区域居中展示", () => {
+		const attachments: AttachmentItem[] = [
+			{
+				file_id: "file-report-001",
+				file_name: "summary-note.md",
+				is_directory: false,
+				file_extension: "md",
+			},
+		]
+
+		render(
+			<MobileProjectDetailFilesView
+				attachments={attachments}
+				mobileViewVariant="project-detail"
+			/>,
+		)
+
+		fireEvent.change(screen.getByTestId("project-detail-files-search-input"), {
+			target: { value: "missing-keyword" },
+		})
+
+		const emptyState = screen.getByTestId("mobile-files-search-empty")
+
+		expect(emptyState).toHaveTextContent("No matching files")
+		expect(emptyState).toHaveTextContent("Try a different search term.")
+		expect(emptyState).toHaveAttribute("role", "status")
+		expect(emptyState.className).toContain("flex-1")
+		expect(emptyState.className).toContain("justify-center")
+		expect(emptyState.querySelector("svg")).toBeInTheDocument()
+		expect(emptyState).not.toHaveTextContent("projectDetail.searchEmptyDescription")
+		expect(emptyState).not.toHaveTextContent("search.searchEmptyDescription")
 	})
 })

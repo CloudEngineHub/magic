@@ -20,6 +20,8 @@ class ExportWorkspaceRequest implements RequestInterface
         private readonly string $code,
         private readonly array $uploadConfig,
         private readonly ?string $sourcePath = null,
+        private readonly ?string $archiveRoot = null,
+        private readonly ?string $fileName = null,
     ) {
     }
 
@@ -43,6 +45,16 @@ class ExportWorkspaceRequest implements RequestInterface
         return $this->sourcePath;
     }
 
+    public function getArchiveRoot(): ?string
+    {
+        return $this->archiveRoot;
+    }
+
+    public function getFileName(): ?string
+    {
+        return $this->fileName;
+    }
+
     public function toArray(): array
     {
         $request = [
@@ -53,6 +65,14 @@ class ExportWorkspaceRequest implements RequestInterface
 
         if ($this->sourcePath !== null && $this->sourcePath !== '') {
             $request['source_path'] = $this->sourcePath;
+        }
+
+        if ($this->archiveRoot !== null && $this->archiveRoot !== '') {
+            $request['archive_root'] = $this->archiveRoot;
+        }
+
+        if ($this->fileName !== null && $this->fileName !== '') {
+            $request['file_name'] = $this->fileName;
         }
 
         return $request;

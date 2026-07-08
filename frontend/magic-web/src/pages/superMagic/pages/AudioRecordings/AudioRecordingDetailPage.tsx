@@ -217,6 +217,11 @@ function AudioRecordingDetailPageDesktop() {
 	const detailUnavailable =
 		!summaryReady && detailSummaryState.status === "unavailable" && Boolean(resolvedItem)
 
+	const shouldUseResummarize =
+		summaryReady ||
+		detailSummaryState.status === "failed" ||
+		resolvedItem?.card_status === "summarized"
+
 	const speakerNameMap = useMemo(() => {
 		const merged = {
 			...(fileMap?.magicProjectConfig?.metadata?.speakers ?? {}),
@@ -224,6 +229,15 @@ function AudioRecordingDetailPageDesktop() {
 		}
 		return merged
 	}, [fileMap?.magicProjectConfig?.metadata?.speakers, speakerNameOverrides])
+
+	/** Routes summary actions to initial generation or direct re-summary based on current detail state. */
+	function handleSummaryAction() {
+		if (shouldUseResummarize) {
+			void actions.resubmitSummary()
+			return
+		}
+		void actions.submitSummary()
+	}
 
 	const speakerIds = useMemo(
 		() =>
@@ -336,7 +350,7 @@ function AudioRecordingDetailPageDesktop() {
 					renaming={actions.renaming}
 					onBack={handleBack}
 					onRename={handleRename}
-					onGenerateSummary={() => void actions.submitSummary()}
+					onGenerateSummary={handleSummaryAction}
 					onExportAudio={() => void actions.downloadAudio()}
 					onExportTranscript={() => void actions.downloadTranscript()}
 					onExportNotes={() => void actions.downloadNotes()}
@@ -408,7 +422,7 @@ function AudioRecordingDetailPageDesktop() {
 								speakerNameMap={speakerNameMap}
 								onOpenSpeakerSettings={openSpeakerSettings}
 								onTimeClick={handleSummaryTimeClick}
-								onGenerateSummary={() => void actions.submitSummary()}
+								onGenerateSummary={handleSummaryAction}
 								summarySubmitting={actions.summarySubmitting}
 							/>
 						}

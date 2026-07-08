@@ -46,9 +46,6 @@ import {
 } from "./RecordingDetailHeaderActionMenu"
 import { useRecordingDetailCapabilities } from "./RecordingDetailProvider"
 
-// TODO(audio-recordings): Flip on after backend exposes a stable re-summary API.
-const ENABLE_REGENERATE_SUMMARY_ACTION = false
-
 interface RecordingDetailExportAvailability {
 	hasAudio: boolean
 	hasTranscript: boolean
@@ -173,11 +170,11 @@ export function RecordingDetailHeader({
 	const isSummaryFailed =
 		projectItem?.card_status === "summary_failed" ||
 		(projectItem?.current_phase === "summarizing" && projectItem.phase_status === "failed")
-	// TODO(audio-recordings): Allow summary_failed header CTA again after backend supports re-summary.
+	const isSummaryReady = projectItem ? isAudioProjectSummaryReady(projectItem) : false
 	const canShowGenerateSummary =
-		capabilities.canGenerateSummary &&
-		canGenerateSummary &&
-		(!isSummaryFailed || ENABLE_REGENERATE_SUMMARY_ACTION)
+		capabilities.canGenerateSummary && (canGenerateSummary || isSummaryReady || isSummaryFailed)
+	const summaryActionLabel =
+		isSummaryReady || isSummaryFailed ? t("card.regenerateSummary") : t("card.generateSummary")
 
 	/** i18n labels for recording source resolution — mirrors AudioRecordingCard usage */
 	const sourceLabels = useMemo(
@@ -292,9 +289,7 @@ export function RecordingDetailHeader({
 							data-testid="recording-detail-generate-summary"
 						>
 							<Sparkles className="size-4" />
-							{summarySubmitting
-								? t("detail.summarizing")
-								: t("card.generateSummary")}
+							{summarySubmitting ? t("detail.summarizing") : summaryActionLabel}
 						</Button>
 					) : null}
 
