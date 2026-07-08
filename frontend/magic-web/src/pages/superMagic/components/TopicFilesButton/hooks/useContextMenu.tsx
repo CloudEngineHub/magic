@@ -16,6 +16,7 @@ import {
 	IconFolders,
 	IconSquareCheck,
 	IconInfoCircle,
+	IconCopy,
 } from "@tabler/icons-react"
 import IconOpenWindow from "@/enhance/tabler/icons-react/icons/IconOpenWindow"
 import MagicIcon from "@/components/base/MagicIcon"
@@ -38,9 +39,9 @@ import { createFileMenuItems } from "../components/hooks/useFileMenuItems"
 import { useFileActionVisibility } from "@/pages/superMagic/providers/file-action-visibility-provider"
 import { normalizeMenuItems, type TopicFilesMenuItem } from "../utils/menu-items"
 import { isMagicSystemFolder } from "../utils/magic-system-folder"
-import { getAttachmentIndexEntry, type AttachmentIndex } from "../utils/attachmentIndex"
-import { canCreateDesignProjectInMenuTarget } from "../../Detail/contents/Design/utils/designProjectMenuPolicy"
+import type { AttachmentIndex } from "../utils/attachmentIndex"
 import { getAttachmentKey } from "../utils/getAttachmentKey"
+import { copyAttachmentPath, getAttachmentFolderPath } from "../utils/attachmentPath"
 import { useMobileDeleteConfirmSheet } from "./useMobileDeleteConfirmSheet"
 
 type MenuItem = TopicFilesMenuItem
@@ -98,23 +99,6 @@ interface UseContextMenuOptions {
 	treeIndex?: AttachmentIndex
 	/** Full attachment tree for mobile hierarchy delete confirmation */
 	attachments?: AttachmentItem[]
-}
-
-function buildFolderPathFromIndex(
-	item: AttachmentItem,
-	treeIndex?: AttachmentIndex,
-): string | undefined {
-	if (!treeIndex || !item.file_id) return undefined
-
-	const entry = getAttachmentIndexEntry(treeIndex, item.file_id)
-	if (!entry) return undefined
-
-	const pathNames = [...treeIndex.getParentItemsById(item.file_id), item]
-		.map((pathItem) => pathItem.name || pathItem.file_name || pathItem.display_filename)
-		.filter(Boolean)
-
-	if (pathNames.length === 0) return "/"
-	return `/${pathNames.join("/")}/`
 }
 
 interface MapDownloadMenuToContextOptions {
@@ -322,22 +306,17 @@ export function useContextMenu(options: UseContextMenuOptions) {
 
 	// 获取文件夹路径 - 优先使用 relative_file_path,否则从树结构中计算
 	const getFolderPath = (item: AttachmentItem): string | undefined => {
-		if (item.is_directory && "children" in item) {
-			// 优先使用 relative_file_path
-			if (item.relative_file_path) {
-				return item.relative_file_path
-			}
-
-			const pathFromTree = buildFolderPathFromIndex(item, treeIndex)
-			return pathFromTree || `/${item.name}`
-		}
-		return undefined
+		return getAttachmentFolderPath(item, treeIndex)
 	}
 
 	// 处理复制文件
 	const handleCopyFile = (item: AttachmentItem) => {
 		if (!item.file_id) return
 		onCopyFile?.([item.file_id])
+	}
+
+	const handleCopyPath = async (item: AttachmentItem) => {
+		await copyAttachmentPath({ item, treeIndex, t })
 	}
 
 	// 生成批量下载层菜单项（只有三个选项）
@@ -635,6 +614,14 @@ export function useContextMenu(options: UseContextMenuOptions) {
 							},
 						]
 					: []),
+				{
+					key: "copyPath",
+					label: t("topicFiles.contextMenu.copyPath"),
+					icon: <MagicIcon component={IconCopy} stroke={2} size={18} />,
+					onClick: () => {
+						void handleCopyPath(item)
+					},
+				},
 				...(handleEnterMultiSelectMode && !isSelectMode
 					? [
 							{
@@ -869,6 +856,14 @@ export function useContextMenu(options: UseContextMenuOptions) {
 							},
 						]
 					: []),
+				{
+					key: "copyPath",
+					label: t("topicFiles.contextMenu.copyPath"),
+					icon: <MagicIcon component={IconCopy} stroke={2} size={18} />,
+					onClick: () => {
+						void handleCopyPath(item)
+					},
+				},
 				...(handleEnterMultiSelectMode && !isSelectMode
 					? [
 							{
