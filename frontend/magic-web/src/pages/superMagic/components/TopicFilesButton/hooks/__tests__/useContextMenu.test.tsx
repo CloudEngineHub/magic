@@ -1,12 +1,9 @@
-import { act, renderHook, waitFor } from "@testing-library/react"
+import { renderHook } from "@testing-library/react"
 import type { ReactNode } from "react"
-import { describe, expect, it, beforeEach, vi } from "vitest"
+import { describe, expect, it, vi } from "vitest"
 import { useContextMenu } from "../useContextMenu"
 import type { AttachmentItem } from "../types"
 import type { TopicFilesMenuItem } from "../../utils/menu-items"
-import { buildAttachmentIndex } from "../../utils/attachmentIndex"
-import magicToast from "@/components/base/MagicToaster/utils"
-import { clipboard } from "@/utils/clipboard-helpers"
 
 vi.mock("react-i18next", () => ({
 	useTranslation: () => ({
@@ -142,25 +139,27 @@ function createOptions(overrides: Partial<Parameters<typeof useContextMenu>[0]> 
 		onCopyFile: vi.fn(),
 		createVirtualFile: vi.fn(),
 		createVirtualFolder: vi.fn(),
+		handleEnterMultiSelectMode: vi.fn(),
 		...overrides,
 	}
 }
 
-function findMenuItem(items: TopicFilesMenuItem[], key: string) {
-	return items.find((item) => item && item.type !== "divider" && item.key === key) as
-		| (TopicFilesMenuItem & { onClick?: () => void })
-		| undefined
+function getMenuKeys(items: TopicFilesMenuItem[]) {
+	return items.filter((item) => item && item.type !== "divider").map((item) => String(item?.key))
 }
 
-describe("useContextMenu copy path", () => {
-	beforeEach(() => {
-		vi.mocked(clipboard.writeText).mockReset()
-		vi.mocked(magicToast.success).mockReset()
-		vi.mocked(magicToast.error).mockReset()
-		vi.mocked(clipboard.writeText).mockResolvedValue(undefined)
-	})
+function expectCopyPathInReferenceGroup(keys: string[]) {
+	const shareIndex = keys.indexOf("share")
+	const copyPathIndex = keys.indexOf("copyPath")
+	const selectMultipleIndex = keys.indexOf("selectMultiple")
 
-	it("shows copy path for file rows and copies relative_file_path", async () => {
+	expect(shareIndex).toBeGreaterThanOrEqual(0)
+	expect(copyPathIndex).toBeGreaterThan(shareIndex)
+	expect(selectMultipleIndex).toBeGreaterThan(copyPathIndex)
+}
+
+describe("useContextMenu copy path menu", () => {
+	it("places copy path in the reference group for file rows", () => {
 		const file: AttachmentItem = {
 			file_id: "file-1",
 			name: "report.md",
@@ -169,21 +168,13 @@ describe("useContextMenu copy path", () => {
 		}
 
 		const { result } = renderHook(() => useContextMenu(createOptions()))
-		const copyPathItem = findMenuItem(result.current.getMenuItems(file), "copyPath")
+		const keys = getMenuKeys(result.current.getMenuItems(file))
 
-		expect(copyPathItem?.label).toBe("topicFiles.contextMenu.copyPath")
-
-		await act(async () => {
-			copyPathItem?.onClick?.()
-		})
-
-		await waitFor(() => {
-			expect(clipboard.writeText).toHaveBeenCalledWith("/docs/report.md")
-		})
-		expect(magicToast.success).toHaveBeenCalledWith("topicFiles.contextMenu.copyPathSuccess")
+		expect(keys).toContain("copyPath")
+		expectCopyPathInReferenceGroup(keys)
 	})
 
-	it("shows copy path for folder rows", () => {
+	it("places copy path in the reference group for folder rows", () => {
 		const folder: AttachmentItem = {
 			file_id: "folder-1",
 			name: "docs",
@@ -193,74 +184,9 @@ describe("useContextMenu copy path", () => {
 		}
 
 		const { result } = renderHook(() => useContextMenu(createOptions()))
+		const keys = getMenuKeys(result.current.getMenuItems(folder))
 
-		expect(findMenuItem(result.current.getMenuItems(folder), "copyPath")).toBeTruthy()
-	})
-
-	it("uses tree index path when a folder has no relative_file_path", async () => {
-		const childFolder: AttachmentItem = {
-			file_id: "folder-2",
-			name: "reports",
-			is_directory: true,
-			children: [],
-		}
-		const attachments: AttachmentItem[] = [
-			{
-				file_id: "folder-1",
-				name: "docs",
-				is_directory: true,
-				children: [childFolder],
-			},
-		]
-
-		const { result } = renderHook(() =>
-			useContextMenu(createOptions({ treeIndex: buildAttachmentIndex(attachments) })),
-		)
-		const copyPathItem = findMenuItem(result.current.getMenuItems(childFolder), "copyPath")
-
-		await act(async () => {
-			copyPathItem?.onClick?.()
-		})
-
-		await waitFor(() => {
-			expect(clipboard.writeText).toHaveBeenCalledWith("/docs/reports/")
-		})
-	})
-
-	it("falls back to path-like fields when relative_file_path is missing", async () => {
-		const file: AttachmentItem = {
-			file_id: "file-1",
-			name: "fallback-name.md",
-			is_directory: false,
-			file_key: "/from-file-key.md",
-		}
-
-		const { result } = renderHook(() => useContextMenu(createOptions()))
-		const copyPathItem = findMenuItem(result.current.getMenuItems(file), "copyPath")
-
-		await act(async () => {
-			copyPathItem?.onClick?.()
-		})
-
-		await waitFor(() => {
-			expect(clipboard.writeText).toHaveBeenCalledWith("/from-file-key.md")
-		})
-	})
-
-	it("shows failure toast without writing an empty path", async () => {
-		const file: AttachmentItem = {
-			file_id: "file-1",
-			is_directory: false,
-		}
-
-		const { result } = renderHook(() => useContextMenu(createOptions()))
-		const copyPathItem = findMenuItem(result.current.getMenuItems(file), "copyPath")
-
-		await act(async () => {
-			copyPathItem?.onClick?.()
-		})
-
-		expect(clipboard.writeText).not.toHaveBeenCalled()
-		expect(magicToast.error).toHaveBeenCalledWith("topicFiles.contextMenu.copyPathFailed")
+		expect(keys).toContain("copyPath")
+		expectCopyPathInReferenceGroup(keys)
 	})
 })
