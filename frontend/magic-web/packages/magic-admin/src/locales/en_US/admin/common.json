@@ -195,7 +195,7 @@
 	"prePage": "Previous Page",
 	"search": "Search Options",
 	"status": "Status",
-	"title": "$t(common:platform.name) Admin Dashboard",
+	"title": "{{platformName}} Admin Dashboard",
 	"totalItems": "Total {{total}} items",
 	"unsavedChanges": "You have unsaved changes. Are you sure you want to close?"
 }

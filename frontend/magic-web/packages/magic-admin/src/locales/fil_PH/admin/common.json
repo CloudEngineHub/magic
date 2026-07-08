@@ -131,7 +131,7 @@
 	"prePage": "Nakaraang Pahina",
 	"search": "Mga Opsyon sa Paghahanap",
 	"status": "Katayuan",
-	"title": "$t(common:platform.name) Dashboard ng Admin",
+	"title": "{{platformName}} Dashboard ng Admin",
 	"totalItems": "Kabuuang {{total}} items",
 	"unsavedChanges": "Mayroon kang mga pagbabagong hindi pa naka-save. Sigurado ka bang gusto mong isara?"
 }
