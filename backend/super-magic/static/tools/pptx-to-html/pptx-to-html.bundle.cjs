@@ -11860,7 +11860,6 @@ var import_node_path4 = __toESM(require("node:path"), 1);
 // src/convert/convert.ts
 var import_node_path3 = __toESM(require("node:path"), 1);
 var import_promises4 = require("node:fs/promises");
-var import_node_module = require("node:module");
 
 // src/package/readPptx.ts
 var import_promises = require("node:fs/promises");
@@ -17717,7 +17716,7 @@ function firstChild(value, keys) {
 function findFirst(value, key) {
   const current = node(value);
   if (!current) return void 0;
-  if (current[key]) return node(current[key]) ?? node(asArray(current[key])[0]);
+  if (Object.prototype.hasOwnProperty.call(current, key)) return node(current[key]) ?? node(asArray(current[key])[0]) ?? {};
   for (const childValue of Object.values(current)) {
     if (Array.isArray(childValue)) {
       for (const item of childValue) {
@@ -18586,6 +18585,7 @@ function parseLine(source, theme) {
     dash: attr(child(line8, "a:prstDash"), "val") ?? "solid",
     cap: attr(line8, "cap"),
     join: parseLineJoin(line8),
+    miterLimitRaw: attr(child(line8, "a:miter"), "lim"),
     compound: attr(line8, "cmpd"),
     align: attr(line8, "algn"),
     headEnd: parseLineEnd(child(line8, "a:headEnd")),
@@ -18594,6 +18594,7 @@ function parseLine(source, theme) {
 }
 function lineFallbackColor(fill) {
   if (fill?.type === "solid" && typeof fill.color === "string") return fill.color;
+  if (fill?.type === "pattern" && typeof fill.foregroundColor === "string") return fill.foregroundColor;
   if (fill?.type !== "gradient" || !Array.isArray(fill.stops)) return void 0;
   const firstStop = fill.stops.find((stop) => stop && typeof stop === "object");
   return typeof firstStop?.color === "string" ? firstStop.color : void 0;
@@ -18749,8 +18750,10 @@ function parseRunStyle(source, theme) {
     italicRaw: attr(source, "i"),
     underline: parseUnderline(underline),
     underlineType: underline,
+    underlineLine: parseUnderlineLine(source, theme),
     underlineLineFollowText: valueAt(source, "a:uLnTx") != null ? true : void 0,
     underlineFillFollowText: valueAt(source, "a:uFillTx") != null ? true : void 0,
+    underlineFill: parseFill(child(source, "a:uFill"), theme),
     strike: parseStrike(strike),
     strikeType: strike,
     letterSpacing: letterSpacingValue != null ? `${letterSpacingValue}pt` : void 0,
@@ -18781,6 +18784,18 @@ function parseRunStyle(source, theme) {
     textOutline: parseTextOutline(source, theme),
     effects: parseEffects(source, theme),
     color: parseColor(child(source, "a:solidFill") ?? source, theme)
+  };
+}
+function parseUnderlineLine(source, theme) {
+  const line8 = child(source, "a:uLn");
+  if (!line8 || valueAt(line8, "a:noFill") != null) return void 0;
+  const widthRaw = attr(line8, "w");
+  const fill = parseFill(line8, theme);
+  return {
+    widthRaw,
+    width: Number(widthRaw ?? 9525) / 12700,
+    dash: attr(child(line8, "a:prstDash"), "val"),
+    fill
   };
 }
 function parseFontSlots(source, theme) {
@@ -19662,6 +19677,11 @@ function parseTableCellStyle(tcPr, theme) {
     const value = attr(tcPr, source);
     if (value != null) style[target] = emuToCssPx3(Number(value));
   }
+  const rtl = attr(tcPr, "rtl");
+  if (rtl != null) {
+    style.rightToLeft = isTruthyAttr2(rtl);
+    style.rightToLeftRaw = rtl;
+  }
   const metadata = tableCellMetadata(tcPr);
   if (Object.keys(metadata).length > 0) style.metadata = metadata;
   return hasTableCellStyle(style) ? style : void 0;
@@ -19795,6 +19815,7 @@ function mergeMissingRunStyle(runStyle, textStyle) {
   for (const [key, value] of Object.entries(textStyle)) {
     if (value === void 0 || merged[key] !== void 0) continue;
     if ((key === "fontWeight" || key === "bold") && merged.bold === false) continue;
+    if (key === "underline" && merged.underlineType === "none") continue;
     merged[key] = value;
   }
   return merged;
@@ -20061,6 +20082,7 @@ function extractDataLabels(source, theme) {
   const dataLabels = child(source, "c:dLbls");
   if (!dataLabels) return void 0;
   const textStyle = dataLabelTextStyle(extractChartTextStyleFromTextProperties(child(dataLabels, "c:txPr"), theme));
+  const separator = valueAt(dataLabels, "c:separator");
   const parsed = {
     position: attr(child(dataLabels, "c:dLblPos"), "val"),
     showLegendKey: parseBoolean3(attr(child(dataLabels, "c:showLegendKey"), "val")),
@@ -20069,6 +20091,7 @@ function extractDataLabels(source, theme) {
     showSerName: parseBoolean3(attr(child(dataLabels, "c:showSerName"), "val")),
     showPercent: parseBoolean3(attr(child(dataLabels, "c:showPercent"), "val")),
     showBubbleSize: parseBoolean3(attr(child(dataLabels, "c:showBubbleSize"), "val")),
+    ...separator != null ? { separator: textValue(separator) } : {},
     ...textStyle ? { textStyle } : {}
   };
   const flags = [
@@ -20095,7 +20118,11 @@ function dataLabelTextStyle(style) {
     ...style.fontSizeRaw ? { fontSizeRaw: style.fontSizeRaw } : {},
     ...style.color ? { color: style.color } : {},
     ...style.bold != null ? { bold: style.bold } : {},
-    ...style.italic != null ? { italic: style.italic } : {}
+    ...style.italic != null ? { italic: style.italic } : {},
+    ...style.kerning != null ? { kerning: style.kerning } : {},
+    ...style.kerningRaw ? { kerningRaw: style.kerningRaw } : {},
+    ...style.spacing != null ? { spacing: style.spacing } : {},
+    ...style.spacingRaw ? { spacingRaw: style.spacingRaw } : {}
   };
   return Object.keys(parsed).length > 0 ? parsed : void 0;
 }
@@ -20643,7 +20670,11 @@ function extractTitleRunStyle(rPr, theme) {
     ...typeof style.bold === "boolean" ? { bold: style.bold } : {},
     ...typeof style.italic === "boolean" ? { italic: style.italic } : {},
     ...typeof style.symbolFontFamily === "string" ? { symbolFontFamily: style.symbolFontFamily } : {},
-    ...typeof style.symbolChar === "string" ? { symbolChar: style.symbolChar } : {}
+    ...typeof style.symbolChar === "string" ? { symbolChar: style.symbolChar } : {},
+    ...typeof style.kerning === "number" ? { kerning: style.kerning } : {},
+    ...typeof style.kerningRaw === "string" ? { kerningRaw: style.kerningRaw } : {},
+    ...typeof style.letterSpacingValue === "number" ? { spacing: style.letterSpacingValue } : {},
+    ...typeof style.letterSpacingRaw === "string" ? { spacingRaw: style.letterSpacingRaw } : {}
   };
   return Object.keys(parsed).length > 0 ? parsed : void 0;
 }
@@ -20686,9 +20717,11 @@ function extractChartSeries(chart, theme) {
 }
 function extractChartCategories(ser) {
   const cat = child(ser, "c:cat");
-  const stringPoints = children(findFirst(cat, "c:strCache"), "c:pt");
-  if (stringPoints.length > 0) return stringPoints.map((pt) => textValue(valueAt(pt, "c:v")));
-  return children(findFirst(cat, "c:numCache"), "c:pt").map((pt) => textValue(valueAt(pt, "c:v")));
+  const stringCache = findFirst(cat, "c:strCache");
+  const stringPoints = children(stringCache, "c:pt");
+  if (stringPoints.length > 0) return indexedPointValues(stringCache, stringPoints, (pt) => textValue(valueAt(pt, "c:v")), "");
+  const numberCache = findFirst(cat, "c:numCache");
+  return indexedPointValues(numberCache, children(numberCache, "c:pt"), (pt) => textValue(valueAt(pt, "c:v")), "");
 }
 function extractChartCategoryValueType(ser) {
   const cat = child(ser, "c:cat");
@@ -20752,7 +20785,11 @@ function stringProp3(key, value) {
 }
 function extractNumCache(ser) {
   const val = child(ser, "c:val");
-  return children(findFirst(val, "c:numCache"), "c:pt").map((pt) => Number(textValue(valueAt(pt, "c:v")))).filter((value) => Number.isFinite(value));
+  const cache = findFirst(val, "c:numCache");
+  return indexedPointValues(cache, children(cache, "c:pt"), (pt) => {
+    const value = Number(textValue(valueAt(pt, "c:v")));
+    return Number.isFinite(value) ? value : void 0;
+  }, void 0);
 }
 function extractStringCache(ref) {
   const cache = child(ref, "c:strCache");
@@ -20761,7 +20798,7 @@ function extractStringCache(ref) {
   if (points.length === 0) return void 0;
   const pointCount = numberAttr4(child(cache, "c:ptCount"), "val");
   const indexes = points.map((pt) => numberAttr4(pt, "idx")).filter((value) => value != null);
-  const values = points.map((pt) => textValue(valueAt(pt, "c:v")));
+  const values = indexedPointValues(cache, points, (pt) => textValue(valueAt(pt, "c:v")), "");
   return {
     ...pointCount != null ? { pointCount } : {},
     indexes,
@@ -20776,7 +20813,10 @@ function extractNumberCache(cache) {
   if (points.length === 0) return void 0;
   const pointCount = numberAttr4(child(cache, "c:ptCount"), "val");
   const indexes = points.map((pt) => numberAttr4(pt, "idx")).filter((value) => value != null);
-  const values = points.map((pt) => Number(textValue(valueAt(pt, "c:v"))));
+  const values = indexedPointValues(cache, points, (pt) => {
+    const value = Number(textValue(valueAt(pt, "c:v")));
+    return Number.isFinite(value) ? value : void 0;
+  }, void 0);
   return {
     ...pointCount != null ? { pointCount } : {},
     indexes,
@@ -20788,11 +20828,13 @@ function extractNumberCache(cache) {
 function extractSeriesStyle(ser, theme) {
   const shapeProperties = child(ser, "c:spPr");
   const fill = extractSolidFill(shapeProperties, theme);
+  const negativeFill = extractSolidFill(findFirst(child(ser, "c:extLst"), "c14:invertSolidFillFmt"), theme);
   const line8 = extractSeriesLine(shapeProperties, theme);
   const effects = parseEffects(shapeProperties, theme);
   return {
     ...fill?.color || line8?.color ? { color: fill?.color ?? String(line8?.color) } : {},
     ...fill ? { fill } : {},
+    ...negativeFill ? { negativeFill } : {},
     ...line8 ? { line: line8 } : {},
     ...effects ? { effects } : {}
   };
@@ -20815,6 +20857,19 @@ function extractSolidFill(source, theme) {
 }
 function hasSequentialIndexes(indexes, pointLength) {
   return indexes.length === pointLength && indexes.every((value, index) => value === index);
+}
+function indexedPointValues(cache, points, valueFor, missing) {
+  const pointCount = numberAttr4(child(cache, "c:ptCount"), "val");
+  const indexes = points.map((pt) => numberAttr4(pt, "idx"));
+  if (!canRebuildIndexedCache(indexes, pointCount)) return points.map(valueFor);
+  const values = Array.from({ length: pointCount }, () => missing);
+  points.forEach((point8, index) => {
+    values[indexes[index]] = valueFor(point8);
+  });
+  return values;
+}
+function canRebuildIndexedCache(indexes, pointCount) {
+  return pointCount != null && Number.isInteger(pointCount) && pointCount >= 0 && indexes.length > 0 && new Set(indexes).size === indexes.length && indexes.every((value) => value != null && Number.isInteger(value) && value >= 0 && value < pointCount);
 }
 function numberAttr4(value, name) {
   const text = attr(value, name);
@@ -20996,6 +21051,8 @@ function extractAxis(axis, theme) {
     majorTickMark: attr(child(axis, "c:majorTickMark"), "val"),
     minorTickMark: attr(child(axis, "c:minorTickMark"), "val"),
     tickLblPos: attr(child(axis, "c:tickLblPos"), "val"),
+    ...numberProp3("tickLabelSkip", numberAttr5(child(axis, "c:tickLblSkip"), "val")),
+    ...numberProp3("tickMarkSkip", numberAttr5(child(axis, "c:tickMarkSkip"), "val")),
     labelAlignment: attr(child(axis, "c:lblAlgn"), "val"),
     ...numberProp3("labelOffset", numberAttr5(child(axis, "c:lblOffset"), "val")),
     auto: parseBoolean8(attr(child(axis, "c:auto"), "val")),
@@ -21473,6 +21530,10 @@ function parsePictureEffects(pic, theme) {
       enabled: true
     };
   }
+  const biLevel = findFirst(pic, "a:biLevel");
+  if (biLevel) {
+    effects.biLevel = parseBiLevel(biLevel);
+  }
   if (hasDescendant(pic, "a:lum")) {
     const luminance = findFirst(pic, "a:lum");
     effects.luminance = parseBrightnessContrast(luminance);
@@ -21546,6 +21607,16 @@ function parseBrightnessContrast(source) {
     cssContrast: contrast != null ? fixedPercentageToCssRatio(contrast) : void 0
   };
 }
+function parseBiLevel(source) {
+  const thresh = numericAttr2(source, "thresh");
+  const validThresh = thresh != null && thresh >= 0 && thresh <= 1e5;
+  return {
+    enabled: true,
+    thresh,
+    threshold: validThresh ? fixedPercentageToUnit(thresh) : void 0,
+    renderMode: validThresh ? "svg-filter" : "metadata"
+  };
+}
 function parseBackgroundRemoval(source) {
   const foregroundMarks = parseBackgroundRemovalMarks(source, "a14:foregroundMark");
   const backgroundMarks = parseBackgroundRemovalMarks(source, "a14:backgroundMark");
@@ -21589,6 +21660,9 @@ function hasDescendant(value, key) {
 function fixedPercentageToCssRatio(value) {
   return Number(Math.max(0, Math.min(2, 1 + value / 1e5)).toFixed(4));
 }
+function fixedPercentageToUnit(value) {
+  return Number(Math.max(0, Math.min(1, value / 1e5)).toFixed(4));
+}
 function softenBlurRadius(amount) {
   if (amount == null || amount >= 0) return void 0;
   return Number(Math.min(6, Math.abs(amount) / 25e3).toFixed(4));
@@ -21620,6 +21694,7 @@ function pictureEffectName(key) {
   if (key === "a:outerShdw") return "outerShadow";
   if (key === "a:glow") return "glow";
   if (key === "a:grayscl") return "grayscale";
+  if (key === "a:biLevel") return "biLevel";
   if (key === "a:lum") return "luminance";
   if (key === "a14:brightnessContrast") return "luminance";
   if (key === "a14:saturation") return "saturation";
@@ -21966,15 +22041,70 @@ function layerSizeMetadata(fileProbe, mainFileProbe) {
 }
 
 // src/ooxml/sourceMetadata.ts
-function sourceMetadata(cNvPr) {
+function sourceMetadata(cNvPr, rels) {
   return {
     sourceShapeId: attr(cNvPr, "id"),
     sourceShapeName: attr(cNvPr, "name"),
-    sourceCreationId: sourceCreationId(cNvPr)
+    sourceDescription: attr(cNvPr, "descr"),
+    sourceCreationId: sourceCreationId(cNvPr),
+    sourceHyperlink: sourceHyperlink(cNvPr, rels)
   };
 }
 function sourceCreationId(cNvPr) {
   return attr(findFirst(child(cNvPr, "a:extLst"), "a16:creationId"), "id");
+}
+function sourceHyperlink(cNvPr, rels) {
+  const clickLink = child(cNvPr, "a:hlinkClick");
+  const mouseOverLink = child(cNvPr, "a:hlinkMouseOver");
+  const link = clickLink ?? mouseOverLink;
+  if (!link) return void 0;
+  const relationshipId = attr(link, "r:id");
+  const rel = relationshipId ? rels?.get(relationshipId) : void 0;
+  const history = attr(link, "history");
+  const base = {
+    trigger: clickLink ? "click" : "mouseOver",
+    relationshipId,
+    action: attr(link, "action"),
+    tooltip: attr(link, "tooltip"),
+    history: history == null ? void 0 : history === "1",
+    rawTarget: rel?.target,
+    targetMode: rel?.targetMode,
+    relationshipType: rel ? relationshipKind(rel.type) : void 0
+  };
+  if (rel && relationshipKind(rel.type) === "hyperlink") {
+    return {
+      ...base,
+      type: "url",
+      href: rel.target,
+      safe: isSafeHyperlink2(rel.target)
+    };
+  }
+  if (rel && relationshipKind(rel.type) === "slide") {
+    return {
+      ...base,
+      type: "slide",
+      target: rel.resolvedPath,
+      safe: true,
+      action: "go-to-slide"
+    };
+  }
+  if (base.action?.includes("hlinksldjump")) {
+    return {
+      ...base,
+      type: "slide",
+      safe: true,
+      action: "go-to-slide"
+    };
+  }
+  return Object.values(base).some((value) => value != null) ? { ...base, type: "action", safe: false } : void 0;
+}
+function isSafeHyperlink2(value) {
+  try {
+    const url2 = new URL(value);
+    return ["http:", "https:", "mailto:", "tel:"].includes(url2.protocol);
+  } catch {
+    return value.startsWith("#") || value.startsWith("/");
+  }
 }
 
 // src/ooxml/parsePictureElement.ts
@@ -21988,7 +22118,7 @@ async function parsePicture(pic, context, rels, zIndex) {
   const cNvPr = child(child(pic, "p:nvPicPr"), "p:cNvPr");
   const alt = attr(cNvPr, "descr") ?? attr(cNvPr, "name") ?? "";
   const media = parseMediaReference(pic, rels);
-  const source = sourceMetadata(cNvPr);
+  const source = sourceMetadata(cNvPr, rels);
   if (media) {
     const mediaExt = extensionOf(media.rel.resolvedPath);
     const mediaOutputPath = `${media.kind === "video" ? "assets/videos" : "assets/audio"}/${context.slideId}-${media.kind}-${String(zIndex).padStart(3, "0")}.${mediaExt}`;
@@ -23145,7 +23275,7 @@ function preservedGroupElement(group, elements, context, zIndex, options = {}) {
   );
   if (box.w <= 0 || box.h <= 0) return void 0;
   const cNvPr = child(child(group, "p:nvGrpSpPr"), "p:cNvPr");
-  const source = sourceMetadata(cNvPr);
+  const source = sourceMetadata(cNvPr, options.rels);
   return {
     id: elementId(context.slideId, zIndex),
     type: "group",
@@ -23247,6 +23377,82 @@ function pathWithElement(groupPath, element) {
 }
 function round2(value) {
   return Math.round(value * 100) / 100;
+}
+
+// src/ooxml/rasterizeComplexGroup.ts
+function rasterizeComplexGroup(group, elements, context, zIndex, rels) {
+  if (elements.length < 200) return void 0;
+  if (!elements.every((element) => element.type === "shape" || element.type === "connector")) return void 0;
+  const box = unionBox(elements);
+  if (!box || box.w <= 0 || box.h <= 0) return void 0;
+  const id = elementId(context.slideId, zIndex);
+  const outputPath = `assets/fallback/${id}-complex-group.png`;
+  const cNvPr = child(child(group, "p:nvGrpSpPr"), "p:cNvPr");
+  const source = sourceMetadata(cNvPr, rels);
+  context.assets.push({
+    id,
+    sourcePath: context.slidePath,
+    outputPath,
+    type: "rasterFallback",
+    metadata: {
+      reason: "complex-vector-group",
+      slideId: context.slideId,
+      slideIndex: context.index,
+      slidePath: context.slidePath,
+      box,
+      sourceShapeId: source.sourceShapeId,
+      sourceShapeName: source.sourceShapeName,
+      sourceCreationId: source.sourceCreationId,
+      sourceElementCount: elements.length
+    },
+    internal: {
+      sourceGroupXml: serializeXml({ "p:grpSp": group })
+    }
+  });
+  context.warnings.push({
+    slideId: context.slideId,
+    elementId: id,
+    code: "complex-vector-group-fallback",
+    message: `Complex decorative group with ${elements.length} elements was emitted as a raster fallback candidate.`
+  });
+  return {
+    id,
+    type: "image",
+    role: "decorative",
+    box,
+    zIndex,
+    src: outputPath,
+    alt: "",
+    fillMode: "stretch",
+    rasterFallback: true,
+    fallbackReason: "complex-vector-group",
+    ...source,
+    sourceElementCount: elements.length
+  };
+}
+function serializeXml(value) {
+  const builder = new json2xml_default({
+    ignoreAttributes: false,
+    attributeNamePrefix: "",
+    textNodeName: "#text",
+    format: false,
+    suppressEmptyNode: true
+  });
+  return builder.build(value);
+}
+function unionBox(elements) {
+  const boxes = elements.map((element) => element.box).filter((box) => box.w > 0 && box.h > 0);
+  if (boxes.length === 0) return void 0;
+  const left = Math.min(...boxes.map((box) => box.x));
+  const top = Math.min(...boxes.map((box) => box.y));
+  const right = Math.max(...boxes.map((box) => box.x + box.w));
+  const bottom = Math.max(...boxes.map((box) => box.y + box.h));
+  return {
+    x: Math.round(left * 100) / 100,
+    y: Math.round(top * 100) / 100,
+    w: Math.round((right - left) * 100) / 100,
+    h: Math.round((bottom - top) * 100) / 100
+  };
 }
 
 // src/ooxml/placeholderRef.ts
@@ -23446,6 +23652,7 @@ async function parseSlide(context) {
   return {
     id: context.slideId,
     index: context.index,
+    sourcePath: context.slidePath,
     width: slideContext.canvas.width,
     height: slideContext.canvas.height,
     background: parseSlideBackground(slide, {
@@ -23475,7 +23682,7 @@ async function parseDrawableChild(item, context, rels, order, preservePlainGroup
     return { elements: element ? [element] : [], nextOrder: order + 1 };
   }
   if (item.key === "p:cxnSp") {
-    const element = parseConnector(item.value, context, order);
+    const element = parseConnector(item.value, context, rels, order);
     return { elements: element ? [element] : [], nextOrder: order + 1 };
   }
   if (item.key === "p:grpSp") {
@@ -23511,7 +23718,7 @@ function markInherited(element, sourceLayer, sourcePath) {
 async function parseShape(shape, context, rels, zIndex) {
   const nv = child(shape, "p:nvSpPr");
   const cNvPr = child(nv, "p:cNvPr");
-  const source = sourceMetadata(cNvPr);
+  const source = sourceMetadata(cNvPr, rels);
   const hidden = attr(cNvPr, "hidden") === "1";
   const spPr = child(shape, "p:spPr");
   const txBody = child(shape, "p:txBody");
@@ -23598,10 +23805,10 @@ async function parseShape(shape, context, rels, zIndex) {
     effects
   };
 }
-function parseConnector(connector, context, zIndex) {
+function parseConnector(connector, context, rels, zIndex) {
   const nv = child(connector, "p:nvCxnSpPr");
   const cNvPr = child(nv, "p:cNvPr");
-  const source = sourceMetadata(cNvPr);
+  const source = sourceMetadata(cNvPr, rels);
   const hidden = attr(cNvPr, "hidden") === "1";
   const spPr = child(connector, "p:spPr");
   const { box, rotation, flipH, flipV } = parseElementTransform(spPr, context);
@@ -23629,7 +23836,7 @@ function parseConnector(connector, context, zIndex) {
 async function parseGraphicFrame(frame, context, rels, zIndex) {
   const { box, rotation, flipH, flipV } = parseElementTransform(frame, context);
   const cNvPr = child(child(frame, "p:nvGraphicFramePr"), "p:cNvPr");
-  const source = sourceMetadata(cNvPr);
+  const source = sourceMetadata(cNvPr, rels);
   const hidden = attr(cNvPr, "hidden") === "1" || attr(cNvPr, "hidden") === "true";
   const id = elementId(context.slideId, zIndex);
   const slideZoom = parseSlideZoomFrame(frame, context);
@@ -23735,9 +23942,9 @@ async function parseGroup(group, context, rels, startOrder, preservePlainGroups 
     elements.push(...result.elements);
     order = result.nextOrder;
   }
-  const groupElement = preservedGroupElement(group, elements, context, startOrder, { allowWithoutEffects: preservePlainGroups });
+  const groupElement = preservedGroupElement(group, elements, context, startOrder, { allowWithoutEffects: preservePlainGroups, rels });
   if (groupElement) return { elements: [groupElement], nextOrder: reserveGroupId ? order : order + 1 };
-  const rasterFallback = rasterizeComplexGroup(group, elements, context, startOrder);
+  const rasterFallback = rasterizeComplexGroup(group, elements, context, startOrder, rels);
   if (rasterFallback) return { elements: [rasterFallback], nextOrder: order };
   return { elements, nextOrder: order };
 }
@@ -23749,80 +23956,6 @@ function shouldReserveGroupContainerId(group, preservePlainGroups) {
   if (ordered.length === 0) return false;
   if (ordered.some((item) => item.key === "p:graphicFrame" || item.key === "mc:AlternateContent")) return false;
   return preservePlainGroups || hasSimpleShadow;
-}
-function rasterizeComplexGroup(group, elements, context, zIndex) {
-  if (elements.length < 200) return void 0;
-  if (!elements.every((element) => element.type === "shape" || element.type === "connector")) return void 0;
-  const box = unionBox(elements);
-  if (!box || box.w <= 0 || box.h <= 0) return void 0;
-  const id = elementId(context.slideId, zIndex);
-  const outputPath = `assets/fallback/${id}-complex-group.png`;
-  const cNvPr = child(child(group, "p:nvGrpSpPr"), "p:cNvPr");
-  const source = sourceMetadata(cNvPr);
-  context.assets.push({
-    id,
-    sourcePath: context.slidePath,
-    outputPath,
-    type: "rasterFallback",
-    metadata: {
-      reason: "complex-vector-group",
-      slideId: context.slideId,
-      slideIndex: context.index,
-      slidePath: context.slidePath,
-      box,
-      sourceShapeId: source.sourceShapeId,
-      sourceShapeName: source.sourceShapeName,
-      sourceCreationId: source.sourceCreationId,
-      sourceElementCount: elements.length
-    },
-    internal: {
-      sourceGroupXml: serializeXml({ "p:grpSp": group })
-    }
-  });
-  context.warnings.push({
-    slideId: context.slideId,
-    elementId: id,
-    code: "complex-vector-group-fallback",
-    message: `Complex decorative group with ${elements.length} elements was emitted as a raster fallback candidate.`
-  });
-  return {
-    id,
-    type: "image",
-    role: "decorative",
-    box,
-    zIndex,
-    src: outputPath,
-    alt: "",
-    fillMode: "stretch",
-    rasterFallback: true,
-    fallbackReason: "complex-vector-group",
-    ...source,
-    sourceElementCount: elements.length
-  };
-}
-function serializeXml(value) {
-  const builder = new json2xml_default({
-    ignoreAttributes: false,
-    attributeNamePrefix: "",
-    textNodeName: "#text",
-    format: false,
-    suppressEmptyNode: true
-  });
-  return builder.build(value);
-}
-function unionBox(elements) {
-  const boxes = elements.map((element) => element.box).filter((box) => box.w > 0 && box.h > 0);
-  if (boxes.length === 0) return void 0;
-  const left = Math.min(...boxes.map((box) => box.x));
-  const top = Math.min(...boxes.map((box) => box.y));
-  const right = Math.max(...boxes.map((box) => box.x + box.w));
-  const bottom = Math.max(...boxes.map((box) => box.y + box.h));
-  return {
-    x: Math.round(left * 100) / 100,
-    y: Math.round(top * 100) / 100,
-    w: Math.round((right - left) * 100) / 100,
-    h: Math.round((bottom - top) * 100) / 100
-  };
 }
 function parseElementTransform(source, context) {
   return parseTransformWithMapper(source, context.size, context.canvas, context.coordinateMapper ?? identityMapper());
@@ -38700,18 +38833,28 @@ function parseTableTextStyle(source, theme) {
   if (!source) return void 0;
   const color = parseColorInfo(source, theme);
   const bold = parseOnOff(attr(source, "b"));
+  const italic = parseOnOff(attr(source, "i"));
+  const fontSizeRaw = attr(source, "sz");
+  const fontSize = scaledPointSize(fontSizeRaw);
+  const underline = attr(source, "u");
   const font = parseTableTextFont(source, theme);
   const style = {
     fontFamily: font?.family,
     fontFamilySource: font?.source,
     fontFamilyRef: font?.ref,
+    fontSize,
+    fontSizeRaw,
     color: color?.color,
     colorSource: color?.source,
     colorScheme: color?.scheme,
     colorResolved: color?.resolvedColor,
     fontWeight: bold === true ? 700 : void 0,
     bold,
-    boldRaw: attr(source, "b")
+    boldRaw: attr(source, "b"),
+    italic,
+    italicRaw: attr(source, "i"),
+    underline: parseUnderline2(underline),
+    underlineType: underline
   };
   const defined = Object.fromEntries(Object.entries(style).filter(([, value]) => value !== void 0));
   return Object.keys(defined).length > 0 ? defined : void 0;
@@ -38731,6 +38874,15 @@ function parseOnOff(value) {
   if (["1", "true", "on"].includes(value)) return true;
   if (["0", "false", "off"].includes(value)) return false;
   return void 0;
+}
+function scaledPointSize(value) {
+  if (value == null) return void 0;
+  const number4 = Number(value);
+  return Number.isFinite(number4) ? number4 / 100 : void 0;
+}
+function parseUnderline2(value) {
+  if (!value || value === "none") return void 0;
+  return value;
 }
 
 // src/render/escape.ts
@@ -38759,11 +38911,25 @@ function geometryAttributePairs(element) {
   ];
 }
 function sourceShapeAttributePairs(element) {
+  const hyperlink = element.sourceHyperlink;
   return [
     ["data-source-shape-id", element.sourceShapeId],
     ["data-source-shape-name", element.sourceShapeName],
+    ["data-source-description", element.sourceDescription],
     ["data-source-creation-id", element.sourceCreationId],
-    ["data-source-group-path", element.sourceGroupPath]
+    ["data-source-group-path", element.sourceGroupPath],
+    ["data-source-hyperlink-type", hyperlink?.type],
+    ["data-source-hyperlink-trigger", hyperlink?.trigger],
+    ["data-source-hyperlink-url", hyperlink?.href],
+    ["data-source-hyperlink-safe", booleanData(hyperlink?.safe)],
+    ["data-source-hyperlink-history", booleanData(hyperlink?.history)],
+    ["data-source-hyperlink-relationship-id", hyperlink?.relationshipId],
+    ["data-source-hyperlink-raw-target", hyperlink?.rawTarget],
+    ["data-source-hyperlink-target-mode", hyperlink?.targetMode],
+    ["data-source-hyperlink-relationship-type", hyperlink?.relationshipType],
+    ["data-source-action", hyperlink?.action],
+    ["data-source-action-target", hyperlink?.target],
+    ["title", hyperlink?.tooltip]
   ];
 }
 function renderAttributes(attrs) {
@@ -39201,6 +39367,8 @@ function axisDataAttributes(prefix, axis) {
     attrString3(`data-${prefix}-axis-major-tick-mark`, axis.majorTickMark),
     attrString3(`data-${prefix}-axis-minor-tick-mark`, axis.minorTickMark),
     attrString3(`data-${prefix}-axis-tick-lbl-pos`, axis.tickLblPos),
+    attrString3(`data-${prefix}-axis-tick-label-skip`, axis.tickLabelSkip == null ? void 0 : String(axis.tickLabelSkip)),
+    attrString3(`data-${prefix}-axis-tick-mark-skip`, axis.tickMarkSkip == null ? void 0 : String(axis.tickMarkSkip)),
     attrString3(`data-${prefix}-axis-label-alignment`, axis.labelAlignment),
     attrString3(`data-${prefix}-axis-label-offset`, axis.labelOffset == null ? void 0 : String(axis.labelOffset)),
     attrString3(`data-${prefix}-axis-auto`, boolString3(axis.auto)),
@@ -39232,6 +39400,8 @@ function asAxis(value) {
   const majorTickMark = asOptionalString3(axis.majorTickMark);
   const minorTickMark = asOptionalString3(axis.minorTickMark);
   const tickLblPos = asOptionalString3(axis.tickLblPos);
+  const tickLabelSkip = asNumber3(axis.tickLabelSkip);
+  const tickMarkSkip = asNumber3(axis.tickMarkSkip);
   const labelAlignment = asOptionalString3(axis.labelAlignment);
   const labelOffset = asNumber3(axis.labelOffset);
   const auto = asOptionalBoolean3(axis.auto);
@@ -39241,7 +39411,7 @@ function asAxis(value) {
   const line8 = asAxisLine(axis.line);
   const fill = asAxisFill(axis.fill);
   const labelStyle = asChartAxisTextStyle(axis.labelStyle);
-  return id || crossAxisId || title || titleStyle || visible != null || position || scaling || majorUnit != null || minorUnit != null || majorGridlines != null || majorGridlineLine || minorGridlines != null || minorGridlineLine || numFmt || majorTickMark || minorTickMark || tickLblPos || labelAlignment || labelOffset != null || auto != null || noMultiLevelLabels != null || crosses || crossBetween || line8 || fill || labelStyle ? { id, crossAxisId, title, titleStyle, visible, position, scaling, majorUnit, minorUnit, majorGridlines, majorGridlineLine, minorGridlines, minorGridlineLine, numFmt, majorTickMark, minorTickMark, tickLblPos, labelAlignment, labelOffset, auto, noMultiLevelLabels, crosses, crossBetween, line: line8, fill, labelStyle } : void 0;
+  return id || crossAxisId || title || titleStyle || visible != null || position || scaling || majorUnit != null || minorUnit != null || majorGridlines != null || majorGridlineLine || minorGridlines != null || minorGridlineLine || numFmt || majorTickMark || minorTickMark || tickLblPos || tickLabelSkip != null || tickMarkSkip != null || labelAlignment || labelOffset != null || auto != null || noMultiLevelLabels != null || crosses || crossBetween || line8 || fill || labelStyle ? { id, crossAxisId, title, titleStyle, visible, position, scaling, majorUnit, minorUnit, majorGridlines, majorGridlineLine, minorGridlines, minorGridlineLine, numFmt, majorTickMark, minorTickMark, tickLblPos, tickLabelSkip, tickMarkSkip, labelAlignment, labelOffset, auto, noMultiLevelLabels, crosses, crossBetween, line: line8, fill, labelStyle } : void 0;
 }
 function asAxisFill(value) {
   if (value == null || typeof value !== "object" || Array.isArray(value)) return void 0;
@@ -39353,23 +39523,24 @@ function seriesMetadataAttributes(item) {
     item?.sourceRefs?.values ? ` data-series-value-ref="${escapeHtml(item.sourceRefs.values)}"` : "",
     typeof item?.line?.visible === "boolean" ? ` data-series-line-visible="${String(item.line.visible)}"` : "",
     ...seriesFillAttributes(item?.fill),
+    ...seriesFillAttributes(item?.negativeFill, "negative-fill"),
     ...seriesCacheAttributes("name", item?.nameCache),
     ...seriesCacheAttributes("category", item?.categoryCache),
     ...seriesCacheAttributes("value", item?.valueCache),
     item?.valueCache?.formatCode ? ` data-series-value-cache-format-code="${escapeHtml(item.valueCache.formatCode)}"` : ""
   ].join("");
 }
-function seriesFillAttributes(fill) {
+function seriesFillAttributes(fill, name = "fill") {
   if (!fill) return [];
   const color = asOptionalString4(fill.color);
   const source = asOptionalString4(fill.source);
   const scheme = asOptionalString4(fill.scheme);
   const resolvedColor = asOptionalString4(fill.resolvedColor);
   return [
-    color ? ` data-series-fill-color="${escapeHtml(color)}"` : "",
-    source ? ` data-series-fill-source="${escapeHtml(source)}"` : "",
-    scheme ? ` data-series-fill-scheme="${escapeHtml(scheme)}"` : "",
-    resolvedColor ? ` data-series-fill-resolved="${escapeHtml(resolvedColor)}"` : ""
+    color ? ` data-series-${name}-color="${escapeHtml(color)}"` : "",
+    source ? ` data-series-${name}-source="${escapeHtml(source)}"` : "",
+    scheme ? ` data-series-${name}-scheme="${escapeHtml(scheme)}"` : "",
+    resolvedColor ? ` data-series-${name}-resolved="${escapeHtml(resolvedColor)}"` : ""
   ];
 }
 function asSourceRefs(value) {
@@ -39429,29 +39600,45 @@ function asLegend(value) {
 function renderLegend(legend, items, width, height, margin) {
   if (!legend || items.length === 0) return "";
   const position = legend.position ?? "r";
+  const verticalLegend = isVerticalLegend(legend);
   const rightLegend = isRightLegend(legend);
+  const leftLegend = isLeftLegend(legend);
+  const topLegend = isTopLegend(legend);
   const visibleItems = items.filter((item) => legendEntryForItem(legend, item)?.deleted !== true);
   if (visibleItems.length === 0) return "";
   const manualBox = legendLayoutBox(legend, width, height);
-  const originX = manualBox ? 0 : rightLegend ? width - margin.right + 18 : margin.left;
-  const originY = manualBox ? manualLegendBaseline(manualBox, rightLegend) : rightLegend ? margin.top + (position === "tr" ? 0 : 12) : height - 28;
-  const itemGap = legendItemGap(visibleItems.length, rightLegend, manualBox) ?? (rightLegend ? 20 : 92);
+  const originX = manualBox ? 0 : rightLegend ? width - margin.right + 18 : leftLegend ? 24 : margin.left;
+  const originY = manualBox ? manualLegendBaseline(manualBox, verticalLegend) : verticalLegend ? margin.top + (position === "tr" ? 0 : 12) : topLegend ? margin.top - 30 : height - 28;
+  const itemGap = legendItemGap(visibleItems.length, verticalLegend, manualBox) ?? (verticalLegend ? 20 : 92);
   const entries = visibleItems.map((item, index) => {
     const entry = legendEntryForItem(legend, item);
     const style = entry?.labelStyle ?? legend.labelStyle;
-    const x = rightLegend ? originX : originX + index * itemGap;
-    const y = rightLegend ? originY + index * itemGap : originY;
+    const x = verticalLegend ? originX : originX + index * itemGap;
+    const y = verticalLegend ? originY + index * itemGap : originY;
     return `<g class="chart-legend-item" data-series="${escapeHtml(item.label)}" data-legend-entry-index="${item.index}"${seriesMetadataAttributes(item.series)}><rect x="${round3(x)}" y="${round3(y - 10)}" width="10" height="10" fill="${item.color}"></rect><text x="${round3(x + 16)}" y="${round3(y)}" class="chart-legend-label"${legendLabelAttributes(style)}>${escapeHtml(item.label)}</text></g>`;
   }).join("\n        ");
   const layoutBox = manualBox?.width != null && manualBox.height != null ? `<rect class="chart-legend-layout-box" x="0" y="0" width="${manualBox.width}" height="${manualBox.height}" fill="none" stroke="none"></rect>
         ` : "";
+  const background = manualBox?.width != null && manualBox.height != null ? legendBackground(legend.area, manualBox.width, manualBox.height) : "";
   const transform2 = manualBox ? ` transform="translate(${manualBox.x} ${manualBox.y})"` : "";
   return `<g class="chart-legend" data-legend-position="${escapeHtml(position)}"${legend.overlay == null ? "" : ` data-legend-overlay="${legend.overlay}"`}${legendLayoutAttributes(legend)}${transform2}>
-        ${layoutBox}${entries}
+        ${background}${layoutBox}${entries}
         </g>`;
 }
 function isRightLegend(legend) {
   return legend?.position === "r" || legend?.position === "tr";
+}
+function isBottomLegend(legend) {
+  return legend?.position === "b";
+}
+function isLeftLegend(legend) {
+  return legend?.position === "l";
+}
+function isTopLegend(legend) {
+  return legend?.position === "t";
+}
+function isVerticalLegend(legend) {
+  return isRightLegend(legend) || isLeftLegend(legend);
 }
 function legendLayoutDataAttributes(legend) {
   const layout = legend?.layout;
@@ -39510,16 +39697,21 @@ function legendLayoutBox(legend, chartWidth, chartHeight) {
     height: positiveLayoutSize(layout.h, chartHeight)
   };
 }
+function legendBackground(area, width, height) {
+  const background = renderChartFrameBackground(area, "chart-legend-bg", 0, 0, width, height);
+  return background ? `${background}
+        ` : "";
+}
 function positiveLayoutSize(value, total) {
   return value != null && value > 0 ? round3(value * total) : void 0;
 }
-function manualLegendBaseline(box, rightLegend) {
-  if (rightLegend) return Math.min(14, Math.max(10, (box.height ?? 28) / 2));
+function manualLegendBaseline(box, verticalLegend) {
+  if (verticalLegend) return Math.min(14, Math.max(10, (box.height ?? 28) / 2));
   return Math.max(12, round3(((box.height ?? 24) + 8) / 2));
 }
-function legendItemGap(count, rightLegend, box) {
+function legendItemGap(count, verticalLegend, box) {
   if (!box || count <= 0) return void 0;
-  const size = rightLegend ? box.height : box.width;
+  const size = verticalLegend ? box.height : box.width;
   return size == null ? void 0 : round3(size / count);
 }
 function legendLabelAttributes(style) {
@@ -39580,6 +39772,7 @@ function asTitleMeta(value) {
   return present != null || empty != null || overlay != null || textStyle || runs || area ? { present, empty, overlay, textStyle, runs, area } : void 0;
 }
 function hasTitleSpace(title, titleMeta) {
+  if (titleMeta?.overlay === true) return false;
   if (title) return true;
   return titleMeta?.present === true && titleMeta.overlay !== true;
 }
@@ -39819,7 +40012,8 @@ function asDataLabels(value) {
     showCatName: asOptionalBoolean4(labels.showCatName),
     showSerName: asOptionalBoolean4(labels.showSerName),
     showPercent: asOptionalBoolean4(labels.showPercent),
-    showBubbleSize: asOptionalBoolean4(labels.showBubbleSize)
+    showBubbleSize: asOptionalBoolean4(labels.showBubbleSize),
+    separator: typeof labels.separator === "string" ? labels.separator : void 0
   };
   return Object.values(parsed).some((item) => item != null) ? parsed : void 0;
 }
@@ -39834,6 +40028,7 @@ function dataLabelsDataAttributes(dataLabels) {
     attrString6("data-chart-data-labels-show-ser-name", boolString4(dataLabels.showSerName)),
     attrString6("data-chart-data-labels-show-percent", boolString4(dataLabels.showPercent)),
     attrString6("data-chart-data-labels-show-bubble-size", boolString4(dataLabels.showBubbleSize)),
+    attrString6("data-chart-data-labels-separator", dataLabels.separator),
     ...chartTextStyleDataAttributes("chart-data-labels", dataLabels.textStyle)
   ].filter(Boolean);
 }
@@ -40460,12 +40655,13 @@ function textDefaultStyle(textDefault) {
 
 // src/render/renderEcharts.ts
 var ECHARTS_VENDOR_OUTPUT_PATH = "assets/vendor/echarts.min.js";
+var ECHARTS_CDN_SCRIPT_SRC = "https://cdn.jsdelivr.net/npm/echarts@6.1.0/dist/echarts.min.js";
 function hasCharts(deckOrSlide) {
   const deck = deckOrSlide;
   if (Array.isArray(deck.slides)) return deck.slides.some((slide) => hasCharts(slide));
   return collectElements(deckOrSlide.elements).some((element) => element.type === "chart");
 }
-function renderEchartsRuntimeScripts(scriptSrc = ECHARTS_VENDOR_OUTPUT_PATH) {
+function renderEchartsRuntimeScripts(scriptSrc = ECHARTS_CDN_SCRIPT_SRC) {
   return `<script src="${escapeHtml(scriptSrc)}"></script>
   <script>
   (() => {
@@ -40527,6 +40723,7 @@ function cartesianOption(data, seriesType, horizontal, area = false) {
   const chartLabels = effectiveDataLabels(asRecord3(data.dataLabels), textContext);
   const axes = effectiveAxes(data.axes, textContext);
   const stacked = isStacked(data.grouping);
+  const supportsDataLabels = !area || isStandardLineOrAreaGrouping(data.grouping);
   return compactObject({
     title: titleOption(data, textContext),
     tooltip: { trigger: "axis" },
@@ -40549,7 +40746,7 @@ function cartesianOption(data, seriesType, horizontal, area = false) {
         lineStyle: lineStyleOption(styledItem, { strokeEnds: seriesType === "line" }),
         barCategoryGap: seriesType === "bar" ? barCategoryGapOption(data.gapWidth) : void 0,
         barGap: seriesType === "bar" ? barGapOption(data.overlap, stacked) : void 0,
-        label: dataLabelOption(effectiveDataLabels(item.dataLabels, textContext) ?? chartLabels, seriesType, horizontal, stacked),
+        label: supportsDataLabels ? dataLabelOption(effectiveDataLabels(item.dataLabels, textContext) ?? chartLabels, seriesType, horizontal, stacked) : void 0,
         showSymbol: seriesType === "line" && styledItem.marker?.symbol === "none" ? false : void 0,
         symbol: seriesType === "line" ? echartsSymbol(styledItem.marker?.symbol) : void 0,
         symbolSize: seriesType === "line" ? styledItem.marker?.size : void 0
@@ -40557,11 +40754,16 @@ function cartesianOption(data, seriesType, horizontal, area = false) {
     })
   });
 }
+function isStandardLineOrAreaGrouping(value) {
+  const grouping = asOptionalString8(value);
+  return grouping == null || grouping === "standard";
+}
 function pieOption(data, doughnut) {
   const categories = asStrings(data.categories);
   const series = chartSeries(data.series);
   const first = series[0] ?? { name: "Series 1", values: [] };
   const textContext = textContextForChart(data);
+  const dataLabels = effectiveDataLabels(data.dataLabels, textContext);
   return compactObject({
     title: titleOption(data, textContext),
     tooltip: { trigger: "item" },
@@ -40570,6 +40772,7 @@ function pieOption(data, doughnut) {
       type: "pie",
       name: first.name,
       radius: doughnut ? ["45%", "70%"] : "70%",
+      label: pieDataLabelOption(dataLabels),
       data: first.values.map((value, index) => compactObject({
         name: categories[index] ?? String(index + 1),
         value,
@@ -40577,6 +40780,19 @@ function pieOption(data, doughnut) {
       }))
     }]
   });
+}
+function pieDataLabelOption(labels) {
+  if (!labels || labels.showPercent !== true) return void 0;
+  const textStyle = asRecord3(labels.textStyle);
+  const separator = dataLabelSeparator(labels);
+  return compactObject({
+    show: true,
+    formatter: labels.showCatName === true ? `{b}${separator}{d}%` : "{d}%",
+    ...dataLabelTextStyleOption(textStyle)
+  });
+}
+function dataLabelSeparator(labels, fallback = " ") {
+  return typeof labels.separator === "string" && !/[\r\n]/.test(labels.separator) ? labels.separator : fallback;
 }
 function titleOption(data, textContext = textContextForChart(data)) {
   const title = asOptionalString8(data.title);
@@ -40651,8 +40867,8 @@ function categoryAxisOption(axes, placement) {
     nameTextStyle: chartTextStyleOption(asRecord3(axis?.titleStyle)),
     inverse: asRecord3(axis?.scaling)?.orientation === "maxMin",
     axisLine: axisLineOption(axis?.line),
-    axisTick: axisTickOption(axis?.majorTickMark, axis?.visible, axis?.line),
-    axisLabel: axisLabelOption(axis?.labelStyle, axis?.tickLblPos, axis?.visible, categoryAxisLabelMargin(axis, placement))
+    axisTick: axisTickOption(axis?.majorTickMark, axis?.visible, axis?.line, axisInterval(axis?.tickMarkSkip)),
+    axisLabel: axisLabelOption(axis?.labelStyle, axis?.tickLblPos, axis?.visible, categoryAxisLabelMargin(axis, placement), axisInterval(axis?.tickLabelSkip))
   });
 }
 function valueAxisOption(axes) {
@@ -40691,16 +40907,17 @@ function axisLineOption(line8) {
   if (parsed.visible === false) return { show: false };
   return { lineStyle: lineStyleOption({ line: parsed, name: "", values: [] }) };
 }
-function axisTickOption(value, axisVisible, line8) {
+function axisTickOption(value, axisVisible, line8, interval) {
   if (axisVisible === false) return { show: false };
   const mark = asOptionalString8(value);
-  if (!mark) return void 0;
+  if (!mark && interval == null) return void 0;
   if (mark === "none") return { show: false };
-  if (!["in", "out", "cross"].includes(mark)) return void 0;
+  const supportedMark = mark && ["in", "out", "cross"].includes(mark) ? mark : void 0;
   return compactObject({
-    show: true,
-    inside: mark === "in" ? true : mark === "out" ? false : void 0,
-    lineStyle: axisTickLineStyleOption(line8)
+    show: supportedMark ? true : void 0,
+    inside: supportedMark === "in" ? true : supportedMark === "out" ? false : void 0,
+    interval,
+    lineStyle: supportedMark ? axisTickLineStyleOption(line8) : void 0
   });
 }
 function axisTickLineStyleOption(line8) {
@@ -40712,10 +40929,14 @@ function axisTickLineStyleOption(line8) {
     type: lineDashType(parsed.dash)
   });
 }
-function axisLabelOption(style, tickLabelPosition, axisVisible, margin) {
+function axisLabelOption(style, tickLabelPosition, axisVisible, margin, interval) {
   const base = axisTextOption(style);
   if (axisVisible === false || tickLabelPosition === "none") return compactObject({ show: false, ...base ?? {} });
-  return compactObject({ ...base ?? {}, margin });
+  return compactObject({ ...base ?? {}, margin, interval });
+}
+function axisInterval(value) {
+  const skip = asNumber7(value);
+  return skip != null && Number.isInteger(skip) && skip > 1 ? skip - 1 : void 0;
 }
 function axisTextOption(style) {
   return chartTextStyleOption(asRecord3(style));
@@ -40803,11 +41024,14 @@ function asSeriesMarkerLayout(value) {
   const source = asRecord3(value);
   if (!source) return void 0;
   const symbol2 = asOptionalString8(source.symbol);
-  if (symbol2 !== "circle" && symbol2 !== "none") return void 0;
+  if (!isBasicMarkerSymbol(symbol2)) return void 0;
   return {
     symbol: symbol2,
     size: asNumber7(source.size)
   };
+}
+function isBasicMarkerSymbol(value) {
+  return value === "circle" || value === "none" || value === "square" || value === "triangle" || value === "diamond";
 }
 function lineCapOption(value) {
   const cap = asOptionalString8(value);
@@ -40869,13 +41093,23 @@ function shadowValueOption(value) {
 }
 function dataLabelOption(labels, seriesType, horizontal, stacked) {
   const parsed = asRecord3(labels);
-  if (!isBasicShowValueDataLabels(parsed)) return void 0;
+  if (!parsed || !isBasicShowValueDataLabels(parsed)) return void 0;
   const textStyle = asRecord3(parsed?.textStyle);
   return compactObject({
     show: true,
     position: seriesType === "bar" ? barLabelPosition(parsed?.position, horizontal, stacked) : "top",
+    formatter: cartesianDataLabelFormatter(parsed),
     ...dataLabelTextStyleOption(textStyle)
   });
+}
+function cartesianDataLabelFormatter(labels) {
+  const separator = dataLabelSeparator(labels, ",");
+  const parts = [
+    labels.showCatName === true ? "{b}" : void 0,
+    labels.showSerName === true ? "{a}" : void 0,
+    "{c}"
+  ].filter((part) => part != null);
+  return parts.length > 1 ? parts.join(separator) : void 0;
 }
 function barCategoryGapOption(value) {
   const gapWidth = asNumber7(value) ?? 150;
@@ -40916,7 +41150,7 @@ function barLabelPosition(position, horizontal, stacked) {
 }
 function isBasicShowValueDataLabels(labels) {
   if (!labels || labels.showVal !== true) return false;
-  return labels.showLegendKey !== true && labels.showCatName !== true && labels.showSerName !== true && labels.showPercent !== true && labels.showBubbleSize !== true;
+  return labels.showLegendKey !== true && labels.showPercent !== true && labels.showBubbleSize !== true && !(typeof labels.separator === "string" && /[\r\n]/.test(labels.separator));
 }
 function lineDashType(value) {
   const dash = asOptionalString8(value);
@@ -41011,19 +41245,28 @@ function asBoolean(value) {
   return typeof value === "boolean" ? value : void 0;
 }
 
+// src/shared/chartNumberFormats.ts
+function isBasicNumberFormatCode(formatCode) {
+  return formatCode === "#,##0" || formatCode === "#,##0.0" || formatCode === "0.0" || formatCode === "0%" || formatCode === "0.0%";
+}
+
 // src/render/renderChartAxisAttrs.ts
 function formatAxisValue(value, formatCode) {
   if (formatCode === "#,##0") return new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 }).format(value);
+  if (formatCode === "#,##0.0") return new Intl.NumberFormat("en-US", { minimumFractionDigits: 1, maximumFractionDigits: 1 }).format(value);
+  if (formatCode === "0.0") return value.toFixed(1);
+  if (formatCode === "0%") return `${Math.round(value * 100)}%`;
+  if (formatCode === "0.0%") return `${(value * 100).toFixed(1)}%`;
   if (!formatCode || formatCode === "General") return Number.isInteger(value) ? String(value) : String(round6(value));
   return Number.isInteger(value) ? String(value) : String(round6(value));
 }
 function formatCategoryValue(value, formatCode, categoryValueType) {
-  if (formatCode !== "#,##0" || categoryValueType !== "number") return value;
+  if (!isBasicNumberFormatCode(formatCode) || categoryValueType !== "number") return value;
   const number4 = Number(value);
   return Number.isFinite(number4) ? formatAxisValue(number4, formatCode) : value;
 }
-function isRightLegend2(legend) {
-  return legend.position === "r" || legend.position === "tr";
+function isBottomLegend2(legend) {
+  return legend.position === "b";
 }
 function round6(value) {
   return Number(value.toFixed(2));
@@ -41128,7 +41371,7 @@ function renderVerticalBarValueLabels(categories, series, labels, margin, plotH,
     const barX = margin.left + visualIndex * groupW + barStart + seriesIndex * barStep;
     const x = round8(barX + (barW - 2) / 2);
     const y = verticalValueLabelY(itemLabels?.position, barY, barH, margin.top, plotH, value < 0);
-    return valueLabelText(category, item.name, value, x, y, "middle", itemLabels?.textStyle, item.valueCache?.formatCode);
+    return valueLabelText(category, item.name, value, x, y, "middle", itemLabels, item.valueCache?.formatCode);
   })).join("\n        ");
 }
 function renderHorizontalBarValueLabels(categories, series, labels, margin, plotW, scale, groupH, barH, barStart, barStep, valueAxis, categoryAxis) {
@@ -41144,7 +41387,7 @@ function renderHorizontalBarValueLabels(categories, series, labels, margin, plot
     const width = Math.abs(valueX - zeroX);
     const y = margin.top + visualIndex * groupH + barStart + seriesIndex * barStep + (barH - 2) / 2 + 4;
     const label = horizontalValueLabelPosition(itemLabels?.position, x, width, margin.left, right, value < 0);
-    return valueLabelText(category, item.name, value, round8(label.x), round8(y), label.anchor, itemLabels?.textStyle, item.valueCache?.formatCode);
+    return valueLabelText(category, item.name, value, round8(label.x), round8(y), label.anchor, itemLabels, item.valueCache?.formatCode);
   })).join("\n        ");
 }
 function hasBasicValueDataLabels(data) {
@@ -41168,20 +41411,22 @@ function renderVerticalStackedBarValueLabels(rects, sourceSeries, chartLabels) {
   return rects.map((rect) => {
     const labels = asDataLabels2(sourceSeries[rect.seriesIndex]?.dataLabels) ?? chartLabels;
     if (!hasBasicShowValueDataLabels(labels)) return "";
-    return stackedBarLabelText(rect, rect.value, round8(rect.x + rect.width / 2), round8(rect.y + rect.height / 2 + 4), labels?.textStyle, sourceSeries[rect.seriesIndex]?.valueCache?.formatCode);
+    return stackedBarLabelText(rect, rect.value, round8(rect.x + rect.width / 2), round8(rect.y + rect.height / 2 + 4), labels, sourceSeries[rect.seriesIndex]?.valueCache?.formatCode);
   }).filter(Boolean).join("\n        ");
 }
 function renderHorizontalStackedBarValueLabels(rects, sourceSeries, chartLabels) {
   return rects.map((rect) => {
     const labels = asDataLabels2(sourceSeries[rect.seriesIndex]?.dataLabels) ?? chartLabels;
     if (!hasBasicShowValueDataLabels(labels)) return "";
-    return stackedBarLabelText(rect, rect.value, round8(rect.x + rect.width / 2), round8(rect.y + rect.height / 2 + 4), labels?.textStyle, sourceSeries[rect.seriesIndex]?.valueCache?.formatCode);
+    return stackedBarLabelText(rect, rect.value, round8(rect.x + rect.width / 2), round8(rect.y + rect.height / 2 + 4), labels, sourceSeries[rect.seriesIndex]?.valueCache?.formatCode);
   }).filter(Boolean).join("\n        ");
 }
 function hasBasicPercentStackedBarPercentDataLabels(data, series, categoryCount) {
   const labels = asDataLabels2(data?.dataLabels);
-  if (labels?.showPercent !== true || labels.position !== "ctr") return false;
-  if (labels.showLegendKey !== false || labels.showVal !== false || labels.showCatName !== false || labels.showSerName !== false || labels.showBubbleSize !== false) return false;
+  if (!isBasicPercentStackedPercentDataLabels(labels) && !series.some((item) => isBasicPercentStackedPercentDataLabels(asDataLabels2(item.dataLabels)))) return false;
+  return hasSafePercentStackedValues(series, categoryCount);
+}
+function hasSafePercentStackedValues(series, categoryCount) {
   if (series.length === 0 || categoryCount <= 0) return false;
   for (let categoryIndex = 0; categoryIndex < categoryCount; categoryIndex += 1) {
     let total = 0;
@@ -41194,26 +41439,38 @@ function hasBasicPercentStackedBarPercentDataLabels(data, series, categoryCount)
   }
   return true;
 }
+function isBasicPercentStackedPercentDataLabels(labels) {
+  if (labels?.showPercent !== true || labels.position !== "ctr") return false;
+  return labels.showLegendKey !== true && labels.showVal !== true && labels.showCatName !== true && labels.showSerName !== true && labels.showBubbleSize !== true;
+}
 function hasBasicPiePercentDataLabels(data) {
   const labels = asDataLabels2(data?.dataLabels);
-  if (labels?.showPercent !== true) return false;
-  return labels.showLegendKey !== true && labels.showVal !== true && labels.showSerName !== true && labels.showBubbleSize !== true;
+  if (!labels || labels.showLegendKey === true || labels.showBubbleSize === true) return false;
+  return labels.showVal === true || labels.showPercent === true;
 }
 function renderVerticalPercentStackedBarPercentLabels(rects, sourceSeries, labels) {
   return rects.map((rect) => {
+    const itemLabels = percentStackedPercentLabelsForRect(sourceSeries[rect.seriesIndex], labels);
+    if (!itemLabels) return "";
     const rawValue = sourceSeries[rect.seriesIndex]?.values[rect.categoryIndex] ?? 0;
     const percent2 = rect.value / 100;
     const text = formatPercent(percent2);
-    return percentStackedBarLabelText(rect, rawValue, percent2, round8(rect.x + rect.width / 2), round8(rect.y + rect.height / 2 + 4), text, labels?.textStyle);
-  }).join("\n        ");
+    return percentStackedBarLabelText(rect, rawValue, percent2, round8(rect.x + rect.width / 2), round8(rect.y + rect.height / 2 + 4), text, itemLabels.textStyle);
+  }).filter(Boolean).join("\n        ");
 }
 function renderHorizontalPercentStackedBarPercentLabels(rects, sourceSeries, labels) {
   return rects.map((rect) => {
+    const itemLabels = percentStackedPercentLabelsForRect(sourceSeries[rect.seriesIndex], labels);
+    if (!itemLabels) return "";
     const rawValue = sourceSeries[rect.seriesIndex]?.values[rect.categoryIndex] ?? 0;
     const percent2 = rect.value / 100;
     const text = formatPercent(percent2);
-    return percentStackedBarLabelText(rect, rawValue, percent2, round8(rect.x + rect.width / 2), round8(rect.y + rect.height / 2 + 4), text, labels?.textStyle);
-  }).join("\n        ");
+    return percentStackedBarLabelText(rect, rawValue, percent2, round8(rect.x + rect.width / 2), round8(rect.y + rect.height / 2 + 4), text, itemLabels.textStyle);
+  }).filter(Boolean).join("\n        ");
+}
+function percentStackedPercentLabelsForRect(series, chartLabels) {
+  const labels = asDataLabels2(series?.dataLabels) ?? chartLabels;
+  return isBasicPercentStackedPercentDataLabels(labels) ? labels : void 0;
 }
 function renderPiePercentDataLabels(labels, values, dataLabels, options) {
   const total = values.reduce((sum, value) => sum + Math.max(0, value), 0);
@@ -41230,32 +41487,49 @@ function renderPiePercentDataLabels(labels, values, dataLabels, options) {
     const y = round8(options.cy + Math.sin(mid) * labelRadius + 4);
     const category = labels[index] ?? String(index + 1);
     const percent2 = positive / total;
-    const text = dataLabels?.showCatName === true ? `${category} ${formatPercent(percent2)}` : formatPercent(percent2);
+    const text = formatPieDataLabelText(category, options.seriesName, value, percent2, dataLabels, options.valueFormatCode);
     return pieLabelText(category, options.seriesName, value, percent2, x, y, text, dataLabels?.textStyle);
   }).filter(Boolean).join("\n        ");
+}
+function formatPieDataLabelText(category, seriesName, value, percent2, labels, formatCode) {
+  const parts = [
+    labels?.showCatName === true ? category : void 0,
+    labels?.showSerName === true ? seriesName : void 0,
+    labels?.showVal === true ? formatLabelValue(value, formatCode) : void 0,
+    labels?.showPercent === true ? formatPercent(percent2) : void 0
+  ].filter((part) => part != null);
+  return parts.join(dataLabelSeparator2(labels, " "));
+}
+function dataLabelSeparator2(labels, fallback = " ") {
+  return typeof labels?.separator === "string" ? labels.separator : fallback;
 }
 function renderLineValueLabels(categories, series, labels, margin, plotW, plotH, scale, valueAxis, categoryAxis) {
   return series.flatMap((item) => item.values.map((value, categoryIndex) => {
     const itemLabels = asDataLabels2(item.dataLabels) ?? labels;
-    if (!hasBasicLineShowValueDataLabels(itemLabels)) return "";
+    if (!hasBasicLineShowValueDataLabels(itemLabels) || !Number.isFinite(value)) return "";
     const category = categories[categoryIndex] ?? String(categoryIndex + 1);
     const x = margin.left + categoryPosition(categoryIndex, categories.length, plotW, "point", categoryAxis);
     const y = valueAxisY(margin.top, plotH, value, scale, valueAxis);
     const label = lineValueLabelPosition(itemLabels?.position, x, y);
-    return valueLabelText(category, item.name, value, label.x, label.y, label.anchor, itemLabels?.textStyle, item.valueCache?.formatCode);
+    return valueLabelText(category, item.name, value, label.x, label.y, label.anchor, itemLabels, item.valueCache?.formatCode);
   })).join("\n        ");
 }
-function valueLabelText(category, seriesName, value, x, y, anchor, style, formatCode) {
-  return `<text class="chart-data-label" data-category="${escapeHtml(category)}" data-series="${escapeHtml(seriesName)}" data-value="${round8(value)}" x="${x}" y="${y}" text-anchor="${anchor}"${dataLabelStyleAttributes(style)}>${escapeHtml(formatLabelValue(value, formatCode))}</text>`;
+function valueLabelText(category, seriesName, value, x, y, anchor, labels, formatCode) {
+  return `<text class="chart-data-label" data-category="${escapeHtml(category)}" data-series="${escapeHtml(seriesName)}" data-value="${round8(value)}" x="${x}" y="${y}" text-anchor="${anchor}"${dataLabelStyleAttributes(labels?.textStyle)}>${dataLabelTextContent(formatDataLabelText(category, seriesName, value, labels, formatCode), x)}</text>`;
 }
-function stackedBarLabelText(rect, value, x, y, style, formatCode) {
-  return `<text class="chart-data-label chart-data-label-bar-stacked-value" data-category="${escapeHtml(rect.category)}" data-series="${escapeHtml(rect.series)}" data-value="${round8(value)}" x="${x}" y="${y}" text-anchor="middle"${dataLabelStyleAttributes(style)}>${escapeHtml(formatLabelValue(value, formatCode))}</text>`;
+function stackedBarLabelText(rect, value, x, y, labels, formatCode) {
+  return `<text class="chart-data-label chart-data-label-bar-stacked-value" data-category="${escapeHtml(rect.category)}" data-series="${escapeHtml(rect.series)}" data-value="${round8(value)}" x="${x}" y="${y}" text-anchor="middle"${dataLabelStyleAttributes(labels?.textStyle)}>${dataLabelTextContent(formatDataLabelText(rect.category, rect.series, value, labels, formatCode), x)}</text>`;
 }
 function pieLabelText(category, seriesName, value, percent2, x, y, text, style) {
-  return `<text class="chart-data-label chart-data-label-pie" data-category="${escapeHtml(category)}" data-series="${escapeHtml(seriesName)}" data-value="${round8(value)}" data-percent="${round8(percent2)}" x="${x}" y="${y}" text-anchor="middle"${dataLabelStyleAttributes(style)}>${escapeHtml(text)}</text>`;
+  return `<text class="chart-data-label chart-data-label-pie" data-category="${escapeHtml(category)}" data-series="${escapeHtml(seriesName)}" data-value="${round8(value)}" data-percent="${round8(percent2)}" x="${x}" y="${y}" text-anchor="middle"${dataLabelStyleAttributes(style)}>${dataLabelTextContent(text, x)}</text>`;
 }
 function percentStackedBarLabelText(rect, value, percent2, x, y, text, style) {
-  return `<text class="chart-data-label chart-data-label-bar-percent" data-category="${escapeHtml(rect.category)}" data-series="${escapeHtml(rect.series)}" data-value="${round8(value)}" data-percent="${round8(percent2)}" x="${x}" y="${y}" text-anchor="middle"${dataLabelStyleAttributes(style)}>${escapeHtml(text)}</text>`;
+  return `<text class="chart-data-label chart-data-label-bar-percent" data-category="${escapeHtml(rect.category)}" data-series="${escapeHtml(rect.series)}" data-value="${round8(value)}" data-percent="${round8(percent2)}" x="${x}" y="${y}" text-anchor="middle"${dataLabelStyleAttributes(style)}>${dataLabelTextContent(text, x)}</text>`;
+}
+function dataLabelTextContent(text, x) {
+  const lines = text.split(/\r\n|\r|\n/);
+  if (lines.length === 1) return escapeHtml(text);
+  return lines.map((line8, index) => `<tspan x="${x}"${index === 0 ? "" : ' dy="1.2em"'}>${escapeHtml(line8)}</tspan>`).join("");
 }
 function verticalValueLabelY(position, barY, barH, plotTop, plotH, negative) {
   const plotBottom = plotTop + plotH;
@@ -41294,12 +41568,13 @@ function asDataLabels2(value) {
     showCatName: typeof value.showCatName === "boolean" ? value.showCatName : void 0,
     showSerName: typeof value.showSerName === "boolean" ? value.showSerName : void 0,
     showPercent: typeof value.showPercent === "boolean" ? value.showPercent : void 0,
-    showBubbleSize: typeof value.showBubbleSize === "boolean" ? value.showBubbleSize : void 0
+    showBubbleSize: typeof value.showBubbleSize === "boolean" ? value.showBubbleSize : void 0,
+    separator: typeof value.separator === "string" ? value.separator : void 0
   };
 }
 function hasBasicShowValueDataLabels(labels) {
   if (labels?.showVal !== true) return false;
-  return labels.showLegendKey !== true && labels.showCatName !== true && labels.showSerName !== true && labels.showPercent !== true && labels.showBubbleSize !== true;
+  return labels.showLegendKey !== true && labels.showPercent !== true && labels.showBubbleSize !== true;
 }
 function hasBasicLineShowValueDataLabels(labels) {
   return hasBasicShowValueDataLabels(labels) && (labels?.position == null || ["r", "l", "t", "b", "ctr"].includes(labels.position));
@@ -41309,7 +41584,15 @@ function dataLabelStyleAttributes(style) {
   return attrs.length > 0 ? ` ${attrs.join(" ")}` : "";
 }
 function formatLabelValue(value, formatCode) {
-  return formatCode === "#,##0" ? formatAxisValue(value, formatCode) : String(value);
+  return isBasicNumberFormatCode(formatCode) ? formatAxisValue(value, formatCode) : String(value);
+}
+function formatDataLabelText(category, seriesName, value, labels, formatCode) {
+  const parts = [
+    labels?.showCatName === true ? category : void 0,
+    labels?.showSerName === true ? seriesName : void 0,
+    formatLabelValue(value, formatCode)
+  ].filter((part) => part != null);
+  return parts.join(dataLabelSeparator2(labels, ","));
 }
 function formatPercent(value) {
   const percent2 = value * 100;
@@ -41318,109 +41601,6 @@ function formatPercent(value) {
 }
 function round8(value) {
   return Math.round(value * 100) / 100;
-}
-
-// src/render/renderChartStackedBars.ts
-var DEFAULT_BAR_GAP_WIDTH = 150;
-function barClusterLayout(groupSize, seriesCount, gapWidth, overlap, stacked) {
-  const gap = validGapWidth(gapWidth) ? gapWidth : DEFAULT_BAR_GAP_WIDTH;
-  const overlapRatio = !stacked && validOverlap(overlap) ? overlap : 0;
-  const barCount = stacked ? 1 : Math.max(1, seriesCount);
-  const denominator = barCount - (barCount - 1) * (overlapRatio / 100) + gap / 100;
-  const thickness = Math.max(4, groupSize / denominator);
-  const step = stacked ? 0 : thickness * (1 - overlapRatio / 100);
-  const used = thickness + step * (barCount - 1);
-  return {
-    start: (groupSize - used) / 2,
-    thickness,
-    step
-  };
-}
-function validGapWidth(value) {
-  return value != null && Number.isFinite(value) && value >= 0 && value <= 500;
-}
-function validOverlap(value) {
-  return value != null && Number.isFinite(value) && value >= -100 && value <= 100;
-}
-function verticalStackedBarRects(categories, series, margin, plotH, scale, groupW, barW, offsetX, fillFor, valueAxis, categoryAxis) {
-  return categories.flatMap((category, categoryIndex) => {
-    const visualIndex = categoryVisualIndex(categoryIndex, categories.length, categoryAxis);
-    let positiveBase = 0;
-    let negativeBase = 0;
-    return series.map((item, seriesIndex) => {
-      const value = item.values[categoryIndex] ?? 0;
-      const previous = value >= 0 ? positiveBase : negativeBase;
-      const next = previous + value;
-      const yNext = valueAxisY(margin.top, plotH, next, scale, valueAxis);
-      const yPrevious = valueAxisY(margin.top, plotH, previous, scale, valueAxis);
-      if (value >= 0) positiveBase = next;
-      else negativeBase = next;
-      const x = margin.left + visualIndex * groupW + offsetX;
-      return {
-        category,
-        categoryIndex,
-        series: item.name,
-        seriesIndex,
-        value,
-        x: round9(x),
-        y: round9(Math.min(yNext, yPrevious)),
-        width: round9(barW - 2),
-        height: round9(Math.abs(yPrevious - yNext)),
-        fill: fillFor(item, seriesIndex, categoryIndex)
-      };
-    });
-  });
-}
-function horizontalStackedBarRects(categories, series, margin, plotW, scale, groupH, barH, offsetY, fillFor, valueAxis, categoryAxis) {
-  return categories.flatMap((category, categoryIndex) => {
-    const visualIndex = categoryVisualIndex(categoryIndex, categories.length, categoryAxis);
-    let positiveBase = 0;
-    let negativeBase = 0;
-    return series.map((item, seriesIndex) => {
-      const value = item.values[categoryIndex] ?? 0;
-      const previous = value >= 0 ? positiveBase : negativeBase;
-      const next = previous + value;
-      const xPrevious = valueAxisX(margin.left, plotW, previous, scale, valueAxis);
-      const xNext = valueAxisX(margin.left, plotW, next, scale, valueAxis);
-      if (value >= 0) positiveBase = next;
-      else negativeBase = next;
-      const y = margin.top + visualIndex * groupH + offsetY;
-      return {
-        category,
-        categoryIndex,
-        series: item.name,
-        seriesIndex,
-        value,
-        x: round9(Math.min(xPrevious, xNext)),
-        y: round9(y),
-        width: round9(Math.abs(xNext - xPrevious)),
-        height: round9(barH - 2),
-        fill: fillFor(item, seriesIndex, categoryIndex)
-      };
-    });
-  });
-}
-function round9(value) {
-  return Math.round(value * 100) / 100;
-}
-
-// src/render/renderChartBarStacking.ts
-function barStackingMode(grouping) {
-  if (grouping === "stacked" || grouping === "percentStacked") return grouping;
-  return "none";
-}
-function percentStackedSeries(series, categoryCount) {
-  const totals = Array.from({ length: categoryCount }, (_, categoryIndex) => {
-    return series.reduce((sum, item) => sum + Math.max(0, item.values[categoryIndex] ?? 0), 0);
-  });
-  return series.map((item) => ({
-    ...item,
-    values: Array.from({ length: categoryCount }, (_, categoryIndex) => {
-      const total = totals[categoryIndex] ?? 0;
-      if (total <= 0) return 0;
-      return Math.max(0, item.values[categoryIndex] ?? 0) / total * 100;
-    })
-  }));
 }
 
 // src/render/renderChartLineStacking.ts
@@ -41440,9 +41620,29 @@ function stackedLineSeries(series, categoryCount) {
     return { ...item, values };
   });
 }
+function percentStackedLineSeries(series, categoryCount) {
+  const totals = Array.from({ length: categoryCount }, (_, categoryIndex) => {
+    return series.reduce((sum, item) => sum + Math.max(0, item.values[categoryIndex] ?? 0), 0);
+  });
+  const cumulative = Array.from({ length: categoryCount }, () => 0);
+  return series.map((item) => ({
+    ...item,
+    values: Array.from({ length: categoryCount }, (_, categoryIndex) => {
+      const total = totals[categoryIndex] ?? 0;
+      const percent2 = total > 0 ? Math.max(0, item.values[categoryIndex] ?? 0) / total * 100 : 0;
+      cumulative[categoryIndex] += percent2;
+      return cumulative[categoryIndex];
+    })
+  }));
+}
 function hasOnlyNonNegativeLineValues(series) {
   const values = series.flatMap((item) => item.values);
   return values.length > 0 && values.every((value) => Number.isFinite(value) && value >= 0);
+}
+function hasPositiveLineCategoryTotals(series, categoryCount) {
+  return categoryCount > 0 && Array.from({ length: categoryCount }, (_, categoryIndex) => {
+    return series.reduce((sum, item) => sum + (item.values[categoryIndex] ?? 0), 0);
+  }).every((total) => Number.isFinite(total) && total > 0);
 }
 
 // src/render/chartValueScale.ts
@@ -41483,6 +41683,41 @@ function niceCeil(value) {
 function niceFloor(value) {
   if (!Number.isFinite(value) || value >= 0) return 0;
   return -niceCeil(Math.abs(value));
+}
+
+// src/render/renderChartBlankValues.ts
+function chartBlankMode(value) {
+  return value === "span" || value === "zero" ? value : "gap";
+}
+function seriesWithDisplayedBlankValues(series, displayBlanksAs) {
+  if (chartBlankMode(displayBlanksAs) !== "zero") return series;
+  return series.map((item) => ({
+    ...item,
+    values: item.values.map((value) => Number.isFinite(value) ? value : 0)
+  }));
+}
+function linePointSegments(values, displayBlanksAs, pointForValue) {
+  const mode = chartBlankMode(displayBlanksAs);
+  const segments = [[]];
+  for (const [index, rawValue] of values.entries()) {
+    const value = Number.isFinite(rawValue) ? rawValue : void 0;
+    if (value == null) {
+      if (mode === "zero") {
+        segments[segments.length - 1].push(pointForValue(0, index));
+      } else if (mode === "gap" && segments[segments.length - 1].length > 0) {
+        segments.push([]);
+      }
+      continue;
+    }
+    segments[segments.length - 1].push(pointForValue(value, index));
+  }
+  return segments.filter((segment) => segment.length > 0);
+}
+
+// src/shared/chartMarkerSymbols.ts
+var basicChartMarkerSymbols = ["circle", "square", "triangle", "diamond"];
+function isBasicChartMarkerSymbol(value) {
+  return typeof value === "string" && basicChartMarkerSymbols.includes(value);
 }
 
 // src/render/renderEffectCss.ts
@@ -41574,9 +41809,9 @@ function renderLineChartSeriesStyle(item, seriesIndex, fallbackColor, chartId) {
   ].filter(Boolean).join(" ");
   return {
     defs,
-    strokeAttributes: `${lineAttrs}${seriesLineMetadata(line8)}${seriesEffectMetadata(item.effects)}${seriesMarkerAttributes(item)}`,
+    strokeAttributes: `${lineAttrs}${seriesLineMetadata(line8)}${seriesEffectMetadata(item.effects)}${seriesMarkerAttributes(item, fallbackColor)}`,
     pointFill: asString(line8?.color) ?? fallbackColor,
-    metadataAttributes: `${seriesLineMetadata(line8)}${seriesEffectMetadata(item.effects)}${seriesMarkerAttributes(item)}`
+    metadataAttributes: `${seriesLineMetadata(line8)}${seriesEffectMetadata(item.effects)}${seriesMarkerAttributes(item, fallbackColor)}`
   };
 }
 function shouldRenderSeriesMarkers(item) {
@@ -41584,21 +41819,26 @@ function shouldRenderSeriesMarkers(item) {
   if (item.marker?.source === "chartStyleUnsupported") return false;
   if (item.marker?.symbol === "none") return false;
   const size = asNumber8(item.marker.size);
+  if (item.marker?.line && item.marker.symbol == null && size == null) return true;
   if (size != null && size <= 0) return false;
-  if (item.marker.symbol === "square") return size != null && size > 0;
-  return item.marker.symbol === "circle";
+  if (item.marker.symbol === "circle") return true;
+  return isBasicChartMarkerSymbol(item.marker.symbol) && size != null && size > 0;
 }
 function seriesMarkerRadius(item) {
   const size = asNumber8(item.marker?.size);
   return size != null && size > 0 ? size : 4;
 }
-function seriesMarkerAttributes(item) {
+function seriesMarkerAttributes(item, fallbackColor) {
   const line8 = asRecord4(item.marker?.line);
+  const lineColor = line8 && line8.visible !== false ? asString(line8.color) ?? fallbackColor : void 0;
   return [
     item.marker?.symbol ? ` data-series-marker-symbol="${escapeHtml(item.marker.symbol)}"` : "",
     asNumber8(item.marker?.size) != null ? ` data-series-marker-size="${formatNumber3(asNumber8(item.marker?.size))}"` : "",
     item.marker?.source ? ` data-series-marker-source="${escapeHtml(item.marker.source)}"` : "",
     line8?.visible === false ? ` data-series-marker-line-visible="false"` : "",
+    lineColor ? ` data-series-marker-line-color="${escapeHtml(lineColor)}"` : "",
+    asString(line8?.colorSource) ? ` data-series-marker-line-color-source="${escapeHtml(asString(line8?.colorSource))}"` : "",
+    asString(line8?.colorResolved) ? ` data-series-marker-line-color-resolved="${escapeHtml(asString(line8?.colorResolved))}"` : "",
     asNumber8(line8?.width) != null ? ` data-series-marker-line-width="${formatNumber3(asNumber8(line8?.width))}"` : "",
     asString(line8?.cap) ? ` data-series-marker-line-cap="${escapeHtml(asString(line8?.cap))}"` : "",
     asString(line8?.join) ? ` data-series-marker-line-join="${escapeHtml(asString(line8?.join))}"` : "",
@@ -41698,8 +41938,8 @@ function renderCategoryAxisTicks(margin, plotW, plotH, categories, categoryAxis,
   return categories.map((category, index) => {
     const x = round6(margin.left + categoryPosition(index, categories.length, plotW, mode, categoryAxis));
     return [
-      categoryAxis ? renderCategoryTickMark(x, axisY, categoryAxis.majorTickMark, category, categoryAxis.line) : "",
-      renderCategoryTickLabel(x, axisY, categoryAxis, category, categoryValueType)
+      categoryAxis && shouldRenderCategoryIndex(index, categoryAxis.tickMarkSkip) ? renderCategoryTickMark(x, axisY, categoryAxis.majorTickMark, category, categoryAxis.line) : "",
+      shouldRenderCategoryIndex(index, categoryAxis?.tickLabelSkip) ? renderCategoryTickLabel(x, axisY, categoryAxis, category, categoryValueType) : ""
     ].filter(Boolean).join("");
   }).filter(Boolean).join("\n        ");
 }
@@ -41724,18 +41964,18 @@ function renderLeftCategoryAxisTicks(margin, plotH, categories, categoryAxis, ca
   return categories.map((category, index) => {
     const y = round6(margin.top + categoryPosition(index, categories.length, plotH, "bar", categoryAxis));
     return [
-      categoryAxis ? renderLeftCategoryTickMark(axisX, y, categoryAxis.majorTickMark, category, categoryAxis.line) : "",
-      renderLeftCategoryTickLabel(axisX, y, categoryAxis, category, categoryValueType)
+      categoryAxis && shouldRenderCategoryIndex(index, categoryAxis.tickMarkSkip) ? renderLeftCategoryTickMark(axisX, y, categoryAxis.majorTickMark, category, categoryAxis.line) : "",
+      shouldRenderCategoryIndex(index, categoryAxis?.tickLabelSkip) ? renderLeftCategoryTickLabel(axisX, y, categoryAxis, category, categoryValueType) : ""
     ].filter(Boolean).join("");
   }).filter(Boolean).join("\n        ");
 }
 function renderVerticalAxisTitles(width, height, margin, plotW, plotH, axes, legend) {
-  const categoryTitle = axes.category?.visible !== false && axes.category?.title ? `<text class="chart-axis-title chart-axis-title-category"${chartTextAttrs(axes.category.titleStyle)} x="${round6(margin.left + plotW / 2)}" y="${height - (legend && !isRightLegend2(legend) ? 78 : 42)}" text-anchor="middle">${escapeHtml(axes.category.title)}</text>` : "";
+  const categoryTitle = axes.category?.visible !== false && axes.category?.title ? `<text class="chart-axis-title chart-axis-title-category"${chartTextAttrs(axes.category.titleStyle)} x="${round6(margin.left + plotW / 2)}" y="${height - (legend && isBottomLegend2(legend) ? 78 : 42)}" text-anchor="middle">${escapeHtml(axes.category.title)}</text>` : "";
   const valueTitle = axes.value?.visible !== false && axes.value?.title ? `<text class="chart-axis-title chart-axis-title-value"${chartTextAttrs(axes.value.titleStyle)} x="18" y="${round6(margin.top + plotH / 2)}" text-anchor="middle" transform="rotate(-90 18 ${round6(margin.top + plotH / 2)})">${escapeHtml(axes.value.title)}</text>` : "";
   return [categoryTitle, valueTitle].filter(Boolean).join("\n        ");
 }
 function renderHorizontalAxisTitles(width, height, margin, plotW, plotH, axes, legend) {
-  const valueTitle = axes.value?.visible !== false && axes.value?.title ? `<text class="chart-axis-title chart-axis-title-value"${chartTextAttrs(axes.value.titleStyle)} x="${round6(margin.left + plotW / 2)}" y="${height - (legend && !isRightLegend2(legend) ? 78 : 42)}" text-anchor="middle">${escapeHtml(axes.value.title)}</text>` : "";
+  const valueTitle = axes.value?.visible !== false && axes.value?.title ? `<text class="chart-axis-title chart-axis-title-value"${chartTextAttrs(axes.value.titleStyle)} x="${round6(margin.left + plotW / 2)}" y="${height - (legend && isBottomLegend2(legend) ? 78 : 42)}" text-anchor="middle">${escapeHtml(axes.value.title)}</text>` : "";
   const categoryTitle = axes.category?.visible !== false && axes.category?.title ? `<text class="chart-axis-title chart-axis-title-category"${chartTextAttrs(axes.category.titleStyle)} x="18" y="${round6(margin.top + plotH / 2)}" text-anchor="middle" transform="rotate(-90 18 ${round6(margin.top + plotH / 2)})">${escapeHtml(axes.category.title)}</text>` : "";
   return [categoryTitle, valueTitle].filter(Boolean).join("\n        ");
 }
@@ -41930,6 +42170,10 @@ function categoryLabelOffset(axis, defaultPx) {
   if (raw == null || !Number.isFinite(raw)) return defaultPx;
   return round6(defaultPx * clamp2(raw, 0, 1e3) / 100);
 }
+function shouldRenderCategoryIndex(index, skip) {
+  if (skip == null || !Number.isInteger(skip) || skip <= 1) return true;
+  return index % skip === 0;
+}
 
 // src/render/renderChartAxisDefaults.ts
 function chartStyleAxisLineDefaults(data) {
@@ -42005,46 +42249,491 @@ function lineStyle(line8) {
   return Object.keys(style).length > 0 ? style : void 0;
 }
 
-// src/render/renderChart.ts
-var palette = ["#2563eb", "#f97316", "#16a34a", "#9333ea", "#0891b2", "#e11d48"];
-var defaultChartViewport = { width: 640, height: 360 };
-function renderChartFigure(element) {
-  const chartType = String(element.chartType ?? "unknown");
-  const data = element.data ?? {};
-  const svg = renderChartSvg(chartType, data, element.id, chartViewport(chartType, element.box));
-  const attrs = renderAttributes([
-    ["data-element-id", element.id],
-    ["data-role", "chart"],
-    ...sourceShapeAttributePairs(element)
-  ]);
-  return `    <figure class="chart chart-${escapeHtml(chartType)}"${attrs}>
-      ${renderEchartsContainer(element.id, chartType)}
-      ${svg}
-      ${renderEchartsOptionScript(element.id, chartType, data)}
-      <script type="application/json" data-chart-data="${escapeHtml(element.id)}">${jsonScriptContent(data)}</script>
-    </figure>`;
+// src/render/renderChartBarStacking.ts
+function barStackingMode(grouping) {
+  if (grouping === "stacked" || grouping === "percentStacked") return grouping;
+  return "none";
 }
-function renderChartSvg(chartType, data, chartId, viewport) {
-  if (chartType === "bar") return renderBarChart(data, viewport);
-  if (chartType === "line") return renderLineChart(data, false, chartId, viewport);
-  if (chartType === "area") return renderLineChart(data, true, chartId, viewport);
-  if (chartType === "pie" || chartType === "doughnut") return renderPieChart(data, chartType === "doughnut");
-  return `<div class="chart-renderer chart-unsupported" data-chart-type="${escapeHtml(chartType)}">Unsupported chart: ${escapeHtml(chartType)}</div>`;
+function percentStackedSeries(series, categoryCount) {
+  const totals = Array.from({ length: categoryCount }, (_, categoryIndex) => {
+    return series.reduce((sum, item) => sum + Math.max(0, item.values[categoryIndex] ?? 0), 0);
+  });
+  return series.map((item) => ({
+    ...item,
+    values: Array.from({ length: categoryCount }, (_, categoryIndex) => {
+      const total = totals[categoryIndex] ?? 0;
+      if (total <= 0) return 0;
+      return Math.max(0, item.values[categoryIndex] ?? 0) / total * 100;
+    })
+  }));
 }
-function chartViewport(chartType, box) {
-  if (chartType !== "bar" && chartType !== "line" && chartType !== "area") return defaultChartViewport;
-  if (!Number.isFinite(box?.w) || !Number.isFinite(box?.h) || box.w <= 0 || box.h <= 0) return defaultChartViewport;
+
+// src/render/renderChartStackedBars.ts
+var DEFAULT_BAR_GAP_WIDTH = 150;
+function barClusterLayout(groupSize, seriesCount, gapWidth, overlap, stacked) {
+  const gap = validGapWidth(gapWidth) ? gapWidth : DEFAULT_BAR_GAP_WIDTH;
+  const overlapRatio = !stacked && validOverlap(overlap) ? overlap : 0;
+  const barCount = stacked ? 1 : Math.max(1, seriesCount);
+  const denominator = barCount - (barCount - 1) * (overlapRatio / 100) + gap / 100;
+  const thickness = Math.max(4, groupSize / denominator);
+  const step = stacked ? 0 : thickness * (1 - overlapRatio / 100);
+  const used = thickness + step * (barCount - 1);
   return {
-    width: defaultChartViewport.width,
-    height: round10(defaultChartViewport.width * box.h / box.w)
+    start: (groupSize - used) / 2,
+    thickness,
+    step
   };
 }
+function validGapWidth(value) {
+  return value != null && Number.isFinite(value) && value >= 0 && value <= 500;
+}
+function validOverlap(value) {
+  return value != null && Number.isFinite(value) && value >= -100 && value <= 100;
+}
+function verticalStackedBarRects(categories, series, margin, plotH, scale, groupW, barW, offsetX, fillFor, valueAxis, categoryAxis) {
+  return categories.flatMap((category, categoryIndex) => {
+    const visualIndex = categoryVisualIndex(categoryIndex, categories.length, categoryAxis);
+    let positiveBase = 0;
+    let negativeBase = 0;
+    return series.map((item, seriesIndex) => {
+      const value = item.values[categoryIndex] ?? 0;
+      const previous = value >= 0 ? positiveBase : negativeBase;
+      const next = previous + value;
+      const yNext = valueAxisY(margin.top, plotH, next, scale, valueAxis);
+      const yPrevious = valueAxisY(margin.top, plotH, previous, scale, valueAxis);
+      if (value >= 0) positiveBase = next;
+      else negativeBase = next;
+      const x = margin.left + visualIndex * groupW + offsetX;
+      return {
+        category,
+        categoryIndex,
+        series: item.name,
+        seriesIndex,
+        value,
+        x: round9(x),
+        y: round9(Math.min(yNext, yPrevious)),
+        width: round9(barW - 2),
+        height: round9(Math.abs(yPrevious - yNext)),
+        fill: fillFor(item, seriesIndex, categoryIndex)
+      };
+    });
+  });
+}
+function horizontalStackedBarRects(categories, series, margin, plotW, scale, groupH, barH, offsetY, fillFor, valueAxis, categoryAxis) {
+  return categories.flatMap((category, categoryIndex) => {
+    const visualIndex = categoryVisualIndex(categoryIndex, categories.length, categoryAxis);
+    let positiveBase = 0;
+    let negativeBase = 0;
+    return series.map((item, seriesIndex) => {
+      const value = item.values[categoryIndex] ?? 0;
+      const previous = value >= 0 ? positiveBase : negativeBase;
+      const next = previous + value;
+      const xPrevious = valueAxisX(margin.left, plotW, previous, scale, valueAxis);
+      const xNext = valueAxisX(margin.left, plotW, next, scale, valueAxis);
+      if (value >= 0) positiveBase = next;
+      else negativeBase = next;
+      const y = margin.top + visualIndex * groupH + offsetY;
+      return {
+        category,
+        categoryIndex,
+        series: item.name,
+        seriesIndex,
+        value,
+        x: round9(Math.min(xPrevious, xNext)),
+        y: round9(y),
+        width: round9(Math.abs(xNext - xPrevious)),
+        height: round9(barH - 2),
+        fill: fillFor(item, seriesIndex, categoryIndex)
+      };
+    });
+  });
+}
+function round9(value) {
+  return Math.round(value * 100) / 100;
+}
+
+// src/render/renderChartBarStroke.ts
+function barSeriesStrokeAttributes(item) {
+  const line8 = asRecord5(item?.line);
+  const fill = asRecord5(line8?.fill);
+  if (!line8 || line8.visible === false || fill?.type !== "solid") return "";
+  const color = asString2(line8.color);
+  if (!color) return "";
+  const width = asNumber9(line8.width);
+  if (width != null && width <= 0) return "";
+  const dash = svgDashArray(line8.dash, width ?? 1);
+  const cap = supportedLineCap(asString2(line8.cap));
+  const join = supportedLineJoin(asString2(line8.join));
+  return [
+    ` data-series-line-color="${escapeHtml(color)}"`,
+    width != null ? ` data-series-line-width="${formatNumber4(width)}"` : "",
+    cap ? ` data-series-line-cap="${escapeHtml(cap)}"` : "",
+    join ? ` data-series-line-join="${escapeHtml(join)}"` : "",
+    dash ? ` data-series-line-dash="${escapeHtml(asString2(line8.dash))}"` : "",
+    ` stroke="${escapeHtml(color)}"`,
+    width != null && width > 0 ? ` stroke-width="${formatNumber4(width)}"` : "",
+    cap ? ` stroke-linecap="${escapeHtml(svgLineCap(cap))}"` : "",
+    join ? ` stroke-linejoin="${escapeHtml(svgLineJoin(join))}"` : "",
+    dash ? ` stroke-dasharray="${escapeHtml(dash)}"` : ""
+  ].join("");
+}
+function asRecord5(value) {
+  return value != null && typeof value === "object" && !Array.isArray(value) ? value : void 0;
+}
+function asString2(value) {
+  return typeof value === "string" && value.trim() ? value : void 0;
+}
+function asNumber9(value) {
+  if (value == null || value === "") return void 0;
+  const number4 = Number(value);
+  return Number.isFinite(number4) ? number4 : void 0;
+}
+function supportedLineCap(value) {
+  return value === "flat" || value === "sq" || value === "rnd" ? value : void 0;
+}
+function supportedLineJoin(value) {
+  return value === "bevel" || value === "miter" || value === "round" ? value : void 0;
+}
+function formatNumber4(value) {
+  return Number(value.toFixed(2)).toString();
+}
+
+// src/render/renderChartSeriesInput.ts
+function asSeriesLine2(value) {
+  if (value == null || typeof value !== "object" || Array.isArray(value)) return void 0;
+  const source = value;
+  const line8 = {
+    ...typeof source.visible === "boolean" ? { visible: source.visible } : {},
+    ...asHexColor(source.color) ? { color: asHexColor(source.color) } : {},
+    ...asOptionalString9(source.colorSource) ? { colorSource: asOptionalString9(source.colorSource) } : {},
+    ...asHexColor(source.colorResolved) ? { colorResolved: asHexColor(source.colorResolved) } : {},
+    ...asNumber10(source.width) != null ? { width: asNumber10(source.width) } : {},
+    ...asOptionalString9(source.cap) ? { cap: asOptionalString9(source.cap) } : {},
+    ...asOptionalString9(source.join) ? { join: asOptionalString9(source.join) } : {},
+    ...asOptionalString9(source.dash) ? { dash: asOptionalString9(source.dash) } : {},
+    ...asOptionalString9(source.colorScheme) ? { colorScheme: asOptionalString9(source.colorScheme) } : {}
+  };
+  return Object.keys(line8).length > 0 ? line8 : void 0;
+}
+function definedSeriesLineFields2(line8) {
+  if (!line8) return {};
+  return {
+    ...typeof line8.visible === "boolean" ? { visible: line8.visible } : {},
+    ...asHexColor(line8.color) ? { color: asHexColor(line8.color) } : {},
+    ...asOptionalString9(line8.colorSource) ? { colorSource: asOptionalString9(line8.colorSource) } : {},
+    ...asHexColor(line8.colorResolved) ? { colorResolved: asHexColor(line8.colorResolved) } : {},
+    ...asNumber10(line8.width) != null ? { width: asNumber10(line8.width) } : {},
+    ...asOptionalString9(line8.cap) ? { cap: asOptionalString9(line8.cap) } : {},
+    ...asOptionalString9(line8.join) ? { join: asOptionalString9(line8.join) } : {},
+    ...asOptionalString9(line8.dash) ? { dash: asOptionalString9(line8.dash) } : {},
+    ...asRecord6(line8.fill) ? { fill: asRecord6(line8.fill) } : {}
+  };
+}
+function asSeriesMarker(value) {
+  if (value == null || typeof value !== "object" || Array.isArray(value)) return void 0;
+  const symbol2 = asOptionalString9(value.symbol);
+  const size = asNumber10(value.size);
+  const line8 = asSeriesLine2(value.line);
+  return symbol2 || size != null || line8 ? { ...symbol2 ? { symbol: symbol2 } : {}, ...size != null ? { size } : {}, ...line8 ? { line: line8 } : {} } : void 0;
+}
+function asRecord6(value) {
+  return value != null && typeof value === "object" && !Array.isArray(value) ? value : void 0;
+}
+function asOptionalString9(value) {
+  if (value == null) return void 0;
+  const text = String(value).trim();
+  return text || void 0;
+}
+function asHexColor(value) {
+  if (typeof value !== "string") return void 0;
+  const normalized = value.replace(/^#/, "");
+  return /^[0-9a-fA-F]{6}$/.test(normalized) ? `#${normalized.toLowerCase()}` : void 0;
+}
+function asNumber10(value) {
+  if (value == null || value === "") return void 0;
+  const number4 = Number(value);
+  return Number.isFinite(number4) ? number4 : void 0;
+}
+
+// src/render/renderChartShared.ts
+var palette = ["#2563eb", "#f97316", "#16a34a", "#9333ea", "#0891b2", "#e11d48"];
+function legendReservesSpace(legend) {
+  return !!legend && legend.overlay !== true;
+}
+function chartAreasWithDefaults(data) {
+  const style = asRecord7(data?.style);
+  return {
+    chartArea: applyChartAreaDefault(data?.chartArea, chartStyleAreaDefault(style, "cs:chartArea")),
+    plotArea: applyChartAreaDefault(data?.plotArea, chartStyleAreaDefault(style, "cs:plotArea"))
+  };
+}
+function chartStyleAreaDefault(style, context) {
+  const defaults = Array.isArray(style?.areaDefaults) ? style.areaDefaults : [];
+  const match = defaults.find((item) => asOptionalString10(item?.context) === context);
+  return asRecord7(match?.area);
+}
+function applyChartAreaDefault(localArea, defaultArea) {
+  const local = asRecord7(localArea);
+  const defaults = asRecord7(defaultArea);
+  if (!defaults) return local;
+  if (!local) return defaults;
+  const fill = mergeChartAreaPart(defaults.fill, local.fill);
+  const line8 = mergeChartAreaPart(defaults.line, local.line);
+  const merged = {
+    ...local,
+    ...fill ? { fill } : {},
+    ...line8 ? { line: line8 } : {}
+  };
+  return Object.keys(merged).length > 0 ? merged : void 0;
+}
+function mergeChartAreaPart(defaultPart, localPart) {
+  const defaults = definedObjectFields(defaultPart);
+  const local = definedObjectFields(localPart);
+  if (!defaults) return local;
+  if (!local) return defaults;
+  if (local.visible === false) return local;
+  const merged = { ...defaults, ...local };
+  return Object.keys(merged).length > 0 ? merged : void 0;
+}
+function definedObjectFields(value) {
+  if (value == null || typeof value !== "object" || Array.isArray(value)) return void 0;
+  const fields = Object.fromEntries(Object.entries(value).filter((entry) => entry[1] != null));
+  return Object.keys(fields).length > 0 ? fields : void 0;
+}
+function asAxes2(value) {
+  if (value == null || typeof value !== "object" || Array.isArray(value)) return {};
+  return {
+    category: asAxis2(value.category),
+    value: asAxis2(value.value)
+  };
+}
+function asAxis2(value) {
+  if (value == null || typeof value !== "object" || Array.isArray(value)) return void 0;
+  const id = asOptionalString10(value.id);
+  const crossAxisId = asOptionalString10(value.crossAxisId);
+  const title = asOptionalString10(value.title);
+  const titleStyle = asRecord7(value.titleStyle);
+  const visible = typeof value.visible === "boolean" ? value.visible : void 0;
+  const position = asOptionalString10(value.position);
+  const scaling = asAxisScaling2(value.scaling);
+  const majorUnit = asNumber11(value.majorUnit);
+  const minorUnit = asNumber11(value.minorUnit);
+  const majorGridlines = typeof value.majorGridlines === "boolean" ? value.majorGridlines : void 0;
+  const majorGridlineLine = asAxisLine2(value.majorGridlineLine);
+  const minorGridlines = typeof value.minorGridlines === "boolean" ? value.minorGridlines : void 0;
+  const minorGridlineLine = asAxisLine2(value.minorGridlineLine);
+  const numFmt = asAxisNumFmt2(value.numFmt);
+  const majorTickMark = asOptionalString10(value.majorTickMark);
+  const minorTickMark = asOptionalString10(value.minorTickMark);
+  const tickLblPos = asOptionalString10(value.tickLblPos);
+  const tickLabelSkip = asNumber11(value.tickLabelSkip);
+  const tickMarkSkip = asNumber11(value.tickMarkSkip);
+  const labelOffset = asNumber11(value.labelOffset);
+  const crosses = asOptionalString10(value.crosses);
+  const crossBetween = asOptionalString10(value.crossBetween);
+  const line8 = asAxisLine2(value.line);
+  const labelStyle = asRecord7(value.labelStyle);
+  return id || crossAxisId || title || titleStyle || visible != null || position || scaling || majorUnit != null || minorUnit != null || majorGridlines != null || majorGridlineLine || minorGridlines != null || minorGridlineLine || numFmt || majorTickMark || minorTickMark || tickLblPos || tickLabelSkip != null || tickMarkSkip != null || labelOffset != null || crosses || crossBetween || line8 || labelStyle ? { id, crossAxisId, title, titleStyle, visible, position, scaling, majorUnit, minorUnit, majorGridlines, majorGridlineLine, minorGridlines, minorGridlineLine, numFmt, majorTickMark, minorTickMark, tickLblPos, tickLabelSkip, tickMarkSkip, labelOffset, crosses, crossBetween, line: line8, labelStyle } : void 0;
+}
+function asAxisLine2(value) {
+  if (value == null || typeof value !== "object" || Array.isArray(value)) return void 0;
+  const visible = typeof value.visible === "boolean" ? value.visible : void 0;
+  const color = asHexColor2(value.color);
+  const colorSource = asOptionalString10(value.colorSource);
+  const colorScheme = asOptionalString10(value.colorScheme);
+  const colorResolved = asHexColor2(value.colorResolved);
+  const width = asNumber11(value.width);
+  const cap = asOptionalString10(value.cap);
+  const compound = asOptionalString10(value.compound);
+  const align = asOptionalString10(value.align);
+  const join = asOptionalString10(value.join);
+  const dash = asOptionalString10(value.dash);
+  return visible != null || color || colorSource || colorScheme || colorResolved || width != null || cap || compound || align || join || dash ? { visible, color, colorSource, colorScheme, colorResolved, width, cap, compound, align, join, dash } : void 0;
+}
+function asAxisScaling2(value) {
+  if (value == null || typeof value !== "object" || Array.isArray(value)) return void 0;
+  const min = asNumber11(value.min);
+  const max = asNumber11(value.max);
+  const orientation = asOptionalString10(value.orientation);
+  return min == null && max == null && !orientation ? void 0 : { min, max, orientation };
+}
+function asAxisNumFmt2(value) {
+  if (value == null || typeof value !== "object" || Array.isArray(value)) return void 0;
+  const formatCode = asOptionalString10(value.formatCode);
+  const sourceLinked = typeof value.sourceLinked === "boolean" ? value.sourceLinked : void 0;
+  return formatCode || sourceLinked != null ? { formatCode, sourceLinked } : void 0;
+}
+function verticalCategoryAxisY(margin, plotH, categoryAxis, valueAxis, scale) {
+  if (categoryAxis?.crosses === "max") return valueAxisY(margin.top, plotH, scale.max, scale, valueAxis);
+  if (categoryAxis?.crosses === "autoZero" && scaleIncludesZero(scale)) return valueAxisY(margin.top, plotH, 0, scale, valueAxis);
+  return valueAxisY(margin.top, plotH, scale.min, scale, valueAxis);
+}
+function horizontalCategoryAxisX(margin, plotW, categoryAxis, valueAxis, scale) {
+  if (categoryAxis?.crosses === "max") return valueAxisX(margin.left, plotW, scale.max, scale, valueAxis);
+  if (categoryAxis?.crosses === "autoZero" && scaleIncludesZero(scale)) return valueAxisX(margin.left, plotW, 0, scale, valueAxis);
+  return valueAxisX(margin.left, plotW, scale.min, scale, valueAxis);
+}
+function scaleIncludesZero(scale) {
+  return scale.min < 0 && scale.max > 0;
+}
+function legendItems(series, categories, data) {
+  if (data?.varyColors === true && series.length <= 1) {
+    return categories.map((label, index) => ({
+      label,
+      color: seriesFill(data, series, series[0], 0, index),
+      index
+    }));
+  }
+  return series.map((item, index) => ({
+    label: item.name,
+    color: seriesFill(data, series, item, index, index),
+    index,
+    series: item
+  }));
+}
+function seriesFill(data, series, item, seriesIndex, pointIndex) {
+  const chartPalette = chartColorStylePalette(data) ?? palette;
+  if (data?.varyColors === true && series.length <= 1) {
+    return chartPalette[pointIndex % chartPalette.length] ?? palette[pointIndex % palette.length];
+  }
+  return item?.color ?? chartPalette[seriesIndex % chartPalette.length] ?? palette[seriesIndex % palette.length];
+}
+function seriesBarFill(data, series, item, seriesIndex, pointIndex, value) {
+  if (value < 0 && item?.invertIfNegative === true) {
+    const negativeColor = asHexColor2(item.negativeFill?.color);
+    if (negativeColor) return negativeColor;
+  }
+  return seriesFill(data, series, item, seriesIndex, pointIndex);
+}
+function chartColorStylePalette(data) {
+  if (asOptionalString10(data?.style?.colorStyle?.method) !== "cycle") return void 0;
+  const colors = Array.isArray(data?.style?.colorStyle?.colors) ? data.style.colorStyle.colors.map(asHexColor2).filter((color) => color != null) : [];
+  return colors.length > 0 ? colors : void 0;
+}
+function seriesInvertIfNegativeAttribute(item) {
+  return typeof item?.invertIfNegative === "boolean" ? ` data-invert-if-negative="${String(item.invertIfNegative)}"` : "";
+}
+function asStrings2(value) {
+  return Array.isArray(value) ? value.map((item) => String(item)) : [];
+}
+function asCategoryValueType2(value) {
+  return value === "string" || value === "number" ? value : void 0;
+}
+function asSeries(value) {
+  if (!Array.isArray(value)) return [];
+  return value.map((item, index) => ({
+    name: String(item?.name ?? `Series ${index + 1}`),
+    values: asOptionalNumberValues(item?.values),
+    index: asNumber11(item?.index),
+    order: asNumber11(item?.order),
+    uniqueId: asOptionalString10(item?.uniqueId),
+    uniqueIdExtUri: asOptionalString10(item?.uniqueIdExtUri),
+    uniqueIdExtNamespace: asOptionalString10(item?.uniqueIdExtNamespace),
+    smooth: typeof item?.smooth === "boolean" ? item.smooth : void 0,
+    sourceRefs: asSourceRefs(item?.sourceRefs),
+    nameCache: asSeriesCache(item?.nameCache),
+    categoryCache: asSeriesCache(item?.categoryCache),
+    valueCache: asValueCache(item?.valueCache),
+    invertIfNegative: typeof item?.invertIfNegative === "boolean" ? item.invertIfNegative : void 0,
+    color: asHexColor2(item?.color) ?? asHexColor2(item?.fill?.color),
+    fill: asRecord7(item?.fill),
+    negativeFill: asRecord7(item?.negativeFill),
+    line: asRecord7(item?.line),
+    effects: asRecord7(item?.effects),
+    marker: asSeriesMarker(item?.marker),
+    dataLabels: asRecord7(item?.dataLabels)
+  }));
+}
+function asOptionalNumberValues(value) {
+  if (!Array.isArray(value)) return [];
+  return value.map((item) => {
+    const number4 = Number(item);
+    return Number.isFinite(number4) ? number4 : void 0;
+  });
+}
+function applyChartStyleMarkerLayout(item, markerLayout) {
+  if (item.marker) return item;
+  if (markerLayout == null || typeof markerLayout !== "object" || Array.isArray(markerLayout)) return item;
+  const symbol2 = asOptionalString10(markerLayout.symbol);
+  const size = asNumber11(markerLayout.size);
+  if (!isBasicMarkerSymbol2(symbol2)) {
+    return symbol2 ? {
+      ...item,
+      marker: {
+        symbol: symbol2,
+        ...size != null ? { size } : {},
+        source: "chartStyleUnsupported"
+      }
+    } : item;
+  }
+  return {
+    ...item,
+    marker: {
+      symbol: symbol2,
+      ...size != null ? { size } : {},
+      source: "chartStyle"
+    }
+  };
+}
+function isBasicMarkerSymbol2(value) {
+  return value === "circle" || value === "none" || value === "square" || value === "triangle" || value === "diamond";
+}
+function applyChartStyleMarkerLineDefault(item, markerLineDefault) {
+  const defaults = asSeriesLine2(markerLineDefault);
+  if (!defaults) return item;
+  const marker = item.marker ?? {};
+  const localLine = asRecord7(marker.line);
+  return {
+    ...item,
+    marker: {
+      ...marker,
+      line: {
+        ...defaults,
+        ...definedSeriesLineFields2(localLine)
+      }
+    }
+  };
+}
+function applyChartStyleSeriesLineDefault(item, seriesLineDefault) {
+  const defaults = asSeriesLine2(seriesLineDefault);
+  if (!defaults) return item;
+  return {
+    ...item,
+    line: {
+      ...defaults,
+      ...definedSeriesLineFields2(item.line)
+    }
+  };
+}
+function asRecord7(value) {
+  return value != null && typeof value === "object" && !Array.isArray(value) ? value : void 0;
+}
+function asOptionalString10(value) {
+  if (value == null) return void 0;
+  const text = String(value).trim();
+  return text || void 0;
+}
+function asHexColor2(value) {
+  if (typeof value !== "string") return void 0;
+  const normalized = value.replace(/^#/, "");
+  return /^[0-9a-fA-F]{6}$/.test(normalized) ? `#${normalized.toLowerCase()}` : void 0;
+}
+function asNumber11(value) {
+  if (value == null || value === "") return void 0;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : void 0;
+}
+function round10(value) {
+  return Math.round(value * 100) / 100;
+}
+
+// src/render/renderBarChart.ts
 function renderBarChart(data, viewport) {
-  if (asOptionalString9(data.direction) === "bar") return renderHorizontalBarChart(data, viewport);
+  if (asOptionalString10(data.direction) === "bar") return renderHorizontalBarChart(data, viewport);
   const categories = asStrings2(data.categories);
   const series = orderedSeries(asSeries(data.series));
   const { width, height } = viewport;
-  const title = asOptionalString9(data.title);
+  const title = asOptionalString10(data.title);
   const textDefaults = chartSpaceTextDefaults(data);
   const styleTextDefaults = chartStyleTextDefaults(data);
   const axisTextDefaults = chartStyleAxisTextDefaults(data);
@@ -42055,28 +42744,32 @@ function renderBarChart(data, viewport) {
   const dataLabels = applyDataLabelTextDefaults(data.dataLabels, textDefaults, styleTextDefaults?.dataLabel);
   const titleSpace = hasTitleSpace(title, titleMeta);
   const rightLegend = isRightLegend(legend);
+  const leftLegend = isLeftLegend(legend);
+  const topLegend = isTopLegend(legend);
+  const bottomLegend = isBottomLegend(legend);
+  const reserveLegendSpace = legendReservesSpace(legend);
   const margin = applyPlotAreaLayout({
-    top: titleSpace ? 52 : 24,
-    right: rightLegend ? 136 : 28,
-    bottom: 56 + (axes.category?.title ? 22 : 0) + (legend && !rightLegend ? 34 : 0),
-    left: 48 + (axes.value?.title ? 24 : 0)
+    top: (titleSpace ? 52 : 24) + (reserveLegendSpace && topLegend ? 34 : 0),
+    right: reserveLegendSpace && rightLegend ? 136 : 28,
+    bottom: 56 + (axes.category?.title ? 22 : 0) + (reserveLegendSpace && bottomLegend ? 34 : 0),
+    left: 48 + (axes.value?.title ? 24 : 0) + (reserveLegendSpace && leftLegend ? 108 : 0)
   }, width, height, data.plotAreaLayout);
   const plotW = width - margin.left - margin.right;
   const plotH = height - margin.top - margin.bottom;
-  const stacking = barStackingMode(asOptionalString9(data?.grouping));
+  const stacking = barStackingMode(asOptionalString10(data?.grouping));
   const stacked = stacking !== "none";
   const renderSeries = stacking === "percentStacked" ? percentStackedSeries(series, categories.length) : series;
   const scale = stacking === "percentStacked" ? computePercentStackedValueScale(axes.value) : computeValueScale(series, axes.value, stacked);
   const groupW = plotW / Math.max(1, categories.length);
-  const layout = barClusterLayout(groupW, series.length, asNumber9(data.gapWidth), asNumber9(data.overlap), stacked);
+  const layout = barClusterLayout(groupW, series.length, asNumber11(data.gapWidth), asNumber11(data.overlap), stacked);
   const barW = layout?.thickness ?? Math.max(4, groupW * 0.7 / (stacked ? 1 : Math.max(1, series.length)));
   const barStart = layout?.start ?? groupW * 0.15;
   const barStep = layout?.step ?? barW;
   const showValueLabels = stacking === "percentStacked" ? false : hasBasicValueDataLabels(data);
   const showSeriesValueLabels = !stacked && hasBasicSeriesValueDataLabels(series);
   const showStackedSeriesValueLabels = stacking === "stacked" && hasBasicStackedBarValueDataLabels(series);
-  const stackedRects = stacked ? verticalStackedBarRects(categories, renderSeries, margin, plotH, scale, groupW, barW, barStart, (item, seriesIndex, categoryIndex) => seriesFill(data, series, item, seriesIndex, categoryIndex), axes.value, axes.category) : [];
-  const bars = stacked ? stackedRects.map((rect) => `<rect class="chart-bar chart-bar-stacked" data-category="${escapeHtml(rect.category)}" data-series="${escapeHtml(rect.series)}"${seriesInvertIfNegativeAttribute(series[rect.seriesIndex])}${seriesMetadataAttributes(series[rect.seriesIndex])} x="${rect.x}" y="${rect.y}" width="${rect.width}" height="${rect.height}" fill="${rect.fill}"><title>${escapeHtml(rect.series)} ${escapeHtml(rect.category)}: ${rect.value}</title></rect>`).join("\n        ") : categories.flatMap((category, categoryIndex) => {
+  const stackedRects = stacked ? verticalStackedBarRects(categories, renderSeries, margin, plotH, scale, groupW, barW, barStart, (item, seriesIndex, categoryIndex) => seriesBarFill(data, series, series[seriesIndex] ?? item, seriesIndex, categoryIndex, item.values[categoryIndex] ?? 0), axes.value, axes.category) : [];
+  const bars = stacked ? stackedRects.map((rect) => `<rect class="chart-bar chart-bar-stacked" data-category="${escapeHtml(rect.category)}" data-series="${escapeHtml(rect.series)}"${seriesInvertIfNegativeAttribute(series[rect.seriesIndex])}${seriesMetadataAttributes(series[rect.seriesIndex])} x="${rect.x}" y="${rect.y}" width="${rect.width}" height="${rect.height}" fill="${rect.fill}"${barSeriesStrokeAttributes(series[rect.seriesIndex])}><title>${escapeHtml(rect.series)} ${escapeHtml(rect.category)}: ${rect.value}</title></rect>`).join("\n        ") : categories.flatMap((category, categoryIndex) => {
     return series.map((item, seriesIndex) => {
       const value = item.values[categoryIndex] ?? 0;
       const zeroY = valueAxisY(margin.top, plotH, 0, scale, axes.value);
@@ -42085,8 +42778,8 @@ function renderBarChart(data, viewport) {
       const x = margin.left + visualIndex * groupW + barStart + seriesIndex * barStep;
       const y = Math.min(valueY, zeroY);
       const barH = Math.abs(zeroY - valueY);
-      const fill = seriesFill(data, series, item, seriesIndex, categoryIndex);
-      return `<rect class="chart-bar" data-category="${escapeHtml(category)}" data-series="${escapeHtml(item.name)}"${seriesInvertIfNegativeAttribute(item)}${seriesMetadataAttributes(item)} x="${round10(x)}" y="${round10(y)}" width="${round10(barW - 2)}" height="${round10(barH)}" fill="${fill}"><title>${escapeHtml(item.name)} ${escapeHtml(category)}: ${value}</title></rect>`;
+      const fill = seriesBarFill(data, series, item, seriesIndex, categoryIndex, value);
+      return `<rect class="chart-bar" data-category="${escapeHtml(category)}" data-series="${escapeHtml(item.name)}"${seriesInvertIfNegativeAttribute(item)}${seriesMetadataAttributes(item)} x="${round10(x)}" y="${round10(y)}" width="${round10(barW - 2)}" height="${round10(barH)}" fill="${fill}"${barSeriesStrokeAttributes(item)}><title>${escapeHtml(item.name)} ${escapeHtml(category)}: ${value}</title></rect>`;
     });
   }).join("\n        ");
   const percentLabels = stacking === "percentStacked" && hasBasicPercentStackedBarPercentDataLabels({ dataLabels }, series, categories.length) ? renderVerticalPercentStackedBarPercentLabels(stackedRects, series, dataLabels) : "";
@@ -42126,7 +42819,7 @@ function renderHorizontalBarChart(data, viewport) {
   const categories = asStrings2(data.categories);
   const series = orderedSeries(asSeries(data.series));
   const { width, height } = viewport;
-  const title = asOptionalString9(data.title);
+  const title = asOptionalString10(data.title);
   const textDefaults = chartSpaceTextDefaults(data);
   const styleTextDefaults = chartStyleTextDefaults(data);
   const axisTextDefaults = chartStyleAxisTextDefaults(data);
@@ -42137,28 +42830,32 @@ function renderHorizontalBarChart(data, viewport) {
   const dataLabels = applyDataLabelTextDefaults(data.dataLabels, textDefaults, styleTextDefaults?.dataLabel);
   const titleSpace = hasTitleSpace(title, titleMeta);
   const rightLegend = isRightLegend(legend);
+  const leftLegend = isLeftLegend(legend);
+  const topLegend = isTopLegend(legend);
+  const bottomLegend = isBottomLegend(legend);
+  const reserveLegendSpace = legendReservesSpace(legend);
   const margin = applyPlotAreaLayout({
-    top: titleSpace ? 52 : 24,
-    right: rightLegend ? 136 : 28,
-    bottom: 56 + (axes.value?.title ? 22 : 0) + (legend && !rightLegend ? 34 : 0),
-    left: 96 + (axes.category?.title ? 24 : 0)
+    top: (titleSpace ? 52 : 24) + (reserveLegendSpace && topLegend ? 34 : 0),
+    right: reserveLegendSpace && rightLegend ? 136 : 28,
+    bottom: 56 + (axes.value?.title ? 22 : 0) + (reserveLegendSpace && bottomLegend ? 34 : 0),
+    left: 96 + (axes.category?.title ? 24 : 0) + (reserveLegendSpace && leftLegend ? 108 : 0)
   }, width, height, data.plotAreaLayout);
   const plotW = width - margin.left - margin.right;
   const plotH = height - margin.top - margin.bottom;
-  const stacking = barStackingMode(asOptionalString9(data?.grouping));
+  const stacking = barStackingMode(asOptionalString10(data?.grouping));
   const stacked = stacking !== "none";
   const renderSeries = stacking === "percentStacked" ? percentStackedSeries(series, categories.length) : series;
   const scale = stacking === "percentStacked" ? computePercentStackedValueScale(axes.value) : computeValueScale(series, axes.value, stacked);
   const groupH = plotH / Math.max(1, categories.length);
-  const layout = barClusterLayout(groupH, series.length, asNumber9(data.gapWidth), asNumber9(data.overlap), stacked);
+  const layout = barClusterLayout(groupH, series.length, asNumber11(data.gapWidth), asNumber11(data.overlap), stacked);
   const barH = layout?.thickness ?? Math.max(4, groupH * 0.7 / (stacked ? 1 : Math.max(1, series.length)));
   const barStart = layout?.start ?? groupH * 0.15;
   const barStep = layout?.step ?? barH;
   const showValueLabels = stacking === "percentStacked" ? false : hasBasicValueDataLabels(data);
   const showSeriesValueLabels = !stacked && hasBasicSeriesValueDataLabels(series);
   const showStackedSeriesValueLabels = stacking === "stacked" && hasBasicStackedBarValueDataLabels(series);
-  const stackedRects = stacked ? horizontalStackedBarRects(categories, renderSeries, margin, plotW, scale, groupH, barH, barStart, (item, seriesIndex, categoryIndex) => seriesFill(data, series, item, seriesIndex, categoryIndex), axes.value, axes.category) : [];
-  const bars = stacked ? stackedRects.map((rect) => `<rect class="chart-bar chart-bar-stacked" data-category="${escapeHtml(rect.category)}" data-series="${escapeHtml(rect.series)}"${seriesInvertIfNegativeAttribute(series[rect.seriesIndex])}${seriesMetadataAttributes(series[rect.seriesIndex])} x="${rect.x}" y="${rect.y}" width="${rect.width}" height="${rect.height}" fill="${rect.fill}"><title>${escapeHtml(rect.series)} ${escapeHtml(rect.category)}: ${rect.value}</title></rect>`).join("\n        ") : categories.flatMap((category, categoryIndex) => series.map((item, seriesIndex) => {
+  const stackedRects = stacked ? horizontalStackedBarRects(categories, renderSeries, margin, plotW, scale, groupH, barH, barStart, (item, seriesIndex, categoryIndex) => seriesBarFill(data, series, series[seriesIndex] ?? item, seriesIndex, categoryIndex, item.values[categoryIndex] ?? 0), axes.value, axes.category) : [];
+  const bars = stacked ? stackedRects.map((rect) => `<rect class="chart-bar chart-bar-stacked" data-category="${escapeHtml(rect.category)}" data-series="${escapeHtml(rect.series)}"${seriesInvertIfNegativeAttribute(series[rect.seriesIndex])}${seriesMetadataAttributes(series[rect.seriesIndex])} x="${rect.x}" y="${rect.y}" width="${rect.width}" height="${rect.height}" fill="${rect.fill}"${barSeriesStrokeAttributes(series[rect.seriesIndex])}><title>${escapeHtml(rect.series)} ${escapeHtml(rect.category)}: ${rect.value}</title></rect>`).join("\n        ") : categories.flatMap((category, categoryIndex) => series.map((item, seriesIndex) => {
     const value = item.values[categoryIndex] ?? 0;
     const zeroX = valueAxisX(margin.left, plotW, 0, scale, axes.value);
     const valueX = valueAxisX(margin.left, plotW, value, scale, axes.value);
@@ -42166,8 +42863,8 @@ function renderHorizontalBarChart(data, viewport) {
     const barW = Math.abs(valueX - zeroX);
     const visualIndex = categoryVisualIndex(categoryIndex, categories.length, axes.category);
     const y = margin.top + visualIndex * groupH + barStart + seriesIndex * barStep;
-    const fill = seriesFill(data, series, item, seriesIndex, categoryIndex);
-    return `<rect class="chart-bar" data-category="${escapeHtml(category)}" data-series="${escapeHtml(item.name)}"${seriesInvertIfNegativeAttribute(item)}${seriesMetadataAttributes(item)} x="${round10(x)}" y="${round10(y)}" width="${round10(barW)}" height="${round10(barH - 2)}" fill="${fill}"><title>${escapeHtml(item.name)} ${escapeHtml(category)}: ${value}</title></rect>`;
+    const fill = seriesBarFill(data, series, item, seriesIndex, categoryIndex, value);
+    return `<rect class="chart-bar" data-category="${escapeHtml(category)}" data-series="${escapeHtml(item.name)}"${seriesInvertIfNegativeAttribute(item)}${seriesMetadataAttributes(item)} x="${round10(x)}" y="${round10(y)}" width="${round10(barW)}" height="${round10(barH - 2)}" fill="${fill}"${barSeriesStrokeAttributes(item)}><title>${escapeHtml(item.name)} ${escapeHtml(category)}: ${value}</title></rect>`;
   })).join("\n        ");
   const percentLabels = stacking === "percentStacked" && hasBasicPercentStackedBarPercentDataLabels({ dataLabels }, series, categories.length) ? renderHorizontalPercentStackedBarPercentLabels(stackedRects, series, dataLabels) : "";
   const valueLabels = percentLabels || (showStackedSeriesValueLabels ? renderHorizontalStackedBarValueLabels(stackedRects, series, dataLabels) : showValueLabels || showSeriesValueLabels ? renderHorizontalBarValueLabels(categories, series, dataLabels, margin, plotW, scale, groupH, barH, barStart, barStep, axes.value, axes.category) : "");
@@ -42202,11 +42899,63 @@ function renderHorizontalBarChart(data, viewport) {
         ${chartLegend}
       </svg>`;
 }
+function effectiveBarChartData(data) {
+  return {
+    ...data,
+    chartType: "bar",
+    grouping: asOptionalString10(data?.grouping) ?? "clustered",
+    gapWidth: effectiveBarGapWidth(data?.gapWidth),
+    overlap: effectiveBarOverlap(data?.overlap)
+  };
+}
+function effectiveBarGapWidth(value) {
+  const gapWidth = asNumber11(value);
+  return gapWidth != null && gapWidth >= 0 && gapWidth <= 500 ? gapWidth : DEFAULT_BAR_GAP_WIDTH;
+}
+function effectiveBarOverlap(value) {
+  const overlap = asNumber11(value);
+  return overlap != null && overlap >= -100 && overlap <= 100 ? overlap : 0;
+}
+
+// src/render/renderChart.ts
+var defaultChartViewport = { width: 640, height: 360 };
+function renderChartFigure(element) {
+  const chartType = String(element.chartType ?? "unknown");
+  const data = element.data ?? {};
+  const svg = renderChartSvg(chartType, data, element.id, chartViewport(chartType, element.box));
+  const attrs = renderAttributes([
+    ["data-element-id", element.id],
+    ["data-role", "chart"],
+    ...sourceShapeAttributePairs(element)
+  ]);
+  return `    <figure class="chart chart-${escapeHtml(chartType)}"${attrs}>
+      ${renderEchartsContainer(element.id, chartType)}
+      ${svg}
+      ${renderEchartsOptionScript(element.id, chartType, data)}
+      <script type="application/json" data-chart-data="${escapeHtml(element.id)}">${jsonScriptContent(data)}</script>
+    </figure>`;
+}
+function renderChartSvg(chartType, data, chartId, viewport) {
+  if (chartType === "bar") return renderBarChart(data, viewport);
+  if (chartType === "line") return renderLineChart(data, false, chartId, viewport);
+  if (chartType === "area") return renderLineChart(data, true, chartId, viewport);
+  if (chartType === "pie" || chartType === "doughnut") return renderPieChart(data, chartType === "doughnut");
+  return `<div class="chart-renderer chart-unsupported" data-chart-type="${escapeHtml(chartType)}">Unsupported chart: ${escapeHtml(chartType)}</div>`;
+}
+function chartViewport(chartType, box) {
+  if (chartType !== "bar" && chartType !== "line" && chartType !== "area") return defaultChartViewport;
+  if (!Number.isFinite(box?.w) || !Number.isFinite(box?.h) || box.w <= 0 || box.h <= 0) return defaultChartViewport;
+  return {
+    width: defaultChartViewport.width,
+    height: round10(defaultChartViewport.width * box.h / box.w)
+  };
+}
 function renderLineChart(data, filled, chartId, viewport) {
   const categories = asStrings2(data.categories);
   const series = orderedSeries(asSeries(data.series));
+  const displayedSeries = seriesWithDisplayedBlankValues(series, data.displayBlanksAs);
   const { width, height } = viewport;
-  const title = asOptionalString9(data.title);
+  const title = asOptionalString10(data.title);
   const textDefaults = chartSpaceTextDefaults(data);
   const styleTextDefaults = chartStyleTextDefaults(data);
   const axisTextDefaults = chartStyleAxisTextDefaults(data);
@@ -42216,17 +42965,22 @@ function renderLineChart(data, filled, chartId, viewport) {
   const axes = applyAxisTextDefaults(applyAxisLineDefaults(asAxes2(data.axes), axisLineDefaults), textDefaults, axisTextDefaults, styleTextDefaults?.axisTitle);
   const titleSpace = hasTitleSpace(title, titleMeta);
   const rightLegend = isRightLegend(legend);
+  const leftLegend = isLeftLegend(legend);
+  const topLegend = isTopLegend(legend);
+  const bottomLegend = isBottomLegend(legend);
+  const reserveLegendSpace = legendReservesSpace(legend);
   const margin = applyPlotAreaLayout({
-    top: titleSpace ? 52 : 24,
-    right: rightLegend ? 136 : 28,
-    bottom: 56 + (axes.category?.title ? 22 : 0) + (legend && !rightLegend ? 34 : 0),
-    left: 48 + (axes.value?.title ? 24 : 0)
+    top: (titleSpace ? 52 : 24) + (reserveLegendSpace && topLegend ? 34 : 0),
+    right: reserveLegendSpace && rightLegend ? 136 : 28,
+    bottom: 56 + (axes.category?.title ? 22 : 0) + (reserveLegendSpace && bottomLegend ? 34 : 0),
+    left: 48 + (axes.value?.title ? 24 : 0) + (reserveLegendSpace && leftLegend ? 108 : 0)
   }, width, height, data.plotAreaLayout);
   const plotW = width - margin.left - margin.right;
   const plotH = height - margin.top - margin.bottom;
-  const stacking = lineStackingMode(asOptionalString9(data?.grouping));
-  const renderSeries = stacking === "stacked" && hasOnlyNonNegativeLineValues(series) ? stackedLineSeries(series, categories.length) : series;
-  const scale = computeValueScale(renderSeries, axes.value);
+  const stacking = lineStackingMode(asOptionalString10(data?.grouping));
+  const percentStacked = stacking === "percentStacked" && hasOnlyNonNegativeLineValues(displayedSeries) && hasPositiveLineCategoryTotals(displayedSeries, categories.length);
+  const renderSeries = percentStacked ? percentStackedLineSeries(displayedSeries, categories.length) : stacking === "stacked" && hasOnlyNonNegativeLineValues(displayedSeries) ? stackedLineSeries(displayedSeries, categories.length) : displayedSeries;
+  const scale = percentStacked ? computePercentStackedValueScale(axes.value) : computeValueScale(renderSeries, axes.value);
   const dataLabels = applyDataLabelTextDefaults(data.dataLabels, textDefaults, styleTextDefaults?.dataLabel);
   const paths = renderSeries.map((item, seriesIndex) => {
     const sourceItem = series[seriesIndex] ?? item;
@@ -42238,25 +42992,32 @@ function renderLineChart(data, filled, chartId, viewport) {
       ),
       data.style?.seriesLineDefault
     );
-    const points = item.values.map((value, index) => {
+    const pointSegments = linePointSegments(item.values, data.displayBlanksAs, (value, index) => {
       const x = margin.left + categoryPosition(index, categories.length, plotW, "point", axes.category);
       const y = valueAxisY(margin.top, plotH, value, scale, axes.value);
-      return [round10(x), round10(y)];
+      return { x: round10(x), y: round10(y), categoryIndex: index };
     });
-    const d = lineSeriesPath(points, (styledItem.smooth ?? data.smooth) === true);
+    const pointRecords = pointSegments.flat();
+    const pathSegments = pointSegments.map((segment) => ({
+      records: segment,
+      d: lineSeriesPath(segment.map((point8) => [point8.x, point8.y]), (styledItem.smooth ?? data.smooth) === true)
+    }));
     const style = renderLineChartSeriesStyle(styledItem, seriesIndex, color, chartId);
     const metadata = `${seriesMetadataAttributes(styledItem)}${style.metadataAttributes}`;
     const seriesNameAttr = ` data-series="${escapeHtml(styledItem.name)}"`;
-    const area = filled && points.length > 0 ? `<path class="chart-area"${seriesNameAttr}${metadata} d="${d} L ${points[points.length - 1][0]} ${margin.top + plotH} L ${points[0][0]} ${margin.top + plotH} Z" fill="${color}" opacity="0.18"></path>` : "";
-    const linePath = styledItem.line?.visible === false ? "" : `<path class="chart-line"${seriesNameAttr}${seriesMetadataAttributes(styledItem)} d="${d}" fill="none" ${style.strokeAttributes}></path>`;
+    const area = filled ? pathSegments.map((segment) => {
+      const points = segment.records.map((point8) => [point8.x, point8.y]);
+      return points.length > 1 ? `<path class="chart-area"${seriesNameAttr}${metadata} d="${segment.d} L ${points[points.length - 1][0]} ${margin.top + plotH} L ${points[0][0]} ${margin.top + plotH} Z" fill="${color}" opacity="0.18"></path>` : "";
+    }).filter(Boolean).join("\n        ") : "";
+    const linePath = styledItem.line?.visible === false ? "" : pathSegments.map((segment) => `<path class="chart-line"${seriesNameAttr}${seriesMetadataAttributes(styledItem)} d="${segment.d}" fill="none" ${style.strokeAttributes}></path>`).join("\n        ");
     const markerRadius = seriesMarkerRadius(styledItem);
-    const dots = shouldRenderSeriesMarkers(styledItem) ? points.map(([x, y], index) => renderSeriesMarker(styledItem, categories[index] ?? "", metadata, x, y, markerRadius, style.pointFill)).join("\n        ") : "";
+    const dots = shouldRenderSeriesMarkers(styledItem) ? pointRecords.map((point8) => renderSeriesMarker(styledItem, categories[point8.categoryIndex] ?? "", metadata, point8.x, point8.y, markerRadius, style.pointFill)).join("\n        ") : "";
     return `${style.defs ? `<defs>
 ${style.defs}
         </defs>` : ""}${area}${linePath}${dots}`;
   }).join("\n        ");
   const showLineValueLabels = hasBasicLineValueDataLabels({ dataLabels }) || hasBasicLineSeriesValueDataLabels(series);
-  const valueLabels = !filled && stacking === "none" && showLineValueLabels ? renderLineValueLabels(categories, series, dataLabels, margin, plotW, plotH, scale, axes.value, axes.category) : "";
+  const valueLabels = stacking === "none" && showLineValueLabels ? renderLineValueLabels(categories, displayedSeries, dataLabels, margin, plotW, plotH, scale, axes.value, axes.category) : "";
   const axisTitles = renderVerticalAxisTitles(width, height, margin, plotW, plotH, axes, legend);
   const chartTitle = renderChartTitle(title, titleMeta, width);
   const areas = chartAreasWithDefaults(data);
@@ -42290,7 +43051,7 @@ ${style.defs}
 }
 function renderPieChart(data, doughnut) {
   const series = orderedSeries(asSeries(data.series));
-  const values = series[0]?.values ?? [];
+  const values = (series[0]?.values ?? []).map((value) => Number.isFinite(value) ? value : 0);
   const labels = asStrings2(data.categories);
   const total = values.reduce((sum, value) => sum + Math.max(0, value), 0) || 1;
   const textDefaults = chartSpaceTextDefaults(data);
@@ -42304,8 +43065,8 @@ function renderPieChart(data, doughnut) {
     start = end;
     return `<path class="chart-slice" data-category="${escapeHtml(labels[index] ?? String(index + 1))}"${seriesMetadataAttributes(series[0])} d="${path8}" fill="${seriesFill(data, series, series[0], 0, index)}"><title>${escapeHtml(labels[index] ?? "")}: ${value}</title></path>`;
   }).join("\n        ");
-  const valueLabels = series.length === 1 && values.every((value) => value >= 0) && hasBasicPiePercentDataLabels({ dataLabels }) ? renderPiePercentDataLabels(labels, values, dataLabels, { cx: 180, cy: 180, radius: doughnut ? 110 : 140, innerRadius: doughnut ? 64 : 0, seriesName: series[0]?.name ?? "Series 1" }) : "";
-  const title = asOptionalString9(data.title);
+  const valueLabels = series.length === 1 && values.every((value) => value >= 0) && hasBasicPiePercentDataLabels({ dataLabels }) ? renderPiePercentDataLabels(labels, values, dataLabels, { cx: 180, cy: 180, radius: doughnut ? 110 : 140, innerRadius: doughnut ? 64 : 0, seriesName: series[0]?.name ?? "Series 1", valueFormatCode: series[0]?.valueCache?.formatCode }) : "";
+  const title = asOptionalString10(data.title);
   const titleMeta = applyTitleTextDefaults(asTitleMeta(data.titleMeta), title, textDefaults, styleTextDefaults?.title);
   const chartTitle = renderChartTitle(title, titleMeta, 360);
   const areas = chartAreasWithDefaults(data);
@@ -42340,289 +43101,17 @@ function describeArc(cx, cy, radius, start, end, innerRadius) {
 function point(cx, cy, radius, angle) {
   return { x: round10(cx + Math.cos(angle) * radius), y: round10(cy + Math.sin(angle) * radius) };
 }
-function asStrings2(value) {
-  return Array.isArray(value) ? value.map((item) => String(item)) : [];
-}
-function asCategoryValueType2(value) {
-  return value === "string" || value === "number" ? value : void 0;
-}
-function asSeries(value) {
-  if (!Array.isArray(value)) return [];
-  return value.map((item, index) => ({
-    name: String(item?.name ?? `Series ${index + 1}`),
-    values: Array.isArray(item?.values) ? item.values.map(Number).filter(Number.isFinite) : [],
-    index: asNumber9(item?.index),
-    order: asNumber9(item?.order),
-    uniqueId: asOptionalString9(item?.uniqueId),
-    uniqueIdExtUri: asOptionalString9(item?.uniqueIdExtUri),
-    uniqueIdExtNamespace: asOptionalString9(item?.uniqueIdExtNamespace),
-    smooth: typeof item?.smooth === "boolean" ? item.smooth : void 0,
-    sourceRefs: asSourceRefs(item?.sourceRefs),
-    nameCache: asSeriesCache(item?.nameCache),
-    categoryCache: asSeriesCache(item?.categoryCache),
-    valueCache: asValueCache(item?.valueCache),
-    invertIfNegative: typeof item?.invertIfNegative === "boolean" ? item.invertIfNegative : void 0,
-    color: asHexColor(item?.color) ?? asHexColor(item?.fill?.color),
-    fill: asRecord5(item?.fill),
-    line: asRecord5(item?.line),
-    effects: asRecord5(item?.effects),
-    marker: asSeriesMarker(item?.marker),
-    dataLabels: asRecord5(item?.dataLabels)
-  }));
-}
-function applyChartStyleMarkerLayout(item, markerLayout) {
-  if (item.marker) return item;
-  if (markerLayout == null || typeof markerLayout !== "object" || Array.isArray(markerLayout)) return item;
-  const symbol2 = asOptionalString9(markerLayout.symbol);
-  const size = asNumber9(markerLayout.size);
-  if (symbol2 !== "circle" && symbol2 !== "none") {
-    return symbol2 ? {
-      ...item,
-      marker: {
-        symbol: symbol2,
-        ...size != null ? { size } : {},
-        source: "chartStyleUnsupported"
-      }
-    } : item;
-  }
-  return {
-    ...item,
-    marker: {
-      symbol: symbol2,
-      ...size != null ? { size } : {},
-      source: "chartStyle"
-    }
-  };
-}
-function applyChartStyleMarkerLineDefault(item, markerLineDefault) {
-  const defaults = asSeriesLine2(markerLineDefault);
-  if (!defaults) return item;
-  const marker = item.marker ?? {};
-  const localLine = asRecord5(marker.line);
-  return {
-    ...item,
-    marker: {
-      ...marker,
-      line: {
-        ...defaults,
-        ...definedSeriesLineFields2(localLine)
-      }
-    }
-  };
-}
-function applyChartStyleSeriesLineDefault(item, seriesLineDefault) {
-  const defaults = asSeriesLine2(seriesLineDefault);
-  if (!defaults) return item;
-  return {
-    ...item,
-    line: {
-      ...defaults,
-      ...definedSeriesLineFields2(item.line)
-    }
-  };
-}
-function chartAreasWithDefaults(data) {
-  const style = asRecord5(data?.style);
-  return {
-    chartArea: applyChartAreaDefault(data?.chartArea, chartStyleAreaDefault(style, "cs:chartArea")),
-    plotArea: applyChartAreaDefault(data?.plotArea, chartStyleAreaDefault(style, "cs:plotArea"))
-  };
-}
-function chartStyleAreaDefault(style, context) {
-  const defaults = Array.isArray(style?.areaDefaults) ? style.areaDefaults : [];
-  const match = defaults.find((item) => asOptionalString9(item?.context) === context);
-  return asRecord5(match?.area);
-}
-function applyChartAreaDefault(localArea, defaultArea) {
-  const local = asRecord5(localArea);
-  const defaults = asRecord5(defaultArea);
-  if (!defaults) return local;
-  if (!local) return defaults;
-  const fill = mergeChartAreaPart(defaults.fill, local.fill);
-  const line8 = mergeChartAreaPart(defaults.line, local.line);
-  const merged = {
-    ...local,
-    ...fill ? { fill } : {},
-    ...line8 ? { line: line8 } : {}
-  };
-  return Object.keys(merged).length > 0 ? merged : void 0;
-}
-function mergeChartAreaPart(defaultPart, localPart) {
-  const defaults = definedObjectFields(defaultPart);
-  const local = definedObjectFields(localPart);
-  if (!defaults) return local;
-  if (!local) return defaults;
-  if (local.visible === false) return local;
-  const merged = { ...defaults, ...local };
-  return Object.keys(merged).length > 0 ? merged : void 0;
-}
-function definedObjectFields(value) {
-  if (value == null || typeof value !== "object" || Array.isArray(value)) return void 0;
-  const fields = Object.fromEntries(Object.entries(value).filter((entry) => entry[1] != null));
-  return Object.keys(fields).length > 0 ? fields : void 0;
-}
-function asSeriesLine2(value) {
-  if (value == null || typeof value !== "object" || Array.isArray(value)) return void 0;
-  const source = value;
-  const line8 = {
-    ...typeof source.visible === "boolean" ? { visible: source.visible } : {},
-    ...asHexColor(source.color) ? { color: asHexColor(source.color) } : {},
-    ...asNumber9(source.width) != null ? { width: asNumber9(source.width) } : {},
-    ...asOptionalString9(source.cap) ? { cap: asOptionalString9(source.cap) } : {},
-    ...asOptionalString9(source.join) ? { join: asOptionalString9(source.join) } : {},
-    ...asOptionalString9(source.dash) ? { dash: asOptionalString9(source.dash) } : {},
-    ...asOptionalString9(source.colorScheme) ? { colorScheme: asOptionalString9(source.colorScheme) } : {}
-  };
-  return Object.keys(line8).length > 0 ? line8 : void 0;
-}
-function definedSeriesLineFields2(line8) {
-  if (!line8) return {};
-  return {
-    ...typeof line8.visible === "boolean" ? { visible: line8.visible } : {},
-    ...asHexColor(line8.color) ? { color: asHexColor(line8.color) } : {},
-    ...asNumber9(line8.width) != null ? { width: asNumber9(line8.width) } : {},
-    ...asOptionalString9(line8.cap) ? { cap: asOptionalString9(line8.cap) } : {},
-    ...asOptionalString9(line8.join) ? { join: asOptionalString9(line8.join) } : {},
-    ...asOptionalString9(line8.dash) ? { dash: asOptionalString9(line8.dash) } : {},
-    ...asRecord5(line8.fill) ? { fill: asRecord5(line8.fill) } : {}
-  };
-}
-function asAxes2(value) {
-  if (value == null || typeof value !== "object" || Array.isArray(value)) return {};
-  return {
-    category: asAxis2(value.category),
-    value: asAxis2(value.value)
-  };
-}
-function asAxis2(value) {
-  if (value == null || typeof value !== "object" || Array.isArray(value)) return void 0;
-  const id = asOptionalString9(value.id);
-  const crossAxisId = asOptionalString9(value.crossAxisId);
-  const title = asOptionalString9(value.title);
-  const titleStyle = asRecord5(value.titleStyle);
-  const visible = typeof value.visible === "boolean" ? value.visible : void 0;
-  const position = asOptionalString9(value.position);
-  const scaling = asAxisScaling2(value.scaling);
-  const majorUnit = asNumber9(value.majorUnit);
-  const minorUnit = asNumber9(value.minorUnit);
-  const majorGridlines = typeof value.majorGridlines === "boolean" ? value.majorGridlines : void 0;
-  const majorGridlineLine = asAxisLine2(value.majorGridlineLine);
-  const minorGridlines = typeof value.minorGridlines === "boolean" ? value.minorGridlines : void 0;
-  const minorGridlineLine = asAxisLine2(value.minorGridlineLine);
-  const numFmt = asAxisNumFmt2(value.numFmt);
-  const majorTickMark = asOptionalString9(value.majorTickMark);
-  const minorTickMark = asOptionalString9(value.minorTickMark);
-  const tickLblPos = asOptionalString9(value.tickLblPos);
-  const labelOffset = asNumber9(value.labelOffset);
-  const crosses = asOptionalString9(value.crosses);
-  const crossBetween = asOptionalString9(value.crossBetween);
-  const line8 = asAxisLine2(value.line);
-  const labelStyle = asRecord5(value.labelStyle);
-  return id || crossAxisId || title || titleStyle || visible != null || position || scaling || majorUnit != null || minorUnit != null || majorGridlines != null || majorGridlineLine || minorGridlines != null || minorGridlineLine || numFmt || majorTickMark || minorTickMark || tickLblPos || labelOffset != null || crosses || crossBetween || line8 || labelStyle ? { id, crossAxisId, title, titleStyle, visible, position, scaling, majorUnit, minorUnit, majorGridlines, majorGridlineLine, minorGridlines, minorGridlineLine, numFmt, majorTickMark, minorTickMark, tickLblPos, labelOffset, crosses, crossBetween, line: line8, labelStyle } : void 0;
-}
-function asAxisLine2(value) {
-  if (value == null || typeof value !== "object" || Array.isArray(value)) return void 0;
-  const visible = typeof value.visible === "boolean" ? value.visible : void 0;
-  const color = asHexColor(value.color);
-  const colorSource = asOptionalString9(value.colorSource);
-  const colorScheme = asOptionalString9(value.colorScheme);
-  const colorResolved = asHexColor(value.colorResolved);
-  const width = asNumber9(value.width);
-  const cap = asOptionalString9(value.cap);
-  const compound = asOptionalString9(value.compound);
-  const align = asOptionalString9(value.align);
-  const join = asOptionalString9(value.join);
-  const dash = asOptionalString9(value.dash);
-  return visible != null || color || colorSource || colorScheme || colorResolved || width != null || cap || compound || align || join || dash ? { visible, color, colorSource, colorScheme, colorResolved, width, cap, compound, align, join, dash } : void 0;
-}
-function asRecord5(value) {
-  return value != null && typeof value === "object" && !Array.isArray(value) ? value : void 0;
-}
-function asSeriesMarker(value) {
-  if (value == null || typeof value !== "object" || Array.isArray(value)) return void 0;
-  const symbol2 = asOptionalString9(value.symbol);
-  const size = asNumber9(value.size);
-  return symbol2 || size != null ? { ...symbol2 ? { symbol: symbol2 } : {}, ...size != null ? { size } : {} } : void 0;
-}
-function asAxisScaling2(value) {
-  if (value == null || typeof value !== "object" || Array.isArray(value)) return void 0;
-  const min = asNumber9(value.min);
-  const max = asNumber9(value.max);
-  const orientation = asOptionalString9(value.orientation);
-  return min == null && max == null && !orientation ? void 0 : { min, max, orientation };
-}
-function asAxisNumFmt2(value) {
-  if (value == null || typeof value !== "object" || Array.isArray(value)) return void 0;
-  const formatCode = asOptionalString9(value.formatCode);
-  const sourceLinked = typeof value.sourceLinked === "boolean" ? value.sourceLinked : void 0;
-  return formatCode || sourceLinked != null ? { formatCode, sourceLinked } : void 0;
-}
-function effectiveBarChartData(data) {
-  return {
-    ...data,
-    chartType: "bar",
-    grouping: asOptionalString9(data?.grouping) ?? "clustered",
-    gapWidth: effectiveBarGapWidth(data?.gapWidth),
-    overlap: effectiveBarOverlap(data?.overlap)
-  };
-}
-function effectiveBarGapWidth(value) {
-  const gapWidth = asNumber9(value);
-  return gapWidth != null && gapWidth >= 0 && gapWidth <= 500 ? gapWidth : DEFAULT_BAR_GAP_WIDTH;
-}
-function effectiveBarOverlap(value) {
-  const overlap = asNumber9(value);
-  return overlap != null && overlap >= -100 && overlap <= 100 ? overlap : 0;
-}
-function verticalCategoryAxisY(margin, plotH, categoryAxis, valueAxis, scale) {
-  if (categoryAxis?.crosses === "max") return valueAxisY(margin.top, plotH, scale.max, scale, valueAxis);
-  if (categoryAxis?.crosses === "autoZero" && scaleIncludesZero(scale)) return valueAxisY(margin.top, plotH, 0, scale, valueAxis);
-  return valueAxisY(margin.top, plotH, scale.min, scale, valueAxis);
-}
-function horizontalCategoryAxisX(margin, plotW, categoryAxis, valueAxis, scale) {
-  if (categoryAxis?.crosses === "max") return valueAxisX(margin.left, plotW, scale.max, scale, valueAxis);
-  if (categoryAxis?.crosses === "autoZero" && scaleIncludesZero(scale)) return valueAxisX(margin.left, plotW, 0, scale, valueAxis);
-  return valueAxisX(margin.left, plotW, scale.min, scale, valueAxis);
-}
-function scaleIncludesZero(scale) {
-  return scale.min < 0 && scale.max > 0;
-}
-function legendItems(series, categories, data) {
-  if (data?.varyColors === true && series.length <= 1) {
-    return categories.map((label, index) => ({
-      label,
-      color: seriesFill(data, series, series[0], 0, index),
-      index
-    }));
-  }
-  return series.map((item, index) => ({
-    label: item.name,
-    color: seriesFill(data, series, item, index, index),
-    index,
-    series: item
-  }));
-}
-function seriesFill(data, series, item, seriesIndex, pointIndex) {
-  const chartPalette = chartColorStylePalette(data) ?? palette;
-  if (data?.varyColors === true && series.length <= 1) {
-    return chartPalette[pointIndex % chartPalette.length] ?? palette[pointIndex % palette.length];
-  }
-  return item?.color ?? chartPalette[seriesIndex % chartPalette.length] ?? palette[seriesIndex % palette.length];
-}
-function seriesInvertIfNegativeAttribute(item) {
-  return typeof item?.invertIfNegative === "boolean" ? ` data-invert-if-negative="${String(item.invertIfNegative)}"` : "";
-}
 function markerLinePaintAttributes(item, fallbackColor) {
-  const line8 = asRecord5(item.marker?.line);
+  const line8 = asRecord7(item.marker?.line);
   if (!line8 || line8.visible === false) return "";
-  const stroke = asHexColor(line8.color) ?? fallbackColor;
-  const width = asNumber9(line8.width);
+  const stroke = asHexColor2(line8.color) ?? fallbackColor;
+  const width = asNumber11(line8.width);
   const dash = svgDashArray(line8.dash, width);
   return [
     ` stroke="${escapeHtml(stroke)}"`,
     width != null ? ` stroke-width="${round10(width)}"` : "",
-    asOptionalString9(line8.cap) ? ` stroke-linecap="${escapeHtml(asOptionalString9(line8.cap))}"` : "",
-    asOptionalString9(line8.join) ? ` stroke-linejoin="${escapeHtml(asOptionalString9(line8.join))}"` : "",
+    asOptionalString10(line8.cap) ? ` stroke-linecap="${escapeHtml(asOptionalString10(line8.cap))}"` : "",
+    asOptionalString10(line8.join) ? ` stroke-linejoin="${escapeHtml(asOptionalString10(line8.join))}"` : "",
     dash ? ` stroke-dasharray="${escapeHtml(dash)}"` : ""
   ].join("");
 }
@@ -42633,30 +43122,15 @@ function renderSeriesMarker(item, category, metadata, x, y, size, fill) {
     const side = round10(size * 2);
     return `<rect class="chart-point chart-point-square" ${common} x="${round10(x - size)}" y="${round10(y - size)}" width="${side}" height="${side}" ${paint}></rect>`;
   }
+  if (item.marker?.symbol === "triangle") {
+    const d = `M${round10(x)} ${round10(y - size)}L${round10(x + size)} ${round10(y + size)}H${round10(x - size)}Z`;
+    return `<path class="chart-point chart-point-triangle" ${common} d="${d}" ${paint}></path>`;
+  }
+  if (item.marker?.symbol === "diamond") {
+    const d = `M${round10(x)} ${round10(y - size)}L${round10(x + size)} ${round10(y)}L${round10(x)} ${round10(y + size)}L${round10(x - size)} ${round10(y)}Z`;
+    return `<path class="chart-point chart-point-diamond" ${common} d="${d}" ${paint}></path>`;
+  }
   return `<circle class="chart-point" ${common} cx="${x}" cy="${y}" r="${size}" ${paint}></circle>`;
-}
-function chartColorStylePalette(data) {
-  if (asOptionalString9(data?.style?.colorStyle?.method) !== "cycle") return void 0;
-  const colors = Array.isArray(data?.style?.colorStyle?.colors) ? data.style.colorStyle.colors.map(asHexColor).filter((color) => color != null) : [];
-  return colors.length > 0 ? colors : void 0;
-}
-function asOptionalString9(value) {
-  if (value == null) return void 0;
-  const text = String(value).trim();
-  return text || void 0;
-}
-function asHexColor(value) {
-  if (typeof value !== "string") return void 0;
-  const normalized = value.replace(/^#/, "");
-  return /^[0-9a-fA-F]{6}$/.test(normalized) ? `#${normalized.toLowerCase()}` : void 0;
-}
-function asNumber9(value) {
-  if (value == null || value === "") return void 0;
-  const parsed = Number(value);
-  return Number.isFinite(parsed) ? parsed : void 0;
-}
-function round10(value) {
-  return Math.round(value * 100) / 100;
 }
 
 // src/render/renderElementOrder.ts
@@ -42839,6 +43313,7 @@ function renderPatternFillCss(fill) {
   const background = fill.backgroundColor ?? "transparent";
   const pattern = String(fill.pattern ?? "");
   if (pattern === "pct5") return `background: radial-gradient(${foreground} 0.75px, ${background} 0.75px) 0 0 / 12px 12px`;
+  if (isSupportedPercentPattern(pattern)) return `background-color: ${background}; background-image: ${svgPatternDataUrl(percentPatternSvg(pattern, foreground, background))}; background-size: 12px 12px`;
   if (pattern === "solidDmnd") return `background-color: ${background}; background-image: ${svgPatternDataUrl(`<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 12 12"><path d="M6 1L11 6L6 11L1 6Z" fill="${foreground}"/></svg>`)}; background-size: 12px 12px`;
   if (pattern.includes("Horz")) return `background: repeating-linear-gradient(0deg, ${background} 0 5px, ${foreground} 5px 6px, ${background} 6px 12px)`;
   if (pattern.includes("Vert")) return `background: repeating-linear-gradient(90deg, ${background} 0 5px, ${foreground} 5px 6px, ${background} 6px 12px)`;
@@ -42858,6 +43333,7 @@ ${body}
 }
 function patternSvgBody(pattern, foreground) {
   if (pattern === "pct5") return `          <circle cx="6" cy="6" r="0.75" fill="${foreground}"></circle>`;
+  if (isSupportedPercentPattern(pattern)) return percentPatternDots(pattern).map((dot) => `          <circle cx="${dot.x}" cy="${dot.y}" r="${dot.r}" fill="${foreground}"></circle>`).join("\n");
   if (pattern === "solidDmnd") return `          <path d="M6 1L11 6L6 11L1 6Z" fill="${foreground}"></path>`;
   const path8 = patternPath(pattern);
   return `          <path d="${path8}" stroke="${foreground}" stroke-width="1" fill="none"></path>`;
@@ -42871,6 +43347,30 @@ function patternPath(pattern) {
 }
 function svgPatternDataUrl(svg) {
   return `url("data:image/svg+xml,${encodeURIComponent(svg)}")`;
+}
+function isSupportedPercentPattern(pattern) {
+  return ["pct10", "pct20", "pct25", "pct50"].includes(pattern);
+}
+function percentPatternSvg(pattern, foreground, background) {
+  const dots = percentPatternDots(pattern).map((dot) => `<circle cx="${dot.x}" cy="${dot.y}" r="${dot.r}" fill="${foreground}"/>`).join("");
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 12 12"><rect width="12" height="12" fill="${background}"/>${dots}</svg>`;
+}
+function percentPatternDots(pattern) {
+  const radius = 0.75;
+  if (pattern === "pct10") return [{ x: 3, y: 3, r: radius }, { x: 9, y: 9, r: radius }];
+  if (pattern === "pct20") return [{ x: 3, y: 3, r: radius }, { x: 9, y: 3, r: radius }, { x: 3, y: 9, r: radius }, { x: 9, y: 9, r: radius }];
+  if (pattern === "pct25") return [{ x: 3, y: 3, r: radius }, { x: 9, y: 3, r: radius }, { x: 6, y: 6, r: radius }, { x: 3, y: 9, r: radius }, { x: 9, y: 9, r: radius }];
+  return [
+    { x: 3, y: 3, r: radius },
+    { x: 6, y: 3, r: radius },
+    { x: 9, y: 3, r: radius },
+    { x: 3, y: 6, r: radius },
+    { x: 6, y: 6, r: radius },
+    { x: 9, y: 6, r: radius },
+    { x: 3, y: 9, r: radius },
+    { x: 6, y: 9, r: radius },
+    { x: 9, y: 9, r: radius }
+  ];
 }
 
 // src/render/renderArrowCalloutGeometry.ts
@@ -43085,13 +43585,13 @@ function adjustment(element, name, fallback) {
 function pathFromPoints(points, width, height) {
   return points.map(([x, y], index) => {
     const command = index === 0 ? "M" : "L";
-    return `${command}${formatNumber4(x / width * 100)} ${formatNumber4(y / height * 100)}`;
+    return `${command}${formatNumber5(x / width * 100)} ${formatNumber5(y / height * 100)}`;
   }).join("") + "Z";
 }
 function clamp5(value, min, max) {
   return Math.min(max, Math.max(min, value));
 }
-function formatNumber4(value) {
+function formatNumber5(value) {
   if (Math.abs(value) < 1e-4) return "0";
   return Number(value.toFixed(3)).toString();
 }
@@ -43144,10 +43644,10 @@ function line(x, y, width, height) {
   return `L${point2(x, y, width, height)}`;
 }
 function arc(rx, ry, rotation, largeArc, sweep, x, y, width, height) {
-  return `A${formatNumber5(rx / width * 100)} ${formatNumber5(ry / height * 100)} ${rotation} ${largeArc} ${sweep} ${point2(x, y, width, height)}`;
+  return `A${formatNumber6(rx / width * 100)} ${formatNumber6(ry / height * 100)} ${rotation} ${largeArc} ${sweep} ${point2(x, y, width, height)}`;
 }
 function point2(x, y, width, height) {
-  return `${formatNumber5(x / width * 100)} ${formatNumber5(y / height * 100)}`;
+  return `${formatNumber6(x / width * 100)} ${formatNumber6(y / height * 100)}`;
 }
 function adjustmentValue(element, name, fallback) {
   const adjustments = Array.isArray(element?.geometry?.adjustments) ? element.geometry.adjustments : [];
@@ -43157,7 +43657,7 @@ function adjustmentValue(element, name, fallback) {
 function clamp6(value, min, max) {
   return Math.min(max, Math.max(min, value));
 }
-function formatNumber5(value) {
+function formatNumber6(value) {
   if (Math.abs(value) < 1e-4) return "0";
   return Number(value.toFixed(3)).toString();
 }
@@ -43227,7 +43727,7 @@ function bevelGeometry(element) {
   };
 }
 function path2(points, width, height) {
-  return points.map(([x, y], index) => `${index === 0 ? "M" : "L"}${formatNumber6(x / width * 100)} ${formatNumber6(y / height * 100)}`).join("") + "Z";
+  return points.map(([x, y], index) => `${index === 0 ? "M" : "L"}${formatNumber7(x / width * 100)} ${formatNumber7(y / height * 100)}`).join("") + "Z";
 }
 function adjustmentValue2(element, name, fallback) {
   const adjustments = Array.isArray(element?.geometry?.adjustments) ? element.geometry.adjustments : [];
@@ -43237,7 +43737,7 @@ function adjustmentValue2(element, name, fallback) {
 function clamp7(value, min, max) {
   return Math.min(max, Math.max(min, value));
 }
-function formatNumber6(value) {
+function formatNumber7(value) {
   if (Math.abs(value) < 1e-4) return "0";
   return Number(value.toFixed(3)).toString();
 }
@@ -43274,10 +43774,10 @@ function bentUpArrowPath(element) {
   ].join("");
 }
 function move2(x, y, width, height) {
-  return `M${formatNumber7(x / width * 100)} ${formatNumber7(y / height * 100)}`;
+  return `M${formatNumber8(x / width * 100)} ${formatNumber8(y / height * 100)}`;
 }
 function line2(x, y, width, height) {
-  return `L${formatNumber7(x / width * 100)} ${formatNumber7(y / height * 100)}`;
+  return `L${formatNumber8(x / width * 100)} ${formatNumber8(y / height * 100)}`;
 }
 function adjustmentValue3(element, name, fallback) {
   const adjustments = Array.isArray(element?.geometry?.adjustments) ? element.geometry.adjustments : [];
@@ -43287,7 +43787,7 @@ function adjustmentValue3(element, name, fallback) {
 function clamp8(value, min, max) {
   return Math.min(max, Math.max(min, value));
 }
-function formatNumber7(value) {
+function formatNumber8(value) {
   if (Math.abs(value) < 1e-4) return "0";
   return Number(value.toFixed(3)).toString();
 }
@@ -43336,15 +43836,15 @@ function ellipsePoint(cx, cy, rx, ry, deg) {
   return { x: cx + rx * Math.cos(rad), y: cy + ry * Math.sin(rad) };
 }
 function arc2(rx, ry, largeArc, sweep, end, width, height) {
-  return `A${formatNumber8(rx / width * 100)} ${formatNumber8(ry / height * 100)} 0 ${largeArc} ${sweep} ${point3(end, width, height)}`;
+  return `A${formatNumber9(rx / width * 100)} ${formatNumber9(ry / height * 100)} 0 ${largeArc} ${sweep} ${point3(end, width, height)}`;
 }
 function point3(item, width, height) {
-  return `${formatNumber8(item.x / width * 100)} ${formatNumber8(item.y / height * 100)}`;
+  return `${formatNumber9(item.x / width * 100)} ${formatNumber9(item.y / height * 100)}`;
 }
 function clamp9(value, min, max) {
   return Math.min(max, Math.max(min, value));
 }
-function formatNumber8(value) {
+function formatNumber9(value) {
   if (Math.abs(value) < 1e-4) return "0";
   return Number(value.toFixed(3)).toString();
 }
@@ -43361,7 +43861,7 @@ function chordPath(element) {
     return "M0 50A50 50 0 1 1 100 50A50 50 0 1 1 0 50Z";
   }
   const largeArc = sweepDegrees > 180 ? 1 : 0;
-  return `M${formatNumber9(start.x)} ${formatNumber9(start.y)}A50 50 0 ${largeArc} 1 ${formatNumber9(end.x)} ${formatNumber9(end.y)}Z`;
+  return `M${formatNumber10(start.x)} ${formatNumber10(start.y)}A50 50 0 ${largeArc} 1 ${formatNumber10(end.x)} ${formatNumber10(end.y)}Z`;
 }
 function ellipsePoint2(element, angleValue) {
   const width = Math.max(1, Number(element?.box?.w ?? 100));
@@ -43384,7 +43884,7 @@ function clampAngle(value) {
 function positiveSweepDegrees(startAngle, endAngle) {
   return (endAngle - startAngle + fullCircleUnits) % fullCircleUnits / 6e4;
 }
-function formatNumber9(value) {
+function formatNumber10(value) {
   if (Math.abs(value) < 1e-4) return "0";
   return Number(value.toFixed(3)).toString();
 }
@@ -43398,7 +43898,7 @@ function cornerPath(element) {
   const adj2 = clamp10(adjustmentValue5(element, "adj2", 5e4), 0, 1e5 * width / shortestSide);
   const x1 = shortestSide * adj2 / 1e5 / width * 100;
   const y1 = 100 - shortestSide * adj1 / 1e5 / height * 100;
-  return `M0 0L${formatNumber10(x1)} 0L${formatNumber10(x1)} ${formatNumber10(y1)}H100V100H0Z`;
+  return `M0 0L${formatNumber11(x1)} 0L${formatNumber11(x1)} ${formatNumber11(y1)}H100V100H0Z`;
 }
 function adjustmentValue5(element, name, fallback) {
   const adjustments = Array.isArray(element?.geometry?.adjustments) ? element.geometry.adjustments : [];
@@ -43408,7 +43908,7 @@ function adjustmentValue5(element, name, fallback) {
 function clamp10(value, min, max) {
   return Math.min(max, Math.max(min, value));
 }
-function formatNumber10(value) {
+function formatNumber11(value) {
   if (Math.abs(value) < 1e-4) return "0";
   return Number(value.toFixed(3)).toString();
 }
@@ -43554,7 +44054,7 @@ function arc3(cx, cy, rx, ry, startDegrees, endDegrees, prefix, width, height, m
   const largeArc = Math.abs(delta) > 180 ? 1 : 0;
   const reflected = mirrorX !== mirrorY;
   const sweep = reflected ? delta >= 0 ? 0 : 1 : delta >= 0 ? 1 : 0;
-  return `${prefix}${point4(startX, startY, width, height, mirrorX, mirrorY)}A${formatNumber11(rx / width * 100)} ${formatNumber11(ry / height * 100)} 0 ${largeArc} ${sweep} ${point4(endX, endY, width, height, mirrorX, mirrorY)}`;
+  return `${prefix}${point4(startX, startY, width, height, mirrorX, mirrorY)}A${formatNumber12(rx / width * 100)} ${formatNumber12(ry / height * 100)} 0 ${largeArc} ${sweep} ${point4(endX, endY, width, height, mirrorX, mirrorY)}`;
 }
 function move3(x, y, width, height, mirrorX, mirrorY) {
   return `M${point4(x, y, width, height, mirrorX, mirrorY)}`;
@@ -43565,7 +44065,7 @@ function line3(x, y, width, height, mirrorX, mirrorY) {
 function point4(x, y, width, height, mirrorX, mirrorY) {
   const normalizedX = (mirrorX ? width - x : x) / width * 100;
   const normalizedY = (mirrorY ? height - y : y) / height * 100;
-  return `${formatNumber11(normalizedX)} ${formatNumber11(normalizedY)}`;
+  return `${formatNumber12(normalizedX)} ${formatNumber12(normalizedY)}`;
 }
 function adjustmentValue6(element, name, fallback) {
   const adjustments = Array.isArray(element?.geometry?.adjustments) ? element.geometry.adjustments : [];
@@ -43578,7 +44078,7 @@ function clamp11(value, min, max) {
 function degrees(value) {
   return value * 180 / Math.PI;
 }
-function formatNumber11(value) {
+function formatNumber12(value) {
   if (Math.abs(value) < 1e-4) return "0";
   return Number(value.toFixed(3)).toString();
 }
@@ -43628,7 +44128,7 @@ function cubeGeometry(element) {
   };
 }
 function path3(points, width, height) {
-  return points.map(([x, y], index) => `${index === 0 ? "M" : "L"}${formatNumber12(x / width * 100)} ${formatNumber12(y / height * 100)}`).join("") + "Z";
+  return points.map(([x, y], index) => `${index === 0 ? "M" : "L"}${formatNumber13(x / width * 100)} ${formatNumber13(y / height * 100)}`).join("") + "Z";
 }
 function adjustmentValue7(element, name, fallback) {
   const adjustments = Array.isArray(element?.geometry?.adjustments) ? element.geometry.adjustments : [];
@@ -43638,7 +44138,7 @@ function adjustmentValue7(element, name, fallback) {
 function clamp12(value, min, max) {
   return Math.min(max, Math.max(min, value));
 }
-function formatNumber12(value) {
+function formatNumber13(value) {
   if (Math.abs(value) < 1e-4) return "0";
   return Number(value.toFixed(3)).toString();
 }
@@ -43646,7 +44146,7 @@ function formatNumber12(value) {
 // src/render/renderDiagStripeGeometry.ts
 function diagStripePath(element) {
   const value = clamp13(adjustmentValue8(element, "adj", 5e4), 0, 1e5) / 1e3;
-  const edge = formatNumber13(value);
+  const edge = formatNumber14(value);
   return `M0 ${edge}L${edge} 0H100L0 100Z`;
 }
 function adjustmentValue8(element, name, fallback) {
@@ -43657,7 +44157,7 @@ function adjustmentValue8(element, name, fallback) {
 function clamp13(value, min, max) {
   return Math.min(max, Math.max(min, value));
 }
-function formatNumber13(value) {
+function formatNumber14(value) {
   if (Math.abs(value) < 1e-4) return "0";
   return Number(value.toFixed(3)).toString();
 }
@@ -43665,10 +44165,10 @@ function formatNumber13(value) {
 // src/render/renderFrameGeometry.ts
 function frameGeometry(element) {
   const thickness = percentAdjustment(element, "adj1", 12.5);
-  const x = formatNumber14(shortestSideToWidthPercent(element, thickness));
-  const y = formatNumber14(shortestSideToHeightPercent(element, thickness));
-  const right = formatNumber14(100 - Number(x));
-  const bottom = formatNumber14(100 - Number(y));
+  const x = formatNumber15(shortestSideToWidthPercent(element, thickness));
+  const y = formatNumber15(shortestSideToHeightPercent(element, thickness));
+  const right = formatNumber15(100 - Number(x));
+  const bottom = formatNumber15(100 - Number(y));
   return {
     tag: "compound",
     parts: [
@@ -43693,7 +44193,7 @@ function shortestSideToHeightPercent(element, value) {
   const height = Math.max(1, Number(element?.box?.h ?? 100));
   return Math.min(100, Math.max(0, value * Math.min(width, height) / height));
 }
-function formatNumber14(value) {
+function formatNumber15(value) {
   return Number(value.toFixed(3)).toString();
 }
 
@@ -43712,9 +44212,9 @@ function halfFramePath(element) {
   const y2 = height - x1 * height / width;
   return [
     "M0 0H100",
-    `L${formatNumber15(x2 / width * 100)} ${formatNumber15(y1 / height * 100)}`,
-    `H${formatNumber15(x1 / width * 100)}`,
-    `V${formatNumber15(y2 / height * 100)}`,
+    `L${formatNumber16(x2 / width * 100)} ${formatNumber16(y1 / height * 100)}`,
+    `H${formatNumber16(x1 / width * 100)}`,
+    `V${formatNumber16(y2 / height * 100)}`,
     "L0 100Z"
   ].join("");
 }
@@ -43726,7 +44226,7 @@ function adjustmentValue9(element, name, fallback) {
 function clamp14(value, min, max) {
   return Math.min(max, Math.max(min, value));
 }
-function formatNumber15(value) {
+function formatNumber16(value) {
   if (Math.abs(value) < 1e-4) return "0";
   return Number(value.toFixed(3)).toString();
 }
@@ -43770,10 +44270,10 @@ function leftUpArrowPath(element) {
   ].join("");
 }
 function move4(x, y, width, height) {
-  return `M${formatNumber16(x / width * 100)} ${formatNumber16(y / height * 100)}`;
+  return `M${formatNumber17(x / width * 100)} ${formatNumber17(y / height * 100)}`;
 }
 function line4(x, y, width, height) {
-  return `L${formatNumber16(x / width * 100)} ${formatNumber16(y / height * 100)}`;
+  return `L${formatNumber17(x / width * 100)} ${formatNumber17(y / height * 100)}`;
 }
 function adjustmentValue10(element, name, fallback) {
   const adjustments = Array.isArray(element?.geometry?.adjustments) ? element.geometry.adjustments : [];
@@ -43783,7 +44283,7 @@ function adjustmentValue10(element, name, fallback) {
 function clamp15(value, min, max) {
   return Math.min(max, Math.max(min, value));
 }
-function formatNumber16(value) {
+function formatNumber17(value) {
   if (Math.abs(value) < 1e-4) return "0";
   return Number(value.toFixed(3)).toString();
 }
@@ -43834,10 +44334,10 @@ function leftRightUpArrowPath(element) {
   ].join("");
 }
 function move5(x, y, width, height) {
-  return `M${formatNumber17(x / width * 100)} ${formatNumber17(y / height * 100)}`;
+  return `M${formatNumber18(x / width * 100)} ${formatNumber18(y / height * 100)}`;
 }
 function line5(x, y, width, height) {
-  return `L${formatNumber17(x / width * 100)} ${formatNumber17(y / height * 100)}`;
+  return `L${formatNumber18(x / width * 100)} ${formatNumber18(y / height * 100)}`;
 }
 function adjustmentValue11(element, name, fallback) {
   const adjustments = Array.isArray(element?.geometry?.adjustments) ? element.geometry.adjustments : [];
@@ -43847,7 +44347,7 @@ function adjustmentValue11(element, name, fallback) {
 function clamp16(value, min, max) {
   return Math.min(max, Math.max(min, value));
 }
-function formatNumber17(value) {
+function formatNumber18(value) {
   if (Math.abs(value) < 1e-4) return "0";
   return Number(value.toFixed(3)).toString();
 }
@@ -43856,8 +44356,8 @@ function formatNumber17(value) {
 function canGeometry(element) {
   const depth = canDepthPercent(element);
   const bottom = 100 - depth;
-  const depthValue = formatNumber18(depth);
-  const bottomValue = formatNumber18(bottom);
+  const depthValue = formatNumber19(depth);
+  const bottomValue = formatNumber19(bottom);
   return {
     tag: "compound",
     parts: [
@@ -43879,9 +44379,9 @@ function stripedRightArrowGeometry(element) {
   return {
     tag: "compound",
     parts: [
-      { tag: "path", part: "stripe-1", d: `M0 ${formatNumber18(y1)}H${formatNumber18(stripe1)}V${formatNumber18(y2)}H0Z` },
-      { tag: "path", part: "stripe-2", d: `M${formatNumber18(stripe2Left)} ${formatNumber18(y1)}H${formatNumber18(stripe2Right)}V${formatNumber18(y2)}H${formatNumber18(stripe2Left)}Z` },
-      { tag: "path", part: "body", d: `M${formatNumber18(bodyX)} ${formatNumber18(y1)}H${formatNumber18(headX)}V0L100 50L${formatNumber18(headX)} 100V${formatNumber18(y2)}H${formatNumber18(bodyX)}Z` }
+      { tag: "path", part: "stripe-1", d: `M0 ${formatNumber19(y1)}H${formatNumber19(stripe1)}V${formatNumber19(y2)}H0Z` },
+      { tag: "path", part: "stripe-2", d: `M${formatNumber19(stripe2Left)} ${formatNumber19(y1)}H${formatNumber19(stripe2Right)}V${formatNumber19(y2)}H${formatNumber19(stripe2Left)}Z` },
+      { tag: "path", part: "body", d: `M${formatNumber19(bodyX)} ${formatNumber19(y1)}H${formatNumber19(headX)}V0L100 50L${formatNumber19(headX)} 100V${formatNumber19(y2)}H${formatNumber19(bodyX)}Z` }
     ]
   };
 }
@@ -43915,7 +44415,7 @@ function maxWidthShortestSideAdjustment(element, value) {
   const height = Math.max(1, Number(element?.box?.h ?? 100));
   return value * width / Math.min(width, height);
 }
-function formatNumber18(value) {
+function formatNumber19(value) {
   return Number(value.toFixed(3)).toString();
 }
 
@@ -43967,10 +44467,10 @@ function point5(value, width, height) {
   return `${xPercent(value.x, width)} ${yPercent(value.y, height)}`;
 }
 function xPercent(value, width) {
-  return formatNumber19(value / width * 100);
+  return formatNumber20(value / width * 100);
 }
 function yPercent(value, height) {
-  return formatNumber19(value / height * 100);
+  return formatNumber20(value / height * 100);
 }
 function adjustmentValue13(element, name, fallback) {
   const adjustments = Array.isArray(element?.geometry?.adjustments) ? element.geometry.adjustments : [];
@@ -43980,7 +44480,7 @@ function adjustmentValue13(element, name, fallback) {
 function clamp17(value, min, max) {
   return Math.min(max, Math.max(min, value));
 }
-function formatNumber19(value) {
+function formatNumber20(value) {
   if (Math.abs(value) < 1e-4) return "0";
   return Number(value.toFixed(3)).toString();
 }
@@ -43988,13 +44488,13 @@ function formatNumber19(value) {
 // src/render/renderPolygonGeometry.ts
 function hexagonPath(element) {
   const inset = shortestSideToWidthPercent3(element, adjustmentValue14(element, "adj", 25));
-  return `M0 50L${formatNumber20(inset)} 0H${formatNumber20(100 - inset)}L100 50L${formatNumber20(100 - inset)} 100H${formatNumber20(inset)}Z`;
+  return `M0 50L${formatNumber21(inset)} 0H${formatNumber21(100 - inset)}L100 50L${formatNumber21(100 - inset)} 100H${formatNumber21(inset)}Z`;
 }
 function octagonPath(element) {
   const rawInset = Math.min(50, Math.max(0, adjustmentValue14(element, "adj", 29.289)));
   const insetX = shortestSideToWidthPercent3(element, rawInset);
   const insetY = shortestSideToHeightPercent3(element, rawInset);
-  return `M0 ${formatNumber20(insetY)}L${formatNumber20(insetX)} 0H${formatNumber20(100 - insetX)}L100 ${formatNumber20(insetY)}V${formatNumber20(100 - insetY)}L${formatNumber20(100 - insetX)} 100H${formatNumber20(insetX)}L0 ${formatNumber20(100 - insetY)}Z`;
+  return `M0 ${formatNumber21(insetY)}L${formatNumber21(insetX)} 0H${formatNumber21(100 - insetX)}L100 ${formatNumber21(insetY)}V${formatNumber21(100 - insetY)}L${formatNumber21(100 - insetX)} 100H${formatNumber21(insetX)}L0 ${formatNumber21(100 - insetY)}Z`;
 }
 function heptagonPath() {
   const hc = 50;
@@ -44007,7 +44507,7 @@ function heptagonPath() {
   const dy1 = shd2 * 62349 / 1e5;
   const dy2 = shd2 * 22252 / 1e5;
   const dy3 = shd2 * 90097 / 1e5;
-  return `M${formatNumber20(hc - dx1)} ${formatNumber20(svc + dy2)}L${formatNumber20(hc - dx2)} ${formatNumber20(svc - dy1)}L50 0L${formatNumber20(hc + dx2)} ${formatNumber20(svc - dy1)}L${formatNumber20(hc + dx1)} ${formatNumber20(svc + dy2)}L${formatNumber20(hc + dx3)} ${formatNumber20(svc + dy3)}H${formatNumber20(hc - dx3)}Z`;
+  return `M${formatNumber21(hc - dx1)} ${formatNumber21(svc + dy2)}L${formatNumber21(hc - dx2)} ${formatNumber21(svc - dy1)}L50 0L${formatNumber21(hc + dx2)} ${formatNumber21(svc - dy1)}L${formatNumber21(hc + dx1)} ${formatNumber21(svc + dy2)}L${formatNumber21(hc + dx3)} ${formatNumber21(svc + dy3)}H${formatNumber21(hc - dx3)}Z`;
 }
 function decagonPath() {
   const hc = 50;
@@ -44017,7 +44517,7 @@ function decagonPath() {
   const dx2 = hc * Math.cos(72 * Math.PI / 180);
   const dy1 = shd2 * Math.sin(72 * Math.PI / 180);
   const dy2 = shd2 * Math.sin(36 * Math.PI / 180);
-  return `M0 50L${formatNumber20(hc - dx1)} ${formatNumber20(vc - dy2)}L${formatNumber20(hc - dx2)} ${formatNumber20(vc - dy1)}H${formatNumber20(hc + dx2)}L${formatNumber20(hc + dx1)} ${formatNumber20(vc - dy2)}L100 50L${formatNumber20(hc + dx1)} ${formatNumber20(vc + dy2)}L${formatNumber20(hc + dx2)} ${formatNumber20(vc + dy1)}H${formatNumber20(hc - dx2)}L${formatNumber20(hc - dx1)} ${formatNumber20(vc + dy2)}Z`;
+  return `M0 50L${formatNumber21(hc - dx1)} ${formatNumber21(vc - dy2)}L${formatNumber21(hc - dx2)} ${formatNumber21(vc - dy1)}H${formatNumber21(hc + dx2)}L${formatNumber21(hc + dx1)} ${formatNumber21(vc - dy2)}L100 50L${formatNumber21(hc + dx1)} ${formatNumber21(vc + dy2)}L${formatNumber21(hc + dx2)} ${formatNumber21(vc + dy1)}H${formatNumber21(hc - dx2)}L${formatNumber21(hc - dx1)} ${formatNumber21(vc + dy2)}Z`;
 }
 function dodecagonPath() {
   const x1 = 100 * 2894 / 21600;
@@ -44028,7 +44528,7 @@ function dodecagonPath() {
   const y2 = 100 * 7906 / 21600;
   const y3 = 100 * 13694 / 21600;
   const y4 = 100 * 18706 / 21600;
-  return `M0 ${formatNumber20(y2)}L${formatNumber20(x1)} ${formatNumber20(y1)}L${formatNumber20(x2)} 0H${formatNumber20(x3)}L${formatNumber20(x4)} ${formatNumber20(y1)}L100 ${formatNumber20(y2)}V${formatNumber20(y3)}L${formatNumber20(x4)} ${formatNumber20(y4)}L${formatNumber20(x3)} 100H${formatNumber20(x2)}L${formatNumber20(x1)} ${formatNumber20(y4)}L0 ${formatNumber20(y3)}Z`;
+  return `M0 ${formatNumber21(y2)}L${formatNumber21(x1)} ${formatNumber21(y1)}L${formatNumber21(x2)} 0H${formatNumber21(x3)}L${formatNumber21(x4)} ${formatNumber21(y1)}L100 ${formatNumber21(y2)}V${formatNumber21(y3)}L${formatNumber21(x4)} ${formatNumber21(y4)}L${formatNumber21(x3)} 100H${formatNumber21(x2)}L${formatNumber21(x1)} ${formatNumber21(y4)}L0 ${formatNumber21(y3)}Z`;
 }
 function adjustmentValue14(element, name, fallback) {
   const adjustments = Array.isArray(element?.geometry?.adjustments) ? element.geometry.adjustments : [];
@@ -44046,7 +44546,7 @@ function shortestSideToHeightPercent3(element, value) {
   const height = Math.max(1, Number(element?.box?.h ?? 100));
   return Math.min(100, Math.max(0, value * Math.min(width, height) / height));
 }
-function formatNumber20(value) {
+function formatNumber21(value) {
   if (Math.abs(value) < 0.01) return "0";
   if (Math.abs(value - 100) < 0.01) return "100";
   return Number(value.toFixed(3)).toString();
@@ -44074,24 +44574,24 @@ function rectVariantPath(shapeType, element) {
 function round1RectPath(element) {
   const { x, y } = shortestSidePercent(element, percentAdjustment2(element, "adj", 16.667));
   if (x <= 0 || y <= 0) return "M0 0H100V100H0Z";
-  return `M0 0H${formatNumber21(100 - x)}A${formatNumber21(x)} ${formatNumber21(y)} 0 0 1 100 ${formatNumber21(y)}V100H0Z`;
+  return `M0 0H${formatNumber22(100 - x)}A${formatNumber22(x)} ${formatNumber22(y)} 0 0 1 100 ${formatNumber22(y)}V100H0Z`;
 }
 function round2DiagRectPath(element) {
   const topLeft = shortestSidePercent(element, percentAdjustment2(element, "adj1", 16.667));
   const bottomRight = shortestSidePercent(element, percentAdjustment2(element, "adj2", 0));
-  const bottomRightCorner = bottomRight.x > 0 && bottomRight.y > 0 ? `V${formatNumber21(100 - bottomRight.y)}A${formatNumber21(bottomRight.x)} ${formatNumber21(bottomRight.y)} 0 0 1 ${formatNumber21(100 - bottomRight.x)} 100` : "V100";
-  const topLeftCorner = topLeft.x > 0 && topLeft.y > 0 ? `V${formatNumber21(topLeft.y)}A${formatNumber21(topLeft.x)} ${formatNumber21(topLeft.y)} 0 0 1 ${formatNumber21(topLeft.x)} 0` : "V0";
-  return `M${formatNumber21(topLeft.x)} 0H100${bottomRightCorner}H0${topLeftCorner}Z`;
+  const bottomRightCorner = bottomRight.x > 0 && bottomRight.y > 0 ? `V${formatNumber22(100 - bottomRight.y)}A${formatNumber22(bottomRight.x)} ${formatNumber22(bottomRight.y)} 0 0 1 ${formatNumber22(100 - bottomRight.x)} 100` : "V100";
+  const topLeftCorner = topLeft.x > 0 && topLeft.y > 0 ? `V${formatNumber22(topLeft.y)}A${formatNumber22(topLeft.x)} ${formatNumber22(topLeft.y)} 0 0 1 ${formatNumber22(topLeft.x)} 0` : "V0";
+  return `M${formatNumber22(topLeft.x)} 0H100${bottomRightCorner}H0${topLeftCorner}Z`;
 }
 function snip2SameRectPath(element) {
   const top = shortestSidePercent(element, percentAdjustment2(element, "adj1", 16.667));
   const bottom = shortestSidePercent(element, percentAdjustment2(element, "adj2", 0));
-  return `M${formatNumber21(top.x)} 0H${formatNumber21(100 - top.x)}L100 ${formatNumber21(top.y)}V${formatNumber21(100 - bottom.y)}L${formatNumber21(100 - bottom.x)} 100H${formatNumber21(bottom.x)}L0 ${formatNumber21(100 - bottom.y)}V${formatNumber21(top.y)}Z`;
+  return `M${formatNumber22(top.x)} 0H${formatNumber22(100 - top.x)}L100 ${formatNumber22(top.y)}V${formatNumber22(100 - bottom.y)}L${formatNumber22(100 - bottom.x)} 100H${formatNumber22(bottom.x)}L0 ${formatNumber22(100 - bottom.y)}V${formatNumber22(top.y)}Z`;
 }
 function snip2DiagRectPath(element) {
   const left = shortestSidePercent(element, percentAdjustment2(element, "adj1", 0));
   const right = shortestSidePercent(element, percentAdjustment2(element, "adj2", 16.667));
-  return `M${formatNumber21(left.x)} 0H${formatNumber21(100 - right.x)}L100 ${formatNumber21(right.y)}V${formatNumber21(100 - left.y)}L${formatNumber21(100 - left.x)} 100H${formatNumber21(right.x)}L0 ${formatNumber21(100 - right.y)}V${formatNumber21(left.y)}Z`;
+  return `M${formatNumber22(left.x)} 0H${formatNumber22(100 - right.x)}L100 ${formatNumber22(right.y)}V${formatNumber22(100 - left.y)}L${formatNumber22(100 - left.x)} 100H${formatNumber22(right.x)}L0 ${formatNumber22(100 - right.y)}V${formatNumber22(left.y)}Z`;
 }
 function percentAdjustment2(element, name, fallback) {
   const adjustments = Array.isArray(element?.geometry?.adjustments) ? element.geometry.adjustments : [];
@@ -44108,7 +44608,7 @@ function shortestSidePercent(element, value) {
     y: Math.min(100, Math.max(0, value * shortest / height))
   };
 }
-function formatNumber21(value) {
+function formatNumber22(value) {
   if (Math.abs(value) < 1e-4) return "0";
   return Number(value.toFixed(3)).toString();
 }
@@ -44138,6 +44638,7 @@ var svgPresetGeometryTypes = /* @__PURE__ */ new Set([
   "chord",
   "teardrop",
   "diagStripe",
+  "flowChartProcess",
   "flowChartConnector",
   "round2SameRect",
   ...rectVariantShapeTypes,
@@ -44217,12 +44718,12 @@ function adjustment3(element, name, fallback) {
   return typeof value === "number" && Number.isFinite(value) ? value : fallback;
 }
 function pointX(value, width) {
-  return formatNumber22(value / width * 100);
+  return formatNumber23(value / width * 100);
 }
 function pointY(value, height) {
-  return formatNumber22(value / height * 100);
+  return formatNumber23(value / height * 100);
 }
-function formatNumber22(value) {
+function formatNumber23(value) {
   return Number(value.toFixed(3)).toString();
 }
 
@@ -44236,8 +44737,8 @@ function teardropPath(element) {
   return [
     "M0 50",
     "A50 50 0 0 1 50 0",
-    `Q${formatNumber23(x2)} 0 ${formatNumber23(x1)} ${formatNumber23(y1)}`,
-    `Q100 ${formatNumber23(y2)} 100 50`,
+    `Q${formatNumber24(x2)} 0 ${formatNumber24(x1)} ${formatNumber24(y1)}`,
+    `Q100 ${formatNumber24(y2)} 100 50`,
     "A50 50 0 0 1 50 100",
     "A50 50 0 0 1 0 50",
     "Z"
@@ -44251,7 +44752,7 @@ function adjustmentValue15(element, name, fallback) {
 function clamp18(value, min, max) {
   return Math.min(max, Math.max(min, value));
 }
-function formatNumber23(value) {
+function formatNumber24(value) {
   if (Math.abs(value) < 1e-4) return "0";
   return Number(value.toFixed(3)).toString();
 }
@@ -44313,10 +44814,10 @@ function line6(x, y, width, height) {
   return `L${point6(x, y, width, height)}`;
 }
 function arc4(rx, ry, rotation, largeArc, sweep, x, y, width, height) {
-  return `A${formatNumber24(rx / width * 100)} ${formatNumber24(ry / height * 100)} ${rotation} ${largeArc} ${sweep} ${point6(x, y, width, height)}`;
+  return `A${formatNumber25(rx / width * 100)} ${formatNumber25(ry / height * 100)} ${rotation} ${largeArc} ${sweep} ${point6(x, y, width, height)}`;
 }
 function point6(x, y, width, height) {
-  return `${formatNumber24(x / width * 100)} ${formatNumber24(y / height * 100)}`;
+  return `${formatNumber25(x / width * 100)} ${formatNumber25(y / height * 100)}`;
 }
 function adjustmentValue16(element, name, fallback) {
   const adjustments = Array.isArray(element?.geometry?.adjustments) ? element.geometry.adjustments : [];
@@ -44326,7 +44827,7 @@ function adjustmentValue16(element, name, fallback) {
 function clamp19(value, min, max) {
   return Math.min(max, Math.max(min, value));
 }
-function formatNumber24(value) {
+function formatNumber25(value) {
   if (Math.abs(value) < 1e-4) return "0";
   return Number(value.toFixed(3)).toString();
 }
@@ -44390,7 +44891,7 @@ function arc5(cx, cy, rx, ry, startDegrees, endDegrees, width, height) {
   const delta = endDegrees - startDegrees;
   const largeArc = Math.abs(delta) > 180 ? 1 : 0;
   const sweep = delta >= 0 ? 1 : 0;
-  return `A${formatNumber25(rx / width * 100)} ${formatNumber25(ry / height * 100)} 0 ${largeArc} ${sweep} ${point7(endX, endY, width, height)}`;
+  return `A${formatNumber26(rx / width * 100)} ${formatNumber26(ry / height * 100)} 0 ${largeArc} ${sweep} ${point7(endX, endY, width, height)}`;
 }
 function move7(x, y, width, height) {
   return `M${point7(x, y, width, height)}`;
@@ -44399,14 +44900,14 @@ function line7(x, y, width, height) {
   return `L${point7(x, y, width, height)}`;
 }
 function point7(x, y, width, height) {
-  return `${formatNumber25(x / width * 100)} ${formatNumber25(y / height * 100)}`;
+  return `${formatNumber26(x / width * 100)} ${formatNumber26(y / height * 100)}`;
 }
 function adjustmentValue17(element, name, fallback) {
   const adjustments = Array.isArray(element?.geometry?.adjustments) ? element.geometry.adjustments : [];
   const item = adjustments.find((candidate) => candidate?.name === name);
   return typeof item?.value === "number" && Number.isFinite(item.value) ? item.value : fallback;
 }
-function formatNumber25(value) {
+function formatNumber26(value) {
   if (Math.abs(value) < 1e-4) return "0";
   return Number(value.toFixed(3)).toString();
 }
@@ -44469,6 +44970,8 @@ function presetShapeGeometry(shapeType, element) {
       return { tag: "path", d: teardropPath(element) };
     case "diagStripe":
       return { tag: "path", d: diagStripePath(element) };
+    case "flowChartProcess":
+      return { tag: "path", d: "M0 0H100V100H0Z" };
     case "flowChartConnector":
       return { tag: "ellipse" };
     case "round2SameRect":
@@ -44558,32 +45061,32 @@ function arcPath(element) {
   const end = arcPoint(endAngle);
   const sweep = positiveSweepDegrees2(startAngle, endAngle);
   const largeArc = sweep > 180 ? 1 : 0;
-  return `M${formatNumber26(start.x)} ${formatNumber26(start.y)}A50 50 0 ${largeArc} 1 ${formatNumber26(end.x)} ${formatNumber26(end.y)}`;
+  return `M${formatNumber27(start.x)} ${formatNumber27(start.y)}A50 50 0 ${largeArc} 1 ${formatNumber27(end.x)} ${formatNumber27(end.y)}`;
 }
 function trianglePoints(element) {
   const apexX = widePercentAdjustment(element, "adj", 50);
-  return `${formatNumber26(apexX)},0 100,100 0,100`;
+  return `${formatNumber27(apexX)},0 100,100 0,100`;
 }
 function trapezoidPath(element) {
   const inset = horizontalShortestSidePercentAdjustment(element, "adj", 25, 50);
   const rightInset = 100 - inset;
-  return `M0 100L${formatNumber26(inset)} 0H${formatNumber26(rightInset)}L100 100Z`;
+  return `M0 100L${formatNumber27(inset)} 0H${formatNumber27(rightInset)}L100 100Z`;
 }
 function homePlatePath(element) {
   const inset = horizontalShortestSidePercentAdjustment(element, "adj", 50, 100);
   const shoulderX = 100 - inset;
-  return `M0 0H${formatNumber26(shoulderX)}L100 50L${formatNumber26(shoulderX)} 100H0Z`;
+  return `M0 0H${formatNumber27(shoulderX)}L100 50L${formatNumber27(shoulderX)} 100H0Z`;
 }
 function chevronPath(element) {
   const inset = horizontalShortestSidePercentAdjustment(element, "adj", 50, 100);
   const shoulderX = 100 - inset;
-  return `M0 0H${formatNumber26(shoulderX)}L100 50L${formatNumber26(shoulderX)} 100H0L${formatNumber26(inset)} 50Z`;
+  return `M0 0H${formatNumber27(shoulderX)}L100 50L${formatNumber27(shoulderX)} 100H0L${formatNumber27(inset)} 50Z`;
 }
 function round2SameRectPath(element) {
   const radius = percentAdjustment3(element, "adj1", 16);
   if (radius <= 0) return "M0 0H100V100H0Z";
-  const left = formatNumber26(radius);
-  const right = formatNumber26(100 - radius);
+  const left = formatNumber27(radius);
+  const right = formatNumber27(100 - radius);
   return `M${left} 0H${right}Q100 0 100 ${left}V100H0V${left}Q0 0 ${left} 0Z`;
 }
 function piePath(element) {
@@ -44593,7 +45096,7 @@ function piePath(element) {
   const end = arcPoint(endAngle);
   const sweep = positiveSweepDegrees2(startAngle, endAngle);
   const largeArc = sweep > 180 ? 1 : 0;
-  return `M50 50L${formatNumber26(start.x)} ${formatNumber26(start.y)}A50 50 0 ${largeArc} 1 ${formatNumber26(end.x)} ${formatNumber26(end.y)}Z`;
+  return `M50 50L${formatNumber27(start.x)} ${formatNumber27(start.y)}A50 50 0 ${largeArc} 1 ${formatNumber27(end.x)} ${formatNumber27(end.y)}Z`;
 }
 function rightArrowPath(element) {
   const shaftHalfHeight = halfPercentAdjustment(element, "adj1", 25);
@@ -44601,7 +45104,7 @@ function rightArrowPath(element) {
   const headX = 100 - headLength;
   const top = 50 - shaftHalfHeight;
   const bottom = 50 + shaftHalfHeight;
-  return `M0 ${formatNumber26(top)}H${formatNumber26(headX)}V0L100 50L${formatNumber26(headX)} 100V${formatNumber26(bottom)}H0Z`;
+  return `M0 ${formatNumber27(top)}H${formatNumber27(headX)}V0L100 50L${formatNumber27(headX)} 100V${formatNumber27(bottom)}H0Z`;
 }
 function leftArrowPath(element) {
   const shaftHalfHeight = halfPercentAdjustment(element, "adj1", 25);
@@ -44609,14 +45112,14 @@ function leftArrowPath(element) {
   const headX = headLength;
   const top = 50 - shaftHalfHeight;
   const bottom = 50 + shaftHalfHeight;
-  return `M100 ${formatNumber26(top)}H${formatNumber26(headX)}V0L0 50L${formatNumber26(headX)} 100V${formatNumber26(bottom)}H100Z`;
+  return `M100 ${formatNumber27(top)}H${formatNumber27(headX)}V0L0 50L${formatNumber27(headX)} 100V${formatNumber27(bottom)}H100Z`;
 }
 function upArrowPath(element) {
   const shaftHalfWidth = halfPercentAdjustment(element, "adj1", 25);
   const headLength = arrowHeadLengthVerticalPercent(element, "adj2", 50);
   const left = 50 - shaftHalfWidth;
   const right = 50 + shaftHalfWidth;
-  return `M${formatNumber26(left)} 100V${formatNumber26(headLength)}H0L50 0L100 ${formatNumber26(headLength)}H${formatNumber26(right)}V100Z`;
+  return `M${formatNumber27(left)} 100V${formatNumber27(headLength)}H0L50 0L100 ${formatNumber27(headLength)}H${formatNumber27(right)}V100Z`;
 }
 function downArrowPath(element) {
   const shaftHalfWidth = halfPercentAdjustment(element, "adj1", 25);
@@ -44624,7 +45127,7 @@ function downArrowPath(element) {
   const headY = 100 - headLength;
   const left = 50 - shaftHalfWidth;
   const right = 50 + shaftHalfWidth;
-  return `M${formatNumber26(left)} 0V${formatNumber26(headY)}H0L50 100L100 ${formatNumber26(headY)}H${formatNumber26(right)}V0Z`;
+  return `M${formatNumber27(left)} 0V${formatNumber27(headY)}H0L50 100L100 ${formatNumber27(headY)}H${formatNumber27(right)}V0Z`;
 }
 function leftRightArrowPath(element) {
   const shaftHalfHeight = halfPercentAdjustment(element, "adj1", 25);
@@ -44633,7 +45136,7 @@ function leftRightArrowPath(element) {
   const rightHeadX = 100 - headLength;
   const top = 50 - shaftHalfHeight;
   const bottom = 50 + shaftHalfHeight;
-  return `M0 50L${formatNumber26(leftHeadX)} 0V${formatNumber26(top)}H${formatNumber26(rightHeadX)}V0L100 50L${formatNumber26(rightHeadX)} 100V${formatNumber26(bottom)}H${formatNumber26(leftHeadX)}V100Z`;
+  return `M0 50L${formatNumber27(leftHeadX)} 0V${formatNumber27(top)}H${formatNumber27(rightHeadX)}V0L100 50L${formatNumber27(rightHeadX)} 100V${formatNumber27(bottom)}H${formatNumber27(leftHeadX)}V100Z`;
 }
 function upDownArrowPath(element) {
   const shaftHalfWidth = halfPercentAdjustment(element, "adj1", 25);
@@ -44642,7 +45145,7 @@ function upDownArrowPath(element) {
   const bottomHeadY = 100 - headLength;
   const left = 50 - shaftHalfWidth;
   const right = 50 + shaftHalfWidth;
-  return `M50 0L100 ${formatNumber26(topHeadY)}H${formatNumber26(right)}V${formatNumber26(bottomHeadY)}H100L50 100L0 ${formatNumber26(bottomHeadY)}H${formatNumber26(left)}V${formatNumber26(topHeadY)}H0Z`;
+  return `M50 0L100 ${formatNumber27(topHeadY)}H${formatNumber27(right)}V${formatNumber27(bottomHeadY)}H100L50 100L0 ${formatNumber27(bottomHeadY)}H${formatNumber27(left)}V${formatNumber27(topHeadY)}H0Z`;
 }
 function quadArrowPath(element) {
   const a2 = percentAdjustmentWithMax2(element, "adj2", 22.5, 50);
@@ -44666,7 +45169,7 @@ function quadArrowPath(element) {
   const y3 = 50 - dy3;
   const y4 = 50 + dy3;
   const y6 = 100 - y1;
-  return `M0 50L${formatNumber26(x1)} ${formatNumber26(y2)}V${formatNumber26(y3)}H${formatNumber26(x3)}V${formatNumber26(y1)}H${formatNumber26(x2)}L50 0L${formatNumber26(x5)} ${formatNumber26(y1)}H${formatNumber26(x4)}V${formatNumber26(y3)}H${formatNumber26(x6)}V${formatNumber26(y2)}L100 50L${formatNumber26(x6)} ${formatNumber26(y5)}V${formatNumber26(y4)}H${formatNumber26(x4)}V${formatNumber26(y6)}H${formatNumber26(x5)}L50 100L${formatNumber26(x2)} ${formatNumber26(y6)}H${formatNumber26(x3)}V${formatNumber26(y4)}H${formatNumber26(x1)}V${formatNumber26(y5)}Z`;
+  return `M0 50L${formatNumber27(x1)} ${formatNumber27(y2)}V${formatNumber27(y3)}H${formatNumber27(x3)}V${formatNumber27(y1)}H${formatNumber27(x2)}L50 0L${formatNumber27(x5)} ${formatNumber27(y1)}H${formatNumber27(x4)}V${formatNumber27(y3)}H${formatNumber27(x6)}V${formatNumber27(y2)}L100 50L${formatNumber27(x6)} ${formatNumber27(y5)}V${formatNumber27(y4)}H${formatNumber27(x4)}V${formatNumber27(y6)}H${formatNumber27(x5)}L50 100L${formatNumber27(x2)} ${formatNumber27(y6)}H${formatNumber27(x3)}V${formatNumber27(y4)}H${formatNumber27(x1)}V${formatNumber27(y5)}Z`;
 }
 function notchedRightArrowPath(element) {
   const a1 = percentAdjustmentWithMax2(element, "adj1", 50, 100);
@@ -44675,12 +45178,12 @@ function notchedRightArrowPath(element) {
   const y1 = 50 - a1 / 2;
   const y2 = 50 + a1 / 2;
   const notchX = shortestSideToWidthPercent4(element, a1 * a2 / 100);
-  return `M0 ${formatNumber26(y1)}H${formatNumber26(headX)}V0L100 50L${formatNumber26(headX)} 100V${formatNumber26(y2)}H0L${formatNumber26(notchX)} 50Z`;
+  return `M0 ${formatNumber27(y1)}H${formatNumber27(headX)}V0L100 50L${formatNumber27(headX)} 100V${formatNumber27(y2)}H0L${formatNumber27(notchX)} 50Z`;
 }
 function plusPath(element) {
   const arm = percentAdjustment3(element, "adj", 38);
   const opposite = 100 - arm;
-  return `M${formatNumber26(arm)} 0H${formatNumber26(opposite)}V${formatNumber26(arm)}H100V${formatNumber26(opposite)}H${formatNumber26(opposite)}V100H${formatNumber26(arm)}V${formatNumber26(opposite)}H0V${formatNumber26(arm)}H${formatNumber26(arm)}Z`;
+  return `M${formatNumber27(arm)} 0H${formatNumber27(opposite)}V${formatNumber27(arm)}H100V${formatNumber27(opposite)}H${formatNumber27(opposite)}V100H${formatNumber27(arm)}V${formatNumber27(opposite)}H0V${formatNumber27(arm)}H${formatNumber27(arm)}Z`;
 }
 function donutPath(element) {
   const innerRadius = percentAdjustment3(element, "adj", 25);
@@ -44688,12 +45191,12 @@ function donutPath(element) {
   if (innerRadius <= 0) return outerPath;
   const top = 50 - innerRadius;
   const bottom = 50 + innerRadius;
-  return `${outerPath}ZM50 ${formatNumber26(top)}A${formatNumber26(innerRadius)} ${formatNumber26(innerRadius)} 0 1 0 50 ${formatNumber26(bottom)}A${formatNumber26(innerRadius)} ${formatNumber26(innerRadius)} 0 1 0 50 ${formatNumber26(top)}Z`;
+  return `${outerPath}ZM50 ${formatNumber27(top)}A${formatNumber27(innerRadius)} ${formatNumber27(innerRadius)} 0 1 0 50 ${formatNumber27(bottom)}A${formatNumber27(innerRadius)} ${formatNumber27(innerRadius)} 0 1 0 50 ${formatNumber27(top)}Z`;
 }
 function snip1RectPath(element) {
   const snip = percentAdjustment3(element, "adj", 16.667);
   const start = 100 - snip;
-  return `M0 0H${formatNumber26(start)}L100 ${formatNumber26(snip)}V100H0Z`;
+  return `M0 0H${formatNumber27(start)}L100 ${formatNumber27(snip)}V100H0Z`;
 }
 function snipRoundRectPath(element) {
   const round11 = percentAdjustment3(element, "adj1", 16.667);
@@ -44703,8 +45206,8 @@ function snipRoundRectPath(element) {
   const snipX = shortestSideToWidthPercent4(element, snip);
   const snipY = shortestSideToHeightPercent4(element, snip);
   const x2 = 100 - snipX;
-  const topLeft = roundX > 0 && roundY > 0 ? `V${formatNumber26(roundY)}A${formatNumber26(roundX)} ${formatNumber26(roundY)} 0 0 1 ${formatNumber26(roundX)} 0` : "V0";
-  return `M${formatNumber26(roundX)} 0H${formatNumber26(x2)}L100 ${formatNumber26(snipY)}V100H0${topLeft}Z`;
+  const topLeft = roundX > 0 && roundY > 0 ? `V${formatNumber27(roundY)}A${formatNumber27(roundX)} ${formatNumber27(roundY)} 0 0 1 ${formatNumber27(roundX)} 0` : "V0";
+  return `M${formatNumber27(roundX)} 0H${formatNumber27(x2)}L100 ${formatNumber27(snipY)}V100H0${topLeft}Z`;
 }
 function roundRectPath(element) {
   const geometry = element?.geometry;
@@ -44715,10 +45218,10 @@ function roundRectPath(element) {
   const rx = Math.min(50, radiusPx / width * 100);
   const ry = Math.min(50, radiusPx / height * 100);
   if (rx <= 0 || ry <= 0) return "M0 0H100V100H0Z";
-  const x = formatNumber26(rx);
-  const y = formatNumber26(ry);
-  const right = formatNumber26(100 - rx);
-  const bottom = formatNumber26(100 - ry);
+  const x = formatNumber27(rx);
+  const y = formatNumber27(ry);
+  const right = formatNumber27(100 - rx);
+  const bottom = formatNumber27(100 - ry);
   return `M${x} 0H${right}Q100 0 100 ${y}V${bottom}Q100 100 ${right} 100H${x}Q0 100 0 ${bottom}V${y}Q0 0 ${x} 0Z`;
 }
 function angleAdjustment(element, name, fallback) {
@@ -44804,7 +45307,7 @@ function positiveSweepDegrees2(startAngle, endAngle) {
 function normalizeDegrees(value) {
   return (value % 360 + 360) % 360;
 }
-function formatNumber26(value) {
+function formatNumber27(value) {
   return Number(value.toFixed(3)).toString();
 }
 
@@ -44948,6 +45451,7 @@ ${indent}</filter>`;
 // src/render/renderPictureFilterDefs.ts
 function renderPictureFilterDefs(slide) {
   const filters = imageElements(slide.elements).flatMap((element) => [
+    ...renderBiLevelFilter(slide.id, element),
     ...renderDuotoneFilter(slide.id, element),
     ...renderSharpenFilter(slide.id, element)
   ]);
@@ -44970,8 +45474,35 @@ function pictureDuotoneFilterId(slideId, element) {
 function pictureDuotoneFilterUrl(slideId, element) {
   return duotoneColors(element).length >= 2 ? `url(#${pictureDuotoneFilterId(slideId, element)})` : void 0;
 }
+function pictureBiLevelFilterId(slideId, element) {
+  return `${slideId}-${element.id}-bi-level-filter`;
+}
+function pictureBiLevelFilterUrl(slideId, element) {
+  return biLevelThreshold(element) != null ? `url(#${pictureBiLevelFilterId(slideId, element)})` : void 0;
+}
 function pictureSharpenFilterId(slideId, element) {
   return sharpenSvgFilterId(`${slideId}-${element.id}`, element.effects);
+}
+function renderBiLevelFilter(slideId, element) {
+  const threshold = biLevelThreshold(element);
+  if (threshold == null) return [];
+  const id = escapeHtml(pictureBiLevelFilterId(slideId, element));
+  const intercept = formatNumber28(0.5 - threshold);
+  return [`        <filter id="${id}" color-interpolation-filters="sRGB">
+          <feColorMatrix type="matrix" values="0.2126 0.7152 0.0722 0 0 0.2126 0.7152 0.0722 0 0 0.2126 0.7152 0.0722 0 0 0 0 0 1 0" result="luminance"/>
+          <feComponentTransfer in="luminance" result="thresholdShift">
+            <feFuncR type="linear" slope="1" intercept="${intercept}"/>
+            <feFuncG type="linear" slope="1" intercept="${intercept}"/>
+            <feFuncB type="linear" slope="1" intercept="${intercept}"/>
+            <feFuncA type="identity"/>
+          </feComponentTransfer>
+          <feComponentTransfer in="thresholdShift">
+            <feFuncR type="discrete" tableValues="0 1"/>
+            <feFuncG type="discrete" tableValues="0 1"/>
+            <feFuncB type="discrete" tableValues="0 1"/>
+            <feFuncA type="identity"/>
+          </feComponentTransfer>
+        </filter>`];
 }
 function renderDuotoneFilter(slideId, element) {
   const colors = duotoneColors(element);
@@ -44997,6 +45528,13 @@ function renderSharpenFilter(slideId, element) {
 function duotoneColors(element) {
   const colors = element.effects?.duotone?.colors;
   return Array.isArray(colors) ? colors.filter((color) => typeof color === "string") : [];
+}
+function biLevelThreshold(element) {
+  const threshold = element.effects?.biLevel?.threshold;
+  return typeof threshold === "number" && Number.isFinite(threshold) ? Math.max(0, Math.min(1, threshold)) : void 0;
+}
+function formatNumber28(value) {
+  return Number(value.toFixed(4)).toString();
 }
 function rgb01(color) {
   const match = color.match(/^#([0-9a-f]{6})$/i);
@@ -45069,11 +45607,15 @@ ${declarations.map((item) => `  ${item};`).join("\n")}
 }
 function pictureEffectOrder(effects) {
   const order = Array.isArray(effects?.effectOrder) ? effects.effectOrder : [];
-  const fallback = ["grayscale", "luminance", "saturation", "colorTemperature", "sharpenSoften", "duotone", "outerShadow", "glow", "blur"];
+  const fallback = ["grayscale", "biLevel", "luminance", "saturation", "colorTemperature", "sharpenSoften", "duotone", "outerShadow", "glow", "blur"];
   return [...order, ...fallback].filter((name, index, values) => values.indexOf(name) === index);
 }
 function pictureEffectFilterToCss(name, effects, slideId, element, options) {
   if (name === "grayscale" && effects?.grayscale?.enabled) return ["grayscale(1)"];
+  if (name === "biLevel") {
+    const svgFilter = slideId && element ? pictureBiLevelFilterUrl(slideId, element) : void 0;
+    return svgFilter ? [svgFilter] : [];
+  }
   if (name === "luminance") {
     return [
       effects?.luminance?.brightness != null ? `brightness(${cssNumber4(effects.luminance.brightness)})` : void 0,
@@ -45128,6 +45670,7 @@ function imageFillAttributes(fill, assetPrefix) {
   if (fill?.type !== "image") return "";
   const fillRect = fill.fillRect;
   const effects = fill.effects ?? {};
+  const grayscale = effects.grayscale;
   const luminance = effects.luminance;
   const saturation = effects.saturation;
   const colorTemperature = effects.colorTemperature;
@@ -45144,6 +45687,7 @@ function imageFillAttributes(fill, assetPrefix) {
     fillRect?.top != null ? ` data-fill-rect-top="${escapeHtml(String(fillRect.top))}"` : void 0,
     fillRect?.right != null ? ` data-fill-rect-right="${escapeHtml(String(fillRect.right))}"` : void 0,
     fillRect?.bottom != null ? ` data-fill-rect-bottom="${escapeHtml(String(fillRect.bottom))}"` : void 0,
+    grayscale?.enabled === true ? ` data-fill-grayscale="true"` : void 0,
     luminance?.enabled === true ? ` data-fill-luminance="true"` : void 0,
     luminance?.bright != null ? ` data-fill-luminance-bright="${escapeHtml(String(luminance.bright))}"` : void 0,
     luminance?.contrast != null ? ` data-fill-luminance-contrast="${escapeHtml(String(luminance.contrast))}"` : void 0,
@@ -45198,7 +45742,7 @@ function formatPatternNumber(value) {
 }
 function hasPictureEffects(fill) {
   const effects = fill?.effects;
-  const metadataOnly = /* @__PURE__ */ new Set(["effectOrder", "luminance", "saturation", "colorTemperature", "sharpenSoften", "backgroundRemoval"]);
+  const metadataOnly = /* @__PURE__ */ new Set(["effectOrder", "grayscale", "luminance", "saturation", "colorTemperature", "sharpenSoften", "backgroundRemoval"]);
   const blocking = Object.keys(effects ?? {}).filter((key) => !metadataOnly.has(key));
   return blocking.length > 0;
 }
@@ -45250,7 +45794,7 @@ function isConnectorGeometry(shapeType) {
 function isShapeSvgElement(element) {
   const shapeType = element.shapeType;
   if (shapeType === "custGeom") return customShapeGeometry(element) != null;
-  return isSvgGeometry(shapeType) || isBasicSvgLineGeometry(shapeType) && hasLinearGradientLine(element);
+  return isSvgGeometry(shapeType) || isBasicSvgLineGeometry(shapeType) && hasSvgOnlyLineFill(element);
 }
 function renderShapeSvg(element, assetPrefix = "") {
   const shapeType = String(element.shapeType ?? "rect");
@@ -45286,8 +45830,9 @@ ${defs}      ${geometryElement(geometry, "none", stroke.attrs)}
 function isBasicSvgLineGeometry(shapeType) {
   return typeof shapeType === "string" && ["rect", "ellipse", "roundRect"].includes(shapeType);
 }
-function hasLinearGradientLine(element) {
+function hasSvgOnlyLineFill(element) {
   const fill = element.line?.fill;
+  if (fill?.type === "pattern") return true;
   return fill?.type === "gradient" && fill?.kind === "linear" && Array.isArray(fill.stops);
 }
 function renderConnectorSvg(element) {
@@ -45297,6 +45842,7 @@ function renderConnectorSvg(element) {
   const markerPaint = stroke.markerPaint;
   const strokeWidth = line8.width ?? 1;
   const dash = svgDashArray(line8.dash, strokeWidth);
+  const miterLimit = miterLimitValue(line8.miterLimitRaw);
   const markerDefs = renderMarkerDefsContent(element, markerPaint);
   const markerStart = markerUrl(element, "head", line8.headEnd);
   const markerEnd = markerUrl(element, "tail", line8.tailEnd);
@@ -45311,6 +45857,7 @@ function renderConnectorSvg(element) {
     `stroke-width="${escapeHtml(String(strokeWidth))}"`,
     `stroke-linecap="${svgLineCap(line8.cap)}"`,
     `stroke-linejoin="${svgLineJoin(line8.join)}"`,
+    miterLimit ? `stroke-miterlimit="${miterLimit}"` : void 0,
     dash ? `stroke-dasharray="${dash}"` : void 0,
     markerAttrs || void 0
   ].filter(Boolean).join(" ");
@@ -45346,7 +45893,7 @@ function geometryPartElement(geometry, fill, stroke) {
 function connectorPath(shapeType, element) {
   switch (shapeType) {
     case "bentConnector3":
-      return `M0 0H${formatNumber27(connectorAdjustment(element, "adj1", 50))}V100H100`;
+      return `M0 0H${formatNumber29(connectorAdjustment(element, "adj1", 50))}V100H100`;
     case "bentConnector4":
       return bentConnector4Path(element);
     case "curvedConnector3":
@@ -45366,12 +45913,12 @@ function curvedConnector3Path(element) {
   const x2 = connectorAdjustment(element, "adj1", 50);
   const x1 = x2 / 2;
   const x3 = (100 + x2) / 2;
-  return `M0 0C${formatNumber27(x1)} 0 ${formatNumber27(x2)} 25 ${formatNumber27(x2)} 50C${formatNumber27(x2)} 75 ${formatNumber27(x3)} 100 100 100`;
+  return `M0 0C${formatNumber29(x1)} 0 ${formatNumber29(x2)} 25 ${formatNumber29(x2)} 50C${formatNumber29(x2)} 75 ${formatNumber29(x3)} 100 100 100`;
 }
 function bentConnector4Path(element) {
   const x = connectorAdjustment(element, "adj1", 50);
   const y = connectorAdjustment(element, "adj2", 50);
-  return `M0 0H${formatNumber27(x)}V${formatNumber27(y)}H100V100`;
+  return `M0 0H${formatNumber29(x)}V${formatNumber29(y)}H100V100`;
 }
 function paintFill(element, assetPrefix = "") {
   const fill = element.fill ?? {};
@@ -45433,6 +45980,17 @@ function paintStroke(element) {
       defs: linearStrokeGradientDef(id, gradient)
     };
   }
+  if (line8.fill?.type === "pattern") {
+    const id = `${element.id}-line-pattern`;
+    const value = `url(#${escapeHtml(id)})`;
+    const attrs2 = strokeAttributes(line8, line8.width ?? 1, value);
+    return {
+      attrs: attrs2.join(" "),
+      value,
+      markerPaint: line8.color,
+      defs: patternFillDef(id, line8.fill)
+    };
+  }
   const attrs = strokeAttributes(line8, line8.width ?? 1);
   return {
     attrs: attrs.join(" "),
@@ -45448,11 +46006,13 @@ function linearStrokeGradientDef(id, fill) {
 }
 function strokeAttributes(line8, width, color = line8.color, dashWidth = width) {
   const dash = svgDashArray(line8.dash, dashWidth);
+  const miterLimit = miterLimitValue(line8.miterLimitRaw);
   return [
     `stroke="${escapeHtml(color)}"`,
-    `stroke-width="${escapeHtml(formatNumber27(width))}"`,
+    `stroke-width="${escapeHtml(formatNumber29(width))}"`,
     `stroke-linecap="${svgLineCap(line8.cap)}"`,
     `stroke-linejoin="${svgLineJoin(line8.join)}"`,
+    miterLimit ? `stroke-miterlimit="${miterLimit}"` : void 0,
     dash ? `stroke-dasharray="${dash}"` : void 0
   ].filter(Boolean);
 }
@@ -45470,7 +46030,7 @@ function renderCompoundPaths(path8, attrs, line8, markerAttrs = "", direction = 
     return `      <path d="${escapedPath}" fill="none" ${strokeAttrs2}${transformAttribute(direction, alignOffset + stroke.offset)} data-line-compound-part="${stroke.part}"></path>`;
   });
   if (markerAttrs) {
-    paths.push(`      <path d="${escapedPath}" fill="none" stroke="transparent" stroke-width="${escapeHtml(formatNumber27(width))}" ${markerAttrs}${transformAttribute(direction, alignOffset)} data-line-compound-part="marker"></path>`);
+    paths.push(`      <path d="${escapedPath}" fill="none" stroke="transparent" stroke-width="${escapeHtml(formatNumber29(width))}" ${markerAttrs}${transformAttribute(direction, alignOffset)} data-line-compound-part="marker"></path>`);
   }
   return paths.join("\n");
 }
@@ -45517,12 +46077,16 @@ function lineAlignmentOffset(align, width) {
 }
 function transformAttribute(direction, offset) {
   if (Math.abs(offset) < 1e-3) return "";
-  const x = formatNumber27(direction.x * offset);
-  const y = formatNumber27(direction.y * offset);
+  const x = formatNumber29(direction.x * offset);
+  const y = formatNumber29(direction.y * offset);
   return ` transform="translate(${x} ${y})"`;
 }
-function formatNumber27(value) {
+function formatNumber29(value) {
   return Number(value.toFixed(3)).toString();
+}
+function miterLimitValue(value) {
+  const raw = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(raw) && raw > 0 ? formatNumber29(raw / 1e5) : void 0;
 }
 function lineAttributes(line8) {
   const fill = line8.fill ?? {};
@@ -45531,10 +46095,14 @@ function lineAttributes(line8) {
     line8.align ? ` data-line-align="${escapeHtml(line8.align)}"` : void 0,
     line8.cap ? ` data-line-cap="${escapeHtml(line8.cap)}"` : void 0,
     line8.join ? ` data-line-join="${escapeHtml(line8.join)}"` : void 0,
+    line8.miterLimitRaw != null ? ` data-line-miter-limit-raw="${escapeHtml(String(line8.miterLimitRaw))}"` : void 0,
     line8.dash ? ` data-line-dash="${escapeHtml(line8.dash)}"` : void 0,
     dashMetadata(line8.dash) ? ` data-line-dasharray="${escapeHtml(dashMetadata(line8.dash) ?? "")}"` : void 0,
     line8.width != null ? ` data-line-width="${escapeHtml(String(line8.width))}"` : void 0,
     fill.type ? ` data-line-fill-type="${escapeHtml(fill.type)}"` : void 0,
+    fill.pattern ? ` data-line-pattern="${escapeHtml(fill.pattern)}"` : void 0,
+    fill.foregroundColor ? ` data-line-pattern-foreground-color="${escapeHtml(fill.foregroundColor)}"` : void 0,
+    fill.backgroundColor ? ` data-line-pattern-background-color="${escapeHtml(fill.backgroundColor)}"` : void 0,
     fill.kind ? ` data-line-gradient-kind="${escapeHtml(fill.kind)}"` : void 0,
     fill.angle != null ? ` data-line-gradient-angle="${escapeHtml(String(fill.angle))}"` : void 0,
     Array.isArray(fill.stops) ? ` data-line-gradient-stop-count="${escapeHtml(String(fill.stops.length))}"` : void 0,
@@ -45683,6 +46251,81 @@ function cssNumber5(value) {
   return Number(value.toFixed(4));
 }
 
+// src/render/renderBackgroundCss.ts
+function backgroundDeclarations(fill, assetPrefix) {
+  if (fill?.type !== "image") return [fillToCss(fill)];
+  if (!fill.src || fill.unsupported) return ["background: transparent"];
+  return [
+    `background-image: ${cssUrl(assetPrefix + fill.src)}`,
+    `background-repeat: ${fill.fillMode === "tile" ? "repeat" : "no-repeat"}`,
+    `background-position: ${backgroundImagePosition(fill)}`,
+    `background-size: ${backgroundImageSize(fill)}`
+  ];
+}
+function fillToCss(fill) {
+  if (fill?.type === "solid") return `background: ${fill.color}`;
+  if (fill?.type === "gradient" && Array.isArray(fill.stops)) {
+    const stops = gradientStopsToCss(fill.stops);
+    if (fill.kind === "path") return `background: ${radialGradientCss(fill, stops)}`;
+    const angle = typeof fill.angle === "number" ? fill.angle : 180;
+    return `background: linear-gradient(${angle}deg, ${stops})`;
+  }
+  if (fill?.type === "pattern") return renderPatternFillCss(fill);
+  return "background: transparent";
+}
+function imageFitToCss(fillMode) {
+  if (fillMode === "stretch") return "fill";
+  return "cover";
+}
+function tilePositionToCss(tile) {
+  const [x, y] = tileAlignmentToPercent(tile?.algn);
+  return `${positionAxisToCss(x, tile?.offsetX)} ${positionAxisToCss(y, tile?.offsetY)}`;
+}
+function tileSizeToCss(tile) {
+  const scaleX = finiteNumber2(tile?.scaleX);
+  const scaleY = finiteNumber2(tile?.scaleY);
+  if (scaleX == null && scaleY == null) return "auto";
+  return `${cssNumber6((scaleX ?? 1) * 100)}% ${cssNumber6((scaleY ?? 1) * 100)}%`;
+}
+function backgroundImagePosition(fill) {
+  if (fill.fillMode === "tile") return tilePositionToCss(fill.tile);
+  if (fill.crop) {
+    return `${cropBackgroundPositionAxis(fill.crop.left, fill.crop.right)} ${cropBackgroundPositionAxis(fill.crop.top, fill.crop.bottom)}`;
+  }
+  return "center";
+}
+function backgroundImageSize(fill) {
+  if (fill.fillMode === "tile") return tileSizeToCss(fill.tile);
+  if (fill.crop) return cropBackgroundSize(fill.crop);
+  return fill.fillMode === "stretch" ? "100% 100%" : "cover";
+}
+function cssUrl(value) {
+  return `url("${value.replace(/["\\\n\r\f]/g, "\\$&")}")`;
+}
+function tileAlignmentToPercent(alignment) {
+  if (alignment === "t") return [50, 0];
+  if (alignment === "tr") return [100, 0];
+  if (alignment === "l") return [0, 50];
+  if (alignment === "ctr") return [50, 50];
+  if (alignment === "r") return [100, 50];
+  if (alignment === "bl") return [0, 100];
+  if (alignment === "b") return [50, 100];
+  if (alignment === "br") return [100, 100];
+  return [0, 0];
+}
+function positionAxisToCss(percent2, offset) {
+  const offsetNumber = finiteNumber2(offset) ?? 0;
+  if (offsetNumber === 0) return `${percent2}%`;
+  const operator = offsetNumber < 0 ? "-" : "+";
+  return `calc(${percent2}% ${operator} ${cssNumber6(Math.abs(offsetNumber))}px)`;
+}
+function cssNumber6(value) {
+  return Number(value.toFixed(4)).toString();
+}
+function finiteNumber2(value) {
+  return typeof value === "number" && Number.isFinite(value) ? value : void 0;
+}
+
 // src/render/renderGeometryCss.ts
 function geometryBorderRadiusDeclaration(element) {
   const shapeType = element.shapeType;
@@ -45693,15 +46336,108 @@ function geometryBorderRadiusDeclaration(element) {
 function roundRectRadius(element) {
   const geometry = element.geometry;
   const ratio = typeof geometry?.roundRadiusRatio === "number" ? geometry.roundRadiusRatio : 1 / 6;
-  return cssNumber6(Math.max(0, Math.min(element.box.w, element.box.h) * ratio));
+  return cssNumber7(Math.max(0, Math.min(element.box.w, element.box.h) * ratio));
 }
-function cssNumber6(value) {
+function cssNumber7(value) {
   return Number.isInteger(value) ? String(value) : value.toFixed(2).replace(/\.?0+$/, "");
+}
+
+// src/render/renderImageSourceCss.ts
+function renderImageFillAreaCss(slideId, element) {
+  const crop = element.crop;
+  const fillRect = element.fillRect;
+  if (!crop || element.fillMode === "tile") return "";
+  const rect = imageSourceRectForFillRect(fillRect);
+  if (!rect) return "";
+  const declarations = [
+    "position: absolute",
+    "display: block",
+    "overflow: hidden",
+    `left: ${cssNumber8(rect.left)}%`,
+    `top: ${cssNumber8(rect.top)}%`,
+    `width: ${cssNumber8(rect.width)}%`,
+    `height: ${cssNumber8(rect.height)}%`
+  ];
+  return `[data-slide-id="${slideId}"] [data-element-id="${element.id}"] > .image-fill-area {
+${declarations.map((item) => `  ${item};`).join("\n")}
+}`;
+}
+function renderImageSourceCss(slideId, element) {
+  const crop = element.crop;
+  const fillRect = element.fillRect;
+  if (element.fillMode === "tile") return "";
+  const hasFillArea = Boolean(crop && hasInsetFillRect(fillRect));
+  const sourceRect = crop ? imageSourceRectForCrop(crop) : imageSourceRectForFillRect(fillRect);
+  if (!sourceRect) return "";
+  const declarations = [
+    "position: absolute",
+    `left: ${cssNumber8(sourceRect.left)}%`,
+    `top: ${cssNumber8(sourceRect.top)}%`,
+    `width: ${cssNumber8(sourceRect.width)}%`,
+    `height: ${cssNumber8(sourceRect.height)}%`,
+    "object-fit: fill"
+  ];
+  const selector = hasFillArea ? `[data-slide-id="${slideId}"] [data-element-id="${element.id}"] > .image-fill-area > .image-source` : `[data-slide-id="${slideId}"] [data-element-id="${element.id}"] > .image-source`;
+  return `${selector} {
+${declarations.map((item) => `  ${item};`).join("\n")}
+}`;
+}
+function imageSourceRectForCrop(crop) {
+  const x = cropSourceAxis(crop.left, crop.right);
+  const y = cropSourceAxis(crop.top, crop.bottom);
+  return { left: x.offset, top: y.offset, width: x.size, height: y.size };
+}
+function imageSourceRectForFillRect(fillRect) {
+  if (!hasInsetFillRect(fillRect)) return void 0;
+  const left = finiteNumber3(fillRect?.left) ?? 0;
+  const top = finiteNumber3(fillRect?.top) ?? 0;
+  const right = finiteNumber3(fillRect?.right) ?? 0;
+  const bottom = finiteNumber3(fillRect?.bottom) ?? 0;
+  return {
+    left,
+    top,
+    width: 100 - left - right,
+    height: 100 - top - bottom
+  };
+}
+function hasInsetFillRect(fillRect) {
+  return ["left", "top", "right", "bottom"].some((key) => finiteNumber3(fillRect?.[key]) != null);
+}
+function finiteNumber3(value) {
+  return typeof value === "number" && Number.isFinite(value) ? value : void 0;
+}
+function cssNumber8(value) {
+  return Number(value.toFixed(4)).toString();
+}
+
+// src/render/renderImageElementCss.ts
+function imageElementDeclarations(slideId, element) {
+  const crop = element.crop;
+  const fillRect = element.fillRect;
+  const effects = element.effects ?? {};
+  const fillMode = element.fillMode;
+  const isTile = fillMode === "tile";
+  const tile = element.tile;
+  const hasFillRect = !isTile && hasInsetFillRect(fillRect);
+  const sharpenFilterUrl = pictureSharpenFilterId(slideId, element);
+  const filter = pictureFilterToCss(effects, slideId, element, sharpenFilterUrl ? { sharpenFilterUrl } : {});
+  return [
+    isTile ? "overflow: hidden" : crop || hasFillRect ? "overflow: hidden" : void 0,
+    geometryBorderRadiusDeclaration(element),
+    isTile ? tileFlipCustomProperty(tile) : void 0,
+    isTile ? `background-image: ${imageTileBackgroundImage(tile)}` : void 0,
+    isTile ? "background-repeat: repeat" : void 0,
+    isTile ? `background-position: ${tilePositionToCss(tile)}` : void 0,
+    isTile ? `background-size: ${tileSizeToCss(tile)}` : void 0,
+    !crop && !hasFillRect && fillMode && !isTile ? `object-fit: ${imageFitToCss(fillMode)}` : void 0,
+    effects.alphaModFix?.opacity != null ? `opacity: ${effects.alphaModFix.opacity}` : void 0,
+    filter ? `filter: ${filter}` : void 0
+  ].filter(Boolean);
 }
 
 // src/render/renderParagraphRuns.ts
 function paragraphRunsForRender(paragraph) {
-  const runs = [...paragraph?.runs ?? []];
+  const runs = runsWithTabStops(paragraph);
   const endStyle = paragraph?.endStyle;
   if (hasStyle(endStyle)) {
     runs.push({
@@ -45711,6 +46447,15 @@ function paragraphRunsForRender(paragraph) {
     });
   }
   return runs;
+}
+function runsWithTabStops(paragraph) {
+  const tabStops = Array.isArray(paragraph?.style?.tabStops) ? paragraph.style.tabStops : [];
+  let tabIndex = 0;
+  return (paragraph?.runs ?? []).map((run) => {
+    if (run?.type !== "tab") return run;
+    const tabStop = tabStops[tabIndex++];
+    return tabStop && typeof tabStop === "object" && !Array.isArray(tabStop) ? { ...run, tabStop, tabStopIndex: tabIndex - 1 } : run;
+  });
 }
 function hasStyle(value) {
   return value != null && typeof value === "object" && !Array.isArray(value) && Object.values(value).some((item) => item !== void 0);
@@ -45747,6 +46492,44 @@ function effectiveCssTextDirection(direction, text) {
 }
 function isDirectionMetadataText(text) {
   return text.replace(/[\s\u200b\u200c\u200d\ufeff]/gu, "").length === 0;
+}
+
+// src/render/renderTextFontFamilyCss.ts
+function fontFamilyCssValueForTextStyle(style, text) {
+  const families = [
+    style.symbolFontFamily,
+    style.fontFamily,
+    style.fontFamilyLatin,
+    style.fontFamilyLatinFallback,
+    style.fontFamilyEastAsian,
+    style.fontFamilyComplexScript
+  ].filter((value) => typeof value === "string" && value.trim() !== "");
+  return fontFamilyCssValueForFamilies([...new Set(families)], text);
+}
+function fontFamilyCssValueForFamilies(families, text) {
+  const unique5 = preferLatinFontForLatinText(fontFamiliesWithWebFallbacks(families), text);
+  return unique5.length > 0 ? [...unique5, "var(--font-primary)"].join(", ") : void 0;
+}
+function containsCjk(text) {
+  return typeof text === "string" && /[\u3400-\u9fff\uf900-\ufaff]/u.test(text);
+}
+function preferLatinFontForLatinText(families, text) {
+  if (!isLatinOnlyText(text) || families.length < 2) return families;
+  const first = families[0];
+  if (!first || !isCjkUiFont(first)) return families;
+  const latinIndex = families.findIndex((family) => isCommonLatinFont(family));
+  if (latinIndex <= 0) return families;
+  const latin = families[latinIndex];
+  return [latin, ...families.filter((_, index) => index !== latinIndex)];
+}
+function isLatinOnlyText(text) {
+  return typeof text === "string" && /[A-Za-z0-9]/u.test(text) && !containsCjk(text);
+}
+function isCjkUiFont(fontFamily) {
+  return /(?:Microsoft YaHei|微软雅黑|Noto Sans CJK|Noto Sans SC|Source Han Sans|思源黑体|SimHei|黑体|SimSun|宋体|PingFang SC|Hiragino Sans GB)/i.test(fontFamily);
+}
+function isCommonLatinFont(fontFamily) {
+  return /^(?:Arial|Aptos|Calibri|Helvetica|Segoe UI|Times New Roman|Georgia|Verdana|Tahoma)$/i.test(fontFamily.trim());
 }
 
 // src/render/renderTextFit.ts
@@ -45821,6 +46604,7 @@ function paragraphStyleDeclarations(style, bullet, text) {
     ...textAlignDeclarations(style.textAlign),
     direction ? `direction: ${direction}` : void 0,
     style.tabSize ? `tab-size: ${style.tabSize}` : void 0,
+    style.tabSize ? `--ppt-tab-leader-width: ${style.tabSize}` : void 0,
     tabStopsCount ? `--ppt-tab-stop-count: ${tabStopsCount}` : void 0,
     tabStops ? `--ppt-tab-stops: "${escapeCssString(tabStops)}"` : void 0,
     style.fontAlign ? `vertical-align: ${fontAlignToCss(String(style.fontAlign))}` : void 0,
@@ -45889,15 +46673,12 @@ function cssValue(value) {
   if (value && typeof value === "object" && typeof value.cssValue === "string") return value.cssValue;
   return void 0;
 }
-function containsCjk(text) {
-  return typeof text === "string" && /[\u3400-\u9fff\uf900-\ufaff]/u.test(text);
-}
 function renderRunCss(slideId, element) {
   const paragraphs = element.text?.paragraphs ?? [];
   const autoFit = element.text?.bodyStyle?.autoFit;
   return paragraphs.flatMap((paragraph, paragraphIndex) => {
     return paragraphRunsForRender(paragraph).map((run, runIndex) => {
-      const declarations = runStyleDeclarationsForText(run.style ?? {}, autoFit, run.text);
+      const declarations = runStyleDeclarationsForText(run.style ?? {}, autoFit, run.text, paragraph.style ?? {});
       if (declarations.length === 0) return "";
       return `[data-slide-id="${slideId}"] [data-element-id="${element.id}"] [data-paragraph-index="${paragraphIndex}"] [data-run-index="${runIndex}"] {
 ${declarations.map((item) => `  ${item};`).join("\n")}
@@ -45910,18 +46691,19 @@ function renderListMarkerCss(slideId, element, assetPrefix) {
   const autoFit = element.text?.bodyStyle?.autoFit;
   return paragraphs.map((paragraph, index) => {
     const bullet = paragraph?.bullet ?? {};
-    const declarations = listMarkerDeclarations(bullet, firstVisibleRunStyle(paragraph), autoFit, assetPrefix);
+    const visibleRun = firstVisibleRun(paragraph);
+    const declarations = listMarkerDeclarations(bullet, visibleRun?.style ?? {}, visibleRun?.text, autoFit, assetPrefix);
     if (declarations.length === 0) return "";
     return `[data-slide-id="${slideId}"] [data-element-id="${element.id}"] [data-paragraph-index="${index}"]::before {
 ${declarations.map((item) => `  ${item};`).join("\n")}
 }`;
   }).filter(Boolean).join("\n\n");
 }
-function listMarkerDeclarations(bullet, textStyle, autoFit, assetPrefix) {
+function listMarkerDeclarations(bullet, textStyle, text, autoFit, assetPrefix) {
   if (bullet.type === "bullet" && typeof bullet.char === "string") {
     return [
       ...markerBaseDeclarations(`"${escapeCssString(bullet.char)}"`),
-      ...markerStyleDeclarations(bullet, textStyle, autoFit)
+      ...markerStyleDeclarations(bullet, textStyle, text, autoFit)
     ];
   }
   if (bullet.type === "number") {
@@ -45929,7 +46711,7 @@ function listMarkerDeclarations(bullet, textStyle, autoFit, assetPrefix) {
     return [
       "counter-increment: ppt-list",
       ...markerBaseDeclarations(numberFormatContent(format)),
-      ...markerStyleDeclarations(bullet, textStyle, autoFit)
+      ...markerStyleDeclarations(bullet, textStyle, text, autoFit)
     ];
   }
   if (bullet.type === "image" && typeof bullet.src === "string" && bullet.unsupported !== true) {
@@ -45940,27 +46722,31 @@ function listMarkerDeclarations(bullet, textStyle, autoFit, assetPrefix) {
   }
   return [];
 }
-function markerStyleDeclarations(bullet, textStyle, autoFit) {
+function markerStyleDeclarations(bullet, textStyle, text, autoFit) {
   const textFontSize = scaledRunFontSize(textStyle, autoFit);
   return [
     markerColorDeclaration(bullet, textStyle),
-    markerFontFamilyDeclaration(bullet, textStyle),
+    markerFontFamilyDeclaration(bullet, textStyle, text),
     typeof bullet.sizeCss === "string" ? `font-size: ${bullet.sizeCss}` : bullet.sizeFollowText ? markerFontSizeDeclaration(textFontSize) : void 0
   ].filter(Boolean);
 }
-function firstVisibleRunStyle(paragraph) {
+function firstVisibleRun(paragraph) {
   const run = paragraphRunsForRender(paragraph).find((item) => item?.text && item.type !== "break" && item.type !== "tab");
-  return run?.style ?? {};
+  return run ? { text: run.text, style: run.style ?? {} } : void 0;
 }
 function markerColorDeclaration(bullet, textStyle) {
   if (typeof bullet.color === "string") return `color: ${bullet.color}`;
   if (!bullet.colorFollowText) return void 0;
   return typeof textStyle.color === "string" ? `color: ${textStyle.color}` : "color: inherit";
 }
-function markerFontFamilyDeclaration(bullet, textStyle) {
-  if (typeof bullet.fontFamily === "string") return `font-family: ${bullet.fontFamily}, var(--font-primary)`;
+function markerFontFamilyDeclaration(bullet, textStyle, text) {
+  if (typeof bullet.fontFamily === "string") return `font-family: ${markerFontFamilyCssValue(bullet.fontFamily)}`;
   if (!bullet.fontFollowText) return void 0;
-  return typeof textStyle.fontFamily === "string" ? `font-family: ${textStyle.fontFamily}, var(--font-primary)` : "font-family: inherit";
+  const value = fontFamilyCssValueForTextStyle2(textStyle, text);
+  return value ? `font-family: ${value}` : "font-family: inherit";
+}
+function markerFontFamilyCssValue(family) {
+  return fontFamilyCssValueForFamilies([family]) ?? "var(--font-primary)";
 }
 function markerFontSizeDeclaration(value) {
   return value != null ? `font-size: ${value}px` : "font-size: inherit";
@@ -45971,7 +46757,7 @@ function markerImageDeclarations(bullet, textStyle, autoFit, assetPrefix) {
   return [
     `width: ${size}`,
     `height: ${size}`,
-    `background-image: ${cssUrl(`${assetPrefix}${bullet.src}`)}`,
+    `background-image: ${cssUrl2(`${assetPrefix}${bullet.src}`)}`,
     "background-repeat: no-repeat",
     "background-position: center",
     "background-size: contain"
@@ -46011,10 +46797,10 @@ function numberFormatToCss(format) {
 function escapeCssString(value) {
   return value.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
 }
-function cssUrl(value) {
+function cssUrl2(value) {
   return `url("${value.replace(/["\\\n\r\f]/g, "\\$&")}")`;
 }
-function runStyleDeclarationsForText(style, autoFit, text) {
+function runStyleDeclarationsForText(style, autoFit, text, inheritedStyle = {}) {
   const fontSize = scaledRunFontSize(style, autoFit);
   const decorationStyle = textDecorationStyleToCss(style);
   const textFill = textFillToCss(style.textFill);
@@ -46027,12 +46813,16 @@ function runStyleDeclarationsForText(style, autoFit, text) {
     style.underline || style.strike ? `text-decoration: ${textDecorationToCss(style)}` : void 0,
     decorationStyle ? `text-decoration-style: ${decorationStyle}` : void 0,
     style.underline && (style.underlineLineFollowText || style.underlineFillFollowText) ? "text-decoration-color: currentColor" : void 0,
+    underlineColorDeclaration(style),
+    underlineLineThicknessDeclaration(style),
     style.strike === "double" ? "text-decoration-style: double" : void 0,
     style.letterSpacing ? `letter-spacing: ${style.letterSpacing}` : void 0,
     style.kerning != null ? `font-kerning: normal` : void 0,
+    style.kumimoji === true ? "text-combine-upright: all" : void 0,
     style.capitalization === "uppercase" ? "text-transform: uppercase" : void 0,
     style.capitalization === "small-caps" ? "font-variant-caps: small-caps" : void 0,
     typeof style.baseline === "number" ? `vertical-align: ${style.baseline}%` : void 0,
+    typeof style.baseline !== "number" && inheritedStyle.fontAlign ? `vertical-align: ${fontAlignToCss(String(inheritedStyle.fontAlign))}` : void 0,
     style.normalizeHeight ? "font-size-adjust: from-font" : void 0,
     direction ? `direction: ${direction}` : void 0,
     style.highlightColor ? `background-color: ${style.highlightColor}` : void 0,
@@ -46044,33 +46834,11 @@ function runStyleDeclarationsForText(style, autoFit, text) {
   ].filter(Boolean);
 }
 function fontFamilyDeclaration(style, text) {
-  const families = [
-    style.fontFamily,
-    style.fontFamilyLatin,
-    style.fontFamilyLatinFallback,
-    style.fontFamilyEastAsian,
-    style.fontFamilyComplexScript
-  ].filter((value) => typeof value === "string" && value.trim() !== "");
-  const unique5 = preferLatinFontForLatinText(fontFamiliesWithWebFallbacks([...new Set(families)]), text);
-  return unique5.length > 0 ? `font-family: ${[...unique5, "var(--font-primary)"].join(", ")}` : void 0;
+  const value = fontFamilyCssValueForTextStyle(style, text);
+  return value ? `font-family: ${value}` : void 0;
 }
-function preferLatinFontForLatinText(families, text) {
-  if (!isLatinOnlyText(text) || families.length < 2) return families;
-  const first = families[0];
-  if (!first || !isCjkUiFont(first)) return families;
-  const latinIndex = families.findIndex((family) => isCommonLatinFont(family));
-  if (latinIndex <= 0) return families;
-  const latin = families[latinIndex];
-  return [latin, ...families.filter((_, index) => index !== latinIndex)];
-}
-function isLatinOnlyText(text) {
-  return typeof text === "string" && /[A-Za-z0-9]/u.test(text) && !containsCjk(text);
-}
-function isCjkUiFont(fontFamily) {
-  return /(?:Microsoft YaHei|微软雅黑|Noto Sans CJK|Noto Sans SC|Source Han Sans|思源黑体|SimHei|黑体|SimSun|宋体|PingFang SC|Hiragino Sans GB)/i.test(fontFamily);
-}
-function isCommonLatinFont(fontFamily) {
-  return /^(?:Arial|Aptos|Calibri|Helvetica|Segoe UI|Times New Roman|Georgia|Verdana|Tahoma)$/i.test(fontFamily.trim());
+function fontFamilyCssValueForTextStyle2(style, text) {
+  return fontFamilyCssValueForTextStyle(style, text);
 }
 function paragraphText(paragraph) {
   return paragraphRunsForRender(paragraph).map((run) => run.text ?? "").join("");
@@ -46094,7 +46862,7 @@ function textOutlineToCss(outline) {
   const value = outline;
   if (value.supportedCss !== true) return void 0;
   if (typeof value.width !== "number" || typeof value.color !== "string") return void 0;
-  return `-webkit-text-stroke: ${cssNumber7(value.width)}px ${value.color}`;
+  return `-webkit-text-stroke: ${cssNumber9(value.width)}px ${value.color}`;
 }
 function renderParagraphBoundaryCss(slideId, element) {
   const bodyStyle = element.text?.bodyStyle ?? {};
@@ -46137,6 +46905,9 @@ function textDecorationToCss(style) {
 }
 function textDecorationStyleToCss(style) {
   if (style.strike) return void 0;
+  if (!style.underline) return void 0;
+  const lineDash = underlineLineDashToCss(style.underlineLine);
+  if (lineDash) return lineDash;
   const underline = String(style.underline ?? "").toLowerCase();
   if (underline === "dbl") return "double";
   if (underline.includes("wavy")) return "wavy";
@@ -46144,7 +46915,27 @@ function textDecorationStyleToCss(style) {
   if (underline.includes("dash")) return "dashed";
   return void 0;
 }
-function cssNumber7(value) {
+function underlineLineDashToCss(line8) {
+  if (!line8 || typeof line8 !== "object") return void 0;
+  const dash = String(line8.dash ?? "").toLowerCase();
+  if (dash === "dot" || dash === "sysdot") return "dotted";
+  if (dash.includes("dash")) return "dashed";
+  return void 0;
+}
+function underlineColorDeclaration(style) {
+  const fill = style.underlineFill;
+  if (!style.underline) return void 0;
+  if (fill?.type === "none") return "text-decoration-color: transparent";
+  if (fill?.type === "solid" && typeof fill.color === "string") return `text-decoration-color: ${fill.color}`;
+  const line8 = style.underlineLine;
+  const lineFill = line8?.fill;
+  return lineFill?.type === "solid" && typeof lineFill.color === "string" ? `text-decoration-color: ${lineFill.color}` : void 0;
+}
+function underlineLineThicknessDeclaration(style) {
+  const line8 = style.underlineLine;
+  return style.underline && typeof line8?.width === "number" && Number.isFinite(line8.width) && line8.width > 0 ? `text-decoration-thickness: ${line8.width}px` : void 0;
+}
+function cssNumber9(value) {
   return Number(value.toFixed(4)).toString();
 }
 
@@ -46176,8 +46967,8 @@ function textBoxDeclarations(element, effectFilter) {
     bodyStyle.forceAntialias ? "-webkit-font-smoothing: antialiased" : void 0,
     typeof bodyStyle.textRotation === "number" ? "transform-origin: center center" : void 0,
     autoFit.type ? `--ppt-text-fit: ${autoFit.type}` : void 0,
-    typeof autoFit.fontScale === "number" ? `--ppt-font-scale: ${cssNumber8(autoFit.fontScale)}` : void 0,
-    typeof autoFit.lineSpaceReduction === "number" ? `--ppt-line-space-reduction: ${cssNumber8(autoFit.lineSpaceReduction)}` : void 0,
+    typeof autoFit.fontScale === "number" ? `--ppt-font-scale: ${cssNumber10(autoFit.fontScale)}` : void 0,
+    typeof autoFit.lineSpaceReduction === "number" ? `--ppt-line-space-reduction: ${cssNumber10(autoFit.lineSpaceReduction)}` : void 0,
     firstRun.fontFamily ? `font-family: ${fontFamiliesWithWebFallbacks([firstRun.fontFamily]).join(", ")}, var(--font-primary)` : void 0,
     scaledFontSize ? `font-size: ${scaledFontSize}px` : void 0,
     firstRun.fontWeight ? `font-weight: ${firstRun.fontWeight}` : void 0,
@@ -46271,83 +47062,8 @@ function overflowToCss(value) {
   if (value === "overflow") return "visible";
   return "visible";
 }
-function cssNumber8(value) {
+function cssNumber10(value) {
   return Number(value.toFixed(4)).toString();
-}
-
-// src/render/renderBackgroundCss.ts
-function backgroundDeclarations(fill, assetPrefix) {
-  if (fill?.type !== "image") return [fillToCss(fill)];
-  if (!fill.src || fill.unsupported) return ["background: transparent"];
-  return [
-    `background-image: ${cssUrl2(assetPrefix + fill.src)}`,
-    `background-repeat: ${fill.fillMode === "tile" ? "repeat" : "no-repeat"}`,
-    `background-position: ${backgroundImagePosition(fill)}`,
-    `background-size: ${backgroundImageSize(fill)}`
-  ];
-}
-function fillToCss(fill) {
-  if (fill?.type === "solid") return `background: ${fill.color}`;
-  if (fill?.type === "gradient" && Array.isArray(fill.stops)) {
-    const stops = gradientStopsToCss(fill.stops);
-    if (fill.kind === "path") return `background: ${radialGradientCss(fill, stops)}`;
-    const angle = typeof fill.angle === "number" ? fill.angle : 180;
-    return `background: linear-gradient(${angle}deg, ${stops})`;
-  }
-  if (fill?.type === "pattern") return renderPatternFillCss(fill);
-  return "background: transparent";
-}
-function imageFitToCss(fillMode) {
-  if (fillMode === "stretch") return "fill";
-  return "cover";
-}
-function tilePositionToCss(tile) {
-  const [x, y] = tileAlignmentToPercent(tile?.algn);
-  return `${positionAxisToCss(x, tile?.offsetX)} ${positionAxisToCss(y, tile?.offsetY)}`;
-}
-function tileSizeToCss(tile) {
-  const scaleX = finiteNumber2(tile?.scaleX);
-  const scaleY = finiteNumber2(tile?.scaleY);
-  if (scaleX == null && scaleY == null) return "auto";
-  return `${cssNumber9((scaleX ?? 1) * 100)}% ${cssNumber9((scaleY ?? 1) * 100)}%`;
-}
-function backgroundImagePosition(fill) {
-  if (fill.fillMode === "tile") return tilePositionToCss(fill.tile);
-  if (fill.crop) {
-    return `${cropBackgroundPositionAxis(fill.crop.left, fill.crop.right)} ${cropBackgroundPositionAxis(fill.crop.top, fill.crop.bottom)}`;
-  }
-  return "center";
-}
-function backgroundImageSize(fill) {
-  if (fill.fillMode === "tile") return tileSizeToCss(fill.tile);
-  if (fill.crop) return cropBackgroundSize(fill.crop);
-  return fill.fillMode === "stretch" ? "100% 100%" : "cover";
-}
-function cssUrl2(value) {
-  return `url("${value.replace(/["\\\n\r\f]/g, "\\$&")}")`;
-}
-function tileAlignmentToPercent(alignment) {
-  if (alignment === "t") return [50, 0];
-  if (alignment === "tr") return [100, 0];
-  if (alignment === "l") return [0, 50];
-  if (alignment === "ctr") return [50, 50];
-  if (alignment === "r") return [100, 50];
-  if (alignment === "bl") return [0, 100];
-  if (alignment === "b") return [50, 100];
-  if (alignment === "br") return [100, 100];
-  return [0, 0];
-}
-function positionAxisToCss(percent2, offset) {
-  const offsetNumber = finiteNumber2(offset) ?? 0;
-  if (offsetNumber === 0) return `${percent2}%`;
-  const operator = offsetNumber < 0 ? "-" : "+";
-  return `calc(${percent2}% ${operator} ${cssNumber9(Math.abs(offsetNumber))}px)`;
-}
-function cssNumber9(value) {
-  return Number(value.toFixed(4)).toString();
-}
-function finiteNumber2(value) {
-  return typeof value === "number" && Number.isFinite(value) ? value : void 0;
 }
 
 // src/render/renderTransformCss.ts
@@ -46724,13 +47440,14 @@ function renderElementCss(slideId, element, assetPrefix = "", inheritedFlip = no
   const elementCss = `[data-slide-id="${slideId}"] [data-element-id="${element.id}"] {
 ${declarations.map((item) => `  ${item};`).join("\n")}
 }`;
+  const imageFillAreaCss = element.type === "image" ? renderImageFillAreaCss(slideId, element) : "";
   const imageSourceCss = element.type === "image" ? renderImageSourceCss(slideId, element) : "";
   const imageTileFlipCss = element.type === "image" ? renderImageTileFlipCss(slideId, element) : "";
   const shapeFillTileFlipCss = element.type === "shape" ? renderShapeFillTileFlipCss(slideId, element) : "";
   const textCss = element.type === "text" ? renderTextScopedCss(slideId, element, assetPrefix) : "";
   const textReadableFlipCss = element.type === "text" ? renderTextReadableFlipCss(slideId, element, readableFlip) : "";
   const groupCss = element.type === "group" ? groupChildrenCss(slideId, element, assetPrefix, inheritedFlip) : "";
-  return [elementCss, imageSourceCss, imageTileFlipCss, shapeFillTileFlipCss, textCss, textReadableFlipCss, groupCss].filter(Boolean).join("\n\n");
+  return [elementCss, imageFillAreaCss, imageSourceCss, imageTileFlipCss, shapeFillTileFlipCss, textCss, textReadableFlipCss, groupCss].filter(Boolean).join("\n\n");
 }
 function textReadableFlipRootDeclarations(readableFlip) {
   if (!readableFlip) return [];
@@ -46800,27 +47517,7 @@ function styleDeclarations(slideId, element) {
     ].filter(Boolean);
   }
   if (element.type === "image") {
-    const crop = element.crop;
-    const fillRect = element.fillRect;
-    const effects = element.effects ?? {};
-    const fillMode = element.fillMode;
-    const isTile = fillMode === "tile";
-    const tile = element.tile;
-    const hasFillRect = !isTile && !crop && hasInsetFillRect(fillRect);
-    const sharpenFilterUrl = pictureSharpenFilterId(slideId, element);
-    const filter = pictureFilterToCss(effects, slideId, element, sharpenFilterUrl ? { sharpenFilterUrl } : {});
-    return [
-      isTile ? "overflow: hidden" : crop || hasFillRect ? "overflow: hidden" : void 0,
-      geometryBorderRadiusDeclaration(element),
-      isTile ? tileFlipCustomProperty(tile) : void 0,
-      isTile ? `background-image: ${imageTileBackgroundImage(tile)}` : void 0,
-      isTile ? "background-repeat: repeat" : void 0,
-      isTile ? `background-position: ${tilePositionToCss(tile)}` : void 0,
-      isTile ? `background-size: ${tileSizeToCss(tile)}` : void 0,
-      !crop && !hasFillRect && fillMode && !isTile ? `object-fit: ${imageFitToCss(fillMode)}` : void 0,
-      effects.alphaModFix?.opacity != null ? `opacity: ${effects.alphaModFix.opacity}` : void 0,
-      filter ? `filter: ${filter}` : void 0
-    ].filter(Boolean);
+    return imageElementDeclarations(slideId, element);
   }
   return [];
 }
@@ -46861,8 +47558,8 @@ function innerShadowToCss(shadow) {
 }
 function blurFilterToCss2(effects, skipSoftEdge = false) {
   const filters = [
-    !skipSoftEdge && effects?.softEdge?.radius != null ? `blur(${cssNumber10(effects.softEdge.radius)}px)` : void 0,
-    effects?.blur?.radius != null ? `blur(${cssNumber10(effects.blur.radius)}px)` : void 0
+    !skipSoftEdge && effects?.softEdge?.radius != null ? `blur(${cssNumber11(effects.softEdge.radius)}px)` : void 0,
+    effects?.blur?.radius != null ? `blur(${cssNumber11(effects.blur.radius)}px)` : void 0
   ].filter(Boolean);
   return filters.length > 0 ? filters.join(" ") : void 0;
 }
@@ -46870,50 +47567,8 @@ function combineFilterCss(...filters) {
   const values = filters.filter(Boolean);
   return values.length > 0 ? values.join(" ") : void 0;
 }
-function renderImageSourceCss(slideId, element) {
-  const crop = element.crop;
-  const fillRect = element.fillRect;
-  if (element.fillMode === "tile") return "";
-  const sourceRect = crop ? imageSourceRectForCrop(crop) : imageSourceRectForFillRect(fillRect);
-  if (!sourceRect) return "";
-  const declarations = [
-    "position: absolute",
-    `left: ${cssNumber10(sourceRect.left)}%`,
-    `top: ${cssNumber10(sourceRect.top)}%`,
-    `width: ${cssNumber10(sourceRect.width)}%`,
-    `height: ${cssNumber10(sourceRect.height)}%`,
-    "object-fit: fill"
-  ];
-  return `[data-slide-id="${slideId}"] [data-element-id="${element.id}"] > .image-source {
-${declarations.map((item) => `  ${item};`).join("\n")}
-}`;
-}
-function imageSourceRectForCrop(crop) {
-  const x = cropSourceAxis(crop.left, crop.right);
-  const y = cropSourceAxis(crop.top, crop.bottom);
-  return { left: x.offset, top: y.offset, width: x.size, height: y.size };
-}
-function imageSourceRectForFillRect(fillRect) {
-  if (!hasInsetFillRect(fillRect)) return void 0;
-  const left = finiteNumber3(fillRect?.left) ?? 0;
-  const top = finiteNumber3(fillRect?.top) ?? 0;
-  const right = finiteNumber3(fillRect?.right) ?? 0;
-  const bottom = finiteNumber3(fillRect?.bottom) ?? 0;
-  return {
-    left,
-    top,
-    width: 100 - left - right,
-    height: 100 - top - bottom
-  };
-}
-function hasInsetFillRect(fillRect) {
-  return ["left", "top", "right", "bottom"].some((key) => finiteNumber3(fillRect?.[key]) != null);
-}
-function cssNumber10(value) {
+function cssNumber11(value) {
   return Number(value.toFixed(4)).toString();
-}
-function finiteNumber3(value) {
-  return typeof value === "number" && Number.isFinite(value) ? value : void 0;
 }
 
 // src/render/renderTextBodyAttributes.ts
@@ -46972,7 +47627,7 @@ function renderDiagramDrawing(value) {
   if (!width || !height || !Array.isArray(drawing.shapes)) return "";
   const content = drawing.shapes.map((shape) => renderDiagramShape(shape)).filter(Boolean).join("\n");
   if (!content) return "";
-  return `<svg class="diagram-drawing-svg" viewBox="0 0 ${formatNumber28(width)} ${formatNumber28(height)}" role="img" aria-label="SmartArt diagram drawing preview">
+  return `<svg class="diagram-drawing-svg" viewBox="0 0 ${formatNumber30(width)} ${formatNumber30(height)}" role="img" aria-label="SmartArt diagram drawing preview">
 ${content}
     </svg>`;
 }
@@ -47006,7 +47661,7 @@ function renderDiagramShape(value) {
   const stroke = strokeAttrs(shape.line, shape.box);
   const text = renderDiagramText(shape);
   return `      <g ${attrs}>
-        <svg x="0" y="0" width="${formatNumber28(width)}" height="${formatNumber28(height)}" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
+        <svg x="0" y="0" width="${formatNumber30(width)}" height="${formatNumber30(height)}" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
           ${geometryElement2(geometry, fill, stroke)}
         </svg>${text}
       </g>`;
@@ -47031,11 +47686,11 @@ function renderDiagramText(shape) {
   const textX = diagramTextX(innerBox, alignment);
   const textAnchor = diagramTextAnchor(alignment);
   const attrs = [
-    `x="${formatNumber28(textX)}"`,
-    `y="${formatNumber28(innerBox.y + innerBox.height / 2)}"`,
+    `x="${formatNumber30(textX)}"`,
+    `y="${formatNumber30(innerBox.y + innerBox.height / 2)}"`,
     `fill="${escapeHtml(color)}"`,
     `font-family="${escapeHtml(fontFamily)}"`,
-    `font-size="${formatNumber28(fontSize)}"`,
+    `font-size="${formatNumber30(fontSize)}"`,
     weight ? `font-weight="${escapeHtml(weight)}"` : void 0,
     fontStyle ? `font-style="${fontStyle}"` : void 0,
     `text-anchor="${textAnchor}"`,
@@ -47115,7 +47770,7 @@ function renderDiagramTextContent(lines, x) {
   const firstDy = -(lines.length - 1) * 0.6;
   return lines.map((line8, index) => {
     const dy = index === 0 ? firstDy : 1.2;
-    return `<tspan x="${formatNumber28(x)}" dy="${formatNumber28(dy)}em">${escapeHtml(line8)}</tspan>`;
+    return `<tspan x="${formatNumber30(x)}" dy="${formatNumber30(dy)}em">${escapeHtml(line8)}</tspan>`;
   }).join("");
 }
 function diagramTextMetadataAttrs(text) {
@@ -47274,10 +47929,10 @@ function strokeAttrs(line8, box) {
   }
   return [
     `stroke="${escapeHtml(current.color ?? current.fill?.color ?? "#111827")}"`,
-    `stroke-width="${formatNumber28(width)}"`,
+    `stroke-width="${formatNumber30(width)}"`,
     `stroke-linecap="${svgLineCap(current.cap)}"`,
     `stroke-linejoin="${svgLineJoin(current.join)}"`,
-    attrString8("stroke-miterlimit", miterLimitValue(current.miterLimitRaw)),
+    attrString8("stroke-miterlimit", miterLimitValue2(current.miterLimitRaw)),
     dash ? `stroke-dasharray="${escapeHtml(dash)}"` : void 0,
     ...lineDataAttrs(current, width, dash)
   ].filter(Boolean).join(" ");
@@ -47288,7 +47943,7 @@ function lineDataAttrs(line8, normalizedWidth, dash) {
     attrString8("data-line-visible", line8.visible === false ? "false" : line8.visible === true ? "true" : void 0),
     attrString8("data-line-width", line8.width),
     attrString8("data-line-width-raw", line8.widthRaw),
-    attrString8("data-line-normalized-width", formatNumber28(normalizedWidth)),
+    attrString8("data-line-normalized-width", formatNumber30(normalizedWidth)),
     attrString8("data-line-cap", line8.cap),
     attrString8("data-line-compound", line8.compound),
     attrString8("data-line-align", line8.align),
@@ -47309,9 +47964,9 @@ function normalizedStrokeWidth(line8, box) {
   const basis = Math.min(width && width > 0 ? width : raw, height && height > 0 ? height : raw);
   return basis > 0 ? raw / basis * 100 : 0.75;
 }
-function miterLimitValue(value) {
+function miterLimitValue2(value) {
   const raw = numberValue(value);
-  return raw != null && raw > 0 ? formatNumber28(raw / 1e5) : void 0;
+  return raw != null && raw > 0 ? formatNumber30(raw / 1e5) : void 0;
 }
 function attrString8(name, value) {
   if (value == null || value === false || value === "") return void 0;
@@ -47321,15 +47976,15 @@ function booleanData3(value) {
   return value === true ? "true" : value === false ? "false" : void 0;
 }
 function transformAttr(x, y, width, height, rotation, flipH, flipV) {
-  const translate = `translate(${formatNumber28(x)} ${formatNumber28(y)})`;
-  const rotate = rotation ? ` rotate(${formatNumber28(rotation)} ${formatNumber28(width / 2)} ${formatNumber28(height / 2)})` : "";
+  const translate = `translate(${formatNumber30(x)} ${formatNumber30(y)})`;
+  const rotate = rotation ? ` rotate(${formatNumber30(rotation)} ${formatNumber30(width / 2)} ${formatNumber30(height / 2)})` : "";
   const flip = flipTransform(width, height, flipH, flipV);
   return `transform="${translate}${rotate}${flip}"`;
 }
 function flipTransform(width, height, flipH, flipV) {
-  if (flipH && flipV) return ` translate(${formatNumber28(width)} ${formatNumber28(height)}) scale(-1 -1)`;
-  if (flipH) return ` translate(${formatNumber28(width)} 0) scale(-1 1)`;
-  if (flipV) return ` translate(0 ${formatNumber28(height)}) scale(1 -1)`;
+  if (flipH && flipV) return ` translate(${formatNumber30(width)} ${formatNumber30(height)}) scale(-1 -1)`;
+  if (flipH) return ` translate(${formatNumber30(width)} 0) scale(-1 1)`;
+  if (flipV) return ` translate(0 ${formatNumber30(height)}) scale(1 -1)`;
   return "";
 }
 function firstRunStyle(text) {
@@ -47342,7 +47997,7 @@ function numberValue(value) {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : void 0;
 }
-function formatNumber28(value) {
+function formatNumber30(value) {
   return Number(value.toFixed(3)).toString();
 }
 
@@ -47566,34 +48221,13 @@ function googleFontFamiliesForDeck(deck) {
 function googleFontFamiliesForSlide(slide) {
   return googleFontFamiliesForValue(slide);
 }
-function renderGoogleFontsScript(families) {
+function renderGoogleFontsLinks(families) {
   const unique5 = uniqueGoogleFontFamilies(families);
   if (unique5.length === 0) return "";
-  const json2 = JSON.stringify(unique5).replace(/</g, "\\u003c");
-  return `<script type="application/json" id="ppt-google-font-families">${json2}</script>
-  <script>
-  (() => {
-    const node = document.getElementById("ppt-google-font-families");
-    if (!node) return;
-    let families = [];
-    try {
-      families = JSON.parse(node.textContent || "[]");
-    } catch {
-      return;
-    }
-    for (const family of families) {
-      if (typeof family !== "string" || !family.trim()) continue;
-      const link = document.createElement("link");
-      link.rel = "stylesheet";
-      link.href = "https://fonts.googleapis.com/css2?family=" + encodeGoogleFontFamily(family) + "&display=swap";
-      link.dataset.googleFontFamily = family;
-      document.head.appendChild(link);
-    }
-    function encodeGoogleFontFamily(value) {
-      return encodeURIComponent(value.trim()).replace(/%20/g, "+");
-    }
-  })();
-  </script>`;
+  return unique5.map((family) => {
+    const href = `https://fonts.googleapis.com/css2?family=${encodeGoogleFontFamily(family)}&display=swap`;
+    return `<link rel="stylesheet" href="${href}" data-google-font-family="${escapeHtml(family)}">`;
+  }).join("\n  ");
 }
 function googleFontFamiliesForValue(value) {
   const found = /* @__PURE__ */ new Set();
@@ -47632,12 +48266,272 @@ function uniqueGoogleFontFamilies(families) {
 function normalizeFontFamily2(value) {
   return value.split(",")[0]?.trim().replace(/^['"]|['"]$/g, "").replace(/\s+/g, " ") ?? "";
 }
+function encodeGoogleFontFamily(value) {
+  return encodeURIComponent(value.trim()).replace(/%20/g, "+");
+}
 function isGoogleFontCandidate(family) {
   if (!family) return false;
   const lower = family.toLowerCase();
   if (genericFamilies.has(lower) || systemFontFamilies.has(lower)) return false;
   if (family.startsWith("+")) return false;
   return /^[\w .'-]+$/.test(family);
+}
+
+// src/render/renderSoftEdgeAttributes.ts
+function softEdgeAttributePairs(softEdge) {
+  return [
+    ["data-soft-edge-radius", softEdge?.radius],
+    ["data-soft-edge-render-mode", softEdge?.radius != null ? "alpha-mask-filter" : void 0]
+  ];
+}
+
+// src/render/renderSvgPicture.ts
+var svgPictureShapeTypes = [
+  "triangle",
+  "rtTriangle",
+  "diamond",
+  "ellipse",
+  "parallelogram",
+  "pentagon",
+  "hexagon",
+  "octagon",
+  "trapezoid",
+  "homePlate",
+  "chevron",
+  "corner",
+  "halfFrame",
+  "rightArrow",
+  "leftArrow",
+  "upArrow",
+  "downArrow",
+  "heptagon",
+  "decagon",
+  "dodecagon",
+  "round2SameRect",
+  "snip1Rect",
+  "plus",
+  "flowChartConnector",
+  "flowChartMagneticDisk",
+  "leftRightArrow",
+  "upDownArrow",
+  "quadArrow",
+  "rightArrowCallout",
+  "leftArrowCallout",
+  "leftRightArrowCallout",
+  "quadArrowCallout",
+  "upArrowCallout",
+  "flowChartProcess",
+  "round1Rect",
+  "snip2SameRect",
+  "snip2DiagRect",
+  "round2DiagRect",
+  "snipRoundRect",
+  "wedgeRoundRectCallout",
+  "bentUpArrow",
+  "leftUpArrow",
+  "leftRightUpArrow",
+  "bentArrow",
+  "uturnArrow",
+  "curvedRightArrow",
+  "curvedLeftArrow",
+  "curvedUpArrow",
+  "curvedDownArrow",
+  "stripedRightArrow",
+  "notchedRightArrow",
+  "donut",
+  "diagStripe",
+  "pie",
+  "chord",
+  "blockArc",
+  "teardrop",
+  "swooshArrow",
+  "noSmoking",
+  "can",
+  "cube",
+  "bevel",
+  "frame"
+];
+var svgPictureShapeTypeSet = new Set(svgPictureShapeTypes);
+function canRenderSvgPicture(element) {
+  return svgPictureShapeType(element) != null && element.fillMode !== "tile" && !hasInsetFillRect2(element.fillRect);
+}
+function renderSvgPicture(element, attrs, assetPrefix) {
+  const crop = element.crop ?? {};
+  const x = cropSourceAxis(crop.left, crop.right);
+  const y = cropSourceAxis(crop.top, crop.bottom);
+  const shapeType = svgPictureShapeType(element) ?? "triangle";
+  const clipId = `${element.id}-picture-clip`;
+  const alt = escapeHtml(element.alt);
+  return `    <svg class="image image-vector image-${escapeHtml(shapeType)}"${attrs} viewBox="0 0 100 100" preserveAspectRatio="none" role="img" aria-label="${alt}">
+      <defs>
+        <clipPath id="${escapeHtml(clipId)}" clipPathUnits="userSpaceOnUse">${clipPathShape(shapeType, element)}</clipPath>
+      </defs>
+      <image href="${escapeHtml(assetPrefix + element.src)}" x="${x.offset}" y="${y.offset}" width="${x.size}" height="${y.size}" preserveAspectRatio="none" clip-path="url(#${escapeHtml(clipId)})"></image>
+    </svg>`;
+}
+function svgPictureShapeType(element) {
+  const shapeType = element.shapeType;
+  if (isSvgPictureShapeType(shapeType)) return shapeType;
+  const geometryType = element.geometry?.type;
+  return isSvgPictureShapeType(geometryType) ? geometryType : void 0;
+}
+function isSvgPictureShapeType(value) {
+  return typeof value === "string" && svgPictureShapeTypeSet.has(value);
+}
+function clipPathShape(shapeType, element) {
+  return clipPathGeometry(presetShapeGeometry(shapeType, element));
+}
+function clipPathGeometry(geometry) {
+  if (geometry.tag === "compound") return geometry.parts.filter((part) => part.fill !== false).map(clipPathGeometryPart).join("");
+  return clipPathGeometryPart(geometry);
+}
+function clipPathGeometryPart(geometry) {
+  if (geometry.tag === "ellipse") return '<ellipse cx="50" cy="50" rx="50" ry="50"></ellipse>';
+  if (geometry.tag === "polygon") return `<polygon points="${escapeHtml(geometry.points ?? "")}"></polygon>`;
+  const fillRule = geometry.fillRule ? ` clip-rule="${geometry.fillRule}"` : "";
+  return `<path d="${escapeHtml(geometry.d ?? "")}"${fillRule}></path>`;
+}
+function hasInsetFillRect2(fillRect) {
+  return ["left", "top", "right", "bottom"].some((key) => typeof fillRect?.[key] === "number" && Number.isFinite(fillRect[key]));
+}
+
+// src/render/renderImageElement.ts
+function renderImage(element, assetPrefix) {
+  const effects = element.effects ?? {};
+  const alpha = effects.alphaModFix;
+  const grayscale = effects.grayscale;
+  const biLevel = effects.biLevel;
+  const luminance = effects.luminance;
+  const duotone = effects.duotone;
+  const outerShadow = effects.outerShadow;
+  const glow = effects.glow;
+  const colorTemperature = effects.colorTemperature;
+  const sharpenSoften = effects.sharpenSoften;
+  const backgroundRemoval = effects.backgroundRemoval;
+  const crop = element.crop;
+  const fillRect = element.fillRect;
+  const fillMode = element.fillMode;
+  const tile = element.tile;
+  const isTile = fillMode === "tile";
+  const hasFillRect = !isTile && hasInsetFillRect3(fillRect);
+  const className = ["image", element.role === "heroImage" ? "hero-image" : void 0, isTile ? "image-tile" : void 0, hasFillRect ? "image-fill-rect" : void 0].filter(Boolean).join(" ");
+  const src = escapeHtml(assetPrefix + element.src);
+  const rawSrc = assetPrefix + element.src;
+  const attrs = renderAttributes([
+    ["data-element-id", element.id],
+    ["data-role", element.role],
+    ...sourceShapeAttributePairs(element),
+    ...geometryAttributePairs(element),
+    ["data-fill-mode", fillMode],
+    ["data-tile-tx", tile?.tx],
+    ["data-tile-ty", tile?.ty],
+    ["data-tile-sx", tile?.sx],
+    ["data-tile-sy", tile?.sy],
+    ["data-tile-flip", tile?.flip],
+    ["data-tile-algn", tile?.algn],
+    ["data-tile-offset-x", tile?.offsetX],
+    ["data-tile-offset-y", tile?.offsetY],
+    ["data-tile-scale-x", tile?.scaleX],
+    ["data-tile-scale-y", tile?.scaleY],
+    ["data-crop-left", crop?.left],
+    ["data-crop-top", crop?.top],
+    ["data-crop-right", crop?.right],
+    ["data-crop-bottom", crop?.bottom],
+    ["data-fill-rect-enabled", fillRect?.enabled === true ? "true" : void 0],
+    ["data-fill-rect-left", fillRect?.left],
+    ["data-fill-rect-top", fillRect?.top],
+    ["data-fill-rect-right", fillRect?.right],
+    ["data-fill-rect-bottom", fillRect?.bottom],
+    ["data-raster-fallback", booleanData4(element.rasterFallback)],
+    ["data-fallback-reason", element.fallbackReason],
+    ["data-source-element-count", element.sourceElementCount],
+    ["data-alpha-mod-fix", alpha?.amount],
+    ["data-grayscale", booleanData4(grayscale?.enabled)],
+    ["data-bi-level", booleanData4(biLevel?.enabled)],
+    ["data-bi-level-thresh", biLevel?.thresh],
+    ["data-bi-level-threshold", biLevel?.threshold],
+    ["data-bi-level-render-mode", biLevel?.renderMode],
+    ["data-luminance", booleanData4(luminance?.enabled)],
+    ["data-luminance-bright", luminance?.bright],
+    ["data-luminance-contrast", luminance?.contrast],
+    ["data-css-brightness", luminance?.brightness],
+    ["data-css-contrast", luminance?.cssContrast],
+    ["data-duotone-colors", Array.isArray(duotone?.colors) ? duotone.colors.join(" ") : void 0],
+    ["data-duotone-render-mode", duotone?.renderMode],
+    ["data-color-temperature", colorTemperature?.value],
+    ["data-color-temperature-unsupported-css", colorTemperature?.unsupportedCss === true ? "true" : void 0],
+    ["data-sharpen-soften", sharpenSoften?.amount],
+    ["data-sharpen-soften-css-blur", sharpenSoften?.cssBlur],
+    ["data-sharpen-soften-svg-sharpen", sharpenSoften?.svgSharpen],
+    ["data-sharpen-soften-unsupported-css", sharpenSoften?.unsupportedCss === true ? "true" : void 0],
+    ...backgroundRemovalAttributePairs(backgroundRemoval),
+    ...shadowAttributePairs(outerShadow),
+    ...softEdgeAttributePairs(effects.softEdge),
+    ["data-glow-radius", glow?.radius],
+    ["data-glow-color", glow?.color],
+    ["data-picture-effect-order", Array.isArray(effects.effectOrder) ? effects.effectOrder.join(" ") : void 0],
+    ...directSourceEffectAttributePairs(element.directSourceEffects),
+    ...pictureEffectLayerAttributePairs(element.effectLayerSources, assetPrefix),
+    ["style", isTile ? `--ppt-image-url: ${cssUrl3(rawSrc)};` : void 0]
+  ]);
+  const alt = escapeHtml(element.alt);
+  if (canRenderSvgPicture(element)) return renderSvgPicture(element, attrs, assetPrefix);
+  if (isTile) {
+    return `    <div class="${className}"${attrs}><img class="image-source" src="${src}" alt="${alt}"></div>`;
+  }
+  if (crop && hasFillRect) {
+    const cropClassName = [className, "image-crop"].filter(Boolean).join(" ");
+    return `    <div class="${cropClassName}"${attrs}><span class="image-fill-area"><img class="image-source" src="${src}" alt="${alt}"></span></div>`;
+  }
+  if (crop) {
+    const cropClassName = [className, "image-crop"].filter(Boolean).join(" ");
+    return `    <div class="${cropClassName}"${attrs}><img class="image-source" src="${src}" alt="${alt}"></div>`;
+  }
+  if (hasFillRect) {
+    return `    <div class="${className}"${attrs}><img class="image-source" src="${src}" alt="${alt}"></div>`;
+  }
+  return `    <img class="${className}"${attrs} src="${src}" alt="${alt}">`;
+}
+function hasImageFill(element) {
+  return element.fill?.type === "image";
+}
+function cssUrl3(value) {
+  return `url("${value.replace(/["\\\n\r\f]/g, "\\$&")}")`;
+}
+function hasInsetFillRect3(fillRect) {
+  return ["left", "top", "right", "bottom"].some((key) => finiteNumber4(fillRect?.[key]) != null);
+}
+function finiteNumber4(value) {
+  return typeof value === "number" && Number.isFinite(value) ? value : void 0;
+}
+function booleanData4(value) {
+  return value === true ? "true" : value === false ? "false" : void 0;
+}
+
+// src/render/renderLineAttributes.ts
+function lineAttributePairs(element) {
+  const line8 = element.line ?? element.style?.line ?? {};
+  const fill = line8.fill ?? {};
+  return [
+    ["data-line-compound", line8.compound],
+    ["data-line-align", line8.align],
+    ["data-line-cap", line8.cap],
+    ["data-line-join", line8.join],
+    ["data-line-miter-limit-raw", line8.miterLimitRaw],
+    ["data-line-dash", line8.dash],
+    ["data-line-width", line8.width],
+    ["data-line-fill-type", fill.type],
+    ["data-line-pattern", fill.pattern],
+    ["data-line-pattern-foreground-color", fill.foregroundColor],
+    ["data-line-pattern-background-color", fill.backgroundColor],
+    ["data-line-gradient-kind", fill.kind],
+    ["data-line-gradient-angle", fill.angle],
+    ["data-line-gradient-stop-count", Array.isArray(fill.stops) ? fill.stops.length : void 0],
+    ["data-line-gradient-scaled", booleanData5(fill.scaled)]
+  ];
+}
+function booleanData5(value) {
+  return value === true ? "true" : value === false ? "false" : void 0;
 }
 
 // src/render/renderMedia.ts
@@ -47692,7 +48586,8 @@ function renderRun(run, index, options) {
     return `<a class="run-link"${attrs} href="${escapeHtml(hyperlink.href)}" target="_blank" rel="noopener noreferrer">${content}</a>`;
   }
   if (hyperlink?.safe === true && hyperlink.action === "go-to-slide") {
-    return `<a class="run-link"${attrs}>${content}</a>`;
+    const href = typeof hyperlink.target === "string" ? options.slideHrefForTarget?.(hyperlink.target) : void 0;
+    return href ? `<a class="run-link"${attrs} href="${escapeHtml(href)}">${content}</a>` : `<a class="run-link"${attrs}>${content}</a>`;
   }
   return `<span${attrs}>${content}</span>`;
 }
@@ -47711,10 +48606,16 @@ function renderRunAttributes(run, index, options) {
   const textOutline = style.textOutline;
   const textOutlineFill = textOutline?.fill;
   const textFill = style.textFill;
+  const underlineLineFill = style.underlineLine?.fill;
   const direction = effectiveTextDirection(style.direction, run.text);
+  const tabStop = run.type === "tab" ? run.tabStop : void 0;
   const attrs = [
     ["data-run-index", index],
     ["data-run-type", run.type],
+    ["data-tab-stop-index", tabStop ? run.tabStopIndex : void 0],
+    ["data-tab-stop-pos", tabStop?.pos],
+    ["data-tab-stop-align", tabStop?.algn],
+    ["data-tab-stop-leader", tabStop?.leader],
     ["data-field-id", field.id],
     ["data-field-type", field.type],
     ["lang", style.language],
@@ -47738,19 +48639,32 @@ function renderRunAttributes(run, index, options) {
     ["data-font-size", style.fontSize],
     ["data-font-size-px", style.fontSizePx],
     ["data-font-size-raw", style.fontSizeRaw],
-    ["data-bold", booleanData4(style.bold)],
+    ["data-bold", booleanData6(style.bold)],
     ["data-bold-raw", style.boldRaw],
-    ["data-italic", booleanData4(style.italic)],
+    ["data-italic", booleanData6(style.italic)],
     ["data-italic-raw", style.italicRaw],
     ["data-alt-lang", style.alternateLanguage],
-    ["data-dirty", booleanData4(style.dirty)],
-    ["data-smt-clean", booleanData4(style.smtClean)],
-    ["data-kumimoji", booleanData4(style.kumimoji)],
-    ["data-no-proof", booleanData4(style.noProof)],
-    ["data-error", booleanData4(style.error)],
+    ["data-dirty", booleanData6(style.dirty)],
+    ["data-smt-clean", booleanData6(style.smtClean)],
+    ["data-kumimoji", booleanData6(style.kumimoji)],
+    ["data-no-proof", booleanData6(style.noProof)],
+    ["data-error", booleanData6(style.error)],
     ["data-underline-type", style.underlineType],
-    ["data-underline-line-follow-text", booleanData4(style.underlineLineFollowText)],
-    ["data-underline-fill-follow-text", booleanData4(style.underlineFillFollowText)],
+    ["data-underline-line-width", style.underlineLine?.width],
+    ["data-underline-line-width-raw", style.underlineLine?.widthRaw],
+    ["data-underline-line-dash", style.underlineLine?.dash],
+    ["data-underline-line-fill-type", underlineLineFill?.type],
+    ["data-underline-line-fill-color", underlineLineFill?.color],
+    ["data-underline-line-fill-color-source", underlineLineFill?.colorSource],
+    ["data-underline-line-fill-color-scheme", underlineLineFill?.colorScheme],
+    ["data-underline-line-fill-color-resolved", underlineLineFill?.colorResolved],
+    ["data-underline-line-follow-text", booleanData6(style.underlineLineFollowText)],
+    ["data-underline-fill-follow-text", booleanData6(style.underlineFillFollowText)],
+    ["data-underline-fill-type", style.underlineFill?.type],
+    ["data-underline-fill-color", style.underlineFill?.color],
+    ["data-underline-fill-color-source", style.underlineFill?.colorSource],
+    ["data-underline-fill-color-scheme", style.underlineFill?.colorScheme],
+    ["data-underline-fill-color-resolved", style.underlineFill?.colorResolved],
     ["data-strike", style.strike],
     ["data-strike-type", style.strikeType],
     ["data-baseline", style.baseline],
@@ -47762,13 +48676,13 @@ function renderRunAttributes(run, index, options) {
     ["data-kerning-raw", style.kerningRaw],
     ["data-capitalization", style.capitalization],
     ["data-capitalization-type", style.capitalizationType],
-    ["data-normalize-height", booleanData4(style.normalizeHeight)],
+    ["data-normalize-height", booleanData6(style.normalizeHeight)],
     ["data-normalize-height-raw", style.normalizeHeightRaw],
     ["data-text-fill-type", style.textFillType],
     ["data-text-fill-gradient-kind", textFill?.kind],
     ["data-text-fill-gradient-angle", textFill?.angle],
     ["data-text-fill-gradient-stop-count", Array.isArray(textFill?.stops) ? textFill.stops.length : void 0],
-    ["data-text-fill-gradient-scaled", booleanData4(textFill?.scaled)],
+    ["data-text-fill-gradient-scaled", booleanData6(textFill?.scaled)],
     ["data-text-outline-type", textOutline?.type],
     ["data-text-outline-color", textOutline?.color],
     ["data-text-outline-color-source", textOutline?.colorSource],
@@ -47781,15 +48695,15 @@ function renderRunAttributes(run, index, options) {
     ["data-text-outline-gradient-kind", textOutlineFill?.kind],
     ["data-text-outline-gradient-angle", textOutlineFill?.angle],
     ["data-text-outline-gradient-stop-count", Array.isArray(textOutlineFill?.stops) ? textOutlineFill.stops.length : void 0],
-    ["data-text-outline-gradient-scaled", booleanData4(textOutlineFill?.scaled)],
-    ["data-text-outline-supported-svg", booleanData4(textOutline?.supportedSvg)],
+    ["data-text-outline-gradient-scaled", booleanData6(textOutlineFill?.scaled)],
+    ["data-text-outline-supported-svg", booleanData6(textOutline?.supportedSvg)],
     ["data-symbol-font-family", style.symbolFontFamily],
     ["data-symbol-char", style.symbolChar],
     ["data-hyperlink-type", hyperlink?.type],
     ["data-hyperlink-trigger", hyperlink?.trigger],
     ["data-hyperlink-url", hyperlink?.href],
-    ["data-hyperlink-safe", booleanData4(hyperlink?.safe)],
-    ["data-hyperlink-history", booleanData4(hyperlink?.history)],
+    ["data-hyperlink-safe", booleanData6(hyperlink?.safe)],
+    ["data-hyperlink-history", booleanData6(hyperlink?.history)],
     ["data-hyperlink-relationship-id", hyperlink?.relationshipId],
     ["data-hyperlink-raw-target", hyperlink?.rawTarget],
     ["data-hyperlink-target-mode", hyperlink?.targetMode],
@@ -47797,18 +48711,32 @@ function renderRunAttributes(run, index, options) {
     ["data-action", hyperlink?.action],
     ["data-action-target", hyperlink?.target],
     ["title", hyperlink?.tooltip],
-    ["style", options.inlineStyle ? inlineRunStyle(style, options.autoFit, run.text) : void 0]
+    ["style", runStyleAttribute(style, options, run.text, tabStop)]
   ];
   return renderAttributes2(attrs);
 }
-function inlineRunStyle(style, autoFit, text) {
-  const declarations = runStyleDeclarationsForText(style, autoFit, text);
+function runStyleAttribute(style, options, text, tabStop) {
+  const declarations = [
+    ...options.inlineStyle ? runStyleDeclarationsForText(style, options.autoFit, text, options.inheritedStyle) : [],
+    ...tabLeaderDeclarations(tabStop)
+  ];
   return declarations.length > 0 ? `${declarations.join("; ")};` : void 0;
+}
+function tabLeaderDeclarations(tabStop) {
+  if (tabStop?.leader !== "dot") return [];
+  return [
+    "display: inline-block",
+    "width: var(--ppt-tab-leader-width, 4em)",
+    "min-width: 1em",
+    "height: 0.75em",
+    "border-bottom: 1px dotted currentColor",
+    "vertical-align: baseline"
+  ];
 }
 function renderAttributes2(attrs) {
   return attrs.filter(([, value]) => value != null && value !== false && value !== "").map(([name, value]) => ` ${name}="${escapeHtml(value)}"`).join("");
 }
-function booleanData4(value) {
+function booleanData6(value) {
   return value === true ? "true" : value === false ? "false" : void 0;
 }
 function hasVisibleGlyph(value) {
@@ -47838,6 +48766,7 @@ function shapeImageFillAttributePairs(fill, assetPrefix) {
   const crop = fill?.crop;
   const fillRect = fill?.fillRect;
   const effects = fill?.effects ?? {};
+  const grayscale = effects.grayscale;
   const luminance = effects.luminance;
   const saturation = effects.saturation;
   const colorTemperature = effects.colorTemperature;
@@ -47870,6 +48799,7 @@ function shapeImageFillAttributePairs(fill, assetPrefix) {
     ["data-fill-rect-top", fillRect?.top],
     ["data-fill-rect-right", fillRect?.right],
     ["data-fill-rect-bottom", fillRect?.bottom],
+    ["data-fill-grayscale", grayscale?.enabled === true ? "true" : void 0],
     ["data-fill-luminance", luminance?.enabled === true ? "true" : void 0],
     ["data-fill-luminance-bright", luminance?.bright],
     ["data-fill-luminance-contrast", luminance?.contrast],
@@ -47881,6 +48811,7 @@ function shapeImageFillAttributePairs(fill, assetPrefix) {
     ["data-fill-color-temperature-unsupported-css", colorTemperature?.unsupportedCss === true ? "true" : void 0],
     ["data-fill-sharpen-soften", sharpenSoften?.amount],
     ["data-fill-sharpen-soften-css-blur", sharpenSoften?.cssBlur],
+    ["data-fill-sharpen-soften-svg-sharpen", sharpenSoften?.svgSharpen],
     ["data-fill-sharpen-soften-unsupported-css", sharpenSoften?.unsupportedCss === true ? "true" : void 0],
     ...backgroundRemovalAttributePairs(backgroundRemoval, "data-fill-background-removal"),
     ["data-fill-picture-effect-order", Array.isArray(effects.effectOrder) ? effects.effectOrder.join(" ") : void 0],
@@ -47891,7 +48822,7 @@ function shapeImageFillAttributePairs(fill, assetPrefix) {
 }
 function shapeImageFillStyle(fill, assetPrefix) {
   if (fill?.type !== "image" || !fill.src || fill.unsupported) return void 0;
-  const imageUrl = cssUrl3(assetPrefix + fill.src);
+  const imageUrl = cssUrl4(assetPrefix + fill.src);
   const flipProperty = tileFlipCustomProperty(fill.tile);
   const declarations = [
     fill.fillMode === "tile" && flipProperty ? `--ppt-shape-fill-url: ${imageUrl}` : void 0,
@@ -47909,7 +48840,7 @@ function shapeImagePosition(fill) {
   if (fill.crop) {
     return `${cropPositionAxis(fill.crop.left, fill.crop.right)} ${cropPositionAxis(fill.crop.top, fill.crop.bottom)}`;
   }
-  if (hasInsetFillRect2(fill.fillRect)) return fillRectPosition(fill.fillRect);
+  if (hasInsetFillRect4(fill.fillRect)) return fillRectPosition(fill.fillRect);
   return "center";
 }
 function shapeImageSize(fill) {
@@ -47917,7 +48848,7 @@ function shapeImageSize(fill) {
   if (fill.crop) {
     return cropBackgroundSize(fill.crop);
   }
-  if (hasInsetFillRect2(fill.fillRect)) return fillRectSize(fill.fillRect);
+  if (hasInsetFillRect4(fill.fillRect)) return fillRectSize(fill.fillRect);
   return fill.fillMode === "stretch" ? "100% 100%" : "cover";
 }
 function cropPositionAxis(start, end) {
@@ -47928,21 +48859,21 @@ function tilePositionToCss2(tile) {
   return `${positionAxisToCss2(x, tile?.offsetX)} ${positionAxisToCss2(y, tile?.offsetY)}`;
 }
 function tileSizeToCss2(tile) {
-  const scaleX = finiteNumber4(tile?.scaleX);
-  const scaleY = finiteNumber4(tile?.scaleY);
+  const scaleX = finiteNumber5(tile?.scaleX);
+  const scaleY = finiteNumber5(tile?.scaleY);
   if (scaleX == null && scaleY == null) return "auto";
-  return `${cssNumber11((scaleX ?? 1) * 100)}% ${cssNumber11((scaleY ?? 1) * 100)}%`;
+  return `${cssNumber12((scaleX ?? 1) * 100)}% ${cssNumber12((scaleY ?? 1) * 100)}%`;
 }
-function hasInsetFillRect2(fillRect) {
-  return ["left", "top", "right", "bottom"].some((key) => finiteNumber4(fillRect?.[key]) != null);
+function hasInsetFillRect4(fillRect) {
+  return ["left", "top", "right", "bottom"].some((key) => finiteNumber5(fillRect?.[key]) != null);
 }
 function fillRectPosition(fillRect) {
-  return `left ${cssNumber11(finiteNumber4(fillRect?.left) ?? 0)}% top ${cssNumber11(finiteNumber4(fillRect?.top) ?? 0)}%`;
+  return `left ${cssNumber12(finiteNumber5(fillRect?.left) ?? 0)}% top ${cssNumber12(finiteNumber5(fillRect?.top) ?? 0)}%`;
 }
 function fillRectSize(fillRect) {
-  const width = 100 - (finiteNumber4(fillRect?.left) ?? 0) - (finiteNumber4(fillRect?.right) ?? 0);
-  const height = 100 - (finiteNumber4(fillRect?.top) ?? 0) - (finiteNumber4(fillRect?.bottom) ?? 0);
-  return `${cssNumber11(width)}% ${cssNumber11(height)}%`;
+  const width = 100 - (finiteNumber5(fillRect?.left) ?? 0) - (finiteNumber5(fillRect?.right) ?? 0);
+  const height = 100 - (finiteNumber5(fillRect?.top) ?? 0) - (finiteNumber5(fillRect?.bottom) ?? 0);
+  return `${cssNumber12(width)}% ${cssNumber12(height)}%`;
 }
 function tileAlignmentToPercent2(alignment) {
   if (alignment === "t") return [50, 0];
@@ -47956,18 +48887,18 @@ function tileAlignmentToPercent2(alignment) {
   return [0, 0];
 }
 function positionAxisToCss2(percent2, offset) {
-  const offsetNumber = finiteNumber4(offset) ?? 0;
+  const offsetNumber = finiteNumber5(offset) ?? 0;
   if (offsetNumber === 0) return `${percent2}%`;
   const operator = offsetNumber < 0 ? "-" : "+";
-  return `calc(${percent2}% ${operator} ${cssNumber11(Math.abs(offsetNumber))}px)`;
+  return `calc(${percent2}% ${operator} ${cssNumber12(Math.abs(offsetNumber))}px)`;
 }
-function finiteNumber4(value) {
+function finiteNumber5(value) {
   return typeof value === "number" && Number.isFinite(value) ? value : void 0;
 }
-function cssNumber11(value) {
+function cssNumber12(value) {
   return Number(value.toFixed(4)).toString();
 }
-function cssUrl3(value) {
+function cssUrl4(value) {
   return `url("${value.replace(/["\\\n\r\f]/g, "\\$&")}")`;
 }
 
@@ -47987,7 +48918,7 @@ function renderSlideZoom(element, assetPrefix) {
     ["data-target-slide-ref", zoom.targetSlideRef],
     ["data-creation-id", zoom.creationId],
     ["data-zoom-id", zoom.zoomId],
-    ["data-return-to-parent", booleanData5(zoom.returnToParent)],
+    ["data-return-to-parent", booleanData7(zoom.returnToParent)],
     ["data-transition-duration-ms", zoom.transitionDurationMs]
   ]);
   const image = zoom.src ? `<img class="slide-zoom-preview" src="${escapeHtml(assetPrefix + zoom.src)}" alt="${escapeHtml(zoom.alt ?? "Slide zoom preview")}">` : "";
@@ -47997,36 +48928,15 @@ function slideZoomHref(targetSlideRef, assetPrefix) {
   if (typeof targetSlideRef !== "string" || targetSlideRef.length === 0) return void 0;
   return assetPrefix === "../" ? `./${targetSlideRef}.html` : `#${targetSlideRef}`;
 }
-function booleanData5(value) {
+function booleanData7(value) {
   return value === true ? "true" : value === false ? "false" : void 0;
 }
 
-// src/render/renderSvgPicture.ts
-function canRenderSvgPicture(element) {
-  return element.shapeType === "triangle" && element.fillMode !== "tile" && !hasInsetFillRect3(element.fillRect);
-}
-function renderSvgPicture(element, attrs, assetPrefix) {
-  const crop = element.crop ?? {};
-  const x = cropSourceAxis(crop.left, crop.right);
-  const y = cropSourceAxis(crop.top, crop.bottom);
-  const clipId = `${element.id}-picture-clip`;
-  const alt = escapeHtml(element.alt);
-  return `    <svg class="image image-vector image-${escapeHtml(String(element.shapeType))}"${attrs} viewBox="0 0 100 100" preserveAspectRatio="none" role="img" aria-label="${alt}">
-      <defs>
-        <clipPath id="${escapeHtml(clipId)}" clipPathUnits="userSpaceOnUse"><polygon points="50,0 100,100 0,100"></polygon></clipPath>
-      </defs>
-      <image href="${escapeHtml(assetPrefix + element.src)}" x="${x.offset}" y="${y.offset}" width="${x.size}" height="${y.size}" preserveAspectRatio="none" clip-path="url(#${escapeHtml(clipId)})"></image>
-    </svg>`;
-}
-function hasInsetFillRect3(fillRect) {
-  return ["left", "top", "right", "bottom"].some((key) => typeof fillRect?.[key] === "number" && Number.isFinite(fillRect[key]));
-}
-
 // src/render/renderTable.ts
-function renderTable(element) {
+function renderTable(element, options = {}) {
   const rows = (element.rows ?? []).map((row, rowIndex) => {
-    const cells = (row.cells ?? []).map((cell, cellIndex) => `<td${renderTableCellAttributes(cell)}>${renderTableCellContent(cell, `${element.id}-r-${rowIndex}-c-${cellIndex}`)}</td>`).join("");
-    return `<tr>${cells}</tr>`;
+    const cells = (row.cells ?? []).map((cell, cellIndex) => `<td${renderTableCellAttributes(cell)}>${renderTableCellContent(cell, `${element.id}-r-${rowIndex}-c-${cellIndex}`, options)}</td>`).join("");
+    return `<tr${renderTableRowAttributes(row)}>${cells}</tr>`;
   }).join("");
   const colgroup = renderTableColGroup(element.columns);
   const style = element.style;
@@ -48037,6 +48947,14 @@ function renderTable(element) {
     ...tableMetadataAttributePairs(style)
   ]);
   return `    <table class="${tableClassName(style)}"${attrs}>${colgroup}<tbody>${rows}</tbody></table>`;
+}
+function renderTableRowAttributes(row) {
+  const height = Number(row?.height);
+  const finiteHeight = Number.isFinite(height) ? height : void 0;
+  return renderAttributes3([
+    ["data-row-height", finiteHeight],
+    ["style", finiteHeight != null && finiteHeight > 0 ? `height: ${emuToCssPx4(finiteHeight)};` : void 0]
+  ]);
 }
 function renderTableColGroup(columns) {
   if (!Array.isArray(columns) || columns.length === 0) return "";
@@ -48067,12 +48985,12 @@ function tableMetadataAttributePairs(style) {
   const options = style?.options ?? {};
   return [
     ["data-table-style-id", style?.styleId],
-    ["data-table-band-row", booleanData6(options.bandRow)],
-    ["data-table-band-col", booleanData6(options.bandCol)],
-    ["data-table-first-row", booleanData6(options.firstRow)],
-    ["data-table-last-row", booleanData6(options.lastRow)],
-    ["data-table-first-col", booleanData6(options.firstCol)],
-    ["data-table-last-col", booleanData6(options.lastCol)]
+    ["data-table-band-row", booleanData8(options.bandRow)],
+    ["data-table-band-col", booleanData8(options.bandCol)],
+    ["data-table-first-row", booleanData8(options.firstRow)],
+    ["data-table-last-row", booleanData8(options.lastRow)],
+    ["data-table-first-col", booleanData8(options.firstCol)],
+    ["data-table-last-col", booleanData8(options.lastCol)]
   ];
 }
 function renderTableCellAttributes(cell) {
@@ -48088,7 +49006,9 @@ function renderTableCellAttributes(cell) {
     ["data-col-span", colSpan > 1 ? colSpan : void 0],
     ["data-row-span", rowSpan > 1 ? rowSpan : void 0],
     ["data-cell-anchor", style.verticalAlign],
-    ["data-cell-anchor-ctr", booleanData6(style.anchorCenter)],
+    ["data-cell-anchor-ctr", booleanData8(style.anchorCenter)],
+    ["data-cell-right-to-left", booleanData8(style.rightToLeft)],
+    ["data-cell-right-to-left-raw", style.rightToLeftRaw],
     ["data-fill-type", fill.type],
     ["data-fill-color", fill.color],
     ["data-fill-color-source", fill.colorSource],
@@ -48101,7 +49021,7 @@ function renderTableCellAttributes(cell) {
     ["data-cell-text-font-family", textStyle.fontFamily],
     ["data-cell-text-font-family-source", textStyle.fontFamilySource],
     ["data-cell-text-font-family-ref", textStyle.fontFamilyRef],
-    ["data-cell-text-bold", booleanData6(textStyle.bold)],
+    ["data-cell-text-bold", booleanData8(textStyle.bold)],
     ["data-cell-text-bold-raw", textStyle.boldRaw],
     ...tableBorderAttributePairs("left", borders.left),
     ...tableBorderAttributePairs("right", borders.right),
@@ -48112,28 +49032,146 @@ function renderTableCellAttributes(cell) {
   ];
   return renderAttributes3(attrs);
 }
-function renderTableCellContent(cell, cellId) {
+function renderTableCellContent(cell, cellId, options) {
   const textBody = cell.textBody;
   const paragraphs = textBody?.paragraphs ?? [];
   if (paragraphs.length === 0) return escapeHtml(cell.text ?? "");
   const autoFit = textBody?.bodyStyle?.autoFit;
+  let numberValue2;
   const content = paragraphs.map((paragraph, index) => {
-    return `<span class="table-paragraph paragraph"${renderTableParagraphAttributes(paragraph, index, autoFit)}>${renderRuns(paragraphRunsForRender(paragraph), { inlineStyle: true, autoFit, gradientIdPrefix: `${cellId}-p-${index}` })}</span>`;
+    const runs = paragraphRunsForRender(paragraph);
+    numberValue2 = nextTableNumberValue(paragraph?.bullet, numberValue2);
+    const marker = renderTableParagraphMarker(paragraph, numberValue2, autoFit);
+    return `<span class="table-paragraph paragraph"${renderTableParagraphAttributes(paragraph, index, paragraphs.length, textBody?.bodyStyle)}>${marker}${renderRuns(runs, { inlineStyle: true, autoFit, inheritedStyle: paragraph?.style ?? {}, gradientIdPrefix: `${cellId}-p-${index}`, slideHrefForTarget: options.slideHrefForTarget })}</span>`;
   }).join("");
   return `<div class="table-cell-content"${renderTableTextBodyAttributes(textBody?.bodyStyle)}>${content}</div>`;
+}
+function renderTableParagraphMarker(paragraph, numberValue2, autoFit) {
+  const bullet = paragraph?.bullet ?? {};
+  const text = tableMarkerText(bullet, numberValue2);
+  if (!text) return "";
+  const visibleRun = firstVisibleRun2(paragraph);
+  const declarations = tableMarkerStyleDeclarations(bullet, visibleRun?.style ?? {}, visibleRun?.text, autoFit);
+  const attrs = [
+    ["class", "table-marker"],
+    ["aria-hidden", "true"],
+    ["style", declarations.length > 0 ? `${declarations.join("; ")};` : void 0]
+  ];
+  return `<span${renderAttributes3(attrs)}>${escapeHtml(text)}</span>`;
+}
+function nextTableNumberValue(bullet, previous) {
+  if (bullet?.type !== "number") return previous;
+  return tableMarkerStartValue(bullet.startAt) ?? (previous == null ? 1 : previous + 1);
+}
+function tableMarkerText(bullet, numberValue2) {
+  if (bullet.type === "bullet" && typeof bullet.char === "string") return bullet.char;
+  if (bullet.type !== "number" || numberValue2 == null) return void 0;
+  const format = typeof bullet.format === "string" ? bullet.format : "arabicPeriod";
+  const number4 = tableMarkerNumber(numberValue2, format);
+  if (!number4) return void 0;
+  if (format.includes("ParenBoth")) return `(${number4}) `;
+  if (format.includes("ParenR")) return `${number4}) `;
+  if (format.includes("Period")) return `${number4}. `;
+  return `${number4} `;
+}
+function tableMarkerNumber(value, format) {
+  if (!Number.isInteger(value) || value < 1) return void 0;
+  if (format.startsWith("alphaLc")) return alphaMarker(value, "abcdefghijklmnopqrstuvwxyz");
+  if (format.startsWith("alphaUc")) return alphaMarker(value, "ABCDEFGHIJKLMNOPQRSTUVWXYZ");
+  if (format.startsWith("romanLc")) return romanMarker(value).toLowerCase();
+  if (format.startsWith("romanUc")) return romanMarker(value);
+  return String(value);
+}
+function alphaMarker(value, alphabet) {
+  let remaining = value;
+  let result = "";
+  while (remaining > 0) {
+    remaining -= 1;
+    result = alphabet[remaining % alphabet.length] + result;
+    remaining = Math.floor(remaining / alphabet.length);
+  }
+  return result;
+}
+function romanMarker(value) {
+  const pairs = [
+    [1e3, "M"],
+    [900, "CM"],
+    [500, "D"],
+    [400, "CD"],
+    [100, "C"],
+    [90, "XC"],
+    [50, "L"],
+    [40, "XL"],
+    [10, "X"],
+    [9, "IX"],
+    [5, "V"],
+    [4, "IV"],
+    [1, "I"]
+  ];
+  let remaining = Math.min(value, 3999);
+  let result = "";
+  for (const [amount, letter] of pairs) {
+    while (remaining >= amount) {
+      result += letter;
+      remaining -= amount;
+    }
+  }
+  return result;
+}
+function tableMarkerStyleDeclarations(bullet, textStyle, text, autoFit) {
+  const textFontSize = scaledRunFontSize(textStyle, autoFit);
+  return [
+    "position: absolute",
+    "left: 0",
+    "top: 0",
+    "min-width: 1.1em",
+    "transform: translateX(-100%)",
+    "padding-right: 0.3em",
+    "text-align: right",
+    markerColorDeclaration2(bullet, textStyle),
+    markerFontFamilyDeclaration2(bullet, textStyle, text),
+    typeof bullet.sizeCss === "string" ? `font-size: ${bullet.sizeCss}` : bullet.sizeFollowText ? markerFontSizeDeclaration2(textFontSize) : void 0
+  ].filter(Boolean);
+}
+function firstVisibleRun2(paragraph) {
+  const run = paragraphRunsForRender(paragraph).find((item) => item?.text && item.type !== "break" && item.type !== "tab");
+  return run ? { text: run.text, style: run.style ?? {} } : void 0;
+}
+function markerColorDeclaration2(bullet, textStyle) {
+  if (typeof bullet.color === "string") return `color: ${bullet.color}`;
+  if (!bullet.colorFollowText) return void 0;
+  return typeof textStyle.color === "string" ? `color: ${textStyle.color}` : "color: inherit";
+}
+function markerFontFamilyDeclaration2(bullet, textStyle, text) {
+  if (typeof bullet.fontFamily === "string") return `font-family: ${markerFontFamilyCssValue2(bullet.fontFamily)}`;
+  if (!bullet.fontFollowText) return void 0;
+  const value = fontFamilyCssValueForTextStyle(textStyle, text);
+  return value ? `font-family: ${value}` : "font-family: inherit";
+}
+function markerFontFamilyCssValue2(family) {
+  return fontFamilyCssValueForTextStyle({ fontFamily: family }) ?? "var(--font-primary)";
+}
+function markerFontSizeDeclaration2(value) {
+  return value != null ? `font-size: ${value}px` : "font-size: inherit";
+}
+function tableMarkerStartValue(value) {
+  const number4 = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(number4) ? number4 : void 0;
 }
 function renderTableTextBodyAttributes(bodyStyle) {
   return renderAttributes3(textBodyAttributePairs(bodyStyle));
 }
-function renderTableParagraphAttributes(paragraph, index, autoFit) {
+function renderTableParagraphAttributes(paragraph, index, paragraphCount, bodyStyle) {
   const style = paragraph?.style ?? {};
   const bullet = paragraph?.bullet ?? {};
   const text = paragraphRunsForRender(paragraph).map((run) => run.text ?? "").join("");
   const declarations = paragraphStyleDeclarations(style, bullet, text);
+  const autoFit = bodyStyle?.autoFit;
   const autoFitLineHeight = tableAutoFitLineHeight(autoFit);
   if (autoFitLineHeight != null && !declarations.some((item) => item.startsWith("line-height:"))) {
     declarations.push(`line-height: ${autoFitLineHeight}`);
   }
+  declarations.push(...tableParagraphBoundaryDeclarations(index, paragraphCount, bodyStyle));
   const direction = effectiveTextDirection(style.direction, text);
   const attrs = [
     ["data-paragraph-index", index],
@@ -48144,20 +49182,20 @@ function renderTableParagraphAttributes(paragraph, index, autoFit) {
     ["data-bullet-type", bullet.type],
     ["data-bullet-char", bullet.type === "bullet" ? bullet.char : void 0],
     ["data-bullet-color", bullet.color],
-    ["data-bullet-color-follow-text", booleanData6(bullet.colorFollowText)],
+    ["data-bullet-color-follow-text", booleanData8(bullet.colorFollowText)],
     ["data-bullet-font-family", bullet.fontFamily],
     ["data-bullet-font-charset", bullet.fontCharset],
     ["data-bullet-font-pitch-family", bullet.fontPitchFamily],
-    ["data-bullet-font-follow-text", booleanData6(bullet.fontFollowText)],
+    ["data-bullet-font-follow-text", booleanData8(bullet.fontFollowText)],
     ["data-bullet-size-type", bullet.sizeType],
     ["data-bullet-size-raw", bullet.sizeRaw],
     ["data-bullet-size-value", bullet.sizeValue],
     ["data-bullet-size-css", bullet.sizeCss],
-    ["data-bullet-size-follow-text", booleanData6(bullet.sizeFollowText)],
+    ["data-bullet-size-follow-text", booleanData8(bullet.sizeFollowText)],
     ["data-bullet-image-src", bullet.type === "image" ? bullet.src : void 0],
     ["data-bullet-image-relationship-id", bullet.type === "image" ? bullet.relationshipId : void 0],
     ["data-bullet-image-media-type", bullet.type === "image" ? bullet.mediaType : void 0],
-    ["data-bullet-image-unsupported", bullet.type === "image" ? booleanData6(bullet.unsupported) : void 0],
+    ["data-bullet-image-unsupported", bullet.type === "image" ? booleanData8(bullet.unsupported) : void 0],
     ["data-number-format", bullet.type === "number" ? bullet.format : void 0],
     ["data-number-start", bullet.type === "number" ? bullet.startAt : void 0],
     ["data-text-align", style.textAlign],
@@ -48176,6 +49214,13 @@ function renderTableParagraphAttributes(paragraph, index, autoFit) {
     ["style", declarations.length > 0 ? `${declarations.join("; ")};` : void 0]
   ];
   return renderAttributes3(attrs);
+}
+function tableParagraphBoundaryDeclarations(index, paragraphCount, bodyStyle) {
+  if (bodyStyle?.spacingFirstLastParagraph !== false) return [];
+  return [
+    index === 0 ? "margin-top: 0" : void 0,
+    index === paragraphCount - 1 ? "margin-bottom: 0" : void 0
+  ].filter(Boolean);
 }
 function tableAutoFitLineHeight(autoFit) {
   if (autoFit?.type !== "normal" || typeof autoFit.lineSpaceReduction !== "number" || !Number.isFinite(autoFit.lineSpaceReduction)) return void 0;
@@ -48205,6 +49250,9 @@ function tableCellStyle(style) {
     style.paddingTop ? `padding-top: ${style.paddingTop}` : void 0,
     style.paddingBottom ? `padding-bottom: ${style.paddingBottom}` : void 0,
     tableVerticalAlignDeclaration(style),
+    ...tableCellDirectionDeclarations(style),
+    ...tableHorizontalOverflowDeclarations(style.metadata?.horzOverflow),
+    ...tableVerticalTextDeclarations(style.metadata?.vert),
     tableBorderDeclaration("left", style.borders?.left),
     tableBorderDeclaration("right", style.borders?.right),
     tableBorderDeclaration("top", style.borders?.top),
@@ -48212,9 +49260,39 @@ function tableCellStyle(style) {
   ].filter(Boolean);
   return declarations.length > 0 ? `${declarations.join("; ")};` : void 0;
 }
+function tableHorizontalOverflowDeclarations(value) {
+  if (value === "clip") return ["overflow: hidden"];
+  if (value === "overflow") return ["overflow: visible"];
+  if (value === "ellipsis") return ["overflow: hidden", "text-overflow: ellipsis", "white-space: nowrap"];
+  return [];
+}
+function tableVerticalTextDeclarations(value) {
+  const verticalText = tableVerticalTextValue(value);
+  if (!verticalText || verticalText === "horz") return [];
+  const textOrientation = verticalText === "wordArtVert" || verticalText === "wordArtVertRtl" || verticalText === "eaVert" ? "upright" : "mixed";
+  return [
+    "writing-mode: vertical-rl",
+    `text-orientation: ${textOrientation}`,
+    `--ppt-table-cell-vertical-text: ${verticalText}`
+  ];
+}
+function tableVerticalTextValue(value) {
+  return typeof value === "string" && ["horz", "vert", "vert270", "wordArtVert", "wordArtVertRtl", "eaVert"].includes(value) ? value : void 0;
+}
+function tableCellDirectionDeclarations(style) {
+  if (typeof style.rightToLeft !== "boolean") return [];
+  return [`direction: ${style.rightToLeft ? "rtl" : "ltr"}`, "unicode-bidi: isolate"];
+}
 function tableFillDeclaration(fill) {
   if (fill?.type === "solid" && fill.color) return `background-color: ${fill.color}`;
   if (fill?.type === "none") return "background-color: transparent";
+  if (fill?.type === "gradient" && Array.isArray(fill.stops)) {
+    const stops = gradientStopsToCss(fill.stops);
+    if (fill.kind === "path") return `background: ${radialGradientCss(fill, stops)}`;
+    const angle = typeof fill.angle === "number" ? fill.angle : 180;
+    return `background: linear-gradient(${angle}deg, ${stops})`;
+  }
+  if (fill?.type === "pattern") return renderPatternFillCss(fill);
   return void 0;
 }
 function tableVerticalAlignDeclaration(style) {
@@ -48237,7 +49315,7 @@ function tableBorderDeclaration(side, line8) {
 function renderAttributes3(attrs) {
   return attrs.filter(([, value]) => value != null && value !== false && value !== "").map(([name, value]) => ` ${name}="${escapeHtml(value)}"`).join("");
 }
-function booleanData6(value) {
+function booleanData8(value) {
   return value === true ? "true" : value === false ? "false" : void 0;
 }
 function kebabCase(value) {
@@ -48287,33 +49365,35 @@ function textWarpPlainText(text) {
 var basicTextWarpPresets = /* @__PURE__ */ new Set(["textArchUp", "textArchDown", "textCircle"]);
 
 // src/render/renderHtml.ts
-function renderDeckHtml(deck) {
+function renderDeckHtml(deck, options = {}) {
+  const context = renderContextForDeck(deck, "deck");
   const slides = deck.slides.map((slide) => {
-    return renderSlideSection(slide, "");
+    return renderSlideSection(slide, "", context);
   }).join("\n\n");
   return renderDocument({
     title: deck.source.fileName,
     stylesheetHref: "./styles.css",
     googleFontFamilies: googleFontFamiliesForDeck(deck),
     includeEcharts: hasCharts(deck),
-    echartsScriptSrc: "./assets/vendor/echarts.min.js",
+    echartsScriptSrc: options.echartsScriptSrc,
     body: `<main class="deck" data-template-version="${deck.version}">
 ${slides}
 </main>`
   });
 }
-function renderSlideHtml(deck, slideId) {
+function renderSlideHtml(deck, slideId, options = {}) {
   const slide = deck.slides.find((item) => item.id === slideId);
   if (!slide) throw new Error(`Unknown slide id: ${slideId}`);
+  const context = renderContextForDeck(deck, "single");
   return renderDocument({
     title: `${deck.source.fileName} - ${slide.id}`,
     stylesheetHref: "../styles.css",
     googleFontFamilies: googleFontFamiliesForSlide(slide),
     includeEcharts: hasCharts(slide),
-    echartsScriptSrc: "../assets/vendor/echarts.min.js",
+    echartsScriptSrc: options.echartsScriptSrc,
     inlineStyle: renderSlideScopedCss(slide, "../"),
     body: `<main class="deck deck-single" data-template-version="${deck.version}">
-${renderSlideSection(slide, "../")}
+${renderSlideSection(slide, "../", context)}
 </main>`
   });
 }
@@ -48339,7 +49419,7 @@ function renderDocument(input) {
 ${input.inlineStyle}
   </style>` : "";
   const googleFonts = input.googleFontFamilies ? `
-  ${renderGoogleFontsScript(input.googleFontFamilies)}` : "";
+  ${renderGoogleFontsLinks(input.googleFontFamilies)}` : "";
   const echarts = input.includeEcharts ? `
   ${renderEchartsRuntimeScripts(input.echartsScriptSrc)}` : "";
   return `<!doctype html>
@@ -48356,8 +49436,32 @@ ${input.body}
 </html>
 `;
 }
-function renderSlideSection(slide, assetPrefix) {
-  const elements = orderedElements(slide.elements).map((element) => renderElement(element, assetPrefix, noFlipState)).join("\n");
+function renderContextForDeck(deck, mode) {
+  const slideIdsByPath = /* @__PURE__ */ new Map();
+  const slideIdsByIndex = /* @__PURE__ */ new Map();
+  for (const slide of deck.slides) {
+    if (typeof slide.sourcePath === "string") slideIdsByPath.set(normalizeSlideTarget(slide.sourcePath), slide.id);
+    slideIdsByPath.set(`ppt/slides/slide${slide.index}.xml`, slide.id);
+    slideIdsByIndex.set(slide.index, slide.id);
+  }
+  return {
+    slideHrefForTarget(target) {
+      const normalized = normalizeSlideTarget(target);
+      const slideId = slideIdsByPath.get(normalized) ?? slideIdsByIndex.get(slideIndexFromTarget(normalized));
+      if (!slideId) return void 0;
+      return mode === "deck" ? `#${slideId}` : `./${slideId}.html`;
+    }
+  };
+}
+function normalizeSlideTarget(target) {
+  return target.replace(/^\/+/, "").replace(/\\/g, "/");
+}
+function slideIndexFromTarget(target) {
+  const match = /(?:^|\/)slide(\d+)\.xml$/i.exec(target);
+  return match ? Number(match[1]) : NaN;
+}
+function renderSlideSection(slide, assetPrefix, context) {
+  const elements = orderedElements(slide.elements).map((element) => renderElement(element, assetPrefix, noFlipState, context)).join("\n");
   const pictureFilters = renderPictureFilterDefs(slide);
   const effectFilters = renderEffectFilterDefs(slide);
   const content = [pictureFilters, effectFilters, elements].filter(Boolean).join("\n");
@@ -48388,14 +49492,14 @@ function slideBackgroundAttributePairs(background, assetPrefix) {
     ["data-background-gradient-angle", background?.angle],
     ["data-background-gradient-path", background?.path],
     ["data-background-gradient-stop-count", Array.isArray(background?.stops) ? background.stops.length : void 0],
-    ["data-background-gradient-scaled", booleanData7(background?.scaled)],
-    ["data-background-gradient-rot-with-shape", booleanData7(background?.rotateWithShape)],
+    ["data-background-gradient-scaled", booleanData9(background?.scaled)],
+    ["data-background-gradient-rot-with-shape", booleanData9(background?.rotateWithShape)],
     ["data-background-gradient-flip", background?.flip],
     ["data-background-gradient-fill-to-rect", gradientFillToRect ? JSON.stringify(gradientFillToRect) : void 0],
     ["data-background-gradient-tile-rect", background?.tileRect ? JSON.stringify(background.tileRect) : void 0],
     ["data-background-theme-style-source", background?.themeStyleSource],
     ["data-background-theme-style-index", background?.themeStyleIndex],
-    ["data-background-inherited", booleanData7(background?.inherited)],
+    ["data-background-inherited", booleanData9(background?.inherited)],
     ["data-background-inherited-source", background?.inheritedSource],
     ["data-background-unsupported", background?.unsupported === true ? "true" : void 0],
     ["data-background-reason", background?.reason],
@@ -48420,136 +49524,70 @@ function slideBackgroundAttributePairs(background, assetPrefix) {
     ["data-background-tile-scale-y", tile?.scaleY]
   ];
 }
-function renderElement(element, assetPrefix, inheritedFlip) {
+function renderElement(element, assetPrefix, inheritedFlip, context) {
   if (element.hidden) return "";
+  let rendered;
   switch (element.type) {
     case "text":
-      return renderText(element, assetPrefix, inheritedFlip);
+      rendered = renderText(element, assetPrefix, inheritedFlip, context);
+      break;
     case "image":
-      return renderImage(element, assetPrefix);
+      rendered = renderImage(element, assetPrefix);
+      break;
     case "shape":
-      if (isConnectorGeometry(element.shapeType)) return renderConnectorSvg(element);
-      if (isShapeSvgElement(element) && (!hasImageFill(element) || canRenderShapeSvgImageFill(element))) return renderShapeSvg(element, assetPrefix);
-      return `    <div class="shape shape-${escapeHtml(element.shapeType)}"${renderShapeAttributes(element, assetPrefix)}></div>`;
+      if (isConnectorGeometry(element.shapeType)) rendered = renderConnectorSvg(element);
+      else if (isShapeSvgElement(element) && (!hasImageFill(element) || canRenderShapeSvgImageFill(element))) rendered = renderShapeSvg(element, assetPrefix);
+      else rendered = `    <div class="shape shape-${escapeHtml(element.shapeType)}"${renderShapeAttributes(element, assetPrefix)}></div>`;
+      break;
     case "connector":
-      return renderConnectorSvg(element);
+      rendered = renderConnectorSvg(element);
+      break;
     case "group":
-      return renderGroup(element, assetPrefix, (child2, childAssetPrefix) => {
-        return renderElement(child2, childAssetPrefix, nextFlipState(element, inheritedFlip));
+      rendered = renderGroup(element, assetPrefix, (child2, childAssetPrefix) => {
+        return renderElement(child2, childAssetPrefix, nextFlipState(element, inheritedFlip), context);
       });
+      break;
     case "table":
-      return renderTable(element);
+      rendered = renderTable(element, { slideHrefForTarget: context.slideHrefForTarget });
+      break;
     case "chart":
-      return renderChartFigure(element);
+      rendered = renderChartFigure(element);
+      break;
     case "slideZoom":
-      return renderSlideZoom(element, assetPrefix);
+      rendered = renderSlideZoom(element, assetPrefix);
+      break;
     case "video":
     case "audio":
-      return renderMedia(element, assetPrefix);
+      rendered = renderMedia(element, assetPrefix);
+      break;
     case "fallback":
-      return renderFallback(element, assetPrefix);
+      rendered = renderFallback(element, assetPrefix);
+      break;
     default:
-      return `    <div class="fallback" data-element-id="${element.id}" data-role="fallback"></div>`;
+      rendered = `    <div class="fallback" data-element-id="${element.id}" data-role="fallback"></div>`;
+      break;
   }
+  return wrapElementHyperlink(element, rendered, context);
 }
-function renderImage(element, assetPrefix) {
-  const effects = element.effects ?? {};
-  const alpha = effects.alphaModFix;
-  const grayscale = effects.grayscale;
-  const luminance = effects.luminance;
-  const duotone = effects.duotone;
-  const outerShadow = effects.outerShadow;
-  const glow = effects.glow;
-  const colorTemperature = effects.colorTemperature;
-  const sharpenSoften = effects.sharpenSoften;
-  const backgroundRemoval = effects.backgroundRemoval;
-  const crop = element.crop;
-  const fillRect = element.fillRect;
-  const fillMode = element.fillMode;
-  const tile = element.tile;
-  const isTile = fillMode === "tile";
-  const hasFillRect = !isTile && !crop && hasInsetFillRect4(fillRect);
-  const className = ["image", element.role === "heroImage" ? "hero-image" : void 0, isTile ? "image-tile" : void 0, hasFillRect ? "image-fill-rect" : void 0].filter(Boolean).join(" ");
-  const src = escapeHtml(assetPrefix + element.src);
-  const rawSrc = assetPrefix + element.src;
-  const attrs = renderAttributes([
-    ["data-element-id", element.id],
-    ["data-role", element.role],
-    ...sourceShapeAttributePairs(element),
-    ...geometryAttributePairs(element),
-    ["data-fill-mode", fillMode],
-    ["data-tile-tx", tile?.tx],
-    ["data-tile-ty", tile?.ty],
-    ["data-tile-sx", tile?.sx],
-    ["data-tile-sy", tile?.sy],
-    ["data-tile-flip", tile?.flip],
-    ["data-tile-algn", tile?.algn],
-    ["data-tile-offset-x", tile?.offsetX],
-    ["data-tile-offset-y", tile?.offsetY],
-    ["data-tile-scale-x", tile?.scaleX],
-    ["data-tile-scale-y", tile?.scaleY],
-    ["data-crop-left", crop?.left],
-    ["data-crop-top", crop?.top],
-    ["data-crop-right", crop?.right],
-    ["data-crop-bottom", crop?.bottom],
-    ["data-fill-rect-enabled", fillRect?.enabled === true ? "true" : void 0],
-    ["data-fill-rect-left", fillRect?.left],
-    ["data-fill-rect-top", fillRect?.top],
-    ["data-fill-rect-right", fillRect?.right],
-    ["data-fill-rect-bottom", fillRect?.bottom],
-    ["data-raster-fallback", booleanData7(element.rasterFallback)],
-    ["data-fallback-reason", element.fallbackReason],
-    ["data-source-element-count", element.sourceElementCount],
-    ["data-alpha-mod-fix", alpha?.amount],
-    ["data-grayscale", booleanData7(grayscale?.enabled)],
-    ["data-luminance", booleanData7(luminance?.enabled)],
-    ["data-luminance-bright", luminance?.bright],
-    ["data-luminance-contrast", luminance?.contrast],
-    ["data-css-brightness", luminance?.brightness],
-    ["data-css-contrast", luminance?.cssContrast],
-    ["data-duotone-colors", Array.isArray(duotone?.colors) ? duotone.colors.join(" ") : void 0],
-    ["data-duotone-render-mode", duotone?.renderMode],
-    ["data-color-temperature", colorTemperature?.value],
-    ["data-color-temperature-unsupported-css", colorTemperature?.unsupportedCss === true ? "true" : void 0],
-    ["data-sharpen-soften", sharpenSoften?.amount],
-    ["data-sharpen-soften-css-blur", sharpenSoften?.cssBlur],
-    ["data-sharpen-soften-svg-sharpen", sharpenSoften?.svgSharpen],
-    ["data-sharpen-soften-unsupported-css", sharpenSoften?.unsupportedCss === true ? "true" : void 0],
-    ...backgroundRemovalAttributePairs(backgroundRemoval),
-    ...shadowAttributePairs(outerShadow),
-    ...softEdgeAttributePairs(effects.softEdge),
-    ["data-glow-radius", glow?.radius],
-    ["data-glow-color", glow?.color],
-    ["data-picture-effect-order", Array.isArray(effects.effectOrder) ? effects.effectOrder.join(" ") : void 0],
-    ...directSourceEffectAttributePairs(element.directSourceEffects),
-    ...pictureEffectLayerAttributePairs(element.effectLayerSources, assetPrefix),
-    ["style", isTile ? `--ppt-image-url: ${cssUrl4(rawSrc)};` : void 0]
-  ]);
-  const alt = escapeHtml(element.alt);
-  if (canRenderSvgPicture(element)) return renderSvgPicture(element, attrs, assetPrefix);
-  if (isTile) {
-    return `    <div class="${className}"${attrs}><img class="image-source" src="${src}" alt="${alt}"></div>`;
-  }
-  if (crop) {
-    const cropClassName = [className, "image-crop"].filter(Boolean).join(" ");
-    return `    <div class="${cropClassName}"${attrs}><img class="image-source" src="${src}" alt="${alt}"></div>`;
-  }
-  if (hasFillRect) {
-    return `    <div class="${className}"${attrs}><img class="image-source" src="${src}" alt="${alt}"></div>`;
-  }
-  return `    <img class="${className}"${attrs} src="${src}" alt="${alt}">`;
+function wrapElementHyperlink(element, html, context) {
+  const hyperlink = element.sourceHyperlink;
+  if (hyperlink?.safe !== true) return html;
+  if (element.type === "text" && hasRunHyperlinks(element.text?.paragraphs)) return html;
+  const href = elementHyperlinkHref(hyperlink, context);
+  if (!href) return html;
+  const externalAttrs = hyperlink.type === "url" ? ` target="_blank" rel="noopener noreferrer"` : "";
+  return `    <a class="element-link" href="${escapeHtml(href)}"${externalAttrs}>
+${html}
+    </a>`;
 }
-function hasImageFill(element) {
-  return element.fill?.type === "image";
+function elementHyperlinkHref(hyperlink, context) {
+  if (hyperlink?.type === "url" && typeof hyperlink.href === "string") return hyperlink.href;
+  if (hyperlink?.type === "slide" && typeof hyperlink.target === "string") return context.slideHrefForTarget?.(hyperlink.target);
+  return void 0;
 }
-function cssUrl4(value) {
-  return `url("${value.replace(/["\\\n\r\f]/g, "\\$&")}")`;
-}
-function hasInsetFillRect4(fillRect) {
-  return ["left", "top", "right", "bottom"].some((key) => finiteNumber5(fillRect?.[key]) != null);
-}
-function finiteNumber5(value) {
-  return typeof value === "number" && Number.isFinite(value) ? value : void 0;
+function hasRunHyperlinks(paragraphs) {
+  if (!Array.isArray(paragraphs)) return false;
+  return paragraphs.some((paragraph) => Array.isArray(paragraph?.runs) && paragraph.runs.some((run) => run?.style?.hyperlink));
 }
 function renderShapeAttributes(element, assetPrefix) {
   const fill = element.fill ?? {};
@@ -48565,12 +49603,6 @@ function renderShapeAttributes(element, assetPrefix) {
     ...shapeImageFillAttributePairs(fill, assetPrefix)
   ]);
 }
-function softEdgeAttributePairs(softEdge) {
-  return [
-    ["data-soft-edge-radius", softEdge?.radius],
-    ["data-soft-edge-render-mode", softEdge?.radius != null ? "alpha-mask-filter" : void 0]
-  ];
-}
 function shapeFillAttributePairs(fill) {
   if (fill?.type === "image") return [];
   return [
@@ -48583,16 +49615,16 @@ function shapeFillAttributePairs(fill) {
     ["data-fill-gradient-kind", fill?.kind],
     ["data-fill-gradient-angle", fill?.angle],
     ["data-fill-gradient-path", fill?.path],
-    ["data-fill-gradient-implicit", booleanData7(fill?.implicit)],
+    ["data-fill-gradient-implicit", booleanData9(fill?.implicit)],
     ["data-fill-gradient-flip", fill?.flip],
-    ["data-fill-gradient-scaled", booleanData7(fill?.scaled)],
-    ["data-fill-gradient-rot-with-shape", booleanData7(fill?.rotateWithShape)],
+    ["data-fill-gradient-scaled", booleanData9(fill?.scaled)],
+    ["data-fill-gradient-rot-with-shape", booleanData9(fill?.rotateWithShape)],
     ["data-fill-gradient-tile-rect", fill?.tileRect ? JSON.stringify(fill.tileRect) : void 0],
     ["data-fill-gradient-fill-to-rect", fill?.fillToRect ? JSON.stringify(fill.fillToRect) : void 0]
   ];
 }
-function renderText(element, assetPrefix, inheritedFlip) {
-  if (element.role === "list") return renderList(element, assetPrefix, inheritedFlip);
+function renderText(element, assetPrefix, inheritedFlip, context) {
+  if (element.role === "list") return renderList(element, assetPrefix, inheritedFlip, context);
   const tag = element.role === "title" ? "h1" : element.role === "subtitle" ? "p" : element.role === "heading" ? "h2" : "p";
   const className = `text ${element.role}`;
   const text = element.text;
@@ -48601,20 +49633,20 @@ function renderText(element, assetPrefix, inheritedFlip) {
   const readableFlip = textReadableFlipState(element, inheritedFlip);
   const contentAttrs = renderTextReadableContentAttributes(readableFlip);
   const outline = renderShapeOutlineSvg(element);
-  const content = paragraphs.length > 0 ? paragraphs.map((paragraph, index) => `<span class="paragraph"${renderParagraphAttributes(paragraph, index, assetPrefix)}>${renderRuns(paragraphRunsForRender(paragraph), { gradientIdPrefix: `${element.id}-p-${index}` })}</span>`).join("") : renderRuns([{ text: text?.plain ?? "" }], { gradientIdPrefix: `${element.id}-plain` });
+  const content = paragraphs.length > 0 ? paragraphs.map((paragraph, index) => `<span class="paragraph"${renderParagraphAttributes(paragraph, index, assetPrefix)}>${renderRuns(paragraphRunsForRender(paragraph), { gradientIdPrefix: `${element.id}-p-${index}`, slideHrefForTarget: context.slideHrefForTarget })}</span>`).join("") : renderRuns([{ text: text?.plain ?? "" }], { gradientIdPrefix: `${element.id}-plain`, slideHrefForTarget: context.slideHrefForTarget });
   const warped = renderTextWarpSvg(element, text);
   const bodyContent = warped ? `${outline}<span class="text-warp-source">${content}</span>${warped}` : `${outline}${content}`;
   const body = `<span class="text-readable-content"${contentAttrs}>${bodyContent}</span>`;
   return `    <${tag} class="${className}"${attrs}>${body}</${tag}>`;
 }
-function renderList(element, assetPrefix, inheritedFlip) {
+function renderList(element, assetPrefix, inheritedFlip, context) {
   const text = element.text;
   const paragraphs = text?.paragraphs ?? [];
   const tag = isNumberedList(paragraphs) ? "ol" : "ul";
   const readableFlip = textReadableFlipState(element, inheritedFlip);
   const contentAttrs = renderTextReadableContentAttributes(readableFlip);
   const items = paragraphs.map((paragraph, index) => {
-    const content = renderRuns(paragraphRunsForRender(paragraph), { gradientIdPrefix: `${element.id}-p-${index}` });
+    const content = renderRuns(paragraphRunsForRender(paragraph), { gradientIdPrefix: `${element.id}-p-${index}`, slideHrefForTarget: context.slideHrefForTarget });
     return `<li${renderParagraphAttributes(paragraph, index, assetPrefix)}><span class="text-readable-content"${contentAttrs}>${content}</span></li>`;
   }).join("");
   const attrs = renderAttributes([
@@ -48622,8 +49654,8 @@ function renderList(element, assetPrefix, inheritedFlip) {
     ["data-role", "list"],
     ...sourceShapeAttributePairs(element),
     ...geometryAttributePairs(element),
-    ["data-readable-flip-horizontal", booleanData7(readableFlip.h)],
-    ["data-readable-flip-vertical", booleanData7(readableFlip.v)],
+    ["data-readable-flip-horizontal", booleanData9(readableFlip.h)],
+    ["data-readable-flip-vertical", booleanData9(readableFlip.v)],
     ...shadowAttributePairs(element.style?.effects?.outerShadow),
     ...textBodyAttributePairs(text?.bodyStyle),
     ["data-list-type", tag === "ol" ? "number" : "bullet"],
@@ -48658,8 +49690,8 @@ function renderTextElementAttributes(element, assetPrefix, inheritedFlip) {
     ["data-role", element.role],
     ...sourceShapeAttributePairs(element),
     ...geometryAttributePairs(element),
-    ["data-readable-flip-horizontal", booleanData7(readableFlip.h)],
-    ["data-readable-flip-vertical", booleanData7(readableFlip.v)],
+    ["data-readable-flip-horizontal", booleanData9(readableFlip.h)],
+    ["data-readable-flip-vertical", booleanData9(readableFlip.v)],
     ...shadowAttributePairs(element.style?.effects?.outerShadow),
     ...textBodyAttributePairs(text?.bodyStyle),
     ...shapeFillAttributePairs(fill),
@@ -48683,20 +49715,20 @@ function renderParagraphAttributes(paragraph, index, assetPrefix = "") {
     ["data-bullet-type", bullet.type],
     ["data-bullet-char", bullet.type === "bullet" ? bullet.char : void 0],
     ["data-bullet-color", bullet.color],
-    ["data-bullet-color-follow-text", booleanData7(bullet.colorFollowText)],
+    ["data-bullet-color-follow-text", booleanData9(bullet.colorFollowText)],
     ["data-bullet-font-family", bullet.fontFamily],
     ["data-bullet-font-charset", bullet.fontCharset],
     ["data-bullet-font-pitch-family", bullet.fontPitchFamily],
-    ["data-bullet-font-follow-text", booleanData7(bullet.fontFollowText)],
+    ["data-bullet-font-follow-text", booleanData9(bullet.fontFollowText)],
     ["data-bullet-size-type", bullet.sizeType],
     ["data-bullet-size-raw", bullet.sizeRaw],
     ["data-bullet-size-value", bullet.sizeValue],
     ["data-bullet-size-css", bullet.sizeCss],
-    ["data-bullet-size-follow-text", booleanData7(bullet.sizeFollowText)],
+    ["data-bullet-size-follow-text", booleanData9(bullet.sizeFollowText)],
     ["data-bullet-image-src", bullet.type === "image" && bullet.src ? assetPrefix + bullet.src : void 0],
     ["data-bullet-image-relationship-id", bullet.type === "image" ? bullet.relationshipId : void 0],
     ["data-bullet-image-media-type", bullet.type === "image" ? bullet.mediaType : void 0],
-    ["data-bullet-image-unsupported", bullet.type === "image" ? booleanData7(bullet.unsupported) : void 0],
+    ["data-bullet-image-unsupported", bullet.type === "image" ? booleanData9(bullet.unsupported) : void 0],
     ["data-number-format", bullet.type === "number" ? bullet.format : void 0],
     ["data-number-start", bullet.type === "number" ? bullet.startAt : void 0],
     ["data-paragraph-level", style.level],
@@ -48715,11 +49747,11 @@ function renderParagraphAttributes(paragraph, index, assetPrefix = "") {
     ["data-tab-stops", tabStopsData(style.tabStops)],
     ["data-tab-stop-count", tabStopCount(style.tabStops)],
     ["data-font-align", style.fontAlign],
-    ["data-east-asian-line-break", booleanData7(style.eastAsianLineBreak)],
+    ["data-east-asian-line-break", booleanData9(style.eastAsianLineBreak)],
     ["data-east-asian-line-break-raw", style.eastAsianLineBreakRaw],
-    ["data-latin-line-break", booleanData7(style.latinLineBreak)],
+    ["data-latin-line-break", booleanData9(style.latinLineBreak)],
     ["data-latin-line-break-raw", style.latinLineBreakRaw],
-    ["data-hanging-punctuation", booleanData7(style.hangingPunctuation)],
+    ["data-hanging-punctuation", booleanData9(style.hangingPunctuation)],
     ["data-hanging-punctuation-raw", style.hangingPunctuationRaw],
     ...spacingAttributePairs("line-spacing", spacing.line),
     ...spacingAttributePairs("space-before", spacing.before),
@@ -48749,25 +49781,8 @@ function commonBulletChar(paragraphs) {
   if (chars.length === 0) return void 0;
   return chars.every((char) => char === chars[0]) ? chars[0] : void 0;
 }
-function booleanData7(value) {
+function booleanData9(value) {
   return value === true ? "true" : value === false ? "false" : void 0;
-}
-function lineAttributePairs(element) {
-  const line8 = element.line ?? element.style?.line ?? {};
-  const fill = line8.fill ?? {};
-  return [
-    ["data-line-compound", line8.compound],
-    ["data-line-align", line8.align],
-    ["data-line-cap", line8.cap],
-    ["data-line-join", line8.join],
-    ["data-line-dash", line8.dash],
-    ["data-line-width", line8.width],
-    ["data-line-fill-type", fill.type],
-    ["data-line-gradient-kind", fill.kind],
-    ["data-line-gradient-angle", fill.angle],
-    ["data-line-gradient-stop-count", Array.isArray(fill.stops) ? fill.stops.length : void 0],
-    ["data-line-gradient-scaled", booleanData7(fill.scaled)]
-  ];
 }
 
 // src/render/renderOverviewHtml.ts
@@ -49142,7 +50157,6 @@ function clamp20(value, min, max) {
 }
 
 // src/convert/convert.ts
-var require2 = (0, import_node_module.createRequire)(__filename);
 async function convertPptxToHtml(options) {
   const pkg = await readPptx(options.input);
   const presentation = await parsePresentation(pkg);
@@ -49188,23 +50202,31 @@ async function convertPptxToHtml(options) {
     slides
   }));
   await materializeRasterFallbackAssets(options.input, deck, assets, warnings, options.rasterFallbackMode ?? "placeholder");
-  await materializeEchartsRuntimeAsset(deck, assets);
+  await materializeEchartsRuntimeAsset(deck, assets, options.echartsRuntimePath);
   const report = buildReport(options.input, deck, warnings);
-  await writeOutput(options.outDir, pkg, deck, assets, report, options.mode ?? "paged");
+  await writeOutput(options.outDir, pkg, deck, assets, report, {
+    mode: options.mode ?? "paged",
+    echartsScriptSrc: options.echartsScriptSrc,
+    useLocalEchartsRuntime: Boolean(options.echartsRuntimePath)
+  });
   return { deck, assets, report };
 }
-async function writeOutput(outDir, pkg, deck, assets, report, mode) {
+async function writeOutput(outDir, pkg, deck, assets, report, options) {
   await (0, import_promises4.mkdir)(outDir, { recursive: true });
   await writeText(import_node_path3.default.join(outDir, "template.json"), `${JSON.stringify(deck, null, 2)}
 `);
-  if (mode === "deck") {
-    await writeText(import_node_path3.default.join(outDir, "index.html"), renderDeckHtml(deck));
+  if (options.mode === "deck") {
+    await writeText(import_node_path3.default.join(outDir, "index.html"), renderDeckHtml(deck, {
+      echartsScriptSrc: echartsScriptSrcForOutput("deck", options)
+    }));
     await writeText(import_node_path3.default.join(outDir, "styles.css"), renderDeckCss(deck));
   } else {
     await writeText(import_node_path3.default.join(outDir, "index.html"), renderIndexHtml(deck));
     await writeText(import_node_path3.default.join(outDir, "overview.html"), renderOverviewHtml(deck));
     for (const slide of deck.slides) {
-      await writeText(import_node_path3.default.join(outDir, "slides", `${slide.id}.html`), renderSlideHtml(deck, slide.id));
+      await writeText(import_node_path3.default.join(outDir, "slides", `${slide.id}.html`), renderSlideHtml(deck, slide.id, {
+        echartsScriptSrc: echartsScriptSrcForOutput("single", options)
+      }));
     }
     await writeText(import_node_path3.default.join(outDir, "styles.css"), renderGlobalCss(deck));
   }
@@ -49228,15 +50250,24 @@ async function writeOutput(outDir, pkg, deck, assets, report, mode) {
     await writeBuffer(import_node_path3.default.join(outDir, asset.outputPath), await pkg.readBuffer(asset.sourcePath));
   }
 }
-async function materializeEchartsRuntimeAsset(deck, assets) {
+function echartsScriptSrcForOutput(mode, options) {
+  if (options.echartsScriptSrc) return options.echartsScriptSrc;
+  if (!options.useLocalEchartsRuntime) return void 0;
+  return mode === "deck" ? "./assets/vendor/echarts.min.js" : "../assets/vendor/echarts.min.js";
+}
+async function materializeEchartsRuntimeAsset(deck, assets, echartsRuntimePath) {
+  if (!echartsRuntimePath) return;
   if (!hasCharts(deck)) return;
   if (assets.some((asset) => asset.type === "vendor" && asset.outputPath === ECHARTS_VENDOR_OUTPUT_PATH)) return;
-  const sourcePath = require2.resolve("echarts/dist/echarts.min.js");
+  const sourcePath = import_node_path3.default.resolve(echartsRuntimePath);
   assets.push({
     id: "vendor-echarts",
-    sourcePath: "echarts/dist/echarts.min.js",
+    sourcePath,
     outputPath: ECHARTS_VENDOR_OUTPUT_PATH,
     type: "vendor",
+    metadata: {
+      runtimeSource: "custom-file"
+    },
     generatedContent: await (0, import_promises4.readFile)(sourcePath)
   });
 }
@@ -49262,12 +50293,16 @@ async function main() {
   const outputModeIndex = args.indexOf("--output-mode");
   const legacyModeIndex = args.indexOf("--mode");
   const rasterFallbackIndex = args.indexOf("--raster-fallback");
+  const echartsRuntimeIndex = args.indexOf("--echarts-runtime");
+  const echartsSrcIndex = args.indexOf("--echarts-src");
   const jsonOutput = args.includes("--json");
   const outDir = outIndex >= 0 ? args[outIndex + 1] : void 0;
   const mode = outputModeIndex >= 0 ? args[outputModeIndex + 1] : legacyModeIndex >= 0 ? args[legacyModeIndex + 1] : "paged";
   const rasterFallbackMode = rasterFallbackIndex >= 0 ? args[rasterFallbackIndex + 1] : "placeholder";
+  const echartsRuntimePath = echartsRuntimeIndex >= 0 ? args[echartsRuntimeIndex + 1] : void 0;
+  const echartsScriptSrc = echartsSrcIndex >= 0 ? args[echartsSrcIndex + 1] : void 0;
   if (!input || !outDir) {
-    console.error("Usage: pptx-template convert input.pptx --out output [--output-mode paged|deck] [--raster-fallback placeholder|render|skip] [--json]");
+    console.error("Usage: pptx-template convert input.pptx --out output [--output-mode paged|deck] [--raster-fallback placeholder|render|skip] [--echarts-runtime path/to/echarts.min.js] [--echarts-src https://cdn.example/echarts.min.js] [--json]");
     process.exitCode = 1;
     return;
   }
@@ -49285,7 +50320,9 @@ async function main() {
     input: import_node_path4.default.resolve(input),
     outDir: import_node_path4.default.resolve(outDir),
     mode,
-    rasterFallbackMode
+    rasterFallbackMode,
+    ...echartsRuntimePath ? { echartsRuntimePath: import_node_path4.default.resolve(echartsRuntimePath) } : {},
+    ...echartsScriptSrc ? { echartsScriptSrc } : {}
   });
   if (jsonOutput) {
     console.log(JSON.stringify({

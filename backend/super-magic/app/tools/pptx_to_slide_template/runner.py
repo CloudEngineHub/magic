@@ -57,6 +57,8 @@ VALID_CATEGORY_CODES = {
     "PPT-CATE-culture-creative",
 }
 
+ECHARTS_RUNTIME_RELATIVE_PATH = Path("static/js/echarts/6.0.0/echarts.min.js")
+
 
 def _resolve_workspace_path(path_value: str, workspace_dir: Path) -> Path:
     path = Path(path_value)
@@ -94,6 +96,11 @@ def _static_bundle_path() -> Path:
     return root / "static" / "tools" / "pptx-to-html" / "pptx-to-html.bundle.cjs"
 
 
+def _static_echarts_runtime_path() -> Path:
+    root = Path(__file__).resolve().parents[3]
+    return root / ECHARTS_RUNTIME_RELATIVE_PATH
+
+
 def _parse_json_from_stdout(stdout: str) -> Dict[str, Any]:
     text = stdout.strip()
     if not text:
@@ -107,11 +114,14 @@ def _parse_json_from_stdout(stdout: str) -> Dict[str, Any]:
         return json.loads(match.group(1))
 
 
-async def _run_bundle(source_path: Path, render_dir: Path) -> Dict[str, Any]:
+def _bundle_command(source_path: Path, render_dir: Path) -> List[str]:
     bundle_path = _static_bundle_path()
     if not bundle_path.exists():
         raise PptxToSlideTemplateError(f"PPTX renderer bundle is missing: {bundle_path}")
-    command = [
+    echarts_runtime_path = _static_echarts_runtime_path()
+    if not echarts_runtime_path.exists():
+        raise PptxToSlideTemplateError(f"ECharts runtime is missing: {echarts_runtime_path}")
+    return [
         "node",
         str(bundle_path),
         str(source_path),
@@ -121,8 +131,14 @@ async def _run_bundle(source_path: Path, render_dir: Path) -> Dict[str, Any]:
         "paged",
         "--raster-fallback",
         "placeholder",
+        "--echarts-runtime",
+        str(echarts_runtime_path),
         "--json",
     ]
+
+
+async def _run_bundle(source_path: Path, render_dir: Path) -> Dict[str, Any]:
+    command = _bundle_command(source_path, render_dir)
     process = await asyncio.create_subprocess_exec(
         *command,
         stdout=asyncio.subprocess.PIPE,

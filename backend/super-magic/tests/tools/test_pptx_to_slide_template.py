@@ -16,6 +16,14 @@ def test_static_renderer_bundle_defaults_widescreen_to_1920_by_1080():
     assert "return { width: 1920, height: 1080 }" in bundle
 
 
+def test_bundle_command_uses_local_static_echarts_runtime(tmp_path):
+    command = runner._bundle_command(tmp_path / "demo.pptx", tmp_path / "rendered")
+
+    assert "--echarts-runtime" in command
+    assert command[command.index("--echarts-runtime") + 1] == str(runner._static_echarts_runtime_path())
+    assert "--echarts-src" not in command
+
+
 def test_collage_grid_size_uses_compact_matrix():
     assert preview_assets.collage_grid_size(1) == (1, 1)
     assert preview_assets.collage_grid_size(4) == (2, 2)
@@ -125,6 +133,22 @@ def test_rewrite_slide_html_does_not_inject_project_bridge(tmp_path):
 
     assert "../theme.css" in rewritten
     assert "slide-bridge.js" not in rewritten
+
+
+def test_rewrite_slide_html_points_echarts_runtime_to_template_asset(tmp_path):
+    html = '<html><head><script src="../assets/vendor/echarts.min.js"></script></head><body></body></html>'
+
+    rewritten = runner._rewrite_slide_html(
+        html,
+        slots=[],
+        preserve_source_data_attrs=False,
+        externalize_inline_svg=True,
+        vectors_dir=tmp_path / "vectors",
+        slide_id="slide-001",
+    )
+
+    assert '<script src="../images/vendor/echarts.min.js"></script>' in rewritten
+    assert "../assets/vendor/echarts.min.js" not in rewritten
 
 
 def test_write_magic_project_uses_slide_project_config(tmp_path):
