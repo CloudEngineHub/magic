@@ -314,6 +314,14 @@ class InitClientMessage(ClientMessage):
 Custom agent config. type identifies the agent variant; profile carries identity (name, description, role). Top-level name/description are deprecated fallbacks."""
     )
 
+    @validator("message_subscription_config", pre=True)
+    def normalize_message_subscription_config(cls, v):
+        if v is None:
+            return v
+        if isinstance(v, dict):
+            return [v]
+        return v
+
     @validator("message_subscription_config")
     def validate_message_subscription_config(cls, v):
         if Environment.is_local():

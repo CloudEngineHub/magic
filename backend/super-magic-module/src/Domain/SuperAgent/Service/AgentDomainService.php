@@ -130,9 +130,13 @@ class AgentDomainService
                 'token' => config('super-magic.sandbox.token', ''),
             ],
         ];
-        $agentInitContext->setMessageSubscriptionConfig(
-            array_merge([$systemSubscriptionItem], $extraSubscriptionConfigs)
-        );
+        if (count($extraSubscriptionConfigs) > 0) {
+            $agentInitContext->setMessageSubscriptionConfig(
+                array_merge([$systemSubscriptionItem], $extraSubscriptionConfigs)
+            );
+        } else {
+            $agentInitContext->setMessageSubscriptionConfig($systemSubscriptionItem);
+        }
         // 设置 sts refresh 接口
         $refreshConfig = [
             'method' => 'POST',
