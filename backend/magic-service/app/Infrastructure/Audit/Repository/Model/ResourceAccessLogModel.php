@@ -19,18 +19,10 @@ use Carbon\Carbon;
  * @property string $resource_type
  * @property string $resource_code
  * @property null|string $resource_name
- * @property null|string $resource_owner_organization_code
  * @property string $operation
  * @property string $source
- * @property null|string $source_detail
- * @property string $status
- * @property null|string $ip
- * @property null|string $user_agent
- * @property null|string $request_url
  * @property null|string $request_id
- * @property null|string $trace_id
  * @property array $context
- * @property array $resource_snapshot
  * @property null|Carbon $created_at
  * @property null|Carbon $updated_at
  */
@@ -50,18 +42,10 @@ class ResourceAccessLogModel extends AbstractModel
         'resource_type',
         'resource_code',
         'resource_name',
-        'resource_owner_organization_code',
         'operation',
         'source',
-        'source_detail',
-        'status',
-        'ip',
-        'user_agent',
-        'request_url',
         'request_id',
-        'trace_id',
         'context',
-        'resource_snapshot',
         'created_at',
         'updated_at',
     ];
@@ -75,18 +59,10 @@ class ResourceAccessLogModel extends AbstractModel
         'resource_type' => 'string',
         'resource_code' => 'string',
         'resource_name' => 'string',
-        'resource_owner_organization_code' => 'string',
         'operation' => 'string',
         'source' => 'string',
-        'source_detail' => 'string',
-        'status' => 'string',
-        'ip' => 'string',
-        'user_agent' => 'string',
-        'request_url' => 'string',
         'request_id' => 'string',
-        'trace_id' => 'string',
         'context' => 'array',
-        'resource_snapshot' => 'array',
         'created_at' => 'datetime',
         'updated_at' => 'datetime',
     ];

@@ -11,11 +11,12 @@ use App\Domain\Audit\ResourceAccess\Entity\ResourceAccessLogEntity;
 use App\Domain\Audit\ResourceAccess\Repository\Facade\ResourceAccessLogRepositoryInterface;
 use App\Domain\Audit\ResourceAccess\Service\ResourceAccessLogDomainService;
 use App\Domain\SlidesTemplate\Entity\SlidesTemplateEntity;
-use App\Domain\SlidesTemplate\Entity\ValueObject\SlidesTemplateSourceType;
 use App\Domain\SlidesTemplate\Event\SlidesTemplateUsedEvent;
 use App\Infrastructure\Audit\Listener\SlidesTemplateUsageLogListener;
+use App\Infrastructure\Audit\Repository\Model\ResourceAccessLogModel;
 use PHPUnit\Framework\TestCase;
 use Psr\Container\ContainerInterface;
+use ReflectionClass;
 use RuntimeException;
 
 /**
@@ -30,10 +31,7 @@ class SlidesTemplateUsageLogListenerTest extends TestCase
         $listener = new SlidesTemplateUsageLogListener(new SlidesTemplateUsageLogListenerTestContainer($domainService));
 
         $template = new SlidesTemplateEntity();
-        $template->setOrganizationCode('OFFICIAL_ORG')
-            ->setCode('PPT-business-minimal')
-            ->setSourceType(SlidesTemplateSourceType::System)
-            ->setCategoryCode('PPT-CATE-business')
+        $template->setCode('PPT-business-minimal')
             ->setLabel(['zh_CN' => '职场白皮书', 'en_US' => 'Corporate Whitepaper'])
             ->setTemplateFileKey('slides/templates/business.zip');
 
@@ -59,19 +57,14 @@ class SlidesTemplateUsageLogListenerTest extends TestCase
         $this->assertSame('slides_template', $entity->getResourceType());
         $this->assertSame('PPT-business-minimal', $entity->getResourceCode());
         $this->assertSame('职场白皮书', $entity->getResourceName());
-        $this->assertSame('OFFICIAL_ORG', $entity->getResourceOwnerOrganizationCode());
         $this->assertSame('use', $entity->getOperation());
         $this->assertSame('super_magic_tool', $entity->getSource());
-        $this->assertNull($entity->getSourceDetail());
-        $this->assertSame('success', $entity->getStatus());
         $this->assertSame('topic-1', $entity->getContext()['topic_id']);
         $this->assertSame('project-1', $entity->getContext()['project_id']);
         $this->assertSame('task-1', $entity->getContext()['task_id']);
         $this->assertSame('super_magic_tool', $entity->getContext()['source']);
         $this->assertArrayNotHasKey('tool_call_id', $entity->getContext());
         $this->assertArrayNotHasKey('tool_name', $entity->getContext());
-        $this->assertSame('PPT-CATE-business', $entity->getResourceSnapshot()['category_code']);
-        $this->assertSame('SYSTEM', $entity->getResourceSnapshot()['source_type']);
     }
 
     public function testDomainServiceDoesNotSwallowRepositoryFailure(): void
@@ -82,6 +75,25 @@ class SlidesTemplateUsageLogListenerTest extends TestCase
         $this->expectExceptionMessage('save failed');
 
         $domainService->save(new ResourceAccessLogEntity());
+    }
+
+    public function testResourceAccessLogModelDoesNotExposeDroppedColumns(): void
+    {
+        $droppedColumns = [
+            'user_agent',
+            'ip',
+            'resource_owner_organization_code',
+            'source_detail',
+            'status',
+            'trace_id',
+            'request_url',
+            'resource_snapshot',
+        ];
+
+        $properties = (new ReflectionClass(ResourceAccessLogModel::class))->getDefaultProperties();
+
+        $this->assertSame([], array_values(array_intersect($droppedColumns, $properties['fillable'])));
+        $this->assertSame([], array_values(array_intersect($droppedColumns, array_keys($properties['casts']))));
     }
 }
 

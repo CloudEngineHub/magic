@@ -10,7 +10,6 @@ namespace App\Infrastructure\Audit\Listener;
 use App\Domain\Audit\ResourceAccess\Entity\ResourceAccessLogEntity;
 use App\Domain\Audit\ResourceAccess\Service\ResourceAccessLogDomainService;
 use App\Domain\SlidesTemplate\Event\SlidesTemplateUsedEvent;
-use App\Infrastructure\Util\Http\RequestHelper;
 use Hyperf\Event\Annotation\Listener;
 use Hyperf\Event\Contract\ListenerInterface;
 use Hyperf\HttpServer\Contract\RequestInterface;
@@ -66,23 +65,10 @@ class SlidesTemplateUsageLogListener implements ListenerInterface
             ->setResourceType(self::RESOURCE_TYPE)
             ->setResourceCode($template->getCode())
             ->setResourceName($this->resolveResourceName($template->getLabel()))
-            ->setResourceOwnerOrganizationCode($template->getOrganizationCode())
             ->setOperation(self::OPERATION)
             ->setSource($this->resolveSource($accessContext))
-            ->setStatus('success')
-            ->setIp($request ? RequestHelper::getClientIp($request) : null)
-            ->setUserAgent($this->limitString($request ? RequestHelper::getUserAgent($request) : null, 512))
-            ->setRequestUrl($this->limitString($request ? RequestHelper::getFullUrl($request) : null, 1024))
             ->setRequestId($this->limitString($this->getHeader($request, ['x-request-id', 'request-id']), 128))
-            ->setTraceId($this->limitString($this->getHeader($request, ['x-trace-id', 'trace-id', 'traceparent']), 128))
-            ->setContext($accessContext)
-            ->setResourceSnapshot([
-                'code' => $template->getCode(),
-                'label' => $template->getLabel(),
-                'source_type' => $template->getSourceType()->value,
-                'category_code' => $template->getCategoryCode(),
-                'owner_organization_code' => $template->getOrganizationCode(),
-            ]);
+            ->setContext($accessContext);
 
         return $entity;
     }

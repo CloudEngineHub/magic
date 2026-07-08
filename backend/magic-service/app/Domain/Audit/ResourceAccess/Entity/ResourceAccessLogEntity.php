@@ -28,29 +28,13 @@ class ResourceAccessLogEntity extends AbstractEntity
 
     protected ?string $resourceName = null;
 
-    protected ?string $resourceOwnerOrganizationCode = null;
-
     protected string $operation = '';
 
     protected string $source = '';
 
-    protected ?string $sourceDetail = null;
-
-    protected string $status = 'success';
-
-    protected ?string $ip = null;
-
-    protected ?string $userAgent = null;
-
-    protected ?string $requestUrl = null;
-
     protected ?string $requestId = null;
 
-    protected ?string $traceId = null;
-
     protected array $context = [];
-
-    protected array $resourceSnapshot = [];
 
     protected ?DateTime $createdAt = null;
 
@@ -154,18 +138,6 @@ class ResourceAccessLogEntity extends AbstractEntity
         return $this;
     }
 
-    public function getResourceOwnerOrganizationCode(): ?string
-    {
-        return $this->resourceOwnerOrganizationCode;
-    }
-
-    public function setResourceOwnerOrganizationCode(?string $resourceOwnerOrganizationCode): self
-    {
-        $resourceOwnerOrganizationCode = trim((string) $resourceOwnerOrganizationCode);
-        $this->resourceOwnerOrganizationCode = $resourceOwnerOrganizationCode === '' ? null : $resourceOwnerOrganizationCode;
-        return $this;
-    }
-
     public function getOperation(): string
     {
         return $this->operation;
@@ -188,66 +160,6 @@ class ResourceAccessLogEntity extends AbstractEntity
         return $this;
     }
 
-    public function getSourceDetail(): ?string
-    {
-        return $this->sourceDetail;
-    }
-
-    public function setSourceDetail(?string $sourceDetail): self
-    {
-        $sourceDetail = trim((string) $sourceDetail);
-        $this->sourceDetail = $sourceDetail === '' ? null : $sourceDetail;
-        return $this;
-    }
-
-    public function getStatus(): string
-    {
-        return $this->status;
-    }
-
-    public function setStatus(?string $status): self
-    {
-        $status = trim((string) $status);
-        $this->status = $status === '' ? 'success' : $status;
-        return $this;
-    }
-
-    public function getIp(): ?string
-    {
-        return $this->ip;
-    }
-
-    public function setIp(?string $ip): self
-    {
-        $ip = trim((string) $ip);
-        $this->ip = $ip === '' ? null : $ip;
-        return $this;
-    }
-
-    public function getUserAgent(): ?string
-    {
-        return $this->userAgent;
-    }
-
-    public function setUserAgent(?string $userAgent): self
-    {
-        $userAgent = trim((string) $userAgent);
-        $this->userAgent = $userAgent === '' ? null : $userAgent;
-        return $this;
-    }
-
-    public function getRequestUrl(): ?string
-    {
-        return $this->requestUrl;
-    }
-
-    public function setRequestUrl(?string $requestUrl): self
-    {
-        $requestUrl = trim((string) $requestUrl);
-        $this->requestUrl = $requestUrl === '' ? null : $requestUrl;
-        return $this;
-    }
-
     public function getRequestId(): ?string
     {
         return $this->requestId;
@@ -260,18 +172,6 @@ class ResourceAccessLogEntity extends AbstractEntity
         return $this;
     }
 
-    public function getTraceId(): ?string
-    {
-        return $this->traceId;
-    }
-
-    public function setTraceId(?string $traceId): self
-    {
-        $traceId = trim((string) $traceId);
-        $this->traceId = $traceId === '' ? null : $traceId;
-        return $this;
-    }
-
     public function getContext(): array
     {
         return $this->context;
@@ -280,17 +180,6 @@ class ResourceAccessLogEntity extends AbstractEntity
     public function setContext(array $context): self
     {
         $this->context = $context;
-        return $this;
-    }
-
-    public function getResourceSnapshot(): array
-    {
-        return $this->resourceSnapshot;
-    }
-
-    public function setResourceSnapshot(array $resourceSnapshot): self
-    {
-        $this->resourceSnapshot = $resourceSnapshot;
         return $this;
     }
 
