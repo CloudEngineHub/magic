@@ -1445,6 +1445,7 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 				Boolean(messageType) &&
 				[
 					"iframeReady",
+					"pageLoaded",
 					"contentLoaded",
 					"domReady",
 					"renderComplete",
@@ -1507,13 +1508,7 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 						origin: event.origin,
 					})
 					setIframeLoaded(true)
-				} else if (
-					event.data &&
-					event.data.type === "pageLoaded" &&
-					(externalRenderSiteOrigin
-						? event.origin === externalRenderSiteOrigin
-						: isExpectedSource)
-				) {
+				} else if (event.data && event.data.type === "pageLoaded") {
 					// Shell load 后再次兜底置为 ready，避免早期 iframeReady 丢失。
 					reportRenderLifecycleStage("page_loaded", {
 						origin: event.origin,
