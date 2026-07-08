@@ -3,124 +3,6 @@ import type { AttachmentItem } from "../../../../TopicFilesButton/hooks/types"
 import { getParentIdFromPath } from "../../../../TopicFilesButton/utils/getParentIdFromPath"
 import { isMagicProjectConfigFile } from "@/pages/superMagic/components/MessageList/components/MessageAttachment/utils"
 
-function normalizeTabFileId(fileId: unknown): string {
-	if (typeof fileId === "string") return fileId.trim()
-	if (typeof fileId === "number" && Number.isFinite(fileId)) return String(fileId)
-	return ""
-}
-
-function getAttachmentFileName(item: FileItem | AttachmentItem): string {
-	return item.display_filename || item.file_name || item.filename || ""
-}
-
-function isSlideProjectFolder(item: FileItem | AttachmentItem | undefined): boolean {
-	return Boolean(item?.is_directory && item?.display_config?.type === "slide")
-}
-
-function findParentDirectory(
-	items: (FileItem | AttachmentItem)[] | undefined,
-	child: FileItem | AttachmentItem,
-): FileItem | AttachmentItem | undefined {
-	if (!items || !Array.isArray(items)) return undefined
-
-	const childParentId = normalizeTabFileId(child.parent_id)
-	const childPath = child.relative_file_path || ""
-	const parentPath = childPath.includes("/") ? childPath.split("/").slice(0, -1).join("/") : ""
-
-	for (const item of items) {
-		if (item.is_directory) {
-			const itemId = normalizeTabFileId(item.file_id)
-			const itemPath = item.relative_file_path || ""
-			if (
-				(childParentId && itemId === childParentId) ||
-				(parentPath && itemPath === parentPath)
-			) {
-				return item
-			}
-		}
-
-		if (Array.isArray(item.children)) {
-			const found = findParentDirectory(item.children, child)
-			if (found) return found
-		}
-	}
-
-	return undefined
-}
-
-function resolveSlideProjectTabFile(
-	file: FileItem | AttachmentItem,
-	attachments?: FileItem[] | AttachmentItem[],
-): FileItem | AttachmentItem {
-	if (isSlideProjectFolder(file)) return file
-
-	const fileName = getAttachmentFileName(file).toLowerCase()
-	if (fileName !== "index.html") return file
-
-	const parentDirectory = findParentDirectory(attachments, file)
-	return isSlideProjectFolder(parentDirectory) ? parentDirectory : file
-}
-
-export function normalizeSlideProjectTabItem(
-	tab: TabItem,
-	attachments?: FileItem[] | AttachmentItem[],
-): TabItem {
-	const tabFile = resolveSlideProjectTabFile(tab.fileData, attachments)
-	const stableFileId = normalizeTabFileId(tabFile.file_id)
-	if (!stableFileId) return tab
-
-	const currentTabId = normalizeTabFileId(tab.id)
-	const currentFileId = normalizeTabFileId(tab.fileData.file_id)
-	if (stableFileId === currentTabId && stableFileId === currentFileId) return tab
-
-	const displayConfig = tabFile.display_config || tab.display_config
-	return {
-		...tab,
-		id: stableFileId,
-		title: getFileTabTitle(tabFile, attachments, displayConfig),
-		fileData: {
-			...tab.fileData,
-			...tabFile,
-			file_id: stableFileId,
-			display_config: displayConfig,
-		} as FileItem,
-		filePath: tabFile.relative_file_path || tab.filePath,
-		display_config: displayConfig,
-	}
-}
-
-export function dedupeTabsById(tabs: TabItem[]): TabItem[] {
-	const result: TabItem[] = []
-	const indexById = new Map<string, number>()
-
-	for (const tab of tabs) {
-		const id = normalizeTabFileId(tab.id)
-		if (!id) continue
-
-		const existingIndex = indexById.get(id)
-		if (existingIndex === undefined) {
-			indexById.set(id, result.length)
-			result.push({ ...tab, id })
-			continue
-		}
-
-		const existing = result[existingIndex]
-		const shouldUseNext =
-			tab.active ||
-			(!existing.active &&
-				(tab.active_at || tab.create_at || 0) >=
-					(existing.active_at || existing.create_at || 0))
-
-		result[existingIndex] = {
-			...(shouldUseNext ? tab : existing),
-			id,
-			active: Boolean(existing.active || tab.active),
-		}
-	}
-
-	return result
-}
-
 /**
  * 递归查找指定路径的目录项
  * @param items - 附件树数组
@@ -238,39 +120,30 @@ export function convertFileToTabItem(
 		closeable?: boolean
 	},
 ): TabItem | null {
-	if (!file) {
+	if (!file || !file.file_id) {
 		return null
 	}
 
-	const tabFile = resolveSlideProjectTabFile(file, attachments)
-	const stableFileId = normalizeTabFileId(tabFile.file_id)
-	if (!stableFileId) {
-		return null
-	}
+	const fileDisplayConfig = options?.display_config || file.display_config
+	const tabTitle = getFileTabTitle(file, attachments, fileDisplayConfig)
 
-	const resolvedToSlideFolder = tabFile !== file && isSlideProjectFolder(tabFile)
-	const fileDisplayConfig = resolvedToSlideFolder
-		? tabFile.display_config
-		: options?.display_config || tabFile.display_config
-	const tabTitle = getFileTabTitle(tabFile, attachments, fileDisplayConfig)
-
-	const parentPath = tabFile.relative_file_path?.split("/").slice(0, -1).join("/") || ""
+	const parentPath = file.relative_file_path?.split("/").slice(0, -1).join("/") || ""
 
 	const now = Date.now()
 
 	const tabItem: TabItem = {
-		id: stableFileId,
+		id: file.file_id,
 		type: "file",
 		title: tabTitle,
 		fileData: {
-			...tabFile,
-			file_id: stableFileId,
+			...file,
+			file_id: file.file_id,
 			parent_id: getParentIdFromPath(attachments as AttachmentItem[] | undefined, parentPath),
 			display_config: fileDisplayConfig,
 		} as FileItem,
 		active: options?.active ?? true,
 		closeable: options?.closeable ?? true,
-		filePath: tabFile.relative_file_path,
+		filePath: file.relative_file_path,
 		display_config: fileDisplayConfig,
 		// Note: create_at and active_at will be set by reducer if used through dispatchTabs
 		// For direct setCurrentTabs calls, these values are preserved

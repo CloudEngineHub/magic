@@ -1,12 +1,6 @@
 import { describe, it, expect } from "vitest"
 // @ts-ignore
-import {
-	calculateCalvedRelativePath,
-	convertFileToTabItem,
-	dedupeTabsById,
-	handleDuplicateTabNames,
-	normalizeSlideProjectTabItem,
-} from "../tabUtils"
+import { calculateCalvedRelativePath, handleDuplicateTabNames } from "../tabUtils"
 import type { TabItem } from "../../types"
 
 describe("calculateCalvedRelativePath", () => {
@@ -290,104 +284,5 @@ describe("handleDuplicateTabNames", () => {
 			expect(fileTabs[0].calvedRelativePath).toBe(`../${longPath}`)
 			expect(fileTabs[1].calvedRelativePath).toBe(`../other/${longPath}`)
 		})
-	})
-})
-
-describe("convertFileToTabItem", () => {
-	it("uses the PPT folder as the tab id when opening its index.html", () => {
-		const indexFile = {
-			file_id: "index-file",
-			file_name: "index.html",
-			relative_file_path: "deck/index.html",
-			parent_id: "deck-folder",
-			display_config: { type: "html" },
-		}
-		const folder = {
-			file_id: "deck-folder",
-			file_name: "2026前沿UI设计盘点",
-			is_directory: true,
-			relative_file_path: "deck",
-			display_config: { type: "slide" },
-			children: [indexFile],
-		}
-
-		const folderTab = convertFileToTabItem(folder, [folder])
-		const indexTab = convertFileToTabItem(indexFile, [folder])
-
-		expect(folderTab?.id).toBe("deck-folder")
-		expect(indexTab?.id).toBe("deck-folder")
-		expect(indexTab?.fileData.file_id).toBe("deck-folder")
-		expect(indexTab?.fileData.is_directory).toBe(true)
-		expect(indexTab?.display_config?.type).toBe("slide")
-	})
-
-	it("normalizes cached PPT index tab and dedupes it with the folder tab", () => {
-		const indexFile = {
-			file_id: "index-file",
-			file_name: "index.html",
-			relative_file_path: "deck/index.html",
-			parent_id: "deck-folder",
-		}
-		const folder = {
-			file_id: "deck-folder",
-			file_name: "2026前沿UI设计盘点",
-			is_directory: true,
-			relative_file_path: "deck",
-			display_config: { type: "slide" },
-			children: [indexFile],
-		}
-		const normalizedTabs = [
-			normalizeSlideProjectTabItem(
-				{
-					id: "index-file",
-					title: "index.html",
-					active: true,
-					closeable: true,
-					fileData: indexFile,
-					filePath: "deck/index.html",
-				},
-				[folder],
-			),
-			convertFileToTabItem(folder, [folder])!,
-		]
-
-		const dedupedTabs = dedupeTabsById(normalizedTabs)
-
-		expect(dedupedTabs).toHaveLength(1)
-		expect(dedupedTabs[0].id).toBe("deck-folder")
-		expect(dedupedTabs[0].active).toBe(true)
-	})
-
-	it("normalizes cached PPT tab fileData when only the tab id was migrated", () => {
-		const indexFile = {
-			file_id: "index-file",
-			file_name: "index.html",
-			relative_file_path: "deck/index.html",
-			parent_id: "deck-folder",
-		}
-		const folder = {
-			file_id: "deck-folder",
-			file_name: "2026前沿UI设计盘点",
-			is_directory: true,
-			relative_file_path: "deck",
-			display_config: { type: "slide" },
-			children: [indexFile],
-		}
-
-		const normalizedTab = normalizeSlideProjectTabItem(
-			{
-				id: "deck-folder",
-				title: "index.html",
-				active: true,
-				closeable: true,
-				fileData: indexFile,
-				filePath: "deck/index.html",
-			},
-			[folder],
-		)
-
-		expect(normalizedTab.id).toBe("deck-folder")
-		expect(normalizedTab.fileData.file_id).toBe("deck-folder")
-		expect(normalizedTab.fileData.is_directory).toBe(true)
 	})
 })
