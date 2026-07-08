@@ -133,6 +133,8 @@ export enum RouteName {
 	NotAuth = "NotAuth",
 	/** 系统初始化流程 */
 	Initialization = "Initialization",
+	/** 系统维护页 */
+	Maintenance = "Maintenance",
 	/** Chat模块 - 首页 */
 	Chat = "Chat",
 	/** Chat模块 - 对话页面 */

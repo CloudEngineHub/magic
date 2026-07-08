@@ -36,6 +36,7 @@ import { whiteListRoutes } from "@/routes/const/whiteRoutes"
 import { interfaceStore } from "@/stores/interface"
 import { BroadcastChannelSender } from "@/broadcastChannel"
 import { defaultClusterCode } from "@/routes/helpers"
+import { DEFAULT_MAINTENANCE_CONFIG, shouldForceSiteClose } from "@/constants/maintenance"
 
 interface PlatformServiceFactory {
 	(context: AppServiceContext): Promise<PlatformServiceInterface>
@@ -82,6 +83,8 @@ export enum AppInitResult {
 	INIT_FAILED_WHITELIST = "INIT_FAILED_WHITELIST",
 	/** 系统需要初始化且已重定向到初始化页 */
 	NEED_SYSTEM_INITIALIZATION = "NEED_SYSTEM_INITIALIZATION",
+	/** 系统维护中且已重定向到维护页 */
+	SITE_MAINTENANCE = "SITE_MAINTENANCE",
 }
 
 /**
@@ -313,7 +316,7 @@ class AppService extends AbstractAppService<AppInitResultData> {
 			appStore.setLanguageReadyPromise(languageReadyPromise)
 
 			const globalConfigInitPromise = globalConfigStore
-				.initGlobalConfig(response.platform_settings, i18next)
+				.initGlobalConfig(response.platform_settings, i18next, response.global_config)
 				.catch((error) => {
 					this.logger.error("全局配置语言包初始化失败", error)
 					throw new AppInitializationError({
@@ -442,6 +445,17 @@ class AppService extends AbstractAppService<AppInitResultData> {
 						AppInitResult.NEED_SYSTEM_INITIALIZATION,
 						pathname,
 						false,
+						false,
+					)
+				}
+
+				const isSiteMaintenance = await this.checkSiteMaintenance()
+				if (isSiteMaintenance) {
+					this.logger.log("系统处于站点关闭维护状态，已重定向到维护页面")
+					return this.createAndReportInitResult(
+						AppInitResult.SITE_MAINTENANCE,
+						pathname,
+						true,
 						false,
 					)
 				}
@@ -643,6 +657,38 @@ class AppService extends AbstractAppService<AppInitResultData> {
 		}
 	}
 
+	private redirectToMaintenance = () => {
+		const pathname = window.location.pathname
+
+		if (pathname !== RoutePath.Maintenance) {
+			this.logger.log("重定向到维护页面", { currentPath: pathname })
+			history.replace({ name: RouteName.Maintenance })
+		} else {
+			this.logger.log("当前已在维护页面，无需重定向")
+		}
+	}
+
+	private checkSiteMaintenance = async (): Promise<boolean> => {
+		if (this.getPlatformType() !== Platform.Magic) {
+			return false
+		}
+
+		try {
+			const response = await this.loadSettingsAll()
+			globalConfigStore.setMaintenanceConfig(response.global_config)
+
+			if (shouldForceSiteClose(response.global_config)) {
+				this.redirectToMaintenance()
+				return true
+			}
+
+			return false
+		} catch (error) {
+			this.logger.error("检查系统维护状态失败", error)
+			return false
+		}
+	}
+
 	/**
 	 * @description 检查系统是否需要初始化
 	 * @returns Promise<boolean> 如果需要初始化返回 true
@@ -665,11 +711,11 @@ class AppService extends AbstractAppService<AppInitResultData> {
 					// 如果接口调用失败，假设不需要初始化，继续正常流程
 					this.logger.warn("获取公开配置失败，假设系统已初始化", error)
 					return {
+						...DEFAULT_MAINTENANCE_CONFIG,
 						need_initial: false,
-						is_maintenance: false,
-						maintenance_description: "",
 					}
 				})
+			globalConfigStore.setMaintenanceConfig(globalConfig)
 
 			if (globalConfig.need_initial) {
 				this.logger.log("系统需要初始化，跳转到初始化页面")
