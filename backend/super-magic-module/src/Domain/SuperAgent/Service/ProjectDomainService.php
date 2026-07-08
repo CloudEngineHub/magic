@@ -335,9 +335,10 @@ class ProjectDomainService
         int $sourceProjectId,
         ?int $targetWorkspaceId,
         string $userId,
-        ?string $targetProjectName = null
+        ?string $targetProjectName = null,
+        ?string $projectMode = null
     ): ProjectEntity {
-        return Db::transaction(function () use ($sourceProjectId, $targetWorkspaceId, $userId, $targetProjectName) {
+        return Db::transaction(function () use ($sourceProjectId, $targetWorkspaceId, $userId, $targetProjectName, $projectMode) {
             $currentTime = date('Y-m-d H:i:s');
 
             // Get the source project first to return updated entity
@@ -365,6 +366,9 @@ class ProjectDomainService
             ];
             if ($projectNameChanged) {
                 $projectUpdateData['project_name'] = $targetProjectName;
+            }
+            if ($projectMode !== null) {
+                $projectUpdateData['project_mode'] = $projectMode;
             }
 
             $projectUpdateResult = $this->projectRepository->updateProjectByCondition(

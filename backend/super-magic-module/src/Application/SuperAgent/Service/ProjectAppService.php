@@ -1359,7 +1359,8 @@ class ProjectAppService extends AbstractAppService
             $requestDTO->getSourceProjectId(),
             $targetWorkspaceId,
             $userAuthorization->getId(),
-            $requestDTO->getTargetProjectName()
+            $requestDTO->getTargetProjectName(),
+            $requestDTO->getProjectMode()
         );
 
         $this->logger->info(sprintf(

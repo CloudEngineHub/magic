@@ -2894,7 +2894,10 @@ class ResourceShareAppService extends AbstractShareAppService
             Db::commit();
 
             // 返回复制结果
-            return CopyResourceFilesResponseDTO::fromEntity($forkProjectRecordEntity)->toArray();
+            $responseDto = CopyResourceFilesResponseDTO::fromEntity($forkProjectRecordEntity);
+            $responseDto->projectMode = $forkProjectEntity->getProjectMode();
+
+            return $responseDto->toArray();
         } catch (Throwable $e) {
             Db::rollBack();
             $this->logger->error('Copy resource files failed, error: ' . $e->getMessage());
