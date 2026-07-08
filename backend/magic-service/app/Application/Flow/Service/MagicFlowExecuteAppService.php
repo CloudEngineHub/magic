@@ -157,7 +157,7 @@ class MagicFlowExecuteAppService extends AbstractFlowAppService
             globalVariable: $magicFlow->getGlobalVariable(),
             attachments: AttachmentUtil::getByApiArray($apiChatDTO->getAttachments(), true, $flowDataIsolation->getCurrentOrganizationCode()),
         );
-        $originConversationId = $apiChatDTO->getConversationId();
+        $originConversationId = $apiChatDTO->getConversationId() ?: IdGenerator::getUniqueId32();
         $executionData = new ExecutionData(
             flowDataIsolation: $flowDataIsolation,
             operator: $operator,
@@ -225,7 +225,7 @@ class MagicFlowExecuteAppService extends AbstractFlowAppService
             globalVariable: $magicFlow->getGlobalVariable(),
             attachments: AttachmentUtil::getByApiArray($apiChatDTO->getAttachments(), true, $flowDataIsolation->getCurrentOrganizationCode()),
         );
-        $originConversationId = $apiChatDTO->getConversationId();
+        $originConversationId = $apiChatDTO->getConversationId() ?: IdGenerator::getUniqueId32();
         $executionData = new ExecutionData(
             flowDataIsolation: $flowDataIsolation,
             operator: $operator,
