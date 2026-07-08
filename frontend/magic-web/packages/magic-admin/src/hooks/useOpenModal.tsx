@@ -2,11 +2,13 @@ import type { FC } from "react"
 import { createRoot } from "react-dom/client"
 import type { ModalProps } from "antd"
 import { last } from "lodash-es"
+import { I18nextProvider } from "react-i18next"
 import { AdminComponentsProvider, MagicThemeProvider, ThemeType } from "@admin-components"
 import { ConfigProvider } from "antd"
 import { AdminProviderContext, useAdmin } from "@admin/provider/AdminProvider"
 import type { AdminProviderContextType } from "@admin/provider/AdminProvider/types"
 import { languageManager } from "../utils/locale"
+import { adminI18n } from "@admin/locales"
 
 export type OpenableProps<P = ModalProps> = P & {
 	onClose?: () => void
@@ -60,23 +62,27 @@ export const openModal = <P extends object>(
 
 	const content = adminContext ? (
 		<AdminProviderContext.Provider value={adminContext}>
-			<AdminComponentsProvider
-				language={adminContext.language}
-				theme={adminContext.theme as ThemeType}
-			>
-				<div onClick={(e) => e.stopPropagation()}>
-					<ModalComponent {...propsWithClose} />
-				</div>
-			</AdminComponentsProvider>
+			<I18nextProvider i18n={adminI18n}>
+				<AdminComponentsProvider
+					language={adminContext.language}
+					theme={adminContext.theme as ThemeType}
+				>
+					<div onClick={(e) => e.stopPropagation()}>
+						<ModalComponent {...propsWithClose} />
+					</div>
+				</AdminComponentsProvider>
+			</I18nextProvider>
 		</AdminProviderContext.Provider>
 	) : (
-		<ConfigProvider locale={locale}>
-			<MagicThemeProvider>
-				<div onClick={(e) => e.stopPropagation()}>
-					<ModalComponent {...propsWithClose} />
-				</div>
-			</MagicThemeProvider>
-		</ConfigProvider>
+		<I18nextProvider i18n={adminI18n}>
+			<ConfigProvider locale={locale}>
+				<MagicThemeProvider>
+					<div onClick={(e) => e.stopPropagation()}>
+						<ModalComponent {...propsWithClose} />
+					</div>
+				</MagicThemeProvider>
+			</ConfigProvider>
+		</I18nextProvider>
 	)
 
 	createRoot(root).render(content)

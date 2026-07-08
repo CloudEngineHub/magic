@@ -131,7 +131,7 @@
 	"prePage": "前のページ",
 	"search": "検索オプション",
 	"status": "ステータス",
-	"title": "$t(common:platform.name)管理ダッシュボード",
+	"title": "{{platformName}}管理ダッシュボード",
 	"totalItems": "合計{{total}}件",
 	"unsavedChanges": "保存されていない変更があります。閉じてもよろしいですか？"
 }
