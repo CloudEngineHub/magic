@@ -440,15 +440,17 @@ class GlobalConfigApi extends AbstractApi
     public function updateGlobalConfig(GlobalConfigUpdateRequest $request): array
     {
         $payload = $request->validated();
-        $isMaintenance = (bool) ($payload['is_maintenance'] ?? false);
-        $description = (string) ($payload['maintenance_description'] ?? '');
 
         $config = $this->magicSettingAppService->get();
-        $config->setIsMaintenance($isMaintenance);
+        if (array_key_exists('is_maintenance', $payload)) {
+            $config->setIsMaintenance((bool) $payload['is_maintenance']);
+        }
         if (array_key_exists('maintenance_type', $payload)) {
             $config->setMaintenanceType((string) $payload['maintenance_type']);
         }
-        $config->setMaintenanceDescription($description);
+        if (array_key_exists('maintenance_description', $payload)) {
+            $config->setMaintenanceDescription((string) ($payload['maintenance_description'] ?? ''));
+        }
 
         $this->magicSettingAppService->save($config);
 
