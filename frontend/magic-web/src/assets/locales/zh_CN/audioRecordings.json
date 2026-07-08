@@ -182,7 +182,7 @@
 	"summary": {
 		"missingModel": "无法获取总结模型，请稍后重试",
 		"missingParams": "缺少总结所需参数，请刷新列表后重试",
-		"retryMergeTodo": "重新合并暂未支持，等待后端接口提供",
+		"retryMergeFailed": "重新合并提交失败，请稍后重试",
 		"submitFailed": "提交总结失败，请稍后重试"
 	},
 	"title": "录音与纪要"

@@ -100,6 +100,34 @@ export interface FinishRecordingTaskResponse {
 	message?: string
 }
 
+/** Request payload for the finish-recording recovery endpoint.
+ *  The current frontend recover flow intentionally does not send a body,
+ *  but these optional fields are supported by the backend contract. */
+export interface RecoverFinishRecordingTaskRequest {
+	generated_title?: string
+	asr_stream_content?: string
+}
+
+/** Response from the finish-recording recovery endpoint.
+ *  The action field indicates how the frontend should proceed:
+ *  - finish_recording_recovery_started → optimistic "processing" + start polling
+ *  - already_completed → refresh list, use completed state
+ *  - finish_recording_already_running → keep "processing", continue polling */
+export interface RecoverFinishRecordingTaskResponse {
+	success: boolean
+	task_key: string
+	sandbox_id?: string
+	phase?: string
+	status?: string
+	percent?: number
+	action?:
+		| "finish_recording_recovery_started"
+		| "already_completed"
+		| "finish_recording_already_running"
+		| string
+	message?: string
+}
+
 export const generateRecordingSummaryApi = (fetch: HttpClient) => ({
 	/**
 	 * @description 获取录音总结上传token
@@ -315,6 +343,19 @@ export const generateRecordingSummaryApi = (fetch: HttpClient) => ({
 		return fetch.post<BatchTaskProgressResponse>(
 			genRequestUrl("/api/v1/asr/tasks/progress/batch"),
 			{ task_keys },
+		)
+	},
+
+	/**
+	 * @description Recovers a finish-recording task that is stuck in merge_failed state.
+	 * The POST body is intentionally empty in the current flow; the backend
+	 * supports optional generated_title and asr_stream_content fields.
+	 */
+	recoverFinishRecordingTask({ task_key }: { task_key: string }) {
+		return fetch.post<RecoverFinishRecordingTaskResponse>(
+			genRequestUrl(
+				`/api/v1/asr/tasks/${encodeURIComponent(task_key)}/finish-recording/recover`,
+			),
 		)
 	},
 })

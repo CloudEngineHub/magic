@@ -182,7 +182,7 @@
 	"summary": {
 		"missingModel": "Unable to load summary model. Please try again later.",
 		"missingParams": "Missing parameters required for summary. Please refresh the list.",
-		"retryMergeTodo": "Merge retry is not supported yet. Waiting for the backend API.",
+		"retryMergeFailed": "Failed to retry merge. Please try again later.",
 		"submitFailed": "Failed to submit summary. Please try again later."
 	},
 	"title": "Recordings & summaries"

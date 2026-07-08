@@ -1,4 +1,5 @@
 import { SuperMagicApi } from "@/apis"
+import type { RecoverFinishRecordingTaskResponse } from "@/apis/modules/superMagic/recordSummary"
 import type {
 	AudioProjectListItem,
 	AudioProjectSortBy,
@@ -139,6 +140,16 @@ export class AudioRecordingsService {
 			task_key: item.task_key,
 			model_id: modelId,
 		})
+	}
+
+	/** Triggers the backend finish-recording recovery API for a merge_failed task.
+	 *  No request body is sent; the backend recovers the task based on the task_key alone. */
+	async retryMerge(item: AudioProjectListItem): Promise<RecoverFinishRecordingTaskResponse> {
+		if (!item.task_key) {
+			throw new Error("task_key is required for retry merge")
+		}
+
+		return SuperMagicApi.recoverFinishRecordingTask({ task_key: item.task_key })
 	}
 
 	/** Loads display title for detail header when navigation state omits projectName */

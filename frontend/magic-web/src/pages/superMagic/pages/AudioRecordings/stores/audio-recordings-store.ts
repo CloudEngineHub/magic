@@ -22,10 +22,12 @@ import { summaryProgressPoller } from "../services/summary-progress-poller"
 import { resolveCardStatusFromListItem } from "../utils/normalize-audio-project-item"
 import { shouldPollSummaryProgress } from "../utils/summary-action-utils"
 import {
+	buildOptimisticRetryMergeProject,
 	buildOptimisticSummarizingProject,
 	deleteAudioRecordingProjects,
 	renameAudioRecordingProject,
 	resubmitAudioRecordingSummary,
+	retryMergeAudioRecording,
 	submitAudioRecordingSummary,
 } from "../utils/audio-recording-actions"
 import { resolveDatePresetRange } from "../utils/resolve-date-preset-range"
@@ -36,6 +38,10 @@ const DEFAULT_PAGE_SIZE = 20
 export type SubmitSummaryResult =
 	| { ok: true }
 	| { ok: false; reason: "busy" | "missingParams" | "missingModel" | "api" }
+
+export type RetryMergeResult =
+	| { ok: true }
+	| { ok: false; reason: "busy" | "missingParams" | "api" }
 
 /** Uses progress duration only after backend reports a real value, preserving known local metadata */
 function resolvePatchedDuration(progressDuration: number | undefined, currentDuration: number) {
@@ -272,6 +278,53 @@ export class AudioRecordingsStore {
 		this.optimisticItems = this.optimisticItems.filter((entry) => entry.id !== itemId)
 	}
 
+	/**
+	 * Patches both authoritative and optimistic caches to reflect an in-progress
+	 * merge recovery, so PC/H5 list cards immediately switch to the "processing" state.
+	 */
+	private applyOptimisticProcessingState(item: AudioProjectListItem) {
+		const listIndex = this.list.findIndex((entry) => entry.id === item.id)
+		const baseItem = listIndex >= 0 ? this.list[listIndex] : item
+		const optimisticItem = buildOptimisticRetryMergeProject(baseItem)
+
+		if (listIndex >= 0) {
+			this.list[listIndex] = optimisticItem
+		}
+		this.optimisticItems = [
+			optimisticItem,
+			...this.optimisticItems.filter((entry) => entry.id !== item.id),
+		]
+	}
+
+	/**
+	 * Restores local caches when an optimistic merge recovery fails before the
+	 * backend accepts the task, preventing cards from staying in a false "processing" state.
+	 */
+	private rollbackOptimisticProcessingState({
+		itemId,
+		previousListItem,
+		previousOptimisticItem,
+	}: {
+		itemId: string
+		previousListItem?: AudioProjectListItem
+		previousOptimisticItem?: AudioProjectListItem
+	}) {
+		const listIndex = this.list.findIndex((entry) => entry.id === itemId)
+		if (listIndex >= 0 && previousListItem) {
+			this.list[listIndex] = previousListItem
+		}
+
+		if (previousOptimisticItem) {
+			this.optimisticItems = [
+				previousOptimisticItem,
+				...this.optimisticItems.filter((entry) => entry.id !== itemId),
+			]
+			return
+		}
+
+		this.optimisticItems = this.optimisticItems.filter((entry) => entry.id !== itemId)
+	}
+
 	async fetchList(options: { page?: number; keyword?: string } = {}) {
 		const page = options.page ?? 1
 		const keyword = resolveKeywordParam(options, this.keyword)
@@ -477,6 +530,54 @@ export class AudioRecordingsStore {
 			if (this.hasLoadedOnce) {
 				void this.fetchList({ page: 1, keyword: this.keyword })
 			}
+			return { ok: true }
+		} finally {
+			runInAction(() => {
+				this.submittingIds.delete(item.id)
+			})
+		}
+	}
+
+	/** Triggers finish-recording recovery for a merge_failed item and starts progress polling */
+	async retryMerge(item: AudioProjectListItem): Promise<RetryMergeResult> {
+		if (this.submittingIds.has(item.id)) return { ok: false, reason: "busy" }
+
+		const taskKey = item.task_key
+		if (!taskKey) return { ok: false, reason: "missingParams" }
+		const previousListItem = this.list.find((entry) => entry.id === item.id)
+		const previousOptimisticItem = this.optimisticItems.find((entry) => entry.id === item.id)
+
+		runInAction(() => {
+			this.submittingIds.add(item.id)
+			this.applyOptimisticProcessingState(item)
+		})
+
+		try {
+			const result = await retryMergeAudioRecording(item)
+			if (!result.ok) {
+				runInAction(() => {
+					this.rollbackOptimisticProcessingState({
+						itemId: item.id,
+						previousListItem,
+						previousOptimisticItem,
+					})
+				})
+				return result
+			}
+
+			const action = result.response.action
+
+			// For already_completed responses, refresh the list to pick up the completed state.
+			if (action === "already_completed") {
+				if (this.hasLoadedOnce) {
+					void this.fetchList({ page: 1, keyword: this.keyword })
+				}
+				return { ok: true }
+			}
+
+			// For recovery_started and already_running, add to poller and keep optimistic state.
+			// The poller will eventually patch the card to the correct terminal state.
+			summaryProgressPoller.addTask(taskKey)
 			return { ok: true }
 		} finally {
 			runInAction(() => {

@@ -97,6 +97,11 @@ export function canSubmitResummary(extra: ResummarySubmitExtra): boolean {
 	return Boolean(extra.task_key)
 }
 
+/** Validates that an item has a task_key for the finish-recording recovery API. */
+export function canRetryMerge(extra: { task_key?: string }): boolean {
+	return Boolean(extra.task_key)
+}
+
 /** Whether an already summarized recording can expose an explicit regenerate action. */
 export function canRegenerateSummarizedSummary(isSubmitting = false): boolean {
 	return !isSubmitting

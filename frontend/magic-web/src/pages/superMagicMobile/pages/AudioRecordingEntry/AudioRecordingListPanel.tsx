@@ -305,10 +305,18 @@ function AudioRecordingListPanel({
 		return false
 	}
 
-	/** Keeps the re-merge affordance visible while the backend retry API is still unavailable. */
-	function handleRetryMerge() {
-		// TODO(audio-recordings): Replace this placeholder with the backend retry-merge API when provided.
-		toast.info(t("audioRecordings:summary.retryMergeTodo"))
+	/** Recovers a merge_failed recording by calling the backend finish-recording recovery API. */
+	async function handleRetryMerge(item: AudioProjectListItem) {
+		const result = await store.retryMerge(item)
+		if (result.ok) return
+
+		if (result.reason === "missingParams") {
+			toast.error(t("audioRecordings:summary.missingParams"))
+			return
+		}
+		if (result.reason === "api") {
+			toast.error(t("audioRecordings:summary.retryMergeFailed"))
+		}
 	}
 
 	async function handleRename(projectId: string, name: string) {
