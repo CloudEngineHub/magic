@@ -32,7 +32,7 @@ function CreateDirectoryInput({
 	return (
 		<div className={styles.textFolderItem}>
 			<div className={styles.folderIconContainer}>
-				<img src={FoldIcon} alt="folder" width={14} height={14} />
+				<img src={FoldIcon} alt="folder" width={14} height={14}  data-testid="create-directory-input-image"/>
 			</div>
 			<InputWithError
 				className={styles.input}

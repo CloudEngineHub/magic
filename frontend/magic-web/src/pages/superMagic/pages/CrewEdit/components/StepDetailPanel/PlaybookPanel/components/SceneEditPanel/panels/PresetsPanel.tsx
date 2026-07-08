@@ -249,6 +249,7 @@ export const PresetsPanel = observer(function PresetsPanel() {
 					<label
 						className="cursor-pointer select-none overflow-hidden text-ellipsis whitespace-nowrap text-sm font-medium text-foreground"
 						onClick={handleSelectAll}
+						data-testid="handle-select-all"
 					>
 						{t("playbook.edit.filter.selectAll")}
 					</label>
@@ -595,9 +596,9 @@ function PresetItemRow({
 							? "cursor-default opacity-30"
 							: "cursor-grab active:cursor-grabbing",
 					)}
+					data-testid={`preset-item-drag-${item.data_key}`}
 					{...(isDragDisabled ? {} : listeners)}
 					aria-label="drag"
-					data-testid={`preset-item-drag-${item.data_key}`}
 				>
 					<GripVertical className="h-4 w-4" />
 				</button>

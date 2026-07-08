@@ -34,6 +34,7 @@ import { userStore } from "@/models/user"
 import { downloadFileWithAnchor } from "../../../utils/handleFIle"
 import { useFileDisplayConfig } from "../hooks/useFileDisplayConfig"
 import { generateShareMessageText } from "../utils/generateShareMessageText"
+import { cn } from "@/lib/utils"
 
 interface ShareSuccessModalProps {
 	open: boolean
@@ -50,6 +51,7 @@ interface ShareSuccessModalProps {
 	shareProject?: boolean // 是否分享整个项目
 	projectName?: string // 项目原始名称（用于项目分享时显示）
 	fileIds?: string[] // 文件ID列表，用于查询文件详情
+	hideManageShareLinks?: boolean // 录音等专用分享场景会使用自己的管理入口
 }
 
 const useStyles = createStyles(({ token }) => ({
@@ -200,6 +202,7 @@ export default memo(function ShareSuccessModal(props: ShareSuccessModalProps) {
 		shareProject,
 		projectName,
 		fileIds,
+		hideManageShareLinks,
 	} = props
 
 	// 使用 hook 获取文件详情配置
@@ -270,7 +273,16 @@ export default memo(function ShareSuccessModal(props: ShareSuccessModalProps) {
 			fileDisplayConfig,
 			t,
 		})
-	}, [fileCount, mainFileName, shareName, projectName, shareProject, shareUrl, fileDisplayConfig, t])
+	}, [
+		fileCount,
+		mainFileName,
+		shareName,
+		projectName,
+		shareProject,
+		shareUrl,
+		fileDisplayConfig,
+		t,
+	])
 
 	// Render share message with clickable links
 	const renderShareMessage = useCallback(() => {
@@ -300,6 +312,7 @@ export default memo(function ShareSuccessModal(props: ShareSuccessModalProps) {
 									rel="noopener noreferrer"
 									className="inline break-all text-primary underline"
 									onClick={(e) => e.stopPropagation()}
+									data-testid="share-success-modal"
 								>
 									{urlMatch[0]}
 								</a>
@@ -312,6 +325,7 @@ export default memo(function ShareSuccessModal(props: ShareSuccessModalProps) {
 										magicToast.success(t("share.copySuccess"))
 									}}
 									title={t("share.copyLink")}
+									data-testid="write-text"
 								>
 									<Copy className="h-3.5 w-3.5" />
 								</button>
@@ -363,7 +377,8 @@ export default memo(function ShareSuccessModal(props: ShareSuccessModalProps) {
 			canvas.toBlob((blob) => {
 				if (!blob) return
 				const url = URL.createObjectURL(blob)
-				downloadFileWithAnchor(url, filename)
+				// Keep the derived download prompt above the share success dialog.
+				downloadFileWithAnchor(url, filename, undefined, { modalZIndex: 1300 })
 				magicToast.success(t("share.downloadSuccess"))
 			})
 		}
@@ -391,8 +406,9 @@ export default memo(function ShareSuccessModal(props: ShareSuccessModalProps) {
 	// ===== Mobile 特有的逻辑 =====
 
 	// Mobile actions popup config
-	const mobileActions = useMemo<ActionsPopup.ActionButtonConfig[]>(
-		() => [
+	const mobileActions = useMemo<ActionsPopup.ActionButtonConfig[]>(() => {
+		if (hideManageShareLinks) return []
+		return [
 			{
 				key: "manageShare",
 				label: t("share.manageShareLinks"),
@@ -406,9 +422,8 @@ export default memo(function ShareSuccessModal(props: ShareSuccessModalProps) {
 					onClose()
 				},
 			},
-		],
-		[t, shareProject, onClose],
-	)
+		]
+	}, [hideManageShareLinks, t, shareProject, onClose])
 
 	const handleOpenActionsPopup = useCallback(() => {
 		setActionsPopupVisible(true)
@@ -495,7 +510,11 @@ export default memo(function ShareSuccessModal(props: ShareSuccessModalProps) {
 						<div className={styles.mobileShareLinkSection}>
 							<div className={styles.mobileLabel}>{t("share.shareLink")}</div>
 							<div className={styles.mobileShareLinkBox}>{renderShareMessage()}</div>
-							<div className={styles.mobileCopyButton} onClick={handleCopyShareLink}>
+							<div
+								className={styles.mobileCopyButton}
+								onClick={handleCopyShareLink}
+								data-testid="handle-copy-share-link"
+							>
 								<Copy size={16} />
 								{t("share.copy")}
 							</div>
@@ -515,6 +534,7 @@ export default memo(function ShareSuccessModal(props: ShareSuccessModalProps) {
 							<div
 								className={styles.mobileDownloadButton}
 								onClick={handleDownloadQRCode}
+								data-testid="handle-download-qr-code"
 							>
 								<Download size={16} />
 								{t("share.downloadQRCode")}
@@ -542,9 +562,13 @@ export default memo(function ShareSuccessModal(props: ShareSuccessModalProps) {
 				style={{ zIndex: 1200 }}
 				onPointerDownOutside={(e) => e.preventDefault()}
 				onEscapeKeyDown={(e) => e.preventDefault()}
+				data-testid="on-pointer-down-outside"
 			>
 				{/* Header */}
-				<DialogHeader className="border-b border-border px-3 py-3">
+				<DialogHeader
+					className="border-b border-border px-3 py-3"
+					data-testid="share-success-modal-header"
+				>
 					<DialogTitle className="text-base font-semibold">
 						{t("share.successModalTitle")}
 					</DialogTitle>
@@ -621,6 +645,7 @@ export default memo(function ShareSuccessModal(props: ShareSuccessModalProps) {
 								target="_blank"
 								rel="noopener noreferrer"
 								className="text-sm font-medium leading-none text-foreground hover:underline"
+								data-testid="share-success-modal-link"
 							>
 								{t("share.shareLink")}
 							</a>
@@ -631,6 +656,7 @@ export default memo(function ShareSuccessModal(props: ShareSuccessModalProps) {
 								variant="outline"
 								className="w-full gap-2 shadow-xs"
 								onClick={handleCopyShareLink}
+								data-testid="handle-copy-share-link-2"
 							>
 								<Copy className="h-4 w-4" />
 								{t("share.copy")}
@@ -657,6 +683,7 @@ export default memo(function ShareSuccessModal(props: ShareSuccessModalProps) {
 								variant="outline"
 								className="w-[144px] gap-2 shadow-xs"
 								onClick={handleDownloadQRCode}
+								data-testid="handle-download-qr-code-2"
 							>
 								<Download className="h-4 w-4" />
 								{t("share.downloadQRCode")}
@@ -666,28 +693,41 @@ export default memo(function ShareSuccessModal(props: ShareSuccessModalProps) {
 				</div>
 
 				{/* Footer */}
-				<DialogFooter className="border-t border-border px-3 py-3">
-					<div className="flex w-full items-center justify-between gap-1.5">
-						<Button
-							variant="outline"
-							onClick={() => {
-								// 根据 shareProject 决定打开的 tab
-								const defaultTab = shareProject
-									? SharedResourceType.Project
-									: SharedResourceType.File
-								openShareManagementModal(undefined, { defaultTab })
-								onClose()
-							}}
-							className="shadow-xs"
-						>
-							{t("share.manageShareLinks")}
-						</Button>
+				<DialogFooter 
+					className="border-t border-border px-3 py-3" 
+					data-testid="share-success-modal-footer"
+				>
+					<div
+						className={cn(
+							"flex w-full items-center gap-1.5",
+							hideManageShareLinks ? "justify-end" : "justify-between",
+						)}
+						data-testid="share-success-modal-footer-actions"
+					>
+						{!hideManageShareLinks && (
+							<Button
+								variant="outline"
+								onClick={() => {
+									// 根据 shareProject 决定打开的 tab
+									const defaultTab = shareProject
+										? SharedResourceType.Project
+										: SharedResourceType.File
+									openShareManagementModal(undefined, { defaultTab })
+									onClose()
+								}}
+								className="shadow-xs"
+								data-testid="open-share-management-modal"
+							>
+								{t("share.manageShareLinks")}
+							</Button>
+						)}
 						<div className="flex items-center gap-1.5">
 							{onCancelShare && (
 								<Button
 									variant="ghost"
 									onClick={handleCancelShareClick}
 									className="text-destructive hover:text-destructive"
+									data-testid="handle-cancel-share-click"
 								>
 									{t("share.cancelShare")}
 								</Button>
@@ -697,6 +737,7 @@ export default memo(function ShareSuccessModal(props: ShareSuccessModalProps) {
 									variant="outline"
 									onClick={onEditShare}
 									className="shadow-xs"
+									data-testid="on-edit-share"
 								>
 									{t("share.editShare")}
 								</Button>

@@ -211,6 +211,7 @@ export function CrewDetailDialog({
 											loading="lazy"
 											decoding="async"
 											onError={() => setAvatarLoadFailed(true)}
+											data-testid="set-avatar-load-failed"
 										/>
 									) : (
 										<CrewFallbackAvatar />

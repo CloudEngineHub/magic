@@ -1,4 +1,4 @@
-import { act, renderHook } from "@testing-library/react"
+import { act, cleanup, renderHook } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import { useTopicDesktopLayout } from "../useTopicDesktopLayout"
@@ -17,16 +17,39 @@ class MockResizeObserver {
 	}
 }
 
+/** Provides deterministic storage for layout persistence tests in jsdom. */
+function createLocalStorageMock(): Storage {
+	let store: Record<string, string> = {}
+	return {
+		get length() {
+			return Object.keys(store).length
+		},
+		clear: vi.fn(() => {
+			store = {}
+		}),
+		getItem: vi.fn((key: string) => store[key] ?? null),
+		key: vi.fn((index: number) => Object.keys(store)[index] ?? null),
+		removeItem: vi.fn((key: string) => {
+			delete store[key]
+		}),
+		setItem: vi.fn((key: string, value: string) => {
+			store[key] = value
+		}),
+	}
+}
+
 describe("useTopicDesktopLayout", () => {
 	beforeEach(() => {
 		vi.stubGlobal("ResizeObserver", MockResizeObserver)
+		vi.stubGlobal("localStorage", createLocalStorageMock())
 		localStorage.clear()
 	})
 
 	afterEach(() => {
-		vi.unstubAllGlobals()
+		cleanup()
 		pubsub.clear()
 		localStorage.clear()
+		vi.unstubAllGlobals()
 	})
 
 	it("should return default widths", () => {
@@ -46,8 +69,8 @@ describe("useTopicDesktopLayout", () => {
 		rerender()
 
 		act(() => {
-			document.dispatchEvent(new MouseEvent("mousemove", { clientX: 150 }))
-			document.dispatchEvent(new MouseEvent("mouseup", { clientX: 150 }))
+			document.dispatchEvent(new MouseEvent("pointermove", { clientX: 150 }))
+			document.dispatchEvent(new MouseEvent("pointerup", { clientX: 150 }))
 		})
 		rerender()
 
@@ -55,6 +78,45 @@ describe("useTopicDesktopLayout", () => {
 		expect(localStorage.getItem(PROJECT_SIDER_WIDTH_STORAGE_KEY)).toBe(
 			String(DEFAULT_WIDTH.PROJECT_SIDER + 50),
 		)
+	})
+
+	it("should resize message panel with pointer events", () => {
+		const { result, rerender } = renderHook(() => useTopicDesktopLayout({ isReadOnly: false }))
+
+		act(() => {
+			result.current.startDragMessagePanel(300)
+		})
+		rerender()
+
+		act(() => {
+			document.dispatchEvent(new MouseEvent("pointermove", { clientX: 260 }))
+			document.dispatchEvent(new MouseEvent("pointerup", { clientX: 260 }))
+		})
+		rerender()
+
+		expect(result.current.messagePanelWidthPx).toBe(DEFAULT_WIDTH.MESSAGE_PANEL + 40)
+		expect(localStorage.getItem(MESSAGE_PANEL_WIDTH_STORAGE_KEY)).toBe(
+			String(DEFAULT_WIDTH.MESSAGE_PANEL + 40),
+		)
+	})
+
+	it("should end drag state without persisting when pointer is cancelled", () => {
+		const { result, rerender } = renderHook(() => useTopicDesktopLayout({ isReadOnly: false }))
+
+		act(() => {
+			result.current.startDragProjectSider(100)
+		})
+		rerender()
+		expect(result.current.isDraggingProjectSider).toBe(true)
+
+		act(() => {
+			document.dispatchEvent(new MouseEvent("pointermove", { clientX: 150 }))
+			document.dispatchEvent(new MouseEvent("pointercancel", { clientX: 100 }))
+		})
+		rerender()
+
+		expect(result.current.isDraggingProjectSider).toBe(false)
+		expect(localStorage.getItem(PROJECT_SIDER_WIDTH_STORAGE_KEY)).toBeNull()
 	})
 
 	it("should toggle conversation panel collapse state", () => {

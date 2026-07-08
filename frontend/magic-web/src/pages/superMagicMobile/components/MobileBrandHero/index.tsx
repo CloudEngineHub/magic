@@ -51,6 +51,7 @@ const MobileBrandHero = observer(function MobileBrandHero({
 					alt={brandName}
 					className={cn("h-20 w-20 shrink-0", imageClassName)}
 					draggable={false}
+					data-testid="mobile-brand-hero-image"
 				/>
 			) : null}
 			<p

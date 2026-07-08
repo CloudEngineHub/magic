@@ -181,7 +181,7 @@ export default memo(function ShareRangeField(props: ShareRangeFieldProps) {
 
 	return (
 		<div className="flex flex-col gap-2">
-			<label className="text-sm font-medium leading-none text-foreground">
+			<label className="text-sm font-medium leading-none text-foreground" data-testid="share-range-field-label">
 				{t("share.shareRange")}
 			</label>
 
@@ -194,6 +194,7 @@ export default memo(function ShareRangeField(props: ShareRangeFieldProps) {
 						value === "all" ? "border-primary" : "border-border",
 					)}
 					onClick={() => handleRangeChange("all")}
+					data-testid="handle-range-change"
 				>
 					<div
 						className={cn(
@@ -217,6 +218,7 @@ export default memo(function ShareRangeField(props: ShareRangeFieldProps) {
 						value === "designated" ? "border-primary" : "border-border",
 					)}
 					onClick={() => handleRangeChange("designated")}
+					data-testid="handle-range-change-2"
 				>
 					<div
 						className={cn(
@@ -244,6 +246,7 @@ export default memo(function ShareRangeField(props: ShareRangeFieldProps) {
 						size="sm"
 						onClick={handleAddMembers}
 						className="w-full justify-center gap-2"
+						data-testid="handle-add-members"
 					>
 						<MagicIcon component={IconPlus} size={16} />
 						{t("share.addMembers")}
@@ -285,6 +288,7 @@ export default memo(function ShareRangeField(props: ShareRangeFieldProps) {
 										<button
 											onClick={() => handleRemoveTarget(member.id)}
 											className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded hover:bg-destructive/10"
+											data-testid="handle-remove-target"
 										>
 											<MagicIcon
 												component={IconX}

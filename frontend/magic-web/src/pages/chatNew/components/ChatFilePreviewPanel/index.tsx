@@ -84,6 +84,7 @@ const ChatFilePreviewPanel = observer(function ChatFilePreviewPanel({
 			case "pdf":
 				return <MagicPdfRender file={data} height="100%" />
 			case "docx":
+			case "docm":
 			case "doc":
 				return <MagicDocxRender file={data} height="100%" minScale={0.3} />
 			default:

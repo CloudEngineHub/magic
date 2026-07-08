@@ -129,14 +129,15 @@ export class LoginService {
 
 	/** Logout */
 	async logout() {
-		const { authorization } = userStore.user
+		const { authorization, organizationCode } = userStore.user
 		await magicClient.abort(async () => {
 			if (authorization) {
 				const controller = new AbortController()
 				const device = await getDeviceInfo(configStore.i18n.i18n.instance)
 				const headers = new Headers()
 				headers.set("authorization", authorization || "")
-				await this.userApi.logout({ device }, headers, controller.signal)
+				headers.set("organization-code", organizationCode)
+				await this.authApi.logout(headers, controller.signal)
 			}
 		})
 	}

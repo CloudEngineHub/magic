@@ -1,3 +1,4 @@
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -7,9 +8,10 @@ from app.tools.run_sdk_snippet import RunSdkSnippet, RunSdkSnippetParams
 
 
 class _FakeAgentContext:
-    def __init__(self, context_id: str) -> None:
+    def __init__(self, context_id: str, current_model_id: str | None = None) -> None:
         self.context_id = context_id
         self.cleanup_callbacks = {}
+        self.model_context = SimpleNamespace(current_text_model_id=current_model_id)
 
     def register_run_cleanup(self, key, callback) -> None:
         self.cleanup_callbacks[key] = callback
@@ -22,11 +24,11 @@ class _FakeAgentContext:
 
 
 class _FakeToolContext:
-    def __init__(self, context_id: str = "ctx_test_123") -> None:
+    def __init__(self, context_id: str = "ctx_test_123", current_model_id: str | None = None) -> None:
         self.tool_call_id = "call_test_123"
         self.tool_name = "run_sdk_snippet"
         self.arguments = {}
-        self._agent_context = _FakeAgentContext(context_id)
+        self._agent_context = _FakeAgentContext(context_id, current_model_id)
 
     def get_extension(self, name: str):
         if name == "agent_context":
@@ -74,6 +76,26 @@ async def test_run_sdk_snippet_keeps_default_timeout_for_non_video_tools(tmp_pat
     assert result.ok is True
     assert mock_execute.await_args.kwargs["timeout"] == 60
     assert mock_execute.await_args.kwargs["extra_env"]["SUPER_MAGIC_AGENT_CONTEXT_ID"] == "ctx_test_123"
+
+
+@pytest.mark.asyncio
+async def test_run_sdk_snippet_injects_current_model_env(tmp_path):
+    tool = RunSdkSnippet()
+
+    with patch("app.tools.run_sdk_snippet.PathManager.get_project_root", return_value=tmp_path), \
+         patch("app.tools.run_sdk_snippet.ProcessExecutor.execute_command", new_callable=AsyncMock) as mock_execute:
+        mock_execute.return_value = TerminalToolResult(ok=True, content="ok")
+
+        result = await tool.execute(
+            tool_context=_FakeToolContext(current_model_id="mock-current-model"),
+            params=RunSdkSnippetParams(
+                python_code="print('mock result')",
+                timeout=60,
+            ),
+        )
+
+    assert result.ok is True
+    assert mock_execute.await_args.kwargs["extra_env"]["SUPER_MAGIC_CURRENT_MODEL_ID"] == "mock-current-model"
 
 
 def test_run_sdk_snippet_repairs_unescaped_quotes_in_absolute_path_assignment():

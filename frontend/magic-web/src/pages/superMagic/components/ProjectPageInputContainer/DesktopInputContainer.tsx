@@ -76,37 +76,47 @@ function DesktopInputContainer({
 					{editorNodes?.taskDataNode}
 					{editorNodes?.messageQueueNode}
 				</div>
-				<div className="flex w-full items-center gap-4 overflow-hidden">
-					{/* 话题模式切换器 */}
-					<ModeToggle
-						size={editorSize}
-						topicMode={editorContext.topicMode}
-						agentCode={
-							editorContext.agentCode ?? editorContext.selectedTopic?.agent_code
-						}
-						allowChangeMode={(editorContext.messagesLength ?? 0) > 0 ? false : true}
-						useChatTerminology={editorContext.useChatTerminology}
-						onModeChange={editorContext.setTopicMode}
-					/>
-					{shouldShowSceneControls && <div className="h-[60%] w-[1px] bg-border"></div>}
-					{/* 场景切换器 */}
-					{shouldShowSceneControls && (
-						<>
-							{shouldShowCurrentSceneBadge && currentScene ? (
-								<CurrentSceneBadge
-									scene={currentScene}
-									variant="outlineButton"
-									onClose={() => sceneStateStore.setCurrentScene(null)}
-								/>
-							) : (
-								<div
-									id={SCENE_INPUT_IDS.SCENES_SWITCHER}
-									className="min-w-0 flex-1"
-								></div>
-							)}
-						</>
-					)}
-				</div>
+				{shouldShowHeaderControls ? (
+					<div className="flex w-full items-center gap-4 overflow-hidden">
+						{/* 话题模式切换器 */}
+						{shouldShowModeToggle ? (
+							<ModeToggle
+								size={editorSize}
+								topicMode={editorContext.topicMode}
+								agentCode={
+									editorContext.agentCode ??
+									editorContext.selectedTopic?.agent_code
+								}
+								allowChangeMode={
+									editorContext.allowChangeMode ??
+									((editorContext.messagesLength ?? 0) > 0 ? false : true)
+								}
+								useChatTerminology={editorContext.useChatTerminology}
+								onModeChange={editorContext.setTopicMode}
+							/>
+						) : null}
+						{shouldShowModeToggle && shouldShowSceneControls ? (
+							<div className="h-[60%] w-[1px] bg-border"></div>
+						) : null}
+						{/* 场景切换器 */}
+						{shouldShowSceneControls && (
+							<>
+								{shouldShowCurrentSceneBadge && currentScene ? (
+									<CurrentSceneBadge
+										scene={currentScene}
+										variant="outlineButton"
+										onClose={() => sceneStateStore.setCurrentScene(null)}
+									/>
+								) : (
+									<div
+										id={SCENE_INPUT_IDS.SCENES_SWITCHER}
+										className="min-w-0 flex-1"
+									></div>
+								)}
+							</>
+						)}
+					</div>
+				) : null}
 				<div className={cn("w-full", classNames?.editorWrapper)}>
 					<div
 						className={cn(

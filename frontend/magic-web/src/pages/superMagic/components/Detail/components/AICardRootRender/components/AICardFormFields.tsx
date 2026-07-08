@@ -12,6 +12,8 @@ import { MagicPromptEditor } from "@/components/base/MagicPromptEditor"
 import type { JSONContent } from "@tiptap/react"
 import { CARD_TEMPLATES } from "../hooks/useAICardConfig"
 import type { CardTemplateType } from "../hooks/useAICardConfig"
+import AICardNotificationFields from "./AICardNotificationFields"
+import type { AICardNotificationConfig } from "../utils/aiCardNotification"
 
 export interface AICardFormFieldsValues {
 	taskName: string
@@ -23,6 +25,7 @@ export interface AICardFormFieldsValues {
 	model?: ModelItem | null
 	imageModel?: ModelItem | null
 	videoModel?: ModelItem | null
+	notification?: AICardNotificationConfig
 }
 
 interface AICardFormFieldsProps {
@@ -136,7 +139,7 @@ function AICardFormFields({
 		<>
 			{/* Card Name */}
 			<div className="space-y-2">
-				<label className="text-sm font-medium text-foreground">
+				<label className="text-sm font-medium text-foreground" data-testid="ai-card-form-fields-label">
 					{t("detail.aiCard.form.cardName")} <span className="text-destructive">*</span>
 				</label>
 				<Input
@@ -151,7 +154,7 @@ function AICardFormFields({
 			{/* Template */}
 			{!hideTemplate && (
 				<div className="space-y-2">
-					<label className="text-sm font-medium text-foreground">
+					<label className="text-sm font-medium text-foreground" data-testid="ai-card-form-fields-label-2">
 						{t("detail.aiCard.form.template")}
 					</label>
 					<MagicSelect
@@ -178,6 +181,7 @@ function AICardFormFields({
 								"disabled:cursor-not-allowed disabled:opacity-50",
 								"resize-y",
 							)}
+							data-testid="on-change"
 						/>
 					)}
 					<p className="text-xs text-muted-foreground">
@@ -188,7 +192,7 @@ function AICardFormFields({
 
 			{/* Prompt */}
 			<div className="space-y-2">
-				<label className="text-sm font-medium text-foreground">
+				<label className="text-sm font-medium text-foreground" data-testid="ai-card-form-fields-label-3">
 					{t("detail.aiCard.form.prompt")} <span className="text-destructive">*</span>
 				</label>
 				<MagicPromptEditor
@@ -209,7 +213,7 @@ function AICardFormFields({
 
 			{/* Schedule */}
 			<div className="space-y-2">
-				<label className="text-sm font-medium text-foreground">
+				<label className="text-sm font-medium text-foreground" data-testid="ai-card-form-fields-label-4">
 					{t("detail.aiCard.config.schedule")}
 				</label>
 				<ScheduledItem
@@ -218,6 +222,12 @@ function AICardFormFields({
 					disabled={disabled}
 				/>
 			</div>
+
+			<AICardNotificationFields
+				value={values.notification}
+				onChange={(notification) => onChange({ notification })}
+				disabled={disabled}
+			/>
 
 			{/* Model selections — 3 column grid */}
 			{hasModelOptions && (
@@ -229,7 +239,7 @@ function AICardFormFields({
 						{/* Language model */}
 						{modelList && modelList.length > 0 && (
 							<div className="min-w-0 space-y-1.5">
-								<label className="text-xs text-muted-foreground">
+								<label className="text-xs text-muted-foreground" data-testid="ai-card-form-fields-label-5">
 									{t("detail.aiCard.config.languageModel")}
 								</label>
 								<MagicSelect
@@ -252,7 +262,7 @@ function AICardFormFields({
 						{/* Image model */}
 						{imageModelList && imageModelList.length > 0 && (
 							<div className="min-w-0 space-y-1.5">
-								<label className="text-xs text-muted-foreground">
+								<label className="text-xs text-muted-foreground" data-testid="ai-card-form-fields-label-6">
 									{t("detail.aiCard.config.imageModel")}
 								</label>
 								<MagicSelect
@@ -275,7 +285,7 @@ function AICardFormFields({
 						{/* Video model */}
 						{videoModelList && videoModelList.length > 0 && (
 							<div className="min-w-0 space-y-1.5">
-								<label className="text-xs text-muted-foreground">
+								<label className="text-xs text-muted-foreground" data-testid="ai-card-form-fields-label-7">
 									{t("detail.aiCard.config.videoModel")}
 								</label>
 								<MagicSelect

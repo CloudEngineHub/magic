@@ -1,5 +1,5 @@
 import { memo, useCallback, useMemo, useState } from "react"
-import { Eye, EyeOff } from "lucide-react"
+import { Eye, EyeOff, Share2 } from "lucide-react"
 import { clipboard } from "@/utils/clipboard-helpers"
 import { useTranslation } from "react-i18next"
 import { Switch } from "@/components/shadcn-ui/switch"
@@ -10,6 +10,7 @@ import { generateSharePassword, generateTopicShareMessageText } from "./utils"
 import { useUpdateEffect } from "ahooks"
 import magicToast from "@/components/base/MagicToaster/utils"
 import { generateShareUrl } from "@/pages/superMagic/components/ShareManagement/utils/shareTypeHelpers"
+import { canUseNativeShare, shareToNativeTarget } from "./utils/nativeShare"
 
 interface MobileTopicShareProps {
 	shareContext?: {
@@ -78,7 +79,11 @@ function TopicSettingsRow({
 			data-testid={testId}
 		>
 			<div className="flex-1 text-left text-base leading-5 text-foreground">{label}</div>
-			<Switch checked={checked} className="pointer-events-none shrink-0" />
+			<Switch
+				checked={checked}
+				className="pointer-events-none shrink-0"
+				data-testid="mobile-topic-share-switch"
+			/>
 		</div>
 	)
 }
@@ -88,6 +93,8 @@ export default memo(function MobileTopicShare(props: MobileTopicShareProps) {
 
 	const { t } = useTranslation("super")
 	const [isPasswordVisible, setIsPasswordVisible] = useState(false)
+	// Capture Web Share support once per sheet mount so button visibility stays stable while editing share settings.
+	const [canNativeShare] = useState(() => canUseNativeShare())
 
 	// 分享开关状态
 	const [shareEnabled, setShareEnabled] = useState(() => {
@@ -273,6 +280,23 @@ export default memo(function MobileTopicShare(props: MobileTopicShareProps) {
 		magicToast.success(t("share.copyShareMessageSuccess"))
 	}, [shareMessageText, t])
 
+	/**
+	 * Sends the already-rendered topic share message to the mobile system share sheet.
+	 */
+	const handleNativeShare = useCallback(async () => {
+		if (!shareMessageText || !shareUrlForClipboard) return
+
+		const result = await shareToNativeTarget({
+			title: topicTitle || t("common.untitledTopic"),
+			text: shareMessageText,
+			url: shareUrlForClipboard,
+		})
+
+		if (result === "failed" || result === "unsupported") {
+			magicToast.error(t("share.nativeShareFailed"))
+		}
+	}, [shareMessageText, shareUrlForClipboard, t, topicTitle])
+
 	const passwordText = isPasswordVisible ? extraData?.password || "" : "• • • • • •"
 
 	return (
@@ -295,7 +319,11 @@ export default memo(function MobileTopicShare(props: MobileTopicShareProps) {
 					<div className="flex-1 text-base leading-5 text-foreground">
 						{t("share.enableShareLink")}
 					</div>
-					<Switch checked={shareEnabled} className="pointer-events-none shrink-0" />
+					<Switch
+						checked={shareEnabled}
+						className="pointer-events-none shrink-0"
+						data-testid="mobile-topic-share-switch-2"
+					/>
 				</div>
 			</CardGroup>
 
@@ -357,14 +385,29 @@ export default memo(function MobileTopicShare(props: MobileTopicShareProps) {
 						</CardGroup>
 					</div>
 
-					<button
-						type="button"
-						onClick={handleCopyShareUrl}
-						className="flex h-12 w-full items-center justify-center rounded-lg bg-foreground px-3.5 text-base font-medium text-background active:opacity-70"
-						data-testid="mobile-topic-share-copy-link-button"
-					>
-						{t("share.copyLinkAction")}
-					</button>
+					<div className="space-y-2">
+						{canNativeShare ? (
+							<button
+								type="button"
+								onClick={() => void handleNativeShare()}
+								// Keep the system share action disabled until the text payload exists, avoiding empty native sheets.
+								disabled={!shareMessageText}
+								className="flex h-12 w-full items-center justify-center rounded-lg bg-white px-3.5 text-base font-medium text-foreground active:opacity-70 disabled:opacity-50"
+								data-testid="mobile-topic-share-native-share-button"
+							>
+								<Share2 className="mr-2 h-4 w-4" />
+								{t("share.shareToSystem")}
+							</button>
+						) : null}
+						<button
+							type="button"
+							onClick={handleCopyShareUrl}
+							className="flex h-12 w-full items-center justify-center rounded-lg bg-foreground px-3.5 text-base font-medium text-background active:opacity-70"
+							data-testid="mobile-topic-share-copy-link-button"
+						>
+							{t("share.copyLinkAction")}
+						</button>
+					</div>
 				</div>
 			) : null}
 		</div>

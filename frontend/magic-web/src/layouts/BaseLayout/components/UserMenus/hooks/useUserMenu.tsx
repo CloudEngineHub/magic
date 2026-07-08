@@ -10,11 +10,13 @@ import {
 	Languages,
 	CircleUserRound,
 	Settings,
+	Info,
 } from "lucide-react"
 import { IconDeviceImacCog, IconLogout, IconShare3 } from "@tabler/icons-react"
 import MagicIcon from "@/components/base/MagicIcon"
 import { UserMenuKey } from "../constants"
 import { userStore } from "@/models/user"
+import { isMagicApp } from "@/utils/devices"
 import useLanguageOptions from "./useLanguageOptions"
 
 interface UseUserMenuProps {
@@ -101,7 +103,7 @@ function useUserMenu({ isPreviewMode }: UseUserMenuProps) {
 			{
 				type: "divider",
 			},
-			{
+			!isMagicApp && {
 				label: (
 					<span data-testid="user-menus-download-client">
 						{t("sider.downloadClient")}
@@ -110,6 +112,12 @@ function useUserMenu({ isPreviewMode }: UseUserMenuProps) {
 				key: UserMenuKey.DownloadClient,
 				icon: <MonitorSmartphone />,
 				"data-testid": "user-menus-download-client",
+			},
+			isMagicApp && {
+				label: <span data-testid="user-menus-about-us">{t("setting.aboutUs")}</span>,
+				key: UserMenuKey.AboutUs,
+				icon: <Info />,
+				"data-testid": "user-menus-about-us",
 			},
 			(isPersonalOrganization || isAdmin) && {
 				type: "divider",

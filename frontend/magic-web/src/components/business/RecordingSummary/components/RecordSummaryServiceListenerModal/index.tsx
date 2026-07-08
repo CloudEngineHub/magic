@@ -6,9 +6,12 @@ import { RecordingSession } from "@/types/recordSummary"
 import { RECORD_SUMMARY_EVENTS } from "@/services/recordSummary/const/events"
 import { formatDuration } from "@/services/recordSummary/utils/format"
 import { initializeService } from "@/services/recordSummary/serviceInstance"
+import { isAudioProjectMode } from "@/services/audioRecordings"
 import SuperMagicService from "@/pages/superMagic/services"
 import FileContentChangeModal from "../FileContentChangeModal"
 import { RecordSummaryActionButton, RecordSummaryAlertIcon } from "../RecordSummaryAlertCard"
+import { RouteName } from "@/routes/constants"
+import { history } from "@/routes/history"
 
 function renderDescriptionLines(content: string) {
 	return (
@@ -103,9 +106,19 @@ function RecordSummaryServiceListenerModal() {
 								fullWidth
 								onClick={() => {
 									modalInstance.destroy()
-									if (session.project?.id) {
-										SuperMagicService.switchProjectById(session.project.id)
+									if (!session.project?.id) return
+
+									if (isAudioProjectMode(session.project.project_mode)) {
+										history.push({
+											name: RouteName.AudioRecordingDetail,
+											params: {
+												projectId: session.project.id,
+											},
+										})
+										return
 									}
+
+									SuperMagicService.switchProjectById(session.project.id)
 								}}
 								data-testid="record-summary-duration-go-project-button"
 							>

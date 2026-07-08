@@ -29,13 +29,13 @@ export default memo(function SharePasswordField(props: SharePasswordFieldProps) 
 	}
 
 	return (
-		<div className="flex flex-col gap-2">
+		<div className="flex flex-col gap-2" data-testid="share-password-field">
 			{showLabel && (
-				<label className="text-sm font-medium leading-none text-foreground">
+				<label className="text-sm font-medium leading-none text-foreground" data-testid="share-password-field-label">
 					{t("share.accessPassword")}
 				</label>
 			)}
-			<div className="flex items-center gap-2">
+			<div className="flex items-center gap-2" data-testid="share-password-actions">
 				{/* 密码输入框和复制按钮组合 */}
 				<div className="flex flex-1 items-center gap-0">
 					<Input
@@ -45,12 +45,14 @@ export default memo(function SharePasswordField(props: SharePasswordFieldProps) 
 							"h-9 flex-1 rounded-r-none border-r-0",
 							"border-input focus-visible:border-input focus-visible:ring-0 focus-visible:ring-offset-0",
 						)}
+						data-testid="share-password-field-input"
 					/>
 					<Button
 						variant="outline"
 						size="icon"
 						className="h-9 w-9 rounded-l-none border-l"
 						onClick={onCopy}
+						data-testid="on-copy"
 					>
 						<Copy className="h-4 w-4" />
 					</Button>
@@ -62,6 +64,7 @@ export default memo(function SharePasswordField(props: SharePasswordFieldProps) 
 						size="default"
 						className="h-9 min-w-20"
 						onClick={handleResetClick}
+						data-testid="handle-reset-click"
 					>
 						{t("share.resetPassword")}
 					</Button>

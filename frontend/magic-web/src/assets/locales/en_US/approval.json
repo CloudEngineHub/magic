@@ -260,5 +260,6 @@
 	"validationFailed": "Validation Failed",
 	"viewDetails": "View Details",
 	"yiCi": "Sequential",
-	"zhiFuRen": "Payer"
+	"zhiFuRen": "Payer",
+	"selectAllOrReverse": "Select All/Reverse"
 }

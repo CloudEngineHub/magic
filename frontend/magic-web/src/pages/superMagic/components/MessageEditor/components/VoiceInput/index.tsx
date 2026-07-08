@@ -1,4 +1,4 @@
-import VoiceInput, { VoiceInputRef } from "@/components/business/VoiceInput"
+import VoiceInput, { VoiceInputRef, type VoiceInputStatus } from "@/components/business/VoiceInput"
 import { VoiceResultUtterance } from "@/components/business/VoiceInput/services/VoiceClient/types"
 import { VoiceResult } from "@/components/business/VoiceInput/types"
 import AiCompletionService from "@/services/chat/editor/AiCompletionService"
@@ -6,7 +6,18 @@ import { isMobile } from "@/utils/devices"
 import { Editor, JSONContent } from "@tiptap/core"
 import { logger as Logger } from "@/utils/log"
 import { useMemoizedFn } from "ahooks"
-import { forwardRef, Ref, useRef, useImperativeHandle, useEffect } from "react"
+import { forwardRef, Ref, useRef, useImperativeHandle, useEffect, type ReactNode } from "react"
+import { runActiveEditor } from "../../utils/editorLifecycle"
+
+type VoiceInputCommitMode = "live" | "deferred"
+
+interface DeferredVoiceSegment {
+	key: string
+	text: string
+	start: number
+	end: number
+	definite: boolean
+}
 
 interface SuperMagicVoiceInputProps {
 	className?: string
@@ -16,6 +27,15 @@ interface SuperMagicVoiceInputProps {
 	iconSize?: number
 	tooltipText?: string
 	tooltipSide?: "top" | "bottom" | "left" | "right"
+	commitMode?: VoiceInputCommitMode
+	onRecordingChange?: (isRecording: boolean) => void
+	onStatusChange?: (status: VoiceInputStatus) => void
+	onDeferredTextChange?: (text: string) => void
+	onWaveformLevelsChange?: (levels: number[]) => void
+	children?: ReactNode
+	toggleOnClick?: boolean
+	waveformBarCount?: number
+	waveformClassName?: string
 }
 
 const logger = Logger.createLogger("SuperMagicVoiceInput")
@@ -45,6 +65,15 @@ const SuperMagicVoiceInput = forwardRef<VoiceInputRef, SuperMagicVoiceInputProps
 			className,
 			tooltipText,
 			tooltipSide,
+			commitMode = "live",
+			onRecordingChange,
+			onStatusChange,
+			onDeferredTextChange,
+			onWaveformLevelsChange,
+			children,
+			toggleOnClick,
+			waveformBarCount,
+			waveformClassName,
 		}: SuperMagicVoiceInputProps,
 		ref: Ref<VoiceInputRef>,
 	) => {
@@ -59,6 +88,7 @@ const SuperMagicVoiceInput = forwardRef<VoiceInputRef, SuperMagicVoiceInputProps
 			end: number
 			length: number
 		} | null>(null)
+		const deferredSegmentsRef = useRef<DeferredVoiceSegment[]>([])
 
 		const handleResult = useMemoizedFn((result: string, response: VoiceResult) => {
 			// Early return: abnormal data check
@@ -67,27 +97,133 @@ const SuperMagicVoiceInput = forwardRef<VoiceInputRef, SuperMagicVoiceInputProps
 				return
 			}
 
-			// Early return: only process when recording and editor is available
-			if (!voiceInputRef.current?.isRecording || !tiptapEditor) return
+			// Early return: only process when recording
+			if (!voiceInputRef.current?.isRecording) return
+
+			if (commitMode === "deferred") {
+				processDeferredUtterances(response.utterances, result)
+				return
+			}
+
+			if (!tiptapEditor) return
 
 			try {
-				if (!isMobile && !tiptapEditor.isFocused) {
-					tiptapEditor.commands.focus()
-				}
+				runActiveEditor(tiptapEditor, (editor) => {
+					if (!isMobile && !editor.isFocused) {
+						editor.commands.focus()
+					}
 
-				// Process each utterance segment incrementally
-				processUtterances(response.utterances, tiptapEditor)
+					// Process each utterance segment incrementally
+					processUtterances(response.utterances, editor)
+				})
 
 				// Update value after DOM updates
 				requestAnimationFrame(() => {
-					if (tiptapEditor.isDestroyed) return
-					const newContent = tiptapEditor.getJSON()
-					updateValue?.(newContent)
+					runActiveEditor(tiptapEditor, (editor) => {
+						const newContent = editor.getJSON()
+						updateValue?.(newContent)
+					})
 				})
 			} catch (error) {
 				logger.error("Voice input processing failed", error)
 			}
 		})
+
+		function getUtteranceKey(utterance: VoiceResultUtterance): string {
+			return `${utterance.start_time}:${utterance.end_time}`
+		}
+
+		function emitDeferredText() {
+			const deferredText = deferredSegmentsRef.current
+				.slice()
+				.sort((currentSegment, nextSegment) => currentSegment.start - nextSegment.start)
+				.map((segment) => segment.text)
+				.join("")
+			onDeferredTextChange?.(deferredText)
+		}
+
+		function resetDeferredText() {
+			deferredSegmentsRef.current = []
+			onDeferredTextChange?.("")
+		}
+
+		function doVoiceSegmentsOverlap(
+			currentSegment: Pick<DeferredVoiceSegment, "start" | "end">,
+			nextSegment: Pick<DeferredVoiceSegment, "start" | "end">,
+		): boolean {
+			return currentSegment.start < nextSegment.end && nextSegment.start < currentSegment.end
+		}
+
+		function upsertDeferredSegment(nextSegment: DeferredVoiceSegment) {
+			if (
+				!nextSegment.definite &&
+				deferredSegmentsRef.current.some(
+					(segment) => segment.definite && doVoiceSegmentsOverlap(segment, nextSegment),
+				)
+			)
+				return
+
+			deferredSegmentsRef.current = deferredSegmentsRef.current.filter((segment) => {
+				if (segment.key === nextSegment.key) return false
+				if (!doVoiceSegmentsOverlap(segment, nextSegment)) return true
+
+				return false
+			})
+			deferredSegmentsRef.current.push(nextSegment)
+		}
+
+		function applyDeferredFallbackText(fallbackText: string) {
+			deferredSegmentsRef.current = fallbackText
+				? [
+					{
+						key: "fallback",
+						text: fallbackText,
+						start: 0,
+						end: fallbackText.length,
+						definite: true,
+					},
+				]
+				: []
+			emitDeferredText()
+		}
+
+		function processDeferredUtterances(
+			utterances: VoiceResultUtterance[] | undefined,
+			fallbackText: string,
+		) {
+			if (!utterances || utterances.length === 0) {
+				applyDeferredFallbackText(fallbackText)
+				return
+			}
+
+			let hasAcceptedUtterance = false
+			for (const utterance of utterances) {
+				if (
+					typeof utterance.start_time !== "number" ||
+					typeof utterance.end_time !== "number" ||
+					utterance.start_time === -1 ||
+					utterance.end_time === -1
+				)
+					continue
+
+				hasAcceptedUtterance = true
+				const utteranceKey = getUtteranceKey(utterance)
+				upsertDeferredSegment({
+					key: utteranceKey,
+					text: utterance.text,
+					start: utterance.start_time,
+					end: utterance.end_time,
+					definite: Boolean(utterance.definite),
+				})
+			}
+
+			if (hasAcceptedUtterance) {
+				emitDeferredText()
+				return
+			}
+
+			applyDeferredFallbackText(fallbackText)
+		}
 
 		// Helper: process utterances and update editor incrementally
 		function processUtterances(utterances: VoiceResultUtterance[] | undefined, editor: Editor) {
@@ -191,34 +327,44 @@ const SuperMagicVoiceInput = forwardRef<VoiceInputRef, SuperMagicVoiceInputProps
 				AiCompletionService.enable()
 			}
 
+			onRecordingChange?.(isRecording)
+
+			if (isRecording && commitMode === "deferred") {
+				resetDeferredText()
+				return
+			}
+
 			if (isRecording && tiptapEditor) {
-				enableScrollIntoViewRef.current = true
-				shouldIgnoreNonDefiniteRef.current = false
-				lastDefinitePositionRef.current = null
-				lastTextSelectionRef.current = null
+				runActiveEditor(tiptapEditor, (editor) => {
+					enableScrollIntoViewRef.current = true
+					shouldIgnoreNonDefiniteRef.current = false
+					lastDefinitePositionRef.current = null
+					lastTextSelectionRef.current = null
 
-				// Calculate and save base insertion position
-				const currentSelection = tiptapEditor.state.selection
-				const endPosition = tiptapEditor.state.doc.content.size - 1
-				const startPos = currentSelection.head > 1 ? currentSelection.head : endPosition
-				lastTextSelectionRef.current = startPos
+					// Calculate and save base insertion position
+					const currentSelection = editor.state.selection
+					const endPosition = editor.state.doc.content.size - 1
+					const startPos = currentSelection.head > 1 ? currentSelection.head : endPosition
+					lastTextSelectionRef.current = startPos
 
-				console.log("初始化光标位置", startPos)
+					console.log("初始化光标位置", startPos)
 
-				if (!tiptapEditor.isFocused && !isMobile) {
-					console.log("初始化光标位置，聚焦编辑器")
-					tiptapEditor.commands.focus()
-				}
+					if (!editor.isFocused && !isMobile) {
+						console.log("初始化光标位置，聚焦编辑器")
+						editor.commands.focus()
+					}
+				})
 			} else if (!isRecording && tiptapEditor && !isMobile) {
 				lastDefinitePositionRef.current = null
 				shouldIgnoreNonDefiniteRef.current = false
 				// Fix cursor position at recording end
 				requestAnimationFrame(() => {
-					if (tiptapEditor.isDestroyed) return
-					if (lastTextSelectionRef.current !== null) {
-						tiptapEditor.commands.setTextSelection(lastTextSelectionRef.current)
-						lastTextSelectionRef.current = null
-					}
+					runActiveEditor(tiptapEditor, (editor) => {
+						if (lastTextSelectionRef.current !== null) {
+							editor.commands.setTextSelection(lastTextSelectionRef.current)
+							lastTextSelectionRef.current = null
+						}
+					})
 				})
 			}
 		})
@@ -251,7 +397,7 @@ const SuperMagicVoiceInput = forwardRef<VoiceInputRef, SuperMagicVoiceInputProps
 				if (
 					scrollElement &&
 					scrollElement.scrollTop + scrollElement.clientHeight >=
-						scrollElement.scrollHeight
+					scrollElement.scrollHeight
 				) {
 					enableScrollIntoViewRef.current = true
 				}
@@ -273,7 +419,10 @@ const SuperMagicVoiceInput = forwardRef<VoiceInputRef, SuperMagicVoiceInputProps
 			ref,
 			() => ({
 				stopRecording: () => {
-					voiceInputRef.current?.stopRecording()
+					return voiceInputRef.current?.stopRecording()
+				},
+				disconnect: () => {
+					voiceInputRef.current?.disconnect()
 				},
 				isRecording: voiceInputRef.current?.isRecording ?? false,
 				status: voiceInputRef.current?.status ?? "idle",
@@ -286,14 +435,21 @@ const SuperMagicVoiceInput = forwardRef<VoiceInputRef, SuperMagicVoiceInputProps
 			<VoiceInput
 				ref={voiceInputRef}
 				onResult={handleResult}
+				onStatusChange={onStatusChange}
 				onRecordingChange={handleRecordingChange}
+				onWaveformLevelsChange={onWaveformLevelsChange}
 				iconSize={iconSize}
 				className={className}
+				toggleOnClick={toggleOnClick}
+				waveformBarCount={waveformBarCount}
+				waveformClassName={waveformClassName}
 				enableHotkey={!isMobile}
 				config={config}
 				tooltipText={tooltipText}
 				tooltipSide={tooltipSide}
-			/>
+			>
+				{children}
+			</VoiceInput>
 		)
 	},
 )

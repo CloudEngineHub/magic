@@ -170,7 +170,16 @@ export const useMultiFolderUploadActions = ({
 	 * 获取共用的状态信息
 	 */
 	const getSharedState = useCallback(() => {
-		const { activeTasks, completedTasks, pendingTasks } = multiFolderUploadStore
+		const {
+			activeTasks: allActiveTasks,
+			completedTasks: allCompletedTasks,
+			pendingTasks: allPendingTasks,
+		} = multiFolderUploadStore
+
+		// 过滤掉静默任务
+		const activeTasks = allActiveTasks.filter((task) => !task.options?.silent)
+		const completedTasks = allCompletedTasks.filter((task) => !task.options?.silent)
+		const pendingTasks = allPendingTasks.filter((task) => !task.options?.silent)
 
 		// 是否有正在运行的任务
 		const hasActiveTasks = activeTasks.length > 0

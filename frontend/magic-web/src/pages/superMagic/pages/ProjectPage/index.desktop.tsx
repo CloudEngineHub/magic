@@ -10,20 +10,29 @@ import ProjectSider from "../../components/ProjectSider"
 import { useTranslation } from "react-i18next"
 import { useDetailModeCache } from "../../hooks/useDetailModeCache"
 import { useAttachmentsPolling } from "../../hooks/useAttachmentsPolling"
+import { useProjectAttachmentsChangeRealtime } from "../../hooks/useProjectAttachmentsChangeRealtime"
 import { AttachmentDataProcessor } from "../../utils/attachmentDataProcessor"
 import {
+	measureAttachmentFetch,
+	recordAttachmentsStaleResponseDropped,
+} from "../../utils/attachmentPerf"
+import {
+	normalizeUpdateAttachmentsPayload,
 	releaseAttachmentsRefreshWaitersWithoutFetch,
 	resolveAttachmentsRefreshWaitersForProject,
+	type SuperMagicUpdateAttachmentsRequest,
 	withAttachmentsRefreshWaitersResolved,
 } from "@/pages/superMagic/services/attachmentsTopicSync"
 import { isCollaborationWorkspace } from "../../constants"
 import { useNoPermissionCollaborationProject } from "../../hooks/useNoPermissionCollaborationProject"
 import { observer } from "mobx-react-lite"
-import { SuperMagicApi } from "@/apis"
 import { workspaceStore, projectStore, topicStore } from "../../stores/core"
 import { Files } from "lucide-react"
 import ProjectCardContainer from "../../components/ProjectCardContainer"
 import TopicDesktopPanels from "../TopicPage/components/TopicDesktopPanels"
+import { loadProjectAttachments } from "../../services"
+import { isAbortError, useLatestAbortableRequest } from "../../hooks/useLatestAbortableRequest"
+import { useProjectFirstAttachmentRender } from "../../hooks/useProjectFirstAttachmentRender"
 import { isAudioProjectMode } from "../AudioRecordings/utils/is-audio-project-mode"
 import type {
 	SuperMagicOpenFileTabPayload,
@@ -45,6 +54,10 @@ function ProjectPage() {
 
 	/** ======================== Refs ======================== */
 	const detailRef = useRef<DetailRef>(null)
+	const { shouldRenderProjectFirstRequest, resetProjectFirstRequestRender } =
+		useProjectFirstAttachmentRender()
+	const { startRequest: startAttachmentsRequest, cancelCurrent: cancelAttachmentsRequest } =
+		useLatestAbortableRequest()
 
 	/** ======================== States ======================== */
 	const [autoDetail, setAutoDetail] = useState<any>()
@@ -96,7 +109,7 @@ function ProjectPage() {
 			// 使用setTimeout确保DOM更新后再打开tab
 			setTimeout(() => {
 				// 允许消息区直接传入临时 fileData，复用右侧详情区打开逻辑。
-				detailRef.current?.openFileTab?.({ file_id: data.fileId })
+				detailRef.current?.openFileTab?.(data.fileData ?? { file_id: data.fileId })
 			}, 100)
 		}
 		const handleOpenPlaybackTab = (toolData: SuperMagicOpenPlaybackTabPayload) => {
@@ -129,13 +142,20 @@ function ProjectPage() {
 	// 集成轮询hook
 	useAttachmentsPolling({
 		projectId: selectedProject?.id,
+		autoStart: false,
 		onAttachmentsChange: useCallback(
-			({ tree, list }: { tree: any[]; list: never[] }) => {
+			({ tree, list }: { tree: any[]; list: any[] }) => {
 				// 统一处理 metadata，内部自闭环处理验证和返回逻辑
-				const processedData = AttachmentDataProcessor.processAttachmentData({ tree, list })
+				const processedData = AttachmentDataProcessor.processAttachmentData(
+					{ tree, list },
+					{ preserveList: true },
+				)
 				setAttachments(processedData.tree)
 				setAttachmentList(processedData.list)
-				projectFilesStore.setWorkspaceFileTree(processedData.tree)
+				projectFilesStore.setWorkspaceFileTree(processedData.tree, {
+					list: processedData.list,
+					source: "ProjectPage.polling",
+				})
 			},
 			[setAttachments, setAttachmentList],
 		),
@@ -148,38 +168,112 @@ function ProjectPage() {
 		}),
 	})
 
+	useProjectAttachmentsChangeRealtime({
+		projectId: selectedProject?.id,
+		onAttachmentsChange: useCallback(({ tree, list }) => {
+			setAttachments(tree)
+			setAttachmentList(list)
+		}, []),
+		onFallbackError: useMemoizedFn((error: unknown) => {
+			if (isCollaborationWorkspace(selectedWorkspace)) {
+				handleNoPermissionCollaborationProject(error)
+				return
+			}
+			console.error("Failed to refresh realtime attachments:", error)
+		}),
+	})
+
 	const updateAttachments = useDebounceFn(
 		(selectedProject: any, callback?: () => void) => {
 			const projectId = selectedProject?.id as string | undefined
 			if (!projectId) {
+				cancelAttachmentsRequest()
+				resetProjectFirstRequestRender()
 				setAttachments([])
 				projectFilesStore.setWorkspaceFileTree([])
 				releaseAttachmentsRefreshWaitersWithoutFetch()
 				return
 			}
+			const request = startAttachmentsRequest()
+			const shouldRenderIncrementally = shouldRenderProjectFirstRequest(projectId)
+			let didCommitFinalSnapshot = false
+
 			try {
 				pubsub.publish(PubSubEvents.Update_Attachments_Loading, true)
 				withAttachmentsRefreshWaitersResolved(
 					projectId,
-					SuperMagicApi.getAttachmentsByProjectId({
-						projectId,
-						// @ts-ignore 使用window添加临时的token
-						temporaryToken: window.temporary_token || "",
-					})
-						.then((res) => {
-							// 统一处理 metadata，包括 index.html 文件的特殊逻辑，内部自闭环处理验证和返回逻辑
-							const processedData = AttachmentDataProcessor.processAttachmentData(res)
-							setAttachments(processedData.tree)
-							setAttachmentList(processedData.list)
-							projectFilesStore.setWorkspaceFileTree(processedData.tree)
+					measureAttachmentFetch("ProjectPage.updateAttachments", () =>
+						loadProjectAttachments({
+							projectId,
+							signal: request.signal,
+							onBatchSnapshot: shouldRenderIncrementally
+								? ({ tree, list, phase, isFinal }) => {
+										if (!request.isCurrent()) {
+											recordAttachmentsStaleResponseDropped(
+												"ProjectPage.updateAttachments",
+												{ stage: "batch_snapshot", phase },
+											)
+											return
+										}
+										const processedData =
+											AttachmentDataProcessor.processAttachmentData(
+												{ tree, list },
+												{ preserveList: true },
+											)
+										setAttachments(processedData.tree)
+										setAttachmentList(processedData.list)
+										projectFilesStore.setWorkspaceFileTree(processedData.tree, {
+											list: processedData.list,
+											source: `ProjectPage.batch.${phase}`,
+										})
+										if (isFinal) {
+											didCommitFinalSnapshot = true
+										}
+									}
+								: undefined,
+						}),
+					)
+						.then((res: Awaited<ReturnType<typeof loadProjectAttachments>>) => {
+							if (!request.isCurrent()) {
+								recordAttachmentsStaleResponseDropped(
+									"ProjectPage.updateAttachments",
+									{ stage: "load_result" },
+								)
+								return
+							}
+							if (!didCommitFinalSnapshot) {
+								setAttachments(res.tree)
+								setAttachmentList(res.list)
+								projectFilesStore.setWorkspaceFileTree(res.tree, {
+									list: res.list,
+									source: "ProjectPage.load_result",
+								})
+							}
 							GlobalMentionPanelStore.finishLoadAttachmentsPromise(projectId)
 						})
+						.catch((error: unknown) => {
+							if (isAbortError(error)) return
+							if (!request.isCurrent()) {
+								recordAttachmentsStaleResponseDropped(
+									"ProjectPage.updateAttachments",
+									{ stage: "load_error" },
+								)
+								return
+							}
+							console.error("Failed to fetch attachments:", error)
+							setAttachments([])
+							projectFilesStore.setWorkspaceFileTree([])
+						})
 						.finally(() => {
-							pubsub.publish(PubSubEvents.Update_Attachments_Loading, false)
+							request.release()
+							if (request.isCurrent()) {
+								pubsub.publish(PubSubEvents.Update_Attachments_Loading, false)
+							}
 							callback?.()
 						}),
 				)
 			} catch (error) {
+				if (isAbortError(error)) return
 				console.error("Failed to fetch attachments:", error)
 				setAttachments([])
 				projectFilesStore.setWorkspaceFileTree([])
@@ -201,6 +295,7 @@ function ProjectPage() {
 		}
 
 		return () => {
+			cancelAttachmentsRequest()
 			if (projectId) {
 				GlobalMentionPanelStore.clearInitLoadAttachmentsPromise(projectId)
 			}
@@ -212,17 +307,23 @@ function ProjectPage() {
 	}, [userSelectDetail, autoDetail])
 
 	useEffect(() => {
-		pubsub.subscribe(PubSubEvents.Update_Attachments, (callback) => {
+		const handleUpdateAttachments = (
+			payloadOrCallback?: SuperMagicUpdateAttachmentsRequest,
+		) => {
+			const payload = normalizeUpdateAttachmentsPayload(payloadOrCallback)
+
 			if (!selectedProject) {
-				callback?.()
+				payload?.callback?.()
 				releaseAttachmentsRefreshWaitersWithoutFetch()
 				return
 			}
 
-			updateAttachments(selectedProject, callback)
-		})
+			updateAttachments(selectedProject, payload?.callback)
+		}
+
+		pubsub.subscribe(PubSubEvents.Update_Attachments, handleUpdateAttachments)
 		return () => {
-			pubsub?.unsubscribe(PubSubEvents.Update_Attachments)
+			pubsub?.unsubscribe(PubSubEvents.Update_Attachments, handleUpdateAttachments)
 		}
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [selectedProject])

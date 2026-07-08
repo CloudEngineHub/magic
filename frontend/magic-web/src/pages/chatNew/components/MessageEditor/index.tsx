@@ -77,6 +77,7 @@ import { useIsMobile } from "@/hooks/useIsMobile"
 import useNavigate from "@/routes/hooks/useNavigate"
 import { MessageReceiveType } from "@/types/chat"
 import { RouteName } from "@/routes/constants"
+import { runActiveEditor } from "@/utils/tiptapEditorLifecycle"
 
 export interface SendData {
 	jsonValue: JSONContent | undefined
@@ -156,16 +157,10 @@ const MessageEditor = observer(function MessageEditor({
 
 	/** Safe editor focus helper to prevent TipTap view errors */
 	const safeEditorFocus = useMemoizedFn(() => {
-		try {
-			const editor = editorRef.current?.editor
-			if (editor && editorReady && !settingContent.current) {
-				// Use chain method which has better error handling
-				editor.chain().focus().run()
-			}
-		} catch (error) {
-			// Silently handle focus errors when editor view is not ready
-			console.debug("Editor focus skipped: view not ready")
-		}
+		if (!editorReady || settingContent.current) return
+		runActiveEditor(editorRef.current?.editor, (editor) => {
+			editor.chain().focus().run()
+		})
 	})
 
 	const {
@@ -180,8 +175,10 @@ const MessageEditor = observer(function MessageEditor({
 		return autorun(() => {
 			if (ConversationStore.selectText && editorReady && !settingContent.current) {
 				settingContent.current = true
-				editorRef.current?.editor?.commands.setContent(ConversationStore.selectText, {
-					emitUpdate: true,
+				runActiveEditor(editorRef.current?.editor, (editor) => {
+					editor.commands.setContent(ConversationStore.selectText, {
+						emitUpdate: true,
+					})
 				})
 				safeEditorFocus()
 				setIsEmpty(false)
@@ -194,7 +191,9 @@ const MessageEditor = observer(function MessageEditor({
 	useMount(() => {
 		if (value !== undefined && editorReady && !settingContent.current) {
 			settingContent.current = true
-			editorRef.current?.editor?.commands.setContent(value, { emitUpdate: true })
+			runActiveEditor(editorRef.current?.editor, (editor) => {
+				editor.commands.setContent(value, { emitUpdate: true })
+			})
 			safeEditorFocus()
 			settingContent.current = false
 		}
@@ -267,7 +266,9 @@ const MessageEditor = observer(function MessageEditor({
 						const text =
 							(editMessage.message as TextConversationMessage).text?.content ?? ""
 
-						editorRef.current?.editor?.commands.setContent(text, { emitUpdate: true })
+						runActiveEditor(editorRef.current?.editor, (editor) => {
+							editor.commands.setContent(text, { emitUpdate: true })
+						})
 
 						setFiles(
 							(editMessage.message as TextConversationMessage).text?.attachments?.map(
@@ -276,11 +277,13 @@ const MessageEditor = observer(function MessageEditor({
 						)
 						break
 					case ConversationMessageType.Markdown:
-						editorRef.current?.editor?.commands.setContent(
-							(editMessage.message as MarkdownConversationMessage).markdown
-								?.content ?? "",
-							{ emitUpdate: true },
-						)
+						runActiveEditor(editorRef.current?.editor, (editor) => {
+							editor.commands.setContent(
+								(editMessage.message as MarkdownConversationMessage).markdown
+									?.content ?? "",
+								{ emitUpdate: true },
+							)
+						})
 						setFiles(
 							(
 								editMessage.message as MarkdownConversationMessage
@@ -293,8 +296,10 @@ const MessageEditor = observer(function MessageEditor({
 								?.content ?? "{}",
 							{},
 						)
-						editorRef.current?.editor?.commands.setContent(richText, {
-							emitUpdate: true,
+						runActiveEditor(editorRef.current?.editor, (editor) => {
+							editor.commands.setContent(richText, {
+								emitUpdate: true,
+							})
 						})
 						setFiles(
 							(
@@ -311,28 +316,31 @@ const MessageEditor = observer(function MessageEditor({
 							files?.length === 1 &&
 							IMAGE_EXTENSIONS.includes(files[0].file_extension ?? "")
 						) {
-							editorRef.current?.editor?.commands.setContent(
-								{
-									type: "doc",
-									content: [
-										{
-											type: "paragraph",
-											content: [
-												{
-													type: Image.name,
-													attrs: {
-														file_id: files[0].file_id,
-														file_name: files[0].file_name,
-														file_size: files[0].file_size,
-														file_extension: files[0].file_extension,
+							runActiveEditor(editorRef.current?.editor, (editor) => {
+								editor.commands.setContent(
+									{
+										type: "doc",
+										content: [
+											{
+												type: "paragraph",
+												content: [
+													{
+														type: Image.name,
+														attrs: {
+															file_id: files[0].file_id,
+															file_name: files[0].file_name,
+															file_size: files[0].file_size,
+															file_extension:
+																files[0].file_extension,
+														},
 													},
-												},
-											],
-										},
-									],
-								},
-								{ emitUpdate: true },
-							)
+												],
+											},
+										],
+									},
+									{ emitUpdate: true },
+								)
+							})
 							break
 						}
 						setFiles(
@@ -348,7 +356,9 @@ const MessageEditor = observer(function MessageEditor({
 				settingContent.current = false
 			} else if (!editMessage) {
 				settingContent.current = true
-				editorRef.current?.editor?.commands.setContent("", { emitUpdate: true })
+				runActiveEditor(editorRef.current?.editor, (editor) => {
+					editor.commands.setContent("", { emitUpdate: true })
+				})
 				safeEditorFocus()
 				settingContent.current = false
 				setFiles([])
@@ -360,18 +370,16 @@ const MessageEditor = observer(function MessageEditor({
 
 	/** ========================== Add Emoji ========================== */
 	const onAddEmoji = useMemoizedFn((emoji: EmojiInfo) => {
-		try {
-			editorRef.current?.editor
-				?.chain()
+		runActiveEditor(editorRef.current?.editor, (editor) => {
+			editor
+				.chain()
 				.focus()
 				.insertContent({
 					type: MagicEmojiNodeExtension.name,
 					attrs: { ...emoji, locale: language },
 				})
 				.run()
-		} catch (error) {
-			console.debug("Add emoji focus skipped: editor view not ready")
-		}
+		})
 	})
 
 	const footerInstructionsNode = useMemo(() => {
@@ -640,7 +648,11 @@ const MessageEditor = observer(function MessageEditor({
 
 	const getEditorJSON = useMemoizedFn(() => {
 		try {
-			const editorJson = editorRef.current?.editor?.getJSON()
+			const editorJson = runActiveEditor(
+				editorRef.current?.editor,
+				(editor) => editor.getJSON(),
+				undefined,
+			)
 			// Ensure json is valid
 			if (!editorJson || typeof editorJson !== "object" || !("type" in editorJson)) {
 				return {
@@ -672,17 +684,17 @@ const MessageEditor = observer(function MessageEditor({
 	const handleAfterSend = useMemoizedFn(() => {
 		if (clearAfterSend) {
 			setIsEmpty(true)
-			editorRef.current?.editor?.chain().clearContent().run()
+			runActiveEditor(editorRef.current?.editor, (editor) => {
+				editor.chain().clearContent().run()
+			})
 			if (residencyContent.length > 0) {
-				try {
-					editorRef.current?.editor
-						?.chain()
+				runActiveEditor(editorRef.current?.editor, (editor) => {
+					editor
+						.chain()
 						.focus()
 						.insertContent(cloneDeep(residencyContent))
 						.run()
-				} catch (error) {
-					console.debug("Insert residency content focus skipped: editor view not ready")
-				}
+				})
 			}
 
 			clearSessionInstructConfig()
@@ -799,11 +811,9 @@ const MessageEditor = observer(function MessageEditor({
 	])
 
 	const onClick = useMemoizedFn(() => {
-		try {
-			editorRef.current?.editor?.chain().focus().run()
-		} catch (error) {
-			console.debug("Click focus skipped: editor view not ready")
-		}
+		runActiveEditor(editorRef.current?.editor, (editor) => {
+			editor.chain().focus().run()
+		})
 	})
 
 	const ChildrenRender = useMemoizedFn(({ className: inputClassName }) => {

@@ -11,8 +11,6 @@
 interface UploadConfig {
   /** 单文件最大大小限制（字节） */
   maxFileSize: number
-  /** 单次上传最大文件数量 */
-  maxTotalFiles: number
   /** 允许的文件扩展名（空数组表示不限制） */
   allowedExtensions: string[]
   /** 禁止的文件扩展名 */
@@ -24,7 +22,6 @@ interface UploadConfig {
 ```typescript
 uploadConfig: UploadConfig = {
   maxFileSize: 100 * 1024 * 1024, // 100MB
-  maxTotalFiles: 10000,
   allowedExtensions: [], // 不限制
   blockedExtensions: [".exe", ".bat", ".cmd", ".scr"], // 安全考虑
 }
@@ -46,16 +43,7 @@ multiFolderUploadStore.updateMaxFileSize(200 * 1024 * 1024)
 multiFolderUploadStore.updateMaxFileSize(1024 * 1024 * 1024)
 ```
 
-#### 2. 更新文件数量限制
-```typescript
-// 限制单次最多上传5000个文件
-multiFolderUploadStore.updateMaxTotalFiles(5000)
-
-// 限制单次最多上传1000个文件
-multiFolderUploadStore.updateMaxTotalFiles(1000)
-```
-
-#### 3. 设置允许的文件类型
+#### 2. 设置允许的文件类型
 ```typescript
 // 只允许图片文件
 multiFolderUploadStore.updateAllowedExtensions(['.jpg', '.jpeg', '.png', '.gif', '.webp'])
@@ -67,7 +55,7 @@ multiFolderUploadStore.updateAllowedExtensions(['.pdf', '.doc', '.docx', '.txt',
 multiFolderUploadStore.updateAllowedExtensions([])
 ```
 
-#### 4. 设置禁止的文件类型
+#### 3. 设置禁止的文件类型
 ```typescript
 // 禁止可执行文件和脚本
 multiFolderUploadStore.updateBlockedExtensions(['.exe', '.bat', '.cmd', '.scr', '.js', '.vbs'])
@@ -82,7 +70,6 @@ multiFolderUploadStore.updateBlockedExtensions(['.avi', '.mkv', '.mov', '.mp4'])
 // 批量更新多个配置
 multiFolderUploadStore.updateUploadConfig({
   maxFileSize: 50 * 1024 * 1024, // 50MB
-  maxTotalFiles: 5000,
   allowedExtensions: ['.jpg', '.png', '.pdf', '.doc'],
   blockedExtensions: ['.exe', '.bat', '.cmd']
 })
@@ -107,7 +94,6 @@ console.log('当前配置:', config)
 // {
 //   maxFileSize: 104857600,
 //   maxFileSizeMB: 100,
-//   maxTotalFiles: 10000,
 //   allowedExtensions: [],
 //   blockedExtensions: [".exe", ".bat", ".cmd", ".scr"]
 // }
@@ -147,19 +133,16 @@ if (projectType === 'development') {
 // VIP用户 - 更高限制
 if (userLevel === 'vip') {
   multiFolderUploadStore.updateMaxFileSize(1024 * 1024 * 1024) // 1GB
-  multiFolderUploadStore.updateMaxTotalFiles(50000)
 }
 
 // 普通用户 - 标准限制
 if (userLevel === 'normal') {
   multiFolderUploadStore.updateMaxFileSize(100 * 1024 * 1024) // 100MB
-  multiFolderUploadStore.updateMaxTotalFiles(10000)
 }
 
 // 试用用户 - 较低限制
 if (userLevel === 'trial') {
   multiFolderUploadStore.updateMaxFileSize(10 * 1024 * 1024) // 10MB
-  multiFolderUploadStore.updateMaxTotalFiles(1000)
 }
 ```
 
@@ -170,14 +153,12 @@ function adjustUploadLimitsBasedOnLoad(serverLoad: number) {
   if (serverLoad > 80) {
     // 高负载 - 降低限制
     multiFolderUploadStore.updateUploadConfig({
-      maxFileSize: 50 * 1024 * 1024, // 50MB
-      maxTotalFiles: 5000
+      maxFileSize: 50 * 1024 * 1024 // 50MB
     })
   } else if (serverLoad < 30) {
     // 低负载 - 提高限制
     multiFolderUploadStore.updateUploadConfig({
-      maxFileSize: 200 * 1024 * 1024, // 200MB
-      maxTotalFiles: 20000
+      maxFileSize: 200 * 1024 * 1024 // 200MB
     })
   } else {
     // 正常负载 - 标准限制

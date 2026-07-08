@@ -117,7 +117,9 @@ export default function ReferenceImageItem({
 }: ReferenceImageItemProps) {
 	const fileType = useMemo(() => getMediaResourcePathKind(path), [path])
 	const isImageLike = fileType === "image"
-	const { lowUrl, isLoading, hasError, imageInfo } = useReferenceImageUrls(path)
+	const { lowUrl, isLoading, hasError, imageInfo } = useReferenceImageUrls(path, {
+		enabled: isImageLike,
+	})
 
 	const canCropLayout =
 		Boolean(sourceCrop) && Boolean(imageInfo?.naturalWidth && imageInfo?.naturalHeight)

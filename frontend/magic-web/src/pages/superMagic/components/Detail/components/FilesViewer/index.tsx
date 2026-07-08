@@ -34,6 +34,7 @@ import TabItem from "./components/TabItem"
 import { TabContextMenu } from "./components/TabContextMenu"
 import { useTranslation } from "react-i18next"
 import MagicIcon from "@/components/base/MagicIcon"
+import MagicSpin from "@/components/base/MagicSpin"
 import HeadlessHorizontalScroll from "@/components/base/HeadlessHorizontalScroll"
 import DetailEmpty from "../DetailEmpty"
 import { FileTabMagicIcon } from "./components/FileTabMagicIcon"
@@ -46,6 +47,11 @@ import {
 	getWebsiteTabData,
 	saveCommonWebsitePreset,
 } from "./utils/websiteTabs"
+import {
+	FILE_VIEWER_FULLSCREEN_SAFE_AREA_CLASS_NAME,
+	FILE_VIEWER_FULLSCREEN_VIEWPORT_CLASS_NAME,
+	shouldUseFileViewerFullscreenSafeArea,
+} from "./utils/fullscreenSafeArea"
 
 // 获取文件路径用作tooltip的工具函数
 const getFileTooltip = (tab: any, unknownFileText: string) => {
@@ -81,7 +87,8 @@ const FilesViewer = memo(
 			// Props are passed directly to hook
 			const tabAttachments = props.attachments ?? props.attachmentList
 			const { t } = useTranslation("super")
-			const isFullscreenMode = useFullscreenMode()
+			const isUrlFullscreenMode = useFullscreenMode()
+			const isFullscreenMode = Boolean(props.forceFullscreenMode) || isUrlFullscreenMode
 			const [expandPanelVisible, setExpandPanelVisible] = useState(false)
 			const [commonWebsiteDialogOpen, setCommonWebsiteDialogOpen] = useState(false)
 			const [commonWebsiteInitialValues, setCommonWebsiteInitialValues] =
@@ -92,6 +99,7 @@ const FilesViewer = memo(
 			const {
 				tabs,
 				activeTab,
+				isRestoringFileTabs,
 				openFileTab,
 				openWebsiteTab,
 				closeFileTab,
@@ -286,7 +294,7 @@ const FilesViewer = memo(
 
 			// Notify parent about fullscreen state changes via callback
 			useEffect(() => {
-				props.onFullscreenChange?.(!!fullscreenFileId)
+				props.onFullscreenChange?.(Boolean(props.forceFullscreenMode) || !!fullscreenFileId)
 			}, [fullscreenFileId, props])
 
 			// 监听activeTab变化，自动滚动到对应位置
@@ -362,6 +370,7 @@ const FilesViewer = memo(
 								switchToTab(tab.id)
 								setExpandPanelVisible(false)
 							}}
+							data-testid="switch-to-tab"
 						>
 							<FileTabMagicIcon
 								tab={tab}
@@ -378,6 +387,7 @@ const FilesViewer = memo(
 									e.stopPropagation()
 									handleTabClose(tab.id)
 								}}
+								data-testid="handle-tab-close"
 							>
 								<IconX />
 							</div>
@@ -388,16 +398,48 @@ const FilesViewer = memo(
 
 			const currentTab = activeTab
 			const { isFullscreen, ...otherProps } = getRenderProps(currentTab)
+			const effectiveIsFullscreen =
+				Boolean(props.forceFullscreenMode) || Boolean(isFullscreen)
+			const currentRenderProps = useMemo(
+				() => ({ isFullscreen: effectiveIsFullscreen, ...otherProps }),
+				[effectiveIsFullscreen, otherProps],
+			)
+			const shouldUseSafeAreaFullscreen = shouldUseFileViewerFullscreenSafeArea()
+			const currentRenderPropsRef = useRef(currentRenderProps)
+			currentRenderPropsRef.current = currentRenderProps
+			const currentTabId = currentTab?.id
+			const currentRenderCacheKey = useMemo(() => {
+				if (!currentTab) return ""
+
+				return [
+					currentTab.id,
+					currentTab.refreshKey || "",
+					currentTab.fileData.file_id || "",
+					currentTab.fileData.updated_at || "",
+					String(isFullscreen),
+					String(otherProps.type || ""),
+					String(otherProps.updatedAt || ""),
+					props.activeFileId || "",
+					props.showFileFooter ? "1" : "0",
+				].join("|")
+			}, [
+				currentTab,
+				isFullscreen,
+				otherProps.type,
+				otherProps.updatedAt,
+				props.activeFileId,
+				props.showFileFooter,
+			])
 			const shouldShowDetailEmpty =
 				props.showFallbackWhenEmpty ||
 				(!currentTab && (tabs.length > 0 || Boolean(props.activeFileId)))
 
 			// 缓存当前 tab 的渲染属性
 			useEffect(() => {
-				if (currentTab) {
-					addToCache(currentTab.id, { isFullscreen, ...otherProps })
+				if (currentTabId) {
+					addToCache(currentTabId, currentRenderPropsRef.current)
 				}
-			}, [currentTab?.id, isFullscreen, JSON.stringify(otherProps), addToCache])
+			}, [currentTabId, currentRenderCacheKey, addToCache])
 
 			// 判断是否应该渲染某个 tab
 			const shouldRenderTab = useCallback(
@@ -420,7 +462,9 @@ const FilesViewer = memo(
 					const cachedProps = getFromCache(tab.id)
 
 					// 如果没有缓存，使用当前 tab 的属性
-					const renderProps = cachedProps || { isFullscreen, ...otherProps }
+					const renderProps = isActive
+						? currentRenderProps
+						: cachedProps || currentRenderProps
 
 					// 判断是否是演示模式tab，如果是则构建playbackProps
 					const isPlayback = isPlaybackTab(tab.id)
@@ -443,7 +487,13 @@ const FilesViewer = memo(
 								isFileShare: props.isFileShare,
 								activeFileId: props.activeFileId,
 								onActiveFileChange: props.onActiveFileChange,
-								openFileTab: props.openFileTab,
+								openFileTab: props.openFileTab
+									? (fileId: string, path: string) =>
+											props.openFileTab?.({
+												file_id: fileId,
+												relative_file_path: path,
+											})
+									: undefined,
 								getFileViewMode: props.getFileViewMode,
 								handleViewModeChange: props.handleViewModeChange,
 								onDownload: props.onDownload,
@@ -469,7 +519,7 @@ const FilesViewer = memo(
 							isActive={isActive}
 							renderProps={renderProps}
 							onActiveFileChange={props?.onActiveFileChange}
-							isFullscreen={isFullscreen}
+							isFullscreen={effectiveIsFullscreen}
 							openFileTab={openFileTab}
 							playbackProps={playbackProps}
 							hideTabBar={props.hideTabBar}
@@ -482,8 +532,8 @@ const FilesViewer = memo(
 				tabs,
 				activeTab?.id,
 				getFromCache,
-				isFullscreen,
-				otherProps,
+				effectiveIsFullscreen,
+				currentRenderProps,
 				props?.onActiveFileChange,
 				shouldRenderTab,
 				cachedTabIds,
@@ -498,83 +548,99 @@ const FilesViewer = memo(
 				<div
 					className={cn(
 						"flex h-full flex-col",
-						isFullscreen &&
-							"fixed inset-0 z-detail-fullscreen h-screen w-screen rounded-none bg-white",
+						effectiveIsFullscreen && FILE_VIEWER_FULLSCREEN_VIEWPORT_CLASS_NAME,
 					)}
 				>
-					{/* Tab Bar — hidden in immersive read-only mode (e.g. audio recording detail) */}
-					{tabs.length > 0 && !isFullscreenMode && !props.hideTabBar && (
-						<div className="relative flex h-11 items-center bg-accent">
-							<HeadlessHorizontalScroll
-								className="h-full min-w-0 flex-1"
-								controlBackground="rgb(var(--accent-rgb))"
-								scrollContainerClassName="no-scrollbar flex h-full w-full items-center overflow-x-auto overflow-y-hidden px-1 gap-0.5"
-								scrollContainerRef={tabsContainerRef}
-								onScrollContainerContextMenu={handleContainerContextMenu}
-							>
-								{tabs.map((tab, index) => renderTabItem(tab, index))}
-							</HeadlessHorizontalScroll>
+					<div
+						className={cn(
+							"flex h-full min-h-0 min-w-0 flex-col",
+							// Fullscreen fixed layers bypass BaseLayoutPc padding, so this shell reapplies safe-area insets.
+							effectiveIsFullscreen &&
+								shouldUseSafeAreaFullscreen &&
+								FILE_VIEWER_FULLSCREEN_SAFE_AREA_CLASS_NAME,
+						)}
+					>
+						{/* Tab Bar — hidden in immersive read-only mode (e.g. audio recording detail) */}
+						{tabs.length > 0 && !isFullscreenMode && !props.hideTabBar && (
+							<div className="relative flex h-11 items-center bg-accent">
+								<HeadlessHorizontalScroll
+									className="h-full min-w-0 flex-1"
+									controlBackground="rgb(var(--accent-rgb))"
+									scrollContainerClassName="no-scrollbar flex h-full w-full items-center overflow-x-auto overflow-y-hidden px-1 gap-0.5"
+									scrollContainerRef={tabsContainerRef}
+									onScrollContainerContextMenu={handleContainerContextMenu}
+								>
+									{tabs.map((tab, index) => renderTabItem(tab, index))}
+								</HeadlessHorizontalScroll>
 
-							<WebsitePresetMenu onOpenWebsiteTab={openWebsiteTab} />
+								<WebsitePresetMenu onOpenWebsiteTab={openWebsiteTab} />
 
-							{/* 展开按钮 */}
-							<DropdownMenu
-								open={expandPanelVisible}
-								onOpenChange={setExpandPanelVisible}
-							>
-								<DropdownMenuTrigger asChild>
-									<div className="relative mx-1 flex size-7 shrink-0 cursor-pointer select-none items-center justify-center rounded-md transition-all duration-200 hover:bg-black/10">
-										<MagicIcon component={IconMenu2} size={18} />
+								{/* 展开按钮 */}
+								<DropdownMenu
+									open={expandPanelVisible}
+									onOpenChange={setExpandPanelVisible}
+								>
+									<DropdownMenuTrigger asChild>
+										<div className="relative mx-1 flex size-7 shrink-0 cursor-pointer select-none items-center justify-center rounded-md transition-all duration-200 hover:bg-black/10">
+											<MagicIcon component={IconMenu2} size={18} />
+										</div>
+									</DropdownMenuTrigger>
+									<DropdownMenuContent
+										align="end"
+										className="max-h-[300px] w-[180px] overflow-y-auto p-1"
+									>
+										{tabs.map(renderExpandPanelItem)}
+									</DropdownMenuContent>
+								</DropdownMenu>
+
+								{/* 关闭所有 tab 按钮 */}
+								<Tooltip
+									title={t("shortcut.closeAllTabs")}
+									placement="bottom"
+									mouseEnterDelay={0.3}
+								>
+									<div
+										className="relative mr-1 flex size-7 shrink-0 cursor-pointer select-none items-center justify-center rounded-md transition-all duration-200 hover:bg-black/10"
+										onClick={handleClearAllTabs}
+										data-testid="handle-clear-all-tabs"
+									>
+										<MagicIcon component={IconX} size={16} />
 									</div>
-								</DropdownMenuTrigger>
-								<DropdownMenuContent
-									align="end"
-									className="max-h-[300px] w-[180px] overflow-y-auto p-1"
-								>
-									{tabs.map(renderExpandPanelItem)}
-								</DropdownMenuContent>
-							</DropdownMenu>
+								</Tooltip>
+							</div>
+						)}
 
-							{/* 关闭所有 tab 按钮 */}
-							<Tooltip
-								title={t("shortcut.closeAllTabs")}
-								placement="bottom"
-								mouseEnterDelay={0.3}
-							>
-								<div
-									className="relative mr-1 flex size-7 shrink-0 cursor-pointer select-none items-center justify-center rounded-md transition-all duration-200 hover:bg-black/10"
-									onClick={handleClearAllTabs}
-								>
-									<MagicIcon component={IconX} size={16} />
-								</div>
-							</Tooltip>
+						{/* 右键菜单 */}
+						<TabContextMenu
+							contextMenuState={contextMenuState}
+							getContextMenuItems={getContextMenuItems}
+							onClose={hideContextMenu}
+						/>
+						<CommonWebsitePresetDialog
+							open={commonWebsiteDialogOpen}
+							mode="add"
+							initialValues={commonWebsiteInitialValues}
+							onOpenChange={setCommonWebsiteDialogOpen}
+							onSubmit={handleSubmitCommonWebsite}
+						/>
+
+						{/* Content Area */}
+						<div className="flex flex-1 flex-col overflow-hidden">
+							{currentTab ? (
+								isRestoringFileTabs ? (
+									<div className="flex h-full items-center justify-center">
+										<MagicSpin spinning />
+									</div>
+								) : (
+									<>
+										{/* Render all cached tabs */}
+										{renderCachedTabs}
+									</>
+								)
+							) : shouldShowDetailEmpty ? (
+								<DetailEmpty />
+							) : null}
 						</div>
-					)}
-
-					{/* 右键菜单 */}
-					<TabContextMenu
-						contextMenuState={contextMenuState}
-						getContextMenuItems={getContextMenuItems}
-						onClose={hideContextMenu}
-					/>
-					<CommonWebsitePresetDialog
-						open={commonWebsiteDialogOpen}
-						mode="add"
-						initialValues={commonWebsiteInitialValues}
-						onOpenChange={setCommonWebsiteDialogOpen}
-						onSubmit={handleSubmitCommonWebsite}
-					/>
-
-					{/* Content Area */}
-					<div className="flex flex-1 flex-col overflow-hidden">
-						{currentTab ? (
-							<>
-								{/* 渲染所有缓存的 tabs */}
-								{renderCachedTabs}
-							</>
-						) : shouldShowDetailEmpty ? (
-							<DetailEmpty />
-						) : null}
 					</div>
 				</div>
 			)

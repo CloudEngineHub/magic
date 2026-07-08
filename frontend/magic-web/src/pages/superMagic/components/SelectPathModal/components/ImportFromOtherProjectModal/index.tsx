@@ -9,6 +9,7 @@ import {
 	IconFolder,
 	IconFileSearch,
 } from "@tabler/icons-react"
+import { Box, Mic, UsersRound } from "lucide-react"
 import { isEmpty } from "lodash-es"
 import { useTranslation } from "react-i18next"
 
@@ -21,14 +22,22 @@ import MagicSpin from "@/components/base/MagicSpin"
 import MagicFileIcon from "@/components/base/MagicFileIcon"
 import FoldIcon from "@/pages/superMagic/assets/svg/file-folder.svg"
 import EmptyFilesIcon from "@/pages/superMagic/assets/svg/empty-files.svg"
-import IconWorkspace from "../../../icons/IconWorkspace"
 import IconProject from "../../../icons/IconProject"
 
 import type { ImportFromOtherProjectModalProps, ViewMode } from "../../types"
-import { SHARE_WORKSPACE_DATA, MY_CLAW_WORKSPACE_DATA } from "../../../../constants"
+import {
+	SHARE_WORKSPACE_ID,
+	SHARE_WORKSPACE_DATA,
+	MY_AUDIO_RECORDINGS_WORKSPACE_ID,
+	MY_AUDIO_RECORDINGS_WORKSPACE_DATA,
+	MY_CLAW_WORKSPACE_ID,
+	MY_CLAW_WORKSPACE_DATA,
+} from "../../../../constants"
 import { useIsMobile } from "@/hooks/useIsMobile"
 import MagicEllipseWithTooltip from "@/components/base/MagicEllipseWithTooltip/MagicEllipseWithTooltip"
 import { getItemName } from "../../utils/attachmentUtils"
+import { MagiClaw } from "@/enhance/lucide-react"
+import type { Workspace } from "../../../../pages/Workspace/types"
 
 import {
 	useWorkspaceManagement,
@@ -47,6 +56,25 @@ function EmptyStateBox({ children }: { children: React.ReactNode }) {
 			</div>
 		</div>
 	)
+}
+
+const FIXED_WORKSPACE_IDS = new Set<string>([
+	SHARE_WORKSPACE_ID,
+	MY_AUDIO_RECORDINGS_WORKSPACE_ID,
+	MY_CLAW_WORKSPACE_ID,
+])
+
+function isFixedWorkspace(workspace: Workspace) {
+	return FIXED_WORKSPACE_IDS.has(workspace.id)
+}
+
+function renderWorkspaceIcon(workspaceId: string) {
+	if (workspaceId === SHARE_WORKSPACE_ID) return <UsersRound className="size-4 text-current" />
+	if (workspaceId === MY_AUDIO_RECORDINGS_WORKSPACE_ID)
+		return <Mic className="size-4 text-current" />
+	if (workspaceId === MY_CLAW_WORKSPACE_ID)
+		return <MagiClaw className="size-4 text-current" strokeWidth={1.25} />
+	return <Box className="size-4 text-current" />
 }
 
 function ImportFromOtherProjectModal({
@@ -193,10 +221,12 @@ function ImportFromOtherProjectModal({
 	// 渲染工作区列表
 	const renderWorkspaceList = () => {
 		const shareWorkspace = SHARE_WORKSPACE_DATA(t)
+		const audioRecordingsWorkspace = MY_AUDIO_RECORDINGS_WORKSPACE_DATA(t)
 		const myClawWorkspace = MY_CLAW_WORKSPACE_DATA(t)
 		const allWorkspaces = [
 			...workspaceManager.availableWorkspaces,
 			shareWorkspace,
+			audioRecordingsWorkspace,
 			myClawWorkspace,
 		]
 
@@ -216,39 +246,61 @@ function ImportFromOtherProjectModal({
 			"flex size-6 shrink-0 items-center justify-center rounded-[4px] bg-fill"
 		const nameClass =
 			"max-w-[150px] overflow-hidden text-ellipsis whitespace-nowrap leading-6 text-foreground md:max-w-[400px]"
+		const shouldSeparateFixedChannels = filteredWorkspaces.some(
+			(workspace) => !isFixedWorkspace(workspace),
+		)
+		let hasRenderedFixedDivider = false
 
 		return (
 			<>
 				{filteredWorkspaces.length > 0 ? (
-					filteredWorkspaces.map((workspace, index) => (
-						<div
-							key={workspace.id || index}
-							className={textFolderItemClass}
-							onClick={() => handleWorkspaceClick(workspace)}
-						>
-							<div className="flex w-full flex-1 items-center justify-between gap-2.5">
-								<div className="flex flex-1 items-center gap-1">
-									<div className={folderIconClass}>
-										<IconWorkspace />
-									</div>
-									<MagicEllipseWithTooltip
-										title={workspaceManager.getWorkspaceDisplayName(workspace)}
-										text={workspaceManager.getWorkspaceDisplayName(workspace)}
-										className={nameClass}
-										placement="topLeft"
-									>
-										{workspaceManager.getWorkspaceDisplayName(workspace)}
-									</MagicEllipseWithTooltip>
-								</div>
-								<div className="flex min-w-0 flex-[0_0_500px] shrink items-center justify-end gap-2.5">
-									<IconChevronRight
-										className="size-5 flex-[0_0_20px] shrink-0 text-base text-muted-foreground"
-										size={16}
+					filteredWorkspaces.map((workspace, index) => {
+						const workspaceName = workspaceManager.getWorkspaceDisplayName(workspace)
+						const isFixedChannel = isFixedWorkspace(workspace)
+						const shouldRenderDivider =
+							isFixedChannel &&
+							shouldSeparateFixedChannels &&
+							!hasRenderedFixedDivider
+						if (shouldRenderDivider) hasRenderedFixedDivider = true
+
+						return (
+							<React.Fragment key={workspace.id || index}>
+								{shouldRenderDivider && (
+									<div
+										className="my-2 border-t border-border"
+										data-testid="import-from-other-project-modal-fixed-workspace-divider"
 									/>
+								)}
+								<div
+									className={textFolderItemClass}
+									onClick={() => handleWorkspaceClick(workspace)}
+									data-testid="handle-workspace-click"
+								>
+									<div className="flex w-full flex-1 items-center justify-between gap-2.5">
+										<div className="flex flex-1 items-center gap-1">
+											<div className={folderIconClass}>
+												{renderWorkspaceIcon(workspace.id)}
+											</div>
+											<MagicEllipseWithTooltip
+												title={workspaceName}
+												text={workspaceName}
+												className={nameClass}
+												placement="topLeft"
+											>
+												{workspaceName}
+											</MagicEllipseWithTooltip>
+										</div>
+										<div className="flex min-w-0 flex-[0_0_500px] shrink items-center justify-end gap-2.5">
+											<IconChevronRight
+												className="size-5 flex-[0_0_20px] shrink-0 text-base text-muted-foreground"
+												size={16}
+											/>
+										</div>
+									</div>
 								</div>
-							</div>
-						</div>
-					))
+							</React.Fragment>
+						)
+					})
 				) : searchManager.isSearch && searchManager.fileName ? (
 					<EmptyStateBox>
 						<div className="inline-flex size-12 items-center justify-center rounded-lg border border-border bg-card text-foreground shadow-sm">
@@ -265,7 +317,7 @@ function ImportFromOtherProjectModal({
 					</EmptyStateBox>
 				) : (
 					<div className="flex w-full flex-1 flex-col items-center justify-center gap-1">
-						<img src={EmptyFilesIcon} alt="" width={200} height={200} />
+						<img src={EmptyFilesIcon} alt="" width={200} height={200}  data-testid="import-from-other-project-modal-image"/>
 						<div className="text-sm leading-5 text-foreground/35">
 							{t("selectPathModal.noWorkspace")}
 						</div>
@@ -302,6 +354,7 @@ function ImportFromOtherProjectModal({
 							key={project.id || index}
 							className={textFolderItemClass}
 							onClick={() => handleProjectClick(project)}
+							data-testid="handle-project-click"
 						>
 							<div className="flex w-full flex-1 items-center justify-between gap-2.5">
 								<div className="flex flex-1 items-center gap-1">
@@ -342,7 +395,7 @@ function ImportFromOtherProjectModal({
 					</EmptyStateBox>
 				) : (
 					<div className="flex w-full flex-1 flex-col items-center justify-center gap-1">
-						<img src={EmptyFilesIcon} alt="" width={200} height={200} />
+						<img src={EmptyFilesIcon} alt="" width={200} height={200}  data-testid="import-from-other-project-modal-image-2"/>
 						<div className="text-sm leading-5 text-foreground/35">
 							{t("selectPathModal.noProject")}
 						</div>
@@ -383,6 +436,7 @@ function ImportFromOtherProjectModal({
 									)
 								}
 							}}
+							data-testid="closest"
 						>
 							<Checkbox
 								checked={isSelected}
@@ -403,6 +457,7 @@ function ImportFromOtherProjectModal({
 												alt="folder"
 												width={14}
 												height={14}
+												data-testid="import-from-other-project-modal-image-3"
 											/>
 										) : (
 											<MagicFileIcon
@@ -544,6 +599,7 @@ function ImportFromOtherProjectModal({
 														: "pointer",
 												}}
 												onClick={() => breadcrumb.onBreadcrumbClick(item)}
+												data-testid="on-breadcrumb-click"
 											>
 												<MagicEllipseWithTooltip
 													title={item.name}
@@ -601,6 +657,7 @@ function ImportFromOtherProjectModal({
 																				alt="folder"
 																				width={14}
 																				height={14}
+																				data-testid="import-from-other-project-modal-image-4"
 																			/>
 																		</div>
 																		<MagicEllipseWithTooltip

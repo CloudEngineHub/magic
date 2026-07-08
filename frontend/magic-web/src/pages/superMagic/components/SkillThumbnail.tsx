@@ -74,6 +74,7 @@ export function SkillThumbnail({
 					alt={alt}
 					className={cn("size-full object-cover", imgClassName)}
 					onError={() => setLoadFailed(true)}
+					data-testid="set-load-failed"
 				/>
 			) : (
 				<SkillDefaultIcon

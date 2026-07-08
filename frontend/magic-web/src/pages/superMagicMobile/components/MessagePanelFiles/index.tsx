@@ -94,6 +94,7 @@ export default memo(function MessagePanelFiles(props: MessagePanelFilesProps) {
 									fileList.filter((file) => file.file_key !== item.file_key),
 								)
 							}}
+							data-testid="on-file-list-change"
 						>
 							<MagicIcon
 								component={IconX}

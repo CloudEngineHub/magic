@@ -21,6 +21,7 @@ export type MobileResourceTypeKind =
 	| "projectTopic"
 	| "conversation"
 	| "file"
+	| "folder"
 	| "crew"
 	| "skill"
 
@@ -72,6 +73,11 @@ export const MOBILE_RESOURCE_TYPE_ICON_CONFIG: Record<
 		Icon: FileText,
 		boxClass: "bg-icon-app-cloud/8",
 		iconClass: "text-icon-app-cloud",
+	},
+	folder: {
+		Icon: Folder,
+		boxClass: "bg-icon-project/8",
+		iconClass: "text-icon-project",
 	},
 	crew: {
 		Icon: Bot,

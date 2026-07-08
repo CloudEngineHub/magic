@@ -26,6 +26,7 @@ function PlatformBrandIcon({ platform, className, testId }: PlatformBrandIconPro
 				viewBox="0 0 24 24"
 				className="shrink-0"
 				aria-hidden
+				data-testid="img-svg"
 			>
 				<SelfMediaPlatformIconPaths
 					platform={platform}

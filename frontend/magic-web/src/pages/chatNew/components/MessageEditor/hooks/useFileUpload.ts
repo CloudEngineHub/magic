@@ -20,6 +20,7 @@ import type { ReportFileUploadsResponse } from "@/apis/modules/file"
 import { FileApi } from "@/apis"
 import type { UploadResult } from "@/hooks/useUploadFiles/types"
 import magicToast from "@/components/base/MagicToaster/utils"
+import { isEditorActive, runActiveEditor } from "@/utils/tiptapEditorLifecycle"
 
 function dataUrlToFile(dataUrl: string, fileName: string): File {
 	const parts = dataUrl.split(",")
@@ -151,25 +152,30 @@ export function useFileUpload({
 		}
 
 		// Process images and insert into editor
-		if (imageFiles.length > 0 && editorRef?.current?.editor) {
-			const pos = editorRef.current.editor.state.selection.$from.pos ?? 0
+		const currentEditor = editorRef?.current?.editor
+		if (imageFiles.length > 0 && isEditorActive(currentEditor)) {
+			const pos = currentEditor.state.selection.$from.pos ?? 0
 			await Promise.all(
 				imageFiles.map(async (file) => {
 					const file_extension = file.type.split("/").pop() ?? ""
 					const src = await fileToBase64(file)
 
-					editorRef.current?.editor?.commands.insertContentAt(pos, {
-						type: Image.name,
-						attrs: {
-							src,
-							file_name: file.name,
-							file_size: file.size,
-							file_extension,
-						},
+					runActiveEditor(editorRef.current?.editor, (editor) => {
+						editor.commands.insertContentAt(pos, {
+							type: Image.name,
+							attrs: {
+								src,
+								file_name: file.name,
+								file_size: file.size,
+								file_extension,
+							},
+						})
 					})
 				}),
 			)
-			editorRef.current.editor.commands.focus(pos + imageFiles.length)
+			runActiveEditor(editorRef.current?.editor, (editor) => {
+				editor.commands.focus(pos + imageFiles.length)
+			})
 		}
 
 		// Process other files
@@ -178,7 +184,9 @@ export function useFileUpload({
 		}
 
 		// Focus editor after file processing
-		editorRef?.current?.editor?.chain().focus().run()
+		runActiveEditor(editorRef?.current?.editor, (editor) => {
+			editor.chain().focus().run()
+		})
 	})
 
 	const handlePasteFileFail = useMemoizedFn((errors: FileError[]) => {

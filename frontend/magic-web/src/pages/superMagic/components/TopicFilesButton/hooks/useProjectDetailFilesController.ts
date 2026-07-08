@@ -23,7 +23,7 @@ interface UseProjectDetailFilesControllerOptions {
 	selectedProject?: any
 	selectedTopic?: any
 	setIsSelectMode: (value: boolean) => void
-	refreshAttachments?: () => Promise<void> | void
+	onMoveSuccess?: () => void
 }
 
 /**
@@ -35,7 +35,7 @@ export function useProjectDetailFilesController({
 	selectedProject,
 	selectedTopic,
 	setIsSelectMode,
-	refreshAttachments,
+	onMoveSuccess,
 }: UseProjectDetailFilesControllerOptions) {
 	const { t } = useTranslation("super")
 	const [shareModalVisible, setShareModalVisible] = useState(false)
@@ -66,20 +66,20 @@ export function useProjectDetailFilesController({
 	const moveFileHook = useMoveFile({
 		projectId,
 		attachments,
-		onMoveSuccess: async () => {
-			await refreshAttachments?.()
+		onMoveSuccess: () => {
 			setIsSelectMode(false)
 			setSelectionResetKey((prev) => prev + 1)
+			onMoveSuccess?.()
 		},
 	})
 
 	const copyFileSelector = useCopyFileSelector({
 		projectId,
 		attachments,
-		onCopySuccess: async () => {
-			await refreshAttachments?.()
+		onCopySuccess: () => {
 			setIsSelectMode(false)
 			setSelectionResetKey((prev) => prev + 1)
+			onMoveSuccess?.()
 		},
 	})
 
@@ -141,8 +141,6 @@ export function useProjectDetailFilesController({
 				])
 			}
 
-			await refreshAttachments?.()
-
 			magicToast.success(t("topicFiles.contextMenu.createFileSuccess"))
 		} catch (error) {
 			console.error("创建移动端项目详情文件失败:", error)
@@ -170,8 +168,6 @@ export function useProjectDetailFilesController({
 				file_name: folderName,
 				is_directory: true,
 			})
-
-			await refreshAttachments?.()
 
 			magicToast.success(t("topicFiles.contextMenu.createFolderSuccess"))
 		} catch (error) {
@@ -211,8 +207,6 @@ export function useProjectDetailFilesController({
 						file_ids: fileIds,
 						project_id: projectId,
 					}).catch(() => null)
-
-					await refreshAttachments?.()
 
 					magicToast.success(t("topicFiles.contextMenu.deleteFileSuccess"))
 					setIsSelectMode(false)

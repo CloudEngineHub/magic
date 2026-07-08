@@ -409,6 +409,7 @@ export default function MaterialAttachmentList({
 			)}
 			onPaste={handlePaste}
 			tabIndex={-1}
+			data-testid="handle-paste"
 			{...dropZoneProps}
 		>
 			{isDragging ? (
@@ -461,6 +462,7 @@ export default function MaterialAttachmentList({
 					handleFiles(e.target.files)
 					e.target.value = ""
 				}}
+				data-testid="handle-files"
 			/>
 
 			{materials.length > 0 ? (

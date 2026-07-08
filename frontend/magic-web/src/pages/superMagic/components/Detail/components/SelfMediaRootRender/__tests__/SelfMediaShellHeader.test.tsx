@@ -2,6 +2,8 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { describe, expect, it, vi } from "vitest"
 import SelfMediaShellHeader, { SelfMediaShellViewBar } from "../components/SelfMediaShellHeader"
 
+const mockUseIsMobile = vi.hoisted(() => vi.fn(() => false))
+
 vi.mock("react-i18next", () => ({
 	useTranslation: () => ({
 		t: (key: string, params?: { index?: number }) =>
@@ -15,6 +17,10 @@ vi.mock("@/components/shadcn-ui/tooltip", () => ({
 	Tooltip: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 	TooltipContent: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
 	TooltipTrigger: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+}))
+
+vi.mock("@/hooks/use-mobile", () => ({
+	useIsMobile: mockUseIsMobile,
 }))
 
 describe("SelfMediaShellHeader", () => {
@@ -131,19 +137,36 @@ describe("SelfMediaShellHeader", () => {
 		expect(screen.getByTestId("self-media-shell-header")).toHaveClass(
 			"grid-cols-[minmax(14rem,1fr)_auto]",
 		)
+		expect(screen.getByTestId("self-media-shell-header")).toHaveClass(
+			"max-lg:grid-cols-[minmax(0,1fr)_auto]",
+		)
+		expect(screen.getByTestId("self-media-shell-header")).not.toHaveClass("max-lg:grid-cols-1")
 		expect(screen.getByTestId("self-media-shell-back-home-button")).toHaveClass(
 			"rounded-[14px]",
 		)
+		expect(screen.getByTestId("self-media-shell-back-home-button")).toHaveClass("max-sm:size-9")
+		expect(screen.getByTestId("self-media-shell-platform-icon-frame")).toHaveClass(
+			"max-sm:hidden",
+		)
+		expect(screen.getByTestId("self-media-shell-mobile-platform-icon")).toHaveClass(
+			"hidden",
+			"max-sm:flex",
+			"size-6",
+		)
 		expect(screen.getByTestId("self-media-shell-view-bar")).toHaveClass("shrink-0")
+		expect(screen.getByTestId("self-media-shell-view-bar")).toHaveClass("max-sm:py-1.5")
 		expect(screen.getByTestId("self-media-shell-view-bar")).not.toHaveClass("absolute")
 		expect(screen.getByTestId("self-media-view-tabs")).toHaveClass("shrink-0")
+		expect(screen.getByTestId("self-media-view-tabs")).toHaveClass("max-sm:w-full")
 		expect(screen.getByRole("tablist")).toHaveClass("overflow-visible")
+		expect(screen.getByRole("tablist")).toHaveClass("h-10")
 		expect(screen.getByTestId("self-media-shell-toolbar")).toHaveClass("rounded-[18px]")
-		expect(screen.getByTestId("self-media-shell-toolbar")).toHaveClass("p-2")
-		expect(screen.getByTestId("self-media-shell-toolbar")).toHaveClass("-m-2")
+		expect(screen.getByTestId("self-media-shell-toolbar")).toHaveClass("p-1")
+		expect(screen.getByTestId("self-media-shell-toolbar")).toHaveClass("-m-1")
 		expect(screen.getByTestId("self-media-shell-toolbar")).toHaveClass("overflow-visible")
 		expect(screen.getByTestId("self-media-shell-toolbar")).toHaveClass("max-lg:overflow-x-auto")
 		expect(screen.getByTestId("self-media-export-btn")).toHaveClass("bg-[#18181b]")
+		expect(screen.getByTestId("self-media-export-btn")).toHaveClass("max-sm:h-10")
 	})
 
 	it("renders the pre-publish analysis action inside the shared footer", () => {
@@ -162,9 +185,37 @@ describe("SelfMediaShellHeader", () => {
 		const action = screen.getByTestId("self-media-footer-pre-publish-analysis")
 		expect(action).toHaveTextContent("detail.selfMedia.analysis.action")
 		expect(screen.getByTestId("self-media-shell-view-bar")).toContainElement(action)
+		expect(screen.getByTestId("self-media-shell-view-bar")).toHaveClass("max-sm:py-1.5")
+		expect(action).toHaveClass("max-sm:size-10")
+		expect(action.querySelector("span")).toHaveClass("max-sm:sr-only")
 
 		fireEvent.click(action)
 		expect(onRequestPrePublishAnalysis).toHaveBeenCalledTimes(1)
+	})
+
+	it("hides edit-related views on mobile and falls back to the first readable tab", () => {
+		const onChangeView = vi.fn()
+		mockUseIsMobile.mockReturnValueOnce(true)
+
+		render(
+			<SelfMediaShellViewBar
+				view="edit"
+				tabLabels={{
+					feed: "Cover",
+					detail: "Content",
+					edit: "Edit",
+					code: "Source",
+				}}
+				visibleTabs={["feed", "detail", "edit", "code"]}
+				onChangeView={onChangeView}
+			/>,
+		)
+
+		expect(screen.queryByText("Edit")).not.toBeInTheDocument()
+		expect(screen.queryByText("Source")).not.toBeInTheDocument()
+		expect(screen.getByText("Cover")).toBeInTheDocument()
+		expect(screen.getByText("Content")).toBeInTheDocument()
+		expect(onChangeView).toHaveBeenCalledWith("feed")
 	})
 
 	it("edits and saves the article title", async () => {

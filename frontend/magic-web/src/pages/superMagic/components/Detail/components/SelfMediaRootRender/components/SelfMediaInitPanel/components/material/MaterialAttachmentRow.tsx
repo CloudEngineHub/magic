@@ -41,6 +41,7 @@ export default function MaterialAttachmentRow({
 						src={item.previewUrl}
 						alt={item.file.name}
 						className="h-full w-full object-cover"
+						data-testid="material-attachment-row-image"
 					/>
 				) : (
 					<svg
@@ -52,6 +53,7 @@ export default function MaterialAttachmentRow({
 						strokeWidth="1.5"
 						className="text-muted-foreground"
 						aria-hidden="true"
+						data-testid="material-attachment-row-svg"
 					>
 						<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
 						<polyline points="14 2 14 8 20 8" />
@@ -61,8 +63,9 @@ export default function MaterialAttachmentRow({
 					type="button"
 					className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center bg-destructive text-destructive-foreground opacity-0 transition-opacity group-hover:opacity-100"
 					onClick={() => onRemove(item.id)}
+					data-testid="on-remove"
 				>
-					<svg width="8" height="8" viewBox="0 0 12 12" fill="none" aria-hidden="true">
+					<svg width="8" height="8" viewBox="0 0 12 12" fill="none" aria-hidden="true" data-testid="material-attachment-row-svg-2">
 						<path
 							d="M9 3L3 9M3 3l6 6"
 							stroke="currentColor"
@@ -89,6 +92,7 @@ export default function MaterialAttachmentRow({
 						placeholder={descriptionPlaceholder}
 						value={item.description}
 						onChange={(e) => onDescriptionChange(item.id, e.target.value)}
+						data-testid="on-description-change"
 					/>
 					<InlineVoiceButton
 						value={item.description}

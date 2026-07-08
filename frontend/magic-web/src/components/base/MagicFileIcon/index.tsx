@@ -20,6 +20,8 @@ const iconNameMap: Record<string, string> = {
 	md: "markdown",
 	doc: "word",
 	docx: "word",
+	docm: "word",
+	wps: "word",
 	xls: "excel",
 	xlsx: "excel",
 	csv: "excel",

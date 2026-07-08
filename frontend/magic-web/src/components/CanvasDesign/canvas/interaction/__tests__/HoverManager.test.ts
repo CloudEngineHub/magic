@@ -35,6 +35,7 @@ function createHoverManager(
 		selected?: boolean
 		geometryHitIds?: string[]
 		viewportHitTarget?: Konva.Node | null
+		extendingElementId?: string | null
 	} = {},
 ) {
 	const stage = new Konva.Group()
@@ -99,6 +100,9 @@ function createHoverManager(
 					: (options.transformActive ?? false),
 			isTransforming: () => false,
 			isDraggingElement: () => false,
+		},
+		extendManager: {
+			getExtendingElementId: () => options.extendingElementId ?? null,
 		},
 	}
 
@@ -231,6 +235,70 @@ describe("HoverManager", () => {
 
 		expect(manager.hoveredElementId).toBe("element-1")
 		expect(requestLayerDraw).toHaveBeenCalledTimes(1)
+		manager.destroy()
+	})
+
+	it("sets hover from geometry when viewport scales an element under a stationary pointer", () => {
+		const { eventHandlers, getIntersection, manager, requestLayerDraw } = createHoverManager({
+			geometryHitIds: ["element-1"],
+		})
+		getIntersection.mockReturnValue(null)
+
+		eventHandlers.get("viewport:scale")?.[0]?.({ data: { scale: 2 } })
+
+		expect(manager.hoveredElementId).toBe("element-1")
+		expect(requestLayerDraw).toHaveBeenCalled()
+		manager.destroy()
+	})
+
+	it("clears and suppresses hover refresh while viewport gesture is active", () => {
+		const raf = installRafMock()
+		const { eventHandlers, getIntersection, manager, requestLayerDraw, target } =
+			createHoverManager({
+				geometryHitIds: ["element-1"],
+			})
+
+		manager.handleMouseMove({ target })
+		raf.flush()
+		expect(manager.hoveredElementId).toBe("element-1")
+
+		eventHandlers.get("viewport:gesture")?.[0]?.({
+			data: { active: true, source: "touch-pinch", pointerCount: 2 },
+		})
+		expect(manager.hoveredElementId).toBeNull()
+
+		getIntersection.mockReturnValue(null)
+		eventHandlers.get("viewport:scale")?.[0]?.({ data: { scale: 2 } })
+
+		expect(manager.hoveredElementId).toBeNull()
+		expect(requestLayerDraw).toHaveBeenCalledTimes(2)
+		manager.destroy()
+	})
+
+	it("does not set hover while extend mode is active", () => {
+		const raf = installRafMock()
+		const { manager, requestLayerDraw, target } = createHoverManager({
+			extendingElementId: "element-1",
+		})
+
+		manager.handleMouseMove({ target })
+
+		expect(raf.count()).toBe(0)
+		expect(manager.hoveredElementId).toBeNull()
+		expect(requestLayerDraw).not.toHaveBeenCalled()
+		manager.destroy()
+	})
+
+	it("does not refresh hover from geometry while extend mode is active", () => {
+		const { eventHandlers, manager, requestLayerDraw } = createHoverManager({
+			extendingElementId: "element-1",
+			geometryHitIds: ["element-1"],
+		})
+
+		eventHandlers.get("viewport:pan")?.[0]?.({ data: { x: 20, y: 30 } })
+
+		expect(manager.hoveredElementId).toBeNull()
+		expect(requestLayerDraw).not.toHaveBeenCalled()
 		manager.destroy()
 	})
 })

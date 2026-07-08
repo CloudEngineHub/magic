@@ -13,7 +13,6 @@ import { VideoPlaybackController } from "./VideoPlaybackController"
 
 interface CreatePlayerNodeOptions {
 	showLoadingOverlay?: boolean
-	onFullscreenClick?: () => void
 	onPlayButtonClick?: () => void
 	onContentDoubleClick?: () => void
 }
@@ -33,9 +32,6 @@ interface PlayerNodeRefs {
 	progressGroup: Konva.Group
 	progressBackground: Konva.Rect
 	progressText: Konva.Text
-	fullscreenButtonGroup: Konva.Group
-	fullscreenButtonBg: Konva.Rect
-	fullscreenIcon: Konva.Group
 	isHovering: boolean
 	bufferingOverlay: Konva.Group
 	bufferingSpinnerRoot: Konva.Group
@@ -68,6 +64,7 @@ export class VideoRenderer {
 	private placeholderUsesCenteredLayout = false
 	private renderToken = 0
 	private forceLoadingOverlay = false
+	private touchControlsHideTimer?: ReturnType<typeof setTimeout>
 
 	public destroy(): void {
 		this.clearPlayerUiSubscription()
@@ -97,8 +94,23 @@ export class VideoRenderer {
 	}
 
 	private clearPlayerUiSubscription(): void {
+		this.clearTouchControlsAutoHide()
 		this.playerUnsub?.()
 		this.playerUnsub = undefined
+	}
+
+	private clearTouchControlsAutoHide(): void {
+		if (!this.touchControlsHideTimer) return
+		clearTimeout(this.touchControlsHideTimer)
+		this.touchControlsHideTimer = undefined
+	}
+
+	private scheduleTouchControlsAutoHide(hideControls: () => void): void {
+		this.clearTouchControlsAutoHide()
+		this.touchControlsHideTimer = setTimeout(() => {
+			this.touchControlsHideTimer = undefined
+			hideControls()
+		}, 2500)
 	}
 
 	public resetTransientContent(): void {
@@ -323,23 +335,7 @@ export class VideoRenderer {
 		progressGroup.add(progressBackground)
 		progressGroup.add(progressText)
 
-		const fullscreenButtonGroup = new Konva.Group({
-			listening: true,
-			name: "video-player-fullscreen-button",
-		})
-		const fullscreenButtonBg = new Konva.Rect({
-			width: VIDEO_CONFIG.CONTROL_BUTTON_SIZE,
-			height: VIDEO_CONFIG.CONTROL_BUTTON_SIZE,
-			cornerRadius: VIDEO_CONFIG.CORNER_RADIUS,
-			fill: VIDEO_CONFIG.CONTROL_BUTTON_BG,
-			listening: true,
-		})
-		const fullscreenIcon = this.createFullscreenIcon()
-		fullscreenButtonGroup.add(fullscreenButtonBg)
-		fullscreenButtonGroup.add(fullscreenIcon)
-
 		controlsGroup.add(progressGroup)
-		controlsGroup.add(fullscreenButtonGroup)
 
 		const showControls = () => {
 			if (!this.playerRefs || !canvas.permissionManager.canShowTransientElementAffordance()) {
@@ -382,42 +378,8 @@ export class VideoRenderer {
 			}
 		}
 
-		const handleFullscreenMouseDown = (e: Konva.KonvaEventObject<MouseEvent>) => {
-			e.cancelBubble = true
-			if (e.evt) {
-				e.evt.stopPropagation()
-				e.evt.stopImmediatePropagation()
-			}
-			if (!canvas.permissionManager.canUseSelectionToolAffordance()) {
-				return
-			}
-			options?.onFullscreenClick?.()
-		}
-
-		fullscreenButtonBg.on("mousedown", handleFullscreenMouseDown)
-		fullscreenButtonBg.on("click tap", (e) => {
-			e.cancelBubble = true
-			if (e.evt) {
-				e.evt.stopPropagation()
-			}
-		})
-		fullscreenButtonBg.on("mouseenter", () => {
-			if (!canvas.permissionManager.canUseSelectionToolAffordance()) {
-				return
-			}
-			fullscreenButtonBg.fill(VIDEO_CONFIG.CONTROL_BUTTON_BG_HOVER)
-			canvas.cursorManager.setTemporary("pointer")
-			group.getLayer()?.batchDraw()
-		})
-		fullscreenButtonBg.on("mouseleave", () => {
-			if (!canvas.permissionManager.canUseSelectionToolAffordance()) {
-				return
-			}
-			fullscreenButtonBg.fill(VIDEO_CONFIG.CONTROL_BUTTON_BG)
-			canvas.cursorManager.restoreToolCursor()
-			group.getLayer()?.batchDraw()
-		})
 		playButtonGroup.on("mouseenter", () => {
+			this.clearTouchControlsAutoHide()
 			if (
 				!canvas.permissionManager.canUseSelectionToolAffordance() ||
 				!playButtonGroup.visible()
@@ -436,20 +398,52 @@ export class VideoRenderer {
 			canvas.cursorManager.restoreToolCursor()
 			group.getLayer()?.batchDraw()
 		})
+		playButtonGroup.on("touchstart", () => {
+			if (
+				!canvas.permissionManager.canUseSelectionToolAffordance() ||
+				!playButtonGroup.visible()
+			) {
+				return
+			}
+			this.updatePlayButtonHoverState(playButtonBg, triangle, pauseBarsGroup, true)
+			group.getLayer()?.batchDraw()
+		})
+		playButtonGroup.on("touchend touchcancel", () => {
+			if (!canvas.permissionManager.canUseSelectionToolAffordance()) {
+				return
+			}
+			this.updatePlayButtonHoverState(playButtonBg, triangle, pauseBarsGroup, false)
+			group.getLayer()?.batchDraw()
+		})
 
 		// 禁止在 mousedown 上截断冒泡，否则 stage 上的选择工具无法选中/拖拽。
 		// 中心按钮统一负责播放/暂停；双击画面区域仍可切换播放状态。
-		playButtonGroup.on("click tap", () => {
+		playButtonGroup.on("click tap", (event) => {
+			if (this.isTouchLikeKonvaEvent(event)) {
+				showControls()
+				this.scheduleTouchControlsAutoHide(hideControls)
+			}
 			options?.onPlayButtonClick?.()
 		})
 		hit.on("dblclick dbltap", () => {
 			options?.onContentDoubleClick?.()
 		})
-		group.on("mouseenter", showControls)
+		hit.on("tap", (event) => {
+			if (!this.isTouchLikeKonvaEvent(event)) return
+			showControls()
+			this.scheduleTouchControlsAutoHide(hideControls)
+		})
+		group.on("mouseenter", () => {
+			this.clearTouchControlsAutoHide()
+			showControls()
+		})
 		group.on("mouseleave", hideControls)
 		group.on("mousemove", handlePointerMove)
 		group.on("dragmove", handlePointerMove)
-		group.on("dragstart", hideControls)
+		group.on("dragstart", () => {
+			this.clearTouchControlsAutoHide()
+			hideControls()
+		})
 
 		group.add(previewNode)
 		group.add(bufferingOverlay)
@@ -472,9 +466,6 @@ export class VideoRenderer {
 			progressGroup,
 			progressBackground,
 			progressText,
-			fullscreenButtonGroup,
-			fullscreenButtonBg,
-			fullscreenIcon,
 			isHovering: false,
 			bufferingOverlay,
 			bufferingSpinnerRoot,
@@ -591,8 +582,6 @@ export class VideoRenderer {
 			pauseBarRight,
 			progressGroup,
 			progressBackground,
-			fullscreenButtonGroup,
-			fullscreenIcon,
 			bufferingOverlay,
 			bufferingSpinnerShape,
 		} = this.playerRefs
@@ -618,28 +607,14 @@ export class VideoRenderer {
 		playButtonBg.radius(this.getPlayButtonRadius(iconSize))
 		layoutLucideSolidPlayPath(playTriangle, 0, 0, iconSize)
 		this.updatePauseBarsLayout(pauseBarLeft, pauseBarRight, iconSize)
-		const buttonSize = VIDEO_CONFIG.CONTROL_BUTTON_SIZE
 		const paddingX = VIDEO_CONFIG.CONTROL_PADDING * inverseScale.x
 		const paddingY = VIDEO_CONFIG.CONTROL_PADDING * inverseScale.y
-		const scaledButtonWidth = buttonSize * inverseScale.x
-		const scaledButtonHeight = buttonSize * inverseScale.y
 
 		progressGroup.scale(inverseScale)
 		const progressHeight = progressBackground.height() * inverseScale.y
 		progressGroup.position({
 			x: paddingX,
 			y: height - progressHeight - paddingY,
-		})
-
-		fullscreenButtonGroup.scale(inverseScale)
-		fullscreenButtonGroup.position({
-			x: width - scaledButtonWidth - paddingX,
-			y: height - scaledButtonHeight - paddingY,
-		})
-
-		fullscreenIcon.position({
-			x: (buttonSize - fullscreenIcon.width()) / 2,
-			y: (buttonSize - fullscreenIcon.height()) / 2,
 		})
 	}
 
@@ -696,40 +671,6 @@ export class VideoRenderer {
 			.padStart(2, "0")}`
 	}
 
-	private createFullscreenIcon(): Konva.Group {
-		const size = 14
-		const corner = 4
-		const stroke = 1.5
-		const icon = new Konva.Group({
-			width: size,
-			height: size,
-			listening: false,
-		})
-		const color = VIDEO_CONFIG.CONTROL_TEXT_COLOR
-
-		const lines = [
-			[corner, 0, 0, 0, 0, corner],
-			[size - corner, 0, size, 0, size, corner],
-			[0, size - corner, 0, size, corner, size],
-			[size, size - corner, size, size, size - corner, size],
-		]
-
-		lines.forEach((points) => {
-			icon.add(
-				new Konva.Line({
-					points,
-					stroke: color,
-					strokeWidth: stroke,
-					lineCap: "round",
-					lineJoin: "round",
-					listening: false,
-				}),
-			)
-		})
-
-		return icon
-	}
-
 	private updatePlayButtonHoverState(
 		playButtonBg: Konva.Circle,
 		playTriangle: Konva.Path,
@@ -742,10 +683,7 @@ export class VideoRenderer {
 	}
 
 	private resetControlHoverStyles(
-		refs: Pick<
-			PlayerNodeRefs,
-			"playButtonBg" | "playTriangle" | "pauseBarsGroup" | "fullscreenButtonBg"
-		>,
+		refs: Pick<PlayerNodeRefs, "playButtonBg" | "playTriangle" | "pauseBarsGroup">,
 	): void {
 		this.updatePlayButtonHoverState(
 			refs.playButtonBg,
@@ -753,7 +691,18 @@ export class VideoRenderer {
 			refs.pauseBarsGroup,
 			false,
 		)
-		refs.fullscreenButtonBg.fill(VIDEO_CONFIG.CONTROL_BUTTON_BG)
+	}
+
+	private isTouchLikeKonvaEvent(event: Konva.KonvaEventObject<Event>): boolean {
+		const nativeEvent = event.evt
+		if (!nativeEvent) return false
+		if (typeof PointerEvent !== "undefined" && nativeEvent instanceof PointerEvent) {
+			return nativeEvent.pointerType === "touch" || nativeEvent.pointerType === "pen"
+		}
+		if (typeof TouchEvent !== "undefined" && nativeEvent instanceof TouchEvent) {
+			return true
+		}
+		return nativeEvent.type.startsWith("touch")
 	}
 
 	private updatePauseBarsLayout(

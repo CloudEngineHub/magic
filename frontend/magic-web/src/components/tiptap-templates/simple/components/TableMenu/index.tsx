@@ -13,6 +13,7 @@ import {
 } from "@tabler/icons-react"
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/tiptap-ui-primitive/tooltip"
 import { isInTable, getTableCellCoordinates } from "./utils"
+import { runActiveEditor } from "@/utils/tiptapEditorLifecycle"
 import "./table-menu.scss"
 
 interface TableMenuProps {
@@ -35,24 +36,28 @@ export function TableMenu({ editor, isEditable }: TableMenuProps) {
 			return
 		}
 
-		const inTable = isInTable(editor)
-		if (!inTable) {
-			setIsVisible(false)
-			return
-		}
+		const didUpdate = runActiveEditor(editor, (activeEditor) => {
+			const inTable = isInTable(activeEditor)
+			if (!inTable) {
+				setIsVisible(false)
+				return true
+			}
 
-		const coords = getTableCellCoordinates(editor)
-		if (!coords) {
-			setIsVisible(false)
-			return
-		}
+			const coords = getTableCellCoordinates(activeEditor)
+			if (!coords) {
+				setIsVisible(false)
+				return true
+			}
 
-		// Position menu above the cell
-		setPosition({
-			top: coords.top - 40,
-			left: coords.left,
+			// Position menu above the cell
+			setPosition({
+				top: coords.top - 40,
+				left: coords.left,
+			})
+			setIsVisible(true)
+			return true
 		})
-		setIsVisible(true)
+		if (!didUpdate) setIsVisible(false)
 	})
 
 	// Update position on selection change
@@ -91,42 +96,48 @@ export function TableMenu({ editor, isEditable }: TableMenuProps) {
 
 	// Table commands
 	const addRowBefore = useMemoizedFn(() => {
-		if (!editor) return
-		editor.chain().focus().addRowBefore().run()
+		runActiveEditor(editor, (activeEditor) => {
+			activeEditor.chain().focus().addRowBefore().run()
+		})
 	})
 
 	const addRowAfter = useMemoizedFn(() => {
-		if (!editor) return
-		editor.chain().focus().addRowAfter().run()
+		runActiveEditor(editor, (activeEditor) => {
+			activeEditor.chain().focus().addRowAfter().run()
+		})
 	})
 
 	const addColumnBefore = useMemoizedFn(() => {
-		if (!editor) return
-		editor.chain().focus().addColumnBefore().run()
+		runActiveEditor(editor, (activeEditor) => {
+			activeEditor.chain().focus().addColumnBefore().run()
+		})
 	})
 
 	const addColumnAfter = useMemoizedFn(() => {
-		if (!editor) return
-		editor.chain().focus().addColumnAfter().run()
+		runActiveEditor(editor, (activeEditor) => {
+			activeEditor.chain().focus().addColumnAfter().run()
+		})
 	})
 
 	const deleteRow = useMemoizedFn(() => {
-		if (!editor) return
-		editor.chain().focus().deleteRow().run()
+		runActiveEditor(editor, (activeEditor) => {
+			activeEditor.chain().focus().deleteRow().run()
+		})
 	})
 
 	const deleteColumn = useMemoizedFn(() => {
-		if (!editor) return
-		editor.chain().focus().deleteColumn().run()
+		runActiveEditor(editor, (activeEditor) => {
+			activeEditor.chain().focus().deleteColumn().run()
+		})
 	})
 
 	// Check if commands are available
-	const canAddRowBefore = editor?.can().addRowBefore() ?? false
-	const canAddRowAfter = editor?.can().addRowAfter() ?? false
-	const canAddColumnBefore = editor?.can().addColumnBefore() ?? false
-	const canAddColumnAfter = editor?.can().addColumnAfter() ?? false
-	const canDeleteRow = editor?.can().deleteRow() ?? false
-	const canDeleteColumn = editor?.can().deleteColumn() ?? false
+	const canAddRowBefore = runActiveEditor(editor, (activeEditor) => activeEditor.can().addRowBefore(), false) ?? false
+	const canAddRowAfter = runActiveEditor(editor, (activeEditor) => activeEditor.can().addRowAfter(), false) ?? false
+	const canAddColumnBefore = runActiveEditor(editor, (activeEditor) => activeEditor.can().addColumnBefore(), false) ?? false
+	const canAddColumnAfter = runActiveEditor(editor, (activeEditor) => activeEditor.can().addColumnAfter(), false) ?? false
+	const canDeleteRow = runActiveEditor(editor, (activeEditor) => activeEditor.can().deleteRow(), false) ?? false
+	const canDeleteColumn = runActiveEditor(editor, (activeEditor) => activeEditor.can().deleteColumn(), false) ?? false
 
 	if (!isVisible || !position) {
 		return null

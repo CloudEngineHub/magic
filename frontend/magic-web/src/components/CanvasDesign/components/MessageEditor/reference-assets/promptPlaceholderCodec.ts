@@ -40,7 +40,7 @@ export function decodePromptPlaceholdersToMentions(
 	for (let index = 0; index < references.length; index += 1) {
 		const fileName = references[index]?.fileName?.trim()
 		if (!fileName) continue
-		const tokenPattern = new RegExp(escapeRegex(options.buildToken(index + 1)), "g")
+		const tokenPattern = new RegExp(escapeRegex(options.buildToken(index + 1)), "gi")
 		if (!tokenPattern.test(decoded)) continue
 		decoded = replaceFirst(decoded, tokenPattern, `@${fileName}`)
 	}

@@ -28,7 +28,7 @@ export const DocumentSplitLayout = memo(function DocumentSplitLayout({
 	const {
 		width: documentListWidthPx,
 		isDragging: isDraggingDocumentList,
-		handleMouseDown: onDocumentListResizeStart,
+		handleResizeStart: onDocumentListResizeStart,
 	} = useResizablePanel({
 		minWidth: KNOWLEDGE_DOC_LIST_MIN_PX,
 		maxWidth: KNOWLEDGE_DOC_LIST_MAX_PX,
@@ -63,7 +63,7 @@ export const DocumentSplitLayout = memo(function DocumentSplitLayout({
 				<DocumentListPanel />
 			</div>
 			<TopicResizeHandle
-				onMouseDown={onDocumentListResizeStart}
+				onResizeStart={onDocumentListResizeStart}
 				className={cn("shrink-0", isDraggingDocumentList && "before:opacity-100")}
 			/>
 			<div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-[10px] border border-border">

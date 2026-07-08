@@ -46,6 +46,21 @@ export interface FileInfo {
 	fileType?: string
 }
 
+/** UI overrides for file-share scenarios such as recording detail sharing. */
+export interface FileShareUiConfig {
+	/** Reuses the existing project_mode semantic so recording shares do not invent another scene field. */
+	projectMode?: string | null
+	hideShareProjectToggle?: boolean
+	hideShowFileListSetting?: boolean
+	forceViewFileList?: boolean
+	showSelectAll?: boolean
+	lockShareProject?: boolean
+	/** Use the recording share sheet title ("Share") instead of generic file-share copy. */
+	useRecordingShareCreateTitle?: boolean
+	/** Hide generic share-management shortcuts when a scene owns a specialized manager. */
+	hideManageShareLinks?: boolean
+}
+
 /** Share extra data */
 export interface ShareExtraData {
 	passwordEnabled?: boolean
@@ -65,6 +80,7 @@ export interface ShareExtraData {
 	view_file_list?: boolean // 话题分享：可查看文件列表
 	project_id?: string
 	allowDownloadProjectFile?: boolean // 允许下载及导出（后端字段: allow_download_project_file）
+	pureMode?: boolean // 纯净模式（后端字段: pure_mode）
 }
 
 export interface ShareProps {
@@ -92,12 +108,14 @@ export interface ShareModalProps extends Omit<ShareProps, "type">, MagicModalPro
 	attachmentList?: any[] // 扁平化的文件列表（可选）
 	resourceId?: string // 资源ID（可选，外部传入的资源ID）
 	defaultSelectedFileIds?: string[] // 默认选中的文件ID列表
+	requiredFileIds?: string[] // 提交时始终补齐的文件ID（不改变UI可见选择）
 	defaultOpenFileId?: string // 默认打开的文件ID
 	projectName?: string // 项目名称（用于项目分享模式）
 	projectId?: string // 项目ID（用于创建分享时使用，可选，如果不传则从API获取）
 	onCancel?: (e?: React.MouseEvent<HTMLButtonElement>) => void
 	onCancelShare?: (resourceId: string) => void // 取消分享的回调，用于更新列表
 	onSaveSuccess?: () => void // 保存成功的回调
+	fileShareUiConfig?: FileShareUiConfig
 }
 
 // API types for file sharing

@@ -26,7 +26,17 @@ export function useTabCache(options: TabCacheOptions = {}) {
 
 	// 更新缓存的 tab IDs
 	const updateCachedTabIds = useCallback(() => {
-		setCachedTabIds(Array.from(cacheRef.current.keys()))
+		const nextIds = Array.from(cacheRef.current.keys())
+		setCachedTabIds((prevIds) => {
+			if (
+				prevIds.length === nextIds.length &&
+				prevIds.every((id, index) => id === nextIds[index])
+			) {
+				return prevIds
+			}
+
+			return nextIds
+		})
 	}, [])
 
 	// 添加或更新缓存
@@ -44,11 +54,8 @@ export function useTabCache(options: TabCacheOptions = {}) {
 
 			// 如果不缓存 Office 文件且当前是 Office 文件，则不进行缓存
 			if (!cacheOfficeFiles && isOfficeFile) {
-				console.log("Office file caching is disabled, skipping:", renderProps?.type)
 				return
 			}
-
-			console.log(renderProps, "renderProps")
 
 			const cache = cacheRef.current
 			const now = Date.now()

@@ -201,14 +201,14 @@ const AgentConfigPanel = forwardRef<AgentConfigPanelRef, AgentConfigPanelProps>(
 				{/* 可用工具 */}
 				<div className={styles.toolsSection}>
 					<div className={styles.toolsHeader}>
-						<label className={styles.label}>
+						<label className={styles.label} data-testid="agent-config-panel-label">
 							{t("agentEditor.configPanel.availableTools")}
 						</label>
 					</div>
 					<div className={styles.toolsList}>
 						{tools.map((tool: any) => (
 							<div key={tool.code} className={styles.toolItem}>
-								<img src={SelectedToolIcon} className={styles.toolIcon} />
+								<img src={SelectedToolIcon} className={styles.toolIcon}  data-testid="agent-config-panel-image"/>
 								<span>{tool.name}</span>
 								{/* <CloseOutlined
 								className={styles.toolRemoveBtn}

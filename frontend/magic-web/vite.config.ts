@@ -14,6 +14,7 @@ import { viteExternalsPlugin } from "vite-plugin-externals"
 import createAppServiceWorkerPlugin from "./plugins/vite-plugin-app-service-worker"
 import vitePluginTransformBaseImports from "./plugins/vite-plugin-transform-base-imports"
 import vitePluginCriticalFontPreload from "./plugins/vite-plugin-font-preload"
+import vitePluginMagicApi from "./plugins/vite-plugin-magic-api"
 import { getViteEditionConfig } from "./vite/edition"
 import { createCodeSplittingGroups } from "./vite/code-splitting-groups"
 import Inspect from "vite-plugin-inspect"
@@ -25,7 +26,11 @@ const ENV_PREFIX = "MAGIC_"
 /** 是否为开发环境 */
 const isDev = process.env.NODE_ENV === "development"
 
-/** 本地开发 HTTPS hosts，支持逗号分隔多个，默认 magic.t.teamshare.cn */
+/** 开发端口仅为 443 时才启用 mkcert，否则 Vite 以 HTTP dev server 启动 */
+const devServerPort = process.env.PORT ? Number(process.env.PORT) : undefined
+const isHttpsDevServer = isDev && devServerPort === 443
+
+/** 本地开发 HTTPS hosts，支持逗号分隔多个，默认 magic.com */
 const devHosts = (process.env.DEV_HOSTS ?? "magic.com")
 	.split(",")
 	.map((h) => h.trim())
@@ -139,7 +144,14 @@ function getBaseViteConfig(): UserConfig {
 		assetsInclude: ["**/*.md", "**/*.mdx", "**/*.mov", "**/*.webm", "**/*.png"],
 		resolve: {
 			// magic-flow lists react as a dep; force one React for hooks
-			dedupe: ["react", "react-dom"],
+			dedupe: [
+				"react",
+				"react-dom",
+				"react-router",
+				"react-router-dom",
+				"i18next",
+				"react-i18next",
+			],
 			alias: [
 				{
 					find: "@",
@@ -152,6 +164,10 @@ function getBaseViteConfig(): UserConfig {
 				{
 					find: "@dtyq/x-markdown",
 					replacement: resolve(__dirname, "packages/x-markdown/src/index.ts"),
+				},
+				{
+					find: "@magic-web/html2image",
+					replacement: resolve(__dirname, "packages/html2image/src/index.ts"),
 				},
 				// packages/logger may have its own node_modules during local development.
 				// Pin ARMS to the app dependency so Vite does not resolve a nested version
@@ -169,6 +185,26 @@ function getBaseViteConfig(): UserConfig {
 					replacement: resolve(__dirname, "packages/magic-admin/components/index.ts"),
 				},
 				{
+					find: /^@dtyq\/html-sandbox\/index\.html(\?raw)?$/,
+					replacement: `${resolve(__dirname, "packages/html-sandbox/index.html")}$1`,
+				},
+				{
+					find: "@dtyq/html-sandbox/runtime",
+					replacement: resolve(__dirname, "packages/html-sandbox/src/runtime/index.ts"),
+				},
+				{
+					find: "@dtyq/html-sandbox/telemetry",
+					replacement: resolve(__dirname, "packages/html-sandbox/src/telemetry/index.ts"),
+				},
+				{
+					find: "@dtyq/html-sandbox",
+					replacement: resolve(__dirname, "packages/html-sandbox/src/index.ts"),
+				},
+				{
+					find: /^@dtyq\/html-sandbox\/(.+)$/,
+					replacement: resolve(__dirname, "packages/html-sandbox/src/$1"),
+				},
+				{
 					find: "@dtyq/magic-admin/components",
 					replacement: resolve(__dirname, "packages/magic-admin/components/index.ts"),
 				},
@@ -180,6 +216,10 @@ function getBaseViteConfig(): UserConfig {
 					),
 				},
 				{
+					find: "@dtyq/magic-admin/locales",
+					replacement: resolve(__dirname, "packages/magic-admin/src/locales/index.ts"),
+				},
+				{
 					find: "@dtyq/magic-admin",
 					replacement: resolve(__dirname, "packages/magic-admin/src/index.ts"),
 				},
@@ -187,6 +227,7 @@ function getBaseViteConfig(): UserConfig {
 		},
 		plugins: [
 			createAppServiceWorkerPlugin(),
+			vitePluginMagicApi({ projectRoot: __dirname }),
 			// Transform named imports from @/components/base to default imports
 			// 将 @/components/base 的命名导入转换为默认导入
 			vitePluginTransformBaseImports({
@@ -202,22 +243,22 @@ function getBaseViteConfig(): UserConfig {
 			}),
 			keepConsole(),
 			isEnableInspect &&
-				Inspect({
-					build: true,
-					outputDir: ".vite-inspect",
-				}),
+			Inspect({
+				build: true,
+				outputDir: ".vite-inspect",
+			}),
 			// 构建分析插件
 			isVisualizer &&
-				(visualizer({
-					filename: "dist/stats.html",
-					gzipSize: true,
-					brotliSize: true,
-					// 生成的可视化文件的路径和名称
-					// 可视化的类型，可选值有 'sunburst'、'treemap'、'network' 等
-					template: "treemap",
-					// 是否打开生成的可视化文件
-					open: true,
-				}) as PluginOption),
+			(visualizer({
+				filename: "dist/stats.html",
+				gzipSize: true,
+				brotliSize: true,
+				// 生成的可视化文件的路径和名称
+				// 可视化的类型，可选值有 'sunburst'、'treemap'、'network' 等
+				template: "treemap",
+				// 是否打开生成的可视化文件
+				open: true,
+			}) as PluginOption),
 			codeInspectorPlugin({
 				bundler: "vite", // Automatically detect development or production environment
 				editor: "code",
@@ -265,12 +306,12 @@ function getBaseViteConfig(): UserConfig {
 			// Critical font preload plugin for LCP optimization
 			!isDev && vitePluginCriticalFontPreload(),
 			!isDev &&
-				viteExternalsPlugin({
-					// 模块名: 全局变量名
-					react: "React",
-					"react-dom": "ReactDOM",
-					"lodash-es": "_",
-				}),
+			viteExternalsPlugin({
+				// 模块名: 全局变量名
+				react: "React",
+				"react-dom": "ReactDOM",
+				"lodash-es": "_",
+			}),
 			vitePluginImp({
 				libList: [
 					{
@@ -278,16 +319,16 @@ function getBaseViteConfig(): UserConfig {
 					},
 				],
 			}),
-			// 用于本地生成HTTPS证书
-			...(isDev
+			// Only bind mkcert for the 443 dev server; other dev ports stay on HTTP.
+			...(isHttpsDevServer
 				? [
-						mkcert({
-							// 本地配置该地址的 host, 满足文件私有桶上传
-							// 可通过环境变量 DEV_HOSTS 覆盖，多个 host 用逗号分隔
-							hosts: devHosts,
-						}),
-						// http2Proxy({ quiet: true }),
-					]
+					mkcert({
+						// 本地配置该地址的 host, 满足文件私有桶上传
+						// 可通过环境变量 DEV_HOSTS 覆盖，多个 host 用逗号分隔
+						hosts: devHosts,
+					}),
+					// http2Proxy({ quiet: true }),
+				]
 				: []), // optional -- suppress error logging],
 			// 浏览器兼容
 			// legacy({

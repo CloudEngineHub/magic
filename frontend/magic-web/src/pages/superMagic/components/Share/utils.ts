@@ -1,5 +1,6 @@
 import { ShareType } from "./types"
 import { findFileInTree, calculateActualFileCount } from "./FileSelector/utils"
+import { isAudioProjectMode } from "@/services/audioRecordings/audioProjectMode"
 
 export { generateShareMessageText } from "./utils/generateShareMessageText"
 export { generateTopicShareMessageText } from "./utils/generateTopicShareMessageText"
@@ -42,10 +43,18 @@ export function calculateDefaultShareName(
 	t: (key: string, options?: Record<string, unknown>) => string,
 	shareProject?: boolean,
 	projectName?: string,
+	projectMode?: string | null,
 ): string {
 	// 如果是项目分享，返回"项目分享_{项目名称}"
 	if (shareProject) {
 		return t("share.projectShareName", {
+			projectName: projectName || t("common.untitledProject"),
+		}) as string
+	}
+
+	// Recording shares should use the recording title instead of the selected file name.
+	if (isAudioProjectMode(projectMode)) {
+		return t("share.recordingShareName", {
 			projectName: projectName || t("common.untitledProject"),
 		}) as string
 	}

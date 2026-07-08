@@ -16,6 +16,29 @@ import { usePhoneScaling } from "../../hooks/usePhoneScaling"
 import { WECHAT_PHONE_HEIGHT, WECHAT_PHONE_WIDTH } from "./wechatShellConstants"
 
 const WECHAT_ARTICLE_PHONE_PREVIEW_MAX_SCALE = 1.2
+const WECHAT_ARTICLE_PHONE_PREVIEW_RESET = `
+<style data-wechat-phone-preview-reset="true">
+	:host {
+		display: block;
+		max-width: 100%;
+		overflow-x: hidden;
+		color: #1f1f1f;
+		font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, "PingFang SC", "Microsoft YaHei", Arial, sans-serif;
+	}
+	:host *, :host *::before, :host *::after {
+		box-sizing: border-box;
+		max-width: 100%;
+	}
+	:host img, :host svg, :host video, :host canvas {
+		height: auto;
+		max-width: 100%;
+	}
+	:host table {
+		display: block;
+		width: 100%;
+		overflow-x: auto;
+	}
+</style>`
 
 interface WechatArticlePhonePreviewProps {
 	post: SelfMediaPost
@@ -39,7 +62,7 @@ function getShadowArticleHtml(html: string) {
 		.join("")
 	const body = document.body.innerHTML || html
 
-	return `${headStyles}${body}`
+	return `${WECHAT_ARTICLE_PHONE_PREVIEW_RESET}${headStyles}${body}`
 }
 
 function ShadowArticleHtml({ html }: { html: string }) {
@@ -114,6 +137,7 @@ export default function WechatArticlePhonePreview({
 								"detail.selfMedia.platform.wechat-official-accounts.phonePreview.close",
 								"关闭预览",
 							)}
+							data-testid="wechat-article-phone-preview-close-button"
 						>
 							<X size={27} strokeWidth={1.9} />
 						</button>
@@ -124,6 +148,7 @@ export default function WechatArticlePhonePreview({
 								"detail.selfMedia.platform.wechat-official-accounts.phonePreview.more",
 								"更多",
 							)}
+							data-testid="wechat-article-phone-preview-more-button"
 						>
 							<MoreHorizontal size={28} strokeWidth={2.3} />
 						</button>

@@ -13,6 +13,7 @@ import { cn } from "@/lib/utils"
 import { Button } from "@/components/shadcn-ui/button"
 import { QueuedMessage } from "../../hooks/useMessageQueue"
 import CollapsibleText from "./components/CollapsibleText"
+import MobileMessageQueue from "./MobileMessageQueue"
 
 export interface MessageQueueProps {
 	queue: QueuedMessage[]
@@ -28,6 +29,7 @@ export interface MessageQueueProps {
 	onStartEdit: (messageId: string) => void
 	onCancelEdit: () => void
 	className?: string
+	variant?: "default" | "mobile"
 }
 
 const actionButtonBase = cn(
@@ -38,6 +40,7 @@ const actionButtonBase = cn(
 	"disabled:pointer-events-none disabled:opacity-50",
 )
 
+/** Route queue rendering to the mobile prototype card only when callers opt in. */
 function MessageQueue({
 	queue,
 	queueStats,
@@ -47,12 +50,29 @@ function MessageQueue({
 	onStartEdit,
 	onCancelEdit,
 	className,
+	variant = "default",
 }: MessageQueueProps) {
 	const { t } = useTranslation("super")
 	const [isExpanded, setIsExpanded] = useState(true)
 
 	if (queue.length === 0) {
 		return null
+	}
+
+	if (variant === "mobile") {
+		return (
+			<MobileMessageQueue
+				queue={queue}
+				queueStats={queueStats}
+				editingQueueItem={editingQueueItem}
+				onRemoveMessage={onRemoveMessage}
+				onSendMessage={onSendMessage}
+				onStartEdit={onStartEdit}
+				onCancelEdit={onCancelEdit}
+				className={className}
+				variant={variant}
+			/>
+		)
 	}
 
 	const handleToggleExpanded = () => {
@@ -77,6 +97,7 @@ function MessageQueue({
 						className="flex size-[18px] cursor-pointer items-center justify-center text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
 						onClick={handleToggleExpanded}
 						aria-expanded={isExpanded}
+						data-testid="handle-toggle-expanded"
 					>
 						{isExpanded ? <IconChevronUp size={18} /> : <IconChevronDown size={18} />}
 					</button>
@@ -154,6 +175,7 @@ function MessageQueue({
 														if (!message.isDeletingLoading)
 															onRemoveMessage(message.id)
 													}}
+													data-testid="on-remove-message"
 												>
 													{message.isDeletingLoading ? (
 														<Spin size="small" />
@@ -172,6 +194,7 @@ function MessageQueue({
 													onClick={() => {
 														if (!isDisabled) onStartEdit(message.id)
 													}}
+													data-testid="on-start-edit"
 												>
 													<IconEdit size={14} />
 												</div>
@@ -187,6 +210,7 @@ function MessageQueue({
 														if (!message.isSendingLoading)
 															onSendMessage(message.id)
 													}}
+													data-testid="on-send-message"
 												>
 													{message.isSendingLoading ? (
 														<IconArrowUpDashed size={14} />

@@ -75,6 +75,63 @@ describe("IframeUserInfoService", () => {
 		})
 	})
 
+	it("prompts for sensitive scopes when app config failed to load", async () => {
+		const authorizeUserInfo = vi.fn().mockResolvedValue(true)
+		const { service, postToIframe } = createService({
+			getUserInfo: () => fullUserInfo,
+			authorizeUserInfo,
+			appConfigState: { status: "error", error: "HTTP 500" },
+		})
+
+		await service.handleMessage(USER_INFO_MESSAGE_TYPES.GET_USER_INFO_REQUEST, {
+			type: USER_INFO_MESSAGE_TYPES.GET_USER_INFO_REQUEST,
+			requestId: "req-identity-config-error",
+			scopes: [USER_INFO_SCOPES.IDENTITY],
+		})
+
+		expect(authorizeUserInfo).toHaveBeenCalledWith({
+			appName: "HTML 微应用",
+			fields: ["用户 ID", "Magic ID"],
+			reason: "",
+			scopes: [USER_INFO_SCOPES.IDENTITY],
+			appConfigLoadError: "HTTP 500",
+		})
+		expect(postToIframe).toHaveBeenCalledWith({
+			type: USER_INFO_MESSAGE_TYPES.GET_USER_INFO_RESPONSE,
+			requestId: "req-identity-config-error",
+			success: true,
+			userInfo: {
+				name: "Display Name",
+				avatar: "https://example.com/avatar.png",
+				user_id: "user-1",
+				magic_id: "magic-1",
+			},
+		})
+	})
+
+	it("rejects sensitive scopes while app config is loading", async () => {
+		const authorizeUserInfo = vi.fn().mockResolvedValue(true)
+		const { service, postToIframe } = createService({
+			getUserInfo: () => fullUserInfo,
+			authorizeUserInfo,
+			appConfigState: { status: "loading" },
+		})
+
+		await service.handleMessage(USER_INFO_MESSAGE_TYPES.GET_USER_INFO_REQUEST, {
+			type: USER_INFO_MESSAGE_TYPES.GET_USER_INFO_REQUEST,
+			requestId: "req-identity-config-loading",
+			scopes: [USER_INFO_SCOPES.IDENTITY],
+		})
+
+		expect(authorizeUserInfo).not.toHaveBeenCalled()
+		expect(postToIframe).toHaveBeenCalledWith({
+			type: USER_INFO_MESSAGE_TYPES.GET_USER_INFO_RESPONSE,
+			requestId: "req-identity-config-loading",
+			success: false,
+			error: "App config is still loading",
+		})
+	})
+
 	it("prompts once for declared sensitive scopes and returns scoped fields", async () => {
 		const authorizeUserInfo = vi.fn().mockResolvedValue(true)
 		const { service, postToIframe } = createService({
@@ -182,7 +239,6 @@ describe("IframeUserInfoService", () => {
 			}),
 		)
 	})
-
 
 	it("does not reuse sensitive authorization across app instances with the same manifest", async () => {
 		const authorizeUserInfo = vi.fn().mockResolvedValue(true)

@@ -13,8 +13,15 @@ class RangeParser:
 
     @staticmethod
     def parse_numeric(raw: Optional[str], total: Optional[int] = None) -> List[int]:
+        """解析 1-based 数字范围，并在总数已知时兼容全量标记。"""
+
         if raw is None or str(raw).strip() == "":
             return list(range(1, (total or 0) + 1)) if total else []
+
+        if str(raw).strip().lower() == "all":
+            if total is None:
+                raise DocumentRangeError("Invalid range value: all")
+            return list(range(1, max(int(total), 0) + 1))
 
         values: List[int] = []
         for part in str(raw).replace("，", ",").split(","):

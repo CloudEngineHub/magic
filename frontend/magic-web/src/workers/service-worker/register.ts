@@ -1,3 +1,4 @@
+import { isMobile } from "@/utils/devices"
 import { env } from "@/utils/env"
 import {
 	DEFAULT_VENDOR_CACHEABLE_HOSTS,
@@ -7,6 +8,8 @@ import {
 	VENDOR_CACHEABLE_HOSTS_QUERY_PARAM,
 	WORKBOX_CDN_QUERY_PARAM,
 } from "./sw-constants"
+import type { StartWarmUpMessage } from "./types"
+import { getHardwareConcurrency, isSaveDataEnabled, resolveWarmUpTuning } from "./warmup-tuning"
 
 const APP_SERVICE_WORKER_URL = "/sw.js"
 const APP_SERVICE_WORKER_SCOPE = "/"
@@ -368,19 +371,45 @@ export async function activateWaitingServiceWorkerAndReload(
 	})
 }
 
+/**
+ * Builds the START_WARMUP postMessage payload with main-thread tuning for batch size and interval.
+ */
+function buildStartWarmUpMessage(assets: string[]): StartWarmUpMessage {
+	const { intervalMs, batchSize } = resolveWarmUpTuning(getHardwareConcurrency())
+
+	return {
+		type: "START_WARMUP",
+		assets,
+		intervalMs,
+		batchSize,
+	}
+}
+
+/**
+ * Mobile and save-data clients skip idle static-asset warmup to reduce bandwidth and storage pressure.
+ */
+function shouldWarmUpStaticAssets(): boolean {
+	if (isMobile) return false
+	if (isSaveDataEnabled()) return false
+	return true
+}
+
 function scheduleWarmUpPostMessage(worker: ServiceWorker): void {
 	const postMsg = async () => {
 		try {
 			const res = await fetch(`/warmup-assets.json?t=${Date.now()}`)
 			if (res.ok) {
 				const assets = await res.json()
-				worker.postMessage({ type: "START_WARMUP", assets })
+				const normalizedAssets = Array.isArray(assets)
+					? assets.filter((item): item is string => typeof item === "string")
+					: []
+				worker.postMessage(buildStartWarmUpMessage(normalizedAssets))
 			} else {
-				worker.postMessage({ type: "START_WARMUP", assets: [] })
+				worker.postMessage(buildStartWarmUpMessage([]))
 			}
 		} catch (e) {
 			console.error("[sw] Failed to fetch warmup-assets.json", e)
-			worker.postMessage({ type: "START_WARMUP", assets: [] })
+			worker.postMessage(buildStartWarmUpMessage([]))
 		}
 	}
 
@@ -399,6 +428,7 @@ function scheduleWarmUpPostMessage(worker: ServiceWorker): void {
 }
 
 function triggerWarmUpWhenIdle(): void {
+	if (!shouldWarmUpStaticAssets()) return
 	if (typeof window === "undefined" || !("serviceWorker" in navigator)) return
 
 	if (!navigator.serviceWorker.controller) {

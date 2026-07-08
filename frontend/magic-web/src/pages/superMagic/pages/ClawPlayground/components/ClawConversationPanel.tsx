@@ -23,6 +23,7 @@ import { useTopicConversationLoading } from "@/pages/superMagic/hooks/useTopicCo
 import { useTopicMessages } from "@/pages/superMagic/hooks/useTopicMessages"
 import { createMessageSendService } from "@/pages/superMagic/services/messageSendFlowService"
 import { resolveMessageSendContext } from "@/pages/superMagic/services/messageSendPreparation"
+import { shouldCheckAttachmentsOnTaskStatus } from "@/pages/superMagic/services/topicStatusSyncService"
 import { type TaskStatus } from "@/pages/superMagic/pages/Workspace/types"
 import { TopicMode } from "../../Workspace/TopicMode"
 import { getClawBrandTranslationValues } from "@/pages/superMagic/utils/clawBrand"
@@ -46,6 +47,7 @@ export interface ClawConversationPanelProps {
 	detailPanelVisible?: boolean
 	clawCode?: string
 	onOpenSkillsPanel?: () => void
+	onTerminalTopicStatusChange?: () => void
 }
 
 export const ClawConversationPanel = observer(function ClawConversationPanel({
@@ -54,6 +56,7 @@ export const ClawConversationPanel = observer(function ClawConversationPanel({
 	clawCode,
 	onToggleConversationPanel,
 	onOpenSkillsPanel,
+	onTerminalTopicStatusChange,
 }: ClawConversationPanelProps) {
 	const { t } = useTranslation("sidebar")
 	const clawBrandValues = getClawBrandTranslationValues()
@@ -61,6 +64,7 @@ export const ClawConversationPanel = observer(function ClawConversationPanel({
 	const selectedProject = store.selectedProject
 	const selectedTopic = store.selectedTopic
 	const topicStore = store.topicStore
+	const attachments = store.projectFilesStore.workspaceFileTree
 	const sharedTopicModelStore = useMemo(() => createSuperMagicTopicModelStore(), [])
 	const scopedMessageSendService = useMemo(
 		() =>
@@ -74,8 +78,13 @@ export const ClawConversationPanel = observer(function ClawConversationPanel({
 		selectedTopic,
 		onConversationGeneratingChange: store.setConversationGenerating,
 		onTopicMessagesChange: ({ lastMessageNode, selectedTopic: currentTopic }) => {
-			if (currentTopic?.id && lastMessageNode?.status) {
-				store.updateTopicStatus(currentTopic.id, lastMessageNode?.status)
+			const nextStatus = lastMessageNode?.status as TaskStatus | undefined
+			if (currentTopic?.id && nextStatus) {
+				const hasStatusChanged = nextStatus !== currentTopic.task_status
+				store.updateTopicStatus(currentTopic.id, nextStatus)
+				if (hasStatusChanged && shouldCheckAttachmentsOnTaskStatus(nextStatus)) {
+					onTerminalTopicStatusChange?.()
+				}
 			}
 		},
 	})
@@ -222,6 +231,7 @@ export const ClawConversationPanel = observer(function ClawConversationPanel({
 			showLoading,
 			mentionPanelStore: store.mentionPanelStore,
 			projectFilesStore: store.projectFilesStore,
+			attachments,
 			topicModelStore,
 			enableMessageSendByContent: true,
 			mergeSendParams: ({ defaultParams }) => {
@@ -245,6 +255,7 @@ export const ClawConversationPanel = observer(function ClawConversationPanel({
 		showLoading,
 		store.mentionPanelStore,
 		store.projectFilesStore,
+		attachments,
 		store.projectStore.setSelectedProject,
 		store.selectedWorkspace,
 		store.workspaceStore.setSelectedWorkspace,

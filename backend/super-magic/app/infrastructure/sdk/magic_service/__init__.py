@@ -12,11 +12,14 @@ from .factory import (
 )
 
 # API classes
+from .api.ai_ability_api import AiAbilityApi
 from .api.agent_api import AgentApi
 from .api.message_schedule_api import MessageScheduleApi
+from .api.oauth2_callback_relay_api import OAuth2CallbackRelayApi
 from .api.share_api import ShareApi
 
 # Parameter classes
+from .parameter.ai_ability_runtime_config_parameter import AiAbilityRuntimeConfigParameter
 from .parameter.get_agent_details_parameter import GetAgentDetailsParameter
 from .parameter.tool_execute_parameter import ToolExecuteParameter
 from .parameter.search_knowledge_parameter import SearchKnowledgeParameter
@@ -28,6 +31,7 @@ from .parameter.message_schedule_parameter import (
     UpdateMessageScheduleParameter,
     DeleteMessageScheduleParameter,
 )
+from .parameter.oauth2_callback_relay_parameter import OAuth2CallbackRelayParameter
 from .parameter.share_resource_id_parameter import ShareResourceIdParameter
 from .parameter.create_share_parameter import CreateShareParameter, TargetId
 from .parameter.find_similar_share_parameter import FindSimilarShareParameter
@@ -35,6 +39,7 @@ from .parameter.cancel_share_parameter import CancelShareParameter
 from .parameter.ingest_third_party_message_parameter import IngestThirdPartyMessageParameter
 
 # Result classes
+from .result.ai_ability_runtime_config_result import AiAbilityRuntimeConfigItem, AiAbilityRuntimeConfigResult
 from .result.agent_details_result import (
     AgentDetailsResult,
     Tool
@@ -46,6 +51,7 @@ from .result.message_schedule_result import (
     MessageScheduleListResult,
     DeleteMessageScheduleResult,
 )
+from .result.oauth2_callback_relay_result import OAuth2CallbackRelayResult
 from .result.share_result import (
     ShareResourceIdResult,
     ShareResult,
@@ -77,11 +83,14 @@ __all__ = [
     'MagicServiceConfigError',
 
     # API classes
+    'AiAbilityApi',
     'AgentApi',
     'MessageScheduleApi',
+    'OAuth2CallbackRelayApi',
     'ShareApi',
 
     # Parameter classes
+    'AiAbilityRuntimeConfigParameter',
     'GetAgentDetailsParameter',
     'ToolExecuteParameter',
     'SearchKnowledgeParameter',
@@ -91,6 +100,7 @@ __all__ = [
     'GetMessageScheduleDetailParameter',
     'UpdateMessageScheduleParameter',
     'DeleteMessageScheduleParameter',
+    'OAuth2CallbackRelayParameter',
     'ShareResourceIdParameter',
     'CreateShareParameter',
     'TargetId',
@@ -99,6 +109,8 @@ __all__ = [
     'IngestThirdPartyMessageParameter',
 
     # Result classes
+    'AiAbilityRuntimeConfigResult',
+    'AiAbilityRuntimeConfigItem',
     'AgentDetailsResult',
     'ToolExecuteResult',
     'SearchKnowledgeResult',
@@ -106,6 +118,7 @@ __all__ = [
     'MessageScheduleResult',
     'MessageScheduleListResult',
     'DeleteMessageScheduleResult',
+    'OAuth2CallbackRelayResult',
     'ShareResourceIdResult',
     'ShareResult',
     'CancelShareResult',

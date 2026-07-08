@@ -1,7 +1,8 @@
 import { act, renderHook } from "@testing-library/react"
-import { describe, expect, it, vi } from "vitest"
+import { beforeEach, describe, expect, it, vi } from "vitest"
 import { useMoveFile } from "../useMoveFile"
 import type { AttachmentItem } from "../types"
+import { SuperMagicApi } from "@/apis"
 
 vi.mock("react-i18next", () => ({
 	useTranslation: () => ({
@@ -41,6 +42,10 @@ vi.mock("../../utils/checkDuplicateFileName", () => ({
 }))
 
 describe("useMoveFile", () => {
+	beforeEach(() => {
+		vi.clearAllMocks()
+	})
+
 	it("单个移动时默认从当前项目根目录打开", () => {
 		const attachments: AttachmentItem[] = [
 			{
@@ -107,5 +112,48 @@ describe("useMoveFile", () => {
 		expect(result.current.selectorConfig.visible).toBe(true)
 		expect(result.current.selectorConfig.defaultPath).toEqual([])
 		expect(result.current.selectorConfig.pendingMoveFileIds).toEqual(["folder-1"])
+	})
+
+	it("移动文件夹到同级目录时默认保留两者并跳过冲突弹窗", async () => {
+		vi.mocked(SuperMagicApi.moveFile).mockResolvedValue({
+			status: "success",
+		})
+
+		const attachments: AttachmentItem[] = [
+			{
+				file_id: "folder-1",
+				name: "Folder 1",
+				is_directory: true,
+				relative_file_path: "/Folder 1",
+				children: [],
+			},
+		]
+
+		const { result } = renderHook(() =>
+			useMoveFile({
+				projectId: "project-1",
+				attachments,
+			}),
+		)
+
+		await act(async () => {
+			await result.current.batchMoveFilesWithDuplicateCheck({
+				fileIds: ["folder-1"],
+				projectId: "project-1",
+				targetParentId: "",
+				targetPath: [],
+				sourceAttachments: attachments,
+				targetAttachments: attachments,
+			})
+		})
+
+		expect(result.current.folderConflictModalVisible).toBe(false)
+		expect(SuperMagicApi.moveFile).toHaveBeenCalledWith(
+			expect.objectContaining({
+				file_id: "folder-1",
+				target_parent_id: "",
+				keep_both_file_ids: ["folder-1"],
+			}),
+		)
 	})
 })

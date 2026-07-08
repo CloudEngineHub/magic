@@ -11,6 +11,7 @@ export function useOrganization() {
 		organizationCode: userStore.user.organizationCode,
 		magicOrganizationMap: userStore.user.magicOrganizationMap,
 		teamshareOrganizationCode: userStore.user.teamshareOrganizationCode,
+		organizationListReady: userStore.user.organizationListReady,
 	})
 
 	useEffect(() => {
@@ -20,6 +21,7 @@ export function useOrganization() {
 				organizations: userStore.user.organizations,
 				magicOrganizationMap: userStore.user.magicOrganizationMap,
 				teamshareOrganizationCode: userStore.user.teamshareOrganizationCode,
+				organizationListReady: userStore.user.organizationListReady,
 			}),
 			(org) => setOrganizationMeta(org),
 			{
@@ -33,5 +35,6 @@ export function useOrganization() {
 		organizations: organizationMeta.organizations,
 		magicOrganizationMap: organizationMeta.magicOrganizationMap,
 		teamshareOrganizationCode: organizationMeta.teamshareOrganizationCode,
+		organizationListReady: organizationMeta.organizationListReady,
 	}
 }

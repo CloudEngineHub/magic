@@ -18,6 +18,7 @@ use App\Domain\Provider\Entity\ValueObject\ProviderDataIsolation;
 use App\Domain\Provider\Service\AiAbilityDomainService;
 use App\ErrorCode\DesignErrorCode;
 use App\Infrastructure\Core\Exception\ExceptionBuilder;
+use App\Infrastructure\ExternalAPI\ImageGenerateAPI\SizeManager;
 use Dtyq\SuperMagic\Application\Contract\UserAiWatermarkPolicyInterface;
 use Dtyq\SuperMagic\Domain\SuperAgent\Entity\ValueObject\MemberRole;
 use Dtyq\SuperMagic\Domain\SuperAgent\Service\ProjectDomainService;
@@ -99,6 +100,13 @@ class ImageGenerationAppService extends DesignAppService
         return $entity;
     }
 
+    public function generateImages(Authenticatable $authenticatable, ImageGenerationEntity $entity): ImageGenerationEntity
+    {
+        $this->assertGenerateNumWithinLimit($entity);
+
+        return $this->generateImage($authenticatable, $entity);
+    }
+
     public function generateHighImage(Authenticatable $authenticatable, ImageGenerationEntity $entity): ImageGenerationEntity
     {
         $entity->setType(ImageGenerationType::UPSCALE);
@@ -116,10 +124,10 @@ class ImageGenerationAppService extends DesignAppService
     public function generateEraser(Authenticatable $authenticatable, ImageGenerationEntity $entity): ImageGenerationEntity
     {
         $entity->setType(ImageGenerationType::ERASER);
+        $this->assertImageAbilityProviderAvailable(AiAbilityCode::ImageEraser);
 
-        [$modelId, $prompt] = $this->resolveAbilityModelAndPrompt(AiAbilityCode::ImageEraser);
-        $entity->setModelId($modelId);
-        $entity->setPrompt($prompt);
+        $entity->setPrompt('');
+        $entity->setModelId('design_image_eraser');
 
         return $this->generateImage($authenticatable, $entity);
     }
@@ -130,10 +138,10 @@ class ImageGenerationAppService extends DesignAppService
     public function generateExpandImage(Authenticatable $authenticatable, ImageGenerationEntity $entity): ImageGenerationEntity
     {
         $entity->setType(ImageGenerationType::EXPAND);
+        $this->assertImageAbilityProviderAvailable(AiAbilityCode::ImageExpand);
 
-        [$modelId, $prompt] = $this->resolveAbilityModelAndPrompt(AiAbilityCode::ImageExpand);
-        $entity->setModelId($modelId);
-        $entity->setPrompt($prompt);
+        $entity->setPrompt(trim((string) ($entity->getPrompt() ?? '')));
+        $entity->setModelId('design_image_expand');
 
         return $this->generateImage($authenticatable, $entity);
     }
@@ -144,7 +152,7 @@ class ImageGenerationAppService extends DesignAppService
     public function generateRemoveBackground(Authenticatable $authenticatable, ImageGenerationEntity $entity): ImageGenerationEntity
     {
         $entity->setType(ImageGenerationType::REMOVE_BACKGROUND);
-        $this->assertRemoveBackgroundAbilityAvailable();
+        $this->assertImageAbilityProviderAvailable(AiAbilityCode::ImageRemoveBackground);
 
         $entity->setPrompt('');
         // 任务完成后由专用链路产出结果，此处仅占位
@@ -199,37 +207,76 @@ class ImageGenerationAppService extends DesignAppService
         return $entity;
     }
 
-    /**
-     * 从 AI 能力配置中解析 model_id 和 prompt（仅配置值，trim 后可能为空，由 Handler 决定是否使用内置默认提示词）.
-     *
-     * @return array{0: string, 1: string} [modelId, prompt]
-     */
-    private function resolveAbilityModelAndPrompt(AiAbilityCode $code): array
+    public function queryImageGenerationResults(Authenticatable $authenticatable, int $projectId, string $imageId): ImageGenerationEntity
     {
-        $entity = $this->aiAbilityDomainService->getByCode(ProviderDataIsolation::create('')->disabled(), $code);
+        $dataIsolation = $this->createDesignDataIsolation($authenticatable);
 
-        if ($entity === null || ! $entity->isEnabled()) {
-            ExceptionBuilder::throw(DesignErrorCode::InvalidArgument, 'design.image_generation.feature_unavailable');
+        $project = $this->projectDomainService->getProjectNotUserId($projectId);
+        $this->validateRoleHigherOrEqual($dataIsolation, $project, MemberRole::VIEWER);
+
+        $entity = $this->domainService->queryByProjectAndImageId($dataIsolation, $projectId, $imageId);
+        if (! $entity) {
+            ExceptionBuilder::throw(DesignErrorCode::InvalidArgument, 'common.not_found', ['label' => $imageId]);
         }
 
-        $config = $entity->getConfig();
-        $modelId = $config['model_id'] ?? null;
-
-        if (empty($modelId)) {
-            ExceptionBuilder::throw(DesignErrorCode::InvalidArgument, 'design.image_generation.feature_unavailable');
+        if ($entity->getStatus() !== ImageGenerationStatus::COMPLETED) {
+            $entity->setImages([]);
+            return $entity;
         }
 
-        $prompt = trim((string) ($config['prompt'] ?? ''));
+        $outputImages = $entity->getOutputImages() ?? [];
+        if ($outputImages === [] && $entity->getFileName() !== '') {
+            $outputImages[] = [
+                'index' => 1,
+                'file_name' => $entity->getFileName(),
+                'file_path' => $entity->getFilePath(),
+            ];
+        }
+        if ($outputImages === []) {
+            $entity->setStatus(ImageGenerationStatus::FAILED);
+            $entity->setErrorMessage('Generated image output is empty');
+            $entity->setImages([]);
+            return $entity;
+        }
 
-        return [$modelId, $prompt];
+        $addWatermark = $this->userAiWatermarkPolicy->shouldApplyVisibleAiWatermark($authenticatable);
+        $images = [];
+        foreach ($outputImages as $outputImage) {
+            $filePath = (string) ($outputImage['file_path'] ?? '');
+            $fileName = (string) ($outputImage['file_name'] ?? '');
+            if ($filePath === '' && $fileName !== '') {
+                $filePath = rtrim($entity->getFileDir(), '/') . '/' . $fileName;
+            }
+
+            $taskFile = $this->taskFileDomainService->findEntityByRelativePath($projectId, $filePath);
+            if (! $taskFile) {
+                $entity->setStatus(ImageGenerationStatus::FAILED);
+                $entity->setErrorMessage('Generated image file not found');
+                $entity->setImages([]);
+                return $entity;
+            }
+
+            $images[] = [
+                'index' => (int) ($outputImage['index'] ?? count($images) + 1),
+                'file_name' => $fileName,
+                'file_url' => $this->taskFileDomainService->getFileUrls(
+                    projectOrganizationCode: $project->getUserOrganizationCode(),
+                    projectId: $project->getId(),
+                    fileIds: [$taskFile->getFileId()],
+                    downloadMode: 'preview',
+                    addWatermark: $addWatermark
+                )[0]['url'] ?? '',
+            ];
+        }
+
+        $entity->setImages($images);
+
+        return $entity;
     }
 
-    /**
-     * 校验去背景能力已启用且存在至少一个启用的 provider（与专用网关 /images/remove-background 一致）.
-     */
-    private function assertRemoveBackgroundAbilityAvailable(): void
+    private function assertImageAbilityProviderAvailable(AiAbilityCode $code): void
     {
-        $entity = $this->aiAbilityDomainService->getByCode(ProviderDataIsolation::create('')->disabled(), AiAbilityCode::ImageRemoveBackground);
+        $entity = $this->aiAbilityDomainService->getByCode(ProviderDataIsolation::create('')->disabled(), $code);
 
         if ($entity === null || ! $entity->isEnabled()) {
             ExceptionBuilder::throw(DesignErrorCode::InvalidArgument, 'design.image_generation.feature_unavailable');
@@ -247,5 +294,23 @@ class ImageGenerationAppService extends DesignAppService
         }
 
         ExceptionBuilder::throw(DesignErrorCode::InvalidArgument, 'design.image_generation.feature_unavailable');
+    }
+
+    private function assertGenerateNumWithinLimit(ImageGenerationEntity $entity): void
+    {
+        $generateNum = $entity->getGenerateNum();
+        $maxOutputImages = SizeManager::getMaxOutputImages($entity->getModelId(), $entity->getModelId());
+        if ($generateNum <= $maxOutputImages) {
+            return;
+        }
+
+        ExceptionBuilder::throw(
+            DesignErrorCode::InvalidArgument,
+            'design.image_generation.generate_num_exceeds_limit',
+            [
+                'limit' => $maxOutputImages,
+                'requested' => $generateNum,
+            ]
+        );
     }
 }

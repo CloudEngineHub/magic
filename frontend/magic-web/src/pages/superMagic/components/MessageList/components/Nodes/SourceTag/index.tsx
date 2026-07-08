@@ -17,7 +17,6 @@ function SourceTag({ source }: SourceTagProps) {
 		<Badge
 			variant="outline"
 			className={cn(sourceTagBaseClassName, channelMeta.className)}
-			data-testid="super-magic-source-tag"
 		>
 			<channelMeta.Icon aria-hidden="true" className="size-3 shrink-0" />
 			<span>{t(channelMeta.labelKey)}</span>

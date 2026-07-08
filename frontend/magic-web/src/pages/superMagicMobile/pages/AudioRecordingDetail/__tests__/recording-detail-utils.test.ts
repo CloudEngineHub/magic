@@ -1,0 +1,349 @@
+import i18next from "i18next"
+import { beforeAll, describe, expect, it, vi } from "vitest"
+import { formatTime } from "@/utils/string"
+import { parseMagicProjectConfig } from "../utils/magic-project-config"
+import { mergeProjectDetailIntoAudioItem } from "../utils/project-detail-merge"
+import { resolveRecordingDetailTitle } from "../utils/recording-detail-title"
+import {
+	collectSpeakerIdsFromText,
+	injectMarkdownSpeakerLinks,
+	injectMarkdownTimeLinks,
+} from "../utils/markdown-time-links"
+import { formatRecordingTime, parseRecordingTimeToSeconds } from "../utils/time"
+import { parseTopicsMarkdown } from "../utils/topics-parser"
+import { parseTranscriptMarkdown } from "../utils/transcript-parser"
+
+vi.mock("@/utils/string", () => ({
+	// Keep fallback-title tests deterministic without loading the app theme store.
+	formatTime: vi.fn((value: number | string, format?: string) => {
+		if (format === "YYYY/MM/DD HH:mm") return "2026/06/24 15:24"
+		return String(value)
+	}),
+}))
+
+describe("mobile recording detail utils", () => {
+	beforeAll(async () => {
+		// Seed the minimal namespace used by the shared fallback-title helper.
+		await i18next.init({
+			lng: "zh-CN",
+			fallbackLng: "zh-CN",
+			resources: {
+				"zh-CN": {
+					audioRecordings: {
+						defaultName: "{{datetime}} 的录音",
+					},
+				},
+			},
+		})
+	})
+
+	it("parses magic.project.js config without executing callbacks", () => {
+		const config = parseMagicProjectConfig(`
+window.magicProjectConfig = {
+  "version": "1.0.0",
+  "type": "audio",
+  "name": "Demo Recording",
+  "files": {
+    "audio": "demo.wav",
+    "summary": "demo-summary.md"
+  },
+  "metadata": {
+    "title": "Demo Recording",
+    "duration": 42
+  }
+};
+
+if (typeof window.magicProjectConfigure === 'function') {
+  window.magicProjectConfigure(window.magicProjectConfig);
+}
+`)
+
+		expect(config?.files?.audio).toBe("demo.wav")
+		expect(config?.metadata?.duration).toBe(42)
+	})
+
+	it("parses legacy magic.project.js object literals with comments and trailing commas", () => {
+		const config = parseMagicProjectConfig(`
+// legacy audio bundle config
+window.magicProjectConfig = {
+  version: '1.0.0',
+  type: 'audio',
+  files: {
+    audio: 'recording/session.wav',
+    transcript: 'recording/transcript.md',
+  },
+  metadata: {
+    title: 'Legacy Recording',
+  },
+};
+window.magicProjectConfigure(window.magicProjectConfig);
+`)
+
+		expect(config?.type).toBe("audio")
+		expect(config?.files?.audio).toBe("recording/session.wav")
+		expect(config?.metadata?.title).toBe("Legacy Recording")
+	})
+
+	it("ignores fake config assignments that only appear inside comments", () => {
+		const config = parseMagicProjectConfig(`
+// window.magicProjectConfig = { type: "audio", files: { audio: "wrong.wav" } };
+window.magicProjectConfig = {
+  "type": "audio",
+  "files": {
+    "audio": "right.wav"
+  }
+};
+`)
+
+		expect(config?.files?.audio).toBe("right.wav")
+	})
+
+	it("parses completed transcript markdown into timeline segments", () => {
+		const segments = parseTranscriptMarkdown(`
+## Transcript
+
+[00:00] Speaker-1: Hello there
+[00:05] Speaker-2: Hi
+`)
+
+		expect(segments).toEqual([
+			{ id: "0-0", start: 0, end: 5, speaker: "Speaker-1", text: "Hello there" },
+			{ id: "1-5", start: 5, end: undefined, speaker: "Speaker-2", text: "Hi" },
+		])
+	})
+
+	it("keeps transcript body when generated text is placed after speaker lines", () => {
+		const segments = parseTranscriptMarkdown(`
+## Transcript
+
+[00:00] Speaker-1:
+Opening paragraph for a demo recording.
+
+[00:08] Speaker-1:
+Second paragraph.
+`)
+
+		expect(segments).toEqual([
+			{
+				id: "0-0",
+				start: 0,
+				end: 8,
+				speaker: "Speaker-1",
+				text: "Opening paragraph for a demo recording.",
+			},
+			{
+				id: "1-8",
+				start: 8,
+				end: undefined,
+				speaker: "Speaker-1",
+				text: "Second paragraph.",
+			},
+		])
+	})
+
+	it("parses structured topics markdown into summary and time cards", () => {
+		const topics = parseTopicsMarkdown(`
+## Topics
+
+### 📌 demo_topic | Demo Topic | #000000
+
+#### Key Points
+[Speaker-1, Speaker-2]
+Important discussion.
+
+#### Related Dialogue
+- \`00:10-00:20\` Speaker-1, Speaker-2: Discussed the plan
+`)
+
+		expect(topics).toHaveLength(1)
+		expect(topics[0]?.name).toBe("Demo Topic")
+		expect(topics[0]?.summarySpeakers).toEqual(["Speaker-1", "Speaker-2"])
+		expect(topics[0]?.items[0]).toMatchObject({
+			time: 10,
+			timeEnd: 20,
+			speakers: ["Speaker-1", "Speaker-2"],
+			text: "Discussed the plan",
+		})
+	})
+
+	it("preserves existing magic-time links without leaking raw href text", () => {
+		const markdown = `—— Speaker-1 [00:05](magic-time://5)\n—— Speaker-1 00:10 (magic-time://10)\n—— Speaker-1 \`[00:15](magic-time://15)\``
+
+		expect(injectMarkdownTimeLinks(markdown)).toContain("[00:05](magic-time://5)")
+		expect(injectMarkdownTimeLinks(markdown)).toContain("[00:10](magic-time://10)")
+		expect(injectMarkdownTimeLinks(markdown)).toContain("[00:15](magic-time://15)")
+		expect(injectMarkdownTimeLinks(markdown)).not.toContain("(magic-time://5)(magic-time://5)")
+		expect(injectMarkdownTimeLinks(markdown)).not.toContain("`[00:15](magic-time://15)`")
+	})
+
+	it("normalizes triple-slash magic-time links generated by highlight files", () => {
+		const markdown = "—— Speaker-1 `[00:05](magic-time:///5)`"
+
+		expect(injectMarkdownTimeLinks(markdown)).toContain("[00:05](magic-time://5)")
+		expect(injectMarkdownTimeLinks(markdown)).not.toContain("`[00:05](magic-time:///5)`")
+	})
+
+	it("normalizes escaped magic-time links inside inline code", () => {
+		const markdown = "—— Speaker-1 `\\[00:05\\]\\(magic-time:///5\\)`"
+
+		expect(injectMarkdownTimeLinks(markdown)).toContain("[00:05](magic-time://5)")
+		expect(injectMarkdownTimeLinks(markdown)).not.toContain("magic-time:///5")
+	})
+
+	it("turns speaker ids into internal speaker links with shared display names", () => {
+		const markdown = `[Speaker-1, Speaker-2]\nSpeaker-1 opens.`
+
+		expect(injectMarkdownSpeakerLinks(markdown, { "Speaker-1": "Host" })).toContain(
+			"[Host](magic-speaker://Speaker-1)",
+		)
+		expect(injectMarkdownSpeakerLinks(markdown, {})).toContain(
+			"[Speaker-2](magic-speaker://Speaker-2)",
+		)
+		expect(collectSpeakerIdsFromText(markdown)).toEqual(["Speaker-1", "Speaker-2"])
+	})
+
+	it("preserves existing speaker links without nesting their href", () => {
+		const markdown = "[说话人1](magic-speaker://Speaker-1) keeps talking."
+
+		expect(injectMarkdownSpeakerLinks(markdown, { "Speaker-1": "说话人1" })).toBe(markdown)
+	})
+
+	it("only injects plain speaker ids when time links and speaker links already exist", () => {
+		const markdown =
+			"[00:11](magic-time://11) [说话人1](magic-speaker://Speaker-1) meets Speaker-2."
+		const result = injectMarkdownSpeakerLinks(markdown, {
+			"Speaker-1": "说话人1",
+			"Speaker-2": "说话人2",
+		})
+
+		expect(result).toContain("[00:11](magic-time://11)")
+		expect(result).toContain("[说话人1](magic-speaker://Speaker-1)")
+		expect(result).toContain("[说话人2](magic-speaker://Speaker-2)")
+		expect(result).not.toContain("magic-speaker://[")
+	})
+
+	it("does not rewrite speaker ids inside existing href text", () => {
+		const markdown = "[Speaker-1 profile](https://example.com/Speaker-1?from=Speaker-2)"
+		const result = injectMarkdownSpeakerLinks(markdown, {
+			"Speaker-1": "主持人",
+			"Speaker-2": "嘉宾",
+		})
+
+		expect(result).toBe(markdown)
+	})
+
+	it("parses recording time text into seconds for both minute and hour formats", () => {
+		expect(parseRecordingTimeToSeconds("05:12")).toBe(312)
+		expect(parseRecordingTimeToSeconds("1:05:12")).toBe(3912)
+		expect(parseRecordingTimeToSeconds("invalid")).toBe(0)
+	})
+
+	it("formats compact playback labels for short and long recordings", () => {
+		expect(formatRecordingTime(0)).toBe("00:00")
+		expect(formatRecordingTime(312)).toBe("05:12")
+		expect(formatRecordingTime(3912)).toBe("01:05:12")
+	})
+
+	it("prefers project-level titles over bundle metadata titles", () => {
+		expect(
+			resolveRecordingDetailTitle({
+				projectName: "Project title",
+				initialTitle: "Route title",
+				magicProjectConfig: {
+					name: "Bundle name",
+					metadata: { title: "Bundle metadata title" },
+				},
+			}),
+		).toBe("Project title")
+	})
+
+	it("does not fall back to magic.project.js titles when project-level names are absent", () => {
+		expect(
+			resolveRecordingDetailTitle({
+				projectName: "",
+				createdAt: 0,
+				initialTitle: "",
+				magicProjectConfig: {
+					name: "Bundle name",
+					metadata: { title: "Bundle metadata title" },
+				},
+			}),
+		).toBe("")
+	})
+
+	it("falls back to the same created-at title used by the recordings list", () => {
+		const createdAt = 1710000000
+
+		expect(
+			resolveRecordingDetailTitle({
+				projectName: "",
+				createdAt,
+				initialTitle: "Temporary route title",
+			}),
+		).toBe(
+			i18next.t("defaultName", {
+				ns: "audioRecordings",
+				datetime: formatTime(createdAt, "YYYY/MM/DD HH:mm"),
+			}),
+		)
+	})
+
+	it("does not use route title as a fallback before canonical project detail arrives", () => {
+		expect(
+			resolveRecordingDetailTitle({
+				projectName: "",
+				createdAt: 0,
+				initialTitle: "Temporary route title",
+			}),
+		).toBe("")
+
+		expect(
+			resolveRecordingDetailTitle({
+				projectName: "Canonical detail title",
+				createdAt: 1710000000,
+				initialTitle: "Temporary route title",
+			}),
+		).toBe("Canonical detail title")
+	})
+
+	it("prefers project detail metadata over audio list metadata when both exist", () => {
+		expect(
+			mergeProjectDetailIntoAudioItem(
+				{
+					id: "project-001",
+					project_name: "Stale audio list title",
+					created_at: 1710000000,
+					duration: 30,
+					tags: [],
+					device_id: "",
+					audio_source: "recorded",
+					current_phase: "merging",
+					phase_status: "completed",
+					card_status: "not_summarized",
+					is_summarized: false,
+					workspace_id: "workspace-a",
+					workspace_name: "Workspace A",
+				},
+				{
+					id: "project-001",
+					project_name: "Canonical detail title",
+					project_status: "idle" as never,
+					project_mode: "" as never,
+					workspace_id: "workspace-b",
+					work_dir: "",
+					workspace_name: "Workspace B",
+					current_topic_id: "",
+					current_topic_status: "ready",
+					created_at: "1710000000",
+					updated_at: "1710000001",
+					tag: "",
+				},
+			),
+		).toMatchObject({
+			project_name: "Canonical detail title",
+			workspace_id: "workspace-b",
+			workspace_name: "Workspace B",
+			current_topic_status: "ready",
+		})
+	})
+})

@@ -17,6 +17,7 @@ export const SuggestItem = observer(function SuggestItem({ item, onClick }: Sugg
 				"bg-secondary text-secondary-foreground hover:bg-fill-secondary/80",
 			)}
 			onClick={() => onClick(item)}
+			data-testid="suggest-item"
 		>
 			<span className="min-w-0 flex-1 break-words">{item}</span>
 			<IconArrowRight className="size-4 shrink-0" />

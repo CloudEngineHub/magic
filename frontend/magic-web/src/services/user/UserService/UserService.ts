@@ -233,6 +233,7 @@ export class UserService {
 		userStore.user.setOrganizations(magicOrganizationMap || {})
 		// userStore.user.setTeamshareOrganizations(organizations || [])
 		userStore.user.setTeamshareOrganization(teamshareOrganizationCode || "", organizations)
+		userStore.user.setOrganizationListReady(true)
 	}
 
 	/**
@@ -349,6 +350,7 @@ export class UserService {
 		userStore.user.setOrganizationCode("")
 		userStore.user.setOrganizations({})
 		userStore.user.setTeamshareOrganization("", [])
+		userStore.user.setOrganizationListReady(false)
 		// userStore.user.setTeamshareOrganizations([])
 	}
 

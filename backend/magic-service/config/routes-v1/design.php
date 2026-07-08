@@ -10,15 +10,19 @@ use Hyperf\HttpServer\Router\Router;
 
 Router::addGroup('/api/v1', static function () {
     Router::addGroup('/design', static function () {
-        // 根据提示词生成图片
+        // 根据提示词生成图片（generate-images上线后废弃）
         Router::post('/generate-image', [DesignApi::class, 'generateImage']);
         // 补全生图提示词
         Router::post('/image-prompt/complete', [DesignApi::class, 'completeImagePrompt']);
+        // 根据提示词生成多张图片
+        Router::post('/generate-images', [DesignApi::class, 'generateImages']);
         // 转高清
         Router::post('/generate-high-image', [DesignApi::class, 'generateHighImage']);
 
-        // 查询图片生成结果
+        // 查询图片生成结果（generate-images上线后废弃）
         Router::get('/image-generation-result', [DesignApi::class, 'queryImageGenerationResult']);
+        // 查询多图生成结果
+        Router::get('/image-generation-results', [DesignApi::class, 'queryImageGenerationResults']);
 
         // 识别图片标记位置的内容
         Router::post('/identify-image-mark', [DesignApi::class, 'identifyImageMark']);

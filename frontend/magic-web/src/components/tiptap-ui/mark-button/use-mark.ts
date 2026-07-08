@@ -16,6 +16,7 @@ import { StrikeIcon } from "@/components/tiptap-icons/strike-icon"
 import { SubscriptIcon } from "@/components/tiptap-icons/subscript-icon"
 import { SuperscriptIcon } from "@/components/tiptap-icons/superscript-icon"
 import { UnderlineIcon } from "@/components/tiptap-icons/underline-icon"
+import { runActiveEditor } from "@/utils/tiptapEditorLifecycle"
 
 export type Mark = "bold" | "italic" | "strike" | "code" | "underline" | "superscript" | "subscript"
 
@@ -66,28 +67,40 @@ export const MARK_SHORTCUT_KEYS: Record<Mark, string> = {
  * Checks if a mark can be toggled in the current editor state
  */
 export function canToggleMark(editor: Editor | null, type: Mark): boolean {
-	if (!editor || !editor.isEditable) return false
-	if (!isMarkInSchema(type, editor) || isNodeTypeSelected(editor, ["image"])) return false
+	return (
+		runActiveEditor(editor, (activeEditor) => {
+			if (!activeEditor.isEditable) return false
+			if (!isMarkInSchema(type, activeEditor) || isNodeTypeSelected(activeEditor, ["image"]))
+				return false
 
-	return editor.can().toggleMark(type)
+			return activeEditor.can().toggleMark(type)
+		}, false) ?? false
+	)
 }
 
 /**
  * Checks if a mark is currently active
  */
 export function isMarkActive(editor: Editor | null, type: Mark): boolean {
-	if (!editor || !editor.isEditable) return false
-	return editor.isActive(type)
+	return (
+		runActiveEditor(editor, (activeEditor) => {
+			if (!activeEditor.isEditable) return false
+			return activeEditor.isActive(type)
+		}, false) ?? false
+	)
 }
 
 /**
  * Toggles a mark in the editor
  */
 export function toggleMark(editor: Editor | null, type: Mark): boolean {
-	if (!editor || !editor.isEditable) return false
 	if (!canToggleMark(editor, type)) return false
 
-	return editor.chain().focus().toggleMark(type).run()
+	return (
+		runActiveEditor(editor, (activeEditor) => {
+			return activeEditor.chain().focus().toggleMark(type).run()
+		}, false) ?? false
+	)
 }
 
 /**
@@ -100,14 +113,19 @@ export function shouldShowButton(props: {
 }): boolean {
 	const { editor, type, hideWhenUnavailable } = props
 
-	if (!editor || !editor.isEditable) return false
-	if (!isMarkInSchema(type, editor)) return false
+	const isVisible =
+		runActiveEditor(editor, (activeEditor) => {
+			if (!activeEditor.isEditable) return false
+			if (!isMarkInSchema(type, activeEditor)) return false
 
-	if (hideWhenUnavailable && !editor.isActive("code")) {
-		return canToggleMark(editor, type)
-	}
+			if (hideWhenUnavailable && !activeEditor.isActive("code")) {
+				return canToggleMark(activeEditor, type)
+			}
 
-	return true
+			return true
+		}, false) ?? false
+
+	return isVisible
 }
 
 /**

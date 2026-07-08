@@ -25,7 +25,7 @@ function SidebarHeader({ collapsed, onToggleCollapse }: SidebarHeaderProps) {
 					data-testid="sidebar-header-collapsed"
 				>
 					<a
-						className="flex h-9 w-9 cursor-pointer items-center justify-center transition-opacity duration-200 group-focus-within/sidebar-toggle:pointer-events-none group-focus-within/sidebar-toggle:opacity-0 group-hover/sidebar:pointer-events-none group-hover/sidebar:opacity-0"
+						className="flex h-9 w-9 cursor-pointer items-center justify-center transition-opacity duration-200 group-focus-within/sidebar-toggle:pointer-events-none group-focus-within/sidebar-toggle:opacity-0 group-hover/sidebar:pointer-events-none group-hover/sidebar:opacity-0 no-hover:pointer-events-none no-hover:opacity-0"
 						href={superRouteUrl}
 						onClick={handleNavigateToSuperHome}
 						data-testid="sidebar-header-logo"
@@ -36,7 +36,7 @@ function SidebarHeader({ collapsed, onToggleCollapse }: SidebarHeaderProps) {
 					<Button
 						variant="ghost"
 						size="icon"
-						className="pointer-events-none absolute inset-0 z-10 h-9 w-9 rounded-md opacity-0 transition-opacity duration-200 hover:bg-accent group-focus-within/sidebar-toggle:pointer-events-auto group-focus-within/sidebar-toggle:opacity-100 group-hover/sidebar:pointer-events-auto group-hover/sidebar:opacity-100"
+						className="pointer-events-none absolute inset-0 z-10 h-9 w-9 rounded-md opacity-0 transition-opacity duration-200 hover:bg-accent group-focus-within/sidebar-toggle:pointer-events-auto group-focus-within/sidebar-toggle:opacity-100 group-hover/sidebar:pointer-events-auto group-hover/sidebar:opacity-100 no-hover:pointer-events-auto no-hover:opacity-100"
 						aria-label="Expand sidebar"
 						onClick={onToggleCollapse}
 						data-testid="sidebar-header-expand"

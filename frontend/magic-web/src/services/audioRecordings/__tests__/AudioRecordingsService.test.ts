@@ -8,6 +8,7 @@ vi.mock("@/apis", () => ({
 		queryAudioProjects: vi.fn(),
 		editProject: vi.fn(),
 		batchDeleteProjects: vi.fn(),
+		batchMoveProjects: vi.fn(),
 		getRecordingSummaryResult: vi.fn(),
 		summarizeRecordedTask: vi.fn(),
 	},
@@ -42,7 +43,7 @@ function createApiItem(
 		project_mode: "audio",
 		extra: {
 			duration: 120,
-			device_id: "Redmi K70 Ultra",
+			device_id: "mock-device-alpha",
 			audio_source: "recorded",
 			current_phase: "summarizing",
 			phase_status: "completed",
@@ -116,5 +117,56 @@ describe("AudioRecordingsService", () => {
 				is_hidden: 0,
 			}),
 		)
+	})
+
+	it("passes workspace id and preserves workspace metadata on normalized rows", async () => {
+		vi.mocked(SuperMagicApi.queryAudioProjects).mockResolvedValue({
+			list: [
+				createApiItem("workspace-row", {
+					workspace_id: "workspace-audio-001",
+					workspace_name: "Mock audio workspace",
+				}),
+			],
+			total: 1,
+		})
+
+		const result = await service.queryProjects({
+			page: 1,
+			pageSize: 20,
+			keyword: "",
+			summaryFilter: "all",
+			sortBy: "created_at",
+			sortOrder: "desc",
+			workspaceId: "workspace-audio-001",
+		})
+
+		expect(SuperMagicApi.queryAudioProjects).toHaveBeenCalledWith(
+			expect.objectContaining({
+				workspace_id: "workspace-audio-001",
+			}),
+		)
+		expect(result.list[0]?.workspace_id).toBe("workspace-audio-001")
+		expect(result.list[0]?.workspace_name).toBe("Mock audio workspace")
+	})
+
+	it("moves projects in batches of 20", async () => {
+		vi.mocked(SuperMagicApi.batchMoveProjects).mockResolvedValue(undefined)
+		const projectIds = Array.from({ length: 45 }, (_, index) => `project-${index + 1}`)
+
+		await service.batchMoveProjects(projectIds, "target-workspace")
+
+		expect(SuperMagicApi.batchMoveProjects).toHaveBeenCalledTimes(3)
+		expect(SuperMagicApi.batchMoveProjects).toHaveBeenNthCalledWith(1, {
+			project_ids: projectIds.slice(0, 20),
+			target_workspace_id: "target-workspace",
+		})
+		expect(SuperMagicApi.batchMoveProjects).toHaveBeenNthCalledWith(2, {
+			project_ids: projectIds.slice(20, 40),
+			target_workspace_id: "target-workspace",
+		})
+		expect(SuperMagicApi.batchMoveProjects).toHaveBeenNthCalledWith(3, {
+			project_ids: projectIds.slice(40),
+			target_workspace_id: "target-workspace",
+		})
 	})
 })

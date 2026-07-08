@@ -1,9 +1,52 @@
 import type { DesignData } from "../types"
+import type { LayerElement } from "@/components/CanvasDesign/canvas/types"
+import type { CanvasDocumentMergeElementConflictReason } from "@/components/CanvasDesign/model"
 import type { FileItem } from "@/pages/superMagic/components/Detail/components/FilesViewer/types"
 import type { DesignAttachmentIndex } from "../utils/designAttachmentIndex"
 import type { FileHistoryVersion } from "@/pages/superMagic/pages/Workspace/types"
 
 export type DesignRemoteUpdateListenerMode = "message" | "file-change"
+
+export type DesignConflictReason =
+	| "remote-update-with-local-dirty"
+	| "save-version-conflict"
+	| "draft-remote-advanced"
+	| "element-level-conflict"
+
+export type DesignElementConflictReason = CanvasDocumentMergeElementConflictReason
+
+export type DesignElementConflictStatus = "unresolved" | "resolved"
+
+export interface DesignElementConflict {
+	elementId: string
+	reason: DesignElementConflictReason
+	status: DesignElementConflictStatus
+	baseElement: LayerElement | null
+	localElement: LayerElement | null
+	remoteElement: LayerElement | null
+	baseParentId: string | null
+	localParentId: string | null
+	remoteParentId: string | null
+	createdAt: number
+	resolvedAt?: number
+	resolution?: "use-local" | "use-remote"
+}
+
+export interface DesignConflict {
+	reason: DesignConflictReason
+	baseVersion: number | null
+	localVersion: number | null
+	remoteVersion: number | null
+	baseFingerprint: string
+	localFingerprint: string
+	remoteFingerprint: string
+	localData: DesignData
+	remoteData: DesignData
+	createdAt: number
+	localDataRestored?: boolean
+	elementConflicts?: DesignElementConflict[]
+	mergedData?: DesignData
+}
 
 export interface DesignProjectManagerOptions {
 	currentFile?: { id: string; name: string }
@@ -42,10 +85,12 @@ export interface DesignProjectStateBagSetters {
 	setFileVersion: (v: number | undefined) => void
 	setIsProcessingRevoke: (v: boolean) => void
 	setRevokeType: (v: "revoke" | "restore" | null) => void
+	setConflictState: (v: DesignConflict | null) => void
 }
 
 export interface DesignProjectStateBag {
 	getDesignData: () => DesignData
+	getConflictState: () => DesignConflict | null
 	getMagicProjectJsFileId: () => string | null
 	getMagicProjectJsVersion: () => number | null
 	setMagicProjectJsVersion: (v: number | null) => void

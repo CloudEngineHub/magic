@@ -20,5 +20,7 @@ export const enum LoginValueKey {
 	INVITE_CODE = "invite_code",
 }
 
+export const LOGIN_STRATEGY_QUERY_KEY = "login-strategy"
+
 export const ServiceAgreementUrl = "/web/terms"
 export const PrivacyPolicyUrl = "/web/privacy"

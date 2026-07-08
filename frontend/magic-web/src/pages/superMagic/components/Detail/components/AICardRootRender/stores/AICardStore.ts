@@ -1,61 +1,13 @@
 import { makeAutoObservable, runInAction } from "mobx"
 import { getTemporaryDownloadUrl } from "@/pages/superMagic/utils/api"
-import type {
-	AICardEntry,
-	AICardHistoryEntry,
-	AICardProjectConfig,
-	AICardViewMode,
-} from "../types"
+import { parseMagicProjectConfigContent } from "@/pages/superMagic/utils/magicProjectConfigParser"
+import type { AICardEntry, AICardHistoryEntry, AICardProjectConfig, AICardViewMode } from "../types"
+import { buildAICardSyncFingerprint } from "../utils/aiCardSyncFingerprint"
 
-/**
- * Parse magic.project.js content to extract config.
- * Uses bracket-matching approach (no eval) for safety.
- */
-function parseMagicProjectConfig(content: string): AICardProjectConfig | null {
-	const marker = "window.magicProjectConfig"
-	const idx = content.indexOf(marker)
-	if (idx === -1) return null
-
-	const eqIdx = content.indexOf("=", idx + marker.length)
-	if (eqIdx === -1) return null
-
-	let braceStart = -1
-	for (let i = eqIdx + 1; i < content.length; i++) {
-		if (content[i] === "{") {
-			braceStart = i
-			break
-		}
-	}
-	if (braceStart === -1) return null
-
-	let depth = 0
-	let braceEnd = -1
-	for (let i = braceStart; i < content.length; i++) {
-		if (content[i] === "{") depth++
-		else if (content[i] === "}") {
-			depth--
-			if (depth === 0) {
-				braceEnd = i
-				break
-			}
-		}
-	}
-	if (braceEnd === -1) return null
-
-	const jsonLike = content.slice(braceStart, braceEnd + 1)
-	// Normalize JS object to JSON (handle trailing commas, unquoted keys)
-	const normalized = jsonLike
-		.replace(/\/\/[^\n]*/g, "") // remove single-line comments
-		.replace(/\/\*[\s\S]*?\*\//g, "") // remove multi-line comments
-		.replace(/,(\s*[}\]])/g, "$1") // remove trailing commas
-		.replace(/([{,]\s*)(\w+)\s*:/g, '$1"$2":') // quote unquoted keys
-		.replace(/:\s*'([^']*)'/g, ': "$1"') // single quotes to double
-
-	try {
-		return JSON.parse(normalized)
-	} catch {
-		return null
-	}
+function parseAICardProjectConfig(content: string): AICardProjectConfig | null {
+	const config = parseMagicProjectConfigContent(content)
+	if (!config || config.type !== "ai-card") return null
+	return config as unknown as AICardProjectConfig
 }
 
 export class AICardStore {
@@ -71,6 +23,8 @@ export class AICardStore {
 
 	private folderFileId: string | undefined
 	private attachmentList: any[] | undefined
+	private lastSyncFingerprint = ""
+	private hasSynced = false
 
 	constructor() {
 		makeAutoObservable(this)
@@ -86,8 +40,46 @@ export class AICardStore {
 		return this.activeHistoryFileId || this.activeCard?.latestHtmlFileId
 	}
 
+	get detailVersionFileIds(): string[] {
+		const latestHtmlFileId = this.activeCard?.latestHtmlFileId
+		const fileIds: string[] = []
+		const seen = new Set<string>()
+
+		if (latestHtmlFileId) {
+			fileIds.push(latestHtmlFileId)
+			seen.add(latestHtmlFileId)
+		}
+
+		for (const entry of this.historyEntries) {
+			if (!entry.fileId || seen.has(entry.fileId)) continue
+			fileIds.push(entry.fileId)
+			seen.add(entry.fileId)
+		}
+
+		return fileIds
+	}
+
+	get detailVersionCount(): number {
+		return this.detailVersionFileIds.length
+	}
+
+	get detailVersionIndex(): number {
+		const fileId = this.detailFileId
+		if (!fileId) return -1
+		return this.detailVersionFileIds.indexOf(fileId)
+	}
+
+	get canOpenPreviousDetailVersion(): boolean {
+		return this.detailVersionIndex > 0
+	}
+
+	get canOpenNextDetailVersion(): boolean {
+		const index = this.detailVersionIndex
+		return index >= 0 && index < this.detailVersionFileIds.length - 1
+	}
+
 	get hasConfig(): boolean {
-		return !!(this.projectConfig?.schedule_id)
+		return !!this.projectConfig?.schedule_id
 	}
 
 	/** The file_id of magic.project.js (if found) */
@@ -118,6 +110,14 @@ export class AICardStore {
 		this.viewMode = "detail"
 	}
 
+	openPreviousDetailVersion() {
+		this.openDetailVersionByOffset(-1)
+	}
+
+	openNextDetailVersion() {
+		this.openDetailVersionByOffset(1)
+	}
+
 	goBack() {
 		this.viewMode = "dashboard"
 		this.activeCardId = null
@@ -127,6 +127,10 @@ export class AICardStore {
 	async sync(folderFileId?: string, attachmentList?: any[]) {
 		this.folderFileId = folderFileId
 		this.attachmentList = attachmentList
+		const nextFingerprint = buildAICardSyncFingerprint(folderFileId, this.findChildren())
+		if (this.hasSynced && nextFingerprint === this.lastSyncFingerprint) return
+		this.lastSyncFingerprint = nextFingerprint
+		this.hasSynced = true
 		await this.loadCards()
 	}
 
@@ -193,9 +197,7 @@ export class AICardStore {
 	}
 
 	private buildHistoryEntries(children: any[]): AICardHistoryEntry[] {
-		const historyDir = children.find(
-			(f: any) => f.file_name === "history" && f.is_directory,
-		)
+		const historyDir = children.find((f: any) => f.file_name === "history" && f.is_directory)
 		if (!historyDir?.children?.length) {
 			return []
 		}
@@ -233,9 +235,7 @@ export class AICardStore {
 			}
 		}
 
-		return entries.sort(
-			(a, b) => b.timestamp.localeCompare(a.timestamp),
-		)
+		return entries.sort((a, b) => b.timestamp.localeCompare(a.timestamp))
 	}
 
 	/**
@@ -246,9 +246,7 @@ export class AICardStore {
 	 */
 	private resolveEntryFile(children: any[], name: string): any | undefined {
 		// Folder-based: name/ directory with index.html
-		const folder = children.find(
-			(f: any) => f.file_name === name && f.is_directory,
-		)
+		const folder = children.find((f: any) => f.file_name === name && f.is_directory)
 		if (folder?.children?.length) {
 			const indexFile = folder.children.find(
 				(c: any) => c.file_name === "index.html" && !c.is_directory,
@@ -258,22 +256,30 @@ export class AICardStore {
 
 		// Legacy: name.html single file
 		const htmlName = name.endsWith(".html") ? name : `${name}.html`
-		return children.find(
-			(f: any) => f.file_name === htmlName && !f.is_directory,
-		)
+		return children.find((f: any) => f.file_name === htmlName && !f.is_directory)
 	}
 
 	private findChildren(): any[] {
 		if (!this.attachmentList?.length) return []
 
 		// The folder itself may be in attachmentList
-		const folder = this.attachmentList.find(
-			(f: any) => f.file_id === this.folderFileId,
-		)
+		const folder = this.attachmentList.find((f: any) => f.file_id === this.folderFileId)
 		if (folder?.children?.length) return folder.children
 
 		// Or the attachmentList IS the children
 		return this.attachmentList
+	}
+
+	private openDetailVersionByOffset(offset: number) {
+		const currentIndex = this.detailVersionIndex
+		if (currentIndex < 0) return
+
+		const nextFileId = this.detailVersionFileIds[currentIndex + offset]
+		if (!nextFileId) return
+
+		this.activeHistoryFileId =
+			nextFileId === this.activeCard?.latestHtmlFileId ? null : nextFileId
+		this.viewMode = "detail"
 	}
 
 	private async fetchProjectConfig(fileId: string): Promise<AICardProjectConfig | null> {
@@ -284,7 +290,7 @@ export class AICardStore {
 			const resp = await fetch(url, { credentials: "omit" })
 			if (!resp.ok) return null
 			const text = await resp.text()
-			return parseMagicProjectConfig(text)
+			return parseAICardProjectConfig(text)
 		} catch {
 			return null
 		}

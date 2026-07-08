@@ -10,6 +10,7 @@ import { useUploadWithModal } from "./hooks/useUploadWithModal"
 import { useDuplicateFileHandler } from "./hooks/useDuplicateFileHandler"
 import {
 	DuplicateFileModal,
+	FolderConflictModal,
 	SelectModeHeader,
 	NormalModeHeader,
 	SearchModeHeader,
@@ -19,13 +20,16 @@ import { cn } from "@/lib/utils"
 import magicToast from "@/components/base/MagicToaster/utils"
 import { type PresetFileType } from "./constant"
 import type { TopicFileRowDecorationResolver } from "./topic-file-row-decoration.types"
-import { useUpdateEffect } from "ahooks"
+import { useMemoizedFn, useUpdateEffect } from "ahooks"
+import { requestProjectAttachmentsFullRefresh } from "../../services/attachmentsTopicSync"
+import { useDebouncedSearchValue } from "./hooks/useDebouncedSearchValue"
 import { useIsMobile } from "@/hooks/useIsMobile"
 import MobileProjectDetailFilesView from "./components/MobileProjectDetailFilesView"
 import { SelectDirectoryModal } from "../SelectPathModal"
 import { useBatchDownload } from "./hooks/useBatchDownload"
 import { useProjectDetailFilesController } from "./hooks/useProjectDetailFilesController"
 import { useCrossProjectFileOperation } from "./hooks/useCrossProjectFileOperation"
+import { useCrossProjectMoveCompensation } from "./hooks/useCrossProjectMoveCompensation"
 import { useMobileProjectFilesDownload } from "./hooks/useMobileProjectFilesDownload"
 import { getMobileAttachmentKey } from "./utils/get-mobile-attachment-key"
 import ProjectShareSheet from "@/pages/superMagicMobile/components/ProjectShareSheet"
@@ -117,8 +121,14 @@ const TopicFilesPanel = forwardRef<TopicFilesPanelRef, TopicFilesPanelProps>(
 		const [refreshLoading, setRefreshLoading] = useState(false)
 		const [isSelectMode, setIsSelectMode] = useState(false)
 		const [isSearchMode, setIsSearchMode] = useState(false)
-		const [searchValue, setSearchValue] = useState("")
 		const prevProjectIdRef = useRef<string | undefined>()
+		const {
+			rawSearchValue,
+			debouncedSearchValue,
+			updateSearchValue,
+			commitSearchValue,
+			resetSearchValue,
+		} = useDebouncedSearchValue({ source: "TopicFilesPanel" })
 
 		// 监听 projectId 变化，只在首次加载或切换项目时设置 loading 状态
 		// 避免在任务执行过程中频繁进入 loading 状态
@@ -160,13 +170,39 @@ const TopicFilesPanel = forwardRef<TopicFilesPanelRef, TopicFilesPanelProps>(
 			selectedTopic,
 		})
 
+		const requestAttachmentsRefreshAfterMove = useMemoizedFn((reason: string) => {
+			if (refreshAttachments) {
+				void refreshAttachments()
+				return
+			}
+
+			if (!projectId) return
+
+			requestProjectAttachmentsFullRefresh({
+				projectId,
+				reason,
+			})
+		})
+
 		const projectDetailFilesController = useProjectDetailFilesController({
 			projectId,
 			attachments,
 			selectedProject,
 			selectedTopic,
 			setIsSelectMode,
-			refreshAttachments,
+			onMoveSuccess: () => {
+				requestAttachmentsRefreshAfterMove("topic-files-panel-mobile-move-success")
+			},
+		})
+
+		const handleProjectDetailCrossProjectSuccess = useCrossProjectMoveCompensation({
+			attachments,
+			onAttachmentsChange,
+			onUpdateAttachments: () => {
+				requestAttachmentsRefreshAfterMove(
+					"topic-files-panel-mobile-cross-project-operation-success",
+				)
+			},
 		})
 
 		const crossProjectOperation = useCrossProjectFileOperation({
@@ -174,11 +210,10 @@ const TopicFilesPanel = forwardRef<TopicFilesPanelRef, TopicFilesPanelProps>(
 			selectedWorkspace: selectedWorkspace || null,
 			selectedProject: selectedProject || null,
 			projects,
-			onSuccess: async () => {
-				await refreshAttachments?.()
+			onSuccess: (result) => {
 				setIsSelectMode(false)
 				projectDetailFilesController.resetMobileSelection()
-				pubsub.publish(PubSubEvents.Update_Attachments)
+				handleProjectDetailCrossProjectSuccess(result)
 			},
 		})
 
@@ -318,12 +353,16 @@ const TopicFilesPanel = forwardRef<TopicFilesPanelRef, TopicFilesPanelProps>(
 		// 处理关闭搜索模式
 		const handleCloseSearch = () => {
 			setIsSearchMode(false)
-			setSearchValue("")
+			resetSearchValue()
 		}
 
 		// 处理搜索值变化
 		const handleSearchChange = (value: string) => {
-			setSearchValue(value)
+			updateSearchValue(value)
+		}
+
+		const handleSearchCommit = (value: string) => {
+			commitSearchValue(value)
 		}
 
 		// 处理添加文件功能 - 打开创建文件菜单
@@ -348,9 +387,13 @@ const TopicFilesPanel = forwardRef<TopicFilesPanelRef, TopicFilesPanelProps>(
 
 		const handleRefreshList = () => {
 			setRefreshLoading(true)
-			pubsub.publish(PubSubEvents.Update_Attachments, () => {
-				setRefreshLoading(false)
-				magicToast.success(t("common.refreshSuccess"))
+			requestProjectAttachmentsFullRefresh({
+				projectId,
+				reason: "topic-files-panel-manual-refresh",
+				callback: () => {
+					setRefreshLoading(false)
+					magicToast.success(t("common.refreshSuccess"))
+				},
 			})
 		}
 
@@ -421,7 +464,10 @@ const TopicFilesPanel = forwardRef<TopicFilesPanelRef, TopicFilesPanelProps>(
 
 		return (
 			<>
-				<div className={cn("flex h-full flex-col gap-0.5", className)}>
+				<div
+					className={cn("flex h-full flex-col gap-0.5", className)}
+					data-testid="topic-files-panel"
+				>
 					{shouldUseProjectDetailMobileView ? (
 						<MobileProjectDetailFilesView
 							attachments={attachments}
@@ -467,9 +513,10 @@ const TopicFilesPanel = forwardRef<TopicFilesPanelRef, TopicFilesPanelProps>(
 							{isSearchMode ? (
 								<SearchModeHeader
 									key="search-header"
-									searchValue={searchValue}
+									searchValue={rawSearchValue}
 									onSearchChange={handleSearchChange}
-									onClose={handleCloseSearch}
+									onSearchCommit={handleSearchCommit}
+							onClose={handleCloseSearch}
 									className="duration-200 animate-in fade-in"
 								/>
 							) : isSelectMode ? (
@@ -531,7 +578,7 @@ const TopicFilesPanel = forwardRef<TopicFilesPanelRef, TopicFilesPanelProps>(
 								projects={projects}
 								workspaces={workspaces}
 								isInProject={isInProject}
-								externalSearchValue={searchValue}
+								externalSearchValue={isSearchMode ? debouncedSearchValue : ""}
 								filterMenuItems={filterMenuItems}
 								filterBatchDownloadLayerMenuItems={
 									filterBatchDownloadLayerMenuItems
@@ -584,6 +631,15 @@ const TopicFilesPanel = forwardRef<TopicFilesPanelRef, TopicFilesPanelProps>(
 					))}
 
 				{/* 同名文件处理 Modal - 统一处理所有上传方式 */}
+				<FolderConflictModal
+					visible={sharedDuplicateHandler.folderConflictModalVisible}
+					folderName={sharedDuplicateHandler.currentFolderName}
+					totalConflicts={sharedDuplicateHandler.totalFolderConflicts}
+					canMerge={sharedDuplicateHandler.canMergeFolderConflict}
+					onCancel={sharedDuplicateHandler.handleFolderConflictCancel}
+					onMerge={sharedDuplicateHandler.handleFolderConflictMerge}
+					onKeepBoth={sharedDuplicateHandler.handleFolderConflictKeepBoth}
+				/>
 				{shouldUseProjectDetailMobileView ? (
 					<DuplicateFileModal
 						visible={projectDetailFilesController.sharedDuplicateHandler.modalVisible}

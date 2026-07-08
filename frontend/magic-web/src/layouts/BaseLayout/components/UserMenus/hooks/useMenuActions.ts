@@ -10,6 +10,7 @@ import showOnlineFeedbackModal from "@/components/business/OnlineFeedbackModal"
 import { openShareManagementModal } from "@/pages/superMagic/components/ShareManagement/stores/globalShareManagement"
 import { openLongTremMemoryModal } from "@/pages/superMagic/components/LongTremMemory"
 import routeManageService from "@/pages/superMagic/services/routeManageService"
+import { openAboutUsInMagicApp } from "@/layouts/BaseLayout/utils/magicAppNavigation"
 
 interface UseMenuActionsProps {
 	onClose: () => void
@@ -42,6 +43,13 @@ function useMenuActions({ onClose }: UseMenuActionsProps) {
 				})
 				break
 			case UserMenuKey.ConsumptionDetails:
+				break
+			case UserMenuKey.DownloadClient:
+				openNewTab("https://www.letsmagic.cn/download")
+				break
+			case UserMenuKey.AboutUs:
+				// Desktop app reuses the same native "About Us" bridge as the mobile shell.
+				openAboutUsInMagicApp()
 				break
 			case UserMenuKey.OnlineFeedback:
 				showOnlineFeedbackModal()

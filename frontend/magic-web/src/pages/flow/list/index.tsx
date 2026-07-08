@@ -20,8 +20,8 @@ import { useStyles } from "./styles"
 import { useMemoizedFn } from "ahooks"
 import type { Knowledge } from "@/types/knowledge"
 import UpdateKnowledgeModal from "@/pages/vectorKnowledge/components/UpdateInfoModal"
-import { RouteName } from "@/routes/constants"
 import { openCreateToolModal, openCreateToolsetModal } from "@/components/business"
+import { getVectorKnowledgeCreateRoute } from "@/pages/vectorKnowledge/utils"
 
 function FlowListPage() {
 	const { t: globalT } = useTranslation()
@@ -92,7 +92,7 @@ function FlowListPage() {
 
 	/** 创建知识库 */
 	const handleCreateKnowledge = useMemoizedFn(() => {
-		navigate({ name: RouteName.VectorKnowledgeCreate })
+		navigate(getVectorKnowledgeCreateRoute(location.pathname))
 	})
 
 	/** 创建工作流 */

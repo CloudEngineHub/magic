@@ -16,10 +16,12 @@ use Dtyq\SuperMagic\Domain\Share\Entity\ResourceShareEntity;
 use Dtyq\SuperMagic\Domain\Share\Service\ResourceShareDomainService;
 use Dtyq\SuperMagic\Domain\SuperAgent\Entity\TaskFileEntity;
 use Dtyq\SuperMagic\Domain\SuperAgent\Entity\TopicEntity;
+use Dtyq\SuperMagic\Domain\SuperAgent\Entity\ValueObject\StorageType;
 use Dtyq\SuperMagic\Domain\SuperAgent\Event\FilesBatchDeletedEvent;
 use Dtyq\SuperMagic\Domain\SuperAgent\Event\FileUploadedEvent;
 use Dtyq\SuperMagic\Domain\SuperAgent\Service\TaskFileDomainService;
 use Dtyq\SuperMagic\Domain\SuperAgent\Service\TopicDomainService;
+use Dtyq\SuperMagic\Interfaces\Share\DTO\Request\CreateShareRequestDTO;
 use Hyperf\Context\ApplicationContext;
 use Hyperf\Redis\Redis;
 use PHPUnit\Framework\TestCase;
@@ -225,7 +227,7 @@ class FileManagementAppServiceTest extends TestCase
         );
     }
 
-    public function testGetFileUrlsByAccessTokenFiltersTopicScope(): void
+    public function testGetFileUrlsByAccessTokenAllowsProjectScopeForTopicWhenViewFileListEnabledByDefault(): void
     {
         $this->bindAccessToken('token-topic', 'share-topic');
 
@@ -249,12 +251,9 @@ class FileManagementAppServiceTest extends TestCase
             ->with(88)
             ->willReturn($topicEntity);
 
-        $allowedFileEntity = $this->createTaskFileEntity(501, '/workspace/topic.md');
-        $allowedFileEntity->setProjectId(900);
-
         $taskFileDomainService = $this->createMock(TaskFileDomainService::class);
-        $taskFileDomainService->method('findUserFilesByTopicId')
-            ->willReturnCallback(static fn (string $topicId): array => $topicId === '88' ? [$allowedFileEntity] : []);
+        $taskFileDomainService->expects($this->never())
+            ->method('findUserFilesByTopicId');
         $taskFileDomainService->method('getFileUrlsByProjectId')
             ->willReturnCallback(static function (array $ids, int $projectId): array {
                 return array_map(
@@ -269,8 +268,83 @@ class FileManagementAppServiceTest extends TestCase
         $this->setPrivateProperty($service, 'taskFileDomainService', $taskFileDomainService);
 
         $this->assertSame(
-            [['file_id' => '501', 'url' => 'https://example.test/501.md']],
+            [
+                ['file_id' => '501', 'url' => 'https://example.test/501.md'],
+                ['file_id' => '999', 'url' => 'https://example.test/999.md'],
+            ],
             $service->getFileUrlsByAccessToken([501, 999], 'token-topic', 'preview')
+        );
+    }
+
+    public function testGetFileUrlsByAccessTokenFiltersTopicScopeWhenViewFileListDisabled(): void
+    {
+        $this->bindAccessToken('token-topic-disabled-file-list', 'share-topic-disabled-file-list');
+
+        $shareEntity = (new ResourceShareEntity())
+            ->setResourceId('88')
+            ->setResourceType(ResourceType::Topic->value)
+            ->setExtra([CreateShareRequestDTO::EXTRA_FIELD_VIEW_FILE_LIST => false]);
+
+        $resourceShareDomainService = $this->createMock(ResourceShareDomainService::class);
+        $resourceShareDomainService->expects($this->once())
+            ->method('getValidShareById')
+            ->with('share-topic-disabled-file-list')
+            ->willReturn($shareEntity);
+
+        $topicEntity = new TopicEntity([
+            'id' => 88,
+            'project_id' => 900,
+        ]);
+        $topicDomainService = $this->createMock(TopicDomainService::class);
+        $topicDomainService->expects($this->once())
+            ->method('getTopicWithDeleted')
+            ->with(88)
+            ->willReturn($topicEntity);
+
+        $visibleFileEntity = $this->createTaskFileEntity(501, '/workspace/topic.md');
+        $visibleFileEntity->setProjectId(900);
+        $visibleFileEntity->setTopicId(88);
+
+        $hiddenTopicEntity = $this->createTaskFileEntity(777, '/runtime/topic_88/message/tool.md');
+        $hiddenTopicEntity->setProjectId(900);
+        $hiddenTopicEntity->setTopicId(88);
+        $hiddenTopicEntity->setIsHidden(true);
+        $hiddenTopicEntity->setStorageType(StorageType::TOPIC);
+
+        $otherTopicEntity = $this->createTaskFileEntity(778, '/workspace/other-topic.md');
+        $otherTopicEntity->setProjectId(900);
+        $otherTopicEntity->setTopicId(99);
+
+        $taskFileDomainService = $this->createMock(TaskFileDomainService::class);
+        $taskFileDomainService->expects($this->never())
+            ->method('findUserFilesByTopicId');
+        $taskFileDomainService->method('findFilesByProjectIdAndIds')
+            ->willReturnCallback(static function (int $projectId, array $ids) use ($visibleFileEntity, $hiddenTopicEntity, $otherTopicEntity): array {
+                if ($projectId !== 900 || $ids !== [501, 777, 778, 779]) {
+                    return [];
+                }
+
+                return [$visibleFileEntity, $hiddenTopicEntity, $otherTopicEntity];
+            });
+        $taskFileDomainService->method('getFileUrlsByProjectId')
+            ->willReturnCallback(static function (array $ids, int $projectId): array {
+                return array_map(
+                    static fn (int $id): array => ['file_id' => (string) $id, 'url' => sprintf('https://example.test/%d.md', $id)],
+                    $ids
+                );
+            });
+
+        $service = $this->createService($this->createMock(EventDispatcherInterface::class));
+        $this->setPrivateProperty($service, 'resourceShareDomainService', $resourceShareDomainService);
+        $this->setPrivateProperty($service, 'topicDomainService', $topicDomainService);
+        $this->setPrivateProperty($service, 'taskFileDomainService', $taskFileDomainService);
+
+        $this->assertSame(
+            [
+                ['file_id' => '501', 'url' => 'https://example.test/501.md'],
+                ['file_id' => '777', 'url' => 'https://example.test/777.md'],
+            ],
+            $service->getFileUrlsByAccessToken([501, 777, 778, 779], 'token-topic-disabled-file-list', 'preview')
         );
     }
 

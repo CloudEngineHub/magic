@@ -15,6 +15,7 @@ import aiohttp
 from agentlang.logger import get_logger
 from app.infrastructure.sdk.magic_service.factory import get_magic_service_sdk
 from app.infrastructure.sdk.magic_service.parameter.get_agent_openapi_parameter import GetAgentOpenApiParameter
+from app.utils.async_file_utils import async_exists, async_mkdir, async_write_bytes
 
 logger = get_logger(__name__)
 
@@ -46,7 +47,7 @@ class CrewDownloader:
         await self._download_and_extract_zip(file_url, target_dir)
 
         identity_file = target_dir / "IDENTITY.md"
-        if not identity_file.exists():
+        if not await async_exists(identity_file):
             raise ValueError(
                 f"Downloaded crew package for '{agent_code}' is missing IDENTITY.md"
             )
@@ -59,7 +60,7 @@ class CrewDownloader:
         Strips the top-level directory inside the zip (if all entries share one)
         so files land directly in target_dir.
         """
-        target_dir.mkdir(parents=True, exist_ok=True)
+        await async_mkdir(target_dir, parents=True, exist_ok=True)
 
         async with aiohttp.ClientSession() as session:
             async with session.get(url, timeout=aiohttp.ClientTimeout(total=60)) as resp:
@@ -82,9 +83,9 @@ class CrewDownloader:
                     continue
                 dest = target_dir / rel_path
                 if member.filename.endswith("/"):
-                    dest.mkdir(parents=True, exist_ok=True)
+                    await async_mkdir(dest, parents=True, exist_ok=True)
                 else:
-                    dest.parent.mkdir(parents=True, exist_ok=True)
-                    dest.write_bytes(zf.read(member.filename))
+                    await async_mkdir(dest.parent, parents=True, exist_ok=True)
+                    await async_write_bytes(dest, zf.read(member.filename))
 
         logger.info(f"Extracted {len(names)} files to {target_dir}")

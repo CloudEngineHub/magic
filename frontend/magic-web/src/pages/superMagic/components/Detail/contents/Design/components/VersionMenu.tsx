@@ -145,6 +145,7 @@ export function VersionMenu(props: VersionMenuProps) {
 												onClick={() =>
 													onChangeVersion(item.version, index === 0)
 												}
+												data-testid="on-change-version"
 											>
 												<Flex vertical gap={2}>
 													<Flex align="center" gap={4}>

@@ -57,6 +57,10 @@ export interface I18nTexts {
 
 	// Mobile specific
 	selectItem: string
+	multiSelectActions: {
+		enter: string
+		complete: string
+	}
 	/** 顶部「已选」入口文案（不含数量） */
 	mobileSelectedItemsLabel: string
 	/** 已选列表全屏标题 */

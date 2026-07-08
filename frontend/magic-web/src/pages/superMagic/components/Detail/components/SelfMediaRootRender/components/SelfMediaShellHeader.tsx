@@ -1,4 +1,4 @@
-import { memo, type FormEvent, type ReactNode, useEffect, useState } from "react"
+import { memo, type FormEvent, type ReactNode, useEffect, useMemo, useState } from "react"
 import {
 	Check,
 	ChevronLeft,
@@ -14,11 +14,14 @@ import { cn } from "@/lib/utils"
 import { Button } from "@/components/shadcn-ui/button"
 import { Input } from "@/components/shadcn-ui/input"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/shadcn-ui/tooltip"
+import { useIsMobile } from "@/hooks/use-mobile"
 import ExportPanel from "./ExportPanel"
 import PlatformBrandIcon from "./PlatformBrandIcon"
 import ViewTabs from "./ViewTabs"
 import type { SelfMediaPlatform } from "../../../types"
 import type { SelfMediaPost, SelfMediaView } from "../types"
+
+const EDIT_RELATED_SELF_MEDIA_VIEWS = new Set<SelfMediaView>(["edit", "code"])
 
 interface SelfMediaShellHeaderProps {
 	platform: SelfMediaPlatform
@@ -131,26 +134,32 @@ function SelfMediaShellHeader({
 
 	return (
 		<header
-			className="grid min-h-[72px] grid-cols-[minmax(14rem,1fr)_auto] items-center gap-3 bg-transparent px-3 py-2 max-lg:grid-cols-1 max-lg:items-stretch sm:min-h-[88px] sm:px-4 sm:py-3 lg:gap-4 lg:px-6"
+			className="grid min-h-[72px] grid-cols-[minmax(14rem,1fr)_auto] items-center gap-3 bg-transparent px-3 py-2 max-lg:grid-cols-[minmax(0,1fr)_auto] max-lg:items-center max-sm:min-h-0 max-sm:gap-2 max-sm:px-2 max-sm:py-1.5 sm:min-h-[88px] sm:px-4 sm:py-3 lg:gap-4 lg:px-6"
 			data-testid="self-media-shell-header"
 		>
-			<div className="flex min-w-0 items-center gap-3" data-testid="self-media-shell-title">
+			<div
+				className="flex min-w-0 items-center gap-3 max-sm:gap-2"
+				data-testid="self-media-shell-title"
+			>
 				{onBackHome ? (
 					<Button
 						type="button"
 						variant="outline"
 						size="sm"
-						className="h-10 shrink-0 rounded-[14px] border-[#e4e4e7] bg-white px-3 text-sm font-[700] text-[#18181b] shadow-[0_3px_12px_rgba(24,24,27,0.06)] hover:bg-white hover:text-[#18181b] max-[380px]:w-10 max-[380px]:px-0 sm:h-11 sm:px-4"
+						className="h-10 shrink-0 rounded-[14px] border-[#e4e4e7] bg-white px-3 text-sm font-[700] text-[#18181b] shadow-[0_3px_12px_rgba(24,24,27,0.06)] hover:bg-white hover:text-[#18181b] max-sm:size-9 max-sm:rounded-[12px] max-sm:px-0 sm:h-11 sm:px-4"
 						onClick={onBackHome}
 						data-testid="self-media-shell-back-home-button"
 					>
 						<ChevronLeft size={17} />
-						<span className="max-[380px]:sr-only">
+						<span className="max-sm:sr-only">
 							{t("detail.selfMedia.home.backHome")}
 						</span>
 					</Button>
 				) : null}
-				<span className="flex size-10 shrink-0 items-center justify-center rounded-[14px] bg-white text-[#18181b] shadow-[0_3px_12px_rgba(24,24,27,0.06)] sm:size-11">
+				<span
+					className="flex size-10 shrink-0 items-center justify-center rounded-[14px] bg-white text-[#18181b] shadow-[0_3px_12px_rgba(24,24,27,0.06)] max-sm:hidden sm:size-11"
+					data-testid="self-media-shell-platform-icon-frame"
+				>
 					<PlatformBrandIcon
 						platform={platform}
 						className="size-5"
@@ -158,13 +167,22 @@ function SelfMediaShellHeader({
 					/>
 				</span>
 				<div className="min-w-0 flex-1">
-					<p className="text-xs font-[700] leading-[1.2] text-[#71717a]">
-						{t("detail.selfMedia.home.article")}
-					</p>
+					<div className="flex min-w-0 items-center gap-1.5">
+						<p className="text-xs font-[700] leading-[1.2] text-[#71717a]">
+							{t("detail.selfMedia.home.article")}
+						</p>
+						<span
+							className="hidden size-6 shrink-0 items-center justify-center rounded-[9px] bg-white text-[#18181b] shadow-[0_2px_8px_rgba(24,24,27,0.06)] max-sm:flex"
+							data-testid="self-media-shell-mobile-platform-icon"
+						>
+							<PlatformBrandIcon platform={platform} className="size-4" />
+						</span>
+					</div>
 					{editingTitle ? (
 						<form
 							className="mt-1 flex min-w-0 items-center gap-2"
 							onSubmit={handleSubmitTitle}
+							data-testid="handle-submit-title"
 						>
 							<div className="min-w-0 flex-1">
 								<Input
@@ -216,7 +234,7 @@ function SelfMediaShellHeader({
 					) : (
 						<div className="mt-0.5 flex min-w-0 items-start gap-1.5">
 							<h2
-								className="min-w-0 whitespace-normal break-words text-sm font-[800] leading-[1.3] text-[#18181b] sm:text-base sm:leading-[1.25]"
+								className="min-w-0 whitespace-normal break-words text-sm font-[800] leading-[1.3] text-[#18181b] max-sm:text-[13px] sm:text-base sm:leading-[1.25]"
 								data-testid="self-media-shell-platform-title"
 							>
 								{articleTitle}
@@ -248,12 +266,12 @@ function SelfMediaShellHeader({
 					)}
 				</div>
 			</div>
-			<div className="flex min-w-0 items-center justify-end gap-3 max-lg:justify-start max-md:flex-col max-md:items-stretch lg:gap-4">
+			<div className="flex min-w-0 items-center justify-end gap-3 max-lg:justify-end max-md:items-start lg:gap-4">
 				<div
-					className="-m-2 flex max-w-full shrink-0 items-center justify-end gap-2 overflow-visible rounded-[18px] p-2 max-lg:justify-start max-lg:overflow-x-auto"
+					className="-m-1 flex max-w-full shrink-0 items-center justify-end gap-1 overflow-visible rounded-[18px] p-1 max-lg:justify-end max-lg:overflow-x-auto sm:-m-2 sm:gap-2 sm:p-2"
 					data-testid="self-media-shell-toolbar"
 				>
-					<div className="flex h-11 shrink-0 items-center gap-1.5 rounded-[16px] bg-white/80 px-1.5 shadow-[inset_0_1px_rgba(255,255,255,0.82),0_3px_14px_rgba(24,24,27,0.05)] sm:h-12 sm:gap-2 sm:rounded-[18px] sm:px-2">
+					<div className="flex h-10 shrink-0 items-center gap-1 rounded-[14px] bg-white/80 px-1 shadow-[inset_0_1px_rgba(255,255,255,0.82),0_3px_14px_rgba(24,24,27,0.05)] sm:h-12 sm:gap-2 sm:rounded-[18px] sm:px-2">
 						{onStartInspector && !inspectorDisabled ? (
 							<Tooltip>
 								<TooltipTrigger asChild>
@@ -267,7 +285,7 @@ function SelfMediaShellHeader({
 										variant="ghost"
 										size="icon"
 										className={cn(
-											"size-10 rounded-[14px] text-[#18181b] hover:bg-[#f1f1f2] hover:text-[#18181b]",
+											"size-9 rounded-[12px] text-[#18181b] hover:bg-[#f1f1f2] hover:text-[#18181b] sm:size-10 sm:rounded-[14px]",
 											inspectorActive &&
 												"bg-[#18181b] text-white hover:bg-[#18181b] hover:text-white",
 										)}
@@ -290,7 +308,7 @@ function SelfMediaShellHeader({
 									aria-label={refreshLabel}
 									variant="ghost"
 									size="icon"
-									className="size-10 rounded-[14px] text-[#18181b] hover:bg-[#f1f1f2] hover:text-[#18181b]"
+									className="size-9 rounded-[12px] text-[#18181b] hover:bg-[#f1f1f2] hover:text-[#18181b] sm:size-10 sm:rounded-[14px]"
 								>
 									<RefreshCw className="h-4 w-4" />
 								</Button>
@@ -320,34 +338,47 @@ export function SelfMediaShellViewBar({
 	onRequestPrePublishAnalysis,
 }: SelfMediaShellViewBarProps) {
 	const { t } = useTranslation("super")
+	const isMobile = useIsMobile()
+	const resolvedVisibleTabs = useMemo(() => {
+		if (!isMobile) return visibleTabs
+		return visibleTabs.filter((tab) => !EDIT_RELATED_SELF_MEDIA_VIEWS.has(tab))
+	}, [isMobile, visibleTabs])
+
+	useEffect(() => {
+		if (!isMobile || !EDIT_RELATED_SELF_MEDIA_VIEWS.has(view)) return
+		const fallbackView = resolvedVisibleTabs[0]
+		if (fallbackView) onChangeView(fallbackView)
+	}, [isMobile, onChangeView, resolvedVisibleTabs, view])
 
 	return (
 		<footer
-			className="shrink-0 border-t border-[#f1f1f2] bg-white px-2 py-2 sm:px-4 sm:py-3"
+			className="shrink-0 border-t border-[#f1f1f2] bg-white px-2 py-2 max-sm:py-1.5 sm:px-4 sm:py-3"
 			data-testid="self-media-shell-view-bar"
 		>
-			<div className="mx-auto grid max-w-full grid-cols-[1fr_auto_1fr] items-center gap-3 max-md:grid-cols-1">
+			<div className="mx-auto grid max-w-full grid-cols-[1fr_auto_1fr] items-center gap-3 max-md:grid-cols-[minmax(0,1fr)_auto] max-md:gap-2">
 				<div aria-hidden="true" className="min-w-0 max-md:hidden" />
-				<div className="flex min-w-0 justify-start overflow-x-auto sm:justify-center">
+				<div className="flex min-w-0 justify-start overflow-x-auto max-sm:-mx-1 max-sm:px-1 sm:justify-center">
 					<ViewTabs
 						value={view}
 						onChange={onChangeView}
 						labels={tabLabels}
-						order={visibleTabs}
+						order={resolvedVisibleTabs}
 					/>
 				</div>
 				{onRequestPrePublishAnalysis ? (
-					<div className="flex justify-end max-md:justify-center">
+					<div className="flex justify-end">
 						<Button
 							type="button"
 							variant="outline"
 							size="sm"
 							onClick={onRequestPrePublishAnalysis}
-							className="h-10 shrink-0 rounded-[14px] border-[#e4e4e7] bg-white px-3 text-xs font-[800] text-[#18181b] shadow-[0_3px_12px_rgba(24,24,27,0.06)] hover:bg-[#18181b] hover:text-white"
+							className="h-10 shrink-0 rounded-[14px] border-[#e4e4e7] bg-white px-3 text-xs font-[800] text-[#18181b] shadow-[0_3px_12px_rgba(24,24,27,0.06)] hover:bg-[#18181b] hover:text-white max-sm:size-10 max-sm:px-0"
 							data-testid="self-media-footer-pre-publish-analysis"
 						>
 							<ClipboardCheck className="h-4 w-4" />
-							<span>{t("detail.selfMedia.analysis.action")}</span>
+							<span className="max-sm:sr-only">
+								{t("detail.selfMedia.analysis.action")}
+							</span>
 						</Button>
 					</div>
 				) : (

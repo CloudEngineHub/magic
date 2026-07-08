@@ -433,6 +433,7 @@ export default function AgentDesigner(props: {
 										onClick={(e) => {
 											e.stopPropagation()
 										}}
+										data-testid="agent-designer"
 									>
 										<VisibleRangeSelector
 											selected={selected}
@@ -483,6 +484,7 @@ export default function AgentDesigner(props: {
 												key={option.key}
 												className={styles.dropdownItem}
 												onClick={() => handleAIOptimization(option.key)}
+												data-testid="handle-ai-optimization"
 											>
 												{option.icon}
 												{/* <div className={styles.itemIcon}>{option.icon}</div> */}
@@ -515,7 +517,7 @@ export default function AgentDesigner(props: {
 									justify="center"
 									className={styles.AIeditButtons}
 								>
-									<img src={AIOptimizationSvg} alt="" />
+									<img src={AIOptimizationSvg} alt="" data-testid="agent-designer-image" />
 									<span className={styles.aiEditText}>
 										{t("agentEditor.Optimize")}
 									</span>

@@ -64,6 +64,7 @@ export class OrganizationService {
 		// 内存状态同步
 		userStore.user.setOrganizations(magicOrganizationMap || {})
 		userStore.user.setTeamshareOrganizations(organizations || [])
+		userStore.user.setOrganizationListReady(true)
 		userStore.account.updateAccount(magicId, {
 			organizations: magicOrganizations,
 			teamshareOrganizations: organizations,
@@ -115,6 +116,7 @@ export class OrganizationService {
 		// 内存状态同步
 		userStore.user.setOrganizations(magicOrganizationMap || {})
 		userStore.user.setTeamshareOrganizations(organizations || [])
+		userStore.user.setOrganizationListReady(true)
 	}
 
 	/**

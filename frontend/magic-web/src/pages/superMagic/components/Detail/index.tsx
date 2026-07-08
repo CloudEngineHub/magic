@@ -50,6 +50,8 @@ interface DetailProps {
 	showFileHeader?: boolean
 	/** When true, hides FilesViewer tab bar for immersive read-only preview */
 	hideTabBar?: boolean
+	/** When true, treats the file viewer as fullscreen without requiring URL params */
+	forceFullscreenMode?: boolean
 	/** Overrides default footer visibility (mobile non-share shows footer by default) */
 	showFileFooter?: boolean
 }
@@ -100,6 +102,7 @@ const Detail = forwardRef<DetailRef, DetailProps>((props, ref) => {
 		onFileTabsCacheLoaded,
 		showFileHeader,
 		hideTabBar,
+		forceFullscreenMode,
 		showFileFooter: showFileFooterProp,
 	} = props
 
@@ -188,6 +191,7 @@ const Detail = forwardRef<DetailRef, DetailProps>((props, ref) => {
 				showFileFooter={showFileFooterProp ?? (!isShareRoute && isMobile)}
 				showFileHeader={showFileHeader}
 				hideTabBar={hideTabBar}
+				forceFullscreenMode={forceFullscreenMode}
 				currentTopicStatus={currentTopicStatus}
 				messages={messages}
 				autoDetail={autoDetail}

@@ -21,6 +21,7 @@ import { cn } from "@/lib/tiptap-utils"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import { ShareListRefreshType } from "@/pages/superMagic/components/ShareManagement/types"
 import magicToast from "@/components/base/MagicToaster/utils"
+import { isMagicApp } from "@/utils/devices"
 
 interface TopicSharePopoverProps {
 	open: boolean
@@ -295,6 +296,7 @@ function TopicSharePopoverContent({
 									rel="noopener noreferrer"
 									className="inline break-all text-primary underline"
 									onClick={(e) => e.stopPropagation()}
+									data-testid="topic-share-popover"
 								>
 									{urlMatch[0]}
 								</a>
@@ -307,6 +309,7 @@ function TopicSharePopoverContent({
 										magicToast.success(t("share.copySuccess"))
 									}}
 									title={t("share.copyLink")}
+									data-testid="write-text"
 								>
 									<Copy className="h-3.5 w-3.5" />
 								</button>
@@ -318,7 +321,7 @@ function TopicSharePopoverContent({
 				})}
 			</>
 		)
-	}, [shareMessageText])
+	}, [shareMessageText, t])
 
 	// Handle copy share message
 	const handleCopyShareMessage = useCallback(() => {
@@ -516,6 +519,7 @@ function TopicSharePopoverContent({
 						<div
 							className={styles.advancedHeader}
 							onClick={() => setIsAdvancedOpen(!isAdvancedOpen)}
+							data-testid="set-is-advanced-open"
 						>
 							<span className={styles.advancedTitle}>
 								{t("share.advancedOptions")}
@@ -693,6 +697,14 @@ function TopicSharePopover({
 					// 如果点击的是 MagicModal，不要关闭 Popover
 					const target = e.target as HTMLElement
 					if (target.closest(".ant-modal-root") || target.closest("[role='dialog']")) {
+						e.preventDefault()
+					}
+				}}
+				onFocusOutside={(e) => {
+					// Magic App iPad uses the desktop popover on a WebView touch surface.
+					// Clipboard and WebView focus hops can briefly move focus outside without
+					// a user dismissal intent, so keep the PC popover open for focus-only changes.
+					if (isMagicApp) {
 						e.preventDefault()
 					}
 				}}

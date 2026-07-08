@@ -3,11 +3,10 @@ import { useTranslation } from "react-i18next"
 import { UploadSource } from "../../MessageEditor/hooks/useFileUpload"
 import { multiFolderUploadStore } from "@/stores/folderUpload"
 import type { BatchSaveInfo } from "@/stores/folderUpload/types"
-import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import type { AttachmentItem } from "./types"
-import { pathToDirectoryNames } from "../utils/path-helper"
 import { useDuplicateFileHandler } from "./useDuplicateFileHandler"
 import magicToast from "@/components/base/MagicToaster/utils"
+import { createUploadRefreshCoordinator } from "../utils/uploadRefreshController"
 
 interface UseDragUploadOptions {
 	allowUpload?: boolean
@@ -52,10 +51,18 @@ export function useDragUpload({
 	// 实际上传处理函数（用于单个文件上传）
 	const processFilesUpload = useCallback(
 		async (files: File[], parentId?: string) => {
-			// 文件上传：每个文件都创建一个独立的上传任务
-			await Promise.all(
-				files.map((file) =>
-					multiFolderUploadStore.createUploadTask([file], parentId, {
+			const refreshCoordinator = createUploadRefreshCoordinator({
+				uploadType: "file",
+				projectFiles: attachments,
+				uploadFileCount: files.length,
+			})
+
+			let firstError: unknown
+
+			// File upload: create one task per file sequentially to avoid Promise spikes.
+			for (const file of files) {
+				try {
+					await multiFolderUploadStore.createUploadTask([file], parentId, {
 						projectId: projectId || "",
 						workspaceId,
 						projectName: selectedProject?.project_name || t("common.untitledProject"),
@@ -65,95 +72,111 @@ export function useDragUpload({
 						source: UploadSource.ProjectFile,
 						onComplete: (taskId: string) => {
 							if (debug) {
-								console.log(
-									`📄 文件上传任务 ${taskId} 完成（${file.name}），触发附件更新`,
-								)
+								console.log(`📄 文件上传任务 ${taskId} 完成（${file.name}）`)
 							}
-							// 触发文件列表更新
-							pubsub.publish(PubSubEvents.Update_Attachments)
+							refreshCoordinator.handleFileTaskComplete(taskId, {
+								fileName: file.name,
+							})
 						},
-						// 每个批次上传完成的回调函数
+						onError: (taskId: string) => {
+							refreshCoordinator.handleFileTaskError(taskId, {
+								fileName: file.name,
+							})
+						},
 						onBatchUploadComplete: (batchInfo) => {
 							if (debug) {
 								console.log(
 									`📄 文件批次上传进度: ${batchInfo.currentBatch}/${batchInfo.totalBatches}, 成功: ${batchInfo.batchSuccessCount}, 失败: ${batchInfo.batchFailedCount}`,
 								)
 							}
-							// 当前批次有成功上传的文件时，触发文件列表的局部更新
-							if (batchInfo.batchSuccessCount > 0) {
-								pubsub.publish(PubSubEvents.Update_Attachments)
-							}
 						},
-						// 每次批量保存完成的回调函数（实时保存机制）
 						onBatchSaveComplete: (batchSaveInfo: BatchSaveInfo) => {
 							if (debug) {
 								console.log(
 									`💾 文件批量保存完成: ${batchSaveInfo.savedFilesCount} 文件已保存到项目, 总处理: ${batchSaveInfo.totalProcessedFiles}`,
 								)
 							}
-							// 文件保存到项目后立即刷新文件列表，让用户能够实时看到文件出现
-							pubsub.publish(PubSubEvents.Update_Attachments)
+							refreshCoordinator.handleBatchSaveComplete(batchSaveInfo, {
+								fileName: file.name,
+							})
 						},
-					}),
-				),
-			)
+					})
+					refreshCoordinator.markTaskCreated({ fileName: file.name, parentId })
+				} catch (error) {
+					refreshCoordinator.markTaskCreateFailed({ fileName: file.name, parentId })
+					firstError = firstError || error
+				}
+			}
+
+			if (firstError) {
+				throw firstError
+			}
 		},
-		[projectId, workspaceId, selectedProject, selectedTopic, t, debug],
+		[attachments, projectId, workspaceId, selectedProject, selectedTopic, t, debug],
 	)
 
 	// 实际上传处理函数（用于文件夹上传）
 	const processFolderUpload = useCallback(
 		async (files: File[], parentId?: string) => {
-			console.log("📁 [processFolderUpload] 开始上传文件夹:")
-			console.log("  ↳ parentId:", parentId)
-			console.log("  ↳ files 详情:")
-			files.forEach((file) => {
-				// eslint-disable-next-line @typescript-eslint/no-explicit-any
-				const webkitPath = (file as any).webkitRelativePath || ""
-				console.log(`    - name="${file.name}", webkitRelativePath="${webkitPath}"`)
+			const refreshCoordinator = createUploadRefreshCoordinator({
+				uploadType: "folder",
+				projectFiles: attachments,
+				uploadFileCount: files.length,
 			})
 
+			if (debug) {
+				console.log("📁 [processFolderUpload] 开始上传文件夹:")
+				console.log("  ↳ parentId:", parentId)
+				console.log("  ↳ files 详情:")
+				files.forEach((file) => {
+					// eslint-disable-next-line @typescript-eslint/no-explicit-any
+					const webkitPath = (file as any).webkitRelativePath || ""
+					console.log(`    - name="${file.name}", webkitRelativePath="${webkitPath}"`)
+				})
+			}
+
 			// 文件夹上传：所有文件作为一个上传任务
-			await multiFolderUploadStore.createUploadTask(files, parentId, {
-				projectId: projectId || "",
-				workspaceId,
-				projectName: selectedProject?.project_name || t("common.untitledProject"),
-				topicId: selectedTopic?.id,
-				taskId: "",
-				storageType: "workspace",
-				source: UploadSource.ProjectFile,
-				onComplete: (taskId: string) => {
-					if (debug) {
-						console.log(`📁 文件夹上传任务 ${taskId} 完成，触发附件更新`)
-					}
-					// 触发文件列表更新
-					pubsub.publish(PubSubEvents.Update_Attachments)
-				},
-				// 每个批次上传完成的回调函数
-				onBatchUploadComplete: (batchInfo) => {
-					if (debug) {
-						console.log(
-							`📁 文件夹批次上传进度: ${batchInfo.currentBatch}/${batchInfo.totalBatches}, 成功: ${batchInfo.batchSuccessCount}, 失败: ${batchInfo.batchFailedCount}`,
-						)
-					}
-					// 当前批次有成功上传的文件时，触发文件列表的局部更新
-					if (batchInfo.batchSuccessCount > 0) {
-						pubsub.publish(PubSubEvents.Update_Attachments)
-					}
-				},
-				// 每次批量保存完成的回调函数（实时保存机制）
-				onBatchSaveComplete: (batchSaveInfo: BatchSaveInfo) => {
-					if (debug) {
-						console.log(
-							`💾 文件夹批量保存完成: ${batchSaveInfo.savedFilesCount} 文件已保存到项目, 总处理: ${batchSaveInfo.totalProcessedFiles}`,
-						)
-					}
-					// 文件保存到项目后立即刷新文件列表，让用户能够实时看到文件出现
-					pubsub.publish(PubSubEvents.Update_Attachments)
-				},
-			})
+			try {
+				await multiFolderUploadStore.createUploadTask(files, parentId, {
+					projectId: projectId || "",
+					workspaceId,
+					projectName: selectedProject?.project_name || t("common.untitledProject"),
+					topicId: selectedTopic?.id,
+					taskId: "",
+					storageType: "workspace",
+					source: UploadSource.ProjectFile,
+					onComplete: (taskId: string) => {
+						if (debug) {
+							console.log(`📁 文件夹上传任务 ${taskId} 完成`)
+						}
+						refreshCoordinator.flushDeferredRefresh("taskComplete", { taskId })
+					},
+					onError: (taskId: string) => {
+						refreshCoordinator.flushDeferredRefresh("taskError", { taskId })
+					},
+					onBatchUploadComplete: (batchInfo) => {
+						if (debug) {
+							console.log(
+								`📁 文件夹批次上传进度: ${batchInfo.currentBatch}/${batchInfo.totalBatches}, 成功: ${batchInfo.batchSuccessCount}, 失败: ${batchInfo.batchFailedCount}`,
+							)
+						}
+					},
+					onBatchSaveComplete: (batchSaveInfo: BatchSaveInfo) => {
+						if (debug) {
+							console.log(
+								`💾 文件夹批量保存完成: ${batchSaveInfo.savedFilesCount} 文件已保存到项目, 总处理: ${batchSaveInfo.totalProcessedFiles}`,
+							)
+						}
+						refreshCoordinator.handleBatchSaveComplete(batchSaveInfo)
+					},
+				})
+				refreshCoordinator.markTaskCreated({ filesCount: files.length, parentId })
+			} catch (error) {
+				refreshCoordinator.markTaskCreateFailed({ filesCount: files.length, parentId })
+				throw error
+			}
 		},
-		[projectId, workspaceId, selectedProject, selectedTopic, t, debug],
+		[attachments, projectId, workspaceId, selectedProject, selectedTopic, t, debug],
 	)
 
 	// 同名文件处理 handler（优先使用外部传入的共享 handler）
@@ -191,7 +214,7 @@ export function useDragUpload({
 
 			try {
 				// 提取 parentId
-				const parentId = targetItem?.is_directory ? targetItem.file_id : undefined
+				const parentId = targetItem?.is_directory ? targetItem.file_id || "" : ""
 
 				if (debug) {
 					console.log("📤 开始上传文件:", {
@@ -222,9 +245,6 @@ export function useDragUpload({
 		[
 			allowUpload,
 			projectId,
-			workspaceId,
-			selectedProject,
-			selectedTopic,
 			t,
 			debug,
 			duplicateFileHandler,

@@ -155,6 +155,8 @@ export class ToolManager {
 		// 如果设置的工具与当前工具相同，不做处理
 		if (this.activeTool === tool) return
 
+		this.canvas.inputManager.cancelLongPress()
+
 		// 使用 PermissionManager 统一判断：只读模式下只允许选择工具和平移工具
 		if (this.canvas.readonly && tool !== this.selectionTool && tool !== this.panTool) {
 			return

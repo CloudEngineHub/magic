@@ -7,8 +7,12 @@ interface UseKeyboardNavProps {
 	onSelectPrevious: () => void
 	onSelectNext: () => void
 	onConfirm: () => void
+	onBeforeConfirm?: () => boolean | void
+	onMetaEnter?: () => boolean | void
 	onNavigateBack: () => void
+	onBeforeNavigateBack?: () => void
 	onEnterFolder: () => void
+	onBeforeEnterFolder?: () => boolean | void
 	onExit: () => void
 	enabled?: boolean
 	preventDefault?: boolean
@@ -29,8 +33,12 @@ export function useKeyboardNav(props: UseKeyboardNavProps): UseKeyboardNavReturn
 		onSelectPrevious,
 		onSelectNext,
 		onConfirm,
+		onBeforeConfirm,
+		onMetaEnter,
 		onNavigateBack,
+		onBeforeNavigateBack,
 		onEnterFolder,
+		onBeforeEnterFolder,
 		onExit,
 		enabled = true,
 		preventDefault = true,
@@ -38,6 +46,7 @@ export function useKeyboardNav(props: UseKeyboardNavProps): UseKeyboardNavReturn
 
 	// Debounce tracking for Enter key to prevent rapid consecutive presses
 	const lastConfirmTimeRef = useRef<number>(0)
+	const lastMetaEnterTimeRef = useRef<number>(0)
 	const confirmDebounceDelay = DEBOUNCE_DELAYS.KEYBOARD
 
 	// Memoized action handlers
@@ -50,10 +59,31 @@ export function useKeyboardNav(props: UseKeyboardNavProps): UseKeyboardNavReturn
 			return
 		}
 		lastConfirmTimeRef.current = now
+		if (onBeforeConfirm?.()) {
+			return
+		}
 		onConfirm()
 	})
-	const handleNavigateBack = useMemoizedFn(onNavigateBack)
-	const handleEnterFolder = useMemoizedFn(onEnterFolder)
+	const handleMetaEnter = useMemoizedFn(() => {
+		const now = Date.now()
+		if (now - lastMetaEnterTimeRef.current < confirmDebounceDelay) {
+			return true
+		}
+		const handled = onMetaEnter?.()
+		if (handled === false) return false
+		lastMetaEnterTimeRef.current = now
+		return true
+	})
+	const handleNavigateBack = useMemoizedFn(() => {
+		onBeforeNavigateBack?.()
+		onNavigateBack()
+	})
+	const handleEnterFolder = useMemoizedFn(() => {
+		if (onBeforeEnterFolder?.()) {
+			return
+		}
+		onEnterFolder()
+	})
 	const handleExit = useMemoizedFn(onExit)
 
 	// Map keyboard action to handler
@@ -83,6 +113,16 @@ export function useKeyboardNav(props: UseKeyboardNavProps): UseKeyboardNavReturn
 
 			const { key, metaKey, ctrlKey, altKey, shiftKey } = event
 
+			if (key === "Enter" && (metaKey || ctrlKey) && !altKey && !shiftKey && onMetaEnter) {
+				const handled = handleMetaEnter()
+				if (!handled) return
+				if (preventDefault) {
+					event.preventDefault()
+					event.stopPropagation()
+				}
+				return
+			}
+
 			// Ignore if modifier keys are pressed (except for specific combinations)
 			if (metaKey || ctrlKey || altKey || shiftKey) {
 				return
@@ -105,7 +145,7 @@ export function useKeyboardNav(props: UseKeyboardNavProps): UseKeyboardNavReturn
 			// Execute handler
 			handler()
 		},
-		[enabled, preventDefault, actionHandlers],
+		[enabled, preventDefault, actionHandlers, handleMetaEnter, onMetaEnter],
 	)
 
 	// Add global keyboard event listener

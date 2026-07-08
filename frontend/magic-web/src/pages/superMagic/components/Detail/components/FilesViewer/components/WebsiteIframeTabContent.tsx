@@ -63,6 +63,7 @@ const WebsiteIframeTabContent = memo(function WebsiteIframeTabContent({
 						title={t("fileViewer.website.refresh")}
 						className="inline-flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
 						onClick={() => setRefreshKey((current) => current + 1)}
+						data-testid="set-refresh-key"
 					>
 						<RefreshCw size={14} />
 					</button>
@@ -73,6 +74,7 @@ const WebsiteIframeTabContent = memo(function WebsiteIframeTabContent({
 						className={cn(
 							"inline-flex h-7 shrink-0 items-center gap-1 rounded-md px-2 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground",
 						)}
+						data-testid="website-iframe-tab-content-link"
 					>
 						<ExternalLink size={14} />
 						{t("fileViewer.website.openExternal")}
@@ -94,6 +96,7 @@ const WebsiteIframeTabContent = memo(function WebsiteIframeTabContent({
 						setShowLoadFallback(false)
 					}}
 					className="absolute inset-0 h-full w-full border-0 bg-white"
+					data-testid="set-has-loaded"
 				/>
 				{showLoadFallback && !hasLoaded && !isLoadFallbackDismissed ? (
 					<div
@@ -106,6 +109,7 @@ const WebsiteIframeTabContent = memo(function WebsiteIframeTabContent({
 							title={t("fileViewer.website.closeLoadFallback")}
 							className="absolute right-2 top-2 inline-flex size-6 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
 							onClick={() => setIsLoadFallbackDismissed(true)}
+							data-testid="set-is-load-fallback-dismissed"
 						>
 							<X size={13} aria-hidden="true" />
 						</button>
@@ -121,6 +125,7 @@ const WebsiteIframeTabContent = memo(function WebsiteIframeTabContent({
 								target="_blank"
 								rel="noreferrer"
 								className="mt-4 inline-flex h-8 items-center gap-1 rounded-md bg-primary px-3 text-xs text-primary-foreground transition-colors hover:bg-primary/90"
+								data-testid="website-iframe-tab-content-link-2"
 							>
 								<ExternalLink size={14} />
 								{t("fileViewer.website.openExternal")}

@@ -172,6 +172,9 @@ export class VideoResourceManager {
 			this.markStaleRequestDrop()
 			return null
 		}
+		if (this.canvas.canvasFileUploadManager.shouldDeferRemoteResourceLoad(path)) {
+			return null
+		}
 		const normalizedPath = this.canonicalResourcePath(path)
 		const entry = this.getOrCreateEntry(normalizedPath)
 		return this.urlLifecycle.ensureFreshOssInfo(path, entry, options)
@@ -355,6 +358,9 @@ export class VideoResourceManager {
 	private async loadVideoInternal(path: string): Promise<LoadedVideoResource | null> {
 		if (this.destroyed) {
 			this.markStaleRequestDrop()
+			return null
+		}
+		if (this.canvas.canvasFileUploadManager.shouldDeferRemoteResourceLoad(path)) {
 			return null
 		}
 		const normalizedPath = this.canonicalResourcePath(path)

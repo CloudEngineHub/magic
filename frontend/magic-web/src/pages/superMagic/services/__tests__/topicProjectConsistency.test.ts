@@ -4,6 +4,7 @@ import {
 	isTopicBoundToProject,
 	shouldCreateFreshTopicForProject,
 	shouldRefreshChatProjectState,
+	shouldRefreshChatProjectStateOnDesktop,
 	wasProjectRemovedFromLoadedList,
 } from "@/pages/superMagic/services/topicProjectConsistency"
 
@@ -86,5 +87,44 @@ describe("topicProjectConsistency", () => {
 
 		expect(shouldCreateFreshTopicForProject(selectedProject, staleTopic)).toBe(true)
 		expect(isTopicBoundToProject(currentTopic, "project-b")).toBe(true)
+	})
+
+	it("should skip desktop refresh while switchChatProjectInDesktop is in flight", () => {
+		expect(
+			shouldRefreshChatProjectStateOnDesktop({
+				projectId: "project-a",
+				routeTopicId: "topic-a",
+				selectedProjectId: "project-b",
+				selectedWorkspaceId: "workspace-1",
+				selectedTopic: null,
+				isDesktopChatSwitchInProgress: true,
+			}),
+		).toBe(false)
+	})
+
+	it("should refresh desktop state when URL points to a different active project", () => {
+		expect(
+			shouldRefreshChatProjectStateOnDesktop({
+				projectId: "project-a",
+				routeTopicId: "topic-a",
+				selectedProjectId: "project-b",
+				selectedWorkspaceId: "workspace-1",
+				selectedTopic: null,
+				loadedProjects: [{ id: "project-a" } as unknown as ProjectListItem],
+			}),
+		).toBe(true)
+	})
+
+	it("should still refresh on desktop cold start when store is empty", () => {
+		expect(
+			shouldRefreshChatProjectStateOnDesktop({
+				projectId: "project-a",
+				routeTopicId: "topic-a",
+				selectedProjectId: undefined,
+				selectedWorkspaceId: undefined,
+				selectedTopic: null,
+				loadedProjects: [],
+			}),
+		).toBe(true)
 	})
 })

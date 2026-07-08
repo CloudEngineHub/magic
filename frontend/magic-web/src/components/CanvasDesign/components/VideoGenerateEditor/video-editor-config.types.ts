@@ -25,6 +25,8 @@ export interface UseVideoEditorConfigOptions {
 	 * originalRequestOnly 忽略临时草稿与各模式缓存，仅以 generateVideoRequest 为准（成片后「重新生成」）。
 	 */
 	restoreOnMount?: "preferDraft" | "originalRequestOnly"
+	/** 尺寸选择变化时是否同步更新当前 videoElement；结果态重新编辑生成新元素时应关闭 */
+	syncElementSize?: boolean
 }
 
 export interface VideoModelOption {

@@ -17,6 +17,7 @@ import { ToolbarButton } from "@/pages/superMagic/components/MessageEditor/types
 import { isAllowedMention as defaultIsAllowedMention } from "@/pages/superMagic/components/MessageEditor/utils/mention"
 import type { Topic } from "@/pages/superMagic/pages/Workspace/types"
 import { superMagicStore } from "@/pages/superMagic/stores"
+import { optimisticMessageStore } from "@/pages/superMagic/stores/optimisticMessageStore"
 import { projectStore, topicStore, workspaceStore } from "@/pages/superMagic/stores/core"
 import type { createSuperMagicTopicModelStore } from "@/stores/superMagic/topicModelStore"
 import projectFilesStore from "@/stores/projectFiles"
@@ -31,6 +32,8 @@ interface RevokedEditableUserMessageProps {
 	selectedTopic: Topic | null
 	showLoading?: boolean
 	messagesLength: number
+	/** 撤回进入编辑态时临时隐藏的 failed optimistic 消息；发送成功后据此做真正清理。 */
+	hiddenOptimisticMessageIds?: string[]
 	onFileClick?: (fileItem: unknown) => void
 	topicModelStore?: ReturnType<typeof createSuperMagicTopicModelStore>
 	fallbackContent: ReactNode
@@ -47,6 +50,7 @@ function RevokedEditableUserMessage({
 	selectedTopic,
 	showLoading = false,
 	messagesLength,
+	hiddenOptimisticMessageIds = [],
 	onFileClick,
 	topicModelStore,
 	fallbackContent,
@@ -190,6 +194,20 @@ function RevokedEditableUserMessage({
 					onPendingSendChange?.(false)
 				}
 			},
+			onSendSuccess: () => {
+				if (!selectedTopic?.chat_topic_id) return
+
+				hiddenOptimisticMessageIds.forEach((appMessageId) => {
+					optimisticMessageStore.remove({
+						chat_topic_id: selectedTopic.chat_topic_id,
+						app_message_id: appMessageId,
+					})
+					superMagicStore.removeUserMessage(selectedTopic.chat_topic_id, appMessageId)
+				})
+				optimisticMessageStore.clearHiddenRevokedOptimisticMessageIds(
+					selectedTopic.chat_topic_id,
+				)
+			},
 			modules: {
 				mention: { enabled: true },
 				aiCompletion: { enabled: false },
@@ -227,6 +245,7 @@ function RevokedEditableUserMessage({
 		}
 	}, [
 		initialContent,
+		hiddenOptimisticMessageIds,
 		isAllowedMention,
 		messagesLength,
 		onFileClick,

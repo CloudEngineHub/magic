@@ -227,7 +227,7 @@ export function PresetItemEditDialog({
 								data-testid="preset-options-table"
 							>
 								<thead>
-									<tr>
+									<tr data-testid="preset-item-edit-dialog-row">
 										<th className="w-[5rem] pb-2 text-left" scope="col" />
 										<th className="w-24 min-w-[6rem] text-left" scope="col">
 											<span className="text-xs text-muted-foreground">
@@ -360,6 +360,7 @@ function OptionRow({ idx, option, isDefault, onUpdate, onDelete, onSetDefault }:
 					type="button"
 					className="flex cursor-grab touch-none items-center gap-1 text-muted-foreground active:cursor-grabbing"
 					aria-hidden="true"
+					data-testid="preset-option-drag-handle-button"
 				>
 					<GripVertical className="h-4 w-4" />
 					{t("playbook.edit.presets.form.optionLabel", { number: idx + 1 })}

@@ -609,8 +609,6 @@ export const AddModelModal = memo(
 							</Flex>
 						</Form.Item>
 
-						<div className={styles.fieldHint}>{t("form.sharedFieldHint")}</div>
-
 						{/* 模型描述 */}
 						<Form.Item label={t("form.modelDescription")} className={styles.formItem}>
 							<Flex gap={6}>

@@ -41,12 +41,13 @@ const GuidePanel = observer(({ config, onItemClick, readOnly = false }: GuidePan
 						key={item.key}
 						onClick={() => handleItemClick(item)}
 						className="flex cursor-pointer items-center gap-2 overflow-clip rounded-md border border-border bg-background p-3.5 transition-colors hover:bg-accent"
+						data-testid="handle-item-click"
 					>
 						{/* Icon Container */}
 						{item.icon && (
 							<div className="flex size-[50px] shrink-0 items-center justify-center">
 								<div className="flex size-[42px] items-center justify-center rounded-lg bg-primary/10">
-									<img src={item.icon} alt="icon" className="size-full" />
+									<img src={item.icon} alt="icon" className="size-full"  data-testid="guide-panel-image"/>
 								</div>
 							</div>
 						)}

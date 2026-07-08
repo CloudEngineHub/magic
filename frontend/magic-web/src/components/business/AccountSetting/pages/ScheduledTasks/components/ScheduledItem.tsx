@@ -122,6 +122,11 @@ export function ScheduledItem({ value, onChange, disabled }: ScheduledItemProps)
 						onChange={(day: string) => updateFormValues({ day })}
 						disabled={disabled}
 						className={styles.selector}
+						classNames={{
+							popup: {
+								root: styles.monthlySelectorPopup,
+							},
+						}}
 						options={DAY_OPTIONS}
 					/>
 				) : null}

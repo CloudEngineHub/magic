@@ -153,6 +153,8 @@ export const PubSubEvents = {
 	Update_Attachments_Loading: "update_attachments_loading",
 	/** 超级麦吉 - 更新附件 */
 	Update_Attachments: "update_attachments",
+	/** Super Magic - refresh the Claw scheduled task list. */
+	Refresh_Claw_Scheduled_Tasks: "refresh_claw_scheduled_tasks",
 	/** 超级麦吉 - 进入文件全选 */
 	Select_All_Files: "select_all_files",
 	/** 超级麦吉 - 取消文件全选 */

@@ -354,6 +354,7 @@ export function MagiClawCreateSheet({
 											<label
 												className="shrink-0 text-[16px] text-muted-foreground"
 												htmlFor="magi-claw-sheet-name-input"
+												data-testid="magi-claw-create-sheet-label"
 											>
 												{t("superLobster.createDialog.nameLabel")}
 											</label>

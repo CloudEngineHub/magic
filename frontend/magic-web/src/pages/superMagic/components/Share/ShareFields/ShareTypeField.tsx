@@ -65,11 +65,11 @@ export default memo(function ShareTypeField(props: ShareTypeFieldProps) {
 	}
 
 	return (
-		<div className="flex flex-col gap-2">
-			<div className="text-sm font-medium leading-none text-foreground">
+		<div className="flex flex-col gap-2" data-testid="share-type-field">
+			<div className="text-sm font-medium leading-none text-foreground" data-testid="share-type-field-label">
 				{t("share.shareMethod")}
 			</div>
-			<div className="flex flex-col gap-1">
+			<div className="flex flex-col gap-1" data-testid="share-type-list">
 				{shareTypeList.map((item) => {
 					const isActive = item.type === normalizedValue
 					const isPasswordProtected = item.type === ShareType.PasswordProtected
@@ -86,12 +86,14 @@ export default memo(function ShareTypeField(props: ShareTypeFieldProps) {
 							className="rounded-xl"
 							onMouseEnter={() => setHoveredType(item.type)}
 							onMouseLeave={() => setHoveredType(null)}
+							data-testid="set-hovered-type"
 						>
 							<div
 								className={cn(
 									"flex cursor-pointer flex-row items-start gap-2 rounded-lg px-2.5 py-2 transition-colors hover:bg-[#F5F5F5]",
 								)}
 								onClick={() => handleTypeChange(item.type)}
+								data-testid="handle-type-change"
 							>
 								<div className="h-6 w-6 flex-shrink-0">
 									<img
@@ -101,6 +103,7 @@ export default memo(function ShareTypeField(props: ShareTypeFieldProps) {
 											"h-full w-full",
 											isDisabled && "opacity-40 grayscale",
 										)}
+										data-testid="share-type-field-image"
 									/>
 								</div>
 								<div className="flex flex-1 flex-col gap-1.5">
@@ -125,7 +128,7 @@ export default memo(function ShareTypeField(props: ShareTypeFieldProps) {
 										showCheckbox ? "opacity-100" : "opacity-0",
 									)}
 								>
-									{isDisabled ? <VipIcon /> : <Checkbox checked={isActive} />}
+									{isDisabled ? <VipIcon /> : <Checkbox checked={isActive}  data-testid="share-type-field-checkbox"/>}
 								</div>
 							</div>
 						</div>

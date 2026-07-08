@@ -13,6 +13,7 @@ import {
 	type UserInfoAuthorizationRequest,
 } from "../services/IframeUserInfoService"
 import type { HTMLAppConfig, UserInfo } from "../types"
+import type { HtmlAppConfigState } from "../services/IframePermissionService"
 
 export interface UseIframeUserInfoOptions {
 	/** iframe ref，用于构造 postToIframe */
@@ -23,6 +24,8 @@ export interface UseIframeUserInfoOptions {
 	getUserInfo: () => UserInfo | null
 	/** app.json permissions declaration. */
 	appConfig?: HTMLAppConfig | null
+	/** app.json loading state. */
+	appConfigState?: HtmlAppConfigState
 	/** 当前 HTML 微应用实例标识，例如 projectId + appRootPath。 */
 	appInstanceKey?: string
 	/** 请求敏感用户信息前的宿主侧授权确认。 */
@@ -35,8 +38,15 @@ export interface UseIframeUserInfoReturn {
 }
 
 export function useIframeUserInfo(options: UseIframeUserInfoOptions): UseIframeUserInfoReturn {
-	const { iframeRef, targetOrigin, getUserInfo, appConfig, appInstanceKey, authorizeUserInfo } =
-		options
+	const {
+		iframeRef,
+		targetOrigin,
+		getUserInfo,
+		appConfig,
+		appConfigState,
+		appInstanceKey,
+		authorizeUserInfo,
+	} = options
 
 	const serviceRef = useRef<IframeUserInfoService | null>(null)
 
@@ -49,6 +59,7 @@ export function useIframeUserInfo(options: UseIframeUserInfoOptions): UseIframeU
 			postToIframe,
 			getUserInfo,
 			appConfig,
+			appConfigState,
 			appInstanceKey,
 			authorizeUserInfo,
 		}
@@ -59,7 +70,7 @@ export function useIframeUserInfo(options: UseIframeUserInfoOptions): UseIframeU
 			serviceRef.current?.destroy()
 			serviceRef.current = null
 		}
-	}, [postToIframe, getUserInfo, appConfig, appInstanceKey, authorizeUserInfo])
+	}, [postToIframe, getUserInfo, appConfig, appConfigState, appInstanceKey, authorizeUserInfo])
 
 	const handleUserInfoMessage = useMemoizedFn(
 		async (type: string, payload: unknown): Promise<boolean> => {

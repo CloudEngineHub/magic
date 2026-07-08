@@ -10,6 +10,8 @@ import {
 	type FileItem,
 } from "./utils/fetchInterceptor"
 import { createNestedIframeContentHandler } from "./utils/nested-iframe-content"
+import { createVirtualStorageMessageHandler } from "./utils/virtual-storage"
+import { HTML_IFRAME_RENDER_LIFECYCLE_EVENT } from "./telemetry/iframeRenderLifecycle"
 import type { SaveResult } from "./iframe-bridge/types"
 import { useStyles } from "./styles"
 import { useFileData } from "@/pages/superMagic/hooks/useFileData"
@@ -42,20 +44,26 @@ import { useIsMobile } from "@/hooks/useIsMobile"
 import useExportMenuItems from "./useExportMenuItems"
 import Deleted from "../../components/Deleted"
 import useSaveHandlerRegistration from "../../hooks/useSaveHandlerRegistration"
+import { useCurrentHtmlFileInfo } from "./hooks/useCurrentHtmlFileInfo"
 import useShareButtonVisibility from "../../hooks/useShareButtonVisibility"
 import type { HeaderActionConfig } from "../../components/CommonHeaderV2/types"
 import useServerUpdate from "../../hooks/useServerUpdate"
 import CodeVersionCompareDialog from "../../components/versioning/CodeVersionCompareDialog"
 import VersionCompareDialog from "../../components/versioning/VersionCompareDialog"
-import { getFileContentById } from "@/pages/superMagic/utils/api"
+import HistoryVersionCompareDialog from "../../components/PPTRender/components/HistoryVersionCompareDialog"
+import {
+	getFileContentById,
+	getTemporaryDownloadUrl,
+	downloadFileContent,
+} from "@/pages/superMagic/utils/api"
 import { useTranslation } from "react-i18next"
 import { AlertTriangle, Crosshair, Terminal } from "lucide-react"
 import { Button } from "@/components/shadcn-ui/button"
 import { cn } from "@/lib/utils"
 import { env } from "@/utils/env"
+import { logger as Logger } from "@/utils/log"
 import magicToast from "@/components/base/MagicToaster/utils"
-import { exportHtmlToPdf, exportHtmlToImage } from "../../../../../../../packages/pdf-export/src"
-import type { ImageExportFormat } from "../../../../../../../packages/pdf-export/src"
+import { type ImageExportFormat } from "@magic-web/html2image"
 import { resolvePptScaleContentDimensions } from "./utils/slide-dimensions"
 import {
 	AlertDialog,
@@ -70,6 +78,7 @@ import {
 
 /** 跨组件重挂载持久化调试面板开关状态（按文件 ID 存储） */
 const devConsoleStateMap = new Map<string, boolean>()
+const htmlRenderLogger = Logger.createLogger("HTMLContent")
 
 interface HTMLProps {
 	data: string | any
@@ -115,8 +124,10 @@ interface HTMLProps {
 	openFileTab?: (fileItem: any, autoEdit?: boolean) => void
 	exportFile?: (fileId: string, fileVersion?: number) => void
 	exportPdf?: (fileId: string) => void
+	exportRasterPdf?: (fileId: string, pageMode: "fit" | "paginate") => void
 	exportPpt?: (fileId: string) => void
 	exportPptx?: (fileId: string) => void
+	exportImage?: (fileId: string, format?: ImageExportFormat) => void
 	isExporting?: boolean
 	selectedProject?: ProjectListItem | null
 	selectedTopic?: Topic | null
@@ -134,15 +145,17 @@ interface HTMLProps {
 
 interface HtmlExportActionProps {
 	handleExportSource: () => void
-	handleExportPDF: (pagination: "slice" | "none") => void
+	handleExportPDF: () => void
 	handleExportPPT: () => void
 	handleExportPptx: () => void
 	handleExportImage?: (format: ImageExportFormat) => void
+	handleExportRasterPdf?: (pageMode: "fit" | "paginate") => void
 	isExporting?: boolean
 	supportPPT: boolean
 	showButtonText: boolean
 	showExportPptx?: boolean
 	showExportImage?: boolean
+	showExportRasterPdf?: boolean
 }
 
 const HtmlExportAction = memo(function HtmlExportAction({
@@ -151,11 +164,13 @@ const HtmlExportAction = memo(function HtmlExportAction({
 	handleExportPPT,
 	handleExportPptx,
 	handleExportImage,
+	handleExportRasterPdf,
 	isExporting,
 	supportPPT,
 	showButtonText,
 	showExportPptx,
 	showExportImage,
+	showExportRasterPdf,
 }: HtmlExportActionProps) {
 	const { ExportDropdownButton } = useExportMenuItems({
 		handleExportSource,
@@ -163,11 +178,13 @@ const HtmlExportAction = memo(function HtmlExportAction({
 		handleExportPPT,
 		handleExportPptx,
 		handleExportImage,
+		handleExportRasterPdf,
 		isExporting,
 		showButtonText,
 		supportPPT,
 		showExportPptx,
 		showExportImage,
+		showExportRasterPdf,
 	})
 
 	return ExportDropdownButton
@@ -199,8 +216,10 @@ export default memo(function HTML(props: HTMLProps) {
 		openFileTab,
 		exportFile,
 		exportPdf,
+		exportRasterPdf,
 		exportPpt,
 		exportPptx,
+		exportImage,
 		isExporting,
 		selectedProject,
 		showFileHeader = true,
@@ -226,6 +245,9 @@ export default memo(function HTML(props: HTMLProps) {
 
 	const [processedContent, setProcessedContent] = useState<string>("")
 	const [filePathMapping, setFilePathMapping] = useState<Map<string, string>>(new Map()) // 记录文件的相对路径和替换后的url映射关系
+	// 跨域 shell 渲染下，数据加载完成 ≠ iframe 内容已画出来；
+	// 用 iframe 上报的渲染就绪信号来控制预览 loading 收起时机，避免"loading 没了但页面空白"。
+	const [isPreviewRenderReady, setIsPreviewRenderReady] = useState(false)
 	const [saveFunction, setSaveFunction] = useState<
 		(() => Promise<SaveResult | undefined>) | (() => void) | null
 	>(null) // 保存函数
@@ -236,7 +258,6 @@ export default memo(function HTML(props: HTMLProps) {
 	/** 是否正处于编辑后的状态 */
 	const [isEditingAfter, setIsEditingAfter] = useState(false)
 	const [serverUpdatedContent, setServerUpdatedContent] = useState<string>()
-	const [isExportingPdf, setIsExportingPdf] = useState(false)
 	const editSessionUpdatedAtRef = useRef<string | undefined>(undefined)
 	const serverUpdateRequestIdRef = useRef(0)
 	const editSessionBaselineContentRef = useRef<string | null>(null)
@@ -337,10 +358,11 @@ export default memo(function HTML(props: HTMLProps) {
 		}
 	}, [handleDetailHeaderRefresh])
 
-	const currentAttachmentItem = useMemo(
-		() => allAttachmentItems.find((item: any) => item.file_id === displayData?.file_id),
-		[allAttachmentItems, displayData?.file_id],
-	)
+	const currentHtmlFileInfo = useCurrentHtmlFileInfo({
+		attachmentList: allAttachmentItems,
+		fileId: displayData?.file_id,
+		fallbackFileName: data?.file_name || displayData?.file_name,
+	})
 
 	/**
 	 * 仅可视化预览：dashboard / audio / video 入口 HTML 走构建内 templates；dashboard 另换壳 CSS/JS。
@@ -350,13 +372,13 @@ export default memo(function HTML(props: HTMLProps) {
 		if (viewMode === "code" || isPlaybackMode || isInPPTMode) return undefined
 		if (isEditMode && !isDataAnalysis) return undefined
 		return resolveHtmlPreviewBundledTemplate({
-			fileName: currentAttachmentItem?.file_name || data?.file_name,
-			relativeFilePath: currentAttachmentItem?.relative_file_path,
+			fileName: currentHtmlFileInfo.fileName || data?.file_name,
+			relativeFilePath: currentHtmlFileInfo.relativeFilePath,
 			displayConfigType: displayConfig?.type,
 		})
 	}, [
-		currentAttachmentItem?.file_name,
-		currentAttachmentItem?.relative_file_path,
+		currentHtmlFileInfo,
+		data?.file_name,
 		displayConfig?.type,
 		isDataAnalysis,
 		isEditMode,
@@ -463,6 +485,112 @@ export default memo(function HTML(props: HTMLProps) {
 		getCurrentEditingContent,
 		applyContent: applyEditingContent,
 	})
+
+	// ==================== 历史版本对比 ====================
+	const [showHistoryCompareDialog, setShowHistoryCompareDialog] = useState(false)
+	const [compareHistoryVersion, setCompareHistoryVersion] = useState<number | undefined>(
+		undefined,
+	)
+	const [compareHistoryContent, setCompareHistoryContent] = useState<string>("")
+	/** Ignore stale history version fetch responses when user switches versions quickly */
+	const compareHistorySwitchSeqRef = useRef(0)
+
+	/** 获取指定版本内容用于对比（不改变当前显示版本） */
+	const getVersionContentForCompare = useMemoizedFn(
+		async (targetVersion: number): Promise<string | null> => {
+			if (!fileId) return null
+			try {
+				const urlRes = await getTemporaryDownloadUrl({
+					file_ids: [fileId],
+					file_versions: { [fileId]: targetVersion },
+				})
+				if (!urlRes[0]?.url) {
+					magicToast.error(t("common.fileUrlFetchFailed"))
+					return null
+				}
+				const content = await downloadFileContent(urlRes[0].url, { responseType: "text" })
+				return content as string
+			} catch (error) {
+				console.error("Failed to download version content for compare:", error)
+				magicToast.error(t("common.fileDownloadFailed"))
+				return null
+			}
+		},
+	)
+
+	/** 处理历史版本内容（路径替换） */
+	const processHistoricalContent = useMemoizedFn(async (rawHtml: string): Promise<string> => {
+		try {
+			const result = await processHtmlContent({
+				content: rawHtml,
+				attachments,
+				fileId,
+				fileName: data?.file_name,
+				attachmentList,
+				displayConfig,
+			})
+			return result.processedContent
+		} catch {
+			return rawHtml
+		}
+	})
+
+	/** 点击历史版本 → 打开对比弹窗 */
+	const handleCompareVersion = useMemoizedFn(async (version: number) => {
+		try {
+			const raw = await getVersionContentForCompare(version)
+			if (raw) {
+				const processed = await processHistoricalContent(raw)
+				// 将三个状态更新批量提交，确保 HistoryVersionCompareDialog 首次挂载时
+				// historyContent 已就绪，避免组件以空内容初始化后无法正确渲染
+				setCompareHistoryVersion(version)
+				setCompareHistoryContent(processed)
+				setShowHistoryCompareDialog(true)
+			}
+		} catch (error) {
+			console.error("Failed to load version for comparison:", error)
+		}
+	})
+
+	/** 在对比弹窗中切换历史版本 */
+	const handleSwitchHistoryVersion = useMemoizedFn(async (version: number) => {
+		const switchId = ++compareHistorySwitchSeqRef.current
+		try {
+			const raw = await getVersionContentForCompare(version)
+			if (switchId !== compareHistorySwitchSeqRef.current) return
+			if (!raw) {
+				throw new Error(`Failed to load history version ${version}`)
+			}
+			const processed = await processHistoricalContent(raw)
+			if (switchId !== compareHistorySwitchSeqRef.current) return
+			// Update content and version together so dialog does not render mismatched state
+			setCompareHistoryContent(processed)
+			setCompareHistoryVersion(version)
+		} catch (error) {
+			console.error("Failed to switch history version:", error)
+			throw error
+		}
+	})
+
+	/** 使用历史版本 → 执行回滚并刷新 */
+	const handleUseHistoryVersionFromCompare = useMemoizedFn(async (version: number) => {
+		try {
+			setShowHistoryCompareDialog(false)
+			await activeHistory.handleVersionRollback(version)
+			onRefreshFile?.()
+			if (fileId) {
+				await fetchHtmlFileVersions(fileId, true)
+			}
+		} catch (error) {
+			console.error("Failed to rollback to history version:", error)
+		}
+	})
+
+	/** 保留最新版本 → 关闭对比弹窗 */
+	const handleUseLatestVersionFromCompare = useMemoizedFn(() => {
+		setShowHistoryCompareDialog(false)
+	})
+	// ======================================================
 
 	useEffect(() => {
 		setServerUpdatedContent(undefined)
@@ -604,6 +732,18 @@ export default memo(function HTML(props: HTMLProps) {
 			attachmentList || [],
 			{
 				postMessageTargetStrategy,
+				projectId: selectedProject?.id,
+				topicId: selectedProject?.current_topic_id,
+				parentTargetOrigin: window.location.origin,
+				onTelemetry: (data) => {
+					htmlRenderLogger.report(HTML_IFRAME_RENDER_LIFECYCLE_EVENT, {
+						renderMode: env("MAGIC_HTML_SANDBOX_URL") ? "cross-origin" : "same-origin",
+						shellUrl: env("MAGIC_HTML_SANDBOX_URL") || "/husky.html",
+						fileId: currentFileId || "",
+						relativeFilePath: htmlRelativeFolderPath,
+						...data,
+					})
+				},
 			},
 		)
 
@@ -613,15 +753,18 @@ export default memo(function HTML(props: HTMLProps) {
 			onSaveAndExit: handleSaveAndExit,
 			onCancel: handleCancel,
 		})
+		const virtualStorageMessageHandler = createVirtualStorageMessageHandler()
 
 		window.addEventListener("message", messageHandler)
 		window.addEventListener("message", nestedIframeHandler)
 		window.addEventListener("message", keyboardMessageHandler)
+		window.addEventListener("message", virtualStorageMessageHandler)
 
 		return () => {
 			window.removeEventListener("message", messageHandler)
 			window.removeEventListener("message", nestedIframeHandler)
 			window.removeEventListener("message", keyboardMessageHandler)
+			window.removeEventListener("message", virtualStorageMessageHandler)
 		}
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [attachmentList, displayData?.file_id])
@@ -859,6 +1002,23 @@ export default memo(function HTML(props: HTMLProps) {
 		[],
 	)
 
+	const handlePreviewRenderReady = useMemoizedFn(() => {
+		setIsPreviewRenderReady(true)
+	})
+
+	// 待渲染内容变化（切换文件 / 内容更新 / 重新挂载）时重置渲染就绪态，重新显示 loading；
+	// 同时设置兜底定时器，避免极端情况下 iframe 未上报就绪信号导致 loading 永久卡住。
+	useEffect(() => {
+		setIsPreviewRenderReady(false)
+		if (!processedContent) return
+		const fallbackTimer = window.setTimeout(() => {
+			setIsPreviewRenderReady(true)
+		}, 4000)
+		return () => {
+			window.clearTimeout(fallbackTimer)
+		}
+	}, [processedContent, renderKey])
+
 	// 当 viewMode 变化时，退出编辑模式
 	useEffect(() => {
 		if (setIsEditMode && isEditMode) {
@@ -916,53 +1076,12 @@ export default memo(function HTML(props: HTMLProps) {
 		exportFile?.(displayData?.file_id, htmlFileVersion)
 	})
 
-	const handleExportPDF = useMemoizedFn(async (pagination: "slice" | "none" = "slice") => {
-		const content = processedContent || editingCodeContent || displayData?.content || ""
-		const fileId = displayData?.file_id
-		if (!content) {
-			magicToast.error(t("topicFiles.contextMenu.fileExport.exportFailed"))
-			return
-		}
+	const handleExportPDF = useMemoizedFn(() => {
+		exportPdf?.(displayData?.file_id)
+	})
 
-		const toastKey = `pdf-export-${fileId || Date.now()}`
-		setIsExportingPdf(true)
-		magicToast.loading({
-			key: toastKey,
-			content: t("topicFiles.exporting"),
-			duration: 0,
-		})
-
-		try {
-			await exportHtmlToPdf({
-				pages: [content],
-				pagination,
-				fileName:
-					(displayData?.file_name || data?.file_name || "export").replace(
-						/\.html?$/i,
-						"",
-					) + ".pdf",
-				output: "download",
-				onProgress: ({ phase, current, total }) => {
-					if (phase !== "capture" || total <= 1) return
-					magicToast.loading({
-						key: toastKey,
-						content: `${t("topicFiles.exporting")} (${current}/${total})`,
-						duration: 0,
-					})
-				},
-			}).promise
-			magicToast.success({
-				key: toastKey,
-				content: t("topicFiles.exportSuccess"),
-				duration: 1000,
-			})
-		} catch (error) {
-			console.error("[pdf-export] HTML export failed:", error)
-			magicToast.destroy(toastKey)
-			magicToast.error(t("topicFiles.contextMenu.fileExport.exportFailed"))
-		} finally {
-			setIsExportingPdf(false)
-		}
+	const handleExportRasterPdf = useMemoizedFn((pageMode: "fit" | "paginate") => {
+		exportRasterPdf?.(displayData?.file_id, pageMode)
 	})
 
 	const handleExportPPT = useMemoizedFn(() => {
@@ -973,60 +1092,9 @@ export default memo(function HTML(props: HTMLProps) {
 		exportPptx?.(displayData?.file_id)
 	})
 
-	const handleExportImage = useMemoizedFn(async (format: ImageExportFormat = "png") => {
-		const content = processedContent || editingCodeContent || displayData?.content || ""
-		const fileId = displayData?.file_id
-		if (!content) {
-			magicToast.error(t("topicFiles.contextMenu.fileExport.exportFailed"))
-			return
-		}
-
-		const toastKey = `image-export-${fileId || Date.now()}`
-		setIsExportingPdf(true)
-		magicToast.loading({
-			key: toastKey,
-			content: t("topicFiles.exporting"),
-			duration: 0,
-		})
-
-		try {
-			await exportHtmlToImage({
-				pages: [content],
-				format,
-				fileName: (displayData?.file_name || data?.file_name || "export").replace(
-					/\.html?$/i,
-					"",
-				),
-				onProgress: ({ phase, current, total }) => {
-					if (phase !== "capture" || total <= 1) return
-					magicToast.loading({
-						key: toastKey,
-						content: `${t("topicFiles.exporting")} (${current}/${total})`,
-						duration: 0,
-					})
-				},
-			}).promise
-			magicToast.success({
-				key: toastKey,
-				content: t("topicFiles.exportSuccess"),
-				duration: 1000,
-			})
-		} catch (error) {
-			console.error("[image-export] HTML export failed:", error)
-			magicToast.destroy(toastKey)
-			magicToast.error(t("topicFiles.contextMenu.fileExport.exportFailed"))
-		} finally {
-			setIsExportingPdf(false)
-		}
+	const handleExportImage = useMemoizedFn((format: ImageExportFormat = "png") => {
+		exportImage?.(displayData?.file_id, format)
 	})
-
-	const relative_file_path = useMemo(() => {
-		const path = attachmentList?.find(
-			(item: any) => item.file_id === displayData?.file_id,
-		)?.relative_file_path
-
-		return path?.replace(displayData?.file_name, "")
-	}, [attachmentList, displayData])
 
 	const handleDownload = useMemoizedFn(() => {
 		onDownload?.(displayData?.file_id, htmlFileVersion)
@@ -1202,11 +1270,13 @@ export default memo(function HTML(props: HTMLProps) {
 							handleExportPPT={handleExportPPT}
 							handleExportPptx={handleExportPptx}
 							handleExportImage={handleExportImage}
-							isExporting={isExporting || isExportingPdf}
+							handleExportRasterPdf={handleExportRasterPdf}
+							isExporting={isExporting}
 							supportPPT={isInPPTMode}
 							showButtonText={context.showButtonText}
 							showExportPptx={isConvertibleFile(displayData, ["html"])}
 							showExportImage={isConvertibleFile(displayData, ["html"])}
+							showExportRasterPdf
 						/>
 					),
 				},
@@ -1221,6 +1291,7 @@ export default memo(function HTML(props: HTMLProps) {
 			handleExportPPT,
 			handleExportPptx,
 			handleExportImage,
+			handleExportRasterPdf,
 			handleExportSource,
 			handleSave,
 			handleSaveAndExit,
@@ -1266,6 +1337,7 @@ export default memo(function HTML(props: HTMLProps) {
 		allowEdit,
 		attachments,
 		actionConfig: headerActionConfig,
+		onCompareVersion: handleCompareVersion,
 		extraMoreMenuItems:
 			!isDataAnalysis && !isCodeViewMode
 				? [
@@ -1322,7 +1394,7 @@ export default memo(function HTML(props: HTMLProps) {
 					})}
 				>
 					<div
-						className={cx(styles.previewInnerBase, styles.htmlBody, {
+						className={cx(styles.previewInnerBase, styles.htmlBody, "relative", {
 							[styles.phoneModeInner]: viewMode === "phone",
 							[styles.immersivePreviewInner]: isImmersiveLayout,
 						})}
@@ -1345,32 +1417,47 @@ export default memo(function HTML(props: HTMLProps) {
 								attachmentList={attachmentList}
 								currentFileId={displayData?.file_id}
 								currentFileName={data?.file_name}
+								projectId={selectedProject?.id}
+								topicId={selectedProject?.current_topic_id}
 							/>
 						) : htmlIsDeleted ? (
 							<Deleted data={displayData} showHeader={false} />
 						) : (
-							<IsolatedHTMLRenderer
-								ref={htmlRendererRef}
-								key={`html-${renderKey}`}
-								content={processedContent}
-								rawSourceCode={data?.content}
-								sandboxType="iframe"
-								isPptRender={isInPPTMode}
-								scaleContentDimensions={scaleContentDimensions}
-								isFullscreen={isFullscreen}
-								isEditMode={isEditMode}
-								saveEditContent={saveEditContent}
-								onSaveReady={onSaveReady}
-								fileId={displayData?.file_id}
-								filePathMapping={filePathMapping}
-								openNewTab={openNewTab}
-								relative_file_path={relative_file_path}
-								selectedProject={selectedProject}
-								attachmentList={attachmentList}
-								isPlaybackMode={isPlaybackMode}
-								onDevConsoleClose={() => setDevConsoleEnabled(false)}
-								onAppendPickingChange={setIsAppendPicking}
-							/>
+							<>
+								<IsolatedHTMLRenderer
+									ref={htmlRendererRef}
+									key={`html-${renderKey}`}
+									content={processedContent}
+									rawSourceCode={data?.content}
+									sandboxType="iframe"
+									isPptRender={isInPPTMode}
+									scaleContentDimensions={scaleContentDimensions}
+									isFullscreen={isFullscreen}
+									isEditMode={isEditMode}
+									saveEditContent={saveEditContent}
+									onSaveReady={onSaveReady}
+									fileId={displayData?.file_id}
+									filePathMapping={filePathMapping}
+									openNewTab={openNewTab}
+									htmlRelativeFolderPath={currentHtmlFileInfo.htmlRelativeFolderPath}
+									selectedProject={selectedProject}
+									attachmentList={attachmentList}
+									isPlaybackMode={isPlaybackMode}
+									onRenderReady={handlePreviewRenderReady}
+									onDevConsoleClose={() => setDevConsoleEnabled(false)}
+									onAppendPickingChange={setIsAppendPicking}
+								/>
+								{/* 跨域 shell 渲染期间用 loading 覆盖层填补"数据已就绪但 iframe 内容未画出"的空窗 */}
+								{!isPreviewRenderReady && (
+									<Flex
+										justify="center"
+										align="center"
+										className="absolute inset-0 z-10 bg-white dark:bg-[#1c1c1c]"
+									>
+										<MagicSpin spinning />
+									</Flex>
+								)}
+							</>
 						)}
 					</div>
 				</div>
@@ -1440,6 +1527,27 @@ export default memo(function HTML(props: HTMLProps) {
 					openNewTab={openNewTab}
 					selectedProject={selectedProject}
 					attachmentList={attachmentList}
+				/>
+			)}
+
+			{/* 历史版本对比弹窗；isPptRender 与单页预览一致，PPT 项目内启用缩放 */}
+			{compareHistoryVersion && (
+				<HistoryVersionCompareDialog
+					open={showHistoryCompareDialog}
+					onOpenChange={setShowHistoryCompareDialog}
+					latestContent={processedContent}
+					historyContent={compareHistoryContent}
+					historyVersion={compareHistoryVersion}
+					fileVersionsList={activeHistory.fileVersionsList}
+					onUseHistoryVersion={handleUseHistoryVersionFromCompare}
+					onUseLatestVersion={handleUseLatestVersionFromCompare}
+					onSwitchHistoryVersion={handleSwitchHistoryVersion}
+					filePathMapping={filePathMapping}
+					fileId={displayData?.file_id}
+					openNewTab={openNewTab}
+					selectedProject={selectedProject}
+					attachmentList={attachmentList}
+					isPptRender={isInPPTMode}
 				/>
 			)}
 		</div>

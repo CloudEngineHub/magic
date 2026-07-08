@@ -10,6 +10,7 @@ import { LinkIcon } from "@/components/tiptap-icons/link-icon"
 
 // --- Lib ---
 import { isMarkInSchema, sanitizeUrl } from "@/lib/tiptap-utils"
+import { runActiveEditor } from "@/utils/tiptapEditorLifecycle"
 
 /**
  * Configuration for the link popover functionality
@@ -48,16 +49,24 @@ export interface LinkHandlerProps {
  * Checks if a link can be set in the current editor state
  */
 export function canSetLink(editor: Editor | null): boolean {
-	if (!editor || !editor.isEditable) return false
-	return editor.can().setMark("link")
+	return (
+		runActiveEditor(editor, (activeEditor) => {
+			if (!activeEditor.isEditable) return false
+			return activeEditor.can().setMark("link")
+		}, false) ?? false
+	)
 }
 
 /**
  * Checks if a link is currently active in the editor
  */
 export function isLinkActive(editor: Editor | null): boolean {
-	if (!editor || !editor.isEditable) return false
-	return editor.isActive("link")
+	return (
+		runActiveEditor(editor, (activeEditor) => {
+			if (!activeEditor.isEditable) return false
+			return activeEditor.isActive("link")
+		}, false) ?? false
+	)
 }
 
 /**
@@ -69,17 +78,22 @@ export function shouldShowLinkButton(props: {
 }): boolean {
 	const { editor, hideWhenUnavailable } = props
 
-	const linkInSchema = isMarkInSchema("link", editor)
+	const isVisible =
+		runActiveEditor(editor, (activeEditor) => {
+			const linkInSchema = isMarkInSchema("link", activeEditor)
 
-	if (!linkInSchema || !editor) {
-		return false
-	}
+			if (!linkInSchema) {
+				return false
+			}
 
-	if (hideWhenUnavailable && !editor.isActive("code")) {
-		return canSetLink(editor)
-	}
+			if (hideWhenUnavailable && !activeEditor.isActive("code")) {
+				return canSetLink(activeEditor)
+			}
 
-	return true
+			return true
+		}, false) ?? false
+
+	return isVisible
 }
 
 /**
@@ -95,14 +109,16 @@ export function useLinkHandler(props: LinkHandlerProps) {
 
 		// Get URL and title immediately on mount
 		const updateInitialState = () => {
-			if (isLinkActive(editor)) {
-				const { href, title: linkTitle } = editor.getAttributes("link")
-				setUrl(href || "")
-				setTitle(linkTitle || "")
-			} else {
-				setUrl("")
-				setTitle("")
-			}
+			runActiveEditor(editor, (activeEditor) => {
+				if (isLinkActive(activeEditor)) {
+					const { href, title: linkTitle } = activeEditor.getAttributes("link")
+					setUrl(href || "")
+					setTitle(linkTitle || "")
+				} else {
+					setUrl("")
+					setTitle("")
+				}
+			})
 		}
 
 		updateInitialState()
@@ -112,15 +128,17 @@ export function useLinkHandler(props: LinkHandlerProps) {
 		if (!editor) return
 
 		const updateLinkState = () => {
-			if (isLinkActive(editor)) {
-				const { href, title: linkTitle } = editor.getAttributes("link")
-				setUrl(href || "")
-				setTitle(linkTitle || "")
-			} else {
-				// Clear state when link is not active
-				setUrl("")
-				setTitle("")
-			}
+			runActiveEditor(editor, (activeEditor) => {
+				if (isLinkActive(activeEditor)) {
+					const { href, title: linkTitle } = activeEditor.getAttributes("link")
+					setUrl(href || "")
+					setTitle(linkTitle || "")
+				} else {
+					// Clear state when link is not active
+					setUrl("")
+					setTitle("")
+				}
+			})
 		}
 
 		// Update immediately when selection changes
@@ -140,9 +158,6 @@ export function useLinkHandler(props: LinkHandlerProps) {
 	const setLink = React.useCallback(() => {
 		if (!url || !editor) return
 
-		const { selection } = editor.state
-		const isEmpty = selection.empty
-
 		// Encode URL if it contains spaces to ensure markdown parsing works correctly
 		// According to Markdown spec, URLs with spaces should be URL-encoded
 		// We use encodeURI to preserve path structure while encoding spaces
@@ -158,29 +173,34 @@ export function useLinkHandler(props: LinkHandlerProps) {
 			linkAttributes.title = title.trim()
 		}
 
-		if (isEmpty) {
-			// If no text is selected, insert text with link mark
-			// This ensures the link is properly formatted as [text](url) in markdown
-			// instead of being recognized as auto-link <url>
-			const linkText = title && title.trim() ? title.trim() : url
-			editor
-				.chain()
-				.focus()
-				.insertContent({
-					type: "text",
-					text: linkText,
-					marks: [
-						{
-							type: "link",
-							attrs: linkAttributes,
-						},
-					],
-				})
-				.run()
-		} else {
-			// If text is selected, convert it to a link
-			editor.chain().focus().extendMarkRange("link").setLink(linkAttributes).run()
-		}
+		runActiveEditor(editor, (activeEditor) => {
+			const { selection } = activeEditor.state
+			const isEmpty = selection.empty
+
+			if (isEmpty) {
+				// If no text is selected, insert text with link mark
+				// This ensures the link is properly formatted as [text](url) in markdown
+				// instead of being recognized as auto-link <url>
+				const linkText = title && title.trim() ? title.trim() : url
+				activeEditor
+					.chain()
+					.focus()
+					.insertContent({
+						type: "text",
+						text: linkText,
+						marks: [
+							{
+								type: "link",
+								attrs: linkAttributes,
+							},
+						],
+					})
+					.run()
+			} else {
+				// If text is selected, convert it to a link
+				activeEditor.chain().focus().extendMarkRange("link").setLink(linkAttributes).run()
+			}
+		})
 
 		setUrl(null)
 		setTitle(null)
@@ -189,14 +209,15 @@ export function useLinkHandler(props: LinkHandlerProps) {
 	}, [editor, onSetLink, url, title])
 
 	const removeLink = React.useCallback(() => {
-		if (!editor) return
-		editor
-			.chain()
-			.focus()
-			.extendMarkRange("link")
-			.unsetLink()
-			.setMeta("preventAutolink", true)
-			.run()
+		runActiveEditor(editor, (activeEditor) => {
+			activeEditor
+				.chain()
+				.focus()
+				.extendMarkRange("link")
+				.unsetLink()
+				.setMeta("preventAutolink", true)
+				.run()
+		})
 		setUrl("")
 		setTitle("")
 	}, [editor])

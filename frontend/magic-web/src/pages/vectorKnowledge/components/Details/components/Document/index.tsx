@@ -4,7 +4,7 @@ import { Flex, Input, Button, Tag, Dropdown, Table } from "antd"
 import { useMemoizedFn, useDebounceFn } from "ahooks"
 import { IconChevronDown, IconDots, IconPlus } from "@tabler/icons-react"
 import { useUpload } from "@/hooks/useUploadFiles"
-import { genFileData } from "@/pages/vectorKnowledge/utils"
+import { genFileData, getVectorKnowledgeCreateRoute } from "@/pages/vectorKnowledge/utils"
 import { KnowledgeApi } from "@/apis"
 import { Knowledge } from "@/types/knowledge"
 import {
@@ -16,16 +16,14 @@ import {
 import { useDocumentOperations } from "../../hooks/useDocumentOperations"
 import { useVectorKnowledgeDocumentStyles } from "./styles"
 import DocumentUpload from "@/pages/vectorKnowledge/components/Upload/DocumentUpload"
-import {
-	hasEditRight,
-	hasAdminRight,
-} from "@/pages/flow/components/AuthControlButton/types"
+import { hasEditRight, hasAdminRight } from "@/pages/flow/components/AuthControlButton/types"
 import type { OperationTypes } from "@/pages/flow/components/AuthControlButton/types"
 import IconActionButton from "@/enhance/tabler/icons-react/icons/IconActionButton"
 import { FragmentConfig } from "@/pages/vectorKnowledge/types"
 import { history } from "@/routes/history"
 import { RouteName } from "@/routes/constants"
 import magicToast from "@/components/base/MagicToaster/utils"
+import { useLocation } from "react-router"
 
 interface Props {
 	className: string
@@ -42,6 +40,7 @@ export default function Document({
 }: Props) {
 	const { styles } = useVectorKnowledgeDocumentStyles()
 	const { t } = useTranslation("flow")
+	const location = useLocation()
 
 	const rightContainerRef = useRef<HTMLDivElement>(null)
 	const headerRef = useRef<HTMLDivElement>(null)
@@ -249,14 +248,20 @@ export default function Document({
 	}
 
 	/** 跳转文档配置页面 */
-	const handleFileConfig = useMemoizedFn((record: Knowledge.EmbedDocumentDetail) => {
-		history.push({
-			name: RouteName.VectorKnowledgeCreate,
+	const getDocumentConfigRoute = useMemoizedFn((record: Knowledge.EmbedDocumentDetail) => {
+		const route = getVectorKnowledgeCreateRoute(location.pathname)
+		return {
+			...route,
 			query: {
+				...(route.query || {}),
 				knowledgeBaseCode,
 				documentCode: record.code,
 			},
-		})
+		}
+	})
+
+	const handleFileConfig = useMemoizedFn((record: Knowledge.EmbedDocumentDetail) => {
+		history.push(getDocumentConfigRoute(record))
 	})
 
 	/**
@@ -484,67 +489,67 @@ export default function Document({
 		},
 		...(hasEditRight(userOperation)
 			? [
-				{
-					title: t("knowledgeDatabase.operation"),
-					key: "operation",
-					width: 100,
-					render: (_: any, record: Knowledge.EmbedDocumentDetail) => (
-						<div className={styles.operation}>
-							<div
-								className={styles.actionButton}
-								onClick={() => handleFileConfig(record)}
-							>
-								<IconActionButton size={24} />
-							</div>
-							<Dropdown
-								placement="bottomRight"
-								menu={{
-									items: [
-										{
-											label: <div>{t("knowledgeDatabase.rename")}</div>,
-											key: "rename",
-											onClick: () => handleRenameFile(record),
-										},
-										// {
-										// 	label: <div>{t("common.enable")}</div>,
-										// 	key: "enable",
-										// 	onClick: () => handleEnableSingleFile(record),
-										// },
-										// {
-										// 	label: <div>{t("common.disabled")}</div>,
-										// 	key: "disabled",
-										// 	onClick: () => handleDisableSingleFile(record),
-										// },
-										...(hasAdminRight(userOperation) &&
-											sourceType !== DataSourceType.Enterprise
-											? [
-												{
-													label: (
-														<div className={styles.deleteText}>
-															{t("knowledgeDatabase.delete")}
-														</div>
-													),
-													key: "delete",
-													onClick: () =>
-														handleDeleteSingleFile(record),
-												},
-											]
-											: []),
-									],
-								}}
-							>
-								<Flex
-									align="center"
-									justify="center"
-									className={styles.operationButton}
+					{
+						title: t("knowledgeDatabase.operation"),
+						key: "operation",
+						width: 100,
+						render: (_: any, record: Knowledge.EmbedDocumentDetail) => (
+							<div className={styles.operation}>
+								<div
+									className={styles.actionButton}
+									onClick={() => handleFileConfig(record)}
 								>
-									<IconDots size={20} />
-								</Flex>
-							</Dropdown>
-						</div>
-					),
-				},
-			]
+									<IconActionButton size={24} />
+								</div>
+								<Dropdown
+									placement="bottomRight"
+									menu={{
+										items: [
+											{
+												label: <div>{t("knowledgeDatabase.rename")}</div>,
+												key: "rename",
+												onClick: () => handleRenameFile(record),
+											},
+											// {
+											// 	label: <div>{t("common.enable")}</div>,
+											// 	key: "enable",
+											// 	onClick: () => handleEnableSingleFile(record),
+											// },
+											// {
+											// 	label: <div>{t("common.disabled")}</div>,
+											// 	key: "disabled",
+											// 	onClick: () => handleDisableSingleFile(record),
+											// },
+											...(hasAdminRight(userOperation) &&
+											sourceType !== DataSourceType.Enterprise
+												? [
+														{
+															label: (
+																<div className={styles.deleteText}>
+																	{t("knowledgeDatabase.delete")}
+																</div>
+															),
+															key: "delete",
+															onClick: () =>
+																handleDeleteSingleFile(record),
+														},
+													]
+												: []),
+										],
+									}}
+								>
+									<Flex
+										align="center"
+										justify="center"
+										className={styles.operationButton}
+									>
+										<IconDots size={20} />
+									</Flex>
+								</Dropdown>
+							</div>
+						),
+					},
+				]
 			: []),
 	]
 
@@ -568,30 +573,30 @@ export default function Document({
 									items: [
 										...(hasEditRight(userOperation)
 											? [
-												{
-													label: <div>{t("common.enable")}</div>,
-													key: "enable",
-													onClick: () => handleBatchEnable(),
-												},
-												{
-													label: <div>{t("common.disabled")}</div>,
-													key: "disable",
-													onClick: () => handleBatchDisable(),
-												},
-											]
+													{
+														label: <div>{t("common.enable")}</div>,
+														key: "enable",
+														onClick: () => handleBatchEnable(),
+													},
+													{
+														label: <div>{t("common.disabled")}</div>,
+														key: "disable",
+														onClick: () => handleBatchDisable(),
+													},
+												]
 											: []),
 										...(hasAdminRight(userOperation)
 											? [
-												{
-													label: (
-														<div className={styles.deleteText}>
-															{t("knowledgeDatabase.delete")}
-														</div>
-													),
-													key: "delete",
-													onClick: () => handleBatchDelete(),
-												},
-											]
+													{
+														label: (
+															<div className={styles.deleteText}>
+																{t("knowledgeDatabase.delete")}
+															</div>
+														),
+														key: "delete",
+														onClick: () => handleBatchDelete(),
+													},
+												]
 											: []),
 									],
 								}}
@@ -629,9 +634,9 @@ export default function Document({
 					rowSelection={
 						hasEditRight(userOperation)
 							? {
-								selectedRowKeys,
-								onChange: (codes) => setSelectedRowKeys(codes as string[]),
-							}
+									selectedRowKeys,
+									onChange: (codes) => setSelectedRowKeys(codes as string[]),
+								}
 							: undefined
 					}
 					columns={columns}
@@ -644,6 +649,9 @@ export default function Document({
 						showSizeChanger: true,
 						showQuickJumper: false,
 						pageSizeOptions: ["10", "20", "50"],
+						locale: {
+							items_per_page: t("knowledgeDatabase.paginationItemsPerPage"),
+						},
 						onChange: handlePageChange,
 					}}
 				/>

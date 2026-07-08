@@ -7,6 +7,8 @@
 from app.tools.dummy_tool import DummyTool # DummyTool 必须在第一个位置导入，
 from app.tools.ask_user import AskUserTool
 from app.tools.web_search import WebSearch
+from app.tools.agent_list import AgentList
+from app.tools.prepare_agent import PrepareAgent
 from app.tools.call_subagent import CallSubagent
 from app.tools.wait_for_subagents import WaitForSubagents
 from app.tools.compact_chat_history import CompactChatHistory
@@ -29,7 +31,6 @@ from app.tools.get_js_cdn_address import GetJsCdnAddress
 from app.tools.grep_search import GrepSearch
 
 from app.tools.generate_images import GenerateImages
-from app.tools.generate_video import GenerateVideo, QueryVideoGeneration
 from app.tools.image_search import ImageSearch
 from app.tools.list_dir import ListDir
 from app.tools.purify import Purify
@@ -68,6 +69,7 @@ from app.tools.document_parse import (
     SummarizeDocument,
     UnderstandDocumentImages,
 )
+from app.tools.cli_manager import CliManagerApply, CliManagerList, CliManagerRemove
 from app.tools.env_manager import GetEnv, ListEnv, SetEnv, UnsetEnv
 from app.tools.visual_understanding import VisualUnderstanding
 from app.tools.visual_understanding_webpage import VisualUnderstandingWebpage
@@ -107,6 +109,7 @@ from app.tools.design.tools import (
     CreateCanvas,
     GenerateCanvasImages,
     GenerateCanvasVideos,
+    RestoreCanvasMedia,
     SearchCanvasImages,
     SearchImagePrompts,
 )
@@ -129,6 +132,21 @@ from app.tools.mcp import (
     McpGetToolSchema,
     McpListServers,
     McpListTools,
+)
+
+# OAuth2 工具集（code_mode_only=True，只允许通过 sdk.tool.call 调用）
+from app.tools.oauth2 import (
+    OAuth2CheckAuthorization,
+    OAuth2GetApiDoc,
+    OAuth2GetRedirectUri,
+    OAuth2ListApiDocs,
+    OAuth2ListApps,
+    OAuth2RemoveApiDoc,
+    OAuth2RemoveApp,
+    OAuth2Request,
+    OAuth2StartAuthorization,
+    OAuth2UpsertApiDoc,
+    OAuth2UpsertApp,
 )
 
 # Remote 工具集（将 magic-service mention 中的 tool / agent 以本地工具形态转发）
@@ -157,7 +175,9 @@ __all__ = [
     "AnalysisSlideWebpage",
     "AppendToFile",
     "WebSearch",
-    "CallAgent",
+    "AgentList",
+    "PrepareAgent",
+    "CallSubagent",
     "WaitForSubagents",
     "ConnectDingTalkBot",
     "ConnectLarkBot",
@@ -175,6 +195,9 @@ __all__ = [
     "SampleDocumentContent",
     "SummarizeDocument",
     "UnderstandDocumentImages",
+    "CliManagerApply",
+    "CliManagerList",
+    "CliManagerRemove",
     "GetEnv",
     "ListEnv",
     "SetEnv",
@@ -197,8 +220,6 @@ __all__ = [
     "GrepSearch",
     "ImageSearch",
     "GenerateImages",
-    "GenerateVideo",
-    "QueryVideoGeneration",
     "GetIMChannelStatus",
     "FindSkillsTool",
     "GetUserInfo",
@@ -262,6 +283,7 @@ __all__ = [
     "CreateCanvas",
     "GenerateCanvasImages",
     "GenerateCanvasVideos",
+    "RestoreCanvasMedia",
     "SearchCanvasImages",
     "SearchImagePrompts",
 
@@ -272,6 +294,19 @@ __all__ = [
     "McpGetToolSchema",
     "McpListServers",
     "McpListTools",
+
+    # OAuth2 工具集
+    "OAuth2CheckAuthorization",
+    "OAuth2GetApiDoc",
+    "OAuth2GetRedirectUri",
+    "OAuth2ListApiDocs",
+    "OAuth2ListApps",
+    "OAuth2RemoveApiDoc",
+    "OAuth2RemoveApp",
+    "OAuth2Request",
+    "OAuth2StartAuthorization",
+    "OAuth2UpsertApiDoc",
+    "OAuth2UpsertApp",
 
     # Remote 工具集
     "CallSimpleAgent",

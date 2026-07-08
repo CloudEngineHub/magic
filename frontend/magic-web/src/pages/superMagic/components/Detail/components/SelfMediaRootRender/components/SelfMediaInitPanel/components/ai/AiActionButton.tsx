@@ -107,16 +107,17 @@ export default observer(function AiActionButton({
 					"flex h-full flex-shrink-0 items-center justify-center gap-1.5 font-semibold transition-all",
 					isSm ? "px-2" : "px-5",
 					!loading &&
-						(isAccent
-							? "hover:bg-white/10 active:opacity-95"
-							: isPrimary
-								? "hover:bg-white/5 active:opacity-90 dark:hover:bg-black/5"
-								: "hover:text-zinc-900 active:opacity-90 dark:hover:text-zinc-50"),
+					(isAccent
+						? "hover:bg-white/10 active:opacity-95"
+						: isPrimary
+							? "hover:bg-white/5 active:opacity-90 dark:hover:bg-black/5"
+							: "hover:text-zinc-900 active:opacity-90 dark:hover:text-zinc-50"),
 				)}
 				onClick={onClick}
 				disabled={disabled && !loading}
 				title={effectiveDisabledReason}
 				aria-describedby={effectiveDisabledReason ? disabledReasonId : undefined}
+				data-testid="ai-action-button"
 			>
 				{loading && (
 					<span className="relative mr-1 flex h-2 w-2">

@@ -118,6 +118,7 @@ function ToolCardHeader({
 				role={interactive ? "button" : undefined}
 				tabIndex={interactive ? 0 : undefined}
 				onKeyDown={handleKeyDown}
+				data-testid="knowledge-search-tool"
 			>
 				<div className="relative flex size-4 shrink-0 items-center justify-center overflow-hidden rounded-[6px] bg-muted">
 					{status === "running" ? (
@@ -277,8 +278,8 @@ function KnowledgeSearchTool({
 				: query
 					? `${query} · ${hits.length} ${t("knowledgeSearch.hits", "命中")}`
 					: data?.summary?.message ||
-						toolData?.remark ||
-						`${hits.length} ${t("knowledgeSearch.hits", "命中")}`
+					toolData?.remark ||
+					`${hits.length} ${t("knowledgeSearch.hits", "命中")}`
 
 	const toggleExpanded = useCallback(() => {
 		pubsub.publish(PubSubEvents.Message_Suppress_Auto_Scroll)
@@ -312,6 +313,7 @@ function KnowledgeSearchTool({
 			data-tool={toolData?.id}
 			onMouseEnter={onMouseEnter}
 			onMouseLeave={onMouseLeave}
+			data-testid="on-mouse-enter"
 		>
 			<ToolCardShell>
 				<ToolCardHeader
@@ -367,6 +369,7 @@ function KnowledgeSearchTool({
 												event.preventDefault()
 												openHitSource(hit)
 											}}
+											data-testid="open-hit-source"
 										>
 											<div className="flex items-center gap-1.5">
 												<span className="min-w-0 flex-1 truncate text-[12px] font-medium leading-4 text-foreground">

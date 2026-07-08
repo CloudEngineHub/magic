@@ -345,6 +345,7 @@ function EditCrewDialog({
 												src={draft.iconUrl}
 												alt=""
 												className="size-full object-cover"
+												data-testid="edit-crew-dialog-image"
 											/>
 										) : (
 											<div className="flex size-full items-center justify-center bg-muted">

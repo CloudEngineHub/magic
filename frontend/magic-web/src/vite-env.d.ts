@@ -8,6 +8,6 @@ declare module "*.css" {
 }
 
 declare module "virtual:magic-api" {
-	const script: string
-	export default script
+	const preludeScript: string
+	export default preludeScript
 }

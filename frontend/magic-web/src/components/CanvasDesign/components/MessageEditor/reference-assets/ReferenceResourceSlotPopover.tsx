@@ -85,6 +85,7 @@ export default function ReferenceResourceSlotPopover(props: ReferenceResourceSlo
 			currentAssetCounts={currentAssetCounts}
 			onProjectSelect={onProjectSelect}
 			onProjectSelectPanelOpenChange={onProjectSelectPanelOpenChange}
+			maxProjectSelectBatchCount={1}
 			trigger={
 				<div
 					ref={slotRootRef}

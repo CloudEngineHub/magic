@@ -119,6 +119,7 @@ export function CanvasUpgradeOverlay({
 						className={styles.progressAction}
 						onClick={onAction}
 						disabled={actionDisabled}
+						data-testid="on-action"
 					>
 						{actionLabel}
 					</button>

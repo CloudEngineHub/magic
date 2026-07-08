@@ -5,8 +5,9 @@ import MagicDatePicker from "../MagicDatePicker"
 import MagicInput from "../MagicInput"
 import MagicSelect from "../MagicSelect"
 import MagicTreeSelect from "../MagicTreeSelect"
-import { SearchItemType } from "./types"
+import UserSelect from "../UserSelect"
 import TimeFilterPanel from "../TimeFilterPanel"
+import { SearchItemType } from "./types"
 
 // 搜索组件类型定义
 export interface SearchComponent {
@@ -19,6 +20,7 @@ const defaultComponents = new Map<string, SearchComponent>([
 	[SearchItemType.TEXT, { component: MagicInput }],
 	[SearchItemType.SELECT, { component: MagicSelect }],
 	[SearchItemType.TREE_SELECT, { component: MagicTreeSelect }],
+	[SearchItemType.USER_SELECT, { component: UserSelect }],
 	[SearchItemType.DATE_RANGE, { component: MagicDatePicker.RangePicker }],
 	[SearchItemType.DATE, { component: MagicDatePicker }],
 	[SearchItemType.RADIO, { component: Radio }],

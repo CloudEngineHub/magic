@@ -356,6 +356,7 @@ export default function ReferenceFilePicker({
 						multiple={allowMultiSelect}
 						className="hidden"
 						onChange={handleLocalFileSelect}
+						data-testid="handle-local-file-select"
 					/>
 					<div
 						className={cn(
@@ -386,6 +387,7 @@ export default function ReferenceFilePicker({
 										type="button"
 										className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-zinc-400 transition-all hover:bg-zinc-50/80 hover:text-zinc-700 dark:text-zinc-500 dark:hover:bg-zinc-900/80 dark:hover:text-zinc-300"
 										disabled={disabled}
+										data-testid="reference-file-picker-upload-reference-button"
 									>
 										<Upload className="size-3.5" />
 										{value.length === 0 && (
@@ -422,6 +424,7 @@ export default function ReferenceFilePicker({
 								multiple={allowMultiSelect}
 								className="hidden"
 								onChange={handleLocalFileSelect}
+								data-testid="handle-local-file-select-2"
 							/>
 							<div
 								ref={dropZoneRef}
@@ -431,6 +434,7 @@ export default function ReferenceFilePicker({
 										? "border-primary bg-primary/5"
 										: "border-border/60 hover:border-border",
 								)}
+
 								{...dropZoneProps}
 							>
 								<div className="flex flex-1 items-center gap-3">
@@ -439,6 +443,7 @@ export default function ReferenceFilePicker({
 										className="flex items-center gap-1.5 rounded-md bg-primary/10 px-2.5 py-1.5 text-xs font-medium text-primary transition-colors hover:bg-primary/20"
 										onClick={() => fileInputRef.current?.click()}
 										disabled={isDisabled}
+										data-testid="reference-file-picker-open-local-file-button"
 									>
 										<Upload className="size-3.5" />
 										{t(
@@ -454,6 +459,7 @@ export default function ReferenceFilePicker({
 												type="button"
 												className="flex items-center gap-1.5 rounded-md bg-muted px-2.5 py-1.5 text-xs font-medium text-foreground/80 transition-colors hover:bg-muted/80 hover:text-foreground"
 												disabled={isDisabled}
+												data-testid="reference-file-picker-project-file-button"
 											>
 												<FolderOpen className="size-3.5" />
 												{t(

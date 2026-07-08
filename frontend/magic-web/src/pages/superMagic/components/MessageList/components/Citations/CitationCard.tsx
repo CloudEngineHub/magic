@@ -54,6 +54,7 @@ function CitationCard({
 				type="button"
 				onClick={toggleExpanded}
 				className="flex items-center gap-1.5 w-full text-left active:opacity-70 transition-opacity mb-2"
+				data-testid="toggle-expanded"
 			>
 				<IconBook2 size={14} className="text-muted-foreground shrink-0" />
 				<span className="flex-1 text-xs leading-4 text-muted-foreground">
@@ -78,7 +79,7 @@ function CitationCard({
 								? resolveSafePreviewUrl(source.url)
 								: null
 						return (
-							<li key={source.index}>
+							<li key={source.index} data-testid="citation-card-item">
 								<div className="flex items-start gap-2 w-full">
 									<button
 										type="button"
@@ -86,6 +87,7 @@ function CitationCard({
 											onHighlightChange?.(isHighlighted ? null : source.index)
 										}
 										className="flex items-start gap-2 flex-1 min-w-0 text-left active:opacity-70 transition-opacity"
+										data-testid="on-highlight-change"
 									>
 										{/* 圆形序号 */}
 										<span
@@ -138,6 +140,7 @@ function CitationCard({
 											"transition-colors mt-0.5 active:opacity-60",
 										)}
 										onClick={() => handleSourceClick(source)}
+										data-testid="handle-source-click"
 									>
 										<IconExternalLink size={14} />
 									</button>

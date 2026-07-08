@@ -7,21 +7,22 @@ import { useLocation } from "react-router"
 import useNavigate from "@/routes/hooks/useNavigate"
 import { RouteName } from "@/routes/constants"
 
-interface VectorKnowledgeLayoutProps extends PropsWithChildren { }
+interface VectorKnowledgeLayoutProps extends PropsWithChildren {}
 
 export default function VectorKnowledgeLayout({ children }: VectorKnowledgeLayoutProps) {
 	const navigate = useNavigate()
 
 	const { pathname } = useLocation()
 
-	// 如果当前路径不是详情页或创建页，则默认跳转到创建页
+	// 向量知识库拥有独立列表页，避免入口复用 flow 父布局。
 	useEffect(() => {
 		if (
 			!pathname.includes(RoutePath.VectorKnowledgeDetail) &&
-			!pathname.includes(RoutePath.VectorKnowledgeCreate)
+			!pathname.includes(RoutePath.VectorKnowledgeCreate) &&
+			!pathname.includes(RoutePath.VectorKnowledgeList)
 		) {
 			navigate({
-				name: RouteName.VectorKnowledgeCreate,
+				name: RouteName.VectorKnowledge,
 			})
 		}
 	}, [pathname, navigate])

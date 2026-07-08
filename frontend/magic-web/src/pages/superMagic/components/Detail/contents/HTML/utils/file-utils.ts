@@ -113,6 +113,7 @@ export interface ProjectAttachmentNode {
 	file_name?: string
 	parent_id?: string
 	relative_file_path?: string
+	updated_at?: string | number
 	is_directory?: boolean
 	children?: ProjectAttachmentNode[]
 }

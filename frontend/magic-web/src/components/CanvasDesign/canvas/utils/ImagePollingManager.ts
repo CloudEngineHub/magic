@@ -3,7 +3,10 @@ import type { ImageElement as ImageElementData } from "../types"
 import type { GetImageGenerationResultParams } from "../../types.magic"
 import { IMAGE_CONFIG } from "../element/elements/ImageElement.config"
 import { joinUploadStoragePath } from "./pathUtils"
-import { getImageGenerationTaskMeta } from "./imageGenerationTaskMeta"
+import {
+	getImageGenerationTaskMeta,
+	isBatchImageGenerationTaskMeta,
+} from "./imageGenerationTaskMeta"
 import {
 	extractSmartNameFromFileName,
 	shouldContinueGenerationPolling,
@@ -95,7 +98,12 @@ export class ImagePollingManager {
 			return elementData.generateImageRequest.image_id
 		}
 
-		return getImageGenerationTaskMeta(elementData)?.image_id
+		const taskMeta = getImageGenerationTaskMeta(elementData)
+		if (isBatchImageGenerationTaskMeta(taskMeta)) {
+			return undefined
+		}
+
+		return taskMeta?.image_id
 	}
 
 	private shouldPollCurrentElement(): boolean {
@@ -113,6 +121,19 @@ export class ImagePollingManager {
 		}
 
 		return true
+	}
+
+	private primeGeneratedImageResource(
+		path: string,
+		fileUrl: string | null | undefined,
+		fileName: string,
+	): void {
+		if (!fileUrl) return
+
+		this.config.canvas.imageResourceManager.primeCache(path, {
+			src: fileUrl,
+			fileName,
+		})
 	}
 
 	/**
@@ -141,6 +162,7 @@ export class ImagePollingManager {
 
 			if (result.file_dir && result.file_name) {
 				updateData.src = joinUploadStoragePath(result.file_dir, result.file_name)
+				this.primeGeneratedImageResource(updateData.src, result.file_url, result.file_name)
 
 				const elementData = this.config.getElementData()
 				const imageGenerationTaskMeta = getImageGenerationTaskMeta(elementData)
@@ -157,6 +179,13 @@ export class ImagePollingManager {
 			this.config.canvas.elementManager.update(this.config.elementId, updateData, {
 				silent: false,
 			})
+
+			if (updateData.src && result.file_url) {
+				this.config.canvas.imageResourceManager.loadResource(updateData.src, {
+					variant: "preview",
+					priority: "critical",
+				})
+			}
 
 			// 发出图片结果更新事件
 			this.config.canvas.eventEmitter.emit({

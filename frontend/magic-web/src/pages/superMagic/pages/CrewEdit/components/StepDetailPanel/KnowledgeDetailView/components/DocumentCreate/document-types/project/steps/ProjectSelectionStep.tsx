@@ -12,6 +12,7 @@ import type { ProjectDocumentStore } from "../../../store"
 import { workspaceStore, projectStore } from "@/pages/superMagic/stores/core"
 import { cn } from "@/lib/utils"
 import { SuperMagicApi } from "@/apis"
+import { loadProjectAttachments } from "@/pages/superMagic/services"
 import FileSelector from "@/pages/superMagic/components/Share/FileSelector/FileSelector"
 import useResizablePanel from "@/pages/superMagic/hooks/useResizablePanel"
 import TopicResizeHandle from "@/pages/superMagic/pages/TopicPage/components/TopicResizeHandle"
@@ -89,7 +90,7 @@ export const ProjectSelectionStep = observer(function ProjectSelectionStep({
 	const {
 		width: workspaceWidthPx,
 		isDragging: isDraggingWorkspace,
-		handleMouseDown: onWorkspaceResizeStart,
+		handleResizeStart: onWorkspaceResizeStart,
 	} = useResizablePanel({
 		minWidth: WORKSPACE_LIST_MIN_PX,
 		maxWidth: WORKSPACE_LIST_MAX_PX,
@@ -101,7 +102,7 @@ export const ProjectSelectionStep = observer(function ProjectSelectionStep({
 	const {
 		width: projectWidthPx,
 		isDragging: isDraggingProject,
-		handleMouseDown: onProjectResizeStart,
+		handleResizeStart: onProjectResizeStart,
 	} = useResizablePanel({
 		minWidth: PROJECT_LIST_MIN_PX,
 		maxWidth: PROJECT_LIST_MAX_PX,
@@ -359,7 +360,7 @@ export const ProjectSelectionStep = observer(function ProjectSelectionStep({
 		mutate: setProjectFiles,
 	} = useRequest(
 		async (projectId: string) => {
-			const res = await SuperMagicApi.getAttachmentsByProjectId({
+			const res = await loadProjectAttachments({
 				projectId,
 				temporaryToken:
 					(window as Window & { temporary_token?: string }).temporary_token || "",
@@ -640,6 +641,7 @@ export const ProjectSelectionStep = observer(function ProjectSelectionStep({
 												"bg-accent",
 										)}
 										onClick={() => handleWorkspaceClick(workspace.id, false)}
+										data-testid="handle-workspace-click"
 									>
 										<Box className="size-4 shrink-0 text-muted-foreground" />
 										<span className="flex-1 truncate text-sm">
@@ -660,6 +662,7 @@ export const ProjectSelectionStep = observer(function ProjectSelectionStep({
 									isSharedWorkspace && "bg-accent",
 								)}
 								onClick={() => handleWorkspaceClick("shared", true)}
+								data-testid="handle-workspace-click-2"
 							>
 								<UsersRound className="size-4 shrink-0 text-muted-foreground" />
 								<span className="flex-1 truncate text-sm">
@@ -677,7 +680,7 @@ export const ProjectSelectionStep = observer(function ProjectSelectionStep({
 							>
 								<div style={{ pointerEvents: "auto", height: "100%" }}>
 									<TopicResizeHandle
-										onMouseDown={onWorkspaceResizeStart}
+										onResizeStart={onWorkspaceResizeStart}
 										className={cn(
 											"h-full shrink-0",
 											isDraggingWorkspace && "before:opacity-100",
@@ -758,6 +761,7 @@ export const ProjectSelectionStep = observer(function ProjectSelectionStep({
 														isCurrentView && "bg-accent",
 													)}
 													onClick={() => handleProjectClick(project.id)}
+													data-testid="handle-project-click"
 												>
 													<Checkbox
 														checked={checkboxState}
@@ -791,7 +795,7 @@ export const ProjectSelectionStep = observer(function ProjectSelectionStep({
 								>
 									<div style={{ pointerEvents: "auto", height: "100%" }}>
 										<TopicResizeHandle
-											onMouseDown={onProjectResizeStart}
+											onResizeStart={onProjectResizeStart}
 											className={cn(
 												"h-full shrink-0",
 												isDraggingProject && "before:opacity-100",

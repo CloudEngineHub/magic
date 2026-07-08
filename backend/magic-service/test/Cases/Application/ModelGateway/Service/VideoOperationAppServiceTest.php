@@ -1625,6 +1625,7 @@ class VideoOperationAppServiceTest extends TestCase
         $operation->setTaskId('task-1');
         $operation->setSourceId('design_video_generation');
         $operation->setProjectId(1001);
+        $operation->setVideoId('video-1001');
         $operation->setRawRequest([
             'model_id' => 'veo-3.1-fast-generate-preview',
             'prompt' => 'make a video',
@@ -1704,6 +1705,8 @@ class VideoOperationAppServiceTest extends TestCase
         $this->assertSame(1280, $event->getWidth());
         $this->assertSame(720, $event->getHeight());
         $this->assertSame(1001, $event->getProjectId());
+        $this->assertSame('video-1001', $event->getVideoId());
+        $this->assertSame('video-1001', $event->getBusinessParams()['video_id'] ?? null);
         $this->assertSame('topic-1', $event->getTopicId());
         $this->assertSame('task-1', $event->getTaskId());
         $this->assertSame('design_video_generation', $event->getSourceId());

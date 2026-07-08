@@ -29,6 +29,7 @@ from app.channel.wechat.state import (
 from app.channel.wechat.stream import WechatStream
 from app.channel.wechat.typing import WechatTypingConfigManager, WechatTypingController
 from app.channel.base.third_party_message import dispatch_third_party_message
+from app.core.context.execution_source import EXECUTION_SOURCE_DYNAMIC_CONFIG_KEY, SuperMagicExecutionSource
 from app.core.keepalive_registry import KeepaliveRegistry
 from app.core.entity.message.client_message import ChatClientMessage, Metadata
 from app.utils.time_utils import now_ms
@@ -403,6 +404,9 @@ class WechatChannel(BaseChannel):
             ),
             channel_context={
                 "wechat_media": [wechat_media.model_dump()] if wechat_media else []
+            },
+            dynamic_config={
+                EXECUTION_SOURCE_DYNAMIC_CONFIG_KEY: SuperMagicExecutionSource.THIRD_PARTY_IM.value,
             },
         )
         logger.info(f"[WechatChannel] 分发消息: user_id={user_id}, len={len(content)}")

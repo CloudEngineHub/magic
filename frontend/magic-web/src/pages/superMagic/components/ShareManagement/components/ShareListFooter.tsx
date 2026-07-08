@@ -183,6 +183,7 @@ function ShareListFooter({
 										style={{
 											color: "var(--base-foreground, #0A0A0A)",
 										}}
+										data-testid="set-input-value"
 									/>
 								) : (
 									// 显示模式：页码按钮

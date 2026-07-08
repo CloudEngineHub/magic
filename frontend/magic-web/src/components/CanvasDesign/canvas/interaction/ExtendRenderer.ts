@@ -16,6 +16,7 @@ import {
 } from "./FrameEditorShared"
 
 const EXTEND_OVERLAY_GROUP_NAME = "extend-overlay"
+const EXTEND_FRAME_HIT_AREA_NAME = "extend-frame-hit-area"
 const EXTEND_FRAME_BOX_NAME = "extend-frame-box"
 const EXTEND_GRID_LINE_NAME = "extend-grid-line"
 const EXTEND_IMAGE_CLIP_GROUP_NAME = "extend-image-clip-group"
@@ -44,6 +45,7 @@ export class ExtendRenderer {
 	private overlayGroup?: Konva.Group
 	private imageClipGroup?: Konva.Group
 	private imageProxy?: Konva.Image
+	private frameHitArea?: Konva.Rect
 	private frameBox?: Konva.Rect
 	private frameTransformer?: Konva.Transformer
 	private imageTransformer?: Konva.Transformer
@@ -155,6 +157,16 @@ export class ExtendRenderer {
 			this.canvas.cursorManager.restoreToolCursor()
 		})
 
+		this.frameHitArea = new Konva.Rect({
+			x: session.frame.x,
+			y: session.frame.y,
+			width: session.frame.width,
+			height: session.frame.height,
+			fill: "transparent",
+			listening: true,
+			name: EXTEND_FRAME_HIT_AREA_NAME,
+		})
+
 		this.frameBox = new Konva.Rect({
 			x: session.frame.x,
 			y: session.frame.y,
@@ -174,7 +186,13 @@ export class ExtendRenderer {
 		const areaOverlay = this.createAreaOverlay()
 		const gridLines = createFrameGridLines(session.frame, EXTEND_GRID_LINE_NAME)
 
-		this.overlayGroup.add(this.imageClipGroup, areaOverlay, this.frameBox, ...gridLines)
+		this.overlayGroup.add(
+			this.frameHitArea,
+			this.imageClipGroup,
+			areaOverlay,
+			this.frameBox,
+			...gridLines,
+		)
 		this.canvas.controlsLayer.add(this.overlayGroup)
 		this.createFrameLabels()
 		this.updateFrameLabels()
@@ -254,6 +272,7 @@ export class ExtendRenderer {
 				height: this.frameBox.height(),
 			})
 			this.frameBox.size({ width: nextFrame.width, height: nextFrame.height })
+			this.updateFrameHitArea(nextFrame)
 			this.updateImageClip(nextFrame)
 			this.syncAreaOverlay()
 			updateFrameGridLines(this.overlayGroup, nextFrame, EXTEND_GRID_LINE_NAME)
@@ -402,7 +421,18 @@ export class ExtendRenderer {
 		})
 	}
 
+	private updateFrameHitArea(frame: ExtendSession["frame"]): void {
+		this.frameHitArea?.setAttrs({
+			x: frame.x,
+			y: frame.y,
+			width: frame.width,
+			height: frame.height,
+		})
+	}
+
 	private setupStagePointerListener(): void {
+		// InputManager is reserved for primary canvas tools. Extend mode uses this
+		// local listener only to toggle its image transformer affordance.
 		this.stagePointerDownHandler = ({ target }) => {
 			if (target === this.imageProxy || this.isNodeInImageTransformer(target)) {
 				this.setImageTransformerVisible(true)
@@ -819,6 +849,7 @@ export class ExtendRenderer {
 		const normalizedFrame = this.normalizeFrame(session.frame)
 		this.frameBox.position({ x: normalizedFrame.x, y: normalizedFrame.y })
 		this.frameBox.size({ width: normalizedFrame.width, height: normalizedFrame.height })
+		this.updateFrameHitArea(normalizedFrame)
 		this.updateImageClip(normalizedFrame)
 		this.ensureImageProxyWithinFrame()
 		this.syncAreaOverlay()

@@ -10,6 +10,15 @@ import type {
 	ReferenceResourceTypeFilter,
 } from "./reference-resource.types"
 
+interface ReferenceResourcePanelBatchItemLike {
+	data: {
+		file_id?: string
+		file_name?: string
+		file_path?: string
+		file_extension?: string
+	}
+}
+
 export function normalizeReferenceComparablePath(path?: string): string {
 	if (!path) return ""
 	return path.trim().replace(/\\/g, "/").replace(/^\/+/, "")
@@ -193,4 +202,115 @@ export function isReferenceAssetTypeCapacityBlocked(options: {
 		return true
 
 	return false
+}
+
+export function filterReferenceResourcePanelBatchItems<
+	T extends ReferenceResourcePanelBatchItemLike,
+>(options: {
+	items: T[]
+	maxReferenceFiles?: number
+	currentReferenceFiles?: string[]
+	assetLimits?: ReferenceAssetPerTypeLimits
+	currentAssetCounts?: ReferenceAssetTypeCounts
+	maxBatchItems?: number
+}): T[] {
+	const {
+		items,
+		maxReferenceFiles,
+		currentReferenceFiles = [],
+		assetLimits,
+		currentAssetCounts,
+		maxBatchItems,
+	} = options
+	const batchLimit =
+		typeof maxBatchItems === "number" ? Math.max(Math.floor(maxBatchItems), 0) : Infinity
+	if (items.length === 0 || batchLimit <= 0) return []
+
+	const currentPathSet = new Set(
+		currentReferenceFiles.map((path) => normalizeReferenceComparablePath(path)).filter(Boolean),
+	)
+	const acceptedPathSet = new Set<string>()
+	const acceptedItems: T[] = []
+	let nextReferenceFileCount = currentReferenceFiles.length
+	const nextAssetCounts = currentAssetCounts ? { ...currentAssetCounts } : undefined
+
+	for (const item of items) {
+		if (acceptedItems.length >= batchLimit) break
+
+		const selectionKey = normalizeReferenceComparablePath(
+			item.data.file_path || item.data.file_id || item.data.file_name,
+		)
+		if (selectionKey && acceptedPathSet.has(selectionKey)) continue
+
+		const consumesSlot = !selectionKey || !currentPathSet.has(selectionKey)
+		if (consumesSlot) {
+			if (maxReferenceFiles !== undefined && nextReferenceFileCount + 1 > maxReferenceFiles) {
+				continue
+			}
+
+			if (assetLimits && nextAssetCounts) {
+				const fileClass = classifyReferenceAssetFile({
+					filePath: item.data.file_path,
+					fileName: item.data.file_name,
+					fileExtension: item.data.file_extension,
+				})
+				if (!canAcceptNextReferenceAsset(fileClass, assetLimits, nextAssetCounts)) {
+					continue
+				}
+				incrementReferenceAssetCount(fileClass, nextAssetCounts)
+			}
+
+			nextReferenceFileCount += 1
+		}
+
+		if (selectionKey) acceptedPathSet.add(selectionKey)
+		acceptedItems.push(item)
+	}
+
+	return acceptedItems
+}
+
+function canAcceptNextReferenceAsset(
+	fileClass: ReferenceAssetFileClass,
+	assetLimits: ReferenceAssetPerTypeLimits,
+	currentAssetCounts: ReferenceAssetTypeCounts,
+): boolean {
+	if (fileClass === "unknown") return false
+
+	const nextTotal =
+		currentAssetCounts.images + currentAssetCounts.videos + currentAssetCounts.audios + 1
+	if (Number.isFinite(assetLimits.total.max) && nextTotal > assetLimits.total.max) return false
+
+	if (
+		fileClass === "image" &&
+		Number.isFinite(assetLimits.reference_images.max) &&
+		currentAssetCounts.images + 1 > assetLimits.reference_images.max
+	) {
+		return false
+	}
+	if (
+		fileClass === "video" &&
+		Number.isFinite(assetLimits.reference_videos.max) &&
+		currentAssetCounts.videos + 1 > assetLimits.reference_videos.max
+	) {
+		return false
+	}
+	if (
+		fileClass === "audio" &&
+		Number.isFinite(assetLimits.reference_audios.max) &&
+		currentAssetCounts.audios + 1 > assetLimits.reference_audios.max
+	) {
+		return false
+	}
+
+	return true
+}
+
+function incrementReferenceAssetCount(
+	fileClass: ReferenceAssetFileClass,
+	currentAssetCounts: ReferenceAssetTypeCounts,
+): void {
+	if (fileClass === "image") currentAssetCounts.images += 1
+	else if (fileClass === "video") currentAssetCounts.videos += 1
+	else if (fileClass === "audio") currentAssetCounts.audios += 1
 }

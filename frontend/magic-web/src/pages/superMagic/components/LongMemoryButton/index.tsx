@@ -30,6 +30,7 @@ function LongMemoryButton({ onWorkspaceStateChange }: LongMemoryButtonProps) {
 			)}
 			onClick={handleClick}
 			onMouseEnter={preloadLongTremMemoryModal}
+			data-testid="handle-click"
 		>
 			<IconLight size={16} />
 			<Flex align="center" gap={4}>

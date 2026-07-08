@@ -5,6 +5,7 @@ import { EditorContent, EditorContext, useEditor } from "@tiptap/react"
 import type { Node as ProseMirrorNode, Slice } from "@tiptap/pm/model"
 import { useTranslation } from "react-i18next"
 import { cx } from "antd-style"
+import { runActiveEditor } from "@/utils/tiptapEditorLifecycle"
 
 // --- Tiptap Core Extensions ---
 import { StarterKit } from "@tiptap/starter-kit"
@@ -90,6 +91,8 @@ export const SimpleEditor = React.forwardRef<SimpleEditorRef, SimpleEditorProps>
 	ref,
 ) {
 	const [mobileView, setMobileView] = React.useState<"main" | "highlighter" | "link">("main")
+	const [showSearchPanel, setShowSearchPanel] = React.useState(false)
+	const enableSearchReplaceRef = React.useRef(enableSearchReplace)
 
 	const toolbarRef = React.useRef<HTMLDivElement>(null)
 	const { t } = useTranslation("tiptap")
@@ -129,6 +132,19 @@ export const SimpleEditor = React.forwardRef<SimpleEditorRef, SimpleEditorProps>
 				autocapitalize: "off",
 				"aria-label": "Main content area, start typing to enter text.",
 				class: "simple-editor",
+			},
+			handleKeyDown: (_view, event) => {
+				const key = event.key?.toLowerCase()
+				const isSearchKey = key === "f" && (event.metaKey || event.ctrlKey) && !event.altKey
+
+				if (!enableSearchReplaceRef.current || !isSearchKey) {
+					return false
+				}
+
+				event.preventDefault()
+				event.stopPropagation()
+				setShowSearchPanel(true)
+				return true
 			},
 		},
 		editable: isEditable,
@@ -206,7 +222,9 @@ export const SimpleEditor = React.forwardRef<SimpleEditorRef, SimpleEditorProps>
 	// 内容变化时，如果不可编辑，则更新编辑器内容
 	useUpdateEffect(() => {
 		if (!isEditable) {
-			editor?.commands?.setContent?.(processedContent ?? [])
+			runActiveEditor(editor, (activeEditor) => {
+				activeEditor.commands.setContent(processedContent ?? [])
+			})
 		}
 	}, [processedContent])
 
@@ -228,11 +246,9 @@ export const SimpleEditor = React.forwardRef<SimpleEditorRef, SimpleEditorProps>
 				return
 			}
 
-			try {
-				editor.commands.updatePlaceholder(placeholder)
-			} catch (error) {
-				console.warn("Failed to update placeholder:", error)
-			}
+			runActiveEditor(editor, (activeEditor) => {
+				activeEditor.commands.updatePlaceholder(placeholder)
+			})
 		})
 
 		return () => {
@@ -253,13 +269,18 @@ export const SimpleEditor = React.forwardRef<SimpleEditorRef, SimpleEditorProps>
 		pasteHandlersRef.current.handleEditorUpdate = handleEditorUpdate
 	}, [handleOnPaste, handleEditorUpdate])
 
+	React.useEffect(() => {
+		enableSearchReplaceRef.current = enableSearchReplace
+	}, [enableSearchReplace])
+
 	React.useImperativeHandle(
 		ref,
 		() => ({
 			editor,
 			setContent: (content: string) => {
-				if (!editor) return
-				editor.commands.setContent(preprocessMarkdownFrontmatter(content))
+				runActiveEditor(editor, (activeEditor) => {
+					activeEditor.commands.setContent(preprocessMarkdownFrontmatter(content))
+				})
 			},
 		}),
 		[editor],
@@ -311,23 +332,6 @@ export const SimpleEditor = React.forwardRef<SimpleEditorRef, SimpleEditorProps>
 	)
 	const [selectedNode, setSelectedNode] = React.useState<ProseMirrorNode | null>(null)
 	const [selectedNodePos, setSelectedNodePos] = React.useState<number | null>(null)
-	const [showSearchPanel, setShowSearchPanel] = React.useState(false)
-
-	// Keyboard shortcut: Cmd/Ctrl+F to open search panel
-	React.useEffect(() => {
-		if (!enableSearchReplace) return
-
-		const handleKeyDown = (e: KeyboardEvent) => {
-			if (e.key === "f" && (e.metaKey || e.ctrlKey) && !e.altKey) {
-				e.preventDefault()
-				e.stopPropagation()
-				setShowSearchPanel(true)
-			}
-		}
-
-		window.addEventListener("keydown", handleKeyDown, true)
-		return () => window.removeEventListener("keydown", handleKeyDown, true)
-	}, [enableSearchReplace])
 
 	const handleToggleSearch = useMemoizedFn(() => {
 		setShowSearchPanel((prev) => !prev)

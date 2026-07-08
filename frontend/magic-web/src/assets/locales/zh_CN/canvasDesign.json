@@ -20,6 +20,16 @@
 		"unsupportedDropContent": "当前拖拽内容不支持添加为参考图",
 		"unsupportedReferenceImageType": "当前仅支持添加图片类型的参考图"
 	},
+	"elementConflict": {
+		"deleteElement": "删除这个元素",
+		"description": "这个元素有新的同步内容，也有你当前的修改。",
+		"keepDeleted": "保持删除",
+		"keepElement": "保留这个元素",
+		"restoreNew": "恢复新版",
+		"title": "请选择保留的版本",
+		"useLocal": "保留我的",
+		"useRemote": "使用新的"
+	},
 	"elementTools": {
 		"elementAlign": {
 			"bottom": "底部对齐",
@@ -125,6 +135,7 @@
 		"defaultName": "分组"
 	},
 	"image": {
+		"batchUploadFailed": "有 {{failed}}/{{total}} 个文件上传失败",
 		"defaultName": "图片生成器",
 		"empty": "请发送生成图像的指令",
 		"errorPrefix": "图像生成失败, ",
@@ -179,6 +190,15 @@
 			"placeholder": "搜索图层"
 		},
 		"title": "图层"
+	},
+	"mediaResourceFullscreenPreview": {
+		"audioLoadFailed": "音频加载失败",
+		"close": "关闭全屏预览",
+		"croppedImage": "裁剪图",
+		"imageLoadFailed": "图片加载失败",
+		"originalImage": "原图",
+		"videoLoadFailed": "视频加载失败，请稍后重试",
+		"viewMode": "图片显示模式"
 	},
 	"menu": {
 		"addFrame": "添加画框",
@@ -405,6 +425,7 @@
 		"hand": "抓手工具",
 		"imageGenerator": "图像生成",
 		"marker": "标记",
+		"plugins": "插件",
 		"selection": "选择工具",
 		"space": "空格",
 		"text": "文本",
@@ -455,6 +476,7 @@
 		"sendConfirmOk": "确认执行",
 		"sendConfirmSkip": "下次不再提示",
 		"sendConfirmTitle": "消耗提示",
+		"sendConfirmUnknownPointsDescription": "本次任务将产生积分消耗，是否确认执行？",
 		"size": "尺寸",
 		"slotLabelFirstFrame": "首帧",
 		"slotLabelLastFrame": "尾帧",

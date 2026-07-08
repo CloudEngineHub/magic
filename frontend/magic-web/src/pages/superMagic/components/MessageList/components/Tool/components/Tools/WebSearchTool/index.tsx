@@ -59,6 +59,7 @@ export default memo(function WebSearchTool({
 									setSelectedKeyword(group.keyword)
 								}}
 								style={{ cursor: "pointer" }}
+								data-testid="set-selected-keyword"
 							>
 								{group.keyword}
 							</div>

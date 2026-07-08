@@ -10,6 +10,7 @@ import {
 	SimpleEditor,
 	SimpleEditorRef,
 } from "@/components/tiptap-templates/simple/simple-editor"
+import { runActiveEditor } from "@/utils/tiptapEditorLifecycle"
 
 const AgentEditor = forwardRef<AgentEditorRef, AgentEditorProps>((props, ref) => {
 	const { agent, onChange, onReady, setEditorAgent, setLoading, loading } = props
@@ -64,7 +65,9 @@ const AgentEditor = forwardRef<AgentEditorRef, AgentEditorProps>((props, ref) =>
 		},
 
 		focus: () => {
-			simpleEditorRef.current?.editor?.commands?.focus()
+			runActiveEditor(simpleEditorRef.current?.editor, (editor) => {
+				editor.commands.focus()
+			})
 		},
 	}))
 
@@ -110,7 +113,7 @@ const AgentEditor = forwardRef<AgentEditorRef, AgentEditorProps>((props, ref) =>
 	}
 
 	return (
-		<div className={styles.container} onKeyDown={handleKeyDown}>
+		<div className={styles.container} onKeyDown={handleKeyDown} data-testid="handle-key-down">
 			<Spin spinning={loading}>
 				<div className={styles.editorWrapper}>
 					<SimpleEditor

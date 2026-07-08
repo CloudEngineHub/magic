@@ -63,13 +63,49 @@ export const DEFAULT_WORKBOX_RUNTIME_URL =
 /** Max concurrent fetch+put operations during install precache. */
 export const PRECACHE_BATCH_CONCURRENCY = 20
 
+/** Warm-up batch size for low-tier hardware (hardwareConcurrency <= WARMUP_LOW_TIER_MAX_CORES). */
+export const WARMUP_LOW_BATCH_SIZE = 6
+
+/** Warm-up batch size for medium-tier hardware. */
+export const WARMUP_MEDIUM_BATCH_SIZE = 8
+
+/** Warm-up batch size for high-tier hardware. */
+export const WARMUP_HIGH_BATCH_SIZE = 10
+
+/** Warm-up interval (ms) for low-tier hardware (hardwareConcurrency <= WARMUP_LOW_TIER_MAX_CORES). */
+export const WARMUP_LOW_INTERVAL_MS = 5000
+
+/** Warm-up interval (ms) for medium-tier hardware. */
+export const WARMUP_MEDIUM_INTERVAL_MS = 3000
+
+/** Warm-up interval (ms) for high-tier hardware. */
+export const WARMUP_HIGH_INTERVAL_MS = 500
+
+/** Inclusive upper bound of logical CPU cores for the low warm-up tier. */
+export const WARMUP_LOW_TIER_MAX_CORES = 6
+
+/** Inclusive upper bound of logical CPU cores for the medium warm-up tier. */
+export const WARMUP_MEDIUM_TIER_MAX_CORES = 11
+
+/** Minimum allowed warm-up batch size (SW-side clamp). */
+export const WARMUP_MIN_BATCH_SIZE = 6
+
+/** Maximum allowed warm-up batch size (SW-side clamp). */
+export const WARMUP_MAX_BATCH_SIZE = 10
+
+/** Minimum allowed warm-up interval in milliseconds (SW-side clamp). */
+export const WARMUP_MIN_INTERVAL_MS = 200
+
+/** Maximum allowed warm-up interval in milliseconds (SW-side clamp). */
+export const WARMUP_MAX_INTERVAL_MS = 10000
+
 const SECONDS_PER_DAY = 60 * 60 * 24
- 
+
 export const CACHE_TTL_3_DAYS = SECONDS_PER_DAY * 3
 export const CACHE_TTL_14_DAYS = SECONDS_PER_DAY * 14
 export const CACHE_TTL_30_DAYS = SECONDS_PER_DAY * 30
 export const CACHE_TTL_60_DAYS = SECONDS_PER_DAY * 60
- 
+
 export const APP_STATIC_CACHE_NAME = `${CACHE_NAMESPACE}-app-static-assets-v1`
 export const APP_IMAGE_CACHE_NAME = `${CACHE_NAMESPACE}-app-image-assets-v1`
 export const APP_MARKED_RESOURCE_CACHE_NAME = `${CACHE_NAMESPACE}-app-marked-resource-assets-v1`
@@ -80,25 +116,24 @@ export const APP_API_CACHE_NAME = `${CACHE_NAMESPACE}-app-api-cache-v1`
 
 export const CACHEABLE_API_RULES: ReadonlyArray<string | RegExp> = [
 	// 核心配置 (支持 RegExp 与 string 混用。写 RegExp 时务必带上 ^ 与 $ 锚点，防止误匹配包含此 URL 作为 query 参数的其它接口)
-	/^\/api\/v1\/settings\/(all|menu-modules)$/,
-	"/api/v1/auth/environment",
+	// /^\/api\/v1\/settings\/(all|menu-modules)$/,
 	// 多语言翻译包
 	"/v4/locales/settings",
 	// 功能权限与订阅
-	"/api/v1/function-permissions/me",
-	"/api/v1/operation-permissions/organization-admin",
+	// "/api/v1/function-permissions/me",
+	// "/api/v1/operation-permissions/organization-admin",
 	// 工作空间与推荐卡片
-	"/api/v1/super-agents/featured",
+	// "/api/v1/super-agents/featured",
 ]
 
 /**
  * Checks whether a given API request URL or pathname matches the cacheable API rules.
- * 
- * NOTE: 
- * 1. This function will automatically clean up the query parameters and hashes, 
- *    extracting the clean pathname to prevent false matching when a URL (e.g. callback URL) 
+ *
+ * NOTE:
+ * 1. This function will automatically clean up the query parameters and hashes,
+ *    extracting the clean pathname to prevent false matching when a URL (e.g. callback URL)
  *    is included as a query parameter of another non-cacheable API request.
- * 2. When writing RegExp rules in CACHEABLE_API_RULES, ALWAYS anchor them (e.g. starting with `/^` 
+ * 2. When writing RegExp rules in CACHEABLE_API_RULES, ALWAYS anchor them (e.g. starting with `/^`
  *    and ending with `$/`) or write strict patterns to prevent partial matching bugs.
  */
 export function isCacheableApiRequest(urlOrPath: string): boolean {
@@ -129,7 +164,7 @@ export function isCacheableApiRequest(urlOrPath: string): boolean {
 		return rule === normalizedPath
 	})
 }
- 
+
 /** ExpirationPlugin options shared by CacheFirst and post-install precache LRU enforcement. */
 export const APP_STATIC_EXPIRATION_OPTIONS = {
 	maxEntries: 4000,
@@ -140,7 +175,7 @@ export const API_CACHE_EXPIRATION_OPTIONS = {
 	maxEntries: 50,
 	maxAgeSeconds: CACHE_TTL_3_DAYS,
 }
- 
+
 /** Cache buckets registered by Workbox routes; activate keeps only these under CACHE_NAMESPACE. */
 export const MANAGED_APP_CACHE_NAMES = [
 	APP_STATIC_CACHE_NAME,
@@ -151,7 +186,7 @@ export const MANAGED_APP_CACHE_NAMES = [
 	VENDOR_STATIC_CACHE_NAME,
 	APP_API_CACHE_NAME,
 ] as const
- 
+
 /** Prefix for activate-time deletion of stale magic-web buckets. */
 export function getManagedCacheNamePrefix(): string {
 	return `${CACHE_NAMESPACE}-`

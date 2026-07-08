@@ -87,6 +87,7 @@ function SimilarShareItem({ item, onClick, showStats = false }: SimilarShareItem
 				e.currentTarget.style.background = "transparent"
 			}}
 			onClick={() => onClick?.(item)}
+			data-testid="on-mouse-enter"
 		>
 			{/* 分享类型图标 */}
 			<div className="flex h-5 w-5 flex-shrink-0 items-center justify-center">

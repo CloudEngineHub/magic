@@ -126,6 +126,25 @@ class AgentMode(str, Enum):
         }
         return agent_type_mapping.get(self, "magic")
 
+    @classmethod
+    def resolve_agent_type(cls, agent_mode: "Optional[Union[AgentMode, str]]") -> str:
+        """Resolve an agent_mode (enum or string) to its canonical agent_type string.
+
+        This is the single source of truth for mode/alias normalization, e.g. "ppt" -> "slider",
+        "data_analysis" -> "data-analyst". Both the chat dispatch path and call_subagent reuse it
+        so there is never a second mapping table.
+
+        - Empty/None -> GENERAL's agent_type ("magic").
+        - Known mode value -> mapped agent_type.
+        - Unknown string (custom agent id / already-canonical name) -> returned trimmed as-is.
+        """
+        if not agent_mode:
+            return cls.GENERAL.get_agent_type()
+        try:
+            return cls(agent_mode).get_agent_type()
+        except ValueError:
+            return str(agent_mode).strip() or cls.GENERAL.get_agent_type()
+
 
 class ChatClientMessage(ClientMessage):
     """

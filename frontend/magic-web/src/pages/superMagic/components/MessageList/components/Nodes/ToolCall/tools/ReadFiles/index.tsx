@@ -81,7 +81,7 @@ function ReadFiles(props: NodeProps) {
 	}
 
 	return (
-		<div className={styles.node} onMouseEnter={onMouseEnter} onMouseLeave={onMouseLeave}>
+		<div className={styles.node} onMouseEnter={onMouseEnter} onMouseLeave={onMouseLeave} data-testid="on-mouse-enter">
 			<div className={cx(styles.container, { [styles.containerActive]: open })}>
 				<div className={styles.nodeHeader}>
 					<Flex
@@ -104,7 +104,7 @@ function ReadFiles(props: NodeProps) {
 						)}
 					</Flex>
 					{tool.status !== "error" && (
-						<div className={cx(styles.button, "mr-[6px]")} onClick={toggle}>
+						<div className={cx(styles.button, "mr-[6px]")} onClick={toggle} data-testid="toggle">
 							{open ? (
 								<ChevronUp
 									size={16}

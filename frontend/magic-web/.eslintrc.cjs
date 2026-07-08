@@ -1,3 +1,4 @@
+const { layerImportBoundaryOverrides } = require("./eslint/layer-import-boundaries.cjs")
 const path = require("path")
 
 module.exports = {
@@ -15,6 +16,7 @@ module.exports = {
 		tsconfigRootDir: __dirname,
 	},
 	settings: {
+		"import/core-modules": ["virtual:magic-api"],
 		"import/resolver": {
 			typescript: {
 				project: ["./tsconfig.json", "./tsconfig.eslint.json", "./tsconfig.test.json"],
@@ -86,6 +88,7 @@ module.exports = {
 		],
 	},
 	overrides: [
+		...layerImportBoundaryOverrides,
 		{
 			files: ["*.cjs"],
 			rules: {

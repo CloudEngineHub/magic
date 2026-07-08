@@ -31,6 +31,7 @@ export function SketchTitleIllustration({
 					imageClassName,
 				)}
 				draggable={false}
+				data-testid="sketch-title-illustration-image"
 			/>
 		</div>
 	)

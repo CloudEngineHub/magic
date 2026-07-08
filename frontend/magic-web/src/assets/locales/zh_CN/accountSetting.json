@@ -7,7 +7,7 @@
 	"aiWatermark": "AI 生成水印设置",
 	"aiWatermarkActionFailed": "操作失败，请稍后重试",
 	"aiWatermarkAgreementBody": "经过您的申请，平台可以向您提供未添加显式标识的 AI 生成合成内容。如您后续使用网络信息内容传播服务发布 AI 生成合成内容，请注意您还需主动声明并使用传播平台提供的标识功能进行标识。您理解并承诺，如您未按照法律法规要求在 AI 生成合成内容上添加显式标识，导致公众混淆或者误认，因此所发生的后果和责任均由您自行承担。",
-	"aiWatermarkAgreementIntro": "根据法律法规要求，超级麦吉 AI 平台（“平台”）提供 AI 生成合成服务，可能导致公众混淆或者误认的，平台应当在 AI 生成合成内容上添加显式标识，向公众进行提示。",
+	"aiWatermarkAgreementIntro": "根据法律法规要求，$t(common:platform.name) AI 平台（“平台”）提供 AI 生成合成服务，可能导致公众混淆或者误认的，平台应当在 AI 生成合成内容上添加显式标识，向公众进行提示。",
 	"aiWatermarkDisabled": "未全局同意",
 	"aiWatermarkDisabledDescription": "当前仍保持原有下载菜单形态。点击“下载无水印图片”时，会继续沿用原有触发行为，并在该流程中执行协议确认。",
 	"aiWatermarkEnabled": "已全局同意",

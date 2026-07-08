@@ -227,6 +227,20 @@
                                 <option value="">不传版本</option>
                             </select>
                         </div>
+
+                        <!-- 执行来源选择 -->
+                        <div class="model-config" id="executionSourceGroup">
+                            <select id="executionSourceSelect" class="agent-mode-select">
+                                <option value="human_chat" selected>来源 human_chat</option>
+                                <option value="open_api">来源 open_api</option>
+                                <option value="message_schedule">来源 message_schedule</option>
+                                <option value="webhook">来源 webhook</option>
+                                <option value="third_party_im">来源 third_party_im</option>
+                                <option value="cron">来源 cron</option>
+                                <option value="system">来源 system</option>
+                                <option value="unknown">来源 unknown</option>
+                            </select>
+                        </div>
                     </div>
 
                     <div class="input-and-actions">
@@ -341,7 +355,7 @@
     <script src="https://cdn.jsdelivr.net/npm/marked@9/marked.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
     <script src="js/micro_app_runtime.js?v=debug-workspace-files-7"></script>
-    <script src="js/client.js?v=debug-workspace-files-6"></script>
+    <script src="js/client.js?v=debug-execution-source-1"></script>
 </body>
 
 </html>

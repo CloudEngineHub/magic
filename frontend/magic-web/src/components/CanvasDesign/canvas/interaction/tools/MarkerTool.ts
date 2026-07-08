@@ -1,6 +1,7 @@
 import Konva from "konva"
 import { BaseTool, type ToolOptions, ToolCompletionStrategy } from "./BaseTool"
 import { MarkerTypeEnum } from "../../types"
+import type { CanvasPointerInput } from "../input"
 import { AREA_MARKER_STYLES } from "../markers/markerStyles"
 
 /**
@@ -13,9 +14,8 @@ export interface MarkerToolOptions extends ToolOptions {}
  * 支持点击创建点标记，拖拽创建区域标记
  */
 export class MarkerTool extends BaseTool {
-	private mousedownHandler: ((e: Konva.KonvaEventObject<MouseEvent>) => void) | null = null
-	private mousemoveHandler: ((e: Konva.KonvaEventObject<MouseEvent>) => void) | null = null
-	private mouseupHandler: ((e: Konva.KonvaEventObject<MouseEvent>) => void) | null = null
+	private inputUnsubscribers: Array<() => void> = []
+	private escapeUnsubscribe: (() => void) | null = null
 
 	// 拖拽状态
 	private isDragging = false
@@ -43,91 +43,16 @@ export class MarkerTool extends BaseTool {
 		this.canvas.elementManager.disableElementDraggingOnly()
 
 		// 监听 ESC 键取消框选
-		this.canvas.eventEmitter.on("keyboard:escape", this.handleEscapeKey.bind(this))
+		this.escapeUnsubscribe = this.canvas.eventEmitter.on("keyboard:escape", () =>
+			this.handleEscapeKey(),
+		)
 
-		// 监听 mousedown 事件
-		this.mousedownHandler = (e: Konva.KonvaEventObject<MouseEvent>) => {
-			// 从点击的节点向上查找图片元素
-			const clickedElement = this.findImageElementAt(e.target)
-			if (!clickedElement) return
-
-			// 获取点击位置（画布坐标）
-			const pos = this.canvas.stage.getPointerPosition()
-			if (!pos) return
-
-			// 转换为画布坐标（考虑viewport的缩放和偏移）
-			const transform = this.canvas.stage.getAbsoluteTransform().copy()
-			transform.invert()
-			const canvasPos = transform.point(pos)
-
-			// 记录拖拽起点
-			this.isDragging = true
-			this.dragStartPos = canvasPos
-			this.dragTargetElement = clickedElement
-		}
-
-		// 监听 mousemove 事件
-		this.mousemoveHandler = (e: Konva.KonvaEventObject<MouseEvent>) => {
-			if (!this.isDragging || !this.dragStartPos || !this.dragTargetElement) return
-
-			// 获取当前位置
-			const pos = this.canvas.stage.getPointerPosition()
-			if (!pos) return
-
-			const transform = this.canvas.stage.getAbsoluteTransform().copy()
-			transform.invert()
-			const canvasPos = transform.point(pos)
-
-			// 计算拖拽距离
-			const dx = canvasPos.x - this.dragStartPos.x
-			const dy = canvasPos.y - this.dragStartPos.y
-			const distance = Math.sqrt(dx * dx + dy * dy)
-
-			// 如果拖拽距离超过阈值，显示预览矩形
-			if (distance > 5) {
-				this.showPreviewRect(this.dragStartPos, canvasPos)
-			}
-		}
-
-		// 监听 mouseup 事件
-		this.mouseupHandler = (e: Konva.KonvaEventObject<MouseEvent>) => {
-			if (!this.isDragging || !this.dragStartPos) return
-
-			// 获取当前位置
-			const pos = this.canvas.stage.getPointerPosition()
-			if (!pos) return
-
-			const transform = this.canvas.stage.getAbsoluteTransform().copy()
-			transform.invert()
-			const canvasPos = transform.point(pos)
-
-			// 计算拖拽距离
-			const dx = canvasPos.x - this.dragStartPos.x
-			const dy = canvasPos.y - this.dragStartPos.y
-			const distance = Math.sqrt(dx * dx + dy * dy)
-
-			// 清除预览矩形
-			this.clearPreviewRect()
-
-			if (this.dragTargetElement) {
-				if (distance > 5) {
-					// 拖拽距离超过阈值，创建区域标记
-					this.createAreaMarker(this.dragStartPos, canvasPos, this.dragTargetElement)
-				} else {
-					// 拖拽距离小于阈值，创建点标记
-					this.createPointMarker(this.dragStartPos, this.dragTargetElement)
-				}
-			}
-
-			// 重置拖拽状态
-			this.isDragging = false
-			this.dragStartPos = null
-			this.dragTargetElement = null
-		}
-
-		this.canvas.stage.on("mousedown", this.mousedownHandler)
-		this.canvas.stage.on("mousemove", this.mousemoveHandler)
-		this.canvas.stage.on("mouseup", this.mouseupHandler)
+		this.inputUnsubscribers = [
+			this.canvas.inputManager.on("down", this.handlePointerDown),
+			this.canvas.inputManager.on("move", this.handlePointerMove),
+			this.canvas.inputManager.on("up", this.handlePointerUp),
+			this.canvas.inputManager.on("cancel", this.handlePointerCancel),
+		]
 	}
 
 	/**
@@ -142,27 +67,96 @@ export class MarkerTool extends BaseTool {
 		// 清除预览矩形
 		this.clearPreviewRect()
 
-		// 移除事件监听
-		if (this.mousedownHandler) {
-			this.canvas.stage.off("mousedown", this.mousedownHandler)
-			this.mousedownHandler = null
-		}
-		if (this.mousemoveHandler) {
-			this.canvas.stage.off("mousemove", this.mousemoveHandler)
-			this.mousemoveHandler = null
-		}
-		if (this.mouseupHandler) {
-			this.canvas.stage.off("mouseup", this.mouseupHandler)
-			this.mouseupHandler = null
-		}
-
-		// 移除 ESC 键监听
-		this.canvas.eventEmitter.off("keyboard:escape")
+		this.inputUnsubscribers.forEach((unsubscribe) => unsubscribe())
+		this.inputUnsubscribers = []
+		this.escapeUnsubscribe?.()
+		this.escapeUnsubscribe = null
 
 		// 重置拖拽状态
 		this.isDragging = false
 		this.dragStartPos = null
 		this.dragTargetElement = null
+	}
+
+	private handlePointerDown = (input: CanvasPointerInput): void => {
+		if (!this.isActive) return
+		if (input.button !== 0 || input.activePointerCount > 1) return
+
+		// 从点击的节点向上查找图片元素
+		const clickedElement = this.findImageElementAt(input.target)
+		if (!clickedElement) return
+
+		this.preventDefaultForDirectInput(input)
+
+		// 记录拖拽起点
+		this.isDragging = true
+		this.dragStartPos = input.canvas
+		this.dragTargetElement = clickedElement
+	}
+
+	private handlePointerMove = (input: CanvasPointerInput): void => {
+		if (!this.isDragging || !this.dragStartPos || !this.dragTargetElement) return
+
+		if (input.activePointerCount > 1) {
+			this.resetDragState()
+			return
+		}
+
+		this.preventDefaultForDirectInput(input)
+
+		// 计算拖拽距离
+		const dx = input.canvas.x - this.dragStartPos.x
+		const dy = input.canvas.y - this.dragStartPos.y
+		const distance = Math.sqrt(dx * dx + dy * dy)
+
+		// 如果拖拽距离超过阈值，显示预览矩形
+		if (distance > 5) {
+			this.showPreviewRect(this.dragStartPos, input.canvas)
+		}
+	}
+
+	private handlePointerUp = (input: CanvasPointerInput): void => {
+		if (!this.isDragging || !this.dragStartPos) return
+
+		this.preventDefaultForDirectInput(input)
+
+		// 计算拖拽距离
+		const dx = input.canvas.x - this.dragStartPos.x
+		const dy = input.canvas.y - this.dragStartPos.y
+		const distance = Math.sqrt(dx * dx + dy * dy)
+
+		// 清除预览矩形
+		this.clearPreviewRect()
+
+		if (this.dragTargetElement) {
+			if (distance > 5) {
+				// 拖拽距离超过阈值，创建区域标记
+				this.createAreaMarker(this.dragStartPos, input.canvas, this.dragTargetElement)
+			} else {
+				// 拖拽距离小于阈值，创建点标记
+				this.createPointMarker(this.dragStartPos, this.dragTargetElement)
+			}
+		}
+
+		this.resetDragState()
+	}
+
+	private handlePointerCancel = (): void => {
+		this.resetDragState()
+	}
+
+	private resetDragState(): void {
+		this.clearPreviewRect()
+		this.isDragging = false
+		this.dragStartPos = null
+		this.dragTargetElement = null
+	}
+
+	private preventDefaultForDirectInput(input: CanvasPointerInput): void {
+		if (input.pointerType === "mouse") return
+		if (input.nativeEvent.cancelable) {
+			input.nativeEvent.preventDefault()
+		}
 	}
 
 	/**

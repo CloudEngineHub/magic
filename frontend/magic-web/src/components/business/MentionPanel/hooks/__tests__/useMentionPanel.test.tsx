@@ -17,8 +17,71 @@ import {
 import type { MentionStoreRequest } from "../../dispatch"
 import { en } from "../../i18n/locales/en"
 
-vi.mock("ahooks", () => ({
-	useMemoizedFn: <T extends (...args: never[]) => unknown>(fn: T) => fn,
+vi.mock("ahooks", async () => {
+	const React = await vi.importActual<typeof import("react")>("react")
+	type MemoizedFunction = (...args: never[]) => unknown
+
+	return {
+		useMemoizedFn: <T extends MemoizedFunction>(fn: T): T => {
+			const fnRef = React.useRef(fn)
+			fnRef.current = fn
+
+			return React.useMemo(
+				() => ((...args: Parameters<T>) => fnRef.current(...args)) as T,
+				[],
+			)
+		},
+	}
+})
+
+vi.mock("../../runtime/builtin/request-builder", () => ({
+	buildMentionStoreRequest: ({
+		state,
+		catalogId,
+		itemId,
+		query,
+		scopeFolderId,
+		t,
+	}: {
+		state: string
+		catalogId?: string
+		itemId?: string
+		query?: string
+		scopeFolderId?: string
+		t?: unknown
+	}) => {
+		switch (state) {
+			case "default":
+				return {
+					kind: "default",
+					options: {
+						t,
+					},
+				}
+			case "catalog":
+				if (!catalogId) return null
+				return {
+					kind: "catalog",
+					catalogId,
+					id: itemId,
+				}
+			case "directory":
+				if (!itemId) return null
+				return {
+					kind: "children",
+					id: itemId,
+				}
+			case "search":
+				if (!query?.trim()) return null
+				return {
+					kind: "search",
+					query,
+					...(scopeFolderId?.trim() ? { scopeFolderId: scopeFolderId.trim() } : {}),
+				}
+			default:
+				return null
+		}
+	},
 }))
 
 vi.mock("../useKeyboardNav", () => ({
@@ -313,6 +376,64 @@ describe("useMentionPanel", () => {
 		expect(dataService.removeFromHistory).toHaveBeenCalledWith("history-cache-id")
 	})
 
+	it("should derive canEnterFolder from actual catalog transitions", async () => {
+		const folderWithoutChildrenFlag: MentionItem = {
+			id: "empty-folder",
+			type: MentionItemType.FOLDER,
+			name: "Empty Folder",
+			isFolder: true,
+		}
+		const plainFile: MentionItem = {
+			id: "plain-file",
+			type: MentionItemType.PROJECT_FILE,
+			name: "Plain File",
+		}
+		const dataService: MockDataService = {
+			preLoadList: vi.fn(),
+			removeFromHistory: vi.fn(),
+			dispatch: vi.fn(async (request: MentionStoreRequest) => {
+				if (request.kind === "default") {
+					return {
+						items: [folderWithoutChildrenFlag, plainFile],
+					}
+				}
+				return {}
+			}),
+		}
+		const catalogBehavior: MentionPanelCatalogBehavior = {
+			getDynamicTransition: ({ selectedItem, enterFolder }) => {
+				if (enterFolder && selectedItem.id === "empty-folder") {
+					return {
+						state: PanelState.FOLDER,
+					}
+				}
+				return null
+			},
+		}
+
+		const { result } = renderHook(() =>
+			useMentionPanel({
+				dataService,
+				t: en,
+				catalogBehavior,
+			}),
+		)
+
+		await waitFor(() => {
+			expect(result.current.state.items).toEqual([folderWithoutChildrenFlag, plainFile])
+			expect(result.current.computed.canEnterFolder).toBe(true)
+		})
+
+		act(() => {
+			result.current.actions.selectItem(1)
+		})
+
+		await waitFor(() => {
+			expect(result.current.state.selectedIndex).toBe(1)
+			expect(result.current.computed.canEnterFolder).toBe(false)
+		})
+	})
+
 	it("should pass custom catalog id through injected behavior", async () => {
 		const customCatalogId = "custom-catalog"
 		const dataService: MockDataService = {
@@ -384,6 +505,7 @@ describe("useMentionPanel", () => {
 
 		await waitFor(() => {
 			expect(result.current.state.items).toEqual(customDefaultItems)
+			expect(result.current.computed.canEnterFolder).toBe(true)
 		})
 
 		await act(async () => {
@@ -394,6 +516,7 @@ describe("useMentionPanel", () => {
 			expect(result.current.state.currentState).toBe(PanelState.CATALOG)
 			expect(result.current.state.navigationStack[0]?.catalogId).toBe(customCatalogId)
 			expect(result.current.state.items).toEqual(customCatalogItems)
+			expect(result.current.computed.canEnterFolder).toBe(false)
 		})
 	})
 })

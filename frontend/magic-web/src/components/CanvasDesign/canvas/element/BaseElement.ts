@@ -643,6 +643,7 @@ export abstract class BaseElement<T extends BaseElementProps = BaseElementProps>
 		// 设置拖拽和交互 - 复用 ElementManager 的统一判断，保持 rerender 前后一致
 		const canDrag = this.canvas.elementManager.canDragElement(this.data)
 		node.draggable(canDrag)
+		node.listening(this.canvas.elementManager.canListenElement())
 	}
 
 	/**

@@ -3,6 +3,7 @@ import type { MagicDatePickerProps, MagicDatePickerRangePickerProps } from "../M
 import type { MagicDropdownButtonProps } from "../MagicDropdown"
 import type { MagicInputProps } from "../MagicInput"
 import type { MagicSelectProps } from "../MagicSelect"
+import type { UserSelectProps } from "../UserSelect"
 import type { MagicButtonProps } from "../MagicButton"
 import type { TimeFilterPanelProps } from "../TimeFilterPanel"
 
@@ -15,6 +16,7 @@ export enum SearchItemType {
 	TEXT = "text",
 	SELECT = "select",
 	TREE_SELECT = "treeSelect",
+	USER_SELECT = "userSelect",
 	DATE_RANGE = "dateRange",
 	DATE = "date",
 	RADIO = "radio",
@@ -30,6 +32,9 @@ export type SelectSearchItem = WithType<MagicSelectProps, SearchItemType.SELECT>
 
 /* 树选择搜索 */
 export type TreeSelectSearchItem = WithType<TreeSelectProps, SearchItemType.TREE_SELECT>
+
+/* 用户选择搜索 */
+export type UserSelectSearchItem = WithType<UserSelectProps, SearchItemType.USER_SELECT>
 
 /* 日期范围搜索 */
 export type DateRangeSearchItem = WithType<
@@ -63,6 +68,7 @@ export type CustomSearchItem = WithType<
 export type SearchItem =
 	| TextSearchItem
 	| SelectSearchItem
+	| UserSelectSearchItem
 	| DateRangeSearchItem
 	| DateSearchItem
 	| RadioSearchItem

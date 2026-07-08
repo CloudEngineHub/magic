@@ -783,6 +783,7 @@ function MobileProjectDetailFilesView({
 			<MobileFileSelectionCheckbox
 				state={selectionState}
 				onClick={() => toggleSelected(item)}
+				data-testid="mobile-file-checkbox"
 				ariaLabel={
 					isFullySelected ? t("topicFiles.cancelSelect") : t("topicFiles.batchOperation")
 				}
@@ -796,6 +797,9 @@ function MobileProjectDetailFilesView({
 		return (
 			<div
 				key={key}
+				data-file-id={item.file_id || undefined}
+				data-file-kind="folder"
+				data-testid="project-detail-mobile-file-row"
 				className={cn(
 					"overflow-hidden bg-card",
 					isChatSheetVariant ? "rounded-xl" : "rounded-xl",
@@ -807,11 +811,13 @@ function MobileProjectDetailFilesView({
 						"flex select-none items-center gap-3 px-[14px] py-2.5",
 						isChatSheetVariant ? "min-h-[56px]" : "min-h-[56px]",
 					)}
+					data-testid="mobile-folder-content"
 				>
 					<button
 						type="button"
 						className="flex min-w-0 flex-1 items-center gap-3 text-left active:opacity-70"
 						onClick={() => handleFolderRowClick(item)}
+						data-testid="mobile-folder-button"
 					>
 						{renderAttachmentIconCell(renderRowIcon(item))}
 						<div className="min-w-0 flex-1">
@@ -820,10 +826,14 @@ function MobileProjectDetailFilesView({
 									"truncate leading-6 text-foreground",
 									"text-base font-medium",
 								)}
+								data-testid="mobile-folder-name"
 							>
 								{getAttachmentDisplayName(item)}
 							</p>
-							<p className="mt-0.5 text-sm leading-4 text-muted-foreground">
+							<p
+								className="mt-0.5 text-sm leading-4 text-muted-foreground"
+								data-testid="mobile-folder-description"
+							>
 								{getFolderSecondaryText(item)}
 							</p>
 						</div>
@@ -841,6 +851,9 @@ function MobileProjectDetailFilesView({
 		return (
 			<div
 				key={key}
+				data-file-id={item.file_id || undefined}
+				data-file-kind="file"
+				data-testid="project-detail-mobile-file-row"
 				className={cn(
 					"overflow-hidden bg-card",
 					isChatSheetVariant ? "rounded-xl" : "rounded-xl",
@@ -853,11 +866,13 @@ function MobileProjectDetailFilesView({
 						"flex select-none items-center gap-3 px-[14px] py-2.5",
 						isChatSheetVariant ? "min-h-[56px]" : "min-h-[56px]",
 					)}
+					data-testid="mobile-file-content"
 				>
 					<button
 						type="button"
 						className="flex min-w-0 flex-1 items-center gap-3 text-left active:opacity-70"
 						onClick={() => onFileOpen?.(item)}
+						data-testid="mobile-file-button"
 					>
 						{renderAttachmentIconCell(renderRowIcon(item))}
 						<div className="min-w-0 flex-1">
@@ -866,10 +881,14 @@ function MobileProjectDetailFilesView({
 									"truncate leading-6 text-foreground",
 									isChatSheetVariant ? "text-base font-medium" : "text-base",
 								)}
+								data-testid="mobile-file-name"
 							>
 								{getAttachmentDisplayName(item)}
 							</p>
-							<p className="mt-0.5 truncate text-sm leading-4 text-muted-foreground">
+							<p
+								className="mt-0.5 truncate text-sm leading-4 text-muted-foreground"
+								data-testid="mobile-file-description"
+							>
 								{pathLabel || getFileSecondaryText(item)}
 							</p>
 						</div>
@@ -883,7 +902,10 @@ function MobileProjectDetailFilesView({
 	const renderEmptyState = () => {
 		if (refreshLoading) {
 			return (
-				<div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
+				<div
+					className="flex flex-1 items-center justify-center text-sm text-muted-foreground"
+					data-testid="mobile-files-loading"
+				>
 					{t("loading")}
 				</div>
 			)
@@ -891,14 +913,20 @@ function MobileProjectDetailFilesView({
 
 		if (isSearching) {
 			return (
-				<div className="flex flex-1 items-center justify-center px-6 text-center text-sm text-muted-foreground">
+				<div
+					className="flex flex-1 items-center justify-center px-6 text-center text-sm text-muted-foreground"
+					data-testid="mobile-files-search-empty"
+				>
 					{t("search.searchEmptyDescription", { keyword: searchValue })}
 				</div>
 			)
 		}
 
 		return (
-			<div className="flex flex-1 items-center justify-center px-6 text-center text-sm text-muted-foreground">
+			<div
+				className="flex flex-1 items-center justify-center px-6 text-center text-sm text-muted-foreground"
+				data-testid="mobile-files-empty"
+			>
 				{t("topicFiles.emptyState.title")}
 			</div>
 		)
@@ -966,6 +994,7 @@ function MobileProjectDetailFilesView({
 											"flex flex-col gap-2",
 											isChatSheetVariant ? "px-[10px] py-2.5" : "py-2",
 										)}
+										data-testid="mobile-files-search-list"
 									>
 										{searchResults.map((result) =>
 											renderFileRow(result.item, result.pathLabel || "/"),
@@ -980,6 +1009,7 @@ function MobileProjectDetailFilesView({
 										"flex flex-col gap-2",
 										isChatSheetVariant ? "px-[10px] py-2.5" : "py-2",
 									)}
+									data-testid="mobile-files-list"
 								>
 									{folders.map((item) => renderFolderRow(item))}
 									{files.map((item) => renderFileRow(item))}
@@ -987,26 +1017,26 @@ function MobileProjectDetailFilesView({
 							)}
 						</div>
 					</MagicPullToRefresh>
-
-					{/* 添加按钮占据与原型一致的底栏上方位置；进入多选后隐藏，让底部操作区成为唯一主操作。 */}
-					{allowEdit && !hasSelection && (
-						<Button
-							type="button"
-							size="icon"
-							className={cn(
-								"absolute bottom-1 right-2 z-20 h-12 w-12 rounded-full bg-foreground text-background hover:bg-foreground/90",
-							)}
-							onClick={() => setAddSheetOpen(true)}
-							aria-label={t("projectDetail.fabFilesAria")}
-							data-testid="project-detail-files-add-button"
-						>
-							<Plus className="size-[22px]" strokeWidth={2} />
-						</Button>
-					)}
 				</ScrollEdgeFadeContainer>
+
+				{/* Keep the file action FAB outside ScrollEdgeFadeContainer's isolated stacking context so the bottom search shadow cannot cover it. */}
+				{allowEdit && !hasSelection && (
+					<Button
+						type="button"
+						size="icon"
+						className={cn(
+							"absolute bottom-1 right-2 z-30 h-12 w-12 rounded-full bg-foreground text-background hover:bg-foreground/90",
+						)}
+						onClick={() => setAddSheetOpen(true)}
+						aria-label={t("projectDetail.fabFilesAria")}
+						data-testid="project-detail-files-add-button"
+					>
+						<Plus className="size-[22px]" strokeWidth={2} />
+					</Button>
+				)}
 			</div>
 
-			<div className="relative shrink-0 bg-mobile-background">
+			<div className="relative z-10 shrink-0 bg-mobile-background">
 				{hasSelection ? (
 					<MobileFilesSelectionBar
 						isAllSelected={isAllSelected}

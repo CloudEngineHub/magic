@@ -8,6 +8,7 @@ import type { MagicRichEditorRef } from "@/components/base/MagicRichEditor"
 import EditorDraftService from "@/services/chat/editor/DraftService"
 import EditorDraftStore from "@/stores/chatNew/editorDraft"
 import EditorStore from "@/stores/chatNew/messageUI/editor"
+import { runActiveEditor } from "@/utils/tiptapEditorLifecycle"
 
 /** Types */
 import type { FileData } from "../components/InputFiles/types"
@@ -115,8 +116,10 @@ function useConversationDraft({
 				const draft = getDraft(targetConversationId, targetTopicId)
 
 				// Set editor content
-				editorRef.current?.editor?.commands.setContent(draft?.content ?? "", {
-					emitUpdate: true,
+				runActiveEditor(editorRef.current?.editor, (editor) => {
+					editor.commands.setContent(draft?.content ?? "", {
+						emitUpdate: true,
+					})
 				})
 
 				// Set internal state
@@ -129,11 +132,13 @@ function useConversationDraft({
 				setFiles(draftFiles)
 
 				// Update empty state
-				const text = editorRef.current?.editor?.getText()
+				const text = runActiveEditor(editorRef.current?.editor, (editor) => editor.getText(), "")
 				setIsEmpty?.(!text)
 			} else {
 				// Clear editor if no draft
-				editorRef.current?.editor?.chain().clearContent().run()
+				runActiveEditor(editorRef.current?.editor, (editor) => {
+					editor.chain().clearContent().run()
+				})
 				setIsEmpty?.(true)
 				setValue(undefined)
 				setFiles([])
@@ -141,7 +146,9 @@ function useConversationDraft({
 		} catch (error) {
 			console.error("Error loading draft:", error)
 			// Fallback to clear state
-			editorRef.current?.editor?.chain().clearContent().run()
+			runActiveEditor(editorRef.current?.editor, (editor) => {
+				editor.chain().clearContent().run()
+			})
 			setIsEmpty?.(true)
 			setValue(undefined)
 			setFiles([])

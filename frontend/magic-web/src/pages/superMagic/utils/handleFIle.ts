@@ -36,7 +36,7 @@ export const getFileType = (file_extension: string) => {
 		return DetailType.Doc
 	}
 
-	if (ext === "docx") {
+	if (ext === "docx" || ext === "docm") {
 		return DetailType.Docx
 	}
 
@@ -253,7 +253,7 @@ const getFilenameFromUrl = (url: string): string | undefined => {
 		const pathname = urlObj.pathname
 		// 获取路径中的最后一部分作为文件名
 		const segments = pathname.split("/")
-		let filename = segments[segments.length - 1]
+		const filename = segments[segments.length - 1]
 
 		// 如果提取到的文件名有效（非空且包含文件扩展名）
 		const filenameFromPath = normalizeFilename(filename)
@@ -265,7 +265,7 @@ const getFilenameFromUrl = (url: string): string | undefined => {
 		// 如果不是有效的完整 URL，尝试手动解析
 		const urlWithoutParams = url.split("?")[0].split("#")[0]
 		const segments = urlWithoutParams.split("/")
-		let filename = segments[segments.length - 1]
+		const filename = segments[segments.length - 1]
 
 		const filenameFromPath = normalizeFilename(filename)
 		if (filenameFromPath) return filenameFromPath
@@ -296,17 +296,30 @@ const triggerDownload = (href: string, filename?: string, target?: string) => {
 	document.body.removeChild(link)
 }
 
-const downloadFn = (url: string, filename?: string, target?: string) => {
+const downloadFn = async (url: string, filename?: string, target?: string) => {
 	// APP 环境、钉钉环境、微信/企业微信环境直接打开新窗口
 	if (isInApp() || isDingTalk() || isWechat()) {
 		window.open(url, "_blank")
 		return
 	}
 
-	triggerDownload(url, filename, target)
+	await triggerDownload(url, filename, target)
 }
 
-export const downloadFileWithAnchor = async (url: string, filename?: string, target?: string) => {
+interface DownloadFileWithAnchorOptions {
+	/** Optional desktop modal layer for nested download prompts. */
+	modalZIndex?: number
+}
+
+/**
+ * Starts an anchor-based download and shows a lightweight prompt for manual retry/copy.
+ */
+export const downloadFileWithAnchor = async (
+	url: string,
+	filename?: string,
+	target?: string,
+	options?: DownloadFileWithAnchorOptions,
+) => {
 	// 如果没有传递文件名,尝试从 URL 中提取
 	const finalFilename = filename || getFilenameFromUrl(url)
 
@@ -315,6 +328,7 @@ export const downloadFileWithAnchor = async (url: string, filename?: string, tar
 		open: true,
 		fileName: finalFilename || "file",
 		downloadUrl: url,
+		modalZIndex: options?.modalZIndex,
 		onDownload: () => {
 			downloadFn(url, finalFilename, target)
 		},
@@ -373,8 +387,9 @@ export function getMimeTypeExtensions(ext: string): string[] {
 	const mimeMap: Record<string, string[]> = {
 		// 文档类型
 		pdf: ["pdf"],
-		doc: ["doc", "docx"],
-		docx: ["doc", "docx"],
+		doc: ["doc", "docx", "docm"],
+		docx: ["doc", "docx", "docm"],
+		docm: ["doc", "docx", "docm"],
 		xls: ["xls", "xlsx"],
 		xlsx: ["xls", "xlsx"],
 		ppt: ["ppt", "pptx"],

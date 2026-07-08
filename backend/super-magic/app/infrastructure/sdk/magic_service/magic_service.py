@@ -9,9 +9,11 @@ from typing import Dict, Any, Optional, TYPE_CHECKING
 from urllib.parse import urlparse
 
 from app.infrastructure.sdk.base import SdkBase, SdkContext
+from .api.ai_ability_api import AiAbilityApi
 from .api.agent_api import AgentApi
 from .api.file_api import FileApi  # TEMP: scan-wav workaround, remove when MagicFS auto-refreshes
 from .api.message_schedule_api import MessageScheduleApi
+from .api.oauth2_callback_relay_api import OAuth2CallbackRelayApi
 from .api.skill_api import SkillApi
 from .api.share_api import ShareApi
 
@@ -39,9 +41,11 @@ class MagicService:
 
         # Initialize API routes
         self._routes = {
+            'ai_ability': AiAbilityApi,
             'agent': AgentApi,
             'file': FileApi,  # TEMP: scan-wav workaround, remove when MagicFS auto-refreshes
             'message_schedule': MessageScheduleApi,
+            'oauth2_callback_relay': OAuth2CallbackRelayApi,
             'skill': SkillApi,
             'share': ShareApi,
         }
@@ -74,6 +78,11 @@ class MagicService:
         return self._fetched_definitions['agent']
 
     @property
+    def ai_ability(self) -> 'AiAbilityApi':
+        """Get AI ability API instance."""
+        return self._fetched_definitions['ai_ability']
+
+    @property
     def file(self) -> 'FileApi':
         """Get file API instance.
 
@@ -85,6 +94,11 @@ class MagicService:
     def message_schedule(self) -> 'MessageScheduleApi':
         """Get message schedule API instance"""
         return self._fetched_definitions['message_schedule']
+
+    @property
+    def oauth2_callback_relay(self) -> 'OAuth2CallbackRelayApi':
+        """获取 OAuth2 callback relay API 实例。"""
+        return self._fetched_definitions['oauth2_callback_relay']
 
     @property
     def skill(self) -> 'SkillApi':

@@ -48,11 +48,16 @@ import { useTopicHistoryGroupedViewModel } from "./useTopicHistoryGroupedViewMod
 import { resolveTopicTaskStatus } from "@/pages/superMagic/utils/topicHistory"
 import statusPollingService from "@/pages/superMagic/services/statusPollingService"
 import type { SuperAgentTopicStatusItem } from "@/apis/modules/superMagic"
+import { isMagicApp } from "@/utils/devices"
 
 export interface TopicHistoryPanelContentProps {
 	topics: Topic[]
 	projectId: string
 	selectedTopicId?: string
+	/** Expands the conversation panel before switching topics when the sliver-only layout is active. */
+	isConversationPanelCollapsed?: boolean
+	/** Restores the conversation panel so the selected topic becomes immediately visible. */
+	onExpandConversationPanel?: () => void
 	editingTopicId: string | null
 	editingValue: string
 	onEditingValueChange: (value: string) => void
@@ -87,6 +92,8 @@ function TopicHistoryPanelContentInner({
 	topics,
 	projectId,
 	selectedTopicId,
+	isConversationPanelCollapsed = false,
+	onExpandConversationPanel,
 	editingTopicId,
 	editingValue,
 	onEditingValueChange,
@@ -120,6 +127,8 @@ function TopicHistoryPanelContentInner({
 	const [topicStatusPatches, setTopicStatusPatches] = useState<
 		Record<string, Pick<Topic, "task_status" | "status" | "has_unread">>
 	>({})
+	// Magic App WebView on iPad keeps the desktop layout, but touch input has no reliable hover state.
+	const useAppTouchActions = isMagicApp
 	const topicStatusPollerIdRef = useRef(
 		`topic-history-panel-${Math.random().toString(36).slice(2)}`,
 	)
@@ -261,6 +270,12 @@ function TopicHistoryPanelContentInner({
 	async function handleTopicSelect(topic: Topic) {
 		if (editingTopicId === topic.id) return
 
+		// Re-expand the conversation panel before switching topics so the target thread
+		// is visible immediately instead of staying hidden behind the collapsed sliver.
+		if (isConversationPanelCollapsed) {
+			onExpandConversationPanel?.()
+		}
+
 		let resolvedTopic = topic
 
 		// 历史话题侧栏接口返回的条目有时只够列表展示；切换前补一次详情，避免缺失会话字段导致回切报错。
@@ -335,6 +350,7 @@ function TopicHistoryPanelContentInner({
 	function renderTopicActions(topic: Topic, isActionVisible: boolean) {
 		const patchedTopic = getTopicWithStatusPatch(topic)
 		const isDeleteDisabled = !canDeleteTopic || recordSummaryStore.isRecordingTopic(topic.id)
+		const canShowPinMenuItem = useAppTouchActions && !topic.is_archived
 
 		return (
 			<div
@@ -405,6 +421,24 @@ function TopicHistoryPanelContentInner({
 								onClick={(event) => event.stopPropagation()}
 								data-testid={`message-header-history-item-menu-topic-${topic.id}`}
 							>
+								{canShowPinMenuItem ? (
+									<DropdownMenuItem
+										onClick={(event) => {
+											event.stopPropagation()
+											void handlePinToggle(topic)
+										}}
+										data-testid="message-header-history-item-pin"
+									>
+										{topic.is_pinned ? (
+											<PinOff className="size-4 text-muted-foreground" />
+										) : (
+											<Pin className="size-4 text-muted-foreground" />
+										)}
+										{topic.is_pinned
+											? t("messageHeader.unpin")
+											: t("messageHeader.pin")}
+									</DropdownMenuItem>
+								) : null}
 								<DropdownMenuItem
 									onClick={(event) => {
 										event.stopPropagation()
@@ -467,6 +501,7 @@ function TopicHistoryPanelContentInner({
 		// 已归档话题不开放置顶入口，避免用户对归档数据执行排序类操作。
 		const canShowPinAction = !topic.is_archived
 		const isActionVisible =
+			(useAppTouchActions && editingTopicId !== topic.id) ||
 			hoveredTopicId === topic.id ||
 			openMenuTopicId === topic.id ||
 			openContextMenuTopicId === topic.id ||
@@ -513,8 +548,12 @@ function TopicHistoryPanelContentInner({
 							setHoveredTopicId(topic.id)
 							setOpenMenuTopicId(null)
 						}}
-						onMouseEnter={() => setHoveredTopicId(topic.id)}
+						onMouseEnter={() => {
+							if (useAppTouchActions) return
+							setHoveredTopicId(topic.id)
+						}}
 						onMouseLeave={() => {
+							if (useAppTouchActions) return
 							if (
 								openMenuTopicId !== topic.id &&
 								openContextMenuTopicId !== topic.id
@@ -526,7 +565,10 @@ function TopicHistoryPanelContentInner({
 						data-selected={topic.id === selectedTopicId}
 					>
 						<div className="flex size-4 shrink-0 items-center justify-center">
-							{canShowPinAction && isActionVisible && editingTopicId !== topic.id ? (
+							{!useAppTouchActions &&
+							canShowPinAction &&
+							isActionVisible &&
+							editingTopicId !== topic.id ? (
 								<Button
 									type="button"
 									variant="ghost"

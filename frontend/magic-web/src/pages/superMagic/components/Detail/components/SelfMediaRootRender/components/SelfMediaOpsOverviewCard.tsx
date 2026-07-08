@@ -518,6 +518,7 @@ function SelfMediaOpsOverviewCard({
 																dailyInsightId,
 															)
 														}
+														data-testid="handle-dismiss-daily-insight-action"
 													>
 														<X size={14} />
 													</button>

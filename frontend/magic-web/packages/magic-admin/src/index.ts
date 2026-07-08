@@ -11,11 +11,19 @@ export { useAdminStore } from "@admin/stores/admin"
 
 export * from "@admin/const/common"
 export { AiModel } from "@admin/const/aiModel"
+export { getAdminLocaleModules, type AdminLocaleModules } from "@admin/locales"
 
 // 5. 导出鉴权中间件
 export { withAuthMiddleware } from "@admin/layouts/BaseLayout/components/AuthMiddleware"
 
 export { findRouteByPathname, checkItemPermission } from "@admin/utils/routeUtils"
+export {
+	getMatchedRouteChain,
+	getMatchedRouteEntries,
+	getPermissionSourceByPath,
+	getRoutePermissionSource,
+} from "@admin/utils/routeMeta"
+export type { MatchedRouteEntry, PermissionSource, RouteWithMeta } from "@admin/utils/routeMeta"
 
 // 9. 导出类型
 export { PlatformPackage } from "@admin/types/platformPackage"

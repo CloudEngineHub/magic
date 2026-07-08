@@ -1,5 +1,4 @@
 import { useEffect, useRef } from "react"
-import { useLocation } from "react-router-dom"
 import { reaction } from "mobx"
 import type { ModeItem } from "@/pages/superMagic/pages/Workspace/types"
 import { configStore } from "@/models/config"
@@ -84,12 +83,18 @@ export function useFeaturedModeListRefreshOnDocumentVisible(
  * the response replaces it.
  */
 export function useFeaturedModeListRefreshOnFirstOpen(open: boolean) {
-	const location = useLocation()
 	const featuredFetchedOnOpenRef = useRef(false)
+	const previousLocationKeyRef = useRef("")
+	const currentLocationKey =
+		typeof window === "undefined"
+			? ""
+			: `${window.location.pathname}${window.location.search}${window.location.hash}`
 
 	useEffect(() => {
+		if (previousLocationKeyRef.current === currentLocationKey) return
+		previousLocationKeyRef.current = currentLocationKey
 		featuredFetchedOnOpenRef.current = false
-	}, [location.pathname, location.search, location.key])
+	}, [currentLocationKey])
 
 	useEffect(() => {
 		if (!open) return

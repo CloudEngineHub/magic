@@ -94,6 +94,7 @@ export function ColorPicker({ value, onChange, onChangeComplete, disabled }: Col
 							onBlur={handleBlur}
 							className="absolute inset-0 cursor-pointer opacity-0"
 							disabled={disabled}
+							data-testid="handle-change"
 						/>
 					</Button>
 				</span>

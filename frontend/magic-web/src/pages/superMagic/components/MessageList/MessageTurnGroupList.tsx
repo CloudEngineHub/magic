@@ -1,15 +1,17 @@
 import { memo, type ReactNode } from "react"
 import { cn } from "@/lib/utils"
+import { Checkbox } from "@/components/shadcn-ui/checkbox"
 import type { SuperMagicMessageItem } from "./type"
 import { getMessageNodeKey } from "./helpers"
 import { isUserRoleMessage, isToolRoleMessage, type MessageTurnGroup } from "./message-turn-groups"
 import { superMagicStore } from "@/pages/superMagic/stores"
 
 export const USER_MESSAGE_STICKY_OVERLAY_CLASS = cn(
-	"sticky z-20 overflow-visible",
+	"sticky isolate z-20 overflow-visible",
 	"[--sticky-message-mask-bg:rgb(var(--sidebar-rgb))] [--sticky-message-mask-fade-from:rgb(var(--sidebar-rgb))]",
-	"before:pointer-events-none before:absolute before:inset-0 before:-z-10 before:bg-[var(--sticky-message-mask-bg)] before:content-['']",
-	"after:pointer-events-none after:absolute after:inset-x-0 after:top-full after:h-4 after:bg-gradient-to-b after:from-[var(--sticky-message-mask-fade-from)] after:to-transparent after:content-['']",
+	"before:pointer-events-none before:absolute before:inset-0 before:z-0 before:bg-[var(--sticky-message-mask-bg)] before:content-['']",
+	"after:pointer-events-none after:absolute after:inset-x-0 after:top-full after:z-0 after:h-4 after:bg-gradient-to-b after:from-[var(--sticky-message-mask-fade-from)] after:to-transparent after:content-['']",
+	"[&>*]:relative [&>*]:z-[1]",
 )
 
 /**
@@ -21,8 +23,12 @@ export const USER_MESSAGE_STICKY_OVERLAY_CLASS_MOBILE = cn(
 	"!-top-[2px]",
 )
 
-export function getUserMessageStickyTopClass(isMobile: boolean): "top-[10px]" | "top-[40px]" {
-	return isMobile ? "top-[10px]" : "top-[40px]"
+export function getUserMessageStickyTopClass(
+	isMobile: boolean,
+): "top-[10px] [--sticky-message-top:10px]" | "top-[40px] [--sticky-message-top:40px]" {
+	return isMobile
+		? "top-[10px] [--sticky-message-top:10px]"
+		: "top-[40px] [--sticky-message-top:40px]"
 }
 
 /** Extra classes applied to the row wrapper when the message is from the user */
@@ -34,6 +40,11 @@ export interface MessageTurnGroupListProps {
 	stickyMessageClassName?: string
 	/** Inner message UI (e.g. Node); wrapped with user right-align + sticky section */
 	renderNode: (args: { node: SuperMagicMessageItem; index: number }) => ReactNode
+	/** Export-selection mode: render a left checkbox column per selectable turn */
+	exportMode?: boolean
+	selectedKeys?: ReadonlySet<string>
+	onToggleSelect?: (key: string) => void
+	limitReached?: boolean
 }
 
 const statusList = new Set(["completed", "failed", "error", "finished", "suspended"])
@@ -43,6 +54,10 @@ function MessageTurnGroupListInner({
 	isMobile,
 	stickyMessageClassName,
 	renderNode,
+	exportMode,
+	selectedKeys,
+	onToggleSelect,
+	limitReached,
 }: MessageTurnGroupListProps) {
 	const userMessageStickyTopClass = getUserMessageStickyTopClass(isMobile)
 
@@ -50,7 +65,9 @@ function MessageTurnGroupListInner({
 		const nodeKey = getMessageNodeKey(node) || `${node?.role || "message"}-${index}`
 		const inner = renderNode({ node, index })
 		if (inner == null || inner === false) return null
-		const card = superMagicStore.getMessageNode(node?.app_message_id)
+		const card = superMagicStore.getMessageNode(node?.app_message_id) as
+			| { status?: string }
+			| undefined
 		if (!statusList.has(card?.status as string) && node?.role === "tool") {
 			return null
 		}
@@ -74,16 +91,71 @@ function MessageTurnGroupListInner({
 		)
 	}
 
+	function selectionWrap(group: MessageTurnGroup, content: ReactNode): ReactNode {
+		if (!exportMode) return content
+		const selectable = group.stickyItem != null
+		const checked = selectable ? Boolean(selectedKeys?.has(group.key)) : false
+		const disabled = selectable && !checked && Boolean(limitReached)
+
+		return (
+			<div
+				className={cn(
+					"group/export relative rounded-lg py-1 pl-9 pr-1 transition-colors duration-150",
+					selectable && !disabled && "cursor-pointer",
+					selectable && !checked && !disabled && "hover:bg-muted/30",
+					disabled && "cursor-not-allowed opacity-55",
+				)}
+			>
+				{selectable && (
+					<div
+						className={cn(
+							"pointer-events-auto absolute left-0 top-4 z-40 flex size-7 items-center justify-center transition-opacity duration-150",
+							checked ? "opacity-100" : "opacity-80 group-hover/export:opacity-100",
+						)}
+					>
+						<Checkbox
+							checked={checked}
+							disabled={disabled}
+							className="size-4"
+							onCheckedChange={() => onToggleSelect?.(group.key)}
+							onClick={(e) => e.stopPropagation()}
+						/>
+					</div>
+				)}
+				<div
+					className={cn(
+						"min-w-0 transition-opacity duration-150",
+						checked && "opacity-95",
+					)}
+				>
+					{content}
+				</div>
+				{selectable && (
+					<div
+						className={cn(
+							"absolute inset-0 z-30 rounded-lg transition-colors duration-150",
+							!disabled && "hover:bg-primary/[0.02]",
+						)}
+						onClick={() => {
+							if (disabled) return
+							onToggleSelect?.(group.key)
+						}}
+					/>
+				)}
+			</div>
+		)
+	}
+
 	return (
 		<>
 			{groups.map((group) => {
-				// Mobile: flat scroll list — sticky user turns waste viewport and block more assistant content.
-				if (!group.stickyItem || isMobile) {
-					return (
-						<div key={group.key} className="relative flex flex-col gap-2">
+				if (!group.stickyItem) {
+					const content = (
+						<div className="relative flex flex-col gap-2">
 							{group.items.map(({ node, index }) => row(node, index))}
 						</div>
 					)
+					return <div key={group.key}>{selectionWrap(group, content)}</div>
 				}
 
 				const { stickyItem, items } = group
@@ -91,8 +163,8 @@ function MessageTurnGroupListInner({
 					getMessageNodeKey(stickyItem.node) ||
 					`${stickyItem.node?.role || "message"}-${stickyItem.index}`
 
-				return (
-					<section key={group.key} className="relative z-[1] flex flex-col">
+				const inner = (
+					<section className="relative flex flex-col">
 						<div
 							data-sticky-message-id={stickyNodeKey}
 							className={cn(
@@ -108,6 +180,8 @@ function MessageTurnGroupListInner({
 						{items.slice(1).map(({ node, index }) => row(node, index))}
 					</section>
 				)
+
+				return <div key={group.key}>{selectionWrap(group, inner)}</div>
 			})}
 		</>
 	)

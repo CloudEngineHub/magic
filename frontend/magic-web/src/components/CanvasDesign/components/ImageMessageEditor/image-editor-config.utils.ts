@@ -124,6 +124,56 @@ export function findBestSizeForResolution(
 	return targetSize
 }
 
+export function resolveImageSizeOptionFromRequest(options: {
+	sizes: ImageSizeOption[]
+	request?: Pick<GenerateImageRequest, "size" | "resolution"> | null
+	preferredResolution?: string
+	currentLabel?: string
+	fallbackAspectRatio?: number
+}): { size: ImageSizeOption; resolution?: string } | null {
+	const { sizes, request, preferredResolution, currentLabel, fallbackAspectRatio } = options
+	if (sizes.length === 0) return null
+
+	const availableScales = Array.from(new Set(sizes.map((size) => size.scale).filter(Boolean)))
+	const requestedResolution = request?.resolution
+	const targetResolution =
+		requestedResolution && availableScales.includes(requestedResolution)
+			? requestedResolution
+			: preferredResolution && availableScales.includes(preferredResolution)
+				? preferredResolution
+				: undefined
+
+	const exactSize =
+		request?.size && requestedResolution
+			? sizes.find(
+					(size) =>
+						size.value === request.size &&
+						(size.scale || undefined) === requestedResolution,
+				)
+			: undefined
+	const sameValueSize = request?.size
+		? sizes.find((size) => size.value === request.size)
+		: undefined
+	const requestAspectRatio = request?.size ? parseAspectRatioFromSize(request.size) : undefined
+	const targetSize =
+		exactSize ||
+		sameValueSize ||
+		findBestSizeForResolution(
+			sizes,
+			targetResolution,
+			currentLabel,
+			fallbackAspectRatio ?? requestAspectRatio,
+		) ||
+		sizes[0]
+
+	return {
+		size: targetSize,
+		resolution: availableScales.length
+			? targetSize.scale || targetResolution || undefined
+			: undefined,
+	}
+}
+
 export function buildImageModelOptions(imageModelList: ImageModelItem[]): ImageModelOption[] {
 	return imageModelList.map((model) => ({
 		label: model.model_name,

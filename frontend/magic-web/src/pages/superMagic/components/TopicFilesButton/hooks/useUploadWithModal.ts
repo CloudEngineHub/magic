@@ -1,12 +1,11 @@
 import { useState, useCallback } from "react"
-import { message } from "antd"
 import { useTranslation } from "react-i18next"
 import { UploadSource } from "../../MessageEditor/hooks/useFileUpload"
 import { multiFolderUploadStore } from "@/stores/folderUpload"
 import type { BatchSaveInfo } from "@/stores/folderUpload/types"
-import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import type { AttachmentItem } from "./types"
 import { useDuplicateFileHandler } from "./useDuplicateFileHandler"
+import { createUploadRefreshCoordinator } from "../utils/uploadRefreshController"
 
 interface UseUploadWithModalOptions {
 	projectId?: string
@@ -34,10 +33,18 @@ export function useUploadWithModal({
 	// 实际上传处理函数（用于单个文件上传）
 	const processFilesUpload = useCallback(
 		async (files: File[], parentId?: string) => {
-			// 文件上传：每个文件都创建一个独立的上传任务
-			await Promise.all(
-				files.map((file) =>
-					multiFolderUploadStore.createUploadTask([file], parentId, {
+			const refreshCoordinator = createUploadRefreshCoordinator({
+				uploadType: "file",
+				projectFiles: attachments,
+				uploadFileCount: files.length,
+			})
+
+			let firstError: unknown
+
+			// File upload: create one task per file sequentially to avoid Promise spikes.
+			for (const file of files) {
+				try {
+					await multiFolderUploadStore.createUploadTask([file], parentId, {
 						projectId: projectId || "",
 						workspaceId,
 						projectName: selectedProject?.project_name || t("common.untitledProject"),
@@ -47,76 +54,90 @@ export function useUploadWithModal({
 						source: UploadSource.ProjectFile,
 						onComplete: (taskId: string) => {
 							console.log(
-								`📄 Modal file upload task ${taskId} completed for ${file.name}, triggering attachments update`,
+								`📄 Modal file upload task ${taskId} completed for ${file.name}`,
 							)
-							// 触发文件列表更新
-							pubsub.publish(PubSubEvents.Update_Attachments)
+							refreshCoordinator.handleFileTaskComplete(taskId, {
+								fileName: file.name,
+							})
 						},
-						// 每个批次上传完成的回调函数
+						onError: (taskId: string) => {
+							refreshCoordinator.handleFileTaskError(taskId, {
+								fileName: file.name,
+							})
+						},
 						onBatchUploadComplete: (batchInfo) => {
 							console.log(
 								`📄 Modal file batch upload progress: ${batchInfo.currentBatch}/${batchInfo.totalBatches}, success: ${batchInfo.batchSuccessCount}, failed: ${batchInfo.batchFailedCount}`,
 							)
-							// 当前批次有成功上传的文件时，触发文件列表的局部更新
-							if (batchInfo.batchSuccessCount > 0) {
-								pubsub.publish(PubSubEvents.Update_Attachments)
-							}
 						},
-						// 每次批量保存完成的回调函数（实时保存机制）
 						onBatchSaveComplete: (batchSaveInfo: BatchSaveInfo) => {
 							console.log(
 								`💾 Modal file batch save completed: ${batchSaveInfo.savedFilesCount} files saved to project, total processed: ${batchSaveInfo.totalProcessedFiles}`,
 							)
-							// 文件保存到项目后立即刷新文件列表，让用户能够实时看到文件出现
-							pubsub.publish(PubSubEvents.Update_Attachments)
+							refreshCoordinator.handleBatchSaveComplete(batchSaveInfo, {
+								fileName: file.name,
+							})
 						},
-					}),
-				),
-			)
+					})
+					refreshCoordinator.markTaskCreated({ fileName: file.name, parentId })
+				} catch (error) {
+					refreshCoordinator.markTaskCreateFailed({ fileName: file.name, parentId })
+					firstError = firstError || error
+				}
+			}
+
+			if (firstError) {
+				throw firstError
+			}
 		},
-		[projectId, workspaceId, selectedProject, selectedTopic, t],
+		[attachments, projectId, workspaceId, selectedProject, selectedTopic, t],
 	)
 
 	// 实际上传处理函数（用于文件夹上传）
 	const processFolderUpload = useCallback(
 		async (files: File[], parentId?: string) => {
-			// 文件夹上传：所有文件作为一个上传任务
-			await multiFolderUploadStore.createUploadTask(files, parentId, {
-				projectId: projectId || "",
-				workspaceId,
-				projectName: selectedProject?.project_name || t("common.untitledProject"),
-				topicId: selectedTopic?.id,
-				taskId: "",
-				storageType: "workspace",
-				source: UploadSource.ProjectFile,
-				onComplete: (taskId: string) => {
-					console.log(
-						`📁 Modal folder upload task ${taskId} completed, triggering attachments update`,
-					)
-					// 触发文件列表更新
-					pubsub.publish(PubSubEvents.Update_Attachments)
-				},
-				// 每个批次上传完成的回调函数
-				onBatchUploadComplete: (batchInfo) => {
-					console.log(
-						`📁 Modal folder batch upload progress: ${batchInfo.currentBatch}/${batchInfo.totalBatches}, success: ${batchInfo.batchSuccessCount}, failed: ${batchInfo.batchFailedCount}`,
-					)
-					// 当前批次有成功上传的文件时，触发文件列表的局部更新
-					if (batchInfo.batchSuccessCount > 0) {
-						pubsub.publish(PubSubEvents.Update_Attachments)
-					}
-				},
-				// 每次批量保存完成的回调函数（实时保存机制）
-				onBatchSaveComplete: (batchSaveInfo: BatchSaveInfo) => {
-					console.log(
-						`💾 Modal folder batch save completed: ${batchSaveInfo.savedFilesCount} files saved to project, total processed: ${batchSaveInfo.totalProcessedFiles}`,
-					)
-					// 文件保存到项目后立即刷新文件列表，让用户能够实时看到文件出现
-					pubsub.publish(PubSubEvents.Update_Attachments)
-				},
+			const refreshCoordinator = createUploadRefreshCoordinator({
+				uploadType: "folder",
+				projectFiles: attachments,
+				uploadFileCount: files.length,
 			})
+
+			// Folder upload: all files share one upload task.
+			try {
+				await multiFolderUploadStore.createUploadTask(files, parentId, {
+					projectId: projectId || "",
+					workspaceId,
+					projectName: selectedProject?.project_name || t("common.untitledProject"),
+					topicId: selectedTopic?.id,
+					taskId: "",
+					storageType: "workspace",
+					source: UploadSource.ProjectFile,
+					onComplete: (taskId: string) => {
+						console.log(`📁 Modal folder upload task ${taskId} completed`)
+						refreshCoordinator.flushDeferredRefresh("taskComplete", { taskId })
+					},
+					onError: (taskId: string) => {
+						refreshCoordinator.flushDeferredRefresh("taskError", { taskId })
+					},
+					onBatchUploadComplete: (batchInfo) => {
+						console.log(
+							`📁 Modal folder batch upload progress: ${batchInfo.currentBatch}/${batchInfo.totalBatches}, success: ${batchInfo.batchSuccessCount}, failed: ${batchInfo.batchFailedCount}`,
+						)
+					},
+					onBatchSaveComplete: (batchSaveInfo: BatchSaveInfo) => {
+						console.log(
+							`💾 Modal folder batch save completed: ${batchSaveInfo.savedFilesCount} files saved to project, total processed: ${batchSaveInfo.totalProcessedFiles}`,
+						)
+						refreshCoordinator.handleBatchSaveComplete(batchSaveInfo)
+					},
+				})
+				refreshCoordinator.markTaskCreated({ filesCount: files.length, parentId })
+			} catch (error) {
+				refreshCoordinator.markTaskCreateFailed({ filesCount: files.length, parentId })
+				throw error
+			}
 		},
-		[projectId, workspaceId, selectedProject, selectedTopic, t],
+		[attachments, projectId, workspaceId, selectedProject, selectedTopic, t],
 	)
 
 	// 同名文件处理 handler（优先使用外部传入的共享 handler）
@@ -176,7 +197,7 @@ export function useUploadWithModal({
 		async ({ path, files }: { path: AttachmentItem[]; files: File[] }) => {
 			try {
 				// 提取最后一个 AttachmentItem 的 file_id 作为 parentId
-				const parentId = path.length > 0 ? path[path.length - 1].file_id : undefined
+				const parentId = path.length > 0 ? path[path.length - 1].file_id || "" : ""
 
 				// 根据是否为文件夹上传选择不同的处理函数
 				const uploadProcessor = isUploadingFolder ? processFolderUpload : processFilesUpload

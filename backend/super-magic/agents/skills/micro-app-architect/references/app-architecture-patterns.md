@@ -13,20 +13,24 @@ Condensed architecture patterns for Simple, Medium, and Complex micro-apps. Focu
 <app-directory>/
 ├── index.html          (all UI + logic)
 └── data/
-    └── *.json          (optional persistence)
+    ├── config.json     (optional single-state/config file)
+    └── records/        (one JSON file per user-created record)
 ```
 
 **Key code pattern:**
 ```javascript
-// Load data + auto-refresh on change
+// Load list projection, then read detail on demand
 async function loadAndRender() {
-  const raw = await window.Magic.fs.readFile("data/sales.json");
-  const sales = JSON.parse(raw);
-  // ... render to DOM
+  const entries = await window.Magic.fs.listDir("data/records/");
+  const rows = entries
+    .map((entry) => parseRecordFileName(entry.name))
+    .filter(Boolean)
+    .sort((a, b) => b.sortKey.localeCompare(a.sortKey));
+  renderRows(rows);
 }
 
 loadAndRender();
-window.Magic.fs.watchFile("data/sales.json", () => loadAndRender());
+window.Magic.fs.watchDir("data/records/", () => loadAndRender());
 ```
 
 ---
@@ -123,7 +127,7 @@ Workflow: read input → update status (25%) → analyze → update (50%) → ge
 └── content-studio/
     ├── index.html                (control panel: task creation, agent/model selector, status)
     └── data/
-        ├── tasks.json            (task queue with status per task)
+        ├── tasks/                (one JSON file per task)
         ├── agents.json           (cached agent list)
         └── outputs/
             ├── task-001-research.md
@@ -186,17 +190,18 @@ function waitForFile(path) {
 }
 ```
 
-**tasks.json schema:**
+**task record schema:**
 ```json
-[{
+{
   "id": "task-001",
+  "shortId": "t001ab",
   "title": "Research AI trends",
   "status": "complete",
   "assignedTo": "research_agent",
   "topicId": "topic_abc123",
   "createdAt": 1706000000000,
   "completedAt": 1706000060000
-}]
+}
 ```
 
 ---
@@ -206,7 +211,7 @@ function waitForFile(path) {
 | User Request | Pattern | Key APIs Used |
 |--------------|---------|---------------|
 | "Make a calculator" | Simple | (pure JS, no Magic API) |
-| "Make a todo list" | Simple | `fs.readFile`, `fs.writeFile` |
+| "Make a todo list" | Simple | `fs.listDir`, `fs.watchDir`, `fs.readFile`, `fs.writeFile`, `fs.renameFile`, `fs.deleteFile` |
 | "Make an AI chat interface" | Simple | `llm.stream`, `llm.getModels` |
 | "Make a data analysis tool" | Medium | `fs.*`, `createTopicAndSend` + @file skill |
 | "Make an automated report generator" | Medium | `fs.*`, `createTopicAndSend`, companion skill |
@@ -217,7 +222,7 @@ function waitForFile(path) {
 
 ## Data Initialization
 
-Always create initial data files when generating the app:
+Always create config files and empty record directories when generating the app. Do not initialize shared CRUD collections as a single array JSON file.
 
 ```javascript
 async function initializeData() {
@@ -227,8 +232,8 @@ async function initializeData() {
     await window.Magic.fs.writeFile("data/config.json", JSON.stringify({
       appName: "My App", version: "1.0.0", createdAt: Date.now()
     }, null, 2));
-    await window.Magic.fs.writeFile("data/items.json", "[]");
   }
+  await window.Magic.fs.listDir("data/records/").catch(() => []);
 }
 ```
 
@@ -238,5 +243,6 @@ app-dir/
 ├── index.html
 └── data/
     ├── config.json      ← generated with defaults
-    └── items.json       ← generated as empty array []
+    └── records/
+        └── .keep        ← optional placeholder if the host needs a physical directory
 ```

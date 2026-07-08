@@ -99,6 +99,7 @@ class SubagentSessionState(BaseModel):
     last_tool_call_id: Optional[str] = None
     cached_tool_result: Optional[SubagentPayload] = None
     interrupt_requested: bool = False
+    crew_display_name: Optional[str] = None
     interrupt_reason: Optional[str] = None
 
     @model_validator(mode="after")

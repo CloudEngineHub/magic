@@ -1,7 +1,7 @@
 import { SuperMagicApi } from "@/apis"
 import type { RecordTaskProgress } from "@/apis/modules/superMagic/recordSummary"
 
-const POLL_INTERVAL_MS = 5000
+const POLL_INTERVAL_MS = 10000
 
 export interface SummaryProgressPollerCallbacks {
 	onProgress: (task: RecordTaskProgress) => void
@@ -55,9 +55,31 @@ export class SummaryProgressPoller {
 		this.timer = null
 	}
 
+	/**
+	 * Returns true when the task response indicates the pipeline is fully done.
+	 * The pipeline is done only when:
+	 * 1. The overall task has failed (task_status === "failed"), OR
+	 * 2. The summarizing phase itself has completed or failed (phase_status is completed/failed).
+	 * We must NOT treat task_status === "completed" as terminal if summarizing is still in_progress.
+	 */
+	private isTaskTerminal(task: RecordTaskProgress): boolean {
+		if (task.task_status === "failed") return true
+		if (task.current_phase === "summarizing") {
+			return task.phase_status === "completed" || task.phase_status === "failed"
+		}
+		return false
+	}
+
 	/** Fetches progress for all tracked task keys in one batch request */
 	private async pollOnce() {
-		if (this.isPolling || this.taskKeys.size === 0 || !this.callbacks) return
+		// If callbacks were cleared (e.g., dispose() was called while a previous
+		// pollOnce was in flight), stop the interval proactively so the timer
+		// doesn't keep firing after the page unmounts.
+		if (!this.callbacks) {
+			this.stopInterval()
+			return
+		}
+		if (this.isPolling || this.taskKeys.size === 0) return
 
 		const keys = [...this.taskKeys]
 		this.isPolling = true
@@ -66,20 +88,25 @@ export class SummaryProgressPoller {
 			const response = await SuperMagicApi.batchTaskProgress({ task_keys: keys })
 			const tasks = response.tasks ?? []
 
+			// Guard against dispose() being called while we awaited the response.
+			const callbacks = this.callbacks
+			if (!callbacks) return
+
 			for (const task of tasks) {
 				if (!task.task_key) continue
 
 				if (task.exists === false) {
 					this.taskKeys.delete(task.task_key)
-					this.callbacks.onTaskMissing(task.task_key)
+					callbacks.onTaskMissing(task.task_key)
 					continue
 				}
 
-				this.callbacks.onProgress(task)
+				callbacks.onProgress(task)
 
-				if (task.phase_status === "completed" || task.phase_status === "failed") {
+				// Remove the task when either the overall pipeline or the current phase is done.
+				if (this.isTaskTerminal(task)) {
 					this.taskKeys.delete(task.task_key)
-					this.callbacks.onTaskDone(task.task_key)
+					callbacks.onTaskDone(task.task_key)
 				}
 			}
 		} catch {

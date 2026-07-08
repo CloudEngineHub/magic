@@ -417,10 +417,16 @@ class MagicFlowExecuteAppService extends AbstractFlowAppService
      */
     public static function routine(string $flowCode, string $branchId, array $routineConfig = []): void
     {
+        $logger = simple_logger('FlowRoutine');
         // 暂时只有系统级别的定时任务
         $dataIsolation = FlowDataIsolation::create();
         $magicFlow = di(MagicFlowDomainService::class)->getByCode($dataIsolation, $flowCode);
         if (! $magicFlow) {
+            $logger->info("routine flow not found, flow_code: {$flowCode}");
+            return;
+        }
+        if (! $magicFlow->isEnabled()) {
+            $logger->info("routine flow not enabled, flow_code: {$flowCode}");
             return;
         }
         $dataIsolation->setCurrentOrganizationCode($magicFlow->getOrganizationCode());
@@ -456,6 +462,10 @@ class MagicFlowExecuteAppService extends AbstractFlowAppService
             if ($agent) {
                 $executionData->setAgentId($agent->getId());
                 $magicFlow->setAgentId($agent->getId());
+                if (! $agent->isAvailable()) {
+                    $logger->info("routine flow agent not available, flow_code: {$flowCode}, agent_id: {$agent->getId()}");
+                    return;
+                }
             }
         }
         ExecutionDataUtil::appendTriggerTopInfo(['flow' => $magicFlow], $executionData);

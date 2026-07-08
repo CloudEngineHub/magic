@@ -16,6 +16,7 @@ import {
 import type { SuggestionItem, SlashMenuItemType } from "../types"
 import { DEFAULT_GROUPS } from "../types"
 import { isExtensionAvailable } from "@/lib/tiptap-utils"
+import { runActiveEditor } from "@/utils/tiptapEditorLifecycle"
 
 // Type for translation function
 type TranslationFunction = (key: string) => string
@@ -25,12 +26,25 @@ type TranslationFunction = (key: string) => string
  */
 export function createDefaultMenuItems(editor: Editor, t?: TranslationFunction): SuggestionItem[] {
 	// Editor instance is available for capability checks in individual item configurations
-	// Helper function to safely delete range
-	const deleteRangeIfExists = (editorInstance: Editor, range?: Range | null) => {
-		if (range) {
-			return editorInstance.chain().focus().deleteRange(range)
-		}
-		return editorInstance.chain().focus()
+	// Helper function to safely delete range before running a menu action.
+	const runWithDeletedRange = (
+		editorInstance: Editor,
+		range: Range | null | undefined,
+		action: (chain: ReturnType<Editor["chain"]>, editor: Editor) => void,
+	) => {
+		runActiveEditor(editorInstance, (activeEditor) => {
+			const chain = range
+				? activeEditor.chain().focus().deleteRange(range)
+				: activeEditor.chain().focus()
+			action(chain, activeEditor)
+		})
+	}
+
+	const canExecute = (
+		editorInstance: Editor | null | undefined,
+		action: (editor: Editor) => boolean,
+	) => {
+		return runActiveEditor(editorInstance, action, false) ?? false
 	}
 
 	// Use the editor parameter to avoid unused variable warning
@@ -52,7 +66,9 @@ export function createDefaultMenuItems(editor: Editor, t?: TranslationFunction):
 			icon: <IconTypography size={18} />,
 			group: DEFAULT_GROUPS.FORMATTING,
 			onSelect: ({ editor, range }) => {
-				deleteRangeIfExists(editor, range).setParagraph().run()
+				runWithDeletedRange(editor, range, (chain) => {
+					chain.setParagraph().run()
+				})
 			},
 			enabled: () => true,
 		},
@@ -67,9 +83,11 @@ export function createDefaultMenuItems(editor: Editor, t?: TranslationFunction):
 			icon: <IconH1 size={18} />,
 			group: DEFAULT_GROUPS.FORMATTING,
 			onSelect: ({ editor, range }) => {
-				deleteRangeIfExists(editor, range).setHeading({ level: 1 }).run()
+				runWithDeletedRange(editor, range, (chain) => {
+					chain.setHeading({ level: 1 }).run()
+				})
 			},
-			enabled: (editor) => editor?.can()?.setHeading({ level: 1 }) || false,
+			enabled: (editor) => canExecute(editor, (activeEditor) => activeEditor.can().setHeading({ level: 1 })),
 		},
 
 		{
@@ -81,9 +99,11 @@ export function createDefaultMenuItems(editor: Editor, t?: TranslationFunction):
 			icon: <IconH2 size={18} />,
 			group: DEFAULT_GROUPS.FORMATTING,
 			onSelect: ({ editor, range }) => {
-				deleteRangeIfExists(editor, range).setHeading({ level: 2 }).run()
+				runWithDeletedRange(editor, range, (chain) => {
+					chain.setHeading({ level: 2 }).run()
+				})
 			},
-			enabled: (editor) => editor?.can()?.setHeading({ level: 2 }) || false,
+			enabled: (editor) => canExecute(editor, (activeEditor) => activeEditor.can().setHeading({ level: 2 })),
 		},
 
 		{
@@ -95,9 +115,11 @@ export function createDefaultMenuItems(editor: Editor, t?: TranslationFunction):
 			icon: <IconH3 size={18} />,
 			group: DEFAULT_GROUPS.FORMATTING,
 			onSelect: ({ editor, range }) => {
-				deleteRangeIfExists(editor, range).setHeading({ level: 3 }).run()
+				runWithDeletedRange(editor, range, (chain) => {
+					chain.setHeading({ level: 3 }).run()
+				})
 			},
-			enabled: (editor) => editor?.can()?.setHeading({ level: 3 }) || false,
+			enabled: (editor) => canExecute(editor, (activeEditor) => activeEditor.can().setHeading({ level: 3 })),
 		},
 
 		// Additional headings for completeness
@@ -110,9 +132,11 @@ export function createDefaultMenuItems(editor: Editor, t?: TranslationFunction):
 			icon: <IconH3 size={18} />,
 			group: DEFAULT_GROUPS.FORMATTING,
 			onSelect: ({ editor, range }) => {
-				deleteRangeIfExists(editor, range).setHeading({ level: 4 }).run()
+				runWithDeletedRange(editor, range, (chain) => {
+					chain.setHeading({ level: 4 }).run()
+				})
 			},
-			enabled: (editor) => editor?.can()?.setHeading({ level: 4 }) || false,
+			enabled: (editor) => canExecute(editor, (activeEditor) => activeEditor.can().setHeading({ level: 4 })),
 		},
 
 		{
@@ -124,9 +148,11 @@ export function createDefaultMenuItems(editor: Editor, t?: TranslationFunction):
 			icon: <IconH3 size={18} />,
 			group: DEFAULT_GROUPS.FORMATTING,
 			onSelect: ({ editor, range }) => {
-				deleteRangeIfExists(editor, range).setHeading({ level: 5 }).run()
+				runWithDeletedRange(editor, range, (chain) => {
+					chain.setHeading({ level: 5 }).run()
+				})
 			},
-			enabled: (editor) => editor?.can()?.setHeading({ level: 5 }) || false,
+			enabled: (editor) => canExecute(editor, (activeEditor) => activeEditor.can().setHeading({ level: 5 })),
 		},
 
 		{
@@ -138,9 +164,11 @@ export function createDefaultMenuItems(editor: Editor, t?: TranslationFunction):
 			icon: <IconH3 size={18} />,
 			group: DEFAULT_GROUPS.FORMATTING,
 			onSelect: ({ editor, range }) => {
-				deleteRangeIfExists(editor, range).setHeading({ level: 6 }).run()
+				runWithDeletedRange(editor, range, (chain) => {
+					chain.setHeading({ level: 6 }).run()
+				})
 			},
-			enabled: (editor) => editor?.can()?.setHeading({ level: 6 }) || false,
+			enabled: (editor) => canExecute(editor, (activeEditor) => activeEditor.can().setHeading({ level: 6 })),
 		},
 
 		// Lists
@@ -153,9 +181,11 @@ export function createDefaultMenuItems(editor: Editor, t?: TranslationFunction):
 			icon: <IconList size={18} />,
 			group: DEFAULT_GROUPS.LISTS,
 			onSelect: ({ editor, range }) => {
-				deleteRangeIfExists(editor, range).toggleBulletList().run()
+				runWithDeletedRange(editor, range, (chain) => {
+					chain.toggleBulletList().run()
+				})
 			},
-			enabled: (editor) => editor?.can()?.toggleBulletList() || false,
+			enabled: (editor) => canExecute(editor, (activeEditor) => activeEditor.can().toggleBulletList()),
 		},
 
 		{
@@ -167,9 +197,11 @@ export function createDefaultMenuItems(editor: Editor, t?: TranslationFunction):
 			icon: <IconListNumbers size={18} />,
 			group: DEFAULT_GROUPS.LISTS,
 			onSelect: ({ editor, range }) => {
-				deleteRangeIfExists(editor, range).toggleOrderedList().run()
+				runWithDeletedRange(editor, range, (chain) => {
+					chain.toggleOrderedList().run()
+				})
 			},
-			enabled: (editor) => editor?.can()?.toggleOrderedList() || false,
+			enabled: (editor) => canExecute(editor, (activeEditor) => activeEditor.can().toggleOrderedList()),
 		},
 
 		{
@@ -182,13 +214,15 @@ export function createDefaultMenuItems(editor: Editor, t?: TranslationFunction):
 			group: DEFAULT_GROUPS.LISTS,
 			onSelect: ({ editor, range }) => {
 				// Use TaskList extension if available, otherwise fallback to plain text
-				if (editor?.can()?.toggleTaskList()) {
-					deleteRangeIfExists(editor, range).toggleTaskList().run()
-				}
+				runWithDeletedRange(editor, range, (chain, activeEditor) => {
+					if (activeEditor.can().toggleTaskList()) {
+						chain.toggleTaskList().run()
+					}
+				})
 			},
 			enabled: (editor) => {
 				// Check if TaskList extension is available and can be toggled
-				return editor?.can()?.toggleTaskList() || true
+				return canExecute(editor, (activeEditor) => activeEditor.can().toggleTaskList()) || true
 			},
 		},
 
@@ -202,9 +236,11 @@ export function createDefaultMenuItems(editor: Editor, t?: TranslationFunction):
 			icon: <IconBlockquote size={18} />,
 			group: DEFAULT_GROUPS.BLOCKS,
 			onSelect: ({ editor, range }) => {
-				deleteRangeIfExists(editor, range).toggleBlockquote().run()
+				runWithDeletedRange(editor, range, (chain) => {
+					chain.toggleBlockquote().run()
+				})
 			},
-			enabled: (editor) => editor?.can()?.toggleBlockquote() || false,
+			enabled: (editor) => canExecute(editor, (activeEditor) => activeEditor.can().toggleBlockquote()),
 		},
 
 		{
@@ -216,9 +252,11 @@ export function createDefaultMenuItems(editor: Editor, t?: TranslationFunction):
 			icon: <IconCode size={18} />,
 			group: DEFAULT_GROUPS.BLOCKS,
 			onSelect: ({ editor, range }) => {
-				deleteRangeIfExists(editor, range).toggleCodeBlock().run()
+				runWithDeletedRange(editor, range, (chain) => {
+					chain.toggleCodeBlock().run()
+				})
 			},
-			enabled: (editor) => editor?.can()?.toggleCodeBlock() || false,
+			enabled: (editor) => canExecute(editor, (activeEditor) => activeEditor.can().toggleCodeBlock()),
 		},
 
 		{
@@ -230,9 +268,11 @@ export function createDefaultMenuItems(editor: Editor, t?: TranslationFunction):
 			icon: <IconMinus size={18} />,
 			group: DEFAULT_GROUPS.BLOCKS,
 			onSelect: ({ editor, range }) => {
-				deleteRangeIfExists(editor, range).setHorizontalRule().run()
+				runWithDeletedRange(editor, range, (chain) => {
+					chain.setHorizontalRule().run()
+				})
 			},
-			enabled: (editor) => editor?.can()?.setHorizontalRule() || false,
+			enabled: (editor) => canExecute(editor, (activeEditor) => activeEditor.can().setHorizontalRule()),
 		},
 
 		{
@@ -245,15 +285,15 @@ export function createDefaultMenuItems(editor: Editor, t?: TranslationFunction):
 			group: DEFAULT_GROUPS.BLOCKS,
 			onSelect: ({ editor, range }) => {
 				// Insert a basic 3x3 table
-				if (editor?.can()?.insertTable?.()) {
-					deleteRangeIfExists(editor, range)
-						.insertTable({ rows: 3, cols: 3, withHeaderRow: true })
-						.run()
-				}
+				runWithDeletedRange(editor, range, (chain, activeEditor) => {
+					if (activeEditor.can().insertTable?.()) {
+						chain.insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()
+					}
+				})
 			},
 			enabled: (editor) => {
 				// Check if Table extension is available
-				return editor?.can()?.insertTable?.() || true
+				return canExecute(editor, (activeEditor) => activeEditor.can().insertTable?.() || true)
 			},
 		},
 
@@ -270,7 +310,9 @@ export function createDefaultMenuItems(editor: Editor, t?: TranslationFunction):
 				// For now, just prompt for image URL and insert as markdown
 				const url = prompt("Enter image URL:")
 				if (url) {
-					deleteRangeIfExists(editor, range).insertContent(`![Image](${url})`).run()
+					runWithDeletedRange(editor, range, (chain) => {
+						chain.insertContent(`![Image](${url})`).run()
+					})
 				}
 			},
 			enabled: () => false,
@@ -287,9 +329,9 @@ export function createDefaultMenuItems(editor: Editor, t?: TranslationFunction):
 			group: DEFAULT_GROUPS.MEDIA,
 			onSelect: ({ editor, range }) => {
 				// Delete the slash command text first
-				if (range) {
-					editor.chain().focus().deleteRange(range).run()
-				}
+				runWithDeletedRange(editor, range, (chain) => {
+					chain.run()
+				})
 
 				// Create file input for storage image upload
 				const input = document.createElement("input")
@@ -308,7 +350,9 @@ export function createDefaultMenuItems(editor: Editor, t?: TranslationFunction):
 					if (!file) return
 
 					// Use the editor command to insert storage image
-					editor.commands.insertStorageImageFromFile?.(file)
+					runActiveEditor(editor, (activeEditor) => {
+						activeEditor.commands.insertStorageImageFromFile?.(file)
+					})
 				}
 
 				input.addEventListener("change", handleChange)
@@ -329,9 +373,9 @@ export function createDefaultMenuItems(editor: Editor, t?: TranslationFunction):
 			group: DEFAULT_GROUPS.MEDIA,
 			onSelect: ({ editor, range }) => {
 				// Delete the slash command text first
-				if (range) {
-					editor.chain().focus().deleteRange(range).run()
-				}
+				runWithDeletedRange(editor, range, (chain) => {
+					chain.run()
+				})
 
 				// Create file input for project image upload
 				const input = document.createElement("input")
@@ -350,7 +394,9 @@ export function createDefaultMenuItems(editor: Editor, t?: TranslationFunction):
 					if (!file) return
 
 					// Use the editor command to insert project image
-					editor.commands.insertProjectImageFromFile?.(file)
+					runActiveEditor(editor, (activeEditor) => {
+						activeEditor.commands.insertProjectImageFromFile?.(file)
+					})
 				}
 
 				input.addEventListener("change", handleChange)

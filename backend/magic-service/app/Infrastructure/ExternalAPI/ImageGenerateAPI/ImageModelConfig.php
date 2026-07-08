@@ -23,6 +23,8 @@ class ImageModelConfig extends AbstractValueObject
 
     protected int $maxReferenceImages = 0;
 
+    protected int $maxOutputImages = 1;
+
     protected string $defaultScale = '';
 
     /**
@@ -52,6 +54,7 @@ class ImageModelConfig extends AbstractValueObject
         return new self([
             'sizes' => $config['sizes'] ?? [],
             'max_reference_images' => $config['max_reference_images'] ?? 0,
+            'max_output_images' => $config['max_output_images'] ?? 1,
             'default_scale' => $config['default_scale'] ?? '',
             'image_settings' => $config['image_settings'] ?? [],
         ]);
@@ -62,6 +65,7 @@ class ImageModelConfig extends AbstractValueObject
         return [
             'sizes' => $this->sizes,
             'max_reference_images' => $this->maxReferenceImages,
+            'max_output_images' => $this->maxOutputImages,
             'default_scale' => $this->defaultScale,
             'image_settings' => $this->localizeImageSettings($this->imageSettings),
         ];

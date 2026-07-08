@@ -16,8 +16,6 @@ export interface UploadFileWithKey {
 export interface UploadConfig {
 	/** 单文件最大大小限制（字节） */
 	maxFileSize: number
-	/** 单次上传最大文件数量 */
-	maxTotalFiles: number
 	/** 允许的文件扩展名（空数组表示不限制） */
 	allowedExtensions: string[]
 	/** 禁止的文件扩展名 */
@@ -55,7 +53,20 @@ export interface FolderUploadState {
 	totalBatches: number
 	progress: number
 
-	currentPhase: "preparing" | "uploading" | "saving" | "paused" | "completed" | "error"
+	currentPhase:
+		| "preparing"
+		| "creating_folders"
+		| "uploading"
+		| "saving"
+		| "paused"
+		| "completed"
+		| "error"
+
+	// Folder directory creation progress.
+	directoryTotal?: number
+	directoryCreated?: number
+	directoryFailed?: number
+	currentDirectoryPath?: string
 
 	// 详细信息
 	uploadSpeed?: number // KB/s
@@ -79,6 +90,21 @@ export interface FolderUploadOptions {
 	batchSize?: number
 	maxRetries?: number
 	onlyUpload?: boolean // 是否只上传不保存到项目（true: 只上传到OSS，false: 上传后保存到项目）
+	silent?: boolean // Silent mode: hide from global upload progress toast.
+	displayName?: string
+	displayFileExtension?: string
+	isSingleFileUploadTask?: boolean
+	disableAutoSplit?: boolean
+	uploadGroupId?: string
+	uploadGroupIndex?: number
+	uploadGroupTotal?: number
+	sharedDirectoryContext?: FolderUploadSharedDirectoryContext
+}
+
+export interface FolderUploadSharedDirectoryContext {
+	folderIdMap: Map<string, string>
+	folderCreationPromises: Map<string, Promise<string | undefined>>
+	silent?: boolean // 静默模式：不在全局上传进度浮窗中显示
 }
 
 export interface TaskCreateOptions extends FolderUploadOptions {
@@ -98,7 +124,11 @@ export interface FolderUploadTask {
 	topicId?: string
 	taskId?: string
 	parentId?: string
+	baseSuffixDir?: string
 	files: File[]
+	displayName: string
+	displayFileExtension?: string
+	isSingleFileUploadTask: boolean
 
 	// 任务状态
 	state: FolderUploadState
@@ -126,6 +156,7 @@ export interface FolderUploadTask {
 	getFailedFiles: () => FailedFileInfo[]
 	retrySingleFile: (fileName: string, filePath: string) => Promise<boolean>
 	clearFileTrackingState: () => void
+	releaseFileReferences: () => void
 }
 
 export interface SerializedTask {

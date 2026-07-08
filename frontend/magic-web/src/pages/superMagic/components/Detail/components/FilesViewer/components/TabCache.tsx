@@ -9,6 +9,11 @@ import { getWebsiteTabData } from "../utils/websiteTabs"
 import type { TabItem } from "../types"
 import type { KnowledgeBaseTabData } from "../hooks/useKnowledgeBaseTab"
 import { getFileViewerTabType } from "../utils/tabType"
+import {
+	FILE_VIEWER_FULLSCREEN_BROWSER_TAB_CONTENT_CLASS_NAME,
+	FILE_VIEWER_FULLSCREEN_TAB_CONTENT_CLASS_NAME,
+	shouldUseFileViewerFullscreenSafeArea,
+} from "../utils/fullscreenSafeArea"
 
 type CachedTab = Partial<TabItem> & {
 	id: string
@@ -88,6 +93,10 @@ const TabCache = memo(
 			? playbackProps?.isFullscreen === true
 			: isFullscreenMode || isFullscreen
 		const fillsViewerWithoutTabBar = hideTabBar && !effectiveIsFullscreen
+		// Magic App WebView needs safe-area bounded content, while browsers keep the legacy viewport-fixed layer.
+		const fullscreenTabContentClassName = shouldUseFileViewerFullscreenSafeArea()
+			? FILE_VIEWER_FULLSCREEN_TAB_CONTENT_CLASS_NAME
+			: FILE_VIEWER_FULLSCREEN_BROWSER_TAB_CONTENT_CLASS_NAME
 
 		return (
 			<div
@@ -95,7 +104,7 @@ const TabCache = memo(
 				className={cn(
 					"left-0 w-full transition-[opacity,visibility] duration-200",
 					effectiveIsFullscreen
-						? "fixed top-0 h-full"
+						? fullscreenTabContentClassName
 						: fillsViewerWithoutTabBar
 							? "absolute top-0 h-full"
 							: "absolute top-11 h-[calc(100%-44px)]",

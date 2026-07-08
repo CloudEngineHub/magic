@@ -5,7 +5,7 @@
  * handleMessage 分发链中。依赖变化时自动重建 service 实例。
  */
 
-import { useRef } from "react"
+import { useEffect, useRef } from "react"
 import { useMemoizedFn, useDeepCompareEffect } from "ahooks"
 import {
 	IframeFSService,
@@ -20,7 +20,7 @@ import {
 	type VerifyFileFn,
 	type ConfirmProjectDeleteFn,
 } from "../services/IframeFSService"
-import type { HTMLAppConfig } from "../types"
+import type { HTMLAppConfig, HtmlPermissionScope } from "../types"
 
 export interface UseIframeFSOptions {
 	/** iframe ref，用于构造 postToIframe */
@@ -69,6 +69,8 @@ export interface UseIframeFSOptions {
 	 * 删除 appRoot 外 project-scope 文件/目录前的宿主确认。
 	 */
 	confirmProjectDeleteFn?: ConfirmProjectDeleteFn
+	/** 执行高风险能力前的授权检查。 */
+	authorizePermission?: (scope: HtmlPermissionScope) => Promise<boolean>
 }
 
 export interface UseIframeFSReturn {
@@ -93,6 +95,7 @@ export function useIframeFS(options: UseIframeFSOptions): UseIframeFSReturn {
 		renameFileFn,
 		verifyFileFn,
 		confirmProjectDeleteFn,
+		authorizePermission,
 	} = options
 
 	const serviceRef = useRef<IframeFSService | null>(null)
@@ -120,6 +123,7 @@ export function useIframeFS(options: UseIframeFSOptions): UseIframeFSReturn {
 			renameFileFn,
 			verifyFileFn,
 			confirmProjectDeleteFn,
+			authorizePermission,
 		})
 
 		return () => {
@@ -139,10 +143,11 @@ export function useIframeFS(options: UseIframeFSOptions): UseIframeFSReturn {
 		renameFileFn,
 		verifyFileFn,
 		confirmProjectDeleteFn,
+		authorizePermission,
 	])
 
 	// fileList 变化时仅更新内部引用，避免重建 service（会中断 watch 轮询）
-	useDeepCompareEffect(() => {
+	useEffect(() => {
 		serviceRef.current?.updateFileList(fileList)
 	}, [fileList])
 

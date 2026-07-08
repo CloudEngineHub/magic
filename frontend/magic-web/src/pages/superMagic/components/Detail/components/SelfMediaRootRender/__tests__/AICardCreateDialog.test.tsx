@@ -44,15 +44,34 @@ vi.mock("@/components/base/MagicSwitch", () => ({
 vi.mock("../../AICardRootRender/components/AICardFormFields", () => ({
 	default: ({
 		values,
+		onChange,
 		hideEnabledToggle,
 	}: {
 		values: { taskName: string; prompt: string }
+		onChange: (updates: Record<string, unknown>) => void
 		hideEnabledToggle?: boolean
 	}) => (
 		<div data-testid="mock-ai-card-form-fields">
 			<div data-testid="mock-ai-card-task-name">{values.taskName}</div>
 			<div data-testid="mock-ai-card-prompt">{values.prompt}</div>
 			<div data-testid="mock-ai-card-hide-enabled">{String(hideEnabledToggle)}</div>
+			<button
+				type="button"
+				onClick={() =>
+					onChange({
+						notification: {
+							channels: [
+								{
+									channel: "dingtalk",
+									targetDescription: "发到「运营日报群」",
+								},
+							],
+						},
+					})
+				}
+			>
+				Set notification
+			</button>
 		</div>
 	),
 }))
@@ -138,6 +157,40 @@ describe("AICardCreateDialog", () => {
 					prompt: "分析 sales.csv",
 					promptJSONContent,
 					cardName: "销售看板",
+				}),
+			)
+		})
+	})
+
+	it("submits simplified notification channel descriptions for AI card creation", async () => {
+		render(
+			<AICardCreateDialog
+				open
+				onOpenChange={vi.fn()}
+				projectId="project-1"
+				initialValues={{
+					taskName: "运营日报",
+					prompt: "分析最新运营数据",
+					template: "daily-digest",
+					enabled: true,
+				}}
+			/>,
+		)
+
+		fireEvent.click(screen.getByRole("button", { name: "Set notification" }))
+		fireEvent.click(screen.getByRole("button", { name: "Create" }))
+
+		await waitFor(() => {
+			expect(createAICardViaTopic).toHaveBeenCalledWith(
+				expect.objectContaining({
+					notification: {
+						channels: [
+							{
+								channel: "dingtalk",
+								targetDescription: "发到「运营日报群」",
+							},
+						],
+					},
 				}),
 			)
 		})

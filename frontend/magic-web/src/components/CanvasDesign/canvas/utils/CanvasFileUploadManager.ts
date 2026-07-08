@@ -14,7 +14,12 @@ import {
 	isVideoFile,
 	isAudioFile,
 } from "./utils"
-import { normalizeUploadFileResponse } from "./pathUtils"
+import {
+	isRemoteOrSpecialPath,
+	normalizePathLocal,
+	normalizeUploadFileResponse,
+	stripCurrentDirectoryPrefix,
+} from "./pathUtils"
 import { getAllExistingNames } from "./elementUtils"
 import { ImageElement as ImageElementClass } from "../element/elements/ImageElement"
 import { VideoElement as VideoElementClass } from "../element/elements/VideoElement"
@@ -63,6 +68,10 @@ export interface UploadFileElementOptions {
 	elementData?: Partial<ImageElementData> | Partial<VideoElementData>
 	/** 是否管理历史记录（默认 true，在批量操作时应设为 false） */
 	manageHistory?: boolean
+	/** 上传完成回调（用于外部同步真实上传进度） */
+	onUploadComplete?: (elementId: string, result: UploadFileResponse) => void
+	/** 上传失败回调（用于外部同步真实上传进度） */
+	onUploadFailed?: (elementId: string, error: Error) => void
 }
 
 /**
@@ -177,6 +186,9 @@ export class CanvasFileUploadManager {
 	 */
 	private readonly remoteResourceTransfers = new Map<string, RemoteResourceTransfer>()
 
+	/** 跨画布粘贴时，生成请求里的隐藏参考资源正在后台迁移；此期间资源预览应保持 loading，不触发 not-found toast */
+	private readonly pendingRemoteResourceLoadDeferrals = new Map<string, number>()
+
 	/** 临时元素删除监听（用于同步移除待完成上传） */
 	private readonly handleTemporaryDeleted = (event: { data: { elementId: string } }) => {
 		this.unregisterPendingUploadElement(event.data.elementId)
@@ -268,6 +280,53 @@ export class CanvasFileUploadManager {
 		return this.currentPendingBatchId
 	}
 
+	public getRemoteResourceLoadDeferralKey(path?: string | null): string | null {
+		const rawPath = path?.trim()
+		if (!rawPath || isRemoteOrSpecialPath(rawPath)) {
+			return null
+		}
+
+		const key = stripCurrentDirectoryPrefix(normalizePathLocal(rawPath))
+		if (!key || key === ".") {
+			return null
+		}
+		return key
+	}
+
+	public shouldDeferRemoteResourceLoad(path: string): boolean {
+		const key = this.getRemoteResourceLoadDeferralKey(path)
+		return !!key && (this.pendingRemoteResourceLoadDeferrals.get(key) ?? 0) > 0
+	}
+
+	public registerPendingRemoteResourceLoadDeferral(path: string): () => void {
+		const key = this.getRemoteResourceLoadDeferralKey(path)
+		if (!key) {
+			return () => undefined
+		}
+
+		const currentCount = this.pendingRemoteResourceLoadDeferrals.get(key) ?? 0
+		this.pendingRemoteResourceLoadDeferrals.set(key, currentCount + 1)
+		let released = false
+		return () => {
+			if (released) {
+				return
+			}
+			released = true
+
+			const nextCount = (this.pendingRemoteResourceLoadDeferrals.get(key) ?? 0) - 1
+			if (nextCount > 0) {
+				this.pendingRemoteResourceLoadDeferrals.set(key, nextCount)
+				return
+			}
+
+			this.pendingRemoteResourceLoadDeferrals.delete(key)
+			this.canvas.eventEmitter.emit({
+				type: "resource:remote-load-deferral-released",
+				data: { path, key },
+			})
+		}
+	}
+
 	public getCompletedRemoteResourceTransfer(options: {
 		sourceCanvasId?: string
 		metadata: CanvasElementClipboardFileMetadata
@@ -297,6 +356,7 @@ export class CanvasFileUploadManager {
 	public async getReusableCompletedRemoteResourceTransfer(options: {
 		sourceCanvasId?: string
 		metadata: CanvasElementClipboardFileMetadata
+		allowFileInfoFallback?: boolean
 	}): Promise<UploadFileResponse | null> {
 		const key = this.getRemoteResourceTransferKey(options)
 		if (!key) {
@@ -307,8 +367,9 @@ export class CanvasFileUploadManager {
 		if (!completedTransfer) {
 			return null
 		}
-
-		const isUsable = await this.isCompletedRemoteResourceTransferUsable(completedTransfer)
+		const isUsable = await this.isCompletedRemoteResourceTransferUsable(completedTransfer, {
+			allowFileInfoFallback: options.allowFileInfoFallback ?? true,
+		})
 		if (isUsable) {
 			return completedTransfer
 		}
@@ -337,6 +398,7 @@ export class CanvasFileUploadManager {
 		const completedTransfer = await this.getReusableCompletedRemoteResourceTransfer({
 			sourceCanvasId,
 			metadata,
+			allowFileInfoFallback: metadata.role !== "generation-resource",
 		})
 		if (completedTransfer) {
 			return completedTransfer
@@ -543,6 +605,20 @@ export class CanvasFileUploadManager {
 			// 取出队列中的所有请求
 			const requests = [...this.uploadQueue]
 			this.uploadQueue = []
+			const settledRequests = new Set<UploadRequest>()
+			const settleUploadComplete = (
+				request: UploadRequest,
+				result: UploadFileResponse,
+			): void => {
+				if (settledRequests.has(request)) return
+				settledRequests.add(request)
+				request.onUploadComplete(result)
+			}
+			const settleUploadFailed = (request: UploadRequest, error: Error): void => {
+				if (settledRequests.has(request)) return
+				settledRequests.add(request)
+				request.onUploadFailed(error)
+			}
 
 			// 检查是否有 uploadFiles 方法
 			const uploadFilesMethod = this.canvas.magicConfigManager.config?.methods?.uploadFiles
@@ -550,7 +626,7 @@ export class CanvasFileUploadManager {
 				const error = new Error("uploadFiles method not available")
 				// 所有请求都标记为失败
 				for (const request of requests) {
-					request.onUploadFailed(error)
+					settleUploadFailed(request, error)
 				}
 				return
 			}
@@ -563,10 +639,10 @@ export class CanvasFileUploadManager {
 				overwrite: this.getUploadFileOverwrite(req.file, requestFiles),
 				onUploadComplete: (result) => {
 					const normalizedResult = normalizeUploadFileResponse(result)
-					req.onUploadComplete(normalizedResult)
+					settleUploadComplete(req, normalizedResult)
 				},
 				onUploadFailed: (error) => {
-					req.onUploadFailed(error)
+					settleUploadFailed(req, error)
 				},
 			}))
 
@@ -580,7 +656,7 @@ export class CanvasFileUploadManager {
 				// 上传失败，所有请求都标记为失败
 				const errorMessage = error instanceof Error ? error.message : "Upload failed"
 				for (const request of requests) {
-					request.onUploadFailed(new Error(errorMessage))
+					settleUploadFailed(request, new Error(errorMessage))
 				}
 			}
 		} finally {
@@ -650,7 +726,14 @@ export class CanvasFileUploadManager {
 	 * @returns 创建的元素ID，失败返回 null
 	 */
 	public async uploadFileElement(options: UploadFileElementOptions): Promise<string | null> {
-		const { file, position, elementData, manageHistory = true } = options
+		const {
+			file,
+			position,
+			elementData,
+			manageHistory = true,
+			onUploadComplete,
+			onUploadFailed,
+		} = options
 
 		if (!this.canvas.magicConfigManager.config?.methods?.uploadFiles) {
 			return null
@@ -701,7 +784,16 @@ export class CanvasFileUploadManager {
 				this.canvas.elementManager.createTemporary(canvasFileElement, {
 					uploadFiles: [file],
 					onUploadComplete: (elementId) => {
+						const element = this.canvas.elementManager.getElementInstance(elementId)
+						const uploadResult =
+							element instanceof ImageElementClass ||
+							element instanceof VideoElementClass
+								? element.uploadResult
+								: undefined
 						const hasChanged = this.handleUploadCompleteInternal(elementId)
+						if (uploadResult) {
+							onUploadComplete?.(elementId, uploadResult)
+						}
 						if (historyManager && hasChanged) {
 							const pendingBatchId = this.findPendingBatchIdByElement(elementId)
 							if (pendingBatchId) {
@@ -713,6 +805,7 @@ export class CanvasFileUploadManager {
 					},
 					onUploadFailed: (elementId, error) => {
 						const hasChanged = this.handleUploadFailedInternal(elementId, error)
+						onUploadFailed?.(elementId, error)
 						if (historyManager && hasChanged) {
 							const pendingBatchId = this.findPendingBatchIdByElement(elementId)
 							if (pendingBatchId) {
@@ -953,7 +1046,12 @@ export class CanvasFileUploadManager {
 
 	private async isCompletedRemoteResourceTransferUsable(
 		result: UploadFileResponse,
+		options: { allowFileInfoFallback: boolean },
 	): Promise<boolean> {
+		if (!options.allowFileInfoFallback) {
+			return true
+		}
+
 		const getFileResourceMeta =
 			this.canvas.magicConfigManager.config?.methods?.getFileResourceMeta
 		if (getFileResourceMeta) {

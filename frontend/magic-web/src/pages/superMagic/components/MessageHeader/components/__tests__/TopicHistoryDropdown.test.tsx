@@ -14,11 +14,15 @@ import TopicHistoryDropdown from "../TopicHistoryDropdown"
 
 const mockUsePaginatedTopics = vi.fn()
 
-vi.mock("react-i18next", () => ({
-	useTranslation: () => ({
-		t: (key: string) => key,
-	}),
-}))
+vi.mock("react-i18next", async (importOriginal) => {
+	const actual = await importOriginal<typeof import("react-i18next")>()
+	return {
+		...actual,
+		useTranslation: () => ({
+			t: (key: string) => key,
+		}),
+	}
+})
 
 vi.mock("@/components/base", () => ({
 	MagicDropdown: ({
@@ -253,6 +257,29 @@ describe("TopicHistoryDropdown", () => {
 		await waitFor(() => {
 			expect(screen.queryByTestId("dropdown-content")).not.toBeInTheDocument()
 		})
+	})
+
+	it("expands the conversation panel before creating a topic when collapsed", () => {
+		const callOrder: string[] = []
+		const handleExpandConversationPanel = vi.fn(() => {
+			callOrder.push("expand")
+		})
+		const handleCreateTopic = vi.fn(() => {
+			callOrder.push("create")
+		})
+
+		renderComponent({
+			isConversationPanelCollapsed: true,
+			onExpandConversationPanel: handleExpandConversationPanel,
+			onCreateTopic: handleCreateTopic,
+		})
+
+		fireEvent.click(screen.getByTestId("dropdown-trigger"))
+		fireEvent.click(screen.getByTestId("message-header-history-add-topic-button"))
+
+		expect(handleExpandConversationPanel).toHaveBeenCalledTimes(1)
+		expect(handleCreateTopic).toHaveBeenCalledTimes(1)
+		expect(callOrder).toEqual(["expand", "create"])
 	})
 
 	it("focuses search input after dropdown opens", async () => {

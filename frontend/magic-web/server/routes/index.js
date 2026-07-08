@@ -3,6 +3,7 @@ const throttleMiddleware = require("../middleware/throttleMiddleware")
 const compressionMiddleware = require("../middleware/compressionMiddleware")
 const serviceWorkerMiddleware = require("../middleware/serviceWorkerMiddleware")
 const staticResourceMiddleware = require("../middleware/staticResourceMiddleware")
+const { setStaticAssetCacheHeaders } = require("../middleware/staticAssetCacheHeaders")
 const { defaultSEOMiddleware, generateSeoRoutes } = require("../middleware/seoMiddleware")
 const { getHtmlTemplate } = require("../middleware/seoMiddleware/getHtmlTemplate")
 const k8sOnlyMiddleware = require("../middleware/k8sOnlyMiddleware")
@@ -56,24 +57,7 @@ const configureRoutes = (app) => {
 	app.use(
 		express.static(path.join(rootPath, "../dist"), {
 			index: false, // 禁止 express.static 处理 index.html，让后续中间件处理
-			setHeaders: (res, pathname) => {
-				const excludeReg = [
-					/sw\.js$/,
-					/\.html$/,
-					/registerSW\.js$/,
-					/favicon\.svg$/,
-					/manifest\.webmanifest$/,
-				]
-				// Pages to not cache
-				if (excludeReg.some((o) => o.test(pathname))) {
-					// Custom Cache-Control for HTML files
-					res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate")
-					res.setHeader("Pragma", "no-cache")
-					res.setHeader("Expires", "0")
-				} else {
-					res.setHeader("Cache-Control", "max-age=31536000")
-				}
-			},
+			setHeaders: setStaticAssetCacheHeaders,
 		}),
 	)
 

@@ -27,6 +27,8 @@ export interface MediaResourceUrlEntry {
 	contentLength: number | null
 	exchangePromise: Promise<string | null> | null
 	backgroundRefreshPromise: Promise<void> | null
+	/** 最近一次后台 metadata 校验调度时间；用于避免缓存命中热路径反复强制换链 */
+	lastBackgroundRefreshAt?: number
 	lastFailureReason: ResourceLoadFailureReason | null
 }
 
@@ -53,6 +55,7 @@ export interface MediaResourceUrlLifecycleOptions<TEntry extends MediaResourceUr
 			| "getFileInfoForceRefreshCount"
 			| "backgroundRefreshQueuedCount"
 			| "backgroundRefreshDedupedCount"
+			| "backgroundRefreshSkippedCount"
 			| "metadataProbeCount"
 			| "metadataUnchangedCount"
 			| "metadataChangedCount"
@@ -60,6 +63,8 @@ export interface MediaResourceUrlLifecycleOptions<TEntry extends MediaResourceUr
 			| "metadataDeletedCount",
 	) => void
 }
+
+const BACKGROUND_METADATA_REFRESH_COOLDOWN_MS = 60 * 1000
 
 export class MediaResourceUrlLifecycle<TEntry extends MediaResourceUrlEntry> {
 	private readonly pathAliasToCanonical = new Map<string, string>()
@@ -282,6 +287,20 @@ export class MediaResourceUrlLifecycle<TEntry extends MediaResourceUrlEntry> {
 		if (entry.backgroundRefreshPromise) {
 			this.options.incrementDiagnostic("backgroundRefreshDedupedCount")
 			return
+		}
+		const shouldCooldownFallbackRefresh =
+			typeof this.options.canvas.magicConfigManager.config?.methods?.getFileResourceMeta !==
+			"function"
+		const now = Date.now()
+		if (shouldCooldownFallbackRefresh) {
+			if (
+				entry.lastBackgroundRefreshAt !== undefined &&
+				now - entry.lastBackgroundRefreshAt < BACKGROUND_METADATA_REFRESH_COOLDOWN_MS
+			) {
+				this.options.incrementDiagnostic("backgroundRefreshSkippedCount")
+				return
+			}
+			entry.lastBackgroundRefreshAt = now
 		}
 
 		this.options.incrementDiagnostic("backgroundRefreshQueuedCount")

@@ -82,6 +82,7 @@ import VoiceInput from "./components/VoiceInput"
 import IconCircleKeyboard from "@/enhance/tabler/icons-react/icons/IconCircleKeyboard"
 import IconCircleMicrophone from "@/enhance/tabler/icons-react/icons/IconCircleMicrophone"
 import magicToast from "@/components/base/MagicToaster/utils"
+import { runActiveEditor } from "@/utils/tiptapEditorLifecycle"
 
 const MAX_UPLOAD_COUNT = 10
 
@@ -165,8 +166,10 @@ const MessageEditor: React.FC<MessageEditorProps> = observer(
 			const disposer = autorun(() => {
 				if (ConversationStore.selectText && editorReady && !settingContent.current) {
 					settingContent.current = true
-					editorRef.current?.editor?.commands.setContent(ConversationStore.selectText, {
-						emitUpdate: true,
+					runActiveEditor(editorRef.current?.editor, (editor) => {
+						editor.commands.setContent(ConversationStore.selectText, {
+							emitUpdate: true,
+						})
 					})
 					ConversationStore.setSelectText("")
 					settingContent.current = false
@@ -178,7 +181,9 @@ const MessageEditor: React.FC<MessageEditorProps> = observer(
 		useMount(() => {
 			if (value !== undefined && editorReady && !settingContent.current) {
 				settingContent.current = true
-				editorRef.current?.editor?.commands.setContent(value, { emitUpdate: true })
+				runActiveEditor(editorRef.current?.editor, (editor) => {
+					editor.commands.setContent(value, { emitUpdate: true })
+				})
 				// Remove auto focus on mount
 				settingContent.current = false
 			}
@@ -197,7 +202,9 @@ const MessageEditor: React.FC<MessageEditorProps> = observer(
 		useEffect(() => {
 			return autorun(() => {
 				if (ReplyStore.replyMessageId) {
-					editorRef.current?.editor?.chain().focus().run()
+					runActiveEditor(editorRef.current?.editor, (editor) => {
+						editor.chain().focus().run()
+					})
 				}
 			})
 		}, [])
@@ -352,7 +359,9 @@ const MessageEditor: React.FC<MessageEditorProps> = observer(
 
 						if (clearAfterSend) {
 							setIsEmpty(true)
-							editorRef.current?.editor?.chain().clearContent().run()
+							runActiveEditor(editorRef.current?.editor, (editor) => {
+								editor.chain().clearContent().run()
+							})
 
 							clearSessionInstructConfig()
 
@@ -382,13 +391,15 @@ const MessageEditor: React.FC<MessageEditorProps> = observer(
 
 		/** ========================== Add Emoji ========================== */
 		const onAddEmoji = useMemoizedFn((emoji: EmojiInfo) => {
-			editorRef.current?.editor
-				?.chain()
-				.insertContent({
-					type: MagicEmojiNodeExtension.name,
-					attrs: { ...emoji, locale: language },
-				})
-				.run()
+			runActiveEditor(editorRef.current?.editor, (editor) => {
+				editor
+					.chain()
+					.insertContent({
+						type: MagicEmojiNodeExtension.name,
+						attrs: { ...emoji, locale: language },
+					})
+					.run()
+			})
 		})
 
 		/** ========================== File Upload Related ========================== */
@@ -660,28 +671,40 @@ const MessageEditor: React.FC<MessageEditorProps> = observer(
 					EditorStore.lastConversationId !== conversationId ||
 					EditorStore.lastTopicId !== topicId
 				) {
-					EditorDraftService.writeDraft(
-						EditorStore.lastConversationId,
-						EditorStore.lastTopicId ?? "",
-						{
-							content: editorRef.current?.editor?.getJSON(),
-							files,
-						},
-					)
+						EditorDraftService.writeDraft(
+							EditorStore.lastConversationId,
+							EditorStore.lastTopicId ?? "",
+							{
+								content: runActiveEditor(
+									editorRef.current?.editor,
+									(editor) => editor.getJSON(),
+									undefined,
+								),
+								files,
+							},
+						)
 				}
 				// Read draft
 				if (EditorDraftStore.hasDraft(conversationId, topicId ?? "")) {
 					const draft = EditorDraftStore.getDraft(conversationId, topicId ?? "")
-					editorRef.current?.editor?.commands.setContent(draft?.content ?? "", {
-						emitUpdate: true,
+					runActiveEditor(editorRef.current?.editor, (editor) => {
+						editor.commands.setContent(draft?.content ?? "", {
+							emitUpdate: true,
+						})
 					})
 					// Set internal state
 					setValue(draft?.content)
 					setFiles(draft?.files ?? [])
-					const text = editorRef.current?.editor?.getText()
+					const text = runActiveEditor(
+						editorRef.current?.editor,
+						(editor) => editor.getText(),
+						"",
+					)
 					setIsEmpty(!text)
 				} else {
-					editorRef.current?.editor?.chain().clearContent().run()
+					runActiveEditor(editorRef.current?.editor, (editor) => {
+						editor.chain().clearContent().run()
+					})
 					setIsEmpty(true)
 					// Reset internal state
 					setValue(undefined)
@@ -860,11 +883,11 @@ const MessageEditor: React.FC<MessageEditorProps> = observer(
 		)
 
 		const onClick = useMemoizedFn(() => {
-			const editor = editorRef.current?.editor
-			if (!editor) return
+			runActiveEditor(editorRef.current?.editor, (editor) => {
+				editor.chain().focus().run()
+				console.log("click", editor)
+			})
 
-			editor.chain().focus().run()
-			console.log("click", editor)
 			if (MobileEditorStore.emojiPanelOpen) {
 				MobileEditorStore.closeEmojiPanel()
 			}
@@ -873,29 +896,31 @@ const MessageEditor: React.FC<MessageEditorProps> = observer(
 			if (isMobile && isIos) {
 				// 延迟滚动以等待键盘动画完成
 				setTimeout(() => {
-					const editorElement = editor.view.dom as HTMLElement
-					if (editorElement) {
-						const rect = editorElement.getBoundingClientRect()
-						const viewHeight =
-							window.innerHeight || document.documentElement.clientHeight
+					runActiveEditor(editorRef.current?.editor, (editor) => {
+						const editorElement = editor.view.dom as HTMLElement
+						if (editorElement) {
+							const rect = editorElement.getBoundingClientRect()
+							const viewHeight =
+								window.innerHeight || document.documentElement.clientHeight
 
-						// 检查输入框是否在视口下半部分（可能被键盘遮挡）
-						if (rect.bottom > viewHeight * 0.5) {
-							// 使用 TipTap 的 scrollIntoView 命令以获得更好的兼容性
-							editor.chain().scrollIntoView().run()
+							// 检查输入框是否在视口下半部分（可能被键盘遮挡）
+							if (rect.bottom > viewHeight * 0.5) {
+								// 使用 TipTap 的 scrollIntoView 命令以获得更好的兼容性
+								editor.chain().scrollIntoView().run()
 
-							// 回退方案：如果 TipTap 命令不起作用，尝试使用原生 scrollIntoView
-							requestAnimationFrame(() => {
-								const updatedRect = editorElement.getBoundingClientRect()
-								if (updatedRect.bottom > viewHeight * 0.5) {
-									editorElement.scrollIntoView({
-										behavior: "smooth",
-										block: "center",
-									})
-								}
-							})
+								// 回退方案：如果 TipTap 命令不起作用，尝试使用原生 scrollIntoView
+								requestAnimationFrame(() => {
+									const updatedRect = editorElement.getBoundingClientRect()
+									if (updatedRect.bottom > viewHeight * 0.5) {
+										editorElement.scrollIntoView({
+											behavior: "smooth",
+											block: "center",
+										})
+									}
+								})
+							}
 						}
-					}
+					})
 				}, 300) // 延迟等待 iOS 键盘动画完成（通常需要 250-300ms）
 			}
 		})

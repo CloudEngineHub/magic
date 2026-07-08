@@ -10,10 +10,10 @@ import FoldIcon from "@/pages/superMagic/assets/svg/file-folder.svg"
 import useStyles from "./style"
 import type { FileSelectorProps } from "./types"
 import { CheckboxState } from "./types"
-import { useTreeData } from "@/pages/superMagic/components/TopicFilesButton/hooks/useTreeData"
+import { useAttachmentIndex } from "@/pages/superMagic/components/TopicFilesButton/hooks/useAttachmentIndex"
+import { useVisibleTreeRows } from "@/pages/superMagic/components/TopicFilesButton/hooks/useVisibleTreeRows"
 import CustomTree from "@/pages/superMagic/components/TopicFilesButton/components/CustomTree/CustomTree"
 import type { TreeNodeData } from "@/pages/superMagic/components/TopicFilesButton/utils/treeDataConverter"
-import { getNodePath } from "@/pages/superMagic/components/TopicFilesButton/utils/treeDataConverter"
 import {
 	getAttachmentType,
 	getChildrenForCustomMetadataIconPath,
@@ -65,15 +65,19 @@ export default memo(function FileSelector(props: FileSelectorProps) {
 		})
 	}, [attachments, searchValue])
 
-	// Generate tree data using the same hook as TopicFilesCore
-	const { treeData } = useTreeData({
+	const { attachmentIndex } = useAttachmentIndex({
 		mergedFiles: filteredFiles,
-		renamingItemId: null,
 	})
+	const { expandedKeySet, visibleRows, visibleNodes, visibleNodeIndexByKey } = useVisibleTreeRows(
+		{
+			expandedKeys,
+			attachmentTree: filteredFiles,
+		},
+	)
 
 	// Use locate file hook
 	const { locatingFileId, handleLocateFileInTree } = useLocateFile({
-		treeData,
+		attachmentIndex,
 		expandedKeys,
 		setExpandedKeys,
 		treeAreaRef,
@@ -120,13 +124,18 @@ export default memo(function FileSelector(props: FileSelectorProps) {
 
 	// Initialize: expand parent folders for selected files and locate to default open file
 	useEffect(() => {
-		if (initialized || !selectedFileIds || selectedFileIds.length === 0 || !treeData.length)
+		if (
+			initialized ||
+			!selectedFileIds ||
+			selectedFileIds.length === 0 ||
+			attachmentIndex.totalCount === 0
+		)
 			return
 
 		// Collect all parent folder keys for all selected files
 		const parentKeysSet = new Set<React.Key>()
 		for (const fileId of selectedFileIds) {
-			const path = getNodePath(treeData, fileId)
+			const path = attachmentIndex.getPathKeysById(fileId)
 			if (path.length > 0) {
 				// Expand all parent folders (exclude the file itself)
 				const parentKeys = path.slice(0, -1)
@@ -147,7 +156,7 @@ export default memo(function FileSelector(props: FileSelectorProps) {
 				handleLocateFileInTree(defaultOpenFileId)
 			}, 100)
 		}
-	}, [selectedFileIds, treeData, initialized, handleLocateFileInTree, defaultOpenFileId])
+	}, [selectedFileIds, attachmentIndex, initialized, handleLocateFileInTree, defaultOpenFileId])
 
 	// Memoize checkbox states for all nodes to avoid O(n²) complexity
 	const nodeCheckStates = useMemo(() => {
@@ -424,12 +433,12 @@ export default memo(function FileSelector(props: FileSelectorProps) {
 		(node: TreeNodeData) => {
 			const item = node.item || {}
 			const itemId = node.key
-			const hasChildren = node.children && node.children.length > 0
-			const isExpanded = expandedKeys.includes(node.key)
+			const hasChildren = !node.isLeaf
+			const isExpanded = expandedKeySet.has(String(node.key))
 			const indentWidth = node.level * 10
 
 			// Check if this file is being located
-			const isLocating = locatingFileId === itemId
+			const isLocating = locatingFileId === itemId || locatingFileId === item.file_id
 
 			// 使用缓存的 checkbox 状态（避免重复计算）
 			const checkState = nodeCheckStates.get(itemId) || CheckboxState.Unchecked
@@ -491,6 +500,7 @@ export default memo(function FileSelector(props: FileSelectorProps) {
 								e.stopPropagation()
 								onDefaultOpenFileChange?.(null)
 							}}
+							data-testid="on-default-open-file-change"
 						>
 							<MagicIcon
 								component={IconHomeCheck}
@@ -526,6 +536,7 @@ export default memo(function FileSelector(props: FileSelectorProps) {
 									// Then set as default open file
 									onDefaultOpenFileChange?.(itemId)
 								}}
+								data-testid="is-node-selected"
 							>
 								<MagicIcon
 									component={IconHomeDot}
@@ -552,7 +563,7 @@ export default memo(function FileSelector(props: FileSelectorProps) {
 						isMobile && styles.mobileFileItem,
 						isLocating && styles.locatingFileItem,
 					)}
-					data-selector-file-id={itemId}
+					data-selector-file-id={item.file_id || itemId}
 					onMouseEnter={() => setHoveredItemId(itemId)}
 					onMouseLeave={() => setHoveredItemId(null)}
 					onClick={(e) => {
@@ -564,6 +575,7 @@ export default memo(function FileSelector(props: FileSelectorProps) {
 					style={{
 						cursor: isFileDisabled ? "not-allowed" : "pointer",
 					}}
+					data-testid="set-hovered-item-id"
 				>
 					<div
 						className={cx(
@@ -595,6 +607,7 @@ export default memo(function FileSelector(props: FileSelectorProps) {
 										}
 									}}
 									onClick={(e) => e.stopPropagation()}
+									data-testid="handle-file-toggle"
 								/>
 							</div>
 						)}
@@ -607,6 +620,7 @@ export default memo(function FileSelector(props: FileSelectorProps) {
 									alt="folder"
 									width={16}
 									height={16}
+									data-testid="file-selector-image"
 								/>
 							) : item?.metadata?.type === "custom" ||
 							  (item?.metadata?.type === "micro-app" && item?.is_directory) ? (
@@ -658,6 +672,7 @@ export default memo(function FileSelector(props: FileSelectorProps) {
 			nodeCheckStates,
 			selectedFileIds,
 			expandedKeys,
+			expandedKeySet,
 			isDefaultOpenFile,
 			isFileSupported,
 			cx,
@@ -684,26 +699,31 @@ export default memo(function FileSelector(props: FileSelectorProps) {
 		],
 	)
 
-	// Handle expand
-	const handleExpand = useCallback((newExpandedKeys: React.Key[]) => {
-		setExpandedKeys(newExpandedKeys)
-	}, [])
-
 	// Memoize CustomTree to prevent unnecessary re-renders
 	const customTreeMemo = useMemo(
 		() => (
 			<CustomTree
-				treeData={treeData}
-				switcherIcon={() => null}
-				onExpand={handleExpand}
+				visibleRows={visibleRows}
+				visibleNodes={visibleNodes}
+				visibleNodeIndexByKey={visibleNodeIndexByKey}
 				expandedKeys={expandedKeys}
 				titleRender={titleRender}
 				showIcon={false}
 				blockNode
-				className={styles.treeArea}
+				scrollElementRef={treeAreaRef}
+				scrollToKey={locatingFileId}
+				isMobile={isMobile}
 			/>
 		),
-		[treeData, handleExpand, expandedKeys, titleRender, styles.treeArea],
+		[
+			visibleRows,
+			visibleNodes,
+			visibleNodeIndexByKey,
+			expandedKeys,
+			titleRender,
+			locatingFileId,
+			isMobile,
+		],
 	)
 
 	return (
@@ -720,6 +740,7 @@ export default memo(function FileSelector(props: FileSelectorProps) {
 									: false
 						}
 						onCheckedChange={handleSelectAll}
+						data-testid="handle-select-all"
 					/>
 					<span className="text-sm text-muted-foreground">{t("share.selectAll")}</span>
 				</div>
@@ -736,7 +757,7 @@ export default memo(function FileSelector(props: FileSelectorProps) {
 
 			{/* File tree */}
 			<div ref={treeAreaRef} className={styles.treeArea}>
-				{treeData.length > 0 ? (
+				{visibleRows.length > 0 ? (
 					customTreeMemo
 				) : (
 					<div className={styles.emptyState}>{t("common.notFound")}</div>

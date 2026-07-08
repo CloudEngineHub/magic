@@ -13,6 +13,7 @@ export function MobileBrandLogoIcon(props: SVGProps<SVGSVGElement>) {
 			fill="none"
 			xmlns="http://www.w3.org/2000/svg"
 			aria-hidden
+			data-testid="mobile-brand-logo-icon-svg"
 			{...props}
 		>
 			<mask

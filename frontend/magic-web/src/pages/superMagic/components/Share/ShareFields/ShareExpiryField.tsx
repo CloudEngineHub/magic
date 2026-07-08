@@ -17,8 +17,8 @@ export default memo(function ShareExpiryField(props: ShareExpiryFieldProps) {
 	const currentValue = value === null ? "permanent" : String(value)
 
 	return (
-		<div className="flex flex-col gap-2">
-			<label className="text-sm font-medium leading-none text-foreground">
+		<div className="flex flex-col gap-2" data-testid="share-expiry-field">
+			<label className="text-sm font-medium leading-none text-foreground" data-testid="share-expiry-field-label">
 				{t("share.shareExpiry")}
 			</label>
 			<Select
@@ -26,16 +26,17 @@ export default memo(function ShareExpiryField(props: ShareExpiryFieldProps) {
 				onValueChange={(val) => {
 					onChange(val === "permanent" ? null : Number(val))
 				}}
+				data-testid="on-change"
 			>
-				<SelectTrigger className="h-9 w-full">
+				<SelectTrigger className="h-9 w-full" data-testid="share-expiry-trigger">
 					<SelectValue placeholder={t("share.expiryPermanent")} />
 				</SelectTrigger>
-				<SelectContent className="z-[1500]" style={{ zIndex: 1500 }}>
+				<SelectContent className="z-[1500]" style={{ zIndex: 1500 }} data-testid="share-expiry-content">
 					{EXPIRY_OPTIONS.map((option) => {
 						const optionValue =
 							option.value === null ? "permanent" : String(option.value)
 						return (
-							<SelectItem key={optionValue} value={optionValue}>
+							<SelectItem key={optionValue} value={optionValue} data-testid="share-expiry-option">
 								{t(option.label)}
 							</SelectItem>
 						)

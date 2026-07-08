@@ -219,18 +219,21 @@ const ProjectPageMain = observer(function ProjectPageMain({
 				)}
 			>
 				{loading ? (
-					<div className="flex w-full flex-col gap-1 pt-0">
+					<div className="flex w-full flex-col gap-1 pt-0" data-testid="project-topics-loading">
 						<TopicItemSkeleton />
 						<TopicItemSkeleton />
 						<TopicItemSkeleton />
 						<TopicItemSkeleton />
 					</div>
 				) : isTopicsEmpty ? (
-					<div className="flex h-full min-h-0 w-full flex-1 flex-col items-center justify-center px-3 text-center">
+					<div
+						className="flex h-full min-h-0 w-full flex-1 flex-col items-center justify-center px-3 text-center"
+						data-testid="project-topics-empty"
+					>
 						<ProjectTopicsEmptyState />
 					</div>
 				) : (
-					<div className="flex w-full flex-col gap-1 pt-0">
+					<div className="flex w-full flex-col gap-1 pt-0" data-testid="project-topics-list">
 						{processedTopics.map((item) => (
 							<TopicItemComponent
 								key={item.id}

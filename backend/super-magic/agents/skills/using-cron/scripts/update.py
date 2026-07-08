@@ -6,6 +6,7 @@ Arguments:
     --id            Scheduled task ID. Required.
     --task-name     Task name. Optional.
     --message-content   Message content. Optional.
+    --message-content-file Read message content from a file. Use for long text or content with special characters. Optional.
     --type          Schedule type: no_repeat | daily_repeat | weekly_repeat | monthly_repeat. Optional; use with --time.
     --time          Execution time in HH:MM format. Optional; use with --type.
     --day           Date, weekday, or day-of-month; meaning depends on --type. Optional.
@@ -18,6 +19,7 @@ import json
 import re
 import argparse
 from datetime import datetime
+from pathlib import Path
 from typing import Optional
 
 import _context  # initialize project root path
@@ -58,15 +60,21 @@ def parse_message_content(raw: str):
         pass
     return text_to_json_content(raw), "rich_text"
 
-
 parser = argparse.ArgumentParser(description="Update a scheduled message task")
 parser.add_argument("--id", required=True, help="Scheduled task ID")
 parser.add_argument("--task-name", default=None, help="Task name")
-parser.add_argument(
+message_group = parser.add_mutually_exclusive_group()
+message_group.add_argument(
     "--message-content",
     dest="message_content",
     default=None,
     help="Message content; maps to detail fields message_content/task_describe",
+)
+message_group.add_argument(
+    "--message-content-file",
+    dest="message_content_file",
+    default=None,
+    help="Read message content from a file; useful for long text or special characters",
 )
 parser.add_argument(
     "--type",
@@ -114,6 +122,18 @@ def normalize_deadline(value: Optional[str]) -> Optional[str]:
     return None
 
 
+def resolve_message_content(
+    message_content: Optional[str],
+    message_content_file: Optional[str],
+) -> Optional[str]:
+    """读取最终任务指令内容。未传消息内容时返回 None，表示不更新该字段。"""
+    if message_content is not None:
+        return message_content
+    if message_content_file:
+        return Path(message_content_file).read_text(encoding="utf-8").strip()
+    return None
+
+
 try:
     # Build time_config only when both --type and --time are provided.
     time_config = None
@@ -129,8 +149,9 @@ try:
     # Convert message_content to rich_text format when provided.
     message_content = None
     message_type = None
-    if args.message_content is not None:
-        message_content, message_type = parse_message_content(args.message_content)
+    raw_content = resolve_message_content(args.message_content, args.message_content_file)
+    if raw_content is not None:
+        message_content, message_type = parse_message_content(raw_content)
 
     sdk = create_magic_service_sdk_with_defaults()
 

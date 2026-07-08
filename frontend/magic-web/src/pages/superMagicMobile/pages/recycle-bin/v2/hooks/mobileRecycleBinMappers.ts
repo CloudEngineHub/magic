@@ -29,14 +29,25 @@ const TAB_KEY_TO_TYPE: Record<string, RecycleBinItemData["type"]> = {
 export function mapListItemToItemData(item: RecycleBin.ListItem, t: TFunction): RecycleBinItemData {
 	const resourceType = item.resource_type as ResourceType
 	const tabKey = RESOURCE_TYPE_TO_TAB[resourceType] ?? "files"
-	const type = TAB_KEY_TO_TYPE[tabKey] ?? "file"
-	const deletedBy =
-		item.deleted_by_user?.nickname ?? item.deleted_by_name ?? item.deleted_by ?? ""
-	const deletedByUser = item.deleted_by_user
-		? { nickname: item.deleted_by_user.nickname, avatar: item.deleted_by_user.avatar }
-		: undefined
-	const parentInfo = item.extra_data?.parent_info
-	const path = buildRecycleBinPathLabel({ resourceType, parentInfo, t })
+	const type =
+		resourceType === RESOURCE_TYPE.FILE
+			? item.extra_data?.is_directory
+				? "folder"
+				: "file"
+			: (TAB_KEY_TO_TYPE[tabKey] ?? "file")
+	const parentInfo = {
+		...item.extra_data?.parent_info,
+		workspace_name:
+			item.extra_data?.parent_info?.workspace_name ?? item.extra_data?.workspace_name,
+		project_name: item.extra_data?.parent_info?.project_name ?? item.extra_data?.project_name,
+		relative_file_path: item.extra_data?.relative_file_path,
+	}
+	const path = buildRecycleBinPathLabel({
+		resourceType,
+		parentInfo,
+		resourceName: item.resource_name,
+		t,
+	})
 	return {
 		id: item.id,
 		type,
@@ -45,8 +56,6 @@ export function mapListItemToItemData(item: RecycleBin.ListItem, t: TFunction): 
 			resourceType,
 			t,
 		}),
-		deletedBy,
-		deletedByUser,
 		deletedAt: item.deleted_at,
 		validDays: item.remaining_days ?? 0,
 		resourceId: item.resource_id,
@@ -84,6 +93,7 @@ const TYPE_TO_CATEGORY: Record<RecycleBinItemData["type"], RecycleBinItem["categ
 	project: "projects",
 	topic: "topics",
 	file: "files",
+	folder: "files",
 }
 
 export function mobileItemDataToDomain(item: RecycleBinItemData): RecycleBinItem {
@@ -93,8 +103,6 @@ export function mobileItemDataToDomain(item: RecycleBinItemData): RecycleBinItem
 		resourceType: item.resourceType as ResourceType,
 		category: TYPE_TO_CATEGORY[item.type],
 		title: item.title,
-		deletedBy: item.deletedBy,
-		deletedByUser: item.deletedByUser,
 		path: item.path,
 		deletedOn: "",
 		remainingDays: item.validDays,

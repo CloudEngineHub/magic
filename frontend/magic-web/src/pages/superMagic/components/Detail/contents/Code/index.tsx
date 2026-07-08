@@ -10,7 +10,6 @@ import AIOptimization from "@/pages/superMagic/components/Detail/components/AIOp
 import CommonFooter from "../../components/CommonFooter"
 import Deleted from "../../components/Deleted"
 import useSaveHandlerRegistration from "../../hooks/useSaveHandlerRegistration"
-import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import FileEditButtons from "@/pages/superMagic/components/Detail/components/EditToolbar/FileEditButtons"
 import type { HeaderActionConfig } from "@/pages/superMagic/components/Detail/components/CommonHeaderV2/types"
 import { useTranslation } from "react-i18next"
@@ -119,9 +118,6 @@ export default function CodeViewer(props: any) {
 			)
 			// 更新 content 状态
 			setContent(editingCodeContent)
-			if (data?.file_name === "magic.project.js") {
-				pubsub.publish(PubSubEvents.Update_Attachments)
-			}
 		}
 		// 不再退出编辑模式
 	})
@@ -232,6 +228,13 @@ export default function CodeViewer(props: any) {
 		() => ({
 			customActions: [
 				{
+					key: "code-export-dropdown",
+					zone: "secondary",
+					after: "download",
+					visible: () => !isMobile && allowDownload !== false,
+					render: () => ExportDropdownButton,
+				},
+				{
 					key: "code-ai-optimization",
 					zone: "primary",
 					visible: () =>
@@ -272,10 +275,12 @@ export default function CodeViewer(props: any) {
 			],
 		}),
 		[
+			allowDownload,
 			allowEdit,
 			attachmentList,
 			data?.file_id,
 			file_id,
+			ExportDropdownButton,
 			handleCancel,
 			handleEdit,
 			handleSave,
@@ -299,7 +304,7 @@ export default function CodeViewer(props: any) {
 			fileContent: fileContent || content,
 			currentFile,
 			detailMode,
-			showDownload: allowDownload !== false,
+			showDownload: false,
 			isEditMode,
 			fileVersion,
 			isNewestFileVersion: isNewestVersion,

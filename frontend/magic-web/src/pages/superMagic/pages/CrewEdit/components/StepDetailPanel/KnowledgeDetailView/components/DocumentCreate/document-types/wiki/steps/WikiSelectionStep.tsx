@@ -111,7 +111,7 @@ export const WikiSelectionStep = observer(function WikiSelectionStep({
 	const {
 		width: wikiWidthPx,
 		isDragging: isDraggingWiki,
-		handleMouseDown: onWikiResizeStart,
+		handleResizeStart: onWikiResizeStart,
 	} = useResizablePanel({
 		minWidth: WIKI_LIST_MIN_PX,
 		maxWidth: WIKI_LIST_MAX_PX,
@@ -328,6 +328,7 @@ export const WikiSelectionStep = observer(function WikiSelectionStep({
 													isCurrentView && "bg-accent",
 												)}
 												onClick={() => handleWikiClick(wiki.node_ref)}
+												data-testid="handle-wiki-click"
 											>
 												<Checkbox
 													checked={checkboxState}
@@ -366,7 +367,7 @@ export const WikiSelectionStep = observer(function WikiSelectionStep({
 							>
 								<div style={{ pointerEvents: "auto", height: "100%" }}>
 									<TopicResizeHandle
-										onMouseDown={onWikiResizeStart}
+										onResizeStart={onWikiResizeStart}
 										className={cn(
 											"h-full shrink-0",
 											isDraggingWiki && "before:opacity-100",

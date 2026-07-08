@@ -200,7 +200,8 @@ Update scheduled task configuration. Only pass fields to be modified; unspecifie
 | ---------------------------------- | ------- | -------- | ----------------------------------------------------------------------------------- |
 | `--id <schedule_id>`               | string  | Yes      | Task ID                                                                             |
 | `--task-name <name>`               | string  | No       | New task name                                                                       |
-| `--message-content <content>`      | string  | No       | Message content (same as detail message_content/task_describe)                      |
+| `--message-content <content>`      | string  | No       | Message content (same as detail message_content/task_describe). Mutually exclusive with `--message-content-file` |
+| `--message-content-file <path>`    | string  | No       | Read message content from a file. Prefer this for long text or content with Chinese punctuation, quotes, or brackets |
 | `--type <type>`                    | string  | No       | Schedule type (must be provided with `--time`)                                      |
 | `--time <HH:MM>`                   | string  | No       | Execution time (must be provided with `--type`)                                     |
 | `--day <value>`                    | string  | No       | Date/weekday/day-of-month, depends on `--type`                                      |
@@ -219,6 +220,9 @@ python scripts/update.py --id "<schedule_id>" --task-name "New Name"
 
 # Update task description
 python scripts/update.py --id "<schedule_id>" --message-content "Updated task description content"
+
+# Update task description from a file
+python scripts/update.py --id "<schedule_id>" --message-content-file /tmp/cron-message.txt
 
 # Update schedule time
 python scripts/update.py --id "<schedule_id>" --type daily_repeat --time "10:00"

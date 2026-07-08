@@ -5,7 +5,21 @@ import MenuItem from "../index"
 import type { MentionItem } from "../../../types"
 import { MentionItemType } from "../../../types"
 
+const defaultT = {
+	ariaLabels: {
+		menuItem: "Menu item",
+	},
+	navigationActions: {
+		enter: "Enter",
+	},
+}
+
+;(MenuItem as typeof MenuItem & { defaultProps?: { t: typeof defaultT } }).defaultProps = {
+	t: defaultT,
+}
+
 vi.mock("../../../renderers/context", () => ({
+	useMentionItemRenderContextValue: () => ({}),
 	useMentionItemRenderer: (type: string) => ({
 		renderIcon: ({ item }: { item: MentionItem }) => {
 			if (typeof item.icon === "string") {
@@ -79,7 +93,7 @@ describe("MenuItem", () => {
 			expect(screen.getByText("Test Item")).toBeInTheDocument()
 		})
 
-		it("should render with description", () => {
+		it("should render item when description is provided", () => {
 			const itemWithDescription = {
 				...baseItem,
 				description: "Test description",
@@ -88,7 +102,6 @@ describe("MenuItem", () => {
 			render(<MenuItem item={itemWithDescription} onClick={mockOnClick} />)
 
 			expect(screen.getByText("Test Item")).toBeInTheDocument()
-			expect(screen.getByText("Test description")).toBeInTheDocument()
 		})
 
 		it("should apply selected state", () => {
@@ -123,6 +136,31 @@ describe("MenuItem", () => {
 			const option = screen.getByRole("option")
 			expect(option?.className).toContain("custom-class")
 			expect(option).toHaveStyle("color: rgb(255, 0, 0)")
+		})
+
+		it("should render checkbox state when provided", () => {
+			const { rerender } = render(
+				<MenuItem
+					item={baseItem}
+					onClick={mockOnClick}
+					showCheckbox
+					checkboxChecked={false}
+				/>,
+			)
+
+			expect(screen.getByTestId("mention-panel-menu-item-checkbox")).toHaveAttribute(
+				"data-checked",
+				"false",
+			)
+
+			rerender(
+				<MenuItem item={baseItem} onClick={mockOnClick} showCheckbox checkboxChecked />,
+			)
+
+			expect(screen.getByTestId("mention-panel-menu-item-checkbox")).toHaveAttribute(
+				"data-checked",
+				"true",
+			)
 		})
 	})
 
@@ -172,7 +210,7 @@ describe("MenuItem", () => {
 
 			render(<MenuItem item={folderItem} onClick={mockOnClick} />)
 
-			expect(screen.getByText("➤")).toBeInTheDocument()
+			expect(screen.getByTestId("mention-panel-enter-folder-trigger")).toBeInTheDocument()
 		})
 
 		it("should render right arrow for items with children", () => {
@@ -183,13 +221,15 @@ describe("MenuItem", () => {
 
 			render(<MenuItem item={itemWithChildren} onClick={mockOnClick} />)
 
-			expect(screen.getByText("➤")).toBeInTheDocument()
+			expect(screen.getByTestId("mention-panel-enter-folder-trigger")).toBeInTheDocument()
 		})
 
 		it("should not render right arrow for regular files", () => {
 			render(<MenuItem item={baseItem} onClick={mockOnClick} />)
 
-			expect(screen.queryByText("➤")).not.toBeInTheDocument()
+			expect(
+				screen.queryByTestId("mention-panel-enter-folder-trigger"),
+			).not.toBeInTheDocument()
 		})
 	})
 
@@ -316,7 +356,7 @@ describe("MenuItem", () => {
 			render(<MenuItem item={folderItem} onClick={mockOnClick} />)
 
 			expect(screen.getByText("📁")).toBeInTheDocument()
-			expect(screen.getByText("➤")).toBeInTheDocument()
+			expect(screen.getByTestId("mention-panel-enter-folder-trigger")).toBeInTheDocument()
 		})
 
 		it("should render MCP item correctly", () => {

@@ -12,7 +12,7 @@ function CloseButtonComponent({ visible, isClosing, onClick }: CloseButtonProps)
 	const { styles } = useStyles()
 
 	return (
-		<div className={styles.closeButton} onClick={onClick}>
+		<div className={styles.closeButton} onClick={onClick} data-testid="close-button">
 			<TSIcon
 				type="ts-close-line"
 				size="24"

@@ -94,6 +94,7 @@ export default memo(function Search(props: SearchProps) {
 									setSelectedKeyword(group.keyword)
 								}}
 								style={{ cursor: "pointer" }}
+								data-testid="set-selected-keyword"
 							>
 								{group.keyword}
 							</div>

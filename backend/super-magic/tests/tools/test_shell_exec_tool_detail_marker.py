@@ -1,4 +1,5 @@
 import json
+from types import SimpleNamespace
 
 import pytest
 
@@ -13,6 +14,18 @@ from app.tools.shell_exec_utils.tool_detail_marker import (
 
 def _marker(payload):
     return f"<super-magic-tool-detail>{json.dumps(payload, ensure_ascii=False)}</super-magic-tool-detail>"
+
+
+class _FakeToolContext:
+    def __init__(self, current_model_id: str | None = None) -> None:
+        self._agent_context = SimpleNamespace(
+            model_context=SimpleNamespace(current_text_model_id=current_model_id),
+        )
+
+    def get_extension(self, name: str):
+        if name == "agent_context":
+            return self._agent_context
+        return None
 
 
 def test_shell_exec_marker_removes_valid_payload_and_stores_override():
@@ -93,6 +106,39 @@ async def test_shell_exec_execute_applies_marker_before_return(monkeypatch, tmp_
     assert "<super-magic-tool-detail>" not in result.extra_info["stdout"]
     assert result.extra_info[DISPLAY_OVERRIDE_KEY]["after"]["remark"] == "Mock script completed"
     assert result.extra_info[DISPLAY_OVERRIDE_KEY]["tool_detail"]["data"]["content"] == "Mock detail content"
+
+
+@pytest.mark.asyncio
+async def test_shell_exec_injects_current_model_env(monkeypatch, tmp_path):
+    captured_kwargs = {}
+
+    async def fake_execute_command(*args, **kwargs):
+        captured_kwargs.update(kwargs)
+        return TerminalToolResult(
+            command="python mock_script.py",
+            content="ok",
+            ok=True,
+            exit_code=0,
+            extra_info={
+                "stdout": "ok",
+                "stderr": "",
+                "exit_code": 0,
+            },
+        )
+
+    monkeypatch.setattr(
+        "app.tools.shell_exec.ProcessExecutor.execute_command",
+        fake_execute_command,
+    )
+
+    tool = ShellExec(base_dir=tmp_path)
+    result = await tool.execute(
+        _FakeToolContext(current_model_id="mock-current-model"),
+        ShellExecParams(command="python mock_script.py"),
+    )
+
+    assert result.ok is True
+    assert captured_kwargs["extra_env"]["SUPER_MAGIC_CURRENT_MODEL_ID"] == "mock-current-model"
 
 
 @pytest.mark.asyncio

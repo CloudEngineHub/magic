@@ -10,7 +10,10 @@ import { BaseElement } from "../BaseElement"
 import { RenderUtils } from "../../utils/RenderUtils"
 import { generateUUID, type Rect } from "../../utils/utils"
 import { BorderDecorator } from "../decorators/BorderDecorator"
-import { InfoButtonDecorator } from "../decorators/InfoButtonDecorator"
+import {
+	ElementCornerActionsDecorator,
+	type ElementCornerActionConfig,
+} from "../decorators/ElementCornerActionsDecorator"
 import { TransformBehavior } from "../../interaction/TransformManager"
 import type { TransformContext } from "../BaseElement"
 import { VideoRenderer } from "../renderers/VideoRenderer"
@@ -44,7 +47,7 @@ export class VideoElement extends BaseElement<VideoElementData> {
 	private renderer = new VideoRenderer()
 	private pollingManager: VideoPollingManager
 	private borderDecorator?: BorderDecorator
-	private infoButtonDecorator?: InfoButtonDecorator
+	private cornerActionsDecorator?: ElementCornerActionsDecorator
 	public isGenerating = false
 	private isLoadingState = false
 	private isInlinePlaybackPending = false
@@ -123,7 +126,7 @@ export class VideoElement extends BaseElement<VideoElementData> {
 		this.pollingManager.destroy()
 		this.renderer.destroy()
 		this.borderDecorator?.destroy()
-		this.infoButtonDecorator?.destroy()
+		this.cornerActionsDecorator?.destroy()
 		this.removeContentUpdateListener()
 		this.removeRetryEditingListeners()
 		this.removeVideoResourceRefreshedListener()
@@ -136,8 +139,8 @@ export class VideoElement extends BaseElement<VideoElementData> {
 		this.renderer.resetTransientContent()
 		this.borderDecorator?.destroy()
 		this.borderDecorator = undefined
-		this.infoButtonDecorator?.destroy()
-		this.infoButtonDecorator = undefined
+		this.cornerActionsDecorator?.destroy()
+		this.cornerActionsDecorator = undefined
 		return super.rerender()
 	}
 
@@ -192,6 +195,7 @@ export class VideoElement extends BaseElement<VideoElementData> {
 				this.data.id,
 				{
 					generateVideoRequest: requestWithId,
+					videoGenerationResultMeta: undefined,
 					status: undefined,
 					errorMessage: undefined,
 					src: undefined,
@@ -665,12 +669,6 @@ export class VideoElement extends BaseElement<VideoElementData> {
 
 		const playerGroup = this.renderer.createPlayerNode(width, height, this.canvas, {
 			showLoadingOverlay: this.isInlinePlaybackPending || this.isInlinePlaybackRefreshing,
-			onFullscreenClick: () => {
-				this.canvas.eventEmitter.emit({
-					type: "element:video:fullscreenClick",
-					data: { elementId: this.data.id },
-				})
-			},
 			onPlayButtonClick: () => {
 				this.canvas.videoPlaybackInteractionManager.toggleElementPlayback(
 					this.data.id,
@@ -689,9 +687,7 @@ export class VideoElement extends BaseElement<VideoElementData> {
 		}
 
 		this.createBorder(group, width, height, false)
-		if (this.shouldShowInfoButton()) {
-			this.createInfoButton(group, width, height)
-		}
+		this.createCornerActions(group, width, height, { fullscreen: true })
 		this.setupContentUpdateListener(group)
 	}
 
@@ -749,9 +745,7 @@ export class VideoElement extends BaseElement<VideoElementData> {
 					)
 				}
 
-				if (this.shouldShowInfoButton()) {
-					this.createInfoButton(group, width, height)
-				}
+				this.createCornerActions(group, width, height)
 			},
 		})
 		this.setupContentUpdateListener(group)
@@ -802,15 +796,49 @@ export class VideoElement extends BaseElement<VideoElementData> {
 		}
 	}
 
-	private createInfoButton(group: Konva.Group, width: number, height: number): void {
-		this.infoButtonDecorator = new InfoButtonDecorator(group, {
+	private createCornerActions(
+		group: Konva.Group,
+		width: number,
+		height: number,
+		options?: { fullscreen?: boolean },
+	): void {
+		const actions: ElementCornerActionConfig[] = []
+		if (this.shouldShowInfoButton()) {
+			actions.push({
+				key: "info",
+				placement: "top-right",
+				icon: "info",
+				onClick: () => {
+					this.canvas.eventEmitter.emit({
+						type: "element:video:infoButtonClick",
+						data: { elementId: this.data.id },
+					})
+				},
+			})
+		}
+		if (options?.fullscreen && this.shouldShowFullscreenButton()) {
+			actions.push({
+				key: "fullscreen",
+				placement: "bottom-right",
+				icon: "fullscreen",
+				onClick: () => {
+					this.canvas.eventEmitter.emit({
+						type: "element:video:fullscreenClick",
+						data: { elementId: this.data.id },
+					})
+				},
+			})
+		}
+		if (!actions.length) return
+
+		this.cornerActionsDecorator = new ElementCornerActionsDecorator(group, {
 			elementId: this.data.id,
 			canvas: this.canvas,
 			width,
 			height,
-			infoClickEventType: "element:video:infoButtonClick",
+			actions,
 		})
-		this.infoButtonDecorator.create()
+		this.cornerActionsDecorator.create()
 	}
 
 	private createRenderGroup(width: number, height: number): Konva.Group {
@@ -944,6 +972,10 @@ export class VideoElement extends BaseElement<VideoElementData> {
 		return !!this.data.generateVideoRequest
 	}
 
+	private shouldShowFullscreenButton(): boolean {
+		return !!this.data.src
+	}
+
 	private setupContentUpdateListener(group: Konva.Group): void {
 		if (this.contentUpdateHandler) {
 			return
@@ -1002,7 +1034,7 @@ export class VideoElement extends BaseElement<VideoElementData> {
 		this.renderer.updatePlaceholderContentLayout(this.node, width, height)
 		this.renderer.updatePlayerLayout(this.node, width, height)
 		this.borderDecorator?.updateSize(width, height)
-		this.infoButtonDecorator?.updateConfig({ width, height })
+		this.cornerActionsDecorator?.updateConfig({ width, height })
 		this.node.getLayer()?.batchDraw()
 	}
 

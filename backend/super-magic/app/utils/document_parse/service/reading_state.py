@@ -15,7 +15,7 @@ from typing import Any
 from app.utils.async_file_utils import async_mkdir, async_try_read_json, async_write_json
 
 from ..constants import READING_STATE_FILENAME
-from ..structure.range_parser import RangeParser, compact_numeric_ranges
+from .reading_range_parser import ReadingRangeParser
 
 
 class ReadingStateStore:
@@ -55,6 +55,7 @@ class ReadingStateStore:
             "sampled_ranges": existing.get("sampled_ranges") or [],
             "extracted_ranges": existing.get("extracted_ranges") or [],
             "visually_understood_images": existing.get("visually_understood_images") or [],
+            "rendered_page_snapshots": existing.get("rendered_page_snapshots") or [],
             "unread_ranges": existing.get("unread_ranges") or [],
             "discovered_sections": existing.get("discovered_sections") or [],
             "recommended_next_actions": existing.get("recommended_next_actions") or [],
@@ -85,6 +86,7 @@ class ReadingStateStore:
             file_type=file_type,
             metadata=metadata,
         )
+        sampled_range = ReadingRangeParser.normalize_for_state(sampled_range, total_units, unit_type)
         state["sampled_ranges"] = self._append_unique(state.get("sampled_ranges"), sampled_range)
         state["sample_files"] = self._append_unique(state.get("sample_files"), sample_path)
         state["recommended_next_actions"] = recommendations
@@ -109,8 +111,32 @@ class ReadingStateStore:
             unit_type=unit_type,
             file_type=file_type,
         )
+        extracted_range = ReadingRangeParser.normalize_for_state(extracted_range, total_units, unit_type)
         state["extracted_ranges"] = self._append_unique(state.get("extracted_ranges"), extracted_range)
         state["unread_ranges"] = self._compute_unread_ranges(state)
+        return await self.save(output_dir, state)
+
+    async def mark_page_snapshots_rendered(
+        self,
+        output_dir: Path,
+        *,
+        snapshots: list[dict[str, Any]],
+        recommendations: list[str] | None = None,
+    ) -> dict[str, Any]:
+        """在阅读状态中记录已经渲染的 PDF 整页快照。"""
+
+        state = await self.load(output_dir)
+        rendered = list(state.get("rendered_page_snapshots") or [])
+        seen = {str(item.get("asset_path") or "") for item in rendered}
+        for snapshot in snapshots:
+            asset_path = str(snapshot.get("asset_path") or "")
+            if not asset_path or asset_path in seen:
+                continue
+            rendered.append(snapshot)
+            seen.add(asset_path)
+        state["rendered_page_snapshots"] = rendered
+        if recommendations is not None:
+            state["recommended_next_actions"] = recommendations
         return await self.save(output_dir, state)
 
     async def mark_images_understood(
@@ -141,13 +167,9 @@ class ReadingStateStore:
 
     @staticmethod
     def _compute_unread_ranges(state: dict[str, Any]) -> list[str]:
+        """根据已读范围计算剩余未读范围。"""
+
         total_units = int(state.get("total_units") or 0)
         unit_type = str(state.get("unit_type") or "")
-        if total_units <= 0 or unit_type not in {"page", "slide"}:
-            return []
-        read_units: set[int] = set()
-        for range_text in (state.get("extracted_ranges") or []) + (state.get("sampled_ranges") or []):
-            read_units.update(RangeParser.parse_numeric(str(range_text), total_units))
-        unread = [unit for unit in range(1, total_units + 1) if unit not in read_units]
-        compact = compact_numeric_ranges(unread)
-        return [compact] if compact else []
+        consumed_ranges = (state.get("extracted_ranges") or []) + (state.get("sampled_ranges") or [])
+        return ReadingRangeParser.compute_unread_ranges(total_units, unit_type, consumed_ranges)

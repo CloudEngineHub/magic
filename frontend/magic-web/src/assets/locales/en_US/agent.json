@@ -198,7 +198,8 @@
 			"status": "Query MCP Plugin Status",
 			"title": "MCP Plugin",
 			"tool": "Load Tools",
-			"url": "Modify MCP Plugin Service URL"
+			"url": "Modify MCP Plugin Service URL",
+			"manageAuth": "Manage Authorization"
 		}
 	}
 }

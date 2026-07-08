@@ -91,6 +91,7 @@ function ProjectFileRow({
 				})
 			}}
 			disabled={loading || isAlreadyAdded}
+			data-testid="on-toggle"
 		>
 			{multiSelect ? (
 				<span
@@ -189,6 +190,7 @@ export default function ProjectFilePickerContent({
 						className="flex items-center gap-1 rounded-md bg-primary/10 px-2 py-1 text-[11px] font-medium text-primary transition-colors hover:bg-primary/20"
 						onClick={onLocalUpload}
 						disabled={loading}
+						data-testid="on-local-upload"
 					>
 						<Upload className="size-3" />
 						{localUploadLabel ||
@@ -220,6 +222,7 @@ export default function ProjectFilePickerContent({
 					onChange={(e) => onSearchChange(e.target.value)}
 					onKeyDown={(e) => e.stopPropagation()}
 					autoFocus
+					data-testid="on-search-change"
 				/>
 			</div>
 
@@ -276,6 +279,7 @@ export default function ProjectFilePickerContent({
 						className="w-full rounded-md bg-primary px-2.5 py-1.5 text-[11px] font-medium text-primary-foreground transition-colors hover:bg-primary/90 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
 						onClick={onConfirm}
 						disabled={loading || pendingCount === 0}
+						data-testid="on-confirm"
 					>
 						{confirmLabel ||
 							t(

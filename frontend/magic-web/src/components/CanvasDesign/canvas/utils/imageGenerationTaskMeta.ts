@@ -8,6 +8,23 @@ import type {
 } from "../../types.magic"
 import { ImageGenerationTaskTypeMap } from "../../types.magic"
 
+export function createBatchImageTaskMeta({
+	imageId,
+	outputIndex,
+	outputCount,
+}: {
+	imageId: string
+	outputIndex: number
+	outputCount: number
+}): ImageGenerationTaskMeta {
+	return {
+		type: ImageGenerationTaskTypeMap.Batch,
+		image_id: imageId,
+		output_index: outputIndex,
+		output_count: outputCount,
+	}
+}
+
 export function createHighImageTaskMeta(
 	request: GenerateHightImageRequest,
 ): ImageGenerationTaskMeta {
@@ -77,5 +94,25 @@ export function getImageGenerationTaskMeta(
 	return (
 		element.imageGenerationTaskMeta ||
 		getLegacyHighImageTaskMeta(element.generateHightImageRequest)
+	)
+}
+
+export function isBatchImageGenerationTaskMeta(
+	meta: ImageGenerationTaskMeta | undefined,
+): meta is ImageGenerationTaskMeta & {
+	image_id: string
+	output_index: number
+	output_count: number
+} {
+	return (
+		meta?.type === ImageGenerationTaskTypeMap.Batch &&
+		typeof meta.image_id === "string" &&
+		meta.image_id.length > 0 &&
+		typeof meta.output_index === "number" &&
+		Number.isFinite(meta.output_index) &&
+		meta.output_index > 0 &&
+		typeof meta.output_count === "number" &&
+		Number.isFinite(meta.output_count) &&
+		meta.output_count > 0
 	)
 }

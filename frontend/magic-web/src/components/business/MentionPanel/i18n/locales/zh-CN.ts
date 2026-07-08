@@ -54,6 +54,10 @@ export const zhCN: I18nTexts = {
 
 	// Mobile specific
 	selectItem: "选择引用内容",
+	multiSelectActions: {
+		enter: "多选",
+		complete: "完成",
+	},
 	mobileSelectedItemsLabel: "已选",
 	mobileSelectedItemsTitle: "已选",
 

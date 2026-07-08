@@ -1,9 +1,12 @@
 import { existsSync, readdirSync } from "node:fs"
 import { join, resolve } from "path"
 import { build } from "esbuild"
-import type { OutputBundle } from "rollup"
-import type { PluginOption, ResolvedConfig } from "vite"
+import type { PluginOption, ResolvedConfig, Rollup } from "vite"
 import { collectPrecacheAssetUrlsFromAssetFilenames } from "./collect-precache-asset-urls"
+import { collectWarmupAssets, type WarmupAssetConfig } from "./collect-warmup-assets"
+
+// Reuse Vite's Rollup-compatible bundle type so this plugin does not require a direct rollup dependency.
+type OutputBundle = Rollup.OutputBundle
 
 const APP_SERVICE_WORKER_FILE_NAME = "sw.js"
 const APP_SERVICE_WORKER_ROUTE_PATH = `/${APP_SERVICE_WORKER_FILE_NAME}`
@@ -13,6 +16,23 @@ interface BuildAppServiceWorkerOptions {
 	precacheAssetUrls: string[]
 	warmUpAssetUrls: string[]
 }
+
+// Keep warm-up targets to high-value public routes while avoiding broad all-bundle preloading.
+const CORE_WARMUP_ASSETS = {
+	moduleMatchers: [
+		"src/pages/superMagic/lazy/ProjectPage",
+		"src/pages/superMagic/lazy/ChatProjectPage",
+		"src/pages/superMagic/lazy/WorkspacePage",
+		"src/pages/superMagic/lazy/TopicPage",
+		"src/pages/superMagic/pages/Assistant",
+		"src/pages/superMagic/pages/MagiClawPage",
+		"src/pages/superMagic/pages/ClawPlayground",
+		"src/pages/superMagic/pages/CrewMarket",
+		"src/pages/superMagic/pages/MyCrewPage",
+		"src/pages/chatNew/lazy/Chat",
+	],
+	maxAssets: 300,
+} satisfies WarmupAssetConfig
 
 /**
  * Collects hashed js/css public paths from the Rollup output bundle (production build).
@@ -119,9 +139,9 @@ export default function createAppServiceWorkerPlugin(): PluginOption {
 		async generateBundle(_options, bundle) {
 			if (!resolvedConfig || resolvedConfig.command !== "build") return
 
-			// precache is cleared, all items routed to warmup list
+			// Precache stays empty; warm-up is limited to configured core page chunks.
 			const precacheAssetUrls: string[] = []
-			const warmUpAssetUrls = collectPrecacheUrlsFromBundle(bundle)
+			const warmUpAssetUrls = collectWarmupAssets(bundle, CORE_WARMUP_ASSETS)
 			const transformedSource = await buildAppServiceWorkerSource({
 				precacheAssetUrls,
 				warmUpAssetUrls: [],

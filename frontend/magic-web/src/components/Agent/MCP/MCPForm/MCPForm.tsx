@@ -9,7 +9,7 @@ import {
 	IconCheck,
 } from "@tabler/icons-react"
 import MagicAvatar from "@/components/base/MagicAvatar"
-import UploadButton from "../../../../pages/explore/components/UploadButton"
+import UploadButton from "@/pages/explore/components/UploadButton"
 import { useEffect, useMemo, useRef, useState } from "react"
 import { IconMCP } from "@/enhance/tabler/icons-react"
 import { useUpload } from "@/hooks/useUploadFiles"
@@ -20,7 +20,7 @@ import { useTranslation } from "react-i18next"
 import MagicSpin from "@/components/base/MagicSpin"
 import type { FormItemProps } from "antd"
 import { FlowApi } from "@/apis"
-import Editor from "react-simple-code-editor"
+import SimpleCodeEditor from "react-simple-code-editor"
 import type { AgentCommonModalChildrenProps } from "../../AgentCommonModal"
 import { MCPType } from "../types"
 import { set } from "lodash-es"
@@ -78,6 +78,9 @@ const optionCardClassName = cn(
 
 const optionCardSelectedClassName =
 	"border-primary shadow-[0_0_1px_rgba(0,0,0,0.3),0_4px_14px_rgba(0,0,0,0.1)]"
+
+const Editor = ((SimpleCodeEditor as unknown as { default?: typeof SimpleCodeEditor }).default ??
+	SimpleCodeEditor) as typeof SimpleCodeEditor
 
 export default function MCPForm(props: MCPFormProps) {
 	const { id, onClose, onSuccessCallback } = props
@@ -722,6 +725,9 @@ export default function MCPForm(props: MCPFormProps) {
 																name: mcpName,
 																...(result?.mcpServers?.[mcpName] ||
 																	{}),
+															}
+															if (formData?.[MCPFormField.Url]) {
+																formData.type = MCPType.HTTP
 															}
 															if (
 																formData?.[MCPFormField.Command] ||

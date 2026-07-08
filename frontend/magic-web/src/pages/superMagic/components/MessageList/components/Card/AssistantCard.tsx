@@ -274,6 +274,9 @@ export function withAssistantCard<
 
 				{statusList.has(messageNode?.status) && (
 					<>
+						{messageNode?.content && (
+							<div className="mb-1 text-muted-foreground">{messageNode?.content}</div>
+						)}
 						<StatusBadge status={messageNode?.status} />
 						{messageNode?.status === "finished" && (
 							<div className="mt-[6px] flex items-center justify-between gap-[4px]">
@@ -329,6 +332,7 @@ export function withAssistantCard<
 							type="button"
 							className="underline underline-offset-2 hover:text-foreground"
 							onClick={() => setFollowUpSuggestions(true)}
+							data-testid="set-follow-up-suggestions"
 						>
 							{t("ui.followUpSuggestionsReenable")}
 						</button>

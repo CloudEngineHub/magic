@@ -16,6 +16,7 @@ vi.mock("react-i18next", () => ({
 			if (key === "common.cancel") return "取消"
 			if (key === "mobile.shell.navChats") return "对话"
 			if (key === "project.unnamedProject") return "未命名项目"
+			if (key === "workspace.unnamedWorkspace") return "未命名工作区"
 			if (key === "workspace.shareWorkspaceName") return "共享工作区"
 			if (key === "workspace.projectCount") return `${String(options?.count || "0")} 个项目`
 			if (key === "selectPathModal.searchEmptyDescription")
@@ -252,6 +253,233 @@ describe("SelectDirectoryModal mobile", () => {
 			/>,
 		)
 	}
+
+	it("opens regular-workspace copy mode at the workspace list and submits a workspace-level target", async () => {
+		renderModal({
+			mobileCrossProjectConfig: {
+				sourceAttachments: attachments,
+				initialViewMode: "workspace",
+				allowWorkspaceSubmit: true,
+				includeSpecialWorkspaces: false,
+				workspaces: [
+					{
+						id: "workspace-audio-1",
+						name: "Audio Workspace One",
+						project_count: 3,
+						workspace_type: "default",
+					},
+					{
+						id: "workspace-audio-2",
+						name: "Audio Workspace Two",
+						project_count: 0,
+						workspace_type: "default",
+					},
+					{
+						id: "my-claw",
+						name: "Mock Claw Workspace",
+						project_count: 9,
+						workspace_type: "default",
+					},
+					{
+						id: "workspace-audio-chat",
+						name: "Mock Chat Workspace",
+						project_count: 8,
+						workspace_type: "chat",
+					},
+				],
+			},
+		})
+
+		await waitFor(() => {
+			expect(
+				screen.getByTestId("select-directory-mobile-workspace-workspace-audio-1"),
+			).toBeInTheDocument()
+		})
+
+		expect(
+			screen.queryByTestId("select-directory-mobile-workspace-collaboration"),
+		).not.toBeInTheDocument()
+		expect(
+			screen.queryByTestId("select-directory-mobile-workspace-__mobile-chats__"),
+		).not.toBeInTheDocument()
+		expect(
+			screen.queryByTestId("select-directory-mobile-workspace-my-claw"),
+		).not.toBeInTheDocument()
+		expect(
+			screen.queryByTestId("select-directory-mobile-workspace-workspace-audio-chat"),
+		).not.toBeInTheDocument()
+
+		fireEvent.click(screen.getByTestId("select-directory-mobile-workspace-workspace-audio-1"))
+
+		await waitFor(() => {
+			expect(screen.getByTestId("select-directory-mobile-confirm-button")).toBeEnabled()
+		})
+
+		fireEvent.click(screen.getByTestId("select-directory-mobile-confirm-button"))
+
+		expect(onSubmit).toHaveBeenCalledWith({
+			path: [],
+			targetWorkspaceId: "workspace-audio-1",
+			targetProjectId: "",
+			targetAttachments: [],
+			sourceAttachments: attachments,
+		})
+		expect(getWorkspaces).not.toHaveBeenCalled()
+		expect(getCollaborationProjects).not.toHaveBeenCalled()
+		expect(getChatWorkspace).not.toHaveBeenCalled()
+	})
+
+	it("updates the regular-workspace copy list when workspaces arrive after opening", async () => {
+		const { rerender } = renderModal({
+			mobileCrossProjectConfig: {
+				sourceAttachments: attachments,
+				initialViewMode: "workspace",
+				allowWorkspaceSubmit: true,
+				includeSpecialWorkspaces: false,
+				workspaces: [],
+			},
+		})
+
+		expect(
+			screen.queryByTestId("select-directory-mobile-workspace-workspace-audio-late"),
+		).not.toBeInTheDocument()
+
+		rerender(
+			<SelectDirectoryModal
+				visible
+				projectId="project-1"
+				title="移动文件"
+				attachments={attachments}
+				disabledFolderIds={[]}
+				mobileCrossProjectConfig={{
+					sourceAttachments: attachments,
+					initialViewMode: "workspace",
+					allowWorkspaceSubmit: true,
+					includeSpecialWorkspaces: false,
+					workspaces: [
+						{
+							id: "workspace-audio-late",
+							name: "Late Audio Workspace",
+							project_count: 4,
+							workspace_type: "default",
+						},
+					],
+				}}
+				onClose={onClose}
+				onSubmit={onSubmit}
+			/>,
+		)
+
+		await waitFor(() => {
+			expect(
+				screen.getByTestId("select-directory-mobile-workspace-workspace-audio-late"),
+			).toBeInTheDocument()
+		})
+		expect(getWorkspaces).not.toHaveBeenCalled()
+	})
+
+	it("renders and searches the unnamed workspace fallback in regular-workspace copy mode", async () => {
+		renderModal({
+			mobileCrossProjectConfig: {
+				sourceAttachments: attachments,
+				initialViewMode: "workspace",
+				allowWorkspaceSubmit: true,
+				includeSpecialWorkspaces: false,
+				workspaces: [
+					{
+						id: "workspace-audio-blank",
+						name: "   ",
+						project_count: 0,
+						workspace_type: "default",
+					},
+					{
+						id: "workspace-audio-named",
+						name: "Named Workspace",
+						project_count: 1,
+						workspace_type: "default",
+					},
+				],
+			},
+		})
+
+		await waitFor(() => {
+			expect(screen.getByText("未命名工作区")).toBeInTheDocument()
+		})
+
+		fireEvent.change(screen.getByTestId("select-directory-mobile-search-input"), {
+			target: { value: "未命名" },
+		})
+
+		expect(
+			screen.getByTestId("select-directory-mobile-workspace-workspace-audio-blank"),
+		).toBeInTheDocument()
+		expect(
+			screen.queryByTestId("select-directory-mobile-workspace-workspace-audio-named"),
+		).not.toBeInTheDocument()
+	})
+
+	it("submits an existing project root target from regular-workspace copy mode", async () => {
+		getProjectsWithCollaboration.mockResolvedValueOnce({
+			list: [
+				{
+					id: "project-audio-target",
+					project_name: "Audio Target Project",
+					workspace_id: "workspace-audio-1",
+					user_role: "owner",
+				},
+			],
+		})
+		getAttachmentsByProjectId.mockResolvedValueOnce({ tree: targetAttachments })
+		renderModal({
+			mobileCrossProjectConfig: {
+				sourceAttachments: attachments,
+				initialViewMode: "workspace",
+				allowWorkspaceSubmit: true,
+				includeSpecialWorkspaces: false,
+				workspaces: [
+					{
+						id: "workspace-audio-1",
+						name: "Audio Workspace One",
+						project_count: 1,
+						workspace_type: "default",
+					},
+				],
+			},
+		})
+
+		await waitFor(() => {
+			expect(
+				screen.getByTestId("select-directory-mobile-workspace-workspace-audio-1"),
+			).toBeInTheDocument()
+		})
+
+		fireEvent.click(screen.getByTestId("select-directory-mobile-workspace-workspace-audio-1"))
+
+		await waitFor(() => {
+			expect(
+				screen.getByTestId("select-directory-mobile-project-project-audio-target"),
+			).toBeInTheDocument()
+		})
+
+		fireEvent.click(screen.getByTestId("select-directory-mobile-project-project-audio-target"))
+
+		await waitFor(() => {
+			expect(
+				screen.getByTestId("select-directory-mobile-root-select-button"),
+			).toBeInTheDocument()
+		})
+
+		fireEvent.click(screen.getByTestId("select-directory-mobile-root-select-button"))
+		fireEvent.click(screen.getByTestId("select-directory-mobile-confirm-button"))
+
+		expect(onSubmit).toHaveBeenCalledWith({
+			path: [],
+			targetProjectId: "project-audio-target",
+			targetWorkspaceId: "workspace-audio-1",
+			targetAttachments,
+			sourceAttachments: attachments,
+		})
+	})
 
 	it("allows selecting the root directory and confirming from the dedicated mobile sheet", () => {
 		renderModal()
@@ -546,16 +774,27 @@ describe("SelectDirectoryModal mobile", () => {
 	})
 
 	it("shows fallback copy for unnamed chat projects in the list and breadcrumb", async () => {
-		getProjects.mockResolvedValueOnce({
-			list: [
-				{
-					id: "project-chat-empty",
-					project_name: "   ",
-					workspace_id: "chat-workspace",
-					user_role: "owner",
-				},
-			],
-		})
+		getProjects
+			.mockResolvedValueOnce({
+				list: [
+					{
+						id: "project-chat-count-placeholder",
+						project_name: "Mock Chat Count Project",
+						workspace_id: "chat-workspace",
+						user_role: "owner",
+					},
+				],
+			})
+			.mockResolvedValueOnce({
+				list: [
+					{
+						id: "project-chat-empty",
+						project_name: "   ",
+						workspace_id: "chat-workspace",
+						user_role: "owner",
+					},
+				],
+			})
 
 		renderModal({
 			mobileCrossProjectConfig: {

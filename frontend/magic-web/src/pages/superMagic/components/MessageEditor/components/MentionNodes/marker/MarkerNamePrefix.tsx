@@ -64,7 +64,7 @@ export default function MarkerNamePrefix({ data }: MarkerNamePrefixProps) {
 				height: pointHeight,
 			}}
 		>
-			<img src={CanvasMarkerIcon} alt="marker" className="h-full w-full object-cover" />
+			<img src={CanvasMarkerIcon} alt="marker" className="h-full w-full object-cover"  data-testid="marker-name-prefix-image"/>
 			{markerNumber !== undefined && (
 				<span
 					className="pointer-events-none absolute left-1/2 -translate-x-1/2 -translate-y-1/2 font-semibold text-white"

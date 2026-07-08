@@ -48,6 +48,23 @@ global.ResizeObserver = vi.fn().mockImplementation(() => ({
 
 // 添加对 antd 的最小模拟，避免在测试启动时加载完整 antd 依赖链
 vi.mock("antd", () => {
+	const createMockComponent = (name: string) => {
+		const MockComponent = ({
+			children,
+			...props
+		}: { children?: ReactNode } & Record<string, unknown>) =>
+			React.createElement(
+				"div",
+				{
+					"data-testid": `antd-${name}`,
+					...props,
+				},
+				children,
+			)
+		MockComponent.displayName = name
+		return MockComponent
+	}
+
 	// 创建一个模拟的消息API
 	const mockMessage = {
 		success: vi.fn(),
@@ -99,5 +116,8 @@ vi.mock("antd", () => {
 
 	return {
 		App,
+		Avatar: createMockComponent("Avatar"),
+		Badge: createMockComponent("Badge"),
+		Flex: createMockComponent("Flex"),
 	}
 })

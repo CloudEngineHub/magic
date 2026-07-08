@@ -209,15 +209,15 @@ export default memo(function Share(props: ShareProps) {
 	}, [getValidateShareSettings, validateShareSettings])
 
 	return (
-		<div className={styles.shareContainer}>
+		<div className={styles.shareContainer} data-testid="share-settings-panel">
 			{/* Topic info display - only for topic sharing */}
 			{shareMode === ShareMode.Topic && (
-				<div className={styles.topicInfo}>
-					<div className={styles.topicInfoLeft}>
+				<div className={styles.topicInfo} data-testid="share-topic-info">
+					<div className={styles.topicInfoLeft} data-testid="share-topic-label">
 						<MagicIcon component={IconShare3} size={20} className={styles.topicIcon} />
 						<span className={styles.topicLabel}>{t("share.topic")}</span>
 					</div>
-					<div className={styles.topicInfoRight}>
+					<div className={styles.topicInfoRight} data-testid="share-topic-title">
 						<span className={styles.topicTitleHash}># </span>
 						<span className={styles.topicTitle}>
 							{topicTitle || t("messageHeader.untitledTopic")}
@@ -228,7 +228,7 @@ export default memo(function Share(props: ShareProps) {
 			)}
 
 			{/* Share configuration fields */}
-			<div className="flex flex-col gap-3">
+			<div className="flex flex-col gap-3" data-testid="share-settings-fields">
 				{/* Share Type */}
 				<ShareTypeField
 					value={type}

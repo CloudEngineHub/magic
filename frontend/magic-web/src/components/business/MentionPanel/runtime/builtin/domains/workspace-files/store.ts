@@ -6,10 +6,7 @@ import type {
 	WorkspaceFilesStoreDependencies,
 } from "./types"
 import { getFolderMentionData } from "../../../../utils/directoryMention"
-
-function toRelativePath(path: string) {
-	return path.startsWith("/") ? path.slice(1) : path
-}
+import { normalizeProjectReferencePath } from "../../../../utils/projectReferenceMention"
 
 export class MentionPanelWorkspaceFilesStore {
 	private readonly projectFilesStore: WorkspaceFilesStoreDependencies["projectFilesStore"]
@@ -35,7 +32,7 @@ export class MentionPanelWorkspaceFilesStore {
 					data: getFolderMentionData({
 						directoryId: file.file_id,
 						directoryName: file.file_name,
-						directoryPath: toRelativePath(file.relative_file_path),
+						directoryPath: normalizeProjectReferencePath(file.relative_file_path),
 						directoryMetadata: file.display_config,
 					}),
 				}
@@ -56,7 +53,7 @@ export class MentionPanelWorkspaceFilesStore {
 				data: {
 					file_id: file.file_id,
 					file_name: file.file_name,
-					file_path: toRelativePath(file.relative_file_path),
+					file_path: normalizeProjectReferencePath(file.relative_file_path),
 					file_extension: file.file_extension,
 				} as ProjectFileMentionData,
 			}

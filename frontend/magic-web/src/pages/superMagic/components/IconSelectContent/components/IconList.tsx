@@ -82,6 +82,7 @@ const IconList = ({
 										isSelected && styles.selectedIcon,
 									)}
 									onClick={() => setLocalSelectedIcon(IconName)}
+									data-testid="set-local-selected-icon"
 								>
 									<TablerIcon
 										name={IconName}

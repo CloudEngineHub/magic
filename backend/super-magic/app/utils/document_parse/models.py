@@ -3,8 +3,17 @@
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
+from enum import StrEnum
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+
+
+class DocumentAssetType(StrEnum):
+    """文档解析过程中产生的资产类型。"""
+
+    EMBEDDED_IMAGE = "embedded_image"
+    PAGE_SNAPSHOT = "page_snapshot"
+    VISUAL_RESULT = "visual_result"
 
 
 @dataclass

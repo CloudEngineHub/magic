@@ -2,11 +2,7 @@ import type { TFunction } from "i18next"
 import { RotateCcw, Search, Trash2 } from "lucide-react"
 import { Button } from "@/components/shadcn-ui/button"
 import { Checkbox } from "@/components/shadcn-ui/checkbox"
-import {
-	InputGroup,
-	InputGroupAddon,
-	InputGroupInput,
-} from "@/components/shadcn-ui/input-group"
+import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/shadcn-ui/input-group"
 
 interface RecycleBinToolbarProps {
 	title: string
@@ -14,7 +10,6 @@ interface RecycleBinToolbarProps {
 	hasSelection: boolean
 	isAllSelected: boolean
 	isPartiallySelected: boolean
-	hasMixedSelectionTypes: boolean
 	onToggleSelectAll: (checked: boolean) => void
 	onCancelSelection: () => void
 	onRestoreSelection: () => void
@@ -30,7 +25,6 @@ export function RecycleBinToolbar({
 	hasSelection,
 	isAllSelected,
 	isPartiallySelected,
-	hasMixedSelectionTypes,
 	onToggleSelectAll,
 	onCancelSelection,
 	onRestoreSelection,
@@ -79,7 +73,6 @@ export function RecycleBinToolbar({
 							className="h-9 gap-[8px] rounded-lg px-4"
 							onClick={onRestoreSelection}
 							type="button"
-							disabled={hasMixedSelectionTypes}
 							data-testid="recycle-bin-restore-selection"
 						>
 							<RotateCcw className="size-4" />

@@ -19,6 +19,7 @@ from app.api.routes.media import router as media_router
 from app.api.routes.debug import router as debug_router
 from app.api.routes.agent_control import router as agent_control_router
 from app.api.routes.debug_workspace_files import router as debug_workspace_files_router
+from app.api.routes.oauth2_local import router as oauth2_local_router
 
 
 # 创建主路由器，设置统一前缀
@@ -62,6 +63,9 @@ api_router.include_router(agent_control_router, tags=["Agent 控制"])
 
 # 注册调试面板专用工作区文件路由
 api_router.include_router(debug_workspace_files_router, tags=["调试面板工作区文件"])
+
+# 注册 OAuth2 本地调试回调路由
+api_router.include_router(oauth2_local_router, tags=["OAuth2 本地调试"])
 
 @api_router.get("/health", tags=["系统"])
 async def health_check():

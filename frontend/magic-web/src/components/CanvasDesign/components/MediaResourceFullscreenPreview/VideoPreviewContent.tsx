@@ -61,6 +61,20 @@ export default function VideoPreviewContent(props: VideoPreviewContentProps) {
 		[canvas, resource.path],
 	)
 
+	const releasePlayback = useCallback(() => {
+		if (!canvas) return
+
+		const consumerId = consumerIdRef.current
+		const video = canvas.videoPlaybackManager.getVideoElement(consumerId)
+		video?.pause()
+		canvas.videoPlaybackManager.release(consumerId)
+	}, [canvas])
+
+	const handleClose = useCallback(() => {
+		releasePlayback()
+		onClose()
+	}, [onClose, releasePlayback])
+
 	useEffect(() => {
 		if (!canvas || !resource.path) {
 			setVideoElement(null)
@@ -78,6 +92,8 @@ export default function VideoPreviewContent(props: VideoPreviewContentProps) {
 		void acquirePlayback({ autoPlay: true })
 			.then((session) => {
 				if (cancelled) {
+					session?.video.pause()
+					canvas.videoPlaybackManager.release(consumerId)
 					return
 				}
 				setVideoElement(session?.video ?? null)
@@ -98,6 +114,8 @@ export default function VideoPreviewContent(props: VideoPreviewContentProps) {
 
 		return () => {
 			cancelled = true
+			const video = canvas.videoPlaybackManager.getVideoElement(consumerId)
+			video?.pause()
 			canvas.videoPlaybackManager.release(consumerId)
 			setIsRefreshing(false)
 		}
@@ -128,7 +146,7 @@ export default function VideoPreviewContent(props: VideoPreviewContentProps) {
 			videoElement={videoElement}
 			onPlayRequest={handlePlayRequest}
 			isOpen
-			onClose={onClose}
+			onClose={handleClose}
 			intrinsicSizeHint={intrinsicSizeHint}
 			isLoading={isLoading || isRefreshing}
 			hasError={hasError}

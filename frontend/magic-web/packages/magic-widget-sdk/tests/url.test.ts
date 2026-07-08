@@ -1,0 +1,145 @@
+import { describe, expect, it } from "vitest"
+import { buildWidgetIframeUrl } from "../src/url"
+
+describe("buildWidgetIframeUrl", () => {
+	it("builds a typed crew page with script origin, login strategy, organization and extra query", () => {
+		const url = buildWidgetIframeUrl(
+			{
+				page: {
+					type: "crew",
+					crewId: "crew-001",
+				},
+				auth: {
+					loginStrategy: "phone_password",
+					organizationCode: "org-001",
+				},
+				iframe: {
+					query: {
+						source: "external-widget",
+					},
+				},
+			},
+			{
+				fallbackAppOrigin: "https://www.letsmagic.cn",
+			},
+		)
+
+		expect(url.origin).toBe("https://www.letsmagic.cn")
+		expect(url.pathname).toBe("/global/super/crew/crew-001")
+		expect(url.searchParams.get("login-strategy")).toBe("phone_password")
+		expect(url.searchParams.get("organizationCode")).toBe("org-001")
+		expect(url.searchParams.get("source")).toBe("external-widget")
+	})
+
+	it("uses the script origin fallback", () => {
+		const url = buildWidgetIframeUrl(
+			{
+				page: {
+					type: "crew",
+					crewId: "crew-001",
+				},
+			},
+			{
+				fallbackAppOrigin: "https://magic.example.com",
+			},
+		)
+
+		expect(url.toString()).toBe("https://magic.example.com/global/super/crew/crew-001")
+	})
+
+	it("encodes the crew id as one path segment", () => {
+		const url = buildWidgetIframeUrl(
+			{
+				page: {
+					type: "crew",
+					crewId: "crew/a b",
+				},
+			},
+			{
+				fallbackAppOrigin: "https://www.letsmagic.cn",
+			},
+		)
+
+		expect(url.toString()).toBe("https://www.letsmagic.cn/global/super/crew/crew%2Fa%20b")
+	})
+
+	it("rejects empty crew ids", () => {
+		expect(() =>
+			buildWidgetIframeUrl(
+				{
+					page: {
+						type: "crew",
+						crewId: " ",
+					},
+				},
+				{
+					fallbackAppOrigin: "https://www.letsmagic.cn",
+				},
+			),
+		).toThrow(/crewId/)
+	})
+
+	it("rejects missing page options with a stable error", () => {
+		expect(() =>
+			buildWidgetIframeUrl(
+				{} as never,
+				{
+					fallbackAppOrigin: "https://www.letsmagic.cn",
+				},
+			),
+		).toThrow("Magic widget page is required")
+	})
+
+	it("rejects missing crew ids with a stable error", () => {
+		expect(() =>
+			buildWidgetIframeUrl(
+				{
+					page: {
+						type: "crew",
+					},
+				} as never,
+				{
+					fallbackAppOrigin: "https://www.letsmagic.cn",
+				},
+			),
+		).toThrow("Magic widget crewId must be a string")
+	})
+
+	it("rejects legacy top-level organization codes with a stable error", () => {
+		expect(() =>
+			buildWidgetIframeUrl(
+				{
+					page: {
+						type: "crew",
+						crewId: "crew-001",
+					},
+					organizationCode: "org-001",
+				} as never,
+				{
+					fallbackAppOrigin: "https://www.letsmagic.cn",
+				},
+			),
+		).toThrow(
+			"Magic widget organizationCode must be configured through auth.organizationCode",
+		)
+	})
+
+	it("rejects non-string auth organization codes with a stable error", () => {
+		expect(() =>
+			buildWidgetIframeUrl(
+				{
+					page: {
+						type: "crew",
+						crewId: "crew-001",
+					},
+					auth: {
+						organizationCode: 123,
+					},
+				} as never,
+				{
+					fallbackAppOrigin: "https://www.letsmagic.cn",
+				},
+			),
+		).toThrow("Magic widget auth.organizationCode must be a string")
+	})
+})

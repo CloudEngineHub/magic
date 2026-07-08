@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils"
 interface SearchModeHeaderProps {
 	searchValue: string
 	onSearchChange: (value: string) => void
+	onSearchCommit?: (value: string) => void
 	onClose: () => void
 	className?: string
 }
@@ -15,6 +16,7 @@ interface SearchModeHeaderProps {
 function SearchModeHeader({
 	searchValue,
 	onSearchChange,
+	onSearchCommit,
 	onClose,
 	className,
 }: SearchModeHeaderProps) {
@@ -33,8 +35,13 @@ function SearchModeHeader({
 
 	const handleCompositionEnd = (e: React.CompositionEvent<HTMLInputElement>) => {
 		isComposingRef.current = false
-		// 组合结束时，传递最终的值
-		onSearchChange(e.currentTarget.value)
+		const value = e.currentTarget.value
+		setLocalValue(value)
+		if (onSearchCommit) {
+			onSearchCommit(value)
+			return
+		}
+		onSearchChange(value)
 	}
 
 	const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {

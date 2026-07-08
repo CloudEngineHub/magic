@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useMessageChanges } from "../../hooks/useMessageChanges"
 import Detail, { type DetailRef } from "../../components/Detail"
 import { SendMessageOptions } from "../../components/MessagePanel/types"
+import { shouldCheckAttachmentsOnTaskStatus } from "../../services/topicStatusSyncService"
 import useStyles from "../Workspace/style"
 import { JSONContent } from "@tiptap/core"
 import GlobalMentionPanelStore from "@/components/business/MentionPanel/builtin-store"
@@ -12,13 +13,20 @@ import projectFilesStore from "@/stores/projectFiles"
 import { filterClickableMessageWithoutRevoked } from "../../utils/handleMessage"
 import { useDetailModeCache } from "../../hooks/useDetailModeCache"
 import { useAttachmentsPolling } from "../../hooks/useAttachmentsPolling"
+import { useProjectAttachmentsChangeRealtime } from "../../hooks/useProjectAttachmentsChangeRealtime"
 import { useAutoOpenFile } from "../../hooks/useAutoOpenFile"
 import { useDeferUntilFileTabsCacheLoaded } from "../../hooks/useDeferUntilFileTabsCacheLoaded"
 import { useRefreshTopicDetailOnTaskComplete } from "../../hooks/useRefreshTopicDetailOnTaskComplete"
 import { AttachmentDataProcessor } from "../../utils/attachmentDataProcessor"
 import {
+	measureAttachmentFetch,
+	recordAttachmentsStaleResponseDropped,
+} from "../../utils/attachmentPerf"
+import {
+	normalizeUpdateAttachmentsPayload,
 	releaseAttachmentsRefreshWaitersWithoutFetch,
 	resolveAttachmentsRefreshWaitersForProject,
+	type SuperMagicUpdateAttachmentsRequest,
 	withAttachmentsRefreshWaitersResolved,
 } from "@/pages/superMagic/services/attachmentsTopicSync"
 import { isCollaborationWorkspace } from "../../constants"
@@ -27,7 +35,7 @@ import { superMagicStore } from "@/pages/superMagic/stores"
 import { observer } from "mobx-react-lite"
 import { LongMemoryApi, SuperMagicApi } from "@/apis"
 import { workspaceStore, projectStore, topicStore } from "../../stores/core"
-import SuperMagicService from "../../services"
+import SuperMagicService, { loadProjectAttachments } from "../../services"
 import { userStore } from "@/models/user"
 import { LongMemory } from "@/types/longMemory"
 import { useInterruptAndUndoMessage } from "../../hooks/useInterruptAndUndoMessage"
@@ -36,8 +44,9 @@ import { useTopicMessages } from "../../hooks/useTopicMessages"
 import { useCreateTopicListener } from "../../components/TopicMode/useCreateTopicListener"
 import { useTopicFiles } from "./hooks/useTopicFiles"
 import TopicSidebar from "./components/TopicSidebar"
-import { isAudioProjectMode } from "../AudioRecordings/utils/is-audio-project-mode"
+import { isAudioProjectMode } from "@/services/audioRecordings"
 import TopicMessagePanel from "./components/TopicMessagePanel"
+import { ChatConversationActionsSlot } from "@/pages/superMagic/pages/ChatProjectPage/components/ChatConversationActionsSlot"
 import TopicDesktopPanels from "./components/TopicDesktopPanels"
 import { useTopicDetailPanelController } from "./hooks/useTopicDetailPanelController"
 import {
@@ -45,6 +54,7 @@ import {
 	useTopicHistoryLayoutState,
 } from "./hooks/useTopicHistoryLayoutState"
 import { useMessageHeaderTopicActions } from "./hooks/useMessageHeaderTopicActions"
+import { useAICardDeepLinkOpen } from "./hooks/useAICardDeepLinkOpen"
 import type { AttachmentItem } from "../../components/TopicFilesButton/hooks"
 import { TaskStatus } from "../Workspace/types"
 import { resolveMessageSendContext } from "../../services/messageSendPreparation"
@@ -52,13 +62,10 @@ import { messageSendService } from "../../services/messageSendFlowService"
 import { isReadOnlyProject } from "../../utils/permission"
 import { MessageHeaderTopicHistoryPanel } from "../../components/MessageHeader"
 import topicReadProgressService from "../../services/topicReadProgressService"
-import {
-	applyOptimisticTopicRunningState,
-	handleArrivedTopicStatusChange as syncArrivedTopicStatusChange,
-	syncTopicStatusPatch,
-} from "../../services/topicStatusSyncService"
 import dayjs from "@/lib/dayjs"
 import type { MessageItem } from "../../stores/types"
+import { isAbortError, useLatestAbortableRequest } from "../../hooks/useLatestAbortableRequest"
+import { useProjectFirstAttachmentRender } from "../../hooks/useProjectFirstAttachmentRender"
 
 /** 任务消息状态变化后延迟拉工作区/项目详情，减轻后端尚未落库时单次请求仍返回 running 的问题 */
 const WORKSPACE_PROJECT_STATUS_REFRESH_DELAY_MS = 1000
@@ -119,8 +126,27 @@ function resolveReadProgressPayloadFromMessage(message?: {
 	}
 }
 
+async function syncTopicStatusPatch(topicId: string) {
+	if (!topicId) return
+	const statusResponse = await SuperMagicApi.getTopicsStatus({ topic_ids: [topicId] })
+	const topicItems = statusResponse.topics || statusResponse.list || []
+	const statusItem = topicItems.find((item) => item.id === topicId)
+	if (!statusItem) return
+
+	topicStore.mergeTopic(topicId, {
+		task_status: statusItem.status as TaskStatus,
+		status: statusItem.status as TaskStatus,
+		has_unread: statusItem.has_unread,
+	})
+}
+
+interface TopicPageDesktopProps {
+	pageVariant?: "default" | "singleTopicChat"
+}
+
 // 工作区组件
-function TopicPage() {
+function TopicPage({ pageVariant = "default" }: TopicPageDesktopProps) {
+	const isSingleTopicChat = pageVariant === "singleTopicChat"
 	// Get workspace and project state from stores
 	const selectedWorkspace = workspaceStore.selectedWorkspace
 	const selectedProject = projectStore.selectedProject
@@ -141,15 +167,22 @@ function TopicPage() {
 		null,
 	)
 	const previousTopicIdRef = useRef<string | null>(null)
+	const { shouldRenderProjectFirstRequest, resetProjectFirstRequestRender } =
+		useProjectFirstAttachmentRender()
+	const { startRequest: startAttachmentsRequest, cancelCurrent: cancelAttachmentsRequest } =
+		useLatestAbortableRequest()
 
 	/** ======================== States ======================== */
 	const [autoDetail, setAutoDetail] = useState<any>()
 	const [userSelectDetail, setUserSelectDetail] = useState<any>()
 	const [isShowLoadingInit, setIsShowLoadingInit] = useState(false)
 	const [isDetailPanelFullscreen, setIsDetailPanelFullscreen] = useState(false)
+	const clearUserSelectDetail = useMemoizedFn(() => {
+		setUserSelectDetail(null)
+	})
 	// Calculate read-only status based on user role
 	const isReadOnly = isReadOnlyProject(selectedProject?.user_role)
-	const hideProjectCard = isAudioProjectMode(selectedProject?.project_mode)
+	const hideProjectCard = isSingleTopicChat || isAudioProjectMode(selectedProject?.project_mode)
 	const topicActions = useMessageHeaderTopicActions({
 		selectedProject,
 		selectedTopic,
@@ -190,10 +223,18 @@ function TopicPage() {
 		selectedProject?.id,
 	)
 
+	useAICardDeepLinkOpen({
+		topicId: selectedTopic?.id,
+		attachments,
+		scheduleWhenTabsCacheReady,
+		handleFileClickWithPanel,
+		clearUserSelectDetail,
+	})
+
 	const { isTopicHistoryPanelOpen, closeTopicHistoryPanel, toggleTopicHistoryPanel } =
 		useTopicHistoryLayoutState({
 			storageKey: TOPIC_HISTORY_PANEL_OPEN_STORAGE_KEYS.topicPage,
-			isEnabled: !isReadOnly,
+			isEnabled: !isReadOnly && !isSingleTopicChat,
 		})
 
 	const activeFileIdRef = useRef<string | null>(activeFileId)
@@ -301,6 +342,29 @@ function TopicPage() {
 	selectedProjectRef.current = selectedProject
 	selectedWorkspaceRef.current = selectedWorkspace
 
+	const { checkNowDebounced } = useAttachmentsPolling({
+		projectId: selectedProject?.id,
+		autoStart: false,
+		onAttachmentsChange: useCallback(({ tree, list }: { tree: any[]; list: any[] }) => {
+			// 统一处理 metadata，内部自闭环处理验证和返回逻辑
+			const processedData = AttachmentDataProcessor.processAttachmentData(
+				{ tree, list },
+				{ preserveList: true },
+			)
+			projectFilesStore.setWorkspaceFileTree(processedData.tree, {
+				list: processedData.list,
+				source: "TopicPage.taskStatusCheck",
+			})
+		}, []),
+		onError: useMemoizedFn((error: any) => {
+			if (isCollaborationWorkspace(selectedWorkspace)) {
+				// 团队共享项目，如果权限不足，回到首页
+				handleNoPermissionCollaborationProject(error)
+				return
+			}
+		}),
+	})
+
 	/**
 	 * 处理到达消息引发的话题状态变化：
 	 * 1) 仅在状态真正变化时更新本地话题状态；
@@ -320,36 +384,55 @@ function TopicPage() {
 			lastReadAt?: string
 			lastReadMessageId?: string
 		}) => {
-			syncArrivedTopicStatusChange({
-				scopeName: "TopicPage",
-				topicStore,
-				topicReadProgressService,
-				currentTopicStatusRef,
-				nextStatus,
-				topicId,
-				lastReadAt,
-				lastReadMessageId,
-				onTopicStatusChanged: (resolvedStatus, resolvedTopicId) => {
-					void SuperMagicService.topic.updateTopicStatus(resolvedTopicId, resolvedStatus)
+			if (!nextStatus || !topicId) return
 
-					const latestWorkspaceId = selectedWorkspaceRef.current?.id
-					const latestProjectId = selectedProjectRef.current?.id
-					if (delayedWorkspaceProjectStatusTimeoutRef.current) {
-						clearTimeout(delayedWorkspaceProjectStatusTimeoutRef.current)
-					}
-					delayedWorkspaceProjectStatusTimeoutRef.current = setTimeout(() => {
-						delayedWorkspaceProjectStatusTimeoutRef.current = null
-						if (latestWorkspaceId) {
-							void SuperMagicService.workspace.updateWorkspaceStatus(
-								latestWorkspaceId,
-							)
-						}
-						if (latestProjectId) {
-							void SuperMagicService.project.updateProjectStatus(latestProjectId)
-						}
-					}, WORKSPACE_PROJECT_STATUS_REFRESH_DELAY_MS)
-				},
+			const latestTopicStatus = currentTopicStatusRef.current
+			const hasStatusChanged = nextStatus !== latestTopicStatus
+			if (!hasStatusChanged) return
+
+			currentTopicStatusRef.current = nextStatus
+			void SuperMagicService.topic.updateTopicStatus(topicId, nextStatus)
+			const shouldMarkImmediateRead =
+				document.visibilityState === "visible" &&
+				(nextStatus === TaskStatus.FINISHED || nextStatus === TaskStatus.ERROR)
+			const syncPromise = syncTopicStatusPatch(topicId).catch((error) => {
+				console.warn("[TopicPage] 同步话题 unread 状态失败:", error)
 			})
+
+			currentTopicStatusRef.current = nextStatus
+			void SuperMagicService.topic.updateTopicStatus(topicId, nextStatus)
+			if (shouldCheckAttachmentsOnTaskStatus(nextStatus)) {
+				checkNowDebounced()
+			}
+
+			const latestWorkspaceId = selectedWorkspaceRef.current?.id
+			const latestProjectId = selectedProjectRef.current?.id
+			if (delayedWorkspaceProjectStatusTimeoutRef.current) {
+				clearTimeout(delayedWorkspaceProjectStatusTimeoutRef.current)
+			}
+			delayedWorkspaceProjectStatusTimeoutRef.current = setTimeout(() => {
+				delayedWorkspaceProjectStatusTimeoutRef.current = null
+				if (latestWorkspaceId) {
+					void SuperMagicService.workspace.updateWorkspaceStatus(latestWorkspaceId)
+				}
+				if (latestProjectId) {
+					void SuperMagicService.project.updateProjectStatus(latestProjectId)
+				}
+			}, WORKSPACE_PROJECT_STATUS_REFRESH_DELAY_MS)
+
+			if (shouldMarkImmediateRead) {
+				void syncPromise.finally(() => {
+					window.setTimeout(() => {
+						topicReadProgressService.markTopicReadProgress({
+							topicId,
+							lastReadAt,
+							lastReadMessageId,
+							reason: "message-change",
+							immediate: true,
+						})
+					}, 1000)
+				})
+			}
 		},
 	)
 
@@ -393,15 +476,10 @@ function TopicPage() {
 			const readProgressPayload = resolveReadProgressPayloadFromMessages(topicMessages)
 			const targetTopicId = currentTopic?.id || selectedTopic?.id
 
-			let lastDetailMessage = undefined
-			for (let index = topicMessages.length - 1; index >= 0; index -= 1) {
-				const message = topicMessages[index]
+			const lastDetailMessage = topicMessages.findLast((message) => {
 				const node = superMagicStore.getMessageNode(message?.app_message_id)
-				if (!filterClickableMessageWithoutRevoked(node)) continue
-
-				lastDetailMessage = message
-				break
-			}
+				return filterClickableMessageWithoutRevoked(node)
+			})
 
 			const lastDetailMessageNode = superMagicStore.getMessageNode(
 				lastDetailMessage?.app_message_id,
@@ -475,27 +553,20 @@ function TopicPage() {
 		clearActiveDetailTabType()
 	}, [selectedTopic?.id, selectedTopic?.chat_topic_id])
 
-	// 集成轮询hook（需在 useTopicMessages 之前，以注入 checkNowDebounced）
-	const { checkNowDebounced } = useAttachmentsPolling({
+	useProjectAttachmentsChangeRealtime({
 		projectId: selectedProject?.id,
-		onAttachmentsChange: useCallback(({ tree, list }: { tree: any[]; list: never[] }) => {
-			// 统一处理 metadata，内部自闭环处理验证和返回逻辑
-			const processedData = AttachmentDataProcessor.processAttachmentData({ tree, list })
-			projectFilesStore.setWorkspaceFileTree(processedData.tree)
-		}, []),
-		onError: useMemoizedFn((error: any, _projectId: string) => {
+		onFallbackError: useMemoizedFn((error: unknown) => {
 			if (isCollaborationWorkspace(selectedWorkspace)) {
-				// 团队共享项目，如果权限不足，回到首页
 				handleNoPermissionCollaborationProject(error)
 				return
 			}
+			console.error("Failed to refresh realtime attachments:", error)
 		}),
 	})
 
 	const { handlePullMoreMessage, isMessagesInitialLoading, isSelectedTopicMessagesReady } =
 		useTopicMessages({
 			selectedTopic,
-			checkNowDebounced,
 		})
 
 	useUpdateEffect(() => {
@@ -503,10 +574,7 @@ function TopicPage() {
 
 		if (selectedTopic?.id) {
 			const readProgressPayload = resolveReadProgressPayloadFromMessages(messages)
-			void syncTopicStatusPatch({
-				topicStore,
-				topicId: selectedTopic.id,
-			})
+			void syncTopicStatusPatch(selectedTopic.id)
 				.catch((error) => {
 					console.warn("[TopicPage] 进入话题触发前同步话题 unread 状态失败:", error)
 				})
@@ -534,31 +602,87 @@ function TopicPage() {
 		(selectedProject: any, callback?: () => void) => {
 			const projectId = selectedProject?.id as string | undefined
 			if (!projectId) {
+				cancelAttachmentsRequest()
+				resetProjectFirstRequestRender()
 				projectFilesStore.setWorkspaceFileTree([])
 				releaseAttachmentsRefreshWaitersWithoutFetch()
 				return
 			}
+			const request = startAttachmentsRequest()
+			const shouldRenderIncrementally = shouldRenderProjectFirstRequest(projectId)
+			let didCommitFinalSnapshot = false
+
 			try {
 				pubsub.publish(PubSubEvents.Update_Attachments_Loading, true)
 				withAttachmentsRefreshWaitersResolved(
 					projectId,
-					SuperMagicApi.getAttachmentsByProjectId({
-						projectId,
-						// @ts-ignore 使用window添加临时的token
-						temporaryToken: window.temporary_token || "",
-					})
-						.then((res) => {
-							// 统一处理 metadata，包括 index.html 文件的特殊逻辑，内部自闭环处理验证和返回逻辑
-							const processedData = AttachmentDataProcessor.processAttachmentData(res)
-							projectFilesStore.setWorkspaceFileTree(processedData.tree)
+					measureAttachmentFetch("TopicPage.updateAttachments", () =>
+						loadProjectAttachments({
+							projectId,
+							signal: request.signal,
+							onBatchSnapshot: shouldRenderIncrementally
+								? ({ tree, list, phase, isFinal }) => {
+										if (!request.isCurrent()) {
+											recordAttachmentsStaleResponseDropped(
+												"TopicPage.updateAttachments",
+												{ stage: "batch_snapshot", phase },
+											)
+											return
+										}
+										const processedData =
+											AttachmentDataProcessor.processAttachmentData(
+												{ tree, list },
+												{ preserveList: true },
+											)
+										projectFilesStore.setWorkspaceFileTree(processedData.tree, {
+											list: processedData.list,
+											source: `TopicPage.batch.${phase}`,
+										})
+										if (isFinal) {
+											didCommitFinalSnapshot = true
+										}
+									}
+								: undefined,
+						}),
+					)
+						.then((res: Awaited<ReturnType<typeof loadProjectAttachments>>) => {
+							if (!request.isCurrent()) {
+								recordAttachmentsStaleResponseDropped(
+									"TopicPage.updateAttachments",
+									{ stage: "load_result" },
+								)
+								return
+							}
+							if (!didCommitFinalSnapshot) {
+								projectFilesStore.setWorkspaceFileTree(res.tree, {
+									list: res.list,
+									source: "TopicPage.load_result",
+								})
+							}
 							GlobalMentionPanelStore.finishLoadAttachmentsPromise(projectId)
 						})
+						.catch((error: unknown) => {
+							if (isAbortError(error)) return
+							if (!request.isCurrent()) {
+								recordAttachmentsStaleResponseDropped(
+									"TopicPage.updateAttachments",
+									{ stage: "load_error" },
+								)
+								return
+							}
+							console.error("Failed to fetch attachments:", error)
+							projectFilesStore.setWorkspaceFileTree([])
+						})
 						.finally(() => {
-							pubsub.publish(PubSubEvents.Update_Attachments_Loading, false)
+							request.release()
+							if (request.isCurrent()) {
+								pubsub.publish(PubSubEvents.Update_Attachments_Loading, false)
+							}
 							callback?.()
 						}),
 				)
 			} catch (error) {
+				if (isAbortError(error)) return
 				console.error("Failed to fetch attachments:", error)
 				projectFilesStore.setWorkspaceFileTree([])
 				resolveAttachmentsRefreshWaitersForProject(projectId)
@@ -579,6 +703,7 @@ function TopicPage() {
 		}
 
 		return () => {
+			cancelAttachmentsRequest()
 			if (projectId) {
 				GlobalMentionPanelStore.clearInitLoadAttachmentsPromise(projectId)
 			}
@@ -590,22 +715,22 @@ function TopicPage() {
 	}, [userSelectDetail, autoDetail])
 
 	useEffect(() => {
-		pubsub.subscribe(PubSubEvents.Update_Attachments, (callback) => {
-			if (
-				selectedProject &&
-				selectedTopic
-				// 消息只跟topic关联
-				// &&
-				// data?.chat_topic_id === selectedTopic.chat_topic_id
-			) {
-				updateAttachments(selectedProject, callback)
+		const handleUpdateAttachments = (
+			payloadOrCallback?: SuperMagicUpdateAttachmentsRequest,
+		) => {
+			const payload = normalizeUpdateAttachmentsPayload(payloadOrCallback)
+
+			if (selectedProject && selectedTopic) {
+				updateAttachments(selectedProject, payload?.callback)
 				return
 			}
-			callback?.()
+			payload?.callback?.()
 			releaseAttachmentsRefreshWaitersWithoutFetch()
-		})
+		}
+
+		pubsub.subscribe(PubSubEvents.Update_Attachments, handleUpdateAttachments)
 		return () => {
-			pubsub?.unsubscribe(PubSubEvents.Update_Attachments)
+			pubsub?.unsubscribe(PubSubEvents.Update_Attachments, handleUpdateAttachments)
 		}
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [selectedTopic, selectedProject])
@@ -619,8 +744,8 @@ function TopicPage() {
 		}
 	}, [])
 
-	// Listen for Create_New_Topic event and handle topic creation
-	useCreateTopicListener()
+	// Chat detail creates a new conversation on expert switch instead of sibling topics.
+	useCreateTopicListener({ enabled: !isSingleTopicChat })
 
 	// 封装消息发送处理函数
 	const handleSendMsg = useMemoizedFn(
@@ -639,27 +764,6 @@ function TopicPage() {
 
 			// 延迟200ms通知MessageList组件滚动到底部
 			pubsub.publish(PubSubEvents.Message_Scroll_To_Bottom, { time: 1000 })
-		},
-	)
-
-	const handleEditorSendComplete = useMemoizedFn(
-		({
-			success,
-			currentProject,
-			currentTopic,
-		}: {
-			success: boolean
-			currentProject: typeof selectedProject
-			currentTopic: typeof selectedTopic
-		}) => {
-			if (!success) return
-
-			applyOptimisticTopicRunningState({
-				topicStore,
-				topic: currentTopic ?? topicStore.selectedTopic,
-				project: currentProject ?? selectedProjectRef.current,
-				workspace: selectedWorkspaceRef.current,
-			})
 		},
 	)
 
@@ -691,10 +795,9 @@ function TopicPage() {
 				messages={messages as any}
 				showLoading={showLoading}
 				isShowLoadingInit={isShowLoadingInit}
-				currentTopicStatus={currentTopicStatus!}
+				currentTopicStatus={currentTopicStatus}
 				attachments={attachments}
 				handleSendMsg={handleSendMsg}
-				onSendComplete={handleEditorSendComplete}
 				handlePullMoreMessage={handlePullMoreMessage}
 				isMessagesLoading={isMessagesInitialLoading}
 				handleFileClick={handleFileClickWithPanel}
@@ -709,6 +812,7 @@ function TopicPage() {
 				historyTriggerMode={historyTriggerMode}
 				isHistoryPanelOpen={isHistoryPanelOpen}
 				onToggleHistoryPanel={onToggleHistoryPanel}
+				trailingActions={isSingleTopicChat ? <ChatConversationActionsSlot /> : undefined}
 			/>
 		),
 	)
@@ -726,6 +830,7 @@ function TopicPage() {
 					isReadOnly={isReadOnly}
 					topicFilesProps={topicFilesPropsWithPanel}
 					hideProjectCard={hideProjectCard}
+					siderVariant={isSingleTopicChat ? "chat" : "default"}
 				/>
 			}
 			detailPanel={
@@ -753,27 +858,31 @@ function TopicPage() {
 			}
 			isReadOnly={isReadOnly}
 			keepDetailMountedWhenHidden
-			historyLayout={{
-				isOpen: isTopicHistoryPanelOpen,
-				onClose: closeTopicHistoryPanel,
-				onToggle: toggleTopicHistoryPanel,
-				renderPanel: ({
-					isConversationPanelCollapsed,
-					onExpandConversationPanel,
-					onClose,
-					closeButtonRef,
-				}) => (
-					<MessageHeaderTopicHistoryPanel
-						selectedProject={selectedProject}
-						topicStore={topicStore}
-						topicActions={topicActions}
-						isConversationPanelCollapsed={isConversationPanelCollapsed}
-						onExpandConversationPanel={onExpandConversationPanel}
-						onClose={onClose}
-						closeButtonRef={closeButtonRef}
-					/>
-				),
-			}}
+			historyLayout={
+				isSingleTopicChat
+					? undefined
+					: {
+							isOpen: isTopicHistoryPanelOpen,
+							onClose: closeTopicHistoryPanel,
+							onToggle: toggleTopicHistoryPanel,
+							renderPanel: ({
+								isConversationPanelCollapsed,
+								onExpandConversationPanel,
+								onClose,
+								closeButtonRef,
+							}) => (
+								<MessageHeaderTopicHistoryPanel
+									selectedProject={selectedProject}
+									topicStore={topicStore}
+									topicActions={topicActions}
+									isConversationPanelCollapsed={isConversationPanelCollapsed}
+									onExpandConversationPanel={onExpandConversationPanel}
+									onClose={onClose}
+									closeButtonRef={closeButtonRef}
+								/>
+							),
+						}
+			}
 			shouldShowDetailPanel={shouldShowDetailPanel}
 			renderMessagePanel={renderMessagePanel}
 		/>

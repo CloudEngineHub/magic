@@ -13,14 +13,21 @@ import {
 	type FSWriteRequest,
 	type FSWriteBlobRequest,
 	type FSListRequest,
+	type FSListDirRequest,
+	type FSGetFileUrlRequest,
 	type FSDeleteFileRequest,
 	type FSDeleteDirRequest,
 	type FSMoveFileRequest,
 	type FSRenameFileRequest,
 	type FSWatchRegister,
 	type FSWatchUnregister,
+	type FSWatchDirRegister,
+	type FSWatchDirUnregister,
+	type FSDirEntry,
 	type HTMLAppConfig,
+	type HtmlPermissionScope,
 } from "../types"
+import { IframeFSWatchService } from "./IframeFSWatchService"
 
 /** workspace 文件项（来自 attachmentList 扁平化后） */
 export interface FSFileItem {
@@ -147,6 +154,8 @@ export interface IframeFSConfig {
 	 * 删除 appRoot 外的 project-scope 文件/目录前，让宿主弹出二次确认。
 	 */
 	confirmProjectDeleteFn?: ConfirmProjectDeleteFn
+	/** 执行高风险能力前的授权检查。未提供时保持旧行为。 */
+	authorizePermission?: (scope: HtmlPermissionScope) => Promise<boolean>
 }
 
 /** 读取文件大小限制：5 MB */
@@ -162,12 +171,7 @@ export class IframeFSService {
 	readonly appRootDir: string
 	/** 文件别名映射（来自 appConfig.files） */
 	private readonly aliasMap: Record<string, string>
-	/** watch 注册表：resolvedPath → { watchers, originalPath } */
-	private watchRegistry = new Map<string, { watchers: Set<string>; originalPath: string }>()
-	/** 文件 updated_at 快照（用于轮询变更检测） */
-	private watchSnapshot = new Map<string, string | undefined>()
-	/** 轮询定时器 */
-	private pollTimerId: ReturnType<typeof setInterval> | null = null
+	private readonly watchService: IframeFSWatchService
 	/**
 	 * 本次会话中通过 mkdirFn 新建的目录缓存：resolvedPath → file_id
 	 * 避免重复创建同一目录（fileList 刷新前的中间态）
@@ -184,6 +188,14 @@ export class IframeFSService {
 
 		// 别名映射
 		this.aliasMap = cfg.appConfig?.files ?? {}
+
+		this.watchService = new IframeFSWatchService({
+			postToIframe: (message) => this.send(message),
+			getFileUpdatedAt: (resolvedPath) => this.findFile(resolvedPath)?.updated_at,
+			getDirEntryNames: (resolvedDir) => this.buildDirEntryNames(resolvedDir),
+			getDirEntries: (resolvedDir, originalDir) =>
+				this.buildDirEntries(resolvedDir, originalDir),
+		})
 	}
 
 	/**
@@ -204,6 +216,12 @@ export class IframeFSService {
 			case FS_MESSAGE_TYPES.LIST_REQUEST:
 				this.handleList(payload as FSListRequest)
 				return true
+			case FS_MESSAGE_TYPES.LIST_DIR_REQUEST:
+				this.handleListDir(payload as FSListDirRequest)
+				return true
+			case FS_MESSAGE_TYPES.GET_FILE_URL_REQUEST:
+				await this.handleGetFileUrl(payload as FSGetFileUrlRequest)
+				return true
 			case FS_MESSAGE_TYPES.DELETE_FILE_REQUEST:
 				await this.handleDeleteFile(payload as FSDeleteFileRequest)
 				return true
@@ -222,6 +240,12 @@ export class IframeFSService {
 			case FS_MESSAGE_TYPES.WATCH_UNREGISTER:
 				this.handleWatchUnregister(payload as FSWatchUnregister)
 				return true
+			case FS_MESSAGE_TYPES.WATCH_DIR_REGISTER:
+				this.handleWatchDirRegister(payload as FSWatchDirRegister)
+				return true
+			case FS_MESSAGE_TYPES.WATCH_DIR_UNREGISTER:
+				this.handleWatchDirUnregister(payload as FSWatchDirUnregister)
+				return true
 			case FS_MESSAGE_TYPES.GET_APP_BASE_PATH_REQUEST:
 				this.handleGetAppBasePath(payload as { requestId: string })
 				return true
@@ -231,9 +255,7 @@ export class IframeFSService {
 	}
 
 	destroy() {
-		this.stopPolling()
-		this.watchRegistry.clear()
-		this.watchSnapshot.clear()
+		this.watchService.destroy()
 		this.dirCache.clear()
 	}
 
@@ -258,6 +280,18 @@ export class IframeFSService {
 		}
 
 		try {
+			if (this.isProjectRootRequestPath(path)) {
+				const allowed = await this.ensurePermission("fs.project.read")
+				if (!allowed) {
+					return this.send({
+						type: FS_MESSAGE_TYPES.READ_RESPONSE,
+						requestId,
+						success: false,
+						error: "Permission denied: fs.project.read",
+					})
+				}
+			}
+
 			const item = this.findFile(resolved)
 			if (!item) {
 				return this.send({
@@ -317,6 +351,18 @@ export class IframeFSService {
 		}
 
 		try {
+			if (this.isProjectRootRequestPath(path)) {
+				const allowed = await this.ensurePermission("fs.project.write")
+				if (!allowed) {
+					return this.send({
+						type: FS_MESSAGE_TYPES.WRITE_RESPONSE,
+						requestId,
+						success: false,
+						error: "Permission denied: fs.project.write",
+					})
+				}
+			}
+
 			await this.confirmProjectOperationIfNeeded(resolved, false, "write")
 			const existingFile = this.findFile(resolved)
 
@@ -382,6 +428,18 @@ export class IframeFSService {
 		}
 
 		try {
+			if (this.isProjectRootRequestPath(path)) {
+				const allowed = await this.ensurePermission("fs.project.write")
+				if (!allowed) {
+					return this.send({
+						type: replyType,
+						requestId,
+						success: false,
+						error: "Permission denied: fs.project.write",
+					})
+				}
+			}
+
 			await this.confirmProjectOperationIfNeeded(resolved, false, "write")
 			const existingFile = this.findFile(resolved)
 
@@ -441,6 +499,80 @@ export class IframeFSService {
 		this.send({ type: FS_MESSAGE_TYPES.LIST_RESPONSE, requestId, success: true, files })
 	}
 
+	private handleListDir(req: FSListDirRequest) {
+		const { requestId, dir } = req
+		const requestDir = dir ?? "./"
+		const resolvedDir = this.resolveDir(requestDir)
+
+		if (resolvedDir === null) {
+			return this.send({
+				type: FS_MESSAGE_TYPES.LIST_DIR_RESPONSE,
+				requestId,
+				success: false,
+				error: `Access denied or invalid directory: ${dir}`,
+			})
+		}
+
+		this.send({
+			type: FS_MESSAGE_TYPES.LIST_DIR_RESPONSE,
+			requestId,
+			success: true,
+			entries: this.buildDirEntries(resolvedDir, requestDir),
+		})
+	}
+
+	private async handleGetFileUrl(req: FSGetFileUrlRequest) {
+		const { requestId, path } = req
+		const resolved = this.resolvePath(path)
+		const replyType = FS_MESSAGE_TYPES.GET_FILE_URL_RESPONSE
+
+		if (!resolved) {
+			return this.send({
+				type: replyType,
+				requestId,
+				success: false,
+				error: `Access denied or invalid path: ${path}`,
+			})
+		}
+
+		try {
+			if (this.isProjectRootRequestPath(path)) {
+				const allowed = await this.ensurePermission("fs.project.read")
+				if (!allowed) {
+					return this.send({
+						type: replyType,
+						requestId,
+						success: false,
+						error: "Permission denied: fs.project.read",
+					})
+				}
+			}
+
+			const item = this.findFile(resolved)
+			if (!item) {
+				return this.send({
+					type: replyType,
+					requestId,
+					success: false,
+					error: `File not found: ${path}`,
+				})
+			}
+
+			const urls = await getIframeDownloadUrl([item.file_id])
+			const url = urls?.[0]?.url
+			if (!url) throw new Error("Failed to get file URL")
+
+			this.send({ type: replyType, requestId, success: true, url })
+		} catch (err) {
+			this.send({
+				type: replyType,
+				requestId,
+				success: false,
+				error: err instanceof Error ? err.message : "Unknown error",
+			})
+		}
+	}
+
 	private async handleDeleteFile(req: FSDeleteFileRequest) {
 		const { requestId, path } = req
 		const resolved = this.resolvePath(path)
@@ -464,6 +596,18 @@ export class IframeFSService {
 		}
 
 		try {
+			if (this.isProjectRootRequestPath(path)) {
+				const allowed = await this.ensurePermission("fs.project.write")
+				if (!allowed) {
+					return this.send({
+						type: FS_MESSAGE_TYPES.DELETE_FILE_RESPONSE,
+						requestId,
+						success: false,
+						error: "Permission denied: fs.project.write",
+					})
+				}
+			}
+
 			const item = this.findFile(resolved)
 			if (!item) {
 				return this.send({
@@ -532,6 +676,18 @@ export class IframeFSService {
 		}
 
 		try {
+			if (this.isProjectRootRequestPath(path)) {
+				const allowed = await this.ensurePermission("fs.project.write")
+				if (!allowed) {
+					return this.send({
+						type: FS_MESSAGE_TYPES.DELETE_DIR_RESPONSE,
+						requestId,
+						success: false,
+						error: "Permission denied: fs.project.write",
+					})
+				}
+			}
+
 			// 收集目录本身 + 目录下所有文件的 file_id
 			const dirPath = this.normalizeWorkspacePath(
 				resolvedDir.endsWith("/") ? resolvedDir.slice(0, -1) : resolvedDir,
@@ -617,6 +773,18 @@ export class IframeFSService {
 		}
 
 		try {
+			if (this.isProjectRootRequestPath(path) || this.isProjectRootRequestPath(targetDir)) {
+				const allowed = await this.ensurePermission("fs.project.write")
+				if (!allowed) {
+					return this.send({
+						type: FS_MESSAGE_TYPES.MOVE_FILE_RESPONSE,
+						requestId,
+						success: false,
+						error: "Permission denied: fs.project.write",
+					})
+				}
+			}
+
 			const item = this.findFile(resolved)
 			if (!item) {
 				return this.send({
@@ -717,6 +885,18 @@ export class IframeFSService {
 		}
 
 		try {
+			if (this.isProjectRootRequestPath(path)) {
+				const allowed = await this.ensurePermission("fs.project.write")
+				if (!allowed) {
+					return this.send({
+						type: FS_MESSAGE_TYPES.RENAME_FILE_RESPONSE,
+						requestId,
+						success: false,
+						error: "Permission denied: fs.project.write",
+					})
+				}
+			}
+
 			const item = this.findFile(resolved)
 			if (!item) {
 				return this.send({
@@ -764,18 +944,7 @@ export class IframeFSService {
 		const resolved = this.resolvePath(path)
 		if (!resolved) return
 
-		// 最多同时监听 10 个文件
-		if (this.watchRegistry.size >= 10 && !this.watchRegistry.has(resolved)) return
-
-		if (!this.watchRegistry.has(resolved)) {
-			this.watchRegistry.set(resolved, { watchers: new Set(), originalPath: path })
-			this.watchSnapshot.set(resolved, this.findFile(resolved)?.updated_at)
-		}
-		const entry = this.watchRegistry.get(resolved)
-		if (!entry) return
-		entry.watchers.add(requestId)
-
-		if (this.pollTimerId === null) this.startPolling()
+		this.watchService.registerFile(requestId, path, resolved)
 	}
 
 	private handleWatchUnregister(req: FSWatchUnregister) {
@@ -783,42 +952,23 @@ export class IframeFSService {
 		const resolved = this.resolvePath(path)
 		if (!resolved) return
 
-		const entry = this.watchRegistry.get(resolved)
-		if (entry) {
-			entry.watchers.delete(requestId)
-			if (entry.watchers.size === 0) {
-				this.watchRegistry.delete(resolved)
-				this.watchSnapshot.delete(resolved)
-			}
-		}
-
-		if (this.watchRegistry.size === 0) this.stopPolling()
+		this.watchService.unregisterFile(requestId, resolved)
 	}
 
-	private startPolling() {
-		this.pollTimerId = setInterval(() => {
-			this.watchRegistry.forEach(({ originalPath }, resolved) => {
-				const item = this.findFile(resolved)
-				const prev = this.watchSnapshot.get(resolved)
-				const curr = item?.updated_at
-				if (curr && curr !== prev) {
-					this.watchSnapshot.set(resolved, curr)
-					// 发回 iframe 注册时使用的原始路径，确保 iframe 侧过滤条件匹配
-					this.send({
-						type: FS_MESSAGE_TYPES.FILE_CHANGED,
-						path: originalPath,
-						timestamp: Date.now(),
-					})
-				}
-			})
-		}, 3000)
+	private handleWatchDirRegister(req: FSWatchDirRegister) {
+		const { requestId, dir } = req
+		const resolved = this.resolveDir(dir)
+		if (resolved === null) return
+
+		this.watchService.registerDir(requestId, dir, resolved)
 	}
 
-	private stopPolling() {
-		if (this.pollTimerId !== null) {
-			clearInterval(this.pollTimerId)
-			this.pollTimerId = null
-		}
+	private handleWatchDirUnregister(req: FSWatchDirUnregister) {
+		const { requestId, dir } = req
+		const resolved = this.resolveDir(dir)
+		if (resolved === null) return
+
+		this.watchService.unregisterDir(requestId, resolved)
 	}
 
 	// ─── 路径工具 ────────────────────────────────────────────────────────────────
@@ -874,6 +1024,53 @@ export class IframeFSService {
 		)
 	}
 
+	private listDirectDirItems(resolvedDir: string) {
+		return this.cfg.fileList
+			.map((item) => ({ item, path: this.normalizeWorkspacePath(item.relative_file_path) }))
+			.filter(({ path }) => {
+				if (resolvedDir === "") {
+					return path.length > 0 && !path.includes("/")
+				}
+				if (!path.startsWith(resolvedDir)) return false
+				const rest = path.slice(resolvedDir.length)
+				return rest.length > 0 && !rest.includes("/")
+			})
+	}
+
+	private buildDirEntryNames(resolvedDir: string): string[] {
+		return this.listDirectDirItems(resolvedDir).map(
+			({ item, path }) => item.file_name || path.split("/").pop() || path,
+		)
+	}
+
+	private buildDirEntries(resolvedDir: string, originalDir: string): FSDirEntry[] {
+		return this.listDirectDirItems(resolvedDir)
+			.map(({ item, path }) => {
+				const name = item.file_name || path.split("/").pop() || path
+				const entry: FSDirEntry = {
+					name,
+					path: this.toIframeVisiblePath(path, originalDir),
+					isDirectory: item.is_directory ?? false,
+				}
+				if (item.updated_at) entry.updatedAt = item.updated_at
+				return entry
+			})
+	}
+
+	private toIframeVisiblePath(resolvedPath: string, originalDir: string): string {
+		if (this.isProjectRootRequestPath(originalDir)) {
+			return `/${resolvedPath}`
+		}
+
+		const appRoot = this.normalizeWorkspacePath(this.appRootDir)
+		if (!appRoot) return resolvedPath
+		if (resolvedPath === appRoot) return ""
+		if (resolvedPath.startsWith(`${appRoot}/`)) {
+			return resolvedPath.slice(appRoot.length + 1)
+		}
+		return resolvedPath
+	}
+
 	private normalizeWorkspacePath(path: string): string {
 		return path.replace(/^\/+/, "").replace(/\/+$/, "")
 	}
@@ -894,6 +1091,10 @@ export class IframeFSService {
 
 	private hasProjectFileScope(): boolean {
 		return true
+	}
+
+	private isProjectRootRequestPath(path: string): boolean {
+		return typeof path === "string" && path.startsWith("/")
 	}
 
 	private isPathInAppRoot(path: string): boolean {
@@ -990,9 +1191,13 @@ export class IframeFSService {
 	private isSingleFileName(name: string): boolean {
 		return (
 			name.trim().length > 0 &&
-			!/[\/\\]/.test(name) &&
+			!name.includes("/") &&
+			!name.includes("\\") &&
 			!name.includes("..") &&
-			!/[\x00-\x1F\x7F]/.test(name)
+			!Array.from(name).some((char) => {
+				const code = char.charCodeAt(0)
+				return code <= 31 || code === 127
+			})
 		)
 	}
 
@@ -1075,5 +1280,10 @@ export class IframeFSService {
 
 	private send(message: object) {
 		this.cfg.postToIframe(message)
+	}
+
+	private async ensurePermission(scope: HtmlPermissionScope): Promise<boolean> {
+		if (!this.cfg.authorizePermission) return true
+		return this.cfg.authorizePermission(scope)
 	}
 }

@@ -561,6 +561,7 @@ export function useTimeTooltip({
 				}}
 				onMouseEnter={handleInnerMouseEnter}
 				onMouseLeave={handleInnerMouseLeave}
+				data-testid="handle-inner-mouse-enter"
 			>
 				<div className={tooltipItem}>
 					<IconClockHour4 size={14} stroke={1.5} />

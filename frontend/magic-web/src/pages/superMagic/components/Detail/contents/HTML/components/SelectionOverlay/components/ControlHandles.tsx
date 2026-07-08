@@ -55,6 +55,7 @@ export function ControlHandles({
 					cursor: isMoving ? "grabbing" : "grab",
 				}}
 				onPointerDown={onMoveHandleMouseDown}
+				data-testid="on-move-handle-mouse-down"
 			>
 				<Move size={12} className="text-primary-foreground" />
 			</div>
@@ -72,6 +73,7 @@ export function ControlHandles({
 						cursor: "pointer",
 					}}
 					onPointerDown={onDuplicate}
+					data-testid="on-duplicate"
 				>
 					<Copy size={12} className="text-white" />
 				</div>
@@ -90,6 +92,7 @@ export function ControlHandles({
 						cursor: "pointer",
 					}}
 					onPointerDown={onDelete}
+					data-testid="on-delete"
 				>
 					<Trash2 size={12} className="text-destructive-foreground" />
 				</div>
@@ -107,6 +110,7 @@ export function ControlHandles({
 						cursor: handle.cursor,
 					}}
 					onPointerDown={(event) => onResizeHandleMouseDown(event, handle)}
+					data-testid="on-resize-handle-mouse-down"
 				/>
 			))}
 
@@ -135,6 +139,7 @@ export function ControlHandles({
 					onPointerDown={(event) =>
 						onRotateHandleMouseDown(event, transformedRect, containerElement)
 					}
+					data-testid="on-rotate-handle-mouse-down"
 				>
 					<RotateCw size={12} className="text-primary-foreground" />
 				</div>

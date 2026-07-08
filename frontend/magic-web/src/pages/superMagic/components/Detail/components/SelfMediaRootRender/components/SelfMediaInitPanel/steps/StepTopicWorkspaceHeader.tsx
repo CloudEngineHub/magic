@@ -196,6 +196,7 @@ export default function StepTopicWorkspaceHeader({
 						)}
 						onClick={onPrev}
 						disabled={!canPrev}
+						data-testid="on-prev"
 					>
 						<ChevronLeft size={15} />
 					</button>
@@ -214,6 +215,7 @@ export default function StepTopicWorkspaceHeader({
 						)}
 						onClick={onNext}
 						disabled={!canNext}
+						data-testid="on-next"
 					>
 						<ChevronRight size={15} />
 					</button>

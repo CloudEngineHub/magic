@@ -41,7 +41,6 @@ import {
 	shouldExitPageAfterProjectMove,
 } from "@/pages/superMagicMobile/utils/navigateAfterProjectMove"
 import {
-	resolveChatDetailDeleteFallback,
 	resolvePostMoveBackFallback,
 	shouldExitDetailPageAfterDelete,
 	shouldExitDetailPageAfterTransfer,
@@ -534,11 +533,16 @@ export function useProjectListActions({
 			if (onDeleteProjectConfirmed) {
 				await onDeleteProjectConfirmed(deletedProject)
 			} else if (shouldExitChatDetailPage && deleteWorkspaceId) {
-				applySuperMobileDetailExitNavigation({
-					navigate,
-					fallback: resolveChatDetailDeleteFallback(),
-					leaveRouteImmediately: true,
+				// Leave chat detail immediately and let the chats list reuse its optimistic deletion flow.
+				navigate({
+					name: RouteName.SuperChatsList,
+					replace: true,
+					state: { pendingDeletedProjectId: deletedProject.id },
+					viewTransition: false,
 				})
+				projectStore.setSelectedProject(null)
+				topicStore.setTopics([])
+				topicStore.setSelectedTopic(null)
 				await SuperMagicService.project.deleteProject(deletedProject.id, deleteWorkspaceId)
 				void SuperMagicService.project.fetchProjects({
 					workspaceId: deleteWorkspaceId,

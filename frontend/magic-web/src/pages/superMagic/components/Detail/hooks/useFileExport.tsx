@@ -2,9 +2,8 @@ import { useState, useRef } from "react"
 import { TFunction } from "i18next"
 import { getTemporaryDownloadUrl } from "@/pages/superMagic/utils/api"
 import { exportSingleFileToPpt } from "@/pages/superMagic/components/TopicFilesButton/utils/exportSingleFile"
-import { exportHtmlToPdf, exportHtmlToImage } from "../../../../../../packages/pdf-export/src"
-import type { ImageExportFormat } from "../../../../../../packages/pdf-export/src"
-import { exportMarkdownFileToPdf } from "@/utils/markdownPdfExport"
+import { exportHtmlToImage, type ImageExportFormat } from "@magic-web/html2image"
+import { isFileInPPTMode } from "@/pages/superMagic/components/Detail/utils/file"
 import { isMarkdownFileName } from "@/utils/pdfFileType"
 import { prepareSingleSlideExport } from "@/pages/superMagic/services/pptService"
 import { downloadFileWithAnchor } from "@/pages/superMagic/utils/handleFIle"
@@ -12,6 +11,10 @@ import { DownloadImageMode } from "../../../pages/Workspace/types"
 import magicToast from "@/components/base/MagicToaster/utils"
 import { toast } from "sonner"
 import { SuperMagicApi } from "@/apis"
+import {
+	documentExportService,
+	type DocumentExport,
+} from "@/pages/superMagic/services/documentExport"
 
 interface Attachment {
 	file_id?: string
@@ -41,7 +44,7 @@ interface UseFileExportReturn {
 		fileVersion?: { [key: string]: number } | undefined,
 	) => Promise<void>
 	/** 导出为 PDF */
-	exportPdf: (fileIds: string[], pagination?: "slice" | "none") => Promise<void>
+	exportPdf: (fileIds: string[]) => Promise<void>
 	/** 导出为 PPT */
 	exportPpt: (fileIds: string[]) => Promise<void>
 	/** 导出为图片（仅 HTML） */
@@ -219,23 +222,30 @@ function useFileExport({
 		}
 	}
 
-	const exportPdf = async (fileIds: string[], pagination: "slice" | "none" = "slice") => {
+	const exportPdf = async (fileIds: string[]) => {
 		if (!fileIds || fileIds.length === 0) return
+
+		const documentExporter = documentExportService.get()
+		if (!documentExporter) {
+			magicToast.error(t("topicFiles.contextMenu.fileExport.unsupportedInCurrentVersion"))
+			return
+		}
 
 		const fileId = fileIds[0]
 		const file = attachments?.find((item) => item.file_id === fileId)
 		const fileName = (file as any)?.file_name || (file as any)?.display_filename || "export.pdf"
 
+		const resourceErrors = documentExporter.createResourceErrorCollector(t)
 		startExport()
 		try {
 			if (isMarkdownFileName(fileName)) {
-				await exportMarkdownFileToPdf({
+				await documentExporter.exportMarkdownFile({
 					fileId,
 					fileName,
-					pagination,
 					selectedProject,
 					relativeFilePath: (file as any)?.relative_file_path,
 					attachments: (attachments ?? []) as any[],
+					onResourceLoadError: resourceErrors.onResourceLoadError,
 					onProgress: ({ phase, current, total }) => {
 						if (phase === "capture" && total > 0) {
 							onProgress(Math.round((current / total) * 100))
@@ -253,14 +263,20 @@ function useFileExport({
 					throw new Error("Failed to fetch HTML file content")
 				}
 
-				await exportHtmlToPdf({
-					pages: result.htmlSlides,
-					pagination,
+				const inPptMode = isFileInPPTMode(fileId, (attachments ?? []) as any[])
+
+				await documentExporter.exportPages(result.htmlSlides, {
 					fileName: (result.fileName || "export") + ".pdf",
-					output: "download",
-					onProgress: ({ phase, current, total }) => {
-						if (phase === "capture" && total > 0) {
-							onProgress(Math.round((current / total) * 100))
+					skipFailedPages: true,
+					pptMode: inPptMode,
+					vector: {
+						fitContentWidth: !inPptMode,
+					},
+					onResourceLoadError: resourceErrors.onResourceLoadError,
+					onPageProgress: (ctx) => {
+						const { index, total } = ctx as DocumentExport.PageProgressContext
+						if (total > 0) {
+							onProgress(Math.round((index / total) * 100))
 						}
 					},
 				}).promise

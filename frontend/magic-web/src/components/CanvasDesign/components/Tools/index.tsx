@@ -27,6 +27,7 @@ import { VideoGeneratorTool } from "../../canvas/interaction/tools/VideoGenerato
 import { ToolTypeEnum, type ToolType } from "../../canvas/types"
 import type { ToolOptionItem } from "./types"
 import ToolItemWithPopover from "./ToolItemWithPopover"
+import PluginTool from "./PluginTool"
 import { useCanvasDesignI18n } from "../../context/I18nContext"
 import { useMagic } from "../../context/MagicContext"
 import {
@@ -44,6 +45,8 @@ import {
 	getResolvedMediaPlacementConfig,
 	getViewportCanvasRect,
 } from "../../canvas/utils/elementUtils"
+import { canUseDesignPlugins } from "@/pages/superMagic/components/Detail/contents/Design/utils/pluginAccess"
+import { userStore } from "@/models/user"
 
 /**
  * 将 BaseTool 转换为 ToolType
@@ -283,6 +286,8 @@ export default function Tools() {
 		},
 	]
 
+	const canShowDesignPluginEntry = canUseDesignPlugins(userStore.user.organizationCode)
+
 	return (
 		<div
 			className={styles.tools}
@@ -363,6 +368,12 @@ export default function Tools() {
 					</Tooltip>
 				)
 			})}
+			{canShowDesignPluginEntry && (
+				<>
+					<div className={styles.divider} />
+					<PluginTool />
+				</>
+			)}
 		</div>
 	)
 }

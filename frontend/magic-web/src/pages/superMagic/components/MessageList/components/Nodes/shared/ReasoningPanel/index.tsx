@@ -34,6 +34,7 @@ export function ReasoningPanel(props: ReasoningPanelProps) {
 					<div
 						className="ml-auto mr-[6px] inline-flex size-5 flex-none cursor-pointer items-center justify-center rounded-[4px] hover:bg-fill active:bg-fill-secondary"
 						onClick={onToggle}
+						data-testid="on-toggle"
 					>
 						{loading ? (
 							<Loader2 className="size-4 animate-spin" />

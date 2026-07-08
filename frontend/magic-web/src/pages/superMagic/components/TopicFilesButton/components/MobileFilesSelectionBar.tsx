@@ -25,8 +25,9 @@ function ActionIconButton(props: {
 	label: string
 	onClick?: () => void
 	isDestructive?: boolean
+	dataTestId: string
 }) {
-	const { icon: Icon, label, onClick, isDestructive = false } = props
+	const { icon: Icon, label, onClick, isDestructive = false, dataTestId } = props
 	const isDisabled = !onClick
 
 	return (
@@ -38,6 +39,7 @@ function ActionIconButton(props: {
 				isDestructive ? "text-destructive" : "text-foreground"
 			} disabled:cursor-not-allowed disabled:opacity-35`}
 			aria-label={label}
+			data-testid={dataTestId}
 		>
 			<Icon className="size-[20px]" strokeWidth={1.8} />
 		</button>
@@ -81,12 +83,13 @@ function MobileFilesSelectionBar({
 					<MobileFileSelectionCheckbox
 						state={selectAllState}
 						onClick={onToggleAll}
-						aria-label={t("topicFiles.selectAll")}
+						ariaLabel={t("topicFiles.selectAll")}
 					/>
 					<button
 						type="button"
 						onClick={onToggleAll}
 						className="text-[15px] font-medium text-foreground active:opacity-70"
+						data-testid="mobile-files-select-all-button"
 					>
 						{t("topicFiles.selectAll")}
 					</button>
@@ -100,24 +103,28 @@ function MobileFilesSelectionBar({
 						icon={Download}
 						label={t("topicFiles.contextMenu.download")}
 						onClick={onDownload}
+						dataTestId="mobile-files-download-button"
 					/>
 					<div className="h-5 w-px shrink-0 bg-border" />
 					<ActionIconButton
 						icon={Share2}
 						label={t("topicFiles.contextMenu.shareFile")}
 						onClick={onShare}
+						dataTestId="mobile-files-share-button"
 					/>
 					<div className="h-5 w-px shrink-0 bg-border" />
 					<ActionIconButton
 						icon={Copy}
 						label={t("topicFiles.contextMenu.copyTo")}
 						onClick={onCopy}
+						dataTestId="mobile-files-copy-button"
 					/>
 					<div className="h-5 w-px shrink-0 bg-border" />
 					<ActionIconButton
 						icon={FolderSymlink}
 						label={t("topicFiles.contextMenu.move")}
 						onClick={onMove}
+						dataTestId="mobile-files-move-button"
 					/>
 					<div className="h-5 w-px shrink-0 bg-border" />
 					<ActionIconButton
@@ -125,6 +132,7 @@ function MobileFilesSelectionBar({
 						label={t("topicFiles.contextMenu.delete")}
 						onClick={onDelete}
 						isDestructive
+						dataTestId="mobile-files-delete-button"
 					/>
 				</div>
 			</div>

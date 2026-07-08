@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 
 import pytest
@@ -12,7 +13,18 @@ from app.utils.document_parse.drivers.powerpoint_driver import PowerPointDocumen
 from app.utils.document_parse.drivers.registry import get_document_driver_registry
 from app.utils.document_parse.drivers.spreadsheet_driver import SpreadsheetDocumentDriver
 from app.utils.document_parse.drivers.word_driver import WordDocumentDriver
-from app.utils.document_parse.models import DocumentAsset, DocumentChunk, DocumentProfile, ExtractionResult
+from app.utils.document_parse.models import (
+    DocumentAsset,
+    DocumentAssetType,
+    DocumentChunk,
+    DocumentProfile,
+    ExtractionResult,
+)
+from app.utils.document_parse.pdf.pdf_file_validator import PdfFileValidator, PdfValidationErrorCode
+from app.utils.document_parse.pdf.pdf_metadata import PdfMetadata
+from app.utils.document_parse.pdf.pdf_page_snapshot_extractor import PdfPageSnapshotExtractor
+from app.utils.document_parse.pdf.pdf_render_backend import PdfRenderedPage
+from app.utils.document_parse.pdf.pdf_strategy import PdfExtractionStrategy
 from app.utils.document_parse.service.document_artifact_mode import DocumentArtifactModeSelector
 from app.utils.document_parse.service.document_extractor import DocumentExtractor
 from app.utils.document_parse.service.document_format_converter import DocumentFormatConverter
@@ -22,6 +34,7 @@ from app.utils.document_parse.service.document_inspector import DocumentInspecto
 from app.utils.document_parse.service.document_reading_planner import DocumentReadingPlanner
 from app.utils.document_parse.service.document_sampler import DocumentSampler
 from app.utils.document_parse.service.document_summarizer import DocumentSummarizer
+from app.utils.document_parse.service.reading_state import ReadingStateStore
 from app.utils.document_parse.structure.chunk_store import ChunkStore
 from app.utils.document_parse.structure.image_feature_analyzer import ImageFeatureAnalyzer
 from app.utils.document_parse.structure.image_watermark_detector import ImageWatermarkDetector
@@ -44,6 +57,123 @@ def _save_mock_content_image(path: Path, size: tuple[int, int] = (32, 16), color
 
 def test_range_parser_compacts_numeric_ranges():
     assert RangeParser.parse_numeric("1-3,5,7-8", total=10) == [1, 2, 3, 5, 7, 8]
+
+
+def test_range_parser_expands_all_when_total_is_known():
+    assert RangeParser.parse_numeric("all", total=4) == [1, 2, 3, 4]
+
+
+def test_document_sampler_accepts_all_range_with_sampling_limit():
+    assert DocumentSampler._select_sample_range(16, "all", max_units=3) == "1-3"
+
+
+def test_document_reading_planner_accepts_all_range_from_index():
+    state = {
+        "total_units": 16,
+        "unit_type": "slide",
+        "sampled_ranges": [],
+        "extracted_ranges": ["all"],
+    }
+
+    assert DocumentReadingPlanner._next_range(state, max_units=5) == ""
+
+
+def test_document_reading_planner_accepts_prefixed_slide_ranges_from_index():
+    state = DocumentReadingPlanner._state_from_index(
+        {
+            "source_path": "/tmp/mock.pptx",
+            "file_type": "powerpoint",
+            "unit_type": "slide",
+            "total_units": 6,
+            "chunks": [{"source_range": "slides:1-4"}],
+        },
+        Path("/tmp/out"),
+    )
+
+    assert DocumentReadingPlanner._next_range(state, max_units=5) == "5-6"
+
+
+def test_document_image_understander_accepts_all_range_filters():
+    index = {
+        "total_units": 2,
+        "assets": [
+            {"asset_type": "page_snapshot", "path": "assets/page1.png", "source_range": "pages:1"},
+            {"asset_type": "page_snapshot", "path": "assets/page2.png", "source_range": "pages:2"},
+        ],
+    }
+
+    selected = DocumentImageUnderstander._select_assets(index, Path("/tmp/out"), [], "all", None, False)
+
+    assert [asset["path"] for asset in selected] == ["assets/page1.png", "assets/page2.png"]
+
+
+def test_document_image_understander_accepts_all_chunk_range():
+    asset = {"asset_type": "page_snapshot", "path": "assets/page1.png", "source_range": "pages:1"}
+
+    assert DocumentImageUnderstander._asset_in_chunk_ranges(asset, ["all"], total_units=2) is True
+
+
+def test_export_markdown_existing_chunks_accept_requested_all_range():
+    chunks = [{"source_range": "slides:1-4"}]
+
+    assert ExportDocumentMarkdown._chunks_cover_requested_range(chunks, "all", total_units=4) is True
+
+
+async def test_reading_state_normalizes_all_extracted_range_for_slides(tmp_path: Path):
+    state = await ReadingStateStore().mark_extracted(
+        tmp_path,
+        source_path="/tmp/mock.pptx",
+        total_units=16,
+        unit_type="slide",
+        file_type="powerpoint",
+        extracted_range="all",
+    )
+
+    assert state["extracted_ranges"] == ["1-16"]
+    assert state["unread_ranges"] == []
+
+
+async def test_reading_state_normalizes_prefixed_all_range_for_pages(tmp_path: Path):
+    state = await ReadingStateStore().mark_sampled(
+        tmp_path,
+        source_path="/tmp/mock.pdf",
+        total_units=4,
+        unit_type="page",
+        file_type="pdf",
+        sampled_range="pages:all",
+        sample_path="samples/mock.md",
+        recommendations=[],
+    )
+
+    assert state["sampled_ranges"] == ["1-4"]
+    assert state["unread_ranges"] == []
+
+
+async def test_reading_state_accepts_legacy_all_range(tmp_path: Path):
+    store = ReadingStateStore()
+    await store.save(
+        tmp_path,
+        {
+            "source_path": "/tmp/mock.pptx",
+            "output_dir": str(tmp_path),
+            "file_type": "powerpoint",
+            "unit_type": "slide",
+            "total_units": 16,
+            "sampled_ranges": [],
+            "extracted_ranges": ["all"],
+        },
+    )
+
+    state = await store.initialize(
+        tmp_path,
+        source_path="/tmp/mock.pptx",
+        total_units=16,
+        unit_type="slide",
+        file_type="powerpoint",
+    )
+
+    assert state["extracted_ranges"] == ["all"]
+    assert state["unread_ranges"] == []
 
 
 def test_image_feature_analyzer_flags_solid_color_images(tmp_path: Path):
@@ -76,6 +206,126 @@ def test_image_watermark_detector_filters_solid_images_without_blank_name(tmp_pa
 
     assert kept == []
     assert skipped[0]["reason"] == "invalid solid or blank image"
+
+
+@pytest.mark.asyncio
+async def test_pdf_validator_rejects_invalid_header(tmp_path: Path):
+    source = tmp_path / "invalid.pdf"
+    source.write_text("<html>not pdf</html>", encoding="utf-8")
+
+    result = await PdfFileValidator().validate(source)
+
+    assert result.ok is False
+    assert result.error_code == PdfValidationErrorCode.INVALID_HEADER
+
+
+def test_pdf_metadata_selects_deterministic_stratified_pages():
+    assert PdfMetadata._select_sample_pages(0) == []
+    assert PdfMetadata._select_sample_pages(3) == [1, 2, 3]
+    assert PdfMetadata._select_sample_pages(10) == [1, 2, 3, 5, 10]
+
+
+@pytest.mark.asyncio
+async def test_pdf_metadata_records_stratified_sample_pages(tmp_path: Path):
+    import fitz
+
+    source = tmp_path / "sampled.pdf"
+    doc = fitz.open()
+    for page_index in range(10):
+        page = doc.new_page(width=200, height=120)
+        page.insert_text((20, 40), f"Page {page_index + 1} sample text")
+    doc.save(str(source))
+
+    metadata = await PdfMetadata.inspect(source)
+
+    assert metadata["sample_pages"] == 5
+    assert metadata["sampled_pages"] == [1, 2, 3, 5, 10]
+    assert metadata["sampling_strategy"] == "deterministic_stratified"
+
+
+def test_pdf_strategy_adds_snapshots_for_scanned_like_pdf():
+    decision = PdfExtractionStrategy().decide(
+        pages=[1, 2],
+        metadata={"is_scanned_like": True},
+        extract_embedded_images=True,
+    )
+
+    assert decision.extract_text_layer is True
+    assert decision.extract_embedded_images is True
+    assert decision.extract_page_snapshots is True
+    assert decision.page_snapshot_pages == [1, 2]
+    assert decision.reason == "scanned_like_pdf"
+
+
+@pytest.mark.asyncio
+async def test_pdf_page_snapshot_extractor_wraps_rendered_pages(tmp_path: Path):
+    class FakeRenderBackend:
+        """测试用 PDF 渲染后端。"""
+
+        async def render_pages(self, path, pages, output_dir, *, dpi=120, image_format="jpg"):
+            """写入伪造图片并返回渲染结果。"""
+
+            rendered = []
+            for page in pages:
+                output_path = output_dir / f"page_{page}.jpg"
+                output_path.write_bytes(b"mock image bytes")
+                rendered.append(
+                    PdfRenderedPage(
+                        page=page,
+                        path=output_path,
+                        width=100,
+                        height=200,
+                        format="JPG",
+                        content_hash=f"hash-{page}",
+                        backend="fake",
+                    )
+                )
+            return rendered
+
+    source = tmp_path / "source.pdf"
+    source.write_bytes(b"%PDF-1.7")
+    output_dir = tmp_path / "source.document"
+
+    assets = await PdfPageSnapshotExtractor(FakeRenderBackend()).extract(
+        source,
+        output_dir,
+        [2],
+        render_reason="layout_required",
+        start_index=3,
+    )
+
+    assert len(assets) == 1
+    assert assets[0].asset_id == "asset_0003"
+    assert assets[0].asset_type == DocumentAssetType.PAGE_SNAPSHOT.value
+    assert assets[0].path == "assets/page_2.jpg"
+    assert assets[0].metadata["page"] == 2
+    assert assets[0].metadata["render_reason"] == "layout_required"
+
+
+def test_document_image_understander_selects_page_snapshot_assets(tmp_path: Path):
+    index = {
+        "total_units": 3,
+        "chunks": [],
+        "assets": [
+            {
+                "asset_type": DocumentAssetType.PAGE_SNAPSHOT.value,
+                "path": "assets/page_002.jpg",
+                "source_range": "pages:2",
+                "metadata": {"page": 2},
+            },
+            {
+                "asset_type": "attachment",
+                "path": "assets/raw.bin",
+                "source_range": "pages:2",
+                "metadata": {"page": 2},
+            },
+        ],
+    }
+
+    assets = DocumentImageUnderstander._select_assets(index, tmp_path, [], "2", None, force=True)
+
+    assert len(assets) == 1
+    assert assets[0]["asset_type"] == DocumentAssetType.PAGE_SNAPSHOT.value
 
 
 def test_image_watermark_detector_preserves_protected_solid_images(tmp_path: Path):
@@ -879,34 +1129,32 @@ async def test_document_image_understander_keeps_failed_result_out_of_chunk(tmp_
 
 
 @pytest.mark.asyncio
-async def test_pdf_visual_mode_persists_recognition_result(tmp_path: Path, monkeypatch):
+async def test_pdf_visual_hint_persists_page_snapshot_asset(tmp_path: Path):
+    import fitz
+
     source = tmp_path / "sample.pdf"
     output_dir = tmp_path / "sample-pdf.document"
-    source.write_bytes(b"%PDF test placeholder")
 
-    async def fake_metadata(path: Path):
-        return {
-            "page_count": 2,
-            "sample_pages": 2,
-            "avg_chars_per_sample_page": 0,
-            "text_density": "low",
-            "has_images_in_sample": True,
-        }
+    doc = fitz.open()
+    page = doc.new_page(width=200, height=160)
+    page.insert_text((20, 30), "Mock chart recognition source.")
+    doc.save(str(source))
+    doc.close()
 
-    async def fake_outline(path: Path):
-        return []
+    extraction = await PdfDocumentDriver().extract(
+        source,
+        output_dir,
+        ranges="1",
+        mode="visual",
+        extract_images=False,
+        visual_hint="page_snapshot",
+    )
 
-    async def fake_visual(path: Path, pages, query=None):
-        return "## Page 1\n\nMock chart recognition result."
-
-    monkeypatch.setattr("app.utils.document_parse.drivers.pdf_driver.PdfMetadata.inspect", fake_metadata)
-    monkeypatch.setattr("app.utils.document_parse.drivers.pdf_driver.PdfOutlineReader.read", fake_outline)
-    monkeypatch.setattr("app.utils.document_parse.drivers.pdf_driver.PdfVisualExtractor.extract_pages", fake_visual)
-
-    extraction = await PdfDocumentDriver().extract(source, output_dir, ranges="1", mode="visual")
-
-    assert extraction.metadata["visual_result_path"] == "visual-results/pdf_pages_1.md"
-    assert (output_dir / "visual-results" / "pdf_pages_1.md").read_text(encoding="utf-8") == "## Page 1\n\nMock chart recognition result."
+    assert extraction.metadata["mode"] == "hybrid"
+    assert extraction.metadata["requested_mode"] == "visual"
+    assert extraction.assets[0].asset_type == DocumentAssetType.PAGE_SNAPSHOT.value
+    assert (output_dir / extraction.assets[0].path).exists()
+    assert "### Page Snapshot" in extraction.chunks[0].content
     assert extraction.chunks[0].path == "chunks/chunk_0001.md"
 
 
@@ -959,7 +1207,10 @@ async def test_pdf_local_text_filters_solid_image_assets(tmp_path: Path):
     output_dir = tmp_path / "with-solid-image.document"
     extraction = await PdfDocumentDriver().extract(source, output_dir, mode="local_text", extract_images=True)
 
-    assert len(extraction.assets) == 1
+    embedded_assets = [asset for asset in extraction.assets if asset.asset_type == DocumentAssetType.EMBEDDED_IMAGE.value]
+    snapshot_assets = [asset for asset in extraction.assets if asset.asset_type == DocumentAssetType.PAGE_SNAPSHOT.value]
+    assert len(embedded_assets) == 1
+    assert len(snapshot_assets) == 1
     assert extraction.metadata["skipped_images"][0]["reason"] == "invalid solid or blank image"
     assert "Filtered solid/blank image 1" in extraction.chunks[0].content
     assert "image 2" in extraction.chunks[0].content
@@ -989,11 +1240,18 @@ async def test_export_small_pdf_defaults_to_simple_artifacts(tmp_path: Path):
 
     assert result.ok
     assert result.extra_info["artifact_mode"] == "simple"
+    assert result.data["artifact_mode"] == "simple"
+    assert result.data["file_type"] == "pdf"
+    assert result.data["combined_path"] == str(output_dir / "document.md")
+    assert result.data["index_path"] == str(output_dir / "document.index.json")
     assert (output_dir / "document.md").exists()
     assert not (output_dir / "chunks").exists()
-    assert not (output_dir / "document.index.json").exists()
+    assert (output_dir / "document.index.json").exists()
     assert not (output_dir / "document.outline.md").exists()
     assert not (output_dir / "document.reading_state.json").exists()
+    index = json.loads((output_dir / "document.index.json").read_text(encoding="utf-8"))
+    assert index["chunks"][0]["path"] == "document.md"
+    assert index["metadata"]["artifact_mode"] == "simple"
 
 
 @pytest.mark.asyncio
@@ -1023,6 +1281,7 @@ async def test_export_small_scanned_pdf_simple_artifacts_keep_assets(tmp_path: P
     assert result.ok
     assert result.extra_info["artifact_mode"] == "simple"
     assert (output_dir / "document.md").exists()
+    assert (output_dir / "document.index.json").exists()
     assert (output_dir / "assets").exists()
     assert "![" in (output_dir / "document.md").read_text(encoding="utf-8")
     assert not (output_dir / "chunks").exists()
@@ -1052,6 +1311,10 @@ async def test_export_large_pdf_defaults_to_progressive_artifacts(tmp_path: Path
 
     assert result.ok
     assert result.extra_info["artifact_mode"] == "progressive"
+    assert result.data["artifact_mode"] == "progressive"
+    assert result.data["file_type"] == "pdf"
+    assert result.data["combined_path"] == str(output_dir / "document.md")
+    assert result.data["index_path"] == str(output_dir / "document.index.json")
     assert (output_dir / "document.md").exists()
     assert (output_dir / "chunks").exists()
     assert (output_dir / "document.index.json").exists()
@@ -1151,6 +1414,8 @@ async def test_export_large_document_reuses_existing_chunks_with_visual_writebac
 
     assert result.ok
     assert result.extra_info["reused_existing_chunks"] is True
+    assert result.data["combined_path"] == str(output_dir / "document.md")
+    assert result.data["index_path"] == str(output_dir / "document.index.json")
     assert "Recognized page text." in (output_dir / "document.md").read_text(encoding="utf-8")
     assert "<!-- document-converter-visual:assets/page_0001.png -->" in (output_dir / "document.md").read_text(encoding="utf-8")
 
@@ -1191,6 +1456,64 @@ async def test_generic_driver_normalizes_parser_images_to_assets(tmp_path: Path)
     assert assets[0].path == "assets/sample_docx_image_0001.png"
     assert (output_dir / assets[0].path).exists()
     assert rewritten == "![image](assets/sample_docx_image_0001.png)"
+
+
+@pytest.mark.asyncio
+async def test_powerpoint_driver_preserves_slide_image_ranges(tmp_path: Path, monkeypatch):
+    source = tmp_path / "mock.pptx"
+    source.write_bytes(b"mock pptx")
+    raw_images = tmp_path / "raw-images"
+    raw_images.mkdir()
+    colors = ["blue", "red", "green", "purple", "orange"]
+    for slide in range(1, 6):
+        _save_mock_content_image(raw_images / f"slide_{slide:02d}_image.png", size=(32, 18), color=colors[slide - 1])
+    output_dir = tmp_path / "mock.document"
+    output_dir.mkdir()
+
+    class FakeParser:
+        """模拟底层文件解析器。"""
+
+        async def parse(self, path: Path, output_path: Path, **kwargs):
+            """写入带幻灯片编号注释的 Markdown 和图片目录。"""
+
+            content = "\n\n".join(
+                [
+                    f"<!-- Slide number: {slide} -->\n\n![slide_{slide:02d}_image.png](./raw-images/slide_{slide:02d}_image.png)"
+                    for slide in range(1, 6)
+                ]
+            )
+            output_path.write_text(content, encoding="utf-8")
+            return ParseResult(
+                metadata=ParseMetadata(additional_info={"slide_count": 5}),
+                success=True,
+                output_file_path=output_path,
+                output_images_dir=str(raw_images),
+            )
+
+    monkeypatch.setattr("app.utils.file_parse.get_file_parser", lambda: FakeParser())
+    monkeypatch.setattr(
+        "app.utils.document_parse.drivers.powerpoint_driver.PptxStructureReader.read_slide_titles",
+        lambda path: [],
+    )
+
+    extraction = await PowerPointDocumentDriver().extract(source, output_dir, ranges="1-5")
+
+    assert extraction.total_units == 5
+    assert extraction.pages_processed == 5
+    assert [asset.metadata["slide"] for asset in extraction.assets] == [1, 2, 3, 4, 5]
+    assert [asset.source_range for asset in extraction.assets] == ["slides:1", "slides:2", "slides:3", "slides:4", "slides:5"]
+    selected = DocumentImageUnderstander._select_assets(
+        {
+            "total_units": extraction.total_units,
+            "assets": [asset.__dict__ for asset in extraction.assets],
+        },
+        output_dir,
+        [],
+        "1-5",
+        None,
+        force=True,
+    )
+    assert len(selected) == 5
 
 
 def test_generic_driver_appends_missing_image_links():
@@ -1237,10 +1560,13 @@ async def test_pdf_skips_watermark_images_and_keeps_one_repeated_logo(tmp_path: 
     output_dir = tmp_path / "with-watermark.document"
     extraction = await PdfDocumentDriver().extract(source, output_dir, mode="local_text", extract_images=True)
 
-    assert len(extraction.assets) == 2
+    embedded_assets = [asset for asset in extraction.assets if asset.asset_type == DocumentAssetType.EMBEDDED_IMAGE.value]
+    snapshot_assets = [asset for asset in extraction.assets if asset.asset_type == DocumentAssetType.PAGE_SNAPSHOT.value]
+    assert len(embedded_assets) == 2
+    assert len(snapshot_assets) == 3
     assert len([item for item in extraction.metadata["skipped_images"] if "watermark" in item["reason"]]) == 3
     assert len([item for item in extraction.metadata["skipped_images"] if "duplicate repeated image" in item["reason"]]) == 2
-    assert extraction.chunks[0].content.count("![") == 2
+    assert extraction.chunks[0].content.count("![") == 5
 
 
 @pytest.mark.asyncio

@@ -8,7 +8,7 @@
 import { useRef, useEffect } from "react"
 import { useMemoizedFn } from "ahooks"
 import { IframeAgentService, type IframeAgentConfig } from "../services/IframeAgentService"
-import type { AgentInfo, TiptapJSONContent } from "../types"
+import type { AgentInfo, HtmlPermissionScope, TiptapJSONContent } from "../types"
 
 export interface UseIframeAgentOptions {
 	/** iframe ref，用于构造 postToIframe */
@@ -30,6 +30,8 @@ export interface UseIframeAgentOptions {
 	 * 默认 false，仅开放只读能力。
 	 */
 	enableWriteOperations?: boolean
+	/** 执行高风险能力前的授权检查。 */
+	authorizePermission?: (scope: HtmlPermissionScope) => Promise<boolean>
 }
 
 export interface UseIframeAgentReturn {
@@ -45,6 +47,7 @@ export function useIframeAgent(options: UseIframeAgentOptions): UseIframeAgentRe
 		createTopicAndSend,
 		sendMessage,
 		enableWriteOperations = false,
+		authorizePermission,
 	} = options
 
 	const serviceRef = useRef<IframeAgentService | null>(null)
@@ -60,6 +63,7 @@ export function useIframeAgent(options: UseIframeAgentOptions): UseIframeAgentRe
 			createTopicAndSend,
 			sendMessage,
 			enableWriteOperations,
+			authorizePermission,
 		}
 
 		serviceRef.current = new IframeAgentService(cfg)
@@ -68,7 +72,14 @@ export function useIframeAgent(options: UseIframeAgentOptions): UseIframeAgentRe
 			serviceRef.current?.destroy()
 			serviceRef.current = null
 		}
-	}, [postToIframe, getAgentList, createTopicAndSend, sendMessage, enableWriteOperations])
+	}, [
+		postToIframe,
+		getAgentList,
+		createTopicAndSend,
+		sendMessage,
+		enableWriteOperations,
+		authorizePermission,
+	])
 
 	const handleAgentMessage = useMemoizedFn(
 		async (type: string, payload: unknown): Promise<boolean> => {

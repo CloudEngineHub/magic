@@ -1,6 +1,6 @@
 import { Suspense, lazy, useState, type MouseEvent } from "react"
 import { useLocation } from "react-router"
-import { ChevronRight, Home, LayoutGrid, UsersRound } from "lucide-react"
+import { ChevronRight, Home, LayoutGrid, MessageCircle, UsersRound } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { WorkspaceList } from "./WorkspaceList"
 import CollapsedWorkspaceMenu from "./CollapsedWorkspaceMenu"
@@ -16,6 +16,7 @@ import workspaceStore from "@/pages/superMagic/stores/core/workspace"
 import { isCollaborationWorkspace } from "@/pages/superMagic/constants"
 import SuperMagicService from "@/pages/superMagic/services"
 import AppsSubMenu from "./AppsSubMenu"
+import ChatsSubMenu from "./ChatsSubMenu"
 import useNavigate from "@/routes/hooks/useNavigate"
 import { RouteName } from "@/routes/constants"
 import { getRoutePath, routesPathMatch } from "@/routes/history/helpers"
@@ -25,6 +26,8 @@ import { getClawBrandTranslationValues } from "@/pages/superMagic/utils/clawBran
 import { observer } from "mobx-react-lite"
 import useResourceStatusPolling from "@/pages/superMagic/hooks/useResourceStatusPolling"
 import { useNavigateToSuperHome } from "./hooks/useNavigateToSuperHome"
+import { isMagicApp } from "@/utils/devices"
+import { openAudioRecordingsInMagicApp } from "@/layouts/BaseLayout/utils/magicAppNavigation"
 
 const CollaborationProjectsPanel = lazy(
 	() =>
@@ -57,6 +60,13 @@ function SidebarContent({ collapsed }: SidebarContentProps) {
 	function handleNavigateToRoute(routeName: RouteName, event: MouseEvent<HTMLAnchorElement>) {
 		if (!shouldHandleAnchorClick(event)) return
 		event.preventDefault()
+
+		// Magic App should hand audio recordings back to the native recording tab even on desktop UI.
+		if (routeName === RouteName.AudioRecordings && isMagicApp) {
+			openAudioRecordingsInMagicApp()
+			return
+		}
+
 		if (routesPathMatch(routeName, location.pathname)) return
 		navigate({ name: routeName })
 	}
@@ -119,6 +129,23 @@ function SidebarContent({ collapsed }: SidebarContentProps) {
 									</span>
 								</a>
 							</SidebarMenuButton>
+						</SidebarMenuItem>
+						<SidebarMenuItem>
+							<ChatsSubMenu>
+								<SidebarMenuButton
+									tooltip={collapsed ? t("sidebar:chats.title") : undefined}
+									data-testid="sidebar-content-chats-button"
+									className="text-sidebar-foreground"
+								>
+									<MessageCircle className="h-4 w-4 shrink-0" />
+									<span className="flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-left text-sm leading-5">
+										{t("sidebar:chats.title")}
+									</span>
+									{!collapsed && (
+										<ChevronRight className="h-4 w-4 shrink-0 text-sidebar-foreground" />
+									)}
+								</SidebarMenuButton>
+							</ChatsSubMenu>
 						</SidebarMenuItem>
 						{sidebarMarketMenuItems.map(renderSidebarMarketMenuItem)}
 						<SidebarMenuItem>

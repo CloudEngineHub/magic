@@ -1,4 +1,5 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { useTranslation } from "react-i18next"
 import { cn } from "@/lib/utils"
 import { getTemporaryDownloadUrl } from "@/pages/superMagic/utils/api"
 import { processHtmlContent } from "../../../contents/HTML/htmlProcessor"
@@ -6,10 +7,12 @@ import { flattenAttachments } from "../../../contents/HTML/utils"
 import { injectFetchInterceptorScript } from "../../../contents/HTML/utils/fetchInterceptor"
 import type { FileItem } from "../../../contents/HTML/utils/fetchInterceptor"
 import IsolatedHTMLRenderer from "../../../contents/HTML/IsolatedHTMLRenderer"
+import { AICardIframeLoadingState } from "./AICardIframeLoadingState"
 
 interface AICardIframeProps {
 	fileId?: string
 	attachmentList?: any[]
+	selectedProject?: { id?: string; name?: string } | null
 	className?: string
 	style?: React.CSSProperties
 	/** When true, the component shows a skeleton loader */
@@ -20,7 +23,7 @@ interface AICardIframeProps {
 }
 
 const EMPTY_FILE_PATH_MAPPING = new Map<string, string>()
-const NOOP_OPEN_NEW_TAB = () => {}
+const NOOP_OPEN_NEW_TAB = () => undefined
 
 /**
  * Lightweight iframe renderer for AI Cards.
@@ -29,16 +32,21 @@ const NOOP_OPEN_NEW_TAB = () => {}
 function AICardIframe({
 	fileId,
 	attachmentList,
+	selectedProject,
 	className,
 	style,
 	showSkeleton = true,
 	hideVerticalScroll = false,
 	onLoad,
 }: AICardIframeProps) {
+	const { t } = useTranslation("super")
 	const [processedContent, setProcessedContent] = useState<string | null>(null)
 	const [filePathMapping, setFilePathMapping] =
 		useState<Map<string, string>>(EMPTY_FILE_PATH_MAPPING)
 	const [loading, setLoading] = useState(true)
+	// 跨域 shell 下，内容写入 iframe 到真正渲染完成之间存在异步间隙；
+	// 仅凭数据加载完成无法代表页面已经画出来，需额外等待 iframe 上报渲染就绪。
+	const [isRenderReady, setIsRenderReady] = useState(false)
 	const [error, setError] = useState<string | null>(null)
 
 	const flattenedFiles = useMemo(
@@ -66,6 +74,16 @@ function AICardIframe({
 		const slashIndex = path.lastIndexOf("/")
 		return slashIndex >= 0 ? path.slice(0, slashIndex + 1) : "/"
 	}, [currentFile])
+	const currentFileFingerprint = useMemo(
+		() =>
+			[
+				currentFile?.file_id || "",
+				currentFile?.file_name || "",
+				currentFile?.relative_file_path || "",
+				currentFile?.updated_at,
+			].join(":"),
+		[currentFile],
+	)
 
 	const attachmentListRef = useRef(attachmentList)
 	attachmentListRef.current = attachmentList
@@ -81,6 +99,7 @@ function AICardIframe({
 
 		let cancelled = false
 		setLoading(true)
+		setIsRenderReady(false)
 		setError(null)
 		setProcessedContent(null)
 		setFilePathMapping(EMPTY_FILE_PATH_MAPPING)
@@ -128,11 +147,16 @@ function AICardIframe({
 		return () => {
 			cancelled = true
 		}
-	}, [fileId, currentFile?.file_name, relativeFolderPath])
+	}, [fileId, currentFile?.file_name, currentFileFingerprint, relativeFolderPath])
 
 	const handleRenderReady = useCallback(() => {
+		setLoading(false)
+		setIsRenderReady(true)
 		onLoad?.()
 	}, [onLoad])
+
+	// 数据已加载但 iframe 尚未渲染就绪时仍保持骨架屏，避免出现"loading 消失但页面空白"的间隙。
+	const showLoadingSkeleton = showSkeleton && (loading || (Boolean(processedContent) && !isRenderReady))
 
 	if (error) {
 		return (
@@ -150,8 +174,8 @@ function AICardIframe({
 
 	return (
 		<div className={cn("relative h-full w-full overflow-hidden", className)} style={style}>
-			{loading && showSkeleton && (
-				<div className="absolute inset-0 z-10 animate-pulse rounded-lg bg-muted/40" />
+			{showLoadingSkeleton && (
+				<AICardIframeLoadingState label={t("detail.aiCard.detail.loadingCard")} />
 			)}
 			{processedContent && (
 				<IsolatedHTMLRenderer
@@ -160,7 +184,8 @@ function AICardIframe({
 					filePathMapping={filePathMapping}
 					openNewTab={NOOP_OPEN_NEW_TAB}
 					attachmentList={attachmentList}
-					relative_file_path={relativeFolderPath}
+					htmlRelativeFolderPath={relativeFolderPath}
+					selectedProject={selectedProject}
 					isVisible
 					containIframeOverscroll
 					hideVerticalScroll={hideVerticalScroll}

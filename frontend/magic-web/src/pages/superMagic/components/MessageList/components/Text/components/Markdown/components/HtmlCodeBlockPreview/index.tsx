@@ -19,17 +19,20 @@ import { useHtmlCodeBlockPreviewStreamingScroll } from "./hooks/useHtmlCodeBlock
 import { hasVisibleHtmlPreviewContent } from "./shared"
 import type { HtmlCodeBlockPreviewProps } from "./types"
 import { resolveHtmlPreviewIntrinsicWidthHint } from "./preview-width"
+import { useStreamingCommittedContent } from "@/pages/superMagic/components/MessageList/components/Nodes/MessageNode/tools/WriteFileStreamingContent"
 
 function HtmlCodeBlockPreview(props: HtmlCodeBlockPreviewProps) {
 	const {
 		className: preClassName,
+		style: preStyle,
+		title: preTitle,
 		isStreaming = false,
 		isSuspended = false,
 		codeBlockInfo,
 		previewCode,
 		fullCode,
 		streamingScrollStateRef,
-		...preProps
+		...restPreProps
 	} = props
 	const { t } = useTranslation("super")
 	const { t: tInterface } = useTranslation("interface")
@@ -62,10 +65,14 @@ function HtmlCodeBlockPreview(props: HtmlCodeBlockPreviewProps) {
 	)
 	const hasCompletedFence = Boolean(fullCode)
 	const codeDisplayContent = codeBlockInfo.code
+	const committedCodeDisplayContent = useStreamingCommittedContent(
+		codeDisplayContent,
+		isStreaming,
+	)
 	const { setScrollAreaElement } = useHtmlCodeBlockPreviewStreamingScroll({
 		isStreaming,
 		hasCompletedFence,
-		codeContent: codeDisplayContent,
+		codeContent: committedCodeDisplayContent,
 		streamingScrollStateRef,
 	})
 	const {
@@ -256,9 +263,13 @@ function HtmlCodeBlockPreview(props: HtmlCodeBlockPreviewProps) {
 						{effectiveIsExpanded && shouldRenderCodeView && (
 							<HtmlCodeBlockPreviewCodeView
 								preClassName={preClassName}
-								preProps={preProps}
+								preProps={{
+									...restPreProps,
+									style: preStyle,
+									title: preTitle,
+								}}
 								codeClassName={codeBlockInfo.className}
-								codeDisplayContent={codeDisplayContent}
+								codeDisplayContent={committedCodeDisplayContent}
 								scrollAreaRef={setScrollAreaElement}
 							/>
 						)}

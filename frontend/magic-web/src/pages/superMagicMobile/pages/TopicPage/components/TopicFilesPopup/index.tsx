@@ -145,6 +145,7 @@ function TopicFilesPopupComponent({
 				selectedTopic={selectedTopic}
 				selectedProject={selectedProject}
 				ref={previewDetailPopupRef}
+				allowEdit={!isReadonly}
 				setUserSelectDetail={setUserSelectDetail}
 				onClose={() => {
 					setUserSelectDetail(null)
@@ -157,6 +158,7 @@ function TopicFilesPopupComponent({
 				selectedTopic={selectedTopic}
 				selectedProject={selectedProject}
 				ref={linkPreviewPopupRef}
+				allowEdit={!isReadonly}
 				setUserSelectDetail={setUserSelectDetail}
 				onClose={() => {
 					// 关闭链接预览时不需要回写文件弹层状态。

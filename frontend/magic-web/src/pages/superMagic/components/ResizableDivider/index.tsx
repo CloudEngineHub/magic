@@ -80,6 +80,7 @@ function ResizableDivider({
 				onMouseDown={handleMouseDown}
 				onMouseEnter={handleMouseEnter}
 				onMouseLeave={handleMouseLeave}
+				data-testid="handle-mouse-down"
 			/>
 			{/* 拖拽时的全局遮罩层，通过 Portal 渲染到 body */}
 			{isDragging &&
@@ -88,6 +89,7 @@ function ResizableDivider({
 						className="fixed inset-0 z-[9999] cursor-ew-resize select-none bg-transparent"
 						onMouseMove={handleOverlayMouseMove}
 						onMouseUp={handleOverlayMouseUp}
+						data-testid="handle-overlay-mouse-move"
 					/>,
 					document.body,
 				)}

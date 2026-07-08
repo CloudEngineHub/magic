@@ -55,6 +55,7 @@ interface UseBatchDownloadOptions {
 	// 新增：操作完成回调（用于刷新列表）
 	onUpdateAttachments?: () => void
 	removeFile: (fileId: string) => void
+	getParentPathByFileId?: (fileId: string) => AttachmentItem[]
 	isMoving?: boolean
 	// 批量导出进度回调
 	onBatchPdfExportStart?: () => void
@@ -89,6 +90,7 @@ export function useBatchDownload(options: UseBatchDownloadOptions) {
 		moveFileHook,
 		onUpdateAttachments,
 		removeFile,
+		getParentPathByFileId,
 		isMoving = false,
 		onBatchPdfExportStart,
 		onBatchPdfExportProgress,
@@ -137,6 +139,12 @@ export function useBatchDownload(options: UseBatchDownloadOptions) {
 	const exitSelectMode = () => {
 		setSelectedItems(new Set())
 		onSelectModeChange?.(false)
+	}
+
+	const getInitialParentPath = (fileId: string) => {
+		return getParentPathByFileId
+			? getParentPathByFileId(fileId)
+			: getParentPathFromFileId(fileId, attachments)
 	}
 
 	// 检测选中项目中是否包含文件夹
@@ -225,7 +233,6 @@ export function useBatchDownload(options: UseBatchDownloadOptions) {
 					removeFile(fileId)
 				})
 			}
-			pubsub.publish(PubSubEvents.Update_Attachments)
 			pubsub.publish(PubSubEvents.Cancel_File_Selection)
 			onUpdateAttachments?.()
 			magicToast.success(t("topicFiles.contextMenu.deleteFileSuccess"))
@@ -482,7 +489,7 @@ export function useBatchDownload(options: UseBatchDownloadOptions) {
 
 		const fileIds = Array.from(selectedItems)
 		const firstFileId = fileIds[0]
-		const parentPath = firstFileId ? getParentPathFromFileId(firstFileId, attachments) : []
+		const parentPath = firstFileId ? getInitialParentPath(firstFileId) : []
 
 		// 只有桌面普通项目继续走跨项目 Modal；移动端和 chat 项目回退到目录选择器。
 		if (projects.length > 0 && crossProjectOperation && !isMobile && !isChatProject) {
@@ -500,7 +507,7 @@ export function useBatchDownload(options: UseBatchDownloadOptions) {
 
 		const fileIds = Array.from(selectedItems)
 		const firstFileId = fileIds[0]
-		const parentPath = firstFileId ? getParentPathFromFileId(firstFileId, attachments) : []
+		const parentPath = firstFileId ? getInitialParentPath(firstFileId) : []
 
 		crossProjectOperation.openCopyModal(fileIds, parentPath)
 	}

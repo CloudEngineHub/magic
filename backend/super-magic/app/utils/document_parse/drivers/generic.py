@@ -30,6 +30,7 @@ from ..structure.heading_detector import HeadingDetector
 from ..structure.image_feature_analyzer import ImageFeatureAnalyzer
 from ..structure.image_watermark_detector import ImageWatermarkDetector
 from ..structure.outline_builder import OutlineBuilder
+from ..structure.range_parser import RangeParser
 from ..structure.virtual_outline_builder import VirtualOutlineBuilder
 from .base import DocumentDriver
 
@@ -91,6 +92,7 @@ class GenericMarkItDownDriver(DocumentDriver):
         parse_result = await get_file_parser().parse(
             path,
             temp_output,
+            ranges=ranges,
             extract_images=kwargs.get("extract_images", True),
             enable_visual_understanding=False,
         )
@@ -111,12 +113,14 @@ class GenericMarkItDownDriver(DocumentDriver):
         )
         content = self._remove_skipped_image_links(content, parse_result.output_images_dir, skipped_images)
         content = self._rewrite_image_links_to_assets(content, parse_result.output_images_dir, assets)
+        self._assign_asset_units_from_markdown(content, assets)
         content = self._append_missing_image_links(content, assets)
         chunks = DocumentChunker.chunk_text(content, path.name, ranges or "all", max_chars=max_chars)
         chunks = await ChunkStore.write_chunks(output_dir, chunks)
-        nodes = OutlineBuilder.build_tree(HeadingDetector.detect(content)) or VirtualOutlineBuilder.by_units(self.unit_type, len(chunks), 1)
-        for node, chunk in zip(nodes, chunks):
-            node.chunk_ids.append(chunk.chunk_id)
+        total_units = self._resolve_total_units(path, content, parse_result, chunks)
+        processed_units = self._resolve_processed_units(ranges, total_units, chunks)
+        nodes = OutlineBuilder.build_tree(HeadingDetector.detect(content)) or VirtualOutlineBuilder.by_units(self.unit_type, total_units, 1)
+        self._attach_chunks_to_nodes(nodes, chunks, total_units)
         return ExtractionResult(
             document_id=document_id,
             source_path=str(path),
@@ -124,11 +128,12 @@ class GenericMarkItDownDriver(DocumentDriver):
             chunks=chunks,
             assets=assets,
             nodes=nodes,
-            total_units=len(chunks),
-            pages_processed=len(chunks),
+            total_units=total_units,
+            pages_processed=processed_units,
             metadata={
                 "mode": mode,
                 "raw_markdown_path": str(temp_output.relative_to(output_dir)),
+                "source_range": ranges or "all",
                 "skipped_images": skipped_images,
                 "skipped_watermark_images": [item for item in skipped_images if "watermark" in str(item.get("reason", ""))],
             },
@@ -192,6 +197,141 @@ class GenericMarkItDownDriver(DocumentDriver):
                 },
             ))
         return assets, skipped_watermarks
+
+    def _assign_asset_units_from_markdown(self, content: str, assets: list[DocumentAsset]) -> None:
+        """从 Markdown 标记中回填图片所属的页/幻灯片编号。"""
+
+        if not assets:
+            return
+        unit_pattern = self._unit_marker_pattern()
+        if unit_pattern is None:
+            return
+        by_link: dict[str, DocumentAsset] = {}
+        for asset in assets:
+            candidates = {
+                str(asset.path or ""),
+                f"./{asset.path}" if asset.path else "",
+                str(asset.title or ""),
+                str((asset.metadata or {}).get("original_name") or ""),
+            }
+            for candidate in candidates:
+                normalized = candidate.strip()
+                if normalized:
+                    by_link[normalized] = asset
+                    by_link[normalized.removeprefix("./")] = asset
+        current_unit: int | None = None
+        image_pattern = re.compile(r"!\[[^\]]*]\(([^)]+)\)")
+        for line in content.splitlines():
+            marker = unit_pattern.search(line)
+            if marker:
+                current_unit = int(marker.group(1))
+            if current_unit is None:
+                continue
+            for image_match in image_pattern.finditer(line):
+                link = image_match.group(1).strip()
+                asset = by_link.get(link) or by_link.get(link.removeprefix("./"))
+                if not asset or asset.metadata.get(self.unit_type):
+                    continue
+                asset.metadata[self.unit_type] = current_unit
+                asset.source_range = f"{self._unit_range_prefix()}:{current_unit}"
+
+    def _resolve_total_units(self, path: Path, content: str, parse_result, chunks: list[DocumentChunk]) -> int:
+        """解析本次提取结果对应的文档总单元数。"""
+
+        parser_total = self._parser_reported_total_units(parse_result)
+        marker_total = self._max_marked_unit(content)
+        return max(parser_total, marker_total, len(chunks), 1)
+
+    def _resolve_processed_units(self, ranges: str | None, total_units: int, chunks: list[DocumentChunk]) -> int:
+        """根据范围表达式估算本次实际处理的页/幻灯片数量。"""
+
+        if ranges and total_units > 0:
+            try:
+                selected = RangeParser.parse_numeric(ranges, total_units)
+                if selected:
+                    return len(selected)
+            except Exception:
+                return len(chunks)
+        return total_units or len(chunks)
+
+    def _attach_chunks_to_nodes(self, nodes, chunks: list[DocumentChunk], total_units: int) -> None:
+        """按范围关系把 chunk 挂到对应的目录节点上。"""
+
+        if not nodes or not chunks:
+            return
+        for node in nodes:
+            node.chunk_ids = []
+        node_units = [(node, self._parse_source_units(node.source_range, total_units)) for node in nodes]
+        if not any(units for _, units in node_units):
+            for node, chunk in zip(nodes, chunks):
+                node.chunk_ids.append(chunk.chunk_id)
+            return
+        for chunk in chunks:
+            chunk_units = self._parse_source_units(chunk.source_range, total_units)
+            attached = False
+            for node, units in node_units:
+                if chunk_units and units and chunk_units.isdisjoint(units):
+                    continue
+                if chunk.chunk_id not in node.chunk_ids:
+                    node.chunk_ids.append(chunk.chunk_id)
+                attached = True
+            if not attached and chunk.chunk_id not in nodes[0].chunk_ids:
+                nodes[0].chunk_ids.append(chunk.chunk_id)
+
+    def _parse_source_units(self, source_range: str, total_units: int) -> set[int]:
+        """把带前缀或 all 的范围表达式转为单元编号集合。"""
+
+        normalized = str(source_range or "").strip()
+        if not normalized:
+            return set()
+        for prefix in ("pages:", "slides:", "sections:"):
+            normalized = normalized.removeprefix(prefix)
+        if normalized.lower() == "all":
+            return set(range(1, total_units + 1)) if total_units > 0 else set()
+        try:
+            return set(RangeParser.parse_numeric(normalized, total_units or None))
+        except Exception:
+            return set()
+
+    def _unit_marker_pattern(self) -> re.Pattern | None:
+        """返回当前文档单元在 Markdown 中的注释标记。"""
+
+        patterns = {
+            "slide": r"<!--\s*Slide number:\s*(\d+)\s*-->",
+            "page": r"<!--\s*Page number:\s*(\d+)\s*-->",
+        }
+        pattern = patterns.get(self.unit_type)
+        return re.compile(pattern, re.IGNORECASE) if pattern else None
+
+    def _max_marked_unit(self, content: str) -> int:
+        """读取 Markdown 注释中出现过的最大页/幻灯片编号。"""
+
+        pattern = self._unit_marker_pattern()
+        if pattern is None:
+            return 0
+        values = [int(match.group(1)) for match in pattern.finditer(content)]
+        return max(values) if values else 0
+
+    @staticmethod
+    def _parser_reported_total_units(parse_result) -> int:
+        """读取底层 parser 暴露的总单元数。"""
+
+        additional_info = getattr(getattr(parse_result, "metadata", None), "additional_info", None) or {}
+        for key in ("total_units", "slide_count", "page_count", "sheet_count"):
+            value = additional_info.get(key)
+            if isinstance(value, int) and value > 0:
+                return value
+        return 0
+
+    def _unit_range_prefix(self) -> str:
+        """生成 source_range 使用的单元前缀。"""
+
+        prefixes = {
+            "slide": "slides",
+            "page": "pages",
+            "section": "sections",
+        }
+        return prefixes.get(self.unit_type, f"{self.unit_type}s")
 
     @staticmethod
     def _remove_skipped_image_links(content: str, images_dir: str, skipped_assets: list[dict]) -> str:

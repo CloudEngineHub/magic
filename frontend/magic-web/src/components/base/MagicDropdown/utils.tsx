@@ -124,6 +124,9 @@ export function convertMenuItemsToComponents(
 				data-testid={menuItemTestId}
 				className="!gap-1.5 !p-1.5"
 				onSelect={(event) => {
+					if (menuItem.keepOpenOnClick) {
+						event.preventDefault()
+					}
 					// Call the global onClick handler
 					if (onClick) {
 						onClick({

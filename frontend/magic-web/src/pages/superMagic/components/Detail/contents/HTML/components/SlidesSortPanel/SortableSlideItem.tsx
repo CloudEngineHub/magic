@@ -43,6 +43,7 @@ export function SortableSlideItem({ slide, index, screenshot }: SortableSlideIte
 					src={screenshot.thumbnailUrl}
 					alt={`Slide ${index + 1}`}
 					className="h-full w-full object-cover"
+					data-testid="sortable-slide-item-image"
 				/>
 			)
 		}
@@ -75,6 +76,7 @@ export function SortableSlideItem({ slide, index, screenshot }: SortableSlideIte
 					"hover:text-foreground",
 					isDragging ? "cursor-grabbing text-primary" : "cursor-grab",
 				)}
+				data-testid="sortable-slide-item-drag-handle-button"
 				{...attributes}
 				{...listeners}
 			>

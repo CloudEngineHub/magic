@@ -41,6 +41,7 @@ function useFileVersionsMenuItems({
 						styles.checkedVersionItem,
 					)}
 					onClick={() => handleChangeFileVersion?.(item.version, index === 0)}
+					data-testid="handle-change-file-version"
 				>
 					<Flex vertical gap={2}>
 						<Flex align="center" gap={4}>

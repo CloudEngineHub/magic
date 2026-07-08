@@ -19,6 +19,7 @@ import { syncCropConfigOnResize } from "../utils/imageCropUtils"
 import { normalizeSize } from "../utils/normalizeUtils"
 import { sanitizeCanvasDocument } from "../utils/temporaryElementUtils"
 import { CanvasDocumentIndex } from "./CanvasDocumentIndex"
+import { resumeImageBatchPollingManagers } from "../utils/resumeImageBatchPolling"
 
 /**
  * 更新模式
@@ -64,6 +65,10 @@ export class ElementManager {
 	private canvas: Canvas
 
 	private elements: Map<string, BaseElement> = new Map()
+	private elementDraggingDisabled = false
+	private viewportGestureDraggingDisabled = false
+	private elementListeningDisabled = false
+	private viewportGestureUnsubscribe?: () => void
 	private batchMode = false
 	private isBatchDeleting = false
 	private pendingBatchDeleteChangeIds: Set<string> = new Set()
@@ -86,6 +91,12 @@ export class ElementManager {
 		this.nodeAdapter = new NodeAdapter({ canvas: this.canvas })
 		// 初始化 ZIndexManager
 		this.zIndexManager = new ZIndexManager(this.canvas)
+		this.viewportGestureUnsubscribe = this.canvas.eventEmitter.on(
+			"viewport:gesture",
+			({ data }) => {
+				this.setViewportGestureDraggingDisabled(data.active)
+			},
+		)
 	}
 
 	/**
@@ -1013,6 +1024,7 @@ export class ElementManager {
 				case "element:image:retryClick":
 				case "element:image:generate-submit-started":
 				case "element:image:generate-submit-failed":
+				case "element:image:fullscreenClick":
 				case "element:video:infoButtonClick":
 				case "element:video:retryClick":
 				case "element:video:generate-submit-started":
@@ -1320,6 +1332,7 @@ export class ElementManager {
 		// 深拷贝传入的数据，确保内部数据独立，不受外部状态管理工具影响
 		const docCopy = sanitizeCanvasDocument(JSON.parse(JSON.stringify(doc)) as CanvasDocument)
 		this.replaceAll(docCopy.elements || [])
+		resumeImageBatchPollingManagers(this.canvas)
 	}
 
 	/**
@@ -1444,6 +1457,7 @@ export class ElementManager {
 		} finally {
 			this.batchMode = false
 			this.flush()
+			resumeImageBatchPollingManagers(this.canvas)
 
 			// 触发文档恢复事件，通知所有管理器更新（如 name labels、hover 等）
 			// 因为批量模式不会触发 element:updated 事件，需要手动通知
@@ -1625,6 +1639,8 @@ export class ElementManager {
 	 * 销毁管理器
 	 */
 	public destroy(): void {
+		this.viewportGestureUnsubscribe?.()
+		this.viewportGestureUnsubscribe = undefined
 		this.clear()
 		this.elements.clear()
 	}
@@ -1850,6 +1866,8 @@ export class ElementManager {
 	 * 禁用所有元素的拖拽和交互功能
 	 */
 	public disableElementDragging(): void {
+		this.elementDraggingDisabled = true
+		this.elementListeningDisabled = true
 		this.elements.forEach((element) => {
 			element.setDraggable(false)
 			element.setListening(false)
@@ -1860,9 +1878,14 @@ export class ElementManager {
 	 * 只禁用所有元素的拖拽功能，保持交互功能（listening）
 	 */
 	public disableElementDraggingOnly(): void {
+		this.elementDraggingDisabled = true
 		this.elements.forEach((element) => {
 			element.setDraggable(false)
 		})
+	}
+
+	public canListenElement(): boolean {
+		return !this.elementListeningDisabled
 	}
 
 	/**
@@ -1875,6 +1898,10 @@ export class ElementManager {
 	 * 必须关闭原生拖拽，否则命中真实节点时会绕过 proxy，只拖动单个元素。
 	 */
 	public canDragElement(elementData: LayerElement): boolean {
+		if (this.elementDraggingDisabled || this.viewportGestureDraggingDisabled) {
+			return false
+		}
+
 		const selectionManager = this.canvas.selectionManager
 		const isSelected = selectionManager?.isSelected(elementData.id) ?? false
 		const selectionCount = selectionManager?.getSelectionCount() ?? 0
@@ -1893,6 +1920,8 @@ export class ElementManager {
 	 * 恢复所有元素的拖拽和交互功能（根据权限管理器判断）
 	 */
 	public enableElementDragging(): void {
+		this.elementDraggingDisabled = false
+		this.elementListeningDisabled = false
 		this.elements.forEach((element) => {
 			const elementData = element.getData()
 			element.setDraggable(this.canDragElement(elementData))
@@ -1907,6 +1936,27 @@ export class ElementManager {
 		this.elements.forEach((element) => {
 			const elementData = element.getData()
 			element.setDraggable(this.canDragElement(elementData))
+		})
+	}
+
+	private setViewportGestureDraggingDisabled(disabled: boolean): void {
+		if (this.viewportGestureDraggingDisabled === disabled) {
+			return
+		}
+
+		this.viewportGestureDraggingDisabled = disabled
+		if (disabled) {
+			this.stopAllElementDrags()
+		}
+		this.updateAllElementsDraggable()
+	}
+
+	private stopAllElementDrags(): void {
+		this.elements.forEach((element) => {
+			const node = element.getNode()
+			if (node?.isDragging()) {
+				node.stopDrag()
+			}
 		})
 	}
 

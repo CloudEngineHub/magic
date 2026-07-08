@@ -9,6 +9,14 @@ import importlib.metadata
 import inspect
 
 from app.core.context.agent_context import AgentContext
+from app.core.context.execution_source import (
+    ASK_USER_POLICY_HORIZON_SOURCE,
+    build_ask_user_policy_horizon_message,
+    is_ask_user_allowed_source,
+    remove_execution_source_from_dynamic_config,
+    resolve_execution_source,
+    stamp_execution_source,
+)
 from app.core.entity.final_task_state import FinalTaskStateCode, build_final_task_state
 from app.core.models.media_model import ImageModelSpec, VideoModelSpec
 from app.core.models.model_selection_policy import ModelSelectionInput, ModelSelectionPolicy
@@ -33,6 +41,7 @@ from app.path_manager import PathManager
 from app.service.agent_event.user_tool_call_listener_service import UserToolCallListenerService
 from app.service.agent_event.channel_startup_listener_service import ChannelStartupListenerService
 from app.core.entity.message.client_message import InitClientMessage, ChatClientMessage, AgentMode
+from app.service.cli_manager import CliManagerService
 from app.service.home_persistence_service import HomePersistenceService
 from agentlang.logger import get_logger
 from app.core.base_service import Base
@@ -153,7 +162,7 @@ class AgentDispatcher(Base):
         """
         if self.agent_context.get_init_client_message() is not None:
             logger.info("agent_context 已存在客户端初始化消息，跳过文件加载")
-            self._schedule_initial_cli_status_detection()
+            await CliManagerService.initialize_from_environment(self.agent_context)
             return True
 
         try:
@@ -177,7 +186,7 @@ class AgentDispatcher(Base):
         logger.info("开始工作区初始化流程")
 
         await HomePersistenceService.initialize_from_environment()
-        self._schedule_initial_cli_status_detection()
+        await CliManagerService.initialize_from_environment(self.agent_context)
 
         # ========== 配置更新阶段 - 每次都执行 ==========
         # 保存初始化消息到文件
@@ -191,6 +200,18 @@ class AgentDispatcher(Base):
             await model_config_manager.refresh_provider(MagicServiceProvider())
         except Exception as e:
             logger.error(f"MagicServiceProvider refresh failed, continuing without it: {e}")
+
+        # 阶段二：init_client_message.json 已就绪，触发 magic-service AI 能力配置加载
+        try:
+            from agentlang.config.ai_abilities.ability_config_manager import ai_ability_config_manager
+            from app.core.ai_ability_providers.magic_service_provider import MagicServiceAIAbilityProvider
+            await ai_ability_config_manager.refresh_provider(
+                MagicServiceAIAbilityProvider(
+                    (init_message.dynamic_config or {}).get("ai_abilities")
+                )
+            )
+        except Exception as e:
+            logger.error(f"MagicServiceAIAbilityProvider refresh failed, continuing without it: {e}")
 
         # 从 init_message.metadata 提取并设置关键字段
         if init_message.metadata:
@@ -281,15 +302,6 @@ class AgentDispatcher(Base):
             else:
                 logger.info("工作区初始化完成")
 
-    def _schedule_initial_cli_status_detection(self) -> None:
-        """调度 CLI 状态探测，失败不影响主流程。"""
-        try:
-            from app.service.cli_status import CliStatusFactory
-
-            CliStatusFactory.schedule_initial_detection(self.agent_context)
-        except Exception as e:
-            logger.warning(f"CLI 状态后台检测启动失败，继续初始化流程: {e}")
-
     async def switch_agent(self, agent_mode: Union[AgentMode, str], agent_code: str = None):
         """
         根据agent_mode切换到相应的agent
@@ -378,48 +390,16 @@ class AgentDispatcher(Base):
 
     async def _prepare_crew_agent(self, agent_code: str) -> None:
         """Crew 运行时准备：按需下载定义文件、编译 .agent、设置当前会话的 AgentProfile。"""
-        from app.path_manager import PathManager
-        from app.service.crew_downloader import CrewDownloader
-        from app.service.crew_agent_compiler import CrewAgentCompiler
-        from app.service.crew_agent_cache_manager import CrewAgentCacheManager
         from app.core.entity.agent_profile import AgentProfile
-        from app.utils.async_file_utils import async_read_markdown, async_exists
+        from app.service.crew_agent_runtime_service import CrewAgentRuntimeService
 
-        crew_dir = PathManager.get_crew_agent_dir(agent_code)
-        output_agent_file = PathManager.get_compiled_agent_file(agent_code)
-        identity_file = PathManager.get_crew_identity_file(agent_code)
-        compiler = CrewAgentCompiler()
-        cache_manager = CrewAgentCacheManager()
+        info = await CrewAgentRuntimeService(
+            on_cache_invalidated=self._invalidate_cached_crew_agent,
+        ).ensure_compiled(agent_code)
 
-        if await async_exists(output_agent_file):
-            if not await async_exists(identity_file):
-                logger.warning(f"IDENTITY.md not found for existing crew agent, skip profile setup: {identity_file}")
-                return
-            cache_state = await cache_manager.evaluate_cache(agent_code, crew_dir)
-            if cache_state.stale:
-                logger.info(
-                    f"Crew source cache stale, recompile: agent_code={agent_code}, "
-                    f"reason={cache_state.reason}, file_count={cache_state.source.file_count}"
-                )
-                await cache_manager.clear_compiled_cache(agent_code)
-                self._invalidate_cached_crew_agent(agent_code, cache_state.reason)
-                identity_meta = await compiler.compile(agent_code, crew_dir)
-                await cache_manager.write_manifest(agent_code, crew_dir, cache_state.source)
-            else:
-                logger.info(f"Crew .agent cache fresh, skip download/compile: {output_agent_file}")
-                identity_meta = (await async_read_markdown(identity_file)).meta
-        else:
-            if not await async_exists(identity_file):
-                logger.info(f"Crew files not found locally, downloading: {agent_code}")
-                downloader = CrewDownloader()
-                await downloader.download_and_extract(agent_code, crew_dir)
-            self._invalidate_cached_crew_agent(agent_code, "compiled_cache_missing")
-            identity_meta = await compiler.compile(agent_code, crew_dir)
-            await cache_manager.write_manifest(agent_code, crew_dir)
-
-        name        = identity_meta.get("name", "")
-        role        = identity_meta.get("role", "")
-        description = identity_meta.get("description", "")
+        name        = info.name
+        role        = info.role
+        description = info.description
 
         if name:
             profile = AgentProfile(name=name, role=role, description=description)
@@ -566,6 +546,7 @@ class AgentDispatcher(Base):
         last_dc = dict(last.get("dynamic_config") or {})
         last_dc.pop("image_model", None)
         last_dc.pop("video_model", None)
+        last_dc = remove_execution_source_from_dynamic_config(last_dc)
         current_dc = message.dynamic_config or {}
         if last_dc:
             message.dynamic_config = {**last_dc, **current_dc}
@@ -595,6 +576,23 @@ class AgentDispatcher(Base):
             await async_write_json(self._last_dispatch_message_file(), merged, indent=2, ensure_ascii=False)
         except Exception as e:
             logger.warning(f"[AgentDispatcher] 保存 dispatch 消息快照失败，忽略: {e}")
+
+    def _apply_execution_source(self, message: ChatClientMessage) -> None:
+        """Resolve and publish the current run source to AgentContext and horizon."""
+        source = resolve_execution_source(message)
+        stamp_execution_source(message, source)
+        self.agent_context.set_execution_source(source)
+
+        if is_ask_user_allowed_source(source):
+            return
+
+        try:
+            self.agent_context.horizon.push_notification(
+                ASK_USER_POLICY_HORIZON_SOURCE,
+                build_ask_user_policy_horizon_message(source),
+            )
+        except Exception as e:
+            logger.warning(f"[AgentDispatcher] 推送 ask_user 来源策略到 horizon 失败: {e}")
 
     @staticmethod
     def _remove_model_selection_fields(snapshot: Dict) -> Dict:
@@ -740,6 +738,20 @@ class AgentDispatcher(Base):
         except Exception as e:
             logger.warning(f"dispatch_message: model provider check failed, continuing: {e}")
 
+        # 确保 magic-service AI 能力配置已加载，失败不阻断 chat。
+        try:
+            from agentlang.config.ai_abilities.ability_config_manager import ai_ability_config_manager
+            from app.core.ai_ability_providers.magic_service_provider import MagicServiceAIAbilityProvider
+            dynamic_ai_abilities = (message.dynamic_config or {}).get("ai_abilities")
+            ability_provider = MagicServiceAIAbilityProvider(dynamic_ai_abilities)
+            if isinstance(dynamic_ai_abilities, Mapping) and dynamic_ai_abilities:
+                await ai_ability_config_manager.refresh_provider(ability_provider)
+            else:
+                await ai_ability_config_manager.ensure_provider_loaded(ability_provider)
+            ai_ability_config_manager.maybe_refresh_in_background(ability_provider.provider_type)
+        except Exception as e:
+            logger.warning(f"dispatch_message: AI ability provider check failed, continuing: {e}")
+
         await self._fill_from_last_dispatch_message(message)
 
         # fill 后仍为 None 说明历史快照也没有，归一化为默认模式
@@ -754,6 +766,7 @@ class AgentDispatcher(Base):
                 self.agent_context.set_dynamic_image_model_id(image_model_id)
                 logger.info(f"[AgentDispatcher] 从消息 dynamic_config 设置图片模型: {image_model_id}")
 
+        self._apply_execution_source(message)
         self.agent_context.set_chat_client_message(message)
 
         # Extract agent_code for crew agent dispatching

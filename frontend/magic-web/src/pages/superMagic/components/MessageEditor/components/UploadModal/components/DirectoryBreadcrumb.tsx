@@ -165,7 +165,7 @@ function DirectoryBreadcrumb({
 									gap={8}
 								>
 									<div className={styles.folderIconContainer}>
-										<img src={FoldIcon} alt="folder" width={14} height={14} />
+										<img src={FoldIcon} alt="folder" width={14} height={14}  data-testid="directory-breadcrumb-image"/>
 									</div>
 									{!subitem.operation && (
 										<IconLock className={styles.lockIcon} size={12} />
@@ -196,6 +196,7 @@ function DirectoryBreadcrumb({
 				key={item.id}
 				className={[styles.breadcrumbItem, loading ? "disable" : ""].join(" ")}
 				onClick={() => onItemClick(item)}
+				data-testid="on-item-click"
 			>
 				{!item.operation && <IconLock className={styles.lockIcon} size={12} />}
 				<Tooltip title={item.name} placement="topLeft">

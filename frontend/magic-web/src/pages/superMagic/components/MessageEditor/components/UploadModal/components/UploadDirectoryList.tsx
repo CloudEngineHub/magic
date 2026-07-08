@@ -113,6 +113,7 @@ function UploadDirectoryList({ fileList, onRemoveFile }: UploadDirectoryListProp
 								className={`${styles.actionButton} delete`}
 								onClick={() => onRemoveFile(fileIndex)}
 								title={t("uploadModal.removeFile")}
+								data-testid="on-remove-file"
 							>
 								<IconTrash size={18} />
 							</button>
@@ -127,6 +128,7 @@ function UploadDirectoryList({ fileList, onRemoveFile }: UploadDirectoryListProp
 						className={`${styles.fileItem} ${styles.directoryItem}`}
 						style={{ paddingLeft }}
 						onClick={() => toggleExpanded(node.path)}
+						data-testid="toggle-expanded"
 					>
 						<div className={styles.fileInfo}>
 							<span className={styles.expandIcon}>

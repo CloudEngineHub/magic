@@ -372,6 +372,7 @@ function DocumentListPanel() {
 											? "bg-muted font-medium"
 											: "text-muted-foreground"
 									}`}
+									data-testid="handle-document-click"
 								>
 									<div className="min-w-0 flex-1">
 										<MagicEllipseWithTooltip

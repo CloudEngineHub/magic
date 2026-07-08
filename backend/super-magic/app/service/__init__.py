@@ -10,6 +10,7 @@ if TYPE_CHECKING:
     from app.service.attachment_service import AttachmentService
     from app.service.file_service import FileService
 
+
 __all__ = [
     'AgentService',
     'AttachmentService',

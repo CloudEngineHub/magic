@@ -16,9 +16,13 @@ import { useCompositeDetailPanelController } from "@/pages/superMagic/hooks/useC
 import { useDeferUntilFileTabsCacheLoaded } from "@/pages/superMagic/hooks/useDeferUntilFileTabsCacheLoaded"
 import { useScopedMessageHeaderTopicActions } from "@/pages/superMagic/hooks/useScopedMessageHeaderTopicActions"
 import { useAttachmentsPolling } from "@/pages/superMagic/hooks/useAttachmentsPolling"
+import { useProjectAttachmentsChangeRealtime } from "@/pages/superMagic/hooks/useProjectAttachmentsChangeRealtime"
 import { AttachmentDataProcessor } from "@/pages/superMagic/utils/attachmentDataProcessor"
+import { loadProjectAttachments } from "@/pages/superMagic/services"
 import {
+	normalizeUpdateAttachmentsPayload,
 	releaseAttachmentsRefreshWaitersWithoutFetch,
+	type SuperMagicUpdateAttachmentsRequest,
 	withAttachmentsRefreshWaitersResolved,
 } from "@/pages/superMagic/services/attachmentsTopicSync"
 import { useTopicFiles } from "@/pages/superMagic/pages/TopicPage/hooks/useTopicFiles"
@@ -32,7 +36,6 @@ import {
 } from "@/pages/superMagic/providers/file-action-visibility-provider"
 import { convertSearchParams } from "@/routes/history/helpers"
 import { RouteName } from "@/routes/constants"
-import { SuperMagicApi } from "@/apis"
 import { crewService } from "@/services/crew/CrewService"
 import { useDefaultModeModelListRefreshOnMount } from "@/pages/superMagic/hooks"
 import { useCreateTopicListener } from "@/pages/superMagic/components/TopicMode"
@@ -65,7 +68,12 @@ function CrewEditErrorFallback({ error, onBack }: { error: string; onBack: () =>
 			data-testid="crew-edit-error"
 		>
 			<p className="text-sm text-destructive">{error}</p>
-			<button type="button" className="text-sm text-primary hover:underline" onClick={onBack}>
+			<button
+				type="button"
+				className="text-sm text-primary hover:underline"
+				onClick={onBack}
+				data-testid="on-back"
+			>
 				{t("backToMyCrew")}
 			</button>
 		</div>
@@ -264,13 +272,12 @@ function CrewEditInner({ crewId }: { crewId: string }) {
 			pubsub.publish(PubSubEvents.Update_Attachments_Loading, true)
 			withAttachmentsRefreshWaitersResolved(
 				projectId,
-				SuperMagicApi.getAttachmentsByProjectId({
+				loadProjectAttachments({
 					projectId,
 					temporaryToken,
 				})
 					.then((res) => {
-						const processedData = AttachmentDataProcessor.processAttachmentData(res)
-						store.projectFilesStore.setWorkspaceFileTree(processedData.tree)
+						store.projectFilesStore.setWorkspaceFileTree(res.tree)
 						store.mentionPanelStore.finishLoadAttachmentsPromise(projectId)
 						didLoad = true
 					})
@@ -338,7 +345,7 @@ function CrewEditInner({ crewId }: { crewId: string }) {
 	const {
 		width: sidebarWidthPx,
 		isDragging: isDraggingSidebar,
-		handleMouseDown: onSidebarResizeStart,
+		handleResizeStart: onSidebarResizeStart,
 	} = useResizablePanel({
 		minWidth: SIDEBAR_MIN_PX,
 		maxWidth: SIDEBAR_MAX_PX,
@@ -350,7 +357,7 @@ function CrewEditInner({ crewId }: { crewId: string }) {
 	const {
 		width: detailPanelWidthPx,
 		isDragging: isDraggingDetail,
-		handleMouseDown: onDetailResizeStart,
+		handleResizeStart: onDetailResizeStart,
 	} = useResizablePanel({
 		minWidth: DETAIL_MIN_PX,
 		maxWidth: DETAIL_MAX_PX,
@@ -389,8 +396,10 @@ function CrewEditInner({ crewId }: { crewId: string }) {
 		}
 	}, [selectedProject, store.projectFilesStore])
 
-	useAttachmentsPolling({
+	const { checkNowDebounced: checkAttachmentsNowDebounced } = useAttachmentsPolling({
 		projectId: selectedProject?.id,
+		store: store.projectFilesStore,
+		autoStart: false,
 		onAttachmentsChange: useCallback(
 			({ tree, list }: { tree: AttachmentItem[]; list: AttachmentItem[] }) => {
 				const processedData = AttachmentDataProcessor.processAttachmentData({ tree, list })
@@ -401,6 +410,17 @@ function CrewEditInner({ crewId }: { crewId: string }) {
 		),
 		onError: useMemoizedFn((error: unknown) => {
 			console.error("Failed to poll crew attachments:", error)
+		}),
+	})
+
+	useProjectAttachmentsChangeRealtime({
+		projectId: selectedProject?.id,
+		store: store.projectFilesStore,
+		onAttachmentsChange: useCallback(() => {
+			setIsInitialAttachmentsLoaded(true)
+		}, []),
+		onFallbackError: useMemoizedFn((error: unknown) => {
+			console.error("Failed to refresh realtime crew attachments:", error)
 		}),
 	})
 
@@ -427,14 +447,17 @@ function CrewEditInner({ crewId }: { crewId: string }) {
 	}, [selectedProject?.id])
 
 	useEffect(() => {
-		const handleUpdateAttachments = (callback?: () => void) => {
+		const handleUpdateAttachments = (
+			payloadOrCallback?: SuperMagicUpdateAttachmentsRequest,
+		) => {
+			const payload = normalizeUpdateAttachmentsPayload(payloadOrCallback)
 			const pid = selectedProject?.id
 			if (!pid) {
-				callback?.()
+				payload?.callback?.()
 				releaseAttachmentsRefreshWaitersWithoutFetch()
 				return
 			}
-			updateAttachments(pid, callback)
+			updateAttachments(pid, payload?.callback)
 		}
 
 		pubsub.subscribe(PubSubEvents.Update_Attachments, handleUpdateAttachments)
@@ -580,6 +603,7 @@ function CrewEditInner({ crewId }: { crewId: string }) {
 							topicStore={conversation.topicStore}
 							mentionPanelStore={store.mentionPanelStore}
 							projectFilesStore={store.projectFilesStore}
+							onTerminalTopicStatusChange={checkAttachmentsNowDebounced}
 							isConversationPanelCollapsed={
 								shouldShowDetailPanel ? layout.isConversationPanelCollapsed : false
 							}

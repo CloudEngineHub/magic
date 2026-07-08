@@ -7,7 +7,7 @@ import {
 	useMemo,
 	type ClipboardEvent,
 } from "react"
-import { useEditor, EditorContent } from "@tiptap/react"
+import { useEditor, EditorContent, type Editor } from "@tiptap/react"
 import type { Extension, Node as TiptapNode } from "@tiptap/core"
 import Document from "@tiptap/extension-document"
 import Paragraph from "@tiptap/extension-paragraph"
@@ -28,6 +28,7 @@ import {
 } from "./tiptap/contentUtils"
 import styles from "./index.module.css"
 import tiptapStyles from "./tiptap-editor.module.css"
+import { runActiveEditor } from "@/utils/tiptapEditorLifecycle"
 
 interface MentionEditorCommands {
 	updateMentionEnabled?: (enabled: boolean) => boolean
@@ -286,53 +287,55 @@ const MessageEditor = forwardRef<MessageEditorRef, MessageEditorProps>(
 
 			const valueSnapshot = value ?? ""
 			const itemsSnapshot = matchableItems
-			const syncMentionChange = () => {
+			const syncMentionChange = (activeEditor: Editor) => {
 				const mentionCb = onMentionChangeRef.current
 				if (!mentionCb) return
 				mentionCb(
-					getMentionPathsFromContent(editor.getJSON()),
-					getStringFromContent(editor.getJSON()),
+					getMentionPathsFromContent(activeEditor.getJSON()),
+					getStringFromContent(activeEditor.getJSON()),
 				)
 			}
 			let cancelled = false
 
 			queueMicrotask(() => {
-				if (cancelled || !editor || editor.isDestroyed) return
+				runActiveEditor(editor, (activeEditor) => {
+					if (cancelled) return
 
-				const currentStr = getStringFromContent(editor.getJSON())
-				const pathsInEditor = new Set(getMentionPathsFromContent(editor.getJSON()))
-				const matchablePathsInValue = getMatchablePathsFromValue(
-					valueSnapshot,
-					itemsSnapshot,
-				)
-				const hasMentionsRenderedAsText = matchablePathsInValue.some(
-					(p) => !pathsInEditor.has(p),
-				)
+					const currentStr = getStringFromContent(activeEditor.getJSON())
+					const pathsInEditor = new Set(getMentionPathsFromContent(activeEditor.getJSON()))
+					const matchablePathsInValue = getMatchablePathsFromValue(
+						valueSnapshot,
+						itemsSnapshot,
+					)
+					const hasMentionsRenderedAsText = matchablePathsInValue.some(
+						(p) => !pathsInEditor.has(p),
+					)
 
-				if (currentStr !== valueSnapshot) {
-					const contentToSet = getContentFromString(valueSnapshot, itemsSnapshot)
-					isInternalChangeRef.current = true
-					editor.commands.setContent(contentToSet, {
-						emitUpdate: false,
-					})
-					syncMentionChange()
-					queueMicrotask(() => {
-						isInternalChangeRef.current = false
-					})
-					return
-				}
+					if (currentStr !== valueSnapshot) {
+						const contentToSet = getContentFromString(valueSnapshot, itemsSnapshot)
+						isInternalChangeRef.current = true
+						activeEditor.commands.setContent(contentToSet, {
+							emitUpdate: false,
+						})
+						syncMentionChange(activeEditor)
+						queueMicrotask(() => {
+							isInternalChangeRef.current = false
+						})
+						return
+					}
 
-				if (hasMentionsRenderedAsText) {
-					const contentToSet = getContentFromString(valueSnapshot, itemsSnapshot)
-					isInternalChangeRef.current = true
-					editor.commands.setContent(contentToSet, {
-						emitUpdate: false,
-					})
-					syncMentionChange()
-					queueMicrotask(() => {
-						isInternalChangeRef.current = false
-					})
-				}
+					if (hasMentionsRenderedAsText) {
+						const contentToSet = getContentFromString(valueSnapshot, itemsSnapshot)
+						isInternalChangeRef.current = true
+						activeEditor.commands.setContent(contentToSet, {
+							emitUpdate: false,
+						})
+						syncMentionChange(activeEditor)
+						queueMicrotask(() => {
+							isInternalChangeRef.current = false
+						})
+					}
+				})
 			})
 
 			return () => {
@@ -343,11 +346,13 @@ const MessageEditor = forwardRef<MessageEditorRef, MessageEditorProps>(
 		// 空文档时占位文案变更：空事务触发占位装饰重算（不重建 editor）
 		useEffect(() => {
 			placeholderRef.current = placeholder ?? ""
-			if (!editor || editor.isDestroyed) return
-			if (!editor.isEmpty) return
+			if (!editor) return
+			const isEmpty = runActiveEditor(editor, (activeEditor) => activeEditor.isEmpty, false)
+			if (!isEmpty) return
 			queueMicrotask(() => {
-				if (!editor || editor.isDestroyed) return
-				editor.view.dispatch(editor.state.tr)
+				runActiveEditor(editor, (activeEditor) => {
+					activeEditor.view.dispatch(activeEditor.state.tr)
+				})
 			})
 		}, [placeholder, editor])
 
@@ -356,12 +361,12 @@ const MessageEditor = forwardRef<MessageEditorRef, MessageEditorProps>(
 		}, [checkScrollbar])
 
 		useEffect(() => {
-			if (!autoFocus || !editor || editor.isDestroyed) return
+			if (!autoFocus || !editor) return
 			const timer = window.setTimeout(() => {
-				if (!editor.isDestroyed) {
-					if (autoFocusAtDocumentEnd) editor.commands.focus("end")
-					else focusEditorWithPreservedSelection(editor, getPreferredSelectionRange())
-				}
+				runActiveEditor(editor, (activeEditor) => {
+					if (autoFocusAtDocumentEnd) activeEditor.commands.focus("end")
+					else focusEditorWithPreservedSelection(activeEditor, getPreferredSelectionRange())
+				})
 			}, 50)
 			return () => window.clearTimeout(timer)
 		}, [autoFocus, autoFocusAtDocumentEnd, editor, getPreferredSelectionRange])
@@ -373,7 +378,11 @@ const MessageEditor = forwardRef<MessageEditorRef, MessageEditorProps>(
 
 		useEffect(() => {
 			if (!editor || !mentionExtension) return
-			;(editor.commands as MentionEditorCommands).updateMentionEnabled?.(mentionEnabled)
+			runActiveEditor(editor, (activeEditor) => {
+				;(activeEditor.commands as MentionEditorCommands).updateMentionEnabled?.(
+					mentionEnabled,
+				)
+			})
 		}, [editor, mentionExtension, mentionEnabled])
 
 		useEffect(() => {
@@ -449,63 +458,69 @@ function insertMentionItemsToEditor(
 ) {
 	if (items.length === 0) return
 
-	const content = items.flatMap((item) => [
-		{
-			type: "mention",
-			attrs: item,
-		},
-		{
-			type: "text",
-			text: MENTION_CARET_GUARD_TEXT,
-		},
-	])
+	runActiveEditor(editor, (activeEditor) => {
+		const content = items.flatMap((item) => [
+			{
+				type: "mention",
+				attrs: item,
+			},
+			{
+				type: "text",
+				text: MENTION_CARET_GUARD_TEXT,
+			},
+		])
 
-	const fragment = Fragment.fromArray(content.map((node) => editor.schema.nodeFromJSON(node)))
-	const fragSize = fragment.size
-	const shouldUsePreservedSelection = options?.placement !== "documentEnd" && !editor.isFocused
+		const fragment = Fragment.fromArray(
+			content.map((node) => activeEditor.schema.nodeFromJSON(node)),
+		)
+		const fragSize = fragment.size
+		const shouldUsePreservedSelection =
+			options?.placement !== "documentEnd" && !activeEditor.isFocused
 
-	const chain = editor.chain()
-	if (options?.placement === "documentEnd") {
-		chain.focus("end")
-	} else {
-		chain.focus()
-	}
-	chain
-		.command(({ tr, commands }) => {
-			const currentSelection = tr.selection
-			const preservedSelection = shouldUsePreservedSelection
-				? getLatestFocusedSelectionRange?.()
-				: null
-			const maxPos = Math.max(1, tr.doc.content.size)
-			const insertFrom = preservedSelection
-				? Math.min(Math.max(preservedSelection.from, 1), maxPos)
-				: currentSelection.from
-			const insertTo = preservedSelection
-				? Math.min(Math.max(preservedSelection.to, insertFrom), maxPos)
-				: currentSelection.to
-			if (
-				!commands.insertContentAt({ from: insertFrom, to: insertTo }, content, {
-					updateSelection: false,
+		const chain = activeEditor.chain()
+		if (options?.placement === "documentEnd") {
+			chain.focus("end")
+		} else {
+			chain.focus()
+		}
+		chain
+			.command(({ tr, commands }) => {
+				const currentSelection = tr.selection
+				const preservedSelection = shouldUsePreservedSelection
+					? getLatestFocusedSelectionRange?.()
+					: null
+				const maxPos = Math.max(1, tr.doc.content.size)
+				const insertFrom = preservedSelection
+					? Math.min(Math.max(preservedSelection.from, 1), maxPos)
+					: currentSelection.from
+				const insertTo = preservedSelection
+					? Math.min(Math.max(preservedSelection.to, insertFrom), maxPos)
+					: currentSelection.to
+				if (
+					!commands.insertContentAt({ from: insertFrom, to: insertTo }, content, {
+						updateSelection: false,
+					})
+				) {
+					return false
+				}
+				const nextSelectionPosition = insertFrom + fragSize
+				if (!commands.setTextSelection(nextSelectionPosition)) {
+					return false
+				}
+				onSelectionRangeChange?.({
+					from: nextSelectionPosition,
+					to: nextSelectionPosition,
 				})
-			) {
-				return false
-			}
-			const nextSelectionPosition = insertFrom + fragSize
-			if (!commands.setTextSelection(nextSelectionPosition)) {
-				return false
-			}
-			onSelectionRangeChange?.({
-				from: nextSelectionPosition,
-				to: nextSelectionPosition,
+				return true
 			})
-			return true
-		})
-		.run()
+			.run()
+	})
 
 	// 拖放等场景下焦点会留在 drop 容器上；延后一步把 DOM 焦点拉回编辑器，落在上面 setTextSelection 的选区（新内容之后）
 	setTimeout(() => {
-		if (editor.isDestroyed) return
-		editor.commands.focus()
+		runActiveEditor(editor, (activeEditor) => {
+			activeEditor.commands.focus()
+		})
 	}, 0)
 }
 
@@ -515,18 +530,18 @@ function focusEditorWithPreservedSelection(
 	editor: NonNullable<ReturnType<typeof useEditor>>,
 	selectionRange: MessageEditorSelectionRange | null,
 ) {
-	if (editor.isDestroyed) return
+	runActiveEditor(editor, (activeEditor) => {
+		if (!selectionRange) {
+			activeEditor.commands.focus("end")
+			return
+		}
 
-	if (!selectionRange) {
-		editor.commands.focus("end")
-		return
-	}
+		const maxPos = Math.max(1, activeEditor.state.doc.content.size)
+		const from = Math.min(Math.max(selectionRange.from, 1), maxPos)
+		const to = Math.min(Math.max(selectionRange.to, from), maxPos)
 
-	const maxPos = Math.max(1, editor.state.doc.content.size)
-	const from = Math.min(Math.max(selectionRange.from, 1), maxPos)
-	const to = Math.min(Math.max(selectionRange.to, from), maxPos)
-
-	editor.chain().focus().setTextSelection({ from, to }).run()
+		activeEditor.chain().focus().setTextSelection({ from, to }).run()
+	})
 }
 
 function resolvePreferredSelectionRange(

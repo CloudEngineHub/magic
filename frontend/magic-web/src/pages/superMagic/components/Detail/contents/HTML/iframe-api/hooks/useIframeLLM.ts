@@ -8,6 +8,7 @@
 import { useRef, useEffect } from "react"
 import { useMemoizedFn } from "ahooks"
 import { IframeLLMService, type IframeLLMConfig } from "../services/IframeLLMService"
+import type { HtmlPermissionScope } from "../types"
 
 export interface UseIframeLLMOptions {
 	/** iframe ref，用于构造 postToIframe */
@@ -20,6 +21,8 @@ export interface UseIframeLLMOptions {
 	getAuthorization: () => string
 	/** 获取当前组织代码的函数 */
 	getOrganizationCode: () => string
+	/** 执行高风险能力前的授权检查。 */
+	authorizePermission?: (scope: HtmlPermissionScope) => Promise<boolean>
 }
 
 export interface UseIframeLLMReturn {
@@ -28,7 +31,14 @@ export interface UseIframeLLMReturn {
 }
 
 export function useIframeLLM(options: UseIframeLLMOptions): UseIframeLLMReturn {
-	const { iframeRef, targetOrigin, baseUrl, getAuthorization, getOrganizationCode } = options
+	const {
+		iframeRef,
+		targetOrigin,
+		baseUrl,
+		getAuthorization,
+		getOrganizationCode,
+		authorizePermission,
+	} = options
 
 	const serviceRef = useRef<IframeLLMService | null>(null)
 
@@ -42,6 +52,7 @@ export function useIframeLLM(options: UseIframeLLMOptions): UseIframeLLMReturn {
 			baseUrl,
 			getAuthorization,
 			getOrganizationCode,
+			authorizePermission,
 		}
 
 		serviceRef.current = new IframeLLMService(cfg)
@@ -50,7 +61,7 @@ export function useIframeLLM(options: UseIframeLLMOptions): UseIframeLLMReturn {
 			serviceRef.current?.destroy()
 			serviceRef.current = null
 		}
-	}, [baseUrl, getAuthorization, getOrganizationCode, postToIframe])
+	}, [baseUrl, getAuthorization, getOrganizationCode, authorizePermission, postToIframe])
 
 	const handleLLMMessage = useMemoizedFn(
 		async (type: string, payload: unknown): Promise<boolean> => {

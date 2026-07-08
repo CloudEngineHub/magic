@@ -215,6 +215,7 @@ function InstagramFeedPostCell({
 				<div
 					className="flex shrink-0 cursor-pointer items-center gap-2"
 					onClick={() => onSelectPost(postIdx)}
+					data-testid="on-select-post"
 				>
 					<div
 						className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full p-[2px]"
@@ -228,6 +229,7 @@ function InstagramFeedPostCell({
 				<div
 					className="flex min-w-0 flex-1 cursor-pointer flex-col justify-center"
 					onClick={() => onSelectPost(postIdx)}
+					data-testid="on-select-post-2"
 				>
 					<div className="truncate text-[13px] font-bold tracking-tight text-[#111]">
 						{displayAuthor}
@@ -237,6 +239,7 @@ function InstagramFeedPostCell({
 				<button
 					type="button"
 					className="shrink-0 bg-transparent px-2 py-1 text-[13.5px] font-bold text-[#0095f6]"
+					data-testid="instagram-phone-views-follow-button"
 				>
 					关注
 				</button>
@@ -244,6 +247,7 @@ function InstagramFeedPostCell({
 					type="button"
 					className="flex shrink-0 items-center px-1 py-1 text-[#111]"
 					aria-label="More"
+					data-testid="more-button"
 				>
 					<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
 						<circle cx="5" cy="12" r="1.5" />
@@ -260,6 +264,7 @@ function InstagramFeedPostCell({
 				onPointerUp={bind.onPointerUp}
 				onPointerCancel={bind.onPointerCancel}
 				className="group relative w-full shrink-0 touch-pan-y overflow-hidden bg-[#fafafa]"
+				data-testid="on-pointer-down"
 			>
 				{showContent ? (
 					<div
@@ -326,6 +331,7 @@ function InstagramFeedPostCell({
 							)}
 							onPointerDown={handleControlPointerDown}
 							onClick={prev}
+							data-testid="handle-control-pointer-down"
 						>
 							<ChevronLeft className="h-4 w-4" />
 						</button>
@@ -339,6 +345,7 @@ function InstagramFeedPostCell({
 							)}
 							onPointerDown={handleControlPointerDown}
 							onClick={next}
+							data-testid="handle-control-pointer-down-2"
 						>
 							<ChevronRight className="h-4 w-4" />
 						</button>
@@ -365,6 +372,7 @@ function InstagramFeedPostCell({
 										"h-[6px] w-[6px] rounded-full transition-all",
 										idx === currentIndex ? "bg-[#3897f0]" : "bg-[#dbdbdb]",
 									)}
+									data-testid="handle-control-pointer-down-3"
 								/>
 							))}
 						</div>
@@ -382,6 +390,7 @@ function InstagramFeedPostCell({
 					type="button"
 					className="mt-1 text-[13px] text-[#8e8e8e]"
 					onClick={() => onSelectPost(postIdx)}
+					data-testid="on-select-post-3"
 				>
 					View all {post.meta.commentCount || post.meta.comments?.length || 0} comments
 				</button>
@@ -486,6 +495,7 @@ function InstagramDetailView({
 		<div
 			className="scrollbar-hide flex h-full flex-col overflow-y-auto overflow-x-hidden bg-white"
 			onWheel={handleDetailWheel}
+			data-testid="handle-detail-wheel"
 		>
 			<div className="sticky top-0 z-50 flex shrink-0 items-center justify-between border-b border-[#efefef] bg-white px-2 py-2">
 				<div className="flex items-center gap-3">
@@ -516,6 +526,7 @@ function InstagramDetailView({
 					<button
 						type="button"
 						className="rounded-full border border-[#0095f6] px-3.5 py-1 text-[12px] font-bold text-[#0095f6]"
+						data-testid="instagram-phone-views-follow-button-2"
 					>
 						关注
 					</button>
@@ -523,6 +534,7 @@ function InstagramDetailView({
 						type="button"
 						className="flex items-center p-1 text-[#111]"
 						aria-label="More"
+						data-testid="more-button-2"
 					>
 						<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
 							<circle cx="5" cy="12" r="1.5" />
@@ -776,6 +788,7 @@ function InstagramFooterView({ labels }: { labels: InstagramFooterLabels }) {
 				fill="currentColor"
 				role="img"
 				aria-label={labels.home}
+				data-testid="img-svg"
 			>
 				<path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z" />
 			</svg>
@@ -790,6 +803,7 @@ function InstagramFooterView({ labels }: { labels: InstagramFooterLabels }) {
 				strokeLinejoin="round"
 				role="img"
 				aria-label={labels.search}
+				data-testid="img-svg-2"
 			>
 				<circle cx="11" cy="11" r="8" />
 				<line x1="21" y1="21" x2="16.65" y2="16.65" />
@@ -805,6 +819,7 @@ function InstagramFooterView({ labels }: { labels: InstagramFooterLabels }) {
 				strokeLinejoin="round"
 				role="img"
 				aria-label={labels.reels}
+				data-testid="img-svg-3"
 			>
 				<polygon points="23 7 16 12 23 17 23 7" />
 				<rect x="1" y="5" width="15" height="14" rx="2" ry="2" />
@@ -820,6 +835,7 @@ function InstagramFooterView({ labels }: { labels: InstagramFooterLabels }) {
 				strokeLinejoin="round"
 				role="img"
 				aria-label={labels.create}
+				data-testid="img-svg-4"
 			>
 				<polygon points="22 2 15 22 11 13 2 9 22 2" />
 			</svg>
@@ -834,6 +850,7 @@ function InstagramFooterView({ labels }: { labels: InstagramFooterLabels }) {
 				strokeLinejoin="round"
 				role="img"
 				aria-label={labels.profile}
+				data-testid="img-svg-5"
 			>
 				<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
 				<circle cx="12" cy="7" r="4" />

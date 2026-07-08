@@ -1,25 +1,62 @@
-import { useEffect, useMemo, useRef, useState } from "react"
-import { ChevronLeft, Loader2 } from "lucide-react"
+import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from "react"
 import { observer } from "mobx-react-lite"
 import { useTranslation } from "react-i18next"
 import { useLocation, useParams } from "react-router"
-import { SuperMagicApi } from "@/apis"
-import { Button } from "@/components/shadcn-ui/button"
-import { cn } from "@/lib/utils"
-import Detail, { type DetailRef } from "@/pages/superMagic/components/Detail"
-import { AttachmentDataProcessor } from "@/pages/superMagic/utils/attachmentDataProcessor"
-import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks"
+import {
+	AlertDialog,
+	AlertDialogAction,
+	AlertDialogCancel,
+	AlertDialogContent,
+	AlertDialogDescription,
+	AlertDialogFooter,
+	AlertDialogHeader,
+	AlertDialogTitle,
+} from "@/components/shadcn-ui/alert-dialog"
+import { useIsMobile } from "@/hooks/useIsMobile"
 import useNavigate from "@/routes/hooks/useNavigate"
 import { RouteName } from "@/routes/constants"
-import SuperMagicService from "@/pages/superMagic/services"
-import type { AudioRecordingCardStatus } from "@/types/audioProject"
+import type { AudioProjectListItem, AudioRecordingCardStatus } from "@/types/audioProject"
 import {
-	resolveAudioPreviewTarget,
-	resolveAudioPreviewTargetWithFallback,
-	type AudioPreviewMissingKind,
-	type AudioPreviewTarget,
-} from "./utils/resolve-audio-preview-target"
-import { AudioRecordingsStore } from "./stores/audio-recordings-store"
+	recordingGroupsService,
+	UNGROUPED_RECORDING_GROUP_ID,
+	type AudioRecordingGroup,
+} from "@/services/audioRecordings"
+import { saveMediaSpeakersAndMagicProjectJs } from "@/pages/superMagic/components/Detail/contents/HTML/media/utils"
+import { collectSpeakerIdsFromText } from "./utils/markdown-time-links"
+import { normalizeSpeakerSelection } from "./utils/speaker-filter"
+import { useRecordingDetailData } from "./hooks/useRecordingDetailData"
+import { useRecordingAudioPlayer } from "./hooks/useRecordingAudioPlayer"
+import { useRecordingPlayerCurrentSec } from "./hooks/useRecordingPlayerCurrentSec"
+import { useRecordingColorSegments } from "./hooks/useRecordingColorSegments"
+import { useRecordingDetailActions } from "./hooks/useRecordingDetailActions"
+import { isAudioProjectSummaryReady } from "./utils/audio-recordings-utils"
+import { resolveDetailSummaryVisualState } from "./utils/summary-action-utils"
+import { playTranscriptFromSegment } from "./utils/transcript-playback"
+import { OWNER_RECORDING_DETAIL_CAPABILITIES } from "./types/recording-detail-capabilities"
+import type { RecordingTranscriptSegment } from "./types/recording-detail"
+import { RecordingDetailProvider } from "./components/recording-detail/RecordingDetailProvider"
+import { RecordingDetailHeader } from "./components/recording-detail/RecordingDetailHeader"
+import { RecordingDetailWorkbench } from "./components/recording-detail/RecordingDetailWorkbench"
+import { RecordingDetailLeftColumn } from "./components/recording-detail/RecordingDetailLeftColumn"
+import { RecordingDetailRightPanel } from "./components/recording-detail/RecordingDetailRightPanel"
+import {
+	RecordingDetailEmptyState,
+	RecordingDetailPageSkeleton,
+} from "./components/recording-detail/RecordingDetailEmptyState"
+import { RecordingDetailSpeakerDialog } from "./components/recording-detail/RecordingDetailSpeakerDialog"
+import { useRecordingDetailShareControls } from "./components/recording-detail/useRecordingDetailShareControls"
+import RecordingShareManagementDialog from "./components/recording-detail/RecordingShareManagementDialog"
+import { AudioRecordingMoveGroupDialog } from "./components/AudioRecordingGroupDialogs"
+import { AudioRecordingCopyDialog } from "./components/AudioRecordingCopyDialog"
+import ShareModal from "@/pages/superMagic/components/Share/Modal"
+import { ShareMode, ShareType } from "@/pages/superMagic/components/Share/types"
+import { createRecordingShareUiConfig } from "@/pages/superMagic/components/Share/utils/recordingShareUiConfig"
+import { AUDIO_RECORDINGS_PAGE_SHELL_CLASS } from "./constants/page-shell"
+import { useAudioRecordingCopyToProject } from "./hooks/useAudioRecordingCopyToProject"
+
+const MobileAudioRecordingDetailPage = lazy(
+	() => import("@/pages/superMagicMobile/pages/AudioRecordingDetail"),
+)
 
 interface AudioRecordingDetailLocationState {
 	projectName?: string
@@ -27,234 +64,454 @@ interface AudioRecordingDetailLocationState {
 	audioFileId?: string
 }
 
-/** Full-width audio HTML detail page without project file tree sidebar */
-function AudioRecordingDetailPage() {
+/** Desktop recording detail workbench replacing the legacy iframe HTML preview. */
+function AudioRecordingDetailPageDesktop() {
 	const { t } = useTranslation("audioRecordings")
 	const navigate = useNavigate()
 	const location = useLocation()
 	const { projectId = "" } = useParams<{ projectId: string }>()
-	const detailRef = useRef<DetailRef>(null)
-	const storeRef = useRef(new AudioRecordingsStore())
-
-	const [attachments, setAttachments] = useState<AttachmentItem[]>([])
-	const [attachmentList, setAttachmentList] = useState<AttachmentItem[]>([])
-	const [loading, setLoading] = useState(true)
-	const [loadError, setLoadError] = useState(false)
-	const [previewMissingKind, setPreviewMissingKind] = useState<AudioPreviewMissingKind | null>(
-		null,
-	)
-	const [previewKind, setPreviewKind] = useState<AudioPreviewTarget["kind"] | null>(null)
-	const [resolvedTitle, setResolvedTitle] = useState<string>("")
-	const [isOpeningProject, setIsOpeningProject] = useState(false)
-
 	const locationState = location.state as AudioRecordingDetailLocationState | null
-	const initialTitle = locationState?.projectName?.trim() ?? ""
-	const routeCardStatus = locationState?.cardStatus
-	const routeAudioFileId = locationState?.audioFileId?.trim()
+
+	const {
+		loading,
+		error,
+		projectItem,
+		fileMap,
+		texts,
+		audioUrl,
+		title,
+		attachmentList,
+		refresh,
+		mutateAudioProjectItem,
+	} = useRecordingDetailData({
+		projectId,
+		initialTitle: locationState?.projectName,
+	})
+
+	const player = useRecordingAudioPlayer(audioUrl)
+	const { seekTo, playSegment } = player
+	const playerCurrentSec = useRecordingPlayerCurrentSec(
+		player.audioRef,
+		player.playing,
+		player.currentTime,
+	)
+	const [detailItem, setDetailItem] = useState<AudioProjectListItem | null>(null)
+	const [titleOverride, setTitleOverride] = useState("")
+	const [playerExpanded, setPlayerExpanded] = useState(false)
+	const [speakerSettingsOpen, setSpeakerSettingsOpen] = useState(false)
+	const [speakerDraft, setSpeakerDraft] = useState<Record<string, string>>({})
+	const [speakerNameOverrides, setSpeakerNameOverrides] = useState<Record<string, string>>({})
+	const [speakerFilterProjectId, setSpeakerFilterProjectId] = useState(projectId)
+	const [selectedSpeakerIds, setSelectedSpeakerIds] = useState<string[]>([])
+	const [moveGroupOpen, setMoveGroupOpen] = useState(false)
+	const [deleteOpen, setDeleteOpen] = useState(false)
+	const [groups, setGroups] = useState<AudioRecordingGroup[]>([])
+	const [ungroupedCount, setUngroupedCount] = useState(0)
+
+	const resolvedItem = detailItem ?? projectItem
+	const displayTitle = titleOverride || title || t("detail.untitled")
+
+	const actions = useRecordingDetailActions({
+		projectId,
+		projectItem: resolvedItem,
+		fileMap,
+		recordingName: displayTitle,
+		onProjectItemChange: (item) => {
+			setDetailItem(item)
+			mutateAudioProjectItem(item)
+		},
+		onRefresh: refresh,
+	})
+
+	const shareControls = useRecordingDetailShareControls({
+		projectId,
+		fileMap,
+	})
+	const copyController = useAudioRecordingCopyToProject({
+		onSuccess: refresh,
+	})
 
 	useEffect(() => {
-		if (initialTitle) {
-			setResolvedTitle(initialTitle)
-			return
-		}
+		setDetailItem(projectItem)
+	}, [projectItem])
 
-		if (!projectId) return
+	useEffect(() => {
+		setSpeakerNameOverrides(fileMap?.magicProjectConfig?.metadata?.speakers ?? {})
+	}, [fileMap?.magicProjectConfig?.metadata?.speakers, projectId])
 
-		void storeRef.current.fetchProjectName(projectId).then((name) => {
-			if (name) setResolvedTitle(name)
+	useEffect(() => {
+		if (!moveGroupOpen) return
+		void recordingGroupsService.listGroups().then((result) => {
+			setGroups(result.groups)
+			setUngroupedCount(result.ungroupedCount)
 		})
-	}, [initialTitle, projectId])
+	}, [moveGroupOpen])
+
+	/** Refreshes move-target groups after inline CRUD without reloading the detail page */
+	const refreshMoveGroups = useCallback(async () => {
+		const result = await recordingGroupsService.listGroups()
+		setGroups(result.groups)
+		setUngroupedCount(result.ungroupedCount)
+	}, [])
+
+	const handleCreateGroupFromMove = useCallback(
+		async (name: string) => {
+			const created = await recordingGroupsService.createGroup(name)
+			await refreshMoveGroups()
+			return created
+		},
+		[refreshMoveGroups],
+	)
+
+	const handleRenameGroupFromMove = useCallback(
+		async (id: string, name: string) => {
+			await recordingGroupsService.renameGroup(id, name)
+			await refreshMoveGroups()
+		},
+		[refreshMoveGroups],
+	)
+
+	const handleDeleteGroupFromMove = useCallback(
+		async (id: string) => {
+			await recordingGroupsService.deleteGroup(id)
+			await refreshMoveGroups()
+		},
+		[refreshMoveGroups],
+	)
+
+	const summaryReady = useMemo(() => {
+		if (resolvedItem) return isAudioProjectSummaryReady(resolvedItem)
+		return locationState?.cardStatus === "summarized"
+	}, [locationState?.cardStatus, resolvedItem])
+
+	const detailSummaryState = useMemo(
+		() =>
+			resolveDetailSummaryVisualState({
+				summaryReady,
+				phase: resolvedItem?.current_phase ?? null,
+				status: resolvedItem?.phase_status ?? null,
+				cardStatus: resolvedItem?.card_status ?? locationState?.cardStatus,
+				isSubmitting: actions.summarySubmitting,
+				extra: {
+					task_key: resolvedItem?.task_key,
+					topic_id: resolvedItem?.topic_id,
+					audio_file_id: resolvedItem?.audio_file_id,
+					audio_source: resolvedItem?.audio_source,
+					model_id: resolvedItem?.model_id,
+				},
+			}),
+		[
+			actions.summarySubmitting,
+			locationState?.cardStatus,
+			resolvedItem?.audio_file_id,
+			resolvedItem?.audio_source,
+			resolvedItem?.card_status,
+			resolvedItem?.current_phase,
+			resolvedItem?.model_id,
+			resolvedItem?.phase_status,
+			resolvedItem?.task_key,
+			resolvedItem?.topic_id,
+			summaryReady,
+		],
+	)
+	const detailUnavailable =
+		!summaryReady && detailSummaryState.status === "unavailable" && Boolean(resolvedItem)
+
+	const speakerNameMap = useMemo(() => {
+		const merged = {
+			...(fileMap?.magicProjectConfig?.metadata?.speakers ?? {}),
+			...speakerNameOverrides,
+		}
+		return merged
+	}, [fileMap?.magicProjectConfig?.metadata?.speakers, speakerNameOverrides])
+
+	const speakerIds = useMemo(
+		() =>
+			collectRecordingSpeakerIds([
+				texts.transcript?.content,
+				texts.notes?.content,
+				...Object.values(texts.summary).map((entry) => entry?.content),
+			]),
+		[texts],
+	)
+	const effectiveSelectedSpeakerIds = useMemo(
+		() =>
+			speakerFilterProjectId === projectId
+				? normalizeSpeakerSelection(speakerIds, selectedSpeakerIds)
+				: speakerIds,
+		[projectId, selectedSpeakerIds, speakerFilterProjectId, speakerIds],
+	)
 
 	useEffect(() => {
-		if (!projectId) {
-			setLoading(false)
-			setLoadError(true)
-			return
-		}
+		if (speakerFilterProjectId === projectId) return
+		setSpeakerFilterProjectId(projectId)
+		setSelectedSpeakerIds([])
+	}, [projectId, speakerFilterProjectId])
 
-		let cancelled = false
-		setLoading(true)
-		setLoadError(false)
-		setPreviewMissingKind(null)
-		setPreviewKind(null)
+	const summaryContent = useMemo(
+		() =>
+			Object.fromEntries(
+				Object.entries(texts.summary).map(([key, value]) => [key, value?.content]),
+			),
+		[texts.summary],
+	)
 
-		SuperMagicApi.getAttachmentsByProjectId({ projectId, temporaryToken: "" })
-			.then((response) => {
-				if (cancelled) return
-
-				const processed = AttachmentDataProcessor.processAttachmentData(response)
-				setAttachments(processed.tree)
-				setAttachmentList(processed.list)
-
-				const previewResult = routeCardStatus
-					? {
-							target: resolveAudioPreviewTarget({
-								cardStatus: routeCardStatus,
-								audioFileId: routeAudioFileId,
-								tree: processed.tree,
-								list: processed.list,
-							}),
-							missingKind: null as AudioPreviewMissingKind | null,
-						}
-					: resolveAudioPreviewTargetWithFallback({
-							audioFileId: routeAudioFileId,
-							tree: processed.tree,
-							list: processed.list,
-						})
-
-				if (!previewResult.target) {
-					const expectsRawAudio =
-						routeCardStatus === "not_summarized" || routeCardStatus === "summarizing"
-					setPreviewMissingKind(
-						previewResult.missingKind ?? (expectsRawAudio ? "raw-audio" : "html-entry"),
-					)
-					return
-				}
-
-				setPreviewKind(previewResult.target.kind)
-
-				window.setTimeout(() => {
-					detailRef.current?.openFileTab?.(previewResult.target?.file)
-				}, 100)
-			})
-			.catch(() => {
-				if (cancelled) return
-				setLoadError(true)
-			})
-			.finally(() => {
-				if (!cancelled) setLoading(false)
-			})
-
-		return () => {
-			cancelled = true
-		}
-	}, [projectId, routeCardStatus, routeAudioFileId])
-
-	const previewMissingMessage = useMemo(() => {
-		if (previewMissingKind === "raw-audio") return t("detail.audioNotFound")
-		return t("detail.entryNotFound")
-	}, [previewMissingKind, t])
-
-	const pageTitle = useMemo(() => {
-		return resolvedTitle || t("detail.untitled")
-	}, [resolvedTitle, t])
-
-	/** Raw audio preview uses a white canvas to match AudioPreview; HTML summary keeps muted shell */
-	const isRawAudioPreviewMode =
-		previewKind === "raw-audio" ||
-		routeCardStatus === "not_summarized" ||
-		routeCardStatus === "summarizing" ||
-		previewMissingKind === "raw-audio"
+	const colorSegments = useRecordingColorSegments(summaryReady, texts.summary.topics?.content)
 
 	function handleBack() {
 		navigate({ name: RouteName.AudioRecordings })
 	}
 
-	/** Fallback when bundled HTML entry is missing: hydrate Super state then open project file tree */
-	async function handleOpenProjectDetail() {
-		if (!projectId || isOpeningProject) return
+	async function handleRename(name: string) {
+		const ok = await actions.renameProject(name)
+		if (ok) setTitleOverride(name)
+		return ok
+	}
 
-		setIsOpeningProject(true)
+	const openSpeakerSettings = useCallback(() => {
+		const draft = Object.fromEntries(
+			speakerIds.map((speakerId) => [speakerId, speakerNameMap[speakerId] ?? speakerId]),
+		)
+		setSpeakerDraft(draft)
+		setSpeakerSettingsOpen(true)
+	}, [speakerIds, speakerNameMap])
+
+	const handleSummaryTimeClick = useCallback(
+		(seconds: number, end?: number) => {
+			if (end != null) playSegment({ start: seconds, end })
+			else seekTo(seconds, { autoplay: true })
+		},
+		[playSegment, seekTo],
+	)
+
+	const handlePlaySegment = useCallback(
+		(segment: RecordingTranscriptSegment) => {
+			// Desktop transcript clicks should jump into the full recording and continue playback from that sentence.
+			playTranscriptFromSegment({ seekTo }, segment.start)
+		},
+		[seekTo],
+	)
+
+	/** Binds speaker-filter changes to the current project so the selection resets only across detail-page boundaries. */
+	const handleSelectedSpeakerIdsChange = useCallback(
+		(speakerIdsToSelect: string[]) => {
+			setSpeakerFilterProjectId(projectId)
+			setSelectedSpeakerIds(speakerIdsToSelect)
+		},
+		[projectId],
+	)
+
+	async function handleSaveSpeakers() {
+		if (!texts.magicProject?.fileId || !texts.magicProject.content) return
+		const nextSpeakers = { ...speakerNameMap, ...speakerDraft }
 		try {
-			// Recordings routes sit outside Super layout; initializeState mirrors share/copy-project entry.
-			await SuperMagicService.initializeState({ projectId })
-		} catch (error) {
-			console.error("Failed to initialize project state before navigation:", error)
-		} finally {
-			setIsOpeningProject(false)
+			await saveMediaSpeakersAndMagicProjectJs({
+				mediaSpeakers: nextSpeakers,
+				magicProjectJsFileInfo: {
+					fileId: texts.magicProject.fileId,
+					content: texts.magicProject.content,
+				},
+			})
+			setSpeakerNameOverrides(nextSpeakers)
+			setSpeakerSettingsOpen(false)
+			void refresh()
+		} catch {
+			// save errors surface through shared media util logging
 		}
-
-		navigate({
-			name: RouteName.SuperWorkspaceProjectState,
-			params: { projectId },
-		})
 	}
 
 	return (
-		<div
-			className="flex h-full min-h-0 w-full min-w-0 flex-col overflow-hidden rounded-xl border border-border bg-background shadow-xs"
-			data-testid="audio-recording-detail-page"
-		>
-			<div className="flex shrink-0 items-center gap-2 border-b border-border px-4 py-3">
-				<Button
-					variant="ghost"
-					size="sm"
-					onClick={handleBack}
-					data-testid="audio-recording-detail-back"
-				>
-					<ChevronLeft className="h-4 w-4" />
-					{t("detail.back")}
-				</Button>
-				<h1 className="truncate text-sm font-semibold text-foreground">{pageTitle}</h1>
-			</div>
-
+		<RecordingDetailProvider capabilities={OWNER_RECORDING_DETAIL_CAPABILITIES}>
 			<div
-				className={cn(
-					"relative min-h-0 flex-1",
-					isRawAudioPreviewMode ? "bg-white" : "bg-muted",
-				)}
+				className={AUDIO_RECORDINGS_PAGE_SHELL_CLASS}
+				data-testid="audio-recording-detail-page"
 			>
-				{loading ? (
-					<div className="flex h-full items-center justify-center text-sm text-muted-foreground">
-						<Loader2 className="mr-2 h-4 w-4 animate-spin" />
-						{t("detail.loading")}
-					</div>
-				) : null}
+				<RecordingDetailHeader
+					title={displayTitle}
+					projectItem={resolvedItem}
+					fileMap={fileMap}
+					exportAvailability={actions.exportAvailability}
+					canGenerateSummary={actions.canGenerateSummary}
+					summarySubmitting={actions.summarySubmitting}
+					renaming={actions.renaming}
+					onBack={handleBack}
+					onRename={handleRename}
+					onGenerateSummary={() => void actions.submitSummary()}
+					onExportAudio={() => void actions.downloadAudio()}
+					onExportTranscript={() => void actions.downloadTranscript()}
+					onExportNotes={() => void actions.downloadNotes()}
+					onExportSummaryType={(type) => void actions.downloadSummaryType(type)}
+					onExportAll={() => void actions.downloadAll()}
+					onCreateShare={shareControls.openCreateShare}
+					onManageShare={shareControls.openManageShare}
+					onMoveGroup={() => setMoveGroupOpen(true)}
+					onCopyToProject={() => {
+						if (resolvedItem) void copyController.openCopyToProject(resolvedItem)
+					}}
+					onDelete={() => setDeleteOpen(true)}
+				/>
 
-				{!loading && loadError ? (
-					<div className="flex h-full flex-col items-center justify-center gap-3 px-6 text-center">
-						<p className="text-sm text-muted-foreground">{t("detail.loadFailed")}</p>
-						<Button variant="outline" onClick={handleBack}>
-							{t("detail.back")}
-						</Button>
-					</div>
-				) : null}
+				{loading ? <RecordingDetailPageSkeleton /> : null}
 
-				{!loading && !loadError && previewMissingKind ? (
-					<div className="flex h-full flex-col items-center justify-center gap-3 px-6 text-center">
-						<p className="text-sm text-muted-foreground">{previewMissingMessage}</p>
-						<div className="flex flex-wrap items-center justify-center gap-2">
-							{previewMissingKind === "html-entry" ? (
-								<Button
-									onClick={() => void handleOpenProjectDetail()}
-									disabled={isOpeningProject}
-									data-testid="audio-recording-detail-open-project"
-								>
-									{isOpeningProject ? (
-										<>
-											<Loader2 className="mr-2 h-4 w-4 animate-spin" />
-											{t("detail.openingProject")}
-										</>
-									) : (
-										t("detail.openProject")
-									)}
-								</Button>
-							) : null}
-							<Button variant="outline" onClick={handleBack}>
-								{t("detail.back")}
-							</Button>
-						</div>
-					</div>
-				) : null}
-
-				{!loading && !loadError && !previewMissingKind ? (
-					<Detail
-						ref={detailRef}
-						disPlayDetail={null}
-						attachments={attachments}
-						attachmentList={attachmentList}
-						projectId={projectId}
-						allowEdit={false}
-						showPlaybackControl={false}
-						showFallbackWhenEmpty={false}
-						showFileHeader={false}
-						hideTabBar
-						showFileFooter={false}
+				{!loading && error ? (
+					<RecordingDetailEmptyState
+						variant="pageError"
+						className="flex-1"
+						onAction={handleBack}
+						actionLabel={t("detail.back")}
 					/>
 				) : null}
+
+				{!loading && !error && detailUnavailable ? (
+					<RecordingDetailEmptyState
+						variant="pageError"
+						className="flex-1"
+						onAction={handleBack}
+						actionLabel={t("detail.back")}
+					/>
+				) : null}
+
+				{!loading && !error && !detailUnavailable ? (
+					<RecordingDetailWorkbench
+						left={
+							<RecordingDetailLeftColumn
+								audioRef={player.audioRef}
+								audioUrl={audioUrl}
+								transcriptMarkdown={texts.transcript?.content}
+								currentSec={playerCurrentSec}
+								currentTime={player.currentTime}
+								duration={player.duration}
+								playing={player.playing}
+								expanded={playerExpanded}
+								playbackRate={player.playbackRate}
+								colorSegments={colorSegments}
+								speakerNameMap={speakerNameMap}
+								selectedSpeakerIds={effectiveSelectedSpeakerIds}
+								onSelectedSpeakerIdsChange={handleSelectedSpeakerIdsChange}
+								onToggle={player.toggle}
+								onSeek={player.seekTo}
+								onPlaySegment={handlePlaySegment}
+								onExpandedChange={setPlayerExpanded}
+								onPlaybackRateChange={player.setPlaybackRate}
+								onOpenSpeakerSettings={openSpeakerSettings}
+							/>
+						}
+						right={
+							<RecordingDetailRightPanel
+								fileMap={fileMap}
+								summaryContent={summaryContent}
+								notesContent={texts.notes?.content}
+								attachmentList={attachmentList}
+								summaryReady={summaryReady}
+								summarizing={detailSummaryState.status === "generating"}
+								summaryFailed={detailSummaryState.status === "failed"}
+								speakerNameMap={speakerNameMap}
+								onOpenSpeakerSettings={openSpeakerSettings}
+								onTimeClick={handleSummaryTimeClick}
+								onGenerateSummary={() => void actions.submitSummary()}
+								summarySubmitting={actions.summarySubmitting}
+							/>
+						}
+					/>
+				) : null}
+
+				<RecordingDetailSpeakerDialog
+					open={speakerSettingsOpen}
+					speakerIds={speakerIds}
+					value={speakerDraft}
+					onValueChange={setSpeakerDraft}
+					onOpenChange={setSpeakerSettingsOpen}
+					onConfirm={() => void handleSaveSpeakers()}
+				/>
+
+				<AudioRecordingMoveGroupDialog
+					open={moveGroupOpen}
+					onOpenChange={setMoveGroupOpen}
+					groups={groups.filter((group) => group.id !== UNGROUPED_RECORDING_GROUP_ID)}
+					ungroupedCount={ungroupedCount}
+					selectedGroupId={resolvedItem?.workspace_id ?? UNGROUPED_RECORDING_GROUP_ID}
+					onSelect={async (groupId) => {
+						await actions.moveToGroup(groupId)
+					}}
+					onCreateGroup={handleCreateGroupFromMove}
+					onRenameGroup={handleRenameGroupFromMove}
+					onDeleteGroup={handleDeleteGroupFromMove}
+					isSubmitting={actions.moving}
+				/>
+
+				<AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+					<AlertDialogContent>
+						<AlertDialogHeader>
+							<AlertDialogTitle>{t("actions.deleteTitle")}</AlertDialogTitle>
+							<AlertDialogDescription>
+								{t("actions.deleteConfirmSingle")}
+							</AlertDialogDescription>
+						</AlertDialogHeader>
+						<AlertDialogFooter>
+							<AlertDialogCancel>{t("actions.cancel")}</AlertDialogCancel>
+							<AlertDialogAction
+								onClick={() => void actions.deleteProject()}
+								disabled={actions.deleting}
+							>
+								{t("actions.confirm")}
+							</AlertDialogAction>
+						</AlertDialogFooter>
+					</AlertDialogContent>
+				</AlertDialog>
+
+				<ShareModal
+					open={shareControls.shareModalOpen}
+					onCancel={shareControls.closeShareModal}
+					shareMode={ShareMode.File}
+					projectId={projectId}
+					attachments={shareControls.attachments}
+					attachmentList={shareControls.attachmentList}
+					projectName={displayTitle}
+					defaultSelectedFileIds={shareControls.defaultSelectedFileIds}
+					requiredFileIds={shareControls.requiredFileIds}
+					types={[ShareType.PasswordProtected, ShareType.Organization, ShareType.Public]}
+					fileShareUiConfig={createRecordingShareUiConfig()}
+				/>
+
+				<RecordingShareManagementDialog
+					open={shareControls.shareManagementOpen}
+					projectId={projectId}
+					onClose={shareControls.closeManageShare}
+				/>
+				<AudioRecordingCopyDialog controller={copyController} />
 			</div>
-		</div>
+		</RecordingDetailProvider>
 	)
 }
 
-export default observer(AudioRecordingDetailPage)
+const ObservedAudioRecordingDetailPageDesktop = observer(AudioRecordingDetailPageDesktop)
+
+/** Shared recording detail route: mobile renders H5 preview, desktop renders React workbench. */
+function AudioRecordingDetailPage() {
+	const isMobile = useIsMobile()
+
+	if (isMobile) {
+		return (
+			<Suspense fallback={null}>
+				<MobileAudioRecordingDetailPage />
+			</Suspense>
+		)
+	}
+
+	return <ObservedAudioRecordingDetailPageDesktop />
+}
+
+export default AudioRecordingDetailPage
+
+/** Collects every speaker id from loaded detail text files for the shared editor. */
+function collectRecordingSpeakerIds(contents: Array<string | undefined>) {
+	return Array.from(
+		new Set(contents.flatMap((content) => (content ? collectSpeakerIdsFromText(content) : []))),
+	).sort()
+}
+
+/*
+ * Future share-link entry hook:
+ * if (isAudioProjectMode(projectMode)) return <RecordingDetailShareShell projectId={...} />
+ * See types/recording-detail-capabilities.ts SHARE_RECORDING_DETAIL_CAPABILITIES.
+ */

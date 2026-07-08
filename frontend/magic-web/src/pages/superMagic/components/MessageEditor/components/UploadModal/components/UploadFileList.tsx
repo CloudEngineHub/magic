@@ -104,6 +104,7 @@ function UploadFileList({
 					onKeyDown={handleKeyDown}
 					onBlur={handleInputBlur}
 					className={styles.fileNameInput}
+					data-testid="update-editing-name"
 				/>
 			)
 		}
@@ -128,7 +129,7 @@ function UploadFileList({
 					<UploadAction
 						handler={(onUpload) => {
 							return (
-								<button className={styles.addFilesButton} onClick={onUpload}>
+								<button className={styles.addFilesButton} onClick={onUpload} data-testid="on-upload">
 									{t("uploadModal.addUploadFiles")}
 								</button>
 							)
@@ -151,6 +152,7 @@ function UploadFileList({
 									className={`${styles.actionButton} edit`}
 									onClick={() => startEditing(index, file.name)}
 									title={t("uploadModal.editFilename")}
+									data-testid="start-editing"
 								>
 									<IconPencil size={18} />
 								</button>
@@ -160,6 +162,7 @@ function UploadFileList({
 										className={`${styles.actionButton} delete`}
 										onClick={() => onRemoveFile(index)}
 										title={t("uploadModal.removeFile")}
+										data-testid="on-remove-file"
 									>
 										<IconTrash size={18} />
 									</button>

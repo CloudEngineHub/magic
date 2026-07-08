@@ -9,7 +9,13 @@ import type {
 	ProjectStatus,
 } from "../../../../../pages/Workspace/types"
 import type { TopicMode } from "@/pages/superMagic/pages/Workspace/TopicMode"
-import { SHARE_WORKSPACE_ID, MY_CLAW_WORKSPACE_ID } from "../../../../../constants"
+import {
+	SHARE_WORKSPACE_ID,
+	MY_AUDIO_RECORDINGS_WORKSPACE_ID,
+	MY_CLAW_WORKSPACE_ID,
+} from "../../../../../constants"
+import { AUDIO_PROJECT_MODE } from "@/pages/superMagic/pages/AudioRecordings/utils/is-audio-project-mode"
+import { normalizeAudioProjectList } from "@/pages/superMagic/pages/AudioRecordings/utils/normalize-audio-project-item"
 
 interface UseProjectManagementOptions {
 	t: TFunction<"super", undefined>
@@ -78,10 +84,55 @@ export function useProjectManagement(options: UseProjectManagementOptions) {
 		setLoading(false)
 	})
 
+	// 获取录音纪要项目列表
+	const fetchAudioRecordingProjects = useMemoizedFn(async () => {
+		setLoading(true)
+		try {
+			const res = await SuperMagicApi.queryAudioProjects({
+				page: 1,
+				page_size: 99,
+				is_hidden: 0,
+				sort_by: "created_at",
+				sort_order: "desc",
+			})
+
+			const projects: ProjectListItem[] = normalizeAudioProjectList(res?.list || []).map(
+				(item) => ({
+					id: item.id,
+					project_name: item.project_name,
+					project_description: "",
+					project_status: (item.project_status || "waiting") as ProjectStatus,
+					project_mode: AUDIO_PROJECT_MODE as TopicMode,
+					workspace_id: MY_AUDIO_RECORDINGS_WORKSPACE_ID,
+					workspace_name: t("workspace.myAudioRecordingsWorkspaceName"),
+					work_dir: "",
+					current_topic_id: item.topic_id || "",
+					current_topic_status: item.current_topic_status || "",
+					created_at: item.created_at ? String(item.created_at) : "",
+					updated_at: "",
+					tag: "",
+				}),
+			)
+
+			setAvailableProjects(projects)
+		} catch (error) {
+			console.error("Failed to fetch audio recording projects:", error)
+			magicToast.error(t("selectPathModal.fetchAudioRecordingsFailed"))
+			setAvailableProjects([])
+		}
+		setLoading(false)
+	})
+
 	const fetchProjectsByWorkspace = useMemoizedFn(async (workspaceId: string) => {
 		// 龙虾工作区：获取龙虾项目列表
 		if (workspaceId === MY_CLAW_WORKSPACE_ID) {
 			await fetchMagicClawProjects()
+			return
+		}
+
+		// 录音纪要工作区：获取录音纪要项目列表
+		if (workspaceId === MY_AUDIO_RECORDINGS_WORKSPACE_ID) {
+			await fetchAudioRecordingProjects()
 			return
 		}
 

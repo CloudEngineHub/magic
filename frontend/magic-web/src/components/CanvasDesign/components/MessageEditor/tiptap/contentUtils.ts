@@ -1,7 +1,8 @@
 import type { JSONContent } from "@tiptap/react"
+import { CANVAS_REFERENCE_MENTION_ITEM_TYPE } from "../reference-assets/canvasReferenceMention.constants"
 
 /** 项目 MentionExtension 使用的 PROJECT_FILE 类型标识 */
-const PROJECT_FILE_TYPE = "project_file"
+const PROJECT_FILE_TYPE = CANVAS_REFERENCE_MENTION_ITEM_TYPE.projectFile
 export const MENTION_CARET_GUARD_TEXT = "\u200b"
 
 /** 可匹配的 @ 项，用于 string 转 JSON 时判断是否渲染为节点 */

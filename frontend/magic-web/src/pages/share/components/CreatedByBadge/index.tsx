@@ -1,6 +1,5 @@
 import { memo, useCallback, CSSProperties } from "react"
 import { useTranslation } from "react-i18next"
-import { isPrivateDeployment } from "@/utils/env"
 import { getAvatarUrl } from "@/utils/avatar"
 import { globalConfigStore } from "@/stores/globalConfig"
 import { useStyles } from "./styles"
@@ -25,10 +24,15 @@ function CreatedByBadge({ visible = true, style }: CreatedByBadgeProps) {
 	const isEnglish = i18n.language === "en_US" || i18n.language === "en"
 
 	return (
-		<div className={styles.badge} onClick={handleClick} style={style}>
-			{isPrivateDeployment() ? (
+		<div
+			className={styles.badge}
+			onClick={handleClick}
+			style={style}
+			data-testid="created-by-badge"
+		>
+			{globalConfig?.minimal_logo ? (
 				<img
-					src={getAvatarUrl(globalConfig?.minimal_logo || "", 35)}
+					src={getAvatarUrl(globalConfig.minimal_logo, 35)}
 					alt=""
 					className={styles.logo}
 				/>

@@ -1,5 +1,6 @@
 import Demo from "../Demo/locales/zh_CN"
 import MultiLangSetting from "../MultiLangSetting/locales/zh_CN"
+import UserSelect from "../UserSelect/locales/zh_CN"
 import SideMenu from "../SideMenu/locales/zh_CN"
 import SearchSelect from "../SearchSelect/locales/zh_CN"
 import ButtonGroup from "../ButtonGroup/locales/zh_CN"
@@ -15,6 +16,7 @@ import TimeFilterPanel from "../TimeFilterPanel/locales/zh_CN"
 export default {
 	Demo,
 	MultiLangSetting,
+	UserSelect,
 	SideMenu,
 	SearchSelect,
 	ButtonGroup,

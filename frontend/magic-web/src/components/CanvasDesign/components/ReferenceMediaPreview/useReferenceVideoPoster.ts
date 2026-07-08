@@ -1,7 +1,7 @@
-import { useEffect, useState } from "react"
+import { useCallback, useEffect, useState } from "react"
 import { useCanvas } from "../../context/CanvasContext"
+import { useCanvasEvent } from "../../hooks/useCanvasEvent"
 import { clonePosterCanvas } from "./clonePosterCanvas"
-
 export type ReferenceVideoPosterLoadState = "loading" | "ready" | "error"
 
 export interface UseReferenceVideoPosterResult {
@@ -20,6 +20,24 @@ export function useReferenceVideoPoster(path: string): UseReferenceVideoPosterRe
 	const [posterClone, setPosterClone] = useState<HTMLCanvasElement | null>(null)
 	const [ossSrc, setOssSrc] = useState<string | null>(null)
 	const [loadState, setLoadState] = useState<ReferenceVideoPosterLoadState>("loading")
+	const [retryToken, setRetryToken] = useState(0)
+
+	useCanvasEvent(
+		"resource:remote-load-deferral-released",
+		useCallback(
+			({ data }) => {
+				if (!canvas) return
+				const pathKey =
+					canvas.canvasFileUploadManager.getRemoteResourceLoadDeferralKey(path)
+				if (!pathKey || pathKey !== data.key) {
+					return
+				}
+				setRetryToken((value) => value + 1)
+			},
+			[canvas, path],
+		),
+		[canvas, path],
+	)
 
 	useEffect(() => {
 		if (!canvas) {
@@ -32,10 +50,19 @@ export function useReferenceVideoPoster(path: string): UseReferenceVideoPosterRe
 		setLoadState("loading")
 		setPosterClone(null)
 		setOssSrc(null)
+		if (canvas.canvasFileUploadManager.shouldDeferRemoteResourceLoad(path)) {
+			return () => {
+				cancelled = true
+			}
+		}
 		void (async () => {
 			try {
 				const loaded = await canvas.videoResourceManager.getResource(path)
 				if (cancelled) return
+				if (!loaded && canvas.canvasFileUploadManager.shouldDeferRemoteResourceLoad(path)) {
+					setLoadState("loading")
+					return
+				}
 				if (!loaded?.poster || loaded.poster.width < 1 || loaded.poster.height < 1) {
 					setPosterClone(null)
 					setOssSrc(null)
@@ -55,7 +82,7 @@ export function useReferenceVideoPoster(path: string): UseReferenceVideoPosterRe
 		return () => {
 			cancelled = true
 		}
-	}, [canvas, path])
+	}, [canvas, path, retryToken])
 
 	return { loadState, posterClone, ossSrc }
 }

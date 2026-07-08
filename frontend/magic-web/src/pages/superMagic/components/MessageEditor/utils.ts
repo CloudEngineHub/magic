@@ -10,7 +10,7 @@ import { TFunction } from "i18next"
 
 interface FileDetailResult {
 	type: string
-	data: {
+	data: ProjectFileMentionData & {
 		file_name: string
 		file_extension?: string
 		file_id: string
@@ -37,6 +37,7 @@ export function handleProjectFileMention(
 		return {
 			type: fileType,
 			data: {
+				...data,
 				file_name: fileName,
 				file_extension: data.file_extension,
 				file_id: data.file_id,
@@ -48,6 +49,7 @@ export function handleProjectFileMention(
 	return {
 		type: "empty",
 		data: {
+			...data,
 			file_name: fileName,
 			file_id: data.file_id,
 			text: t?.("detail.fileNotSupported"),

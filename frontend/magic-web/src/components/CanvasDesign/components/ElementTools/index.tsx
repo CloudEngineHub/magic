@@ -83,17 +83,17 @@ export default function ElementTools() {
 					imageElementTools.push({
 						type: ElementToolTypeEnum.ImageCropButton,
 					})
-					// imageElementTools.push({
-					// 	type: ElementToolTypeEnum.ImageExtendButton,
-					// })
+					imageElementTools.push({
+						type: ElementToolTypeEnum.ImageExtendButton,
+					})
 					imageElementTools.push({
 						type: ElementToolTypeEnum.ImageRemoveBackgroundButton,
 					})
-					// imageElementTools.push({
-					// 	type: ElementToolTypeEnum.ImageEraserButton,
-					// })
+					imageElementTools.push({
+						type: ElementToolTypeEnum.ImageEraserButton,
+					})
 					if (convertHightConfig?.supported) {
-						// imageElementTools.push(Divider)
+						imageElementTools.push(Divider)
 						imageElementTools.push({
 							type: ElementToolTypeEnum.ImageConvertHightButton,
 						})

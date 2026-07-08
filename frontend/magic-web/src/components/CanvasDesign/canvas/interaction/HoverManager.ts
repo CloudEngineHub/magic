@@ -19,6 +19,7 @@ export class HoverManager {
 	private pendingHoverTarget: Konva.Node | null = null
 	private hoverRafId: number | null = null
 	private eventUnsubscribers: Array<() => void> = []
+	private isViewportGestureActive = false
 
 	// Hover 边框样式配置（静态属性，供其他类使用）
 	public static readonly HOVER_STROKE = "#3B82F6"
@@ -66,9 +67,14 @@ export class HoverManager {
 			}),
 		)
 
-		// 监听视口缩放事件，更新 hover 边框宽度
+		// 监听视口缩放事件，鼠标未移动时也要重新命中当前指针下的元素
 		this.eventUnsubscribers.push(
 			this.canvas.eventEmitter.on("viewport:scale", () => {
+				if (this.isViewportGestureActive) {
+					this.clearHover()
+					return
+				}
+				this.refreshHoverAtCurrentPointer()
 				this.updateHoverStrokeWidth()
 			}),
 		)
@@ -76,7 +82,22 @@ export class HoverManager {
 		// 监听视口平移事件，鼠标未移动时也要重新命中当前指针下的元素
 		this.eventUnsubscribers.push(
 			this.canvas.eventEmitter.on("viewport:pan", () => {
+				if (this.isViewportGestureActive) {
+					this.clearHover()
+					return
+				}
 				this.refreshHoverAtCurrentPointer()
+			}),
+		)
+
+		this.eventUnsubscribers.push(
+			this.canvas.eventEmitter.on("viewport:gesture", ({ data }) => {
+				this.isViewportGestureActive = data.active
+				if (data.active) {
+					this.pendingHoverTarget = null
+					this.cancelHoverFlush()
+					this.clearHover()
+				}
 			}),
 		)
 
@@ -97,6 +118,8 @@ export class HoverManager {
 
 		this.eventUnsubscribers.push(
 			this.canvas.eventEmitter.on("extend:enter", () => {
+				this.pendingHoverTarget = null
+				this.cancelHoverFlush()
 				this.clearHover()
 			}),
 		)
@@ -113,6 +136,13 @@ export class HoverManager {
 	 * 处理鼠标移动事件
 	 */
 	private handleMouseMove = (e: Konva.KonvaEventObject<MouseEvent>): void => {
+		if (this.isViewportGestureActive || this.isExtendModeActive()) {
+			this.pendingHoverTarget = null
+			this.cancelHoverFlush()
+			this.clearHover()
+			return
+		}
+
 		this.pendingHoverTarget = e.target
 		this.scheduleHoverFlush()
 	}
@@ -147,6 +177,11 @@ export class HoverManager {
 	}
 
 	private refreshHoverAtCurrentPointer(): void {
+		if (this.isViewportGestureActive || this.isExtendModeActive()) {
+			this.clearHover()
+			return
+		}
+
 		const pointerPosition = this.canvas.stage.getPointerPosition()
 		if (!pointerPosition) {
 			this.clearHover()
@@ -167,6 +202,11 @@ export class HoverManager {
 	}
 
 	private resolveHoverTarget(target: Konva.Node | null): void {
+		if (this.isViewportGestureActive || this.isExtendModeActive()) {
+			this.clearHover()
+			return
+		}
+
 		if (!target || this.canvas.transformManager.isTransformInteractionActive()) {
 			this.clearHover()
 			return
@@ -207,6 +247,11 @@ export class HoverManager {
 	 * 设置 hover 状态
 	 */
 	private setHover(elementId: string): void {
+		if (this.isViewportGestureActive || this.isExtendModeActive()) {
+			this.clearHover()
+			return
+		}
+
 		// 如果元素已被选中，不显示 hover 效果
 		if (this.canvas.selectionManager.isSelected(elementId)) {
 			this.clearHover()
@@ -440,6 +485,10 @@ export class HoverManager {
 		})
 
 		return topElementId
+	}
+
+	private isExtendModeActive(): boolean {
+		return Boolean(this.canvas.extendManager?.getExtendingElementId?.())
 	}
 
 	/**

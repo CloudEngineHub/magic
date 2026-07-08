@@ -96,21 +96,21 @@ export const generateUserApi = (fetch: HttpClient) => ({
 		})
 	},
 
-	/**
-	 * @description 登出
-	 * @param {{ device: Common.DeviceInfo }} data 登录设备
-	 * @param {HeadersInit} headers 请求头
-	 * @param signal
-	 * @returns
-	 */
-	logout(data: { device: Common.DeviceInfo }, headers?: HeadersInit, signal?: AbortSignal) {
-		return fetch.post<Login.UserLoginsResponse>(genRequestUrl("/v4/users/logout"), data, {
-			headers,
-			signal,
-			enableRequestUnion: true,
-			enableAuthorizationVerification: false,
-		})
-	},
+	// /**
+	//  * @description 登出
+	//  * @param {{ device: Common.DeviceInfo }} data 登录设备
+	//  * @param {HeadersInit} headers 请求头
+	//  * @param signal
+	//  * @returns
+	//  */
+	// logout(data: { device: Common.DeviceInfo }, headers?: HeadersInit, signal?: AbortSignal) {
+	// 	return fetch.post<Login.UserLoginsResponse>(genRequestUrl("/v4/users/logout"), data, {
+	// 		headers,
+	// 		signal,
+	// 		enableRequestUnion: true,
+	// 		enableAuthorizationVerification: false,
+	// 	})
+	// },
 
 	/**
 	 * @description 钉钉 App 登录

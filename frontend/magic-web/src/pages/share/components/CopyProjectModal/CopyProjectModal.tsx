@@ -206,10 +206,13 @@ function CopyProjectModal({ open, onCancel, projectData, onCopySuccess }: CopyPr
 			title={null}
 			closable={false}
 		>
-			<div>
+			<div data-testid="copy-project-modal">
 				{/* 标题和描述 */}
 				<div className="mb-5 h-10">
-					<div className="text-base font-semibold leading-[22px]">
+					<div
+						className="text-base font-semibold leading-[22px]"
+						data-testid="copy-project-modal-title"
+					>
 						{t("share.copyProject")}
 					</div>
 					<div className="mb-2.5 text-xs leading-4 text-muted-foreground">
@@ -223,7 +226,10 @@ function CopyProjectModal({ open, onCancel, projectData, onCopySuccess }: CopyPr
 						<span className="text-sm font-normal leading-5 text-foreground">
 							{`${t("share.originalProject")}${t("share.author")}`}
 						</span>
-						<div className="flex h-9 items-center justify-start gap-1.5 rounded-lg border border-border bg-muted px-1.5 text-sm font-semibold leading-5 text-foreground">
+						<div
+							className="flex h-9 items-center justify-start gap-1.5 rounded-lg border border-border bg-muted px-1.5 text-sm font-semibold leading-5 text-foreground"
+							data-testid="original-project-author"
+						>
 							{projectData?.originalAuthor}
 						</div>
 					</div>
@@ -232,7 +238,10 @@ function CopyProjectModal({ open, onCancel, projectData, onCopySuccess }: CopyPr
 						<span className="text-sm font-normal leading-5 text-foreground">
 							{`${t("share.originalProject")}${t("share.name")}`}
 						</span>
-						<div className="flex h-9 items-center justify-start gap-1.5 rounded-lg border border-border bg-muted px-1.5 text-sm font-semibold leading-5 text-foreground">
+						<div
+							className="flex h-9 items-center justify-start gap-1.5 rounded-lg border border-border bg-muted px-1.5 text-sm font-semibold leading-5 text-foreground"
+							data-testid="original-project-name"
+						>
 							{projectData?.isProjectShare
 								? projectData?.originalProjectName || t("project.unnamedProject")
 								: projectData?.shareName || t("project.unnamedProject")}
@@ -261,6 +270,7 @@ function CopyProjectModal({ open, onCancel, projectData, onCopySuccess }: CopyPr
 							onChange={(e) => setNewProjectName(e.target.value)}
 							placeholder={t("share.enterNewProjectName")}
 							className="w-full"
+							data-testid="new-project-name-input"
 						/>
 					</div>
 					<div className="mb-2 text-sm font-medium text-foreground">
@@ -281,15 +291,20 @@ function CopyProjectModal({ open, onCancel, projectData, onCopySuccess }: CopyPr
 									onChange={(e) => setSearchValue(e.target.value)}
 									placeholder={t("share.searchWorkspace")}
 									className="rounded-lg"
+									data-testid="workspace-search-input"
 								/>
 							</div>
 							{/* 工作区列表 */}
-							<div className="max-h-[200px] overflow-y-auto rounded-lg bg-background p-2.5">
+							<div
+								className="max-h-[200px] overflow-y-auto rounded-lg bg-background p-2.5"
+								data-testid="workspace-list"
+							>
 								{/* 新建工作区选项 */}
 								{!isCreatingWorkspace ? (
 									<div
 										className="flex cursor-pointer items-center gap-3 rounded-lg px-2.5 py-1.5 text-sm font-medium text-foreground transition-all hover:bg-accent"
 										onClick={handleCreateNewWorkspace}
+										data-testid="create-workspace-button"
 									>
 										<div className="flex h-6 w-6 items-center justify-center rounded text-foreground">
 											<IconPlus size={16} />
@@ -310,11 +325,15 @@ function CopyProjectModal({ open, onCancel, projectData, onCopySuccess }: CopyPr
 											onKeyDown={handleWorkspaceInputKeyDown}
 											placeholder={t("share.enterWorkspaceName")}
 											autoFocus
+											data-testid="create-workspace-input"
 										/>
 									</div>
 								)}
 								{loading ? (
-									<div className="p-6 text-center text-sm text-muted-foreground">
+									<div
+										className="p-6 text-center text-sm text-muted-foreground"
+										data-testid="workspace-list-loading"
+									>
 										{t("common.loading")}
 									</div>
 								) : filteredWorkspaces.length > 0 ? (
@@ -327,12 +346,16 @@ function CopyProjectModal({ open, onCancel, projectData, onCopySuccess }: CopyPr
 													"border-primary bg-accent/50 hover:bg-accent",
 											)}
 											onClick={() => handleWorkspaceSelect(workspace)}
+											data-testid="workspace-item"
 										>
 											<div>
 												<img src={folderIcon} alt="folder" />
 											</div>
 											<div className="flex-1">
-												<div className="text-sm font-medium text-foreground">
+												<div
+													className="text-sm font-medium text-foreground"
+													data-testid="workspace-name"
+												>
 													{workspace.name || t("share.unNamedWorkspace")}
 												</div>
 											</div>
@@ -342,7 +365,10 @@ function CopyProjectModal({ open, onCancel, projectData, onCopySuccess }: CopyPr
 										</div>
 									))
 								) : (
-									<div className="p-6 text-center text-sm text-muted-foreground">
+									<div
+										className="p-6 text-center text-sm text-muted-foreground"
+										data-testid="workspace-list-empty"
+									>
 										{t("share.noWorkspaceFound")}
 									</div>
 								)}
@@ -353,7 +379,11 @@ function CopyProjectModal({ open, onCancel, projectData, onCopySuccess }: CopyPr
 
 				{/* 底部按钮 */}
 				<div className="mt-6 flex justify-end gap-3 border-t border-border pt-4">
-					<Button onClick={handleClose} className="min-w-[80px]">
+					<Button
+						onClick={handleClose}
+						className="min-w-[80px]"
+						data-testid="copy-project-cancel-button"
+					>
 						{t("common.cancel")}
 					</Button>
 					<Button
@@ -362,6 +392,7 @@ function CopyProjectModal({ open, onCancel, projectData, onCopySuccess }: CopyPr
 						loading={submitting}
 						disabled={!isFormValid}
 						className="min-w-[80px]"
+						data-testid="copy-project-confirm-button"
 					>
 						{t("common.confirm")}
 					</Button>

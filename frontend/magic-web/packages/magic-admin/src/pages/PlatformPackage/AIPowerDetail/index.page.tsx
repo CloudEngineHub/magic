@@ -1,5 +1,5 @@
 import { Divider, Flex, Form, message, Tooltip } from "antd"
-import { ButtonGroup, MagicCard, MagicSwitch, MagicAvatar } from "@admin-components"
+import { ButtonGroup, MagicButton, MagicCard, MagicSwitch, MagicAvatar } from "@admin-components"
 import { lazy, useMemo, useState } from "react"
 import { useParams } from "react-router-dom"
 import { useMemoizedFn, useMount, useRequest, useUnmount } from "ahooks"
@@ -95,7 +95,7 @@ function AIPowerDetailPage() {
 					? {
 							...res.config,
 							providers: mergedProviders,
-					  }
+						}
 					: res.config,
 			})
 
@@ -210,6 +210,37 @@ function AIPowerDetailPage() {
 		}
 	}
 
+	const onClear = () => {
+		if (useProvidersConfig) {
+			const providerConfig = (form.getFieldValue(["config", "providers"]) ||
+				providerList.find((item) => item.provider === selectedProvider)) as
+				| PlatformPackage.ProviderConfig
+				| undefined
+
+			if (!providerConfig) return
+
+			const keepKeys = ["provider", "name", "enable"]
+			const clearedProvider = { ...providerConfig }
+			const clearedProviderRecord = clearedProvider as unknown as Record<string, unknown>
+
+			Object.keys(clearedProvider).forEach((key) => {
+				if (!keepKeys.includes(key)) {
+					clearedProviderRecord[key] = undefined
+				}
+			})
+
+			form.setFieldValue(["config", "providers"], clearedProvider)
+		} else {
+			form.setFieldsValue({
+				config: {
+					model_id: undefined,
+					prompt: undefined,
+				},
+			})
+		}
+
+		form.setFields(form.getFieldsError().map(({ name }) => ({ name, errors: [] })))
+	}
 	const handleValuesChange = (changedFields: any, allFields: any) => {
 		// 如果使用 providers 配置且服务商没有变化，则更新服务商配置
 		if (
@@ -271,12 +302,14 @@ function AIPowerDetailPage() {
 					<ModelConfig />
 				)}
 				{hasEditRight && (
-					<ButtonGroup
-						className={styles.buttonGroup}
-						onCancel={onCancel}
-						onSave={onSave}
-						okProps={{ loading: saveLoading }}
-					/>
+					<Flex justify="flex-end" align="center" gap={10} className={styles.buttonGroup}>
+						<MagicButton onClick={onClear}>{tCommon("button.clear")}</MagicButton>
+						<ButtonGroup
+							onCancel={onCancel}
+							onSave={onSave}
+							okProps={{ loading: saveLoading }}
+						/>
+					</Flex>
 				)}
 			</Form>
 		</div>

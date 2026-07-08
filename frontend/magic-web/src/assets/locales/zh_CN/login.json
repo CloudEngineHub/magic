@@ -6,7 +6,6 @@
 	"agree": "同意并继续",
 	"agreementText": "我已阅读并同意",
 	"and": "和",
-	"antaLogin": "安踏登录",
 	"appleLogin": "苹果登录",
 	"appleLoginDescription": "当前 Apple Id 尚未绑定账号",
 	"appleLoginLoading": "正在获取 Apple 登录信息，请稍候...",
@@ -55,7 +54,7 @@
 			"title": "提示"
 		},
 		"confirm": "立即前往国际站",
-		"content": "检测到您使用的邀请码为超级麦吉国际站专用邀请码，即将为你自动跳转至国际站…"
+		"content": "检测到您使用的邀请码为$t(common:platform.name)国际站专用邀请码，即将为你自动跳转至国际站…"
 	},
 	"larkLogin": "飞书登录",
 	"larkRedirectLogin": "飞书跳转",

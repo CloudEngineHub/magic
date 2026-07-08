@@ -370,6 +370,7 @@ export default function SelfMediaSplashScreen({ onComplete }: SelfMediaSplashScr
 													alt=""
 													className="h-full w-full object-cover"
 													draggable={false}
+													data-testid="self-media-splash-screen-image"
 												/>
 											</div>
 										)
@@ -429,6 +430,7 @@ export default function SelfMediaSplashScreen({ onComplete }: SelfMediaSplashScr
 						disabled={exiting}
 						className="flex h-[54px] items-center gap-3 rounded-full bg-[#09090b] px-10 text-[15px] font-[700] text-white shadow-[0_18px_40px_rgba(24,24,27,0.16)] transition-transform hover:-translate-y-0.5 active:scale-95"
 						onClick={handleStart}
+						data-testid="handle-start"
 					>
 						<span
 							aria-hidden="true"

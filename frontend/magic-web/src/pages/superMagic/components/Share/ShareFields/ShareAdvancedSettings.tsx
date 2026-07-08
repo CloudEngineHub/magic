@@ -19,7 +19,7 @@ interface SwitchConfig {
 }
 
 export default memo(function ShareAdvancedSettings(props: ShareAdvancedSettingsProps) {
-	const { settings, onChange, mode } = props
+	const { settings, onChange, mode, hiddenSettingKeys = [] } = props
 
 	const { t } = useTranslation("super")
 	const [isExpanded, setIsExpanded] = useState(true)
@@ -70,6 +70,14 @@ export default memo(function ShareAdvancedSettings(props: ShareAdvancedSettingsP
 				modes: [ShareMode.File],
 			},
 			{
+				key: "pureMode",
+				labelKey: "share.pureMode",
+				descriptionKey: "share.pureModeDescription",
+				isVip: false,
+				defaultValue: false,
+				modes: [ShareMode.File],
+			},
+			{
 				key: "hideCreatorInfo",
 				labelKey: "share.hideCreatorInfo",
 				descriptionKey: "share.hideCreatorInfoDescription",
@@ -89,14 +97,20 @@ export default memo(function ShareAdvancedSettings(props: ShareAdvancedSettingsP
 	}, [])
 
 	// 根据当前模式筛选需要显示的开关配置
-	const visibleConfigs = SWITCH_CONFIGS.filter((config) => config.modes.includes(mode))
+	const visibleConfigs = SWITCH_CONFIGS.filter(
+		(config) => config.modes.includes(mode) && !hiddenSettingKeys.includes(config.key),
+	)
 
 	return (
-		<div className="flex select-none flex-col gap-3 rounded-lg bg-muted px-3 py-3">
+		<div
+			className="flex select-none flex-col gap-3 rounded-lg bg-muted px-3 py-3"
+			data-testid="share-advanced-settings"
+		>
 			{/* Header */}
 			<div
 				className="flex cursor-pointer items-center justify-between gap-2"
 				onClick={() => setIsExpanded(!isExpanded)}
+				data-testid="set-is-expanded"
 			>
 				<span className="text-sm font-medium leading-none text-foreground">
 					{t("share.advancedSettings")}
@@ -110,12 +124,12 @@ export default memo(function ShareAdvancedSettings(props: ShareAdvancedSettingsP
 
 			{/* Settings List */}
 			{isExpanded && (
-				<div className="flex flex-col gap-2">
+				<div className="flex flex-col gap-2" data-testid="share-advanced-settings-list">
 					{visibleConfigs.map((config) => {
 						const checked = settings[config.key] ?? config.defaultValue
 
 						return (
-							<div key={config.key} className="flex gap-3">
+							<div key={config.key} className="flex gap-3" data-testid="share-advanced-settings-item">
 								{config.isVip ? (
 									<VipSwitch
 										checked={checked}
@@ -127,6 +141,7 @@ export default memo(function ShareAdvancedSettings(props: ShareAdvancedSettingsP
 										onCheckedChange={(value) =>
 											handleSettingChange(config.key, value)
 										}
+										data-testid="handle-setting-change"
 									/>
 								)}
 								<div className="flex flex-1 flex-col gap-2">

@@ -1,7 +1,7 @@
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import { superMagicStore } from "@/pages/superMagic/stores"
 import { set } from "lodash-es"
-// import mock from "./mock_v26.json"
+// import mock from "./mock_v1.json"
 
 // @ts-ignore
 window.test = (topicId: string = "837333386617253888") => {
@@ -46,7 +46,7 @@ window.test = (topicId: string = "837333386617253888") => {
 			pubsub.publish(PubSubEvents.Stream_Message, message)
 			setTimeout(() => {
 				run(i + 1)
-			}, 5)
+			}, 20)
 		} else {
 			set(message, ["message", "send_time"], Date.now() / 1000)
 

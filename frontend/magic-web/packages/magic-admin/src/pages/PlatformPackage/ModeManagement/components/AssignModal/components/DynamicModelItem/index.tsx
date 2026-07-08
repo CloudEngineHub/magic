@@ -12,6 +12,7 @@ import { useStyles } from "../../styles"
 import { useModeConfigContext } from "../../hooks/useModeConfigContext"
 import { DragType } from "../../types"
 import SortableModelItem from "../SortableModelItem"
+import { isNewDynamicModelId } from "../../utils"
 
 interface DynamicModelItemProps {
 	handle: boolean
@@ -42,12 +43,21 @@ function DynamicModelItem({ handle, data, dragOverlay, style }: DynamicModelItem
 		[aggregate_config.models, dragOverlay],
 	)
 
-	const options = useMemo(
-		() => [
-			{
-				label: t("languageModel"),
-				value: AiModel.ServiceProviderCategory.LLM,
-			},
+	const options = useMemo(() => {
+		const languageModelOption = {
+			label: t("languageModel"),
+			value: AiModel.ServiceProviderCategory.LLM,
+		}
+
+		if (
+			isNewDynamicModelId(id) ||
+			data.model_category === AiModel.ServiceProviderCategory.LLM
+		) {
+			return [languageModelOption]
+		}
+
+		return [
+			languageModelOption,
 			{
 				label: t("imageModel"),
 				value: AiModel.ServiceProviderCategory.VLM,
@@ -56,9 +66,8 @@ function DynamicModelItem({ handle, data, dragOverlay, style }: DynamicModelItem
 				label: t("videoModel"),
 				value: AiModel.ServiceProviderCategory.VGM,
 			},
-		],
-		[t],
-	)
+		]
+	}, [data.model_category, id, t])
 
 	const downgradeOptions = useMemo(
 		() => [
@@ -287,7 +296,7 @@ function DynamicModelItem({ handle, data, dragOverlay, style }: DynamicModelItem
 				<Flex align="center" className={styles.actionWrapper}>
 					<MagicSelect
 						options={options}
-						defaultValue={data.model_category}
+						value={data.model_category}
 						className={styles.select}
 						onChange={changeModelCategory}
 						disabled={!handle}

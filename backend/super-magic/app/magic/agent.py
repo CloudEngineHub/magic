@@ -3329,6 +3329,15 @@ Since your subsequent output will be merged with pre-interruption content and di
         # 目前未实现流式处理，返回空值
         return None
 
+    def _is_tool_visible_in_current_context(self, tool_name: str) -> bool:
+        """检查工具是否应暴露给当前 Agent 上下文的 LLM。"""
+        try:
+            tool_instance = tool_factory.get_tool_instance(tool_name)
+        except Exception:
+            logger.warning(f"工具 {tool_name} 实例化失败，跳过添加。", exc_info=True)
+            return False
+        return tool_instance.is_visible_in_context(self.agent_context)
+
     async def _call_llm(
         self,
         messages: List[Dict[str, Any]],
@@ -3353,9 +3362,7 @@ Since your subsequent output will be merged with pre-interruption content and di
         # 1. 添加 .agent 文件中定义的基础工具
         if self.tools:
             for tool_name in self.tools.keys():
-                # 子 Agent 到达深度上限后，不再向 LLM 暴露 call_subagent，
-                # 避免模型看到一个注定会因深度限制失败的工具。
-                if tool_name == "call_subagent" and self.agent_context.get_subagent_depth() >= 1:
+                if not self._is_tool_visible_in_current_context(tool_name):
                     continue
                 # 只通过预构建定义获取工具参数
                 tool_param = tool_factory.get_tool_param_from_definition(tool_name)
@@ -3371,7 +3378,10 @@ Since your subsequent output will be merged with pre-interruption content and di
         # 2. 始终注入 compact_chat_history（永久工具，无需在 .agent 文件中声明）
         compact_tool_name = "compact_chat_history"
         existing_names = {t.get("function", {}).get("name") for t in tools_list}
-        if compact_tool_name not in existing_names:
+        if (
+            compact_tool_name not in existing_names
+            and self._is_tool_visible_in_current_context(compact_tool_name)
+        ):
             compact_param = tool_factory.get_tool_param_from_definition(compact_tool_name)
             if compact_param:
                 tools_list.append(compact_param)

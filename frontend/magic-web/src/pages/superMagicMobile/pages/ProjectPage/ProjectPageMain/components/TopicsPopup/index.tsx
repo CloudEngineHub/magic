@@ -80,6 +80,7 @@ function TopicsPopup({ open, onOpenChange, onCreateTopic, onOpenActionsPopup }: 
 							onOpenChange(false)
 						}}
 						className="flex h-9 w-full items-center justify-center gap-2 rounded-md border border-input bg-background px-4 py-2 text-sm text-foreground shadow-xs transition-colors hover:bg-accent hover:text-accent-foreground"
+						data-testid="on-create-topic"
 					>
 						<IconMessageCirclePlus size={16} />
 						<span>{t("topic.createNewTopic")}</span>

@@ -11,8 +11,17 @@ import type { SuperAgentTopicStatusItem } from "@/apis/modules/superMagic"
 const mockUsePaginatedTopics = vi.fn()
 const mockReloadTopics = vi.fn()
 const mockResetTopics = vi.fn()
-const mockStartTopicStatusPolling = vi.fn()
-const mockStopTopicStatusPolling = vi.fn()
+const {
+	mockStartTopicStatusPolling,
+	mockStopTopicStatusPolling,
+	mockGetTopicDetail,
+	mockIsMagicApp,
+} = vi.hoisted(() => ({
+	mockStartTopicStatusPolling: vi.fn(),
+	mockStopTopicStatusPolling: vi.fn(),
+	mockGetTopicDetail: vi.fn(),
+	mockIsMagicApp: vi.fn(() => false),
+}))
 let latestTopicStatusPollingHandler: ((items: SuperAgentTopicStatusItem[]) => void) | null = null
 
 vi.mock("react-i18next", () => ({
@@ -63,6 +72,21 @@ vi.mock("@/pages/superMagic/services/statusPollingService", () => ({
 			mockStartTopicStatusPolling(options)
 		},
 		stopTopicStatusPolling: mockStopTopicStatusPolling,
+	},
+}))
+
+vi.mock("@/pages/superMagic/services", () => ({
+	default: {
+		topic: {
+			// Keep topic detail lookup inert in tests so row selection focuses on panel behavior.
+			getTopicDetail: mockGetTopicDetail,
+		},
+	},
+}))
+
+vi.mock("@/utils/devices", () => ({
+	get isMagicApp() {
+		return mockIsMagicApp()
 	},
 }))
 
@@ -391,15 +415,30 @@ describe("TopicHistoryPanelContent", () => {
 		mockResetTopics.mockReset()
 		mockStartTopicStatusPolling.mockClear()
 		mockStopTopicStatusPolling.mockClear()
+		mockGetTopicDetail.mockReset()
+		mockIsMagicApp.mockReset()
+		mockIsMagicApp.mockReturnValue(false)
 		latestTopicStatusPollingHandler = null
-		mockUsePaginatedTopics.mockReturnValue({
-			displayTopics: topics,
-			isLoading: false,
-			isReloading: false,
-			reload: mockReloadTopics,
-			reset: mockResetTopics,
-			total: topics.length,
-		})
+		mockUsePaginatedTopics.mockImplementation(
+			(options?: { storeTopics?: Topic[]; searchKeyword?: string }) => {
+				const sourceTopics = options?.storeTopics ?? topics
+				const normalizedKeyword = options?.searchKeyword?.toLowerCase().trim() ?? ""
+				const filteredTopics = normalizedKeyword
+					? sourceTopics.filter((topic) =>
+							(topic.topic_name ?? "").toLowerCase().includes(normalizedKeyword),
+						)
+					: sourceTopics
+
+				return {
+					displayTopics: filteredTopics,
+					isLoading: false,
+					isReloading: false,
+					reload: mockReloadTopics,
+					reset: mockResetTopics,
+					total: filteredTopics.length,
+				}
+			},
+		)
 	})
 
 	it("shows server total in panel title", () => {
@@ -426,8 +465,10 @@ describe("TopicHistoryPanelContent", () => {
 			target: { value: "beta" },
 		})
 
-		expect(screen.queryByText("Alpha Topic")).not.toBeInTheDocument()
-		expect(screen.getByText("Beta Topic")).toBeInTheDocument()
+		return waitFor(() => {
+			expect(screen.queryByText("Alpha Topic")).not.toBeInTheDocument()
+			expect(screen.getByText("Beta Topic")).toBeInTheDocument()
+		})
 	})
 
 	it("calls onSelectTopic when clicking a topic item", () => {
@@ -441,6 +482,44 @@ describe("TopicHistoryPanelContent", () => {
 
 		expect(handleSelectTopic).toHaveBeenCalledTimes(1)
 		expect(handleSelectTopic).toHaveBeenCalledWith(topics[1])
+	})
+
+	it("expands the conversation panel before selecting a topic when it is collapsed", () => {
+		const callOrder: string[] = []
+		const handleExpandConversationPanel = vi.fn(() => {
+			callOrder.push("expand")
+		})
+		const handleSelectTopic = vi.fn(() => {
+			callOrder.push("select")
+		})
+
+		renderComponent({
+			isConversationPanelCollapsed: true,
+			onExpandConversationPanel: handleExpandConversationPanel,
+			onSelectTopic: handleSelectTopic,
+		})
+
+		fireEvent.click(screen.getByTestId("message-header-history-item-topic-2"))
+
+		expect(handleExpandConversationPanel).toHaveBeenCalledTimes(1)
+		expect(handleSelectTopic).toHaveBeenCalledTimes(1)
+		expect(callOrder).toEqual(["expand", "select"])
+	})
+
+	it("keeps the history panel open after selecting a topic", () => {
+		const handleClose = vi.fn()
+		const handleSelectTopic = vi.fn()
+
+		renderComponent({
+			onClose: handleClose,
+			onSelectTopic: handleSelectTopic,
+		})
+
+		fireEvent.click(screen.getByTestId("message-header-history-item-topic-2"))
+
+		expect(handleSelectTopic).toHaveBeenCalledTimes(1)
+		expect(handleClose).not.toHaveBeenCalled()
+		expect(screen.getByTestId("message-header-history-panel-container")).toBeInTheDocument()
 	})
 
 	it("calls onCreateTopic when clicking create button", () => {
@@ -468,7 +547,7 @@ describe("TopicHistoryPanelContent", () => {
 
 		await waitFor(() => {
 			expect(handleEditSubmit).toHaveBeenCalledWith("topic-1")
-			expect(mockReloadTopics).toHaveBeenCalledTimes(2)
+			expect(mockReloadTopics).toHaveBeenCalledTimes(1)
 		})
 	})
 
@@ -515,17 +594,72 @@ describe("TopicHistoryPanelContent", () => {
 			onClose: vi.fn(),
 		})
 
-		fireEvent.mouseEnter(screen.getByTestId("message-header-history-item-topic-1"))
-		fireEvent.click(screen.getByTestId("message-header-history-item-menu-button-topic-1"))
+		fireEvent.mouseEnter(screen.getByTestId("message-header-history-item-topic-2"))
+		fireEvent.click(screen.getByTestId("message-header-history-item-menu-button-topic-2"))
 
-		expect(screen.getByTestId("message-header-history-item-menu-topic-1")).toBeInTheDocument()
+		await waitFor(() => {
+			expect(
+				screen.getByTestId("message-header-history-item-menu-topic-topic-2"),
+			).toBeInTheDocument()
+		})
 
 		fireEvent.click(screen.getByTestId("mock-dropdown-outside"))
 
 		await waitFor(() => {
 			expect(
-				screen.queryByTestId("message-header-history-item-menu-topic-1"),
+				screen.queryByTestId("message-header-history-item-menu-topic-topic-2"),
 			).not.toBeInTheDocument()
+		})
+	})
+
+	it("keeps desktop topic actions hidden until the row is hovered", () => {
+		renderComponent()
+
+		expect(
+			screen.queryByTestId("message-header-history-item-menu-button-topic-2"),
+		).not.toBeInTheDocument()
+		expect(
+			screen.queryByTestId("message-header-history-item-pin-button-topic-2"),
+		).not.toBeInTheDocument()
+
+		fireEvent.mouseEnter(screen.getByTestId("message-header-history-item-topic-2"))
+
+		expect(
+			screen.getByTestId("message-header-history-item-menu-button-topic-2"),
+		).toBeInTheDocument()
+		expect(
+			screen.getByTestId("message-header-history-item-pin-button-topic-2"),
+		).toBeInTheDocument()
+	})
+
+	it("shows app topic actions without hover and moves pin into the more menu", async () => {
+		const handlePinTopic = vi.fn().mockResolvedValue(undefined)
+		mockIsMagicApp.mockReturnValue(true)
+
+		renderComponent({
+			onPinTopic: handlePinTopic,
+		})
+
+		expect(screen.getAllByTestId("mock-status-icon")).toHaveLength(2)
+		expect(
+			screen.queryByTestId("message-header-history-item-pin-button-topic-2"),
+		).not.toBeInTheDocument()
+		expect(
+			screen.getByTestId("message-header-history-item-menu-button-topic-2"),
+		).toBeInTheDocument()
+
+		fireEvent.click(screen.getByTestId("message-header-history-item-menu-button-topic-2"))
+		expect(
+			screen
+				.getByTestId("message-header-history-item-menu-topic-topic-2")
+				.querySelector("button"),
+		).toBe(screen.getByTestId("message-header-history-item-pin"))
+		fireEvent.click(screen.getByTestId("message-header-history-item-pin"))
+
+		await waitFor(() => {
+			expect(handlePinTopic).toHaveBeenCalledTimes(1)
+			expect(handlePinTopic).toHaveBeenCalledWith("topic-2")
+			expect(mockReloadTopics).toHaveBeenCalledTimes(1)
 		})
 	})
 
@@ -599,7 +733,7 @@ describe("TopicHistoryPanelContent", () => {
 		await waitFor(() => {
 			expect(handleAiRenameTopic).toHaveBeenCalledTimes(1)
 			expect(handleAiRenameTopic).toHaveBeenCalledWith(topic3)
-			expect(mockReloadTopics).toHaveBeenCalledTimes(2)
+			expect(mockReloadTopics).toHaveBeenCalledTimes(1)
 		})
 	})
 
@@ -621,7 +755,7 @@ describe("TopicHistoryPanelContent", () => {
 
 		await Promise.resolve(deleteCall[2]?.onSuccess?.())
 
-		expect(mockReloadTopics).toHaveBeenCalledTimes(2)
+		expect(mockReloadTopics).toHaveBeenCalledTimes(1)
 	})
 
 	it("reconciles stale running patches back to finished when store topics complete", async () => {

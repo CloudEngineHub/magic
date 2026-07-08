@@ -14,7 +14,7 @@ export interface BaseComponentProps {
 	children?: ReactNode
 }
 
-/** 预览策略：打开方声明能力，FilesViewer 按配置执行，不关心文件来源。 */
+/** Preview policy declared by the opener and executed by FilesViewer, independent of file source. */
 export interface FilePreviewPolicy {
 	temporary?: boolean
 	persistTab?: boolean
@@ -22,6 +22,8 @@ export interface FilePreviewPolicy {
 	keepLocalContent?: boolean
 	restoreAsActive?: boolean
 	readonly?: boolean
+	awaitAttachmentSync?: boolean
+	awaitAttachmentPath?: string
 }
 
 export interface WebsitePreset {
@@ -64,6 +66,7 @@ export interface FileItem {
 	parent_id?: string | number
 	source?: AttachmentSource
 	project_id?: string
+	is_hidden?: boolean
 }
 
 // Tab item interface
@@ -87,6 +90,10 @@ export interface TabItem {
 	 * 标记文件是否已被删除
 	 */
 	isDeleted?: boolean
+	/**
+	 * Cached tab has no matching file while the first attachment pass is still loading.
+	 */
+	isLoading?: boolean
 	/**
 	 * 用于强制重新挂载 Render 组件的刷新键
 	 */
@@ -143,6 +150,8 @@ export interface FilesViewerProps extends BaseComponentProps {
 	openFileTab?: (fileItem: any, autoEdit?: boolean) => void
 	activeFileId?: string | null
 	showFileFooter?: boolean
+	/** When true, treats the file viewer as fullscreen without requiring URL params */
+	forceFullscreenMode?: boolean
 	/** When false, hides CommonHeaderV2 inside file preview (URL param still works as fallback) */
 	showFileHeader?: boolean
 	/** When true, hides the file tab bar for single-file immersive read-only views */

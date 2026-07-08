@@ -16,7 +16,10 @@ import { IconLoader2 } from "@tabler/icons-react"
 import XMarkdown from "@dtyq/x-markdown"
 import { Virtuoso, type VirtuosoHandle } from "react-virtuoso"
 import { useStreamingCommittedContent } from "./WriteFileStreamingContent"
-import { parseWriteFileContentSource } from "./streamingWriteFileContent"
+import {
+	normalizeWriteFileMarkdownInput,
+	parseWriteFileContentSource,
+} from "./streamingWriteFileContent"
 import ChunkedCodeBlock from "./ChunkedCodeBlock"
 
 interface ToolDataLike {
@@ -51,8 +54,8 @@ const writeFileMarkdownClassName = cn(
 	"[&_hr]:my-0.5 [&_hr]:border-border",
 	"[&_strong]:font-semibold",
 	"[&_a]:text-primary [&_a]:no-underline hover:[&_a]:underline",
-	"[&_pre]:mt-0 [&_pre]:overflow-auto [&_pre]:rounded [&_pre]:bg-muted [&_pre]:p-2 [&_pre]:text-[85%] [&_pre]:leading-[1.45]",
-	"[&_code]:rounded [&_code]:bg-muted [&_code]:px-1 [&_code]:py-0.5 [&_code]:text-[85%]",
+	"[&_pre]:mt-0 [&_pre]:overflow-auto [&_pre]:rounded [&_pre]:bg-transparent [&_pre]:p-2 [&_pre]:text-[90%] [&_pre]:leading-[1.5]",
+	"[&_code]:rounded [&_code]:bg-muted [&_code]:px-1 [&_code]:py-0.5 [&_code]:text-[90%]",
 	"[&_pre_code]:bg-transparent [&_pre_code]:p-0 [&_pre_code]:text-[100%]",
 	"[&_table]:my-1 [&_table]:border-collapse [&_table]:overflow-auto [&_table]:text-xs",
 	"[&_thead]:bg-muted",
@@ -86,6 +89,12 @@ function WriteTool(props: WriteToolProps) {
 		streamingContent.content || "",
 		loading,
 	)
+	const markdownContent = useMemo(() => {
+		return normalizeWriteFileMarkdownInput({
+			filePath: streamingContent.filePath || "",
+			content: committedContent,
+		})
+	}, [committedContent, streamingContent.filePath])
 	const virtuosoRef = useRef<VirtuosoHandle>(null)
 
 	const renderVirtualContent = useCallback(
@@ -147,6 +156,7 @@ function WriteTool(props: WriteToolProps) {
 					<div
 						className="inline-flex h-7 w-7 flex-none cursor-pointer items-center justify-center rounded-r-[4px] bg-white hover:bg-fill active:bg-fill-secondary dark:bg-card"
 						onClick={handleOpenPlaybackTab}
+						data-testid="handle-open-playback-tab"
 					>
 						<CircleAlert size={16} className="text-foreground" />
 					</div>
@@ -155,6 +165,7 @@ function WriteTool(props: WriteToolProps) {
 						<div
 							className="inline-flex h-7 w-7 flex-none cursor-pointer items-center justify-center rounded-r-[4px] bg-white hover:bg-fill active:bg-fill-secondary dark:bg-card"
 							onClick={handleOpenPlaybackTab}
+							data-testid="handle-open-playback-tab-2"
 						>
 							<MonitorPlay size={16} className="text-foreground" />
 						</div>
@@ -171,6 +182,7 @@ function WriteTool(props: WriteToolProps) {
 				data-tool={tool?.id}
 				onMouseEnter={onMouseEnter}
 				onMouseLeave={onMouseLeave}
+				data-testid="on-mouse-enter"
 			>
 				<div
 					className={cn(
@@ -185,6 +197,7 @@ function WriteTool(props: WriteToolProps) {
 								isEmpty(fileData) && "cursor-not-allowed",
 							)}
 							onClick={onClick}
+							data-testid="write-file"
 						>
 							<ToolIconBadge toolName={tool?.name} />
 							<span className="w-fit flex-none text-xs font-normal leading-4 text-foreground">
@@ -226,9 +239,9 @@ function WriteTool(props: WriteToolProps) {
 									style={{ whiteSpace: "pre-wrap" }}
 									escapeRawHtml
 									protectCustomTagNewlines={false}
-									content={committedContent}
+									content={markdownContent}
 									renderContent={renderVirtualContent}
-									components={{ pre: ChunkedCodeBlock, code: ChunkedCodeBlock }}
+									components={{ code: ChunkedCodeBlock }}
 								/>
 							</div>
 						</div>

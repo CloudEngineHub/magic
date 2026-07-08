@@ -19,7 +19,35 @@
 			"@/*": ["./src/*"],
 			"@enterprise/*": ["./enterprise/src/*"],
 			"@admin/*": ["./packages/magic-admin/src/*"],
+			"@customer/*": ["./customer/src/*"],
 			"@admin-components": ["./packages/magic-admin/components/index.ts"],
+			"@admin-enterprise/*": ["./packages/magic-admin/enterprise/src/*"],
+			"@dtyq/html-sandbox": ["./packages/html-sandbox/src/index.ts"],
+			"@dtyq/html-sandbox/index.html": ["./packages/html-sandbox/index.html"],
+			"@dtyq/html-sandbox/runtime": ["./packages/html-sandbox/src/runtime/index.ts"],
+			"@dtyq/html-sandbox/runtime/api": ["./packages/html-sandbox/src/runtime/api/index.ts"],
+			"@dtyq/html-sandbox/runtime/RuntimeLogger": [
+				"./packages/html-sandbox/src/runtime/RuntimeLogger.ts"
+			],
+			"@dtyq/html-sandbox/runtime/RuntimePlugin": [
+				"./packages/html-sandbox/src/runtime/RuntimePlugin.ts"
+			],
+			"@dtyq/html-sandbox/telemetry": ["./packages/html-sandbox/src/telemetry/index.ts"],
+			"@dtyq/html-sandbox/*": ["./packages/html-sandbox/src/*"],
+			"@dtyq/magic-admin": ["./packages/magic-admin/src/index.ts"],
+			"@dtyq/magic-admin/ServiceIcon": [
+				"./packages/magic-admin/src/pages/PlatformPackage/components/ServiceIcon/index.tsx"
+			],
+			"@dtyq/magic-admin/components": ["./packages/magic-admin/components/index.ts"],
+			"@dtyq/magic-admin/provider": [
+				"./packages/magic-admin/src/provider/AdminProvider/index.tsx"
+			],
+			"@dtyq/magic-admin/locales": ["./packages/magic-admin/src/locales/index.ts"],
+			"@dtyq/x-markdown": ["./packages/x-markdown/src/index.ts"],
+			"@dtyq/x-markdown/*": ["./packages/x-markdown/src/*"],
+			"@magic/html2pptx": ["./packages/html2pptx/src/index.ts"],
+			"@magic-web/html2image": ["./packages/html2image/src/index.ts"],
+			"@magic-web/html2pdf": ["./packages/html2pdf/src/index.ts"]
 		},
 		"resolveJsonModule": true,
 		"skipLibCheck": true,
@@ -38,8 +66,19 @@
 		"src/**/__tests__/**/*.ts",
 		"src/**/__tests__/**/*.tsx",
 		"enterprise/src/**/__tests__/**/*.ts",
-		"enterprise/src/**/__tests__/**/*.tsx"
+		"enterprise/src/**/__tests__/**/*.tsx",
+		"customer/src/**/__tests__/**/*.ts",
+		"customer/src/**/__tests__/**/*.tsx"
 	],
-	"include": ["src/**/*", "enterprise/src/**/*", "types/**/*", "test", "vite/**/*.ts"],
+	"include": [
+		"src/**/*",
+		"enterprise/src/**/*",
+		"customer/src/**/*",
+		"types/**/*",
+		"mock/**/*",
+		"test",
+		"vite/**/*.ts",
+		"enterprise/src/Demo.tsx"
+	],
 	"references": [{ "path": "./tsconfig.node.json" }, { "path": "./tsconfig.test.json" }]
 }

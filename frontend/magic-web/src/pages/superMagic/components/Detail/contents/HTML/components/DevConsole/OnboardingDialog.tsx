@@ -38,6 +38,7 @@ function ErrorRowPreview({ sendLabel }: { sendLabel: string }) {
 				tabIndex={-1}
 				className="ml-1 flex-shrink-0 rounded p-0.5 text-muted-foreground hover:bg-accent hover:text-red-500"
 				title={sendLabel}
+				data-testid="onboarding-dialog-button"
 			>
 				<Send size={11} />
 			</button>

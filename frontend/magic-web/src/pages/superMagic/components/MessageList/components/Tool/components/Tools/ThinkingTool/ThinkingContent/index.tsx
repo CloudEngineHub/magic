@@ -15,6 +15,7 @@ function ThinkingContent({ content }: { content: string }) {
 				alt="quote"
 				width={20}
 				height={20}
+				data-testid="thinking-content-image"
 			/>
 			<EditorBody
 				isLoading={false}
@@ -29,6 +30,7 @@ function ThinkingContent({ content }: { content: string }) {
 				alt="quote"
 				width={20}
 				height={20}
+				data-testid="thinking-content-image-2"
 			/>
 		</Flex>
 	)

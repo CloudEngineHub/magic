@@ -1,98 +1,204 @@
 import { useEffect, useRef, useCallback } from "react"
 import { useDebounceFn } from "ahooks"
 import { SuperMagicApi } from "@/apis"
-
-// 内存缓存Map，记录每个projectId对应的last_updated_at值
-const projectLastUpdatedCache = new Map<string, string>()
+import { measureManualPerfAsyncOperation } from "@/utils/manualPerfLogger"
+import projectFilesStoreDefault, { type ProjectFilesStore } from "@/stores/projectFiles"
+import type { AttachmentItem } from "../components/TopicFilesButton/hooks"
+import { measureAttachmentFetch } from "../utils/attachmentPerf"
+import { loadProjectAttachments } from "../services"
+import {
+	clearProjectAttachmentsLastUpdated,
+	getProjectAttachmentsLastUpdated,
+	markProjectAttachmentsLastUpdated,
+	subscribeProjectAttachmentsLastUpdated,
+} from "../utils/projectAttachments/lastUpdatedCache"
+import { isAbortError, useLatestAbortableRequest } from "./useLatestAbortableRequest"
 
 interface UseAttachmentsPollingOptions {
 	/** 项目ID */
 	projectId?: string
+	/** Source of the current local attachment list. Defaults to the global project file store. */
+	store?: Pick<ProjectFilesStore, "workspaceFilesList">
 	/** 轮询间隔，默认5秒 */
 	interval?: number
 	/** 是否启用轮询，默认true */
 	enabled?: boolean
+	/** Whether to auto-start polling; manual checks still work when false. */
+	autoStart?: boolean
 	/** 当附件发生变化时的回调函数 */
 	onAttachmentsChange?: (data: {
-		tree: any[]
-		list: never[]
+		tree: AttachmentItem[]
+		list: AttachmentItem[]
 		last_updated_at: string
 		projectId: string
 	}) => void
 	/** 错误回调 */
-	onError?: (error: any, projectId: string) => void
+	onError?: (error: unknown, projectId: string) => void
 }
 
 export interface AttachmentsResponse {
-	tree?: any[]
-	list?: never[]
+	tree?: AttachmentItem[]
+	list?: AttachmentItem[]
 	last_updated_at?: string
 }
 
 /**
- * 轮询项目附件状态变化的hook
- * 每5秒检查一次附件的last_updated_at是否发生变化，如果变化则触发回调
+ * Fallback attachment consistency check hook.
+ * Event-driven pages call checkNow/checkNowDebounced after task terminal status changes.
+ * startPolling remains available only for explicit legacy callers.
  */
 export function useAttachmentsPolling(options: UseAttachmentsPollingOptions = {}) {
 	const {
 		projectId,
-		interval = 10000, // 默认10秒
+		store = projectFilesStoreDefault,
+		interval = 5000, // 默认5秒，仅显式开启轮询时使用
 		enabled = true,
+		autoStart = false,
 		onAttachmentsChange,
 		onError,
 	} = options
 
 	const timerRef = useRef<NodeJS.Timeout | null>(null)
 	const isMountedRef = useRef(true)
+	const { startRequest: startPollingRequest, cancelCurrent: cancelPollingRequest } =
+		useLatestAbortableRequest()
 	// 每个实例独立跟踪 last_updated_at，避免共享缓存导致多实例间"吞掉"变更通知
 	const instanceLastUpdatedRef = useRef<string>("")
 
 	const checkAttachments = useCallback(async () => {
 		if (!projectId || !enabled) return
 
-		// 记录开始执行时的projectId，用于后续一致性检查
+		// Capture projectId at start so stale results after project switches can be dropped.
 		const currentProjectId = projectId
+		const request = startPollingRequest()
+		const isLatestRequest = () =>
+			isMountedRef.current && currentProjectId === projectId && request.isCurrent()
 
 		try {
-			const res: { last_updated_at: string } = await SuperMagicApi.getLastFileUpdateTime({
-				project_id: currentProjectId,
-			})
+			const countRes = await measureManualPerfAsyncOperation(
+				"attachments_count_probe_ms",
+				() =>
+					SuperMagicApi.getProjectAttachmentsCount(
+						{
+							projectId: currentProjectId,
+						},
+						{ signal: request.signal },
+					),
+				{
+					source: "useAttachmentsPolling.getProjectAttachmentsCount",
+					has_project_id: true,
+				},
+			)
 
-			// 组件已卸载，直接返回
-			if (!isMountedRef.current) return
-
-			// 检查projectId是否仍然一致，避免使用过期的projectId处理数据
-			if (currentProjectId !== projectId) {
-				console.log("ProjectId changed during API call, ignoring result:", {
+			if (!isLatestRequest()) {
+				console.log("ProjectId changed during count API call, ignoring result:", {
 					started: currentProjectId,
 					current: projectId,
 				})
 				return
 			}
 
-			const newLastUpdatedAt = res?.last_updated_at || ""
-			const cachedLastUpdatedAt = instanceLastUpdatedRef.current
+			const serverCount = Number(countRes?.total ?? 0)
+			const localCount = store.workspaceFilesList.length
+			let shouldRefresh = serverCount !== localCount
+			let newLastUpdatedAt = instanceLastUpdatedRef.current
+			const shouldHydrateLastUpdatedAfterRefresh = shouldRefresh
 
-			// 如果last_updated_at发生变化或首次获取，触发回调
-			if (newLastUpdatedAt && newLastUpdatedAt !== cachedLastUpdatedAt) {
-				// 更新实例级缓存和共享缓存
-				instanceLastUpdatedRef.current = newLastUpdatedAt
-				projectLastUpdatedCache.set(currentProjectId, newLastUpdatedAt)
-				const attachmentRes: AttachmentsResponse =
-					await SuperMagicApi.getAttachmentsByProjectId({
-						projectId: currentProjectId,
-						// @ts-ignore 使用window添加临时的token
-						temporaryToken: window.temporary_token || "",
-					})
+			if (!shouldRefresh) {
+				const res: { last_updated_at: string } = await measureManualPerfAsyncOperation(
+					"last_update_fetch_ms",
+					() =>
+						SuperMagicApi.getLastFileUpdateTime(
+							{
+								project_id: currentProjectId,
+							},
+							{ signal: request.signal },
+						),
+					{
+						source: "useAttachmentsPolling.getLastFileUpdateTime",
+						has_project_id: true,
+					},
+				)
 
-				// 再次检查projectId一致性，确保回调时projectId仍然正确
-				if (currentProjectId !== projectId) {
+				if (!isLatestRequest()) {
+					console.log(
+						"ProjectId changed during last updated API call, ignoring result:",
+						{
+							started: currentProjectId,
+							current: projectId,
+						},
+					)
+					return
+				}
+
+				newLastUpdatedAt = res?.last_updated_at || ""
+				const cachedLastUpdatedAt = instanceLastUpdatedRef.current
+				shouldRefresh = Boolean(
+					newLastUpdatedAt && newLastUpdatedAt !== cachedLastUpdatedAt,
+				)
+			}
+
+			// Load the tree only when count or last_updated_at changes; otherwise this is a cheap probe.
+			if (shouldRefresh) {
+				const attachmentRes: AttachmentsResponse = await measureAttachmentFetch(
+					"useAttachmentsPolling.loadProjectAttachments",
+					() =>
+						loadProjectAttachments({
+							projectId: currentProjectId,
+							signal: request.signal,
+						}),
+				)
+
+				if (!isLatestRequest()) {
 					console.log("ProjectId changed during attachments API call, ignoring result:", {
 						started: currentProjectId,
 						current: projectId,
 					})
 					return
 				}
+
+				if (shouldHydrateLastUpdatedAfterRefresh) {
+					try {
+						const res: { last_updated_at: string } =
+							await measureManualPerfAsyncOperation(
+								"last_update_fetch_ms",
+								() =>
+									SuperMagicApi.getLastFileUpdateTime(
+										{
+											project_id: currentProjectId,
+										},
+										{ signal: request.signal },
+									),
+								{
+									source: "useAttachmentsPolling.getLastFileUpdateTimeAfterCountRefresh",
+									has_project_id: true,
+								},
+							)
+
+						if (!isLatestRequest()) {
+							console.log(
+								"ProjectId changed during post-refresh last updated API call, ignoring result:",
+								{
+									started: currentProjectId,
+									current: projectId,
+								},
+							)
+							return
+						}
+
+						newLastUpdatedAt = res?.last_updated_at || newLastUpdatedAt
+					} catch (error) {
+						if (isAbortError(error) || !isLatestRequest()) return
+						console.warn(
+							`Failed to hydrate last_updated_at after count refresh for project ${currentProjectId}:`,
+							error,
+						)
+					}
+				}
+
+				// Update the cache only after a successful load so canceled requests cannot hide changes.
+				instanceLastUpdatedRef.current = newLastUpdatedAt
+				markProjectAttachmentsLastUpdated(currentProjectId, newLastUpdatedAt)
 
 				// 触发回调
 				onAttachmentsChange?.({
@@ -103,11 +209,9 @@ export function useAttachmentsPolling(options: UseAttachmentsPollingOptions = {}
 				})
 			}
 		} catch (error) {
-			// 组件已卸载，直接返回
-			if (!isMountedRef.current) return
+			if (isAbortError(error)) return
 
-			// 检查projectId一致性，避免报告过期projectId的错误
-			if (currentProjectId !== projectId) {
+			if (!isLatestRequest()) {
 				console.log("ProjectId changed during API call, ignoring error:", {
 					started: currentProjectId,
 					current: projectId,
@@ -117,8 +221,10 @@ export function useAttachmentsPolling(options: UseAttachmentsPollingOptions = {}
 
 			console.error(`Failed to check attachments for project ${currentProjectId}:`, error)
 			onError?.(error, currentProjectId)
+		} finally {
+			request.release()
 		}
-	}, [projectId, enabled, onAttachmentsChange, onError])
+	}, [projectId, enabled, onAttachmentsChange, onError, startPollingRequest, store])
 
 	const checkAttachmentsDebounced = useDebounceFn(checkAttachments, {
 		wait: 1000,
@@ -131,10 +237,9 @@ export function useAttachmentsPolling(options: UseAttachmentsPollingOptions = {}
 
 		if (!projectId || !enabled) return
 
-		// 立即执行一次检查
+		// Do not run immediately; page initialization owns the first attachment load.
 		// checkAttachments()
 
-		// 启动定时器
 		timerRef.current = setInterval(checkAttachments, interval)
 	}, [checkAttachments, interval, projectId, enabled])
 
@@ -145,10 +250,11 @@ export function useAttachmentsPolling(options: UseAttachmentsPollingOptions = {}
 		}
 	}, [])
 
-	// 当projectId或enabled状态变化时，重新启动轮询
+	// Restart or stop polling when projectId/enabled/autoStart changes.
 	useEffect(() => {
-		// projectId 变化时重置实例级缓存
-		instanceLastUpdatedRef.current = ""
+		cancelPollingRequest()
+		// Reset instance cache on project change; reuse shared cache if WS updated it.
+		instanceLastUpdatedRef.current = getProjectAttachmentsLastUpdated(projectId)
 		// // 清空文件状态
 		// onAttachmentsChange?.({
 		// 	tree: [],
@@ -156,15 +262,22 @@ export function useAttachmentsPolling(options: UseAttachmentsPollingOptions = {}
 		// 	last_updated_at: "",
 		// 	projectId: projectId || "",
 		// })
-		if (projectId && enabled) {
+		if (projectId && enabled && autoStart) {
 			startPolling()
 		} else {
 			stopPolling()
 		}
 
 		return () => {
+			cancelPollingRequest()
 			stopPolling()
 		}
+	}, [autoStart, cancelPollingRequest, enabled, projectId, startPolling, stopPolling])
+
+	useEffect(() => {
+		return subscribeProjectAttachmentsLastUpdated(projectId, (lastUpdatedAt) => {
+			instanceLastUpdatedRef.current = lastUpdatedAt
+		})
 	}, [projectId])
 
 	// 组件卸载时清理
@@ -173,9 +286,10 @@ export function useAttachmentsPolling(options: UseAttachmentsPollingOptions = {}
 
 		return () => {
 			isMountedRef.current = false
+			cancelPollingRequest()
 			stopPolling()
 		}
-	}, [stopPolling])
+	}, [cancelPollingRequest, stopPolling])
 
 	return {
 		/** 手动触发一次检查 */
@@ -192,9 +306,9 @@ export function useAttachmentsPolling(options: UseAttachmentsPollingOptions = {}
 				// 清除实例级缓存
 				instanceLastUpdatedRef.current = ""
 				if (targetProjectId) {
-					projectLastUpdatedCache.delete(targetProjectId)
+					clearProjectAttachmentsLastUpdated(targetProjectId)
 				} else if (projectId) {
-					projectLastUpdatedCache.delete(projectId)
+					clearProjectAttachmentsLastUpdated(projectId)
 				}
 			},
 			[projectId],
@@ -204,7 +318,7 @@ export function useAttachmentsPolling(options: UseAttachmentsPollingOptions = {}
 			(targetProjectId?: string) => {
 				return (
 					instanceLastUpdatedRef.current ||
-					projectLastUpdatedCache.get(targetProjectId || projectId || "")
+					getProjectAttachmentsLastUpdated(targetProjectId || projectId)
 				)
 			},
 			[projectId],

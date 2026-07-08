@@ -94,7 +94,7 @@ export function NetworkTab({ entries, onSendErrorToAgent }: NetworkTabProps) {
 	}
 
 	return (
-		<div ref={scrollRef} className="h-full overflow-y-auto text-xs" onScroll={handleScroll}>
+		<div ref={scrollRef} className="h-full overflow-y-auto text-xs" onScroll={handleScroll} data-testid="handle-scroll">
 			<div
 				style={{
 					height: `${virtualizer.getTotalSize()}px`,
@@ -134,6 +134,7 @@ export function NetworkTab({ entries, onSendErrorToAgent }: NetworkTabProps) {
 							<div
 								className="flex cursor-pointer items-center gap-2 px-2 py-1.5 hover:bg-accent/50"
 								onClick={() => toggleExpand(entry.id)}
+								data-testid="toggle-expand"
 							>
 								<ChevronRight
 									size={10}
@@ -179,6 +180,7 @@ export function NetworkTab({ entries, onSendErrorToAgent }: NetworkTabProps) {
 														e.stopPropagation()
 														onSendErrorToAgent(entry)
 													}}
+													data-testid="on-send-error-to-agent"
 												>
 													<Send size={12} />
 												</button>

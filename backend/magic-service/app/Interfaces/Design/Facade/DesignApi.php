@@ -13,6 +13,7 @@ use App\Application\Design\Service\ImageGenerationAppService;
 use App\Application\Design\Service\ImageMarkIdentifyAppService;
 use App\Application\Design\Service\ImagePromptCompletionAppService;
 use App\Domain\Design\Entity\Dto\DesignVideoCreateDTO;
+use App\Domain\Design\Entity\ImageGenerationEntity;
 use App\Domain\Design\Entity\ValueObject\ImageGenerationType;
 use App\Domain\Design\Entity\ValueObject\ImageMarkIdentifyType;
 use App\Interfaces\Design\Assembler\DesignVideoAssembler;
@@ -24,6 +25,7 @@ use App\Interfaces\Design\RequestForm\EraserFormRequest;
 use App\Interfaces\Design\RequestForm\EstimateVideoPointsFormRequest;
 use App\Interfaces\Design\RequestForm\ExpandImageFormRequest;
 use App\Interfaces\Design\RequestForm\GenerateImageFormRequest;
+use App\Interfaces\Design\RequestForm\GenerateImagesFormRequest;
 use App\Interfaces\Design\RequestForm\GenerateVideoFormRequest;
 use App\Interfaces\Design\RequestForm\IdentifyImageMarkFormRequest;
 use App\Interfaces\Design\RequestForm\QueryImageGenerationResultFormRequest;
@@ -73,13 +75,36 @@ class DesignApi extends AbstractApi
     }
 
     /**
+     * 生成多张图片.
+     */
+    public function generateImages(GenerateImagesFormRequest $request)
+    {
+        $request->validateResolved();
+        $authenticatable = $this->getAuthorization();
+        $validated = $request->validated();
+        $dto = new ImageGenerationDTO($validated);
+
+        $DO = ImageGenerationAssembler::toDO($dto);
+        $DO->setGenerateNum((int) $validated['generate_num']);
+
+        $DO->setType(ImageGenerationType::TEXT_TO_IMAGE);
+        if ($DO->getReferenceImageCount()) {
+            $DO->setType(ImageGenerationType::IMAGE_TO_IMAGE);
+        }
+
+        $entity = $this->imageGenerationAppService->generateImages($authenticatable, $DO);
+
+        return $this->formatImageGenerationResults($entity);
+    }
+
+    /**
      * 转高清.
      */
     public function generateHighImage(ConvertHighImageFormRequest $request)
     {
         $request->validateResolved();
         $authenticatable = $this->getAuthorization();
-        $dto = new ImageGenerationDTO($request->validated());
+        $dto = new ImageGenerationDTO($this->normalizeImageOperationPayload($request->validated()));
         $DO = ImageGenerationAssembler::toDO($dto);
 
         $filePath = (string) $this->request->input('file_path');
@@ -111,6 +136,23 @@ class DesignApi extends AbstractApi
         $entity = $this->imageGenerationAppService->queryImageGeneration($authenticatable, $projectId, $imageId);
 
         return ImageGenerationAssembler::toDTO($entity);
+    }
+
+    /**
+     * 查询多图生成结果.
+     */
+    public function queryImageGenerationResults(QueryImageGenerationResultFormRequest $request)
+    {
+        $authenticatable = $this->getAuthorization();
+
+        $request->validateResolved();
+        $validated = $request->validated();
+        $projectId = (int) $validated['project_id'];
+        $imageId = (string) $validated['image_id'];
+
+        $entity = $this->imageGenerationAppService->queryImageGenerationResults($authenticatable, $projectId, $imageId);
+
+        return $this->formatImageGenerationResults($entity);
     }
 
     /**
@@ -188,7 +230,7 @@ class DesignApi extends AbstractApi
     {
         $request->validateResolved();
         $authenticatable = $this->getAuthorization();
-        $dto = new ImageGenerationDTO($request->validated());
+        $dto = new ImageGenerationDTO($this->normalizeImageOperationPayload($request->validated()));
         $DO = ImageGenerationAssembler::toDO($dto);
 
         $filePath = (string) $this->request->input('file_path');
@@ -213,7 +255,7 @@ class DesignApi extends AbstractApi
     {
         $request->validateResolved();
         $authenticatable = $this->getAuthorization();
-        $dto = new ImageGenerationDTO($request->validated());
+        $dto = new ImageGenerationDTO($this->normalizeImageOperationPayload($request->validated()));
         $DO = ImageGenerationAssembler::toDO($dto);
 
         $filePath = (string) $this->request->input('file_path');
@@ -306,5 +348,41 @@ class DesignApi extends AbstractApi
         $entity = $this->designVideoAppService->query($authenticatable, $projectId, $videoId);
 
         return DesignVideoAssembler::toDTO($entity)->toArray();
+    }
+
+    private function formatImageGenerationResults(ImageGenerationEntity $entity): array
+    {
+        return [
+            'project_id' => (string) $entity->getProjectId(),
+            'image_id' => $entity->getImageId(),
+            'model_id' => $entity->getModelId(),
+            'prompt' => $entity->getPrompt(),
+            'size' => $entity->getSize(),
+            'resolution' => $entity->getResolution(),
+            'file_dir' => $entity->getFileDir(),
+            'generate_num' => $entity->getGenerateNum(),
+            'status' => $entity->getStatus()->value,
+            'error_message' => $entity->getErrorMessage(),
+            'images' => $entity->getImages(),
+        ];
+    }
+
+    /**
+     * @param array<string, mixed> $payload
+     * @return array<string, mixed>
+     */
+    private function normalizeImageOperationPayload(array $payload): array
+    {
+        if (! isset($payload['image_generation_config']) && isset($payload['generate_config'])) {
+            $payload['image_generation_config'] = $payload['generate_config'];
+        }
+        unset($payload['generate_config']);
+
+        if (! isset($payload['prompt']) && isset($payload['custom_prompt'])) {
+            $payload['prompt'] = $payload['custom_prompt'];
+        }
+        unset($payload['custom_prompt']);
+
+        return $payload;
     }
 }

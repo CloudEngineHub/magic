@@ -3,7 +3,7 @@ import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import type { SuperMagicCreateNewTopicPayload } from "@/pages/superMagic/events/message"
 import SuperMagicService from "../../services"
 import TopicService from "../../services/topicService"
-import { projectStore, topicStore as globalTopicStore } from "../../stores/core"
+import { projectStore, topicStore as globalTopicStore, topicStore } from "../../stores/core"
 import type { ProjectListItem, Topic } from "../../pages/Workspace/types"
 import { TopicMode } from "../../pages/Workspace/TopicMode"
 import type { TopicStore } from "../../stores/core/topic"
@@ -70,7 +70,11 @@ function resolveRequestedModeSourceTopic({
  * Uses object payload contract ({ topicMode, afterCreate }) for all callers.
  */
 export function useCreateTopicListener(options: UseCreateTopicListenerOptions = {}) {
-	const { enabled = true, selectedProject: selectedProjectFromOptions, topicStore } = options
+	const {
+		enabled = true,
+		selectedProject: selectedProjectFromOptions,
+		topicStore: scopedTopicStore,
+	} = options
 	const selectedProject = selectedProjectFromOptions ?? projectStore.selectedProject
 
 	useEffect(() => {
@@ -104,11 +108,11 @@ export function useCreateTopicListener(options: UseCreateTopicListenerOptions = 
 				topicMode,
 			})
 
-			if (topicStore) {
+			if (scopedTopicStore) {
 				const projectId = selectedProject?.id
 				if (!projectId) return
 
-				new TopicService({ store: topicStore })
+				new TopicService({ store: scopedTopicStore })
 					.createTopic({
 						projectId,
 						topicName: topicName || "",
@@ -132,5 +136,5 @@ export function useCreateTopicListener(options: UseCreateTopicListenerOptions = 
 		return () => {
 			pubsub.unsubscribe(PubSubEvents.Create_New_Topic, handleCreateTopic)
 		}
-	}, [enabled, selectedProject, topicStore])
+	}, [enabled, selectedProject, scopedTopicStore])
 }

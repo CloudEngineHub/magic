@@ -161,7 +161,7 @@ function CreateKnowledgeDialog({
 									<Label className="text-base font-medium">
 										{t("knowledgeBase.create.importLabel")}
 									</Label>
-									<div className="space-y-2" role="list">
+									<div className="space-y-2" role="list" data-testid="list-div">
 										{IMPORT_SOURCE_OPTIONS.map((option) => (
 											<SourceTypeOptionRow
 												key={option.value}

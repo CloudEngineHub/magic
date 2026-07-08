@@ -183,7 +183,7 @@ export const getFileIcon = (filename: string) => {
 	}
 
 	// Document files
-	if (["md", "txt", "doc", "docx", "pdf"].includes(extension)) {
+	if (["md", "txt", "doc", "docx", "docm", "pdf"].includes(extension)) {
 		return IconDocFile
 	}
 

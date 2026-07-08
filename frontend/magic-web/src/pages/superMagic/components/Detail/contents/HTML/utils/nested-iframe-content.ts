@@ -16,6 +16,11 @@ import { getFileContentById } from "@/pages/superMagic/utils/api"
 import { processHtmlContent } from "../htmlProcessor"
 import { getFullContent, decodeHTMLEntities } from "./full-content"
 import {
+	buildHtmlVirtualStorageNamespace,
+	createVirtualStorageContext,
+	virtualStorageRegistry,
+} from "./virtual-storage"
+import {
 	MAGIC_FETCH_POST_MESSAGE_TARGET_HELPER,
 	POST_MESSAGE_TARGET_STRATEGIES,
 	findMatchingFile,
@@ -36,6 +41,10 @@ export const NESTED_IFRAME_MESSAGE_TYPES = {
 
 interface NestedIframeContentHandlerOptions {
 	postMessageTargetStrategy?: PostMessageTargetStrategy
+	projectId?: string
+	topicId?: string
+	parentTargetOrigin?: string
+	onTelemetry?: (data: Record<string, unknown>) => void
 }
 
 // 规范化链路文件 ID：去重并补齐当前请求发起文件
@@ -48,7 +57,11 @@ function normalizeChainFileIds(chainFileIds: unknown, requesterFileId?: string):
 	return unique
 }
 
-function injectIframeChainScript(htmlContent: string, chainFileIds: string[]): string {
+function injectIframeChainScript(
+	htmlContent: string,
+	chainFileIds: string[],
+	metadata: { fileId?: string; relativePath?: string } = {},
+): string {
 	if (!htmlContent) return htmlContent
 
 	try {
@@ -57,9 +70,17 @@ function injectIframeChainScript(htmlContent: string, chainFileIds: string[]): s
 		const doc = parser.parseFromString(htmlContent, "text/html")
 		const chainScript = doc.createElement("script")
 		chainScript.setAttribute("data-injected", "iframe-chain")
-		chainScript.textContent = `window.__MAGIC_IFRAME_CHAIN__=${JSON.stringify(chainFileIds)};`
+		chainScript.textContent = [
+			`window.__MAGIC_IFRAME_CHAIN__=${JSON.stringify(chainFileIds)};`,
+			metadata.fileId ? `window.__MAGIC_FILE_ID__=${JSON.stringify(metadata.fileId)};` : "",
+			metadata.relativePath
+				? `window.__MAGIC_RELATIVE_PATH__=${JSON.stringify(metadata.relativePath)};`
+				: "",
+		]
+			.filter(Boolean)
+			.join("")
 
-		if (doc.head) doc.head.appendChild(chainScript)
+		if (doc.head) doc.head.insertBefore(chainScript, doc.head.firstChild)
 		else if (doc.body) doc.body.insertBefore(chainScript, doc.body.firstChild)
 		else doc.documentElement.appendChild(chainScript)
 
@@ -361,8 +382,38 @@ export function createNestedIframeContentHandler(
 	attachmentList: unknown[],
 	options: NestedIframeContentHandlerOptions = {},
 ) {
-	const { postMessageTargetStrategy = POST_MESSAGE_TARGET_STRATEGIES.SAME_ORIGIN_ANCESTOR } =
-		options
+	const {
+		postMessageTargetStrategy = POST_MESSAGE_TARGET_STRATEGIES.SAME_ORIGIN_ANCESTOR,
+		projectId,
+		topicId,
+		parentTargetOrigin,
+	} = options
+
+	const reportNestedIframeFailure = (
+		reason: string,
+		errorMessage: string,
+		details: {
+			requestId: string
+			relativePath: string
+			messageFileId?: string
+			chainFileIds: unknown
+		},
+	) => {
+		const chainFileIds = normalizeChainFileIds(details.chainFileIds, details.messageFileId)
+		options.onTelemetry?.({
+			stage: "iframe_failure",
+			failureType: "nested_iframe_failed",
+			reason,
+			requestId: details.requestId,
+			errorMessage,
+			source: {
+				depth: chainFileIds.length,
+				path: details.relativePath,
+				requesterFileId: details.messageFileId || "",
+				chainFileIds,
+			},
+		})
+	}
 
 	return async (event: MessageEvent) => {
 		if (!event.data || event.data.type !== NESTED_IFRAME_MESSAGE_TYPES.REQUEST) return
@@ -380,7 +431,7 @@ export function createNestedIframeContentHandler(
 			skipProcessing?: boolean,
 			skipReason?: string,
 		) => {
-			; (event.source as Window)?.postMessage(
+			;(event.source as Window)?.postMessage(
 				{
 					type: NESTED_IFRAME_MESSAGE_TYPES.RESPONSE,
 					requestId,
@@ -408,6 +459,12 @@ export function createNestedIframeContentHandler(
 			const matchedFile = findMatchingFile(allFiles, relativePath, requesterFolderPath)
 
 			if (!matchedFile?.file_id) {
+				reportNestedIframeFailure("not_found", "File not found: " + relativePath, {
+					requestId,
+					relativePath,
+					messageFileId,
+					chainFileIds,
+				})
 				// 未找到文件时通知前端跳过，避免无限重试
 				sendResponse(
 					false,
@@ -421,6 +478,12 @@ export function createNestedIframeContentHandler(
 			}
 
 			if (requestChainFileIds.includes(matchedFile.file_id)) {
+				reportNestedIframeFailure("cycle", "Circular iframe nesting detected", {
+					requestId,
+					relativePath,
+					messageFileId,
+					chainFileIds,
+				})
 				// 命中循环依赖（A -> B -> A），直接跳过处理
 				sendResponse(false, undefined, "Circular iframe nesting detected", true)
 				return
@@ -432,6 +495,12 @@ export function createNestedIframeContentHandler(
 			})
 
 			if (typeof rawContent !== "string") {
+				reportNestedIframeFailure("fetch_failed", "Failed to fetch file content", {
+					requestId,
+					relativePath,
+					messageFileId,
+					chainFileIds,
+				})
 				sendResponse(false, undefined, "Failed to fetch file content")
 				return
 			}
@@ -453,7 +522,20 @@ export function createNestedIframeContentHandler(
 				html_relative_path: nestedFileFolderPath,
 			})
 
-			// 5. Inject all required runtime scripts (Magic methods, storage mocks, etc.)
+			const virtualStorageContext = await createVirtualStorageContext({
+				namespace: buildHtmlVirtualStorageNamespace({
+					projectId,
+					topicId,
+					fileId: matchedFile.file_id,
+				}),
+				origin: event.origin || undefined,
+				targetOrigin:
+					parentTargetOrigin ||
+					(typeof window !== "undefined" ? window.location.origin : "*"),
+			})
+			virtualStorageRegistry.register(virtualStorageContext)
+
+			// 5. Inject all required runtime scripts (Magic methods, virtual storage, etc.)
 			const fullContent = getFullContent(
 				decodeHTMLEntities(processedResult.processedContent),
 				matchedFile.file_id,
@@ -464,12 +546,26 @@ export function createNestedIframeContentHandler(
 						postMessageTargetStrategy,
 					},
 					postMessageTargetStrategy,
+					virtualStorage: virtualStorageContext,
 				},
 			)
 
-			const fullContentWithChain = injectIframeChainScript(fullContent, requestChainFileIds)
+			const fullContentWithChain = injectIframeChainScript(fullContent, requestChainFileIds, {
+				fileId: matchedFile.file_id,
+				relativePath: matchedFile.relative_file_path || relativePath,
+			})
 			sendResponse(true, fullContentWithChain)
 		} catch (error) {
+			reportNestedIframeFailure(
+				"processing_error",
+				error instanceof Error ? error.message : "Unknown error",
+				{
+					requestId,
+					relativePath,
+					messageFileId,
+					chainFileIds,
+				},
+			)
 			sendResponse(false, undefined, error instanceof Error ? error.message : "Unknown error")
 		}
 	}

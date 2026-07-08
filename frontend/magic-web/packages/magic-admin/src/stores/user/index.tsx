@@ -103,7 +103,9 @@ const resetAdminRuntimeState = () => {
 	const adminStore = useAdminStore.getState()
 	adminStore.setIsPermissionInitialized(false)
 	adminStore.setUserPermissions([])
+	adminStore.setTeamshareUserPermissions([])
 	adminStore.setPermissionsKeys("")
+	adminStore.setTeamsharePermissionsKeys("")
 	adminStore.setSubscriptionInfo(null)
 	adminStore.setIsOfficialOrg(false)
 }

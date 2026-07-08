@@ -355,8 +355,6 @@ export function usePPTSidebar({
 					pubsub.publish(PubSubEvents.Set_Content_When_Slide_Added, {
 						content: contentToInsert,
 					})
-
-					pubsub.publish(PubSubEvents.Update_Attachments)
 				} catch (loadError) {
 					console.error("Failed to load slide content or generate screenshot:", loadError)
 					// The slide is still inserted, just not fully loaded
@@ -512,8 +510,6 @@ export function usePPTSidebar({
 						minSlidesCount: 1,
 					})
 
-					pubsub.publish(PubSubEvents.Update_Attachments)
-
 					// Show success toast after API completes
 					magicToast.destroy(toastId)
 					magicToast.success(t("fileViewer.deleteSlideSuccess"))
@@ -645,8 +641,6 @@ export function usePPTSidebar({
 				if (onSortSave) {
 					onSortSave(store.slidePaths)
 				}
-
-				pubsub.publish(PubSubEvents.Update_Attachments)
 			}
 		} catch (error) {
 			console.error("Failed to rename slide:", error)

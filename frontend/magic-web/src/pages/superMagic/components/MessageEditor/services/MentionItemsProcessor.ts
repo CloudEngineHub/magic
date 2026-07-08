@@ -24,7 +24,7 @@ import { MentionItemsStatistics } from "./types"
 import { JSONContent } from "@tiptap/core"
 import { SuperMagicApi } from "@/apis"
 import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks"
-import pubsub, { PubSubEvents } from "@/utils/pubsub"
+import { loadProjectAttachments } from "@/pages/superMagic/services"
 
 interface BatchOperationResult {
 	status?: "success" | "processing" | "completed" | "failed"
@@ -196,8 +196,6 @@ export class MentionItemsProcessor {
 			beforeAttachments,
 			sourceIds: unresolvedSourceIds,
 		})
-
-		if (copiedFiles.length > 0) pubsub.publish(PubSubEvents.Update_Attachments)
 
 		return [...copiedReferencesFromSameProject, ...copiedFiles]
 	}
@@ -549,7 +547,7 @@ export class MentionItemsProcessor {
 	}
 
 	private async getProjectAttachments(projectId: string): Promise<AttachmentItem[]> {
-		const result = await SuperMagicApi.getAttachmentsByProjectId({
+		const result = await loadProjectAttachments({
 			projectId,
 			temporaryToken: "",
 		})

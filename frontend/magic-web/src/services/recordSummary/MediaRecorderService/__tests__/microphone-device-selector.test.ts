@@ -11,6 +11,23 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
 import { getMicrophoneConstraints } from "../config/AudioConstraintsConfig"
 
+vi.mock("@/assets/locales/locale-adapters", () => ({
+	getLocaleModules: () => ({}),
+	getAdminLocaleModules: () => ({}),
+	loadFallbackLocale: vi.fn(),
+	loadMagicFlowLocale: vi.fn(),
+}))
+
+vi.mock("react-i18next", () => ({
+	useTranslation: () => ({
+		t: (key: string) => key,
+	}),
+	initReactI18next: {
+		type: "3rdParty",
+		init: vi.fn(),
+	},
+}))
+
 // ─── 1. AudioConstraintsConfig ────────────────────────────────────────────────
 
 describe("getMicrophoneConstraints – deviceId", () => {
@@ -94,6 +111,73 @@ describe("MicrophoneSourceStrategy – getUserMedia deviceId", () => {
 		const calledConstraints = mockGetUserMedia.mock.calls[0][0].audio
 		// object constraints are passed as-is (not wrapped again)
 		expect(calledConstraints.deviceId).toEqual({ ideal: "default" })
+	})
+
+	it("falls back to minimal audio constraints when advanced constraints fail", async () => {
+		const mockStream = makeStream()
+		const mockGetUserMedia = vi
+			.fn()
+			.mockRejectedValueOnce(new Error("OverconstrainedError: deviceId"))
+			.mockResolvedValueOnce(mockStream)
+		const strategy = new MicrophoneSourceStrategy(
+			{
+				sampleRate: 16000,
+				bitRate: 16,
+				chunkDuration: 10,
+				type: "wav",
+				maxRetries: 1,
+				audioSource: {
+					source: "microphone",
+					microphoneConstraints: {
+						deviceId: "device-xyz",
+						noiseSuppression: true,
+					},
+				},
+			},
+			{
+				logger: { log: vi.fn(), warn: vi.fn(), error: vi.fn(), report: vi.fn() },
+				mediaDevices: { getUserMedia: mockGetUserMedia, getDisplayMedia: vi.fn() },
+			},
+		)
+
+		await strategy.initialize()
+
+		expect(mockGetUserMedia).toHaveBeenCalledTimes(2)
+		expect(mockGetUserMedia.mock.calls[0][0]).toMatchObject({
+			audio: expect.objectContaining({
+				deviceId: { exact: "device-xyz" },
+			}),
+		})
+		expect(mockGetUserMedia.mock.calls[1][0]).toEqual({
+			audio: true,
+		})
+	})
+
+	it("does not fall back to minimal audio constraints when permission is denied", async () => {
+		const mockGetUserMedia = vi
+			.fn()
+			.mockRejectedValueOnce(new Error("NotAllowedError: permission denied"))
+		const strategy = new MicrophoneSourceStrategy(
+			{
+				sampleRate: 16000,
+				bitRate: 16,
+				chunkDuration: 10,
+				type: "wav",
+				maxRetries: 1,
+				audioSource: {
+					source: "microphone",
+				},
+			},
+			{
+				logger: { log: vi.fn(), warn: vi.fn(), error: vi.fn(), report: vi.fn() },
+				mediaDevices: { getUserMedia: mockGetUserMedia, getDisplayMedia: vi.fn() },
+			},
+		)
+
+		await expect(strategy.initialize()).rejects.toThrow(
+			"Failed to initialize microphone audio source",
+		)
+		expect(mockGetUserMedia).toHaveBeenCalledTimes(1)
 	})
 })
 

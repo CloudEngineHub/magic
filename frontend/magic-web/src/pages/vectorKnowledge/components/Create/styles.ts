@@ -9,6 +9,7 @@ export const useVectorKnowledgeCreateStyles = createStyles(
 			container: css`
 				height: 100%;
 				overflow: hidden;
+				background: ${isDarkMode ? "transparent" : token.magicColorUsages.white};
 			`,
 			content: css`
 				flex: 1;
@@ -55,6 +56,9 @@ export const useVectorKnowledgeCreateStyles = createStyles(
 				}
 			`,
 			uploadIcon: css`
+				display: flex;
+				align-items: center;
+				justify-content: center;
 				color: rgba(28, 29, 35);
 				margin-bottom: 5px;
 			`,

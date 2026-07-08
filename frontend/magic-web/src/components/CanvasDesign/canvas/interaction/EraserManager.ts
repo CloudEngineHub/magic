@@ -1,9 +1,9 @@
-import type Konva from "konva"
 import type { Canvas } from "../Canvas"
 import { ElementTypeEnum, type ImageElement } from "../types"
 import { isCanvasUIComponentNode } from "../utils/domGuards"
 import { calculateNodesRect } from "../utils/utils"
 import { EraserRenderer, type EraserPoint, type EraserStroke } from "./EraserRenderer"
+import type { CanvasPointerInput } from "./input"
 
 export const MIN_RADIUS = 8
 export const MAX_RADIUS = 120
@@ -37,9 +37,7 @@ export class EraserManager {
 	private viewportPanHandler?: () => void
 	private elementUpdatedHandler?: (event: { data: { elementId: string } }) => void
 	private elementRerenderedHandler?: (event: { data: { elementId: string } }) => void
-	private stageMouseMoveHandler?: () => void
-	private stageMouseDownHandler?: (event: Konva.KonvaEventObject<MouseEvent>) => void
-	private stageMouseUpHandler?: () => void
+	private inputUnsubscribers: Array<() => void> = []
 	private containerMouseEnterHandler?: (event: MouseEvent) => void
 	private containerMouseLeaveHandler?: (event: MouseEvent) => void
 	private documentPointerMoveHandler?: (event: PointerEvent) => void
@@ -103,23 +101,12 @@ export class EraserManager {
 				this.syncPresentation()
 			}
 		}
-		this.stageMouseMoveHandler = () => {
-			if (!this.erasingElementId) return
-			if (!this.isCursorVisible) return
-			this.canvas.cursorManager.updateEraserCursorFromStagePointer()
-			this.syncStrokeWithPointer()
-		}
-		this.stageMouseDownHandler = (event) => {
-			if (!this.erasingElementId || event.evt.button !== 0 || !this.isCursorVisible) return
-			this.isPointerDown = true
-			this.canvas.cursorManager.updateEraserCursorFromStagePointer()
-			this.syncStrokeWithPointer()
-		}
-		this.stageMouseUpHandler = () => {
-			if (!this.erasingElementId) return
-			this.isPointerDown = false
-			this.eraserRenderer?.finishStroke()
-		}
+		this.inputUnsubscribers = [
+			this.canvas.inputManager.on("down", this.handleInputPointerDown),
+			this.canvas.inputManager.on("move", this.handleInputPointerMove),
+			this.canvas.inputManager.on("up", this.handleInputPointerUp),
+			this.canvas.inputManager.on("cancel", this.handleInputPointerCancel),
+		]
 		this.containerMouseEnterHandler = (event) => {
 			if (!this.erasingElementId || !this.isInteractiveCanvasPointerTarget(event.target))
 				return
@@ -131,12 +118,10 @@ export class EraserManager {
 		}
 		this.documentPointerMoveHandler = (event) => {
 			if (!this.erasingElementId) return
+			if (event.pointerType !== "mouse") return
 			if (!this.isInteractiveCanvasPointerTarget(event.target)) {
 				this.hideCursorAndResetInteraction(event)
-				return
 			}
-			this.showCursorForNativePointerEvent(event)
-			this.syncStrokeWithPointer()
 		}
 		this.windowBlurHandler = () => {
 			this.hideCursorAndResetInteraction()
@@ -146,9 +131,6 @@ export class EraserManager {
 		this.canvas.eventEmitter.on("viewport:pan", this.viewportPanHandler)
 		this.canvas.eventEmitter.on("element:updated", this.elementUpdatedHandler)
 		this.canvas.eventEmitter.on("element:rerendered", this.elementRerenderedHandler)
-		this.canvas.stage.on("mousemove", this.stageMouseMoveHandler)
-		this.canvas.stage.on("mousedown", this.stageMouseDownHandler)
-		this.canvas.stage.on("mouseup", this.stageMouseUpHandler)
 		this.canvas.container.addEventListener("mouseenter", this.containerMouseEnterHandler)
 		this.canvas.container.addEventListener("mouseleave", this.containerMouseLeaveHandler)
 		document.addEventListener("pointermove", this.documentPointerMoveHandler, true)
@@ -172,18 +154,8 @@ export class EraserManager {
 			this.canvas.eventEmitter.off("element:rerendered", this.elementRerenderedHandler)
 			this.elementRerenderedHandler = undefined
 		}
-		if (this.stageMouseMoveHandler) {
-			this.canvas.stage.off("mousemove", this.stageMouseMoveHandler)
-			this.stageMouseMoveHandler = undefined
-		}
-		if (this.stageMouseDownHandler) {
-			this.canvas.stage.off("mousedown", this.stageMouseDownHandler)
-			this.stageMouseDownHandler = undefined
-		}
-		if (this.stageMouseUpHandler) {
-			this.canvas.stage.off("mouseup", this.stageMouseUpHandler)
-			this.stageMouseUpHandler = undefined
-		}
+		this.inputUnsubscribers.forEach((unsubscribe) => unsubscribe())
+		this.inputUnsubscribers = []
 		if (this.containerMouseEnterHandler) {
 			this.canvas.container.removeEventListener("mouseenter", this.containerMouseEnterHandler)
 			this.containerMouseEnterHandler = undefined
@@ -264,6 +236,69 @@ export class EraserManager {
 		this.canvas.cursorManager.showEraserCursor()
 		this.canvas.cursorManager.updateEraserCursorFromStagePointer()
 		this.isCursorVisible = true
+	}
+
+	private handleInputPointerDown = (input: CanvasPointerInput): void => {
+		if (!this.erasingElementId || input.button !== 0) return
+
+		if (input.activePointerCount > 1) {
+			this.finishStrokeAndHideCursor()
+			return
+		}
+
+		this.showCursorForCanvasInput(input)
+		this.isPointerDown = true
+		this.syncStrokeWithPointer()
+	}
+
+	private handleInputPointerMove = (input: CanvasPointerInput): void => {
+		if (!this.erasingElementId) return
+
+		if (input.activePointerCount > 1) {
+			this.finishStrokeAndHideCursor()
+			return
+		}
+
+		this.showCursorForCanvasInput(input)
+		this.syncStrokeWithPointer()
+	}
+
+	private handleInputPointerUp = (input: CanvasPointerInput): void => {
+		if (!this.erasingElementId) return
+
+		this.showCursorForCanvasInput(input)
+		this.isPointerDown = false
+		this.eraserRenderer?.finishStroke()
+
+		if (input.pointerType !== "mouse") {
+			this.canvas.cursorManager.hideEraserCursor()
+			this.isCursorVisible = false
+		}
+	}
+
+	private handleInputPointerCancel = (): void => {
+		if (!this.erasingElementId) return
+		this.finishStrokeAndHideCursor()
+	}
+
+	private showCursorForCanvasInput(input: CanvasPointerInput): void {
+		if (!this.erasingElementId) return
+		if (input.pointerType !== "mouse" && input.nativeEvent.cancelable) {
+			input.nativeEvent.preventDefault()
+		}
+
+		this.isPointerDown = (input.buttons & 1) === 1
+		this.canvas.stage.setPointersPositions(input.nativeEvent)
+		this.canvas.cursorManager.showEraserCursor()
+		this.canvas.cursorManager.updateEraserCursorFromStagePointer()
+		this.isCursorVisible = true
+	}
+
+	private finishStrokeAndHideCursor(): void {
+		this.eraserRenderer?.finishStroke()
+		this.isPointerDown = false
+		this.canvas.cursorManager.hideEraserCursor()
+		this.isCursorVisible = false
 	}
 
 	private syncPointerDownFromNativeEvent(event: MouseEvent | PointerEvent): void {

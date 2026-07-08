@@ -7,6 +7,12 @@ import TopicResizeHandle from "./TopicResizeHandle"
 import { useTopicDesktopLayout } from "../hooks/useTopicDesktopLayout"
 import { useTopicDesktopPanelMotion } from "../hooks/useTopicDesktopPanelMotion"
 
+// Portal layers bypass BaseLayoutPc padding, so they must consume safe-area variables directly.
+const topicHistorySafeAreaPortalClassName =
+	"pointer-events-none fixed bottom-[var(--safe-area-inset-bottom)] right-[var(--safe-area-inset-right)] top-[var(--safe-area-inset-top)] z-40"
+const topicHistorySafeAreaDrawerClassName =
+	"pointer-events-auto absolute bottom-[var(--safe-area-inset-bottom)] right-[var(--safe-area-inset-right)] top-[var(--safe-area-inset-top)]"
+
 export interface TopicDesktopPanelsHistoryLayout {
 	isOpen: boolean
 	onClose: () => void
@@ -103,10 +109,25 @@ function TopicDesktopPanels({
 	const visibleConversationPanelCollapsed = shouldShowDetailPanel
 		? isConversationPanelCollapsed
 		: false
+	// Collapse should dismiss the history panel first so the right rail does not stay open
+	// after the conversation pane shrinks into the collapsed sliver state.
+	const handleToggleConversationPanel = useMemo(() => {
+		return () => {
+			if (!visibleConversationPanelCollapsed && isTopicHistoryPanelOpen) {
+				onCloseTopicHistoryPanel?.()
+			}
+			toggleConversationPanel()
+		}
+	}, [
+		isTopicHistoryPanelOpen,
+		onCloseTopicHistoryPanel,
+		toggleConversationPanel,
+		visibleConversationPanelCollapsed,
+	])
 	const messagePanel = renderMessagePanel({
 		isConversationPanelCollapsed: visibleConversationPanelCollapsed,
 		isDraggingPanel: isDraggingProjectSider || isDraggingMessagePanel,
-		onToggleConversationPanel: toggleConversationPanel,
+		onToggleConversationPanel: handleToggleConversationPanel,
 		onExpandConversationPanel: expandConversationPanel,
 		historyTriggerMode: historyLayout ? "layout" : "dropdown",
 		isHistoryPanelOpen: isTopicHistoryPanelOpen,
@@ -202,8 +223,8 @@ function TopicDesktopPanels({
 
 				{showProjectResizeHandle && (
 					<TopicResizeHandle
-						onMouseDown={(event) => {
-							startDragProjectSider(event.clientX)
+						onResizeStart={(clientX) => {
+							startDragProjectSider(clientX)
 						}}
 						className={cn("shrink-0", isDraggingProjectSider && "before:opacity-100")}
 					/>
@@ -269,8 +290,8 @@ function TopicDesktopPanels({
 						>
 							<TopicResizeHandle
 								disabled={isConversationPanelCollapsed || !shouldShowDetailPanel}
-								onMouseDown={(event) => {
-									startDragMessagePanel(event.clientX)
+								onResizeStart={(clientX) => {
+									startDragMessagePanel(clientX)
 								}}
 								className={cn(
 									"h-full w-full shrink-0",
@@ -309,7 +330,7 @@ function TopicDesktopPanels({
 								aria-hidden="true"
 							/>
 							{createPortal(
-								<div className="pointer-events-none fixed inset-y-0 right-0 z-40">
+								<div className={topicHistorySafeAreaPortalClassName}>
 									<div className="pointer-events-auto h-full">
 										{renderTopicHistoryShell(visibleTopicHistoryMode)}
 									</div>
@@ -328,7 +349,7 @@ function TopicDesktopPanels({
 										onClick={onCloseTopicHistoryPanel}
 										aria-hidden="true"
 									/>
-									<div className="pointer-events-auto absolute inset-y-0 right-0">
+									<div className={topicHistorySafeAreaDrawerClassName}>
 										{renderTopicHistoryShell("drawer")}
 									</div>
 								</div>,

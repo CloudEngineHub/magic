@@ -82,6 +82,7 @@ const IconComponent = (props: IconComponentProps) => {
 					src={iconUrl}
 					alt="icon"
 					style={{ width: size, height: size, flexShrink: 0 }}
+					data-testid="icon-view-component-image"
 				/>
 			</div>
 		)

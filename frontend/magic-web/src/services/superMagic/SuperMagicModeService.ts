@@ -2,7 +2,11 @@ import { BUSINESS_API_ERROR_CODE } from "@/constants/api"
 import { MODEL_TYPE_IMAGE, MODEL_TYPE_LLM } from "@/apis/modules/org-ai-model-provider"
 import { userStore } from "@/models/user"
 import type { ModelItem } from "@/pages/superMagic/components/MessageEditor/types"
-import { ModeItem, ModeModelGroupItemResponse } from "@/pages/superMagic/pages/Workspace/types"
+import {
+	ModeItem,
+	type ModeModelGroupItem,
+	ModeModelGroupItemResponse,
+} from "@/pages/superMagic/pages/Workspace/types"
 import { TopicMode } from "@/pages/superMagic/pages/Workspace/TopicMode"
 import superMagicCustomModelService from "./SuperMagicCustomModelService"
 import superMagicModeListRepository, {
@@ -16,6 +20,12 @@ import { SuperMagicApi } from "@/apis"
 import { configStore } from "@/models/config"
 import { interfaceStore } from "@/stores/interface"
 import { waitForLanguageReady } from "@/utils/waitPublicConfigInit"
+import {
+	TEMPORARY_SUPER_MAGIC_MODE_DIAG,
+	getTemporarySuperMagicModeDiagnostics,
+	hasAnyTemporarySuperMagicModeDiagnostic,
+	hasTemporarySuperMagicModeDiagnostic,
+} from "./superMagicModeTemporaryDiagnostics"
 
 const logger = Logger.createLogger("SuperMagicModeService")
 type ModeModelType = "language" | "image" | "video"
@@ -38,6 +48,64 @@ function resolveFeaturedModeMapKey(item: ModeItem): string {
 
 function buildModeMapFromModeList(list: ModeItem[]): Map<string, ModeItem> {
 	return new Map(list.map((item) => [resolveFeaturedModeMapKey(item), item]))
+}
+
+function normalizeAllModelGroupName(
+	groupName: string,
+	modelType: Extract<ModeModelType, "image" | "video">,
+) {
+	const suffixPattern = modelType === "image" ? /[-_\s]image$/i : /[-_\s]video$/i
+	return groupName.replace(suffixPattern, "").trim().toLowerCase()
+}
+
+function getModeListPayloadShape(modeList: ModeItem[], models?: Record<string, ModelItem>) {
+	let groupCount = 0
+	let languageModelRefCount = 0
+	let imageModelRefCount = 0
+	let videoModelRefCount = 0
+
+	modeList.forEach((item) => {
+		item.groups?.forEach((group) => {
+			groupCount += 1
+			languageModelRefCount += group.model_ids?.length ?? group.models?.length ?? 0
+			imageModelRefCount += group.image_model_ids?.length ?? group.image_models?.length ?? 0
+			videoModelRefCount += group.video_model_ids?.length ?? group.video_models?.length ?? 0
+		})
+	})
+
+	return {
+		modeCount: modeList.length,
+		groupCount,
+		modelDictionaryCount: models ? Object.keys(models).length : undefined,
+		languageModelRefCount,
+		imageModelRefCount,
+		videoModelRefCount,
+	}
+}
+
+function shouldSkipModeBootstrap() {
+	return hasTemporarySuperMagicModeDiagnostic(TEMPORARY_SUPER_MAGIC_MODE_DIAG.SkipBootstrap)
+}
+
+function shouldSkipModeStorage() {
+	return (
+		shouldSkipModeBootstrap() ||
+		hasTemporarySuperMagicModeDiagnostic(TEMPORARY_SUPER_MAGIC_MODE_DIAG.SkipStorage)
+	)
+}
+
+function shouldSkipDefaultModeModel() {
+	return (
+		shouldSkipModeBootstrap() ||
+		hasTemporarySuperMagicModeDiagnostic(TEMPORARY_SUPER_MAGIC_MODE_DIAG.SkipDefaultModel)
+	)
+}
+
+function shouldSkipModePersist() {
+	return (
+		shouldSkipModeBootstrap() ||
+		hasTemporarySuperMagicModeDiagnostic(TEMPORARY_SUPER_MAGIC_MODE_DIAG.SkipPersist)
+	)
 }
 
 // Configuration constants
@@ -105,7 +173,9 @@ class SuperMagicModeService {
 
 		// Kick off legacy localStorage → IndexedDB migration early so
 		// quota pressure is relieved regardless of current user context.
-		void this.migrateLegacyLocalStorage()
+		if (!shouldSkipModeStorage()) {
+			void this.migrateLegacyLocalStorage()
+		}
 
 		this.modeListReaction = reaction(
 			() => [
@@ -124,6 +194,22 @@ class SuperMagicModeService {
 					organizationCode,
 					userId,
 				})
+				if (shouldSkipModeBootstrap()) {
+					this.logTemporaryDiagnostic("mode-bootstrap:skip", {
+						reason: TEMPORARY_SUPER_MAGIC_MODE_DIAG.SkipBootstrap,
+					})
+					return
+				}
+
+				if (shouldSkipModeStorage()) {
+					this.logTemporaryDiagnostic("mode-bootstrap:skip-storage", {
+						reason: TEMPORARY_SUPER_MAGIC_MODE_DIAG.SkipStorage,
+					})
+					void this.fetchModeList()
+					return
+				}
+
+				this.logTemporaryDiagnostic("mode-bootstrap:start")
 				void this.hydrateFromStorage().finally(() => {
 					void this.fetchModeList()
 				})
@@ -142,6 +228,15 @@ class SuperMagicModeService {
 		const userId = userStore.user.userInfo?.user_id || "unknown-user"
 		const lang = configStore.i18n.displayLanguage ?? "unknown-lang"
 		return `${organizationCode}:${userId}:${lang}`
+	}
+
+	private logTemporaryDiagnostic(stage: string, data?: Record<string, unknown>) {
+		if (!hasAnyTemporarySuperMagicModeDiagnostic()) return
+		logger.log("TEMPORARY_SUPER_MAGIC_MODE_DIAGNOSTICS", {
+			stage,
+			diagnostics: getTemporarySuperMagicModeDiagnostics(),
+			...data,
+		})
 	}
 
 	private isFreshForCurrentContext(lastContextKey: string | null, lastFetchAt: number) {
@@ -183,10 +278,21 @@ class SuperMagicModeService {
 	async hydrateFromStorage(
 		storageKey: string | null = this.globalTopicModeLocaleStorageKey,
 	): Promise<void> {
+		if (shouldSkipModeStorage()) {
+			this.logTemporaryDiagnostic("mode-storage:hydrate-skip", {
+				reason: shouldSkipModeBootstrap()
+					? TEMPORARY_SUPER_MAGIC_MODE_DIAG.SkipBootstrap
+					: TEMPORARY_SUPER_MAGIC_MODE_DIAG.SkipStorage,
+			})
+			return
+		}
+
 		if (!storageKey) {
 			this.resetModeList()
 			return
 		}
+
+		this.logTemporaryDiagnostic("mode-storage:hydrate-start", { storageKey })
 
 		// Make sure any legacy entry for this key has been moved to IDB first
 		await this.migrateLegacyLocalStorage()
@@ -196,6 +302,10 @@ class SuperMagicModeService {
 			if (Array.isArray(data)) {
 				this._modeList = data
 				this._modeMap = buildModeMapFromModeList(data)
+				this.logTemporaryDiagnostic("mode-storage:hydrate-end", {
+					source: "indexedDB",
+					...getModeListPayloadShape(data),
+				})
 				logger.log("Successfully loaded mode list from IndexedDB")
 				return
 			}
@@ -208,10 +318,18 @@ class SuperMagicModeService {
 				error,
 			)
 			this.hydrateFromLocalStorageFallback(storageKey)
+			this.logTemporaryDiagnostic("mode-storage:hydrate-end", {
+				source: "localStorage-fallback-after-idb-error",
+				...getModeListPayloadShape(this._modeList),
+			})
 			return
 		}
 
 		this.hydrateFromLocalStorageFallback(storageKey)
+		this.logTemporaryDiagnostic("mode-storage:hydrate-end", {
+			source: "localStorage-fallback",
+			...getModeListPayloadShape(this._modeList),
+		})
 	}
 
 	private hydrateFromLocalStorageFallback(storageKey: string) {
@@ -244,9 +362,28 @@ class SuperMagicModeService {
 		storageKey: string | null = this.globalTopicModeLocaleStorageKey,
 	): Promise<void> {
 		if (!storageKey) return
+		if (shouldSkipModePersist()) {
+			this.logTemporaryDiagnostic("mode-storage:persist-skip", {
+				reason: shouldSkipModeBootstrap()
+					? TEMPORARY_SUPER_MAGIC_MODE_DIAG.SkipBootstrap
+					: TEMPORARY_SUPER_MAGIC_MODE_DIAG.SkipPersist,
+				storageKey,
+				...getModeListPayloadShape(modeList),
+			})
+			return
+		}
+
+		this.logTemporaryDiagnostic("mode-storage:persist-start", {
+			storageKey,
+			...getModeListPayloadShape(modeList),
+		})
 
 		try {
 			await superMagicModeListRepository.saveByKey(storageKey, modeList)
+			this.logTemporaryDiagnostic("mode-storage:persist-end", {
+				storageKey,
+				target: "indexedDB",
+			})
 			return
 		} catch (error) {
 			logger.warn(
@@ -257,6 +394,10 @@ class SuperMagicModeService {
 
 		try {
 			window.localStorage.setItem(storageKey, JSON.stringify(modeList))
+			this.logTemporaryDiagnostic("mode-storage:persist-end", {
+				storageKey,
+				target: "localStorage",
+			})
 		} catch (error) {
 			logger.error("Failed to persist mode list to localStorage fallback", error)
 		}
@@ -268,6 +409,15 @@ class SuperMagicModeService {
 	 * including entries for other organizations the user may no longer need.
 	 */
 	migrateLegacyLocalStorage(): Promise<void> {
+		if (shouldSkipModeStorage()) {
+			this.logTemporaryDiagnostic("mode-storage:migrate-skip", {
+				reason: shouldSkipModeBootstrap()
+					? TEMPORARY_SUPER_MAGIC_MODE_DIAG.SkipBootstrap
+					: TEMPORARY_SUPER_MAGIC_MODE_DIAG.SkipStorage,
+			})
+			return Promise.resolve()
+		}
+
 		if (this._legacyMigrationPromise) {
 			return this._legacyMigrationPromise
 		}
@@ -290,6 +440,9 @@ class SuperMagicModeService {
 			}
 
 			if (keys.length === 0) return
+			this.logTemporaryDiagnostic("mode-storage:migrate-start", {
+				legacyKeyCount: keys.length,
+			})
 
 			let migrated = 0
 			let removed = 0
@@ -322,6 +475,11 @@ class SuperMagicModeService {
 			}
 
 			logger.log("Legacy mode list migration finished", {
+				scanned: keys.length,
+				migrated,
+				removed,
+			})
+			this.logTemporaryDiagnostic("mode-storage:migrate-end", {
 				scanned: keys.length,
 				migrated,
 				removed,
@@ -445,6 +603,68 @@ class SuperMagicModeService {
 	getVideoModelListByMode(mode: string, agentCode?: string | null) {
 		const key = resolveModeMapKey(mode, agentCode)
 		return this._modeMap.get(key)?.groups.flatMap((item) => item.video_models || []) ?? []
+	}
+
+	/**
+	 * 获取当前用户所有模式下可用的生图模型分组列表
+	 * @returns
+	 */
+	getAllImageModelGroups() {
+		return this.getAllModelGroupsByType("image")
+	}
+
+	/**
+	 * 获取当前用户所有模式下可用的视频模型分组列表
+	 * @returns
+	 */
+	getAllVideoModelGroups() {
+		return this.getAllModelGroupsByType("video")
+	}
+
+	/**
+	 * 获取当前用户所有模式下可用的模型分组列表
+	 * @param modelType 模型类型
+	 * @returns 按组名分组，组内模型按模型ID去重
+	 */
+	private getAllModelGroupsByType(modelType: Extract<ModeModelType, "image" | "video">) {
+		const modelIdSet = new Set<string>()
+		const groupMap = new Map<string, ModeModelGroupItem>()
+		const groups: ModeModelGroupItem[] = []
+
+		this._modeList.forEach((modeItem) => {
+			modeItem.groups.forEach((groupItem) => {
+				const models =
+					modelType === "image"
+						? groupItem.image_models || []
+						: groupItem.video_models || []
+				const uniqueModels = models.filter((model) => {
+					if (!model?.model_id) return false
+					if (modelIdSet.has(model.model_id)) return false
+					modelIdSet.add(model.model_id)
+					return true
+				})
+
+				if (uniqueModels.length === 0) return
+
+				const groupKey =
+					normalizeAllModelGroupName(groupItem.group.name, modelType) ||
+					groupItem.group.id
+				const existingGroup = groupMap.get(groupKey)
+				if (existingGroup) {
+					existingGroup.models.push(...uniqueModels)
+					return
+				}
+
+				const nextGroup = {
+					...groupItem,
+					models: uniqueModels,
+				}
+				groupMap.set(groupKey, nextGroup)
+				groups.push(nextGroup)
+			})
+		})
+
+		return groups
 	}
 
 	private getOfficialModelListByType(
@@ -613,6 +833,17 @@ class SuperMagicModeService {
 		retryCount = 0,
 		force = false,
 	}: { retryCount?: number; force?: boolean } = {}): Promise<ModeItem[]> {
+		if (shouldSkipModeBootstrap()) {
+			this.cleanup()
+			this._isModeListLoading = false
+			this.logTemporaryDiagnostic("mode-fetch:featured-skip", {
+				reason: TEMPORARY_SUPER_MAGIC_MODE_DIAG.SkipBootstrap,
+				retryCount,
+				force,
+			})
+			return Promise.resolve(this._modeList)
+		}
+
 		const requestContext = this.resolveCurrentModeListContext()
 		if (!requestContext) {
 			this.resetModeList()
@@ -651,6 +882,11 @@ class SuperMagicModeService {
 		// Clear previous retry timer
 		this.cleanup()
 		this._isModeListLoading = true
+		this.logTemporaryDiagnostic("mode-fetch:featured-start", {
+			contextKey: requestContext.contextKey,
+			retryCount,
+			force,
+		})
 
 		// Wait for persisted locale / i18n sync before language-scoped featured API.
 		// No need to block on the rest of public-config initialization here.
@@ -697,9 +933,19 @@ class SuperMagicModeService {
 				if (preservedDefaultEntry) {
 					this._modeMap.set(TopicMode.Default, preservedDefaultEntry)
 				}
+				this.logTemporaryDiagnostic("mode-fetch:featured-end", {
+					contextKey: requestContext.contextKey,
+					...getModeListPayloadShape(this._modeList, res.models),
+				})
 
-				if (this._modeList.length > 0) {
-					this.fetchDefaultModeModelList()
+				if (this._modeList.length > 0 && !shouldSkipDefaultModeModel()) {
+					void this.fetchDefaultModeModelList()
+				} else if (this._modeList.length > 0) {
+					this.logTemporaryDiagnostic("mode-fetch:default-skip", {
+						reason: shouldSkipModeBootstrap()
+							? TEMPORARY_SUPER_MAGIC_MODE_DIAG.SkipBootstrap
+							: TEMPORARY_SUPER_MAGIC_MODE_DIAG.SkipDefaultModel,
+					})
 				}
 
 				void this.persistToStorage(this._modeList, requestContext.storageKey)
@@ -765,6 +1011,16 @@ class SuperMagicModeService {
 	 * @param force Bypass freshness short-circuit; refetch (e.g. edit page + SW cache)
 	 */
 	fetchDefaultModeModelList({ force = false }: { force?: boolean } = {}): Promise<void> {
+		if (shouldSkipDefaultModeModel()) {
+			this.logTemporaryDiagnostic("mode-fetch:default-skip", {
+				reason: shouldSkipModeBootstrap()
+					? TEMPORARY_SUPER_MAGIC_MODE_DIAG.SkipBootstrap
+					: TEMPORARY_SUPER_MAGIC_MODE_DIAG.SkipDefaultModel,
+				force,
+			})
+			return Promise.resolve()
+		}
+
 		if (!this.isContextReady) {
 			return Promise.resolve()
 		}
@@ -797,6 +1053,11 @@ class SuperMagicModeService {
 			return Promise.resolve()
 		}
 
+		this.logTemporaryDiagnostic("mode-fetch:default-start", {
+			contextKey: requestContextKey,
+			force,
+		})
+
 		const fetchPromise = (async () => {
 			await waitForLanguageReady()
 			return await SuperMagicApi.getDefaultModeModelList()
@@ -815,12 +1076,12 @@ class SuperMagicModeService {
 					models: (group.model_ids ?? [])
 						.map((modelId) => res.models[modelId])
 						.filter(Boolean),
-					image_models: (group.image_model_ids ?? []).map(
-						(modelId) => res.models[modelId],
-					),
-					video_models: (group.video_model_ids ?? []).map(
-						(modelId) => res.models[modelId],
-					),
+					image_models: (group.image_model_ids ?? [])
+						.map((modelId) => res.models[modelId])
+						.filter(Boolean),
+					video_models: (group.video_model_ids ?? [])
+						.map((modelId) => res.models[modelId])
+						.filter(Boolean),
 				}))
 
 				this._defaultModeModelList = groups
@@ -828,6 +1089,10 @@ class SuperMagicModeService {
 				this._modeMap.set(TopicMode.Default, {
 					...res,
 					groups,
+				})
+				this.logTemporaryDiagnostic("mode-fetch:default-end", {
+					contextKey: requestContextKey,
+					...getModeListPayloadShape([{ ...res, groups }], res.models),
 				})
 			})
 			.finally(() => {

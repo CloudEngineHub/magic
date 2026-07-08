@@ -14,7 +14,6 @@ import {
 } from "../utils/designAssetDirectory"
 import { normalizePath, findFileBySrc } from "../utils/utils"
 import type { GetOrCreateImagesDirFn } from "./useGetOrCreateImagesDir"
-import { waitForNextAttachmentsRefreshForProject } from "@/pages/superMagic/services/attachmentsTopicSync"
 import {
 	normalizeDesignAttachmentPathForCanvas,
 	resolveDesignDslPathCandidatesToWorkspaceRelative,
@@ -25,6 +24,7 @@ import {
 	validateCanvasFilePath,
 } from "@/components/CanvasDesign/canvas/utils/utils"
 import { UploadSubDir, type UploadSubDirType } from "@/components/CanvasDesign/types.magic"
+import { loadProjectAttachments } from "@/pages/superMagic/services"
 
 interface UseDesignFileCopyOptions {
 	projectId?: string
@@ -103,7 +103,7 @@ export function useDesignFileCopy(options: UseDesignFileCopyOptions): UseDesignF
 
 	const getProjectAttachments = useCallback(
 		async (targetProjectId: string): Promise<FileItem[]> => {
-			const result = await SuperMagicApi.getAttachmentsByProjectId({
+			const result = await loadProjectAttachments({
 				projectId: targetProjectId,
 				temporaryToken: "",
 			})
@@ -156,14 +156,6 @@ export function useDesignFileCopy(options: UseDesignFileCopyOptions): UseDesignF
 
 			const maxAttempts = Math.max(1, Math.floor(ATTACHMENT_WAIT_TIMEOUT_MS / 1000))
 			for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
-				updateAttachments()
-				try {
-					await waitForNextAttachmentsRefreshForProject(projectId, {
-						timeoutMs: BATCH_OPERATION_POLL_INTERVAL,
-					})
-				} catch (error) {
-					//
-				}
 
 				const latestAttachments = await getProjectAttachments(projectId)
 				const matchedAttachment = latestAttachments.find(

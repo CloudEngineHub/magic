@@ -1,0 +1,520 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+import { createMagicWidgetController } from "../src/controller"
+
+function setViewport(width: number, height: number) {
+	Object.defineProperty(window, "innerWidth", {
+		configurable: true,
+		writable: true,
+		value: width,
+	})
+	Object.defineProperty(window, "innerHeight", {
+		configurable: true,
+		writable: true,
+		value: height,
+	})
+}
+
+function appendWidgetScript(src = "https://www.letsmagic.cn/sdk/magic-widget.js") {
+	const script = document.createElement("script")
+	script.src = src
+	document.head.append(script)
+	return script
+}
+
+describe("createMagicWidgetController", () => {
+	beforeEach(() => {
+		setViewport(1024, 768)
+	})
+
+	afterEach(() => {
+		document.body.innerHTML = ""
+		vi.restoreAllMocks()
+		vi.useRealTimers()
+	})
+
+	it("mounts a circular message trigger and opens the anchored panel", () => {
+		vi.useFakeTimers()
+		const widget = createMagicWidgetController()
+		appendWidgetScript()
+
+		widget.mount({
+			page: {
+				type: "crew",
+				crewId: "crew-001",
+			},
+			auth: {
+				loginStrategy: "phone_password",
+				organizationCode: "org-001",
+			},
+		})
+
+		const root = document.querySelector("[data-magic-widget-root]")
+		const trigger = root?.shadowRoot?.querySelector(
+			"[data-magic-widget-trigger]",
+		) as HTMLElement
+
+		expect(trigger.textContent).toBe("")
+		expect(trigger.querySelector("[data-magic-widget-trigger-icon]")).not.toBeNull()
+
+		Object.defineProperty(trigger, "getBoundingClientRect", {
+			value: () => ({
+				left: 120,
+				top: 160,
+				width: 56,
+				height: 56,
+				right: 176,
+				bottom: 216,
+				x: 120,
+				y: 160,
+				toJSON: () => undefined,
+			}),
+		})
+
+		trigger.dispatchEvent(new MouseEvent("click", { bubbles: true }))
+
+		const layer = root?.shadowRoot?.querySelector("[data-magic-widget-panel-layer]")
+		const panel = root?.shadowRoot?.querySelector("[data-magic-widget-panel]") as HTMLElement
+		const iframe = panel.querySelector("iframe")
+		expect(layer?.getAttribute("data-state")).toBe("opening")
+
+		vi.advanceTimersByTime(180)
+
+		expect(layer?.getAttribute("data-state")).toBe("open")
+		expect(trigger.hidden).toBe(true)
+		expect(panel.style.left).not.toBe("")
+		expect(panel.style.top).not.toBe("")
+		expect(panel.style.transformOrigin).not.toBe("")
+		expect(iframe?.getAttribute("src")).toContain("/global/super/crew/crew-001")
+		expect(iframe?.getAttribute("src")).toContain("login-strategy=phone_password")
+		expect(iframe?.getAttribute("src")).toContain("organizationCode=org-001")
+	})
+
+	it("plays a closing animation before hiding the panel", () => {
+		vi.useFakeTimers()
+		const widget = createMagicWidgetController()
+		appendWidgetScript()
+
+		widget.mount({
+			page: {
+				type: "crew",
+				crewId: "crew-001",
+			},
+		})
+
+		const root = document.querySelector("[data-magic-widget-root]")
+		const trigger = root?.shadowRoot?.querySelector("[data-magic-widget-trigger]")
+
+		trigger?.dispatchEvent(new MouseEvent("click", { bubbles: true }))
+		expect((trigger as HTMLElement).hidden).toBe(true)
+
+		const layer = root?.shadowRoot?.querySelector(
+			"[data-magic-widget-panel-layer]",
+		) as HTMLElement
+		const closeButton = root?.shadowRoot?.querySelector(".magic-widget-close")
+		expect(closeButton?.textContent).toBe("")
+		expect(closeButton?.querySelector("[data-magic-widget-close-icon]")).not.toBeNull()
+
+		closeButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }))
+
+		expect(layer.hidden).toBe(false)
+		expect(layer.getAttribute("data-state")).toBe("closing")
+		expect((trigger as HTMLElement).hidden).toBe(true)
+
+		vi.advanceTimersByTime(180)
+
+		expect(layer.hidden).toBe(true)
+		expect(layer.getAttribute("data-state")).toBe("closed")
+		expect((trigger as HTMLElement).hidden).toBe(false)
+	})
+
+	it("drags the panel on desktop", () => {
+		const widget = createMagicWidgetController()
+		appendWidgetScript()
+		vi.useFakeTimers()
+		vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback) => {
+			callback(0)
+			return 1
+		})
+
+		widget.mount({
+			page: {
+				type: "crew",
+				crewId: "crew-001",
+			},
+		})
+
+		const root = document.querySelector("[data-magic-widget-root]")
+		const trigger = root?.shadowRoot?.querySelector("[data-magic-widget-trigger]")
+
+		trigger?.dispatchEvent(new MouseEvent("click", { bubbles: true }))
+
+		const panel = root?.shadowRoot?.querySelector("[data-magic-widget-panel]") as HTMLElement
+		const header = root?.shadowRoot?.querySelector(".magic-widget-header") as HTMLElement
+		const iframe = root?.shadowRoot?.querySelector("iframe") as HTMLIFrameElement
+		const layer = root?.shadowRoot?.querySelector("[data-magic-widget-panel-layer]")
+
+		expect(layer?.getAttribute("data-state")).toBe("opening")
+
+		Object.defineProperty(panel, "getBoundingClientRect", {
+			value: () => ({
+				left: 200,
+				top: 140,
+				width: 300,
+				height: 300,
+				right: 500,
+				bottom: 440,
+				x: 200,
+				y: 140,
+				toJSON: () => undefined,
+			}),
+		})
+
+		header.dispatchEvent(new MouseEvent("pointerdown", { clientX: 210, clientY: 150 }))
+
+		expect(layer?.getAttribute("data-state")).toBe("open")
+		expect(panel.getAttribute("data-dragging")).toBe("true")
+
+		window.dispatchEvent(new MouseEvent("pointermove", { clientX: 260, clientY: 200 }))
+
+		expect(panel.style.left).not.toBe("250px")
+		expect(panel.style.top).not.toBe("190px")
+		expect(panel.style.transform).toBe("translate3d(50px, 50px, 0)")
+		expect(iframe.style.pointerEvents).toBe("none")
+
+		window.dispatchEvent(new MouseEvent("pointerup", { clientX: 260, clientY: 200 }))
+
+		expect(panel.style.left).toBe("250px")
+		expect(panel.style.top).toBe("190px")
+		expect(panel.style.transform).toBe("")
+		expect(panel.hasAttribute("data-dragging")).toBe(false)
+		expect(iframe.style.pointerEvents).toBe("")
+
+		vi.advanceTimersByTime(180)
+		expect(layer?.getAttribute("data-state")).toBe("open")
+	})
+
+	it("opens as a bottom popover on mobile", () => {
+		setViewport(390, 844)
+		const widget = createMagicWidgetController()
+		appendWidgetScript()
+
+		widget.mount({
+			page: {
+				type: "crew",
+				crewId: "crew-001",
+			},
+		})
+
+		const root = document.querySelector("[data-magic-widget-root]")
+		const trigger = root?.shadowRoot?.querySelector("[data-magic-widget-trigger]")
+
+		trigger?.dispatchEvent(new MouseEvent("click", { bubbles: true }))
+
+		const layer = root?.shadowRoot?.querySelector("[data-magic-widget-panel-layer]")
+		const panel = root?.shadowRoot?.querySelector("[data-magic-widget-panel]") as HTMLElement
+
+		expect(layer?.getAttribute("data-mode")).toBe("mobile")
+		expect(panel.style.left).toBe("")
+		expect(panel.style.top).toBe("")
+		expect(panel.style.transformOrigin).toBe("")
+
+		const style = root?.shadowRoot?.querySelector("style")
+		expect(style?.textContent).toContain("width: 100%;")
+		expect(style?.textContent).toContain("height: 86vh;")
+		expect(style?.textContent).toContain("border-bottom-left-radius: 0;")
+		expect(style?.textContent).toContain("border-bottom-right-radius: 0;")
+	})
+
+	it("uses the widget script origin", () => {
+		appendWidgetScript("https://magic.example.com/sdk/magic-widget.js")
+		const widget = createMagicWidgetController()
+
+		widget.mount({
+			page: {
+				type: "crew",
+				crewId: "crew-001",
+			},
+		})
+
+		const root = document.querySelector("[data-magic-widget-root]")
+		const trigger = root?.shadowRoot?.querySelector("[data-magic-widget-trigger]")
+
+		trigger?.dispatchEvent(new MouseEvent("click", { bubbles: true }))
+
+		const iframe = root?.shadowRoot?.querySelector("iframe")
+		expect(iframe?.getAttribute("src")).toBe(
+			"https://magic.example.com/global/super/crew/crew-001",
+		)
+	})
+
+	it("positions the opened desktop panel over the trigger area", () => {
+		const widget = createMagicWidgetController()
+		appendWidgetScript()
+
+		widget.mount({
+			page: {
+				type: "crew",
+				crewId: "crew-001",
+			},
+			modal: {
+				width: 300,
+				height: 300,
+			},
+		})
+
+		const root = document.querySelector("[data-magic-widget-root]")
+		const trigger = root?.shadowRoot?.querySelector("[data-magic-widget-trigger]") as HTMLElement
+
+		Object.defineProperty(trigger, "getBoundingClientRect", {
+			value: () => ({
+				left: 500,
+				top: 500,
+				width: 56,
+				height: 56,
+				right: 556,
+				bottom: 556,
+				x: 500,
+				y: 500,
+				toJSON: () => undefined,
+			}),
+		})
+
+		expect(() =>
+			trigger?.dispatchEvent(new MouseEvent("click", { bubbles: true })),
+		).not.toThrow()
+
+		const panel = root?.shadowRoot?.querySelector("[data-magic-widget-panel]") as HTMLElement
+		expect(panel.style.left).toBe("256px")
+		expect(panel.style.top).toBe("256px")
+	})
+
+	it("updates the trigger position while dragging", () => {
+		const widget = createMagicWidgetController()
+		appendWidgetScript()
+
+		widget.mount({
+			page: {
+				type: "crew",
+				crewId: "crew-001",
+			},
+		})
+
+		const root = document.querySelector("[data-magic-widget-root]")
+		const trigger = root?.shadowRoot?.querySelector(
+			"[data-magic-widget-trigger]",
+		) as HTMLElement
+
+		Object.defineProperty(trigger, "getBoundingClientRect", {
+			value: () => ({
+				left: 100,
+				top: 120,
+				width: 56,
+				height: 56,
+				right: 156,
+				bottom: 176,
+				x: 100,
+				y: 120,
+				toJSON: () => undefined,
+			}),
+		})
+
+		trigger.dispatchEvent(new MouseEvent("pointerdown", { clientX: 110, clientY: 130 }))
+		window.dispatchEvent(new MouseEvent("pointermove", { clientX: 160, clientY: 180 }))
+		window.dispatchEvent(new MouseEvent("pointerup", { clientX: 160, clientY: 180 }))
+
+		expect(trigger.style.left).toBe("150px")
+		expect(trigger.style.top).toBe("170px")
+	})
+
+	it("keeps the trigger visible after the viewport is resized", () => {
+		const widget = createMagicWidgetController()
+		appendWidgetScript()
+
+		widget.mount({
+			page: {
+				type: "crew",
+				crewId: "crew-001",
+			},
+		})
+
+		const root = document.querySelector("[data-magic-widget-root]")
+		const trigger = root?.shadowRoot?.querySelector(
+			"[data-magic-widget-trigger]",
+		) as HTMLElement
+
+		Object.defineProperty(trigger, "getBoundingClientRect", {
+			value: () => ({
+				left: 960,
+				top: 720,
+				width: 56,
+				height: 56,
+				right: 1016,
+				bottom: 776,
+				x: 960,
+				y: 720,
+				toJSON: () => undefined,
+			}),
+		})
+
+		setViewport(800, 600)
+		window.dispatchEvent(new Event("resize"))
+
+		expect(trigger.style.left).toBe("744px")
+		expect(trigger.style.top).toBe("544px")
+		expect(trigger.style.right).toBe("auto")
+		expect(trigger.style.bottom).toBe("auto")
+	})
+
+	it("keeps the opened desktop panel inside the viewport after resize", () => {
+		const widget = createMagicWidgetController()
+		appendWidgetScript()
+
+		widget.mount({
+			page: {
+				type: "crew",
+				crewId: "crew-001",
+			},
+			modal: {
+				width: 420,
+				height: 220,
+			},
+		})
+
+		const root = document.querySelector("[data-magic-widget-root]")
+		const trigger = root?.shadowRoot?.querySelector("[data-magic-widget-trigger]")
+
+		trigger?.dispatchEvent(new MouseEvent("click", { bubbles: true }))
+
+		const panel = root?.shadowRoot?.querySelector("[data-magic-widget-panel]") as HTMLElement
+
+		Object.defineProperty(panel, "getBoundingClientRect", {
+			value: () => ({
+				left: 700,
+				top: 620,
+				width: 420,
+				height: 220,
+				right: 1120,
+				bottom: 840,
+				x: 700,
+				y: 620,
+				toJSON: () => undefined,
+			}),
+		})
+
+		setViewport(800, 600)
+		window.dispatchEvent(new Event("resize"))
+
+		expect(panel.style.left).toBe("380px")
+		expect(panel.style.top).toBe("380px")
+		expect(panel.style.right).toBe("auto")
+		expect(panel.style.bottom).toBe("auto")
+	})
+
+	it("renders a configurable mask for the mobile sheet", () => {
+		setViewport(390, 844)
+		const widget = createMagicWidgetController()
+		appendWidgetScript()
+
+		widget.mount({
+			page: {
+				type: "crew",
+				crewId: "crew-001",
+			},
+			modal: {
+				classNames: {
+					mask: "custom-mask",
+				},
+				styles: {
+					mask: {
+						backgroundColor: "rgba(1, 2, 3, 0.4)",
+					},
+				},
+			},
+		})
+
+		const root = document.querySelector("[data-magic-widget-root]")
+		const trigger = root?.shadowRoot?.querySelector("[data-magic-widget-trigger]")
+
+		trigger?.dispatchEvent(new MouseEvent("click", { bubbles: true }))
+
+		const mask = root?.shadowRoot?.querySelector(".magic-widget-mask") as HTMLElement
+		const layer = root?.shadowRoot?.querySelector(
+			"[data-magic-widget-panel-layer]",
+		) as HTMLElement
+		const style = root?.shadowRoot?.querySelector("style")
+
+		expect(layer.getAttribute("data-mode")).toBe("mobile")
+		expect(mask.classList.contains("custom-mask")).toBe(true)
+		expect(mask.style.backgroundColor).toBe("rgba(1, 2, 3, 0.4)")
+		expect(style?.textContent).toContain(".magic-widget-mask")
+		expect(style?.textContent).toContain("pointer-events: auto;")
+	})
+
+	it("applies modal title, classNames and styles to modal slots", () => {
+		const widget = createMagicWidgetController()
+		appendWidgetScript()
+
+		widget.mount({
+			page: {
+				type: "crew",
+				crewId: "crew-001",
+			},
+			modal: {
+				title: "Support Center",
+				classNames: {
+					root: "custom-root",
+					layer: "custom-layer",
+					mask: "custom-mask",
+					container: "custom-container",
+					header: "custom-header",
+					title: "custom-title",
+					close: "custom-close",
+					body: "custom-body",
+					iframe: "custom-iframe",
+				},
+				styles: {
+					mask: {
+						backgroundColor: "rgba(1, 2, 3, 0.4)",
+					},
+					container: {
+						backgroundColor: "rgb(1, 2, 3)",
+					},
+					header: {
+						borderBottomColor: "rgb(4, 5, 6)",
+					},
+					iframe: {
+						backgroundColor: "rgb(7, 8, 9)",
+					},
+				},
+			},
+		})
+
+		const root = document.querySelector("[data-magic-widget-root]") as HTMLElement
+		const layer = root.shadowRoot?.querySelector(
+			"[data-magic-widget-panel-layer]",
+		) as HTMLElement
+		const mask = root.shadowRoot?.querySelector(".magic-widget-mask") as HTMLElement
+		const panel = root.shadowRoot?.querySelector("[data-magic-widget-panel]") as HTMLElement
+		const header = root.shadowRoot?.querySelector(".magic-widget-header") as HTMLElement
+		const title = root.shadowRoot?.querySelector(".magic-widget-title") as HTMLElement
+		const closeButton = root.shadowRoot?.querySelector(".magic-widget-close") as HTMLElement
+		const body = root.shadowRoot?.querySelector(".magic-widget-body") as HTMLElement
+		const iframe = root.shadowRoot?.querySelector("iframe") as HTMLIFrameElement
+
+		expect(root.classList.contains("custom-root")).toBe(true)
+		expect(layer.classList.contains("custom-layer")).toBe(true)
+		expect(mask.classList.contains("custom-mask")).toBe(true)
+		expect(panel.classList.contains("custom-container")).toBe(true)
+		expect(header.classList.contains("custom-header")).toBe(true)
+		expect(title.classList.contains("custom-title")).toBe(true)
+		expect(closeButton.classList.contains("custom-close")).toBe(true)
+		expect(body.classList.contains("custom-body")).toBe(true)
+		expect(iframe.classList.contains("custom-iframe")).toBe(true)
+		expect(title.textContent).toBe("Support Center")
+		expect(iframe.title).toBe("Support Center")
+		expect(mask.style.backgroundColor).toBe("rgba(1, 2, 3, 0.4)")
+		expect(panel.style.backgroundColor).toBe("rgb(1, 2, 3)")
+		expect(header.style.borderBottomColor).toBe("rgb(4, 5, 6)")
+		expect(iframe.style.backgroundColor).toBe("rgb(7, 8, 9)")
+	})
+})

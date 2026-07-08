@@ -176,4 +176,18 @@ export const generateAuthApi = (fetch: HttpClient) => ({
 			},
 		)
 	},
+
+	/**
+	 * @description 登出
+	 * @param signal
+	 * @returns
+	 */
+	logout(headers?: HeadersInit, signal?: AbortSignal) {
+		return fetch.delete<any>(genRequestUrl("/api/v1/sessions"), {}, {
+			headers,
+			signal,
+			enableRequestUnion: true,
+			enableAuthorizationVerification: false,
+		})
+	},
 })

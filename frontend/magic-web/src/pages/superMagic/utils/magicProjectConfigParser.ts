@@ -39,6 +39,7 @@ class MagicProjectLiteralParser {
 		if (char === "{") return this.parseObject(depth + 1)
 		if (char === "[") return this.parseArray(depth + 1)
 		if (char === '"' || char === "'") return this.parseString()
+		if (char === "`") return this.parseTemplateLiteral()
 		if (char === "-" || isDigit(char)) return this.parseNumber()
 		if (this.consumeKeyword("true")) return true
 		if (this.consumeKeyword("false")) return false
@@ -154,40 +155,69 @@ class MagicProjectLiteralParser {
 				throw new Error("Unterminated escape sequence in magic.project.js config")
 			}
 
-			const escaped = this.source[this.index]
-			this.index += 1
-			switch (escaped) {
-				case "b":
-					value += "\b"
-					break
-				case "f":
-					value += "\f"
-					break
-				case "n":
-					value += "\n"
-					break
-				case "r":
-					value += "\r"
-					break
-				case "t":
-					value += "\t"
-					break
-				case "v":
-					value += "\v"
-					break
-				case "0":
-					value += "\0"
-					break
-				case "u":
-					value += this.parseUnicodeEscape()
-					break
-				default:
-					value += escaped
-					break
-			}
+			value += this.parseEscapedCharacter()
 		}
 
 		throw new Error("Unterminated string literal in magic.project.js config")
+	}
+
+	private parseTemplateLiteral(): string {
+		this.expect("`")
+		let value = ""
+
+		while (this.index < this.source.length) {
+			const char = this.source[this.index]
+			const next = this.source[this.index + 1]
+
+			if (char === "`") {
+				this.index += 1
+				return value
+			}
+
+			if (char === "$" && next === "{") {
+				throw new Error("Template expressions are not supported in magic.project.js config")
+			}
+
+			this.index += 1
+			if (char !== "\\") {
+				value += char
+				continue
+			}
+
+			if (this.index >= this.source.length) {
+				throw new Error("Unterminated escape sequence in magic.project.js config")
+			}
+
+			value += this.parseEscapedCharacter()
+		}
+
+		throw new Error("Unterminated template literal in magic.project.js config")
+	}
+
+	private parseEscapedCharacter(): string {
+		const escaped = this.source[this.index]
+		this.index += 1
+
+		switch (escaped) {
+			case "b":
+				return "\b"
+			case "f":
+				return "\f"
+			case "n":
+				return "\n"
+			case "r":
+				return "\r"
+			case "t":
+				return "\t"
+			case "v":
+				return "\v"
+			case "0":
+				return "\0"
+			case "u":
+				return this.parseUnicodeEscape()
+			default:
+				return escaped
+		}
 	}
 
 	private parseUnicodeEscape(): string {
@@ -315,6 +345,10 @@ function findConfigAssignmentValueIndex(content: string): number {
 			index = skipString(content, index)
 			continue
 		}
+		if (char === "`") {
+			index = skipTemplateLiteral(content, index)
+			continue
+		}
 		if (char === "/" && next === "/") {
 			index = skipLineComment(content, index)
 			continue
@@ -397,6 +431,22 @@ function skipString(content: string, index: number): number {
 		}
 		cursor += 1
 		if (char === quote) return cursor
+	}
+
+	return cursor
+}
+
+function skipTemplateLiteral(content: string, index: number): number {
+	let cursor = index + 1
+
+	while (cursor < content.length) {
+		const char = content[cursor]
+		if (char === "\\") {
+			cursor += 2
+			continue
+		}
+		cursor += 1
+		if (char === "`") return cursor
 	}
 
 	return cursor

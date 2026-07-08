@@ -95,6 +95,7 @@ export function SelfMediaComposerConfigClearButton({
 				"inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full border border-border bg-background px-3 text-xs font-medium text-muted-foreground shadow-xs transition-colors",
 				"hover:bg-sidebar-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
 			)}
+			data-testid="self-media-composer-config-summary"
 		>
 			<X className="size-3.5" />
 			{label}

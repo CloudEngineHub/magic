@@ -6,10 +6,8 @@ import { formatRelativeTime } from "@/utils/string"
 
 export interface RecycleBinItemData {
 	id: string
-	type: "workspace" | "project" | "topic" | "file"
+	type: "workspace" | "project" | "topic" | "file" | "folder"
 	title: string
-	deletedBy: string
-	deletedByUser?: { nickname: string; avatar: string }
 	/** ISO，用于列表展示删除时间 */
 	deletedAt?: string
 	validDays: number
@@ -47,7 +45,6 @@ function RecycleBinItem(props: RecycleBinItemProps) {
 	const typeLabel = t(`mobile.recycleBin.item.type.${item.type}`)
 
 	const hasDeletedTime = Boolean(deletedTimeLabel)
-	const hasDeletedBy = Boolean(item.deletedBy?.trim())
 
 	return (
 		<button
@@ -72,11 +69,7 @@ function RecycleBinItem(props: RecycleBinItemProps) {
 						<RecycleBinTypeBadge label={typeLabel} />
 						<p className="min-w-0 flex-1 truncate text-left text-[12px] font-light leading-4 text-muted-foreground">
 							{hasDeletedTime ? deletedTimeLabel : null}
-							{hasDeletedTime && hasDeletedBy ? (
-								<span className="mx-1 opacity-50">·</span>
-							) : null}
-							{hasDeletedBy ? item.deletedBy : null}
-							{hasDeletedTime || hasDeletedBy ? (
+							{hasDeletedTime ? (
 								<span className="mx-1 opacity-50">·</span>
 							) : null}
 							<span className="tabular-nums text-orange-500 dark:text-orange-400">

@@ -47,7 +47,8 @@ class HistoryMessageNodeRunner extends NodeRunner
             $executionData->getConversationId(),
             $executionData->getOriginConversationId(),
             $executionData->getTopicId(),
-            $maxRecord
+            $maxRecord,
+            $executionData->getDataIsolation()->getCurrentUserId()
         );
         $memoryQuery->setStartTime($startTime);
         $memoryQuery->setEndTime($endTime);

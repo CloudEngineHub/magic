@@ -18,6 +18,8 @@ interface MobileFileSelectorPopupProps {
 	allowSetDefaultOpen?: boolean
 	shareProject?: boolean
 	onShareProjectChange?: (checked: boolean) => void
+	hideShareProjectToggle?: boolean
+	showSelectAll?: boolean
 }
 
 function MobileFileSelectorPopup({
@@ -33,6 +35,8 @@ function MobileFileSelectorPopup({
 	allowSetDefaultOpen = false,
 	shareProject = false,
 	onShareProjectChange,
+	hideShareProjectToggle = false,
+	showSelectAll = false,
 }: MobileFileSelectorPopupProps) {
 	const { t } = useTranslation("super")
 	const [selectedFileIds, setSelectedFileIds] = useState<string[]>(externalSelectedFileIds)
@@ -66,23 +70,25 @@ function MobileFileSelectorPopup({
 			}}
 		>
 			<div className="flex flex-col gap-2 p-3">
-				{/* Share Project Switch */}
-				<div className="flex items-start gap-3 rounded-md bg-sidebar-accent p-2">
-					<Switch
-						checked={shareProject}
-						onCheckedChange={(checked) => {
-							onShareProjectChange?.(checked)
-						}}
-					/>
-					<div className="flex flex-1 flex-col gap-2">
-						<div className="pt-[3px] text-sm font-medium leading-none text-foreground">
-							{t("share.shareProject")}
-						</div>
-						<div className="text-xs leading-normal text-muted-foreground">
-							{t("share.shareProjectDescription")}
+				{!hideShareProjectToggle ? (
+					<div className="flex items-start gap-3 rounded-md bg-sidebar-accent p-2">
+						<Switch
+							checked={shareProject}
+							onCheckedChange={(checked) => {
+								onShareProjectChange?.(checked)
+							}}
+							data-testid="on-share-project-change"
+						/>
+						<div className="flex flex-1 flex-col gap-2">
+							<div className="pt-[3px] text-sm font-medium leading-none text-foreground">
+								{t("share.shareProject")}
+							</div>
+							<div className="text-xs leading-normal text-muted-foreground">
+								{t("share.shareProjectDescription")}
+							</div>
 						</div>
 					</div>
-				</div>
+				) : null}
 
 				{/* File Selector */}
 				<FileSelector
@@ -94,6 +100,7 @@ function MobileFileSelectorPopup({
 					onDefaultOpenFileChange={onDefaultOpenFileChange}
 					disabled={disabled || shareProject}
 					allowSetDefaultOpen={allowSetDefaultOpen || shareProject}
+					showSelectAll={showSelectAll}
 				/>
 			</div>
 		</CommonPopup>

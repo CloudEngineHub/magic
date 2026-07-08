@@ -1,5 +1,6 @@
 import type {
 	LayerElement,
+	CanvasDeviceInfo,
 	ToolType,
 	ToolKeyEvent,
 	Marker,
@@ -55,6 +56,11 @@ export interface CanvasEventMap {
 		source: ViewportChangeSource
 		phase: ViewportChangePhase
 	}
+	"viewport:gesture": {
+		active: boolean
+		source: "touch-pinch" | "webkit-gesture"
+		pointerCount?: number
+	}
 	"viewport:reset": void
 
 	// 元素相关事件
@@ -101,6 +107,7 @@ export interface CanvasEventMap {
 	"element:video:generate-submit-started": { elementId: string }
 	/** 宿主 generateVideo 提交失败或前置校验未通过，供 UI 恢复生成编辑器展示 */
 	"element:video:generate-submit-failed": { elementId: string }
+	"element:image:fullscreenClick": { elementId: string }
 	"element:video:fullscreenClick": { elementId: string }
 	"element:image:resultUpdated": { elementId: string }
 	"element:image:loaded": { elementId: string } // 图片加载完成事件
@@ -143,6 +150,7 @@ export interface CanvasEventMap {
 		path: string
 		reason?: ResourceLoadFailureReason
 	} // 视频换链/刷新失败（如附件已删除）
+	"resource:remote-load-deferral-released": { path: string; key: string } // 跨画布粘贴远程参考资源迁移完成/结束，允许预览重试
 	"resource:released": { path: string } // 资源生命周期清理事件（供资源 URL 缓存同步）
 
 	// 元素拖拽相关事件（单元素）
@@ -180,6 +188,10 @@ export interface CanvasEventMap {
 	"canvas:resize": { width: number; height: number }
 	"canvas:clear": void
 	"canvas:readonly": { readonly: boolean } // 只读状态变化事件
+	"canvas:devicechange": {
+		previous: CanvasDeviceInfo
+		current: CanvasDeviceInfo
+	}
 	"canvas:contextmenu": { x: number; y: number; canvasX: number; canvasY: number } // 画布空白区域右键菜单事件
 	"document:loaded": void // 文档加载完成事件
 	"document:restored": void // 文档恢复事件（撤销/恢复时触发，用于更新 UI 状态）

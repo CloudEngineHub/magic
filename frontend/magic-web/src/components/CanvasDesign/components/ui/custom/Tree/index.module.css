@@ -129,3 +129,9 @@
 	/* opacity: 1; */
 	display: block;
 }
+
+@media (hover: none), (pointer: coarse), (any-pointer: coarse) {
+	.tree-node-content--selected .show-on-hover {
+		display: block;
+	}
+}

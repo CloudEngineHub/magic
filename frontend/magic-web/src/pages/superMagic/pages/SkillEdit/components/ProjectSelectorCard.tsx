@@ -37,7 +37,7 @@ function ProjectSelectorCard({
 			>
 				<div className="relative size-7 shrink-0 overflow-hidden rounded-md bg-[linear-gradient(135deg,#111827_0%,#4f46e5_100%)]">
 					{skillLogo ? (
-						<img src={skillLogo} alt={projectName} className="size-full object-cover" />
+						<img src={skillLogo} alt={projectName} className="size-full object-cover"  data-testid="project-selector-card-image"/>
 					) : (
 						<div className="flex size-full items-center justify-center text-xs font-semibold text-white">
 							{coverLabel}

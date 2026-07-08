@@ -56,7 +56,7 @@ function renderConfirmOutlinePreview(nodes: OutlineNode[], depth = 0): ReactNode
 	return (
 		<ul className={cn("space-y-1.5", depth > 0 && "ml-3 border-l border-zinc-200/80 pl-3")}>
 			{nodes.map((node) => (
-				<li key={node.id} className="space-y-1.5">
+				<li key={node.id} className="space-y-1.5" data-testid="step-confirm-blocks-item">
 					<p className="text-xs leading-relaxed text-foreground/80">{node.text}</p>
 					{node.children?.length
 						? renderConfirmOutlinePreview(node.children, depth + 1)
@@ -192,7 +192,7 @@ export function TopicProgressList({
 				{topics.map((item) => {
 					const isActive = activeTopicId === item.topicId
 					return (
-						<li key={item.topicId} className="duration-300 animate-in fade-in">
+						<li key={item.topicId} className="duration-300 animate-in fade-in" data-testid="step-confirm-blocks-item-2">
 							<Button
 								type="button"
 								variant="outline"
@@ -236,6 +236,7 @@ export function TopicProgressList({
 						<li
 							key={`pending-${i}`}
 							className="flex animate-pulse items-center gap-4 rounded-[24px] bg-white px-4 py-3.5 opacity-70 shadow-[inset_0_1px_rgba(255,255,255,0.85),0_12px_30px_rgba(24,24,27,0.06)] ring-1 ring-zinc-950/[0.06]"
+							data-testid="step-confirm-blocks-item-3"
 						>
 							<span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#f4f4f5] text-sm font-[820] text-[#71717a]">
 								{topics.length + i + 1}
@@ -381,6 +382,7 @@ export function StepConfirmArticleList({
 						<li
 							key={index}
 							className="group flex flex-col gap-3 border-b border-zinc-950/10 px-0 py-4 transition-colors animate-in fade-in last:border-b-0 last:pb-0"
+							data-testid="step-confirm-blocks-item-4"
 						>
 							<div className="flex items-start gap-3">
 								<Badge className="h-9 w-9 shrink-0 rounded-[14px] bg-[#18181b] px-0 text-xs font-[820] text-white shadow-none">

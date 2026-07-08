@@ -74,6 +74,7 @@ export type RecordSummaryResultMessage = {
 	recording_summary_result: {
 		workspace_id: string
 		project_id: string
+		project_mode?: string | null
 		topic_id: string
 		organization_code: string
 		success: boolean

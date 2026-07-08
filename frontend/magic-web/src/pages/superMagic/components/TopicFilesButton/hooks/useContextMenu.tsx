@@ -15,6 +15,7 @@ import {
 	IconReplace,
 	IconFolders,
 	IconSquareCheck,
+	IconInfoCircle,
 } from "@tabler/icons-react"
 import IconOpenWindow from "@/enhance/tabler/icons-react/icons/IconOpenWindow"
 import MagicIcon from "@/components/base/MagicIcon"
@@ -37,8 +38,7 @@ import { createFileMenuItems } from "../components/hooks/useFileMenuItems"
 import { useFileActionVisibility } from "@/pages/superMagic/providers/file-action-visibility-provider"
 import { normalizeMenuItems, type TopicFilesMenuItem } from "../utils/menu-items"
 import { isMagicSystemFolder } from "../utils/magic-system-folder"
-import type { TreeNodeData } from "../utils/treeDataConverter"
-import { findNodePath } from "../utils/path-helper"
+import { getAttachmentIndexEntry, type AttachmentIndex } from "../utils/attachmentIndex"
 import { canCreateDesignProjectInMenuTarget } from "../../Detail/contents/Design/utils/designProjectMenuPolicy"
 import { getAttachmentKey } from "../utils/getAttachmentKey"
 import { useMobileDeleteConfirmSheet } from "./useMobileDeleteConfirmSheet"
@@ -52,11 +52,7 @@ interface UseContextMenuOptions {
 	handleShareItem: (item: AttachmentItem) => void
 	handleDeleteItem: (item: AttachmentItem) => void
 	handleDownloadOriginal: (item: AttachmentItem, mode?: DownloadImageMode) => void
-	handleDownloadPdf: (
-		item: AttachmentItem,
-		folderChildren?: AttachmentItem[],
-		pagination?: "slice" | "none",
-	) => void
+	handleDownloadPdf: (item: AttachmentItem, folderChildren?: AttachmentItem[]) => void
 	handleDownloadPpt: (item: AttachmentItem) => void
 	handleDownloadPptx: (item: AttachmentItem, folderChildren?: AttachmentItem[]) => void
 	handleDownloadImage?: (item: AttachmentItem, format: "png" | "jpeg") => void
@@ -66,6 +62,7 @@ interface UseContextMenuOptions {
 	handleAddToNewChat: (item: AttachmentItem) => void
 	handleMoveFile?: (item: AttachmentItem) => void
 	handleReplaceFile?: (item: AttachmentItem) => void
+	handleShowInfo?: (item: AttachmentItem) => void
 	createVirtualFile: (
 		type: "txt" | "md" | "html" | "py" | "go" | "php" | "design" | "customFile",
 		key?: string,
@@ -97,10 +94,27 @@ interface UseContextMenuOptions {
 	handleEnterMultiSelectMode?: (item: AttachmentItem) => void
 	/* 是否已在多选模式 */
 	isSelectMode?: boolean
-	/* 树形数据，用于检查父级节点 */
-	treeData?: TreeNodeData[]
+	/* File tree index for parent checks */
+	treeIndex?: AttachmentIndex
 	/** Full attachment tree for mobile hierarchy delete confirmation */
 	attachments?: AttachmentItem[]
+}
+
+function buildFolderPathFromIndex(
+	item: AttachmentItem,
+	treeIndex?: AttachmentIndex,
+): string | undefined {
+	if (!treeIndex || !item.file_id) return undefined
+
+	const entry = getAttachmentIndexEntry(treeIndex, item.file_id)
+	if (!entry) return undefined
+
+	const pathNames = [...treeIndex.getParentItemsById(item.file_id), item]
+		.map((pathItem) => pathItem.name || pathItem.file_name || pathItem.display_filename)
+		.filter(Boolean)
+
+	if (pathNames.length === 0) return "/"
+	return `/${pathNames.join("/")}/`
 }
 
 interface MapDownloadMenuToContextOptions {
@@ -244,6 +258,19 @@ export function flattenMenuItems(items: MenuItem[]): MenuItem[] {
 }
 
 /**
+ * 检查父级或更父级是否有 display_config
+ * @param item - 当前文件/文件夹项
+ * @param treeIndex - File tree index
+ * @returns 如果父级链中有任何节点带 display_config，返回 true
+ */
+function hasDisplayConfigInAncestors(item: AttachmentItem, treeIndex?: AttachmentIndex): boolean {
+	if (!treeIndex || !item.file_id) return false
+	return treeIndex
+		.getParentItemsById(item.file_id)
+		.some((parent) => Boolean(parent.display_config))
+}
+
+/**
  * useContextMenu - 处理右键菜单配置
  */
 export function useContextMenu(options: UseContextMenuOptions) {
@@ -271,6 +298,7 @@ export function useContextMenu(options: UseContextMenuOptions) {
 		handleAddToNewChat,
 		handleMoveFile,
 		handleReplaceFile,
+		handleShowInfo,
 		onCopyFile,
 		createVirtualFile,
 		createVirtualFolder,
@@ -288,7 +316,7 @@ export function useContextMenu(options: UseContextMenuOptions) {
 		getShortcutHint,
 		handleEnterMultiSelectMode,
 		isSelectMode = false,
-		treeData,
+		treeIndex,
 		attachments = [],
 	} = options
 
@@ -300,7 +328,7 @@ export function useContextMenu(options: UseContextMenuOptions) {
 				return item.relative_file_path
 			}
 
-			const pathFromTree = item.file_id ? findNodePath(treeData || [], item.file_id) : null
+			const pathFromTree = buildFolderPathFromIndex(item, treeIndex)
 			return pathFromTree || `/${item.name}`
 		}
 		return undefined
@@ -382,11 +410,23 @@ export function useContextMenu(options: UseContextMenuOptions) {
 			isFreeTrialVersion,
 			preloadWaterMarkFreeModal,
 		}
+		const showInfoMenuItems: MenuItem[] = handleShowInfo
+			? [
+					{
+						key: "showInfo",
+						label: t("topicFiles.contextMenu.showInfo"),
+						icon: <MagicIcon component={IconInfoCircle} stroke={2} size={18} />,
+						onClick: () => handleShowInfo(item),
+					},
+				]
+			: []
 
 		if (item.is_directory && "children" in item) {
 			const parentPath = getFolderPath(item)
 			const key = item.file_id
-			const canCreateDesignProject = canCreateDesignProjectInMenuTarget(item, treeData)
+			// 判断是否允许创建画布：当前项或父级/更父级没有携带 display_config 时才允许
+			const canCreateDesignProject =
+				!item.display_config && !hasDisplayConfigInAncestors(item, treeIndex)
 
 			menuItems.push(
 				{
@@ -607,6 +647,7 @@ export function useContextMenu(options: UseContextMenuOptions) {
 							},
 						]
 					: []),
+				...showInfoMenuItems,
 				{ type: "divider" as const },
 				{
 					key: "delete",
@@ -840,6 +881,7 @@ export function useContextMenu(options: UseContextMenuOptions) {
 							},
 						]
 					: []),
+				...showInfoMenuItems,
 				{ type: "divider" as const },
 				{
 					key: "delete",

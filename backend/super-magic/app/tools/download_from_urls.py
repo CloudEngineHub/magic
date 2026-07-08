@@ -194,8 +194,12 @@ Prioritize using this tool for file downloads over wget or curl. Use batch downl
                 "cache_misses": batch_result.cache_misses
             }
 
+            content = json.dumps(content_dict, ensure_ascii=False, indent=2)
+            if batch_result.success == 0 and batch_result.failed > 0:
+                return ToolResult.error(content, extra_info=extra_info)
+
             return ToolResult(
-                content=json.dumps(content_dict, ensure_ascii=False, indent=2),
+                content=content,
                 extra_info=extra_info
             )
 
@@ -446,12 +450,6 @@ Prioritize using this tool for file downloads over wget or curl. Use batch downl
         # 无论成功还是失败，都使用本工具自定义的 remark，避免被通用错误提示覆盖
         result.use_custom_remark = True
 
-        if not result.ok:
-            return {
-                "action": i18n.translate("download_from_urls", category="tool.actions"),
-                "remark": i18n.translate("download_from_url.error", category="tool.messages", error=result.content)
-            }
-
         # 尝试从结果中获取成功/失败统计
         try:
             if result.extra_info:
@@ -467,6 +465,8 @@ Prioritize using this tool for file downloads over wget or curl. Use batch downl
                     remark = i18n.translate("download_from_urls.failed_count", category="tool.messages", count=failed_count)
                 else:
                     remark = i18n.translate("download_from_url.completed", category="tool.messages")
+            elif not result.ok:
+                remark = i18n.translate("download_from_url.error", category="tool.messages", error=result.content)
             else:
                 remark = i18n.translate("download_from_url.completed", category="tool.messages")
         except Exception:

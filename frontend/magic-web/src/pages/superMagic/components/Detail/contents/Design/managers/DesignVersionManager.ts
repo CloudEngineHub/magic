@@ -79,7 +79,6 @@ export class DesignVersionManager {
 				})
 				if (fileInfo?.version !== undefined) {
 					version = fileInfo.version
-					this.stateBag.setMagicProjectJsVersion(version)
 				}
 			} catch {
 				// ignore
@@ -109,6 +108,7 @@ export class DesignVersionManager {
 	applyVersionData(parsedDesignData: DesignData, isViewingHistory: boolean): void {
 		this.saveManager.cancelAutoSave()
 		this.saveManager.clearRemoteConflict()
+		this.stateBag.setters.setConflictState(null)
 		this.stateBag.setters.setIsSaving(false)
 		this.stateBag.setters.setDesignData(parsedDesignData)
 		this.stateBag.setPrevDesignDataFingerprint(hashDesignDataComparable(parsedDesignData))
@@ -132,9 +132,11 @@ export class DesignVersionManager {
 
 		try {
 			let parsedDesignData: DesignData | null
+			let latestVersion: number | null = null
 			if (isNewestVersionTarget) {
 				const result = await this.loadLatest()
 				parsedDesignData = result.data
+				latestVersion = result.version
 			} else {
 				parsedDesignData = await this.loadWithVersion(version)
 			}
@@ -142,16 +144,19 @@ export class DesignVersionManager {
 			if (parsedDesignData) {
 				this.stateBag.setters.setFileVersion(isNewestVersionTarget ? undefined : version)
 				this.applyVersionData(parsedDesignData, !isNewestVersionTarget)
+				if (isNewestVersionTarget && latestVersion !== null) {
+					this.stateBag.setMagicProjectJsVersion(latestVersion)
+				}
 			}
 		} catch {
 			// ignore
 		}
 	}
 
-	handleReturnLatest(): void {
+	async handleReturnLatest(): Promise<void> {
 		const list = this.getFileVersionsList()
 		if (list?.length > 0) {
-			this.handleChangeFileVersion(list[0].version, true)
+			await this.handleChangeFileVersion(list[0].version, true)
 		} else {
 			this.stateBag.setters.setFileVersion(undefined)
 		}
@@ -169,9 +174,12 @@ export class DesignVersionManager {
 			if (res) {
 				await this.fetchFileVersions()
 				this.stateBag.setters.setFileVersion(undefined)
-				const { data } = await this.loadLatest()
+				const { data, version: latestVersion } = await this.loadLatest()
 				if (data) {
 					this.applyVersionData(data, false)
+					if (latestVersion !== null) {
+						this.stateBag.setMagicProjectJsVersion(latestVersion)
+					}
 				}
 				const t = this.options.getT?.() ?? ((k: string) => k)
 				magicToast.success(t("common.rollbackSuccess"))

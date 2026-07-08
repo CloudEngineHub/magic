@@ -2,7 +2,7 @@ import yaml from "js-yaml"
 import dayjs from "@/lib/dayjs"
 import { SuperMagicApi } from "@/apis"
 import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks"
-import { AttachmentDataProcessor } from "@/pages/superMagic/utils/attachmentDataProcessor"
+import { loadProjectAttachments } from "@/pages/superMagic/services"
 import {
 	downloadFileContent,
 	getFileContentById,
@@ -538,12 +538,10 @@ export function parseClawCronTaskMarkdown(params: {
 
 async function getProjectAttachments(projectId: string) {
 	const temporaryToken = (window as Window & { temporary_token?: string }).temporary_token || ""
-	const response = await SuperMagicApi.getAttachmentsByProjectId({
+	return loadProjectAttachments({
 		projectId,
 		temporaryToken,
 	})
-
-	return AttachmentDataProcessor.processAttachmentData(response)
 }
 
 function parseClawCronTaskCandidateFileContent(params: {

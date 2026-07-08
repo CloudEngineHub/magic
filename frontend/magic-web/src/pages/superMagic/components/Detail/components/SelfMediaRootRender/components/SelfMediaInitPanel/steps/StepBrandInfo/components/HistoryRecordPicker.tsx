@@ -47,6 +47,7 @@ export function HistoryRecordPicker({
 					)}
 					className="rounded-full p-1 text-[#71717a] transition-all hover:bg-[#18181b] hover:text-[#ffd637]"
 					onClick={onClose}
+					data-testid="on-close"
 				>
 					<X size={12} />
 				</button>
@@ -67,6 +68,7 @@ export function HistoryRecordPicker({
 							})}
 							className="flex flex-1 flex-col items-start gap-1 text-left"
 							onClick={() => onSelect(record)}
+							data-testid="on-select"
 						>
 							{/* Account Name */}
 							<div className="flex items-center gap-1.5 text-sm font-semibold text-[#18181b] transition-colors">
@@ -113,6 +115,7 @@ export function HistoryRecordPicker({
 									e.stopPropagation()
 									onDelete(record.id)
 								}}
+								data-testid="on-delete"
 							>
 								<Trash2 size={12} />
 							</button>

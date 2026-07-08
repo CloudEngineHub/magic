@@ -1,7 +1,6 @@
 import { useState, useCallback, useRef } from "react"
 import { SuperMagicApi } from "@/apis"
-import { ResourceType } from "../../superMagic/components/Share/types"
-import { AttachmentDataProcessor } from "../../superMagic/utils/attachmentDataProcessor"
+import { loadProjectAttachments } from "@/pages/superMagic/services"
 
 interface UseLegacyFileShareDataReturn {
 	attachments: any
@@ -108,15 +107,13 @@ export default function useLegacyFileShareData(): UseLegacyFileShareDataReturn {
 			if (projectId) {
 				setLoading(true)
 				setError(null)
-				SuperMagicApi.getAttachmentsByProjectId({
+				loadProjectAttachments({
 					projectId,
 					// @ts-ignore 使用window添加临时的token
 					temporaryToken: window?.temporary_token || "",
 				})
-					.then((res: any) => {
-						// 统一处理 metadata，包括 index.html 文件的特殊逻辑，内部自闭环处理验证和返回逻辑
-						const processedData = AttachmentDataProcessor.processAttachmentData(res)
-						setAttachments(processedData)
+					.then((res) => {
+						setAttachments(res)
 					})
 					.catch((err) => {
 						setError(err)

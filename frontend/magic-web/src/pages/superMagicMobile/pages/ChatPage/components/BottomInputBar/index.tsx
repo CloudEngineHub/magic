@@ -12,6 +12,7 @@ import { Paragraph } from "@tiptap/extension-paragraph"
 import { Text } from "@tiptap/extension-text"
 import type { JSONContent } from "@tiptap/core"
 import InterruptButton from "@/pages/superMagic/components/MessageEditor/components/InterruptButton"
+import { runActiveEditor } from "@/utils/tiptapEditorLifecycle"
 
 interface BottomInputBarProps {
 	show: boolean
@@ -53,12 +54,17 @@ export default function BottomInputBar({
 	/** 弹窗编辑器内容回写：当 syncContent 更新时，将最新内容同步到本地展示编辑器 */
 	useEffect(() => {
 		if (!editor || syncContent == null) return
-		editor.commands.setContent(syncContent)
-		setIsEmpty(editor.isEmpty)
+		runActiveEditor(editor, (activeEditor) => {
+			activeEditor.commands.setContent(syncContent)
+			setIsEmpty(activeEditor.isEmpty)
+		})
 	}, [syncContent, editor])
 
 	return (
-		<div className={cn("w-full flex-col gap-2 px-2 pb-1.5", show ? "flex" : "hidden")}>
+		<div
+			className={cn("w-full flex-col gap-2 px-2 pb-1.5", show ? "flex" : "hidden")}
+			data-testid="mobile-bottom-input-bar"
+		>
 			{editorNodes?.taskDataNode}
 			{editorNodes?.messageQueueNode}
 			<div
@@ -67,12 +73,13 @@ export default function BottomInputBar({
 					!showModeSelector && "h-[40px] pl-4",
 					isTaskRunning && "pr-2",
 				)}
+				data-testid="mobile-bottom-input-shell"
 			>
 				{/* 话题模式（移动端 UI：ModeSelector + CrewSelectModal） */}
 				{showModeSelector && <ModeSelector iconSize={28} editorContext={editorContext} />}
 
 				{/* TipTap 编辑器展示区 - 语音输入内容落点，点击只触发弹出输入框 */}
-				<div className="relative flex min-h-8 min-w-0 flex-1 items-center">
+				<div className="relative flex min-h-8 min-w-0 flex-1 items-center" data-testid="mobile-bottom-input-editor">
 					<EditorContent
 						editor={editor}
 						className={cn(
@@ -84,7 +91,10 @@ export default function BottomInputBar({
 					/>
 					{/* 内容为空时的占位文本 */}
 					{isEmpty && (
-						<div className="pointer-events-none absolute inset-0 flex items-center truncate font-['Geist'] text-sm text-muted-foreground">
+						<div
+							className="pointer-events-none absolute inset-0 flex items-center truncate font-['Geist'] text-sm text-muted-foreground"
+							data-testid="mobile-bottom-input-placeholder"
+						>
 							{t("chatInput.mobilePlaceholder")}
 						</div>
 					)}
@@ -97,6 +107,7 @@ export default function BottomInputBar({
 						onClick={() =>
 							onInputClick?.(editor?.isEmpty ? null : (editor?.getJSON() ?? null))
 						}
+						data-testid="on-input-click"
 					/>
 				</div>
 

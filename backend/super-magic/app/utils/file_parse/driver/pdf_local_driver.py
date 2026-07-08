@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Union
 
 from agentlang.logger import get_logger
+from app.utils.async_file_utils import async_exists
 from .interfaces.pdf_driver_interface import PdfDriverInterface
 from .interfaces.file_parser_driver_interface import ParseResult, ParseMetadata, ConversionStrategy
 from .abstract_driver import AbstractDriver
@@ -152,7 +153,7 @@ class PdfLocalDriver(AbstractDriver, PdfDriverInterface):
                 result.output_images_dir = str(images_dir)
 
                 # 清理临时图片文件
-                ImageExtractorUtil.cleanup_temp_images(image_paths)
+                await ImageExtractorUtil.cleanup_temp_images(image_paths)
                 logger.info(f"成功保存 {len(image_paths)} 张图片并更新为markdown格式")
 
                 return final_content
@@ -180,11 +181,10 @@ class PdfLocalDriver(AbstractDriver, PdfDriverInterface):
         pattern = r'- 图片 \d+: (.+\.(?:png|jpg|jpeg|gif|bmp|tiff|webp))'
         matches = re.findall(pattern, markdown_content, re.IGNORECASE)
 
-        loop = asyncio.get_event_loop()
         for match in matches:
             image_path = match.strip()
             # Check existence asynchronously
-            file_exists = await loop.run_in_executor(None, Path(image_path).exists)
+            file_exists = await async_exists(image_path)
             if file_exists:
                 image_paths.append(image_path)
 

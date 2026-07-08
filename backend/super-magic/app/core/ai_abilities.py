@@ -121,7 +121,7 @@ AI_ABILITY_DEFAULTS: Dict[str, Dict[str, Any]] = {
 def get_ability_config(ability: AIAbility, key: str, default: Any = None) -> Any:
     """Helper function to get AI ability configuration with application defaults
 
-    This wraps the agentlang AIAbilityManager and adds application-level defaults.
+    This reads the provider-backed AIAbilityConfigManager and adds application-level defaults.
 
     Args:
         ability: AI ability enum
@@ -137,10 +137,10 @@ def get_ability_config(ability: AIAbility, key: str, default: Any = None) -> Any
         model_id = get_ability_config(AIAbility.VISUAL_UNDERSTANDING, "model_id")
         timeout = get_ability_config(AIAbility.SUMMARIZE, "timeout", default=180)
     """
-    from agentlang.config.ai_ability_manager import ai_ability_manager
+    from agentlang.config.ai_abilities.ability_config_manager import ai_ability_config_manager
 
-    # Try to get from configuration manager
-    value = ai_ability_manager.get(ability.value, key, default=None)
+    ability_config = ai_ability_config_manager.get(ability.value)
+    value = ability_config.get(key) if ability_config is not None else None
 
     # If not found, try application defaults
     if value is None and default is None:

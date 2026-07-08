@@ -92,7 +92,7 @@ function MessageEditorView({
 					onDragLeave={dragEvents.onDragLeave}
 					onDragOver={dragEvents.onDragOver}
 					onDrop={dragEvents.onDrop}
-					onPaste={onPaste}
+					onPasteCapture={onPaste}
 					data-testid="super-message-editor-container"
 				>
 					<FlexBox

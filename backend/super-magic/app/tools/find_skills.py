@@ -90,11 +90,13 @@ class FindSkillsParams(BaseToolParams):
                 return None
             try:
                 parsed = json.loads(v)
-                # JSON 解析成功但结果是字符串（如 `"system"`），当作单个 provider 处理
-                v = [parsed] if isinstance(parsed, str) else parsed
+                # JSON 解析成功后继续归一化，兼容 `"system"` 与 `"system,my_library"`
+                v = _normalize_provider_values(parsed)
             except json.JSONDecodeError:
-                # 裸字符串（如 `system`），当作单个 provider 处理
-                v = [v.strip()]
+                # 裸字符串（如 `system` 或 `system,my_library`），按逗号拆分后处理
+                v = _normalize_provider_values(v)
+        else:
+            v = _normalize_provider_values(v)
         if not v:
             return None
         invalid = [p for p in v if p not in _VALID_PROVIDERS]
@@ -367,3 +369,20 @@ def _format_result_md(result: SearchResult) -> str:
         lines.append("\n---\n\n> 未找到匹配的 Skill，请尝试不同的关键词。")
 
     return "\n".join(lines)
+
+
+def _normalize_provider_values(value: object) -> Optional[List[str]]:
+    """将模型可能输出的 provider 字符串归一化为 provider 列表。"""
+    if value is None:
+        return None
+    if isinstance(value, str):
+        return [item.strip() for item in value.split(",") if item.strip()]
+    if isinstance(value, list):
+        providers: List[str] = []
+        for item in value:
+            providers.extend(
+                part.strip() for part in str(item).split(",") if part.strip()
+            )
+        return providers
+    provider = str(value).strip()
+    return [provider] if provider else None

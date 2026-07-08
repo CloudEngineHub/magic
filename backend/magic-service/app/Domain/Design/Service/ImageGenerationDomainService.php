@@ -10,6 +10,7 @@ namespace App\Domain\Design\Service;
 use App\Domain\Design\Entity\DesignDataIsolation;
 use App\Domain\Design\Entity\ImageGenerationEntity;
 use App\Domain\Design\Entity\ValueObject\ImageGenerationStatus;
+use App\Domain\Design\Entity\ValueObject\ImageGenerationType;
 use App\Domain\Design\Event\ImageGenerationTaskCreatedEvent;
 use App\Domain\Design\Repository\Facade\ImageGenerationRepositoryInterface;
 use App\ErrorCode\DesignErrorCode;
@@ -60,12 +61,31 @@ readonly class ImageGenerationDomainService
         $this->repository->updateStatus($dataIsolation, $taskId, ImageGenerationStatus::PROCESSING->value);
     }
 
+    public function tryMarkAsProcessing(DesignDataIsolation $dataIsolation, int $taskId): bool
+    {
+        return $this->repository->tryMarkAsProcessing($dataIsolation, $taskId);
+    }
+
+    /**
+     * @param array<int, ImageGenerationType|int> $types
+     * @return array<int, ImageGenerationEntity>
+     */
+    public function findPendingByTypes(array $types, int $limit): array
+    {
+        return $this->repository->findPendingByTypes($types, $limit);
+    }
+
     /**
      * 更新任务状态为已完成.
      */
     public function markAsCompleted(DesignDataIsolation $dataIsolation, int $taskId, string $fileName): void
     {
         $this->repository->completed($dataIsolation, $taskId, $fileName);
+    }
+
+    public function markAsCompletedWithImages(DesignDataIsolation $dataIsolation, int $taskId, string $fileName, array $outputImages): void
+    {
+        $this->repository->completedWithImages($dataIsolation, $taskId, $fileName, $outputImages);
     }
 
     /**

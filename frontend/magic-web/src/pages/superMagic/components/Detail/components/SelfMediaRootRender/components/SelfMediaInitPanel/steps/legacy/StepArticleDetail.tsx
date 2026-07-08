@@ -213,6 +213,7 @@ export default function StepArticleDetail({
 								if (index !== activeTab) onPersistDraft?.()
 								setActiveTab(index)
 							}}
+							data-testid="on-persist-draft"
 						>
 							{article.title ||
 								t("detail.selfMedia.initPanel.stepDetail.articleFallback", {
@@ -238,7 +239,7 @@ export default function StepArticleDetail({
 
 				{/* Platform selection (required) */}
 				<div>
-					<label className="mb-2 block text-sm font-semibold">
+					<label className="mb-2 block text-sm font-semibold" data-testid="step-article-detail-label">
 						{t("detail.selfMedia.initPanel.stepDetail.platformLabel")}
 					</label>
 					<div className="flex flex-wrap gap-2">
@@ -255,6 +256,7 @@ export default function StepArticleDetail({
 								onClick={() =>
 									handleFieldChange("platform", p.value as SelfMediaPlatform)
 								}
+								data-testid="handle-field-change"
 							>
 								{t(p.labelKey)}
 							</button>
@@ -285,6 +287,7 @@ export default function StepArticleDetail({
 						type="button"
 						className="flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-border/60 py-3 text-xs font-medium text-muted-foreground transition-all hover:border-primary/30 hover:text-foreground"
 						onClick={() => setConfigExpanded(true)}
+						data-testid="set-config-expanded"
 					>
 						<svg
 							width="14"
@@ -295,6 +298,7 @@ export default function StepArticleDetail({
 							strokeWidth="2"
 							strokeLinecap="round"
 							strokeLinejoin="round"
+							data-testid="step-article-detail-svg"
 						>
 							<path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" />
 							<circle cx="12" cy="12" r="3" />
@@ -309,6 +313,7 @@ export default function StepArticleDetail({
 							strokeWidth="2"
 							strokeLinecap="round"
 							strokeLinejoin="round"
+							data-testid="step-article-detail-svg-2"
 						>
 							<polyline points="6 9 12 15 18 9" />
 						</svg>
@@ -319,7 +324,7 @@ export default function StepArticleDetail({
 				{showConfig && (
 					<>
 						<div>
-							<label className="mb-2.5 block text-sm font-semibold">
+							<label className="mb-2.5 block text-sm font-semibold" data-testid="step-article-detail-label-2">
 								{t("detail.selfMedia.initPanel.stepDetail.styleLabel")}
 							</label>
 							<div className="flex flex-wrap gap-2">
@@ -334,6 +339,7 @@ export default function StepArticleDetail({
 												: "border-border/60 text-muted-foreground hover:border-primary/40 hover:text-foreground",
 										)}
 										onClick={() => handleFieldChange("style", preset.value)}
+										data-testid="handle-field-change-2"
 									>
 										{t(preset.labelKey)}
 									</button>
@@ -356,6 +362,7 @@ export default function StepArticleDetail({
 										onChange={(e) =>
 											handleFieldChange("style", e.target.value || "custom")
 										}
+										data-testid="handle-field-change-3"
 									/>
 									<InlineVoiceButton
 										value={
@@ -374,7 +381,7 @@ export default function StepArticleDetail({
 
 						{/* Visual preset */}
 						<div>
-							<label className="mb-2.5 block text-sm font-semibold">
+							<label className="mb-2.5 block text-sm font-semibold" data-testid="step-article-detail-label-3">
 								{t("detail.selfMedia.initPanel.stepDetail.visualLabel")}
 							</label>
 							<p className="mb-2 text-xs text-muted-foreground">
@@ -415,7 +422,7 @@ export default function StepArticleDetail({
 						{/* Outline */}
 						<div>
 							<div className="mb-2.5 flex items-center justify-between">
-								<label className="text-sm font-semibold">
+								<label className="text-sm font-semibold" data-testid="step-article-detail-label-4">
 									{t("detail.selfMedia.initPanel.stepDetail.outlineLabel")}
 								</label>
 								<div className="flex items-center gap-2">
@@ -434,6 +441,7 @@ export default function StepArticleDetail({
 											)}
 											onClick={handleOutlineButtonClick}
 											disabled={!currentArticle.title.trim()}
+											data-testid="handle-outline-button-click"
 										>
 											{generatingOutline ? (
 												<>
@@ -445,6 +453,7 @@ export default function StepArticleDetail({
 														fill="none"
 														stroke="currentColor"
 														strokeWidth="2"
+														data-testid="step-article-detail-svg-3"
 													>
 														<path d="M21 12a9 9 0 1 1-6.219-8.56" />
 													</svg>
@@ -465,6 +474,7 @@ export default function StepArticleDetail({
 														strokeWidth="2"
 														strokeLinecap="round"
 														strokeLinejoin="round"
+														data-testid="step-article-detail-svg-4"
 													>
 														<path d="M12 2v4M16.2 7.8l2.9-2.9M18 12h4M16.2 16.2l2.9 2.9M12 18v4M4.9 19.1l2.9-2.9M2 12h4M4.9 4.9l2.9 2.9" />
 													</svg>
@@ -495,6 +505,7 @@ export default function StepArticleDetail({
 																)
 															}
 															autoFocus
+															data-testid="set-optimize-instruction"
 														/>
 														<InlineVoiceButton
 															variant="textarea"
@@ -516,6 +527,7 @@ export default function StepArticleDetail({
 																	optimizeInstruction,
 																)
 															}
+															data-testid="handle-ai-optimize"
 														>
 															<svg
 																width="12"
@@ -526,6 +538,7 @@ export default function StepArticleDetail({
 																strokeWidth="2"
 																strokeLinecap="round"
 																strokeLinejoin="round"
+																data-testid="step-article-detail-svg-5"
 															>
 																<path d="M12 2v4M16.2 7.8l2.9-2.9M18 12h4M16.2 16.2l2.9 2.9M12 18v4M4.9 19.1l2.9-2.9M2 12h4M4.9 4.9l2.9 2.9" />
 															</svg>
@@ -549,7 +562,7 @@ export default function StepArticleDetail({
 						{/* Card count */}
 						{currentArticle.platform !== "wechat-official-accounts" && (
 							<div>
-								<label className="mb-2 block text-sm font-semibold">
+								<label className="mb-2 block text-sm font-semibold" data-testid="step-article-detail-label-5">
 									{t("detail.selfMedia.initPanel.stepDetail.cardCountLabel")}
 								</label>
 								<div className="flex items-center gap-3">
@@ -565,6 +578,7 @@ export default function StepArticleDetail({
 												Math.max(1, parseInt(e.target.value) || 1),
 											)
 										}
+										data-testid="handle-field-change-4"
 									/>
 									<span className="text-xs text-muted-foreground">
 										{t("detail.selfMedia.initPanel.stepDetail.cardCountHint")}

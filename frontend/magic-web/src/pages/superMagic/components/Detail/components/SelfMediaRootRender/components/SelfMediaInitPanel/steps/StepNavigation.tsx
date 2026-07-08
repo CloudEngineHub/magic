@@ -166,6 +166,7 @@ export default function StepNavigation({
 								disabled={isFutureStep}
 								aria-label={getStepLabel(index)}
 								title={getStepLabel(index)}
+								data-testid="on-navigate"
 							/>
 						)
 					})}

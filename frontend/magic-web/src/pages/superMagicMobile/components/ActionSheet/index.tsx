@@ -95,8 +95,9 @@ function ActionSheet({
 												? "text-destructive hover:bg-destructive/5 active:bg-destructive/10"
 												: "text-foreground hover:bg-muted active:bg-muted/80",
 											action.disabled &&
-												"cursor-not-allowed opacity-50 hover:bg-transparent",
+											"cursor-not-allowed opacity-50 hover:bg-transparent",
 										)}
+										data-testid="action-sheet"
 									>
 										{action.label}
 									</button>

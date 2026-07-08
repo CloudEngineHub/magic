@@ -68,8 +68,6 @@ export function useFileReplace({
 								file_key: uploadedFile.file_key,
 							})
 							magicToast.success(t("topicFiles.contextMenu.replaceFileSuccess"))
-							// 刷新文件列表
-							pubsub.publish(PubSubEvents.Update_Attachments)
 							pubsub.publish(PubSubEvents.Super_Magic_Detail_Refresh)
 						} catch (replaceError) {
 							console.error("Replace file error:", replaceError)

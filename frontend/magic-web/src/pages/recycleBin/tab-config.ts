@@ -32,16 +32,23 @@ const RECYCLE_BIN_TABS_CONFIG = [
 			mobile: "mobile.recycleBin.tabs.topics",
 		},
 	},
-	// {
-	// 	id: "files",
-	// 	labelKey: {
-	// 		pc: "recycleBin.tabs.files",
-	// 		mobile: "mobile.recycleBin.tabs.files",
-	// 	},
-	// },
+	{
+		id: "files",
+		labelKey: {
+			pc: "recycleBin.tabs.files",
+			mobile: "mobile.recycleBin.tabs.files",
+		},
+	},
 ] as const
 
-type RecycleBinTabId = (typeof RECYCLE_BIN_TABS_CONFIG)[number]["id"]
+type RecycleBinTabId = (typeof RECYCLE_BIN_TABS_CONFIG)[number]["id"] | "files"
+
+const RECYCLE_BIN_RESOURCE_TYPE_TO_TAB_ID: Record<number, RecycleBinTabId> = {
+	1: "workspaces",
+	2: "projects",
+	3: "topics",
+	4: "files",
+}
 
 interface RecycleBinTab {
 	id: RecycleBinTabId
@@ -82,13 +89,13 @@ function setRecycleBinTabQuery(tabId: RecycleBinTabId) {
 }
 
 function createRecycleBinTabCounts(): Record<RecycleBinTabId, number> {
-	return RECYCLE_BIN_TABS_CONFIG.reduce(
-		(acc, tab) => {
-			acc[tab.id] = 0
-			return acc
-		},
-		{} as Record<RecycleBinTabId, number>,
-	)
+	return {
+		all: 0,
+		workspaces: 0,
+		projects: 0,
+		topics: 0,
+		files: 0,
+	}
 }
 
 function getRecycleBinTabs(props: {
@@ -105,6 +112,7 @@ function getRecycleBinTabs(props: {
 
 export {
 	RECYCLE_BIN_TABS_CONFIG,
+	RECYCLE_BIN_RESOURCE_TYPE_TO_TAB_ID,
 	createRecycleBinTabCounts,
 	getRecycleBinTabs,
 	getRecycleBinTabIdFromQuery,

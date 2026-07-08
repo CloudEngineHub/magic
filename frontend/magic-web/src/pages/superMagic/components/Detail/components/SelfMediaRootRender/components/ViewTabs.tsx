@@ -30,17 +30,17 @@ function ViewTabs({ value, onChange, labels, order, className }: ViewTabsProps) 
 		<Tabs
 			value={value}
 			onValueChange={(nextView) => onChange(nextView as SelfMediaView)}
-			className={cn("w-max max-w-none shrink-0 flex-row gap-0", className)}
+			className={cn("w-max max-w-none shrink-0 flex-row gap-0 max-sm:w-full", className)}
 			data-testid="self-media-view-tabs"
 		>
-			<TabsList className="h-11 w-max max-w-none shrink-0 justify-start overflow-visible rounded-[16px] bg-[#efeff0] p-1 sm:h-12 sm:rounded-[18px]">
+			<TabsList className="h-10 w-max max-w-none shrink-0 justify-start overflow-visible rounded-[14px] bg-[#efeff0] p-1 sm:h-12 sm:rounded-[18px]">
 				{visibleOrder.map((view) => {
 					return (
 						<TabsTrigger
 							key={view}
 							value={view}
 							data-testid={`self-media-view-${view}`}
-							className="h-9 min-w-[76px] shrink-0 rounded-[12px] px-3 text-sm font-[700] text-[#18181b] data-[state=active]:bg-white data-[state=active]:shadow-[0_3px_10px_rgba(24,24,27,0.06)] sm:h-10 sm:min-w-[92px] sm:rounded-[14px] sm:px-4"
+							className="h-8 min-w-[68px] shrink-0 rounded-[10px] px-2 text-xs font-[700] text-[#18181b] data-[state=active]:bg-white data-[state=active]:shadow-[0_3px_10px_rgba(24,24,27,0.06)] sm:h-10 sm:min-w-[92px] sm:rounded-[14px] sm:px-4 sm:text-sm"
 						>
 							{labels?.[view] || defaultLabels[view]}
 						</TabsTrigger>

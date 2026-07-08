@@ -1,5 +1,9 @@
 import Konva from "konva"
 import { hasModKey } from "./shortcuts/modifierUtils"
+import {
+	pickSelectedElementIdAtStagePointer,
+	resolveManagedElementIdFromKonvaNode,
+} from "./elementNodeUtils"
 import type { Canvas } from "../Canvas"
 import type {
 	PaddingInsetConfig,
@@ -34,6 +38,8 @@ import type { ViewportChangePhase, ViewportChangeSource } from "../EventEmitter"
 
 type PanPending = { x: number; y: number }
 type ViewportBoundingRect = { x: number; y: number; width: number; height: number }
+
+const DEFAULT_VIEWPORT_SCALE = 0.3
 
 /**
  * 触摸事件处理器集合
@@ -266,7 +272,7 @@ export class ViewportController {
 		return { horizontal: "center", vertical: "center" }
 	}
 
-	private scale = 1
+	private scale = DEFAULT_VIEWPORT_SCALE
 	private minScale = 0.001
 	private maxScale = 5
 	private scaleStep = 0.1
@@ -278,12 +284,13 @@ export class ViewportController {
 	// 触摸缩放相关
 	private lastTouchPinchDistance = 0
 	private isTouchPinching = false
+	private isTouchGestureActive = false
+	private activeViewportGestureSource: "touch-pinch" | "webkit-gesture" | null = null
 
 	// 触摸平移相关
 	private isTouchPanning = false
 	private touchStartPosition: { x: number; y: number } | null = null
 	private stageStartPosition: { x: number; y: number } | null = null
-	private touchStartTime = 0
 	private readonly TOUCH_MOVE_THRESHOLD = 10 // 移动阈值，避免误触
 
 	// 动画相关
@@ -296,6 +303,7 @@ export class ViewportController {
 	private activeWebKitGesturePinch: WebKitGesturePinchState | null = null
 
 	private webKitGestureHandler: ((e: Event) => void) | null = null
+	private deviceChangeUnsubscribe?: () => void
 
 	// 是否禁用 pan 和缩放
 	private isPanZoomDisabled = false
@@ -313,6 +321,34 @@ export class ViewportController {
 	 */
 	private roundScale(scale: number): number {
 		return Math.round(scale * 10000) / 10000
+	}
+
+	private beginViewportGesture(
+		source: "touch-pinch" | "webkit-gesture",
+		pointerCount?: number,
+	): void {
+		this.canvas.inputManager?.cancelLongPress()
+		if (this.isTouchGestureActive) {
+			return
+		}
+		this.isTouchGestureActive = true
+		this.activeViewportGestureSource = source
+		this.canvas.eventEmitter.emit({
+			type: "viewport:gesture",
+			data: { active: true, source, pointerCount },
+		})
+	}
+
+	private endViewportGesture(source: "touch-pinch" | "webkit-gesture"): void {
+		if (!this.isTouchGestureActive) {
+			return
+		}
+		this.isTouchGestureActive = false
+		this.activeViewportGestureSource = null
+		this.canvas.eventEmitter.emit({
+			type: "viewport:gesture",
+			data: { active: false, source },
+		})
 	}
 
 	/**
@@ -692,6 +728,10 @@ export class ViewportController {
 	constructor(options: { canvas: Canvas }) {
 		const { canvas } = options
 		this.canvas = canvas
+		this.canvas.stage.scale({
+			x: DEFAULT_VIEWPORT_SCALE,
+			y: DEFAULT_VIEWPORT_SCALE,
+		})
 
 		// 视口缩放/平移节流配置写死在本类（如需限频可在此增加 maxFps）
 		this.zoomThrottle = createLeadingRafThrottle<ZoomPending>((v) => this.applyZoomUpdate(v), {
@@ -720,13 +760,21 @@ export class ViewportController {
 	 */
 	private setupEventListeners(): void {
 		this.setupWheelEvents()
-		this.setupWebKitGesturePinch()
+		this.syncWebKitGesturePinchListener()
 		this.setupTouchEvents()
+		this.deviceChangeUnsubscribe = this.canvas.eventEmitter.on("canvas:devicechange", () => {
+			this.syncWebKitGesturePinchListener()
+		})
 	}
 
 	/** 桌面 Safari 等：触控板捏合走 gesture 的 scale，需在非移动端单独处理 */
-	private setupWebKitGesturePinch(): void {
-		if (this.canvas.isMobileDevice) {
+	private syncWebKitGesturePinchListener(): void {
+		if (!this.shouldEnableWebKitGesturePinch()) {
+			this.removeWebKitGesturePinchListener()
+			return
+		}
+
+		if (this.webKitGestureHandler) {
 			return
 		}
 
@@ -740,6 +788,7 @@ export class ViewportController {
 
 			if (e.type === "gesturestart") {
 				e.preventDefault()
+				this.beginViewportGesture("webkit-gesture")
 				this.activeWebKitGesturePinch = createWebKitGesturePinchState(
 					this.canvas.stage,
 					gestureEvent,
@@ -773,6 +822,7 @@ export class ViewportController {
 			e.preventDefault()
 			this.zoomThrottle.flush()
 			this.activeWebKitGesturePinch = null
+			this.endViewportGesture("webkit-gesture")
 		}
 
 		const handler = this.webKitGestureHandler
@@ -781,11 +831,90 @@ export class ViewportController {
 		}
 	}
 
+	private removeWebKitGesturePinchListener(): void {
+		if (!this.webKitGestureHandler) {
+			return
+		}
+
+		const handler = this.webKitGestureHandler
+		const container = this.canvas.stage.container()
+		for (const t of WEBKIT_GESTURE_EVENTS) {
+			container.removeEventListener(t, handler)
+		}
+		this.webKitGestureHandler = null
+		if (this.activeWebKitGesturePinch) {
+			this.zoomThrottle.flush()
+			this.activeWebKitGesturePinch = null
+		}
+		if (this.activeViewportGestureSource === "webkit-gesture") {
+			this.endViewportGesture("webkit-gesture")
+		}
+	}
+
 	/**
 	 * 检查是否应该启用触摸平移
 	 */
 	private shouldEnableTouchPan(): boolean {
-		return this.canvas.isMobileDevice
+		return this.canvas.deviceInfo.input.touch
+	}
+
+	private shouldEnableWebKitGesturePinch(): boolean {
+		const { layout, input } = this.canvas.deviceInfo
+		return layout === "regular" && (input.hover || !input.coarsePointer)
+	}
+
+	private shouldHandleSingleTouchPan(event: TouchEvent): boolean {
+		if (!this.shouldEnableTouchPan()) {
+			return false
+		}
+
+		if (this.canvas.eraserManager?.getErasingElementId()) {
+			return false
+		}
+
+		const toolManager = this.canvas.toolManager
+		if (!toolManager) {
+			return true
+		}
+
+		const activeTool = toolManager.getActiveTool()
+		if (activeTool === toolManager.getPanTool()) {
+			return true
+		}
+
+		if (activeTool !== toolManager.getSelectionTool()) {
+			return false
+		}
+
+		return this.isTouchStartOnViewportBlank(event)
+	}
+
+	private isTouchStartOnViewportBlank(event: TouchEvent): boolean {
+		const touch = event.touches[0]
+		if (!touch) {
+			return true
+		}
+
+		this.canvas.stage.setPointersPositions(event)
+		const pointer = this.canvas.stage.getPointerPosition()
+		if (!pointer) {
+			return true
+		}
+
+		const hitNode = this.canvas.stage.getIntersection(pointer)
+		if (!hitNode || hitNode.getClassName() === "Layer") {
+			return true
+		}
+
+		if (hitNode.name() === "multi-selection-proxy") {
+			return !pickSelectedElementIdAtStagePointer(this.canvas, pointer)
+		}
+
+		if (resolveManagedElementIdFromKonvaNode(hitNode, this.canvas)) {
+			return false
+		}
+
+		return false
 	}
 
 	/**
@@ -812,6 +941,7 @@ export class ViewportController {
 	 */
 	private setupTouchEvents(): void {
 		let hasMoved = false
+		let shouldPanFromTouchStart = false
 
 		// 使用原生事件监听器，支持 passive: false
 		const container = this.canvas.stage.container()
@@ -821,7 +951,7 @@ export class ViewportController {
 
 			if (touches.length === 1) {
 				// 单指触摸：准备平移
-				this.touchStartTime = Date.now()
+				shouldPanFromTouchStart = this.shouldHandleSingleTouchPan(e)
 				const touch = touches[0]
 
 				this.touchStartPosition = {
@@ -836,6 +966,8 @@ export class ViewportController {
 
 				hasMoved = false
 			} else if (touches.length === 2) {
+				this.beginViewportGesture("touch-pinch", touches.length)
+				shouldPanFromTouchStart = false
 				// 双指触摸：禁用单指平移，启用缩放
 				this.isTouchPanning = false
 				this.touchStartPosition = null
@@ -862,7 +994,7 @@ export class ViewportController {
 				!this.isTouchPinching &&
 				this.touchStartPosition &&
 				this.stageStartPosition &&
-				this.shouldEnableTouchPan()
+				shouldPanFromTouchStart
 			) {
 				// 单指移动：处理平移（仅移动端）
 				const touch = touches[0]
@@ -928,18 +1060,21 @@ export class ViewportController {
 				this.touchStartPosition = null
 				this.stageStartPosition = null
 				hasMoved = false
+				shouldPanFromTouchStart = false
 
 				// 重置缩放状态，松手时立即应用待处理的 viewport 状态
 				if (this.isTouchPinching) {
 					this.isTouchPinching = false
 					this.lastTouchPinchDistance = 0
 					this.zoomThrottle.flush()
+					this.endViewportGesture("touch-pinch")
 				}
 			} else if (touches.length === 1 && this.isTouchPinching) {
 				// 从双指变为单指：结束缩放，立即应用待处理状态
 				this.isTouchPinching = false
 				this.lastTouchPinchDistance = 0
 				this.zoomThrottle.flush()
+				this.endViewportGesture("touch-pinch")
 			}
 		}
 
@@ -950,11 +1085,13 @@ export class ViewportController {
 			this.isTouchPanning = false
 			this.touchStartPosition = null
 			this.stageStartPosition = null
+			shouldPanFromTouchStart = false
 			if (this.isTouchPinching) {
 				this.zoomThrottle.flush()
 			}
 			this.isTouchPinching = false
 			this.lastTouchPinchDistance = 0
+			this.endViewportGesture("touch-pinch")
 			hasMoved = false
 		}
 
@@ -1319,14 +1456,7 @@ export class ViewportController {
 
 		// 移除原生触摸事件监听器
 		const container = this.canvas.stage.container()
-		if (this.webKitGestureHandler) {
-			const handler = this.webKitGestureHandler
-			for (const t of WEBKIT_GESTURE_EVENTS) {
-				container.removeEventListener(t, handler)
-			}
-			this.webKitGestureHandler = null
-		}
-		this.activeWebKitGesturePinch = null
+		this.removeWebKitGesturePinchListener()
 		if (this.touchEventHandlers) {
 			container.removeEventListener("touchstart", this.touchEventHandlers.handleTouchStart)
 			container.removeEventListener("touchmove", this.touchEventHandlers.handleTouchMove)
@@ -1334,9 +1464,16 @@ export class ViewportController {
 			container.removeEventListener("touchcancel", this.touchEventHandlers.handleTouchCancel)
 			this.touchEventHandlers = null
 		}
+		this.deviceChangeUnsubscribe?.()
+		this.deviceChangeUnsubscribe = undefined
 
 		// 清理状态
+		if (this.isTouchGestureActive) {
+			this.endViewportGesture(this.activeViewportGestureSource ?? "touch-pinch")
+		}
 		this.isTouchPinching = false
+		this.isTouchGestureActive = false
+		this.activeViewportGestureSource = null
 		this.lastTouchPinchDistance = 0
 		this.isTouchPanning = false
 		this.touchStartPosition = null
@@ -1348,6 +1485,10 @@ export class ViewportController {
 	 */
 	public isTouchPanningActive(): boolean {
 		return this.isTouchPanning
+	}
+
+	public isViewportGestureActive(): boolean {
+		return this.isTouchGestureActive
 	}
 
 	/**

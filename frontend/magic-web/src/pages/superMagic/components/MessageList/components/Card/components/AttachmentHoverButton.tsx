@@ -43,6 +43,7 @@ function AttachmentHoverButton({ attachments, t, className }: AttachmentHoverBut
 						"flex h-6 items-center gap-1.5 rounded-md border-0 bg-transparent px-2 text-xs font-normal leading-4 text-foreground transition-all hover:bg-fill",
 						className,
 					)}
+					data-testid="attachment-hover-button-trigger"
 				>
 					<Paperclip size={16} className="shrink-0" />
 					<span>
@@ -85,6 +86,7 @@ function AttachmentHoverButton({ attachments, t, className }: AttachmentHoverBut
 								type="button"
 								className="relative flex w-full cursor-pointer items-center gap-2 overflow-clip rounded-sm px-2.5 py-1.5 text-left transition-colors hover:bg-accent"
 								onClick={() => handleFileClick(mentionData)}
+								data-testid="handle-file-click"
 							>
 								{/* File Icon */}
 								<div className="flex h-6 w-6 shrink-0 items-center justify-center">

@@ -54,6 +54,10 @@ export const en: I18nTexts = {
 
 	// Mobile specific
 	selectItem: "Select",
+	multiSelectActions: {
+		enter: "Multi-select",
+		complete: "Done",
+	},
 	mobileSelectedItemsLabel: "Selected",
 	mobileSelectedItemsTitle: "Selected",
 

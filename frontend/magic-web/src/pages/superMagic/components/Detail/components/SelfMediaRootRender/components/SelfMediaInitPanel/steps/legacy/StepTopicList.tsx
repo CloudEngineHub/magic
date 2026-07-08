@@ -149,6 +149,7 @@ export default function StepTopicList({
 						type="button"
 						className="flex w-full items-center justify-center gap-2 rounded-xl border-2 border-dashed border-primary/30 bg-gradient-to-r from-primary/5 to-primary/[0.02] px-4 py-4 text-sm font-medium text-primary transition-all hover:border-primary/50 hover:from-primary/10 hover:to-primary/5 hover:shadow-sm active:scale-[0.99]"
 						onClick={() => setShowAiPanel(true)}
+						data-testid="set-show-ai-panel"
 					>
 						<svg
 							width="18"
@@ -159,6 +160,7 @@ export default function StepTopicList({
 							strokeWidth="2"
 							strokeLinecap="round"
 							strokeLinejoin="round"
+							data-testid="step-topic-list-svg"
 						>
 							<path d="M12 2v4M16.2 7.8l2.9-2.9M18 12h4M16.2 16.2l2.9 2.9M12 18v4M4.9 19.1l2.9-2.9M2 12h4M4.9 4.9l2.9 2.9" />
 						</svg>
@@ -179,6 +181,7 @@ export default function StepTopicList({
 										strokeLinecap="round"
 										strokeLinejoin="round"
 										className="text-primary"
+										data-testid="step-topic-list-svg-2"
 									>
 										<path d="M12 2v4M16.2 7.8l2.9-2.9M18 12h4M16.2 16.2l2.9 2.9M12 18v4M4.9 19.1l2.9-2.9M2 12h4M4.9 4.9l2.9 2.9" />
 									</svg>
@@ -194,6 +197,7 @@ export default function StepTopicList({
 									setShowAiPanel(false)
 									setAiError("")
 								}}
+								data-testid="set-show-ai-panel-2"
 							>
 								<svg
 									width="16"
@@ -204,6 +208,7 @@ export default function StepTopicList({
 									strokeWidth="2"
 									strokeLinecap="round"
 									strokeLinejoin="round"
+									data-testid="step-topic-list-svg-3"
 								>
 									<path d="M18 6 6 18M6 6l12 12" />
 								</svg>
@@ -226,6 +231,7 @@ export default function StepTopicList({
 										}
 									}}
 									disabled={aiGenerating}
+									data-testid="set-ai-direction"
 								/>
 								<InlineVoiceButton value={aiDirection} onResult={setAiDirection} />
 							</div>
@@ -264,6 +270,7 @@ export default function StepTopicList({
 											)
 										}
 										disabled={aiGenerating}
+										data-testid="set-topic-count"
 									/>
 									<span>
 										{t(
@@ -278,6 +285,7 @@ export default function StepTopicList({
 									type="button"
 									className="flex items-center gap-1.5 rounded-lg bg-muted px-3 py-1.5 text-xs font-medium text-muted-foreground hover:bg-muted/80"
 									onClick={handleAbort}
+									data-testid="handle-abort"
 								>
 									<svg
 										className="animate-spin"
@@ -287,6 +295,7 @@ export default function StepTopicList({
 										fill="none"
 										stroke="currentColor"
 										strokeWidth="2"
+										data-testid="step-topic-list-svg-4"
 									>
 										<path d="M21 12a9 9 0 1 1-6.219-8.56" />
 									</svg>
@@ -297,6 +306,7 @@ export default function StepTopicList({
 									type="button"
 									className="flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground shadow-sm hover:bg-primary/90 active:scale-[0.97]"
 									onClick={handleAiGenerate}
+									data-testid="handle-ai-generate"
 								>
 									<svg
 										width="12"
@@ -307,6 +317,7 @@ export default function StepTopicList({
 										strokeWidth="2"
 										strokeLinecap="round"
 										strokeLinejoin="round"
+										data-testid="step-topic-list-svg-5"
 									>
 										<path d="M12 2v4M16.2 7.8l2.9-2.9M18 12h4" />
 									</svg>
@@ -338,6 +349,7 @@ export default function StepTopicList({
 									)}
 									value={article.title}
 									onChange={(e) => handleTitleChange(index, e.target.value)}
+									data-testid="handle-title-change"
 								/>
 								<InlineVoiceButton
 									value={article.title}
@@ -353,6 +365,7 @@ export default function StepTopicList({
 									)}
 									value={article.folderName}
 									onChange={(e) => handleFolderNameChange(index, e.target.value)}
+									data-testid="handle-folder-name-change"
 								/>
 								<InlineVoiceButton
 									value={article.folderName}
@@ -371,6 +384,7 @@ export default function StepTopicList({
 								"mt-2 shrink-0 rounded-md p-1.5 text-muted-foreground/50 transition-all hover:bg-destructive/10 hover:text-destructive",
 							)}
 							onClick={() => handleRemove(index)}
+							data-testid="handle-remove"
 						>
 							<svg
 								width="14"
@@ -381,6 +395,7 @@ export default function StepTopicList({
 								strokeWidth="2"
 								strokeLinecap="round"
 								strokeLinejoin="round"
+								data-testid="step-topic-list-svg-6"
 							>
 								<path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
 							</svg>
@@ -394,6 +409,7 @@ export default function StepTopicList({
 				type="button"
 				className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-border/60 py-3.5 text-sm text-muted-foreground transition-all hover:border-primary/40 hover:bg-muted/30 hover:text-primary"
 				onClick={handleAdd}
+				data-testid="handle-add"
 			>
 				<svg
 					width="16"
@@ -404,6 +420,7 @@ export default function StepTopicList({
 					strokeWidth="2"
 					strokeLinecap="round"
 					strokeLinejoin="round"
+					data-testid="step-topic-list-svg-7"
 				>
 					<path d="M12 5v14M5 12h14" />
 				</svg>

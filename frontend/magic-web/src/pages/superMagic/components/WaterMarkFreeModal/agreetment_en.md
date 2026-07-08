@@ -7,10 +7,10 @@ Before downloading AI-generated watermark-free content, please read and understa
 ## Article 1: Purpose and Scope
 
 ### 1.1 Purpose
-This Agreement governs the provision of AI-generated watermark-free content download services by the Super Magic Platform (hereinafter referred to as "the Platform") to users, clarifies the rights and obligations of both parties, and ensures compliance with applicable laws and regulations of the People's Republic of China.
+This Agreement governs the provision of AI-generated watermark-free content download services by the {{platformName}} Platform (hereinafter referred to as "the Platform") to users, clarifies the rights and obligations of both parties, and ensures compliance with applicable laws and regulations of the People's Republic of China.
 
 ### 1.2 Scope
-This Agreement applies to user activities involving the download of AI-generated watermark-free content, including text, images, audio, video, and other materials, through the Super Magic Platform.
+This Agreement applies to user activities involving the download of AI-generated watermark-free content, including text, images, audio, video, and other materials, through the {{platformName}} Platform.
 
 ### 1.3 Legal Basis
 This Agreement is formulated in accordance with the Cybersecurity Law of the People's Republic of China, the Data Security Law of the People's Republic of China, the Personal Information Protection Law of the People's Republic of China, the Provisions on the Administration of Algorithm Recommendations for Internet Information Services, the Provisions on the Administration of Deep Synthesis of Internet Information Services, the Interim Measures for the Administration of Generative Artificial Intelligence Services, the Measures for Identifying Content Generated and Synthesized by Artificial Intelligence, and other applicable laws and regulations.
@@ -159,6 +159,9 @@ The Platform reserves the right to amend this Agreement in accordance with chang
 
 ### 11.2 Effectiveness
 This Agreement becomes effective upon the user clicking the "Agree" button and is legally binding on both parties.
+
+### 11.3 Interpretation
+The {{platformName}} Platform {{domain}} retains final interpretation rights of this Agreement.
 
 ## Article 12: Contact Information
 

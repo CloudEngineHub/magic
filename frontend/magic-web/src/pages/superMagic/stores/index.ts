@@ -6,10 +6,12 @@ import type { SuperMagicChunkMessage } from "@/types/chat/intermediate_message"
 import {
 	createDomainEventRegistry,
 	createTopicMessageListenerRegistry,
+	RegisterTopicMessageListenerParams,
 	resolveCrewDomainEvent,
 	resolveTaskDomainEvent,
 } from "./listener-registry"
 import { persistMessageToStorage } from "./persistence"
+import { notifyAskUserV2BrowserNotificationFromMessageNode } from "../services/askUserBrowserNotificationService"
 import {
 	getRawMessageNode,
 	transformRawMessage,
@@ -18,11 +20,13 @@ import {
 	isToolCallsEqual,
 	isToolCallsMatch,
 	isToolCallArgumentsComplete,
+	compactToolCalls,
 	getCharsPerTick,
 	adjustSliceEnd,
 	createStreamState,
 	getDefaultTopicMeta,
 } from "./message-transforms"
+import { bindSuperMagicStoreCollaborators, superMagicStoreCollaborators } from "./collaborators"
 
 // Re-export types (preserves all existing public type exports)
 export type {
@@ -61,6 +65,9 @@ import type {
 	RawSuperMagicMessageSequence,
 	RawSuperMagicMessageEnvelope,
 	PendingUserMessageEnvelope,
+	ServerMessagesConfirmedPayload,
+	SuperMagicStoreCallbackRegistrar,
+	SuperMagicStoreCollaborators,
 	SharedMessageItem,
 	MessageItem,
 	StreamState,
@@ -78,7 +85,11 @@ function resolveDomainEvents(payload: TopicMessageListenerPayload): DomainEventP
 	)
 }
 
-export class SuperMagicStore {
+export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
+	private collaborators: SuperMagicStoreCollaborators
+	private onServerMessagesConfirmedCallbacks = new Set<
+		(payload: ServerMessagesConfirmedPayload) => void
+	>()
 	// 消息
 	messages: Map<SuperMagicStoreTopicId, MessageItem[]> = new Map()
 	// 消息缓冲区
@@ -105,8 +116,28 @@ export class SuperMagicStore {
 	/** 领域事件注册中心：用于将消息变更转换后的领域事件统一分发 */
 	private domainEventRegistry = createDomainEventRegistry<DomainEventPayload>()
 
-	constructor() {
-		makeAutoObservable(this, {}, { autoBind: true })
+	constructor(collaborators: SuperMagicStoreCollaborators = superMagicStoreCollaborators) {
+		this.collaborators = collaborators
+		makeAutoObservable(
+			this,
+			{
+				onServerMessagesConfirmedCallbacks: false,
+			},
+			{ autoBind: true },
+		)
+	}
+
+	registerOnServerMessagesConfirmed(callback: (payload: ServerMessagesConfirmedPayload) => void) {
+		this.onServerMessagesConfirmedCallbacks.add(callback)
+		return () => {
+			this.onServerMessagesConfirmedCallbacks.delete(callback)
+		}
+	}
+
+	private emitServerMessagesConfirmed(payload: ServerMessagesConfirmedPayload) {
+		this.onServerMessagesConfirmedCallbacks.forEach((callback) => {
+			callback(payload)
+		})
 	}
 
 	private emitDomainEvents(payload: TopicMessageListenerPayload) {
@@ -140,6 +171,7 @@ export class SuperMagicStore {
 	initializeMessages(topicId: string, messages: RawSuperMagicMessageEnvelope[]) {
 		const existingMessages = this.messages.get(topicId) || []
 		const topicBuffer = this.getTopicBuffer(topicId)
+		const incomingAppMessageIds: string[] = []
 		console.log("API 拉取的消息列表", messages)
 		const bufferedMessageIds = new Set(
 			topicBuffer.messages.map((item) => item?.seq?.message?.app_message_id),
@@ -153,6 +185,7 @@ export class SuperMagicStore {
 				const rawNode = getRawMessageNode(imMessage)
 				const messageType = String(imMessage?.type || "")
 				const appMessageId = imMessage?.app_message_id as string
+				if (appMessageId) incomingAppMessageIds.push(appMessageId)
 				const correlationId = String(rawNode?.correlation_id || "")
 				if (
 					!bufferedMessageIds.has(appMessageId) &&
@@ -198,8 +231,29 @@ export class SuperMagicStore {
 
 				this.messageMap.set(appMessageId, rawNode)
 			})
+			// Clean up local sidecars.
+			this.emitServerMessagesConfirmed({
+				chat_topic_id: topicId,
+				app_message_ids: incomingAppMessageIds,
+			})
+
+			const mergedServerMessages = unionBy(sortMessages(existingMessages), "app_message_id")
+			// Server history enters the in-memory list first, then local failed messages are restored by send-time anchors before a single UI update.
+			this.collaborators.getRestorableUserMessages(topicId).forEach((message) => {
+				this.insertPendingUserMessage(
+					mergedServerMessages,
+					topicId,
+					message.pending_message,
+					{
+						created_at: message.created_at,
+						anchor_message_id: message.anchor_message_id,
+						anchor_seq_id: message.anchor_seq_id,
+					},
+				)
+			})
+
 			this.toolResponseMap.set(topicId, toolResponseMap)
-			this.messages.set(topicId, unionBy(sortMessages(existingMessages), "app_message_id"))
+			this.messages.set(topicId, mergedServerMessages)
 		})
 	}
 
@@ -284,7 +338,7 @@ export class SuperMagicStore {
 				const fn = toolCalls?.[0]?.function
 				if (fn && !Array.isArray(fn) && typeof fn === "object") {
 					const isNewTool = fn.name
-					const toolIndex = toolCalls?.[0]?.index || 0
+					const toolIndex = toolCalls?.[0]?.index ?? 0
 
 					if (isNewTool) {
 						streamState.tool_calls[toolIndex] = toolCalls?.[0]
@@ -354,6 +408,129 @@ export class SuperMagicStore {
 		})
 	}
 
+	/** Records the current message list anchor before sending; used only for optimistic recovery positioning, not included in API payload. */
+	getLatestMessageAnchor(topicId: string) {
+		const messageList = this.messages.get(topicId) || []
+		const lastMessage = messageList[messageList.length - 1]
+		let fallbackAnchorMessage: MessageItem | undefined
+		for (let i = messageList.length - 1; i >= 0; i--) {
+			if (messageList[i]?.app_message_id) {
+				fallbackAnchorMessage = messageList[i]
+				break
+			}
+		}
+
+		return {
+			anchor_message_id: fallbackAnchorMessage?.app_message_id,
+			anchor_seq_id: lastMessage?.seq_id,
+		}
+	}
+
+	private getUserMessageAnchorIndex(
+		messageList: MessageItem[],
+		options?: { anchor_message_id?: string; anchor_seq_id?: string },
+	) {
+		// Prefer seq anchor for refresh recovery positioning; fall back to app_message_id of the last message before send.
+		if (!options?.anchor_seq_id && !options?.anchor_message_id) return -1
+
+		const anchorSeqIndex = options.anchor_seq_id
+			? messageList.findIndex((message) => message.seq_id === options.anchor_seq_id)
+			: -1
+		if (anchorSeqIndex > -1) return anchorSeqIndex
+
+		return options.anchor_message_id
+			? messageList.findIndex(
+					(message) => message.app_message_id === options.anchor_message_id,
+				)
+			: -1
+	}
+
+	private resolveRestoredUserMessageSeqId(createdAt: number, anchorMessage?: MessageItem) {
+		if (!anchorMessage?.seq_id) return `${createdAt}`
+		// Construct a local seq using the anchor seq prefix, ensuring stable ordering after the anchor and before the next real message.
+		return `${anchorMessage.seq_id}_${createdAt}`
+	}
+
+	private isRestoredOptimisticMessageAfterAnchor(message?: MessageItem) {
+		// Check if local recovered messages have already been inserted after the anchor; consecutive failed messages continue in order.
+		const optimisticStatus = this.collaborators.getMessageOptimisticStatus(
+			message?.topic_id,
+			message?.app_message_id,
+		)
+		return Boolean(message?.app_message_id && optimisticStatus)
+	}
+
+	private insertPendingUserMessage(
+		messageList: MessageItem[],
+		topicId: string,
+		baseMessage: PendingUserMessageEnvelope,
+		options: { created_at?: number; anchor_message_id?: string; anchor_seq_id?: string },
+	) {
+		// After server history flows back, insert local failed/sending snapshots into the main store list by their send-time anchors.
+		const rawMessage = baseMessage?.message as RawSuperMagicIMMessage
+		const appMessageId = rawMessage?.app_message_id as string
+		if (!rawMessage || !appMessageId || !options.created_at) return
+		if (messageList.some((item) => item.app_message_id === appMessageId)) return
+
+		const anchorIndex = this.getUserMessageAnchorIndex(messageList, options)
+		const anchorMessage = anchorIndex > -1 ? messageList[anchorIndex] : undefined
+		const sendTime = Math.floor(options.created_at / 1000)
+		const sequence = {
+			seq_id: this.resolveRestoredUserMessageSeqId(options.created_at, anchorMessage),
+			message_id: appMessageId,
+			refer_message_id: "",
+			sender_message_id: rawMessage?.sender_id || "",
+			conversation_id: baseMessage?.conversation_id || "",
+			send_time: sendTime,
+			magic_id: "",
+			organization_code: "",
+			message: {
+				...rawMessage,
+				send_time: sendTime,
+			},
+		} as RawSuperMagicMessageSequence
+		const nextMessage = transformRawMessage(sequence)
+		const messageNode = getRawMessageNode(rawMessage)
+		const insertionIndex = this.getRestoredUserMessageInsertionIndex(messageList, anchorIndex)
+
+		this.messageMap.set(appMessageId, messageNode)
+		const nextMessages =
+			insertionIndex > -1
+				? [
+						...messageList.slice(0, insertionIndex),
+						nextMessage,
+						...messageList.slice(insertionIndex),
+					]
+				: sortMessages([...messageList, nextMessage])
+		messageList.length = 0
+		messageList.push(...nextMessages)
+	}
+
+	private getRestoredUserMessageInsertionIndex(messageList: MessageItem[], anchorIndex: number) {
+		// Multiple failed messages may be consecutively recovered after the same anchor; new messages are inserted after this segment.
+		if (anchorIndex === -1) return -1
+
+		let insertionIndex = anchorIndex + 1
+		while (this.isRestoredOptimisticMessageAfterAnchor(messageList[insertionIndex])) {
+			insertionIndex += 1
+		}
+		return insertionIndex
+	}
+
+	/** Before retrying an optimistic failed message, remove the old local user message from the v2 main message source. */
+	removeUserMessage(topicId: string, appMessageId: string) {
+		if (!topicId || !appMessageId) return
+
+		const messageList = this.messages.get(topicId) || []
+		runInAction(() => {
+			this.messages.set(
+				topicId,
+				messageList.filter((item) => item.app_message_id !== appMessageId),
+			)
+			this.messageMap.delete(appMessageId)
+		})
+	}
+
 	replaceUserMessage(
 		topicId: string,
 		baseMessage: RawSuperMagicMessageEnvelope | RawSuperMagicMessageSequence,
@@ -404,13 +581,6 @@ export class SuperMagicStore {
 		const messageNode = getRawMessageNode(message?.message)
 
 		const appMessageId = message?.message?.app_message_id as string
-		if (topicId === this.activeTopicId) {
-			notifyAskUserV2BrowserNotificationFromMessageNode({
-				topicId,
-				messageNode,
-				messageSendTime: nextMessage?.send_time,
-			})
-		}
 
 		const correlationId = messageNode?.correlation_id as string
 
@@ -452,7 +622,10 @@ export class SuperMagicStore {
 						Array.isArray(messageNode?.tool_calls) && messageNode.tool_calls.length > 0
 							? (messageNode.tool_calls as ToolCall[])
 							: []
-					streamState.tool_calls = finalToolCalls
+					streamState.tool_calls = this.mergeToolCallsById(
+						compactToolCalls(streamState.tool_calls),
+						compactToolCalls(finalToolCalls),
+					)
 
 					const cache = this.messageMap.get(correlationId) as
 						| RawSuperMagicMessageNode
@@ -507,7 +680,9 @@ export class SuperMagicStore {
 	}
 
 	/** 注册指定话题的新消息到达监听，仅响应增量 arrived 事件。 */
-	registerTopicMessageListener(params: RegisterTopicMessageListenerParams) {
+	registerTopicMessageListener(
+		params: RegisterTopicMessageListenerParams<MessageItem, TopicMessageNode>,
+	) {
 		return this.topicMessageListenerRegistry.register(params)
 	}
 
@@ -566,7 +741,7 @@ export class SuperMagicStore {
 			if (streamControlledKeys.has(key)) return
 			if (value === undefined) return
 			if ((cache as Record<string, unknown>)[key] === value) return
-				; (cache as Record<string, unknown>)[key] = value
+			;(cache as Record<string, unknown>)[key] = value
 			mutated = true
 		})
 
@@ -613,7 +788,7 @@ export class SuperMagicStore {
 			const next = (finalCard as Record<string, unknown>)[key]
 			if (next === undefined || next === null || next === "") return
 			if ((merged as Record<string, unknown>)[key] === next) return
-				; (merged as Record<string, unknown>)[key] = next
+			;(merged as Record<string, unknown>)[key] = next
 			mutated = true
 		})
 
@@ -878,14 +1053,16 @@ export class SuperMagicStore {
 		topicMeta.content.forEach((streamState, correlationId) => {
 			if (streamState.isFinalMessageReceived) return
 
-			const validToolCalls = streamState.tool_calls.filter(isToolCallArgumentsComplete)
+			const validToolCalls = compactToolCalls(streamState.tool_calls).filter(
+				isToolCallArgumentsComplete,
+			)
 
 			streamState.tool_calls = validToolCalls
 			streamState.isFinalMessageReceived = true
 
 			const cache = this.messageMap.get(correlationId) as RawSuperMagicMessageNode | undefined
 			if (cache) {
-				; (cache as any).tool_calls = validToolCalls.length > 0 ? validToolCalls : []
+				;(cache as any).tool_calls = validToolCalls.length > 0 ? validToolCalls : []
 				this.messageMap.set(correlationId, cache)
 			}
 
@@ -945,13 +1122,75 @@ export class SuperMagicStore {
 		}
 	}
 
+	/**
+	 * 以 current 数组既有顺序为基准，按 tool_call.id 合并 incoming：
+	 * - 已有 id：原位补齐 function.arguments / function.label / tool
+	 * - 新 id：追加末尾
+	 * 首现即定序、永不重排，根治流式与最终态顺序不一致。
+	 */
+	private mergeToolCallsById(current: ToolCall[], incoming: ToolCall[]): ToolCall[] {
+		if (current.length === 0) return incoming
+		if (incoming.length === 0) return incoming
+
+		const currentById = new Map(current.map((t) => [t.id, t]))
+		const merged: ToolCall[] = current.map((t) => {
+			const inc = incoming.find((i) => i.id === t.id)
+			if (!inc) return t
+			return {
+				...t,
+				function: {
+					...t.function,
+					arguments: inc.function?.arguments ?? t.function?.arguments ?? "",
+					label: inc.function?.label || t.function?.label || "",
+					name: inc.function?.name || t.function?.name || "",
+				},
+				...(inc.tool ? { tool: inc.tool } : {}),
+			}
+		})
+
+		for (const inc of incoming) {
+			if (!currentById.has(inc.id)) {
+				merged.push(inc)
+			}
+		}
+
+		return merged
+	}
+
+	/**
+	 * 按 existingOrder 的 id 顺序重排 tools：已知 id 保持 existingOrder 顺序，
+	 * 新 id 追加末尾。用于续流前统一排序，保证 streamToolCallsBySingleUnit
+	 * 的 slice 沿用稳定顺序。
+	 */
+	private reorderToolCallsByExisting(existingOrder: ToolCall[], tools: ToolCall[]): ToolCall[] {
+		if (existingOrder.length === 0) return tools
+		if (tools.length === 0) return tools
+
+		const toolById = new Map(tools.map((t) => [t.id, t]))
+		const ordered: ToolCall[] = []
+
+		for (const existing of existingOrder) {
+			const match = toolById.get(existing.id)
+			if (match) {
+				ordered.push(match)
+				toolById.delete(existing.id)
+			}
+		}
+
+		toolById.forEach((remaining) => {
+			ordered.push(remaining)
+		})
+
+		return ordered
+	}
+
 	private resumeFromCurrentStateV2(topicId: string, appMessageId: string): boolean {
 		const streamState = this.getTopicStreamState(topicId, appMessageId)
 		const messageMap = this.messageMap.get(appMessageId) || this.getDefaultNode(appMessageId)
 
 		const finalContent = streamState.content || ""
 		const finalReasoningContent = streamState.reasoning_content || ""
-		const finalTools = streamState.tool_calls || []
+		const finalTools = compactToolCalls(streamState.tool_calls)
 
 		// --------------------------
 		// 1. 续流思考（直接补全）
@@ -1009,22 +1248,18 @@ export class SuperMagicStore {
 		// 3. 续流工具（基于 topicMeta.tool_calls 续流到 messageMap）
 		// --------------------------
 		if (!Array.isArray(messageMap.tool_calls)) messageMap.tool_calls = []
-		if (!isToolCallsEqual(messageMap.tool_calls, finalTools)) {
-			if (
-				!isToolCallsMatch(
-					messageMap.tool_calls,
-					finalTools.slice(0, messageMap.tool_calls.length),
-				)
-			) {
-				messageMap.tool_calls = finalTools
-			}
+		const orderedFinalTools = this.reorderToolCallsByExisting(
+			messageMap.tool_calls as ToolCall[],
+			finalTools,
+		)
+		if (!isToolCallsEqual(messageMap.tool_calls, orderedFinalTools)) {
 			streamState.stage = "tool"
 
 			console.log("【LS】 tool_calls", streamState.stage)
 			const toolStepResult = this.streamToolCallsBySingleUnit(
 				messageMap,
 				streamState,
-				finalTools,
+				orderedFinalTools,
 			)
 			this.messageMap.set(appMessageId, messageMap)
 			if (!toolStepResult.progressed && toolStepResult.done) return false
@@ -1032,9 +1267,9 @@ export class SuperMagicStore {
 		}
 
 		if (streamState.isFinalMessageReceived) {
-			if (finalTools.length > 0 && Array.isArray(messageMap.tool_calls)) {
+			if (orderedFinalTools.length > 0 && Array.isArray(messageMap.tool_calls)) {
 				let toolSynced = false
-				finalTools.forEach((ft, i) => {
+				orderedFinalTools.forEach((ft, i) => {
 					if (
 						ft.tool &&
 						messageMap.tool_calls?.[i] &&
@@ -1083,8 +1318,8 @@ export class SuperMagicStore {
 			const finalToolResponse = finalTool?.tool
 			const currentArgs = get(messageMap, ["tool_calls", i, "function", "arguments"], "")
 
-			if (!messageMap.tool_calls[i]) {
-				messageMap.tool_calls[i] = {
+			if (!messageMap.tool_calls?.[i]) {
+				messageMap.tool_calls![i] = {
 					id: toolId,
 					type: toolType,
 					index: i,
@@ -1113,12 +1348,12 @@ export class SuperMagicStore {
 				const nextChunk = finalArgs.slice(currentArgs.length, safeEnd)
 				set(messageMap, ["tool_calls", i, "function", "arguments"], currentArgs + nextChunk)
 				streamState.currentToolIndex = i
-				messageMap.tool_calls = messageMap.tool_calls.slice(0, i + 1)
+				messageMap.tool_calls = messageMap.tool_calls?.slice(0, i + 1)
 				return { progressed: true, done: false }
 			}
 
 			streamState.currentToolIndex = i + 1
-			messageMap.tool_calls = messageMap.tool_calls.slice(0, i + 1)
+			messageMap.tool_calls = messageMap.tool_calls?.slice(0, i + 1)
 			return {
 				progressed: true,
 				done: streamState.currentToolIndex >= finalTools.length,
@@ -1130,43 +1365,15 @@ export class SuperMagicStore {
 	}
 
 	/**
-	 * 切回话题时：将不可见期间已完成的流式快照回退到视觉位置，
-	 * 重建 StreamState 并启动打字机追平动画（场景 2）。
+	 * 切回话题时：清理不可见期间保存的流式快照。
+	 * cache (messageMap) 在 flushStreamToCompletion 中已被固化为完整终态，
+	 * 无需回退重建 StreamState、无需重启打字机——observer 直接显示终态。
 	 */
 	private replayPendingSnapshots(topicId: string) {
 		const topicMeta = this.topicMeta.get(topicId)
 		if (!topicMeta?.streamSnapshots?.size) return
 
-		const entries = Array.from(topicMeta.streamSnapshots.entries())
 		topicMeta.streamSnapshots.clear()
-
-		for (const [correlationId, snapshot] of entries) {
-			const cache = this.messageMap.get(correlationId) as RawSuperMagicMessageNode
-			if (!cache) continue
-
-			const fullReasoningContent = (cache.reasoning_content as string) || ""
-			const fullContent = (cache.content as string) || ""
-			const fullToolCalls = Array.isArray(cache.tool_calls)
-				? ([...(cache.tool_calls as ToolCall[])] as ToolCall[])
-				: []
-
-			cache.reasoning_content = snapshot.reasoning_content
-			cache.content = snapshot.content
-			cache.tool_calls = snapshot.tool_calls
-			this.messageMap.set(correlationId, cache)
-
-			const replayState = createStreamState()
-			replayState.reasoning_content = fullReasoningContent
-			replayState.content = fullContent
-			replayState.tool_calls = fullToolCalls
-			replayState.isFinalMessageReceived = true
-			topicMeta.content.set(correlationId, replayState)
-		}
-
-		const firstCorrelationId = entries[0]?.[0]
-		if (firstCorrelationId) {
-			this.startStreamRendering(topicId, firstCorrelationId)
-		}
 	}
 
 	/**
@@ -1253,7 +1460,7 @@ export class SuperMagicStore {
 	 * @description 处理超麦流式消息
 	 * @param message 消息
 	 */
-	handleSuperMagicChunkMessage(message: SuperMagicChunkMessage) { }
+	handleSuperMagicChunkMessage(message: SuperMagicChunkMessage) {}
 
 	/**
 	 * @description 设置测试消息(DEBUG 专用)
@@ -1274,7 +1481,7 @@ export class SuperMagicStore {
 				role: "user",
 				seq_id: "876836510905307136",
 				refer_message_id: "",
-			},
+			} as unknown as MessageItem,
 		])
 		this.messageMap.set("ml4spbx3-r3j3lwr6mjh", {
 			instructs: [
@@ -1308,7 +1515,9 @@ export class SuperMagicStore {
 	}
 }
 
-export const superMagicStore = new SuperMagicStore()
+// Module-level assembly: query capabilities injected via collaborators, write notifications bound via callback registration.
+export const superMagicStore = new SuperMagicStore(superMagicStoreCollaborators)
+bindSuperMagicStoreCollaborators(superMagicStore)
 // @ts-ignore
 window.base = () => {
 	console.log(/** keep-console */ "messages      ", toJS(superMagicStore.messages))
@@ -1321,6 +1530,7 @@ window.base = () => {
 // @ts-ignore
 window.superMagicStore = superMagicStore
 
+// @ts-ignore
 pubsub.subscribe("super_magic_chunk_message", (message: SuperMagicChunkMessage) => {
 	superMagicStore.receiveChunk(message)
 })

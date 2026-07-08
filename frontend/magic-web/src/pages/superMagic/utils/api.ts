@@ -688,6 +688,7 @@ export type SaveUploadFileToProjectResponse = {
 	task_id: string
 	created_at: string
 	relative_file_path: string
+	is_hidden?: boolean
 }
 
 // // 保存用户上传的文件到项目文件

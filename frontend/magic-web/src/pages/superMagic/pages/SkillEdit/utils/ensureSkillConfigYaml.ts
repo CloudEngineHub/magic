@@ -2,8 +2,8 @@ import type { TFunction } from "i18next"
 import { SuperMagicApi } from "@/apis"
 import magicToast from "@/components/base/MagicToaster/utils"
 import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks/types"
-import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import { SuperMagicApiErrorCode } from "@/pages/superMagic/constants/apiErrorCodes"
+import { requestProjectAttachmentsFullRefresh } from "@/pages/superMagic/services/attachmentsTopicSync"
 import {
 	buildDefaultSkillConfigYaml,
 	findAttachmentByRelativePath,
@@ -22,21 +22,24 @@ const ATTACHMENTS_AFTER_EVENT_MS = 80
 
 let ensurePublishInFlight: Promise<boolean> | null = null
 
-function waitForAttachmentsListHydration(timeoutMs: number): Promise<void> {
+function waitForAttachmentsListHydration(projectId: string, timeoutMs: number): Promise<void> {
 	return new Promise((resolve) => {
 		let settled = false
 		const finish = () => {
 			if (settled) return
 			settled = true
 			clearTimeout(timer)
-			pubsub.unsubscribe(PubSubEvents.Update_Attachments, onAttachments)
 			resolve()
 		}
-		const onAttachments = () => {
+		const onAttachmentsRefreshed = () => {
 			setTimeout(finish, ATTACHMENTS_AFTER_EVENT_MS)
 		}
-		pubsub.subscribe(PubSubEvents.Update_Attachments, onAttachments)
 		const timer = setTimeout(finish, timeoutMs)
+		requestProjectAttachmentsFullRefresh({
+			projectId,
+			reason: "skill-ensure-hydrate-empty-list",
+			callback: onAttachmentsRefreshed,
+		})
 	})
 }
 
@@ -102,7 +105,7 @@ export async function ensureSkillConfigYamlForPublish(options: {
 
 		let files = getWorkspaceFilesList()
 		if (files.length === 0) {
-			await waitForAttachmentsListHydration(ATTACHMENTS_HYDRATION_MAX_MS)
+			await waitForAttachmentsListHydration(projectId, ATTACHMENTS_HYDRATION_MAX_MS)
 			files = getWorkspaceFilesList()
 		}
 
@@ -157,12 +160,14 @@ export async function ensureSkillConfigYamlForPublish(options: {
 					},
 				])
 
-				pubsub.publish(PubSubEvents.Update_Attachments)
 				return true
 			} catch (error) {
 				const errorObj = error as { code?: number; message?: string }
 				if (errorObj?.code === SuperMagicApiErrorCode.DuplicateFile) {
-					pubsub.publish(PubSubEvents.Update_Attachments)
+					requestProjectAttachmentsFullRefresh({
+						projectId,
+						reason: "skill-ensure-workspace-file-duplicate",
+					})
 					return true
 				}
 				console.error("ensureSkillConfigYamlForPublish failed:", error)
@@ -199,12 +204,14 @@ export async function ensureSkillConfigYamlForPublish(options: {
 				},
 			])
 
-			pubsub.publish(PubSubEvents.Update_Attachments)
 			return true
 		} catch (error) {
 			const errorObj = error as { code?: number; message?: string }
 			if (errorObj?.code === SuperMagicApiErrorCode.DuplicateFile) {
-				pubsub.publish(PubSubEvents.Update_Attachments)
+				requestProjectAttachmentsFullRefresh({
+					projectId,
+					reason: "skill-ensure-config-yaml-duplicate",
+				})
 				// 文件已存在
 				return true
 			}

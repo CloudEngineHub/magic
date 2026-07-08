@@ -165,6 +165,7 @@ function KnowledgeSearchDocumentItem({ document }: { document: KnowledgeSearchDo
 			}
 			onClick={openDocument}
 			onKeyDown={handleDocumentKeyDown}
+			data-testid="open-document"
 		>
 			<div className="flex items-start justify-between gap-4">
 				<div className="min-w-0">

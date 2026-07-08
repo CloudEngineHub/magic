@@ -1,6 +1,7 @@
 import { memo } from "react"
 import { motion } from "framer-motion"
 import { useTranslation } from "react-i18next"
+import { ChevronLeft, ChevronRight } from "lucide-react"
 import AICardIframe from "./AICardIframe"
 import type { AICardEntry } from "../types"
 
@@ -9,12 +10,38 @@ interface AICardDetailProps {
 	/** Override file to display (e.g. history entry). Falls back to card.latestHtmlFileId */
 	htmlFileId?: string
 	attachmentList?: any[]
+	canGoToPreviousVersion?: boolean
+	canGoToNextVersion?: boolean
+	onOpenPreviousVersion?: () => void
+	onOpenNextVersion?: () => void
+	selectedProject?: { id?: string; name?: string } | null
 	onBack: () => void
 }
 
-function AICardDetail({ card, htmlFileId, attachmentList, onBack }: AICardDetailProps) {
+function AICardDetail({
+	card,
+	htmlFileId,
+	attachmentList,
+	canGoToPreviousVersion = false,
+	canGoToNextVersion = false,
+	onOpenPreviousVersion,
+	onOpenNextVersion,
+	selectedProject,
+	onBack,
+}: AICardDetailProps) {
 	const { t } = useTranslation("super")
 	const fileId = htmlFileId || card.latestHtmlFileId
+	const showVersionControls = Boolean(onOpenPreviousVersion || onOpenNextVersion)
+	const previousVersionLabel = t("detail.aiCard.detail.previousVersion")
+	const nextVersionLabel = t("detail.aiCard.detail.nextVersion")
+	const previousVersionTitle = canGoToPreviousVersion
+		? previousVersionLabel
+		: t("detail.aiCard.detail.previousVersionDisabled")
+	const nextVersionTitle = canGoToNextVersion
+		? nextVersionLabel
+		: t("detail.aiCard.detail.nextVersionDisabled")
+	const versionButtonClassName =
+		"inline-flex size-8 shrink-0 items-center justify-center rounded-md border border-border bg-background text-muted-foreground shadow-sm transition-colors hover:border-border/80 hover:bg-muted/80 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:border-border disabled:bg-muted/40 disabled:text-muted-foreground disabled:opacity-45 disabled:shadow-none disabled:hover:border-border disabled:hover:bg-muted/40 disabled:hover:text-muted-foreground"
 
 	return (
 		<motion.div
@@ -31,11 +58,12 @@ function AICardDetail({ card, htmlFileId, attachmentList, onBack }: AICardDetail
 				transition={{ delay: 0.1, duration: 0.2 }}
 				className="flex items-center justify-between border-b border-border px-4 py-3"
 			>
-				<div className="flex items-center gap-3">
+				<div className="flex min-w-0 items-center gap-3">
 					<button
 						type="button"
 						onClick={onBack}
-						className="flex items-center gap-1 rounded-md px-2 py-1 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+						className="flex shrink-0 items-center gap-1 rounded-md px-2 py-1 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+						data-testid="on-back"
 					>
 						<svg
 							width="16"
@@ -54,12 +82,12 @@ function AICardDetail({ card, htmlFileId, attachmentList, onBack }: AICardDetail
 						</svg>
 						{t("detail.aiCard.detail.back")}
 					</button>
-					<div className="h-4 w-px bg-border" />
-					<h2 className="text-sm font-semibold text-foreground">{card.name}</h2>
+					<div className="h-4 w-px shrink-0 bg-border" />
+					<h2 className="truncate text-sm font-semibold text-foreground">{card.name}</h2>
 				</div>
-				<div className="flex items-center gap-2">
+				<div className="flex shrink-0 items-center gap-2">
 					{card.lastUpdated && (
-						<span className="text-xs text-muted-foreground">
+						<span className="hidden text-xs text-muted-foreground sm:inline">
 							{new Date(card.lastUpdated).toLocaleString(undefined, {
 								month: "short",
 								day: "numeric",
@@ -67,6 +95,35 @@ function AICardDetail({ card, htmlFileId, attachmentList, onBack }: AICardDetail
 								minute: "2-digit",
 							})}
 						</span>
+					)}
+					{showVersionControls && (
+						<div
+							className="flex items-center gap-1"
+							data-testid="ai-card-detail-version-controls"
+						>
+							<button
+								type="button"
+								aria-label={previousVersionLabel}
+								title={previousVersionTitle}
+								disabled={!canGoToPreviousVersion}
+								onClick={onOpenPreviousVersion}
+								className={versionButtonClassName}
+								data-testid="on-open-previous-version"
+							>
+								<ChevronLeft size={16} aria-hidden="true" />
+							</button>
+							<button
+								type="button"
+								aria-label={nextVersionLabel}
+								title={nextVersionTitle}
+								disabled={!canGoToNextVersion}
+								onClick={onOpenNextVersion}
+								className={versionButtonClassName}
+								data-testid="on-open-next-version"
+							>
+								<ChevronRight size={16} aria-hidden="true" />
+							</button>
+						</div>
 					)}
 				</div>
 			</motion.div>
@@ -77,6 +134,7 @@ function AICardDetail({ card, htmlFileId, attachmentList, onBack }: AICardDetail
 					<AICardIframe
 						fileId={fileId}
 						attachmentList={attachmentList}
+						selectedProject={selectedProject}
 						className="h-full w-full"
 						style={{ height: "100%" }}
 					/>

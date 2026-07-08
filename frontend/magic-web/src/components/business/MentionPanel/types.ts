@@ -94,8 +94,10 @@ export interface ProjectFileMentionData {
 	file_id: string
 	file_name: string
 	file_path: string
+	relative_file_path?: string
 	file_extension: string
 	file_size?: number
+	is_hidden?: boolean
 	/** Internal: source project for project-file mentions pasted outside their original project. */
 	source_project_id?: string
 	/** Internal: source file id before copying into the target project. */
@@ -481,6 +483,7 @@ export interface MentionPanelProps<TCatalogId extends string = string> extends B
 	 * 仍可通过 onClose / 键盘退出等显式关闭。
 	 */
 	lockDismissToExplicitClose?: boolean
+	canToggleMultiSelectItem?: (item: MentionItem) => boolean
 	lastHistoryIndex?: number
 	runtime?: MentionPanelRuntime<TCatalogId>
 	/**
@@ -504,6 +507,7 @@ export interface MenuItemProps extends BaseComponentProps {
 	item: MentionItem
 	selected?: boolean
 	onClick?: (event?: React.MouseEvent) => void
+	onCheckboxClick?: (event?: React.MouseEvent) => void
 	onDelete?: (item: MentionItem) => void
 	isSearch?: boolean
 	t: I18nTexts

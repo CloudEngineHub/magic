@@ -47,6 +47,7 @@ const ProjectPageInputContainerComponent: React.FC<ProjectPageInputContainerProp
 	setSelectedProject,
 	onEditorBlur,
 	onEditorFocus,
+	onMessageSendReady,
 	onFileClick,
 	selectedWorkspace,
 	attachments,
@@ -160,6 +161,7 @@ const ProjectPageInputContainerComponent: React.FC<ProjectPageInputContainerProp
 				onSendMessage={messageQueue.sendQueuedMessage}
 				onStartEdit={messageQueue.startEditQueueItem}
 				onCancelEdit={messageQueue.cancelEditQueueItem}
+				variant={isMobile ? "mobile" : "default"}
 			/>
 		)
 
@@ -177,6 +179,7 @@ const ProjectPageInputContainerComponent: React.FC<ProjectPageInputContainerProp
 		messageQueue.sendQueuedMessage,
 		messageQueue.startEditQueueItem,
 		messageQueue.cancelEditQueueItem,
+		isMobile,
 	])
 
 	const sceneEditorContext = useMemo<SceneEditorContext>(() => {
@@ -224,6 +227,7 @@ const ProjectPageInputContainerComponent: React.FC<ProjectPageInputContainerProp
 				onEditorBlur?.()
 			},
 			onSendComplete,
+			onMessageSendReady,
 			queueContext: {
 				editingQueueItem: messageQueue.editingQueueItem,
 				addToQueue: messageQueue.addToQueue,
@@ -256,6 +260,7 @@ const ProjectPageInputContainerComponent: React.FC<ProjectPageInputContainerProp
 		attachments,
 		mentionPanelStore,
 		onFileClick,
+		onMessageSendReady,
 		messageQueue.editingQueueItem,
 		messageQueue.addToQueue,
 		messageQueue.finishEditQueueItem,

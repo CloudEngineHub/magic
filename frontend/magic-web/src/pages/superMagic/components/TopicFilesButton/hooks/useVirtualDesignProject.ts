@@ -4,7 +4,6 @@ import { useDebounceFn, useUpdateEffect } from "ahooks"
 import type { InputRef } from "antd"
 import type { AttachmentItem } from "./types"
 import { AttachmentSource } from "./types"
-import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import { validateFilename } from "@/utils/filename-validator"
 import { checkDuplicateFileName } from "../utils/checkDuplicateFileName"
 
@@ -207,39 +206,10 @@ export function useVirtualDesignProject(options: UseVirtualDesignProjectOptions)
 
 		try {
 			// 调用画布项目创建回调
-			const result = await options.onDesignProjectCreate?.(
+			await options.onDesignProjectCreate?.(
 				trimmedName,
 				virtualDesignProject.parentPath,
 			)
-
-			// 显示成功提示（createDesignProject 内部已经显示成功消息，这里不需要重复显示）
-
-			// 如果有onAttachmentsChange回调，使用本地更新
-			if (options.onAttachmentsChange && result) {
-				// 构建真实文件夹数据
-				const realFolder: AttachmentItem = {
-					file_id: result.file_id || result.id,
-					name: trimmedName,
-					path: trimmedName,
-					type: "folder",
-					is_directory: true,
-					children: [],
-					source: AttachmentSource.PROJECT_DIRECTORY,
-				}
-
-				// 将新文件夹添加到attachments的正确位置
-				const updatedAttachments = addFolderToAttachments(
-					attachments,
-					realFolder,
-					virtualDesignProject.parentPath,
-				)
-
-				// 更新本地状态
-				options.onAttachmentsChange(updatedAttachments)
-			} else {
-				// 回退到原有的pubsub方式
-				pubsub.publish(PubSubEvents.Update_Attachments)
-			}
 
 			// 创建成功后清理虚拟文件夹
 			clearVirtualDesignProject()

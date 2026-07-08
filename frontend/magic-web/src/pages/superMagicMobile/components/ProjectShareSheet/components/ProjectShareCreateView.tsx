@@ -21,6 +21,7 @@ import { ShareType } from "@/pages/superMagic/components/Share/types"
 import type { ProjectShareSheetController } from "../types"
 import SelectedFilesHierarchySection from "./SelectedFilesHierarchySection"
 import { ProjectShareScrollSpacer } from "./ProjectShareFloatingActionBar"
+import { RecordingShareContentPicker } from "@/pages/superMagic/pages/AudioRecordings/components/recording-share/RecordingShareContentPicker"
 
 interface ProjectShareCreateViewProps {
 	controller: ProjectShareSheetController
@@ -44,6 +45,10 @@ function CardGroup({ children }: { children: ReactNode }) {
  * 文件模式下展示已选文件列表，默认折叠，避免创建页首屏过长。
  */
 function SelectedFilesSection({ controller }: { controller: ProjectShareSheetController }) {
+	if (controller.enableInlineFileSelection) {
+		return null
+	}
+
 	if (controller.mode !== "file" || controller.selectedFileCount === 0) {
 		return null
 	}
@@ -134,6 +139,14 @@ export default function ProjectShareCreateView({ controller }: ProjectShareCreat
 
 	return (
 		<div className="flex flex-col gap-2.5" data-testid="project-share-sheet-create-view">
+			{controller.enableInlineFileSelection ? (
+				<RecordingShareContentPicker
+					groupedItems={controller.groupedShareItems}
+					selectedFileIds={controller.selectedFileIds}
+					onToggleFileId={controller.toggleShareFileId}
+					onSetSelectedFileIds={controller.setSelectedFileIds}
+				/>
+			) : null}
 			<SelectedFilesSection controller={controller} />
 			<div className="space-y-2">
 				<SectionLabel>{t("projectShare.typeLabel")}</SectionLabel>
@@ -330,19 +343,21 @@ export default function ProjectShareCreateView({ controller }: ProjectShareCreat
 								showDivider
 								testId="project-share-sheet-allow-download-row"
 							/>
-							<AdvancedSwitchRow
-								label={t("share.viewFileList")}
-								description={t("share.viewFileListDescription")}
-								checked={formState.advancedSettings.showFileList ?? true}
-								onCheckedChange={(value) =>
-									controller.setAdvancedSettings({
-										...formState.advancedSettings,
-										showFileList: value,
-									})
-								}
-								showDivider
-								testId="project-share-sheet-show-file-list-row"
-							/>
+							{!controller.enableInlineFileSelection ? (
+								<AdvancedSwitchRow
+									label={t("share.viewFileList")}
+									description={t("share.viewFileListDescription")}
+									checked={formState.advancedSettings.showFileList ?? true}
+									onCheckedChange={(value) =>
+										controller.setAdvancedSettings({
+											...formState.advancedSettings,
+											showFileList: value,
+										})
+									}
+									showDivider
+									testId="project-share-sheet-show-file-list-row"
+								/>
+							) : null}
 							<AdvancedSwitchRow
 								label={t("share.showOriginalInfo")}
 								description={t("share.showOriginalInfoDescription")}

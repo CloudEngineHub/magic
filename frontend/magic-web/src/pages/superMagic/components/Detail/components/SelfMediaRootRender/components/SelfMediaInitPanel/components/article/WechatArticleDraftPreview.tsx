@@ -58,6 +58,7 @@ export default function WechatArticleDraftPreview({ article }: WechatArticleDraf
 								"detail.selfMedia.initPanel.stepDetail.wechatPreviewBack",
 								"返回",
 							)}
+							data-testid="wechat-article-draft-preview-wechat-preview-back-button"
 						>
 							<ChevronLeft size={24} strokeWidth={2.1} />
 						</button>
@@ -74,6 +75,7 @@ export default function WechatArticleDraftPreview({ article }: WechatArticleDraf
 								"detail.selfMedia.initPanel.stepDetail.wechatPreviewMore",
 								"更多",
 							)}
+							data-testid="wechat-article-draft-preview-wechat-preview-more-button"
 						>
 							<MoreHorizontal size={23} strokeWidth={2.1} />
 						</button>

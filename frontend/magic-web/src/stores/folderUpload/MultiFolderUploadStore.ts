@@ -1,6 +1,7 @@
 import { makeAutoObservable, runInAction } from "mobx"
 import i18n from "i18next"
 import { logger as Logger } from "@/utils/log"
+import { SuperMagicApi } from "@/apis"
 import { FolderUploadTask } from "./FolderUploadTask"
 import { TaskQueue } from "./TaskQueue"
 import { getCurrentProjectId } from "./helpers"
@@ -14,12 +15,91 @@ import type {
 	BatchSaveInfo,
 	UploadFileWithKey,
 	FailedFileInfo,
+	FolderUploadSharedDirectoryContext,
 } from "./types"
 import magicToast from "@/components/base/MagicToaster/utils"
 
 const logger = Logger.createLogger("UploadTaskService", {
 	enableConfig: { console: true },
 })
+
+// Split tasks above this size to reduce peak File, Promise, and progress-state memory.
+const AUTO_SPLIT_FOLDER_FILE_COUNT = 500
+
+function getUploadItemRelativePath(item: UploadFileWithKey) {
+	return (item.file as any).webkitRelativePath || item.file.name
+}
+
+function isFolderUploadItems(files: UploadFileWithKey[]) {
+	return files.some((item) => Boolean((item.file as any).webkitRelativePath))
+}
+
+function getUploadDisplayName(files: UploadFileWithKey[], fallback: string) {
+	const firstFile = files[0]?.file
+	if (!firstFile) return fallback
+	const relativePath = ((firstFile as any).webkitRelativePath || firstFile.name) as string
+	return relativePath.split("/").filter(Boolean)[0] || firstFile.name || fallback
+}
+
+function getUploadItemRootPath(item: UploadFileWithKey) {
+	return getUploadItemRelativePath(item).split("/").filter(Boolean)[0] || ""
+}
+
+function getUploadFileExtension(files: UploadFileWithKey[]) {
+	const fileName = files[0]?.file.name || ""
+	const lastDotIndex = fileName.lastIndexOf(".")
+	return lastDotIndex > 0 ? fileName.substring(lastDotIndex) : ""
+}
+
+/**
+ * Split a large folder upload into subtasks. Prefer bin-packing by top-level folder
+ * so each directory stays together when possible.
+ * If one top-level folder exceeds chunkSize, slice inside that folder by count.
+ */
+function splitUploadFilesByFolder(files: UploadFileWithKey[], chunkSize: number) {
+	const chunks: UploadFileWithKey[][] = []
+	let currentChunk: UploadFileWithKey[] = []
+	const groups = new Map<string, UploadFileWithKey[]>()
+
+	// Step 1: group by the first webkitRelativePath segment, e.g. a/x.ts and a/y.ts.
+	files.forEach((item) => {
+		const rootName =
+			getUploadItemRelativePath(item).split("/").filter(Boolean)[0] || item.file.name
+		const group = groups.get(rootName)
+		if (group) {
+			group.push(item)
+		} else {
+			groups.set(rootName, [item])
+		}
+	})
+
+	const flushCurrentChunk = () => {
+		if (currentChunk.length > 0) {
+			chunks.push(currentChunk)
+			currentChunk = []
+		}
+	}
+
+	// Step 2: merge top-level groups into chunks until the next one would exceed chunkSize.
+	groups.forEach((group) => {
+		if (group.length > chunkSize) {
+			// If one top-level folder exceeds the limit, slice inside it by fixed size.
+			flushCurrentChunk()
+			for (let index = 0; index < group.length; index += chunkSize) {
+				chunks.push(group.slice(index, index + chunkSize))
+			}
+			return
+		}
+
+		if (currentChunk.length + group.length > chunkSize) {
+			flushCurrentChunk()
+		}
+		currentChunk.push(...group)
+	})
+
+	flushCurrentChunk()
+	return chunks
+}
 
 class MultiFolderUploadStore {
 	// 全局状态
@@ -39,13 +119,13 @@ class MultiFolderUploadStore {
 	// 文件上传配置
 	uploadConfig: UploadConfig = {
 		maxFileSize: 500 * 1024 * 1024, // 100MB 单文件大小限制
-		maxTotalFiles: 10000, // 单次上传最大文件数量
 		allowedExtensions: [], // 允许的文件扩展名（空数组表示不限制）
 		blockedExtensions: [".exe", ".bat", ".cmd", ".scr"], // 禁止的文件扩展名
 	}
 
 	// 用户回调函数存储
 	private taskCallbacks = new Map<string, TaskCreateOptions>()
+	private directoryCreationPromises = new Map<string, Promise<string | undefined>>()
 
 	// 核心管理器
 	private taskQueue: TaskQueue
@@ -256,6 +336,15 @@ class MultiFolderUploadStore {
 				throw new Error(errorMsg)
 			}
 
+			if (
+				!options.disableAutoSplit &&
+				validFiles.length > AUTO_SPLIT_FOLDER_FILE_COUNT &&
+				isFolderUploadItems(validFiles)
+			) {
+				// Split only real folder uploads beyond the threshold; multi-file uploads stay unchanged.
+				return this.createSplitUploadTasks(validFiles, parentId, options)
+			}
+
 			// 使用过滤后的有效文件继续上传
 			files = validFiles
 
@@ -272,6 +361,15 @@ class MultiFolderUploadStore {
 			// 创建任务
 			const task = new FolderUploadTask(validFiles, parentId, {
 				...options,
+				displayName:
+					options.displayName || getUploadDisplayName(validFiles, options.projectName),
+				displayFileExtension:
+					options.displayFileExtension || getUploadFileExtension(validFiles),
+				isSingleFileUploadTask:
+					options.isSingleFileUploadTask ??
+					Boolean(
+						validFiles.length === 1 && !(validFiles[0].file as any).webkitRelativePath,
+					),
 				t: this.t.bind(this),
 			})
 
@@ -345,6 +443,160 @@ class MultiFolderUploadStore {
 		}
 	}
 
+	/**
+	 * Create subtasks for a large-folder split and aggregate callbacks with one groupId.
+	 * Subtasks share directory context so the split tree reuses backend directory IDs.
+	 */
+	private async createSplitUploadTasks(
+		files: UploadFileWithKey[],
+		parentId: string | undefined,
+		options: TaskCreateOptions,
+	): Promise<string> {
+		// Split tasks still belong to one user upload; groupId aggregates final callbacks.
+		const chunks = splitUploadFilesByFolder(files, AUTO_SPLIT_FOLDER_FILE_COUNT)
+		const groupId = `folder_upload_group_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`
+		const sharedDirectoryContext: FolderUploadSharedDirectoryContext = {
+			folderIdMap: new Map<string, string>(),
+			folderCreationPromises: new Map<string, Promise<string | undefined>>(),
+		}
+		let settledCount = 0
+		let errorCount = 0
+		let firstError: Error | undefined
+		const displayName = getUploadDisplayName(files, options.projectName)
+
+		magicToast.info(
+			String(
+				this.t("folderUpload.messages.largeFolderSplit", {
+					count: files.length,
+					tasks: chunks.length,
+				}),
+			),
+		)
+
+		if (!options.onlyUpload) {
+			// Precreate the top folder and cache it so subtasks share the same parent_id.
+			await this.precreateSplitRootDirectories(
+				files,
+				parentId,
+				options.projectId,
+				sharedDirectoryContext,
+			)
+		}
+
+		const finalizeGroup = (error?: Error) => {
+			settledCount += 1
+			if (error) {
+				errorCount += 1
+				firstError = firstError || error
+			}
+
+			if (settledCount !== chunks.length) return
+			if (errorCount > 0) {
+				options.onError?.(groupId, firstError || new Error("Upload group failed"))
+			} else {
+				options.onComplete?.(groupId)
+			}
+		}
+
+		for (const [index, chunk] of Array.from(chunks.entries())) {
+			await this.createUploadTask(chunk, parentId, {
+				...options,
+				displayName: `${displayName} (${index + 1}/${chunks.length})`,
+				disableAutoSplit: true,
+				sharedDirectoryContext,
+				uploadGroupId: groupId,
+				uploadGroupIndex: index + 1,
+				uploadGroupTotal: chunks.length,
+				onComplete: () => finalizeGroup(),
+				onError: (_taskId, error) => finalizeGroup(error),
+			})
+		}
+
+		return groupId
+	}
+
+	private async precreateSplitRootDirectories(
+		files: UploadFileWithKey[],
+		parentId: string | undefined,
+		projectId: string,
+		sharedDirectoryContext: FolderUploadSharedDirectoryContext,
+	): Promise<void> {
+		const rootPaths = Array.from(
+			new Set(files.map((item) => getUploadItemRootPath(item)).filter(Boolean)),
+		)
+
+		for (const rootPath of rootPaths) {
+			await this.ensureSharedRootDirectoryCreated(
+				rootPath,
+				parentId,
+				projectId,
+				sharedDirectoryContext,
+			)
+		}
+	}
+
+	private async ensureSharedRootDirectoryCreated(
+		rootPath: string,
+		parentId: string | undefined,
+		projectId: string,
+		sharedDirectoryContext: FolderUploadSharedDirectoryContext,
+	): Promise<string | undefined> {
+		// Split tasks check shared locks first; store-level locks prevent cross-batch duplicates.
+		const cachedFileId = sharedDirectoryContext.folderIdMap.get(rootPath)
+		if (cachedFileId) return cachedFileId
+
+		const pendingCreation = sharedDirectoryContext.folderCreationPromises.get(rootPath)
+		if (pendingCreation) return pendingCreation
+
+		const directoryKey = `${projectId}:${parentId || ""}:${rootPath}`
+		const globalPendingCreation = this.directoryCreationPromises.get(directoryKey)
+		if (globalPendingCreation) {
+			const fileId = await globalPendingCreation
+			if (fileId) {
+				sharedDirectoryContext.folderIdMap.set(rootPath, fileId)
+			}
+			return fileId
+		}
+
+		const creationPromise = this.createSharedDirectory(projectId, parentId, rootPath).finally(
+			() => {
+				this.directoryCreationPromises.delete(directoryKey)
+				sharedDirectoryContext.folderCreationPromises.delete(rootPath)
+			},
+		)
+
+		this.directoryCreationPromises.set(directoryKey, creationPromise)
+		sharedDirectoryContext.folderCreationPromises.set(rootPath, creationPromise)
+
+		const fileId = await creationPromise
+		if (fileId) {
+			sharedDirectoryContext.folderIdMap.set(rootPath, fileId)
+		}
+
+		return fileId
+	}
+
+	private async createSharedDirectory(
+		projectId: string,
+		parentId: string | undefined,
+		folderName: string,
+	): Promise<string | undefined> {
+		const response = await SuperMagicApi.createFile({
+			project_id: projectId,
+			parent_id: parentId,
+			file_name: folderName,
+			is_directory: true,
+			ignore_duplicate: true,
+		})
+
+		const fileId = (response as { file_id?: string })?.file_id
+		if (!fileId) {
+			throw new Error(`Failed to create folder: ${folderName}`)
+		}
+
+		return fileId
+	}
+
 	// 处理任务队列
 	private async processTaskQueue(): Promise<void> {
 		while (this.taskQueue.hasNext() && this.canStartNewTask()) {
@@ -405,6 +657,9 @@ class MultiFolderUploadStore {
 
 		runInAction(() => {
 			if (task) {
+				if (task.state.errorFiles === 0) {
+					task.releaseFileReferences()
+				}
 				// 从活跃任务移除
 				this.globalState.activeTasks = this.globalState.activeTasks.filter(
 					(t) => t.id !== taskId,
@@ -817,13 +1072,18 @@ class MultiFolderUploadStore {
 	// 更新全局统计
 	private updateGlobalStats = (): void => {
 		const activeTasks = this.globalState.activeTasks
+		const pendingTasks = this.globalState.pendingTasks
 		const completedTasks = this.globalState.completedTasks
 
 		// 活跃任务统计
 		this.globalState.totalActiveTasks = activeTasks.length
 
-		// 计算所有任务的文件总数（活跃 + 已完成）
+		// Count files across all tasks: active + pending + completed.
 		const activeTasksTotalFiles = activeTasks.reduce(
+			(sum, task) => sum + task.state.totalFiles,
+			0,
+		)
+		const pendingTasksTotalFiles = pendingTasks.reduce(
 			(sum, task) => sum + task.state.totalFiles,
 			0,
 		)
@@ -831,9 +1091,10 @@ class MultiFolderUploadStore {
 			(sum, task) => sum + task.state.totalFiles,
 			0,
 		)
-		this.globalState.totalFiles = activeTasksTotalFiles + completedTasksTotalFiles
+		this.globalState.totalFiles =
+			activeTasksTotalFiles + pendingTasksTotalFiles + completedTasksTotalFiles
 
-		// 计算已完成的文件总数（活跃任务的已处理 + 已完成任务的成功文件）
+		// Count completed files: processed active files plus successful completed files.
 		const activeProcessedFiles = activeTasks.reduce(
 			(sum, task) => sum + task.state.processedFiles,
 			0,
@@ -883,6 +1144,10 @@ class MultiFolderUploadStore {
 			(sum, task) => sum + (task.state.totalBytes || 0),
 			0,
 		)
+		const pendingTotalBytes = pendingTasks.reduce(
+			(sum, task) => sum + (task.state.totalBytes || 0),
+			0,
+		)
 		const activeUploadedBytes = activeTasks.reduce(
 			(sum, task) => sum + (task.state.uploadedBytes || 0),
 			0,
@@ -894,7 +1159,7 @@ class MultiFolderUploadStore {
 			0,
 		)
 
-		const totalBytes = activeTotalBytes + completedTotalBytes
+		const totalBytes = activeTotalBytes + pendingTotalBytes + completedTotalBytes
 		const uploadedBytes = activeUploadedBytes + completedTotalBytes
 
 		if (totalBytes > 0) {
@@ -985,22 +1250,6 @@ class MultiFolderUploadStore {
 	}
 
 	/**
-	 * 更新最大文件数量限制
-	 * @param maxTotalFiles 最大文件数量
-	 */
-	updateMaxTotalFiles(maxTotalFiles: number): void {
-		if (maxTotalFiles <= 0) {
-			throw new Error("Max total files must be greater than 0")
-		}
-
-		runInAction(() => {
-			this.uploadConfig.maxTotalFiles = maxTotalFiles
-		})
-
-		console.log(`📁 Updated max total files limit to ${maxTotalFiles}`)
-	}
-
-	/**
 	 * 更新允许的文件扩展名
 	 * @param extensions 允许的扩展名数组，如 ['.jpg', '.png', '.pdf']
 	 */
@@ -1043,7 +1292,6 @@ class MultiFolderUploadStore {
 		runInAction(() => {
 			this.uploadConfig = {
 				maxFileSize: 100 * 1024 * 1024, // 100MB
-				maxTotalFiles: 10000,
 				allowedExtensions: [],
 				blockedExtensions: [".exe", ".bat", ".cmd", ".scr"],
 			}
@@ -1637,14 +1885,14 @@ class MultiFolderUploadStore {
 		console.log(
 			"🧪 Expected behavior:",
 			"\n  1. 每当batchSave完成时，触发onBatchSaveComplete回调",
-			"\n  2. 回调函数发布 'update_attachments' 事件",
-			"\n  3. 文件列表立即刷新，显示新保存的文件",
+			"\n  2. 回调函数记录上传刷新节点，附件树由 file_change/applyFileChange 增量更新",
+			"\n  3. 文件列表显示新保存的文件",
 			"\n  4. 用户可以实时看到文件出现在列表中",
 		)
 
 		console.log("📊 Watch for these events in the console:")
 		console.log('  - "💾 Batch save completed: X files saved to project"')
-		console.log('  - "📡 Published update_attachments event"')
+		console.log('  - "refreshAttachments" / file_change apply logs')
 		console.log("  - 观察文件列表UI是否实时更新")
 
 		console.log("📋 Test scenarios:")

@@ -271,8 +271,17 @@ export function getSyncedTimeFilterValue(
 ): TimeRangeValue | null {
 	if (!startDate || !endDate) return null
 
-	if (lastValue?.startDate === startDate && lastValue.endDate === endDate) {
-		return lastValue
+	const isExactMatch =
+		lastValue?.startDate === startDate && lastValue.endDate === endDate
+	const isPresetMatch =
+		lastValue?.presetKey && lastValue.startDate === startDate
+
+	if (isExactMatch || isPresetMatch) {
+		return {
+			...lastValue,
+			startDate,
+			endDate,
+		}
 	}
 
 	return {

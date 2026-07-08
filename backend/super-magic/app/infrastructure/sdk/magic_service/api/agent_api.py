@@ -15,10 +15,12 @@ from ..parameter.get_agent_openapi_parameter import GetAgentOpenApiParameter
 from ..parameter.get_skill_file_urls_parameter import GetSkillFileUrlsParameter
 from ..parameter.import_skill_from_agent_parameter import ImportSkillFromAgentParameter
 from ..parameter.ingest_third_party_message_parameter import IngestThirdPartyMessageParameter
+from ..parameter.available_agents_parameter import AvailableAgentsParameter
 from ..parameter.list_agents_parameter import ListAgentsParameter
 from ..parameter.search_knowledge_parameter import SearchKnowledgeParameter
 from ..parameter.tool_execute_parameter import ToolExecuteParameter
 from ..parameter.update_agent_parameter import UpdateAgentParameter
+from ..result.available_agents_result import AvailableAgentsResult
 from ..result.agent_details_result import AgentDetailsResult
 from ..result.agent_execute_result import AgentExecuteResult
 from ..result.agent_openapi_result import AgentOpenApiResult
@@ -184,6 +186,25 @@ class AgentApi(MagicServiceAbstractApi):
         endpoint_path = "/api/v1/open-api/sandbox/super-agent/tasks/ingest-third-party-message"
         data = await self.request_by_parameter_async(parameter, "POST", endpoint_path)
         return IngestThirdPartyMessageResult(data)
+
+    async def list_available_agents_async(
+        self,
+        parameter: AvailableAgentsParameter,
+    ) -> AvailableAgentsResult:
+        """List the current user's available Crew agents (paginated, keyword-searchable).
+
+        Uses POST /api/v1/open-api/sandbox/agents/me/available which returns agents
+        with localized name/description based on the request language header.
+
+        Args:
+            parameter: AvailableAgentsParameter instance
+
+        Returns:
+            AvailableAgentsResult containing the list of available agents
+        """
+        endpoint_path = "/api/v1/open-api/sandbox/agents/me/available"
+        data = await self.request_by_parameter_async(parameter, "POST", endpoint_path)
+        return AvailableAgentsResult(data)
 
     # ==================== Open API Methods ====================
 

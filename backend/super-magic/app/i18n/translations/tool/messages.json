@@ -895,30 +895,6 @@
         "zh_CN": "部分图片生成成功（{{succeeded_count}}/{{total_count}}）",
         "en_US": "Images partially generated ({{succeeded_count}}/{{total_count}} succeeded)"
     },
-    "generate_video.success": {
-        "zh_CN": "视频生成成功，文件：{{file_name}}",
-        "en_US": "Video generation successful, file: {{file_name}}"
-    },
-    "generate_video.pending": {
-        "zh_CN": "视频创建工具已轮询到超时，任务仍在生成中。若用户后续明确要求查询，可使用 operation_id={{operation_id}} 继续查询，当前状态={{status}}",
-        "en_US": "The video creation tool timed out while polling and the task is still running. If the user explicitly asks later, continue querying with operation_id={{operation_id}}, current status={{status}}"
-    },
-    "generate_video.error": {
-        "zh_CN": "视频生成失败: {{error}}",
-        "en_US": "Video generation failed: {{error}}"
-    },
-    "query_video_generation.success": {
-        "zh_CN": "视频任务完成，文件：{{file_name}}",
-        "en_US": "Video task completed, file: {{file_name}}"
-    },
-    "query_video_generation.pending": {
-        "zh_CN": "视频任务仍在处理中。operation_id={{operation_id}}，当前状态={{status}}",
-        "en_US": "Video task is still processing. operation_id={{operation_id}}, current status={{status}}"
-    },
-    "query_video_generation.error": {
-        "zh_CN": "查询视频任务失败: {{error}}",
-        "en_US": "Failed to query video task: {{error}}"
-    },
     "task_progress.queued_message": {
         "zh_CN": "{{task_label}}排队中（{{percentage}}%）",
         "en_US": "{{task_label}} queued ({{percentage}}%)"
@@ -1207,6 +1183,18 @@
         "zh_CN": "视频结果：完成 {{completed}} 个，处理中 {{processing}} 个，失败 {{failed}} 个",
         "en_US": "Video result: {{completed}} completed, {{processing}} processing, {{failed}} failed"
     },
+    "restore_canvas_media.preview": {
+        "zh_CN": "发现 {{missing_count}} 个可恢复媒体，等待确认",
+        "en_US": "Found {{missing_count}} recoverable media item(s), waiting for confirmation"
+    },
+    "restore_canvas_media.restored": {
+        "zh_CN": "已恢复 {{restored_count}} 个媒体图层",
+        "en_US": "Restored {{restored_count}} media layer(s)"
+    },
+    "restore_canvas_media.exception": {
+        "zh_CN": "恢复画布媒体失败",
+        "en_US": "Failed to restore canvas media"
+    },
     "thinking.start_deep_thinking": {
         "zh_CN": "开始深入思考问题：{{problem}}",
         "en_US": "Starting deep thinking on problem: {{problem}}"
@@ -1244,7 +1232,7 @@
         "en_US": "Calling sub-agent: {{agent_name}}"
     },
     "call_subagent.error": {
-        "zh_CN": "调用子智能体失败: {{error}}",
+        "zh_CN": "调用数字员工失败: {{error}}",
         "en_US": "Sub-agent call failed: {{error}}"
     },
     "call_subagent.assign": {
@@ -1334,6 +1322,38 @@
     "call_subagent.detail.next_step": {
         "zh_CN": "下一步",
         "en_US": "Next step"
+    },
+    "agent_list.searching": {
+        "zh_CN": "正在查找数字员工",
+        "en_US": "Looking for available digital employees"
+    },
+    "agent_list.done": {
+        "zh_CN": "已找到 {{count}} 个数字员工",
+        "en_US": "Found {{count}} digital employees"
+    },
+    "agent_list.empty": {
+        "zh_CN": "没有找到匹配的数字员工",
+        "en_US": "No matching digital employees were found"
+    },
+    "agent_list.error": {
+        "zh_CN": "数字员工列表获取失败，请稍后重试",
+        "en_US": "Unable to load the digital employee list. Please try again later."
+    },
+    "prepare_agent.preparing": {
+        "zh_CN": "正在准备数字员工",
+        "en_US": "Preparing the digital employee"
+    },
+    "prepare_agent.ready": {
+        "zh_CN": "数字员工 {{agent}} 已就绪",
+        "en_US": "Digital employee {{agent}} is ready"
+    },
+    "prepare_agent.done": {
+        "zh_CN": "数字员工已准备完成",
+        "en_US": "The digital employee is ready"
+    },
+    "prepare_agent.error": {
+        "zh_CN": "数字员工准备失败，请稍后重试",
+        "en_US": "Unable to prepare the digital employee. Please try again later."
     },
     "wait_for_subagents.error": {
         "zh_CN": "等待子智能体失败: {{error}}",
@@ -2170,6 +2190,366 @@
     "env_manager.detail.value_header": {
         "zh_CN": "变量值",
         "en_US": "Value"
+    },
+    "cli_manager.apply.before": {
+        "zh_CN": "正在{{mode}}持久化 CLI「{{name}}」",
+        "en_US": "Persisting CLI \"{{name}}\" with {{mode}} mode"
+    },
+    "cli_manager.apply.after_success": {
+        "zh_CN": "CLI「{{name}}」已持久化",
+        "en_US": "CLI \"{{name}}\" persisted"
+    },
+    "cli_manager.apply.after_failed": {
+        "zh_CN": "CLI「{{name}}」持久化失败：{{error}}",
+        "en_US": "Failed to persist CLI \"{{name}}\": {{error}}"
+    },
+    "cli_manager.list.before": {
+        "zh_CN": "正在查看持久化 CLI（校验：{{validate}}）",
+        "en_US": "Listing persisted CLIs (validate: {{validate}})"
+    },
+    "cli_manager.list.after_success": {
+        "zh_CN": "读取到 {{count}} 个持久化 CLI",
+        "en_US": "Found {{count}} persisted CLI(s)"
+    },
+    "cli_manager.list.after_failed": {
+        "zh_CN": "查看持久化 CLI 失败：{{error}}",
+        "en_US": "Failed to list persisted CLIs: {{error}}"
+    },
+    "cli_manager.remove.before": {
+        "zh_CN": "正在移除持久化 CLI「{{name}}」",
+        "en_US": "Removing persisted CLI \"{{name}}\""
+    },
+    "cli_manager.remove.after_success": {
+        "zh_CN": "CLI「{{name}}」的持久化已移除",
+        "en_US": "Persistence removed for CLI \"{{name}}\""
+    },
+    "cli_manager.remove.after_failed": {
+        "zh_CN": "移除 CLI「{{name}}」持久化失败：{{error}}",
+        "en_US": "Failed to remove persistence for CLI \"{{name}}\": {{error}}"
+    },
+    "cli_manager.detail.apply_success_title": {
+        "zh_CN": "CLI 持久化完成",
+        "en_US": "CLI Persistence Complete"
+    },
+    "cli_manager.detail.apply_failed_title": {
+        "zh_CN": "CLI 持久化失败",
+        "en_US": "CLI Persistence Failed"
+    },
+    "cli_manager.detail.list_success_title": {
+        "zh_CN": "持久化 CLI 列表",
+        "en_US": "Persisted CLIs"
+    },
+    "cli_manager.detail.list_failed_title": {
+        "zh_CN": "持久化 CLI 读取失败",
+        "en_US": "Persisted CLI List Failed"
+    },
+    "cli_manager.detail.remove_success_title": {
+        "zh_CN": "CLI 持久化已移除",
+        "en_US": "CLI Persistence Removed"
+    },
+    "cli_manager.detail.remove_failed_title": {
+        "zh_CN": "CLI 持久化移除失败",
+        "en_US": "CLI Persistence Remove Failed"
+    },
+    "cli_manager.detail.name": {
+        "zh_CN": "名称",
+        "en_US": "Name"
+    },
+    "cli_manager.detail.mode": {
+        "zh_CN": "模式",
+        "en_US": "Mode"
+    },
+    "cli_manager.detail.commands": {
+        "zh_CN": "命令",
+        "en_US": "Commands"
+    },
+    "cli_manager.detail.strategy": {
+        "zh_CN": "策略",
+        "en_US": "Strategy"
+    },
+    "cli_manager.detail.package_manager": {
+        "zh_CN": "包管理器",
+        "en_US": "Package manager"
+    },
+    "cli_manager.detail.status": {
+        "zh_CN": "状态",
+        "en_US": "Status"
+    },
+    "cli_manager.detail.bin_dir": {
+        "zh_CN": "命令入口目录",
+        "en_US": "Command bin directory"
+    },
+    "cli_manager.detail.command_routes": {
+        "zh_CN": "命令路由",
+        "en_US": "Command Routes"
+    },
+    "cli_manager.detail.command_entry": {
+        "zh_CN": "命令入口",
+        "en_US": "Command entry"
+    },
+    "cli_manager.detail.command_target": {
+        "zh_CN": "真实目标",
+        "en_US": "Real target"
+    },
+    "cli_manager.detail.registry_file": {
+        "zh_CN": "注册表",
+        "en_US": "Registry file"
+    },
+    "cli_manager.detail.app_links": {
+        "zh_CN": "原路径软链",
+        "en_US": "Original path links"
+    },
+    "cli_manager.detail.config_dirs": {
+        "zh_CN": "配置目录",
+        "en_US": "Config directories"
+    },
+    "cli_manager.detail.env_keys": {
+        "zh_CN": "依赖环境变量",
+        "en_US": "Required env keys"
+    },
+    "cli_manager.detail.error": {
+        "zh_CN": "错误",
+        "en_US": "Error"
+    },
+    "cli_manager.detail.count": {
+        "zh_CN": "数量",
+        "en_US": "Count"
+    },
+    "cli_manager.detail.validation": {
+        "zh_CN": "校验",
+        "en_US": "Validation"
+    },
+    "cli_manager.detail.remove_state": {
+        "zh_CN": "删除状态目录",
+        "en_US": "Remove state"
+    },
+    "cli_manager.detail.removed_paths": {
+        "zh_CN": "已移除路径数",
+        "en_US": "Removed paths"
+    },
+    "cli_manager.detail.ok": {
+        "zh_CN": "正常",
+        "en_US": "OK"
+    },
+    "cli_manager.detail.failed": {
+        "zh_CN": "失败",
+        "en_US": "Failed"
+    },
+    "cli_manager.detail.yes": {
+        "zh_CN": "是",
+        "en_US": "yes"
+    },
+    "cli_manager.detail.no": {
+        "zh_CN": "否",
+        "en_US": "no"
+    },
+    "cli_manager.error.confirmation_required": {
+        "zh_CN": "需要用户明确确认",
+        "en_US": "Explicit user confirmation is required"
+    },
+    "cli_manager.error.command_name_reserved": {
+        "zh_CN": "命令名属于系统保留名称：{{command}}",
+        "en_US": "Command name is reserved: {{command}}"
+    },
+    "cli_manager.error.command_name_conflict": {
+        "zh_CN": "命令名已被占用：{{command}}",
+        "en_US": "Command name is already in use: {{command}}"
+    },
+    "cli_manager.error.command_path_conflict": {
+        "zh_CN": "当前 PATH 中已有同名命令：{{command}}",
+        "en_US": "A command with the same name already exists in PATH: {{command}}"
+    },
+    "cli_manager.error.command_not_found_after_install": {
+        "zh_CN": "安装后未找到命令：{{command}}",
+        "en_US": "Command was not found after install: {{command}}"
+    },
+    "cli_manager.error.command_path_missing": {
+        "zh_CN": "指定的命令路径不存在：{{command}}",
+        "en_US": "Explicit command path does not exist: {{command}}"
+    },
+    "cli_manager.error.command_path_unknown_command": {
+        "zh_CN": "命令路径不属于本次持久化命令：{{command}}",
+        "en_US": "Command path was provided for an unknown command: {{command}}"
+    },
+    "cli_manager.error.cannot_move_install_root": {
+        "zh_CN": "安装根目录过宽或不安全，不能移动",
+        "en_US": "The inferred install root is too broad or unsafe to move"
+    },
+    "cli_manager.error.cannot_locate_install_root": {
+        "zh_CN": "无法可靠定位安装根目录",
+        "en_US": "Cannot reliably locate the install root"
+    },
+    "cli_manager.error.install_command_required": {
+        "zh_CN": "安装模式需要提供安装命令",
+        "en_US": "Install mode requires an install command"
+    },
+    "cli_manager.error.install_command_failed": {
+        "zh_CN": "安装命令执行失败",
+        "en_US": "Install command failed"
+    },
+    "cli_manager.error.not_found": {
+        "zh_CN": "未找到该持久化 CLI：{{name}}",
+        "en_US": "Persisted CLI not found: {{name}}"
+    },
+    "cli_manager.error.size_limit_exceeded": {
+        "zh_CN": "安装产物超过大小或文件数量限制",
+        "en_US": "Persisted CLI exceeds size or file-count limits"
+    },
+    "cli_manager.error.unknown": {
+        "zh_CN": "CLI 管理操作失败",
+        "en_US": "CLI manager operation failed"
+    },
+    "oauth2.list_apps.listing": {
+        "zh_CN": "正在查看 OAuth2 应用",
+        "en_US": "Listing OAuth2 apps"
+    },
+    "oauth2.list_apps.listed": {
+        "zh_CN": "已查看 OAuth2 应用",
+        "en_US": "OAuth2 apps listed"
+    },
+    "oauth2.list_apps.failed": {
+        "zh_CN": "查看 OAuth2 应用失败",
+        "en_US": "Failed to list OAuth2 apps"
+    },
+    "oauth2.upsert_app.upserting": {
+        "zh_CN": "正在保存 OAuth2 应用「{{app_name}}」",
+        "en_US": "Saving OAuth2 app \"{{app_name}}\""
+    },
+    "oauth2.upsert_app.upserted": {
+        "zh_CN": "OAuth2 应用「{{app_name}}」已保存",
+        "en_US": "OAuth2 app \"{{app_name}}\" saved"
+    },
+    "oauth2.upsert_app.failed": {
+        "zh_CN": "保存 OAuth2 应用「{{app_name}}」失败",
+        "en_US": "Failed to save OAuth2 app \"{{app_name}}\""
+    },
+    "oauth2.get_redirect_uri.getting": {
+        "zh_CN": "正在获取 OAuth2 重定向 URI",
+        "en_US": "Getting OAuth2 redirect URI"
+    },
+    "oauth2.get_redirect_uri.got": {
+        "zh_CN": "已获取 OAuth2 重定向 URI",
+        "en_US": "OAuth2 redirect URI is ready"
+    },
+    "oauth2.get_redirect_uri.failed": {
+        "zh_CN": "获取 OAuth2 重定向 URI 失败",
+        "en_US": "Failed to get OAuth2 redirect URI"
+    },
+    "oauth2.request.requesting": {
+        "zh_CN": "正在请求 {{target}}",
+        "en_US": "Requesting {{target}}"
+    },
+    "oauth2.request.succeeded": {
+        "zh_CN": "请求 {{target}} 完成，状态码 {{status_code}}",
+        "en_US": "Request {{target}} completed with status {{status_code}}"
+    },
+    "oauth2.request.failed": {
+        "zh_CN": "请求 {{target}} 失败，状态码 {{status_code}}",
+        "en_US": "Request {{target}} failed with status {{status_code}}"
+    },
+    "oauth2.remove_app.removing": {
+        "zh_CN": "正在删除 OAuth2 应用「{{app_name}}」",
+        "en_US": "Removing OAuth2 app \"{{app_name}}\""
+    },
+    "oauth2.remove_app.removed": {
+        "zh_CN": "OAuth2 应用「{{app_name}}」已删除",
+        "en_US": "OAuth2 app \"{{app_name}}\" removed"
+    },
+    "oauth2.remove_app.failed": {
+        "zh_CN": "删除 OAuth2 应用「{{app_name}}」失败",
+        "en_US": "Failed to remove OAuth2 app \"{{app_name}}\""
+    },
+    "oauth2.start_authorization.starting": {
+        "zh_CN": "正在为「{{app_name}}」生成授权链接",
+        "en_US": "Creating authorization link for \"{{app_name}}\""
+    },
+    "oauth2.start_authorization.started": {
+        "zh_CN": "已生成「{{app_name}}」授权链接",
+        "en_US": "Authorization link for \"{{app_name}}\" is ready"
+    },
+    "oauth2.start_authorization.failed": {
+        "zh_CN": "生成「{{app_name}}」授权链接失败",
+        "en_US": "Failed to create authorization link for \"{{app_name}}\""
+    },
+    "oauth2.check_authorization.checking": {
+        "zh_CN": "正在检查「{{app_name}}」授权状态",
+        "en_US": "Checking authorization status for \"{{app_name}}\""
+    },
+    "oauth2.check_authorization.checked": {
+        "zh_CN": "已检查「{{app_name}}」授权状态",
+        "en_US": "Authorization status for \"{{app_name}}\" checked"
+    },
+    "oauth2.check_authorization.authorized": {
+        "zh_CN": "「{{app_name}}」授权已完成",
+        "en_US": "Authorization for \"{{app_name}}\" completed"
+    },
+    "oauth2.check_authorization.pending": {
+        "zh_CN": "正在等待「{{app_name}}」完成授权",
+        "en_US": "Waiting for \"{{app_name}}\" authorization"
+    },
+    "oauth2.check_authorization.expired": {
+        "zh_CN": "「{{app_name}}」授权已过期",
+        "en_US": "Authorization for \"{{app_name}}\" expired"
+    },
+    "oauth2.check_authorization.not_authorized": {
+        "zh_CN": "「{{app_name}}」尚未授权",
+        "en_US": "Authorization for \"{{app_name}}\" has not started"
+    },
+    "oauth2.check_authorization.denied": {
+        "zh_CN": "「{{app_name}}」授权被拒绝",
+        "en_US": "Authorization for \"{{app_name}}\" was denied"
+    },
+    "oauth2.check_authorization.failed": {
+        "zh_CN": "检查「{{app_name}}」授权状态失败",
+        "en_US": "Failed to check authorization status for \"{{app_name}}\""
+    },
+    "oauth2.api_docs.listing": {
+        "zh_CN": "正在查询「{{app_name}}」接口文档",
+        "en_US": "Listing API docs for \"{{app_name}}\""
+    },
+    "oauth2.api_docs.listed": {
+        "zh_CN": "已查询「{{app_name}}」接口文档",
+        "en_US": "API docs for \"{{app_name}}\" listed"
+    },
+    "oauth2.api_docs.list_failed": {
+        "zh_CN": "查询「{{app_name}}」接口文档失败",
+        "en_US": "Failed to list API docs for \"{{app_name}}\""
+    },
+    "oauth2.api_docs.getting": {
+        "zh_CN": "正在获取接口文档「{{operation_id}}」",
+        "en_US": "Getting API doc \"{{operation_id}}\""
+    },
+    "oauth2.api_docs.got": {
+        "zh_CN": "已获取接口文档「{{operation_id}}」",
+        "en_US": "API doc \"{{operation_id}}\" loaded"
+    },
+    "oauth2.api_docs.get_failed": {
+        "zh_CN": "获取接口文档「{{operation_id}}」失败",
+        "en_US": "Failed to get API doc \"{{operation_id}}\""
+    },
+    "oauth2.api_docs.upserting": {
+        "zh_CN": "正在保存接口文档「{{target}}」",
+        "en_US": "Saving API doc \"{{target}}\""
+    },
+    "oauth2.api_docs.upserted": {
+        "zh_CN": "接口文档「{{target}}」已保存",
+        "en_US": "API doc \"{{target}}\" saved"
+    },
+    "oauth2.api_docs.upsert_failed": {
+        "zh_CN": "保存接口文档「{{target}}」失败",
+        "en_US": "Failed to save API doc \"{{target}}\""
+    },
+    "oauth2.api_docs.removing": {
+        "zh_CN": "正在移除接口文档「{{operation_id}}」",
+        "en_US": "Removing API doc \"{{operation_id}}\""
+    },
+    "oauth2.api_docs.removed": {
+        "zh_CN": "接口文档「{{operation_id}}」已移除",
+        "en_US": "API doc \"{{operation_id}}\" removed"
+    },
+    "oauth2.api_docs.remove_failed": {
+        "zh_CN": "移除接口文档「{{operation_id}}」失败",
+        "en_US": "Failed to remove API doc \"{{operation_id}}\""
     },
     "call_simple_tool.calling": {
         "zh_CN": "正在调用工具流",

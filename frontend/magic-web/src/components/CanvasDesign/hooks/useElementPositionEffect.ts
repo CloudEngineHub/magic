@@ -18,14 +18,14 @@ export interface UseElementPositionEffectOptions {
 	verticalAlign?: VerticalAlign
 	/** 模式化定位所依赖的事件名，不传则监听 selection:position */
 	positionEventType?: "crop:position" | "extend:position" | "eraser:position"
-	/** 模式化定位对应的元素 ID */
+	/** 定位对应的元素 ID；搭配 positionEventType 时用于过滤事件，不传 positionEventType 时直接跟踪该元素 bounds */
 	trackedElementId?: string | null
 }
 
 /**
  * 通用的元素定位 Hook
  * 用于将 UI 组件定位到元素的指定位置（上方/下方/左侧/右侧）
- * 支持选中模式（selection:position）和裁剪模式（crop:position），复用相同的定位逻辑
+ * 支持选中模式（selection:position）、模式化定位（crop/extend/eraser）和按元素 ID 定位，复用相同的定位逻辑
  */
 export default function useElementPositionEffect(options: UseElementPositionEffectOptions) {
 	const {
@@ -153,6 +153,31 @@ export default function useElementPositionEffect(options: UseElementPositionEffe
 				}
 			})
 			return unsubscribe
+		}
+
+		if (trackedElementId) {
+			const updateFromTrackedElement = () => {
+				applyBoundingRect(
+					canvas.geometryCacheManager.getElementBounds(trackedElementId) ?? null,
+				)
+			}
+
+			updateFromTrackedElement()
+
+			const unsubscribeList = [
+				canvas.eventEmitter.on("canvas:resize", updateFromTrackedElement),
+				canvas.eventEmitter.on("document:loaded", updateFromTrackedElement),
+				canvas.eventEmitter.on("document:restored", updateFromTrackedElement),
+				canvas.eventEmitter.on("element:change", updateFromTrackedElement),
+				canvas.eventEmitter.on("element:updated", updateFromTrackedElement),
+				canvas.eventEmitter.on("element:deleted", updateFromTrackedElement),
+				canvas.eventEmitter.on("element:batchupdated", updateFromTrackedElement),
+				canvas.eventEmitter.on("element:batchdeleted", updateFromTrackedElement),
+			]
+
+			return () => {
+				unsubscribeList.forEach((unsubscribe) => unsubscribe())
+			}
 		}
 
 		// 选中模式：监听 selection:position

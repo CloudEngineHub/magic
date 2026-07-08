@@ -42,6 +42,7 @@ export default function PromptPresetValueNodeView({ deleteNode, selected }: Reac
 				className="inline-flex items-center justify-center"
 				tabIndex={-1}
 				aria-label={tokenLabel}
+				data-testid="handle-remove"
 			>
 				<X className="h-3 w-3" />
 			</button>

@@ -32,6 +32,7 @@ export const MobileBrandLogo = observer(function MobileBrandLogo({
 				alt={alt}
 				draggable={false}
 				className={cn("shrink-0 object-contain", className)}
+				data-testid="mobile-brand-logo-image"
 			/>
 		)
 	}

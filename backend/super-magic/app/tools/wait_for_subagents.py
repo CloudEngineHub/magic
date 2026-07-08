@@ -92,6 +92,22 @@ Rules for wait_for_subagents:
   Rules: only scans messages produced AFTER the wait call starts — never matches historical content. The sub-agent keeps running after a match — you must call wait_for_subagents again or kill it.
 """
 
+    def is_visible_in_context(self, agent_context: "AgentContext") -> bool:
+        return not agent_context.is_subagent_context()
+
+    async def check_execution_permission(
+        self,
+        tool_context: ToolContext,
+        params: WaitForSubagentsParams,
+    ) -> Optional[ToolResult]:
+        agent_context = tool_context.get_extension("agent_context")
+        if agent_context is not None and agent_context.is_subagent_context():
+            return ToolResult.error(
+                "Sub-agents cannot wait for sibling or nested sub-agents. "
+                "Return your current findings to the parent agent instead."
+            )
+        return None
+
     async def execute(self, tool_context: ToolContext, params: WaitForSubagentsParams) -> ToolResult:
         # Phase 1: resolve agent_ids to handles or immediate error results
         resolved: list[tuple[str, str | None, SubagentSessionHandle | None, SubagentQueryResult | None]] = []
