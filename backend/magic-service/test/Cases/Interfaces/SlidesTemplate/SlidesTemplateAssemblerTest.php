@@ -111,6 +111,7 @@ class SlidesTemplateAssemblerTest extends TestCase
                 'collage_url' => 'https://signed.example/collage.png',
                 'preview_url' => 'https://www.letsmagic.cn/share/files/1',
                 'sort' => 100,
+                'usage_count' => 123,
                 'is_official' => false,
             ]],
         ], $dto->toArray());
@@ -196,6 +197,9 @@ class SlidesTemplateAssemblerTest extends TestCase
             'preview_url' => 'https://www.letsmagic.cn/share/files/1',
             'status' => 1,
             'sort' => 100,
+            'base_usage_count' => 100,
+            'actual_usage_count' => 23,
+            'usage_count' => 123,
             'created_uid' => 'user-1',
             'updated_uid' => 'user-2',
             'created_at' => null,
@@ -258,6 +262,8 @@ class SlidesTemplateAssemblerTest extends TestCase
             ->setPreviewUrl('https://www.letsmagic.cn/share/files/1')
             ->setStatus(1)
             ->setSort(100)
+            ->setBaseUsageCount(100)
+            ->setActualUsageCount(23)
             ->setCreatedUid('user-1')
             ->setUpdatedUid('user-2');
 

@@ -165,6 +165,14 @@ class SlidesTemplateAppServiceTest extends TestCase
                 'PPT-65f2c8a42d7b0-123456'
             )
             ->willReturn($template);
+        $domainService
+            ->expects($this->once())
+            ->method('incrementActualUsageCount')
+            ->with(
+                $this->callback(static fn (SlidesTemplateDataIsolation $actual): bool => $actual->isContainOfficialOrganization()
+                    && $actual->getOrganizationCodes() === ['CURRENT_ORG', 'OFFICIAL_ORG']),
+                'PPT-65f2c8a42d7b0-123456'
+            );
 
         $service = new TestableSlidesTemplateAppService($domainService);
         $result = $service->getTemplateFileUrl($dataIsolation, 'PPT-65f2c8a42d7b0-123456');
@@ -245,6 +253,7 @@ class SlidesTemplateAppServiceTest extends TestCase
         $request->method('getPreviewUrl')->willReturn(null);
         $request->method('getStatus')->willReturn(SlidesTemplateStatus::Enabled->value);
         $request->method('getSort')->willReturn(100);
+        $request->method('getBaseUsageCount')->willReturn(88);
 
         $capturedTemplate = null;
         $domainService = $this->createMock(SlidesTemplateDomainService::class);
@@ -269,6 +278,8 @@ class SlidesTemplateAppServiceTest extends TestCase
         $this->assertSame('user-1', $result->getCreatedUid());
         $this->assertSame('user-1', $result->getUpdatedUid());
         $this->assertSame(100, $result->getSort());
+        $this->assertSame(88, $result->getBaseUsageCount());
+        $this->assertSame(0, $result->getActualUsageCount());
         $this->assertSame(SlidesTemplateSourceType::Custom, $result->getSourceType());
     }
 
@@ -424,12 +435,14 @@ class SlidesTemplateAppServiceTest extends TestCase
         $request->method('getPreviewUrl')->willReturn(null);
         $request->method('getStatus')->willReturn(SlidesTemplateStatus::Enabled->value);
         $request->method('getSort')->willReturn(100);
+        $request->method('getBaseUsageCount')->willReturn(66);
 
         $existing = new SlidesTemplateEntity();
         $existing->setId(123)
             ->setOrganizationCode('OFFICIAL_ORG')
             ->setCode('PPT-65f2c8a42d7b0-12345678')
             ->setSourceType(SlidesTemplateSourceType::System)
+            ->setActualUsageCount(9)
             ->setCreatedUid('system');
 
         $capturedTemplate = null;
@@ -454,6 +467,8 @@ class SlidesTemplateAppServiceTest extends TestCase
         $this->assertSame(SlidesTemplateSourceType::System, $result->getSourceType());
         $this->assertSame('system', $result->getCreatedUid());
         $this->assertSame('user-1', $result->getUpdatedUid());
+        $this->assertSame(66, $result->getBaseUsageCount());
+        $this->assertSame(9, $result->getActualUsageCount());
     }
 
     private function makeDataIsolation(string $organizationCode, array $officialOrganizationCodes): SlidesTemplateDataIsolation

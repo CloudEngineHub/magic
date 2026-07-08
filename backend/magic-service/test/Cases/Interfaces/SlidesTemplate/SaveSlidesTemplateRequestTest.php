@@ -26,4 +26,16 @@ class SaveSlidesTemplateRequestTest extends TestCase
         $this->assertArrayNotHasKey('category_id', $rules);
         $this->assertStringContainsString('regex:/^PPT-CATE-', (string) $rules['category_code']);
     }
+
+    public function testBaseUsageCountIsAcceptedButActualUsageCountIsNot(): void
+    {
+        /** @var SaveSlidesTemplateRequest $request */
+        $request = (new ReflectionClass(SaveSlidesTemplateRequest::class))->newInstanceWithoutConstructor();
+        $rules = $request->rules();
+
+        $this->assertArrayHasKey('base_usage_count', $rules);
+        $this->assertArrayNotHasKey('actual_usage_count', $rules);
+        $this->assertStringContainsString('integer', (string) $rules['base_usage_count']);
+        $this->assertStringContainsString('min:0', (string) $rules['base_usage_count']);
+    }
 }

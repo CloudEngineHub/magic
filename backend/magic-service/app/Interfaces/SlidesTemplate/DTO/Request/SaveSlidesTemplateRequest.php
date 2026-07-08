@@ -35,6 +35,7 @@ class SaveSlidesTemplateRequest extends FormRequest
             'preview_url' => 'nullable|url|max:1024',
             'status' => 'nullable|integer|in:0,1',
             'sort' => 'nullable|integer',
+            'base_usage_count' => 'nullable|integer|min:0',
         ];
     }
 
@@ -71,6 +72,8 @@ class SaveSlidesTemplateRequest extends FormRequest
             'preview_url.max' => __('slides_template.preview_url_max'),
             'status.in' => __('slides_template.status_in'),
             'sort.integer' => __('slides_template.sort_integer'),
+            'base_usage_count.integer' => __('slides_template.base_usage_count_integer'),
+            'base_usage_count.min' => __('slides_template.base_usage_count_min'),
         ];
     }
 
@@ -126,5 +129,10 @@ class SaveSlidesTemplateRequest extends FormRequest
     public function getSort(): int
     {
         return (int) $this->input('sort', 0);
+    }
+
+    public function getBaseUsageCount(): int
+    {
+        return (int) $this->input('base_usage_count', 0);
     }
 }

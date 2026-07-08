@@ -138,6 +138,7 @@ class SlidesTemplateDomainServiceTest extends TestCase
         $repository = new CapturingSlidesTemplateRepository();
         $repository->entityWithTrashed = $this->makeTemplate()
             ->setId(123)
+            ->setActualUsageCount(7)
             ->setCreatedUid('old-user')
             ->setUpdatedUid('old-user')
             ->setDeletedAt('2026-07-01 10:00:00');
@@ -155,6 +156,7 @@ class SlidesTemplateDomainServiceTest extends TestCase
 
         $this->assertSame($template, $result);
         $this->assertSame(123, $repository->savedEntity?->getId());
+        $this->assertSame(7, $repository->savedEntity?->getActualUsageCount());
         $this->assertSame('new-user', $repository->savedEntity?->getCreatedUid());
         $this->assertSame('new-user', $repository->savedEntity?->getUpdatedUid());
         $this->assertSame(
@@ -253,6 +255,11 @@ class CapturingSlidesTemplateRepository implements SlidesTemplateRepositoryInter
     }
 
     public function updateSort(SlidesTemplateDataIsolation $dataIsolation, int|string $id, int $sort, string $updatedUid): bool
+    {
+        return true;
+    }
+
+    public function incrementActualUsageCount(SlidesTemplateDataIsolation $dataIsolation, string $code): bool
     {
         return true;
     }

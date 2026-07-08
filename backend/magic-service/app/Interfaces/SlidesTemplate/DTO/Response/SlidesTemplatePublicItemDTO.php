@@ -29,6 +29,8 @@ class SlidesTemplatePublicItemDTO extends AbstractDTO
 
     public int $sort = 0;
 
+    public int $usageCount = 0;
+
     public bool $isOfficial = false;
 
     public function __construct(?array $data = null)
@@ -126,6 +128,16 @@ class SlidesTemplatePublicItemDTO extends AbstractDTO
     public function setSort(null|int|string $sort): void
     {
         $this->sort = $sort === null ? 0 : (int) $sort;
+    }
+
+    public function getUsageCount(): int
+    {
+        return $this->usageCount;
+    }
+
+    public function setUsageCount(null|int|string $usageCount): void
+    {
+        $this->usageCount = $usageCount === null ? 0 : (int) $usageCount;
     }
 
     public function isOfficial(): bool

@@ -73,6 +73,9 @@ class SlidesTemplateAssembler
         $dto->setPreviewUrl($template->getPreviewUrl());
         $dto->setStatus($template->getStatus()->value);
         $dto->setSort($template->getSort());
+        $dto->setBaseUsageCount($template->getBaseUsageCount());
+        $dto->setActualUsageCount($template->getActualUsageCount());
+        $dto->setUsageCount($template->getUsageCount());
         $dto->setCreatedUid($template->getCreatedUid());
         $dto->setUpdatedUid($template->getUpdatedUid());
         $dto->setCreatedAt($template->getCreatedAt());
@@ -107,6 +110,7 @@ class SlidesTemplateAssembler
         $dto->setCollageUrl($template->getCollageUrl());
         $dto->setPreviewUrl($template->getPreviewUrl());
         $dto->setSort($template->getSort());
+        $dto->setUsageCount($template->getUsageCount());
         $dto->setIsOfficial(OfficialOrganizationUtil::isOfficialOrganization($template->getOrganizationCode()));
         return $dto;
     }

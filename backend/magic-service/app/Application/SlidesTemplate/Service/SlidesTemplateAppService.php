@@ -52,6 +52,7 @@ class SlidesTemplateAppService extends AbstractSlidesTemplateAppService
 
         $template = $this->slidesTemplateDomainService->findEnabledByCodeOrFail($dataIsolation, $code);
         $this->resolveTemplateFileUrl($template);
+        $this->slidesTemplateDomainService->incrementActualUsageCount($dataIsolation, $template->getCode());
         $this->dispatchSlidesTemplateUsedEvent($this->createSlidesTemplateUsedEvent(
             $authorization,
             $dataIsolation,

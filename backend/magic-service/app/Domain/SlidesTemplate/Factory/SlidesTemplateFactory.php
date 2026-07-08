@@ -29,6 +29,8 @@ class SlidesTemplateFactory
         $entity->setPreviewUrl($model->preview_url);
         $entity->setStatus($model->status);
         $entity->setSort($model->sort);
+        $entity->setBaseUsageCount($model->base_usage_count ?? 0);
+        $entity->setActualUsageCount($model->actual_usage_count ?? 0);
         $entity->setCreatedUid($model->created_uid);
         $entity->setUpdatedUid($model->updated_uid);
         $entity->setCreatedAt($model->created_at?->toDateTimeString());

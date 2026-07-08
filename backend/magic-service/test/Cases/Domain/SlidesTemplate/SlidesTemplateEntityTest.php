@@ -94,6 +94,8 @@ class SlidesTemplateEntityTest extends TestCase
             'preview_url' => 'https://www.letsmagic.cn/share/files/1',
             'status' => 1,
             'sort' => 100,
+            'base_usage_count' => 0,
+            'actual_usage_count' => 0,
             'created_uid' => 'user-1',
             'updated_uid' => 'user-2',
         ], $entity->toArray());
