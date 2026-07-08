@@ -17,43 +17,6 @@ function isSlideProjectFolder(item: FileItem | AttachmentItem | undefined): bool
 	return Boolean(item?.is_directory && item?.display_config?.type === "slide")
 }
 
-function createFallbackSlideProjectFolder(
-	file: FileItem | AttachmentItem,
-): (FileItem | AttachmentItem) | undefined {
-	// 旧缓存可能保存的是 PPT 目录下 index.html 的 file_id。
-	// 如果缓存恢复早于附件树加载，无法通过 attachments 找到父目录，会导致：
-	// 默认恢复 tab 使用 index.html id，用户再点击文件树里的 PPT 目录时使用目录 id，
-	// 同一个 PPT 项目被打开成两个 tab。此时先用 index.html.parent_id 作为稳定 tab id，
-	// 等附件树同步完成后，再由同步逻辑用真实目录节点刷新 fileData。
-	const parentId = normalizeTabFileId(file.parent_id)
-	if (!parentId || file.display_config?.type !== "slide") return undefined
-
-	const relativeFilePath = file.relative_file_path || ""
-	const folderPath = relativeFilePath.includes("/")
-		? relativeFilePath.split("/").slice(0, -1).join("/")
-		: ""
-	if (!folderPath) return undefined
-
-	const folderPathParts = folderPath.split("/").filter(Boolean)
-	const folderName =
-		file.display_config.name ||
-		(folderPath ? folderPathParts[folderPathParts.length - 1] : undefined) ||
-		getAttachmentFileName(file)
-
-	return {
-		...file,
-		file_id: parentId,
-		file_name: folderName,
-		filename: folderName,
-		display_filename: folderName,
-		file_extension: "",
-		relative_file_path: folderPath,
-		parent_id: undefined,
-		is_directory: true,
-		children: undefined,
-	}
-}
-
 function findParentDirectory(
 	items: (FileItem | AttachmentItem)[] | undefined,
 	child: FileItem | AttachmentItem,
@@ -95,9 +58,7 @@ function resolveSlideProjectTabFile(
 	if (fileName !== "index.html") return file
 
 	const parentDirectory = findParentDirectory(attachments, file)
-	if (isSlideProjectFolder(parentDirectory)) return parentDirectory
-
-	return createFallbackSlideProjectFolder(file) || file
+	return isSlideProjectFolder(parentDirectory) ? parentDirectory : file
 }
 
 export function normalizeSlideProjectTabItem(
