@@ -620,9 +620,8 @@ describe("AudioRecordingsStore", () => {
 
 		expect(store.list[0]?.card_status).toBe("summarizing")
 		expect(store.list[0]?.phase_status).toBe("in_progress")
-		expect(store.optimisticItems[0]?.id).toBe("mock-project-resummary-pending")
-		expect(store.optimisticItems[0]?.card_status).toBe("summarizing")
-
+		// Item already exists in authoritative list — should not be duplicated in optimisticItems
+		expect(store.optimisticItems).toHaveLength(0)
 		if (!resolveRequest) throw new Error("mock resummary resolver was not initialized")
 		resolveRequest({
 			success: true,

@@ -242,6 +242,7 @@ export class AudioRecordingsStore {
 
 		if (listIndex >= 0) {
 			this.list[listIndex] = optimisticItem
+			return
 		}
 		this.optimisticItems = [
 			optimisticItem,
@@ -289,6 +290,7 @@ export class AudioRecordingsStore {
 
 		if (listIndex >= 0) {
 			this.list[listIndex] = optimisticItem
+			return
 		}
 		this.optimisticItems = [
 			optimisticItem,
@@ -525,11 +527,6 @@ export class AudioRecordingsStore {
 			}
 
 			summaryProgressPoller.addTask(taskKey)
-			// Refresh only after the list has hydrated once; detail-only or test-created stores
-			// should not clear a locally patched row by starting an initial page-1 load.
-			if (this.hasLoadedOnce) {
-				void this.fetchList({ page: 1, keyword: this.keyword })
-			}
 			return { ok: true }
 		} finally {
 			runInAction(() => {
@@ -565,18 +562,7 @@ export class AudioRecordingsStore {
 				return result
 			}
 
-			const action = result.response.action
-
-			// For already_completed responses, refresh the list to pick up the completed state.
-			if (action === "already_completed") {
-				if (this.hasLoadedOnce) {
-					void this.fetchList({ page: 1, keyword: this.keyword })
-				}
-				return { ok: true }
-			}
-
-			// For recovery_started and already_running, add to poller and keep optimistic state.
-			// The poller will eventually patch the card to the correct terminal state.
+			// Add to poller for all cases; the poller patches the card to the correct terminal state.
 			summaryProgressPoller.addTask(taskKey)
 			return { ok: true }
 		} finally {
