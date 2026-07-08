@@ -1442,7 +1442,6 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 			const isExpectedSource = event.source === iframeRef.current?.contentWindow
 			const isAllowedType = messageType ? iframeMessageTypes.has(messageType) : false
 			const shouldStrictlyValidatePreviewSource =
-				Boolean(onContentMetrics || onRenderReady) &&
 				Boolean(messageType) &&
 				[
 					"iframeReady",
