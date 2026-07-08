@@ -10,23 +10,13 @@ from agentlang.logger import get_logger
 from app.tools.media_utils import (
     BatchMediaResolveResults,
     MediaResolveResult,
+    VIDEO_MIME_MAP,
+    VideoFormatGuard,
     generate_presigned_url,
 )
 from app.utils.async_file_utils import async_read_bytes, async_stat
 
 logger = get_logger(__name__)
-
-# 视频文件扩展名到 MIME 类型的映射
-VIDEO_MIME_MAP = {
-    "mp4": "video/mp4",
-    "avi": "video/x-msvideo",
-    "mov": "video/quicktime",
-    "mkv": "video/x-matroska",
-    "webm": "video/webm",
-    "flv": "video/x-flv",
-    "wmv": "video/x-ms-wmv",
-    "m4v": "video/x-m4v",
-}
 
 # 本地视频 base64 编码大小上限（MB）
 LOCAL_FILE_BASE64_MAX_MB = 20.0
@@ -84,6 +74,10 @@ class VideoProcessor:
             MediaResolveResult
         """
         source = video.strip()
+        format_check = await VideoFormatGuard.validate_source(source)
+        if not format_check.ok:
+            logger.warning(f"视频格式前置校验失败: {source}: {format_check.error}")
+            return MediaResolveResult(source=source, error=format_check.error)
 
         if re.match(r'^https?://', source):
             logger.debug(f"视频来源为 HTTP URL: {source}")
@@ -122,6 +116,10 @@ class VideoProcessor:
         Raises:
             ValueError: 文件大小超过限制时抛出
         """
+        format_check = await VideoFormatGuard.validate_source(file_path)
+        if not format_check.ok:
+            raise ValueError(format_check.error)
+
         stat = await async_stat(file_path)
         file_size_mb = stat.st_size / (1024 * 1024)
         if file_size_mb > max_size_mb:
