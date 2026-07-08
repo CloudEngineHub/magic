@@ -14,6 +14,7 @@ use App\Domain\SlidesTemplate\Service\SlidesTemplateDomainService;
 use App\ErrorCode\SlidesTemplateErrorCode;
 use App\Infrastructure\Core\DataIsolation\BaseDataIsolation;
 use App\Infrastructure\Core\Exception\ExceptionBuilder;
+use App\Infrastructure\Core\ValueObject\Page;
 use Dtyq\CloudFile\Kernel\Struct\FileLink;
 use Qbhy\HyperfAuth\Authenticatable;
 
@@ -38,6 +39,15 @@ abstract class AbstractSlidesTemplateAppService extends AbstractKernelAppService
         }
         $this->handleByAuthorization($authorization, $dataIsolation);
         return $dataIsolation;
+    }
+
+    protected function createListPage(int $page, int $pageSize): Page
+    {
+        $page = new Page($page, $pageSize);
+        if ($page->getPage() > 1) {
+            $page->setTotal(false);
+        }
+        return $page;
     }
 
     /**

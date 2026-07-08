@@ -34,7 +34,7 @@ class SlidesTemplateAppService extends AbstractSlidesTemplateAppService
         $query->setCategoryCode($request->getCategoryCode());
         $query->setStatus(SlidesTemplateStatus::Enabled->value);
 
-        $page = new Page($request->getPage(), $request->getPageSize());
+        $page = $this->createListPage($request->getPage(), $request->getPageSize());
         $result = $this->slidesTemplateDomainService->queries($dataIsolation, $query, $page);
         $this->resolveAssetUrls($result['list'], includeTemplateFileUrl: false);
 
