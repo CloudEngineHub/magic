@@ -101,6 +101,14 @@ class WorkspaceExportRequest(BaseModel):
         description="""<!--zh: 相对于工作区根目录的子目录路径（如 'skills/my-skill'），留空则导出整个工作区-->
 Relative path within the workspace root to export (e.g. 'skills/my-skill'). Defaults to the entire workspace.""",
     )
+    archive_root: str = Field(
+        "",
+        description="Optional root directory name inside the ZIP archive. Defaults to code.",
+    )
+    file_name: str = Field(
+        "",
+        description="Optional ZIP file name to upload. Defaults to '{code}_{timestamp}.zip'.",
+    )
 
 
 class WorkspaceExportData(BaseModel):

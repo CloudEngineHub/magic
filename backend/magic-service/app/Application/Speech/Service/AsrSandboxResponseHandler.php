@@ -16,6 +16,7 @@ use App\Infrastructure\Core\Traits\HasLogger;
 use Dtyq\SuperMagic\Application\SuperAgent\Service\AbstractAppService;
 use Dtyq\SuperMagic\Domain\SuperAgent\Entity\TaskFileEntity;
 use Dtyq\SuperMagic\Domain\SuperAgent\Service\TaskFileDomainService;
+use Dtyq\SuperMagic\Infrastructure\Utils\RelativeFilePathUtil;
 use Throwable;
 
 /**
@@ -173,8 +174,10 @@ class AsrSandboxResponseHandler extends AbstractAppService
             );
 
             if ($fileEntity !== null) {
+                $resolvedPath = $this->buildRelativeFilePathForEntity($fileEntity, (int) $taskStatus->projectId);
                 $taskStatus->audioFileId = (string) $fileEntity->getFileId();
-                $taskStatus->filePath = $relativePath;
+                $taskStatus->filePath = $resolvedPath;
+                $taskStatus->displayDirectory = $this->extractDirectoryPath(['path' => $resolvedPath]);
             }
         } catch (Throwable $e) {
             $this->logger->error('查询音频文件记录失败', [
@@ -190,6 +193,18 @@ class AsrSandboxResponseHandler extends AbstractAppService
 
             ExceptionBuilder::throw(AsrErrorCode::CreateAudioFileFailed, '', ['error' => $e->getMessage()]);
         }
+    }
+
+    private function buildRelativeFilePathForEntity(TaskFileEntity $entity, int $projectId): string
+    {
+        $filesWithParents = $this->taskFileDomainService->getFilesWithParentsByIds(
+            [$entity->getFileId()],
+            $projectId
+        );
+        $fileMap = RelativeFilePathUtil::indexByFileId($filesWithParents);
+        $fileMap[$entity->getFileId()] = $entity;
+
+        return ltrim(RelativeFilePathUtil::buildPathByParentChain($entity, $fileMap), '/');
     }
 
     /**
@@ -267,7 +282,7 @@ class AsrSandboxResponseHandler extends AbstractAppService
      * - ASR 在录音启动时已经创建了显示目录与隐藏目录，并把它们的 `file_id` 持久化到
      *   Redis（`displayDirectoryId` / `tempHiddenDirectoryId`）。调用方根据文件类型
      *   传入对应的 `$parentId`，本方法只负责按 (project_id, parent_id, file_name) 轮询。
-     * - `$relativePath` 仅用于日志，便于排查；不再参与查询。
+     * - `$relativePath` 仅用于日志，便于排查；不参与查询。
      *
      * @param AsrTaskStatusDTO $taskStatus 任务状态
      * @param null|int $parentId 文件所在目录的 file_id（来自 ASR 自己创建目录时记录的 id）
@@ -304,6 +319,13 @@ class AsrSandboxResponseHandler extends AbstractAppService
             ExceptionBuilder::throw(AsrErrorCode::CreateAudioFileFailed, '', ['error' => '任务状态信息不完整']);
         }
 
+        // 2. 项目访问鉴权（保持原有行为）
+        $this->getAccessibleProjectWithEditor(
+            (int) $taskStatus->projectId,
+            $taskStatus->userId,
+            $taskStatus->organizationCode
+        );
+
         if ($parentId === null || $parentId <= 0 || $fileName === '') {
             $this->logger->warning(sprintf('%s 父目录或文件名缺失，跳过查询', $fileTypeName), $logContext);
             if ($throwOnTimeout) {
@@ -315,13 +337,6 @@ class AsrSandboxResponseHandler extends AbstractAppService
             }
             return null;
         }
-
-        // 2. 项目访问鉴权（保持原有行为）
-        $this->getAccessibleProjectWithEditor(
-            (int) $taskStatus->projectId,
-            $taskStatus->userId,
-            $taskStatus->organizationCode
-        );
 
         // 3. 按 (project_id, parent_id, file_name) 轮询
         $this->logger->info(sprintf('开始轮询查询%s记录', $fileTypeName), $logContext + [

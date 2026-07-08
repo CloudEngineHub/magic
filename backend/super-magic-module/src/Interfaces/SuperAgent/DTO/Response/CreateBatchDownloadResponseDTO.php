@@ -35,6 +35,11 @@ class CreateBatchDownloadResponseDTO
     protected string $message;
 
     /**
+     * @var null|string 沙箱ID
+     */
+    protected ?string $sandboxId;
+
+    /**
      * 构造函数.
      */
     public function __construct(
@@ -42,13 +47,15 @@ class CreateBatchDownloadResponseDTO
         string $batchKey,
         ?string $downloadUrl = null,
         int $fileCount = 0,
-        string $message = ''
+        string $message = '',
+        ?string $sandboxId = null
     ) {
         $this->status = $status;
         $this->batchKey = $batchKey;
         $this->downloadUrl = $downloadUrl;
         $this->fileCount = $fileCount;
         $this->message = $message;
+        $this->sandboxId = $sandboxId;
     }
 
     /**
@@ -62,6 +69,7 @@ class CreateBatchDownloadResponseDTO
             'download_url' => $this->downloadUrl,
             'file_count' => $this->fileCount,
             'message' => $this->message,
+            'sandbox_id' => $this->sandboxId,
         ];
     }
 
@@ -103,5 +111,13 @@ class CreateBatchDownloadResponseDTO
     public function getMessage(): string
     {
         return $this->message;
+    }
+
+    /**
+     * 获取沙箱ID.
+     */
+    public function getSandboxId(): ?string
+    {
+        return $this->sandboxId;
     }
 }

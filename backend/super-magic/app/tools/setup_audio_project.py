@@ -14,6 +14,7 @@ from app.tools.abstract_file_tool import AbstractFileTool
 from app.tools.core import BaseToolParams, tool
 from app.tools.workspace_tool import WorkspaceTool
 from app.core.entity.message.server_message import DisplayType, TerminalContent, ToolDetail
+from app.tools.audio_analysis_registry import panel_entries_for_file_keys
 
 logger = get_logger(__name__)
 
@@ -141,6 +142,8 @@ Scene judgment criteria:
         description="""<!--zh
 可选分析文件映射。格式：每行一个 key:value 键值对
 
+支持的分析类型以 app.tools.audio_analysis_registry 中的注册表为准。当前常用类型如下：
+
 可选的分析类型：
 
 1. power_dynamics（权力动态分析）
@@ -201,6 +204,8 @@ power_dynamics:产品评审会议-权力动态.md
 不执行任何可选分析时传空字符串
 -->
 Optional analysis file mapping. Format: one key:value pair per line
+
+Supported analysis types are defined by the registry in app.tools.audio_analysis_registry. Common current types are listed below:
 
 Available optional analysis types (select multiple based on content characteristics):
 
@@ -450,6 +455,10 @@ class SetupAudioProject(AbstractFileTool[SetupAudioProjectParams], WorkspaceTool
             # 添加可选分析文件（如果提供非空字典）
             if optional_files_dict:
                 config_data["files"].update(optional_files_dict)
+
+            analysis_panel_entries = panel_entries_for_file_keys(config_data["files"].keys())
+            if analysis_panel_entries:
+                config_data["analysis_panels"] = analysis_panel_entries
 
             config_json = json.dumps(config_data, indent=2, ensure_ascii=False)
             project_js_content = f"""window.magicProjectConfig = {config_json};

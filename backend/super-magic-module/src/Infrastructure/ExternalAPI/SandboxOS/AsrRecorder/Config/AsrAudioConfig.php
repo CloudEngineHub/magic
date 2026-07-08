@@ -17,11 +17,13 @@ readonly class AsrAudioConfig
      * @param string $sourceDir 音频分片源目录（相对于 workspace）
      * @param string $targetDir 目标目录（相对于 workspace）
      * @param string $outputFilename 输出文件名（不含扩展名）
+     * @param null|int $fileShardCount 已上传音频分片总数
      */
     public function __construct(
         private string $sourceDir,
         private string $targetDir,
-        private string $outputFilename
+        private string $outputFilename,
+        private ?int $fileShardCount = null
     ) {
     }
 
@@ -40,15 +42,26 @@ readonly class AsrAudioConfig
         return $this->outputFilename;
     }
 
+    public function getFileShardCount(): ?int
+    {
+        return $this->fileShardCount;
+    }
+
     /**
      * 转换为数组（用于 HTTP 请求）.
      */
     public function toArray(): array
     {
-        return [
+        $data = [
             'source_dir' => $this->sourceDir,
             'target_dir' => $this->targetDir,
             'output_filename' => $this->outputFilename,
         ];
+
+        if ($this->fileShardCount !== null && $this->fileShardCount >= 0) {
+            $data['file_shard_count'] = $this->fileShardCount;
+        }
+
+        return $data;
     }
 }
