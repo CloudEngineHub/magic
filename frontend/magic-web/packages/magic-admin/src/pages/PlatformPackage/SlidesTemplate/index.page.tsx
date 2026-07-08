@@ -84,7 +84,11 @@ export default function SlidesTemplatePage() {
 	const [statusLoadingIds, setStatusLoadingIds] = useState<Set<string>>(new Set())
 	const [sortLoadingIds, setSortLoadingIds] = useState<Set<string>>(new Set())
 
-	const hasEditRight = useRights(PERMISSION_KEY_MAP.SLIDES_TEMPLATE)
+	const hasQueryRight = useRights([
+		PERMISSION_KEY_MAP.SLIDES_TEMPLATE_QUERY,
+		PERMISSION_KEY_MAP.SLIDES_TEMPLATE_EDIT,
+	])
+	const hasEditRight = useRights(PERMISSION_KEY_MAP.SLIDES_TEMPLATE_EDIT)
 
 	const { run, loading } = useRequest(
 		(arg: ParamsType) => {
@@ -419,7 +423,7 @@ export default function SlidesTemplatePage() {
 			{
 				text: t("slidesTemplate.category.manageButton"),
 				icon: <IconCategory size={16} />,
-				disabled: !hasEditRight,
+				disabled: !hasQueryRight,
 				onClick: () => setCategoryOpen(true),
 			},
 			{
@@ -433,7 +437,7 @@ export default function SlidesTemplatePage() {
 				},
 			},
 		],
-		[ensureCategories, hasEditRight, t],
+		[ensureCategories, hasEditRight, hasQueryRight, t],
 	)
 
 	const toolbar = (
