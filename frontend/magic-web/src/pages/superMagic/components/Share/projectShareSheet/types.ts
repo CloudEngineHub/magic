@@ -73,6 +73,11 @@ export interface ProjectShareSheetController {
 	selectedFileItems: AttachmentItem[]
 	selectedFileHierarchy: SelectedFileHierarchyNode[]
 	selectedFileCount: number
+	defaultOpenFileId?: string
+	defaultOpenFileItem?: AttachmentItem
+	defaultOpenFileCandidates: AttachmentItem[]
+	defaultOpenFileCandidateTree: AttachmentItem[]
+	defaultOpenFilePickerOpen: boolean
 	memberSelectorOpen: boolean
 	selectedMemberNodes: TreeNode[]
 	detailMemberNodes: TreeNode[]
@@ -104,6 +109,9 @@ export interface ProjectShareSheetController {
 	copySelectedShareUrl: () => void | Promise<void>
 	copySelectedSharePassword: () => void
 	shareSelectedShareToSystem: () => Promise<void>
+	openDefaultOpenFilePicker: () => void
+	closeDefaultOpenFilePicker: () => void
+	selectDefaultOpenFile: (fileId: string) => void
 	submitCreateShare: () => Promise<void>
 	openEditSelectedShare: () => void
 	confirmCancelShare: () => Promise<void>

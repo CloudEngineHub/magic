@@ -526,6 +526,252 @@ describe("useProjectShareSheet", () => {
 		expect(result.current.view).toBe("linkDetail")
 	})
 
+	it("文件模式未传默认打开文件时会从已选范围内自动计算并提交", async () => {
+		const { result } = renderHook(() =>
+			useProjectShareSheet({
+				open: true,
+				projectId: "fictional-project-1",
+				projectName: "Fictional Project",
+				attachments: [
+					{
+						file_id: "folder-1",
+						name: "Fictional Folder",
+						is_directory: true,
+						children: [
+							{
+								file_id: "file-1",
+								name: "index.html",
+								file_name: "index.html",
+								file_extension: "html",
+								is_directory: false,
+							},
+							{
+								file_id: "file-2",
+								name: "fictional-note.txt",
+								file_name: "fictional-note.txt",
+								file_extension: "txt",
+								is_directory: false,
+							},
+						],
+					},
+				],
+				mode: "file",
+				defaultSelectedFileIds: ["folder-1"],
+				onClose: vi.fn(),
+			}),
+		)
+
+		expect(result.current.defaultOpenFileId).toBe("file-1")
+		expect(result.current.defaultOpenFileItem?.file_id).toBe("file-1")
+
+		await act(async () => {
+			await result.current.submitCreateShare()
+		})
+
+		expect(mocks.createOrUpdateShareResource).toHaveBeenCalledWith(
+			expect.objectContaining({
+				file_ids: ["folder-1"],
+				default_open_file_id: "file-1",
+			}),
+		)
+	})
+
+	it("文件模式会保留已选文件夹子级中的外部默认打开文件", async () => {
+		const { result } = renderHook(() =>
+			useProjectShareSheet({
+				open: true,
+				projectId: "fictional-project-1",
+				projectName: "Fictional Project",
+				attachments: [
+					{
+						file_id: "folder-1",
+						name: "Fictional Folder",
+						is_directory: true,
+						children: [
+							{
+								file_id: "file-1",
+								name: "index.html",
+								file_name: "index.html",
+								file_extension: "html",
+								is_directory: false,
+							},
+							{
+								file_id: "file-2",
+								name: "fictional-note.txt",
+								file_name: "fictional-note.txt",
+								file_extension: "txt",
+								is_directory: false,
+							},
+						],
+					},
+				],
+				mode: "file",
+				defaultSelectedFileIds: ["folder-1"],
+				defaultOpenFileId: "file-2",
+				onClose: vi.fn(),
+			}),
+		)
+
+		expect(result.current.defaultOpenFileId).toBe("file-2")
+		expect(result.current.defaultOpenFileItem?.file_id).toBe("file-2")
+
+		await act(async () => {
+			await result.current.submitCreateShare()
+		})
+
+		expect(mocks.createOrUpdateShareResource).toHaveBeenCalledWith(
+			expect.objectContaining({
+				default_open_file_id: "file-2",
+			}),
+		)
+	})
+
+	it("文件模式外部默认打开文件为普通文件夹时会回退到文件夹内可打开文件", async () => {
+		const { result } = renderHook(() =>
+			useProjectShareSheet({
+				open: true,
+				projectId: "fictional-project-1",
+				projectName: "Fictional Project",
+				attachments: [
+					{
+						file_id: "folder-1",
+						name: "Fictional Folder",
+						is_directory: true,
+						children: [
+							{
+								file_id: "file-1",
+								name: "index.html",
+								file_name: "index.html",
+								file_extension: "html",
+								is_directory: false,
+							},
+						],
+					},
+				],
+				mode: "file",
+				defaultSelectedFileIds: ["folder-1"],
+				defaultOpenFileId: "folder-1",
+				onClose: vi.fn(),
+			}),
+		)
+
+		expect(result.current.defaultOpenFileId).toBe("file-1")
+		expect(result.current.defaultOpenFileItem?.file_id).toBe("file-1")
+
+		await act(async () => {
+			await result.current.submitCreateShare()
+		})
+
+		expect(mocks.createOrUpdateShareResource).toHaveBeenCalledWith(
+			expect.objectContaining({
+				default_open_file_id: "file-1",
+			}),
+		)
+	})
+
+	it("项目模式会从项目附件中自动计算默认打开文件并提交", async () => {
+		const { result } = renderHook(() =>
+			useProjectShareSheet({
+				open: true,
+				projectId: "fictional-project-1",
+				projectName: "Fictional Project",
+				attachments: [
+					{
+						file_id: "folder-1",
+						name: "Fictional Folder",
+						is_directory: true,
+						children: [
+							{
+								file_id: "file-1",
+								name: "index.html",
+								file_name: "index.html",
+								file_extension: "html",
+								is_directory: false,
+							},
+							{
+								file_id: "file-2",
+								name: "fictional-note.txt",
+								file_name: "fictional-note.txt",
+								file_extension: "txt",
+								is_directory: false,
+							},
+						],
+					},
+				],
+				mode: "project",
+				onClose: vi.fn(),
+			}),
+		)
+
+		expect(result.current.defaultOpenFileId).toBe("file-1")
+		expect(result.current.defaultOpenFileItem?.file_id).toBe("file-1")
+		expect(result.current.defaultOpenFileCandidates.map((item) => item.file_id)).toEqual([
+			"file-1",
+			"file-2",
+		])
+
+		await act(async () => {
+			await result.current.submitCreateShare()
+		})
+
+		expect(mocks.createOrUpdateShareResource).toHaveBeenCalledWith(
+			expect.objectContaining({
+				share_project: true,
+				default_open_file_id: "file-1",
+			}),
+		)
+	})
+
+	it("用户选择默认打开文件后会更新当前值并在提交时使用用户选择", async () => {
+		const { result } = renderHook(() =>
+			useProjectShareSheet({
+				open: true,
+				projectId: "fictional-project-1",
+				projectName: "Fictional Project",
+				attachments: [
+					{
+						file_id: "file-1",
+						name: "index.html",
+						file_name: "index.html",
+						file_extension: "html",
+						is_directory: false,
+					},
+					{
+						file_id: "file-2",
+						name: "fictional-note.txt",
+						file_name: "fictional-note.txt",
+						file_extension: "txt",
+						is_directory: false,
+					},
+				],
+				mode: "file",
+				defaultSelectedFileIds: ["file-1", "file-2"],
+				onClose: vi.fn(),
+			}),
+		)
+
+		expect(result.current.defaultOpenFileId).toBe("file-1")
+
+		act(() => {
+			result.current.selectDefaultOpenFile("file-2")
+		})
+
+		expect(result.current.defaultOpenFileId).toBe("file-2")
+		expect(result.current.defaultOpenFileItem?.file_id).toBe("file-2")
+		expect(result.current.defaultOpenFilePickerOpen).toBe(false)
+
+		await act(async () => {
+			await result.current.submitCreateShare()
+		})
+
+		expect(mocks.createOrUpdateShareResource).toHaveBeenCalledWith(
+			expect.objectContaining({
+				file_ids: ["file-1", "file-2"],
+				default_open_file_id: "file-2",
+			}),
+		)
+	})
+
 	it("录音分享场景创建分享时只会自动补齐 magic.project.js，音频仍保持默认勾选但不再强制注入", async () => {
 		const { result } = renderHook(() =>
 			useProjectShareSheet({

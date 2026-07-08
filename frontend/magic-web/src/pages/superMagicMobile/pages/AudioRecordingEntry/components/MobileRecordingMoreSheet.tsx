@@ -11,9 +11,6 @@ import {
 	shouldShowSummaryButton,
 } from "@/pages/superMagic/pages/AudioRecordings/utils/summary-action-utils"
 
-// TODO(audio-recordings): Flip on after backend exposes a stable re-summary API.
-const ENABLE_REGENERATE_SUMMARY_ACTION = false
-
 interface MobileRecordingMoreSheetProps {
 	isOpen: boolean
 	item: AudioProjectListItem | null
@@ -104,11 +101,10 @@ export function MobileRecordingMoreSheet({
 		: false
 	const showSummarizeAction = item
 		? shouldShowSummaryButton(item.current_phase, item.phase_status) ||
-			(ENABLE_REGENERATE_SUMMARY_ACTION && showRegenerateAction && isSummarized)
+			(showRegenerateAction && isSummarized)
 		: false
-	// TODO(audio-recordings): Restore retry/regenerate summary variant once backend re-summary is supported.
 	const summaryVariant = item
-		? ENABLE_REGENERATE_SUMMARY_ACTION && showRegenerateAction && isSummarized
+		? showRegenerateAction && isSummarized
 			? "retry"
 			: getSummaryButtonVariant(item.current_phase, item.phase_status)
 		: null
@@ -298,7 +294,6 @@ export function MobileRecordingMoreSheet({
 								}}
 							/>
 						) : null}
-						{/* TODO(audio-recordings): showSummarizeAction still carries regenerate-summary behavior behind the disabled API gate. */}
 						{hideShareAction ? null : (
 							<MenuItem
 								label={t("super:mobile.recordingEntry.moreSheet.share")}

@@ -4,6 +4,7 @@ import {
 	AUDIO_RECORDINGS_FILTER_SESSION_KEY,
 	DEFAULT_AUDIO_RECORDINGS_FILTER_SESSION,
 	readAudioRecordingsFilterSession,
+	resolveAvailableAudioRecordingGroupId,
 	resolveMobileAudioRecordingsSortOption,
 	writeAudioRecordingsFilterSession,
 } from "../audio-recordings-filter-session"
@@ -97,5 +98,18 @@ describe("audio-recordings-filter-session", () => {
 		expect(
 			resolveMobileAudioRecordingsSortOption(DEFAULT_AUDIO_RECORDINGS_FILTER_SESSION),
 		).toBe("updated_at_desc")
+	})
+
+	it("resolves stale saved group ids back to the all-recordings group", () => {
+		const groups = [{ id: "mock-group-id", name: "Mock group", projectCount: 2 }]
+
+		expect(resolveAvailableAudioRecordingGroupId(ALL_RECORDING_GROUP_ID, groups)).toBe(
+			ALL_RECORDING_GROUP_ID,
+		)
+		expect(resolveAvailableAudioRecordingGroupId("", groups)).toBe("")
+		expect(resolveAvailableAudioRecordingGroupId("mock-group-id", groups)).toBe("mock-group-id")
+		expect(resolveAvailableAudioRecordingGroupId("mock-stale-group-id", groups)).toBe(
+			ALL_RECORDING_GROUP_ID,
+		)
 	})
 })

@@ -2517,6 +2517,13 @@
 		"exitEdit": "Exit Edit",
 		"fetchFailed": "Failed to fetch queue list",
 		"missingInfo": "Project or topic information is missing",
+		"mobile": {
+			"collapse": "Collapse queue",
+			"count": "{{count}} items",
+			"emptyContent": "⋯",
+			"expand": "Expand queue",
+			"title": "Queued"
+		},
 		"operationInProgress": "This message is being processed, please try again later",
 		"removeFromQueue": "Remove from queue",
 		"sendFailed": "Failed to send message",
@@ -2527,13 +2534,6 @@
 		"taskPending": "Pending",
 		"taskProcessing": "Processing",
 		"title": "Task Queue",
-		"mobile": {
-			"collapse": "Collapse queue",
-			"count": "{{count}} items",
-			"emptyContent": "⋯",
-			"expand": "Expand queue",
-			"title": "Queued"
-		},
 		"updateFailed": "Failed to update queue message",
 		"updateSuccess": "Queue message updated successfully"
 	},
@@ -3278,6 +3278,9 @@
 		"defaultNameOrganization": "Organization Share",
 		"defaultNamePassword": "Password Link",
 		"defaultNamePublic": "Public Link",
+		"defaultOpenFileDescription": "Choose the file that opens by default after visiting the link",
+		"defaultOpenFileLabel": "Default open file",
+		"defaultOpenFileSearchPlaceholder": "Search files",
 		"deleteConfirmDescription": "People with this link will no longer be able to access the share after it is canceled.",
 		"deleteConfirmMessage": "Cancel \"{{name}}\"? People with this link will no longer be able to access the share.",
 		"deleteConfirmTitle": "Cancel shared link",
@@ -4589,7 +4592,10 @@
 		],
 		"actionTitle": "If you want to actively intervene",
 		"mainText": "Task execution is taking too long, which may be due to the following reasons:",
-		"reasonList": ["AI is processing complex tasks", "Network connection is unstable"],
+		"reasonList": [
+			"AI is processing complex tasks",
+			"Network connection is unstable"
+		],
 		"statusText": "If you don't take any action, AI will continue trying"
 	},
 	"tool": {

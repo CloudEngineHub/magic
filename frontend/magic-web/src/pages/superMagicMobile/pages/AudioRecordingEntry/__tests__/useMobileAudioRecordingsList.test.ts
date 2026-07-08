@@ -205,6 +205,39 @@ describe("useMobileAudioRecordingsList", () => {
 		expect(result.current.currentGroupCount).toBe(3)
 	})
 
+	it("resets a stale persisted group id after mobile group metadata loads", async () => {
+		sessionStorage.setItem(
+			AUDIO_RECORDINGS_FILTER_SESSION_KEY,
+			JSON.stringify({
+				summaryFilter: "all",
+				datePreset: "all",
+				sortBy: "updated_at",
+				sortOrder: "desc",
+				searchKeyword: "",
+				groupId: "workspace-audio-stale",
+			}),
+		)
+
+		const { result } = renderHook(() => useMobileAudioRecordingsList())
+
+		await waitFor(() => {
+			expect(result.current.currentGroupId).toBe(ALL_RECORDING_GROUP_ID)
+		})
+
+		await waitFor(() => {
+			expect(serviceMocks.queryProjects).toHaveBeenLastCalledWith(
+				expect.objectContaining({
+					workspaceId: ALL_RECORDING_GROUP_ID,
+				}),
+			)
+		})
+		expect(
+			JSON.parse(sessionStorage.getItem(AUDIO_RECORDINGS_FILTER_SESSION_KEY) ?? "{}"),
+		).toMatchObject({
+			groupId: ALL_RECORDING_GROUP_ID,
+		})
+	})
+
 	it("keeps empty group names in currentGroupLabel for toolbar fallback rendering", async () => {
 		serviceMocks.listGroups.mockResolvedValue({
 			groups: [

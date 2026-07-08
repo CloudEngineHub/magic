@@ -56,17 +56,31 @@ export class SummaryProgressPoller {
 	}
 
 	/**
-	 * Returns true when the task response indicates the pipeline is fully done.
-	 * The pipeline is done only when:
-	 * 1. The overall task has failed (task_status === "failed"), OR
-	 * 2. The summarizing phase itself has completed or failed (phase_status is completed/failed).
-	 * We must NOT treat task_status === "completed" as terminal if summarizing is still in_progress.
+	 * Returns true when no further progress is expected and polling can stop.
+	 *
+	 * Terminal conditions:
+	 * 1. Merging phase failed — phase_status is "failed"
+	 * 2. Merging phase completed but auto_summary is false — manually triggered
+	 *    summary, no further phase transition from the backend
+	 * 3. Summarizing phase completed or failed — phase_status is "completed" or "failed"
+	 *
+	 * Merging completed with auto_summary === true is NOT terminal because the
+	 * backend will automatically transition to the summarizing phase later.
 	 */
 	private isTaskTerminal(task: RecordTaskProgress): boolean {
-		if (task.task_status === "failed") return true
-		if (task.current_phase === "summarizing") {
-			return task.phase_status === "completed" || task.phase_status === "failed"
+		const phase = task.current_phase
+		const status = task.phase_status
+
+		if (phase === "merging") {
+			if (status === "failed") return true
+			if (status === "completed" && task.auto_summary === false) return true
+			return false
 		}
+
+		if (phase === "summarizing") {
+			return status === "completed" || status === "failed"
+		}
+
 		return false
 	}
 

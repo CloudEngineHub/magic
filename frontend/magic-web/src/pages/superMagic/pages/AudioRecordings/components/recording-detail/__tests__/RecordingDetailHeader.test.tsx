@@ -66,12 +66,13 @@ vi.mock("react-i18next", async (importOriginal) => {
 					"detail.shareCreate": "Create share",
 					"detail.shareManage": "Manage share",
 					"card.generateSummary": "Generate summary",
+					"card.regenerateSummary": "Regenerate summary",
 					"card.moveToGroup": "Move to group",
 					"card.moreActions": "More actions",
 					"card.copyToProject": "Copy to project",
 					"card.notSummarized": "Not summarized",
 					"card.summarized": "Summarized",
-					"card.summarizing": "Summarizing now",
+					"card.summarizing": "Summarizing",
 					"card.summaryFailed": "Summary failed",
 					"card.sourceRecorded": "Recorded",
 					"actions.deleteTitle": "Delete",
@@ -226,7 +227,7 @@ describe("RecordingDetailHeader action styling", () => {
 
 		expect(screen.queryByTestId("recording-detail-generate-summary")).not.toBeInTheDocument()
 		const badge = screen.getByTestId("recording-detail-summary-status")
-		expect(badge).toHaveTextContent("Summarizing now")
+		expect(badge).toHaveTextContent("Summarizing")
 		expect(badge).toHaveClass("border-sky-500/25", "bg-sky-500/10")
 		expect(badge.querySelector("svg")).toHaveClass("animate-spin")
 	})
@@ -253,7 +254,7 @@ describe("RecordingDetailHeader action styling", () => {
 		expect(badge).toHaveClass("border-amber-500/25", "bg-amber-500/10")
 	})
 
-	it("keeps summary CTA hidden when summary generation failed", () => {
+	it("shows regenerate summary CTA when summary generation failed", () => {
 		render(
 			<RecordingDetailHeader
 				{...baseProps}
@@ -267,7 +268,9 @@ describe("RecordingDetailHeader action styling", () => {
 			/>,
 		)
 
-		expect(screen.queryByTestId("recording-detail-generate-summary")).not.toBeInTheDocument()
+		expect(screen.getByTestId("recording-detail-generate-summary")).toHaveTextContent(
+			"Regenerate summary",
+		)
 		const badge = screen.getByTestId("recording-detail-summary-status")
 		expect(badge).toHaveTextContent("Summary failed")
 		expect(badge).toHaveClass("border-destructive/25", "bg-destructive/10")

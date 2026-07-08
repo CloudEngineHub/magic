@@ -16,6 +16,7 @@ vi.mock("@/apis", () => ({
 		getRecordingSummaryResult: vi.fn(),
 		getSuperMagicTopicModel: vi.fn(),
 		summarizeRecordedTask: vi.fn(),
+		resummarizeRecordedTask: vi.fn(),
 		batchTaskProgress: vi.fn(),
 		editProject: vi.fn(),
 		batchDeleteProjects: vi.fn(),
@@ -552,6 +553,120 @@ describe("AudioRecordingsStore", () => {
 		})
 	})
 
+	it("resubmits summary with model only and starts polling", async () => {
+		const store = new AudioRecordingsStore()
+		const item: AudioProjectListItem = {
+			id: "mock-project-resummary",
+			project_name: "Mock resummary entry",
+			created_at: 1780657155,
+			duration: 120,
+			tags: [],
+			device_id: "mock-device",
+			audio_source: "recorded",
+			current_phase: "summarizing",
+			phase_status: "failed",
+			card_status: "summary_failed",
+			is_summarized: false,
+			task_key: "mock-task-key-resummary",
+			topic_id: "mock-topic-resummary",
+			model_id: "mock-model-resummary",
+		}
+
+		store.list = [item]
+		vi.mocked(SuperMagicApi.resummarizeRecordedTask).mockResolvedValue({
+			success: true,
+			task_key: "mock-task-key-resummary",
+		})
+
+		await store.resubmitSummary(item)
+
+		expect(SuperMagicApi.resummarizeRecordedTask).toHaveBeenCalledWith({
+			task_key: "mock-task-key-resummary",
+			model_id: "mock-model-resummary",
+		})
+		expect(store.list[0]?.card_status).toBe("summarizing")
+		expect(store.list[0]?.phase_status).toBe("in_progress")
+		expect(summaryProgressPollerMock.addTask).toHaveBeenCalledWith("mock-task-key-resummary")
+	})
+
+	it("optimistically marks resummary as summarizing before API resolves", async () => {
+		const store = new AudioRecordingsStore()
+		const item: AudioProjectListItem = {
+			id: "mock-project-resummary-pending",
+			project_name: "Mock pending resummary entry",
+			created_at: 1780657155,
+			duration: 120,
+			tags: [],
+			device_id: "mock-device",
+			audio_source: "recorded",
+			current_phase: "summarizing",
+			phase_status: "failed",
+			card_status: "summary_failed",
+			is_summarized: false,
+			task_key: "mock-task-key-resummary-pending",
+			topic_id: "mock-topic-resummary-pending",
+			model_id: "mock-model-resummary-pending",
+		}
+		let resolveRequest: ((value: { success: boolean; task_key: string }) => void) | undefined
+
+		store.list = [item]
+		vi.mocked(SuperMagicApi.resummarizeRecordedTask).mockReturnValue(
+			new Promise((resolve) => {
+				resolveRequest = resolve
+			}),
+		)
+
+		const submitPromise = store.resubmitSummary(item)
+
+		expect(store.list[0]?.card_status).toBe("summarizing")
+		expect(store.list[0]?.phase_status).toBe("in_progress")
+		// Item already exists in authoritative list — should not be duplicated in optimisticItems
+		expect(store.optimisticItems).toHaveLength(0)
+		if (!resolveRequest) throw new Error("mock resummary resolver was not initialized")
+		resolveRequest({
+			success: true,
+			task_key: "mock-task-key-resummary-pending",
+		})
+		await submitPromise
+	})
+
+	it("rolls back optimistic resummary state when API submission fails", async () => {
+		const store = new AudioRecordingsStore()
+		const item: AudioProjectListItem = {
+			id: "mock-project-resummary-failed-submit",
+			project_name: "Mock failed resummary submit entry",
+			created_at: 1780657155,
+			duration: 120,
+			tags: [],
+			device_id: "mock-device",
+			audio_source: "recorded",
+			current_phase: "summarizing",
+			phase_status: "failed",
+			card_status: "summary_failed",
+			is_summarized: false,
+			task_key: "mock-task-key-resummary-failed-submit",
+			topic_id: "mock-topic-resummary-failed-submit",
+			model_id: "mock-model-resummary-failed-submit",
+		}
+
+		store.list = [item]
+		vi.mocked(SuperMagicApi.resummarizeRecordedTask).mockRejectedValue(
+			new Error("mock resummary submit failure"),
+		)
+
+		const result = await store.resubmitSummary(item)
+
+		expect(result).toEqual({ ok: false, reason: "api" })
+		expect(store.list[0]).toMatchObject({
+			card_status: "summary_failed",
+			phase_status: "failed",
+		})
+		expect(store.optimisticItems.some((entry) => entry.id === item.id)).toBe(false)
+		expect(summaryProgressPollerMock.addTask).not.toHaveBeenCalledWith(
+			"mock-task-key-resummary-failed-submit",
+		)
+	})
+
 	it("patches list item when progress reports summarizing completed", () => {
 		const store = new AudioRecordingsStore()
 		store.list = [
@@ -582,6 +697,41 @@ describe("AudioRecordingsStore", () => {
 
 		expect(store.list[0]?.card_status).toBe("summarized")
 		expect(store.list[0]?.is_summarized).toBe(true)
+	})
+
+	it("keeps progress summarizing when previous list item still has finished flags", () => {
+		const store = new AudioRecordingsStore()
+		store.list = [
+			{
+				id: "mock-project-progress-resummary",
+				project_name: "Mock progress resummary",
+				created_at: 1780657155,
+				duration: 120,
+				tags: [],
+				device_id: "mock-device",
+				audio_source: "recorded",
+				current_phase: "summarizing",
+				phase_status: "completed",
+				card_status: "summarized",
+				is_summarized: true,
+				project_status: "finished",
+				current_topic_status: "finished",
+				task_key: "mock-task-progress-resummary",
+			},
+		]
+
+		store.patchListItemFromProgress({
+			exists: true,
+			task_key: "mock-task-progress-resummary",
+			project_id: "mock-project-progress-resummary",
+			current_phase: "summarizing",
+			phase_status: "in_progress",
+			phase_percent: 0,
+		})
+
+		expect(store.list[0]?.card_status).toBe("summarizing")
+		expect(store.list[0]?.phase_status).toBe("in_progress")
+		expect(store.list[0]?.is_summarized).toBe(false)
 	})
 
 	it("patches list item duration from progress duration_seconds", () => {

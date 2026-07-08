@@ -10,6 +10,7 @@ import {
 	deleteAudioRecordingProjects,
 	moveAudioRecordingProjects,
 	renameAudioRecordingProject,
+	resubmitAudioRecordingSummary,
 	submitAudioRecordingSummary,
 } from "../utils/audio-recording-actions"
 import { downloadRecordingAudioFile } from "../utils/download-recording-audio"
@@ -130,6 +131,28 @@ export function useRecordingDetailActions(input: UseRecordingDetailActionsInput)
 		}
 	}, [onProjectItemChange, projectItem, t])
 
+	const resubmitSummary = useCallback(async () => {
+		if (!projectItem) return false
+		setSummarySubmitting(true)
+		try {
+			const result = await resubmitAudioRecordingSummary(projectItem)
+			if (!result.ok) {
+				if (result.reason === "missingModel") {
+					toast.error(t("summary.missingModel"))
+				} else if (result.reason === "missingParams") {
+					toast.error(t("summary.missingParams"))
+				} else {
+					toast.error(t("summary.submitFailed"))
+				}
+				return false
+			}
+			onProjectItemChange(buildOptimisticSummarizingProject(projectItem))
+			return true
+		} finally {
+			setSummarySubmitting(false)
+		}
+	}, [onProjectItemChange, projectItem, t])
+
 	const runDownload = useCallback(
 		async (task: () => Promise<boolean>) => {
 			if (downloading) return false
@@ -229,6 +252,7 @@ export function useRecordingDetailActions(input: UseRecordingDetailActionsInput)
 		deleteProject,
 		moveToGroup,
 		submitSummary,
+		resubmitSummary,
 		downloadAudio,
 		downloadTranscript,
 		downloadNotes,

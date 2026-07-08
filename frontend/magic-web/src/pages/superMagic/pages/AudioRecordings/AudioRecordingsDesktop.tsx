@@ -7,7 +7,6 @@ import { toast } from "sonner"
 import { useTranslation } from "react-i18next"
 import useNavigate from "@/routes/hooks/useNavigate"
 import { RouteName } from "@/routes/constants"
-import SuperMagicService from "@/pages/superMagic/services"
 import type { AudioProjectListItem } from "@/types/audioProject"
 import { useAutoLoadMoreSentinel } from "@/pages/superMagic/hooks/useAutoLoadMoreSentinel"
 import AudioRecordingCard from "./components/AudioRecordingCard"
@@ -39,6 +38,7 @@ import { registerAudioRecordingsShellRefreshHandler } from "./utils/request-audi
 import {
 	patchAudioRecordingsFilterSession,
 	readAudioRecordingsFilterSession,
+	resolveAvailableAudioRecordingGroupId,
 } from "./utils/audio-recordings-filter-session"
 import { useAudioRecordingCopyToProject } from "./hooks/useAudioRecordingCopyToProject"
 
@@ -71,10 +71,21 @@ function AudioRecordingsDesktop({ scrollViewportRef }: AudioRecordingsDesktopPro
 	const [totalGroupCount, setTotalGroupCount] = useState(0)
 	const [ungroupedCount, setUngroupedCount] = useState(0)
 	const [currentGroupId, setCurrentGroupId] = useState(initialFilterSession.groupId)
+	const [hasLoadedGroups, setHasLoadedGroups] = useState(false)
 	const [groupLoading, setGroupLoading] = useState(false)
 	const [isManageGroupsOpen, setIsManageGroupsOpen] = useState(false)
 	const [isSettingsOpen, setIsSettingsOpen] = useState(false)
 	const [moveTarget, setMoveTarget] = useState<AudioProjectListItem | null>(null)
+
+	/** Keeps the active group filter aligned across UI state, store queries, and session cache. */
+	const handleGroupChange = useCallback(
+		(groupId: string) => {
+			setCurrentGroupId(groupId)
+			store.setWorkspaceId(groupId)
+			patchAudioRecordingsFilterSession({ groupId })
+		},
+		[store],
+	)
 
 	// Fetch recording groups metadata
 	const refreshGroups = useCallback(async () => {
@@ -84,6 +95,7 @@ function AudioRecordingsDesktop({ scrollViewportRef }: AudioRecordingsDesktopPro
 			setGroups(result.groups)
 			setTotalGroupCount(result.totalCount)
 			setUngroupedCount(result.ungroupedCount)
+			setHasLoadedGroups(true)
 		} catch (error) {
 			console.error("Failed to load recording groups:", error)
 		} finally {
@@ -142,6 +154,14 @@ function AudioRecordingsDesktop({ scrollViewportRef }: AudioRecordingsDesktopPro
 	}, [handleRefresh])
 
 	useEffect(() => {
+		if (!hasLoadedGroups) return
+		const availableGroupId = resolveAvailableAudioRecordingGroupId(currentGroupId, groups)
+		if (availableGroupId !== currentGroupId) {
+			handleGroupChange(availableGroupId)
+		}
+	}, [currentGroupId, groups, handleGroupChange, hasLoadedGroups])
+
+	useEffect(() => {
 		if (!hasHydratedFilters) return
 		if (isSearchComposing) return
 		void store.fetchList({ page: 1, keyword: debouncedKeyword.trim() })
@@ -172,13 +192,6 @@ function AudioRecordingsDesktop({ scrollViewportRef }: AudioRecordingsDesktopPro
 		patchAudioRecordingsFilterSession({ datePreset: value })
 	}
 
-	/** Keeps the active group filter aligned across UI state, store queries, and session cache. */
-	function handleGroupChange(groupId: string) {
-		setCurrentGroupId(groupId)
-		store.setWorkspaceId(groupId)
-		patchAudioRecordingsFilterSession({ groupId })
-	}
-
 	/** Persists search text without changing the existing debounce-based request cadence. */
 	function handleSearchKeywordChange(value: string) {
 		setSearchKeyword(value)
@@ -194,8 +207,8 @@ function AudioRecordingsDesktop({ scrollViewportRef }: AudioRecordingsDesktopPro
 	// Group Manage callbacks — manage dialog switches list filter after create
 	const handleCreateGroupFromManage = async (name: string) => {
 		const created = await recordingGroupsService.createGroup(name)
-		handleGroupChange(created.id)
 		await refreshGroups()
+		handleGroupChange(created.id)
 		return created
 	}
 
@@ -243,20 +256,6 @@ function AudioRecordingsDesktop({ scrollViewportRef }: AudioRecordingsDesktopPro
 				cardStatus: item.card_status,
 				audioFileId: item.audio_file_id,
 			},
-		})
-	}
-
-	/** Initializes Super state before leaving the recordings shell for the backing project page */
-	async function handleOpenProjectDetail(item: AudioProjectListItem) {
-		try {
-			await SuperMagicService.initializeState({ projectId: item.id })
-		} catch (error) {
-			console.error("Failed to initialize project state before navigation:", error)
-		}
-
-		navigate({
-			name: RouteName.SuperWorkspaceProjectState,
-			params: { projectId: item.id },
 		})
 	}
 
@@ -309,8 +308,42 @@ function AudioRecordingsDesktop({ scrollViewportRef }: AudioRecordingsDesktopPro
 		}
 	}
 
+	/** Submits a re-summary request immediately without a secondary scope dialog. */
+	async function handleResummarize(item: AudioProjectListItem) {
+		const result = await store.resubmitSummary(item)
+		if (result.ok) return
+
+		if (result.reason === "missingParams") {
+			toast.error(t("summary.missingParams"))
+			return
+		}
+		if (result.reason === "missingModel") {
+			toast.error(t("summary.missingModel"))
+			return
+		}
+		if (result.reason === "api") {
+			toast.error(t("summary.submitFailed"))
+		}
+	}
+
+	/** Recovers a merge_failed recording by calling the backend finish-recording recovery API. */
+	async function handleRetryMerge(item: AudioProjectListItem) {
+		const result = await store.retryMerge(item)
+		if (result.ok) return
+
+		if (result.reason === "missingParams") {
+			toast.error(t("summary.missingParams"))
+			return
+		}
+		if (result.reason === "api") {
+			toast.error(t("summary.retryMergeFailed"))
+		}
+	}
+
 	const isRefreshing = store.loading && !store.loadingMore
-	const emptyMessage = debouncedKeyword.trim() ? t("empty.search") : t("empty.description")
+	const isSearchEmptyState = Boolean(debouncedKeyword.trim())
+	// Keep the default empty state concise while preserving search-specific guidance.
+	const emptyMessage = isSearchEmptyState ? t("empty.search") : ""
 
 	return (
 		<div
@@ -372,7 +405,9 @@ function AudioRecordingsDesktop({ scrollViewportRef }: AudioRecordingsDesktopPro
 					data-testid="audio-recordings-empty"
 				>
 					<p className="text-sm font-medium text-foreground">{t("empty.title")}</p>
-					<p className="mt-1 text-sm text-muted-foreground">{emptyMessage}</p>
+					{emptyMessage ? (
+						<p className="mt-1 text-sm text-muted-foreground">{emptyMessage}</p>
+					) : null}
 				</div>
 			) : null}
 
@@ -386,8 +421,17 @@ function AudioRecordingsDesktop({ scrollViewportRef }: AudioRecordingsDesktopPro
 							key={item.id}
 							item={item}
 							onOpen={handleOpenDetail}
-							onSummarize={(entry) => void handleSummarize(entry)}
-							onOpenProject={(entry) => void handleOpenProjectDetail(entry)}
+							onSummarize={(entry) => {
+								if (
+									entry.card_status === "summarized" ||
+									entry.card_status === "summary_failed"
+								) {
+									void handleResummarize(entry)
+									return
+								}
+								void handleSummarize(entry)
+							}}
+							onRetryMerge={handleRetryMerge}
 							onRename={handleRenameRequest}
 							onDelete={handleDeleteRequest}
 							onCopyToProject={(entry) => {

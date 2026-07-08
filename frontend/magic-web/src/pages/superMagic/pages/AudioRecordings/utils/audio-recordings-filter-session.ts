@@ -3,7 +3,10 @@ import type {
 	AudioProjectSortOrder,
 	AudioRecordingSummaryFilter,
 } from "@/types/audioProject"
-import { ALL_RECORDING_GROUP_ID } from "@/services/audioRecordings/RecordingGroupsConstants"
+import {
+	ALL_RECORDING_GROUP_ID,
+	UNGROUPED_RECORDING_GROUP_ID,
+} from "@/services/audioRecordings/RecordingGroupsConstants"
 import type { AudioRecordingsDatePreset } from "./resolve-date-preset-range"
 
 export const AUDIO_RECORDINGS_FILTER_SESSION_KEY = "audio-recordings.list.filters.v1"
@@ -133,4 +136,16 @@ export function resolveMobileAudioRecordingsSortOption(
 ): MobileAudioRecordingsSessionSortOption {
 	if (snapshot.sortBy === "created_at" && snapshot.sortOrder === "desc") return "created_at_desc"
 	return "updated_at_desc"
+}
+
+/** Keeps deleted or invisible saved group ids from producing an empty list-filter selection. */
+export function resolveAvailableAudioRecordingGroupId(
+	groupId: string,
+	groups: Array<{ id: string }>,
+): string {
+	if (groupId === ALL_RECORDING_GROUP_ID || groupId === UNGROUPED_RECORDING_GROUP_ID) {
+		return groupId
+	}
+
+	return groups.some((group) => group.id === groupId) ? groupId : ALL_RECORDING_GROUP_ID
 }

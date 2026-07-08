@@ -677,6 +677,7 @@ const TopicFilesPanel = forwardRef<TopicFilesPanelRef, TopicFilesPanelProps>(
 							onClose={projectDetailFilesController.closeShareModal}
 							mode="file"
 							attachments={attachments}
+							attachmentList={attachments}
 							defaultSelectedFileIds={projectDetailFilesController.shareFileIds}
 							projectName={selectedProject?.project_name}
 							projectId={projectId}
