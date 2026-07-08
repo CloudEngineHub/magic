@@ -1,4 +1,5 @@
 export const enum RoutePath {
+	Maintenance = "/maintenance",
 	Initialization = "/initialization",
 	ApprovalDetailFull = "/approval/:id",
 	ApprovalFilePreview = "/approval/file/preview",

@@ -52,6 +52,7 @@ export interface AppMenuItem {
 
 export interface GlobalConfig {
 	is_maintenance: boolean
+	maintenance_type: "global_notice" | "site_close"
 	maintenance_description: string
 	need_initial: boolean
 }

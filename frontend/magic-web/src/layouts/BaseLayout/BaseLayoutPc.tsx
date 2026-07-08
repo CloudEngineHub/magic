@@ -21,6 +21,7 @@ import { useSidebarAnimation, useSidebarResponsive } from "./hooks"
 import { globalShareManagementStore } from "@/pages/superMagic/components/ShareManagement/stores"
 import { magic } from "@/enhance/magicElectron"
 import LayoutModalContainer from "./components/LayoutModalContainer"
+import MaintenanceNotice from "@/components/global/MaintenanceNotice"
 
 const isElectron = magic?.env?.isElectron?.()
 
@@ -83,12 +84,13 @@ const BaseLayoutPc = observer(() => {
 			style={ROOT_SAFE_AREA_STYLE}
 			onClick={handleClick}
 		>
+			<MaintenanceNotice />
 			{isElectron && (
 				<Suspense fallback={null}>
 					<ElectronHeader />
 				</Suspense>
 			)}
-			<ResizablePanelGroup direction="horizontal">
+			<ResizablePanelGroup direction="horizontal" className="min-h-0 flex-1">
 				{/* Sidebar Panel - always rendered with smooth width transition */}
 				<Observer>
 					{() => (

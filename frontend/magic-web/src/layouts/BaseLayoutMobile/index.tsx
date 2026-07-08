@@ -25,6 +25,7 @@ import {
 } from "@/pages/superMagicMobile/components/MobileDocumentTheme"
 import useMetaSet from "@/routes/hooks/useRoutesMetaSet"
 import { useAntdMobileLocale } from "@/hooks/useAntdMobileLocale"
+import MaintenanceNotice from "@/components/global/MaintenanceNotice"
 
 const MobileTabBar = lazy(() => import("./components/MobileTabBar"))
 
@@ -91,6 +92,7 @@ const BaseLayoutMobile = () => {
 				<MobileDocumentThemeSync />
 				<div className={styles.root}>
 					<GlobalSafeArea direction="top" />
+					<MaintenanceNotice />
 					<div
 						className={cx(styles.container, {
 							[styles.view]: hasVisibleTabBar,
