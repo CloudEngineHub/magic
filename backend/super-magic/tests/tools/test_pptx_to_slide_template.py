@@ -1,3 +1,5 @@
+import json
+
 from PIL import Image
 
 from app.tools.pptx_to_slide_template import preview_assets, runner
@@ -123,3 +125,26 @@ def test_rewrite_slide_html_does_not_inject_project_bridge(tmp_path):
 
     assert "../theme.css" in rewritten
     assert "slide-bridge.js" not in rewritten
+
+
+def test_write_magic_project_uses_slide_project_config(tmp_path):
+    path = runner._write_magic_project(
+        tmp_path,
+        "昆虫科普-探索奇妙的昆虫世界",
+        ["slides/slide-001.html", "slides/slide-002.html"],
+    )
+
+    text = path.read_text(encoding="utf-8")
+    config_text = text.removeprefix("window.magicProjectConfig = ").split(
+        ";\nwindow.magicProjectConfigure(window.magicProjectConfig);"
+    )[0]
+    config = json.loads(config_text)
+
+    assert config == {
+        "version": "1.0.0",
+        "type": "slide",
+        "name": "昆虫科普-探索奇妙的昆虫世界",
+        "slides": ["slides/slide-001.html", "slides/slide-002.html"],
+    }
+    assert "canvas" not in config
+    assert "slide-bridge.js" not in text

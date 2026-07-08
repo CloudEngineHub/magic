@@ -1,6 +1,8 @@
 # Custom Template Workflow
 
-Use when the user describes a style in text, provides screenshots, or gives an existing PPT project.
+Use when the user describes a style in text, provides screenshots, or provides an existing template package.
+
+If the user provides an existing Super Magic slide project directory that contains `magic.project.js` with `type: "slide"` and asks to convert or extract it into a reusable template, use `project-template-workflow.md` instead.
 
 ## 1. Inputs
 

@@ -24,8 +24,8 @@ Input PPTX file path, supports workspace-relative path or absolute path.""",
     )
     output_dir: str = Field(
         "",
-        description="""<!--zh: 输出根目录，必须位于工作区内。为空时默认写入 `slide-templates/`。本工具只写入转换草稿，不创建最终 ZIP。-->
-Output root directory. Must be inside workspace. Defaults to `slide-templates/` when empty. This tool only writes the conversion draft and does not create the final ZIP.""",
+        description="""<!--zh: 输出根目录，必须位于工作区内。为空时默认写入 `slide-templates/`。本工具只写入转换草稿，不创建最终 ZIP。草稿目录可包含 `magic.project.js` 用于预览。-->
+Output root directory. Must be inside workspace. Defaults to `slide-templates/` when empty. This tool only writes the conversion draft and does not create the final ZIP. The draft directory may include `magic.project.js` for preview.""",
     )
     template_id: str = Field(
         "",
@@ -80,13 +80,14 @@ class ConvertPptxToSlideTemplate(WorkspaceTool[ConvertPptxToSlideTemplateParams]
 
     输出结构：
     - `<template-dir>/template.json`
+    - `<template-dir>/magic.project.js`
     - `<template-dir>/theme.css`
     - `<template-dir>/images/`
     - `<template-dir>/slides/*.html`
     - `<output-root>/artifacts/<template-id>/previews/`
 
     `visual-spec.md` 需要在工具调用后由大模型根据转换产物的实际视觉风格分析生成。
-    最终 `<template-id>-template.zip` 也必须在二次调整完成后再生成。
+    `magic.project.js` 只用于转换草稿预览，最终 `<template-id>-template.zip` 必须在二次调整完成后再生成，且不包含该文件。
     -->
     Convert a PPTX file into a reusable HTML slide template project.
     """
@@ -135,6 +136,7 @@ class ConvertPptxToSlideTemplate(WorkspaceTool[ConvertPptxToSlideTemplateParams]
                 "requires_visual_spec": True,
                 "preview_dir": str(result.preview_dir),
                 "template_json": str(result.template_json_path),
+                "magic_project": str(result.magic_project_path),
                 "thumbnail_image": result.payload.get("thumbnail_image", ""),
                 "collage_image": result.payload.get("collage_image", ""),
             },
@@ -211,6 +213,7 @@ class ConvertPptxToSlideTemplate(WorkspaceTool[ConvertPptxToSlideTemplateParams]
             f"- Requires refinement: `{data.get('requires_refinement', True)}`",
             f"- Requires visual spec: `{data.get('requires_visual_spec', True)}`",
             f"- Metadata: `{data.get('template_json', '')}`",
+            f"- Magic project draft config: `{data.get('magic_project', '')}`",
             f"- Preview artifact directory: `{data.get('preview_dir', '')}`",
             f"- Thumbnail: `{data.get('thumbnail_image', '')}`",
             f"- Collage: `{data.get('collage_image', '')}`",

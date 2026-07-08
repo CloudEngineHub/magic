@@ -9,6 +9,7 @@
 ```text
 <template-dir>/
 ├── template.json
+├── magic.project.js        # optional PPTX conversion draft helper only
 ├── visual-spec.md
 ├── theme.css
 ├── images/
@@ -18,6 +19,8 @@
 ```
 
 模板源码目录只保存可复用源文件。预览图、截图缓存、发布图片和打包产物不得放入模板源码目录。
+
+PPTX 转换草稿目录可以包含 `magic.project.js`，用于 slide 预览或编辑。它不是模板元数据，不写入 `template.json.files`；最终 ZIP 不包含该文件。
 
 打包 ZIP 与模板目录平级：
 
@@ -123,6 +126,7 @@ artifacts/<template-id>/
 - `visual_spec` 可选。最终模板发布前应指向由大模型风格分析生成的 `visual-spec.md`。
 - `package_zip` 可选，只描述推荐打包输出位置。
 - 封面图、缩略图、拼接图等预览图不写入 `template.json.files`。
+- `magic.project.js` 不写入 `template.json.files`。它只允许作为 PPTX 转换草稿辅助文件，最终 ZIP 必须排除。
 
 ## 4. `slides`
 
@@ -145,6 +149,8 @@ artifacts/<template-id>/
 - `description` 使用英文，说明该页面展示的结构和组件。
 - `slides` 数组顺序表示默认播放顺序，不依赖文件名数字排序。
 - 每个 slide 文件必须采用不同布局或组件组合，不能复制同一结构后只改标题。
+- `slides` 必须以模板目录中当前存在的页面文件为准。用户修改模板草稿后，若某个页面文件被删除、改名或移动，必须同步更新 `template.json.slides`；已不存在的页面引用必须自动移除。
+- 打包、发布或继续编辑前，必须重新读取 `slides/` 目录和 `template.json.slides`，以用户最后修改后的文件状态为准。不要因为旧元数据还保留引用而恢复用户删除的页面。
 
 HTML 中可以保留少量 `data-slot`、`data-slot-type`、`data-slot-role` 作为大模型编辑提示。它们不进入 `template.json` 元数据契约。生成新 PPT 时，应根据 HTML 的真实结构、样式和内容判断如何替换或改写，而不是依赖 `template.json.slots`。
 

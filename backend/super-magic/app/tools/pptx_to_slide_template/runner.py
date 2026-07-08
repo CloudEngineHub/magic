@@ -26,6 +26,7 @@ class PptxToSlideTemplateResult:
     zip_path: Path
     preview_dir: Path
     template_json_path: Path
+    magic_project_path: Path
     slide_count: int
     warnings: List[str]
     payload: Dict[str, Any]
@@ -260,6 +261,22 @@ def _copy_render_assets(render_dir: Path, template_dir: Path) -> bool:
     return True
 
 
+def _write_magic_project(template_dir: Path, project_name: str, slide_files: List[str]) -> Path:
+    config = {
+        "version": "1.0.0",
+        "type": "slide",
+        "name": project_name,
+        "slides": slide_files,
+    }
+    content = (
+        f"window.magicProjectConfig = {json.dumps(config, ensure_ascii=False, indent=2)};\n"
+        "window.magicProjectConfigure(window.magicProjectConfig);\n"
+    )
+    path = template_dir / "magic.project.js"
+    path.write_text(content, encoding="utf-8")
+    return path
+
+
 def _load_json(path: Path) -> Dict[str, Any]:
     return json.loads(path.read_text(encoding="utf-8"))
 
@@ -355,6 +372,12 @@ async def convert_pptx_to_slide_template(
             }
         )
 
+    magic_project_path = _write_magic_project(
+        template_dir,
+        source_path.stem,
+        [str(slide["file"]) for slide in slide_index],
+    )
+
     warnings = [str(item.get("message") or item) for item in report.get("warnings", [])] if isinstance(report.get("warnings"), list) else []
     if not slide_index:
         warnings.append("No slide HTML files were copied into the template project")
@@ -389,6 +412,7 @@ async def convert_pptx_to_slide_template(
         zip_path=zip_path,
         preview_dir=preview_dir,
         template_json_path=template_json_path,
+        magic_project_path=magic_project_path,
         slide_count=len(slide_index),
         warnings=warnings,
         payload={
@@ -402,6 +426,7 @@ async def convert_pptx_to_slide_template(
             "requires_visual_spec": True,
             "preview_dir": str(preview_dir),
             "template_json": str(template_json_path),
+            "magic_project": str(magic_project_path),
             "thumbnail_image": str(preview_dir / preview_files["thumbnail_image"]) if "thumbnail_image" in preview_files else "",
             "collage_image": str(preview_dir / preview_files["collage_image"]) if "collage_image" in preview_files else "",
             "slide_count": len(slide_index),

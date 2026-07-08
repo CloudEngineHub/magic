@@ -1,12 +1,11 @@
 ---
 name: slide-template
-description: "Use when the user asks to create slides with a specific style, wants to use or inspect a PPT template by code, wants to see platform-provided PPT template options before creating, describes a custom template style, provides a PPTX/PPT file to convert into a platform template, or wants to extract a template from an existing PPT project."
-description-cn: "当用户想查看平台提供的 PPT 模板选项、通过模板 code 使用或检查 PPT 模板、用特定风格制作幻灯片、描述自定义模板风格、提供 PPTX/PPT 文件转换为平台模板，或从现有 PPT 项目中抽象模板时使用。"
+description: "Use when the user asks to create slides with a specific style, wants to use or inspect a PPT template by code, wants to see platform-provided PPT template options before creating, describes a custom template style, provides a PPTX/PPT file to convert into a platform template, or wants to extract a template from an existing Super Magic slide project."
 ---
 
 # Slide Template Manager
 
-Use this skill to retrieve platform templates by exact code, create a custom template from a style description, extract one from a PPTX/PPT file, or extract one from an existing PPT project.
+Use this skill to retrieve platform templates by exact code, create a custom template from a style description, extract one from a PPTX/PPT file, or extract one from an existing Super Magic slide project.
 
 ## Template Metadata
 
@@ -35,6 +34,7 @@ Do not write or rely on legacy fields such as `name`, `template_dir`, `package_t
 - Platform template list is available but no template is selected: recommend 3-5 suitable options with `ask_user`. Each option must include name, short description, and exact `code`, plus "no template/default style".
 - User only describes scenario/topic/audience without enough visual specs and no platform template list is available: ask for a platform template code or confirm no template/default style.
 - User provides a PPTX/PPT/presentation template file or URL and asks to convert it into a platform template: read `references/pptx-template-workflow.md` and follow the PPTX Template Workflow first.
+- User provides an existing Super Magic slide project directory that contains `magic.project.js` with `type: "slide"` and asks to convert or extract it into a reusable template: read `references/project-template-workflow.md` and follow the Project Template Workflow. Do not modify the source project, and do not create the final ZIP until the user confirms.
 - User describes concrete visual style (colors, materials, layout, decorative elements, visual keywords; 配色/材质/版式/装饰/视觉关键词): generate a custom template first, then use it.
 - Editing/fixing/refactoring existing slides does not trigger template selection unless the user asks for a new PPT/project.
 
@@ -88,7 +88,8 @@ After receiving `template_file_url`:
 
 - First decide whether the page needs images. Use images for visual layouts, cover/section/closing pages, specific person/product/scene/case, or sparse text.
 - Skip image search for dense comparison, card grid, timeline/process, data dashboard, or chart pages.
-- Prefer `image_search`. Try at least 2 content-relevant keyword groups and include style keywords inferred from the downloaded template.
+- When the selected template includes local image or illustration assets and the target slide needs an image, or the user has not provided a required image, inspect and reuse suitable assets from the template first. Prefer these assets for decorative illustrations, cover/section visuals, backgrounds, motifs, and style-consistent placeholders.
+- Use `image_search` only after checking template assets, or when the slide needs a factual photo, specific person/product/place, screenshot, brand mark, or another exact image the template cannot supply. Try at least 2 content-relevant keyword groups and include style keywords inferred from the downloaded template.
 - If search results are poor, use `generate_images` and save output under the PPT project `images/` folder.
 - Apply template style only to creative illustrations (concept visuals, atmosphere, decorative or abstract images). Do not stylize factual photos, real people, real places, products, history/science references, brand marks, screenshots, QR codes, or data graphics.
 - Images should occupy meaningful visual space; do not use them as tiny icons.
@@ -98,11 +99,15 @@ After receiving `template_file_url`:
 
 ## Custom Template Workflow
 
-Use when the user describes a style in text, provides screenshots, or gives an existing PPT project. Read `<skill_dir>/references/custom-template-workflow.md` and follow it before generating custom template files.
+Use when the user describes a style in text, provides screenshots, or provides an existing template package. Read `<skill_dir>/references/custom-template-workflow.md` and follow it before generating custom template files.
 
 ## PPTX Template Workflow
 
-Use when the user provides a presentation file such as `.pptx`, `.ppt`, `.potx`, `.pot`, `.ppsx`, a WPS presentation, or a URL to a presentation template and asks to convert it into this platform's reusable template format. Read `<skill_dir>/references/pptx-template-workflow.md`, then call `convert_pptx_to_slide_template`. After the tool returns, keep working: analyze the converted content, write `visual-spec.md`, refine `template.json`, `theme.css`, `images/`, and `slides/*.html`, run lightweight QA, then ask whether to package the refined draft as the final template ZIP. Do not call the old raw HTML renderer tool or run this skill's old PPTX extraction scripts.
+Use when the user provides a presentation file such as `.pptx`, `.ppt`, `.potx`, `.pot`, `.ppsx`, a WPS presentation, or a URL to a presentation template and asks to convert it into this platform's reusable template format. Read `<skill_dir>/references/pptx-template-workflow.md`, then call `convert_pptx_to_slide_template`. After the tool returns, keep working: analyze the converted content, write `visual-spec.md`, sanitize obvious sensitive content, confirm ambiguous sensitive assets through `ask_user`, refine `template.json`, `theme.css`, `images/`, and `slides/*.html`, run lightweight QA, then ask whether to package the refined draft as the final template ZIP. Do not call the old raw HTML renderer tool or run this skill's old PPTX extraction scripts.
+
+## Project Template Workflow
+
+Use when the user provides an existing Super Magic slide project directory that contains `magic.project.js` with `type: "slide"` and asks to convert or extract it into a reusable platform template. Read `<skill_dir>/references/project-template-workflow.md` and follow it before creating template draft files.
 
 ## Style Specificity & Template Scope
 
@@ -116,6 +121,7 @@ Use when the user provides a presentation file such as `.pptx`, `.ppt`, `.potx`,
 - Platform template workflow output: a complete template package generated through `creating-slides`, using template files retrieved through `get_slides_template_download_url`.
 - Built-in local template workflow output: none; local bundled templates are no longer supported.
 - Custom workflow output: a complete template package generated through `creating-slides`.
-- PPTX template conversion output: first create a draft template folder containing `template.json`, `theme.css`, `images/`, and `slides/*.html`; use the model to analyze the converted visual style and write `visual-spec.md`, refine the folder, run lightweight QA, then ask the user whether to create the final sibling `<template-id>-template.zip`.
+- PPTX template conversion output: first create a draft template folder containing `template.json`, optional `magic.project.js`, `theme.css`, `images/`, and `slides/*.html`; use the model to analyze the converted visual style, write `visual-spec.md`, sanitize obvious sensitive content, confirm ambiguous sensitive assets through `ask_user`, refine the folder, run lightweight QA, then ask the user whether to create the final sibling `<template-id>-template.zip`. If a ZIP is created, exclude `magic.project.js` and unconfirmed sensitive assets.
+- Project template conversion output: first create a new standalone draft template folder containing `template.json`, `visual-spec.md`, `theme.css`, `images/`, and deduplicated `slides/*.html`; sanitize sensitive content and ask the user through `ask_user` before keeping ambiguous sensitive assets such as logos or internal screenshots. Only after user confirmation, create the sibling `<template-id>-template.zip`.
 - Preview images may be generated by a script from `slides/*.html`, but they must be stored in build or publishing artifacts and must not be included in the template ZIP.
 - Do not paste raw HTML in chat.
