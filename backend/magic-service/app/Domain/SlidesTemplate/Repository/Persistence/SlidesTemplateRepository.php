@@ -150,6 +150,8 @@ class SlidesTemplateRepository extends AbstractRepository implements SlidesTempl
     {
         $query = $withTrashed ? SlidesTemplateModel::withTrashed() : SlidesTemplateModel::query();
         $builder = $this->createBuilder($dataIsolation, $query);
-        return $builder->where('code', $code)->first();
+        $model = $builder->where('code', $code)->first();
+
+        return $model instanceof SlidesTemplateModel ? $model : null;
     }
 }
