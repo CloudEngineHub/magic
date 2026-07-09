@@ -90,6 +90,7 @@
 		"actionFailed": "Action Failed",
 		"actionSuccess": "Action Successful",
 		"addSuccess": "Add Successful",
+		"codeConflictRetry": "Template code conflict. A new code has been generated automatically",
 		"copyFailed": "Copy Failed",
 		"copySuccess": "Copy Successful",
 		"createSuccess": "Create Successful",
@@ -241,6 +242,7 @@
 			"collage": "Preview Collage",
 			"description": "Description",
 			"label": "Template Name",
+			"previewImages": "Per-slide Preview Images",
 			"previewUrl": "Preview URL",
 			"sort": "Sort",
 			"status": "Status",
@@ -266,6 +268,10 @@
 			"imageUploadedDescription": "Image uploaded. Click, drag, or paste to replace it",
 			"onlyImage": "Only image files are supported",
 			"onlyZip": "Only ZIP files are supported",
+			"previewImagesDescription": "Click, drag, or paste multiple images to upload. Drag thumbnails to reorder slides",
+			"previewImagesEmpty": "No per-slide preview images yet. Click or drag images to upload",
+			"previewImagesUploadedDescription": "{{count}} image(s) uploaded. You can add more or drag to reorder",
+			"removePreviewImage": "Remove this preview image",
 			"zipDescription": "Click or drag a ZIP file to upload",
 			"zipUploadedDescription": "ZIP uploaded. Click or drag to replace it"
 		}

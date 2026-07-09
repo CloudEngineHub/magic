@@ -46,7 +46,9 @@ function SlidesPresetCard({
 
 	const label = lt(template.label) ?? lt(template.value) ?? ""
 	const testIdSuffix = getTemplateTestIdSuffix(template)
-	const canPreview = Boolean(template.preview_url)
+	const canPreview = Boolean(
+		template.preview_image_urls?.length || template.collage_url || template.preview_url,
+	)
 
 	useEffect(() => {
 		return () => {

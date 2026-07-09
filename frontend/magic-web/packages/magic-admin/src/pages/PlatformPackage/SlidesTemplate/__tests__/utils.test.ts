@@ -3,9 +3,11 @@ import { SlidesTemplate } from "../../../../types/slidesTemplate"
 import {
 	buildSlidesTemplateCategorySaveParams,
 	buildSlidesTemplateSaveParams,
+	generateSlidesTemplateCode,
 	getSlidesTemplateStatusByChecked,
 	getSlidesTemplateStatusColor,
 	isSystemSlidesTemplate,
+	joinUploadDir,
 	resolveSlidesTemplateCategoryName,
 	resolveSlidesTemplateTitle,
 } from "../utils"
@@ -18,6 +20,7 @@ describe("slides template page utils", () => {
 			description: { zh_CN: "描述", en_US: "Description" },
 			thumbnail_file_key: "thumb.png",
 			collage_file_key: "",
+			preview_image_file_keys: ["preview-1.png", "preview-2.png"],
 			template_file_key: "template.zip",
 			preview_url: "",
 			status: true,
@@ -30,11 +33,39 @@ describe("slides template page utils", () => {
 			description: { zh_CN: "描述", en_US: "Description" },
 			thumbnail_file_key: "thumb.png",
 			collage_file_key: null,
+			preview_image_file_keys: ["preview-1.png", "preview-2.png"],
 			template_file_key: "template.zip",
 			preview_url: null,
 			status: SlidesTemplate.StatusMap.enabled,
 			sort: 0,
 		})
+	})
+
+	it("generates backend-compatible template code", () => {
+		const firstCode = generateSlidesTemplateCode()
+		const secondCode = generateSlidesTemplateCode()
+
+		expect(firstCode).toMatch(/^PPT-[A-Za-z0-9]+(-[A-Za-z0-9]+)*$/)
+		expect(secondCode).toMatch(/^PPT-[A-Za-z0-9]+(-[A-Za-z0-9]+)*$/)
+		expect(firstCode).not.toBe(secondCode)
+	})
+
+	it("includes optional code when building save params", () => {
+		const payload = buildSlidesTemplateSaveParams({
+			code: "PPT-Abc123",
+			category_code: "PPT-CATE-business",
+			label: { zh_CN: "模板", en_US: "Template" },
+			description: { zh_CN: "描述", en_US: "Description" },
+			thumbnail_file_key: "thumb.png",
+			collage_file_key: null,
+			preview_image_file_keys: [],
+			template_file_key: "template.zip",
+			preview_url: null,
+			status: true,
+			sort: 10,
+		})
+
+		expect(payload.code).toBe("PPT-Abc123")
 	})
 
 	it("clears empty template category code", () => {
@@ -103,6 +134,15 @@ describe("slides template page utils", () => {
 			}),
 		).toBe(false)
 		expect(isSystemSlidesTemplate({ source_type: undefined })).toBe(false)
+	})
+
+	it("joins upload credential dir and business dir", () => {
+		expect(joinUploadDir("org/public", "slide-templates/PPT-001/")).toBe(
+			"org/public/slide-templates/PPT-001/",
+		)
+		expect(joinUploadDir("org/public/", "/slide-templates/PPT-001/previews/")).toBe(
+			"org/public/slide-templates/PPT-001/previews/",
+		)
 	})
 
 	it("resolves title with language fallback", () => {

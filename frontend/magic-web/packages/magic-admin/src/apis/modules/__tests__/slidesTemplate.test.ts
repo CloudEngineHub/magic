@@ -45,11 +45,13 @@ describe("SlidesTemplateApi", () => {
 		const client = createClient()
 		const api = generateSlidesTemplateApi(client as never)
 		const payload = {
+			code: "PPT-Abc123",
 			category_code: "PPT-CATE-business",
 			label: { zh_CN: "模板", en_US: "Template" },
 			description: { zh_CN: "描述", en_US: "Description" },
 			thumbnail_file_key: "thumb.png",
 			collage_file_key: null,
+			preview_image_file_keys: ["preview-1.png", "preview-2.png"],
 			template_file_key: "template.zip",
 			preview_url: null,
 			status: 1,

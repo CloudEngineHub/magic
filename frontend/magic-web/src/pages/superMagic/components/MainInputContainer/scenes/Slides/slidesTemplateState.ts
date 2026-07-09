@@ -22,6 +22,7 @@ export interface SlidesTemplateItem {
 	}
 	thumbnail_url?: string | null
 	collage_url?: string | null
+	preview_image_urls?: string[]
 	preview_url?: string | null
 	sort: number
 	is_official: boolean
@@ -71,8 +72,7 @@ export const OTHER_SLIDES_TEMPLATE_GROUP_KEY = "other"
 export const SLIDES_TEMPLATE_PAGE_SIZE = 20
 export const SLIDES_TEMPLATE_CATEGORY_PAGE_SIZE = 200
 export const SLIDES_TEMPLATE_IMAGE_PROCESS: ImageProcessOptions = {
-	resize: { w: 1200 },
-	quality: 82,
+	resize: { w: 1920 },
 	format: "webp",
 }
 
@@ -245,6 +245,8 @@ export function toTemplateOption(template: SlidesTemplateItem) {
 		label: template.label,
 		thumbnail_url: template.thumbnail_url ?? undefined,
 		collage_url: template.collage_url ?? undefined,
+		// 每页 PPT 预览图 URL 列表；为空时由前端 UI 降级使用 collage_url
+		preview_image_urls: template.preview_image_urls ?? [],
 		description: template.description,
 		preview_url: template.preview_url ?? undefined,
 		preview_title: {

@@ -31,6 +31,8 @@ export namespace SlidesTemplate {
 		thumbnail_url?: string | null
 		collage_file_key?: string | null
 		collage_url?: string | null
+		preview_image_file_keys?: string[]
+		preview_image_urls?: string[]
 		template_file_key: string
 		template_file_url?: string | null
 		preview_url?: string | null
@@ -50,11 +52,13 @@ export namespace SlidesTemplate {
 	}
 
 	export interface SaveParams {
+		code?: string
 		category_code?: string | null
 		label: LangText
 		description: LangText
 		thumbnail_file_key: string
 		collage_file_key?: string | null
+		preview_image_file_keys?: string[]
 		template_file_key: string
 		preview_url?: string | null
 		status?: Status

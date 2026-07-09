@@ -26,6 +26,10 @@ const officialTemplate: SlidesTemplateItem = {
 	},
 	thumbnail_url: "https://example.com/official.png",
 	collage_url: "https://example.com/official-collage.png",
+	preview_image_urls: [
+		"https://example.com/official-1.png",
+		"https://example.com/official-2.png",
+	],
 	preview_url: "https://example.com/official-preview",
 	sort: 100,
 	is_official: true,
@@ -44,6 +48,7 @@ const organizationTemplate: SlidesTemplateItem = {
 	},
 	thumbnail_url: null,
 	collage_url: null,
+	preview_image_urls: [],
 	preview_url: null,
 	sort: 90,
 	is_official: false,
@@ -183,6 +188,16 @@ describe("slides template state", () => {
 		expect(option?.description).toEqual(organizationTemplate.description)
 		expect(option?.thumbnail_url).toBeUndefined()
 		expect(option?.collage_url).toBeUndefined()
+		expect(option?.preview_image_urls).toEqual([])
 		expect(option?.preview_url).toBeUndefined()
+	})
+
+	it("maps per-slide preview image URLs", () => {
+		const panel = createSlidesPresetPanelConfig([officialTemplate])
+		const styleField = panel.field?.items.find((item) => item.data_key === "style")
+		const group = styleField?.options[0] as OptionGroup | undefined
+		const option = group?.children?.[0]
+
+		expect(option?.preview_image_urls).toEqual(officialTemplate.preview_image_urls)
 	})
 })

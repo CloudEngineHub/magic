@@ -1,11 +1,40 @@
+import { customAlphabet } from "nanoid"
 import { SlidesTemplate } from "../../../types/slidesTemplate"
 
+/**
+ * 后端 code 正则：^PPT-[A-Za-z0-9]+(-[A-Za-z0-9]+)*$
+ * 避开 nanoid 默认字典中的 "_"、"-"，仅使用字母数字，
+ * 保证单独一个原子即可通过正则校验且唯一性足够强。
+ */
+const UPPERCASE_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+const LOWERCASE_ALPHABET = UPPERCASE_ALPHABET.toLowerCase()
+const DIGIT_ALPHABET = "0123456789"
+const SLIDES_TEMPLATE_CODE_ALPHABET = [UPPERCASE_ALPHABET, LOWERCASE_ALPHABET, DIGIT_ALPHABET].join(
+	"",
+)
+const SLIDES_TEMPLATE_CODE_LENGTH = 12
+const generateCodeSegment = customAlphabet(
+	SLIDES_TEMPLATE_CODE_ALPHABET,
+	SLIDES_TEMPLATE_CODE_LENGTH,
+)
+
+/**
+ * 生成新的 PPT 模板 code（仅用于新建模板）。
+ * 形如 `PPT-xxxxxxxxxxxx`，满足后端校验且具备近乎零冲突的随机性，
+ * 冲突时由调用方捕获唯一约束错误后重新生成。
+ */
+export function generateSlidesTemplateCode(): string {
+	return `PPT-${generateCodeSegment()}`
+}
+
 export interface SlidesTemplateFormValues {
+	code?: string
 	category_code?: string | null
 	label: SlidesTemplate.LangText
 	description: SlidesTemplate.LangText
 	thumbnail_file_key: string
 	collage_file_key?: string | null
+	preview_image_file_keys?: string[]
 	template_file_key: string
 	preview_url?: string | null
 	status?: boolean
@@ -38,20 +67,31 @@ export function isSystemSlidesTemplate(record: Pick<SlidesTemplate.Item, "source
 	return record.source_type === SlidesTemplate.SourceTypeMap.system
 }
 
+export function joinUploadDir(baseDir: string, suffixDir: string) {
+	const normalizedBaseDir = baseDir.endsWith("/") ? baseDir : `${baseDir}/`
+	const normalizedSuffixDir = suffixDir.startsWith("/") ? suffixDir.slice(1) : suffixDir
+
+	return `${normalizedBaseDir}${normalizedSuffixDir}`
+}
+
 export function buildSlidesTemplateSaveParams(
 	values: SlidesTemplateFormValues,
 ): SlidesTemplate.SaveParams {
-	return {
+	const params: SlidesTemplate.SaveParams = {
 		category_code: values.category_code || null,
 		label: values.label,
 		description: values.description,
 		thumbnail_file_key: values.thumbnail_file_key,
 		collage_file_key: values.collage_file_key || null,
+		preview_image_file_keys: values.preview_image_file_keys ?? [],
 		template_file_key: values.template_file_key,
 		preview_url: values.preview_url || null,
 		status: getSlidesTemplateStatusByChecked(Boolean(values.status)),
 		sort: values.sort ?? 0,
 	}
+	// code 仅在新建模板时由前端注入；编辑模式不应携带 code，由后端保留原值
+	if (values.code) params.code = values.code
+	return params
 }
 
 export function buildSlidesTemplateCategorySaveParams(

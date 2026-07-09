@@ -95,6 +95,7 @@
 		"actionFailed": "操作失败",
 		"actionSuccess": "操作成功",
 		"addSuccess": "添加成功",
+		"codeConflictRetry": "模板编码冲突，已自动重新生成",
 		"copyFailed": "复制失败",
 		"copySuccess": "复制成功",
 		"createSuccess": "创建成功",
@@ -246,6 +247,7 @@
 			"collage": "预览拼图",
 			"description": "模板描述",
 			"label": "模板名称",
+			"previewImages": "每页预览图",
 			"previewUrl": "预览链接",
 			"sort": "排序值",
 			"status": "启用状态",
@@ -271,6 +273,10 @@
 			"imageUploadedDescription": "图片已上传，可点击、拖拽或粘贴替换",
 			"onlyImage": "仅支持上传图片文件",
 			"onlyZip": "仅支持上传 ZIP 文件",
+			"previewImagesDescription": "支持点击、拖拽或粘贴多图上传，可拖拽缩略图调整每页顺序",
+			"previewImagesEmpty": "暂无每页预览图，点击或拖拽图片上传",
+			"previewImagesUploadedDescription": "已上传 {{count}} 张，可继续添加或拖拽排序",
+			"removePreviewImage": "移除该页预览图",
 			"zipDescription": "支持点击或拖拽 ZIP 文件上传",
 			"zipUploadedDescription": "ZIP 已上传，可点击或拖拽替换"
 		}

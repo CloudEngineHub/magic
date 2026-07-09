@@ -89,6 +89,10 @@ describe("SlidesPresetGrid", () => {
 			value: "academic-research",
 			label: "Academic Research",
 			thumbnail_url: "https://example.com/academic.png",
+			preview_image_urls: [
+				"https://example.com/academic-page-1.png",
+				"https://example.com/academic-page-2.png",
+			],
 			preview_url: "https://example.com/academic-preview",
 			preview_title: "Academic Preview",
 		},
@@ -146,9 +150,17 @@ describe("SlidesPresetGrid", () => {
 
 		expect(handleTemplateClick).not.toHaveBeenCalled()
 		expect(screen.getByTestId("slides-preset-preview-dialog-content")).toBeInTheDocument()
-		expect(screen.getByTestId("slides-preset-preview-dialog-iframe")).toHaveAttribute(
+		expect(screen.getByTestId("slides-preset-preview-dialog-pages")).toBeInTheDocument()
+		expect(screen.getByRole("img", { name: "Academic Preview 1" })).toHaveAttribute(
 			"src",
-			"https://example.com/academic-preview",
+			"https://example.com/academic-page-1.png",
+		)
+
+		fireEvent.click(screen.getByRole("button", { name: "Academic Preview 2" }))
+
+		expect(screen.getByRole("img", { name: "Academic Preview 2" })).toHaveAttribute(
+			"src",
+			"https://example.com/academic-page-2.png",
 		)
 	})
 

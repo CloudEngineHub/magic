@@ -52,6 +52,8 @@ export interface OptionItem {
 	label?: LocaleText
 	thumbnail_url?: string
 	collage_url?: string
+	/** 每页 PPT 预览图访问 URL 列表；为空时前端可降级使用 collage_url */
+	preview_image_urls?: string[]
 	description?: LocaleText
 	icon_url?: string
 	sub_text?: LocaleText
