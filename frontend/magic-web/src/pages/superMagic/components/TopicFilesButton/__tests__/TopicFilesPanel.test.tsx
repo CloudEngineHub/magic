@@ -16,6 +16,10 @@ vi.mock("react-i18next", () => ({
 vi.mock("ahooks", () => ({
 	useMemoizedFn: (fn: (...args: any[]) => any) => fn,
 	useUpdateEffect: vi.fn(),
+	useDebounceFn: (fn: (...args: any[]) => any) => ({
+		run: fn,
+		cancel: vi.fn(),
+	}),
 }))
 
 vi.mock("@/hooks/useIsMobile", () => ({

@@ -4891,6 +4891,7 @@
 		"dataCorrectionDescription": "AI checks for errors in tables and data and corrects them",
 		"dataCorrectionPrompt": "Please check the data in the content through trusted data sources. The data must come from a reliable data source and be cross-verified through multiple sources. Ensure the data is accurate and reliable.",
 		"download": "Download",
+		"downloadAbort": "Cancel Download",
 		"downloadAllTitle": "Download All",
 		"downloadFailed": "Download failed",
 		"downloadSelected": "Download Selected ({{count}})",
