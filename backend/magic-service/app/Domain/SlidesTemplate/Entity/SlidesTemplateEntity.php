@@ -204,9 +204,9 @@ class SlidesTemplateEntity extends AbstractEntity
         return $this->thumbnailFileKey;
     }
 
-    public function setThumbnailFileKey(string $thumbnailFileKey): self
+    public function setThumbnailFileKey(?string $thumbnailFileKey): self
     {
-        $this->thumbnailFileKey = $thumbnailFileKey;
+        $this->thumbnailFileKey = $thumbnailFileKey ?? '';
         return $this;
     }
 
