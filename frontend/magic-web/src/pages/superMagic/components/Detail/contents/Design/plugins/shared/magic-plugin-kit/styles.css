@@ -165,8 +165,6 @@
 	font-size: 12px;
 	line-height: 1.5;
 	text-align: center;
-	/* background: rgb(var(--mpk-background-rgb) / 0.82); */
-	/* border: 1px dashed var(--mpk-ring); */
 	border-radius: 12px;
 	pointer-events: none;
 	backdrop-filter: blur(2px);

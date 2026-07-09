@@ -1,3 +1,13 @@
+/**
+ * 插件文件资产 Host 侧实现。
+ *
+ * 三条路径：
+ * - pickPluginFiles：本地 File → upload → PluginFileAsset
+ * - resolvePluginFileByPath / resolvePluginFileAssets：已有项目 path → getFileInfo，不上传
+ * - resolveProjectPluginFile：资源面板选中项 → 同上（path 来自 panel item）
+ *
+ * PluginFileAsset 同时含 path（稳定标识）与 url/src（当前可访问签名 URL）。
+ */
 import { getMediaDimensions, isImageFile, validateFile } from "../../canvas/utils/utils"
 import type { Canvas } from "../../canvas/Canvas"
 import type { ReferenceResourcePanelItem } from "../../types"
@@ -5,6 +15,7 @@ import type { ReferenceResourceTypeFilter } from "../MessageEditor/reference-ass
 import type { PluginPickFilesOptions } from "./runtime/v1"
 import type { PluginFileAsset, PluginFilePickerType } from "./types"
 
+/** 上传本地文件并返回插件文件资产 */
 export async function pickPluginFiles(
 	canvas: Canvas,
 	files: File[],
@@ -46,6 +57,78 @@ export async function pickPluginFiles(
 	}))
 }
 
+/**
+ * 按项目 path 解析已有资源，不触发 upload。
+ * 画布 copy-elements 粘贴复用 sourceRef.src 同源。
+ * 图片会 useImageProcess: true 换链，并尝试读 naturalWidth/Height。
+ */
+export async function resolvePluginFileByPath(
+	canvas: Canvas,
+	path: string,
+	options?: PluginPickFilesOptions & { fileName?: string },
+): Promise<PluginFileAsset> {
+	const getFileInfo = canvas.magicConfigManager.config?.methods?.getFileInfo
+	if (!getFileInfo) {
+		throw new Error("getFileInfo method not available.")
+	}
+
+	const type = options?.type ?? inferPluginFileTypeFromPath(path)
+	const fileInfo = await getFileInfo(path, { useImageProcess: type === "image" })
+	const dimensions =
+		type === "image"
+			? await getImageDimensionsFromUrl(fileInfo.src).catch(
+					(): { width: number; height: number } | undefined => undefined,
+				)
+			: undefined
+
+	return {
+		id: path,
+		path,
+		url: fileInfo.src,
+		src: fileInfo.src,
+		fileName:
+			options?.fileName || fileInfo.fileName || path.split("/").filter(Boolean).pop() || path,
+		type,
+		width: dimensions?.width,
+		height: dimensions?.height,
+	}
+}
+
+/**
+ * 批量 resolvePluginFileByPath。
+ * options.type 有值时过滤类型（与 pickFiles 的 type 约束对齐）；未传则不过滤。
+ */
+export async function resolvePluginFileAssets(
+	canvas: Canvas,
+	files: Array<{ path: string; fileName?: string }>,
+	options?: PluginPickFilesOptions,
+): Promise<PluginFileAsset[]> {
+	if (canvas.readonly) {
+		throw new Error("Canvas is readonly.")
+	}
+
+	const resolved = await Promise.all(
+		files.map((file) =>
+			resolvePluginFileByPath(canvas, file.path, {
+				...options,
+				fileName: file.fileName,
+			}),
+		),
+	)
+
+	return resolved.filter((asset) => validatePluginPickedFileType(asset.type, options))
+}
+
+/** options.type 未指定时放行；指定时只保留推断 type 匹配的 asset。 */
+function validatePluginPickedFileType(
+	type: PluginFilePickerType | undefined,
+	options?: PluginPickFilesOptions,
+): boolean {
+	if (!options?.type) return true
+	return type === options.type
+}
+
+/** 项目面板选中项 插入插件资源。 */
 export async function resolveProjectPluginFile(
 	canvas: Canvas,
 	item: ReferenceResourcePanelItem,
@@ -77,6 +160,7 @@ export async function resolveProjectPluginFile(
 	}
 }
 
+/** 本地 `<input type="file">` 的 accept 属性。 */
 export function getPluginFilePickerAccept(options?: PluginPickFilesOptions): string {
 	if (options?.accept?.length) return options.accept.join(",")
 	if (options?.type === "image") return "image/*"
@@ -85,6 +169,7 @@ export function getPluginFilePickerAccept(options?: PluginPickFilesOptions): str
 	return ""
 }
 
+/** 资源面板 Tab 类型过滤（image / video / audio / file）。 */
 export function getPluginReferenceResourceType(
 	options?: PluginPickFilesOptions,
 ): ReferenceResourceTypeFilter {
@@ -94,6 +179,7 @@ export function getPluginReferenceResourceType(
 	return "file"
 }
 
+/** 通过 Image 加载签名 URL 读 natural 尺寸；失败时由调用方 catch 忽略。 */
 function getImageDimensionsFromUrl(url: string): Promise<{ width: number; height: number }> {
 	return new Promise((resolve, reject) => {
 		const image = new Image()
@@ -110,6 +196,7 @@ function getImageDimensionsFromUrl(url: string): Promise<{ width: number; height
 	})
 }
 
+/** 本地上传前校验：通用 validateFile + options.type MIME 过滤。 */
 function validatePluginPickedFile(file: File, options?: PluginPickFilesOptions): boolean {
 	const validation = validateFile(file)
 	if (!validation.valid) return false
@@ -119,6 +206,7 @@ function validatePluginPickedFile(file: File, options?: PluginPickFilesOptions):
 	return true
 }
 
+/** 从 File MIME 推断 PluginFilePickerType。 */
 function inferPluginFileType(file: File | undefined): PluginFilePickerType {
 	if (!file) return "file"
 	if (isImageFile(file)) return "image"
@@ -127,6 +215,7 @@ function inferPluginFileType(file: File | undefined): PluginFilePickerType {
 	return "file"
 }
 
+/** 从 path 后缀推断 type；resolve 路径无 File 对象时使用。 */
 function inferPluginFileTypeFromPath(path: string): PluginFilePickerType {
 	const extension = path.split(".").pop()?.toLowerCase()
 	if (extension && ["png", "jpg", "jpeg", "webp", "gif", "svg"].includes(extension)) {

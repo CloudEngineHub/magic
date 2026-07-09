@@ -390,6 +390,71 @@ validate: ({ state, t }) => {
 
 用户必填字段的「未填写」优先用 `isDisabled` 置灰按钮；需要 toast / 错误区文案时再在 `validate` 中返回字符串。
 
+## 图片导入（点击 / 拖拽 / 粘贴）
+
+`image-grid` 与 `image-slot` 共用同一套导入链路。插件运行在 iframe `srcDoc` 内，**无法直接读取**画布 V2 私有剪贴板 bundle（`web application/x-canvas-design-clipboard-bundle`），因此粘贴画布元素时由 Host 代为读取并回传 metadata。
+
+### 三种入口
+
+| 入口 | 行为 |
+| ---- | ---- |
+| 点击上传 | 调用 `ctx.assets.pickFiles`，本地 File 走 upload |
+| 拖拽本地图片 | 调用 `ctx.assets.uploadFile`，逐张上传 |
+| 粘贴 | 见下方「粘贴读取 / 导入优先级」 |
+
+### 粘贴前置条件
+
+1. **焦点必须在导入容器上**：`image-grid` 的网格、`image-slot` 的上传按钮或预览区需先获得焦点（网格 / 预览区带 `tabIndex=0`），再按 `Ctrl/Cmd+V`。
+2. **宿主能力**：插件 `manifest.capabilities` 需声明 `assets.pickFiles`（`readCanvasClipboard` / `resolveFileAssets` 桥接复用该 capability）与 `assets.uploadFile`；粘贴过程提示需声明 `ui.toast`。
+3. **画布只读**：Host 在 readonly 下会拒绝 upload / resolve，粘贴可能静默失败或报错。
+
+### 粘贴读取优先级
+
+kit 在 `resolvePastedImageAssets` 中按以下顺序处理：
+
+1. **paste event 中的标准图片 File**（外部截图、`copy-as-png` 落入系统的 `image/png` 等）
+2. **Host 桥接 `ctx.assets.readCanvasClipboard()`**（回传 `source` / `version` / `operation` / `files`，不含 elements 与 Blob 本体）
+
+### 粘贴导入优先级
+
+读取到内容后，按以下顺序决定最终 `PluginFileAsset`：
+
+1. **`copy-as-png`**：优先使用 Host 侧已 upload 的 `uploadedAssets`；否则对 paste event 中的图片 File 走 `uploadFile`
+2. **`copy-elements` + `sourceRef.src`**：对 `role === "element-media"` 且带 `sourceRef.src` 的 metadata 调用 `ctx.assets.resolveFileAssets`，**按项目 path 解析、不上传**
+3. **其余情况**：对 paste event 中的本地图片 File 走 `uploadFile`
+
+`copy-elements` 粘贴复用 `sourceRef.src`（稳定项目 path），**不使用**可能过期的 `ossUrl`。resolve 失败且剪贴板中仍有本地图片 File 时，会 fallback 到 upload；若仅有画布 metadata 且 resolve 失败，则抛出错误并 toast。
+
+### 拖拽与粘贴的去重策略
+
+- **拖拽本地文件**：与点击 picker 一致，**不去重**，新图 append 到现有列表（受 `maxCount` 截断）。
+- **粘贴画布引用**：按 `referenceId`（path）去重，避免同一张画布图重复添加。
+
+### 粘贴过程 UI 反馈
+
+粘贴开始时 kit 调用：
+
+```js
+ctx.ui.toast(section.pasteHint ?? t("imageImport.pasting", "正在粘贴…"), "info")
+```
+
+失败时写入 `state.error`，并调用 `ctx.ui.toast(message, "error")`。toast 经 iframe `postMessage` 到 Host，由 `usePluginRuntimeBridge` 触发 sonner 展示。
+
+可通过 section 字段自定义文案：
+
+- `pasteHint`：粘贴进行中 toast，默认「正在粘贴…」
+- `pasteErrorMessage`：粘贴失败兜底文案，默认「粘贴失败，请重试」
+
+### 相关 Host 实现（维护者）
+
+| 模块 | 职责 |
+| ---- | ---- |
+| `PluginPanel/readPluginCanvasClipboard.ts` | Host 读 V2 bundle，`copy-as-png` 时 upload |
+| `PluginPanel/fileAssets.ts` | `pickPluginFiles` / `resolvePluginFileAssets` |
+| `PluginPanel/usePluginRuntimeBridge.ts` | 处理 `read-canvas-clipboard`、`resolve-file-assets`、`toast` 消息 |
+
+业务插件通常**不需要**直接调用 `readCanvasClipboard`；使用 `image-grid` / `image-slot` 即可。若自定义粘贴 UI，可参考 kit 内 `resolvePastedImageAssets` 逻辑。
+
 ## Section Types
 
 当前内置的 `kind` 有：
@@ -419,17 +484,20 @@ validate: ({ state, t }) => {
 - `addLabel`: 添加按钮文案，默认 `+`
 - `gridClassName`: 附加 class
 - `pickErrorMessage`: 选图失败兜底文案
+- `pasteHint`: 粘贴进行中 toast 文案，默认 `t("imageImport.pasting", "正在粘贴…")`
+- `pasteErrorMessage`: 粘贴失败 toast / 错误区兜底文案
 - `maxCount`: 最大图片数，支持数字或函数
 - `beforePick`: 选图前校验，返回字符串表示中断
-- `dropHint`: 拖拽悬停时的提示文案，可选
+- `dropHint`: 拖拽悬停时的提示文案，可选；默认「拖拽或粘贴图片到这里」
 - `deps`: 额外依赖的 state key，例如 `maxCount` 依赖模型配置时需要声明
 - `when`: 条件渲染，返回 `false` 时不显示
 - `required`: 至少上传 1 张图时传 `required: true`
 
 行为说明：
 
-- 支持点击上传、拖拽导入、容器聚焦时粘贴图片；
-- 拖拽本地图片时会走上传链路；
+- 支持点击上传、拖拽导入、容器聚焦时粘贴图片（含从画布复制元素，见「图片导入」）；
+- 拖拽本地图片走 upload，append 到列表，不去重；
+- 粘贴画布元素走 resolve（不上传），按 referenceId 去重；
 
 示例：
 
@@ -461,15 +529,18 @@ validate: ({ state, t }) => {
 - `alt`: 预览图的 alt 文案
 - `help`: 区块底部说明文案
 - `pickErrorMessage`: 选图失败兜底文案
+- `pasteHint`: 粘贴进行中 toast 文案
+- `pasteErrorMessage`: 粘贴失败兜底文案
 - `beforePick`: 选图前校验，返回字符串表示中断
-- `dropHint`: 拖拽悬停时的提示文案，可选
+- `dropHint`: 拖拽悬停时的提示文案，可选；默认「拖拽或粘贴图片到这里」
 - `deps`: 额外依赖的 state key，例如 `when` 依赖其他字段时需要声明
 - `when`: 条件渲染，返回 `false` 时不显示
 - `required`: 必填单图时传 `required: true`；可选图用 `suffix` 标注，不要加 `required`
 
 行为说明：
 
-- 支持点击上传、拖拽替换、容器聚焦时粘贴替换；
+- 支持点击上传、拖拽替换、容器聚焦时粘贴替换（含画布复制，见「图片导入」）；
+- 单槽位模式下粘贴成功会替换当前图片；
 
 示例：
 

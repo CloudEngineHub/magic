@@ -99,6 +99,61 @@ describe("plugin runtime protocol", () => {
 		expect(getPluginRuntimeResultType("magic-canvas-plugin:complete-image-prompt")).toBe(
 			"magic-canvas-plugin:complete-image-prompt-result",
 		)
+		expect(getPluginRuntimeMessageCapability("magic-canvas-plugin:read-canvas-clipboard")).toBe(
+			"assets.pickFiles",
+		)
+		expect(getPluginRuntimeResultType("magic-canvas-plugin:read-canvas-clipboard")).toBe(
+			"magic-canvas-plugin:read-canvas-clipboard-result",
+		)
+		expect(getPluginRuntimeMessageCapability("magic-canvas-plugin:resolve-file-assets")).toBe(
+			"assets.pickFiles",
+		)
+		expect(getPluginRuntimeResultType("magic-canvas-plugin:resolve-file-assets")).toBe(
+			"magic-canvas-plugin:resolve-file-assets-result",
+		)
+	})
+
+	it("parses read-canvas-clipboard requests", () => {
+		expect(
+			parsePluginRuntimeMessage(
+				{
+					channelToken: "active-token",
+					type: "magic-canvas-plugin:read-canvas-clipboard",
+					requestId: "request-3",
+				},
+				"active-token",
+			),
+		).toEqual({
+			type: "magic-canvas-plugin:read-canvas-clipboard",
+			requestId: "request-3",
+		})
+	})
+
+	it("parses resolve-file-assets requests and filters invalid entries", () => {
+		expect(
+			parsePluginRuntimeMessage(
+				{
+					channelToken: "active-token",
+					type: "magic-canvas-plugin:resolve-file-assets",
+					requestId: "request-4",
+					files: [
+						{ path: "uploads/a.png", fileName: "a.png" },
+						{ path: 123 },
+						{ path: "uploads/b.png", fileName: "   " },
+					],
+					options: { type: "image", maxCount: 2 },
+				},
+				"active-token",
+			),
+		).toEqual({
+			type: "magic-canvas-plugin:resolve-file-assets",
+			requestId: "request-4",
+			files: [
+				{ path: "uploads/a.png", fileName: "a.png" },
+				{ path: "uploads/b.png", fileName: undefined },
+			],
+			options: { type: "image", maxCount: 2 },
+		})
 	})
 
 	it("checks manifest capability declarations strictly", () => {

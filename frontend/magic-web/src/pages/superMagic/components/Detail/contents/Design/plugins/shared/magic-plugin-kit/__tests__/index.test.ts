@@ -503,6 +503,363 @@ describe("magic-plugin-kit", () => {
 		expect(cards[0]).toBe(initialFirstCard)
 	})
 
+	function createImagePasteData(filename = "image.png") {
+		const blobFile = new File([new Uint8Array([137, 80, 78, 71])], filename, {
+			type: "image/png",
+		})
+		return {
+			files: [blobFile],
+			items: [
+				{
+					kind: "file",
+					type: "image/png",
+					getAsFile: () => blobFile,
+				},
+			],
+			types: ["Files"],
+		}
+	}
+
+	function dispatchPaste(
+		target: Element,
+		clipboardData: { files: File[]; items: unknown[]; types: string[] },
+	) {
+		const event = new Event("paste", { bubbles: true, cancelable: true })
+		Object.defineProperty(event, "clipboardData", {
+			value: clipboardData,
+			configurable: true,
+		})
+		target.dispatchEvent(event)
+	}
+
+	function dispatchEmptyPaste(target: Element) {
+		dispatchPaste(target, {
+			files: [],
+			items: [],
+			types: [],
+		})
+	}
+
+	it("reads canvas clipboard through host bridge when paste event has no files", async () => {
+		const existingPath = "uploads/canvas-image.png"
+		const resolvedAsset = {
+			id: existingPath,
+			path: existingPath,
+			url: "https://example.com/canvas-image.png",
+			src: "https://example.com/canvas-image.png",
+			fileName: "canvas-image.png",
+			type: "image",
+		}
+		const uploadFile = vi.fn()
+		const resolveFileAssets = vi.fn().mockResolvedValue([resolvedAsset])
+		const readCanvasClipboard = vi.fn().mockResolvedValue({
+			payload: {
+				source: "canvas-design",
+				version: 1,
+				operation: "copy-elements",
+				files: [
+					{
+						id: "file-1",
+						elementId: "element-1",
+						filename: "canvas-image.png",
+						mimeType: "image/png",
+						fileSize: 0,
+						role: "element-media",
+						sourceRef: { src: existingPath },
+					},
+				],
+			},
+			uploadedAssets: [],
+		})
+		const kit = loadMagicPluginKit()
+		const root = createRoot()
+		const ctx = createCtx()
+		ctx.assets.uploadFile = uploadFile
+		ctx.assets.resolveFileAssets = resolveFileAssets
+		ctx.assets.readCanvasClipboard = readCanvasClipboard
+
+		kit.mount(ctx, root, {
+			initialState: {
+				productImages: [],
+			},
+			sections: [
+				{
+					id: "productImages",
+					kind: "image-grid",
+					stateKey: "productImages",
+					title: "Products",
+					maxCount: 3,
+				},
+			],
+			generate: createGenerateConfig(),
+		})
+
+		const grid = root.querySelector(".mpk-image-grid")
+		expect(grid).not.toBeNull()
+		dispatchEmptyPaste(grid!)
+
+		await vi.waitFor(() => {
+			expect(readCanvasClipboard).toHaveBeenCalledTimes(1)
+			expect(resolveFileAssets).toHaveBeenCalledWith([
+				{ path: existingPath, fileName: "canvas-image.png" },
+			])
+			expect(uploadFile).not.toHaveBeenCalled()
+		})
+	})
+
+	it("uploads standard image files from paste event", async () => {
+		const uploadedAsset = {
+			id: "uploads/export.png",
+			path: "uploads/export.png",
+			url: "https://example.com/export.png",
+			src: "https://example.com/export.png",
+			fileName: "export.png",
+			type: "image",
+		}
+		const uploadFile = vi.fn().mockResolvedValue(uploadedAsset)
+		const resolveFileAssets = vi.fn()
+		const kit = loadMagicPluginKit()
+		const root = createRoot()
+		const ctx = createCtx()
+		ctx.assets.uploadFile = uploadFile
+		ctx.assets.resolveFileAssets = resolveFileAssets
+
+		kit.mount(ctx, root, {
+			initialState: {
+				referenceImage: null,
+			},
+			sections: [
+				{
+					id: "referenceImage",
+					kind: "image-slot",
+					stateKey: "referenceImage",
+					title: "Reference",
+				},
+			],
+			generate: createGenerateConfig(),
+		})
+
+		const uploadTarget = root.querySelector(".mpk-image-slot-upload")
+		expect(uploadTarget).not.toBeNull()
+		dispatchPaste(uploadTarget!, createImagePasteData("export.png"))
+
+		await vi.waitFor(() => {
+			expect(uploadFile).toHaveBeenCalledTimes(1)
+			expect(resolveFileAssets).not.toHaveBeenCalled()
+		})
+	})
+
+	it("shows a pasting toast while paste import is in progress", async () => {
+		let resolveUpload: (value: unknown) => void = () => {}
+		const uploadFile = vi.fn(
+			() =>
+				new Promise((resolve) => {
+					resolveUpload = resolve
+				}),
+		)
+		const kit = loadMagicPluginKit()
+		const root = createRoot()
+		const ctx = createCtx()
+		ctx.assets.uploadFile = uploadFile
+
+		kit.mount(ctx, root, {
+			initialState: {
+				referenceImage: null,
+			},
+			sections: [
+				{
+					id: "referenceImage",
+					kind: "image-slot",
+					stateKey: "referenceImage",
+					title: "Reference",
+				},
+			],
+			generate: createGenerateConfig(),
+		})
+
+		const uploadTarget = root.querySelector(".mpk-image-slot-upload")
+		expect(uploadTarget).not.toBeNull()
+		dispatchPaste(uploadTarget!, createImagePasteData("export.png"))
+
+		await vi.waitFor(() => {
+			expect(ctx.ui.toast).toHaveBeenCalledWith("正在粘贴…", "info")
+		})
+
+		resolveUpload({
+			id: "uploads/export.png",
+			path: "uploads/export.png",
+			url: "https://example.com/export.png",
+			src: "https://example.com/export.png",
+			fileName: "export.png",
+			type: "image",
+		})
+
+		await vi.waitFor(() => {
+			expect(uploadFile).toHaveBeenCalledTimes(1)
+		})
+	})
+
+	it("shows an error toast when paste upload fails", async () => {
+		const uploadFile = vi.fn().mockRejectedValue(new Error("upload failed"))
+		const kit = loadMagicPluginKit()
+		const root = createRoot()
+		const ctx = createCtx()
+		ctx.assets.uploadFile = uploadFile
+
+		kit.mount(ctx, root, {
+			initialState: {
+				referenceImage: null,
+			},
+			sections: [
+				{
+					id: "referenceImage",
+					kind: "image-slot",
+					stateKey: "referenceImage",
+					title: "Reference",
+				},
+			],
+			generate: createGenerateConfig(),
+		})
+
+		const uploadTarget = root.querySelector(".mpk-image-slot-upload")
+		expect(uploadTarget).not.toBeNull()
+		dispatchPaste(uploadTarget!, createImagePasteData("export.png"))
+
+		await vi.waitFor(() => {
+			expect(ctx.ui.toast).toHaveBeenCalledWith("upload failed", "error")
+		})
+	})
+
+	it("shows an error toast when canvas clipboard resolve fails", async () => {
+		const resolveFileAssets = vi.fn().mockRejectedValue(new Error("resolve failed"))
+		const readCanvasClipboard = vi.fn().mockResolvedValue({
+			payload: {
+				source: "canvas-design",
+				version: 1,
+				operation: "copy-elements",
+				files: [
+					{
+						id: "file-1",
+						elementId: "element-1",
+						filename: "canvas-image.png",
+						mimeType: "image/png",
+						fileSize: 0,
+						role: "element-media",
+						sourceRef: { src: "uploads/canvas-image.png" },
+					},
+				],
+			},
+			uploadedAssets: [],
+		})
+		const kit = loadMagicPluginKit()
+		const root = createRoot()
+		const ctx = createCtx()
+		ctx.assets.resolveFileAssets = resolveFileAssets
+		ctx.assets.readCanvasClipboard = readCanvasClipboard
+
+		kit.mount(ctx, root, {
+			initialState: {
+				productImages: [],
+			},
+			sections: [
+				{
+					id: "productImages",
+					kind: "image-grid",
+					stateKey: "productImages",
+					title: "Products",
+					maxCount: 3,
+				},
+			],
+			generate: createGenerateConfig(),
+		})
+
+		const grid = root.querySelector(".mpk-image-grid")
+		expect(grid).not.toBeNull()
+		dispatchEmptyPaste(grid!)
+
+		await vi.waitFor(() => {
+			expect(resolveFileAssets).toHaveBeenCalledTimes(1)
+			expect(ctx.ui.toast).toHaveBeenCalledWith("resolve failed", "error")
+		})
+	})
+
+	it("does not toast or import when canvas clipboard is empty", async () => {
+		const readCanvasClipboard = vi.fn().mockResolvedValue({
+			payload: null,
+			uploadedAssets: [],
+		})
+		const resolveFileAssets = vi.fn()
+		const kit = loadMagicPluginKit()
+		const root = createRoot()
+		const ctx = createCtx()
+		ctx.assets.readCanvasClipboard = readCanvasClipboard
+		ctx.assets.resolveFileAssets = resolveFileAssets
+
+		kit.mount(ctx, root, {
+			initialState: {
+				productImages: [],
+			},
+			sections: [
+				{
+					id: "productImages",
+					kind: "image-grid",
+					stateKey: "productImages",
+					title: "Products",
+					maxCount: 3,
+				},
+			],
+			generate: createGenerateConfig(),
+		})
+
+		const grid = root.querySelector(".mpk-image-grid")
+		expect(grid).not.toBeNull()
+		dispatchEmptyPaste(grid!)
+
+		await vi.waitFor(() => {
+			expect(readCanvasClipboard).toHaveBeenCalledTimes(1)
+		})
+
+		expect(resolveFileAssets).not.toHaveBeenCalled()
+		expect(ctx.ui.toast).not.toHaveBeenCalled()
+	})
+
+	it("shows an error toast when canvas clipboard read fails", async () => {
+		const readCanvasClipboard = vi.fn().mockRejectedValue(new Error("clipboard denied"))
+		const resolveFileAssets = vi.fn()
+		const kit = loadMagicPluginKit()
+		const root = createRoot()
+		const ctx = createCtx()
+		ctx.assets.readCanvasClipboard = readCanvasClipboard
+		ctx.assets.resolveFileAssets = resolveFileAssets
+
+		kit.mount(ctx, root, {
+			initialState: {
+				productImages: [],
+			},
+			sections: [
+				{
+					id: "productImages",
+					kind: "image-grid",
+					stateKey: "productImages",
+					title: "Products",
+					maxCount: 3,
+				},
+			],
+			generate: createGenerateConfig(),
+		})
+
+		const grid = root.querySelector(".mpk-image-grid")
+		expect(grid).not.toBeNull()
+		dispatchEmptyPaste(grid!)
+
+		await vi.waitFor(() => {
+			expect(readCanvasClipboard).toHaveBeenCalledTimes(1)
+			expect(ctx.ui.toast).toHaveBeenCalledWith("clipboard denied", "error")
+		})
+
+		expect(resolveFileAssets).not.toHaveBeenCalled()
+	})
+
 	it("uses native title by default and renders tooltip DOM when hover descriptions are enabled", () => {
 		const kit = loadMagicPluginKit()
 		const root = createRoot()

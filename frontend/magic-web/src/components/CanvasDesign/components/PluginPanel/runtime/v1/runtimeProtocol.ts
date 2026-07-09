@@ -83,6 +83,16 @@ export type PluginRuntimeMessage =
 			mimeType: string
 	  }
 	| {
+			type: "magic-canvas-plugin:resolve-file-assets"
+			requestId: string
+			files: Array<{ path: string; fileName?: string }>
+			options?: PluginPickFilesOptions
+	  }
+	| {
+			type: "magic-canvas-plugin:read-canvas-clipboard"
+			requestId: string
+	  }
+	| {
 			type: "magic-canvas-plugin:fetch-blob"
 			requestId: string
 			url: string
@@ -124,6 +134,8 @@ export const PLUGIN_RUNTIME_RESULT_TYPE_BY_MESSAGE_TYPE = {
 	"magic-canvas-plugin:generate-and-place": "magic-canvas-plugin:generate-and-place-result",
 	"magic-canvas-plugin:complete-image-prompt": "magic-canvas-plugin:complete-image-prompt-result",
 	"magic-canvas-plugin:upload-file": "magic-canvas-plugin:upload-file-result",
+	"magic-canvas-plugin:resolve-file-assets": "magic-canvas-plugin:resolve-file-assets-result",
+	"magic-canvas-plugin:read-canvas-clipboard": "magic-canvas-plugin:read-canvas-clipboard-result",
 	"magic-canvas-plugin:fetch-blob": "magic-canvas-plugin:fetch-blob-result",
 	"magic-canvas-plugin:storage-get": "magic-canvas-plugin:storage-get-result",
 	"magic-canvas-plugin:storage-set": "magic-canvas-plugin:storage-set-result",
@@ -148,6 +160,8 @@ const PLUGIN_RUNTIME_CAPABILITY_BY_MESSAGE_TYPE: Partial<
 	"magic-canvas-plugin:generate-and-place": "ai.generateAndPlace",
 	"magic-canvas-plugin:complete-image-prompt": "ai.completeImagePrompt",
 	"magic-canvas-plugin:upload-file": "assets.uploadFile",
+	"magic-canvas-plugin:resolve-file-assets": "assets.pickFiles",
+	"magic-canvas-plugin:read-canvas-clipboard": "assets.pickFiles",
 	"magic-canvas-plugin:fetch-blob": "assets.fetchBlob",
 	"magic-canvas-plugin:storage-get": "plugin.storage",
 	"magic-canvas-plugin:storage-set": "plugin.storage",
@@ -283,6 +297,41 @@ export function parsePluginRuntimeMessage(
 			type: "magic-canvas-plugin:fetch-blob",
 			requestId: record.requestId,
 			url: record.url,
+		}
+	}
+	if (
+		record.type === "magic-canvas-plugin:read-canvas-clipboard" &&
+		typeof record.requestId === "string"
+	) {
+		return {
+			type: "magic-canvas-plugin:read-canvas-clipboard",
+			requestId: record.requestId,
+		}
+	}
+	if (
+		record.type === "magic-canvas-plugin:resolve-file-assets" &&
+		typeof record.requestId === "string" &&
+		Array.isArray(record.files)
+	) {
+		const files = record.files
+			.filter(
+				(file): file is { path: string; fileName?: string } =>
+					Boolean(file) &&
+					typeof file === "object" &&
+					typeof (file as Record<string, unknown>).path === "string",
+			)
+			.map((file) => ({
+				path: file.path,
+				fileName:
+					typeof file.fileName === "string" && file.fileName.trim()
+						? file.fileName
+						: undefined,
+			}))
+		return {
+			type: "magic-canvas-plugin:resolve-file-assets",
+			requestId: record.requestId,
+			files,
+			options: parsePluginPickFilesOptions(record.options),
 		}
 	}
 	if (

@@ -316,6 +316,25 @@ export function createPluginSrcDocV1(
 						).then((data) => data.file);
 					});
 				},
+				resolveFileAssets(files, options = {}) {
+					return requestHost(
+						{
+							type: "magic-canvas-plugin:resolve-file-assets",
+							files: Array.isArray(files) ? files : [],
+							options,
+						},
+						"magic-canvas-plugin:resolve-file-assets-result"
+					).then((data) => data.files || []);
+				},
+				readCanvasClipboard() {
+					return requestHost(
+						{ type: "magic-canvas-plugin:read-canvas-clipboard" },
+						"magic-canvas-plugin:read-canvas-clipboard-result"
+					).then((data) => ({
+						payload: data.payload ?? null,
+						uploadedAssets: data.uploadedAssets || [],
+					}));
+				},
 				fetchBlob(url) {
 					return requestHost(
 						{ type: "magic-canvas-plugin:fetch-blob", url },

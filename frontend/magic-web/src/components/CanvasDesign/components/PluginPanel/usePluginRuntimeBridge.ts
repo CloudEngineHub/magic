@@ -20,7 +20,8 @@ import { PLUGIN_WINDOW_MARGIN } from "./constants"
 import type { PluginFileAsset, PluginFilePickerRequest } from "./types"
 import { clampPluginPanelHeight } from "./position"
 import { resolvePluginResource, getErrorMessage } from "./resourceUtils"
-import { pickPluginFiles } from "./fileAssets"
+import { pickPluginFiles, resolvePluginFileAssets } from "./fileAssets"
+import { readPluginCanvasClipboard } from "./readPluginCanvasClipboard"
 import { generatePluginImages, getPluginImageModels } from "./imageGeneration"
 import { completePluginImagePrompt } from "./imagePromptCompletion"
 import {
@@ -234,6 +235,47 @@ export function usePluginRuntimeBridge({
 					(error) => {
 						postPluginMessage({
 							type: "magic-canvas-plugin:upload-file-result",
+							requestId: data.requestId,
+							error: getErrorMessage(error),
+						})
+					},
+				)
+				return
+			}
+
+			if (data.type === "magic-canvas-plugin:resolve-file-assets") {
+				void resolvePluginFileAssets(canvas, data.files, data.options).then(
+					(files) => {
+						postPluginMessage({
+							type: "magic-canvas-plugin:resolve-file-assets-result",
+							requestId: data.requestId,
+							files,
+						})
+					},
+					(error) => {
+						postPluginMessage({
+							type: "magic-canvas-plugin:resolve-file-assets-result",
+							requestId: data.requestId,
+							error: getErrorMessage(error),
+						})
+					},
+				)
+				return
+			}
+
+			if (data.type === "magic-canvas-plugin:read-canvas-clipboard") {
+				void readPluginCanvasClipboard(canvas).then(
+					(result) => {
+						postPluginMessage({
+							type: "magic-canvas-plugin:read-canvas-clipboard-result",
+							requestId: data.requestId,
+							payload: result.payload,
+							uploadedAssets: result.uploadedAssets,
+						})
+					},
+					(error) => {
+						postPluginMessage({
+							type: "magic-canvas-plugin:read-canvas-clipboard-result",
 							requestId: data.requestId,
 							error: getErrorMessage(error),
 						})

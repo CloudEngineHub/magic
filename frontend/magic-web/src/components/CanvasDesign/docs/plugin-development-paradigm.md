@@ -906,8 +906,11 @@ ctx.state.patch       合并局部 state 并触发 view.update
 ctx.state.replace     替换整体 state 并触发 view.update
 ctx.panel.render      Panel Kit
 ctx.resources.resolve 插件包内资源解析
-ctx.assets.pickFiles  选择文件
-ctx.assets.uploadFile 上传文件
+ctx.assets.pickFiles  选择文件（含资源面板选图）
+ctx.assets.uploadFile 上传本地文件
+ctx.assets.resolveFileAssets 按项目 path 解析已有资源，不上传
+ctx.assets.readCanvasClipboard 由 Host 读取画布 V2 剪贴板 metadata
+ctx.assets.fetchBlob  按 URL 拉取 Blob
 ctx.ai.getImageModels 获取模型
 ctx.ai.completeImagePrompt AI 补全图片提示词
 ctx.ai.generateAndPlace 生成并放入画布
@@ -986,6 +989,61 @@ ctx.state.patch(state, {
 1. 插件可以不传 `model_id`，由后端默认模型处理。
 2. `reference_images` 走宿主资源路径，不直接传 base64。
 3. 返回值为空或异常时，应由插件自行决定错误提示与回填策略。
+
+### 10.2.2 画布剪贴板粘贴（`readCanvasClipboard` / `resolveFileAssets`）
+
+插件 iframe 无法直接读取画布 V2 私有剪贴板 bundle。当用户从画布复制元素后粘贴到插件面板时，需经 Host 桥接：
+
+```text
+插件 ctx.assets.readCanvasClipboard()
+  -> postMessage magic-canvas-plugin:read-canvas-clipboard
+  -> Host readPluginCanvasClipboard（CanvasElementClipboard.read）
+  -> 回传 { payload, uploadedAssets }
+```
+
+`payload` 结构（不含 elements / Blob）：
+
+```ts
+{
+  source: "canvas-design",
+  version: 1,
+  operation: "copy-elements" | "copy-as-png",
+  files: Array<{
+    id: string
+    elementId: string
+    filename: string
+    mimeType: string
+    fileSize: number
+    role: "element-media" | "canvas-export"
+    sourceRef?: { src?: string; ossUrl?: string; expiresAt?: string }
+  }>
+}
+```
+
+导入策略：
+
+| operation | 处理方式 |
+| --------- | -------- |
+| `copy-as-png` | Host 对 bundle 内 Blob upload，回传 `uploadedAssets`；或插件对 paste event 中的 `image/png` 走 `uploadFile` |
+| `copy-elements` | 对带 `sourceRef.src` 的 `element-media` 调用 `ctx.assets.resolveFileAssets([{ path, fileName }])`，按 path 解析、**不上传** |
+
+`resolveFileAssets` 参数示例：
+
+```js
+const assets = await ctx.assets.resolveFileAssets(
+	[{ path: "uploads/foo.png", fileName: "foo.png" }],
+	{ type: "image" },
+)
+```
+
+返回 `PluginFileAsset[]`，同时含 `path`（稳定标识）与 `url` / `src`（当前可访问 URL）。
+
+Capability 映射：
+
+- `ctx.assets.readCanvasClipboard` → 声明 `assets.pickFiles`（与 pick / resolve 共用 bridge 权限）
+- `ctx.assets.resolveFileAssets` → 声明 `assets.pickFiles`
+
+内置插件通过 `magic-plugin-kit` 的 `image-grid` / `image-slot` 已封装上述逻辑，业务插件一般无需直接调用。自定义粘贴 UI 时可参考 kit 内 `resolvePastedImageAssets`。
 
 ### 10.3 分层总览
 

@@ -149,3 +149,12 @@ pnpm --dir frontend/magic-web exec vitest run --config ./vitest.config.ts \
 ```
 
 如果改动触达 CanvasDesign 类型、PluginPanel 或 shared kit，需要补跑相关 focused 测试，并按需执行 typecheck。
+
+涉及画布 → 插件粘贴链路时，额外运行：
+
+```bash
+pnpm --dir frontend/magic-web exec vitest run --config ./vitest.config.ts \
+  src/pages/superMagic/components/Detail/contents/Design/plugins/shared/magic-plugin-kit/__tests__/index.test.ts
+```
+
+相关 Host 模块：`readPluginCanvasClipboard.ts`、`fileAssets.ts`、`usePluginRuntimeBridge.ts`。协议说明见 `plugin-development-paradigm.md` §10.2.2 与 `magic-plugin-kit/README.md`「图片导入」。

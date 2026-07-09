@@ -123,6 +123,7 @@
 		return /^.+\.(png|jpe?g|webp|gif|bmp|svg)$/i.test(String(file.name ?? ""))
 	}
 
+	/* 从dataTransfer中获取文件 */
 	function getLocalFilesFromDataTransfer(dataTransfer) {
 		if (!dataTransfer) return []
 		const directFiles = Array.from(dataTransfer.files || []).filter(Boolean)
@@ -146,6 +147,134 @@
 			return true
 		}
 		return Array.from(dataTransfer.types || []).includes("Files")
+	}
+
+	const CANVAS_ELEMENT_CLIPBOARD_SOURCE = "canvas-design"
+	const CANVAS_ELEMENT_CLIPBOARD_VERSION = 1
+
+	/**
+	 * 画布复制粘贴：插件运行在 iframe srcDoc，paste event 读不到 V2 bundle。
+	 *
+	 * 读取：
+	 * 1. paste event 中的标准图片 File（外部截图 / copy-as-png 的 image/png）
+	 * 2. Host 桥接 readCanvasClipboard（回传 source/version/operation/files，不含 elements）
+	 *
+	 * 导入：
+	 * 1. copy-as-png → Host uploadedAssets，或本地 uploadFile
+	 * 2. copy-elements + sourceRef.src → resolveFileAssets，不上传
+	 * 3. 其余 → uploadFile
+	 */
+
+	function normalizeCanvasClipboardSourceRef(sourceRef) {
+		if (!sourceRef || typeof sourceRef !== "object") return undefined
+		return {
+			src: typeof sourceRef.src === "string" ? sourceRef.src : undefined,
+			ossUrl: typeof sourceRef.ossUrl === "string" ? sourceRef.ossUrl : undefined,
+			expiresAt: typeof sourceRef.expiresAt === "string" ? sourceRef.expiresAt : undefined,
+		}
+	}
+
+	/** 校验并规范化单条画布剪贴板文件 metadata。 */
+	function normalizeCanvasClipboardFileMetadata(file) {
+		if (!file || typeof file !== "object") return null
+		const role = file.role
+		if (role !== "element-media" && role !== "canvas-export") return null
+		if (typeof file.filename !== "string" || !file.filename.trim()) return null
+		if (typeof file.mimeType !== "string" || !file.mimeType.trim()) return null
+		return {
+			id: typeof file.id === "string" ? file.id : "",
+			elementId: typeof file.elementId === "string" ? file.elementId : "",
+			filename: file.filename,
+			mimeType: file.mimeType,
+			fileSize: typeof file.fileSize === "number" ? file.fileSize : 0,
+			role,
+			sourceRef: normalizeCanvasClipboardSourceRef(file.sourceRef),
+		}
+	}
+
+	/** 校验画布剪贴板 payload 结构（Host 回传 metadata 规范化用）。 */
+	function normalizeCanvasClipboardPayload(data) {
+		if (!data || typeof data !== "object") return null
+		if (data.source !== CANVAS_ELEMENT_CLIPBOARD_SOURCE) return null
+		if (data.version !== CANVAS_ELEMENT_CLIPBOARD_VERSION) return null
+		const operation = data.operation === "copy-as-png" ? "copy-as-png" : "copy-elements"
+		const files = Array.isArray(data.files)
+			? data.files.map(normalizeCanvasClipboardFileMetadata).filter(Boolean)
+			: []
+		if (!files.length && !Array.isArray(data.elements)) return null
+		return { operation, files }
+	}
+
+	/** 通过 Host 桥接读取 V2 bundle 剪贴板；失败时向上抛出，由 paste 错误处理展示 toast。 */
+	async function readCanvasClipboardPayloadFromHost(ctx) {
+		if (!ctx.assets?.readCanvasClipboard) return null
+		const hostResult = await ctx.assets.readCanvasClipboard()
+		const payload = normalizeCanvasClipboardPayload(hostResult?.payload)
+		if (!payload && !(hostResult?.uploadedAssets?.length > 0)) {
+			return null
+		}
+		return {
+			payload,
+			uploadedAssets: Array.isArray(hostResult?.uploadedAssets)
+				? hostResult.uploadedAssets
+				: [],
+		}
+	}
+
+	/** Host 剪贴板结果是否包含可导入的图片（空剪贴板时不应 toast / 导入）。 */
+	function hasHostImportableContent(hostResult) {
+		if (!hostResult) return false
+		if (hostResult.uploadedAssets?.length > 0) return true
+		const payload = hostResult.payload
+		if (!payload) return false
+		if (payload.operation === "copy-as-png") {
+			return payload.files.length > 0
+		}
+		return getReusableCanvasClipboardFiles(payload, 1).length > 0
+	}
+
+	function isImageClipboardMimeType(mimeType) {
+		return String(mimeType ?? "")
+			.toLowerCase()
+			.startsWith("image/")
+	}
+
+	/**
+	 * 从 payload 中筛选可复用引用的图片（copy-elements + element-media + sourceRef.src）。
+	 * copy-as-png 不在此列，需走 upload 路径。
+	 */
+	function getReusableCanvasClipboardFiles(payload, maxCount) {
+		if (!payload || payload.operation === "copy-as-png") return []
+		return payload.files
+			.filter(
+				(file) =>
+					file.role === "element-media" &&
+					file.sourceRef?.src &&
+					isImageClipboardMimeType(file.mimeType),
+			)
+			.slice(0, maxCount)
+	}
+
+	/** 从 DataTransfer（paste 的 clipboardData / drag 的 dataTransfer）提取标准图片 File。 */
+	function getImageFilesFromDataTransfer(dataTransfer) {
+		return getLocalFilesFromDataTransfer(dataTransfer).filter(isImageFile)
+	}
+
+	/** 合并导入资源并按 referenceId 去重，避免同 path 重复添加。 */
+	function mergeUniqueImageAssets(currentAssets, incomingAssets, maxCount) {
+		const merged = [...(Array.isArray(currentAssets) ? currentAssets : [])]
+		const existingIds = new Set(
+			merged.map((asset) => getImageReferenceId(asset)).filter(Boolean),
+		)
+		for (const asset of incomingAssets) {
+			if (!asset) continue
+			const referenceId = getImageReferenceId(asset)
+			if (referenceId && existingIds.has(referenceId)) continue
+			if (referenceId) existingIds.add(referenceId)
+			merged.push(asset)
+			if (merged.length >= maxCount) break
+		}
+		return merged
 	}
 
 	function getErrorMessage(error) {
@@ -776,18 +905,78 @@
 			return uploaded
 		}
 
-		async function importSectionImages(section, payload) {
-			const validationError = validateSectionAcquire(section)
-			if (validationError) return []
-			if (payload.kind === "picker") {
-				return pickImageFiles({
-					multiple: payload.maxCount > 1,
-					maxCount: payload.maxCount,
-				})
+		/** 将画布剪贴板 metadata 中的 sourceRef.src 解析为 PluginFileAsset，不 upload。 */
+		async function resolveCanvasClipboardAssets(metadataList) {
+			if (!metadataList.length) return []
+			if (!ctx.assets?.resolveFileAssets) {
+				throw new Error("ctx.assets.resolveFileAssets is not connected yet.")
 			}
-			if (payload.kind === "local") {
-				return uploadDroppedFiles(payload.files.slice(0, payload.maxCount))
+			return ctx.assets.resolveFileAssets(
+				metadataList.map((file) => ({
+					path: file.sourceRef.src,
+					fileName: file.filename,
+				})),
+			)
+		}
+
+		/**
+		 * 粘贴导入的统一入口：先读 metadata，再决定 resolve 还是 upload。
+		 * 见模块顶部「画布复制粘贴」注释中的读取/导入优先级。
+		 */
+		async function resolvePastedImageAssets(maxCount, clipboardData, options = {}) {
+			if (maxCount <= 0) return []
+
+			let payload = null
+			let hostUploadedAssets = []
+			let resolveError = null
+
+			// 画布剪贴板粘贴导入
+			const hostResult =
+				options.hostResult !== undefined
+					? options.hostResult
+					: await readCanvasClipboardPayloadFromHost(ctx)
+			if (hostResult) {
+				payload = hostResult.payload
+				hostUploadedAssets = hostResult.uploadedAssets
 			}
+
+			// copy-as-png（复制为PNG） 场景，Host 已上传，直接返回
+			if (hostUploadedAssets.length) {
+				return hostUploadedAssets.slice(0, maxCount)
+			}
+
+			// copy-elements（复制画布元素） 场景，Host 未上传，需要 resolve
+			const metadataList = payload ? getReusableCanvasClipboardFiles(payload, maxCount) : []
+
+			if (metadataList.length) {
+				try {
+					const resolved = await resolveCanvasClipboardAssets(metadataList)
+					if (resolved.length) {
+						return resolved.slice(0, maxCount)
+					}
+				} catch (error) {
+					resolveError = error
+				}
+			}
+
+			// 常规本地文件复制粘贴导入
+			const imageFiles = clipboardData ? getImageFilesFromDataTransfer(clipboardData) : []
+			if (imageFiles.length) {
+				try {
+					return await uploadDroppedFiles(imageFiles.slice(0, maxCount))
+				} catch (uploadError) {
+					throw resolveError || uploadError
+				}
+			}
+
+			if (resolveError) {
+				throw resolveError
+			}
+
+			if (metadataList.length) {
+				throw new Error(t("error.pasteResolve", "粘贴失败，无法引用画布图片"))
+			}
+
 			return []
 		}
 
@@ -1031,10 +1220,6 @@
 				target.classList.toggle("is-drag-over", Boolean(isActive))
 			}
 
-			const getLocalImageFiles = (dataTransfer) => {
-				return getLocalFilesFromDataTransfer(dataTransfer).filter(isImageFile)
-			}
-
 			const handleImportError = (error) => {
 				setState({
 					error:
@@ -1044,7 +1229,19 @@
 				})
 			}
 
+			const handlePasteError = (error) => {
+				const message =
+					getErrorMessage(error) ||
+					section.pasteErrorMessage ||
+					t("error.pasteFiles", "粘贴失败，请重试")
+				setState({ error: message })
+				ctx.ui?.toast?.(message, "error")
+			}
+
 			const importLocalFiles = async (files) => {
+				const validationError = validateSectionAcquire(section)
+				if (validationError) return
+
 				const currentAssets = Array.isArray(state[section.stateKey])
 					? state[section.stateKey]
 					: []
@@ -1055,16 +1252,44 @@
 				const maxCount = mode === "grid" ? importLimit.remaining : 1
 				if (maxCount <= 0) return
 
-				const images = await importSectionImages(section, {
-					kind: "local",
-					files,
-					maxCount,
-				})
+				const images = await uploadDroppedFiles(files.slice(0, maxCount))
 				if (!images?.length) return
 				if (mode === "grid") {
 					setState({
 						[section.stateKey]: [...currentAssets, ...images].slice(
 							0,
+							importLimit.maxCount,
+						),
+						error: "",
+					})
+					return
+				}
+				setState({ [section.stateKey]: images[0] ?? null, error: "" })
+			}
+
+			/* 粘贴导入资源 */
+			const importPastedAssets = async (clipboardData, options = {}) => {
+				// 检验
+				const validationError = validateSectionAcquire(section)
+				if (validationError) return
+
+				const currentAssets = Array.isArray(state[section.stateKey])
+					? state[section.stateKey]
+					: []
+				const importLimit =
+					mode === "grid"
+						? getSectionImportLimit(section, currentAssets.length)
+						: { maxCount: 1, remaining: 1 }
+				const maxCount = mode === "grid" ? importLimit.remaining : 1
+				if (maxCount <= 0) return
+
+				const images = await resolvePastedImageAssets(maxCount, clipboardData, options)
+				if (!images?.length) return
+				if (mode === "grid") {
+					setState({
+						[section.stateKey]: mergeUniqueImageAssets(
+							currentAssets,
+							images,
 							importLimit.maxCount,
 						),
 						error: "",
@@ -1108,7 +1333,7 @@
 				setDragState(false)
 				const dataTransfer = event.dataTransfer
 				if (!dataTransfer) return
-				const localFiles = getLocalImageFiles(dataTransfer)
+				const localFiles = getImageFilesFromDataTransfer(dataTransfer)
 				if (!localFiles.length) return
 
 				try {
@@ -1119,13 +1344,35 @@
 			})
 
 			target.addEventListener("paste", async (event) => {
-				const files = Array.from(event.clipboardData?.files || []).filter(isImageFile)
-				if (!files.length) return
-				event.preventDefault()
+				const clipboardData = event.clipboardData
+				const imageFiles = clipboardData ? getImageFilesFromDataTransfer(clipboardData) : []
+				const canReadCanvasClipboard = Boolean(ctx.assets?.readCanvasClipboard)
+
+				if (!imageFiles.length && !canReadCanvasClipboard) return
+
+				const showPastingToast = () => {
+					ctx.ui?.toast?.(
+						section.pasteHint ?? t("imageImport.pasting", "正在粘贴…"),
+						"info",
+					)
+				}
+
 				try {
-					await importLocalFiles(files)
+					if (imageFiles.length) {
+						event.preventDefault()
+						showPastingToast()
+						await importPastedAssets(clipboardData)
+						return
+					}
+
+					event.preventDefault()
+					const hostResult = await readCanvasClipboardPayloadFromHost(ctx)
+					if (!hasHostImportableContent(hostResult)) return
+
+					showPastingToast()
+					await importPastedAssets(clipboardData, { hostResult })
 				} catch (error) {
-					handleImportError(error)
+					handlePasteError(error)
 				}
 			})
 		}
@@ -1718,7 +1965,13 @@
 				previewCanvas.height = Math.max(1, Math.round(cropCanvas.height * scale))
 				const previewContext = previewCanvas.getContext("2d")
 				if (!previewContext) return null
-				previewContext.drawImage(cropCanvas, 0, 0, previewCanvas.width, previewCanvas.height)
+				previewContext.drawImage(
+					cropCanvas,
+					0,
+					0,
+					previewCanvas.width,
+					previewCanvas.height,
+				)
 				return previewCanvas.toDataURL("image/png")
 			}
 

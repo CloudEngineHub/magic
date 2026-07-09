@@ -123,6 +123,8 @@ return {
 | `ctx.resources.resolve` | `resources.resolve` |
 | `ctx.assets.pickFiles` | `assets.pickFiles` |
 | `ctx.assets.uploadFile` | `assets.uploadFile` |
+| `ctx.assets.resolveFileAssets` | `assets.pickFiles` |
+| `ctx.assets.readCanvasClipboard` | `assets.pickFiles` |
 | `ctx.assets.fetchBlob` | `assets.fetchBlob` |
 | `ctx.ai.getImageModels` | `ai.getImageModels` |
 | `ctx.ai.completeImagePrompt` | `ai.completeImagePrompt` |
