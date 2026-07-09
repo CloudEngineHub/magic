@@ -224,7 +224,7 @@ After the tool completes, verify:
 - Before final packaging, `images/` contains no unconfirmed logos, internal screenshots, QR codes, real people, customer case images, private dashboards, or proprietary visuals.
 - User-confirmed retained sensitive assets are listed in the final report before packaging.
 - `<template-dir>/slides/*.html` load `../theme.css` and reference local `../images/...` assets.
-- When the template is later used, copied pages must not reference the downloaded template directory or any absolute local path.
+- When the template is later used, copied pages must not reference the installed template directory or any absolute local path.
 - The preview generation script writes the first-slide preview and matrix preview outside `<template-dir>/`, usually under `<artifact-root>/<template-id>/previews/`.
 - Slide HTML contains `data-slot` attributes for replaceable text, images, or charts where available, but slot metadata is not duplicated into `template.json`.
 - Default slide HTML does not contain renderer-only source attributes such as `data-element-id` or `data-source-shape-id`.

@@ -30,7 +30,7 @@ Do not write or rely on legacy fields such as `name`, `template_dir`, `package_t
 
 ## Decision
 
-- Explicit template `code`: retrieve the template package with `get_slides_template_download_url`, then inspect the downloaded template files.
+- Explicit template `code`: install the template package with `install_slides_template`, then inspect the installed template files.
 - Platform template list is available but no template is selected: recommend 3-5 suitable options with `ask_user`. Each option must include name, short description, and exact `code`, plus "no template/default style".
 - User only describes scenario/topic/audience without enough visual specs and no platform template list is available: ask for a platform template code or confirm no template/default style.
 - User provides a PPTX/PPT/presentation template file or URL and asks to convert it into a platform template: read `references/pptx-template-workflow.md` and follow the PPTX Template Workflow first.
@@ -40,31 +40,30 @@ Do not write or rely on legacy fields such as `name`, `template_dir`, `package_t
 
 ## Platform Template Retrieval
 
-When a template code is selected and you need to read or download the template package, first call `get_slides_template_download_url` through Code Mode, then download and inspect the ZIP package.
+When a template code is selected and you need to read the template package, first call `install_slides_template` through Code Mode, then inspect the installed directory.
 
 ```python
 from sdk.tool import tool
 
-result = tool.call("get_slides_template_download_url", {
-    "code": template_code
+result = tool.call("install_slides_template", {
+    "code": template_code,
+    "install_path": f"slide-templates/{template_code}"
 })
 
-template_file_url = result.data["template_file_url"]
+installed_directory = result.data["installed_directory"]
 ```
 
-After receiving `template_file_url`:
+After receiving `installed_directory`:
 
-1. Download the ZIP package into the current workspace, for example under `.workspace/slide-templates/<code>/`.
-   Prefer `download_from_urls` for the URL download, then use `shell_exec` only for unzip/file inspection.
-2. Unzip it into a dedicated directory.
-3. Read `template.json` first.
-4. Read all available resources declared by `template.json` that are useful for the deck:
+1. Use the returned `installed_directory`, even if it differs from the requested `install_path`; the tool may choose a suffixed directory when the requested directory already exists.
+2. Read `template.json` from `installed_directory` first.
+3. Read all available resources declared by `template.json` that are useful for the deck:
    - Always read `files.theme_css` when present.
    - Read `files.visual_spec` for design rules, typography, layout types, chart rules, and image guidance when present.
    - Read representative `slides[].file` files or representative HTML files under `files.slides_dir`, when present.
-5. Treat `theme.css` as the authoritative CSS. Treat `template.json`, `visual-spec.md`, and `slides/*.html` as complementary sources for reusable layouts, edit hints, components, composition patterns, visual rhythm, and asset references.
-6. Read image paths or assets only when needed for the target deck.
-7. Do not link to downloaded template files from generated slides. Copy the required CSS and assets into the PPT project after `create_slide_project`.
+4. Treat `theme.css` as the authoritative CSS. Treat `template.json`, `visual-spec.md`, and `slides/*.html` as complementary sources for reusable layouts, edit hints, components, composition patterns, visual rhythm, and asset references.
+5. Read image paths or assets only when needed for the target deck.
+6. Do not link to installed template files from generated slides. Copy the required CSS and assets into the PPT project after `create_slide_project`.
 
 ## PPTX-Derived Template Contract
 
@@ -88,12 +87,12 @@ When a template is PPTX-derived, preserve and document this reuse contract:
 ## Template Application Workflow
 
 1. Resolve the selected template code from user choice or upstream context. If there is no exact code, ask for it or proceed with no template if the user confirms.
-2. Call `get_slides_template_download_url` and download the template package.
-3. Read `template.json`, then read the available resources it declares (`theme_css`, `visual_spec`, `slides_dir`, `images_dir`, and `slides[].file`) before creating slide pages.
+2. Call `install_slides_template` with the exact code and a stable `install_path`, then use `result.data["installed_directory"]`.
+3. Read `template.json` from the installed directory, then read the available resources it declares (`theme_css`, `visual_spec`, `slides_dir`, `images_dir`, and `slides[].file`) before creating slide pages.
 4. Decide whether the package is PPTX-derived using the rules above. If yes, preserve the PPTX-derived template contract for downstream slide creation.
 5. Before writing slides, summarize internally: package resources, palette roles, typography, layout inventory, reusable components, slot/page patterns, composition rules, asset dependencies, adaptation rules, and whether the selected package is PPTX-derived.
 6. Create the slide project with `create_slide_project`.
-7. Copy `theme.css` and any required assets from the downloaded template into the PPT project. Keep all slide references local to that project.
+7. Copy `theme.css` and any required assets from the installed template into the PPT project. Keep all slide references local to that project.
 8. Each slide HTML must include the local CSS:
 
 ```html
@@ -101,7 +100,7 @@ When a template is PPTX-derived, preserve and document this reuse contract:
 ```
 
 9. For PPTX-derived templates, downstream slide creation should apply the template-preserving contract instead of treating converted pages as loose style references.
-10. For non-PPTX-derived templates, load `creating-slides` and generate slides. Keep every slide fixed at 1920x1080; do not use responsive design. Use only the downloaded template's CSS variables, components, dedicated layout patterns, chart colors, and image guidance inferred from the template package. If no downloaded layout fits, compose the page from template components, decorations, and layout helpers instead of generic centered text.
+10. For non-PPTX-derived templates, load `creating-slides` and generate slides. Keep every slide fixed at 1920x1080; do not use responsive design. Use only the installed template's CSS variables, components, dedicated layout patterns, chart colors, and image guidance inferred from the template package. If no installed layout fits, compose the page from template components, decorations, and layout helpers instead of generic centered text.
 11. Each slide should have one clear visual anchor, such as an image area, chart, matrix, large number, color block, or template-specific decoration.
 12. Use `data-slot`, `data-slot-type`, and `data-slot-role` from slide HTML as editing hints when present, but do not expect slot metadata in `template.json`.
 
@@ -110,7 +109,7 @@ When a template is PPTX-derived, preserve and document this reuse contract:
 - First decide whether the page needs images. Use images for visual layouts, cover/section/closing pages, specific person/product/scene/case, or sparse text.
 - Skip image search for dense comparison, card grid, timeline/process, data dashboard, or chart pages.
 - When the selected template includes local image or illustration assets and the target slide needs an image, or the user has not provided a required image, inspect and reuse suitable assets from the template first. Prefer these assets for decorative illustrations, cover/section visuals, backgrounds, motifs, and style-consistent placeholders.
-- Use `image_search` only after checking template assets, or when the slide needs a factual photo, specific person/product/place, screenshot, brand mark, or another exact image the template cannot supply. Try at least 2 content-relevant keyword groups and include style keywords inferred from the downloaded template.
+- Use `image_search` only after checking template assets, or when the slide needs a factual photo, specific person/product/place, screenshot, brand mark, or another exact image the template cannot supply. Try at least 2 content-relevant keyword groups and include style keywords inferred from the installed template.
 - If search results are poor, use `generate_images` and save output under the PPT project `images/` folder.
 - Apply template style only to creative illustrations (concept visuals, atmosphere, decorative or abstract images). Do not stylize factual photos, real people, real places, products, history/science references, brand marks, screenshots, QR codes, or data graphics.
 - Images should occupy meaningful visual space; do not use them as tiny icons.
@@ -139,7 +138,7 @@ Use when the user provides an existing Super Magic slide project directory that 
 
 ## Output
 
-- Platform template workflow output: a complete template package generated through `creating-slides`, using template files retrieved through `get_slides_template_download_url`.
+- Platform template workflow output: a complete template package generated through `creating-slides`, using template files installed through `install_slides_template`.
 - Built-in local template workflow output: none; local bundled templates are no longer supported.
 - Custom workflow output: a complete template package generated through `creating-slides`.
 - PPTX template conversion output: first create a draft template folder containing `template.json`, optional `magic.project.js`, `theme.css`, `images/`, and `slides/*.html`; use the model to analyze the converted visual style, write `visual-spec.md`, sanitize obvious sensitive content, confirm ambiguous sensitive assets through `ask_user`, refine the folder, run lightweight QA, then ask the user whether to create the final sibling `<template-id>-template.zip`. If a ZIP is created, exclude `magic.project.js` and unconfirmed sensitive assets.

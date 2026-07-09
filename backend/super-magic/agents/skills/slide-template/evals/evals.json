@@ -4,31 +4,31 @@
     {
       "id": 1,
       "prompt": "帮我用科技深色风格做一个 AI 发展趋势的 PPT，10页左右",
-      "expected_output": "先加载 slide-template。若上下文已有平台模板候选列表，则根据“科技深色风格”推荐 3-5 个候选模板，并使用 ask_user 询问用户选择；选项需包含模板名称、简短描述和 template code，同时提供不使用模板的选项。若上下文没有模板候选或明确 code，则询问用户提供 template code、从平台模板面板选择，或确认不使用模板；不得展示旧内置模板目录或编造 code。用户选定 code 后，通过 run_sdk_snippet 调用 get_slides_template_download_url 获取 template_file_url，下载解压 ZIP 后先读取 template.json，再根据 files/slides 字段加载 theme.css、visual-spec.md、slides/*.html 和本地 images 等可用资源；template.json 应使用 schema_version=1.0、PPT-... template_id、label/description 和 slides[].file/title/layout/description，category_code 可选且不依赖旧 preview.html 或 slots 元数据，再继续生成",
+      "expected_output": "先加载 slide-template。若上下文已有平台模板候选列表，则根据“科技深色风格”推荐 3-5 个候选模板，并使用 ask_user 询问用户选择；选项需包含模板名称、简短描述和 template code，同时提供不使用模板的选项。若上下文没有模板候选或明确 code，则询问用户提供 template code、从平台模板面板选择，或确认不使用模板；不得展示旧内置模板目录或编造 code。用户选定 code 后，通过 run_sdk_snippet 调用 install_slides_template 安装模板包，使用返回的 installed_directory 先读取 template.json，再根据 files/slides 字段加载 theme.css、visual-spec.md、slides/*.html 和本地 images 等可用资源；template.json 应使用 schema_version=1.0、PPT-... template_id、label/description 和 slides[].file/title/layout/description，category_code 可选且不依赖旧 preview.html 或 slots 元数据，再继续生成",
       "files": []
     },
     {
       "id": 2,
       "prompt": "我要做一个季度业绩汇报 PPT，想要商务简约风格，内容关于 2025 年 Q1 销售数据",
-      "expected_output": "先加载 slide-template。若上下文已有平台模板候选列表，则根据“季度业绩汇报”和“商务简约风格”推荐 3-5 个候选模板，并使用 ask_user 询问用户选择；选项需包含模板名称、简短描述和 template code，同时提供不使用模板的选项。若上下文没有模板候选或明确 code，则询问用户提供 template code、从平台模板面板选择，或确认不使用模板；不得展示旧内置模板目录或编造 code。用户选定 code 后，通过 get_slides_template_download_url 获取模板 ZIP 下载链接，下载解压后先读取 template.json，再根据 files/slides 字段加载 theme.css、visual-spec.md、slides/*.html 和本地 images 等可用资源；不依赖旧 preview.html 或 slots 元数据",
+      "expected_output": "先加载 slide-template。若上下文已有平台模板候选列表，则根据“季度业绩汇报”和“商务简约风格”推荐 3-5 个候选模板，并使用 ask_user 询问用户选择；选项需包含模板名称、简短描述和 template code，同时提供不使用模板的选项。若上下文没有模板候选或明确 code，则询问用户提供 template code、从平台模板面板选择，或确认不使用模板；不得展示旧内置模板目录或编造 code。用户选定 code 后，通过 install_slides_template 安装模板包，使用返回的 installed_directory 先读取 template.json，再根据 files/slides 字段加载 theme.css、visual-spec.md、slides/*.html 和本地 images 等可用资源；不依赖旧 preview.html 或 slots 元数据",
       "files": []
     },
     {
       "id": 3,
       "prompt": "先给我看看有哪些 PPT 模板可以选，我还没决定用哪个",
-      "expected_output": "加载 slide-template。若上下文已有平台模板候选列表，则使用 ask_user 展示 3-5 套可选模板；每个选项需包含模板名称、简短描述和 template code，同时提供不使用模板的选项。若上下文没有平台模板候选列表或 code，则说明本 skill 不再内置模板列表，要求用户从平台模板面板选择或提供 template code；不得列出旧 assets/templates 目录或 preview.html 路径；下载后的模板应按新版 HTML slide template project 读取 template.json、visual-spec.md、theme.css、images/ 和 slides/*.html",
+      "expected_output": "加载 slide-template。若上下文已有平台模板候选列表，则使用 ask_user 展示 3-5 套可选模板；每个选项需包含模板名称、简短描述和 template code，同时提供不使用模板的选项。若上下文没有平台模板候选列表或 code，则说明本 skill 不再内置模板列表，要求用户从平台模板面板选择或提供 template code；不得列出旧 assets/templates 目录或 preview.html 路径；安装后的模板应按新版 HTML slide template project 读取 template.json、visual-spec.md、theme.css、images/ 和 slides/*.html",
       "files": []
     },
     {
       "id": 4,
       "prompt": "帮我做一个论文答辩 PPT，学术风格，主题是机器学习在医疗影像诊断中的应用",
-      "expected_output": "先加载 slide-template。若上下文已有平台模板候选列表，则根据“论文答辩”和“学术风格”推荐 3-5 个候选模板，并使用 ask_user 询问用户选择；选项需包含模板名称、简短描述和 template code，同时提供不使用模板的选项。若上下文没有模板候选或明确 code，则询问用户提供 template code、从平台模板面板选择，或确认不使用模板；不得展示旧内置模板目录或编造 code。用户选定 code 后，通过 get_slides_template_download_url 获取模板 ZIP，下载解压后先读取 template.json，再根据 files/slides 字段加载 theme.css、visual-spec.md、slides/*.html 和本地 images 等可用资源；不依赖旧 preview.html 或 slots 元数据",
+      "expected_output": "先加载 slide-template。若上下文已有平台模板候选列表，则根据“论文答辩”和“学术风格”推荐 3-5 个候选模板，并使用 ask_user 询问用户选择；选项需包含模板名称、简短描述和 template code，同时提供不使用模板的选项。若上下文没有模板候选或明确 code，则询问用户提供 template code、从平台模板面板选择，或确认不使用模板；不得展示旧内置模板目录或编造 code。用户选定 code 后，通过 install_slides_template 安装模板包，使用返回的 installed_directory 先读取 template.json，再根据 files/slides 字段加载 theme.css、visual-spec.md、slides/*.html 和本地 images 等可用资源；不依赖旧 preview.html 或 slots 元数据",
       "files": []
     },
     {
       "id": 5,
       "prompt": "做一个互联网产品发布会 PPT，要时尚一点，有渐变感，介绍我们的新 App",
-      "expected_output": "先加载 slide-template。若上下文已有平台模板候选列表，则根据“互联网产品发布会”“时尚”和“渐变感”推荐 3-5 个候选模板，并使用 ask_user 询问用户选择；选项需包含模板名称、简短描述和 template code，同时提供不使用模板的选项。若上下文没有模板候选或明确 code，则询问用户提供 template code、从平台模板面板选择，或确认不使用模板；不得展示旧内置模板目录或编造 code。用户选定 code 后，通过 get_slides_template_download_url 获取模板 ZIP，下载解压后先读取 template.json，再根据 files/slides 字段加载 theme.css、visual-spec.md、slides/*.html 和本地 images 等可用资源；不依赖旧 preview.html 或 slots 元数据",
+      "expected_output": "先加载 slide-template。若上下文已有平台模板候选列表，则根据“互联网产品发布会”“时尚”和“渐变感”推荐 3-5 个候选模板，并使用 ask_user 询问用户选择；选项需包含模板名称、简短描述和 template code，同时提供不使用模板的选项。若上下文没有模板候选或明确 code，则询问用户提供 template code、从平台模板面板选择，或确认不使用模板；不得展示旧内置模板目录或编造 code。用户选定 code 后，通过 install_slides_template 安装模板包，使用返回的 installed_directory 先读取 template.json，再根据 files/slides 字段加载 theme.css、visual-spec.md、slides/*.html 和本地 images 等可用资源；不依赖旧 preview.html 或 slots 元数据",
       "files": []
     },
     {
@@ -52,7 +52,7 @@
     {
       "id": 9,
       "prompt": "我选了一个平台模板，template.json 里 source.kind 是 converted，source.file 是 brand-template.pptx。请用这个模板做一份新 PPT。",
-      "expected_output": "加载 slide-template 并识别这是 PPTX-derived 模板：不能只因为 source.kind=converted 判断，需结合 source.file 的 .pptx 后缀或 visual-spec/description 明确来源；进入 template-preserving edit mode。下载并读取 template.json、theme.css、visual-spec.md、代表性 slides/*.html 和预览图后，逐页根据 layout、description、HTML slot 结构、图片/图表数量、预览图选择 source_slide_file；todo_list 每页记录 edit_mode: template_preserving、text_slot_mapping、可选 image_slot_mapping/chart_data_mapping、锁定元素和允许的小幅适配。创建项目后复制 theme.css、所选页面 HTML 和所有本地资源；页面生成时先复制源 HTML，再局部替换文本 slot，保留 DOM、CSS、图片/SVG/图表容器、绝对定位、字体层级和配色；不使用通用 Tailwind 页面或 create_slide 从零重写；完成后检查 src/href 不引用模板下载目录或绝对本地路径",
+      "expected_output": "加载 slide-template 并识别这是 PPTX-derived 模板：不能只因为 source.kind=converted 判断，需结合 source.file 的 .pptx 后缀或 visual-spec/description 明确来源；进入 template-preserving edit mode。通过 install_slides_template 安装模板包，使用返回的 installed_directory 读取 template.json、theme.css、visual-spec.md、代表性 slides/*.html 和预览图后，逐页根据 layout、description、HTML slot 结构、图片/图表数量、预览图选择 source_slide_file；todo_list 每页记录 edit_mode: template_preserving、text_slot_mapping、可选 image_slot_mapping/chart_data_mapping、锁定元素和允许的小幅适配。创建项目后复制 theme.css、所选页面 HTML 和所有本地资源；页面生成时先复制源 HTML，再局部替换文本 slot，保留 DOM、CSS、图片/SVG/图表容器、绝对定位、字体层级和配色；不使用通用 Tailwind 页面或 create_slide 从零重写；完成后检查 src/href 不引用模板安装目录或绝对本地路径",
       "files": []
     },
     {
