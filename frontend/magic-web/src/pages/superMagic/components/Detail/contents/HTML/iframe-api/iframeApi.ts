@@ -66,18 +66,34 @@ export async function createIframeFile(data: {
 
 // ─── MagicBase 数据库操作 ────────────────────────────────────────────────────
 
+function withMagicBaseShareToken() {
+	const token = (window as Window & { temporary_token?: string }).temporary_token || ""
+	if (!token) return undefined
+	return {
+		headers: {
+			"x-magic-share-token": token,
+		},
+	}
+}
+
 /**
  * 获取项目下所有表。
  */
 export async function getMagicBaseTables(projectId: string): Promise<unknown[]> {
-	return iframeClient.get(`/api/v1/magicbase/projects/${projectId}/tables`)
+	return iframeClient.get(
+		`/api/v1/magicbase/projects/${projectId}/tables`,
+		withMagicBaseShareToken(),
+	)
 }
 
 /**
  * 获取单张表详情（含字段定义）。
  */
 export async function getMagicBaseTable(projectId: string, tableId: string): Promise<unknown> {
-	return iframeClient.get(`/api/v1/magicbase/projects/${projectId}/tables/${tableId}`)
+	return iframeClient.get(
+		`/api/v1/magicbase/projects/${projectId}/tables/${tableId}`,
+		withMagicBaseShareToken(),
+	)
 }
 
 /**
@@ -89,10 +105,14 @@ export async function createMagicBaseRow(
 	data: Record<string, unknown>,
 	select?: string[],
 ): Promise<unknown> {
-	return iframeClient.post(`/api/v1/magicbase/projects/${projectId}/tables/${tableId}/rows`, {
-		data,
-		...(select ? { select: select.join(",") } : {}),
-	})
+	return iframeClient.post(
+		`/api/v1/magicbase/projects/${projectId}/tables/${tableId}/rows`,
+		{
+			data,
+			...(select ? { select: select.join(",") } : {}),
+		},
+		withMagicBaseShareToken(),
+	)
 }
 
 /**
@@ -111,6 +131,7 @@ export async function queryMagicBaseRows(
 	return iframeClient.post(
 		`/api/v1/magicbase/projects/${projectId}/tables/${tableId}/query`,
 		requestBody,
+		withMagicBaseShareToken(),
 	)
 }
 
@@ -126,6 +147,7 @@ export async function getMagicBaseRow(
 	const params = select ? `?select=${select.join(",")}` : ""
 	return iframeClient.get(
 		`/api/v1/magicbase/projects/${projectId}/tables/${tableId}/rows/${recordId}${params}`,
+		withMagicBaseShareToken(),
 	)
 }
 
@@ -145,6 +167,7 @@ export async function updateMagicBaseRow(
 			data,
 			...(select ? { select: select.join(",") } : {}),
 		},
+		withMagicBaseShareToken(),
 	)
 }
 
@@ -158,6 +181,8 @@ export async function deleteMagicBaseRow(
 ): Promise<void> {
 	return iframeClient.delete(
 		`/api/v1/magicbase/projects/${projectId}/tables/${tableId}/rows/${recordId}`,
+		undefined,
+		withMagicBaseShareToken(),
 	)
 }
 
@@ -165,7 +190,10 @@ export async function deleteMagicBaseRow(
  * 获取项目关系列表。
  */
 export async function getMagicBaseRelations(projectId: string): Promise<unknown[]> {
-	return iframeClient.get(`/api/v1/magicbase/projects/${projectId}/relations`)
+	return iframeClient.get(
+		`/api/v1/magicbase/projects/${projectId}/relations`,
+		withMagicBaseShareToken(),
+	)
 }
 
 export interface IframeFileInfo {

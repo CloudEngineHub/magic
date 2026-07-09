@@ -46,9 +46,10 @@ const context = await window.Magic.getContext();
 For data apps with ownership or collaboration:
 
 - Call `window.Magic.getContext()` during initialization before user-dependent reads or writes.
-- Store stable identity fields in MagicBase, such as `creator_user_id`, `creator_name`, `owner_user_id`, `owner_name`, and `updated_by_user_id`, choosing only fields the app actually needs.
-- When creating a row, write `creator_user_id: context.userId` and `creator_name: context.userName` or the scenario's equivalent owner fields.
-- When rendering edit/delete/archive/transfer buttons, compare `context.userId` with the row's stable identity field. Display names are not permission keys.
+- Prefer MagicBase system fields for ownership. MagicBase automatically records `created_by` for every row, and backend `private_user` permissions are based on this system field.
+- Do not create a dynamic `creator_user_id` column just to enforce creator permissions. Create business identity fields only when the app needs UI display, filtering, assignment, or domain-specific ownership beyond the system creator, such as `creator_name`, `owner_user_id`, `owner_name`, `assignee_user_id`, or `updated_by_user_id`.
+- When creating a row, write only real business fields. Do not write system fields such as `created_by`, `organization_code`, `created_at`, or `updated_at`.
+- When rendering edit/delete/archive/transfer buttons for creator-owned rows, request `created_by` through `select` and compare it with `context.userId`. Display names are not permission keys.
 - If `getContext()` fails, disable user-dependent create, edit, delete, ownership, and transfer operations and show an understandable error. Never write fake identities such as `unknown`, `guest`, `visitor`, `访客`, or `未命名用户` into MagicBase.
 
 Recommended pattern:
@@ -68,15 +69,18 @@ async function createTask(data) {
     throw new Error("Current user information is not initialized");
   }
 
-  return window.Magic.db.createRow(TASK_TABLE_ID, {
-    ...data,
-    creator_user_id: context.userId,
-    creator_name: context.userName,
-  });
+  return window.Magic.db.createRow(
+    TASK_TABLE_ID,
+    {
+      ...data,
+      creator_name: context.userName, // UI display only; backend ownership uses system created_by.
+    },
+    ["id", "title", "status", "created_by", "creator_name", "created_at", "updated_at"]
+  );
 }
 
 function canEdit(row) {
-  return Boolean(context?.userId && row.creator_user_id === context.userId);
+  return Boolean(context?.userId && row.created_by === context.userId);
 }
 ```
 
@@ -84,46 +88,46 @@ function canEdit(row) {
 
 ## MagicBase Dynamic Permissions
 
-MagicBase `dynamic_permissions` are the backend security boundary. Frontend filters, hidden buttons, and `canEdit()` checks are only product experience safeguards. They must not be treated as the only permission control when the user asks for private or owner-only data.
+MagicBase `dynamic_permissions` are the backend security boundary. Frontend filters, hidden buttons, and `canEdit()` checks are only product experience safeguards. They must not be treated as the only permission control when the user asks for private, owner-only, organization-shared, department-shared, read-only, or restricted-edit data.
 
-When the user says that each person can only see their own data, only edit their own data, "my data", personal private data, creator-only access, owner-only access, or similar requirements, `create_magicbase_table` must include row-level `private_user` dynamic permissions:
+Before creating a table for a multi-user data app, split the permission intent into four questions and reflect the answer in the `plan` assumptions and `create_magicbase_table.dynamic_permissions`:
+
+1. Who can read rows?
+2. Who can insert rows?
+3. Who can edit rows?
+4. Who can delete rows?
+
+If the user gives partial permission intent, infer the missing parts with the least-privilege default that still satisfies the product loop, and state the assumption in the plan. Do not omit `dynamic_permissions` for data that has ownership, privacy, collaboration, organization, department, review, or read-only semantics.
 
 Pass `dynamic_permissions` as a nested object in the tool arguments, not as a JSON string. Do not stringify it or wrap the object in quotes. If the tool rejects `dynamic_permissions` with "expected object", retry with the same permission intent as an object; do not remove the permission field or fall back to a public table.
-
-```json
-{
-  "dynamic_permissions": {
-    "table": {
-      "read_scope": "public",
-      "insert_scope": "public"
-    },
-    "row": {
-      "read_scope": "private_user",
-      "edit_scope": "private_user",
-      "delete_scope": "private_user"
-    },
-    "columns": {}
-  }
-}
-```
-
-Still store stable business identity fields such as `creator_user_id`, `creator_name`, `owner_user_id`, and `owner_name` when the app needs display, filtering, or UI permission checks. HTML should still query with filters such as `creator_user_id: context.userId` for better user experience, but that filter is not the security boundary. The backend boundary is MagicBase `dynamic_permissions`.
 
 Scope selection:
 
 - `public`: public collaborative data that every permitted project user may access.
-- `private_user`: only the row creator may read, edit, or delete. Use this for personal todos, personal records, my applications, my drafts, and owner-only data.
+- `private_user`: only the row creator may read, edit, or delete. This uses MagicBase system `created_by`, not a dynamic `creator_user_id` column. Use this for personal records, my applications, my drafts, owner-only edit/delete, and creator-owned rows.
 - `private_department`: users may access rows created by people in overlapping departments. Use only when the user explicitly asks for department-level isolation.
 - `private_org`: users in the same organization may access the data. Use for organization-shared data.
 - `disabled`: dynamic permissions do not grant access; use only when the app intentionally relies on static permissions or administrators.
 
-Correct `create_magicbase_table` pattern for personal todos:
+Permission intent matrix:
+
+| User intent | Table scope | Row scope |
+| --- | --- | --- |
+| Everyone collaborates and can edit/delete all rows | `read_scope=public`, `insert_scope=public` | `read_scope=public`, `edit_scope=public`, `delete_scope=public` |
+| Everyone can read, only the creator can edit/delete | `read_scope=public`, `insert_scope=public` | `read_scope=public`, `edit_scope=private_user`, `delete_scope=private_user` |
+| Each user can only access their own rows | `read_scope=public`, `insert_scope=public` | `read_scope=private_user`, `edit_scope=private_user`, `delete_scope=private_user` |
+| Organization-shared rows | `read_scope=public`, `insert_scope=public` | Use `private_org` for read/edit/delete only where the user asks for organization-wide access; otherwise combine `read_scope=private_org` with `edit_scope=private_user` and `delete_scope=private_user` for creator-managed org data. |
+| Department-shared rows | `read_scope=public`, `insert_scope=public` | Use `private_department` for read/edit/delete only where the user asks for department-wide access; otherwise combine `read_scope=private_department` with `edit_scope=private_user` and `delete_scope=private_user` for creator-managed department data. |
+| Public intake form where submitters should not edit after submit | `read_scope=public`, `insert_scope=public` | Do not grant ordinary public edit/delete. Use `edit_scope=disabled`, `delete_scope=disabled`, or explain that administrator/explicit permissions are required for later review operations. |
+| Admin-maintained data with ordinary user read-only access | `read_scope=public`, `insert_scope=disabled` unless users may submit | Do not use public edit/delete. Use `edit_scope=disabled`, `delete_scope=disabled`, or explicit manager/admin permissions. |
+
+Correct `create_magicbase_table` pattern for a todo app where everyone can read all todos but only the creator can edit or delete:
 
 ```json
 {
   "table_key": "tasks",
   "table_name": "Tasks",
-  "description": "Personal todo tasks",
+  "description": "Team-visible todo tasks with creator-only edits",
   "columns": [
     {
       "column_key": "title",
@@ -139,16 +143,10 @@ Correct `create_magicbase_table` pattern for personal todos:
       "default_value": "pending"
     },
     {
-      "column_key": "creator_user_id",
-      "column_name": "Creator User ID",
-      "data_type": "text",
-      "is_required": true
-    },
-    {
       "column_key": "creator_name",
       "column_name": "Creator Name",
       "data_type": "text",
-      "is_required": true
+      "is_required": false
     }
   ],
   "dynamic_permissions": {
@@ -157,7 +155,7 @@ Correct `create_magicbase_table` pattern for personal todos:
       "insert_scope": "public"
     },
     "row": {
-      "read_scope": "private_user",
+      "read_scope": "public",
       "edit_scope": "private_user",
       "delete_scope": "private_user"
     },
@@ -165,6 +163,12 @@ Correct `create_magicbase_table` pattern for personal todos:
   }
 }
 ```
+
+Field-level permissions:
+
+- System fields such as `created_by`, `organization_code`, `created_at`, and `updated_at` are not dynamic columns. They can be selected where supported, but must not be written in `createRow` or `updateRow`.
+- Business ownership, assignment, review, status-transition, audit, and statistics fields should not be publicly editable unless the user explicitly asks for open collaboration.
+- If a field is for display only, derived data, review state, ownership, or system-like metadata, either set an appropriate `dynamic_permission` for the column or do not render an edit control for it. Backend row permissions are still the security boundary.
 
 If `query_magicbase_tables` or `get_magicbase_table` finds an existing table whose row permissions are `public`, do not claim that backend private permissions are already enforced. If there is no tool available to update table dynamic permissions, explain that the current implementation can only add frontend filtering and UI checks for the existing table, and recommend adding a MagicBase permission-update tool before claiming full backend enforcement.
 
@@ -179,6 +183,17 @@ For data-oriented micro-apps, treat MagicBase persistence as the default. Survey
 The data model must serve the full approved product loop, not the smallest possible CRUD shell. Derive fields from the planned object, attributes, lifecycle state, category/grouping needs, notes/details, ordering, archive/deletion behavior, statistics, and filters. UI-only state should stay in JavaScript; anything needed for persistence, search, filtering, sorting, or later reuse belongs in MagicBase.
 
 System fields are not dynamic business columns. MagicBase automatically maintains fields such as `id`, `record_id`, `created_at`, `updated_at`, `created_by`, `project_id`, `table_id`, and `organization_code`. HTML code may read, display, select, filter, or sort by supported system fields, but must not put system fields into the `data` object passed to `createRow` or `updateRow`. Only dynamic business fields that appear in the table's `columns` list as `column_key` may be written in `data`.
+
+When UI behavior depends on creator ownership, include `id`, all displayed business fields, `created_by`, `created_at`, and `updated_at` in `select` for `queryRows`, `getRow`, `createRow`, and `updateRow` responses that feed the UI. Compare `row.created_by` with `context.userId`; do not require a dynamic `creator_user_id` field unless the product has a separate business owner concept.
+
+Canonical runtime signatures:
+
+- `window.Magic.db.queryRows(tableId, query)`
+- `window.Magic.db.createRow(tableId, data, select?)`
+- `window.Magic.db.updateRow(tableId, recordId, data, select?)`
+- `window.Magic.db.deleteRow(tableId, recordId)`
+
+Never omit the first `tableId` argument. In particular, `updateRow(recordId, data, select)` is wrong and will not update the intended MagicBase table.
 
 1. Call `query_magicbase_tables` to check whether the required table already exists.
 2. If the table is missing, call `create_magicbase_table`; the tool automatically records migration history in `.magicbase/migrations.json` and refreshes the latest MagicBase data model in `HTML-APP.md`.
@@ -247,6 +262,7 @@ const rows = result.list;
   - `with?` — 关联查询配置
 - Return: `Promise<{ list: Array<object>; total: number; page: number; page_size: number }>` — 分页结果。行数组字段是 `list`，不要使用 `rows`
 - **超时**：30 秒（其他操作为 15 秒）
+- If the UI enables or disables actions based on creator ownership, `select` must include `id`, the displayed business fields, `created_by`, `created_at`, and `updated_at`.
 
 Use this defensive read pattern when handling existing or uncertain runtime responses:
 
@@ -284,6 +300,7 @@ const updated = await window.Magic.db.updateRow(TABLE_ID_FROM_MAGICBASE_TOOL, "r
 
 - Parameters: `tableId: string`、`recordId: string`、`data: Record<string, unknown>`、`select?: string[]`
 - Return: `Promise<object>` — the updated row
+- Do not call `updateRow(recordId, data, select)`. The first argument must always be the real MagicBase table id, followed by the row/record id.
 - The `data` object must contain only dynamic column keys from the actual table schema. Do not write system fields such as `updated_at`; MagicBase updates them automatically and they can be returned through `select`.
 - Match values to the MySQL-like column type. For `json` columns, pass arrays/objects directly; do not stringify or join arrays before calling `updateRow`.
 

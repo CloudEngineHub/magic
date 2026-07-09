@@ -16,6 +16,7 @@ use App\Application\MagicBase\Service\MagicBaseRowAppService;
 use App\Application\MagicBase\Service\MagicBaseTableAppService;
 use App\Domain\MagicBase\Exception\MagicBaseExceptionBuilder;
 use App\Infrastructure\Core\AbstractApi;
+use App\Interfaces\Authorization\Web\MagicUserAuthorization;
 use App\Interfaces\MagicBase\Assembler\MagicBaseResponseAssembler;
 use App\Interfaces\MagicBase\DTO\CreateColumnRequest;
 use App\Interfaces\MagicBase\DTO\CreateRelationRequest;
@@ -24,6 +25,10 @@ use App\Interfaces\MagicBase\DTO\CreateTableRequest;
 use App\Interfaces\MagicBase\DTO\QueryRowsRequest;
 use App\Interfaces\MagicBase\DTO\UpdateTableRequest;
 use Dtyq\ApiResponse\Annotation\ApiResponse;
+use Dtyq\SuperMagic\Application\SuperAgent\Service\AccessTokenAuthorizationService;
+use Dtyq\SuperMagic\Domain\Share\Constant\ResourceType;
+use Dtyq\SuperMagic\Domain\Share\Service\ResourceShareDomainService;
+use Dtyq\SuperMagic\Infrastructure\Utils\AccessTokenUtil;
 use Hyperf\Di\Annotation\Inject;
 use Hyperf\HttpServer\Contract\RequestInterface;
 
@@ -48,6 +53,12 @@ class MagicBaseApi extends AbstractApi
     #[Inject]
     protected MagicBaseAdminAppService $adminAppService;
 
+    #[Inject]
+    protected AccessTokenAuthorizationService $accessTokenAuthorizationService;
+
+    #[Inject]
+    protected ResourceShareDomainService $resourceShareDomainService;
+
     public function createTable(RequestInterface $request, string $projectId)
     {
         $requestDTO = new CreateTableRequest($request->all());
@@ -61,15 +72,17 @@ class MagicBaseApi extends AbstractApi
 
     public function listTables(string $projectId): array
     {
-        $tables = $this->tableAppService->listTables($this->getAuthorization(), self::parseId($projectId, '项目ID'));
+        $projectId = self::parseId($projectId, '项目ID');
+        $tables = $this->tableAppService->listTables($this->resolveRuntimeAuthorization($projectId), $projectId);
         return array_map(static fn (mixed $table) => MagicBaseResponseAssembler::tableSummary($table), iterator_to_array($tables));
     }
 
     public function getTable(string $projectId, string $tableId)
     {
+        $projectId = self::parseId($projectId, '项目ID');
         $result = $this->tableAppService->getTable(
-            $this->getAuthorization(),
-            self::parseId($projectId, '项目ID'),
+            $this->resolveRuntimeAuthorization($projectId),
+            $projectId,
             self::parseId($tableId, '表ID'),
         );
         return MagicBaseResponseAssembler::tableDetail($result->table, $result->columns);
@@ -133,10 +146,11 @@ class MagicBaseApi extends AbstractApi
 
     public function createRow(RequestInterface $request, string $projectId, string $tableId)
     {
+        $projectId = self::parseId($projectId, '项目ID');
         $requestDTO = new CreateRowRequest($request->all());
         return MagicBaseResponseAssembler::row($this->rowAppService->createRow(
-            $this->getAuthorization(),
-            self::parseId($projectId, '项目ID'),
+            $this->resolveRuntimeAuthorization($projectId),
+            $projectId,
             self::parseId($tableId, '表ID'),
             MagicBaseAssembler::toCreateRowRequestDTO($requestDTO),
         ));
@@ -144,10 +158,11 @@ class MagicBaseApi extends AbstractApi
 
     public function queryRows(RequestInterface $request, string $projectId, string $tableId)
     {
+        $projectId = self::parseId($projectId, '项目ID');
         $requestDTO = new QueryRowsRequest($request->all());
         return MagicBaseResponseAssembler::page($this->queryAppService->queryRows(
-            $this->getAuthorization(),
-            self::parseId($projectId, '项目ID'),
+            $this->resolveRuntimeAuthorization($projectId),
+            $projectId,
             self::parseId($tableId, '表ID'),
             MagicBaseAssembler::toQueryRowsRequestDTO($requestDTO),
         ));
@@ -155,9 +170,10 @@ class MagicBaseApi extends AbstractApi
 
     public function getRow(string $projectId, string $tableId, string $recordId)
     {
+        $projectId = self::parseId($projectId, '项目ID');
         return MagicBaseResponseAssembler::row($this->queryAppService->showRow(
-            $this->getAuthorization(),
-            self::parseId($projectId, '项目ID'),
+            $this->resolveRuntimeAuthorization($projectId),
+            $projectId,
             self::parseId($tableId, '表ID'),
             self::parseId($recordId, '记录ID'),
             (string) $this->request->query('select', ''),
@@ -166,10 +182,11 @@ class MagicBaseApi extends AbstractApi
 
     public function updateRow(RequestInterface $request, string $projectId, string $tableId, string $recordId)
     {
+        $projectId = self::parseId($projectId, '项目ID');
         $requestDTO = new CreateRowRequest($request->all());
         return MagicBaseResponseAssembler::row($this->rowAppService->updateRow(
-            $this->getAuthorization(),
-            self::parseId($projectId, '项目ID'),
+            $this->resolveRuntimeAuthorization($projectId),
+            $projectId,
             self::parseId($tableId, '表ID'),
             self::parseId($recordId, '记录ID'),
             MagicBaseAssembler::toCreateRowRequestDTO($requestDTO),
@@ -178,9 +195,10 @@ class MagicBaseApi extends AbstractApi
 
     public function deleteRow(string $projectId, string $tableId, string $recordId)
     {
+        $projectId = self::parseId($projectId, '项目ID');
         $this->rowAppService->deleteRow(
-            $this->getAuthorization(),
-            self::parseId($projectId, '项目ID'),
+            $this->resolveRuntimeAuthorization($projectId),
+            $projectId,
             self::parseId($tableId, '表ID'),
             self::parseId($recordId, '记录ID'),
         );
@@ -198,11 +216,12 @@ class MagicBaseApi extends AbstractApi
 
     public function listRelations(string $projectId): array
     {
+        $projectId = self::parseId($projectId, '项目ID');
         return array_map(
             static fn (mixed $relation) => MagicBaseResponseAssembler::relation($relation),
             iterator_to_array($this->relationAppService->listRelations(
-                $this->getAuthorization(),
-                self::parseId($projectId, '项目ID'),
+                $this->resolveRuntimeAuthorization($projectId),
+                $projectId,
             ))
         );
     }
@@ -282,5 +301,44 @@ class MagicBaseApi extends AbstractApi
             MagicBaseExceptionBuilder::validateFailed($label);
         }
         return (int) $id;
+    }
+
+    private function resolveRuntimeAuthorization(int $projectId): MagicUserAuthorization
+    {
+        $shareToken = trim((string) $this->request->header('x-magic-share-token', ''));
+        if ($shareToken === '') {
+            /** @var MagicUserAuthorization $authorization */
+            $authorization = $this->getAuthorization();
+            return $authorization;
+        }
+
+        if (! AccessTokenUtil::validate($shareToken)) {
+            $this->denyRuntimeAccess();
+        }
+
+        $shareId = AccessTokenUtil::getShareId($shareToken);
+        if ($shareId === null) {
+            $this->denyRuntimeAccess();
+        }
+
+        $shareEntity = $this->resourceShareDomainService->getValidShareById($shareId);
+        if ($shareEntity === null) {
+            $this->denyRuntimeAccess();
+        }
+
+        if ($shareEntity->getResourceType() !== ResourceType::Project->value || (int) $shareEntity->getProjectId() !== $projectId) {
+            $this->denyRuntimeAccess();
+        }
+
+        return $this->accessTokenAuthorizationService->validateTokenAndCreateUserAuthorization($shareToken);
+    }
+
+    /**
+     * @return never
+     */
+    private function denyRuntimeAccess()
+    {
+        MagicBaseExceptionBuilder::accessDenied('无项目访问权限');
+        throw new \RuntimeException('Unreachable.');
     }
 }

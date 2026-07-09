@@ -17,7 +17,7 @@ description: "Complete API reference for window.Magic.* in SuperMagic HTML micro
 1. All `window.Magic.*` APIs are **pre-injected** — no imports needed. External CDN allowed.
 2. File paths are relative to **app root** (`index.html` dir) by default. `../` is forbidden. Use leading-slash paths such as `"/shared/data.json"` to access project-root files. Writing, deleting, moving, or renaming files outside the app root triggers host confirmation.
 3. `window.Magic.llm` tokens hosted; no `api_key` in HTML.
-4. **No inline event handlers** — use `addEventListener`.
+4. **No inline event handlers** — use `addEventListener`. For buttons rendered by `innerHTML`, bind one delegated listener on a stable container and use `data-action`/`data-id`.
 5. **LLM calls must include model selector UI** unless user specifies model. Default `"auto"`.
 6. **Complex file-based AI** → use `createTopicAndSend` + `@file` + companion skill. Simple → `readFile` + `llm.chat/stream`.
 7. **High-risk APIs are permission-gated** — new HTML micro-apps must declare requested scopes in `app.json.permissions.scopes`. The host asks the user to approve high-risk runtime calls for a limited duration.
@@ -39,6 +39,17 @@ description: "Complete API reference for window.Magic.* in SuperMagic HTML micro
    ```
 
 ---
+
+## HTML Interaction Safety
+
+Generated micro-app controls must be wired through real JavaScript listeners, not HTML event attributes.
+
+- Do not generate `onclick`, `onchange`, `oninput`, `onsubmit`, or other inline event attributes.
+- For lists, cards, table rows, and menus rendered with `innerHTML`, use event delegation: `container.addEventListener("click", handler)` and buttons such as `<button data-action="edit" data-id="...">`.
+- Do not attach action functions to `window` just to make inline event handlers work.
+- If using `new FormData(form)`, every value read with `formData.get("field")` must have a matching `name="field"` on the input/select/textarea. Having only `id="field"` is not enough.
+- Before calling `.trim()`, normalize possibly missing form values, for example `String(formData.get("title") || "").trim()`.
+- If a form is read by DOM IDs instead, use `.value` consistently and do not mix it with `FormData.get()` for unnamed controls.
 
 ## 1. File System (`window.Magic.fs`)
 

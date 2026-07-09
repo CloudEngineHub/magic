@@ -48,6 +48,12 @@
       "prompt": "Create an HTML page that previews assets/chart.png from the workspace and provides an open-file link.",
       "expected_output": "Generates an HTML file using window.Magic.fs.getFileUrl(\"assets/chart.png\") to get a temporary browser-accessible URL, assigns it to an img src and/or anchor href, handles errors, and uses addEventListener or startup functions instead of inline handlers. Does not use project.downloadFiles unless the user explicitly asks to trigger a browser download.",
       "files": []
+    },
+    {
+      "id": 9,
+      "prompt": "帮我做一个待办微应用，要有 MagicBase，用户可以看到所有人的待办，但是只能编辑自己的待办。",
+      "expected_output": "Generates a MagicBase-backed todo micro-app with row read public and edit/delete private_user. The runtime code has no inline event attributes and uses delegated click handlers with data-action/data-id for list actions. If FormData is used, every FormData field has a matching name attribute. queryRows includes select fields for id, displayed business fields, created_by, created_at, and updated_at. createRow/updateRow request only business fields, and updateRow(TABLE_ID, recordId, data, select) uses the table id as the first argument.",
+      "files": []
     }
   ]
 }

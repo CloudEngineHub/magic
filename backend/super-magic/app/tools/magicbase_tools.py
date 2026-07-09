@@ -303,8 +303,8 @@ Default value. Leave empty when no default is needed."""
     )
     dynamic_permission: Optional[Dict[str, Any]] = Field(
         default=None,
-        description="""<!--zh: 字段动态权限配置，可选。-->
-Optional column dynamic permission object, for example {"read_scope": "public", "edit_scope": "public"}. Pass it as an object, not as a JSON string."""
+        description="""<!--zh: 字段动态权限配置，可选。只有普通用户确实可直接修改的字段才使用 public edit；归属、审核、审计、派生或只展示字段应使用更严格 edit_scope 或不提供编辑入口。后端行归属使用系统 created_by，不依赖动态 creator_user_id 字段。-->
+Optional column dynamic permission object. Pass it as an object, not as a JSON string. Use public edit only for fields ordinary users may directly modify. Ownership, review, audit, derived, or display-only business fields should use a restrictive edit_scope or no edit UI; backend row ownership uses system created_by, not a dynamic creator_user_id column."""
     )
 
     @field_validator("data_type")
@@ -450,10 +450,11 @@ Optional project name for MagicBase."""
     dynamic_permissions: Optional[Dict[str, Any]] = Field(
         default=None,
         description="""<!--zh
-        表、行、列动态权限配置，可选；省略时 MagicBase 默认 public。
-        需要“只能看自己的/只能改自己的/我的数据”时，必须传对象形式的 row private_user，不能传 JSON 字符串。
+        表、行、列动态权限配置。只要应用存在所有权、隐私、协作、组织、部门、只读或受限编辑语义，就必须传对象形式的 dynamic_permissions，不能依赖默认 public。
+        常见组合：全员协作 row read/edit/delete=public；所有人可读但创建人编辑/删除 row read=public, edit/delete=private_user；私有数据 row read/edit/delete=private_user；组织共享用 private_org；部门共享用 private_department；提交后不可改不要给 public edit/delete，可用 disabled 或显式管理员权限。
+        private_user 基于系统 created_by，不要为了权限单独创建 creator_user_id。
         -->
-Optional table, row, and column dynamic permissions. Pass this as an object, never as a JSON string. For owner-only rows, use {"table": {"read_scope": "public", "insert_scope": "public"}, "row": {"read_scope": "private_user", "edit_scope": "private_user", "delete_scope": "private_user"}, "columns": {}}. Omit only when public defaults are intended."""
+Table, row, and column dynamic permissions. Pass this as an object, never as a JSON string. If the app has ownership, privacy, collaboration, organization, department, read-only, or restricted-edit semantics, include this field instead of relying on defaults. Common row scopes: full collaboration => read/edit/delete public; everyone can read but only creators edit/delete => read public, edit/delete private_user; private personal rows => read/edit/delete private_user; organization-shared => use private_org where org-wide access is intended; department-shared => use private_department where department access is intended; intake/read-only data => do not grant public edit/delete, use disabled or explicit admin permissions. private_user uses system created_by; do not create creator_user_id only for permission enforcement."""
     )
 
     @field_validator("dynamic_permissions", mode="before")
@@ -489,9 +490,11 @@ HTML 微应用工作流中，create_magicbase_table 会自动维护 MagicBase sc
 	- Before calling MagicBase, it appends a Pending migration to the workspace-root `.magicbase/migrations.json`.
 	- On success, it updates that migration to Success, records the real table_id, and refreshes the latest MagicBase data model in `HTML-APP.md`.
 	- On failure, it updates that migration to Failed with a short error summary and does not modify the official data model in `HTML-APP.md`.
-	
-	When the user asks for owner-only or "my data" access, keep `dynamic_permissions` in the table creation request and use row `private_user`. Do not fall back to public table creation after a permission parameter error.
-	
+
+	For any multi-user data app, decide who can read, insert, edit, and delete rows before creating the table. When the app has ownership, privacy, collaboration, organization, department, read-only, or restricted-edit semantics, keep `dynamic_permissions` in the table creation request. Do not fall back to public table creation after a permission parameter error.
+
+	Use the appropriate row scope combination: full collaboration uses public read/edit/delete; everyone-can-read but creator-only editing uses row read public and edit/delete private_user; private personal data uses private_user for read/edit/delete; organization-shared data uses private_org where org-wide access is intended; department-shared data uses private_department where department access is intended; read-only or intake flows must not grant public edit/delete. `private_user` uses MagicBase system `created_by`; do not create `creator_user_id` only for permission enforcement.
+
 	Do not call file-editing tools just to maintain schema migrations. Ordinary project memory is summarized with `update_html_app_memory` once before the development task ends.
 	"""
 
@@ -580,8 +583,8 @@ Default value. Leave empty when no default is needed."""
     )
     dynamic_permission: Optional[Dict[str, Any]] = Field(
         default=None,
-        description="""<!--zh: 字段动态权限配置，可选。-->
-Optional column dynamic permission object, for example {"read_scope": "public", "edit_scope": "public"}. Pass it as an object, not as a JSON string."""
+        description="""<!--zh: 字段动态权限配置，可选。只有普通用户确实可直接修改的字段才使用 public edit；归属、审核、审计、派生或只展示字段应使用更严格 edit_scope 或不提供编辑入口。后端行归属使用系统 created_by，不依赖动态 creator_user_id 字段。-->
+Optional column dynamic permission object. Pass it as an object, not as a JSON string. Use public edit only for fields ordinary users may directly modify. Ownership, review, audit, derived, or display-only business fields should use a restrictive edit_scope or no edit UI; backend row ownership uses system created_by, not a dynamic creator_user_id column."""
     )
 
     @field_validator("data_type")
