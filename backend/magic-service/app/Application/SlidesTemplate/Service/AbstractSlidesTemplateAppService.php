@@ -59,21 +59,22 @@ abstract class AbstractSlidesTemplateAppService extends AbstractKernelAppService
             return;
         }
 
-        //        $publicPathsByOrg = [];
+        $publicPathsByOrg = [];
         $privatePathsByOrg = [];
         foreach ($templates as $template) {
-            $this->appendFilePath($privatePathsByOrg, $template->getOrganizationCode(), $template->getThumbnailFileKey());
-            $this->appendFilePath($privatePathsByOrg, $template->getOrganizationCode(), $template->getCollageFileKey());
-            $this->appendFilePaths($privatePathsByOrg, $template->getOrganizationCode(), $template->getPreviewImageFileKeys());
+            $this->appendFilePath($publicPathsByOrg, $template->getOrganizationCode(), $template->getThumbnailFileKey());
+            $this->appendFilePath($publicPathsByOrg, $template->getOrganizationCode(), $template->getCollageFileKey());
+            $this->appendFilePaths($publicPathsByOrg, $template->getOrganizationCode(), $template->getPreviewImageFileKeys());
             if ($includeTemplateFileUrl) {
                 $this->appendFilePath($privatePathsByOrg, $template->getOrganizationCode(), $template->getTemplateFileKey());
             }
         }
 
-        //        $publicLinksByOrg = [];
-        //        foreach ($publicPathsByOrg as $organizationCode => $paths) {
-        //            $publicLinksByOrg[$organizationCode] = $this->getPublicFileLinks($organizationCode, array_values(array_unique($paths)));
-        //        }
+        $publicLinksByOrg = [];
+        foreach ($publicPathsByOrg as $organizationCode => $paths) {
+            $publicLinksByOrg[$organizationCode] = $this->getPublicFileLinks($organizationCode, array_values(array_unique($paths)));
+        }
+
         $privateLinksByOrg = [];
         foreach ($privatePathsByOrg as $organizationCode => $paths) {
             $privateLinksByOrg[$organizationCode] = $this->getPrivateFileLinks($organizationCode, array_values(array_unique($paths)));
@@ -81,9 +82,9 @@ abstract class AbstractSlidesTemplateAppService extends AbstractKernelAppService
 
         foreach ($templates as $template) {
             $organizationCode = $template->getOrganizationCode();
-            $template->setThumbnailUrl($this->resolveUrl($privateLinksByOrg, $organizationCode, $template->getThumbnailFileKey()));
-            $template->setCollageUrl($this->resolveUrl($privateLinksByOrg, $organizationCode, $template->getCollageFileKey()));
-            $template->setPreviewImageUrls($this->resolveUrls($privateLinksByOrg, $organizationCode, $template->getPreviewImageFileKeys()));
+            $template->setThumbnailUrl($this->resolveUrl($publicLinksByOrg, $organizationCode, $template->getThumbnailFileKey()));
+            $template->setCollageUrl($this->resolveUrl($publicLinksByOrg, $organizationCode, $template->getCollageFileKey()));
+            $template->setPreviewImageUrls($this->resolveUrls($publicLinksByOrg, $organizationCode, $template->getPreviewImageFileKeys()));
             if ($includeTemplateFileUrl) {
                 $template->setTemplateFileUrl($this->resolveUrl($privateLinksByOrg, $organizationCode, $template->getTemplateFileKey()));
             }
