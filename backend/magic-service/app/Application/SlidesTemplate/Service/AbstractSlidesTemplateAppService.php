@@ -91,6 +91,31 @@ abstract class AbstractSlidesTemplateAppService extends AbstractKernelAppService
         }
     }
 
+    /**
+     * @param SlidesTemplateEntity[] $templates
+     */
+    protected function resolveThumbnailUrls(array $templates): void
+    {
+        if ($templates === []) {
+            return;
+        }
+
+        $publicPathsByOrg = [];
+        foreach ($templates as $template) {
+            $this->appendFilePath($publicPathsByOrg, $template->getOrganizationCode(), $template->getThumbnailFileKey());
+        }
+
+        $publicLinksByOrg = [];
+        foreach ($publicPathsByOrg as $organizationCode => $paths) {
+            $publicLinksByOrg[$organizationCode] = $this->getPublicFileLinksInBatches($organizationCode, array_values(array_unique($paths)));
+        }
+
+        foreach ($templates as $template) {
+            $organizationCode = $template->getOrganizationCode();
+            $template->setThumbnailUrl($this->resolveUrl($publicLinksByOrg, $organizationCode, $template->getThumbnailFileKey()));
+        }
+    }
+
     protected function resolveTemplateFileUrl(SlidesTemplateEntity $template): void
     {
         $fileLinks = $this->getPrivateFileLinks($template->getOrganizationCode(), [$template->getTemplateFileKey()]);

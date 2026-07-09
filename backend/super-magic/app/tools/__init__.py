@@ -123,7 +123,7 @@ from app.tools.install_skills import InstallSkillsTool
 from app.tools.read_skills import ReadSkills
 from app.tools.run_sdk_snippet import RunSdkSnippet
 from app.tools.search_knowledge import SearchKnowledge
-from app.tools.get_slides_template_download_url import GetSlidesTemplateDownloadUrl
+from app.tools.install_slides_template import InstallSlidesTemplate
 
 # MCP 工具集（code_mode_only=True，只允许通过 sdk.tool.call 调用）
 from app.tools.mcp import (
@@ -229,7 +229,7 @@ __all__ = [
     "ReadSkills",
     "RunSdkSnippet",
     "SearchKnowledge",
-    "GetSlidesTemplateDownloadUrl",
+    "InstallSlidesTemplate",
     "ReadFile",
     "ReadFiles",
     "ReadWebpagesAsMarkdown",

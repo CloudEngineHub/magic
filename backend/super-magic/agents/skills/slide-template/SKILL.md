@@ -30,7 +30,7 @@ Do not write or rely on legacy fields such as `name`, `template_dir`, `package_t
 
 ## Decision
 
-- Explicit template `code`: retrieve the template package with `get_slides_template_download_url`, then inspect the downloaded template files.
+- Explicit template `code`: install the template package with `install_slides_template`, then inspect the installed template files.
 - Platform template list is available but no template is selected: recommend 3-5 suitable options with `ask_user`. Each option must include name, short description, and exact `code`, plus "no template/default style".
 - User only describes scenario/topic/audience without enough visual specs and no platform template list is available: ask for a platform template code or confirm no template/default style.
 - User provides a PPTX/PPT/presentation template file or URL and asks to convert it into a platform template: read `references/pptx-template-workflow.md` and follow the PPTX Template Workflow first.
@@ -40,37 +40,36 @@ Do not write or rely on legacy fields such as `name`, `template_dir`, `package_t
 
 ## Platform Template Retrieval
 
-When a template code is selected and you need to read or download the template package, first call `get_slides_template_download_url` through Code Mode, then download and inspect the ZIP package.
+When a template code is selected and you need to read the template package, first call `install_slides_template` through Code Mode, then inspect the installed directory.
 
 ```python
 from sdk.tool import tool
 
-result = tool.call("get_slides_template_download_url", {
-    "code": template_code
+result = tool.call("install_slides_template", {
+    "code": template_code,
+    "install_path": f"slide-templates/{template_code}"
 })
 
-template_file_url = result.data["template_file_url"]
+installed_directory = result.data["installed_directory"]
 ```
 
-After receiving `template_file_url`:
+After receiving `installed_directory`:
 
-1. Download the ZIP package into the current workspace, for example under `.workspace/slide-templates/<code>/`.
-   Prefer `download_from_urls` for the URL download, then use `shell_exec` only for unzip/file inspection.
-2. Unzip it into a dedicated directory.
-3. Read `template.json` first.
-4. Read all available resources declared by `template.json` that are useful for the deck:
+1. Use the returned `installed_directory`, even if it differs from the requested `install_path`; the tool may choose a suffixed directory when the requested directory already exists.
+2. Read `template.json` from `installed_directory` first.
+3. Read all available resources declared by `template.json` that are useful for the deck:
    - Always read `files.theme_css` when present.
    - Read `files.visual_spec` for design rules, typography, layout types, chart rules, and image guidance when present.
    - Read representative `slides[].file` files or representative HTML files under `files.slides_dir`, when present.
-5. Treat `theme.css` as the authoritative CSS. Treat `template.json`, `visual-spec.md`, and `slides/*.html` as complementary sources for reusable layouts, edit hints, components, composition patterns, visual rhythm, and asset references.
-6. Read image paths or assets only when needed for the target deck.
-7. Do not link to downloaded template files from generated slides. Copy the required CSS and assets into the PPT project after `create_slide_project`.
+4. Treat `theme.css` as the authoritative CSS. Treat `template.json`, `visual-spec.md`, and `slides/*.html` as complementary sources for reusable layouts, edit hints, components, composition patterns, visual rhythm, and asset references.
+5. Read image paths or assets only when needed for the target deck.
+6. Do not link to installed template files from generated slides. Copy the required CSS and assets into the PPT project after `create_slide_project`.
 
 ## Template Application Workflow
 
 1. Resolve the selected template code from user choice or upstream context. If there is no exact code, ask for it or proceed with no template if the user confirms.
-2. Call `get_slides_template_download_url` and download the template package.
-3. Read `template.json`, then read the available resources it declares (`theme_css`, `visual_spec`, `slides_dir`, `images_dir`, and `slides[].file`) before creating slide pages.
+2. Call `install_slides_template` with the exact code and a stable `install_path`, then use `result.data["installed_directory"]`.
+3. Read `template.json` from the installed directory, then read the available resources it declares (`theme_css`, `visual_spec`, `slides_dir`, `images_dir`, and `slides[].file`) before creating slide pages.
 4. Before writing slides, summarize internally: package resources, palette roles, typography, layout inventory, reusable components, slot/page patterns, composition rules, asset dependencies, and adaptation rules.
 5. Create the template package with `create_slide_project`.
 6. Copy `theme.css` and any required assets from the downloaded template into the PPT project. Keep all slide references local to that project.
@@ -118,7 +117,7 @@ Use when the user provides an existing Super Magic slide project directory that 
 
 ## Output
 
-- Platform template workflow output: a complete template package generated through `creating-slides`, using template files retrieved through `get_slides_template_download_url`.
+- Platform template workflow output: a complete template package generated through `creating-slides`, using template files installed through `install_slides_template`.
 - Built-in local template workflow output: none; local bundled templates are no longer supported.
 - Custom workflow output: a complete template package generated through `creating-slides`.
 - PPTX template conversion output: first create a draft template folder containing `template.json`, optional `magic.project.js`, `theme.css`, `images/`, and `slides/*.html`; use the model to analyze the converted visual style, write `visual-spec.md`, sanitize obvious sensitive content, confirm ambiguous sensitive assets through `ask_user`, refine the folder, run lightweight QA, then ask the user whether to create the final sibling `<template-id>-template.zip`. If a ZIP is created, exclude `magic.project.js` and unconfirmed sensitive assets.

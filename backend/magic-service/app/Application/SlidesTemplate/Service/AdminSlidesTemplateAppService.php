@@ -45,7 +45,7 @@ class AdminSlidesTemplateAppService extends AbstractSlidesTemplateAppService
         $query = $this->buildQuery($request->getKeyword(), $request->getCode(), $request->getCategoryCode(), $request->getStatus());
         $page = $this->createListPage($request->getPage(), $request->getPageSize());
         $result = $this->slidesTemplateDomainService->queries($dataIsolation, $query, $page);
-        $this->resolveAssetUrls($result['list'], includeTemplateFileUrl: false);
+        $this->resolveThumbnailUrls($result['list']);
         $categories = $this->resolveCategories($dataIsolation, $result['list']);
 
         return [
