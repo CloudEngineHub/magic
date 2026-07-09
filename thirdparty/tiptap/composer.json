@@ -1,12 +1,12 @@
 {
-    "name": "ueberdosis/tiptap-php",
+    "name": "dtyq/tiptap",
     "description": "A PHP package to work with Tiptap output",
     "keywords": [
         "ueberdosis",
         "tiptap",
         "prosemirror"
     ],
-    "homepage": "https://github.com/ueberdosis/tiptap-php",
+    "homepage": "https://github.com/dtyq/tiptap",
     "license": "MIT",
     "authors": [
         {
@@ -48,6 +48,11 @@
         "sort-packages": true,
         "allow-plugins": {
             "pestphp/pest-plugin": true
+        }
+    },
+    "extra": {
+        "branch-alias": {
+            "dev-master": "0.1-dev"
         }
     },
     "minimum-stability": "dev",

@@ -4,10 +4,13 @@ namespace Tiptap\Core;
 
 use DOMDocument;
 use stdClass;
+use Tiptap\Extensions\RenderTextInterface;
 use Tiptap\Utils\HTML;
 
 class DOMSerializer
 {
+    use SerializerTrait;
+
     protected $document;
 
     protected $schema;
@@ -69,7 +72,7 @@ class DOMSerializer
             }
         }
         // renderText($node)
-        elseif (isset($extension) && method_exists($extension, 'renderText')) {
+        elseif (isset($extension) && $extension instanceof RenderTextInterface) {
             $html[] = $extension->renderText($node);
         }
         // text
@@ -104,7 +107,7 @@ class DOMSerializer
             $html = array_merge($html, $this->closeAndReopenTags($markTagsToClose, $markStack));
         }
 
-        return join($html);
+        return implode($html);
     }
 
     private function closeAndReopenTags(array $markTagsToClose, array &$markStack): array
@@ -154,11 +157,6 @@ class DOMSerializer
         }
 
         return $html;
-    }
-
-    private function isMarkOrNode($markOrNode, $renderClass): bool
-    {
-        return isset($markOrNode->type) && $markOrNode->type === $renderClass::$name;
     }
 
     private function markShouldOpen($mark, $previousNode): bool
@@ -263,7 +261,7 @@ class DOMSerializer
             foreach ($renderHTML as $index => $renderInstruction) {
                 // ['div', …]
                 if (is_string($renderInstruction)) {
-                    if (is_integer($index) && $nextTag = $renderHTML[$index + 1] ?? null) {
+                    if (is_int($index) && $nextTag = $renderHTML[$index + 1] ?? null) {
                         // ['table', ['class' => 'custom-class']]
                         if (! in_array(0, $nextTag, true)) {
                             if (is_array($nextTag) && $this->isAnAttributeArray($nextTag)) {
@@ -290,7 +288,7 @@ class DOMSerializer
                     }
 
                     // ['div', ?, 'span']
-                    if (is_integer($index) && $nextTag = $renderHTML[$index + 2] ?? null) {
+                    if (is_int($index) && $nextTag = $renderHTML[$index + 2] ?? null) {
                         if (! in_array(0, $nextTag, true)) {
                             if (! $this->isAnAttributeArray($nextTag)) {
                                 $html[] = $this->renderOpeningTag($extension, $nodeOrMark, $nextTag);
@@ -301,17 +299,18 @@ class DOMSerializer
 
                     continue;
                 }
-                // ['tbody', 0]
-                elseif (is_array($renderInstruction) && in_array(0, $renderInstruction, true)) {
+
+                if (is_array($renderInstruction) && in_array(0, $renderInstruction, true)) {
                     $html[] = $this->renderOpeningTag($extension, $nodeOrMark, $renderInstruction);
                 }
+                // ['tbody', 0]
                 // ['class' => 'foobar']
                 elseif (is_array($renderInstruction)) {
                     continue;
                 }
             }
 
-            return join($html);
+            return implode($html);
         }
 
         throw new \Exception('[renderOpeningTag] Failed to use renderHTML: ' . json_encode($renderHTML));
@@ -350,7 +349,7 @@ class DOMSerializer
 
         // ["content" => …]
         if (isset($renderHTML['content'])) {
-            return;
+            return '';
         }
 
         // ['table', ['tbody']]
@@ -372,7 +371,7 @@ class DOMSerializer
                 }
             }
 
-            return join($html);
+            return implode($html);
         }
 
         throw new \Exception('[renderClosingTag] Failed to use renderHTML: ' . json_encode($renderHTML));
