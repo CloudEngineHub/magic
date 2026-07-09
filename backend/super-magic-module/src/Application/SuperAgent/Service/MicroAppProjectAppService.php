@@ -82,7 +82,7 @@ class MicroAppProjectAppService extends AbstractAppService
         Db::beginTransaction();
         try {
             $shareItem = $this->resourceShareAppService->createShare($authorization, $shareDTO);
-            $accessUrl = $this->shareUrlBuilder->buildResourceShareUrl(ResourceType::Project, $record->getResourceId());
+            $accessUrl = $this->shareUrlBuilder->buildMicroAppShareUrl($record->getResourceId());
 
             $record
                 ->setShareId($shareItem->id)
@@ -242,7 +242,7 @@ class MicroAppProjectAppService extends AbstractAppService
             'share_range' => $record->getShareRange(),
             'target_ids' => $record->getTargetIds(),
             'publish_status' => $record->getPublishStatus(),
-            'access_url' => $record->getAccessUrl(),
+            'access_url' => $this->shareUrlBuilder->buildMicroAppShareUrl($record->getResourceId()) ?? $record->getAccessUrl(),
             'published_at' => $record->getPublishedAt(),
             'unpublished_at' => $record->getUnpublishedAt(),
         ];

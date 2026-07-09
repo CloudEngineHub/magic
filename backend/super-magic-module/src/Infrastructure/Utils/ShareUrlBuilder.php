@@ -61,6 +61,21 @@ class ShareUrlBuilder
         return $shareUrl;
     }
 
+    public function buildMicroAppShareUrl(string $resourceId, ?string $password = null): ?string
+    {
+        $frontendDomain = rtrim((string) env('MAGIC_FRONTEND_DOMAIN', ''), '/');
+        if ($frontendDomain === '') {
+            return null;
+        }
+
+        $shareUrl = $frontendDomain . '/micro-app/' . $resourceId;
+        if ($password !== null && $password !== '') {
+            $shareUrl .= '?password=' . rawurlencode($password);
+        }
+
+        return $shareUrl;
+    }
+
     /**
      * 获取分享URL的前缀部分.
      *

@@ -612,6 +612,7 @@ class ResourceShareAppService extends AbstractShareAppService
         $result = [
             'resource_type' => $resourceType->value, // 使用枚举的整数值，而不是枚举对象
             'resource_name' => $shareEntity->getResourceName() ?: $factory->getResourceNameForDetail($shareEntity) ?: '', // 优先使用数据库中的 resource_name，如果为空则从资源获取
+            'project_id' => $shareEntity->getProjectId() !== null ? (string) $shareEntity->getProjectId() : null,
             'temporary_token' => AccessTokenUtil::generate((string) $shareEntity->getId(), $shareEntity->getOrganizationCode()),
             'default_open_file_id' => $shareEntity->getDefaultOpenFileId() !== null ? (string) $shareEntity->getDefaultOpenFileId() : null,
             'extra' => $extra,
@@ -896,6 +897,7 @@ class ResourceShareAppService extends AbstractShareAppService
             $projectId = (int) $shareEntity->getProjectId();
             if ($projectId === 0) {
                 return [
+                    'project_id' => null,
                     'list' => [],
                     'tree' => [],
                     'total' => 0,
@@ -2267,6 +2269,7 @@ class ResourceShareAppService extends AbstractShareAppService
         $tree = FileTreeUtil::assembleFilesTreeByParentId($allList, 'zh_CN');
 
         return [
+            'project_id' => (string) $projectId,
             'list' => $list,
             'tree' => $tree,
             'total' => $total,

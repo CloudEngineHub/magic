@@ -21,7 +21,12 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import useFullscreenMode from "@/hooks/useFullscreenMode"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import MessageList from "../MessageList"
-import { MessageStatus, TaskStatus, type TaskData } from "@/pages/superMagic/pages/Workspace/types"
+import {
+	MessageStatus,
+	TaskStatus,
+	type ProjectListItem,
+	type TaskData,
+} from "@/pages/superMagic/pages/Workspace/types"
 import CommonPopup from "@/pages/superMagicMobile/components/CommonPopup"
 import { useDownloadAll } from "@/pages/superMagic/components/TopicFilesButton/useDownloadAll"
 import { getBaseUrl } from "@/pages/superMagicMobile/utils/mobile"
@@ -119,6 +124,17 @@ function Topic({
 	const { handleDownloadAll, allLoading } = useDownloadAll({ projectId })
 
 	const { isShareRoute, isLegacy } = useShareRoute()
+	const shareSelectedProject = useMemo(
+		() =>
+			projectId
+				? ({
+						id: projectId,
+						project_name: resource_name,
+						name: resource_name,
+					} as ProjectListItem)
+				: null,
+		[projectId, resource_name],
+	)
 
 	// 判断是否是新格式文件分享（多个文件，无fileId）
 	const isNewFileShare = isFileShare && !fileId
@@ -1020,6 +1036,7 @@ function Topic({
 									onActiveFileChange={setActiveFileId}
 									topicName={resource_name}
 									projectId={projectId}
+									selectedProject={shareSelectedProject}
 									allowDownload={allowDownloadProjectFile}
 								/>
 							</div>
