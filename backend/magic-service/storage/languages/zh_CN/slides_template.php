@@ -29,6 +29,7 @@ return [
     'description_en_us_max' => '模板英文描述不能超过1000个字符',
     'thumbnail_file_key_required' => '模板封面图文件 key 是必需的',
     'template_file_key_required' => '模板 ZIP 文件 key 是必需的',
+    'template_file_must_be_archive' => '模板文件必须是压缩包（zip/rar/7z/tar/gz/tgz/bz2/xz）',
     'file_key_string' => '文件 key 必须是字符串',
     'file_key_max' => '文件 key 不能超过512个字符',
     'preview_image_file_keys_array' => '模板预览多图文件 key 必须是数组',

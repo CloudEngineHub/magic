@@ -25,6 +25,8 @@ use Qbhy\HyperfAuth\Authenticatable;
 
 class AdminSlidesTemplateAppService extends AbstractSlidesTemplateAppService
 {
+    private const ARCHIVE_EXTENSIONS = ['zip', 'rar', '7z', 'tar', 'gz', 'tgz', 'bz2', 'xz'];
+
     public function __construct(
         SlidesTemplateDomainService $slidesTemplateDomainService,
         private readonly SlidesTemplateCategoryDomainService $slidesTemplateCategoryDomainService,
@@ -71,6 +73,7 @@ class AdminSlidesTemplateAppService extends AbstractSlidesTemplateAppService
         $this->assertOfficialOrganization($dataIsolation);
 
         $this->assertCategoryExists($dataIsolation, $request->getCategoryCode());
+        $this->assertTemplateFileIsArchive($request->getTemplateFileKey());
         $template = $this->buildEntityFromRequest($request);
         $template->setCode($request->getCode() ?? SlidesTemplateEntity::generateNewCode());
         $template->setSourceType(SlidesTemplateSourceType::Custom);
@@ -90,6 +93,7 @@ class AdminSlidesTemplateAppService extends AbstractSlidesTemplateAppService
         $this->assertOfficialOrganization($dataIsolation);
 
         $this->assertCategoryExists($dataIsolation, $request->getCategoryCode());
+        $this->assertTemplateFileIsArchive($request->getTemplateFileKey());
         $existing = $this->slidesTemplateDomainService->findByIdOrFail($dataIsolation, $id);
         $template = $this->buildEntityFromRequest($request);
         $template->setId($existing->getId());
@@ -176,6 +180,14 @@ class AdminSlidesTemplateAppService extends AbstractSlidesTemplateAppService
         }
 
         $this->slidesTemplateCategoryDomainService->findByCodeOrFail($dataIsolation, $categoryCode);
+    }
+
+    private function assertTemplateFileIsArchive(string $templateFileKey): void
+    {
+        $extension = strtolower(pathinfo($templateFileKey, PATHINFO_EXTENSION));
+        if (! in_array($extension, self::ARCHIVE_EXTENSIONS, true)) {
+            ExceptionBuilder::throw(SlidesTemplateErrorCode::VALIDATE_FAILED, 'slides_template.template_file_must_be_archive');
+        }
     }
 
     /**

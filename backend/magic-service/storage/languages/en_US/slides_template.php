@@ -29,6 +29,7 @@ return [
     'description_en_us_max' => 'Template English description cannot exceed 1000 characters',
     'thumbnail_file_key_required' => 'Template thumbnail file key is required',
     'template_file_key_required' => 'Template ZIP file key is required',
+    'template_file_must_be_archive' => 'Template file must be an archive (zip/rar/7z/tar/gz/tgz/bz2/xz)',
     'file_key_string' => 'File key must be a string',
     'file_key_max' => 'File key cannot exceed 512 characters',
     'preview_image_file_keys_array' => 'Template preview image file keys must be an array',
