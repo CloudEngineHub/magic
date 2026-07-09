@@ -1,4 +1,4 @@
-import { lazy, useMemo, useState } from "react"
+import { lazy, useMemo, useRef, useState } from "react"
 import { Button, Flex, Image, InputNumber, Switch, message } from "antd"
 import type { TableProps } from "antd/lib"
 import { createStyles } from "antd-style"
@@ -69,8 +69,10 @@ export default function SlidesTemplatePage() {
 	const isMobile = useIsMobile()
 
 	const [open, setOpen] = useState(false)
+	const [modalMode, setModalMode] = useState<"create" | "edit">("create")
 	const [categoryOpen, setCategoryOpen] = useState(false)
 	const [selectedRow, setSelectedRow] = useState<DataType | null>(null)
+	const [detailLoading, setDetailLoading] = useState(false)
 	const [data, setData] = useState<DataType[]>([])
 	const [categories, setCategories] = useState<SlidesTemplate.CategoryItem[]>([])
 	const [total, setTotal] = useState(0)
@@ -83,6 +85,7 @@ export default function SlidesTemplatePage() {
 	})
 	const [statusLoadingIds, setStatusLoadingIds] = useState<Set<string>>(new Set())
 	const [sortLoadingIds, setSortLoadingIds] = useState<Set<string>>(new Set())
+	const editRequestIdRef = useRef(0)
 
 	const hasQueryRight = useRights([
 		PERMISSION_KEY_MAP.SLIDES_TEMPLATE_QUERY,
@@ -171,6 +174,42 @@ export default function SlidesTemplatePage() {
 				})
 			},
 		})
+	})
+
+	const handleCreate = useMemoizedFn(() => {
+		editRequestIdRef.current += 1
+		ensureCategories()
+		setModalMode("create")
+		setSelectedRow(null)
+		setDetailLoading(false)
+		setOpen(true)
+	})
+
+	const handleEdit = useMemoizedFn(async (record: DataType) => {
+		if (isSystemSlidesTemplate(record)) return
+
+		const requestId = editRequestIdRef.current + 1
+		editRequestIdRef.current = requestId
+		ensureCategories()
+		setModalMode("edit")
+		setSelectedRow(null)
+		setDetailLoading(true)
+		setOpen(true)
+
+		try {
+			const detail = await SlidesTemplateApi.detail(record.id)
+			if (editRequestIdRef.current !== requestId) return
+			setSelectedRow(detail)
+		} catch (error) {
+			if (editRequestIdRef.current !== requestId) return
+			console.error("fetch slides template detail failed", error)
+			message.error(t("message.actionFailed"))
+			setOpen(false)
+		} finally {
+			if (editRequestIdRef.current === requestId) {
+				setDetailLoading(false)
+			}
+		}
 	})
 
 	const { run: runUpdateStatus } = useDebounceFn(
@@ -379,12 +418,7 @@ export default function SlidesTemplatePage() {
 								type="link"
 								className={styles.linkButton}
 								disabled={disabled}
-								onClick={() => {
-									if (disabled) return
-									ensureCategories()
-									setSelectedRow(record)
-									setOpen(true)
-								}}
+								onClick={() => handleEdit(record)}
 							>
 								{t("button.edit")}
 							</Button>
@@ -414,7 +448,7 @@ export default function SlidesTemplatePage() {
 			handleStatusChange,
 			handleSortChange,
 			handleDelete,
-			ensureCategories,
+			handleEdit,
 		],
 	)
 
@@ -430,15 +464,17 @@ export default function SlidesTemplatePage() {
 				text: t("slidesTemplate.addButton"),
 				type: "primary",
 				disabled: !hasEditRight,
-				onClick: () => {
-					ensureCategories()
-					setSelectedRow(null)
-					setOpen(true)
-				},
+				onClick: handleCreate,
 			},
 		],
-		[ensureCategories, hasEditRight, hasQueryRight, t],
+		[handleCreate, hasEditRight, hasQueryRight, t],
 	)
+
+	const closeTemplateModal = useMemoizedFn(() => {
+		editRequestIdRef.current += 1
+		setOpen(false)
+		setDetailLoading(false)
+	})
 
 	const toolbar = (
 		<SlidesTemplateToolbar
@@ -477,12 +513,7 @@ export default function SlidesTemplatePage() {
 							statusLoadingIds={statusLoadingIds}
 							hasEditRight={hasEditRight}
 							handleStatusChange={handleStatusChange}
-							handleEdit={(record) => {
-								if (isSystemSlidesTemplate(record)) return
-								ensureCategories()
-								setSelectedRow(record)
-								setOpen(true)
-							}}
+							handleEdit={handleEdit}
 							sourceTypeLabel={sourceTypeLabel}
 							handleDelete={handleDelete}
 						/>
@@ -510,9 +541,11 @@ export default function SlidesTemplatePage() {
 				<SlidesTemplateModal
 					open={open}
 					info={selectedRow}
+					mode={modalMode}
+					detailLoading={detailLoading}
 					categoryOptions={categoryOptions}
-					onCancel={() => setOpen(false)}
-					onOk={() => setOpen(false)}
+					onCancel={closeTemplateModal}
+					onOk={closeTemplateModal}
 					onSuccess={() => refresh()}
 				/>
 			)}

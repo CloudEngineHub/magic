@@ -1,5 +1,5 @@
 import { memo, useState } from "react"
-import { Flex, Form } from "antd"
+import { Flex, Form, Image } from "antd"
 import { IconCheck, IconUpload } from "@tabler/icons-react"
 import { useMemoizedFn } from "ahooks"
 import { MagicInput, UploadButton } from "@admin-components"
@@ -158,10 +158,13 @@ export const SlidesTemplateUploadField = memo(
 						</span>
 					</Flex>
 					{previewUrl ? (
-						<img
+						<Image
 							src={previewUrl}
 							alt={label}
-							style={{ width: 160, height: 96, objectFit: "cover", borderRadius: 8 }}
+							width={160}
+							height={96}
+							style={{ objectFit: "cover", borderRadius: 8 }}
+							preview={{ src: previewUrl }}
 							draggable={false}
 						/>
 					) : null}

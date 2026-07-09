@@ -72,7 +72,7 @@ function SortablePreviewImage({ item, index, disabled, onRemove }: SortablePrevi
 					width={116}
 					height={72}
 					style={{ objectFit: "cover", borderRadius: 6 }}
-					preview={false}
+					preview={{ src: item.url }}
 				/>
 				<MagicButton
 					type="text"
