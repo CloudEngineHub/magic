@@ -90,6 +90,8 @@ interface TransformManagerPrivate {
 	isTransformInteractionActive: () => boolean
 	handleTransformerDragmove: () => void
 	syncSelectionProxyToElements: (options: { isRealtime: boolean; isScaling: boolean }) => void
+	isTransforming: (elementId: string) => boolean
+	isElementInActiveTransformInteraction: (elementId: string) => boolean
 }
 
 function createProxySyncManager() {
@@ -345,5 +347,22 @@ describe("TransformManager multi-selection proxy sync", () => {
 			data: { elementIds: ["element-1"], activeAnchor: "top-left" },
 		})
 		expect(update).toHaveBeenCalled()
+	})
+
+	it("distinguishes transformer attachment from active transform interaction", () => {
+		const manager = Object.create(TransformManager.prototype) as TransformManagerPrivate
+		manager.transformingElementIds = new Set(["element-1"])
+		manager.isAnchorTransformActive = false
+		manager.isProxyInteractionActive = false
+		manager.isTransformIntentActive = false
+		;(manager as unknown as { isDragging: boolean }).isDragging = false
+
+		expect(manager.isTransforming("element-1")).toBe(true)
+		expect(manager.isElementInActiveTransformInteraction("element-1")).toBe(false)
+
+		manager.isAnchorTransformActive = true
+
+		expect(manager.isElementInActiveTransformInteraction("element-1")).toBe(true)
+		expect(manager.isElementInActiveTransformInteraction("element-2")).toBe(false)
 	})
 })

@@ -91,7 +91,7 @@ export function useCanvasDesignRef(ref: React.Ref<CanvasDesignRef>): void {
 					canvas.loadDocument(plainData)
 				} else {
 					// 使用智能差异更新，只更新变化的元素，保留当前状态
-					canvas.elementManager.loadDocumentSmart(plainData)
+					canvas.loadDocumentSmart(plainData)
 					// 立即记录历史，支持撤销到更新前的状态
 					canvas.historyManager.recordHistoryImmediate()
 				}

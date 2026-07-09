@@ -1,5 +1,10 @@
 import type { Canvas } from "./Canvas"
-import type { LayerElement } from "../document/types"
+import { ElementTypeEnum, type ElementType, type LayerElement } from "../document/types"
+
+const NON_CONNECTABLE_ELEMENT_TYPES = new Set<ElementType>([
+	ElementTypeEnum.Frame,
+	ElementTypeEnum.Group,
+])
 
 /**
  * 权限管理器 - 统一管理元素的交互权限
@@ -95,6 +100,20 @@ export class PermissionManager {
 		if (!element) return false
 		if (!this.isVisible(element)) return false
 		if (!this.canShowTransientElementAffordance()) return false
+		return true
+	}
+
+	/**
+	 * 判断元素是否可以作为连接线起点/终点。
+	 *
+	 * Frame、Group 是容器语义，默认不展示连接 handle，也不能作为新连接目标。
+	 * 普通元素可通过 interactionConfig.connectable=false 显式关闭连接能力。
+	 */
+	public canConnect(element: LayerElement | undefined): boolean {
+		if (!element) return false
+		if (!this.canHover(element)) return false
+		if (NON_CONNECTABLE_ELEMENT_TYPES.has(element.type)) return false
+		if (element.interactionConfig?.connectable === false) return false
 		return true
 	}
 

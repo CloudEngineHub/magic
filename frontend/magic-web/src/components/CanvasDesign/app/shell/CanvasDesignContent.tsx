@@ -47,6 +47,8 @@ const CanvasDesignContent = forwardRef<CanvasDesignRef, CanvasDesignProps>((prop
 		onCanvasDesignDataPatchChange,
 		elementActionHints,
 		onElementActionHintAction,
+		connectionActionHints,
+		onConnectionActionHintAction,
 	} = data
 
 	const {
@@ -206,7 +208,12 @@ const CanvasDesignContent = forwardRef<CanvasDesignRef, CanvasDesignProps>((prop
 	return (
 		<FloatingUIProvider canvas={canvas}>
 			<div ref={canvasContainerRef} className={styles.canvasContainer} />
-			<ElementActionHints hints={elementActionHints} onAction={onElementActionHintAction} />
+			<ElementActionHints
+				hints={elementActionHints}
+				onAction={onElementActionHintAction}
+				connectionHints={connectionActionHints}
+				onConnectionAction={onConnectionActionHintAction}
+			/>
 			{!readonly && <ElementRenameOverlay />}
 			{!readonly && <ElementTools />}
 			{!readonly && <ImageMessageEditor />}

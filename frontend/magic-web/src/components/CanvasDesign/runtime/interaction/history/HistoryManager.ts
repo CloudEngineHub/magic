@@ -103,6 +103,10 @@ export class HistoryManager {
 			this.recordHistoryImmediate()
 		})
 
+		this.canvas.eventEmitter.on("connection:change", () => {
+			this.recordHistoryImmediate()
+		})
+
 		this.canvas.eventEmitter.on("upload:pending-change", () => {
 			this.emitHistoryStateChange()
 		})
@@ -162,7 +166,7 @@ export class HistoryManager {
 
 		// 获取当前文档快照（包含临时元素，以便撤销时能正确恢复）
 		const startedAt = now()
-		const snapshot = this.canvas.elementManager.exportDocument({ includeTemporary: true })
+		const snapshot = this.canvas.exportDocument({ includeTemporary: true })
 		const durationMs = now() - startedAt
 		this.recordCount += 1
 		this.lastRecordDurationMs = durationMs
@@ -254,7 +258,7 @@ export class HistoryManager {
 
 		try {
 			// 使用智能加载，只更新变化的元素，避免全量重新渲染
-			this.canvas.elementManager.loadDocumentSmart(item.snapshot)
+			this.canvas.loadDocumentSmart(item.snapshot)
 
 			// 触发选中元素位置更新
 			// 因为 loadDocument 使用批量模式，不会触发 element:updated 事件

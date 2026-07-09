@@ -11,6 +11,7 @@ export type CursorType =
 	| "crosshair"
 	| "grab"
 	| "grabbing"
+	| "not-allowed"
 	| "text"
 	| "move"
 	| "n-resize"
@@ -170,7 +171,11 @@ export class CursorManager {
 	private setCursor(cursor: CursorType): void {
 		const container = this.canvas.stage.container()
 		if (container) {
-			container.style.cursor = cursor === "eraser" ? "none" : cursor
+			const cursorStyle = cursor === "eraser" ? "none" : cursor
+			if (this.currentCursor === cursor && container.style.cursor === cursorStyle) {
+				return
+			}
+			container.style.cursor = cursorStyle
 			this.currentCursor = cursor
 		}
 	}

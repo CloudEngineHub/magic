@@ -15,6 +15,7 @@ import type {
 } from "../input/index"
 import { getClientPointFromNativeEvent } from "../input/index"
 import { isMultiSelectEvent } from "../shortcuts/modifierUtils"
+import { isConnectionNode } from "../connection/connectionNodeUtils"
 
 const TOUCH_DIRECT_DRAG_DISTANCE = 8
 
@@ -224,6 +225,10 @@ export class SelectionTool extends BaseTool {
 
 		const clickedNode = input.target
 
+		if (isConnectionNode(clickedNode)) {
+			return
+		}
+
 		if (this.isDecoratorNode(clickedNode)) {
 			return
 		}
@@ -249,6 +254,7 @@ export class SelectionTool extends BaseTool {
 					return
 				}
 
+				this.canvas.connectionManager.deselectConnection()
 				const wasSelected = this.canvas.selectionManager.isSelected(elementId)
 				if (!wasSelected) {
 					this.canvas.selectionManager.replaceSelection([elementId])
@@ -291,6 +297,7 @@ export class SelectionTool extends BaseTool {
 		// 触屏空白拖动交给 ViewportController 平移，不进入 PC 框选流程。
 		this.clearPendingDirectDrag()
 		if (!isMultiSelect) {
+			this.canvas.connectionManager.deselectConnection()
 			this.canvas.selectionManager.deselectAll()
 		}
 	}
@@ -312,6 +319,7 @@ export class SelectionTool extends BaseTool {
 
 		this.clearPendingDirectDrag()
 		if (!isMultiSelect) {
+			this.canvas.connectionManager.deselectConnection()
 			this.canvas.selectionManager.deselectAll()
 		}
 		return true
@@ -381,15 +389,7 @@ export class SelectionTool extends BaseTool {
 
 		// 实时更新框选区域内的元素选中状态
 		const box = { x, y, width, height }
-		const selectedIds = this.findElementsInBox(box)
-
-		// 实时更新选中状态，让 Layers UI 可以看到变化
-		if (selectedIds.length > 0) {
-			this.canvas.selectionManager.selectMultiple(selectedIds, this.isMultiSelectMode)
-		} else if (!this.isMultiSelectMode) {
-			// 如果没有框选到元素且不是多选模式，清空选中
-			this.canvas.selectionManager.deselectAll()
-		}
+		this.updateSelectionFromBox(box)
 
 		this.toolLayer.batchDraw()
 	}
@@ -515,6 +515,10 @@ export class SelectionTool extends BaseTool {
 
 		const clickedNode = e.target
 
+		if (isConnectionNode(clickedNode)) {
+			return
+		}
+
 		// 检查是否点击了装饰性元素（包括按钮本身或其父节点）
 		let decoratorNodeName: string | undefined
 		let currentNode: Konva.Node | null = clickedNode
@@ -568,6 +572,7 @@ export class SelectionTool extends BaseTool {
 					// 多选模式：切换选中状态
 					this.canvas.selectionManager.toggle(elementId)
 				} else {
+					this.canvas.connectionManager.deselectConnection()
 					// 单选模式：如果点击的不是已选中的元素，选中它
 					// 如果点击的是已选中的元素，保持选中（允许拖拽）
 					const wasSelected = this.canvas.selectionManager.isSelected(elementId)
@@ -610,6 +615,7 @@ export class SelectionTool extends BaseTool {
 			}
 
 			if (!isMultiSelect) {
+				this.canvas.connectionManager.deselectConnection()
 				this.canvas.selectionManager.deselectAll()
 			}
 			return
@@ -631,6 +637,7 @@ export class SelectionTool extends BaseTool {
 		// 清空选中（如果没有按住 Cmd/Ctrl）
 		this.isMultiSelectMode = isMultiSelect // 记录多选模式
 		if (!isMultiSelect) {
+			this.canvas.connectionManager.deselectConnection()
 			this.canvas.selectionManager.deselectAll()
 		}
 		this.clearPendingDirectDrag()
@@ -703,15 +710,7 @@ export class SelectionTool extends BaseTool {
 
 		// 实时更新框选区域内的元素选中状态
 		const box = { x, y, width, height }
-		const selectedIds = this.findElementsInBox(box)
-
-		// 实时更新选中状态，让 Layers UI 可以看到变化
-		if (selectedIds.length > 0) {
-			this.canvas.selectionManager.selectMultiple(selectedIds, this.isMultiSelectMode)
-		} else if (!this.isMultiSelectMode) {
-			// 如果没有框选到元素且不是多选模式，清空选中
-			this.canvas.selectionManager.deselectAll()
-		}
+		this.updateSelectionFromBox(box)
 
 		this.toolLayer.batchDraw()
 	}
@@ -1244,6 +1243,33 @@ export class SelectionTool extends BaseTool {
 		return selectedIds
 	}
 
+	private updateSelectionFromBox(box: {
+		x: number
+		y: number
+		width: number
+		height: number
+	}): void {
+		const selectedElementIds = this.findElementsInBox(box)
+		const selectedConnectionIds = this.canvas.connectionManager.findConnectionsInBox(box)
+
+		// 实时更新选中状态，让 Layers UI 可以看到变化
+		if (selectedElementIds.length > 0) {
+			this.canvas.selectionManager.selectMultiple(selectedElementIds, this.isMultiSelectMode)
+		} else if (!this.isMultiSelectMode) {
+			// 如果没有框选到元素且不是多选模式，清空选中
+			this.canvas.selectionManager.deselectAll()
+		}
+
+		if (selectedConnectionIds.length > 0) {
+			this.canvas.connectionManager.selectConnections(selectedConnectionIds, {
+				append: this.isMultiSelectMode,
+				autoFocus: false,
+			})
+		} else if (!this.isMultiSelectMode) {
+			this.canvas.connectionManager.deselectConnection()
+		}
+	}
+
 	/**
 	 * 检查元素是否在框选范围内
 	 * @param element 元素
@@ -1414,6 +1440,7 @@ export class SelectionTool extends BaseTool {
 						width,
 						height,
 					})
+					this.updateSelectionFromBox({ x, y, width, height })
 
 					this.toolLayer.batchDraw()
 				}

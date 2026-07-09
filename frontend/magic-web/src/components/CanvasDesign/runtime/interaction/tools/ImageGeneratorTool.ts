@@ -220,6 +220,23 @@ export class ImageGeneratorTool extends BaseTool {
 		this.createImageElementAt(position.x, position.y, imageSize.width, imageSize.height)
 	}
 
+	public createImageAtCanvasPoint(
+		centerX: number,
+		centerY: number,
+		imageModelList?: ImageModelItem[],
+	): string {
+		const size = this.getImageElementSizeForModelList(imageModelList)
+		return this.createImageElementAtCenter(centerX, centerY, size.width, size.height)
+	}
+
+	public getImageElementSizeForModelList(imageModelList?: ImageModelItem[]): {
+		width: number
+		height: number
+	} {
+		const defaultSize = imageModelList ? this.calculateDefaultSize(imageModelList) : null
+		return this.getImageElementSize(defaultSize?.width, defaultSize?.height)
+	}
+
 	public createImageElementNearViewport(width?: number, height?: number): string {
 		const imageSize = this.getImageElementSize(width, height)
 		const mediaPlacementConfig = getResolvedMediaPlacementConfig(this.canvas)
@@ -338,9 +355,9 @@ export class ImageGeneratorTool extends BaseTool {
 		centerY: number,
 		width?: number,
 		height?: number,
-	): void {
+	): string {
 		const size = this.getImageElementSize(width, height)
-		this.createImageElementAt(
+		return this.createImageElementAt(
 			centerX - size.width / 2,
 			centerY - size.height / 2,
 			size.width,

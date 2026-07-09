@@ -9,6 +9,16 @@
 		"ok": "确定",
 		"save": "保存"
 	},
+	"connectionConflict": {
+		"deleteConnection": "删除这条连接",
+		"description": "这条连接线有新的同步内容，也有你当前的修改。",
+		"keepConnection": "保留这条连接",
+		"keepDeleted": "保持删除",
+		"restoreNew": "恢复新版",
+		"title": "请选择保留的连接",
+		"useLocal": "保留我的",
+		"useRemote": "使用新的"
+	},
 	"dropOverlay": {
 		"loading": "加载中",
 		"processing": "正在处理 {{current}}/{{total}}",

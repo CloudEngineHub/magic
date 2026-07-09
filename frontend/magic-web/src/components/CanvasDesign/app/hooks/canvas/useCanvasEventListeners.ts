@@ -116,7 +116,10 @@ export function useCanvasEventListeners(options: UseCanvasEventListenersOptions)
 			source: CanvasDesignDataChangeSource,
 			changeMeta?: Pick<
 				CanvasDesignDataChangeMeta,
-				"changedElementIds" | "elementNameChanges"
+				| "changedElementIds"
+				| "elementNameChanges"
+				| "changedConnectionIds"
+				| "deletedConnectionIds"
 			>,
 		) => {
 			const previous = pendingCanvasDataChangeMetaRef.current
@@ -126,15 +129,27 @@ export function useCanvasEventListeners(options: UseCanvasEventListenersOptions)
 				nextChangedElementIds = Array.from(
 					new Set([...previous.changedElementIds, ...changedElementIds]),
 				)
-			} else if (changedElementIds && !previous) {
+			} else if (changedElementIds) {
 				nextChangedElementIds = changedElementIds
 			} else if (previous?.changedElementIds) {
 				nextChangedElementIds = previous.changedElementIds
+			}
+			const mergeIds = (left?: string[], right?: string[]) => {
+				if (!left?.length && !right?.length) return undefined
+				return Array.from(new Set([...(left ?? []), ...(right ?? [])]))
 			}
 
 			pendingCanvasDataChangeMetaRef.current = {
 				source,
 				changedElementIds: nextChangedElementIds,
+				changedConnectionIds: mergeIds(
+					previous?.changedConnectionIds,
+					changeMeta?.changedConnectionIds,
+				),
+				deletedConnectionIds: mergeIds(
+					previous?.deletedConnectionIds,
+					changeMeta?.deletedConnectionIds,
+				),
 				elementNameChanges: mergeElementNameChanges(
 					previous?.elementNameChanges,
 					changeMeta?.elementNameChanges,
@@ -161,26 +176,52 @@ export function useCanvasEventListeners(options: UseCanvasEventListenersOptions)
 						source: meta?.source ?? "element:change",
 						changedElementIds: meta?.changedElementIds,
 						deletedElementIds,
+						changedConnectionIds: meta?.changedConnectionIds,
+						deletedConnectionIds: meta?.deletedConnectionIds,
 						elementNameChanges: meta?.elementNameChanges,
 					}
 				: undefined
 
 		const patchHandler = onCanvasDesignDataPatchChangeRef.current
 		const changedElementIds = metaWithDeletedElementIds?.changedElementIds
+		const changedConnectionIds = metaWithDeletedElementIds?.changedConnectionIds
+		const deletedConnectionIds = metaWithDeletedElementIds?.deletedConnectionIds
+		const hasElementPatch =
+			(changedElementIds && changedElementIds.length > 0) || deletedElementIds.length > 0
+		const hasConnectionPatch =
+			(changedConnectionIds && changedConnectionIds.length > 0) ||
+			(deletedConnectionIds && deletedConnectionIds.length > 0)
 		if (
 			patchHandler &&
-			metaWithDeletedElementIds?.source === "element:change" &&
-			changedElementIds &&
-			changedElementIds.length > 0
+			(hasElementPatch || hasConnectionPatch) &&
+			metaWithDeletedElementIds?.source !== "canvas:clear"
 		) {
 			try {
-				const patch = canvas.elementManager.exportDocumentPatch({
-					changedElementIds,
-					deletedElementIds,
-					elementNameChanges: metaWithDeletedElementIds.elementNameChanges,
-					includeTemporary: false,
-				})
-				patchHandler(patch, metaWithDeletedElementIds)
+				const elementPatch = hasElementPatch
+					? canvas.elementManager.exportDocumentPatch({
+							changedElementIds: changedElementIds ?? [],
+							deletedElementIds,
+							elementNameChanges: metaWithDeletedElementIds?.elementNameChanges,
+							includeTemporary: false,
+						})
+					: {
+							upserts: [],
+							deletedElementIds: [],
+							changedElementIds: [],
+						}
+				const connectionPatch = hasConnectionPatch
+					? canvas.connectionManager.exportDocumentPatch({
+							changedConnectionIds,
+							deletedConnectionIds,
+						})
+					: undefined
+				patchHandler(
+					{
+						...elementPatch,
+						...connectionPatch,
+					},
+					metaWithDeletedElementIds,
+				)
 				return
 			} catch {
 				// Patch export is an optimization path; fall back to the legacy full export below.
@@ -199,7 +240,10 @@ export function useCanvasEventListeners(options: UseCanvasEventListenersOptions)
 			source: CanvasDesignDataChangeSource,
 			changeMeta?: Pick<
 				CanvasDesignDataChangeMeta,
-				"changedElementIds" | "elementNameChanges"
+				| "changedElementIds"
+				| "elementNameChanges"
+				| "changedConnectionIds"
+				| "deletedConnectionIds"
 			>,
 		) => {
 			mergePendingCanvasDataChangeMeta(source, changeMeta)
@@ -278,8 +322,13 @@ export function useCanvasEventListeners(options: UseCanvasEventListenersOptions)
 
 	// 监听所有可能导致画布数据变化的事件
 	useCanvasEvents(
-		["element:change", "canvas:clear", "element:temporary:converted"] as const,
-		(changeEvent, clearEvent, temporaryConvertedEvent) => {
+		[
+			"element:change",
+			"canvas:clear",
+			"element:temporary:converted",
+			"connection:change",
+		] as const,
+		(changeEvent, clearEvent, temporaryConvertedEvent, connectionEvent) => {
 			if (changeEvent) {
 				if (changeEvent.data?.phase === "transient") return
 				scheduleCanvasDesignDataChange("element:change", {
@@ -296,6 +345,13 @@ export function useCanvasEventListeners(options: UseCanvasEventListenersOptions)
 			}
 			if (clearEvent) {
 				scheduleCanvasDesignDataChange("canvas:clear")
+				return
+			}
+			if (connectionEvent) {
+				scheduleCanvasDesignDataChange("connection:change", {
+					changedConnectionIds: connectionEvent.data.changedConnectionIds,
+					deletedConnectionIds: connectionEvent.data.deletedConnectionIds,
+				})
 			}
 		},
 		[scheduleCanvasDesignDataChange],

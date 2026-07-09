@@ -6,6 +6,7 @@ import type {
 	Marker,
 	CropConfig,
 	ExtendSession,
+	CanvasConnection,
 } from "../document/types"
 import type { IdentifyImageMarkResponse } from "../../public/magic-types"
 import type {
@@ -99,6 +100,34 @@ export interface CanvasEventMap {
 	"element:batchupdated": void // 批量更新完成事件
 	"element:batchdeleted": { elementIds: string[] } // 批量删除完成事件
 	"referenceImages:changed": { elementId: string } // 图片元素参考图增删（触发未引用资源清理）
+	"connection:change": {
+		connections: CanvasConnection[]
+		changedConnectionIds?: string[]
+		deletedConnectionIds?: string[]
+	} // 元素业务关联线增删或恢复
+	"connection:selection:change": {
+		selectedConnectionIds: string[]
+		addedConnectionIds?: string[]
+		removedConnectionIds?: string[]
+	} // 元素业务关联线选区变化
+	"connection:select": { connectionId: string } // 选中元素业务关联线
+	"connection:deselect": { connectionId: string } // 取消选中元素业务关联线
+	"connection:menu:open": {
+		connectionId?: string
+		originElementId?: string
+		originSide?: "left" | "right"
+		x: number
+		y: number
+		canvasX: number
+		canvasY: number
+		source: "handle" | "drag-empty"
+	} // 元素业务关联线菜单打开
+	"connection:menu:close": {
+		connectionId?: string
+		originElementId?: string
+		originSide?: "left" | "right"
+		source: "handle" | "drag-empty"
+	} // 元素业务关联线菜单关闭
 
 	// 临时元素相关事件
 	"element:temporary:converted": { elementId: string } // 临时元素转为正式元素

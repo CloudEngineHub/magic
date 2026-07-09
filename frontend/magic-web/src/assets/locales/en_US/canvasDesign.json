@@ -9,6 +9,16 @@
 		"ok": "OK",
 		"save": "Save"
 	},
+	"connectionConflict": {
+		"deleteConnection": "Delete this connection",
+		"description": "This connection has new synced content and your current changes.",
+		"keepConnection": "Keep this connection",
+		"keepDeleted": "Keep deleted",
+		"restoreNew": "Restore new",
+		"title": "Choose a connection to keep",
+		"useLocal": "Keep mine",
+		"useRemote": "Use new"
+	},
 	"dropOverlay": {
 		"loading": "Loading",
 		"referenceImageLimitReached": "Reference image limit reached",

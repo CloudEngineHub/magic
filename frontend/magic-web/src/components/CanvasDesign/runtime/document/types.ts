@@ -152,6 +152,8 @@ export interface InteractionConfig {
 	strokePosition?: StrokePosition
 	/** 是否锁定宽高比 */
 	aspectRatioLocked?: boolean
+	/** 是否允许作为连接线起点/终点；Frame、Group 等容器元素固定不可连接 */
+	connectable?: boolean
 }
 
 /** 基础元素属性 */
@@ -425,10 +427,27 @@ export interface MarkerArea extends MarkerCommon {
 /** 标记类型 */
 export type Marker = MarkerPoint | MarkerArea
 
+/**
+ * 画布元素业务关联线。
+ *
+ * 该结构只表达持久化的因果语义：sourceElementId -> targetElementId。
+ * 视觉上的左右连接点由渲染层根据元素位置实时计算，不写入画布 DSL。
+ */
+export interface CanvasConnection {
+	/** 关联线唯一标识 */
+	id: string
+	/** 上游/原因/输入元素 ID；默认视觉承接方向为左到右 */
+	sourceElementId: string
+	/** 下游/结果/消费方元素 ID */
+	targetElementId: string
+}
+
 /** 画布文档结构 */
 export interface CanvasDocument {
 	/** 元素 */
 	elements?: LayerElement[]
+	/** 元素业务关联线 */
+	connections?: CanvasConnection[]
 }
 
 /**

@@ -33,6 +33,14 @@ function createNode() {
 	}
 }
 
+function createConnectionManagerStub() {
+	return {
+		deselectConnection: vi.fn(),
+		findConnectionsInBox: vi.fn(() => []),
+		selectConnections: vi.fn(),
+	}
+}
+
 type SelectionToolPrivate = {
 	canvas: Canvas
 	activate: () => void
@@ -56,6 +64,8 @@ type SelectionToolPrivate = {
 
 type SelectionToolBoxPrivate = {
 	findElementsInBox: (box: { x: number; y: number; width: number; height: number }) => string[]
+	updateSelectionFromBox: (box: { x: number; y: number; width: number; height: number }) => void
+	isMultiSelectMode: boolean
 }
 
 function createPointerEvent(
@@ -153,6 +163,7 @@ function createTouchSelectionTool(options?: {
 			replaceSelection: vi.fn(),
 			deselectAll: vi.fn(),
 		},
+		connectionManager: createConnectionManagerStub(),
 		inputManager: {
 			on: vi.fn(() => vi.fn()),
 			cancelLongPress: vi.fn(),
@@ -591,6 +602,7 @@ describe("SelectionTool pending direct drag", () => {
 		)
 
 		expect(canvas.selectionManager.deselectAll).toHaveBeenCalledTimes(1)
+		expect(canvas.connectionManager.deselectConnection).toHaveBeenCalledTimes(1)
 		expect(tool.pendingDirectDrag).toBeNull()
 	})
 
@@ -622,6 +634,7 @@ describe("SelectionTool pending direct drag", () => {
 		)
 
 		expect(canvas.selectionManager.deselectAll).not.toHaveBeenCalled()
+		expect(canvas.connectionManager.deselectConnection).not.toHaveBeenCalled()
 		expect(tool.pendingDirectDrag).toBeNull()
 	})
 
@@ -660,6 +673,7 @@ describe("SelectionTool pending direct drag", () => {
 				replaceSelection: vi.fn(),
 				deselectAll: vi.fn(),
 			},
+			connectionManager: createConnectionManagerStub(),
 			inputManager: {
 				cancelLongPress: vi.fn(),
 			},
@@ -684,6 +698,7 @@ describe("SelectionTool pending direct drag", () => {
 		)
 
 		expect(canvas.selectionManager.deselectAll).toHaveBeenCalledTimes(1)
+		expect(canvas.connectionManager.deselectConnection).toHaveBeenCalledTimes(1)
 		expect(tool.pendingDirectDrag).toBeNull()
 	})
 
@@ -727,6 +742,7 @@ describe("SelectionTool pending direct drag", () => {
 				replaceSelection: vi.fn(),
 				deselectAll: vi.fn(),
 			},
+			connectionManager: createConnectionManagerStub(),
 			transformManager: {
 				beginTransformInteractionIntent,
 				clearTransformInteractionIntent,
@@ -873,5 +889,77 @@ describe("SelectionTool pending direct drag", () => {
 		expect(tool.findElementsInBox(box)).toEqual(["visible"])
 		expect(queryElementIdsByExpandedRect).toHaveBeenCalledWith(box, 0)
 		expect(getElementData).not.toHaveBeenCalledWith("child")
+	})
+
+	it("updates element and connection selections from a selection box", () => {
+		const box = { x: 0, y: 0, width: 100, height: 100 }
+		const canvas = {
+			geometryCacheManager: {
+				queryElementIdsByExpandedRect: vi.fn(() => ["element-1"]),
+			},
+			elementManager: {
+				findParentIdForElement: vi.fn(() => undefined),
+				getElementData: vi.fn(() => ({
+					id: "element-1",
+					type: "rectangle",
+					x: 10,
+					y: 10,
+					width: 20,
+					height: 20,
+				})),
+			},
+			permissionManager: {
+				canSelect: vi.fn(() => true),
+			},
+			selectionManager: {
+				selectMultiple: vi.fn(),
+				deselectAll: vi.fn(),
+			},
+			connectionManager: {
+				findConnectionsInBox: vi.fn(() => ["connection-1", "connection-2"]),
+				selectConnections: vi.fn(),
+				deselectConnection: vi.fn(),
+			},
+		} as unknown as Canvas
+		const tool = new SelectionTool({ canvas }) as unknown as SelectionToolBoxPrivate
+
+		tool.updateSelectionFromBox(box)
+
+		expect(canvas.selectionManager.selectMultiple).toHaveBeenCalledWith(["element-1"], false)
+		expect(canvas.connectionManager.findConnectionsInBox).toHaveBeenCalledWith(box)
+		expect(canvas.connectionManager.selectConnections).toHaveBeenCalledWith(
+			["connection-1", "connection-2"],
+			{ append: false, autoFocus: false },
+		)
+	})
+
+	it("clears element and connection selections when an unmodified selection box is empty", () => {
+		const canvas = {
+			geometryCacheManager: {
+				queryElementIdsByExpandedRect: vi.fn(() => []),
+			},
+			elementManager: {
+				findParentIdForElement: vi.fn(),
+				getElementData: vi.fn(),
+			},
+			permissionManager: {
+				canSelect: vi.fn(),
+			},
+			selectionManager: {
+				selectMultiple: vi.fn(),
+				deselectAll: vi.fn(),
+			},
+			connectionManager: {
+				findConnectionsInBox: vi.fn(() => []),
+				selectConnections: vi.fn(),
+				deselectConnection: vi.fn(),
+			},
+		} as unknown as Canvas
+		const tool = new SelectionTool({ canvas }) as unknown as SelectionToolBoxPrivate
+
+		tool.updateSelectionFromBox({ x: 0, y: 0, width: 100, height: 100 })
+
+		expect(canvas.selectionManager.deselectAll).toHaveBeenCalledTimes(1)
+		expect(canvas.connectionManager.deselectConnection).toHaveBeenCalledTimes(1)
 	})
 })

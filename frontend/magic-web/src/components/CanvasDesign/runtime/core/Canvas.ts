@@ -56,6 +56,9 @@ import { TextFormattingManager } from "../interaction/text-editing/TextFormattin
 import { CanvasInputManager } from "../interaction/input/index"
 import { isCanvasUIComponentNode } from "../shared/dom/domGuards"
 import { buildVirtualResourceScope } from "../shared/path/pathUtils"
+import { ConnectionManager } from "../interaction/connection/ConnectionManager"
+import { ConnectionDragManager } from "../interaction/connection/ConnectionDragManager"
+import { ConnectionHandleOverlayManager } from "../interaction/connection/ConnectionHandleOverlayManager"
 import {
 	editActions,
 	layerActions,
@@ -79,6 +82,16 @@ function areCanvasDeviceInfoEqual(a: CanvasDeviceInfo, b: CanvasDeviceInfo): boo
 	)
 }
 
+function getCanvasConnectionComparable(connections: CanvasDocument["connections"]): string {
+	return JSON.stringify(
+		(connections ?? []).map(({ id, sourceElementId, targetElementId }) => ({
+			id,
+			sourceElementId,
+			targetElementId,
+		})),
+	)
+}
+
 /**
  * Canvas类 - 封装Konva画布的初始化和管理
  */
@@ -88,6 +101,7 @@ export class Canvas {
 
 	// 五层架构的 Layer 管理（从底到顶）
 	public contentLayer: Konva.Layer // 1. 内容层：用户创建的所有元素
+	public connectionGroup: Konva.Group // 内容层底部 Group：元素之间的业务关联线
 	public selectionLayer: Konva.Layer // 2. 选择层：框选矩形和选中高亮效果
 	public controlsLayer: Konva.Layer // 3. 控制层：Transformer 和 Hover 边框
 	public markersLayer: Konva.Layer // 4. 标记层：图片上的 Marker 标记（在最上层，不被遮挡）
@@ -105,6 +119,9 @@ export class Canvas {
 	public videoSelectionPlaybackManager: VideoSelectionPlaybackManager
 	public videoPlaybackInteractionManager: VideoPlaybackInteractionManager
 	public inputManager: CanvasInputManager
+	public connectionManager: ConnectionManager
+	public connectionDragManager: ConnectionDragManager
+	public connectionHandleOverlayManager: ConnectionHandleOverlayManager
 	public toolManager: ToolManager
 	public keyboardManager: KeyboardManager
 	public alignmentManager: AlignmentManager
@@ -190,6 +207,8 @@ export class Canvas {
 
 		// 创建五层架构的 Layer
 		this.contentLayer = new Konva.Layer({ name: "content", listening: true })
+		this.connectionGroup = new Konva.Group({ name: "canvas-connections", listening: true })
+		this.contentLayer.add(this.connectionGroup)
 		this.selectionLayer = new Konva.Layer({ name: "selection", listening: false })
 		this.markersLayer = new Konva.Layer({ name: "markers", listening: true })
 		this.controlsLayer = new Konva.Layer({ name: "controls", listening: true })
@@ -287,6 +306,11 @@ export class Canvas {
 
 		// 初始化几何缓存管理器（统一提供边界缓存与后续空间索引扩展点）
 		this.geometryCacheManager = new GeometryCacheManager({
+			canvas: this,
+		})
+
+		// 初始化关联线管理器（使用 contentLayer 内的 connectionGroup 绘制元素业务因果关系）
+		this.connectionManager = new ConnectionManager({
 			canvas: this,
 		})
 
@@ -428,6 +452,16 @@ export class Canvas {
 			canvas: this,
 		})
 
+		// 初始化关联线拖拽管理器（依赖统一 inputManager，使用 Controls Layer 绘制 preview）
+		this.connectionDragManager = new ConnectionDragManager({
+			canvas: this,
+		})
+
+		// 初始化关联线 handle overlay（使用 Controls Layer，不新增 Konva Layer）
+		this.connectionHandleOverlayManager = new ConnectionHandleOverlayManager({
+			canvas: this,
+		})
+
 		// 设置键盘事件监听
 		this.setupKeyboardListeners()
 
@@ -548,6 +582,7 @@ export class Canvas {
 			}
 
 			// 点击在画布外且不在UI组件内，取消选中
+			this.connectionManager.deselectConnection()
 			if (this.selectionManager.hasSelection()) {
 				this.selectionManager.deselectAll()
 			}
@@ -859,6 +894,7 @@ export class Canvas {
 		this.historyManager.disable()
 
 		this.elementManager.loadDocument(doc)
+		this.connectionManager.loadDocument(doc)
 
 		// 重新启用历史记录
 		this.historyManager.enable()
@@ -877,13 +913,42 @@ export class Canvas {
 	}
 
 	/**
+	 * 智能加载文档数据
+	 * @param doc - 画布文档
+	 */
+	public loadDocumentSmart(doc: CanvasDocument): void {
+		this.resourceUrlWarmupManager.warmupDocument(doc, "loadDocumentSmart")
+		const previousConnections = this.connectionManager.exportConnections()
+		let didEmitDocumentRestored = false
+		const unsubscribeDocumentRestored = this.eventEmitter.on("document:restored", () => {
+			didEmitDocumentRestored = true
+		})
+		try {
+			this.elementManager.loadDocumentSmart(doc)
+		} finally {
+			unsubscribeDocumentRestored()
+		}
+		this.connectionManager.loadDocument(doc)
+		const nextConnections = this.connectionManager.exportConnections()
+		if (
+			!didEmitDocumentRestored &&
+			getCanvasConnectionComparable(previousConnections) !==
+				getCanvasConnectionComparable(nextConnections)
+		) {
+			this.eventEmitter.emit({ type: "document:restored", data: undefined })
+		}
+	}
+
+	/**
 	 * 导出文档数据
 	 * @param options 导出选项
 	 * @param options.includeTemporary 是否包含临时元素（默认 false）
 	 * @returns 画布文档
 	 */
 	public exportDocument(options?: { includeTemporary?: boolean }): CanvasDocument {
-		return this.elementManager.exportDocument(options)
+		const doc = this.elementManager.exportDocument(options)
+		const connections = this.connectionManager.exportConnections()
+		return connections.length > 0 ? { ...doc, connections } : doc
 	}
 
 	/**
@@ -912,6 +977,7 @@ export class Canvas {
 	 */
 	public clear(): void {
 		this.elementManager.clear()
+		this.connectionManager.clear({ emitChange: false })
 		this.markerManager.clear()
 
 		// 发布画布清空事件
@@ -1034,6 +1100,40 @@ export class Canvas {
 	}
 
 	/**
+	 * 删除当前选区。元素选区和业务关联线选区相互独立，但删除操作需要合并成一次用户意图。
+	 */
+	public deleteSelection(): void {
+		const selectedConnectionIds = this.connectionManager.getSelectedConnectionIds()
+		const selectedElementIds = this.selectionManager.getSelectedIds()
+		const deletableElementIds = selectedElementIds.filter((id) => {
+			const elementData = this.elementManager.getElementData(id)
+			return this.permissionManager.canDelete(elementData)
+		})
+
+		if (selectedConnectionIds.length === 0 && deletableElementIds.length === 0) {
+			return
+		}
+
+		if (selectedConnectionIds.length > 0 && deletableElementIds.length > 0) {
+			this.historyManager.disable()
+			try {
+				this.connectionManager.deleteSelectedConnections()
+			} finally {
+				this.historyManager.enable()
+			}
+			this.deleteSelectedElements()
+			return
+		}
+
+		if (selectedConnectionIds.length > 0) {
+			this.connectionManager.deleteSelectedConnections()
+			return
+		}
+
+		this.deleteSelectedElements()
+	}
+
+	/**
 	 * 设置只读状态
 	 */
 	public setReadonly(readonly: boolean): void {
@@ -1047,6 +1147,8 @@ export class Canvas {
 			this.elementRenameManager.cancelRename()
 			this.toolManager.setActiveToolByType(ToolTypeEnum.Select)
 		}
+
+		this.eventEmitter.emit({ type: "canvas:readonly", data: { readonly } })
 	}
 
 	/**
@@ -1090,13 +1192,13 @@ export class Canvas {
 	/**
 	 * 收集指定 Layer 中的所有节点
 	 * @param layer - 要收集的 Layer 实例
-	 * @returns 所有节点的数组（排除背景节点）
+	 * @returns 所有节点的数组（排除背景和运行时辅助节点）
 	 */
 	public collectLayerNodes(layer: Konva.Layer): Konva.Node[] {
 		const nodes: Konva.Node[] = []
 		const collectRecursive = (node: Konva.Node): void => {
-			// 排除背景节点
-			if (node.name() === "canvas-background") {
+			// 排除背景和运行时辅助节点
+			if (node.name() === "canvas-background" || node.name() === "canvas-connections") {
 				return
 			}
 			nodes.push(node)
@@ -1120,6 +1222,24 @@ export class Canvas {
 			["controls", this.controlsLayer],
 			["overlay", this.overlayLayer],
 		])
+	}
+
+	/**
+	 * 确保连接线 Group 存在于 contentLayer 底部：背景之上，元素之下。
+	 */
+	public ensureConnectionGroup(): Konva.Group {
+		if (this.connectionGroup.getParent() !== this.contentLayer) {
+			this.connectionGroup = new Konva.Group({
+				name: "canvas-connections",
+				listening: true,
+			})
+			this.contentLayer.add(this.connectionGroup)
+		}
+
+		this.connectionGroup.moveToBottom()
+		const background = this.contentLayer.findOne(".canvas-background")
+		background?.moveToBottom()
+		return this.connectionGroup
 	}
 
 	/**
@@ -1159,6 +1279,9 @@ export class Canvas {
 		this.imageBatchPollingRegistry.destroy()
 		this.elementManager.destroy()
 		this.geometryCacheManager.destroy()
+		this.connectionManager.destroy()
+		this.connectionDragManager.destroy()
+		this.connectionHandleOverlayManager.destroy()
 		this.viewportController.destroy()
 		this.selectionManager.destroy()
 		this.transformManager.destroy()

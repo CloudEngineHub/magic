@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest"
-import type { CanvasDocument, LayerElement } from "../types"
+import type { CanvasConnection, CanvasDocument, LayerElement } from "../types"
 import {
-	mergeCanvasDocumentsByElement,
+	mergeCanvasDocuments,
 	refreshCanvasDocumentElementMergeConflictsFromRemote,
 } from "../merge"
 
@@ -54,17 +54,25 @@ function frame(id: string, children: LayerElement[] = [], props: Partial<LayerEl
 	} as LayerElement
 }
 
-function canvas(elements: LayerElement[]): CanvasDocument {
-	return { elements }
+function connection(
+	id: string,
+	sourceElementId = "source",
+	targetElementId = "target",
+): CanvasConnection {
+	return { id, sourceElementId, targetElementId }
 }
 
-describe("mergeCanvasDocumentsByElement", () => {
+function canvas(elements: LayerElement[], connections?: CanvasConnection[]): CanvasDocument {
+	return connections ? { elements, connections } : { elements }
+}
+
+describe("mergeCanvasDocuments", () => {
 	it("merges local and remote changes on different elements", () => {
 		const baseCanvas = canvas([rect("local"), rect("remote")])
 		const localCanvas = canvas([rect("local", { x: 10 }), rect("remote")])
 		const remoteCanvas = canvas([rect("local"), rect("remote", { x: 20 })])
 
-		const result = mergeCanvasDocumentsByElement({ baseCanvas, localCanvas, remoteCanvas })
+		const result = mergeCanvasDocuments({ baseCanvas, localCanvas, remoteCanvas })
 
 		expect(result.ok).toBe(true)
 		if (!result.ok) return
@@ -107,7 +115,7 @@ describe("mergeCanvasDocumentsByElement", () => {
 			} as Partial<LayerElement>),
 		])
 
-		const result = mergeCanvasDocumentsByElement({ baseCanvas, localCanvas, remoteCanvas })
+		const result = mergeCanvasDocuments({ baseCanvas, localCanvas, remoteCanvas })
 
 		expect(result.ok).toBe(true)
 		if (!result.ok) return
@@ -159,7 +167,7 @@ describe("mergeCanvasDocumentsByElement", () => {
 			} as Partial<LayerElement>),
 		])
 
-		const result = mergeCanvasDocumentsByElement({ baseCanvas, localCanvas, remoteCanvas })
+		const result = mergeCanvasDocuments({ baseCanvas, localCanvas, remoteCanvas })
 
 		expect(result.ok).toBe(true)
 		if (!result.ok) return
@@ -185,7 +193,7 @@ describe("mergeCanvasDocumentsByElement", () => {
 		const localCanvas = canvas([rect("same", { x: 10 })])
 		const remoteCanvas = canvas([rect("same", { x: 20 })])
 
-		const result = mergeCanvasDocumentsByElement({ baseCanvas, localCanvas, remoteCanvas })
+		const result = mergeCanvasDocuments({ baseCanvas, localCanvas, remoteCanvas })
 
 		expect(result).toEqual(
 			expect.objectContaining({
@@ -218,7 +226,7 @@ describe("mergeCanvasDocumentsByElement", () => {
 		const localCanvas = canvas([rect("a"), rect("a", { x: 10 })])
 		const remoteCanvas = canvas([rect("a")])
 
-		const result = mergeCanvasDocumentsByElement({ baseCanvas, localCanvas, remoteCanvas })
+		const result = mergeCanvasDocuments({ baseCanvas, localCanvas, remoteCanvas })
 
 		expect(result).toEqual(
 			expect.objectContaining({
@@ -234,7 +242,7 @@ describe("mergeCanvasDocumentsByElement", () => {
 		const localCanvas = canvas([rect("target", { y: 10 }), rect("local", { y: 20 })])
 		const remoteCanvas = canvas([rect("local")])
 
-		const result = mergeCanvasDocumentsByElement({ baseCanvas, localCanvas, remoteCanvas })
+		const result = mergeCanvasDocuments({ baseCanvas, localCanvas, remoteCanvas })
 
 		expect(result).toEqual(
 			expect.objectContaining({
@@ -263,7 +271,7 @@ describe("mergeCanvasDocumentsByElement", () => {
 		const localCanvas = canvas([frame("frame", [rect("local-new")])])
 		const remoteCanvas = canvas([frame("frame", [rect("remote-new")])])
 
-		const result = mergeCanvasDocumentsByElement({ baseCanvas, localCanvas, remoteCanvas })
+		const result = mergeCanvasDocuments({ baseCanvas, localCanvas, remoteCanvas })
 
 		expect(result.ok).toBe(true)
 		if (!result.ok) return
@@ -282,7 +290,7 @@ describe("mergeCanvasDocumentsByElement", () => {
 		const localCanvas = canvas([frame("frame", []), rect("child")])
 		const remoteCanvas = canvas([frame("frame", [rect("child"), rect("remote-new")])])
 
-		const result = mergeCanvasDocumentsByElement({ baseCanvas, localCanvas, remoteCanvas })
+		const result = mergeCanvasDocuments({ baseCanvas, localCanvas, remoteCanvas })
 
 		expect(result).toEqual(
 			expect.objectContaining({
@@ -334,5 +342,117 @@ describe("mergeCanvasDocumentsByElement", () => {
 				remoteParentId: null,
 			}),
 		])
+	})
+
+	it("merges local and remote connection additions", () => {
+		const elements = [rect("source"), rect("target"), rect("other")]
+		const baseCanvas = canvas(elements)
+		const localCanvas = canvas(elements, [connection("local", "source", "target")])
+		const remoteCanvas = canvas(elements, [connection("remote", "target", "other")])
+
+		const result = mergeCanvasDocuments({ baseCanvas, localCanvas, remoteCanvas })
+
+		expect(result.ok).toBe(true)
+		if (!result.ok) return
+		expect(result.mergedCanvas.connections?.map((item) => item.id).sort()).toEqual([
+			"local",
+			"remote",
+		])
+	})
+
+	it("reports duplicate connection ids as a connection-level conflict", () => {
+		const elements = [rect("source"), rect("target"), rect("other")]
+		const baseCanvas = canvas(elements)
+		const localCanvas = canvas(elements, [
+			connection("edge", "source", "target"),
+			connection("edge", "target", "other"),
+		])
+		const remoteCanvas = baseCanvas
+
+		const result = mergeCanvasDocuments({ baseCanvas, localCanvas, remoteCanvas })
+
+		expect(result).toEqual(
+			expect.objectContaining({
+				ok: false,
+				isConnectionLevelConflict: true,
+				reason: "duplicate-connection-id",
+				connectionConflictIds: ["edge"],
+				connectionConflicts: [
+					expect.objectContaining({
+						connectionId: "edge",
+						reason: "duplicate-connection-id",
+					}),
+				],
+			}),
+		)
+	})
+
+	it("applies local connection deletion and update over unchanged remote", () => {
+		const elements = [rect("source"), rect("target"), rect("other")]
+		const baseCanvas = canvas(elements, [
+			connection("delete-me", "source", "target"),
+			connection("update-me", "source", "target"),
+		])
+		const localCanvas = canvas(elements, [connection("update-me", "target", "other")])
+		const remoteCanvas = baseCanvas
+
+		const result = mergeCanvasDocuments({ baseCanvas, localCanvas, remoteCanvas })
+
+		expect(result.ok).toBe(true)
+		if (!result.ok) return
+		expect(result.mergedCanvas.connections).toEqual([
+			connection("update-me", "target", "other"),
+		])
+	})
+
+	it("returns a connection conflict when both sides update the same connection differently", () => {
+		const elements = [rect("source"), rect("target"), rect("other")]
+		const baseCanvas = canvas(elements, [connection("edge", "source", "target")])
+		const localCanvas = canvas(elements, [connection("edge", "target", "other")])
+		const remoteCanvas = canvas(elements, [connection("edge", "other", "source")])
+
+		const result = mergeCanvasDocuments({ baseCanvas, localCanvas, remoteCanvas })
+
+		expect(result).toEqual(
+			expect.objectContaining({
+				ok: false,
+				isConnectionLevelConflict: true,
+				reason: "same-connection-changed",
+				connectionConflictIds: ["edge"],
+			}),
+		)
+	})
+
+	it("returns a connection delete-update conflict", () => {
+		const elements = [rect("source"), rect("target"), rect("other")]
+		const baseCanvas = canvas(elements, [connection("edge", "source", "target")])
+		const localCanvas = canvas(elements)
+		const remoteCanvas = canvas(elements, [connection("edge", "target", "other")])
+
+		const result = mergeCanvasDocuments({ baseCanvas, localCanvas, remoteCanvas })
+
+		expect(result).toEqual(
+			expect.objectContaining({
+				ok: false,
+				isConnectionLevelConflict: true,
+				reason: "connection-delete-update-conflict",
+				connectionConflictIds: ["edge"],
+			}),
+		)
+	})
+
+	it("removes connections whose endpoint is deleted by the element merge", () => {
+		const baseCanvas = canvas(
+			[rect("source"), rect("target")],
+			[connection("edge", "source", "target")],
+		)
+		const localCanvas = canvas([rect("source")], [connection("edge", "source", "target")])
+		const remoteCanvas = baseCanvas
+
+		const result = mergeCanvasDocuments({ baseCanvas, localCanvas, remoteCanvas })
+
+		expect(result.ok).toBe(true)
+		if (!result.ok) return
+		expect(result.mergedCanvas.connections).toBeUndefined()
 	})
 })

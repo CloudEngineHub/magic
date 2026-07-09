@@ -6,6 +6,7 @@ import type { MagicConfig } from "./magic-types"
 import type {
 	CanvasDeviceInfo,
 	CanvasDesignPluginModuleConfig,
+	CanvasConnection,
 	CanvasDocument,
 	LayerElement,
 	Marker,
@@ -13,7 +14,10 @@ import type {
 } from "../runtime/document/types"
 import type { CanvasElementNameChange } from "../runtime/core/EventEmitter"
 import type { TFunction } from "./i18n-types"
-import type { CanvasDocumentMergeElementConflictReason } from "../runtime/document/index"
+import type {
+	CanvasDocumentMergeConnectionConflictReason,
+	CanvasDocumentMergeElementConflictReason,
+} from "../runtime/document/index"
 import type {
 	ReferenceAssetPerTypeLimits,
 	ReferenceAssetTypeCounts,
@@ -374,6 +378,18 @@ export interface CanvasDesignElementActionHint {
 	remoteExists?: boolean
 }
 
+export interface CanvasDesignConnectionActionHint {
+	id?: string
+	connectionId: string
+	sourceElementId?: string
+	targetElementId?: string
+	reason?: CanvasDocumentMergeConnectionConflictReason
+	status?: "unresolved" | "resolved"
+	tone?: "warning" | "info" | "error"
+	localExists?: boolean
+	remoteExists?: boolean
+}
+
 export interface CanvasDesignProps {
 	/** 设计项目 ID，用于隔离画布级缓存、SW 离线资源与跨画布粘贴校验 */
 	id: string
@@ -412,6 +428,9 @@ export interface CanvasDesignProps {
 		/** 元素锚点动作提示；仅展示和回调，不改变元素交互能力 */
 		elementActionHints?: CanvasDesignElementActionHint[]
 		onElementActionHintAction?: (elementId: string, actionKey: string) => void
+		/** 连接线锚点动作提示；仅展示和回调，不改变连接线交互能力 */
+		connectionActionHints?: CanvasDesignConnectionActionHint[]
+		onConnectionActionHintAction?: (connectionId: string, actionKey: string) => void
 	}
 	/** marker 配置 */
 	marker?: {
@@ -448,11 +467,14 @@ export type CanvasDesignDataChangeSource =
 	| "element:change"
 	| "canvas:clear"
 	| "element:temporary:converted"
+	| "connection:change"
 
 export interface CanvasDesignDataChangeMeta {
 	source: CanvasDesignDataChangeSource
 	changedElementIds?: string[]
 	deletedElementIds?: string[]
+	changedConnectionIds?: string[]
+	deletedConnectionIds?: string[]
 	elementNameChanges?: CanvasElementNameChange[]
 }
 
@@ -461,4 +483,7 @@ export interface CanvasDesignDataPatch {
 	deletedElementIds: string[]
 	changedElementIds: string[]
 	elementNameChanges?: CanvasElementNameChange[]
+	connectionUpserts?: CanvasConnection[]
+	deletedConnectionIds?: string[]
+	changedConnectionIds?: string[]
 }

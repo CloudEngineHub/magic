@@ -1,4 +1,15 @@
-import type { CanvasDocument, LayerElement } from "./types"
+import type { CanvasConnection, CanvasDocument, LayerElement } from "./types"
+import {
+	buildCanvasDocumentConnectionIndex,
+	cloneCanvasConnection,
+	createCanvasDocumentConnectionDiff,
+	getCanvasConnectionHash,
+	getCanvasDocumentElementIdSet,
+	sanitizeCanvasConnections,
+	toSortedCanvasConnectionIdArray,
+	type CanvasDocumentConnectionDiff,
+	type CanvasDocumentConnectionIndex,
+} from "./connectionIndex"
 import {
 	addCanvasElementIds,
 	buildCanvasDocumentElementIndex,
@@ -19,21 +30,36 @@ import {
 
 export type CanvasDocumentMergeConflictReason =
 	| "duplicate-element-id"
+	| "duplicate-connection-id"
 	| "same-element-changed"
+	| "same-connection-changed"
 	| "delete-update-conflict"
+	| "connection-delete-update-conflict"
 	| "parent-structure-conflict"
 	| "missing-parent"
 
 export type CanvasDocumentMergeElementConflictReason = Exclude<
 	CanvasDocumentMergeConflictReason,
-	"duplicate-element-id"
+	| "duplicate-element-id"
+	| "duplicate-connection-id"
+	| "same-connection-changed"
+	| "connection-delete-update-conflict"
 >
+
+export type CanvasDocumentMergeConnectionConflictReason =
+	| "duplicate-connection-id"
+	| "same-connection-changed"
+	| "connection-delete-update-conflict"
 
 export interface CanvasDocumentMergeChangeSummary {
 	localChangedElementIds: string[]
 	remoteChangedElementIds: string[]
 	localDeletedElementIds: string[]
 	remoteDeletedElementIds: string[]
+	localChangedConnectionIds: string[]
+	remoteChangedConnectionIds: string[]
+	localDeletedConnectionIds: string[]
+	remoteDeletedConnectionIds: string[]
 }
 
 export interface CanvasDocumentElementMergeConflict {
@@ -47,24 +73,48 @@ export interface CanvasDocumentElementMergeConflict {
 	remoteParentId: string | null
 }
 
+export interface CanvasDocumentConnectionMergeConflict {
+	connectionId: string
+	reason: CanvasDocumentMergeConnectionConflictReason
+	baseConnection: CanvasConnection | null
+	localConnection: CanvasConnection | null
+	remoteConnection: CanvasConnection | null
+}
+
 export type CanvasDocumentMergeResult =
 	| ({
 			ok: true
+			isElementLevelConflict?: false
+			isConnectionLevelConflict?: false
 			mergedCanvas: CanvasDocument
 	  } & CanvasDocumentMergeChangeSummary)
 	| ({
 			ok: false
 			isElementLevelConflict: true
+			isConnectionLevelConflict?: false
 			reason: CanvasDocumentMergeElementConflictReason
 			conflictElementIds: string[]
+			connectionConflictIds?: string[]
 			elementConflicts: CanvasDocumentElementMergeConflict[]
 			mergedCanvas: CanvasDocument
 	  } & CanvasDocumentMergeChangeSummary)
 	| ({
 			ok: false
 			isElementLevelConflict?: false
+			isConnectionLevelConflict: true
+			reason: CanvasDocumentMergeConnectionConflictReason
+			conflictElementIds: string[]
+			connectionConflictIds: string[]
+			connectionConflicts: CanvasDocumentConnectionMergeConflict[]
+			mergedCanvas: CanvasDocument
+	  } & CanvasDocumentMergeChangeSummary)
+	| ({
+			ok: false
+			isElementLevelConflict?: false
+			isConnectionLevelConflict?: false
 			reason: CanvasDocumentMergeConflictReason
 			conflictElementIds: string[]
+			connectionConflictIds?: string[]
 	  } & CanvasDocumentMergeChangeSummary)
 
 interface ConflictCheckResult {
@@ -94,12 +144,26 @@ function isLocalDiffApplySuccess(
 function createChangeSummary(
 	localDiff: CanvasDocumentElementDiff,
 	remoteDiff: CanvasDocumentElementDiff,
+	localConnectionDiff?: CanvasDocumentConnectionDiff,
+	remoteConnectionDiff?: CanvasDocumentConnectionDiff,
 ): CanvasDocumentMergeChangeSummary {
 	return {
 		localChangedElementIds: toSortedCanvasElementIdArray(localDiff.changed),
 		remoteChangedElementIds: toSortedCanvasElementIdArray(remoteDiff.changed),
 		localDeletedElementIds: toSortedCanvasElementIdArray(localDiff.deleted),
 		remoteDeletedElementIds: toSortedCanvasElementIdArray(remoteDiff.deleted),
+		localChangedConnectionIds: toSortedCanvasConnectionIdArray(
+			localConnectionDiff?.changed ?? [],
+		),
+		remoteChangedConnectionIds: toSortedCanvasConnectionIdArray(
+			remoteConnectionDiff?.changed ?? [],
+		),
+		localDeletedConnectionIds: toSortedCanvasConnectionIdArray(
+			localConnectionDiff?.deleted ?? [],
+		),
+		remoteDeletedConnectionIds: toSortedCanvasConnectionIdArray(
+			remoteConnectionDiff?.deleted ?? [],
+		),
 	}
 }
 
@@ -330,19 +394,26 @@ function createConflictResult(
 	conflictElementIds: string[],
 	localDiff: CanvasDocumentElementDiff,
 	remoteDiff: CanvasDocumentElementDiff,
+	localConnectionDiff?: CanvasDocumentConnectionDiff,
+	remoteConnectionDiff?: CanvasDocumentConnectionDiff,
 ): CanvasDocumentMergeResult {
 	return {
 		ok: false,
 		reason,
 		conflictElementIds: toSortedCanvasElementIdArray(conflictElementIds),
-		...createChangeSummary(localDiff, remoteDiff),
+		...createChangeSummary(localDiff, remoteDiff, localConnectionDiff, remoteConnectionDiff),
 	}
 }
 
 function isElementLevelConflictReason(
 	reason: CanvasDocumentMergeConflictReason,
 ): reason is CanvasDocumentMergeElementConflictReason {
-	return reason !== "duplicate-element-id"
+	return (
+		reason !== "duplicate-element-id" &&
+		reason !== "duplicate-connection-id" &&
+		reason !== "same-connection-changed" &&
+		reason !== "connection-delete-update-conflict"
+	)
 }
 
 function hasAncestorInConflictSet(
@@ -391,6 +462,8 @@ function createElementLevelConflictResult(
 	mergedCanvas: CanvasDocument,
 	localDiff: CanvasDocumentElementDiff,
 	remoteDiff: CanvasDocumentElementDiff,
+	localConnectionDiff: CanvasDocumentConnectionDiff | undefined,
+	remoteConnectionDiff: CanvasDocumentConnectionDiff | undefined,
 	baseIndex: CanvasDocumentElementIndex,
 	localIndex: CanvasDocumentElementIndex,
 	remoteIndex: CanvasDocumentElementIndex,
@@ -415,7 +488,7 @@ function createElementLevelConflictResult(
 			reasonByElementId,
 		}),
 		mergedCanvas,
-		...createChangeSummary(localDiff, remoteDiff),
+		...createChangeSummary(localDiff, remoteDiff, localConnectionDiff, remoteConnectionDiff),
 	}
 }
 
@@ -667,6 +740,8 @@ function createElementLevelMergeResult(options: {
 	remoteCanvas: CanvasDocument | undefined
 	localDiff: CanvasDocumentElementDiff
 	remoteDiff: CanvasDocumentElementDiff
+	localConnectionDiff?: CanvasDocumentConnectionDiff
+	remoteConnectionDiff?: CanvasDocumentConnectionDiff
 	baseIndex: CanvasDocumentElementIndex
 	localIndex: CanvasDocumentElementIndex
 	remoteIndex: CanvasDocumentElementIndex
@@ -678,6 +753,8 @@ function createElementLevelMergeResult(options: {
 		remoteCanvas,
 		localDiff,
 		remoteDiff,
+		localConnectionDiff,
+		remoteConnectionDiff,
 		baseIndex,
 		localIndex,
 		remoteIndex,
@@ -727,6 +804,8 @@ function createElementLevelMergeResult(options: {
 				partialMergeResult.mergedCanvas,
 				localDiff,
 				remoteDiff,
+				localConnectionDiff,
+				remoteConnectionDiff,
 				baseIndex,
 				localIndex,
 				remoteIndex,
@@ -741,6 +820,8 @@ function createElementLevelMergeResult(options: {
 				partialMergeResult.conflictElementIds,
 				localDiff,
 				remoteDiff,
+				localConnectionDiff,
+				remoteConnectionDiff,
 			)
 		}
 
@@ -758,6 +839,8 @@ function createElementLevelMergeResult(options: {
 		fallbackMergedCanvas,
 		localDiff,
 		remoteDiff,
+		localConnectionDiff,
+		remoteConnectionDiff,
 		baseIndex,
 		localIndex,
 		remoteIndex,
@@ -765,7 +848,147 @@ function createElementLevelMergeResult(options: {
 	)
 }
 
-export function mergeCanvasDocumentsByElement(options: {
+type ConnectionMergeResult =
+	| {
+			ok: true
+			connections: CanvasConnection[]
+	  }
+	| {
+			ok: false
+			reason: CanvasDocumentMergeConnectionConflictReason
+			connectionConflictIds: string[]
+			connectionConflicts: CanvasDocumentConnectionMergeConflict[]
+			connections: CanvasConnection[]
+	  }
+
+function cloneIndexedConnection(
+	index: CanvasDocumentConnectionIndex,
+	connectionId: string,
+): CanvasConnection | null {
+	const connection = index.records.get(connectionId)?.connection
+	return connection ? cloneCanvasConnection(connection) : null
+}
+
+function buildConnectionMergeConflict(options: {
+	connectionId: string
+	reason: CanvasDocumentMergeConnectionConflictReason
+	baseIndex: CanvasDocumentConnectionIndex
+	localIndex: CanvasDocumentConnectionIndex
+	remoteIndex: CanvasDocumentConnectionIndex
+}): CanvasDocumentConnectionMergeConflict {
+	return {
+		connectionId: options.connectionId,
+		reason: options.reason,
+		baseConnection: cloneIndexedConnection(options.baseIndex, options.connectionId),
+		localConnection: cloneIndexedConnection(options.localIndex, options.connectionId),
+		remoteConnection: cloneIndexedConnection(options.remoteIndex, options.connectionId),
+	}
+}
+
+function mergeCanvasDocumentConnections(options: {
+	remoteCanvas: CanvasDocument | undefined
+	mergedCanvas: CanvasDocument
+	baseIndex: CanvasDocumentConnectionIndex
+	localIndex: CanvasDocumentConnectionIndex
+	remoteIndex: CanvasDocumentConnectionIndex
+	localDiff: CanvasDocumentConnectionDiff
+	remoteDiff: CanvasDocumentConnectionDiff
+}): ConnectionMergeResult {
+	const {
+		remoteCanvas,
+		mergedCanvas,
+		baseIndex,
+		localIndex,
+		remoteIndex,
+		localDiff,
+		remoteDiff,
+	} = options
+	const connectionsById = new Map<string, CanvasConnection>()
+	sanitizeCanvasConnections(
+		remoteCanvas?.connections,
+		getCanvasDocumentElementIdSet(mergedCanvas),
+	).forEach((connection) => connectionsById.set(connection.id, connection))
+
+	const conflictReasonById = new Map<string, CanvasDocumentMergeConnectionConflictReason>()
+	const allChangedIds = new Set<string>([...localDiff.changed, ...remoteDiff.changed])
+
+	allChangedIds.forEach((connectionId) => {
+		const localChanged = localDiff.changed.has(connectionId)
+		const remoteChanged = remoteDiff.changed.has(connectionId)
+		if (!localChanged) return
+
+		const localDeleted = localDiff.deleted.has(connectionId)
+		const remoteDeleted = remoteDiff.deleted.has(connectionId)
+		const localConnection = localIndex.records.get(connectionId)?.connection ?? null
+		const remoteConnection = remoteIndex.records.get(connectionId)?.connection ?? null
+
+		if (localChanged && remoteChanged) {
+			if (localDeleted && remoteDeleted) {
+				connectionsById.delete(connectionId)
+				return
+			}
+			if (localDeleted || remoteDeleted) {
+				conflictReasonById.set(connectionId, "connection-delete-update-conflict")
+				return
+			}
+			if (
+				localConnection &&
+				remoteConnection &&
+				getCanvasConnectionHash(localConnection) ===
+					getCanvasConnectionHash(remoteConnection)
+			) {
+				connectionsById.set(connectionId, cloneCanvasConnection(localConnection))
+				return
+			}
+			conflictReasonById.set(connectionId, "same-connection-changed")
+			return
+		}
+
+		if (!remoteChanged) {
+			if (localDeleted) {
+				connectionsById.delete(connectionId)
+				return
+			}
+			if (localConnection) {
+				connectionsById.set(connectionId, cloneCanvasConnection(localConnection))
+			}
+			return
+		}
+	})
+
+	const connections = sanitizeCanvasConnections(
+		Array.from(connectionsById.values()),
+		getCanvasDocumentElementIdSet(mergedCanvas),
+	)
+	if (conflictReasonById.size === 0) {
+		return { ok: true, connections }
+	}
+
+	const connectionConflictIds = toSortedCanvasConnectionIdArray(conflictReasonById.keys())
+	return {
+		ok: false,
+		reason: conflictReasonById.values().next().value ?? "same-connection-changed",
+		connectionConflictIds,
+		connectionConflicts: connectionConflictIds.map((connectionId) =>
+			buildConnectionMergeConflict({
+				connectionId,
+				reason: conflictReasonById.get(connectionId) ?? "same-connection-changed",
+				baseIndex,
+				localIndex,
+				remoteIndex,
+			}),
+		),
+		connections,
+	}
+}
+
+function withConnections(canvas: CanvasDocument, connections: CanvasConnection[]): CanvasDocument {
+	return connections.length > 0
+		? { ...canvas, connections }
+		: { ...canvas, connections: undefined }
+}
+
+export function mergeCanvasDocuments(options: {
 	baseCanvas: CanvasDocument | undefined
 	localCanvas: CanvasDocument | undefined
 	remoteCanvas: CanvasDocument | undefined
@@ -776,6 +999,17 @@ export function mergeCanvasDocumentsByElement(options: {
 	const remoteIndex = buildCanvasDocumentElementIndex(remoteCanvas)
 	const localDiff = createCanvasDocumentElementDiff(baseIndex, localIndex)
 	const remoteDiff = createCanvasDocumentElementDiff(baseIndex, remoteIndex)
+	const baseConnectionIndex = buildCanvasDocumentConnectionIndex(baseCanvas)
+	const localConnectionIndex = buildCanvasDocumentConnectionIndex(localCanvas)
+	const remoteConnectionIndex = buildCanvasDocumentConnectionIndex(remoteCanvas)
+	const localConnectionDiff = createCanvasDocumentConnectionDiff(
+		baseConnectionIndex,
+		localConnectionIndex,
+	)
+	const remoteConnectionDiff = createCanvasDocumentConnectionDiff(
+		baseConnectionIndex,
+		remoteConnectionIndex,
+	)
 
 	const duplicateConflict = findDuplicateConflict(baseIndex, localIndex, remoteIndex)
 	if (duplicateConflict) {
@@ -784,7 +1018,40 @@ export function mergeCanvasDocumentsByElement(options: {
 			duplicateConflict.conflictElementIds,
 			localDiff,
 			remoteDiff,
+			localConnectionDiff,
+			remoteConnectionDiff,
 		)
+	}
+	const duplicateConnectionIds = new Set<string>([
+		...baseConnectionIndex.duplicateConnectionIds,
+		...localConnectionIndex.duplicateConnectionIds,
+		...remoteConnectionIndex.duplicateConnectionIds,
+	])
+	if (duplicateConnectionIds.size > 0) {
+		const connectionConflictIds = toSortedCanvasConnectionIdArray(duplicateConnectionIds)
+		return {
+			ok: false,
+			isConnectionLevelConflict: true,
+			reason: "duplicate-connection-id",
+			conflictElementIds: [],
+			connectionConflictIds,
+			connectionConflicts: connectionConflictIds.map((connectionId) =>
+				buildConnectionMergeConflict({
+					connectionId,
+					reason: "duplicate-connection-id",
+					baseIndex: baseConnectionIndex,
+					localIndex: localConnectionIndex,
+					remoteIndex: remoteConnectionIndex,
+				}),
+			),
+			mergedCanvas: cloneCanvasJson(remoteCanvas ?? {}),
+			...createChangeSummary(
+				localDiff,
+				remoteDiff,
+				localConnectionDiff,
+				remoteConnectionDiff,
+			),
+		}
 	}
 
 	const elementConflictAnalysis = analyzeElementConflicts(
@@ -804,6 +1071,8 @@ export function mergeCanvasDocumentsByElement(options: {
 				remoteCanvas,
 				localDiff,
 				remoteDiff,
+				localConnectionDiff,
+				remoteConnectionDiff,
 				baseIndex,
 				localIndex,
 				remoteIndex,
@@ -816,6 +1085,8 @@ export function mergeCanvasDocumentsByElement(options: {
 			elementConflict.conflictElementIds,
 			localDiff,
 			remoteDiff,
+			localConnectionDiff,
+			remoteConnectionDiff,
 		)
 	}
 
@@ -828,6 +1099,8 @@ export function mergeCanvasDocumentsByElement(options: {
 				remoteCanvas,
 				localDiff,
 				remoteDiff,
+				localConnectionDiff,
+				remoteConnectionDiff,
 				baseIndex,
 				localIndex,
 				remoteIndex,
@@ -840,6 +1113,8 @@ export function mergeCanvasDocumentsByElement(options: {
 			parentStructureConflict.conflictElementIds,
 			localDiff,
 			remoteDiff,
+			localConnectionDiff,
+			remoteConnectionDiff,
 		)
 	}
 
@@ -857,6 +1132,8 @@ export function mergeCanvasDocumentsByElement(options: {
 				remoteCanvas,
 				localDiff,
 				remoteDiff,
+				localConnectionDiff,
+				remoteConnectionDiff,
 				baseIndex,
 				localIndex,
 				remoteIndex,
@@ -869,22 +1146,61 @@ export function mergeCanvasDocumentsByElement(options: {
 			mergeResult.conflictElementIds,
 			localDiff,
 			remoteDiff,
+			localConnectionDiff,
+			remoteConnectionDiff,
 		)
+	}
+
+	const connectionMergeResult = mergeCanvasDocumentConnections({
+		remoteCanvas,
+		mergedCanvas: mergeResult.mergedCanvas,
+		baseIndex: baseConnectionIndex,
+		localIndex: localConnectionIndex,
+		remoteIndex: remoteConnectionIndex,
+		localDiff: localConnectionDiff,
+		remoteDiff: remoteConnectionDiff,
+	})
+	const mergedCanvas = withConnections(
+		mergeResult.mergedCanvas,
+		connectionMergeResult.connections,
+	)
+	if (!connectionMergeResult.ok) {
+		return {
+			ok: false,
+			isConnectionLevelConflict: true,
+			reason: connectionMergeResult.reason,
+			conflictElementIds: [],
+			connectionConflictIds: connectionMergeResult.connectionConflictIds,
+			connectionConflicts: connectionMergeResult.connectionConflicts,
+			mergedCanvas,
+			...createChangeSummary(
+				localDiff,
+				remoteDiff,
+				localConnectionDiff,
+				remoteConnectionDiff,
+			),
+		}
 	}
 
 	return {
 		ok: true,
-		mergedCanvas: mergeResult.mergedCanvas,
-		...createChangeSummary(localDiff, remoteDiff),
+		mergedCanvas,
+		...createChangeSummary(localDiff, remoteDiff, localConnectionDiff, remoteConnectionDiff),
 	}
 }
 
-export function hasCanvasDocumentElementLevelLocalChanges(options: {
+export function hasCanvasDocumentLocalChanges(options: {
 	baseCanvas: CanvasDocument | undefined
 	localCanvas: CanvasDocument | undefined
 }): boolean {
 	const baseIndex = buildCanvasDocumentElementIndex(options.baseCanvas)
 	const localIndex = buildCanvasDocumentElementIndex(options.localCanvas)
 	const localDiff = createCanvasDocumentElementDiff(baseIndex, localIndex)
-	return !isCanvasElementIdSetEmpty(localDiff.changed)
+	const baseConnectionIndex = buildCanvasDocumentConnectionIndex(options.baseCanvas)
+	const localConnectionIndex = buildCanvasDocumentConnectionIndex(options.localCanvas)
+	const localConnectionDiff = createCanvasDocumentConnectionDiff(
+		baseConnectionIndex,
+		localConnectionIndex,
+	)
+	return !isCanvasElementIdSetEmpty(localDiff.changed) || localConnectionDiff.changed.size > 0
 }

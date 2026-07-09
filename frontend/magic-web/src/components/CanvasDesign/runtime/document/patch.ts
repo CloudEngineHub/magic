@@ -1,4 +1,10 @@
-import type { CanvasDocument, LayerElement } from "./types"
+import type { CanvasConnection, CanvasDocument, LayerElement } from "./types"
+import {
+	cloneCanvasConnection,
+	cloneCanvasConnections,
+	getCanvasDocumentElementIdSet,
+	sanitizeCanvasConnections,
+} from "./connectionIndex"
 import {
 	cloneCanvasElement,
 	cloneCanvasElements,
@@ -24,6 +30,9 @@ export interface CanvasDocumentPatch {
 	deletedElementIds: string[]
 	changedElementIds: string[]
 	elementNameChanges?: CanvasDocumentElementNameChange[]
+	connectionUpserts?: CanvasConnection[]
+	deletedConnectionIds?: string[]
+	changedConnectionIds?: string[]
 }
 
 export interface CanvasDocumentPatchApplyOptions {
@@ -158,6 +167,7 @@ export function tryApplyCanvasDocumentPatch(
 	options: CanvasDocumentPatchApplyOptions = {},
 ): CanvasDocumentPatchApplyResult {
 	let elements = cloneCanvasElements(canvasData?.elements)
+	let connections = cloneCanvasConnections(canvasData?.connections)
 
 	patch.deletedElementIds.forEach((elementId) => {
 		elements = removeElementById(elements, elementId).elements
@@ -183,6 +193,10 @@ export function tryApplyCanvasDocumentPatch(
 				canvas: {
 					...(canvasData ?? {}),
 					elements: removeResult.elements,
+					connections: sanitizeCanvasConnections(
+						connections,
+						getCanvasDocumentElementIdSet(removeResult.elements),
+					),
 				},
 				elementId: element.id,
 				parentId: upsert.parentId,
@@ -193,11 +207,24 @@ export function tryApplyCanvasDocumentPatch(
 			: insertIntoSiblings(removeResult.elements, element)
 	}
 
+	const deletedConnectionIds = new Set(patch.deletedConnectionIds ?? [])
+	connections = connections.filter((connection) => !deletedConnectionIds.has(connection.id))
+
+	for (const connection of patch.connectionUpserts ?? []) {
+		const clonedConnection = cloneCanvasConnection(connection)
+		connections = [
+			...connections.filter((item) => item.id !== clonedConnection.id),
+			clonedConnection,
+		]
+	}
+	connections = sanitizeCanvasConnections(connections, getCanvasDocumentElementIdSet(elements))
+
 	return {
 		ok: true,
 		canvas: {
 			...(canvasData ?? {}),
 			elements,
+			...(connections.length > 0 ? { connections } : { connections: undefined }),
 		},
 	}
 }

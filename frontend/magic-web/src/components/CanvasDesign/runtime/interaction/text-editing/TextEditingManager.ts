@@ -172,16 +172,14 @@ export class TextEditingManager {
 		this.focusActiveEditor()
 	}
 
-	public startCreatingAt(x: number, y: number): void {
-		const defaultStyle = this.getInitialTextDefaultStyle()
-		const initialContent = [createRichTextParagraph("")]
-		const initialLayout = measureRichTextLayout(initialContent, defaultStyle)
+	public startCreatingAt(x: number, y: number): string {
+		const { defaultStyle, initialContent, size } = this.getInitialTextCreationState()
 		const elementId = this.createTextElement(
 			initialContent,
 			x,
 			y,
-			Math.max(initialLayout.width, 1),
-			Math.max(initialLayout.height, 1),
+			size.width,
+			size.height,
 			defaultStyle,
 			false,
 		)
@@ -199,6 +197,11 @@ export class TextEditingManager {
 			initialCaretClientPoint: null,
 			originalElementData: null,
 		})
+		return elementId
+	}
+
+	public getInitialTextElementSize(): { width: number; height: number } {
+		return this.getInitialTextCreationState().size
 	}
 
 	public editElement(
@@ -400,6 +403,24 @@ export class TextEditingManager {
 			this.canvas.selectionManager.selectMultiple([elementId])
 		}
 		return elementId
+	}
+
+	private getInitialTextCreationState(): {
+		defaultStyle: TextStyle
+		initialContent: RichTextParagraph[]
+		size: { width: number; height: number }
+	} {
+		const defaultStyle = this.getInitialTextDefaultStyle()
+		const initialContent = [createRichTextParagraph("")]
+		const initialLayout = measureRichTextLayout(initialContent, defaultStyle)
+		return {
+			defaultStyle,
+			initialContent,
+			size: {
+				width: Math.max(initialLayout.width, 1),
+				height: Math.max(initialLayout.height, 1),
+			},
+		}
 	}
 
 	private getInitialTextDefaultStyle(): TextStyle {

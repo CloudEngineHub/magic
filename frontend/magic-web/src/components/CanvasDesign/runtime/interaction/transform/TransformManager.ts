@@ -1157,6 +1157,14 @@ export class TransformManager {
 	}
 
 	/**
+	 * 检查元素是否处于正在进行的 transform 交互中。
+	 * 注意：isTransforming 表示元素已绑定到 Transformer，普通选中态也会为 true。
+	 */
+	public isElementInActiveTransformInteraction(elementId: string): boolean {
+		return this.transformingElementIds.has(elementId) && this.isTransformInteractionActive()
+	}
+
+	/**
 	 * 检查是否正在拖拽元素
 	 */
 	public isDraggingElement(): boolean {

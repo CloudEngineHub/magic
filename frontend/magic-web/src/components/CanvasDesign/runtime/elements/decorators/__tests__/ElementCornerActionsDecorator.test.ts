@@ -50,11 +50,17 @@ function createStageGroup() {
 }
 
 function createCanvasMock(
-	options: { hoveredElementId?: string | null; selected?: boolean; touch?: boolean } = {},
+	options: {
+		hoveredElementId?: string | null
+		selected?: boolean
+		touch?: boolean
+		connectionDragging?: boolean
+	} = {},
 ) {
 	const { handlers, eventEmitter } = createEventEmitterMock()
 	let hoveredElementId = options.hoveredElementId ?? null
 	let selected = options.selected ?? false
+	let connectionDragging = options.connectionDragging ?? false
 
 	return {
 		canvas: {
@@ -75,6 +81,9 @@ function createCanvasMock(
 			hoverManager: {
 				getHoveredElementId: vi.fn(() => hoveredElementId),
 			},
+			connectionDragManager: {
+				isDraggingConnection: vi.fn(() => connectionDragging),
+			},
 			permissionManager: {
 				canUseSelectionToolAffordance: vi.fn(() => true),
 			},
@@ -89,6 +98,9 @@ function createCanvasMock(
 		},
 		setSelected: (nextSelected: boolean) => {
 			selected = nextSelected
+		},
+		setConnectionDragging: (nextConnectionDragging: boolean) => {
+			connectionDragging = nextConnectionDragging
 		},
 	}
 }
@@ -158,6 +170,28 @@ describe("ElementCornerActionsDecorator", () => {
 		setHoveredElementId(null)
 		handlers.get("element:hover")?.[0]?.({ data: { elementId: null } })
 		expect(rootGroup?.visible()).toBe(false)
+
+		decorator.destroy()
+		stage.destroy()
+	})
+
+	it("keeps actions hidden while a connection drag is active", () => {
+		const { group, stage } = createStageGroup()
+		const { canvas, handlers, setConnectionDragging, setHoveredElementId } = createCanvasMock()
+		const decorator = createDecorator(group, canvas)
+
+		decorator.create()
+		const rootGroup = group.findOne(".decorator-corner-actions")
+		expect(rootGroup?.visible()).toBe(false)
+
+		setConnectionDragging(true)
+		setHoveredElementId("image-1")
+		handlers.get("element:hover")?.[0]?.({ data: { elementId: "image-1" } })
+		expect(rootGroup?.visible()).toBe(false)
+
+		setConnectionDragging(false)
+		handlers.get("element:hover")?.[0]?.({ data: { elementId: "image-1" } })
+		expect(rootGroup?.visible()).toBe(true)
 
 		decorator.destroy()
 		stage.destroy()

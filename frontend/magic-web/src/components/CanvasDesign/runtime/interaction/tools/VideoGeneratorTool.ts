@@ -117,6 +117,23 @@ export class VideoGeneratorTool extends BaseTool {
 		this.createVideoElementAt(position.x, position.y, videoSize.width, videoSize.height)
 	}
 
+	public createVideoAtCanvasPoint(
+		centerX: number,
+		centerY: number,
+		videoModelList?: VideoModelItem[],
+	): string {
+		const size = this.getVideoElementSizeForModelList(videoModelList)
+		return this.createVideoElementAtCenter(centerX, centerY, size.width, size.height)
+	}
+
+	public getVideoElementSizeForModelList(videoModelList?: VideoModelItem[]): {
+		width: number
+		height: number
+	} {
+		const defaultSize = videoModelList ? this.calculateDefaultSize(videoModelList) : null
+		return this.getVideoElementSize(defaultSize?.width, defaultSize?.height)
+	}
+
 	/** 模型列表或界面语言变化时清空缓存；工具仍激活时会重新拉取 */
 	public clearModelListCache(): void {
 		this.cachedVideoModelList = null
@@ -295,9 +312,9 @@ export class VideoGeneratorTool extends BaseTool {
 		centerY: number,
 		width?: number,
 		height?: number,
-	): void {
+	): string {
 		const size = this.getVideoElementSize(width, height)
-		this.createVideoElementAt(
+		return this.createVideoElementAt(
 			centerX - size.width / 2,
 			centerY - size.height / 2,
 			size.width,
@@ -305,7 +322,7 @@ export class VideoGeneratorTool extends BaseTool {
 		)
 	}
 
-	private createVideoElementAt(x: number, y: number, width?: number, height?: number): void {
+	private createVideoElementAt(x: number, y: number, width?: number, height?: number): string {
 		const size = this.getVideoElementSize(width, height)
 		const elementId = generateElementId()
 		const newZIndex = this.canvas.elementManager.getNextZIndexInLevel()
@@ -337,5 +354,6 @@ export class VideoGeneratorTool extends BaseTool {
 		})
 
 		this.onTaskComplete()
+		return elementId
 	}
 }

@@ -108,6 +108,16 @@ export function generateMarkerId(): string {
 }
 
 /**
+ * 生成连接线唯一标识
+ * 格式：connection-{20位雪花ID}
+ * @returns 连接线唯一标识
+ */
+export function generateConnectionId(): string {
+	const snowflakeId = snowflakeGenerator.generate()
+	return `connection-${snowflakeId}`
+}
+
+/**
  * 生成 UUID v4
  * 格式：xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx
  * @returns UUID 字符串

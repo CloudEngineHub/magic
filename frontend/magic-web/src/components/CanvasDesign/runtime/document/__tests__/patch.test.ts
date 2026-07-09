@@ -98,4 +98,60 @@ describe("applyCanvasDocumentPatch", () => {
 		)
 		expect(result.canvas.elements?.map((element) => element.id)).toEqual(["existing"])
 	})
+
+	it("applies connection upserts and deletes", () => {
+		const canvas: CanvasDocument = {
+			elements: [rect("source"), rect("target"), rect("other")],
+			connections: [{ id: "old", sourceElementId: "source", targetElementId: "target" }],
+		}
+
+		const next = applyCanvasDocumentPatch(canvas, {
+			upserts: [],
+			deletedElementIds: [],
+			changedElementIds: [],
+			connectionUpserts: [{ id: "new", sourceElementId: "target", targetElementId: "other" }],
+			deletedConnectionIds: ["old"],
+			changedConnectionIds: ["old", "new"],
+		})
+
+		expect(next.connections).toEqual([
+			{ id: "new", sourceElementId: "target", targetElementId: "other" },
+		])
+	})
+
+	it("preserves existing connections when a patch has no connection fields", () => {
+		const canvas: CanvasDocument = {
+			elements: [rect("source"), rect("target")],
+			connections: [{ id: "edge", sourceElementId: "source", targetElementId: "target" }],
+		}
+
+		const next = applyCanvasDocumentPatch(canvas, {
+			upserts: [{ element: { ...rect("source"), x: 12 }, parentId: null }],
+			deletedElementIds: [],
+			changedElementIds: ["source"],
+		})
+
+		expect(next.connections).toEqual([
+			{ id: "edge", sourceElementId: "source", targetElementId: "target" },
+		])
+	})
+
+	it("cleans connections attached to deleted or missing elements", () => {
+		const canvas: CanvasDocument = {
+			elements: [rect("source"), rect("target")],
+			connections: [
+				{ id: "deleted", sourceElementId: "source", targetElementId: "target" },
+				{ id: "missing", sourceElementId: "source", targetElementId: "missing" },
+				{ id: "self", sourceElementId: "source", targetElementId: "source" },
+			],
+		}
+
+		const next = applyCanvasDocumentPatch(canvas, {
+			upserts: [],
+			deletedElementIds: ["target"],
+			changedElementIds: ["target"],
+		})
+
+		expect(next.connections).toBeUndefined()
+	})
 })

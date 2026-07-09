@@ -70,9 +70,10 @@ export const editActions: UserAction[] = [
 		id: "edit.delete",
 		category: "edit",
 		canExecute: (canvas) => {
-			// 非只读模式且有选中的元素
 			if (canvas.readonly) return false
+			if (canvas.connectionManager.hasSelectedConnection()) return true
 
+			// 非只读模式且有选中的元素
 			const selectedIds = canvas.selectionManager.getSelectedIds()
 			if (selectedIds.length === 0) return false
 
@@ -85,7 +86,7 @@ export const editActions: UserAction[] = [
 			return deletableElementIds.length > 0
 		},
 		execute: (canvas) => {
-			canvas.deleteSelectedElements()
+			canvas.deleteSelection()
 		},
 	},
 	{

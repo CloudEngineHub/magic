@@ -464,7 +464,7 @@ export function ElementMenuProvider(props: PropsWithChildren<unknown>) {
 					/>
 				</ContextMenuTrigger>
 				<ContextMenuContent
-					className="box-border"
+					className="box-border data-[state=closed]:hidden data-[state=closed]:!animate-none data-[state=closed]:!transition-none data-[state=closed]:!duration-0"
 					style={{ width: MENU_WIDTH, minWidth: MENU_WIDTH }}
 					data-canvas-ui-component
 					onCloseAutoFocus={(event) => {

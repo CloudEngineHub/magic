@@ -454,7 +454,10 @@ export class ElementCornerActionsDecorator {
 	}
 
 	private syncHoverStateFromCanvas(): void {
-		if (!this.config.canvas.permissionManager.canUseSelectionToolAffordance()) {
+		if (
+			!this.config.canvas.permissionManager.canUseSelectionToolAffordance() ||
+			this.isConnectionDragging()
+		) {
 			this.hide()
 			return
 		}
@@ -482,6 +485,10 @@ export class ElementCornerActionsDecorator {
 	}
 
 	public show(): void {
+		if (this.isConnectionDragging()) {
+			this.hide()
+			return
+		}
 		this.isHovering = true
 		if (!this.rootGroup) return
 		this.rootGroup.visible(true)
@@ -495,6 +502,10 @@ export class ElementCornerActionsDecorator {
 		if (!this.rootGroup) return
 		this.rootGroup.visible(false)
 		this.group.getLayer()?.batchDraw()
+	}
+
+	private isConnectionDragging(): boolean {
+		return this.config.canvas.connectionDragManager?.isDraggingConnection?.() === true
 	}
 
 	private destroyButtonNodes(): void {

@@ -484,6 +484,8 @@ function DesignViewer(props: DesignViewerProps) {
 		conflictState,
 		resolveElementConflictWithLocal,
 		resolveElementConflictWithRemote,
+		resolveConnectionConflictWithLocal,
+		resolveConnectionConflictWithRemote,
 		resolveBlockingConflictWithRemote,
 		resolveBlockingConflictWithLocal,
 		resolveEditedElementConflictsWithLocal,
@@ -1237,7 +1239,10 @@ function DesignViewer(props: DesignViewerProps) {
 
 	const conflictNoticeText = useMemo(() => {
 		if (!conflictState) return null
-		if (conflictState.elementConflicts?.some(({ status }) => status === "unresolved")) {
+		if (
+			conflictState.elementConflicts?.some(({ status }) => status === "unresolved") ||
+			conflictState.connectionConflicts?.some(({ status }) => status === "unresolved")
+		) {
 			return null
 		}
 		const isDraftConflict = conflictState.reason === "draft-remote-advanced"
@@ -1285,9 +1290,18 @@ function DesignViewer(props: DesignViewerProps) {
 				.map(({ elementId }) => elementId),
 		[conflictState?.elementConflicts],
 	)
+	const unresolvedConnectionConflictIds = useMemo(
+		() =>
+			(conflictState?.connectionConflicts ?? [])
+				.filter(({ status }) => status === "unresolved")
+				.map(({ connectionId }) => connectionId),
+		[conflictState?.connectionConflicts],
+	)
 	const [locallyResolvedElementConflictIds, setLocallyResolvedElementConflictIds] = useState<
 		Set<string>
 	>(() => new Set())
+	const [locallyResolvedConnectionConflictIds, setLocallyResolvedConnectionConflictIds] =
+		useState<Set<string>>(() => new Set())
 
 	useEffect(() => {
 		setLocallyResolvedElementConflictIds((prev) => {
@@ -1301,7 +1315,22 @@ function DesignViewer(props: DesignViewerProps) {
 		})
 	}, [unresolvedElementConflictIds])
 
+	useEffect(() => {
+		setLocallyResolvedConnectionConflictIds((prev) => {
+			if (prev.size === 0) return prev
+
+			const unresolvedConnectionIds = new Set(unresolvedConnectionConflictIds)
+			const next = new Set(
+				Array.from(prev).filter((connectionId) =>
+					unresolvedConnectionIds.has(connectionId),
+				),
+			)
+			return next.size === prev.size ? prev : next
+		})
+	}, [unresolvedConnectionConflictIds])
+
 	const hasUnresolvedElementConflicts = unresolvedElementConflictIds.length > 0
+	const hasUnresolvedConnectionConflicts = unresolvedConnectionConflictIds.length > 0
 	const visibleElementConflicts = useMemo(
 		() =>
 			(conflictState?.elementConflicts ?? []).filter(
@@ -1309,6 +1338,15 @@ function DesignViewer(props: DesignViewerProps) {
 					status === "unresolved" && !locallyResolvedElementConflictIds.has(elementId),
 			),
 		[conflictState?.elementConflicts, locallyResolvedElementConflictIds],
+	)
+	const visibleConnectionConflicts = useMemo(
+		() =>
+			(conflictState?.connectionConflicts ?? []).filter(
+				({ connectionId, status }) =>
+					status === "unresolved" &&
+					!locallyResolvedConnectionConflictIds.has(connectionId),
+			),
+		[conflictState?.connectionConflicts, locallyResolvedConnectionConflictIds],
 	)
 	const elementActionHints = useMemo(
 		() =>
@@ -1324,7 +1362,34 @@ function DesignViewer(props: DesignViewerProps) {
 			),
 		[visibleElementConflicts],
 	)
-	const shouldBlockCanvasForConflict = !!conflictState && !hasUnresolvedElementConflicts
+	const connectionActionHints = useMemo(
+		() =>
+			visibleConnectionConflicts.map(
+				({
+					connectionId,
+					reason,
+					status,
+					baseConnection,
+					localConnection,
+					remoteConnection,
+				}) => {
+					const anchorConnection = localConnection ?? remoteConnection ?? baseConnection
+					return {
+						connectionId,
+						sourceElementId: anchorConnection?.sourceElementId,
+						targetElementId: anchorConnection?.targetElementId,
+						reason,
+						status,
+						tone: "warning" as const,
+						localExists: !!localConnection,
+						remoteExists: !!remoteConnection,
+					}
+				},
+			),
+		[visibleConnectionConflicts],
+	)
+	const shouldBlockCanvasForConflict =
+		!!conflictState && !hasUnresolvedElementConflicts && !hasUnresolvedConnectionConflicts
 	const shouldShowCanvasConflictNotice = shouldBlockCanvasForConflict && !!conflictNoticeText
 	const [blockingConflictResolveAction, setBlockingConflictResolveAction] = useState<
 		"remote" | "local" | null
@@ -1396,6 +1461,30 @@ function DesignViewer(props: DesignViewerProps) {
 		[resolveElementConflictWithRemote, t],
 	)
 
+	const handleUseLocalConnectionConflict = useCallback(
+		(connectionId: string) => {
+			const didResolve = resolveConnectionConflictWithLocal(connectionId)
+			if (!didResolve) {
+				toast.error(t("design.conflict.elementResolveFailed"))
+				return
+			}
+			setLocallyResolvedConnectionConflictIds((prev) => new Set(prev).add(connectionId))
+		},
+		[resolveConnectionConflictWithLocal, t],
+	)
+
+	const handleUseRemoteConnectionConflict = useCallback(
+		(connectionId: string) => {
+			const didResolve = resolveConnectionConflictWithRemote(connectionId)
+			if (!didResolve) {
+				toast.error(t("design.conflict.elementResolveFailed"))
+				return
+			}
+			setLocallyResolvedConnectionConflictIds((prev) => new Set(prev).add(connectionId))
+		},
+		[resolveConnectionConflictWithRemote, t],
+	)
+
 	const handleElementActionHintAction = useCallback(
 		(elementId: string, actionKey: string) => {
 			if (actionKey === "use-local") {
@@ -1407,6 +1496,19 @@ function DesignViewer(props: DesignViewerProps) {
 			}
 		},
 		[handleUseLocalElementConflict, handleUseRemoteElementConflict],
+	)
+
+	const handleConnectionActionHintAction = useCallback(
+		(connectionId: string, actionKey: string) => {
+			if (actionKey === "use-local") {
+				handleUseLocalConnectionConflict(connectionId)
+				return
+			}
+			if (actionKey === "use-remote") {
+				handleUseRemoteConnectionConflict(connectionId)
+			}
+		},
+		[handleUseLocalConnectionConflict, handleUseRemoteConnectionConflict],
 	)
 
 	// 显示历史版本 banner 时预留顶部空间，避免遮挡画布（与 HISTORY_VERSION_BANNER_LAYOUT_HEIGHT_PX 一致）
@@ -1562,6 +1664,9 @@ function DesignViewer(props: DesignViewerProps) {
 											handleCanvasDesignDataPatchChange,
 										elementActionHints,
 										onElementActionHintAction: handleElementActionHintAction,
+										connectionActionHints,
+										onConnectionActionHintAction:
+											handleConnectionActionHintAction,
 										projectAttachmentMentionTree,
 										defaultProjectAttachmentFolderId,
 										defaultProjectAttachmentFolderName,

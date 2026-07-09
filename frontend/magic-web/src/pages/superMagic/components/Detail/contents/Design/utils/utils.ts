@@ -4,7 +4,10 @@ import { flattenAttachments, findMatchingFile } from "../../HTML/utils"
 import type { FileItem } from "@/pages/superMagic/components/Detail/components/FilesViewer/types"
 import { DesignData } from "../types"
 import { IMAGE_EXTENSIONS } from "@/constants/file"
-import type { LayerElement } from "@/components/CanvasDesign/runtime/document/types"
+import type {
+	CanvasConnection,
+	LayerElement,
+} from "@/components/CanvasDesign/runtime/document/types"
 import { t } from "i18next"
 import { AttachmentSource } from "@/pages/superMagic/components/TopicFilesButton/hooks/types"
 import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks/types"
@@ -43,6 +46,23 @@ function layerTreeHasImageOrVideo(elements: LayerElement[] | undefined): boolean
 		if (children?.length && layerTreeHasImageOrVideo(children)) return true
 	}
 	return false
+}
+
+function getCanvasConnections(canvas: DesignData["canvas"] | null | undefined): CanvasConnection[] {
+	return canvas?.connections ?? []
+}
+
+function buildCanvasPayload(
+	elements: LayerElement[],
+	connections: CanvasConnection[],
+): {
+	elements: LayerElement[]
+	connections?: CanvasConnection[]
+} {
+	return {
+		elements,
+		...(connections.length > 0 ? { connections } : {}),
+	}
 }
 
 /**
@@ -114,6 +134,7 @@ export function generateMagicProjectJsContent(
 	options?: { projectBasePath?: string },
 ): string {
 	const rawElements = designData.canvas?.elements || []
+	const connections = getCanvasConnections(designData.canvas)
 	const basePath = options?.projectBasePath?.trim()
 	const isV2 = isV2Version(designData.version)
 	const needPathRewrite = !!basePath && layerTreeHasImageOrVideo(rawElements)
@@ -130,9 +151,9 @@ export function generateMagicProjectJsContent(
 	let canvasField: unknown
 	if (isV2) {
 		stripHeavyFields(elements)
-		canvasField = compressCanvasData({ elements })
+		canvasField = compressCanvasData(buildCanvasPayload(elements, connections))
 	} else {
-		canvasField = { elements }
+		canvasField = buildCanvasPayload(elements, connections)
 	}
 
 	const config = {
@@ -165,6 +186,7 @@ export interface MagicProjectJsParseDiagnostics {
 function buildDesignDataFromMagicProjectConfig(
 	config: Record<string, unknown>,
 	elements: LayerElement[],
+	connections: CanvasConnection[] = [],
 ): DesignData {
 	return {
 		type: (config as { type?: string }).type || "design",
@@ -172,8 +194,19 @@ function buildDesignDataFromMagicProjectConfig(
 		version: (config as { version?: string }).version || MAGIC_PROJECT_VERSION_V1,
 		canvas: {
 			elements,
+			...(connections.length > 0 ? { connections } : {}),
 		},
 	}
+}
+
+function getConnectionsFromCanvasObject(
+	canvasObj: {
+		connections?: unknown
+	} | null,
+): CanvasConnection[] {
+	return Array.isArray(canvasObj?.connections)
+		? (canvasObj.connections as CanvasConnection[])
+		: []
 }
 
 /**
@@ -201,11 +234,14 @@ export function parseMagicProjectJsContentWithDiagnostics(
 		}
 
 		const canvasField = (config as { canvas?: unknown }).canvas
-		let canvasObj: { elements?: unknown } | null = null
+		let canvasObj: { elements?: unknown; connections?: unknown } | null = null
 
 		if (isCompressedCanvas(canvasField)) {
 			try {
-				canvasObj = decompressCanvasData(canvasField) as { elements?: unknown } | null
+				canvasObj = decompressCanvasData(canvasField) as {
+					elements?: unknown
+					connections?: unknown
+				} | null
 			} catch (error) {
 				return {
 					data: null,
@@ -214,7 +250,7 @@ export function parseMagicProjectJsContentWithDiagnostics(
 				}
 			}
 		} else if (canvasField && typeof canvasField === "object" && !Array.isArray(canvasField)) {
-			canvasObj = canvasField as { elements?: unknown }
+			canvasObj = canvasField as { elements?: unknown; connections?: unknown }
 		} else {
 			return { data: null, canvasStatus: "invalid" }
 		}
@@ -224,8 +260,9 @@ export function parseMagicProjectJsContentWithDiagnostics(
 		}
 
 		const elements = canvasObj.elements as LayerElement[]
+		const connections = getConnectionsFromCanvasObject(canvasObj)
 		return {
-			data: buildDesignDataFromMagicProjectConfig(config, elements),
+			data: buildDesignDataFromMagicProjectConfig(config, elements, connections),
 			canvasStatus: elements.length > 0 ? "valid-non-empty" : "valid-empty",
 		}
 	} catch (error) {
@@ -258,16 +295,23 @@ export function parseMagicProjectJsContent(content: string): DesignData | null {
 		// 严格区分 missing/invalid/decompress-failed 的逻辑只给 upgrade diagnostics 使用。
 		const canvasField = (config as { canvas?: unknown }).canvas
 		let elements: LayerElement[] = []
+		let connections: CanvasConnection[] = []
 		if (isCompressedCanvas(canvasField)) {
 			const canvasObj = decompressCanvasData(canvasField) as {
 				elements?: LayerElement[]
+				connections?: unknown
 			} | null
 			elements = canvasObj?.elements || []
+			connections = getConnectionsFromCanvasObject(canvasObj)
 		} else {
-			elements = (canvasField as { elements?: LayerElement[] } | undefined)?.elements || []
+			const canvasObj = canvasField as
+				| { elements?: LayerElement[]; connections?: unknown }
+				| undefined
+			elements = canvasObj?.elements || []
+			connections = getConnectionsFromCanvasObject(canvasObj ?? null)
 		}
 
-		return buildDesignDataFromMagicProjectConfig(config, elements)
+		return buildDesignDataFromMagicProjectConfig(config, elements, connections)
 	} catch {
 		return null
 	}

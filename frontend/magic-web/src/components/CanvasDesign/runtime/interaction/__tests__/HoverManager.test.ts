@@ -32,7 +32,10 @@ function installRafMock() {
 function createHoverManager(
 	options: {
 		transformActive?: boolean | (() => boolean)
-		selected?: boolean
+		transforming?: boolean | (() => boolean)
+		activeTransforming?: boolean | (() => boolean)
+		selected?: boolean | (() => boolean)
+		connectionDragging?: boolean | (() => boolean)
 		geometryHitIds?: string[]
 		viewportHitTarget?: Konva.Node | null
 		extendingElementId?: string | null
@@ -46,6 +49,14 @@ function createHoverManager(
 	const getPointerPosition = vi.fn(() => ({ x: 30, y: 40 }))
 	const getIntersection = vi.fn(() => options.viewportHitTarget ?? null)
 	const eventHandlers = new Map<string, Array<(event: { data?: unknown }) => void>>()
+	const getOptionValue = (value: boolean | (() => boolean) | undefined, fallback: boolean) =>
+		typeof value === "function" ? value() : (value ?? fallback)
+	const isSelected = () => getOptionValue(options.selected, false)
+	const isTransformActive = () => getOptionValue(options.transformActive, false)
+	const isTransforming = () => getOptionValue(options.transforming, false)
+	const isConnectionDragging = () => getOptionValue(options.connectionDragging, false)
+	const isActiveTransforming = () =>
+		getOptionValue(options.activeTransforming, isTransformActive() && isTransforming())
 	const elementData: LayerElement = {
 		id: "element-1",
 		type: "rectangle",
@@ -91,23 +102,27 @@ function createHoverManager(
 			canHover: () => true,
 		},
 		selectionManager: {
-			isSelected: () => options.selected ?? false,
+			isSelected,
+			getSelectedIds: () => (isSelected() ? ["element-1"] : []),
 		},
 		transformManager: {
-			isTransformInteractionActive: () =>
-				typeof options.transformActive === "function"
-					? options.transformActive()
-					: (options.transformActive ?? false),
-			isTransforming: () => false,
+			isTransformInteractionActive: isTransformActive,
+			isTransforming,
+			isElementInActiveTransformInteraction: () => isActiveTransforming(),
 			isDraggingElement: () => false,
+		},
+		connectionDragManager: {
+			isDraggingConnection: isConnectionDragging,
 		},
 		extendManager: {
 			getExtendingElementId: () => options.extendingElementId ?? null,
 		},
 	}
 
-	stage.getPointerPosition = getPointerPosition as never
-	stage.getIntersection = getIntersection as never
+	;(stage as unknown as { getPointerPosition: typeof getPointerPosition }).getPointerPosition =
+		getPointerPosition
+	;(stage as unknown as { getIntersection: typeof getIntersection }).getIntersection =
+		getIntersection
 
 	const manager = new HoverManager({ canvas: canvas as never }) as unknown as HoverManagerPrivate
 	const target = new Konva.Rect({ id: "element-1" })
@@ -120,6 +135,27 @@ function createHoverManager(
 		requestLayerDraw,
 		target,
 	}
+}
+
+function createTransformerAnchor(): Konva.Rect {
+	const transformer = new Konva.Transformer()
+	const anchor = new Konva.Rect({ name: "middle-right _anchor" })
+	transformer.add(anchor)
+	return anchor
+}
+
+function createConnectionHitPathInsideElement(): Konva.Path {
+	const elementNode = new Konva.Group({ id: "element-1" })
+	const connectionGroup = new Konva.Group({ name: "canvas-connection" })
+	connectionGroup.setAttr("connectionId", "connection-1")
+	const hitPath = new Konva.Path({
+		name: "canvas-connection-hit-path",
+		data: "M 10 10 C 40 10 40 40 70 40",
+	})
+	hitPath.setAttr("connectionId", "connection-1")
+	connectionGroup.add(hitPath)
+	elementNode.add(connectionGroup)
+	return hitPath
 }
 
 describe("HoverManager", () => {
@@ -193,6 +229,131 @@ describe("HoverManager", () => {
 		active.manager.destroy()
 	})
 
+	it("keeps hover identity for a selected transformer-bound element without drawing hover", () => {
+		const raf = installRafMock()
+		const { emit, manager, requestLayerDraw, target } = createHoverManager({
+			selected: true,
+			transforming: true,
+			activeTransforming: false,
+		})
+
+		manager.handleMouseMove({ target })
+		raf.flush()
+
+		expect(manager.hoveredElementId).toBe("element-1")
+		expect(manager.hoverNode).toBeNull()
+		expect(requestLayerDraw).not.toHaveBeenCalled()
+		expect(emit).toHaveBeenCalledWith({
+			type: "element:hover",
+			data: { elementId: "element-1" },
+		})
+		manager.destroy()
+	})
+
+	it("keeps selected hover identity when the transformer anchor is the mousemove target", () => {
+		const raf = installRafMock()
+		const { emit, manager, requestLayerDraw } = createHoverManager({
+			selected: true,
+			transforming: true,
+			activeTransforming: false,
+		})
+		const anchor = createTransformerAnchor()
+
+		manager.handleMouseMove({ target: anchor })
+		raf.flush()
+
+		expect(manager.hoveredElementId).toBe("element-1")
+		expect(manager.hoverNode).toBeNull()
+		expect(requestLayerDraw).not.toHaveBeenCalled()
+		expect(emit).toHaveBeenCalledWith({
+			type: "element:hover",
+			data: { elementId: "element-1" },
+		})
+		manager.destroy()
+	})
+
+	it("does not keep selected hover identity for a transformer anchor outside selected geometry", () => {
+		const raf = installRafMock()
+		const { getPointerPosition, manager, requestLayerDraw } = createHoverManager({
+			selected: true,
+			transforming: true,
+			activeTransforming: false,
+		})
+		const anchor = createTransformerAnchor()
+
+		getPointerPosition.mockReturnValue({ x: 200, y: 200 })
+		manager.handleMouseMove({ target: anchor })
+		raf.flush()
+
+		expect(manager.hoveredElementId).toBeNull()
+		expect(manager.hoverNode).toBeNull()
+		expect(requestLayerDraw).not.toHaveBeenCalled()
+		manager.destroy()
+	})
+
+	it("does not set element hover when the mousemove target is a connection node", () => {
+		const raf = installRafMock()
+		const { manager, requestLayerDraw, target } = createHoverManager()
+		const connectionHitPath = createConnectionHitPathInsideElement()
+
+		manager.handleMouseMove({ target })
+		raf.flush()
+		expect(manager.hoveredElementId).toBe("element-1")
+		expect(manager.hoverNode).toBeInstanceOf(Konva.Rect)
+
+		manager.handleMouseMove({ target: connectionHitPath })
+		raf.flush()
+
+		expect(manager.hoveredElementId).toBeNull()
+		expect(manager.hoverNode).toBeNull()
+		expect(requestLayerDraw).toHaveBeenCalledTimes(2)
+		manager.destroy()
+	})
+
+	it("refreshes selected hover identity from the current pointer without drawing hover", () => {
+		const { emit, eventHandlers, manager, requestLayerDraw } = createHoverManager({
+			selected: true,
+			transforming: true,
+			activeTransforming: false,
+			geometryHitIds: ["element-1"],
+		})
+
+		eventHandlers.get("element:select")?.[0]?.({ data: { elementIds: ["element-1"] } })
+
+		expect(manager.hoveredElementId).toBe("element-1")
+		expect(manager.hoverNode).toBeNull()
+		expect(requestLayerDraw).not.toHaveBeenCalled()
+		expect(emit).toHaveBeenCalledWith({
+			type: "element:hover",
+			data: { elementId: "element-1" },
+		})
+		manager.destroy()
+	})
+
+	it("restores the hover node after a selected hovered element is deselected", () => {
+		const raf = installRafMock()
+		let selected = true
+		const { eventHandlers, manager, requestLayerDraw, target } = createHoverManager({
+			selected: () => selected,
+			transforming: () => selected,
+			activeTransforming: false,
+			geometryHitIds: ["element-1"],
+		})
+
+		manager.handleMouseMove({ target })
+		raf.flush()
+		expect(manager.hoveredElementId).toBe("element-1")
+		expect(manager.hoverNode).toBeNull()
+
+		selected = false
+		eventHandlers.get("element:deselect")?.[0]?.({ data: { elementIds: ["element-1"] } })
+
+		expect(manager.hoveredElementId).toBe("element-1")
+		expect(manager.hoverNode).toBeInstanceOf(Konva.Rect)
+		expect(requestLayerDraw).toHaveBeenCalledTimes(1)
+		manager.destroy()
+	})
+
 	it("refreshes hover hit testing when the viewport pans without mouse movement", () => {
 		const raf = installRafMock()
 		const { eventHandlers, manager, target } = createHoverManager()
@@ -251,6 +412,20 @@ describe("HoverManager", () => {
 		manager.destroy()
 	})
 
+	it("does not refresh element hover from geometry when the current pointer hits a connection node", () => {
+		const { eventHandlers, getIntersection, manager, requestLayerDraw } = createHoverManager({
+			geometryHitIds: ["element-1"],
+		})
+		getIntersection.mockReturnValue(createConnectionHitPathInsideElement())
+
+		eventHandlers.get("viewport:pan")?.[0]?.({ data: { x: 20, y: 30 } })
+
+		expect(manager.hoveredElementId).toBeNull()
+		expect(manager.hoverNode).toBeNull()
+		expect(requestLayerDraw).not.toHaveBeenCalled()
+		manager.destroy()
+	})
+
 	it("clears and suppresses hover refresh while viewport gesture is active", () => {
 		const raf = installRafMock()
 		const { eventHandlers, getIntersection, manager, requestLayerDraw, target } =
@@ -285,6 +460,42 @@ describe("HoverManager", () => {
 
 		expect(raf.count()).toBe(0)
 		expect(manager.hoveredElementId).toBeNull()
+		expect(requestLayerDraw).not.toHaveBeenCalled()
+		manager.destroy()
+	})
+
+	it("clears and suppresses hover while a connection drag is active", () => {
+		const raf = installRafMock()
+		let connectionDragging = false
+		const { manager, requestLayerDraw, target } = createHoverManager({
+			connectionDragging: () => connectionDragging,
+		})
+
+		manager.handleMouseMove({ target })
+		raf.flush()
+		expect(manager.hoveredElementId).toBe("element-1")
+		expect(manager.hoverNode).toBeInstanceOf(Konva.Rect)
+
+		connectionDragging = true
+		manager.handleMouseMove({ target })
+
+		expect(raf.count()).toBe(0)
+		expect(manager.hoveredElementId).toBeNull()
+		expect(manager.hoverNode).toBeNull()
+		expect(requestLayerDraw).toHaveBeenCalledTimes(2)
+		manager.destroy()
+	})
+
+	it("does not refresh hover from geometry while a connection drag is active", () => {
+		const { eventHandlers, manager, requestLayerDraw } = createHoverManager({
+			connectionDragging: true,
+			geometryHitIds: ["element-1"],
+		})
+
+		eventHandlers.get("viewport:pan")?.[0]?.({ data: { x: 20, y: 30 } })
+
+		expect(manager.hoveredElementId).toBeNull()
+		expect(manager.hoverNode).toBeNull()
 		expect(requestLayerDraw).not.toHaveBeenCalled()
 		manager.destroy()
 	})

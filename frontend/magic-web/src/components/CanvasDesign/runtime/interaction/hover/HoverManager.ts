@@ -1,6 +1,10 @@
 import Konva from "konva"
 import type { Canvas } from "../../core/Canvas"
-import { resolveManagedElementIdFromKonvaNode } from "../transform/elementNodeUtils"
+import { isConnectionNode } from "../connection/connectionNodeUtils"
+import {
+	pickSelectedElementIdAtStagePointer,
+	resolveManagedElementIdFromKonvaNode,
+} from "../transform/elementNodeUtils"
 
 /**
  * Hover 管理器 - 管理元素的 hover 效果
@@ -53,10 +57,18 @@ export class HoverManager {
 			}),
 		)
 
-		// 监听选中事件，清除 hover（避免冲突）
+		// 选中元素仍然可以拥有 hover 身份，用于连接 handle 等 hover-only affordance；
+		// 但选中态自身已有 Transformer，不再绘制 hover 边框。
 		this.eventUnsubscribers.push(
 			this.canvas.eventEmitter.on("element:select", () => {
-				this.clearHover()
+				this.clearHoverNode()
+				this.refreshHoverAtCurrentPointer()
+			}),
+		)
+
+		this.eventUnsubscribers.push(
+			this.canvas.eventEmitter.on("element:deselect", () => {
+				this.refreshHoverAtCurrentPointer()
 			}),
 		)
 
@@ -136,7 +148,7 @@ export class HoverManager {
 	 * 处理鼠标移动事件
 	 */
 	private handleMouseMove = (e: Konva.KonvaEventObject<MouseEvent>): void => {
-		if (this.isViewportGestureActive || this.isExtendModeActive()) {
+		if (this.shouldSuppressHover()) {
 			this.pendingHoverTarget = null
 			this.cancelHoverFlush()
 			this.clearHover()
@@ -177,7 +189,7 @@ export class HoverManager {
 	}
 
 	private refreshHoverAtCurrentPointer(): void {
-		if (this.isViewportGestureActive || this.isExtendModeActive()) {
+		if (this.shouldSuppressHover()) {
 			this.clearHover()
 			return
 		}
@@ -188,13 +200,19 @@ export class HoverManager {
 			return
 		}
 
+		const targetAtPointer = this.canvas.stage.getIntersection?.(pointerPosition)
+		if (targetAtPointer && this.isConnectionTarget(targetAtPointer)) {
+			this.clearHover()
+			return
+		}
+
 		const elementId = this.getElementIdAtPointer(pointerPosition)
 		if (!elementId) {
 			this.clearHover()
 			return
 		}
 
-		if (this.hoveredElementId === elementId) {
+		if (this.isHoverStateCurrentForElement(elementId)) {
 			return
 		}
 
@@ -202,31 +220,44 @@ export class HoverManager {
 	}
 
 	private resolveHoverTarget(target: Konva.Node | null): void {
-		if (this.isViewportGestureActive || this.isExtendModeActive()) {
+		if (this.shouldSuppressHover()) {
 			this.clearHover()
 			return
 		}
 
-		if (!target || this.canvas.transformManager.isTransformInteractionActive()) {
+		const transformInteractionActive =
+			this.canvas.transformManager.isTransformInteractionActive()
+		if (!target || transformInteractionActive) {
 			this.clearHover()
 			return
 		}
 
-		// 获取元素 ID（使用与 isValidElementNode 相同的逻辑）
-		const elementId = this.getElementIdFromNode(target)
+		if (this.isConnectionTarget(target)) {
+			this.clearHover()
+			return
+		}
+
+		const targetIsTransformer = this.isTransformerNode(target)
+		const elementId = this.getElementIdFromTarget(target)
 		if (!elementId) {
 			this.clearHover()
 			return
 		}
 
 		// 检查是否是有效的元素节点
-		if (!this.isValidElementNode(target)) {
+		if (!targetIsTransformer && !this.isValidElementNode(target)) {
+			this.clearHover()
+			return
+		}
+
+		const invalidElementReason = this.getInvalidElementIdReason(elementId)
+		if (invalidElementReason) {
 			this.clearHover()
 			return
 		}
 
 		// 如果已经 hover 在同一个元素上，不做处理
-		if (this.hoveredElementId === elementId) {
+		if (this.isHoverStateCurrentForElement(elementId)) {
 			return
 		}
 
@@ -247,14 +278,15 @@ export class HoverManager {
 	 * 设置 hover 状态
 	 */
 	private setHover(elementId: string): void {
-		if (this.isViewportGestureActive || this.isExtendModeActive()) {
+		if (this.shouldSuppressHover()) {
 			this.clearHover()
 			return
 		}
 
-		// 如果元素已被选中，不显示 hover 效果
+		// 如果元素已被选中，只保留 hover 身份，不绘制 hover 边框。
 		if (this.canvas.selectionManager.isSelected(elementId)) {
-			this.clearHover()
+			this.clearHoverNode()
+			this.setHoveredElementId(elementId)
 			return
 		}
 
@@ -311,15 +343,9 @@ export class HoverManager {
 		this.requestControlsDraw("hover-set")
 
 		// 更新状态
-		const previousHoveredElementId = this.hoveredElementId
 		this.hoverNode = hoverNode
 		this.hoverNodeIsDefault = isDefaultHoverNode
-		this.hoveredElementId = elementId
-
-		// 发出 hover 事件
-		if (previousHoveredElementId !== elementId) {
-			this.canvas.eventEmitter.emit({ type: "element:hover", data: { elementId } })
-		}
+		this.setHoveredElementId(elementId)
 	}
 
 	/**
@@ -360,18 +386,29 @@ export class HoverManager {
 	 * 清除 hover 状态
 	 */
 	private clearHover(): void {
-		if (this.hoverNode) {
-			this.hoverNode.destroy()
-			this.hoverNode = null
-			this.hoverNodeIsDefault = false
-			this.requestControlsDraw("hover-clear")
-		}
+		this.clearHoverNode()
+		this.setHoveredElementId(null)
+	}
 
-		if (this.hoveredElementId) {
-			this.hoveredElementId = null
-			// 发出 hover 清除事件
-			this.canvas.eventEmitter.emit({ type: "element:hover", data: { elementId: null } })
-		}
+	private clearHoverNode(): void {
+		if (!this.hoverNode) return
+		this.hoverNode.destroy()
+		this.hoverNode = null
+		this.hoverNodeIsDefault = false
+		this.requestControlsDraw("hover-clear")
+	}
+
+	private setHoveredElementId(elementId: string | null): void {
+		if (this.hoveredElementId === elementId) return
+		this.hoveredElementId = elementId
+		this.canvas.eventEmitter.emit({ type: "element:hover", data: { elementId } })
+	}
+
+	private isHoverStateCurrentForElement(elementId: string): boolean {
+		if (this.hoveredElementId !== elementId) return false
+		return this.canvas.selectionManager.isSelected(elementId)
+			? this.hoverNode === null
+			: this.hoverNode !== null
 	}
 
 	/**
@@ -379,6 +416,23 @@ export class HoverManager {
 	 */
 	private getElementIdFromNode(node: Konva.Node): string | null {
 		return resolveManagedElementIdFromKonvaNode(node, this.canvas) ?? null
+	}
+
+	private getElementIdFromTarget(node: Konva.Node): string | null {
+		const elementId = this.getElementIdFromNode(node)
+		if (elementId) return elementId
+		if (!this.isTransformerNode(node)) return null
+
+		const pointerPosition = this.canvas.stage.getPointerPosition()
+		if (!pointerPosition) return null
+		return pickSelectedElementIdAtStagePointer(this.canvas, pointerPosition) ?? null
+	}
+
+	private isTransformerNode(node: Konva.Node): boolean {
+		return (
+			node.getClassName() === "Transformer" ||
+			node.getParent()?.getClassName() === "Transformer"
+		)
 	}
 
 	/**
@@ -396,10 +450,12 @@ export class HoverManager {
 		}
 
 		// 排除 Transformer 及其子元素
-		if (
-			node.getClassName() === "Transformer" ||
-			node.getParent()?.getClassName() === "Transformer"
-		) {
+		if (this.isTransformerNode(node)) {
+			return false
+		}
+
+		// 连接线拥有独立的 hover/selection 反馈，不参与元素 hover。
+		if (this.isConnectionTarget(node)) {
 			return false
 		}
 
@@ -419,23 +475,27 @@ export class HoverManager {
 			return false
 		}
 
+		return this.getInvalidElementIdReason(elementId) === null
+	}
+
+	private getInvalidElementIdReason(elementId: string): string | null {
 		// 使用 PermissionManager 统一判断元素是否可以 hover
 		const elementData = this.canvas.elementManager.getElementData(elementId)
 		if (!this.canvas.permissionManager.canHover(elementData)) {
-			return false
+			return "cannot-hover"
 		}
 
-		// 排除正在被 transform 的元素
-		if (this.canvas.transformManager.isTransforming(elementId)) {
-			return false
+		// 普通选中态也会绑定 Transformer；只有正在拖拽/缩放的交互态才阻止 hover。
+		if (this.isElementInActiveTransformInteraction(elementId)) {
+			return "transforming"
 		}
 
 		// 排除正在拖拽时的所有元素
 		if (this.canvas.transformManager.isDraggingElement()) {
-			return false
+			return "dragging-element"
 		}
 
-		return true
+		return null
 	}
 
 	private getElementIdAtPointer(pointerPosition: { x: number; y: number }): string | null {
@@ -458,12 +518,11 @@ export class HoverManager {
 		let topElementId: string | null = null
 		let topAbsoluteZIndex = Number.NEGATIVE_INFINITY
 		const adapter = this.canvas.elementManager.getNodeAdapter()
-
 		candidateIds.forEach((elementId) => {
-			const elementData = this.canvas.elementManager.getElementData(elementId)
-			if (!this.canvas.permissionManager.canHover(elementData)) return
-			if (this.canvas.transformManager.isTransforming(elementId)) return
-			if (this.canvas.transformManager.isDraggingElement()) return
+			const invalidReason = this.getInvalidElementIdReason(elementId)
+			if (invalidReason) {
+				return
+			}
 
 			const bounds = adapter.getElementBounds(elementId)
 			if (
@@ -487,8 +546,35 @@ export class HoverManager {
 		return topElementId
 	}
 
+	private isElementInActiveTransformInteraction(elementId: string): boolean {
+		const transformManager = this.canvas.transformManager
+		if (typeof transformManager.isElementInActiveTransformInteraction === "function") {
+			return transformManager.isElementInActiveTransformInteraction(elementId)
+		}
+		return (
+			transformManager.isTransformInteractionActive() &&
+			transformManager.isTransforming(elementId)
+		)
+	}
+
+	private isConnectionTarget(node: Konva.Node): boolean {
+		return isConnectionNode(node)
+	}
+
 	private isExtendModeActive(): boolean {
 		return Boolean(this.canvas.extendManager?.getExtendingElementId?.())
+	}
+
+	private isConnectionDragActive(): boolean {
+		return this.canvas.connectionDragManager?.isDraggingConnection?.() === true
+	}
+
+	private shouldSuppressHover(): boolean {
+		return (
+			this.isViewportGestureActive ||
+			this.isExtendModeActive() ||
+			this.isConnectionDragActive()
+		)
 	}
 
 	/**
