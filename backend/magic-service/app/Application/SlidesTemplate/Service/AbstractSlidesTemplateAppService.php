@@ -20,6 +20,8 @@ use Qbhy\HyperfAuth\Authenticatable;
 
 abstract class AbstractSlidesTemplateAppService extends AbstractKernelAppService
 {
+    private const FILE_LINKS_BATCH_SIZE = 200;
+
     public function __construct(
         protected readonly SlidesTemplateDomainService $slidesTemplateDomainService,
     ) {
@@ -69,15 +71,13 @@ abstract class AbstractSlidesTemplateAppService extends AbstractKernelAppService
                 $this->appendFilePath($privatePathsByOrg, $template->getOrganizationCode(), $template->getTemplateFileKey());
             }
         }
-
         $publicLinksByOrg = [];
         foreach ($publicPathsByOrg as $organizationCode => $paths) {
-            $publicLinksByOrg[$organizationCode] = $this->getPublicFileLinks($organizationCode, array_values(array_unique($paths)));
+            $publicLinksByOrg[$organizationCode] = $this->getPublicFileLinksInBatches($organizationCode, array_values(array_unique($paths)));
         }
-
         $privateLinksByOrg = [];
         foreach ($privatePathsByOrg as $organizationCode => $paths) {
-            $privateLinksByOrg[$organizationCode] = $this->getPrivateFileLinks($organizationCode, array_values(array_unique($paths)));
+            $privateLinksByOrg[$organizationCode] = $this->getPrivateFileLinksInBatches($organizationCode, array_values(array_unique($paths)));
         }
 
         foreach ($templates as $template) {
@@ -114,6 +114,33 @@ abstract class AbstractSlidesTemplateAppService extends AbstractKernelAppService
         foreach ($fileKeys as $fileKey) {
             $this->appendFilePath($pathsByOrg, $organizationCode, $fileKey);
         }
+    }
+
+    private function getPublicFileLinksInBatches(string $organizationCode, array $fileLinks): array
+    {
+        return $this->getFileLinksInBatches(
+            $organizationCode,
+            $fileLinks,
+            fn (string $organizationCode, array $fileLinks): array => $this->getPublicFileLinks($organizationCode, $fileLinks)
+        );
+    }
+
+    private function getPrivateFileLinksInBatches(string $organizationCode, array $fileLinks): array
+    {
+        return $this->getFileLinksInBatches(
+            $organizationCode,
+            $fileLinks,
+            fn (string $organizationCode, array $fileLinks): array => $this->getPrivateFileLinks($organizationCode, $fileLinks)
+        );
+    }
+
+    private function getFileLinksInBatches(string $organizationCode, array $fileLinks, callable $resolver): array
+    {
+        $fileLinksMap = [];
+        foreach (array_chunk($fileLinks, self::FILE_LINKS_BATCH_SIZE) as $fileLinksBatch) {
+            $fileLinksMap = array_replace($fileLinksMap, $resolver($organizationCode, $fileLinksBatch));
+        }
+        return $fileLinksMap;
     }
 
     private function resolveUrl(array $linksByOrg, string $organizationCode, ?string $fileKey): ?string
