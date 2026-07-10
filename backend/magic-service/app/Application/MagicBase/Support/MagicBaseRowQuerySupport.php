@@ -27,6 +27,15 @@ use LogicException;
 
 readonly class MagicBaseRowQuerySupport
 {
+    private const DEFAULT_SYSTEM_FIELDS = [
+        'id',
+        'record_id',
+        'organization_code',
+        'created_at',
+        'updated_at',
+        'created_by',
+    ];
+
     public function __construct(
         private MagicBaseMetadataDomainService $metadataDomainService,
         private MagicBaseAccessControl $accessControl,
@@ -46,7 +55,7 @@ readonly class MagicBaseRowQuerySupport
     ): MagicBaseFormattedRow {
         $fields = $select->getFields();
         if ($fields === []) {
-            $fields = array_merge(['id'], $access->getColumns()->keys());
+            $fields = array_merge(self::DEFAULT_SYSTEM_FIELDS, $access->getColumns()->keys());
         }
 
         $result = [];
@@ -54,7 +63,7 @@ readonly class MagicBaseRowQuerySupport
             if (! is_string($field)) {
                 continue;
             }
-            if (in_array($field, ['id', 'record_id', 'created_at', 'updated_at', 'created_by'], true)) {
+            if (in_array($field, self::DEFAULT_SYSTEM_FIELDS, true)) {
                 $result[$field] = $this->formatRootField($row, $field);
                 continue;
             }
@@ -200,6 +209,7 @@ readonly class MagicBaseRowQuerySupport
     {
         return match ($field) {
             'id', 'record_id' => (string) $row->getRecordId(),
+            'organization_code' => $row->getOrganizationCode(),
             'created_at' => $this->formatDatetime($row->getCreatedAt()),
             'updated_at' => $this->formatDatetime($row->getUpdatedAt()),
             'created_by' => $row->getCreatedBy(),
@@ -419,7 +429,8 @@ readonly class MagicBaseRowQuerySupport
     private function formatRootField(MagicBaseRowEntity $row, string $field): mixed
     {
         return match ($field) {
-            'id' => (string) $row->getRecordId(),
+            'id', 'record_id' => (string) $row->getRecordId(),
+            'organization_code' => $row->getOrganizationCode(),
             'created_at' => $this->formatDatetime($row->getCreatedAt()),
             'updated_at' => $this->formatDatetime($row->getUpdatedAt()),
             'created_by' => $row->getCreatedBy(),

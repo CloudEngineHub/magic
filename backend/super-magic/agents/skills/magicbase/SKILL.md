@@ -184,7 +184,9 @@ The data model must serve the full approved product loop, not the smallest possi
 
 System fields are not dynamic business columns. MagicBase automatically maintains fields such as `id`, `record_id`, `created_at`, `updated_at`, `created_by`, `project_id`, `table_id`, and `organization_code`. HTML code may read, display, select, filter, or sort by supported system fields, but must not put system fields into the `data` object passed to `createRow` or `updateRow`. Only dynamic business fields that appear in the table's `columns` list as `column_key` may be written in `data`.
 
-When UI behavior depends on creator ownership, include `id`, all displayed business fields, `created_by`, `created_at`, and `updated_at` in `select` for `queryRows`, `getRow`, `createRow`, and `updateRow` responses that feed the UI. Compare `row.created_by` with `context.userId`; do not require a dynamic `creator_user_id` field unless the product has a separate business owner concept.
+When `select` is omitted or empty, row APIs return all readable dynamic business fields plus these default row system fields: `id`, `record_id`, `organization_code`, `created_at`, `updated_at`, and `created_by`. When `select` is provided, the response is an exact projection: include every business or system field the UI needs.
+
+When UI behavior depends on creator ownership, default queries already include `created_by`. If you provide an explicit `select` for `queryRows`, `getRow`, `createRow`, or `updateRow`, include `id`, all displayed business fields, `created_by`, `created_at`, and `updated_at` in that `select`. Compare `row.created_by` with `context.userId`; do not require a dynamic `creator_user_id` field unless the product has a separate business owner concept.
 
 Canonical runtime signatures:
 
@@ -236,7 +238,7 @@ const newRow = await window.Magic.db.createRow(TABLE_ID_FROM_MAGICBASE_TOOL, {
 
 - Parameters: `tableId: string`、`data: Record<string, unknown>`、`select?: string[]`（可选，指定返回字段）
 - Return: `Promise<object>` — the created row
-- The `data` object must contain only dynamic column keys from the actual table schema. Do not write `created_at`, `updated_at`, `id`, `record_id`, `created_by`, `project_id`, `table_id`, or `organization_code` into `data`; request them through `select` if you need them in the response.
+- The `data` object must contain only dynamic column keys from the actual table schema. Do not write `created_at`, `updated_at`, `id`, `record_id`, `created_by`, `project_id`, `table_id`, or `organization_code` into `data`; omit `select` for the default response fields or request specific system fields through `select` if you need a custom projection.
 - Match values to the MySQL-like column type. For `json` columns, pass arrays/objects directly; do not stringify or join arrays before calling `createRow`.
 
 ### Query rows `queryRows(tableId, query)`
@@ -262,7 +264,8 @@ const rows = result.list;
   - `with?` — 关联查询配置
 - Return: `Promise<{ list: Array<object>; total: number; page: number; page_size: number }>` — 分页结果。行数组字段是 `list`，不要使用 `rows`
 - **超时**：30 秒（其他操作为 15 秒）
-- If the UI enables or disables actions based on creator ownership, `select` must include `id`, the displayed business fields, `created_by`, `created_at`, and `updated_at`.
+- If `select` is omitted or empty, each row includes all readable dynamic business fields plus `id`, `record_id`, `organization_code`, `created_at`, `updated_at`, and `created_by`.
+- If the UI enables or disables actions based on creator ownership and you provide an explicit `select`, it must include `id`, the displayed business fields, `created_by`, `created_at`, and `updated_at`.
 
 Use this defensive read pattern when handling existing or uncertain runtime responses:
 
