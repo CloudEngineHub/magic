@@ -95,8 +95,13 @@ class SlidesTemplateCategoryRepository extends AbstractRepository implements Sli
 
         $builder->select($columns)
             ->selectRaw('COUNT(t.id) AS template_count')
-            ->groupBy($columns)
-            ->orderBy('magic_slides_template_categories.sort', 'desc')
+            ->groupBy($columns);
+
+        if ($query->isOnlyWithTemplates()) {
+            $builder->havingRaw('COUNT(t.id) > 0');
+        }
+
+        $builder->orderBy('magic_slides_template_categories.sort', 'desc')
             ->orderBy('magic_slides_template_categories.id', 'desc');
 
         $total = -1;

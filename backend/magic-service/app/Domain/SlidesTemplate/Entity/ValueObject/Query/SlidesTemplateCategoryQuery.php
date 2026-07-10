@@ -15,6 +15,8 @@ class SlidesTemplateCategoryQuery
 
     private ?int $status = null;
 
+    private bool $onlyWithTemplates = false;
+
     public function getKeyword(): ?string
     {
         return $this->keyword;
@@ -45,5 +47,15 @@ class SlidesTemplateCategoryQuery
     public function setStatus(null|int|string $status): void
     {
         $this->status = $status === null || $status === '' ? null : (int) $status;
+    }
+
+    public function isOnlyWithTemplates(): bool
+    {
+        return $this->onlyWithTemplates;
+    }
+
+    public function setOnlyWithTemplates(bool $onlyWithTemplates): void
+    {
+        $this->onlyWithTemplates = $onlyWithTemplates;
     }
 }

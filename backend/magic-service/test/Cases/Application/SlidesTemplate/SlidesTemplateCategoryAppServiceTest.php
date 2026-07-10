@@ -45,7 +45,8 @@ class SlidesTemplateCategoryAppServiceTest extends TestCase
             ->method('queriesWithTemplateCount')
             ->with(
                 $this->callback(static fn (SlidesTemplateDataIsolation $actual): bool => $actual->getCurrentOrganizationCode() === 'OFFICIAL_ORG'),
-                $this->callback(static fn (SlidesTemplateCategoryQuery $query): bool => $query->getStatus() === SlidesTemplateCategoryStatus::Enabled->value),
+                $this->callback(static fn (SlidesTemplateCategoryQuery $query): bool => $query->getStatus() === SlidesTemplateCategoryStatus::Enabled->value
+                    && ! $query->isOnlyWithTemplates()),
                 $this->callback(static fn (Page $page): bool => $page->getPage() === 1 && $page->getPageNum() === 20)
             )
             ->willReturn(['total' => 1, 'list' => [$category]]);
@@ -77,7 +78,8 @@ class SlidesTemplateCategoryAppServiceTest extends TestCase
                 $this->callback(static fn (SlidesTemplateDataIsolation $actual): bool => $actual->isContainOfficialOrganization()
                     && $actual->getOrganizationCodes() === ['CURRENT_ORG', 'OFFICIAL_ORG']),
                 $this->callback(static fn (SlidesTemplateCategoryQuery $query): bool => $query->getKeyword() === 'business'
-                    && $query->getStatus() === SlidesTemplateCategoryStatus::Enabled->value),
+                    && $query->getStatus() === SlidesTemplateCategoryStatus::Enabled->value
+                    && $query->isOnlyWithTemplates()),
                 $this->callback(static fn (Page $page): bool => $page->getPage() === 1 && $page->getPageNum() === 200)
             )
             ->willReturn(['total' => 1, 'list' => [$category]]);

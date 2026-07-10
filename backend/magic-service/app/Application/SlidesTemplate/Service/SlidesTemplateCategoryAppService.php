@@ -36,6 +36,7 @@ class SlidesTemplateCategoryAppService extends AbstractKernelAppService
         $query = new SlidesTemplateCategoryQuery();
         $query->setKeyword($request->getKeyword());
         $query->setStatus(SlidesTemplateCategoryStatus::Enabled->value);
+        $query->setOnlyWithTemplates(true);
 
         $page = new Page($request->getPage(), $request->getPageSize());
         $result = $this->slidesTemplateCategoryDomainService->queriesWithTemplateCount($dataIsolation, $query, $page);
