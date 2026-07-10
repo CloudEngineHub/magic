@@ -43,6 +43,41 @@ class TOSTest extends CloudFileBaseTest
         $this->assertArrayHasKey('expires', $credential);
     }
 
+    /**
+     * 验证 TOS 临时上传凭证支持切换内网 endpoint.
+     */
+    public function testGetUploadTemporaryCredentialWithInternalEndpoint()
+    {
+        $filesystem = $this->getFilesystem();
+        $options = [
+            'internal_endpoint' => true,
+            'cache' => false,
+        ];
+
+        $credentialPolicy = new CredentialPolicy([
+            'sts' => false,
+            'roleSessionName' => 'test',
+        ]);
+        $res = $filesystem->getUploadTemporaryCredential($credentialPolicy, $options);
+        $credential = $res['temporary_credential'];
+        $this->assertArrayHasKey('host', $credential);
+        $this->assertStringContainsString('.ivolces.com', $credential['host']);
+        $this->assertStringNotContainsString('.volces.com', $credential['host']);
+
+        $credentialPolicy = new CredentialPolicy([
+            'sts' => true,
+            'roleSessionName' => 'test',
+        ]);
+        $res = $filesystem->getUploadTemporaryCredential($credentialPolicy, $options);
+        $credential = $res['temporary_credential'];
+        $this->assertArrayHasKey('host', $credential);
+        $this->assertArrayHasKey('endpoint', $credential);
+        $this->assertStringContainsString('.ivolces.com', $credential['host']);
+        $this->assertStringContainsString('.ivolces.com', $credential['endpoint']);
+        $this->assertStringNotContainsString('.volces.com', $credential['host']);
+        $this->assertStringNotContainsString('.volces.com', $credential['endpoint']);
+    }
+
     public function testUpload()
     {
         $filesystem = $this->getFilesystem();
@@ -117,6 +152,39 @@ class TOSTest extends CloudFileBaseTest
         ]);
         var_dump($link);
         $this->assertIsString($link);
+    }
+
+    /**
+     * 验证 TOS 直签链接支持切换内网 endpoint.
+     */
+    public function testGetLinkWithInternalEndpoint()
+    {
+        $filesystem = $this->getFilesystem();
+
+        $link = $filesystem->getLink('easy-file/tos_demo.png', '', 7200, [
+            'internal_endpoint' => true,
+            'cache' => false,
+        ]);
+
+        $this->assertStringContainsString('.ivolces.com', $link->getUrl());
+        $this->assertStringNotContainsString('.volces.com', $link->getUrl());
+    }
+
+    /**
+     * 验证 TOS 临时凭证签名链接支持切换内网 endpoint.
+     */
+    public function testGetPreSignedUrlByCredentialWithInternalEndpoint()
+    {
+        $filesystem = $this->getFilesystem();
+        $credentialPolicy = new CredentialPolicy([]);
+
+        $url = $filesystem->getPreSignedUrlByCredential($credentialPolicy, 'easy-file/tos_demo.png', [
+            'internal_endpoint' => true,
+            'cache' => false,
+        ]);
+
+        $this->assertStringContainsString('.ivolces.com', $url);
+        $this->assertStringNotContainsString('.volces.com', $url);
     }
 
     public function testDestroy()
