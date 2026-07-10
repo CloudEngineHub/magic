@@ -31,6 +31,7 @@ import { PluginRuntimeEmpty } from "./PluginRuntimeEmpty"
 import { PluginRuntimeFrame } from "./PluginRuntimeFrame"
 import { PluginWindowHeader } from "./PluginWindowHeader"
 import { clampPositionToContainer, getInitialPosition, saveCachedPosition } from "./position"
+import { captureFullscreenRestoreTarget, restoreFullscreenIfNeeded } from "./fullscreenRestore"
 import { getErrorMessage } from "./resourceUtils"
 import type { PluginFileAsset, PluginFilePickerRequest, PluginWindowPosition } from "./types"
 import { usePluginRuntimeBridge } from "./usePluginRuntimeBridge"
@@ -65,6 +66,7 @@ export const PluginWindow = memo(function PluginWindow({
 	const iframeRef = useRef<HTMLIFrameElement>(null)
 	const localFileInputRef = useRef<HTMLInputElement>(null)
 	const awaitingLocalFileDialogRef = useRef(false)
+	const fullscreenRestoreTargetRef = useRef<Element | null>(null)
 	const [filePickerRequest, setFilePickerRequest] = useState<PluginFilePickerRequest | null>(null)
 	const filePickerRequestRef = useRef<PluginFilePickerRequest | null>(null)
 	const projectFileBatchItemsRef = useRef<Array<ReferenceResourcePanelItem | undefined>>([])
@@ -138,12 +140,19 @@ export const PluginWindow = memo(function PluginWindow({
 		[channelToken],
 	)
 
+	const finishLocalFileDialog = useCallback(() => {
+		const restoreTarget = fullscreenRestoreTargetRef.current
+		fullscreenRestoreTargetRef.current = null
+		void restoreFullscreenIfNeeded(restoreTarget)
+	}, [])
+
 	useEffect(() => {
 		const handleWindowFocus = () => {
 			if (!awaitingLocalFileDialogRef.current) return
 			window.setTimeout(() => {
 				if (!awaitingLocalFileDialogRef.current) return
 				awaitingLocalFileDialogRef.current = false
+				finishLocalFileDialog()
 				const request = filePickerRequestRef.current
 				if (!request) return
 				filePickerRequestRef.current = null
@@ -155,7 +164,7 @@ export const PluginWindow = memo(function PluginWindow({
 		return () => {
 			window.removeEventListener("focus", handleWindowFocus)
 		}
-	}, [respondToPickFiles])
+	}, [finishLocalFileDialog, respondToPickFiles])
 
 	const handleFilePickerOpenChange = useCallback(
 		(open: boolean) => {
@@ -175,6 +184,7 @@ export const PluginWindow = memo(function PluginWindow({
 	const handleLocalFileInputChange = useCallback(
 		(event: ChangeEvent<HTMLInputElement>) => {
 			awaitingLocalFileDialogRef.current = false
+			finishLocalFileDialog()
 			const request = filePickerRequest
 			const files = Array.from(event.target.files || [])
 			event.target.value = ""
@@ -191,13 +201,14 @@ export const PluginWindow = memo(function PluginWindow({
 				(error) => respondToPickFiles(request.requestId, { error: getErrorMessage(error) }),
 			)
 		},
-		[canvas, filePickerRequest, respondToPickFiles],
+		[canvas, filePickerRequest, finishLocalFileDialog, respondToPickFiles],
 	)
 
 	const handleFilePickerSourceSelect = useCallback((source: ReferenceResourceSourceType) => {
 		awaitingLocalFileDialogRef.current = false
 		projectFileBatchItemsRef.current = []
 		if (source === REFERENCE_RESOURCE_SOURCE_TYPES.localUpload) {
+			fullscreenRestoreTargetRef.current = captureFullscreenRestoreTarget()
 			awaitingLocalFileDialogRef.current = true
 			localFileInputRef.current?.click()
 		}
