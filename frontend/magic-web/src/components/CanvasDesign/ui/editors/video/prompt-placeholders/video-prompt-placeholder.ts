@@ -11,7 +11,7 @@ import {
 } from "../../message/reference-assets/promptPlaceholderCodec"
 import type { VideoReferenceAssetInfo, VideoReferenceAssetKind } from "../video-editor-config.types"
 
-interface VideoPromptPlaceholderReference extends PromptPlaceholderReference {
+export interface VideoPromptPlaceholderReference extends PromptPlaceholderReference {
 	assetType: VideoReferenceAssetKind
 	assetTypeIndex: number
 	legacyAssetIndex: number

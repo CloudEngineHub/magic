@@ -148,6 +148,7 @@ interface ImageEditorControlsProps {
 	onPreviewMediaResource?: (resource: MediaResourceFullscreenPreviewItem) => void
 	linkedMediaItems?: LinkedEditorMediaItem[]
 	onRemoveLinkedConnection?: (connectionId: string) => void
+	renderPromptOptimizationButton?: () => React.ReactNode
 	renderSendButton?: () => React.ReactNode
 }
 
@@ -161,6 +162,7 @@ export default function ImageEditorControls(props: ImageEditorControlsProps) {
 		onPreviewMediaResource,
 		linkedMediaItems = [],
 		onRemoveLinkedConnection,
+		renderPromptOptimizationButton,
 		renderSendButton,
 	} = props
 	const { t } = useCanvasDesignI18n()
@@ -520,6 +522,7 @@ export default function ImageEditorControls(props: ImageEditorControlsProps) {
 								</SelectContent>
 							</Select>
 						)}
+						{renderPromptOptimizationButton && renderPromptOptimizationButton()}
 						{renderSendButton && renderSendButton()}
 					</div>
 				</div>

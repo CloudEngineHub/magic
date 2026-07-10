@@ -70,6 +70,7 @@ export default function ImageMessageEditor() {
 					isDragging={isDragging}
 					retryEditingElementId={retryEditingElementId}
 					onPreviewMediaResource={setPreviewingMediaResource}
+					isMediaResourcePreviewOpen={previewingMediaResource != null}
 				/>
 			) : null}
 			{previewingMediaResource != null ? (
@@ -87,6 +88,7 @@ interface ActiveImageMessageEditorProps {
 	isDragging: boolean
 	retryEditingElementId: string | null
 	onPreviewMediaResource: (resource: MediaResourceFullscreenPreviewItem) => void
+	isMediaResourcePreviewOpen: boolean
 }
 
 function ActiveImageMessageEditor({
@@ -94,6 +96,7 @@ function ActiveImageMessageEditor({
 	isDragging,
 	retryEditingElementId,
 	onPreviewMediaResource,
+	isMediaResourcePreviewOpen,
 }: ActiveImageMessageEditorProps) {
 	const { canvas } = useCanvas()
 	const [hiddenAfterSubmit, setHiddenAfterSubmit] = useState(false)
@@ -184,6 +187,7 @@ function ActiveImageMessageEditor({
 				autoFocus={isRetryEditing}
 				autoFocusAtDocumentEnd={isRetryEditing}
 				onPreviewMediaResource={onPreviewMediaResource}
+				isMediaResourcePreviewOpen={isMediaResourcePreviewOpen}
 			/>
 		)
 	}
@@ -195,6 +199,7 @@ function ActiveImageMessageEditor({
 				key={imageElement.id}
 				imageElement={imageElement}
 				onPreviewMediaResource={onPreviewMediaResource}
+				isMediaResourcePreviewOpen={isMediaResourcePreviewOpen}
 			/>
 		)
 	}

@@ -29,6 +29,7 @@ import { buildImageRequestWithLinkedEditorInputs } from "../connection/linkedIma
 interface SecondEditProps {
 	imageElement: ImageElement
 	onPreviewMediaResource?: (resource: MediaResourceFullscreenPreviewItem) => void
+	isMediaResourcePreviewOpen?: boolean
 }
 
 export default function SecondEdit(props: SecondEditProps) {
@@ -394,6 +395,7 @@ export default function SecondEdit(props: SecondEditProps) {
 				className={styles.imageMessageEditor}
 				style={{ visibility: isVisible ? "visible" : "hidden" }}
 				onPreviewMediaResource={props.onPreviewMediaResource}
+				isMediaResourcePreviewOpen={props.isMediaResourcePreviewOpen}
 			/>
 		)
 	}

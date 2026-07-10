@@ -8,8 +8,13 @@ import {
 } from "react"
 import { ArrowUp, LoaderCircle } from "lucide-react"
 import { useCanvas } from "../../../app/providers/CanvasProvider"
+import { useCanvasDesignI18n } from "../../../app/providers/I18nProvider"
+import { useHostUiLocale } from "../../../app/providers/HostUiLocaleProvider"
 import type { ImageElement } from "../../../runtime/document/types"
-import type { ReferenceResourceSourceType } from "../message/reference-assets/reference-resource.types"
+import type {
+	ReferenceResourceFileInfo,
+	ReferenceResourceSourceType,
+} from "../message/reference-assets/reference-resource.types"
 import type {
 	ReferenceResourcePanelItem,
 	ReferenceResourcePanelSelectContext,
@@ -43,6 +48,18 @@ import {
 } from "../connection/useLinkedEditorInputs"
 import { composePromptWithLinkedText } from "../connection/linkedTextPrompt"
 import type { LinkedEditorMediaPolicy } from "../connection/linkedEditorInputs"
+import { buildImageRequestWithLinkedEditorInputs } from "../connection/linkedImageRequest"
+import PromptOptimizationButton from "../prompt-optimization/PromptOptimizationButton"
+import {
+	buildPromptOptimizationUserPrompt,
+	resolvePromptOptimizationOutputLanguage,
+	type PromptOptimizationReferenceContext,
+} from "../prompt-optimization/promptOptimizationUserPrompt"
+import type { CompleteImagePromptRequest, GenerateImageRequest } from "../../../public/magic-types"
+import {
+	createPromptPlaceholderTokenFactory,
+	resolvePromptPlaceholderTokenConfig,
+} from "../message/reference-assets/promptPlaceholderTokenConfig"
 
 interface ImageEditorSurfaceProps {
 	imageElement: ImageElement
@@ -60,6 +77,7 @@ interface ImageEditorSurfaceProps {
 	className?: string
 	style?: CSSProperties
 	onPreviewMediaResource?: (resource: MediaResourceFullscreenPreviewItem) => void
+	isMediaResourcePreviewOpen?: boolean
 }
 
 export default function ImageEditorSurface(props: ImageEditorSurfaceProps) {
@@ -79,8 +97,11 @@ export default function ImageEditorSurface(props: ImageEditorSurfaceProps) {
 		className,
 		style,
 		onPreviewMediaResource,
+		isMediaResourcePreviewOpen = false,
 	} = props
 	const { canvas } = useCanvas()
+	const { t } = useCanvasDesignI18n()
+	const hostUiLocale = useHostUiLocale()
 	const [hasScrollbar, setHasScrollbar] = useState(false)
 	const [hoveredMentionPath, setHoveredMentionPath] = useState<string | null>(null)
 	const {
@@ -109,6 +130,15 @@ export default function ImageEditorSurface(props: ImageEditorSurfaceProps) {
 		targetKind: "image",
 		mediaPolicy: linkedMediaPolicy,
 	})
+	const promptPlaceholderTokenConfig = useMemo(() => resolvePromptPlaceholderTokenConfig(t), [t])
+	const buildImagePromptPlaceholderToken = useMemo(
+		() =>
+			createPromptPlaceholderTokenFactory(
+				promptPlaceholderTokenConfig.imageLabel,
+				promptPlaceholderTokenConfig,
+			),
+		[promptPlaceholderTokenConfig],
+	)
 	const canSendPrompt = Boolean(
 		composePromptWithLinkedText(linkedEditorInputs.textPrompt, prompt).trim(),
 	)
@@ -122,6 +152,10 @@ export default function ImageEditorSurface(props: ImageEditorSurfaceProps) {
 	const effectiveCurrentReferenceFiles = useMemo(
 		() => mergeUniquePaths(currentReferenceFiles, linkedActiveImagePaths),
 		[currentReferenceFiles, linkedActiveImagePaths],
+	)
+	const promptOptimizationPlaceholderPaths = useMemo(
+		() => ({ image: effectiveCurrentReferenceFiles }),
+		[effectiveCurrentReferenceFiles],
 	)
 	const effectiveIsReferenceFileLimitReached =
 		maxReferenceFiles !== undefined &&
@@ -322,6 +356,52 @@ export default function ImageEditorSurface(props: ImageEditorSurfaceProps) {
 
 	const handleSend = useCallback(() => onSend(linkedEditorInputs), [linkedEditorInputs, onSend])
 
+	const buildPromptOptimizationRequest = useCallback(() => {
+		const currentPrompt = prompt.trim()
+		const baseRequest = handlers.buildRequestParams() as GenerateImageRequest
+		const request = buildImageRequestWithLinkedEditorInputs(
+			baseRequest,
+			{
+				activeMediaReferences: linkedEditorInputs.activeMediaReferences,
+				textPrompt: linkedEditorInputs.textPrompt,
+			},
+			prompt,
+		)
+		const referenceImages = request.reference_images ?? []
+		const encodedPrompt = (request.prompt ?? currentPrompt).trim()
+		if (!encodedPrompt && referenceImages.length === 0) return null
+		const completionRequest: CompleteImagePromptRequest = {
+			user_prompt: buildPromptOptimizationUserPrompt({
+				target: "image",
+				currentPrompt: encodedPrompt,
+				outputLanguage: resolvePromptOptimizationOutputLanguage({
+					currentPrompt: encodedPrompt,
+					hostUiLocale,
+				}),
+				referenceImageCount: referenceImages.length,
+				references: buildImagePromptOptimizationReferences(
+					referenceImages,
+					config.referenceFileInfos,
+					buildImagePromptPlaceholderToken,
+				),
+			}),
+		}
+		if (request.model_id) completionRequest.model_id = request.model_id
+		if (referenceImages.length > 0) completionRequest.reference_images = referenceImages
+		if (request.reference_image_options) {
+			completionRequest.reference_image_options = request.reference_image_options
+		}
+		return completionRequest
+	}, [
+		buildImagePromptPlaceholderToken,
+		config.referenceFileInfos,
+		handlers,
+		hostUiLocale,
+		linkedEditorInputs.activeMediaReferences,
+		linkedEditorInputs.textPrompt,
+		prompt,
+	])
+
 	return (
 		<ReferenceResourceDropSurface
 			ref={setRefs}
@@ -373,6 +453,16 @@ export default function ImageEditorSurface(props: ImageEditorSurfaceProps) {
 				onPreviewMediaResource={onPreviewMediaResource}
 				linkedMediaItems={linkedEditorInputs?.mediaItems}
 				onRemoveLinkedConnection={linkedEditorInputs?.removeConnection}
+				renderPromptOptimizationButton={() => (
+					<PromptOptimizationButton
+						buildRequest={buildPromptOptimizationRequest}
+						referencePrompt={`${linkedEditorInputs.textPrompt}\n${prompt}\n${effectiveCurrentReferenceFiles.join("\n")}`}
+						placeholderPaths={promptOptimizationPlaceholderPaths}
+						onApply={handlers.setPrompt}
+						onPreviewMediaResource={onPreviewMediaResource}
+						isMediaResourcePreviewOpen={isMediaResourcePreviewOpen}
+					/>
+				)}
 				renderSendButton={() => (
 					<Button
 						className={styles.sendButton}
@@ -401,4 +491,22 @@ function mergeUniquePaths(paths: string[], extraPaths: string[]): string[] {
 		merged.push(path)
 	}
 	return merged
+}
+
+function buildImagePromptOptimizationReferences(
+	referenceImages: string[],
+	referenceFileInfos: ReferenceResourceFileInfo[],
+	buildToken: (index: number) => string,
+): PromptOptimizationReferenceContext[] {
+	const fileNameByPath = new Map(
+		referenceFileInfos.map((info) => [info.path, info.fileName || ""]),
+	)
+	return referenceImages.map((path, index) => ({
+		kind: "image",
+		placeholder: buildToken(index + 1),
+		label: `图片参考 ${index + 1}`,
+		fileName: fileNameByPath.get(path) || path.split("/").pop() || path,
+		isVisualInput: true,
+		visualReferenceIndex: index + 1,
+	}))
 }

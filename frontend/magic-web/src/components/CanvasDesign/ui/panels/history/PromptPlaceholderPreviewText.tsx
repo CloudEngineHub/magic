@@ -28,6 +28,12 @@ type PromptSegment =
 			previewItem: MediaResourceFullscreenPreviewItem | null
 	  }
 
+function getPlaceholderDisplayValue(
+	segment: Extract<PromptSegment, { type: "placeholder" }>,
+): string {
+	return segment.previewItem?.fileName ? `@${segment.previewItem.fileName}` : segment.value
+}
+
 export function PromptPlaceholderPreviewText(props: PromptPlaceholderPreviewTextProps) {
 	const { text, tokenConfig, placeholderPaths, onPreviewMediaResource } = props
 	const segments = useMemo<PromptSegment[]>(() => {
@@ -79,6 +85,7 @@ export function PromptPlaceholderPreviewText(props: PromptPlaceholderPreviewText
 		}
 
 		const previewItem = segment.previewItem
+		const displayValue = getPlaceholderDisplayValue(segment)
 
 		return (
 			<button
@@ -90,7 +97,7 @@ export function PromptPlaceholderPreviewText(props: PromptPlaceholderPreviewText
 					onPreviewMediaResource(previewItem)
 				}}
 			>
-				{segment.value}
+				{displayValue}
 			</button>
 		)
 	})

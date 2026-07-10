@@ -65,6 +65,7 @@ export default function VideoGenerateEditor() {
 					retryEditingElementId={retryEditingElementId}
 					setRetryEditingElementId={setRetryEditingElementId}
 					onPreviewMediaResource={setPreviewingMediaResource}
+					isMediaResourcePreviewOpen={previewingMediaResource != null}
 				/>
 			) : null}
 			{previewingMediaResource != null ? (
@@ -83,6 +84,7 @@ interface ActiveVideoGenerateEditorProps {
 	retryEditingElementId: string | null
 	setRetryEditingElementId: (id: string | null) => void
 	onPreviewMediaResource: (resource: MediaResourceFullscreenPreviewItem) => void
+	isMediaResourcePreviewOpen: boolean
 }
 
 function ActiveVideoGenerateEditor({
@@ -91,6 +93,7 @@ function ActiveVideoGenerateEditor({
 	retryEditingElementId,
 	setRetryEditingElementId,
 	onPreviewMediaResource,
+	isMediaResourcePreviewOpen,
 }: ActiveVideoGenerateEditorProps) {
 	const { canvas } = useCanvas()
 	const [hiddenAfterSubmit, setHiddenAfterSubmit] = useState(false)
@@ -168,6 +171,7 @@ function ActiveVideoGenerateEditor({
 			key={`${videoElement.id}-result-regenerate`}
 			videoElement={videoElement}
 			onPreviewMediaResource={onPreviewMediaResource}
+			isMediaResourcePreviewOpen={isMediaResourcePreviewOpen}
 		/>
 	) : null
 
@@ -179,6 +183,7 @@ function ActiveVideoGenerateEditor({
 			autoFocusAtDocumentEnd={isRetryEditing}
 			onGenerateSubmitSucceeded={handleGenerateSubmitSucceeded}
 			onPreviewMediaResource={onPreviewMediaResource}
+			isMediaResourcePreviewOpen={isMediaResourcePreviewOpen}
 		/>
 	) : null
 

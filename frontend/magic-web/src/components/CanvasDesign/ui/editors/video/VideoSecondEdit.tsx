@@ -25,6 +25,7 @@ import type { MediaResourceFullscreenPreviewItem } from "../../fullscreen/media-
 interface VideoSecondEditProps {
 	videoElement: VideoElement
 	onPreviewMediaResource?: (resource: MediaResourceFullscreenPreviewItem) => void
+	isMediaResourcePreviewOpen?: boolean
 }
 
 async function waitForPendingVideoGenerationResources(
@@ -230,6 +231,7 @@ export default function VideoSecondEdit(props: VideoSecondEditProps) {
 			submitTarget="new-element"
 			syncElementSize={false}
 			onPreviewMediaResource={props.onPreviewMediaResource}
+			isMediaResourcePreviewOpen={props.isMediaResourcePreviewOpen}
 		/>
 	)
 }

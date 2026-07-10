@@ -19,6 +19,7 @@ interface ImageMessageEditorRenderProps {
 	/** 与 autoFocus 联用：挂载后将光标置于提示词末尾 */
 	autoFocusAtDocumentEnd?: boolean
 	onPreviewMediaResource?: (resource: MediaResourceFullscreenPreviewItem) => void
+	isMediaResourcePreviewOpen?: boolean
 }
 
 export default function ImageMessageEditorRender(props: ImageMessageEditorRenderProps) {
@@ -27,6 +28,7 @@ export default function ImageMessageEditorRender(props: ImageMessageEditorRender
 		autoFocus = false,
 		autoFocusAtDocumentEnd = false,
 		onPreviewMediaResource,
+		isMediaResourcePreviewOpen = false,
 	} = props
 
 	const { t } = useCanvasDesignI18n()
@@ -152,6 +154,7 @@ export default function ImageMessageEditorRender(props: ImageMessageEditorRender
 			autoFocus={autoFocus}
 			autoFocusAtDocumentEnd={autoFocusAtDocumentEnd}
 			onPreviewMediaResource={onPreviewMediaResource}
+			isMediaResourcePreviewOpen={isMediaResourcePreviewOpen}
 		/>
 	)
 }

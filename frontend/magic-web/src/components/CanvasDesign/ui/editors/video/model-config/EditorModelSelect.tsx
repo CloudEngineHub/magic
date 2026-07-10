@@ -43,7 +43,7 @@ export default function EditorModelSelect(props: EditorModelSelectProps) {
 	return (
 		<Select value={selectedModelId} onValueChange={onModelChange}>
 			<SelectTrigger className={styles.selectTrigger}>
-				<div className={styles.modelOptionItemContent} style={{ maxWidth: 160 }}>
+				<div className={styles.modelOptionItemContent}>
 					{selectedModelOption.model.model_icon && (
 						<div className={styles.icon}>
 							<img

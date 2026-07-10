@@ -10,14 +10,15 @@
 	align-self: flex-start;
 	box-sizing: border-box;
 
-	/* 名义宽度由 VideoGenerateEditorRender 注入 --video-editor-shell-nominal-width（中文 580px / 其他 760px） */
-	width: min(var(--video-editor-shell-nominal-width, 580px), calc(100vw - 24px));
+	/* 名义宽度由 VideoGenerateEditorRender 注入 --video-editor-shell-nominal-width（中文 600px / 其他 760px） */
+	width: min(var(--video-editor-shell-nominal-width, 600px), calc(100vw - 24px));
 	max-width: calc(100vw - 24px);
 	padding: var(--spacing-2, 8px);
 	overflow-x: hidden;
 	background: var(--base-background, #fff);
 	border-radius: var(--border-radius-rounded-md, 8px);
-	box-shadow: var(--shadow-md-1-offset-x, 0) var(--shadow-md-1-offset-y, 4px)
+	box-shadow:
+		var(--shadow-md-1-offset-x, 0) var(--shadow-md-1-offset-y, 4px)
 			var(--shadow-md-1-blur-radius, 6px) var(--shadow-md-1-spread-radius, -1px)
 			var(--shadow-md-1-color, rgb(0 0 0 / 10%)),
 		var(--shadow-md-2-offset-x, 0) var(--shadow-md-2-offset-y, 2px)
@@ -66,11 +67,21 @@
 .bottom .left,
 .bottom .right {
 	display: flex;
-	flex-shrink: 0;
 	gap: var(--spacing-1, 4px);
 	align-items: center;
 	justify-content: center;
 	overflow: hidden;
+}
+
+.bottom .left {
+	flex: 1 1 auto;
+	min-width: 0;
+	justify-content: flex-start;
+}
+
+.bottom .right {
+	flex: 0 0 auto;
+	overflow: visible;
 }
 
 .tabsList {
@@ -126,7 +137,10 @@
 		var(--shadow-xs-1-blur-radius, 2px) var(--shadow-xs-1-spread-radius, -1px)
 		var(--shadow-xs-1-color, rgb(0 0 0 / 10%));
 	cursor: pointer;
-	transition: color 0.2s ease, background-color 0.2s ease, box-shadow 0.2s ease;
+	transition:
+		color 0.2s ease,
+		background-color 0.2s ease,
+		box-shadow 0.2s ease;
 	pointer-events: auto;
 }
 

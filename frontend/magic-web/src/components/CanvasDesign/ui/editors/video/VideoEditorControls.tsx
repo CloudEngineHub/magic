@@ -275,6 +275,7 @@ interface VideoEditorControlsProps {
 	onPreviewMediaResource?: (resource: MediaResourceFullscreenPreviewItem) => void
 	linkedMediaItems?: LinkedEditorMediaItem[]
 	onRemoveLinkedConnection?: (connectionId: string) => void
+	renderPromptOptimizationButton?: () => React.ReactNode
 }
 
 export default function VideoEditorControls(props: VideoEditorControlsProps) {
@@ -290,6 +291,7 @@ export default function VideoEditorControls(props: VideoEditorControlsProps) {
 		onPreviewMediaResource,
 		linkedMediaItems = [],
 		onRemoveLinkedConnection,
+		renderPromptOptimizationButton,
 	} = props
 	const { t } = useCanvasDesignI18n()
 	const sourceListScrollerRef = useRef<HTMLDivElement | null>(null)
@@ -659,6 +661,7 @@ export default function VideoEditorControls(props: VideoEditorControlsProps) {
 		onPreviewMediaResource,
 		onRemoveLinkedConnection,
 		handlers,
+		t,
 	])
 	const showTopImageInputs =
 		supportsStartFrame ||
@@ -1026,6 +1029,7 @@ export default function VideoEditorControls(props: VideoEditorControlsProps) {
 				</div>
 				<div className={styles.right}>
 					<VideoGenerationSettingsPopover config={config} />
+					{renderPromptOptimizationButton && renderPromptOptimizationButton()}
 					{renderSendButton && renderSendButton()}
 				</div>
 			</div>

@@ -19,8 +19,10 @@ import useElementPositionEffect from "../../../app/hooks/layout/useElementPositi
 import { useFloatingComponent } from "../../../app/hooks/layout/useFloatingComponent"
 import { ElementTypeEnum, type VideoElement } from "../../../runtime/document/types"
 import type {
+	CompleteImagePromptRequest,
 	GenerateVideoInputs,
 	GenerateVideoRequest,
+	ReferenceImageOptions,
 	VideoInputModeConfig,
 } from "../../../public/magic-types"
 import type {
@@ -37,6 +39,7 @@ import {
 	buildReferenceAssetInputs,
 	hasVideoInputs,
 	resolveReferenceAssetLimits,
+	resolveVideoFrameRoleSupport,
 	validateReferenceAssetsByLimits,
 } from "./model-config/video-editor-config.model"
 import type {
@@ -69,6 +72,24 @@ import {
 	type LinkedEditorMediaReference,
 } from "../connection/linkedEditorInputs"
 import { useLinkedEditorInputs } from "../connection/useLinkedEditorInputs"
+import PromptOptimizationButton from "../prompt-optimization/PromptOptimizationButton"
+import {
+	buildPromptOptimizationUserPrompt,
+	resolvePromptOptimizationOutputLanguage,
+	type PromptOptimizationReferenceContext,
+} from "../prompt-optimization/promptOptimizationUserPrompt"
+import { buildReferenceImageOptions } from "../../../runtime/resources/image/imageCropUtils"
+import {
+	createPromptPlaceholderTokenFactory,
+	resolvePromptPlaceholderTokenConfig,
+	type PromptPlaceholderTokenConfig,
+	type PromptPlaceholderTokenKind,
+} from "../message/reference-assets/promptPlaceholderTokenConfig"
+import {
+	encodeVideoPromptMentionsToPlaceholders,
+	resolveVideoPromptPlaceholderReferences,
+	type VideoPromptPlaceholderReference,
+} from "./prompt-placeholders/video-prompt-placeholder"
 
 interface VideoGenerateEditorRenderProps {
 	videoElement: VideoElement
@@ -83,6 +104,7 @@ interface VideoGenerateEditorRenderProps {
 	/** 尺寸选择变化时是否同步更新当前元素尺寸 */
 	syncElementSize?: UseVideoEditorConfigOptions["syncElementSize"]
 	onPreviewMediaResource?: (resource: MediaResourceFullscreenPreviewItem) => void
+	isMediaResourcePreviewOpen?: boolean
 }
 
 /** 画布内浮动的视频生成编辑器：提示词、模型、输入区与发送 */
@@ -96,8 +118,10 @@ export default function VideoGenerateEditorRender(props: VideoGenerateEditorRend
 		submitTarget = "current-element",
 		syncElementSize,
 		onPreviewMediaResource,
+		isMediaResourcePreviewOpen = false,
 	} = props
 	const { t } = useCanvasDesignI18n()
+	const promptPlaceholderTokenConfig = useMemo(() => resolvePromptPlaceholderTokenConfig(t), [t])
 	const hostUiLocale = useHostUiLocale()
 	const shellNominalWidthPx = useMemo(
 		() => getVideoEditorShellNominalWidthPx(hostUiLocale),
@@ -195,6 +219,13 @@ export default function VideoGenerateEditorRender(props: VideoGenerateEditorRend
 		() => composePromptWithLinkedText(linkedEditorInputs.textPrompt, config.prompt),
 		[config.prompt, linkedEditorInputs.textPrompt],
 	)
+	const promptOptimizationPlaceholderPaths = useMemo(() => {
+		const promptReferences = resolveVideoPromptPlaceholderReferences({
+			mode: config.selectedInputMode,
+			referenceImageInfos: mergedReferenceAssetInfos,
+		})
+		return buildVideoPromptOptimizationPlaceholderPaths(promptReferences)
+	}, [config.selectedInputMode, mergedReferenceAssetInfos])
 	const buildRequestParamsWithLinkedInputs = useCallback(
 		(requestParams: Partial<GenerateVideoRequest> = buildRequestParams()) => {
 			const requestWithPrompt = {
@@ -647,6 +678,65 @@ export default function VideoGenerateEditorRender(props: VideoGenerateEditorRend
 		videoElement,
 	])
 
+	const buildPromptOptimizationRequest = useCallback(() => {
+		const currentPrompt = composedPrompt.trim()
+		const promptReferences = resolveVideoPromptPlaceholderReferences({
+			mode: config.selectedInputMode,
+			referenceImageInfos: mergedReferenceAssetInfos,
+		})
+		const encodedPrompt = encodeVideoPromptMentionsToPlaceholders(
+			currentPrompt,
+			promptReferences,
+			promptPlaceholderTokenConfig,
+		).trim()
+		const frameImageCount = config.currentFrameImages.filter(Boolean).length
+		const referenceImages = buildVideoPromptOptimizationReferenceImages(
+			config.currentFrameImages,
+			mergedReferenceAssetInfos,
+		)
+		if (!encodedPrompt && referenceImages.length === 0) return null
+		const completionRequest: CompleteImagePromptRequest = {
+			user_prompt: buildPromptOptimizationUserPrompt({
+				target: "video",
+				currentPrompt: encodedPrompt,
+				outputLanguage: resolvePromptOptimizationOutputLanguage({
+					currentPrompt: encodedPrompt,
+					hostUiLocale,
+				}),
+				referenceImageCount: referenceImages.length,
+				frameImageCount,
+				referenceVideoCount: countVideoReferencesByKind(mergedReferenceAssetInfos, "video"),
+				referenceAudioCount: countVideoReferencesByKind(mergedReferenceAssetInfos, "audio"),
+				references: buildVideoPromptOptimizationReferences({
+					frameImageInfos: config.frameImageInfos,
+					inputModeConfig: config.currentInputModeConfig,
+					referenceImages,
+					referenceAssetInfos: mergedReferenceAssetInfos,
+					promptReferences,
+					promptPlaceholderTokenConfig,
+				}),
+			}),
+		}
+		const referenceImageOptions = buildVideoPromptOptimizationReferenceImageOptions(
+			linkedEditorInputs.activeMediaReferences,
+		)
+		if (config.selectedModelId) completionRequest.model_id = config.selectedModelId
+		if (referenceImages.length > 0) completionRequest.reference_images = referenceImages
+		if (referenceImageOptions) completionRequest.reference_image_options = referenceImageOptions
+		return completionRequest
+	}, [
+		composedPrompt,
+		config.currentFrameImages,
+		config.currentInputModeConfig,
+		config.frameImageInfos,
+		config.selectedModelId,
+		config.selectedInputMode,
+		hostUiLocale,
+		linkedEditorInputs.activeMediaReferences,
+		mergedReferenceAssetInfos,
+		promptPlaceholderTokenConfig,
+	])
+
 	const sendButtonBusy = isSending || isEstimateLoading
 
 	return (
@@ -705,6 +795,18 @@ export default function VideoGenerateEditorRender(props: VideoGenerateEditorRend
 				onPreviewMediaResource={onPreviewMediaResource}
 				linkedMediaItems={linkedEditorInputs.mediaItems}
 				onRemoveLinkedConnection={linkedEditorInputs.removeConnection}
+				renderPromptOptimizationButton={() => (
+					<PromptOptimizationButton
+						buildRequest={buildPromptOptimizationRequest}
+						referencePrompt={`${composedPrompt}\n${config.currentFrameImages
+							.filter(Boolean)
+							.join("\n")}\n${effectiveReferencePaths.join("\n")}`}
+						placeholderPaths={promptOptimizationPlaceholderPaths}
+						onApply={handlers.setPrompt}
+						onPreviewMediaResource={onPreviewMediaResource}
+						isMediaResourcePreviewOpen={isMediaResourcePreviewOpen}
+					/>
+				)}
 				renderSendButton={() => (
 					<Button
 						className={styles.sendButton}
@@ -825,10 +927,242 @@ function buildVideoRequestWithReferenceAssets(options: {
 	}
 }
 
+function buildVideoPromptOptimizationReferences(options: {
+	frameImageInfos: Array<{ path: string; fileName?: string } | undefined>
+	inputModeConfig: VideoInputModeConfig | undefined
+	referenceImages: string[]
+	referenceAssetInfos: VideoReferenceAssetInfo[]
+	promptReferences: VideoPromptPlaceholderReference[]
+	promptPlaceholderTokenConfig: PromptPlaceholderTokenConfig
+}): PromptOptimizationReferenceContext[] {
+	const {
+		frameImageInfos,
+		inputModeConfig,
+		referenceImages,
+		referenceAssetInfos,
+		promptReferences,
+		promptPlaceholderTokenConfig,
+	} = options
+	const visualIndexByPath = new Map(
+		referenceImages.map((path, index) => [path, index + 1] as const),
+	)
+	const promptReferenceByPath = new Map(
+		promptReferences.map((reference) => [reference.path, reference]),
+	)
+	const references: PromptOptimizationReferenceContext[] = []
+	const referenceByPath = new Map<string, PromptOptimizationReferenceContext>()
+
+	const pushReference = (path: string, reference: PromptOptimizationReferenceContext) => {
+		const existing = referenceByPath.get(path)
+		if (existing) {
+			mergePromptOptimizationReference(existing, reference)
+			return
+		}
+		referenceByPath.set(path, reference)
+		references.push(reference)
+	}
+
+	const frameRoles = buildVideoPromptOptimizationFrameRoles(inputModeConfig)
+	frameImageInfos.forEach((info, index) => {
+		if (!info?.path) return
+		const frameRole = frameRoles[index]
+		pushReference(info.path, {
+			kind: "image",
+			label: getVideoFramePromptOptimizationLabel(frameRole, index),
+			fileName: info.fileName || getFileNameFromPath(info.path),
+			isVisualInput: true,
+			visualReferenceIndex: visualIndexByPath.get(info.path),
+			role: getVideoFramePromptOptimizationRole(frameRole),
+		})
+	})
+
+	const assetTypeCounters: Record<VideoReferenceAssetInfo["assetType"], number> = {
+		image: 0,
+		video: 0,
+		audio: 0,
+	}
+	referenceAssetInfos.forEach((info) => {
+		assetTypeCounters[info.assetType] += 1
+		const promptReference = promptReferenceByPath.get(info.path)
+		pushReference(info.path, {
+			kind: info.assetType,
+			placeholder: promptReference
+				? buildVideoPromptOptimizationPlaceholder(
+						promptReference,
+						promptPlaceholderTokenConfig,
+					)
+				: undefined,
+			label: getVideoAssetPromptOptimizationLabel(
+				info.assetType,
+				assetTypeCounters[info.assetType],
+			),
+			fileName: info.fileName || getFileNameFromPath(info.path),
+			isVisualInput: info.assetType === "image",
+			visualReferenceIndex:
+				info.assetType === "image" ? visualIndexByPath.get(info.path) : undefined,
+			role: getVideoAssetPromptOptimizationRole(info.assetType),
+		})
+	})
+
+	return references
+}
+
+function mergePromptOptimizationReference(
+	target: PromptOptimizationReferenceContext,
+	source: PromptOptimizationReferenceContext,
+): void {
+	if (!target.placeholder && source.placeholder) target.placeholder = source.placeholder
+	if (!target.label && source.label) target.label = source.label
+	if (!target.fileName && source.fileName) target.fileName = source.fileName
+	if (!target.visualReferenceIndex && source.visualReferenceIndex) {
+		target.visualReferenceIndex = source.visualReferenceIndex
+	}
+	target.isVisualInput = Boolean(target.isVisualInput || source.isVisualInput)
+	target.role = mergePromptOptimizationReferenceRole(target.role, source.role)
+}
+
+function mergePromptOptimizationReferenceRole(
+	current: string | undefined,
+	next: string | undefined,
+): string | undefined {
+	if (!next) return current
+	if (!current) return next
+	if (current.includes(next)) return current
+	return `${current}；${next}`
+}
+
+function buildVideoPromptOptimizationFrameRoles(
+	inputModeConfig: VideoInputModeConfig | undefined,
+): Array<"start" | "end"> {
+	const { supportsStartFrame, supportsEndFrame } = resolveVideoFrameRoleSupport(inputModeConfig)
+	const roles: Array<"start" | "end"> = []
+	if (supportsStartFrame) roles.push("start")
+	if (supportsEndFrame) roles.push("end")
+	return roles
+}
+
+function getVideoFramePromptOptimizationLabel(
+	role: "start" | "end" | undefined,
+	index: number,
+): string {
+	if (role === "start") return "首帧参考"
+	if (role === "end") return "尾帧参考"
+	return `视频帧参考 ${index + 1}`
+}
+
+function getVideoFramePromptOptimizationRole(role: "start" | "end" | undefined): string {
+	if (role === "start") return "作为视频起始画面的视觉约束"
+	if (role === "end") return "作为视频结束画面的视觉约束"
+	return "作为视频画面关键帧参考"
+}
+
+function getVideoAssetPromptOptimizationLabel(
+	assetType: VideoReferenceAssetInfo["assetType"],
+	index: number,
+): string {
+	if (assetType === "image") return `图片参考 ${index}`
+	if (assetType === "video") return `视频文件引用 ${index}`
+	return `音频文件引用 ${index}`
+}
+
+function getVideoAssetPromptOptimizationRole(
+	assetType: VideoReferenceAssetInfo["assetType"],
+): string {
+	if (assetType === "image") return "作为视频生成的图片参考"
+	if (assetType === "video") return "作为视频文件引用"
+	return "作为音频文件引用"
+}
+
+function buildVideoPromptOptimizationPlaceholder(
+	reference: VideoPromptPlaceholderReference,
+	tokenConfig: PromptPlaceholderTokenConfig,
+): string {
+	const tokenFactory = createPromptPlaceholderTokenFactory(
+		getVideoPromptOptimizationPlaceholderLabel(reference.assetType, tokenConfig),
+		tokenConfig,
+	)
+	return tokenFactory(reference.assetTypeIndex)
+}
+
+function getVideoPromptOptimizationPlaceholderLabel(
+	assetType: VideoReferenceAssetInfo["assetType"],
+	tokenConfig: PromptPlaceholderTokenConfig,
+): string {
+	if (assetType === "image") return tokenConfig.imageLabel
+	if (assetType === "video") return tokenConfig.videoLabel
+	return tokenConfig.audioLabel
+}
+
+function buildVideoPromptOptimizationPlaceholderPaths(
+	promptReferences: VideoPromptPlaceholderReference[],
+): Partial<Record<PromptPlaceholderTokenKind, string[]>> {
+	const placeholderPaths: Partial<Record<PromptPlaceholderTokenKind, string[]>> = {}
+	promptReferences.forEach((reference) => {
+		const paths = placeholderPaths[reference.assetType] ?? []
+		paths[reference.assetTypeIndex - 1] = reference.path
+		placeholderPaths[reference.assetType] = paths
+	})
+	return placeholderPaths
+}
+
+function buildVideoPromptOptimizationReferenceImages(
+	frameImages: Array<string | undefined>,
+	referenceAssetInfos: VideoReferenceAssetInfo[],
+): string[] {
+	return mergeUniquePaths([
+		...frameImages.filter((path): path is string => Boolean(path)),
+		...referenceAssetInfos
+			.filter((info) => info.assetType === "image")
+			.map((info) => info.path),
+	])
+}
+
+function buildVideoPromptOptimizationReferenceImageOptions(
+	references: LinkedEditorMediaReference[],
+): ReferenceImageOptions | undefined {
+	const options = references.flatMap((reference) => {
+		if (reference.kind !== "image") return []
+		return (
+			buildReferenceImageOptions({
+				filePath: reference.path,
+				crop: reference.sourceCrop,
+			}) ?? []
+		)
+	})
+	return options.length > 0 ? dedupeReferenceImageOptions(options) : undefined
+}
+
+function dedupeReferenceImageOptions(options: ReferenceImageOptions): ReferenceImageOptions {
+	const seenPathSet = new Set<string>()
+	return options.filter((option) => {
+		if (!option.path || seenPathSet.has(option.path)) return false
+		seenPathSet.add(option.path)
+		return true
+	})
+}
+
+function mergeUniquePaths(paths: string[]): string[] {
+	const result: string[] = []
+	const seenPathSet = new Set<string>()
+	for (const path of paths) {
+		if (!path || seenPathSet.has(path)) continue
+		seenPathSet.add(path)
+		result.push(path)
+	}
+	return result
+}
+
+function countVideoReferencesByKind(
+	referenceAssetInfos: VideoReferenceAssetInfo[],
+	kind: "video" | "audio",
+): number {
+	return referenceAssetInfos.filter((info) => info.assetType === kind).length
+}
+
 /** 中文界面略窄；英文等其它语言略宽，避免输入时外壳宽度抖动 */
 function getVideoEditorShellNominalWidthPx(languageCode: string | undefined): number {
 	if (!languageCode) return 760
 	const normalized = languageCode.toLowerCase().replace(/-/g, "_")
-	if (normalized.startsWith("zh")) return 580
+	if (normalized.startsWith("zh")) return 600
 	return 760
 }
