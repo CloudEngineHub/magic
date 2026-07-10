@@ -47,6 +47,16 @@ The target users."""
         description="""<!--zh: 核心使用场景。-->
 The core usage scenario."""
     )
+    anonymous_access: Optional[bool] = Field(
+        default=None,
+        description="""<!--zh: 微应用是否允许未登录匿名访问。-->
+Whether the micro-app allows unauthenticated anonymous access."""
+    )
+    auth_notes: Optional[str] = Field(
+        default=None,
+        description="""<!--zh: 匿名与登录策略说明，例如为什么必须登录或为什么允许匿名。-->
+Notes about anonymous/login strategy, such as why login is required or why anonymous access is allowed."""
+    )
     entry_files: List[HtmlAppMemoryFile] = Field(
         default_factory=list,
         description="""<!--zh: 入口文件和关键文件列表。-->
@@ -127,6 +137,15 @@ def _overview(params: UpdateHtmlAppMemoryParams) -> str:
     return "\n".join(lines) if lines else "- 暂未记录。"
 
 
+def _auth_strategy(params: UpdateHtmlAppMemoryParams) -> str:
+    lines = []
+    if params.anonymous_access is not None:
+        lines.append(f"- anonymous：`{str(params.anonymous_access).lower()}`")
+    if params.auth_notes:
+        lines.append(f"- 说明：{params.auth_notes}")
+    return "\n".join(lines) if lines else "- 暂未记录。"
+
+
 def _iteration_history(content: str, params: UpdateHtmlAppMemoryParams) -> str:
     existing = _section_body(content, "迭代历史")
     lines = [line for line in existing.splitlines() if line.strip() and "暂未记录" not in line]
@@ -137,13 +156,17 @@ def _iteration_history(content: str, params: UpdateHtmlAppMemoryParams) -> str:
 
 def _render_memory(content: str, params: UpdateHtmlAppMemoryParams) -> str:
     magicbase_block = _existing_magicbase_block(content)
-    return f"""# HTML-APP.md
+    return f"""# MICRO-APP.md
 
-这个文件是当前 workspace 中唯一 HTML 微应用的项目记忆。HTML 页面不要读取它；它只服务后续开发和迭代。
+这个文件是当前 workspace 中唯一微应用的项目记忆。HTML 页面不要读取它；README.md 不承担记忆职责。它只服务后续开发和迭代。
 
 ## 应用概览
 
 {_overview(params)}
+
+## 匿名与登录策略
+
+{_auth_strategy(params)}
 
 ## 入口与文件
 
@@ -174,35 +197,35 @@ def _render_memory(content: str, params: UpdateHtmlAppMemoryParams) -> str:
 @tool(name="update_html_app_memory")
 class UpdateHtmlAppMemory(BaseTool[UpdateHtmlAppMemoryParams]):
     """<!--zh
-    更新 workspace 根目录的 HTML-APP.md 项目记忆。
+    更新 workspace 根目录的 MICRO-APP.md 项目记忆。
 
-    只用于记录当前 HTML 微应用的真实完成状态。不要用 write_file 或 edit_file 直接修改 HTML-APP.md。
+    只用于记录当前微应用的真实完成状态。不要用 write_file 或 edit_file 直接修改 MICRO-APP.md。
     -->
-    Update the workspace-root HTML-APP.md project memory.
+    Update the workspace-root MICRO-APP.md project memory.
 
-    Use this only to record the actual completed state of the current HTML micro-app. Do not use write_file or edit_file to modify HTML-APP.md directly.
+    Use this only to record the actual completed state of the current micro-app. Do not use write_file or edit_file to modify MICRO-APP.md directly.
     """
     name = "update_html_app_memory"
 
     def get_prompt_hint(self) -> str:
         return """\
 <!--zh
-开发 HTML 微应用时，任务结束前用本工具更新 `HTML-APP.md`。
+开发微应用时，任务结束前用本工具更新 `MICRO-APP.md`。
 
 规则：
 - 只记录真实完成的内容，不记录计划或未完成能力。
-- `HTML-APP.md` 只展示最新项目状态和最新 MagicBase 表结构，不记录迁移历史。
+- `MICRO-APP.md` 只展示最新项目状态、匿名/登录策略和最新 MagicBase 表结构，不记录迁移历史。
 - MagicBase 迁移历史由 `.magicbase/migrations.json` 自动维护，agent 不要手写。
-- 不要用 write_file、edit_file、multi_edit_file 或 range 编辑工具修改 `HTML-APP.md`。
+- 不要用 write_file、edit_file、multi_edit_file 或 range 编辑工具修改 `MICRO-APP.md`。
 - “铁律”用于记录后续迭代绝不能破坏的约束。
 -->
-Use this tool before ending an HTML micro-app development task to update `HTML-APP.md`.
+Use this tool before ending a micro-app development task to update `MICRO-APP.md`.
 
 Rules:
 - Record only what was actually completed, not plans or unfinished capabilities.
-- `HTML-APP.md` shows the latest project state and latest MagicBase data model only. It does not store migration history.
+- `MICRO-APP.md` shows the latest project state, anonymous/login strategy, and latest MagicBase data model only. It does not store migration history.
 - MagicBase migration history is maintained automatically in `.magicbase/migrations.json`. The agent must not write it manually.
-- Do not use write_file, edit_file, multi_edit_file, or range edit tools to modify `HTML-APP.md`.
+- Do not use write_file, edit_file, multi_edit_file, or range edit tools to modify `MICRO-APP.md`.
 - Use "铁律" for constraints that future iterations must not break.
 """
 
@@ -215,6 +238,8 @@ Rules:
                     params.app_type,
                     params.target_users,
                     params.core_scenario,
+                    params.anonymous_access is not None,
+                    params.auth_notes,
                     params.entry_files,
                     params.features,
                     params.runtime_notes,
@@ -222,30 +247,30 @@ Rules:
                     params.iteration_summary,
                 ]
             ):
-                return ToolResult.error("No project memory fields were provided. Provide the completed app state before updating HTML-APP.md.")
+                return ToolResult.error("No project memory fields were provided. Provide the completed app state before updating MICRO-APP.md.")
 
             updated = _render_memory(content, params)
             await write_html_app_memory(updated)
             return ToolResult(
-                content="Updated HTML-APP.md project memory. The MagicBase data model section was preserved, and migration history remains in .magicbase/migrations.json.",
-                data={"file_path": "HTML-APP.md"},
+                content="Updated MICRO-APP.md project memory. The MagicBase data model section was preserved, and migration history remains in .magicbase/migrations.json.",
+                data={"file_path": "MICRO-APP.md"},
             )
         except Exception as e:
-            return ToolResult.error(f"Failed to update HTML-APP.md project memory: {e}")
+            return ToolResult.error(f"Failed to update MICRO-APP.md project memory: {e}")
 
     async def get_tool_detail(self, tool_context: ToolContext, result: ToolResult, arguments: Dict[str, Any] = None) -> Optional[ToolDetail]:
         if not result.ok:
             return ToolDetail(
                 type=DisplayType.MD,
                 data=FileContent(
-                    file_name="HTML-APP.md",
-                    content="HTML-APP.md 更新失败，请稍后重试或检查项目记忆参数。",
+                    file_name="MICRO-APP.md",
+                    content="MICRO-APP.md 更新失败，请稍后重试或检查项目记忆参数。",
                 ),
             )
         return ToolDetail(
             type=DisplayType.MD,
             data=FileContent(
-                file_name="HTML-APP.md",
-                content="HTML-APP.md 项目记忆已更新。",
+                file_name="MICRO-APP.md",
+                content="MICRO-APP.md 项目记忆已更新。",
             ),
         )

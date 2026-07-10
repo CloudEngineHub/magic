@@ -206,6 +206,10 @@ readonly class MagicBaseAccessControl
 
     private function buildActorContext(MagicUserAuthorization $authorization): ActorContext
     {
+        if ($authorization->getId() === '') {
+            return new ActorContext('', $authorization->getOrganizationCode(), []);
+        }
+
         $dataIsolation = DataIsolation::simpleMake($authorization->getOrganizationCode(), $authorization->getId());
         $departmentIds = $this->departmentUserDomainService->getDepartmentIdsByUserId($dataIsolation, $authorization->getId(), true);
         return new ActorContext($authorization->getId(), $authorization->getOrganizationCode(), $departmentIds);
@@ -289,6 +293,9 @@ readonly class MagicBaseAccessControl
         $project = $this->getProjectOrFail($projectId);
         if (! $this->isSameOrganization($authorization, $project)) {
             $this->forbidden($deniedMessage);
+        }
+        if (MagicBaseRuntimeProjectAccessContext::hasShareAccess($projectId)) {
+            return $project;
         }
         if ($this->isProjectOwner($authorization, $project)) {
             return $project;

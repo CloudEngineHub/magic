@@ -124,7 +124,7 @@ On failure: re-read and verify anchor existence/uniqueness -> increase anchor le
             file_path = resolved.path
             fuzzy_warning = resolved.warning
             if is_html_app_memory_path(file_path):
-                return ToolResult.error("HTML-APP.md is managed by update_html_app_memory. Use that tool instead of edit_file_range so MagicBase data model records are not overwritten.")
+                return ToolResult.error("MICRO-APP.md is managed by update_html_app_memory. Use that tool instead of edit_file_range so MagicBase data model records are not overwritten.")
             ai_warnings = []
             ai_warnings.extend(self._strip_line_number_prefixes(file_path, params))
             if fuzzy_warning:

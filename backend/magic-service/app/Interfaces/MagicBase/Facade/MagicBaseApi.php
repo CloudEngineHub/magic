@@ -14,8 +14,10 @@ use App\Application\MagicBase\Service\MagicBaseQueryAppService;
 use App\Application\MagicBase\Service\MagicBaseRelationAppService;
 use App\Application\MagicBase\Service\MagicBaseRowAppService;
 use App\Application\MagicBase\Service\MagicBaseTableAppService;
+use App\Application\MagicBase\Support\MagicBaseRuntimeProjectAccessContext;
 use App\Domain\MagicBase\Exception\MagicBaseExceptionBuilder;
 use App\Infrastructure\Core\AbstractApi;
+use App\Infrastructure\Util\Context\RequestCoContext;
 use App\Interfaces\Authorization\Web\MagicUserAuthorization;
 use App\Interfaces\MagicBase\Assembler\MagicBaseResponseAssembler;
 use App\Interfaces\MagicBase\DTO\CreateColumnRequest;
@@ -25,8 +27,8 @@ use App\Interfaces\MagicBase\DTO\CreateTableRequest;
 use App\Interfaces\MagicBase\DTO\QueryRowsRequest;
 use App\Interfaces\MagicBase\DTO\UpdateTableRequest;
 use Dtyq\ApiResponse\Annotation\ApiResponse;
-use Dtyq\SuperMagic\Application\SuperAgent\Service\AccessTokenAuthorizationService;
 use Dtyq\SuperMagic\Domain\Share\Constant\ResourceType;
+use Dtyq\SuperMagic\Domain\Share\Constant\ShareAccessType;
 use Dtyq\SuperMagic\Domain\Share\Service\ResourceShareDomainService;
 use Dtyq\SuperMagic\Infrastructure\Utils\AccessTokenUtil;
 use Hyperf\Di\Annotation\Inject;
@@ -52,9 +54,6 @@ class MagicBaseApi extends AbstractApi
 
     #[Inject]
     protected MagicBaseAdminAppService $adminAppService;
-
-    #[Inject]
-    protected AccessTokenAuthorizationService $accessTokenAuthorizationService;
 
     #[Inject]
     protected ResourceShareDomainService $resourceShareDomainService;
@@ -330,7 +329,30 @@ class MagicBaseApi extends AbstractApi
             $this->denyRuntimeAccess();
         }
 
-        return $this->accessTokenAuthorizationService->validateTokenAndCreateUserAuthorization($shareToken);
+        $currentAuthorization = RequestCoContext::getUserAuthorization();
+        if ($shareEntity->getShareType() === ShareAccessType::TeamShare->value) {
+            if ($currentAuthorization === null) {
+                $this->denyRuntimeAccess();
+            }
+
+            $this->resourceShareDomainService->validateShareAccess(
+                $shareEntity,
+                $currentAuthorization->getId(),
+                $currentAuthorization->getOrganizationCode(),
+                $shareEntity->getShareCode()
+            );
+            MagicBaseRuntimeProjectAccessContext::allowShareAccess($projectId);
+            return $currentAuthorization;
+        }
+
+        MagicBaseRuntimeProjectAccessContext::allowShareAccess($projectId);
+        if ($currentAuthorization !== null && $currentAuthorization->getOrganizationCode() === $shareEntity->getOrganizationCode()) {
+            return $currentAuthorization;
+        }
+
+        return (new MagicUserAuthorization())
+            ->setId('')
+            ->setOrganizationCode($shareEntity->getOrganizationCode());
     }
 
     /**

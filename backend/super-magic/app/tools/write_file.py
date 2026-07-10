@@ -111,7 +111,7 @@ class WriteFile(AbstractFileTool[WriteFileParams], WorkspaceTool[WriteFileParams
             # 使用父类方法获取安全的文件路径
             file_path = self.resolve_path(params.file_path)
             if is_html_app_memory_path(file_path):
-                return ToolResult.error("HTML-APP.md is managed by update_html_app_memory. Use that tool instead of write_file so MagicBase data model records are not overwritten.")
+                return ToolResult.error("MICRO-APP.md is managed by update_html_app_memory. Use that tool instead of write_file so MagicBase data model records are not overwritten.")
             
             initial_file_exists = await async_exists(file_path)
 

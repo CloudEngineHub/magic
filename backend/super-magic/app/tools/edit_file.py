@@ -131,7 +131,7 @@ When editing the same file multiple times:
             file_path = resolved.path
             fuzzy_warning = resolved.warning
             if is_html_app_memory_path(file_path):
-                return ToolResult.error("HTML-APP.md is managed by update_html_app_memory. Use that tool instead of edit_file so MagicBase data model records are not overwritten.")
+                return ToolResult.error("MICRO-APP.md is managed by update_html_app_memory. Use that tool instead of edit_file so MagicBase data model records are not overwritten.")
             # Check and strip line numbers from old_string
             old_string_cleaned, had_line_numbers, line_warning = LineNumberHandler.detect_and_strip(params.old_string)
             if had_line_numbers:

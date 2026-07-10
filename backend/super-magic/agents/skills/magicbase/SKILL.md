@@ -14,7 +14,7 @@ MagicBase has two layers:
 
 Do not expose schema creation inside HTML pages. HTML code should only read and write rows on tables that already exist.
 
-Project memory uses `HTML-APP.md` for the latest human-readable data model. Do not edit it directly with file-editing tools. MagicBase schema tools maintain `.magicbase/migrations.json`; after successful table or column changes, they refresh the latest MagicBase data model in `HTML-APP.md`. If tools report a `Pending` migration at the start of a later task, query MagicBase first so confirmable records can be repaired before more schema work.
+Project memory uses `MICRO-APP.md` for the latest human-readable app memory and MagicBase data model. Do not edit it directly with file-editing tools. MagicBase schema tools maintain `.magicbase/migrations.json`; after successful table or column changes, they refresh the latest MagicBase data model in `MICRO-APP.md`. If tools report a `Pending` migration at the start of a later task, query MagicBase first so confirmable records can be repaired before more schema work. If a legacy `HTML-APP.md` exists, read it for context and migrate the memory to `MICRO-APP.md` before finishing.
 
 MagicBase exposes a simplified MySQL-like column model. Use only these `data_type` values when creating tables or columns: `text`, `number`, `datetime`, `boolean`, `json`.
 
@@ -45,6 +45,7 @@ const context = await window.Magic.getContext();
 
 For data apps with ownership or collaboration:
 
+- Ensure `app.json.anonymous` matches the permission model. Apps that depend on real current-user identity, `created_by`, owner-only editing, departments, organizations, or team collaboration must set `anonymous:false`. Anonymous apps can only use identity-independent public flows such as public display or anonymous intake.
 - Call `window.Magic.getContext()` during initialization before user-dependent reads or writes.
 - Prefer MagicBase system fields for ownership. MagicBase automatically records `created_by` for every row, and backend `private_user` permissions are based on this system field.
 - Do not create a dynamic `creator_user_id` column just to enforce creator permissions. Create business identity fields only when the app needs UI display, filtering, assignment, or domain-specific ownership beyond the system creator, such as `creator_name`, `owner_user_id`, `owner_name`, `assignee_user_id`, or `updated_by_user_id`.
@@ -198,8 +199,8 @@ Canonical runtime signatures:
 Never omit the first `tableId` argument. In particular, `updateRow(recordId, data, select)` is wrong and will not update the intended MagicBase table.
 
 1. Call `query_magicbase_tables` to check whether the required table already exists.
-2. If the table is missing, call `create_magicbase_table`; the tool automatically records migration history in `.magicbase/migrations.json` and refreshes the latest MagicBase data model in `HTML-APP.md`.
-3. If columns are missing, call `create_magicbase_column`; the tool automatically records migration history in `.magicbase/migrations.json` and refreshes the latest MagicBase data model in `HTML-APP.md`.
+2. If the table is missing, call `create_magicbase_table`; the tool automatically records migration history in `.magicbase/migrations.json` and refreshes the latest MagicBase data model in `MICRO-APP.md`.
+3. If columns are missing, call `create_magicbase_column`; the tool automatically records migration history in `.magicbase/migrations.json` and refreshes the latest MagicBase data model in `MICRO-APP.md`.
 4. Generate HTML only after you have a real `table.id` from MagicBase tools or from a successful reconciliation against MagicBase.
 
 Never pass `table_key` or `table_name` as `tableId` to `window.Magic.db`. The HTML code must use the real table id returned by MagicBase tools.

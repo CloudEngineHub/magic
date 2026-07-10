@@ -120,7 +120,7 @@ class PlanTool(BaseUserToolCallTool[PlanParams]):
 - 新建 HTML 微应用、较大改动、改动文件结构、或涉及 MagicBase 建表/加字段时，必须先调用 plan 并等待用户确认。
 - 是否调用 ask_user 由你判断：只有缺少会显著改变产品方向的信息，且无法用合理默认值安全推进时才提问；短需求可以合理推断时，直接带明确假设进入 plan。
 - 用户确认 plan 之前，不要写文件，不要建表，不要加字段，不要声称已开始开发。
-- 若方案涉及 MagicBase 表结构变更，计划中要说明 MagicBase schema 工具会自动维护 `.magicbase/migrations.json`，并在成功后刷新 `HTML-APP.md` 的最新表结构；agent 不需要单独编辑文件写 Pending/Success/Failed。
+- 若方案涉及 MagicBase 表结构变更，计划中要说明 MagicBase schema 工具会自动维护 `.magicbase/migrations.json`，并在成功后刷新 `MICRO-APP.md` 的最新表结构；agent 不需要单独编辑文件写 Pending/Success/Failed。
 - 用户要求修改 plan 时，不要实现；根据用户意见调整方案后再次调用 plan。
 - 用户取消或超时时，不要继续实现。
 
@@ -142,10 +142,11 @@ Plan content must be concrete enough for the user to approve:
   - Persistence: which dynamic business fields must be stored in MagicBase and which are only temporary UI state. Do not list MagicBase system fields such as `id`, `record_id`, `created_at`, `updated_at`, `created_by`, `project_id`, `table_id`, or `organization_code` as writable data_model fields.
 - Put the expanded, real feature scope into `requirements`, the derived persistent fields into `data_model`, and the expanded verifiable outcomes into `acceptance_criteria`.
 - If the plan includes teamwork, ownership, creator/assignee fields, edit/delete permissions, or "my records" filtering, explicitly state that the HTML app must call `window.Magic.getContext()` first, which MagicBase fields store stable identity, which display fields come from context user information, and which operations are limited to the current user. Acceptance criteria must verify that non-owners do not see or cannot use edit/delete actions and that the app never writes fake users such as unknown, guest, visitor, or unnamed users.
+- 明确 `app.json.anonymous` 的取值。涉及本人编辑、我的数据、创建人权限、用户/部门/组织隔离、团队协作时默认 `anonymous:false`；公开展示、匿名反馈、匿名表单类应用才可 `anonymous:true`。
 - `assumptions` must name the concrete defaults used for product expansion. Do not use vague statements such as "simple and easy to use".
 - State what will be built, the real files to create or change, and the useful data model needed by the approved product loop when persistence is needed.
 - 数据型微应用默认优先使用 MagicBase：问卷、表单、待办、CRUD、小后台、dashboard、tracker 或任何用户提交/编辑/统计/查询/导出的数据，都应在 plan 中包含 data_model；只有纯展示、纯静态、纯计算器、没有用户数据或用户明确不要保存数据时才为空。
-- 新建或修改微应用时，`files` 应包含任务结束前会通过 `update_html_app_memory` 创建或更新的根目录 `HTML-APP.md`，但不要在用户确认 plan 前写入它。
+- 新建或修改微应用时，`files` 应包含 `app.json`、`magic.project.js`、入口 HTML，以及任务结束前会通过 `update_html_app_memory` 创建或更新的 `MICRO-APP.md`，但不要在用户确认 plan 前写入它。
 - Do not list fake pages, speculative features, or files that will not actually be produced.
 - Keep requirements and acceptance criteria short, concrete, and verifiable.
 - Pass list fields as JSON arrays, not Markdown or YAML strings. `files` must be an array of objects with `path` and `purpose`. `data_model` must be an array of objects with `table_name`, `purpose`, and `fields`.
@@ -154,7 +155,7 @@ When to call plan:
 - Before creating an HTML micro-app, making a substantial change, changing file structure, or creating/changing MagicBase tables or columns.
 - Decide whether ask_user is needed. Call it only when missing information would significantly change the product direction and cannot be safely handled with reasonable defaults. If a short request is reasonably inferable, proceed to plan with explicit assumptions.
 - Before the user approves the plan, do not write files, create tables, add columns, or claim development has started.
-- If the plan involves MagicBase schema changes, state that MagicBase schema tools will automatically maintain `.magicbase/migrations.json` and refresh the latest data model in `HTML-APP.md` after success. The agent does not need separate file edits for Pending/Success/Failed migration records.
+- If the plan involves MagicBase schema changes, state that MagicBase schema tools will automatically maintain `.magicbase/migrations.json` and refresh the latest data model in `MICRO-APP.md` after success. The agent does not need separate file edits for Pending/Success/Failed migration records.
 - If the user requests plan changes, do not implement. Revise the plan and call plan again.
 - If the user cancels or approval times out, do not continue implementation.
 
@@ -176,10 +177,11 @@ Plan content must be concrete enough for user approval:
   - Persistence: which dynamic business fields must be stored in MagicBase and which are only temporary UI state. Do not list MagicBase system fields such as `id`, `record_id`, `created_at`, `updated_at`, `created_by`, `project_id`, `table_id`, or `organization_code` as writable data_model fields.
 - Put the expanded, real feature scope into `requirements`, the derived persistent fields into `data_model`, and the expanded verifiable outcomes into `acceptance_criteria`.
 - If the plan includes teamwork, ownership, creator/assignee fields, edit/delete permissions, or "my records" filtering, explicitly state that the HTML app must call `window.Magic.getContext()` first, which MagicBase fields store stable identity, which display fields come from context user information, and which operations are limited to the current user. Acceptance criteria must verify that non-owners do not see or cannot use edit/delete actions and that the app never writes fake users such as unknown, guest, visitor, or unnamed users.
+- Explicitly state the `app.json.anonymous` value. Apps with owner-only editing, my data, creator permissions, user/department/organization isolation, or team collaboration default to `anonymous:false`; public showcases, anonymous feedback, and anonymous forms may use `anonymous:true`.
 - `assumptions` must name the concrete defaults used for product expansion. Do not use vague statements such as "simple and easy to use".
 - State what will be built, the real files to create or change, and the useful data model needed by the approved product loop when persistence is needed.
 - Data-oriented micro-apps should use MagicBase by default. Surveys, forms, todos, CRUD apps, admin panels, dashboards, trackers, and any user-submitted/editable/analytical/searchable/exportable data should include data_model in the plan. Leave it empty only for pure showcase/static/calculator apps, apps with no user data, or explicit no-persistence requests.
-- For new or modified micro-apps, `files` should include the root-level `HTML-APP.md` that will be created or updated through `update_html_app_memory` before the task ends, but do not write it before user approval.
+- For new or modified micro-apps, `files` should include `app.json`, `magic.project.js`, the entry HTML, and the `MICRO-APP.md` that will be created or updated through `update_html_app_memory` before the task ends, but do not write it before user approval.
 - Do not list fake pages, speculative features, or files that will not actually be produced.
 - Keep requirements and acceptance criteria short, concrete, and verifiable.
 - Pass list fields as JSON arrays, not Markdown or YAML strings. `files` must be an array of objects with `path` and `purpose`. `data_model` must be an array of objects with `table_name`, `purpose`, and `fields`.

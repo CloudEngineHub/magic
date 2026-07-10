@@ -481,15 +481,15 @@ class CreateMagicTable(BaseTool[CreateMagicbaseTableParams]):
 <!--zh
 HTML 微应用工作流中，create_magicbase_table 会自动维护 MagicBase schema 记录：
 - 调用 MagicBase 前自动在 workspace 根目录 `.magicbase/migrations.json` 追加 Pending migration
-- 成功后自动更新为 Success，补真实 table_id，并刷新 `HTML-APP.md` 里的最新 MagicBase 表结构
-- 失败后自动更新为 Failed，并记录简短错误原因，不修改 `HTML-APP.md` 的正式表结构
+- 成功后自动更新为 Success，补真实 table_id，并刷新 `MICRO-APP.md` 里的最新 MagicBase 表结构
+- 失败后自动更新为 Failed，并记录简短错误原因，不修改 `MICRO-APP.md` 的正式表结构
 
 不要为了 schema migration 单独调用编辑文件工具。普通项目记忆由 `update_html_app_memory` 在开发任务结束前统一整理。
 -->
 	For HTML micro-app work, create_magicbase_table automatically maintains MagicBase schema records:
 	- Before calling MagicBase, it appends a Pending migration to the workspace-root `.magicbase/migrations.json`.
-	- On success, it updates that migration to Success, records the real table_id, and refreshes the latest MagicBase data model in `HTML-APP.md`.
-	- On failure, it updates that migration to Failed with a short error summary and does not modify the official data model in `HTML-APP.md`.
+	- On success, it updates that migration to Success, records the real table_id, and refreshes the latest MagicBase data model in `MICRO-APP.md`.
+	- On failure, it updates that migration to Failed with a short error summary and does not modify the official data model in `MICRO-APP.md`.
 
 	For any multi-user data app, decide who can read, insert, edit, and delete rows before creating the table. When the app has ownership, privacy, collaboration, organization, department, read-only, or restricted-edit semantics, keep `dynamic_permissions` in the table creation request. Do not fall back to public table creation after a permission parameter error.
 
@@ -612,15 +612,15 @@ class CreateMagicColumn(BaseTool[CreateMagicbaseColumnParams]):
 <!--zh
 HTML 微应用工作流中，create_magicbase_column 会自动维护 MagicBase schema 记录：
 - 调用 MagicBase 前自动在 workspace 根目录 `.magicbase/migrations.json` 追加 Pending migration
-- 成功后自动更新为 Success，补真实 column_id，并刷新 `HTML-APP.md` 里的最新 MagicBase 表结构
-- 失败后自动更新为 Failed，并记录简短错误原因，不修改 `HTML-APP.md` 的正式表结构
+- 成功后自动更新为 Success，补真实 column_id，并刷新 `MICRO-APP.md` 里的最新 MagicBase 表结构
+- 失败后自动更新为 Failed，并记录简短错误原因，不修改 `MICRO-APP.md` 的正式表结构
 
 不要为了 schema migration 单独调用编辑文件工具。普通项目记忆由 `update_html_app_memory` 在开发任务结束前统一整理。
 -->
 For HTML micro-app work, create_magicbase_column automatically maintains MagicBase schema records:
 - Before calling MagicBase, it appends a Pending migration to the workspace-root `.magicbase/migrations.json`.
-- On success, it updates that migration to Success, records the real column_id, and refreshes the latest MagicBase data model in `HTML-APP.md`.
-- On failure, it updates that migration to Failed with a short error summary and does not modify the official data model in `HTML-APP.md`.
+- On success, it updates that migration to Success, records the real column_id, and refreshes the latest MagicBase data model in `MICRO-APP.md`.
+- On failure, it updates that migration to Failed with a short error summary and does not modify the official data model in `MICRO-APP.md`.
 
 Do not call file-editing tools just to maintain schema migrations. Ordinary project memory is summarized with `update_html_app_memory` once before the development task ends.
 """

@@ -22,13 +22,14 @@ description: "Complete API reference for window.Magic.* in SuperMagic HTML micro
 6. **Complex file-based AI** → use `createTopicAndSend` + `@file` + companion skill. Simple → `readFile` + `llm.chat/stream`.
 7. **High-risk APIs are permission-gated** — new HTML micro-apps must declare requested scopes in `app.json.permissions.scopes`. The host asks the user to approve high-risk runtime calls for a limited duration.
 8. **User info is privacy-gated** — `window.Magic.user.getInfo()` returns only `name` and `avatar` by default. Sensitive fields require a matching permission declaration, a runtime `getInfo({ scopes, reason })` request, and user confirmation.
-9. **Use `app.json` as the micro-app manifest** — every new HTML micro-app folder should include `app.json` next to `index.html`. Put `type`, `name`, `entry`, file aliases, watch hints, and permissions there. Do not generate `magic.project.js` for new HTML micro-apps.
+9. **Use `app.json` as the micro-app manifest** — every new HTML micro-app folder should include `app.json` next to `index.html`. Put `type`, `name`, `entry`, `anonymous`, file aliases, watch hints, and permissions there. Also generate a minimal `magic.project.js` display bridge that mirrors only `version/type/name/entry/icon`; do not put `anonymous`, permissions, files, watch, or business state in `magic.project.js`.
    ```json
    {
      "version": "1.0.0",
      "type": "micro-app",
      "name": "App Name",
      "entry": "index.html",
+     "anonymous": false,
      "files": {},
      "watch": [],
      "permissions": {

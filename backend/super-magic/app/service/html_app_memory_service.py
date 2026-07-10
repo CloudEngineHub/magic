@@ -14,7 +14,8 @@ from app.utils.async_file_utils import (
     async_write_text,
 )
 
-HTML_APP_MEMORY_FILE = "HTML-APP.md"
+MICRO_APP_MEMORY_FILE = "MICRO-APP.md"
+LEGACY_HTML_APP_MEMORY_FILE = "HTML-APP.md"
 MAGICBASE_DIR = ".magicbase"
 MAGICBASE_MIGRATIONS_FILE = "migrations.json"
 MAGICBASE_MODEL_START = "<!-- HTML_APP_MAGICBASE_DATA_MODEL_START -->"
@@ -26,7 +27,11 @@ def now_utc_text() -> str:
 
 
 def html_app_memory_path() -> Path:
-    return PathManager.get_workspace_dir() / HTML_APP_MEMORY_FILE
+    return PathManager.get_workspace_dir() / MICRO_APP_MEMORY_FILE
+
+
+def legacy_html_app_memory_path() -> Path:
+    return PathManager.get_workspace_dir() / LEGACY_HTML_APP_MEMORY_FILE
 
 
 def magicbase_migrations_path() -> Path:
@@ -35,9 +40,10 @@ def magicbase_migrations_path() -> Path:
 
 def is_html_app_memory_path(path: Path) -> bool:
     try:
-        return path.resolve() == html_app_memory_path().resolve()
+        resolved = path.resolve()
+        return resolved == html_app_memory_path().resolve() or resolved == legacy_html_app_memory_path().resolve()
     except Exception:
-        return path.name == HTML_APP_MEMORY_FILE and path.parent == PathManager.get_workspace_dir()
+        return path.name in {MICRO_APP_MEMORY_FILE, LEGACY_HTML_APP_MEMORY_FILE} and path.parent == PathManager.get_workspace_dir()
 
 
 def json_safe(value: Any) -> Any:
@@ -143,11 +149,15 @@ def default_migrations_state() -> Dict[str, Any]:
 
 
 def default_html_app_memory_content() -> str:
-    return f"""# HTML-APP.md
+    return f"""# MICRO-APP.md
 
-这个文件是当前 workspace 中唯一 HTML 微应用的项目记忆。HTML 页面不要读取它；它只服务后续开发和迭代。
+这个文件是当前 workspace 中唯一微应用的项目记忆。HTML 页面不要读取它；README.md 不承担记忆职责。它只服务后续开发和迭代。
 
 ## 应用概览
+
+- 暂未记录。
+
+## 匿名与登录策略
 
 - 暂未记录。
 
@@ -183,6 +193,9 @@ async def read_html_app_memory() -> str:
     path = html_app_memory_path()
     if await async_exists(path):
         return await async_read_text(path)
+    legacy_path = legacy_html_app_memory_path()
+    if await async_exists(legacy_path):
+        return await async_read_text(legacy_path)
     return default_html_app_memory_content()
 
 

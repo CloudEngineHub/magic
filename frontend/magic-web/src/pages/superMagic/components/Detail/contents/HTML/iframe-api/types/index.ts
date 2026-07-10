@@ -665,6 +665,8 @@ export interface HTMLAppConfig {
 	version?: string
 	/** 入口文件，相对应用根目录。默认 index.html。 */
 	entry?: string
+	/** 是否允许未登录用户访问和使用。未声明时按 false 处理。 */
+	anonymous?: boolean
 	/** 应用图标，可为相对路径或远程 URL。 */
 	icon?: string
 	/** 宿主/应用可读取的扩展元数据。 */
