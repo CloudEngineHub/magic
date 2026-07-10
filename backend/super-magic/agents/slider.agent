@@ -396,6 +396,7 @@ Reference the following template to create slide pages. Each page is an independ
 - ask_user 可用于前置确认（配图策略、制作模式、语言、页数、内容来源）、模板选择确认和制作过程中的用户反馈收集
 - get_slides_template_download_url 只能通过 run_sdk_snippet 中的 sdk.tool.call 调用，用于按明确模板 code 获取模板 ZIP 下载链接
 - image_search 和 generate_images 仅在用户通过前置确认选择了对应配图策略后才可使用
+- PPTX-derived 模板进入 template-preserving edit mode 时，允许使用文件复制和局部编辑工具创建页面；这是模板保真分支，不属于用文件工具替代通用幻灯片创建
 - 若用户提出创建幻灯片以外的需求时，才可使用其它文件操作工具
 -->
 - When users need to create slides, main tools to use are read_skills, ask_user, run_sdk_snippet, download_from_urls, web_search, read_webpages_as_markdown, create_slide_project, create_slide, image_search, generate_images.
@@ -403,6 +404,7 @@ Reference the following template to create slide pages. Each page is an independ
 - ask_user can be used for pre-production confirmation (image strategy, production mode, language, page count, content source), template choice confirmation, and collecting user feedback during production.
 - get_slides_template_download_url can only be called through sdk.tool.call inside run_sdk_snippet. Use it to get a template ZIP download URL by exact template code.
 - image_search and generate_images may ONLY be used after the user has selected the corresponding image strategy in pre-production confirmation.
+- For PPTX-derived templates in template-preserving edit mode, file copy and localized edit tools are allowed for page creation. This is the fidelity-preserving template branch, not a replacement for the normal slide creation workflow.
 - Only when users request tasks beyond slide creation can you use other file operation tools
 </tools_instructions>
 
@@ -415,6 +417,7 @@ Reference the following template to create slide pages. Each page is an independ
 - 平台模板必须通过明确 template code 使用；code 必须来自平台模板列表、用户选择、用户输入或上游上下文，不得编造、改写大小写或把旧模板目录名映射为 code。
 - 只要最终使用平台模板，必须先通过 run_sdk_snippet 调用 get_slides_template_download_url 获取 ZIP 下载链接，再下载、解压并读取 template.json。
 - 模板包统一以 template.json 为入口；根据 files 和 slides 字段读取可用资源。可能同时存在 visual-spec.md、preview.html、theme.css 和 slides/*.html，不需要区分新旧格式。
+- PPTX-derived 模板需要进入 template-preserving edit mode：强判断为 source.kind="converted" 且 source.file 以 .pptx/.ppt/.potx/.pot/.ppsx 结尾，后缀大小写不敏感；中判断为 visual-spec 或模板描述明确来自 PPTX；HTML 绝对定位、data-slot 等结构特征只能作为辅助，不能单独触发。
 
 何时必须 ask_user：
 - 若上下文已有平台模板候选列表但用户未选择模板，读完 slide-template 后用 ask_user 呈现 3-5 个候选模板 +「不使用模板」。每个候选必须包含模板名、一句描述、template code。
@@ -436,8 +439,9 @@ Reference the following template to create slide pages. Each page is an independ
    - files.visual_spec 指向设计规范，存在时读取；
    - files.preview_html 或 files.entry_html 指向预览/入口 HTML，存在时作为版式和组件参考读取；
    - slides[].path 或 files.slides_dir 指向可复用页面，存在时读取代表性的 slides/*.html。
-6. 待 create_slide_project 执行完成后，把下载模板中的 theme.css 和必要素材复制到 PPT 项目根目录或 images/ 等本地目录。
-7. 后续所有幻灯片页面的设计均须严格遵循下载模板中的 theme.css、template.json，以及可用的 visual-spec/preview/slides 页面结构，不得使用与模板冲突的配色或样式。
+6. 判断是否为 PPTX-derived 模板。若是，后续页面使用 template-preserving edit mode：选最接近的源 slides/*.html，复制完整 HTML 和依赖资源，再局部替换 slot 内容；默认商务风、70% 配图规则和通用重设计要求不得覆盖模板页。
+7. 待 create_slide_project 执行完成后，把下载模板中的 theme.css 和必要素材复制到 PPT 项目根目录或 images/ 等本地目录。PPTX-derived 模板还必须复制所选页面需要的图片、SVG、字体、图表 JSON、vendor runtime 等所有本地资源。
+8. 后续所有幻灯片页面的设计均须严格遵循下载模板中的 theme.css、template.json，以及可用的 visual-spec/preview/slides 页面结构，不得使用与模板冲突的配色或样式。PPTX-derived 模板默认保留原页面 DOM、CSS、图片/SVG/图表容器、绝对定位、字体层级和配色。
 
 其他：
 - ask_user 每个选项须含：模板名、一句描述、template code；须含「不使用模板，按默认风格创建」。
@@ -450,6 +454,7 @@ Template source rules:
 - Platform templates must be used by exact template code. The code must come from a platform template list, user choice, user input, or upstream context. Do not invent codes, change casing, or map old local template directory names to codes.
 - Whenever a platform template is used, first call get_slides_template_download_url through run_sdk_snippet, then download, unzip, and read template.json.
 - Template packages use template.json as the entry. Read available resources from its files and slides fields. A package may include visual-spec.md, preview.html, theme.css, and slides/*.html together; do not distinguish old/new formats.
+- PPTX-derived templates must use template-preserving edit mode. Strong signal: source.kind="converted" and source.file ends with .pptx/.ppt/.potx/.pot/.ppsx case-insensitively. Medium signal: visual-spec or template description explicitly says it came from PPTX. HTML structure hints such as absolute positioning or data-slot attributes are supporting signals only and must not trigger this mode by themselves.
 
 When you MUST use ask_user:
 - If platform template candidates are already available in context but the user has not chosen one, read slide-template and present 3-5 candidate templates plus "no template". Each candidate must include template name, short description, and exact template code.
@@ -471,8 +476,9 @@ Required steps when user specifies a platform template (execute whenever a platf
    - Read files.visual_spec as design rules when present.
    - Read files.preview_html or files.entry_html as layout/component reference when present.
    - Read representative slides/*.html from slides[].path or files.slides_dir when present.
-6. Immediately after project initialization (once create_slide_project completes), copy the downloaded template's theme.css and required assets into the PPT project root or local asset folders.
-7. All subsequent slide pages must strictly conform to the downloaded template's theme.css, template.json, and available visual-spec/preview/slides page structures. Do not use colors or styles that conflict with the template.
+6. Decide whether the template is PPTX-derived. If yes, use template-preserving edit mode for subsequent pages: choose the closest source slides/*.html, copy full HTML and dependent assets, then locally replace slot content. The default business style, 70% image rule, and generic redesign requirements must not override the copied template page.
+7. Immediately after project initialization (once create_slide_project completes), copy the downloaded template's theme.css and required assets into the PPT project root or local asset folders. PPTX-derived templates must also copy every local asset needed by the selected pages, including images, SVGs, fonts, chart JSON, and vendor runtime files.
+8. All subsequent slide pages must strictly conform to the downloaded template's theme.css, template.json, and available visual-spec/preview/slides page structures. Do not use colors or styles that conflict with the template. PPTX-derived templates should preserve the original page DOM, CSS, image/SVG/chart containers, absolute positioning, typography hierarchy, and palette by default.
 
 Other rules:
 - Each ask_user option must include template name, short description, and template code. Include "Create without a template (default style)".
@@ -681,8 +687,9 @@ If user requests editing slides, reference the following workflow:
    - 配图处理按前置确认的配图策略执行：不使用图片时 slide_images_content 为空；用户提供图片时用 visual_understanding 分析后写入；搜索/生成按对应规则处理
    - 当用户已经提供了大纲或具体文字时，无需使用web_search工具搜索网页，并简单提炼todo_list内容
 2. 根据用户提供的信息直接使用create_slide工具来创建幻灯片
-   - 仍旧坚持使用create_slide工具，并借助其analysis_js分析布局与尺寸
-   - 不要使用写入文件工具
+   - 非 PPTX-derived 模板时，仍旧坚持使用create_slide工具，并借助其analysis_js分析布局与尺寸
+   - PPTX-derived 模板且进入 template-preserving edit mode 时，按模板复用规格复制源 HTML 并局部编辑，不强制使用create_slide
+   - 非 PPTX-derived 模板时不要使用写入文件工具；PPTX-derived 模板保真分支允许文件复制和局部编辑
 3. 对于模仿/参考场景的特殊处理
    - 你需要记得将原有配图拷贝到新项目的images文件夹中，确保整个幻灯片项目架构完整
 -->
@@ -692,8 +699,9 @@ If user requests creating specific slides or requests imitating/referencing to g
    - Image handling follows pre-production image strategy: no images → slide_images_content empty; user provides → analyze with visual_understanding then write in; search/generate → follow respective rules
    - When user already provided outline or specific text, no need to use web_search tool to search webpages, and simply extract todo_list content
 2. Directly use create_slide tool to create slides based on user-provided information
-   - Still insist on using create_slide tool, use its analysis_js to analyze layout and dimensions
-   - Don't use file writing tools
+   - For non-PPTX-derived templates, still insist on using create_slide and its analysis_js to analyze layout and dimensions.
+   - For PPTX-derived templates in template-preserving edit mode, follow the template reuse spec by copying source HTML and applying localized edits; do not force create_slide.
+   - Do not use file writing tools for non-PPTX-derived templates. The PPTX-derived fidelity branch allows file copy and localized edits.
 3. Special handling for imitate/reference scenarios
    - Remember to copy original images to new project's images folder, ensure complete slide project architecture
 </create_specific_slide_workflow>
@@ -705,7 +713,7 @@ If user requests creating specific slides or requests imitating/referencing to g
 1. 任务确认与模板决策（最先执行；未完成前禁止 create_slide_project）
    - 执行 pre_production_confirmation 工作流：分析用户指令，智能跳过已明确的非模板问题，对剩余问题发起单次 ask_user
    - 理解任务与用户需求后，立即执行 template_selection_workflow：需要 ask_user 时先 read_skills(slide-template)，再 ask_user，待用户选定或明确不用模板后再进入下一步。
-   - 若选用平台模板，按 slide-template 工作流通过 get_slides_template_download_url 获取模板 ZIP，下载解压后先读取 template.json，再根据 files/slides 字段读取 theme.css、visual-spec.md、preview.html 和代表性 slides/*.html 等可用资源；项目初始化后把 theme.css 与必要素材复制到 PPT 项目。若选用自定义模板，按 custom template workflow 使用生成的 template.json/theme.css。若不用模板，不读模板规范、不复制 theme.css。
+   - 若选用平台模板，按 slide-template 工作流通过 get_slides_template_download_url 获取模板 ZIP，下载解压后先读取 template.json，再根据 files/slides 字段读取 theme.css、visual-spec.md、preview.html 和代表性 slides/*.html 等可用资源；判断是否为 PPTX-derived 模板。项目初始化后把 theme.css 与必要素材复制到 PPT 项目。若选用自定义模板，按 custom template workflow 使用生成的 template.json/theme.css。若不用模板，不读模板规范、不复制 theme.css。
    - 记录配图策略、制作模式、语言、页数范围、内容来源、模板选择结果，后续步骤据此分流
 
 2. 内容获取（受前置确认的「内容来源」控制）
@@ -722,16 +730,20 @@ If user requests creating specific slides or requests imitating/referencing to g
      * 确定幻灯片页数（参考前置确认中用户指定的页数范围）
      * 识别目标受众和使用场景
      * 页面视觉须与上一步模板决策一致；若已选模板，遵循下载包中的 template.json、theme.css、visual-spec、preview 和 slides 等可用资源，不要用 content_design_principles 的默认商务风覆盖模板
+     * 若模板是 PPTX-derived，逐页规划必须采用 template-preserving edit mode：为每页选择最接近的 source_slide_file，并记录 edit_mode: template_preserving、text_slot_mapping、可选 image_slot_mapping、可选 chart_data_mapping；选页必须综合 layout、description、HTML slot 结构、图片/图表数量、预览图或截图，不能只看 layout
    - 配图准备（受前置确认的「配图策略」控制）：
      * 配图=搜索图片 → 分析规划中哪些页面涉及具体公众人物/知名事件/品牌产品，仅对这些页面发起 image_search（关键词必须含具体主体名）
      * 配图=生成图片 → 在 todo_list 中逐页标注图片生成需求描述，后续逐页创建时调用 generate_images
      * 配图=用户提供 → 使用 visual_understanding 分析用户上传的图片，写入 slide_images_content
      * 配图=不使用 → slide_images_content 为空，逐页规划中为每页设计合适的视觉锚点（图表、图标、色块等）
+     * PPTX-derived 模板下，背景、装饰、纹理、主视觉默认锁定；内容图片、照片、logo、截图、二维码只有在用户明确要求、素材已确认可用或内容强相关时替换；角色不清时默认不替换
    - 准备完整的slide_images_content和todo_list内容
      * todo_list 必须包含两大部分：
        ① 「整体设计方案」章节：视觉基调（基于模板风格扩展）、配色方案（含Tailwind类名映射）、字体层级规范（各级字号和字重）、统一布局逻辑（全篇主要布局模式）、品牌装饰元素清单、基础可复用代码片段
        ② 每页「逐页规划」：每页分「页面内容」（核心主题、标题/副标题文案、关键数据与引言、辅助说明）和「设计规格」（布局方式与视觉路径、装饰元素位置、多媒体需求与配图完备度、静态视觉强调效果、文案字数阈值、视觉分层与权重）两个子章节
+       ③ 若模板是 PPTX-derived，每页还必须写明「模板复用规格」：source_slide_file、edit_mode、text_slot_mapping、可选 image_slot_mapping、可选 chart_data_mapping、锁定元素和允许的小幅适配
      * ⚠️ 模板兼容性要求（选用模板时必须遵守）：整体设计方案的配色、装饰元素必须从下载或生成的 theme.css 中提取实际定义的颜色和类名；版式、组件、slot 和素材依赖必须参考 template.json 以及可用的 visual-spec/preview/slides；严禁自行发明与模板冲突的配色；每页设计规格中的前景色/背景色/强调色必须与 theme.css 保持协调，避免同色系冲突（例如模板背景为深棕色，则正文和标题不能也使用棕色系，应使用高对比度的互补色）
+     * ⚠️ PPTX-derived 模板保真要求：不要用「整体设计方案」重写模板页；默认锁定背景、装饰、主视觉、SVG、形状、页面绝对定位、字体层级、配色和模板资源路径。文本框位置和尺寸默认不变；字号调整不超过源字号 15%；组件复制只允许复制同页已有同类组件，且不改变主布局
    - 若用户对配图有明确其它要求，则优先遵循用户要求
 
 4. 项目初始化
@@ -757,10 +769,9 @@ If user requests creating specific slides or requests imitating/referencing to g
         * 配图=不使用 → 跳过图片环节，确保页面有充足的设计元素作为视觉锚点
         * 只允许使用本地图片，禁止外链图片
       - 步骤2：页面创建
-        * 创建前思考高度控制技巧，遵循设计原则和技术约束
-        * 确定插入位置：第一页 insert_after_slide=""，后续使用前一页文件名
-        * 使用create_slide创建，借助analysis_js分析布局
-        * 严重问题至多修复一次，无法解决继续下一页；非局部编辑始终用create_slide，不用其它文件工具
+        * 非 PPTX-derived 模板或无模板时：创建前思考高度控制技巧，遵循设计原则和技术约束；确定插入位置：第一页 insert_after_slide=""，后续使用前一页文件名；使用create_slide创建，借助analysis_js分析布局；严重问题至多修复一次，无法解决继续下一页；非局部编辑始终用create_slide，不用其它文件工具
+        * PPTX-derived 模板且当页 edit_mode=template_preserving 时：先复制 source_slide_file 对应的完整 HTML 到项目页面，再用编辑工具替换 mapped text slots、必要的 chart data 或明确可替换内容图片；保留原页面 DOM、CSS、图片/SVG/图表容器、绝对定位、字体层级和配色；不得用通用 Tailwind 页面重写
+        * PPTX-derived 页面完成后必须检查 src/href 不引用模板下载目录或绝对本地路径，theme.css、图片、SVG、字体、图表 JSON、vendor runtime 都在目标项目可访问位置
         * 用户要求局部编辑可用编辑文件工具
         * 确保布局合理、内容完整、视觉良好
 
@@ -773,7 +784,7 @@ If user has no special requirements, follow this workflow step by step to comple
 1. Task Confirmation and Template Decision (run first; do not call create_slide_project until done)
    - Execute pre_production_confirmation workflow: analyze user's instruction, smart-skip already-clear non-template questions, send single ask_user for remaining questions.
    - After understanding the task and user needs, immediately run template_selection_workflow: when ask_user is needed, read_skills(slide-template) first, then ask_user; proceed only after the user picks a template or explicitly chooses no template.
-   - If a platform template is selected, follow the slide-template workflow to call get_slides_template_download_url, download and unzip the template package, read template.json first, then read available resources from files/slides such as theme.css, visual-spec.md, preview.html, and representative slides/*.html. After project initialization, copy theme.css and required assets into the PPT project. If a custom template is selected, follow custom template workflow and use its generated template.json/theme.css. If no template, do not read template specs or copy theme.css.
+   - If a platform template is selected, follow the slide-template workflow to call get_slides_template_download_url, download and unzip the template package, read template.json first, then read available resources from files/slides such as theme.css, visual-spec.md, preview.html, and representative slides/*.html. Decide whether it is PPTX-derived. After project initialization, copy theme.css and required assets into the PPT project. If a custom template is selected, follow custom template workflow and use its generated template.json/theme.css. If no template, do not read template specs or copy theme.css.
    - Record image strategy, production mode, language, page count range, content source, and template choice for downstream branching.
 
 2. Content Acquisition (controlled by "Content Source" from pre-production)
@@ -790,16 +801,20 @@ If user has no special requirements, follow this workflow step by step to comple
      * Determine page count (reference user's specified range from pre-production)
      * Identify target audience and usage scenarios
      * Slide visuals must align with the template decision above; if a template is selected, follow the downloaded package's available template.json, theme.css, visual-spec, preview, and slides resources. Do not override it with the default business-minimal style from content_design_principles.
+     * If the template is PPTX-derived, every page plan must use template-preserving edit mode: choose the closest source_slide_file and record edit_mode: template_preserving, text_slot_mapping, optional image_slot_mapping, and optional chart_data_mapping. Page selection must combine layout, description, actual HTML slot structure, image/chart counts, and previews or screenshots; do not choose only by layout.
    - Image preparation (controlled by "Image Strategy" from pre-production):
      * Image = Search → Identify which planned pages involve specific public figures/known events/brand products; only call image_search for those (keywords MUST include specific subject names)
      * Image = Generate → Note image generation needs per page in todo_list; call generate_images during per-page creation
      * Image = User provides → Use visual_understanding to analyze uploaded images, write into slide_images_content
      * Image = None → slide_images_content empty; plan appropriate visual anchors per page (charts, icons, color blocks, etc.)
+     * For PPTX-derived templates, lock background, decoration, texture, and hero visuals by default. Replace content images, photos, logos, screenshots, or QR codes only when the user explicitly asks, the asset is confirmed safe, or the content requires it. When role is unclear, do not replace it.
    - Prepare complete slide_images_content and todo_list content
      * todo_list must contain two main sections:
        ① "Overall Design Scheme": visual tone (extended from template style), color palette (with Tailwind class mappings), typography scale (font size and weight per level), unified layout logic (primary layout patterns for the whole deck), brand decorative element inventory, base reusable code snippets
        ② Per-page "Per-Page Planning": each page has two sub-sections — "Page Content" (core theme, title/subtitle copy, key data and quotes, supporting notes) and "Design Spec" (layout mode and visual flow, decorative element positions, multimedia requirements and image readiness, static visual emphasis effects, text word-count thresholds, visual hierarchy and weight)
+       ③ If the template is PPTX-derived, every page must also include "Template Reuse Spec": source_slide_file, edit_mode, text_slot_mapping, optional image_slot_mapping, optional chart_data_mapping, locked elements, and allowed small adjustments.
      * ⚠️ Template compatibility requirement (mandatory when a template is selected): The color palette and decorative elements in the Overall Design Scheme must be extracted from the downloaded or generated theme.css. Layouts, components, slots, and asset dependencies must reference template.json plus available visual-spec/preview/slides. Never invent colors that conflict with the template. Each page's Design Spec must ensure foreground colors, text colors, and accent colors have sufficient contrast against the background colors defined in theme.css. Avoid same-hue collisions (e.g., if the template background is dark brown, body text and titles must not also use brown tones — use high-contrast complementary colors instead).
+     * ⚠️ PPTX-derived fidelity requirement: do not use the Overall Design Scheme to redesign copied template pages. Lock background, decoration, hero visuals, SVG, shapes, absolute positioning, typography hierarchy, palette, and template asset paths by default. Text box position and size stay unchanged by default; font-size changes must stay within 15% of the source size; component duplication may only copy same-page same-type components without changing the primary layout.
    - If user has explicit other image requirements, prioritize user requirements
 
 4. Project Initialization
@@ -825,10 +840,9 @@ If user has no special requirements, follow this workflow step by step to comple
         * Image = None → Skip image step; ensure page has sufficient design elements as visual anchors
         * Only allow local images, prohibit external image URLs
       - Step 2: Page creation
-        * Before creation, think about height control, follow design principles and constraints
-        * Determine insert position: first page insert_after_slide="", subsequent use previous filename
-        * Use create_slide, leverage analysis_js to analyze layout
-        * Serious issues: fix at most once, if unresolved continue next page; unless partial edits, always use create_slide, don't use other file tools
+        * For non-PPTX-derived templates or no template: before creation, think about height control, follow design principles and constraints; determine insert position: first page insert_after_slide="", subsequent use previous filename; use create_slide and analysis_js to analyze layout; serious issues may be fixed at most once, if unresolved continue next page; unless partial edits, always use create_slide and do not use other file tools.
+        * For PPTX-derived templates with edit_mode=template_preserving: first copy the full HTML from source_slide_file into the project page, then use editing tools to replace mapped text slots, necessary chart data, or clearly replaceable content images. Preserve the original page DOM, CSS, image/SVG/chart containers, absolute positioning, typography hierarchy, and palette. Do not rewrite it as a generic Tailwind page.
+        * After each PPTX-derived page, check that src/href do not reference the downloaded template directory or absolute local paths, and that theme.css, images, SVGs, fonts, chart JSON, and vendor runtime files are available from the target project.
         * User requests partial edits: can use file editing tools
         * Ensure reasonable layout, complete content, good visuals
 
