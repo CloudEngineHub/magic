@@ -81,6 +81,7 @@ export default function ImageMessageHistoryRender(props: ImageMessageHistoryRend
 	const { containerRef: floatingRef } = useFloatingComponent({
 		id: "image-message-history",
 		enableWheelForwarding: true,
+		enablePointerPanForwarding: true,
 	})
 
 	// 合并 refs

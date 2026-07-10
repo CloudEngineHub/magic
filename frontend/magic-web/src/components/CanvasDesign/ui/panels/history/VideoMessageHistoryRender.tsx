@@ -58,6 +58,7 @@ export default function VideoMessageHistoryRender(props: VideoMessageHistoryRend
 	const { containerRef: floatingRef } = useFloatingComponent({
 		id: "video-message-history",
 		enableWheelForwarding: true,
+		enablePointerPanForwarding: true,
 	})
 
 	const setRefs = useCallback(

@@ -1,6 +1,7 @@
 import type { ReactNode } from "react"
 import { useEffect, useLayoutEffect, useRef, useState } from "react"
 import { Button } from "../../primitives/shadcn/button"
+import { useOverflowChange } from "../../../app/hooks/layout/useOverflowChange"
 import { cn } from "../../../runtime/shared/lib/utils"
 import styles from "./MessageHistoryCollapsiblePrompt.module.css"
 
@@ -19,6 +20,7 @@ export function MessageHistoryCollapsiblePrompt(props: MessageHistoryCollapsible
 	const textRef = useRef<HTMLDivElement>(null)
 	const [expanded, setExpanded] = useState(false)
 	const [needsExpand, setNeedsExpand] = useState(false)
+	const [hasExpandedScrollbar, setHasExpandedScrollbar] = useState(false)
 
 	useEffect(() => {
 		setExpanded(false)
@@ -39,6 +41,12 @@ export function MessageHistoryCollapsiblePrompt(props: MessageHistoryCollapsible
 			ro.disconnect()
 		}
 	}, [trimmed, expanded])
+	useOverflowChange({
+		targetRef: textRef,
+		axis: "y",
+		enabled: expanded,
+		onOverflowChange: setHasExpandedScrollbar,
+	})
 
 	if (!trimmed) {
 		return <div className={styles.root}>{emptyLabel}</div>
@@ -49,7 +57,7 @@ export function MessageHistoryCollapsiblePrompt(props: MessageHistoryCollapsible
 			<div
 				ref={textRef}
 				className={cn(styles.text, expanded ? styles.expanded : styles.collapsed)}
-				data-wheel-trap={expanded ? "hard" : undefined}
+				data-wheel-trap={expanded && hasExpandedScrollbar ? "hard" : undefined}
 			>
 				{content ?? trimmed}
 			</div>

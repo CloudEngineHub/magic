@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { Copy, LoaderCircle, RefreshCw, Sparkles } from "lucide-react"
 import { toast } from "sonner"
+import { useFloatingComponent } from "../../../app/hooks/layout/useFloatingComponent"
+import { useOverflowChange } from "../../../app/hooks/layout/useOverflowChange"
 import { useCanvas } from "../../../app/providers/CanvasProvider"
 import { useCanvasDesignI18n } from "../../../app/providers/I18nProvider"
 import type { CompleteImagePromptRequest } from "../../../public/magic-types"
@@ -50,6 +52,8 @@ export default function PromptOptimizationButton(props: PromptOptimizationButton
 	const [optimizedPrompt, setOptimizedPrompt] = useState("")
 	const [errorMessage, setErrorMessage] = useState("")
 	const [isGenerating, setIsGenerating] = useState(false)
+	const [hasBodyScrollbar, setHasBodyScrollbar] = useState(false)
+	const bodyRef = useRef<HTMLDivElement>(null)
 	const mediaPreviewDismissGuardRef = useRef(false)
 	const hasSeenMediaPreviewOpenRef = useRef(false)
 	const completeImagePrompt = canvas?.magicConfigManager.config?.methods?.completeImagePrompt
@@ -70,6 +74,18 @@ export default function PromptOptimizationButton(props: PromptOptimizationButton
 			),
 		[optimizedPrompt, placeholderPaths, promptPlaceholderTokenConfig],
 	)
+	const { containerRef: floatingRef } = useFloatingComponent({
+		id: "prompt-optimization-popover",
+		enableWheelForwarding: open && !hasBodyScrollbar,
+		enablePointerPanForwarding: open,
+	})
+
+	useOverflowChange({
+		targetRef: bodyRef,
+		axis: "y",
+		enabled: open && hasOptimizedPrompt && !isGenerating && !errorMessage,
+		onOverflowChange: setHasBodyScrollbar,
+	})
 
 	useEffect(() => {
 		setOptimizedPrompt("")
@@ -204,6 +220,7 @@ export default function PromptOptimizationButton(props: PromptOptimizationButton
 				align="end"
 				side="bottom"
 				sideOffset={6}
+				ref={floatingRef}
 				className={styles.promptOptimizationContent}
 				onOpenAutoFocus={(event) => event.preventDefault()}
 				onInteractOutside={(event) => {
@@ -244,7 +261,7 @@ export default function PromptOptimizationButton(props: PromptOptimizationButton
 						{errorMessage}
 					</div>
 				) : (
-					<div className={styles.promptOptimizationBody}>
+					<div ref={bodyRef} className={styles.promptOptimizationBody}>
 						<PromptPlaceholderPreviewText
 							text={optimizedPrompt}
 							tokenConfig={promptPlaceholderTokenConfig}
