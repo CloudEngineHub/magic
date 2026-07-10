@@ -76,7 +76,7 @@
     {
       "id": 13,
       "prompt": "我选择了一个普通平台模板，source.kind 是 original，不是 PPTX 转换出来的。请用它做销售汇报。",
-      "expected_output": "加载 slide-template 并下载模板后读取 template.json、theme.css、visual-spec.md 和代表性 slides/*.html；确认不是 PPTX-derived 模板，因此不强制进入 template-preserving clone-first 分支。按普通平台模板流程使用 theme.css、visual-spec、组件、layout pattern 和 data-slot 提示生成页面，可使用 create_slide 创建新页；仍需保持模板配色和组件体系，不得发明冲突风格，但不要求每页复制某个源 HTML 或记录 source_slide_file/edit_mode: template_preserving",
+      "expected_output": "加载 slide-template 并通过 install_slides_template 安装模板包后，从返回的 installed_directory 读取 template.json、theme.css、visual-spec.md 和代表性 slides/*.html；确认不是 PPTX-derived 模板，因此不强制进入 template-preserving clone-first 分支。按普通平台模板流程使用 theme.css、visual-spec、组件、layout pattern 和 data-slot 提示生成页面，可使用 create_slide 创建新页；仍需保持模板配色和组件体系，不得发明冲突风格，但不要求每页复制某个源 HTML 或记录 source_slide_file/edit_mode: template_preserving",
       "files": []
     }
   ]
