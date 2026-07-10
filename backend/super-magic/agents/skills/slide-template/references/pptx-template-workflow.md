@@ -91,26 +91,39 @@ Only keep the original asset if the user explicitly chooses to keep it. If the u
 
 `visual-spec.md` must describe the reusable visual system only. Do not record the source PPT's private business facts.
 
-## 4. Mandatory AI Refinement After Tool Call
+Template-preserving reuse does not override sanitization. A converted page may keep source visuals only when they are safe template assets or the user explicitly confirmed them. Unconfirmed logos, QR codes, screenshots, real-person photos, internal system images, customer case visuals, proprietary icons, and business dashboards must still be replaced with neutral assets or removed before final packaging.
+
+## 4. Converted Template Reuse Contract
+
+PPTX-derived templates should be reusable as page masters. Preserve this contract during refinement:
+
+- `slides/*.html` are concrete source pages for later template-preserving edits, not just style references.
+- Keep the page DOM, page-level CSS, image/SVG/chart containers, absolute positioning, typography hierarchy, palette, and local asset references stable unless they are broken, sensitive, or clearly renderer-only noise.
+- Do not simplify a converted page into generic components if that would make it harder to copy the original structure into a new PPT project.
+- Improve `template.json.slides[].title`, `layout`, and `description` so a later agent can choose the closest source page. The description should mention page purpose, visible structure, content areas, image/chart/table roles, and any notable reusable constraints.
+- `visual-spec.md` must include a section titled `How to use this converted template`. It should explain how to choose pages, which text/image/chart slots can be edited, which background/decorative/hero elements are locked, when images or charts may be replaced, and how much text fitting is allowed.
+- Keep slot hints in HTML through `data-slot`, `data-slot-type`, and `data-slot-role`. Do not reintroduce `template.json.slides[].slots`.
+
+## 5. Mandatory AI Refinement After Tool Call
 
 After `convert_pptx_to_slide_template` returns, continue working on the generated draft folder before ending the conversation:
 
 1. Read the generated `template.json`, `theme.css`, and representative `slides/*.html`.
 2. Inspect preview artifacts when available, especially cover and collage images under the artifact directory returned by the tool.
 3. Analyze the converted deck's actual visual system: palette, typography hierarchy, spacing, layout patterns, decorative motifs, component types, chart/table treatment, image treatment, and repeated page structures.
-4. Write `visual-spec.md` from that analysis. The file must describe the actual style of the converted PPT, not a generic conversion template, and must not include private business facts from the source deck.
+4. Write `visual-spec.md` from that analysis. The file must describe the actual style of the converted PPT, not a generic conversion template, must include `How to use this converted template`, and must not include private business facts from the source deck.
 5. Update `template.json`:
    - Add `files.visual_spec: "visual-spec.md"` after `visual-spec.md` exists.
    - Keep `category_code` absent unless classification should live in the template.
    - Improve bilingual `label` and `description` if the source filename is not descriptive.
-   - Improve each slide `title` and `description` based on the converted slide content and layout.
+   - Improve each slide `title` and `description` based on the converted slide content and layout. Each description should identify the page's reusable purpose, structure, slot groups, visual anchors, and image/chart/table roles.
 6. Refine `theme.css`:
    - Keep reusable visual system rules, variables, typography, colors, chart colors, and helpers.
    - Avoid putting page-specific layout rules into global selectors.
    - Remove obvious renderer noise only when it is not needed for visual fidelity.
 7. Refine `slides/*.html`:
    - Keep fixed 1920x1080 pages and `../theme.css`.
-   - Preserve the converted visual identity and source-specific layout intent.
+   - Preserve the converted visual identity, source-specific layout intent, DOM structure, page-level CSS, image/SVG/chart containers, absolute positioning, typography hierarchy, palette, and local asset references.
    - Keep useful `data-slot`, `data-slot-type`, and `data-slot-role` hints.
    - Replace obvious sensitive text with neutral example content.
    - Remove irrelevant debug attributes, dead markup, empty placeholders, broken references, and repeated boilerplate that hurts reuse.
@@ -123,13 +136,14 @@ After `convert_pptx_to_slide_template` returns, continue working on the generate
    - Check that slides load `../theme.css`.
    - Check that slide HTML, CSS, metadata, and visual spec do not contain obvious sensitive text.
    - Check that `images/` contains no unconfirmed logos, internal screenshots, QR codes, real people, customer case images, private dashboards, or proprietary visuals.
+   - Check that page descriptions and `visual-spec.md` are sufficient for choosing a source page and applying template-preserving edits.
    - Check obvious overflow or clipping on risky pages when browser/DOM inspection is available.
    - Confirm the template source folder does not contain `preview.html`, `template-pages.*`, `source.css`, `previews/`, generated preview images, or a nested `packages/` directory. `magic.project.js` may exist in the draft source folder.
 9. End by reporting the refined draft folder, sanitization strategy, user-confirmed retained sensitive assets if any, and asking the user whether to package it as the final template ZIP.
 
 Do not automatically create the ZIP unless the user confirms. If the user confirms packaging, add `files.package_zip` to `template.json`, then create `<template-id>-template.zip` beside the template folder. The ZIP must include only the refined template source files and must exclude `magic.project.js`, artifacts, previews, debug output, original PPTX files, intermediate render folders, and unconfirmed sensitive assets.
 
-## 5. Template Metadata
+## 6. Template Metadata
 
 `template.json` is the only metadata entrypoint. It must follow `references/template-json-spec.md` and include:
 
@@ -146,19 +160,19 @@ Do not write `name`, `template_dir`, `package_type`, `taxonomy`, `review_status`
 
 Do not generate `template-pages.md` or `template-pages.json`; page selection data belongs in `template.json.slides`.
 
-## 6. Post-Conversion Refinement
+## 7. Post-Conversion Refinement
 
 Before creating the final ZIP:
 
-1. Analyze the converted slide pages and preview artifacts with the model, then write `visual-spec.md` with the actual reusable visual system extracted from the deck.
+1. Analyze the converted slide pages and preview artifacts with the model, then write `visual-spec.md` with the actual reusable visual system extracted from the deck, including `How to use this converted template`.
 2. Review `template.json` and confirm bilingual label, bilingual description, source canvas, warnings, and slide descriptions. Add `files.visual_spec` only after `visual-spec.md` exists. Add `category_code` only when classification should live in the template.
 3. Review `theme.css`; keep template-level visual system there and avoid forcing every page into the same structure.
-4. Review `slides/*.html`; remove irrelevant renderer artifacts, keep `../theme.css`, localize assets, retain useful `data-slot` hints, and replace obvious sensitive text with neutral example content.
+4. Review `slides/*.html`; remove irrelevant renderer artifacts, keep `../theme.css`, localize assets, retain useful `data-slot` hints, preserve cloneable page structure, and replace obvious sensitive text with neutral example content.
 5. Review `images/`; remove or replace unconfirmed sensitive assets, and keep original ambiguous assets only when the user explicitly confirmed through `ask_user`.
 6. Run a lightweight overflow, sensitive-content, and asset-reference check.
 7. Create the final sibling `<template-id>-template.zip` only after the refined source folder passes these checks. Exclude `magic.project.js` and unconfirmed sensitive assets from the ZIP even when they remain in the draft folder.
 
-## 7. Draft Synchronization After User Edits
+## 8. Draft Synchronization After User Edits
 
 After the draft template folder exists, the user's latest file edits are authoritative.
 
@@ -174,23 +188,25 @@ Before continuing refinement, QA, packaging, or reporting final status:
 
 Do not restore a page just because `template.json` still references it. For example, if the user deleted `slides/market-overview.html` but `template.json.slides` still contains that file, remove that slide entry before QA or packaging.
 
-## 8. How To Use The Template
+## 9. How To Use The Template
 
 When creating a new PPT from the generated template:
 
 1. Read `<template-dir>/template.json`.
-2. Choose a page from `template.json.slides` based on `layout`, `title`, and `description`.
-3. Copy the selected `slides/*.html` into the target PPT project.
-4. Copy `theme.css` and needed `images/` assets into the target PPT project.
-5. Use `data-slot`, `data-slot-type`, and `data-slot-role` in HTML as editing hints when present; preserve the source structure, SVG, image containers, and style classes.
+2. Confirm whether it is PPTX-derived: `source.kind` is `"converted"` and `source.file` has a PPT/PPTX family extension case-insensitively, or `visual-spec.md`/description explicitly says it came from PPTX. Do not use HTML structure hints alone as the trigger.
+3. Choose a page from `template.json.slides` by combining `layout`, `title`, `description`, actual HTML slot structure, image/chart/table counts, and previews or screenshots when available.
+4. Copy the selected `slides/*.html` into the target PPT project.
+5. Copy `theme.css` and every needed local asset into the target PPT project, including images, SVGs, fonts, chart JSON, and vendor runtime files.
+6. For PPTX-derived templates, use template-preserving edits: replace mapped text slots first; only replace clear content images, chart data, logos, QR codes, screenshots, or repeated components when the user asks, content requires it, and the asset is safe or confirmed. Keep background, decorative, texture, hero, SVG, shape, absolute positioning, typography, and palette locked by default.
+7. For non-PPTX-derived templates, use `data-slot`, `data-slot-type`, and `data-slot-role` in HTML as editing hints when present; preserve the source structure, SVG, image containers, and style classes.
 
 The conversion draft may keep `magic.project.js` for slide preview/editing. The final template ZIP must not include `magic.project.js`, `index.html`, or `slide-bridge.js`. Preview and publishing systems should use `template.json.slides`, `theme.css`, and `slides/*.html`; previews are generated afterward by script into artifact storage.
 
-## 9. Debug Mode
+## 10. Debug Mode
 
 By default, intermediate renderer artifacts are removed. Use `debug: True` only when diagnosing conversion problems. Debug artifacts are not part of the platform template package and must not be uploaded as the template ZIP.
 
-## 10. Quality Checks
+## 11. Quality Checks
 
 After the tool completes, verify:
 
@@ -202,10 +218,13 @@ After the tool completes, verify:
 - `template.json.slides` matches the current `slides/` files after user edits; stale references to deleted, renamed, or moved files are removed or corrected before packaging.
 - `template.json` does not contain legacy fields such as `name`, `slides[].slots`, `slides[].source_slide`, `slides[].best_for`, or `slides[].risks`.
 - Before final packaging, `<template-dir>/visual-spec.md` exists, is generated from model analysis of the converted deck, and describes the reusable design system.
+- Before final packaging, `visual-spec.md` includes `How to use this converted template`.
+- Before final packaging, `template.json.slides[].description` is specific enough to support page selection for template-preserving edits.
 - Before final packaging, slide HTML, CSS, metadata, and `visual-spec.md` do not contain obvious sensitive text.
 - Before final packaging, `images/` contains no unconfirmed logos, internal screenshots, QR codes, real people, customer case images, private dashboards, or proprietary visuals.
 - User-confirmed retained sensitive assets are listed in the final report before packaging.
 - `<template-dir>/slides/*.html` load `../theme.css` and reference local `../images/...` assets.
+- When the template is later used, copied pages must not reference the installed template directory or any absolute local path.
 - The preview generation script writes the first-slide preview and matrix preview outside `<template-dir>/`, usually under `<artifact-root>/<template-id>/previews/`.
 - Slide HTML contains `data-slot` attributes for replaceable text, images, or charts where available, but slot metadata is not duplicated into `template.json`.
 - Default slide HTML does not contain renderer-only source attributes such as `data-element-id` or `data-source-shape-id`.

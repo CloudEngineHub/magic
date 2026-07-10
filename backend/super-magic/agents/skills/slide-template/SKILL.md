@@ -65,30 +65,51 @@ After receiving `installed_directory`:
 5. Read image paths or assets only when needed for the target deck.
 6. Do not link to installed template files from generated slides. Copy the required CSS and assets into the PPT project after `create_slide_project`.
 
+## PPTX-Derived Template Contract
+
+This skill owns the template package contract and conversion/refinement guidance. It may describe how a PPTX-derived template should signal reuse intent, but detailed page-by-page slide authoring belongs to the slide creation agent.
+
+Identify a PPTX-derived template with these rules:
+
+- Strong signal: `template.json.source.kind` is `"converted"` and `template.json.source.file` ends with `.pptx`, `.ppt`, `.potx`, `.pot`, or `.ppsx` case-insensitively.
+- Medium signal: `visual-spec.md`, the template description, or the package notes explicitly say the template was converted from PPTX/PPT.
+- Weak signals such as absolute-positioned HTML, `data-slot*` attributes, local image-heavy pages, or page-level converted styles can support the decision, but must not trigger PPTX-derived handling by themselves.
+
+When a template is PPTX-derived, preserve and document this reuse contract:
+
+- Treat `slides/*.html` as concrete page masters, not loose visual inspiration.
+- Make page selection possible through specific `template.json.slides[].title`, `layout`, and `description`; descriptions should mention visible structure, content areas, image/chart/table roles, and notable constraints.
+- Keep `data-slot`, `data-slot-type`, and `data-slot-role` in slide HTML as downstream editing hints, but do not add `template.json.slides[].slots`.
+- Preserve source DOM structure, page-level CSS, local asset references, image/SVG/chart containers, absolute positioning, typography hierarchy, color system, and visual elements unless they are broken, sensitive, or clearly renderer-only noise.
+- Document locked elements and editable boundaries in `visual-spec.md`, especially backgrounds, decorative images, textures, hero visuals, SVGs, shapes, page positioning, typography scale, palette, text fitting, content-image replacement, and chart-data replacement.
+- Template-preserving reuse does not bypass sanitization. Logos, QR codes, screenshots, real-person photos, internal dashboards, and other ambiguous sensitive assets still require user confirmation before final packaging.
+
 ## Template Application Workflow
 
 1. Resolve the selected template code from user choice or upstream context. If there is no exact code, ask for it or proceed with no template if the user confirms.
 2. Call `install_slides_template` with the exact code and a stable `install_path`, then use `result.data["installed_directory"]`.
 3. Read `template.json` from the installed directory, then read the available resources it declares (`theme_css`, `visual_spec`, `slides_dir`, `images_dir`, and `slides[].file`) before creating slide pages.
-4. Before writing slides, summarize internally: package resources, palette roles, typography, layout inventory, reusable components, slot/page patterns, composition rules, asset dependencies, and adaptation rules.
-5. Create the template package with `create_slide_project`.
-6. Copy `theme.css` and any required assets from the downloaded template into the PPT project. Keep all slide references local to that project.
-7. Each slide HTML must include the local CSS:
+4. Decide whether the package is PPTX-derived using the rules above. If yes, preserve the PPTX-derived template contract for downstream slide creation.
+5. Before writing slides, summarize internally: package resources, palette roles, typography, layout inventory, reusable components, slot/page patterns, composition rules, asset dependencies, adaptation rules, and whether the selected package is PPTX-derived.
+6. Create the slide project with `create_slide_project`.
+7. Copy `theme.css` and any required assets from the installed template into the PPT project. Keep all slide references local to that project.
+8. Each slide HTML must include the local CSS:
 
 ```html
 <link rel="stylesheet" href="theme.css" />
 ```
 
-8. Load `creating-slides` and generate slides. Keep every slide fixed at 1920x1080; do not use responsive design. Use only the downloaded template's CSS variables, components, dedicated layout patterns, chart colors, and image guidance inferred from the template package. If no downloaded layout fits, compose the page from template components, decorations, and layout helpers instead of generic centered text.
-9. Each slide should have one clear visual anchor, such as an image area, chart, matrix, large number, color block, or template-specific decoration.
-10. Use `data-slot`, `data-slot-type`, and `data-slot-role` from slide HTML as editing hints when present, but do not expect slot metadata in `template.json`.
+9. For PPTX-derived templates, downstream slide creation should apply the template-preserving contract instead of treating converted pages as loose style references.
+10. For non-PPTX-derived templates, load `creating-slides` and generate slides. Keep every slide fixed at 1920x1080; do not use responsive design. Use only the installed template's CSS variables, components, dedicated layout patterns, chart colors, and image guidance inferred from the template package. If no installed layout fits, compose the page from template components, decorations, and layout helpers instead of generic centered text.
+11. Each slide should have one clear visual anchor, such as an image area, chart, matrix, large number, color block, or template-specific decoration.
+12. Use `data-slot`, `data-slot-type`, and `data-slot-role` from slide HTML as editing hints when present, but do not expect slot metadata in `template.json`.
 
 ## Image Rules
 
 - First decide whether the page needs images. Use images for visual layouts, cover/section/closing pages, specific person/product/scene/case, or sparse text.
 - Skip image search for dense comparison, card grid, timeline/process, data dashboard, or chart pages.
 - When the selected template includes local image or illustration assets and the target slide needs an image, or the user has not provided a required image, inspect and reuse suitable assets from the template first. Prefer these assets for decorative illustrations, cover/section visuals, backgrounds, motifs, and style-consistent placeholders.
-- Use `image_search` only after checking template assets, or when the slide needs a factual photo, specific person/product/place, screenshot, brand mark, or another exact image the template cannot supply. Try at least 2 content-relevant keyword groups and include style keywords inferred from the downloaded template.
+- Use `image_search` only after checking template assets, or when the slide needs a factual photo, specific person/product/place, screenshot, brand mark, or another exact image the template cannot supply. Try at least 2 content-relevant keyword groups and include style keywords inferred from the installed template.
 - If search results are poor, use `generate_images` and save output under the PPT project `images/` folder.
 - Apply template style only to creative illustrations (concept visuals, atmosphere, decorative or abstract images). Do not stylize factual photos, real people, real places, products, history/science references, brand marks, screenshots, QR codes, or data graphics.
 - Images should occupy meaningful visual space; do not use them as tiny icons.
