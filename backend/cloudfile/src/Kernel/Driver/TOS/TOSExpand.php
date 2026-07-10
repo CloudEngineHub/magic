@@ -8,6 +8,7 @@ declare(strict_types=1);
 namespace Dtyq\CloudFile\Kernel\Driver\TOS;
 
 use DateTime;
+use Dtyq\CloudFile\Kernel\AdapterName;
 use Dtyq\CloudFile\Kernel\Driver\ExpandInterface;
 use Dtyq\CloudFile\Kernel\Exceptions\ChunkDownloadException;
 use Dtyq\CloudFile\Kernel\Exceptions\CloudFileException;
@@ -43,6 +44,7 @@ class TOSExpand implements ExpandInterface
 
     public function __construct(array $config = [])
     {
+        $config = AdapterName::applyEndpointOptions(AdapterName::TOS, $config, $config);
         $this->config = $config;
         $this->configParser = new ConfigParser($config);
         $this->client = new TosClient($this->configParser);
@@ -51,7 +53,11 @@ class TOSExpand implements ExpandInterface
 
     public function getUploadCredential(CredentialPolicy $credentialPolicy, array $options = []): array
     {
-        return $credentialPolicy->isSts() ? $this->getUploadCredentialBySts($credentialPolicy) : $this->getUploadCredentialBySimple($credentialPolicy);
+        $configParser = $this->createConfigParser($options);
+
+        return $credentialPolicy->isSts()
+            ? $this->getUploadCredentialBySts($credentialPolicy, $configParser)
+            : $this->getUploadCredentialBySimple($credentialPolicy, $configParser);
     }
 
     public function getPreSignedUrls(array $fileNames, int $expires = 3600, array $options = []): array
@@ -418,10 +424,10 @@ class TOSExpand implements ExpandInterface
         if (! empty($query)) {
             $input->setQuery($query);
         }
-        return $this->client->preSignedURL($input)->getSignedUrl();
+        return $this->getClientWithEndpointOptions($options)->preSignedURL($input)->getSignedUrl();
     }
 
-    private function getUploadCredentialBySimple(CredentialPolicy $credentialPolicy): array
+    private function getUploadCredentialBySimple(CredentialPolicy $credentialPolicy, ConfigParser $configParser): array
     {
         $expires = $credentialPolicy->getExpires();
 
@@ -432,7 +438,7 @@ class TOSExpand implements ExpandInterface
         $serverSideEncryption = 'AES256';
         $algorithm = 'TOS4-HMAC-SHA256';
         $date = $end->format('Ymd\THis\Z');
-        $credential = "{$this->configParser->getAk()}/{$end->format('Ymd')}/{$this->configParser->getRegion()}/tos/request";
+        $credential = "{$configParser->getAk()}/{$end->format('Ymd')}/{$configParser->getRegion()}/tos/request";
         $conditions = [
             [
                 'bucket' => $this->getBucket(),
@@ -457,8 +463,8 @@ class TOSExpand implements ExpandInterface
 
         $base64policy = base64_encode(json_encode(['expiration' => $expiration, 'conditions' => $conditions]));
 
-        $dateKey = hash_hmac('sha256', $end->format('Ymd'), $this->configParser->getSk(), true);
-        $regionKey = hash_hmac('sha256', $this->configParser->getRegion(), $dateKey, true);
+        $dateKey = hash_hmac('sha256', $end->format('Ymd'), $configParser->getSk(), true);
+        $regionKey = hash_hmac('sha256', $configParser->getRegion(), $dateKey, true);
         $serviceKey = hash_hmac('sha256', 'tos', $regionKey, true);
         $signingKey = hash_hmac('sha256', 'request', $serviceKey, true);
         $signature = hash_hmac('sha256', $base64policy, $signingKey);
@@ -466,7 +472,7 @@ class TOSExpand implements ExpandInterface
         $callback = '';
 
         return [
-            'host' => $this->configParser->getEndpoint($this->getBucket()),
+            'host' => $configParser->getEndpoint($this->getBucket()),
             'x-tos-algorithm' => $algorithm,
             'x-tos-date' => $date,
             'x-tos-credential' => $credential,
@@ -483,7 +489,7 @@ class TOSExpand implements ExpandInterface
     /**
      * @see https://www.volcengine.com/docs/6349/127695
      */
-    private function getUploadCredentialBySts(CredentialPolicy $credentialPolicy): array
+    private function getUploadCredentialBySts(CredentialPolicy $credentialPolicy, ConfigParser $configParser): array
     {
         if (empty($this->getTrn())) {
             throw new CloudFileException('未配置 trn');
@@ -568,8 +574,8 @@ class TOSExpand implements ExpandInterface
         $callback = '';
 
         $client = Sts::getInstance();
-        $client->setAccessKey($this->configParser->getAk());
-        $client->setSecretKey($this->configParser->getSk());
+        $client->setAccessKey($configParser->getAk());
+        $client->setSecretKey($configParser->getSk());
         $body = $client->assumeRole($query)->getContents();
         $data = json_decode($body, true);
         if (empty($data['Result']['Credentials'])) {
@@ -577,9 +583,9 @@ class TOSExpand implements ExpandInterface
         }
 
         return [
-            'host' => $this->configParser->getEndpoint($this->getBucket()),
-            'region' => $this->configParser->getRegion(),
-            'endpoint' => $this->configParser->getEndpoint(),
+            'host' => $configParser->getEndpoint($this->getBucket()),
+            'region' => $configParser->getRegion(),
+            'endpoint' => $configParser->getEndpoint(),
             'credentials' => $data['Result']['Credentials'],
             'bucket' => $this->getBucket(),
             'dir' => $credentialPolicy->getDir() ?? '',
@@ -591,6 +597,29 @@ class TOSExpand implements ExpandInterface
     private function getBucket(): string
     {
         return $this->config['bucket'] ?? '';
+    }
+
+    /**
+     * 根据本次调用选项创建 TOS 配置解析器.
+     */
+    private function createConfigParser(array $options = []): ConfigParser
+    {
+        $config = AdapterName::applyEndpointOptions(AdapterName::TOS, $this->config, $options);
+
+        return new ConfigParser($config);
+    }
+
+    /**
+     * 根据本次调用选项获取 TOS 客户端.
+     */
+    private function getClientWithEndpointOptions(array $options = []): TosClient
+    {
+        $config = AdapterName::applyEndpointOptions(AdapterName::TOS, $this->config, $options);
+        if (($config['endpoint'] ?? '') === ($this->config['endpoint'] ?? '')) {
+            return $this->client;
+        }
+
+        return new TosClient(new ConfigParser($config));
     }
 
     private function getTrn(): string

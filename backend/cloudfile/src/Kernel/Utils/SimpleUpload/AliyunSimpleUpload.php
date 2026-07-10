@@ -1004,9 +1004,9 @@ class AliyunSimpleUpload extends SimpleUpload
 
         $tempCredential = $credential['temporary_credential'];
 
-        // Build endpoint from region
+        // 优先使用临时凭证返回的 endpoint，缺省时再按 region 兼容旧格式
         $region = $tempCredential['region'];
-        $endpoint = "https://{$region}.aliyuncs.com";
+        $endpoint = $tempCredential['endpoint'] ?? "https://{$region}.aliyuncs.com";
 
         return [
             'endpoint' => $endpoint,
