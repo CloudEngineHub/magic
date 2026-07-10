@@ -31,7 +31,7 @@ class AdminModeApi extends AbstractApi
     /**
      * 获取模式列表.
      */
-    #[CheckPermission([MagicResourceEnum::ADMIN_AI_MODE], MagicOperationEnum::QUERY)]
+    #[CheckPermission([MagicResourceEnum::PLATFORM_AGENT_OFFICIAL, MagicResourceEnum::ADMIN_AI_MODE], MagicOperationEnum::QUERY)]
     public function getModes(QueryModesRequest $request)
     {
         $authorization = $this->getAuthorization();
