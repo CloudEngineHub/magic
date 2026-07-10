@@ -19,6 +19,19 @@
 		"useLocal": "Keep mine",
 		"useRemote": "Use new"
 	},
+	"connectionEditor": {
+		"linkedMediaActive": "Linked",
+		"linkedMediaDuplicate": "Already added",
+		"linkedMediaMissingResource": "Missing resource",
+		"linkedMediaOverLimit": "Over limit",
+		"linkedMediaUnavailable": "Unavailable",
+		"linkedMediaUnsupportedMode": "Not supported in current mode",
+		"linkedMediaUnsupportedType": "Unsupported type",
+		"mediaKindAudio": "Audio",
+		"mediaKindImage": "Image",
+		"mediaKindVideo": "Video",
+		"removeConnection": "Remove connection"
+	},
 	"dropOverlay": {
 		"loading": "Loading",
 		"referenceImageLimitReached": "Reference image limit reached",

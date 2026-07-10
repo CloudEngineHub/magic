@@ -23,6 +23,8 @@ import { useImageEditorConfig } from "./useImageEditorConfig"
 import { useFloatingComponent } from "../../../app/hooks/layout/useFloatingComponent"
 import ImageEditorSurface from "./ImageEditorSurface"
 import type { MediaResourceFullscreenPreviewItem } from "../../fullscreen/media-resource/index"
+import type { LinkedEditorInputsState } from "../connection/useLinkedEditorInputs"
+import { buildImageRequestWithLinkedEditorInputs } from "../connection/linkedImageRequest"
 
 interface SecondEditProps {
 	imageElement: ImageElement
@@ -251,29 +253,34 @@ export default function SecondEdit(props: SecondEditProps) {
 	)
 
 	// 处理发送按钮点击
-	const handleSend = useCallback(async () => {
-		const requestParams = handlers.buildRequestParams()
-		if (!requestParams.model_id) {
-			console.error("[SecondEdit] 无法确定 model_id")
-			return
-		}
-		await createAndSubmitImageGeneration(
-			{
-				model_id: requestParams.model_id,
-				prompt: requestParams.prompt || prompt.trim(),
-				size: requestParams.size,
-				resolution: requestParams.resolution,
-				reference_images: requestParams.reference_images,
-				reference_image_options: requestParams.reference_image_options,
-				image_generation_config: requestParams.image_generation_config,
-			},
-			{
-				clearEditorPromptOnSuccess: true,
-				closeEditorOnSuccess: true,
-				deselectOnSuccess: true,
-			},
-		)
-	}, [createAndSubmitImageGeneration, handlers, prompt])
+	const handleSend = useCallback(
+		async (linkedEditorInputs: LinkedEditorInputsState) => {
+			const requestParams = handlers.buildRequestParams()
+			if (!requestParams.model_id) {
+				console.error("[SecondEdit] 无法确定 model_id")
+				return
+			}
+			const generateRequest = buildImageRequestWithLinkedEditorInputs(
+				requestParams,
+				linkedEditorInputs,
+				prompt,
+			)
+			if (!generateRequest.prompt?.trim()) return
+
+			await createAndSubmitImageGeneration(
+				{
+					...generateRequest,
+					model_id: requestParams.model_id,
+				},
+				{
+					clearEditorPromptOnSuccess: true,
+					closeEditorOnSuccess: true,
+					deselectOnSuccess: true,
+				},
+			)
+		},
+		[createAndSubmitImageGeneration, handlers, prompt],
+	)
 
 	const handleGenerateAgain = useCallback(async () => {
 		if (!directGenerateRequest?.model_id || !directGenerateRequest.prompt) return

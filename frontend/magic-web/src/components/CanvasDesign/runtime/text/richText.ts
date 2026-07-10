@@ -239,6 +239,23 @@ export function extractPlainTextFromRichText(content?: RichTextParagraph[]): str
 		.join("\n")
 }
 
+export function extractPromptTextFromRichText(content?: RichTextParagraph[]): string {
+	if (!content || content.length === 0) {
+		return ""
+	}
+
+	let orderedListIndex = 0
+	return content
+		.map((paragraph, paragraphIndex) => {
+			const paragraphText = (paragraph.children || []).map((node) => node.text || "").join("")
+			const listMarkerIndex =
+				paragraph.style?.listType === "ordered" ? orderedListIndex++ : paragraphIndex
+			const listMarker = getRichTextListMarker(paragraph.style?.listType, listMarkerIndex)
+			return `${listMarker}${paragraphText}`
+		})
+		.join("\n")
+}
+
 export function cloneRichTextParagraphs(content?: RichTextParagraph[]): RichTextParagraph[] {
 	return normalizeRichTextParagraphs(content).map((paragraph) => ({
 		children: (paragraph.children || []).map(

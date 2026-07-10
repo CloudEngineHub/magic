@@ -1,4 +1,4 @@
-import { Maximize2, PlusIcon, X } from "lucide-react"
+import { Link2, Maximize2, PlusIcon, TriangleAlert, X } from "lucide-react"
 import {
 	Fragment,
 	useCallback,
@@ -18,6 +18,7 @@ import styles from "./SourceList.module.css"
 import { cn } from "../../../runtime/shared/lib/utils"
 import { getMediaResourcePathKind } from "../../../runtime/resources/media-common/mediaResourcePathKind"
 import type { MediaResourceFullscreenPreviewItem } from "../../fullscreen/media-resource/index"
+import type { CropConfig } from "../../../runtime/document/types"
 
 /** 素材槽位：空槽为「+ 标签」；已配置时由列表内置铺满预览与 hover 删除 */
 export interface SourceListSlotOption {
@@ -31,6 +32,11 @@ export interface SourceListSlotOption {
 	/** 已选资源路径，有值时渲染预览 + hover 删除，不再使用默认「+」内容 */
 	resourcePath?: string
 	resourceFileName?: string
+	sourceCrop?: CropConfig
+	/** 只读资源：可预览/移除，但点击槽位不会进入替换选择流程 */
+	readOnly?: boolean
+	statusLabel?: string
+	statusTone?: "neutral" | "warning" | "danger"
 	onRemoveResource?: () => void
 	/** 删除按钮无障碍标签 */
 	removeResourceAriaLabel?: string
@@ -188,8 +194,24 @@ export default function SourceList(props: SourceListProps) {
 									path: resourcePath,
 									fileName: resourceDisplayName,
 									kind: resourceKind,
+									crop: entry.sourceCrop,
 								} satisfies MediaResourceFullscreenPreviewItem)
 							: null
+					const statusTone = entry.statusTone ?? "neutral"
+					const statusIcon =
+						entry.statusLabel && statusTone === "neutral" ? (
+							<Link2
+								size={11}
+								className={styles.sourceItemStatusIconSvg}
+								aria-hidden
+							/>
+						) : entry.statusLabel ? (
+							<TriangleAlert
+								size={11}
+								className={styles.sourceItemStatusIconSvg}
+								aria-hidden
+							/>
+						) : null
 					const slotContent = resourcePath ? (
 						<>
 							<div className={styles.sourceItemInnerFilled}>
@@ -199,6 +221,7 @@ export default function SourceList(props: SourceListProps) {
 									fillParent
 									objectFit="contain"
 									inlineOriginal
+									sourceCrop={entry.sourceCrop}
 								/>
 							</div>
 							{previewResource && entry.onPreviewResource ? (
@@ -224,18 +247,33 @@ export default function SourceList(props: SourceListProps) {
 									/>
 								</button>
 							) : null}
-							<button
-								type="button"
-								className={styles.sourceItemRemoveButton}
-								aria-label={entry.removeResourceAriaLabel ?? "Remove reference"}
-								onClick={(e) => {
-									e.preventDefault()
-									e.stopPropagation()
-									entry.onRemoveResource?.()
-								}}
-							>
-								<X size={10} className={styles.sourceItemRemoveIcon} aria-hidden />
-							</button>
+							{statusIcon ? (
+								<span
+									className={styles.sourceItemStatusIcon}
+									data-tone={statusTone}
+									aria-label={entry.statusLabel}
+								>
+									{statusIcon}
+								</span>
+							) : null}
+							{entry.onRemoveResource ? (
+								<button
+									type="button"
+									className={styles.sourceItemRemoveButton}
+									aria-label={entry.removeResourceAriaLabel ?? "Remove reference"}
+									onClick={(e) => {
+										e.preventDefault()
+										e.stopPropagation()
+										entry.onRemoveResource?.()
+									}}
+								>
+									<X
+										size={10}
+										className={styles.sourceItemRemoveIcon}
+										aria-hidden
+									/>
+								</button>
+							) : null}
 						</>
 					) : (
 						emptySlotContent
@@ -244,6 +282,9 @@ export default function SourceList(props: SourceListProps) {
 					const slotItemClassName = cn(
 						styles.sourceItem,
 						hasResource && styles.sourceItemHasResource,
+						entry.readOnly && styles.sourceItemReadOnly,
+						entry.statusTone === "danger" && styles.sourceItemDanger,
+						entry.statusTone === "warning" && styles.sourceItemWarning,
 					)
 					const slotItemNode = renderItem ? (
 						renderItem({
@@ -272,6 +313,14 @@ export default function SourceList(props: SourceListProps) {
 									<span className="block break-all text-left">
 										{resourceDisplayName}
 									</span>
+									{entry.statusLabel ? (
+										<span
+											className={styles.sourceItemTooltipStatus}
+											data-tone={statusTone}
+										>
+											{entry.statusLabel}
+										</span>
+									) : null}
 									<TooltipPrimitive.Arrow className="fill-black" />
 								</TooltipContent>
 							</TooltipPrimitive.Portal>

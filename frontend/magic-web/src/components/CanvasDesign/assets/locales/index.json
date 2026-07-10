@@ -19,6 +19,19 @@
 		"useLocal": "保留我的",
 		"useRemote": "使用新的"
 	},
+	"connectionEditor": {
+		"linkedMediaActive": "已关联",
+		"linkedMediaDuplicate": "已添加",
+		"linkedMediaMissingResource": "资源缺失",
+		"linkedMediaOverLimit": "数量超限",
+		"linkedMediaUnavailable": "不可用",
+		"linkedMediaUnsupportedMode": "当前模式不支持",
+		"linkedMediaUnsupportedType": "类型不支持",
+		"mediaKindAudio": "音频",
+		"mediaKindImage": "图片",
+		"mediaKindVideo": "视频",
+		"removeConnection": "删除连线"
+	},
 	"dropOverlay": {
 		"loading": "加载中",
 		"processing": "正在处理 {{current}}/{{total}}",

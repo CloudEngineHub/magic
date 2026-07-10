@@ -10,6 +10,8 @@ import { useImageEditorConfig } from "./useImageEditorConfig"
 import { useUpdateEffect } from "ahooks"
 import ImageEditorSurface from "./ImageEditorSurface"
 import type { MediaResourceFullscreenPreviewItem } from "../../fullscreen/media-resource/index"
+import type { LinkedEditorInputsState } from "../connection/useLinkedEditorInputs"
+import { buildImageRequestWithLinkedEditorInputs } from "../connection/linkedImageRequest"
 
 interface ImageMessageEditorRenderProps {
 	imageElement: ImageElement
@@ -39,7 +41,6 @@ export default function ImageMessageEditorRender(props: ImageMessageEditorRender
 		imageElement,
 		editorFocusRef: editorRef,
 	})
-
 	// 保存默认生图配置
 	const saveDefaultGenerateImageConfig = useCallback(
 		(requestParams: GenerateImageRequest) => {
@@ -66,39 +67,46 @@ export default function ImageMessageEditorRender(props: ImageMessageEditorRender
 	)
 
 	// 处理发送按钮点击
-	const handleSend = useCallback(async () => {
-		if (sendingRef.current) return
-		if (!canvas) {
-			return
-		}
+	const handleSend = useCallback(
+		async (linkedEditorInputs: LinkedEditorInputsState) => {
+			if (sendingRef.current) return
+			if (!canvas) {
+				return
+			}
 
-		if (!config.selectedModelId) {
-			return
-		}
+			if (!config.selectedModelId) {
+				return
+			}
 
-		if (!config.prompt.trim()) {
-			return
-		}
+			// 构建请求参数
+			const requestParams = config.handlers.buildRequestParams() as GenerateImageRequest
+			const generateRequest = buildImageRequestWithLinkedEditorInputs(
+				requestParams,
+				linkedEditorInputs,
+				config.prompt,
+			)
+			if (!generateRequest.prompt?.trim()) {
+				return
+			}
 
-		// 构建请求参数
-		const requestParams = config.handlers.buildRequestParams() as GenerateImageRequest
+			const elementInstance = canvas.elementManager.getElementInstance(imageElement.id)
+			if (!elementInstance || !(elementInstance instanceof ImageElementClass)) {
+				return
+			}
 
-		const elementInstance = canvas.elementManager.getElementInstance(imageElement.id)
-		if (!elementInstance || !(elementInstance instanceof ImageElementClass)) {
-			return
-		}
-
-		sendingRef.current = true
-		setIsSending(true)
-		try {
-			config.handlers.cancelPendingDraftPersistence()
-			config.handlers.saveDraftRequest(requestParams)
-			await elementInstance.generateImage(requestParams)
-		} finally {
-			sendingRef.current = false
-			setIsSending(false)
-		}
-	}, [canvas, config.handlers, config.prompt, config.selectedModelId, imageElement.id])
+			sendingRef.current = true
+			setIsSending(true)
+			try {
+				config.handlers.cancelPendingDraftPersistence()
+				config.handlers.saveDraftRequest(requestParams)
+				await elementInstance.generateImage(generateRequest)
+			} finally {
+				sendingRef.current = false
+				setIsSending(false)
+			}
+		},
+		[canvas, config.handlers, config.prompt, config.selectedModelId, imageElement.id],
+	)
 
 	useUpdateEffect(() => {
 		// 如果正在恢复配置，不触发保存

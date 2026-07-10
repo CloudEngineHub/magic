@@ -18,15 +18,27 @@ import { useCanvasSelectionUI } from "../../../app/providers/CanvasUIProvider"
 import useElementPositionEffect from "../../../app/hooks/layout/useElementPositionEffect"
 import { useFloatingComponent } from "../../../app/hooks/layout/useFloatingComponent"
 import { ElementTypeEnum, type VideoElement } from "../../../runtime/document/types"
-import type { GenerateVideoRequest } from "../../../public/magic-types"
-import type { UseVideoEditorConfigOptions } from "./video-editor-config.types"
+import type {
+	GenerateVideoInputs,
+	GenerateVideoRequest,
+	VideoInputModeConfig,
+} from "../../../public/magic-types"
+import type {
+	UseVideoEditorConfigOptions,
+	VideoReferenceAssetInfo,
+} from "./video-editor-config.types"
 import { VideoElement as VideoElementClass } from "../../../runtime/elements/video/VideoElement"
 import { generateUUID } from "../../../runtime/shared/ids"
 import MessageEditor, { type MessageEditorRef } from "../message/MessageEditor"
 import { useCanvasReferenceMention } from "../message/useCanvasReferenceMention"
 import VideoEditorControls from "./VideoEditorControls"
 import { useVideoEditorConfig } from "./useVideoEditorConfig"
-import { validateReferenceAssetsByLimits } from "./model-config/video-editor-config.model"
+import {
+	buildReferenceAssetInputs,
+	hasVideoInputs,
+	resolveReferenceAssetLimits,
+	validateReferenceAssetsByLimits,
+} from "./model-config/video-editor-config.model"
 import type {
 	ReferenceResourcePanelItem,
 	ReferenceResourcePanelSelectContext,
@@ -48,6 +60,15 @@ import { useVideoPointsEstimate } from "./useVideoPointsEstimate"
 import { useVideoPointsConfirm } from "./useVideoPointsConfirm"
 import { buildVideoPointsEstimateSignature } from "./points/video-points-estimate.utils"
 import type { MediaResourceFullscreenPreviewItem } from "../../fullscreen/media-resource/index"
+import LinkedEditorInputsBar from "../connection/LinkedEditorInputsBar"
+import { composePromptWithLinkedText } from "../connection/linkedTextPrompt"
+import {
+	mergeLinkedMediaReferences,
+	type LinkedEditorMediaKind,
+	type LinkedEditorMediaPolicy,
+	type LinkedEditorMediaReference,
+} from "../connection/linkedEditorInputs"
+import { useLinkedEditorInputs } from "../connection/useLinkedEditorInputs"
 
 interface VideoGenerateEditorRenderProps {
 	videoElement: VideoElement
@@ -109,6 +130,96 @@ export default function VideoGenerateEditorRender(props: VideoGenerateEditorRend
 	})
 	const { handlers } = config
 	const { buildRequestParams } = handlers
+	const linkedMediaPolicy = useMemo<LinkedEditorMediaPolicy>(() => {
+		const supportedKinds: LinkedEditorMediaKind[] = []
+		if (config.supportsReferenceImages) supportedKinds.push("image")
+		if (config.supportsReferenceVideos) supportedKinds.push("video")
+		if (config.supportsReferenceAudios) supportedKinds.push("audio")
+
+		return {
+			supportedKinds,
+			manualReferences: config.referenceImageInfos.map((info) => ({
+				kind: info.assetType,
+				path: info.path,
+			})),
+			validateActiveReferences: (references) => {
+				const hasMaxIssue = validateReferenceAssetsByLimits(
+					config.currentInputModeConfig,
+					buildVideoReferenceAssetInfosFromReferences(references),
+				).some((issue) => issue.rule === "max")
+				return hasMaxIssue ? "over-limit" : null
+			},
+		}
+	}, [
+		config.currentInputModeConfig,
+		config.referenceImageInfos,
+		config.supportsReferenceAudios,
+		config.supportsReferenceImages,
+		config.supportsReferenceVideos,
+	])
+	const linkedEditorInputs = useLinkedEditorInputs({
+		targetElementId: videoElement.id,
+		targetKind: "video",
+		mediaPolicy: linkedMediaPolicy,
+	})
+	const mergedReferenceAssetInfos = useMemo(
+		() =>
+			mergeLinkedVideoReferenceAssetInfos(
+				config.referenceImageInfos,
+				linkedEditorInputs.activeMediaReferences,
+			),
+		[config.referenceImageInfos, linkedEditorInputs.activeMediaReferences],
+	)
+	const effectiveReferencePaths = useMemo(
+		() => mergedReferenceAssetInfos.map((info) => info.path),
+		[mergedReferenceAssetInfos],
+	)
+	const effectiveReferenceAssetCounts = useMemo(
+		() => countVideoReferenceAssetInfosByKind(mergedReferenceAssetInfos),
+		[mergedReferenceAssetInfos],
+	)
+	const effectiveReferenceAssetLimits = useMemo(
+		() => resolveReferenceAssetLimits(config.currentInputModeConfig, mergedReferenceAssetInfos),
+		[config.currentInputModeConfig, mergedReferenceAssetInfos],
+	)
+	const effectiveMaxReferenceFiles = useMemo(() => {
+		if (!config.supportsReferenceAssets) return 0
+		const maxCount = effectiveReferenceAssetLimits.total.max
+		if (!Number.isFinite(maxCount)) return undefined
+		return maxCount && maxCount > 0 ? maxCount : undefined
+	}, [config.supportsReferenceAssets, effectiveReferenceAssetLimits.total.max])
+	const effectiveReferenceLimitReached =
+		effectiveMaxReferenceFiles !== undefined &&
+		effectiveReferencePaths.length >= effectiveMaxReferenceFiles
+	const composedPrompt = useMemo(
+		() => composePromptWithLinkedText(linkedEditorInputs.textPrompt, config.prompt),
+		[config.prompt, linkedEditorInputs.textPrompt],
+	)
+	const buildRequestParamsWithLinkedInputs = useCallback(
+		(requestParams: Partial<GenerateVideoRequest> = buildRequestParams()) => {
+			const requestWithPrompt = {
+				...requestParams,
+				prompt: composePromptWithLinkedText(
+					linkedEditorInputs.textPrompt,
+					requestParams.prompt ?? config.prompt,
+				),
+			}
+			return buildVideoRequestWithReferenceAssets({
+				requestParams: requestWithPrompt,
+				referenceAssetInfos: mergedReferenceAssetInfos,
+				inputModeConfig: config.currentInputModeConfig,
+				supportsReferenceAssets: config.supportsReferenceAssets,
+			})
+		},
+		[
+			buildRequestParams,
+			config.currentInputModeConfig,
+			config.prompt,
+			config.supportsReferenceAssets,
+			linkedEditorInputs.textPrompt,
+			mergedReferenceAssetInfos,
+		],
+	)
 	const hasNonStandardInputMode = config.availableInputModes.some((mode) => mode !== "standard")
 	const isEstimateInputModeSettled =
 		config.availableInputModes.includes(config.selectedInputMode) &&
@@ -120,10 +231,10 @@ export default function VideoGenerateEditorRender(props: VideoGenerateEditorRend
 	const estimateRequest = useMemo(() => {
 		if (!estimateModelId) return null
 		return {
-			...buildRequestParams(),
+			...buildRequestParamsWithLinkedInputs(),
 			model_id: estimateModelId,
 		}
-	}, [estimateModelId, buildRequestParams])
+	}, [estimateModelId, buildRequestParamsWithLinkedInputs])
 	const estimateSignature = useMemo(() => {
 		if (!estimateRequest) return null
 		return buildVideoPointsEstimateSignature(estimateRequest)
@@ -138,13 +249,13 @@ export default function VideoGenerateEditorRender(props: VideoGenerateEditorRend
 		useCanvasReferenceMention({
 			matchableItems: config.matchableItems,
 			mentionEnabledOverride: config.modelOptions.length > 0,
-			maxReferenceFiles: config.supportsReferenceAssets ? config.maxReferenceImages : 0,
-			currentReferenceFiles: config.currentReferenceImages,
-			isReferenceFileLimitReached: config.isReferenceImageLimitReached,
+			maxReferenceFiles: effectiveMaxReferenceFiles,
+			currentReferenceFiles: effectiveReferencePaths,
+			isReferenceFileLimitReached: effectiveReferenceLimitReached,
 			referenceResourceType: config.referenceResourceType,
-			assetLimits: config.supportsReferenceAssets ? config.referenceAssetLimits : undefined,
+			assetLimits: config.supportsReferenceAssets ? effectiveReferenceAssetLimits : undefined,
 			currentAssetCounts: config.supportsReferenceAssets
-				? config.referenceAssetCounts
+				? effectiveReferenceAssetCounts
 				: undefined,
 		})
 
@@ -284,14 +395,14 @@ export default function VideoGenerateEditorRender(props: VideoGenerateEditorRend
 				isDropEnabled: canAcceptReferenceDrop,
 				files,
 				matchableItems,
-				currentReferenceFiles: config.currentReferenceImages,
-				maxReferenceFiles: config.maxReferenceImages,
+				currentReferenceFiles: effectiveReferencePaths,
+				maxReferenceFiles: effectiveMaxReferenceFiles,
 			})
 		},
 		[
 			canAcceptReferenceDrop,
-			config.currentReferenceImages,
-			config.maxReferenceImages,
+			effectiveReferencePaths,
+			effectiveMaxReferenceFiles,
 			matchableItems,
 		],
 	)
@@ -302,19 +413,19 @@ export default function VideoGenerateEditorRender(props: VideoGenerateEditorRend
 				isDropEnabled: canAcceptReferenceDrop,
 				files,
 				accept: config.fileInputAccept,
-				currentReferenceFileCount: config.currentReferenceImages.length,
-				maxReferenceFiles: config.maxReferenceImages,
-				assetLimits: config.referenceAssetLimits,
-				currentAssetCounts: config.referenceAssetCounts,
+				currentReferenceFileCount: effectiveReferencePaths.length,
+				maxReferenceFiles: effectiveMaxReferenceFiles,
+				assetLimits: effectiveReferenceAssetLimits,
+				currentAssetCounts: effectiveReferenceAssetCounts,
 			})
 		},
 		[
 			canAcceptReferenceDrop,
-			config.currentReferenceImages,
-			config.maxReferenceImages,
 			config.fileInputAccept,
-			config.referenceAssetLimits,
-			config.referenceAssetCounts,
+			effectiveMaxReferenceFiles,
+			effectiveReferenceAssetLimits,
+			effectiveReferenceAssetCounts,
+			effectiveReferencePaths,
 		],
 	)
 
@@ -322,17 +433,17 @@ export default function VideoGenerateEditorRender(props: VideoGenerateEditorRend
 		() =>
 			getReferenceResourceHoverState({
 				isDropEnabled: canAcceptReferenceDrop,
-				currentReferenceFileCount: config.currentReferenceImages.length,
-				maxReferenceFiles: config.maxReferenceImages,
-				assetLimits: config.referenceAssetLimits,
-				currentAssetCounts: config.referenceAssetCounts,
+				currentReferenceFileCount: effectiveReferencePaths.length,
+				maxReferenceFiles: effectiveMaxReferenceFiles,
+				assetLimits: effectiveReferenceAssetLimits,
+				currentAssetCounts: effectiveReferenceAssetCounts,
 			}),
 		[
 			canAcceptReferenceDrop,
-			config.currentReferenceImages,
-			config.maxReferenceImages,
-			config.referenceAssetLimits,
-			config.referenceAssetCounts,
+			effectiveMaxReferenceFiles,
+			effectiveReferenceAssetLimits,
+			effectiveReferenceAssetCounts,
+			effectiveReferencePaths,
 		],
 	)
 
@@ -342,18 +453,18 @@ export default function VideoGenerateEditorRender(props: VideoGenerateEditorRend
 				isDropEnabled: canAcceptReferenceDrop,
 				dataTransfer,
 				accept: config.fileInputAccept,
-				currentReferenceFileCount: config.currentReferenceImages.length,
-				maxReferenceFiles: config.maxReferenceImages,
-				assetLimits: config.referenceAssetLimits,
-				currentAssetCounts: config.referenceAssetCounts,
+				currentReferenceFileCount: effectiveReferencePaths.length,
+				maxReferenceFiles: effectiveMaxReferenceFiles,
+				assetLimits: effectiveReferenceAssetLimits,
+				currentAssetCounts: effectiveReferenceAssetCounts,
 			}),
 		[
 			canAcceptReferenceDrop,
 			config.fileInputAccept,
-			config.currentReferenceImages,
-			config.maxReferenceImages,
-			config.referenceAssetLimits,
-			config.referenceAssetCounts,
+			effectiveMaxReferenceFiles,
+			effectiveReferenceAssetLimits,
+			effectiveReferenceAssetCounts,
+			effectiveReferencePaths,
 		],
 	)
 
@@ -362,9 +473,9 @@ export default function VideoGenerateEditorRender(props: VideoGenerateEditorRend
 			const normalizedFiles = normalizeProjectDropFiles(
 				files,
 				matchableItems,
-				config.currentReferenceImages,
+				effectiveReferencePaths,
 			)
-			const existingReferencePathSet = new Set(config.currentReferenceImages)
+			const existingReferencePathSet = new Set(effectiveReferencePaths)
 			const nextFiles: ReferenceDropProjectFile[] = []
 			const seenNextPathSet = new Set<string>()
 			normalizedFiles.forEach((file) => {
@@ -382,7 +493,7 @@ export default function VideoGenerateEditorRender(props: VideoGenerateEditorRend
 				})
 			})
 		},
-		[config.currentReferenceImages, handlers, matchableItems],
+		[config.currentReferenceImages.length, effectiveReferencePaths, handlers, matchableItems],
 	)
 
 	const handlePaste = useCallback(
@@ -412,9 +523,12 @@ export default function VideoGenerateEditorRender(props: VideoGenerateEditorRend
 		t("videoEditor.placeholder", "请输入您的视频创作需求")
 
 	const submitVideoGeneration = useCallback(
-		async (requestParams: GenerateVideoRequest) => {
+		async (
+			requestParams: GenerateVideoRequest,
+			options?: { draftRequest?: Partial<GenerateVideoRequest> },
+		) => {
 			if (sendingRef.current) return
-			if (!canvas || !config.selectedModelId || !config.prompt.trim()) return
+			if (!canvas || !config.selectedModelId || !requestParams.prompt?.trim()) return
 			const elementInstance = canvas.elementManager.getElementInstance(videoElement.id)
 			if (!(elementInstance instanceof VideoElementClass)) return
 			sendingRef.current = true
@@ -430,7 +544,7 @@ export default function VideoGenerateEditorRender(props: VideoGenerateEditorRend
 								newElementSize: config.ratioOption,
 							})
 						: await (async () => {
-								handlers.saveDraftRequest(requestParams)
+								handlers.saveDraftRequest(options?.draftRequest ?? requestParams)
 								return elementInstance.generateVideo(requestParams)
 							})()
 				if (submitted) onGenerateSubmitSucceeded?.()
@@ -441,7 +555,6 @@ export default function VideoGenerateEditorRender(props: VideoGenerateEditorRend
 		},
 		[
 			canvas,
-			config.prompt,
 			config.ratioOption,
 			config.selectedModelId,
 			handlers,
@@ -453,8 +566,8 @@ export default function VideoGenerateEditorRender(props: VideoGenerateEditorRend
 
 	const handleSend = useCallback(async () => {
 		if (sendingRef.current || isEstimateLoading) return
-		if (!canvas || !config.selectedModelId || !config.prompt.trim()) return
-		const currentInputs = config.referenceImageInfos
+		if (!canvas || !config.selectedModelId || !composedPrompt.trim()) return
+		const currentInputs = mergedReferenceAssetInfos
 		const validationIssues = validateReferenceAssetsByLimits(
 			config.currentInputModeConfig,
 			currentInputs,
@@ -506,26 +619,29 @@ export default function VideoGenerateEditorRender(props: VideoGenerateEditorRend
 			)
 			return
 		}
+		const draftRequestParams = buildRequestParams()
 		const requestParams = {
-			...(handlers.buildRequestParams() as GenerateVideoRequest),
+			...(buildRequestParamsWithLinkedInputs(draftRequestParams) as GenerateVideoRequest),
 			video_id: generateUUID(),
 		}
 		const elementInstance = canvas.elementManager.getElementInstance(videoElement.id)
 		if (!(elementInstance instanceof VideoElementClass)) return
 		await confirmVideoGeneration({
 			points: estimatedPoints,
-			onConfirm: () => submitVideoGeneration(requestParams),
+			onConfirm: () =>
+				submitVideoGeneration(requestParams, { draftRequest: draftRequestParams }),
 		})
 	}, [
+		buildRequestParams,
+		buildRequestParamsWithLinkedInputs,
 		canvas,
+		composedPrompt,
 		confirmVideoGeneration,
 		config.currentInputModeConfig,
-		config.prompt,
-		config.referenceImageInfos,
 		config.selectedModelId,
 		estimatedPoints,
-		handlers,
 		isEstimateLoading,
+		mergedReferenceAssetInfos,
 		submitVideoGeneration,
 		t,
 		videoElement,
@@ -555,6 +671,10 @@ export default function VideoGenerateEditorRender(props: VideoGenerateEditorRend
 				style={{ display: "none" }}
 				onChange={handlers.handleFileChange}
 			/>
+			<LinkedEditorInputsBar
+				textConnections={linkedEditorInputs.textConnections}
+				onRemoveConnection={linkedEditorInputs.removeConnection}
+			/>
 			<MessageEditor
 				ref={editorRef}
 				autoFocus={autoFocus}
@@ -583,12 +703,14 @@ export default function VideoGenerateEditorRender(props: VideoGenerateEditorRend
 				onProjectSelect={handleProjectSelect}
 				onFocusEditor={() => editorRef.current?.focus()}
 				onPreviewMediaResource={onPreviewMediaResource}
+				linkedMediaItems={linkedEditorInputs.mediaItems}
+				onRemoveLinkedConnection={linkedEditorInputs.removeConnection}
 				renderSendButton={() => (
 					<Button
 						className={styles.sendButton}
 						onClick={handleSend}
 						disabled={
-							sendButtonBusy || !config.prompt.trim() || !config.selectedModelId
+							sendButtonBusy || !composedPrompt.trim() || !config.selectedModelId
 						}
 						aria-busy={sendButtonBusy}
 						data-testid="video-generate-editor-send-button"
@@ -617,6 +739,90 @@ export default function VideoGenerateEditorRender(props: VideoGenerateEditorRend
 			/>
 		</ReferenceResourceDropSurface>
 	)
+}
+
+function getFileNameFromPath(path: string): string {
+	return path.split("/").pop() || path
+}
+
+function buildVideoReferenceAssetInfoFromReference(
+	reference: LinkedEditorMediaReference,
+): VideoReferenceAssetInfo {
+	return {
+		path: reference.path,
+		src: reference.path,
+		fileName: getFileNameFromPath(reference.path),
+		assetType: reference.kind,
+	}
+}
+
+function buildVideoReferenceAssetInfosFromReferences(
+	references: LinkedEditorMediaReference[],
+): VideoReferenceAssetInfo[] {
+	return references.map(buildVideoReferenceAssetInfoFromReference)
+}
+
+function mergeLinkedVideoReferenceAssetInfos(
+	manualInfos: VideoReferenceAssetInfo[],
+	linkedReferences: LinkedEditorMediaReference[],
+): VideoReferenceAssetInfo[] {
+	const manualInfoByPath = new Map(manualInfos.map((info) => [info.path, info]))
+	return mergeLinkedMediaReferences(
+		manualInfos.map((info) => ({
+			kind: info.assetType,
+			path: info.path,
+		})),
+		linkedReferences,
+	).map(
+		(reference) =>
+			manualInfoByPath.get(reference.path) ??
+			buildVideoReferenceAssetInfoFromReference(reference),
+	)
+}
+
+function countVideoReferenceAssetInfosByKind(assets: VideoReferenceAssetInfo[]): {
+	images: number
+	videos: number
+	audios: number
+} {
+	return assets.reduce(
+		(acc, item) => {
+			if (item.assetType === "image") acc.images += 1
+			if (item.assetType === "video") acc.videos += 1
+			if (item.assetType === "audio") acc.audios += 1
+			return acc
+		},
+		{ images: 0, videos: 0, audios: 0 },
+	)
+}
+
+function omitReferenceAssetInputs(inputs: GenerateVideoInputs | undefined): GenerateVideoInputs {
+	const nextInputs = { ...(inputs ?? {}) }
+	delete nextInputs.reference_images
+	delete nextInputs.reference_videos
+	delete nextInputs.reference_audios
+	return nextInputs
+}
+
+function buildVideoRequestWithReferenceAssets(options: {
+	requestParams: Partial<GenerateVideoRequest>
+	referenceAssetInfos: VideoReferenceAssetInfo[]
+	inputModeConfig: VideoInputModeConfig | undefined
+	supportsReferenceAssets: boolean
+}): Partial<GenerateVideoRequest> {
+	const { requestParams, referenceAssetInfos, inputModeConfig, supportsReferenceAssets } = options
+	if (!supportsReferenceAssets) return requestParams
+
+	const referenceInputs = buildReferenceAssetInputs(referenceAssetInfos, inputModeConfig)
+	const inputs = {
+		...omitReferenceAssetInputs(requestParams.inputs),
+		...referenceInputs,
+	}
+
+	return {
+		...requestParams,
+		inputs: hasVideoInputs(inputs) ? inputs : undefined,
+	}
 }
 
 /** 中文界面略窄；英文等其它语言略宽，避免输入时外壳宽度抖动 */

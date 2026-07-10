@@ -82,6 +82,18 @@
 	background-color: white;
 }
 
+.sourceItemReadOnly {
+	cursor: default;
+}
+
+.sourceItemWarning {
+	border-color: rgb(var(--warning-rgb, 245 158 11));
+}
+
+.sourceItemDanger {
+	border-color: rgb(var(--destructive-rgb));
+}
+
 .sourceItemPreviewable {
 	cursor: pointer;
 }
@@ -183,6 +195,54 @@
 .sourceItemPreviewIcon {
 	flex-shrink: 0;
 	color: currentcolor;
+}
+
+.sourceItemStatusIcon {
+	position: absolute;
+	top: 2px;
+	left: 2px;
+	z-index: 2;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 16px;
+	height: 16px;
+	color: #fafafa;
+	background: rgb(0 0 0 / 56%);
+	border-radius: 999px;
+	box-shadow: 0 1px 3px rgb(0 0 0 / 16%);
+	pointer-events: none;
+}
+
+.sourceItemStatusIcon[data-tone="warning"] {
+	color: #451a03;
+	background: #fbbf24;
+}
+
+.sourceItemStatusIcon[data-tone="danger"] {
+	color: rgb(var(--destructive-foreground-rgb));
+	background: rgb(var(--destructive-rgb));
+}
+
+.sourceItemStatusIconSvg {
+	flex-shrink: 0;
+}
+
+.sourceItemTooltipStatus {
+	display: block;
+	margin-top: 4px;
+	color: rgb(255 255 255 / 72%);
+	font-size: 11px;
+	line-height: 14px;
+	text-align: left;
+}
+
+.sourceItemTooltipStatus[data-tone="warning"] {
+	color: #fde68a;
+}
+
+.sourceItemTooltipStatus[data-tone="danger"] {
+	color: #fecaca;
 }
 
 .sourceItemHasResource:hover .sourceItemRemoveButton,

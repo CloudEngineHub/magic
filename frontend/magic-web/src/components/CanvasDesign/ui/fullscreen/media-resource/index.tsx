@@ -31,6 +31,7 @@ export default function MediaResourceFullscreenPreview(props: MediaResourceFulls
 			<ImageFullscreenOverlay
 				path={resource.path}
 				fileName={resource.fileName}
+				crop={resource.crop}
 				isOpen
 				onClose={onClose}
 			/>

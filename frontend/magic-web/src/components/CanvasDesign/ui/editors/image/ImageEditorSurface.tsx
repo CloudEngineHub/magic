@@ -1,5 +1,6 @@
 import {
 	useCallback,
+	useMemo,
 	useState,
 	type ClipboardEvent,
 	type CSSProperties,
@@ -35,6 +36,13 @@ import ImageEditorControls from "./ImageEditorControls"
 import type { ImageEditorConfig } from "./useImageEditorConfig"
 import styles from "./index.module.css"
 import type { MediaResourceFullscreenPreviewItem } from "../../fullscreen/media-resource/index"
+import LinkedEditorInputsBar from "../connection/LinkedEditorInputsBar"
+import {
+	type LinkedEditorInputsState,
+	useLinkedEditorInputs,
+} from "../connection/useLinkedEditorInputs"
+import { composePromptWithLinkedText } from "../connection/linkedTextPrompt"
+import type { LinkedEditorMediaPolicy } from "../connection/linkedEditorInputs"
 
 interface ImageEditorSurfaceProps {
 	imageElement: ImageElement
@@ -44,7 +52,7 @@ interface ImageEditorSurfaceProps {
 	floatingId: string
 	selectionPersistenceKey: string
 	placeholder: string
-	onSend: () => void | Promise<void>
+	onSend: (linkedEditorInputs: LinkedEditorInputsState) => void | Promise<void>
 	isSending: boolean
 	autoFocus?: boolean
 	autoFocusAtDocumentEnd?: boolean
@@ -84,13 +92,48 @@ export default function ImageEditorSurface(props: ImageEditorSurfaceProps) {
 		currentReferenceFiles,
 		isReferenceFileLimitReached,
 	} = config
+	const linkedMediaPolicy = useMemo<LinkedEditorMediaPolicy>(() => {
+		const maxCount = maxReferenceFiles ?? 0
+		return {
+			supportedKinds: maxCount > 0 ? ["image"] : [],
+			manualReferences: currentReferenceFiles.map((path) => ({
+				kind: "image",
+				path,
+			})),
+			maxTotalCount: maxCount,
+			maxCountByKind: { image: maxCount },
+		}
+	}, [currentReferenceFiles, maxReferenceFiles])
+	const linkedEditorInputs = useLinkedEditorInputs({
+		targetElementId: imageElement.id,
+		targetKind: "image",
+		mediaPolicy: linkedMediaPolicy,
+	})
+	const canSendPrompt = Boolean(
+		composePromptWithLinkedText(linkedEditorInputs.textPrompt, prompt).trim(),
+	)
+	const linkedActiveImagePaths = useMemo(
+		() =>
+			linkedEditorInputs.activeMediaReferences
+				.filter((reference) => reference.kind === "image")
+				.map((reference) => reference.path),
+		[linkedEditorInputs.activeMediaReferences],
+	)
+	const effectiveCurrentReferenceFiles = useMemo(
+		() => mergeUniquePaths(currentReferenceFiles, linkedActiveImagePaths),
+		[currentReferenceFiles, linkedActiveImagePaths],
+	)
+	const effectiveIsReferenceFileLimitReached =
+		maxReferenceFiles !== undefined &&
+		effectiveCurrentReferenceFiles.length >= maxReferenceFiles
 
 	const { matchableItems, mentionDataService, mentionExtension, mentionEnabled } =
 		useCanvasReferenceMention({
 			matchableItems: config.matchableItems,
 			maxReferenceFiles,
-			currentReferenceFiles,
-			isReferenceFileLimitReached,
+			currentReferenceFiles: effectiveCurrentReferenceFiles,
+			isReferenceFileLimitReached:
+				isReferenceFileLimitReached || effectiveIsReferenceFileLimitReached,
 			referenceResourceType: config.referenceResourceType,
 		})
 
@@ -127,12 +170,20 @@ export default function ImageEditorSurface(props: ImageEditorSurfaceProps) {
 		(source: ReferenceResourceSourceType) => {
 			if (source !== "local-upload") return
 			handlers.setPopoverOpen(false)
-			if (!config.selectedReferenceSlot?.path && config.isReferenceFileLimitReached) {
+			if (
+				!config.selectedReferenceSlot?.path &&
+				(config.isReferenceFileLimitReached || effectiveIsReferenceFileLimitReached)
+			) {
 				return
 			}
 			handlers.triggerFileSelect()
 		},
-		[config.isReferenceFileLimitReached, config.selectedReferenceSlot?.path, handlers],
+		[
+			config.isReferenceFileLimitReached,
+			config.selectedReferenceSlot?.path,
+			effectiveIsReferenceFileLimitReached,
+			handlers,
+		],
 	)
 
 	const handleProjectSelect = useCallback(
@@ -161,11 +212,11 @@ export default function ImageEditorSurface(props: ImageEditorSurfaceProps) {
 				isDropEnabled: canAcceptReferenceDrop,
 				files,
 				matchableItems,
-				currentReferenceFiles,
+				currentReferenceFiles: effectiveCurrentReferenceFiles,
 				maxReferenceFiles,
 			})
 		},
-		[canAcceptReferenceDrop, matchableItems, currentReferenceFiles, maxReferenceFiles],
+		[canAcceptReferenceDrop, matchableItems, effectiveCurrentReferenceFiles, maxReferenceFiles],
 	)
 
 	const canAcceptLocalFiles = useCallback(
@@ -174,21 +225,26 @@ export default function ImageEditorSurface(props: ImageEditorSurfaceProps) {
 				isDropEnabled: canAcceptReferenceDrop,
 				files,
 				accept: fileInputAccept,
-				currentReferenceFileCount: currentReferenceFiles.length,
+				currentReferenceFileCount: effectiveCurrentReferenceFiles.length,
 				maxReferenceFiles,
 			})
 		},
-		[canAcceptReferenceDrop, fileInputAccept, maxReferenceFiles, currentReferenceFiles],
+		[
+			canAcceptReferenceDrop,
+			fileInputAccept,
+			maxReferenceFiles,
+			effectiveCurrentReferenceFiles,
+		],
 	)
 
 	const getHoverDropState = useCallback(
 		() =>
 			getReferenceResourceHoverState({
 				isDropEnabled: canAcceptReferenceDrop,
-				currentReferenceFileCount: currentReferenceFiles.length,
+				currentReferenceFileCount: effectiveCurrentReferenceFiles.length,
 				maxReferenceFiles,
 			}),
-		[canAcceptReferenceDrop, maxReferenceFiles, currentReferenceFiles],
+		[canAcceptReferenceDrop, maxReferenceFiles, effectiveCurrentReferenceFiles],
 	)
 
 	const getLocalHoverState = useCallback(
@@ -197,10 +253,15 @@ export default function ImageEditorSurface(props: ImageEditorSurfaceProps) {
 				isDropEnabled: canAcceptReferenceDrop,
 				dataTransfer,
 				accept: fileInputAccept,
-				currentReferenceFileCount: currentReferenceFiles.length,
+				currentReferenceFileCount: effectiveCurrentReferenceFiles.length,
 				maxReferenceFiles,
 			}),
-		[canAcceptReferenceDrop, fileInputAccept, maxReferenceFiles, currentReferenceFiles],
+		[
+			canAcceptReferenceDrop,
+			fileInputAccept,
+			maxReferenceFiles,
+			effectiveCurrentReferenceFiles,
+		],
 	)
 
 	const handleProjectFilesDrop = useCallback(
@@ -208,13 +269,13 @@ export default function ImageEditorSurface(props: ImageEditorSurfaceProps) {
 			const normalizedFiles = normalizeProjectDropFiles(
 				files,
 				matchableItems,
-				currentReferenceFiles,
+				effectiveCurrentReferenceFiles,
 			)
 			editorRef.current?.insertMentionItems(
 				normalizedFiles.map((file) => createReferenceResourcePanelItemFromDropFile(file)),
 			)
 		},
-		[currentReferenceFiles, editorRef, matchableItems],
+		[effectiveCurrentReferenceFiles, editorRef, matchableItems],
 	)
 
 	const handlePaste = useCallback(
@@ -259,6 +320,8 @@ export default function ImageEditorSurface(props: ImageEditorSurfaceProps) {
 		[config.referenceFileInfos, editorRef, handlers, prompt],
 	)
 
+	const handleSend = useCallback(() => onSend(linkedEditorInputs), [linkedEditorInputs, onSend])
+
 	return (
 		<ReferenceResourceDropSurface
 			ref={setRefs}
@@ -276,6 +339,12 @@ export default function ImageEditorSurface(props: ImageEditorSurfaceProps) {
 				style={{ display: "none" }}
 				onChange={handlers.handleFileChange}
 			/>
+			{linkedEditorInputs ? (
+				<LinkedEditorInputsBar
+					textConnections={linkedEditorInputs.textConnections}
+					onRemoveConnection={linkedEditorInputs.removeConnection}
+				/>
+			) : null}
 			<MessageEditor
 				ref={editorRef}
 				autoFocus={autoFocus}
@@ -285,7 +354,7 @@ export default function ImageEditorSurface(props: ImageEditorSurfaceProps) {
 				placeholder={placeholder}
 				value={prompt}
 				onChange={handlers.setPrompt}
-				onEnter={onSend}
+				onEnter={handleSend}
 				onScrollbarChange={setHasScrollbar}
 				matchableItems={matchableItems}
 				mentionDataService={mentionDataService}
@@ -302,11 +371,13 @@ export default function ImageEditorSurface(props: ImageEditorSurfaceProps) {
 				onProjectSelect={handleProjectSelect}
 				onReferenceFileRemove={handleReferenceFileRemoveFromPopover}
 				onPreviewMediaResource={onPreviewMediaResource}
+				linkedMediaItems={linkedEditorInputs?.mediaItems}
+				onRemoveLinkedConnection={linkedEditorInputs?.removeConnection}
 				renderSendButton={() => (
 					<Button
 						className={styles.sendButton}
-						onClick={onSend}
-						disabled={isSending || !prompt.trim() || !config.selectedModelId}
+						onClick={handleSend}
+						disabled={isSending || !canSendPrompt || !config.selectedModelId}
 						aria-busy={isSending}
 					>
 						{isSending ? (
@@ -319,4 +390,15 @@ export default function ImageEditorSurface(props: ImageEditorSurfaceProps) {
 			/>
 		</ReferenceResourceDropSurface>
 	)
+}
+
+function mergeUniquePaths(paths: string[], extraPaths: string[]): string[] {
+	const merged: string[] = []
+	const seen = new Set<string>()
+	for (const path of [...paths, ...extraPaths]) {
+		if (!path || seen.has(path)) continue
+		seen.add(path)
+		merged.push(path)
+	}
+	return merged
 }

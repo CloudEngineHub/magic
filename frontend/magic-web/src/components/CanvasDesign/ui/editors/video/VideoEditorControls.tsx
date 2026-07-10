@@ -13,6 +13,7 @@ import SourceList, {
 	type SourceListSlotOption,
 } from "../../panels/source-list/index"
 import { VideoGenerationSettingsPopover } from "./model-config/VideoGenerationSettingsPopover"
+import { resolveReferenceAssetLimits } from "./model-config/video-editor-config.model"
 import ReferenceResourceSlotPopover from "../message/reference-assets/ReferenceResourceSlotPopover"
 import type {
 	ReferenceResourceSourceType,
@@ -25,6 +26,11 @@ import type {
 import { cn } from "../../../runtime/shared/lib/utils"
 import { useOverflowChange } from "../../../app/hooks/layout/useOverflowChange"
 import type { MediaResourceFullscreenPreviewItem } from "../../fullscreen/media-resource/index"
+import type { TFunction } from "../../../public/i18n-types"
+import type {
+	LinkedEditorMediaInactiveReason,
+	LinkedEditorMediaItem,
+} from "../connection/linkedEditorInputs"
 
 interface VideoEditorEmptyReferenceSlotPopoverProps {
 	inputTab: "frame" | "reference"
@@ -155,6 +161,94 @@ function assignForwardedRef<T>(ref: ForwardedRef<T>, value: T | null) {
 	ref.current = value
 }
 
+function getLinkedMediaInactiveReasonLabel(
+	t: TFunction,
+	reason: LinkedEditorMediaInactiveReason | undefined,
+): string {
+	if (reason === "unsupported-type")
+		return t("connectionEditor.linkedMediaUnsupportedType", "类型不支持")
+	if (reason === "unsupported-mode")
+		return t("connectionEditor.linkedMediaUnsupportedMode", "当前模式不支持")
+	if (reason === "over-limit") return t("connectionEditor.linkedMediaOverLimit", "数量超限")
+	if (reason === "missing-resource")
+		return t("connectionEditor.linkedMediaMissingResource", "资源缺失")
+	if (reason === "duplicate") return t("connectionEditor.linkedMediaDuplicate", "已添加")
+	return t("connectionEditor.linkedMediaUnavailable", "不可用")
+}
+
+function getLinkedMediaStatusTone(item: LinkedEditorMediaItem): "neutral" | "warning" | "danger" {
+	if (item.status === "active") return "neutral"
+	if (item.reason === "over-limit" || item.reason === "unsupported-type") return "danger"
+	return "warning"
+}
+
+function countLinkedMediaItemsByKind(items: Array<LinkedEditorMediaItem & { path: string }>): {
+	images: number
+	videos: number
+	audios: number
+} {
+	return items.reduce(
+		(acc, item) => {
+			if (item.kind === "image") acc.images += 1
+			if (item.kind === "video") acc.videos += 1
+			if (item.kind === "audio") acc.audios += 1
+			return acc
+		},
+		{ images: 0, videos: 0, audios: 0 },
+	)
+}
+
+function getLinkedMediaFileName(item: LinkedEditorMediaItem & { path: string }): string {
+	return item.fileName || item.path.split("/").pop() || item.path
+}
+
+function createLinkedMediaSourceListOption(options: {
+	item: LinkedEditorMediaItem & { path: string }
+	index: number
+	slotIndex: number
+	label: string
+	removeResourceAriaLabel: string
+	previewResourceAriaLabel: string
+	t: TFunction
+	onPreviewMediaResource?: (resource: MediaResourceFullscreenPreviewItem) => void
+	onRemoveLinkedConnection?: (connectionId: string) => void
+}): SourceListOption {
+	const {
+		item,
+		index,
+		slotIndex,
+		label,
+		removeResourceAriaLabel,
+		previewResourceAriaLabel,
+		t,
+		onPreviewMediaResource,
+		onRemoveLinkedConnection,
+	} = options
+	const statusLabel =
+		item.status === "active"
+			? t("connectionEditor.linkedMediaActive", "已关联")
+			: getLinkedMediaInactiveReasonLabel(t, item.reason)
+	return {
+		kind: "slot",
+		label,
+		value: `linked-reference-${item.connectionId}-${index}`,
+		slotIndex,
+		groupId: item.kind,
+		resourcePath: item.path,
+		resourceFileName: item.fileName,
+		sourceCrop: item.sourceCrop,
+		readOnly: true,
+		statusLabel,
+		statusTone: getLinkedMediaStatusTone(item),
+		removeResourceAriaLabel,
+		previewResourceAriaLabel,
+		onPreviewResource: onPreviewMediaResource,
+		onRemoveResource: onRemoveLinkedConnection
+			? () => onRemoveLinkedConnection(item.connectionId)
+			: undefined,
+	}
+}
+
 /** 视频编辑器底部工具区：模型、输入 Tab、参考图与发送区 */
 interface VideoEditorControlsProps {
 	config: VideoEditorConfig
@@ -179,6 +273,8 @@ interface VideoEditorControlsProps {
 	/** 点击顶部栏空白区域（非 SourceList）时聚焦提示词编辑器 */
 	onFocusEditor?: () => void
 	onPreviewMediaResource?: (resource: MediaResourceFullscreenPreviewItem) => void
+	linkedMediaItems?: LinkedEditorMediaItem[]
+	onRemoveLinkedConnection?: (connectionId: string) => void
 }
 
 export default function VideoEditorControls(props: VideoEditorControlsProps) {
@@ -192,6 +288,8 @@ export default function VideoEditorControls(props: VideoEditorControlsProps) {
 		renderSendButton,
 		onFocusEditor,
 		onPreviewMediaResource,
+		linkedMediaItems = [],
+		onRemoveLinkedConnection,
 	} = props
 	const { t } = useCanvasDesignI18n()
 	const sourceListScrollerRef = useRef<HTMLDivElement | null>(null)
@@ -204,13 +302,12 @@ export default function VideoEditorControls(props: VideoEditorControlsProps) {
 		modelOptionGroups,
 		selectedModelOption,
 		activeInputTab,
+		currentInputModeConfig,
 		supportsEndFrame,
 		maxFrameImages,
 		currentFrameImages,
 		frameImageInfos,
-		maxReferenceImages,
 		referenceImageInfos,
-		referenceAssetLimits,
 		referenceAssetCounts,
 		supportsReferenceAssets,
 		supportsReferenceImages,
@@ -282,6 +379,64 @@ export default function VideoEditorControls(props: VideoEditorControlsProps) {
 			}) satisfies Record<VideoReferenceAssetKind, ReferenceResourceType>,
 		[],
 	)
+	const linkedDisplayMediaItems = useMemo(
+		() =>
+			linkedMediaItems.filter((item): item is LinkedEditorMediaItem & { path: string } =>
+				Boolean(item.path),
+			),
+		[linkedMediaItems],
+	)
+	const linkedActiveMediaItems = useMemo(
+		() => linkedDisplayMediaItems.filter((item) => item.status === "active"),
+		[linkedDisplayMediaItems],
+	)
+	const linkedActiveReferenceAssetInfos = useMemo<VideoReferenceAssetInfo[]>(
+		() =>
+			linkedActiveMediaItems.map((item) => ({
+				path: item.path,
+				src: item.path,
+				fileName: getLinkedMediaFileName(item),
+				assetType: item.kind,
+			})),
+		[linkedActiveMediaItems],
+	)
+	const effectiveReferenceAssetInfos = useMemo(
+		() => [...referenceImageInfos, ...linkedActiveReferenceAssetInfos],
+		[referenceImageInfos, linkedActiveReferenceAssetInfos],
+	)
+	const effectiveReferenceAssetLimits = useMemo(
+		() => resolveReferenceAssetLimits(currentInputModeConfig, effectiveReferenceAssetInfos),
+		[currentInputModeConfig, effectiveReferenceAssetInfos],
+	)
+	const effectiveMaxReferenceFiles = useMemo(() => {
+		if (!supportsReferenceAssets) return 0
+		const maxCount = effectiveReferenceAssetLimits.total.max
+		if (!Number.isFinite(maxCount)) return undefined
+		return maxCount && maxCount > 0 ? maxCount : undefined
+	}, [effectiveReferenceAssetLimits.total.max, supportsReferenceAssets])
+	const linkedActiveReferenceAssetCounts = useMemo(
+		() => countLinkedMediaItemsByKind(linkedActiveMediaItems),
+		[linkedActiveMediaItems],
+	)
+	const effectiveReferenceAssetCounts = useMemo(
+		() => ({
+			images: referenceAssetCounts.images + linkedActiveReferenceAssetCounts.images,
+			videos: referenceAssetCounts.videos + linkedActiveReferenceAssetCounts.videos,
+			audios: referenceAssetCounts.audios + linkedActiveReferenceAssetCounts.audios,
+		}),
+		[referenceAssetCounts, linkedActiveReferenceAssetCounts],
+	)
+	const effectiveReferenceAssetTotalCount =
+		referenceImageInfos.length + linkedActiveMediaItems.length
+	const displayReferenceKinds = useMemo(() => {
+		const nextKinds: VideoReferenceAssetKind[] = [...supportedReferenceKinds]
+		linkedDisplayMediaItems.forEach((item) => {
+			if (!nextKinds.includes(item.kind)) {
+				nextKinds.push(item.kind)
+			}
+		})
+		return nextKinds
+	}, [linkedDisplayMediaItems, supportedReferenceKinds])
 
 	const frameOptions = useMemo((): SourceListOption[] => {
 		const options: SourceListOption[] = []
@@ -371,10 +526,10 @@ export default function VideoEditorControls(props: VideoEditorControlsProps) {
 	])
 
 	const referenceAssetOptions = useMemo((): SourceListOption[] => {
-		if (!supportsReferenceAssets) return []
-		const totalCount = referenceImageInfos.length
+		if (!supportsReferenceAssets && linkedDisplayMediaItems.length === 0) return []
+		const totalCount = effectiveReferenceAssetTotalCount
 		const totalLimitReached =
-			maxReferenceImages !== undefined && totalCount >= maxReferenceImages
+			effectiveMaxReferenceFiles !== undefined && totalCount >= effectiveMaxReferenceFiles
 		const existingItemsByType = {
 			image: [] as Array<{
 				info: VideoEditorConfig["referenceImageInfos"][number]
@@ -393,22 +548,30 @@ export default function VideoEditorControls(props: VideoEditorControlsProps) {
 		referenceImageInfos.forEach((info, index) => {
 			existingItemsByType[info.assetType].push({ info, index })
 		})
+		const linkedItemsByType = {
+			image: [] as Array<LinkedEditorMediaItem & { path: string }>,
+			video: [] as Array<LinkedEditorMediaItem & { path: string }>,
+			audio: [] as Array<LinkedEditorMediaItem & { path: string }>,
+		}
+		linkedDisplayMediaItems.forEach((item) => {
+			linkedItemsByType[item.kind].push(item)
+		})
 
 		const getTypeMax = (kind: VideoReferenceAssetKind): number | undefined => {
 			const range =
 				kind === "image"
-					? referenceAssetLimits.reference_images
+					? effectiveReferenceAssetLimits.reference_images
 					: kind === "video"
-						? referenceAssetLimits.reference_videos
-						: referenceAssetLimits.reference_audios
+						? effectiveReferenceAssetLimits.reference_videos
+						: effectiveReferenceAssetLimits.reference_audios
 			if (!Number.isFinite(range.max)) return undefined
 			return range.max > 0 ? range.max : undefined
 		}
 
 		const getTypeCount = (kind: VideoReferenceAssetKind): number => {
-			if (kind === "image") return referenceAssetCounts.images
-			if (kind === "video") return referenceAssetCounts.videos
-			return referenceAssetCounts.audios
+			if (kind === "image") return effectiveReferenceAssetCounts.images
+			if (kind === "video") return effectiveReferenceAssetCounts.videos
+			return effectiveReferenceAssetCounts.audios
 		}
 
 		const getInsertIndex = (kind: VideoReferenceAssetKind): number => {
@@ -423,8 +586,9 @@ export default function VideoEditorControls(props: VideoEditorControlsProps) {
 		}
 
 		const options: SourceListOption[] = []
-		for (const kind of supportedReferenceKinds) {
+		for (const kind of displayReferenceKinds) {
 			const items = existingItemsByType[kind]
+			const linkedItems = linkedItemsByType[kind]
 			const maxCount = getTypeMax(kind)
 			const typeCount = getTypeCount(kind)
 			const countLabel =
@@ -445,9 +609,26 @@ export default function VideoEditorControls(props: VideoEditorControlsProps) {
 					onRemoveResource: () => handlers.handleReferenceImageRemove(info.path),
 				})
 			})
+			linkedItems.forEach((item, linkedIndex) => {
+				options.push(
+					createLinkedMediaSourceListOption({
+						item,
+						index: linkedIndex,
+						slotIndex: referenceImageInfos.length + linkedIndex,
+						label: referenceSlotLabelByType[kind],
+						removeResourceAriaLabel: removeSlotAriaLabel,
+						previewResourceAriaLabel,
+						t,
+						onPreviewMediaResource,
+						onRemoveLinkedConnection,
+					}),
+				)
+			})
 
 			const canAddMoreOfType =
-				!totalLimitReached && (maxCount === undefined || typeCount < maxCount)
+				supportedReferenceKinds.includes(kind) &&
+				!totalLimitReached &&
+				(maxCount === undefined || typeCount < maxCount)
 			if (!canAddMoreOfType) continue
 
 			const insertIndex = getInsertIndex(kind)
@@ -464,17 +645,26 @@ export default function VideoEditorControls(props: VideoEditorControlsProps) {
 		return options
 	}, [
 		supportsReferenceAssets,
-		maxReferenceImages,
+		linkedDisplayMediaItems,
+		effectiveReferenceAssetTotalCount,
+		effectiveMaxReferenceFiles,
 		referenceImageInfos,
-		referenceAssetLimits,
-		referenceAssetCounts,
+		effectiveReferenceAssetLimits,
+		effectiveReferenceAssetCounts,
 		supportedReferenceKinds,
+		displayReferenceKinds,
 		referenceSlotLabelByType,
 		removeSlotAriaLabel,
 		previewResourceAriaLabel,
 		onPreviewMediaResource,
+		onRemoveLinkedConnection,
 		handlers,
 	])
+	const showTopImageInputs =
+		supportsStartFrame ||
+		supportsEndFrame ||
+		supportsReferenceAssets ||
+		linkedDisplayMediaItems.length > 0
 
 	const selectedResourceSlotKey = selectedResourceSlot
 		? selectedResourceSlot.slotKey ||
@@ -487,25 +677,41 @@ export default function VideoEditorControls(props: VideoEditorControlsProps) {
 			const allowedInfos = referenceImageInfos.filter(
 				(info) => info.assetType === referenceAssetKind,
 			)
-			const currentInfos = allowedInfos.filter(
-				(_info, index) => !option.resourcePath || index !== option.slotIndex,
+			const currentManualInfos = allowedInfos.filter(
+				(info) => !option.resourcePath || info.path !== option.resourcePath,
 			)
-			const currentAssetCounts = currentInfos.reduce(
-				(acc, info) => {
-					if (info.assetType === "image") acc.images++
-					else if (info.assetType === "video") acc.videos++
-					else acc.audios++
-					return acc
-				},
-				{ images: 0, videos: 0, audios: 0 },
+			const currentLinkedInfos = linkedActiveMediaItems.filter(
+				(info) => info.kind === referenceAssetKind,
 			)
+			const currentManualReferenceCount = referenceImageInfos.filter(
+				(info) => !option.resourcePath || info.path !== option.resourcePath,
+			).length
+			const currentReferenceCount =
+				currentManualReferenceCount + linkedActiveMediaItems.length
+			const currentManualAssetCounts = referenceImageInfos
+				.filter((info) => !option.resourcePath || info.path !== option.resourcePath)
+				.reduce(
+					(acc, info) => {
+						if (info.assetType === "image") acc.images++
+						else if (info.assetType === "video") acc.videos++
+						else acc.audios++
+						return acc
+					},
+					{ images: 0, videos: 0, audios: 0 },
+				)
+			const currentAssetCounts = linkedActiveMediaItems.reduce((acc, info) => {
+				if (info.kind === "image") acc.images++
+				else if (info.kind === "video") acc.videos++
+				else acc.audios++
+				return acc
+			}, currentManualAssetCounts)
 			const typeRange =
 				referenceAssetKind === "image"
-					? referenceAssetLimits.reference_images
+					? effectiveReferenceAssetLimits.reference_images
 					: referenceAssetKind === "video"
-						? referenceAssetLimits.reference_videos
-						: referenceAssetLimits.reference_audios
-			const totalMax = referenceAssetLimits.total.max
+						? effectiveReferenceAssetLimits.reference_videos
+						: effectiveReferenceAssetLimits.reference_audios
+			const totalMax = effectiveReferenceAssetLimits.total.max
 			const effectiveMax = Number.isFinite(typeRange.max)
 				? Math.min(Math.max(typeRange.max, 0), totalMax)
 				: totalMax
@@ -520,19 +726,27 @@ export default function VideoEditorControls(props: VideoEditorControlsProps) {
 			return {
 				slotKey: option.value,
 				referenceAssetKind,
-				currentFiles: currentInfos.map((info) => info.path),
+				currentFiles: [
+					...currentManualInfos.map((info) => info.path),
+					...currentLinkedInfos.map((info) => info.path),
+				],
 				maxReferenceFiles:
 					Number.isFinite(effectiveMax) && effectiveMax > 0 ? effectiveMax : undefined,
 				isLimitReached:
-					(Number.isFinite(totalMax) && currentInfos.length >= totalMax) ||
+					(Number.isFinite(totalMax) && currentReferenceCount >= totalMax) ||
 					!hasRemainingCapacity,
 				referenceResourceType: referenceResourceTypeByKind[referenceAssetKind],
 				referenceFileInfos: allowedInfos,
-				assetLimits: referenceAssetLimits,
+				assetLimits: effectiveReferenceAssetLimits,
 				currentAssetCounts,
 			}
 		},
-		[referenceAssetLimits, referenceImageInfos, referenceResourceTypeByKind],
+		[
+			effectiveReferenceAssetLimits,
+			linkedActiveMediaItems,
+			referenceImageInfos,
+			referenceResourceTypeByKind,
+		],
 	)
 
 	const buildRenderSourceListSlotItem = useCallback(
@@ -609,6 +823,13 @@ export default function VideoEditorControls(props: VideoEditorControlsProps) {
 									aria-hidden
 								/>
 							</button>
+						</div>
+					)
+				}
+				if (option.readOnly) {
+					return (
+						<div ref={slotRootRef} className={className} style={style}>
+							{content}
 						</div>
 					)
 				}
@@ -697,8 +918,6 @@ export default function VideoEditorControls(props: VideoEditorControlsProps) {
 		() => buildRenderSourceListSlotItem("reference", resolveReferencePopoverState),
 		[buildRenderSourceListSlotItem, resolveReferencePopoverState],
 	)
-
-	const showTopImageInputs = supportsStartFrame || supportsEndFrame || supportsReferenceAssets
 
 	const handleTopPointerDown = useCallback(
 		(event: PointerEvent<HTMLDivElement>) => {
