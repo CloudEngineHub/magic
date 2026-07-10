@@ -202,6 +202,7 @@ export interface ReferenceResourcePanelCatalogBehavior {
 export interface ReferenceResourcePanelRendererProps {
 	visible: boolean
 	triggerRef?: RefObject<HTMLElement | null>
+	portalContainer?: HTMLElement | null
 	language?: string
 	dataService?: MentionDataServicePort
 	initialLoadOptions?: ReferenceResourcePanelInitialLoadOptions

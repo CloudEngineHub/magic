@@ -104,6 +104,7 @@ const MentionPanelMobile = observer(
 			initialNavigationStack,
 			searchPlaceholder,
 			triggerRef,
+			portalContainer,
 			language,
 			className,
 			style,
@@ -535,6 +536,7 @@ const MentionPanelMobile = observer(
 				overlayClassName={styles.mask}
 				position="bottom"
 				title={a11yTitle}
+				getContainer={portalContainer ?? undefined}
 				{...restProps}
 			>
 				<MentionPanelRootProviders

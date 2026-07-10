@@ -12,6 +12,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "../../ui/popover"
 import { cn } from "../../../lib/utils"
 import { useMagic } from "../../../context/MagicContext"
 import { useCanvasDesignI18n } from "../../../context/I18nContext"
+import { usePortalContainer } from "../../ui/custom/PortalContainerContext"
 import {
 	REFERENCE_RESOURCE_SOURCE_TYPES,
 	type ReferenceResourceFileInfo,
@@ -112,6 +113,7 @@ export default function ReferenceResourcePopover(props: ReferenceResourcePopover
 	} = props
 	const { t } = useCanvasDesignI18n()
 	const { referenceResourcePanelRenderer: ReferenceResourcePanelRenderer } = useMagic()
+	const portalContainer = usePortalContainer()
 	const [displayMode, setDisplayMode] = useState<"hover" | "click">("click")
 	const [isProjectSelectVisible, setIsProjectSelectVisible] = useState(false)
 	const internalTriggerRef = useRef<HTMLDivElement>(null)
@@ -423,6 +425,7 @@ export default function ReferenceResourcePopover(props: ReferenceResourcePopover
 				<ReferenceResourcePanelRenderer
 					visible={isProjectSelectVisible}
 					triggerRef={internalTriggerRef as React.RefObject<HTMLElement | null>}
+					portalContainer={portalContainer}
 					language="zh-CN"
 					onSelect={handleProjectSelect}
 					onClose={handleProjectSelectClose}

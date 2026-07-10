@@ -18,6 +18,7 @@ const PANEL_CLASS_NAME = "canvas-design-reference-resource-panel"
 interface CanvasMentionPanelProps {
 	visible: boolean
 	triggerRef?: React.RefObject<HTMLElement | null>
+	portalContainer?: HTMLElement | null
 	language?: string
 	className?: string
 	initialState?: PanelState
@@ -55,6 +56,7 @@ export function CanvasDesignReferenceResourcePanel(props: ReferenceResourcePanel
 	const {
 		visible,
 		triggerRef,
+		portalContainer,
 		language,
 		dataService,
 		initialLoadOptions,
@@ -85,6 +87,7 @@ export function CanvasDesignReferenceResourcePanel(props: ReferenceResourcePanel
 		<TypedMentionPanel
 			visible={visible}
 			triggerRef={triggerRef}
+			portalContainer={portalContainer}
 			language={language}
 			className={PANEL_CLASS_NAME}
 			initialState={initialLoadOptions ? PanelState.FOLDER : undefined}
