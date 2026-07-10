@@ -67,6 +67,7 @@ class SlidesTemplateAssembler
         $dto->setDescription(I18nTextDTO::fromArray($template->getDescription()));
         $dto->setThumbnailFileKey($template->getThumbnailFileKey());
         $dto->setThumbnailUrl($template->getThumbnailUrl());
+        $dto->setColors($template->getColors());
         $dto->setCollageFileKey($template->getCollageFileKey());
         $dto->setCollageUrl($template->getCollageUrl());
         $dto->setPreviewImageFileKeys($template->getPreviewImageFileKeys());
@@ -82,6 +83,10 @@ class SlidesTemplateAssembler
         $dto->setUpdatedUid($template->getUpdatedUid());
         $dto->setCreatedAt($template->getCreatedAt());
         $dto->setUpdatedAt($template->getUpdatedAt());
+        $dto->setTags(array_map(
+            static fn ($tag) => SlidesTemplateTagAssembler::createAdminItemDTO($tag),
+            $template->getTags()
+        ));
 
         if ($dto instanceof AdminSlidesTemplateDetailDTO) {
             $dto->setTemplateFileUrl($template->getTemplateFileUrl());
@@ -109,12 +114,17 @@ class SlidesTemplateAssembler
         $dto->setLabel(I18nTextDTO::fromArray($template->getLabel()));
         $dto->setDescription(I18nTextDTO::fromArray($template->getDescription()));
         $dto->setThumbnailUrl($template->getThumbnailUrl());
+        $dto->setColors($template->getColors());
         $dto->setCollageUrl($template->getCollageUrl());
         $dto->setPreviewImageUrls($template->getPreviewImageUrls());
         $dto->setPreviewUrl($template->getPreviewUrl());
         $dto->setSort($template->getSort());
         $dto->setUsageCount($template->getUsageCount());
         $dto->setIsOfficial(OfficialOrganizationUtil::isOfficialOrganization($template->getOrganizationCode()));
+        $dto->setTags(array_map(
+            static fn ($tag) => SlidesTemplateTagAssembler::createSimplePublicItemDTO($tag),
+            $template->getTags()
+        ));
         return $dto;
     }
 

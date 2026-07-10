@@ -218,8 +218,12 @@ use App\Domain\Provider\Service\ModelFilter\OrganizationBasedModelFilterInterfac
 use App\Domain\Provider\Service\ModelFilter\PackageFilterInterface;
 use App\Domain\SlidesTemplate\Repository\Facade\SlidesTemplateCategoryRepositoryInterface;
 use App\Domain\SlidesTemplate\Repository\Facade\SlidesTemplateRepositoryInterface;
+use App\Domain\SlidesTemplate\Repository\Facade\SlidesTemplateTagRelationRepositoryInterface;
+use App\Domain\SlidesTemplate\Repository\Facade\SlidesTemplateTagRepositoryInterface;
 use App\Domain\SlidesTemplate\Repository\Persistence\SlidesTemplateCategoryRepository;
 use App\Domain\SlidesTemplate\Repository\Persistence\SlidesTemplateRepository;
+use App\Domain\SlidesTemplate\Repository\Persistence\SlidesTemplateTagRelationRepository;
+use App\Domain\SlidesTemplate\Repository\Persistence\SlidesTemplateTagRepository;
 use App\Domain\SuperAgent\Service\UsageCalculator\DefaultUsageCalculator;
 use App\Domain\SuperAgent\Service\UsageCalculator\UsageCalculatorInterface;
 use App\Domain\Token\Item\MagicTokenExtra;
@@ -566,6 +570,8 @@ $dependencies = [
     // slides template
     SlidesTemplateCategoryRepositoryInterface::class => SlidesTemplateCategoryRepository::class,
     SlidesTemplateRepositoryInterface::class => SlidesTemplateRepository::class,
+    SlidesTemplateTagRepositoryInterface::class => SlidesTemplateTagRepository::class,
+    SlidesTemplateTagRelationRepositoryInterface::class => SlidesTemplateTagRelationRepository::class,
 
     OrganizationBasedModelFilterInterface::class => DefaultOrganizationModelFilter::class,
     ProviderControlPolicyInterface::class => DefaultProviderControlPolicy::class,

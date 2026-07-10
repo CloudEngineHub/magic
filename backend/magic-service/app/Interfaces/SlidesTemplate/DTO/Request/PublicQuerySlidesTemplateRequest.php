@@ -25,6 +25,8 @@ class PublicQuerySlidesTemplateRequest extends FormRequest
             'page_size' => 'nullable|integer|min:1|max:200',
             'keyword' => 'nullable|string|max:100',
             'category_code' => 'nullable|string|max:64',
+            'tag_codes' => 'nullable',
+            'tag_match' => 'nullable|string|in:any,all',
         ];
     }
 
@@ -38,6 +40,7 @@ class PublicQuerySlidesTemplateRequest extends FormRequest
             'page_size.max' => __('slides_template.page_size_max'),
             'keyword.max' => __('slides_template.keyword_max'),
             'category_code.max' => __('slides_template.category_code_max'),
+            'tag_match.in' => __('slides_template.tag_match_in'),
         ];
     }
 
@@ -61,5 +64,38 @@ class PublicQuerySlidesTemplateRequest extends FormRequest
     {
         $categoryCode = trim((string) $this->input('category_code', ''));
         return $categoryCode === '' ? null : $categoryCode;
+    }
+
+    public function getTagCodes(): array
+    {
+        return $this->normalizeTagCodes($this->input('tag_codes', []));
+    }
+
+    public function getTagMatch(): string
+    {
+        $tagMatch = trim((string) $this->input('tag_match', 'any'));
+        return in_array($tagMatch, ['any', 'all'], true) ? $tagMatch : 'any';
+    }
+
+    private function normalizeTagCodes(mixed $tagCodes): array
+    {
+        if (is_string($tagCodes)) {
+            $tagCodes = explode(',', $tagCodes);
+        }
+        if (! is_array($tagCodes)) {
+            return [];
+        }
+
+        $result = [];
+        foreach ($tagCodes as $tagCode) {
+            if (! is_string($tagCode)) {
+                continue;
+            }
+            $tagCode = trim($tagCode);
+            if ($tagCode !== '') {
+                $result[$tagCode] = $tagCode;
+            }
+        }
+        return array_values($result);
     }
 }

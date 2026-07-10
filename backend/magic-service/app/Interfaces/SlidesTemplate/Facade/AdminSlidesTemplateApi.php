@@ -17,6 +17,7 @@ use App\Interfaces\SlidesTemplate\DTO\Request\AdminQuerySlidesTemplateRequest;
 use App\Interfaces\SlidesTemplate\DTO\Request\SaveSlidesTemplateRequest;
 use App\Interfaces\SlidesTemplate\DTO\Request\UpdateSlidesTemplateSortRequest;
 use App\Interfaces\SlidesTemplate\DTO\Request\UpdateSlidesTemplateStatusRequest;
+use App\Interfaces\SlidesTemplate\DTO\Request\UpdateSlidesTemplateTagsRequest;
 use Dtyq\ApiResponse\Annotation\ApiResponse;
 
 #[ApiResponse('low_code')]
@@ -65,6 +66,15 @@ class AdminSlidesTemplateApi extends AbstractApi
     {
         $request->validated();
         $template = $this->adminSlidesTemplateAppService->update($this->getAuthorization(), $id, $request);
+
+        return SlidesTemplateAssembler::createAdminDetailDTO($template)->toArray();
+    }
+
+    #[CheckPermission([MagicResourceEnum::PLATFORM_SLIDES_TEMPLATE], MagicOperationEnum::EDIT)]
+    public function updateTags(UpdateSlidesTemplateTagsRequest $request, string $id): array
+    {
+        $request->validated();
+        $template = $this->adminSlidesTemplateAppService->updateTags($this->getAuthorization(), $id, $request);
 
         return SlidesTemplateAssembler::createAdminDetailDTO($template)->toArray();
     }

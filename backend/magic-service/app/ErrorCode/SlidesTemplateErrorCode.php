@@ -37,4 +37,10 @@ enum SlidesTemplateErrorCode: int
 
     #[ErrorMessage('slides_template.category_code_already_exists')]
     case CATEGORY_CODE_ALREADY_EXISTS = 47007;
+
+    #[ErrorMessage('slides_template.tag_not_found')]
+    case TAG_NOT_FOUND = 47008;
+
+    #[ErrorMessage('slides_template.tag_code_already_exists')]
+    case TAG_CODE_ALREADY_EXISTS = 47009;
 }

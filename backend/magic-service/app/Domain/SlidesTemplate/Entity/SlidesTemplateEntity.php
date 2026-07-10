@@ -33,6 +33,8 @@ class SlidesTemplateEntity extends AbstractEntity
 
     protected ?string $thumbnailUrl = null;
 
+    protected array $colors = [];
+
     protected ?string $collageFileKey = null;
 
     protected ?string $collageUrl = null;
@@ -54,6 +56,11 @@ class SlidesTemplateEntity extends AbstractEntity
     protected int $baseUsageCount = 0;
 
     protected int $actualUsageCount = 0;
+
+    /**
+     * @var SlidesTemplateTagEntity[]
+     */
+    protected array $tags = [];
 
     protected ?string $createdUid = null;
 
@@ -87,6 +94,7 @@ class SlidesTemplateEntity extends AbstractEntity
             'description' => $this->description,
             'search_text' => $this->searchText,
             'thumbnail_file_key' => $this->thumbnailFileKey,
+            'colors' => $this->colors,
             'collage_file_key' => $this->collageFileKey,
             'preview_image_file_keys' => $this->previewImageFileKeys,
             'template_file_key' => $this->templateFileKey,
@@ -221,6 +229,26 @@ class SlidesTemplateEntity extends AbstractEntity
         return $this;
     }
 
+    public function getColors(): array
+    {
+        return $this->colors;
+    }
+
+    public function setColors(?array $colors): self
+    {
+        $this->colors = [];
+        foreach ($colors ?? [] as $color) {
+            if (! is_string($color)) {
+                continue;
+            }
+            $color = strtoupper(trim($color));
+            if (preg_match('/^#[0-9A-F]{6}$/', $color) === 1) {
+                $this->colors[] = $color;
+            }
+        }
+        return $this;
+    }
+
     public function getCollageFileKey(): ?string
     {
         return $this->collageFileKey;
@@ -345,6 +373,23 @@ class SlidesTemplateEntity extends AbstractEntity
     public function getUsageCount(): int
     {
         return $this->baseUsageCount + $this->actualUsageCount;
+    }
+
+    /**
+     * @return SlidesTemplateTagEntity[]
+     */
+    public function getTags(): array
+    {
+        return $this->tags;
+    }
+
+    /**
+     * @param SlidesTemplateTagEntity[] $tags
+     */
+    public function setTags(array $tags): self
+    {
+        $this->tags = array_values($tags);
+        return $this;
     }
 
     public function getCreatedUid(): ?string

@@ -7,6 +7,8 @@ declare(strict_types=1);
 
 namespace App\Domain\SlidesTemplate\Entity\ValueObject\Query;
 
+use App\Domain\SlidesTemplate\Entity\ValueObject\SlidesTemplateTagMatch;
+
 class SlidesTemplateQuery
 {
     private ?string $keyword = null;
@@ -16,6 +18,10 @@ class SlidesTemplateQuery
     private ?string $categoryCode = null;
 
     private ?int $status = null;
+
+    private array $tagCodes = [];
+
+    private SlidesTemplateTagMatch $tagMatch = SlidesTemplateTagMatch::Any;
 
     public function getKeyword(): ?string
     {
@@ -58,5 +64,40 @@ class SlidesTemplateQuery
     public function setStatus(null|int|string $status): void
     {
         $this->status = $status === null || $status === '' ? null : (int) $status;
+    }
+
+    public function getTagCodes(): array
+    {
+        return $this->tagCodes;
+    }
+
+    public function setTagCodes(array $tagCodes): void
+    {
+        $result = [];
+        foreach ($tagCodes as $tagCode) {
+            if (! is_string($tagCode)) {
+                continue;
+            }
+            $tagCode = trim($tagCode);
+            if ($tagCode !== '') {
+                $result[$tagCode] = $tagCode;
+            }
+        }
+        $this->tagCodes = array_values($result);
+    }
+
+    public function getTagMatch(): SlidesTemplateTagMatch
+    {
+        return $this->tagMatch;
+    }
+
+    public function setTagMatch(null|SlidesTemplateTagMatch|string $tagMatch): void
+    {
+        if ($tagMatch instanceof SlidesTemplateTagMatch) {
+            $this->tagMatch = $tagMatch;
+            return;
+        }
+
+        $this->tagMatch = SlidesTemplateTagMatch::tryFrom((string) $tagMatch) ?? SlidesTemplateTagMatch::Any;
     }
 }

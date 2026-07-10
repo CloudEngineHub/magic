@@ -29,6 +29,8 @@ class AdminSlidesTemplateItemDTO extends AbstractDTO
 
     public ?string $thumbnailUrl = null;
 
+    public array $colors = [];
+
     public ?string $collageFileKey = null;
 
     public ?string $collageUrl = null;
@@ -58,6 +60,8 @@ class AdminSlidesTemplateItemDTO extends AbstractDTO
     public ?string $createdAt = null;
 
     public ?string $updatedAt = null;
+
+    public array $tags = [];
 
     public function __construct(?array $data = null)
     {
@@ -154,6 +158,16 @@ class AdminSlidesTemplateItemDTO extends AbstractDTO
     public function setThumbnailUrl(?string $thumbnailUrl): void
     {
         $this->thumbnailUrl = $thumbnailUrl;
+    }
+
+    public function getColors(): array
+    {
+        return $this->colors;
+    }
+
+    public function setColors(?array $colors): void
+    {
+        $this->colors = $this->normalizeStringList($colors ?? []);
     }
 
     public function getCollageFileKey(): ?string
@@ -304,6 +318,16 @@ class AdminSlidesTemplateItemDTO extends AbstractDTO
     public function setUpdatedAt(?string $updatedAt): void
     {
         $this->updatedAt = $updatedAt;
+    }
+
+    public function getTags(): array
+    {
+        return $this->tags;
+    }
+
+    public function setTags(array $tags): void
+    {
+        $this->tags = array_values($tags);
     }
 
     private function normalizeStringList(array $values): array

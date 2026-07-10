@@ -38,6 +38,8 @@ class SaveSlidesTemplateRequest extends FormRequest
             'status' => 'nullable|integer|in:0,1',
             'sort' => 'nullable|integer',
             'base_usage_count' => 'nullable|integer|min:0',
+            'tag_codes' => 'nullable|array',
+            'tag_codes.*' => 'string|max:64|regex:/^[a-z0-9]+(-[a-z0-9]+)*$/',
         ];
     }
 
@@ -79,6 +81,10 @@ class SaveSlidesTemplateRequest extends FormRequest
             'sort.integer' => __('slides_template.sort_integer'),
             'base_usage_count.integer' => __('slides_template.base_usage_count_integer'),
             'base_usage_count.min' => __('slides_template.base_usage_count_min'),
+            'tag_codes.array' => __('slides_template.tag_codes_array'),
+            'tag_codes.*.string' => __('slides_template.tag_codes_string'),
+            'tag_codes.*.max' => __('slides_template.tag_code_max'),
+            'tag_codes.*.regex' => __('slides_template.tag_code_regex'),
         ];
     }
 
@@ -159,5 +165,30 @@ class SaveSlidesTemplateRequest extends FormRequest
     public function getBaseUsageCount(): int
     {
         return (int) $this->input('base_usage_count', 0);
+    }
+
+    public function getTagCodes(): array
+    {
+        $tagCodes = $this->input('tag_codes', []);
+        if (! is_array($tagCodes)) {
+            return [];
+        }
+
+        $result = [];
+        foreach ($tagCodes as $tagCode) {
+            if (! is_string($tagCode)) {
+                continue;
+            }
+            $tagCode = trim($tagCode);
+            if ($tagCode !== '') {
+                $result[$tagCode] = $tagCode;
+            }
+        }
+        return array_values($result);
+    }
+
+    public function hasTagCodes(): bool
+    {
+        return $this->has('tag_codes');
     }
 }

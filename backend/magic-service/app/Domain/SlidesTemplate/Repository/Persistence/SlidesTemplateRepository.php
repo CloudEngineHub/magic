@@ -10,6 +10,8 @@ namespace App\Domain\SlidesTemplate\Repository\Persistence;
 use App\Domain\SlidesTemplate\Entity\SlidesTemplateDataIsolation;
 use App\Domain\SlidesTemplate\Entity\SlidesTemplateEntity;
 use App\Domain\SlidesTemplate\Entity\ValueObject\Query\SlidesTemplateQuery;
+use App\Domain\SlidesTemplate\Entity\ValueObject\SlidesTemplateTagMatch;
+use App\Domain\SlidesTemplate\Entity\ValueObject\SlidesTemplateTagStatus;
 use App\Domain\SlidesTemplate\Factory\SlidesTemplateFactory;
 use App\Domain\SlidesTemplate\Repository\Facade\SlidesTemplateRepositoryInterface;
 use App\Domain\SlidesTemplate\Repository\Persistence\Model\SlidesTemplateModel;
@@ -65,6 +67,8 @@ class SlidesTemplateRepository extends AbstractRepository implements SlidesTempl
             $keywordLike = '%' . addcslashes($keyword, '\%_') . '%';
             $builder->where('search_text', 'LIKE', $keywordLike);
         }
+
+        $this->applyTagFilter($builder, $query);
 
         $builder->orderBy('sort', 'desc')->orderBy('id', 'desc');
 
@@ -153,5 +157,36 @@ class SlidesTemplateRepository extends AbstractRepository implements SlidesTempl
         $model = $builder->where('code', $code)->first();
 
         return $model instanceof SlidesTemplateModel ? $model : null;
+    }
+
+    private function applyTagFilter($builder, SlidesTemplateQuery $query): void
+    {
+        $tagCodes = $query->getTagCodes();
+        if ($tagCodes === []) {
+            return;
+        }
+
+        if ($query->getTagMatch() === SlidesTemplateTagMatch::All) {
+            foreach ($tagCodes as $tagCode) {
+                $this->whereHasEnabledTag($builder, [$tagCode]);
+            }
+            return;
+        }
+
+        $this->whereHasEnabledTag($builder, $tagCodes);
+    }
+
+    private function whereHasEnabledTag($builder, array $tagCodes): void
+    {
+        $builder->whereExists(static function ($subQuery) use ($tagCodes): void {
+            $subQuery->selectRaw('1')
+                ->from('magic_slides_template_tag_relations AS r')
+                ->join('magic_slides_template_tags AS tag', 'tag.id', '=', 'r.tag_id')
+                ->whereColumn('r.template_id', 'magic_slides_templates.id')
+                ->whereColumn('r.organization_code', 'magic_slides_templates.organization_code')
+                ->whereIn('tag.code', $tagCodes)
+                ->where('tag.status', SlidesTemplateTagStatus::Enabled->value)
+                ->whereNull('tag.deleted_at');
+        });
     }
 }

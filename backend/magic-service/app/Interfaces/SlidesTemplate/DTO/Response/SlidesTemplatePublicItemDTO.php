@@ -23,6 +23,8 @@ class SlidesTemplatePublicItemDTO extends AbstractDTO
 
     public ?string $thumbnailUrl = null;
 
+    public array $colors = [];
+
     public ?string $collageUrl = null;
 
     public array $previewImageUrls = [];
@@ -34,6 +36,8 @@ class SlidesTemplatePublicItemDTO extends AbstractDTO
     public int $usageCount = 0;
 
     public bool $isOfficial = false;
+
+    public array $tags = [];
 
     public function __construct(?array $data = null)
     {
@@ -102,6 +106,21 @@ class SlidesTemplatePublicItemDTO extends AbstractDTO
         $this->thumbnailUrl = $thumbnailUrl;
     }
 
+    public function getColors(): array
+    {
+        return $this->colors;
+    }
+
+    public function setColors(?array $colors): void
+    {
+        $this->colors = [];
+        foreach ($colors ?? [] as $color) {
+            if (is_string($color) && $color !== '') {
+                $this->colors[] = $color;
+            }
+        }
+    }
+
     public function getCollageUrl(): ?string
     {
         return $this->collageUrl;
@@ -165,5 +184,15 @@ class SlidesTemplatePublicItemDTO extends AbstractDTO
     public function setIsOfficial(bool $isOfficial): void
     {
         $this->isOfficial = $isOfficial;
+    }
+
+    public function getTags(): array
+    {
+        return $this->tags;
+    }
+
+    public function setTags(array $tags): void
+    {
+        $this->tags = array_values($tags);
     }
 }
