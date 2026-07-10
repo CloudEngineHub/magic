@@ -86,11 +86,6 @@ class GlobalConfigCacheUtil
         return self::set(self::getGlobalConfigKey(), $data, self::TTL_GLOBAL_CONFIG);
     }
 
-    public static function deleteGlobalConfig(): int
-    {
-        return self::delete(self::getGlobalConfigKey());
-    }
-
     /**
      * Set global data queries to cache.
      *
