@@ -1,5 +1,5 @@
 import { memo, useEffect, useMemo, useRef, useState } from "react"
-import { Flex, Form, InputNumber, Select, Switch, message } from "antd"
+import { Flex, Form, InputNumber, Select, Spin, Switch, message } from "antd"
 import { useMemoizedFn } from "ahooks"
 import { nanoid } from "nanoid"
 import { useTranslation } from "react-i18next"
@@ -29,6 +29,8 @@ import {
 
 interface SlidesTemplateModalProps extends MagicModalProps {
 	info?: SlidesTemplate.Item | null
+	mode?: "create" | "edit"
+	detailLoading?: boolean
 	categoryOptions?: Array<{ label: string; value: string }>
 	onSuccess?: () => void
 }
@@ -81,6 +83,8 @@ const isCodeConflictError = (error: unknown) => {
 export const SlidesTemplateModal = memo(
 	({
 		info,
+		mode = "create",
+		detailLoading = false,
 		categoryOptions = [],
 		onCancel,
 		onOk,
@@ -113,6 +117,7 @@ export const SlidesTemplateModal = memo(
 		// For editing we reuse the existing code from `info.code`.
 		const [generatedCode, setGeneratedCode] = useState(() => generateSlidesTemplateCode())
 		const effectiveCode = info?.code ?? generatedCode
+		const isEditMode = mode === "edit"
 
 		const [previewImages, setPreviewImages] = useState<SlidesTemplatePreviewImageItem[]>([])
 		const [uploadingPreviews, setUploadingPreviews] = useState(false)
@@ -432,6 +437,7 @@ export const SlidesTemplateModal = memo(
 		})
 
 		const onInnerOk = useMemoizedFn(async (e) => {
+			if (detailLoading || (isEditMode && !info?.id)) return
 			try {
 				const values = await form.validateFields()
 				setLangErrors(DEFAULT_LANG_ERRORS)
@@ -461,7 +467,9 @@ export const SlidesTemplateModal = memo(
 					}
 				}
 
-				message.success(info ? t("message.updateSuccess") : t("message.createSuccess"))
+				message.success(
+					isEditMode ? t("message.updateSuccess") : t("message.createSuccess"),
+				)
 				onOk?.(e)
 				onSuccess?.()
 			} catch (error) {
@@ -478,18 +486,35 @@ export const SlidesTemplateModal = memo(
 		return (
 			<MagicModal
 				width={720}
-				title={info ? t("slidesTemplate.editTitle") : t("slidesTemplate.addTitle")}
+				title={isEditMode ? t("slidesTemplate.editTitle") : t("slidesTemplate.addTitle")}
 				okText={t("button.save")}
 				cancelText={t("button.cancel")}
 				onCancel={onInnerCancel}
 				onOk={onInnerOk}
-				okButtonProps={{ loading, disabled: uploadingField !== null || uploadingPreviews }}
+				okButtonProps={{
+					loading,
+					disabled:
+						detailLoading ||
+						(isEditMode && !info?.id) ||
+						uploadingField !== null ||
+						uploadingPreviews,
+				}}
 				maskClosable={false}
 				centered
 				destroyOnHidden
 				{...rest}
 			>
-				<MagicForm afterRequiredMask colon={false} form={form}>
+				{detailLoading ? (
+					<Flex justify="center" style={{ padding: "24px 0" }}>
+						<Spin />
+					</Flex>
+				) : null}
+				<MagicForm
+					afterRequiredMask
+					colon={false}
+					form={form}
+					style={detailLoading ? { display: "none" } : undefined}
+				>
 					<Form.Item label={t("slidesTemplate.fields.label")} required>
 						<Flex gap={10}>
 							<Form.Item

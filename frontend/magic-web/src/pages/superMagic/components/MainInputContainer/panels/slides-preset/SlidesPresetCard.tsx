@@ -230,13 +230,13 @@ function SlidesPresetCard({
 					sideOffset={16}
 					style={{ zIndex: "calc(var(--z-index-popup, 1000) + 1)" }}
 					className={cn(
-						"pointer-events-none w-[420px] overflow-hidden rounded-xl border border-border/50 bg-card p-0 shadow-2xl backdrop-blur-xl",
+						"pointer-events-none w-[480px] max-w-[calc(100vw-32px)] overflow-hidden rounded-xl border border-border/50 bg-card p-0 shadow-2xl backdrop-blur-xl",
 						"data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2",
 					)}
 				>
 					<div className="flex flex-col">
 						{template.collage_url && (
-							<div className="relative min-h-[236px] overflow-hidden bg-black/5 shadow-inner">
+							<div className="relative min-h-[270px] overflow-hidden bg-black/5 shadow-inner">
 								{!isCollageLoaded && (
 									<div className="absolute inset-0 z-10 flex animate-pulse items-center justify-center bg-muted/20">
 										<ImageIcon className="h-8 w-8 text-muted-foreground/20" />

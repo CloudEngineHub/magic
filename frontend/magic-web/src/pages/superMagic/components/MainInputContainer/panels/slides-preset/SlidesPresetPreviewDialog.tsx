@@ -114,6 +114,12 @@ function SlidesPresetPreviewDialog({
 								loading="eager"
 								decoding="async"
 							/>
+							<div
+								className="absolute bottom-3 right-3 rounded-full bg-black/70 px-3 py-1 text-sm font-medium text-white shadow-sm"
+								data-testid="slides-preset-preview-dialog-page-index"
+							>
+								{activeIndex + 1} / {pages.length}
+							</div>
 						</div>
 						{canSwitch ? (
 							<HeadlessHorizontalScroll
@@ -175,6 +181,9 @@ function SlidesPresetPreviewDialog({
 												draggable={false}
 												aria-hidden="true"
 											/>
+											<span className="absolute bottom-1.5 left-1.5 rounded-full bg-black/70 px-2 py-0.5 text-xs font-medium text-white">
+												#{index + 1}
+											</span>
 										</button>
 									</div>
 								))}

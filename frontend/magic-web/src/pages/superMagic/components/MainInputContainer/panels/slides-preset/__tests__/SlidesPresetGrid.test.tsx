@@ -155,12 +155,18 @@ describe("SlidesPresetGrid", () => {
 			"src",
 			"https://example.com/academic-page-1.png",
 		)
+		expect(screen.getByTestId("slides-preset-preview-dialog-page-index")).toHaveTextContent(
+			"1 / 2",
+		)
 
 		fireEvent.click(screen.getByRole("button", { name: "Academic Preview 2" }))
 
 		expect(screen.getByRole("img", { name: "Academic Preview 2" })).toHaveAttribute(
 			"src",
 			"https://example.com/academic-page-2.png",
+		)
+		expect(screen.getByTestId("slides-preset-preview-dialog-page-index")).toHaveTextContent(
+			"2 / 2",
 		)
 	})
 
