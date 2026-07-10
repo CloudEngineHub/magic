@@ -136,8 +136,8 @@ async def test_install_slides_template_tool_installs_template(monkeypatch, tmp_p
     assert result.data["template_name"] == "职场白皮书"
     assert result.data["installed_directory"] == str(tmp_path / "templates" / "business")
     assert result.data["install_path_changed"] is False
-    assert (tmp_path / "templates" / "business" / "template.json").exists()
-    assert (tmp_path / "templates" / "business" / "theme.css").exists()
+    assert (tmp_path / "templates" / "business" / "business" / "template.json").exists()
+    assert (tmp_path / "templates" / "business" / "business" / "theme.css").exists()
     assert "Slides template installed." in result.content
     assert "- template code: ppt-business-minimal" in result.content
     assert "- template name: 职场白皮书" in result.content
@@ -235,6 +235,50 @@ async def test_install_slides_template_tool_rejects_non_zip_download(monkeypatch
     assert result.ok is False
     assert "not a readable ZIP package" in result.content
     assert not install_dir.exists()
+
+
+@pytest.mark.asyncio
+async def test_install_slides_template_tool_rejects_unsafe_zip_paths(monkeypatch, tmp_path):
+    class FakeMagicServiceClient:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return None
+
+        async def get_slides_template_file_url(self, code, access_context=None):
+            return {
+                "code": code,
+                "label": {"zh_CN": "职场白皮书"},
+                "template_file_url": "https://example.test/template.zip",
+            }
+
+    async def fake_download(download_url, download_path):
+        with zipfile.ZipFile(download_path, "w") as archive:
+            archive.writestr("../evil.txt", "owned")
+            archive.writestr("template.json", "{}")
+
+    monkeypatch.setattr(
+        "app.tools.install_slides_template.MagicServiceClient",
+        FakeMagicServiceClient,
+    )
+    monkeypatch.setattr(
+        InstallSlidesTemplate,
+        "_download_template_file",
+        staticmethod(fake_download),
+    )
+
+    tool = InstallSlidesTemplate()
+    install_dir = tmp_path / "templates" / "business"
+    result = await tool.execute(
+        ToolContext(tool_name="install_slides_template", arguments={}),
+        InstallSlidesTemplateParams(code="ppt-business-minimal", install_path=str(install_dir)),
+    )
+
+    assert result.ok is False
+    assert "Unsafe path in template package" in result.content
+    assert not install_dir.exists()
+    assert not (tmp_path / "templates" / "evil.txt").exists()
 
 
 @pytest.mark.asyncio
