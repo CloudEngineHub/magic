@@ -134,6 +134,7 @@ describe("SlidesTemplateCanvas", () => {
 	it("drags the canvas when the pointer starts on the background", () => {
 		renderCanvas()
 		const canvas = screen.getByTestId("slides-template-canvas")
+		const setPointerCapture = vi.spyOn(canvas, "setPointerCapture")
 		mockCanvasRect(canvas)
 
 		fireCanvasPointerEvent(canvas, "pointerdown", {
@@ -143,6 +144,7 @@ describe("SlidesTemplateCanvas", () => {
 			isPrimary: true,
 			pointerId: 1,
 		})
+		expect(setPointerCapture).not.toHaveBeenCalled()
 		fireCanvasPointerEvent(canvas, "pointermove", {
 			clientX: 150,
 			clientY: 125,
@@ -153,6 +155,7 @@ describe("SlidesTemplateCanvas", () => {
 		expect(screen.getByTestId("slides-template-canvas-content")).toHaveStyle({
 			transform: "translate3d(50px, 25px, 0) scale(1)",
 		})
+		expect(setPointerCapture).toHaveBeenCalledWith(1)
 	})
 
 	it("constrains dragging at the finite canvas edge after templates are exhausted", () => {
