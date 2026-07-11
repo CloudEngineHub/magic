@@ -1,4 +1,4 @@
-import { Check, ChevronLeft, ChevronRight, Image as ImageIcon, X } from "lucide-react"
+import { Check, ChevronLeft, ChevronRight, Image as ImageIcon, Palette, X } from "lucide-react"
 import { type MouseEvent, useCallback, useEffect, useMemo, useRef } from "react"
 import { useTranslation } from "react-i18next"
 import HeadlessHorizontalScroll from "@/components/base/HeadlessHorizontalScroll"
@@ -20,10 +20,14 @@ import {
 import { getSlidesTemplatePreviewThumbnailImageUrl } from "./slidesTemplateImages"
 import styles from "./SlidesTemplateInlinePreview.module.css"
 import SlidesTemplatePreviewStage from "./SlidesTemplatePreviewStage"
+import SlidesTemplateColorPalette from "./SlidesTemplateColorPalette"
+import { applyResolvedTemplateColors, templateColorToRgba } from "./templateColors"
+import { useResolvedTemplateColors } from "./useResolvedTemplateColors"
 
 interface SlidesTemplateInlinePreviewProps {
 	focus: SlidesTemplatePreviewFocus | null
 	onClose: () => void
+	onFindSimilarColors?: (template: OptionItem) => void
 	onTemplateSelect: (template: OptionItem) => void
 	selectedTemplate?: OptionItem | null
 }
@@ -42,6 +46,7 @@ function getInitialPageIndex(focus: SlidesTemplatePreviewFocus, pages: string[])
 export default function SlidesTemplateInlinePreview({
 	focus,
 	onClose,
+	onFindSimilarColors,
 	onTemplateSelect,
 	selectedTemplate,
 }: SlidesTemplateInlinePreviewProps) {
@@ -51,6 +56,12 @@ export default function SlidesTemplateInlinePreview({
 	const previewStageRef = useRef<HTMLDivElement | null>(null)
 	const onCloseRef = useRef(onClose)
 	const template = focus?.tile.template
+	const colorImageUrl = template ? getTemplateCoverUrl(template) : undefined
+	const colors = useResolvedTemplateColors({
+		colors: template?.colors,
+		imageUrl: colorImageUrl,
+		priority: "interactive",
+	})
 	const pages = useMemo(() => getTemplatePreviewUrls(template), [template])
 	const pageKey = useMemo(() => pages.join("\n"), [pages])
 	const initialIndex = focus ? getInitialPageIndex(focus, pages) : 0
@@ -118,13 +129,21 @@ export default function SlidesTemplateInlinePreview({
 	const title = lt(template.preview_title) ?? lt(template.label) ?? lt(template.value) ?? ""
 	const description =
 		lt(template.preview_description) ?? lt(template.description) ?? lt(template.sub_text)
-	const previewImageUrl = focus.tile.imageUrl ?? getTemplateCoverUrl(template)
+	const previewImageUrl = focus.tile.imageUrl ?? colorImageUrl
 	const templateKey = getTemplateKey(template)
 	const isSelected = selectedTemplate ? getTemplateKey(selectedTemplate) === templateKey : false
+	const primaryAmbientColor = templateColorToRgba(colors[0], 0.18)
 
 	function handleUseTemplate() {
 		if (template) {
 			onTemplateSelect(template)
+		}
+		onClose()
+	}
+
+	function handleFindSimilarColors() {
+		if (template) {
+			onFindSimilarColors?.(applyResolvedTemplateColors(template, colors))
 		}
 		onClose()
 	}
@@ -170,6 +189,15 @@ export default function SlidesTemplateInlinePreview({
 						)}
 						data-slides-template-preview-close-block="true"
 					>
+						{primaryAmbientColor ? (
+							<div
+								aria-hidden="true"
+								className="pointer-events-none absolute inset-0"
+								style={{
+									backgroundImage: `radial-gradient(circle at 20% 0%, ${primaryAmbientColor}, transparent 38%)`,
+								}}
+							/>
+						) : null}
 						<div
 							className={cn(
 								"relative aspect-video w-32 shrink-0 overflow-hidden rounded-2xl bg-zinc-900 sm:w-40",
@@ -207,8 +235,25 @@ export default function SlidesTemplateInlinePreview({
 									{description}
 								</div>
 							) : null}
+							<SlidesTemplateColorPalette className="mt-2" colors={colors} compact />
 						</div>
 						<div className="flex shrink-0 items-center gap-2">
+							{onFindSimilarColors && colors.length > 0 ? (
+								<Button
+									type="button"
+									size="sm"
+									variant="ghost"
+									className={cn(
+										"h-9 rounded-full px-3 text-white/75 hover:text-white",
+										styles.iconAction,
+									)}
+									onClick={handleFindSimilarColors}
+									data-testid="slides-template-inline-preview-similar-colors"
+								>
+									<Palette className="mr-1.5 size-4" />
+									{t("playbook.edit.presets.form.similarColors")}
+								</Button>
+							) : null}
 							<Button
 								type="button"
 								size="sm"

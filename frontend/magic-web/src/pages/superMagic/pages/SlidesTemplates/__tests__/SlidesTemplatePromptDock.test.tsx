@@ -78,6 +78,7 @@ const businessTemplate: OptionItem = {
 		en_US: "Business Template",
 	},
 	thumbnail_url: "https://example.com/business-cover.png",
+	colors: ["#315ECA", "#7AA7FF", "#182A5A"],
 }
 
 describe("SlidesTemplatePromptDock", () => {
@@ -103,6 +104,7 @@ describe("SlidesTemplatePromptDock", () => {
 			"src",
 			"https://example.com/business-cover.png",
 		)
+		expect(screen.getByTestId("slides-template-color-palette")).toBeInTheDocument()
 		expect(
 			screen
 				.getByTestId("slides-templates-page-selected-template")
@@ -137,6 +139,20 @@ describe("SlidesTemplatePromptDock", () => {
 		screen.getByTestId("slides-templates-page-preview-selected-template").click()
 
 		expect(onPreviewSelectedTemplate).toHaveBeenCalledTimes(1)
+	})
+
+	it("finds templates with colors similar to the selected template", () => {
+		const onFindSimilarColors = vi.fn()
+		render(
+			<SlidesTemplatePromptDock
+				selectedTemplate={businessTemplate}
+				onFindSimilarColors={onFindSimilarColors}
+			/>,
+		)
+
+		screen.getByTestId("slides-templates-page-find-similar-colors").click()
+
+		expect(onFindSimilarColors).toHaveBeenCalledWith(businessTemplate)
 	})
 
 	it("clears preset suffix when no template is selected", () => {

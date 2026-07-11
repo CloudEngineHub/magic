@@ -24,6 +24,7 @@ import SlidesTemplateSelectionPreview from "./SlidesTemplateSelectionPreview"
 
 interface SlidesTemplatePromptDockProps {
 	onClearSelectedTemplate?: () => void
+	onFindSimilarColors?: (template: OptionItem) => void
 	onPreviewSelectedTemplate?: () => void
 	selectedTemplate?: OptionItem | null
 }
@@ -59,6 +60,7 @@ const SLIDES_TEMPLATE_EDITOR_CONTAINER_CLASS_NAME = [
 
 function SlidesTemplatePromptDock({
 	onClearSelectedTemplate,
+	onFindSimilarColors,
 	onPreviewSelectedTemplate,
 	selectedTemplate,
 }: SlidesTemplatePromptDockProps) {
@@ -148,6 +150,7 @@ function SlidesTemplatePromptDock({
 					<SlidesTemplateSelectionPreview
 						template={selectedTemplate}
 						onClear={onClearSelectedTemplate}
+						onFindSimilarColors={onFindSimilarColors}
 						onPreview={onPreviewSelectedTemplate}
 					/>
 				) : null}

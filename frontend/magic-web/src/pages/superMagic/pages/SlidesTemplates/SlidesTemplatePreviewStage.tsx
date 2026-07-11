@@ -92,7 +92,6 @@ function usePreviewImagePreload(pages: string[], activeIndex: number) {
 function usePreviewImageSwap(activePage: string | undefined, resetKey: string) {
 	const [displayedPage, setDisplayedPage] = useState(activePage)
 	const [isLoading, setIsLoading] = useState(false)
-	const [animationKey, setAnimationKey] = useState(0)
 	const displayedPageRef = useRef(activePage)
 	const resetKeyRef = useRef(resetKey)
 
@@ -102,7 +101,6 @@ function usePreviewImageSwap(activePage: string | undefined, resetKey: string) {
 			displayedPageRef.current = activePage
 			setDisplayedPage(activePage)
 			setIsLoading(false)
-			setAnimationKey((currentKey) => currentKey + 1)
 			return
 		}
 
@@ -134,16 +132,26 @@ function usePreviewImageSwap(activePage: string | undefined, resetKey: string) {
 			displayedPageRef.current = activePage
 			setDisplayedPage(activePage)
 			setIsLoading(false)
-			setAnimationKey((currentKey) => currentKey + 1)
+		}
+		const preparePage = () => {
+			if (typeof image.decode !== "function") {
+				commitPage()
+				return
+			}
+
+			void image
+				.decode()
+				.catch(() => undefined)
+				.then(commitPage)
 		}
 
 		setIsLoading(Boolean(displayedPageRef.current))
-		image.onload = commitPage
+		image.onload = preparePage
 		image.onerror = commitPage
 		image.src = activePage
 
 		if (image.complete) {
-			commitPage()
+			preparePage()
 		}
 
 		return () => {
@@ -153,7 +161,7 @@ function usePreviewImageSwap(activePage: string | undefined, resetKey: string) {
 		}
 	}, [activePage, resetKey])
 
-	return { animationKey, displayedPage, isLoading }
+	return { displayedPage, isLoading }
 }
 
 function SlidesTemplatePreviewStage({
@@ -166,8 +174,8 @@ function SlidesTemplatePreviewStage({
 	const safeActiveIndex = clampPageIndex(activeIndex, pages.length)
 	const activePage = pages[safeActiveIndex]
 	const pageKey = useMemo(() => pages.join("\n"), [pages])
-	const ambientPage = getSlidesTemplatePreviewAmbientImageUrl(activePage)
-	const { animationKey, displayedPage, isLoading } = usePreviewImageSwap(activePage, pageKey)
+	const { displayedPage, isLoading } = usePreviewImageSwap(activePage, pageKey)
+	const ambientPage = getSlidesTemplatePreviewAmbientImageUrl(displayedPage)
 	const displayedIndex = displayedPage ? pages.indexOf(displayedPage) : safeActiveIndex
 	const displayedPageNumber = displayedIndex >= 0 ? displayedIndex + 1 : safeActiveIndex + 1
 
@@ -179,30 +187,25 @@ function SlidesTemplatePreviewStage({
 			className="relative flex h-full min-h-0 justify-center"
 			data-slides-template-preview-close-block="true"
 		>
-			{activePage ? (
+			{displayedPage ? (
 				<img
-					key={activePage}
 					src={ambientPage}
 					alt=""
-					className={cn(styles.ambientPreview, isLoading && styles.ambientPreviewLoading)}
+					className={styles.ambientPreview}
 					loading="eager"
 					decoding="async"
 					draggable={false}
 					aria-hidden="true"
+					data-testid="slides-template-inline-preview-ambient-image"
 				/>
 			) : null}
 			<div
-				className={cn(
-					"relative overflow-hidden bg-transparent",
-					styles.previewFrame,
-					isLoading && styles.previewFrameLoading,
-				)}
+				className={cn("relative overflow-hidden bg-transparent", styles.previewFrame)}
 				data-loading={isLoading ? "true" : "false"}
 				data-testid="slides-template-inline-preview-pages"
 			>
 				{displayedPage ? (
 					<img
-						key={`${displayedPage}-${animationKey}`}
 						src={displayedPage}
 						alt={`${title} ${displayedPageNumber}`}
 						className={styles.previewPageImage}

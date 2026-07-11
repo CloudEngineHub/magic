@@ -443,7 +443,7 @@ describe("slides template canvas layout", () => {
 
 		expect(tiles).toHaveLength(8)
 		expect(tiles.map((tile) => tile.id)).toEqual(
-			Array.from({ length: 8 }, (_, index) => `template-${index}:cover:${index}`),
+			Array.from({ length: 8 }, (_, index) => `template-${index}:cover`),
 		)
 	})
 

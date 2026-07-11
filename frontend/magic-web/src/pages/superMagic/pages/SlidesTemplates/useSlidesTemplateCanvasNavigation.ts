@@ -20,6 +20,7 @@ const CONTROL_ZOOM_STEP = 0.1
 const CONTROL_PAN_VIEWPORT_RATIO = 0.65
 
 interface UseSlidesTemplateCanvasNavigationInput {
+	animateToOffset: (nextOffset: TemplateCanvasPoint) => TemplateCanvasPoint
 	canvasItemsLength: number
 	contentBounds: TemplateCanvasBounds
 	maybeRequestMore: (directions: TemplateCanvasDirection[]) => boolean
@@ -33,6 +34,7 @@ interface UseSlidesTemplateCanvasNavigationInput {
 }
 
 export function useSlidesTemplateCanvasNavigation({
+	animateToOffset,
 	canvasItemsLength,
 	contentBounds,
 	maybeRequestMore,
@@ -98,6 +100,26 @@ export function useSlidesTemplateCanvasNavigation({
 		[maybeRequestMore, offsetRef, setCanvasOffset, stopAnimation, viewportRef],
 	)
 
+	const handleFocusPoint = useCallback(
+		(point: TemplateCanvasPoint) => {
+			const viewport = viewportRef.current
+			if (!viewport) return false
+
+			stopAnimation()
+			const { width, height } = viewport.getBoundingClientRect()
+			if (width <= 0 || height <= 0) return false
+
+			const insets = viewportInsetsRef.current
+			const scale = scaleRef.current
+			animateToOffset({
+				x: ((insets?.left ?? 0) - (insets?.right ?? 0)) / 2 - point.x * scale,
+				y: ((insets?.top ?? 0) - (insets?.bottom ?? 0)) / 2 - point.y * scale,
+			})
+			return true
+		},
+		[animateToOffset, scaleRef, stopAnimation, viewportInsetsRef, viewportRef],
+	)
+
 	useLayoutEffect(() => {
 		hasAutoFittedRef.current = false
 		scaleRef.current = 1
@@ -149,6 +171,7 @@ export function useSlidesTemplateCanvasNavigation({
 		canZoomIn: canvasScale < SLIDES_TEMPLATE_CANVAS_MAX_SCALE,
 		canZoomOut: canvasScale > SLIDES_TEMPLATE_CANVAS_MIN_SCALE,
 		handleControlMove,
+		handleFocusPoint,
 		handleResetView,
 		handleZoomIn: () => handleControlZoom(canvasScale + CONTROL_ZOOM_STEP),
 		handleZoomOut: () => handleControlZoom(canvasScale - CONTROL_ZOOM_STEP),

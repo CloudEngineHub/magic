@@ -21,6 +21,7 @@ function createTemplate(index: number): OptionItem {
 		label: `Template ${index}`,
 		thumbnail_url: `https://example.com/${index}-cover.png`,
 		preview_image_urls: [],
+		colors: ["#315ECA", "#7AA7FF", "#182A5A"],
 	}
 }
 
@@ -44,22 +45,27 @@ function renderCanvas(
 	templates: OptionItem[],
 	{
 		hasMore = true,
+		onFindSimilarColors,
 		onTemplateSelect = vi.fn(),
+		selectedTemplate = null,
 	}: {
 		hasMore?: boolean
+		onFindSimilarColors?: (template: OptionItem) => void
 		onTemplateSelect?: (template: OptionItem) => void
+		selectedTemplate?: OptionItem | null
 	} = {},
 ) {
 	return render(
 		<SlidesTemplateCanvas
 			templates={templates}
-			selectedTemplate={null}
+			selectedTemplate={selectedTemplate}
 			onTemplateSelect={onTemplateSelect}
 			hasMore={hasMore}
 			isLoading={false}
 			isLoadingMore={false}
 			isRefreshing={false}
 			onLoadMore={vi.fn()}
+			onFindSimilarColors={onFindSimilarColors}
 			resetKey="all:"
 		/>,
 	)
@@ -145,5 +151,28 @@ describe("SlidesTemplateCanvas rendering", () => {
 		fireEvent.click(getFirstTestElement("slides-template-cover-select-button"))
 
 		expect(onTemplateSelect).toHaveBeenCalledWith(selectedTemplate)
+	})
+
+	it("shows the animated glow border for the selected template", () => {
+		const selectedTemplate = createTemplate(1)
+		renderCanvas([selectedTemplate], { selectedTemplate })
+
+		expect(screen.getByTestId("slides-template-glow-border")).toBeInTheDocument()
+		expect(screen.getByTestId("slides-template-color-palette")).toBeInTheDocument()
+	})
+
+	it("shows the palette on hover and finds templates with similar colors when clicked", () => {
+		const template = createTemplate(1)
+		const onFindSimilarColors = vi.fn()
+		const onTemplateSelect = vi.fn()
+		renderCanvas([template], { onFindSimilarColors, onTemplateSelect })
+
+		const palette = screen.getByTestId("slides-template-color-palette")
+		expect(palette).toHaveClass("opacity-0", "group-hover:opacity-100")
+
+		fireEvent.click(palette)
+
+		expect(onFindSimilarColors).toHaveBeenCalledWith(template)
+		expect(onTemplateSelect).not.toHaveBeenCalled()
 	})
 })

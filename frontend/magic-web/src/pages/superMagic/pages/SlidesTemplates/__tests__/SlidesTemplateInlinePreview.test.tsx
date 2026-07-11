@@ -19,6 +19,7 @@ const template: OptionItem = {
 		{ length: 8 },
 		(_, index) => `https://example.com/business-${index + 1}.png`,
 	),
+	colors: ["#315ECA", "#7AA7FF", "#182A5A"],
 }
 
 const focus: SlidesTemplatePreviewFocus = {
@@ -33,15 +34,18 @@ const focus: SlidesTemplatePreviewFocus = {
 
 function renderPreview({
 	onClose = vi.fn(),
+	onFindSimilarColors = vi.fn(),
 	onTemplateSelect = vi.fn(),
 }: {
 	onClose?: () => void
+	onFindSimilarColors?: (template: OptionItem) => void
 	onTemplateSelect?: (template: OptionItem) => void
 } = {}) {
 	const result = render(
 		<SlidesTemplateInlinePreview
 			focus={focus}
 			onClose={onClose}
+			onFindSimilarColors={onFindSimilarColors}
 			onTemplateSelect={onTemplateSelect}
 			selectedTemplate={null}
 		/>,
@@ -49,6 +53,7 @@ function renderPreview({
 
 	return {
 		onClose,
+		onFindSimilarColors,
 		onTemplateSelect,
 		...result,
 	}
@@ -92,6 +97,16 @@ describe("SlidesTemplateInlinePreview", () => {
 		fireEvent.click(screen.getByTestId("slides-template-inline-preview-use-button"))
 
 		expect(onTemplateSelect).toHaveBeenCalledWith(template)
+		expect(onClose).toHaveBeenCalledTimes(1)
+	})
+
+	it("shows the palette and opens similar-color results", () => {
+		const { onClose, onFindSimilarColors } = renderPreview()
+
+		expect(screen.getByTestId("slides-template-color-palette")).toBeInTheDocument()
+		fireEvent.click(screen.getByTestId("slides-template-inline-preview-similar-colors"))
+
+		expect(onFindSimilarColors).toHaveBeenCalledWith(template)
 		expect(onClose).toHaveBeenCalledTimes(1)
 	})
 

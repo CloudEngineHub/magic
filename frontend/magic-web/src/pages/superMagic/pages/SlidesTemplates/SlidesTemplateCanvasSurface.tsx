@@ -35,6 +35,7 @@ interface SlidesTemplateCanvasSurfaceProps {
 	isRefreshing: boolean
 	onCanvasClickCapture: MouseEventHandler<HTMLDivElement>
 	onControlMove: ComponentProps<typeof SlidesTemplateCanvasControls>["onMove"]
+	onFindSimilarColors?: (template: OptionItem) => void
 	onPointerCancel: PointerEventHandler<HTMLDivElement>
 	onPointerDown: PointerEventHandler<HTMLDivElement>
 	onPointerLeave: PointerEventHandler<HTMLDivElement>
@@ -70,6 +71,7 @@ export default function SlidesTemplateCanvasSurface({
 	isRefreshing,
 	onCanvasClickCapture,
 	onControlMove,
+	onFindSimilarColors,
 	onPointerCancel,
 	onPointerDown,
 	onPointerLeave,
@@ -90,7 +92,13 @@ export default function SlidesTemplateCanvasSurface({
 }: SlidesTemplateCanvasSurfaceProps) {
 	const isPreviewOpen = previewFocus !== null
 	const { isIdle, markActive } = useSlidesTemplateCanvasIdle({
-		disabled: isDragging || isCanvasMoving || isPreviewOpen || isInitialLoading || isRefreshing,
+		disabled:
+			isDragging ||
+			isCanvasMoving ||
+			isPreviewOpen ||
+			Boolean(focusedAnchorTileId) ||
+			isInitialLoading ||
+			isRefreshing,
 	})
 	const pointerActivityOriginRef = useRef<{ x: number; y: number } | null>(null)
 
@@ -160,6 +168,7 @@ export default function SlidesTemplateCanvasSurface({
 				visibleCanvasItems={visibleCanvasItems}
 				focusedAnchorTileId={focusedAnchorTileId}
 				selectedTemplateValue={selectedTemplateValue}
+				onFindSimilarColors={onFindSimilarColors}
 				onTemplateSelect={onTemplateSelect}
 				onPreviewClick={onPreviewToggle}
 			/>
@@ -171,6 +180,7 @@ export default function SlidesTemplateCanvasSurface({
 				focus={previewFocus}
 				selectedTemplate={selectedTemplate}
 				onClose={onPreviewClose}
+				onFindSimilarColors={onFindSimilarColors}
 				onTemplateSelect={onTemplateSelect}
 			/>
 			{isPreviewOpen ? null : (

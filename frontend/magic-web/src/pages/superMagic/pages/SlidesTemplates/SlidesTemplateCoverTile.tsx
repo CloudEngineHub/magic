@@ -1,5 +1,5 @@
 import { Award, Check, Eye, Image as ImageIcon, MousePointerClick } from "lucide-react"
-import type { KeyboardEvent, MouseEvent } from "react"
+import { useState, type KeyboardEvent, type MouseEvent } from "react"
 import { useTranslation } from "react-i18next"
 import { Button } from "@/components/shadcn-ui/button"
 import { cn } from "@/lib/utils"
@@ -10,6 +10,10 @@ import {
 	getSlidesTemplateTagDisplayName,
 	hasSlidesTemplateUsageCount,
 } from "@/pages/superMagic/components/MainInputContainer/panels/slides-preset/templateMeta"
+import SlidesTemplateGlowBorder from "./SlidesTemplateGlowBorder"
+import SlidesTemplateColorPalette from "./SlidesTemplateColorPalette"
+import { applyResolvedTemplateColors } from "./templateColors"
+import { useResolvedTemplateColors } from "./useResolvedTemplateColors"
 
 interface SlidesTemplateCoverTileProps {
 	canPreview: boolean
@@ -18,6 +22,7 @@ interface SlidesTemplateCoverTileProps {
 	isKeyboardAccessible?: boolean
 	isExpanded: boolean
 	isSelected: boolean
+	onFindSimilarColors?: (template: OptionItem) => void
 	onPreviewClick: () => void
 	onSelect: (template: OptionItem) => void
 	template: OptionItem
@@ -30,6 +35,7 @@ export default function SlidesTemplateCoverTile({
 	isKeyboardAccessible = true,
 	isExpanded,
 	isSelected,
+	onFindSimilarColors,
 	onPreviewClick,
 	onSelect,
 	template,
@@ -45,9 +51,17 @@ export default function SlidesTemplateCoverTile({
 	const showUsageCount = hasSlidesTemplateUsageCount(template)
 	const usageCount = Math.max(0, template.usage_count ?? 0)
 	const coverUrl = imageUrl
+	const showGlowBorder = isSelected || isExpanded
+	const [hasRequestedInteractiveColors, setHasRequestedInteractiveColors] = useState(false)
+	const colors = useResolvedTemplateColors({
+		colors: template.colors,
+		enabled: showGlowBorder || hasRequestedInteractiveColors,
+		imageUrl: coverUrl,
+		priority: "interactive",
+	})
 
 	function handleSelect() {
-		onSelect(template)
+		onSelect(applyResolvedTemplateColors(template, colors))
 	}
 
 	function handlePreview() {
@@ -79,13 +93,37 @@ export default function SlidesTemplateCoverTile({
 				"focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-white/70",
 				"hover:z-10 hover:scale-[1.006] hover:opacity-100 hover:shadow-[0_14px_36px_rgba(0,0,0,0.32)] hover:ring-white/[0.18]",
 				isSelected &&
-					"z-20 opacity-100 shadow-[0_14px_38px_rgba(0,0,0,0.34)] ring-2 ring-inset ring-primary",
+					"z-20 opacity-100 shadow-[0_14px_38px_rgba(0,0,0,0.34)] ring-1 ring-inset ring-white/[0.18]",
 				isExpanded &&
-					"z-30 scale-[1.01] opacity-100 shadow-[0_18px_44px_rgba(0,0,0,0.38)] ring-2 ring-inset ring-white/[0.55]",
+					"z-30 scale-[1.01] opacity-100 shadow-[0_18px_44px_rgba(0,0,0,0.38)] ring-1 ring-inset ring-white/[0.2]",
 			)}
+			onPointerEnter={() => setHasRequestedInteractiveColors(true)}
+			onFocusCapture={() => setHasRequestedInteractiveColors(true)}
 			onClick={handlePreview}
 			onKeyDown={handleKeyDown}
 		>
+			{showGlowBorder ? <SlidesTemplateGlowBorder radius={7} /> : null}
+			{colors.length > 0 ? (
+				<SlidesTemplateColorPalette
+					className={cn(
+						"absolute right-2.5 top-2.5 z-20 transition-opacity duration-200",
+						showGlowBorder
+							? "opacity-100"
+							: "opacity-0 group-focus-within:opacity-100 group-hover:opacity-100",
+					)}
+					colors={colors}
+					compact
+					onClick={
+						onFindSimilarColors
+							? () =>
+									onFindSimilarColors(
+										applyResolvedTemplateColors(template, colors),
+									)
+							: undefined
+					}
+					tabIndex={isKeyboardAccessible ? 0 : -1}
+				/>
+			) : null}
 			{coverUrl ? (
 				<img
 					key={coverUrl}
@@ -126,8 +164,18 @@ export default function SlidesTemplateCoverTile({
 				</div>
 			) : null}
 
-			<div className="pointer-events-none absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-black/[0.68] via-black/[0.22] to-transparent opacity-0 transition-opacity duration-200 group-focus-within:opacity-100 group-hover:opacity-100" />
-			<div className="absolute inset-x-0 bottom-0 flex min-w-0 translate-y-1.5 items-center justify-between gap-2 px-2.5 py-2 opacity-0 transition-all duration-200 ease-out group-focus-within:translate-y-0 group-focus-within:opacity-100 group-hover:translate-y-0 group-hover:opacity-100">
+			<div
+				className={cn(
+					"pointer-events-none absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-black/[0.68] via-black/[0.22] to-transparent opacity-0 transition-opacity duration-200 group-focus-within:opacity-100 group-hover:opacity-100",
+					isExpanded && "opacity-100",
+				)}
+			/>
+			<div
+				className={cn(
+					"absolute inset-x-0 bottom-0 flex min-w-0 translate-y-1.5 items-center justify-between gap-2 px-2.5 py-2 opacity-0 transition-all duration-200 ease-out group-focus-within:translate-y-0 group-focus-within:opacity-100 group-hover:translate-y-0 group-hover:opacity-100",
+					isExpanded && "translate-y-0 opacity-100",
+				)}
+			>
 				<span className="min-w-0 truncate text-xs font-medium leading-5 text-white/95 drop-shadow">
 					{label}
 				</span>

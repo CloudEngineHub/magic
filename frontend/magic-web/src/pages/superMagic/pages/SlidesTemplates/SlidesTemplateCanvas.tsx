@@ -1,11 +1,10 @@
 import {
-	type MouseEvent,
-	type PointerEvent,
 	forwardRef,
 	useCallback,
 	useEffect,
 	useImperativeHandle,
 	useLayoutEffect,
+	useMemo,
 	useRef,
 	useState,
 } from "react"
@@ -18,23 +17,20 @@ import {
 	type TemplateCanvasPoint,
 } from "./canvasLayout"
 import {
-	CANVAS_DRAG_START_THRESHOLD,
 	CANVAS_END_PADDING,
-	type CanvasDragState,
 	type SlidesTemplateCanvasTile,
 	type SlidesTemplatePreviewFocus,
 	LOAD_MORE_INTERVAL_MS,
-	getDirectionsFromVelocity,
-	getEdgeVelocity,
+	getPriorityWeightedRandomIndex,
 	getLoadMoreThreshold,
 	getTemplateKey,
 	getTemplatePreviewUrls,
-	isCanvasDragBlockedTarget,
-	isSameCanvasPoint,
 } from "./canvasInteraction"
 import SlidesTemplateCanvasSurface from "./SlidesTemplateCanvasSurface"
 import { useSlidesTemplateCanvasItems } from "./useSlidesTemplateCanvasItems"
+import { useSlidesTemplateCanvasMotion } from "./useSlidesTemplateCanvasMotion"
 import { useSlidesTemplateCanvasNavigation } from "./useSlidesTemplateCanvasNavigation"
+import { useSlidesTemplateCanvasPointer } from "./useSlidesTemplateCanvasPointer"
 import { useSlidesTemplateCanvasWheel } from "./useSlidesTemplateCanvasWheel"
 import { useTemplateCanvasVisibleItems } from "./useTemplateCanvasVisibleItems"
 
@@ -43,7 +39,9 @@ interface SlidesTemplateCanvasProps {
 	isLoading: boolean
 	isLoadingMore: boolean
 	isRefreshing: boolean
+	loadMoreSignal?: number | string
 	onLoadMore: () => void
+	onFindSimilarColors?: (template: OptionItem) => void
 	onPreviewOpenChange?: (isOpen: boolean) => void
 	onTemplateSelect: (template: OptionItem) => void
 	resetKey: string
@@ -53,6 +51,7 @@ interface SlidesTemplateCanvasProps {
 }
 
 export interface SlidesTemplateCanvasHandle {
+	focusRandomTemplate: () => boolean
 	openPreview: (template: OptionItem) => boolean
 }
 
@@ -65,7 +64,9 @@ const SlidesTemplateCanvas = forwardRef<SlidesTemplateCanvasHandle, SlidesTempla
 			isLoading,
 			isLoadingMore,
 			isRefreshing,
+			loadMoreSignal,
 			onLoadMore,
+			onFindSimilarColors,
 			onPreviewOpenChange,
 			onTemplateSelect,
 			resetKey,
@@ -76,23 +77,32 @@ const SlidesTemplateCanvas = forwardRef<SlidesTemplateCanvasHandle, SlidesTempla
 		ref,
 	) {
 		const [previewFocus, setPreviewFocus] = useState<SlidesTemplatePreviewFocus | null>(null)
+		const [randomFocusedAnchorTileId, setRandomFocusedAnchorTileId] = useState("")
 		const viewportRef = useRef<HTMLDivElement | null>(null)
 		const contentRef = useRef<HTMLDivElement | null>(null)
-		const frameRef = useRef<number | null>(null)
 		const offsetRef = useRef<TemplateCanvasPoint>({ x: 0, y: 0 })
 		const viewportInsetsRef = useRef(viewportInsets)
 		const scaleRef = useRef(1)
-		const velocityRef = useRef<TemplateCanvasPoint>({ x: 0, y: 0 })
-		const dragStateRef = useRef<CanvasDragState | null>(null)
 		const lastLoadMoreAtRef = useRef(0)
-		const lastAutoLoadTemplateCountRef = useRef(-1)
-		const suppressClickRef = useRef(false)
-		const suppressClickTimeoutRef = useRef<number | null>(null)
-		const [isDragging, setIsDragging] = useState(false)
-		const [isCanvasMoving, setIsCanvasMoving] = useState(false)
+		const lastAutoLoadSignalRef = useRef<number | string | null>(null)
 		const { canvasItems, contentBounds, templateBounds } = useSlidesTemplateCanvasItems({
 			templates,
 		})
+		const priorityCanvasItems = useMemo(
+			() =>
+				// 后端默认按 sort 降序返回，这里再次显式排序，保证本地分组数据也遵循同一优先级。
+				[...canvasItems].sort((left, right) => {
+					const leftSort = left.item.template.sort
+					const rightSort = right.item.template.sort
+					if (leftSort != null && rightSort != null && leftSort !== rightSort) {
+						return rightSort - leftSort
+					}
+					if (leftSort != null) return -1
+					if (rightSort != null) return 1
+					return left.index - right.index
+				}),
+			[canvasItems],
+		)
 		const { scheduleVisibleCanvasItemsUpdate, updateVisibleCanvasItems, visibleCanvasItems } =
 			useTemplateCanvasVisibleItems({
 				canvasItems,
@@ -100,35 +110,26 @@ const SlidesTemplateCanvas = forwardRef<SlidesTemplateCanvasHandle, SlidesTempla
 				scaleRef,
 				viewportRef,
 			})
-		const focusedAnchorTileId = previewFocus?.anchorTileId ?? ""
+		const focusedAnchorTileId = previewFocus?.anchorTileId ?? randomFocusedAnchorTileId
+		const renderedCanvasItems = useMemo(() => {
+			if (!focusedAnchorTileId) return visibleCanvasItems
+
+			const focusedCanvasItem = canvasItems.find(
+				({ item }) => item.id === focusedAnchorTileId,
+			)
+			if (!focusedCanvasItem || visibleCanvasItems.includes(focusedCanvasItem)) {
+				return visibleCanvasItems
+			}
+
+			// 聚焦移动期间目标可能尚未进入虚拟化窗口；提前渲染一张卡片可避免到达后短暂空白。
+			return [focusedCanvasItem, ...visibleCanvasItems]
+		}, [canvasItems, focusedAnchorTileId, visibleCanvasItems])
 		const isPreviewOpen = previewFocus !== null
 		const selectedTemplateValue = selectedTemplate ? getTemplateKey(selectedTemplate) : ""
 		const isInitialLoading = isLoading && templates.length === 0
 		viewportInsetsRef.current = viewportInsets
 		const viewportInsetsKey = `${viewportInsets?.top ?? 0}:${viewportInsets?.right ?? 0}:${viewportInsets?.bottom ?? 0}:${viewportInsets?.left ?? 0}`
-
-		useImperativeHandle(
-			ref,
-			() => ({
-				openPreview(template) {
-					if (getTemplatePreviewUrls(template).length === 0) return false
-
-					const templateKey = getTemplateKey(template)
-					const canvasItem = canvasItems.find(
-						({ item }) => getTemplateKey(item.template) === templateKey,
-					)
-					if (!canvasItem) return false
-
-					const { grid, item: tile } = canvasItem
-					setPreviewFocus({
-						anchorTileId: `${tile.id}:${grid.x}:${grid.y}`,
-						tile,
-					})
-					return true
-				},
-			}),
-			[canvasItems],
-		)
+		const autoLoadSignal = loadMoreSignal ?? canvasItems.length
 
 		const stateRef = useRef({
 			hasMore,
@@ -246,27 +247,20 @@ const SlidesTemplateCanvas = forwardRef<SlidesTemplateCanvasHandle, SlidesTempla
 		)
 
 		useEffect(() => {
-			if (
-				isPreviewOpen ||
-				!hasMore ||
-				isLoading ||
-				isLoadingMore ||
-				isRefreshing ||
-				canvasItems.length === 0
-			) {
+			if (isPreviewOpen || !hasMore || isLoading || isLoadingMore || isRefreshing) {
 				return
 			}
-			if (lastAutoLoadTemplateCountRef.current === canvasItems.length) return
+			if (lastAutoLoadSignalRef.current === autoLoadSignal) return
 
 			const frameId = requestAnimationFrame(() => {
 				if (maybeRequestMore(AUTO_LOAD_DIRECTIONS, { bypassThrottle: true })) {
-					lastAutoLoadTemplateCountRef.current = canvasItems.length
+					lastAutoLoadSignalRef.current = autoLoadSignal
 				}
 			})
 
 			return () => cancelAnimationFrame(frameId)
 		}, [
-			canvasItems.length,
+			autoLoadSignal,
 			hasMore,
 			isPreviewOpen,
 			isLoading,
@@ -281,45 +275,31 @@ const SlidesTemplateCanvas = forwardRef<SlidesTemplateCanvasHandle, SlidesTempla
 			setCanvasOffset(offsetRef.current)
 		}, [contentBounds, hasMore, isLoading, isLoadingMore, isRefreshing, setCanvasOffset])
 
-		const stopAnimation = useCallback(() => {
-			if (frameRef.current != null) {
-				cancelAnimationFrame(frameRef.current)
-				frameRef.current = null
-			}
-			velocityRef.current = { x: 0, y: 0 }
-			setIsCanvasMoving(false)
-		}, [])
-
-		const tick = useCallback(() => {
-			const velocity = velocityRef.current
-			if (Math.abs(velocity.x) < 0.2 && Math.abs(velocity.y) < 0.2) {
-				stopAnimation()
-				return
-			}
-
-			const previousOffset = offsetRef.current
-			const nextOffset = setCanvasOffset({
-				x: previousOffset.x + velocity.x,
-				y: previousOffset.y + velocity.y,
+		const { animateToOffset, isCanvasMoving, scheduleEdgeMovement, stopAnimation } =
+			useSlidesTemplateCanvasMotion({
+				getConstrainedOffset,
+				maybeRequestMore,
+				offsetRef,
+				setCanvasOffset,
 			})
-			const appliedDelta = {
-				x: nextOffset.x - previousOffset.x,
-				y: nextOffset.y - previousOffset.y,
-			}
-			if (isSameCanvasPoint(previousOffset, nextOffset)) {
-				stopAnimation()
-				return
-			}
-
-			maybeRequestMore(getDirectionsFromVelocity(appliedDelta))
-			frameRef.current = requestAnimationFrame(tick)
-		}, [maybeRequestMore, setCanvasOffset, stopAnimation])
-
-		const startAnimation = useCallback(() => {
-			if (frameRef.current != null) return
-			setIsCanvasMoving(true)
-			frameRef.current = requestAnimationFrame(tick)
-		}, [tick])
+		const {
+			handleCanvasClickCapture,
+			handlePointerDown,
+			handlePointerLeave,
+			handlePointerMove,
+			handlePointerRelease,
+			isDragging,
+		} = useSlidesTemplateCanvasPointer({
+			isPreviewOpen,
+			maybeRequestMore,
+			offsetRef,
+			onPointerDownStart: () => setRandomFocusedAnchorTileId(""),
+			resetKey,
+			scheduleEdgeMovement,
+			setCanvasOffset,
+			stopAnimation,
+			viewportRef,
+		})
 
 		const setViewportNode = useCallback(
 			(node: HTMLDivElement | null) => {
@@ -329,154 +309,18 @@ const SlidesTemplateCanvas = forwardRef<SlidesTemplateCanvasHandle, SlidesTempla
 			[updateVisibleCanvasItems],
 		)
 
-		const handlePointerMove = useCallback(
-			(event: PointerEvent<HTMLDivElement>) => {
-				if (isPreviewOpen) return
-
-				const dragState = dragStateRef.current
-				if (dragState) {
-					if (event.pointerId !== dragState.pointerId) return
-
-					const dragDistanceX = event.clientX - dragState.startClientX
-					const dragDistanceY = event.clientY - dragState.startClientY
-					if (
-						!dragState.hasMoved &&
-						Math.hypot(dragDistanceX, dragDistanceY) < CANVAS_DRAG_START_THRESHOLD
-					) {
-						return
-					}
-
-					if (!dragState.hasMoved) {
-						dragState.hasMoved = true
-						setIsDragging(true)
-						viewportRef.current?.setPointerCapture(event.pointerId)
-					}
-
-					event.preventDefault()
-					const previousOffset = offsetRef.current
-					const nextOffset = setCanvasOffset({
-						x: dragState.startOffset.x + dragDistanceX,
-						y: dragState.startOffset.y + dragDistanceY,
-					})
-					const appliedDelta = {
-						x: nextOffset.x - previousOffset.x,
-						y: nextOffset.y - previousOffset.y,
-					}
-					dragState.lastClientX = event.clientX
-					dragState.lastClientY = event.clientY
-					maybeRequestMore(getDirectionsFromVelocity(appliedDelta))
-					return
-				}
-
-				if (isCanvasDragBlockedTarget(event.target)) {
-					stopAnimation()
-					return
-				}
-
-				const viewport = viewportRef.current
-				if (!viewport) return
-
-				const velocity = getEdgeVelocity(viewport.getBoundingClientRect(), event)
-				velocityRef.current = velocity
-				if (Math.abs(velocity.x) < 0.2 && Math.abs(velocity.y) < 0.2) {
-					stopAnimation()
-					return
-				}
-				startAnimation()
-			},
-			[isPreviewOpen, maybeRequestMore, setCanvasOffset, startAnimation, stopAnimation],
-		)
-
-		const handlePointerDown = useCallback(
-			(event: PointerEvent<HTMLDivElement>) => {
-				if (isPreviewOpen) return
-
-				const viewport = viewportRef.current
-				if (
-					!viewport ||
-					event.button > 0 ||
-					event.isPrimary === false ||
-					isCanvasDragBlockedTarget(event.target)
-				) {
-					return
-				}
-
-				stopAnimation()
-				dragStateRef.current = {
-					hasMoved: false,
-					lastClientX: event.clientX,
-					lastClientY: event.clientY,
-					pointerId: event.pointerId,
-					startClientX: event.clientX,
-					startClientY: event.clientY,
-					startOffset: offsetRef.current,
-				}
-			},
-			[isPreviewOpen, stopAnimation],
-		)
-
-		const handlePointerLeave = useCallback(() => {
-			stopAnimation()
-			if (dragStateRef.current?.hasMoved) return
-			dragStateRef.current = null
-			setIsDragging(false)
-		}, [stopAnimation])
-
-		const handlePointerRelease = useCallback(
-			(event: PointerEvent<HTMLDivElement>) => {
-				if (isPreviewOpen) return
-
-				const viewport = viewportRef.current
-				const dragState = dragStateRef.current
-				if (!dragState || dragState.pointerId !== event.pointerId) return
-
-				if (dragState.hasMoved) {
-					suppressClickRef.current = true
-					if (suppressClickTimeoutRef.current != null) {
-						window.clearTimeout(suppressClickTimeoutRef.current)
-					}
-					suppressClickTimeoutRef.current = window.setTimeout(() => {
-						suppressClickRef.current = false
-						suppressClickTimeoutRef.current = null
-					}, 0)
-				}
-
-				dragStateRef.current = null
-				setIsDragging(false)
-				if (viewport?.hasPointerCapture(event.pointerId)) {
-					viewport.releasePointerCapture(event.pointerId)
-				}
-			},
-			[isPreviewOpen],
-		)
-
-		const handleCanvasClickCapture = useCallback(
-			(event: MouseEvent<HTMLDivElement>) => {
-				if (isPreviewOpen) return
-
-				if (!suppressClickRef.current) return
-
-				suppressClickRef.current = false
-				if (suppressClickTimeoutRef.current != null) {
-					window.clearTimeout(suppressClickTimeoutRef.current)
-					suppressClickTimeoutRef.current = null
-				}
-				event.preventDefault()
-				event.stopPropagation()
-			},
-			[isPreviewOpen],
-		)
-
 		const {
 			canvasScale,
 			canZoomIn,
 			canZoomOut,
 			handleControlMove,
+			handleFocusPoint,
 			handleResetView,
 			handleZoomIn,
 			handleZoomOut,
 			setCanvasScale,
 		} = useSlidesTemplateCanvasNavigation({
+			animateToOffset,
 			canvasItemsLength: canvasItems.length,
 			contentBounds,
 			maybeRequestMore,
@@ -489,6 +333,47 @@ const SlidesTemplateCanvas = forwardRef<SlidesTemplateCanvasHandle, SlidesTempla
 			viewportRef,
 		})
 
+		useImperativeHandle(
+			ref,
+			() => ({
+				focusRandomTemplate() {
+					if (priorityCanvasItems.length === 0) return false
+
+					const candidates =
+						priorityCanvasItems.length > 1 && randomFocusedAnchorTileId
+							? priorityCanvasItems.filter(({ item }) => {
+									return item.id !== randomFocusedAnchorTileId
+								})
+							: priorityCanvasItems
+					const randomIndex = getPriorityWeightedRandomIndex(candidates.length)
+					const canvasItem = candidates[randomIndex]
+					if (!canvasItem || !handleFocusPoint(canvasItem.position)) return false
+
+					const { item: tile } = canvasItem
+					setRandomFocusedAnchorTileId(tile.id)
+					return true
+				},
+				openPreview(template) {
+					if (getTemplatePreviewUrls(template).length === 0) return false
+
+					const templateKey = getTemplateKey(template)
+					const canvasItem = canvasItems.find(
+						({ item }) => getTemplateKey(item.template) === templateKey,
+					)
+					if (!canvasItem) return false
+
+					const { item: tile } = canvasItem
+					setRandomFocusedAnchorTileId("")
+					setPreviewFocus({
+						anchorTileId: tile.id,
+						tile,
+					})
+					return true
+				},
+			}),
+			[canvasItems, handleFocusPoint, priorityCanvasItems, randomFocusedAnchorTileId],
+		)
+
 		useSlidesTemplateCanvasWheel({
 			enabled: !isPreviewOpen,
 			maybeRequestMore,
@@ -500,29 +385,14 @@ const SlidesTemplateCanvas = forwardRef<SlidesTemplateCanvasHandle, SlidesTempla
 			viewportRef,
 		})
 
-		useEffect(() => {
-			if (!isPreviewOpen) return
-
-			const viewport = viewportRef.current
-			const activePointerId = dragStateRef.current?.pointerId
-			stopAnimation()
-			dragStateRef.current = null
-			setIsDragging(false)
-			if (activePointerId != null && viewport?.hasPointerCapture(activePointerId)) {
-				viewport.releasePointerCapture(activePointerId)
-			}
-		}, [isPreviewOpen, stopAnimation])
-
 		useLayoutEffect(() => {
-			velocityRef.current = { x: 0, y: 0 }
+			stopAnimation()
 			lastLoadMoreAtRef.current = 0
-			lastAutoLoadTemplateCountRef.current = -1
-			dragStateRef.current = null
-			suppressClickRef.current = false
-			setIsDragging(false)
+			lastAutoLoadSignalRef.current = null
 			setPreviewFocus(null)
+			setRandomFocusedAnchorTileId("")
 			setCanvasOffset({ x: 0, y: 0 })
-		}, [resetKey, setCanvasOffset])
+		}, [resetKey, setCanvasOffset, stopAnimation])
 
 		useLayoutEffect(() => {
 			setCanvasOffset(offsetRef.current)
@@ -532,18 +402,8 @@ const SlidesTemplateCanvas = forwardRef<SlidesTemplateCanvasHandle, SlidesTempla
 			onPreviewOpenChange?.(previewFocus !== null)
 		}, [onPreviewOpenChange, previewFocus])
 
-		useEffect(() => {
-			return () => {
-				dragStateRef.current = null
-				if (suppressClickTimeoutRef.current != null) {
-					window.clearTimeout(suppressClickTimeoutRef.current)
-					suppressClickTimeoutRef.current = null
-				}
-				stopAnimation()
-			}
-		}, [stopAnimation])
-
 		function handlePreviewToggle(anchorTileId: string, tile: SlidesTemplateCanvasTile) {
+			setRandomFocusedAnchorTileId("")
 			setPreviewFocus((currentFocus) =>
 				currentFocus?.anchorTileId === anchorTileId && currentFocus.tile.id === tile.id
 					? null
@@ -556,7 +416,7 @@ const SlidesTemplateCanvas = forwardRef<SlidesTemplateCanvasHandle, SlidesTempla
 				setViewportNode={setViewportNode}
 				canvasItems={canvasItems}
 				contentRef={contentRef}
-				visibleCanvasItems={visibleCanvasItems}
+				visibleCanvasItems={renderedCanvasItems}
 				focusedAnchorTileId={focusedAnchorTileId}
 				selectedTemplateValue={selectedTemplateValue}
 				selectedTemplate={selectedTemplate}
@@ -578,6 +438,7 @@ const SlidesTemplateCanvas = forwardRef<SlidesTemplateCanvasHandle, SlidesTempla
 				onPointerCancel={handlePointerRelease}
 				onPointerLeave={handlePointerLeave}
 				onCanvasClickCapture={handleCanvasClickCapture}
+				onFindSimilarColors={onFindSimilarColors}
 				onTemplateSelect={onTemplateSelect}
 				onPreviewToggle={handlePreviewToggle}
 				onPreviewClose={() => setPreviewFocus(null)}

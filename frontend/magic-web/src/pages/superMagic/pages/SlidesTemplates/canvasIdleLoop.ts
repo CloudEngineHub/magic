@@ -2,7 +2,14 @@ import { SLIDES_TEMPLATE_CANVAS_STEP_Y, type TemplateCanvasItem } from "./canvas
 import type { SlidesTemplateCanvasTile } from "./canvasInteraction"
 
 const MIN_LOOP_COLUMN_ITEM_COUNT = 3
-const BASE_LOOP_SPEED_PX_PER_SECOND = 10
+const MIN_LOOP_SPEED_PX_PER_SECOND = 5.5
+const LOOP_SPEED_STEP_PX_PER_SECOND = 0.85
+const LOOP_SPEED_VARIANT_COUNT = 7
+
+function getColumnMotionVariant(column: number) {
+	// 使用列号生成稳定差异，刷新后节奏不跳变，同时避免相邻列形成同步运动。
+	return (Math.abs(column) * 37 + (column < 0 ? 11 : 0)) % LOOP_SPEED_VARIANT_COUNT
+}
 
 export interface SlidesTemplateCanvasIdleLoop {
 	column: number
@@ -81,13 +88,15 @@ export function resolveSlidesTemplateCanvasIdleLoops(
 		.sort((left, right) => left.column - right.column)
 		.map(({ column, items: currentItems }) => {
 			const distance = currentItems.length * SLIDES_TEMPLATE_CANVAS_STEP_Y
-			const phase = Math.abs(column) % 3
+			const motionVariant = getColumnMotionVariant(column)
+			const speed =
+				MIN_LOOP_SPEED_PX_PER_SECOND + motionVariant * LOOP_SPEED_STEP_PX_PER_SECOND
 			return {
 				column,
-				delay: phase * 0.65,
+				delay: (motionVariant % 4) * 0.55,
 				distance,
 				direction: (Math.abs(column) % 2 === 0 ? -1 : 1) as -1 | 1,
-				duration: distance / (BASE_LOOP_SPEED_PX_PER_SECOND + phase * 1.5),
+				duration: distance / speed,
 			}
 		})
 }

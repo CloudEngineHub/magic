@@ -6,7 +6,7 @@ import {
 	isTrackpadPanWheel,
 	normalizeWheelDelta,
 } from "./canvasZoom"
-import { getDirectionsFromVelocity, isCanvasDragBlockedTarget } from "./canvasInteraction"
+import { getDirectionsFromVelocity } from "./canvasInteraction"
 
 const ZOOM_OUT_LOAD_DIRECTIONS: TemplateCanvasDirection[] = ["left", "right", "up", "down"]
 const TRACKPAD_PAN_GESTURE_TIMEOUT_MS = 180
@@ -40,8 +40,6 @@ export function useSlidesTemplateCanvasWheel({
 		let lastTrackpadPanAt = Number.NEGATIVE_INFINITY
 
 		function handleWheel(event: globalThis.WheelEvent) {
-			if (isCanvasDragBlockedTarget(event.target)) return
-
 			if (event.cancelable) {
 				event.preventDefault()
 			}

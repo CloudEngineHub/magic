@@ -1,7 +1,8 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react"
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
+import { createRef } from "react"
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest"
 import type { OptionItem } from "@/pages/superMagic/components/MainInputContainer/panels/types"
-import SlidesTemplateCanvas from "../SlidesTemplateCanvas"
+import SlidesTemplateCanvas, { type SlidesTemplateCanvasHandle } from "../SlidesTemplateCanvas"
 import { getLoadMoreThreshold } from "../canvasInteraction"
 
 vi.mock("react-i18next", () => ({
@@ -393,6 +394,36 @@ describe("SlidesTemplateCanvas", () => {
 		}
 	})
 
+	it("continues loading pages when a client-side filter keeps the visible count unchanged", async () => {
+		const rectSpy = vi
+			.spyOn(HTMLElement.prototype, "getBoundingClientRect")
+			.mockReturnValue(CANVAS_RECT)
+		const onLoadMore = vi.fn()
+		const props = {
+			templates: [template],
+			selectedTemplate: null,
+			onTemplateSelect: vi.fn(),
+			hasMore: true,
+			isLoading: false,
+			isLoadingMore: false,
+			isRefreshing: false,
+			onLoadMore,
+			resetKey: "similar-colors:",
+		}
+
+		try {
+			const { rerender } = render(<SlidesTemplateCanvas {...props} loadMoreSignal={40} />)
+
+			await waitFor(() => expect(onLoadMore).toHaveBeenCalledTimes(1))
+
+			rerender(<SlidesTemplateCanvas {...props} loadMoreSignal={80} />)
+
+			await waitFor(() => expect(onLoadMore).toHaveBeenCalledTimes(2))
+		} finally {
+			rectSpy.mockRestore()
+		}
+	})
+
 	it("prefetches before the viewport reaches the loaded canvas edge", () => {
 		expect(getLoadMoreThreshold(800, 600)).toBe(640)
 		expect(getLoadMoreThreshold(1440, 900)).toBe(960)
@@ -429,6 +460,148 @@ describe("SlidesTemplateCanvas", () => {
 		expect(screen.getByTestId("slides-template-canvas-content")).toHaveStyle({
 			transform: "translate3d(0px, -24px, 0) scale(1)",
 		})
+	})
+
+	it("keeps canvas wheel navigation active while the pointer is over a card action", () => {
+		renderCanvas(Array.from({ length: 120 }, (_, index) => createTemplate(index + 1)))
+		const canvas = screen.getByTestId("slides-template-canvas")
+		mockCanvasRect(canvas)
+
+		fireEvent.wheel(getFirstTestElement("slides-template-cover-select-button"), {
+			clientX: 400,
+			clientY: 300,
+			deltaMode: 0,
+			deltaY: 24,
+		})
+
+		expect(screen.getByTestId("slides-template-canvas-content")).toHaveStyle({
+			transform: "translate3d(0px, -24px, 0) scale(1)",
+		})
+	})
+
+	it("waits before edge movement so leaving the canvas does not nudge the content", () => {
+		vi.useFakeTimers()
+		const requestAnimationFrameSpy = vi
+			.spyOn(window, "requestAnimationFrame")
+			.mockImplementation((callback) =>
+				window.setTimeout(() => callback(performance.now()), 16),
+			)
+		const cancelAnimationFrameSpy = vi
+			.spyOn(window, "cancelAnimationFrame")
+			.mockImplementation((frameId) => window.clearTimeout(frameId))
+
+		try {
+			renderCanvas(
+				Array.from({ length: 120 }, (_, index) => createTemplate(index + 1)),
+				vi.fn(),
+				{
+					hasMore: false,
+				},
+			)
+			const canvas = screen.getByTestId("slides-template-canvas")
+			mockCanvasRect(canvas)
+
+			fireEvent.pointerMove(canvas, { clientX: 2, clientY: 300, pointerId: 7 })
+			act(() => vi.advanceTimersByTime(100))
+			expect(getCanvasTranslate()).toEqual({ x: 0, y: 0 })
+
+			fireEvent.pointerLeave(canvas, { clientX: -2, clientY: 300, pointerId: 7 })
+			act(() => vi.advanceTimersByTime(500))
+			expect(getCanvasTranslate()).toEqual({ x: 0, y: 0 })
+		} finally {
+			requestAnimationFrameSpy.mockRestore()
+			cancelAnimationFrameSpy.mockRestore()
+			vi.useRealTimers()
+		}
+	})
+
+	it("centers and highlights a random template from the current filtered items", async () => {
+		const templates = Array.from({ length: 120 }, (_, index) => createTemplate(index + 1))
+		const canvasRef = createRef<SlidesTemplateCanvasHandle>()
+		const randomSpy = vi.spyOn(Math, "random").mockReturnValue(0.75)
+
+		try {
+			render(
+				<SlidesTemplateCanvas
+					ref={canvasRef}
+					templates={templates}
+					selectedTemplate={null}
+					onTemplateSelect={vi.fn()}
+					hasMore={false}
+					isLoading={false}
+					isLoadingMore={false}
+					isRefreshing={false}
+					onLoadMore={vi.fn()}
+					resetKey="business:"
+				/>,
+			)
+			const canvas = screen.getByTestId("slides-template-canvas")
+			mockCanvasRect(canvas)
+
+			let didFocus = false
+			act(() => {
+				didFocus = canvasRef.current?.focusRandomTemplate() ?? false
+			})
+
+			expect(didFocus).toBe(true)
+			// 随机聚焦先保留当前位置，再通过 requestAnimationFrame 平滑移动到目标。
+			expect(getCanvasTranslate()).toEqual({ x: 0, y: 0 })
+			await waitFor(() => {
+				expect(getCanvasTranslate()).not.toEqual({ x: 0, y: 0 })
+			})
+			await waitFor(
+				() => {
+					expect(
+						screen
+							.getAllByTestId("slides-template-canvas-tile-item")
+							.some((item) => item.style.zIndex === "30"),
+					).toBe(true)
+				},
+				{ timeout: 2500 },
+			)
+		} finally {
+			randomSpy.mockRestore()
+		}
+	})
+
+	it("gives higher-sort templates priority when choosing a random focus", () => {
+		const templates = [
+			{ ...createTemplate(1), sort: 10 },
+			{ ...createTemplate(2), sort: 100 },
+			{ ...createTemplate(3), sort: 50 },
+		]
+		const canvasRef = createRef<SlidesTemplateCanvasHandle>()
+		const randomSpy = vi.spyOn(Math, "random").mockReturnValue(0)
+
+		try {
+			render(
+				<SlidesTemplateCanvas
+					ref={canvasRef}
+					templates={templates}
+					selectedTemplate={null}
+					onTemplateSelect={vi.fn()}
+					hasMore={false}
+					isLoading={false}
+					isLoadingMore={false}
+					isRefreshing={false}
+					onLoadMore={vi.fn()}
+					resetKey="business:"
+				/>,
+			)
+			const canvas = screen.getByTestId("slides-template-canvas")
+			mockCanvasRect(canvas)
+
+			act(() => {
+				canvasRef.current?.focusRandomTemplate()
+			})
+
+			const focusedItem = screen
+				.getAllByTestId("slides-template-canvas-tile-item")
+				.find((item) => item.style.zIndex === "30")
+			expect(focusedItem?.querySelector('img[alt="Template 2"]')).toBeInTheDocument()
+		} finally {
+			randomSpy.mockRestore()
+		}
 	})
 
 	it("keeps fast deltas in the same trackpad gesture as canvas movement", () => {

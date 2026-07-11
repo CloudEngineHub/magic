@@ -18,6 +18,7 @@ interface SlidesTemplateCanvasLoopColumnProps {
 	idleLoop: SlidesTemplateCanvasIdleLoop | null
 	isIdleAnimationActive: boolean
 	items: SlidesTemplateCanvasColumnItem[]
+	onFindSimilarColors?: (template: OptionItem) => void
 	onPreviewClick: (anchorTileId: string, tile: SlidesTemplateCanvasTile) => void
 	onTemplateSelect: (template: OptionItem) => void
 	reduceMotion: boolean
@@ -31,6 +32,7 @@ export default function SlidesTemplateCanvasLoopColumn({
 	idleLoop,
 	isIdleAnimationActive,
 	items,
+	onFindSimilarColors,
 	onPreviewClick,
 	onTemplateSelect,
 	reduceMotion,
@@ -87,7 +89,7 @@ export default function SlidesTemplateCanvasLoopColumn({
 		loopAnimationRef.current?.stop()
 		loopAnimationRef.current = null
 
-		if (!idleLoop || !canAnimateIdleLoop) {
+		if (!idleLoop || !canAnimateIdleLoop || focusedAnchorTileId) {
 			loopY.set(0)
 			hasLoopStartedRef.current = false
 			setShowLoopOverlay(false)
@@ -127,7 +129,15 @@ export default function SlidesTemplateCanvasLoopColumn({
 		})
 
 		return () => loopAnimationRef.current?.stop()
-	}, [canAnimateIdleLoop, idleLoop, isLoopRunning, loopEndY, loopY, showLoopOverlay])
+	}, [
+		canAnimateIdleLoop,
+		focusedAnchorTileId,
+		idleLoop,
+		isLoopRunning,
+		loopEndY,
+		loopY,
+		showLoopOverlay,
+	])
 
 	const loopState = idleLoop
 		? {
@@ -140,7 +150,7 @@ export default function SlidesTemplateCanvasLoopColumn({
 
 	return loopItems.map(({ canvasItem, visibleIndex }) => {
 		const { grid, item: tile, position, size } = canvasItem
-		const anchorTileId = `${tile.id}:${grid.x}:${grid.y}`
+		const anchorTileId = tile.id
 
 		return (
 			<SlidesTemplateCanvasTileItem
@@ -155,6 +165,7 @@ export default function SlidesTemplateCanvasLoopColumn({
 				focusedAnchorTileId={focusedAnchorTileId}
 				loopState={loopState}
 				selectedTemplateValue={selectedTemplateValue}
+				onFindSimilarColors={onFindSimilarColors}
 				onTemplateSelect={onTemplateSelect}
 				onPreviewClick={onPreviewClick}
 				shouldPlayIntro={shouldPlayIntro}

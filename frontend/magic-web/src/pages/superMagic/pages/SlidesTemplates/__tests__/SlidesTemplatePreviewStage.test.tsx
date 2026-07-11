@@ -51,10 +51,9 @@ describe("SlidesTemplatePreviewStage", () => {
 
 		try {
 			const { rerender } = renderStage(0)
+			const initialImage = screen.getByTestId("slides-template-inline-preview-active-image")
 
-			expect(
-				screen.getByTestId("slides-template-inline-preview-active-image"),
-			).toHaveAttribute("src", pages[0])
+			expect(initialImage).toHaveAttribute("src", pages[0])
 
 			rerender(<SlidesTemplatePreviewStage activeIndex={1} pages={pages} title="Business" />)
 
@@ -67,6 +66,9 @@ describe("SlidesTemplatePreviewStage", () => {
 			)
 			expect(
 				screen.getByTestId("slides-template-inline-preview-active-image"),
+			).toHaveAttribute("src", pages[0])
+			expect(
+				screen.getByTestId("slides-template-inline-preview-ambient-image"),
 			).toHaveAttribute("src", pages[0])
 
 			const pendingImage = [...createdImages]
@@ -86,6 +88,9 @@ describe("SlidesTemplatePreviewStage", () => {
 			expect(
 				screen.getByTestId("slides-template-inline-preview-active-image"),
 			).toHaveAttribute("src", pages[1])
+			expect(screen.getByTestId("slides-template-inline-preview-active-image")).toBe(
+				initialImage,
+			)
 		} finally {
 			vi.stubGlobal("Image", OriginalImage)
 			Object.defineProperty(window, "Image", {

@@ -281,6 +281,7 @@ export function useSlidesTemplateCatalogState({
 		isLoadingMore,
 		keyword,
 		loadMore,
+		loadedTemplateCount: templates.length,
 		selectedGroupKey,
 		setKeyword,
 		setSelectedGroupKey,

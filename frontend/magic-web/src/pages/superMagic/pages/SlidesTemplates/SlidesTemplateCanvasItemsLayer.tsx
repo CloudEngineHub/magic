@@ -14,6 +14,7 @@ interface SlidesTemplateCanvasItemsLayerProps {
 	contentRef: RefObject<HTMLDivElement | null>
 	focusedAnchorTileId: string
 	isIdleAnimationActive: boolean
+	onFindSimilarColors?: (template: OptionItem) => void
 	onPreviewClick: (anchorTileId: string, tile: SlidesTemplateCanvasTile) => void
 	onTemplateSelect: (template: OptionItem) => void
 	selectedTemplateValue: string
@@ -30,6 +31,7 @@ export default function SlidesTemplateCanvasItemsLayer({
 	contentRef,
 	focusedAnchorTileId,
 	isIdleAnimationActive,
+	onFindSimilarColors,
 	onPreviewClick,
 	onTemplateSelect,
 	selectedTemplateValue,
@@ -102,6 +104,7 @@ export default function SlidesTemplateCanvasItemsLayer({
 					reduceMotion={reduceMotion}
 					focusedAnchorTileId={focusedAnchorTileId}
 					selectedTemplateValue={selectedTemplateValue}
+					onFindSimilarColors={onFindSimilarColors}
 					onTemplateSelect={onTemplateSelect}
 					onPreviewClick={onPreviewClick}
 					shouldPlayIntro={shouldPlayIntro}
@@ -109,7 +112,7 @@ export default function SlidesTemplateCanvasItemsLayer({
 			))}
 			{standaloneItems.map(({ canvasItem, visibleIndex }) => {
 				const { grid, item: tile, position, size } = canvasItem
-				const anchorTileId = `${tile.id}:${grid.x}:${grid.y}`
+				const anchorTileId = tile.id
 
 				return (
 					<SlidesTemplateCanvasTileItem
@@ -123,6 +126,7 @@ export default function SlidesTemplateCanvasItemsLayer({
 						imageLoading={visibleIndex < EAGER_TEMPLATE_COVER_COUNT ? "eager" : "lazy"}
 						focusedAnchorTileId={focusedAnchorTileId}
 						selectedTemplateValue={selectedTemplateValue}
+						onFindSimilarColors={onFindSimilarColors}
 						onTemplateSelect={onTemplateSelect}
 						onPreviewClick={onPreviewClick}
 						shouldPlayIntro={shouldPlayIntro}

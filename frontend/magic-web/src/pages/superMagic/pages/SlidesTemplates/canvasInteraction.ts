@@ -69,10 +69,20 @@ export function getTemplatePreviewUrls(template: OptionItem | null | undefined) 
 }
 
 export function buildTemplateCanvasTiles(templates: OptionItem[]): SlidesTemplateCanvasTile[] {
+	const occurrenceByStableKey = new Map<string, number>()
+
 	return templates.map((template, index) => {
-		const templateKey = getTemplateKey(template) || `template-${index}`
+		const stableKey =
+			getTemplateKey(template) ||
+			getTemplateCoverUrl(template) ||
+			localeTextToDisplayString(template.label) ||
+			`template-${index}`
+		const occurrence = occurrenceByStableKey.get(stableKey) ?? 0
+		occurrenceByStableKey.set(stableKey, occurrence + 1)
+		const duplicateSuffix = occurrence > 0 ? `:duplicate-${occurrence}` : ""
 		return {
-			id: `${templateKey}:cover:${index}`,
+			// 唯一模板不使用数组下标，筛选插入新结果时 React 可以保留原卡片实例。
+			id: `${stableKey}:cover${duplicateSuffix}`,
 			imageUrl: getTemplateCoverUrl(template),
 			kind: "cover",
 			template,
@@ -117,6 +127,23 @@ export function getLoadMoreThreshold(viewportWidth: number, viewportHeight: numb
 
 export function isSameCanvasPoint(a: TemplateCanvasPoint, b: TemplateCanvasPoint) {
 	return Math.abs(a.x - b.x) < 0.01 && Math.abs(a.y - b.y) < 0.01
+}
+
+export function getPriorityWeightedRandomIndex(itemCount: number, randomValue = Math.random()) {
+	if (itemCount <= 1) return 0
+
+	// 排名越靠前权重越高，但使用平方根衰减，避免后排模板概率快速接近零。
+	const weights = Array.from({ length: itemCount }, (_, index) => 1 / Math.sqrt(index + 1))
+	const totalWeight = weights.reduce((total, weight) => total + weight, 0)
+	const normalizedRandomValue = Math.min(Math.max(randomValue, 0), 1 - Number.EPSILON)
+	let remainingWeight = normalizedRandomValue * totalWeight
+
+	for (let index = 0; index < weights.length; index += 1) {
+		remainingWeight -= weights[index] ?? 0
+		if (remainingWeight < 0) return index
+	}
+
+	return itemCount - 1
 }
 
 export function isCanvasDragBlockedTarget(target: EventTarget | null) {

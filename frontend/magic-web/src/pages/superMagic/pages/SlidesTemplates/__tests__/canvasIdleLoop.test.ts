@@ -47,17 +47,17 @@ describe("slides template canvas idle loop", () => {
 		expect(resolveSlidesTemplateCanvasIdleLoops(items)).toEqual([
 			{
 				column: -1,
-				delay: 0.65,
+				delay: 1.1,
 				distance: 5 * SLIDES_TEMPLATE_CANVAS_STEP_Y,
 				direction: 1,
-				duration: (5 * SLIDES_TEMPLATE_CANVAS_STEP_Y) / 11.5,
+				duration: (5 * SLIDES_TEMPLATE_CANVAS_STEP_Y) / 10.6,
 			},
 			{
 				column: 2,
-				delay: 1.3,
+				delay: 0,
 				distance: 4 * SLIDES_TEMPLATE_CANVAS_STEP_Y,
 				direction: -1,
-				duration: (4 * SLIDES_TEMPLATE_CANVAS_STEP_Y) / 13,
+				duration: (4 * SLIDES_TEMPLATE_CANVAS_STEP_Y) / 8.9,
 			},
 		])
 	})
@@ -75,10 +75,10 @@ describe("slides template canvas idle loop", () => {
 		expect(resolveSlidesTemplateCanvasIdleLoops(items)).toEqual([
 			{
 				column: 2,
-				delay: 1.3,
+				delay: 0,
 				distance: 4 * SLIDES_TEMPLATE_CANVAS_STEP_Y,
 				direction: -1,
-				duration: (4 * SLIDES_TEMPLATE_CANVAS_STEP_Y) / 13,
+				duration: (4 * SLIDES_TEMPLATE_CANVAS_STEP_Y) / 8.9,
 			},
 		])
 	})

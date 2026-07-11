@@ -339,6 +339,7 @@ export function toTemplateOption(template: SlidesTemplateItem) {
 		description: template.description,
 		preview_url: template.preview_url ?? undefined,
 		usage_count: template.usage_count ?? 0,
+		sort: template.sort,
 		colors: template.colors ?? [],
 		tags: template.tags ?? [],
 		preview_title: {
