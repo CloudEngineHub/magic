@@ -271,6 +271,15 @@ class MagicBaseTableRepository implements MagicBaseTableRepositoryInterface, Mag
         return $this->toEntity(MagicBaseTablePermissionEntity::class, $model->toArray());
     }
 
+    public function deleteTablePermission(string $organizationCode, int $tableId, int $permissionId): void
+    {
+        MagicBaseTablePermissionModel::query()
+            ->where('organization_code', $organizationCode)
+            ->where('table_id', $tableId)
+            ->where('id', $permissionId)
+            ->delete();
+    }
+
     public function listColumnPermissions(string $organizationCode, int $tableId, ?int $columnId = null): MagicBaseEntityCollection
     {
         $query = MagicBaseColumnPermissionModel::query()
@@ -299,6 +308,15 @@ class MagicBaseTableRepository implements MagicBaseTableRepositoryInterface, Mag
         return $this->toEntity(MagicBaseColumnPermissionEntity::class, $model->toArray());
     }
 
+    public function deleteColumnPermission(string $organizationCode, int $tableId, int $permissionId): void
+    {
+        MagicBaseColumnPermissionModel::query()
+            ->where('organization_code', $organizationCode)
+            ->where('table_id', $tableId)
+            ->where('id', $permissionId)
+            ->delete();
+    }
+
     public function listRowPermissions(string $organizationCode, int $tableId, ?int $recordId = null): MagicBaseEntityCollection
     {
         $query = MagicBaseRowPermissionModel::query()
@@ -325,6 +343,15 @@ class MagicBaseTableRepository implements MagicBaseTableRepositoryInterface, Mag
         $model->fill($payload);
         $model->save();
         return $this->toEntity(MagicBaseRowPermissionEntity::class, $model->toArray());
+    }
+
+    public function deleteRowPermission(string $organizationCode, int $tableId, int $permissionId): void
+    {
+        MagicBaseRowPermissionModel::query()
+            ->where('organization_code', $organizationCode)
+            ->where('table_id', $tableId)
+            ->where('id', $permissionId)
+            ->delete();
     }
 
     /**

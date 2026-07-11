@@ -14,6 +14,7 @@ use App\Domain\MagicBase\Entity\ValueObject\MagicBaseRowQuery;
 use App\Domain\MagicBase\Entity\ValueObject\MagicBaseRowQueryResult;
 use App\Domain\MagicBase\Exception\MagicBaseExceptionBuilder;
 use App\Domain\MagicBase\Repository\Facade\MagicBaseRowQueryRepositoryInterface;
+use Hyperf\Logger\LoggerFactory;
 use LogicException;
 use MongoDB\Model\BSONArray;
 use MongoDB\Model\BSONDocument;
@@ -39,7 +40,10 @@ readonly class MagicBaseMongoRowQueryRepository implements MagicBaseRowQueryRepo
             ], [
                 'maxTimeMS' => $this->client->queryTimeoutMs(),
             ]);
-        } catch (Throwable) {
+        } catch (Throwable $exception) {
+            $this->logQueryFailure('MongoDB row storage read failed.', $exception, [
+                'collection' => $route->getMongoCollection(),
+            ]);
             MagicBaseExceptionBuilder::storageUnavailable('MongoDB row storage read failed.');
             throw new LogicException('Unreachable');
         }
@@ -62,7 +66,10 @@ readonly class MagicBaseMongoRowQueryRepository implements MagicBaseRowQueryRepo
             $collection = $this->client->collection($route->getMongoCollection());
             $total = $collection->countDocuments($filter, ['maxTimeMS' => $this->client->queryTimeoutMs()]);
             $cursor = $collection->find($filter, $options);
-        } catch (Throwable) {
+        } catch (Throwable $exception) {
+            $this->logQueryFailure('MongoDB row storage query failed.', $exception, [
+                'collection' => $route->getMongoCollection(),
+            ]);
             MagicBaseExceptionBuilder::storageUnavailable('MongoDB row storage query failed.');
             throw new LogicException('Unreachable');
         }
@@ -93,7 +100,10 @@ readonly class MagicBaseMongoRowQueryRepository implements MagicBaseRowQueryRepo
                 'limit' => MagicBaseConst::ROW_STORAGE_SEARCH_SIZE,
                 'maxTimeMS' => $this->client->queryTimeoutMs(),
             ]);
-        } catch (Throwable) {
+        } catch (Throwable $exception) {
+            $this->logQueryFailure('MongoDB row storage list failed.', $exception, [
+                'collection' => $route->getMongoCollection(),
+            ]);
             MagicBaseExceptionBuilder::storageUnavailable('MongoDB row storage list failed.');
             throw new LogicException('Unreachable');
         }
@@ -254,5 +264,21 @@ readonly class MagicBaseMongoRowQueryRepository implements MagicBaseRowQueryRepo
         }
 
         return $normalized;
+    }
+
+    /**
+     * @param array<string, mixed> $context
+     */
+    private function logQueryFailure(string $message, Throwable $exception, array $context = []): void
+    {
+        di(LoggerFactory::class)->get(static::class)->error($message, $context + [
+            'exception' => $exception::class,
+            'message' => $this->sanitizeExceptionMessage($exception->getMessage()),
+        ]);
+    }
+
+    private function sanitizeExceptionMessage(string $message): string
+    {
+        return (string) preg_replace('/mongodb(\+srv)?:\/\/\S+/i', 'mongodb$1://[redacted]', $message);
     }
 }

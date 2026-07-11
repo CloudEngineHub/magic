@@ -149,6 +149,11 @@ readonly class MagicBaseMetadataDomainService
         return $this->permissionRepository->upsertTablePermission($entity instanceof MagicBaseTablePermissionEntity ? $entity : new MagicBaseTablePermissionEntity($entity));
     }
 
+    public function deleteTablePermission(string $organizationCode, int $tableId, int $permissionId): void
+    {
+        $this->permissionRepository->deleteTablePermission($organizationCode, $tableId, $permissionId);
+    }
+
     /** @return MagicBaseEntityCollection<MagicBaseColumnPermissionEntity> */
     public function listColumnPermissions(string $organizationCode, int $tableId, ?int $columnId = null): MagicBaseEntityCollection
     {
@@ -161,6 +166,11 @@ readonly class MagicBaseMetadataDomainService
         return $this->permissionRepository->upsertColumnPermission($entity instanceof MagicBaseColumnPermissionEntity ? $entity : new MagicBaseColumnPermissionEntity($entity));
     }
 
+    public function deleteColumnPermission(string $organizationCode, int $tableId, int $permissionId): void
+    {
+        $this->permissionRepository->deleteColumnPermission($organizationCode, $tableId, $permissionId);
+    }
+
     /** @return MagicBaseEntityCollection<MagicBaseRowPermissionEntity> */
     public function listRowPermissions(string $organizationCode, int $tableId, ?int $recordId = null): MagicBaseEntityCollection
     {
@@ -171,6 +181,11 @@ readonly class MagicBaseMetadataDomainService
     public function upsertRowPermission(array|MagicBaseRowPermissionEntity $entity): MagicBaseRowPermissionEntity
     {
         return $this->permissionRepository->upsertRowPermission($entity instanceof MagicBaseRowPermissionEntity ? $entity : new MagicBaseRowPermissionEntity($entity));
+    }
+
+    public function deleteRowPermission(string $organizationCode, int $tableId, int $permissionId): void
+    {
+        $this->permissionRepository->deleteRowPermission($organizationCode, $tableId, $permissionId);
     }
 
     public function createMigrationLog(MagicBaseMigrationLogEntity $entity): MagicBaseMigrationLogEntity

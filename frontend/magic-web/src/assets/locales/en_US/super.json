@@ -469,6 +469,7 @@
 		"notFound": "No results found",
 		"onlineEdit": "Online Edit",
 		"onlySupportUploadImage": "Only support uploading png/jpg/gif format images",
+		"open": "Open",
 		"pinned": "Pinned",
 		"pptMode": "Slide",
 		"projectNotSelected": "Please select a project first",
@@ -627,9 +628,7 @@
 				"defaultModel": "Default model",
 				"defaultVideoModel": "Default video model",
 				"editTitle": "Edit Configuration",
-				"enableSchedule": "Enable Scheduled Execution",
-				"enableScheduleHint": "Card will auto-update at the set frequency",
-				"generate": "Generate Card",
+				"generate": "Generate Observation",
 				"imageModel": "Image Model",
 				"languageModel": "Language Model",
 				"modelSection": "Model Configuration",
@@ -642,27 +641,129 @@
 			"createDialog": {
 				"cancel": "Cancel",
 				"cardName": "Card Name",
-				"cardNamePlaceholder": "e.g., TikTok Trending, Daily Industry Digest",
-				"confirm": "Create Card",
+				"cardNamePlaceholder": "e.g., Competitor Radar, Trend Watch, Business Anomaly Watch",
+				"confirm": "Create AI Card",
 				"creating": "Creating...",
-				"description": "AI will automatically create a visual card and set up a scheduled task to fetch and update latest data periodically.",
-				"prompt": "Analysis Instructions",
-				"promptHint": "AI will periodically fetch latest data based on this instruction, analyze it, and generate an updated visual card.",
-				"promptPlaceholder": "Tell AI what content to track and analyze.\ne.g., Search today's top 20 trending topics on TikTok, Weibo, and Xiaohongshu, analyze trends and present with list + trend markers.",
-				"template": "Card Template",
+				"description": "Create an AI Card that continuously watches a goal, forms judgement, and renders visual results. You can still switch to a fixed plan for the classic scheduled flow.",
+				"prompt": "Observation Goal",
+				"promptHint": "Tell AI what to observe, how to judge importance, and what actions to suggest when meaningful changes appear.",
+				"promptPlaceholder": "Tell AI what to keep watching.\ne.g., Watch Competitor A's enterprise pricing, launches, and customer stories. When important changes appear, explain the impact and suggest sales actions.",
+				"template": "Display Template",
+				"templates": {
+					"collapseForm": "Collapse editing",
+					"description": "Choose a common observation scenario. The form will prefill the goal, visual template, schedule, and AI task permissions.",
+					"expandForm": "Expand editing",
+					"summary": "Selected template",
+					"summaryAutonomy": "AI task permissions",
+					"summaryGoal": "Observation goal",
+					"summaryName": "Name",
+					"summarySchedule": "Schedule",
+					"template": {
+						"brandSentiment": {
+							"description": "Watch social hot topics, user feedback, negative signals, and campaign opportunities.",
+							"scenario": "For brand, PR, marketing, and content operations teams.",
+							"title": "Brand sentiment and trend observer"
+						},
+						"businessAnomaly": {
+							"description": "Watch metric anomalies across operations, conversion, inventory, sales, or service data.",
+							"scenario": "For operations, analytics, growth, and business owners.",
+							"title": "Business anomaly observer"
+						},
+						"campaignMaterial": {
+							"description": "Watch campaign channels, ad creatives, landing pages, and conversion cost changes.",
+							"scenario": "For growth, performance marketing, campaign, and creative teams.",
+							"title": "Campaign and creative observer"
+						},
+						"competitorPricing": {
+							"description": "Watch competitor pricing, releases, customer stories, and enterprise capabilities.",
+							"scenario": "For sales, product, strategy, and market research teams.",
+							"title": "Competitor product and pricing observer"
+						},
+						"contentPerformance": {
+							"description": "Watch published content metrics, comment feedback, and redistribution opportunities.",
+							"scenario": "For self-media, content operations, and growth teams.",
+							"title": "Content performance observer"
+						},
+						"custom": {
+							"description": "Start from a blank setup and fill in the observation goal yourself.",
+							"scenario": "For custom observation tasks without a fixed scenario yet.",
+							"title": "Custom"
+						},
+						"inventoryRisk": {
+							"description": "Watch inventory levels, replenishment cycles, stockout alerts, and slow-moving items.",
+							"scenario": "For ecommerce, supply chain, retail, and merchandising teams.",
+							"title": "Inventory and supply risk observer"
+						},
+						"policyChange": {
+							"description": "Watch industry policies, platform rules, regulatory notices, and compliance changes.",
+							"scenario": "For legal, compliance, platform operations, and market research teams.",
+							"title": "Policy and compliance change observer"
+						},
+						"productReviews": {
+							"description": "Watch app store, ecommerce, community, and review content for experience feedback.",
+							"scenario": "For product, experience, growth, and user research teams.",
+							"title": "Product experience and review observer"
+						},
+						"renewalRisk": {
+							"description": "Watch customer activity, tickets, contract windows, and renewal risk signals.",
+							"scenario": "For sales, customer success, operations, and business owners.",
+							"title": "Renewal and churn risk observer"
+						},
+						"serviceQuality": {
+							"description": "Watch community, support, and after-sales issues for service quality risks.",
+							"scenario": "For support, community, operations, and service management teams.",
+							"title": "Community issue and service quality observer"
+						},
+						"talentHiring": {
+							"description": "Watch competitor hiring, team expansion, talent movement, and role requirements.",
+							"scenario": "For HR, strategy, business owners, and organization development teams.",
+							"title": "Hiring and talent movement observer"
+						},
+						"userFeedback": {
+							"description": "Watch high-frequency needs and blockers from support, surveys, communities, and reviews.",
+							"scenario": "For product, user research, support, and growth teams.",
+							"title": "User feedback and needs observer"
+						}
+					},
+					"title": "Choose an observation template"
+				},
 				"title": "Create AI Card"
 			},
 			"createMessage": {
+				"autonomy": {
+					"approvalPolicies": {
+						"allChanges": "All scheduling changes require confirmation",
+						"destructiveOnly": "Pausing, archiving, deleting, and external notifications require confirmation",
+						"highRisk": "High-risk, destructive, frequency-increase, and external notification changes require confirmation"
+					},
+					"approvalPolicy": "Approval policy: {{policy}}",
+					"budgetNote": "Budget: {{budget}}",
+					"guardrails": "Guardrails: {{guardrails}}",
+					"level": "Autonomy level: {{level}}",
+					"levels": {
+						"bounded": "Bounded autonomy",
+						"goalDriven": "Goal-driven",
+						"suggested": "Suggested only"
+					},
+					"limits": "Limits: up to {{maxWatchTasks}} active watch tasks, up to {{maxRunsPerDay}} runs per day"
+				},
+				"cardDomain": "Card domain: {{domain}}",
 				"cardId": "Card ID: {{cardId}}",
 				"cardLink": "Card link: {{cardLink}}",
 				"customTemplate": "Custom template: {{customTemplate}}",
 				"location": "Location: {{cardDir}}/",
+				"mode": "Mode: {{mode}}",
+				"modes": {
+					"observer": "AI Watch",
+					"scheduled": "Fixed plan"
+				},
 				"notificationChannels": {
 					"dingtalk": "DingTalk",
 					"lark": "Lark",
 					"wecom": "WeCom"
 				},
 				"notificationTargetLine": "{{channel}}: {{targetDescription}}",
+				"observerContract": "AI Watch contract: write the current observer state to state/signals.json, state/evidence.json, state/judgement.json, state/run-summary.json, state/observation-plan.json, and state/notification-log.json. The HTML output, such as state/index.html or a runs/{run_id}/ artifact, should visualize the same structured intelligence data.",
 				"schedule": {
 					"daily": "daily at {{time}}",
 					"default": "at {{time}}",
@@ -676,15 +777,19 @@
 				"sectionTitle": "━━━ {{title}} ━━━",
 				"sections": {
 					"analysisInstruction": "Analysis instructions",
+					"autonomyPolicy": "AI task permissions",
 					"cardData": "Card data",
 					"createRequirement": "Creation requirements",
 					"notificationTargets": "Notification targets"
 				},
 				"template": "Template: {{template}}",
 				"title": "Create an AI Card named \"{{cardName}}\".",
+				"titleScheduled": "Create a fixed-plan AI card named \"{{cardName}}\".",
 				"topicName": "[AI Card] {{cardName}}",
+				"topicNameScheduled": "[AI Card] {{cardName}}",
 				"update": {
 					"defaultScheduled": "Update mode: default scheduled updates",
+					"observerAutoPlan": "Schedule planning: choose the single next watch task that should run from the observation goal, then create one message_schedule task. Future runs should decide whether to add or adjust watch tasks.",
 					"once": "Update mode: one-time generation",
 					"scheduled": "Schedule: {{schedule}}{{enabledText}}"
 				}
@@ -693,21 +798,21 @@
 				"archived": "Archived",
 				"configure": "Configure",
 				"current": "Current",
-				"empty": "No card content yet, waiting for scheduled task to generate",
+				"empty": "No observation result yet. Waiting for the next run.",
 				"historyCount": "{{count}} versions",
 				"historyEmpty": "No history versions yet. Future automated updates will appear here.",
-				"historyPreviewDescription": "The dashboard shows only a summary; open it to load the full card.",
+				"historyPreviewDescription": "The dashboard shows only a summary; open it to load the full observation result.",
 				"historyPreviewTitle": "History snapshot",
 				"historySectionDescription": "Review archived versions by generation time.",
 				"historySectionTitle": "Version timeline",
 				"historyVersion": "🕰 History",
-				"latestSectionDescription": "The active card version. Open it to inspect the full result.",
+				"latestSectionDescription": "The active observation result. Open it to inspect the full result.",
 				"latestSectionTitle": "Latest version",
 				"latestVersion": "✨ Latest",
-				"loading": "Loading AI Cards...",
-				"loadingDescription": "Parsing card data",
+				"loading": "Loading AI Card...",
+				"loadingDescription": "Parsing observation data",
 				"modelSummary": "Model {{model}}",
-				"openHistoryVersion": "Open full version",
+				"openHistoryVersion": "Open full result",
 				"runNow": "Run Now",
 				"running": "Running...",
 				"scheduleCustom": "{{time}}",
@@ -732,21 +837,65 @@
 				"loadingCard": "Loading card",
 				"nextVersion": "Older version",
 				"nextVersionDisabled": "Already at earliest version",
-				"noContent": "No card content yet, waiting for next scheduled task",
+				"noContent": "No observation result yet, waiting for the next run",
 				"previousVersion": "Newer version",
 				"previousVersionDisabled": "Already at latest version"
 			},
 			"form": {
 				"advancedSettings": "Advanced Settings",
 				"aiPolish": "AI Polish",
+				"autonomy": {
+					"approvalPolicies": {
+						"allChanges": "Ask me before any change",
+						"destructiveOnly": "Ask before pause, archive, delete, or external notification",
+						"highRisk": "Ask before high-risk changes, frequency increases, deletion, or external notification"
+					},
+					"approvalPolicy": "Which changes need approval",
+					"budgetNote": "What to watch first",
+					"budgetPlaceholder": "e.g., Prioritize negative feedback and high-impact customers, up to 4 deep runs per day",
+					"description": "Set whether AI can adjust observation tasks automatically; it will ask first when a change is outside the allowed range.",
+					"guardrails": "What AI must not do automatically",
+					"guardrailsPlaceholder": "One rule per line, e.g.\nDo not auto-reply to users or close tickets\nAnonymize quoted user content\nExplain the reason and impact before escalation",
+					"levels": {
+						"bounded": {
+							"description": "Low-risk observation changes can run automatically; frequency increases and deletion ask first",
+							"title": "Auto low-risk changes"
+						},
+						"goalDriven": {
+							"description": "AI can optimize the plan toward the goal and ask first for high-impact or out-of-range changes",
+							"title": "Optimize toward goal"
+						},
+						"suggested": {
+							"description": "AI only lists suggestions and changes tasks after you confirm",
+							"title": "Suggest only, do not change"
+						}
+					},
+					"maxRunsPerDay": "Max runs per day",
+					"maxWatchTasks": "Max active watch items",
+					"title": "What AI can adjust"
+				},
 				"cardName": "Card Name",
-				"cardNamePlaceholder": "e.g., TikTok Trending, Daily Industry Digest",
+				"cardNamePlaceholder": "e.g., Competitor Radar, Trend Watch, Business Anomaly Watch",
 				"customTemplatePlaceholder": "Describe the card style and layout you want.\ne.g., Show a trend line chart on the left, a top-10 list on the right, with a dark theme.",
+				"errors": {
+					"projectRequired": "Select a valid project first."
+				},
+				"mode": "Run Mode",
+				"modes": {
+					"observer": {
+						"description": "Continuously watch signals, then generate judgement, evidence, work logs, and an observation plan",
+						"title": "AI Watch"
+					},
+					"scheduled": {
+						"description": "Update visual results on a fixed cadence, preserving the classic scheduled flow",
+						"title": "Fixed Plan"
+					}
+				},
 				"polishModel": "Polish Model",
-				"prompt": "Analysis Instructions",
-				"promptHint": "AI will periodically fetch latest data, analyze it, and update the visual card.",
-				"promptPlaceholder": "Tell AI what content to track and analyze.\ne.g., Search today's top 20 trending topics on TikTok, Weibo, and Xiaohongshu, analyze trends.",
-				"template": "Card Template",
+				"prompt": "Observation Goal",
+				"promptHint": "AI will fetch latest data around the observation goal, judge meaningful changes, and update the visual result.",
+				"promptPlaceholder": "Tell AI what to keep watching.\ne.g., Watch today's top 20 trends on TikTok, Weibo, and Xiaohongshu. Judge trend changes, opportunity windows, and suggested actions.",
+				"template": "Display Template",
 				"templateHint": "Choose a visual template, or select \"Custom\" and describe your requirements",
 				"templateOptions": {
 					"analyticsPanel": "Analytics Panel",
@@ -757,10 +906,11 @@
 				"voiceInput": "Voice Input"
 			},
 			"history": {
+				"artifactCount": "{{count}} artifacts",
 				"back": "Back",
 				"empty": "No history records",
 				"selectHint": "← Select a history version to view",
-				"title": "History"
+				"title": "{{cardName}} — History"
 			},
 			"notification": {
 				"channels": {
@@ -768,7 +918,7 @@
 					"lark": "Lark",
 					"wecom": "WeCom"
 				},
-				"description": "After a card is generated or updated successfully, send it to the described targets. This only stores targets, not platform credentials.",
+				"description": "After an observation result is generated or updated successfully, send it to the described targets. This only stores targets, not platform credentials.",
 				"placeholders": {
 					"dingtalk": "e.g. Send to the Ops Daily group, or send to someone",
 					"lark": "e.g. Send to the Growth Daily group, or send to someone",
@@ -791,6 +941,301 @@
 				"error": "Failed to run, please try again later",
 				"success": "Task triggered successfully",
 				"successSwitched": "Task triggered, switched to the corresponding topic"
+			},
+			"scheduleDecisionMessage": {
+				"action": "Action: {{action}}",
+				"cardId": "Card ID: {{cardId}}",
+				"cardLink": "Card link: {{cardLink}}",
+				"cardName": "Card: {{cardName}}",
+				"cronDay": "Message schedule day: {{day}}",
+				"cronDeadline": "Message schedule deadline: {{deadline}}",
+				"cronEnabled": "Message schedule enabled: {{enabled}}",
+				"cronMessageContent": "Message schedule content: {{messageContent}}",
+				"cronScheduleId": "Message schedule ID: {{scheduleId}}",
+				"cronTaskName": "Message schedule task name: {{taskName}}",
+				"cronTime": "Message schedule time: {{time}}",
+				"cronType": "Message schedule type: {{type}}",
+				"decisionId": "Decision ID: {{decisionId}}",
+				"impact": "Impact: {{impact}}",
+				"instruction": "Load the ai-card-generator Skill, then call apply_ai_card_schedule_decision for this confirmed scheduleDecisions item. Execute it only once. If autonomy_config, permissions, risk, or missing parameters prevent execution, explain the skipped step, the risk, and the safest alternative.",
+				"previousCadence": "Previous cadence: {{previousCadence}}",
+				"proposedCadence": "Proposed cadence: {{proposedCadence}}",
+				"reason": "Reason: {{reason}}",
+				"scheduleCommand": "Schedule command: {{command}}",
+				"scheduleId": "Schedule ID: {{scheduleId}}",
+				"sections": {
+					"context": "Context",
+					"decision": "Schedule decision",
+					"instruction": "Instruction"
+				},
+				"targetTask": "Target task: {{targetTask}}",
+				"title": "Apply the AI Card schedule decision for \"{{cardName}}\"."
+			},
+			"signalDesk": {
+				"accepted": "Accepted",
+				"actionQueue": "Action Queue",
+				"actionTypes": {
+					"action": "Suggested action",
+					"createTask": "Create task",
+					"deepDive": "Deep dive",
+					"feedback": "Feedback",
+					"generateDoc": "Generate doc",
+					"notify": "Set notification",
+					"typeLabel": "Type: {{type}}",
+					"watch": "Keep watching"
+				},
+				"aiStrategy": "AI Strategy",
+				"autonomousLoop": "Watching continuously",
+				"autonomyLevel": "AI task permissions",
+				"autonomyLevels": {
+					"bounded": "Auto low-risk changes",
+					"configured": "Follow config",
+					"fixed": "Fixed Plan",
+					"goal_driven": "Auto-adjust toward goal",
+					"suggested": "Suggestions only"
+				},
+				"categories": {
+					"action": "Action",
+					"competitor": "Competitor",
+					"feedback": "Feedback",
+					"opportunity": "Opportunity",
+					"risk": "Risk",
+					"trend": "Trend"
+				},
+				"change": "Change",
+				"changeLabels": {
+					"disappeared": "Disappeared",
+					"new": "First seen",
+					"repeated": "Still appearing",
+					"reversed": "Reversed",
+					"updated": "Updated"
+				},
+				"confidenceLabels": {
+					"high": "High trust",
+					"low": "Low trust",
+					"medium": "Medium trust"
+				},
+				"confirmDecision": "Apply Decision",
+				"currentSignals": "New signals",
+				"decisionQueue": "Schedule Decisions",
+				"decisionSent": "Decision sent. AI will apply it within the autonomy boundary or explain why it was skipped.",
+				"defaultGoal": "Keep watching meaningful changes",
+				"defaultGuardrails": "Follow the current task config. Confirm high-risk changes in Task Overview.",
+				"defaultScope": "Pricing pages / official posts / hiring / social media / industry media",
+				"editStrategy": "Edit Strategy",
+				"empty": {
+					"actionQueue": "No actions to review",
+					"description": "Run once to generate signals, evidence, judgement, and an observation plan.",
+					"filteredSignals": "No signals match this filter",
+					"judgement": "Judgement",
+					"noSchedule": "Configure a schedule or bind a runnable task first.",
+					"notificationStrategy": "No notification strategy yet",
+					"notificationStrategyDescription": "This run has not written displayable notification rules.",
+					"observationPlan": "Observation plan",
+					"signalList": "No signals yet",
+					"signals": "Signal list",
+					"title": "No observation result yet"
+				},
+				"evidence": "Evidence",
+				"evidenceCount": "Evidence · {{count}}",
+				"evidenceDrawer": {
+					"title": "Evidence details"
+				},
+				"eyebrow": "AI Card",
+				"filtered": "Filtered",
+				"filters": {
+					"all": "All",
+					"cooling": "Less attention",
+					"new": "New",
+					"rising": "More attention"
+				},
+				"finishedAt": "Finished",
+				"goalPrefix": "Goal: ",
+				"heroDescriptionJoiner": " and ",
+				"heroDescriptionPrefix": ". Only notify ",
+				"heroDescriptionSuffix": ".",
+				"heroTitleFirst": "Let AI",
+				"heroTitleSecond": "keep watching one question",
+				"historyNarrative": "Signal History",
+				"historyRecords": "History",
+				"impact": "Impact",
+				"impactAndSuggestion": "Impact and suggestion",
+				"impactScore": "Impact Score",
+				"importance": "Importance",
+				"importantChanges": "important changes",
+				"intelCore": "Intel core",
+				"keyPoints": "Key points",
+				"lastScan": "Last scan",
+				"lowTrustWarning": "Low-trust signal. Check more sources before acting.",
+				"manualTask": {
+					"message": "Task instructions",
+					"messagePlaceholder": "Describe what this scheduled task should watch and update each time.",
+					"name": "Task name",
+					"namePlaceholder": "AI Card: Competitor hiring watch",
+					"reason": "Reason",
+					"reasonPlaceholder": "Why this watch task should exist separately.",
+					"schedule": "Schedule",
+					"submit": "Send to Agent",
+					"title": "Add watch task manually"
+				},
+				"mode": "Mode",
+				"mustKnow": "Must know",
+				"needsDecision": "Decision needed",
+				"needsHumanDecision": "Human decision needed",
+				"nextActions": "next actions",
+				"nextRun": "Next run",
+				"nextRunWithTime": "Next run: {{time}}",
+				"nextStep": "Next step",
+				"noEvidence": "No evidence",
+				"noImportantNotification": "No important change notification yet.",
+				"noJudgement": "Waiting",
+				"noKeyChanges": "No key changes yet",
+				"noLinkedEvidence": "No linked evidence",
+				"noObservationPlanSummary": "Waiting for AI to generate an observation plan summary.",
+				"noSignal": "Select signal",
+				"none": "None",
+				"notification": "Notification",
+				"notificationDelivered": "Notification delivered",
+				"notificationDeliveredDefault": "Observation result delivered",
+				"notificationLog": "Notification Log",
+				"notificationOnlyHighValue": "Only high-value updates trigger alerts.",
+				"notificationPreview": "Notification preview",
+				"notificationRule": "Rule",
+				"notificationStrategy": "Notification Strategy",
+				"observationGuardrails": "Observation limits",
+				"observationPlan": "Observation Plan",
+				"observationScope": "Scope",
+				"ongoingObservation": "Ongoing observation",
+				"openCard": "Full Result",
+				"openSource": "Open source",
+				"pendingActionCount": "{{count}} to review",
+				"pendingActions": "Suggested actions",
+				"phaseStatus": {
+					"failed": "Failed",
+					"partial": "Partial",
+					"running": "Running",
+					"success": "Done"
+				},
+				"phases": "Run Steps",
+				"publishedAt": "Published {{time}}",
+				"quietHours": "Quiet hours",
+				"ready": "Ready",
+				"recommendedActions": "Suggested actions",
+				"requiresConfirmation": "Confirm",
+				"reviewPlan": "Check Config",
+				"run": "Run",
+				"runStatus": {
+					"failed": "Run failed",
+					"running": "Observing",
+					"watching": "Watching"
+				},
+				"runSummaryDescription": "AI scanned {{scanned}} sources, used {{accepted}}, filtered {{filtered}}, and found {{signals}} signals.",
+				"runSummaryEmpty": "No run stats yet. Source handling will appear after the next observation run.",
+				"runSummarySources": "Source handling: scanned {{scanned}} · used {{accepted}} · filtered {{filtered}}",
+				"runSummaryTitle": "This run",
+				"scanProcess": "Scan process",
+				"scanned": "Scanned",
+				"scheduleSuggestionCount": "{{count}} schedule suggestions",
+				"scheduleSuggestions": "Schedule suggestions",
+				"signalMap": "Signal Map",
+				"signalMapCanvas": {
+					"fit": "Fit view",
+					"grabHint": "Drag to move · scroll to zoom",
+					"reset": "Reset view",
+					"zoomIn": "Zoom in",
+					"zoomOut": "Zoom out"
+				},
+				"signalMapCountHint": "{{count}} signals · draggable canvas · compact when zoomed out",
+				"signalMapHint": "Grouped by type, importance, and status.",
+				"signalMapViews": {
+					"list": "List",
+					"map": "Map"
+				},
+				"signals": "Signals",
+				"taskOverview": {
+					"actions": {
+						"create": "New task",
+						"delete": "Delete task",
+						"pause": "Pause task",
+						"update": "Update task"
+					},
+					"addManualTask": "Add task manually",
+					"confirm": {
+						"create": "Confirm setup",
+						"delete": "Confirm delete",
+						"pause": "Confirm pause",
+						"update": "Confirm change"
+					},
+					"currentTasks": "Current tasks",
+					"emptyPendingAdjustments": "No pending changes",
+					"emptyTasks": "No assigned tasks",
+					"expiresAt": "Expires",
+					"lastDecision": "Last decision",
+					"mainTask": "Primary watch task",
+					"mainTaskSource": "Primary task",
+					"menu": {
+						"delete": "Delete task",
+						"edit": "Edit task",
+						"records": "Run records",
+						"runNow": "Run now"
+					},
+					"nextRun": "Next run",
+					"noCadence": "No cadence set",
+					"pendingAdjustments": "Pending changes",
+					"pendingCount": "{{count}} pending",
+					"schedule": {
+						"daily": "Daily {{time}}",
+						"monthly": "Monthly day {{day}} {{time}}",
+						"weekly": "Weekly {{day}} {{time}}"
+					},
+					"status": {
+						"accelerated": "Accelerated",
+						"active": "Active",
+						"archived": "Archived",
+						"error": "Error",
+						"paused": "Paused",
+						"pending": "Pending"
+					},
+					"taskCount": "{{count}} tasks",
+					"taskId": "Task ID",
+					"title": "Task Overview"
+				},
+				"todayFocus": "TODAY'S FOCUS",
+				"todayJudgement": "Today's Judgement",
+				"trust": "Trust",
+				"unread": "Unread",
+				"velocityLabels": {
+					"cooling": "Less attention",
+					"new": "New",
+					"resolved": "Resolved",
+					"rising": "More attention",
+					"stable": "Stable"
+				},
+				"viewFullReport": "View full report",
+				"waitingImpact": "Waiting for AI to assess impact.",
+				"waitingJudgement": "Waiting for the next run to generate judgement",
+				"waitingNotificationStrategy": "Waiting for notification strategy",
+				"watchTaskCount": "{{count}} watch tasks",
+				"watchTasks": "Watch tasks",
+				"workLog": "AI Work Log"
+			},
+			"supplementInput": {
+				"file": "File",
+				"hint": "Add a question, direction, or material for the AI Card to handle",
+				"mention": "Mention",
+				"placeholder": "What else would you like to ask? Add a question, direction, or file",
+				"send": "Send",
+				"sent": "Sent to AI Card",
+				"title": "Ask a follow-up"
+			},
+			"supplementMessage": {
+				"currentGoal": "Current goal:",
+				"instruction": "Use the ai-card-generator Skill before acting. Treat the user's content as supplemental input for the current AI Card. Answer the question first. Then, within this AI card's scope, update the observation goal, scope, guardrails, watch tasks, schedules, notification strategy, current state, or generated card when the supplement justifies it. Respect autonomy_config and risk rules. Execute allowed low-risk changes directly; write scheduleDecisions for changes that require approval, exceed policy, or need user confirmation.",
+				"projectPath": "Project path: {{path}}",
+				"sections": {
+					"userInput": "User input"
+				},
+				"title": "Update the AI Card \"{{cardName}}\" with this supplemental question."
 			},
 			"tile": {
 				"history": "History",
@@ -953,7 +1398,7 @@
 			},
 			"home": {
 				"aiCard": "AI Card",
-				"aiCardCount": "{{count}} AI card(s)",
+				"aiCardCount": "{{count}} AI Cards",
 				"archivePost": "Pause publishing",
 				"archivePostSuccess": "Article paused for publishing",
 				"article": "Article",
@@ -2517,6 +2962,13 @@
 		"exitEdit": "Exit Edit",
 		"fetchFailed": "Failed to fetch queue list",
 		"missingInfo": "Project or topic information is missing",
+		"mobile": {
+			"collapse": "Collapse queue",
+			"count": "{{count}} items",
+			"emptyContent": "⋯",
+			"expand": "Expand queue",
+			"title": "Queued"
+		},
 		"operationInProgress": "This message is being processed, please try again later",
 		"removeFromQueue": "Remove from queue",
 		"sendFailed": "Failed to send message",
@@ -2531,11 +2983,104 @@
 		"updateSuccess": "Queue message updated successfully"
 	},
 	"microAppPage": {
+		"databasePanel": {
+			"columnKey": "Column key",
+			"columnName": "Column name",
+			"columnPermission": "Column permissions",
+			"columns": "columns",
+			"contextMenu": {
+				"clearSelection": "Clear selection",
+				"columnPermission": "Set column permissions",
+				"rowPermission": "Set row permissions",
+				"tablePermission": "Set table permissions"
+			},
+			"dataTab": "Data",
+			"dataType": "Type",
+			"editorTarget": "Targets: {{total}}",
+			"editorTitle": {
+				"column": "Set column permissions",
+				"row": "Set row permissions",
+				"table": "Set table permissions"
+			},
+			"loadRowsFailed": "Failed to load rows",
+			"loadTableFailed": "Failed to load table schema",
+			"loadTablesFailed": "Failed to load tables",
+			"loading": "Loading",
+			"loadingTable": "Loading table",
+			"next": "Next",
+			"no": "No",
+			"noColumns": "No columns",
+			"noMatchedTables": "No matching tables",
+			"noRows": "No rows",
+			"noTables": "No tables",
+			"pageInfo": "Page {{page}} / {{totalPages}}",
+			"permission": "Permission",
+			"permissionAction": {
+				"delete": "Delete",
+				"edit": "Edit",
+				"read": "Read"
+			},
+			"permissionDelete": "Delete permission",
+			"permissionDeleteFailed": "Failed to delete permission",
+			"permissionDeleteSuccess": "Permission deleted",
+			"permissionEmpty": "Select permissions to save",
+			"permissionEmptyList": "No static permissions",
+			"permissionExisting": "Existing static permissions",
+			"permissionLevel": {
+				"insert": "Insert",
+				"manage": "Manage",
+				"read": "Read"
+			},
+			"permissionNoDynamicColumns": "No dynamic columns in selection",
+			"permissionSave": "Save permissions",
+			"permissionSaveFailed": "Failed to save permissions",
+			"permissionSaveSuccess": "Permissions saved",
+			"permissionSelectSubject": "Select user/department",
+			"permissionSelectSubjectFailed": "Select a matching subject",
+			"permissionSubject": "Subject",
+			"permissionSubjectRequired": "Select a subject",
+			"permissionType": {
+				"column": "Column",
+				"row": "Row",
+				"table": "Table"
+			},
+			"permissionsTab": "Permissions",
+			"previous": "Previous",
+			"refresh": "Refresh",
+			"required": "Required",
+			"retry": "Retry",
+			"rowPermission": "Row permissions",
+			"schemaField": "Schema field",
+			"searchTables": "Search tables",
+			"selectCurrentPage": "Select current page",
+			"selectRow": "Select row",
+			"selectedRows": "{{total}} rows selected",
+			"source": "Source",
+			"status": "Status",
+			"structureTab": "Structure",
+			"subjectAnonymous": "Anonymous visitor",
+			"subjectType": {
+				"anonymous": "Anonymous",
+				"department": "Department",
+				"organization": "Organization",
+				"user": "User"
+			},
+			"systemField": "System field",
+			"tablePermission": "Table permissions",
+			"title": "Database",
+			"totalRows": "{{total}} rows",
+			"yes": "Yes"
+		},
 		"header": {
 			"backToApps": "Back to micro apps",
+			"codeFiles": "Code files",
 			"entryLabel": "Entry",
 			"entryPlaceholder": "Select entry HTML",
+			"hideConversation": "Hide conversation",
+			"hideDatabase": "Hide database",
 			"hideFiles": "Hide files",
+			"showConversation": "Show conversation",
+			"showDatabase": "Show database",
 			"showFiles": "Show files"
 		},
 		"preview": {
@@ -2545,7 +3090,48 @@
 		"previewDialog": {
 			"description": "File preview dialog",
 			"title": "File preview"
+		},
+		"previewMode": {
+			"default": "Default preview",
+			"phone": "Phone preview",
+			"source": "Source preview"
+		},
+		"publish": {
+			"button": "Publish",
+			"buttonTooltip": "Publish for others to use",
+			"copyLink": "Copy link",
+			"copyShareText": "Copy share text",
+			"copySuccess": "Link copied",
+			"description": "After you configure access, others can use this micro app through the published link.",
+			"loadFailed": "Failed to load publish settings",
+			"password": "Access password",
+			"passwordHint": "Password must be 4-32 characters.",
+			"passwordInvalid": "Password must be 4-32 characters",
+			"publish": "Publish",
+			"published": "Published",
+			"publishedAt": "Published at: {{time}}",
+			"quickShareDescription": "Copy the link or full share text and send it to people who need access.",
+			"quickShareTitle": "Quick share",
+			"resetPassword": "Reset password",
+			"saveFailed": "Failed to publish. Please retry.",
+			"saveSuccess": "Publish settings saved",
+			"shareTextCopySuccess": "Share text copied",
+			"title": "Publish micro app",
+			"unpublish": "Unpublish",
+			"unpublishConfirmContent": "After unpublishing, others can no longer use this micro app through the published link.",
+			"unpublishConfirmTitle": "Unpublish this micro app?",
+			"unpublishFailed": "Failed to unpublish. Please retry.",
+			"unpublishSuccess": "Micro app unpublished",
+			"update": "Save settings"
 		}
+	},
+	"microAppShare": {
+		"errorTitle": "Micro app unavailable",
+		"noEntryDescription": "The published content does not include a runnable root HTML file.",
+		"noEntryTitle": "No entry HTML found",
+		"passwordDescription": "Enter the access password set by the publisher.",
+		"passwordTitle": "Open micro app",
+		"title": "Micro app"
 	},
 	"microAppsPage": {
 		"createProject": "New Project",
@@ -2554,8 +3140,17 @@
 		"emptyTitle": "No micro app projects",
 		"errorDescription": "Failed to load the project list. Please retry.",
 		"errorTitle": "Load failed",
+		"publishedEmptyDescription": "Micro apps shared with you will appear here.",
+		"publishedEmptyTitle": "No accessible micro apps",
 		"refresh": "Refresh",
+		"shareType": {
+			"organization": "Team visible",
+			"password": "Password access",
+			"public": "Public access"
+		},
 		"subtitle": "Projects in the current workspace",
+		"tabProjects": "My Projects",
+		"tabPublished": "Published Apps",
 		"title": "Micro Apps"
 	},
 	"mobile": {
@@ -2706,6 +3301,146 @@
 			"shareManagement": "My Share",
 			"title": "Navigation",
 			"workspace": "Workspace"
+		},
+		"recordingEntry": {
+			"active": {
+				"audioSourceUnavailable": "No usable audio input is available. Please check your microphone device and try again.",
+				"backAria": "Back to recordings list",
+				"browserNotSupported": "This browser does not support recording yet. Please switch to a browser with microphone support.",
+				"cancel": "Cancel recording",
+				"defaultTitle": "Current recording",
+				"enableTranscription": "Enable transcription",
+				"enableTranscriptionFailed": "Failed to enable transcription. Please try again later.",
+				"enablingTranscription": "Enabling",
+				"finishAria": "Finish recording and generate summary",
+				"notesPlaceholder": "Capture key points while recording...",
+				"pause": "Pause",
+				"permissionDenied": "Microphone permission was denied. Please allow microphone access and try again.",
+				"renameAria": "Edit recording title",
+				"resume": "Resume",
+				"startFailed": "Failed to start recording. Please check microphone permission and try again.",
+				"startFailedTitle": "Recording ran into a problem",
+				"startTimedOut": "Recording startup timed out. Please check microphone permission and try again.",
+				"starting": "Starting recording",
+				"startingHint": "Requesting microphone access and initializing recording. Please wait...",
+				"statusPaused": "Paused",
+				"statusRecording": "Recording",
+				"tabNotes": "Notes",
+				"tabTranscript": "Transcript",
+				"transcriptionDisabledDescription": "Turn it on to transcribe the recording in real time.",
+				"transcriptionDisabledTitle": "Realtime transcription"
+			},
+			"fabAria": "Start recording",
+			"fabComingSoon": "Recording is coming soon",
+			"filterSheet": {
+				"closeAria": "Close filter",
+				"dateRange": {
+					"all": "All time",
+					"label": "Date range",
+					"month": "Last 30 days",
+					"today": "Today",
+					"week": "Last 7 days"
+				},
+				"resetAria": "Reset filters",
+				"title": "Filter"
+			},
+			"groupSheet": {
+				"all": "All",
+				"backAria": "Back",
+				"closeAria": "Close groups",
+				"confirmAria": "Confirm",
+				"createFailed": "Failed to create group",
+				"createSuccess": "Group created successfully",
+				"createTitle": "New group",
+				"deleteConfirm": "Delete \"{{name}}\"? Recordings in it will be moved to Ungrouped.",
+				"deleteGroup": "Delete group",
+				"deleteGroupAria": "Delete group",
+				"deleteTitle": "Delete group",
+				"groupNameLabel": "Group name",
+				"groupNamePlaceholder": "For example: customer interviews",
+				"manageGroups": "Manage groups",
+				"manageTitle": "Manage groups",
+				"moreGroupAria": "More actions for {{name}}",
+				"moveFailed": "Failed to move. Please try again later.",
+				"moveSuccess": "Moved successfully",
+				"newGroup": "New group",
+				"rename": "Rename",
+				"renameLabel": "Group name",
+				"renamePlaceholder": "Enter a new name",
+				"renameTitle": "Rename group",
+				"title": "Groups",
+				"ungrouped": "Ungrouped",
+				"unnamedGroup": "Unnamed group"
+			},
+			"importComingSoon": "Import is coming soon",
+			"importSheet": {
+				"closeAria": "Close",
+				"fromFiles": "Import from Files",
+				"fromFilesSub": "Choose an audio file from local storage",
+				"title": "Import Audio"
+			},
+			"moreSheet": {
+				"backAria": "Back",
+				"closeAria": "Close",
+				"comingSoon": "Coming soon",
+				"confirmAria": "Confirm",
+				"delete": "Delete",
+				"deleteConfirm": "Delete \"{{name}}\"? This cannot be undone.",
+				"deleteTitle": "Delete recording",
+				"downloadOriginal": "Download original file",
+				"generateSummary": "Generate summary",
+				"moveToGroup": "Move to group",
+				"regenerateSummary": "Regenerate summary",
+				"rename": "Rename",
+				"renameLabel": "Recording name",
+				"renamePlaceholder": "Enter a new name",
+				"share": "Share",
+				"untitled": "Untitled recording"
+			},
+			"moveGroupSheet": {
+				"closeAria": "Close",
+				"title": "Move to group"
+			},
+			"placeholder": "Recordings & summaries coming soon",
+			"progress": {
+				"transferFailed": "Upload failed",
+				"uploading": "Uploading"
+			},
+			"settings": {
+				"autoSummaryEnabled": {
+					"description": "Automatically generate a summary after transcription",
+					"label": "Auto Summarize"
+				},
+				"backAria": "Back",
+				"closeAria": "Close",
+				"model": {
+					"description": "AI model used to generate summaries",
+					"label": "AI Model",
+					"title": "AI Model"
+				},
+				"saveFailed": "Failed to save settings. Please try again.",
+				"sections": {
+					"summary": "Summary",
+					"transcription": "Transcription"
+				},
+				"settingsAria": "Recording settings",
+				"title": "Recording Settings",
+				"transcriptionEnabled": {
+					"description": "Automatically start transcription when recording begins",
+					"label": "Auto Transcribe"
+				}
+			},
+			"startMissingWorkspace": "Recording is unavailable right now. Please enter a workspace first.",
+			"summarySheet": {
+				"closeAria": "Close",
+				"title": "Summary status"
+			},
+			"toolbar": {
+				"clearSearchAria": "Exit search",
+				"filterAria": "Filter",
+				"searchAria": "Search",
+				"uploadAria": "Upload audio"
+			}
 		},
 		"recycleBin": {
 			"actions": "More actions",
@@ -2920,6 +3655,15 @@
 		"invalidManifest": "Invalid pet manifest",
 		"noWorkspace": "Select a workspace first",
 		"projectName": "My Codex Pet",
+		"quickAsk": {
+			"clear": "Clear",
+			"emptyResult": "No result yet",
+			"error": "Search failed. Please try again later.",
+			"loading": "Searching",
+			"placeholder": "Ask a quick question",
+			"selectModel": "Select model",
+			"send": "Send"
+		},
 		"regenerate": "Regenerate pet",
 		"resize": "Resize pet",
 		"setCurrent": "Set as pet",
@@ -3119,6 +3863,9 @@
 		"createFolderNamePlaceholder": "Enter folder name",
 		"createSection": "Create document",
 		"deleteConfirm": {
+			"canvasContentLossWarning": "This operation will delete data or resources required by the canvas content. Some canvas content may disappear.",
+			"canvasMixedWarning": "This operation affects the canvas project entry file and data or resources required by the canvas content. The canvas may fail to open or lose visible content.",
+			"canvasOpenFailureWarning": "This operation will delete the canvas project entry file. The canvas may fail to open.",
 			"emptyLabel": "Empty folder",
 			"fileCount": "{{count}} files",
 			"intro": "Permanently delete the following {{count}} items:",
@@ -3192,6 +3939,9 @@
 		"defaultNameOrganization": "Organization Share",
 		"defaultNamePassword": "Password Link",
 		"defaultNamePublic": "Public Link",
+		"defaultOpenFileDescription": "Choose the file that opens by default after visiting the link",
+		"defaultOpenFileLabel": "Default open file",
+		"defaultOpenFileSearchPlaceholder": "Search files",
 		"deleteConfirmDescription": "People with this link will no longer be able to access the share after it is canceled.",
 		"deleteConfirmMessage": "Cancel \"{{name}}\"? People with this link will no longer be able to access the share.",
 		"deleteConfirmTitle": "Cancel shared link",
@@ -3620,7 +4370,8 @@
 			"contentWillBeSavedTo": "Content will be saved to \"{{projectName}}\"",
 			"organizingRecording": "We're preparing your recording summary and will notify you once it's ready.",
 			"title": "Please wait a moment",
-			"understood": "Got it"
+			"understood": "Got it",
+			"viewOnAudioRecordingsPage": "When it's ready, open Recordings & Notes to view it."
 		}
 	},
 	"recycleBin": {
@@ -3984,6 +4735,7 @@
 		"moreSettings": "Settings",
 		"multiFileShareName": "File Share_{{mainFileName}} and {{count}} files",
 		"name": "Name",
+		"nativeShareFailed": "Failed to share. Please try again.",
 		"navigation": "Navigation",
 		"newProjectDescription": "By default, the copied project will retain the same name as the original. If you need to distinguish between different projects more clearly, you can also customize the name as needed.",
 		"newProjectName": "New project name",
@@ -4016,7 +4768,11 @@
 		"projectShareName": "Project Share_{{projectName}}",
 		"publicAccess": "Public Access",
 		"publicAccessDescription": "Anyone can access via link. Content may be indexed by search engines. Please be aware of data security",
+		"pureMode": "Pure Mode",
+		"pureModeDescription": "Display the entry file in fullscreen and hide the header",
 		"qrCode": "Share QR Code",
+		"recordingShareCreateTitle": "Share",
+		"recordingShareName": "Recording Share_{{projectName}}",
 		"replay": "Replay",
 		"replayWillStartIn": "Replay will start in {{countdown}} seconds",
 		"resetPassword": "Reset",
@@ -4070,6 +4826,7 @@
 		"shareProjectDescription": "When enabled, visitors will have access to all files in the project.",
 		"shareRange": "Share Range",
 		"shareTitle": "Share",
+		"shareToSystem": "Share to",
 		"shareTopic": "Share topic",
 		"showFileList": "Show File List",
 		"showFileListDescription": "When enabled, visitors can view file list",
@@ -4252,6 +5009,7 @@
 		"lineBreak": "Line Break",
 		"openMCPConfig": "Open MCP Config",
 		"operation": "Operation",
+		"quickEdit": "Quick Edit",
 		"sendMessage": "Send Message",
 		"shortcutKeys": "Shortcut Keys",
 		"switchTopicDown": "Switch to Next Topic",
@@ -4496,7 +5254,10 @@
 		],
 		"actionTitle": "If you want to actively intervene",
 		"mainText": "Task execution is taking too long, which may be due to the following reasons:",
-		"reasonList": ["AI is processing complex tasks", "Network connection is unstable"],
+		"reasonList": [
+			"AI is processing complex tasks",
+			"Network connection is unstable"
+		],
 		"statusText": "If you don't take any action, AI will continue trying"
 	},
 	"tool": {
@@ -4622,6 +5383,15 @@
 		"batchOperation": "Batch Operation",
 		"batchOperations": "Batch Operations",
 		"cancelSelect": "Cancel",
+		"canvasOperationRisk": {
+			"moveContentLossContent": "This operation will move data or resources required by the canvas content. Some canvas content may disappear. Continue?",
+			"moveMixedContent": "This operation affects the canvas project entry file and data or resources required by the canvas content. The canvas may fail to open or lose visible content. Continue?",
+			"moveOpenFailureContent": "This operation will move the canvas project entry file. The canvas may fail to open. Continue?",
+			"renameContentLossContent": "This operation will rename data or resources required by the canvas content. Some canvas content may disappear. Continue?",
+			"renameMixedContent": "This operation affects the canvas project entry file and data or resources required by the canvas content. The canvas may fail to open or lose visible content. Continue?",
+			"renameOpenFailureContent": "This operation will rename the canvas project entry file. The canvas may fail to open. Continue?",
+			"title": "Canvas Project Risk"
+		},
 		"clawPlaygroundTags": {
 			"aboutYou": "About You",
 			"guidelines": "Guidelines",
@@ -4653,9 +5423,12 @@
 			"confirmBatchDelete": "Confirm Delete {{count}} Files?",
 			"confirmBatchDeleteWithFolders": "Selection includes folders, subfiles not selected will also be deleted",
 			"confirmBatchDeleteWithMagicSystemFolder": "Your selection includes the .magic system folder. After deletion, some capabilities may stop working and this cannot be undone. Proceed with caution.",
+			"copyPath": "Copy Path",
+			"copyPathFailed": "Failed to copy path",
+			"copyPathSuccess": "Path copied",
 			"copyTo": "Copy to",
-			"createAICardFailed": "Failed to create AI card project",
-			"createAICardSuccess": "AI card project created successfully",
+			"createAICardFailed": "Failed to create AI Card",
+			"createAICardSuccess": "AI Card created successfully",
 			"createDesignFailed": "Failed to create design project",
 			"createDesignSuccess": "Design project created successfully",
 			"createFile": "New File",
@@ -4682,6 +5455,9 @@
 			"deleteBatchSubject": "{{count}} selected item(s)",
 			"deleteBatchTipMobile": "Delete Selection?",
 			"deleteBatchWithFoldersDescription": "will be permanently deleted, including folder contents and unselected subfiles. This action cannot be undone.",
+			"deleteCanvasContentLossRiskContent": "This operation will delete data or resources required by the canvas content. Some canvas content may disappear. Continue deleting?",
+			"deleteCanvasMixedRiskContent": "This operation affects the canvas project entry file and data or resources required by the canvas content. The canvas may fail to open or lose visible content. Continue deleting?",
+			"deleteCanvasOpenFailureRiskContent": "This operation will delete the canvas project entry file. The canvas may fail to open. Continue deleting?",
 			"deleteContent": "Confirm to delete {{name}} ?",
 			"deleteFileDescription": "will be permanently deleted. This action cannot be undone.",
 			"deleteFileFailed": "Failed to delete file",
@@ -4821,6 +5597,7 @@
 			"message": "A folder named “{{folderName}}” already exists here. Do you want to merge the contents or keep both folders?",
 			"title": "Folder Already Exists"
 		},
+		"editorGenerationLockDescription": "Please wait a moment. Editing will resume automatically when the update finishes",
 		"elementSelector": "Element Selector",
 		"elementText": "Element Text",
 		"emptyState": {
@@ -4961,6 +5738,8 @@
 		},
 		"fileLayoutCorrectionPrompt": "Then perform layout correction, please check if the layout is reasonable, if it is unreasonable, please provide suggestions and modify it.",
 		"fileModify": "\nI need to modify this element in the file",
+		"fileModifyElementPrefix": ": ",
+		"fileModifyElementSuffix": "",
 		"fileModifyElements": ":",
 		"fileReadContentPrompt": "content",
 		"fileReadPrompt": "Please read",

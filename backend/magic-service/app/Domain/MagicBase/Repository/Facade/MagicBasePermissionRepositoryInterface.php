@@ -31,13 +31,19 @@ interface MagicBasePermissionRepositoryInterface
 
     public function upsertTablePermission(MagicBaseTablePermissionEntity $entity): MagicBaseTablePermissionEntity;
 
+    public function deleteTablePermission(string $organizationCode, int $tableId, int $permissionId): void;
+
     /** @return MagicBaseEntityCollection<MagicBaseColumnPermissionEntity> */
     public function listColumnPermissions(string $organizationCode, int $tableId, ?int $columnId = null): MagicBaseEntityCollection;
 
     public function upsertColumnPermission(MagicBaseColumnPermissionEntity $entity): MagicBaseColumnPermissionEntity;
 
+    public function deleteColumnPermission(string $organizationCode, int $tableId, int $permissionId): void;
+
     /** @return MagicBaseEntityCollection<MagicBaseRowPermissionEntity> */
     public function listRowPermissions(string $organizationCode, int $tableId, ?int $recordId = null): MagicBaseEntityCollection;
 
     public function upsertRowPermission(MagicBaseRowPermissionEntity $entity): MagicBaseRowPermissionEntity;
+
+    public function deleteRowPermission(string $organizationCode, int $tableId, int $permissionId): void;
 }

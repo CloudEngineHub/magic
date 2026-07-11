@@ -7,6 +7,7 @@ declare(strict_types=1);
 
 namespace App\Application\MagicBase\Service;
 
+use App\Application\MagicBase\DTO\BatchPermissionRequestDTO;
 use App\Application\MagicBase\DTO\ColumnPermissionRequestDTO;
 use App\Application\MagicBase\DTO\RowPermissionRequestDTO;
 use App\Application\MagicBase\DTO\TablePermissionRequestDTO;
@@ -33,6 +34,117 @@ readonly class MagicBasePermissionAppService
         private MagicBaseMigrationLogDomainService $migrationLogDomainService,
         private MagicBaseRowQuerySupport $rowQuerySupport,
     ) {
+    }
+
+    /**
+     * @return array{table_permissions: array<int, mixed>, column_permissions: array<int, mixed>, row_permissions: array<int, mixed>}
+     */
+    public function listPermissions(MagicUserAuthorization $authorization, int $projectId, int $tableId): array
+    {
+        $this->accessControl->requireTableManager($authorization, $projectId, $tableId);
+
+        return [
+            'table_permissions' => iterator_to_array($this->metadataDomainService->listTablePermissions($authorization->getOrganizationCode(), $tableId)),
+            'column_permissions' => iterator_to_array($this->metadataDomainService->listColumnPermissions($authorization->getOrganizationCode(), $tableId)),
+            'row_permissions' => iterator_to_array($this->metadataDomainService->listRowPermissions($authorization->getOrganizationCode(), $tableId)),
+        ];
+    }
+
+    /**
+     * @return array{table_permissions: list<MagicBaseTablePermissionEntity>, column_permissions: list<MagicBaseColumnPermissionEntity>, row_permissions: list<MagicBaseRowPermissionEntity>}
+     */
+    public function batchSavePermissions(MagicUserAuthorization $authorization, int $projectId, int $tableId, BatchPermissionRequestDTO $requestDTO): array
+    {
+        $this->accessControl->requireTableManager($authorization, $projectId, $tableId);
+        $subject = $this->adminDomainService->normalizeSubjectPayload($requestDTO->subjectPayload(), true);
+
+        $savedTablePermissions = [];
+        foreach ($requestDTO->getTablePermissions() as $permissionLevel) {
+            $permissionLevel = trim($permissionLevel);
+            if (! in_array($permissionLevel, MagicBaseConst::PERMISSION_LEVELS, true)) {
+                $this->invalid('permission_level');
+            }
+
+            $savedTablePermissions[] = $this->metadataDomainService->upsertTablePermission([
+                'organization_code' => $authorization->getOrganizationCode(),
+                'table_id' => $tableId,
+                'subject_type' => $subject->getSubjectType(),
+                'subject_id' => $subject->getSubjectId(),
+                'permission_level' => $permissionLevel,
+                'created_at' => new DateTime(),
+                'updated_at' => new DateTime(),
+            ]);
+        }
+
+        $savedColumnPermissions = [];
+        foreach ($requestDTO->getColumnPermissions() as $permissionGroup) {
+            foreach ($permissionGroup['column_ids'] as $columnIdPayload) {
+                $columnId = $this->parsePayloadId($columnIdPayload, '字段ID');
+                $this->getColumnOrFail($authorization, $tableId, $columnId);
+                $savedColumnPermissions[] = $this->metadataDomainService->upsertColumnPermission([
+                    'organization_code' => $authorization->getOrganizationCode(),
+                    'table_id' => $tableId,
+                    'column_id' => $columnId,
+                    'subject_type' => $subject->getSubjectType(),
+                    'subject_id' => $subject->getSubjectId(),
+                    'can_read' => $permissionGroup['can_read'],
+                    'can_edit' => $permissionGroup['can_edit'],
+                    'created_at' => new DateTime(),
+                    'updated_at' => new DateTime(),
+                ]);
+            }
+        }
+
+        $savedRowPermissions = [];
+        foreach ($requestDTO->getRowPermissions() as $permissionGroup) {
+            foreach ($permissionGroup['record_ids'] as $recordIdPayload) {
+                $recordId = $this->parsePayloadId($recordIdPayload, 'record_id');
+                $this->rowQuerySupport->getRowOrFail($authorization, $projectId, $tableId, $recordId);
+                $savedRowPermissions[] = $this->metadataDomainService->upsertRowPermission([
+                    'organization_code' => $authorization->getOrganizationCode(),
+                    'table_id' => $tableId,
+                    'record_id' => $recordId,
+                    'subject_type' => $subject->getSubjectType(),
+                    'subject_id' => $subject->getSubjectId(),
+                    'can_read' => $permissionGroup['can_read'],
+                    'can_edit' => $permissionGroup['can_edit'],
+                    'can_delete' => $permissionGroup['can_delete'],
+                    'created_at' => new DateTime(),
+                    'updated_at' => new DateTime(),
+                ]);
+            }
+        }
+
+        foreach ([...$savedTablePermissions, ...$savedColumnPermissions, ...$savedRowPermissions] as $saved) {
+            $this->metadataDomainService->createMigrationLog($this->migrationLogDomainService->buildPayload(
+                $authorization,
+                $projectId,
+                $tableId,
+                MagicBaseConst::CHANGE_CREATE,
+                MagicBaseConst::TARGET_PERMISSION,
+                (int) $saved->getId(),
+                null,
+                $saved,
+            ));
+        }
+
+        return [
+            'table_permissions' => $savedTablePermissions,
+            'column_permissions' => $savedColumnPermissions,
+            'row_permissions' => $savedRowPermissions,
+        ];
+    }
+
+    public function deletePermission(MagicUserAuthorization $authorization, int $projectId, int $tableId, string $type, int $permissionId): void
+    {
+        $this->accessControl->requireTableManager($authorization, $projectId, $tableId);
+
+        match ($type) {
+            'table' => $this->metadataDomainService->deleteTablePermission($authorization->getOrganizationCode(), $tableId, $permissionId),
+            'column' => $this->metadataDomainService->deleteColumnPermission($authorization->getOrganizationCode(), $tableId, $permissionId),
+            'row' => $this->metadataDomainService->deleteRowPermission($authorization->getOrganizationCode(), $tableId, $permissionId),
+            default => $this->invalid('permission_type'),
+        };
     }
 
     public function createTablePermission(MagicUserAuthorization $authorization, int $projectId, int $tableId, TablePermissionRequestDTO $requestDTO): MagicBaseTablePermissionEntity

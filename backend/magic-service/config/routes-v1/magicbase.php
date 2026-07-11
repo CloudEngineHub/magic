@@ -33,6 +33,9 @@ Router::addGroup('/api/v1', static function () {
 
         Router::post('/admins/project', [MagicBaseApi::class, 'createProjectAdmin']);
         Router::post('/tables/{tableId}/admins', [MagicBaseApi::class, 'createTableAdmin']);
+        Router::get('/tables/{tableId}/permissions', [MagicBaseApi::class, 'listPermissions']);
+        Router::post('/tables/{tableId}/permissions/batch', [MagicBaseApi::class, 'batchSavePermissions']);
+        Router::delete('/tables/{tableId}/permissions/{type}/{permissionId}', [MagicBaseApi::class, 'deletePermission']);
         Router::post('/tables/{tableId}/permissions/table', [MagicBaseApi::class, 'createTablePermission']);
         Router::post('/tables/{tableId}/permissions/columns', [MagicBaseApi::class, 'createColumnPermission']);
         Router::post('/tables/{tableId}/permissions/rows', [MagicBaseApi::class, 'createRowPermission']);

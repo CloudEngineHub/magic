@@ -8,6 +8,7 @@ declare(strict_types=1);
 namespace App\Interfaces\MagicBase\Facade;
 
 use App\Application\MagicBase\Assembler\MagicBaseAssembler;
+use App\Application\MagicBase\DTO\BatchPermissionRequestDTO;
 use App\Application\MagicBase\Service\MagicBaseAdminAppService;
 use App\Application\MagicBase\Service\MagicBasePermissionAppService;
 use App\Application\MagicBase\Service\MagicBaseQueryAppService;
@@ -292,6 +293,66 @@ class MagicBaseApi extends AbstractApi
             self::parseId($tableId, '表ID'),
             MagicBaseAssembler::toRowPermissionRequestDTO($request->all()),
         ));
+    }
+
+    public function listPermissions(string $projectId, string $tableId): array
+    {
+        $permissions = $this->permissionAppService->listPermissions(
+            $this->getAuthorization(),
+            self::parseId($projectId, '项目ID'),
+            self::parseId($tableId, '表ID'),
+        );
+
+        return [
+            'table_permissions' => array_map(
+                static fn (mixed $permission) => MagicBaseResponseAssembler::tablePermission($permission),
+                $permissions['table_permissions'],
+            ),
+            'column_permissions' => array_map(
+                static fn (mixed $permission) => MagicBaseResponseAssembler::columnPermission($permission),
+                $permissions['column_permissions'],
+            ),
+            'row_permissions' => array_map(
+                static fn (mixed $permission) => MagicBaseResponseAssembler::rowPermission($permission),
+                $permissions['row_permissions'],
+            ),
+        ];
+    }
+
+    public function batchSavePermissions(RequestInterface $request, string $projectId, string $tableId): array
+    {
+        $permissions = $this->permissionAppService->batchSavePermissions(
+            $this->getAuthorization(),
+            self::parseId($projectId, '项目ID'),
+            self::parseId($tableId, '表ID'),
+            BatchPermissionRequestDTO::fromArray($request->all()),
+        );
+
+        return [
+            'table_permissions' => array_map(
+                static fn (mixed $permission) => MagicBaseResponseAssembler::tablePermission($permission),
+                $permissions['table_permissions'],
+            ),
+            'column_permissions' => array_map(
+                static fn (mixed $permission) => MagicBaseResponseAssembler::columnPermission($permission),
+                $permissions['column_permissions'],
+            ),
+            'row_permissions' => array_map(
+                static fn (mixed $permission) => MagicBaseResponseAssembler::rowPermission($permission),
+                $permissions['row_permissions'],
+            ),
+        ];
+    }
+
+    public function deletePermission(string $projectId, string $tableId, string $type, string $permissionId): void
+    {
+        $this->permissionAppService->deletePermission(
+            $this->getAuthorization(),
+            self::parseId($projectId, '项目ID'),
+            self::parseId($tableId, '表ID'),
+            $type,
+            self::parseId($permissionId, '权限ID'),
+        );
     }
 
     private static function parseId(string $id, string $label): int
