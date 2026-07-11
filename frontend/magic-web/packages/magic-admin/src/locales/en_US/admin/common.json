@@ -233,8 +233,10 @@
 			"sort": "Sort",
 			"source": "Source",
 			"status": "Status",
+			"tags": "Tags",
 			"thumbnail": "Cover",
-			"updatedAt": "Updated At"
+			"updatedAt": "Updated At",
+			"usageCount": "Usage"
 		},
 		"editTitle": "Edit PPT Template",
 		"fields": {
@@ -246,6 +248,7 @@
 			"previewUrl": "Preview URL",
 			"sort": "Sort",
 			"status": "Status",
+			"tags": "Template Tags",
 			"templateFile": "Template ZIP",
 			"thumbnail": "Cover Image"
 		},
@@ -253,7 +256,9 @@
 			"category": "Category",
 			"code": "Template Code",
 			"keyword": "Keyword",
-			"status": "Status"
+			"status": "Status",
+			"tagMatch": "Tag Match",
+			"tags": "Tags"
 		},
 		"source": {
 			"official": "Official",
@@ -262,6 +267,36 @@
 		"status": {
 			"disabled": "Disabled",
 			"enabled": "Enabled"
+		},
+		"tag": {
+			"addButton": "Add Tag",
+			"addTitle": "Add PPT Template Tag",
+			"codeRule": "Tag code only supports lowercase letters, numbers, and hyphens.",
+			"columns": {
+				"code": "Tag Code",
+				"name": "Tag Name",
+				"status": "Status",
+				"templateCount": "Templates",
+				"updatedAt": "Updated At"
+			},
+			"editTitle": "Edit PPT Template Tag",
+			"fields": {
+				"code": "Tag Code",
+				"name": "Tag Name",
+				"sort": "Sort",
+				"status": "Status"
+			},
+			"filters": {
+				"code": "Tag Code",
+				"keyword": "Keyword",
+				"status": "Status"
+			},
+			"manageButton": "Tags",
+			"manageTitle": "Tag Management"
+		},
+		"tagMatch": {
+			"all": "All",
+			"any": "Any"
 		},
 		"upload": {
 			"imageDescription": "Click, drag, or paste an image to upload",

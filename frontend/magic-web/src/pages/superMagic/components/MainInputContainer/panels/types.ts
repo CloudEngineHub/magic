@@ -63,6 +63,16 @@ export interface OptionItem {
 	width?: number
 	height?: number
 	aspect_ratio?: number
+	usage_count?: number
+	colors?: string[]
+	tags?: OptionItemTag[]
+}
+
+export interface OptionItemTag {
+	id?: string
+	code: string
+	name_i18n?: LocaleTextMap
+	sort?: number
 }
 
 /**

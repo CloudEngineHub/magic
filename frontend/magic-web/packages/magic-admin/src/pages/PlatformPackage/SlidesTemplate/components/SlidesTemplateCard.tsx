@@ -1,5 +1,5 @@
 import { memo } from "react"
-import { Flex, Image, Switch } from "antd"
+import { Flex, Image, Switch, Tag } from "antd"
 import { useTranslation } from "react-i18next"
 import { MagicButton, MobileCard, StatusTag } from "@admin-components"
 import { SlidesTemplate } from "@admin/types/slidesTemplate"
@@ -7,6 +7,7 @@ import {
 	getSlidesTemplateStatusColor,
 	isSystemSlidesTemplate,
 	resolveSlidesTemplateCategoryName,
+	resolveSlidesTemplateTagName,
 } from "../utils"
 
 interface SlidesTemplateCardProps {
@@ -65,6 +66,22 @@ function SlidesTemplateCard({
 				<span>
 					{t("slidesTemplate.columns.category")}: {categoryName}
 				</span>
+				<span>
+					{t("slidesTemplate.columns.usageCount")}: {data.usage_count ?? 0}
+				</span>
+				{data.tags?.length ? (
+					<Flex align="center" gap={6} wrap="wrap">
+						<span>{t("slidesTemplate.columns.tags")}:</span>
+						{data.tags.slice(0, 4).map((tag) => (
+							<Tag key={tag.id || tag.code} style={{ marginInlineEnd: 0 }}>
+								{resolveSlidesTemplateTagName(tag)}
+							</Tag>
+						))}
+						{data.tags.length > 4 ? (
+							<Tag style={{ marginInlineEnd: 0 }}>+{data.tags.length - 4}</Tag>
+						) : null}
+					</Flex>
+				) : null}
 				{data.category ? (
 					<Flex align="center" gap={8}>
 						<span>{t("slidesTemplate.category.columns.status")}:</span>

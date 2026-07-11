@@ -5,6 +5,7 @@ import { SuperMagicApi } from "@/apis"
 import {
 	SLIDES_TEMPLATE_IMAGE_PROCESS,
 	SLIDES_TEMPLATE_PAGE_SIZE,
+	createSlidesTemplateCategoryGroupKey,
 	type SlidesTemplateCategoryItem,
 	type SlidesTemplateItem,
 } from "../slidesTemplateState"
@@ -12,6 +13,7 @@ import { useSlidesTemplatePanelState } from "../useSlidesTemplatePanelState"
 
 const apiMock = vi.hoisted(() => ({
 	getSlidesTemplateCategories: vi.fn(),
+	getSlidesTemplateTags: vi.fn(),
 	getSlidesTemplates: vi.fn(),
 }))
 
@@ -70,6 +72,15 @@ function resolveCategories() {
 	})
 }
 
+function resolveTags() {
+	vi.mocked(SuperMagicApi.getSlidesTemplateTags).mockResolvedValue({
+		page: 1,
+		page_size: 200,
+		total: 0,
+		list: [],
+	})
+}
+
 function StrictModeWrapper({ children }: { children: ReactNode }) {
 	return <StrictMode>{children}</StrictMode>
 }
@@ -89,6 +100,7 @@ describe("useSlidesTemplatePanelState", () => {
 	beforeEach(() => {
 		vi.clearAllMocks()
 		resolveCategories()
+		resolveTags()
 		vi.mocked(SuperMagicApi.getSlidesTemplates).mockResolvedValue({
 			page: 1,
 			page_size: SLIDES_TEMPLATE_PAGE_SIZE,
@@ -107,7 +119,11 @@ describe("useSlidesTemplatePanelState", () => {
 		await waitFor(() => expect(result.current.isLoading).toBe(false))
 		await waitFor(() =>
 			expect(
-				result.current.groups.some((group) => group.group_key === businessCategory.code),
+				result.current.groups.some(
+					(group) =>
+						group.group_key ===
+						createSlidesTemplateCategoryGroupKey(businessCategory.code),
+				),
 			).toBe(true),
 		)
 
@@ -245,12 +261,18 @@ describe("useSlidesTemplatePanelState", () => {
 		await waitFor(() => expect(result.current.isLoading).toBe(false))
 		await waitFor(() =>
 			expect(
-				result.current.groups.some((group) => group.group_key === businessCategory.code),
+				result.current.groups.some(
+					(group) =>
+						group.group_key ===
+						createSlidesTemplateCategoryGroupKey(businessCategory.code),
+				),
 			).toBe(true),
 		)
 
 		act(() => {
-			result.current.setSelectedGroupKey(businessCategory.code)
+			result.current.setSelectedGroupKey(
+				createSlidesTemplateCategoryGroupKey(businessCategory.code),
+			)
 		})
 
 		await waitFor(() => expect(result.current.isRefreshing).toBe(true))
@@ -280,12 +302,18 @@ describe("useSlidesTemplatePanelState", () => {
 		await waitFor(() => expect(result.current.isLoading).toBe(false))
 		await waitFor(() =>
 			expect(
-				result.current.groups.some((group) => group.group_key === businessCategory.code),
+				result.current.groups.some(
+					(group) =>
+						group.group_key ===
+						createSlidesTemplateCategoryGroupKey(businessCategory.code),
+				),
 			).toBe(true),
 		)
 
 		act(() => {
-			result.current.setSelectedGroupKey(businessCategory.code)
+			result.current.setSelectedGroupKey(
+				createSlidesTemplateCategoryGroupKey(businessCategory.code),
+			)
 		})
 
 		await waitFor(() =>

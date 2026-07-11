@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen } from "@testing-library/react"
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest"
 import type { OptionItem } from "../../types"
 import SlidesPresetGrid from "../SlidesPresetGrid"
@@ -95,6 +95,18 @@ describe("SlidesPresetGrid", () => {
 			],
 			preview_url: "https://example.com/academic-preview",
 			preview_title: "Academic Preview",
+			usage_count: 23,
+			tags: [
+				{
+					id: "tag-featured",
+					code: "featured",
+					name_i18n: {
+						zh_CN: "精选",
+						en_US: "Featured",
+					},
+					sort: 100,
+				},
+			],
 		},
 		{
 			value: "tech-dark",
@@ -111,6 +123,15 @@ describe("SlidesPresetGrid", () => {
 		expect(screen.getByTestId("slides-preset-grid")).toBeInTheDocument()
 		expect(screen.getByText("Academic Research")).toBeInTheDocument()
 		expect(screen.getByText("Tech Dark")).toBeInTheDocument()
+	})
+
+	it("renders usage count and featured tag badge", () => {
+		render(<SlidesPresetGrid templates={mockTemplates} />)
+
+		expect(screen.getByTestId("slides-preset-card-featured-badge")).toHaveTextContent(
+			/精选|Featured/,
+		)
+		expect(screen.getByTestId("slides-preset-card-usage-count")).toHaveTextContent("23")
 	})
 
 	it("selects a template when card is clicked", () => {
@@ -158,8 +179,15 @@ describe("SlidesPresetGrid", () => {
 		expect(screen.getByTestId("slides-preset-preview-dialog-page-index")).toHaveTextContent(
 			"1 / 2",
 		)
+		expect(screen.getByTestId("slides-preset-preview-dialog-thumbnail-strip")).toHaveClass(
+			"overflow-hidden",
+			"p-2",
+		)
 
-		fireEvent.click(screen.getByRole("button", { name: "Academic Preview 2" }))
+		const secondPageButton = screen.getByRole("button", { name: "Academic Preview 2" })
+		expect(secondPageButton).toHaveClass("w-[156px]", "sm:w-[220px]", "xl:w-[264px]")
+
+		fireEvent.click(secondPageButton)
 
 		expect(screen.getByRole("img", { name: "Academic Preview 2" })).toHaveAttribute(
 			"src",
@@ -168,6 +196,27 @@ describe("SlidesPresetGrid", () => {
 		expect(screen.getByTestId("slides-preset-preview-dialog-page-index")).toHaveTextContent(
 			"2 / 2",
 		)
+	})
+
+	it("notifies preview open state changes", async () => {
+		const handlePreviewOpenChange = vi.fn()
+
+		render(
+			<SlidesPresetGrid
+				templates={mockTemplates}
+				onPreviewOpenChange={handlePreviewOpenChange}
+			/>,
+		)
+
+		await waitFor(() => expect(handlePreviewOpenChange).toHaveBeenLastCalledWith(false))
+
+		fireEvent.click(screen.getAllByTestId("slides-preset-card-preview-button")[0])
+
+		await waitFor(() => expect(handlePreviewOpenChange).toHaveBeenLastCalledWith(true))
+
+		fireEvent.click(screen.getByTestId("on-open-change"))
+
+		await waitFor(() => expect(handlePreviewOpenChange).toHaveBeenLastCalledWith(false))
 	})
 
 	it("preloads preview iframe after hovering a card for one second", () => {

@@ -629,6 +629,10 @@
 					"insertPresetValue": "插入预设值",
 					"loading": "加载中...",
 					"loadingMore": "加载更多中...",
+					"moveCanvasDown": "向下移动画布",
+					"moveCanvasLeft": "向左移动画布",
+					"moveCanvasRight": "向右移动画布",
+					"moveCanvasUp": "向上移动画布",
 					"name": "名称",
 					"namePlaceholder": "输入名称，如：尺寸、风格",
 					"noOption": "未配置选项",
@@ -641,6 +645,7 @@
 					"presetValue": "预设值",
 					"preview": "预览",
 					"refreshing": "更新中...",
+					"resetCanvasView": "重置画布视图",
 					"searchPlaceholder": "搜索模板",
 					"select": "选择",
 					"selected": "已选择",
@@ -648,7 +653,9 @@
 					"setAsDefault": "设为默认",
 					"titleCreate": "创建",
 					"titleEdit": "编辑",
-					"useTemplate": "使用该模板"
+					"useTemplate": "使用该模板",
+					"zoomInCanvas": "放大画布",
+					"zoomOutCanvas": "缩小画布"
 				},
 				"gallery": {
 					"configured": "卡片选项: 已配置",

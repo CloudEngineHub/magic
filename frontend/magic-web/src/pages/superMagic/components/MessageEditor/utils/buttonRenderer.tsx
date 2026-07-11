@@ -266,7 +266,12 @@ export const BUTTON_RENDERERS: Record<ToolbarButton, ButtonRenderer> = {
 			loading={ctx.stopEventLoading}
 		/>
 	),
-	[ToolbarButton.DIVIDER]: () => <div className="mx-2 h-4 w-px bg-border" />,
+	[ToolbarButton.DIVIDER]: () => (
+		<div
+			className="mx-2 h-4 w-px bg-border"
+			data-testid="super-message-editor-toolbar-divider"
+		/>
+	),
 
 	[ToolbarButton.TOKEN_USAGE]: (ctx) => {
 		if (ctx.size === "mobile") return null

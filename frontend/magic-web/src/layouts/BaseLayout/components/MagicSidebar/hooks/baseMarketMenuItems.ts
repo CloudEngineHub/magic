@@ -1,10 +1,16 @@
-import { Bot, Mic, type LucideIcon } from "lucide-react"
+import { Bot, Mic, Presentation, type LucideIcon } from "lucide-react"
 import { MagiClaw, Skills } from "@/enhance/lucide-react"
 import { RouteName } from "@/routes/constants"
 import { isPrivateDeployment } from "@/utils/env"
 import type { SidebarMarketMenuItem } from "@/layouts/BaseLayout/components/MagicSidebar/hooks/useSidebarMarketMenuItems.types"
 
 export const BASE_MARKET_MENU_ITEMS: SidebarMarketMenuItem[] = [
+	{
+		titleKey: "sidebar:slidesTemplates.title",
+		routeName: RouteName.SuperSlidesTemplates,
+		testId: "sidebar-content-slides-templates-button",
+		Icon: Presentation,
+	},
 	...(isPrivateDeployment()
 		? []
 		: [

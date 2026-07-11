@@ -1,4 +1,5 @@
 import { observer } from "mobx-react-lite"
+import { ChevronLeft, ChevronRight } from "lucide-react"
 import HeadlessHorizontalScroll from "@/components/base/HeadlessHorizontalScroll"
 import { Button } from "@/components/shadcn-ui/button"
 import { cn } from "@/lib/utils"
@@ -13,6 +14,7 @@ interface TemplateGroupSelectorProps {
 	onGroupChange: (groupKey: string) => void
 	renderGroupIcon?: (group: OptionGroup) => ReactNode
 	className?: string
+	controlBackground?: string
 	leftControlClassName?: string
 	rightControlClassName?: string
 	showEmptyGroups?: boolean
@@ -26,6 +28,7 @@ const TemplateGroupSelector = observer(
 		onGroupChange,
 		renderGroupIcon,
 		className,
+		controlBackground,
 		leftControlClassName,
 		rightControlClassName,
 		showEmptyGroups = false,
@@ -35,11 +38,48 @@ const TemplateGroupSelector = observer(
 		return (
 			<HeadlessHorizontalScroll
 				className={cn(
-					"relative flex w-full min-w-0 flex-shrink-0 items-center justify-center gap-2 overflow-hidden rounded-lg p-1",
+					"relative flex w-full min-w-0 flex-shrink-0 items-center justify-center gap-2 overflow-hidden rounded-lg py-1",
 					className,
 				)}
+				controlBackground={controlBackground}
 				data-testid={dataTestId}
-				scrollContainerClassName="no-scrollbar flex w-full min-w-0 items-center justify-start gap-2 overflow-x-auto overflow-y-hidden py-1"
+				renderLeftControl={({ scroll }) => (
+					<div
+						className={cn(
+							"pointer-events-none absolute left-0 top-0 z-10 flex h-full w-14 items-center justify-start bg-[linear-gradient(to_right,_var(--control-background)_0%,_var(--control-background)_54%,_transparent_100%)] pl-1",
+							leftControlClassName,
+						)}
+					>
+						<Button
+							type="button"
+							variant="outline"
+							size="icon"
+							className="pointer-events-auto size-6 rounded-full border-border/50 bg-background/80 text-foreground shadow-xs backdrop-blur"
+							onClick={() => scroll("left")}
+						>
+							<ChevronLeft className="size-4" />
+						</Button>
+					</div>
+				)}
+				renderRightControl={({ scroll }) => (
+					<div
+						className={cn(
+							"pointer-events-none absolute right-0 top-0 z-10 flex h-full w-14 items-center justify-end bg-[linear-gradient(to_left,_var(--control-background)_0%,_var(--control-background)_54%,_transparent_100%)]",
+							rightControlClassName,
+						)}
+					>
+						<Button
+							type="button"
+							variant="outline"
+							size="icon"
+							className="pointer-events-auto size-6 rounded-full border-border/50 bg-background/80 text-foreground shadow-xs backdrop-blur"
+							onClick={() => scroll("right")}
+						>
+							<ChevronRight className="size-4" />
+						</Button>
+					</div>
+				)}
+				scrollContainerClassName="no-scrollbar flex w-full min-w-0 items-center justify-start gap-2 overflow-x-auto overflow-y-hidden py-1 [&>*:first-child]:ml-1"
 			>
 				{groups.map((group) => {
 					const isSelected = group.group_key === selectedGroupKey
@@ -63,6 +103,7 @@ const TemplateGroupSelector = observer(
 								"h-9 shrink-0 gap-2 rounded-full border-2 border-transparent px-4 py-2 font-normal shadow-xs",
 								isSelected && "border-primary bg-background text-primary",
 							)}
+							aria-pressed={isSelected}
 							data-testid={`${dataTestId}-option-${group.group_key}`}
 							onClick={(e) => {
 								onGroupChange(group.group_key)

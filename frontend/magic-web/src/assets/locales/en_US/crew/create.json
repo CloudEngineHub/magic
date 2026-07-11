@@ -631,6 +631,10 @@
 					"insertPresetValue": "Insert Preset Value",
 					"loading": "Loading...",
 					"loadingMore": "Loading more...",
+					"moveCanvasDown": "Move canvas down",
+					"moveCanvasLeft": "Move canvas left",
+					"moveCanvasRight": "Move canvas right",
+					"moveCanvasUp": "Move canvas up",
 					"name": "Name",
 					"namePlaceholder": "Enter name, e.g., Size、Scale",
 					"noOption": "No Option Configured",
@@ -643,6 +647,7 @@
 					"presetValue": "Preset Value",
 					"preview": "Preview",
 					"refreshing": "Updating...",
+					"resetCanvasView": "Reset canvas view",
 					"searchPlaceholder": "Search templates",
 					"select": "Select",
 					"selected": "Selected",
@@ -650,7 +655,9 @@
 					"setAsDefault": "Set as Default",
 					"titleCreate": "Create",
 					"titleEdit": "Edit",
-					"useTemplate": "Use This Template"
+					"useTemplate": "Use This Template",
+					"zoomInCanvas": "Zoom in",
+					"zoomOutCanvas": "Zoom out"
 				},
 				"gallery": {
 					"configured": "Gallery Options: Configured",

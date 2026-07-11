@@ -6,11 +6,14 @@ import {
 } from "@/pages/superMagic/components/MainInputContainer/panels/types"
 import {
 	createSlidesFixedSceneConfig,
+	createSlidesTemplateCategoryGroupKey,
+	createSlidesTemplateTagGroupKey,
 	createSlidesPresetPanelConfig,
 	groupSlidesTemplates,
 	isSlidesMode,
 	type SlidesTemplateCategoryItem,
 	type SlidesTemplateItem,
+	type SlidesTemplateTagItem,
 } from "../slidesTemplateState"
 
 const officialTemplate: SlidesTemplateItem = {
@@ -78,6 +81,18 @@ const educationCategory: SlidesTemplateCategoryItem = {
 	is_official: true,
 }
 
+const featuredTag: SlidesTemplateTagItem = {
+	id: "tag-1",
+	code: "featured",
+	name_i18n: {
+		zh_CN: "精选",
+		en_US: "Featured",
+	},
+	sort: 100,
+	template_count: 1,
+	is_official: true,
+}
+
 describe("slides template state", () => {
 	it("detects PPT topic mode", () => {
 		expect(isSlidesMode(TopicMode.PPT)).toBe(true)
@@ -129,8 +144,8 @@ describe("slides template state", () => {
 
 		expect(groups.map((group) => group.group_key)).toEqual([
 			"all",
-			businessCategory.code,
-			educationCategory.code,
+			createSlidesTemplateCategoryGroupKey(businessCategory.code),
+			createSlidesTemplateCategoryGroupKey(educationCategory.code),
 		])
 		expect(groups[1].group_name).toEqual(businessCategory.name_i18n)
 		expect(groups[1].group_icon).toBeUndefined()
@@ -143,7 +158,9 @@ describe("slides template state", () => {
 
 		expect(groups).toHaveLength(3)
 		expect(groups[0].group_key).toBe("all")
-		expect(groups[1].group_key).toBe(businessCategory.code)
+		expect(groups[1].group_key).toBe(
+			createSlidesTemplateCategoryGroupKey(businessCategory.code),
+		)
 		expect(groups[1].children).toEqual([])
 		expect(groups[2].group_key).toBe("other")
 		expect(groups[2].group_name).toEqual({ zh_CN: "其他", en_US: "Other" })
@@ -157,6 +174,31 @@ describe("slides template state", () => {
 		expect(groups).toHaveLength(1)
 		expect(groups[0].group_key).toBe("all")
 		expect(groups[0].children?.[0].value).toBe(organizationTemplate.code)
+	})
+
+	it("inserts tag groups before category groups", () => {
+		const template = {
+			...officialTemplate,
+			category_code: businessCategory.code,
+			tags: [
+				{
+					id: featuredTag.id,
+					code: featuredTag.code,
+					name_i18n: featuredTag.name_i18n,
+					sort: featuredTag.sort,
+				},
+			],
+		}
+
+		const groups = groupSlidesTemplates([template], [businessCategory], [featuredTag])
+
+		expect(groups.map((group) => group.group_key)).toEqual([
+			"all",
+			createSlidesTemplateTagGroupKey(featuredTag.code),
+			createSlidesTemplateCategoryGroupKey(businessCategory.code),
+		])
+		expect(groups[1].group_name).toEqual(featuredTag.name_i18n)
+		expect(groups[1].children?.[0].value).toBe(template.code)
 	})
 
 	it("keeps the slides preset panel when API returns no templates", () => {
@@ -178,18 +220,34 @@ describe("slides template state", () => {
 	})
 
 	it("maps API template fields and removes empty media URLs", () => {
-		const panel = createSlidesPresetPanelConfig([organizationTemplate])
+		const template = {
+			...organizationTemplate,
+			usage_count: 12,
+			colors: ["#111111", "#ffffff"],
+			tags: [
+				{
+					id: featuredTag.id,
+					code: featuredTag.code,
+					name_i18n: featuredTag.name_i18n,
+					sort: featuredTag.sort,
+				},
+			],
+		}
+		const panel = createSlidesPresetPanelConfig([template])
 		const styleField = panel.field?.items.find((item) => item.data_key === "style")
 		const group = styleField?.options[0] as OptionGroup | undefined
 		const option = group?.children?.[0]
 
-		expect(option?.value).toBe(organizationTemplate.code)
-		expect(option?.label).toEqual(organizationTemplate.label)
-		expect(option?.description).toEqual(organizationTemplate.description)
+		expect(option?.value).toBe(template.code)
+		expect(option?.label).toEqual(template.label)
+		expect(option?.description).toEqual(template.description)
 		expect(option?.thumbnail_url).toBeUndefined()
 		expect(option?.collage_url).toBeUndefined()
 		expect(option?.preview_image_urls).toEqual([])
 		expect(option?.preview_url).toBeUndefined()
+		expect(option?.usage_count).toBe(12)
+		expect(option?.colors).toEqual(template.colors)
+		expect(option?.tags).toEqual(template.tags)
 	})
 
 	it("maps per-slide preview image URLs", () => {

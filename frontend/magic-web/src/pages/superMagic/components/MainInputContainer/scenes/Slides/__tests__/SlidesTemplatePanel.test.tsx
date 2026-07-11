@@ -7,6 +7,7 @@ import { ScenePanelVariant } from "../../../components/LazyScenePanel/types"
 import SlidesTemplatePanel from "../SlidesTemplatePanel"
 import SlidesTemplatePanelContent from "../SlidesTemplatePanelContent"
 import {
+	createSlidesTemplateCategoryGroupKey,
 	createSlidesPresetPanelConfig,
 	type SlidesTemplateCategoryItem,
 	type SlidesTemplateItem,
@@ -15,6 +16,7 @@ import type { SlidesTemplatePanelState } from "../useSlidesTemplatePanelState"
 
 const apiMock = vi.hoisted(() => ({
 	getSlidesTemplateCategories: vi.fn(),
+	getSlidesTemplateTags: vi.fn(),
 	getSlidesTemplates: vi.fn(),
 }))
 
@@ -112,6 +114,12 @@ describe("SlidesTemplatePanel", () => {
 			total: 1,
 			list: [businessCategory],
 		})
+		vi.mocked(SuperMagicApi.getSlidesTemplateTags).mockResolvedValue({
+			page: 1,
+			page_size: 200,
+			total: 0,
+			list: [],
+		})
 		vi.mocked(SuperMagicApi.getSlidesTemplates).mockResolvedValue({
 			page: 1,
 			page_size: 20,
@@ -150,7 +158,11 @@ describe("SlidesTemplatePanel", () => {
 		await screen.findByText("Business Template")
 		await waitFor(() =>
 			expect(
-				screen.getByTestId(`template-group-selector-option-${businessCategory.code}`),
+				screen.getByTestId(
+					`template-group-selector-option-${createSlidesTemplateCategoryGroupKey(
+						businessCategory.code,
+					)}`,
+				),
 			).toBeInTheDocument(),
 		)
 
@@ -252,6 +264,47 @@ describe("SlidesTemplatePanel", () => {
 		)
 
 		expect(screen.getByTestId("slides-template-search-input")).toHaveValue("business")
+	})
+
+	it("moves the toolbar out while preview is open", async () => {
+		render(
+			<SlidesTemplatePanelContent
+				slidesState={createSlidesTemplatePanelContentState({
+					templateOptions: [
+						{
+							value: "business",
+							label: "Business Template",
+							thumbnail_url: "https://example.com/business.png",
+							preview_image_urls: [
+								"https://example.com/business-page-1.png",
+								"https://example.com/business-page-2.png",
+							],
+							preview_title: "Business Preview",
+						},
+					],
+				})}
+				onTemplateClick={vi.fn()}
+			/>,
+		)
+
+		const toolbar = screen.getByTestId("slides-template-panel-toolbar")
+		expect(toolbar).toHaveClass("translate-y-0")
+		expect(toolbar).toHaveClass("opacity-100")
+
+		fireEvent.click(screen.getByTestId("slides-preset-card-preview-button"))
+
+		await waitFor(() => {
+			expect(toolbar).toHaveClass("pointer-events-none")
+			expect(toolbar).toHaveClass("translate-y-[calc(100%_+_24px)]")
+			expect(toolbar).toHaveClass("opacity-0")
+		})
+
+		fireEvent.click(screen.getByTestId("on-open-change"))
+
+		await waitFor(() => {
+			expect(toolbar).toHaveClass("translate-y-0")
+			expect(toolbar).toHaveClass("opacity-100")
+		})
 	})
 
 	it("does not update keyword while composing Chinese input", () => {

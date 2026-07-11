@@ -1,0 +1,142 @@
+import { fireEvent, render, screen } from "@testing-library/react"
+import { describe, expect, it, vi } from "vitest"
+import type { OptionItem } from "@/pages/superMagic/components/MainInputContainer/panels/types"
+import SlidesTemplateCanvas from "../SlidesTemplateCanvas"
+import {
+	SLIDES_TEMPLATE_CANVAS_FEATURED_CARD_HEIGHT,
+	SLIDES_TEMPLATE_CANVAS_FEATURED_CARD_WIDTH,
+} from "../canvasLayout"
+import { MAX_VISIBLE_TEMPLATE_CANVAS_ITEMS } from "../canvasViewport"
+
+vi.mock("react-i18next", () => ({
+	useTranslation: () => ({
+		i18n: { language: "en_US" },
+		t: (key: string) => key,
+	}),
+}))
+
+function createTemplate(index: number): OptionItem {
+	return {
+		value: `PPT-${index}`,
+		label: `Template ${index}`,
+		thumbnail_url: `https://example.com/${index}-cover.png`,
+		preview_image_urls: [],
+	}
+}
+
+function createFeaturedTemplate(index: number): OptionItem {
+	return {
+		...createTemplate(index),
+		tags: [
+			{
+				code: "featured",
+				id: `featured-${index}`,
+				name_i18n: {
+					zh_CN: "精选",
+					en_US: "Featured",
+				},
+			},
+		],
+	}
+}
+
+function renderCanvas(
+	templates: OptionItem[],
+	{
+		hasMore = true,
+		onTemplateSelect = vi.fn(),
+	}: {
+		hasMore?: boolean
+		onTemplateSelect?: (template: OptionItem) => void
+	} = {},
+) {
+	return render(
+		<SlidesTemplateCanvas
+			templates={templates}
+			selectedTemplate={null}
+			onTemplateSelect={onTemplateSelect}
+			hasMore={hasMore}
+			isLoading={false}
+			isLoadingMore={false}
+			isRefreshing={false}
+			onLoadMore={vi.fn()}
+			resetKey="all:"
+		/>,
+	)
+}
+
+function getFirstTestElement(testId: string) {
+	const element = screen.getAllByTestId(testId)[0]
+	expect(element).toBeDefined()
+	return element as HTMLElement
+}
+
+describe("SlidesTemplateCanvas rendering", () => {
+	it("renders only the visible canvas window instead of every loaded tile", () => {
+		renderCanvas(Array.from({ length: 240 }, (_, index) => createTemplate(index + 1)))
+
+		const renderedTiles = screen.getAllByTestId("slides-template-cover-tile")
+
+		expect(renderedTiles.length).toBeGreaterThan(0)
+		expect(renderedTiles.length).toBeLessThan(240)
+		expect(renderedTiles.length).toBeLessThanOrEqual(MAX_VISIBLE_TEMPLATE_CANVAS_ITEMS)
+	})
+
+	it("renders featured templates with a larger canvas tile", () => {
+		renderCanvas([createFeaturedTemplate(1)])
+
+		expect(getFirstTestElement("slides-template-canvas-tile-item")).toHaveStyle({
+			height: `${SLIDES_TEMPLATE_CANVAS_FEATURED_CARD_HEIGHT}px`,
+			width: `${SLIDES_TEMPLATE_CANVAS_FEATURED_CARD_WIDTH}px`,
+			zIndex: "10",
+		})
+	})
+
+	it("renders each loaded cover once before more pages arrive", () => {
+		renderCanvas(Array.from({ length: 3 }, (_, index) => createTemplate(index + 1)))
+
+		expect(screen.getAllByTestId("slides-template-cover-tile")).toHaveLength(3)
+	})
+
+	it("renders each exhausted cover once", () => {
+		renderCanvas(
+			Array.from({ length: 3 }, (_, index) => createTemplate(index + 1)),
+			{
+				hasMore: false,
+			},
+		)
+
+		expect(screen.getAllByTestId("slides-template-cover-tile")).toHaveLength(3)
+	})
+
+	it("only renders usage counts greater than zero", () => {
+		renderCanvas([
+			{ ...createTemplate(1), usage_count: 23 },
+			{ ...createTemplate(2), usage_count: 0 },
+		])
+
+		expect(screen.getAllByTestId("slides-template-cover-usage-count")).toHaveLength(1)
+		expect(screen.getByTestId("slides-template-cover-usage-count")).toHaveTextContent("23")
+	})
+
+	it("loads the first viewport-sized cover batch eagerly", () => {
+		renderCanvas(Array.from({ length: 120 }, (_, index) => createTemplate(index + 1)))
+
+		const coverImages = screen.getAllByRole("img").filter((image) => image.getAttribute("alt"))
+
+		expect(coverImages.length).toBeGreaterThan(36)
+		expect(coverImages[0]).toHaveAttribute("loading", "eager")
+		expect(coverImages[35]).toHaveAttribute("loading", "eager")
+		expect(coverImages[36]).toHaveAttribute("loading", "lazy")
+	})
+
+	it("selects the template from the explicit select button", () => {
+		const onTemplateSelect = vi.fn()
+		const selectedTemplate = createTemplate(1)
+		renderCanvas([selectedTemplate], { onTemplateSelect })
+
+		fireEvent.click(getFirstTestElement("slides-template-cover-select-button"))
+
+		expect(onTemplateSelect).toHaveBeenCalledWith(selectedTemplate)
+	})
+})

@@ -1,0 +1,415 @@
+import { Check, ChevronLeft, ChevronRight, Image as ImageIcon, X } from "lucide-react"
+import {
+	type MouseEvent,
+	useCallback,
+	useEffect,
+	useLayoutEffect,
+	useMemo,
+	useRef,
+	useState,
+} from "react"
+import { useTranslation } from "react-i18next"
+import HeadlessHorizontalScroll from "@/components/base/HeadlessHorizontalScroll"
+import { Button } from "@/components/shadcn-ui/button"
+import { cn } from "@/lib/utils"
+import { useCenteredHorizontalScroll } from "@/pages/superMagic/components/MainInputContainer/hooks/useCenteredHorizontalScroll"
+import { useLocaleText } from "@/pages/superMagic/components/MainInputContainer/panels/hooks/useLocaleText"
+import type { OptionItem } from "@/pages/superMagic/components/MainInputContainer/panels/types"
+import {
+	type SlidesTemplatePreviewFocus,
+	getTemplateCoverUrl,
+	getTemplateKey,
+	getTemplatePreviewUrls,
+} from "./canvasInteraction"
+import { getSlidesTemplatePreviewThumbnailImageUrl } from "./slidesTemplateImages"
+import styles from "./SlidesTemplateInlinePreview.module.css"
+import SlidesTemplatePreviewStage from "./SlidesTemplatePreviewStage"
+
+interface SlidesTemplateInlinePreviewProps {
+	focus: SlidesTemplatePreviewFocus | null
+	onClose: () => void
+	onTemplateSelect: (template: OptionItem) => void
+	selectedTemplate?: OptionItem | null
+}
+
+const PREVIEW_AUTO_DISMISS_MS = 9000
+const PREVIEW_PAGE_WHEEL_THRESHOLD = 80
+const PREVIEW_PAGE_WHEEL_COOLDOWN_MS = 320
+const PREVIEW_BACKGROUND_CLOSE_BLOCK_SELECTOR =
+	'button, a, input, textarea, select, iframe, [data-slides-template-preview-close-block="true"]'
+const renderNoScrollControl = () => null
+
+function clampPageIndex(index: number, pageCount: number) {
+	if (pageCount <= 0) return 0
+	return Math.min(Math.max(index, 0), pageCount - 1)
+}
+
+function getInitialPageIndex(focus: SlidesTemplatePreviewFocus, pages: string[]) {
+	if (!focus.tile.imageUrl) return 0
+	const matchedIndex = pages.findIndex((page) => page === focus.tile.imageUrl)
+	return matchedIndex >= 0 ? matchedIndex : 0
+}
+
+export default function SlidesTemplateInlinePreview({
+	focus,
+	onClose,
+	onTemplateSelect,
+	selectedTemplate,
+}: SlidesTemplateInlinePreviewProps) {
+	const lt = useLocaleText()
+	const { t } = useTranslation("crew/create")
+	const autoDismissTimerRef = useRef<number | null>(null)
+	const previewStageRef = useRef<HTMLDivElement | null>(null)
+	const wheelPageTimerRef = useRef<number | null>(null)
+	const wheelPageDeltaRef = useRef(0)
+	const onCloseRef = useRef(onClose)
+	const template = focus?.tile.template
+	const pages = useMemo(() => getTemplatePreviewUrls(template), [template])
+	const pageKey = useMemo(() => pages.join("\n"), [pages])
+	const initialIndex = focus ? getInitialPageIndex(focus, pages) : 0
+	const [activeIndex, setActiveIndex] = useState(initialIndex)
+	const safeActiveIndex = clampPageIndex(activeIndex, pages.length)
+	const canSwitch = pages.length > 1
+	const { scrollContainerRef, setItemRef } = useCenteredHorizontalScroll({
+		activeKey: String(safeActiveIndex),
+		itemCount: pages.length,
+	})
+
+	useEffect(() => {
+		onCloseRef.current = onClose
+	}, [onClose])
+
+	const clearAutoDismissTimer = useCallback(() => {
+		if (autoDismissTimerRef.current == null) return
+		window.clearTimeout(autoDismissTimerRef.current)
+		autoDismissTimerRef.current = null
+	}, [])
+
+	const resetAutoDismissTimer = useCallback(() => {
+		if (typeof window === "undefined") return
+		clearAutoDismissTimer()
+		autoDismissTimerRef.current = window.setTimeout(() => {
+			autoDismissTimerRef.current = null
+			onCloseRef.current()
+		}, PREVIEW_AUTO_DISMISS_MS)
+	}, [clearAutoDismissTimer])
+
+	const clearWheelPageTimer = useCallback(() => {
+		wheelPageDeltaRef.current = 0
+		if (wheelPageTimerRef.current == null) return
+		window.clearTimeout(wheelPageTimerRef.current)
+		wheelPageTimerRef.current = null
+	}, [])
+
+	useEffect(() => {
+		setActiveIndex(initialIndex)
+	}, [focus?.anchorTileId, focus?.tile.id, initialIndex, pageKey])
+
+	useEffect(() => {
+		if (!focus) {
+			clearAutoDismissTimer()
+			clearWheelPageTimer()
+			return
+		}
+
+		resetAutoDismissTimer()
+		return () => {
+			clearAutoDismissTimer()
+			clearWheelPageTimer()
+		}
+	}, [clearAutoDismissTimer, clearWheelPageTimer, focus, resetAutoDismissTimer])
+
+	const handlePreviousPage = useCallback(() => {
+		resetAutoDismissTimer()
+		setActiveIndex((currentIndex) => (currentIndex <= 0 ? pages.length - 1 : currentIndex - 1))
+	}, [pages.length, resetAutoDismissTimer])
+
+	const handleNextPage = useCallback(() => {
+		resetAutoDismissTimer()
+		setActiveIndex((currentIndex) =>
+			pages.length <= 0 || currentIndex >= pages.length - 1 ? 0 : currentIndex + 1,
+		)
+	}, [pages.length, resetAutoDismissTimer])
+
+	const handlePreviewWheel = useCallback(
+		(event: globalThis.WheelEvent) => {
+			if (!canSwitch || event.ctrlKey || event.metaKey) return
+
+			const delta =
+				Math.abs(event.deltaX) > Math.abs(event.deltaY) ? event.deltaX : event.deltaY
+			if (Math.abs(delta) < 1) return
+
+			if (event.cancelable) {
+				event.preventDefault()
+			}
+			event.stopPropagation()
+			resetAutoDismissTimer()
+
+			if (wheelPageTimerRef.current != null) return
+
+			wheelPageDeltaRef.current += delta
+			if (Math.abs(wheelPageDeltaRef.current) < PREVIEW_PAGE_WHEEL_THRESHOLD) return
+
+			if (wheelPageDeltaRef.current > 0) {
+				handleNextPage()
+			} else {
+				handlePreviousPage()
+			}
+
+			wheelPageDeltaRef.current = 0
+			wheelPageTimerRef.current = window.setTimeout(() => {
+				wheelPageTimerRef.current = null
+				wheelPageDeltaRef.current = 0
+			}, PREVIEW_PAGE_WHEEL_COOLDOWN_MS)
+		},
+		[canSwitch, handleNextPage, handlePreviousPage, resetAutoDismissTimer],
+	)
+
+	useLayoutEffect(() => {
+		const stage = previewStageRef.current
+		if (!stage || !canSwitch) return
+
+		stage.addEventListener("wheel", handlePreviewWheel, { passive: false })
+		return () => stage.removeEventListener("wheel", handlePreviewWheel)
+	}, [canSwitch, handlePreviewWheel])
+
+	if (!focus || !template) return null
+
+	const title = lt(template.preview_title) ?? lt(template.label) ?? lt(template.value) ?? ""
+	const description =
+		lt(template.preview_description) ?? lt(template.description) ?? lt(template.sub_text)
+	const previewImageUrl = focus.tile.imageUrl ?? getTemplateCoverUrl(template)
+	const templateKey = getTemplateKey(template)
+	const isSelected = selectedTemplate ? getTemplateKey(selectedTemplate) === templateKey : false
+
+	function handleUseTemplate() {
+		if (template) {
+			onTemplateSelect(template)
+		}
+		onClose()
+	}
+
+	function handlePreviewBackgroundClick(event: MouseEvent<HTMLDivElement>) {
+		const target = event.target
+		if (!(target instanceof Element)) return
+		if (target.closest(PREVIEW_BACKGROUND_CLOSE_BLOCK_SELECTOR)) return
+
+		onClose()
+	}
+
+	function handleSelectPage(index: number) {
+		resetAutoDismissTimer()
+		setActiveIndex(clampPageIndex(index, pages.length))
+	}
+
+	return (
+		<>
+			<button
+				type="button"
+				aria-label={t("playbook.edit.presets.close")}
+				className={cn("absolute inset-0 z-10", styles.backdrop)}
+				data-slides-template-drag-block="true"
+				data-testid="slides-template-inline-preview-backdrop"
+				onClick={onClose}
+			/>
+			<div
+				className={cn(
+					"pointer-events-auto absolute bottom-5 left-1/2 top-5 z-20 flex min-h-0 w-[calc(100%-48px)] flex-col",
+					styles.stage,
+				)}
+				data-slides-template-drag-block="true"
+				data-testid="slides-template-inline-preview"
+				onFocusCapture={resetAutoDismissTimer}
+				onMouseEnter={resetAutoDismissTimer}
+				onPointerDown={resetAutoDismissTimer}
+			>
+				<div
+					className={styles.showcase}
+					data-testid="slides-template-inline-preview-showcase"
+					onClick={handlePreviewBackgroundClick}
+				>
+					<div
+						className={cn(
+							"mx-auto flex w-full min-w-0 shrink-0 items-center gap-4 px-4 py-3",
+							styles.infoBar,
+						)}
+						data-slides-template-preview-close-block="true"
+					>
+						<div
+							className={cn(
+								"relative aspect-video w-32 shrink-0 overflow-hidden rounded-2xl bg-zinc-900 sm:w-40",
+								styles.cover,
+							)}
+							data-testid="slides-template-inline-preview-cover"
+						>
+							{previewImageUrl ? (
+								<img
+									src={previewImageUrl}
+									alt={title}
+									className="size-full object-cover"
+									loading="eager"
+									decoding="async"
+									draggable={false}
+								/>
+							) : (
+								<div className="flex size-full items-center justify-center text-white/55">
+									<ImageIcon className="size-5" />
+								</div>
+							)}
+						</div>
+						<div className="min-w-0 flex-1">
+							<div
+								className="truncate text-base font-semibold leading-6 text-white"
+								data-testid="slides-template-inline-preview-title"
+							>
+								{title}
+							</div>
+							{description ? (
+								<div
+									className="mt-1 line-clamp-2 text-sm leading-5 text-white/[0.68]"
+									data-testid="slides-template-inline-preview-description"
+								>
+									{description}
+								</div>
+							) : null}
+						</div>
+						<div className="flex shrink-0 items-center gap-2">
+							<Button
+								type="button"
+								size="sm"
+								className={cn(
+									"h-9 rounded-full px-4 font-semibold shadow-lg backdrop-blur-xl",
+									styles.primaryAction,
+									isSelected && styles.primaryActionSelected,
+								)}
+								onClick={handleUseTemplate}
+								data-testid="slides-template-inline-preview-use-button"
+							>
+								<Check className="mr-1.5 size-4" />
+								{t(
+									isSelected
+										? "playbook.edit.presets.form.selected"
+										: "playbook.edit.presets.form.useTemplate",
+								)}
+							</Button>
+							<Button
+								type="button"
+								size="icon"
+								variant="ghost"
+								className={cn(
+									"size-9 rounded-full text-white/70 hover:text-white",
+									styles.iconAction,
+								)}
+								aria-label={t("playbook.edit.presets.close")}
+								onClick={onClose}
+								data-testid="slides-template-inline-preview-close"
+							>
+								<X className="size-4" />
+							</Button>
+						</div>
+					</div>
+					<div
+						className={cn(
+							"mx-auto grid w-full flex-1 grid-cols-[44px_minmax(0,1fr)_44px] items-center gap-3 py-3",
+							styles.viewerRow,
+						)}
+					>
+						<div className="flex justify-center">
+							{canSwitch ? (
+								<Button
+									type="button"
+									variant="secondary"
+									size="icon"
+									className={cn(
+										"size-10 rounded-full text-white",
+										styles.sideButton,
+									)}
+									aria-label={`${title} previous page`}
+									onClick={handlePreviousPage}
+									data-testid="slides-template-inline-preview-previous-button"
+								>
+									<ChevronLeft className="size-5" />
+								</Button>
+							) : null}
+						</div>
+						<SlidesTemplatePreviewStage
+							activeIndex={safeActiveIndex}
+							pages={pages}
+							previewUrl={template.preview_url}
+							stageRef={previewStageRef}
+							title={title}
+						/>
+						<div className="flex justify-center">
+							{canSwitch ? (
+								<Button
+									type="button"
+									variant="secondary"
+									size="icon"
+									className={cn(
+										"size-10 rounded-full text-white",
+										styles.sideButton,
+									)}
+									aria-label={`${title} next page`}
+									onClick={handleNextPage}
+									data-testid="slides-template-inline-preview-next-button"
+								>
+									<ChevronRight className="size-5" />
+								</Button>
+							) : null}
+						</div>
+					</div>
+					{canSwitch ? (
+						<div
+							className="mx-auto h-[140px] w-full shrink-0"
+							data-slides-template-preview-close-block="true"
+						>
+							<HeadlessHorizontalScroll
+								className={cn("h-full rounded-2xl", styles.thumbnailRail)}
+								controlBackground="rgb(18 20 26 / 72%)"
+								hideScrollbar={false}
+								renderLeftControl={renderNoScrollControl}
+								renderRightControl={renderNoScrollControl}
+								scrollContainerClassName="scrollbar-x-thin flex h-full items-center gap-2 overflow-x-auto overflow-y-hidden px-3 py-2"
+								scrollContainerRef={scrollContainerRef}
+								scrollStep={280}
+								data-testid="slides-template-inline-preview-thumbnail-rail"
+							>
+								{pages.map((page, index) => (
+									<div
+										key={`${page}-${index}`}
+										ref={(element) => setItemRef(String(index), element)}
+										className="h-full shrink-0"
+									>
+										<button
+											type="button"
+											aria-label={`${title} ${index + 1}`}
+											onClick={() => handleSelectPage(index)}
+											className={cn(
+												"relative aspect-video h-full overflow-hidden rounded-lg transition",
+												styles.thumbnail,
+												safeActiveIndex === index && styles.thumbnailActive,
+											)}
+											data-testid="slides-template-inline-preview-thumbnail"
+										>
+											<img
+												src={getSlidesTemplatePreviewThumbnailImageUrl(
+													page,
+												)}
+												alt=""
+												className="size-full object-cover"
+												loading={index <= 4 ? "eager" : "lazy"}
+												decoding="async"
+												draggable={false}
+												aria-hidden="true"
+											/>
+										</button>
+									</div>
+								))}
+							</HeadlessHorizontalScroll>
+						</div>
+					) : null}
+				</div>
+			</div>
+		</>
+	)
+}

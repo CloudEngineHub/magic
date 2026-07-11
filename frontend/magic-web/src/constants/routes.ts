@@ -88,6 +88,7 @@ export const enum RoutePath {
 	SuperMagicReplay = "/super-magic-replay",
 	SuperWorkspace = "/super/workspace",
 	Super = "/super",
+	SuperSlidesTemplates = "/super/slides-templates",
 	MobileHome = "/mobile-home",
 	SuperChatsList = "/super/chats",
 	SuperApps = "/apps",

@@ -25,10 +25,12 @@ export namespace SlidesTemplate {
 		source_type?: SourceType
 		category_code?: string | null
 		category?: CategoryItem | null
+		tags?: TagItem[]
 		label: LangText
 		description: LangText
 		thumbnail_file_key: string
 		thumbnail_url?: string | null
+		colors?: string[]
 		collage_file_key?: string | null
 		collage_url?: string | null
 		preview_image_file_keys?: string[]
@@ -36,6 +38,9 @@ export namespace SlidesTemplate {
 		template_file_key: string
 		template_file_url?: string | null
 		preview_url?: string | null
+		usage_count?: number
+		base_usage_count?: number
+		actual_usage_count?: number
 		status: Status
 		sort: number
 		created_uid?: string
@@ -48,6 +53,8 @@ export namespace SlidesTemplate {
 		keyword?: string
 		code?: string
 		category_code?: string
+		tag_codes?: string[]
+		tag_match?: TagMatch
 		status?: Status | null
 	}
 
@@ -61,9 +68,12 @@ export namespace SlidesTemplate {
 		preview_image_file_keys?: string[]
 		template_file_key: string
 		preview_url?: string | null
+		tag_codes?: string[]
 		status?: Status
 		sort?: number
 	}
+
+	export type TagMatch = "any" | "all"
 
 	export interface CategoryItem {
 		id: string
@@ -90,5 +100,37 @@ export namespace SlidesTemplate {
 		name_i18n: LangText
 		status?: Status
 		sort?: number
+	}
+
+	export interface TagItem {
+		id: string
+		organization_code: string
+		code: string
+		name_i18n: LangText
+		sort: number
+		template_count: number
+		is_official: boolean
+		status: Status
+		created_uid?: string
+		updated_uid?: string
+		created_at?: string
+		updated_at?: string
+	}
+
+	export interface TagQueryParams extends PageParams {
+		keyword?: string
+		code?: string
+		status?: Status | null
+	}
+
+	export interface TagSaveParams {
+		code: string
+		name_i18n: LangText
+		status?: Status
+		sort?: number
+	}
+
+	export interface UpdateTemplateTagsParams {
+		tag_codes?: string[]
 	}
 }

@@ -40,6 +40,13 @@ export const generateSlidesTemplateApi = (client: HttpClient) => ({
 		return client.delete<[]>(genRequestUrl(RequestUrl.deleteSlidesTemplate, { id }))
 	},
 
+	updateTags(id: string, data: SlidesTemplate.UpdateTemplateTagsParams) {
+		return client.put<SlidesTemplate.Item>(
+			genRequestUrl(RequestUrl.updateSlidesTemplateTags, { id }),
+			data,
+		)
+	},
+
 	category: {
 		query(params: SlidesTemplate.CategoryQueryParams) {
 			return client.post<WithPage<SlidesTemplate.CategoryItem>>(
@@ -86,6 +93,48 @@ export const generateSlidesTemplateApi = (client: HttpClient) => ({
 
 		delete(id: string) {
 			return client.delete<[]>(genRequestUrl(RequestUrl.deleteSlidesTemplateCategory, { id }))
+		},
+	},
+
+	tag: {
+		query(params: SlidesTemplate.TagQueryParams) {
+			return client.post<WithPage<SlidesTemplate.TagItem>>(
+				RequestUrl.querySlidesTemplateTags,
+				params,
+			)
+		},
+
+		detail(id: string) {
+			return client.get<SlidesTemplate.TagItem>(
+				genRequestUrl(RequestUrl.getSlidesTemplateTag, { id }),
+			)
+		},
+
+		create(data: SlidesTemplate.TagSaveParams) {
+			return client.post<SlidesTemplate.TagItem>(RequestUrl.createSlidesTemplateTag, data)
+		},
+
+		update(id: string, data: SlidesTemplate.TagSaveParams) {
+			return client.put<SlidesTemplate.TagItem>(
+				genRequestUrl(RequestUrl.updateSlidesTemplateTag, { id }),
+				data,
+			)
+		},
+
+		updateStatus(id: string, status: SlidesTemplate.Status) {
+			return client.put<[]>(genRequestUrl(RequestUrl.updateSlidesTemplateTagStatus, { id }), {
+				status,
+			})
+		},
+
+		updateSort(id: string, sort: number) {
+			return client.put<[]>(genRequestUrl(RequestUrl.updateSlidesTemplateTagSort, { id }), {
+				sort,
+			})
+		},
+
+		delete(id: string) {
+			return client.delete<[]>(genRequestUrl(RequestUrl.deleteSlidesTemplateTag, { id }))
 		},
 	},
 })

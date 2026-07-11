@@ -176,6 +176,8 @@ export const RequestUrl = {
 	updateSlidesTemplateSort: "/api/v1/admin/slides-templates/${id}/sort",
 	/** 删除PPT模板 */
 	deleteSlidesTemplate: "/api/v1/admin/slides-templates/${id}",
+	/** 更新PPT模板标签 */
+	updateSlidesTemplateTags: "/api/v1/admin/slides-templates/${id}/tags",
 	/** 查询PPT模板分类列表 */
 	querySlidesTemplateCategories: "/api/v1/admin/slides-template-categories/queries",
 	/** 获取PPT模板分类详情 */
@@ -190,6 +192,20 @@ export const RequestUrl = {
 	updateSlidesTemplateCategorySort: "/api/v1/admin/slides-template-categories/${id}/sort",
 	/** 删除PPT模板分类 */
 	deleteSlidesTemplateCategory: "/api/v1/admin/slides-template-categories/${id}",
+	/** 查询PPT模板标签列表 */
+	querySlidesTemplateTags: "/api/v1/admin/slides-template-tags/queries",
+	/** 获取PPT模板标签详情 */
+	getSlidesTemplateTag: "/api/v1/admin/slides-template-tags/${id}",
+	/** 创建PPT模板标签 */
+	createSlidesTemplateTag: "/api/v1/admin/slides-template-tags",
+	/** 更新PPT模板标签 */
+	updateSlidesTemplateTag: "/api/v1/admin/slides-template-tags/${id}",
+	/** 更新PPT模板标签状态 */
+	updateSlidesTemplateTagStatus: "/api/v1/admin/slides-template-tags/${id}/status",
+	/** 更新PPT模板标签排序 */
+	updateSlidesTemplateTagSort: "/api/v1/admin/slides-template-tags/${id}/sort",
+	/** 删除PPT模板标签 */
+	deleteSlidesTemplateTag: "/api/v1/admin/slides-template-tags/${id}",
 
 	/** 权限 */
 	/** 获取我的权限列表 */

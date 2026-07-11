@@ -6,7 +6,7 @@ import {
 	useRef,
 	useState,
 } from "react"
-import { Eye, Image as ImageIcon, Check } from "lucide-react"
+import { Award, Eye, Image as ImageIcon, Check, MousePointerClick } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/shadcn-ui/hover-card"
 import { Button } from "@/components/shadcn-ui/button"
@@ -14,6 +14,11 @@ import { cn } from "@/lib/utils"
 import type { OptionItem } from "../types"
 import { useLocaleText } from "../hooks/useLocaleText"
 import { localeTextToDisplayString } from "../utils"
+import {
+	getFeaturedSlidesTemplateTag,
+	getSlidesTemplateTagDisplayName,
+	hasSlidesTemplateUsageCount,
+} from "./templateMeta"
 
 interface SlidesPresetCardProps {
 	template: OptionItem
@@ -39,12 +44,19 @@ function SlidesPresetCard({
 	hoverDetailsContainer,
 }: SlidesPresetCardProps) {
 	const lt = useLocaleText()
-	const { t } = useTranslation("crew/create")
+	const { t, i18n } = useTranslation("crew/create")
 	const preloadTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 	const [isThumbnailLoaded, setIsThumbnailLoaded] = useState(false)
 	const [isCollageLoaded, setIsCollageLoaded] = useState(false)
 
 	const label = lt(template.label) ?? lt(template.value) ?? ""
+	const featuredTag = getFeaturedSlidesTemplateTag(template)
+	const featuredLabel = getSlidesTemplateTagDisplayName(featuredTag, i18n.language, {
+		zh_CN: "精选",
+		en_US: "Featured",
+	})
+	const showUsageCount = hasSlidesTemplateUsageCount(template)
+	const usageCount = Math.max(0, template.usage_count ?? 0)
 	const testIdSuffix = getTemplateTestIdSuffix(template)
 	const canPreview = Boolean(
 		template.preview_image_urls?.length || template.collage_url || template.preview_url,
@@ -161,6 +173,28 @@ function SlidesPresetCard({
 						{label}
 					</div>
 				)}
+				{featuredTag || showUsageCount ? (
+					<div className="pointer-events-none absolute left-2 top-2 z-30 flex max-w-[calc(100%-16px)] flex-wrap items-center gap-1">
+						{featuredTag ? (
+							<span
+								className="inline-flex h-6 max-w-[88px] items-center gap-1 rounded-full bg-amber-500/95 px-2 text-[11px] font-medium leading-none text-white shadow-sm"
+								data-testid="slides-preset-card-featured-badge"
+							>
+								<Award className="size-3 shrink-0" />
+								<span className="truncate">{featuredLabel}</span>
+							</span>
+						) : null}
+						{showUsageCount ? (
+							<span
+								className="inline-flex h-6 items-center gap-1 rounded-full bg-background/90 px-2 text-[11px] font-medium leading-none text-foreground/80 shadow-sm backdrop-blur"
+								data-testid="slides-preset-card-usage-count"
+							>
+								<MousePointerClick className="size-3 shrink-0" />
+								<span>{usageCount}</span>
+							</span>
+						) : null}
+					</div>
+				) : null}
 				<div
 					className={cn(
 						"absolute inset-0 z-20 flex items-center justify-center gap-2.5 bg-black/0 opacity-0 transition-all duration-200 group-focus-within:bg-black/30 group-focus-within:opacity-100",

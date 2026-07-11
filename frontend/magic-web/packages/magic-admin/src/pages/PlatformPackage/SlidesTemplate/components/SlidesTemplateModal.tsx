@@ -17,7 +17,12 @@ import { useUpload } from "@admin/hooks/useUpload"
 import type { CustomCredentials, Upload } from "@admin/types/upload"
 import { genFileData } from "@admin/utils/file"
 import { SlidesTemplate } from "@admin/types/slidesTemplate"
-import { buildSlidesTemplateSaveParams, generateSlidesTemplateCode, joinUploadDir } from "../utils"
+import {
+	buildSlidesTemplateSaveParams,
+	generateSlidesTemplateCode,
+	joinUploadDir,
+	resolveSlidesTemplateTagName,
+} from "../utils"
 import {
 	SlidesTemplateUploadField,
 	type SlidesTemplateFileField,
@@ -32,6 +37,7 @@ interface SlidesTemplateModalProps extends MagicModalProps {
 	mode?: "create" | "edit"
 	detailLoading?: boolean
 	categoryOptions?: Array<{ label: string; value: string }>
+	tagOptions?: Array<{ label: string; value: string }>
 	onSuccess?: () => void
 }
 
@@ -86,6 +92,7 @@ export const SlidesTemplateModal = memo(
 		mode = "create",
 		detailLoading = false,
 		categoryOptions = [],
+		tagOptions = [],
 		onCancel,
 		onOk,
 		onSuccess,
@@ -136,6 +143,7 @@ export const SlidesTemplateModal = memo(
 					en_US: info?.description?.en_US ?? "",
 				},
 				category_code: info?.category_code ?? undefined,
+				tag_codes: info?.tags?.map((tag) => tag.code) ?? [],
 				thumbnail_file_key: info?.thumbnail_file_key ?? "",
 				collage_file_key: info?.collage_file_key ?? "",
 				template_file_key: info?.template_file_key ?? "",
@@ -145,6 +153,18 @@ export const SlidesTemplateModal = memo(
 			}),
 			[info],
 		)
+
+		const mergedTagOptions = useMemo(() => {
+			const optionMap = new Map(tagOptions.map((option) => [option.value, option]))
+			info?.tags?.forEach((tag) => {
+				if (optionMap.has(tag.code)) return
+				optionMap.set(tag.code, {
+					label: resolveSlidesTemplateTagName(tag),
+					value: tag.code,
+				})
+			})
+			return Array.from(optionMap.values())
+		}, [info?.tags, tagOptions])
 
 		const { upload } = useUpload<Upload.FileData>({
 			storageType: "private",
@@ -578,6 +598,22 @@ export const SlidesTemplateModal = memo(
 							showSearch
 							placeholder={t("slidesTemplate.fields.category")}
 							options={categoryOptions}
+							filterOption={(input, option) =>
+								String(option?.label ?? "")
+									.toLowerCase()
+									.includes(input.toLowerCase())
+							}
+						/>
+					</Form.Item>
+
+					<Form.Item label={t("slidesTemplate.fields.tags")} name="tag_codes">
+						<Select
+							allowClear
+							showSearch
+							mode="multiple"
+							maxTagCount="responsive"
+							placeholder={t("slidesTemplate.fields.tags")}
+							options={mergedTagOptions}
 							filterOption={(input, option) =>
 								String(option?.label ?? "")
 									.toLowerCase()

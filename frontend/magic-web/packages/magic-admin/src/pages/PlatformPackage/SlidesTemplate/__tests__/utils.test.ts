@@ -3,12 +3,14 @@ import { SlidesTemplate } from "../../../../types/slidesTemplate"
 import {
 	buildSlidesTemplateCategorySaveParams,
 	buildSlidesTemplateSaveParams,
+	buildSlidesTemplateTagSaveParams,
 	generateSlidesTemplateCode,
 	getSlidesTemplateStatusByChecked,
 	getSlidesTemplateStatusColor,
 	isSystemSlidesTemplate,
 	joinUploadDir,
 	resolveSlidesTemplateCategoryName,
+	resolveSlidesTemplateTagName,
 	resolveSlidesTemplateTitle,
 } from "../utils"
 
@@ -23,6 +25,7 @@ describe("slides template page utils", () => {
 			preview_image_file_keys: ["preview-1.png", "preview-2.png"],
 			template_file_key: "template.zip",
 			preview_url: "",
+			tag_codes: ["featured", "business"],
 			status: true,
 			sort: null,
 		})
@@ -36,6 +39,7 @@ describe("slides template page utils", () => {
 			preview_image_file_keys: ["preview-1.png", "preview-2.png"],
 			template_file_key: "template.zip",
 			preview_url: null,
+			tag_codes: ["featured", "business"],
 			status: SlidesTemplate.StatusMap.enabled,
 			sort: 0,
 		})
@@ -112,6 +116,22 @@ describe("slides template page utils", () => {
 		})
 	})
 
+	it("builds tag save params from form values", () => {
+		const payload = buildSlidesTemplateTagSaveParams({
+			code: " featured ",
+			name_i18n: { zh_CN: "精选", en_US: "Featured" },
+			status: true,
+			sort: null,
+		})
+
+		expect(payload).toEqual({
+			code: "featured",
+			name_i18n: { zh_CN: "精选", en_US: "Featured" },
+			status: SlidesTemplate.StatusMap.enabled,
+			sort: 0,
+		})
+	})
+
 	it("converts switch checked state to template status", () => {
 		expect(getSlidesTemplateStatusByChecked(true)).toBe(SlidesTemplate.StatusMap.enabled)
 		expect(getSlidesTemplateStatusByChecked(false)).toBe(SlidesTemplate.StatusMap.disabled)
@@ -174,5 +194,20 @@ describe("slides template page utils", () => {
 				status: SlidesTemplate.StatusMap.enabled,
 			}),
 		).toBe("Business")
+	})
+
+	it("resolves tag name with language fallback", () => {
+		expect(
+			resolveSlidesTemplateTagName({
+				id: "1",
+				organization_code: "OFFICIAL",
+				code: "featured",
+				name_i18n: { zh_CN: "", en_US: "Featured" },
+				sort: 0,
+				template_count: 0,
+				is_official: true,
+				status: SlidesTemplate.StatusMap.enabled,
+			}),
+		).toBe("Featured")
 	})
 })

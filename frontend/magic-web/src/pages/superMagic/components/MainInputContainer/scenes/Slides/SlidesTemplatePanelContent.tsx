@@ -33,6 +33,7 @@ function SlidesTemplatePanelContent({
 	const { t } = useTranslation("crew/create")
 	const [isSearchOpen, setIsSearchOpen] = useState(() => Boolean(slidesState.keyword.trim()))
 	const [searchValue, setSearchValue] = useState(slidesState.keyword)
+	const [isPreviewOpen, setIsPreviewOpen] = useState(false)
 	const searchInputRef = useRef<HTMLInputElement>(null)
 	const isComposingRef = useRef(false)
 	const hasGroups = slidesState.groups.length > 1
@@ -82,7 +83,17 @@ function SlidesTemplatePanelContent({
 
 	return (
 		<div className={cn("flex min-h-0 flex-col gap-3", className)}>
-			<div className={cn("flex flex-col gap-3 px-4 pt-3", toolbarClassName)}>
+			<div
+				className={cn(
+					"flex flex-col gap-3 px-4 pt-3 transition-[opacity,transform] duration-300 ease-out will-change-transform",
+					toolbarClassName,
+					isPreviewOpen
+						? "pointer-events-none translate-y-[calc(100%_+_24px)] opacity-0"
+						: "translate-y-0 opacity-100",
+				)}
+				data-testid="slides-template-panel-toolbar"
+				aria-hidden={isPreviewOpen}
+			>
 				<div className="flex min-w-0 items-center gap-2">
 					{hasGroups ? (
 						<TemplateGroupSelector
@@ -138,6 +149,7 @@ function SlidesTemplatePanelContent({
 				hasMore={slidesState.hasMore}
 				isLoadingMore={slidesState.isLoadingMore}
 				onLoadMore={slidesState.loadMore}
+				onPreviewOpenChange={setIsPreviewOpen}
 				className={gridClassName}
 				showHoverDetails={showHoverDetails}
 				hoverDetailsContainer={hoverDetailsContainer}

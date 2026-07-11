@@ -1,12 +1,16 @@
+import type { JSONContent } from "@tiptap/core"
 import {
 	OptionViewType,
 	SkillPanelType,
 	type FieldPanelConfig,
 	type OptionGroup,
+	type OptionItem,
+	type OptionItemTag,
 	type SkillPanelConfig,
 } from "../../panels/types"
 import { TopicMode } from "@/pages/superMagic/pages/Workspace/TopicMode"
 import type { ImageProcessOptions } from "@/utils/image-processing"
+import { buildConcatenatedPresetContent, localeTextToDisplayString } from "../../panels/utils"
 
 export interface SlidesTemplateItem {
 	code: string
@@ -26,6 +30,19 @@ export interface SlidesTemplateItem {
 	preview_url?: string | null
 	sort: number
 	is_official: boolean
+	usage_count?: number
+	colors?: string[]
+	tags?: SlidesTemplateItemTag[]
+}
+
+export interface SlidesTemplateItemTag extends OptionItemTag {
+	id: string
+	code: string
+	name_i18n: {
+		zh_CN: string
+		en_US: string
+	}
+	sort: number
 }
 
 export interface SlidesTemplateQueryParams {
@@ -33,6 +50,8 @@ export interface SlidesTemplateQueryParams {
 	page_size?: number
 	keyword?: string
 	category_code?: string
+	tag_codes?: string | string[]
+	tag_match?: SlidesTemplateTagMatch
 }
 
 export interface SlidesTemplateListResponse {
@@ -67,10 +86,36 @@ export interface SlidesTemplateCategoryListResponse {
 	list: SlidesTemplateCategoryItem[]
 }
 
+export type SlidesTemplateTagMatch = "any" | "all"
+
+export interface SlidesTemplateTagItem {
+	id: string
+	code: string
+	name_i18n: {
+		zh_CN: string
+		en_US: string
+	}
+	sort: number
+	template_count: number
+	is_official: boolean
+}
+
+export type SlidesTemplateTagQueryParams = SlidesTemplateQueryParams
+
+export interface SlidesTemplateTagListResponse {
+	page: number
+	page_size: number
+	total: number
+	list: SlidesTemplateTagItem[]
+}
+
 export const ALL_SLIDES_TEMPLATE_GROUP_KEY = "all"
 export const OTHER_SLIDES_TEMPLATE_GROUP_KEY = "other"
+export const SLIDES_TEMPLATE_CATEGORY_GROUP_KEY_PREFIX = "category:"
+export const SLIDES_TEMPLATE_TAG_GROUP_KEY_PREFIX = "tag:"
 export const SLIDES_TEMPLATE_PAGE_SIZE = 20
 export const SLIDES_TEMPLATE_CATEGORY_PAGE_SIZE = 200
+export const SLIDES_TEMPLATE_TAG_PAGE_SIZE = 200
 export const SLIDES_TEMPLATE_IMAGE_PROCESS: ImageProcessOptions = {
 	resize: { w: 1920 },
 	format: "webp",
@@ -126,10 +171,17 @@ const slidesStaticFields: NonNullable<FieldPanelConfig["field"]>["items"] = [
 export function groupSlidesTemplates(
 	templates: SlidesTemplateItem[],
 	categories?: SlidesTemplateCategoryItem[],
+	tags?: SlidesTemplateTagItem[],
 ): OptionGroup[] {
 	const groups: OptionGroup[] = [createAllSlidesTemplateGroup(templates)]
 
-	if (categories) return [...groups, ...groupSlidesTemplatesByCategory(templates, categories)]
+	if (tags || categories) {
+		return [
+			...groups,
+			...(tags ? groupSlidesTemplatesByTag(templates, tags) : []),
+			...(categories ? groupSlidesTemplatesByCategory(templates, categories) : []),
+		]
+	}
 
 	const officialTemplates = templates.filter((template) => template.is_official)
 	const organizationTemplates = templates.filter((template) => !template.is_official)
@@ -161,6 +213,41 @@ function createAllSlidesTemplateGroup(templates: SlidesTemplateItem[]): OptionGr
 	}
 }
 
+export function createSlidesTemplateCategoryGroupKey(code: string) {
+	return `${SLIDES_TEMPLATE_CATEGORY_GROUP_KEY_PREFIX}${code}`
+}
+
+export function createSlidesTemplateTagGroupKey(code: string) {
+	return `${SLIDES_TEMPLATE_TAG_GROUP_KEY_PREFIX}${code}`
+}
+
+export function getSlidesTemplateCategoryCodeFromGroupKey(groupKey: string) {
+	return groupKey.startsWith(SLIDES_TEMPLATE_CATEGORY_GROUP_KEY_PREFIX)
+		? groupKey.slice(SLIDES_TEMPLATE_CATEGORY_GROUP_KEY_PREFIX.length)
+		: undefined
+}
+
+export function getSlidesTemplateTagCodeFromGroupKey(groupKey: string) {
+	return groupKey.startsWith(SLIDES_TEMPLATE_TAG_GROUP_KEY_PREFIX)
+		? groupKey.slice(SLIDES_TEMPLATE_TAG_GROUP_KEY_PREFIX.length)
+		: undefined
+}
+
+function groupSlidesTemplatesByTag(
+	templates: SlidesTemplateItem[],
+	tags: SlidesTemplateTagItem[],
+): OptionGroup[] {
+	return tags.map((tag) => ({
+		group_key: createSlidesTemplateTagGroupKey(tag.code),
+		group_name: tag.name_i18n,
+		children: templates
+			.filter((template) =>
+				template.tags?.some((templateTag) => templateTag.code === tag.code),
+			)
+			.map(toTemplateOption),
+	}))
+}
+
 function groupSlidesTemplatesByCategory(
 	templates: SlidesTemplateItem[],
 	categories: SlidesTemplateCategoryItem[],
@@ -175,7 +262,7 @@ function groupSlidesTemplatesByCategory(
 
 		children.forEach((child) => groupedTemplateCodes.add(String(child.value)))
 		groups.push({
-			group_key: category.code,
+			group_key: createSlidesTemplateCategoryGroupKey(category.code),
 			group_name: category.name_i18n,
 			children,
 		})
@@ -198,8 +285,9 @@ function groupSlidesTemplatesByCategory(
 export function createSlidesPresetPanelConfig(
 	templates: SlidesTemplateItem[],
 	categories?: SlidesTemplateCategoryItem[],
+	tags?: SlidesTemplateTagItem[],
 ): FieldPanelConfig {
-	const groups = groupSlidesTemplates(templates, categories)
+	const groups = groupSlidesTemplates(templates, categories, tags)
 	return {
 		type: SkillPanelType.FIELD,
 		title: { zh_CN: "模板", en_US: "Preset" },
@@ -223,8 +311,9 @@ export function createSlidesPresetPanelConfig(
 export function createSlidesFixedSceneConfig(
 	templates: SlidesTemplateItem[] = [],
 	categories?: SlidesTemplateCategoryItem[],
+	tags?: SlidesTemplateTagItem[],
 ) {
-	const panels: SkillPanelConfig[] = [createSlidesPresetPanelConfig(templates, categories)]
+	const panels: SkillPanelConfig[] = [createSlidesPresetPanelConfig(templates, categories, tags)]
 
 	return {
 		placeholder: {
@@ -249,11 +338,31 @@ export function toTemplateOption(template: SlidesTemplateItem) {
 		preview_image_urls: template.preview_image_urls ?? [],
 		description: template.description,
 		preview_url: template.preview_url ?? undefined,
+		usage_count: template.usage_count ?? 0,
+		colors: template.colors ?? [],
+		tags: template.tags ?? [],
 		preview_title: {
 			zh_CN: `${template.label.zh_CN}预览`,
 			en_US: `${template.label.en_US} Preview`,
 		},
 	}
+}
+
+export function buildSlidesTemplatePresetContent(
+	template?: OptionItem | null,
+): JSONContent | undefined {
+	if (!template) return undefined
+
+	const currentValue = localeTextToDisplayString(template.value)
+	if (!currentValue) return undefined
+
+	return buildConcatenatedPresetContent([
+		{
+			...slidesStaticFields[0]!,
+			current_value: currentValue,
+			options: [template],
+		},
+	])
 }
 
 export const slidesFixedSceneConfig = createSlidesFixedSceneConfig([])

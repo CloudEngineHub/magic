@@ -29,6 +29,7 @@ describe("SlidesTemplateApi", () => {
 		api.detail("123")
 		api.updateStatus("123", 1)
 		api.updateSort("123", 100)
+		api.updateTags("123", { tag_codes: ["featured"] })
 		api.delete("123")
 
 		expect(client.get).toHaveBeenCalledWith("/api/v1/admin/slides-templates/123")
@@ -37,6 +38,9 @@ describe("SlidesTemplateApi", () => {
 		})
 		expect(client.put).toHaveBeenCalledWith("/api/v1/admin/slides-templates/123/sort", {
 			sort: 100,
+		})
+		expect(client.put).toHaveBeenCalledWith("/api/v1/admin/slides-templates/123/tags", {
+			tag_codes: ["featured"],
 		})
 		expect(client.delete).toHaveBeenCalledWith("/api/v1/admin/slides-templates/123")
 	})
@@ -114,5 +118,51 @@ describe("SlidesTemplateApi", () => {
 			"/api/v1/admin/slides-template-categories/123",
 			payload,
 		)
+	})
+
+	it("maps tag query API", () => {
+		const client = createClient()
+		const api = generateSlidesTemplateApi(client as never)
+		const params = { page: 1, page_size: 20, keyword: "featured" }
+
+		api.tag.query(params)
+
+		expect(client.post).toHaveBeenCalledWith(RequestUrl.querySlidesTemplateTags, params)
+	})
+
+	it("maps tag detail, status, sort, and delete APIs", () => {
+		const client = createClient()
+		const api = generateSlidesTemplateApi(client as never)
+
+		api.tag.detail("123")
+		api.tag.updateStatus("123", 1)
+		api.tag.updateSort("123", 100)
+		api.tag.delete("123")
+
+		expect(client.get).toHaveBeenCalledWith("/api/v1/admin/slides-template-tags/123")
+		expect(client.put).toHaveBeenCalledWith("/api/v1/admin/slides-template-tags/123/status", {
+			status: 1,
+		})
+		expect(client.put).toHaveBeenCalledWith("/api/v1/admin/slides-template-tags/123/sort", {
+			sort: 100,
+		})
+		expect(client.delete).toHaveBeenCalledWith("/api/v1/admin/slides-template-tags/123")
+	})
+
+	it("maps tag create and update payloads", () => {
+		const client = createClient()
+		const api = generateSlidesTemplateApi(client as never)
+		const payload = {
+			code: "featured",
+			name_i18n: { zh_CN: "精选", en_US: "Featured" },
+			status: 1,
+			sort: 10,
+		}
+
+		api.tag.create(payload)
+		api.tag.update("123", payload)
+
+		expect(client.post).toHaveBeenCalledWith(RequestUrl.createSlidesTemplateTag, payload)
+		expect(client.put).toHaveBeenCalledWith("/api/v1/admin/slides-template-tags/123", payload)
 	})
 })

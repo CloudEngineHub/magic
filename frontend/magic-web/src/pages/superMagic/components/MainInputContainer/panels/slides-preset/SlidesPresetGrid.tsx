@@ -19,6 +19,7 @@ interface SlidesPresetGridProps {
 	isLoadingMore?: boolean
 	hasMore?: boolean
 	onLoadMore?: () => void
+	onPreviewOpenChange?: (open: boolean) => void
 	showHoverDetails?: boolean
 	hoverDetailsContainer?: HTMLElement | null
 }
@@ -69,6 +70,7 @@ const SlidesPresetGrid = observer(
 		isLoadingMore = false,
 		hasMore = false,
 		onLoadMore,
+		onPreviewOpenChange,
 		showHoverDetails = true,
 		hoverDetailsContainer,
 	}: SlidesPresetGridProps) => {
@@ -81,11 +83,22 @@ const SlidesPresetGrid = observer(
 		const loadMoreSentinelRef = useRef<HTMLDivElement>(null)
 		const scrollLoadRequestedRef = useRef(false)
 		const canUseHoverPreview = useFinePointerHover()
+		const isPreviewOpen = Boolean(previewTemplate)
 
 		useEffect(() => {
 			if (isLoadingMore) return
 			scrollLoadRequestedRef.current = false
 		}, [hasMore, isLoadingMore, templates.length])
+
+		useEffect(() => {
+			onPreviewOpenChange?.(isPreviewOpen)
+		}, [isPreviewOpen, onPreviewOpenChange])
+
+		useEffect(() => {
+			return () => {
+				onPreviewOpenChange?.(false)
+			}
+		}, [onPreviewOpenChange])
 
 		function handlePreviewOpenChange(open: boolean) {
 			if (open) return
@@ -267,7 +280,7 @@ const SlidesPresetGrid = observer(
 				) : null}
 				<SlidesPresetPreviewDialog
 					template={previewTemplate}
-					open={Boolean(previewTemplate)}
+					open={isPreviewOpen}
 					onOpenChange={handlePreviewOpenChange}
 					onSelect={onTemplateClick}
 				/>

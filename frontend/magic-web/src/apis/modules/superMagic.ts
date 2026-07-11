@@ -45,6 +45,8 @@ import type {
 import type {
 	SlidesTemplateCategoryListResponse,
 	SlidesTemplateCategoryQueryParams,
+	SlidesTemplateTagListResponse,
+	SlidesTemplateTagQueryParams,
 	SlidesTemplateListResponse,
 	SlidesTemplateQueryParams,
 } from "@/pages/superMagic/components/MainInputContainer/scenes/Slides/slidesTemplateState"
@@ -722,6 +724,12 @@ export const generateSuperMagicApi = (fetch: HttpClient) => ({
 	getSlidesTemplateCategories(params: SlidesTemplateCategoryQueryParams) {
 		return fetch.get<SlidesTemplateCategoryListResponse>(
 			genRequestUrl("/api/v1/slides-template-categories", {}, params),
+		)
+	},
+
+	getSlidesTemplateTags(params: SlidesTemplateTagQueryParams) {
+		return fetch.get<SlidesTemplateTagListResponse>(
+			genRequestUrl("/api/v1/slides-template-tags", {}, params),
 		)
 	},
 

@@ -11,6 +11,7 @@ import {
 	withFlowNamespaces,
 } from "@/routes/helpers"
 import { superMagicCrewRoutes } from "@/routes/modules/superMagicCrewRoutes"
+import { superMagicSlidesTemplateRoutes } from "@/routes/modules/superMagicSlidesTemplateRoutes"
 
 /**
  * @description 路由处理器，需要异步渲染，等待路由生成再渲染再执行对应业务流程
@@ -454,6 +455,7 @@ export function registerRoutes(config: RouteConfig = {}): Array<RouteObject> {
 						path: `/:clusterCode${RoutePath.SuperChatProjectState}`,
 						element: <ChatProjectPage />,
 					},
+					...superMagicSlidesTemplateRoutes,
 					{
 						name: RouteName.SuperWorkspaceProjectState,
 						path: `/:clusterCode${RoutePath.SuperWorkspaceProjectState}`,

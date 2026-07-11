@@ -63,6 +63,7 @@ interface HeadlessHorizontalScrollProps {
 	children: ReactNode
 	scrollStep?: number
 	enableWheelScroll?: boolean
+	hideScrollbar?: boolean
 	renderLeftControl?: (props: HeadlessHorizontalScrollRenderProps) => ReactNode
 	renderRightControl?: (props: HeadlessHorizontalScrollRenderProps) => ReactNode
 }
@@ -125,6 +126,7 @@ function HeadlessHorizontalScroll({
 	children,
 	scrollStep = 200,
 	enableWheelScroll = true,
+	hideScrollbar = true,
 	renderLeftControl = defaultRenderLeftControl,
 	renderRightControl = defaultRenderRightControl,
 }: HeadlessHorizontalScrollProps) {
@@ -246,7 +248,11 @@ function HeadlessHorizontalScroll({
 			<div
 				{...scrollContainerProps}
 				ref={scrollContainerRef}
-				className={cn("no-scrollbar min-w-0 overflow-x-auto", scrollContainerClassName)}
+				className={cn(
+					hideScrollbar && "no-scrollbar",
+					"min-w-0 overflow-x-auto",
+					scrollContainerClassName,
+				)}
 				onContextMenu={onScrollContainerContextMenu}
 			>
 				{children}

@@ -30,6 +30,7 @@ export function generateSlidesTemplateCode(): string {
 export interface SlidesTemplateFormValues {
 	code?: string
 	category_code?: string | null
+	tag_codes?: string[]
 	label: SlidesTemplate.LangText
 	description: SlidesTemplate.LangText
 	thumbnail_file_key: string
@@ -47,11 +48,22 @@ export interface SlidesTemplateCategoryFormValues {
 	sort?: number | null
 }
 
+export interface SlidesTemplateTagFormValues {
+	code: string
+	name_i18n: SlidesTemplate.LangText
+	status?: boolean
+	sort?: number | null
+}
+
 export function resolveSlidesTemplateTitle(record: SlidesTemplate.Item) {
 	return record.label?.zh_CN || record.label?.en_US || record.code
 }
 
 export function resolveSlidesTemplateCategoryName(record: SlidesTemplate.CategoryItem) {
+	return record.name_i18n?.zh_CN || record.name_i18n?.en_US || record.code
+}
+
+export function resolveSlidesTemplateTagName(record: SlidesTemplate.TagItem) {
 	return record.name_i18n?.zh_CN || record.name_i18n?.en_US || record.code
 }
 
@@ -91,6 +103,7 @@ export function buildSlidesTemplateSaveParams(
 	}
 	// code 仅在新建模板时由前端注入；编辑模式不应携带 code，由后端保留原值
 	if (values.code) params.code = values.code
+	if (Array.isArray(values.tag_codes)) params.tag_codes = values.tag_codes
 	return params
 }
 
@@ -98,6 +111,17 @@ export function buildSlidesTemplateCategorySaveParams(
 	values: SlidesTemplateCategoryFormValues,
 ): SlidesTemplate.CategorySaveParams {
 	return {
+		name_i18n: values.name_i18n,
+		status: getSlidesTemplateStatusByChecked(Boolean(values.status)),
+		sort: values.sort ?? 0,
+	}
+}
+
+export function buildSlidesTemplateTagSaveParams(
+	values: SlidesTemplateTagFormValues,
+): SlidesTemplate.TagSaveParams {
+	return {
+		code: values.code.trim(),
 		name_i18n: values.name_i18n,
 		status: getSlidesTemplateStatusByChecked(Boolean(values.status)),
 		sort: values.sort ?? 0,
