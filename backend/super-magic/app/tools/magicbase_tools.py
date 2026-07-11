@@ -303,8 +303,8 @@ Default value. Leave empty when no default is needed."""
     )
     dynamic_permission: Optional[Dict[str, Any]] = Field(
         default=None,
-        description="""<!--zh: 字段动态权限配置，可选。只有普通用户确实可直接修改的字段才使用 public edit；归属、审核、审计、派生或只展示字段应使用更严格 edit_scope 或不提供编辑入口。后端行归属使用系统 created_by，不依赖动态 creator_user_id 字段。-->
-Optional column dynamic permission object. Pass it as an object, not as a JSON string. Use public edit only for fields ordinary users may directly modify. Ownership, review, audit, derived, or display-only business fields should use a restrictive edit_scope or no edit UI; backend row ownership uses system created_by, not a dynamic creator_user_id column."""
+        description="""<!--zh: 字段动态权限配置，可选。只有普通用户确实可直接修改的字段才使用 public edit；归属、审核、审计、派生或只展示字段应使用更严格 edit_scope 或不提供编辑入口。后端行归属使用系统 created_by，不依赖动态 creator_user_id 字段。字段权限无法强制状态流转、跨表、阈值、时间窗口、配额、流程或敏感业务规则；纯前端隐藏控件只是 ui_only_not_secure，这类规则 requires_backend。-->
+Optional column dynamic permission object. Pass it as an object, not as a JSON string. Use public edit only for fields ordinary users may directly modify. Ownership, review, audit, derived, or display-only business fields should use a restrictive edit_scope or no edit UI; backend row ownership uses system created_by, not a dynamic creator_user_id column. Column permissions cannot enforce state-dependent, cross-table, threshold, time-window, quota, workflow, or sensitive business rules; hiding controls in HTML is ui_only_not_secure and those rules require backend or MagicBase permission-model extension."""
     )
 
     @field_validator("data_type")
@@ -453,8 +453,9 @@ Optional project name for MagicBase."""
         表、行、列动态权限配置。只要应用存在所有权、隐私、协作、组织、部门、只读或受限编辑语义，就必须传对象形式的 dynamic_permissions，不能依赖默认 public。
         常见组合：全员协作 row read/edit/delete=public；所有人可读但创建人编辑/删除 row read=public, edit/delete=private_user；私有数据 row read/edit/delete=private_user；组织共享用 private_org；部门共享用 private_department；提交后不可改不要给 public edit/delete，可用 disabled 或显式管理员权限。
         private_user 基于系统 created_by，不要为了权限单独创建 creator_user_id。
+        MagicBase 只能强制表/行/列/静态授权；状态流转、跨表成员关系、直属上下级、金额阈值、时间窗口、配额、审批/支付/库存/财务/积分等业务规则 requires_backend。纯前端隐藏按钮、禁用输入或列表过滤是 ui_only_not_secure，不能说成已强制权限。
         -->
-Table, row, and column dynamic permissions. Pass this as an object, never as a JSON string. If the app has ownership, privacy, collaboration, organization, department, read-only, or restricted-edit semantics, include this field instead of relying on defaults. Common row scopes: full collaboration => read/edit/delete public; everyone can read but only creators edit/delete => read public, edit/delete private_user; private personal rows => read/edit/delete private_user; organization-shared => use private_org where org-wide access is intended; department-shared => use private_department where department access is intended; intake/read-only data => do not grant public edit/delete, use disabled or explicit admin permissions. private_user uses system created_by; do not create creator_user_id only for permission enforcement."""
+Table, row, and column dynamic permissions. Pass this as an object, never as a JSON string. If the app has ownership, privacy, collaboration, organization, department, read-only, or restricted-edit semantics, include this field instead of relying on defaults. Common row scopes: full collaboration => read/edit/delete public; everyone can read but only creators edit/delete => read public, edit/delete private_user; private personal rows => read/edit/delete private_user; organization-shared => use private_org where org-wide access is intended; department-shared => use private_department where department access is intended; intake/read-only data => do not grant public edit/delete, use disabled or explicit admin permissions. private_user uses system created_by; do not create creator_user_id only for permission enforcement. MagicBase can enforce table/row/column/static grants only; status transitions, cross-table membership, manager hierarchy, thresholds, time windows, quotas, workflow rules, payments, approvals, inventory, finance, points, and other sensitive business rules are requires_backend. Front-end hidden buttons or filters are ui_only_not_secure and must not be described as enforced permission."""
     )
 
     @field_validator("dynamic_permissions", mode="before")
@@ -494,6 +495,8 @@ HTML 微应用工作流中，create_magicbase_table 会自动维护 MagicBase sc
 	For any multi-user data app, decide who can read, insert, edit, and delete rows before creating the table. When the app has ownership, privacy, collaboration, organization, department, read-only, or restricted-edit semantics, keep `dynamic_permissions` in the table creation request. Do not fall back to public table creation after a permission parameter error.
 
 	Use the appropriate row scope combination: full collaboration uses public read/edit/delete; everyone-can-read but creator-only editing uses row read public and edit/delete private_user; private personal data uses private_user for read/edit/delete; organization-shared data uses private_org where org-wide access is intended; department-shared data uses private_department where department access is intended; read-only or intake flows must not grant public edit/delete. `private_user` uses MagicBase system `created_by`; do not create `creator_user_id` only for permission enforcement.
+
+	Before promising a permission feature, classify it as enforceable_by_magicbase, ui_only_not_secure, or requires_backend. MagicBase can enforce table/row/column/static grants. Status transitions, cross-table membership, manager hierarchy, thresholds, time windows, quotas, workflow rules, payments, approvals, inventory, finance, points, and other sensitive business validations require backend or a MagicBase permission-model extension. Front-end hidden buttons, disabled fields, or filtered lists are ui_only_not_secure and must not be described as enforced permissions.
 
 	Do not call file-editing tools just to maintain schema migrations. Ordinary project memory is summarized with `update_html_app_memory` once before the development task ends.
 	"""
@@ -583,8 +586,8 @@ Default value. Leave empty when no default is needed."""
     )
     dynamic_permission: Optional[Dict[str, Any]] = Field(
         default=None,
-        description="""<!--zh: 字段动态权限配置，可选。只有普通用户确实可直接修改的字段才使用 public edit；归属、审核、审计、派生或只展示字段应使用更严格 edit_scope 或不提供编辑入口。后端行归属使用系统 created_by，不依赖动态 creator_user_id 字段。-->
-Optional column dynamic permission object. Pass it as an object, not as a JSON string. Use public edit only for fields ordinary users may directly modify. Ownership, review, audit, derived, or display-only business fields should use a restrictive edit_scope or no edit UI; backend row ownership uses system created_by, not a dynamic creator_user_id column."""
+        description="""<!--zh: 字段动态权限配置，可选。只有普通用户确实可直接修改的字段才使用 public edit；归属、审核、审计、派生或只展示字段应使用更严格 edit_scope 或不提供编辑入口。后端行归属使用系统 created_by，不依赖动态 creator_user_id 字段。字段权限无法强制状态流转、跨表、阈值、时间窗口、配额、流程或敏感业务规则；纯前端隐藏控件只是 ui_only_not_secure，这类规则 requires_backend。-->
+Optional column dynamic permission object. Pass it as an object, not as a JSON string. Use public edit only for fields ordinary users may directly modify. Ownership, review, audit, derived, or display-only business fields should use a restrictive edit_scope or no edit UI; backend row ownership uses system created_by, not a dynamic creator_user_id column. Column permissions cannot enforce state-dependent, cross-table, threshold, time-window, quota, workflow, or sensitive business rules; hiding controls in HTML is ui_only_not_secure and those rules require backend or MagicBase permission-model extension."""
     )
 
     @field_validator("data_type")

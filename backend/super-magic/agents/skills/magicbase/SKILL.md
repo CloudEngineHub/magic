@@ -97,10 +97,45 @@ Before creating a table for a multi-user data app, split the permission intent i
 2. Who can insert rows?
 3. Who can edit rows?
 4. Who can delete rows?
+5. Is the permission rule enforceable by MagicBase scopes/static permissions, or does it require backend business logic?
 
 If the user gives partial permission intent, infer the missing parts with the least-privilege default that still satisfies the product loop, and state the assumption in the plan. Do not omit `dynamic_permissions` for data that has ownership, privacy, collaboration, organization, department, review, or read-only semantics.
 
 Pass `dynamic_permissions` as a nested object in the tool arguments, not as a JSON string. Do not stringify it or wrap the object in quotes. If the tool rejects `dynamic_permissions` with "expected object", retry with the same permission intent as an object; do not remove the permission field or fall back to a public table.
+
+### Permission feasibility boundary
+
+Before promising a permission feature, classify it in the plan as one of:
+
+- `enforceable_by_magicbase`: MagicBase can enforce it with table, row, column, and static permissions.
+- `ui_only_not_secure`: The HTML app can hide buttons, disable fields, or filter lists, but users could bypass the UI and call MagicBase directly. This is product guidance only, not security.
+- `requires_backend`: The rule needs custom backend logic or an extension to the MagicBase permission model. Do not generate a front-end-only app while claiming the permission is secure.
+
+When the request contains `ui_only_not_secure` or `requires_backend` rules, tell the user before building or changing schema. If the user accepts a UI-only downgrade, state the downgrade explicitly in `plan.assumptions` and do not describe it as enforced permission.
+
+MagicBase can enforce these common cases:
+
+- Table-level read/insert/manage access.
+- Row access by built-in scopes: `public`, `private_user`, `private_department`, `private_org`, `disabled`.
+- Creator-owned rows through system `created_by`.
+- Organization/department sharing where the rule directly matches MagicBase scopes.
+- Static grants to explicit users, departments, organization, or anonymous subjects for fixed tables, columns, or rows.
+- Column read/edit restrictions that do not depend on row state or cross-table business logic.
+
+MagicBase cannot enforce these cases in a pure HTML + MagicBase micro-app:
+
+- State-dependent permissions such as "only approvers can edit while pending, everyone read-only after approved".
+- Cross-table or relation-computed permissions such as "only users listed in the project members table can edit that project's tasks".
+- Hierarchical business relationships such as "a direct manager can edit subordinate records".
+- Conditional field permissions such as "finance can edit amount only when amount is greater than 10000".
+- Time-window, quota, sequence, or workflow permissions such as "editable only within 10 minutes", "submit at most 3 times per day", or "must complete A before editing B".
+- Sensitive domain operations that require authoritative validation, such as payments, approvals, inventory deduction, financial balance changes, points, credits, or settlement.
+
+For those cases, use wording like:
+
+```text
+This permission depends on business logic that MagicBase cannot enforce in a pure front-end micro-app. I can implement UI hints such as hidden buttons or disabled fields, but that is not secure permission because users may bypass the UI and call MagicBase directly. To enforce it, add a backend endpoint or extend the MagicBase permission model.
+```
 
 Scope selection:
 
@@ -246,8 +281,8 @@ const newRow = await window.Magic.db.createRow(TABLE_ID_FROM_MAGICBASE_TOOL, {
 
 ```javascript
 const result = await window.Magic.db.queryRows(TABLE_ID_FROM_MAGICBASE_TOOL, {
-  filter: { name: { $contains: "Ali" } },
-  sort: [{ field: "created_at", direction: "desc" }],
+  filter: { name: { eq: "Alice" } },
+  sort: [{ field: "created_at", order: "desc" }],
   select: ["name", "email"],
   page: 1,
   page_size: 20,
@@ -257,8 +292,8 @@ const rows = result.list;
 ```
 
 - Parameters: `tableId: string`、`query: object`
-  - `filter?` — 过滤条件
-  - `sort?` — 排序规则
+  - `filter?` — 过滤条件。Use MagicBase operators without `$`: equality is `{ field: { eq: value } }`, inclusion is `{ field: { in: [value1, value2] } }`. Do not use Mongo operators such as `$eq`, `$in`, or `$contains`; unsupported operators are ignored by the current backend.
+  - `sort?` — 排序规则。Use `{ field: "created_at", order: "desc" }`; the backend reads `order`, not `direction`.
   - `select?: string[]` — 返回字段列表
   - `page?: number` — 页码（默认 1）
   - `page_size?: number` — 每页行数（默认 20）

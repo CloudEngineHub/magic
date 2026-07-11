@@ -66,6 +66,20 @@ export interface MagicBaseQueryRowsResponse {
 	list: MagicBaseRow[]
 }
 
+export interface MagicBaseRowWriteRequest {
+	data: Record<string, unknown>
+	select?: string
+}
+
+export interface MagicBaseBatchDeleteRowsRequest {
+	record_ids: string[]
+}
+
+export interface MagicBaseBatchDeleteRowsResponse {
+	deleted_count: number
+	record_ids: string[]
+}
+
 export type MagicBasePermissionSubjectType = "user" | "department" | "organization" | "anonymous"
 
 export type MagicBaseTablePermissionLevel = "read" | "insert" | "manage"
@@ -279,6 +293,52 @@ export function generateMagicBaseApi(fetch: HttpClient) {
 					projectId,
 					tableId,
 				}),
+				body,
+				largeIntConfig,
+			)
+		},
+
+		createRow(
+			projectId: string,
+			tableId: string,
+			body: MagicBaseRowWriteRequest,
+		): Promise<MagicBaseRow> {
+			return fetch.post<MagicBaseRow>(
+				genRequestUrl("/api/v1/magicbase/projects/${projectId}/tables/${tableId}/rows", {
+					projectId,
+					tableId,
+				}),
+				body,
+				largeIntConfig,
+			)
+		},
+
+		updateRow(
+			projectId: string,
+			tableId: string,
+			recordId: string,
+			body: MagicBaseRowWriteRequest,
+		): Promise<MagicBaseRow> {
+			return fetch.patch<MagicBaseRow>(
+				genRequestUrl(
+					"/api/v1/magicbase/projects/${projectId}/tables/${tableId}/rows/${recordId}",
+					{ projectId, tableId, recordId },
+				),
+				body,
+				largeIntConfig,
+			)
+		},
+
+		batchDeleteRows(
+			projectId: string,
+			tableId: string,
+			body: MagicBaseBatchDeleteRowsRequest,
+		): Promise<MagicBaseBatchDeleteRowsResponse> {
+			return fetch.post<MagicBaseBatchDeleteRowsResponse>(
+				genRequestUrl(
+					"/api/v1/magicbase/projects/${projectId}/tables/${tableId}/rows/batch-delete",
+					{ projectId, tableId },
+				),
 				body,
 				largeIntConfig,
 			)

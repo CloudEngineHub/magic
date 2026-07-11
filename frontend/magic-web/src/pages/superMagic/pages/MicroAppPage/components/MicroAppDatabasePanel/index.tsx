@@ -1,9 +1,20 @@
-import { Database, Loader2, RefreshCw, X } from "lucide-react"
-import { useEffect, useMemo, useState } from "react"
+import { Database, Loader2, Pencil, Plus, RefreshCw, Trash2, X } from "lucide-react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
+import { toast } from "sonner"
 import useSWR from "swr"
 import { MagicBaseApi } from "@/apis"
-import type { MagicBaseSortRule } from "@/apis/modules/magicBase"
+import type { MagicBaseRow, MagicBaseSortRule } from "@/apis/modules/magicBase"
+import {
+	AlertDialog,
+	AlertDialogAction,
+	AlertDialogCancel,
+	AlertDialogContent,
+	AlertDialogDescription,
+	AlertDialogFooter,
+	AlertDialogHeader,
+	AlertDialogTitle,
+} from "@/components/shadcn-ui/alert-dialog"
 import { Button } from "@/components/shadcn-ui/button"
 import { ScrollArea, ScrollBar } from "@/components/shadcn-ui/scroll-area"
 import { Separator } from "@/components/shadcn-ui/separator"
@@ -19,6 +30,7 @@ import { cn } from "@/lib/utils"
 import DataGrid, { type MagicBaseCellSelection } from "./DataGrid"
 import PermissionEditorDialog, { type PermissionEditorTarget } from "./PermissionEditorDialog"
 import PermissionPanel from "./PermissionPanel"
+import RowEditorDialog from "./RowEditorDialog"
 import StructureTable from "./StructureTable"
 import TableList from "./TableList"
 import {
@@ -39,6 +51,20 @@ interface MicroAppDatabasePanelProps {
 
 type PanelTab = "data" | "structure" | "permissions"
 
+type RowEditorState =
+	| {
+			mode: "create"
+			row?: null
+	  }
+	| {
+			mode: "edit"
+			row: MagicBaseRow
+	  }
+
+function getRowRecordId(row: MagicBaseRow): string {
+	return String(row.id ?? row.record_id ?? "")
+}
+
 export default function MicroAppDatabasePanel({
 	open,
 	projectId,
@@ -54,6 +80,14 @@ export default function MicroAppDatabasePanel({
 		tableId: string
 		target: PermissionEditorTarget
 	} | null>(null)
+	const [selectedCells, setSelectedCells] = useState<MagicBaseCellSelection>({
+		rowIds: [],
+		columnIds: [],
+		columnKeys: [],
+	})
+	const [rowEditor, setRowEditor] = useState<RowEditorState | null>(null)
+	const [deleteSelection, setDeleteSelection] = useState<MagicBaseCellSelection | null>(null)
+	const [deletingRows, setDeletingRows] = useState(false)
 
 	const {
 		data: tables = [],
@@ -138,6 +172,7 @@ export default function MicroAppDatabasePanel({
 		setSelectedTableId(tableId)
 		setActiveTab("data")
 		setPage(1)
+		setSelectedCells({ rowIds: [], columnIds: [], columnKeys: [] })
 	}
 
 	const handleSortChange = (field: string) => {
@@ -178,6 +213,59 @@ export default function MicroAppDatabasePanel({
 		})
 	}
 
+	const findRowById = useCallback(
+		(recordId: string) => rows.find((row) => getRowRecordId(row) === recordId) || null,
+		[rows],
+	)
+
+	const handleCreateRow = () => {
+		setActiveTab("data")
+		setRowEditor({ mode: "create", row: null })
+	}
+
+	const handleOpenEditRow = (recordId: string) => {
+		const row = findRowById(recordId)
+		if (!row) return
+		setRowEditor({ mode: "edit", row })
+	}
+
+	const handleEditSelectedRow = () => {
+		if (selectedCells.rowIds.length !== 1) return
+		handleOpenEditRow(selectedCells.rowIds[0])
+	}
+
+	const handleRequestDeleteRows = (selection: MagicBaseCellSelection) => {
+		if (selection.rowIds.length === 0) return
+		setDeleteSelection(selection)
+	}
+
+	const handleDeleteSelectedRows = () => {
+		handleRequestDeleteRows(selectedCells)
+	}
+
+	const confirmDeleteRows = async () => {
+		if (!projectId || !selectedTableId || !deleteSelection?.rowIds.length) return
+		setDeletingRows(true)
+		try {
+			await MagicBaseApi.batchDeleteRows(projectId, selectedTableId, {
+				record_ids: deleteSelection.rowIds,
+			})
+			toast.success(
+				t("microAppPage.databasePanel.rowDeleteSuccess", {
+					total: deleteSelection.rowIds.length,
+				}),
+			)
+			setSelectedCells({ rowIds: [], columnIds: [], columnKeys: [] })
+			setDeleteSelection(null)
+			refreshRows()
+			refreshPermissions()
+		} catch {
+			toast.error(t("microAppPage.databasePanel.rowDeleteFailed"))
+		} finally {
+			setDeletingRows(false)
+		}
+	}
+
 	const handleRefresh = () => {
 		refreshTables()
 		refreshTable()
@@ -193,6 +281,11 @@ export default function MicroAppDatabasePanel({
 	const subtitle = selectedTable
 		? `${selectedTable.table_key} · ${enabledColumns.length} ${t("microAppPage.databasePanel.columns")}`
 		: projectName || ""
+	const canEditSelectedRow = selectedCells.rowIds.length === 1
+	const canDeleteSelectedRows = selectedCells.rowIds.length > 0
+	const selectionResetKey = `${selectedTableId || ""}:${page}:${sort?.field || ""}:${
+		sort?.order || ""
+	}`
 
 	return (
 		<Sheet open={open} onOpenChange={onOpenChange}>
@@ -331,6 +424,42 @@ export default function MicroAppDatabasePanel({
 												<Loader2 className="size-3.5 animate-spin" />
 												{t("microAppPage.databasePanel.loading")}
 											</span>
+										) : activeTab === "data" ? (
+											<div className="flex items-center gap-2">
+												<Button
+													type="button"
+													size="sm"
+													variant="outline"
+													className="h-8 gap-1.5"
+													disabled={!selectedTable}
+													onClick={handleCreateRow}
+												>
+													<Plus className="size-3.5" />
+													{t("microAppPage.databasePanel.rowCreate")}
+												</Button>
+												<Button
+													type="button"
+													size="sm"
+													variant="outline"
+													className="h-8 gap-1.5"
+													disabled={!canEditSelectedRow}
+													onClick={handleEditSelectedRow}
+												>
+													<Pencil className="size-3.5" />
+													{t("microAppPage.databasePanel.rowEdit")}
+												</Button>
+												<Button
+													type="button"
+													size="sm"
+													variant="outline"
+													className="h-8 gap-1.5 text-destructive hover:text-destructive"
+													disabled={!canDeleteSelectedRows}
+													onClick={handleDeleteSelectedRows}
+												>
+													<Trash2 className="size-3.5" />
+													{t("microAppPage.databasePanel.rowDelete")}
+												</Button>
+											</div>
 										) : null}
 									</div>
 
@@ -379,7 +508,15 @@ export default function MicroAppDatabasePanel({
 																loading={
 																	rowsLoading || tableLoading
 																}
+																selectionResetKey={
+																	selectionResetKey
+																}
 																onSortChange={handleSortChange}
+																onSelectionChange={setSelectedCells}
+																onOpenEditRow={handleOpenEditRow}
+																onDeleteRows={
+																	handleRequestDeleteRows
+																}
 																onOpenRowPermissions={
 																	handleOpenRowPermissions
 																}
@@ -470,6 +607,55 @@ export default function MicroAppDatabasePanel({
 					}}
 					onSaved={() => refreshPermissions()}
 				/>
+				<RowEditorDialog
+					open={Boolean(rowEditor)}
+					mode={rowEditor?.mode || "create"}
+					projectId={projectId || ""}
+					table={selectedTable || null}
+					row={rowEditor?.mode === "edit" ? rowEditor.row : null}
+					onOpenChange={(nextOpen) => {
+						if (!nextOpen) setRowEditor(null)
+					}}
+					onSaved={() => {
+						refreshRows()
+						refreshTable()
+					}}
+				/>
+				<AlertDialog
+					open={Boolean(deleteSelection)}
+					onOpenChange={(nextOpen) => {
+						if (!nextOpen && !deletingRows) setDeleteSelection(null)
+					}}
+				>
+					<AlertDialogContent style={{ zIndex: 1302 }}>
+						<AlertDialogHeader>
+							<AlertDialogTitle>
+								{t("microAppPage.databasePanel.rowDeleteTitle")}
+							</AlertDialogTitle>
+							<AlertDialogDescription>
+								{t("microAppPage.databasePanel.rowDeleteDescription", {
+									total: deleteSelection?.rowIds.length || 0,
+								})}
+							</AlertDialogDescription>
+						</AlertDialogHeader>
+						<AlertDialogFooter>
+							<AlertDialogCancel disabled={deletingRows}>
+								{t("common.cancel")}
+							</AlertDialogCancel>
+							<AlertDialogAction
+								variant="destructive"
+								disabled={deletingRows}
+								onClick={(event) => {
+									event.preventDefault()
+									confirmDeleteRows()
+								}}
+							>
+								{deletingRows ? <Loader2 className="size-4 animate-spin" /> : null}
+								{t("microAppPage.databasePanel.rowDeleteConfirm")}
+							</AlertDialogAction>
+						</AlertDialogFooter>
+					</AlertDialogContent>
+				</AlertDialog>
 			</SheetContent>
 		</Sheet>
 	)

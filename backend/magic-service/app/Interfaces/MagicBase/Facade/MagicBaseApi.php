@@ -8,6 +8,7 @@ declare(strict_types=1);
 namespace App\Interfaces\MagicBase\Facade;
 
 use App\Application\MagicBase\Assembler\MagicBaseAssembler;
+use App\Application\MagicBase\DTO\BatchDeleteRowsRequestDTO;
 use App\Application\MagicBase\DTO\BatchPermissionRequestDTO;
 use App\Application\MagicBase\Service\MagicBaseAdminAppService;
 use App\Application\MagicBase\Service\MagicBasePermissionAppService;
@@ -201,6 +202,18 @@ class MagicBaseApi extends AbstractApi
             $projectId,
             self::parseId($tableId, '表ID'),
             self::parseId($recordId, '记录ID'),
+        );
+    }
+
+    public function batchDeleteRows(RequestInterface $request, string $projectId, string $tableId): array
+    {
+        $projectId = self::parseId($projectId, '项目ID');
+        $requestDTO = BatchDeleteRowsRequestDTO::fromArray($request->all());
+        return $this->rowAppService->batchDeleteRows(
+            $this->resolveRuntimeAuthorization($projectId),
+            $projectId,
+            self::parseId($tableId, '表ID'),
+            $requestDTO->getRecordIds(),
         );
     }
 

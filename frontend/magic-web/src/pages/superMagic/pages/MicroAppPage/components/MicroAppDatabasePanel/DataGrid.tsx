@@ -19,7 +19,11 @@ interface DataGridProps {
 	rows: MagicBaseRow[]
 	sort: MagicBaseSortRule | null
 	loading: boolean
+	selectionResetKey?: string
 	onSortChange: (field: string) => void
+	onSelectionChange?: (selection: MagicBaseCellSelection) => void
+	onOpenEditRow?: (rowId: string) => void
+	onDeleteRows?: (selection: MagicBaseCellSelection) => void
 	onOpenRowPermissions?: (selection: MagicBaseCellSelection) => void
 	onOpenColumnPermissions?: (selection: MagicBaseCellSelection) => void
 }
@@ -54,7 +58,11 @@ export default function DataGrid({
 	rows,
 	sort,
 	loading,
+	selectionResetKey,
 	onSortChange,
+	onSelectionChange,
+	onOpenEditRow,
+	onDeleteRows,
 	onOpenRowPermissions,
 	onOpenColumnPermissions,
 }: DataGridProps) {
@@ -169,7 +177,8 @@ export default function DataGrid({
 
 	useEffect(() => {
 		currentSelectionRef.current = currentSelection
-	}, [currentSelection])
+		onSelectionChange?.(currentSelection)
+	}, [currentSelection, onSelectionChange])
 
 	useEffect(() => {
 		contextSelectionRef.current = contextSelection
@@ -185,6 +194,22 @@ export default function DataGrid({
 			autoScrollFrameRef.current = null
 		}
 	}, [])
+
+	useEffect(() => {
+		setSelectionStart(null)
+		setSelectionEnd(null)
+		selectionStartRef.current = null
+		selectionEndRef.current = null
+		currentSelectionRef.current = { rowIds: [], columnIds: [], columnKeys: [] }
+		setContextSelection(null)
+		setContextMenuSelection(null)
+		setContextMenuPosition(null)
+		contextSelectionRef.current = null
+		draggingRef.current = false
+		pointerRef.current = null
+		cancelAutoScroll()
+		onSelectionChange?.({ rowIds: [], columnIds: [], columnKeys: [] })
+	}, [cancelAutoScroll, columns, onSelectionChange, rows, selectionResetKey])
 
 	const updateSelectionEnd = useCallback(
 		(cell: CellCoordinate) => {
@@ -389,6 +414,20 @@ export default function DataGrid({
 		onOpenColumnPermissions?.(selection)
 	}
 
+	const handleOpenEditRow = () => {
+		const selection = getContextMenuSelection()
+		if (selection.rowIds.length !== 1) return
+		closeContextMenu()
+		onOpenEditRow?.(selection.rowIds[0])
+	}
+
+	const handleDeleteRows = () => {
+		const selection = getContextMenuSelection()
+		if (selection.rowIds.length === 0) return
+		closeContextMenu()
+		onDeleteRows?.(selection)
+	}
+
 	useEffect(() => {
 		const handlePointerDown = (event: globalThis.MouseEvent) => {
 			if (!contextMenuPosition) return
@@ -449,6 +488,7 @@ export default function DataGrid({
 
 	const activeSelection = contextMenuSelection ?? contextSelection ?? currentSelection
 	const hasSelectedConfigurableColumns = hasConfigurableColumns(activeSelection)
+	const canEditSelectedRow = activeSelection.rowIds.length === 1
 
 	return (
 		<div
@@ -532,6 +572,11 @@ export default function DataGrid({
 													event,
 												)
 											}
+											onDoubleClick={() => {
+												if (column.source !== "schema") return
+												if (!recordId) return
+												onOpenEditRow?.(recordId)
+											}}
 										>
 											<span className="block truncate">
 												{formatCellValue(value)}
@@ -553,6 +598,25 @@ export default function DataGrid({
 					onContextMenu={(event) => event.preventDefault()}
 					onMouseDown={(event) => event.stopPropagation()}
 				>
+					<button
+						type="button"
+						role="menuitem"
+						disabled={!canEditSelectedRow}
+						className="flex w-full items-center rounded-sm px-2 py-1.5 text-left text-sm outline-none hover:bg-accent hover:text-accent-foreground disabled:pointer-events-none disabled:opacity-50"
+						onClick={handleOpenEditRow}
+					>
+						{t("microAppPage.databasePanel.contextMenu.editRow")}
+					</button>
+					<button
+						type="button"
+						role="menuitem"
+						disabled={activeSelection.rowIds.length === 0}
+						className="flex w-full items-center rounded-sm px-2 py-1.5 text-left text-sm text-destructive outline-none hover:bg-destructive/10 disabled:pointer-events-none disabled:opacity-50"
+						onClick={handleDeleteRows}
+					>
+						{t("microAppPage.databasePanel.contextMenu.deleteRows")}
+					</button>
+					<div className="-mx-1 my-1 h-px bg-border" />
 					<button
 						type="button"
 						role="menuitem"

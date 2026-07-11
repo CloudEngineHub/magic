@@ -11,6 +11,7 @@ use App\Application\MagicBase\DTO\CreateRowRequestDTO;
 use App\Application\MagicBase\DTO\MagicBaseRowDTO;
 use App\Application\MagicBase\Support\MagicBaseAccessControl;
 use App\Application\MagicBase\Support\MagicBaseRowQuerySupport;
+use App\Domain\MagicBase\Exception\MagicBaseExceptionBuilder;
 use App\Domain\MagicBase\Service\MagicBaseRowDomainService;
 use App\Domain\MagicBase\Service\MagicBaseRowStorageResolverDomainService;
 use App\Domain\MagicBase\Service\MagicBaseSelectParserDomainService;
@@ -88,6 +89,36 @@ readonly class MagicBaseRowAppService
             $row = $this->accessControl->requireDeletableRow($authorization, $context, $recordId);
 
             $this->rowStorageResolver->saveRow($this->rowDomainService->markDeleted($row));
+        });
+    }
+
+    /**
+     * @param list<int> $recordIds
+     * @return array{deleted_count: int, record_ids: list<string>}
+     */
+    public function batchDeleteRows(MagicUserAuthorization $authorization, int $projectId, int $tableId, array $recordIds): array
+    {
+        return Db::transaction(function () use ($authorization, $projectId, $tableId, $recordIds): array {
+            if ($recordIds === []) {
+                MagicBaseExceptionBuilder::parameterMissing('record_ids');
+            }
+
+            $context = $this->accessControl->requireWritableTable($authorization, $projectId, $tableId);
+            $rows = [];
+            foreach ($recordIds as $recordId) {
+                $rows[$recordId] = $this->accessControl->requireDeletableRow($authorization, $context, $recordId);
+            }
+
+            $deletedRecordIds = [];
+            foreach ($rows as $recordId => $row) {
+                $this->rowStorageResolver->saveRow($this->rowDomainService->markDeleted($row));
+                $deletedRecordIds[] = (string) $recordId;
+            }
+
+            return [
+                'deleted_count' => count($deletedRecordIds),
+                'record_ids' => $deletedRecordIds,
+            ];
         });
     }
 }
