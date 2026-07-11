@@ -47,6 +47,7 @@ class SlidesTemplateAppService extends AbstractSlidesTemplateAppService
         $query->setTagMatch($request->getTagMatch());
 
         $page = $this->createListPage($request->getPage(), $request->getPageSize());
+        $page->setTotal(true);
         $result = $this->slidesTemplateDomainService->queries($dataIsolation, $query, $page);
         $this->resolveAssetUrls($result['list'], includeTemplateFileUrl: false);
         $this->slidesTemplateTagDomainService->fillTemplateTags(

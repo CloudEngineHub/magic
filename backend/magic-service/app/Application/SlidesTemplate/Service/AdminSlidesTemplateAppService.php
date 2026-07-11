@@ -53,6 +53,7 @@ class AdminSlidesTemplateAppService extends AbstractSlidesTemplateAppService
         $query->setTagCodes($request->getTagCodes());
         $query->setTagMatch($request->getTagMatch());
         $page = $this->createListPage($request->getPage(), $request->getPageSize());
+        $page->setTotal(true);
         $result = $this->slidesTemplateDomainService->queries($dataIsolation, $query, $page);
         $this->resolveThumbnailUrls($result['list']);
         $this->slidesTemplateTagDomainService->fillTemplateTags($dataIsolation, $result['list']);
