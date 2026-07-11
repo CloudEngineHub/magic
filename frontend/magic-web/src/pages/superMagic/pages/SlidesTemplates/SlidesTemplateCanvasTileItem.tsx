@@ -1,6 +1,4 @@
 import { AnimatePresence, motion, type MotionValue } from "framer-motion"
-import type { KeyboardEvent } from "react"
-import { cn } from "@/lib/utils"
 import type { OptionItem } from "@/pages/superMagic/components/MainInputContainer/panels/types"
 import { type TemplateCanvasPoint, type TemplateCanvasSize } from "./canvasLayout"
 import {
@@ -74,46 +72,20 @@ export default function SlidesTemplateCanvasTileItem({
 		)
 	}
 
-	function handleLoopCoverClick() {
-		if (previewImageUrls.length > 0) {
-			onPreviewClick(anchorTileId, tile)
-			return
-		}
-		onTemplateSelect(tile.template)
-	}
-
-	function handleLoopCoverKeyDown(event: KeyboardEvent<HTMLDivElement>) {
-		if (event.key !== "Enter" && event.key !== " ") return
-		event.preventDefault()
-		handleLoopCoverClick()
-	}
-
 	function renderLoopCover(isDuplicate: boolean) {
 		return (
-			<div
-				role={isDuplicate ? undefined : "button"}
-				tabIndex={isDuplicate ? -1 : 0}
-				aria-hidden={isDuplicate || undefined}
-				aria-label={value}
-				data-testid="slides-template-loop-cover"
-				className={cn(
-					"pointer-events-auto size-full cursor-pointer overflow-hidden rounded-lg bg-zinc-900 opacity-90 shadow-[0_8px_24px_rgba(0,0,0,0.22)] outline-none ring-1 ring-inset ring-white/[0.08] focus-visible:ring-2 focus-visible:ring-white/70",
-					selectedTemplateValue === value && "opacity-100 ring-2 ring-primary",
-				)}
-				onClick={handleLoopCoverClick}
-				onKeyDown={isDuplicate ? undefined : handleLoopCoverKeyDown}
-			>
-				{tile.imageUrl ? (
-					<img
-						src={tile.imageUrl}
-						alt=""
-						aria-hidden="true"
-						className="size-full object-cover"
-						loading="lazy"
-						decoding="async"
-						draggable={false}
-					/>
-				) : null}
+			<div data-testid="slides-template-loop-cover" className="pointer-events-auto size-full">
+				<SlidesTemplateCoverTile
+					template={tile.template}
+					imageUrl={tile.imageUrl}
+					imageLoading="lazy"
+					isKeyboardAccessible={!isDuplicate}
+					isSelected={selectedTemplateValue === value}
+					isExpanded={isExpanded}
+					canPreview={previewImageUrls.length > 0}
+					onSelect={onTemplateSelect}
+					onPreviewClick={() => onPreviewClick(anchorTileId, tile)}
+				/>
 			</div>
 		)
 	}
@@ -138,6 +110,7 @@ export default function SlidesTemplateCanvasTileItem({
 		>
 			<motion.div
 				className="size-full"
+				data-testid="slides-template-static-cover"
 				data-slides-template-idle-animation={isLoopRunning ? "true" : "false"}
 				initial={
 					shouldPlayIntro && !reduceMotion

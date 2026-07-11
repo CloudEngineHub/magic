@@ -1,6 +1,8 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react"
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react"
 import { describe, expect, it, vi } from "vitest"
-import SlidesTemplateCanvasTileItem from "../SlidesTemplateCanvasTileItem"
+import SlidesTemplateCanvasLoopColumn, {
+	type SlidesTemplateCanvasColumnItem,
+} from "../SlidesTemplateCanvasLoopColumn"
 import { SLIDES_TEMPLATE_CANVAS_DEFAULT_ITEM_SIZE } from "../canvasLayout"
 import { isCanvasDragBlockedTarget, type SlidesTemplateCanvasTile } from "../canvasInteraction"
 
@@ -11,54 +13,71 @@ vi.mock("react-i18next", () => ({
 	}),
 }))
 
-const tile: SlidesTemplateCanvasTile = {
-	id: "template-1:cover:0",
-	imageUrl: "https://example.com/template-1.png",
-	kind: "cover",
-	template: {
-		value: "template-1",
-		label: "Template 1",
-		preview_image_urls: [],
-	},
+function createColumnItem(index: number): SlidesTemplateCanvasColumnItem {
+	const tile: SlidesTemplateCanvasTile = {
+		id: `template-${index}:cover:${index}`,
+		imageUrl: `https://example.com/template-${index}.png`,
+		kind: "cover",
+		template: {
+			value: `template-${index}`,
+			label: `Template ${index}`,
+			preview_image_urls: [],
+		},
+	}
+
+	return {
+		visibleIndex: index,
+		canvasItem: {
+			index,
+			grid: { x: 0, y: index },
+			item: tile,
+			position: { x: 0, y: index * 184 },
+			size: SLIDES_TEMPLATE_CANVAS_DEFAULT_ITEM_SIZE,
+			span: { columns: 1, rows: 1 },
+		},
+	}
 }
 
-function renderTile(isIdleAnimationActive: boolean, onTemplateSelect = vi.fn()) {
+function renderColumn(
+	items: SlidesTemplateCanvasColumnItem[],
+	isIdleAnimationActive: boolean,
+	onTemplateSelect = vi.fn(),
+) {
 	return (
-		<SlidesTemplateCanvasTileItem
-			anchorTileId="template-1:0:0"
-			column={0}
+		<SlidesTemplateCanvasLoopColumn
+			allItems={items.map(({ canvasItem }) => canvasItem)}
 			focusedAnchorTileId=""
 			idleLoop={{ column: 0, delay: 0, direction: -1, distance: 552, duration: 46 }}
-			imageLoading="eager"
 			isIdleAnimationActive={isIdleAnimationActive}
+			items={items}
 			onPreviewClick={vi.fn()}
 			onTemplateSelect={onTemplateSelect}
-			position={{ x: 0, y: 0 }}
 			reduceMotion={false}
 			selectedTemplateValue=""
 			shouldPlayIntro={false}
-			size={SLIDES_TEMPLATE_CANVAS_DEFAULT_ITEM_SIZE}
-			tile={tile}
-			visibleIndex={0}
 		/>
 	)
 }
 
 describe("SlidesTemplateCanvas idle transition", () => {
-	it("keeps the same loop layer mounted when interaction pauses the animation", async () => {
+	it("keeps one shared loop layer mounted and interactive while paused", async () => {
 		const onTemplateSelect = vi.fn()
-		const view = render(renderTile(true, onTemplateSelect))
+		const firstItem = createColumnItem(0)
+		const secondItem = createColumnItem(1)
+		const view = render(renderColumn([firstItem], true, onTemplateSelect))
 
 		await waitFor(() => {
 			expect(screen.getAllByTestId("slides-template-loop-cover")).toHaveLength(2)
 		})
 
-		view.rerender(renderTile(false, onTemplateSelect))
+		view.rerender(renderColumn([firstItem, secondItem], false, onTemplateSelect))
 
-		expect(screen.getAllByTestId("slides-template-loop-cover")).toHaveLength(2)
+		expect(screen.getAllByTestId("slides-template-loop-cover")).toHaveLength(4)
 		const loopCover = screen.getAllByTestId("slides-template-loop-cover")[0]
 		expect(isCanvasDragBlockedTarget(loopCover)).toBe(false)
-		fireEvent.click(loopCover)
-		expect(onTemplateSelect).toHaveBeenCalledWith(tile.template)
+		const selectButton = within(loopCover).getByTestId("slides-template-cover-select-button")
+		expect(isCanvasDragBlockedTarget(selectButton)).toBe(true)
+		fireEvent.click(selectButton)
+		expect(onTemplateSelect).toHaveBeenCalledWith(firstItem.canvasItem.item.template)
 	})
 })

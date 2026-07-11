@@ -10,6 +10,7 @@ import SlidesTemplateCanvasLoopColumn, {
 import { resolveSlidesTemplateCanvasIdleLoops } from "./canvasIdleLoop"
 
 interface SlidesTemplateCanvasItemsLayerProps {
+	canvasItems: Array<TemplateCanvasItem<SlidesTemplateCanvasTile>>
 	contentRef: RefObject<HTMLDivElement | null>
 	focusedAnchorTileId: string
 	isIdleAnimationActive: boolean
@@ -25,6 +26,7 @@ const contentStyle = {
 } as CSSProperties
 
 export default function SlidesTemplateCanvasItemsLayer({
+	canvasItems,
 	contentRef,
 	focusedAnchorTileId,
 	isIdleAnimationActive,
@@ -39,12 +41,12 @@ export default function SlidesTemplateCanvasItemsLayer({
 	const idleLoopsByColumn = useMemo(
 		() =>
 			new Map(
-				resolveSlidesTemplateCanvasIdleLoops(visibleCanvasItems).map((loop) => [
+				resolveSlidesTemplateCanvasIdleLoops(canvasItems).map((loop) => [
 					loop.column,
 					loop,
 				]),
 			),
-		[visibleCanvasItems],
+		[canvasItems],
 	)
 	const { columnItems, standaloneItems } = useMemo(() => {
 		const nextColumnItems = new Map<number, SlidesTemplateCanvasColumnItem[]>()
@@ -64,6 +66,18 @@ export default function SlidesTemplateCanvasItemsLayer({
 
 		return { columnItems: nextColumnItems, standaloneItems: nextStandaloneItems }
 	}, [visibleCanvasItems])
+	const allItemsByColumn = useMemo(() => {
+		const nextItems = new Map<number, Array<TemplateCanvasItem<SlidesTemplateCanvasTile>>>()
+
+		canvasItems.forEach((canvasItem) => {
+			if (!idleLoopsByColumn.has(canvasItem.grid.x) || canvasItem.span.columns !== 1) return
+			const currentItems = nextItems.get(canvasItem.grid.x) ?? []
+			currentItems.push(canvasItem)
+			nextItems.set(canvasItem.grid.x, currentItems)
+		})
+
+		return nextItems
+	}, [canvasItems, idleLoopsByColumn])
 
 	useEffect(() => {
 		if (visibleCanvasItems.length > 0) hasPlayedIntroRef.current = true
@@ -79,6 +93,9 @@ export default function SlidesTemplateCanvasItemsLayer({
 			{Array.from(columnItems.entries()).map(([column, items]) => (
 				<SlidesTemplateCanvasLoopColumn
 					key={column}
+					allItems={
+						allItemsByColumn.get(column) ?? items.map(({ canvasItem }) => canvasItem)
+					}
 					items={items}
 					idleLoop={idleLoopsByColumn.get(column) ?? null}
 					isIdleAnimationActive={isIdleAnimationActive}

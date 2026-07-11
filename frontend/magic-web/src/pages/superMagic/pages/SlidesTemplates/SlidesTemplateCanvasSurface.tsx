@@ -1,11 +1,11 @@
-import type {
-	ComponentProps,
-	MouseEventHandler,
-	PointerEventHandler,
-	RefCallback,
-	RefObject,
+import {
+	useRef,
+	type ComponentProps,
+	type MouseEventHandler,
+	type PointerEventHandler,
+	type RefCallback,
+	type RefObject,
 } from "react"
-import { useRef } from "react"
 import { cn } from "@/lib/utils"
 import type { OptionItem } from "@/pages/superMagic/components/MainInputContainer/panels/types"
 import type { TemplateCanvasItem } from "./canvasLayout"
@@ -22,6 +22,7 @@ import {
 interface SlidesTemplateCanvasSurfaceProps {
 	canZoomIn: boolean
 	canZoomOut: boolean
+	canvasItems: Array<TemplateCanvasItem<SlidesTemplateCanvasTile>>
 	canvasScale: number
 	bottomEdgeInset?: number
 	contentRef: RefObject<HTMLDivElement | null>
@@ -56,6 +57,7 @@ interface SlidesTemplateCanvasSurfaceProps {
 export default function SlidesTemplateCanvasSurface({
 	canZoomIn,
 	canZoomOut,
+	canvasItems,
 	canvasScale,
 	bottomEdgeInset,
 	contentRef,
@@ -152,6 +154,7 @@ export default function SlidesTemplateCanvasSurface({
 				className="pointer-events-none absolute inset-0 opacity-[0.24] [background-image:linear-gradient(rgba(255,255,255,0.08)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.08)_1px,transparent_1px)] [background-size:72px_72px]"
 			/>
 			<SlidesTemplateCanvasItemsLayer
+				canvasItems={canvasItems}
 				contentRef={contentRef}
 				isIdleAnimationActive={isIdle}
 				visibleCanvasItems={visibleCanvasItems}

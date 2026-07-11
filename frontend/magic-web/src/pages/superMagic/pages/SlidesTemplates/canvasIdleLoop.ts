@@ -12,6 +12,41 @@ export interface SlidesTemplateCanvasIdleLoop {
 	duration: number
 }
 
+interface ResolveSlidesTemplateCanvasLoopItemsInput {
+	allItems: Array<TemplateCanvasItem<SlidesTemplateCanvasTile>>
+	currentY: number
+	loopEndY: number
+	visibleItems: Array<TemplateCanvasItem<SlidesTemplateCanvasTile>>
+}
+
+export function resolveSlidesTemplateCanvasLoopItems({
+	allItems,
+	currentY,
+	loopEndY,
+	visibleItems,
+}: ResolveSlidesTemplateCanvasLoopItemsInput) {
+	if (visibleItems.length === 0) return []
+
+	const visibleTop = Math.min(
+		...visibleItems.map(({ position, size }) => position.y - size.height / 2),
+	)
+	const visibleBottom = Math.max(
+		...visibleItems.map(({ position, size }) => position.y + size.height / 2),
+	)
+	const renderTop = visibleTop - SLIDES_TEMPLATE_CANVAS_STEP_Y
+	const renderBottom = visibleBottom + SLIDES_TEMPLATE_CANVAS_STEP_Y
+	const duplicateY = currentY - loopEndY
+
+	return allItems.filter(({ position, size }) => {
+		const halfHeight = size.height / 2
+		return [currentY, duplicateY].some((offsetY) => {
+			const itemTop = position.y + offsetY - halfHeight
+			const itemBottom = position.y + offsetY + halfHeight
+			return itemBottom >= renderTop && itemTop <= renderBottom
+		})
+	})
+}
+
 export function resolveSlidesTemplateCanvasIdleLoops(
 	items: Array<TemplateCanvasItem<SlidesTemplateCanvasTile>>,
 ): SlidesTemplateCanvasIdleLoop[] {

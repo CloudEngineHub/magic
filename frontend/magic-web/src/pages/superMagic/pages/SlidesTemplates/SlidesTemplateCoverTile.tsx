@@ -15,6 +15,7 @@ interface SlidesTemplateCoverTileProps {
 	canPreview: boolean
 	imageUrl?: string
 	imageLoading?: "eager" | "lazy"
+	isKeyboardAccessible?: boolean
 	isExpanded: boolean
 	isSelected: boolean
 	onPreviewClick: () => void
@@ -26,6 +27,7 @@ export default function SlidesTemplateCoverTile({
 	canPreview,
 	imageUrl,
 	imageLoading = "lazy",
+	isKeyboardAccessible = true,
 	isExpanded,
 	isSelected,
 	onPreviewClick,
@@ -49,12 +51,8 @@ export default function SlidesTemplateCoverTile({
 	}
 
 	function handlePreview() {
-		if (canPreview) {
-			onPreviewClick()
-			return
-		}
-
-		handleSelect()
+		if (!canPreview) return
+		onPreviewClick()
 	}
 
 	function handleKeyDown(event: KeyboardEvent<HTMLDivElement>) {
@@ -72,11 +70,12 @@ export default function SlidesTemplateCoverTile({
 
 	return (
 		<div
-			role="button"
-			tabIndex={0}
+			role={isKeyboardAccessible ? "button" : undefined}
+			tabIndex={isKeyboardAccessible ? 0 : -1}
+			aria-hidden={isKeyboardAccessible ? undefined : true}
 			data-testid="slides-template-cover-tile"
 			className={cn(
-				"group relative size-full overflow-hidden rounded-lg bg-zinc-900 opacity-90 shadow-[0_8px_24px_rgba(0,0,0,0.22)] outline-none ring-1 ring-inset ring-white/[0.08] transition-[opacity,transform,box-shadow,ring-color] duration-200 ease-out",
+				"group relative size-full overflow-hidden rounded-lg bg-zinc-900 opacity-[0.86] shadow-[0_8px_24px_rgba(0,0,0,0.22)] outline-none ring-1 ring-inset ring-white/[0.08] transition-[opacity,transform,box-shadow,ring-color] duration-200 ease-out",
 				"focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-white/70",
 				"hover:z-10 hover:scale-[1.006] hover:opacity-100 hover:shadow-[0_14px_36px_rgba(0,0,0,0.32)] hover:ring-white/[0.18]",
 				isSelected &&
@@ -142,6 +141,7 @@ export default function SlidesTemplateCoverTile({
 						variant="secondary"
 						className="size-7 rounded-full bg-white/[0.92] text-zinc-950 shadow-md backdrop-blur hover:bg-white"
 						aria-label={t("playbook.edit.presets.form.select")}
+						tabIndex={isKeyboardAccessible ? 0 : -1}
 						onClick={(event) => {
 							event.preventDefault()
 							event.stopPropagation()
@@ -161,6 +161,7 @@ export default function SlidesTemplateCoverTile({
 								isExpanded && "bg-primary text-primary-foreground hover:bg-primary",
 							)}
 							aria-label={t("playbook.edit.presets.form.preview")}
+							tabIndex={isKeyboardAccessible ? 0 : -1}
 							onClick={handlePreviewClick}
 							data-testid="slides-template-cover-preview-button"
 						>

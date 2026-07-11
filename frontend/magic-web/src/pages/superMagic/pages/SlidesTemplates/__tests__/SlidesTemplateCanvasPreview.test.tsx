@@ -130,6 +130,34 @@ describe("SlidesTemplateCanvas preview", () => {
 		expect(screen.queryByTestId("slides-template-inline-preview")).not.toBeInTheDocument()
 	})
 
+	it("opens the inline preview when clicking the card body", () => {
+		renderCanvas()
+		const tile = getFirstTestElement("slides-template-cover-tile")
+		const setPointerCapture = vi.spyOn(
+			screen.getByTestId("slides-template-canvas"),
+			"setPointerCapture",
+		)
+
+		fireCanvasPointerEvent(tile, "pointerdown", {
+			clientX: 100,
+			clientY: 100,
+			pointerId: 1,
+		})
+		expect(setPointerCapture).not.toHaveBeenCalled()
+		fireCanvasPointerEvent(tile, "pointerup", {
+			clientX: 100,
+			clientY: 100,
+			pointerId: 1,
+		})
+
+		fireEvent.click(tile)
+
+		expect(screen.getByTestId("slides-template-inline-preview")).toBeInTheDocument()
+		expect(screen.getByTestId("slides-template-inline-preview-title")).toHaveTextContent(
+			"Template 1",
+		)
+	})
+
 	it("opens an inline preview stage and switches pages", () => {
 		renderCanvas()
 

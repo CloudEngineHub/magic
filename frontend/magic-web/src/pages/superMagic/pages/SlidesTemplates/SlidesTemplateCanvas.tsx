@@ -349,6 +349,7 @@ const SlidesTemplateCanvas = forwardRef<SlidesTemplateCanvasHandle, SlidesTempla
 					if (!dragState.hasMoved) {
 						dragState.hasMoved = true
 						setIsDragging(true)
+						viewportRef.current?.setPointerCapture(event.pointerId)
 					}
 
 					event.preventDefault()
@@ -400,7 +401,6 @@ const SlidesTemplateCanvas = forwardRef<SlidesTemplateCanvasHandle, SlidesTempla
 					return
 				}
 
-				event.preventDefault()
 				stopAnimation()
 				dragStateRef.current = {
 					hasMoved: false,
@@ -411,11 +411,16 @@ const SlidesTemplateCanvas = forwardRef<SlidesTemplateCanvasHandle, SlidesTempla
 					startClientY: event.clientY,
 					startOffset: offsetRef.current,
 				}
-				setIsDragging(true)
-				viewport.setPointerCapture(event.pointerId)
 			},
 			[isPreviewOpen, stopAnimation],
 		)
+
+		const handlePointerLeave = useCallback(() => {
+			stopAnimation()
+			if (dragStateRef.current?.hasMoved) return
+			dragStateRef.current = null
+			setIsDragging(false)
+		}, [stopAnimation])
 
 		const handlePointerRelease = useCallback(
 			(event: PointerEvent<HTMLDivElement>) => {
@@ -549,6 +554,7 @@ const SlidesTemplateCanvas = forwardRef<SlidesTemplateCanvasHandle, SlidesTempla
 		return (
 			<SlidesTemplateCanvasSurface
 				setViewportNode={setViewportNode}
+				canvasItems={canvasItems}
 				contentRef={contentRef}
 				visibleCanvasItems={visibleCanvasItems}
 				focusedAnchorTileId={focusedAnchorTileId}
@@ -570,7 +576,7 @@ const SlidesTemplateCanvas = forwardRef<SlidesTemplateCanvasHandle, SlidesTempla
 				onPointerMove={handlePointerMove}
 				onPointerUp={handlePointerRelease}
 				onPointerCancel={handlePointerRelease}
-				onPointerLeave={stopAnimation}
+				onPointerLeave={handlePointerLeave}
 				onCanvasClickCapture={handleCanvasClickCapture}
 				onTemplateSelect={onTemplateSelect}
 				onPreviewToggle={handlePreviewToggle}

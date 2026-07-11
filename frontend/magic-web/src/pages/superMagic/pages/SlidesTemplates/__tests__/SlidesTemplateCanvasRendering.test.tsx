@@ -75,11 +75,14 @@ describe("SlidesTemplateCanvas rendering", () => {
 	it("renders only the visible canvas window instead of every loaded tile", () => {
 		renderCanvas(Array.from({ length: 240 }, (_, index) => createTemplate(index + 1)))
 
-		const renderedTiles = screen.getAllByTestId("slides-template-cover-tile")
+		const renderedTiles = screen.getAllByTestId("slides-template-canvas-tile-item")
 
 		expect(renderedTiles.length).toBeGreaterThan(0)
 		expect(renderedTiles.length).toBeLessThan(240)
 		expect(renderedTiles.length).toBeLessThanOrEqual(MAX_VISIBLE_TEMPLATE_CANVAS_ITEMS)
+		expect(screen.getAllByTestId("slides-template-loop-cover").length).toBeLessThanOrEqual(
+			renderedTiles.length * 2,
+		)
 	})
 
 	it("renders featured templates with a larger canvas tile", () => {
@@ -122,12 +125,16 @@ describe("SlidesTemplateCanvas rendering", () => {
 	it("loads the first viewport-sized cover batch eagerly", () => {
 		renderCanvas(Array.from({ length: 120 }, (_, index) => createTemplate(index + 1)))
 
-		const coverImages = screen.getAllByRole("img").filter((image) => image.getAttribute("alt"))
+		const coverImages = screen
+			.getAllByTestId("slides-template-static-cover")
+			.flatMap((cover) => Array.from(cover.querySelectorAll("img")))
+			.filter((image) => image.getAttribute("alt"))
 
 		expect(coverImages.length).toBeGreaterThan(36)
-		expect(coverImages[0]).toHaveAttribute("loading", "eager")
-		expect(coverImages[35]).toHaveAttribute("loading", "eager")
-		expect(coverImages[36]).toHaveAttribute("loading", "lazy")
+		expect(
+			coverImages.filter((image) => image.getAttribute("loading") === "eager"),
+		).toHaveLength(36)
+		expect(coverImages.some((image) => image.getAttribute("loading") === "lazy")).toBe(true)
 	})
 
 	it("selects the template from the explicit select button", () => {

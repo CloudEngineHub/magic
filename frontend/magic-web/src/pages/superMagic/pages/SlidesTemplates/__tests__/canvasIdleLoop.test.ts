@@ -7,7 +7,10 @@ import {
 	SLIDES_TEMPLATE_CANVAS_STEP_Y,
 	type TemplateCanvasItem,
 } from "../canvasLayout"
-import { resolveSlidesTemplateCanvasIdleLoops } from "../canvasIdleLoop"
+import {
+	resolveSlidesTemplateCanvasIdleLoops,
+	resolveSlidesTemplateCanvasLoopItems,
+} from "../canvasIdleLoop"
 import type { SlidesTemplateCanvasTile } from "../canvasInteraction"
 
 function createCanvasItem(
@@ -78,5 +81,35 @@ describe("slides template canvas idle loop", () => {
 				duration: (4 * SLIDES_TEMPLATE_CANVAS_STEP_Y) / 13,
 			},
 		])
+	})
+
+	it("renders source cards that enter the viewport later in a long-running loop", () => {
+		const allItems = Array.from({ length: 8 }, (_, index) => createCanvasItem(index, 0, index))
+		const visibleItems = allItems.slice(0, 4)
+		const distance = allItems.length * SLIDES_TEMPLATE_CANVAS_STEP_Y
+
+		expect(
+			resolveSlidesTemplateCanvasLoopItems({
+				allItems,
+				currentY: -4 * SLIDES_TEMPLATE_CANVAS_STEP_Y,
+				loopEndY: -distance,
+				visibleItems,
+			}).map(({ grid }) => grid.y),
+		).toEqual(expect.arrayContaining([4, 5, 6, 7]))
+	})
+
+	it("preloads the next card before it starts entering the visible column", () => {
+		const allItems = Array.from({ length: 8 }, (_, index) => createCanvasItem(index, 0, index))
+		const visibleItems = allItems.slice(0, 4)
+		const distance = allItems.length * SLIDES_TEMPLATE_CANVAS_STEP_Y
+
+		expect(
+			resolveSlidesTemplateCanvasLoopItems({
+				allItems,
+				currentY: -0.1,
+				loopEndY: -distance,
+				visibleItems,
+			}).map(({ grid }) => grid.y),
+		).toContain(4)
 	})
 })
