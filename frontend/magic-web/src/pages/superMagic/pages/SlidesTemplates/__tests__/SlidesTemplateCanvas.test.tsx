@@ -41,15 +41,17 @@ function renderCanvas(
 	{
 		hasMore = true,
 		onLoadMore = vi.fn(),
+		selectedTemplate = null,
 	}: {
 		hasMore?: boolean
 		onLoadMore?: () => void
+		selectedTemplate?: OptionItem | null
 	} = {},
 ) {
 	return render(
 		<SlidesTemplateCanvas
 			templates={templates}
-			selectedTemplate={null}
+			selectedTemplate={selectedTemplate}
 			onTemplateSelect={onTemplateSelect}
 			hasMore={hasMore}
 			isLoading={false}
@@ -359,6 +361,19 @@ describe("SlidesTemplateCanvas", () => {
 		expect(
 			Number(content.style.getPropertyValue("--slides-template-canvas-action-scale")),
 		).toBeGreaterThan(1)
+	})
+
+	it("stops the idle template loop after a template is selected", async () => {
+		const templates = Array.from({ length: 120 }, (_, index) => createTemplate(index + 1))
+		renderCanvas(templates, vi.fn(), { selectedTemplate: templates[0] })
+
+		await waitFor(() => {
+			expect(
+				screen.queryAllByTestId("slides-template-static-cover").every((cover) => {
+					return cover.dataset.slidesTemplateIdleAnimation === "false"
+				}),
+			).toBe(true)
+		})
 	})
 
 	it("requests more templates when zooming out exposes loaded edges", () => {

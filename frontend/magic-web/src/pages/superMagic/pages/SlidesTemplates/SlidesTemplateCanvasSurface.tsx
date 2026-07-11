@@ -96,6 +96,7 @@ export default function SlidesTemplateCanvasSurface({
 			isDragging ||
 			isCanvasMoving ||
 			isPreviewOpen ||
+			Boolean(selectedTemplate) ||
 			Boolean(focusedAnchorTileId) ||
 			isInitialLoading ||
 			isRefreshing,

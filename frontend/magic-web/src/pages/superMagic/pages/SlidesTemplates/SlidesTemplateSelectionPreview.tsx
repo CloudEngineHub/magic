@@ -30,18 +30,26 @@ export default function SlidesTemplateSelectionPreview({
 		imageUrl: coverUrl,
 		priority: "interactive",
 	})
-	const primaryAmbientColor = templateColorToRgba(colors[0], 0.16)
+	const primaryAmbientColor = templateColorToRgba(colors[0], 0.26)
+	const secondaryAmbientColor = templateColorToRgba(colors[1] ?? colors[0], 0.16)
+	const templatePreviewBackground = primaryAmbientColor
+		? {
+				backgroundImage: [
+					`radial-gradient(circle at 14% 0%, ${primaryAmbientColor}, transparent 44%)`,
+					secondaryAmbientColor
+						? `radial-gradient(circle at 88% 100%, ${secondaryAmbientColor}, transparent 48%)`
+						: "",
+					"linear-gradient(135deg, rgba(255,255,255,0.07), rgba(255,255,255,0.015))",
+				]
+					.filter(Boolean)
+					.join(", "),
+			}
+		: undefined
 
 	return (
 		<div
-			className="flex min-w-0 items-center gap-3 border-b border-white/[0.08] bg-white/[0.035] px-3 py-3"
-			style={
-				primaryAmbientColor
-					? {
-							backgroundImage: `radial-gradient(circle at 18% 0%, ${primaryAmbientColor}, transparent 42%)`,
-						}
-					: undefined
-			}
+			className="flex min-w-0 items-center gap-3 rounded-xl border border-white/[0.12] bg-white/[0.035] px-3 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.10),0_12px_32px_rgba(0,0,0,0.12)] backdrop-blur-2xl"
+			style={templatePreviewBackground}
 			data-testid="slides-templates-page-selected-template"
 		>
 			<button

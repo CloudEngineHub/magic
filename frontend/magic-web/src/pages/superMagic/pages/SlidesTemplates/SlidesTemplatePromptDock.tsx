@@ -30,7 +30,7 @@ interface SlidesTemplatePromptDockProps {
 }
 
 const SLIDES_TEMPLATE_EDITOR_CONTAINER_CLASS_NAME = [
-	"!rounded-none !border-0 !bg-zinc-950/[0.42] shadow-none backdrop-blur-3xl backdrop-saturate-50 dark:!bg-zinc-950/[0.42]",
+	"!rounded-xl !border !border-white/[0.12] !bg-zinc-950/[0.42] shadow-[inset_0_1px_0_rgba(255,255,255,0.08),0_12px_32px_rgba(0,0,0,0.14)] backdrop-blur-3xl backdrop-saturate-50 dark:!bg-zinc-950/[0.42]",
 	"[&_[data-testid=super-message-editor-header]_button]:!size-8",
 	"[&_[data-testid=super-message-editor-header]_button]:!rounded-lg",
 	"[&_[data-testid=super-message-editor-header]_button]:!border",
@@ -142,10 +142,7 @@ function SlidesTemplatePromptDock({
 
 	return (
 		<SceneStateProvider store={sceneStateStore} variant={ScenePanelVariant.HomePage}>
-			<div
-				className="dark overflow-hidden rounded-xl border border-white/[0.12] bg-zinc-950/[0.30] shadow-[inset_0_1px_0_rgba(255,255,255,0.08),0_12px_32px_rgba(0,0,0,0.14)] backdrop-blur-2xl"
-				data-testid="slides-template-prompt-dock"
-			>
+			<div className="dark flex flex-col gap-2" data-testid="slides-template-prompt-dock">
 				{selectedTemplate ? (
 					<SlidesTemplateSelectionPreview
 						template={selectedTemplate}

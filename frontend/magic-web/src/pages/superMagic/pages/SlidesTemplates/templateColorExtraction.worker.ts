@@ -3,6 +3,7 @@ import type {
 	TemplateColorExtractionRequest,
 	TemplateColorExtractionResponse,
 } from "./templateColorExtractionProtocol"
+import { resolveTrustedTemplateColorUrl } from "./templateColorExtractionUrl"
 
 const SAMPLE_SIZE = 48
 const MAX_IMAGE_BYTES = 12 * 1024 * 1024
@@ -17,20 +18,22 @@ function assertWorkerCapabilities() {
 	}
 }
 
-function resolveSafeImageUrl(imageUrl: string) {
-	const url = new URL(imageUrl, self.location.href)
-	if (url.protocol !== "https:" && url.protocol !== "http:") {
-		throw new Error("Unsupported image URL protocol")
-	}
+function resolveSafeImageUrl(imageUrl: string, allowedOrigins: string[]) {
+	const url = resolveTrustedTemplateColorUrl({
+		allowedOrigins,
+		currentOrigin: self.location.origin,
+		imageUrl,
+	})
+	if (!url) throw new Error("Template image URL origin is not allowed")
 	return url.toString()
 }
 
-async function fetchImageBlob(imageUrl: string) {
+async function fetchImageBlob(imageUrl: string, allowedOrigins: string[]) {
 	const abortController = new AbortController()
 	const timeoutId = setTimeout(() => abortController.abort(), FETCH_TIMEOUT_MS)
 
 	try {
-		const response = await fetch(resolveSafeImageUrl(imageUrl), {
+		const response = await fetch(resolveSafeImageUrl(imageUrl, allowedOrigins), {
 			cache: "force-cache",
 			credentials: "same-origin",
 			mode: "cors",
@@ -53,9 +56,9 @@ async function fetchImageBlob(imageUrl: string) {
 	}
 }
 
-async function extractTemplateColors(imageUrl: string) {
+async function extractTemplateColors(imageUrl: string, allowedOrigins: string[]) {
 	assertWorkerCapabilities()
-	const blob = await fetchImageBlob(imageUrl)
+	const blob = await fetchImageBlob(imageUrl, allowedOrigins)
 	const bitmap = await createImageBitmap(blob)
 
 	try {
@@ -73,12 +76,12 @@ async function extractTemplateColors(imageUrl: string) {
 }
 
 self.onmessage = async (event: MessageEvent<TemplateColorExtractionRequest>) => {
-	const { imageUrl, requestId } = event.data
+	const { allowedOrigins, imageUrl, requestId } = event.data
 	let response: TemplateColorExtractionResponse
 
 	try {
 		response = {
-			colors: await extractTemplateColors(imageUrl),
+			colors: await extractTemplateColors(imageUrl, allowedOrigins),
 			requestId,
 		}
 	} catch (error) {

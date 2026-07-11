@@ -651,7 +651,7 @@
 					"randomTemplate": "Inspire Me",
 					"refreshing": "Updating...",
 					"resetCanvasView": "Reset canvas view",
-					"searchPlaceholder": "Search templates",
+					"searchPlaceholder": "Pick a template to get started ↑",
 					"select": "Select",
 					"selected": "Selected",
 					"selectedTemplate": "Template \"{{name}}\" selected",

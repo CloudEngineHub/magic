@@ -1,5 +1,6 @@
 import { normalizeTemplateColors } from "./templateColors"
 import type { TemplateColorExtractionResponse } from "./templateColorExtractionProtocol"
+import { resolveTrustedTemplateColorUrl } from "./templateColorExtractionUrl"
 
 export type TemplateColorExtractionPriority = "background" | "interactive"
 
@@ -16,6 +17,7 @@ const MAX_RESULT_CACHE_SIZE = 400
 const FILTER_RESULT_BATCH_SIZE = 4
 const FILTER_RESULT_PUBLISH_DELAY_MS = 1_200
 const WORKER_TASK_TIMEOUT_MS = 12_000
+const WORKER_IDLE_TERMINATE_MS = 30_000
 const EMPTY_COLORS: string[] = Object.freeze([]) as string[]
 
 const extractedColorsByUrl = new Map<string, string[]>()
@@ -34,19 +36,42 @@ let publishedResultVersion = 0
 let publishedResultTimeoutId: number | null = null
 let requestSequence = 0
 let worker: Worker | null = null
+let workerIdleTimeoutId: number | null = null
 let isWorkerDisabled = false
+
+function getTemplateColorExtractionAllowedOrigins() {
+	const currentOrigin =
+		typeof window === "undefined" ? "https://localhost" : window.location.origin
+	const runtimeConfig = typeof window === "undefined" ? undefined : window.CONFIG
+	return [
+		import.meta.env?.MAGIC_CDNHOST,
+		import.meta.env?.MAGIC_PUBLIC_CDN_URL,
+		runtimeConfig?.MAGIC_CDNHOST,
+		runtimeConfig?.MAGIC_PUBLIC_CDN_URL,
+	]
+		.map((origin) => {
+			if (!origin) return ""
+			try {
+				return new URL(origin, currentOrigin).origin
+			} catch {
+				return ""
+			}
+		})
+		.filter(Boolean)
+}
 
 export function normalizeTemplateColorExtractionImageUrl(imageUrl: string | undefined) {
 	if (!imageUrl) return ""
 
-	try {
-		const baseUrl = typeof window === "undefined" ? "https://localhost/" : window.location.href
-		const url = new URL(imageUrl, baseUrl)
-		if (url.protocol !== "https:" && url.protocol !== "http:") return ""
-		return url.toString()
-	} catch {
-		return ""
-	}
+	const currentOrigin =
+		typeof window === "undefined" ? "https://localhost" : window.location.origin
+	return (
+		resolveTrustedTemplateColorUrl({
+			allowedOrigins: getTemplateColorExtractionAllowedOrigins(),
+			currentOrigin,
+			imageUrl,
+		})?.toString() ?? ""
+	)
 }
 
 function getCacheKey(imageUrl: string) {
@@ -109,6 +134,24 @@ function clearActiveTaskTimeout() {
 	activeTaskTimeoutId = null
 }
 
+function clearWorkerIdleTimeout() {
+	if (workerIdleTimeoutId == null) return
+	window.clearTimeout(workerIdleTimeoutId)
+	workerIdleTimeoutId = null
+}
+
+function scheduleWorkerIdleTermination() {
+	clearWorkerIdleTimeout()
+	if (!worker || activeTask || interactiveQueue.length > 0 || backgroundQueue.length > 0) return
+
+	workerIdleTimeoutId = window.setTimeout(() => {
+		workerIdleTimeoutId = null
+		if (activeTask || interactiveQueue.length > 0 || backgroundQueue.length > 0) return
+		worker?.terminate()
+		worker = null
+	}, WORKER_IDLE_TERMINATE_MS)
+}
+
 function removeTaskFromQueue(
 	queue: TemplateColorExtractionTask[],
 	task: TemplateColorExtractionTask,
@@ -139,6 +182,7 @@ function enqueueInteractiveTask(task: TemplateColorExtractionTask) {
 function disableWorker() {
 	isWorkerDisabled = true
 	clearActiveTaskTimeout()
+	clearWorkerIdleTimeout()
 	worker?.terminate()
 	worker = null
 
@@ -171,9 +215,11 @@ function handleWorkerMessage(event: MessageEvent<TemplateColorExtractionResponse
 
 	processNextTask()
 	notifyTaskSettled()
+	scheduleWorkerIdleTermination()
 }
 
 function getWorker() {
+	clearWorkerIdleTimeout()
 	if (worker) return worker
 	if (isWorkerDisabled || typeof Worker !== "function") return null
 
@@ -209,8 +255,13 @@ function processNextTask() {
 		markTaskFailed(timedOutTask)
 		processNextTask()
 		notifyTaskSettled()
+		scheduleWorkerIdleTermination()
 	}, WORKER_TASK_TIMEOUT_MS)
-	colorWorker.postMessage({ imageUrl: nextTask.imageUrl, requestId: nextTask.requestId })
+	colorWorker.postMessage({
+		allowedOrigins: getTemplateColorExtractionAllowedOrigins(),
+		imageUrl: nextTask.imageUrl,
+		requestId: nextTask.requestId,
+	})
 }
 
 export function requestTemplateColorExtraction(
@@ -256,6 +307,7 @@ export function clearTemplateColorExtractionBackgroundQueue() {
 		pendingTasksByUrl.delete(task.imageUrl)
 	}
 	backgroundQueue.length = 0
+	scheduleWorkerIdleTermination()
 }
 
 export function getExtractedTemplateColors(imageUrl: string | undefined) {
@@ -289,6 +341,12 @@ export function subscribeTemplateColorExtractionChanges(listener: () => void) {
 	publishedResultListeners.add(listener)
 	return () => {
 		publishedResultListeners.delete(listener)
+		if (publishedResultListeners.size > 0) return
+		if (publishedResultTimeoutId != null) {
+			window.clearTimeout(publishedResultTimeoutId)
+			publishedResultTimeoutId = null
+		}
+		pendingPublishedResultCount = 0
 	}
 }
 

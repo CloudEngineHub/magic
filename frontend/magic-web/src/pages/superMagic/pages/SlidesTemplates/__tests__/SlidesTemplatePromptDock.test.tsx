@@ -92,9 +92,8 @@ describe("SlidesTemplatePromptDock", () => {
 		const lastPresetContent = sceneStateStoreMock.setPresetSuffixContent.mock.calls.at(-1)?.[0]
 		expect(screen.getByTestId("slides-template-prompt-dock")).toHaveClass(
 			"dark",
-			"bg-zinc-950/[0.30]",
-			"border-white/[0.12]",
-			"backdrop-blur-2xl",
+			"flex",
+			"gap-2",
 		)
 		expect(screen.getByTestId("mock-default-message-editor")).toHaveTextContent("ppt")
 		expect(getPromptRichTextPlainText(lastPresetContent)).toBe(
@@ -105,6 +104,10 @@ describe("SlidesTemplatePromptDock", () => {
 			"https://example.com/business-cover.png",
 		)
 		expect(screen.getByTestId("slides-template-color-palette")).toBeInTheDocument()
+		expect(screen.getByTestId("slides-templates-page-selected-template")).toHaveClass(
+			"rounded-xl",
+			"border-white/[0.12]",
+		)
 		expect(
 			screen
 				.getByTestId("slides-templates-page-selected-template")

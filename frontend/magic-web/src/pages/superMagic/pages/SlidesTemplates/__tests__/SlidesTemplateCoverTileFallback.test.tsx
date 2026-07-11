@@ -61,7 +61,7 @@ describe("SlidesTemplateCoverTile color fallback", () => {
 		render(
 			<SlidesTemplateCoverTile
 				canPreview={false}
-				imageUrl="https://example.com/fallback.png"
+				imageUrl="/fallback.png"
 				isExpanded={false}
 				isSelected={false}
 				onFindSimilarColors={onFindSimilarColors}

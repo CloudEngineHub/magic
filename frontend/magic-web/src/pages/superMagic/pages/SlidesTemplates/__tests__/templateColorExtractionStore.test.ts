@@ -10,6 +10,7 @@ class FakeWorker {
 	onerror: ((event: ErrorEvent) => void) | null = null
 	onmessage: ((event: MessageEvent<TemplateColorExtractionResponse>) => void) | null = null
 	readonly requests: TemplateColorExtractionRequest[] = []
+	terminateCallCount = 0
 
 	constructor() {
 		FakeWorker.instances.push(this)
@@ -28,7 +29,7 @@ class FakeWorker {
 	}
 
 	terminate() {
-		return undefined
+		this.terminateCallCount += 1
 	}
 }
 
@@ -46,9 +47,9 @@ describe("template color extraction store", () => {
 
 	it("deduplicates image work, runs one task at a time, and prioritizes interactions", async () => {
 		const store = await import("../templateColorExtractionStore")
-		const firstUrl = "https://example.com/first.png"
-		const secondUrl = "https://example.com/second.png"
-		const interactiveUrl = "https://example.com/interactive.png"
+		const firstUrl = `${window.location.origin}/first.png`
+		const secondUrl = `${window.location.origin}/second.png`
+		const interactiveUrl = `${window.location.origin}/interactive.png`
 		const firstListener = vi.fn()
 		store.subscribeTemplateColorExtraction(firstUrl, firstListener)
 
@@ -78,10 +79,18 @@ describe("template color extraction store", () => {
 		worker?.respond(["#111111", "#555555", "#999999"])
 	})
 
+	it("does not create a worker for untrusted external image origins", async () => {
+		const store = await import("../templateColorExtractionStore")
+
+		store.requestTemplateColorExtraction("https://tracker.example.net/cover.png", "interactive")
+
+		expect(FakeWorker.instances).toHaveLength(0)
+	})
+
 	it("drops queued background work when similar-color mode closes", async () => {
 		const store = await import("../templateColorExtractionStore")
-		const activeUrl = "https://example.com/active.png"
-		const queuedUrl = "https://example.com/queued.png"
+		const activeUrl = `${window.location.origin}/active.png`
+		const queuedUrl = `${window.location.origin}/queued.png`
 
 		store.requestTemplateColorExtraction(activeUrl, "background")
 		store.requestTemplateColorExtraction(queuedUrl, "background")
@@ -99,7 +108,7 @@ describe("template color extraction store", () => {
 		const settledListener = vi.fn()
 		store.subscribeTemplateColorExtractionChanges(publishedListener)
 		store.subscribeTemplateColorExtractionSettled(settledListener)
-		store.requestTemplateColorExtraction("https://example.com/cors-failure.png", "background")
+		store.requestTemplateColorExtraction("/cors-failure.png", "background")
 
 		FakeWorker.instances[0]?.respond([], "Image fetch failed")
 
@@ -113,8 +122,8 @@ describe("template color extraction store", () => {
 		const store = await import("../templateColorExtractionStore")
 		const publishedListener = vi.fn()
 		store.subscribeTemplateColorExtractionChanges(publishedListener)
-		store.requestTemplateColorExtraction("https://example.com/first-batch.png", "background")
-		store.requestTemplateColorExtraction("https://example.com/second-batch.png", "background")
+		store.requestTemplateColorExtraction("/first-batch.png", "background")
+		store.requestTemplateColorExtraction("/second-batch.png", "background")
 
 		const worker = FakeWorker.instances[0]
 		worker?.respond(["#315ECA", "#7AA7FF", "#182A5A"])
@@ -127,5 +136,40 @@ describe("template color extraction store", () => {
 
 		expect(publishedListener).toHaveBeenCalledTimes(1)
 		expect(store.getTemplateColorExtractionVersion()).toBe(1)
+	})
+
+	it("cancels a pending filter publication after the last subscriber leaves", async () => {
+		vi.useFakeTimers()
+		const store = await import("../templateColorExtractionStore")
+		const publishedListener = vi.fn()
+		const unsubscribe = store.subscribeTemplateColorExtractionChanges(publishedListener)
+		store.requestTemplateColorExtraction("/unsubscribe.png", "background")
+		FakeWorker.instances[0]?.respond(["#315ECA", "#7AA7FF", "#182A5A"])
+
+		unsubscribe()
+		vi.advanceTimersByTime(1_200)
+
+		expect(publishedListener).not.toHaveBeenCalled()
+		expect(store.getTemplateColorExtractionVersion()).toBe(0)
+	})
+
+	it("terminates an idle worker while preserving extracted colors", async () => {
+		vi.useFakeTimers()
+		const store = await import("../templateColorExtractionStore")
+		const imageUrl = `${window.location.origin}/idle-worker.png`
+		store.requestTemplateColorExtraction(imageUrl, "interactive")
+
+		const worker = FakeWorker.instances[0]
+		worker?.respond(["#315ECA", "#7AA7FF", "#182A5A"])
+		vi.advanceTimersByTime(29_999)
+		expect(worker?.terminateCallCount).toBe(0)
+		vi.advanceTimersByTime(1)
+
+		expect(worker?.terminateCallCount).toBe(1)
+		expect(store.getExtractedTemplateColors(imageUrl)).toEqual([
+			"#315ECA",
+			"#7AA7FF",
+			"#182A5A",
+		])
 	})
 })

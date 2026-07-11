@@ -1,4 +1,5 @@
 export interface TemplateColorExtractionRequest {
+	allowedOrigins: string[]
 	imageUrl: string
 	requestId: string
 }
