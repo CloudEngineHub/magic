@@ -72,6 +72,8 @@ function SlidesPresetPreviewDialog({
 					</button>
 				</DialogHeader>
 				<SlidesPresetPreviewPages
+					keyboardEnabled={open}
+					onEscape={() => onOpenChange(false)}
 					pages={pages}
 					previewUrl={previewUrl}
 					title={title}

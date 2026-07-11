@@ -121,4 +121,28 @@ describe("SlidesTemplateInlinePreview", () => {
 			left: 270,
 		})
 	})
+
+	it("switches pages with keyboard arrows and wraps at the edges", () => {
+		renderPreview()
+
+		fireEvent.keyDown(document, { key: "ArrowLeft" })
+
+		expect(screen.getByTestId("slides-template-inline-preview-page-index")).toHaveTextContent(
+			"8 / 8",
+		)
+
+		fireEvent.keyDown(document, { key: "ArrowRight" })
+
+		expect(screen.getByTestId("slides-template-inline-preview-page-index")).toHaveTextContent(
+			"1 / 8",
+		)
+	})
+
+	it("closes the preview with Escape", () => {
+		const { onClose } = renderPreview()
+
+		fireEvent.keyDown(document, { key: "Escape" })
+
+		expect(onClose).toHaveBeenCalledTimes(1)
+	})
 })

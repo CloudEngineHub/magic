@@ -198,6 +198,39 @@ describe("SlidesPresetGrid", () => {
 		)
 	})
 
+	it("uses the same wheel and keyboard page navigation in the preview dialog", () => {
+		render(<SlidesPresetGrid templates={mockTemplates} />)
+
+		fireEvent.click(screen.getAllByTestId("slides-preset-card-preview-button")[0])
+
+		fireEvent.wheel(screen.getByTestId("slides-preset-preview-dialog-pages"), {
+			deltaY: 100,
+		})
+		expect(screen.getByTestId("slides-preset-preview-dialog-page-index")).toHaveTextContent(
+			"2 / 2",
+		)
+
+		fireEvent.keyDown(document, { key: "ArrowRight" })
+		expect(screen.getByTestId("slides-preset-preview-dialog-page-index")).toHaveTextContent(
+			"1 / 2",
+		)
+
+		fireEvent.keyDown(document, { key: "ArrowLeft" })
+		expect(screen.getByTestId("slides-preset-preview-dialog-page-index")).toHaveTextContent(
+			"2 / 2",
+		)
+	})
+
+	it("closes the preview dialog with Escape", () => {
+		render(<SlidesPresetGrid templates={mockTemplates} />)
+
+		// 第二个模板只有 iframe 预览，用来覆盖没有多页导航时仍可按 Esc 退出的场景。
+		fireEvent.click(screen.getAllByTestId("slides-preset-card-preview-button")[1])
+		fireEvent.keyDown(document, { key: "Escape" })
+
+		expect(screen.queryByTestId("slides-preset-preview-dialog-content")).not.toBeInTheDocument()
+	})
+
 	it("notifies preview open state changes", async () => {
 		const handlePreviewOpenChange = vi.fn()
 

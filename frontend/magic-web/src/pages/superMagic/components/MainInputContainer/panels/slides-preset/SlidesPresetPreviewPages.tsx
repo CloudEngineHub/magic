@@ -1,16 +1,22 @@
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef } from "react"
 import { ChevronLeft, ChevronRight } from "lucide-react"
 import HeadlessHorizontalScroll from "@/components/base/HeadlessHorizontalScroll"
 import { Button } from "@/components/shadcn-ui/button"
 import { cn } from "@/lib/utils"
 import { useCenteredHorizontalScroll } from "../../hooks/useCenteredHorizontalScroll"
+import {
+	useSlidesPreviewNavigation,
+	useSlidesPreviewWheelNavigation,
+} from "../../hooks/useSlidesPreviewNavigation"
 
 interface SlidesPresetPreviewPagesProps {
 	className?: string
 	dataTestIdPrefix?: string
 	iframeClassName?: string
 	initialIndex?: number
+	keyboardEnabled?: boolean
 	mainFrameClassName?: string
+	onEscape?: () => void
 	pages: string[]
 	previewUrl?: string
 	resetKey?: string
@@ -19,17 +25,14 @@ interface SlidesPresetPreviewPagesProps {
 	title: string
 }
 
-function clampPageIndex(index: number, pageCount: number) {
-	if (pageCount <= 0) return 0
-	return Math.min(Math.max(index, 0), pageCount - 1)
-}
-
 function SlidesPresetPreviewPages({
 	className,
 	dataTestIdPrefix = "slides-preset-preview-dialog",
 	iframeClassName,
 	initialIndex = 0,
+	keyboardEnabled = true,
 	mainFrameClassName,
+	onEscape,
 	pages,
 	previewUrl,
 	resetKey,
@@ -37,19 +40,22 @@ function SlidesPresetPreviewPages({
 	thumbnailButtonClassName,
 	title,
 }: SlidesPresetPreviewPagesProps) {
-	const safeInitialIndex = clampPageIndex(initialIndex, pages.length)
-	const [activeIndex, setActiveIndex] = useState(safeInitialIndex)
 	const pageKey = useMemo(() => pages.join("\n"), [pages])
-	const canSwitch = pages.length > 1
+	const previewStageRef = useRef<HTMLDivElement | null>(null)
+	const { activeIndex, canSwitch, goToNext, goToPage, goToPrevious } = useSlidesPreviewNavigation(
+		{
+			enabled: keyboardEnabled,
+			initialIndex,
+			onEscape,
+			pageCount: pages.length,
+			resetKey: `${resetKey ?? ""}:${pageKey}`,
+		},
+	)
 	const activePage = pages[activeIndex] ?? pages[0]
 	const { scrollContainerRef, setItemRef } = useCenteredHorizontalScroll({
 		activeKey: String(activeIndex),
 		itemCount: pages.length,
 	})
-
-	useEffect(() => {
-		setActiveIndex(safeInitialIndex)
-	}, [pageKey, resetKey, safeInitialIndex])
 
 	useEffect(() => {
 		if (!pages.length || typeof window === "undefined") return
@@ -69,25 +75,18 @@ function SlidesPresetPreviewPages({
 		}
 	}, [pageKey, pages])
 
-	const goToPage = useCallback(
-		(index: number) => {
-			setActiveIndex(clampPageIndex(index, pages.length))
-		},
-		[pages.length],
-	)
-
-	const goToPrevious = useCallback(() => {
-		setActiveIndex((currentIndex) => (currentIndex <= 0 ? pages.length - 1 : currentIndex - 1))
-	}, [pages.length])
-
-	const goToNext = useCallback(() => {
-		setActiveIndex((currentIndex) => (currentIndex >= pages.length - 1 ? 0 : currentIndex + 1))
-	}, [pages.length])
+	useSlidesPreviewWheelNavigation({
+		containerRef: previewStageRef,
+		enabled: canSwitch,
+		onNext: goToNext,
+		onPrevious: goToPrevious,
+	})
 
 	if (pages.length && activePage) {
 		return (
 			<div className={cn("flex min-h-0 flex-col gap-3 overflow-hidden", className)}>
 				<div
+					ref={previewStageRef}
 					className={cn(
 						"relative mx-auto aspect-video w-[min(100%,calc(clamp(280px,52vh,680px)*16/9))] shrink-0 overflow-hidden rounded-md border border-border/60 bg-white shadow-sm",
 						mainFrameClassName,

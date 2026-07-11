@@ -1,18 +1,14 @@
 import { Check, ChevronLeft, ChevronRight, Image as ImageIcon, X } from "lucide-react"
-import {
-	type MouseEvent,
-	useCallback,
-	useEffect,
-	useLayoutEffect,
-	useMemo,
-	useRef,
-	useState,
-} from "react"
+import { type MouseEvent, useCallback, useEffect, useMemo, useRef } from "react"
 import { useTranslation } from "react-i18next"
 import HeadlessHorizontalScroll from "@/components/base/HeadlessHorizontalScroll"
 import { Button } from "@/components/shadcn-ui/button"
 import { cn } from "@/lib/utils"
 import { useCenteredHorizontalScroll } from "@/pages/superMagic/components/MainInputContainer/hooks/useCenteredHorizontalScroll"
+import {
+	useSlidesPreviewNavigation,
+	useSlidesPreviewWheelNavigation,
+} from "@/pages/superMagic/components/MainInputContainer/hooks/useSlidesPreviewNavigation"
 import { useLocaleText } from "@/pages/superMagic/components/MainInputContainer/panels/hooks/useLocaleText"
 import type { OptionItem } from "@/pages/superMagic/components/MainInputContainer/panels/types"
 import {
@@ -33,16 +29,9 @@ interface SlidesTemplateInlinePreviewProps {
 }
 
 const PREVIEW_AUTO_DISMISS_MS = 9000
-const PREVIEW_PAGE_WHEEL_THRESHOLD = 80
-const PREVIEW_PAGE_WHEEL_COOLDOWN_MS = 320
 const PREVIEW_BACKGROUND_CLOSE_BLOCK_SELECTOR =
 	'button, a, input, textarea, select, iframe, [data-slides-template-preview-close-block="true"]'
 const renderNoScrollControl = () => null
-
-function clampPageIndex(index: number, pageCount: number) {
-	if (pageCount <= 0) return 0
-	return Math.min(Math.max(index, 0), pageCount - 1)
-}
 
 function getInitialPageIndex(focus: SlidesTemplatePreviewFocus, pages: string[]) {
 	if (!focus.tile.imageUrl) return 0
@@ -60,20 +49,11 @@ export default function SlidesTemplateInlinePreview({
 	const { t } = useTranslation("crew/create")
 	const autoDismissTimerRef = useRef<number | null>(null)
 	const previewStageRef = useRef<HTMLDivElement | null>(null)
-	const wheelPageTimerRef = useRef<number | null>(null)
-	const wheelPageDeltaRef = useRef(0)
 	const onCloseRef = useRef(onClose)
 	const template = focus?.tile.template
 	const pages = useMemo(() => getTemplatePreviewUrls(template), [template])
 	const pageKey = useMemo(() => pages.join("\n"), [pages])
 	const initialIndex = focus ? getInitialPageIndex(focus, pages) : 0
-	const [activeIndex, setActiveIndex] = useState(initialIndex)
-	const safeActiveIndex = clampPageIndex(activeIndex, pages.length)
-	const canSwitch = pages.length > 1
-	const { scrollContainerRef, setItemRef } = useCenteredHorizontalScroll({
-		activeKey: String(safeActiveIndex),
-		itemCount: pages.length,
-	})
 
 	useEffect(() => {
 		onCloseRef.current = onClose
@@ -93,85 +73,45 @@ export default function SlidesTemplateInlinePreview({
 			onCloseRef.current()
 		}, PREVIEW_AUTO_DISMISS_MS)
 	}, [clearAutoDismissTimer])
-
-	const clearWheelPageTimer = useCallback(() => {
-		wheelPageDeltaRef.current = 0
-		if (wheelPageTimerRef.current == null) return
-		window.clearTimeout(wheelPageTimerRef.current)
-		wheelPageTimerRef.current = null
-	}, [])
-
-	useEffect(() => {
-		setActiveIndex(initialIndex)
-	}, [focus?.anchorTileId, focus?.tile.id, initialIndex, pageKey])
+	const handleClosePreview = useCallback(() => onCloseRef.current(), [])
 
 	useEffect(() => {
 		if (!focus) {
 			clearAutoDismissTimer()
-			clearWheelPageTimer()
 			return
 		}
 
 		resetAutoDismissTimer()
 		return () => {
 			clearAutoDismissTimer()
-			clearWheelPageTimer()
 		}
-	}, [clearAutoDismissTimer, clearWheelPageTimer, focus, resetAutoDismissTimer])
+	}, [clearAutoDismissTimer, focus, resetAutoDismissTimer])
 
-	const handlePreviousPage = useCallback(() => {
-		resetAutoDismissTimer()
-		setActiveIndex((currentIndex) => (currentIndex <= 0 ? pages.length - 1 : currentIndex - 1))
-	}, [pages.length, resetAutoDismissTimer])
+	const {
+		activeIndex: safeActiveIndex,
+		canSwitch,
+		goToNext: handleNextPage,
+		goToPage: handleSelectPage,
+		goToPrevious: handlePreviousPage,
+	} = useSlidesPreviewNavigation({
+		enabled: Boolean(focus),
+		initialIndex,
+		onEscape: handleClosePreview,
+		onInteraction: resetAutoDismissTimer,
+		pageCount: pages.length,
+		resetKey: `${focus?.anchorTileId ?? ""}:${focus?.tile.id ?? ""}:${pageKey}`,
+	})
+	const { scrollContainerRef, setItemRef } = useCenteredHorizontalScroll({
+		activeKey: String(safeActiveIndex),
+		itemCount: pages.length,
+	})
 
-	const handleNextPage = useCallback(() => {
-		resetAutoDismissTimer()
-		setActiveIndex((currentIndex) =>
-			pages.length <= 0 || currentIndex >= pages.length - 1 ? 0 : currentIndex + 1,
-		)
-	}, [pages.length, resetAutoDismissTimer])
-
-	const handlePreviewWheel = useCallback(
-		(event: globalThis.WheelEvent) => {
-			if (!canSwitch || event.ctrlKey || event.metaKey) return
-
-			const delta =
-				Math.abs(event.deltaX) > Math.abs(event.deltaY) ? event.deltaX : event.deltaY
-			if (Math.abs(delta) < 1) return
-
-			if (event.cancelable) {
-				event.preventDefault()
-			}
-			event.stopPropagation()
-			resetAutoDismissTimer()
-
-			if (wheelPageTimerRef.current != null) return
-
-			wheelPageDeltaRef.current += delta
-			if (Math.abs(wheelPageDeltaRef.current) < PREVIEW_PAGE_WHEEL_THRESHOLD) return
-
-			if (wheelPageDeltaRef.current > 0) {
-				handleNextPage()
-			} else {
-				handlePreviousPage()
-			}
-
-			wheelPageDeltaRef.current = 0
-			wheelPageTimerRef.current = window.setTimeout(() => {
-				wheelPageTimerRef.current = null
-				wheelPageDeltaRef.current = 0
-			}, PREVIEW_PAGE_WHEEL_COOLDOWN_MS)
-		},
-		[canSwitch, handleNextPage, handlePreviousPage, resetAutoDismissTimer],
-	)
-
-	useLayoutEffect(() => {
-		const stage = previewStageRef.current
-		if (!stage || !canSwitch) return
-
-		stage.addEventListener("wheel", handlePreviewWheel, { passive: false })
-		return () => stage.removeEventListener("wheel", handlePreviewWheel)
-	}, [canSwitch, handlePreviewWheel])
+	useSlidesPreviewWheelNavigation({
+		containerRef: previewStageRef,
+		enabled: canSwitch,
+		onNext: handleNextPage,
+		onPrevious: handlePreviousPage,
+	})
 
 	if (!focus || !template) return null
 
@@ -195,11 +135,6 @@ export default function SlidesTemplateInlinePreview({
 		if (target.closest(PREVIEW_BACKGROUND_CLOSE_BLOCK_SELECTOR)) return
 
 		onClose()
-	}
-
-	function handleSelectPage(index: number) {
-		resetAutoDismissTimer()
-		setActiveIndex(clampPageIndex(index, pages.length))
 	}
 
 	return (
