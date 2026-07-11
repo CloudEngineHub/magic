@@ -1,4 +1,5 @@
 import { AnimatePresence, motion, type MotionValue } from "framer-motion"
+import { memo } from "react"
 import type { OptionItem } from "@/pages/superMagic/components/MainInputContainer/panels/types"
 import { type TemplateCanvasPoint, type TemplateCanvasSize } from "./canvasLayout"
 import {
@@ -34,7 +35,7 @@ interface SlidesTemplateCanvasTileItemProps {
 	visibleIndex: number
 }
 
-export default function SlidesTemplateCanvasTileItem({
+function SlidesTemplateCanvasTileItem({
 	anchorTileId,
 	column,
 	focusedAnchorTileId,
@@ -172,3 +173,33 @@ export default function SlidesTemplateCanvasTileItem({
 		</div>
 	)
 }
+
+function areTileItemPropsEqual(
+	previous: SlidesTemplateCanvasTileItemProps,
+	next: SlidesTemplateCanvasTileItemProps,
+) {
+	return (
+		previous.anchorTileId === next.anchorTileId &&
+		previous.column === next.column &&
+		previous.focusedAnchorTileId === next.focusedAnchorTileId &&
+		previous.imageLoading === next.imageLoading &&
+		previous.loopState === next.loopState &&
+		previous.onFindSimilarColors === next.onFindSimilarColors &&
+		previous.onPreviewClick === next.onPreviewClick &&
+		previous.onTemplateSelect === next.onTemplateSelect &&
+		previous.position.x === next.position.x &&
+		previous.position.y === next.position.y &&
+		previous.reduceMotion === next.reduceMotion &&
+		previous.selectedTemplateValue === next.selectedTemplateValue &&
+		previous.shouldPlayIntro === next.shouldPlayIntro &&
+		(!next.shouldPlayIntro || previous.visibleIndex === next.visibleIndex) &&
+		previous.size.height === next.size.height &&
+		previous.size.width === next.size.width &&
+		previous.tile.id === next.tile.id &&
+		previous.tile.imageUrl === next.tile.imageUrl &&
+		previous.tile.template === next.tile.template
+	)
+}
+
+// 可见窗口每次换入少量卡片时复用其余卡片，避免拖拽过程中重复执行封面和颜色计算。
+export default memo(SlidesTemplateCanvasTileItem, areTileItemPropsEqual)

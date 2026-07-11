@@ -223,11 +223,11 @@ function SlidesTemplatesPage() {
 		canvasRef.current?.focusRandomTemplate()
 	}
 
-	function handleFindSimilarColors(template: OptionItem) {
+	const handleFindSimilarColors = useCallback((template: OptionItem) => {
 		const colors = getAvailableTemplateColors(template)
 		if (colors.length === 0) return
 		setSimilarColorSource({ ...template, colors })
-	}
+	}, [])
 
 	function handleGroupChange(groupKey: string) {
 		setSimilarColorSource(null)

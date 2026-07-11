@@ -8,6 +8,7 @@ import {
 	APP_STATIC_CACHE_NAME,
 	APP_STATIC_EXPIRATION_OPTIONS,
 	CACHE_TTL_14_DAYS,
+	CACHE_TTL_7_DAYS,
 	CACHE_TTL_30_DAYS,
 	CACHE_TTL_60_DAYS,
 	CANVAS_MEDIA_SCOPE_PREFIX,
@@ -22,6 +23,8 @@ import {
 	PACKAGES_STATIC_CACHE_NAME,
 	PRECACHE_BATCH_CONCURRENCY,
 	RESOURCE_CACHE_MARK_QUERY_PARAM,
+	SLIDES_TEMPLATE_IMAGE_CACHE_NAME,
+	SLIDES_TEMPLATE_IMAGE_CACHE_VALUE,
 	VENDOR_CACHEABLE_HOSTS_QUERY_PARAM,
 	VENDOR_STATIC_CACHE_NAME,
 	WORKBOX_CDN_QUERY_PARAM,
@@ -201,6 +204,22 @@ function registerAppCacheRoutes(
 		new CacheFirst({
 			cacheName: APP_STATIC_CACHE_NAME,
 			plugins: [new CacheableResponsePlugin({ statuses: [200] }), appStaticExpirationPlugin],
+		}),
+	)
+
+	registerRoute(
+		(context) => isCacheableSlidesTemplateImage(context),
+		new CacheFirst({
+			cacheName: SLIDES_TEMPLATE_IMAGE_CACHE_NAME,
+			plugins: [
+				// Cross-origin <img> requests are opaque, but their cache key was granted only by
+				// the template catalog's URL marker above.
+				new CacheableResponsePlugin({ statuses: [0, 200] }),
+				new ExpirationPlugin({
+					maxEntries: 300,
+					maxAgeSeconds: CACHE_TTL_7_DAYS,
+				}),
+			],
 		}),
 	)
 
@@ -493,6 +512,14 @@ function isCacheableImageAsset({ request, url }: WorkboxRouteContext): boolean {
 	if (url.pathname.startsWith(CANVAS_MEDIA_SCOPE_PREFIX)) return false
 	if (request.destination !== "image") return false
 	return HASHED_IMAGE_ASSET_PATTERN.test(url.pathname)
+}
+
+export function isCacheableSlidesTemplateImage({ request, url }: WorkboxRouteContext): boolean {
+	if (request.method !== "GET") return false
+	if (request.destination !== "image") return false
+	return (
+		url.searchParams.get(RESOURCE_CACHE_MARK_QUERY_PARAM) === SLIDES_TEMPLATE_IMAGE_CACHE_VALUE
+	)
 }
 
 function isExplicitlyMarkedCacheableResource(

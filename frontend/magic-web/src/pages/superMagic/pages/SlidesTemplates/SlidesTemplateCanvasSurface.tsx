@@ -101,6 +101,8 @@ export default function SlidesTemplateCanvasSurface({
 			isInitialLoading ||
 			isRefreshing,
 	})
+	// 低比例下单屏会显示上百张封面，循环动画需要额外复制封面节点；此时动画细节不可辨识，保留静态画布。
+	const isIdleAnimationActive = isIdle && canvasScale >= 0.8
 	const pointerActivityOriginRef = useRef<{ x: number; y: number } | null>(null)
 
 	function markPointerActivity(clientX: number, clientY: number) {
@@ -165,7 +167,9 @@ export default function SlidesTemplateCanvasSurface({
 			<SlidesTemplateCanvasItemsLayer
 				canvasItems={canvasItems}
 				contentRef={contentRef}
-				isIdleAnimationActive={isIdle}
+				isIdleAnimationActive={isIdleAnimationActive}
+				keepIdleLoopsMounted={canvasScale >= 0.8}
+				prioritizeCoverLoading={!isDragging && !isCanvasMoving}
 				visibleCanvasItems={visibleCanvasItems}
 				focusedAnchorTileId={focusedAnchorTileId}
 				selectedTemplateValue={selectedTemplateValue}

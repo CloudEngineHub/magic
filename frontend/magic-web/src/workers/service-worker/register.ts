@@ -279,30 +279,37 @@ export function registerAppServiceWorker(): void {
 	const reloadActivationContext: ReloadActivationContext = { triggered: false }
 
 	async function handleRegister() {
+		const serviceWorkerUrl = getAppServiceWorkerUrl()
+
 		try {
 			appServiceWorkerRegistration = await navigator.serviceWorker.register(
-				getAppServiceWorkerUrl(),
+				serviceWorkerUrl,
 				{
 					scope: APP_SERVICE_WORKER_SCOPE,
 				},
 			)
-
-			// Cover timing gap: register() may return before waiting is available.
-			// We listen for installing/updatefound and also perform an immediate waiting check.
-			if (shouldAutoActivateWaitingWorkerOnReload()) {
-				watchInstallingWorkerForReloadActivation(
-					appServiceWorkerRegistration,
-					reloadActivationContext,
-				)
-				tryAutoActivateWaitingServiceWorkerOnReload(
-					appServiceWorkerRegistration,
-					reloadActivationContext,
-				)
-			}
-			void triggerWarmUpWhenIdle()
-		} catch {
+		} catch (error) {
 			appServiceWorkerRegistration = null
+			console.error("[sw] Failed to register app service worker", {
+				error,
+				serviceWorkerUrl,
+			})
+			return
 		}
+
+		// Cover timing gap: register() may return before waiting is available.
+		// We listen for installing/updatefound and also perform an immediate waiting check.
+		if (shouldAutoActivateWaitingWorkerOnReload()) {
+			watchInstallingWorkerForReloadActivation(
+				appServiceWorkerRegistration,
+				reloadActivationContext,
+			)
+			tryAutoActivateWaitingServiceWorkerOnReload(
+				appServiceWorkerRegistration,
+				reloadActivationContext,
+			)
+		}
+		void triggerWarmUpWhenIdle()
 	}
 
 	if (document.readyState === "complete") {
@@ -433,7 +440,9 @@ function triggerWarmUpWhenIdle(): void {
 
 	if (!navigator.serviceWorker.controller) {
 		// If there is no controller active (e.g. first load), wait for controllerchange or ready state
-		navigator.serviceWorker.ready.then((registration) => {
+		const ready = navigator.serviceWorker.ready
+		if (!ready) return
+		ready.then((registration) => {
 			if (registration.active) {
 				scheduleWarmUpPostMessage(registration.active)
 			}

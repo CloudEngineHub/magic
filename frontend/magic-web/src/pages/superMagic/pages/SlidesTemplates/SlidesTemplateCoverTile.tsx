@@ -1,4 +1,4 @@
-import { Award, Check, Eye, Image as ImageIcon, MousePointerClick } from "lucide-react"
+import { Award, Check, Eye, Image as ImageIcon } from "lucide-react"
 import { useState, type KeyboardEvent, type MouseEvent } from "react"
 import { useTranslation } from "react-i18next"
 import { Button } from "@/components/shadcn-ui/button"
@@ -8,7 +8,6 @@ import { useLocaleText } from "@/pages/superMagic/components/MainInputContainer/
 import {
 	getFeaturedSlidesTemplateTag,
 	getSlidesTemplateTagDisplayName,
-	hasSlidesTemplateUsageCount,
 } from "@/pages/superMagic/components/MainInputContainer/panels/slides-preset/templateMeta"
 import SlidesTemplateGlowBorder from "./SlidesTemplateGlowBorder"
 import SlidesTemplateColorPalette from "./SlidesTemplateColorPalette"
@@ -48,8 +47,6 @@ export default function SlidesTemplateCoverTile({
 		zh_CN: "精选",
 		en_US: "Featured",
 	})
-	const showUsageCount = hasSlidesTemplateUsageCount(template)
-	const usageCount = Math.max(0, template.usage_count ?? 0)
 	const coverUrl = imageUrl
 	const showGlowBorder = isSelected || isExpanded
 	const [hasRequestedInteractiveColors, setHasRequestedInteractiveColors] = useState(false)
@@ -106,7 +103,7 @@ export default function SlidesTemplateCoverTile({
 			{colors.length > 0 ? (
 				<SlidesTemplateColorPalette
 					className={cn(
-						"absolute right-2.5 top-2.5 z-20 transition-opacity duration-200",
+						"absolute left-2.5 top-2.5 z-20 transition-opacity duration-200",
 						showGlowBorder
 							? "opacity-100"
 							: "opacity-0 group-focus-within:opacity-100 group-hover:opacity-100",
@@ -141,27 +138,16 @@ export default function SlidesTemplateCoverTile({
 				</div>
 			)}
 
-			{featuredTag || showUsageCount ? (
-				<div className="pointer-events-none absolute left-2.5 top-2.5 z-20 flex max-w-[calc(100%-20px)] flex-wrap items-center gap-1.5">
-					{featuredTag ? (
-						<span
-							className="inline-flex h-6 max-w-[92px] items-center gap-1 rounded-full bg-amber-400/95 px-2 text-[11px] font-semibold leading-none text-zinc-950 shadow-sm ring-1 ring-inset ring-white/20"
-							data-testid="slides-template-cover-featured-badge"
-						>
-							<Award className="size-3 shrink-0" />
-							<span className="truncate">{featuredLabel}</span>
-						</span>
-					) : null}
-					{showUsageCount ? (
-						<span
-							className="inline-flex h-6 items-center gap-1 rounded-full bg-white/[0.88] px-2 text-[11px] font-medium leading-none text-zinc-900 shadow-sm ring-1 ring-inset ring-black/[0.06] backdrop-blur"
-							data-testid="slides-template-cover-usage-count"
-						>
-							<MousePointerClick className="size-3 shrink-0" />
-							<span>{usageCount}</span>
-						</span>
-					) : null}
-				</div>
+			{featuredTag ? (
+				<span
+					role="img"
+					aria-label={featuredLabel}
+					title={featuredLabel}
+					className="pointer-events-none absolute right-2.5 top-2.5 z-20 inline-flex size-6 items-center justify-center rounded-full bg-amber-400/95 text-zinc-950 shadow-sm ring-1 ring-inset ring-white/20"
+					data-testid="slides-template-cover-featured-badge"
+				>
+					<Award className="size-3.5" aria-hidden="true" />
+				</span>
 			) : null}
 
 			<div

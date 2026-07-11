@@ -11,6 +11,7 @@ import {
 	createSlidesPresetPanelConfig,
 	groupSlidesTemplates,
 	isSlidesMode,
+	markSlidesTemplateImageUrl,
 	type SlidesTemplateCategoryItem,
 	type SlidesTemplateItem,
 	type SlidesTemplateTagItem,
@@ -256,6 +257,22 @@ describe("slides template state", () => {
 		const group = styleField?.options[0] as OptionGroup | undefined
 		const option = group?.children?.[0]
 
-		expect(option?.preview_image_urls).toEqual(officialTemplate.preview_image_urls)
+		expect(option?.preview_image_urls).toEqual(
+			officialTemplate.preview_image_urls?.map(markSlidesTemplateImageUrl),
+		)
+	})
+
+	it("marks only valid template image URLs for Service Worker caching", () => {
+		const markedUrl = markSlidesTemplateImageUrl(
+			"https://example.com/thumbnail.webp?x-tos-process=image%2Fresize%2Cw_720",
+		)
+
+		expect(markedUrl).toContain("x-tos-process=image%2Fresize%2Cw_720")
+		expect(new URL(markedUrl ?? "").searchParams.get("swCache")).toBe("slides-template-image")
+		expect(markSlidesTemplateImageUrl(markedUrl)).toBe(markedUrl)
+		expect(markSlidesTemplateImageUrl("not a url")).toBe("not a url")
+		expect(markSlidesTemplateImageUrl("data:image/webp;base64,abc")).toBe(
+			"data:image/webp;base64,abc",
+		)
 	})
 })

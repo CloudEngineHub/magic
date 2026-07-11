@@ -244,10 +244,12 @@
 			"usageCount": "使用次数"
 		},
 		"editTitle": "编辑 PPT 模板",
+		"featuredTagUnavailable": "标签管理中未启用 featured 标签，无法设置精选",
 		"fields": {
 			"category": "所属分类",
 			"collage": "预览拼图",
 			"description": "模板描述",
+			"featured": "开启精选",
 			"label": "模板名称",
 			"previewImages": "每页预览图",
 			"previewUrl": "预览链接",
@@ -264,6 +266,11 @@
 			"status": "状态",
 			"tagMatch": "标签匹配",
 			"tags": "标签"
+		},
+		"preview": {
+			"empty": "上传每页预览图后可在此查看",
+			"nextPage": "下一页",
+			"previousPage": "上一页"
 		},
 		"source": {
 			"official": "官方模板",

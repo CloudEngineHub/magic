@@ -239,10 +239,12 @@
 			"usageCount": "Usage"
 		},
 		"editTitle": "Edit PPT Template",
+		"featuredTagUnavailable": "The featured tag is not enabled in tag management.",
 		"fields": {
 			"category": "Category",
 			"collage": "Preview Collage",
 			"description": "Description",
+			"featured": "Featured",
 			"label": "Template Name",
 			"previewImages": "Per-slide Preview Images",
 			"previewUrl": "Preview URL",
@@ -259,6 +261,11 @@
 			"status": "Status",
 			"tagMatch": "Tag Match",
 			"tags": "Tags"
+		},
+		"preview": {
+			"empty": "Upload per-slide preview images to view them here.",
+			"nextPage": "Next page",
+			"previousPage": "Previous page"
 		},
 		"source": {
 			"official": "Official",

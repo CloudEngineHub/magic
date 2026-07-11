@@ -1,5 +1,5 @@
 import { useReducedMotion } from "framer-motion"
-import { useEffect, useMemo, useRef, type CSSProperties, type RefObject } from "react"
+import { memo, useEffect, useMemo, useRef, type CSSProperties, type RefObject } from "react"
 import type { OptionItem } from "@/pages/superMagic/components/MainInputContainer/panels/types"
 import type { TemplateCanvasItem } from "./canvasLayout"
 import { EAGER_TEMPLATE_COVER_COUNT, type SlidesTemplateCanvasTile } from "./canvasInteraction"
@@ -14,6 +14,8 @@ interface SlidesTemplateCanvasItemsLayerProps {
 	contentRef: RefObject<HTMLDivElement | null>
 	focusedAnchorTileId: string
 	isIdleAnimationActive: boolean
+	keepIdleLoopsMounted: boolean
+	prioritizeCoverLoading: boolean
 	onFindSimilarColors?: (template: OptionItem) => void
 	onPreviewClick: (anchorTileId: string, tile: SlidesTemplateCanvasTile) => void
 	onTemplateSelect: (template: OptionItem) => void
@@ -26,11 +28,13 @@ const contentStyle = {
 	"--slides-template-canvas-action-scale": "1",
 } as CSSProperties
 
-export default function SlidesTemplateCanvasItemsLayer({
+function SlidesTemplateCanvasItemsLayer({
 	canvasItems,
 	contentRef,
 	focusedAnchorTileId,
 	isIdleAnimationActive,
+	keepIdleLoopsMounted,
+	prioritizeCoverLoading,
 	onFindSimilarColors,
 	onPreviewClick,
 	onTemplateSelect,
@@ -56,7 +60,7 @@ export default function SlidesTemplateCanvasItemsLayer({
 
 		visibleCanvasItems.forEach((canvasItem, visibleIndex) => {
 			const entry = { canvasItem, visibleIndex }
-			if (canvasItem.span.columns !== 1) {
+			if (canvasItem.renderKey || canvasItem.span.columns !== 1) {
 				nextStandaloneItems.push(entry)
 				return
 			}
@@ -101,6 +105,7 @@ export default function SlidesTemplateCanvasItemsLayer({
 					items={items}
 					idleLoop={idleLoopsByColumn.get(column) ?? null}
 					isIdleAnimationActive={isIdleAnimationActive}
+					keepIdleLoopMountedWhenPaused={keepIdleLoopsMounted}
 					reduceMotion={reduceMotion}
 					focusedAnchorTileId={focusedAnchorTileId}
 					selectedTemplateValue={selectedTemplateValue}
@@ -116,14 +121,18 @@ export default function SlidesTemplateCanvasItemsLayer({
 
 				return (
 					<SlidesTemplateCanvasTileItem
-						key={anchorTileId}
+						key={canvasItem.renderKey ?? anchorTileId}
 						anchorTileId={anchorTileId}
 						column={grid.x}
 						tile={tile}
 						position={position}
 						reduceMotion={reduceMotion}
 						size={size}
-						imageLoading={visibleIndex < EAGER_TEMPLATE_COVER_COUNT ? "eager" : "lazy"}
+						imageLoading={
+							prioritizeCoverLoading && visibleIndex < EAGER_TEMPLATE_COVER_COUNT
+								? "eager"
+								: "lazy"
+						}
 						focusedAnchorTileId={focusedAnchorTileId}
 						selectedTemplateValue={selectedTemplateValue}
 						onFindSimilarColors={onFindSimilarColors}
@@ -137,3 +146,6 @@ export default function SlidesTemplateCanvasItemsLayer({
 		</div>
 	)
 }
+
+// 画布 transform 由父级直接写入 DOM。缩放时比例标签会更新状态，但卡片数据未变化时不应重渲染整层封面。
+export default memo(SlidesTemplateCanvasItemsLayer)

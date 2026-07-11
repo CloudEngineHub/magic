@@ -25,7 +25,6 @@ export interface CanvasDragState {
 	pointerId: number
 	startClientX: number
 	startClientY: number
-	startOffset: TemplateCanvasPoint
 }
 
 export interface SlidesTemplateCanvasTile {

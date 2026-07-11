@@ -33,17 +33,19 @@ const focus: SlidesTemplatePreviewFocus = {
 }
 
 function renderPreview({
+	focus: previewFocus = focus,
 	onClose = vi.fn(),
 	onFindSimilarColors = vi.fn(),
 	onTemplateSelect = vi.fn(),
 }: {
+	focus?: SlidesTemplatePreviewFocus
 	onClose?: () => void
 	onFindSimilarColors?: (template: OptionItem) => void
 	onTemplateSelect?: (template: OptionItem) => void
 } = {}) {
 	const result = render(
 		<SlidesTemplateInlinePreview
-			focus={focus}
+			focus={previewFocus}
 			onClose={onClose}
 			onFindSimilarColors={onFindSimilarColors}
 			onTemplateSelect={onTemplateSelect}
@@ -74,6 +76,27 @@ function mockRect(left: number, width: number) {
 }
 
 describe("SlidesTemplateInlinePreview", () => {
+	it("shows usage above the template description", () => {
+		const templateWithUsage = {
+			...template,
+			description: "Template description",
+			usage_count: 23,
+		}
+
+		renderPreview({
+			focus: {
+				...focus,
+				tile: { ...focus.tile, template: templateWithUsage },
+			},
+		})
+
+		const usage = screen.getByTestId("slides-template-inline-preview-usage-count")
+		const description = screen.getByTestId("slides-template-inline-preview-description")
+
+		expect(usage).toHaveTextContent("23")
+		expect(usage.compareDocumentPosition(description)).toBe(Node.DOCUMENT_POSITION_FOLLOWING)
+	})
+
 	it("closes when clicking the empty preview background", () => {
 		const { onClose } = renderPreview()
 

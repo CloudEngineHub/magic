@@ -1,11 +1,12 @@
 import { Image as ImageIcon } from "lucide-react"
-import { type RefObject, useEffect, useMemo, useRef, useState } from "react"
+import { type ReactNode, type RefObject, useEffect, useMemo, useRef, useState } from "react"
 import { cn } from "@/lib/utils"
 import { getSlidesTemplatePreviewAmbientImageUrl } from "./slidesTemplateImages"
 import styles from "./SlidesTemplateInlinePreview.module.css"
 
 interface SlidesTemplatePreviewStageProps {
 	activeIndex: number
+	navigation?: ReactNode
 	pages: string[]
 	previewUrl?: string
 	stageRef?: RefObject<HTMLDivElement | null>
@@ -166,6 +167,7 @@ function usePreviewImageSwap(activePage: string | undefined, resetKey: string) {
 
 function SlidesTemplatePreviewStage({
 	activeIndex,
+	navigation,
 	pages,
 	previewUrl,
 	stageRef,
@@ -199,58 +201,61 @@ function SlidesTemplatePreviewStage({
 					data-testid="slides-template-inline-preview-ambient-image"
 				/>
 			) : null}
-			<div
-				className={cn("relative overflow-hidden bg-transparent", styles.previewFrame)}
-				data-loading={isLoading ? "true" : "false"}
-				data-testid="slides-template-inline-preview-pages"
-			>
-				{displayedPage ? (
-					<img
-						src={displayedPage}
-						alt={`${title} ${displayedPageNumber}`}
-						className={styles.previewPageImage}
-						loading="eager"
-						decoding="async"
-						draggable={false}
-						data-testid="slides-template-inline-preview-active-image"
-					/>
-				) : activePage ? (
-					<div className="flex size-full items-center justify-center text-zinc-500">
-						<ImageIcon className="size-6" />
-					</div>
-				) : previewUrl ? (
-					<iframe
-						data-testid="slides-template-inline-preview-iframe"
-						title={title}
-						src={previewUrl}
-						className="size-full border-0 bg-white"
-						referrerPolicy="no-referrer"
-						sandbox="allow-forms allow-popups allow-same-origin allow-scripts"
-						allowFullScreen
-					/>
-				) : (
-					<div className="flex size-full items-center justify-center text-zinc-500">
-						<ImageIcon className="size-6" />
-					</div>
-				)}
-				{isLoading ? (
-					<div className={styles.pageLoadingIndicator} aria-hidden="true">
-						<span />
-						<span />
-						<span />
-					</div>
-				) : null}
-				{pages.length ? (
-					<div
-						className={cn(
-							"absolute bottom-3 right-3 rounded-full px-3 py-1 text-sm font-medium text-white shadow-lg",
-							styles.pagePill,
-						)}
-						data-testid="slides-template-inline-preview-page-index"
-					>
-						{safeActiveIndex + 1} / {pages.length}
-					</div>
-				) : null}
+			<div className={styles.previewShell}>
+				<div
+					className={cn("relative overflow-hidden bg-transparent", styles.previewFrame)}
+					data-loading={isLoading ? "true" : "false"}
+					data-testid="slides-template-inline-preview-pages"
+				>
+					{displayedPage ? (
+						<img
+							src={displayedPage}
+							alt={`${title} ${displayedPageNumber}`}
+							className={styles.previewPageImage}
+							loading="eager"
+							decoding="async"
+							draggable={false}
+							data-testid="slides-template-inline-preview-active-image"
+						/>
+					) : activePage ? (
+						<div className="flex size-full items-center justify-center text-zinc-500">
+							<ImageIcon className="size-6" />
+						</div>
+					) : previewUrl ? (
+						<iframe
+							data-testid="slides-template-inline-preview-iframe"
+							title={title}
+							src={previewUrl}
+							className="size-full border-0 bg-white"
+							referrerPolicy="no-referrer"
+							sandbox="allow-forms allow-popups allow-same-origin allow-scripts"
+							allowFullScreen
+						/>
+					) : (
+						<div className="flex size-full items-center justify-center text-zinc-500">
+							<ImageIcon className="size-6" />
+						</div>
+					)}
+					{isLoading ? (
+						<div className={styles.pageLoadingIndicator} aria-hidden="true">
+							<span />
+							<span />
+							<span />
+						</div>
+					) : null}
+					{pages.length ? (
+						<div
+							className={cn(
+								"absolute bottom-3 right-3 rounded-full px-3 py-1 text-sm font-medium text-white shadow-lg",
+								styles.pagePill,
+							)}
+							data-testid="slides-template-inline-preview-page-index"
+						>
+							{safeActiveIndex + 1} / {pages.length}
+						</div>
+					) : null}
+				</div>
+				{navigation}
 			</div>
 		</div>
 	)

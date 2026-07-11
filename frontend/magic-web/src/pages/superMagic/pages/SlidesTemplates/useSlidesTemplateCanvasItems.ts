@@ -10,6 +10,7 @@ import {
 	getTemplateCanvasBounds,
 } from "./canvasLayout"
 import { buildTemplateCanvasTiles, type SlidesTemplateCanvasTile } from "./canvasInteraction"
+import { getSlidesTemplateCanvasLoopMetrics } from "./canvasLoop"
 
 interface UseSlidesTemplateCanvasItemsInput {
 	templates: OptionItem[]
@@ -38,10 +39,15 @@ export function useSlidesTemplateCanvasItems({ templates }: UseSlidesTemplateCan
 		[canvasTiles],
 	)
 	const bounds = useMemo(() => getTemplateCanvasBounds(canvasItems), [canvasItems])
+	const loopMetrics = useMemo(
+		() => getSlidesTemplateCanvasLoopMetrics(canvasItems),
+		[canvasItems],
+	)
 
 	return {
 		canvasItems,
 		contentBounds: bounds,
+		loopMetrics,
 		templateBounds: bounds,
 	}
 }

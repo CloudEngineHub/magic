@@ -1,4 +1,12 @@
-import { Check, ChevronLeft, ChevronRight, Image as ImageIcon, Palette, X } from "lucide-react"
+import {
+	Check,
+	ChevronLeft,
+	ChevronRight,
+	Image as ImageIcon,
+	MousePointerClick,
+	Palette,
+	X,
+} from "lucide-react"
 import { type MouseEvent, useCallback, useEffect, useMemo, useRef } from "react"
 import { useTranslation } from "react-i18next"
 import HeadlessHorizontalScroll from "@/components/base/HeadlessHorizontalScroll"
@@ -11,6 +19,7 @@ import {
 } from "@/pages/superMagic/components/MainInputContainer/hooks/useSlidesPreviewNavigation"
 import { useLocaleText } from "@/pages/superMagic/components/MainInputContainer/panels/hooks/useLocaleText"
 import type { OptionItem } from "@/pages/superMagic/components/MainInputContainer/panels/types"
+import { hasSlidesTemplateUsageCount } from "@/pages/superMagic/components/MainInputContainer/panels/slides-preset/templateMeta"
 import {
 	type SlidesTemplatePreviewFocus,
 	getTemplateCoverUrl,
@@ -129,6 +138,8 @@ export default function SlidesTemplateInlinePreview({
 	const title = lt(template.preview_title) ?? lt(template.label) ?? lt(template.value) ?? ""
 	const description =
 		lt(template.preview_description) ?? lt(template.description) ?? lt(template.sub_text)
+	const showUsageCount = hasSlidesTemplateUsageCount(template)
+	const usageCount = Math.max(0, template.usage_count ?? 0)
 	const previewImageUrl = focus.tile.imageUrl ?? colorImageUrl
 	const templateKey = getTemplateKey(template)
 	const isSelected = selectedTemplate ? getTemplateKey(selectedTemplate) === templateKey : false
@@ -227,6 +238,15 @@ export default function SlidesTemplateInlinePreview({
 							>
 								{title}
 							</div>
+							{showUsageCount ? (
+								<div
+									className="mt-1.5 inline-flex items-center gap-1 text-xs font-medium text-white/[0.72]"
+									data-testid="slides-template-inline-preview-usage-count"
+								>
+									<MousePointerClick className="size-3.5" aria-hidden="true" />
+									<span>{usageCount}</span>
+								</div>
+							) : null}
 							{description ? (
 								<div
 									className="mt-1 line-clamp-2 text-sm leading-5 text-white/[0.68]"
@@ -290,53 +310,53 @@ export default function SlidesTemplateInlinePreview({
 					</div>
 					<div
 						className={cn(
-							"mx-auto grid w-full flex-1 grid-cols-[44px_minmax(0,1fr)_44px] items-center gap-3 py-3",
+							"mx-auto flex w-full flex-1 items-center justify-center py-3",
 							styles.viewerRow,
 						)}
 					>
-						<div className="flex justify-center">
-							{canSwitch ? (
-								<Button
-									type="button"
-									variant="secondary"
-									size="icon"
-									className={cn(
-										"size-10 rounded-full text-white",
-										styles.sideButton,
-									)}
-									aria-label={`${title} previous page`}
-									onClick={handlePreviousPage}
-									data-testid="slides-template-inline-preview-previous-button"
-								>
-									<ChevronLeft className="size-5" />
-								</Button>
-							) : null}
-						</div>
 						<SlidesTemplatePreviewStage
 							activeIndex={safeActiveIndex}
+							navigation={
+								canSwitch ? (
+									<>
+										<Button
+											type="button"
+											variant="secondary"
+											size="icon"
+											className={cn(
+												"size-12 rounded-full text-white",
+												styles.sideButton,
+												styles.sideButtonPrevious,
+											)}
+											aria-label={`${title} previous page`}
+											onClick={handlePreviousPage}
+											data-testid="slides-template-inline-preview-previous-button"
+										>
+											<ChevronLeft className="size-[22px]" />
+										</Button>
+										<Button
+											type="button"
+											variant="secondary"
+											size="icon"
+											className={cn(
+												"size-12 rounded-full text-white",
+												styles.sideButton,
+												styles.sideButtonNext,
+											)}
+											aria-label={`${title} next page`}
+											onClick={handleNextPage}
+											data-testid="slides-template-inline-preview-next-button"
+										>
+											<ChevronRight className="size-[22px]" />
+										</Button>
+									</>
+								) : null
+							}
 							pages={pages}
 							previewUrl={template.preview_url}
 							stageRef={previewStageRef}
 							title={title}
 						/>
-						<div className="flex justify-center">
-							{canSwitch ? (
-								<Button
-									type="button"
-									variant="secondary"
-									size="icon"
-									className={cn(
-										"size-10 rounded-full text-white",
-										styles.sideButton,
-									)}
-									aria-label={`${title} next page`}
-									onClick={handleNextPage}
-									data-testid="slides-template-inline-preview-next-button"
-								>
-									<ChevronRight className="size-5" />
-								</Button>
-							) : null}
-						</div>
 					</div>
 					{canSwitch ? (
 						<div

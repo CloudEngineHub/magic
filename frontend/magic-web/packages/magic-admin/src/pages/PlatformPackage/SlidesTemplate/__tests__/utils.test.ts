@@ -12,6 +12,7 @@ import {
 	resolveSlidesTemplateCategoryName,
 	resolveSlidesTemplateTagName,
 	resolveSlidesTemplateTitle,
+	setSlidesTemplateTagEnabled,
 } from "../utils"
 
 describe("slides template page utils", () => {
@@ -135,6 +136,19 @@ describe("slides template page utils", () => {
 	it("converts switch checked state to template status", () => {
 		expect(getSlidesTemplateStatusByChecked(true)).toBe(SlidesTemplate.StatusMap.enabled)
 		expect(getSlidesTemplateStatusByChecked(false)).toBe(SlidesTemplate.StatusMap.disabled)
+	})
+
+	it("keeps featured switch and tag codes in sync", () => {
+		expect(setSlidesTemplateTagEnabled(["business", "featured"], "featured", false)).toEqual([
+			"business",
+		])
+		expect(setSlidesTemplateTagEnabled(["business"], "featured", true)).toEqual([
+			"business",
+			"featured",
+		])
+		expect(setSlidesTemplateTagEnabled(["featured", "featured"], "featured", true)).toEqual([
+			"featured",
+		])
 	})
 
 	it("resolves status tag color", () => {

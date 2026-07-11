@@ -10,14 +10,13 @@ import {
 } from "react"
 import type { OptionItem } from "@/pages/superMagic/components/MainInputContainer/panels/types"
 import {
-	constrainTemplateCanvasOffset,
 	shouldRequestMoreTemplates,
+	type TemplateCanvasItem,
 	type TemplateCanvasDirection,
 	type TemplateCanvasInsets,
 	type TemplateCanvasPoint,
 } from "./canvasLayout"
 import {
-	CANVAS_END_PADDING,
 	type SlidesTemplateCanvasTile,
 	type SlidesTemplatePreviewFocus,
 	LOAD_MORE_INTERVAL_MS,
@@ -26,12 +25,18 @@ import {
 	getTemplateKey,
 	getTemplatePreviewUrls,
 } from "./canvasInteraction"
+import {
+	getNearestLoopedSlidesTemplateCanvasItem,
+	getSlidesTemplateCanvasLoopCycle,
+} from "./canvasLoop"
 import SlidesTemplateCanvasSurface from "./SlidesTemplateCanvasSurface"
 import { useSlidesTemplateCanvasItems } from "./useSlidesTemplateCanvasItems"
+import { useSlidesTemplateCanvasAutoLoad } from "./useSlidesTemplateCanvasAutoLoad"
 import { useSlidesTemplateCanvasMotion } from "./useSlidesTemplateCanvasMotion"
 import { useSlidesTemplateCanvasNavigation } from "./useSlidesTemplateCanvasNavigation"
 import { useSlidesTemplateCanvasPointer } from "./useSlidesTemplateCanvasPointer"
 import { useSlidesTemplateCanvasWheel } from "./useSlidesTemplateCanvasWheel"
+import { useSlidesTemplateCanvasActiveTemplates } from "./useSlidesTemplateCanvasActiveTemplates"
 import { useTemplateCanvasVisibleItems } from "./useTemplateCanvasVisibleItems"
 
 interface SlidesTemplateCanvasProps {
@@ -55,8 +60,6 @@ export interface SlidesTemplateCanvasHandle {
 	openPreview: (template: OptionItem) => boolean
 }
 
-const AUTO_LOAD_DIRECTIONS: TemplateCanvasDirection[] = ["left", "right", "up", "down"]
-
 const SlidesTemplateCanvas = forwardRef<SlidesTemplateCanvasHandle, SlidesTemplateCanvasProps>(
 	function SlidesTemplateCanvas(
 		{
@@ -77,17 +80,34 @@ const SlidesTemplateCanvas = forwardRef<SlidesTemplateCanvasHandle, SlidesTempla
 		ref,
 	) {
 		const [previewFocus, setPreviewFocus] = useState<SlidesTemplatePreviewFocus | null>(null)
-		const [randomFocusedAnchorTileId, setRandomFocusedAnchorTileId] = useState("")
+		const [isDragging, setIsDragging] = useState(false)
+		const [randomFocusedCanvasItem, setRandomFocusedCanvasItem] =
+			useState<TemplateCanvasItem<SlidesTemplateCanvasTile> | null>(null)
 		const viewportRef = useRef<HTMLDivElement | null>(null)
 		const contentRef = useRef<HTMLDivElement | null>(null)
 		const offsetRef = useRef<TemplateCanvasPoint>({ x: 0, y: 0 })
 		const viewportInsetsRef = useRef(viewportInsets)
 		const scaleRef = useRef(1)
 		const lastLoadMoreAtRef = useRef(0)
-		const lastAutoLoadSignalRef = useRef<number | string | null>(null)
-		const { canvasItems, contentBounds, templateBounds } = useSlidesTemplateCanvasItems({
+		const lastLoadMoreLoopKeyRef = useRef("")
+		const applyTransform = useCallback(() => {
+			const content = contentRef.current
+			if (!content) return
+			const { x, y } = offsetRef.current
+			const scale = scaleRef.current
+			content.style.transform = `translate3d(${x}px, ${y}px, 0) scale(${scale})`
+			content.style.setProperty(
+				"--slides-template-canvas-action-scale",
+				String(scale > 0 ? 1 / scale : 1),
+			)
+		}, [])
+		const activeTemplates = useSlidesTemplateCanvasActiveTemplates({
+			isDragging,
+			resetKey,
 			templates,
 		})
+		const { canvasItems, contentBounds, loopMetrics, templateBounds } =
+			useSlidesTemplateCanvasItems({ templates: activeTemplates })
 		const priorityCanvasItems = useMemo(
 			() =>
 				// 后端默认按 sort 降序返回，这里再次显式排序，保证本地分组数据也遵循同一优先级。
@@ -106,25 +126,39 @@ const SlidesTemplateCanvas = forwardRef<SlidesTemplateCanvasHandle, SlidesTempla
 		const { scheduleVisibleCanvasItemsUpdate, updateVisibleCanvasItems, visibleCanvasItems } =
 			useTemplateCanvasVisibleItems({
 				canvasItems,
+				loopMetrics,
+				onOffsetRebase: applyTransform,
 				offsetRef,
 				scaleRef,
 				viewportRef,
 			})
+		const randomFocusedAnchorTileId = randomFocusedCanvasItem?.item.id ?? ""
+		const randomFocusedTemplateKey = randomFocusedCanvasItem
+			? getTemplateKey(randomFocusedCanvasItem.item.template)
+			: ""
 		const focusedAnchorTileId = previewFocus?.anchorTileId ?? randomFocusedAnchorTileId
 		const renderedCanvasItems = useMemo(() => {
 			if (!focusedAnchorTileId) return visibleCanvasItems
 
-			const focusedCanvasItem = canvasItems.find(
-				({ item }) => item.id === focusedAnchorTileId,
-			)
+			const focusedCanvasItem =
+				visibleCanvasItems.find(({ item }) => item.id === focusedAnchorTileId) ??
+				randomFocusedCanvasItem ??
+				canvasItems.find(({ item }) => item.id === focusedAnchorTileId)
 			if (!focusedCanvasItem || visibleCanvasItems.includes(focusedCanvasItem)) {
 				return visibleCanvasItems
 			}
 
 			// 聚焦移动期间目标可能尚未进入虚拟化窗口；提前渲染一张卡片可避免到达后短暂空白。
-			return [focusedCanvasItem, ...visibleCanvasItems]
-		}, [canvasItems, focusedAnchorTileId, visibleCanvasItems])
+			return [
+				{
+					...focusedCanvasItem,
+					renderKey: `focus:${focusedCanvasItem.item.id}`,
+				},
+				...visibleCanvasItems,
+			]
+		}, [canvasItems, focusedAnchorTileId, randomFocusedCanvasItem, visibleCanvasItems])
 		const isPreviewOpen = previewFocus !== null
+		const hasDeferredTemplateUpdate = isDragging && activeTemplates !== templates
 		const selectedTemplateValue = selectedTemplate ? getTemplateKey(selectedTemplate) : ""
 		const isInitialLoading = isLoading && templates.length === 0
 		viewportInsetsRef.current = viewportInsets
@@ -136,7 +170,6 @@ const SlidesTemplateCanvas = forwardRef<SlidesTemplateCanvasHandle, SlidesTempla
 			isLoading,
 			isLoadingMore,
 			isRefreshing,
-			contentBounds,
 			templateBounds,
 			onLoadMore,
 		})
@@ -147,60 +180,19 @@ const SlidesTemplateCanvas = forwardRef<SlidesTemplateCanvasHandle, SlidesTempla
 				isLoading,
 				isLoadingMore,
 				isRefreshing,
-				contentBounds,
 				templateBounds,
 				onLoadMore,
 			}
-		}, [
-			hasMore,
-			isLoading,
-			isLoadingMore,
-			isRefreshing,
-			onLoadMore,
-			contentBounds,
-			templateBounds,
-		])
-
-		const applyTransform = useCallback(() => {
-			const content = contentRef.current
-			if (!content) return
-			const { x, y } = offsetRef.current
-			const scale = scaleRef.current
-			content.style.transform = `translate3d(${x}px, ${y}px, 0) scale(${scale})`
-			content.style.setProperty(
-				"--slides-template-canvas-action-scale",
-				String(scale > 0 ? 1 / scale : 1),
-			)
-		}, [])
-
-		const getConstrainedOffset = useCallback((nextOffset: TemplateCanvasPoint) => {
-			const viewport = viewportRef.current
-			if (!viewport) return nextOffset
-
-			const { width, height } = viewport.getBoundingClientRect()
-			if (width <= 0 || height <= 0) return nextOffset
-
-			const state = stateRef.current
-			return constrainTemplateCanvasOffset({
-				bounds: state.contentBounds,
-				insets: viewportInsetsRef.current,
-				offset: nextOffset,
-				padding: state.hasMore ? CANVAS_END_PADDING : 0,
-				scale: scaleRef.current,
-				viewportHeight: height,
-				viewportWidth: width,
-			})
-		}, [])
+		}, [hasMore, isLoading, isLoadingMore, isRefreshing, onLoadMore, templateBounds])
 
 		const setCanvasOffset = useCallback(
 			(nextOffset: TemplateCanvasPoint) => {
-				const constrainedOffset = getConstrainedOffset(nextOffset)
-				offsetRef.current = constrainedOffset
+				offsetRef.current = nextOffset
 				applyTransform()
 				scheduleVisibleCanvasItemsUpdate()
-				return constrainedOffset
+				return nextOffset
 			},
-			[applyTransform, getConstrainedOffset, scheduleVisibleCanvasItemsUpdate],
+			[applyTransform, scheduleVisibleCanvasItemsUpdate],
 		)
 
 		const maybeRequestMore = useCallback(
@@ -239,64 +231,64 @@ const SlidesTemplateCanvas = forwardRef<SlidesTemplateCanvasHandle, SlidesTempla
 				)
 
 				if (!loadDirection) return false
+				let loopKey = ""
+				if (!bypassThrottle) {
+					const loopCycle = getSlidesTemplateCanvasLoopCycle({
+						loopMetrics,
+						offset: offsetRef.current,
+						scale: scaleRef.current,
+					})
+					loopKey = `${loadDirection}:${loopCycle.x}:${loopCycle.y}`
+					if (lastLoadMoreLoopKeyRef.current === loopKey) return false
+				}
 				lastLoadMoreAtRef.current = now
 				state.onLoadMore()
+				if (loopKey) lastLoadMoreLoopKeyRef.current = loopKey
 				return true
 			},
-			[isPreviewOpen],
+			[isPreviewOpen, loopMetrics],
 		)
 
-		useEffect(() => {
-			if (isPreviewOpen || !hasMore || isLoading || isLoadingMore || isRefreshing) {
-				return
-			}
-			if (lastAutoLoadSignalRef.current === autoLoadSignal) return
-
-			const frameId = requestAnimationFrame(() => {
-				if (maybeRequestMore(AUTO_LOAD_DIRECTIONS, { bypassThrottle: true })) {
-					lastAutoLoadSignalRef.current = autoLoadSignal
-				}
-			})
-
-			return () => cancelAnimationFrame(frameId)
-		}, [
+		useSlidesTemplateCanvasAutoLoad({
 			autoLoadSignal,
-			hasMore,
-			isPreviewOpen,
-			isLoading,
-			isLoadingMore,
-			isRefreshing,
+			enabled:
+				!hasDeferredTemplateUpdate &&
+				!isPreviewOpen &&
+				hasMore &&
+				!isLoading &&
+				!isLoadingMore &&
+				!isRefreshing,
+			loopMetrics,
 			maybeRequestMore,
-			templateBounds,
-		])
-
-		useEffect(() => {
-			if (hasMore || isLoading || isLoadingMore || isRefreshing) return
-			setCanvasOffset(offsetRef.current)
-		}, [contentBounds, hasMore, isLoading, isLoadingMore, isRefreshing, setCanvasOffset])
+			offsetRef,
+			resetKey,
+			scaleRef,
+		})
 
 		const { animateToOffset, isCanvasMoving, scheduleEdgeMovement, stopAnimation } =
 			useSlidesTemplateCanvasMotion({
-				getConstrainedOffset,
 				maybeRequestMore,
 				offsetRef,
 				setCanvasOffset,
 			})
+		const handlePointerDownStart = useCallback(() => {
+			setRandomFocusedCanvasItem(null)
+		}, [])
 		const {
 			handleCanvasClickCapture,
 			handlePointerDown,
 			handlePointerLeave,
 			handlePointerMove,
 			handlePointerRelease,
-			isDragging,
 		} = useSlidesTemplateCanvasPointer({
 			isPreviewOpen,
 			maybeRequestMore,
 			offsetRef,
-			onPointerDownStart: () => setRandomFocusedAnchorTileId(""),
+			onPointerDownStart: handlePointerDownStart,
 			resetKey,
 			scheduleEdgeMovement,
 			setCanvasOffset,
+			setIsDragging,
 			stopAnimation,
 			viewportRef,
 		})
@@ -340,17 +332,25 @@ const SlidesTemplateCanvas = forwardRef<SlidesTemplateCanvasHandle, SlidesTempla
 					if (priorityCanvasItems.length === 0) return false
 
 					const candidates =
-						priorityCanvasItems.length > 1 && randomFocusedAnchorTileId
+						priorityCanvasItems.length > 1 && randomFocusedTemplateKey
 							? priorityCanvasItems.filter(({ item }) => {
-									return item.id !== randomFocusedAnchorTileId
+									return (
+										getTemplateKey(item.template) !== randomFocusedTemplateKey
+									)
 								})
 							: priorityCanvasItems
 					const randomIndex = getPriorityWeightedRandomIndex(candidates.length)
 					const canvasItem = candidates[randomIndex]
-					if (!canvasItem || !handleFocusPoint(canvasItem.position)) return false
+					if (!canvasItem) return false
+					const focusedCanvasItem = getNearestLoopedSlidesTemplateCanvasItem({
+						item: canvasItem,
+						loopMetrics,
+						offset: offsetRef.current,
+						scale: scaleRef.current,
+					})
+					if (!handleFocusPoint(focusedCanvasItem.position)) return false
 
-					const { item: tile } = canvasItem
-					setRandomFocusedAnchorTileId(tile.id)
+					setRandomFocusedCanvasItem(focusedCanvasItem)
 					return true
 				},
 				openPreview(template) {
@@ -362,8 +362,15 @@ const SlidesTemplateCanvas = forwardRef<SlidesTemplateCanvasHandle, SlidesTempla
 					)
 					if (!canvasItem) return false
 
-					const { item: tile } = canvasItem
-					setRandomFocusedAnchorTileId("")
+					const focusedCanvasItem = getNearestLoopedSlidesTemplateCanvasItem({
+						item: canvasItem,
+						loopMetrics,
+						offset: offsetRef.current,
+						scale: scaleRef.current,
+					})
+					const { item: tile } = focusedCanvasItem
+					if (!handleFocusPoint(focusedCanvasItem.position)) return false
+					setRandomFocusedCanvasItem(focusedCanvasItem)
 					setPreviewFocus({
 						anchorTileId: tile.id,
 						tile,
@@ -371,7 +378,13 @@ const SlidesTemplateCanvas = forwardRef<SlidesTemplateCanvasHandle, SlidesTempla
 					return true
 				},
 			}),
-			[canvasItems, handleFocusPoint, priorityCanvasItems, randomFocusedAnchorTileId],
+			[
+				canvasItems,
+				handleFocusPoint,
+				loopMetrics,
+				priorityCanvasItems,
+				randomFocusedTemplateKey,
+			],
 		)
 
 		useSlidesTemplateCanvasWheel({
@@ -388,9 +401,9 @@ const SlidesTemplateCanvas = forwardRef<SlidesTemplateCanvasHandle, SlidesTempla
 		useLayoutEffect(() => {
 			stopAnimation()
 			lastLoadMoreAtRef.current = 0
-			lastAutoLoadSignalRef.current = null
+			lastLoadMoreLoopKeyRef.current = ""
 			setPreviewFocus(null)
-			setRandomFocusedAnchorTileId("")
+			setRandomFocusedCanvasItem(null)
 			setCanvasOffset({ x: 0, y: 0 })
 		}, [resetKey, setCanvasOffset, stopAnimation])
 
@@ -402,14 +415,21 @@ const SlidesTemplateCanvas = forwardRef<SlidesTemplateCanvasHandle, SlidesTempla
 			onPreviewOpenChange?.(previewFocus !== null)
 		}, [onPreviewOpenChange, previewFocus])
 
-		function handlePreviewToggle(anchorTileId: string, tile: SlidesTemplateCanvasTile) {
-			setRandomFocusedAnchorTileId("")
-			setPreviewFocus((currentFocus) =>
-				currentFocus?.anchorTileId === anchorTileId && currentFocus.tile.id === tile.id
-					? null
-					: { anchorTileId, tile },
-			)
-		}
+		const handlePreviewToggle = useCallback(
+			(anchorTileId: string, tile: SlidesTemplateCanvasTile) => {
+				setRandomFocusedCanvasItem(null)
+				setPreviewFocus((currentFocus) =>
+					currentFocus?.anchorTileId === anchorTileId && currentFocus.tile.id === tile.id
+						? null
+						: { anchorTileId, tile },
+				)
+			},
+			[],
+		)
+		const handlePreviewClose = useCallback(() => {
+			setPreviewFocus(null)
+			setRandomFocusedCanvasItem(null)
+		}, [])
 
 		return (
 			<SlidesTemplateCanvasSurface
@@ -441,7 +461,7 @@ const SlidesTemplateCanvas = forwardRef<SlidesTemplateCanvasHandle, SlidesTempla
 				onFindSimilarColors={onFindSimilarColors}
 				onTemplateSelect={onTemplateSelect}
 				onPreviewToggle={handlePreviewToggle}
-				onPreviewClose={() => setPreviewFocus(null)}
+				onPreviewClose={handlePreviewClose}
 				onZoomIn={handleZoomIn}
 				onZoomOut={handleZoomOut}
 				onResetView={handleResetView}

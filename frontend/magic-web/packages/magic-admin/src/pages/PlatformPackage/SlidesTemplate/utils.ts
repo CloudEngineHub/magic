@@ -13,6 +13,7 @@ const SLIDES_TEMPLATE_CODE_ALPHABET = [UPPERCASE_ALPHABET, LOWERCASE_ALPHABET, D
 	"",
 )
 const SLIDES_TEMPLATE_CODE_LENGTH = 12
+export const FEATURED_SLIDES_TEMPLATE_TAG_CODE = "featured"
 const generateCodeSegment = customAlphabet(
 	SLIDES_TEMPLATE_CODE_ALPHABET,
 	SLIDES_TEMPLATE_CODE_LENGTH,
@@ -73,6 +74,22 @@ export function getSlidesTemplateStatusByChecked(checked: boolean) {
 
 export function getSlidesTemplateStatusColor(status: SlidesTemplate.Status) {
 	return status === SlidesTemplate.StatusMap.enabled ? "success" : "error"
+}
+
+/**
+ * 「精选」是普通标签的快捷操作，不单独维护一份状态，避免保存后出现开关与标签不一致。
+ */
+export function setSlidesTemplateTagEnabled(
+	tagCodes: string[] | undefined,
+	tagCode: string,
+	enabled: boolean,
+) {
+	const nextTagCodes = Array.from(new Set(tagCodes ?? []))
+	const index = nextTagCodes.indexOf(tagCode)
+
+	if (enabled && index === -1) return [...nextTagCodes, tagCode]
+	if (!enabled && index !== -1) return nextTagCodes.filter((code) => code !== tagCode)
+	return nextTagCodes
 }
 
 export function isSystemSlidesTemplate(record: Pick<SlidesTemplate.Item, "source_type">) {

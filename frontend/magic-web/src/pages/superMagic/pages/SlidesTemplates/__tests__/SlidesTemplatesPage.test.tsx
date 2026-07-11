@@ -13,6 +13,7 @@ import SlidesTemplatesPage, {
 const {
 	catalogStateMock,
 	businessTemplate,
+	findSimilarCallbackHistory,
 	focusRandomTemplateMock,
 	openPreviewMock,
 	relatedTemplate,
@@ -52,6 +53,7 @@ const {
 
 	return {
 		businessTemplate: template,
+		findSimilarCallbackHistory: [] as Array<((template: OptionItem) => void) | undefined>,
 		focusRandomTemplateMock: vi.fn(),
 		openPreviewMock: vi.fn(),
 		relatedTemplate: related,
@@ -109,6 +111,7 @@ vi.mock("../SlidesTemplateCanvas", () => ({
 			},
 			ref,
 		) => {
+			findSimilarCallbackHistory.push(onFindSimilarColors)
 			useImperativeHandle(ref, () => ({
 				focusRandomTemplate: focusRandomTemplateMock,
 				openPreview: openPreviewMock,
@@ -200,6 +203,20 @@ vi.mock("@/pages/superMagic/components/MainInputContainer/panels/TemplateGroupSe
 describe("SlidesTemplatesPage", () => {
 	beforeEach(() => {
 		vi.clearAllMocks()
+		catalogStateMock.isLoadingMore = false
+		findSimilarCallbackHistory.length = 0
+	})
+
+	it("keeps canvas callbacks stable when loading more state changes", () => {
+		const { rerender } = render(<SlidesTemplatesPage />)
+		const initialCallback = findSimilarCallbackHistory[findSimilarCallbackHistory.length - 1]
+
+		catalogStateMock.isLoadingMore = true
+		rerender(<SlidesTemplatesPage />)
+
+		expect(findSimilarCallbackHistory[findSimilarCallbackHistory.length - 1]).toBe(
+			initialCallback,
+		)
 	})
 
 	it("reuses the previous canvas options when filter membership and order are unchanged", () => {

@@ -9,7 +9,7 @@ import {
 
 describe("slides template canvas zoom", () => {
 	it("prevents zooming out below the readable rendering limit", () => {
-		expect(SLIDES_TEMPLATE_CANVAS_MIN_SCALE).toBe(0.65)
+		expect(SLIDES_TEMPLATE_CANVAS_MIN_SCALE).toBe(0.85)
 		expect(clampTemplateCanvasScale(0.1)).toBe(SLIDES_TEMPLATE_CANVAS_MIN_SCALE)
 		expect(getNextTemplateCanvasScale(1, 10_000)).toBe(SLIDES_TEMPLATE_CANVAS_MIN_SCALE)
 	})

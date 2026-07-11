@@ -19,9 +19,11 @@ import { genFileData } from "@admin/utils/file"
 import { SlidesTemplate } from "@admin/types/slidesTemplate"
 import {
 	buildSlidesTemplateSaveParams,
+	FEATURED_SLIDES_TEMPLATE_TAG_CODE,
 	generateSlidesTemplateCode,
 	joinUploadDir,
 	resolveSlidesTemplateTagName,
+	setSlidesTemplateTagEnabled,
 } from "../utils"
 import {
 	SlidesTemplateUploadField,
@@ -31,6 +33,7 @@ import {
 	SlidesTemplatePreviewImagesField,
 	type SlidesTemplatePreviewImageItem,
 } from "./SlidesTemplatePreviewImagesField"
+import SlidesTemplatePagePreview from "./SlidesTemplatePagePreview"
 
 interface SlidesTemplateModalProps extends MagicModalProps {
 	info?: SlidesTemplate.Item | null
@@ -131,6 +134,7 @@ export const SlidesTemplateModal = memo(
 
 		const label = Form.useWatch(["label"], form)
 		const description = Form.useWatch(["description"], form)
+		const tagCodes = Form.useWatch<string[]>("tag_codes", form) ?? []
 
 		const initialValues = useMemo(
 			() => ({
@@ -165,6 +169,18 @@ export const SlidesTemplateModal = memo(
 			})
 			return Array.from(optionMap.values())
 		}, [info?.tags, tagOptions])
+		// 仅以可选标签列表判断开关是否可操作；编辑历史数据时仍把失效标签展示在选择器中。
+		const hasFeaturedTag = tagOptions.some(
+			(option) => option.value === FEATURED_SLIDES_TEMPLATE_TAG_CODE,
+		)
+		const isFeatured = tagCodes.includes(FEATURED_SLIDES_TEMPLATE_TAG_CODE)
+		const previewPages = useMemo(() => {
+			const pageUrls = previewImages.map((item) => item.url).filter(Boolean)
+			if (pageUrls.length) return pageUrls
+			return [info?.thumbnail_url, info?.collage_url].filter((url): url is string =>
+				Boolean(url),
+			)
+		}, [info?.collage_url, info?.thumbnail_url, previewImages])
 
 		const { upload } = useUpload<Upload.FileData>({
 			storageType: "private",
@@ -394,6 +410,13 @@ export const SlidesTemplateModal = memo(
 			},
 		)
 
+		const handleFeaturedChange = useMemoizedFn((checked: boolean) => {
+			form.setFieldValue(
+				"tag_codes",
+				setSlidesTemplateTagEnabled(tagCodes, FEATURED_SLIDES_TEMPLATE_TAG_CODE, checked),
+			)
+		})
+
 		const handleUpload = useMemoizedFn(
 			async (field: SlidesTemplateFileField, files: FileList) => {
 				if (uploadingField) return
@@ -535,6 +558,12 @@ export const SlidesTemplateModal = memo(
 					form={form}
 					style={detailLoading ? { display: "none" } : undefined}
 				>
+					<SlidesTemplatePagePreview
+						pages={previewPages}
+						title={
+							label?.zh_CN || label?.en_US || t("slidesTemplate.fields.previewImages")
+						}
+					/>
 					<Form.Item label={t("slidesTemplate.fields.label")} required>
 						<Flex gap={10}>
 							<Form.Item
@@ -606,6 +635,18 @@ export const SlidesTemplateModal = memo(
 						/>
 					</Form.Item>
 
+					<Form.Item
+						label={t("slidesTemplate.fields.featured")}
+						extra={
+							hasFeaturedTag ? undefined : t("slidesTemplate.featuredTagUnavailable")
+						}
+					>
+						<Switch
+							checked={isFeatured}
+							disabled={!hasFeaturedTag}
+							onChange={handleFeaturedChange}
+						/>
+					</Form.Item>
 					<Form.Item label={t("slidesTemplate.fields.tags")} name="tag_codes">
 						<Select
 							allowClear

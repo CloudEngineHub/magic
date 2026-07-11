@@ -9,6 +9,8 @@ import {
 
 const VISIBLE_OVERSCAN_X = SLIDES_TEMPLATE_CANVAS_CARD_WIDTH
 const VISIBLE_OVERSCAN_Y = SLIDES_TEMPLATE_CANVAS_CARD_HEIGHT * 2
+const MIN_VISIBLE_OVERSCAN_RATIO = 0.35
+const MIN_VISIBLE_OVERSCAN_SCALE = 0.65
 const MIN_VISIBLE_TEMPLATE_CANVAS_ITEMS = 72
 export const MAX_VISIBLE_TEMPLATE_CANVAS_ITEMS = 112
 
@@ -34,23 +36,41 @@ export interface TemplateCanvasViewportWindow {
 	top: number
 }
 
+export function getTemplateCanvasViewportOverscan(scale = 1) {
+	const normalizedScale = Math.max(scale, MIN_VISIBLE_OVERSCAN_SCALE)
+	const scaleProgress = Math.min(
+		1,
+		(normalizedScale - MIN_VISIBLE_OVERSCAN_SCALE) / (1 - MIN_VISIBLE_OVERSCAN_SCALE),
+	)
+	const ratio = MIN_VISIBLE_OVERSCAN_RATIO + (1 - MIN_VISIBLE_OVERSCAN_RATIO) * scaleProgress
+
+	// 缩小时屏幕内卡片数会明显增加。同步缩小预渲染区，避免大量临界区外的封面参与本轮缩放渲染。
+	return {
+		overscanX: VISIBLE_OVERSCAN_X * ratio,
+		overscanY: VISIBLE_OVERSCAN_Y * ratio,
+	}
+}
+
 export function getTemplateCanvasViewportWindow({
 	offset,
-	overscanX = VISIBLE_OVERSCAN_X,
-	overscanY = VISIBLE_OVERSCAN_Y,
+	overscanX,
+	overscanY,
 	scale = 1,
 	viewportHeight,
 	viewportWidth,
 }: TemplateCanvasViewportWindowInput): TemplateCanvasViewportWindow {
+	const resolvedOverscan = getTemplateCanvasViewportOverscan(scale)
+	const resolvedOverscanX = overscanX ?? resolvedOverscan.overscanX
+	const resolvedOverscanY = overscanY ?? resolvedOverscan.overscanY
 	const halfWidth = viewportWidth / 2
 	const halfHeight = viewportHeight / 2
 	const normalizedScale = Math.max(scale, 0.01)
 
 	return {
-		left: (-offset.x - halfWidth - overscanX) / normalizedScale,
-		right: (-offset.x + halfWidth + overscanX) / normalizedScale,
-		top: (-offset.y - halfHeight - overscanY) / normalizedScale,
-		bottom: (-offset.y + halfHeight + overscanY) / normalizedScale,
+		left: (-offset.x - halfWidth - resolvedOverscanX) / normalizedScale,
+		right: (-offset.x + halfWidth + resolvedOverscanX) / normalizedScale,
+		top: (-offset.y - halfHeight - resolvedOverscanY) / normalizedScale,
+		bottom: (-offset.y + halfHeight + resolvedOverscanY) / normalizedScale,
 	}
 }
 

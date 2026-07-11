@@ -7,14 +7,12 @@ export const EDGE_PAN_ACTIVATION_DELAY_MS = 180
 const FOCUS_MOVE_DURATION_MS = 520
 
 interface UseSlidesTemplateCanvasMotionInput {
-	getConstrainedOffset: (nextOffset: TemplateCanvasPoint) => TemplateCanvasPoint
 	maybeRequestMore: (directions: TemplateCanvasDirection[]) => boolean
 	offsetRef: MutableRefObject<TemplateCanvasPoint>
 	setCanvasOffset: (nextOffset: TemplateCanvasPoint) => TemplateCanvasPoint
 }
 
 export function useSlidesTemplateCanvasMotion({
-	getConstrainedOffset,
 	maybeRequestMore,
 	offsetRef,
 	setCanvasOffset,
@@ -91,7 +89,7 @@ export function useSlidesTemplateCanvasMotion({
 		(nextOffset: TemplateCanvasPoint) => {
 			stopAnimation()
 			const startOffset = offsetRef.current
-			const targetOffset = getConstrainedOffset(nextOffset)
+			const targetOffset = nextOffset
 			if (reduceMotion || isSameCanvasPoint(startOffset, targetOffset)) {
 				setCanvasOffset(targetOffset)
 				return targetOffset
@@ -120,7 +118,7 @@ export function useSlidesTemplateCanvasMotion({
 			frameRef.current = requestAnimationFrame(animateFrame)
 			return targetOffset
 		},
-		[getConstrainedOffset, offsetRef, reduceMotion, setCanvasOffset, stopAnimation],
+		[offsetRef, reduceMotion, setCanvasOffset, stopAnimation],
 	)
 
 	useEffect(() => stopAnimation, [stopAnimation])

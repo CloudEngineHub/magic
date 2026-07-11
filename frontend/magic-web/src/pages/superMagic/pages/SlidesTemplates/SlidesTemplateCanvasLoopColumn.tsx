@@ -17,6 +17,7 @@ interface SlidesTemplateCanvasLoopColumnProps {
 	focusedAnchorTileId: string
 	idleLoop: SlidesTemplateCanvasIdleLoop | null
 	isIdleAnimationActive: boolean
+	keepIdleLoopMountedWhenPaused?: boolean
 	items: SlidesTemplateCanvasColumnItem[]
 	onFindSimilarColors?: (template: OptionItem) => void
 	onPreviewClick: (anchorTileId: string, tile: SlidesTemplateCanvasTile) => void
@@ -31,6 +32,7 @@ export default function SlidesTemplateCanvasLoopColumn({
 	focusedAnchorTileId,
 	idleLoop,
 	isIdleAnimationActive,
+	keepIdleLoopMountedWhenPaused = true,
 	items,
 	onFindSimilarColors,
 	onPreviewClick,
@@ -48,9 +50,10 @@ export default function SlidesTemplateCanvasLoopColumn({
 	const [loopItems, setLoopItems] = useState(items)
 	const canAnimateIdleLoop = Boolean(idleLoop) && !reduceMotion
 	const isLoopRunning = isIdleAnimationActive && canAnimateIdleLoop
+	const shouldShowLoopOverlay = showLoopOverlay && keepIdleLoopMountedWhenPaused
 
 	useEffect(() => {
-		if (!idleLoop || !showLoopOverlay) {
+		if (!idleLoop || !shouldShowLoopOverlay) {
 			setLoopItems(items)
 			return
 		}
@@ -83,7 +86,7 @@ export default function SlidesTemplateCanvasLoopColumn({
 
 		updateLoopItems(loopY.get())
 		return loopY.on("change", updateLoopItems)
-	}, [allItems, idleLoop, items, loopEndY, loopY, showLoopOverlay])
+	}, [allItems, idleLoop, items, loopEndY, loopY, shouldShowLoopOverlay])
 
 	useEffect(() => {
 		loopAnimationRef.current?.stop()
@@ -102,7 +105,10 @@ export default function SlidesTemplateCanvasLoopColumn({
 			return
 		}
 
-		if (!isLoopRunning) return
+		if (!isLoopRunning) {
+			if (!keepIdleLoopMountedWhenPaused) setShowLoopOverlay(false)
+			return
+		}
 
 		function startFullLoop(delay = 0) {
 			loopY.set(0)
@@ -134,6 +140,7 @@ export default function SlidesTemplateCanvasLoopColumn({
 		focusedAnchorTileId,
 		idleLoop,
 		isLoopRunning,
+		keepIdleLoopMountedWhenPaused,
 		loopEndY,
 		loopY,
 		showLoopOverlay,
@@ -143,7 +150,7 @@ export default function SlidesTemplateCanvasLoopColumn({
 		? {
 				duplicateY: duplicateLoopY,
 				isRunning: isLoopRunning,
-				show: showLoopOverlay,
+				show: shouldShowLoopOverlay,
 				y: loopY,
 			}
 		: undefined

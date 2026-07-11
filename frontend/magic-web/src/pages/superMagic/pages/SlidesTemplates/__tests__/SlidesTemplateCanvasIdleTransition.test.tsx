@@ -42,6 +42,7 @@ function renderColumn(
 	items: SlidesTemplateCanvasColumnItem[],
 	isIdleAnimationActive: boolean,
 	onTemplateSelect = vi.fn(),
+	keepIdleLoopMountedWhenPaused = true,
 ) {
 	return (
 		<SlidesTemplateCanvasLoopColumn
@@ -49,6 +50,7 @@ function renderColumn(
 			focusedAnchorTileId=""
 			idleLoop={{ column: 0, delay: 0, direction: -1, distance: 552, duration: 46 }}
 			isIdleAnimationActive={isIdleAnimationActive}
+			keepIdleLoopMountedWhenPaused={keepIdleLoopMountedWhenPaused}
 			items={items}
 			onPreviewClick={vi.fn()}
 			onTemplateSelect={onTemplateSelect}
@@ -79,5 +81,20 @@ describe("SlidesTemplateCanvas idle transition", () => {
 		expect(isCanvasDragBlockedTarget(selectButton)).toBe(true)
 		fireEvent.click(selectButton)
 		expect(onTemplateSelect).toHaveBeenCalledWith(firstItem.canvasItem.item.template)
+	})
+
+	it("unmounts paused loop covers when low-detail rendering is enabled", async () => {
+		const firstItem = createColumnItem(0)
+		const view = render(renderColumn([firstItem], true))
+
+		await waitFor(() => {
+			expect(screen.getAllByTestId("slides-template-loop-cover")).toHaveLength(2)
+		})
+
+		view.rerender(renderColumn([firstItem], false, vi.fn(), false))
+
+		await waitFor(() => {
+			expect(screen.queryByTestId("slides-template-loop-cover")).not.toBeInTheDocument()
+		})
 	})
 })

@@ -1,12 +1,18 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react"
-import type { RefObject } from "react"
+import type { MutableRefObject, RefObject } from "react"
 import type { TemplateCanvasItem, TemplateCanvasPoint } from "./canvasLayout"
 import type { SlidesTemplateCanvasTile } from "./canvasInteraction"
-import { getVisibleTemplateCanvasItems } from "./canvasViewport"
+import {
+	getRebasedSlidesTemplateCanvasOffset,
+	getLoopedVisibleSlidesTemplateCanvasItems,
+	type SlidesTemplateCanvasLoopMetrics,
+} from "./canvasLoop"
 
 interface UseTemplateCanvasVisibleItemsInput {
 	canvasItems: Array<TemplateCanvasItem<SlidesTemplateCanvasTile>>
-	offsetRef: RefObject<TemplateCanvasPoint>
+	loopMetrics: SlidesTemplateCanvasLoopMetrics
+	onOffsetRebase: () => void
+	offsetRef: MutableRefObject<TemplateCanvasPoint>
 	scaleRef: RefObject<number>
 	viewportRef: RefObject<HTMLDivElement | null>
 }
@@ -20,11 +26,14 @@ function getCanvasItemKey(items: Array<TemplateCanvasItem<SlidesTemplateCanvasTi
 
 export function useTemplateCanvasVisibleItems({
 	canvasItems,
+	loopMetrics,
+	onOffsetRebase,
 	offsetRef,
 	scaleRef,
 	viewportRef,
 }: UseTemplateCanvasVisibleItemsInput) {
 	const canvasItemsRef = useRef(canvasItems)
+	const loopMetricsRef = useRef(loopMetrics)
 	const visibleKeyRef = useRef("")
 	const frameRef = useRef<number | null>(null)
 	const [visibleCanvasItems, setVisibleCanvasItems] = useState<
@@ -41,8 +50,9 @@ export function useTemplateCanvasVisibleItems({
 		const viewportHeight = height > 0 ? height : FALLBACK_VIEWPORT_HEIGHT
 
 		const scale = scaleRef.current
-		const nextItems = getVisibleTemplateCanvasItems({
+		const nextItems = getLoopedVisibleSlidesTemplateCanvasItems({
 			items,
+			loopMetrics: loopMetricsRef.current,
 			offset: offsetRef.current,
 			scale,
 			viewportHeight,
@@ -65,10 +75,21 @@ export function useTemplateCanvasVisibleItems({
 	}, [updateVisibleCanvasItems])
 
 	useLayoutEffect(() => {
+		const rebasedOffset = getRebasedSlidesTemplateCanvasOffset({
+			nextLoopMetrics: loopMetrics,
+			offset: offsetRef.current,
+			previousLoopMetrics: loopMetricsRef.current,
+			scale: scaleRef.current,
+		})
+		if (rebasedOffset.x !== offsetRef.current.x || rebasedOffset.y !== offsetRef.current.y) {
+			offsetRef.current = rebasedOffset
+			onOffsetRebase()
+		}
 		canvasItemsRef.current = canvasItems
+		loopMetricsRef.current = loopMetrics
 		visibleKeyRef.current = ""
 		updateVisibleCanvasItems()
-	}, [canvasItems, updateVisibleCanvasItems])
+	}, [canvasItems, loopMetrics, onOffsetRebase, offsetRef, scaleRef, updateVisibleCanvasItems])
 
 	useEffect(() => {
 		if (typeof window === "undefined") return

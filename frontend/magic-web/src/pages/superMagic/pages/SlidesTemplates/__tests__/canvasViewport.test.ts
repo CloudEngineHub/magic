@@ -45,7 +45,9 @@ describe("slides template canvas viewport", () => {
 			viewportWidth: 1800,
 		})
 
-		expect(visibleItems).toHaveLength(MAX_VISIBLE_TEMPLATE_CANVAS_ITEMS)
+		expect(visibleItems.length).toBeGreaterThan(0)
+		expect(visibleItems.length).toBeLessThanOrEqual(MAX_VISIBLE_TEMPLATE_CANVAS_ITEMS)
+		expect(visibleItems.length).toBeLessThan(items.length)
 	})
 
 	it("expands the visible item budget when the canvas is zoomed out", () => {

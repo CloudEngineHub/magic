@@ -3,7 +3,6 @@ import {
 	useEffect,
 	useLayoutEffect,
 	useRef,
-	useState,
 	type MouseEvent,
 	type MutableRefObject,
 	type PointerEvent,
@@ -26,6 +25,7 @@ interface UseSlidesTemplateCanvasPointerInput {
 	scheduleEdgeMovement: (rect: DOMRect, point: { clientX: number; clientY: number }) => void
 	setCanvasOffset: (nextOffset: TemplateCanvasPoint) => TemplateCanvasPoint
 	stopAnimation: () => void
+	setIsDragging: (isDragging: boolean) => void
 	viewportRef: RefObject<HTMLDivElement | null>
 }
 
@@ -37,13 +37,13 @@ export function useSlidesTemplateCanvasPointer({
 	resetKey,
 	scheduleEdgeMovement,
 	setCanvasOffset,
+	setIsDragging,
 	stopAnimation,
 	viewportRef,
 }: UseSlidesTemplateCanvasPointerInput) {
 	const dragStateRef = useRef<CanvasDragState | null>(null)
 	const suppressClickRef = useRef(false)
 	const suppressClickTimeoutRef = useRef<number | null>(null)
-	const [isDragging, setIsDragging] = useState(false)
 
 	const handlePointerMove = useCallback(
 		(event: PointerEvent<HTMLDivElement>) => {
@@ -55,6 +55,8 @@ export function useSlidesTemplateCanvasPointer({
 
 				const dragDistanceX = event.clientX - dragState.startClientX
 				const dragDistanceY = event.clientY - dragState.startClientY
+				const pointerDeltaX = event.clientX - dragState.lastClientX
+				const pointerDeltaY = event.clientY - dragState.lastClientY
 				if (
 					!dragState.hasMoved &&
 					Math.hypot(dragDistanceX, dragDistanceY) < CANVAS_DRAG_START_THRESHOLD
@@ -71,8 +73,8 @@ export function useSlidesTemplateCanvasPointer({
 				event.preventDefault()
 				const previousOffset = offsetRef.current
 				const nextOffset = setCanvasOffset({
-					x: dragState.startOffset.x + dragDistanceX,
-					y: dragState.startOffset.y + dragDistanceY,
+					x: previousOffset.x + pointerDeltaX,
+					y: previousOffset.y + pointerDeltaY,
 				})
 				dragState.lastClientX = event.clientX
 				dragState.lastClientY = event.clientY
@@ -100,6 +102,7 @@ export function useSlidesTemplateCanvasPointer({
 			offsetRef,
 			scheduleEdgeMovement,
 			setCanvasOffset,
+			setIsDragging,
 			stopAnimation,
 			viewportRef,
 		],
@@ -128,10 +131,9 @@ export function useSlidesTemplateCanvasPointer({
 				pointerId: event.pointerId,
 				startClientX: event.clientX,
 				startClientY: event.clientY,
-				startOffset: offsetRef.current,
 			}
 		},
-		[isPreviewOpen, offsetRef, onPointerDownStart, stopAnimation, viewportRef],
+		[isPreviewOpen, onPointerDownStart, stopAnimation, viewportRef],
 	)
 
 	const handlePointerLeave = useCallback(() => {
@@ -139,7 +141,7 @@ export function useSlidesTemplateCanvasPointer({
 		if (dragStateRef.current?.hasMoved) return
 		dragStateRef.current = null
 		setIsDragging(false)
-	}, [stopAnimation])
+	}, [setIsDragging, stopAnimation])
 
 	const handlePointerRelease = useCallback(
 		(event: PointerEvent<HTMLDivElement>) => {
@@ -166,7 +168,7 @@ export function useSlidesTemplateCanvasPointer({
 				viewport.releasePointerCapture(event.pointerId)
 			}
 		},
-		[isPreviewOpen, viewportRef],
+		[isPreviewOpen, setIsDragging, viewportRef],
 	)
 
 	const handleCanvasClickCapture = useCallback(
@@ -195,13 +197,13 @@ export function useSlidesTemplateCanvasPointer({
 		if (activePointerId != null && viewport?.hasPointerCapture(activePointerId)) {
 			viewport.releasePointerCapture(activePointerId)
 		}
-	}, [isPreviewOpen, stopAnimation, viewportRef])
+	}, [isPreviewOpen, setIsDragging, stopAnimation, viewportRef])
 
 	useLayoutEffect(() => {
 		dragStateRef.current = null
 		suppressClickRef.current = false
 		setIsDragging(false)
-	}, [resetKey])
+	}, [resetKey, setIsDragging])
 
 	useEffect(() => {
 		return () => {
@@ -219,6 +221,5 @@ export function useSlidesTemplateCanvasPointer({
 		handlePointerLeave,
 		handlePointerMove,
 		handlePointerRelease,
-		isDragging,
 	}
 }

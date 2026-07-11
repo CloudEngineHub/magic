@@ -20,6 +20,7 @@ export interface TemplateCanvasItem<T> {
 	item: T
 	grid: TemplateCanvasPoint
 	position: TemplateCanvasPoint
+	renderKey?: string
 	size: TemplateCanvasSize
 	span: TemplateCanvasSpan
 }
