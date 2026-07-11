@@ -11,8 +11,7 @@ const VISIBLE_OVERSCAN_X = SLIDES_TEMPLATE_CANVAS_CARD_WIDTH
 const VISIBLE_OVERSCAN_Y = SLIDES_TEMPLATE_CANVAS_CARD_HEIGHT * 2
 const MIN_VISIBLE_OVERSCAN_RATIO = 0.35
 const MIN_VISIBLE_OVERSCAN_SCALE = 0.75
-const MIN_VISIBLE_TEMPLATE_CANVAS_ITEMS = 72
-export const MAX_VISIBLE_TEMPLATE_CANVAS_ITEMS = 112
+export const MAX_VISIBLE_TEMPLATE_CANVAS_ITEMS = 144
 
 interface TemplateCanvasViewportWindowInput {
 	offset: TemplateCanvasPoint
@@ -94,26 +93,20 @@ export function isTemplateCanvasItemInWindow<T>(
 }
 
 function clampVisibleItemLimit(limit: number) {
-	return Math.min(
-		Math.max(limit, MIN_VISIBLE_TEMPLATE_CANVAS_ITEMS),
-		MAX_VISIBLE_TEMPLATE_CANVAS_ITEMS,
-	)
+	return Math.min(Math.max(1, limit), MAX_VISIBLE_TEMPLATE_CANVAS_ITEMS)
 }
 
 export function getTemplateCanvasVisibleItemLimit({
-	overscanX = VISIBLE_OVERSCAN_X,
-	overscanY = VISIBLE_OVERSCAN_Y,
 	scale = 1,
 	viewportHeight,
 	viewportWidth,
 }: Omit<TemplateCanvasViewportWindowInput, "offset">) {
 	const normalizedScale = Math.max(scale, 0.01)
-	const worldWidth = (viewportWidth + overscanX * 2) / normalizedScale
-	const worldHeight = (viewportHeight + overscanY * 2) / normalizedScale
-	const columnCount = Math.ceil(worldWidth / SLIDES_TEMPLATE_CANVAS_STEP_X) + 2
-	const rowCount = Math.ceil(worldHeight / SLIDES_TEMPLATE_CANVAS_STEP_Y) + 2
+	const columnCount = Math.ceil(viewportWidth / (SLIDES_TEMPLATE_CANVAS_STEP_X * normalizedScale))
+	const rowCount = Math.ceil(viewportHeight / (SLIDES_TEMPLATE_CANVAS_STEP_Y * normalizedScale))
 
-	return clampVisibleItemLimit(columnCount * rowCount)
+	// 当前视口外只预留一个网格环。低缩放时不再以固定最小数量扩大渲染范围。
+	return clampVisibleItemLimit((columnCount + 1) * (rowCount + 1))
 }
 
 export function getVisibleTemplateCanvasItems<T>({
