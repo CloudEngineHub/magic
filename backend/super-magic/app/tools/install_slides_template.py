@@ -46,11 +46,11 @@ class InstallSlidesTemplate(WorkspaceTool[InstallSlidesTemplateParams]):
     """<!--zh
     根据幻灯片模板 code 下载模板包并解压到临时目录。
     仅在 skill 或 Code Mode 已拿到明确模板 code 且需要读取模板文件时使用。
-    返回结构化数据中的 installed_directory，后续应以该目录为解压根目录查找并读取可用文件。
+    返回结构化数据中的 installed_directory（绝对路径），后续必须以该绝对路径为解压根目录查找并读取可用文件。
     -->
     Download and extract a slide template package by code into a temporary directory.
     Use this only when a skill or Code Mode already has an explicit template code and needs to inspect
-    the template files. The returned data contains installed_directory; use it as the extraction root and inspect files there.
+    the template files. The returned data contains installed_directory as an absolute path; use that absolute path as the extraction root and inspect files there.
     """
 
     code_mode_only: ClassVar[bool] = True
@@ -68,7 +68,7 @@ result = tool.call("install_slides_template", {
 installed_directory = result.data["installed_directory"]
 ```
 
-code 必须原样来自模板列表、用户选择或上游明确传入；不要猜测、编造、转换大小写或重命名。工具会解压到临时目录；安装后以 installed_directory 为解压根目录查找并读取可用文件；ZIP 内的顶层目录会被保留。
+code 必须原样来自模板列表、用户选择或上游明确传入；不要猜测、编造、转换大小写或重命名。工具会解压到临时目录；安装后必须使用 installed_directory 返回的绝对路径作为解压根目录查找并读取可用文件，不要改写成相对路径；ZIP 内的顶层目录会被保留。
 -->
 When you already have an explicit slides template code and need the template package, call this tool from run_sdk_snippet:
 
@@ -82,7 +82,7 @@ installed_directory = result.data["installed_directory"]
 ```
 
 The code must be passed through exactly from the template list, the user's selection, or an explicit upstream value.
-Do not guess it, invent it, change its casing, or rename it. The tool extracts the package into a temporary directory. After installation, use installed_directory as the extraction root and inspect files there; top-level directories inside the ZIP are preserved.
+Do not guess it, invent it, change its casing, or rename it. The tool extracts the package into a temporary directory. After installation, use the absolute path returned in installed_directory as the extraction root and inspect files there; do not rewrite it as a relative path. Top-level directories inside the ZIP are preserved.
 """
 
     async def execute(self, tool_context: ToolContext, params: InstallSlidesTemplateParams) -> ToolResult:
@@ -207,10 +207,11 @@ Do not guess it, invent it, change its casing, or rename it. The tool extracts t
         payload: Dict[str, Any],
         install_dir: Path,
     ) -> Dict[str, Any]:
+        absolute_install_dir = install_dir.expanduser().resolve()
         return {
             "code": str(payload.get("code") or code).strip(),
             "template_name": cls._template_label(payload),
-            "installed_directory": str(install_dir),
+            "installed_directory": str(absolute_install_dir),
         }
 
     @classmethod
@@ -222,9 +223,9 @@ Do not guess it, invent it, change its casing, or rename it. The tool extracts t
         template_name = str(data.get("template_name") or "").strip()
         if template_name:
             lines.append(f"- template name: {template_name}")
-        lines.append(f"- installed directory: `{data.get('installed_directory', '')}`")
+        lines.append(f"- installed directory (absolute path): `{data.get('installed_directory', '')}`")
         lines.append("Note: the template package was extracted into a temporary directory to avoid occupying workspace storage.")
-        lines.append("Next step: use installed_directory as the extraction root, inspect files there, and use the available files.")
+        lines.append("Next step: use the absolute path in installed_directory as the extraction root, inspect files there, and use the available files. Do not rewrite it as a relative path.")
         return "\n".join(lines)
 
     @staticmethod

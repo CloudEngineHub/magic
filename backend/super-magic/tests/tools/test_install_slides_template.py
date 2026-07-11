@@ -152,7 +152,7 @@ async def test_install_slides_template_tool_installs_template(monkeypatch, tmp_p
     assert "Slides template installed." in result.content
     assert "- template code: ppt-business-minimal" in result.content
     assert "- template name: 职场白皮书" in result.content
-    assert f"- installed directory: `{tmp_path / 'templates' / 'business'}`" in result.content
+    assert f"- installed directory (absolute path): `{tmp_path / 'templates' / 'business'}`" in result.content
 
 
 @pytest.mark.asyncio
