@@ -6,7 +6,6 @@ import tempfile
 import zipfile
 from pathlib import Path
 from typing import Any, ClassVar, Dict, Optional
-from uuid import uuid4
 
 from pydantic import Field, field_validator
 
@@ -18,7 +17,6 @@ from app.i18n import i18n
 from app.infrastructure.magic_service.client import MagicServiceClient
 from app.tools.core import BaseToolParams, tool
 from app.tools.workspace_tool import WorkspaceTool
-from app.utils.async_file_utils import async_exists
 
 logger = get_logger(__name__)
 
@@ -33,15 +31,6 @@ class InstallSlidesTemplateParams(BaseToolParams):
             "or rewrite its casing."
         ),
     )
-    install_path: str = Field(
-        ...,
-        description=(
-            "<!--zh: 模板安装目录。相对路径会解析到当前 workspace，绝对路径会原样使用。若目录已存在，工具会安装到追加随机后缀的新目录。-->"
-            "Directory where the template package should be installed. Relative paths are resolved inside "
-            "the current workspace; absolute paths are used as provided. If the directory already exists, "
-            "the tool installs into a new directory with a random suffix."
-        ),
-    )
 
     @field_validator("code")
     @classmethod
@@ -51,23 +40,15 @@ class InstallSlidesTemplateParams(BaseToolParams):
             raise ValueError("code is required")
         return code
 
-    @field_validator("install_path")
-    @classmethod
-    def validate_install_path(cls, value: str) -> str:
-        install_path = value.strip() if isinstance(value, str) else ""
-        if not install_path:
-            raise ValueError("install_path is required")
-        return install_path
-
 
 @tool(name="install_slides_template")
 class InstallSlidesTemplate(WorkspaceTool[InstallSlidesTemplateParams]):
     """<!--zh
-    根据幻灯片模板 code 下载并安装模板包到指定目录。
+    根据幻灯片模板 code 下载模板包并解压到临时目录。
     仅在 skill 或 Code Mode 已拿到明确模板 code 且需要读取模板文件时使用。
     返回结构化数据中的 installed_directory，后续应以该目录为解压根目录查找并读取可用文件。
     -->
-    Download and install a slide template package by code into a target directory.
+    Download and extract a slide template package by code into a temporary directory.
     Use this only when a skill or Code Mode already has an explicit template code and needs to inspect
     the template files. The returned data contains installed_directory; use it as the extraction root and inspect files there.
     """
@@ -82,13 +63,12 @@ class InstallSlidesTemplate(WorkspaceTool[InstallSlidesTemplateParams]):
 from sdk.tool import tool
 
 result = tool.call("install_slides_template", {
-    "code": template_code,
-    "install_path": f"slide-templates/{template_code}"
+    "code": template_code
 })
 installed_directory = result.data["installed_directory"]
 ```
 
-code 必须原样来自模板列表、用户选择或上游明确传入；不要猜测、编造、转换大小写或重命名。安装后以 installed_directory 为解压根目录查找并读取可用文件；ZIP 内的顶层目录会被保留。
+code 必须原样来自模板列表、用户选择或上游明确传入；不要猜测、编造、转换大小写或重命名。工具会解压到临时目录；安装后以 installed_directory 为解压根目录查找并读取可用文件；ZIP 内的顶层目录会被保留。
 -->
 When you already have an explicit slides template code and need the template package, call this tool from run_sdk_snippet:
 
@@ -96,14 +76,13 @@ When you already have an explicit slides template code and need the template pac
 from sdk.tool import tool
 
 result = tool.call("install_slides_template", {
-    "code": template_code,
-    "install_path": f"slide-templates/{template_code}"
+    "code": template_code
 })
 installed_directory = result.data["installed_directory"]
 ```
 
 The code must be passed through exactly from the template list, the user's selection, or an explicit upstream value.
-Do not guess it, invent it, change its casing, or rename it. After installation, use installed_directory as the extraction root and inspect files there; top-level directories inside the ZIP are preserved.
+Do not guess it, invent it, change its casing, or rename it. The tool extracts the package into a temporary directory. After installation, use installed_directory as the extraction root and inspect files there; top-level directories inside the ZIP are preserved.
 """
 
     async def execute(self, tool_context: ToolContext, params: InstallSlidesTemplateParams) -> ToolResult:
@@ -127,12 +106,12 @@ Do not guess it, invent it, change its casing, or rename it. After installation,
                         f"Slides template '{code}' download is not a readable ZIP package. "
                         "Do not continue reading template files from the install directory."
                     )
-                install_dir, change_reason = await self._extract_template_to_install_dir(
+                install_dir = await self._extract_template_to_temp_dir(
                     download_path,
-                    params.install_path,
+                    code,
                 )
 
-            result_data = self._build_result_data(code, payload, install_dir, change_reason)
+            result_data = self._build_result_data(code, payload, install_dir)
             return ToolResult(
                 content=self._build_model_content(result_data),
                 data=result_data,
@@ -175,32 +154,20 @@ Do not guess it, invent it, change its casing, or rename it. After installation,
             process.kill()
         await process.wait()
 
-    async def _extract_template_to_install_dir(self, zip_path: Path, install_path: str) -> tuple[Path, Optional[str]]:
-        requested_dir = self.resolve_path(install_path)
-        install_dir, change_reason = await self._resolve_install_dir(requested_dir)
-        while True:
-            try:
-                await asyncio.to_thread(self._extract_zip_safely, zip_path, install_dir)
-                return install_dir, change_reason
-            except FileExistsError:
-                if change_reason is None:
-                    change_reason = "Requested install directory was created by another process during installation."
-                install_dir = await self._next_available_install_dir(requested_dir)
-
-    async def _resolve_install_dir(self, requested_dir: Path) -> tuple[Path, Optional[str]]:
-        if not await async_exists(requested_dir):
-            return requested_dir, None
-
-        return await self._next_available_install_dir(requested_dir), "Requested install directory already exists."
+    async def _extract_template_to_temp_dir(self, zip_path: Path, code: str) -> Path:
+        temp_root = Path(tempfile.mkdtemp(prefix=f"slides_template_{self._safe_temp_prefix(code)}_"))
+        install_dir = temp_root / "template"
+        try:
+            await asyncio.to_thread(self._extract_zip_safely, zip_path, install_dir)
+        except Exception:
+            shutil.rmtree(temp_root, ignore_errors=True)
+            raise
+        return install_dir
 
     @staticmethod
-    async def _next_available_install_dir(requested_dir: Path) -> Path:
-        parent = requested_dir.parent
-        stem = requested_dir.name
-        while True:
-            candidate = parent / f"{stem}_{uuid4().hex[:8]}"
-            if not await async_exists(candidate):
-                return candidate
+    def _safe_temp_prefix(code: str) -> str:
+        safe_code = "".join(char if char.isalnum() or char in {"-", "_"} else "_" for char in code)
+        return safe_code.strip("_-")[:40] or "template"
 
     @staticmethod
     def _extract_zip_safely(zip_path: Path, extract_dir: Path) -> None:
@@ -239,14 +206,11 @@ Do not guess it, invent it, change its casing, or rename it. After installation,
         code: str,
         payload: Dict[str, Any],
         install_dir: Path,
-        change_reason: Optional[str],
     ) -> Dict[str, Any]:
         return {
             "code": str(payload.get("code") or code).strip(),
             "template_name": cls._template_label(payload),
             "installed_directory": str(install_dir),
-            "install_path_changed": change_reason is not None,
-            "install_path_change_reason": change_reason,
         }
 
     @classmethod
@@ -259,11 +223,8 @@ Do not guess it, invent it, change its casing, or rename it. After installation,
         if template_name:
             lines.append(f"- template name: {template_name}")
         lines.append(f"- installed directory: `{data.get('installed_directory', '')}`")
-        change_reason = str(data.get("install_path_change_reason") or "").strip()
-        if change_reason:
-            lines.append(f"- install path change reason: {change_reason}")
-            lines.append("Use the installed directory above, not the originally requested directory.")
-        lines.append("Next step: use installed directory as the extraction root, inspect files there, and use the available files.")
+        lines.append("Note: the template package was extracted into a temporary directory to avoid occupying workspace storage.")
+        lines.append("Next step: use installed_directory as the extraction root, inspect files there, and use the available files.")
         return "\n".join(lines)
 
     @staticmethod

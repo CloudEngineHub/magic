@@ -1,3 +1,5 @@
+import asyncio
+import shutil
 import zipfile
 
 import pytest
@@ -100,10 +102,20 @@ async def test_install_slides_template_tool_installs_template(monkeypatch, tmp_p
         staticmethod(fake_download),
     )
 
+    async def fake_extract(self, zip_path, code):
+        install_dir = tmp_path / "templates" / "business"
+        await asyncio.to_thread(self._extract_zip_safely, zip_path, install_dir)
+        return install_dir
+
+    monkeypatch.setattr(
+        InstallSlidesTemplate,
+        "_extract_template_to_temp_dir",
+        fake_extract,
+    )
+
     tool = InstallSlidesTemplate()
     params = InstallSlidesTemplateParams(
         code=" ppt-business-minimal ",
-        install_path=str(tmp_path / "templates" / "business"),
     )
     result = await tool.execute(
         ToolContext(
@@ -135,7 +147,6 @@ async def test_install_slides_template_tool_installs_template(monkeypatch, tmp_p
     assert result.data["code"] == "ppt-business-minimal"
     assert result.data["template_name"] == "职场白皮书"
     assert result.data["installed_directory"] == str(tmp_path / "templates" / "business")
-    assert result.data["install_path_changed"] is False
     assert (tmp_path / "templates" / "business" / "business" / "template.json").exists()
     assert (tmp_path / "templates" / "business" / "business" / "theme.css").exists()
     assert "Slides template installed." in result.content
@@ -145,55 +156,20 @@ async def test_install_slides_template_tool_installs_template(monkeypatch, tmp_p
 
 
 @pytest.mark.asyncio
-async def test_install_slides_template_tool_uses_new_directory_when_target_exists(monkeypatch, tmp_path):
-    class FakeMagicServiceClient:
-        async def __aenter__(self):
-            return self
-
-        async def __aexit__(self, exc_type, exc, tb):
-            return None
-
-        async def get_slides_template_file_url(self, code, access_context=None):
-            return {
-                "code": code,
-                "label": {"zh_CN": "职场白皮书", "en_US": "Corporate Whitepaper"},
-                "template_file_url": "https://example.test/template.zip",
-            }
-
-    async def fake_download(download_url, download_path):
-        with zipfile.ZipFile(download_path, "w") as archive:
-            archive.writestr("template.json", "{}")
-
-    requested_dir = tmp_path / "templates" / "business"
-    requested_dir.mkdir(parents=True)
-
-    monkeypatch.setattr(
-        "app.tools.install_slides_template.MagicServiceClient",
-        FakeMagicServiceClient,
-    )
-    monkeypatch.setattr(
-        InstallSlidesTemplate,
-        "_download_template_file",
-        staticmethod(fake_download),
-    )
-    monkeypatch.setattr(
-        "app.tools.install_slides_template.uuid4",
-        lambda: type("FixedUuid", (), {"hex": "abcdef123456"})(),
-    )
+async def test_install_slides_template_tool_extracts_to_temp_directory(tmp_path):
+    zip_path = tmp_path / "template.zip"
+    with zipfile.ZipFile(zip_path, "w") as archive:
+        archive.writestr("template.json", "{}")
 
     tool = InstallSlidesTemplate()
-    result = await tool.execute(
-        ToolContext(tool_name="install_slides_template", arguments={}),
-        InstallSlidesTemplateParams(code="ppt-business-minimal", install_path=str(requested_dir)),
-    )
+    install_dir = await tool._extract_template_to_temp_dir(zip_path, "ppt/business minimal")
 
-    expected_dir = tmp_path / "templates" / "business_abcdef12"
-    assert result.ok is True
-    assert result.data["installed_directory"] == str(expected_dir)
-    assert result.data["install_path_changed"] is True
-    assert result.data["install_path_change_reason"] == "Requested install directory already exists."
-    assert expected_dir.exists()
-    assert "Requested install directory already exists." in result.content
+    try:
+        assert install_dir.name == "template"
+        assert install_dir.parent.name.startswith("slides_template_ppt_business_minimal_")
+        assert (install_dir / "template.json").exists()
+    finally:
+        shutil.rmtree(install_dir.parent, ignore_errors=True)
 
 
 @pytest.mark.asyncio
@@ -226,15 +202,13 @@ async def test_install_slides_template_tool_rejects_non_zip_download(monkeypatch
     )
 
     tool = InstallSlidesTemplate()
-    install_dir = tmp_path / "templates" / "business"
     result = await tool.execute(
         ToolContext(tool_name="install_slides_template", arguments={}),
-        InstallSlidesTemplateParams(code="ppt-business-minimal", install_path=str(install_dir)),
+        InstallSlidesTemplateParams(code="ppt-business-minimal"),
     )
 
     assert result.ok is False
     assert "not a readable ZIP package" in result.content
-    assert not install_dir.exists()
 
 
 @pytest.mark.asyncio
@@ -269,15 +243,13 @@ async def test_install_slides_template_tool_rejects_unsafe_zip_paths(monkeypatch
     )
 
     tool = InstallSlidesTemplate()
-    install_dir = tmp_path / "templates" / "business"
     result = await tool.execute(
         ToolContext(tool_name="install_slides_template", arguments={}),
-        InstallSlidesTemplateParams(code="ppt-business-minimal", install_path=str(install_dir)),
+        InstallSlidesTemplateParams(code="ppt-business-minimal"),
     )
 
     assert result.ok is False
     assert "Unsafe path in template package" in result.content
-    assert not install_dir.exists()
     assert not (tmp_path / "templates" / "evil.txt").exists()
 
 
@@ -311,30 +283,40 @@ async def test_install_slides_template_tool_i18n_and_detail(monkeypatch, tmp_pat
         staticmethod(fake_download),
     )
 
+    async def fake_extract(self, zip_path, code):
+        install_dir = tmp_path / "template"
+        await asyncio.to_thread(self._extract_zip_safely, zip_path, install_dir)
+        return install_dir
+
+    monkeypatch.setattr(
+        InstallSlidesTemplate,
+        "_extract_template_to_temp_dir",
+        fake_extract,
+    )
+
     tool = InstallSlidesTemplate()
     arguments = {"code": "ppt-business-minimal"}
-    arguments_with_path = {"code": "ppt-business-minimal", "install_path": str(tmp_path / "template")}
-    context = ToolContext(tool_name="install_slides_template", arguments=arguments_with_path)
+    context = ToolContext(tool_name="install_slides_template", arguments=arguments)
 
     try:
         i18n.set_language("zh_CN")
         before = await tool.get_before_tool_call_friendly_action_and_remark(
             "install_slides_template",
             context,
-            arguments_with_path,
+            arguments,
         )
         assert before["action"] == "安装幻灯片模板"
         assert before["remark"] == "正在安装模板 ppt-business-minimal"
 
-        result = await tool.execute(context, InstallSlidesTemplateParams(**arguments_with_path))
+        result = await tool.execute(context, InstallSlidesTemplateParams(**arguments))
         after = await tool.get_after_tool_call_friendly_action_and_remark(
             "install_slides_template",
             context,
             result,
             0.1,
-            arguments_with_path,
+            arguments,
         )
-        detail = await tool.get_tool_detail(context, result, arguments_with_path)
+        detail = await tool.get_tool_detail(context, result, arguments)
         assert after["remark"] == "已安装模板 ppt-business-minimal"
         assert detail is not None
         assert "幻灯片模板安装结果" in detail.data.content
@@ -344,7 +326,7 @@ async def test_install_slides_template_tool_i18n_and_detail(monkeypatch, tmp_pat
         before_en = await tool.get_before_tool_call_friendly_action_and_remark(
             "install_slides_template",
             context,
-            arguments_with_path,
+            arguments,
         )
         assert before_en["action"] == "Install slide template"
         assert before_en["remark"] == "Installing template ppt-business-minimal"

@@ -46,8 +46,7 @@ When a template code is selected and you need to read the template package, firs
 from sdk.tool import tool
 
 result = tool.call("install_slides_template", {
-    "code": template_code,
-    "install_path": f"slide-templates/{template_code}"
+    "code": template_code
 })
 
 installed_directory = result.data["installed_directory"]
@@ -55,7 +54,7 @@ installed_directory = result.data["installed_directory"]
 
 After receiving `installed_directory`:
 
-1. Use the returned `installed_directory`, even if it differs from the requested `install_path`; the tool may choose a suffixed directory when the requested directory already exists.
+1. Use the returned `installed_directory`; the tool extracts the package into a temporary directory to avoid occupying workspace storage.
 2. Read `template.json` from `installed_directory` first.
 3. Read all available resources declared by `template.json` that are useful for the deck:
    - Always read `files.theme_css` when present.
@@ -87,7 +86,7 @@ When a template is PPTX-derived, preserve and document this reuse contract:
 ## Template Application Workflow
 
 1. Resolve the selected template code from user choice or upstream context. If there is no exact code, ask for it or proceed with no template if the user confirms.
-2. Call `install_slides_template` with the exact code and a stable `install_path`, then use `result.data["installed_directory"]`.
+2. Call `install_slides_template` with the exact code, then use `result.data["installed_directory"]`.
 3. Read `template.json` from the installed directory, then read the available resources it declares (`theme_css`, `visual_spec`, `slides_dir`, `images_dir`, and `slides[].file`) before creating slide pages.
 4. Decide whether the package is PPTX-derived using the rules above. If yes, preserve the PPTX-derived template contract for downstream slide creation.
 5. Before writing slides, summarize internally: package resources, palette roles, typography, layout inventory, reusable components, slot/page patterns, composition rules, asset dependencies, adaptation rules, and whether the selected package is PPTX-derived.
