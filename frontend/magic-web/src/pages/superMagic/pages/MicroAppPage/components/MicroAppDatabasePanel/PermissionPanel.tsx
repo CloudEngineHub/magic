@@ -1,16 +1,18 @@
 import { Loader2, Trash2 } from "lucide-react"
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { toast } from "sonner"
-import { MagicBaseApi } from "@/apis"
+import { ContactApi, MagicBaseApi } from "@/apis"
 import type {
 	MagicBaseColumn,
 	MagicBasePermissionsResponse,
 	MagicBaseTable,
 } from "@/apis/modules/magicBase"
+import MagicAvatar from "@/components/base/MagicAvatar"
 import { Badge } from "@/components/shadcn-ui/badge"
 import { Button } from "@/components/shadcn-ui/button"
 import { ScrollArea, ScrollBar } from "@/components/shadcn-ui/scroll-area"
+import { cn } from "@/lib/utils"
 
 interface PermissionPanelProps {
 	projectId: string
@@ -22,9 +24,44 @@ interface PermissionPanelProps {
 }
 
 type PermissionType = "table" | "column" | "row"
+type AssignableSubjectType = "user" | "department"
 
-function getSubjectLabel(type: string, id?: string) {
-	return id ? `${type}:${id}` : type
+interface SubjectProfile {
+	key: string
+	type: AssignableSubjectType
+	id: string
+	name: string
+}
+
+interface GroupedPermissionTag {
+	key: string
+	label: string
+}
+
+interface GroupedPermissionRow {
+	key: string
+	subjectType: AssignableSubjectType
+	subjectId: string
+	name: string
+	tags: GroupedPermissionTag[]
+	deleteItems: Array<{
+		type: PermissionType
+		id: string
+	}>
+}
+
+function matchesSubject(permission: { subject_type: string }) {
+	return permission.subject_type === "user" || permission.subject_type === "department"
+}
+
+function getAvatarText(name: string, fallback: string): string {
+	const text = (name || fallback || "").trim()
+	return Array.from(text).slice(-2).join("").toUpperCase() || "-"
+}
+
+function addUniqueTag(tags: GroupedPermissionTag[], tag: GroupedPermissionTag | false | undefined) {
+	if (!tag || tags.some((item) => item.key === tag.key)) return
+	tags.push(tag)
 }
 
 export default function PermissionPanel({
@@ -37,15 +74,223 @@ export default function PermissionPanel({
 }: PermissionPanelProps) {
 	const { t } = useTranslation("super")
 	const [deletingId, setDeletingId] = useState<string | null>(null)
+	const [subjectProfiles, setSubjectProfiles] = useState<Record<string, SubjectProfile>>({})
 	const dynamicColumns = useMemo(
 		() => columns.filter((column) => column.source !== "system" && column.id),
 		[columns],
 	)
 
-	const handleDelete = async (type: PermissionType, permissionId: string) => {
-		setDeletingId(`${type}:${permissionId}`)
+	const subjectLookup = useMemo(() => {
+		const users = new Set<string>()
+		const departments = new Set<string>()
+		const collect = (permission: { subject_type: string; subject_id: string }) => {
+			if (!matchesSubject(permission) || !permission.subject_id) return
+			if (permission.subject_type === "user") users.add(permission.subject_id)
+			if (permission.subject_type === "department") departments.add(permission.subject_id)
+		}
+
+		;(permissions?.table_permissions || []).forEach(collect)
+		;(permissions?.column_permissions || []).forEach(collect)
+		;(permissions?.row_permissions || []).forEach(collect)
+
+		const userIds = Array.from(users).sort()
+		const departmentIds = Array.from(departments).sort()
+		return {
+			key: [
+				...userIds.map((id) => `user:${id}`),
+				...departmentIds.map((id) => `department:${id}`),
+			].join("|"),
+			users: userIds,
+			departments: departmentIds,
+		}
+	}, [permissions])
+
+	useEffect(() => {
+		if (!subjectLookup.key) {
+			setSubjectProfiles({})
+			return
+		}
+
+		let cancelled = false
+
+		const loadSubjectProfiles = async () => {
+			const nextProfiles: Record<string, SubjectProfile> = {}
+
+			if (subjectLookup.users.length) {
+				try {
+					const userResult = await ContactApi.getUsersInfo({
+						user_ids: subjectLookup.users,
+						query_type: 2,
+					})
+					;(userResult.items || []).forEach((user) => {
+						const id = user.user_id
+						if (!id) return
+						nextProfiles[`user:${id}`] = {
+							key: `user:${id}`,
+							type: "user",
+							id,
+							name: user.real_name || user.nickname || id,
+						}
+					})
+				} catch (error) {
+					console.error("Failed to load MagicBase permission users", error)
+				}
+			}
+
+			if (subjectLookup.departments.length) {
+				const departmentResults = await Promise.allSettled(
+					subjectLookup.departments.map((departmentId) =>
+						ContactApi.getDepartmentInfo({ department_id: departmentId }),
+					),
+				)
+				departmentResults.forEach((result, index) => {
+					const id = subjectLookup.departments[index]
+					if (result.status !== "fulfilled") return
+					nextProfiles[`department:${id}`] = {
+						key: `department:${id}`,
+						type: "department",
+						id,
+						name: result.value.name || result.value.i18n_name || id,
+					}
+				})
+			}
+
+			if (!cancelled) {
+				setSubjectProfiles(nextProfiles)
+			}
+		}
+
+		void loadSubjectProfiles()
+
+		return () => {
+			cancelled = true
+		}
+	}, [subjectLookup])
+
+	const permissionRows = useMemo<GroupedPermissionRow[]>(() => {
+		const groupMap = new Map<string, GroupedPermissionRow>()
+
+		const getGroup = (subjectType: AssignableSubjectType, subjectId: string) => {
+			const key = `${subjectType}:${subjectId}`
+			const profile = subjectProfiles[key]
+			const existing = groupMap.get(key)
+			if (existing) return existing
+
+			const group: GroupedPermissionRow = {
+				key,
+				subjectType,
+				subjectId,
+				name:
+					profile?.name ||
+					t(
+						subjectType === "user"
+							? "microAppPage.databasePanel.permissionUnknownUser"
+							: "microAppPage.databasePanel.permissionUnknownDepartment",
+					),
+				tags: [],
+				deleteItems: [],
+			}
+			groupMap.set(key, group)
+			return group
+		}
+
+		;(permissions?.table_permissions || []).filter(matchesSubject).forEach((permission) => {
+			const group = getGroup(
+				permission.subject_type as AssignableSubjectType,
+				permission.subject_id,
+			)
+			addUniqueTag(group.tags, {
+				key: `table:${permission.permission_level}`,
+				label: `${t("microAppPage.databasePanel.permissionType.table")} · ${t(
+					`microAppPage.databasePanel.permissionLevel.${permission.permission_level}`,
+				)}`,
+			})
+			group.deleteItems.push({ type: "table", id: permission.id })
+		})
+		;(permissions?.column_permissions || []).filter(matchesSubject).forEach((permission) => {
+			const column = dynamicColumns.find((item) => item.id === permission.column_id)
+			const columnName = column?.column_name || column?.column_key || ""
+			const group = getGroup(
+				permission.subject_type as AssignableSubjectType,
+				permission.subject_id,
+			)
+			addUniqueTag(
+				group.tags,
+				permission.can_read && {
+					key: `column:${permission.column_id}:read`,
+					label: [
+						t("microAppPage.databasePanel.permissionType.column"),
+						columnName,
+						t("microAppPage.databasePanel.permissionAction.read"),
+					]
+						.filter(Boolean)
+						.join(" · "),
+				},
+			)
+			addUniqueTag(
+				group.tags,
+				permission.can_edit && {
+					key: `column:${permission.column_id}:edit`,
+					label: [
+						t("microAppPage.databasePanel.permissionType.column"),
+						columnName,
+						t("microAppPage.databasePanel.permissionAction.edit"),
+					]
+						.filter(Boolean)
+						.join(" · "),
+				},
+			)
+			group.deleteItems.push({ type: "column", id: permission.id })
+		})
+		;(permissions?.row_permissions || []).filter(matchesSubject).forEach((permission) => {
+			const group = getGroup(
+				permission.subject_type as AssignableSubjectType,
+				permission.subject_id,
+			)
+			addUniqueTag(
+				group.tags,
+				permission.can_read && {
+					key: "row:read",
+					label: `${t("microAppPage.databasePanel.permissionType.row")} · ${t(
+						"microAppPage.databasePanel.permissionAction.read",
+					)}`,
+				},
+			)
+			addUniqueTag(
+				group.tags,
+				permission.can_edit && {
+					key: "row:edit",
+					label: `${t("microAppPage.databasePanel.permissionType.row")} · ${t(
+						"microAppPage.databasePanel.permissionAction.edit",
+					)}`,
+				},
+			)
+			addUniqueTag(
+				group.tags,
+				permission.can_delete && {
+					key: "row:delete",
+					label: `${t("microAppPage.databasePanel.permissionType.row")} · ${t(
+						"microAppPage.databasePanel.permissionAction.delete",
+					)}`,
+				},
+			)
+			group.deleteItems.push({ type: "row", id: permission.id })
+		})
+
+		return Array.from(groupMap.values()).sort((a, b) => {
+			if (a.subjectType !== b.subjectType) return a.subjectType === "user" ? -1 : 1
+			return a.name.localeCompare(b.name)
+		})
+	}, [dynamicColumns, permissions, subjectProfiles, t])
+
+	const handleDelete = async (row: GroupedPermissionRow) => {
+		setDeletingId(row.key)
 		try {
-			await MagicBaseApi.deletePermission(projectId, table.id, type, permissionId)
+			await Promise.all(
+				row.deleteItems.map((item) =>
+					MagicBaseApi.deletePermission(projectId, table.id, item.type, item.id),
+				),
+			)
 			toast.success(t("microAppPage.databasePanel.permissionDeleteSuccess"))
 			onRefreshPermissions()
 		} catch (error) {
@@ -55,42 +300,53 @@ export default function PermissionPanel({
 		}
 	}
 
-	const renderPermissionRow = (
-		type: PermissionType,
-		permissionId: string,
-		subjectTypeValue: string,
-		subjectIdValue: string,
-		target: string,
-		value: string,
-	) => {
-		const deleting = deletingId === `${type}:${permissionId}`
+	const renderSubjectAvatar = (row: GroupedPermissionRow) => (
+		<MagicAvatar
+			size={32}
+			radius={6}
+			className={cn(
+				"shrink-0",
+				row.subjectType === "department" && "ring-1 ring-emerald-500/20",
+			)}
+		>
+			{getAvatarText(row.name, row.subjectId)}
+		</MagicAvatar>
+	)
+
+	const renderPermissionRow = (row: GroupedPermissionRow) => {
+		const deleting = deletingId === row.key
 		return (
 			<div
-				key={`${type}:${permissionId}`}
-				className="grid grid-cols-[96px_1fr_1fr_120px_40px] items-center gap-2 border-b border-border px-3 py-2 text-xs"
+				key={row.key}
+				className="grid grid-cols-[minmax(180px,240px)_1fr_40px] items-center gap-3 border-b border-border px-3 py-2 text-xs"
 			>
-				<Badge variant="outline" className="w-fit rounded-md">
-					{t(`microAppPage.databasePanel.permissionType.${type}`)}
-				</Badge>
-				<span
-					className="truncate"
-					title={getSubjectLabel(subjectTypeValue, subjectIdValue)}
-				>
-					{getSubjectLabel(subjectTypeValue, subjectIdValue)}
-				</span>
-				<span className="truncate text-muted-foreground" title={target}>
-					{target}
-				</span>
-				<span className="truncate text-muted-foreground" title={value}>
-					{value}
-				</span>
+				<div className="flex min-w-0 items-center gap-3">
+					{renderSubjectAvatar(row)}
+					<div className="min-w-0">
+						<div className="truncate text-sm text-foreground">{row.name}</div>
+						<div className="mt-0.5 text-xs text-muted-foreground">
+							{t(`microAppPage.databasePanel.subjectType.${row.subjectType}`)}
+						</div>
+					</div>
+				</div>
+				<div className="flex min-w-0 flex-wrap gap-1.5">
+					{row.tags.map((tag) => (
+						<Badge
+							key={tag.key}
+							variant="outline"
+							className="max-w-full rounded-md font-normal"
+						>
+							<span className="truncate">{tag.label}</span>
+						</Badge>
+					))}
+				</div>
 				<Button
 					type="button"
 					variant="ghost"
 					size="icon-sm"
 					disabled={deleting}
 					aria-label={t("microAppPage.databasePanel.permissionDelete")}
-					onClick={() => handleDelete(type, permissionId)}
+					onClick={() => handleDelete(row)}
 				>
 					{deleting ? (
 						<Loader2 className="size-3.5 animate-spin" />
@@ -118,60 +374,8 @@ export default function PermissionPanel({
 					</div>
 				) : (
 					<div>
-						{(permissions?.table_permissions || []).map((permission) =>
-							renderPermissionRow(
-								"table",
-								permission.id,
-								permission.subject_type,
-								permission.subject_id,
-								table.table_name || table.table_key,
-								t(
-									`microAppPage.databasePanel.permissionLevel.${permission.permission_level}`,
-								),
-							),
-						)}
-						{(permissions?.column_permissions || []).map((permission) => {
-							const column = dynamicColumns.find(
-								(item) => item.id === permission.column_id,
-							)
-							return renderPermissionRow(
-								"column",
-								permission.id,
-								permission.subject_type,
-								permission.subject_id,
-								column?.column_name || permission.column_id,
-								[
-									permission.can_read &&
-										t("microAppPage.databasePanel.permissionAction.read"),
-									permission.can_edit &&
-										t("microAppPage.databasePanel.permissionAction.edit"),
-								]
-									.filter(Boolean)
-									.join(" / ") || "-",
-							)
-						})}
-						{(permissions?.row_permissions || []).map((permission) =>
-							renderPermissionRow(
-								"row",
-								permission.id,
-								permission.subject_type,
-								permission.subject_id,
-								permission.record_id,
-								[
-									permission.can_read &&
-										t("microAppPage.databasePanel.permissionAction.read"),
-									permission.can_edit &&
-										t("microAppPage.databasePanel.permissionAction.edit"),
-									permission.can_delete &&
-										t("microAppPage.databasePanel.permissionAction.delete"),
-								]
-									.filter(Boolean)
-									.join(" / ") || "-",
-							),
-						)}
-						{(permissions?.table_permissions || []).length === 0 &&
-						(permissions?.column_permissions || []).length === 0 &&
-						(permissions?.row_permissions || []).length === 0 ? (
+						{permissionRows.map(renderPermissionRow)}
+						{permissionRows.length === 0 ? (
 							<div className="flex h-32 items-center justify-center text-xs text-muted-foreground">
 								{t("microAppPage.databasePanel.permissionEmptyList")}
 							</div>

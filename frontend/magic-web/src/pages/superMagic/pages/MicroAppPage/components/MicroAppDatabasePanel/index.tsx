@@ -602,6 +602,7 @@ export default function MicroAppDatabasePanel({
 					projectId={projectId || ""}
 					table={editorTable}
 					target={permissionEditor?.target || null}
+					permissions={permissions}
 					onOpenChange={(nextOpen) => {
 						if (!nextOpen) setPermissionEditor(null)
 					}}

@@ -222,6 +222,8 @@ readonly class MagicBaseAccessControl
         $tablePermissions = $this->metadataDomainService->listTablePermissions($authorization->getOrganizationCode(), $tableId);
         $columnPermissions = $this->metadataDomainService->listColumnPermissions($authorization->getOrganizationCode(), $tableId);
         $rowPermissions = $this->metadataDomainService->listRowPermissions($authorization->getOrganizationCode(), $tableId);
+        $isManager = $this->hasProjectManageRole($authorization, $projectId)
+            || $this->permissionDomainService->isManager($actor, $projectAdmins, $tableAdmins, $tablePermissions);
 
         return new MagicBaseAccessContext(
             $this->getColumnsByKey($authorization, $tableId),
@@ -230,7 +232,7 @@ readonly class MagicBaseAccessControl
             $tableAdmins,
             MagicBasePermissionIndex::fromCollection($columnPermissions, 'column_id'),
             MagicBasePermissionIndex::fromCollection($rowPermissions, 'record_id'),
-            $this->permissionDomainService->isManager($actor, $projectAdmins, $tableAdmins, $tablePermissions),
+            $isManager,
         );
     }
 
@@ -316,6 +318,35 @@ readonly class MagicBaseAccessControl
 
         $this->forbidden($deniedMessage);
         throw new LogicException('Unreachable');
+    }
+
+    private function hasProjectManageRole(MagicUserAuthorization $authorization, int $projectId): bool
+    {
+        $project = $this->getProjectOrFail($projectId);
+        if (! $this->isSameOrganization($authorization, $project)) {
+            return false;
+        }
+        if ($authorization->getId() === '') {
+            return false;
+        }
+        if ($this->isProjectOwner($authorization, $project)) {
+            return true;
+        }
+
+        $member = $this->projectMemberDomainService->getMemberByProjectAndUser($projectId, $authorization->getId());
+        if ($member !== null && $member->getRole()->isHigherOrEqualThan(MemberRole::MANAGE)) {
+            return true;
+        }
+
+        $dataIsolation = DataIsolation::simpleMake($authorization->getOrganizationCode(), $authorization->getId());
+        $departmentIds = $this->departmentUserDomainService->getDepartmentIdsByUserId($dataIsolation, $authorization->getId(), true);
+        foreach ($this->projectMemberDomainService->getMembersByProjectAndDepartmentIds($projectId, $departmentIds) as $departmentMember) {
+            if ($departmentMember->getRole()->isHigherOrEqualThan(MemberRole::MANAGE)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private function getProjectOrFail(int $projectId): ProjectEntity
