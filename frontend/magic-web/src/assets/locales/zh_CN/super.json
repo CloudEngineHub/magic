@@ -3157,11 +3157,14 @@
 	},
 	"microAppShare": {
 		"errorTitle": "微应用不可访问",
+		"login": "登录",
 		"noEntryDescription": "发布内容中没有可运行的根目录 HTML 文件。",
 		"noEntryTitle": "未找到入口 HTML",
+		"organization": "切换组织",
 		"passwordDescription": "请输入发布者设置的访问密码。",
 		"passwordTitle": "访问微应用",
-		"title": "微应用"
+		"title": "微应用",
+		"user": "已登录用户"
 	},
 	"microAppsPage": {
 		"createProject": "新建项目",

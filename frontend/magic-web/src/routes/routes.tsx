@@ -127,6 +127,7 @@ const SharedWorkspacePage = lazy(() => import("@/pages/superMagicMobile/pages/Sh
 const WorkspaceProjectsPage = lazy(() => import("@/pages/superMagicMobile/pages/WorkspacePage"))
 
 const SuperMagicShare = lazy(() => import("@/pages/share"))
+const MicroAppSharePage = lazy(() => import("@/pages/share/microApp"))
 
 const SuperAssistant = lazy(() => import("@/pages/superMagic/pages/Assistant"))
 /** PC 录音与纪要 - 列表 */
@@ -521,6 +522,11 @@ export function registerRoutes(config: RouteConfig = {}): Array<RouteObject> {
 			name: RouteName.SuperMagicFileShare,
 			path: RoutePath.SuperMagicFileShare,
 			element: <SuperMagicShare />,
+		},
+		{
+			name: RouteName.MicroAppShare,
+			path: RoutePath.MicroAppShare,
+			element: <MicroAppSharePage />,
 		},
 		{
 			name: RouteName.AuthLayout,

@@ -3157,11 +3157,14 @@
 	},
 	"microAppShare": {
 		"errorTitle": "Micro app unavailable",
+		"login": "Log in",
 		"noEntryDescription": "The published content does not include a runnable root HTML file.",
 		"noEntryTitle": "No entry HTML found",
+		"organization": "Switch organization",
 		"passwordDescription": "Enter the access password set by the publisher.",
 		"passwordTitle": "Open micro app",
-		"title": "Micro app"
+		"title": "Micro app",
+		"user": "Signed-in user"
 	},
 	"microAppsPage": {
 		"createProject": "New Project",

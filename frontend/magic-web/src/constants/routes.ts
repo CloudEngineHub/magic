@@ -100,6 +100,7 @@ export const enum RoutePath {
 	SuperWorkspaceProjectTopicState = "/super/:projectId/:topicId",
 	MicroApps = "/super/micro-apps",
 	MicroApp = "/super/micro-app/:projectId",
+	MicroAppShare = "/micro-app/:resourceId",
 	SuperAssistant = "/super/assistant",
 	CrewMarket = "/market",
 	CrewMarketCrew = "/market/crew",

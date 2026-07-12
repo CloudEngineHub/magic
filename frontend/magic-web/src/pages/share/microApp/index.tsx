@@ -1,0 +1,353 @@
+import { useCallback, useMemo, useState } from "react"
+import { useParams } from "react-router"
+import { useTranslation } from "react-i18next"
+import { Building2, ChevronDown, FileCode2, Loader2, LogIn, LogOut } from "lucide-react"
+import { ErrorDisplay, PasswordVerification, ShareEmptyState } from "@/pages/share/components"
+import HtmlPreviewContent from "@/pages/superMagic/components/Detail/contents/HTML"
+import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks"
+import { resolveSelectedHtmlEntry } from "@/pages/superMagic/pages/MicroAppPage/utils/microAppFiles"
+import type { MicroAppPreviewMode } from "@/pages/superMagic/pages/MicroAppPage/components/MicroAppHeader"
+import type { ProjectListItem } from "@/pages/superMagic/pages/Workspace/types"
+import MagicDropdown from "@/components/base/MagicDropdown"
+import UserAvatarRender from "@/components/business/UserAvatarRender"
+import OrganizationList from "@/layouts/BaseLayout/components/Sider/components/OrganizationSwitch/OrganizationList"
+import useLogout from "@/hooks/account/useLogout"
+import { useAuthorization, useOrganization, useUserInfo } from "@/models/user/hooks"
+import { RouteName } from "@/routes/constants"
+import { history } from "@/routes/history"
+import { buildLoginRedirectSearchParams } from "@/pages/login/utils/loginRedirect"
+import useMicroAppShareData from "./hooks/useMicroAppShareData"
+
+function MicroAppShareEmpty() {
+	const { t } = useTranslation("super")
+
+	return (
+		<div
+			className="flex h-full w-full flex-col items-center justify-center gap-3 bg-muted/20 px-8 text-center"
+			data-testid="micro-app-share-empty"
+		>
+			<div className="flex size-12 items-center justify-center rounded-lg border border-border bg-background text-muted-foreground">
+				<FileCode2 size={22} />
+			</div>
+			<div className="space-y-1">
+				<p className="text-sm font-medium text-foreground">
+					{t("microAppShare.noEntryTitle")}
+				</p>
+				<p className="max-w-[360px] text-sm text-muted-foreground">
+					{t("microAppShare.noEntryDescription")}
+				</p>
+			</div>
+		</div>
+	)
+}
+
+function buildPreviewFile(entryFile: AttachmentItem) {
+	return {
+		...entryFile,
+		file_id: entryFile.file_id,
+		file_name: entryFile.file_name || entryFile.filename || entryFile.name,
+		file_extension: entryFile.file_extension,
+		display_config: entryFile.display_config,
+	}
+}
+
+function convertToQuery(params: URLSearchParams): Record<string, string> {
+	const query: Record<string, string> = {}
+	params.forEach((value, key) => {
+		query[key] = value
+	})
+	return query
+}
+
+function goLogin() {
+	history.replace({
+		name: RouteName.Login,
+		query: convertToQuery(
+			buildLoginRedirectSearchParams({
+				currentHref: window.location.href,
+				redirectTarget: window.location.href,
+			}),
+		),
+	})
+}
+
+function MicroAppShareHeader({ appName }: { appName?: string }) {
+	const { t } = useTranslation("super")
+	const { t: tInterface } = useTranslation("interface")
+	const { userInfo } = useUserInfo()
+	const { authorization } = useAuthorization()
+	const { organizations, organizationCode, teamshareOrganizationCode, magicOrganizationMap } =
+		useOrganization()
+	const [userMenuOpen, setUserMenuOpen] = useState(false)
+	const [organizationMenuOpen, setOrganizationMenuOpen] = useState(false)
+	const logout = useLogout({ onConfirm: () => setUserMenuOpen(false) })
+
+	const isLoggedIn = Boolean(userInfo?.user_id || authorization?.trim())
+	const displayName =
+		userInfo?.real_name || userInfo?.nickname || userInfo?.magic_id || t("microAppShare.user")
+	const organizationName = useMemo(() => {
+		const teamshareOrganization = organizations.find(
+			(item) => item.organization_code === teamshareOrganizationCode,
+		)
+		if (teamshareOrganization?.organization_name) return teamshareOrganization.organization_name
+
+		const magicOrganization = organizationCode ? magicOrganizationMap[organizationCode] : null
+		return (
+			magicOrganization?.organization_name ||
+			teamshareOrganizationCode ||
+			organizationCode ||
+			""
+		)
+	}, [magicOrganizationMap, organizationCode, organizations, teamshareOrganizationCode])
+
+	const handleLogout = useCallback(() => {
+		void logout()
+	}, [logout])
+
+	const handleUserMenuOpenChange = useCallback((open: boolean) => {
+		setUserMenuOpen(open)
+		if (!open) {
+			setOrganizationMenuOpen(false)
+		}
+	}, [])
+
+	const handleOrganizationListClose = useCallback(() => {
+		setOrganizationMenuOpen(false)
+		setUserMenuOpen(false)
+	}, [])
+
+	const renderOrganizationList = () => <OrganizationList onClose={handleOrganizationListClose} />
+
+	const renderUserMenu = () => (
+		<div
+			className="w-[264px] max-w-[calc(100vw-24px)] overflow-hidden rounded-xl border border-border bg-popover p-1.5 text-popover-foreground shadow-xl"
+			data-testid="micro-app-share-user-menu"
+		>
+			<MagicDropdown
+				placement="leftTop"
+				open={organizationMenuOpen}
+				onOpenChange={setOrganizationMenuOpen}
+				trigger={["click"]}
+				popupRender={renderOrganizationList}
+				overlayClassName="p-0"
+			>
+				<button
+					type="button"
+					className="flex h-10 w-full items-center gap-2 rounded-lg px-2 text-left text-sm font-medium text-foreground transition-colors hover:bg-muted/70"
+					data-testid="micro-app-share-organization-trigger"
+				>
+					<Building2 className="size-4 shrink-0 text-muted-foreground" />
+					<span className="min-w-0 flex-1 truncate">
+						{organizationName || t("microAppShare.organization")}
+					</span>
+					<ChevronDown className="size-4 shrink-0 -rotate-90 text-muted-foreground" />
+				</button>
+			</MagicDropdown>
+
+			<button
+				type="button"
+				className="mt-1 flex h-10 w-full items-center gap-2 rounded-lg px-2 text-left text-sm font-medium text-destructive transition-colors hover:bg-destructive/10"
+				onClick={handleLogout}
+				data-testid="micro-app-share-logout"
+			>
+				<LogOut className="size-4" />
+				{tInterface("common.logout")}
+			</button>
+		</div>
+	)
+
+	return (
+		<header
+			className="relative z-20 flex h-14 shrink-0 items-center justify-between gap-4 border-b border-border/70 bg-background/95 px-4 shadow-[0_1px_0_rgba(15,23,42,0.04)] backdrop-blur supports-[backdrop-filter]:bg-background/85 sm:px-5"
+			data-testid="micro-app-share-header"
+		>
+			<div className="flex min-w-0 items-center gap-3">
+				<div className="flex size-9 shrink-0 items-center justify-center rounded-md border border-border/80 bg-muted/40 text-foreground shadow-sm">
+					<FileCode2 size={18} />
+				</div>
+				<div className="min-w-0">
+					<div className="truncate text-[15px] font-semibold leading-5 text-foreground">
+						{appName?.trim() || t("microAppShare.title")}
+					</div>
+				</div>
+			</div>
+
+			{isLoggedIn ? (
+				<div data-testid="micro-app-share-user">
+					<MagicDropdown
+						placement="bottomRight"
+						open={userMenuOpen}
+						onOpenChange={handleUserMenuOpenChange}
+						trigger={["click"]}
+						popupRender={renderUserMenu}
+						overlayClassName="p-0"
+					>
+						<button
+							type="button"
+							className="flex h-10 max-w-[260px] items-center gap-2 rounded-md border border-border/80 bg-background px-2.5 text-left shadow-sm transition-colors hover:bg-muted/60"
+						>
+							<UserAvatarRender
+								userInfo={userInfo}
+								size={30}
+								shape="circle"
+								className="size-[30px] shrink-0"
+							/>
+							<div className="hidden min-w-0 flex-1 sm:block">
+								<div className="truncate text-sm font-medium leading-5 text-foreground">
+									{displayName}
+								</div>
+								{organizationName ? (
+									<div className="truncate text-xs leading-4 text-muted-foreground">
+										{organizationName}
+									</div>
+								) : null}
+							</div>
+							<ChevronDown className="size-4 shrink-0 text-muted-foreground" />
+						</button>
+					</MagicDropdown>
+				</div>
+			) : (
+				<button
+					type="button"
+					className="inline-flex h-9 items-center gap-1.5 rounded-md border border-border bg-background px-3 text-sm font-medium text-foreground shadow-sm transition-colors hover:bg-muted"
+					onClick={goLogin}
+					data-testid="micro-app-share-login"
+				>
+					<LogIn size={15} />
+					{t("microAppShare.login")}
+				</button>
+			)}
+		</header>
+	)
+}
+
+export default function MicroAppSharePage() {
+	const { t } = useTranslation("super")
+	const { resourceId = "" } = useParams<{ resourceId: string }>()
+	const [previewMode, setPreviewMode] = useState<MicroAppPreviewMode>("desktop")
+	const {
+		shareData,
+		shareMeta,
+		attachmentsTree,
+		attachmentList,
+		loading,
+		error,
+		isNeedPassword,
+		passwordFromUrl,
+		emptyStateInfo,
+		handleSwitchOrganization,
+		isSwitching,
+		getShareData,
+		setError,
+		setVerifiedPassword,
+		reload,
+	} = useMicroAppShareData({ resourceId })
+
+	const entryFile = useMemo(
+		() => resolveSelectedHtmlEntry({ items: attachmentList, selectedFileId: null }),
+		[attachmentList],
+	)
+
+	const selectedProject = useMemo<ProjectListItem | null>(
+		() =>
+			shareMeta.projectId
+				? ({
+						id: shareMeta.projectId,
+						project_name: shareMeta.projectName,
+						name: shareMeta.projectName,
+					} as ProjectListItem)
+				: null,
+		[shareMeta.projectId, shareMeta.projectName],
+	)
+
+	const handleVerifySuccess = useCallback(
+		(_data: unknown, password?: string) => {
+			setError(null)
+			setVerifiedPassword(password)
+		},
+		[setError, setVerifiedPassword],
+	)
+	const handleOpenFileTab = useCallback(() => undefined, [])
+
+	if (emptyStateInfo) {
+		return (
+			<ShareEmptyState
+				currentOrgName={emptyStateInfo.currentOrgName}
+				targetOrgName={emptyStateInfo.targetOrgName}
+				targetOrgLogo={emptyStateInfo.targetOrgLogo || undefined}
+				userInfo={emptyStateInfo.userInfo}
+				onSwitch={handleSwitchOrganization}
+				isLoading={isSwitching}
+				isFileShare
+			/>
+		)
+	}
+
+	return (
+		<div
+			className="flex h-screen w-screen flex-col overflow-hidden bg-background"
+			data-testid="micro-app-share-page"
+		>
+			<MicroAppShareHeader appName={shareMeta.projectName} />
+			<main className="min-h-0 flex-1 overflow-hidden">
+				{loading ? (
+					<div
+						className="flex h-full items-center justify-center"
+						data-testid="micro-app-share-loading"
+					>
+						<Loader2 className="size-6 animate-spin text-muted-foreground" />
+					</div>
+				) : null}
+
+				{isNeedPassword && !shareData && !entryFile && !error && !loading ? (
+					<PasswordVerification
+						resourceId={resourceId}
+						initialPassword={passwordFromUrl}
+						onVerifySuccess={handleVerifySuccess}
+						onVerifyFail={() => setError(null)}
+						getShareData={getShareData}
+						isFileShare
+						maxLength={32}
+						uppercase={false}
+						title={t("microAppShare.passwordTitle")}
+						description={t("microAppShare.passwordDescription")}
+					/>
+				) : null}
+
+				{error && !loading ? (
+					<ErrorDisplay
+						errorMessage={t("microAppShare.errorTitle")}
+						onRetry={reload}
+						isFileShare
+					/>
+				) : null}
+
+				{!loading && !error && shareData && !entryFile ? <MicroAppShareEmpty /> : null}
+
+				{!loading && !error && entryFile ? (
+					<div
+						className="h-full w-full overflow-hidden bg-background"
+						data-testid="micro-app-share-preview"
+					>
+						<HtmlPreviewContent
+							data={buildPreviewFile(entryFile)}
+							attachments={attachmentsTree}
+							attachmentList={attachmentList}
+							allowEdit={false}
+							selectedProject={selectedProject}
+							selectedTopic={null}
+							showFileHeader={false}
+							showFooter={false}
+							viewMode={previewMode}
+							onViewModeChange={setPreviewMode}
+							activeFileId={entryFile.file_id}
+							projectId={shareMeta.projectId}
+							openFileTab={handleOpenFileTab}
+							className="h-full"
+						/>
+					</div>
+				) : null}
+			</main>
+		</div>
+	)
+}
