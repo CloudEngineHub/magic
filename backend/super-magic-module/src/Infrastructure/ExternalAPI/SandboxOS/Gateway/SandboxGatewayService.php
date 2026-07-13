@@ -1082,7 +1082,7 @@ class SandboxGatewayService extends AbstractSandboxOS implements SandboxGatewayI
         ]);
 
         try {
-            return retry(3, function () use ($sandboxId, $payload) {
+            return retry(3, function () use ($sandboxId, $projectId, $payload) {
                 try {
                     $response = $this->getClient()->post(
                         $this->buildApiPath(sprintf('api/v1/sandboxes/%s/referenced-projects', $sandboxId)),
