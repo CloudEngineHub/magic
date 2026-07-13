@@ -583,6 +583,56 @@
 	line-height: 1.5;
 }
 
+.mpk-import-hint-tooltip {
+	position: absolute;
+	top: calc(100% + 8px);
+	left: 12px;
+	z-index: 20;
+	display: block;
+	width: max-content;
+	max-width: min(260px, calc(100% - 24px));
+	padding: 8px 10px;
+	color: #fff;
+	font-size: 11px;
+	line-height: 1.5;
+	white-space: normal;
+	text-align: left;
+	background: rgb(17 24 39 / 96%);
+	border-radius: 8px;
+	box-shadow: 0 10px 30px rgb(15 23 42 / 18%);
+	transform: translateY(-4px);
+	opacity: 0;
+	pointer-events: none;
+	transition:
+		opacity 0.15s cubic-bezier(0.4, 0, 0.2, 1),
+		transform 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.mpk-import-hint-tooltip::before {
+	position: absolute;
+	bottom: 100%;
+	left: 16px;
+	width: 0;
+	height: 0;
+	border-width: 5px;
+	border-style: solid;
+	border-color: transparent transparent rgb(17 24 39 / 96%) transparent;
+	content: "";
+}
+
+.mpk-image-slot-upload.has-import-hint-tooltip:hover .mpk-import-hint-tooltip,
+.mpk-image-slot-upload.has-import-hint-tooltip:focus-within .mpk-import-hint-tooltip,
+.mpk-image-grid.has-import-hint-tooltip:hover .mpk-import-hint-tooltip,
+.mpk-image-grid.has-import-hint-tooltip:focus-within .mpk-import-hint-tooltip {
+	transform: translateY(0);
+	opacity: 1;
+}
+
+.mpk-image-slot-upload.is-drag-over .mpk-import-hint-tooltip,
+.mpk-image-grid.is-drag-over .mpk-import-hint-tooltip {
+	opacity: 0;
+}
+
 .mpk-error {
 	padding: 10px 12px;
 	color: var(--mpk-destructive);

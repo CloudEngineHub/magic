@@ -341,6 +341,15 @@ export function createPluginSrcDocV1(
 						"magic-canvas-plugin:fetch-blob-result"
 					).then((data) => new Blob([data.arrayBuffer]));
 				},
+				// 插件内部命中/离开投放区时调用，宿主据此决定鼠标释放后是否 drop。
+				reportCanvasAssetDragTarget(target = {}) {
+					postHost({
+						type: "magic-canvas-plugin:canvas-asset-drag-target",
+						targetId: typeof target.targetId === "string" ? target.targetId : null,
+						mode: target.mode,
+						canDrop: target.canDrop === true,
+					});
+				},
 			},
 			storage: (() => {
 				const privateStorage = {
@@ -444,6 +453,20 @@ export function createPluginSrcDocV1(
 			};
 			postHost({ type: "magic-canvas-plugin:pointer-down" });
 		}, true);
+
+		// 宿主只把画布图片拖拽相关消息转成 iframe 内的 CustomEvent，插件代码无需监听 postMessage。
+		window.addEventListener("message", (event) => {
+			const data = event.data;
+			if (!data || data.channelToken !== __MAGIC_CANVAS_BOOTSTRAP__.channelToken) return;
+			if (
+				data.type !== "magic-canvas-plugin:canvas-asset-drag-move" &&
+				data.type !== "magic-canvas-plugin:canvas-asset-drag-leave" &&
+				data.type !== "magic-canvas-plugin:canvas-asset-drop"
+			) {
+				return;
+			}
+			window.dispatchEvent(new CustomEvent(data.type, { detail: data }));
+		});
 	</script>
 	${runtimeScript}
 	<script>

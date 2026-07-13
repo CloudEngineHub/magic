@@ -1,0 +1,402 @@
+import { type ReactNode, type RefObject, useCallback, useEffect, useRef, useState } from "react"
+import { createPortal } from "react-dom"
+import { toast } from "sonner"
+
+import type { Canvas } from "../../canvas/Canvas"
+import type { CanvasEvent } from "../../canvas/EventEmitter"
+import { ElementTypeEnum, type ImageElement, CanvasDesignPlugin } from "../../canvas/types"
+import { useImageLowUrl } from "../../hooks/useImageUrls"
+import {
+	pluginHasCapability,
+	type PluginCanvasAssetDragTargetMode,
+	type PluginRuntimeMessage,
+} from "./runtime/v1"
+import { resolveCanvasImageDragAssets } from "./canvasImageDragAssets"
+import styles from "./index.module.css"
+
+type CanvasAssetDragTargetMessage = Extract<
+	PluginRuntimeMessage,
+	{ type: "magic-canvas-plugin:canvas-asset-drag-target" }
+>
+
+interface DragPreviewItem {
+	id: string
+	name: string
+	src?: string
+}
+
+interface DragState {
+	/** 拖拽起始元素 ID */
+	originElementId: string
+	/** 本次拖拽可导出的图片元素 ID 列表 */
+	imageElementIds: string[]
+	/** 当前指针窗口 X 坐标 */
+	clientX: number
+	/** 当前指针窗口 Y 坐标 */
+	clientY: number
+	/** 是否悬停在插件浮窗范围内 */
+	isOverPlugin: boolean
+	/** 是否悬停在可投放目标范围内 */
+	isOverTarget: boolean
+	/** 拖拽预览图片列表 */
+	previewItems: DragPreviewItem[]
+}
+
+interface DropTarget {
+	targetId: string
+	mode: PluginCanvasAssetDragTargetMode
+	canDrop: boolean
+}
+
+interface UseCanvasImageExternalDragToPluginParams {
+	canvas: Canvas
+	channelToken: string
+	iframeRef: RefObject<HTMLIFrameElement | null>
+	plugin: CanvasDesignPlugin
+	pluginWindowRef: RefObject<HTMLDivElement | null>
+}
+
+/** 判断窗口坐标是否落在指定 DOMRect 内 */
+function isPointInRect(clientX: number, clientY: number, rect: DOMRect): boolean {
+	return (
+		clientX >= rect.left &&
+		clientX <= rect.right &&
+		clientY >= rect.top &&
+		clientY <= rect.bottom
+	)
+}
+
+/**
+ * 将窗口坐标转换为 iframe 内部坐标。
+ *
+ * 返回 null 表示当前指针不在 iframe 范围内，插件侧应退出 hover/drop 状态。
+ */
+function getIframePoint(
+	iframe: HTMLIFrameElement | null,
+	clientX: number,
+	clientY: number,
+): { x: number; y: number } | null {
+	if (!iframe) return null
+	const rect = iframe.getBoundingClientRect()
+	if (!isPointInRect(clientX, clientY, rect)) return null
+	// 画布事件给的是窗口坐标，插件 iframe 只认识自己的局部坐标。
+	return {
+		x: clientX - rect.left,
+		y: clientY - rect.top,
+	}
+}
+
+/** 判断当前指针窗口坐标是否悬停在插件浮窗范围内 */
+function getPluginWindowHoverState(
+	pluginWindow: HTMLDivElement | null,
+	clientX: number,
+	clientY: number,
+): boolean {
+	if (!pluginWindow) return false
+	return isPointInRect(clientX, clientY, pluginWindow.getBoundingClientRect())
+}
+
+/** 获取拖拽预览所需的图片元素元信息，缩略图 URL 由 useImageLowUrl 异步解析。 */
+function getImagePreviewItem(canvas: Canvas, elementId: string): DragPreviewItem | null {
+	const element = canvas.elementManager.getElementData(elementId)
+	if (!element || element.type !== ElementTypeEnum.Image) return null
+	const imageElement = element as ImageElement
+	if (!imageElement.src) return null
+	return {
+		id: elementId,
+		name: imageElement.name || "Image",
+		src: imageElement.src,
+	}
+}
+
+function CanvasAssetDragGhostItem({ item, index }: { item: DragPreviewItem; index: number }) {
+	const { lowUrl } = useImageLowUrl({
+		elementId: item.id,
+		src: item.src,
+		enabled: Boolean(item.src),
+	})
+
+	return (
+		<div
+			className={styles.canvasAssetDragGhostItem}
+			style={{
+				transform: `translate3d(${index * 7}px, ${index * 5}px, 0) rotate(${index * 3}deg)`,
+			}}
+		>
+			{lowUrl ? (
+				<img
+					className={styles.canvasAssetDragGhostImage}
+					src={lowUrl}
+					alt={item.name}
+					draggable={false}
+				/>
+			) : (
+				<span className={styles.canvasAssetDragGhostPlaceholder} />
+			)}
+		</div>
+	)
+}
+
+function CanvasAssetDragGhost({ dragState }: { dragState: DragState }) {
+	if (typeof document === "undefined") return null
+
+	// 拖拽预览挂到 body，避免被插件浮窗或 iframe 的 overflow/z-index 截断。
+	const visibleItems = dragState.previewItems.length
+		? dragState.previewItems
+		: [{ id: "placeholder", name: "Image" }]
+	const count = dragState.imageElementIds.length
+
+	return createPortal(
+		<div
+			className={styles.canvasAssetDragGhost}
+			style={{
+				transform: `translate3d(${dragState.clientX + 14}px, ${dragState.clientY + 14}px, 0)`,
+			}}
+		>
+			<div className={styles.canvasAssetDragGhostStack}>
+				{visibleItems.map((item, index) => (
+					<CanvasAssetDragGhostItem key={item.id} item={item} index={index} />
+				))}
+				{count > 1 && <span className={styles.canvasAssetDragGhostCount}>{count}</span>}
+			</div>
+		</div>,
+		document.body,
+	)
+}
+
+/** 最多取前三张图片作为拖拽 ghost 的堆叠预览 */
+function getPreviewItems(canvas: Canvas, elementIds: string[]): DragPreviewItem[] {
+	return elementIds
+		.slice(0, 3)
+		.map((elementId) => getImagePreviewItem(canvas, elementId))
+		.filter((item): item is DragPreviewItem => Boolean(item))
+}
+
+/**
+ * 连接画布图片外部拖拽和插件 iframe。
+ *
+ * 画布侧只负责发出 start/move/end；这个 hook 负责：
+ * 1. 将窗口坐标转换为 iframe 坐标并通知插件；
+ * 2. 接收插件上报的当前 drop target；
+ * 3. 在 mouseup/pointerup 后解析图片文件并投递给插件；
+ * 4. 渲染宿主层的拖拽预览。
+ */
+export function useCanvasImageExternalDragToPlugin({
+	canvas,
+	channelToken,
+	iframeRef,
+	plugin,
+	pluginWindowRef,
+}: UseCanvasImageExternalDragToPluginParams): {
+	canvasAssetDragGhost: ReactNode
+	handleCanvasAssetDragTarget: (target: CanvasAssetDragTargetMessage) => void
+	isCanvasAssetDragActive: boolean
+	isCanvasAssetDragOverPlugin: boolean
+	isCanvasAssetDropResolving: boolean
+} {
+	const [dragState, setDragState] = useState<DragState | null>(null)
+	const [isDropResolving, setIsDropResolving] = useState(false)
+	const dragStateRef = useRef<DragState | null>(null)
+	const targetRef = useRef<DropTarget | null>(null)
+	const isInsideIframeRef = useRef(false)
+	// 只有声明了 assets.pickFiles 能力的插件才允许接收画布图片拖入。
+	const canAcceptCanvasImageDrag = pluginHasCapability(plugin, "assets.pickFiles")
+
+	useEffect(() => {
+		dragStateRef.current = dragState
+	}, [dragState])
+
+	/** 向插件 iframe 投递带 channelToken 的宿主消息 */
+	const postPluginMessage = useCallback(
+		(message: Record<string, unknown>) => {
+			iframeRef.current?.contentWindow?.postMessage(
+				{
+					channelToken,
+					...message,
+				},
+				"*",
+			)
+		},
+		[channelToken, iframeRef],
+	)
+
+	/** 通知插件清理画布图片拖拽 hover/drop 状态 */
+	const sendDragLeave = useCallback(() => {
+		isInsideIframeRef.current = false
+		targetRef.current = null
+		// 指针离开 iframe 或拖拽结束时，通知插件清理内部 hover 样式。
+		postPluginMessage({
+			type: "magic-canvas-plugin:canvas-asset-drag-leave",
+		})
+	}, [postPluginMessage])
+
+	/** 将当前拖拽位置同步给插件 iframe，并携带图片数量等元信息 */
+	const postDragMove = useCallback(
+		(state: Pick<DragState, "clientX" | "clientY" | "imageElementIds" | "originElementId">) => {
+			const iframePoint = getIframePoint(iframeRef.current, state.clientX, state.clientY)
+			if (!iframePoint) {
+				if (isInsideIframeRef.current) {
+					sendDragLeave()
+				}
+				return
+			}
+
+			isInsideIframeRef.current = true
+			// 给iframe 发 move 事件，只传元信息，真正文件会在确认 drop 后再解析，避免拖动中反复上传。
+			postPluginMessage({
+				type: "magic-canvas-plugin:canvas-asset-drag-move",
+				clientX: iframePoint.x,
+				clientY: iframePoint.y,
+				assetsMeta: {
+					count: state.imageElementIds.length,
+					originElementId: state.originElementId,
+				},
+			})
+		},
+		[iframeRef, postPluginMessage, sendDragLeave],
+	)
+
+	/** 接收插件 iframe 上报的当前可投放目标 */
+	const handleCanvasAssetDragTarget = useCallback((target: CanvasAssetDragTargetMessage) => {
+		// 插件每次命中/离开投放目标都会上报，宿主只记录当前可 drop 的目标。
+		targetRef.current =
+			target.canDrop && target.targetId && target.mode
+				? {
+						targetId: target.targetId,
+						mode: target.mode,
+						canDrop: true,
+					}
+				: null
+		setDragState((current) =>
+			current
+				? {
+						...current,
+						isOverTarget: Boolean(targetRef.current),
+					}
+				: current,
+		)
+	}, [])
+
+	useEffect(() => {
+		/** 画布开始外部图片拖拽时，初始化宿主拖拽状态和 ghost 预览 */
+		const handleStart = (event: CanvasEvent<"image:external-drag:start">) => {
+			if (!canAcceptCanvasImageDrag) return
+			const { data } = event
+			const nextState: DragState = {
+				originElementId: data.originElementId,
+				imageElementIds: data.imageElementIds,
+				clientX: data.clientX,
+				clientY: data.clientY,
+				isOverPlugin: getPluginWindowHoverState(
+					pluginWindowRef.current,
+					data.clientX,
+					data.clientY,
+				),
+				isOverTarget: false,
+				previewItems: getPreviewItems(canvas, data.imageElementIds),
+			}
+			targetRef.current = null
+			setDragState(nextState)
+			postDragMove(nextState)
+		}
+
+		/** 画布拖拽移动时，更新宿主坐标并继续转发给插件 iframe */
+		const handleMove = (event: CanvasEvent<"image:external-drag:move">) => {
+			if (!canAcceptCanvasImageDrag || !dragStateRef.current) return
+			const { data } = event
+			const isOverPlugin = getPluginWindowHoverState(
+				pluginWindowRef.current,
+				data.clientX,
+				data.clientY,
+			)
+			const nextState = {
+				...dragStateRef.current,
+				clientX: data.clientX,
+				clientY: data.clientY,
+				isOverPlugin,
+				isOverTarget: Boolean(targetRef.current),
+			}
+			setDragState(nextState)
+			postDragMove(nextState)
+		}
+
+		/** 画布拖拽结束时，根据插件最后上报的 drop target 决定是否投递文件 */
+		const handleEnd = (event: CanvasEvent<"image:external-drag:end">) => {
+			if (!canAcceptCanvasImageDrag) return
+			const current = dragStateRef.current
+			const target = targetRef.current
+			sendDragLeave()
+			setDragState(null)
+			// 如果拖拽被取消（工具切换/Escape/多指手势/浏览器取消 pointer），或者没有可投放目标，或者没有可投放目标，则不进行图片导入。
+			if (!current || event.data.cancelled || !target?.canDrop) {
+				return
+			}
+
+			// slot 是单图替换位，只导入拖拽起点；grid 支持把选区里的图片批量导入。
+			const elementIds =
+				target.mode === "slot" ? [current.originElementId] : current.imageElementIds
+			setIsDropResolving(true)
+			const toastId = toast.loading(
+				canvas.t?.("plugin.canvasAssetDrop.loading", "正在导入图片...") ||
+					"正在导入图片...",
+			)
+			void resolveCanvasImageDragAssets(canvas, elementIds)
+				.then((files) => {
+					if (!files.length) {
+						throw new Error("No image asset resolved.")
+					}
+					postPluginMessage({
+						type: "magic-canvas-plugin:canvas-asset-drop",
+						targetId: target.targetId,
+						files,
+					})
+					toast.dismiss(toastId)
+				})
+				.catch((error) => {
+					void error
+					toast.error(
+						canvas.t?.("plugin.canvasAssetDrop.error", "图片导入失败，请重试") ||
+							"图片导入失败，请重试",
+						{ id: toastId },
+					)
+				})
+				.finally(() => {
+					setIsDropResolving(false)
+				})
+		}
+
+		const unsubscribers = [
+			canvas.eventEmitter.on("image:external-drag:start", handleStart),
+			canvas.eventEmitter.on("image:external-drag:move", handleMove),
+			canvas.eventEmitter.on("image:external-drag:end", handleEnd),
+		]
+
+		return () => {
+			unsubscribers.forEach((unsubscribe) => unsubscribe())
+		}
+	}, [
+		canAcceptCanvasImageDrag,
+		canvas,
+		pluginWindowRef,
+		postDragMove,
+		postPluginMessage,
+		sendDragLeave,
+	])
+
+	useEffect(() => {
+		return () => {
+			// 组件卸载时清理拖拽状态。
+			sendDragLeave()
+		}
+	}, [sendDragLeave])
+
+	const canvasAssetDragGhost = dragState ? <CanvasAssetDragGhost dragState={dragState} /> : null
+
+	return {
+		canvasAssetDragGhost,
+		handleCanvasAssetDragTarget,
+		isCanvasAssetDragActive: Boolean(dragState),
+		isCanvasAssetDragOverPlugin: Boolean(dragState?.isOverPlugin),
+		isCanvasAssetDropResolving: isDropResolving,
+	}
+}

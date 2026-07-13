@@ -1,7 +1,4 @@
-import type {
-	CompleteImagePromptRequest,
-	GenerateImageRequest,
-} from "../../../../types.magic"
+import type { CompleteImagePromptRequest, GenerateImageRequest } from "../../../../types.magic"
 import type { CanvasDesignPlugin, CanvasDesignPluginCapability } from "../../../../canvas/types"
 
 export type PluginFilePickerType = "image" | "video" | "audio" | "file"
@@ -25,10 +22,15 @@ export interface PluginGenerateAndPlaceParams extends Partial<GenerateImageReque
 	select?: boolean
 }
 
-export interface PluginCompleteImagePromptParams
-	extends Omit<CompleteImagePromptRequest, "project_id"> {
+export interface PluginCompleteImagePromptParams extends Omit<
+	CompleteImagePromptRequest,
+	"project_id"
+> {
 	user_prompt: string
 }
+
+/** 插件图片投放目标类型：slot 替换单图，grid 追加多图 */
+export type PluginCanvasAssetDragTargetMode = "slot" | "grid"
 
 export type PluginRuntimeMessage =
 	| {
@@ -60,6 +62,13 @@ export type PluginRuntimeMessage =
 	  }
 	| {
 			type: "magic-canvas-plugin:pointer-down"
+	  }
+	/** 插件 runtime 上报当前画布图片拖拽是否命中可投放目标 */
+	| {
+			type: "magic-canvas-plugin:canvas-asset-drag-target"
+			targetId: string | null
+			mode?: PluginCanvasAssetDragTargetMode
+			canDrop: boolean
 	  }
 	| {
 			type: "magic-canvas-plugin:get-image-models"
@@ -237,6 +246,16 @@ export function parsePluginRuntimeMessage(
 	if (record.type === "magic-canvas-plugin:pointer-down") {
 		return {
 			type: "magic-canvas-plugin:pointer-down",
+		}
+	}
+	if (record.type === "magic-canvas-plugin:canvas-asset-drag-target") {
+		// 对 iframe 传回的目标信息做收窄，避免宿主保存非法 mode/targetId。
+		const mode = record.mode === "slot" || record.mode === "grid" ? record.mode : undefined
+		return {
+			type: "magic-canvas-plugin:canvas-asset-drag-target",
+			targetId: typeof record.targetId === "string" ? record.targetId : null,
+			mode,
+			canDrop: record.canDrop === true,
 		}
 	}
 	if (

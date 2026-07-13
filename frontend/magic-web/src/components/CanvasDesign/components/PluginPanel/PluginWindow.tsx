@@ -34,6 +34,7 @@ import { clampPositionToContainer, getInitialPosition, saveCachedPosition } from
 import { captureFullscreenRestoreTarget, restoreFullscreenIfNeeded } from "./fullscreenRestore"
 import { getErrorMessage } from "./resourceUtils"
 import type { PluginFileAsset, PluginFilePickerRequest, PluginWindowPosition } from "./types"
+import { useCanvasImageExternalDragToPlugin } from "./useCanvasImageExternalDragToPlugin"
 import { usePluginRuntimeBridge } from "./usePluginRuntimeBridge"
 import { usePluginView } from "./usePluginView"
 
@@ -71,6 +72,15 @@ export const PluginWindow = memo(function PluginWindow({
 	const filePickerRequestRef = useRef<PluginFilePickerRequest | null>(null)
 	const projectFileBatchItemsRef = useRef<Array<ReferenceResourcePanelItem | undefined>>([])
 	const pluginView = usePluginView(plugin, locale, channelToken, canvas.readonly)
+	// 连接画布图片拖拽和插件 iframe：宿主负责预览、落点确认与最终文件投递。
+	const { canvasAssetDragGhost, handleCanvasAssetDragTarget, isCanvasAssetDragActive } =
+		useCanvasImageExternalDragToPlugin({
+			canvas,
+			channelToken,
+			iframeRef,
+			plugin,
+			pluginWindowRef,
+		})
 
 	useLayoutEffect(() => {
 		positionRef.current = position
@@ -115,6 +125,7 @@ export const PluginWindow = memo(function PluginWindow({
 		channelToken,
 		filePickerRequestRef,
 		iframeRef,
+		onCanvasAssetDragTarget: handleCanvasAssetDragTarget,
 		plugin,
 		pluginWindowRef,
 		setFilePickerRequest,
@@ -344,16 +355,23 @@ export const PluginWindow = memo(function PluginWindow({
 			/>
 
 			{pluginView.srcDoc ? (
-				<PluginRuntimeFrame
-					ref={iframeRef}
-					key={`${plugin.name}-${sessionId}`}
-					height={frameHeight}
-					srcDoc={pluginView.srcDoc}
-					title={pluginView.label}
-				/>
+				<>
+					<PluginRuntimeFrame
+						ref={iframeRef}
+						key={`${plugin.name}-${sessionId}`}
+						height={frameHeight}
+						srcDoc={pluginView.srcDoc}
+						title={pluginView.label}
+					/>
+					{/* 拖拽期间用透明层接管指针，避免 iframe 吃掉宿主侧 mousemove/mouseup。 */}
+					{isCanvasAssetDragActive && (
+						<div className={styles.canvasAssetDragShield} aria-hidden="true" />
+					)}
+				</>
 			) : (
 				<PluginRuntimeEmpty description={pluginView.description} label={pluginView.label} />
 			)}
+			{canvasAssetDragGhost}
 		</div>
 	)
 })

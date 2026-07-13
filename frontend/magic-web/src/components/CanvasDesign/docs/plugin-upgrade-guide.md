@@ -125,6 +125,7 @@ return {
 | `ctx.assets.uploadFile` | `assets.uploadFile` |
 | `ctx.assets.resolveFileAssets` | `assets.pickFiles` |
 | `ctx.assets.readCanvasClipboard` | `assets.pickFiles` |
+| `ctx.assets.reportCanvasAssetDragTarget` | `assets.pickFiles`（runtime v1 注入，画布 Alt 拖拽投放回报） |
 | `ctx.assets.fetchBlob` | `assets.fetchBlob` |
 | `ctx.ai.getImageModels` | `ai.getImageModels` |
 | `ctx.ai.completeImagePrompt` | `ai.completeImagePrompt` |

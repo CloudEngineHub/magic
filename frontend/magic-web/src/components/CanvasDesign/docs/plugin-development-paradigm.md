@@ -1045,6 +1045,43 @@ Capability 映射：
 
 内置插件通过 `magic-plugin-kit` 的 `image-grid` / `image-slot` 已封装上述逻辑，业务插件一般无需直接调用。自定义粘贴 UI 时可参考 kit 内 `resolvePastedImageAssets`。
 
+### 10.2.3 画布图片拖拽到插件（Alt/Option + 左键）
+
+除复制粘贴外，用户可将画布图片 **按住 Alt/Option + 左键拖拽** 到插件 `image-grid` / `image-slot` 上传区。
+
+```text
+画布 SelectionTool
+  -> image:external-drag:start|move|end
+  -> Host useCanvasImageExternalDragToPlugin
+       · ghost 预览（useImageLowUrl，避免过期 ossSrc 403）
+       · iframe 坐标转换
+       · mouseup 时 exportElementsAsPNGBlob / resolve
+  -> postMessage magic-canvas-plugin:canvas-asset-drag-move|leave|drop
+  -> iframe window.dispatchEvent(CustomEvent)
+  -> kit elementFromPoint + ctx.assets.reportCanvasAssetDragTarget
+  -> kit handleCanvasAssetDrop → importCanvasAssetFiles
+```
+
+协议消息（v1 runtime）：
+
+| 方向 | type | 说明 |
+| ---- | ---- | ---- |
+| Host → iframe | `magic-canvas-plugin:canvas-asset-drag-move` | `{ clientX, clientY, assetsMeta: { count, originElementId } }` |
+| Host → iframe | `magic-canvas-plugin:canvas-asset-drag-leave` | 指针离开或拖拽结束，清理 hover |
+| Host → iframe | `magic-canvas-plugin:canvas-asset-drop` | `{ targetId, files: PluginFileAsset[] }` |
+| iframe → Host | `magic-canvas-plugin:canvas-asset-drag-target` | `{ targetId, mode: "grid"\|"slot", canDrop }` |
+
+导入策略：
+
+| 目标 mode | 行为 |
+| --------- | ---- |
+| `grid` | 批量 append，按 `referenceId` 去重，受 `maxCount` 截断 |
+| `slot` | 只取拖拽起点单图，替换当前槽位 |
+
+Capability：`ctx.assets.reportCanvasAssetDragTarget` 由 runtime v1 `createPluginSrcDoc` 注入，与 `assets.pickFiles` 共用 bridge 权限（插件需声明 `assets.pickFiles` 才能使用上传区与画布导入）。
+
+空态导入说明：kit 在空态上传框 hover 时展示 tooltip（key `imageImport.canvasHint`），详见 `magic-plugin-kit/README.md`「图片导入」。
+
 ### 10.3 分层总览
 
 ```text

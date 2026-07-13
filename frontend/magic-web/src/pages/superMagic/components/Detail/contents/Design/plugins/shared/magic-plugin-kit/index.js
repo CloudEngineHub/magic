@@ -545,6 +545,9 @@
 		}
 		let helpers = null
 		let maskCropUploadSequence = 0
+		// 记录插件内所有可接收画布图片拖入的区域，拖拽 move 时按坐标反查。
+		const canvasAssetDropTargets = new Map()
+		let activeCanvasAssetDropTarget = null
 
 		function createMaskCropUploadName(section, sourceAsset) {
 			maskCropUploadSequence += 1
@@ -578,6 +581,13 @@
 		function getDefaultStartMessage() {
 			const locale = String(ctx.i18n?.locale ?? navigator.language ?? "").toLowerCase()
 			return locale.startsWith("zh") ? "开始生成" : "Generation started"
+		}
+
+		function getCanvasImportHintFallback() {
+			const locale = String(ctx.i18n?.locale ?? navigator.language ?? "").toLowerCase()
+			return locale.startsWith("zh")
+				? "支持点击上传、拖入或粘贴图片；画布图片可先复制（⌘C）再点击此处粘贴（⌘V），或按住 （Alt/Option） 批量拖入"
+				: "Click to upload, drag, or paste images here. From canvas: copy (⌘C), click here and paste (⌘V), or hold (Alt/Option) to batch drag"
 		}
 
 		function normalizeTextareaValue(value, maxLength, hasMaxLength) {
@@ -1185,6 +1195,53 @@
 			return sectionNode
 		}
 
+		/** 图片导入区是否展示空态 hover 说明（本地上传/拖拽/粘贴 + 画布导入）。 */
+		function shouldShowCanvasImportHint(section) {
+			if (section?.importHint === false) return false
+			return Boolean(ctx.assets?.pickFiles)
+		}
+
+		/** 空态上传框 hover 说明文案。 */
+		function resolveCanvasImportHint(section) {
+			if (!shouldShowCanvasImportHint(section)) return null
+			if (typeof section.importHint === "string") return section.importHint
+			return t("imageImport.canvasHint", getCanvasImportHintFallback())
+		}
+
+		function createImportHintTooltip(section) {
+			const text = resolveCanvasImportHint(section)
+			if (!text) return null
+			const tooltip = createElement("div", "mpk-import-hint-tooltip", text)
+			tooltip.setAttribute("role", "tooltip")
+			return tooltip
+		}
+
+		function bindEmptyImportHintTooltip(target, section) {
+			if (!target) return null
+			const text = resolveCanvasImportHint(section)
+			if (!text) {
+				removeImportHintTooltip(target)
+				return null
+			}
+
+			let tooltip = target.querySelector(".mpk-import-hint-tooltip")
+			if (!tooltip) {
+				tooltip = createImportHintTooltip(section)
+				if (!tooltip) return null
+				target.append(tooltip)
+			} else {
+				tooltip.textContent = text
+			}
+			target.classList.add("has-import-hint-tooltip")
+			return tooltip
+		}
+
+		function removeImportHintTooltip(target) {
+			if (!target) return
+			target.classList.remove("has-import-hint-tooltip")
+			target.querySelector(".mpk-import-hint-tooltip")?.remove()
+		}
+
 		/** 创建图片卡片 */
 		function createImageCard(asset, altText, onRemove) {
 			const item = createElement("div", "mpk-image-card")
@@ -1209,12 +1266,162 @@
 			return pickImageFiles(options)
 		}
 
+		/** 获取画布图片投放区 ID，优先使用业务显式配置，保证重渲染后仍可匹配。 */
+		function getCanvasAssetDropTargetId(section) {
+			return section.id ?? section.stateKey
+		}
+
+		/** 判断指定 section 当前是否还能接收画布图片拖入。 */
+		function canDropCanvasAssets(section, mode, incomingCount = 1) {
+			if (!section?.stateKey) return false
+			const beforePickError = section.beforePick?.({ state, helpers, t })
+			if (beforePickError) return false
+			if (mode !== "grid") return true
+			const currentAssets = Array.isArray(state[section.stateKey])
+				? state[section.stateKey]
+				: []
+			return (
+				getSectionImportLimit(section, currentAssets.length).remaining > 0 &&
+				incomingCount > 0
+			)
+		}
+
+		/** 维护插件内部的 hover 样式，同一时间只允许一个 drop target 高亮。 */
+		function setActiveCanvasAssetDropTarget(target) {
+			if (activeCanvasAssetDropTarget === target) return
+			activeCanvasAssetDropTarget?.classList.remove("is-drag-over")
+			activeCanvasAssetDropTarget = target
+			activeCanvasAssetDropTarget?.classList.add("is-drag-over")
+		}
+
+		function clearActiveCanvasAssetDropTarget() {
+			setActiveCanvasAssetDropTarget(null)
+		}
+
+		/** 把插件内部命中的投放目标回报给宿主，宿主会在 mouseup 时决定是否真正 drop。 */
+		function reportCanvasAssetDropTarget(targetId, mode, canDrop) {
+			ctx.assets?.reportCanvasAssetDragTarget?.({
+				targetId: targetId ?? null,
+				mode,
+				canDrop: Boolean(canDrop),
+			})
+		}
+
+		/** 根据 iframe 内局部坐标找到当前指针下的画布图片投放区。 */
+		function getCanvasAssetDropTargetFromPoint(clientX, clientY, incomingCount) {
+			const hit = document.elementFromPoint(clientX, clientY)
+			const target = hit?.closest?.("[data-mpk-canvas-drop-target-id]")
+			if (!target) return null
+			const targetId = target.getAttribute("data-mpk-canvas-drop-target-id")
+			if (!targetId) return null
+			const entry = canvasAssetDropTargets.get(targetId)
+			if (!entry || entry.target !== target || !entry.target.isConnected) return null
+			return {
+				...entry,
+				targetId,
+				canDrop: canDropCanvasAssets(entry.section, entry.mode, incomingCount),
+			}
+		}
+
+		/** 将宿主传入的图片文件写回对应 section：grid 追加多图，slot 替换单图。 */
+		async function importCanvasAssetFiles(section, mode, assets) {
+			const validationError = validateSectionAcquire(section)
+			if (validationError) return
+			const incomingAssets = Array.isArray(assets) ? assets.filter(Boolean) : []
+			if (!incomingAssets.length) return
+
+			const currentAssets = Array.isArray(state[section.stateKey])
+				? state[section.stateKey]
+				: []
+			const importLimit =
+				mode === "grid"
+					? getSectionImportLimit(section, currentAssets.length)
+					: { maxCount: 1, remaining: 1 }
+			const maxCount = mode === "grid" ? importLimit.remaining : 1
+			if (maxCount <= 0) return
+
+			const images = incomingAssets.slice(0, maxCount)
+			if (mode === "grid") {
+				setState({
+					[section.stateKey]: mergeUniqueImageAssets(
+						currentAssets,
+						images,
+						importLimit.maxCount,
+					),
+					error: "",
+				})
+				return
+			}
+			setState({ [section.stateKey]: images[0] ?? null, error: "" })
+		}
+
+		/** 把普通图片导入区域登记为画布图片 drop target。 */
+		function registerCanvasAssetDropTarget(target, section, mode) {
+			const targetId = getCanvasAssetDropTargetId(section)
+			if (!targetId) return
+			target.setAttribute("data-mpk-canvas-drop-target-id", targetId)
+			target.setAttribute("data-mpk-canvas-drop-target-mode", mode)
+			canvasAssetDropTargets.set(targetId, {
+				target,
+				section,
+				mode,
+			})
+		}
+
+		/** 响应宿主转发的画布图片拖拽 move，更新 hover 并回报当前可 drop 状态。 */
+		function handleCanvasAssetDragMove(event) {
+			const detail = event.detail ?? {}
+			const incomingCount = Math.max(1, Number(detail.assetsMeta?.count) || 1)
+			const entry =
+				typeof detail.clientX === "number" && typeof detail.clientY === "number"
+					? getCanvasAssetDropTargetFromPoint(
+							detail.clientX,
+							detail.clientY,
+							incomingCount,
+						)
+					: null
+			if (!entry || !entry.canDrop) {
+				clearActiveCanvasAssetDropTarget()
+				reportCanvasAssetDropTarget(entry?.targetId, entry?.mode, false)
+				return
+			}
+
+			setActiveCanvasAssetDropTarget(entry.target)
+			reportCanvasAssetDropTarget(entry.targetId, entry.mode, true)
+		}
+
+		/** 指针离开 iframe 或拖拽结束时清理投放状态。 */
+		function handleCanvasAssetDragLeave() {
+			clearActiveCanvasAssetDropTarget()
+			reportCanvasAssetDropTarget(null, undefined, false)
+		}
+
+		/** 宿主确认 drop 后，把文件列表导入到最后一次命中的投放区。 */
+		function handleCanvasAssetDrop(event) {
+			const detail = event.detail ?? {}
+			const targetId = typeof detail.targetId === "string" ? detail.targetId : ""
+			const entry = canvasAssetDropTargets.get(targetId)
+			clearActiveCanvasAssetDropTarget()
+			if (!entry || !entry.target.isConnected) {
+				return
+			}
+			void importCanvasAssetFiles(entry.section, entry.mode, detail.files).catch((error) => {
+				setState({
+					error:
+						getErrorMessage(error) ||
+						entry.section.pickErrorMessage ||
+						t("error.pickFiles", "图片上传失败，请重试"),
+				})
+			})
+		}
+
 		/** 绑定图片插槽事件 */
 		function bindImageImportTarget(target, section, options) {
 			if (!target) return
 
 			const mode = options.mode
 			let dragDepth = 0
+			registerCanvasAssetDropTarget(target, section, mode)
 
 			const setDragState = (isActive) => {
 				target.classList.toggle("is-drag-over", Boolean(isActive))
@@ -1524,6 +1731,12 @@
 				sectionView.help.textContent = section.help ?? ""
 			}
 
+			if (assets.length === 0) {
+				bindEmptyImportHintTooltip(sectionView.grid, section)
+			} else {
+				removeImportHintTooltip(sectionView.grid)
+			}
+
 			const activeAssets = new Set(assets)
 			for (const [asset, item] of sectionView.items) {
 				if (!activeAssets.has(asset)) {
@@ -1581,16 +1794,16 @@
 			const body = createElement("div", "mpk-image-slot-body")
 
 			if (!asset) {
-				const uploadButton = createElement(
-					"button",
-					"mpk-image-slot-upload",
-					section.uploadLabel,
-				)
+				const uploadButton = createElement("button", "mpk-image-slot-upload")
 				uploadButton.type = "button"
+				uploadButton.append(
+					createElement("span", "mpk-image-slot-upload-label", section.uploadLabel),
+				)
 				uploadButton.setAttribute(
 					"data-drop-hint",
 					section.dropHint ?? t("imageSlot.dropHint", "拖拽或粘贴图片到这里"),
 				)
+				bindEmptyImportHintTooltip(uploadButton, section)
 				uploadButton.addEventListener("click", async () => {
 					try {
 						const images = await pickForSection(section, {
@@ -2932,6 +3145,17 @@
 			hasPendingMask,
 		}
 
+		// 这些事件由宿主 runtime 从 postMessage 转发为 iframe 内 CustomEvent。
+		window.addEventListener(
+			"magic-canvas-plugin:canvas-asset-drag-move",
+			handleCanvasAssetDragMove,
+		)
+		window.addEventListener(
+			"magic-canvas-plugin:canvas-asset-drag-leave",
+			handleCanvasAssetDragLeave,
+		)
+		window.addEventListener("magic-canvas-plugin:canvas-asset-drop", handleCanvasAssetDrop)
+
 		createLayout()
 		updateView()
 		void hydrateSharedGenerationConfigCache().finally(() => {
@@ -2952,6 +3176,20 @@
 				updateView(patch)
 			},
 			dispose() {
+				window.removeEventListener(
+					"magic-canvas-plugin:canvas-asset-drag-move",
+					handleCanvasAssetDragMove,
+				)
+				window.removeEventListener(
+					"magic-canvas-plugin:canvas-asset-drag-leave",
+					handleCanvasAssetDragLeave,
+				)
+				window.removeEventListener(
+					"magic-canvas-plugin:canvas-asset-drop",
+					handleCanvasAssetDrop,
+				)
+				clearActiveCanvasAssetDropTarget()
+				canvasAssetDropTargets.clear()
 				Object.values(view.sectionViews).forEach((sectionView) => {
 					disposeModelSelectView(sectionView)
 				})

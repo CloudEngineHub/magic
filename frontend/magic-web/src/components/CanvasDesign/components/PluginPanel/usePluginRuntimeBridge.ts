@@ -24,21 +24,34 @@ import { pickPluginFiles, resolvePluginFileAssets } from "./fileAssets"
 import { readPluginCanvasClipboard } from "./readPluginCanvasClipboard"
 import { generatePluginImages, getPluginImageModels } from "./imageGeneration"
 import { completePluginImagePrompt } from "./imagePromptCompletion"
-import {
-	resolvePluginStorageKey,
-	resolveSharedGenerationConfigStorageKey,
-} from "./pluginStorage"
+import { resolvePluginStorageKey, resolveSharedGenerationConfigStorageKey } from "./pluginStorage"
 import { validatePluginFetchBlobUrl } from "./pluginFetchBlob"
 
 interface UsePluginRuntimeBridgeParams {
+	/* 是否正在等待本地文件对话框 */
 	awaitingLocalFileDialogRef: MutableRefObject<boolean>
+	/** 画布 */
 	canvas: Canvas
+	/** 通道 token */
 	channelToken: string
+	/** 文件选择器请求引用 */
 	filePickerRequestRef: MutableRefObject<PluginFilePickerRequest | null>
+	/** iframe 引用 */
 	iframeRef: RefObject<HTMLIFrameElement | null>
+	/** 插件 */
 	plugin: CanvasDesignPlugin
+	/** 插件窗口引用 */
 	pluginWindowRef: RefObject<HTMLDivElement | null>
+	/** 插件 iframe 上报画布图片拖拽投放目标时，由 PluginWindow 透传给专门的拖拽 hook */
+	onCanvasAssetDragTarget?: (
+		target: Extract<
+			PluginRuntimeMessage,
+			{ type: "magic-canvas-plugin:canvas-asset-drag-target" }
+		>,
+	) => void
+	/** 设置文件选择器请求 */
 	setFilePickerRequest: Dispatch<SetStateAction<PluginFilePickerRequest | null>>
+	/** 设置框架高度 */
 	setFrameHeight: Dispatch<SetStateAction<number>>
 }
 
@@ -50,6 +63,7 @@ export function usePluginRuntimeBridge({
 	iframeRef,
 	plugin,
 	pluginWindowRef,
+	onCanvasAssetDragTarget,
 	setFilePickerRequest,
 	setFrameHeight,
 }: UsePluginRuntimeBridgeParams) {
@@ -159,6 +173,12 @@ export function usePluginRuntimeBridge({
 
 			if (data.type === "magic-canvas-plugin:pointer-down") {
 				closeFilePicker()
+				return
+			}
+
+			if (data.type === "magic-canvas-plugin:canvas-asset-drag-target") {
+				// 该消息是拖拽过程中的高频状态同步，交给外部拖拽 hook 维护当前 drop 目标。
+				onCanvasAssetDragTarget?.(data)
 				return
 			}
 
@@ -287,7 +307,11 @@ export function usePluginRuntimeBridge({
 			if (data.type === "magic-canvas-plugin:fetch-blob") {
 				let validatedUrl: URL
 				try {
-					validatedUrl = validatePluginFetchBlobUrl(plugin, data.url, window.location.origin)
+					validatedUrl = validatePluginFetchBlobUrl(
+						plugin,
+						data.url,
+						window.location.origin,
+					)
 				} catch (error) {
 					postPluginMessage({
 						type: "magic-canvas-plugin:fetch-blob-result",
@@ -450,6 +474,7 @@ export function usePluginRuntimeBridge({
 		channelToken,
 		filePickerRequestRef,
 		iframeRef,
+		onCanvasAssetDragTarget,
 		plugin,
 		pluginWindowRef,
 		setFilePickerRequest,
