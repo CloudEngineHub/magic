@@ -2,6 +2,7 @@ package code
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 
@@ -29,7 +30,7 @@ type subtreeSpliterCmd struct {
 	Scratch bool `yaml:"scratch"` // with no cache
 }
 
-func newSubtreeSpliterCmd(node yaml.Node) (subtreeSpliter, error) {
+func newSubtreeSpliterCmd(node yaml.Node) (SubtreeSpliter, error) {
 	s := subtreeSpliterCmd{}
 	err := node.Decode(&s)
 	if err != nil {
@@ -116,8 +117,9 @@ func (s *subtreeSpliterCmd) Split(ctx context.Context, code *Code, subtreeSplit 
 		RefSpecs: []gitConfig.RefSpec{
 			gitConfig.RefSpec("refs/heads/" + splitedBranchName + ":refs/heads/" + subtreeSplit.Branch),
 		},
+		Force: force,
 	})
-	if err != nil {
+	if err != nil && !errors.Is(err, git.NoErrAlreadyUpToDate) {
 		return fmt.Errorf("failed to push to dest: %w", err)
 	}
 

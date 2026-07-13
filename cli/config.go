@@ -18,11 +18,18 @@ import (
 type Config struct {
 	Log          []util.LogStreamConfig `yaml:"log"`
 	ImageBuilder yaml.Node              `yaml:"imageBuilder"`
+	Subtree      SubtreeConfig          `yaml:"subtree"`
 	Deploy       DeployConfig           `yaml:"deploy"`
 
 	// data, this describes what will the CLI do
 	Workdir string         `yaml:"workdir"`
 	Deps    []deps.DepData `yaml:"deps"`
+}
+
+type SubtreeConfig struct {
+	Spliter     yaml.Node `yaml:"spliter"`
+	DestGitBase string    `yaml:"destGitBase"`
+	Branch      string    `yaml:"branch"`
 }
 
 type DeployChartConfig struct {
@@ -73,6 +80,12 @@ imageBuilder:
   # by default, use docker buildkit builder
   kind: dockerBuildkit
   imagePrefix: ghcr.io/dtyq/
+
+subtree:
+  spliter:
+    kind: lite
+  destGitBase: https://github.com/dtyq
+  branch: master
 
 deploy:
   chartRepo:
@@ -185,6 +198,18 @@ func init() {
 		// impossible to happen
 		panic(err)
 	}
+	spliterNode := yaml.Node{}
+	err = spliterNode.Encode(map[string]any{
+		"kind": "lite",
+	})
+	if err != nil {
+		// impossible to happen
+		panic(err)
+	}
+	if err != nil {
+		// impossible to happen
+		panic(err)
+	}
 	cfg = &Config{
 		Log: []util.LogStreamConfig{
 			{
@@ -194,6 +219,11 @@ func init() {
 			},
 		},
 		ImageBuilder: builderNode,
+		Subtree: SubtreeConfig{
+			Spliter:     spliterNode,
+			DestGitBase: "https://github/dtyq",
+			Branch:      "master",
+		},
 		Deps: []deps.DepData{
 			{
 				Name:         "common_tool",

@@ -2,6 +2,7 @@ package code
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"go.yaml.in/yaml/v3"
@@ -21,7 +22,7 @@ type subtreeSpliterLite struct {
 	ShowHEADRev bool        `yaml:"showHEADRev"`
 }
 
-func newSubtreeSpliterLite(node yaml.Node) (subtreeSpliter, error) {
+func newSubtreeSpliterLite(node yaml.Node) (SubtreeSpliter, error) {
 	s := subtreeSpliterLite{}
 	err := node.Decode(&s)
 	if err != nil {
@@ -84,8 +85,9 @@ func (s *subtreeSpliterLite) Split(ctx context.Context, code *Code, subtreeSplit
 		RefSpecs: []gitConfig.RefSpec{
 			gitConfig.RefSpec("refs/heads/" + splitedBranchName + ":refs/heads/" + subtreeSplit.Branch),
 		},
+		Force: force,
 	})
-	if err != nil {
+	if err != nil && !errors.Is(err, git.NoErrAlreadyUpToDate) {
 		return fmt.Errorf("failed to push to dest: %w", err)
 	}
 
