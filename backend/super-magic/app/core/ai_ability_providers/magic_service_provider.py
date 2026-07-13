@@ -80,12 +80,6 @@ class MagicServiceAIAbilityProvider(AIAbilityProvider):
         """解析 magic-service runtime-config 返回的 AI 能力配置。"""
         result: List[AIAbilityConfig] = []
         for ability_key, ability_config_item in ability_items.items():
-            if not ability_config_item.enabled:
-                logger.debug(
-                    f"MagicServiceAIAbilityProvider: ability '{ability_key}' is disabled, skipping"
-                )
-                continue
-
             try:
                 parsed_config = create_ai_ability_config(
                     ability_key,

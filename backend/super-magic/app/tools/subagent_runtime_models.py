@@ -44,6 +44,8 @@ class SubagentPayload:
     agent_id: str
     status: SubagentStatus
     mode: SubagentExecutionMode
+    task_label: Optional[str] = None
+    display_name: Optional[str] = None
     result: Optional[str] = None
     error: Optional[str] = None
     resume_hint: Optional[str] = None
@@ -56,6 +58,8 @@ class SubagentQueryResult:
     agent_id: str
     status: SubagentQueryStatus
     agent_name: Optional[str] = None
+    task_label: Optional[str] = None
+    display_name: Optional[str] = None
     result: Optional[str] = None
     error: Optional[str] = None
     # 仅在 status=running（超时但仍在执行）时填充，内容为子 Agent 最近一条 assistant 消息，供父 Agent 了解进度
@@ -88,6 +92,7 @@ class SubagentSessionState(BaseModel):
 
     agent_name: str
     agent_id: str
+    task_label: Optional[str] = None
     status: SubagentStatus = SubagentStatus.IDLE
     last_prompt_digest: Optional[str] = None
     last_result: Optional[str] = None
@@ -99,7 +104,7 @@ class SubagentSessionState(BaseModel):
     last_tool_call_id: Optional[str] = None
     cached_tool_result: Optional[SubagentPayload] = None
     interrupt_requested: bool = False
-    crew_display_name: Optional[str] = None
+    display_name: Optional[str] = None
     interrupt_reason: Optional[str] = None
 
     @model_validator(mode="after")

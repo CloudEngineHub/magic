@@ -50,11 +50,11 @@ logger = get_logger(__name__)
 
 
 class AgentLoadFailedError(RuntimeError):
-    """Raised when a user-selected employee agent cannot be loaded."""
+    """Raised when a user-selected custom Agent cannot be loaded."""
 
     def __init__(self, agent_code: str):
         self.agent_code = agent_code
-        super().__init__(f"failed to load employee agent: {agent_code}")
+        super().__init__(f"failed to load custom Agent: {agent_code}")
 
 
 class AgentDispatcher(Base):
@@ -302,52 +302,50 @@ class AgentDispatcher(Base):
             else:
                 logger.info("工作区初始化完成")
 
+    @staticmethod
+    def _agent_mode_value(agent_mode: Union[AgentMode, str]) -> str:
+        """返回消息协议中的 Agent 模式值，不做跨领域别名转换。"""
+        if isinstance(agent_mode, AgentMode):
+            return agent_mode.value
+        return str(agent_mode).strip()
+
     async def switch_agent(self, agent_mode: Union[AgentMode, str], agent_code: str = None):
         """
         根据agent_mode切换到相应的agent
 
         Args:
             agent_mode: Agent模式，可以是AgentMode枚举或者自定义Agent的字符串ID
-            agent_code: (optional) crew agent code, used when agent_mode == "agent_creator"
+            agent_code: (optional) crew agent code, used when agent_mode == "custom_agent"
 
         Returns:
             Agent: 选择的Agent实例
         """
-        # 如果是字符串，仅支持 agent_creator + agent_code 或内置 AgentMode
-        if isinstance(agent_mode, str):
-            normalized_mode = {
-                "custom_agent": "agent_creator",
-            }.get(agent_mode.strip(), agent_mode.strip())
+        mode_value = self._agent_mode_value(agent_mode)
 
-            # 0. agent_creator + agent_code => compiled crew agent
-            if normalized_mode == "agent_creator":
-                if agent_code and agent_code.strip():
-                    agent_type = agent_code.strip()
-                    logger.info(f"使用编译后的 crew agent: {agent_type}.agent")
-                else:
-                    logger.warning("agent_creator 未提供 agent_code，回退到默认模式")
-                    agent_type = AgentMode.GENERAL.get_agent_type()
-
-            # 0b. magiclaw + agent_code => compiled claw agent (from agents/claws/<claw_code>/)
-            elif normalized_mode == "magiclaw":
-                if agent_code and agent_code.strip():
-                    agent_type = agent_code.strip()
-                    logger.info(f"magiclaw 模式，使用编译后的 claw agent: {agent_type}.agent")
-                else:
-                    logger.warning("magiclaw 未提供 agent_code，回退到默认模式")
-                    agent_type = AgentMode.GENERAL.get_agent_type()
-
+        if mode_value == AgentMode.CUSTOM_AGENT.value:
+            if agent_code and agent_code.strip():
+                agent_type = agent_code.strip()
+                logger.info(f"使用编译后的 crew agent: {agent_type}.agent")
             else:
-                try:
-                    resolved_mode = AgentMode(normalized_mode)
-                    logger.info(f"识别为内置 AgentMode: {resolved_mode}")
-                    agent_type = resolved_mode.get_agent_type()
-                except ValueError:
-                    logger.warning(f"未识别的 agent_mode='{normalized_mode}'，回退到默认模式")
-                    agent_type = AgentMode.GENERAL.get_agent_type()
+                logger.warning("custom_agent 未提供 agent_code，回退到默认模式")
+                agent_type = AgentMode.GENERAL.get_agent_type()
+
+        elif mode_value == AgentMode.MAGICLAW.value:
+            if agent_code and agent_code.strip():
+                agent_type = agent_code.strip()
+                logger.info(f"magiclaw 模式，使用编译后的 claw agent: {agent_type}.agent")
+            else:
+                logger.warning("magiclaw 未提供 agent_code，回退到默认模式")
+                agent_type = AgentMode.GENERAL.get_agent_type()
+
         else:
-            # 使用 AgentMode 的 get_agent_type 方法
-            agent_type = agent_mode.get_agent_type()
+            try:
+                resolved_mode = AgentMode(mode_value)
+                logger.info(f"识别为内置 AgentMode: {resolved_mode}")
+                agent_type = resolved_mode.get_agent_type()
+            except ValueError:
+                logger.warning(f"未识别的 agent_mode='{mode_value}'，回退到默认模式")
+                agent_type = AgentMode.GENERAL.get_agent_type()
 
         # 主 Agent 进程内常驻：命中缓存时直接复用，不重新创建。
         # 产品上永远只有一个主 Agent，且选定后不会切换；切换约束由前端保证，后端暂不额外校验。
@@ -378,18 +376,18 @@ class AgentDispatcher(Base):
         await self.agent_service.run_agent(agent=agent)
 
     def _invalidate_cached_crew_agent(self, agent_code: str, reason: str) -> None:
-        """Drop runtime caches that depend on the compiled crew agent file."""
+        """Drop runtime caches that depend on the compiled Crew adapter output."""
         from app.core.skill_utils.manager import GlobalSkillManager
 
         removed = self.agents.pop(agent_code, None) is not None
         GlobalSkillManager.reset()
         logger.info(
-            f"Invalidated crew runtime cache: agent_code={agent_code}, "
+            f"Invalidated custom Agent runtime cache: agent_code={agent_code}, "
             f"reason={reason}, removed_agent={removed}"
         )
 
     async def _prepare_crew_agent(self, agent_code: str) -> None:
-        """Crew 运行时准备：按需下载定义文件、编译 .agent、设置当前会话的 AgentProfile。"""
+        """通过 Crew 适配器准备自定义 Agent，并设置当前会话的 AgentProfile。"""
         from app.core.entity.agent_profile import AgentProfile
         from app.service.crew_agent_runtime_service import CrewAgentRuntimeService
 
@@ -404,7 +402,7 @@ class AgentDispatcher(Base):
         if name:
             profile = AgentProfile(name=name, role=role, description=description)
             self.agent_context.set_agent_profile(profile)
-            logger.info(f"Set crew agent profile: name={name}, role={role}")
+            logger.info(f"Set custom Agent profile: name={name}, role={role}")
 
     async def _prepare_claw_agent(self, claw_code: str) -> None:
         """Claw 运行时准备：把模板同步到 .workspace/.magic、编译 .agent、设置 AgentProfile。
@@ -498,16 +496,13 @@ class AgentDispatcher(Base):
         except Exception as e:
             logger.warning(f"从 chat agent 配置设置 AgentProfile 失败: {e}")
 
-    async def _prepare_agent(self, agent_mode: str, agent_code: Optional[str]) -> None:
+    async def _prepare_agent(self, agent_mode: Union[AgentMode, str], agent_code: Optional[str]) -> None:
         """Compile + set AgentProfile for modes that need it (crew / magiclaw)."""
         try:
-            normalized_mode = {
-                "custom_agent": "agent_creator",
-            }.get(agent_mode, agent_mode)
-
-            if normalized_mode == "agent_creator" and agent_code:
+            mode_value = self._agent_mode_value(agent_mode)
+            if mode_value == AgentMode.CUSTOM_AGENT.value and agent_code:
                 await self._prepare_crew_agent(agent_code)
-            elif normalized_mode == "magiclaw" and agent_code:
+            elif mode_value == AgentMode.MAGICLAW.value and agent_code:
                 await self._prepare_claw_agent(agent_code)
         except Exception as e:
             logger.error(f"Agent preparation failed (mode={agent_mode}, code={agent_code}): {e}")
@@ -781,7 +776,7 @@ class AgentDispatcher(Base):
         self._apply_chat_agent_config(message)
 
         # Compile agent files and set AgentProfile before loading the agent instance
-        await self._prepare_agent(str(message.agent_mode), agent_code)
+        await self._prepare_agent(message.agent_mode, agent_code)
 
         # 保存本次 dispatch 的完整消息快照（存储全量，补全侧用白名单控制应用范围）
         await self._save_last_dispatch_message(message)

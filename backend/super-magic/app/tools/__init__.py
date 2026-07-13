@@ -7,8 +7,7 @@
 from app.tools.dummy_tool import DummyTool # DummyTool 必须在第一个位置导入，
 from app.tools.ask_user import AskUserTool
 from app.tools.web_search import WebSearch
-from app.tools.agent_list import AgentList
-from app.tools.prepare_agent import PrepareAgent
+from app.tools.find_agents import FindAgentsTool
 from app.tools.call_subagent import CallSubagent
 from app.tools.wait_for_subagents import WaitForSubagents
 from app.tools.compact_chat_history import CompactChatHistory
@@ -124,7 +123,7 @@ from app.tools.read_skills import ReadSkills
 from app.tools.run_sdk_snippet import RunSdkSnippet
 from app.tools.search_knowledge import SearchKnowledge
 
-# MCP 工具集（code_mode_only=True，只允许通过 sdk.tool.call 调用）
+# MCP 工具集（@tool(code_mode_only=True)，只允许通过 sdk.tool.call 调用）
 from app.tools.mcp import (
     McpAddServer,
     McpCallTool,
@@ -134,7 +133,7 @@ from app.tools.mcp import (
     McpListTools,
 )
 
-# OAuth2 工具集（code_mode_only=True，只允许通过 sdk.tool.call 调用）
+# OAuth2 工具集（@tool(code_mode_only=True)，只允许通过 sdk.tool.call 调用）
 from app.tools.oauth2 import (
     OAuth2CheckAuthorization,
     OAuth2GetApiDoc,
@@ -175,8 +174,7 @@ __all__ = [
     "AnalysisSlideWebpage",
     "AppendToFile",
     "WebSearch",
-    "AgentList",
-    "PrepareAgent",
+    "FindAgentsTool",
     "CallSubagent",
     "WaitForSubagents",
     "ConnectDingTalkBot",

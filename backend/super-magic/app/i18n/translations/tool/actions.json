@@ -316,28 +316,24 @@
         "en_US": "Deep write"
     },
     "call_subagent": {
-        "zh_CN": "调用数字员工",
-        "en_US": "Call sub-agent"
+        "zh_CN": "调用智能体",
+        "en_US": "Call Agent"
     },
     "call_subagent.crew": {
         "zh_CN": "调用数字员工",
-        "en_US": "Call digital employee"
+        "en_US": "Call Crew"
     },
-    "agent_list": {
+    "find_agents": {
         "zh_CN": "查找数字员工",
-        "en_US": "Find digital employees"
-    },
-    "prepare_agent": {
-        "zh_CN": "准备数字员工",
-        "en_US": "Prepare digital employee"
+        "en_US": "Find Crew"
     },
     "wait_for_subagents": {
-        "zh_CN": "等待数字员工完成",
-        "en_US": "Wait for sub-agents"
+        "zh_CN": "等待智能体完成任务",
+        "en_US": "Wait for Agents"
     },
     "wait_for_subagents.crew": {
-        "zh_CN": "等待数字员工完成",
-        "en_US": "Waiting for digital employee result"
+        "zh_CN": "等待数字员工完成任务",
+        "en_US": "Wait for Crew"
     },
     "compact_chat_history": {
         "zh_CN": "整理对话内容",

@@ -1232,8 +1232,8 @@
         "en_US": "Calling sub-agent: {{agent_name}}"
     },
     "call_subagent.error": {
-        "zh_CN": "调用数字员工失败: {{error}}",
-        "en_US": "Sub-agent call failed: {{error}}"
+        "zh_CN": "调用智能体失败: {{error}}",
+        "en_US": "Agent call failed: {{error}}"
     },
     "call_subagent.assign": {
         "zh_CN": "{{agent_name}}",
@@ -1256,8 +1256,8 @@
         "en_US": "{{agent_name}} was interrupted"
     },
     "call_subagent.unknown_agent": {
-        "zh_CN": "未知子智能体",
-        "en_US": "Unknown sub-agent"
+        "zh_CN": "未知智能体",
+        "en_US": "Unknown Agent"
     },
     "call_subagent.status.accepted": {
         "zh_CN": "已接收任务",
@@ -1280,8 +1280,16 @@
         "en_US": "Interrupted"
     },
     "call_subagent.detail.sub_agent": {
-        "zh_CN": "子智能体",
-        "en_US": "Sub-agent"
+        "zh_CN": "智能体",
+        "en_US": "Agent"
+    },
+    "call_subagent.detail.crew": {
+        "zh_CN": "数字员工",
+        "en_US": "Crew"
+    },
+    "call_subagent.detail.task_label": {
+        "zh_CN": "任务标签",
+        "en_US": "Task label"
     },
     "call_subagent.detail.session_id": {
         "zh_CN": "会话 ID",
@@ -1323,41 +1331,89 @@
         "zh_CN": "下一步",
         "en_US": "Next step"
     },
-    "agent_list.searching": {
-        "zh_CN": "正在查找数字员工",
-        "en_US": "Looking for available digital employees"
+    "find_agents.searching": {
+        "zh_CN": "正在查找与「{{keywords}}」相关的数字员工",
+        "en_US": "Looking for Crew related to \"{{keywords}}\""
     },
-    "agent_list.done": {
-        "zh_CN": "已找到 {{count}} 个数字员工",
-        "en_US": "Found {{count}} digital employees"
+    "find_agents.searching_all": {
+        "zh_CN": "正在查找全部可用数字员工",
+        "en_US": "Looking for all available Crew"
     },
-    "agent_list.empty": {
+    "find_agents.done": {
+        "zh_CN": "已展示 {{count}} 个数字员工",
+        "en_US": "Crew shown: {{count}}"
+    },
+    "find_agents.done_ranked": {
+        "zh_CN": "共匹配 {{total}} 个数字员工；本次展示 {{count}} 个按需求排序的结果",
+        "en_US": "Crew matches found: {{total}}. Ranked results shown: {{count}}."
+    },
+    "find_agents.done_fallback": {
+        "zh_CN": "已返回 {{count}} 个关键词匹配的数字员工",
+        "en_US": "Keyword-matched Crew shown: {{count}}"
+    },
+    "find_agents.empty": {
         "zh_CN": "没有找到匹配的数字员工",
-        "en_US": "No matching digital employees were found"
+        "en_US": "No matching Crew found"
     },
-    "agent_list.error": {
-        "zh_CN": "数字员工列表获取失败，请稍后重试",
-        "en_US": "Unable to load the digital employee list. Please try again later."
+    "find_agents.error": {
+        "zh_CN": "数字员工查找失败，请稍后重试",
+        "en_US": "Unable to find Crew. Please try again later."
     },
-    "prepare_agent.preparing": {
-        "zh_CN": "正在准备数字员工",
-        "en_US": "Preparing the digital employee"
+    "find_agents.detail_title": {
+        "zh_CN": "数字员工查找结果",
+        "en_US": "Crew search results"
     },
-    "prepare_agent.ready": {
-        "zh_CN": "数字员工 {{agent}} 已就绪",
-        "en_US": "Digital employee {{agent}} is ready"
+    "find_agents.detail_keywords": {
+        "zh_CN": "搜索关键词",
+        "en_US": "Search keywords"
     },
-    "prepare_agent.done": {
-        "zh_CN": "数字员工已准备完成",
-        "en_US": "The digital employee is ready"
+    "find_agents.detail_all": {
+        "zh_CN": "全部",
+        "en_US": "All"
     },
-    "prepare_agent.error": {
-        "zh_CN": "数字员工准备失败，请稍后重试",
-        "en_US": "Unable to prepare the digital employee. Please try again later."
+    "find_agents.detail_query": {
+        "zh_CN": "完整需求",
+        "en_US": "Full request"
+    },
+    "find_agents.detail_total_matches": {
+        "zh_CN": "匹配总数",
+        "en_US": "Total matches"
+    },
+    "find_agents.detail_considered_count": {
+        "zh_CN": "纳入处理的候选数",
+        "en_US": "Candidates considered"
+    },
+    "find_agents.detail_returned_count": {
+        "zh_CN": "实际展示数量",
+        "en_US": "Results shown"
+    },
+    "find_agents.detail_agent_header": {
+        "zh_CN": "数字员工",
+        "en_US": "Crew"
+    },
+    "find_agents.detail_description_header": {
+        "zh_CN": "简介",
+        "en_US": "Description"
+    },
+    "find_agents.detail_priority_match": {
+        "zh_CN": "优先匹配",
+        "en_US": "Top match"
+    },
+    "find_agents.detail_fallback_notice": {
+        "zh_CN": "本次结果按关键词相关性排序。",
+        "en_US": "These results are ordered by keyword relevance."
+    },
+    "find_agents.detail_truncated": {
+        "zh_CN": "本次仅展示前 {{count}} 个结果。",
+        "en_US": "Only the first {{count}} results are shown."
+    },
+    "find_agents.detail_no_results": {
+        "zh_CN": "没有找到匹配的数字员工。",
+        "en_US": "No matching Crew found."
     },
     "wait_for_subagents.error": {
-        "zh_CN": "等待子智能体失败: {{error}}",
-        "en_US": "Failed while waiting for sub-agents: {{error}}"
+        "zh_CN": "等待智能体失败: {{error}}",
+        "en_US": "Failed while waiting for Agents: {{error}}"
     },
     "compact_chat_history.remark": {
         "zh_CN": "当前对话内容过长，「{{agent_name}}」将整理自己的记忆，可能导致先前对话中的一些细节被遗忘；太长的对话会影响「{{agent_name}}」的工作效率",

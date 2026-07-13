@@ -31,6 +31,7 @@ class AIAbility(str, Enum):
 
     # v1.3 implementations
     SKILL_RERANK = "skill_rerank"
+    AGENT_RERANK = "agent_rerank"
 
 
 # Default configurations for each AI ability
@@ -113,6 +114,13 @@ AI_ABILITY_DEFAULTS: Dict[str, Dict[str, Any]] = {
     # 用于 find_skills 工具的 LLM 重排驱动，使用轻量快速模型降低延迟
     AIAbility.SKILL_RERANK: {
         "model_id": "qwen3.5-flash",
+        "enabled": True,
+    },
+
+    # Agent Rerank Ability (v1.3)
+    # 用于 Agent 搜索结果的轻量模型排序
+    AIAbility.AGENT_RERANK: {
+        "model_id": "deepseek-v4-flash",
         "enabled": True,
     },
 }
@@ -261,3 +269,39 @@ def get_compact_model_id() -> str | None:
     except Exception as e:
         logger.warning(f"compact 专属模型 '{model_id}' 配置不可用，将使用当前运行时模型: {e}")
         return None
+
+
+def is_agent_rerank_enabled() -> bool:
+    """返回 Agent 搜索排序能力是否启用。"""
+    return bool(get_ability_config(AIAbility.AGENT_RERANK, "enabled", default=True))
+
+
+def get_agent_rerank_model_id() -> str | None:
+    """返回可用的 Agent 搜索排序模型，禁用或模型不可用时返回 None。"""
+    if not is_agent_rerank_enabled():
+        return None
+
+    model_id = str(
+        get_ability_config(
+            AIAbility.AGENT_RERANK,
+            "model_id",
+            default="deepseek-v4-flash",
+        )
+        or ""
+    ).strip()
+    if not model_id:
+        return None
+
+    try:
+        from agentlang.llms.factory import LLMFactory
+
+        model_config = LLMFactory.get_model_config(
+            model_id,
+            expected_type="llm",
+            allow_fallback=False,
+        )
+        if not model_config.supports_tool_use:
+            return None
+    except Exception:
+        return None
+    return model_id

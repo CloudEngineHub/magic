@@ -1,13 +1,15 @@
 import asyncio
-from dataclasses import asdict
+from dataclasses import asdict, dataclass
+from enum import StrEnum
 import hashlib
 from typing import TYPE_CHECKING, Any, Dict, Optional
 
-from pydantic import Field, model_validator
+from pydantic import Field, field_validator, model_validator
 
 from agentlang.context.tool_context import ToolContext
 from agentlang.logger import get_logger
 from agentlang.tools.tool_result import ToolResult
+from app.core.subagent_delegation import is_custom_agent_code
 from app.i18n import i18n
 from app.path_manager import PathManager
 from app.service.agent_runner import _inherit_parent_context, apply_isolated_agent_model_selection
@@ -23,16 +25,33 @@ from app.tools.subagent_runtime_models import (
 from app.tools.subagent_runtime_store import SubagentRuntimeStore
 from app.tools.subagent_session_manager import subagent_session_manager
 from app.core.entity.message.server_message import DisplayType, TerminalContent, ToolDetail
-from app.core.subagent_delegation import is_crew_agent_code
 
 logger = get_logger(__name__)
 
 if TYPE_CHECKING:
     from app.core.context.agent_context import AgentContext
     from app.magic.agent import Agent
+    from app.service.crew_agent_runtime_service import CrewAgentRuntimeInfo
 
 # 子 Agent 最大嵌套深度：1 表示只允许主 Agent 调用子 Agent，子 Agent 不能再调用子 Agent
 _MAX_AGENT_DEPTH = 1
+
+
+@dataclass(frozen=True)
+class AgentDisplaySubject:
+    kind: "AgentDisplayKind"
+    name: str
+
+
+@dataclass(frozen=True)
+class PreparedAgentTarget:
+    agent_name: str
+    display_name: Optional[str] = None
+
+
+class AgentDisplayKind(StrEnum):
+    AGENT = "agent"
+    CREW = "crew"
 
 
 def _localize_agent_name(agent_name: str) -> str:
@@ -44,24 +63,28 @@ class CallSubagentParams(BaseToolParams):
     agent_name: str = Field(
         ...,
         description=(
-            "Agent type to call. Maps to a .agent config file in the agents/ directory. Available built-in types:\n"
-            "- 'magic': General-purpose agent with full tool access (web search, file ops, code execution, etc.). Use for complex multi-step tasks.\n"
-            "- 'explore': Read-only codebase exploration. Searches files, reads code, answers structural questions. Cannot modify anything.\n"
-            "- 'shell': Shell command execution specialist. Runs scripts, installs deps, performs system operations.\n"
-            "Other agent files (e.g. 'data-analyst') can also be used by name. For Crew employees, use the local agent_name returned by prepare_agent."
+            "Agent target to call. Built-in names and aliases are accepted, e.g. "
+            "magic, explore, shell, search, ppt, data_analysis. "
+            "Marketplace custom Agent codes from find_agents (Crew digital employees, SMA-...) are accepted directly "
+            "and are prepared automatically before dispatch. "
+            "Local .agent names can also be used by filename."
         )
     )
     agent_id: str = Field(
         ...,
         description="Human-readable session ID, e.g. 'market-research-phase1'. Same ID = resume existing conversation; different ID = fresh start. Used for chat history isolation."
     )
+    task_label: str = Field(
+        ...,
+        description=(
+            "User-facing label shown in the UI for this delegated task, not the agent name or agent_id. "
+            "Must use the same language as the user's request so the label is understandable; do not default to English. "
+            "Keep it concise, describe this sub-agent's responsibility, and distinguish concurrent tasks."
+        ),
+    )
     prompt: str = Field(
         ...,
         description="Complete task description. The sub-agent has NO access to the parent's conversation history — include everything it needs: context, task, success criteria, relevant file paths."
-    )
-    display_name: Optional[str] = Field(
-        None,
-        description="Human-readable display name shown in the UI. For Crew employees, pass the name field from prepare_agent result (e.g. '旅行助手'). Leave empty for built-in agents."
     )
     model_id: Optional[str] = Field(
         None,
@@ -97,8 +120,18 @@ class CallSubagentParams(BaseToolParams):
             values.setdefault("agent_id", values.get("agent_name", ""))
         return values
 
+    @field_validator("task_label")
+    @classmethod
+    def validate_task_label(cls, value: str) -> str:
+        label = value.strip()
+        if not label:
+            raise ValueError("task_label must not be empty")
+        if "\n" in label or "\r" in label:
+            raise ValueError("task_label must be a single line")
+        return label
 
-@tool()
+
+@tool(code_mode_only=True)
 class CallSubagent(BaseTool[CallSubagentParams]):
     """Call another agent to complete a task. Each sub-agent runs with an isolated context and its own chat history."""
 
@@ -124,15 +157,13 @@ class CallSubagent(BaseTool[CallSubagentParams]):
         task: Optional[asyncio.Task] = None
         try:
             from app.core.context.agent_context import AgentContext
-            from app.core.entity.message.client_message import AgentMode
             from app.magic.agent import Agent
 
-            # 别名容错：复用 chat 派发链路的同一份映射（ppt -> slider 等），
-            # 归一为本地 .agent 名后再贯穿 session key / 状态 / Agent 加载，避免出现两套匹配逻辑。
-            params.agent_name = AgentMode.resolve_agent_type(params.agent_name)
+            parent: Optional[AgentContext] = tool_context.get_extension("agent_context")
+            prepared_target = await _resolve_agent_target(params.agent_name)
+            params.agent_name = prepared_target.agent_name
 
             # 深度检查：子 Agent 不允许再派发子 Agent
-            parent: Optional[AgentContext] = tool_context.get_extension("agent_context")
             current_depth = parent.get_subagent_depth() if parent else 0
             tool_call_id = tool_context.tool_call_id or ""
             if current_depth >= _MAX_AGENT_DEPTH:
@@ -147,6 +178,8 @@ class CallSubagent(BaseTool[CallSubagentParams]):
                 state = await SubagentRuntimeStore.load_state(params.agent_name, params.agent_id)
                 state.agent_name = params.agent_name
                 state.agent_id = params.agent_id
+                state.task_label = params.task_label
+                state.display_name = prepared_target.display_name
                 if state.status == SubagentStatus.RUNNING and not handle.is_running():
                     _mark_missing_running_as_interrupted(state)
                     async with handle.state_lock:
@@ -269,12 +302,8 @@ class CallSubagent(BaseTool[CallSubagentParams]):
             if agent is not None and task is None:
                 agent.close()
             logger.exception(f"调用智能体失败: {e!s}")
-            # A missing .agent file means the target was never prepared locally — most often a Crew
-            # employee dispatched by display name/code without the prepare_agent step. Return a
-            # recovery-oriented message so the model re-runs agent_list + prepare_agent instead of
-            # giving up and doing the work itself.
             if isinstance(e, FileNotFoundError):
-                error_text = _build_subagent_not_prepared_text(params.agent_name)
+                error_text = _build_subagent_not_available_text(params.agent_name)
             else:
                 error_text = _build_call_subagent_error_text(
                     agent_name=params.agent_name,
@@ -295,11 +324,11 @@ class CallSubagent(BaseTool[CallSubagentParams]):
         args = arguments or {}
         agent_name = args.get("agent_name", "")
         agent_id = args.get("agent_id", "")
-        display_name = args.get("display_name") or ""
-        action = _build_subagent_action(agent_name, display_name)
+        task_label = args.get("task_label", "")
+        subject = _resolve_display_subject(agent_name)
+        action = _build_subagent_action(subject)
         status_text = i18n.translate("call_subagent.status.accepted", category="tool.messages")
-        label = display_name or (_localize_agent_name(agent_name) if agent_name else "")
-        return {"action": action, "remark": _build_status_remark(label or agent_id, status_text)}
+        return {"action": action, "remark": _build_status_remark(task_label, subject.name, agent_id, status_text)}
 
     async def get_before_tool_detail(
         self, tool_context: ToolContext, arguments: Dict[str, Any] = None
@@ -307,7 +336,7 @@ class CallSubagent(BaseTool[CallSubagentParams]):
         args = arguments or {}
         agent_name = args.get("agent_name", "")
         agent_id = args.get("agent_id", "")
-        display_name = args.get("display_name") or ""
+        task_label = args.get("task_label", "")
         prompt = args.get("prompt", "")
         background = args.get("background", False)
         model_id = _resolve_subagent_display_model_id(tool_context, args.get("model_id"))
@@ -316,9 +345,12 @@ class CallSubagent(BaseTool[CallSubagentParams]):
             return None
 
         t = lambda key: i18n.translate(f"call_subagent.detail.{key}", category="tool.messages")
+        subject = _resolve_display_subject(agent_name)
         lines = []
-        if display_name or agent_name:
-            lines.append(f"{t('sub_agent')}: {display_name or _localize_agent_name(agent_name)}")
+        if subject.name:
+            lines.append(f"{t(_detail_subject_key(subject))}: {subject.name}")
+        if task_label:
+            lines.append(f"{t('task_label')}: {task_label}")
         if agent_id:
             lines.append(f"{t('session_id')}: {agent_id}")
         mode_text = t("mode_background") if background else t("mode_sync")
@@ -343,11 +375,12 @@ class CallSubagent(BaseTool[CallSubagentParams]):
         args = arguments or {}
         agent_name = args.get("agent_name", "")
         agent_id = args.get("agent_id", "")
-        display_name = args.get("display_name") or ""
+        task_label = args.get("task_label", "")
 
         if result.ok:
             data = result.data if isinstance(result.data, dict) else {}
             status = data.get("status", "")
+            task_label = data.get("task_label") or task_label
             agent_result = data.get("result") or ""
             error = data.get("error") or ""
             resume_hint = data.get("resume_hint") or ""
@@ -358,29 +391,22 @@ class CallSubagent(BaseTool[CallSubagentParams]):
             agent_result = ""
             error = extra.get("error") or result.content or ""
             resume_hint = ""
+            data = {}
 
-        return _build_subagent_tool_detail(agent_name, agent_id, display_name, status, agent_result, error, resume_hint)
+        subject = _resolve_display_subject(agent_name, payload=data)
+        return _build_subagent_tool_detail(
+            agent_name,
+            agent_id,
+            task_label,
+            subject,
+            status,
+            agent_result,
+            error,
+            resume_hint,
+        )
 
     def get_prompt_hint(self) -> str:
         return """\
-<!--zh
-调用多个子智能体并行处理任务时，必须在每个子智能体的 prompt 中明确写清楚它的输出目标，
-子智能体之间没有共享上下文，无法相互感知，也无法从对话历史中推断目标对象。
-目标对象不写清楚，子智能体会自行猜测，通常的结果是它创建了一个不该创建的新对象。
-
-根据任务性质，有三种典型场景需要区别对待：
-
-1. 共享容器（画布、PPT 等）：由独立元素组成，多个子智能体可以并行往同一个容器里添加各自负责的内容。
-   必须把同一个容器标识（如 project_path、文件路径）传给所有子智能体，并说明每个子智能体负责哪一部分。
-   不得让子智能体自行创建或选择容器。
-
-2. 单一文件（报告、文档等）：整个文件是一个整体，不支持并发写入。
-   要么交给一个子智能体完整完成，要么让各子智能体分别生成各自负责的草稿段落，
-   最后指定一个子智能体将所有段落合并进同一个文件。
-
-3. 各自独立输出（不同主题的调研报告、不同内容的画布等）：每个子智能体生成自己的独立产物，互不干扰。
-   为每个子智能体单独指定其输出目标，不需要协调或合并。
--->
 When dispatching multiple sub-agents in parallel, always specify each agent's output target explicitly in its prompt. Sub-agents share no context — they cannot sense each other or infer targets from conversation history. If the output target is missing, the sub-agent will guess, and will usually create a new object it shouldn't.
 
 Three patterns to follow based on task type:
@@ -391,22 +417,11 @@ Three patterns to follow based on task type:
 
 3. Fully independent outputs (separate reports per topic, separate canvases per theme, etc.): each agent produces its own distinct deliverable. Specify each agent's output target separately. No coordination needed.
 
-<!--zh
-background 不只是用于并行——任何预计执行时间超过几秒的子智能体任务都应该用 background=True 配合 wait_for_subagents：
-- sync 模式（background=False）会让父智能体完全阻塞，看不到进度，也无法续期沙盒活跃时间
-- background 模式下可以通过 wait_for_subagents 的超时快照、pattern 匹配等机制感知子智能体进度
-- 只有确认能在几秒内完成的轻量任务才适合 sync 模式
--->
 background is not just for parallelism — use `background=True` + `wait_for_subagents` for any sub-agent task expected to take more than a few seconds:
 - Sync mode (`background=False`) blocks the parent agent entirely with no progress visibility and no sandbox keep-alive
 - Background mode provides progress monitoring via `wait_for_subagents` timeout snapshots and `pattern` matching for checkpoint-based interleaving
 - Only use sync mode for lightweight tasks that finish within seconds
 
-<!--zh
-子智能体可能在结果里包含产物文件路径。向用户汇报时，将这些路径转为 [@file_path:路径] 格式，
-前端会渲染为可点击蓝色链接。
-示例：调研报告已完成：[@file_path:reports/market-research.md]
--->
 Sub-agents may include output file paths in their results. When reporting to the user, present those paths as [@file_path:path] — the frontend renders them as clickable blue links.
 Example: Research report is ready: [@file_path:reports/market-research.md]
 """
@@ -427,15 +442,17 @@ Example: Research report is ready: [@file_path:reports/market-research.md]
         args = arguments or {}
         agent_name = args.get("agent_name", "")
         agent_id = args.get("agent_id", "")
-        display_name = args.get("display_name") or ""
-        action = _build_subagent_action(agent_name, display_name)
-        label = display_name or (_localize_agent_name(agent_name) if agent_name else "")
+        task_label = args.get("task_label", "")
+        payload = result.data if result.ok and isinstance(result.data, dict) else None
+        subject = _resolve_display_subject(agent_name, payload=payload)
+        action = _build_subagent_action(subject)
 
         if not result.ok:
             status_text = i18n.translate("call_subagent.status.failed", category="tool.messages")
-            return {"action": action, "remark": _build_status_remark(label or agent_id, status_text)}
+            return {"action": action, "remark": _build_status_remark(task_label, subject.name, agent_id, status_text)}
 
-        payload = result.data if isinstance(result.data, dict) else {}
+        payload = payload or {}
+        task_label = payload.get("task_label") or task_label
         status = payload.get("status", "")
 
         _status_key_map = {
@@ -447,7 +464,7 @@ Example: Research report is ready: [@file_path:reports/market-research.md]
         }
         status_key = _status_key_map.get(status, "call_subagent.status.accepted")
         status_text = i18n.translate(status_key, category="tool.messages")
-        return {"action": action, "remark": _build_status_remark(label or agent_id, status_text)}
+        return {"action": action, "remark": _build_status_remark(task_label, subject.name, agent_id, status_text)}
 
 
 def _mode_from_background(background: bool) -> SubagentExecutionMode:
@@ -523,6 +540,10 @@ def _restore_if_same_tool_call(
         and state.cached_tool_result
         and state.last_prompt_digest == prompt_digest
     ):
+        if not state.cached_tool_result.task_label:
+            state.cached_tool_result.task_label = state.task_label
+        if not state.cached_tool_result.display_name:
+            state.cached_tool_result.display_name = state.display_name
         return state.cached_tool_result
     if state.active_tool_call_id == tool_call_id and state.status == SubagentStatus.INTERRUPTED:
         return _build_payload(
@@ -544,6 +565,8 @@ def _build_payload(
         agent_id=state.agent_id,
         status=state.status,
         mode=mode,
+        task_label=state.task_label,
+        display_name=state.display_name,
         result=state.last_result,
         error=error or state.last_error,
         resume_hint=resume_hint,
@@ -559,7 +582,8 @@ def _success_result(payload: SubagentPayload) -> ToolResult:
 
 def _build_payload_text(payload: SubagentPayload) -> str:
     lines = [
-        f"Sub-agent `{payload.agent_name}` with agent_id `{payload.agent_id}` is `{payload.status}`.",
+        f"Task `{payload.task_label or payload.agent_id}` is handled by sub-agent `{payload.agent_name}` with agent_id `{payload.agent_id}`.",
+        f"Status: `{payload.status}`.",
         f"Execution mode: `{payload.mode}`.",
     ]
     if payload.result:
@@ -578,14 +602,11 @@ def _build_call_subagent_error_text(agent_name: str, agent_id: str) -> str:
     )
 
 
-def _build_subagent_not_prepared_text(agent_name: str) -> str:
+def _build_subagent_not_available_text(agent_name: str) -> str:
     return (
-        f"Sub-agent `{agent_name}` is not available locally, so it cannot be dispatched yet. "
-        "Built-in agents you can call directly: magic, explore, shell, search, slider. "
-        "For a digital employee, first call agent_list to find it, then call "
-        "prepare_agent(agent_code='<SMA-... code from agent_list>') to download and compile it — "
-        "prepare_agent returns the local agent_name to pass here. "
-        "Do not pass the employee's display name or raw code directly to call_subagent."
+        f"Sub-agent `{agent_name}` is not available locally and is not a valid marketplace custom Agent code. "
+        "Use a built-in agent name such as magic, explore, shell, or search; "
+        "or call find_agents to choose a Crew digital employee, then pass its SMA-... code directly to call_subagent."
     )
 
 
@@ -720,26 +741,88 @@ def _mark_failed(
     )
 
 
-def _build_status_remark(agent_id: str, status_text: str) -> str:
-    """拼接 remark：agent_id · 状态文案。"""
-    if agent_id:
-        return f"{agent_id} · {status_text}"
+def _build_status_remark(
+    task_label: Optional[str],
+    subject_name: str,
+    agent_id: str,
+    status_text: str,
+) -> str:
+    """拼接 remark：任务标签优先，其次展示名和 agent_id。"""
+    label = (task_label or "").strip()
+    subject = (subject_name or "").strip()
+    fallback = label or subject or agent_id
+    if label and subject:
+        return f"{label} · {subject} · {status_text}"
+    if fallback:
+        return f"{fallback} · {status_text}"
     return status_text
 
 
-def _build_subagent_action(agent_name: str, display_name: str) -> str:
-    """Return the action label for a call_subagent invocation.
+async def _resolve_agent_target(
+    raw_agent_name: str,
+) -> PreparedAgentTarget:
+    from app.core.entity.message.client_message import AgentMode
 
-    Crew employees (display_name provided, or SMA- code) use the "调用数字员工" action.
-    Built-in agents fall back to the generic "{{agent_name}} 子智能体" style.
-    """
-    if display_name or is_crew_agent_code(agent_name):
+    resolved_name = AgentMode.resolve_agent_type(raw_agent_name)
+    if not is_custom_agent_code(resolved_name):
+        return PreparedAgentTarget(agent_name=resolved_name)
+
+    info = await _ensure_custom_agent_compiled_for_subagent(resolved_name)
+    return PreparedAgentTarget(
+        agent_name=info.agent_code,
+        display_name=info.name or info.agent_code,
+    )
+
+
+async def _ensure_custom_agent_compiled_for_subagent(agent_code: str) -> "CrewAgentRuntimeInfo":
+    """Prepare a custom Agent without resetting the parent's global skill cache."""
+    from app.service.crew_agent_runtime_service import CrewAgentRuntimeService
+
+    def _no_global_reset(code: str, reason: str) -> None:
+        logger.info(f"Prepared custom sub-agent, skip global skill reset: code={code}, reason={reason}")
+
+    return await CrewAgentRuntimeService(on_cache_invalidated=_no_global_reset).ensure_compiled(agent_code)
+
+
+def _display_subject(
+    agent_name: str,
+    display_name: Optional[str] = None,
+) -> AgentDisplaySubject:
+    if is_custom_agent_code(agent_name):
+        return AgentDisplaySubject(
+            kind=AgentDisplayKind.CREW,
+            name=(display_name or "").strip() or agent_name.strip(),
+        )
+    return AgentDisplaySubject(kind=AgentDisplayKind.AGENT, name=_localize_agent_name(agent_name) if agent_name else "")
+
+
+def _display_subject_from_payload(
+    agent_name: str,
+    payload: Optional[dict[str, Any]],
+) -> AgentDisplaySubject:
+    display_name = payload.get("display_name") if payload else None
+    return _display_subject(
+        agent_name,
+        display_name if isinstance(display_name, str) else None,
+    )
+
+
+def _resolve_display_subject(
+    agent_name: str,
+    payload: Optional[dict[str, Any]] = None,
+) -> AgentDisplaySubject:
+    return _display_subject_from_payload(agent_name, payload)
+
+
+def _build_subagent_action(subject: AgentDisplaySubject) -> str:
+    """Return the action label for a call_subagent invocation."""
+    if subject.kind == AgentDisplayKind.CREW:
         return i18n.translate("call_subagent.crew", category="tool.actions")
-    if agent_name:
+    if subject.name:
         return i18n.translate(
             "call_subagent.assign",
             category="tool.messages",
-            agent_name=_localize_agent_name(agent_name),
+            agent_name=subject.name,
         )
     return i18n.translate("call_subagent", category="tool.actions")
 
@@ -757,7 +840,8 @@ _STATUS_EMOJI: Dict[str, str] = {
 def _build_subagent_tool_detail(
     agent_name: str,
     agent_id: str,
-    display_name: str,
+    task_label: str,
+    subject: AgentDisplaySubject,
     status: str,
     agent_result: str,
     error: str,
@@ -766,10 +850,12 @@ def _build_subagent_tool_detail(
     """构建子智能体终端风格详情卡片，供 before/after detail 复用。"""
     t = lambda key: i18n.translate(f"call_subagent.detail.{key}", category="tool.messages")
     status_emoji = _STATUS_EMOJI.get(status, "🔄")
-    agent_label = display_name or (_localize_agent_name(agent_name) if agent_name else "")
+    agent_label = subject.name or (_localize_agent_name(agent_name) if agent_name else "")
     lines = []
     if agent_label:
-        lines.append(f"{t('sub_agent')}: {agent_label}")
+        lines.append(f"{t(_detail_subject_key(subject))}: {agent_label}")
+    if task_label:
+        lines.append(f"{t('task_label')}: {task_label}")
     if agent_id:
         lines.append(f"{t('session_id')}: {agent_id}")
     if status:
@@ -793,3 +879,7 @@ def _build_subagent_tool_detail(
             exit_code=exit_code,
         ),
     )
+
+
+def _detail_subject_key(subject: AgentDisplaySubject) -> str:
+    return "crew" if subject.kind == AgentDisplayKind.CREW else "sub_agent"

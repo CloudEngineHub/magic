@@ -20,7 +20,7 @@ from app.tools.subagent_runtime_models import (
 )
 from app.tools.subagent_runtime_store import SubagentRuntimeStore
 from app.tools.subagent_session_manager import SubagentSessionHandle, subagent_session_manager
-from app.tools.call_subagent import _localize_agent_name
+from app.tools.call_subagent import AgentDisplayKind, _display_subject_from_payload
 from app.tools.core.tool_keepalive import start_tool_keep_alive, stop_tool_keep_alive
 from app.core.entity.message.server_message import DisplayType, TerminalContent, ToolDetail
 from app.utils.async_file_utils import async_exists, async_read_json
@@ -43,40 +43,34 @@ class WaitForSubagentsParams(BaseToolParams):
     )
     timeout: float = Field(
         30.0,
-        description="""<!--zh\n等待超时秒数（POSIX 语义）：\n- timeout > 0：最长等待时间，超时后返回当前状态快照（可再次调用继续等）\n- timeout = 0：立即返回当前状态快照，不等待\n- timeout = -1：无限等待，直到所有子智能体完成（兜底上限 60 分钟）\n-->\nTimeout in seconds (POSIX semantics):\n- timeout > 0: max wait time. If reached, returns current status with progress snapshot. Call again to keep waiting.\n- timeout = 0: return current status snapshot immediately without waiting.\n- timeout = -1: wait indefinitely until all agents finish (capped at 60 minutes)."""
+        description="""Timeout in seconds (POSIX semantics):
+- timeout > 0: wait at most this long, then return a progress snapshot. Call again to continue waiting.
+- timeout = 0: return the current status immediately without waiting.
+- timeout = -1: wait until all agents finish, capped at 60 minutes.""",
     )
     kill: bool = Field(
         False,
-        description="""<!--zh\n设为 True 时终止所有指定的子智能体并返回结果。timeout 参数被忽略。\n对已完成的子智能体无副作用。\n-->\nIf True, kill all specified sub-agents and return their results. The timeout parameter is ignored.\nSafe to call on already-finished agents."""
+        description=(
+            "If true, kill all specified sub-agents and return their results. The timeout is ignored. "
+            "Safe to call on already-finished agents."
+        ),
     )
     pattern: Optional[str] = Field(
         None,
-        description="""<!--zh\n正则表达式（Python re 模块语法）；子智能体的 assistant 消息匹配到时提前返回。\n仅 timeout != 0 且 kill=False 时有效。\n典型用法：让子智能体在关键阶段输出约定文本（如 "CHECKPOINT_PHASE_1"），用 pattern 等待该文本出现后验收。\n-->\nRegex pattern (Python re syntax). Returns early when matched in any sub-agent's assistant message.\nOnly effective when timeout != 0 and kill=False.\nTypical usage: instruct the sub-agent to output agreed-upon text at key milestones (e.g., "CHECKPOINT_PHASE_1"), then use pattern to wait for it."""
+        description=(
+            "Python regular expression matched against sub-agent assistant messages. Returns early on a match. "
+            "Only applies when timeout != 0 and kill is false. Use an agreed checkpoint marker, such as "
+            '"CHECKPOINT_PHASE_1", to wait for an intermediate milestone.'
+        ),
     )
 
 
-@tool()
+@tool(code_mode_only=True)
 class WaitForSubagents(BaseTool[WaitForSubagentsParams]):
-    """<!--zh: 等待或终止后台子智能体。-->
-    Wait for or kill background sub-agents."""
+    """Wait for or kill background sub-agents."""
 
     def get_prompt_hint(self) -> str:
         return """\
-<!--zh
-wait_for_subagents 使用规则：
-- timeout > 0：等待最多 N 秒。超时后子智能体仍在运行，你必须选择：
-  1. 再次调用 wait_for_subagents 继续等待
-  2. 用 kill=True 终止它们
-  不处理的子智能体会无限运行并持续消耗资源，不要放任不管。
-- timeout = 0：不等待，立即返回各子智能体的当前状态快照
-- timeout = -1：无限等待，直到所有子智能体完成（兜底上限 60 分钟）
-- kill=True：终止所有指定的子智能体并返回结果（timeout 被忽略）
-- 超时 ≠ 失败：超时只是说明任务还在跑，不是出错了。看 Last message 判断进度，决定是继续 wait 还是 kill
-- 对已完成的子智能体调用 kill 无副作用，安全返回已有结果
-- pattern：Python 正则表达式，用于匹配子智能体的 assistant 消息。任意一个子智能体的新消息命中时立即返回。
-  典型用法：子智能体约定输出 checkpoint 标记（如 [CHECKPOINT:...]），父 agent 用 pattern 等到标记后处理中间结果，再继续等待。
-  规则：只扫描等待开始后产生的新消息，不会匹配历史内容。匹配后子智能体仍在运行，必须再次 wait 或 kill。
--->
 Rules for wait_for_subagents:
 - timeout > 0: wait up to N seconds. If agents are still running after timeout, you MUST either:
   1. Call wait_for_subagents again to keep waiting
@@ -198,6 +192,8 @@ Rules for wait_for_subagents:
             results.append(SubagentQueryResult(
                 agent_id=agent_id,
                 agent_name=state.agent_name,
+                task_label=state.task_label,
+                display_name=state.display_name,
                 status=state.status,
                 result=state.last_result,
                 error=state.last_error,
@@ -236,8 +232,14 @@ Rules for wait_for_subagents:
             error = item.get("error") or ""
 
             status_emoji = _status_emoji.get(status, "🔄")
-            display_name = _localize_agent_name(agent_name) if agent_name else ""
-            header = f"=== {display_name} / {agent_id} ===" if agent_name else f"=== {agent_id} ==="
+            label = _result_display_label(item)
+            subject = _display_subject_from_payload(agent_name, item)
+            if label and subject.name and label != subject.name:
+                header = f"=== {label} / {subject.name} / {agent_id} ==="
+            elif label:
+                header = f"=== {label} / {agent_id} ==="
+            else:
+                header = f"=== {agent_id} ==="
             lines = [header]
             if status:
                 lines.append(f"{t('status')}: {status_emoji} {status}")
@@ -292,29 +294,28 @@ Rules for wait_for_subagents:
             }
         try:
             results = result.data.get("results", [])
+            action = _build_wait_action(results)
             if len(results) == 1 and results[0].get("agent_name"):
                 item = results[0]
-                agent_name = item["agent_name"]
-                display_name = _localize_agent_name(agent_name)
-                action = i18n.translate("call_subagent.assign", category="tool.messages", agent_name=display_name)
+                label = _result_display_label(item)
                 status = item.get("status", "")
                 if status in {SubagentStatus.PENDING, SubagentStatus.RUNNING}:
-                    summary = i18n.translate("call_subagent.running", category="tool.messages", agent_name=display_name)
+                    summary = i18n.translate("call_subagent.running", category="tool.messages", agent_name=label)
                 elif status == SubagentStatus.DONE:
-                    summary = i18n.translate("call_subagent.done", category="tool.messages", agent_name=display_name)
+                    summary = i18n.translate("call_subagent.done", category="tool.messages", agent_name=label)
                 elif status == SubagentStatus.ERROR:
                     summary = i18n.translate(
                         "call_subagent.failed",
                         category="tool.messages",
-                        agent_name=display_name,
+                        agent_name=label,
                         error=item.get("error", i18n.translate("unknown.message", category="tool.messages")),
                     )
                 elif status == SubagentStatus.INTERRUPTED:
-                    summary = i18n.translate("call_subagent.interrupted", category="tool.messages", agent_name=display_name)
+                    summary = i18n.translate("call_subagent.interrupted", category="tool.messages", agent_name=label)
                 else:
-                    summary = f"{display_name}: {status}"
+                    summary = f"{label}: {status}"
             else:
-                summary = ", ".join(f"{item['agent_id']}: {item['status']}" for item in results)
+                summary = ", ".join(f"{_result_display_label(item)}: {item['status']}" for item in results)
             return {"action": action, "remark": summary}
         except Exception:
             return {"action": action, "remark": ""}
@@ -462,6 +463,8 @@ async def _interrupt_and_read_state(agent_name: str, agent_id: str, reason: str)
     return SubagentQueryResult(
         agent_id=agent_id,
         agent_name=state.agent_name,
+        task_label=state.task_label,
+        display_name=state.display_name,
         status=state.status,
         result=state.last_result,
         error=state.last_error,
@@ -473,7 +476,7 @@ def _build_interrupted_subagent_notice(results: list[SubagentQueryResult]) -> st
         "Sub-agent cancellation summary:",
     ]
     for result in results:
-        label = f"{result.agent_name}/{result.agent_id}" if result.agent_name else result.agent_id
+        label = _query_result_label(result)
         suffix = f", reason={result.error}" if result.error else ""
         lines.append(f"- {label}: {result.status}{suffix}")
     lines.append(
@@ -506,6 +509,39 @@ def _resolve_terminal_exit_code(items: list[dict[str, Any]]) -> int:
     if statuses & _IN_FLIGHT_STATUSES:
         return 124
     return 0
+
+
+def _build_wait_action(items: list[dict[str, Any]]) -> str:
+    if items and all(
+        _display_subject_from_payload(str(item.get("agent_name") or ""), item).kind == AgentDisplayKind.CREW
+        for item in items
+    ):
+        return i18n.translate("wait_for_subagents.crew", category="tool.actions")
+    return i18n.translate("wait_for_subagents", category="tool.actions")
+
+
+def _result_display_label(item: dict[str, Any]) -> str:
+    task_label = str(item.get("task_label") or "").strip()
+    if task_label:
+        return task_label
+
+    agent_name = str(item.get("agent_name") or "")
+    subject = _display_subject_from_payload(agent_name, item)
+    if subject.name:
+        return subject.name
+
+    return str(item.get("agent_id") or "")
+
+
+def _query_result_label(result: SubagentQueryResult) -> str:
+    task_label = (result.task_label or "").strip()
+    if task_label:
+        return task_label
+    if result.display_name:
+        return result.display_name
+    if result.agent_name:
+        return f"{result.agent_name}/{result.agent_id}"
+    return result.agent_id
 
 
 async def _get_initial_message_counts(
@@ -608,8 +644,10 @@ def _build_results_text(
     sections: list[str] = []
 
     for i, result in enumerate(results, 1):
-        label = f"{result.agent_name}/{result.agent_id}" if result.agent_name else result.agent_id
+        label = _query_result_label(result)
         parts = [f"[{i}/{total}] {label}: {result.status}"]
+        if result.agent_name or result.agent_id:
+            parts.append(f"Sub-agent: {result.agent_name or ''}/{result.agent_id}")
 
         if result.error:
             parts.append(f"Error: {result.error}")
@@ -626,20 +664,20 @@ def _build_results_text(
         sections.append("\n".join(parts))
 
     # 尾部决策引导：告诉模型仍在运行的 agent 必须被处理
-    running_ids = [r.agent_id for r in results if r.status in _IN_FLIGHT_STATUSES]
-    if running_ids:
+    running_labels = [_query_result_label(r) for r in results if r.status in _IN_FLIGHT_STATUSES]
+    if running_labels:
         reason = wait_result.reason if wait_result else None
-        ids_str = ", ".join(running_ids)
+        labels_str = ", ".join(running_labels)
         if reason == "pattern_matched":
             sections.append(
-                f"--- {len(running_ids)} agent(s) still running after pattern match ({ids_str}). "
+                f"--- {len(running_labels)} agent(s) still running after pattern match ({labels_str}). "
                 "Sub-agents keep running after a match. You must either: "
                 "(1) call wait_for_subagents again to continue monitoring, or "
                 "(2) use kill=True to terminate. Do not leave running agents unattended."
             )
         elif reason == "timeout":
             sections.append(
-                f"--- {len(running_ids)} agent(s) still running after timeout ({ids_str}). "
+                f"--- {len(running_labels)} agent(s) still running after timeout ({labels_str}). "
                 "Timeout is NOT failure — the agents are still working. You must either: "
                 "(1) call wait_for_subagents again to keep waiting, or "
                 "(2) use kill=True to terminate. "
@@ -648,7 +686,7 @@ def _build_results_text(
         else:
             # timeout=0 快照或其他场景
             sections.append(
-                f"--- {len(running_ids)} agent(s) still running ({ids_str}). "
+                f"--- {len(running_labels)} agent(s) still running ({labels_str}). "
                 "Use wait_for_subagents with timeout > 0 to wait for completion, "
                 "or kill=True to terminate."
             )

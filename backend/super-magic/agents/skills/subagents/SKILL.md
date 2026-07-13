@@ -1,11 +1,14 @@
 ---
 name: subagents
-description: Use when multiple independent subtasks can run in parallel, when a research or exploration task is large enough to keep separate rather than do inline (doing it inline fills the conversation with intermediate steps you'll carry through to the end), or when you need a specialized agent type (explore for deep search, shell for system commands). Any task with a clear deliverable and no dependency on the current thread is a good candidate to delegate.
+description: Use when the user asks to find, select, call, or delegate work to an Agent/智能体, digital employee/数字员工, or Crew; when the target is unknown or must be selected by capability; when independent tasks can run in parallel; or when isolated research or a specialized Agent would improve the result.
 ---
 
 # Subagent Dispatch Skill
 
 Use `call_subagent` to delegate tasks to other agents, and `wait_for_subagents` to collect results from background runs.
+These tools are Code Mode tools: run the snippets below with `run_sdk_snippet`, where `sdk.tool.call(...)` is available.
+
+Agent is the generic technical term. Crew is the product term for a marketplace custom Agent presented as a digital employee (数字员工). Users may say Agent, 智能体, digital employee, 数字员工, or Crew. Do not call built-in Agents Crew.
 
 ## When To Use
 
@@ -24,24 +27,56 @@ Do not delegate when:
 
 **Depth limit**: sub-agents cannot call `call_subagent`. Only the root agent may dispatch.
 
+## Selecting The Target Agent
+
+- If the user provides a built-in name, local `.agent` name, or `SMA-...` code, skip discovery and call that Agent directly.
+- If the target is unknown or must be selected by capability, call `find_agents` to search marketplace custom Agents presented as Crew digital employees.
+- Built-in Agents (`magic`, `explore`, `shell`, `search`) do not require discovery.
+
+```python
+from sdk.tool import tool
+
+result = tool.call("find_agents", {
+    "keywords": ["<short capability phrases in the user's language>"],
+    "query": "<the user's complete requirement in the user's language>",
+    "limit": 5,
+})
+print(result.content)
+```
+
+- `keywords`: short capability words or phrases in the user's language. Do not put the complete requirement in an item or split it mechanically on spaces.
+- `query`: the user's complete requirement in the user's language, used to select more relevant candidates.
+- `limit`: choose based on the task. The default is `5`; valid values are `1` through `20`.
+
+Read `result.content`, choose by `code`, `name`, and `description`, then pass the selected `SMA-...` code directly as `call_subagent.agent_name`. If no candidates are returned, retry with shorter, broader capability phrases. To browse all currently available marketplace Agents, explicitly pass `keywords=[]`.
+
 ## Tool: call_subagent
 
 ```python
 from sdk.tool import tool
 
 result = tool.call("call_subagent", {
-    "agent_name": str,   # required
-    "agent_id":   str,   # required
-    "prompt":     str,   # required
-    "model_id":   str,   # optional, defaults to inheriting the caller's model
-    "background": bool,  # optional, default False
-    "fork":       bool,  # optional, default False
+    "agent_name": str,       # required; built-in/local Agent name, or marketplace custom Agent code from find_agents
+    "agent_id": str,         # required; stable conversation/session identity
+    "task_label": str,       # required; user-facing label in the user's language
+    "prompt": str,           # required
+    "model_id": str,         # optional, defaults to inheriting the caller's model
+    "background": bool,      # optional, default False
+    "fork": bool,            # optional, default False
 })
 ```
 
 ### agent_name
 
-Maps to a `.agent` filename under `agents/`. Built-in types:
+Target agent to call. Accepted values:
+
+- Built-in names or aliases: `magic`, `explore`, `shell`, `search`, `ppt`, `data_analysis`
+- Marketplace custom Agent codes returned by `find_agents`, such as `SMA-...` (Crew digital employees)
+- Local `.agent` filenames
+
+For marketplace custom Agent codes, `call_subagent` prepares the Agent automatically before dispatch.
+
+Built-in types:
 
 - `magic`: general-purpose, full tool access (web, files, code). Use for complex multi-step tasks.
 - `explore`: read-only. Searches files, reads code, answers structural questions. Cannot modify anything.
@@ -57,6 +92,14 @@ Human-readable session identity, e.g. `market-research-phase1`.
 - Same `agent_id` → resume the existing conversation (same chat history)
 - Different `agent_id` → fresh start with empty history
 - Name by responsibility, not by sequence: `ppt-outline`, `shell-install-ffmpeg` — not `task1`, `worker-a`
+
+### task_label
+
+User-facing label shown directly in the UI for this delegated task. It is not the agent's name and not `agent_id`.
+
+- Must use the same language as the user's request so the label is understandable. Do not default to English.
+- Make it concise and distinct in multi-agent runs.
+- It may change between calls even when `agent_id` stays the same.
 
 ### prompt
 
@@ -138,7 +181,8 @@ Do not proceed without dealing with running agents — they run indefinitely and
 Awaits all listed agents together. `result.content` uses this format per agent:
 
 ```
-[i/total] agent_type/session_id: status
+[i/total] task_label: status
+Sub-agent: agent_name/agent_id
 Result:
 ```final output```
 ```
@@ -147,7 +191,7 @@ Result:
 - `Result:` appears only when status is `done` — contains the sub-agent's final output
 - When status is `running` (timed out), `Result:` is replaced by `Last message:` — this is the last assistant message the sub-agent produced before the timeout, useful for gauging progress
 - `wait_for_subagents` is idempotent — if status is still `running`, call it again or kill it. Do not ignore running agents — they consume resources indefinitely until explicitly waited on or killed.
-- `result.data["results"]`: structured list for programmatic access, fields: `agent_id`, `agent_name`, `status`, `result`, `error`, `last_activity`, `matched_content`
+- `result.data["results"]`: structured list for programmatic access, fields: `agent_id`, `agent_name`, `task_label`, `status`, `result`, `error`, `last_activity`, `matched_content`
 
 ## Output Target
 
@@ -177,6 +221,7 @@ from sdk.tool import tool
 result = tool.call("call_subagent", {
     "agent_name": "explore",
     "agent_id": "find-product-positioning-doc",
+    "task_label": "positioning source lookup",
     "prompt": """Find the single workspace document that is most useful for answering: "What is this project, who is it for, and what does it provide?"
 Check workspace folders that are likely to contain project briefs, product analysis, requirements, launch materials, or internal planning before searching elsewhere.
 Return:
@@ -197,18 +242,19 @@ Dispatch first (sequential calls, concurrent execution):
 ```python
 from sdk.tool import tool
 
-def dispatch(agent_id, prompt):
+def dispatch(agent_id, task_label, prompt):
     tool.call("call_subagent", {
         "agent_name": "search",
         "agent_id": agent_id,
+        "task_label": task_label,
         "prompt": prompt,
         "background": True,
     })
 
-dispatch("research-competitors", """Search the web for the top 3-5 competitors in this product space.
+dispatch("research-competitors", "competitor research", """Search the web for the top 3-5 competitors in this product space.
 For each, return: product name, target users, main differentiator, and source URL.
 Focus on product launches, review sites, and tech media from the past 12 months.""")
-dispatch("research-market-signals", """Search the web for recent market signals in this product space.
+dispatch("research-market-signals", "market signals", """Search the web for recent market signals in this product space.
 Return:
 1. notable user needs or pain points (with source URLs)
 2. recurring themes across articles or community discussions
@@ -242,6 +288,7 @@ from sdk.tool import tool
 tool.call("call_subagent", {
     "agent_name": "explore",
     "agent_id": "long-research",
+    "task_label": "long research",
     "prompt": """Research X thoroughly. After each major section, output exactly:
 [CHECKPOINT: section_name]
 followed by your findings so far. Continue until all sections are done.""",
@@ -274,6 +321,7 @@ Before dispatching:
 - Is delegation actually necessary?
 - Does the prompt contain all required context (no reference to parent conversation)?
 - Is `agent_id` stable, human-readable, and unique to this task branch?
+- Is `task_label` concise, distinct, and written in the same language as the user's request?
 - Is the output target explicit and conflict-free?
 - If `background=True`, is there a matching `wait_for_subagents`?
 - If an agent needs to be stopped, use `wait_for_subagents(agent_ids=[...], kill=True)` instead of re-dispatching
