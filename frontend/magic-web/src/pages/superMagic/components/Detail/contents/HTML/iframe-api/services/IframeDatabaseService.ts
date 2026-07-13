@@ -29,7 +29,7 @@ import {
 	updateMagicBaseRow,
 	deleteMagicBaseRow,
 	getMagicBaseRelations,
-} from "../iframeApi"
+} from "../magicBaseApi"
 
 export interface IframeDatabaseConfig {
 	/** 向 iframe 发送消息的函数 */
