@@ -12,6 +12,7 @@ import {
 	processInlineStyles,
 	processAudioArray,
 	handleHtCdnUrl,
+	removeRootHtmlXhtmlNamespace,
 } from "./utils"
 import { processDashboardArray } from "./dashboard/utils"
 import {
@@ -105,7 +106,9 @@ function restoreSerializedEntities(html: string): string {
 
 /** 将 Document 序列化为 HTML 字符串并还原实体，保证输出格式与 DOM 语义一致 */
 function serializeDocToHtml(doc: Document): string {
-	return restoreSerializedEntities(new XMLSerializer().serializeToString(doc))
+	return removeRootHtmlXhtmlNamespace(
+		restoreSerializedEntities(new XMLSerializer().serializeToString(doc)),
+	)
 }
 
 function finalizeHtmlPreviewBundledShell(html: string, input: ProcessHtmlContentInput): string {
@@ -610,7 +613,7 @@ export async function processHtmlContent(
 								if (!magicProjectJSConfig.geo) {
 									magicProjectJSConfig.geo = []
 								}
-								; (magicProjectJSConfig as any).geo.push({
+								;(magicProjectJSConfig as any).geo.push({
 									name: resourceInfo.fileName.split(".")[0],
 									url: item.url,
 								})
@@ -619,7 +622,7 @@ export async function processHtmlContent(
 								if (!magicProjectJSConfig.dataSources) {
 									magicProjectJSConfig.dataSources = []
 								}
-								; (magicProjectJSConfig as any).dataSources.push({
+								;(magicProjectJSConfig as any).dataSources.push({
 									name: resourceInfo.fileName.split(".")[0],
 									url: item.url,
 								})

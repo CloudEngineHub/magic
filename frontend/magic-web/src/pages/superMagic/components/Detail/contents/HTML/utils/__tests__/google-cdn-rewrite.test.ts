@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { rewriteHtmlCdnWithHost } from "../index"
+import { rewriteHtmlCdnWithHost, rewriteHtmlWithMagicCdn } from "../index"
 
 const CDN_HOST = "https://cdn.example.com"
 
@@ -20,6 +20,17 @@ function getStyleContents(doc: Document): string[] {
 }
 
 describe("google cdn rewrite", () => {
+	describe("serialized HTML output", () => {
+		it("should not add the XHTML namespace to the root html element", () => {
+			const html = `<!DOCTYPE html><html lang="zh"><head></head><body><p>sample</p></body></html>`
+
+			const result = rewriteHtmlWithMagicCdn(html)
+
+			expect(result).toContain('<html lang="zh">')
+			expect(result).not.toContain('<html xmlns="http://www.w3.org/1999/xhtml"')
+		})
+	})
+
 	describe("fonts.googleapis.com/css2 (single family)", () => {
 		it("should rewrite to internal CDN static CSS path", () => {
 			const html = `<html><head>
