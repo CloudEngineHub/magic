@@ -11,9 +11,11 @@ use App\Domain\Contact\Entity\MagicUserEntity;
 use App\Domain\Contact\Service\MagicUserDomainService;
 use App\Infrastructure\Core\Exception\ExceptionBuilder;
 use Dtyq\SuperMagic\Domain\Agent\Entity\AgentCategoryEntity;
+use Dtyq\SuperMagic\Domain\Agent\Entity\ValueObject\Query\AgentCategoryQuery;
 use Dtyq\SuperMagic\Domain\Agent\Service\SuperMagicAgentCategoryDomainService;
 use Dtyq\SuperMagic\ErrorCode\SuperMagicErrorCode;
 use Dtyq\SuperMagic\Interfaces\Agent\DTO\Request\CreateAgentCategoryRequestAdminDTO;
+use Dtyq\SuperMagic\Interfaces\Agent\DTO\Request\QueryAgentCategoriesRequestAdminDTO;
 use Dtyq\SuperMagic\Interfaces\Agent\DTO\Request\UpdateAgentCategoryRequestAdminDTO;
 use Hyperf\Di\Annotation\Inject;
 use Qbhy\HyperfAuth\Authenticatable;
@@ -28,9 +30,13 @@ class AdminSuperMagicCategoryAppService extends AbstractSuperMagicAppService
     protected MagicUserDomainService $magicUserDomainService;
 
     /** @return array<int, array<string, mixed>> */
-    public function query(): array
+    public function query(QueryAgentCategoriesRequestAdminDTO $requestDTO): array
     {
-        $categories = $this->categoryDomainService->findAll();
+        $query = new AgentCategoryQuery();
+        $query->setStatus($requestDTO->getStatus());
+        $query->setKeyword($requestDTO->getKeyword());
+
+        $categories = $this->categoryDomainService->findByQuery($query);
         $operatorUserMap = $this->buildOperatorUserMap($categories);
         $agentCountMap = $this->buildAgentCountMap($categories);
 

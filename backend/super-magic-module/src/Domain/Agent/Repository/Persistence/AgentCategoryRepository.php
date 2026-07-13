@@ -8,6 +8,7 @@ declare(strict_types=1);
 namespace Dtyq\SuperMagic\Domain\Agent\Repository\Persistence;
 
 use Dtyq\SuperMagic\Domain\Agent\Entity\AgentCategoryEntity;
+use Dtyq\SuperMagic\Domain\Agent\Entity\ValueObject\Query\AgentCategoryQuery;
 use Dtyq\SuperMagic\Domain\Agent\Repository\Facade\AgentCategoryRepositoryInterface;
 use Dtyq\SuperMagic\Domain\Agent\Repository\Persistence\Model\AgentCategoryModel;
 
@@ -33,6 +34,29 @@ class AgentCategoryRepository extends SuperMagicAbstractRepository implements Ag
 
         $models = $this->categoryModel::query()
             ->whereIn('id', $ids)
+            ->get();
+
+        return $models
+            ->map(static fn (AgentCategoryModel $model) => new AgentCategoryEntity($model->toArray()))
+            ->all();
+    }
+
+    public function findByQuery(AgentCategoryQuery $query): array
+    {
+        $builder = $this->categoryModel::query();
+
+        if ($query->getStatus() !== null) {
+            $builder->where('status', $query->getStatus());
+        }
+
+        $keyword = trim((string) $query->getKeyword());
+        if ($keyword !== '') {
+            $builder->where('name_i18n', 'LIKE', '%' . $keyword . '%');
+        }
+
+        $models = $builder
+            ->orderBy('sort_order', 'DESC')
+            ->orderBy('created_at', 'ASC')
             ->get();
 
         return $models

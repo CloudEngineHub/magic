@@ -13,6 +13,7 @@ use App\Infrastructure\Util\Permission\Annotation\CheckPermission;
 use Dtyq\ApiResponse\Annotation\ApiResponse;
 use Dtyq\SuperMagic\Application\Agent\Service\AdminSuperMagicCategoryAppService;
 use Dtyq\SuperMagic\Interfaces\Agent\DTO\Request\CreateAgentCategoryRequestAdminDTO;
+use Dtyq\SuperMagic\Interfaces\Agent\DTO\Request\QueryAgentCategoriesRequestAdminDTO;
 use Dtyq\SuperMagic\Interfaces\Agent\DTO\Request\UpdateAgentCategoryRequestAdminDTO;
 use Dtyq\SuperMagic\Interfaces\Agent\Facade\AbstractSuperMagicApi;
 use Hyperf\Di\Annotation\Inject;
@@ -26,7 +27,7 @@ class AdminSuperMagicCategoryApi extends AbstractSuperMagicApi
     #[CheckPermission([MagicResourceEnum::PLATFORM_AGENT_MARKET], MagicOperationEnum::QUERY)]
     public function queries(): array
     {
-        return ['list' => $this->categoryAppService->query()];
+        return ['list' => $this->categoryAppService->query(QueryAgentCategoriesRequestAdminDTO::fromRequest($this->request))];
     }
 
     #[CheckPermission([MagicResourceEnum::PLATFORM_AGENT_MARKET], MagicOperationEnum::QUERY)]

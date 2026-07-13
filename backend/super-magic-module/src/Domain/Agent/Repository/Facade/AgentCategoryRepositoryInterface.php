@@ -8,6 +8,7 @@ declare(strict_types=1);
 namespace Dtyq\SuperMagic\Domain\Agent\Repository\Facade;
 
 use Dtyq\SuperMagic\Domain\Agent\Entity\AgentCategoryEntity;
+use Dtyq\SuperMagic\Domain\Agent\Entity\ValueObject\Query\AgentCategoryQuery;
 
 /**
  * Agent 分类仓储接口.
@@ -18,6 +19,9 @@ interface AgentCategoryRepositoryInterface
 
     /** @return AgentCategoryEntity[] */
     public function findByIds(array $ids): array;
+
+    /** @return AgentCategoryEntity[] */
+    public function findByQuery(AgentCategoryQuery $query): array;
 
     public function save(AgentCategoryEntity $entity): AgentCategoryEntity;
 

@@ -8,6 +8,7 @@ declare(strict_types=1);
 namespace Dtyq\SuperMagic\Domain\Agent\Service;
 
 use Dtyq\SuperMagic\Domain\Agent\Entity\AgentCategoryEntity;
+use Dtyq\SuperMagic\Domain\Agent\Entity\ValueObject\Query\AgentCategoryQuery;
 use Dtyq\SuperMagic\Domain\Agent\Repository\Facade\AgentCategoryRepositoryInterface;
 use Dtyq\SuperMagic\Domain\Agent\Repository\Facade\AgentMarketRepositoryInterface;
 
@@ -34,6 +35,12 @@ class SuperMagicAgentCategoryDomainService
     public function findByIds(array $ids): array
     {
         return $this->categoryRepository->findByIds($ids);
+    }
+
+    /** @return AgentCategoryEntity[] */
+    public function findByQuery(AgentCategoryQuery $query): array
+    {
+        return $this->categoryRepository->findByQuery($query);
     }
 
     public function save(AgentCategoryEntity $category): AgentCategoryEntity

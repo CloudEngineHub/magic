@@ -10,7 +10,9 @@ namespace Dtyq\SuperMagic\Tests\Unit\Application\Agent\Service;
 use App\Domain\Contact\Service\MagicUserDomainService;
 use Dtyq\SuperMagic\Application\Agent\Service\AdminSuperMagicCategoryAppService;
 use Dtyq\SuperMagic\Domain\Agent\Entity\AgentCategoryEntity;
+use Dtyq\SuperMagic\Domain\Agent\Entity\ValueObject\Query\AgentCategoryQuery;
 use Dtyq\SuperMagic\Domain\Agent\Service\SuperMagicAgentCategoryDomainService;
+use Dtyq\SuperMagic\Interfaces\Agent\DTO\Request\QueryAgentCategoriesRequestAdminDTO;
 use PHPUnit\Framework\TestCase;
 use ReflectionClass;
 use ReflectionProperty;
@@ -24,7 +26,20 @@ class AdminSuperMagicCategoryAppServiceTest extends TestCase
     {
         $service = $this->createService([$this->createCategory()]);
 
-        $result = $service->query();
+        $result = $service->query(new QueryAgentCategoriesRequestAdminDTO());
+
+        self::assertSame('935290509114109952', $result[0]['id']);
+    }
+
+    public function testQueryPassesFilterToDomainService(): void
+    {
+        $requestDTO = new QueryAgentCategoriesRequestAdminDTO();
+        $requestDTO->setStatus(0);
+        $requestDTO->nameI18n = '测试';
+
+        $service = $this->createService([$this->createCategory(status: 0)]);
+
+        $result = $service->query($requestDTO);
 
         self::assertSame('935290509114109952', $result[0]['id']);
     }
@@ -56,6 +71,31 @@ class AdminSuperMagicCategoryAppServiceTest extends TestCase
                 return $this->categories;
             }
 
+            public function findByQuery(AgentCategoryQuery $query): array
+            {
+                return array_values(array_filter(
+                    $this->categories,
+                    static function (AgentCategoryEntity $category) use ($query): bool {
+                        if ($query->getStatus() !== null && $category->getStatus() !== $query->getStatus()) {
+                            return false;
+                        }
+
+                        $keyword = trim((string) $query->getKeyword());
+                        if ($keyword === '') {
+                            return true;
+                        }
+
+                        foreach ($category->getNameI18n() as $name) {
+                            if (is_string($name) && str_contains($name, $keyword)) {
+                                return true;
+                            }
+                        }
+
+                        return false;
+                    }
+                ));
+            }
+
             public function findById(int $id): ?AgentCategoryEntity
             {
                 return $this->category;
@@ -85,7 +125,7 @@ class AdminSuperMagicCategoryAppServiceTest extends TestCase
         return $service;
     }
 
-    private function createCategory(): AgentCategoryEntity
+    private function createCategory(int $status = 1): AgentCategoryEntity
     {
         $category = (new ReflectionClass(AgentCategoryEntity::class))->newInstanceWithoutConstructor();
         foreach ([
@@ -93,7 +133,7 @@ class AdminSuperMagicCategoryAppServiceTest extends TestCase
             'organizationCode' => 'TGosRaFhvb',
             'nameI18n' => ['zh_CN' => '测试分类'],
             'sortOrder' => 1,
-            'status' => 1,
+            'status' => $status,
             'creatorId' => 'user-1',
             'modifierId' => null,
         ] as $property => $value) {
