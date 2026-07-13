@@ -40,9 +40,19 @@ class AgentCategoryEntity extends AbstractEntity
     protected int $sortOrder = 0;
 
     /**
+     * @var int 状态：1-显示，0-隐藏
+     */
+    protected int $status = 1;
+
+    /**
      * @var string 创建者用户 ID
      */
     protected string $creatorId;
+
+    /**
+     * @var null|string 最后更新者用户 ID
+     */
+    protected ?string $modifierId = null;
 
     /**
      * @var null|string 创建时间
@@ -75,7 +85,9 @@ class AgentCategoryEntity extends AbstractEntity
             'name_i18n' => $this->nameI18n,
             'logo' => $this->logo,
             'sort_order' => $this->sortOrder,
+            'status' => $this->status,
             'creator_id' => $this->creatorId,
+            'modifier_id' => $this->modifierId,
             'created_at' => $this->createdAt,
             'updated_at' => $this->updatedAt,
             'deleted_at' => $this->deletedAt,
@@ -145,6 +157,17 @@ class AgentCategoryEntity extends AbstractEntity
         return $this;
     }
 
+    public function getStatus(): int
+    {
+        return $this->status;
+    }
+
+    public function setStatus(int|string $status): self
+    {
+        $this->status = is_string($status) ? (int) $status : $status;
+        return $this;
+    }
+
     public function getCreatorId(): string
     {
         return $this->creatorId;
@@ -153,6 +176,17 @@ class AgentCategoryEntity extends AbstractEntity
     public function setCreatorId(string $creatorId): self
     {
         $this->creatorId = $creatorId;
+        return $this;
+    }
+
+    public function getModifierId(): ?string
+    {
+        return $this->modifierId;
+    }
+
+    public function setModifierId(?string $modifierId): self
+    {
+        $this->modifierId = $modifierId;
         return $this;
     }
 

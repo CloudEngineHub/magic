@@ -97,7 +97,17 @@ class SuperMagicAgentMarketDomainService
     /**
      * 按传入字段部分更新市场员工信息.
      *
-     * @param array{sort_order?: null|int, is_featured?: bool, is_hidden?: bool, category_id?: null|int} $payload
+     * @param array{
+     *     category_id?: null|int,
+     *     name_i18n?: null|array,
+     *     description_i18n?: null|array,
+     *     role_i18n?: null|array,
+     *     icon?: null|array,
+     *     icon_type?: null|int,
+     *     sort_order?: null|int,
+     *     is_featured?: bool,
+     *     is_hidden?: bool
+     * } $payload
      */
     public function updateInfoById(int $id, array $payload): bool
     {

@@ -7,65 +7,66 @@ declare(strict_types=1);
 
 namespace Dtyq\SuperMagic\Domain\Agent\Repository\Persistence;
 
-use Dtyq\SuperMagic\Domain\Agent\Entity\ValueObject\PublishStatus;
-use Dtyq\SuperMagic\Domain\Agent\Entity\ValueObject\SuperMagicAgentDataIsolation;
+use Dtyq\SuperMagic\Domain\Agent\Entity\AgentCategoryEntity;
 use Dtyq\SuperMagic\Domain\Agent\Repository\Facade\AgentCategoryRepositoryInterface;
 use Dtyq\SuperMagic\Domain\Agent\Repository\Persistence\Model\AgentCategoryModel;
 
-/**
- * Agent 分类仓储实现.
- */
 class AgentCategoryRepository extends SuperMagicAbstractRepository implements AgentCategoryRepositoryInterface
 {
-    public function __construct(
-        protected AgentCategoryModel $agentCategoryModel
-    ) {
+    public function __construct(private readonly AgentCategoryModel $categoryModel)
+    {
     }
 
-    /**
-     * 查询分类列表（包含每个分类下的员工数量统计）.
-     */
-    public function getCategoriesWithCrewCount(SuperMagicAgentDataIsolation $dataIsolation): array
+    public function findById(int $id): ?AgentCategoryEntity
     {
-        $builder = $this->agentCategoryModel::query();
+        /** @var null|AgentCategoryModel $model */
+        $model = $this->categoryModel::query()->find($id);
+        return $model === null ? null : new AgentCategoryEntity($model->toArray());
+    }
 
-        $results = $builder
-            ->select([
-                'magic_super_magic_agent_categories.id',
-                'magic_super_magic_agent_categories.name_i18n',
-                'magic_super_magic_agent_categories.logo',
-                'magic_super_magic_agent_categories.sort_order',
-                'magic_super_magic_agent_categories.created_at',
-            ])
-            ->selectRaw('COUNT(store_agent.id) as crew_count')
-            ->leftJoin('magic_super_magic_agent_market as store_agent', function ($join) {
-                $join->on('magic_super_magic_agent_categories.id', '=', 'store_agent.category_id')
-                    ->where('store_agent.publish_status', '=', PublishStatus::PUBLISHED->value)
-                    ->whereNull('store_agent.deleted_at');
-            })
-            ->whereNull('magic_super_magic_agent_categories.deleted_at')
-            ->groupBy(
-                'magic_super_magic_agent_categories.id',
-                'magic_super_magic_agent_categories.name_i18n',
-                'magic_super_magic_agent_categories.logo',
-                'magic_super_magic_agent_categories.sort_order',
-                'magic_super_magic_agent_categories.created_at'
-            )
-            ->orderBy('magic_super_magic_agent_categories.sort_order', 'DESC')
-            ->orderBy('magic_super_magic_agent_categories.created_at', 'ASC')
-            ->get();
-
-        $categories = [];
-        foreach ($results as $result) {
-            $categories[] = [
-                'id' => $result->id,
-                'name_i18n' => $result->name_i18n,
-                'logo' => $result->logo,
-                'sort_order' => $result->sort_order,
-                'crew_count' => (int) $result->crew_count,
-            ];
+    public function findByIds(array $ids): array
+    {
+        $ids = array_values(array_unique(array_filter($ids)));
+        if ($ids === []) {
+            return [];
         }
 
-        return $categories;
+        $models = $this->categoryModel::query()
+            ->whereIn('id', $ids)
+            ->get();
+
+        return $models
+            ->map(static fn (AgentCategoryModel $model) => new AgentCategoryEntity($model->toArray()))
+            ->all();
+    }
+
+    public function save(AgentCategoryEntity $entity): AgentCategoryEntity
+    {
+        $model = $entity->getId() === null
+            ? new AgentCategoryModel()
+            : $this->categoryModel::query()->find($entity->getId());
+        $model ??= new AgentCategoryModel();
+        $model->fill($this->getAttributes($entity));
+        $model->save();
+        return new AgentCategoryEntity($model->toArray());
+    }
+
+    public function deleteById(int $id): bool
+    {
+        /** @var null|AgentCategoryModel $model */
+        $model = $this->categoryModel::query()->find($id);
+        return $model !== null && $model->delete();
+    }
+
+    public function findAll(): array
+    {
+        $models = $this->categoryModel::query()
+            ->orderBy('sort_order', 'DESC')
+            ->orderBy('created_at', 'ASC')
+            ->get();
+
+        return $models
+            ->map(static fn (AgentCategoryModel $model) => new AgentCategoryEntity($model->toArray()))
+            ->all();
     }
 }

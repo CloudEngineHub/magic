@@ -7,27 +7,96 @@ declare(strict_types=1);
 
 namespace Dtyq\SuperMagic\Domain\Agent\Service;
 
-use Dtyq\SuperMagic\Domain\Agent\Entity\ValueObject\SuperMagicAgentDataIsolation;
+use Dtyq\SuperMagic\Domain\Agent\Entity\AgentCategoryEntity;
 use Dtyq\SuperMagic\Domain\Agent\Repository\Facade\AgentCategoryRepositoryInterface;
+use Dtyq\SuperMagic\Domain\Agent\Repository\Facade\AgentMarketRepositoryInterface;
 
-/**
- * Agent 分类领域服务.
- */
 class SuperMagicAgentCategoryDomainService
 {
     public function __construct(
-        protected AgentCategoryRepositoryInterface $agentCategoryRepository
+        private readonly AgentCategoryRepositoryInterface $categoryRepository,
+        private readonly AgentMarketRepositoryInterface $marketRepository,
     ) {
     }
 
-    /**
-     * 获取分类列表（包含每个分类下的员工数量统计）.
-     *
-     * @param SuperMagicAgentDataIsolation $dataIsolation 数据隔离对象
-     * @return array<array{id: int, name_i18n: array, logo: ?string, sort_order: int, crew_count: int}> 分类列表
-     */
-    public function getCategoriesWithCrewCount(SuperMagicAgentDataIsolation $dataIsolation): array
+    /** @return AgentCategoryEntity[] */
+    public function findAll(): array
     {
-        return $this->agentCategoryRepository->getCategoriesWithCrewCount($dataIsolation);
+        return $this->categoryRepository->findAll();
+    }
+
+    public function findById(int $id): ?AgentCategoryEntity
+    {
+        return $this->categoryRepository->findById($id);
+    }
+
+    /** @return AgentCategoryEntity[] */
+    public function findByIds(array $ids): array
+    {
+        return $this->categoryRepository->findByIds($ids);
+    }
+
+    public function save(AgentCategoryEntity $category): AgentCategoryEntity
+    {
+        return $this->categoryRepository->save($category);
+    }
+
+    public function deleteById(int $id): bool
+    {
+        return $this->categoryRepository->deleteById($id);
+    }
+
+    public function isReferencedByMarket(int $categoryId): bool
+    {
+        return $this->marketRepository->countByCategoryId($categoryId) > 0;
+    }
+
+    public function getMarketReferenceCount(int $categoryId): int
+    {
+        return $this->marketRepository->countByCategoryId($categoryId);
+    }
+
+    /** @param int[] $categoryIds */
+    public function getMarketReferenceCounts(array $categoryIds): array
+    {
+        return $this->marketRepository->countByCategoryIds($categoryIds);
+    }
+
+    /** @return array<array{id:int, name_i18n:array, logo:?string, sort_order:int, status:int, crew_count:int}> */
+    public function getCategoriesWithCrewCount(): array
+    {
+        $categories = $this->categoryRepository->findAll();
+        $categoryIds = [];
+        foreach ($categories as $category) {
+            if ($category->getStatus() !== 1) {
+                continue;
+            }
+            if ($category->getId() !== null) {
+                $categoryIds[] = $category->getId();
+            }
+        }
+
+        $crewCounts = $this->marketRepository->countPublishedByCategoryIds($categoryIds);
+        $result = [];
+        foreach ($categories as $category) {
+            if ($category->getStatus() !== 1) {
+                continue;
+            }
+            $categoryId = $category->getId();
+            if ($categoryId === null) {
+                continue;
+            }
+
+            $result[] = [
+                'id' => $categoryId,
+                'name_i18n' => $category->getNameI18n(),
+                'logo' => $category->getLogo(),
+                'sort_order' => $category->getSortOrder(),
+                'status' => $category->getStatus(),
+                'crew_count' => $crewCounts[$categoryId] ?? 0,
+            ];
+        }
+
+        return $result;
     }
 }

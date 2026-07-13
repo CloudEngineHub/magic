@@ -91,6 +91,59 @@ class AgentMarketRepository extends AbstractRepository implements AgentMarketRep
         return $result;
     }
 
+    public function countByCategoryId(int $categoryId): int
+    {
+        return $this->agentMarketModel::query()
+            ->where('category_id', $categoryId)
+            ->count();
+    }
+
+    public function countByCategoryIds(array $categoryIds): array
+    {
+        $categoryIds = array_values(array_unique(array_filter($categoryIds)));
+        if ($categoryIds === []) {
+            return [];
+        }
+
+        $models = $this->agentMarketModel::query()
+            ->select(['category_id'])
+            ->selectRaw('COUNT(*) as agent_count')
+            ->whereIn('category_id', $categoryIds)
+            ->groupBy('category_id')
+            ->get();
+
+        $counts = [];
+        foreach ($models as $model) {
+            $categoryId = (int) $model->getAttribute('category_id');
+            $counts[$categoryId] = (int) $model->getAttribute('agent_count');
+        }
+
+        return $counts;
+    }
+
+    public function countPublishedByCategoryIds(array $categoryIds): array
+    {
+        if ($categoryIds === []) {
+            return [];
+        }
+
+        $models = $this->agentMarketModel::query()
+            ->select(['category_id'])
+            ->selectRaw('COUNT(*) as crew_count')
+            ->whereIn('category_id', $categoryIds)
+            ->where('publish_status', PublishStatus::PUBLISHED->value)
+            ->groupBy('category_id')
+            ->get();
+
+        $counts = [];
+        foreach ($models as $model) {
+            $categoryId = (int) $model->getAttribute('category_id');
+            $counts[$categoryId] = (int) $model->getAttribute('crew_count');
+        }
+
+        return $counts;
+    }
+
     /**
      * 根据 agent_code 查询市场记录（不限制发布状态）.
      */
@@ -329,6 +382,26 @@ class AgentMarketRepository extends AbstractRepository implements AgentMarketRep
 
         if (array_key_exists('category_id', $payload)) {
             $model->category_id = $payload['category_id'];
+        }
+
+        if (array_key_exists('name_i18n', $payload)) {
+            $model->name_i18n = $payload['name_i18n'];
+        }
+
+        if (array_key_exists('description_i18n', $payload)) {
+            $model->description_i18n = $payload['description_i18n'];
+        }
+
+        if (array_key_exists('role_i18n', $payload)) {
+            $model->role_i18n = $payload['role_i18n'];
+        }
+
+        if (array_key_exists('icon', $payload)) {
+            $model->icon = $payload['icon'];
+        }
+
+        if (array_key_exists('icon_type', $payload)) {
+            $model->icon_type = $payload['icon_type'];
         }
 
         if ($model->isDirty() === false) {
