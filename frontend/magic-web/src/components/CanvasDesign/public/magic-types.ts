@@ -1594,4 +1594,6 @@ export interface MagicConfig {
 	 * 宿主界面语言（如 i18next `resolvedLanguage ?? language`），供画布内依赖语言布局的 Magic 相关 UI 使用
 	 */
 	hostUiLocale?: string
+	/** 视频积分预估缓存的宿主业务作用域，变化时清空画布侧预估缓存 */
+	videoPointsEstimateCacheScope?: string
 }

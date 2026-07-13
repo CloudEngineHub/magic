@@ -28,6 +28,7 @@ import type { Canvas } from "../../core/Canvas"
 import type { VideoPlaybackConsumerState } from "../../resources/video/VideoPlaybackManager"
 import type { LoadedVideoResource } from "../../resources/video/VideoResourceManager"
 import type { ResourceLoadFailureReason } from "../../resources/media-common/resourceLoadFailure"
+import { hasVideoGenerationRequestUserIntent } from "../../shared/videoGenerationRequestIntent"
 
 type VideoRenderStage = "empty" | "uploading" | "generating" | "loading" | "ready" | "error"
 
@@ -147,7 +148,12 @@ export class VideoElement extends BaseElement<VideoElementData> {
 	/** 调用宿主 generateVideo，写入 generateVideoRequest 并启动轮询 */
 	public async generateVideo(request: GenerateVideoRequest): Promise<boolean> {
 		const generateVideo = this.canvas.magicConfigManager.config?.methods?.generateVideo
-		if (!generateVideo || this.isGenerating || !request.model_id || !request.prompt) {
+		if (
+			!generateVideo ||
+			this.isGenerating ||
+			!request.model_id ||
+			!hasVideoGenerationRequestUserIntent(request)
+		) {
 			this.canvas.eventEmitter.emit({
 				type: "element:video:generate-submit-failed",
 				data: { elementId: this.data.id },

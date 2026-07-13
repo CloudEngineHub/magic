@@ -19,6 +19,7 @@ import { useVideoPointsConfirm } from "./useVideoPointsConfirm"
 import { resolveVideoGenerationSelection } from "./generation/video-editor-config.generation"
 import { buildVideoPointsEstimateSignature } from "./points/video-points-estimate.utils"
 import { collectPendingVideoGenerationRequestResourcePaths } from "./points/video-points-estimate.resources"
+import { resolveVideoPointsEstimateGate } from "./points/video-points-estimate.policy"
 import type { GenerateVideoRequest } from "../../../public/magic-types"
 import type { MediaResourceFullscreenPreviewItem } from "../../fullscreen/media-resource/index"
 
@@ -123,13 +124,32 @@ export default function VideoSecondEdit(props: VideoSecondEditProps) {
 		setIsPreparingGenerateAgain(true)
 		let estimatedPoints: number | null = null
 		try {
-			await waitForPendingVideoGenerationResources(canvas, generateVideoRequest)
 			const estimateSignature = buildVideoPointsEstimateSignature(generateVideoRequest)
-			if (
-				estimateSignature &&
-				generateVideoRequest.model_id &&
-				methods?.estimateVideoPoints
-			) {
+			const hasPendingResourceDeferrals =
+				collectPendingVideoGenerationRequestResourcePaths(generateVideoRequest, (path) =>
+					canvas.canvasFileUploadManager.shouldDeferRemoteResourceLoad(path),
+				).length > 0
+			const estimateGate = resolveVideoPointsEstimateGate({
+				enabled: true,
+				request: generateVideoRequest,
+				signature: estimateSignature,
+				hasEstimateVideoPoints: Boolean(methods?.estimateVideoPoints),
+				hasPendingResourceDeferrals,
+			})
+			if (estimateGate.blockedReason === "pending_resource_deferrals") {
+				await waitForPendingVideoGenerationResources(canvas, generateVideoRequest)
+			}
+			const canEstimateAfterResourceWait =
+				estimateGate.blockedReason === "pending_resource_deferrals"
+					? resolveVideoPointsEstimateGate({
+							enabled: true,
+							request: generateVideoRequest,
+							signature: estimateSignature,
+							hasEstimateVideoPoints: Boolean(methods?.estimateVideoPoints),
+							hasPendingResourceDeferrals: false,
+						}).canEstimate
+					: estimateGate.canEstimate
+			if (canEstimateAfterResourceWait) {
 				try {
 					const cachedEstimate = getCachedVideoPointsEstimate(estimateSignature)
 					const estimate =

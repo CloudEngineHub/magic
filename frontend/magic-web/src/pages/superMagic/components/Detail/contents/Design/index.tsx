@@ -644,6 +644,16 @@ function DesignViewer(props: DesignViewerProps) {
 
 	// 设计项目 ID
 	const designProjectId = directoryInfo.id || currentFile?.id || ""
+	const videoPointsEstimateCacheScope = useMemo(
+		() =>
+			[
+				projectId ?? "",
+				designProjectId ?? "",
+				designProjectBasePath ?? "",
+				currentFile?.id ?? "",
+			].join(":"),
+		[projectId, designProjectId, designProjectBasePath, currentFile?.id],
+	)
 
 	useEffect(() => {
 		if (!designProjectId) {
@@ -1652,6 +1662,7 @@ function DesignViewer(props: DesignViewerProps) {
 										methods,
 										permissions: designCanvasMagicPermissions,
 										hostUiLocale,
+										videoPointsEstimateCacheScope,
 									}}
 									plugins={canvasPluginConfig}
 									viewport={{

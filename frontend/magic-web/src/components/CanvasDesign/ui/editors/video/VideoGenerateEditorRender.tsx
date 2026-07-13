@@ -90,6 +90,7 @@ import {
 	resolveVideoPromptPlaceholderReferences,
 	type VideoPromptPlaceholderReference,
 } from "./prompt-placeholders/video-prompt-placeholder"
+import { hasVideoGenerationRequestUserIntent } from "../../../runtime/shared/videoGenerationRequestIntent"
 
 interface VideoGenerateEditorRenderProps {
 	videoElement: VideoElement
@@ -266,6 +267,9 @@ export default function VideoGenerateEditorRender(props: VideoGenerateEditorRend
 			model_id: estimateModelId,
 		}
 	}, [estimateModelId, buildRequestParamsWithLinkedInputs])
+	const hasSubmitIntent = useMemo(() => {
+		return hasVideoGenerationRequestUserIntent(buildRequestParamsWithLinkedInputs())
+	}, [buildRequestParamsWithLinkedInputs])
 	const estimateSignature = useMemo(() => {
 		if (!estimateRequest) return null
 		return buildVideoPointsEstimateSignature(estimateRequest)
@@ -559,7 +563,12 @@ export default function VideoGenerateEditorRender(props: VideoGenerateEditorRend
 			options?: { draftRequest?: Partial<GenerateVideoRequest> },
 		) => {
 			if (sendingRef.current) return
-			if (!canvas || !config.selectedModelId || !requestParams.prompt?.trim()) return
+			if (
+				!canvas ||
+				!config.selectedModelId ||
+				!hasVideoGenerationRequestUserIntent(requestParams)
+			)
+				return
 			const elementInstance = canvas.elementManager.getElementInstance(videoElement.id)
 			if (!(elementInstance instanceof VideoElementClass)) return
 			sendingRef.current = true
@@ -597,7 +606,7 @@ export default function VideoGenerateEditorRender(props: VideoGenerateEditorRend
 
 	const handleSend = useCallback(async () => {
 		if (sendingRef.current || isEstimateLoading) return
-		if (!canvas || !config.selectedModelId || !composedPrompt.trim()) return
+		if (!canvas || !config.selectedModelId) return
 		const currentInputs = mergedReferenceAssetInfos
 		const validationIssues = validateReferenceAssetsByLimits(
 			config.currentInputModeConfig,
@@ -655,6 +664,7 @@ export default function VideoGenerateEditorRender(props: VideoGenerateEditorRend
 			...(buildRequestParamsWithLinkedInputs(draftRequestParams) as GenerateVideoRequest),
 			video_id: generateUUID(),
 		}
+		if (!hasVideoGenerationRequestUserIntent(requestParams)) return
 		const elementInstance = canvas.elementManager.getElementInstance(videoElement.id)
 		if (!(elementInstance instanceof VideoElementClass)) return
 		await confirmVideoGeneration({
@@ -666,7 +676,6 @@ export default function VideoGenerateEditorRender(props: VideoGenerateEditorRend
 		buildRequestParams,
 		buildRequestParamsWithLinkedInputs,
 		canvas,
-		composedPrompt,
 		confirmVideoGeneration,
 		config.currentInputModeConfig,
 		config.selectedModelId,
@@ -811,9 +820,7 @@ export default function VideoGenerateEditorRender(props: VideoGenerateEditorRend
 					<Button
 						className={styles.sendButton}
 						onClick={handleSend}
-						disabled={
-							sendButtonBusy || !composedPrompt.trim() || !config.selectedModelId
-						}
+						disabled={sendButtonBusy || !hasSubmitIntent || !config.selectedModelId}
 						aria-busy={sendButtonBusy}
 						data-testid="video-generate-editor-send-button"
 					>

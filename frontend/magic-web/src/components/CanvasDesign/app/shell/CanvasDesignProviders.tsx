@@ -34,6 +34,7 @@ const CanvasDesign = forwardRef<CanvasDesignRef, CanvasDesignProps>((props, ref)
 			methods={props.magic?.methods}
 			permissions={props.magic?.permissions}
 			hostUiLocale={props.magic?.hostUiLocale}
+			videoPointsEstimateCacheScope={props.magic?.videoPointsEstimateCacheScope}
 			projectAttachmentMentionTree={props.data?.projectAttachmentMentionTree}
 			defaultProjectAttachmentFolderId={props.data?.defaultProjectAttachmentFolderId}
 			defaultProjectAttachmentFolderName={props.data?.defaultProjectAttachmentFolderName}

@@ -2,7 +2,14 @@ import { useEffect, useMemo, useState } from "react"
 import { useCanvas } from "../../../app/providers/CanvasProvider"
 import { useMagic } from "../../../app/providers/MagicProvider"
 import type { EstimateVideoPointsResponse, GenerateVideoRequest } from "../../../public/magic-types"
-import { collectPendingVideoGenerationRequestResourcePaths } from "./points/video-points-estimate.resources"
+import {
+	resolveVideoPointsEstimateGate,
+	type VideoPointsEstimateBlockedReason,
+} from "./points/video-points-estimate.policy"
+import {
+	collectPendingVideoGenerationRequestResourcePaths,
+	collectVideoGenerationRequestResourcePaths,
+} from "./points/video-points-estimate.resources"
 
 interface UseVideoPointsEstimateOptions {
 	request: Partial<GenerateVideoRequest> | null
@@ -15,6 +22,7 @@ interface UseVideoPointsEstimateResult {
 	points: number | null
 	isLoading: boolean
 	error: unknown
+	blockedReason: VideoPointsEstimateBlockedReason | null
 }
 
 export function useVideoPointsEstimate(
@@ -28,15 +36,19 @@ export function useVideoPointsEstimate(
 	const [isLoading, setIsLoading] = useState(false)
 	const [deferralVersion, setDeferralVersion] = useState(0)
 
+	const requestResourcePaths = useMemo(() => {
+		return collectVideoGenerationRequestResourcePaths(request)
+	}, [request])
 	const pendingResourcePaths = useMemo(() => {
 		const uploadManager = canvas?.canvasFileUploadManager
-		if (!uploadManager || !request) return []
+		if (!request) return []
+		if (!uploadManager) return requestResourcePaths
 
 		void deferralVersion
 		return collectPendingVideoGenerationRequestResourcePaths(request, (path) =>
 			uploadManager.shouldDeferRemoteResourceLoad(path),
 		)
-	}, [canvas, request, deferralVersion])
+	}, [canvas, request, requestResourcePaths, deferralVersion])
 
 	const pendingResourceKey = useMemo(
 		() => pendingResourcePaths.join("\0"),
@@ -44,18 +56,21 @@ export function useVideoPointsEstimate(
 	)
 	const hasPendingResourceDeferrals = pendingResourcePaths.length > 0
 
-	const canEstimate = useMemo(() => {
-		return Boolean(
-			enabled &&
-			request?.model_id &&
-			signature &&
-			methods?.estimateVideoPoints &&
-			!hasPendingResourceDeferrals,
-		)
-	}, [enabled, hasPendingResourceDeferrals, methods, request?.model_id, signature])
+	const estimateGate = useMemo(
+		() =>
+			resolveVideoPointsEstimateGate({
+				enabled,
+				request,
+				signature,
+				hasEstimateVideoPoints: Boolean(methods?.estimateVideoPoints),
+				hasPendingResourceDeferrals,
+			}),
+		[enabled, hasPendingResourceDeferrals, methods?.estimateVideoPoints, request, signature],
+	)
+	const canEstimate = estimateGate.canEstimate
 
 	useEffect(() => {
-		if (!canvas || !hasPendingResourceDeferrals) return
+		if (!canvas || estimateGate.blockedReason !== "pending_resource_deferrals") return
 
 		const uploadManager = canvas.canvasFileUploadManager
 		const pendingKeys = new Set(
@@ -69,7 +84,7 @@ export function useVideoPointsEstimate(
 			if (!pendingKeys.has(data.key)) return
 			setDeferralVersion((value) => value + 1)
 		})
-	}, [canvas, hasPendingResourceDeferrals, pendingResourceKey, pendingResourcePaths, signature])
+	}, [canvas, estimateGate.blockedReason, pendingResourceKey, pendingResourcePaths, signature])
 
 	useEffect(() => {
 		if (!canEstimate || !signature || !request?.model_id) {
@@ -123,7 +138,10 @@ export function useVideoPointsEstimate(
 	return {
 		estimate,
 		points: typeof estimate?.points === "number" ? estimate.points : null,
-		isLoading: hasPendingResourceDeferrals || (canEstimate && isLoading),
+		isLoading:
+			estimateGate.blockedReason === "pending_resource_deferrals" ||
+			(canEstimate && isLoading),
 		error,
+		blockedReason: estimateGate.blockedReason,
 	}
 }

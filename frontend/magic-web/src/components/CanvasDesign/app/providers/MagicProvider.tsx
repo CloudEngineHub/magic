@@ -23,6 +23,7 @@ import type {
 	ProjectAttachmentMentionNode,
 	ReferenceResourcePanelRenderer,
 } from "../../public/props"
+import { VideoPointsEstimateCache } from "./video-points-estimate.cache"
 
 /**
  * Magic Context - 用于与外部通信
@@ -109,6 +110,8 @@ interface MagicProviderProps {
 	readonly?: boolean
 	/** 宿主 UI 语言，仅用于在语言切换时重拉模型列表 */
 	hostUiLocale?: string
+	/** 宿主业务作用域变化时清空视频积分预估缓存 */
+	videoPointsEstimateCacheScope?: string
 }
 
 export function MagicProvider({
@@ -123,6 +126,7 @@ export function MagicProvider({
 	referenceResourcePanelRenderer,
 	readonly = false,
 	hostUiLocale,
+	videoPointsEstimateCacheScope,
 }: MagicProviderProps) {
 	const [imageModelList, setImageModelList] = useState<ImageModelItem[]>([])
 	const [videoModelList, setVideoModelList] = useState<VideoModelItem[]>([])
@@ -131,10 +135,7 @@ export function MagicProvider({
 	const [convertHightConfig, setConvertHightConfig] =
 		useState<GetConvertHightConfigResponse | null>(null)
 	const [isLoadingConvertHightConfig, setIsLoadingConvertHightConfig] = useState(false)
-	const videoPointsEstimateCacheRef = useRef(new Map<string, EstimateVideoPointsResponse>())
-	const videoPointsEstimatePromiseRef = useRef(
-		new Map<string, Promise<EstimateVideoPointsResponse>>(),
-	)
+	const videoPointsEstimateCacheRef = useRef(new VideoPointsEstimateCache())
 
 	const getImageModelList = methods?.getImageModelList
 	const getVideoModelList = methods?.getVideoModelList
@@ -217,8 +218,7 @@ export function MagicProvider({
 
 	useEffect(() => {
 		videoPointsEstimateCacheRef.current.clear()
-		videoPointsEstimatePromiseRef.current.clear()
-	}, [estimateVideoPoints])
+	}, [videoPointsEstimateCacheScope])
 
 	const getCachedVideoPointsEstimate = useCallback((signature: string) => {
 		return videoPointsEstimateCacheRef.current.get(signature)
@@ -229,25 +229,10 @@ export function MagicProvider({
 			signature: string
 			request: GenerateVideoRequest
 		}): Promise<EstimateVideoPointsResponse> => {
-			const cachedEstimate = videoPointsEstimateCacheRef.current.get(options.signature)
-			if (cachedEstimate) return cachedEstimate
-
-			const pendingEstimate = videoPointsEstimatePromiseRef.current.get(options.signature)
-			if (pendingEstimate) return pendingEstimate
-
-			if (!estimateVideoPoints) throw new Error("estimateVideoPoints is unavailable")
-
-			const requestPromise = estimateVideoPoints(options.request)
-				.then((estimate) => {
-					videoPointsEstimateCacheRef.current.set(options.signature, estimate)
-					return estimate
-				})
-				.finally(() => {
-					videoPointsEstimatePromiseRef.current.delete(options.signature)
-				})
-
-			videoPointsEstimatePromiseRef.current.set(options.signature, requestPromise)
-			return requestPromise
+			return videoPointsEstimateCacheRef.current.getOrRequest({
+				...options,
+				estimateVideoPoints,
+			})
 		},
 		[estimateVideoPoints],
 	)
