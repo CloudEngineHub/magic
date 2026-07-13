@@ -927,6 +927,7 @@
 					path: file.sourceRef.src,
 					fileName: file.filename,
 				})),
+				{ type: "image" },
 			)
 		}
 

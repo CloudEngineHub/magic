@@ -237,40 +237,43 @@ function installMaskPainterDomMocks() {
 		value: vi.fn(() => "data:image/png;base64,mask-preview"),
 	})
 
-	return Object.assign(() => {
-		Object.defineProperty(window, "Image", {
-			configurable: true,
-			writable: true,
-			value: originalImage,
-		})
-		Object.defineProperty(globalThis, "Image", {
-			configurable: true,
-			writable: true,
-			value: originalGlobalImage,
-		})
-		Object.defineProperty(window, "URL", {
-			configurable: true,
-			writable: true,
-			value: originalWindowURL,
-		})
-		Object.defineProperty(globalThis, "URL", {
-			configurable: true,
-			writable: true,
-			value: originalGlobalURL,
-		})
-		Object.defineProperty(HTMLCanvasElement.prototype, "getContext", {
-			configurable: true,
-			value: originalGetContext,
-		})
-		Object.defineProperty(HTMLCanvasElement.prototype, "toBlob", {
-			configurable: true,
-			value: originalToBlob,
-		})
-		Object.defineProperty(HTMLCanvasElement.prototype, "toDataURL", {
-			configurable: true,
-			value: originalToDataURL,
-		})
-	}, { contexts })
+	return Object.assign(
+		() => {
+			Object.defineProperty(window, "Image", {
+				configurable: true,
+				writable: true,
+				value: originalImage,
+			})
+			Object.defineProperty(globalThis, "Image", {
+				configurable: true,
+				writable: true,
+				value: originalGlobalImage,
+			})
+			Object.defineProperty(window, "URL", {
+				configurable: true,
+				writable: true,
+				value: originalWindowURL,
+			})
+			Object.defineProperty(globalThis, "URL", {
+				configurable: true,
+				writable: true,
+				value: originalGlobalURL,
+			})
+			Object.defineProperty(HTMLCanvasElement.prototype, "getContext", {
+				configurable: true,
+				value: originalGetContext,
+			})
+			Object.defineProperty(HTMLCanvasElement.prototype, "toBlob", {
+				configurable: true,
+				value: originalToBlob,
+			})
+			Object.defineProperty(HTMLCanvasElement.prototype, "toDataURL", {
+				configurable: true,
+				value: originalToDataURL,
+			})
+		},
+		{ contexts },
+	)
 }
 
 function setCanvasClientRect(canvas: HTMLCanvasElement, width = 100, height = 100) {
@@ -600,9 +603,10 @@ describe("magic-plugin-kit", () => {
 
 		await vi.waitFor(() => {
 			expect(readCanvasClipboard).toHaveBeenCalledTimes(1)
-			expect(resolveFileAssets).toHaveBeenCalledWith([
-				{ path: existingPath, fileName: "canvas-image.png" },
-			])
+			expect(resolveFileAssets).toHaveBeenCalledWith(
+				[{ path: existingPath, fileName: "canvas-image.png" }],
+				{ type: "image" },
+			)
 			expect(uploadFile).not.toHaveBeenCalled()
 		})
 	})
@@ -778,7 +782,10 @@ describe("magic-plugin-kit", () => {
 		dispatchEmptyPaste(grid!)
 
 		await vi.waitFor(() => {
-			expect(resolveFileAssets).toHaveBeenCalledTimes(1)
+			expect(resolveFileAssets).toHaveBeenCalledWith(
+				[{ path: "uploads/canvas-image.png", fileName: "canvas-image.png" }],
+				{ type: "image" },
+			)
 			expect(ctx.ui.toast).toHaveBeenCalledWith("resolve failed", "error")
 		})
 	})
@@ -1118,7 +1125,10 @@ describe("magic-plugin-kit", () => {
 						{ value: "image", label: "Image" },
 						{ value: "prompt", label: "Prompt" },
 					],
-					patchOnSelect: (_value: string, { state }: { state: Record<string, unknown> }) => {
+					patchOnSelect: (
+						_value: string,
+						{ state }: { state: Record<string, unknown> },
+					) => {
 						tabStates.push(state.mode)
 						return {}
 					},
@@ -1132,7 +1142,10 @@ describe("magic-plugin-kit", () => {
 						{ value: "clean", label: "Clean" },
 						{ value: "bold", label: "Bold" },
 					],
-					patchOnSelect: (_value: string, { state }: { state: Record<string, unknown> }) => {
+					patchOnSelect: (
+						_value: string,
+						{ state }: { state: Record<string, unknown> },
+					) => {
 						optionStates.push(state.style)
 						return {}
 					},
@@ -1518,28 +1531,28 @@ describe("magic-plugin-kit", () => {
 			expect(canvas).toBeTruthy()
 			setCanvasClientRect(canvas as HTMLCanvasElement)
 
-				await vi.waitFor(() => {
-					expect(canvas?.width).toBe(100)
-				})
+			await vi.waitFor(() => {
+				expect(canvas?.width).toBe(100)
+			})
 
-				canvas?.dispatchEvent(
-					new MouseEvent("mousedown", {
-						clientX: 20,
-						clientY: 20,
-					}),
-				)
-				canvas?.dispatchEvent(new MouseEvent("mouseup"))
+			canvas?.dispatchEvent(
+				new MouseEvent("mousedown", {
+					clientX: 20,
+					clientY: 20,
+				}),
+			)
+			canvas?.dispatchEvent(new MouseEvent("mouseup"))
 
-				const preview = root.querySelector<HTMLDivElement>(".mpk-mask-preview")
-				expect(preview).toBeTruthy()
+			const preview = root.querySelector<HTMLDivElement>(".mpk-mask-preview")
+			expect(preview).toBeTruthy()
 			await vi.waitFor(() => {
 				expect(preview?.classList.contains("is-visible")).toBe(true)
 			})
-				expect(preview?.querySelector("img")?.getAttribute("src")).toBe(
-					"data:image/png;base64,mask-preview",
-				)
+			expect(preview?.querySelector("img")?.getAttribute("src")).toBe(
+				"data:image/png;base64,mask-preview",
+			)
 
-				root.querySelector<HTMLButtonElement>(".mpk-generate")?.click()
+			root.querySelector<HTMLButtonElement>(".mpk-generate")?.click()
 
 			await vi.waitFor(() => {
 				expect(buildRequest).toHaveBeenCalledTimes(1)
@@ -1553,8 +1566,8 @@ describe("magic-plugin-kit", () => {
 			await vi.waitFor(() => {
 				expect(buildRequest).toHaveBeenCalledTimes(2)
 			})
-				expect(ctx.assets.uploadFile).toHaveBeenCalledTimes(1)
-				expect(buildRequest.mock.calls[1][0].state.cropImage).toBe(cropAsset)
+			expect(ctx.assets.uploadFile).toHaveBeenCalledTimes(1)
+			expect(buildRequest.mock.calls[1][0].state.cropImage).toBe(cropAsset)
 		} finally {
 			cleanup()
 		}
@@ -1820,9 +1833,7 @@ describe("magic-plugin-kit", () => {
 				expect(buildRequest).toHaveBeenCalledTimes(1)
 			})
 
-			const uploadedNames = ctx.assets.uploadFile.mock.calls.map(
-				(call: unknown[]) => call[1],
-			)
+			const uploadedNames = ctx.assets.uploadFile.mock.calls.map((call: unknown[]) => call[1])
 			expect(uploadedNames).toHaveLength(2)
 			expect(new Set(uploadedNames).size).toBe(2)
 			expect(uploadedNames).toEqual(
