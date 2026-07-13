@@ -11,7 +11,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/go-git/go-billy/v6/osfs"
 	"github.com/go-git/go-git/v6"
 	"github.com/go-git/go-git/v6/plumbing"
 	gitClient "github.com/go-git/go-git/v6/plumbing/client"
@@ -80,12 +79,12 @@ func GetGoGitRepoGitDir(repo *git.Repository) string {
 	}
 	if fsStorage, ok := repo.Storer.(*filesystem.Storage); ok {
 		billyFs := fsStorage.Filesystem()
-		_, isBoundOS := billyFs.(*osfs.BoundOS)
-		_, isRootOS := billyFs.(*osfs.RootOS)
-		if isBoundOS || isRootOS {
-			// is osfs
-			return filepath.Clean(billyFs.Root())
-		}
+		// _, isBoundOS := billyFs.(*osfs.BoundOS)
+		// _, isRootOS := billyFs.(*osfs.RootOS)
+		// if isBoundOS || isRootOS {
+		// is osfs
+		return filepath.Clean(billyFs.Root())
+		// }
 	}
 	return ""
 }
