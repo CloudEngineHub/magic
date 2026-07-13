@@ -60,7 +60,6 @@ class SlidesTemplateTagInitializer
 
             $tagRows = self::buildTagRows($officialOrgCode, $vocabulary['tags'], $groupIds, $now);
             self::upsertTagNodes($tagRows);
-            self::deleteObsoleteDetailNodes($officialOrgCode);
 
             Db::commit();
         } catch (Throwable $throwable) {
@@ -201,34 +200,6 @@ class SlidesTemplateTagInitializer
                     'deleted_at',
                 ]
             );
-        }
-    }
-
-    private static function deleteObsoleteDetailNodes(string $organizationCode): void
-    {
-        $rows = Db::table('magic_slides_template_tags')
-            ->where('organization_code', $organizationCode)
-            ->where(static function ($query): void {
-                $query->where('code', 'like', 'detail-%')
-                    ->orWhere(static function ($query): void {
-                        $query->where('node_type', 'group')
-                            ->where('code', 'like', '%detail%');
-                    });
-            })
-            ->get(['id']);
-
-        $ids = [];
-        foreach ($rows as $row) {
-            $ids[] = (int) ((array) $row)['id'];
-        }
-
-        foreach (array_chunk($ids, 200) as $chunk) {
-            Db::table('magic_slides_template_tag_relations')
-                ->whereIn('tag_id', $chunk)
-                ->delete();
-            Db::table('magic_slides_template_tags')
-                ->whereIn('id', $chunk)
-                ->delete();
         }
     }
 
