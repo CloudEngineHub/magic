@@ -10,9 +10,30 @@ const fs = require("fs")
 const os = require("os")
 const path = require("path")
 const { log, printBanner, writeStep, writeStepResult } = require("./lib/banner.cjs")
+const { resolveEdition } = require("./lib/edition.cjs")
+const { PNPM_COMMAND, pnpmArgs, pnpmScript } = require("./lib/pnpm.cjs")
 
 const DEFAULT_SHUTDOWN_TIMEOUT_MS = 5000
-const DEFAULT_DEV_PORT = 443
+
+/**
+ * Load .env files into process.env so PORT (and friends) truly originate from the
+ * environment — no port is hardcoded anywhere. Shell env wins over files, and
+ * `.env.local` wins over `.env` (loadEnvFile never overrides an already-set key).
+ * These values ride `...process.env` into the Vite child, which reads PORT for
+ * its dev-server port.
+ */
+function loadDotEnvFiles(cwd = process.cwd()) {
+	if (typeof process.loadEnvFile !== "function") return
+	for (const file of [".env.local", ".env"]) {
+		const filePath = path.join(cwd, file)
+		if (!fs.existsSync(filePath)) continue
+		try {
+			process.loadEnvFile(filePath)
+		} catch {
+			// Ignore malformed/locked env files; fall back to shell env.
+		}
+	}
+}
 
 function getPidFilePath(cwd = process.cwd(), tmpDir = os.tmpdir()) {
 	return path.join(tmpDir, `magic-web-dev-${Buffer.from(cwd).toString("hex")}.pid`)
@@ -29,7 +50,8 @@ function getShutdownTimeoutMs(env = process.env) {
 function getDevPort(env = process.env) {
 	const parsedPort = Number(env.PORT)
 
-	return Number.isInteger(parsedPort) && parsedPort > 0 ? parsedPort : DEFAULT_DEV_PORT
+	// No hardcoded fallback: an unset PORT means Vite decides (its default port).
+	return Number.isInteger(parsedPort) && parsedPort > 0 ? parsedPort : undefined
 }
 
 function createPidRecord({ cwd, pid, port, activeChild, activeCommand, startedAt }) {
@@ -276,7 +298,7 @@ function createDevController({
 	 * killed), the JS signal handlers never run, so the detached `concurrently`
 	 * group (vite + husky/widget watchers) is reparented to init and keeps
 	 * running — spamming the terminal on file changes. Since dev is effectively a
-	 * singleton (port 443), the next launch closes the loop by terminating the
+	 * singleton dev server, the next launch closes the loop by terminating the
 	 * recorded process group before starting fresh. Runs before writePidFile.
 	 */
 	const reapStaleSession = () => {
@@ -296,8 +318,7 @@ function createDevController({
 		)
 
 		const anyAlive = () =>
-			groupIds.some((pgid) => isGroupAlive(pgid)) ||
-			pidTargets.some((pid) => isPidAlive(pid))
+			groupIds.some((pgid) => isGroupAlive(pgid)) || pidTargets.some((pid) => isPidAlive(pid))
 
 		if (!anyAlive()) {
 			removePidFile()
@@ -421,16 +442,26 @@ function createDevController({
 
 async function main(controller = createDevController(), processExit = process.exit) {
 	try {
+		// Make PORT (and friends) available from .env before anything reads it, so
+		// the pid record, banner, and Vite child all agree on a single env source.
+		loadDotEnvFiles()
+
 		// Clean up any session left running by a previous abnormal shutdown before
 		// claiming the pid file for this run.
 		controller.reapStaleSession()
 		controller.writePidFile()
 		controller.registerCleanupHandlers()
 
-		log("Starting development environment...\n", "green")
+		// Resolve once and hand the edition to the Vite dev server so pre-steps and
+		// the bundler agree on which edition (and overlay folders) are active.
+		const edition = resolveEdition()
+
+		log(`Starting development environment (edition: ${edition})...\n`, "green")
 
 		writeStep("[1/3] Syncing theme RGB tokens...")
-		await controller.runCommand("pnpm", ["run", "generate:theme-rgb-tokens"], { quiet: true })
+		await controller.runCommand(PNPM_COMMAND, pnpmArgs(["run", "generate:theme-rgb-tokens"]), {
+			quiet: true,
+		})
 		if (controller.isShutdownRequested()) return
 		writeStepResult(true)
 
@@ -442,18 +473,23 @@ async function main(controller = createDevController(), processExit = process.ex
 		writeStepResult(true)
 
 		writeStep("[3/3] Building husky sandbox...")
-		await controller.runCommand("pnpm", ["run", "build:iframe"], { quiet: true })
+		await controller.runCommand(PNPM_COMMAND, pnpmArgs(["run", "build:iframe"]), {
+			quiet: true,
+		})
 		if (controller.isShutdownRequested()) return
 		writeStepResult(true)
 
 		const port = getDevPort()
-		printBanner(`Dev server starting on https://localhost:${port} 🚀`)
+		const devServerUrl = port
+			? `https://localhost:${port}`
+			: "https://localhost (Vite default port)"
+		printBanner(`Dev server starting on ${devServerUrl} 🚀`)
 		await controller.runCommand(
 			"concurrently",
 			[
 				"vite",
-				"pnpm dev:iframe",
-				"pnpm dev:widget",
+				pnpmScript("dev:iframe"),
+				pnpmScript("dev:widget"),
 				"--names",
 				"main,husky,widget",
 				"--prefix-colors",
@@ -464,7 +500,7 @@ async function main(controller = createDevController(), processExit = process.ex
 				"--kill-timeout",
 				String(getShutdownTimeoutMs()),
 			],
-			{ stdio: "inherit" },
+			{ stdio: "inherit", env: { ...process.env, EDITION: edition } },
 		)
 	} catch (error) {
 		if (!controller.isShutdownRequested()) {

@@ -43,6 +43,30 @@ function getGitTrackedFiles(gitRootAbs) {
   }
 }
 
+function getGitSubmodulePaths(gitRootAbs) {
+  try {
+    const out = execSync(
+      "git config --file .gitmodules --get-regexp '^submodule\\..*\\.path$'",
+      {
+        cwd: gitRootAbs,
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "pipe"],
+      },
+    )
+
+    return out
+      .split("\n")
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .map((line) => line.split(/\s+/, 2)[1])
+      .filter(Boolean)
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e)
+    if (msg.includes("No such file or directory")) return []
+    return []
+  }
+}
+
 function buildTrackedAncestorDirs(gitRootAbs, trackedFiles) {
   const ancestorAbsSet = new Set()
   for (const relFile of trackedFiles) {
@@ -53,6 +77,18 @@ function buildTrackedAncestorDirs(gitRootAbs, trackedFiles) {
     }
   }
   return ancestorAbsSet
+}
+
+function buildProtectedDirs(gitRootAbs, relPaths) {
+  const protectedAbsSet = new Set()
+  for (const relPath of relPaths) {
+    const parts = relPath.split("/").filter(Boolean)
+    for (let i = 0; i < parts.length; i += 1) {
+      const partialRelPath = parts.slice(0, i + 1).join("/")
+      protectedAbsSet.add(path.join(gitRootAbs, partialRelPath))
+    }
+  }
+  return protectedAbsSet
 }
 
 function isExcludedAbsDir(absDir, rootAbs, excludedSegments) {
@@ -114,6 +150,8 @@ function main() {
     gitRootAbs,
     trackedFiles,
   )
+  const submodulePaths = getGitSubmodulePaths(gitRootAbs)
+  const protectedDirs = buildProtectedDirs(gitRootAbs, submodulePaths)
 
   const deletableDirs = []
 
@@ -146,6 +184,7 @@ function main() {
     }
 
     if (hasNonRemovableEntry) return false
+    if (!isRoot && protectedDirs.has(absDir)) return false
     if (!isRoot && trackedAncestorDirs.has(absDir)) return false
 
     if (!isRoot) {

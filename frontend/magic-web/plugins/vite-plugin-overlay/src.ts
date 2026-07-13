@@ -3,13 +3,13 @@ import path from "node:path"
 import { performance } from "node:perf_hooks"
 import type { Plugin } from "vite"
 
-export interface VitePluginLayeredOverlayOptions {
+export interface VitePluginSrcOverlayOptions {
 	projectRoot: string
-	layers: OverlayLayerOption[]
+	layers: SrcOverlayLayerOption[]
 	profileEnvName?: string
 }
 
-export interface OverlayLayerOption {
+export interface SrcOverlayLayerOption {
 	name: string
 	dir: string
 	reloadOnChange?: boolean
@@ -91,7 +91,7 @@ function createOverlayLayers({
 	layerOptions,
 }: {
 	projectRoot: string
-	layerOptions: OverlayLayerOption[]
+	layerOptions: SrcOverlayLayerOption[]
 }): OverlayLayer[] {
 	return layerOptions.map((layer) => {
 		const root = path.resolve(projectRoot, layer.dir)
@@ -280,7 +280,7 @@ function createOverlayProfileSession(
 	}
 }
 
-export default function vitePluginLayeredOverlay(options: VitePluginLayeredOverlayOptions): Plugin {
+export default function vitePluginSrcOverlay(options: VitePluginSrcOverlayOptions): Plugin {
 	const layers = createOverlayLayers({
 		projectRoot: options.projectRoot,
 		layerOptions: options.layers,
@@ -413,7 +413,7 @@ export default function vitePluginLayeredOverlay(options: VitePluginLayeredOverl
 	}
 
 	return {
-		name: "vite-plugin-layered-overlay",
+		name: "vite-plugin-overlay:src",
 		enforce: "pre",
 		configResolved(config) {
 			currentCommand = config.command

@@ -25,28 +25,26 @@
 	"license": "Apache-2.0",
 	"type": "module",
 	"scripts": {
-		"build": "pnpm build:opensource",
-		"build:admin:opensource": "pnpm --filter @dtyq/magic-admin build:opensource",
-		"build:enterprise": "EDITION=enterprise node scripts/build.cjs",
-		"build:iframe": "pnpm --dir packages/html-sandbox build:html -- --out-file ../../public/husky.html",
-		"build:opensource": "node scripts/build.cjs",
-		"build:widget": "pnpm --filter @magic-web/widget-sdk exec vite build --config ./vite.config.ts --mode production --outDir ../../public/sdk && pnpm --filter @magic-web/widget-sdk build:types",
+		"build": "node scripts/build.cjs",
+		"build:admin:enterprise": "corepack pnpm --filter @dtyq/magic-admin build",
+		"build:admin:opensource": "corepack pnpm --filter @dtyq/magic-admin build:opensource",
+		"build:enterprise": "node scripts/build.cjs",
+		"build:iframe": "corepack pnpm --dir packages/html-sandbox build:html -- --out-file ../../public/husky.html",
+		"build:widget": "corepack pnpm --filter @magic-web/widget-sdk exec vite build --config ./vite.config.ts --mode production --outDir ../../public/sdk && corepack pnpm --filter @magic-web/widget-sdk build:types",
 		"coverage": "vitest run --coverage",
-		"dev": "pnpm dev:opensource",
-		"dev:all": "concurrently --names \"opensource,enterprise\" --prefix-colors \"cyan,yellow\" \"PORT=4443 pnpm dev:opensource\" \"EDITION=enterprise node scripts/dev.cjs\"",
-		"dev:enterprise": "EDITION=enterprise node scripts/dev.cjs",
-		"dev:iframe": "pnpm --dir packages/html-sandbox build:html -- --out-file ../../public/husky.html --watch",
-		"dev:opensource": "node scripts/dev.cjs",
-		"dev:widget": "pnpm --filter @magic-web/widget-sdk exec vite build --config ./vite.config.ts --mode development --watch --outDir ../../public/sdk",
+		"dev": "node scripts/dev.cjs",
+		"dev:iframe": "corepack pnpm --dir packages/html-sandbox build:html -- --out-file ../../public/husky.html --watch",
+		"dev:widget": "corepack pnpm --filter @magic-web/widget-sdk exec vite build --config ./vite.config.ts --mode development --watch --outDir ../../public/sdk",
 		"generate:icon-tags": "node scripts/icons/gen-tabler-icon-tags.cjs",
 		"generate:self-media-preset-previews": "node scripts/capture-self-media-preset-previews.mjs",
-		"generate:theme-rgb-tokens": "pnpm tsx scripts/generate-theme-rgb-tokens.ts",
-		"generate:theme-rgb-tokens:check": "pnpm tsx scripts/generate-theme-rgb-tokens.ts --check",
-		"lh:install": "pnpm puppeteer browsers install chrome",
-		"lh:view": "pnpm dlx lighthouse --output html --output-path lh-audit.html --input-path lh-audit.json",
-		"lint": "eslint ./src --ext ts,tsx --format stylish --report-unused-disable-directives",
-		"lint:fix": "eslint ./src --ext js,jsx,ts,tsx --report-unused-disable-directives --max-warnings 0 --fix && prettier --write './src/**/*.json'",
-		"prepare": "pnpm run setup:hooks",
+		"generate:theme-rgb-tokens": "tsx scripts/generate-theme-rgb-tokens.ts",
+		"generate:theme-rgb-tokens:check": "tsx scripts/generate-theme-rgb-tokens.ts --check",
+		"postinstall": "node scripts/install-overlay-deps.cjs",
+		"lint": "NODE_OPTIONS=--max-old-space-size=8192 eslint ./src --ext ts,tsx --format stylish --report-unused-disable-directives",
+		"lint:fix": "NODE_OPTIONS=--max-old-space-size=8192 eslint ./src --ext js,jsx,ts,tsx --report-unused-disable-directives --max-warnings 0 --fix && prettier --write './src/**/*.json'",
+		"lint:layers": "NODE_OPTIONS=--max-old-space-size=8192 eslint \"{src,enterprise/src,customer/src}/**/*.{js,jsx,ts,tsx}\" --format stylish --report-unused-disable-directives --no-error-on-unmatched-pattern",
+		"lint:layers:fix": "NODE_OPTIONS=--max-old-space-size=8192 eslint \"{src,enterprise/src,customer/src}/**/*.{js,jsx,ts,tsx}\" --format stylish --report-unused-disable-directives --max-warnings 0 --fix --no-error-on-unmatched-pattern && prettier --write \"{src,enterprise/src,customer/src}/**/*.json\"",
+		"prepare": "corepack pnpm run setup:hooks",
 		"preview": "vite preview",
 		"setup:hooks": "node scripts/install-git-hooks.cjs",
 		"test": "vitest run --config ./vitest.config.ts",
@@ -60,7 +58,10 @@
 			"eslint --fix --config .eslintrc.cjs",
 			"prettier --write"
 		],
-		"**/*.json": [
+		"**/!(package).json": [
+			"prettier --write"
+		],
+		"**/package.json": [
 			"prettier --write",
 			"sort-package-json"
 		]
@@ -116,6 +117,7 @@
 		"@magic/html2pptx": "workspace:*",
 		"@marp-team/marpit": "^3.1.1",
 		"@monaco-editor/react": "4.7.0",
+		"@pdf-lib/fontkit": "^1.1.1",
 		"@radix-ui/react-accordion": "^1.2.12",
 		"@radix-ui/react-alert-dialog": "^1.1.15",
 		"@radix-ui/react-aspect-ratio": "^1.1.8",
@@ -241,7 +243,6 @@
 		"immer": "^10.1.1",
 		"input-otp": "^1.4.2",
 		"install": "^0.13.0",
-		"javascript-obfuscator": "^4.1.1",
 		"js-yaml": "4.1.0",
 		"jspdf": "^2.5.2",
 		"jszip": "^3.10.1",
@@ -354,6 +355,7 @@
 		"@types/file-saver": "^2.0.7",
 		"@types/js-yaml": "4.0.9",
 		"@types/lodash-es": "^4.17.12",
+		"@types/mockjs": "^1.0.10",
 		"@types/node": "^22.16.4",
 		"@types/pako": "^2.0.3",
 		"@types/prismjs": "^1.26.5",
@@ -383,7 +385,7 @@
 		"eslint-plugin-compat": "^6.2.1",
 		"eslint-plugin-import": "^2.26.0",
 		"eslint-plugin-jsx-a11y": "^6.6.1",
-		"eslint-plugin-local": "file:./plugins/eslint-rules",
+		"eslint-plugin-local": "file:./eslint",
 		"eslint-plugin-node": "^11.1.0",
 		"eslint-plugin-prettier": "^5.2.1",
 		"eslint-plugin-react": "^7.31.5",
@@ -393,8 +395,9 @@
 		"husky": "^9.0.11",
 		"jsdom": "^26.1.0",
 		"less": "^4.2.2",
-		"lighthouse": "^13.0.1",
 		"lint-staged": "^15.2.2",
+		"mockjs": "^1.1.0",
+		"msw": "^2.13.2",
 		"postcss": "^8.4.38",
 		"postcss-add-root-selector": "^1.0.6",
 		"postcss-html": "^1.8.0",
@@ -404,7 +407,6 @@
 		"prettier-plugin-sort-json": "^4.2.0",
 		"puppeteer": "^24.32.0",
 		"rc-menu": "^9.16.1",
-		"rollup-plugin-external-globals": "^0.13.0",
 		"rollup-plugin-visualizer": "^5.14.0",
 		"sass-embedded": "^1.93.1",
 		"sort-package-json": "^2.10.0",
@@ -424,7 +426,7 @@
 		"vite-plugin-externals": "^0.6.2",
 		"vite-plugin-imp": "^2.4.0",
 		"vite-plugin-inspect": "12.0.0-beta.1",
-		"vite-plugin-keep-console": "^0.0.10",
+		"vite-plugin-keep-console": "1.0.0",
 		"vite-plugin-mkcert": "^1.17.6",
 		"vitest": "^3.2.4"
 	},
@@ -435,17 +437,9 @@
 	"engines": {
 		"node": "^20.19.0 || >=22.12.0"
 	},
-	"pnpm": {
-		"overrides": {
-			"@dtyq/magic-flow>react": "18.3.1",
-			"@dtyq/magic-flow>react-dom": "18.3.1",
-			"esbuild": "0.24.0",
-			"katex": "0.16.21",
-			"marked": "15.0.12"
-		},
-		"patchedDependencies": {
-			"pptxgenjs": "patches/pptxgenjs.patch",
-			"tiptap-markdown": "patches/tiptap-markdown.patch"
-		}
+	"msw": {
+		"workerDirectory": [
+			"public"
+		]
 	}
 }
