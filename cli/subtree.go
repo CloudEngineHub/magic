@@ -21,8 +21,9 @@ var (
 	}
 
 	subtreePublishCmd = &cobra.Command{
-		Use:   "publish",
-		Short: i18n.L("subtreePublishCommandShort"),
+		Use:                   "publish [names]",
+		DisableFlagsInUseLine: true,
+		Short:                 i18n.L("subtreePublishCommandShort"),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := context.Background()
 			codeBase, err := code.FindMagicrew(".")
@@ -61,7 +62,7 @@ var (
 				for _, name := range args {
 					split, ok := magicrewStructure.Subtrees[name]
 					if !ok {
-						lg.Loge("subtree", "%s", i18n.L("errorSubtreePublishNoSuchSubtree"))
+						lg.Loge("subtree", "%s", i18n.L("errorSubtreePublishNoSuchSubtree", name))
 						return fmt.Errorf("no such subtree: %s", name)
 					}
 					splits[name] = split
@@ -122,7 +123,7 @@ var (
 				return fmt.Errorf("failed to get flag: %v", err)
 			}
 			if initType != "worktree" && initType != "bare" && initType != "none" {
-				lg.Loge("subtree", "%s", i18n.L("errorSubtreePublishBadInitType"))
+				lg.Loge("subtree", "%s", i18n.L("errorSubtreePublishBadInitType", initType))
 				cmd.Help()
 				return fmt.Errorf("invalid arg")
 			}
@@ -149,7 +150,7 @@ var (
 				lg.Logd("subtree", "[%s] %s => %s(%s)", name, split.Prefix, split.DestURL, split.Branch)
 				err = spliter.Split(ctx, codeBase, split, force)
 				if err != nil {
-					lg.Loge("subtree", "%s", i18n.L("errorFailedSplit"))
+					lg.Loge("subtree", "%s", i18n.L("errorFailedSplit", err))
 					return err
 				}
 			}
@@ -163,12 +164,12 @@ func init() {
 	subtreeCmd.Flags().BoolP("help", "h", false, i18n.L("cobraHelpFor", "subtree"))
 	rootCmd.AddCommand(subtreeCmd)
 
-	subtreePublishCmd.Flags().BoolP("all", "a", false, i18n.L("imageBuildCommandArgAllHelp"))
-	subtreePublishCmd.Flags().String("dest-url", "", i18n.L("imageBuildCommandArgDestURLHelp"))
-	subtreePublishCmd.Flags().String("dest-git-base", "", i18n.L("imageBuildCommandArgDestGitBaseHelp"))
-	subtreePublishCmd.Flags().String("init", "none", i18n.L("imageBuildCommandArgInitHelp"))
-	subtreePublishCmd.Flags().StringP("branch", "b", "", i18n.L("imageBuildCommandArgBranchHelp"))
-	subtreePublishCmd.Flags().BoolP("force", "f", false, i18n.L("imageBuildCommandArgForceHelp"))
+	subtreePublishCmd.Flags().BoolP("all", "a", false, i18n.L("subtreePublishCommandArgAllHelp"))
+	subtreePublishCmd.Flags().String("dest-url", "", i18n.L("subtreePublishCommandArgDestURLHelp"))
+	subtreePublishCmd.Flags().String("dest-git-base", "", i18n.L("subtreePublishCommandArgDestGitBaseHelp"))
+	subtreePublishCmd.Flags().String("init", "none", i18n.L("subtreePublishCommandArgInitHelp"))
+	subtreePublishCmd.Flags().StringP("branch", "b", "", i18n.L("subtreePublishCommandArgBranchHelp"))
+	subtreePublishCmd.Flags().BoolP("force", "f", false, i18n.L("subtreePublishCommandArgForceHelp"))
 	subtreePublishCmd.Flags().BoolP("help", "h", false, i18n.L("cobraHelpFor", "subtree publish"))
 
 	subtreeCmd.AddCommand(subtreePublishCmd)
