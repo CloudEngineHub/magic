@@ -12,6 +12,7 @@ from app.core.ai_ability_configs.configs import (
     CompactAbilityConfig,
     DeepWriteAbilityConfig,
     PurifyAbilityConfig,
+    SkillRerankAbilityConfig,
     SmartFilenameAbilityConfig,
     SummarizeAbilityConfig,
     VideoUnderstandingAbilityConfig,
@@ -29,6 +30,7 @@ _ABILITY_CONFIG_CLASSES: Dict[str, Type[BaseAIAbilityConfig]] = {
     CompactAbilityConfig.ability_key_value: CompactAbilityConfig,
     AnalysisAudioAbilityConfig.ability_key_value: AnalysisAudioAbilityConfig,
     VideoUnderstandingAbilityConfig.ability_key_value: VideoUnderstandingAbilityConfig,
+    SkillRerankAbilityConfig.ability_key_value: SkillRerankAbilityConfig,
     AgentRerankAbilityConfig.ability_key_value: AgentRerankAbilityConfig,
 }
 

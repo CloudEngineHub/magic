@@ -9,6 +9,7 @@ from pydantic import Field, field_validator
 from agentlang.context.tool_context import ToolContext
 from agentlang.logger import get_logger
 from agentlang.tools.tool_result import ToolResult
+from app.core.context.agent_context import AgentContext
 from app.core.entity.message.server_message import DisplayType, FileContent, ToolDetail
 from app.core.skill_manager import find_skill
 from app.i18n import i18n
@@ -77,10 +78,21 @@ class ReadSkills(BaseTool[ReadSkillsParams]):
             return ToolResult(ok=False, content=error_msg)
 
         # 获取当前 agent 的 excluded_skills，确保被禁用的 skill 无法通过任何方式加载
-        excluded_skills: set = set()
-        agent_context = tool_context.get_extension("agent_context") if tool_context is not None else None
-        if agent_context and hasattr(agent_context, "get_excluded_skills"):
-            excluded_skills = set(agent_context.get_excluded_skills())
+        agent_context = (
+            tool_context.get_extension_typed("agent_context", AgentContext)
+            if tool_context is not None
+            else None
+        )
+        agent_name = agent_context.agent_name if agent_context is not None else None
+        excluded_skills = {
+            value.strip().casefold()
+            for value in (
+                agent_context.get_excluded_skills()
+                if agent_context is not None
+                else []
+            )
+            if value.strip()
+        }
 
         try:
             # 批量读取所有 skills
@@ -91,20 +103,30 @@ class ReadSkills(BaseTool[ReadSkillsParams]):
 
             for skill_name in params.skill_names:
                 # 被禁用的 skill 直接拒绝，不尝试查找或读取
-                if skill_name in excluded_skills:
+                if skill_name.strip().casefold() in excluded_skills:
                     results.append({"skill_name": skill_name, "success": False, "error": f"Skill '{skill_name}' is disabled for the current agent and cannot be loaded."})
                     failure_count += 1
                     failed_skills.append(skill_name)
                     logger.info(f"拒绝读取被禁用的 skill: {skill_name}")
                     continue
                 try:
-                    skill = await find_skill(skill_name)
+                    skill = await find_skill(skill_name, agent_name=agent_name)
 
                     # s3 挂载有延迟，首次找不到时等待 2s 后重试一次
                     if not skill:
                         logger.warning(f"Skill 未找到，2s 后重试: {skill_name}")
                         await asyncio.sleep(2)
-                        skill = await find_skill(skill_name)
+                        skill = await find_skill(skill_name, agent_name=agent_name)
+
+                    if (
+                        skill is not None
+                        and skill.name.strip().casefold() in excluded_skills
+                    ):
+                        results.append({"skill_name": skill_name, "success": False, "error": f"Skill '{skill_name}' is disabled for the current agent and cannot be loaded."})
+                        failure_count += 1
+                        failed_skills.append(skill_name)
+                        logger.info(f"拒绝读取被禁用的 skill: {skill_name}")
+                        continue
 
                     if not skill:
                         error_msg = f"未找到名为 '{skill_name}' 的 skill"

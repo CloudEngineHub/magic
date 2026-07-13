@@ -513,6 +513,14 @@ ai_abilities:
   compact:
     model_id: "${COMPACT_MODEL_ID:-deepseek-v4-flash}"
 
+  # Skill Candidate Selection Ability (Skill 候选选择能力)
+  skill_rerank:
+    model_id: "${SKILL_RERANK_MODEL_ID:-deepseek-v4-flash}"
+
+  # Agent Candidate Ranking Ability (Agent 候选排序能力)
+  agent_rerank:
+    model_id: "${AGENT_RERANK_MODEL_ID:-deepseek-v4-flash}"
+
 # =====================================================
 # Web Scraping 网页爬取配置
 # =====================================================

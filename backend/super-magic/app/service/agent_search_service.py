@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import asyncio
+import json
 from dataclasses import dataclass
 from enum import StrEnum
 
-from app.core.ai_abilities import get_agent_rerank_model_id, is_agent_rerank_enabled
-from app.core.search_ranker import SearchRanker, SearchRankItem
+from app.core.ai_abilities import get_agent_rerank_model_id
+from app.core.context.run_interruption import await_with_interruption
+from app.core.search_ranker import SearchCandidate, SearchRanker, SearchRankError
 from app.infrastructure.sdk.magic_service.magic_service import MagicService
 from app.infrastructure.sdk.magic_service.parameter.available_agents_parameter import AvailableAgentsParameter
 
@@ -37,6 +40,7 @@ class AgentSearchResult:
     mode: AgentSearchMode
     truncated: bool
     fallback_reason: str | None = None
+    fallback_detail: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -55,12 +59,14 @@ class AgentSearchService:
         keywords: list[str],
         query: str | None,
         limit: int,
+        interruption_event: asyncio.Event | None,
     ) -> AgentSearchResult:
         if not keywords:
             page = await self._fetch_candidates(
                 sdk=sdk,
                 keywords=[],
                 page_size=limit,
+                interruption_event=interruption_event,
             )
             return self._build_result(
                 page=page,
@@ -72,8 +78,9 @@ class AgentSearchService:
             sdk=sdk,
             keywords=keywords,
             page_size=KEYWORD_CANDIDATE_LIMIT,
+            interruption_event=interruption_event,
         )
-        if page.total_matches <= RERANK_THRESHOLD:
+        if not page.candidates or page.total_matches <= RERANK_THRESHOLD:
             return self._build_result(
                 page=page,
                 candidates=page.candidates[:limit],
@@ -85,6 +92,7 @@ class AgentSearchService:
             keywords=keywords,
             query=query,
             limit=limit,
+            interruption_event=interruption_event,
         )
 
     @staticmethod
@@ -93,15 +101,19 @@ class AgentSearchService:
         sdk: MagicService,
         keywords: list[str],
         page_size: int,
+        interruption_event: asyncio.Event | None,
     ) -> _AgentCandidatePage:
         """读取第一页候选，并按 Agent code 保序去重。"""
 
-        result = await sdk.agent.list_available_agents_async(
-            AvailableAgentsParameter(
-                keywords=keywords,
-                page=1,
-                page_size=page_size,
-            )
+        result = await await_with_interruption(
+            sdk.agent.list_available_agents_async(
+                AvailableAgentsParameter(
+                    keywords=keywords,
+                    page=1,
+                    page_size=page_size,
+                )
+            ),
+            interruption_event,
         )
 
         candidates: list[AgentSearchCandidate] = []
@@ -130,44 +142,43 @@ class AgentSearchService:
         keywords: list[str],
         query: str | None,
         limit: int,
+        interruption_event: asyncio.Event | None,
     ) -> AgentSearchResult:
         try:
-            if not is_agent_rerank_enabled():
-                return self._keyword_fallback_result(
-                    page=page,
-                    keywords=keywords,
-                    limit=limit,
-                    reason="disabled",
-                )
-
             model_id = get_agent_rerank_model_id()
-            if model_id is None:
-                return self._keyword_fallback_result(
-                    page=page,
-                    keywords=keywords,
-                    limit=limit,
-                    reason="model_unavailable",
-                )
-
-            order = await SearchRanker().rank(
+            candidate_numbers = await SearchRanker().select_candidates(
                 model_id=model_id,
-                items=[
-                    SearchRankItem(
+                candidates=[
+                    SearchCandidate(
                         name=candidate.name,
                         description=candidate.description,
+                        source_info="source=marketplace",
                     )
                     for candidate in page.candidates
                 ],
-                keywords=keywords,
-                query=query,
+                rules=[
+                    f"Full user request: {query.strip() if query else 'Not provided.'}",
+                    f"Recall keywords: {json.dumps(keywords, ensure_ascii=False)}",
+                    "Return every candidate number exactly once.",
+                    "Order all candidate numbers from best match to worst match.",
+                ],
+                limit=len(page.candidates),
+                interruption_event=interruption_event,
+                minimum_selected=len(page.candidates),
             )
-            ranked = [page.candidates[index] for index in order]
-        except Exception:
+            ranked = [
+                page.candidates[number - 1]
+                for number in candidate_numbers
+            ]
+        except asyncio.CancelledError:
+            raise
+        except SearchRankError as error:
             return self._keyword_fallback_result(
                 page=page,
                 keywords=keywords,
                 limit=limit,
                 reason="ranking_failed",
+                detail=error.detail,
             )
 
         return self._build_result(
@@ -183,6 +194,7 @@ class AgentSearchService:
         keywords: list[str],
         limit: int,
         reason: str,
+        detail: str,
     ) -> AgentSearchResult:
         ranked = self._rank_by_keywords(page.candidates, keywords)
         return self._build_result(
@@ -190,6 +202,7 @@ class AgentSearchService:
             candidates=ranked[:limit],
             mode=AgentSearchMode.KEYWORD_FALLBACK,
             fallback_reason=reason,
+            fallback_detail=detail,
         )
 
     @staticmethod
@@ -205,7 +218,7 @@ class AgentSearchService:
             if normalized:
                 normalized_keywords.append(normalized)
 
-        def score(candidate: AgentSearchCandidate) -> int:
+        def match_level(candidate: AgentSearchCandidate) -> int:
             normalized_name = candidate.name.casefold()
             normalized_description = candidate.description.casefold()
             total = 0
@@ -220,7 +233,7 @@ class AgentSearchService:
                     total += 1
             return total
 
-        return sorted(candidates, key=score, reverse=True)
+        return sorted(candidates, key=match_level, reverse=True)
 
     @staticmethod
     def _build_result(
@@ -229,6 +242,7 @@ class AgentSearchService:
         candidates: list[AgentSearchCandidate],
         mode: AgentSearchMode,
         fallback_reason: str | None = None,
+        fallback_detail: str | None = None,
     ) -> AgentSearchResult:
         returned_count = len(candidates)
         return AgentSearchResult(
@@ -239,4 +253,5 @@ class AgentSearchService:
             mode=mode,
             truncated=page.total_matches > returned_count,
             fallback_reason=fallback_reason,
+            fallback_detail=fallback_detail,
         )

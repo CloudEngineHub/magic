@@ -52,13 +52,13 @@ class VideoUnderstandingAbilityConfig(ModelIdRequiredAIAbilityConfig):
     ability_key_value = "video_understanding"
 
 
+class SkillRerankAbilityConfig(ModelIdRequiredAIAbilityConfig):
+    """始终启用的 Skill Candidate 选择能力运行时配置。"""
+
+    ability_key_value = "skill_rerank"
+
+
 class AgentRerankAbilityConfig(ModelIdRequiredAIAbilityConfig):
-    """Agent 搜索排序能力运行时配置。"""
+    """始终启用的 Agent 搜索排序能力运行时配置。"""
 
     ability_key_value = "agent_rerank"
-
-    def validate_for_merge(self) -> str | None:
-        """允许禁用配置合并，启用时仍要求 model_id。"""
-        if not self.enabled:
-            return None
-        return super().validate_for_merge()

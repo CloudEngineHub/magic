@@ -5,7 +5,7 @@ This module defines the specific AI abilities used in the Super Magic applicatio
 and their default configurations.
 """
 from enum import Enum
-from typing import Dict, Any
+from typing import Any, Dict
 
 
 class AIAbility(str, Enum):
@@ -113,15 +113,13 @@ AI_ABILITY_DEFAULTS: Dict[str, Dict[str, Any]] = {
     # Skill Rerank Ability (v1.3)
     # 用于 find_skills 工具的 LLM 重排驱动，使用轻量快速模型降低延迟
     AIAbility.SKILL_RERANK: {
-        "model_id": "qwen3.5-flash",
-        "enabled": True,
+        "model_id": "deepseek-v4-flash",
     },
 
     # Agent Rerank Ability (v1.3)
     # 用于 Agent 搜索结果的轻量模型排序
     AIAbility.AGENT_RERANK: {
         "model_id": "deepseek-v4-flash",
-        "enabled": True,
     },
 }
 
@@ -253,8 +251,8 @@ def get_compact_model_id() -> str | None:
     Returns:
         Optional[str]: 模型ID，未配置或配置不可用时返回 None
     """
-    from agentlang.logger import get_logger
     from agentlang.config.ai_ability_manager import ai_ability_manager
+    from agentlang.logger import get_logger
 
     logger = get_logger(__name__)
 
@@ -271,37 +269,29 @@ def get_compact_model_id() -> str | None:
         return None
 
 
-def is_agent_rerank_enabled() -> bool:
-    """返回 Agent 搜索排序能力是否启用。"""
-    return bool(get_ability_config(AIAbility.AGENT_RERANK, "enabled", default=True))
+def _get_required_ability_model_id(ability: AIAbility) -> str:
+    """返回能力配置模型；未配置或配置为空时使用代码默认模型。"""
+    defaults = AI_ABILITY_DEFAULTS.get(ability, {})
+    default_model_id = str(defaults.get("model_id") or "").strip()
+    if not default_model_id:
+        raise RuntimeError(f"AI ability '{ability.value}' has no default model_id")
 
-
-def get_agent_rerank_model_id() -> str | None:
-    """返回可用的 Agent 搜索排序模型，禁用或模型不可用时返回 None。"""
-    if not is_agent_rerank_enabled():
-        return None
-
-    model_id = str(
+    configured_model_id = str(
         get_ability_config(
-            AIAbility.AGENT_RERANK,
+            ability,
             "model_id",
-            default="deepseek-v4-flash",
+            default=default_model_id,
         )
         or ""
     ).strip()
-    if not model_id:
-        return None
+    return configured_model_id or default_model_id
 
-    try:
-        from agentlang.llms.factory import LLMFactory
 
-        model_config = LLMFactory.get_model_config(
-            model_id,
-            expected_type="llm",
-            allow_fallback=False,
-        )
-        if not model_config.supports_tool_use:
-            return None
-    except Exception:
-        return None
-    return model_id
+def get_skill_rerank_model_id() -> str:
+    """返回 Skill Candidate 选择模型。"""
+    return _get_required_ability_model_id(AIAbility.SKILL_RERANK)
+
+
+def get_agent_rerank_model_id() -> str:
+    """返回 Agent Candidate 排序模型。"""
+    return _get_required_ability_model_id(AIAbility.AGENT_RERANK)

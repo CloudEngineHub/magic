@@ -1348,8 +1348,8 @@
         "en_US": "Crew matches found: {{total}}. Ranked results shown: {{count}}."
     },
     "find_agents.done_fallback": {
-        "zh_CN": "已返回 {{count}} 个关键词匹配的数字员工",
-        "en_US": "Keyword-matched Crew shown: {{count}}"
+        "zh_CN": "智能排序暂时不可用，已展示 {{count}} 个按关键词排序的数字员工",
+        "en_US": "AI ranking is temporarily unavailable. Keyword-ordered Crew shown: {{count}}."
     },
     "find_agents.empty": {
         "zh_CN": "没有找到匹配的数字员工",
@@ -1400,8 +1400,8 @@
         "en_US": "Top match"
     },
     "find_agents.detail_fallback_notice": {
-        "zh_CN": "本次结果按关键词相关性排序。",
-        "en_US": "These results are ordered by keyword relevance."
+        "zh_CN": "智能排序暂时不可用，本次结果按关键词相关性排列。",
+        "en_US": "AI ranking is temporarily unavailable. These results are ordered by keyword relevance."
     },
     "find_agents.detail_truncated": {
         "zh_CN": "本次仅展示前 {{count}} 个结果。",
@@ -1704,20 +1704,100 @@
         "en_US": "Path error, attempting to resolve..."
     },
     "find_skills.searching": {
-        "zh_CN": "正在检索「{{keywords}}」",
-        "en_US": "Searching for \"{{keywords}}\""
+        "zh_CN": "正在查找与「{{keywords}}」相关的 Skill",
+        "en_US": "Looking for Skills related to \"{{keywords}}\""
+    },
+    "find_skills.searching_all": {
+        "zh_CN": "正在查找合适的 Skill",
+        "en_US": "Looking for suitable Skills"
     },
     "find_skills.searched": {
-        "zh_CN": "已检索「{{keywords}}」，共找到 {{total}} 个候选",
-        "en_US": "Searched \"{{keywords}}\", found {{total}} candidates"
+        "zh_CN": "已找到 {{count}} 个 Skill",
+        "en_US": "Skills found: {{count}}"
     },
-    "find_skills.searched_with_providers": {
-        "zh_CN": "已检索「{{keywords}}」（来源：{{providers}}），共找到 {{total}} 个候选",
-        "en_US": "Searched \"{{keywords}}\" (sources: {{providers}}), found {{total}} candidates"
+    "find_skills.fallback": {
+        "zh_CN": "智能排序暂时不可用，已按基础规则展示 {{count}} 个 Skill",
+        "en_US": "AI ranking is temporarily unavailable. Skills shown using basic ordering: {{count}}."
     },
-    "find_skills.keywords_all": {
-        "zh_CN": "全部",
-        "en_US": "all"
+    "find_skills.fallback_partial": {
+        "zh_CN": "部分来源和智能排序暂时不可用，已按基础规则展示 {{count}} 个 Skill",
+        "en_US": "Some sources and AI ranking are temporarily unavailable. Skills shown using basic ordering: {{count}}."
+    },
+    "find_skills.empty": {
+        "zh_CN": "没有找到合适的 Skill",
+        "en_US": "No suitable Skills found"
+    },
+    "find_skills.error": {
+        "zh_CN": "Skill 搜索失败，请稍后重试",
+        "en_US": "Unable to search Skills. Please try again later."
+    },
+    "find_skills.partial": {
+        "zh_CN": "部分来源暂时不可用，已展示 {{count}} 个其他结果",
+        "en_US": "Some sources are temporarily unavailable. Other results shown: {{count}}."
+    },
+    "find_skills.partial_empty": {
+        "zh_CN": "部分来源暂时不可用，其他来源也没有找到合适的 Skill",
+        "en_US": "Some sources are temporarily unavailable, and no suitable Skills were found from the other sources."
+    },
+    "find_skills.partial_detail": {
+        "zh_CN": "部分来源暂时不可用，以下结果来自其他可用来源。",
+        "en_US": "Some sources are temporarily unavailable. The results below come from other available sources."
+    },
+    "find_skills.detail_fallback_notice": {
+        "zh_CN": "智能排序暂时不可用，本次结果按基础规则排列。",
+        "en_US": "AI ranking is temporarily unavailable. These results use basic ordering."
+    },
+    "find_skills.detail_title": {
+        "zh_CN": "Skill 搜索结果",
+        "en_US": "Skill search results"
+    },
+    "find_skills.detail_query": {
+        "zh_CN": "完整需求",
+        "en_US": "Full request"
+    },
+    "find_skills.detail_candidate_count": {
+        "zh_CN": "纳入处理的候选数",
+        "en_US": "Candidates considered"
+    },
+    "find_skills.detail_returned_count": {
+        "zh_CN": "实际展示数量",
+        "en_US": "Candidates shown"
+    },
+    "find_skills.detail_no_results": {
+        "zh_CN": "没有找到合适的 Skill。",
+        "en_US": "No suitable Skills were found."
+    },
+    "find_skills.detail_skill_header": {
+        "zh_CN": "Skill",
+        "en_US": "Skill"
+    },
+    "find_skills.detail_source_header": {
+        "zh_CN": "来源",
+        "en_US": "Source"
+    },
+    "find_skills.detail_description_header": {
+        "zh_CN": "简介",
+        "en_US": "Description"
+    },
+    "find_skills.provider.system": {
+        "zh_CN": "系统内置",
+        "en_US": "Built-in"
+    },
+    "find_skills.provider.my_library": {
+        "zh_CN": "我的 Skill 库",
+        "en_US": "My library"
+    },
+    "find_skills.provider.market": {
+        "zh_CN": "Skill 市场",
+        "en_US": "Skill marketplace"
+    },
+    "find_skills.provider.skillhub": {
+        "zh_CN": "SkillHub",
+        "en_US": "SkillHub"
+    },
+    "find_skills.provider.clawhub": {
+        "zh_CN": "ClawHub",
+        "en_US": "ClawHub"
     },
     "install_skills.installing": {
         "zh_CN": "正在安装：{{ids}}",

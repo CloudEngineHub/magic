@@ -6,19 +6,18 @@
 from __future__ import annotations
 
 import asyncio
-from typing import Any, Dict, List, Literal, Optional
-
 import json
+from typing import Any, Dict, List, Literal, Optional
 
 from pydantic import Field, field_validator, model_validator
 
-from app.i18n import i18n
 from agentlang.context.tool_context import ToolContext
 from agentlang.logger import get_logger
 from agentlang.tools.tool_result import ToolResult
 from app.core.entity.message.server_message import DisplayType, FileContent, ToolDetail
+from app.core.skill_utils.installer import InstallService, SkillRef
+from app.i18n import i18n
 from app.tools.core import BaseTool, BaseToolParams, tool
-from app.core.skill_utils.installer import InstallResult, InstallService, SkillRef
 
 logger = get_logger(__name__)
 
@@ -113,16 +112,19 @@ class InstallSkillsParams(BaseToolParams):
 @tool()
 class InstallSkillsTool(BaseTool[InstallSkillsParams]):
     """<!--zh
-    批量安装或升级 skill 的**唯一入口**。
+    批量安装或升级 Skill 的唯一入口。安装或升级任何外部 Skill 前必须获得用户明确确认；用户直接要求安装或升级即视为已确认，仅由 Agent 从搜索结果中自行选中不算确认。system builtin 必须通过 read_skills 直接加载，不能传给本工具。
     支持来源：my_library（我的技能库）、market（Magic 市场）、
     skillhub（外部社区）、clawhub（ClawHub 生态）、npx（npm 包）、github（GitHub 仓库）。
     mode=install：同版本已存在时跳过；mode=upgrade：升级到最新或指定版本。
     各条独立成败，不因单条失败而中止整批。
     -->
-    Batch install or upgrade skills — the ONLY entry point for skill installation.
-    Supported sources: my_library, market, skillhub, clawhub, npx, github.
-    mode=install: skip if same version exists; mode=upgrade: update to latest.
-    Items succeed or fail independently; one failure does not abort the batch.
+    Batch install or upgrade Skills through the only supported installation entry point.
+    Obtain explicit user confirmation before installing or upgrading any external Skill.
+    A direct user request to install or upgrade counts as confirmation; an Agent selecting
+    a search result does not. Load system built-ins directly with read_skills and never pass
+    them to this tool. Supported sources: my_library, market, skillhub, clawhub, npx, and
+    github. mode=install skips an existing identical version; mode=upgrade updates to the
+    latest version. Items succeed or fail independently.
     """
 
     async def get_before_tool_call_friendly_action_and_remark(
