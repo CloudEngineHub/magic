@@ -17,7 +17,8 @@ type SubtreeSplit struct {
 }
 
 func tempBranchName(prefix string) string {
-	return "mgaicrew-cli/" + prefix + "-" + time.Now().Format("20060102150405")
+	return "mgaicrew-cli/" + prefix +
+		"-" + time.Now().Format("20060102150405.000000000")
 }
 
 type SubtreeSpliter interface {

@@ -11,6 +11,7 @@ import (
 	"github.com/dtyq/magicrew-cli/util"
 	"github.com/go-git/go-git/v6"
 	gitConfig "github.com/go-git/go-git/v6/config"
+	"github.com/go-git/go-git/v6/plumbing"
 	gitClient "github.com/go-git/go-git/v6/plumbing/client"
 	"github.com/splitsh/lite/splitter"
 )
@@ -67,6 +68,12 @@ func (s *subtreeSpliterLite) Split(ctx context.Context, code *Code, subtreeSplit
 	if err != nil {
 		return fmt.Errorf("failed to split subtree: %w", err)
 	}
+	defer func() {
+		// clean up splited branch
+		refName := plumbing.NewBranchReferenceName(splitedBranchName)
+		_ = code.Repository.Storer.RemoveReference(refName)
+		// best effort, no check
+	}()
 
 	if s.ShowHEADRev {
 		fmt.Printf("%s\n", result.Head().String())
