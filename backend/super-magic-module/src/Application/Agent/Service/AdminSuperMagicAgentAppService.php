@@ -19,6 +19,7 @@ use Dtyq\SuperMagic\Domain\Agent\Entity\ValueObject\PublishTargetType;
 use Dtyq\SuperMagic\Domain\Agent\Entity\ValueObject\Query\AgentVersionAdminQuery;
 use Dtyq\SuperMagic\Domain\Agent\Entity\ValueObject\ReviewStatus;
 use Dtyq\SuperMagic\Domain\Agent\Entity\ValueObject\SuperMagicAgentDataIsolation;
+use Dtyq\SuperMagic\Domain\Agent\Service\SuperMagicAgentCategoryDomainService;
 use Dtyq\SuperMagic\Domain\Agent\Service\SuperMagicAgentMarketDomainService;
 use Dtyq\SuperMagic\Domain\Agent\Service\SuperMagicAgentVersionDomainService;
 use Dtyq\SuperMagic\ErrorCode\SuperMagicErrorCode;
@@ -40,6 +41,9 @@ use Throwable;
  */
 class AdminSuperMagicAgentAppService extends AbstractSuperMagicAppService
 {
+    #[Inject]
+    protected SuperMagicAgentCategoryDomainService $superMagicAgentCategoryDomainService;
+
     #[Inject]
     protected SuperMagicAgentVersionDomainService $superMagicAgentVersionDomainService;
 
@@ -223,7 +227,9 @@ class AdminSuperMagicAgentAppService extends AbstractSuperMagicAppService
             return;
         }
 
-        if (! $this->superMagicAgentMarketDomainService->updateInfoById($id, $requestDTO->getUpdatePayload())) {
+        $payload = $requestDTO->getUpdatePayload();
+        $this->assertCategoryExists($payload['category_id'] ?? null);
+        if (! $this->superMagicAgentMarketDomainService->updateInfoById($id, $payload)) {
             ExceptionBuilder::throw(SuperMagicErrorCode::NotFound, 'common.not_found', ['label' => (string) $id]);
         }
     }
@@ -300,6 +306,29 @@ class AdminSuperMagicAgentAppService extends AbstractSuperMagicAppService
             createdAt: $agent->getCreatedAt(),
             updatedAt: $agent->getUpdatedAt()
         );
+    }
+
+    public function updateMarketCategory(int $id, ?int $categoryId): void
+    {
+        $this->assertCategoryExists($categoryId);
+        if (! $this->superMagicAgentMarketDomainService->updateInfoById($id, ['category_id' => $categoryId])) {
+            ExceptionBuilder::throw(SuperMagicErrorCode::NotFound, 'common.not_found', ['label' => (string) $id]);
+        }
+    }
+
+    private function assertCategoryExists(?int $categoryId): void
+    {
+        if ($categoryId === null) {
+            return;
+        }
+
+        if ($this->superMagicAgentCategoryDomainService->findById($categoryId) === null) {
+            ExceptionBuilder::throw(
+                SuperMagicErrorCode::NotFound,
+                'common.not_found',
+                ['label' => (string) $categoryId]
+            );
+        }
     }
 
     /**
