@@ -228,14 +228,7 @@ export function useMentionPanel<TCatalogId extends string = string>(
 				error: dataSourceHook.error,
 			}
 		})
-	}, [
-		dataSourceHook.items,
-		dataSourceHook.loading,
-		dataSourceHook.error,
-		panelState.currentState,
-		panelState.searchQuery,
-		t,
-	])
+	}, [dataSourceHook.items, dataSourceHook.loading, dataSourceHook.error])
 
 	// Reset selected index when items change
 	useEffect(() => {
