@@ -38,27 +38,21 @@ from .path_utils import (
 class SampleDocumentContentParams(BaseToolParams):
     input_path: str = Field(
         ...,
-        description="""<!--zh: 要抽样阅读的文档绝对路径，不接受相对路径-->
-Absolute document path to sample. Relative paths are not accepted"""
+        description="Absolute document path to sample. Relative paths are not accepted."
     )
     output_dir: str = Field(
         ...,
-        description="""<!--zh: 输出目录的绝对路径，用于保存 samples/ 和 document.reading_state.json-->
-Absolute output directory for samples/ and document.reading_state.json"""
+        description="Absolute output directory for samples/ and document.reading_state.json."
     )
     ranges: Optional[str] = Field(
         None,
-        description="""<!--zh: 可选范围表达式，例如页码或 slide 范围 `1-3,8`-->
-Optional range expression such as pages or slides `1-3,8`"""
+        description="Optional range expression, such as pages or slides `1-3,8`."
     )
 
 
-@tool()
+@tool(code_mode_only=True)
 class SampleDocumentContent(AbstractFileTool[SampleDocumentContentParams], WorkspaceTool[SampleDocumentContentParams]):
-    """<!--zh: 抽样阅读文档，帮助大模型决定后续大文档阅读策略。-->
-    Sample document content so the model can choose the next reading strategy."""
-
-    code_mode_only = True
+    """Sample document content so the model can choose the next reading strategy."""
 
     async def execute(self, tool_context: ToolContext, params: SampleDocumentContentParams) -> ToolResult:
         """Write bounded document samples and update progressive reading state."""

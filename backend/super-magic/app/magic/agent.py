@@ -3365,7 +3365,7 @@ Since your subsequent output will be merged with pre-interruption content and di
                 if not self._is_tool_visible_in_current_context(tool_name):
                     continue
                 # 只通过预构建定义获取工具参数
-                tool_param = tool_factory.get_tool_param_from_definition(tool_name)
+                tool_param = tool_factory.get_llm_direct_tool_param_from_definition(tool_name)
 
                 if tool_param:
                     # 成功从预构建定义生成参数
@@ -3382,7 +3382,7 @@ Since your subsequent output will be merged with pre-interruption content and di
             compact_tool_name not in existing_names
             and self._is_tool_visible_in_current_context(compact_tool_name)
         ):
-            compact_param = tool_factory.get_tool_param_from_definition(compact_tool_name)
+            compact_param = tool_factory.get_llm_direct_tool_param_from_definition(compact_tool_name)
             if compact_param:
                 tools_list.append(compact_param)
 

@@ -25,22 +25,17 @@ from .service import SCOPE_PERSONAL, EnvManagerError, EnvManagerService
 class UnsetEnvParams(BaseToolParams):
     key: Optional[str] = Field(
         None,
-        description="""<!--zh: 要删除的环境变量名-->
-Environment variable name to delete""",
+        description="Environment variable name to delete.",
     )
     scope: str = Field(
         SCOPE_PERSONAL,
-        description="""<!--zh: 删除范围，personal 或 workspace，默认 personal-->
-Delete scope: personal or workspace. Defaults to personal.""",
+        description="Delete scope: personal or workspace. Defaults to personal.",
     )
 
 
-@tool(name="unset_env")
+@tool(name="unset_env", code_mode_only=True)
 class UnsetEnv(BaseTool[UnsetEnvParams]):
-    """<!--zh: 删除持久化环境变量。默认删除个人 env 中的变量。-->
-    Delete a persistent environment variable. Defaults to personal env."""
-
-    code_mode_only = True
+    """Delete a persistent environment variable. Defaults to personal env."""
 
     async def execute(self, tool_context: ToolContext, params: UnsetEnvParams) -> ToolResult:
         try:

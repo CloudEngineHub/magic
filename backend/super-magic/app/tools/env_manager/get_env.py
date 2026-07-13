@@ -25,22 +25,17 @@ from .service import SCOPE_ALL, EnvManagerError, EnvManagerService
 class GetEnvParams(BaseToolParams):
     key: Optional[str] = Field(
         None,
-        description="""<!--zh: 要查询的环境变量名。-->
-Environment variable name to query.""",
+        description="Environment variable name to query.",
     )
     scope: str = Field(
         SCOPE_ALL,
-        description="""<!--zh: 查询范围，personal、workspace 或 all，默认 all。-->
-Query scope: personal, workspace, or all. Defaults to all.""",
+        description="Query scope: personal, workspace, or all. Defaults to all.",
     )
 
 
-@tool(name="get_env")
+@tool(name="get_env", code_mode_only=True)
 class GetEnv(BaseTool[GetEnvParams]):
-    """<!--zh: 查询单个持久化环境变量，值会脱敏。-->
-    Query one persisted environment variable with its masked value."""
-
-    code_mode_only = True
+    """Query one persisted environment variable with its masked value."""
 
     async def execute(self, tool_context: ToolContext, params: GetEnvParams) -> ToolResult:
         try:

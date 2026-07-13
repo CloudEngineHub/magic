@@ -13,18 +13,15 @@ from app.tools.oauth2._api_docs import BaseOAuth2ApiDocTool
 
 
 class OAuth2GetApiDocParams(BaseToolParams):
-    """获取单个 OAuth2 接口文档的参数。"""
+    """Parameters for reading one OAuth2 API document."""
 
-    app_name: str = Field(..., description="""<!--zh: 已注册的 OAuth2 app_name。-->
-Registered OAuth2 app name.""")
-    operation_id: str = Field(..., description="""<!--zh: 要获取的 OpenAPI operationId。-->
-OpenAPI operationId to fetch.""")
+    app_name: str = Field(..., description="Registered OAuth2 app name.")
+    operation_id: str = Field(..., description="OpenAPI operationId to fetch.")
 
 
 @tool(name="oauth2_get_api_doc")
 class OAuth2GetApiDoc(BaseOAuth2ApiDocTool[OAuth2GetApiDocParams]):
-    """<!--zh: 根据 operationId 获取某个 OAuth2 app 的业务接口文档。-->
-    Get recorded business API documentation by operationId."""
+    """Get recorded OAuth2 API documentation by operationId."""
 
     name = "oauth2_get_api_doc"
 

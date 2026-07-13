@@ -25,27 +25,21 @@ from .service import SCOPE_PERSONAL, EnvManagerError, EnvManagerService
 class SetEnvParams(BaseToolParams):
     key: Optional[str] = Field(
         None,
-        description="""<!--zh: 环境变量名-->
-Environment variable name""",
+        description="Environment variable name.",
     )
     value: Optional[str] = Field(
         None,
-        description="""<!--zh: 环境变量值。工具结果和详情不会回显该值。-->
-Environment variable value. The tool result and detail never echo this value.""",
+        description="Environment variable value. Tool results and details never echo it.",
     )
     scope: str = Field(
         SCOPE_PERSONAL,
-        description="""<!--zh: 保存范围，personal 或 workspace，默认 personal-->
-Save scope: personal or workspace. Defaults to personal.""",
+        description="Save scope: personal or workspace. Defaults to personal.",
     )
 
 
-@tool(name="set_env")
+@tool(name="set_env", code_mode_only=True)
 class SetEnv(BaseTool[SetEnvParams]):
-    """<!--zh: 保存持久化环境变量。默认写入个人 env。-->
-    Save a persistent environment variable. Defaults to personal env."""
-
-    code_mode_only = True
+    """Save a persistent environment variable. Defaults to personal env."""
 
     async def execute(self, tool_context: ToolContext, params: SetEnvParams) -> ToolResult:
         try:

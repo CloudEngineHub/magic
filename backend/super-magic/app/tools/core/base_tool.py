@@ -57,6 +57,7 @@ class BaseTool(Generic[T], ABC):
     name: ClassVar[str] = ""
     description: ClassVar[str] = ""
     params_class: ClassVar[Type[T]] = None
+    # 实例运行时默认值；工具注册策略由 @tool 写入私有注册元数据。
     code_mode_only: ClassVar[bool] = False
 
     # 配置项
@@ -111,6 +112,13 @@ class BaseTool(Generic[T], ABC):
         在子类定义时自动执行，确定最终的类级别元数据
         """
         super().__init_subclass__(**kwargs)
+
+        if "code_mode_only" in cls.__dict__:
+            raise TypeError(
+                f"{cls.__name__} declares 'code_mode_only' in the class body. "
+                "Use @tool(code_mode_only=True) instead."
+            )
+
         logger = get_logger(__name__)
 
         # 确保子类被标记为未注册

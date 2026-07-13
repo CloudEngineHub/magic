@@ -11,14 +11,12 @@ from app.tools.oauth2._base import BaseOAuth2Tool
 
 
 class OAuth2GetRedirectUriParams(BaseToolParams):
-    """获取 OAuth2 重定向 URI 的参数。"""
+    """Parameters for reading the OAuth2 redirect URI."""
 
 
 @tool(name="oauth2_get_redirect_uri")
 class OAuth2GetRedirectUri(BaseOAuth2Tool[OAuth2GetRedirectUriParams]):
-    """<!--zh: 获取需要配置到 OAuth2 平台侧的重定向 URI。仅在用户明确询问时调用。-->
-    Get the redirect URI that should be configured in the OAuth2 provider app settings.
-    Use only when the user explicitly asks for the redirect URI."""
+    """Get the provider-side OAuth2 redirect URI when the user requests it."""
 
     name = "oauth2_get_redirect_uri"
 

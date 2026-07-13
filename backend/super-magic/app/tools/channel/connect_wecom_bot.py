@@ -21,23 +21,17 @@ logger = get_logger(__name__)
 class ConnectWecomBotParams(BaseToolParams):
     bot_id: str = Field(
         ...,
-        description="""<!--zh: 企业微信后台获取的 AI Bot ID-->
-The WeCom AI Bot ID from the WeCom admin console.""",
+        description="WeCom AI Bot ID from the WeCom admin console.",
     )
     secret: str = Field(
         ...,
-        description="""<!--zh: 企业微信后台获取的 AI Bot Secret-->
-The WeCom AI Bot secret from the WeCom admin console.""",
+        description="WeCom AI Bot secret from the WeCom admin console.",
     )
 
 
-@tool()
+@tool(code_mode_only=True)
 class ConnectWecomBot(BaseTool[ConnectWecomBotParams]):
-    """<!--zh
-    建立企业微信 AI Bot WebSocket 长连接。仅供 SDK snippet 调用，不挂载到 LLM。
-    -->
-    Start the WeCom AI Bot WebSocket connection. Intended for SDK snippets only and not exposed as a normal LLM tool.
-    """
+    """Start the WeCom AI Bot WebSocket connection from an SDK snippet."""
 
     async def execute(self, tool_context: ToolContext, params: ConnectWecomBotParams) -> ToolResult:
         try:

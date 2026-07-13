@@ -60,27 +60,21 @@ from .path_utils import (
 class ExportDocumentMarkdownParams(BaseToolParams):
     input_path: str = Field(
         ...,
-        description="""<!--zh: 要导出为 Markdown 的文档绝对路径，不接受相对路径-->
-Absolute document path to export as Markdown. Relative paths are not accepted"""
+        description="Absolute document path to export as Markdown. Relative paths are not accepted."
     )
     output_dir: str = Field(
         ...,
-        description="""<!--zh: Markdown 导出产物的输出目录绝对路径-->
-Absolute output directory for Markdown export artifacts"""
+        description="Absolute output directory for Markdown export artifacts."
     )
     ranges: Optional[str] = Field(
         None,
-        description="""<!--zh: 可选范围表达式；为空表示导出整个文档-->
-Optional range expression. Omit to export the whole document"""
+        description="Optional range expression. Omit to export the whole document."
     )
 
 
-@tool()
+@tool(code_mode_only=True)
 class ExportDocumentMarkdown(AbstractFileTool[ExportDocumentMarkdownParams], WorkspaceTool[ExportDocumentMarkdownParams]):
-    """<!--zh: 将文档导出为 Markdown chunks，并按需生成合并版 Markdown 文件。-->
-    Export a document to Markdown chunks and an optional combined Markdown file."""
-
-    code_mode_only = True
+    """Export a document to Markdown chunks and an optional combined Markdown file."""
 
     async def execute(self, tool_context: ToolContext, params: ExportDocumentMarkdownParams) -> ToolResult:
         """Export selected or full document content as Markdown artifacts."""

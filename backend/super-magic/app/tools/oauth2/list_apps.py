@@ -13,13 +13,12 @@ from app.tools.oauth2._base import BaseOAuth2Tool
 
 
 class OAuth2ListAppsParams(BaseToolParams):
-    """列出 OAuth2 app 的参数。"""
+    """Parameters for listing OAuth2 apps."""
 
 
 @tool(name="oauth2_list_apps")
 class OAuth2ListApps(BaseOAuth2Tool[OAuth2ListAppsParams]):
-    """<!--zh: 列出当前已注册 OAuth2 app 及当前用户的授权状态。-->
-    List registered OAuth2 apps and their authorization status for the current user."""
+    """List registered OAuth2 apps and the current user's authorization status."""
 
     name = "oauth2_list_apps"
 

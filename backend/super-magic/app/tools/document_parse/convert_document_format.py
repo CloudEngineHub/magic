@@ -36,32 +36,25 @@ from .path_utils import (
 class ConvertDocumentFormatParams(BaseToolParams):
     input_path: str = Field(
         ...,
-        description="""<!--zh: 要转换的输入文档绝对路径，不接受相对路径-->
-Absolute input document path. Relative paths are not accepted"""
+        description="Absolute input document path. Relative paths are not accepted."
     )
     output_dir: str = Field(
         ...,
-        description="""<!--zh: 转换后文件输出目录的绝对路径，不接受相对路径-->
-Absolute directory for converted files. Relative paths are not accepted"""
+        description="Absolute directory for converted files. Relative paths are not accepted."
     )
     target_format: str = Field(
         ...,
-        description="""<!--zh: 目标格式，例如 pdf、png、docx、pptx、xlsx-->
-Target format, e.g. pdf, png, docx, pptx, xlsx"""
+        description="Target format, such as pdf, png, docx, pptx, or xlsx."
     )
     ranges: Optional[str] = Field(
         None,
-        description="""<!--zh: 可选页码范围，用于 PDF 页面渲染等场景-->
-Optional page range for PDF image rendering"""
+        description="Optional page range for PDF image rendering."
     )
 
 
-@tool()
+@tool(code_mode_only=True)
 class ConvertDocumentFormat(AbstractFileTool[ConvertDocumentFormatParams], WorkspaceTool[ConvertDocumentFormatParams]):
-    """<!--zh: 只做文档格式转换，不做语义提取、索引或总结。-->
-    Convert document formats without semantic extraction."""
-
-    code_mode_only = True
+    """Convert document formats without semantic extraction, indexing, or summarization."""
 
     async def execute(self, tool_context: ToolContext, params: ConvertDocumentFormatParams) -> ToolResult:
         """Convert the source file into the requested output format."""

@@ -31,78 +31,60 @@ _BLOCKED_HEADER_NAMES = {
 
 
 class OAuth2RequestAuthParams(BaseModel):
-    """OAuth2 请求认证头注入参数。"""
+    """OAuth2 access-token injection settings."""
 
     type: Literal["bearer", "header"] = Field(
         "bearer",
-        description="""<!--zh: token 注入方式。bearer 表示 Authorization: Bearer <token>；header 表示自定义头。-->
-OAuth2 token injection mode. bearer uses Authorization: Bearer <token>; header uses a custom header.""",
+        description="Token injection mode: bearer Authorization or a custom header.",
     )
     header_name: str = Field(
         "Authorization",
-        description="""<!--zh: 自定义 token 请求头名称。type=header 时常用于 Access-Token 等平台约定。-->
-Header name used to send the OAuth2 access token. Common custom value: Access-Token.""",
+        description="Header name used when type='header', such as Access-Token.",
     )
     prefix: str = Field(
         "Bearer ",
-        description="""<!--zh: token 前缀。type=header 时可传空字符串。-->
-Prefix prepended to the access token. Use an empty string for raw-token headers.""",
+        description="Token prefix. Use an empty string for raw-token headers.",
     )
 
 
 class OAuth2RequestParams(BaseToolParams):
-    """OAuth2 HTTP 请求参数。"""
+    """Parameters for an OAuth2-authenticated HTTP request."""
 
-    app_name: str = Field(..., description="""<!--zh: 已完成授权的 OAuth2 app_name。-->
-Authorized OAuth2 app name.""")
+    app_name: str = Field(..., description="Authorized OAuth2 app name.")
     method: Literal["GET", "POST", "PUT", "PATCH", "DELETE"] = Field(
         "GET",
-        description="""<!--zh: HTTP 请求方法。-->
-HTTP request method.""",
+        description="HTTP request method.",
     )
-    url: str = Field(..., description="""<!--zh: 要请求的业务 API URL。必须来自用户或平台文档。-->
-Business API URL from the user's provider docs.""")
+    url: str = Field(..., description="Business API URL from the user or provider documentation.")
     headers: Optional[Dict[str, str]] = Field(
         None,
-        description="""<!--zh: 业务请求头。不要传 Authorization、Access-Token 等认证头，工具会自动注入。-->
-Business headers. Do not include OAuth2 authorization headers; this tool injects them.""",
+        description="Business headers. Do not include OAuth2 authorization headers.",
     )
     query: Optional[Dict[str, Any]] = Field(
         None,
-        description="""<!--zh: URL query 参数。-->
-URL query parameters.""",
+        description="URL query parameters.",
     )
     json_body: Optional[Any] = Field(
         None,
-        description="""<!--zh: JSON 请求体。和 form_body 二选一。-->
-JSON request body. Mutually exclusive with form_body.""",
+        description="JSON request body. Mutually exclusive with form_body.",
     )
     form_body: Optional[Dict[str, Any]] = Field(
         None,
-        description="""<!--zh: 表单请求体。和 json_body 二选一。-->
-Form request body. Mutually exclusive with json_body.""",
+        description="Form request body. Mutually exclusive with json_body.",
     )
     auth: Optional[OAuth2RequestAuthParams] = Field(
         None,
-        description="""<!--zh: OAuth2 access token 的注入方式。不填默认 Authorization: Bearer <token>。-->
-OAuth2 access token injection settings. Defaults to Authorization: Bearer <token>.""",
+        description="Token injection settings. Defaults to Authorization: Bearer <token>.",
     )
     timeout: int = Field(
         _DEFAULT_TIMEOUT_SECONDS,
-        description="""<!--zh: 请求超时秒数，最大 120。-->
-Request timeout in seconds. Maximum 120.""",
+        description="Request timeout in seconds. Maximum 120.",
     )
 
 
 @tool(name="oauth2_request")
 class OAuth2Request(BaseOAuth2Tool[OAuth2RequestParams]):
-    """<!--zh
-    使用已授权 OAuth2 app 的 access token 发起业务 HTTP 请求，并在前端展示请求详情。
-    仅作为可视化 HTTP transport；复杂或暂不支持的场景仍可使用 sdk.oauth2.get_access_token 自行请求。
-    -->
-    Make an HTTP request with an OAuth2 access token and render a visible tool result.
-    This is a transport helper, not an API registry; use sdk.oauth2.get_access_token as fallback for unsupported cases.
-    """
+    """Send an HTTP request with an OAuth2 access token and show the request details."""
 
     name = "oauth2_request"
 

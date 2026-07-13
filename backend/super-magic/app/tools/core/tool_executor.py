@@ -105,7 +105,7 @@ class ToolExecutor:
                 return result
 
             # CodeModeOnly 工具只作为 sdk.tool.call 的执行底座；误挂到 agent tools 时在执行层兜底拦截
-            if getattr(tool_instance, "code_mode_only", False) and not tool_context.get_extension("is_code_mode"):
+            if tool_factory.is_code_mode_only_tool(tool_name) and not tool_context.get_extension("is_code_mode"):
                 result = ToolResult.error(
                     f"Tool '{tool_name}' is Code Mode only. "
                     f"Call it from Code Mode via sdk.tool.call().",
@@ -290,16 +290,12 @@ class ToolExecutor:
             # 如果设置了特定工具列表，使用工具实例的名称
             tool_names = [tool.get_effective_name() for tool in self._tools]
         else:
-            # 否则获取所有已注册的工具名称
-            tool_names = tool_factory.get_tool_names()
+            # 否则获取所有可直接挂载的工具名称
+            tool_names = tool_factory.get_llm_direct_tool_names()
 
         for tool_name in tool_names:
-            if tool_factory.is_code_mode_only_tool(tool_name):
-                logger.debug(f"跳过 CodeModeOnly 工具参数: {tool_name}")
-                continue
-
             # 优先从预构建定义获取参数，必要时由工具工厂回退到运行时实例
-            tool_param = tool_factory.get_tool_param_from_definition(tool_name)
+            tool_param = tool_factory.get_llm_direct_tool_param_from_definition(tool_name)
 
             if tool_param:
                 schemas.append(tool_param)

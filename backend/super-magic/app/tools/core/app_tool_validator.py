@@ -4,7 +4,7 @@
 提供 ToolValidatorProtocol 的具体实现，处理工具存在性和可用性验证
 """
 
-from typing import Dict
+from typing import Dict, List
 
 from agentlang.logger import get_logger
 from agentlang.tools.validator import ToolValidatorProtocol
@@ -49,6 +49,25 @@ class AppToolValidator(ToolValidatorProtocol):
                     remapped[new_name] = tool_config
             else:
                 remapped[tool_name] = tool_config
+
+        code_mode_only_tools: List[str] = []
+        for tool_name in remapped:
+            if remote_tool_manager.is_remote_tool(tool_name):
+                continue
+
+            tool_info = tool_factory.get_tool(tool_name)
+            if tool_info is not None and tool_info.code_mode_only:
+                code_mode_only_tools.append(tool_name)
+
+        if code_mode_only_tools:
+            invalid_tools = ", ".join(
+                f"'{tool_name}'" for tool_name in sorted(code_mode_only_tools)
+            )
+            raise ValueError(
+                f"Code Mode Only tools cannot be declared in .agent tools: {invalid_tools}. "
+                "Remove them from the .agent tools list and call them through the corresponding "
+                "Skill with run_sdk_snippet + sdk.tool.call()."
+            )
 
         valid_tools = {}
 
