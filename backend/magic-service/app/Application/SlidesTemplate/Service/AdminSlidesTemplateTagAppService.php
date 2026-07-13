@@ -41,8 +41,6 @@ class AdminSlidesTemplateTagAppService extends AbstractKernelAppService
         $query->setCode($request->getCode());
         $query->setParentId($request->getParentId());
         $query->setNodeType($request->getNodeType());
-        $query->setUsageType($request->getUsageType());
-        $query->setIsVisible($request->getIsVisible());
         $query->setStatus($request->getStatus());
 
         $page = new Page($request->getPage(), $request->getPageSize());
@@ -61,6 +59,17 @@ class AdminSlidesTemplateTagAppService extends AbstractKernelAppService
         $this->assertOfficialOrganization($dataIsolation);
 
         return $this->slidesTemplateTagDomainService->findByIdOrFail($dataIsolation, $id);
+    }
+
+    /**
+     * @return SlidesTemplateTagEntity[]
+     */
+    public function tree(Authenticatable|BaseDataIsolation $authorization): array
+    {
+        $dataIsolation = $this->createSlidesTemplateDataIsolation($authorization);
+        $this->assertOfficialOrganization($dataIsolation);
+
+        return $this->slidesTemplateTagDomainService->queriesTree($dataIsolation);
     }
 
     public function create(Authenticatable|BaseDataIsolation $authorization, SaveSlidesTemplateTagRequest $request): SlidesTemplateTagEntity
@@ -148,12 +157,9 @@ class AdminSlidesTemplateTagAppService extends AbstractKernelAppService
         $tag = new SlidesTemplateTagEntity();
         $tag->setParentId($request->getParentId());
         $tag->setNodeType($request->getNodeType());
-        $tag->setUsageType($request->getUsageType());
         $tag->setCode($request->getCode());
         $tag->setNameI18n($request->getNameI18n());
         $tag->setDescriptionI18n($request->getDescriptionI18n());
-        $tag->setAliasesI18n($request->getAliasesI18n());
-        $tag->setIsVisible($request->isVisible());
         $tag->setStatus($request->getStatus());
         $tag->setSort($request->getSort());
         return $tag;

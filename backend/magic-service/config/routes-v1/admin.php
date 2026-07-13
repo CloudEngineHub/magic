@@ -173,6 +173,7 @@ Router::addGroup('/api/v1/admin', static function () {
 
     Router::addGroup('/slides-template-tags', static function () {
         Router::post('/queries', [AdminSlidesTemplateTagApi::class, 'queries']);
+        Router::get('/tree', [AdminSlidesTemplateTagApi::class, 'tree']);
         Router::get('/{id:\d+}', [AdminSlidesTemplateTagApi::class, 'detail']);
         Router::post('', [AdminSlidesTemplateTagApi::class, 'create']);
         Router::put('/{id:\d+}', [AdminSlidesTemplateTagApi::class, 'update']);

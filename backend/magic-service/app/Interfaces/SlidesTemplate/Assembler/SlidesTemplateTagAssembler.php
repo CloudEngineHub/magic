@@ -71,6 +71,27 @@ class SlidesTemplateTagAssembler
         }, $groups);
     }
 
+    /**
+     * @param SlidesTemplateTagEntity[] $groups
+     */
+    public static function createAdminTreeDTO(array $groups): array
+    {
+        return array_map(static function (SlidesTemplateTagEntity $group): array {
+            $item = self::createAdminItemDTO($group)->toArray();
+            unset($item['template_count']);
+            $item['children'] = array_map(
+                static function (SlidesTemplateTagEntity $tag): array {
+                    $child = self::createAdminItemDTO($tag)->toArray();
+                    unset($child['template_count']);
+                    return $child;
+                },
+                $group->getChildren()
+            );
+
+            return $item;
+        }, $groups);
+    }
+
     public static function createAdminItemDTO(SlidesTemplateTagEntity $tag): AdminSlidesTemplateTagItemDTO
     {
         $dto = new AdminSlidesTemplateTagItemDTO();
@@ -91,10 +112,7 @@ class SlidesTemplateTagAssembler
         $dto->setNameI18n(I18nTextDTO::fromArray($tag->getNameI18n()));
         $dto->setParentId($tag->getParentId());
         $dto->setNodeType($tag->getNodeType()->value);
-        $dto->setUsageType($tag->getUsageType()?->value);
         $dto->setDescriptionI18n(I18nTextDTO::fromArray($tag->getDescriptionI18n()));
-        $dto->setAliasesI18n($tag->getAliasesI18n());
-        $dto->setIsVisible($tag->isVisible());
         $dto->setSort($tag->getSort());
         $dto->setTemplateCount($tag->getTemplateCount());
         $dto->setIsOfficial(OfficialOrganizationUtil::isOfficialOrganization($tag->getOrganizationCode()));

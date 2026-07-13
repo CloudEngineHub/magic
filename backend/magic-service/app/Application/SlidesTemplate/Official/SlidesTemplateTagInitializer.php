@@ -60,6 +60,7 @@ class SlidesTemplateTagInitializer
 
             $tagRows = self::buildTagRows($officialOrgCode, $vocabulary['tags'], $groupIds, $now);
             self::upsertTagNodes($tagRows);
+            self::deleteObsoleteDetailNodes($officialOrgCode);
 
             Db::commit();
         } catch (Throwable $throwable) {
@@ -106,7 +107,7 @@ class SlidesTemplateTagInitializer
             return false;
         }
 
-        foreach (['parent_id', 'node_type', 'usage_type', 'description_i18n', 'aliases_i18n', 'is_visible'] as $column) {
+        foreach (['parent_id', 'node_type', 'description_i18n'] as $column) {
             if (! Schema::hasColumn('magic_slides_template_tags', $column)) {
                 return false;
             }
@@ -127,12 +128,9 @@ class SlidesTemplateTagInitializer
                 'organization_code' => $organizationCode,
                 'parent_id' => 0,
                 'node_type' => 'group',
-                'usage_type' => null,
                 'code' => $group['code'],
                 'name_i18n' => json_encode($group['name_i18n'], JSON_UNESCAPED_UNICODE),
                 'description_i18n' => json_encode([], JSON_UNESCAPED_UNICODE),
-                'aliases_i18n' => json_encode([], JSON_UNESCAPED_UNICODE),
-                'is_visible' => $group['is_visible'] ? 1 : 0,
                 'status' => 1,
                 'sort' => $group['sort'],
                 'created_uid' => self::SYSTEM_UID,
@@ -165,12 +163,9 @@ class SlidesTemplateTagInitializer
                 'organization_code' => $organizationCode,
                 'parent_id' => $groupId,
                 'node_type' => 'tag',
-                'usage_type' => $tag['usage_type'],
                 'code' => $tag['code'],
                 'name_i18n' => json_encode($tag['name_i18n'], JSON_UNESCAPED_UNICODE),
                 'description_i18n' => json_encode([], JSON_UNESCAPED_UNICODE),
-                'aliases_i18n' => json_encode([], JSON_UNESCAPED_UNICODE),
-                'is_visible' => $tag['is_visible'] ? 1 : 0,
                 'status' => 1,
                 'sort' => $tag['sort'],
                 'created_uid' => self::SYSTEM_UID,
@@ -197,11 +192,8 @@ class SlidesTemplateTagInitializer
                     'organization_code',
                     'parent_id',
                     'node_type',
-                    'usage_type',
                     'name_i18n',
                     'description_i18n',
-                    'aliases_i18n',
-                    'is_visible',
                     'status',
                     'sort',
                     'updated_uid',
@@ -209,6 +201,34 @@ class SlidesTemplateTagInitializer
                     'deleted_at',
                 ]
             );
+        }
+    }
+
+    private static function deleteObsoleteDetailNodes(string $organizationCode): void
+    {
+        $rows = Db::table('magic_slides_template_tags')
+            ->where('organization_code', $organizationCode)
+            ->where(static function ($query): void {
+                $query->where('code', 'like', 'detail-%')
+                    ->orWhere(static function ($query): void {
+                        $query->where('node_type', 'group')
+                            ->where('code', 'like', '%detail%');
+                    });
+            })
+            ->get(['id']);
+
+        $ids = [];
+        foreach ($rows as $row) {
+            $ids[] = (int) ((array) $row)['id'];
+        }
+
+        foreach (array_chunk($ids, 200) as $chunk) {
+            Db::table('magic_slides_template_tag_relations')
+                ->whereIn('tag_id', $chunk)
+                ->delete();
+            Db::table('magic_slides_template_tags')
+                ->whereIn('id', $chunk)
+                ->delete();
         }
     }
 

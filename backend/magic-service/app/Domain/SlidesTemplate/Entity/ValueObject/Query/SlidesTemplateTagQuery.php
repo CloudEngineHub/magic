@@ -21,10 +21,6 @@ class SlidesTemplateTagQuery
 
     private ?string $nodeType = null;
 
-    private ?string $usageType = null;
-
-    private ?bool $isVisible = null;
-
     private bool $onlyWithTemplates = false;
 
     private ?string $templateKeyword = null;
@@ -86,27 +82,6 @@ class SlidesTemplateTagQuery
     {
         $nodeType = trim((string) $nodeType);
         $this->nodeType = $nodeType === '' ? null : $nodeType;
-    }
-
-    public function getUsageType(): ?string
-    {
-        return $this->usageType;
-    }
-
-    public function setUsageType(?string $usageType): void
-    {
-        $usageType = trim((string) $usageType);
-        $this->usageType = $usageType === '' ? null : $usageType;
-    }
-
-    public function getIsVisible(): ?bool
-    {
-        return $this->isVisible;
-    }
-
-    public function setIsVisible(null|bool|int|string $isVisible): void
-    {
-        $this->isVisible = $isVisible === null || $isVisible === '' ? null : (bool) $isVisible;
     }
 
     public function isOnlyWithTemplates(): bool

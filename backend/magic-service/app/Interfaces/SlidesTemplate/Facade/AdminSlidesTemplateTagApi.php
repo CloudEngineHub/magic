@@ -49,6 +49,14 @@ class AdminSlidesTemplateTagApi extends AbstractApi
         return SlidesTemplateTagAssembler::createAdminItemDTO($tag)->toArray();
     }
 
+    #[CheckPermission([MagicResourceEnum::PLATFORM_SLIDES_TEMPLATE], MagicOperationEnum::QUERY)]
+    public function tree(): array
+    {
+        return SlidesTemplateTagAssembler::createAdminTreeDTO(
+            $this->adminSlidesTemplateTagAppService->tree($this->getAuthorization())
+        );
+    }
+
     #[CheckPermission([MagicResourceEnum::PLATFORM_SLIDES_TEMPLATE], MagicOperationEnum::EDIT)]
     public function create(SaveSlidesTemplateTagRequest $request): array
     {

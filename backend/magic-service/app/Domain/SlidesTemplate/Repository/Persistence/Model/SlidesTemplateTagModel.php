@@ -16,12 +16,9 @@ use Hyperf\Database\Model\SoftDeletes;
  * @property string $organization_code
  * @property int $parent_id
  * @property string $node_type
- * @property null|string $usage_type
  * @property string $code
  * @property array $name_i18n
  * @property array $description_i18n
- * @property array $aliases_i18n
- * @property int $is_visible
  * @property int $status
  * @property int $sort
  * @property null|string $created_uid
@@ -42,12 +39,9 @@ class SlidesTemplateTagModel extends AbstractModel
         'organization_code',
         'parent_id',
         'node_type',
-        'usage_type',
         'code',
         'name_i18n',
         'description_i18n',
-        'aliases_i18n',
-        'is_visible',
         'status',
         'sort',
         'created_uid',
@@ -59,8 +53,6 @@ class SlidesTemplateTagModel extends AbstractModel
         'parent_id' => 'integer',
         'name_i18n' => 'array',
         'description_i18n' => 'array',
-        'aliases_i18n' => 'array',
-        'is_visible' => 'integer',
         'status' => 'integer',
         'sort' => 'integer',
         'created_at' => 'datetime',

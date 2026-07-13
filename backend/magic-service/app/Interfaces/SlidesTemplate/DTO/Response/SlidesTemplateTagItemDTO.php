@@ -21,13 +21,7 @@ class SlidesTemplateTagItemDTO extends AbstractDTO
 
     public string $nodeType = 'tag';
 
-    public ?string $usageType = 'filter';
-
     public I18nTextDTO $descriptionI18n;
-
-    public array $aliasesI18n = [];
-
-    public bool $isVisible = true;
 
     public int $sort = 0;
 
@@ -92,16 +86,6 @@ class SlidesTemplateTagItemDTO extends AbstractDTO
         $this->nodeType = $nodeType ?? 'tag';
     }
 
-    public function getUsageType(): ?string
-    {
-        return $this->usageType;
-    }
-
-    public function setUsageType(?string $usageType): void
-    {
-        $this->usageType = $usageType;
-    }
-
     public function getDescriptionI18n(): I18nTextDTO
     {
         return $this->descriptionI18n;
@@ -110,26 +94,6 @@ class SlidesTemplateTagItemDTO extends AbstractDTO
     public function setDescriptionI18n(null|array|I18nTextDTO $descriptionI18n): void
     {
         $this->descriptionI18n = $descriptionI18n instanceof I18nTextDTO ? $descriptionI18n : I18nTextDTO::fromArray($descriptionI18n ?? []);
-    }
-
-    public function getAliasesI18n(): array
-    {
-        return $this->aliasesI18n;
-    }
-
-    public function setAliasesI18n(?array $aliasesI18n): void
-    {
-        $this->aliasesI18n = $aliasesI18n ?? [];
-    }
-
-    public function isVisible(): bool
-    {
-        return $this->isVisible;
-    }
-
-    public function setIsVisible(null|bool|int|string $isVisible): void
-    {
-        $this->isVisible = (bool) ($isVisible ?? true);
     }
 
     public function getSort(): int

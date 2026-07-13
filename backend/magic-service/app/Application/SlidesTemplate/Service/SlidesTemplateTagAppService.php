@@ -36,8 +36,6 @@ class SlidesTemplateTagAppService extends AbstractKernelAppService
         $query = new SlidesTemplateTagQuery();
         $query->setStatus(SlidesTemplateTagStatus::Enabled->value);
         $query->setNodeType('tag');
-        $query->setUsageType('filter');
-        $query->setIsVisible(true);
         $query->setOnlyWithTemplates(true);
         $query->setTemplateKeyword($request->getKeyword());
         $query->setTemplateCategoryCode($request->getCategoryCode());

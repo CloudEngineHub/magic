@@ -13,7 +13,6 @@ use App\Domain\SlidesTemplate\Entity\SlidesTemplateTagEntity;
 use App\Domain\SlidesTemplate\Entity\ValueObject\Query\SlidesTemplateTagQuery;
 use App\Domain\SlidesTemplate\Entity\ValueObject\SlidesTemplateTagNodeType;
 use App\Domain\SlidesTemplate\Entity\ValueObject\SlidesTemplateTagStatus;
-use App\Domain\SlidesTemplate\Entity\ValueObject\SlidesTemplateTagUsageType;
 use App\Domain\SlidesTemplate\Repository\Facade\SlidesTemplateTagRelationRepositoryInterface;
 use App\Domain\SlidesTemplate\Repository\Facade\SlidesTemplateTagRepositoryInterface;
 use App\ErrorCode\SlidesTemplateErrorCode;
@@ -55,6 +54,14 @@ class SlidesTemplateTagDomainService
         return $this->slidesTemplateTagRepository->queriesVisibleGroupsWithTagsByCategory($dataIsolation, $categoryCode);
     }
 
+    /**
+     * @return SlidesTemplateTagEntity[]
+     */
+    public function queriesTree(SlidesTemplateDataIsolation $dataIsolation): array
+    {
+        return $this->slidesTemplateTagRepository->queriesTree($dataIsolation);
+    }
+
     public function create(SlidesTemplateDataIsolation $dataIsolation, SlidesTemplateTagEntity $entity): SlidesTemplateTagEntity
     {
         $this->assertTagStructure($dataIsolation, $entity);
@@ -72,7 +79,11 @@ class SlidesTemplateTagDomainService
 
     public function update(SlidesTemplateDataIsolation $dataIsolation, SlidesTemplateTagEntity $entity): SlidesTemplateTagEntity
     {
-        $this->findByIdOrFail($dataIsolation, (string) $entity->getId());
+        $existing = $this->findByIdOrFail($dataIsolation, (string) $entity->getId());
+        if ($existing->getNodeType() !== $entity->getNodeType()) {
+            ExceptionBuilder::throw(SlidesTemplateErrorCode::TAG_STRUCTURE_INVALID);
+        }
+
         $this->assertTagStructure($dataIsolation, $entity);
         try {
             return $this->slidesTemplateTagRepository->save($dataIsolation, $entity);
@@ -100,6 +111,11 @@ class SlidesTemplateTagDomainService
 
     public function delete(SlidesTemplateDataIsolation $dataIsolation, int|string $id): void
     {
+        $entity = $this->findByIdOrFail($dataIsolation, $id);
+        if ($entity->isGroup() && $this->slidesTemplateTagRepository->existsByParentId($dataIsolation, (int) $entity->getId())) {
+            ExceptionBuilder::throw(SlidesTemplateErrorCode::TAG_STRUCTURE_INVALID);
+        }
+
         if (! $this->slidesTemplateTagRepository->delete($dataIsolation, $id)) {
             ExceptionBuilder::throw(SlidesTemplateErrorCode::TAG_NOT_FOUND);
         }
@@ -186,15 +202,14 @@ class SlidesTemplateTagDomainService
     private function assertTagStructure(SlidesTemplateDataIsolation $dataIsolation, SlidesTemplateTagEntity $entity): void
     {
         if ($entity->isGroup()) {
-            if ($entity->getParentId() !== 0 || $entity->getUsageType() !== null || ! str_ends_with($entity->getCode(), '_group')) {
+            if ($entity->getParentId() !== 0 || ! str_ends_with($entity->getCode(), '_group')) {
                 ExceptionBuilder::throw(SlidesTemplateErrorCode::TAG_STRUCTURE_INVALID);
             }
             return;
         }
 
         if ($entity->getNodeType() !== SlidesTemplateTagNodeType::Tag
-            || $entity->getParentId() <= 0
-            || ! $entity->getUsageType() instanceof SlidesTemplateTagUsageType) {
+            || $entity->getParentId() <= 0) {
             ExceptionBuilder::throw(SlidesTemplateErrorCode::TAG_STRUCTURE_INVALID);
         }
 
