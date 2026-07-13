@@ -131,6 +131,7 @@ class AdminSlidesTemplateAppService extends AbstractSlidesTemplateAppService
         $template->setCode($existing->getCode());
         $template->setSourceType($existing->getSourceType());
         $template->setColors($this->resolveUpdatedColors($dataIsolation, $existing, $template));
+        $template->setBaseUsageCount($existing->getBaseUsageCount());
         $template->setActualUsageCount($existing->getActualUsageCount());
         $template->setCreatedUid($existing->getCreatedUid());
         $template->setUpdatedUid($dataIsolation->getCurrentUserId());
@@ -232,7 +233,6 @@ class AdminSlidesTemplateAppService extends AbstractSlidesTemplateAppService
         $template->setPreviewUrl($request->getPreviewUrl());
         $template->setStatus($request->getStatus());
         $template->setSort($request->getSort());
-        $template->setBaseUsageCount($request->getBaseUsageCount());
         return $template;
     }
 

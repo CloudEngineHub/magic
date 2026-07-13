@@ -18,6 +18,8 @@ use App\Domain\SlidesTemplate\Repository\Persistence\Model\SlidesTemplateModel;
 use App\Infrastructure\Core\AbstractRepository;
 use App\Infrastructure\Core\ValueObject\Page;
 use App\Infrastructure\Util\IdGenerator\IdGenerator;
+use Hyperf\Database\Model\Builder;
+use Hyperf\DbConnection\Db;
 
 class SlidesTemplateRepository extends AbstractRepository implements SlidesTemplateRepositoryInterface
 {
@@ -48,28 +50,7 @@ class SlidesTemplateRepository extends AbstractRepository implements SlidesTempl
 
     public function queries(SlidesTemplateDataIsolation $dataIsolation, SlidesTemplateQuery $query, Page $page): array
     {
-        $builder = $this->createBuilder($dataIsolation, SlidesTemplateModel::query());
-
-        if ($query->getCode() !== null) {
-            $builder->where('code', $query->getCode());
-        }
-
-        if ($query->getCategoryCode() !== null) {
-            $builder->where('category_code', $query->getCategoryCode());
-        }
-
-        if ($query->getStatus() !== null) {
-            $builder->where('status', $query->getStatus());
-        }
-
-        if ($query->getKeyword() !== null) {
-            $keyword = mb_strtolower($query->getKeyword(), 'UTF-8');
-            $keywordLike = '%' . addcslashes($keyword, '\%_') . '%';
-            $builder->where('search_text', 'LIKE', $keywordLike);
-        }
-
-        $this->applyTagFilter($builder, $query);
-
+        $builder = $this->createQueryBuilder($dataIsolation, $query);
         $builder->orderBy('sort', 'desc')->orderBy('id', 'desc');
 
         $data = $this->getByPage($builder, $page);
@@ -81,6 +62,11 @@ class SlidesTemplateRepository extends AbstractRepository implements SlidesTempl
         $data['list'] = $list;
 
         return $data;
+    }
+
+    public function count(SlidesTemplateDataIsolation $dataIsolation, SlidesTemplateQuery $query): int
+    {
+        return $this->createQueryBuilder($dataIsolation, $query)->count();
     }
 
     public function save(SlidesTemplateDataIsolation $dataIsolation, SlidesTemplateEntity $entity): SlidesTemplateEntity
@@ -133,11 +119,62 @@ class SlidesTemplateRepository extends AbstractRepository implements SlidesTempl
             ]) > 0;
     }
 
-    public function incrementActualUsageCount(SlidesTemplateDataIsolation $dataIsolation, string $code): bool
+    public function incrementActualUsageCount(SlidesTemplateDataIsolation $dataIsolation, string $code, int $totalUsageIncrement): bool
     {
+        $totalUsageIncrement = max(1, $totalUsageIncrement);
+
         return $this->createBuilder($dataIsolation, SlidesTemplateModel::query())
             ->where('code', $code)
-            ->increment('actual_usage_count') > 0;
+            ->update([
+                'actual_usage_count' => Db::raw('actual_usage_count + 1'),
+                'total_usage_count' => Db::raw(sprintf('total_usage_count + %d', $totalUsageIncrement)),
+            ]) > 0;
+    }
+
+    public function updateBaseUsageCount(SlidesTemplateDataIsolation $dataIsolation, int|string $id, int $baseUsageCount, int $totalUsageCount, string $updatedUid): bool
+    {
+        return $this->createBuilder($dataIsolation, SlidesTemplateModel::query())
+            ->where('id', $id)
+            ->update([
+                'base_usage_count' => max(0, $baseUsageCount),
+                'total_usage_count' => max(0, $totalUsageCount),
+                'updated_uid' => $updatedUid,
+            ]) > 0;
+    }
+
+    /**
+     * @return SlidesTemplateEntity[]
+     */
+    public function findRankedForUsageCount(SlidesTemplateDataIsolation $dataIsolation, int $offset, int $limit): array
+    {
+        $models = $this->createBuilder($dataIsolation, SlidesTemplateModel::query())
+            ->orderBy('sort', 'desc')
+            ->orderBy('id', 'desc')
+            ->offset($offset)
+            ->limit($limit)
+            ->get();
+
+        $list = [];
+        foreach ($models as $model) {
+            /* @var SlidesTemplateModel $model */
+            $list[] = SlidesTemplateFactory::modelToEntity($model);
+        }
+        return $list;
+    }
+
+    public function countForUsageCount(SlidesTemplateDataIsolation $dataIsolation): int
+    {
+        return $this->createBuilder($dataIsolation, SlidesTemplateModel::query())->count();
+    }
+
+    public function updateUsageCounts(SlidesTemplateDataIsolation $dataIsolation, int|string $id, int $baseUsageCount, int $totalUsageCount): bool
+    {
+        return $this->createBuilder($dataIsolation, SlidesTemplateModel::query())
+            ->where('id', $id)
+            ->update([
+                'base_usage_count' => max(0, $baseUsageCount),
+                'total_usage_count' => max(0, $totalUsageCount),
+            ]) > 0;
     }
 
     public function delete(SlidesTemplateDataIsolation $dataIsolation, int|string $id): bool
@@ -157,6 +194,33 @@ class SlidesTemplateRepository extends AbstractRepository implements SlidesTempl
         $model = $builder->where('code', $code)->first();
 
         return $model instanceof SlidesTemplateModel ? $model : null;
+    }
+
+    private function createQueryBuilder(SlidesTemplateDataIsolation $dataIsolation, SlidesTemplateQuery $query): Builder
+    {
+        $builder = $this->createBuilder($dataIsolation, SlidesTemplateModel::query());
+
+        if ($query->getCode() !== null) {
+            $builder->where('code', $query->getCode());
+        }
+
+        if ($query->getCategoryCode() !== null) {
+            $builder->where('category_code', $query->getCategoryCode());
+        }
+
+        if ($query->getStatus() !== null) {
+            $builder->where('status', $query->getStatus());
+        }
+
+        if ($query->getKeyword() !== null) {
+            $keyword = mb_strtolower($query->getKeyword(), 'UTF-8');
+            $keywordLike = '%' . addcslashes($keyword, '\%_') . '%';
+            $builder->where('search_text', 'LIKE', $keywordLike);
+        }
+
+        $this->applyTagFilter($builder, $query);
+
+        return $builder;
     }
 
     private function applyTagFilter($builder, SlidesTemplateQuery $query): void

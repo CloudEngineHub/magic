@@ -12,6 +12,7 @@ use App\Domain\SlidesTemplate\Entity\SlidesTemplateEntity;
 use App\Domain\SlidesTemplate\Entity\ValueObject\Query\SlidesTemplateQuery;
 use App\Domain\SlidesTemplate\Entity\ValueObject\SlidesTemplateStatus;
 use App\Domain\SlidesTemplate\Repository\Facade\SlidesTemplateRepositoryInterface;
+use App\Domain\SlidesTemplate\Service\UsageCount\SlidesTemplateUsageCountPolicyInterface;
 use App\ErrorCode\SlidesTemplateErrorCode;
 use App\Infrastructure\Core\Exception\ExceptionBuilder;
 use App\Infrastructure\Core\ValueObject\Page;
@@ -22,6 +23,7 @@ class SlidesTemplateDomainService
 {
     public function __construct(
         private readonly SlidesTemplateRepositoryInterface $slidesTemplateRepository,
+        private readonly SlidesTemplateUsageCountPolicyInterface $usageCountPolicy,
     ) {
     }
 
@@ -51,11 +53,20 @@ class SlidesTemplateDomainService
         return $this->slidesTemplateRepository->queries($dataIsolation, $query, $page);
     }
 
+    public function count(SlidesTemplateDataIsolation $dataIsolation, SlidesTemplateQuery $query): int
+    {
+        return $this->slidesTemplateRepository->count($dataIsolation, $query);
+    }
+
     public function create(SlidesTemplateDataIsolation $dataIsolation, SlidesTemplateEntity $entity): SlidesTemplateEntity
     {
         $this->prepareRestoreDeletedTemplate($dataIsolation, $entity);
 
         $this->refreshSearchText($entity);
+        $entity->setTotalUsageCount($this->usageCountPolicy->calculateTotalUsageCount(
+            $entity->getBaseUsageCount(),
+            $entity->getActualUsageCount()
+        ));
         try {
             return $this->slidesTemplateRepository->save($dataIsolation, $entity);
         } catch (Throwable $throwable) {
@@ -71,6 +82,10 @@ class SlidesTemplateDomainService
     {
         $this->findByIdOrFail($dataIsolation, (string) $entity->getId());
         $this->refreshSearchText($entity);
+        $entity->setTotalUsageCount($this->usageCountPolicy->calculateTotalUsageCount(
+            $entity->getBaseUsageCount(),
+            $entity->getActualUsageCount()
+        ));
         return $this->slidesTemplateRepository->save($dataIsolation, $entity);
     }
 
@@ -90,7 +105,11 @@ class SlidesTemplateDomainService
 
     public function incrementActualUsageCount(SlidesTemplateDataIsolation $dataIsolation, string $code): void
     {
-        $this->slidesTemplateRepository->incrementActualUsageCount($dataIsolation, $code);
+        $this->slidesTemplateRepository->incrementActualUsageCount(
+            $dataIsolation,
+            $code,
+            $this->usageCountPolicy->getActualUsageIncrement()
+        );
     }
 
     public function delete(SlidesTemplateDataIsolation $dataIsolation, int|string $id): void

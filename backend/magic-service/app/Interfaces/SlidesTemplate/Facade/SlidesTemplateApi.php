@@ -27,13 +27,22 @@ class SlidesTemplateApi extends AbstractApi
         $request->validated();
         $result = $this->slidesTemplateAppService->queries($this->getAuthorization(), $request);
 
-        return SlidesTemplateAssembler::createPageDTO(
-            $result['list'],
-            $result['page'],
-            $result['total'],
-            false,
-            false
-        )->toArray();
+        return SlidesTemplateAssembler::createPublicListPageDTO($result['list'], $result['page'])->toArray();
+    }
+
+    public function count(PublicQuerySlidesTemplateRequest $request): array
+    {
+        $request->validated();
+        $total = $this->slidesTemplateAppService->count($this->getAuthorization(), $request);
+
+        return SlidesTemplateAssembler::createCountDTO($total)->toArray();
+    }
+
+    public function detail(string $code): array
+    {
+        $template = $this->slidesTemplateAppService->detail($this->getAuthorization(), $code);
+
+        return SlidesTemplateAssembler::createPublicDetailDTO($template)->toArray();
     }
 
     public function getFileUrl(GetSlidesTemplateFileUrlRequest $request, string $code): array

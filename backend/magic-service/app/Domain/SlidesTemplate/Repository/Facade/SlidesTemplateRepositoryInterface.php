@@ -25,13 +25,26 @@ interface SlidesTemplateRepositoryInterface
      */
     public function queries(SlidesTemplateDataIsolation $dataIsolation, SlidesTemplateQuery $query, Page $page): array;
 
+    public function count(SlidesTemplateDataIsolation $dataIsolation, SlidesTemplateQuery $query): int;
+
     public function save(SlidesTemplateDataIsolation $dataIsolation, SlidesTemplateEntity $entity): SlidesTemplateEntity;
 
     public function updateStatus(SlidesTemplateDataIsolation $dataIsolation, int|string $id, int $status, string $updatedUid): bool;
 
     public function updateSort(SlidesTemplateDataIsolation $dataIsolation, int|string $id, int $sort, string $updatedUid): bool;
 
-    public function incrementActualUsageCount(SlidesTemplateDataIsolation $dataIsolation, string $code): bool;
+    public function incrementActualUsageCount(SlidesTemplateDataIsolation $dataIsolation, string $code, int $totalUsageIncrement): bool;
+
+    public function updateBaseUsageCount(SlidesTemplateDataIsolation $dataIsolation, int|string $id, int $baseUsageCount, int $totalUsageCount, string $updatedUid): bool;
+
+    /**
+     * @return SlidesTemplateEntity[]
+     */
+    public function findRankedForUsageCount(SlidesTemplateDataIsolation $dataIsolation, int $offset, int $limit): array;
+
+    public function countForUsageCount(SlidesTemplateDataIsolation $dataIsolation): int;
+
+    public function updateUsageCounts(SlidesTemplateDataIsolation $dataIsolation, int|string $id, int $baseUsageCount, int $totalUsageCount): bool;
 
     public function delete(SlidesTemplateDataIsolation $dataIsolation, int|string $id): bool;
 }

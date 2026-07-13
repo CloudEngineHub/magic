@@ -33,6 +33,7 @@ class SlidesTemplateFactory
         $entity->setSort($model->sort);
         $entity->setBaseUsageCount($model->base_usage_count ?? 0);
         $entity->setActualUsageCount($model->actual_usage_count ?? 0);
+        $entity->setTotalUsageCount($model->total_usage_count ?? $entity->getBaseUsageCount() + $entity->getActualUsageCount());
         $entity->setCreatedUid($model->created_uid);
         $entity->setUpdatedUid($model->updated_uid);
         $entity->setCreatedAt($model->created_at?->toDateTimeString());

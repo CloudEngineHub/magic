@@ -15,6 +15,7 @@ use App\Domain\SlidesTemplate\Entity\SlidesTemplateEntity;
 use App\Domain\SlidesTemplate\Entity\ValueObject\Query\SlidesTemplateQuery;
 use App\Domain\SlidesTemplate\Entity\ValueObject\SlidesTemplateSourceType;
 use App\Domain\SlidesTemplate\Entity\ValueObject\SlidesTemplateStatus;
+use App\Domain\SlidesTemplate\Entity\ValueObject\SlidesTemplateTagStatus;
 use App\Domain\SlidesTemplate\Event\SlidesTemplateUsedEvent;
 use App\Domain\SlidesTemplate\Service\SlidesTemplateCategoryDomainService;
 use App\Domain\SlidesTemplate\Service\SlidesTemplateColorExtractor;
@@ -132,14 +133,14 @@ class SlidesTemplateAppServiceTest extends TestCase
                     && $actual->getOrganizationCodes() === ['CURRENT_ORG', 'OFFICIAL_ORG']),
                 $this->callback(static fn (SlidesTemplateQuery $query): bool => $query->getStatus() === SlidesTemplateStatus::Enabled->value
                     && $query->getCategoryCode() === 'PPT-CATE-business'),
-                $this->callback(static fn (Page $page): bool => $page->getPage() === 1 && $page->getPageNum() === 20)
+                $this->callback(static fn (Page $page): bool => $page->getPage() === 1 && $page->getPageNum() === 20 && ! $page->isTotal())
             )
-            ->willReturn(['total' => 0, 'list' => []]);
+            ->willReturn(['total' => -1, 'list' => []]);
 
         $service = new TestableSlidesTemplateAppService($domainService);
         $result = $service->queries($dataIsolation, $request);
 
-        $this->assertSame(0, $result['total']);
+        $this->assertArrayNotHasKey('total', $result);
         $this->assertSame([], $result['list']);
         $this->assertInstanceOf(Page::class, $result['page']);
         $this->assertSame(1, $result['page']->getPage());
@@ -186,7 +187,7 @@ class SlidesTemplateAppServiceTest extends TestCase
         ], $service->fileLinkCalls);
     }
 
-    public function testQueriesResolveImageAssetsFromPublicBucket(): void
+    public function testQueriesResolveOnlyThumbnailFromPublicBucket(): void
     {
         $dataIsolation = $this->makeDataIsolation('CURRENT_ORG', ['OFFICIAL_ORG']);
         $request = new TestPublicQuerySlidesTemplateRequest();
@@ -213,11 +214,74 @@ class SlidesTemplateAppServiceTest extends TestCase
 
         $this->assertSame([$template], $result['list']);
         $this->assertSame('https://public.example/OFFICIAL_ORG/slides/thumbnails/business.png', $template->getThumbnailUrl());
+        $this->assertNull($template->getCollageUrl());
+        $this->assertSame([], $template->getPreviewImageUrls());
+        $this->assertSame([
+            ['OFFICIAL_ORG', ['slides/thumbnails/business.png']],
+        ], $service->publicFileLinkCalls);
+        $this->assertSame([], $service->fileLinkCalls);
+    }
+
+    public function testCountUsesSamePublicQueryFilters(): void
+    {
+        $dataIsolation = $this->makeDataIsolation('CURRENT_ORG', ['OFFICIAL_ORG']);
+        $request = new TestPublicQuerySlidesTemplateRequest(categoryCode: 'PPT-CATE-business', keyword: 'report');
+
+        $domainService = $this->createMock(SlidesTemplateDomainService::class);
+        $domainService
+            ->expects($this->once())
+            ->method('count')
+            ->with(
+                $this->callback(static fn (SlidesTemplateDataIsolation $actual): bool => $actual->isContainOfficialOrganization()
+                    && $actual->getOrganizationCodes() === ['CURRENT_ORG', 'OFFICIAL_ORG']),
+                $this->callback(static fn (SlidesTemplateQuery $query): bool => $query->getStatus() === SlidesTemplateStatus::Enabled->value
+                    && $query->getCategoryCode() === 'PPT-CATE-business'
+                    && $query->getKeyword() === 'report')
+            )
+            ->willReturn(1780);
+
+        $service = new TestableSlidesTemplateAppService($domainService);
+
+        $this->assertSame(1780, $service->count($dataIsolation, $request));
+    }
+
+    public function testDetailResolvesPublicAssetsWithoutPrivateTemplateFileUrl(): void
+    {
+        $dataIsolation = $this->makeDataIsolation('CURRENT_ORG', ['OFFICIAL_ORG']);
+        $template = new SlidesTemplateEntity();
+        $template->setOrganizationCode('OFFICIAL_ORG')
+            ->setId(123)
+            ->setCode('PPT-65f2c8a42d7b0-123456')
+            ->setThumbnailFileKey('slides/thumbnails/business.png')
+            ->setCollageFileKey('slides/collages/business.png')
+            ->setPreviewImageFileKeys([
+                'slides/previews/business-1.png',
+                'slides/previews/business-2.png',
+            ])
+            ->setTemplateFileKey('slides/templates/business.zip');
+
+        $domainService = $this->createMock(SlidesTemplateDomainService::class);
+        $domainService
+            ->expects($this->once())
+            ->method('findEnabledByCodeOrFail')
+            ->with(
+                $this->callback(static fn (SlidesTemplateDataIsolation $actual): bool => $actual->isContainOfficialOrganization()
+                    && $actual->getOrganizationCodes() === ['CURRENT_ORG', 'OFFICIAL_ORG']),
+                'PPT-65f2c8a42d7b0-123456'
+            )
+            ->willReturn($template);
+
+        $service = new TestableSlidesTemplateAppService($domainService);
+        $result = $service->detail($dataIsolation, 'PPT-65f2c8a42d7b0-123456');
+
+        $this->assertSame($template, $result);
+        $this->assertSame('https://public.example/OFFICIAL_ORG/slides/thumbnails/business.png', $template->getThumbnailUrl());
         $this->assertSame('https://public.example/OFFICIAL_ORG/slides/collages/business.png', $template->getCollageUrl());
         $this->assertSame([
             'https://public.example/OFFICIAL_ORG/slides/previews/business-1.png',
             'https://public.example/OFFICIAL_ORG/slides/previews/business-2.png',
         ], $template->getPreviewImageUrls());
+        $this->assertNull($template->getTemplateFileUrl());
         $this->assertSame([
             ['OFFICIAL_ORG', [
                 'slides/thumbnails/business.png',
@@ -294,11 +358,10 @@ class SlidesTemplateAppServiceTest extends TestCase
         ]);
         $request->method('getThumbnailFileKey')->willReturn('');
         $request->method('getCollageFileKey')->willReturn(null);
-        $request->method('getTemplateFileKey')->willReturn('');
+        $request->method('getTemplateFileKey')->willReturn('slides/templates/business.zip');
         $request->method('getPreviewUrl')->willReturn(null);
         $request->method('getStatus')->willReturn(SlidesTemplateStatus::Enabled->value);
         $request->method('getSort')->willReturn(100);
-        $request->method('getBaseUsageCount')->willReturn(88);
 
         $capturedTemplate = null;
         $domainService = $this->createMock(SlidesTemplateDomainService::class);
@@ -323,7 +386,7 @@ class SlidesTemplateAppServiceTest extends TestCase
         $this->assertSame('user-1', $result->getCreatedUid());
         $this->assertSame('user-1', $result->getUpdatedUid());
         $this->assertSame(100, $result->getSort());
-        $this->assertSame(88, $result->getBaseUsageCount());
+        $this->assertSame(0, $result->getBaseUsageCount());
         $this->assertSame(0, $result->getActualUsageCount());
         $this->assertSame(SlidesTemplateSourceType::Custom, $result->getSourceType());
     }
@@ -343,7 +406,7 @@ class SlidesTemplateAppServiceTest extends TestCase
         ]);
         $request->method('getThumbnailFileKey')->willReturn('');
         $request->method('getCollageFileKey')->willReturn(null);
-        $request->method('getTemplateFileKey')->willReturn('');
+        $request->method('getTemplateFileKey')->willReturn('slides/templates/business.zip');
         $request->method('getPreviewUrl')->willReturn(null);
         $request->method('getStatus')->willReturn(SlidesTemplateStatus::Enabled->value);
         $request->method('getSort')->willReturn(100);
@@ -380,7 +443,7 @@ class SlidesTemplateAppServiceTest extends TestCase
         ]);
         $request->method('getThumbnailFileKey')->willReturn('');
         $request->method('getCollageFileKey')->willReturn(null);
-        $request->method('getTemplateFileKey')->willReturn('');
+        $request->method('getTemplateFileKey')->willReturn('slides/templates/business.zip');
         $request->method('getPreviewUrl')->willReturn(null);
         $request->method('getStatus')->willReturn(SlidesTemplateStatus::Enabled->value);
         $request->method('getSort')->willReturn(100);
@@ -462,7 +525,7 @@ class SlidesTemplateAppServiceTest extends TestCase
         $this->assertSame(['PPT-CATE-business'], $categoryDomainService->findByCodesCalls[0]['codes']);
     }
 
-    public function testAdminUpdateKeepsExistingSourceType(): void
+    public function testAdminUpdateKeepsExistingSourceTypeAndBaseUsageCount(): void
     {
         $dataIsolation = $this->makeDataIsolation('OFFICIAL_ORG', ['OFFICIAL_ORG']);
         $request = $this->createMock(SaveSlidesTemplateRequest::class);
@@ -476,17 +539,17 @@ class SlidesTemplateAppServiceTest extends TestCase
         ]);
         $request->method('getThumbnailFileKey')->willReturn('');
         $request->method('getCollageFileKey')->willReturn(null);
-        $request->method('getTemplateFileKey')->willReturn('');
+        $request->method('getTemplateFileKey')->willReturn('slides/templates/business.zip');
         $request->method('getPreviewUrl')->willReturn(null);
         $request->method('getStatus')->willReturn(SlidesTemplateStatus::Enabled->value);
         $request->method('getSort')->willReturn(100);
-        $request->method('getBaseUsageCount')->willReturn(66);
 
         $existing = new SlidesTemplateEntity();
         $existing->setId(123)
             ->setOrganizationCode('OFFICIAL_ORG')
             ->setCode('PPT-65f2c8a42d7b0-12345678')
             ->setSourceType(SlidesTemplateSourceType::System)
+            ->setBaseUsageCount(41)
             ->setActualUsageCount(9)
             ->setCreatedUid('system');
 
@@ -512,7 +575,7 @@ class SlidesTemplateAppServiceTest extends TestCase
         $this->assertSame(SlidesTemplateSourceType::System, $result->getSourceType());
         $this->assertSame('system', $result->getCreatedUid());
         $this->assertSame('user-1', $result->getUpdatedUid());
-        $this->assertSame(66, $result->getBaseUsageCount());
+        $this->assertSame(41, $result->getBaseUsageCount());
         $this->assertSame(9, $result->getActualUsageCount());
     }
 
@@ -534,7 +597,6 @@ class SlidesTemplateAppServiceTest extends TestCase
         $request->method('getPreviewUrl')->willReturn(null);
         $request->method('getStatus')->willReturn(SlidesTemplateStatus::Enabled->value);
         $request->method('getSort')->willReturn(100);
-        $request->method('getBaseUsageCount')->willReturn(0);
         $request->method('getTagCodes')->willReturn([]);
         $request->method('hasTagCodes')->willReturn(false);
 
@@ -568,7 +630,6 @@ class SlidesTemplateAppServiceTest extends TestCase
         $request->method('getPreviewUrl')->willReturn(null);
         $request->method('getStatus')->willReturn(SlidesTemplateStatus::Enabled->value);
         $request->method('getSort')->willReturn(100);
-        $request->method('getBaseUsageCount')->willReturn(66);
         $request->method('hasTagCodes')->willReturn(false);
 
         $existing = new SlidesTemplateEntity();
@@ -615,7 +676,6 @@ class SlidesTemplateAppServiceTest extends TestCase
         $request->method('getPreviewUrl')->willReturn(null);
         $request->method('getStatus')->willReturn(SlidesTemplateStatus::Enabled->value);
         $request->method('getSort')->willReturn(100);
-        $request->method('getBaseUsageCount')->willReturn(0);
         $request->method('getTagCodes')->willReturn([]);
         $request->method('hasTagCodes')->willReturn(false);
 
@@ -649,7 +709,6 @@ class SlidesTemplateAppServiceTest extends TestCase
         $request->method('getPreviewUrl')->willReturn(null);
         $request->method('getStatus')->willReturn(SlidesTemplateStatus::Enabled->value);
         $request->method('getSort')->willReturn(100);
-        $request->method('getBaseUsageCount')->willReturn(66);
         $request->method('hasTagCodes')->willReturn(false);
 
         $existing = new SlidesTemplateEntity();
@@ -734,6 +793,24 @@ class TestableSlidesTemplateAppService extends SlidesTemplateAppService
 
     public array $dispatchedEvents = [];
 
+    public function __construct(
+        SlidesTemplateDomainService $slidesTemplateDomainService,
+        ?SlidesTemplateTagDomainService $slidesTemplateTagDomainService = null,
+    ) {
+        parent::__construct(
+            $slidesTemplateDomainService,
+            $slidesTemplateTagDomainService ?? new class extends SlidesTemplateTagDomainService {
+                public function __construct()
+                {
+                }
+
+                public function fillTemplateTags(SlidesTemplateDataIsolation $dataIsolation, array $templates, ?SlidesTemplateTagStatus $tagStatus = null): void
+                {
+                }
+            }
+        );
+    }
+
     public function getPrivateFileLinks(string $organizationCode, array $fileLinks): array
     {
         $this->fileLinkCalls[] = [$organizationCode, $fileLinks];
@@ -799,6 +876,16 @@ class TestPublicQuerySlidesTemplateRequest extends PublicQuerySlidesTemplateRequ
     {
         return $this->pageSize;
     }
+
+    public function getTagCodes(): array
+    {
+        return [];
+    }
+
+    public function getTagMatch(): string
+    {
+        return 'any';
+    }
 }
 
 class TestAdminQuerySlidesTemplateRequest extends AdminQuerySlidesTemplateRequest
@@ -835,6 +922,16 @@ class TestAdminQuerySlidesTemplateRequest extends AdminQuerySlidesTemplateReques
     public function getStatus(): ?int
     {
         return null;
+    }
+
+    public function getTagCodes(): array
+    {
+        return [];
+    }
+
+    public function getTagMatch(): string
+    {
+        return 'any';
     }
 }
 

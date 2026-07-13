@@ -14,9 +14,11 @@ use App\Infrastructure\Core\ValueObject\Page;
 use App\Interfaces\SlidesTemplate\Assembler\SlidesTemplateAssembler;
 use App\Interfaces\SlidesTemplate\Assembler\SlidesTemplateCategoryAssembler;
 use App\Interfaces\SlidesTemplate\DTO\Response\AdminSlidesTemplateDetailDTO;
+use App\Interfaces\SlidesTemplate\DTO\Response\SlidesTemplateCountDTO;
 use App\Interfaces\SlidesTemplate\DTO\Response\SlidesTemplateFileUrlDTO;
-use App\Interfaces\SlidesTemplate\DTO\Response\SlidesTemplatePageDTO;
-use App\Interfaces\SlidesTemplate\DTO\Response\SlidesTemplatePublicItemDTO;
+use App\Interfaces\SlidesTemplate\DTO\Response\SlidesTemplateListPageDTO;
+use App\Interfaces\SlidesTemplate\DTO\Response\SlidesTemplatePublicDetailDTO;
+use App\Interfaces\SlidesTemplate\DTO\Response\SlidesTemplatePublicListItemDTO;
 use Hyperf\Codec\Packer\PhpSerializerPacker;
 use Hyperf\Context\ApplicationContext;
 use Hyperf\Contract\ConfigInterface;
@@ -87,14 +89,13 @@ class SlidesTemplateAssemblerTest extends TestCase
     {
         $template = $this->makeTemplate();
 
-        $dto = SlidesTemplateAssembler::createPageDTO([$template], new Page(2, 10), 1, false, false);
+        $dto = SlidesTemplateAssembler::createPublicListPageDTO([$template], new Page(2, 10));
 
-        $this->assertInstanceOf(SlidesTemplatePageDTO::class, $dto);
-        $this->assertInstanceOf(SlidesTemplatePublicItemDTO::class, $dto->getList()[0]);
+        $this->assertInstanceOf(SlidesTemplateListPageDTO::class, $dto);
+        $this->assertInstanceOf(SlidesTemplatePublicListItemDTO::class, $dto->getList()[0]);
         $this->assertSame([
             'page' => 2,
             'page_size' => 10,
-            'total' => 1,
             'list' => [[
                 'code' => 'PPT-65f2c8a42d7b0-12345678',
                 'source_type' => 'SYSTEM',
@@ -108,13 +109,52 @@ class SlidesTemplateAssemblerTest extends TestCase
                     'en_US' => 'For business reviews.',
                 ],
                 'thumbnail_url' => 'https://signed.example/thumb.png',
-                'collage_url' => 'https://signed.example/collage.png',
-                'preview_url' => 'https://www.letsmagic.cn/share/files/1',
                 'sort' => 100,
-                'usage_count' => 123,
+                'usage_count' => 215,
                 'is_official' => false,
+                'tags' => [],
             ]],
         ], $dto->toArray());
+    }
+
+    public function testCreatePublicDetailDTOReturnsPublicAssetsWithoutTemplateFileUrl(): void
+    {
+        $template = $this->makeTemplate();
+
+        $dto = SlidesTemplateAssembler::createPublicDetailDTO($template);
+
+        $this->assertInstanceOf(SlidesTemplatePublicDetailDTO::class, $dto);
+        $this->assertSame([
+            'code' => 'PPT-65f2c8a42d7b0-12345678',
+            'source_type' => 'SYSTEM',
+            'category_code' => 'PPT-CATE-business',
+            'label' => [
+                'zh_CN' => '职场白皮书',
+                'en_US' => 'Corporate Whitepaper',
+            ],
+            'description' => [
+                'zh_CN' => '适用于企业汇报。',
+                'en_US' => 'For business reviews.',
+            ],
+            'thumbnail_url' => 'https://signed.example/thumb.png',
+            'colors' => [],
+            'collage_url' => 'https://signed.example/collage.png',
+            'preview_image_urls' => [],
+            'preview_url' => 'https://www.letsmagic.cn/share/files/1',
+            'sort' => 100,
+            'usage_count' => 215,
+            'is_official' => false,
+            'tags' => [],
+        ], $dto->toArray());
+        $this->assertArrayNotHasKey('template_file_url', $dto->toArray());
+    }
+
+    public function testCreateCountDTO(): void
+    {
+        $dto = SlidesTemplateAssembler::createCountDTO(1780);
+
+        $this->assertInstanceOf(SlidesTemplateCountDTO::class, $dto);
+        $this->assertSame(['total' => 1780], $dto->toArray());
     }
 
     public function testCreateAdminDetailAndFileUrlDTO(): void
@@ -191,19 +231,24 @@ class SlidesTemplateAssemblerTest extends TestCase
             ],
             'thumbnail_file_key' => 'slides/thumb.png',
             'thumbnail_url' => 'https://signed.example/thumb.png',
+            'colors' => [],
             'collage_file_key' => 'slides/collage.png',
             'collage_url' => 'https://signed.example/collage.png',
+            'preview_image_file_keys' => [],
+            'preview_image_urls' => [],
             'template_file_key' => 'slides/template.zip',
             'preview_url' => 'https://www.letsmagic.cn/share/files/1',
             'status' => 1,
             'sort' => 100,
             'base_usage_count' => 100,
             'actual_usage_count' => 23,
-            'usage_count' => 123,
+            'total_usage_count' => 215,
+            'usage_count' => 215,
             'created_uid' => 'user-1',
             'updated_uid' => 'user-2',
             'created_at' => null,
             'updated_at' => null,
+            'tags' => [],
         ], $item);
     }
 
@@ -264,6 +309,7 @@ class SlidesTemplateAssemblerTest extends TestCase
             ->setSort(100)
             ->setBaseUsageCount(100)
             ->setActualUsageCount(23)
+            ->setTotalUsageCount(215)
             ->setCreatedUid('user-1')
             ->setUpdatedUid('user-2');
 

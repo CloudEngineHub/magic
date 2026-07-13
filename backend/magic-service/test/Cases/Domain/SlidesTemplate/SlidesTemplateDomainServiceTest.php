@@ -13,6 +13,7 @@ use App\Domain\SlidesTemplate\Entity\ValueObject\Query\SlidesTemplateQuery;
 use App\Domain\SlidesTemplate\Entity\ValueObject\SlidesTemplateSourceType;
 use App\Domain\SlidesTemplate\Repository\Facade\SlidesTemplateRepositoryInterface;
 use App\Domain\SlidesTemplate\Service\SlidesTemplateDomainService;
+use App\Domain\SlidesTemplate\Service\UsageCount\DefaultSlidesTemplateUsageCountPolicy;
 use App\ErrorCode\SlidesTemplateErrorCode;
 use App\Infrastructure\Core\Exception\BusinessException;
 use App\Infrastructure\Core\ValueObject\Page;
@@ -110,7 +111,7 @@ class SlidesTemplateDomainServiceTest extends TestCase
     public function testCreateBuildsSearchTextBeforeSaving(): void
     {
         $repository = new CapturingSlidesTemplateRepository();
-        $service = new SlidesTemplateDomainService($repository);
+        $service = $this->makeService($repository);
 
         $template = $this->makeTemplate();
         $service->create($this->makeDataIsolation(), $template);
@@ -125,7 +126,7 @@ class SlidesTemplateDomainServiceTest extends TestCase
     {
         $repository = new CapturingSlidesTemplateRepository();
         $repository->entityWithTrashed = $this->makeTemplate()->setId(123);
-        $service = new SlidesTemplateDomainService($repository);
+        $service = $this->makeService($repository);
 
         $this->expectException(BusinessException::class);
         $this->expectExceptionCode(SlidesTemplateErrorCode::CODE_ALREADY_EXISTS->value);
@@ -142,7 +143,7 @@ class SlidesTemplateDomainServiceTest extends TestCase
             ->setCreatedUid('old-user')
             ->setUpdatedUid('old-user')
             ->setDeletedAt('2026-07-01 10:00:00');
-        $service = new SlidesTemplateDomainService($repository);
+        $service = $this->makeService($repository);
 
         $template = $this->makeTemplate()
             ->setLabel([
@@ -169,7 +170,7 @@ class SlidesTemplateDomainServiceTest extends TestCase
     {
         $repository = new CapturingSlidesTemplateRepository();
         $repository->entityToFind = $this->makeTemplate()->setId(123);
-        $service = new SlidesTemplateDomainService($repository);
+        $service = $this->makeService($repository);
 
         $template = $this->makeTemplate()
             ->setId(123)
@@ -213,6 +214,11 @@ class SlidesTemplateDomainServiceTest extends TestCase
         $dataIsolation->setEnabled(true);
         return $dataIsolation;
     }
+
+    private function makeService(CapturingSlidesTemplateRepository $repository): SlidesTemplateDomainService
+    {
+        return new SlidesTemplateDomainService($repository, new DefaultSlidesTemplateUsageCountPolicy());
+    }
 }
 
 class CapturingSlidesTemplateRepository implements SlidesTemplateRepositoryInterface
@@ -243,6 +249,11 @@ class CapturingSlidesTemplateRepository implements SlidesTemplateRepositoryInter
         return ['total' => 0, 'list' => []];
     }
 
+    public function count(SlidesTemplateDataIsolation $dataIsolation, SlidesTemplateQuery $query): int
+    {
+        return 0;
+    }
+
     public function save(SlidesTemplateDataIsolation $dataIsolation, SlidesTemplateEntity $entity): SlidesTemplateEntity
     {
         $this->savedEntity = $entity;
@@ -259,7 +270,27 @@ class CapturingSlidesTemplateRepository implements SlidesTemplateRepositoryInter
         return true;
     }
 
-    public function incrementActualUsageCount(SlidesTemplateDataIsolation $dataIsolation, string $code): bool
+    public function incrementActualUsageCount(SlidesTemplateDataIsolation $dataIsolation, string $code, int $totalUsageIncrement): bool
+    {
+        return true;
+    }
+
+    public function updateBaseUsageCount(SlidesTemplateDataIsolation $dataIsolation, int|string $id, int $baseUsageCount, int $totalUsageCount, string $updatedUid): bool
+    {
+        return true;
+    }
+
+    public function findRankedForUsageCount(SlidesTemplateDataIsolation $dataIsolation, int $offset, int $limit): array
+    {
+        return [];
+    }
+
+    public function countForUsageCount(SlidesTemplateDataIsolation $dataIsolation): int
+    {
+        return 0;
+    }
+
+    public function updateUsageCounts(SlidesTemplateDataIsolation $dataIsolation, int|string $id, int $baseUsageCount, int $totalUsageCount): bool
     {
         return true;
     }

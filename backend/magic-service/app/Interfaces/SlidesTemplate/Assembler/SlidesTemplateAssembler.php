@@ -15,9 +15,13 @@ use App\Interfaces\SlidesTemplate\DTO\Response\AdminSlidesTemplateDetailDTO;
 use App\Interfaces\SlidesTemplate\DTO\Response\AdminSlidesTemplateItemDTO;
 use App\Interfaces\SlidesTemplate\DTO\Response\AdminSlidesTemplateListItemDTO;
 use App\Interfaces\SlidesTemplate\DTO\Response\I18nTextDTO;
+use App\Interfaces\SlidesTemplate\DTO\Response\SlidesTemplateCountDTO;
 use App\Interfaces\SlidesTemplate\DTO\Response\SlidesTemplateFileUrlDTO;
+use App\Interfaces\SlidesTemplate\DTO\Response\SlidesTemplateListPageDTO;
 use App\Interfaces\SlidesTemplate\DTO\Response\SlidesTemplatePageDTO;
+use App\Interfaces\SlidesTemplate\DTO\Response\SlidesTemplatePublicDetailDTO;
 use App\Interfaces\SlidesTemplate\DTO\Response\SlidesTemplatePublicItemDTO;
+use App\Interfaces\SlidesTemplate\DTO\Response\SlidesTemplatePublicListItemDTO;
 
 class SlidesTemplateAssembler
 {
@@ -78,6 +82,7 @@ class SlidesTemplateAssembler
         $dto->setSort($template->getSort());
         $dto->setBaseUsageCount($template->getBaseUsageCount());
         $dto->setActualUsageCount($template->getActualUsageCount());
+        $dto->setTotalUsageCount($template->getTotalUsageCount());
         $dto->setUsageCount($template->getUsageCount());
         $dto->setCreatedUid($template->getCreatedUid());
         $dto->setUpdatedUid($template->getUpdatedUid());
@@ -103,6 +108,65 @@ class SlidesTemplateAssembler
         }
 
         return new AdminSlidesTemplateDetailDTO();
+    }
+
+    /**
+     * @param SlidesTemplateEntity[] $templates
+     */
+    public static function createPublicListPageDTO(array $templates, Page $page): SlidesTemplateListPageDTO
+    {
+        return new SlidesTemplateListPageDTO(
+            $page->getPage(),
+            $page->getPageNum(),
+            array_map(static fn (SlidesTemplateEntity $template): SlidesTemplatePublicListItemDTO => self::createPublicListItemDTO($template), $templates)
+        );
+    }
+
+    public static function createPublicListItemDTO(SlidesTemplateEntity $template): SlidesTemplatePublicListItemDTO
+    {
+        $dto = new SlidesTemplatePublicListItemDTO();
+        $dto->setCode($template->getCode());
+        $dto->setSourceType($template->getSourceType()->value);
+        $dto->setCategoryCode($template->getCategoryCode());
+        $dto->setLabel(I18nTextDTO::fromArray($template->getLabel()));
+        $dto->setDescription(I18nTextDTO::fromArray($template->getDescription()));
+        $dto->setThumbnailUrl($template->getThumbnailUrl());
+        $dto->setSort($template->getSort());
+        $dto->setUsageCount($template->getUsageCount());
+        $dto->setIsOfficial(OfficialOrganizationUtil::isOfficialOrganization($template->getOrganizationCode()));
+        $dto->setTags(array_map(
+            static fn ($tag) => SlidesTemplateTagAssembler::createSimplePublicItemDTO($tag),
+            $template->getTags()
+        ));
+        return $dto;
+    }
+
+    public static function createPublicDetailDTO(SlidesTemplateEntity $template): SlidesTemplatePublicDetailDTO
+    {
+        $dto = new SlidesTemplatePublicDetailDTO();
+        $dto->setCode($template->getCode());
+        $dto->setSourceType($template->getSourceType()->value);
+        $dto->setCategoryCode($template->getCategoryCode());
+        $dto->setLabel(I18nTextDTO::fromArray($template->getLabel()));
+        $dto->setDescription(I18nTextDTO::fromArray($template->getDescription()));
+        $dto->setThumbnailUrl($template->getThumbnailUrl());
+        $dto->setColors($template->getColors());
+        $dto->setCollageUrl($template->getCollageUrl());
+        $dto->setPreviewImageUrls($template->getPreviewImageUrls());
+        $dto->setPreviewUrl($template->getPreviewUrl());
+        $dto->setSort($template->getSort());
+        $dto->setUsageCount($template->getUsageCount());
+        $dto->setIsOfficial(OfficialOrganizationUtil::isOfficialOrganization($template->getOrganizationCode()));
+        $dto->setTags(array_map(
+            static fn ($tag) => SlidesTemplateTagAssembler::createSimplePublicItemDTO($tag),
+            $template->getTags()
+        ));
+        return $dto;
+    }
+
+    public static function createCountDTO(int $total): SlidesTemplateCountDTO
+    {
+        return new SlidesTemplateCountDTO($total);
     }
 
     public static function createPublicItemDTO(SlidesTemplateEntity $template): SlidesTemplatePublicItemDTO

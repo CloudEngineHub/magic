@@ -37,7 +37,6 @@ class SaveSlidesTemplateRequest extends FormRequest
             'preview_url' => 'nullable|url|max:1024',
             'status' => 'nullable|integer|in:0,1',
             'sort' => 'nullable|integer',
-            'base_usage_count' => 'nullable|integer|min:0',
             'tag_codes' => 'nullable|array',
             'tag_codes.*' => 'string|max:64|regex:/^[a-z0-9]+(-[a-z0-9]+)*$/',
         ];
@@ -79,8 +78,6 @@ class SaveSlidesTemplateRequest extends FormRequest
             'preview_url.max' => __('slides_template.preview_url_max'),
             'status.in' => __('slides_template.status_in'),
             'sort.integer' => __('slides_template.sort_integer'),
-            'base_usage_count.integer' => __('slides_template.base_usage_count_integer'),
-            'base_usage_count.min' => __('slides_template.base_usage_count_min'),
             'tag_codes.array' => __('slides_template.tag_codes_array'),
             'tag_codes.*.string' => __('slides_template.tag_codes_string'),
             'tag_codes.*.max' => __('slides_template.tag_code_max'),
@@ -160,11 +157,6 @@ class SaveSlidesTemplateRequest extends FormRequest
     public function getSort(): int
     {
         return (int) $this->input('sort', 0);
-    }
-
-    public function getBaseUsageCount(): int
-    {
-        return (int) $this->input('base_usage_count', 0);
     }
 
     public function getTagCodes(): array

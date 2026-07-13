@@ -7,6 +7,7 @@ declare(strict_types=1);
 
 namespace App\Application\SlidesTemplate\Service;
 
+use App\Domain\SlidesTemplate\Entity\SlidesTemplateDataIsolation;
 use App\Domain\SlidesTemplate\Entity\SlidesTemplateEntity;
 use App\Domain\SlidesTemplate\Entity\ValueObject\Query\SlidesTemplateQuery;
 use App\Domain\SlidesTemplate\Entity\ValueObject\SlidesTemplateStatus;
@@ -32,35 +33,44 @@ class SlidesTemplateAppService extends AbstractSlidesTemplateAppService
     }
 
     /**
-     * @return array{page: Page, total: int, list: SlidesTemplateEntity[]}
+     * @return array{page: Page, list: SlidesTemplateEntity[]}
      */
     public function queries(Authenticatable|BaseDataIsolation $authorization, PublicQuerySlidesTemplateRequest $request): array
     {
         $dataIsolation = $this->createSlidesTemplateDataIsolation($authorization);
         $dataIsolation->setContainOfficialOrganization(true);
 
-        $query = new SlidesTemplateQuery();
-        $query->setKeyword($request->getKeyword());
-        $query->setCategoryCode($request->getCategoryCode());
-        $query->setStatus(SlidesTemplateStatus::Enabled->value);
-        $query->setTagCodes($request->getTagCodes());
-        $query->setTagMatch($request->getTagMatch());
-
+        $query = $this->createPublicQuery($request);
         $page = $this->createListPage($request->getPage(), $request->getPageSize());
-        $page->setTotal(true);
+        $page->setTotal(false);
         $result = $this->slidesTemplateDomainService->queries($dataIsolation, $query, $page);
-        $this->resolveAssetUrls($result['list'], includeTemplateFileUrl: false);
-        $this->slidesTemplateTagDomainService->fillTemplateTags(
-            $dataIsolation,
-            $result['list'],
-            SlidesTemplateTagStatus::Enabled
-        );
+        $this->resolveThumbnailUrls($result['list']);
+        $this->fillPublicTemplateTags($dataIsolation, $result['list']);
 
         return [
             'page' => $page,
-            'total' => $result['total'],
             'list' => $result['list'],
         ];
+    }
+
+    public function count(Authenticatable|BaseDataIsolation $authorization, PublicQuerySlidesTemplateRequest $request): int
+    {
+        $dataIsolation = $this->createSlidesTemplateDataIsolation($authorization);
+        $dataIsolation->setContainOfficialOrganization(true);
+
+        return $this->slidesTemplateDomainService->count($dataIsolation, $this->createPublicQuery($request));
+    }
+
+    public function detail(Authenticatable|BaseDataIsolation $authorization, string $code): SlidesTemplateEntity
+    {
+        $dataIsolation = $this->createSlidesTemplateDataIsolation($authorization);
+        $dataIsolation->setContainOfficialOrganization(true);
+
+        $template = $this->slidesTemplateDomainService->findEnabledByCodeOrFail($dataIsolation, $code);
+        $this->resolveAssetUrls([$template], includeTemplateFileUrl: false);
+        $this->fillPublicTemplateTags($dataIsolation, [$template]);
+
+        return $template;
     }
 
     public function getTemplateFileUrl(Authenticatable|BaseDataIsolation $authorization, string $code, array $accessContext = []): SlidesTemplateEntity
@@ -84,6 +94,30 @@ class SlidesTemplateAppService extends AbstractSlidesTemplateAppService
     protected function dispatchSlidesTemplateUsedEvent(SlidesTemplateUsedEvent $event): void
     {
         event_dispatch($event);
+    }
+
+    private function createPublicQuery(PublicQuerySlidesTemplateRequest $request): SlidesTemplateQuery
+    {
+        $query = new SlidesTemplateQuery();
+        $query->setKeyword($request->getKeyword());
+        $query->setCategoryCode($request->getCategoryCode());
+        $query->setStatus(SlidesTemplateStatus::Enabled->value);
+        $query->setTagCodes($request->getTagCodes());
+        $query->setTagMatch($request->getTagMatch());
+        return $query;
+    }
+
+    /**
+     * @param SlidesTemplateEntity[] $templates
+     */
+    private function fillPublicTemplateTags(SlidesTemplateDataIsolation $dataIsolation, array $templates): void
+    {
+        // 如前台列表后续不需要 tags，可注释此调用，列表主数据与图片解析逻辑不受影响。
+        $this->slidesTemplateTagDomainService->fillTemplateTags(
+            $dataIsolation,
+            $templates,
+            SlidesTemplateTagStatus::Enabled
+        );
     }
 
     private function createSlidesTemplateUsedEvent(

@@ -1,0 +1,31 @@
+<?php
+
+declare(strict_types=1);
+/**
+ * Copyright (c) The Magic , Distributed under the software license
+ */
+
+namespace App\Interfaces\SlidesTemplate\DTO\Response;
+
+use App\Infrastructure\Core\AbstractDTO;
+
+class SlidesTemplateCountDTO extends AbstractDTO
+{
+    public int $total = 0;
+
+    public function __construct(int $total)
+    {
+        $this->setTotal($total);
+        parent::__construct();
+    }
+
+    public function getTotal(): int
+    {
+        return $this->total;
+    }
+
+    public function setTotal(null|int|string $total): void
+    {
+        $this->total = $total === null ? 0 : (int) $total;
+    }
+}

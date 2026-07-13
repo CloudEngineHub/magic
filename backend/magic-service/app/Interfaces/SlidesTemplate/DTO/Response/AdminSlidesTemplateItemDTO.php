@@ -51,6 +51,8 @@ class AdminSlidesTemplateItemDTO extends AbstractDTO
 
     public int $actualUsageCount = 0;
 
+    public int $totalUsageCount = 0;
+
     public int $usageCount = 0;
 
     public ?string $createdUid = null;
@@ -273,6 +275,16 @@ class AdminSlidesTemplateItemDTO extends AbstractDTO
     public function getUsageCount(): int
     {
         return $this->usageCount;
+    }
+
+    public function getTotalUsageCount(): int
+    {
+        return $this->totalUsageCount;
+    }
+
+    public function setTotalUsageCount(null|int|string $totalUsageCount): void
+    {
+        $this->totalUsageCount = $totalUsageCount === null ? 0 : (int) $totalUsageCount;
     }
 
     public function setUsageCount(null|int|string $usageCount): void

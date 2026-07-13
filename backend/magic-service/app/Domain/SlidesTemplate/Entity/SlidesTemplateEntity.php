@@ -57,6 +57,8 @@ class SlidesTemplateEntity extends AbstractEntity
 
     protected int $actualUsageCount = 0;
 
+    protected int $totalUsageCount = 0;
+
     /**
      * @var SlidesTemplateTagEntity[]
      */
@@ -103,6 +105,7 @@ class SlidesTemplateEntity extends AbstractEntity
             'sort' => $this->sort,
             'base_usage_count' => $this->baseUsageCount,
             'actual_usage_count' => $this->actualUsageCount,
+            'total_usage_count' => $this->totalUsageCount,
             'created_uid' => $this->createdUid,
             'updated_uid' => $this->updatedUid,
             'created_at' => $this->createdAt,
@@ -372,7 +375,28 @@ class SlidesTemplateEntity extends AbstractEntity
 
     public function getUsageCount(): int
     {
+        if ($this->totalUsageCount > 0) {
+            return $this->totalUsageCount;
+        }
+
         return $this->baseUsageCount + $this->actualUsageCount;
+    }
+
+    public function getTotalUsageCount(): int
+    {
+        return $this->totalUsageCount;
+    }
+
+    public function setTotalUsageCount(null|int|string $totalUsageCount): self
+    {
+        $this->totalUsageCount = max(0, (int) $totalUsageCount);
+        return $this;
+    }
+
+    public function recalculateTotalUsageCount(): self
+    {
+        $this->totalUsageCount = $this->baseUsageCount + $this->actualUsageCount;
+        return $this;
     }
 
     /**

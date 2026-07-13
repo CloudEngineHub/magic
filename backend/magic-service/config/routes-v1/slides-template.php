@@ -23,5 +23,7 @@ Router::addGroup('/api/v1/slides-template-tags', static function () {
 // 幻灯片模板使用侧
 Router::addGroup('/api/v1/slides-templates', static function () {
     Router::get('', [SlidesTemplateApi::class, 'queries']);
+    Router::get('/count', [SlidesTemplateApi::class, 'count']);
     Router::get('/{code}/file-url', [SlidesTemplateApi::class, 'getFileUrl']);
+    Router::get('/{code}', [SlidesTemplateApi::class, 'detail']);
 }, ['middleware' => [RequestContextMiddleware::class]]);

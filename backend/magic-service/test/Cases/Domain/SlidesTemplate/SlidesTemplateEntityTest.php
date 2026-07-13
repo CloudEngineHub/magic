@@ -89,6 +89,7 @@ class SlidesTemplateEntityTest extends TestCase
                 'en_US' => 'For business reviews.',
             ],
             'thumbnail_file_key' => 'slides/thumb.png',
+            'colors' => [],
             'collage_file_key' => 'slides/collage.png',
             'preview_image_file_keys' => [],
             'template_file_key' => 'slides/template.zip',
@@ -97,6 +98,7 @@ class SlidesTemplateEntityTest extends TestCase
             'sort' => 100,
             'base_usage_count' => 0,
             'actual_usage_count' => 0,
+            'total_usage_count' => 0,
             'created_uid' => 'user-1',
             'updated_uid' => 'user-2',
         ], $entity->toArray());

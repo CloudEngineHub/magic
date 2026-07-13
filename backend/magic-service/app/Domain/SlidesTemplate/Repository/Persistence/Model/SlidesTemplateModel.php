@@ -30,6 +30,7 @@ use Hyperf\Database\Model\SoftDeletes;
  * @property int $sort
  * @property int $base_usage_count
  * @property int $actual_usage_count
+ * @property int $total_usage_count
  * @property null|string $created_uid
  * @property null|string $updated_uid
  * @property null|Carbon $created_at
@@ -61,6 +62,7 @@ class SlidesTemplateModel extends AbstractModel
         'sort',
         'base_usage_count',
         'actual_usage_count',
+        'total_usage_count',
         'created_uid',
         'updated_uid',
     ];
@@ -78,6 +80,7 @@ class SlidesTemplateModel extends AbstractModel
         'sort' => 'integer',
         'base_usage_count' => 'integer',
         'actual_usage_count' => 'integer',
+        'total_usage_count' => 'integer',
         'created_at' => 'datetime',
         'updated_at' => 'datetime',
         'deleted_at' => 'datetime',

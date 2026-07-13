@@ -224,6 +224,8 @@ use App\Domain\SlidesTemplate\Repository\Persistence\SlidesTemplateCategoryRepos
 use App\Domain\SlidesTemplate\Repository\Persistence\SlidesTemplateRepository;
 use App\Domain\SlidesTemplate\Repository\Persistence\SlidesTemplateTagRelationRepository;
 use App\Domain\SlidesTemplate\Repository\Persistence\SlidesTemplateTagRepository;
+use App\Domain\SlidesTemplate\Service\UsageCount\DefaultSlidesTemplateUsageCountPolicy;
+use App\Domain\SlidesTemplate\Service\UsageCount\SlidesTemplateUsageCountPolicyInterface;
 use App\Domain\SuperAgent\Service\UsageCalculator\DefaultUsageCalculator;
 use App\Domain\SuperAgent\Service\UsageCalculator\UsageCalculatorInterface;
 use App\Domain\Token\Item\MagicTokenExtra;
@@ -572,6 +574,7 @@ $dependencies = [
     SlidesTemplateRepositoryInterface::class => SlidesTemplateRepository::class,
     SlidesTemplateTagRepositoryInterface::class => SlidesTemplateTagRepository::class,
     SlidesTemplateTagRelationRepositoryInterface::class => SlidesTemplateTagRelationRepository::class,
+    SlidesTemplateUsageCountPolicyInterface::class => DefaultSlidesTemplateUsageCountPolicy::class,
 
     OrganizationBasedModelFilterInterface::class => DefaultOrganizationModelFilter::class,
     ProviderControlPolicyInterface::class => DefaultProviderControlPolicy::class,
