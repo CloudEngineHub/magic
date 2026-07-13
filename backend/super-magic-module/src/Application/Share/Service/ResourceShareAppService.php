@@ -2268,8 +2268,10 @@ class ResourceShareAppService extends AbstractShareAppService
         // Build file tree structure with VS Code-style sorting (default to zh_CN for share context)
         $tree = FileTreeUtil::assembleFilesTreeByParentId($allList, 'zh_CN');
 
+        $projectId = $this->getProjectIdFromFileCollection($collectionId);
+
         return [
-            'project_id' => (string) $projectId,
+            'project_id' => $projectId ?? '',
             'list' => $list,
             'tree' => $tree,
             'total' => $total,
