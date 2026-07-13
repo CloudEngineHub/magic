@@ -86,6 +86,7 @@ class AdminSlidesTemplateAppService extends AbstractSlidesTemplateAppService
 
         $this->assertCategoryExists($dataIsolation, $request->getCategoryCode());
         $this->assertTemplateFileIsArchive($request->getTemplateFileKey());
+        $this->assertTemplateFileKeyHasPrivateUrl($dataIsolation->getCurrentOrganizationCode(), $request->getTemplateFileKey());
         $this->assertThumbnailFileKeyHasPublicUrl($dataIsolation->getCurrentOrganizationCode(), $request->getThumbnailFileKey());
         $this->slidesTemplateTagDomainService->findEnabledByCodesOrFail($dataIsolation, $request->getTagCodes());
         $template = $this->buildEntityFromRequest($request);
@@ -122,6 +123,7 @@ class AdminSlidesTemplateAppService extends AbstractSlidesTemplateAppService
             $this->slidesTemplateTagDomainService->findEnabledByCodesOrFail($dataIsolation, $request->getTagCodes());
         }
         $existing = $this->slidesTemplateDomainService->findByIdOrFail($dataIsolation, $id);
+        $this->assertTemplateFileKeyHasPrivateUrl($existing->getOrganizationCode(), $request->getTemplateFileKey());
         $this->assertThumbnailFileKeyHasPublicUrl($existing->getOrganizationCode(), $request->getThumbnailFileKey());
         $template = $this->buildEntityFromRequest($request);
         $template->setId($existing->getId());
@@ -261,6 +263,19 @@ class AdminSlidesTemplateAppService extends AbstractSlidesTemplateAppService
         $fileLink = $fileLinks[$thumbnailFileKey] ?? null;
         if (! $fileLink instanceof FileLink || $fileLink->getUrl() === '') {
             ExceptionBuilder::throw(SlidesTemplateErrorCode::VALIDATE_FAILED, 'slides_template.thumbnail_file_url_generate_failed');
+        }
+    }
+
+    private function assertTemplateFileKeyHasPrivateUrl(string $organizationCode, string $templateFileKey): void
+    {
+        if ($templateFileKey === '') {
+            return;
+        }
+
+        $fileLinks = $this->getPrivateFileLinks($organizationCode, [$templateFileKey]);
+        $fileLink = $fileLinks[$templateFileKey] ?? null;
+        if (! $fileLink instanceof FileLink || $fileLink->getUrl() === '') {
+            ExceptionBuilder::throw(SlidesTemplateErrorCode::VALIDATE_FAILED, 'slides_template.template_file_url_generate_failed');
         }
     }
 

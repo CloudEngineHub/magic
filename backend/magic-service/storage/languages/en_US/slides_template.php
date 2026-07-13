@@ -32,6 +32,7 @@ return [
     'thumbnail_file_key_required' => 'Template thumbnail file key is required',
     'thumbnail_file_url_generate_failed' => 'Template thumbnail file URL does not exist or is unavailable',
     'template_file_key_required' => 'Template ZIP file key is required',
+    'template_file_url_generate_failed' => 'Template ZIP file URL does not exist or is unavailable',
     'template_file_must_be_archive' => 'Template file must be an archive (zip/rar/7z/tar/gz/tgz/bz2/xz)',
     'file_key_string' => 'File key must be a string',
     'file_key_max' => 'File key cannot exceed 512 characters',

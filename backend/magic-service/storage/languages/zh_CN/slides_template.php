@@ -32,6 +32,7 @@ return [
     'thumbnail_file_key_required' => '模板封面图文件 key 是必需的',
     'thumbnail_file_url_generate_failed' => '模板封面图文件链接不存在或不可用',
     'template_file_key_required' => '模板 ZIP 文件 key 是必需的',
+    'template_file_url_generate_failed' => '模板 ZIP 文件链接不存在或不可用',
     'template_file_must_be_archive' => '模板文件必须是压缩包（zip/rar/7z/tar/gz/tgz/bz2/xz）',
     'file_key_string' => '文件 key 必须是字符串',
     'file_key_max' => '文件 key 不能超过512个字符',

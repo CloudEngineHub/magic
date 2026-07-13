@@ -597,6 +597,88 @@ class SlidesTemplateAppServiceTest extends TestCase
         $service->update($dataIsolation, 123, $request);
     }
 
+    public function testAdminCreateThrowsWhenTemplatePrivateUrlCannotBeResolved(): void
+    {
+        $dataIsolation = $this->makeDataIsolation('OFFICIAL_ORG', ['OFFICIAL_ORG']);
+        $request = $this->createMock(SaveSlidesTemplateRequest::class);
+        $request->method('getLabel')->willReturn([
+            'zh_CN' => '职场白皮书',
+            'en_US' => 'Corporate Whitepaper',
+        ]);
+        $request->method('getDescription')->willReturn([
+            'zh_CN' => '适用于企业汇报。',
+            'en_US' => 'For business reviews.',
+        ]);
+        $request->method('getThumbnailFileKey')->willReturn('slides/thumbnails/business.png');
+        $request->method('getCollageFileKey')->willReturn(null);
+        $request->method('getTemplateFileKey')->willReturn('slides/templates/missing.zip');
+        $request->method('getPreviewUrl')->willReturn(null);
+        $request->method('getStatus')->willReturn(SlidesTemplateStatus::Enabled->value);
+        $request->method('getSort')->willReturn(100);
+        $request->method('getBaseUsageCount')->willReturn(0);
+        $request->method('getTagCodes')->willReturn([]);
+        $request->method('hasTagCodes')->willReturn(false);
+
+        $domainService = $this->createMock(SlidesTemplateDomainService::class);
+        $domainService->expects($this->never())->method('create');
+
+        $service = $this->makeAdminSlidesTemplateAppService($domainService, missingPrivateFileKeys: ['slides/templates/missing.zip']);
+
+        $this->expectException(BusinessException::class);
+        $this->expectExceptionCode(SlidesTemplateErrorCode::VALIDATE_FAILED->value);
+        $this->expectExceptionMessage('slides_template.template_file_url_generate_failed');
+
+        $service->create($dataIsolation, $request);
+    }
+
+    public function testAdminUpdateThrowsWhenTemplatePrivateUrlCannotBeResolved(): void
+    {
+        $dataIsolation = $this->makeDataIsolation('OFFICIAL_ORG', ['OFFICIAL_ORG']);
+        $request = $this->createMock(SaveSlidesTemplateRequest::class);
+        $request->method('getLabel')->willReturn([
+            'zh_CN' => '职场白皮书',
+            'en_US' => 'Corporate Whitepaper',
+        ]);
+        $request->method('getDescription')->willReturn([
+            'zh_CN' => '适用于企业汇报。',
+            'en_US' => 'For business reviews.',
+        ]);
+        $request->method('getThumbnailFileKey')->willReturn('slides/thumbnails/business.png');
+        $request->method('getCollageFileKey')->willReturn(null);
+        $request->method('getTemplateFileKey')->willReturn('slides/templates/missing.zip');
+        $request->method('getPreviewUrl')->willReturn(null);
+        $request->method('getStatus')->willReturn(SlidesTemplateStatus::Enabled->value);
+        $request->method('getSort')->willReturn(100);
+        $request->method('getBaseUsageCount')->willReturn(66);
+        $request->method('hasTagCodes')->willReturn(false);
+
+        $existing = new SlidesTemplateEntity();
+        $existing->setId(123)
+            ->setOrganizationCode('OFFICIAL_ORG')
+            ->setCode('PPT-65f2c8a42d7b0-12345678')
+            ->setSourceType(SlidesTemplateSourceType::System)
+            ->setTemplateFileKey('slides/templates/original.zip')
+            ->setThumbnailFileKey('slides/thumbnails/original.png')
+            ->setActualUsageCount(9)
+            ->setCreatedUid('system');
+
+        $domainService = $this->createMock(SlidesTemplateDomainService::class);
+        $domainService
+            ->expects($this->once())
+            ->method('findByIdOrFail')
+            ->with($this->isInstanceOf(SlidesTemplateDataIsolation::class), 123)
+            ->willReturn($existing);
+        $domainService->expects($this->never())->method('update');
+
+        $service = $this->makeAdminSlidesTemplateAppService($domainService, missingPrivateFileKeys: ['slides/templates/missing.zip']);
+
+        $this->expectException(BusinessException::class);
+        $this->expectExceptionCode(SlidesTemplateErrorCode::VALIDATE_FAILED->value);
+        $this->expectExceptionMessage('slides_template.template_file_url_generate_failed');
+
+        $service->update($dataIsolation, 123, $request);
+    }
+
     private function makeDataIsolation(string $organizationCode, array $officialOrganizationCodes): SlidesTemplateDataIsolation
     {
         /** @var SlidesTemplateDataIsolation $dataIsolation */
@@ -615,6 +697,7 @@ class SlidesTemplateAppServiceTest extends TestCase
         SlidesTemplateDomainService $domainService,
         ?SlidesTemplateCategoryDomainService $categoryDomainService = null,
         array $missingPublicFileKeys = [],
+        array $missingPrivateFileKeys = [],
     ): AdminSlidesTemplateAppService {
         if ($categoryDomainService === null) {
             $categoryDomainService = $this->createMock(SlidesTemplateCategoryDomainService::class);
@@ -623,9 +706,9 @@ class SlidesTemplateAppServiceTest extends TestCase
 
         $tagDomainService = $this->createMock(SlidesTemplateTagDomainService::class);
         $tagDomainService->method('findEnabledByCodesOrFail')->willReturn([]);
-        $tagDomainService->method('fillTemplateTags')->willReturn(null);
-        $tagDomainService->method('syncTemplateTagsByCodes')->willReturn(null);
-        $tagDomainService->method('deleteTemplateTags')->willReturn(null);
+        $tagDomainService->method('fillTemplateTags');
+        $tagDomainService->method('syncTemplateTagsByCodes');
+        $tagDomainService->method('deleteTemplateTags');
 
         $colorExtractor = $this->createMock(SlidesTemplateColorExtractor::class);
         $colorExtractor->method('extractColors')->willReturn([]);
@@ -637,6 +720,7 @@ class SlidesTemplateAppServiceTest extends TestCase
             $colorExtractor
         );
         $service->missingPublicFileKeys = $missingPublicFileKeys;
+        $service->missingPrivateFileKeys = $missingPrivateFileKeys;
 
         return $service;
     }
@@ -790,7 +874,11 @@ class TestableAdminSlidesTemplateAppService extends AdminSlidesTemplateAppServic
 {
     public array $missingPublicFileKeys = [];
 
+    public array $missingPrivateFileKeys = [];
+
     public array $publicFileLinkCalls = [];
+
+    public array $privateFileLinkCalls = [];
 
     public function getPublicFileLinks(string $organizationCode, array $fileLinks): array
     {
@@ -805,6 +893,26 @@ class TestableAdminSlidesTemplateAppService extends AdminSlidesTemplateAppServic
             $result[$fileLink] = new FileLink(
                 $fileLink,
                 'https://public.example/' . $organizationCode . '/' . $fileLink,
+                time() + 3600
+            );
+        }
+
+        return $result;
+    }
+
+    public function getPrivateFileLinks(string $organizationCode, array $fileLinks): array
+    {
+        $this->privateFileLinkCalls[] = [$organizationCode, $fileLinks];
+
+        $result = [];
+        foreach ($fileLinks as $fileLink) {
+            if (in_array($fileLink, $this->missingPrivateFileKeys, true)) {
+                continue;
+            }
+
+            $result[$fileLink] = new FileLink(
+                $fileLink,
+                'https://signed.example/' . $organizationCode . '/' . $fileLink,
                 time() + 3600
             );
         }
