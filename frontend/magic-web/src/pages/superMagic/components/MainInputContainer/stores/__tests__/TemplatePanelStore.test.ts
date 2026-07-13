@@ -63,7 +63,7 @@ describe("TemplatePanelStore", () => {
 							},
 						],
 						preset_content: {
-							default: "Use PPT template: {preset_value}",
+							default: "Use slide template: {preset_value}",
 						},
 					},
 				],
@@ -79,7 +79,7 @@ describe("TemplatePanelStore", () => {
 
 		expect(store.complexField?.current_value).toBe("academic-research")
 		expect(getPromptRichTextPlainText(store.concatenatedPresetContent)).toBe(
-			"Use PPT template: academic-research.",
+			"Use slide template: academic-research.",
 		)
 	})
 })

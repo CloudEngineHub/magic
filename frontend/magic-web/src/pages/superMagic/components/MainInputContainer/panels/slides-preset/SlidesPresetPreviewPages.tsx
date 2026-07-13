@@ -85,49 +85,25 @@ function SlidesPresetPreviewPages({
 	if (pages.length && activePage) {
 		return (
 			<div className={cn("flex min-h-0 flex-col gap-3 overflow-hidden", className)}>
-				<div
-					ref={previewStageRef}
-					className={cn(
-						"relative mx-auto aspect-video w-[min(100%,calc(clamp(280px,52vh,680px)*16/9))] shrink-0 overflow-hidden rounded-md border border-border/60 bg-white shadow-sm",
-						mainFrameClassName,
-					)}
-					data-testid={`${dataTestIdPrefix}-pages`}
-				>
-					<img
-						src={activePage}
-						alt={`${title} ${activeIndex + 1}`}
-						className="size-full object-contain"
-						loading="eager"
-						decoding="async"
-					/>
-					{canSwitch ? (
-						<>
-							<Button
-								type="button"
-								variant="secondary"
-								size="icon"
-								className="absolute left-3 top-1/2 size-9 -translate-y-1/2 rounded-full border border-black/10 bg-white/90 text-neutral-950 shadow-lg backdrop-blur hover:bg-white"
-								aria-label={`${title} previous page`}
-								onClick={goToPrevious}
-								data-testid={`${dataTestIdPrefix}-previous-button`}
-							>
-								<ChevronLeft className="size-4" />
-							</Button>
-							<Button
-								type="button"
-								variant="secondary"
-								size="icon"
-								className="absolute right-3 top-1/2 size-9 -translate-y-1/2 rounded-full border border-black/10 bg-white/90 text-neutral-950 shadow-lg backdrop-blur hover:bg-white"
-								aria-label={`${title} next page`}
-								onClick={goToNext}
-								data-testid={`${dataTestIdPrefix}-next-button`}
-							>
-								<ChevronRight className="size-4" />
-							</Button>
-						</>
-					) : null}
+				<div className="relative w-full shrink-0">
 					<div
-						className="absolute bottom-3 right-3 rounded-full bg-black/70 px-3 py-1 text-sm font-medium text-white shadow-sm"
+						ref={previewStageRef}
+						className={cn(
+							"relative mx-auto aspect-video w-[min(100%,calc(clamp(280px,52vh,680px)*16/9))] overflow-hidden rounded-md border border-border/60 bg-white shadow-sm",
+							mainFrameClassName,
+						)}
+						data-testid={`${dataTestIdPrefix}-pages`}
+					>
+						<img
+							src={activePage}
+							alt={`${title} ${activeIndex + 1}`}
+							className="size-full object-contain"
+							loading="eager"
+							decoding="async"
+						/>
+					</div>
+					<div
+						className="absolute bottom-0 right-0 text-sm font-medium text-neutral-500"
 						data-testid={`${dataTestIdPrefix}-page-index`}
 					>
 						{activeIndex + 1} / {pages.length}
@@ -196,7 +172,7 @@ function SlidesPresetPreviewPages({
 										aria-hidden="true"
 									/>
 									<span className="absolute bottom-1.5 left-1.5 rounded-full bg-black/70 px-2 py-0.5 text-xs font-medium text-white">
-										#{index + 1}
+										{index + 1}
 									</span>
 								</button>
 							</div>

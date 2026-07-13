@@ -97,7 +97,7 @@ describe("SlidesTemplatePromptDock", () => {
 		)
 		expect(screen.getByTestId("mock-default-message-editor")).toHaveTextContent("ppt")
 		expect(getPromptRichTextPlainText(lastPresetContent)).toBe(
-			"Use PPT template: PPT-business.",
+			"Use slide template: PPT-business.",
 		)
 		expect(screen.getByTestId("slides-templates-page-selected-template-image")).toHaveAttribute(
 			"src",

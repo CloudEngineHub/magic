@@ -84,8 +84,10 @@ function createSlidesTemplatePanelContentState(
 		isLoading: false,
 		isRefreshing: false,
 		isLoadingMore: false,
+		isLoadMoreFailed: false,
 		keyword: "",
 		loadMore: vi.fn(),
+		retryLoadMore: vi.fn(),
 		selectedGroupKey: "all",
 		setKeyword: vi.fn(),
 		setSelectedGroupKey: vi.fn(),
@@ -175,7 +177,9 @@ describe("SlidesTemplatePanel", () => {
 				Boolean(content),
 			)
 			const lastContent = contentCalls.at(-1)?.[0] as JSONContent | undefined
-			expect(getPromptRichTextPlainText(lastContent)).toBe("Use PPT template: PPT-business.")
+			expect(getPromptRichTextPlainText(lastContent)).toBe(
+				"Use slide template: PPT-business.",
+			)
 		})
 	})
 
@@ -266,7 +270,35 @@ describe("SlidesTemplatePanel", () => {
 		expect(screen.getByTestId("slides-template-search-input")).toHaveValue("business")
 	})
 
-	it("moves the toolbar out while preview is open", async () => {
+	it("hides the business report category from the template selector", () => {
+		const hiddenGroupKey = createSlidesTemplateCategoryGroupKey("PPT-CATE-business-report")
+		render(
+			<SlidesTemplatePanelContent
+				slidesState={createSlidesTemplatePanelContentState({
+					groups: [
+						{ group_key: "all", group_name: "All", children: [] },
+						{ group_key: "tag:featured", group_name: "Featured", children: [] },
+						{
+							group_key: hiddenGroupKey,
+							group_name: "Business Report",
+							children: [],
+						},
+					],
+				})}
+				onTemplateClick={vi.fn()}
+			/>,
+		)
+
+		expect(screen.getByTestId("template-group-selector-option-all")).toBeInTheDocument()
+		expect(
+			screen.getByTestId("template-group-selector-option-tag:featured"),
+		).toBeInTheDocument()
+		expect(
+			screen.queryByTestId(`template-group-selector-option-${hiddenGroupKey}`),
+		).not.toBeInTheDocument()
+	})
+
+	it("hides the toolbar without an exit transition while preview is open", async () => {
 		render(
 			<SlidesTemplatePanelContent
 				slidesState={createSlidesTemplatePanelContentState({
@@ -290,6 +322,8 @@ describe("SlidesTemplatePanel", () => {
 		const toolbar = screen.getByTestId("slides-template-panel-toolbar")
 		expect(toolbar).toHaveClass("translate-y-0")
 		expect(toolbar).toHaveClass("opacity-100")
+		expect(toolbar).not.toHaveClass("transition-[opacity,transform]")
+		expect(toolbar).not.toHaveClass("duration-300")
 
 		fireEvent.click(screen.getByTestId("slides-preset-card-preview-button"))
 

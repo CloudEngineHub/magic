@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils"
 import TemplateGroupSelector from "../../panels/TemplateGroupSelector"
 import SlidesPresetGrid from "../../panels/slides-preset/SlidesPresetGrid"
 import type { OptionItem } from "../../panels/types"
+import { filterSlidesTemplateSelectorGroups } from "./slidesTemplateState"
 import type { SlidesTemplatePanelState } from "./useSlidesTemplatePanelState"
 
 interface SlidesTemplatePanelContentProps {
@@ -36,7 +37,8 @@ function SlidesTemplatePanelContent({
 	const [isPreviewOpen, setIsPreviewOpen] = useState(false)
 	const searchInputRef = useRef<HTMLInputElement>(null)
 	const isComposingRef = useRef(false)
-	const hasGroups = slidesState.groups.length > 1
+	const selectorGroups = filterSlidesTemplateSelectorGroups(slidesState.groups)
+	const hasGroups = selectorGroups.length > 1
 
 	useEffect(() => {
 		if (!slidesState.keyword.trim()) return
@@ -85,7 +87,7 @@ function SlidesTemplatePanelContent({
 		<div className={cn("flex min-h-0 flex-col gap-3", className)}>
 			<div
 				className={cn(
-					"flex flex-col gap-3 px-4 pt-3 transition-[opacity,transform] duration-300 ease-out will-change-transform",
+					"flex flex-col gap-3 px-4 pt-3",
 					toolbarClassName,
 					isPreviewOpen
 						? "pointer-events-none translate-y-[calc(100%_+_24px)] opacity-0"
@@ -97,7 +99,7 @@ function SlidesTemplatePanelContent({
 				<div className="flex min-w-0 items-center gap-2">
 					{hasGroups ? (
 						<TemplateGroupSelector
-							groups={slidesState.groups}
+							groups={selectorGroups}
 							selectedGroupKey={slidesState.selectedGroupKey}
 							onGroupChange={slidesState.setSelectedGroupKey}
 							showEmptyGroups
@@ -148,7 +150,9 @@ function SlidesTemplatePanelContent({
 				isRefreshing={slidesState.isRefreshing}
 				hasMore={slidesState.hasMore}
 				isLoadingMore={slidesState.isLoadingMore}
+				isLoadMoreFailed={slidesState.isLoadMoreFailed}
 				onLoadMore={slidesState.loadMore}
+				onRetryLoadMore={slidesState.retryLoadMore}
 				onPreviewOpenChange={setIsPreviewOpen}
 				className={gridClassName}
 				showHoverDetails={showHoverDetails}

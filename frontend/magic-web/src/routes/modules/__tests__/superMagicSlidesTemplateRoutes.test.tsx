@@ -32,28 +32,37 @@ function findRouteByName(routes: RouteObject[], routeName: RouteName): RouteObje
 }
 
 describe("superMagicSlidesTemplateRoutes", () => {
-	it("registers the PPT template route before dynamic project routes can match it", () => {
+	it("registers the slide template route before dynamic project routes can match it", () => {
 		const route = superMagicSlidesTemplateRoutes.find(
 			(item) => item.name === RouteName.SuperSlidesTemplates,
 		)
 
-		expect(RoutePath.SuperSlidesTemplates).toBe("/super/slides-templates")
-		expect(route?.path).toBe("/:clusterCode/super/slides-templates")
+		expect(RoutePath.SuperSlidesTemplates).toBe("/super/slide-templates")
+		expect(route?.path).toBe("/:clusterCode/super/slide-templates")
 		expect((route as { meta?: { title?: string } } | undefined)?.meta?.title).toBe(
 			"routes.slidesTemplates",
 		)
 	})
 
-	it("builds the PPT template route path", () => {
+	it("builds the slide template route path", () => {
 		expect(
 			getRoutePath({
 				name: RouteName.SuperSlidesTemplates,
 				params: { clusterCode: "global" },
 			}),
-		).toBe("/global/super/slides-templates")
+		).toBe("/global/super/slide-templates")
 	})
 
-	it("places the PPT template route before dynamic project routes", () => {
+	it("redirects the legacy plural slide path", () => {
+		const legacyRoute = superMagicSlidesTemplateRoutes.find(
+			(item) => item.name === RouteName.SuperSlidesTemplatesLegacy,
+		)
+
+		expect(RoutePath.SuperSlidesTemplatesLegacy).toBe("/super/slides-templates")
+		expect(legacyRoute?.path).toBe("/:clusterCode/super/slides-templates")
+	})
+
+	it("places the slide template route before dynamic project routes", () => {
 		const superRoute = findRouteByName(registerRoutes(), RouteName.Super)
 		const childNames = superRoute?.children?.map((route) => route.name)
 

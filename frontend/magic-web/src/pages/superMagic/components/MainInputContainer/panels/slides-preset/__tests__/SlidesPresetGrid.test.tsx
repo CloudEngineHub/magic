@@ -95,6 +95,7 @@ describe("SlidesPresetGrid", () => {
 			],
 			preview_url: "https://example.com/academic-preview",
 			preview_title: "Academic Preview",
+			description: "Academic research template",
 			usage_count: 23,
 			tags: [
 				{
@@ -125,13 +126,28 @@ describe("SlidesPresetGrid", () => {
 		expect(screen.getByText("Tech Dark")).toBeInTheDocument()
 	})
 
-	it("renders usage count and featured tag badge", () => {
+	it("shows the featured badge beside the title and usage in the card corner", () => {
 		render(<SlidesPresetGrid templates={mockTemplates} />)
 
-		expect(screen.getByTestId("slides-preset-card-featured-badge")).toHaveTextContent(
-			/精选|Featured/,
+		const featuredBadge = screen.getByTestId("slides-preset-card-featured-badge")
+		const usageCount = screen.getByTestId("slides-preset-card-usage-count")
+
+		expect(featuredBadge).not.toHaveTextContent("精选")
+		expect(featuredBadge).toHaveClass(
+			"size-5",
+			"rounded-full",
+			"bg-amber-300",
+			"text-amber-950",
 		)
-		expect(screen.getByTestId("slides-preset-card-usage-count")).toHaveTextContent("23")
+		expect(featuredBadge.querySelector("svg")).not.toBeNull()
+		expect(usageCount).toHaveAttribute("data-usage-count", "23")
+		expect(usageCount).toHaveClass("bottom-2", "right-2", "text-white", "group-hover:opacity-0")
+		expect(usageCount).not.toHaveClass("bg-background/92", "rounded-full")
+		expect(usageCount.querySelector("svg")).toBeNull()
+		expect(screen.getByTestId("slides-preset-card-usage-backdrop")).toHaveClass(
+			"bg-gradient-to-t",
+			"from-black/[0.58]",
+		)
 	})
 
 	it("selects a template when card is clicked", () => {
@@ -144,14 +160,10 @@ describe("SlidesPresetGrid", () => {
 		expect(handleTemplateClick).toHaveBeenCalledWith(mockTemplates[0])
 	})
 
-	it("keeps the selected template action visible", () => {
+	it("does not render a redundant selection button for selected templates", () => {
 		render(<SlidesPresetGrid templates={mockTemplates} selectedTemplate={mockTemplates[0]} />)
 
-		const useButton = screen.getAllByTestId("slides-preset-card-use-button")[0]
-
-		expect(useButton).toHaveTextContent("playbook.edit.presets.form.selected")
-		expect(useButton.className).toContain("opacity-100")
-		expect(useButton.className).toContain("translate-y-0")
+		expect(screen.queryByTestId("slides-preset-card-use-button")).not.toBeInTheDocument()
 	})
 
 	it("shows a lightweight refreshing indicator without hiding existing cards", () => {
@@ -176,9 +188,18 @@ describe("SlidesPresetGrid", () => {
 			"src",
 			"https://example.com/academic-page-1.png",
 		)
-		expect(screen.getByTestId("slides-preset-preview-dialog-page-index")).toHaveTextContent(
-			"1 / 2",
-		)
+		const previewStage = screen.getByTestId("slides-preset-preview-dialog-pages")
+		const pageIndex = screen.getByTestId("slides-preset-preview-dialog-page-index")
+
+		expect(pageIndex).toHaveTextContent("1 / 2")
+		expect(pageIndex).toHaveClass("absolute", "bottom-0", "right-0")
+		expect(previewStage).not.toContainElement(pageIndex)
+		expect(
+			screen.queryByTestId("slides-preset-preview-dialog-previous-button"),
+		).not.toBeInTheDocument()
+		expect(
+			screen.queryByTestId("slides-preset-preview-dialog-next-button"),
+		).not.toBeInTheDocument()
 		expect(screen.getByTestId("slides-preset-preview-dialog-thumbnail-strip")).toHaveClass(
 			"overflow-hidden",
 			"p-2",
@@ -186,15 +207,14 @@ describe("SlidesPresetGrid", () => {
 
 		const secondPageButton = screen.getByRole("button", { name: "Academic Preview 2" })
 		expect(secondPageButton).toHaveClass("w-[156px]", "sm:w-[220px]", "xl:w-[264px]")
+		expect(secondPageButton).toHaveTextContent("2")
+		expect(secondPageButton).not.toHaveTextContent("#2")
 
 		fireEvent.click(secondPageButton)
 
 		expect(screen.getByRole("img", { name: "Academic Preview 2" })).toHaveAttribute(
 			"src",
 			"https://example.com/academic-page-2.png",
-		)
-		expect(screen.getByTestId("slides-preset-preview-dialog-page-index")).toHaveTextContent(
-			"2 / 2",
 		)
 	})
 
@@ -206,18 +226,21 @@ describe("SlidesPresetGrid", () => {
 		fireEvent.wheel(screen.getByTestId("slides-preset-preview-dialog-pages"), {
 			deltaY: 100,
 		})
-		expect(screen.getByTestId("slides-preset-preview-dialog-page-index")).toHaveTextContent(
-			"2 / 2",
+		expect(screen.getByRole("img", { name: "Academic Preview 2" })).toHaveAttribute(
+			"src",
+			"https://example.com/academic-page-2.png",
 		)
 
 		fireEvent.keyDown(document, { key: "ArrowRight" })
-		expect(screen.getByTestId("slides-preset-preview-dialog-page-index")).toHaveTextContent(
-			"1 / 2",
+		expect(screen.getByRole("img", { name: "Academic Preview 1" })).toHaveAttribute(
+			"src",
+			"https://example.com/academic-page-1.png",
 		)
 
 		fireEvent.keyDown(document, { key: "ArrowLeft" })
-		expect(screen.getByTestId("slides-preset-preview-dialog-page-index")).toHaveTextContent(
-			"2 / 2",
+		expect(screen.getByRole("img", { name: "Academic Preview 2" })).toHaveAttribute(
+			"src",
+			"https://example.com/academic-page-2.png",
 		)
 	})
 
@@ -363,5 +386,26 @@ describe("SlidesPresetGrid", () => {
 		fireEvent.scroll(grid)
 
 		expect(handleLoadMore).not.toHaveBeenCalled()
+	})
+
+	it("pauses observer loading after a failed append and exposes a manual retry", () => {
+		const handleLoadMore = vi.fn()
+		const handleRetryLoadMore = vi.fn()
+
+		render(
+			<SlidesPresetGrid
+				templates={mockTemplates}
+				hasMore
+				isLoadMoreFailed
+				onLoadMore={handleLoadMore}
+				onRetryLoadMore={handleRetryLoadMore}
+			/>,
+		)
+
+		notifyIntersection(screen.getByTestId("slides-preset-grid-load-more-sentinel"))
+		expect(handleLoadMore).not.toHaveBeenCalled()
+
+		fireEvent.click(screen.getByTestId("slides-preset-grid-load-more-retry"))
+		expect(handleRetryLoadMore).toHaveBeenCalledTimes(1)
 	})
 })

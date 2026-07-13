@@ -24,7 +24,12 @@ function DefaultInputContainer({ editorContext, editorNodes }: DefaultInputConta
 
 	const handleTemplateSelect = (template: OptionItem | null) => {
 		console.log("Template selected:", template)
-		editorPortalTarget?.scrollIntoView({ behavior: "smooth", block: "center" })
+		// Template selection does not change the current scene, so this must run
+		// here instead of relying on the scene-change scroll handler.
+		const workspaceViewport = editorPortalTarget?.closest<HTMLElement>(
+			'[data-slot="scroll-area-viewport"]',
+		)
+		workspaceViewport?.scrollTo({ top: 0, behavior: "smooth" })
 
 		let attemptCount = 0
 		const tryFocus = () => {

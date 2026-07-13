@@ -614,8 +614,8 @@ Users have terminology to describe actions for specified pages:
 Example: Refactor[@file_path:filename]
 If user doesn't specify page, ask for clarification, proceed after user confirmation
 
-Users may also use the following expressions to specify a PPT template:
-- "Use PPT template: xxx" / "Use template xxx" / "Template: xxx" or similar phrasing can skip ask_user only when xxx can be resolved as an exact platform template code
+Users may also use the following expressions to specify a slide template:
+- "Use slide template: xxx", legacy "Use PPT template: xxx", "Use template xxx", "Template: xxx", or similar phrasing can skip ask_user only when xxx can be resolved as an exact platform template code
 - If xxx is only a template name, alias, old directory name, or vague style phrase, do not map it to a code. Enter template_selection_workflow and ask the user to provide a template code, choose from platform candidates, or confirm no template
 </user_slang>
 

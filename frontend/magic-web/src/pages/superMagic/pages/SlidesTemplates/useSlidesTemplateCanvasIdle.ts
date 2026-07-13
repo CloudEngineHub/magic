@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 
 export const SLIDES_TEMPLATE_CANVAS_IDLE_DELAY_MS = 3200
-export const SLIDES_TEMPLATE_CANVAS_POINTER_ACTIVITY_THRESHOLD = 10
 
 interface UseSlidesTemplateCanvasIdleInput {
 	disabled: boolean
@@ -29,6 +28,16 @@ export function useSlidesTemplateCanvasIdle({ disabled }: UseSlidesTemplateCanva
 		}, SLIDES_TEMPLATE_CANVAS_IDLE_DELAY_MS)
 	}, [clearIdleTimer, disabled])
 
+	const markInactive = useCallback(() => {
+		clearIdleTimer()
+		if (disabled || document.hidden) {
+			setIsIdle(false)
+			return
+		}
+
+		setIsIdle(true)
+	}, [clearIdleTimer, disabled])
+
 	useEffect(() => {
 		clearIdleTimer()
 		if (disabled) {
@@ -38,8 +47,9 @@ export function useSlidesTemplateCanvasIdle({ disabled }: UseSlidesTemplateCanva
 
 		if (!hasInitializedRef.current) {
 			hasInitializedRef.current = true
-			setIsIdle(true)
-			return
+			// 初次挂载无法可靠判断指针是否已在画布内，先按无操作处理，避免页面打开即位移。
+			markActive()
+			return clearIdleTimer
 		}
 
 		markActive()
@@ -66,5 +76,5 @@ export function useSlidesTemplateCanvasIdle({ disabled }: UseSlidesTemplateCanva
 		}
 	}, [clearIdleTimer, markActive])
 
-	return { isIdle, markActive }
+	return { isIdle, markActive, markInactive }
 }

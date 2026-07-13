@@ -29,13 +29,15 @@ import {
 	subscribeTemplateColorExtractionSettled,
 } from "./templateColorExtractionStore"
 import { useTemplateColorExtractionVersion } from "./useResolvedTemplateColors"
+import {
+	preserveExistingTemplateOrder,
+	reuseUnchangedTemplateOptions,
+	SIMILAR_TEMPLATE_PAGE_SIZE as CANVAS_TEMPLATE_PAGE_SIZE,
+	shouldLoadMoreSimilarColorTemplates,
+} from "./similarTemplateLoading"
 
 const BOTTOM_TOOLS_OFFSET = 24
 const CANVAS_EDGE_GAP = 40
-const CANVAS_TEMPLATE_PAGE_SIZE = 40
-const MIN_SIMILAR_COLOR_TEMPLATE_COUNT = 24
-const MAX_SIMILAR_COLOR_LOADS = 3
-const MAX_SIMILAR_COLOR_CANDIDATE_COUNT = CANVAS_TEMPLATE_PAGE_SIZE * (MAX_SIMILAR_COLOR_LOADS + 1)
 const GROUP_SCROLL_CONTROL_CLASS_NAME =
 	"[&_button]:border-white/20 [&_button]:bg-zinc-800/[0.86] [&_button]:text-white [&_button]:shadow-[0_4px_14px_rgba(0,0,0,0.28),inset_0_1px_0_rgba(255,255,255,0.12)] [&_button]:backdrop-blur-lg [&_button:hover]:bg-zinc-700/[0.92]"
 
@@ -47,61 +49,18 @@ function getAvailableTemplateColors(template: OptionItem, cacheVersion?: number)
 	return getExtractedTemplateColors(getTemplateCoverUrl(template))
 }
 
-export function reuseUnchangedTemplateOptions(previous: OptionItem[], next: OptionItem[]) {
-	if (
-		previous.length === next.length &&
-		previous.every((template, index) => template === next[index])
-	) {
-		return previous
-	}
-	return next
-}
-
-export function preserveExistingTemplateOrder(previous: OptionItem[], next: OptionItem[]) {
-	const nextTemplateByKey = new Map(next.map((template) => [getTemplateKey(template), template]))
-	const retainedTemplates = previous.flatMap((template) => {
-		const nextTemplate = nextTemplateByKey.get(getTemplateKey(template))
-		return nextTemplate ? [nextTemplate] : []
-	})
-	const retainedKeys = new Set(retainedTemplates.map(getTemplateKey))
-	return [
-		...retainedTemplates,
-		...next.filter((template) => !retainedKeys.has(getTemplateKey(template))),
-	]
-}
-
-export function shouldLoadMoreSimilarColorTemplates({
-	loadCount,
-	hasMore,
-	isLoading,
-	isLoadingMore,
-	isRefreshing,
-	loadedTemplateCount,
-	similarTemplateCount,
-}: {
-	loadCount: number
-	hasMore: boolean
-	isLoading: boolean
-	isLoadingMore: boolean
-	isRefreshing: boolean
-	loadedTemplateCount: number
-	similarTemplateCount: number
-}) {
-	return (
-		similarTemplateCount < MIN_SIMILAR_COLOR_TEMPLATE_COUNT &&
-		hasMore &&
-		!isLoading &&
-		!isLoadingMore &&
-		!isRefreshing &&
-		loadedTemplateCount < MAX_SIMILAR_COLOR_CANDIDATE_COUNT &&
-		loadCount < MAX_SIMILAR_COLOR_LOADS
-	)
-}
-
 function SlidesTemplatesPage() {
 	const { t } = useTranslation("crew/create")
 	const lt = useLocaleText()
 	const slidesState = useSlidesTemplateCatalogState({ pageSize: CANVAS_TEMPLATE_PAGE_SIZE })
+	const {
+		hasMore: hasMoreTemplates,
+		isLoading: isLoadingTemplates,
+		isLoadingMore: isLoadingMoreTemplates,
+		isRefreshing: isRefreshingTemplates,
+		loadedTemplateCount,
+		loadMore: loadMoreTemplates,
+	} = slidesState
 	const [searchValue, setSearchValue] = useState(slidesState.keyword)
 	const [selectedTemplate, setSelectedTemplate] = useState<OptionItem | null>(null)
 	const [similarColorSource, setSimilarColorSource] = useState<OptionItem | null>(null)
@@ -226,26 +185,26 @@ function SlidesTemplatesPage() {
 		isSimilarColorFilterActive &&
 		shouldLoadMoreSimilarColorTemplates({
 			loadCount: similarColorLoadCountRef.current,
-			hasMore: slidesState.hasMore,
-			isLoading: slidesState.isLoading,
-			isLoadingMore: slidesState.isLoadingMore,
-			isRefreshing: slidesState.isRefreshing,
-			loadedTemplateCount: slidesState.loadedTemplateCount,
+			hasMore: hasMoreTemplates,
+			isLoading: isLoadingTemplates,
+			isLoadingMore: isLoadingMoreTemplates,
+			isRefreshing: isRefreshingTemplates,
+			loadedTemplateCount,
 			similarTemplateCount: visibleTemplateOptions.length,
 		})
 	const handleLoadMoreTemplates = useCallback(() => {
 		if (!isSimilarColorFilterActive) {
-			slidesState.loadMore()
+			loadMoreTemplates()
 			return
 		}
 		if (
 			!shouldLoadMoreSimilarColorTemplates({
 				loadCount: similarColorLoadCountRef.current,
-				hasMore: slidesState.hasMore,
-				isLoading: slidesState.isLoading,
-				isLoadingMore: slidesState.isLoadingMore,
-				isRefreshing: slidesState.isRefreshing,
-				loadedTemplateCount: slidesState.loadedTemplateCount,
+				hasMore: hasMoreTemplates,
+				isLoading: isLoadingTemplates,
+				isLoadingMore: isLoadingMoreTemplates,
+				isRefreshing: isRefreshingTemplates,
+				loadedTemplateCount,
 				similarTemplateCount: visibleTemplateOptions.length,
 			})
 		) {
@@ -253,15 +212,15 @@ function SlidesTemplatesPage() {
 		}
 
 		similarColorLoadCountRef.current += 1
-		slidesState.loadMore()
+		loadMoreTemplates()
 	}, [
+		hasMoreTemplates,
 		isSimilarColorFilterActive,
-		slidesState.hasMore,
-		slidesState.isLoading,
-		slidesState.isLoadingMore,
-		slidesState.isRefreshing,
-		slidesState.loadedTemplateCount,
-		slidesState.loadMore,
+		isLoadingMoreTemplates,
+		isLoadingTemplates,
+		isRefreshingTemplates,
+		loadedTemplateCount,
+		loadMoreTemplates,
 		visibleTemplateOptions.length,
 	])
 
@@ -367,15 +326,7 @@ function SlidesTemplatesPage() {
 					>
 						<motion.div
 							className={cn(
-								"pointer-events-auto flex w-full flex-col rounded-2xl bg-zinc-950/[0.42] p-2 shadow-[0_12px_36px_rgba(0,0,0,0.24),inset_0_1px_0_rgba(255,255,255,0.1)] backdrop-blur-2xl",
-								selectedTemplate
-									? cn(
-											"max-w-4xl",
-											reduceMotion
-												? "transition-none"
-												: "transition-[max-width] duration-150 ease-out",
-										)
-									: "max-w-3xl transition-none",
+								"pointer-events-auto flex w-full max-w-3xl flex-col rounded-2xl bg-zinc-950/[0.42] p-2 shadow-[0_12px_36px_rgba(0,0,0,0.24),inset_0_1px_0_rgba(255,255,255,0.1)] backdrop-blur-2xl",
 							)}
 							data-testid="slides-templates-page-bottom-tools"
 						>

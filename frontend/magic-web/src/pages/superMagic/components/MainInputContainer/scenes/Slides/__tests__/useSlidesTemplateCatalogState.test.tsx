@@ -183,6 +183,77 @@ describe("useSlidesTemplateCatalogState", () => {
 		expect(SuperMagicApi.getSlidesTemplates).toHaveBeenCalledTimes(1)
 	})
 
+	it("stops pagination when an appended page contains no new templates", async () => {
+		vi.mocked(SuperMagicApi.getSlidesTemplates)
+			.mockResolvedValueOnce({
+				page: 1,
+				page_size: SLIDES_TEMPLATE_PAGE_SIZE,
+				total: 2,
+				list: [businessTemplate],
+			})
+			.mockResolvedValueOnce({
+				page: 2,
+				page_size: SLIDES_TEMPLATE_PAGE_SIZE,
+				total: 2,
+				list: [businessTemplate],
+			})
+
+		const { result } = renderHook(() => useSlidesTemplateCatalogState())
+
+		await waitFor(() => expect(result.current.isLoading).toBe(false))
+		expect(result.current.hasMore).toBe(true)
+
+		act(() => {
+			result.current.loadMore()
+		})
+
+		await waitFor(() => expect(result.current.isLoadingMore).toBe(false))
+		expect(result.current.templateOptions).toHaveLength(1)
+		expect(result.current.hasMore).toBe(false)
+
+		act(() => {
+			result.current.loadMore()
+		})
+		expect(SuperMagicApi.getSlidesTemplates).toHaveBeenCalledTimes(2)
+	})
+
+	it("pauses automatic pagination after a failed append and supports manual retry", async () => {
+		vi.mocked(SuperMagicApi.getSlidesTemplates)
+			.mockResolvedValueOnce({
+				page: 1,
+				page_size: SLIDES_TEMPLATE_PAGE_SIZE,
+				total: 2,
+				list: [businessTemplate],
+			})
+			.mockRejectedValueOnce(new Error("network error"))
+			.mockResolvedValueOnce({
+				page: 2,
+				page_size: SLIDES_TEMPLATE_PAGE_SIZE,
+				total: 2,
+				list: [educationTemplate],
+			})
+
+		const { result } = renderHook(() => useSlidesTemplateCatalogState())
+
+		await waitFor(() => expect(result.current.isLoading).toBe(false))
+		act(() => {
+			result.current.loadMore()
+		})
+
+		await waitFor(() => expect(result.current.isLoadMoreFailed).toBe(true))
+		act(() => {
+			result.current.loadMore()
+		})
+		expect(SuperMagicApi.getSlidesTemplates).toHaveBeenCalledTimes(2)
+
+		act(() => {
+			result.current.retryLoadMore()
+		})
+		await waitFor(() => expect(result.current.isLoadingMore).toBe(false))
+		expect(result.current.isLoadMoreFailed).toBe(false)
+		expect(result.current.templateOptions).toHaveLength(2)
+	})
+
 	it("replaces results after category and keyword changes", async () => {
 		vi.mocked(SuperMagicApi.getSlidesTemplates)
 			.mockResolvedValueOnce({

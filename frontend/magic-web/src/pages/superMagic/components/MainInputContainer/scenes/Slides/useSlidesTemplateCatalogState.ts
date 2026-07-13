@@ -32,6 +32,22 @@ function mergeTemplates(
 	return Array.from(templateMap.values())
 }
 
+function getAppendedTemplateCount(
+	currentTemplates: SlidesTemplateItem[],
+	nextTemplates: SlidesTemplateItem[],
+) {
+	const currentTemplateCodes = new Set(currentTemplates.map((template) => template.code))
+	let appendedTemplateCount = 0
+
+	for (const template of nextTemplates) {
+		if (currentTemplateCodes.has(template.code)) continue
+		currentTemplateCodes.add(template.code)
+		appendedTemplateCount += 1
+	}
+
+	return appendedTemplateCount
+}
+
 export function useSlidesTemplateCatalogState({
 	pageSize = SLIDES_TEMPLATE_PAGE_SIZE,
 }: UseSlidesTemplateCatalogStateOptions = {}) {
@@ -44,14 +60,16 @@ export function useSlidesTemplateCatalogState({
 	const [keyword, setKeyword] = useState("")
 	const [debouncedKeyword, setDebouncedKeyword] = useState("")
 	const [page, setPage] = useState(1)
-	const [total, setTotal] = useState(0)
+	const [hasMore, setHasMore] = useState(false)
 	const [isLoading, setIsLoading] = useState(true)
 	const [isRefreshing, setIsRefreshing] = useState(false)
 	const [isLoadingMore, setIsLoadingMore] = useState(false)
+	const [isLoadMoreFailed, setIsLoadMoreFailed] = useState(false)
 	const [hasCheckedAnyTemplate, setHasCheckedAnyTemplate] = useState(false)
 	const [hasAnyTemplate, setHasAnyTemplate] = useState(true)
 	const requestSeqRef = useRef(0)
 	const mountedRef = useRef(true)
+	const templatesRef = useRef<SlidesTemplateItem[]>([])
 	const hasLoadedTemplatesRef = useRef(false)
 	const appendRequestInFlightRef = useRef(false)
 	const templateRequestKeyRef = useRef<string | null>(null)
@@ -165,6 +183,7 @@ export function useSlidesTemplateCatalogState({
 				appendRequestInFlightRef.current = false
 				setPage(1)
 				setIsLoadingMore(false)
+				setIsLoadMoreFailed(false)
 				if (hasLoadedTemplatesRef.current) {
 					setIsRefreshing(true)
 				} else {
@@ -173,6 +192,7 @@ export function useSlidesTemplateCatalogState({
 			} else {
 				appendRequestInFlightRef.current = true
 				setIsLoadingMore(true)
+				setIsLoadMoreFailed(false)
 			}
 
 			try {
@@ -194,13 +214,24 @@ export function useSlidesTemplateCatalogState({
 
 				const nextTemplates = response.list ?? []
 				const nextTotal = response.total ?? nextTemplates.length
-				setTemplates((currentTemplates) =>
+				const currentTemplates = templatesRef.current
+				const appendedTemplateCount =
+					mode === "append"
+						? getAppendedTemplateCount(currentTemplates, nextTemplates)
+						: 0
+				const updatedTemplates =
 					mode === "replace"
 						? nextTemplates
-						: mergeTemplates(currentTemplates, nextTemplates),
-				)
+						: mergeTemplates(currentTemplates, nextTemplates)
+				templatesRef.current = updatedTemplates
+				setTemplates(updatedTemplates)
 				setPage(response.page ?? nextPage)
-				setTotal(nextTotal)
+				// 服务端 total 可能短暂滞后；空页或重复页继续观察会让可见哨兵无限重试。
+				setHasMore(
+					mode === "replace"
+						? nextTemplates.length < nextTotal
+						: appendedTemplateCount > 0 && updatedTemplates.length < nextTotal,
+				)
 				if (mode === "replace" && isAllTemplatesQuery) {
 					setHasCheckedAnyTemplate(true)
 					setHasAnyTemplate(nextTemplates.length > 0)
@@ -209,7 +240,11 @@ export function useSlidesTemplateCatalogState({
 			} catch (error) {
 				if (!mountedRef.current || requestSeq !== requestSeqRef.current) return
 				console.error("Failed to fetch slides templates", error)
-				if (mode === "replace" && !hasLoadedTemplatesRef.current) setTemplates([])
+				if (mode === "replace" && !hasLoadedTemplatesRef.current) {
+					templatesRef.current = []
+					setTemplates([])
+				}
+				if (mode === "append") setIsLoadMoreFailed(true)
 			} finally {
 				if (templateRequestKeyRef.current === requestKey) {
 					templateRequestKeyRef.current = null
@@ -270,9 +305,21 @@ export function useSlidesTemplateCatalogState({
 	const templateOptions = isServerBackedGroup
 		? serverBackedTemplateOptions
 		: (selectedGroup?.children ?? [])
-	const hasMore = templates.length < total
-
 	const loadMore = useCallback(() => {
+		if (
+			isLoading ||
+			isRefreshing ||
+			isLoadingMore ||
+			isLoadMoreFailed ||
+			appendRequestInFlightRef.current ||
+			!hasMore
+		) {
+			return
+		}
+		fetchTemplates(page + 1, "append")
+	}, [fetchTemplates, hasMore, isLoading, isLoadingMore, isLoadMoreFailed, isRefreshing, page])
+
+	const retryLoadMore = useCallback(() => {
 		if (
 			isLoading ||
 			isRefreshing ||
@@ -293,8 +340,10 @@ export function useSlidesTemplateCatalogState({
 		isLoading,
 		isRefreshing,
 		isLoadingMore,
+		isLoadMoreFailed,
 		keyword,
 		loadMore,
+		retryLoadMore,
 		loadedTemplateCount: templates.length,
 		selectedGroupKey,
 		setKeyword,

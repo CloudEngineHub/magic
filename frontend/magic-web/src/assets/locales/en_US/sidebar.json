@@ -103,7 +103,8 @@
 		"title": "Skills Library"
 	},
 	"slidesTemplates": {
-		"title": "PPT Templates"
+		"templateCount": "{{count}} templates",
+		"title": "Slide Templates"
 	},
 	"superLobster": {
 		"card": {
