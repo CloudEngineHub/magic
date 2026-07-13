@@ -26,7 +26,6 @@ interface SlidesTemplateCoverTileProps {
 	onSelect: (template: OptionItem) => void
 	template: OptionItem
 }
-
 export default function SlidesTemplateCoverTile({
 	canPreview,
 	imageUrl,
@@ -86,24 +85,28 @@ export default function SlidesTemplateCoverTile({
 			aria-hidden={isKeyboardAccessible ? undefined : true}
 			data-testid="slides-template-cover-tile"
 			className={cn(
-				"group relative size-full overflow-hidden rounded-lg bg-zinc-900 opacity-[0.86] shadow-[0_8px_24px_rgba(0,0,0,0.22)] outline-none ring-1 ring-inset ring-white/[0.08] transition-[opacity,transform,box-shadow,ring-color] duration-200 ease-out",
+				"group relative size-full overflow-hidden rounded-lg bg-zinc-900 opacity-[0.86] shadow-[0_8px_24px_rgba(0,0,0,0.22)] outline-none ring-1 ring-inset ring-white/[0.08] transition-[opacity,transform,box-shadow,ring-color] motion-reduce:transition-none",
 				"focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-white/70",
-				"hover:z-10 hover:scale-[1.006] hover:opacity-100 hover:shadow-[0_14px_36px_rgba(0,0,0,0.32)] hover:ring-white/[0.18]",
+				"hover:z-10 hover:opacity-100 hover:shadow-[0_14px_36px_rgba(0,0,0,0.32)] hover:ring-white/[0.18]",
+				!isSelected && !isExpanded && "duration-200 ease-out hover:scale-[1.006]",
 				isSelected &&
-					"z-20 opacity-100 shadow-[0_14px_38px_rgba(0,0,0,0.34)] ring-1 ring-inset ring-white/[0.18]",
-				isExpanded &&
-					"z-30 scale-[1.01] opacity-100 shadow-[0_18px_44px_rgba(0,0,0,0.38)] ring-1 ring-inset ring-white/[0.2]",
+					"z-20 opacity-100 shadow-[0_20px_48px_rgba(0,0,0,0.42)] ring-1 ring-inset ring-white/[0.24]",
+				!isSelected &&
+					isExpanded &&
+					"z-30 opacity-100 shadow-[0_18px_44px_rgba(0,0,0,0.38)] ring-1 ring-inset ring-white/[0.2] duration-200 ease-out",
 			)}
 			onPointerEnter={() => setHasRequestedInteractiveColors(true)}
 			onFocusCapture={() => setHasRequestedInteractiveColors(true)}
 			onClick={handlePreview}
 			onKeyDown={handleKeyDown}
 		>
-			{showGlowBorder ? <SlidesTemplateGlowBorder radius={7} /> : null}
+			{showGlowBorder ? (
+				<SlidesTemplateGlowBorder emphasized={isSelected} radius={7} />
+			) : null}
 			{colors.length > 0 ? (
 				<SlidesTemplateColorPalette
 					className={cn(
-						"absolute left-2.5 top-2.5 z-20 transition-opacity duration-200",
+						"absolute right-2.5 top-2.5 z-20 transition-opacity duration-200",
 						showGlowBorder
 							? "opacity-100"
 							: "opacity-0 group-focus-within:opacity-100 group-hover:opacity-100",
@@ -143,10 +146,11 @@ export default function SlidesTemplateCoverTile({
 					role="img"
 					aria-label={featuredLabel}
 					title={featuredLabel}
-					className="pointer-events-none absolute right-2.5 top-2.5 z-20 inline-flex size-6 items-center justify-center rounded-full bg-amber-400/95 text-zinc-950 shadow-sm ring-1 ring-inset ring-white/20"
+					className="pointer-events-none absolute left-2.5 top-2.5 isolate z-20 inline-flex h-6 items-center gap-1 rounded-full border border-amber-100/65 bg-gradient-to-r from-amber-300 via-amber-300 to-amber-400 px-2 text-[11px] font-semibold leading-none text-zinc-950 shadow-[0_2px_8px_rgba(120,53,15,0.34)] ring-1 ring-inset ring-white/25 before:absolute before:-inset-2 before:-z-10 before:rounded-full before:bg-amber-300/50 before:blur-md"
 					data-testid="slides-template-cover-featured-badge"
 				>
 					<Award className="size-3.5" aria-hidden="true" />
+					<span>{featuredLabel}</span>
 				</span>
 			) : null}
 

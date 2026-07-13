@@ -19,7 +19,11 @@ import {
 } from "@/pages/superMagic/components/MainInputContainer/hooks/useSlidesPreviewNavigation"
 import { useLocaleText } from "@/pages/superMagic/components/MainInputContainer/panels/hooks/useLocaleText"
 import type { OptionItem } from "@/pages/superMagic/components/MainInputContainer/panels/types"
-import { hasSlidesTemplateUsageCount } from "@/pages/superMagic/components/MainInputContainer/panels/slides-preset/templateMeta"
+import {
+	FEATURED_SLIDES_TEMPLATE_TAG_CODE,
+	getSlidesTemplateTagDisplayName,
+	hasSlidesTemplateUsageCount,
+} from "@/pages/superMagic/components/MainInputContainer/panels/slides-preset/templateMeta"
 import {
 	type SlidesTemplatePreviewFocus,
 	getTemplateCoverUrl,
@@ -44,7 +48,47 @@ interface SlidesTemplateInlinePreviewProps {
 const PREVIEW_AUTO_DISMISS_MS = 9000
 const PREVIEW_BACKGROUND_CLOSE_BLOCK_SELECTOR =
 	'button, a, input, textarea, select, iframe, [data-slides-template-preview-close-block="true"]'
-const renderNoScrollControl = () => null
+
+interface ThumbnailRailScrollControlProps {
+	direction: "left" | "right"
+	onClick: () => void
+	title: string
+}
+
+function ThumbnailRailScrollControl({
+	direction,
+	onClick,
+	title,
+}: ThumbnailRailScrollControlProps) {
+	const isPrevious = direction === "left"
+	const Icon = isPrevious ? ChevronLeft : ChevronRight
+
+	return (
+		<div
+			className={cn(
+				"pointer-events-none absolute top-0 z-10 flex h-full w-14 items-center",
+				isPrevious
+					? "left-0 justify-start bg-gradient-to-r from-zinc-950/80 to-transparent"
+					: "right-0 justify-end bg-gradient-to-l from-zinc-950/80 to-transparent",
+			)}
+		>
+			<Button
+				type="button"
+				variant="secondary"
+				size="icon"
+				className={cn(
+					"pointer-events-auto size-9 rounded-full border border-white/20 bg-zinc-950/75 text-white shadow-lg backdrop-blur-xl hover:bg-zinc-950/90",
+					isPrevious ? "ml-2" : "mr-2",
+				)}
+				aria-label={`${title} ${isPrevious ? "previous" : "next"} thumbnails`}
+				onClick={onClick}
+				data-testid={`slides-template-inline-preview-thumbnail-${isPrevious ? "previous" : "next"}-button`}
+			>
+				<Icon className="size-4" />
+			</Button>
+		</div>
+	)
+}
 
 function getInitialPageIndex(focus: SlidesTemplatePreviewFocus, pages: string[]) {
 	if (!focus.tile.imageUrl) return 0
@@ -60,7 +104,7 @@ export default function SlidesTemplateInlinePreview({
 	selectedTemplate,
 }: SlidesTemplateInlinePreviewProps) {
 	const lt = useLocaleText()
-	const { t } = useTranslation("crew/create")
+	const { t, i18n } = useTranslation("crew/create")
 	const autoDismissTimerRef = useRef<number | null>(null)
 	const previewStageRef = useRef<HTMLDivElement | null>(null)
 	const onCloseRef = useRef(onClose)
@@ -136,6 +180,13 @@ export default function SlidesTemplateInlinePreview({
 	if (!focus || !template) return null
 
 	const title = lt(template.preview_title) ?? lt(template.label) ?? lt(template.value) ?? ""
+	const tagLabels = (template.tags ?? []).map((tag) => ({
+		code: tag.code,
+		label: getSlidesTemplateTagDisplayName(tag, i18n.language, {
+			zh_CN: tag.code,
+			en_US: tag.code,
+		}),
+	}))
 	const description =
 		lt(template.preview_description) ?? lt(template.description) ?? lt(template.sub_text)
 	const showUsageCount = hasSlidesTemplateUsageCount(template)
@@ -232,11 +283,33 @@ export default function SlidesTemplateInlinePreview({
 							)}
 						</div>
 						<div className="min-w-0 flex-1">
-							<div
-								className="truncate text-base font-semibold leading-6 text-white"
-								data-testid="slides-template-inline-preview-title"
-							>
-								{title}
+							<div className="flex min-w-0 flex-wrap items-center gap-2">
+								<div
+									className="min-w-0 truncate text-base font-semibold leading-6 text-white"
+									data-testid="slides-template-inline-preview-title"
+								>
+									{title}
+								</div>
+								{tagLabels.length > 0 ? (
+									<div
+										className="flex max-w-full shrink-0 flex-wrap items-center gap-1"
+										data-testid="slides-template-inline-preview-tags"
+									>
+										{tagLabels.map((tag) => (
+											<span
+												key={tag.code}
+												className={cn(
+													"inline-flex max-w-24 shrink-0 truncate rounded-full border px-1.5 py-0.5 text-[10px] font-medium leading-3 backdrop-blur-md",
+													tag.code === FEATURED_SLIDES_TEMPLATE_TAG_CODE
+														? "border-amber-200/50 bg-amber-300/20 text-amber-100"
+														: "border-white/[0.16] bg-black/[0.18] text-white/[0.82]",
+												)}
+											>
+												{tag.label}
+											</span>
+										))}
+									</div>
+								) : null}
 							</div>
 							{showUsageCount ? (
 								<div
@@ -310,7 +383,7 @@ export default function SlidesTemplateInlinePreview({
 					</div>
 					<div
 						className={cn(
-							"mx-auto flex w-full flex-1 items-center justify-center py-3",
+							"mx-auto flex w-full flex-1 items-stretch justify-center",
 							styles.viewerRow,
 						)}
 					>
@@ -367,8 +440,20 @@ export default function SlidesTemplateInlinePreview({
 								className={cn("h-full rounded-2xl", styles.thumbnailRail)}
 								controlBackground="rgb(18 20 26 / 72%)"
 								hideScrollbar={false}
-								renderLeftControl={renderNoScrollControl}
-								renderRightControl={renderNoScrollControl}
+								renderLeftControl={({ scroll }) => (
+									<ThumbnailRailScrollControl
+										direction="left"
+										onClick={() => scroll("left")}
+										title={title}
+									/>
+								)}
+								renderRightControl={({ scroll }) => (
+									<ThumbnailRailScrollControl
+										direction="right"
+										onClick={() => scroll("right")}
+										title={title}
+									/>
+								)}
 								scrollContainerClassName="scrollbar-x-thin flex h-full items-center gap-2 overflow-x-auto overflow-y-hidden px-3 py-2"
 								scrollContainerRef={scrollContainerRef}
 								scrollStep={280}
@@ -402,6 +487,13 @@ export default function SlidesTemplateInlinePreview({
 												draggable={false}
 												aria-hidden="true"
 											/>
+											<span
+												className={styles.thumbnailIndex}
+												aria-hidden="true"
+												data-testid="slides-template-inline-preview-thumbnail-index"
+											>
+												{index + 1}
+											</span>
 										</button>
 									</div>
 								))}

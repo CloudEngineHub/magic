@@ -54,6 +54,7 @@ export function useSlidesTemplateCatalogState({
 	const mountedRef = useRef(true)
 	const hasLoadedTemplatesRef = useRef(false)
 	const appendRequestInFlightRef = useRef(false)
+	const templateRequestKeyRef = useRef<string | null>(null)
 	const templateOptionCacheRef = useRef(
 		new Map<
 			string,
@@ -66,7 +67,6 @@ export function useSlidesTemplateCatalogState({
 
 		return () => {
 			mountedRef.current = false
-			requestSeqRef.current += 1
 		}
 	}, [])
 
@@ -149,6 +149,17 @@ export function useSlidesTemplateCatalogState({
 
 			const isAllTemplatesQuery =
 				!debouncedKeyword && !selectedCategoryCode && !selectedTagCode
+			const requestKey = JSON.stringify([
+				mode,
+				nextPage,
+				pageSize,
+				debouncedKeyword,
+				selectedCategoryCode ?? "",
+				selectedTagCode ?? "",
+			])
+			// StrictMode 会重新执行首屏 effect。相同查询仍在进行时复用它，避免重复请求。
+			if (templateRequestKeyRef.current === requestKey) return
+			templateRequestKeyRef.current = requestKey
 			const requestSeq = ++requestSeqRef.current
 			if (mode === "replace") {
 				appendRequestInFlightRef.current = false
@@ -200,6 +211,9 @@ export function useSlidesTemplateCatalogState({
 				console.error("Failed to fetch slides templates", error)
 				if (mode === "replace" && !hasLoadedTemplatesRef.current) setTemplates([])
 			} finally {
+				if (templateRequestKeyRef.current === requestKey) {
+					templateRequestKeyRef.current = null
+				}
 				if (mountedRef.current && requestSeq === requestSeqRef.current) {
 					if (mode === "append") appendRequestInFlightRef.current = false
 					setIsLoading(false)

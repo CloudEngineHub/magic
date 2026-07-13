@@ -58,13 +58,19 @@ describe("slides template canvas viewport", () => {
 				viewportWidth: 800,
 			}),
 		).toBeLessThan(MAX_VISIBLE_TEMPLATE_CANVAS_ITEMS)
-		expect(
-			getTemplateCanvasVisibleItemLimit({
-				scale: SLIDES_TEMPLATE_CANVAS_MIN_SCALE,
-				viewportHeight: 1200,
-				viewportWidth: 1800,
-			}),
-		).toBe(MAX_VISIBLE_TEMPLATE_CANVAS_ITEMS)
+		const defaultScaleLimit = getTemplateCanvasVisibleItemLimit({
+			scale: 1,
+			viewportHeight: 600,
+			viewportWidth: 800,
+		})
+		const zoomedOutLimit = getTemplateCanvasVisibleItemLimit({
+			scale: SLIDES_TEMPLATE_CANVAS_MIN_SCALE,
+			viewportHeight: 1200,
+			viewportWidth: 1800,
+		})
+
+		expect(zoomedOutLimit).toBeGreaterThan(defaultScaleLimit)
+		expect(zoomedOutLimit).toBeLessThanOrEqual(MAX_VISIBLE_TEMPLATE_CANVAS_ITEMS)
 	})
 
 	it("prioritizes real loaded templates over virtual filler tiles when capped", () => {

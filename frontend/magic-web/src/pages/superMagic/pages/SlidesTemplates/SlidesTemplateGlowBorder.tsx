@@ -4,17 +4,21 @@ import { cn } from "@/lib/utils"
 
 interface SlidesTemplateGlowBorderProps {
 	className?: string
+	emphasized?: boolean
 	radius?: number
 }
 
 export default function SlidesTemplateGlowBorder({
 	className,
+	emphasized = false,
 	radius = 10,
 }: SlidesTemplateGlowBorderProps) {
 	const reduceMotion = Boolean(useReducedMotion())
 	const id = useId().replaceAll(":", "")
 	const gradientId = `slides-template-glow-gradient-${id}`
 	const filterId = `slides-template-glow-filter-${id}`
+	const frameInset = emphasized ? "2.5" : "0"
+	const frameSize = emphasized ? "95%" : "100%"
 
 	return (
 		<div
@@ -23,10 +27,14 @@ export default function SlidesTemplateGlowBorder({
 				"pointer-events-none absolute inset-0 z-30 transition-opacity duration-300",
 				className,
 			)}
+			data-emphasized={emphasized || undefined}
 			data-testid="slides-template-glow-border"
 		>
 			<svg
-				className="absolute inset-px size-[calc(100%-2px)] overflow-visible"
+				className={cn(
+					"absolute inset-px size-[calc(100%-2px)] overflow-visible",
+					emphasized && "inset-0 size-full",
+				)}
 				preserveAspectRatio="none"
 			>
 				<defs>
@@ -50,43 +58,43 @@ export default function SlidesTemplateGlowBorder({
 						)}
 					</linearGradient>
 					<filter id={filterId} x="-30%" y="-30%" width="160%" height="160%">
-						<feGaussianBlur stdDeviation="3.2" />
+						<feGaussianBlur stdDeviation={emphasized ? "4" : "3.2"} />
 					</filter>
 				</defs>
 				<rect
-					x="0"
-					y="0"
-					width="100%"
-					height="100%"
+					x={frameInset}
+					y={frameInset}
+					width={frameSize}
+					height={frameSize}
 					rx={radius}
 					fill="none"
 					stroke={`url(#${gradientId})`}
-					strokeWidth="5"
-					opacity="0.58"
+					strokeWidth={emphasized ? "7" : "5"}
+					opacity={emphasized ? "0.72" : "0.58"}
 					filter={`url(#${filterId})`}
 					vectorEffect="non-scaling-stroke"
 				/>
 				<rect
-					x="0"
-					y="0"
-					width="100%"
-					height="100%"
+					x={frameInset}
+					y={frameInset}
+					width={frameSize}
+					height={frameSize}
 					rx={radius}
 					fill="none"
 					stroke={`url(#${gradientId})`}
-					strokeWidth="1.8"
+					strokeWidth={emphasized ? "3.2" : "1.8"}
 					opacity="0.98"
 					vectorEffect="non-scaling-stroke"
 				/>
 				<rect
-					x="0"
-					y="0"
-					width="100%"
-					height="100%"
+					x={frameInset}
+					y={frameInset}
+					width={frameSize}
+					height={frameSize}
 					rx={radius}
 					fill="none"
 					stroke="rgba(255,255,255,0.34)"
-					strokeWidth="0.55"
+					strokeWidth={emphasized ? "0.8" : "0.55"}
 					vectorEffect="non-scaling-stroke"
 				/>
 			</svg>

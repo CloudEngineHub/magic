@@ -9,6 +9,7 @@ import {
 import type { SlidesTemplateCanvasTile } from "./canvasInteraction"
 import {
 	getTemplateCanvasViewportWindow,
+	getVisibleTemplateCanvasItems,
 	getTemplateCanvasVisibleItemLimit,
 } from "./canvasViewport"
 
@@ -21,12 +22,22 @@ export interface SlidesTemplateCanvasLoopMetrics {
 }
 
 interface LoopViewportInput {
+	itemQuery?: SlidesTemplateCanvasLoopItemQuery
 	items: Array<TemplateCanvasItem<SlidesTemplateCanvasTile>>
 	loopMetrics: SlidesTemplateCanvasLoopMetrics
 	offset: TemplateCanvasPoint
 	scale?: number
 	viewportHeight: number
 	viewportWidth: number
+}
+
+export interface SlidesTemplateCanvasLoopItemQuery {
+	getItemsInWindow: (input: {
+		columnCycle: number
+		loopMetrics: SlidesTemplateCanvasLoopMetrics
+		rowCycle: number
+		windowBounds: ReturnType<typeof getTemplateCanvasViewportWindow>
+	}) => Array<TemplateCanvasItem<SlidesTemplateCanvasTile>>
 }
 
 interface NearestLoopedItemInput {
@@ -227,6 +238,7 @@ function addLoopedCanvasItemCandidate(
 }
 
 export function getLoopedVisibleSlidesTemplateCanvasItems({
+	itemQuery,
 	items,
 	loopMetrics,
 	offset,
@@ -234,7 +246,16 @@ export function getLoopedVisibleSlidesTemplateCanvasItems({
 	viewportHeight,
 	viewportWidth,
 }: LoopViewportInput) {
-	if (items.length === 0 || loopMetrics.width <= 0 || loopMetrics.height <= 0) return []
+	if (items.length === 0) return []
+	if (loopMetrics.width <= 0 || loopMetrics.height <= 0) {
+		return getVisibleTemplateCanvasItems({
+			items,
+			offset,
+			scale,
+			viewportHeight,
+			viewportWidth,
+		})
+	}
 
 	const windowBounds = getTemplateCanvasViewportWindow({
 		offset,
@@ -274,7 +295,15 @@ export function getLoopedVisibleSlidesTemplateCanvasItems({
 			columnCycle <= columnCycles.end;
 			columnCycle += 1
 		) {
-			for (const item of items) {
+			const cycleItems =
+				itemQuery?.getItemsInWindow({
+					columnCycle,
+					loopMetrics,
+					rowCycle,
+					windowBounds,
+				}) ?? items
+
+			for (const item of cycleItems) {
 				if (
 					!isLoopedCanvasItemInWindow(
 						item,

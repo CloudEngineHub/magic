@@ -1,3 +1,4 @@
+import { StrictMode, type ReactNode } from "react"
 import { act, renderHook, waitFor } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { SuperMagicApi } from "@/apis"
@@ -84,6 +85,10 @@ const educationTemplate: SlidesTemplateItem = {
 	},
 }
 
+function StrictModeWrapper({ children }: { children: ReactNode }) {
+	return <StrictMode>{children}</StrictMode>
+}
+
 describe("useSlidesTemplateCatalogState", () => {
 	it("supports a larger page size for the full-screen canvas", async () => {
 		vi.mocked(SuperMagicApi.getSlidesTemplates).mockResolvedValue({
@@ -166,6 +171,16 @@ describe("useSlidesTemplateCatalogState", () => {
 			createSlidesTemplateTagGroupKey(featuredTag.code),
 			createSlidesTemplateCategoryGroupKey(businessCategory.code),
 		])
+	})
+
+	it("deduplicates the initial template request in StrictMode", async () => {
+		const { result } = renderHook(() => useSlidesTemplateCatalogState(), {
+			wrapper: StrictModeWrapper,
+		})
+
+		await waitFor(() => expect(result.current.isLoading).toBe(false))
+
+		expect(SuperMagicApi.getSlidesTemplates).toHaveBeenCalledTimes(1)
 	})
 
 	it("replaces results after category and keyword changes", async () => {

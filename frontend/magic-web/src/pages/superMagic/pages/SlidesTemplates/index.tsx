@@ -33,6 +33,9 @@ import { useTemplateColorExtractionVersion } from "./useResolvedTemplateColors"
 const BOTTOM_TOOLS_OFFSET = 24
 const CANVAS_EDGE_GAP = 40
 const CANVAS_TEMPLATE_PAGE_SIZE = 40
+const MIN_SIMILAR_COLOR_TEMPLATE_COUNT = 24
+const MAX_SIMILAR_COLOR_LOADS = 3
+const MAX_SIMILAR_COLOR_CANDIDATE_COUNT = CANVAS_TEMPLATE_PAGE_SIZE * (MAX_SIMILAR_COLOR_LOADS + 1)
 const GROUP_SCROLL_CONTROL_CLASS_NAME =
 	"[&_button]:border-white/20 [&_button]:bg-zinc-800/[0.86] [&_button]:text-white [&_button]:shadow-[0_4px_14px_rgba(0,0,0,0.28),inset_0_1px_0_rgba(255,255,255,0.12)] [&_button]:backdrop-blur-lg [&_button:hover]:bg-zinc-700/[0.92]"
 
@@ -67,6 +70,34 @@ export function preserveExistingTemplateOrder(previous: OptionItem[], next: Opti
 	]
 }
 
+export function shouldLoadMoreSimilarColorTemplates({
+	loadCount,
+	hasMore,
+	isLoading,
+	isLoadingMore,
+	isRefreshing,
+	loadedTemplateCount,
+	similarTemplateCount,
+}: {
+	loadCount: number
+	hasMore: boolean
+	isLoading: boolean
+	isLoadingMore: boolean
+	isRefreshing: boolean
+	loadedTemplateCount: number
+	similarTemplateCount: number
+}) {
+	return (
+		similarTemplateCount < MIN_SIMILAR_COLOR_TEMPLATE_COUNT &&
+		hasMore &&
+		!isLoading &&
+		!isLoadingMore &&
+		!isRefreshing &&
+		loadedTemplateCount < MAX_SIMILAR_COLOR_CANDIDATE_COUNT &&
+		loadCount < MAX_SIMILAR_COLOR_LOADS
+	)
+}
+
 function SlidesTemplatesPage() {
 	const { t } = useTranslation("crew/create")
 	const lt = useLocaleText()
@@ -80,6 +111,8 @@ function SlidesTemplatesPage() {
 	const bottomToolsRef = useRef<HTMLDivElement | null>(null)
 	const visibleTemplateOptionsRef = useRef(slidesState.templateOptions)
 	const similarColorSourceKeyRef = useRef("")
+	const similarColorLoadCountRef = useRef(0)
+	const similarColorLoadSourceKeyRef = useRef("")
 	const bottomToolsSize = useSize(bottomToolsRef)
 	const reduceMotion = useReducedMotion()
 	const hasGroups = slidesState.groups.length > 1
@@ -181,6 +214,62 @@ function SlidesTemplatesPage() {
 		return clearTemplateColorExtractionBackgroundQueue
 	}, [isSimilarColorFilterActive])
 
+	useEffect(() => {
+		const sourceKey = similarColorSource ? getTemplateKey(similarColorSource) : ""
+		if (similarColorLoadSourceKeyRef.current === sourceKey) return
+
+		similarColorLoadSourceKeyRef.current = sourceKey
+		similarColorLoadCountRef.current = 0
+	}, [similarColorSource])
+
+	const canLoadMoreSimilarColorTemplates =
+		isSimilarColorFilterActive &&
+		shouldLoadMoreSimilarColorTemplates({
+			loadCount: similarColorLoadCountRef.current,
+			hasMore: slidesState.hasMore,
+			isLoading: slidesState.isLoading,
+			isLoadingMore: slidesState.isLoadingMore,
+			isRefreshing: slidesState.isRefreshing,
+			loadedTemplateCount: slidesState.loadedTemplateCount,
+			similarTemplateCount: visibleTemplateOptions.length,
+		})
+	const handleLoadMoreTemplates = useCallback(() => {
+		if (!isSimilarColorFilterActive) {
+			slidesState.loadMore()
+			return
+		}
+		if (
+			!shouldLoadMoreSimilarColorTemplates({
+				loadCount: similarColorLoadCountRef.current,
+				hasMore: slidesState.hasMore,
+				isLoading: slidesState.isLoading,
+				isLoadingMore: slidesState.isLoadingMore,
+				isRefreshing: slidesState.isRefreshing,
+				loadedTemplateCount: slidesState.loadedTemplateCount,
+				similarTemplateCount: visibleTemplateOptions.length,
+			})
+		) {
+			return
+		}
+
+		similarColorLoadCountRef.current += 1
+		slidesState.loadMore()
+	}, [
+		isSimilarColorFilterActive,
+		slidesState.hasMore,
+		slidesState.isLoading,
+		slidesState.isLoadingMore,
+		slidesState.isRefreshing,
+		slidesState.loadedTemplateCount,
+		slidesState.loadMore,
+		visibleTemplateOptions.length,
+	])
+
+	useEffect(() => {
+		if (!isSimilarColorFilterActive) return
+		handleLoadMoreTemplates()
+	}, [handleLoadMoreTemplates, isSimilarColorFilterActive])
+
 	const resetKey = `${slidesState.selectedGroupKey}:${slidesState.keyword.trim()}:${
 		similarColorSource ? getTemplateKey(similarColorSource) : "all-colors"
 	}`
@@ -244,11 +333,15 @@ function SlidesTemplatesPage() {
 				templates={visibleTemplateOptions}
 				selectedTemplate={selectedTemplate}
 				onTemplateSelect={setSelectedTemplate}
-				hasMore={slidesState.hasMore}
+				hasMore={
+					isSimilarColorFilterActive
+						? canLoadMoreSimilarColorTemplates
+						: slidesState.hasMore
+				}
 				isLoading={slidesState.isLoading}
 				isLoadingMore={slidesState.isLoadingMore}
 				isRefreshing={slidesState.isRefreshing}
-				onLoadMore={slidesState.loadMore}
+				onLoadMore={handleLoadMoreTemplates}
 				loadMoreSignal={slidesState.loadedTemplateCount}
 				onFindSimilarColors={handleFindSimilarColors}
 				onPreviewOpenChange={setIsInlinePreviewOpen}
@@ -348,7 +441,7 @@ function SlidesTemplatesPage() {
 										placeholder={t(
 											"playbook.edit.presets.form.searchPlaceholder",
 										)}
-										className="h-10 rounded-xl border-0 bg-white/[0.09] pl-9 pr-9 text-sm text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.11)] placeholder:text-white/[0.45] focus-visible:ring-white/20"
+										className="h-10 rounded-2xl border-0 bg-white/[0.09] pl-9 pr-9 text-sm text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.11)] placeholder:text-white/[0.45] focus-visible:ring-white/20"
 										data-testid="slides-templates-page-search-input"
 									/>
 									{searchValue ? (
@@ -368,7 +461,7 @@ function SlidesTemplatesPage() {
 								<Button
 									type="button"
 									variant="ghost"
-									className="group relative isolate h-10 shrink-0 overflow-hidden rounded-xl border-0 bg-white/[0.075] px-3 text-sm text-white/[0.88] shadow-[0_8px_22px_rgba(0,0,0,0.16),inset_0_1px_0_rgba(255,255,255,0.12)] hover:bg-white/[0.11] hover:text-white hover:shadow-[0_10px_28px_rgba(0,0,0,0.2),inset_0_1px_0_rgba(255,255,255,0.16)]"
+									className="group relative isolate h-10 shrink-0 overflow-hidden rounded-2xl border-0 bg-white/[0.075] px-3 text-sm text-white/[0.88] shadow-[0_8px_22px_rgba(0,0,0,0.16),inset_0_1px_0_rgba(255,255,255,0.12)] hover:bg-white/[0.11] hover:text-white hover:shadow-[0_10px_28px_rgba(0,0,0,0.2),inset_0_1px_0_rgba(255,255,255,0.16)]"
 									aria-label={t("playbook.edit.presets.form.randomTemplate")}
 									disabled={slidesState.templateOptions.length === 0}
 									onClick={handleFocusRandomTemplate}
@@ -376,7 +469,7 @@ function SlidesTemplatesPage() {
 								>
 									<SlidesTemplateGlowBorder
 										className="opacity-90 group-hover:opacity-100"
-										radius={11}
+										radius={15}
 									/>
 									<MousePointerClick className="relative z-40 mr-1.5 size-4" />
 									<span className="relative z-40">

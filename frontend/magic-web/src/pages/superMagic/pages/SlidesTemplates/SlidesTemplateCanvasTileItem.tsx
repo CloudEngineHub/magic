@@ -1,4 +1,4 @@
-import { AnimatePresence, motion, type MotionValue } from "framer-motion"
+import { AnimatePresence, motion, type MotionValue, type Variants } from "framer-motion"
 import { memo } from "react"
 import type { OptionItem } from "@/pages/superMagic/components/MainInputContainer/panels/types"
 import { type TemplateCanvasPoint, type TemplateCanvasSize } from "./canvasLayout"
@@ -17,11 +17,28 @@ export interface SlidesTemplateCanvasTileLoopState {
 	y: MotionValue<number>
 }
 
+const templateEmphasisVariants: Variants = {
+	idle: {
+		scale: 1,
+		transition: { duration: 0 },
+	},
+	emphasized: {
+		scale: [1, 1.07, 0.998, 1],
+		transition: {
+			duration: 0.52,
+			times: [0, 0.2, 0.8, 1],
+			ease: ["easeOut", "easeInOut", "easeOut"],
+		},
+	},
+}
+
 interface SlidesTemplateCanvasTileItemProps {
 	anchorTileId: string
 	column: number
 	focusedAnchorTileId: string
 	imageLoading?: "eager" | "lazy"
+	isCanvasFocusSettling: boolean
+	isCanvasMoving: boolean
 	loopState?: SlidesTemplateCanvasTileLoopState
 	onFindSimilarColors?: (template: OptionItem) => void
 	onPreviewClick: (anchorTileId: string, tile: SlidesTemplateCanvasTile) => void
@@ -40,6 +57,8 @@ function SlidesTemplateCanvasTileItem({
 	column,
 	focusedAnchorTileId,
 	imageLoading,
+	isCanvasFocusSettling,
+	isCanvasMoving,
 	loopState,
 	onFindSimilarColors,
 	onPreviewClick,
@@ -54,6 +73,10 @@ function SlidesTemplateCanvasTileItem({
 }: SlidesTemplateCanvasTileItemProps) {
 	const value = getTemplateKey(tile.template)
 	const isExpanded = focusedAnchorTileId === anchorTileId
+	const isSelected = selectedTemplateValue === value
+	const isEmphasized = isSelected || isExpanded
+	const isEmphasisAnimationReady = isEmphasized && (!isCanvasMoving || isCanvasFocusSettling)
+	const emphasisAnimationState = !reduceMotion && isEmphasisAnimationReady ? "emphasized" : "idle"
 	const isFeatured = Boolean(getFeaturedSlidesTemplateTag(tile.template))
 	const previewImageUrls = getTemplatePreviewUrls(tile.template)
 	const introDelay = Math.min(visibleIndex * 0.018, 0.3)
@@ -66,7 +89,7 @@ function SlidesTemplateCanvasTileItem({
 				template={tile.template}
 				imageUrl={tile.imageUrl}
 				imageLoading={imageLoading}
-				isSelected={selectedTemplateValue === value}
+				isSelected={isSelected}
 				isExpanded={isExpanded}
 				canPreview={previewImageUrls.length > 0}
 				onFindSimilarColors={onFindSimilarColors}
@@ -84,7 +107,7 @@ function SlidesTemplateCanvasTileItem({
 					imageUrl={tile.imageUrl}
 					imageLoading="lazy"
 					isKeyboardAccessible={!isDuplicate}
-					isSelected={selectedTemplateValue === value}
+					isSelected={isSelected}
 					isExpanded={isExpanded}
 					canPreview={previewImageUrls.length > 0}
 					onFindSimilarColors={onFindSimilarColors}
@@ -104,25 +127,23 @@ function SlidesTemplateCanvasTileItem({
 				height: size.height,
 				transform: `translate3d(${position.x}px, ${position.y}px, 0) translate(-50%, -50%)`,
 				width: size.width,
-				zIndex: isExpanded
-					? 30
-					: selectedTemplateValue === value
-						? 20
-						: isFeatured
-							? 10
-							: 1,
+				zIndex: isExpanded ? 30 : isSelected ? 20 : isFeatured ? 10 : 1,
 			}}
 		>
 			<motion.div
 				className="size-full"
 				data-testid="slides-template-static-cover"
+				data-slides-template-emphasis-ready={isEmphasisAnimationReady ? "true" : "false"}
 				data-slides-template-idle-animation={isLoopRunning ? "true" : "false"}
 				initial={
 					shouldPlayIntro && !reduceMotion
-						? { opacity: 0, scale: 0.985, y: 14 + (Math.abs(column) % 2) * 6 }
+						? { opacity: 0, y: 14 + (Math.abs(column) % 2) * 6 }
 						: false
 				}
-				animate={{ opacity: showLoopOverlay ? 0 : 1, scale: 1, y: 0 }}
+				animate={{
+					opacity: showLoopOverlay ? 0 : 1,
+					y: 0,
+				}}
 				aria-hidden={showLoopOverlay || undefined}
 				style={{
 					pointerEvents: showLoopOverlay ? "none" : undefined,
@@ -131,11 +152,6 @@ function SlidesTemplateCanvasTileItem({
 				}}
 				transition={{
 					opacity: { duration: 0.42, delay: shouldPlayIntro ? introDelay : 0 },
-					scale: {
-						duration: 0.56,
-						delay: shouldPlayIntro ? introDelay : 0,
-						ease: [0.22, 1, 0.36, 1],
-					},
 					y: {
 						duration: shouldPlayIntro ? 0.62 : 0.45,
 						delay: shouldPlayIntro ? introDelay : 0,
@@ -143,7 +159,14 @@ function SlidesTemplateCanvasTileItem({
 					},
 				}}
 			>
-				{renderCover()}
+				<motion.div
+					className="size-full"
+					initial={false}
+					variants={templateEmphasisVariants}
+					animate={emphasisAnimationState}
+				>
+					{renderCover()}
+				</motion.div>
 			</motion.div>
 			<AnimatePresence>
 				{showLoopOverlay && loopState ? (
@@ -183,6 +206,8 @@ function areTileItemPropsEqual(
 		previous.column === next.column &&
 		previous.focusedAnchorTileId === next.focusedAnchorTileId &&
 		previous.imageLoading === next.imageLoading &&
+		previous.isCanvasFocusSettling === next.isCanvasFocusSettling &&
+		previous.isCanvasMoving === next.isCanvasMoving &&
 		previous.loopState === next.loopState &&
 		previous.onFindSimilarColors === next.onFindSimilarColors &&
 		previous.onPreviewClick === next.onPreviewClick &&

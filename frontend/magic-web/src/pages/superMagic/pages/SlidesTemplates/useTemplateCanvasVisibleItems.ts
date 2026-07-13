@@ -5,11 +5,13 @@ import type { SlidesTemplateCanvasTile } from "./canvasInteraction"
 import {
 	getRebasedSlidesTemplateCanvasOffset,
 	getLoopedVisibleSlidesTemplateCanvasItems,
+	type SlidesTemplateCanvasLoopItemQuery,
 	type SlidesTemplateCanvasLoopMetrics,
 } from "./canvasLoop"
 
 interface UseTemplateCanvasVisibleItemsInput {
 	canvasItems: Array<TemplateCanvasItem<SlidesTemplateCanvasTile>>
+	loopItemQuery?: SlidesTemplateCanvasLoopItemQuery
 	loopMetrics: SlidesTemplateCanvasLoopMetrics
 	onOffsetRebase: () => void
 	offsetRef: MutableRefObject<TemplateCanvasPoint>
@@ -26,6 +28,7 @@ function getCanvasItemKey(items: Array<TemplateCanvasItem<SlidesTemplateCanvasTi
 
 export function useTemplateCanvasVisibleItems({
 	canvasItems,
+	loopItemQuery,
 	loopMetrics,
 	onOffsetRebase,
 	offsetRef,
@@ -33,6 +36,7 @@ export function useTemplateCanvasVisibleItems({
 	viewportRef,
 }: UseTemplateCanvasVisibleItemsInput) {
 	const canvasItemsRef = useRef(canvasItems)
+	const loopItemQueryRef = useRef(loopItemQuery)
 	const loopMetricsRef = useRef(loopMetrics)
 	const visibleKeyRef = useRef("")
 	const frameRef = useRef<number | null>(null)
@@ -51,6 +55,7 @@ export function useTemplateCanvasVisibleItems({
 
 		const scale = scaleRef.current
 		const nextItems = getLoopedVisibleSlidesTemplateCanvasItems({
+			itemQuery: loopItemQueryRef.current,
 			items,
 			loopMetrics: loopMetricsRef.current,
 			offset: offsetRef.current,
@@ -86,10 +91,19 @@ export function useTemplateCanvasVisibleItems({
 			onOffsetRebase()
 		}
 		canvasItemsRef.current = canvasItems
+		loopItemQueryRef.current = loopItemQuery
 		loopMetricsRef.current = loopMetrics
 		visibleKeyRef.current = ""
 		updateVisibleCanvasItems()
-	}, [canvasItems, loopMetrics, onOffsetRebase, offsetRef, scaleRef, updateVisibleCanvasItems])
+	}, [
+		canvasItems,
+		loopItemQuery,
+		loopMetrics,
+		onOffsetRebase,
+		offsetRef,
+		scaleRef,
+		updateVisibleCanvasItems,
+	])
 
 	useEffect(() => {
 		if (typeof window === "undefined") return

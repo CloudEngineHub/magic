@@ -1,5 +1,5 @@
 import { useReducedMotion } from "framer-motion"
-import { memo, useEffect, useMemo, useRef, type CSSProperties, type RefObject } from "react"
+import { memo, useMemo, type CSSProperties, type RefObject } from "react"
 import type { OptionItem } from "@/pages/superMagic/components/MainInputContainer/panels/types"
 import type { TemplateCanvasItem } from "./canvasLayout"
 import { EAGER_TEMPLATE_COVER_COUNT, type SlidesTemplateCanvasTile } from "./canvasInteraction"
@@ -13,6 +13,8 @@ interface SlidesTemplateCanvasItemsLayerProps {
 	canvasItems: Array<TemplateCanvasItem<SlidesTemplateCanvasTile>>
 	contentRef: RefObject<HTMLDivElement | null>
 	focusedAnchorTileId: string
+	isCanvasFocusSettling: boolean
+	isCanvasMoving: boolean
 	isIdleAnimationActive: boolean
 	keepIdleLoopsMounted: boolean
 	prioritizeCoverLoading: boolean
@@ -32,6 +34,8 @@ function SlidesTemplateCanvasItemsLayer({
 	canvasItems,
 	contentRef,
 	focusedAnchorTileId,
+	isCanvasFocusSettling,
+	isCanvasMoving,
 	isIdleAnimationActive,
 	keepIdleLoopsMounted,
 	prioritizeCoverLoading,
@@ -42,8 +46,9 @@ function SlidesTemplateCanvasItemsLayer({
 	visibleCanvasItems,
 }: SlidesTemplateCanvasItemsLayerProps) {
 	const reduceMotion = Boolean(useReducedMotion())
-	const hasPlayedIntroRef = useRef(false)
-	const shouldPlayIntro = !hasPlayedIntroRef.current && visibleCanvasItems.length > 0
+	// 分页追加会替换部分循环副本。卡片入场透明动画会让这些副本短暂显示为空白，
+	// 因此模板墙只保留空闲状态的循环动画，不对卡片本身做初始透明入场。
+	const shouldPlayIntro = false
 	const idleLoopsByColumn = useMemo(
 		() =>
 			new Map(
@@ -85,10 +90,6 @@ function SlidesTemplateCanvasItemsLayer({
 		return nextItems
 	}, [canvasItems, idleLoopsByColumn])
 
-	useEffect(() => {
-		if (visibleCanvasItems.length > 0) hasPlayedIntroRef.current = true
-	}, [visibleCanvasItems.length])
-
 	return (
 		<div
 			ref={contentRef}
@@ -108,6 +109,8 @@ function SlidesTemplateCanvasItemsLayer({
 					keepIdleLoopMountedWhenPaused={keepIdleLoopsMounted}
 					reduceMotion={reduceMotion}
 					focusedAnchorTileId={focusedAnchorTileId}
+					isCanvasFocusSettling={isCanvasFocusSettling}
+					isCanvasMoving={isCanvasMoving}
 					selectedTemplateValue={selectedTemplateValue}
 					onFindSimilarColors={onFindSimilarColors}
 					onTemplateSelect={onTemplateSelect}
@@ -134,6 +137,8 @@ function SlidesTemplateCanvasItemsLayer({
 								: "lazy"
 						}
 						focusedAnchorTileId={focusedAnchorTileId}
+						isCanvasFocusSettling={isCanvasFocusSettling}
+						isCanvasMoving={isCanvasMoving}
 						selectedTemplateValue={selectedTemplateValue}
 						onFindSimilarColors={onFindSimilarColors}
 						onTemplateSelect={onTemplateSelect}

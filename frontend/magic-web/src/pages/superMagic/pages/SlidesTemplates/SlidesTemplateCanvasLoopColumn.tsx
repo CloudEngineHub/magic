@@ -16,6 +16,8 @@ interface SlidesTemplateCanvasLoopColumnProps {
 	allItems: Array<TemplateCanvasItem<SlidesTemplateCanvasTile>>
 	focusedAnchorTileId: string
 	idleLoop: SlidesTemplateCanvasIdleLoop | null
+	isCanvasFocusSettling: boolean
+	isCanvasMoving: boolean
 	isIdleAnimationActive: boolean
 	keepIdleLoopMountedWhenPaused?: boolean
 	items: SlidesTemplateCanvasColumnItem[]
@@ -31,6 +33,8 @@ export default function SlidesTemplateCanvasLoopColumn({
 	allItems,
 	focusedAnchorTileId,
 	idleLoop,
+	isCanvasFocusSettling,
+	isCanvasMoving,
 	isIdleAnimationActive,
 	keepIdleLoopMountedWhenPaused = true,
 	items,
@@ -170,6 +174,8 @@ export default function SlidesTemplateCanvasLoopColumn({
 				size={size}
 				imageLoading={visibleIndex < EAGER_TEMPLATE_COVER_COUNT ? "eager" : "lazy"}
 				focusedAnchorTileId={focusedAnchorTileId}
+				isCanvasFocusSettling={isCanvasFocusSettling}
+				isCanvasMoving={isCanvasMoving}
 				loopState={loopState}
 				selectedTemplateValue={selectedTemplateValue}
 				onFindSimilarColors={onFindSimilarColors}

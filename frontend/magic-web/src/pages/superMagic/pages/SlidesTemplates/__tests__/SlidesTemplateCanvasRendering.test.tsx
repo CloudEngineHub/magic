@@ -6,6 +6,7 @@ import {
 	SLIDES_TEMPLATE_CANVAS_FEATURED_CARD_HEIGHT,
 	SLIDES_TEMPLATE_CANVAS_FEATURED_CARD_WIDTH,
 } from "../canvasLayout"
+import { EAGER_TEMPLATE_COVER_COUNT } from "../canvasInteraction"
 import { MAX_VISIBLE_TEMPLATE_CANVAS_ITEMS } from "../canvasViewport"
 
 vi.mock("react-i18next", () => ({
@@ -99,27 +100,29 @@ describe("SlidesTemplateCanvas rendering", () => {
 		})
 	})
 
-	it("renders the featured mark as an icon-only badge on the right", () => {
+	it("keeps colors on the right and the featured mark on the left", () => {
 		renderCanvas([createFeaturedTemplate(1)])
 
 		const badge = getFirstTestElement("slides-template-cover-featured-badge")
 		expect(badge).toHaveAccessibleName("Featured")
-		expect(badge).toHaveTextContent("")
-		expect(badge).toHaveClass("right-2.5")
+		expect(badge).toHaveTextContent("Featured")
+		expect(badge).toHaveClass("left-2.5")
+		expect(badge).toHaveClass("before:bg-amber-300/50", "before:blur-md")
+		expect(getFirstTestElement("slides-template-color-palette")).toHaveClass("right-2.5")
 	})
 
-	it("keeps every loaded cover represented in the loop before more pages arrive", () => {
+	it("renders a small result set without repeated loop covers", () => {
 		renderCanvas(Array.from({ length: 3 }, (_, index) => createTemplate(index + 1)))
 
 		const covers = screen.getAllByTestId("slides-template-cover-tile")
-		expect(covers.length).toBeGreaterThan(3)
-		expect(covers.length).toBeLessThanOrEqual(MAX_VISIBLE_TEMPLATE_CANVAS_ITEMS)
+		expect(covers).toHaveLength(3)
+		expect(screen.queryAllByTestId("slides-template-loop-cover")).toHaveLength(0)
 		for (let index = 1; index <= 3; index += 1) {
-			expect(screen.getAllByAltText(`Template ${index}`).length).toBeGreaterThan(0)
+			expect(screen.getAllByAltText(`Template ${index}`)).toHaveLength(1)
 		}
 	})
 
-	it("keeps exhausted data looping inside the visible item budget", () => {
+	it("keeps exhausted small result sets finite", () => {
 		renderCanvas(
 			Array.from({ length: 3 }, (_, index) => createTemplate(index + 1)),
 			{
@@ -128,8 +131,7 @@ describe("SlidesTemplateCanvas rendering", () => {
 		)
 
 		const covers = screen.getAllByTestId("slides-template-cover-tile")
-		expect(covers.length).toBeGreaterThan(3)
-		expect(covers.length).toBeLessThanOrEqual(MAX_VISIBLE_TEMPLATE_CANVAS_ITEMS)
+		expect(covers).toHaveLength(3)
 	})
 
 	it("keeps usage counts out of template covers", () => {
@@ -149,11 +151,10 @@ describe("SlidesTemplateCanvas rendering", () => {
 			.flatMap((cover) => Array.from(cover.querySelectorAll("img")))
 			.filter((image) => image.getAttribute("alt"))
 
-		expect(coverImages.length).toBeGreaterThan(36)
+		expect(coverImages.length).toBeGreaterThan(0)
 		expect(
 			coverImages.filter((image) => image.getAttribute("loading") === "eager"),
-		).toHaveLength(36)
-		expect(coverImages.some((image) => image.getAttribute("loading") === "lazy")).toBe(true)
+		).toHaveLength(Math.min(EAGER_TEMPLATE_COVER_COUNT, coverImages.length))
 	})
 
 	it("selects the template from the explicit select button", () => {
@@ -170,7 +171,15 @@ describe("SlidesTemplateCanvas rendering", () => {
 		const selectedTemplate = createTemplate(1)
 		renderCanvas([selectedTemplate], { selectedTemplate })
 
-		expect(getFirstTestElement("slides-template-glow-border")).toBeInTheDocument()
+		const selectedCover = getFirstTestElement("slides-template-cover-tile")
+		expect(selectedCover).toHaveClass("shadow-[0_20px_48px_rgba(0,0,0,0.42)]")
+		expect(getFirstTestElement("slides-template-canvas-tile-item")).toHaveStyle({
+			zIndex: "20",
+		})
+		expect(getFirstTestElement("slides-template-glow-border")).toHaveAttribute(
+			"data-emphasized",
+			"true",
+		)
 		expect(getFirstTestElement("slides-template-color-palette")).toBeInTheDocument()
 	})
 

@@ -1,8 +1,14 @@
 const TEMPLATE_COLOR_LIMIT = 5
 const HEX_COLOR_PATTERN = /^#[0-9a-f]{6}$/i
 const PALETTE_COLOR_WEIGHTS = [0.5, 0.2, 0.12, 0.1, 0.08]
+const MAX_MATCHED_COLOR_DISTANCE = 0.11
+const MAX_MATCHED_COLOR_HUE_DISTANCE_DEGREES = 60
+const MIN_MATCHING_COLOR_COUNT = 2
+const MIN_MATCHING_PALETTE_WEIGHT_RATIO = 0.6
+const MIN_HUE_CHROMA = 0.025
+const UNMATCHED_TEMPLATE_COLOR_DISTANCE = 0.18
 
-export const MAX_SIMILAR_TEMPLATE_COLOR_DISTANCE = 0.18
+export const MAX_SIMILAR_TEMPLATE_COLOR_DISTANCE = 0.13
 
 export type OklabColor = [lightness: number, a: number, b: number]
 
@@ -64,20 +70,143 @@ export function getTemplateOklabDistance(left: OklabColor, right: OklabColor) {
 	return Math.hypot(left[0] - right[0], left[1] - right[1], left[2] - right[2])
 }
 
-function getPaletteCoverageDistance(source: OklabColor[], target: OklabColor[]) {
-	let weightedDistance = 0
-	let totalWeight = 0
+function getOklabChroma(color: OklabColor) {
+	return Math.hypot(color[1], color[2])
+}
 
-	source.forEach((sourceColor, index) => {
-		const weight = PALETTE_COLOR_WEIGHTS[index] ?? 0
-		const nearestDistance = Math.min(
-			...target.map((targetColor) => getTemplateOklabDistance(sourceColor, targetColor)),
-		)
-		weightedDistance += nearestDistance * weight
-		totalWeight += weight
-	})
+function getOklabHue(color: OklabColor) {
+	return (Math.atan2(color[2], color[1]) * 180) / Math.PI
+}
 
-	return totalWeight > 0 ? weightedDistance / totalWeight : Number.POSITIVE_INFINITY
+function getHueDistance(left: OklabColor, right: OklabColor) {
+	const difference = Math.abs(getOklabHue(left) - getOklabHue(right))
+	return Math.min(difference, 360 - difference)
+}
+
+function areTemplateColorsSimilar(source: OklabColor, target: OklabColor) {
+	if (getTemplateOklabDistance(source, target) > MAX_MATCHED_COLOR_DISTANCE) return false
+
+	return (
+		getOklabChroma(source) < MIN_HUE_CHROMA ||
+		getOklabChroma(target) < MIN_HUE_CHROMA ||
+		getHueDistance(source, target) <= MAX_MATCHED_COLOR_HUE_DISTANCE_DEGREES
+	)
+}
+
+interface PaletteOverlap {
+	matchedColorCount: number
+	matchedWeight: number
+	weightedDistance: number
+}
+
+function getColorWeight(index: number) {
+	return PALETTE_COLOR_WEIGHTS[index] ?? 0
+}
+
+function isBetterPaletteOverlap(candidate: PaletteOverlap, current: PaletteOverlap) {
+	if (candidate.matchedWeight !== current.matchedWeight) {
+		return candidate.matchedWeight > current.matchedWeight
+	}
+	if (candidate.matchedColorCount !== current.matchedColorCount) {
+		return candidate.matchedColorCount > current.matchedColorCount
+	}
+	return candidate.weightedDistance < current.weightedDistance
+}
+
+function getOptimalPaletteOverlap(source: OklabColor[], target: OklabColor[]) {
+	const memo = new Map<string, PaletteOverlap>()
+
+	function findBestOverlap(sourceIndex: number, targetMask: number): PaletteOverlap {
+		if (sourceIndex >= source.length) {
+			return { matchedColorCount: 0, matchedWeight: 0, weightedDistance: 0 }
+		}
+
+		const memoKey = `${sourceIndex}:${targetMask}`
+		const cached = memo.get(memoKey)
+		if (cached) return cached
+
+		let bestOverlap = findBestOverlap(sourceIndex + 1, targetMask)
+		const sourceColor = source[sourceIndex]
+		const sourceWeight = getColorWeight(sourceIndex)
+		if (sourceColor) {
+			target.forEach((targetColor, targetIndex) => {
+				if (targetMask & (1 << targetIndex)) return
+				if (!areTemplateColorsSimilar(sourceColor, targetColor)) return
+
+				const nextOverlap = findBestOverlap(
+					sourceIndex + 1,
+					targetMask | (1 << targetIndex),
+				)
+				const distance = getTemplateOklabDistance(sourceColor, targetColor)
+				const candidateOverlap = {
+					matchedColorCount: nextOverlap.matchedColorCount + 1,
+					matchedWeight: nextOverlap.matchedWeight + sourceWeight,
+					weightedDistance: nextOverlap.weightedDistance + distance * sourceWeight,
+				}
+				if (isBetterPaletteOverlap(candidateOverlap, bestOverlap)) {
+					bestOverlap = candidateOverlap
+				}
+			})
+		}
+
+		memo.set(memoKey, bestOverlap)
+		return bestOverlap
+	}
+
+	return findBestOverlap(0, 0)
+}
+
+function hasSufficientPaletteOverlap(source: OklabColor[], target: OklabColor[]) {
+	const overlap = getOptimalPaletteOverlap(source, target)
+	const totalWeight = source.reduce((sum, _, index) => sum + getColorWeight(index), 0)
+	const requiredMatchCount = Math.min(MIN_MATCHING_COLOR_COUNT, source.length, target.length)
+	return (
+		overlap.matchedColorCount >= requiredMatchCount &&
+		overlap.matchedWeight >= totalWeight * MIN_MATCHING_PALETTE_WEIGHT_RATIO
+	)
+}
+
+function getOptimalPaletteDistance(source: OklabColor[], target: OklabColor[]) {
+	const sourceCount = source.length
+	const targetCount = target.length
+	const matrixSize = sourceCount + targetCount
+	const memo = new Map<string, number>()
+
+	function getPairCost(sourceIndex: number, targetIndex: number) {
+		const sourceColor = source[sourceIndex]
+		const targetColor = target[targetIndex]
+		if (sourceColor && targetColor) {
+			return (
+				getTemplateOklabDistance(sourceColor, targetColor) *
+				(getColorWeight(sourceIndex) + getColorWeight(targetIndex))
+			)
+		}
+		if (sourceColor) return UNMATCHED_TEMPLATE_COLOR_DISTANCE * getColorWeight(sourceIndex)
+		if (targetColor) return UNMATCHED_TEMPLATE_COLOR_DISTANCE * getColorWeight(targetIndex)
+		return 0
+	}
+
+	function findMinimumCost(rowIndex: number, targetMask: number): number {
+		if (rowIndex >= matrixSize) return 0
+
+		const memoKey = `${rowIndex}:${targetMask}`
+		const cached = memo.get(memoKey)
+		if (cached != null) return cached
+
+		let minimumCost = Number.POSITIVE_INFINITY
+		for (let targetIndex = 0; targetIndex < matrixSize; targetIndex += 1) {
+			if (targetMask & (1 << targetIndex)) continue
+			const cost =
+				getPairCost(rowIndex, targetIndex) +
+				findMinimumCost(rowIndex + 1, targetMask | (1 << targetIndex))
+			if (cost < minimumCost) minimumCost = cost
+		}
+
+		memo.set(memoKey, minimumCost)
+		return minimumCost
+	}
+
+	return findMinimumCost(0, 0) / 2
 }
 
 export function getTemplatePaletteDistance(
@@ -92,9 +221,10 @@ export function getTemplatePaletteDistance(
 
 	const sourcePalette = normalizedSourceColors.map(templateHexToOklab)
 	const targetPalette = normalizedTargetColors.map(templateHexToOklab)
-	const sourceCoverage = getPaletteCoverageDistance(sourcePalette, targetPalette)
-	const targetCoverage = getPaletteCoverageDistance(targetPalette, sourcePalette)
+	if (!hasSufficientPaletteOverlap(sourcePalette, targetPalette)) {
+		return Number.POSITIVE_INFINITY
+	}
 
-	// 主色到候选色板的覆盖是主要判断，同时保留反向覆盖，避免只命中一个强调色。
-	return sourceCoverage * 0.72 + targetCoverage * 0.28
+	// 全局一对一分配会同时处理颜色顺序和未匹配颜色，避免局部最近色导致错误配对。
+	return getOptimalPaletteDistance(sourcePalette, targetPalette)
 }

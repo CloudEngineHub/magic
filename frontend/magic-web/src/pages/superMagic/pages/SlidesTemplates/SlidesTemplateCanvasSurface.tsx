@@ -1,15 +1,20 @@
 import {
 	useRef,
+	useState,
 	type ComponentProps,
 	type MouseEventHandler,
 	type PointerEventHandler,
 	type RefCallback,
 	type RefObject,
 } from "react"
-import { cn } from "@/lib/utils"
 import type { OptionItem } from "@/pages/superMagic/components/MainInputContainer/panels/types"
 import type { TemplateCanvasItem } from "./canvasLayout"
-import type { SlidesTemplateCanvasTile, SlidesTemplatePreviewFocus } from "./canvasInteraction"
+import {
+	getCanvasEdgeCursor,
+	type CanvasEdgeCursor,
+	type SlidesTemplateCanvasTile,
+	type SlidesTemplatePreviewFocus,
+} from "./canvasInteraction"
 import SlidesTemplateCanvasControls from "./SlidesTemplateCanvasControls"
 import SlidesTemplateCanvasItemsLayer from "./SlidesTemplateCanvasItemsLayer"
 import SlidesTemplateCanvasStatus from "./SlidesTemplateCanvasStatus"
@@ -27,6 +32,7 @@ interface SlidesTemplateCanvasSurfaceProps {
 	bottomEdgeInset?: number
 	contentRef: RefObject<HTMLDivElement | null>
 	focusedAnchorTileId: string
+	isCanvasFocusSettling: boolean
 	isDragging: boolean
 	isCanvasMoving: boolean
 	isInitialLoading: boolean
@@ -63,6 +69,7 @@ export default function SlidesTemplateCanvasSurface({
 	bottomEdgeInset,
 	contentRef,
 	focusedAnchorTileId,
+	isCanvasFocusSettling,
 	isDragging,
 	isCanvasMoving,
 	isInitialLoading,
@@ -104,6 +111,19 @@ export default function SlidesTemplateCanvasSurface({
 	// 低比例下单屏会显示上百张封面，循环动画需要额外复制封面节点；此时动画细节不可辨识，保留静态画布。
 	const isIdleAnimationActive = isIdle && canvasScale >= 0.8
 	const pointerActivityOriginRef = useRef<{ x: number; y: number } | null>(null)
+	const [edgeCursor, setEdgeCursor] = useState<CanvasEdgeCursor | null>(null)
+
+	function updateEdgeCursor(event: {
+		currentTarget: HTMLDivElement
+		clientX: number
+		clientY: number
+	}) {
+		if (isPreviewOpen) return
+		const nextCursor = getCanvasEdgeCursor(event.currentTarget.getBoundingClientRect(), event)
+		setEdgeCursor((currentCursor) =>
+			currentCursor === nextCursor ? currentCursor : nextCursor,
+		)
+	}
 
 	function markPointerActivity(clientX: number, clientY: number) {
 		const origin = pointerActivityOriginRef.current
@@ -127,29 +147,38 @@ export default function SlidesTemplateCanvasSurface({
 		<div
 			ref={setViewportNode}
 			data-testid="slides-template-canvas"
-			className={cn(
-				"relative size-full touch-none select-none overflow-hidden bg-[#101114]",
-				isDragging ? "cursor-grabbing" : "cursor-grab",
-			)}
+			className="relative size-full touch-none select-none overflow-hidden bg-[#101114]"
+			style={{
+				cursor: isPreviewOpen
+					? "default"
+					: isDragging
+						? "grabbing"
+						: (edgeCursor ?? "grab"),
+			}}
 			onPointerDown={(event) => {
 				markActive()
+				updateEdgeCursor(event)
 				onPointerDown(event)
 			}}
 			onPointerMove={(event) => {
 				markPointerActivity(event.clientX, event.clientY)
+				updateEdgeCursor(event)
 				onPointerMove(event)
 			}}
 			onPointerUp={(event) => {
 				markActive()
+				updateEdgeCursor(event)
 				onPointerUp(event)
 			}}
 			onPointerCancel={(event) => {
 				markActive()
+				setEdgeCursor(null)
 				onPointerCancel(event)
 			}}
 			onPointerLeave={(event) => {
 				pointerActivityOriginRef.current = null
 				markActive()
+				setEdgeCursor(null)
 				onPointerLeave(event)
 			}}
 			onWheelCapture={markActive}
@@ -167,6 +196,8 @@ export default function SlidesTemplateCanvasSurface({
 			<SlidesTemplateCanvasItemsLayer
 				canvasItems={canvasItems}
 				contentRef={contentRef}
+				isCanvasFocusSettling={isCanvasFocusSettling}
+				isCanvasMoving={isCanvasMoving}
 				isIdleAnimationActive={isIdleAnimationActive}
 				keepIdleLoopsMounted={canvasScale >= 0.8}
 				prioritizeCoverLoading={!isDragging && !isCanvasMoving}

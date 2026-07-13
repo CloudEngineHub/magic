@@ -5,6 +5,7 @@ import { getDirectionsFromVelocity, getEdgeVelocity, isSameCanvasPoint } from ".
 
 export const EDGE_PAN_ACTIVATION_DELAY_MS = 180
 const FOCUS_MOVE_DURATION_MS = 520
+const FOCUS_EMPHASIS_START_PROGRESS = 0.72
 
 interface UseSlidesTemplateCanvasMotionInput {
 	maybeRequestMore: (directions: TemplateCanvasDirection[]) => boolean
@@ -21,6 +22,7 @@ export function useSlidesTemplateCanvasMotion({
 	const frameRef = useRef<number | null>(null)
 	const edgeActivationTimerRef = useRef<number | null>(null)
 	const velocityRef = useRef<TemplateCanvasPoint>({ x: 0, y: 0 })
+	const [isCanvasFocusSettling, setIsCanvasFocusSettling] = useState(false)
 	const [isCanvasMoving, setIsCanvasMoving] = useState(false)
 
 	const stopAnimation = useCallback(() => {
@@ -33,6 +35,7 @@ export function useSlidesTemplateCanvasMotion({
 			frameRef.current = null
 		}
 		velocityRef.current = { x: 0, y: 0 }
+		setIsCanvasFocusSettling(false)
 		setIsCanvasMoving(false)
 	}, [])
 
@@ -96,6 +99,7 @@ export function useSlidesTemplateCanvasMotion({
 			}
 
 			const startedAt = performance.now()
+			let hasReachedFocusSettlingPhase = false
 			setIsCanvasMoving(true)
 
 			function animateFrame(now: number) {
@@ -105,6 +109,10 @@ export function useSlidesTemplateCanvasMotion({
 					x: startOffset.x + (targetOffset.x - startOffset.x) * easedProgress,
 					y: startOffset.y + (targetOffset.y - startOffset.y) * easedProgress,
 				})
+				if (!hasReachedFocusSettlingPhase && progress >= FOCUS_EMPHASIS_START_PROGRESS) {
+					hasReachedFocusSettlingPhase = true
+					setIsCanvasFocusSettling(true)
+				}
 
 				if (progress < 1) {
 					frameRef.current = requestAnimationFrame(animateFrame)
@@ -125,6 +133,7 @@ export function useSlidesTemplateCanvasMotion({
 
 	return {
 		animateToOffset,
+		isCanvasFocusSettling,
 		isCanvasMoving,
 		scheduleEdgeMovement,
 		stopAnimation,

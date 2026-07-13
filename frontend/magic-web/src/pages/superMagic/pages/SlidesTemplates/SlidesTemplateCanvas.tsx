@@ -106,7 +106,7 @@ const SlidesTemplateCanvas = forwardRef<SlidesTemplateCanvasHandle, SlidesTempla
 			resetKey,
 			templates,
 		})
-		const { canvasItems, contentBounds, loopMetrics, templateBounds } =
+		const { canvasItems, contentBounds, loopItemQuery, loopMetrics, templateBounds } =
 			useSlidesTemplateCanvasItems({ templates: activeTemplates })
 		const priorityCanvasItems = useMemo(
 			() =>
@@ -126,6 +126,7 @@ const SlidesTemplateCanvas = forwardRef<SlidesTemplateCanvasHandle, SlidesTempla
 		const { scheduleVisibleCanvasItemsUpdate, updateVisibleCanvasItems, visibleCanvasItems } =
 			useTemplateCanvasVisibleItems({
 				canvasItems,
+				loopItemQuery,
 				loopMetrics,
 				onOffsetRebase: applyTransform,
 				offsetRef,
@@ -196,17 +197,14 @@ const SlidesTemplateCanvas = forwardRef<SlidesTemplateCanvasHandle, SlidesTempla
 		)
 
 		const maybeRequestMore = useCallback(
-			(
-				directions: TemplateCanvasDirection[],
-				{ bypassThrottle = false }: { bypassThrottle?: boolean } = {},
-			) => {
+			(directions: TemplateCanvasDirection[]) => {
 				if (isPreviewOpen) return false
 
 				const viewport = viewportRef.current
 				if (!viewport || directions.length === 0) return false
 
 				const now = Date.now()
-				if (!bypassThrottle && now - lastLoadMoreAtRef.current < LOAD_MORE_INTERVAL_MS) {
+				if (now - lastLoadMoreAtRef.current < LOAD_MORE_INTERVAL_MS) {
 					return false
 				}
 
@@ -231,19 +229,16 @@ const SlidesTemplateCanvas = forwardRef<SlidesTemplateCanvasHandle, SlidesTempla
 				)
 
 				if (!loadDirection) return false
-				let loopKey = ""
-				if (!bypassThrottle) {
-					const loopCycle = getSlidesTemplateCanvasLoopCycle({
-						loopMetrics,
-						offset: offsetRef.current,
-						scale: scaleRef.current,
-					})
-					loopKey = `${loadDirection}:${loopCycle.x}:${loopCycle.y}`
-					if (lastLoadMoreLoopKeyRef.current === loopKey) return false
-				}
+				const loopCycle = getSlidesTemplateCanvasLoopCycle({
+					loopMetrics,
+					offset: offsetRef.current,
+					scale: scaleRef.current,
+				})
+				const loopKey = `${loadDirection}:${loopCycle.x}:${loopCycle.y}`
+				if (lastLoadMoreLoopKeyRef.current === loopKey) return false
 				lastLoadMoreAtRef.current = now
 				state.onLoadMore()
-				if (loopKey) lastLoadMoreLoopKeyRef.current = loopKey
+				lastLoadMoreLoopKeyRef.current = loopKey
 				return true
 			},
 			[isPreviewOpen, loopMetrics],
@@ -265,12 +260,17 @@ const SlidesTemplateCanvas = forwardRef<SlidesTemplateCanvasHandle, SlidesTempla
 			scaleRef,
 		})
 
-		const { animateToOffset, isCanvasMoving, scheduleEdgeMovement, stopAnimation } =
-			useSlidesTemplateCanvasMotion({
-				maybeRequestMore,
-				offsetRef,
-				setCanvasOffset,
-			})
+		const {
+			animateToOffset,
+			isCanvasFocusSettling,
+			isCanvasMoving,
+			scheduleEdgeMovement,
+			stopAnimation,
+		} = useSlidesTemplateCanvasMotion({
+			maybeRequestMore,
+			offsetRef,
+			setCanvasOffset,
+		})
 		const handlePointerDownStart = useCallback(() => {
 			setRandomFocusedCanvasItem(null)
 		}, [])
@@ -314,6 +314,7 @@ const SlidesTemplateCanvas = forwardRef<SlidesTemplateCanvasHandle, SlidesTempla
 		} = useSlidesTemplateCanvasNavigation({
 			animateToOffset,
 			canvasItemsLength: canvasItems.length,
+			centerContent: loopMetrics.width <= 0 || loopMetrics.height <= 0,
 			contentBounds,
 			maybeRequestMore,
 			offsetRef,
@@ -446,6 +447,7 @@ const SlidesTemplateCanvas = forwardRef<SlidesTemplateCanvasHandle, SlidesTempla
 				canZoomIn={canZoomIn}
 				canZoomOut={canZoomOut}
 				isDragging={isDragging}
+				isCanvasFocusSettling={isCanvasFocusSettling}
 				isCanvasMoving={isCanvasMoving}
 				isInitialLoading={isInitialLoading}
 				isLoading={isLoading}

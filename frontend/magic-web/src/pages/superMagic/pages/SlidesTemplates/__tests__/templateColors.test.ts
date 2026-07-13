@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest"
 import {
 	applyResolvedTemplateColors,
 	getTemplatePaletteDistance,
+	MAX_SIMILAR_TEMPLATE_COLOR_DISTANCE,
 	normalizeTemplateColors,
 	templateColorToRgba,
 } from "../templateColors"
@@ -50,5 +51,24 @@ describe("slides template colors", () => {
 			getTemplatePaletteDistance(source, unrelated),
 		)
 		expect(getTemplatePaletteDistance(source, source)).toBeCloseTo(0)
+	})
+
+	it("requires multiple matching colors instead of only matching the dominant color", () => {
+		const softPink = ["#F0CAD2", "#EBBAC6", "#E7ACB9", "#DEAFB9", "#6B5C61"]
+		const relatedPink = ["#EFC8D1", "#E8B7C3", "#E2A9B6", "#DFAEB8", "#6D5C61"]
+		const pinkWithTealPalette = ["#EFC8D1", "#D0EDEC", "#394B55", "#56666F", "#6CB0AA"]
+		const tealWithPinkAccents = ["#D0EDEC", "#E992A6", "#394B55", "#56666F", "#EBB8C6"]
+		const warmNeutral = ["#D7C9B3", "#E4D9C8", "#CDBDA4", "#C9B396", "#2D3A3D"]
+
+		expect(getTemplatePaletteDistance(softPink, relatedPink)).toBeLessThanOrEqual(
+			MAX_SIMILAR_TEMPLATE_COLOR_DISTANCE,
+		)
+		expect(getTemplatePaletteDistance(softPink, tealWithPinkAccents)).toBeLessThanOrEqual(
+			MAX_SIMILAR_TEMPLATE_COLOR_DISTANCE,
+		)
+		expect(getTemplatePaletteDistance(softPink, pinkWithTealPalette)).toBe(
+			Number.POSITIVE_INFINITY,
+		)
+		expect(getTemplatePaletteDistance(softPink, warmNeutral)).toBe(Number.POSITIVE_INFINITY)
 	})
 })

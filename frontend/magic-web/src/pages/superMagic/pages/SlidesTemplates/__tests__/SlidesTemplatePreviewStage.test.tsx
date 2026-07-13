@@ -15,6 +15,22 @@ function renderStage(activeIndex: number) {
 }
 
 describe("SlidesTemplatePreviewStage", () => {
+	it("uses the full available stage size for the preview frame", () => {
+		renderStage(0)
+
+		expect(screen.getByTestId("slides-template-inline-preview-stage")).toHaveClass("size-full")
+	})
+
+	it("renders the page number outside the preview frame", () => {
+		renderStage(0)
+
+		const previewFrame = screen.getByTestId("slides-template-inline-preview-pages")
+		const pageIndex = screen.getByTestId("slides-template-inline-preview-page-index")
+
+		expect(pageIndex.parentElement).toBe(previewFrame.parentElement)
+		expect(pageIndex.parentElement).not.toBe(previewFrame)
+	})
+
 	it("keeps the current preview image visible until the next image finishes loading", () => {
 		const OriginalImage = window.Image
 		const createdImages: Array<{

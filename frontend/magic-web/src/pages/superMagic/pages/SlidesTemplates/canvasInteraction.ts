@@ -18,6 +18,16 @@ const CANVAS_DRAG_BLOCK_SELECTOR =
 
 export const CANVAS_DRAG_START_THRESHOLD = 4
 
+export type CanvasEdgeCursor =
+	| "n-resize"
+	| "ne-resize"
+	| "e-resize"
+	| "se-resize"
+	| "s-resize"
+	| "sw-resize"
+	| "w-resize"
+	| "nw-resize"
+
 export interface CanvasDragState {
 	hasMoved: boolean
 	lastClientX: number
@@ -104,6 +114,35 @@ export function getEdgeVelocity(rect: DOMRect, point: { clientX: number; clientY
 		velocity.y -= ((EDGE_SIZE - bottomDistance) / EDGE_SIZE) * MAX_SPEED
 
 	return velocity
+}
+
+export function getCanvasEdgeCursor(
+	rect: DOMRect,
+	point: { clientX: number; clientY: number },
+): CanvasEdgeCursor | null {
+	if (
+		point.clientX < rect.left ||
+		point.clientX > rect.right ||
+		point.clientY < rect.top ||
+		point.clientY > rect.bottom
+	) {
+		return null
+	}
+
+	const isNearLeft = point.clientX - rect.left < EDGE_SIZE
+	const isNearRight = rect.right - point.clientX < EDGE_SIZE
+	const isNearTop = point.clientY - rect.top < EDGE_SIZE
+	const isNearBottom = rect.bottom - point.clientY < EDGE_SIZE
+
+	if (isNearTop && isNearLeft) return "nw-resize"
+	if (isNearTop && isNearRight) return "ne-resize"
+	if (isNearBottom && isNearRight) return "se-resize"
+	if (isNearBottom && isNearLeft) return "sw-resize"
+	if (isNearTop) return "n-resize"
+	if (isNearRight) return "e-resize"
+	if (isNearBottom) return "s-resize"
+	if (isNearLeft) return "w-resize"
+	return null
 }
 
 export function getDirectionsFromVelocity(

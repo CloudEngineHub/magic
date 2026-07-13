@@ -186,8 +186,9 @@ function SlidesTemplatePreviewStage({
 	return (
 		<div
 			ref={stageRef}
-			className="relative flex h-full min-h-0 justify-center"
+			className="relative flex size-full min-h-0 justify-center"
 			data-slides-template-preview-close-block="true"
+			data-testid="slides-template-inline-preview-stage"
 		>
 			{displayedPage ? (
 				<img
@@ -243,18 +244,18 @@ function SlidesTemplatePreviewStage({
 							<span />
 						</div>
 					) : null}
-					{pages.length ? (
-						<div
-							className={cn(
-								"absolute bottom-3 right-3 rounded-full px-3 py-1 text-sm font-medium text-white shadow-lg",
-								styles.pagePill,
-							)}
-							data-testid="slides-template-inline-preview-page-index"
-						>
-							{safeActiveIndex + 1} / {pages.length}
-						</div>
-					) : null}
 				</div>
+				{pages.length ? (
+					<div
+						className={cn(
+							"rounded-full px-3 py-1 text-sm font-medium text-white shadow-lg",
+							styles.pagePill,
+						)}
+						data-testid="slides-template-inline-preview-page-index"
+					>
+						{safeActiveIndex + 1} / {pages.length}
+					</div>
+				) : null}
 				{navigation}
 			</div>
 		</div>

@@ -11,10 +11,7 @@ interface UseSlidesTemplateCanvasAutoLoadInput {
 	autoLoadSignal: number | string
 	enabled: boolean
 	loopMetrics: SlidesTemplateCanvasLoopMetrics
-	maybeRequestMore: (
-		directions: TemplateCanvasDirection[],
-		options?: { bypassThrottle?: boolean },
-	) => boolean
+	maybeRequestMore: (directions: TemplateCanvasDirection[]) => boolean
 	offsetRef: MutableRefObject<TemplateCanvasPoint>
 	resetKey: string
 	scaleRef: MutableRefObject<number>
@@ -45,7 +42,7 @@ export function useSlidesTemplateCanvasAutoLoad({
 		if (loopCycle.x !== 0 || loopCycle.y !== 0) return
 
 		const frameId = requestAnimationFrame(() => {
-			if (maybeRequestMore(AUTO_LOAD_DIRECTIONS, { bypassThrottle: true })) {
+			if (maybeRequestMore(AUTO_LOAD_DIRECTIONS)) {
 				lastAutoLoadSignalRef.current = autoLoadSignal
 			}
 		})

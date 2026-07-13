@@ -22,6 +22,7 @@ const CONTROL_PAN_VIEWPORT_RATIO = 0.65
 interface UseSlidesTemplateCanvasNavigationInput {
 	animateToOffset: (nextOffset: TemplateCanvasPoint) => TemplateCanvasPoint
 	canvasItemsLength: number
+	centerContent?: boolean
 	contentBounds: TemplateCanvasBounds
 	maybeRequestMore: (directions: TemplateCanvasDirection[]) => boolean
 	offsetRef: MutableRefObject<TemplateCanvasPoint>
@@ -36,6 +37,7 @@ interface UseSlidesTemplateCanvasNavigationInput {
 export function useSlidesTemplateCanvasNavigation({
 	animateToOffset,
 	canvasItemsLength,
+	centerContent = false,
 	contentBounds,
 	maybeRequestMore,
 	offsetRef,
@@ -156,9 +158,17 @@ export function useSlidesTemplateCanvasNavigation({
 		scaleRef.current = nextScale
 		setCanvasScale(nextScale)
 		hasAutoFittedRef.current = true
-		setCanvasOffset({ x: 0, y: 0 })
+		setCanvasOffset(
+			centerContent
+				? {
+						x: -((contentBounds.minX + contentBounds.maxX) / 2) * nextScale,
+						y: -((contentBounds.minY + contentBounds.maxY) / 2) * nextScale,
+					}
+				: { x: 0, y: 0 },
+		)
 	}, [
 		canvasItemsLength,
+		centerContent,
 		contentBounds,
 		scaleRef,
 		setCanvasOffset,

@@ -1,53 +1,27 @@
-import { useMemo } from "react"
+import { useLayoutEffect, useRef, useState } from "react"
 import type { OptionItem } from "@/pages/superMagic/components/MainInputContainer/panels/types"
-import { getFeaturedSlidesTemplateTag } from "@/pages/superMagic/components/MainInputContainer/panels/slides-preset/templateMeta"
-import {
-	SLIDES_TEMPLATE_CANVAS_DEFAULT_ITEM_SIZE,
-	SLIDES_TEMPLATE_CANVAS_DEFAULT_ITEM_SPAN,
-	SLIDES_TEMPLATE_CANVAS_FEATURED_ITEM_SIZE,
-	SLIDES_TEMPLATE_CANVAS_FEATURED_ITEM_SPAN,
-	buildTemplateCanvasItems,
-	getTemplateCanvasBounds,
-} from "./canvasLayout"
-import { buildTemplateCanvasTiles, type SlidesTemplateCanvasTile } from "./canvasInteraction"
-import { getSlidesTemplateCanvasLoopMetrics } from "./canvasLoop"
+import { SlidesTemplateCanvasLayoutService } from "./SlidesTemplateCanvasLayoutService"
 
 interface UseSlidesTemplateCanvasItemsInput {
 	templates: OptionItem[]
 }
 
-function getSlidesTemplateCanvasTileSize(tile: SlidesTemplateCanvasTile) {
-	return getFeaturedSlidesTemplateTag(tile.template)
-		? SLIDES_TEMPLATE_CANVAS_FEATURED_ITEM_SIZE
-		: SLIDES_TEMPLATE_CANVAS_DEFAULT_ITEM_SIZE
-}
-
-function getSlidesTemplateCanvasTileSpan(tile: SlidesTemplateCanvasTile) {
-	return getFeaturedSlidesTemplateTag(tile.template)
-		? SLIDES_TEMPLATE_CANVAS_FEATURED_ITEM_SPAN
-		: SLIDES_TEMPLATE_CANVAS_DEFAULT_ITEM_SPAN
-}
-
 export function useSlidesTemplateCanvasItems({ templates }: UseSlidesTemplateCanvasItemsInput) {
-	const canvasTiles = useMemo(() => buildTemplateCanvasTiles(templates), [templates])
-	const canvasItems = useMemo(
-		() =>
-			buildTemplateCanvasItems(canvasTiles, {
-				getItemSize: getSlidesTemplateCanvasTileSize,
-				getItemSpan: getSlidesTemplateCanvasTileSpan,
-			}),
-		[canvasTiles],
-	)
-	const bounds = useMemo(() => getTemplateCanvasBounds(canvasItems), [canvasItems])
-	const loopMetrics = useMemo(
-		() => getSlidesTemplateCanvasLoopMetrics(canvasItems),
-		[canvasItems],
-	)
-
-	return {
-		canvasItems,
-		contentBounds: bounds,
-		loopMetrics,
-		templateBounds: bounds,
+	const layoutServiceRef = useRef<SlidesTemplateCanvasLayoutService | null>(null)
+	if (!layoutServiceRef.current) {
+		layoutServiceRef.current = new SlidesTemplateCanvasLayoutService()
 	}
+	const layoutService = layoutServiceRef.current
+	const [snapshot, setSnapshot] = useState(() => layoutService.getSnapshot())
+
+	useLayoutEffect(() => {
+		const nextSnapshot = layoutService.synchronize(templates)
+		setSnapshot((currentSnapshot) =>
+			currentSnapshot.canvasItems === nextSnapshot.canvasItems
+				? currentSnapshot
+				: nextSnapshot,
+		)
+	}, [layoutService, templates])
+
+	return snapshot
 }

@@ -49,6 +49,8 @@ function renderColumn(
 			allItems={items.map(({ canvasItem }) => canvasItem)}
 			focusedAnchorTileId=""
 			idleLoop={{ column: 0, delay: 0, direction: -1, distance: 552, duration: 46 }}
+			isCanvasFocusSettling={false}
+			isCanvasMoving={false}
 			isIdleAnimationActive={isIdleAnimationActive}
 			keepIdleLoopMountedWhenPaused={keepIdleLoopMountedWhenPaused}
 			items={items}

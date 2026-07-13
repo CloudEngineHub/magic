@@ -528,6 +528,28 @@ describe("SlidesTemplateCanvas", () => {
 		expect(getCanvasTranslate().x).toBeLessThan(0)
 	})
 
+	it("updates the cursor for the canvas edge hot zones", () => {
+		renderCanvas(Array.from({ length: 120 }, (_, index) => createTemplate(index + 1)))
+		const canvas = screen.getByTestId("slides-template-canvas")
+		mockCanvasRect(canvas)
+
+		fireCanvasPointerEvent(canvas, "pointermove", {
+			clientX: 20,
+			clientY: 20,
+			pointerId: 8,
+		})
+		expect(canvas).toHaveStyle({ cursor: "nw-resize" })
+
+		fireCanvasPointerEvent(canvas, "pointermove", {
+			clientX: 400,
+			clientY: 300,
+			pointerId: 8,
+		})
+		expect(canvas).toHaveStyle({ cursor: "grab" })
+
+		fireEvent.pointerLeave(canvas, { clientX: -2, clientY: 300, pointerId: 8 })
+	})
+
 	it("counter-scales template cover action buttons after canvas zoom", () => {
 		renderCanvas(Array.from({ length: 120 }, (_, index) => createTemplate(index + 1, 2)))
 		const canvas = screen.getByTestId("slides-template-canvas")
@@ -598,13 +620,26 @@ describe("SlidesTemplateCanvas", () => {
 		}
 	})
 
-	it("continues loading pages when a client-side filter keeps the visible count unchanged", async () => {
+	it("does not reload the same loop after a page extends the loaded template count", () => {
+		vi.useFakeTimers()
 		const rectSpy = vi
 			.spyOn(HTMLElement.prototype, "getBoundingClientRect")
 			.mockReturnValue(CANVAS_RECT)
+		const requestAnimationFrameSpy = vi
+			.spyOn(window, "requestAnimationFrame")
+			.mockImplementation((callback) =>
+				window.setTimeout(() => callback(performance.now()), 16),
+			)
+		const cancelAnimationFrameSpy = vi
+			.spyOn(window, "cancelAnimationFrame")
+			.mockImplementation((frameId) => window.clearTimeout(frameId))
 		const onLoadMore = vi.fn()
+		const initialTemplates = Array.from({ length: 40 }, (_, index) => createTemplate(index + 1))
+		const appendedTemplates = [
+			...initialTemplates,
+			...Array.from({ length: 40 }, (_, index) => createTemplate(index + 41)),
+		]
 		const props = {
-			templates: [template],
 			selectedTemplate: null,
 			onTemplateSelect: vi.fn(),
 			hasMore: true,
@@ -616,15 +651,33 @@ describe("SlidesTemplateCanvas", () => {
 		}
 
 		try {
-			const { rerender } = render(<SlidesTemplateCanvas {...props} loadMoreSignal={40} />)
+			const { rerender } = render(
+				<SlidesTemplateCanvas
+					{...props}
+					loadMoreSignal={initialTemplates.length}
+					templates={initialTemplates}
+				/>,
+			)
 
-			await waitFor(() => expect(onLoadMore).toHaveBeenCalledTimes(1))
+			act(() => vi.advanceTimersByTime(20))
+			expect(onLoadMore).toHaveBeenCalledTimes(1)
+			act(() => vi.advanceTimersByTime(500))
 
-			rerender(<SlidesTemplateCanvas {...props} loadMoreSignal={80} />)
+			rerender(
+				<SlidesTemplateCanvas
+					{...props}
+					loadMoreSignal={appendedTemplates.length}
+					templates={appendedTemplates}
+				/>,
+			)
 
-			await waitFor(() => expect(onLoadMore).toHaveBeenCalledTimes(2))
+			act(() => vi.advanceTimersByTime(20))
+			expect(onLoadMore).toHaveBeenCalledTimes(1)
 		} finally {
+			requestAnimationFrameSpy.mockRestore()
+			cancelAnimationFrameSpy.mockRestore()
 			rectSpy.mockRestore()
+			vi.useRealTimers()
 		}
 	})
 
@@ -754,9 +807,27 @@ describe("SlidesTemplateCanvas", () => {
 			expect(didFocus).toBe(true)
 			// 随机聚焦先保留当前位置，再通过 requestAnimationFrame 平滑移动到目标。
 			expect(getCanvasTranslate()).toEqual({ x: 0, y: 0 })
+			const getFocusedCover = () =>
+				screen
+					.getAllByTestId("slides-template-canvas-tile-item")
+					.find((item) => item.style.zIndex === "30")
+					?.querySelector('[data-testid="slides-template-static-cover"]')
+			expect(getFocusedCover()).toHaveAttribute(
+				"data-slides-template-emphasis-ready",
+				"false",
+			)
 			await waitFor(() => {
 				expect(getCanvasTranslate()).not.toEqual({ x: 0, y: 0 })
 			})
+			await waitFor(
+				() => {
+					expect(getFocusedCover()).toHaveAttribute(
+						"data-slides-template-emphasis-ready",
+						"true",
+					)
+				},
+				{ timeout: 2500 },
+			)
 			await waitFor(
 				() => {
 					expect(
