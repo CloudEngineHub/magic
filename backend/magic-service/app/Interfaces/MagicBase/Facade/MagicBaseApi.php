@@ -35,6 +35,7 @@ use Dtyq\SuperMagic\Domain\Share\Service\ResourceShareDomainService;
 use Dtyq\SuperMagic\Infrastructure\Utils\AccessTokenUtil;
 use Hyperf\Di\Annotation\Inject;
 use Hyperf\HttpServer\Contract\RequestInterface;
+use RuntimeException;
 
 #[ApiResponse('low_code')]
 class MagicBaseApi extends AbstractApi
@@ -380,9 +381,7 @@ class MagicBaseApi extends AbstractApi
     {
         $shareToken = trim((string) $this->request->header('x-magic-share-token', ''));
         if ($shareToken === '') {
-            /** @var MagicUserAuthorization $authorization */
-            $authorization = $this->getAuthorization();
-            return $authorization;
+            return $this->getAuthorization();
         }
 
         if (! AccessTokenUtil::validate($shareToken)) {
@@ -435,6 +434,6 @@ class MagicBaseApi extends AbstractApi
     private function denyRuntimeAccess()
     {
         MagicBaseExceptionBuilder::accessDenied('无项目访问权限');
-        throw new \RuntimeException('Unreachable.');
+        throw new RuntimeException('Unreachable.');
     }
 }
