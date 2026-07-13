@@ -8,6 +8,7 @@ import { ElementTypeEnum, type ImageElement, CanvasDesignPlugin } from "../../ca
 import { useImageLowUrl } from "../../hooks/useImageUrls"
 import {
 	pluginHasCapability,
+	createCanvasAssetDragSessionId,
 	type PluginCanvasAssetDragTargetMode,
 	type PluginRuntimeMessage,
 } from "./runtime/v1"
@@ -26,6 +27,8 @@ interface DragPreviewItem {
 }
 
 interface DragState {
+	/** 宿主侧拖拽会话 ID，与插件 iframe 上报的 dragSessionId 绑定 */
+	sessionId: string
 	/** 拖拽起始元素 ID */
 	originElementId: string
 	/** 本次拖拽可导出的图片元素 ID 列表 */
@@ -197,6 +200,7 @@ export function useCanvasImageExternalDragToPlugin({
 	const [dragState, setDragState] = useState<DragState | null>(null)
 	const [isDropResolving, setIsDropResolving] = useState(false)
 	const dragStateRef = useRef<DragState | null>(null)
+	const dragSessionIdRef = useRef<string | null>(null)
 	const targetRef = useRef<DropTarget | null>(null)
 	const isInsideIframeRef = useRef(false)
 	// 只有声明了 assets.pickFiles 能力的插件才允许接收画布图片拖入。
@@ -220,7 +224,7 @@ export function useCanvasImageExternalDragToPlugin({
 		[channelToken, iframeRef],
 	)
 
-	/** 通知插件清理画布图片拖拽 hover/drop 状态 */
+	/** 通知插件清理画布图片拖拽 hover/drop 状态（不结束宿主拖拽会话） */
 	const sendDragLeave = useCallback(() => {
 		isInsideIframeRef.current = false
 		targetRef.current = null
@@ -232,7 +236,12 @@ export function useCanvasImageExternalDragToPlugin({
 
 	/** 将当前拖拽位置同步给插件 iframe，并携带图片数量等元信息 */
 	const postDragMove = useCallback(
-		(state: Pick<DragState, "clientX" | "clientY" | "imageElementIds" | "originElementId">) => {
+		(
+			state: Pick<
+				DragState,
+				"sessionId" | "clientX" | "clientY" | "imageElementIds" | "originElementId"
+			>,
+		) => {
 			const iframePoint = getIframePoint(iframeRef.current, state.clientX, state.clientY)
 			if (!iframePoint) {
 				if (isInsideIframeRef.current) {
@@ -245,6 +254,7 @@ export function useCanvasImageExternalDragToPlugin({
 			// 给iframe 发 move 事件，只传元信息，真正文件会在确认 drop 后再解析，避免拖动中反复上传。
 			postPluginMessage({
 				type: "magic-canvas-plugin:canvas-asset-drag-move",
+				dragSessionId: state.sessionId,
 				clientX: iframePoint.x,
 				clientY: iframePoint.y,
 				assetsMeta: {
@@ -256,22 +266,30 @@ export function useCanvasImageExternalDragToPlugin({
 		[iframeRef, postPluginMessage, sendDragLeave],
 	)
 
-	/** 接收插件 iframe 上报的当前可投放目标 */
+	/** 接收插件 iframe 上报的当前可投放目标（须匹配活跃拖拽会话） */
 	const handleCanvasAssetDragTarget = useCallback((target: CanvasAssetDragTargetMessage) => {
-		// 插件每次命中/离开投放目标都会上报，宿主只记录当前可 drop 的目标。
-		targetRef.current =
+		const activeSessionId = dragSessionIdRef.current
+		if (!activeSessionId || !dragStateRef.current) return
+		if (target.dragSessionId !== activeSessionId) return
+
+		const nextTarget =
 			target.canDrop && target.targetId && target.mode
-				? {
-						targetId: target.targetId,
-						mode: target.mode,
-						canDrop: true,
-					}
+				? isInsideIframeRef.current
+					? {
+							targetId: target.targetId,
+							mode: target.mode,
+							canDrop: true,
+						}
+					: null
 				: null
+
+		// 插件每次命中/离开投放目标都会上报，宿主只记录当前可 drop 的目标。
+		targetRef.current = nextTarget
 		setDragState((current) =>
-			current
+			current?.sessionId === activeSessionId
 				? {
 						...current,
-						isOverTarget: Boolean(targetRef.current),
+						isOverTarget: Boolean(nextTarget),
 					}
 				: current,
 		)
@@ -282,7 +300,10 @@ export function useCanvasImageExternalDragToPlugin({
 		const handleStart = (event: CanvasEvent<"image:external-drag:start">) => {
 			if (!canAcceptCanvasImageDrag) return
 			const { data } = event
+			const sessionId = createCanvasAssetDragSessionId()
+			dragSessionIdRef.current = sessionId
 			const nextState: DragState = {
+				sessionId,
 				originElementId: data.originElementId,
 				imageElementIds: data.imageElementIds,
 				clientX: data.clientX,
@@ -325,16 +346,23 @@ export function useCanvasImageExternalDragToPlugin({
 			if (!canAcceptCanvasImageDrag) return
 			const current = dragStateRef.current
 			const target = targetRef.current
-			sendDragLeave()
-			setDragState(null)
-			// 如果拖拽被取消（工具切换/Escape/多指手势/浏览器取消 pointer），或者没有可投放目标，或者没有可投放目标，则不进行图片导入。
+
+			const finishDragSession = () => {
+				sendDragLeave()
+				dragSessionIdRef.current = null
+				setDragState(null)
+			}
+
+			// 如果拖拽被取消（工具切换/Escape/多指手势/浏览器取消 pointer），或者没有可投放目标，则不进行图片导入。
 			if (!current || event.data.cancelled || !target?.canDrop) {
+				finishDragSession()
 				return
 			}
 
 			// slot 是单图替换位，只导入拖拽起点；grid 支持把选区里的图片批量导入。
 			const elementIds =
 				target.mode === "slot" ? [current.originElementId] : current.imageElementIds
+			const sessionId = current.sessionId
 			setIsDropResolving(true)
 			const toastId = toast.loading(
 				canvas.t?.("plugin.canvasAssetDrop.loading", "正在导入图片...") ||
@@ -342,11 +370,14 @@ export function useCanvasImageExternalDragToPlugin({
 			)
 			void resolveCanvasImageDragAssets(canvas, elementIds)
 				.then((files) => {
+					// 会话已失效：新拖拽开始 / 组件卸载 / 会话已结束
+					if (dragSessionIdRef.current !== sessionId) return
 					if (!files.length) {
 						throw new Error("No image asset resolved.")
 					}
 					postPluginMessage({
 						type: "magic-canvas-plugin:canvas-asset-drop",
+						dragSessionId: sessionId,
 						targetId: target.targetId,
 						files,
 					})
@@ -361,6 +392,9 @@ export function useCanvasImageExternalDragToPlugin({
 					)
 				})
 				.finally(() => {
+					if (dragSessionIdRef.current === sessionId) {
+						finishDragSession()
+					}
 					setIsDropResolving(false)
 				})
 		}
@@ -386,6 +420,7 @@ export function useCanvasImageExternalDragToPlugin({
 	useEffect(() => {
 		return () => {
 			// 组件卸载时清理拖拽状态。
+			dragSessionIdRef.current = null
 			sendDragLeave()
 		}
 	}, [sendDragLeave])

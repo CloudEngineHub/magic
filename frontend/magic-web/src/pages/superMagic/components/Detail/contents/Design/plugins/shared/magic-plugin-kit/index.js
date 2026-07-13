@@ -548,6 +548,7 @@
 		// 记录插件内所有可接收画布图片拖入的区域，拖拽 move 时按坐标反查。
 		const canvasAssetDropTargets = new Map()
 		let activeCanvasAssetDropTarget = null
+		let activeCanvasAssetDragSessionId = null
 
 		function createMaskCropUploadName(section, sourceAsset) {
 			maskCropUploadSequence += 1
@@ -1371,6 +1372,9 @@
 		/** 响应宿主转发的画布图片拖拽 move，更新 hover 并回报当前可 drop 状态。 */
 		function handleCanvasAssetDragMove(event) {
 			const detail = event.detail ?? {}
+			const dragSessionId =
+				typeof detail.dragSessionId === "string" ? detail.dragSessionId.trim() : ""
+			activeCanvasAssetDragSessionId = dragSessionId || null
 			const incomingCount = Math.max(1, Number(detail.assetsMeta?.count) || 1)
 			const entry =
 				typeof detail.clientX === "number" && typeof detail.clientY === "number"
@@ -1392,6 +1396,7 @@
 
 		/** 指针离开 iframe 或拖拽结束时清理投放状态。 */
 		function handleCanvasAssetDragLeave() {
+			activeCanvasAssetDragSessionId = null
 			clearActiveCanvasAssetDropTarget()
 			reportCanvasAssetDropTarget(null, undefined, false)
 		}
@@ -1399,6 +1404,16 @@
 		/** 宿主确认 drop 后，把文件列表导入到最后一次命中的投放区。 */
 		function handleCanvasAssetDrop(event) {
 			const detail = event.detail ?? {}
+			const dragSessionId =
+				typeof detail.dragSessionId === "string" ? detail.dragSessionId.trim() : ""
+			if (
+				!dragSessionId ||
+				!activeCanvasAssetDragSessionId ||
+				dragSessionId !== activeCanvasAssetDragSessionId
+			) {
+				return
+			}
+			activeCanvasAssetDragSessionId = null
 			const targetId = typeof detail.targetId === "string" ? detail.targetId : ""
 			const entry = canvasAssetDropTargets.get(targetId)
 			clearActiveCanvasAssetDropTarget()

@@ -53,6 +53,7 @@ export function createPluginSrcDocV1(
 		let __MAGIC_CANVAS_SCOPE__ = null;
 		let __MAGIC_CANVAS_DISPOSED__ = false;
 		let __MAGIC_CANVAS_LAST_POINTER__ = null;
+		let __MAGIC_CANVAS_ACTIVE_DRAG_SESSION_ID__ = null;
 		const __MAGIC_CANVAS_STATE_BINDINGS__ = new WeakMap();
 
 		window.registerMagicCanvasPlugin = function registerMagicCanvasPlugin(plugin) {
@@ -343,8 +344,11 @@ export function createPluginSrcDocV1(
 				},
 				// 插件内部命中/离开投放区时调用，宿主据此决定鼠标释放后是否 drop。
 				reportCanvasAssetDragTarget(target = {}) {
+					const dragSessionId = __MAGIC_CANVAS_ACTIVE_DRAG_SESSION_ID__;
+					if (!dragSessionId) return;
 					postHost({
 						type: "magic-canvas-plugin:canvas-asset-drag-target",
+						dragSessionId,
 						targetId: typeof target.targetId === "string" ? target.targetId : null,
 						mode: target.mode,
 						canDrop: target.canDrop === true,
@@ -464,6 +468,13 @@ export function createPluginSrcDocV1(
 				data.type !== "magic-canvas-plugin:canvas-asset-drop"
 			) {
 				return;
+			}
+			if (data.type === "magic-canvas-plugin:canvas-asset-drag-move") {
+				const dragSessionId =
+					typeof data.dragSessionId === "string" ? data.dragSessionId.trim() : "";
+				__MAGIC_CANVAS_ACTIVE_DRAG_SESSION_ID__ = dragSessionId || null;
+			} else if (data.type === "magic-canvas-plugin:canvas-asset-drag-leave") {
+				__MAGIC_CANVAS_ACTIVE_DRAG_SESSION_ID__ = null;
 			}
 			window.dispatchEvent(new CustomEvent(data.type, { detail: data }));
 		});

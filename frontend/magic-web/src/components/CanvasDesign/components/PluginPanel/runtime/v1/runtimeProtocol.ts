@@ -66,6 +66,7 @@ export type PluginRuntimeMessage =
 	/** 插件 runtime 上报当前画布图片拖拽是否命中可投放目标 */
 	| {
 			type: "magic-canvas-plugin:canvas-asset-drag-target"
+			dragSessionId: string
 			targetId: string | null
 			mode?: PluginCanvasAssetDragTargetMode
 			canDrop: boolean
@@ -165,6 +166,7 @@ const PLUGIN_RUNTIME_CAPABILITY_BY_MESSAGE_TYPE: Partial<
 	"magic-canvas-plugin:set-height": "ui.setHeight",
 	"magic-canvas-plugin:resolve-resource": "resources.resolve",
 	"magic-canvas-plugin:pick-files": "assets.pickFiles",
+	"magic-canvas-plugin:canvas-asset-drag-target": "assets.pickFiles",
 	"magic-canvas-plugin:get-image-models": "ai.getImageModels",
 	"magic-canvas-plugin:generate-and-place": "ai.generateAndPlace",
 	"magic-canvas-plugin:complete-image-prompt": "ai.completeImagePrompt",
@@ -181,10 +183,19 @@ const PLUGIN_RUNTIME_CAPABILITY_BY_MESSAGE_TYPE: Partial<
 }
 
 export function createPluginChannelToken(): string {
+	return createOpaqueRuntimeId("plugin")
+}
+
+/** 单次画布图片外部拖拽会话 ID，由宿主生成并在 drag-move / drag-target 间传递 */
+export function createCanvasAssetDragSessionId(): string {
+	return createOpaqueRuntimeId("canvas-asset-drag")
+}
+
+function createOpaqueRuntimeId(prefix: string): string {
 	if (typeof crypto !== "undefined" && crypto.randomUUID) {
 		return crypto.randomUUID()
 	}
-	return `plugin-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`
+	return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`
 }
 
 export function getPluginRuntimeMessageCapability(
@@ -249,10 +260,14 @@ export function parsePluginRuntimeMessage(
 		}
 	}
 	if (record.type === "magic-canvas-plugin:canvas-asset-drag-target") {
+		const dragSessionId =
+			typeof record.dragSessionId === "string" ? record.dragSessionId.trim() : ""
+		if (!dragSessionId) return null
 		// 对 iframe 传回的目标信息做收窄，避免宿主保存非法 mode/targetId。
 		const mode = record.mode === "slot" || record.mode === "grid" ? record.mode : undefined
 		return {
 			type: "magic-canvas-plugin:canvas-asset-drag-target",
+			dragSessionId,
 			targetId: typeof record.targetId === "string" ? record.targetId : null,
 			mode,
 			canDrop: record.canDrop === true,

@@ -90,6 +90,9 @@ describe("plugin runtime protocol", () => {
 		expect(getPluginRuntimeMessageCapability("magic-canvas-plugin:pick-files")).toBe(
 			"assets.pickFiles",
 		)
+		expect(
+			getPluginRuntimeMessageCapability("magic-canvas-plugin:canvas-asset-drag-target"),
+		).toBe("assets.pickFiles")
 		expect(getPluginRuntimeResultType("magic-canvas-plugin:pick-files")).toBe(
 			"magic-canvas-plugin:pick-files-result",
 		)
@@ -154,6 +157,43 @@ describe("plugin runtime protocol", () => {
 			],
 			options: { type: "image", maxCount: 2 },
 		})
+	})
+
+	it("parses canvas-asset-drag-target requests with drag session binding", () => {
+		expect(
+			parsePluginRuntimeMessage(
+				{
+					channelToken: "active-token",
+					type: "magic-canvas-plugin:canvas-asset-drag-target",
+					targetId: "product-grid",
+					mode: "grid",
+					canDrop: true,
+					dragSessionId: "session-1",
+				},
+				"active-token",
+			),
+		).toEqual({
+			type: "magic-canvas-plugin:canvas-asset-drag-target",
+			dragSessionId: "session-1",
+			targetId: "product-grid",
+			mode: "grid",
+			canDrop: true,
+		})
+	})
+
+	it("rejects canvas-asset-drag-target without dragSessionId", () => {
+		expect(
+			parsePluginRuntimeMessage(
+				{
+					channelToken: "active-token",
+					type: "magic-canvas-plugin:canvas-asset-drag-target",
+					targetId: "product-grid",
+					mode: "grid",
+					canDrop: true,
+				},
+				"active-token",
+			),
+		).toBeNull()
 	})
 
 	it("checks manifest capability declarations strictly", () => {
