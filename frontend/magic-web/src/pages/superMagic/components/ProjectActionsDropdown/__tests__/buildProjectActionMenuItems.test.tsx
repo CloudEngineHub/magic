@@ -55,4 +55,40 @@ describe("buildProjectActionMenuItems", () => {
 
 		expect(items.some((item) => item?.key === ProjectActionMenuKey.OpenInNewWindow)).toBe(false)
 	})
+
+	it("shows rename for a manager viewing a workspace-bound collaboration project", () => {
+		const items = buildProjectActionMenuItems({
+			item: {
+				...mockProject,
+				tag: "collaboration",
+				user_role: "manage",
+				is_bind_workspace: true,
+				bind_workspace_id: "workspace-1",
+			},
+			t: translate,
+			inCollaborationPanel: false,
+			onRenameStart: vi.fn(),
+			onRenameProject: vi.fn(),
+		})
+
+		expect(items.some((item) => item?.key === ProjectActionMenuKey.Rename)).toBe(true)
+	})
+
+	it("keeps rename hidden for an editor viewing a workspace-bound collaboration project", () => {
+		const items = buildProjectActionMenuItems({
+			item: {
+				...mockProject,
+				tag: "collaboration",
+				user_role: "editor",
+				is_bind_workspace: true,
+				bind_workspace_id: "workspace-1",
+			},
+			t: translate,
+			inCollaborationPanel: false,
+			onRenameStart: vi.fn(),
+			onRenameProject: vi.fn(),
+		})
+
+		expect(items.some((item) => item?.key === ProjectActionMenuKey.Rename)).toBe(false)
+	})
 })
