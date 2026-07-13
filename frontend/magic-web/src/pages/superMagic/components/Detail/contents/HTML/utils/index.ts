@@ -571,39 +571,39 @@ export function rewriteHtmlCdnWithHost(content: string, cdnHost: string): Docume
 		match: (parsed: URL) => boolean
 		rewrite: (href: string, parsed: URL) => string | string[]
 	}[] = [
-			{
-				// "https://fonts.googleapis.com/icon?family=Material+Icons"
-				match: (parsed) =>
-					GOOGLE_FONT_HOSTS.has(parsed.hostname) && parsed.pathname === "/icon",
-				rewrite: () => cdnHost + "/googleapis/icon/v145/index.css",
+		{
+			// "https://fonts.googleapis.com/icon?family=Material+Icons"
+			match: (parsed) =>
+				GOOGLE_FONT_HOSTS.has(parsed.hostname) && parsed.pathname === "/icon",
+			rewrite: () => cdnHost + "/googleapis/icon/v145/index.css",
+		},
+		{
+			// "https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700;900&display=swap"
+			// "https://fonts.googlefonts.cn/css2?family=Ma+Shan+Zheng&display=swap"
+			// "https://fonts.googleapis.com/css?family=Open+Sans:400,700|Lato:300"
+			// "https://fonts.googlefonts.cn/css?family=Open+Sans:400,700|Lato:300"
+			match: (parsed) =>
+				GOOGLE_FONT_HOSTS.has(parsed.hostname) &&
+				(parsed.pathname === "/css2" || parsed.pathname === "/css"),
+			rewrite: (href, parsed) => {
+				const families = parseFontFamilies(parsed)
+				if (families.length === 0) return href.replace(parsed.hostname, "fonts.loli.net")
+				return families.map(
+					(f) => cdnHost + "/google-fonts/css/woff2/" + toSafeFontName(f) + "_woff2.css",
+				)
 			},
-			{
-				// "https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700;900&display=swap"
-				// "https://fonts.googlefonts.cn/css2?family=Ma+Shan+Zheng&display=swap"
-				// "https://fonts.googleapis.com/css?family=Open+Sans:400,700|Lato:300"
-				// "https://fonts.googlefonts.cn/css?family=Open+Sans:400,700|Lato:300"
-				match: (parsed) =>
-					GOOGLE_FONT_HOSTS.has(parsed.hostname) &&
-					(parsed.pathname === "/css2" || parsed.pathname === "/css"),
-				rewrite: (href, parsed) => {
-					const families = parseFontFamilies(parsed)
-					if (families.length === 0) return href.replace(parsed.hostname, "fonts.loli.net")
-					return families.map(
-						(f) => cdnHost + "/google-fonts/css/woff2/" + toSafeFontName(f) + "_woff2.css",
-					)
-				},
-			},
-			{
-				// "https://fonts.googleapis.com/earlyaccess/notosanssc.css"
-				match: (parsed) => GOOGLE_FONT_HOSTS.has(parsed.hostname),
-				rewrite: (href, parsed) => href.replace(parsed.hostname, "fonts.loli.net"),
-			},
-			{
-				// "https://ajax.googleapis.com/ajax/libs/jquery/3.7.1/jquery.min.js"
-				match: (parsed) => parsed.hostname === "ajax.googleapis.com",
-				rewrite: (href) => href.replace("ajax.googleapis.com", "ajax.loli.net"),
-			},
-		]
+		},
+		{
+			// "https://fonts.googleapis.com/earlyaccess/notosanssc.css"
+			match: (parsed) => GOOGLE_FONT_HOSTS.has(parsed.hostname),
+			rewrite: (href, parsed) => href.replace(parsed.hostname, "fonts.loli.net"),
+		},
+		{
+			// "https://ajax.googleapis.com/ajax/libs/jquery/3.7.1/jquery.min.js"
+			match: (parsed) => parsed.hostname === "ajax.googleapis.com",
+			rewrite: (href) => href.replace("ajax.googleapis.com", "ajax.loli.net"),
+		},
+	]
 
 	function resolveGoogleRewrite(href: string): string | string[] | null {
 		const parsed = parseHref(href)
@@ -618,7 +618,7 @@ export function rewriteHtmlCdnWithHost(content: string, cdnHost: string): Docume
 	function applyGoogleRewrite(link: Element, href: string, doc: Document): void {
 		const result = resolveGoogleRewrite(href)
 		if (!result) return
-		
+
 		link.setAttribute("data-original-href", href)
 
 		if (typeof result === "string") {
@@ -815,8 +815,33 @@ function restoreSerializedEntitiesForCdnRewrite(html: string): string {
 	})
 }
 
+/**
+ * Removes only the XHTML namespace copied onto the root html element.
+ * Namespaces inside SVG foreignObject content are valid markup and must remain intact.
+ */
+export function isRootHtmlXhtmlNamespace(attr: Attr): boolean {
+	return attr.name === "xmlns" && attr.value === "http://www.w3.org/1999/xhtml"
+}
+
+/**
+ * Cleans XMLSerializer's XHTML namespace side effect from the root html tag only.
+ */
+export function removeRootHtmlXhtmlNamespace(html: string): string {
+	if (!html || typeof html !== "string") return html
+
+	return html.replace(/<html\b([^>]*)>/i, (match, attrs = "") => {
+		const cleanedAttrs = attrs.replace(
+			/\s+xmlns=(["'])http:\/\/www\.w3\.org\/1999\/xhtml\1/i,
+			"",
+		)
+		return `<html${cleanedAttrs}>`
+	})
+}
+
 function serializeCdnRewrittenDocument(doc: Document): string {
-	return restoreSerializedEntitiesForCdnRewrite(new XMLSerializer().serializeToString(doc))
+	return removeRootHtmlXhtmlNamespace(
+		restoreSerializedEntitiesForCdnRewrite(new XMLSerializer().serializeToString(doc)),
+	)
 }
 
 const REWRITE_HTML_WITH_MAGIC_CDN_CACHE_MAX = 64
@@ -1105,7 +1130,10 @@ export function filterInjectedTags(htmlString: string, filePathMapping: Map<stri
 		// 恢复CSS中的url()路径
 		const styleElementsForRestore = doc.querySelectorAll("style")
 		styleElementsForRestore.forEach((style) => {
-			if (style.textContent && style.textContent.includes("/*__ORIGINAL_GOOGLE_IMPORT_URL__:")) {
+			if (
+				style.textContent &&
+				style.textContent.includes("/*__ORIGINAL_GOOGLE_IMPORT_URL__:")
+			) {
 				const restoredGoogleImports = new Set<string>()
 				style.textContent = style.textContent.replace(
 					/\/\*__ORIGINAL_GOOGLE_IMPORT_URL__:(.*?)__\*\/\s*@import\s+url\(['"].*?['"]\)\s*([^;]*);/g,
@@ -1189,6 +1217,7 @@ export function filterInjectedTags(htmlString: string, filePathMapping: Map<stri
 		// 获取 html 标签的属性
 		const htmlAttrs: string[] = []
 		Array.from(htmlElement.attributes).forEach((attr) => {
+			if (isRootHtmlXhtmlNamespace(attr)) return
 			htmlAttrs.push(`${attr.name}="${attr.value}"`)
 		})
 		const htmlAttrString = htmlAttrs.length > 0 ? " " + htmlAttrs.join(" ") : ""
