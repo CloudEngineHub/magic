@@ -5,7 +5,7 @@ go 1.25.6
 require (
 	github.com/apparentlymart/go-shquot v0.0.1
 	github.com/docker/cli v29.2.1+incompatible
-	github.com/go-git/go-git/v6 v6.0.0-alpha.4
+	github.com/go-git/go-git/v6 v6.0.0-alpha.4.0.20260707125336-d60654d4f998
 	github.com/joho/godotenv v1.5.1
 	github.com/mattn/go-isatty v0.0.20
 	github.com/moby/buildkit v0.28.0
@@ -31,7 +31,7 @@ require (
 require (
 	github.com/emirpasic/gods v1.18.1 // indirect
 	github.com/go-git/gcfg/v2 v2.0.2 // indirect
-	github.com/go-git/go-billy/v6 v6.0.0-alpha.1 // indirect
+	github.com/go-git/go-billy/v6 v6.0.0-alpha.1.0.20260519112248-0095b064a6c6 // indirect
 	github.com/kevinburke/ssh_config v1.6.0 // indirect
 	github.com/klauspost/cpuid/v2 v2.4.0 // indirect
 	github.com/moby/moby/api v1.54.0 // indirect
@@ -176,7 +176,7 @@ require (
 	go.opentelemetry.io/proto/otlp v1.7.1 // indirect
 	go.yaml.in/yaml/v2 v2.4.3 // indirect
 	golang.org/x/crypto v0.54.0 // indirect
-	golang.org/x/net v0.56.0 // indirect
+	golang.org/x/net v0.57.0 // indirect
 	golang.org/x/oauth2 v0.32.0 // indirect
 	golang.org/x/term v0.45.0 // indirect
 	golang.org/x/time v0.14.0 // indirect

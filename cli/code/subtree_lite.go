@@ -2,12 +2,17 @@ package code
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"regexp"
 
 	"go.yaml.in/yaml/v3"
 
+	"github.com/dtyq/magicrew-cli/util"
 	"github.com/go-git/go-git/v6"
 	gitConfig "github.com/go-git/go-git/v6/config"
+	"github.com/go-git/go-git/v6/plumbing"
+	gitClient "github.com/go-git/go-git/v6/plumbing/client"
 	"github.com/splitsh/lite/splitter"
 )
 
@@ -21,7 +26,7 @@ type subtreeSpliterLite struct {
 	ShowHEADRev bool        `yaml:"showHEADRev"`
 }
 
-func newSubtreeSpliterLite(node yaml.Node) (subtreeSpliter, error) {
+func newSubtreeSpliterLite(node yaml.Node) (SubtreeSpliter, error) {
 	s := subtreeSpliterLite{}
 	err := node.Decode(&s)
 	if err != nil {
@@ -63,6 +68,12 @@ func (s *subtreeSpliterLite) Split(ctx context.Context, code *Code, subtreeSplit
 	if err != nil {
 		return fmt.Errorf("failed to split subtree: %w", err)
 	}
+	defer func() {
+		// clean up splited branch
+		refName := plumbing.NewBranchReferenceName(splitedBranchName)
+		_ = code.Repository.Storer.RemoveReference(refName)
+		// best effort, no check
+	}()
 
 	if s.ShowHEADRev {
 		fmt.Printf("%s\n", result.Head().String())
@@ -78,14 +89,25 @@ func (s *subtreeSpliterLite) Split(ctx context.Context, code *Code, subtreeSplit
 	}
 
 	// push to dest
-	err = remote.PushContext(ctx, &git.PushOptions{
+	options := &git.PushOptions{
 		RemoteName: "anonymous",
 		RemoteURL:  subtreeSplit.DestURL,
 		RefSpecs: []gitConfig.RefSpec{
 			gitConfig.RefSpec("refs/heads/" + splitedBranchName + ":refs/heads/" + subtreeSplit.Branch),
 		},
-	})
-	if err != nil {
+		Force: force,
+	}
+	urlRe := regexp.MustCompile("^(https{0,1})://([^/]+).+")
+	if groups := urlRe.FindStringSubmatch(subtreeSplit.DestURL); len(groups) > 2 {
+		cred, err := util.GetGitHTTPCredential(ctx, code.Repository, groups[1], groups[2])
+		if err == nil && cred != nil {
+			options.ClientOptions = []gitClient.Option{
+				gitClient.WithHTTPAuth(cred),
+			}
+		}
+	}
+	err = remote.PushContext(ctx, options)
+	if err != nil && !errors.Is(err, git.NoErrAlreadyUpToDate) {
 		return fmt.Errorf("failed to push to dest: %w", err)
 	}
 

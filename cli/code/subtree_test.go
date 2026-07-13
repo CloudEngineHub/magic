@@ -196,7 +196,7 @@ func TestSubtree(t *testing.T) {
 	}
 	defer os.RemoveAll(tempDestDir)
 
-	testSpliter := func(t *testing.T, spliter subtreeSpliter) {
+	testSpliter := func(t *testing.T, spliter SubtreeSpliter) {
 		subtreeSplit := SubtreeSplit{
 			Prefix:  prefix,
 			DestURL: tempDestDir,
@@ -258,7 +258,7 @@ cmdKind: git
 			t.Fatalf("failed to unmarshal test config: %v", err)
 		}
 
-		spliter, err := newSubtreeSpliter(testConfig)
+		spliter, err := NewSubtreeSpliter(testConfig)
 		if !assert.NoError(t, err) {
 			t.Fatalf("failed to create subtree spliter: %v", err)
 		}
@@ -288,7 +288,7 @@ cmdPath: "` + splitshLitePath + `"
 			t.Fatalf("failed to unmarshal test config: %v", err)
 		}
 
-		spliter, err := newSubtreeSpliter(testConfig)
+		spliter, err := NewSubtreeSpliter(testConfig)
 		if !assert.NoError(t, err) {
 			t.Fatalf("failed to create subtree spliter: %v", err)
 		}
@@ -310,7 +310,7 @@ showHEADRev: true
 			t.Fatalf("failed to unmarshal test config: %v", err)
 		}
 
-		spliter, err := newSubtreeSpliter(testConfig)
+		spliter, err := NewSubtreeSpliter(testConfig)
 		if !assert.NoError(t, err) {
 			t.Fatalf("failed to create subtree spliter: %v", err)
 		}
