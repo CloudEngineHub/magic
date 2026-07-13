@@ -27,7 +27,7 @@ var (
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := context.Background()
 			codeBase, err := code.FindMagicrew(".")
-			if err != nil {
+			if err != nil || codeBase.Repository == nil {
 				lg.Loge("subtree", "failed to find magicrew: %v", err)
 				return fmt.Errorf("failed to find magicrew: %v", err)
 			}
@@ -106,6 +106,9 @@ var (
 			branch, err := cmd.Flags().GetString("branch")
 			if err != nil {
 				return fmt.Errorf("failed to get flag: %v", err)
+			}
+			if branch == "" {
+				branch = cfg.Subtree.Branch
 			}
 			if branch == "" {
 				branch = "master"
