@@ -623,6 +623,11 @@ export class VideoElement extends BaseElement<VideoElementData> {
 
 	update(newData: VideoElementData): boolean {
 		const srcChanged = this.data.src !== newData.src
+		const newStatus = newData.status
+		const generationSettled =
+			!!newData.src ||
+			newStatus === GenerationStatus.Completed ||
+			newStatus === GenerationStatus.Failed
 		const needsRerender =
 			this.data.generateVideoRequest?.video_id !== newData.generateVideoRequest?.video_id ||
 			this.data.src !== newData.src ||
@@ -630,6 +635,10 @@ export class VideoElement extends BaseElement<VideoElementData> {
 			this.data.errorMessage !== newData.errorMessage
 
 		this.data = newData
+
+		if (generationSettled) {
+			this.isGenerating = false
+		}
 
 		if (srcChanged) {
 			this.cancelScheduledPreviewRefresh()

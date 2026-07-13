@@ -280,6 +280,56 @@ describe("ImageElement mounted image node sync", () => {
 		})
 	})
 
+	it("clears video generating state when terminal generation data arrives", () => {
+		const element = Object.create(VideoElement.prototype) as VideoElement & {
+			data: {
+				id: string
+				src?: string
+				status?: GenerationStatus
+				generateVideoRequest?: { video_id: string }
+				errorMessage?: string
+			}
+			isGenerating: boolean
+			cancelScheduledPreviewRefresh: ReturnType<typeof vi.fn>
+			releasePlaybackConsumers: ReturnType<typeof vi.fn>
+			renderer: { resetPreview: ReturnType<typeof vi.fn> }
+			canvas: {
+				visibilityManager: {
+					updateVideoElement: ReturnType<typeof vi.fn>
+					unregisterVideoElement: ReturnType<typeof vi.fn>
+				}
+			}
+		}
+		element.data = {
+			id: "video-1",
+			status: GenerationStatus.Processing,
+			generateVideoRequest: { video_id: "task-1" },
+		}
+		element.isGenerating = true
+		element.cancelScheduledPreviewRefresh = vi.fn()
+		element.releasePlaybackConsumers = vi.fn()
+		element.renderer = { resetPreview: vi.fn() }
+		element.canvas = {
+			visibilityManager: {
+				updateVideoElement: vi.fn(),
+				unregisterVideoElement: vi.fn(),
+			},
+		}
+
+		const shouldRerender = element.update({
+			...element.data,
+			src: "videos/result.mp4",
+			status: GenerationStatus.Completed,
+		})
+
+		expect(element.isGenerating).toBe(false)
+		expect(element.canvas.visibilityManager.updateVideoElement).toHaveBeenCalledWith(
+			"video-1",
+			"videos/result.mp4",
+		)
+		expect(shouldRerender).toBe(true)
+	})
+
 	it("resizes mounted image layout during node-only transform resize", () => {
 		const imageNode = new Konva.Image({
 			image: new Image(),
