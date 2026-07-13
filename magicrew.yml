@@ -11,3 +11,30 @@ images:
     context: ./frontend/magic-web
   playwright-mod:
     context: ./thirdparty/playwright-mod
+subtrees:
+  api-response:
+    prefix: backend/api-response
+  async-event:
+    prefix: backend/async-event
+  cloudfile:
+    prefix: backend/cloudfile
+  code-executor:
+    prefix: backend/code-executor
+  easy-dingtalk:
+    prefix: backend/easy-dingtalk
+  flow-expr-engine:
+    prefix: backend/flow-expr-engine
+  rule-engine-core:
+    prefix: backend/rule-engine-core
+  sandbox:
+    prefix: backend/sandbox
+  sandbox-components:
+    prefix: backend/sandbox-components
+  sdk-base:
+    prefix: backend/sdk-base
+  super-magic-module:
+    prefix: backend/super-magic-module
+  task-scheduler:
+    prefix: backend/task-scheduler
+  tiptap:
+    prefix: thirdparty/tiptap

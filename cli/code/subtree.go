@@ -9,10 +9,10 @@ import (
 )
 
 type SubtreeSplit struct {
-	Prefix string
+	Prefix string `yaml:"prefix"`
 
-	DestURL string
-	Branch  string
+	DestURL string `yaml:"destURL"`
+	Branch  string `yaml:"branch"`
 	// DestBranch string
 }
 
@@ -20,13 +20,13 @@ func tempBranchName(prefix string) string {
 	return "mgaicrew-cli/" + prefix + "-" + time.Now().Format("20060102150405")
 }
 
-type subtreeSpliter interface {
+type SubtreeSpliter interface {
 	Split(ctx context.Context, code *Code, subtreeSplit SubtreeSplit, force bool) error
 }
 
 type subtreeKind string
 
-func newSubtreeSpliter(node yaml.Node) (subtreeSpliter, error) {
+func NewSubtreeSpliter(node yaml.Node) (SubtreeSpliter, error) {
 	type dummySubtreeSpliter struct {
 		Kind subtreeKind `yaml:"kind"`
 	}
