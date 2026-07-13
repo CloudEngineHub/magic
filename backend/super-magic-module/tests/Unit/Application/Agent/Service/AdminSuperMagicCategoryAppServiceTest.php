@@ -32,7 +32,7 @@ class AdminSuperMagicCategoryAppServiceTest extends TestCase
     public function testGetDetailReturnsCategoryIdAsString(): void
     {
         $category = $this->createCategory();
-        $service = $this->createService([$category], $category, [$this->createUser()]);
+        $service = $this->createService([$category], $category);
 
         $result = $service->getDetail(935290509114109952);
 
@@ -65,6 +65,11 @@ class AdminSuperMagicCategoryAppServiceTest extends TestCase
             {
                 return 0;
             }
+
+            public function getMarketReferenceCounts(array $categoryIds): array
+            {
+                return [];
+            }
         };
 
         $service = (new ReflectionClass(AdminSuperMagicCategoryAppService::class))->newInstanceWithoutConstructor();
@@ -88,7 +93,9 @@ class AdminSuperMagicCategoryAppServiceTest extends TestCase
             'organizationCode' => 'TGosRaFhvb',
             'nameI18n' => ['zh_CN' => '测试分类'],
             'sortOrder' => 1,
+            'status' => 1,
             'creatorId' => 'user-1',
+            'modifierId' => null,
         ] as $property => $value) {
             (new ReflectionProperty($category, $property))->setValue($category, $value);
         }
