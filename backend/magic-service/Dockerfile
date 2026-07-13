@@ -1,6 +1,7 @@
 ARG GOLANG_VERSION=1.26
+ARG GOLANG_BASE_IMAGE=golang:${GOLANG_VERSION}-alpine
 ARG BASE_IMAGE=ghcr.io/dtyq/php-dockerfile:8.4-alpine-3.23-swow-ci-jsonpath-parle-xlswriter
-FROM --platform=$BUILDPLATFORM golang:${GOLANG_VERSION}-alpine AS go-builder
+FROM --platform=$BUILDPLATFORM ${GOLANG_BASE_IMAGE} AS go-builder
 
 ARG TARGETARCH
 ARG APK_MIRROR=mirrors.aliyun.com
