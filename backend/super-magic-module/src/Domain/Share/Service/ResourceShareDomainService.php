@@ -240,6 +240,7 @@ class ResourceShareDomainService
             'resource_name',
             'resource_type',
             'created_at',               // 分享时间 (shared_at)
+            'updated_at',               // 修改时间
             'created_uid',
             'share_type',
             'project_id',
