@@ -35,6 +35,9 @@ class SlidesTemplateTagAppService extends AbstractKernelAppService
 
         $query = new SlidesTemplateTagQuery();
         $query->setStatus(SlidesTemplateTagStatus::Enabled->value);
+        $query->setNodeType('tag');
+        $query->setUsageType('filter');
+        $query->setIsVisible(true);
         $query->setOnlyWithTemplates(true);
         $query->setTemplateKeyword($request->getKeyword());
         $query->setTemplateCategoryCode($request->getCategoryCode());
@@ -49,6 +52,20 @@ class SlidesTemplateTagAppService extends AbstractKernelAppService
             'total' => $result['total'],
             'list' => $result['list'],
         ];
+    }
+
+    /**
+     * @return SlidesTemplateTagEntity[]
+     */
+    public function queriesGroups(Authenticatable|BaseDataIsolation $authorization, PublicQuerySlidesTemplateTagRequest $request): array
+    {
+        $dataIsolation = $this->createSlidesTemplateDataIsolation($authorization);
+        $dataIsolation->setContainOfficialOrganization(true);
+
+        return $this->slidesTemplateTagDomainService->queriesVisibleGroupsWithTagsByCategory(
+            $dataIsolation,
+            $request->getCategoryCode()
+        );
     }
 
     private function createSlidesTemplateDataIsolation(Authenticatable|BaseDataIsolation $authorization): SlidesTemplateDataIsolation

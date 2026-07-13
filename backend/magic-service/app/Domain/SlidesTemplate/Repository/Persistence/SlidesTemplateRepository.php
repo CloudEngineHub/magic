@@ -249,6 +249,7 @@ class SlidesTemplateRepository extends AbstractRepository implements SlidesTempl
                 ->whereColumn('r.template_id', 'magic_slides_templates.id')
                 ->whereColumn('r.organization_code', 'magic_slides_templates.organization_code')
                 ->whereIn('tag.code', $tagCodes)
+                ->where('tag.node_type', 'tag')
                 ->where('tag.status', SlidesTemplateTagStatus::Enabled->value)
                 ->whereNull('tag.deleted_at');
         });

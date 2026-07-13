@@ -25,6 +25,10 @@ class AdminQuerySlidesTemplateTagRequest extends FormRequest
             'page_size' => 'nullable|integer|min:1|max:200',
             'keyword' => 'nullable|string|max:100',
             'code' => 'nullable|string|max:64',
+            'parent_id' => 'nullable|integer|min:0',
+            'node_type' => 'nullable|string|in:group,tag',
+            'usage_type' => 'nullable|string|in:filter,detail,operational',
+            'is_visible' => 'nullable|boolean',
             'status' => 'nullable|integer|in:0,1',
         ];
     }
@@ -39,6 +43,11 @@ class AdminQuerySlidesTemplateTagRequest extends FormRequest
             'page_size.max' => __('slides_template.page_size_max'),
             'keyword.max' => __('slides_template.keyword_max'),
             'code.max' => __('slides_template.tag_code_max'),
+            'parent_id.integer' => __('slides_template.tag_parent_id_integer'),
+            'parent_id.min' => __('slides_template.tag_parent_id_min'),
+            'node_type.in' => __('slides_template.tag_node_type_in'),
+            'usage_type.in' => __('slides_template.tag_usage_type_in'),
+            'is_visible.boolean' => __('slides_template.tag_is_visible_boolean'),
             'status.in' => __('slides_template.status_in'),
         ];
     }
@@ -69,5 +78,29 @@ class AdminQuerySlidesTemplateTagRequest extends FormRequest
     {
         $status = $this->input('status');
         return $status === null || $status === '' ? null : (int) $status;
+    }
+
+    public function getParentId(): ?int
+    {
+        $parentId = $this->input('parent_id');
+        return $parentId === null || $parentId === '' ? null : (int) $parentId;
+    }
+
+    public function getNodeType(): ?string
+    {
+        $nodeType = trim((string) $this->input('node_type', ''));
+        return $nodeType === '' ? null : $nodeType;
+    }
+
+    public function getUsageType(): ?string
+    {
+        $usageType = trim((string) $this->input('usage_type', ''));
+        return $usageType === '' ? null : $usageType;
+    }
+
+    public function getIsVisible(): ?bool
+    {
+        $isVisible = $this->input('is_visible');
+        return $isVisible === null || $isVisible === '' ? null : (bool) $isVisible;
     }
 }

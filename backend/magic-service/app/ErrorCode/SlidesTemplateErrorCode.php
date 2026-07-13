@@ -43,4 +43,10 @@ enum SlidesTemplateErrorCode: int
 
     #[ErrorMessage('slides_template.tag_code_already_exists')]
     case TAG_CODE_ALREADY_EXISTS = 47009;
+
+    #[ErrorMessage('slides_template.tag_structure_invalid')]
+    case TAG_STRUCTURE_INVALID = 47010;
+
+    #[ErrorMessage('slides_template.tag_group_cannot_bind')]
+    case TAG_GROUP_CANNOT_BIND = 47011;
 }

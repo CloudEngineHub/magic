@@ -20,6 +20,11 @@ Router::addGroup('/api/v1/slides-template-tags', static function () {
     Router::get('', [SlidesTemplateTagApi::class, 'queries']);
 }, ['middleware' => [RequestContextMiddleware::class]]);
 
+// 幻灯片模板标签组使用侧
+Router::addGroup('/api/v1/slides-template/tags', static function () {
+    Router::get('/groups', [SlidesTemplateTagApi::class, 'groups']);
+}, ['middleware' => [RequestContextMiddleware::class]]);
+
 // 幻灯片模板使用侧
 Router::addGroup('/api/v1/slides-templates', static function () {
     Router::get('', [SlidesTemplateApi::class, 'queries']);

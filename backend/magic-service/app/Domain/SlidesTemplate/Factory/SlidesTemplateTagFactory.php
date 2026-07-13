@@ -17,8 +17,15 @@ class SlidesTemplateTagFactory
         $entity = new SlidesTemplateTagEntity();
         $entity->setId($model->id);
         $entity->setOrganizationCode($model->organization_code);
+        $entity->setParentId($model->parent_id ?? 0);
+        $nodeType = $model->node_type ?? 'tag';
+        $entity->setNodeType($nodeType);
+        $entity->setUsageType($nodeType === 'group' ? null : ($model->usage_type ?? 'filter'));
         $entity->setCode($model->code);
         $entity->setNameI18n($model->name_i18n ?? []);
+        $entity->setDescriptionI18n($model->description_i18n ?? []);
+        $entity->setAliasesI18n($model->aliases_i18n ?? []);
+        $entity->setIsVisible($model->is_visible ?? 1);
         $entity->setStatus($model->status);
         $entity->setSort($model->sort);
         $entity->setCreatedUid($model->created_uid);

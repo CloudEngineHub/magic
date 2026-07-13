@@ -78,8 +78,14 @@ class SlidesTemplateTagRepository extends AbstractRepository implements SlidesTe
         $columns = [
             'magic_slides_template_tags.id',
             'magic_slides_template_tags.organization_code',
+            'magic_slides_template_tags.parent_id',
+            'magic_slides_template_tags.node_type',
+            'magic_slides_template_tags.usage_type',
             'magic_slides_template_tags.code',
             'magic_slides_template_tags.name_i18n',
+            'magic_slides_template_tags.description_i18n',
+            'magic_slides_template_tags.aliases_i18n',
+            'magic_slides_template_tags.is_visible',
             'magic_slides_template_tags.status',
             'magic_slides_template_tags.sort',
             'magic_slides_template_tags.created_uid',
@@ -114,6 +120,51 @@ class SlidesTemplateTagRepository extends AbstractRepository implements SlidesTe
             'total' => $total,
             'list' => $this->modelsToEntities($list),
         ];
+    }
+
+    public function queriesVisibleGroupsWithTagsByCategory(SlidesTemplateDataIsolation $dataIsolation, ?string $categoryCode): array
+    {
+        $tagModels = $this->queryVisibleTemplateTagsByCategory($dataIsolation, $categoryCode);
+        $tags = $this->modelsToEntities($tagModels);
+        if ($tags === []) {
+            return [];
+        }
+
+        $parentIds = array_values(array_unique(array_map(
+            static fn (SlidesTemplateTagEntity $tag): int => $tag->getParentId(),
+            $tags
+        )));
+
+        $groupBuilder = $this->createBuilder($dataIsolation, SlidesTemplateTagModel::query());
+        $groupModels = $groupBuilder
+            ->whereIn('id', $parentIds)
+            ->where('node_type', 'group')
+            ->where('is_visible', 1)
+            ->where('status', SlidesTemplateTagStatus::Enabled->value)
+            ->orderBy('sort', 'desc')
+            ->orderBy('id', 'desc')
+            ->get();
+
+        $groups = [];
+        foreach ($this->modelsToEntities($groupModels) as $group) {
+            $groups[(int) $group->getId()] = $group;
+        }
+
+        foreach ($tags as $tag) {
+            $group = $groups[$tag->getParentId()] ?? null;
+            if ($group === null) {
+                continue;
+            }
+
+            $children = $group->getChildren();
+            $children[] = $tag;
+            $group->setChildren($children);
+        }
+
+        return array_values(array_filter(
+            $groups,
+            static fn (SlidesTemplateTagEntity $group): bool => $group->getChildren() !== []
+        ));
     }
 
     public function save(SlidesTemplateDataIsolation $dataIsolation, SlidesTemplateTagEntity $entity): SlidesTemplateTagEntity
@@ -188,12 +239,30 @@ class SlidesTemplateTagRepository extends AbstractRepository implements SlidesTe
             $builder->where('magic_slides_template_tags.status', $query->getStatus());
         }
 
+        if ($query->getParentId() !== null) {
+            $builder->where('magic_slides_template_tags.parent_id', $query->getParentId());
+        }
+
+        if ($query->getNodeType() !== null) {
+            $builder->where('magic_slides_template_tags.node_type', $query->getNodeType());
+        }
+
+        if ($query->getUsageType() !== null) {
+            $builder->where('magic_slides_template_tags.usage_type', $query->getUsageType());
+        }
+
+        if ($query->getIsVisible() !== null) {
+            $builder->where('magic_slides_template_tags.is_visible', $query->getIsVisible() ? 1 : 0);
+        }
+
         if ($query->getKeyword() !== null) {
             $keyword = mb_strtolower($query->getKeyword(), 'UTF-8');
             $keywordLike = '%' . addcslashes($keyword, '\%_') . '%';
             $builder->where(static function (Builder $builder) use ($keywordLike): void {
                 $builder->where('magic_slides_template_tags.code', 'LIKE', $keywordLike)
-                    ->orWhereRaw('LOWER(CAST(magic_slides_template_tags.name_i18n AS CHAR)) LIKE ?', [$keywordLike]);
+                    ->orWhereRaw('LOWER(CAST(magic_slides_template_tags.name_i18n AS CHAR)) LIKE ?', [$keywordLike])
+                    ->orWhereRaw('LOWER(CAST(magic_slides_template_tags.description_i18n AS CHAR)) LIKE ?', [$keywordLike])
+                    ->orWhereRaw('LOWER(CAST(magic_slides_template_tags.aliases_i18n AS CHAR)) LIKE ?', [$keywordLike]);
             });
         }
     }
@@ -216,6 +285,41 @@ class SlidesTemplateTagRepository extends AbstractRepository implements SlidesTe
                 $join->whereIn('t.organization_code', $organizationCodes);
             }
         });
+    }
+
+    private function queryVisibleTemplateTagsByCategory(SlidesTemplateDataIsolation $dataIsolation, ?string $categoryCode): iterable
+    {
+        $organizationCodes = array_values(array_filter($dataIsolation->getOrganizationCodes()));
+        $builder = $this->createBuilder($dataIsolation, SlidesTemplateTagModel::query());
+        $builder->select('magic_slides_template_tags.*')
+            ->distinct()
+            ->join('magic_slides_template_tag_relations AS r', static function (JoinClause $join) use ($organizationCodes): void {
+                $join->on('r.tag_id', '=', 'magic_slides_template_tags.id');
+                if ($organizationCodes !== []) {
+                    $join->whereIn('r.organization_code', $organizationCodes);
+                }
+            })
+            ->join('magic_slides_templates AS t', static function (JoinClause $join) use ($organizationCodes): void {
+                $join->on('t.id', '=', 'r.template_id')
+                    ->where('t.status', '=', SlidesTemplateStatus::Enabled->value)
+                    ->whereNull('t.deleted_at');
+
+                if ($organizationCodes !== []) {
+                    $join->whereIn('t.organization_code', $organizationCodes);
+                }
+            })
+            ->where('magic_slides_template_tags.node_type', 'tag')
+            ->where('magic_slides_template_tags.usage_type', 'filter')
+            ->where('magic_slides_template_tags.is_visible', 1)
+            ->where('magic_slides_template_tags.status', SlidesTemplateTagStatus::Enabled->value)
+            ->orderBy('magic_slides_template_tags.sort', 'desc')
+            ->orderBy('magic_slides_template_tags.id', 'desc');
+
+        if ($categoryCode !== null && $categoryCode !== '') {
+            $builder->where('t.category_code', $categoryCode);
+        }
+
+        return $builder->get();
     }
 
     private function applyTemplateQuery(Builder $builder, SlidesTemplateTagQuery $query): void
@@ -254,6 +358,7 @@ class SlidesTemplateTagRepository extends AbstractRepository implements SlidesTe
                 ->whereColumn('tr_filter.template_id', 't.id')
                 ->whereColumn('tr_filter.organization_code', 't.organization_code')
                 ->whereIn('tag_filter.code', $tagCodes)
+                ->where('tag_filter.node_type', 'tag')
                 ->where('tag_filter.status', SlidesTemplateTagStatus::Enabled->value)
                 ->whereNull('tag_filter.deleted_at');
         });

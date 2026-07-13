@@ -13,6 +13,7 @@ use App\Infrastructure\Util\OfficialOrganizationUtil;
 use App\Interfaces\SlidesTemplate\DTO\Response\AdminSlidesTemplateTagItemDTO;
 use App\Interfaces\SlidesTemplate\DTO\Response\I18nTextDTO;
 use App\Interfaces\SlidesTemplate\DTO\Response\SlidesTemplateSimpleTagItemDTO;
+use App\Interfaces\SlidesTemplate\DTO\Response\SlidesTemplateTagGroupItemDTO;
 use App\Interfaces\SlidesTemplate\DTO\Response\SlidesTemplateTagItemDTO;
 use App\Interfaces\SlidesTemplate\DTO\Response\SlidesTemplateTagPageDTO;
 
@@ -50,6 +51,26 @@ class SlidesTemplateTagAssembler
         return $dto;
     }
 
+    /**
+     * @param SlidesTemplateTagEntity[] $groups
+     */
+    public static function createGroupListDTO(array $groups): array
+    {
+        return array_map(static function (SlidesTemplateTagEntity $group): array {
+            $dto = new SlidesTemplateTagGroupItemDTO();
+            $dto->setId($group->getId());
+            $dto->setCode($group->getCode());
+            $dto->setNameI18n(I18nTextDTO::fromArray($group->getNameI18n()));
+            $dto->setSort($group->getSort());
+            $dto->setTags(array_map(
+                static fn (SlidesTemplateTagEntity $tag): SlidesTemplateSimpleTagItemDTO => self::createSimplePublicItemDTO($tag),
+                $group->getChildren()
+            ));
+
+            return $dto->toArray();
+        }, $groups);
+    }
+
     public static function createAdminItemDTO(SlidesTemplateTagEntity $tag): AdminSlidesTemplateTagItemDTO
     {
         $dto = new AdminSlidesTemplateTagItemDTO();
@@ -68,6 +89,12 @@ class SlidesTemplateTagAssembler
         $dto->setId($tag->getId());
         $dto->setCode($tag->getCode());
         $dto->setNameI18n(I18nTextDTO::fromArray($tag->getNameI18n()));
+        $dto->setParentId($tag->getParentId());
+        $dto->setNodeType($tag->getNodeType()->value);
+        $dto->setUsageType($tag->getUsageType()?->value);
+        $dto->setDescriptionI18n(I18nTextDTO::fromArray($tag->getDescriptionI18n()));
+        $dto->setAliasesI18n($tag->getAliasesI18n());
+        $dto->setIsVisible($tag->isVisible());
         $dto->setSort($tag->getSort());
         $dto->setTemplateCount($tag->getTemplateCount());
         $dto->setIsOfficial(OfficialOrganizationUtil::isOfficialOrganization($tag->getOrganizationCode()));

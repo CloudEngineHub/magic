@@ -11,7 +11,9 @@ use App\Domain\SlidesTemplate\Entity\SlidesTemplateDataIsolation;
 use App\Domain\SlidesTemplate\Entity\SlidesTemplateEntity;
 use App\Domain\SlidesTemplate\Entity\SlidesTemplateTagEntity;
 use App\Domain\SlidesTemplate\Entity\ValueObject\Query\SlidesTemplateTagQuery;
+use App\Domain\SlidesTemplate\Entity\ValueObject\SlidesTemplateTagNodeType;
 use App\Domain\SlidesTemplate\Entity\ValueObject\SlidesTemplateTagStatus;
+use App\Domain\SlidesTemplate\Entity\ValueObject\SlidesTemplateTagUsageType;
 use App\Domain\SlidesTemplate\Repository\Facade\SlidesTemplateTagRelationRepositoryInterface;
 use App\Domain\SlidesTemplate\Repository\Facade\SlidesTemplateTagRepositoryInterface;
 use App\ErrorCode\SlidesTemplateErrorCode;
@@ -45,8 +47,17 @@ class SlidesTemplateTagDomainService
         return $this->slidesTemplateTagRepository->queriesWithTemplateCount($dataIsolation, $query, $page);
     }
 
+    /**
+     * @return SlidesTemplateTagEntity[]
+     */
+    public function queriesVisibleGroupsWithTagsByCategory(SlidesTemplateDataIsolation $dataIsolation, ?string $categoryCode): array
+    {
+        return $this->slidesTemplateTagRepository->queriesVisibleGroupsWithTagsByCategory($dataIsolation, $categoryCode);
+    }
+
     public function create(SlidesTemplateDataIsolation $dataIsolation, SlidesTemplateTagEntity $entity): SlidesTemplateTagEntity
     {
+        $this->assertTagStructure($dataIsolation, $entity);
         $this->prepareRestoreDeletedTag($dataIsolation, $entity);
 
         try {
@@ -62,6 +73,7 @@ class SlidesTemplateTagDomainService
     public function update(SlidesTemplateDataIsolation $dataIsolation, SlidesTemplateTagEntity $entity): SlidesTemplateTagEntity
     {
         $this->findByIdOrFail($dataIsolation, (string) $entity->getId());
+        $this->assertTagStructure($dataIsolation, $entity);
         try {
             return $this->slidesTemplateTagRepository->save($dataIsolation, $entity);
         } catch (Throwable $throwable) {
@@ -118,6 +130,11 @@ class SlidesTemplateTagDomainService
     public function syncTemplateTagsByCodes(SlidesTemplateDataIsolation $dataIsolation, int $templateId, array $tagCodes, string $createdUid): void
     {
         $tags = $this->findEnabledByCodesOrFail($dataIsolation, $tagCodes);
+        foreach ($tags as $tag) {
+            if (! $tag->isTag()) {
+                ExceptionBuilder::throw(SlidesTemplateErrorCode::TAG_GROUP_CANNOT_BIND);
+            }
+        }
         $tagIds = array_map(static fn (SlidesTemplateTagEntity $tag): int => (int) $tag->getId(), $tags);
         $this->slidesTemplateTagRelationRepository->syncTemplateTags($dataIsolation, $templateId, $tagIds, $createdUid);
     }
@@ -164,6 +181,27 @@ class SlidesTemplateTagDomainService
 
         $entity->setId($existing->getId());
         $entity->setOrganizationCode($existing->getOrganizationCode());
+    }
+
+    private function assertTagStructure(SlidesTemplateDataIsolation $dataIsolation, SlidesTemplateTagEntity $entity): void
+    {
+        if ($entity->isGroup()) {
+            if ($entity->getParentId() !== 0 || $entity->getUsageType() !== null || ! str_ends_with($entity->getCode(), '_group')) {
+                ExceptionBuilder::throw(SlidesTemplateErrorCode::TAG_STRUCTURE_INVALID);
+            }
+            return;
+        }
+
+        if ($entity->getNodeType() !== SlidesTemplateTagNodeType::Tag
+            || $entity->getParentId() <= 0
+            || ! $entity->getUsageType() instanceof SlidesTemplateTagUsageType) {
+            ExceptionBuilder::throw(SlidesTemplateErrorCode::TAG_STRUCTURE_INVALID);
+        }
+
+        $parent = $this->slidesTemplateTagRepository->findById($dataIsolation, $entity->getParentId());
+        if (! $parent || ! $parent->isGroup()) {
+            ExceptionBuilder::throw(SlidesTemplateErrorCode::TAG_STRUCTURE_INVALID);
+        }
     }
 
     private function isDuplicateCodeException(Throwable $throwable): bool

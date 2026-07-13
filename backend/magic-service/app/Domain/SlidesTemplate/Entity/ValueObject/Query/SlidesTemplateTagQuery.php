@@ -17,6 +17,14 @@ class SlidesTemplateTagQuery
 
     private ?int $status = null;
 
+    private ?int $parentId = null;
+
+    private ?string $nodeType = null;
+
+    private ?string $usageType = null;
+
+    private ?bool $isVisible = null;
+
     private bool $onlyWithTemplates = false;
 
     private ?string $templateKeyword = null;
@@ -57,6 +65,48 @@ class SlidesTemplateTagQuery
     public function setStatus(null|int|string $status): void
     {
         $this->status = $status === null || $status === '' ? null : (int) $status;
+    }
+
+    public function getParentId(): ?int
+    {
+        return $this->parentId;
+    }
+
+    public function setParentId(null|int|string $parentId): void
+    {
+        $this->parentId = $parentId === null || $parentId === '' ? null : (int) $parentId;
+    }
+
+    public function getNodeType(): ?string
+    {
+        return $this->nodeType;
+    }
+
+    public function setNodeType(?string $nodeType): void
+    {
+        $nodeType = trim((string) $nodeType);
+        $this->nodeType = $nodeType === '' ? null : $nodeType;
+    }
+
+    public function getUsageType(): ?string
+    {
+        return $this->usageType;
+    }
+
+    public function setUsageType(?string $usageType): void
+    {
+        $usageType = trim((string) $usageType);
+        $this->usageType = $usageType === '' ? null : $usageType;
+    }
+
+    public function getIsVisible(): ?bool
+    {
+        return $this->isVisible;
+    }
+
+    public function setIsVisible(null|bool|int|string $isVisible): void
+    {
+        $this->isVisible = $isVisible === null || $isVisible === '' ? null : (bool) $isVisible;
     }
 
     public function isOnlyWithTemplates(): bool

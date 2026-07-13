@@ -7,7 +7,9 @@ declare(strict_types=1);
 
 namespace App\Domain\SlidesTemplate\Entity;
 
+use App\Domain\SlidesTemplate\Entity\ValueObject\SlidesTemplateTagNodeType;
 use App\Domain\SlidesTemplate\Entity\ValueObject\SlidesTemplateTagStatus;
+use App\Domain\SlidesTemplate\Entity\ValueObject\SlidesTemplateTagUsageType;
 use App\Infrastructure\Core\AbstractEntity;
 
 class SlidesTemplateTagEntity extends AbstractEntity
@@ -16,9 +18,21 @@ class SlidesTemplateTagEntity extends AbstractEntity
 
     protected string $organizationCode = '';
 
+    protected int $parentId = 0;
+
+    protected SlidesTemplateTagNodeType $nodeType = SlidesTemplateTagNodeType::Tag;
+
+    protected ?SlidesTemplateTagUsageType $usageType = SlidesTemplateTagUsageType::Filter;
+
     protected string $code = '';
 
     protected array $nameI18n = [];
+
+    protected array $descriptionI18n = [];
+
+    protected array $aliasesI18n = [];
+
+    protected bool $isVisible = true;
 
     protected SlidesTemplateTagStatus $status = SlidesTemplateTagStatus::Enabled;
 
@@ -36,13 +50,24 @@ class SlidesTemplateTagEntity extends AbstractEntity
 
     protected int $templateCount = 0;
 
+    /**
+     * @var SlidesTemplateTagEntity[]
+     */
+    protected array $children = [];
+
     public function toArray(): array
     {
         $result = [
             'id' => $this->id,
             'organization_code' => $this->organizationCode,
+            'parent_id' => $this->parentId,
+            'node_type' => $this->nodeType->value,
+            'usage_type' => $this->usageType?->value,
             'code' => $this->code,
             'name_i18n' => $this->nameI18n,
+            'description_i18n' => $this->descriptionI18n,
+            'aliases_i18n' => $this->aliasesI18n,
+            'is_visible' => $this->isVisible ? 1 : 0,
             'status' => $this->status->value,
             'sort' => $this->sort,
             'created_uid' => $this->createdUid,
@@ -52,7 +77,11 @@ class SlidesTemplateTagEntity extends AbstractEntity
             'deleted_at' => $this->deletedAt,
         ];
 
-        return array_filter($result, static fn ($value) => $value !== null);
+        $result = array_filter($result, static fn ($value) => $value !== null);
+        if ($this->usageType === null) {
+            $result['usage_type'] = null;
+        }
+        return $result;
     }
 
     public function getId(): ?int
@@ -77,6 +106,57 @@ class SlidesTemplateTagEntity extends AbstractEntity
         return $this;
     }
 
+    public function getParentId(): int
+    {
+        return $this->parentId;
+    }
+
+    public function setParentId(null|int|string $parentId): self
+    {
+        $this->parentId = max(0, (int) ($parentId ?? 0));
+        return $this;
+    }
+
+    public function getNodeType(): SlidesTemplateTagNodeType
+    {
+        return $this->nodeType;
+    }
+
+    public function setNodeType(SlidesTemplateTagNodeType|string $nodeType): self
+    {
+        $this->nodeType = $nodeType instanceof SlidesTemplateTagNodeType
+            ? $nodeType
+            : SlidesTemplateTagNodeType::from($nodeType);
+        return $this;
+    }
+
+    public function isTag(): bool
+    {
+        return $this->nodeType === SlidesTemplateTagNodeType::Tag;
+    }
+
+    public function isGroup(): bool
+    {
+        return $this->nodeType === SlidesTemplateTagNodeType::Group;
+    }
+
+    public function getUsageType(): ?SlidesTemplateTagUsageType
+    {
+        return $this->usageType;
+    }
+
+    public function setUsageType(null|SlidesTemplateTagUsageType|string $usageType): self
+    {
+        if ($usageType === null || $usageType === '') {
+            $this->usageType = null;
+            return $this;
+        }
+        $this->usageType = $usageType instanceof SlidesTemplateTagUsageType
+            ? $usageType
+            : SlidesTemplateTagUsageType::from($usageType);
+        return $this;
+    }
+
     public function getCode(): string
     {
         return $this->code;
@@ -96,6 +176,39 @@ class SlidesTemplateTagEntity extends AbstractEntity
     public function setNameI18n(array $nameI18n): self
     {
         $this->nameI18n = $nameI18n;
+        return $this;
+    }
+
+    public function getDescriptionI18n(): array
+    {
+        return $this->descriptionI18n;
+    }
+
+    public function setDescriptionI18n(array $descriptionI18n): self
+    {
+        $this->descriptionI18n = $descriptionI18n;
+        return $this;
+    }
+
+    public function getAliasesI18n(): array
+    {
+        return $this->aliasesI18n;
+    }
+
+    public function setAliasesI18n(array $aliasesI18n): self
+    {
+        $this->aliasesI18n = $aliasesI18n;
+        return $this;
+    }
+
+    public function isVisible(): bool
+    {
+        return $this->isVisible;
+    }
+
+    public function setIsVisible(null|bool|int|string $isVisible): self
+    {
+        $this->isVisible = (bool) ($isVisible ?? true);
         return $this;
     }
 
@@ -184,6 +297,23 @@ class SlidesTemplateTagEntity extends AbstractEntity
     public function setTemplateCount(null|int|string $templateCount): self
     {
         $this->templateCount = max(0, (int) $templateCount);
+        return $this;
+    }
+
+    /**
+     * @return SlidesTemplateTagEntity[]
+     */
+    public function getChildren(): array
+    {
+        return $this->children;
+    }
+
+    /**
+     * @param SlidesTemplateTagEntity[] $children
+     */
+    public function setChildren(array $children): self
+    {
+        $this->children = $children;
         return $this;
     }
 }

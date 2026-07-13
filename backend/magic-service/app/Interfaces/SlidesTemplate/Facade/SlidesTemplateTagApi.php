@@ -33,4 +33,13 @@ class SlidesTemplateTagApi extends AbstractApi
             false
         )->toArray();
     }
+
+    public function groups(PublicQuerySlidesTemplateTagRequest $request): array
+    {
+        $request->validated();
+
+        return SlidesTemplateTagAssembler::createGroupListDTO(
+            $this->slidesTemplateTagAppService->queriesGroups($this->getAuthorization(), $request)
+        );
+    }
 }
