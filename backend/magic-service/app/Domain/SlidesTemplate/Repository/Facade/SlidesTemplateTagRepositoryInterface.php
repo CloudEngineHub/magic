@@ -36,6 +36,13 @@ interface SlidesTemplateTagRepositoryInterface
      */
     public function queriesVisibleGroupsWithTagsByCategory(SlidesTemplateDataIsolation $dataIsolation, ?string $categoryCode): array;
 
+    /**
+     * @return SlidesTemplateTagEntity[]
+     */
+    public function queriesTree(SlidesTemplateDataIsolation $dataIsolation): array;
+
+    public function existsByParentId(SlidesTemplateDataIsolation $dataIsolation, int $parentId): bool;
+
     public function save(SlidesTemplateDataIsolation $dataIsolation, SlidesTemplateTagEntity $entity): SlidesTemplateTagEntity;
 
     public function updateStatus(SlidesTemplateDataIsolation $dataIsolation, int|string $id, int $status, string $updatedUid): bool;
