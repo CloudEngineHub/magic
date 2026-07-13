@@ -22,7 +22,7 @@ from agentlang.chat_history.chat_history_models import (
     format_duration_to_str, parse_duration_from_str,
     SystemMessage, UserMessage,
     AssistantMessage, ToolMessage, ChatMessage,
-    FunctionCall, ToolCall
+    FunctionCall, ToolCall, chat_message_from_dict
 )
 from agentlang.chat_history.session_config import SessionConfig
 from agentlang.logger import get_logger
@@ -348,6 +348,84 @@ class ChatHistory:
         filename = f"{self.agent_name}<{self.agent_id}>.json"
         return os.path.join(self.chat_history_dir, filename)
 
+    async def load_last_message_from_disk(self) -> Optional[ChatMessage]:
+        """从磁盘读取最后一条聊天消息，并转换为结构化消息对象。
+
+        该方法不会触发 load() 的全量序列修复，适用于只需要检查持久化尾消息的场景。
+        """
+        from app.utils.async_file_utils import async_exists, async_read_json
+
+        if not await async_exists(self._history_file_path):
+            return None
+
+        try:
+            history_data = await async_read_json(self._history_file_path)
+        except json.JSONDecodeError as e:
+            logger.error(f"解析聊天记录文件 JSON 失败: {self._history_file_path}，错误: {e}")
+            return None
+        except Exception as e:
+            logger.error(f"读取聊天记录文件失败: {self._history_file_path}，错误: {e}", exc_info=True)
+            return None
+
+        if not isinstance(history_data, list) or not history_data:
+            return None
+
+        last_message = history_data[-1]
+        if not isinstance(last_message, dict):
+            logger.warning(f"聊天记录最后一条消息格式无效: {last_message}")
+            return None
+
+        return chat_message_from_dict(last_message)
+
+    async def load_messages_from_disk_without_sequence_repair(self) -> None:
+        """从磁盘加载聊天消息到内存，但不执行序列修复和落盘。
+
+        该方法仅用于 user_tool_call 重启恢复：此时历史尾部允许暂时存在
+        assistant(tool_calls) 缺少 tool_result 的状态，后续会立即追加真实工具结果。
+        """
+        from app.utils.async_file_utils import async_exists, async_read_json
+
+        if not await async_exists(self._history_file_path):
+            self.messages = []
+            self._loaded = True
+            return
+
+        try:
+            history_data = await async_read_json(self._history_file_path)
+        except json.JSONDecodeError as e:
+            logger.error(f"解析聊天记录文件 JSON 失败: {self._history_file_path}，错误: {e}")
+            self.messages = []
+            self._loaded = True
+            return
+        except Exception as e:
+            logger.error(f"读取聊天记录文件失败: {self._history_file_path}，错误: {e}", exc_info=True)
+            self.messages = []
+            self._loaded = True
+            return
+
+        loaded_messages: List[ChatMessage] = []
+        if not isinstance(history_data, list):
+            logger.warning(f"聊天记录文件格式无效 (不是列表): {self._history_file_path}")
+            self.messages = []
+            self._loaded = True
+            return
+
+        for msg_dict in history_data:
+            if not isinstance(msg_dict, dict):
+                logger.warning(f"加载历史时跳过无效的条目 (非字典): {msg_dict}")
+                continue
+            message = chat_message_from_dict(msg_dict)
+            if message is None:
+                continue
+            try:
+                loaded_messages.append(self._add_message_internal(message))
+            except Exception as e:
+                logger.error(f"加载历史时处理消息出错: {msg_dict}，错误: {e}", exc_info=True)
+
+        self.messages = loaded_messages
+        self._loaded = True
+        logger.info(f"已无修复加载 {len(self.messages)} 条聊天记录: {self._history_file_path}")
+
     def _build_tools_list_filename(self) -> str:
         """构建工具列表文件的完整路径"""
         filename = f"{self.agent_name}<{self.agent_id}>.tools.json"
@@ -599,17 +677,8 @@ class ChatHistory:
                              logger.warning(f"无法将旧的 duration_ms 字段 {msg_dict['duration_ms']} 转为 float，已忽略。")
 
                     try:
-                        # 根据 role 转换回相应的 dataclass
-                        if role == "system":
-                            message = SystemMessage.from_dict(msg_dict)
-                        elif role == "user":
-                            message = UserMessage.from_dict(msg_dict)
-                        elif role == "assistant":
-                            message = AssistantMessage.from_dict(msg_dict)
-                        elif role == "tool":
-                            message = ToolMessage.from_dict(msg_dict)
-                        else:
-                            logger.warning(f"加载历史时发现未知的角色: {role}，跳过此消息: {msg_dict}")
+                        message = chat_message_from_dict(msg_dict)
+                        if message is None:
                             continue
 
                         # 验证加载的消息（防止外部文件注入无效数据）
