@@ -1,6 +1,6 @@
 ---
 name: slide-template
-description: "Use when the user asks to create slides with a specific style, wants to use or inspect a PPT template by code, wants to see platform-provided PPT template options before creating, describes a custom template style, provides a PPTX/PPT file to convert into a platform template, or wants to extract a template from an existing Super Magic slide project."
+description: "Use when the user asks to create slides with a specific style, wants to use or inspect a slide template by code, wants to see platform-provided slide template options before creating, describes a custom template style, provides a PPTX/PPT file to convert into a platform template, or wants to extract a template from an existing Super Magic slide project."
 ---
 
 # Slide Template Manager

@@ -20,8 +20,10 @@ export enum RouteName {
 	SuperDashboard = "SuperDashboard",
 	/** 超级麦吉 - 首页 */
 	Super = "Super",
-	/** 超级麦吉 - PPT 模板 */
+	/** 超级麦吉 - Slide Templates */
 	SuperSlidesTemplates = "SuperSlidesTemplates",
+	/** 超级麦吉 - Slide Templates 旧路径 */
+	SuperSlidesTemplatesLegacy = "SuperSlidesTemplatesLegacy",
 	/** 超级麦吉 - 移动端直接开聊首页 */
 	MobileHome = "MobileHome",
 	/** 超级麦吉 - 对话列表（移动端一级页） */

@@ -37,6 +37,7 @@ import { useSlidesTemplateCanvasNavigation } from "./useSlidesTemplateCanvasNavi
 import { useSlidesTemplateCanvasPointer } from "./useSlidesTemplateCanvasPointer"
 import { useSlidesTemplateCanvasWheel } from "./useSlidesTemplateCanvasWheel"
 import { useSlidesTemplateCanvasActiveTemplates } from "./useSlidesTemplateCanvasActiveTemplates"
+import { useSlidesTemplateCanvasAutoExplore } from "./useSlidesTemplateCanvasAutoExplore"
 import { useTemplateCanvasVisibleItems } from "./useTemplateCanvasVisibleItems"
 
 interface SlidesTemplateCanvasProps {
@@ -263,13 +264,30 @@ const SlidesTemplateCanvas = forwardRef<SlidesTemplateCanvasHandle, SlidesTempla
 		const {
 			animateToOffset,
 			isCanvasFocusSettling,
+			isCanvasIdleExploring,
 			isCanvasMoving,
 			scheduleEdgeMovement,
+			startIdleExploration,
 			stopAnimation,
 		} = useSlidesTemplateCanvasMotion({
 			maybeRequestMore,
 			offsetRef,
 			setCanvasOffset,
+		})
+		const {
+			handleCanvasActivity,
+			isIdle: isCanvasIdle,
+			markCanvasInactive,
+		} = useSlidesTemplateCanvasAutoExplore({
+			disabled:
+				isDragging ||
+				isPreviewOpen ||
+				Boolean(selectedTemplate) ||
+				Boolean(focusedAnchorTileId) ||
+				isInitialLoading ||
+				isRefreshing,
+			startIdleExploration,
+			stopAnimation,
 		})
 		const handlePointerDownStart = useCallback(() => {
 			setRandomFocusedCanvasItem(null)
@@ -443,12 +461,12 @@ const SlidesTemplateCanvas = forwardRef<SlidesTemplateCanvasHandle, SlidesTempla
 				selectedTemplate={selectedTemplate}
 				previewFocus={previewFocus}
 				canvasScale={canvasScale}
-				bottomEdgeInset={viewportInsets?.bottom}
 				canZoomIn={canZoomIn}
 				canZoomOut={canZoomOut}
 				isDragging={isDragging}
 				isCanvasFocusSettling={isCanvasFocusSettling}
 				isCanvasMoving={isCanvasMoving}
+				isIdleAnimationActive={isCanvasIdle && !isCanvasIdleExploring && canvasScale >= 0.8}
 				isInitialLoading={isInitialLoading}
 				isLoading={isLoading}
 				isLoadingMore={isLoadingMore}
@@ -459,6 +477,8 @@ const SlidesTemplateCanvas = forwardRef<SlidesTemplateCanvasHandle, SlidesTempla
 				onPointerUp={handlePointerRelease}
 				onPointerCancel={handlePointerRelease}
 				onPointerLeave={handlePointerLeave}
+				onCanvasActivity={handleCanvasActivity}
+				onCanvasPointerLeave={markCanvasInactive}
 				onCanvasClickCapture={handleCanvasClickCapture}
 				onFindSimilarColors={onFindSimilarColors}
 				onTemplateSelect={onTemplateSelect}

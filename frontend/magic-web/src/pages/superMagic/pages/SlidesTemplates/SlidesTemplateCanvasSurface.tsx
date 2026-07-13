@@ -1,5 +1,4 @@
 import {
-	useRef,
 	useState,
 	type ComponentProps,
 	type MouseEventHandler,
@@ -19,27 +18,25 @@ import SlidesTemplateCanvasControls from "./SlidesTemplateCanvasControls"
 import SlidesTemplateCanvasItemsLayer from "./SlidesTemplateCanvasItemsLayer"
 import SlidesTemplateCanvasStatus from "./SlidesTemplateCanvasStatus"
 import SlidesTemplateInlinePreview from "./SlidesTemplateInlinePreview"
-import {
-	SLIDES_TEMPLATE_CANVAS_POINTER_ACTIVITY_THRESHOLD,
-	useSlidesTemplateCanvasIdle,
-} from "./useSlidesTemplateCanvasIdle"
 
 interface SlidesTemplateCanvasSurfaceProps {
 	canZoomIn: boolean
 	canZoomOut: boolean
 	canvasItems: Array<TemplateCanvasItem<SlidesTemplateCanvasTile>>
 	canvasScale: number
-	bottomEdgeInset?: number
 	contentRef: RefObject<HTMLDivElement | null>
 	focusedAnchorTileId: string
 	isCanvasFocusSettling: boolean
 	isDragging: boolean
 	isCanvasMoving: boolean
+	isIdleAnimationActive: boolean
 	isInitialLoading: boolean
 	isLoading: boolean
 	isLoadingMore: boolean
 	isRefreshing: boolean
 	onCanvasClickCapture: MouseEventHandler<HTMLDivElement>
+	onCanvasActivity: () => void
+	onCanvasPointerLeave: () => void
 	onControlMove: ComponentProps<typeof SlidesTemplateCanvasControls>["onMove"]
 	onFindSimilarColors?: (template: OptionItem) => void
 	onPointerCancel: PointerEventHandler<HTMLDivElement>
@@ -66,17 +63,19 @@ export default function SlidesTemplateCanvasSurface({
 	canZoomOut,
 	canvasItems,
 	canvasScale,
-	bottomEdgeInset,
 	contentRef,
 	focusedAnchorTileId,
 	isCanvasFocusSettling,
 	isDragging,
 	isCanvasMoving,
+	isIdleAnimationActive,
 	isInitialLoading,
 	isLoading,
 	isLoadingMore,
 	isRefreshing,
 	onCanvasClickCapture,
+	onCanvasActivity,
+	onCanvasPointerLeave,
 	onControlMove,
 	onFindSimilarColors,
 	onPointerCancel,
@@ -98,19 +97,6 @@ export default function SlidesTemplateCanvasSurface({
 	visibleCanvasItems,
 }: SlidesTemplateCanvasSurfaceProps) {
 	const isPreviewOpen = previewFocus !== null
-	const { isIdle, markActive } = useSlidesTemplateCanvasIdle({
-		disabled:
-			isDragging ||
-			isCanvasMoving ||
-			isPreviewOpen ||
-			Boolean(selectedTemplate) ||
-			Boolean(focusedAnchorTileId) ||
-			isInitialLoading ||
-			isRefreshing,
-	})
-	// 低比例下单屏会显示上百张封面，循环动画需要额外复制封面节点；此时动画细节不可辨识，保留静态画布。
-	const isIdleAnimationActive = isIdle && canvasScale >= 0.8
-	const pointerActivityOriginRef = useRef<{ x: number; y: number } | null>(null)
 	const [edgeCursor, setEdgeCursor] = useState<CanvasEdgeCursor | null>(null)
 
 	function updateEdgeCursor(event: {
@@ -125,24 +111,6 @@ export default function SlidesTemplateCanvasSurface({
 		)
 	}
 
-	function markPointerActivity(clientX: number, clientY: number) {
-		const origin = pointerActivityOriginRef.current
-		if (!origin) {
-			pointerActivityOriginRef.current = { x: clientX, y: clientY }
-			return
-		}
-
-		if (
-			Math.hypot(clientX - origin.x, clientY - origin.y) <
-			SLIDES_TEMPLATE_CANVAS_POINTER_ACTIVITY_THRESHOLD
-		) {
-			return
-		}
-
-		pointerActivityOriginRef.current = { x: clientX, y: clientY }
-		markActive()
-	}
-
 	return (
 		<div
 			ref={setViewportNode}
@@ -155,37 +123,40 @@ export default function SlidesTemplateCanvasSurface({
 						? "grabbing"
 						: (edgeCursor ?? "grab"),
 			}}
+			onPointerEnter={(event) => {
+				onCanvasActivity()
+				updateEdgeCursor(event)
+			}}
 			onPointerDown={(event) => {
-				markActive()
+				onCanvasActivity()
 				updateEdgeCursor(event)
 				onPointerDown(event)
 			}}
 			onPointerMove={(event) => {
-				markPointerActivity(event.clientX, event.clientY)
+				onCanvasActivity()
 				updateEdgeCursor(event)
 				onPointerMove(event)
 			}}
 			onPointerUp={(event) => {
-				markActive()
+				onCanvasActivity()
 				updateEdgeCursor(event)
 				onPointerUp(event)
 			}}
 			onPointerCancel={(event) => {
-				markActive()
+				onCanvasActivity()
 				setEdgeCursor(null)
 				onPointerCancel(event)
 			}}
 			onPointerLeave={(event) => {
-				pointerActivityOriginRef.current = null
-				markActive()
+				onCanvasPointerLeave()
 				setEdgeCursor(null)
 				onPointerLeave(event)
 			}}
-			onWheelCapture={markActive}
-			onFocusCapture={markActive}
-			onKeyDownCapture={markActive}
+			onWheelCapture={onCanvasActivity}
+			onFocusCapture={onCanvasActivity}
+			onKeyDownCapture={onCanvasActivity}
 			onClickCapture={(event) => {
-				markActive()
+				onCanvasActivity()
 				onCanvasClickCapture(event)
 			}}
 		>
@@ -222,7 +193,6 @@ export default function SlidesTemplateCanvasSurface({
 			{isPreviewOpen ? null : (
 				<SlidesTemplateCanvasControls
 					scale={canvasScale}
-					bottomEdgeInset={bottomEdgeInset}
 					canZoomIn={canZoomIn}
 					canZoomOut={canZoomOut}
 					onZoomIn={onZoomIn}

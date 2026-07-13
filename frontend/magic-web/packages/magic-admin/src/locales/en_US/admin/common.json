@@ -171,7 +171,7 @@
 			"providerAccess": "Operations Control",
 			"proxyServer": "Proxy Server",
 			"skillMarket": "Skill Market",
-			"slidesTemplate": "PPT Templates",
+			"slidesTemplate": "Slide Templates",
 			"systemAgent": "Official crew Management",
 			"systemCapability": "System Capability",
 			"systemSkill": "Skill Management",
@@ -199,10 +199,10 @@
 	"search": "Search Options",
 	"slidesTemplate": {
 		"addButton": "Add Template",
-		"addTitle": "Add PPT Template",
+		"addTitle": "Add Slide Template",
 		"category": {
 			"addButton": "Add Category",
-			"addTitle": "Add PPT Template Category",
+			"addTitle": "Add Slide Template Category",
 			"codeRule": "Category code must be PPT-CATE-xxx. The suffix only supports lowercase letters, numbers, and hyphens.",
 			"columns": {
 				"code": "Category Code",
@@ -211,7 +211,7 @@
 				"templateCount": "Templates",
 				"updatedAt": "Updated At"
 			},
-			"editTitle": "Edit PPT Template Category",
+			"editTitle": "Edit Slide Template Category",
 			"fields": {
 				"code": "Category Code",
 				"name": "Category Name",
@@ -238,7 +238,7 @@
 			"updatedAt": "Updated At",
 			"usageCount": "Usage"
 		},
-		"editTitle": "Edit PPT Template",
+		"editTitle": "Edit Slide Template",
 		"featuredTagUnavailable": "The featured tag is not enabled in tag management.",
 		"fields": {
 			"category": "Category",
@@ -277,7 +277,7 @@
 		},
 		"tag": {
 			"addButton": "Add Tag",
-			"addTitle": "Add PPT Template Tag",
+			"addTitle": "Add Slide Template Tag",
 			"codeRule": "Tag code only supports lowercase letters, numbers, and hyphens.",
 			"columns": {
 				"code": "Tag Code",
@@ -286,7 +286,7 @@
 				"templateCount": "Templates",
 				"updatedAt": "Updated At"
 			},
-			"editTitle": "Edit PPT Template Tag",
+			"editTitle": "Edit Slide Template Tag",
 			"fields": {
 				"code": "Tag Code",
 				"name": "Tag Name",

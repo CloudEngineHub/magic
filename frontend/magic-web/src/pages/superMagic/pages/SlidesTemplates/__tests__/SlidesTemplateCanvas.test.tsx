@@ -5,6 +5,7 @@ import type { OptionItem } from "@/pages/superMagic/components/MainInputContaine
 import SlidesTemplateCanvas, { type SlidesTemplateCanvasHandle } from "../SlidesTemplateCanvas"
 import { getLoadMoreThreshold } from "../canvasInteraction"
 import { MAX_VISIBLE_TEMPLATE_CANVAS_ITEMS } from "../canvasViewport"
+import { SLIDES_TEMPLATE_CANVAS_IDLE_DELAY_MS } from "../useSlidesTemplateCanvasIdle"
 
 vi.mock("react-i18next", () => ({
 	useTranslation: () => ({
@@ -574,6 +575,40 @@ describe("SlidesTemplateCanvas", () => {
 		).toBeGreaterThan(1)
 	})
 
+	it("explores while the pointer is away and stops as soon as it enters the canvas", () => {
+		vi.useFakeTimers()
+		const requestAnimationFrameSpy = vi
+			.spyOn(window, "requestAnimationFrame")
+			.mockImplementation((callback) =>
+				window.setTimeout(() => callback(performance.now()), 16),
+			)
+		const cancelAnimationFrameSpy = vi
+			.spyOn(window, "cancelAnimationFrame")
+			.mockImplementation((frameId) => window.clearTimeout(frameId))
+		const performanceNowSpy = vi.spyOn(performance, "now").mockImplementation(() => Date.now())
+
+		try {
+			renderCanvas([template], vi.fn(), { hasMore: false })
+			const canvas = screen.getByTestId("slides-template-canvas")
+			mockCanvasRect(canvas)
+
+			act(() => vi.advanceTimersByTime(SLIDES_TEMPLATE_CANVAS_IDLE_DELAY_MS))
+			act(() => vi.advanceTimersByTime(1000))
+			const exploringOffset = getCanvasTranslate()
+			expect(exploringOffset.x).toBeLessThan(0)
+			expect(exploringOffset.y).toBeLessThan(0)
+
+			fireEvent.pointerEnter(canvas, { clientX: 400, clientY: 300 })
+			act(() => vi.advanceTimersByTime(1000))
+			expect(getCanvasTranslate()).toEqual(exploringOffset)
+		} finally {
+			performanceNowSpy.mockRestore()
+			requestAnimationFrameSpy.mockRestore()
+			cancelAnimationFrameSpy.mockRestore()
+			vi.useRealTimers()
+		}
+	})
+
 	it("stops the idle template loop after a template is selected", async () => {
 		const templates = Array.from({ length: 120 }, (_, index) => createTemplate(index + 1))
 		renderCanvas(templates, vi.fn(), { selectedTemplate: templates[0] })
@@ -736,7 +771,7 @@ describe("SlidesTemplateCanvas", () => {
 		})
 	})
 
-	it("waits before edge movement so leaving the canvas does not nudge the content", () => {
+	it("cancels pending edge movement before starting idle exploration after the pointer leaves", () => {
 		vi.useFakeTimers()
 		const requestAnimationFrameSpy = vi
 			.spyOn(window, "requestAnimationFrame")
@@ -768,7 +803,11 @@ describe("SlidesTemplateCanvas", () => {
 
 			fireEvent.pointerLeave(canvas, { clientX: -2, clientY: 300, pointerId: 7 })
 			act(() => vi.advanceTimersByTime(500))
-			expect(getCanvasTranslate()).toEqual({ x: 0, y: 0 })
+			const idleOffset = getCanvasTranslate()
+			expect(idleOffset.x).toBeLessThan(0)
+			expect(idleOffset.x).toBeGreaterThan(-20)
+			expect(idleOffset.y).toBeLessThan(0)
+			expect(idleOffset.y).toBeGreaterThan(-20)
 		} finally {
 			requestAnimationFrameSpy.mockRestore()
 			cancelAnimationFrameSpy.mockRestore()

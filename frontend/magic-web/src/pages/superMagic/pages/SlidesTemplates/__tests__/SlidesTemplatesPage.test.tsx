@@ -5,11 +5,12 @@ import type {
 	OptionGroup,
 	OptionItem,
 } from "@/pages/superMagic/components/MainInputContainer/panels/types"
-import SlidesTemplatesPage, {
+import SlidesTemplatesPage from "../index"
+import {
 	preserveExistingTemplateOrder,
 	reuseUnchangedTemplateOptions,
 	shouldLoadMoreSimilarColorTemplates,
-} from "../index"
+} from "../similarTemplateLoading"
 
 const {
 	catalogStateMock,
@@ -334,9 +335,12 @@ describe("SlidesTemplatesPage", () => {
 	it("shows the selected template prompt above the search tools", () => {
 		render(<SlidesTemplatesPage />)
 		const promptPanel = screen.getByTestId("slides-templates-page-prompt-panel")
+		const bottomTools = screen.getByTestId("slides-templates-page-bottom-tools")
 
 		fireEvent.click(screen.getByTestId("mock-slides-template-canvas"))
 
+		expect(bottomTools).toHaveClass("max-w-3xl")
+		expect(bottomTools).not.toHaveClass("max-w-4xl")
 		expect(screen.getByTestId("slides-templates-page-prompt-panel")).toBe(promptPanel)
 		expect(promptPanel).toHaveAttribute("aria-hidden", "false")
 		expect(screen.getByTestId("slides-templates-page-bottom-tools")).toContainElement(

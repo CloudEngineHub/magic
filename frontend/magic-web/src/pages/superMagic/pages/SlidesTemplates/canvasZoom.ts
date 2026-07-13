@@ -1,6 +1,6 @@
 import type { TemplateCanvasPoint } from "./canvasLayout"
 
-export const SLIDES_TEMPLATE_CANVAS_MIN_SCALE = 0.75
+export const SLIDES_TEMPLATE_CANVAS_MIN_SCALE = 0.6
 export const SLIDES_TEMPLATE_CANVAS_MAX_SCALE = 1.8
 
 const WHEEL_ZOOM_INTENSITY = 0.0018

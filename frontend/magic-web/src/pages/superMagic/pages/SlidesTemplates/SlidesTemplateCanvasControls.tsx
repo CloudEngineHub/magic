@@ -1,19 +1,10 @@
-import {
-	ChevronDown,
-	ChevronLeft,
-	ChevronRight,
-	ChevronUp,
-	Minus,
-	RotateCcw,
-	Plus,
-} from "lucide-react"
+import { ChevronLeft, ChevronRight, ChevronUp, Minus, RotateCcw, Plus } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { Button } from "@/components/shadcn-ui/button"
 import { cn } from "@/lib/utils"
 import type { TemplateCanvasDirection } from "./canvasLayout"
 
 interface SlidesTemplateCanvasControlsProps {
-	bottomEdgeInset?: number
 	canZoomIn: boolean
 	canZoomOut: boolean
 	onMove: (direction: TemplateCanvasDirection) => void
@@ -24,10 +15,9 @@ interface SlidesTemplateCanvasControlsProps {
 }
 
 const EDGE_BUTTON_CLASS_NAME =
-	"size-10 rounded-full border border-white/15 bg-zinc-950/75 text-white opacity-0 shadow-[0_8px_24px_rgba(0,0,0,0.32)] backdrop-blur-xl transition-[opacity,background-color,transform] duration-150 hover:scale-105 hover:bg-zinc-800 group-hover:opacity-100 focus-visible:opacity-100"
+	"size-10 rounded-full border border-white/15 bg-zinc-950/75 text-white opacity-0 shadow-[0_8px_24px_rgba(0,0,0,0.32)] backdrop-blur-xl transition-[opacity,background-color,border-color,transform] duration-150 hover:scale-105 hover:border-white/[0.28] hover:bg-zinc-950/[0.92] group-hover:opacity-100 focus-visible:opacity-100"
 
 export default function SlidesTemplateCanvasControls({
-	bottomEdgeInset = 0,
 	canZoomIn,
 	canZoomOut,
 	onMove,
@@ -80,23 +70,6 @@ export default function SlidesTemplateCanvasControls({
 					<ChevronUp className="size-5" />
 				</Button>
 			</div>
-			<div
-				className="group absolute left-1/2 z-20 flex h-16 w-36 -translate-x-1/2 items-center justify-center"
-				style={{ bottom: bottomEdgeInset }}
-			>
-				<Button
-					type="button"
-					size="icon"
-					variant="ghost"
-					className={EDGE_BUTTON_CLASS_NAME}
-					aria-label={t("playbook.edit.presets.form.moveCanvasDown")}
-					onClick={() => onMove("down")}
-					data-testid="slides-template-canvas-move-down"
-				>
-					<ChevronDown className="size-5" />
-				</Button>
-			</div>
-
 			<div
 				className="absolute bottom-6 right-6 z-20 flex items-center rounded-xl border border-white/10 bg-zinc-950/70 p-1 shadow-[0_10px_30px_rgba(0,0,0,0.3)] backdrop-blur-xl"
 				data-slides-template-drag-block="true"

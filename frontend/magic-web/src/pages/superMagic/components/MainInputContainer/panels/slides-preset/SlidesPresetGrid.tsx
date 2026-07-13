@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState, type UIEvent } from "react"
 import { observer } from "mobx-react-lite"
 import { motion } from "framer-motion"
 import { useTranslation } from "react-i18next"
+import { Button } from "@/components/shadcn-ui/button"
 import { cn } from "@/lib/utils"
 import type { OptionItem } from "../types"
 import { localeTextToDisplayString } from "../utils"
@@ -17,8 +18,10 @@ interface SlidesPresetGridProps {
 	isLoading?: boolean
 	isRefreshing?: boolean
 	isLoadingMore?: boolean
+	isLoadMoreFailed?: boolean
 	hasMore?: boolean
 	onLoadMore?: () => void
+	onRetryLoadMore?: () => void
 	onPreviewOpenChange?: (open: boolean) => void
 	showHoverDetails?: boolean
 	hoverDetailsContainer?: HTMLElement | null
@@ -68,8 +71,10 @@ const SlidesPresetGrid = observer(
 		isLoading = false,
 		isRefreshing = false,
 		isLoadingMore = false,
+		isLoadMoreFailed = false,
 		hasMore = false,
 		onLoadMore,
+		onRetryLoadMore,
 		onPreviewOpenChange,
 		showHoverDetails = true,
 		hoverDetailsContainer,
@@ -121,6 +126,7 @@ const SlidesPresetGrid = observer(
 				isLoading ||
 				isRefreshing ||
 				isLoadingMore ||
+				isLoadMoreFailed ||
 				scrollLoadRequestedRef.current ||
 				!onLoadMore
 			) {
@@ -129,7 +135,7 @@ const SlidesPresetGrid = observer(
 
 			scrollLoadRequestedRef.current = true
 			onLoadMore()
-		}, [hasMore, isLoading, isRefreshing, isLoadingMore, onLoadMore])
+		}, [hasMore, isLoading, isRefreshing, isLoadingMore, isLoadMoreFailed, onLoadMore])
 
 		useEffect(() => {
 			const sentinel = loadMoreSentinelRef.current
@@ -139,6 +145,7 @@ const SlidesPresetGrid = observer(
 				isLoading ||
 				isRefreshing ||
 				isLoadingMore ||
+				isLoadMoreFailed ||
 				!onLoadMore
 			) {
 				return
@@ -168,6 +175,7 @@ const SlidesPresetGrid = observer(
 			isLoading,
 			isRefreshing,
 			isLoadingMore,
+			isLoadMoreFailed,
 			onLoadMore,
 			requestLoadMore,
 			templates.length,
@@ -263,6 +271,19 @@ const SlidesPresetGrid = observer(
 							data-testid="slides-preset-grid-loading-more"
 						>
 							{t("playbook.edit.presets.form.loadingMore")}
+						</div>
+					) : null}
+					{templates.length > 0 && isLoadMoreFailed ? (
+						<div className="col-span-full flex items-center justify-center py-3">
+							<Button
+								type="button"
+								variant="link"
+								size="sm"
+								onClick={onRetryLoadMore}
+								data-testid="slides-preset-grid-load-more-retry"
+							>
+								{t("playbook.edit.presets.form.loadMoreFailed")}
+							</Button>
 						</div>
 					) : null}
 				</motion.div>

@@ -209,16 +209,22 @@ describe("SlidesTemplateInlinePreview", () => {
 		const scroller = thumbnailRail.firstElementChild as HTMLDivElement
 		const scrollTo = vi.fn()
 
+		expect(thumbnailRail).toHaveStyle({ "--control-background": "transparent" })
+
 		Object.defineProperty(scroller, "clientWidth", { configurable: true, value: 200 })
 		Object.defineProperty(scroller, "scrollWidth", { configurable: true, value: 1000 })
 		Object.defineProperty(scroller, "scrollLeft", { configurable: true, value: 20 })
 		scroller.scrollTo = scrollTo
 
 		fireEvent.scroll(scroller)
+		const nextButton = screen.getByTestId(
+			"slides-template-inline-preview-thumbnail-next-button",
+		)
+		expect(nextButton.parentElement).not.toHaveClass("bg-gradient-to-l")
 		fireEvent.click(
 			screen.getByTestId("slides-template-inline-preview-thumbnail-previous-button"),
 		)
-		fireEvent.click(screen.getByTestId("slides-template-inline-preview-thumbnail-next-button"))
+		fireEvent.click(nextButton)
 
 		expect(scrollTo).toHaveBeenNthCalledWith(1, {
 			behavior: "smooth",

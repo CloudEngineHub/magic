@@ -6,7 +6,7 @@ import {
 	useRef,
 	useState,
 } from "react"
-import { Award, Eye, Image as ImageIcon, Check, MousePointerClick } from "lucide-react"
+import { Award, Eye, Image as ImageIcon } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/shadcn-ui/hover-card"
 import { Button } from "@/components/shadcn-ui/button"
@@ -32,6 +32,20 @@ interface SlidesPresetCardProps {
 }
 
 const PREVIEW_PRELOAD_DELAY_MS = 1000
+
+function FeaturedTagBadge({ label, testId }: { label: string; testId: string }) {
+	return (
+		<span
+			role="img"
+			aria-label={label}
+			title={label}
+			className="inline-flex size-5 shrink-0 items-center justify-center rounded-full bg-amber-300 text-amber-950 shadow-[0_2px_6px_rgba(245,158,11,0.3)]"
+			data-testid={testId}
+		>
+			<Award className="size-3" aria-hidden="true" />
+		</span>
+	)
+}
 
 function SlidesPresetCard({
 	template,
@@ -61,6 +75,10 @@ function SlidesPresetCard({
 	const canPreview = Boolean(
 		template.preview_image_urls?.length || template.collage_url || template.preview_url,
 	)
+	const shouldShowHoverDetails =
+		showHoverDetails &&
+		canUseHoverPreview &&
+		Boolean(template.collage_url || template.description)
 
 	useEffect(() => {
 		return () => {
@@ -76,12 +94,6 @@ function SlidesPresetCard({
 		if (event.key !== "Enter" && event.key !== " ") return
 
 		event.preventDefault()
-		handleClick()
-	}
-
-	function handleUseClick(event: MouseEvent<HTMLButtonElement>) {
-		event.preventDefault()
-		event.stopPropagation()
 		handleClick()
 	}
 
@@ -173,53 +185,34 @@ function SlidesPresetCard({
 						{label}
 					</div>
 				)}
-				{featuredTag || showUsageCount ? (
-					<div className="pointer-events-none absolute left-2 top-2 z-30 flex max-w-[calc(100%-16px)] flex-wrap items-center gap-1">
-						{featuredTag ? (
-							<span
-								className="inline-flex h-6 max-w-[88px] items-center gap-1 rounded-full bg-amber-500/95 px-2 text-[11px] font-medium leading-none text-white shadow-sm"
-								data-testid="slides-preset-card-featured-badge"
-							>
-								<Award className="size-3 shrink-0" />
-								<span className="truncate">{featuredLabel}</span>
-							</span>
-						) : null}
-						{showUsageCount ? (
-							<span
-								className="inline-flex h-6 items-center gap-1 rounded-full bg-background/90 px-2 text-[11px] font-medium leading-none text-foreground/80 shadow-sm backdrop-blur"
-								data-testid="slides-preset-card-usage-count"
-							>
-								<MousePointerClick className="size-3 shrink-0" />
-								<span>{usageCount}</span>
-							</span>
-						) : null}
-					</div>
+				{showUsageCount ? (
+					<>
+						<div
+							aria-hidden="true"
+							className={cn(
+								"pointer-events-none absolute inset-x-0 bottom-0 z-10 h-16 bg-gradient-to-t from-black/[0.58] via-black/[0.18] to-transparent transition-opacity duration-200",
+								shouldShowHoverDetails && "group-hover:opacity-0",
+							)}
+							data-testid="slides-preset-card-usage-backdrop"
+						/>
+						<span
+							className={cn(
+								"pointer-events-none absolute bottom-2 right-2 z-30 text-xs font-medium leading-none text-white drop-shadow-[0_2px_6px_rgba(0,0,0,0.72)] transition-opacity duration-200",
+								shouldShowHoverDetails && "group-hover:opacity-0",
+							)}
+							data-testid="slides-preset-card-usage-count"
+							data-usage-count={usageCount}
+						>
+							{t("playbook.edit.presets.form.usageCount", { count: usageCount })}
+						</span>
+					</>
 				) : null}
 				<div
 					className={cn(
 						"absolute inset-0 z-20 flex items-center justify-center gap-2.5 bg-black/0 opacity-0 transition-all duration-200 group-focus-within:bg-black/30 group-focus-within:opacity-100",
 						canUseHoverPreview && "group-hover:bg-black/30 group-hover:opacity-100",
-						isSelected && "bg-black/30 opacity-100",
 					)}
 				>
-					<Button
-						type="button"
-						size="sm"
-						variant="default"
-						data-testid="slides-preset-card-use-button"
-						className={cn(
-							"h-7 translate-y-2 gap-1 rounded-full px-2 text-xs font-medium opacity-0 shadow-lg transition-all duration-300 group-focus-within:translate-y-0 group-focus-within:opacity-100",
-							canUseHoverPreview &&
-								"hover:scale-105 group-hover:translate-y-0 group-hover:opacity-100",
-							isSelected && "translate-y-0 opacity-100",
-						)}
-						onClick={handleUseClick}
-					>
-						<Check className="size-3.5" />
-						{isSelected
-							? t("playbook.edit.presets.form.selected")
-							: t("playbook.edit.presets.form.select")}
-					</Button>
 					{canPreview && (
 						<Button
 							type="button"
@@ -241,16 +234,22 @@ function SlidesPresetCard({
 			</div>
 			<div
 				className={cn(
-					"truncate text-center text-sm font-medium leading-5 text-foreground/90 transition-colors duration-200",
+					"flex min-w-0 items-center justify-center gap-1.5 text-sm font-medium leading-5 text-foreground/90 transition-colors duration-200",
 					canUseHoverPreview && "group-hover:text-foreground",
 				)}
 			>
-				{label}
+				{featuredTag ? (
+					<FeaturedTagBadge
+						label={featuredLabel}
+						testId="slides-preset-card-featured-badge"
+					/>
+				) : null}
+				<span className="min-w-0 truncate">{label}</span>
 			</div>
 		</div>
 	)
 
-	if (showHoverDetails && canUseHoverPreview && (template.collage_url || template.description)) {
+	if (shouldShowHoverDetails) {
 		const description = template.description ? lt(template.description) : ""
 		const subText = template.sub_text ? lt(template.sub_text) : ""
 
@@ -292,12 +291,28 @@ function SlidesPresetCard({
 						)}
 						<div className="flex flex-col gap-1.5 px-4 py-3.5">
 							<div className="flex items-start justify-between gap-3">
+								{featuredTag ? (
+									<FeaturedTagBadge
+										label={featuredLabel}
+										testId="slides-preset-hover-featured-badge"
+									/>
+								) : null}
 								<h3 className="line-clamp-1 flex-1 text-sm font-semibold text-foreground/90">
 									{label}
 								</h3>
 								{subText && (
 									<span className="shrink-0 rounded-md bg-secondary/60 px-1.5 py-0.5 text-[10px] font-medium leading-none text-secondary-foreground/80">
 										{subText}
+									</span>
+								)}
+								{showUsageCount && (
+									<span
+										className="shrink-0 text-xs font-medium leading-none text-muted-foreground"
+										data-testid="slides-preset-hover-usage-count"
+									>
+										{t("playbook.edit.presets.form.usageCount", {
+											count: usageCount,
+										})}
 									</span>
 								)}
 							</div>

@@ -159,7 +159,7 @@ const slidesStaticFields: NonNullable<FieldPanelConfig["field"]>["items"] = [
 		default_value: "",
 		preset_content: {
 			zh_CN: "使用 PPT 模板：{preset_value}",
-			en_US: "Use PPT template: {preset_value}",
+			en_US: "Use slide template: {preset_value}",
 		},
 		options: [],
 	},
@@ -257,6 +257,18 @@ export function getSlidesTemplateTagCodeFromGroupKey(groupKey: string) {
 	return groupKey.startsWith(SLIDES_TEMPLATE_TAG_GROUP_KEY_PREFIX)
 		? groupKey.slice(SLIDES_TEMPLATE_TAG_GROUP_KEY_PREFIX.length)
 		: undefined
+}
+
+const HIDDEN_SLIDES_TEMPLATE_SELECTOR_CATEGORY_CODES = new Set(["PPT-CATE-business-report"])
+
+/**
+ * 保留完整分组数据，只移除不应出现在模板选择器中的分类入口。
+ */
+export function filterSlidesTemplateSelectorGroups(groups: OptionGroup[]) {
+	return groups.filter((group) => {
+		const categoryCode = getSlidesTemplateCategoryCodeFromGroupKey(group.group_key)
+		return !categoryCode || !HIDDEN_SLIDES_TEMPLATE_SELECTOR_CATEGORY_CODES.has(categoryCode)
+	})
 }
 
 function groupSlidesTemplatesByTag(

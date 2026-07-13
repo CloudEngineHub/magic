@@ -18,7 +18,7 @@ export default function SlidesTemplateGlowBorder({
 	const gradientId = `slides-template-glow-gradient-${id}`
 	const filterId = `slides-template-glow-filter-${id}`
 	const frameInset = emphasized ? "2.5" : "0"
-	const frameSize = emphasized ? "95%" : "100%"
+	const frameSize = emphasized ? "calc(100% - 5px)" : "100%"
 
 	return (
 		<div

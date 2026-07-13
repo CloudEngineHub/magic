@@ -2,6 +2,7 @@ import { Suspense, lazy, useState, type MouseEvent } from "react"
 import { useLocation } from "react-router"
 import { ChevronRight, Home, LayoutGrid, MessageCircle, UsersRound } from "lucide-react"
 import { useTranslation } from "react-i18next"
+import slidesTemplateFireIcon from "@/assets/resources/icons/fire.webp"
 import { WorkspaceList } from "./WorkspaceList"
 import CollapsedWorkspaceMenu from "./CollapsedWorkspaceMenu"
 import type { SidebarContentProps } from "./types"
@@ -31,6 +32,8 @@ const CollaborationProjectsPanel = lazy(
 	() =>
 		import("@/pages/superMagic/components/WorkspacesMenu/components/CollaborationProjectsPanel"),
 )
+
+const SLIDES_TEMPLATE_TOTAL = "101,582"
 
 function SidebarContent({ collapsed }: SidebarContentProps) {
 	const { t } = useTranslation(["sidebar", "super"])
@@ -70,6 +73,12 @@ function SidebarContent({ collapsed }: SidebarContentProps) {
 	}: (typeof sidebarMarketMenuItems)[number]) {
 		const title =
 			titleKey === "sidebar:superLobster.title" ? t(titleKey, clawBrandValues) : t(titleKey)
+		const templateCount =
+			routeName === RouteName.SuperSlidesTemplates
+				? t("slidesTemplates.templateCount", {
+						count: SLIDES_TEMPLATE_TOTAL,
+					})
+				: null
 
 		return (
 			<SidebarMenuItem key={routeName}>
@@ -88,6 +97,21 @@ function SidebarContent({ collapsed }: SidebarContentProps) {
 						<span className="flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-left text-sm leading-5">
 							{title}
 						</span>
+						{!collapsed && templateCount && (
+							// 标题优先截断，数量提示始终留在菜单尾部，避免长语言文本压缩提示内容。
+							<span
+								className="ml-auto flex h-6 shrink-0 items-center gap-1 rounded-full bg-[#fff2ec] px-2 text-sm font-medium leading-none text-[#ff6a1f]"
+								data-testid="sidebar-content-slides-templates-count"
+							>
+								<img
+									src={slidesTemplateFireIcon}
+									alt=""
+									aria-hidden="true"
+									className="h-4 w-4 object-contain"
+								/>
+								{templateCount}
+							</span>
+						)}
 					</a>
 				</SidebarMenuButton>
 			</SidebarMenuItem>

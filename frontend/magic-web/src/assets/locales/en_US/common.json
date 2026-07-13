@@ -117,7 +117,7 @@
 		"settings": "Settings",
 		"skillEdit": "Edit Skill",
 		"skillsLibrary": "Skills Library",
-		"slidesTemplates": "PPT Templates",
+		"slidesTemplates": "Slide Templates",
 		"super": "$t(common:routes.global)",
 		"superChats": "Chats",
 		"superDashboard": "$t(common:platform.name) Dashboard",

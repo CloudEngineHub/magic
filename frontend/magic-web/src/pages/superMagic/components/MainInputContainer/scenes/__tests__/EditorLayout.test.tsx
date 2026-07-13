@@ -2,29 +2,37 @@ import { render, screen, waitFor } from "@testing-library/react"
 import type { ReactNode } from "react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
-const { mockLoad, mockSetCurrentScene, defaultMCPStoreMock, sceneStateStoreMock, mockPlaybooks } =
-	vi.hoisted(() => ({
-		mockLoad: vi.fn(),
-		defaultMCPStoreMock: {
-			hasMCP: false,
-			hasEverAddedMcp: false,
-			initialized: true,
-			load: vi.fn(),
-		},
-		mockSetCurrentScene: vi.fn(),
-		mockPlaybooks: [] as Array<{
-			id: string
-			name: string
-			desc: string
-			icon: string
-			theme_color: string | null
-		}>,
-		sceneStateStoreMock: {
-			currentScene: null as unknown,
-			setCurrentScene: vi.fn(),
-			resetState: vi.fn(),
-		},
-	}))
+const {
+	mockLoad,
+	mockSetCurrentScene,
+	mockSetInputScopeKey,
+	defaultMCPStoreMock,
+	sceneStateStoreMock,
+	mockPlaybooks,
+} = vi.hoisted(() => ({
+	mockLoad: vi.fn(),
+	defaultMCPStoreMock: {
+		hasMCP: false,
+		hasEverAddedMcp: false,
+		initialized: true,
+		load: vi.fn(),
+	},
+	mockSetCurrentScene: vi.fn(),
+	mockSetInputScopeKey: vi.fn(),
+	mockPlaybooks: [] as Array<{
+		id: string
+		name: string
+		desc: string
+		icon: string
+		theme_color: string | null
+	}>,
+	sceneStateStoreMock: {
+		currentScene: null as unknown,
+		setCurrentScene: vi.fn(),
+		setInputScopeKey: vi.fn(),
+		resetState: vi.fn(),
+	},
+}))
 
 vi.mock("mobx-react-lite", () => ({
 	observer: (component: unknown) => component,
@@ -87,6 +95,7 @@ vi.mock("../../hooks/useSkillPanelScroll", () => ({
 vi.mock("../../stores", () => ({
 	sceneStateStore: sceneStateStoreMock,
 	SceneStateProvider: ({ children }: { children: ReactNode }) => <>{children}</>,
+	buildTopicInputScopeKey: vi.fn(() => "test-input-scope"),
 }))
 
 vi.mock("@/services/superMagic/SuperMagicModeService", () => ({
@@ -142,6 +151,7 @@ describe("EditorLayout", () => {
 		mockPlaybooks.length = 0
 		sceneStateStoreMock.currentScene = null
 		sceneStateStoreMock.setCurrentScene = mockSetCurrentScene
+		sceneStateStoreMock.setInputScopeKey = mockSetInputScopeKey
 	})
 
 	it("shows plugin tips when user has no global MCP", async () => {

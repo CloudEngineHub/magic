@@ -34,6 +34,7 @@ import { getSlidesTemplatePreviewThumbnailImageUrl } from "./slidesTemplateImage
 import styles from "./SlidesTemplateInlinePreview.module.css"
 import SlidesTemplatePreviewStage from "./SlidesTemplatePreviewStage"
 import SlidesTemplateColorPalette from "./SlidesTemplateColorPalette"
+import SlidesTemplateThumbnailRailScrollControl from "./SlidesTemplateThumbnailRailScrollControl"
 import { applyResolvedTemplateColors, templateColorToRgba } from "./templateColors"
 import { useResolvedTemplateColors } from "./useResolvedTemplateColors"
 
@@ -48,47 +49,6 @@ interface SlidesTemplateInlinePreviewProps {
 const PREVIEW_AUTO_DISMISS_MS = 9000
 const PREVIEW_BACKGROUND_CLOSE_BLOCK_SELECTOR =
 	'button, a, input, textarea, select, iframe, [data-slides-template-preview-close-block="true"]'
-
-interface ThumbnailRailScrollControlProps {
-	direction: "left" | "right"
-	onClick: () => void
-	title: string
-}
-
-function ThumbnailRailScrollControl({
-	direction,
-	onClick,
-	title,
-}: ThumbnailRailScrollControlProps) {
-	const isPrevious = direction === "left"
-	const Icon = isPrevious ? ChevronLeft : ChevronRight
-
-	return (
-		<div
-			className={cn(
-				"pointer-events-none absolute top-0 z-10 flex h-full w-14 items-center",
-				isPrevious
-					? "left-0 justify-start bg-gradient-to-r from-zinc-950/80 to-transparent"
-					: "right-0 justify-end bg-gradient-to-l from-zinc-950/80 to-transparent",
-			)}
-		>
-			<Button
-				type="button"
-				variant="secondary"
-				size="icon"
-				className={cn(
-					"pointer-events-auto size-9 rounded-full border border-white/20 bg-zinc-950/75 text-white shadow-lg backdrop-blur-xl hover:bg-zinc-950/90",
-					isPrevious ? "ml-2" : "mr-2",
-				)}
-				aria-label={`${title} ${isPrevious ? "previous" : "next"} thumbnails`}
-				onClick={onClick}
-				data-testid={`slides-template-inline-preview-thumbnail-${isPrevious ? "previous" : "next"}-button`}
-			>
-				<Icon className="size-4" />
-			</Button>
-		</div>
-	)
-}
 
 function getInitialPageIndex(focus: SlidesTemplatePreviewFocus, pages: string[]) {
 	if (!focus.tile.imageUrl) return 0
@@ -438,17 +398,17 @@ export default function SlidesTemplateInlinePreview({
 						>
 							<HeadlessHorizontalScroll
 								className={cn("h-full rounded-2xl", styles.thumbnailRail)}
-								controlBackground="rgb(18 20 26 / 72%)"
+								controlBackground="transparent"
 								hideScrollbar={false}
 								renderLeftControl={({ scroll }) => (
-									<ThumbnailRailScrollControl
+									<SlidesTemplateThumbnailRailScrollControl
 										direction="left"
 										onClick={() => scroll("left")}
 										title={title}
 									/>
 								)}
 								renderRightControl={({ scroll }) => (
-									<ThumbnailRailScrollControl
+									<SlidesTemplateThumbnailRailScrollControl
 										direction="right"
 										onClick={() => scroll("right")}
 										title={title}
