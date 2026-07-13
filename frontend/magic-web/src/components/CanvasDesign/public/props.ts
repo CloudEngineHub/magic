@@ -291,6 +291,7 @@ export const ElementToolTypeEnum = {
 	ShapeStyle: "shape-style", // 图形样式配置
 	DownloadButton: "download-button", // 下载按钮
 	RichTextAdvancedButton: "rich-text-advanced-button", // 富文本高级按钮
+	TextContentOptimizationButton: "text-content-optimization-button", // 文本内容优化按钮
 	ImageConvertHightButton: "image-convert-hight-button", // 转高清按钮
 	ImageConvertHight: "image-convert-hight", // 转高清配置
 	ImageCropButton: "image-crop-button", // 裁剪按钮

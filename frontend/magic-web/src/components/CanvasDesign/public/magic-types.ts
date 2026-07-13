@@ -627,6 +627,24 @@ export interface CompleteImagePromptResponse {
 	prompt: string
 }
 
+/**
+ * AI 优化文本内容请求参数
+ */
+export interface CompleteTextContentRequest {
+	/** 当前场景拼装后的用户提示词 */
+	user_prompt: string
+	/** 可选模型 id */
+	model_id?: string
+}
+
+/**
+ * AI 优化文本内容响应
+ */
+export interface CompleteTextContentResponse {
+	/** 最终可直接写入文本元素的内容 */
+	text: string
+}
+
 /** 单条参考图参数 */
 export interface ReferenceImageOptionEntry {
 	path: string
@@ -1330,6 +1348,14 @@ export interface CanvasDesignMethods {
 	completeImagePrompt?: (
 		params: CompleteImagePromptRequest,
 	) => Promise<CompleteImagePromptResponse>
+	/**
+	 * AI 优化文本内容
+	 * @param params 文本内容优化请求参数
+	 * @returns Promise<文本内容优化结果>
+	 */
+	completeTextContent?: (
+		params: CompleteTextContentRequest,
+	) => Promise<CompleteTextContentResponse>
 	/**
 	 * 发起图片生成
 	 * @param params 图片生成请求参数

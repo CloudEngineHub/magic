@@ -31,8 +31,12 @@ describe("buildPromptOptimizationUserPrompt", () => {
 			],
 		})
 
+		expect(prompt).toContain("# 任务\n优化一段用于图片生成或图片编辑的提示词")
+		expect(prompt).toContain("# 当前输入\n```text\n参考[图片1]生成一张海报\n```")
+		expect(prompt).toContain("# 引用规则")
 		expect(prompt).toContain("当前输入中已出现的素材占位符必须原样保留：[图片1]")
 		expect(prompt).toContain("不要新增当前输入没有出现的占位符")
+		expect(prompt).toContain("# 参考素材")
 		expect(prompt).toContain("[图片1]：文件名：product.png，对应第 1 张参考图内容")
 		expect(prompt).toContain("图片参考 2：文件名：style.png，对应第 2 张参考图内容")
 	})
@@ -57,7 +61,7 @@ describe("buildPromptOptimizationUserPrompt", () => {
 		expect(prompt).toContain(
 			"当前输入没有素材占位符，返回结果也不要出现任何 [图片1]、[视频1]、[音频1] 形式的占位符",
 		)
-		expect(prompt).toContain("参考资源概况：已提供 1 张图片内容作为视觉参考。")
+		expect(prompt).toContain("# 参考资源概况\n已提供 1 张图片内容作为视觉参考。")
 		expect(prompt).toContain("图片参考 1：文件名：product.png，对应第 1 张参考图内容")
 	})
 
@@ -95,7 +99,7 @@ describe("buildPromptOptimizationUserPrompt", () => {
 		})
 
 		expect(prompt).toContain(
-			"参考资源概况：已提供 1 张图片内容作为视觉参考，其中 1 张为视频帧参考；1 个视频文件、1 个音频文件仅提供文件名作为上下文，不能推断具体画面或声音内容。",
+			"# 参考资源概况\n已提供 1 张图片内容作为视觉参考，其中 1 张为视频帧参考；1 个视频文件、1 个音频文件仅提供文件名作为上下文，不能推断具体画面或声音内容。",
 		)
 		expect(prompt).toContain(
 			"首帧参考：文件名：start.png，对应第 1 张参考图内容，用途：作为视频起始画面的视觉约束",

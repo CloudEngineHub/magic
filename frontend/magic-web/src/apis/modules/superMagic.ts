@@ -411,6 +411,26 @@ export interface CompleteImagePromptResponse {
 }
 
 /**
+ * AI 优化文本内容请求参数
+ */
+export interface CompleteTextContentRequest {
+	/** 项目 id */
+	project_id?: string
+	/** 当前场景拼装后的用户提示词 */
+	user_prompt: string
+	/** 可选模型 id */
+	model_id?: string
+}
+
+/**
+ * AI 优化文本内容响应
+ */
+export interface CompleteTextContentResponse {
+	/** 最终可直接写入文本元素的内容 */
+	text: string
+}
+
+/**
  * 查询图片生成结果请求参数
  */
 export interface GetImageGenerationResultParams {
@@ -2665,6 +2685,18 @@ export const generateSuperMagicApi = (fetch: HttpClient) => ({
 	completeImagePrompt(params: CompleteImagePromptRequest) {
 		return fetch.post<CompleteImagePromptResponse>(
 			"/api/v1/design/image-prompt/complete",
+			params,
+		)
+	},
+
+	/**
+	 * @description AI 优化文本内容
+	 * @param params 文本内容优化请求参数
+	 * @returns 文本内容优化响应数据
+	 */
+	completeTextContent(params: CompleteTextContentRequest) {
+		return fetch.post<CompleteTextContentResponse>(
+			"/api/v1/design/text-content/complete",
 			params,
 		)
 	},

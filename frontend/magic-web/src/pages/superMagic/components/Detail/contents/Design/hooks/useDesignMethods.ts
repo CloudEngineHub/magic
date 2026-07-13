@@ -149,7 +149,7 @@ export function useDesignMethods(options: UseDesignMethodsOptions): CanvasDesign
 		getOrCreateImagesDir,
 	})
 
-	const { completeImagePrompt } = useImagePromptCompletion({
+	const { completeImagePrompt, completeTextContent } = useImagePromptCompletion({
 		projectId,
 		flatAttachments,
 		designProjectBasePath,
@@ -606,6 +606,7 @@ export function useDesignMethods(options: UseDesignMethodsOptions): CanvasDesign
 		return {
 			getImageModelList,
 			completeImagePrompt,
+			completeTextContent,
 			getVideoModelList,
 			generateVideo,
 			estimateVideoPoints,
@@ -648,6 +649,7 @@ export function useDesignMethods(options: UseDesignMethodsOptions): CanvasDesign
 	}, [
 		getImageModelList,
 		completeImagePrompt,
+		completeTextContent,
 		getVideoModelList,
 		generateVideo,
 		estimateVideoPoints,

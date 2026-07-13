@@ -49,6 +49,8 @@ export default function ElementTools() {
 			switch (firstSelectedElement?.type) {
 				case ElementTypeEnum.Text:
 					return [
+						{ type: ElementToolTypeEnum.TextContentOptimizationButton },
+						Divider,
 						{ type: ElementToolTypeEnum.RichTextFillColor },
 						Divider,
 						{ type: ElementToolTypeEnum.RichTextFontFamily },

@@ -4,6 +4,8 @@ import { SuperMagicApi } from "@/apis"
 import type {
 	CompleteImagePromptRequest,
 	CompleteImagePromptResponse,
+	CompleteTextContentRequest,
+	CompleteTextContentResponse,
 } from "@/components/CanvasDesign/public/magic-types"
 import type { FileItem } from "@/pages/superMagic/components/Detail/components/FilesViewer/types"
 import {
@@ -23,6 +25,9 @@ interface UseImagePromptCompletionReturn {
 	completeImagePrompt: (
 		params: CompleteImagePromptRequest,
 	) => Promise<CompleteImagePromptResponse>
+	completeTextContent: (
+		params: CompleteTextContentRequest,
+	) => Promise<CompleteTextContentResponse>
 }
 
 export function useImagePromptCompletion(
@@ -68,8 +73,29 @@ export function useImagePromptCompletion(
 		[designProjectBasePath, flatAttachments, projectId, t],
 	)
 
+	const completeTextContent = useCallback(
+		async (params: CompleteTextContentRequest): Promise<CompleteTextContentResponse> => {
+			if (!projectId) {
+				throw new Error(t("design.errors.projectIdNotExistsForGenerate"))
+			}
+
+			const requestParams: CompleteTextContentRequest = {
+				project_id: projectId,
+				user_prompt: params.user_prompt,
+			}
+
+			if (params.model_id) {
+				requestParams.model_id = params.model_id
+			}
+
+			return SuperMagicApi.completeTextContent(requestParams)
+		},
+		[projectId, t],
+	)
+
 	return {
 		completeImagePrompt,
+		completeTextContent,
 	}
 }
 

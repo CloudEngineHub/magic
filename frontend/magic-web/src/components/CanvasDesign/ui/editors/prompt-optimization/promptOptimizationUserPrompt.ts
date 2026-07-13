@@ -28,29 +28,16 @@ export function buildPromptOptimizationUserPrompt(
 ): string {
 	const currentInput = options.currentPrompt.trim() || "用户当前未填写"
 	const outputLanguage = options.outputLanguage ?? "zh"
-	if (options.target === "video") {
-		return [
-			"任务：优化一段用于视频生成或视频编辑的提示词，使其更具体、可执行、少歧义。",
-			`当前输入：${currentInput}`,
-			buildOutputLanguageInstruction(outputLanguage),
-			buildReferenceSection(currentInput, options),
-			buildOptimizationInstruction("video"),
-			buildOutputInstruction(),
-		]
-			.filter(Boolean)
-			.join("\n")
-	}
-
 	return [
-		"任务：优化一段用于图片生成或图片编辑的提示词，使其更具体、可执行、少歧义。",
-		`当前输入：${currentInput}`,
+		buildTaskInstruction(options.target),
+		buildCurrentInputSection(currentInput),
 		buildOutputLanguageInstruction(outputLanguage),
 		buildReferenceSection(currentInput, options),
-		buildOptimizationInstruction("image"),
+		buildOptimizationInstruction(options.target),
 		buildOutputInstruction(),
 	]
 		.filter(Boolean)
-		.join("\n")
+		.join("\n\n")
 }
 
 export function resolvePromptOptimizationOutputLanguage(options: {
@@ -87,7 +74,22 @@ function resolveHostUiLocaleLanguage(
 
 function buildOutputLanguageInstruction(language: PromptOptimizationOutputLanguage): string {
 	const fallbackLanguageText = language === "zh" ? "中文" : "英文"
-	return `输出语言：如果当前输入有明确语言，最终提示词必须跟随当前输入语言；如果当前输入为空或语言不明显，最终提示词必须使用${fallbackLanguageText}。不要把素材占位符或文件名当作判断语言的依据。`
+	return [
+		"# 输出语言",
+		`如果当前输入有明确语言，最终提示词必须跟随当前输入语言；如果当前输入为空或语言不明显，最终提示词必须使用${fallbackLanguageText}。不要把素材占位符或文件名当作判断语言的依据。`,
+	].join("\n")
+}
+
+function buildTaskInstruction(target: PromptOptimizationTarget): string {
+	const targetText =
+		target === "video"
+			? "优化一段用于视频生成或视频编辑的提示词，使其更具体、可执行、少歧义。"
+			: "优化一段用于图片生成或图片编辑的提示词，使其更具体、可执行、少歧义。"
+	return ["# 任务", targetText].join("\n")
+}
+
+function buildCurrentInputSection(currentInput: string): string {
+	return ["# 当前输入", "```text", currentInput, "```"].join("\n")
 }
 
 function buildReferenceSection(
@@ -116,11 +118,17 @@ function buildReferenceSection(
 			.filter(Boolean)
 			.join("、")
 		lines.push(
-			`引用规则：当前输入中已出现的素材占位符必须原样保留：${placeholders}。不要改写、删除、翻译这些占位符，也不要把它们替换成文件名或自然语言描述。`,
+			[
+				"# 引用规则",
+				`当前输入中已出现的素材占位符必须原样保留：${placeholders}。不要改写、删除、翻译这些占位符，也不要把它们替换成文件名或自然语言描述。`,
+			].join("\n"),
 		)
 	} else if (referenceInstructions.length > 0) {
 		lines.push(
-			"引用规则：当前输入没有素材占位符，返回结果也不要出现任何 [图片1]、[视频1]、[音频1] 形式的占位符。",
+			[
+				"# 引用规则",
+				"当前输入没有素材占位符，返回结果也不要出现任何 [图片1]、[视频1]、[音频1] 形式的占位符。",
+			].join("\n"),
 		)
 	}
 	if (referenceSummary) {
@@ -130,9 +138,9 @@ function buildReferenceSection(
 		lines.push(
 			"不要新增当前输入没有出现的占位符。参考素材只作为优化上下文；如果当前输入没有明确引用某个占位符，不要在返回结果中强行加入该占位符。",
 		)
-		lines.push("参考素材：", ...referenceInstructions)
+		lines.push(["# 参考素材", ...referenceInstructions].join("\n"))
 	}
-	return lines.join("\n")
+	return lines.join("\n\n")
 }
 
 function buildReferenceSummary(options: BuildPromptOptimizationUserPromptOptions): string {
@@ -153,7 +161,7 @@ function buildReferenceSummary(options: BuildPromptOptimizationUserPromptOptions
 	if (nonVisualParts.length > 0) {
 		parts.push(`${nonVisualParts.join("、")}仅提供文件名作为上下文，不能推断具体画面或声音内容`)
 	}
-	return parts.length > 0 ? `参考资源概况：${parts.join("；")}。` : ""
+	return parts.length > 0 ? ["# 参考资源概况", `${parts.join("；")}。`].join("\n") : ""
 }
 
 function buildReferenceInstruction(
@@ -209,9 +217,12 @@ function buildOptimizationInstruction(target: PromptOptimizationTarget): string 
 		target === "video"
 			? "补充真正服务视频生成的视觉信息：主体动作、场景变化、镜头运动、构图、光线、色彩、材质、节奏和画面连续性。"
 			: "补充真正服务图片生成的视觉信息：主体状态、场景、背景、构图、光线方向与软硬、色彩关系、材质质感、镜头或画幅。"
-	return ["优化要求：", ...sharedRules, targetRule].join("\n")
+	return ["# 优化要求", ...sharedRules, targetRule].join("\n")
 }
 
 function buildOutputInstruction(): string {
-	return "输出：最终只输出一段可直接用于生成的提示词正文。不要输出解释、标题、Markdown、JSON、列表、多套方案或前后缀说明。"
+	return [
+		"# 输出",
+		"最终只输出一段可直接用于生成的提示词正文。不要输出解释、标题、Markdown、JSON、列表、多套方案或前后缀说明。",
+	].join("\n")
 }

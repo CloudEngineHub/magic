@@ -37,6 +37,8 @@ final class SourceId
 
     public const string DESIGN_IMAGE_PROMPT_COMPLETION = 'design_image_prompt_completion';
 
+    public const string DESIGN_TEXT_CONTENT_COMPLETION = 'design_text_content_completion';
+
     public const string CONNECTIVITY_TEST = 'connectivity_test';
 
     public const string AI_SEARCH = 'ai_search';
