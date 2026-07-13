@@ -86,6 +86,7 @@ class AdminSlidesTemplateAppService extends AbstractSlidesTemplateAppService
 
         $this->assertCategoryExists($dataIsolation, $request->getCategoryCode());
         $this->assertTemplateFileIsArchive($request->getTemplateFileKey());
+        $this->assertThumbnailFileKeyHasPublicUrl($dataIsolation->getCurrentOrganizationCode(), $request->getThumbnailFileKey());
         $this->slidesTemplateTagDomainService->findEnabledByCodesOrFail($dataIsolation, $request->getTagCodes());
         $template = $this->buildEntityFromRequest($request);
         $template->setCode($request->getCode() ?? SlidesTemplateEntity::generateNewCode());
@@ -121,6 +122,7 @@ class AdminSlidesTemplateAppService extends AbstractSlidesTemplateAppService
             $this->slidesTemplateTagDomainService->findEnabledByCodesOrFail($dataIsolation, $request->getTagCodes());
         }
         $existing = $this->slidesTemplateDomainService->findByIdOrFail($dataIsolation, $id);
+        $this->assertThumbnailFileKeyHasPublicUrl($existing->getOrganizationCode(), $request->getThumbnailFileKey());
         $template = $this->buildEntityFromRequest($request);
         $template->setId($existing->getId());
         $template->setOrganizationCode($existing->getOrganizationCode());
@@ -246,6 +248,19 @@ class AdminSlidesTemplateAppService extends AbstractSlidesTemplateAppService
         $extension = strtolower(pathinfo($templateFileKey, PATHINFO_EXTENSION));
         if (! in_array($extension, self::ARCHIVE_EXTENSIONS, true)) {
             ExceptionBuilder::throw(SlidesTemplateErrorCode::VALIDATE_FAILED, 'slides_template.template_file_must_be_archive');
+        }
+    }
+
+    private function assertThumbnailFileKeyHasPublicUrl(string $organizationCode, string $thumbnailFileKey): void
+    {
+        if ($thumbnailFileKey === '') {
+            return;
+        }
+
+        $fileLinks = $this->getPublicFileLinks($organizationCode, [$thumbnailFileKey]);
+        $fileLink = $fileLinks[$thumbnailFileKey] ?? null;
+        if (! $fileLink instanceof FileLink || $fileLink->getUrl() === '') {
+            ExceptionBuilder::throw(SlidesTemplateErrorCode::VALIDATE_FAILED, 'slides_template.thumbnail_file_url_generate_failed');
         }
     }
 

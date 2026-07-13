@@ -30,6 +30,7 @@ return [
     'description_en_us_required' => 'Template English description is required',
     'description_en_us_max' => 'Template English description cannot exceed 1000 characters',
     'thumbnail_file_key_required' => 'Template thumbnail file key is required',
+    'thumbnail_file_url_generate_failed' => 'Template thumbnail file URL does not exist or is unavailable',
     'template_file_key_required' => 'Template ZIP file key is required',
     'template_file_must_be_archive' => 'Template file must be an archive (zip/rar/7z/tar/gz/tgz/bz2/xz)',
     'file_key_string' => 'File key must be a string',

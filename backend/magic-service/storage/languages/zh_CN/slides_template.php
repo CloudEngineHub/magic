@@ -30,6 +30,7 @@ return [
     'description_en_us_required' => '模板英文描述是必需的',
     'description_en_us_max' => '模板英文描述不能超过1000个字符',
     'thumbnail_file_key_required' => '模板封面图文件 key 是必需的',
+    'thumbnail_file_url_generate_failed' => '模板封面图文件链接不存在或不可用',
     'template_file_key_required' => '模板 ZIP 文件 key 是必需的',
     'template_file_must_be_archive' => '模板文件必须是压缩包（zip/rar/7z/tar/gz/tgz/bz2/xz）',
     'file_key_string' => '文件 key 必须是字符串',
