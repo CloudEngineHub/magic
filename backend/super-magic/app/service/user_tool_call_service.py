@@ -28,6 +28,9 @@ from app.utils.async_file_utils import (
 
 logger = get_logger(__name__)
 
+ASK_USER_KEEPALIVE_THRESHOLD_SECONDS = 18 * 60
+ASK_USER_KEEPALIVE_INTERVAL_SECONDS = 5 * 60
+
 # (response_status, answer_json) -> (content, extra_info)
 ResultBuilder = Callable[[str, str], Tuple[str, Dict[str, Any]]]
 # () -> answer_json（超时时构造默认答案）
@@ -155,8 +158,14 @@ class UserToolCallService:
         timeout_answer_builder: TimeoutAnswerBuilder,
     ) -> PendingToolCall:
         """创建 PendingToolCall、启动超时定时器、注册到内存、持久化到文件。"""
+        keepalive_enabled = self._should_enable_ask_user_keepalive(tool_name, expires_at)
         timeout_task = asyncio.create_task(
-            self._timeout_watcher(tool_call_id, expires_at, agent_context),
+            self._timeout_watcher(
+                tool_call_id,
+                expires_at,
+                agent_context,
+                keepalive_enabled=keepalive_enabled,
+            ),
             name=f"user_tool_call_timeout_{tool_call_id}",
         )
 
@@ -297,15 +306,34 @@ class UserToolCallService:
         tool_call_id: str,
         expires_at: int,
         agent_context: AgentContext,
+        *,
+        keepalive_enabled: bool = False,
     ) -> None:
         """Sleep until expires_at; if not cancelled, trigger timeout flow."""
+        next_keepalive_at = int(time.time()) + ASK_USER_KEEPALIVE_INTERVAL_SECONDS
+        if keepalive_enabled:
+            self._touch_keepalive(agent_context, f"ask_user:{tool_call_id}:start")
+            logger.info(
+                f"ask_user keepalive enabled: tool_call_id={tool_call_id}, "
+                f"expires_at={expires_at}, interval={ASK_USER_KEEPALIVE_INTERVAL_SECONDS}s"
+            )
+
         try:
             while True:
-                remaining = expires_at - int(time.time())
+                now = int(time.time())
+                remaining = expires_at - now
                 if remaining <= 0:
                     break
-                await asyncio.sleep(min(60, remaining))
-                agent_context.update_activity_time()
+
+                sleep_seconds = min(60, remaining)
+                if keepalive_enabled:
+                    sleep_seconds = min(sleep_seconds, max(1, next_keepalive_at - now))
+
+                await asyncio.sleep(sleep_seconds)
+
+                if keepalive_enabled and int(time.time()) >= next_keepalive_at:
+                    self._touch_keepalive(agent_context, f"ask_user:{tool_call_id}:waiting")
+                    next_keepalive_at = int(time.time()) + ASK_USER_KEEPALIVE_INTERVAL_SECONDS
         except asyncio.CancelledError:
             return
 
@@ -332,6 +360,22 @@ class UserToolCallService:
             ),
             name=f"user_tool_call_timeout_resume_{tool_call_id}",
         )
+
+    @staticmethod
+    def _should_enable_ask_user_keepalive(tool_name: str, expires_at: int) -> bool:
+        """判断当前等待是否需要 ask_user 保活。"""
+        if tool_name != "ask_user":
+            return False
+        return expires_at - int(time.time()) > ASK_USER_KEEPALIVE_THRESHOLD_SECONDS
+
+    @staticmethod
+    def _touch_keepalive(agent_context: AgentContext, source: str) -> None:
+        """刷新活动时间，避免长时间等待 ask_user 时被空闲回收。"""
+        try:
+            agent_context.update_activity_time()
+            logger.debug(f"user_tool_call keepalive touched: source={source}")
+        except Exception as e:
+            logger.warning(f"user_tool_call keepalive failed: source={source}, error={e}")
 
     # ─── 历史兜底恢复 ───────────────────────────────────────────────────────────
 
@@ -560,7 +604,12 @@ class UserToolCallService:
                 continue
 
             timeout_task = asyncio.create_task(
-                self._timeout_watcher(tool_call_id, expires_at, agent_context),
+                self._timeout_watcher(
+                    tool_call_id,
+                    expires_at,
+                    agent_context,
+                    keepalive_enabled=self._should_enable_ask_user_keepalive(tool_name, expires_at),
+                ),
                 name=f"user_tool_call_timeout_restore_{tool_call_id}",
             )
 
