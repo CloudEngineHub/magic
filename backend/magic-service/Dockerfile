@@ -74,7 +74,8 @@ WORKDIR /opt/www
 COPY composer.json composer.lock ./
 
 ARG COMPOSER_MIRROR=https://mirrors.aliyun.com/composer/
-RUN --mount=type=cache,id=composer-cache-v1-${TARGETARCH},target=/root/.composer/cache \
+RUN --mount=type=secret,id=composer,target=/root/.composer/auth.json \
+    --mount=type=cache,id=composer-cache-v1-${TARGETARCH},target=/root/.composer/cache \
     --mount=type=cache,id=composer-cache-v2-${TARGETARCH},target=/root/.cache/composer \
     # 配置 composer 镜像
     { \
