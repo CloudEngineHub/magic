@@ -163,9 +163,7 @@ class UserAgentRepository extends AbstractRepository implements UserAgentReposit
 
     public function deleteByAgentCodeExceptUser(SuperMagicAgentDataIsolation $dataIsolation, string $agentCode, string $excludedUserId): int
     {
-        $builder = $this->createBuilder($dataIsolation, $this->userAgentModel::query());
-
-        return $builder
+        return $this->userAgentModel::query()
             ->where('agent_code', $agentCode)
             ->where('user_id', '!=', $excludedUserId)
             ->delete();
