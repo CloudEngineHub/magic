@@ -1642,6 +1642,8 @@ class ResourceShareAppService extends AbstractShareAppService
             // 使用 toDtoWithPassword 返回包含密码的分享信息
             $item = $this->shareAssembler->toDtoWithPassword($shareEntity)->toArray();
             $item['id'] = (string) $shareEntity->getId(); // 添加 id 字段，用于查询 view_count
+            $item['created_at'] = DateFormatUtil::formatExpireAt($shareEntity->getCreatedAt());
+            $item['updated_at'] = DateFormatUtil::formatExpireAt($shareEntity->getUpdatedAt());
 
             // 添加 file_ids 字段
             $item['file_ids'] = $this->shareDomainService->getFileIdsForShareItem($shareEntity, $condition);
