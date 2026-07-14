@@ -74,6 +74,8 @@ export namespace SlidesTemplate {
 	}
 
 	export type TagMatch = "any" | "all"
+	/** 标签组仅用于管理和展示；模板只能绑定子标签。 */
+	export type TagNodeType = "group" | "tag"
 
 	export interface CategoryItem {
 		id: string
@@ -107,6 +109,9 @@ export namespace SlidesTemplate {
 		organization_code: string
 		code: string
 		name_i18n: LangText
+		description_i18n?: LangText
+		parent_id: string | number
+		node_type: TagNodeType
 		sort: number
 		template_count: number
 		is_official: boolean
@@ -115,17 +120,23 @@ export namespace SlidesTemplate {
 		updated_uid?: string
 		created_at?: string
 		updated_at?: string
+		children?: TagItem[]
 	}
 
 	export interface TagQueryParams extends PageParams {
 		keyword?: string
 		code?: string
+		node_type?: TagNodeType
+		parent_id?: string | number
 		status?: Status | null
 	}
 
 	export interface TagSaveParams {
 		code: string
+		node_type: TagNodeType
+		parent_id: string | number
 		name_i18n: LangText
+		description_i18n?: LangText
 		status?: Status
 		sort?: number
 	}

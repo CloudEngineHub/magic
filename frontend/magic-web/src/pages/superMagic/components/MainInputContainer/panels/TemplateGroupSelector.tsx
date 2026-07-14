@@ -46,7 +46,7 @@ const TemplateGroupSelector = observer(
 				renderLeftControl={({ scroll }) => (
 					<div
 						className={cn(
-							"pointer-events-none absolute left-0 top-0 z-10 flex h-full w-14 items-center justify-start bg-[linear-gradient(to_right,_var(--control-background)_0%,_var(--control-background)_54%,_transparent_100%)] pl-1",
+							"pointer-events-none absolute left-0 top-0 z-10 flex h-full w-14 items-center justify-start bg-[linear-gradient(to_right,_var(--control-background)_0%,_var(--control-background)_54%,_transparent_100%)] pl-1 max-md:hidden",
 							leftControlClassName,
 						)}
 					>
@@ -64,7 +64,7 @@ const TemplateGroupSelector = observer(
 				renderRightControl={({ scroll }) => (
 					<div
 						className={cn(
-							"pointer-events-none absolute right-0 top-0 z-10 flex h-full w-14 items-center justify-end bg-[linear-gradient(to_left,_var(--control-background)_0%,_var(--control-background)_54%,_transparent_100%)]",
+							"pointer-events-none absolute right-0 top-0 z-10 flex h-full w-14 items-center justify-end bg-[linear-gradient(to_left,_var(--control-background)_0%,_var(--control-background)_54%,_transparent_100%)] max-md:hidden",
 							rightControlClassName,
 						)}
 					>
@@ -79,7 +79,7 @@ const TemplateGroupSelector = observer(
 						</Button>
 					</div>
 				)}
-				scrollContainerClassName="no-scrollbar flex w-full min-w-0 items-center justify-start gap-2 overflow-x-auto overflow-y-hidden py-1 [&>*:first-child]:ml-1"
+				scrollContainerClassName="no-scrollbar flex w-full min-w-0 touch-pan-x items-center justify-start gap-2 overflow-x-auto overflow-y-hidden py-1 [&>*:first-child]:ml-1"
 			>
 				{groups.map((group) => {
 					const isSelected = group.group_key === selectedGroupKey

@@ -16,6 +16,7 @@ import { useCenteredHorizontalScroll } from "../hooks/useCenteredHorizontalScrol
 import superMagicModeService from "@/services/superMagic/SuperMagicModeService"
 import { GuideTourElementId } from "@/pages/superMagic/components/LazyGuideTour"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
+import PptModeSwitcherCard from "./PptModeSwitcherCard"
 
 interface ModeSwitcherProps {
 	role: TopicMode
@@ -54,17 +55,34 @@ function RoleSwitcher({ role, onActionClick }: ModeSwitcherProps) {
 	return (
 		<div
 			id={GuideTourElementId.RoleSwitcher}
-			className="flex w-auto min-w-0 max-w-full items-center gap-2"
+			className="flex h-11 w-auto min-w-0 max-w-full items-end gap-2"
 			data-testid="role-switcher"
 		>
 			<HeadlessHorizontalScroll
-				className="min-w-0 flex-1"
+				className="-mt-8 h-[76px] min-w-0 flex-1 [&>div.absolute]:!top-auto [&>div.absolute]:bottom-0 [&>div.absolute]:h-11"
 				data-testid="role-switcher-mode-selector"
-				scrollContainerClassName="no-scrollbar flex min-w-0 items-center gap-2 overflow-x-auto overflow-y-hidden"
+				scrollContainerClassName="no-scrollbar flex h-full min-w-0 items-end gap-2 overflow-x-auto overflow-y-hidden"
 				scrollContainerRef={scrollContainerRef}
 			>
 				{modeList.map((modeItem) => {
 					const isSelected = modeItem.mode.identifier === role
+					if (modeItem.mode.identifier === TopicMode.PPT) {
+						return (
+							<div
+								key={modeItem.mode.identifier}
+								ref={(element) => setItemRef(modeItem.mode.identifier, element)}
+								className="shrink-0"
+							>
+								<PptModeSwitcherCard
+									modeItem={modeItem}
+									isSelected={isSelected}
+									onSelect={() =>
+										onActionClick?.(modeItem.mode.identifier as TopicMode)
+									}
+								/>
+							</div>
+						)
+					}
 
 					return (
 						<div

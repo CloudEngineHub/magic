@@ -1,5 +1,5 @@
 import { Award, Check, Eye, Image as ImageIcon } from "lucide-react"
-import { useState, type KeyboardEvent, type MouseEvent } from "react"
+import { useEffect, useRef, useState, type KeyboardEvent, type MouseEvent } from "react"
 import { useTranslation } from "react-i18next"
 import { Button } from "@/components/shadcn-ui/button"
 import { cn } from "@/lib/utils"
@@ -23,6 +23,7 @@ interface SlidesTemplateCoverTileProps {
 	isSelected: boolean
 	onFindSimilarColors?: (template: OptionItem) => void
 	onPreviewClick: () => void
+	onPreviewIntent?: (template: OptionItem) => void
 	onSelect: (template: OptionItem) => void
 	template: OptionItem
 }
@@ -35,6 +36,7 @@ export default function SlidesTemplateCoverTile({
 	isSelected,
 	onFindSimilarColors,
 	onPreviewClick,
+	onPreviewIntent,
 	onSelect,
 	template,
 }: SlidesTemplateCoverTileProps) {
@@ -49,6 +51,7 @@ export default function SlidesTemplateCoverTile({
 	const coverUrl = imageUrl
 	const showGlowBorder = isSelected || isExpanded
 	const [hasRequestedInteractiveColors, setHasRequestedInteractiveColors] = useState(false)
+	const previewIntentTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 	const colors = useResolvedTemplateColors({
 		colors: template.colors,
 		enabled: showGlowBorder || hasRequestedInteractiveColors,
@@ -56,12 +59,31 @@ export default function SlidesTemplateCoverTile({
 		priority: "interactive",
 	})
 
+	useEffect(() => clearPreviewIntentTimer, [])
+
+	function handlePreviewIntentStart() {
+		setHasRequestedInteractiveColors(true)
+		if (!onPreviewIntent || previewIntentTimerRef.current) return
+
+		previewIntentTimerRef.current = setTimeout(() => {
+			previewIntentTimerRef.current = null
+			onPreviewIntent(template)
+		}, 300)
+	}
+
+	function clearPreviewIntentTimer() {
+		if (!previewIntentTimerRef.current) return
+		clearTimeout(previewIntentTimerRef.current)
+		previewIntentTimerRef.current = null
+	}
+
 	function handleSelect() {
 		onSelect(applyResolvedTemplateColors(template, colors))
 	}
 
 	function handlePreview() {
 		if (!canPreview) return
+		clearPreviewIntentTimer()
 		onPreviewClick()
 	}
 
@@ -75,6 +97,7 @@ export default function SlidesTemplateCoverTile({
 	function handlePreviewClick(event: MouseEvent<HTMLButtonElement>) {
 		event.preventDefault()
 		event.stopPropagation()
+		clearPreviewIntentTimer()
 		onPreviewClick()
 	}
 
@@ -95,8 +118,10 @@ export default function SlidesTemplateCoverTile({
 					isExpanded &&
 					"z-30 opacity-100 shadow-[0_18px_44px_rgba(0,0,0,0.38)] ring-1 ring-inset ring-white/[0.2] duration-200 ease-out",
 			)}
-			onPointerEnter={() => setHasRequestedInteractiveColors(true)}
-			onFocusCapture={() => setHasRequestedInteractiveColors(true)}
+			onPointerEnter={handlePreviewIntentStart}
+			onPointerLeave={clearPreviewIntentTimer}
+			onFocusCapture={handlePreviewIntentStart}
+			onBlurCapture={clearPreviewIntentTimer}
 			onClick={handlePreview}
 			onKeyDown={handleKeyDown}
 		>
@@ -154,18 +179,8 @@ export default function SlidesTemplateCoverTile({
 				</span>
 			) : null}
 
-			<div
-				className={cn(
-					"pointer-events-none absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-black/[0.68] via-black/[0.22] to-transparent opacity-0 transition-opacity duration-200 group-focus-within:opacity-100 group-hover:opacity-100",
-					isExpanded && "opacity-100",
-				)}
-			/>
-			<div
-				className={cn(
-					"absolute inset-x-0 bottom-0 flex min-w-0 translate-y-1.5 items-center justify-between gap-2 px-2.5 py-2 opacity-0 transition-all duration-200 ease-out group-focus-within:translate-y-0 group-focus-within:opacity-100 group-hover:translate-y-0 group-hover:opacity-100",
-					isExpanded && "translate-y-0 opacity-100",
-				)}
-			>
+			<div className="pointer-events-none absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-black/[0.68] via-black/[0.22] to-transparent opacity-0 transition-opacity duration-200 group-focus-within:opacity-100 group-hover:opacity-100" />
+			<div className="absolute inset-x-0 bottom-0 flex min-w-0 translate-y-1.5 items-center justify-between gap-2 px-2.5 py-2 opacity-0 transition-all duration-200 ease-out group-focus-within:translate-y-0 group-focus-within:opacity-100 group-hover:translate-y-0 group-hover:opacity-100">
 				<span className="min-w-0 truncate text-xs font-medium leading-5 text-white/95 drop-shadow">
 					{label}
 				</span>

@@ -27,7 +27,7 @@ import {
 } from "../../panels/utils"
 import { ScenePanelVariant } from "../../components/LazyScenePanel/types"
 import { useOptionalSceneStateStore } from "../../stores"
-import { ALL_SLIDES_TEMPLATE_GROUP_KEY, SLIDES_TEMPLATE_DISPLAY_COUNT } from "./slidesTemplateState"
+import { ALL_SLIDES_TEMPLATE_GROUP_KEY } from "./slidesTemplateState"
 import SlidesTemplateFloatingSelector from "./SlidesTemplateFloatingSelector"
 import SlidesTemplatePanelContent from "./SlidesTemplatePanelContent"
 import { useSlidesTemplatePanelState } from "./useSlidesTemplatePanelState"
@@ -99,6 +99,7 @@ function SlidesTemplatePanel({
 	const [internalSelectedTemplate, setInternalSelectedTemplate] = useState<OptionItem | null>(
 		null,
 	)
+	const templateDetailRequestSeqRef = useRef(0)
 	const isSelectionControlled = controlledSelectedTemplate !== undefined
 	const selectedTemplate = isSelectionControlled
 		? controlledSelectedTemplate
@@ -185,10 +186,26 @@ function SlidesTemplatePanel({
 
 	const handleTemplateClick = (template: OptionItem) => {
 		if (readOnly) return
+		const requestSeq = templateDetailRequestSeqRef.current + 1
+		templateDetailRequestSeqRef.current = requestSeq
 		const nextFieldItems = updateFieldValue(fieldItems, isComplexField, template.value)
 		if (!isSelectionControlled) setInternalSelectedTemplate(template)
 		applyFieldItems(nextFieldItems)
 		onTemplateSelect?.(template)
+
+		const code = typeof template.value === "string" ? template.value : ""
+		if (!code) return
+
+		// 选中后再补充详情资源，模板选择首屏始终只传输缩略图。
+		void Promise.resolve(slidesState.loadTemplateDetail(code))
+			.then((detail) => {
+				if (!detail || requestSeq !== templateDetailRequestSeqRef.current) return
+				if (!isSelectionControlled) setInternalSelectedTemplate(detail)
+				onTemplateSelect?.(detail)
+			})
+			.catch((error) => {
+				console.error("Failed to fetch slides template detail", error)
+			})
 	}
 
 	const handleHeaderFilterInteraction = (
@@ -199,7 +216,7 @@ function SlidesTemplatePanel({
 
 	const title = lt(config.title) || t("playbook.edit.presets.title")
 	const templateCountLabel = t("playbook.edit.presets.templateCount", {
-		count: SLIDES_TEMPLATE_DISPLAY_COUNT.toLocaleString(),
+		count: slidesState.total.toLocaleString(),
 	})
 	const complexField = findComplexField(fieldItems)
 

@@ -5,13 +5,15 @@ import {
 	SLIDES_TEMPLATE_CATEGORY_PAGE_SIZE,
 	SLIDES_TEMPLATE_IMAGE_PROCESS,
 	SLIDES_TEMPLATE_PAGE_SIZE,
-	SLIDES_TEMPLATE_TAG_PAGE_SIZE,
+	SYSTEM_SLIDES_TEMPLATE_TAG_GROUP_CODE,
 	getSlidesTemplateCategoryCodeFromGroupKey,
 	getSlidesTemplateTagCodeFromGroupKey,
 	groupSlidesTemplates,
 	toTemplateOption,
 	type SlidesTemplateCategoryItem,
+	type SlidesTemplateDetail,
 	type SlidesTemplateItem,
+	type SlidesTemplateTagGroupItem,
 	type SlidesTemplateTagItem,
 } from "./slidesTemplateState"
 
@@ -53,14 +55,16 @@ export function useSlidesTemplateCatalogState({
 }: UseSlidesTemplateCatalogStateOptions = {}) {
 	const [templates, setTemplates] = useState<SlidesTemplateItem[]>([])
 	const [categories, setCategories] = useState<SlidesTemplateCategoryItem[]>([])
-	const [tags, setTags] = useState<SlidesTemplateTagItem[]>([])
+	const [operationalTags, setOperationalTags] = useState<SlidesTemplateTagItem[]>([])
+	const [tagGroups, setTagGroups] = useState<SlidesTemplateTagGroupItem[]>([])
 	const [categoryLoadFailed, setCategoryLoadFailed] = useState(false)
-	const [tagLoadFailed, setTagLoadFailed] = useState(false)
-	const [selectedGroupKey, setSelectedGroupKey] = useState(ALL_SLIDES_TEMPLATE_GROUP_KEY)
+	const [selectedGroupKey, setSelectedPrimaryGroupKey] = useState(ALL_SLIDES_TEMPLATE_GROUP_KEY)
+	const [selectedChildTagCodes, setSelectedChildTagCodes] = useState<string[]>([])
 	const [keyword, setKeyword] = useState("")
 	const [debouncedKeyword, setDebouncedKeyword] = useState("")
 	const [page, setPage] = useState(1)
 	const [hasMore, setHasMore] = useState(false)
+	const [total, setTotal] = useState(0)
 	const [isLoading, setIsLoading] = useState(true)
 	const [isRefreshing, setIsRefreshing] = useState(false)
 	const [isLoadingMore, setIsLoadingMore] = useState(false)
@@ -72,12 +76,17 @@ export function useSlidesTemplateCatalogState({
 	const templatesRef = useRef<SlidesTemplateItem[]>([])
 	const hasLoadedTemplatesRef = useRef(false)
 	const appendRequestInFlightRef = useRef(false)
+	const totalRef = useRef(0)
 	const templateRequestKeyRef = useRef<string | null>(null)
 	const templateOptionCacheRef = useRef(
 		new Map<
 			string,
 			{ source: SlidesTemplateItem; option: ReturnType<typeof toTemplateOption> }
 		>(),
+	)
+	const templateDetailCacheRef = useRef(new Map<string, ReturnType<typeof toTemplateOption>>())
+	const templateDetailRequestCacheRef = useRef(
+		new Map<string, Promise<ReturnType<typeof toTemplateOption> | null>>(),
 	)
 
 	useEffect(() => {
@@ -120,60 +129,118 @@ export function useSlidesTemplateCatalogState({
 		}
 	}, [])
 
-	useEffect(() => {
-		let cancelled = false
-
-		SuperMagicApi.getSlidesTemplateTags({
-			page: 1,
-			page_size: SLIDES_TEMPLATE_TAG_PAGE_SIZE,
-			...(debouncedKeyword ? { keyword: debouncedKeyword } : {}),
-		})
-			.then((response) => {
-				if (cancelled) return
-				setTags(response.list ?? [])
-				setTagLoadFailed(false)
-			})
-			.catch((error) => {
-				if (cancelled) return
-				console.error("Failed to fetch slides template tags", error)
-				setTags([])
-				setTagLoadFailed(true)
-			})
-
-		return () => {
-			cancelled = true
-		}
-	}, [debouncedKeyword])
-
 	const categoryCodeSet = useMemo(
 		() => new Set(categories.map((category) => category.code)),
 		[categories],
 	)
-	const tagCodeSet = useMemo(() => new Set(tags.map((tag) => tag.code)), [tags])
 	const selectedCategoryGroupCode = getSlidesTemplateCategoryCodeFromGroupKey(selectedGroupKey)
 	const selectedCategoryCode =
 		selectedCategoryGroupCode && categoryCodeSet.has(selectedCategoryGroupCode)
 			? selectedCategoryGroupCode
 			: undefined
+
+	useEffect(() => {
+		let cancelled = false
+
+		// 顶部一级筛选项只读取系统内置的运营标签组。
+		SuperMagicApi.getSlidesTemplateTagGroups({})
+			.then((response) => {
+				if (cancelled) return
+				setOperationalTags(
+					response?.find((group) => group.code === SYSTEM_SLIDES_TEMPLATE_TAG_GROUP_CODE)
+						?.tags ?? [],
+				)
+			})
+			.catch((error) => {
+				if (cancelled) return
+				console.error("Failed to fetch operational slides template tags", error)
+				setOperationalTags([])
+			})
+
+		return () => {
+			cancelled = true
+		}
+	}, [])
+
+	useEffect(() => {
+		if (!selectedCategoryCode) {
+			setTagGroups([])
+			return
+		}
+
+		let cancelled = false
+
+		SuperMagicApi.getSlidesTemplateTagGroups({ category_code: selectedCategoryCode })
+			.then((response) => {
+				if (cancelled) return
+				setTagGroups(response ?? [])
+			})
+			.catch((error) => {
+				if (cancelled) return
+				console.error("Failed to fetch category slides template tags", error)
+				setTagGroups([])
+			})
+
+		return () => {
+			cancelled = true
+		}
+	}, [selectedCategoryCode])
+
+	const categoryTags = useMemo<SlidesTemplateTagItem[]>(
+		() => tagGroups.flatMap((group) => group.tags),
+		[tagGroups],
+	)
+	const categoryTagCodeSet = useMemo(
+		() => new Set(categoryTags.map((tag) => tag.code)),
+		[categoryTags],
+	)
+	const operationalTagCodeSet = useMemo(
+		() => new Set(operationalTags.map((tag) => tag.code)),
+		[operationalTags],
+	)
 	const selectedTagGroupCode = getSlidesTemplateTagCodeFromGroupKey(selectedGroupKey)
-	const selectedTagCode =
-		selectedTagGroupCode && tagCodeSet.has(selectedTagGroupCode)
+	const selectedOperationalTagCode =
+		selectedTagGroupCode && operationalTagCodeSet.has(selectedTagGroupCode)
 			? selectedTagGroupCode
 			: undefined
+	const selectedTagCodes = useMemo(
+		() =>
+			selectedCategoryCode
+				? selectedChildTagCodes
+				: selectedOperationalTagCode
+					? [selectedOperationalTagCode]
+					: [],
+		[selectedCategoryCode, selectedChildTagCodes, selectedOperationalTagCode],
+	)
+
+	useEffect(() => {
+		setSelectedChildTagCodes((currentTagCodes) => {
+			const validTagCodes = currentTagCodes.filter((tagCode) =>
+				categoryTagCodeSet.has(tagCode),
+			)
+			return validTagCodes.length === currentTagCodes.length ? currentTagCodes : validTagCodes
+		})
+	}, [categoryTagCodeSet])
+
+	const setSelectedGroupKey = useCallback((groupKey: string) => {
+		setSelectedPrimaryGroupKey(groupKey)
+		setSelectedChildTagCodes([])
+		setTagGroups([])
+	}, [])
 
 	const fetchTemplates = useCallback(
 		async (nextPage: number, mode: "replace" | "append") => {
 			if (mode === "append" && appendRequestInFlightRef.current) return
 
 			const isAllTemplatesQuery =
-				!debouncedKeyword && !selectedCategoryCode && !selectedTagCode
+				!debouncedKeyword && !selectedCategoryCode && selectedTagCodes.length === 0
 			const requestKey = JSON.stringify([
 				mode,
 				nextPage,
 				pageSize,
 				debouncedKeyword,
 				selectedCategoryCode ?? "",
-				selectedTagCode ?? "",
+				selectedTagCodes,
 			])
 			// StrictMode 会重新执行首屏 effect。相同查询仍在进行时复用它，避免重复请求。
 			if (templateRequestKeyRef.current === requestKey) return
@@ -195,25 +262,39 @@ export function useSlidesTemplateCatalogState({
 				setIsLoadMoreFailed(false)
 			}
 
+			const queryParams = {
+				page: nextPage,
+				page_size: pageSize,
+				...(debouncedKeyword ? { keyword: debouncedKeyword } : {}),
+				...(selectedCategoryCode ? { category_code: selectedCategoryCode } : {}),
+				...(selectedTagCodes.length > 0
+					? {
+							tag_codes: selectedTagCodes,
+							tag_match: selectedCategoryCode ? ("all" as const) : ("any" as const),
+						}
+					: {}),
+			}
+
 			try {
-				const response = await SuperMagicApi.getSlidesTemplates(
-					{
-						page: nextPage,
-						page_size: pageSize,
-						...(debouncedKeyword ? { keyword: debouncedKeyword } : {}),
-						...(selectedCategoryCode ? { category_code: selectedCategoryCode } : {}),
-						...(selectedTagCode
-							? { tag_codes: [selectedTagCode], tag_match: "any" as const }
-							: {}),
-					},
-					{
-						xMagicImageProcess: SLIDES_TEMPLATE_IMAGE_PROCESS,
-					},
-				)
+				const templatesRequest = SuperMagicApi.getSlidesTemplates(queryParams, {
+					xMagicImageProcess: SLIDES_TEMPLATE_IMAGE_PROCESS,
+				})
+				const countRequest =
+					mode === "replace" ? SuperMagicApi.getSlidesTemplateCount(queryParams) : null
+				const [response, countResponse] = await Promise.all([
+					templatesRequest,
+					countRequest,
+				])
 				if (!mountedRef.current || requestSeq !== requestSeqRef.current) return
 
 				const nextTemplates = response.list ?? []
-				const nextTotal = response.total ?? nextTemplates.length
+				// 仅用于灰度期间保留旧响应的分页行为；正式接口不再返回 total。
+				const legacyTotal = (response as { total?: number }).total
+				const nextTotal = countResponse?.total ?? legacyTotal ?? totalRef.current
+				if (mode === "replace") {
+					totalRef.current = nextTotal
+					setTotal(nextTotal)
+				}
 				const currentTemplates = templatesRef.current
 				const appendedTemplateCount =
 					mode === "append"
@@ -257,31 +338,56 @@ export function useSlidesTemplateCatalogState({
 				}
 			}
 		},
-		[debouncedKeyword, pageSize, selectedCategoryCode, selectedTagCode],
+		[debouncedKeyword, pageSize, selectedCategoryCode, selectedTagCodes],
 	)
 
 	useEffect(() => {
 		fetchTemplates(1, "replace")
 	}, [fetchTemplates])
 
+	const loadTemplateDetail = useCallback((code: string) => {
+		const cachedDetail = templateDetailCacheRef.current.get(code)
+		if (cachedDetail) return Promise.resolve(cachedDetail)
+
+		const pendingRequest = templateDetailRequestCacheRef.current.get(code)
+		if (pendingRequest) return pendingRequest
+
+		const request = Promise.resolve(SuperMagicApi.getSlidesTemplateDetail(code))
+			.then((detail) => {
+				if (!detail) return null
+
+				const nextDetail: SlidesTemplateDetail = detail
+				const detailOption = toTemplateOption(nextDetail)
+				templateDetailCacheRef.current.set(code, detailOption)
+				return detailOption
+			})
+			.finally(() => {
+				templateDetailRequestCacheRef.current.delete(code)
+			})
+
+		templateDetailRequestCacheRef.current.set(code, request)
+		return request
+	}, [])
+
 	const groups = useMemo(() => {
-		const availableCategories = categoryLoadFailed ? undefined : categories
-		const availableTags = tagLoadFailed ? undefined : tags
-		return availableCategories || availableTags
-			? groupSlidesTemplates(templates, availableCategories ?? [], availableTags ?? [])
-			: groupSlidesTemplates(templates)
-	}, [categories, categoryLoadFailed, tagLoadFailed, tags, templates])
+		return groupSlidesTemplates(
+			templates,
+			categoryLoadFailed ? [] : categories,
+			operationalTags,
+		)
+	}, [categories, categoryLoadFailed, operationalTags, templates])
 
 	useEffect(() => {
 		if (groups.some((group) => group.group_key === selectedGroupKey)) return
-		setSelectedGroupKey(ALL_SLIDES_TEMPLATE_GROUP_KEY)
+		setSelectedPrimaryGroupKey(ALL_SLIDES_TEMPLATE_GROUP_KEY)
+		setSelectedChildTagCodes([])
 	}, [groups, selectedGroupKey])
 
 	const selectedGroup = groups.find((group) => group.group_key === selectedGroupKey)
 	const isServerBackedGroup =
 		selectedGroupKey === ALL_SLIDES_TEMPLATE_GROUP_KEY ||
 		Boolean(selectedCategoryCode) ||
-		Boolean(selectedTagCode)
+		selectedTagCodes.length > 0
 	const serverBackedTemplateOptions = useMemo(() => {
 		const cache = templateOptionCacheRef.current
 		const activeCodes = new Set<string>()
@@ -345,9 +451,15 @@ export function useSlidesTemplateCatalogState({
 		loadMore,
 		retryLoadMore,
 		loadedTemplateCount: templates.length,
+		total,
+		loadTemplateDetail,
+		tagGroups,
+		selectedCategoryCode,
+		selectedChildTagCodes,
 		selectedGroupKey,
 		setKeyword,
 		setSelectedGroupKey,
+		setSelectedChildTagCodes,
 		templateOptions,
 	}
 }

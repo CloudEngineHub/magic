@@ -194,6 +194,8 @@ export const RequestUrl = {
 	deleteSlidesTemplateCategory: "/api/v1/admin/slides-template-categories/${id}",
 	/** 查询PPT模板标签列表 */
 	querySlidesTemplateTags: "/api/v1/admin/slides-template-tags/queries",
+	/** 获取PPT模板标签树 */
+	getSlidesTemplateTagTree: "/api/v1/admin/slides-template-tags/tree",
 	/** 获取PPT模板标签详情 */
 	getSlidesTemplateTag: "/api/v1/admin/slides-template-tags/${id}",
 	/** 创建PPT模板标签 */

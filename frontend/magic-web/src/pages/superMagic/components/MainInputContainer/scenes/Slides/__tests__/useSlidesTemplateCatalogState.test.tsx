@@ -15,7 +15,9 @@ import { useSlidesTemplateCatalogState } from "../useSlidesTemplateCatalogState"
 
 const apiMock = vi.hoisted(() => ({
 	getSlidesTemplateCategories: vi.fn(),
-	getSlidesTemplateTags: vi.fn(),
+	getSlidesTemplateTagGroups: vi.fn(),
+	getSlidesTemplateCount: vi.fn(),
+	getSlidesTemplateDetail: vi.fn(),
 	getSlidesTemplates: vi.fn(),
 }))
 
@@ -49,6 +51,16 @@ const featuredTag: SlidesTemplateTagItem = {
 	sort: 100,
 	template_count: 1,
 	is_official: true,
+}
+
+const businessStyleTag: SlidesTemplateTagItem = {
+	...featuredTag,
+	id: "tag-2",
+	code: "style-business",
+	name_i18n: {
+		zh_CN: "商务",
+		en_US: "Business",
+	},
 }
 
 const businessTemplate: SlidesTemplateItem = {
@@ -91,6 +103,7 @@ function StrictModeWrapper({ children }: { children: ReactNode }) {
 
 describe("useSlidesTemplateCatalogState", () => {
 	it("supports a larger page size for the full-screen canvas", async () => {
+		vi.mocked(SuperMagicApi.getSlidesTemplateCount).mockResolvedValue({ total: 68 })
 		vi.mocked(SuperMagicApi.getSlidesTemplates).mockResolvedValue({
 			list: [],
 			page: 1,
@@ -106,6 +119,71 @@ describe("useSlidesTemplateCatalogState", () => {
 				expect.anything(),
 			)
 		})
+		await waitFor(() => expect(SuperMagicApi.getSlidesTemplateCount).toHaveBeenCalled())
+	})
+
+	it("reads the total from the dedicated count endpoint", async () => {
+		vi.mocked(SuperMagicApi.getSlidesTemplateCount).mockResolvedValue({ total: 68 })
+
+		const { result } = renderHook(() => useSlidesTemplateCatalogState())
+
+		await waitFor(() => expect(result.current.total).toBe(68))
+		expect(SuperMagicApi.getSlidesTemplateCount).toHaveBeenCalledWith({
+			page: 1,
+			page_size: SLIDES_TEMPLATE_PAGE_SIZE,
+		})
+	})
+
+	it("loads preview resources only when a template is selected", async () => {
+		vi.mocked(SuperMagicApi.getSlidesTemplateDetail).mockResolvedValue({
+			...businessTemplate,
+			colors: ["#112233"],
+			collage_url: "https://example.com/collage.png",
+			preview_image_urls: ["https://example.com/preview.png"],
+			preview_url: null,
+		})
+
+		const { result } = renderHook(() => useSlidesTemplateCatalogState())
+
+		await waitFor(() => expect(result.current.isLoading).toBe(false))
+		const listTemplateBeforeDetail = result.current.templateOptions[0]
+		let detail: Awaited<ReturnType<typeof result.current.loadTemplateDetail>>
+		await act(async () => {
+			detail = await result.current.loadTemplateDetail(businessTemplate.code)
+		})
+
+		expect(SuperMagicApi.getSlidesTemplateDetail).toHaveBeenCalledWith(businessTemplate.code)
+		expect(detail?.preview_image_urls?.[0]).toContain("https://example.com/preview.png")
+		expect(result.current.templateOptions[0]).toBe(listTemplateBeforeDetail)
+	})
+
+	it("reuses in-flight and completed template detail requests", async () => {
+		vi.mocked(SuperMagicApi.getSlidesTemplateDetail).mockResolvedValue({
+			...businessTemplate,
+			colors: ["#112233"],
+			collage_url: "https://example.com/collage.png",
+			preview_image_urls: ["https://example.com/preview.png"],
+			preview_url: "https://example.com/preview",
+		})
+
+		const { result } = renderHook(() => useSlidesTemplateCatalogState())
+		await waitFor(() => expect(result.current.isLoading).toBe(false))
+
+		let details: Awaited<ReturnType<typeof result.current.loadTemplateDetail>>[]
+		await act(async () => {
+			details = await Promise.all([
+				result.current.loadTemplateDetail(businessTemplate.code),
+				result.current.loadTemplateDetail(businessTemplate.code),
+			])
+		})
+
+		expect(SuperMagicApi.getSlidesTemplateDetail).toHaveBeenCalledTimes(1)
+		expect(details[0]).toBe(details[1])
+
+		await act(async () => {
+			await result.current.loadTemplateDetail(businessTemplate.code)
+		})
+		expect(SuperMagicApi.getSlidesTemplateDetail).toHaveBeenCalledTimes(1)
 	})
 
 	beforeEach(() => {
@@ -116,12 +194,15 @@ describe("useSlidesTemplateCatalogState", () => {
 			total: 1,
 			list: [businessCategory],
 		})
-		vi.mocked(SuperMagicApi.getSlidesTemplateTags).mockResolvedValue({
-			page: 1,
-			page_size: 200,
-			total: 1,
-			list: [featuredTag],
-		})
+		vi.mocked(SuperMagicApi.getSlidesTemplateTagGroups).mockResolvedValue([
+			{
+				id: "featured-group",
+				code: "featured_group",
+				name_i18n: { zh_CN: "精选", en_US: "Featured" },
+				sort: 100,
+				tags: [featuredTag, businessStyleTag],
+			},
+		])
 		vi.mocked(SuperMagicApi.getSlidesTemplates).mockResolvedValue({
 			page: 1,
 			page_size: SLIDES_TEMPLATE_PAGE_SIZE,
@@ -159,10 +240,7 @@ describe("useSlidesTemplateCatalogState", () => {
 			},
 			slidesTemplateImageOptions,
 		)
-		expect(SuperMagicApi.getSlidesTemplateTags).toHaveBeenCalledWith({
-			page: 1,
-			page_size: 200,
-		})
+		expect(SuperMagicApi.getSlidesTemplateTagGroups).toHaveBeenCalledWith({})
 		expect(result.current.templateOptions.map((template) => template.value)).toEqual([
 			businessTemplate.code,
 		])
@@ -307,6 +385,11 @@ describe("useSlidesTemplateCatalogState", () => {
 			},
 			slidesTemplateImageOptions,
 		)
+		await waitFor(() =>
+			expect(SuperMagicApi.getSlidesTemplateTagGroups).toHaveBeenLastCalledWith({
+				category_code: businessCategory.code,
+			}),
+		)
 
 		act(() => {
 			result.current.setKeyword(" business ")
@@ -329,6 +412,24 @@ describe("useSlidesTemplateCatalogState", () => {
 			expect(result.current.templateOptions.map((template) => template.value)).toEqual([
 				businessTemplate.code,
 			]),
+		)
+
+		act(() => {
+			result.current.setSelectedChildTagCodes([featuredTag.code, businessStyleTag.code])
+		})
+
+		await waitFor(() =>
+			expect(SuperMagicApi.getSlidesTemplates).toHaveBeenLastCalledWith(
+				{
+					page: 1,
+					page_size: SLIDES_TEMPLATE_PAGE_SIZE,
+					category_code: businessCategory.code,
+					keyword: "business",
+					tag_codes: [featuredTag.code, businessStyleTag.code],
+					tag_match: "all",
+				},
+				slidesTemplateImageOptions,
+			),
 		)
 	})
 

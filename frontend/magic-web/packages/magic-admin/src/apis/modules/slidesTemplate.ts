@@ -97,6 +97,10 @@ export const generateSlidesTemplateApi = (client: HttpClient) => ({
 	},
 
 	tag: {
+		tree() {
+			return client.get<SlidesTemplate.TagItem[]>(RequestUrl.getSlidesTemplateTagTree)
+		},
+
 		query(params: SlidesTemplate.TagQueryParams) {
 			return client.post<WithPage<SlidesTemplate.TagItem>>(
 				RequestUrl.querySlidesTemplateTags,

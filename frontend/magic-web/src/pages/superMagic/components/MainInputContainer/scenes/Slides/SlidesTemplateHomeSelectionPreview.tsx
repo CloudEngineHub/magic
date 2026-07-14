@@ -163,7 +163,7 @@ export default function SlidesTemplateHomeSelectionPreview({
 			data-testid="slides-template-home-selected-template"
 		>
 			{selectionContent}
-			<div className="order-last w-full min-w-0 border-t border-black/[0.06] pt-2 md:order-none md:mr-auto md:w-auto md:border-t-0 md:pt-0">
+			<div className="order-last w-full min-w-0 border-t border-black/[0.06] pt-2 md:order-none md:ml-auto md:w-auto md:border-t-0 md:pt-0">
 				<FilterBar
 					filters={simpleFilters}
 					onFilterChange={onFilterChange}
