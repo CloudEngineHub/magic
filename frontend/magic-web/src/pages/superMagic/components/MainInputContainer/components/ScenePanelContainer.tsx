@@ -23,6 +23,11 @@ interface ScenePanelContainerProps {
 	loading?: boolean
 	readOnly?: boolean
 	compact?: boolean
+	selectedTemplate?: OptionItem | null
+	onSlidesFilterChangeRequestChange?: (
+		handler: ((filterId: string, value: string) => void) | null,
+	) => void
+	slidesTemplatePickerContainer?: HTMLDivElement | null
 	onTemplateSelect?: (template: OptionItem | null) => void
 	onFilterChange?: (filters: FieldItem[]) => void
 	onGuideItemClick?: (item: GuideItem) => void
@@ -33,6 +38,9 @@ function ScenePanelContainer({
 	loading = false,
 	readOnly = false,
 	compact = false,
+	selectedTemplate,
+	onSlidesFilterChangeRequestChange,
+	slidesTemplatePickerContainer,
 	onTemplateSelect,
 	onFilterChange,
 	onGuideItemClick,
@@ -116,7 +124,7 @@ function ScenePanelContainer({
 				className={
 					compact
 						? "flex min-w-0 flex-1 items-center gap-2 overflow-hidden"
-						: "flex flex-col gap-4"
+						: "flex flex-col gap-4 empty:hidden"
 				}
 			>
 				{fieldPanels?.map(({ config, panelKey }) => {
@@ -128,6 +136,10 @@ function ScenePanelContainer({
 							>
 								<SlidesTemplatePanel
 									config={config}
+									selectedTemplate={selectedTemplate}
+									onFilterChangeRequestChange={onSlidesFilterChangeRequestChange}
+									hideTemplateSelector={variant === ScenePanelVariant.TopicPage}
+									templatePickerContainer={slidesTemplatePickerContainer}
 									onTemplateSelect={onTemplateSelect}
 									onFilterChange={onFilterChange}
 									onPresetContentChange={createPresetContentChangeHandler(
@@ -174,6 +186,14 @@ function ScenePanelContainer({
 								>
 									<SlidesTemplatePanel
 										config={config}
+										selectedTemplate={selectedTemplate}
+										onFilterChangeRequestChange={
+											onSlidesFilterChangeRequestChange
+										}
+										hideTemplateSelector={
+											variant === ScenePanelVariant.TopicPage
+										}
+										templatePickerContainer={slidesTemplatePickerContainer}
 										onTemplateSelect={onTemplateSelect}
 										onFilterChange={onFilterChange}
 										onPresetContentChange={createPresetContentChangeHandler(

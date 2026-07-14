@@ -30,6 +30,7 @@ interface FilterBarProps {
 	onFilterChange?: (filterId: string, value: string) => void
 	variant?: ScenePanelVariant
 	scrollContainerClassName?: string
+	itemGapClassName?: string
 	compact?: boolean
 	prefix?: ReactNode
 }
@@ -39,6 +40,7 @@ function FilterBar({
 	onFilterChange,
 	variant,
 	scrollContainerClassName,
+	itemGapClassName,
 	compact = false,
 	prefix,
 }: FilterBarProps) {
@@ -115,6 +117,7 @@ function FilterBar({
 					className={cn(
 						"flex shrink-0 items-center",
 						isCompactMobile ? "gap-2" : "gap-4",
+						itemGapClassName,
 					)}
 				>
 					{prefix}

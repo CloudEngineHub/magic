@@ -26,6 +26,10 @@ import { pptxExternalLogger, reportPptxExportError } from "@/pages/superMagic/ut
 import { createPptxResourceErrorCollector } from "@/pages/superMagic/utils/pptxResourceErrors"
 import { createRandomUuidV4 } from "@/utils/create-random-uuid-v4"
 import {
+	createPptxSlideConfig,
+	resolvePptScaleContentDimensions,
+} from "../../contents/HTML/utils/slide-dimensions"
+import {
 	documentExportService,
 	type DocumentExport,
 } from "@/pages/superMagic/services/documentExport"
@@ -409,6 +413,9 @@ function EditToolbar({
 		}
 
 		const htmlSlides = targetSlides.map((slide) => slide.content ?? "")
+		const pptxConfig = createPptxSlideConfig(
+			resolvePptScaleContentDimensions(targetSlides[0]?.content, targetSlides[0]?.rawContent),
+		)
 		const toastId = createRandomUuidV4()
 		let exportHandle: ReturnType<typeof exportPPTX> | null = null
 		const resourceErrors = createPptxResourceErrorCollector(t)
@@ -435,6 +442,7 @@ function EditToolbar({
 		exportHandle = exportPPTX(htmlSlides, {
 			fileName: defaultName,
 			skipFailedPages: true,
+			config: pptxConfig,
 			fontResolver: pptFontResolver,
 			logger: pptxExternalLogger,
 			logLevel: "warn",

@@ -6,7 +6,7 @@ import {
 	useRef,
 	useState,
 } from "react"
-import { Award, Eye, Image as ImageIcon } from "lucide-react"
+import { Award, Check, Eye, Image as ImageIcon, MousePointerClick } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/shadcn-ui/hover-card"
 import { Button } from "@/components/shadcn-ui/button"
@@ -33,7 +33,7 @@ interface SlidesPresetCardProps {
 
 const PREVIEW_PRELOAD_DELAY_MS = 1000
 
-function FeaturedTagBadge({ label, testId }: { label: string; testId: string }) {
+function FeaturedTagIcon({ label, testId }: { label: string; testId: string }) {
 	return (
 		<span
 			role="img"
@@ -43,6 +43,18 @@ function FeaturedTagBadge({ label, testId }: { label: string; testId: string }) 
 			data-testid={testId}
 		>
 			<Award className="size-3" aria-hidden="true" />
+		</span>
+	)
+}
+
+function FeaturedTagBadge({ label, testId }: { label: string; testId: string }) {
+	return (
+		<span
+			title={label}
+			className="inline-flex shrink-0 items-center rounded-full border border-amber-500/60 bg-amber-100/70 px-1.5 py-0.5 text-[11px] font-medium leading-none text-amber-800"
+			data-testid={testId}
+		>
+			{label}
 		</span>
 	)
 }
@@ -94,6 +106,12 @@ function SlidesPresetCard({
 		if (event.key !== "Enter" && event.key !== " ") return
 
 		event.preventDefault()
+		handleClick()
+	}
+
+	function handleUseClick(event: MouseEvent<HTMLButtonElement>) {
+		event.preventDefault()
+		event.stopPropagation()
 		handleClick()
 	}
 
@@ -197,12 +215,13 @@ function SlidesPresetCard({
 						/>
 						<span
 							className={cn(
-								"pointer-events-none absolute bottom-2 right-2 z-30 text-xs font-medium leading-none text-white drop-shadow-[0_2px_6px_rgba(0,0,0,0.72)] transition-opacity duration-200",
+								"pointer-events-none absolute bottom-2 right-2 z-30 inline-flex items-center gap-1 text-xs font-medium leading-none text-white drop-shadow-[0_2px_6px_rgba(0,0,0,0.72)] transition-opacity duration-200",
 								shouldShowHoverDetails && "group-hover:opacity-0",
 							)}
 							data-testid="slides-preset-card-usage-count"
 							data-usage-count={usageCount}
 						>
+							<MousePointerClick className="size-3 shrink-0" aria-hidden="true" />
 							{t("playbook.edit.presets.form.usageCount", { count: usageCount })}
 						</span>
 					</>
@@ -211,25 +230,48 @@ function SlidesPresetCard({
 					className={cn(
 						"absolute inset-0 z-20 flex items-center justify-center gap-2.5 bg-black/0 opacity-0 transition-all duration-200 group-focus-within:bg-black/30 group-focus-within:opacity-100",
 						canUseHoverPreview && "group-hover:bg-black/30 group-hover:opacity-100",
+						isSelected && "bg-black/30 opacity-100",
 					)}
 				>
-					{canPreview && (
+					<div
+						className={cn(
+							"flex translate-y-2 items-center gap-2.5 opacity-0 transition-all duration-300 group-focus-within:translate-y-0 group-focus-within:opacity-100",
+							canUseHoverPreview &&
+								"group-hover:translate-y-0 group-hover:opacity-100",
+							isSelected && "translate-y-0 opacity-100",
+						)}
+						data-testid="slides-preset-card-action-group"
+					>
 						<Button
 							type="button"
 							size="sm"
-							variant="secondary"
-							data-testid="slides-preset-card-preview-button"
-							className={cn(
-								"hidden h-7 translate-y-2 gap-1 rounded-full bg-background/95 px-2 text-xs font-medium opacity-0 shadow-lg transition-all duration-300 group-focus-within:inline-flex group-focus-within:translate-y-0 group-focus-within:opacity-100",
-								canUseHoverPreview &&
-									"hover:scale-105 group-hover:inline-flex group-hover:translate-y-0 group-hover:opacity-100",
-							)}
-							onClick={handlePreviewClick}
+							variant="default"
+							data-testid="slides-preset-card-use-button"
+							aria-pressed={isSelected}
+							className="h-7 gap-1 rounded-full px-2 text-xs font-medium shadow-lg transition-transform duration-200 hover:scale-105"
+							onClick={handleUseClick}
 						>
-							<Eye className="size-3.5" />
-							{t("playbook.edit.presets.form.preview")}
+							<Check className="size-3.5" />
+							{t(
+								isSelected
+									? "playbook.edit.presets.form.selected"
+									: "playbook.edit.presets.form.select",
+							)}
 						</Button>
-					)}
+						{canPreview && (
+							<Button
+								type="button"
+								size="sm"
+								variant="secondary"
+								data-testid="slides-preset-card-preview-button"
+								className="inline-flex h-7 gap-1 rounded-full bg-background/95 px-2 text-xs font-medium shadow-lg transition-transform duration-200 hover:scale-105"
+								onClick={handlePreviewClick}
+							>
+								<Eye className="size-3.5" />
+								{t("playbook.edit.presets.form.preview")}
+							</Button>
+						)}
+					</div>
 				</div>
 			</div>
 			<div
@@ -239,7 +281,7 @@ function SlidesPresetCard({
 				)}
 			>
 				{featuredTag ? (
-					<FeaturedTagBadge
+					<FeaturedTagIcon
 						label={featuredLabel}
 						testId="slides-preset-card-featured-badge"
 					/>
@@ -290,26 +332,32 @@ function SlidesPresetCard({
 							</div>
 						)}
 						<div className="flex flex-col gap-1.5 px-4 py-3.5">
-							<div className="flex items-start justify-between gap-3">
-								{featuredTag ? (
-									<FeaturedTagBadge
-										label={featuredLabel}
-										testId="slides-preset-hover-featured-badge"
-									/>
-								) : null}
-								<h3 className="line-clamp-1 flex-1 text-sm font-semibold text-foreground/90">
-									{label}
-								</h3>
-								{subText && (
-									<span className="shrink-0 rounded-md bg-secondary/60 px-1.5 py-0.5 text-[10px] font-medium leading-none text-secondary-foreground/80">
-										{subText}
-									</span>
-								)}
+							<div className="flex items-center justify-between gap-3">
+								<div className="flex min-w-0 flex-1 items-center gap-2">
+									<h3 className="min-w-0 truncate text-sm font-semibold text-foreground/90">
+										{label}
+									</h3>
+									{featuredTag ? (
+										<FeaturedTagBadge
+											label={featuredLabel}
+											testId="slides-preset-hover-featured-badge"
+										/>
+									) : null}
+									{subText && (
+										<span className="shrink-0 rounded-md bg-secondary/60 px-1.5 py-0.5 text-[10px] font-medium leading-none text-secondary-foreground/80">
+											{subText}
+										</span>
+									)}
+								</div>
 								{showUsageCount && (
 									<span
-										className="shrink-0 text-xs font-medium leading-none text-muted-foreground"
+										className="inline-flex shrink-0 items-center gap-1 text-xs font-medium leading-none text-muted-foreground"
 										data-testid="slides-preset-hover-usage-count"
 									>
+										<MousePointerClick
+											className="size-3 shrink-0"
+											aria-hidden="true"
+										/>
 										{t("playbook.edit.presets.form.usageCount", {
 											count: usageCount,
 										})}

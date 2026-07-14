@@ -4,10 +4,12 @@ import {
 	fallbackImageBase64,
 	getFullContent,
 } from "../../../contents/HTML/utils/full-content"
+import {
+	resolvePptScaleContentDimensions,
+	type CanonicalContentDimensions,
+} from "../../../contents/HTML/utils/slide-dimensions"
 import { stabilizeSingleLineTextForSnapdom } from "./snapdomTextStabilizer"
 
-const SLIDE_WIDTH = 1920
-const SLIDE_HEIGHT = 1080
 const THUMBNAIL_SCALE = 4
 
 /**
@@ -40,6 +42,13 @@ export class SlideScreenshotService {
 		return hash.toString(36)
 	}
 
+	private getContentHash(content: string, dimensions?: CanonicalContentDimensions): string {
+		const resolvedDimensions = dimensions ?? resolvePptScaleContentDimensions(content)
+		return this.hashContent(
+			`${content}:${resolvedDimensions.width}x${resolvedDimensions.height}`,
+		)
+	}
+
 	/**
 	 * Generate screenshot for HTML content with caching
 	 * @param url - Slide URL (used as cache key)
@@ -51,7 +60,8 @@ export class SlideScreenshotService {
 			throw new Error("Content is required")
 		}
 
-		const contentHash = this.hashContent(content)
+		const dimensions = resolvePptScaleContentDimensions(content)
+		const contentHash = this.getContentHash(content, dimensions)
 
 		// Check cache first
 		const cached = this.cache.get(url)
@@ -69,7 +79,7 @@ export class SlideScreenshotService {
 		this.generatingUrls.add(url)
 
 		try {
-			const thumbnailUrl = await this.doGenerateScreenshot(content)
+			const thumbnailUrl = await this.doGenerateScreenshot(content, dimensions)
 
 			// Cache the result
 			this.cache.set(url, {
@@ -111,15 +121,18 @@ export class SlideScreenshotService {
 	/**
 	 * Perform actual screenshot generation
 	 */
-	private async doGenerateScreenshot(content: string): Promise<string> {
+	private async doGenerateScreenshot(
+		content: string,
+		{ width, height }: CanonicalContentDimensions,
+	): Promise<string> {
 		// 创建临时容器用于渲染
 		const container = document.createElement("div")
 		container.style.cssText = `
 			position: fixed;
 			top: -9999px;
 			left: -9999px;
-			width: ${SLIDE_WIDTH}px;
-			height: ${SLIDE_HEIGHT}px;
+				width: ${width}px;
+				height: ${height}px;
 			visibility: hidden;
 			pointer-events: none;
 			z-index: -1;
@@ -156,16 +169,16 @@ export class SlideScreenshotService {
 			let thumbnailUrl: { src: string } | null = null
 			try {
 				const result = await snapdom(screenshotTarget, {
-					width: SLIDE_WIDTH,
-					height: SLIDE_HEIGHT,
+					width,
+					height,
 					backgroundColor: "#ffffff",
 					embedFonts: true,
 					fallbackURL: fallbackImageBase64,
 				})
 
 				thumbnailUrl = await result.toWebp({
-					width: SLIDE_WIDTH / THUMBNAIL_SCALE,
-					height: SLIDE_HEIGHT / THUMBNAIL_SCALE,
+					width: width / THUMBNAIL_SCALE,
+					height: height / THUMBNAIL_SCALE,
 					quality: 0.8,
 				})
 			} finally {
@@ -682,7 +695,7 @@ export class SlideScreenshotService {
 
 		// If content is provided, verify it matches
 		if (content) {
-			const contentHash = this.hashContent(content)
+			const contentHash = this.getContentHash(content)
 			return cached.contentHash === contentHash
 		}
 

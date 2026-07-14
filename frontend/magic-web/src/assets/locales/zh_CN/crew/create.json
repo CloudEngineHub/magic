@@ -620,6 +620,7 @@
 				"form": {
 					"actions": "操作",
 					"addOption": "添加选项",
+					"autoSelectTemplate": "AI 自动选择模板",
 					"cancel": "取消",
 					"clearSimilarColors": "清除相似配色筛选",
 					"colorPalette": "模板配色",
@@ -704,6 +705,7 @@
 					}
 				},
 				"selected": "已选：",
+				"templateCount": "{{count}} 套",
 				"title": "预设",
 				"unselected": "未选择",
 				"updatedAt": "更新于 {{date}}"

@@ -1,11 +1,14 @@
+import { useMemo, useState } from "react"
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import type { JSONContent } from "@tiptap/core"
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest"
 import { SuperMagicApi } from "@/apis"
 import { getPromptRichTextPlainText } from "../../../panels/promptRichText"
+import type { OptionItem } from "../../../panels/types"
 import { ScenePanelVariant } from "../../../components/LazyScenePanel/types"
 import SlidesTemplatePanel from "../SlidesTemplatePanel"
 import SlidesTemplatePanelContent from "../SlidesTemplatePanelContent"
+import SlidesTemplateHomeSelectionPreview from "../SlidesTemplateHomeSelectionPreview"
 import {
 	createSlidesTemplateCategoryGroupKey,
 	createSlidesPresetPanelConfig,
@@ -20,13 +23,19 @@ const apiMock = vi.hoisted(() => ({
 	getSlidesTemplates: vi.fn(),
 }))
 
+const sceneStateStoreMock = vi.hoisted(() => ({
+	inputScopeKey: "",
+	sendCount: 0,
+}))
+
 vi.mock("@/apis", () => ({
 	SuperMagicApi: apiMock,
 }))
 
 vi.mock("react-i18next", () => ({
 	useTranslation: () => ({
-		t: (key: string) => key,
+		t: (key: string, options?: { count?: string }) =>
+			key === "playbook.edit.presets.templateCount" ? `${options?.count} 套` : key,
 		i18n: { language: "en_US" },
 	}),
 }))
@@ -41,7 +50,7 @@ vi.mock("i18next", () => ({
 }))
 
 vi.mock("../../../stores", () => ({
-	useOptionalSceneStateStore: () => null,
+	useOptionalSceneStateStore: () => sceneStateStoreMock,
 }))
 
 const businessCategory: SlidesTemplateCategoryItem = {
@@ -110,6 +119,8 @@ describe("SlidesTemplatePanel", () => {
 
 	beforeEach(() => {
 		vi.clearAllMocks()
+		sceneStateStoreMock.inputScopeKey = ""
+		sceneStateStoreMock.sendCount = 0
 		vi.mocked(SuperMagicApi.getSlidesTemplateCategories).mockResolvedValue({
 			page: 1,
 			page_size: 200,
@@ -183,6 +194,182 @@ describe("SlidesTemplatePanel", () => {
 		})
 	})
 
+	it("shows the template count instead of the selected template name", async () => {
+		render(<SlidesTemplatePanel config={createSlidesPresetPanelConfig([])} />)
+
+		const count = await screen.findByTestId("slides-template-panel-template-count")
+		expect(count).toHaveTextContent("101,582 套")
+		fireEvent.click(await screen.findByText("Business Template"))
+
+		expect(count).toHaveTextContent("101,582 套")
+		expect(screen.queryByTestId("slides-template-panel-template-clear-button")).toBeNull()
+	})
+
+	it("removes the preset content when a controlled selection is cleared", async () => {
+		const handlePresetContentChange = vi.fn()
+		const selectedTemplate = {
+			value: businessTemplate.code,
+			label: businessTemplate.label,
+			thumbnail_url: businessTemplate.thumbnail_url ?? undefined,
+		}
+		const { rerender } = render(
+			<SlidesTemplatePanel
+				config={createSlidesPresetPanelConfig([])}
+				selectedTemplate={selectedTemplate}
+				onPresetContentChange={handlePresetContentChange}
+			/>,
+		)
+
+		await waitFor(() => {
+			const contentCalls = handlePresetContentChange.mock.calls.filter(([content]) =>
+				Boolean(content),
+			)
+			const lastContent = contentCalls.at(-1)?.[0] as JSONContent | undefined
+			expect(getPromptRichTextPlainText(lastContent)).toBe(
+				"Use slide template: PPT-business.",
+			)
+		})
+
+		rerender(
+			<SlidesTemplatePanel
+				config={createSlidesPresetPanelConfig([])}
+				selectedTemplate={null}
+				onPresetContentChange={handlePresetContentChange}
+			/>,
+		)
+
+		await waitFor(() => {
+			expect(handlePresetContentChange.mock.calls.at(-1)?.[0]).toBeUndefined()
+		})
+	})
+
+	it("shows selected page, size, and language values in the home selection preview", () => {
+		render(
+			<SlidesTemplateHomeSelectionPreview
+				template={{ value: "woodland", label: "Woodland Storybook" }}
+				filters={[
+					{
+						data_key: "pages",
+						label: "页数",
+						current_value: "6-10",
+						options: [{ value: "6-10", label: "6-10" }],
+					},
+					{
+						data_key: "size",
+						label: "尺寸",
+						current_value: "16:9",
+						options: [{ value: "16:9", label: "16:9" }],
+					},
+					{
+						data_key: "language",
+						label: "语言",
+						current_value: "zh",
+						options: [{ value: "zh", label: "中文" }],
+					},
+				]}
+				onClear={vi.fn()}
+				onFilterChange={vi.fn()}
+			/>,
+		)
+
+		expect(screen.getByText("页数")).toBeInTheDocument()
+		expect(screen.getByText("6-10")).toBeInTheDocument()
+		expect(screen.getByText("尺寸")).toBeInTheDocument()
+		expect(screen.getByText("16:9")).toBeInTheDocument()
+		expect(screen.getByText("语言")).toBeInTheDocument()
+		expect(screen.getByText("中文")).toBeInTheDocument()
+
+		fireEvent.click(screen.getByTestId("slides-template-home-preview-selected-template"))
+		expect(screen.getByTestId("slides-preset-preview-dialog-content")).toBeInTheDocument()
+	})
+
+	it("shows the AI automatic template placeholder when no template is selected", async () => {
+		render(<SlidesTemplateHomeSelectionPreview filters={[]} onFilterChange={vi.fn()} />)
+
+		expect(
+			screen.getByText("playbook.edit.presets.form.autoSelectTemplate"),
+		).toBeInTheDocument()
+		expect(screen.getByText("playbook.edit.presets.form.autoSelectTemplate")).toHaveClass(
+			"whitespace-normal",
+		)
+		expect(screen.queryByTestId("slides-template-home-clear-selected-template")).toBeNull()
+
+		render(
+			<SlidesTemplateHomeSelectionPreview
+				filters={[]}
+				onFilterChange={vi.fn()}
+				onTemplatePickerContainerChange={vi.fn()}
+			/>,
+		)
+		const chooseTemplateButton = screen
+			.getAllByTestId("slides-template-home-choose-template")
+			.at(-1)
+		expect(chooseTemplateButton).toBeDefined()
+		expect(chooseTemplateButton).toHaveAttribute("aria-haspopup", "menu")
+	})
+
+	it("does not mount the template dropdown until the clear click has completed", async () => {
+		function SelectionPreview() {
+			const [template, setTemplate] = useState<OptionItem | null>({
+				value: "woodland",
+				label: "Woodland Storybook",
+			})
+
+			return (
+				<SlidesTemplateHomeSelectionPreview
+					template={template}
+					filters={[]}
+					onClear={() => setTemplate(null)}
+					onFilterChange={vi.fn()}
+					onTemplatePickerContainerChange={vi.fn()}
+				/>
+			)
+		}
+
+		render(<SelectionPreview />)
+
+		const clearButton = screen.getByTestId("slides-template-home-clear-selected-template")
+		fireEvent.pointerDown(clearButton)
+		fireEvent.click(clearButton)
+
+		expect(screen.queryByTestId("slides-template-home-choose-template")).toBeNull()
+		expect(await screen.findByTestId("slides-template-home-choose-template")).toHaveAttribute(
+			"aria-expanded",
+			"false",
+		)
+	})
+
+	it("hides the topic template selector and portals its live dropdown content", async () => {
+		const templatePickerContainer = document.createElement("div")
+		document.body.append(templatePickerContainer)
+		const { unmount } = render(
+			<SlidesTemplatePanel
+				config={createSlidesPresetPanelConfig([])}
+				variant={ScenePanelVariant.TopicPage}
+				hideTemplateSelector
+				templatePickerContainer={templatePickerContainer}
+			/>,
+		)
+
+		expect(screen.queryByTestId("slides-template-floating-selector-trigger")).toBeNull()
+		expect(await screen.findByTestId("slides-preset-grid")).toHaveClass("2xl:!grid-cols-4")
+		unmount()
+		templatePickerContainer.remove()
+	})
+
+	it("shows only the template list in the home panel", async () => {
+		render(
+			<SlidesTemplatePanel
+				config={createSlidesPresetPanelConfig([])}
+				variant={ScenePanelVariant.HomePage}
+			/>,
+		)
+
+		const toolbar = await screen.findByTestId("slides-template-panel-toolbar")
+		expect(toolbar).toHaveClass("sticky", "top-0", "z-50", "bg-background/95", "backdrop-blur")
+		expect(screen.queryByTestId("slides-template-panel-template-count")).toBeNull()
+	})
+
 	it("does not render when there are no templates", async () => {
 		vi.mocked(SuperMagicApi.getSlidesTemplates).mockResolvedValue({
 			page: 1,
@@ -235,6 +422,39 @@ describe("SlidesTemplatePanel", () => {
 		fireEvent.click(screen.getByTestId("slides-template-search-toggle"))
 		expect(await screen.findByTestId("slides-template-search-input")).toBeInTheDocument()
 		await screen.findByText("Business Template")
+		fireEvent.click(screen.getByText("Business Template"))
+
+		expect(trigger).toHaveTextContent("Business Template")
+		expect(trigger).not.toHaveTextContent("101,582 套")
+	})
+
+	it("发送后再次选择模板时不会被旧的发送状态清空", async () => {
+		function ControlledTopicTemplatePanel() {
+			const [selectedTemplate, setSelectedTemplate] = useState<OptionItem | null>(null)
+			const config = useMemo(() => createSlidesPresetPanelConfig([]), [])
+
+			return (
+				<SlidesTemplatePanel
+					config={config}
+					variant={ScenePanelVariant.TopicPage}
+					selectedTemplate={selectedTemplate}
+					onTemplateSelect={(template) => setSelectedTemplate(template)}
+				/>
+			)
+		}
+
+		const { rerender } = render(<ControlledTopicTemplatePanel />)
+		const trigger = await screen.findByTestId("slides-template-floating-selector-trigger")
+
+		// 模拟一次已完成发送，面板应清空当次选择。
+		sceneStateStoreMock.sendCount = 1
+		rerender(<ControlledTopicTemplatePanel />)
+
+		fireEvent.pointerDown(trigger)
+		fireEvent.click(trigger)
+		fireEvent.click(await screen.findByText("Business Template"))
+
+		await waitFor(() => expect(trigger).toHaveTextContent("Business Template"))
 	})
 
 	it("keeps mobile compact selector and filters on the same row", async () => {

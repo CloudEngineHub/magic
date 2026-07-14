@@ -1,6 +1,7 @@
 import { render, screen, waitFor } from "@testing-library/react"
 import type { ReactNode } from "react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
+import { TopicMode } from "@/pages/superMagic/pages/Workspace/TopicMode"
 
 const {
 	mockLoad,
@@ -192,6 +193,15 @@ describe("EditorLayout", () => {
 		await waitFor(() => {
 			expect(mockLoad).toHaveBeenCalled()
 		})
+	})
+
+	it("only uses the full workspace width for the PPT scene", () => {
+		const { rerender } = render(<EditorLayout />)
+		const configContainer = screen.getByTestId("home-scene-config-container")
+		expect(configContainer).toHaveClass("max-w-4xl")
+
+		rerender(<EditorLayout mode={TopicMode.PPT} />)
+		expect(configContainer).not.toHaveClass("max-w-4xl")
 	})
 
 	it("selects the only available scene automatically", async () => {

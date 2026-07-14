@@ -223,7 +223,7 @@ export interface MessageEditorRef {
 	/** 统一恢复内容：先 updateContent 再 restoreMentionItems，恢复期间抑制 appendTransaction */
 	restoreContent: (content?: JSONContent, mentionItems?: MentionListItem[]) => void
 	/** Focus */
-	focus: ({ enableWhenIsMobile }: { enableWhenIsMobile: boolean }) => void
+	focus: (params?: { enableWhenIsMobile?: boolean; preventScroll?: boolean }) => void
 	/** Set topic models */
 	setModels: (params: {
 		languageModel?: ModelItem | null

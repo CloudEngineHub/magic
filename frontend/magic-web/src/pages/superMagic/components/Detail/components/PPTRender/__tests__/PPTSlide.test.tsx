@@ -375,6 +375,31 @@ describe("PPTSlide", () => {
 				rawSourceCode:
 					'<div class="slide-container" data-width="1920" data-height="1080"></div>',
 				scaleContentDimensions: { width: 1600, height: 900 },
+				autoFitVerticalPadding: 64,
+			}),
+		)
+	})
+
+	it("向 HTML renderer 传入竖版 PPT 的缩放尺寸", () => {
+		renderPPTSlide({
+			content: '<div class="slide-container" data-width="1080" data-height="1920"></div>',
+		})
+
+		expect(mockState.renderedIsolatedProps).toHaveBeenCalledWith(
+			expect.objectContaining({
+				scaleContentDimensions: { width: 1080, height: 1920 },
+			}),
+		)
+	})
+
+	it("向 HTML renderer 传入运行时画布的缩放尺寸", () => {
+		renderPPTSlide({
+			content: '<main class="ft-canvas" style="width: 1080px; height: 1080px"></main>',
+		})
+
+		expect(mockState.renderedIsolatedProps).toHaveBeenCalledWith(
+			expect.objectContaining({
+				scaleContentDimensions: { width: 1080, height: 1080 },
 			}),
 		)
 	})
@@ -385,7 +410,6 @@ describe("PPTSlide", () => {
 		expect(mockState.renderedIsolatedProps).toHaveBeenLastCalledWith(
 			expect.objectContaining({
 				isVisible: true,
-				isTabActive: true,
 			}),
 		)
 
@@ -412,7 +436,6 @@ describe("PPTSlide", () => {
 		expect(mockState.renderedIsolatedProps).toHaveBeenLastCalledWith(
 			expect.objectContaining({
 				isVisible: false,
-				isTabActive: false,
 			}),
 		)
 	})

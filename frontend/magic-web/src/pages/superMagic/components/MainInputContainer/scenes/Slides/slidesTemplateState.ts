@@ -114,6 +114,9 @@ export interface SlidesTemplateTagListResponse {
 }
 
 export const ALL_SLIDES_TEMPLATE_GROUP_KEY = "all"
+
+// 模板总量接口尚未提供，先使用产品确认的展示值；接入后替换为接口字段。
+export const SLIDES_TEMPLATE_DISPLAY_COUNT = 101_582
 export const OTHER_SLIDES_TEMPLATE_GROUP_KEY = "other"
 export const SLIDES_TEMPLATE_CATEGORY_GROUP_KEY_PREFIX = "category:"
 export const SLIDES_TEMPLATE_TAG_GROUP_KEY_PREFIX = "tag:"

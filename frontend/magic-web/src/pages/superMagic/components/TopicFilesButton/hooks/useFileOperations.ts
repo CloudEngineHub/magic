@@ -31,6 +31,10 @@ import { pptxExternalLogger, reportPptxExportError } from "@/pages/superMagic/ut
 import { createPptxResourceErrorCollector } from "@/pages/superMagic/utils/pptxResourceErrors"
 import { createRandomUuidV4 } from "@/utils/create-random-uuid-v4"
 import { hasPPTMetadata } from "@/pages/superMagic/components/Detail/utils/file"
+import {
+	createPptxSlideConfig,
+	resolvePptScaleContentDimensions,
+} from "@/pages/superMagic/components/Detail/contents/HTML/utils/slide-dimensions"
 import { getAppEntryFile } from "../../MessageList/components/MessageAttachment/utils"
 import { waitForProjectAttachmentChange } from "@/pages/superMagic/utils/projectAttachments/attachmentMutationWaiter"
 import { exportHtmlToImage } from "@magic-web/html2image"
@@ -1272,11 +1276,15 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 					displayConfig: mergedDisplayConfig,
 				})
 				const pptFontResolver = documentExportService.get()?.getPptFontResolver?.()
+				const pptxConfig = createPptxSlideConfig(
+					resolvePptScaleContentDimensions(preparedHtmlSlides[0]),
+				)
 
 				exportHandle = exportPPTX(preparedHtmlSlides, {
 					fileName: result.fileName,
 					skipFailedPages: true,
 					autoSize,
+					config: pptxConfig,
 					fontResolver: pptFontResolver,
 					logger: pptxExternalLogger,
 					logLevel: "warn",

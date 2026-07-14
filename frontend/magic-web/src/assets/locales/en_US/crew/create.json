@@ -622,6 +622,7 @@
 				"form": {
 					"actions": "Actions",
 					"addOption": "Add Option",
+					"autoSelectTemplate": "AI Selects Automatically",
 					"cancel": "Cancel",
 					"clearSimilarColors": "Clear similar color filter",
 					"colorPalette": "Template colors",
@@ -706,6 +707,7 @@
 					}
 				},
 				"selected": "Selected:",
+				"templateCount": "{{count}} templates",
 				"title": "Presets",
 				"unselected": "Not selected",
 				"updatedAt": "Updated on {{date}}"

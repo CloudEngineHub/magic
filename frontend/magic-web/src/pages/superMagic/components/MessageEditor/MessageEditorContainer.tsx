@@ -322,10 +322,10 @@ export const MessageEditorContainer = observer(
 				isMountedRef,
 			})
 
-				const { tiptapEditor, domRef } = useMessageEditor({
-					value: store.editorStore.value,
-					onSend: handleSend,
-					placeholder,
+			const { tiptapEditor, domRef } = useMessageEditor({
+				value: store.editorStore.value,
+				onSend: handleSend,
+				placeholder,
 				onMentionInsertItems: (items) => {
 					syncInsertedMarkersToManager(items)
 					if (!selectedProject?.id) {
@@ -349,13 +349,13 @@ export const MessageEditorContainer = observer(
 				mentionPanelStore,
 				isAllowedMention,
 				shouldSkipRemoveSync: () => shouldSkipMentionRemoveSyncRef.current,
-					shouldRestoreRemovedMention,
-				})
-				const activeEditorRef = useLatestActiveEditor(tiptapEditor)
+				shouldRestoreRemovedMention,
+			})
+			const activeEditorRef = useLatestActiveEditor(tiptapEditor)
 
-				useEffect(() => {
-					tiptapEditorRef.current = tiptapEditor
-					store.editorStore.setEditor(tiptapEditor)
+			useEffect(() => {
+				tiptapEditorRef.current = tiptapEditor
+				store.editorStore.setEditor(tiptapEditor)
 				return () => {
 					tiptapEditorRef.current = null
 				}
@@ -414,26 +414,26 @@ export const MessageEditorContainer = observer(
 			})
 
 			const clearContent = useMemoizedFn(() => {
-					clearAllMarkers()
+				clearAllMarkers()
 
-					setValue(undefined)
-					runActiveEditor(activeEditorRef.current, (editor) => {
-						editor.commands.clearContent()
-					})
-					clearFiles()
+				setValue(undefined)
+				runActiveEditor(activeEditorRef.current, (editor) => {
+					editor.commands.clearContent()
 				})
+				clearFiles()
+			})
 
 			const clearContentAfterSend = useMemoizedFn(() => {
 				shouldSkipMentionRemoveSyncRef.current = true
 				try {
 					clearAllMarkers()
 
-						setValue(undefined)
-						runActiveEditor(activeEditorRef.current, (editor) => {
-							editor.commands.clearContent()
-						})
-						clearFilesLocalOnly()
-					} finally {
+					setValue(undefined)
+					runActiveEditor(activeEditorRef.current, (editor) => {
+						editor.commands.clearContent()
+					})
+					clearFilesLocalOnly()
+				} finally {
 					shouldSkipMentionRemoveSyncRef.current = false
 				}
 			})
@@ -472,18 +472,24 @@ export const MessageEditorContainer = observer(
 			])
 
 			const focus = useMemoizedFn(
-				({ enableWhenIsMobile = false }: { enableWhenIsMobile?: boolean } = {}) => {
-						if (!enableWhenIsMobile && isMobile) {
-							return
+				({
+					enableWhenIsMobile = false,
+					preventScroll = false,
+				}: {
+					enableWhenIsMobile?: boolean
+					preventScroll?: boolean
+				} = {}) => {
+					if (!enableWhenIsMobile && isMobile) {
+						return
+					}
+					runActiveEditor(activeEditorRef.current, (editor) => {
+						editor.commands.focus(undefined, { scrollIntoView: !preventScroll })
+						if (isMobile) {
+							editor.commands.scrollIntoView()
 						}
-						runActiveEditor(activeEditorRef.current, (editor) => {
-							editor.commands.focus()
-							if (isMobile) {
-								editor.commands.scrollIntoView()
-							}
-						})
-					},
-				)
+					})
+				},
+			)
 
 			const loadDraftReady = useMemoizedFn(() => {
 				return store.draftStore.waitForLoadDraft()
@@ -633,14 +639,14 @@ export const MessageEditorContainer = observer(
 						}
 					}
 
-						runActiveEditor(activeEditorRef.current, (editor) => {
-							editor.commands.insertContent({
-								type: "mention",
-								attrs: item,
-							})
+					runActiveEditor(activeEditorRef.current, (editor) => {
+						editor.commands.insertContent({
+							type: "mention",
+							attrs: item,
 						})
-					},
-				)
+					})
+				},
+			)
 
 			const handleProjectFileMentionClick = useMemoizedFn((target: EventTarget | null) => {
 				const targetElement =

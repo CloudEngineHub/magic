@@ -195,7 +195,7 @@ const SlidesPresetGrid = observer(
 					ref={gridRef}
 					data-testid="slides-preset-grid"
 					className={cn(
-						"scrollbar-hide relative grid w-full grid-cols-2 content-start gap-4 overflow-y-auto overflow-x-hidden p-4 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4",
+						"scrollbar-hide relative grid w-full grid-cols-2 content-start gap-4 overflow-y-auto overflow-x-hidden p-4 md:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5",
 						className,
 					)}
 					variants={containerVariants}

@@ -1,5 +1,6 @@
-import { useState, type MouseEvent, type PointerEvent } from "react"
-import { ChevronDown, CircleX, X } from "lucide-react"
+import { useCallback, useMemo, useState } from "react"
+import { createPortal } from "react-dom"
+import { ChevronDown, X } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import MagicDropdown from "@/components/base/MagicDropdown"
 import MagicPopup from "@/components/base-mobile/MagicPopup"
@@ -8,6 +9,7 @@ import { Label } from "@/components/shadcn-ui/label"
 import { cn } from "@/lib/utils"
 import { ScenePanelVariant } from "../../components/LazyScenePanel/types"
 import FilterBar from "../../panels/FilterBar"
+import { useLocaleText } from "../../panels/hooks/useLocaleText"
 import type { FieldItem, OptionItem } from "../../panels/types"
 import SlidesTemplatePanelContent from "./SlidesTemplatePanelContent"
 import type { SlidesTemplatePanelState } from "./useSlidesTemplatePanelState"
@@ -15,12 +17,13 @@ import type { SlidesTemplatePanelState } from "./useSlidesTemplatePanelState"
 interface SlidesTemplateFloatingSelectorProps {
 	title: string
 	selectedTemplate: OptionItem | null
-	selectedTemplateTitle: string
+	hideTrigger?: boolean
+	templateCountLabel: string
 	simpleFields: FieldItem[]
 	slidesState: SlidesTemplatePanelState
 	onFilterChange: (filterId: string, value: string) => void
 	onTemplateClick: (template: OptionItem) => void
-	onTemplateClear: () => void
+	templatePickerContainer?: HTMLDivElement | null
 	readOnly?: boolean
 	variant?: ScenePanelVariant
 	compact?: boolean
@@ -29,33 +32,33 @@ interface SlidesTemplateFloatingSelectorProps {
 function SlidesTemplateFloatingSelector({
 	title,
 	selectedTemplate,
-	selectedTemplateTitle,
+	hideTrigger = false,
+	templateCountLabel,
 	simpleFields,
 	slidesState,
 	onFilterChange,
 	onTemplateClick,
-	onTemplateClear,
+	templatePickerContainer,
 	readOnly = false,
 	variant,
 	compact = false,
 }: SlidesTemplateFloatingSelectorProps) {
 	const { t } = useTranslation("crew/create")
+	const lt = useLocaleText()
 	const [open, setOpen] = useState(false)
 	const [hoverDetailsContainer, setHoverDetailsContainer] = useState<HTMLDivElement | null>(null)
 	const isMobile = variant === ScenePanelVariant.Mobile
 	const isCompactMobile = compact && isMobile
+	const selectedTemplateTitle =
+		lt(selectedTemplate?.label) ?? lt(selectedTemplate?.value) ?? templateCountLabel
 
-	function handleTemplateClick(template: OptionItem) {
-		onTemplateClick(template)
-		setOpen(false)
-	}
-
-	function handleClear(event: MouseEvent<HTMLElement> | PointerEvent<HTMLElement>) {
-		event.preventDefault()
-		event.stopPropagation()
-		onTemplateClear()
-		setOpen(false)
-	}
+	const handleTemplateClick = useCallback(
+		(template: OptionItem) => {
+			onTemplateClick(template)
+			setOpen(false)
+		},
+		[onTemplateClick],
+	)
 
 	const trigger = (
 		<Button
@@ -80,46 +83,43 @@ function SlidesTemplateFloatingSelector({
 							{title}
 						</span>
 						<span className="whitespace-nowrap text-[13px] font-medium text-foreground">
-							{selectedTemplateTitle || t("playbook.edit.presets.unselected")}
+							{selectedTemplateTitle}
 						</span>
 					</>
 				) : (
-					selectedTemplateTitle || t("playbook.edit.presets.unselected")
+					selectedTemplateTitle
 				)}
 			</span>
 			<span className="relative inline-flex size-4 shrink-0 items-center justify-center">
-				{selectedTemplate && !isCompactMobile ? (
-					<span
-						role="button"
-						tabIndex={0}
-						aria-label={t("playbook.edit.presets.clearSelection")}
-						onPointerDown={handleClear}
-						onClick={handleClear}
-					>
-						<CircleX className="size-4 text-muted-foreground opacity-50" />
-					</span>
-				) : (
-					<ChevronDown className="size-4 text-muted-foreground opacity-50 transition-opacity" />
-				)}
+				<ChevronDown className="size-4 text-muted-foreground opacity-50 transition-opacity" />
 			</span>
 		</Button>
 	)
 
-	const panelContent = (
-		<div
-			ref={setHoverDetailsContainer}
-			className={cn("relative min-h-0", isMobile && "h-full")}
-		>
-			<SlidesTemplatePanelContent
-				slidesState={slidesState}
-				selectedTemplate={selectedTemplate}
-				onTemplateClick={handleTemplateClick}
-				className={cn(isMobile ? "h-full" : "h-[min(640px,70vh)] min-h-[360px]")}
-				toolbarClassName={isMobile ? "px-2 pt-0" : "px-0 pt-0"}
-				gridClassName={cn("min-h-0 flex-1", isMobile ? "p-2" : "p-0 pt-1")}
-				hoverDetailsContainer={hoverDetailsContainer}
-			/>
-		</div>
+	const panelContent = useMemo(
+		() => (
+			<div
+				ref={setHoverDetailsContainer}
+				className={cn(
+					"relative flex min-h-0 flex-col overflow-hidden",
+					isMobile ? "h-full" : "h-[min(640px,70vh)] min-h-[360px]",
+				)}
+			>
+				<SlidesTemplatePanelContent
+					slidesState={slidesState}
+					selectedTemplate={selectedTemplate}
+					onTemplateClick={handleTemplateClick}
+					className="h-full"
+					toolbarClassName={isMobile ? "px-2 pt-0" : "px-0 pt-0"}
+					gridClassName={cn(
+						"min-h-0 flex-1",
+						isMobile ? "p-2" : "p-0 pt-1 2xl:!grid-cols-4",
+					)}
+					hoverDetailsContainer={hoverDetailsContainer}
+				/>
+			</div>
+		),
+		[handleTemplateClick, hoverDetailsContainer, isMobile, selectedTemplate, slidesState],
 	)
 
 	const selector = isMobile ? (
@@ -168,6 +168,16 @@ function SlidesTemplateFloatingSelector({
 		</MagicDropdown>
 	)
 
+	if (hideTrigger) {
+		return templatePickerContainer ? createPortal(panelContent, templatePickerContainer) : null
+	}
+	const templateSelector = (
+		<div className="flex shrink-0 items-center gap-2">
+			<Label className="shrink-0 text-sm font-normal text-foreground">{title}</Label>
+			{selector}
+		</div>
+	)
+
 	if (isCompactMobile) {
 		return (
 			<div className="min-w-0 flex-1 overflow-hidden">
@@ -183,15 +193,25 @@ function SlidesTemplateFloatingSelector({
 		)
 	}
 
+	if (!isMobile) {
+		return (
+			<div className="min-w-0 flex-1 overflow-hidden">
+				<FilterBar
+					filters={simpleFields}
+					onFilterChange={onFilterChange}
+					variant={variant}
+					compact={compact}
+					prefix={templateSelector}
+					itemGapClassName="gap-2"
+					scrollContainerClassName="px-0 justify-start"
+				/>
+			</div>
+		)
+	}
+
 	return (
-		<div
-			className={cn(
-				"flex min-w-0 items-center gap-2",
-				isMobile && "flex-col items-start gap-1",
-			)}
-		>
-			<Label className="shrink-0 text-sm font-normal text-foreground">{title}</Label>
-			{selector}
+		<div className="flex min-w-0 flex-col items-start gap-1">
+			{templateSelector}
 			{simpleFields.length > 0 ? (
 				<div className="min-w-0 flex-1">
 					<FilterBar

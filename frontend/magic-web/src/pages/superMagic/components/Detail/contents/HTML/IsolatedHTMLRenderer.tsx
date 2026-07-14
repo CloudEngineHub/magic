@@ -42,7 +42,6 @@ import { useMediaScenario } from "./media/useMediaScenario"
 import { handleMediaImageUrlRequest, MEDIA_MESSAGE_TYPES } from "./media/utils"
 import { cn } from "@/lib/utils"
 import { StylePanel } from "./components/StylePanel"
-import { ZoomControls } from "./components/StylePanel/controls"
 import type { HTMLEditorV2Ref, SaveResult } from "./iframe-bridge/types/props"
 import type {
 	ImageUploadRequestPayload,
@@ -170,6 +169,10 @@ interface IsolatedHTMLRendererProps {
 	scaleContentDimensions?: CanonicalContentDimensions | null
 	waitForSettledContentMetrics?: boolean
 	autoFitScalePaddingFactor?: number
+	autoFitVerticalPadding?: number
+	manualScale?: number | null
+	onManualScaleChange?: (scale: number | null) => void
+	onScaleRatioChange?: (scale: number) => void
 	disableDynamicResourceInterception?: boolean
 	disableIframeDocumentClickBridge?: boolean // **重要** 控制HTML预览增强组件内部是否禁用 iframe 到父层的通用 DOM_CLICK 桥接
 	onRenderReady?: () => void //控制HTML预览组件的skeleton结束时机
@@ -270,6 +273,10 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 			scaleContentDimensions,
 			waitForSettledContentMetrics = false,
 			autoFitScalePaddingFactor = 1,
+			autoFitVerticalPadding = 0,
+			manualScale,
+			onManualScaleChange,
+			onScaleRatioChange,
 			disableDynamicResourceInterception = false,
 			disableIframeDocumentClickBridge = false,
 			onRenderReady,
@@ -357,7 +364,6 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 			isScaleReady,
 			isManualZoom,
 			handleScaleChange,
-			handleResetZoom,
 			getContentWrapperStyle,
 			getIframeStyle,
 		} = useZoomControls({
@@ -375,7 +381,16 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 			contentMetricsOverride: scalingContentMetrics,
 			waitForSettledContentMetrics: shouldWaitForSettledContentMetrics,
 			autoFitScalePaddingFactor,
+			autoFitVerticalPadding,
+			manualScale,
+			onManualScaleChange,
 		})
+
+		useEffect(() => {
+			if (isPptRender && isScaleReady) {
+				onScaleRatioChange?.(scaleRatio)
+			}
+		}, [isPptRender, isScaleReady, onScaleRatioChange, scaleRatio])
 
 		const buildRenderLifecycleContext = useMemoizedFn((): IframeRenderLifecycleContext => {
 			const lifecycle = renderLifecycleRef.current
@@ -1941,17 +1956,6 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 								toolbarClassName,
 							)}
 						/>
-						{/* 缩放控件 - 绝对定位在工具栏下方 */}
-						{isPptRender && (
-							<div className="absolute bottom-[10px] right-[10px] z-50 rounded-lg border border-border bg-card/95 p-2 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-card/60">
-								<ZoomControls
-									currentScale={scaleRatio}
-									onScaleChange={handleScaleChange}
-									onResetZoom={handleResetZoom}
-									disabled={isSaving}
-								/>
-							</div>
-						)}
 					</>
 				)}
 

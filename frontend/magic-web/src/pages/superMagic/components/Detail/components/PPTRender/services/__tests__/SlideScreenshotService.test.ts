@@ -80,6 +80,24 @@ describe("SlideScreenshotService", () => {
 			})
 		})
 
+		it("uses the slide container dimensions for portrait thumbnails", async () => {
+			const content = `
+				<div class="slide-container" data-width="1080" data-height="1920">
+					<h1>Portrait slide</h1>
+				</div>
+			`
+
+			await service.generateScreenshot("https://example.com/portrait.html", content)
+
+			const [, options] = vi.mocked(snapdom).mock.calls[0]
+			expect(options).toMatchObject({ width: 1080, height: 1920 })
+			expect(snapdomMocks.toWebp).toHaveBeenCalledWith({
+				width: 1080 / 4,
+				height: 1920 / 4,
+				quality: 0.8,
+			})
+		})
+
 		it("should throw error for empty content", async () => {
 			await expect(service.generateScreenshot("url", "")).rejects.toThrow(
 				"Content is required",

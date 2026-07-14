@@ -121,12 +121,19 @@ describe("SlidesPresetGrid", () => {
 	it("renders slide preset cards", () => {
 		render(<SlidesPresetGrid templates={mockTemplates} />)
 
-		expect(screen.getByTestId("slides-preset-grid")).toBeInTheDocument()
+		const grid = screen.getByTestId("slides-preset-grid")
+		expect(grid).toBeInTheDocument()
+		expect(grid).toHaveClass(
+			"grid-cols-2",
+			"md:grid-cols-3",
+			"xl:grid-cols-4",
+			"2xl:grid-cols-5",
+		)
 		expect(screen.getByText("Academic Research")).toBeInTheDocument()
 		expect(screen.getByText("Tech Dark")).toBeInTheDocument()
 	})
 
-	it("shows the featured badge beside the title and usage in the card corner", () => {
+	it("shows the featured icon before the title and usage in the card corner", () => {
 		render(<SlidesPresetGrid templates={mockTemplates} />)
 
 		const featuredBadge = screen.getByTestId("slides-preset-card-featured-badge")
@@ -141,9 +148,16 @@ describe("SlidesPresetGrid", () => {
 		)
 		expect(featuredBadge.querySelector("svg")).not.toBeNull()
 		expect(usageCount).toHaveAttribute("data-usage-count", "23")
-		expect(usageCount).toHaveClass("bottom-2", "right-2", "text-white", "group-hover:opacity-0")
+		expect(usageCount).toHaveClass(
+			"bottom-2",
+			"right-2",
+			"inline-flex",
+			"items-center",
+			"text-white",
+			"group-hover:opacity-0",
+		)
 		expect(usageCount).not.toHaveClass("bg-background/92", "rounded-full")
-		expect(usageCount.querySelector("svg")).toBeNull()
+		expect(usageCount.querySelector("svg")).not.toBeNull()
 		expect(screen.getByTestId("slides-preset-card-usage-backdrop")).toHaveClass(
 			"bg-gradient-to-t",
 			"from-black/[0.58]",
@@ -160,10 +174,24 @@ describe("SlidesPresetGrid", () => {
 		expect(handleTemplateClick).toHaveBeenCalledWith(mockTemplates[0])
 	})
 
-	it("does not render a redundant selection button for selected templates", () => {
-		render(<SlidesPresetGrid templates={mockTemplates} selectedTemplate={mockTemplates[0]} />)
+	it("restores the selection button and shows selected state", () => {
+		const handleTemplateClick = vi.fn()
+		render(
+			<SlidesPresetGrid
+				templates={mockTemplates}
+				selectedTemplate={mockTemplates[0]}
+				onTemplateClick={handleTemplateClick}
+			/>,
+		)
 
-		expect(screen.queryByTestId("slides-preset-card-use-button")).not.toBeInTheDocument()
+		const useButtons = screen.getAllByTestId("slides-preset-card-use-button")
+		const actionGroups = screen.getAllByTestId("slides-preset-card-action-group")
+		expect(useButtons[0]).toHaveTextContent("playbook.edit.presets.form.selected")
+		expect(useButtons[0]).toHaveAttribute("aria-pressed", "true")
+		expect(actionGroups[0]).toHaveClass("translate-y-0", "opacity-100")
+
+		fireEvent.click(useButtons[1])
+		expect(handleTemplateClick).toHaveBeenCalledWith(mockTemplates[1])
 	})
 
 	it("shows a lightweight refreshing indicator without hiding existing cards", () => {
