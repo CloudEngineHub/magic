@@ -23,6 +23,7 @@ interface SlidesPresetGridProps {
 	onLoadMore?: () => void
 	onRetryLoadMore?: () => void
 	onPreviewOpenChange?: (open: boolean) => void
+	onPreviewDetailLoad?: (template: OptionItem) => Promise<OptionItem | null>
 	showHoverDetails?: boolean
 	hoverDetailsContainer?: HTMLElement | null
 }
@@ -76,6 +77,7 @@ const SlidesPresetGrid = observer(
 		onLoadMore,
 		onRetryLoadMore,
 		onPreviewOpenChange,
+		onPreviewDetailLoad,
 		showHoverDetails = true,
 		hoverDetailsContainer,
 	}: SlidesPresetGridProps) => {
@@ -83,6 +85,10 @@ const SlidesPresetGrid = observer(
 		const [previewTemplate, setPreviewTemplate] = useState<OptionItem | null>(null)
 		const [preloadedPreviewTemplate, setPreloadedPreviewTemplate] = useState<OptionItem | null>(
 			null,
+		)
+		// 列表接口只返回缩略图。鼠标停留后用详情结果替换对应卡片，供悬浮详情展示拼接图。
+		const [hoverDetailTemplates, setHoverDetailTemplates] = useState(
+			() => new Map<string, OptionItem>(),
 		)
 		const gridRef = useRef<HTMLDivElement>(null)
 		const loadMoreSentinelRef = useRef<HTMLDivElement>(null)
@@ -110,9 +116,43 @@ const SlidesPresetGrid = observer(
 			setPreviewTemplate(null)
 		}
 
+		function loadPreviewDetail(template: OptionItem) {
+			if (!onPreviewDetailLoad) return Promise.resolve(template)
+			return Promise.resolve(onPreviewDetailLoad(template)).then(
+				(detail) => detail ?? template,
+			)
+		}
+
+		function handlePreviewClick(template: OptionItem) {
+			setPreviewTemplate(template)
+			void loadPreviewDetail(template)
+				.then((detail) => {
+					setPreviewTemplate((currentTemplate) =>
+						currentTemplate?.value === template.value ? detail : currentTemplate,
+					)
+				})
+				.catch((error) => {
+					console.error("Failed to fetch slides template detail for preview", error)
+				})
+		}
+
 		function handlePreviewPreload(template: OptionItem) {
-			if (!template.preview_url) return
-			setPreloadedPreviewTemplate(template)
+			void loadPreviewDetail(template)
+				.then((detail) => {
+					const templateValue = localeTextToDisplayString(template.value)
+					setHoverDetailTemplates((currentTemplates) => {
+						if (currentTemplates.get(templateValue) === detail) return currentTemplates
+
+						const nextTemplates = new Map(currentTemplates)
+						nextTemplates.set(templateValue, detail)
+						return nextTemplates
+					})
+					if (!detail.preview_url) return
+					setPreloadedPreviewTemplate(detail)
+				})
+				.catch((error) => {
+					console.error("Failed to preload slides template detail", error)
+				})
 		}
 
 		const preloadedPreviewUrl = preloadedPreviewTemplate?.preview_url
@@ -229,6 +269,7 @@ const SlidesPresetGrid = observer(
 					) : null}
 					{templates.map((template) => {
 						const value = localeTextToDisplayString(template.value)
+						const cardTemplate = hoverDetailTemplates.get(value) ?? template
 
 						return (
 							<motion.div
@@ -245,10 +286,10 @@ const SlidesPresetGrid = observer(
 								)}
 							>
 								<SlidesPresetCard
-									template={template}
+									template={cardTemplate}
 									isSelected={selectedTemplateValue === value}
 									onClick={onTemplateClick}
-									onPreviewClick={setPreviewTemplate}
+									onPreviewClick={handlePreviewClick}
 									onPreviewPreload={handlePreviewPreload}
 									canUseHoverPreview={canUseHoverPreview}
 									showHoverDetails={showHoverDetails}

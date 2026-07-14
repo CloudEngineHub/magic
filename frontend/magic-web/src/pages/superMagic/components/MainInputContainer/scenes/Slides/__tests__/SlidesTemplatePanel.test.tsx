@@ -14,12 +14,15 @@ import {
 	createSlidesPresetPanelConfig,
 	type SlidesTemplateCategoryItem,
 	type SlidesTemplateItem,
+	type SlidesTemplateTagGroupItem,
 } from "../slidesTemplateState"
 import type { SlidesTemplatePanelState } from "../useSlidesTemplatePanelState"
 
 const apiMock = vi.hoisted(() => ({
 	getSlidesTemplateCategories: vi.fn(),
-	getSlidesTemplateTags: vi.fn(),
+	getSlidesTemplateTagGroups: vi.fn(),
+	getSlidesTemplateCount: vi.fn(),
+	getSlidesTemplateDetail: vi.fn(),
 	getSlidesTemplates: vi.fn(),
 }))
 
@@ -95,12 +98,19 @@ function createSlidesTemplatePanelContentState(
 		isLoadingMore: false,
 		isLoadMoreFailed: false,
 		keyword: "",
+		loadedTemplateCount: 0,
 		loadMore: vi.fn(),
+		loadTemplateDetail: vi.fn(),
 		retryLoadMore: vi.fn(),
+		selectedCategoryCode: undefined,
+		selectedChildTagCodes: [],
 		selectedGroupKey: "all",
 		setKeyword: vi.fn(),
+		setSelectedChildTagCodes: vi.fn(),
 		setSelectedGroupKey: vi.fn(),
+		tagGroups: [],
 		templateOptions: [],
+		total: 0,
 		...overrides,
 	}
 }
@@ -127,12 +137,7 @@ describe("SlidesTemplatePanel", () => {
 			total: 1,
 			list: [businessCategory],
 		})
-		vi.mocked(SuperMagicApi.getSlidesTemplateTags).mockResolvedValue({
-			page: 1,
-			page_size: 200,
-			total: 0,
-			list: [],
-		})
+		vi.mocked(SuperMagicApi.getSlidesTemplateTagGroups).mockResolvedValue([])
 		vi.mocked(SuperMagicApi.getSlidesTemplates).mockResolvedValue({
 			page: 1,
 			page_size: 20,
@@ -198,10 +203,10 @@ describe("SlidesTemplatePanel", () => {
 		render(<SlidesTemplatePanel config={createSlidesPresetPanelConfig([])} />)
 
 		const count = await screen.findByTestId("slides-template-panel-template-count")
-		expect(count).toHaveTextContent("101,582 套")
+		expect(count).toHaveTextContent("1 套")
 		fireEvent.click(await screen.findByText("Business Template"))
 
-		expect(count).toHaveTextContent("101,582 套")
+		expect(count).toHaveTextContent("1 套")
 		expect(screen.queryByTestId("slides-template-panel-template-clear-button")).toBeNull()
 	})
 
@@ -490,16 +495,21 @@ describe("SlidesTemplatePanel", () => {
 		expect(screen.getByTestId("slides-template-search-input")).toHaveValue("business")
 	})
 
-	it("hides the business report category from the template selector", () => {
-		const hiddenGroupKey = createSlidesTemplateCategoryGroupKey("PPT-CATE-business-report")
+	it("renders the business report category in the template selector", () => {
+		const businessReportGroupKey = createSlidesTemplateCategoryGroupKey(
+			"PPT-CATE-business-report",
+		)
+		const setSelectedGroupKey = vi.fn()
 		render(
 			<SlidesTemplatePanelContent
 				slidesState={createSlidesTemplatePanelContentState({
+					selectedGroupKey: businessReportGroupKey,
+					setSelectedGroupKey,
 					groups: [
 						{ group_key: "all", group_name: "All", children: [] },
 						{ group_key: "tag:featured", group_name: "Featured", children: [] },
 						{
-							group_key: hiddenGroupKey,
+							group_key: businessReportGroupKey,
 							group_name: "Business Report",
 							children: [],
 						},
@@ -513,9 +523,84 @@ describe("SlidesTemplatePanel", () => {
 		expect(
 			screen.getByTestId("template-group-selector-option-tag:featured"),
 		).toBeInTheDocument()
-		expect(
-			screen.queryByTestId(`template-group-selector-option-${hiddenGroupKey}`),
-		).not.toBeInTheDocument()
+		const categoryButton = screen.getByTestId(
+			`template-group-selector-option-${businessReportGroupKey}`,
+		)
+		Object.assign(categoryButton, { scrollIntoView: vi.fn() })
+		expect(categoryButton).toBeInTheDocument()
+		fireEvent.click(categoryButton)
+		expect(setSelectedGroupKey).toHaveBeenCalledWith("all")
+	})
+
+	it("renders category tags beneath the primary category selector", () => {
+		const setSelectedChildTagCodes = vi.fn()
+		const tagGroups: SlidesTemplateTagGroupItem[] = [
+			{
+				id: "purpose-group",
+				code: "purpose_group",
+				name_i18n: { zh_CN: "用途与交付物", en_US: "Purpose" },
+				sort: 100,
+				tags: [
+					{
+						id: "annual-report",
+						code: "purpose-annual-report",
+						name_i18n: { zh_CN: "年度报告", en_US: "Annual Report" },
+						sort: 100,
+						template_count: 1,
+						is_official: true,
+					},
+				],
+			},
+			{
+				id: "style-group",
+				code: "style_group",
+				name_i18n: { zh_CN: "视觉风格", en_US: "Style" },
+				sort: 90,
+				tags: [
+					{
+						id: "business-style",
+						code: "style-business",
+						name_i18n: { zh_CN: "商务", en_US: "Business" },
+						sort: 90,
+						template_count: 1,
+						is_official: true,
+					},
+				],
+			},
+		]
+
+		render(
+			<SlidesTemplatePanelContent
+				slidesState={createSlidesTemplatePanelContentState({
+					selectedCategoryCode: businessCategory.code,
+					selectedChildTagCodes: ["purpose-annual-report"],
+					tagGroups,
+					setSelectedChildTagCodes,
+				})}
+				onTemplateClick={vi.fn()}
+			/>,
+		)
+
+		expect(screen.getByTestId("slides-template-category-tag-filters")).toBeInTheDocument()
+		expect(screen.getByText("Purpose")).toBeInTheDocument()
+		expect(screen.queryByText("Style")).not.toBeInTheDocument()
+
+		const toggle = screen.getByTestId("slides-template-tag-groups-toggle")
+		expect(toggle).toHaveAttribute("aria-expanded", "false")
+		fireEvent.click(toggle)
+		expect(screen.getByText("Style")).toBeInTheDocument()
+		expect(toggle).toHaveAttribute("aria-expanded", "true")
+		fireEvent.click(screen.getByTestId("slides-template-tag-option-style-business"))
+		expect(setSelectedChildTagCodes).toHaveBeenCalledWith([
+			"purpose-annual-report",
+			"style-business",
+		])
+		setSelectedChildTagCodes.mockClear()
+		fireEvent.click(toggle)
+		expect(screen.queryByText("Style")).not.toBeInTheDocument()
+
+		fireEvent.click(screen.getByTestId("slides-template-tag-option-purpose-annual-report"))
+		expect(setSelectedChildTagCodes).toHaveBeenCalledWith([])
 	})
 
 	it("hides the toolbar without an exit transition while preview is open", async () => {
@@ -545,7 +630,7 @@ describe("SlidesTemplatePanel", () => {
 		expect(toolbar).not.toHaveClass("transition-[opacity,transform]")
 		expect(toolbar).not.toHaveClass("duration-300")
 
-		fireEvent.click(screen.getByTestId("slides-preset-card-preview-button"))
+		fireEvent.click(screen.getByTestId("slides-preset-card-touch-preview-button"))
 
 		await waitFor(() => {
 			expect(toolbar).toHaveClass("pointer-events-none")

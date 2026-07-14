@@ -120,6 +120,8 @@ describe("slides template page utils", () => {
 	it("builds tag save params from form values", () => {
 		const payload = buildSlidesTemplateTagSaveParams({
 			code: " featured ",
+			node_type: "tag",
+			parent_id: "group-1",
 			name_i18n: { zh_CN: "精选", en_US: "Featured" },
 			status: true,
 			sort: null,
@@ -127,6 +129,8 @@ describe("slides template page utils", () => {
 
 		expect(payload).toEqual({
 			code: "featured",
+			node_type: "tag",
+			parent_id: "group-1",
 			name_i18n: { zh_CN: "精选", en_US: "Featured" },
 			status: SlidesTemplate.StatusMap.enabled,
 			sort: 0,
@@ -216,6 +220,8 @@ describe("slides template page utils", () => {
 				id: "1",
 				organization_code: "OFFICIAL",
 				code: "featured",
+				parent_id: "group-1",
+				node_type: "tag",
 				name_i18n: { zh_CN: "", en_US: "Featured" },
 				sort: 0,
 				template_count: 0,

@@ -88,4 +88,29 @@ describe("SlidesTemplateCoverTile color fallback", () => {
 		})
 		expect(template.colors).toBeUndefined()
 	})
+
+	it("keeps preview and select actions hidden until hover or focus", async () => {
+		const { default: SlidesTemplateCoverTile } = await import("../SlidesTemplateCoverTile")
+
+		render(
+			<SlidesTemplateCoverTile
+				canPreview
+				imageUrl="/preview.png"
+				isExpanded={false}
+				isSelected={false}
+				onPreviewClick={vi.fn()}
+				onSelect={vi.fn()}
+				template={{ label: "Preview template", value: "preview-template" }}
+			/>,
+		)
+
+		const actions = screen.getByTestId("slides-template-cover-actions")
+		expect(actions.parentElement).toHaveClass(
+			"opacity-0",
+			"group-hover:opacity-100",
+			"group-focus-within:opacity-100",
+		)
+		expect(actions).toContainElement(screen.getByTestId("slides-template-cover-preview-button"))
+		expect(actions).toContainElement(screen.getByTestId("slides-template-cover-select-button"))
+	})
 })

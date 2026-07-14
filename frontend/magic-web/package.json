@@ -60,12 +60,9 @@
 			"eslint --fix --config .eslintrc.cjs",
 			"prettier --write"
 		],
-		"**/!(*tsconfig*).json": [
+		"**/*.json": [
 			"prettier --write",
 			"sort-package-json"
-		],
-		"**/*tsconfig*.json": [
-			"prettier --write"
 		]
 	},
 	"browserslist": {

@@ -29,13 +29,13 @@ import useResourceStatusPolling from "@/pages/superMagic/hooks/useResourceStatus
 import { useNavigateToSuperHome } from "./hooks/useNavigateToSuperHome"
 import { isMagicApp } from "@/utils/devices"
 import { openAudioRecordingsInMagicApp } from "@/layouts/BaseLayout/utils/magicAppNavigation"
+import { useSlidesTemplateTotal } from "@/pages/superMagic/hooks/useSlidesTemplateTotal"
+import { formatNumber } from "@/utils/format"
 
 const CollaborationProjectsPanel = lazy(
 	() =>
 		import("@/pages/superMagic/components/WorkspacesMenu/components/CollaborationProjectsPanel"),
 )
-
-const SLIDES_TEMPLATE_TOTAL = "101,582"
 
 function SidebarContent({ collapsed }: SidebarContentProps) {
 	const { t } = useTranslation(["sidebar", "super"])
@@ -49,6 +49,7 @@ function SidebarContent({ collapsed }: SidebarContentProps) {
 	const navigate = useNavigate()
 	const sidebarMarketMenuItems = useSidebarMarketMenuItems()
 	const { superRouteUrl, handleNavigateToSuperHome } = useNavigateToSuperHome()
+	const slidesTemplateTotal = useSlidesTemplateTotal()
 
 	function shouldHandleAnchorClick(event: MouseEvent<HTMLAnchorElement>) {
 		return (
@@ -83,9 +84,9 @@ function SidebarContent({ collapsed }: SidebarContentProps) {
 		const title =
 			titleKey === "sidebar:superLobster.title" ? t(titleKey, clawBrandValues) : t(titleKey)
 		const templateCount =
-			routeName === RouteName.SuperSlidesTemplates
+			routeName === RouteName.SuperSlidesTemplates && slidesTemplateTotal !== undefined
 				? t("slidesTemplates.templateCount", {
-						count: SLIDES_TEMPLATE_TOTAL,
+						count: formatNumber(slidesTemplateTotal),
 					})
 				: null
 

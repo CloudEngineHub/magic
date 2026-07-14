@@ -14,6 +14,7 @@ const SLIDES_TEMPLATE_CODE_ALPHABET = [UPPERCASE_ALPHABET, LOWERCASE_ALPHABET, D
 )
 const SLIDES_TEMPLATE_CODE_LENGTH = 12
 export const FEATURED_SLIDES_TEMPLATE_TAG_CODE = "featured"
+export const SYSTEM_SLIDES_TEMPLATE_TAG_GROUP_CODE = "operational_group"
 const generateCodeSegment = customAlphabet(
 	SLIDES_TEMPLATE_CODE_ALPHABET,
 	SLIDES_TEMPLATE_CODE_LENGTH,
@@ -51,7 +52,10 @@ export interface SlidesTemplateCategoryFormValues {
 
 export interface SlidesTemplateTagFormValues {
 	code: string
+	node_type: SlidesTemplate.TagNodeType
+	parent_id: string | number
 	name_i18n: SlidesTemplate.LangText
+	description_i18n?: SlidesTemplate.LangText
 	status?: boolean
 	sort?: number | null
 }
@@ -94,6 +98,12 @@ export function setSlidesTemplateTagEnabled(
 
 export function isSystemSlidesTemplate(record: Pick<SlidesTemplate.Item, "source_type">) {
 	return record.source_type === SlidesTemplate.SourceTypeMap.system
+}
+
+export function isSystemSlidesTemplateTagGroup(
+	record: Pick<SlidesTemplate.TagItem, "code" | "node_type">,
+) {
+	return record.node_type === "group" && record.code === SYSTEM_SLIDES_TEMPLATE_TAG_GROUP_CODE
 }
 
 export function joinUploadDir(baseDir: string, suffixDir: string) {
@@ -139,7 +149,10 @@ export function buildSlidesTemplateTagSaveParams(
 ): SlidesTemplate.TagSaveParams {
 	return {
 		code: values.code.trim(),
+		node_type: values.node_type,
+		parent_id: values.node_type === "group" ? 0 : values.parent_id,
 		name_i18n: values.name_i18n,
+		description_i18n: values.description_i18n,
 		status: getSlidesTemplateStatusByChecked(Boolean(values.status)),
 		sort: values.sort ?? 0,
 	}

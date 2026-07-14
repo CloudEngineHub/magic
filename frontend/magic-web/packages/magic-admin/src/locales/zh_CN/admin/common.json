@@ -282,7 +282,10 @@
 		},
 		"tag": {
 			"addButton": "新增标签",
+			"addGroupButton": "新增",
+			"addGroupTitle": "新增 PPT 模板标签组",
 			"addTitle": "新增 PPT 模板标签",
+			"childrenTitle": "子标签",
 			"codeRule": "标签编码仅支持小写字母、数字和中划线",
 			"columns": {
 				"code": "标签编码",
@@ -291,10 +294,14 @@
 				"templateCount": "模板数",
 				"updatedAt": "更新时间"
 			},
+			"editGroupTitle": "编辑 PPT 模板标签组",
 			"editTitle": "编辑 PPT 模板标签",
 			"fields": {
 				"code": "标签编码",
+				"enabled": "开启",
 				"name": "标签名称",
+				"nodeType": "节点类型",
+				"parent": "所属标签组",
 				"sort": "排序值",
 				"status": "启用状态"
 			},
@@ -303,8 +310,16 @@
 				"keyword": "关键词",
 				"status": "状态"
 			},
+			"groupCodeRule": "标签组编码必须以 _group 结尾",
+			"groupsTitle": "标签组",
 			"manageButton": "标签管理",
-			"manageTitle": "标签管理"
+			"manageTitle": "标签管理",
+			"nodeTypes": {
+				"group": "标签组",
+				"tag": "子标签"
+			},
+			"quickCreateGroup": "新建标签组",
+			"systemBuiltIn": "系统内置"
 		},
 		"tagMatch": {
 			"all": "全部",

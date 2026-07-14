@@ -42,6 +42,7 @@ interface SlidesTemplateCanvasTileItemProps {
 	loopState?: SlidesTemplateCanvasTileLoopState
 	onFindSimilarColors?: (template: OptionItem) => void
 	onPreviewClick: (anchorTileId: string, tile: SlidesTemplateCanvasTile) => void
+	onPreviewIntent?: (template: OptionItem) => void
 	onTemplateSelect: (template: OptionItem) => void
 	position: TemplateCanvasPoint
 	reduceMotion: boolean
@@ -62,6 +63,7 @@ function SlidesTemplateCanvasTileItem({
 	loopState,
 	onFindSimilarColors,
 	onPreviewClick,
+	onPreviewIntent,
 	onTemplateSelect,
 	position,
 	reduceMotion,
@@ -94,6 +96,7 @@ function SlidesTemplateCanvasTileItem({
 				canPreview={previewImageUrls.length > 0}
 				onFindSimilarColors={onFindSimilarColors}
 				onSelect={onTemplateSelect}
+				onPreviewIntent={onPreviewIntent}
 				onPreviewClick={() => onPreviewClick(anchorTileId, tile)}
 			/>
 		)
@@ -112,6 +115,7 @@ function SlidesTemplateCanvasTileItem({
 					canPreview={previewImageUrls.length > 0}
 					onFindSimilarColors={onFindSimilarColors}
 					onSelect={onTemplateSelect}
+					onPreviewIntent={onPreviewIntent}
 					onPreviewClick={() => onPreviewClick(anchorTileId, tile)}
 				/>
 			</div>

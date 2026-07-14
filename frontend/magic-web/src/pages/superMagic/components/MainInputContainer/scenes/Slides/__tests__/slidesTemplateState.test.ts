@@ -177,7 +177,12 @@ describe("slides template state", () => {
 		expect(groups[0].children?.[0].value).toBe(organizationTemplate.code)
 	})
 
-	it("inserts tag groups before category groups", () => {
+	it("only inserts the featured tag before category groups", () => {
+		const annualReportTag: SlidesTemplateTagItem = {
+			...featuredTag,
+			code: "purpose-annual-report",
+			name_i18n: { zh_CN: "年度报告", en_US: "Annual Report" },
+		}
 		const template = {
 			...officialTemplate,
 			category_code: businessCategory.code,
@@ -191,7 +196,11 @@ describe("slides template state", () => {
 			],
 		}
 
-		const groups = groupSlidesTemplates([template], [businessCategory], [featuredTag])
+		const groups = groupSlidesTemplates(
+			[template],
+			[businessCategory],
+			[featuredTag, annualReportTag],
+		)
 
 		expect(groups.map((group) => group.group_key)).toEqual([
 			"all",

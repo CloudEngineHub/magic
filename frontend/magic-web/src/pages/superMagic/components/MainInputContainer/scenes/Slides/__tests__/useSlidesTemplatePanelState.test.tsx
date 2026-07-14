@@ -13,7 +13,9 @@ import { useSlidesTemplatePanelState } from "../useSlidesTemplatePanelState"
 
 const apiMock = vi.hoisted(() => ({
 	getSlidesTemplateCategories: vi.fn(),
-	getSlidesTemplateTags: vi.fn(),
+	getSlidesTemplateTagGroups: vi.fn(),
+	getSlidesTemplateCount: vi.fn(),
+	getSlidesTemplateDetail: vi.fn(),
 	getSlidesTemplates: vi.fn(),
 }))
 
@@ -73,12 +75,7 @@ function resolveCategories() {
 }
 
 function resolveTags() {
-	vi.mocked(SuperMagicApi.getSlidesTemplateTags).mockResolvedValue({
-		page: 1,
-		page_size: 200,
-		total: 0,
-		list: [],
-	})
+	vi.mocked(SuperMagicApi.getSlidesTemplateTagGroups).mockResolvedValue([])
 }
 
 function StrictModeWrapper({ children }: { children: ReactNode }) {

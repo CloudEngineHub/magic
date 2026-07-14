@@ -137,6 +137,7 @@ export default function SlidesTemplatePage() {
 			SlidesTemplateApi.tag.query({
 				page: 1,
 				page_size: 200,
+				node_type: "tag",
 				status: SlidesTemplate.StatusMap.enabled,
 			}),
 		{

@@ -61,8 +61,23 @@ export interface SlidesTemplateQueryParams {
 export interface SlidesTemplateListResponse {
 	page: number
 	page_size: number
-	total: number
 	list: SlidesTemplateItem[]
+}
+
+export interface SlidesTemplateCountResponse {
+	total: number
+	/**
+	 * 模板累计使用量。服务端灰度发布前可能不返回；前端不能用模板数量替代它。
+	 */
+	template_total_usage_count?: number
+}
+
+/** 列表只提供封面；打开预览时再读取详情中的大图资源。 */
+export interface SlidesTemplateDetail extends SlidesTemplateItem {
+	colors: string[]
+	collage_url: string | null
+	preview_image_urls: string[]
+	preview_url: string | null
 }
 
 export interface SlidesTemplateCategoryItem {
@@ -104,25 +119,25 @@ export interface SlidesTemplateTagItem {
 	is_official: boolean
 }
 
-export type SlidesTemplateTagQueryParams = SlidesTemplateQueryParams
-
-export interface SlidesTemplateTagListResponse {
-	page: number
-	page_size: number
-	total: number
-	list: SlidesTemplateTagItem[]
+export interface SlidesTemplateTagGroupItem {
+	id: string
+	code: string
+	name_i18n: {
+		zh_CN: string
+		en_US: string
+	}
+	sort: number
+	tags: SlidesTemplateTagItem[]
 }
 
 export const ALL_SLIDES_TEMPLATE_GROUP_KEY = "all"
+export const SYSTEM_SLIDES_TEMPLATE_TAG_GROUP_CODE = "operational_group"
 
-// 模板总量接口尚未提供，先使用产品确认的展示值；接入后替换为接口字段。
-export const SLIDES_TEMPLATE_DISPLAY_COUNT = 101_582
 export const OTHER_SLIDES_TEMPLATE_GROUP_KEY = "other"
 export const SLIDES_TEMPLATE_CATEGORY_GROUP_KEY_PREFIX = "category:"
 export const SLIDES_TEMPLATE_TAG_GROUP_KEY_PREFIX = "tag:"
 export const SLIDES_TEMPLATE_PAGE_SIZE = 20
 export const SLIDES_TEMPLATE_CATEGORY_PAGE_SIZE = 200
-export const SLIDES_TEMPLATE_TAG_PAGE_SIZE = 200
 export const SLIDES_TEMPLATE_IMAGE_PROCESS: ImageProcessOptions = {
 	resize: { w: 1920 },
 	format: "webp",
@@ -207,6 +222,7 @@ export function groupSlidesTemplates(
 	if (tags || categories) {
 		return [
 			...groups,
+			// 运营标签组的子标签直接作为一级筛选项展示，例如「精选」「免费」。
 			...(tags ? groupSlidesTemplatesByTag(templates, tags) : []),
 			...(categories ? groupSlidesTemplatesByCategory(templates, categories) : []),
 		]
@@ -260,18 +276,6 @@ export function getSlidesTemplateTagCodeFromGroupKey(groupKey: string) {
 	return groupKey.startsWith(SLIDES_TEMPLATE_TAG_GROUP_KEY_PREFIX)
 		? groupKey.slice(SLIDES_TEMPLATE_TAG_GROUP_KEY_PREFIX.length)
 		: undefined
-}
-
-const HIDDEN_SLIDES_TEMPLATE_SELECTOR_CATEGORY_CODES = new Set(["PPT-CATE-business-report"])
-
-/**
- * 保留完整分组数据，只移除不应出现在模板选择器中的分类入口。
- */
-export function filterSlidesTemplateSelectorGroups(groups: OptionGroup[]) {
-	return groups.filter((group) => {
-		const categoryCode = getSlidesTemplateCategoryCodeFromGroupKey(group.group_key)
-		return !categoryCode || !HIDDEN_SLIDES_TEMPLATE_SELECTOR_CATEGORY_CODES.has(categoryCode)
-	})
 }
 
 function groupSlidesTemplatesByTag(

@@ -22,7 +22,10 @@ function createTemplate(index: number, previewCount = 0): OptionItem {
 	}
 }
 
-function renderCanvas(onPreviewOpenChange?: (isOpen: boolean) => void) {
+function renderCanvas(
+	onPreviewOpenChange?: (isOpen: boolean) => void,
+	onTemplateDetailLoad?: (template: OptionItem) => Promise<OptionItem | null>,
+) {
 	return render(
 		<SlidesTemplateCanvas
 			templates={[
@@ -37,6 +40,7 @@ function renderCanvas(onPreviewOpenChange?: (isOpen: boolean) => void) {
 			isRefreshing={false}
 			onLoadMore={vi.fn()}
 			onPreviewOpenChange={onPreviewOpenChange}
+			onTemplateDetailLoad={onTemplateDetailLoad}
 			resetKey="all:"
 		/>,
 	)
@@ -190,6 +194,46 @@ describe("SlidesTemplateCanvas preview", () => {
 		expect(screen.getByTestId("slides-template-inline-preview-page-index")).toHaveTextContent(
 			"2 / 10",
 		)
+	})
+
+	it("loads template detail on hover and refreshes the opened preview", async () => {
+		const detailedTemplate = {
+			...createTemplate(1),
+			preview_image_urls: [
+				"https://example.com/detail-page-1.png",
+				"https://example.com/detail-page-2.png",
+			],
+		}
+		const onTemplateDetailLoad = vi.fn().mockResolvedValue(detailedTemplate)
+		vi.useFakeTimers()
+
+		try {
+			renderCanvas(undefined, onTemplateDetailLoad)
+			const tile = getFirstTestElement("slides-template-cover-tile")
+
+			fireEvent.pointerEnter(tile)
+			act(() => vi.advanceTimersByTime(299))
+			expect(onTemplateDetailLoad).not.toHaveBeenCalled()
+
+			await act(async () => {
+				vi.advanceTimersByTime(1)
+				await Promise.resolve()
+			})
+			expect(onTemplateDetailLoad).toHaveBeenCalledWith(
+				expect.objectContaining({ value: "PPT-1" }),
+			)
+
+			await act(async () => {
+				fireEvent.click(getFirstTestElement("slides-template-cover-preview-button"))
+				await Promise.resolve()
+			})
+
+			expect(
+				screen.getByTestId("slides-template-inline-preview-page-index"),
+			).toHaveTextContent("1 / 2")
+		} finally {
+			vi.useRealTimers()
+		}
 	})
 
 	it("hides canvas controls and disables canvas movement while previewing", () => {

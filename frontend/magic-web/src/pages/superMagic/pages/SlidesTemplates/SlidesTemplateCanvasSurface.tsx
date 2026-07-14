@@ -45,6 +45,7 @@ interface SlidesTemplateCanvasSurfaceProps {
 	onPointerMove: PointerEventHandler<HTMLDivElement>
 	onPointerUp: PointerEventHandler<HTMLDivElement>
 	onPreviewClose: () => void
+	onPreviewIntent?: (template: OptionItem) => void
 	onPreviewToggle: (anchorTileId: string, tile: SlidesTemplateCanvasTile) => void
 	onResetView: () => void
 	onTemplateSelect: (template: OptionItem) => void
@@ -84,6 +85,7 @@ export default function SlidesTemplateCanvasSurface({
 	onPointerMove,
 	onPointerUp,
 	onPreviewClose,
+	onPreviewIntent,
 	onPreviewToggle,
 	onResetView,
 	onTemplateSelect,
@@ -177,6 +179,7 @@ export default function SlidesTemplateCanvasSurface({
 				selectedTemplateValue={selectedTemplateValue}
 				onFindSimilarColors={onFindSimilarColors}
 				onTemplateSelect={onTemplateSelect}
+				onPreviewIntent={onPreviewIntent}
 				onPreviewClick={onPreviewToggle}
 			/>
 			<div

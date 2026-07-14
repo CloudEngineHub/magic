@@ -277,7 +277,10 @@
 		},
 		"tag": {
 			"addButton": "Add Tag",
+			"addGroupButton": "Add",
+			"addGroupTitle": "Add Slide Template Tag Group",
 			"addTitle": "Add Slide Template Tag",
+			"childrenTitle": "Child Tags",
 			"codeRule": "Tag code only supports lowercase letters, numbers, and hyphens.",
 			"columns": {
 				"code": "Tag Code",
@@ -286,10 +289,14 @@
 				"templateCount": "Templates",
 				"updatedAt": "Updated At"
 			},
+			"editGroupTitle": "Edit Slide Template Tag Group",
 			"editTitle": "Edit Slide Template Tag",
 			"fields": {
 				"code": "Tag Code",
+				"enabled": "Enabled",
 				"name": "Tag Name",
+				"nodeType": "Node Type",
+				"parent": "Parent Group",
 				"sort": "Sort",
 				"status": "Status"
 			},
@@ -298,8 +305,16 @@
 				"keyword": "Keyword",
 				"status": "Status"
 			},
+			"groupCodeRule": "Group codes must end with _group.",
+			"groupsTitle": "Groups",
 			"manageButton": "Tags",
-			"manageTitle": "Tag Management"
+			"manageTitle": "Tag Management",
+			"nodeTypes": {
+				"group": "Group",
+				"tag": "Child Tag"
+			},
+			"quickCreateGroup": "Create Group",
+			"systemBuiltIn": "System Built-in"
 		},
 		"tagMatch": {
 			"all": "All",

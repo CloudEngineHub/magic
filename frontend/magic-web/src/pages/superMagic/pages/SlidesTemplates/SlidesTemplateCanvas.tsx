@@ -49,6 +49,7 @@ interface SlidesTemplateCanvasProps {
 	onLoadMore: () => void
 	onFindSimilarColors?: (template: OptionItem) => void
 	onPreviewOpenChange?: (isOpen: boolean) => void
+	onTemplateDetailLoad?: (template: OptionItem) => Promise<OptionItem | null>
 	onTemplateSelect: (template: OptionItem) => void
 	resetKey: string
 	selectedTemplate?: OptionItem | null
@@ -72,6 +73,7 @@ const SlidesTemplateCanvas = forwardRef<SlidesTemplateCanvasHandle, SlidesTempla
 			onLoadMore,
 			onFindSimilarColors,
 			onPreviewOpenChange,
+			onTemplateDetailLoad,
 			onTemplateSelect,
 			resetKey,
 			selectedTemplate,
@@ -166,6 +168,49 @@ const SlidesTemplateCanvas = forwardRef<SlidesTemplateCanvasHandle, SlidesTempla
 		viewportInsetsRef.current = viewportInsets
 		const viewportInsetsKey = `${viewportInsets?.top ?? 0}:${viewportInsets?.right ?? 0}:${viewportInsets?.bottom ?? 0}:${viewportInsets?.left ?? 0}`
 		const autoLoadSignal = loadMoreSignal ?? canvasItems.length
+		const loadTemplateDetail = useCallback(
+			(template: OptionItem) => {
+				if (!onTemplateDetailLoad) return Promise.resolve(template)
+				return Promise.resolve(onTemplateDetailLoad(template)).then(
+					(detail) => detail ?? template,
+				)
+			},
+			[onTemplateDetailLoad],
+		)
+		const handlePreviewIntent = useCallback(
+			(template: OptionItem) => {
+				if (!onTemplateDetailLoad) return
+				void loadTemplateDetail(template).catch((error) => {
+					console.error("Failed to preload slides template detail", error)
+				})
+			},
+			[loadTemplateDetail, onTemplateDetailLoad],
+		)
+		const hydratePreviewFocus = useCallback(
+			(anchorTileId: string, tile: SlidesTemplateCanvasTile) => {
+				if (!onTemplateDetailLoad) return
+				void loadTemplateDetail(tile.template)
+					.then((detail) => {
+						setPreviewFocus((currentFocus) => {
+							if (
+								currentFocus?.anchorTileId !== anchorTileId ||
+								currentFocus.tile.id !== tile.id
+							) {
+								return currentFocus
+							}
+
+							return {
+								...currentFocus,
+								tile: { ...currentFocus.tile, template: detail },
+							}
+						})
+					})
+					.catch((error) => {
+						console.error("Failed to fetch slides template detail for preview", error)
+					})
+			},
+			[loadTemplateDetail, onTemplateDetailLoad],
+		)
 
 		const stateRef = useRef({
 			hasMore,
@@ -394,12 +439,14 @@ const SlidesTemplateCanvas = forwardRef<SlidesTemplateCanvasHandle, SlidesTempla
 						anchorTileId: tile.id,
 						tile,
 					})
+					hydratePreviewFocus(tile.id, tile)
 					return true
 				},
 			}),
 			[
 				canvasItems,
 				handleFocusPoint,
+				hydratePreviewFocus,
 				loopMetrics,
 				priorityCanvasItems,
 				randomFocusedTemplateKey,
@@ -437,13 +484,18 @@ const SlidesTemplateCanvas = forwardRef<SlidesTemplateCanvasHandle, SlidesTempla
 		const handlePreviewToggle = useCallback(
 			(anchorTileId: string, tile: SlidesTemplateCanvasTile) => {
 				setRandomFocusedCanvasItem(null)
-				setPreviewFocus((currentFocus) =>
-					currentFocus?.anchorTileId === anchorTileId && currentFocus.tile.id === tile.id
-						? null
-						: { anchorTileId, tile },
-				)
+				if (
+					previewFocus?.anchorTileId === anchorTileId &&
+					previewFocus.tile.id === tile.id
+				) {
+					setPreviewFocus(null)
+					return
+				}
+
+				setPreviewFocus({ anchorTileId, tile })
+				hydratePreviewFocus(anchorTileId, tile)
 			},
-			[],
+			[hydratePreviewFocus, previewFocus],
 		)
 		const handlePreviewClose = useCallback(() => {
 			setPreviewFocus(null)
@@ -482,6 +534,7 @@ const SlidesTemplateCanvas = forwardRef<SlidesTemplateCanvasHandle, SlidesTempla
 				onCanvasClickCapture={handleCanvasClickCapture}
 				onFindSimilarColors={onFindSimilarColors}
 				onTemplateSelect={onTemplateSelect}
+				onPreviewIntent={handlePreviewIntent}
 				onPreviewToggle={handlePreviewToggle}
 				onPreviewClose={handlePreviewClose}
 				onZoomIn={handleZoomIn}

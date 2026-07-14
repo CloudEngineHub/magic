@@ -130,6 +130,15 @@ describe("SlidesTemplateApi", () => {
 		expect(client.post).toHaveBeenCalledWith(RequestUrl.querySlidesTemplateTags, params)
 	})
 
+	it("maps tag tree API", () => {
+		const client = createClient()
+		const api = generateSlidesTemplateApi(client as never)
+
+		api.tag.tree()
+
+		expect(client.get).toHaveBeenCalledWith(RequestUrl.getSlidesTemplateTagTree)
+	})
+
 	it("maps tag detail, status, sort, and delete APIs", () => {
 		const client = createClient()
 		const api = generateSlidesTemplateApi(client as never)
@@ -154,6 +163,8 @@ describe("SlidesTemplateApi", () => {
 		const api = generateSlidesTemplateApi(client as never)
 		const payload = {
 			code: "featured",
+			node_type: "tag" as const,
+			parent_id: "group-1",
 			name_i18n: { zh_CN: "精选", en_US: "Featured" },
 			status: 1,
 			sort: 10,

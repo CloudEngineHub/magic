@@ -72,6 +72,7 @@ function SlidesTemplatesPage() {
 	const similarColorSourceKeyRef = useRef("")
 	const similarColorLoadCountRef = useRef(0)
 	const similarColorLoadSourceKeyRef = useRef("")
+	const templateDetailRequestSeqRef = useRef(0)
 	const bottomToolsSize = useSize(bottomToolsRef)
 	const reduceMotion = useReducedMotion()
 	const hasGroups = slidesState.groups.length > 1
@@ -141,6 +142,14 @@ function SlidesTemplatesPage() {
 			: (bottomToolsSize?.height ?? 0) + BOTTOM_TOOLS_OFFSET + CANVAS_EDGE_GAP,
 		left: CANVAS_EDGE_GAP,
 	}
+	const loadTemplateDetail = slidesState.loadTemplateDetail
+	const handleTemplateDetailLoad = useCallback(
+		(template: OptionItem) => {
+			const code = typeof template.value === "string" ? template.value : ""
+			return code ? loadTemplateDetail(code) : Promise.resolve(template)
+		},
+		[loadTemplateDetail],
+	)
 
 	useEffect(() => {
 		if (isComposingRef.current) return
@@ -259,7 +268,24 @@ function SlidesTemplatesPage() {
 	}
 
 	function handleClearSelectedTemplate() {
+		templateDetailRequestSeqRef.current += 1
 		setSelectedTemplate(null)
+	}
+
+	function handleTemplateSelect(template: OptionItem) {
+		const requestSeq = templateDetailRequestSeqRef.current + 1
+		templateDetailRequestSeqRef.current = requestSeq
+		setSelectedTemplate(template)
+		// 列表接口只携带缩略图，选择模板后再读取详情，避免首屏加载全部预览大图。
+		void handleTemplateDetailLoad(template)
+			.then((detail) => {
+				if (detail && requestSeq === templateDetailRequestSeqRef.current) {
+					setSelectedTemplate(detail)
+				}
+			})
+			.catch((error) => {
+				console.error("Failed to fetch slides template detail", error)
+			})
 	}
 
 	function handlePreviewSelectedTemplate() {
@@ -291,7 +317,7 @@ function SlidesTemplatesPage() {
 				ref={canvasRef}
 				templates={visibleTemplateOptions}
 				selectedTemplate={selectedTemplate}
-				onTemplateSelect={setSelectedTemplate}
+				onTemplateSelect={handleTemplateSelect}
 				hasMore={
 					isSimilarColorFilterActive
 						? canLoadMoreSimilarColorTemplates
@@ -304,6 +330,7 @@ function SlidesTemplatesPage() {
 				loadMoreSignal={slidesState.loadedTemplateCount}
 				onFindSimilarColors={handleFindSimilarColors}
 				onPreviewOpenChange={setIsInlinePreviewOpen}
+				onTemplateDetailLoad={handleTemplateDetailLoad}
 				resetKey={resetKey}
 				viewportInsets={canvasViewportInsets}
 			/>

@@ -45,8 +45,9 @@ import type {
 import type {
 	SlidesTemplateCategoryListResponse,
 	SlidesTemplateCategoryQueryParams,
-	SlidesTemplateTagListResponse,
-	SlidesTemplateTagQueryParams,
+	SlidesTemplateCountResponse,
+	SlidesTemplateDetail,
+	SlidesTemplateTagGroupItem,
 	SlidesTemplateListResponse,
 	SlidesTemplateQueryParams,
 } from "@/pages/superMagic/components/MainInputContainer/scenes/Slides/slidesTemplateState"
@@ -727,9 +728,21 @@ export const generateSuperMagicApi = (fetch: HttpClient) => ({
 		)
 	},
 
-	getSlidesTemplateTags(params: SlidesTemplateTagQueryParams) {
-		return fetch.get<SlidesTemplateTagListResponse>(
-			genRequestUrl("/api/v1/slides-template-tags", {}, params),
+	getSlidesTemplateTagGroups(params: { category_code?: string } = {}) {
+		return fetch.get<SlidesTemplateTagGroupItem[]>(
+			genRequestUrl("/api/v1/slides-template/tags/groups", {}, params),
+		)
+	},
+
+	getSlidesTemplateCount(params: SlidesTemplateQueryParams) {
+		return fetch.get<SlidesTemplateCountResponse>(
+			genRequestUrl("/api/v1/slides-templates/count", {}, params),
+		)
+	},
+
+	getSlidesTemplateDetail(code: string) {
+		return fetch.get<SlidesTemplateDetail>(
+			genRequestUrl("/api/v1/slides-templates/${code}", { code }),
 		)
 	},
 

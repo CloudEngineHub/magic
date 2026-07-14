@@ -20,6 +20,7 @@ interface SlidesTemplateCanvasItemsLayerProps {
 	prioritizeCoverLoading: boolean
 	onFindSimilarColors?: (template: OptionItem) => void
 	onPreviewClick: (anchorTileId: string, tile: SlidesTemplateCanvasTile) => void
+	onPreviewIntent?: (template: OptionItem) => void
 	onTemplateSelect: (template: OptionItem) => void
 	selectedTemplateValue: string
 	visibleCanvasItems: Array<TemplateCanvasItem<SlidesTemplateCanvasTile>>
@@ -41,6 +42,7 @@ function SlidesTemplateCanvasItemsLayer({
 	prioritizeCoverLoading,
 	onFindSimilarColors,
 	onPreviewClick,
+	onPreviewIntent,
 	onTemplateSelect,
 	selectedTemplateValue,
 	visibleCanvasItems,
@@ -114,6 +116,7 @@ function SlidesTemplateCanvasItemsLayer({
 					selectedTemplateValue={selectedTemplateValue}
 					onFindSimilarColors={onFindSimilarColors}
 					onTemplateSelect={onTemplateSelect}
+					onPreviewIntent={onPreviewIntent}
 					onPreviewClick={onPreviewClick}
 					shouldPlayIntro={shouldPlayIntro}
 				/>
@@ -142,6 +145,7 @@ function SlidesTemplateCanvasItemsLayer({
 						selectedTemplateValue={selectedTemplateValue}
 						onFindSimilarColors={onFindSimilarColors}
 						onTemplateSelect={onTemplateSelect}
+						onPreviewIntent={onPreviewIntent}
 						onPreviewClick={onPreviewClick}
 						shouldPlayIntro={shouldPlayIntro}
 						visibleIndex={visibleIndex}

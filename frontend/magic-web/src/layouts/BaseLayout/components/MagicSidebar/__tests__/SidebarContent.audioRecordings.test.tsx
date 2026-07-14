@@ -86,6 +86,10 @@ vi.mock("@/pages/superMagic/hooks/useResourceStatusPolling", () => ({
 	default: () => undefined,
 }))
 
+vi.mock("@/pages/superMagic/hooks/useSlidesTemplateTotal", () => ({
+	useSlidesTemplateTotal: () => 101582,
+}))
+
 vi.mock("../hooks/useNavigateToSuperHome", () => ({
 	useNavigateToSuperHome: () => ({
 		superRouteUrl: "/super",

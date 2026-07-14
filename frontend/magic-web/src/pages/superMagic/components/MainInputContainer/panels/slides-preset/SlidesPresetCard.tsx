@@ -31,7 +31,7 @@ interface SlidesPresetCardProps {
 	hoverDetailsContainer?: HTMLElement | null
 }
 
-const PREVIEW_PRELOAD_DELAY_MS = 1000
+const PREVIEW_PRELOAD_DELAY_MS = 300
 
 function FeaturedTagIcon({ label, testId }: { label: string; testId: string }) {
 	return (
@@ -85,7 +85,10 @@ function SlidesPresetCard({
 	const usageCount = Math.max(0, template.usage_count ?? 0)
 	const testIdSuffix = getTemplateTestIdSuffix(template)
 	const canPreview = Boolean(
-		template.preview_image_urls?.length || template.collage_url || template.preview_url,
+		template.preview_image_urls?.length ||
+		template.collage_url ||
+		template.preview_url ||
+		template.thumbnail_url,
 	)
 	const shouldShowHoverDetails =
 		showHoverDetails &&
@@ -239,6 +242,7 @@ function SlidesPresetCard({
 							canUseHoverPreview &&
 								"group-hover:translate-y-0 group-hover:opacity-100",
 							isSelected && "translate-y-0 opacity-100",
+							!canUseHoverPreview && isSelected && "absolute right-2 top-2",
 						)}
 						data-testid="slides-preset-card-action-group"
 					>
@@ -258,7 +262,7 @@ function SlidesPresetCard({
 									: "playbook.edit.presets.form.select",
 							)}
 						</Button>
-						{canPreview && (
+						{canPreview && canUseHoverPreview && (
 							<Button
 								type="button"
 								size="sm"
@@ -273,6 +277,19 @@ function SlidesPresetCard({
 						)}
 					</div>
 				</div>
+				{canPreview && !canUseHoverPreview ? (
+					<Button
+						type="button"
+						size="icon"
+						variant="secondary"
+						className="absolute bottom-2 left-2 z-30 size-9 rounded-full bg-background/95 text-foreground shadow-lg backdrop-blur sm:size-8"
+						data-testid="slides-preset-card-touch-preview-button"
+						aria-label={t("playbook.edit.presets.form.preview")}
+						onClick={handlePreviewClick}
+					>
+						<Eye className="size-4" />
+					</Button>
+				) : null}
 			</div>
 			<div
 				className={cn(

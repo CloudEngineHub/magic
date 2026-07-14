@@ -3,6 +3,12 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest"
 import type { OptionItem } from "../../types"
 import SlidesPresetGrid from "../SlidesPresetGrid"
 
+const { mockUseIsMobile } = vi.hoisted(() => ({ mockUseIsMobile: vi.fn() }))
+
+vi.mock("@/hooks/useIsMobile", () => ({
+	useIsMobile: mockUseIsMobile,
+}))
+
 const intersectionObserverInstances: Array<{
 	callback: IntersectionObserverCallback
 	observedElements: Set<Element>
@@ -78,6 +84,7 @@ describe("SlidesPresetGrid", () => {
 	beforeEach(() => {
 		intersectionObserverInstances.length = 0
 		mockPointerDevice({ canHover: true, maxTouchPoints: 0 })
+		mockUseIsMobile.mockReturnValue(false)
 	})
 
 	afterAll(() => {
@@ -246,6 +253,59 @@ describe("SlidesPresetGrid", () => {
 		)
 	})
 
+	it("shows persistent preview buttons on touch devices", () => {
+		mockPointerDevice({ canHover: false, maxTouchPoints: 5 })
+		render(<SlidesPresetGrid templates={mockTemplates} />)
+
+		const previewButtons = screen.getAllByTestId("slides-preset-card-touch-preview-button")
+		expect(previewButtons).toHaveLength(mockTemplates.length)
+		expect(screen.queryByTestId("slides-preset-card-preview-button")).not.toBeInTheDocument()
+
+		fireEvent.click(previewButtons[0])
+		expect(screen.getByTestId("slides-preset-preview-dialog-content")).toBeInTheDocument()
+	})
+
+	it("shows the selected status in the top-right corner on touch devices", () => {
+		mockPointerDevice({ canHover: false, maxTouchPoints: 5 })
+		render(<SlidesPresetGrid templates={mockTemplates} selectedTemplate={mockTemplates[0]} />)
+
+		const selectedActionGroup = screen.getAllByTestId("slides-preset-card-action-group")[0]
+		expect(selectedActionGroup).toHaveClass("absolute", "right-2", "top-2", "opacity-100")
+		expect(screen.getAllByTestId("slides-preset-card-use-button")[0]).toHaveTextContent(
+			"playbook.edit.presets.form.selected",
+		)
+	})
+
+	it("loads template detail when opening a preview", async () => {
+		const onPreviewDetailLoad = vi.fn().mockResolvedValue(mockTemplates[0])
+		render(
+			<SlidesPresetGrid
+				templates={mockTemplates}
+				onPreviewDetailLoad={onPreviewDetailLoad}
+			/>,
+		)
+
+		fireEvent.click(screen.getAllByTestId("slides-preset-card-preview-button")[0])
+
+		await waitFor(() => expect(onPreviewDetailLoad).toHaveBeenCalledWith(mockTemplates[0]))
+	})
+
+	it("opens the preview in a managed bottom drawer on mobile", () => {
+		mockUseIsMobile.mockReturnValue(true)
+		mockPointerDevice({ canHover: false, maxTouchPoints: 5 })
+		render(<SlidesPresetGrid templates={mockTemplates} />)
+
+		fireEvent.click(screen.getAllByTestId("slides-preset-card-touch-preview-button")[0])
+
+		const drawerContent = document.querySelector('[data-slot="drawer-content"]')
+		expect(drawerContent).toHaveClass("z-popup")
+		expect(drawerContent).toHaveAttribute("data-vaul-drawer-direction", "bottom")
+		expect(drawerContent).not.toHaveClass(
+			"h-[min(90dvh,calc(100dvh-var(--safe-area-inset-top)-0.5rem))]",
+		)
+		expect(screen.getByTestId("slides-preset-preview-dialog-content")).toBeInTheDocument()
+	})
+
 	it("uses the same wheel and keyboard page navigation in the preview dialog", () => {
 		render(<SlidesPresetGrid templates={mockTemplates} />)
 
@@ -303,29 +363,72 @@ describe("SlidesPresetGrid", () => {
 		await waitFor(() => expect(handlePreviewOpenChange).toHaveBeenLastCalledWith(false))
 	})
 
-	it("preloads preview iframe after hovering a card for one second", () => {
+	it("preloads preview iframe after hovering a card for 300ms", async () => {
+		const onPreviewDetailLoad = vi.fn().mockResolvedValue(mockTemplates[0])
 		vi.useFakeTimers()
 
 		try {
-			render(<SlidesPresetGrid templates={mockTemplates} />)
+			render(
+				<SlidesPresetGrid
+					templates={mockTemplates}
+					onPreviewDetailLoad={onPreviewDetailLoad}
+				/>,
+			)
 
 			fireEvent.mouseEnter(screen.getAllByTestId("slides-preset-card")[0])
 
 			act(() => {
-				vi.advanceTimersByTime(999)
+				vi.advanceTimersByTime(299)
 			})
 
 			expect(
 				screen.queryByTestId("slides-preset-preview-preload-iframe"),
 			).not.toBeInTheDocument()
 
-			act(() => {
+			await act(async () => {
 				vi.advanceTimersByTime(1)
+				await Promise.resolve()
 			})
 
+			expect(onPreviewDetailLoad).toHaveBeenCalledWith(mockTemplates[0])
 			expect(screen.getByTestId("slides-preset-preview-preload-iframe")).toHaveAttribute(
 				"src",
 				"https://example.com/academic-preview",
+			)
+		} finally {
+			vi.useRealTimers()
+		}
+	})
+
+	it("renders the collage returned by template detail in the hover card", async () => {
+		const detailTemplate = {
+			...mockTemplates[0],
+			collage_url: "https://example.com/academic-collage.png",
+		}
+		const onPreviewDetailLoad = vi.fn().mockResolvedValue(detailTemplate)
+		vi.useFakeTimers()
+
+		try {
+			render(
+				<SlidesPresetGrid
+					templates={mockTemplates}
+					onPreviewDetailLoad={onPreviewDetailLoad}
+				/>,
+			)
+
+			const firstCard = screen.getAllByTestId("slides-preset-card")[0]
+			fireEvent.pointerEnter(firstCard)
+			fireEvent.mouseEnter(firstCard)
+
+			await act(async () => {
+				vi.advanceTimersByTime(300)
+				await Promise.resolve()
+			})
+
+			expect(onPreviewDetailLoad).toHaveBeenCalledWith(mockTemplates[0])
+			expect(screen.getByAltText("Academic Research collage preview")).toHaveAttribute(
+				"src",
+				"https://example.com/academic-collage.png",
 			)
 		} finally {
 			vi.useRealTimers()
@@ -342,7 +445,7 @@ describe("SlidesPresetGrid", () => {
 			fireEvent.mouseEnter(screen.getAllByTestId("slides-preset-card")[0])
 
 			act(() => {
-				vi.advanceTimersByTime(1000)
+				vi.advanceTimersByTime(300)
 			})
 
 			expect(

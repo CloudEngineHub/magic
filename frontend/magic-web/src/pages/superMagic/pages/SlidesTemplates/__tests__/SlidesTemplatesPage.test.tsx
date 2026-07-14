@@ -71,10 +71,12 @@ const {
 			keyword: "",
 			loadedTemplateCount: 3,
 			loadMore: vi.fn(),
+			loadTemplateDetail: vi.fn().mockResolvedValue(null),
 			selectedGroupKey: "all",
 			setKeyword: vi.fn(),
 			setSelectedGroupKey: vi.fn(),
 			templateOptions: [template, related, unrelated],
+			total: 3,
 		},
 	}
 })
