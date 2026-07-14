@@ -35,7 +35,7 @@ class AdminSuperMagicCategoryAppServiceTest extends TestCase
     {
         $requestDTO = new QueryAgentCategoriesRequestAdminDTO();
         $requestDTO->setStatus(0);
-        $requestDTO->nameI18n = '测试';
+        $requestDTO->keyword = '测试';
 
         $service = $this->createService([$this->createCategory(status: 0)]);
 

@@ -15,8 +15,6 @@ class QueryAgentCategoriesRequestAdminDTO extends AbstractRequestDTO
 {
     public ?int $status = null;
 
-    public ?string $nameI18n = null;
-
     public ?string $keyword = null;
 
     public function setStatus(null|int|string $value): void
@@ -31,7 +29,7 @@ class QueryAgentCategoriesRequestAdminDTO extends AbstractRequestDTO
 
     public function getKeyword(): ?string
     {
-        $keyword = trim((string) ($this->nameI18n ?? $this->keyword ?? ''));
+        $keyword = trim((string) ($this->keyword ?? ''));
         return $keyword === '' ? null : $keyword;
     }
 
@@ -39,7 +37,6 @@ class QueryAgentCategoriesRequestAdminDTO extends AbstractRequestDTO
     {
         return [
             'status' => 'sometimes|nullable|integer|in:0,1',
-            'name_i18n' => 'sometimes|nullable|string|max:255',
             'keyword' => 'sometimes|nullable|string|max:255',
         ];
     }
@@ -49,8 +46,6 @@ class QueryAgentCategoriesRequestAdminDTO extends AbstractRequestDTO
         return [
             'status.integer' => __('validation.integer', ['attribute' => 'status']),
             'status.in' => __('validation.in', ['attribute' => 'status']),
-            'name_i18n.string' => __('validation.string', ['attribute' => 'name_i18n']),
-            'name_i18n.max' => __('validation.max.string', ['attribute' => 'name_i18n', 'max' => 255]),
             'keyword.string' => __('validation.string', ['attribute' => 'keyword']),
             'keyword.max' => __('validation.max.string', ['attribute' => 'keyword', 'max' => 255]),
         ];
