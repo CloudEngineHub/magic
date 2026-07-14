@@ -507,6 +507,18 @@
         "zh_CN": "查询环境变量",
         "en_US": "Query environment variable"
     },
+    "cli_manager_apply": {
+        "zh_CN": "持久化 CLI",
+        "en_US": "Persist CLI"
+    },
+    "cli_manager_list": {
+        "zh_CN": "查看持久化 CLI",
+        "en_US": "List persisted CLIs"
+    },
+    "cli_manager_remove": {
+        "zh_CN": "移除持久化 CLI",
+        "en_US": "Remove persisted CLI"
+    },
     "add_server": {
         "zh_CN": "添加新服务",
         "en_US": "Add New Service"
@@ -558,6 +570,26 @@
     "oauth2_remove_api_doc": {
         "zh_CN": "移除 OAuth2 接口文档",
         "en_US": "Remove OAuth2 API doc"
+    },
+    "scheduled_task_create": {
+        "zh_CN": "创建定时任务",
+        "en_US": "Create scheduled task"
+    },
+    "scheduled_task_list": {
+        "zh_CN": "查询定时任务",
+        "en_US": "List scheduled tasks"
+    },
+    "scheduled_task_get": {
+        "zh_CN": "查看定时任务",
+        "en_US": "Get scheduled task"
+    },
+    "scheduled_task_update": {
+        "zh_CN": "更新定时任务",
+        "en_US": "Update scheduled task"
+    },
+    "scheduled_task_delete": {
+        "zh_CN": "删除定时任务",
+        "en_US": "Delete scheduled task"
     },
     "call_simple_tool": {
         "zh_CN": "调用工具",

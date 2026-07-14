@@ -21,6 +21,7 @@ export type GetRecordingSummaryResultResponse = {
 	success: boolean
 	task_key: string
 	project_id: string
+	project_mode?: string | null
 	chat_topic_id: string
 	conversation_id: string
 	topic_id: string | undefined
@@ -62,6 +63,69 @@ export interface SummarizeRecordedTaskResponse {
 		model_id?: string
 		status?: string
 	}
+}
+
+export type ResummarizeAnalysisScope = "template_analysis_files" | "configured_analysis_files"
+
+export type ResummarizeAnalysisType =
+	| "topics"
+	| "summary"
+	| "followup"
+	| "power_dynamics"
+	| "intent"
+	| "metrics"
+	| "mindmap"
+	| "insights"
+	| "highlights"
+
+export interface ResummarizeRecordedTaskResponse {
+	success: boolean
+	task_key: string
+	message?: string
+	summary?: {
+		status?: string
+		topic_id?: string
+		model_id?: string
+		analysis_scope?: ResummarizeAnalysisScope
+		specified_analysis_types?: ResummarizeAnalysisType[]
+	}
+}
+
+export interface FinishRecordingTaskResponse {
+	success: boolean
+	task_key: string
+	phase?: string
+	status?: string
+	percent?: number
+	message?: string
+}
+
+/** Request payload for the finish-recording recovery endpoint.
+ *  The current frontend recover flow intentionally does not send a body,
+ *  but these optional fields are supported by the backend contract. */
+export interface RecoverFinishRecordingTaskRequest {
+	generated_title?: string
+	asr_stream_content?: string
+}
+
+/** Response from the finish-recording recovery endpoint.
+ *  The action field indicates how the frontend should proceed:
+ *  - finish_recording_recovery_started → optimistic "processing" + start polling
+ *  - already_completed → refresh list, use completed state
+ *  - finish_recording_already_running → keep "processing", continue polling */
+export interface RecoverFinishRecordingTaskResponse {
+	success: boolean
+	task_key: string
+	sandbox_id?: string
+	phase?: string
+	status?: string
+	percent?: number
+	action?:
+		| "finish_recording_recovery_started"
+		| "already_completed"
+		| "finish_recording_already_running"
+		| string
+	message?: string
 }
 
 export const generateRecordingSummaryApi = (fetch: HttpClient) => ({
@@ -209,8 +273,41 @@ export const generateRecordingSummaryApi = (fetch: HttpClient) => ({
 	},
 
 	/**
-	 * TODO: 与后端确认这个api 与 getRecordingSummaryResult 的区别，决定是否需要保留
-	 * @description Trigger AI summary for a live-recorded task (APP recorded audio)
+	 * @description Completes a recorded audio task after all chunks have uploaded
+	 */
+	finishRecordingTask({
+		task_key,
+		generated_title,
+		asr_stream_content,
+	}: {
+		task_key: string
+		generated_title: string
+		asr_stream_content: string
+	}) {
+		const limitedAsrStreamContent = asr_stream_content.slice(0, 10000)
+		return fetch.post<FinishRecordingTaskResponse>(
+			genRequestUrl(`/api/v1/asr/tasks/${encodeURIComponent(task_key)}/finish-recording`),
+			{
+				generated_title,
+				asr_stream_content: limitedAsrStreamContent,
+			},
+		)
+	},
+
+	/**
+	 * @description Queries progress for a single recorded audio task
+	 */
+	getTaskProgress({ task_key }: { task_key: string }) {
+		return fetch.get<RecordTaskProgress>(
+			genRequestUrl(`/api/v1/asr/tasks/${encodeURIComponent(task_key)}/progress`),
+		)
+	},
+
+	/**
+	 * @description 手动触发 recorded 音频任务的 AI 总结
+	 * 主要用于已完成录音或转写、但未自动生成总结的任务。
+	 * 与 getRecordingSummaryResult 不同，这里对应 recorded 音频场景；imported 文件场景仍走 getRecordingSummaryResult。
+	 * 调用后需结合 batchTaskProgress 轮询总结进度与结果。
 	 */
 	summarizeRecordedTask({
 		task_key,
@@ -228,12 +325,37 @@ export const generateRecordingSummaryApi = (fetch: HttpClient) => ({
 	},
 
 	/**
+	 * @description 重新触发已有 ASR 任务的总结生成。
+	 * Backend also supports optional analysis_scope and specified_analysis_types fields,
+	 * but the current product flow intentionally submits only model_id.
+	 */
+	resummarizeRecordedTask({ task_key, model_id }: { task_key: string; model_id: string }) {
+		return fetch.post<ResummarizeRecordedTaskResponse>(
+			genRequestUrl(`/api/v1/asr/tasks/${encodeURIComponent(task_key)}/resummarize`),
+			{ model_id },
+		)
+	},
+
+	/**
 	 * @description Batch query progress for in-flight ASR summary tasks
 	 */
 	batchTaskProgress({ task_keys }: { task_keys: string[] }) {
 		return fetch.post<BatchTaskProgressResponse>(
 			genRequestUrl("/api/v1/asr/tasks/progress/batch"),
 			{ task_keys },
+		)
+	},
+
+	/**
+	 * @description Recovers a finish-recording task that is stuck in merge_failed state.
+	 * The POST body is intentionally empty in the current flow; the backend
+	 * supports optional generated_title and asr_stream_content fields.
+	 */
+	recoverFinishRecordingTask({ task_key }: { task_key: string }) {
+		return fetch.post<RecoverFinishRecordingTaskResponse>(
+			genRequestUrl(
+				`/api/v1/asr/tasks/${encodeURIComponent(task_key)}/finish-recording/recover`,
+			),
 		)
 	},
 })

@@ -1,4 +1,5 @@
 export const enum RoutePath {
+	Maintenance = "/maintenance",
 	Initialization = "/initialization",
 	ApprovalDetailFull = "/approval/:id",
 	ApprovalFilePreview = "/approval/file/preview",
@@ -71,7 +72,10 @@ export const enum RoutePath {
 	Flow = "/flow",
 	MCP = "/flow/mcp/list",
 	Flows = "/flow/:type/list",
+	FlowVectorKnowledgeCreate = "/flow/vector-knowledge/create",
+	FlowVectorKnowledgeDetail = "/flow/vector-knowledge/detail",
 	VectorKnowledge = "/vector-knowledge",
+	VectorKnowledgeList = "/vector-knowledge/list",
 	VectorKnowledgeCreate = "/vector-knowledge/create",
 	VectorKnowledgeDetail = "/vector-knowledge/detail",
 	AgentList = "/flow/agent/list",

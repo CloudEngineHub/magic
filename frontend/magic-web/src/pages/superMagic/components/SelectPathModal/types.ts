@@ -74,10 +74,15 @@ export interface CrossProjectFileOperationModalProps {
 	fileIds: string[]
 	sourceAttachments: AttachmentItem[]
 	initialPath?: AttachmentItem[]
-	selectProjectOnly?: boolean
+	includeFixedWorkspaces?: boolean
+	closeOnSubmit?: boolean
+	allowWorkspaceRootSubmit?: boolean
+	defaultProjectName?: string
 	onClose: () => void
 	onSubmit: (data: {
 		targetProjectId: string
+		targetWorkspaceId?: string
+		targetProject?: ProjectListItem
 		targetPath: AttachmentItem[]
 		targetAttachments: AttachmentItem[]
 		sourceAttachments: AttachmentItem[]

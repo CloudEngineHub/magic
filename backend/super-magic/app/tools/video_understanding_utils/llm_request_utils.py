@@ -33,6 +33,14 @@ _SIZE_LIMIT_ERROR_PATTERNS = [
     re.compile(r"video.*size.*limit", re.IGNORECASE),
 ]
 
+# 匹配视频格式不支持错误的正则模式列表
+_UNSUPPORTED_FORMAT_ERROR_PATTERNS = [
+    re.compile(r"unsupported video format", re.IGNORECASE),
+    re.compile(r"video.*format.*not supported", re.IGNORECASE),
+    re.compile(r"invalid video format", re.IGNORECASE),
+    re.compile(r"不支持的视频格式", re.IGNORECASE),
+]
+
 
 def get_model_video_size_limit_mb(model_id: str) -> Optional[float]:
     """根据模型 ID 获取视频文件大小上限（MB）。
@@ -61,6 +69,19 @@ def is_size_limit_error(exc: Exception) -> bool:
     """
     msg = str(exc)
     return any(pattern.search(msg) for pattern in _SIZE_LIMIT_ERROR_PATTERNS)
+
+
+def is_unsupported_video_format_error(exc: Exception) -> bool:
+    """判断异常是否为视频格式不支持错误。
+
+    Args:
+        exc: 捕获到的异常
+
+    Returns:
+        True 表示是视频格式不支持错误
+    """
+    msg = str(exc)
+    return any(pattern.search(msg) for pattern in _UNSUPPORTED_FORMAT_ERROR_PATTERNS)
 
 
 class VideoLLMRequestHandler:
@@ -160,6 +181,11 @@ class VideoLLMRequestHandler:
         # 大小超限错误直接抛出，不进行 base64 fallback（base64 模式同样会因体积过大被拒绝）
         if first_error is not None and is_size_limit_error(first_error):
             logger.warning("检测到视频文件大小超限错误，跳过 base64 fallback")
+            raise first_error
+
+        # 格式不支持错误直接抛出，不进行 base64 fallback（base64 不会改变文件真实格式）
+        if first_error is not None and is_unsupported_video_format_error(first_error):
+            logger.warning("检测到视频格式不支持错误，跳过 base64 fallback")
             raise first_error
 
         # 检查是否有可以 fallback 到 base64 的视频

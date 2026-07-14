@@ -133,7 +133,7 @@
 	"search": "Tùy chọn Tìm kiếm",
 	"sortOrder": "Thứ tự sắp xếp",
 	"status": "Trạng thái",
-	"title": "$t(common:platform.name) Bảng Điều Khiển Quản Trị",
+	"title": "{{platformName}} Bảng Điều Khiển Quản Trị",
 	"totalItems": "Tổng {{total}} mục",
 	"unsavedChanges": "Bạn có thay đổi chưa được lưu. Bạn có chắc chắn muốn đóng?"
 }

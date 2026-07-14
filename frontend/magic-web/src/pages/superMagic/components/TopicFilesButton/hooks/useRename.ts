@@ -7,6 +7,11 @@ import type { AttachmentItem } from "./types"
 import { validateFilename } from "@/utils/filename-validator"
 import { checkDuplicateFileName } from "../utils/checkDuplicateFileName"
 import { SuperMagicApi } from "@/apis"
+import MagicModal from "@/components/base/MagicModal"
+import {
+	detectCanvasProjectOperationRisk,
+	getCanvasProjectOperationImpact,
+} from "../utils/canvasProjectOperationRisk"
 
 export interface UseRenameOptions {
 	projectId?: string
@@ -160,6 +165,7 @@ export function useRename(options: UseRenameOptions = {}) {
 	const [renamingFileIds, setRenamingFileIds] = useState<Set<string>>(new Set())
 	const [renameErrorMessage, setRenameErrorMessage] = useState<string>("")
 	const renameInputRef = useRef<InputRef>(null)
+	const renameConfirmingRef = useRef(false)
 
 	// 获取文件或文件夹的唯一标识符
 	const getItemId = (item: AttachmentItem): string => {
@@ -250,83 +256,124 @@ export function useRename(options: UseRenameOptions = {}) {
 
 	// 确认重命名
 	const handleRenameConfirm = async () => {
+		if (renameConfirmingRef.current) return
+
 		if (!renamingItemId || !renameValue.trim()) {
 			handleRenameCancel()
 			return
 		}
 
+		renameConfirmingRef.current = true
+
 		const trimmedName = renameValue.trim()
 
-		// 查找当前重命名的项目
-		const currentItem = findItemById(attachments || [], renamingItemId)
-		if (!currentItem) {
-			handleRenameCancel()
-			return
-		}
-
-		// 获取原始名称
-		const originalName = currentItem.is_directory
-			? currentItem.name || ""
-			: currentItem.file_name || currentItem.filename || ""
-
-		// 如果名称没有变化，直接取消重命名
-		if (trimmedName === originalName) {
-			handleRenameCancel()
-			return
-		}
-
-		// 解析 itemId 获取文件ID
-		const fileId = renamingItemId.startsWith("folder:") ? null : renamingItemId
-		const isFolder = !fileId
-
-		// 文件名/文件夹名校验
-		const validationResult = validateFilename(trimmedName, isFolder, { t })
-		if (!validationResult.isValid) {
-			setRenameErrorMessage("")
-			setTimeout(() => {
-				setRenameErrorMessage(validationResult.errorMessage || "名称格式不正确")
-			}, 0)
-			return
-		}
-
-		// 获取父路径
-		const parentPath = currentItem?.relative_file_path
-			? currentItem.relative_file_path.substring(
-					0,
-					currentItem.relative_file_path.lastIndexOf("/"),
-				)
-			: undefined
-
-		// 检查是否重复
-		if (
-			checkDuplicateFileName(
-				trimmedName,
-				attachments || [],
-				parentPath,
-				renamingItemId,
-				getItemId,
-			)
-		) {
-			setRenameErrorMessage("")
-			setTimeout(() => {
-				setRenameErrorMessage(t("topicFiles.contextMenu.newFile.duplicateError"))
-			}, 0)
-			return
-		}
-
-		// 如果是文件夹且没有 fileId，暂时不支持重命名
-		if (!fileId) {
-			setRenamingItemId(null)
-			setRenameValue("")
-			return
-		}
-
-		// 防止重复重命名
-		if (renamingFileIds.has(fileId)) {
-			return
-		}
-
 		try {
+			// 查找当前重命名的项目
+			const currentItem = findItemById(attachments || [], renamingItemId)
+			if (!currentItem) {
+				handleRenameCancel()
+				return
+			}
+
+			// 获取原始名称
+			const originalName = currentItem.is_directory
+				? currentItem.name || ""
+				: currentItem.file_name || currentItem.filename || ""
+
+			// 如果名称没有变化，直接取消重命名
+			if (trimmedName === originalName) {
+				handleRenameCancel()
+				return
+			}
+
+			// 解析 itemId 获取文件ID
+			const fileId = renamingItemId.startsWith("folder:") ? null : renamingItemId
+			const isFolder = !fileId
+
+			// 文件名/文件夹名校验
+			const validationResult = validateFilename(trimmedName, isFolder, { t })
+			if (!validationResult.isValid) {
+				setRenameErrorMessage("")
+				setTimeout(() => {
+					setRenameErrorMessage(validationResult.errorMessage || "名称格式不正确")
+				}, 0)
+				return
+			}
+
+			// 获取父路径
+			const parentPath = currentItem?.relative_file_path
+				? currentItem.relative_file_path.substring(
+						0,
+						currentItem.relative_file_path.lastIndexOf("/"),
+					)
+				: undefined
+
+			// 检查是否重复
+			if (
+				checkDuplicateFileName(
+					trimmedName,
+					attachments || [],
+					parentPath,
+					renamingItemId,
+					getItemId,
+				)
+			) {
+				setRenameErrorMessage("")
+				setTimeout(() => {
+					setRenameErrorMessage(t("topicFiles.contextMenu.newFile.duplicateError"))
+				}, 0)
+				return
+			}
+
+			// 如果是文件夹且没有 fileId，暂时不支持重命名
+			if (!fileId) {
+				setRenamingItemId(null)
+				setRenameValue("")
+				return
+			}
+
+			// 防止重复重命名
+			if (renamingFileIds.has(fileId)) {
+				return
+			}
+
+			const canvasRisk = await detectCanvasProjectOperationRisk({
+				attachments: attachments || [],
+				items: [currentItem],
+				operation: "rename",
+			})
+			if (canvasRisk.shouldWarn) {
+				const impact = getCanvasProjectOperationImpact(canvasRisk)
+				const shouldContinue = await new Promise<boolean>((resolve) => {
+					MagicModal.confirm({
+						title: t("topicFiles.canvasOperationRisk.title"),
+						content: t(
+							impact === "open-failure"
+								? "topicFiles.canvasOperationRisk.renameOpenFailureContent"
+								: impact === "content-loss"
+									? "topicFiles.canvasOperationRisk.renameContentLossContent"
+									: "topicFiles.canvasOperationRisk.renameMixedContent",
+						),
+						okButtonProps: {
+							color: "danger",
+							variant: "solid",
+						},
+						cancelButtonProps: {
+							color: "default",
+							variant: "filled",
+						},
+						okText: t("topicFiles.contextMenu.rename"),
+						cancelText: t("common.cancel"),
+						onOk: () => resolve(true),
+						onCancel: () => resolve(false),
+					})
+				})
+				if (!shouldContinue) {
+					handleRenameCancel()
+					return
+				}
+			}
+
 			// 添加到重命名中状态
 			setRenamingFileIds((prev) => new Set(prev).add(fileId))
 
@@ -368,10 +415,11 @@ export function useRename(options: UseRenameOptions = {}) {
 				onRenameError(error)
 			}
 		} finally {
+			renameConfirmingRef.current = false
 			// 移除重命名中状态
 			setRenamingFileIds((prev) => {
 				const newSet = new Set(prev)
-				newSet.delete(fileId)
+				if (renamingItemId) newSet.delete(renamingItemId)
 				return newSet
 			})
 		}
@@ -387,7 +435,9 @@ export function useRename(options: UseRenameOptions = {}) {
 	// 键盘事件处理
 	const handleRenameKeyDown = (e: React.KeyboardEvent) => {
 		if (e.key === "Enter") {
-			handleRenameConfirm()
+			e.preventDefault()
+			e.stopPropagation()
+			void handleRenameConfirm()
 		} else if (e.key === "Escape") {
 			handleRenameCancel()
 		}
@@ -401,6 +451,7 @@ export function useRename(options: UseRenameOptions = {}) {
 
 	// 重置重命名状态
 	const resetRename = () => {
+		renameConfirmingRef.current = false
 		setRenamingItemId(null)
 		setRenameValue("")
 		setRenameErrorMessage("")

@@ -1,7 +1,8 @@
-import { fireEvent, render, waitFor } from "@testing-library/react"
+import { act, fireEvent, render, waitFor } from "@testing-library/react"
 import { describe, expect, it, vi } from "vitest"
 import type { I18nTexts } from "../../../../../i18n/types"
 import { MentionItemType } from "../../../../../types"
+import { setCanvasElementResourceGetter } from "../../canvas-elements/resource-registry"
 import { MentionPanelFileImageIcon } from "../MentionPanelFileImageIcon"
 
 vi.mock("@/components/base/MagicFileIcon", () => ({
@@ -67,5 +68,119 @@ describe("MentionPanelFileImageIcon", () => {
 				maxHeight: "16px",
 			})
 		})
+	})
+
+	it("does not use project preview cache for canvas element thumbnails", async () => {
+		const { container } = render(
+			<MentionPanelFileImageIcon
+				context={{
+					item: {
+						id: "canvas-elements:element:hero",
+						type: MentionItemType.PROJECT_FILE,
+						name: "Hero Layer",
+						icon: "png",
+						tags: ["canvas-element"],
+						sourcePreview: {
+							kind: "canvas-element",
+							elementId: "hero",
+							mediaType: "image",
+							src: "./images/hero.png",
+						},
+						data: {
+							file_id: "file-1",
+							file_name: "portrait.png",
+							file_path: "assets/portrait.png",
+							file_extension: "png",
+						},
+					},
+					t: {} as I18nTexts,
+					platform: "desktop",
+					filePreviewById: {
+						"file-1": "https://example.com/stale-project-preview.png",
+					},
+				}}
+			/>,
+		)
+
+		expect(container.querySelector("img")).toBeNull()
+		expect(container.querySelector("[data-testid='magic-file-icon']")).toBeNull()
+		expect(container.querySelector("[data-testid='canvas-element-image-icon']")).not.toBeNull()
+	})
+
+	it("uses active canvas resources for canvas element thumbnails outside CanvasProvider", async () => {
+		const lowImageResult = {
+			url: "blob:canvas-low-preview",
+			imageInfo: {
+				naturalWidth: 100,
+				naturalHeight: 50,
+				fileSize: 1000,
+				mimeType: "image/png",
+				filename: "hero.png",
+			},
+			release: vi.fn(),
+		}
+		let resolveLowImage: (value: typeof lowImageResult) => void = () => undefined
+		const lowImagePromise = new Promise<typeof lowImageResult>((resolve) => {
+			resolveLowImage = resolve
+		})
+		const getLowImageUrl = vi.fn(() => lowImagePromise)
+		const fakeCanvas = {
+			imageResourceManager: {
+				getLowImageUrl,
+			},
+			elementManager: {
+				getElementInstance: vi.fn(() => null),
+			},
+		}
+		setCanvasElementResourceGetter("design-a", () => fakeCanvas as any)
+
+		try {
+			let container!: HTMLElement
+			await act(async () => {
+				container = render(
+					<MentionPanelFileImageIcon
+						context={{
+							item: {
+								id: "canvas-elements:element:hero",
+								type: MentionItemType.PROJECT_FILE,
+								name: "Hero Layer",
+								icon: "png",
+								tags: ["canvas-element"],
+								sourcePreview: {
+									kind: "canvas-element",
+									designProjectId: "design-a",
+									elementId: "hero",
+									mediaType: "image",
+									src: "./images/hero.png",
+								},
+								data: {
+									file_id: "file-1",
+									file_name: "portrait.png",
+									file_path: "assets/portrait.png",
+									file_extension: "png",
+								},
+							},
+							t: {} as I18nTexts,
+							platform: "desktop",
+							filePreviewById: {},
+						}}
+					/>,
+				).container
+			})
+			await waitFor(() => {
+				expect(getLowImageUrl).toHaveBeenCalledWith("./images/hero.png")
+			})
+			await act(async () => {
+				resolveLowImage(lowImageResult)
+				await lowImagePromise
+			})
+			await waitFor(() => {
+				expect(
+					container!.querySelector("[data-testid='canvas-element-image-preview']"),
+				).not.toBeNull()
+			})
+		} finally {
+			setCanvasElementResourceGetter("design-a", null)
+		}
 	})
 })

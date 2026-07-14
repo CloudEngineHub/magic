@@ -2517,6 +2517,13 @@
 		"exitEdit": "Exit Edit",
 		"fetchFailed": "Failed to fetch queue list",
 		"missingInfo": "Project or topic information is missing",
+		"mobile": {
+			"collapse": "Collapse queue",
+			"count": "{{count}} items",
+			"emptyContent": "⋯",
+			"expand": "Expand queue",
+			"title": "Queued"
+		},
 		"operationInProgress": "This message is being processed, please try again later",
 		"removeFromQueue": "Remove from queue",
 		"sendFailed": "Failed to send message",
@@ -2678,6 +2685,146 @@
 			"shareManagement": "My Share",
 			"title": "Navigation",
 			"workspace": "Workspace"
+		},
+		"recordingEntry": {
+			"active": {
+				"audioSourceUnavailable": "No usable audio input is available. Please check your microphone device and try again.",
+				"backAria": "Back to recordings list",
+				"browserNotSupported": "This browser does not support recording yet. Please switch to a browser with microphone support.",
+				"cancel": "Cancel recording",
+				"defaultTitle": "Current recording",
+				"enableTranscription": "Enable transcription",
+				"enableTranscriptionFailed": "Failed to enable transcription. Please try again later.",
+				"enablingTranscription": "Enabling",
+				"finishAria": "Finish recording and generate summary",
+				"notesPlaceholder": "Capture key points while recording...",
+				"pause": "Pause",
+				"permissionDenied": "Microphone permission was denied. Please allow microphone access and try again.",
+				"renameAria": "Edit recording title",
+				"resume": "Resume",
+				"startFailed": "Failed to start recording. Please check microphone permission and try again.",
+				"startFailedTitle": "Recording ran into a problem",
+				"startTimedOut": "Recording startup timed out. Please check microphone permission and try again.",
+				"starting": "Starting recording",
+				"startingHint": "Requesting microphone access and initializing recording. Please wait...",
+				"statusPaused": "Paused",
+				"statusRecording": "Recording",
+				"tabNotes": "Notes",
+				"tabTranscript": "Transcript",
+				"transcriptionDisabledDescription": "Turn it on to transcribe the recording in real time.",
+				"transcriptionDisabledTitle": "Realtime transcription"
+			},
+			"fabAria": "Start recording",
+			"fabComingSoon": "Recording is coming soon",
+			"filterSheet": {
+				"closeAria": "Close filter",
+				"dateRange": {
+					"all": "All time",
+					"label": "Date range",
+					"month": "Last 30 days",
+					"today": "Today",
+					"week": "Last 7 days"
+				},
+				"resetAria": "Reset filters",
+				"title": "Filter"
+			},
+			"groupSheet": {
+				"all": "All",
+				"backAria": "Back",
+				"closeAria": "Close groups",
+				"confirmAria": "Confirm",
+				"createFailed": "Failed to create group",
+				"createSuccess": "Group created successfully",
+				"createTitle": "New group",
+				"deleteConfirm": "Delete \"{{name}}\"? Recordings in it will be moved to Ungrouped.",
+				"deleteGroup": "Delete group",
+				"deleteGroupAria": "Delete group",
+				"deleteTitle": "Delete group",
+				"groupNameLabel": "Group name",
+				"groupNamePlaceholder": "For example: customer interviews",
+				"manageGroups": "Manage groups",
+				"manageTitle": "Manage groups",
+				"moreGroupAria": "More actions for {{name}}",
+				"moveFailed": "Failed to move. Please try again later.",
+				"moveSuccess": "Moved successfully",
+				"newGroup": "New group",
+				"rename": "Rename",
+				"renameLabel": "Group name",
+				"renamePlaceholder": "Enter a new name",
+				"renameTitle": "Rename group",
+				"title": "Groups",
+				"ungrouped": "Ungrouped",
+				"unnamedGroup": "Unnamed group"
+			},
+			"importComingSoon": "Import is coming soon",
+			"importSheet": {
+				"closeAria": "Close",
+				"fromFiles": "Import from Files",
+				"fromFilesSub": "Choose an audio file from local storage",
+				"title": "Import Audio"
+			},
+			"moreSheet": {
+				"backAria": "Back",
+				"closeAria": "Close",
+				"comingSoon": "Coming soon",
+				"confirmAria": "Confirm",
+				"delete": "Delete",
+				"deleteConfirm": "Delete \"{{name}}\"? This cannot be undone.",
+				"deleteTitle": "Delete recording",
+				"downloadOriginal": "Download original file",
+				"generateSummary": "Generate summary",
+				"moveToGroup": "Move to group",
+				"regenerateSummary": "Regenerate summary",
+				"rename": "Rename",
+				"renameLabel": "Recording name",
+				"renamePlaceholder": "Enter a new name",
+				"share": "Share",
+				"untitled": "Untitled recording"
+			},
+			"moveGroupSheet": {
+				"closeAria": "Close",
+				"title": "Move to group"
+			},
+			"placeholder": "Recordings & summaries coming soon",
+			"progress": {
+				"transferFailed": "Upload failed",
+				"uploading": "Uploading"
+			},
+			"settings": {
+				"autoSummaryEnabled": {
+					"description": "Automatically generate a summary after transcription",
+					"label": "Auto Summarize"
+				},
+				"backAria": "Back",
+				"closeAria": "Close",
+				"model": {
+					"description": "AI model used to generate summaries",
+					"label": "AI Model",
+					"title": "AI Model"
+				},
+				"saveFailed": "Failed to save settings. Please try again.",
+				"sections": {
+					"summary": "Summary",
+					"transcription": "Transcription"
+				},
+				"settingsAria": "Recording settings",
+				"title": "Recording Settings",
+				"transcriptionEnabled": {
+					"description": "Automatically start transcription when recording begins",
+					"label": "Auto Transcribe"
+				}
+			},
+			"startMissingWorkspace": "Recording is unavailable right now. Please enter a workspace first.",
+			"summarySheet": {
+				"closeAria": "Close",
+				"title": "Summary status"
+			},
+			"toolbar": {
+				"clearSearchAria": "Exit search",
+				"filterAria": "Filter",
+				"searchAria": "Search",
+				"uploadAria": "Upload audio"
+			}
 		},
 		"recycleBin": {
 			"actions": "More actions",
@@ -3055,6 +3202,9 @@
 		"createFolderNamePlaceholder": "Enter folder name",
 		"createSection": "Create document",
 		"deleteConfirm": {
+			"canvasContentLossWarning": "This operation will delete data or resources required by the canvas content. Some canvas content may disappear.",
+			"canvasMixedWarning": "This operation affects the canvas project entry file and data or resources required by the canvas content. The canvas may fail to open or lose visible content.",
+			"canvasOpenFailureWarning": "This operation will delete the canvas project entry file. The canvas may fail to open.",
 			"emptyLabel": "Empty folder",
 			"fileCount": "{{count}} files",
 			"intro": "Permanently delete the following {{count}} items:",
@@ -3128,6 +3278,9 @@
 		"defaultNameOrganization": "Organization Share",
 		"defaultNamePassword": "Password Link",
 		"defaultNamePublic": "Public Link",
+		"defaultOpenFileDescription": "Choose the file that opens by default after visiting the link",
+		"defaultOpenFileLabel": "Default open file",
+		"defaultOpenFileSearchPlaceholder": "Search files",
 		"deleteConfirmDescription": "People with this link will no longer be able to access the share after it is canceled.",
 		"deleteConfirmMessage": "Cancel \"{{name}}\"? People with this link will no longer be able to access the share.",
 		"deleteConfirmTitle": "Cancel shared link",
@@ -3556,7 +3709,8 @@
 			"contentWillBeSavedTo": "Content will be saved to \"{{projectName}}\"",
 			"organizingRecording": "We're preparing your recording summary and will notify you once it's ready.",
 			"title": "Please wait a moment",
-			"understood": "Got it"
+			"understood": "Got it",
+			"viewOnAudioRecordingsPage": "When it's ready, open Recordings & Notes to view it."
 		}
 	},
 	"recycleBin": {
@@ -3920,6 +4074,7 @@
 		"moreSettings": "Settings",
 		"multiFileShareName": "File Share_{{mainFileName}} and {{count}} files",
 		"name": "Name",
+		"nativeShareFailed": "Failed to share. Please try again.",
 		"navigation": "Navigation",
 		"newProjectDescription": "By default, the copied project will retain the same name as the original. If you need to distinguish between different projects more clearly, you can also customize the name as needed.",
 		"newProjectName": "New project name",
@@ -3952,7 +4107,11 @@
 		"projectShareName": "Project Share_{{projectName}}",
 		"publicAccess": "Public Access",
 		"publicAccessDescription": "Anyone can access via link. Content may be indexed by search engines. Please be aware of data security",
+		"pureMode": "Pure Mode",
+		"pureModeDescription": "Display the entry file in fullscreen and hide the header",
 		"qrCode": "Share QR Code",
+		"recordingShareCreateTitle": "Share",
+		"recordingShareName": "Recording Share_{{projectName}}",
 		"replay": "Replay",
 		"replayWillStartIn": "Replay will start in {{countdown}} seconds",
 		"resetPassword": "Reset",
@@ -4006,6 +4165,7 @@
 		"shareProjectDescription": "When enabled, visitors will have access to all files in the project.",
 		"shareRange": "Share Range",
 		"shareTitle": "Share",
+		"shareToSystem": "Share to",
 		"shareTopic": "Share topic",
 		"showFileList": "Show File List",
 		"showFileListDescription": "When enabled, visitors can view file list",
@@ -4432,7 +4592,10 @@
 		],
 		"actionTitle": "If you want to actively intervene",
 		"mainText": "Task execution is taking too long, which may be due to the following reasons:",
-		"reasonList": ["AI is processing complex tasks", "Network connection is unstable"],
+		"reasonList": [
+			"AI is processing complex tasks",
+			"Network connection is unstable"
+		],
 		"statusText": "If you don't take any action, AI will continue trying"
 	},
 	"tool": {
@@ -4558,6 +4721,15 @@
 		"batchOperation": "Batch Operation",
 		"batchOperations": "Batch Operations",
 		"cancelSelect": "Cancel",
+		"canvasOperationRisk": {
+			"moveContentLossContent": "This operation will move data or resources required by the canvas content. Some canvas content may disappear. Continue?",
+			"moveMixedContent": "This operation affects the canvas project entry file and data or resources required by the canvas content. The canvas may fail to open or lose visible content. Continue?",
+			"moveOpenFailureContent": "This operation will move the canvas project entry file. The canvas may fail to open. Continue?",
+			"renameContentLossContent": "This operation will rename data or resources required by the canvas content. Some canvas content may disappear. Continue?",
+			"renameMixedContent": "This operation affects the canvas project entry file and data or resources required by the canvas content. The canvas may fail to open or lose visible content. Continue?",
+			"renameOpenFailureContent": "This operation will rename the canvas project entry file. The canvas may fail to open. Continue?",
+			"title": "Canvas Project Risk"
+		},
 		"clawPlaygroundTags": {
 			"aboutYou": "About You",
 			"guidelines": "Guidelines",
@@ -4621,6 +4793,9 @@
 			"deleteBatchSubject": "{{count}} selected item(s)",
 			"deleteBatchTipMobile": "Delete Selection?",
 			"deleteBatchWithFoldersDescription": "will be permanently deleted, including folder contents and unselected subfiles. This action cannot be undone.",
+			"deleteCanvasContentLossRiskContent": "This operation will delete data or resources required by the canvas content. Some canvas content may disappear. Continue deleting?",
+			"deleteCanvasMixedRiskContent": "This operation affects the canvas project entry file and data or resources required by the canvas content. The canvas may fail to open or lose visible content. Continue deleting?",
+			"deleteCanvasOpenFailureRiskContent": "This operation will delete the canvas project entry file. The canvas may fail to open. Continue deleting?",
 			"deleteContent": "Confirm to delete {{name}} ?",
 			"deleteFileDescription": "will be permanently deleted. This action cannot be undone.",
 			"deleteFileFailed": "Failed to delete file",

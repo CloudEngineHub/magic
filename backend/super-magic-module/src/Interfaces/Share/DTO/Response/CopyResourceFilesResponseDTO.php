@@ -44,6 +44,11 @@ class CopyResourceFilesResponseDTO
      */
     public int $totalFiles = 0;
 
+    /**
+     * 项目模式.
+     */
+    public ?string $projectMode = null;
+
     public static function fromEntity(ProjectForkEntity $entity): self
     {
         $dto = new self();
@@ -66,6 +71,7 @@ class CopyResourceFilesResponseDTO
             'progress' => $this->progress,
             'processed_files' => $this->processedFiles,
             'total_files' => $this->totalFiles,
+            'project_mode' => $this->projectMode,
         ];
     }
 }

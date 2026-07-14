@@ -44,27 +44,7 @@ export class MicrophoneSourceStrategy implements AudioSourceStrategy {
 
 			// Get microphone stream with retry
 			const retryResult = await this.retryManager.execute(async () => {
-				// Build device constraint:
-				// - Explicit deviceId string  → exact match (user-chosen device)
-				// - No explicit deviceId      → ideal:'default' (follows OS default)
-				const explicitDeviceId = this.config.audioSource?.microphoneConstraints?.deviceId
-				const deviceIdConstraint =
-					explicitDeviceId && typeof explicitDeviceId === "string"
-						? { exact: explicitDeviceId }
-						: { ideal: "default" }
-
-				const audioConstraints = getMicrophoneConstraints("default", {
-					...this.config.audioSource?.microphoneConstraints,
-					deviceId: deviceIdConstraint,
-				})
-
-				this.dependencies.logger.log("Requesting microphone stream", {
-					deviceId: deviceIdConstraint,
-				})
-
-				return await this.dependencies.mediaDevices.getUserMedia({
-					audio: audioConstraints,
-				})
+				return await this.requestMicrophoneStream()
 			}, "Get microphone stream")
 
 			if (!retryResult.success || !retryResult.result) {
@@ -172,6 +152,50 @@ export class MicrophoneSourceStrategy implements AudioSourceStrategy {
 			errorMessage.includes("permission denied") ||
 			errorMessage.includes("user denied")
 		)
+	}
+
+	/**
+	 * Requests microphone input using the preferred constraints first, then falls
+	 * back to `audio: true` for browsers/webviews that reject advanced constraints.
+	 */
+	private async requestMicrophoneStream(): Promise<MediaStream> {
+		const explicitDeviceId = this.config.audioSource?.microphoneConstraints?.deviceId
+		const deviceIdConstraint =
+			explicitDeviceId && typeof explicitDeviceId === "string"
+				? { exact: explicitDeviceId }
+				: { ideal: "default" }
+
+		const audioConstraints = getMicrophoneConstraints("default", {
+			...this.config.audioSource?.microphoneConstraints,
+			deviceId: deviceIdConstraint,
+		})
+
+		try {
+			this.dependencies.logger.log("Requesting microphone stream", {
+				deviceId: deviceIdConstraint,
+				constraints: audioConstraints,
+			})
+
+			return await this.dependencies.mediaDevices.getUserMedia({
+				audio: audioConstraints,
+			})
+		} catch (error) {
+			if (!(error instanceof Error) || this.isPermissionError(error)) {
+				throw error
+			}
+
+			// Some embedded browsers reject advanced track constraints such as
+			// `deviceId`, `noiseSuppression`, or `autoGainControl`; retrying with
+			// the minimal `audio: true` shape preserves recording capability.
+			this.dependencies.logger.warn(
+				"Preferred microphone constraints failed, retrying with minimal audio constraints",
+				error,
+			)
+
+			return await this.dependencies.mediaDevices.getUserMedia({
+				audio: true,
+			})
+		}
 	}
 
 	async cleanup(): Promise<void> {

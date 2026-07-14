@@ -4,7 +4,7 @@ import os
 import sys
 import json
 import datetime
-from typing import TypedDict
+from typing import TypedDict, Optional
 
 import yaml
 
@@ -31,9 +31,17 @@ class ImageDescription(TypedDict):
     platforms: list[str]
 
 
+class SubtreeDescription(TypedDict):
+    # match SubtreeSplit struct in cli code/subtree.go
+    prefix: str
+    destURL: Optional[str]
+    branch: Optional[str]
+
+
 class MagicrewStructure(TypedDict):
     # match MagicrewStructure struct in cli code/code.go
     images: dict[str, ImageDescription]
+    subtrees: dict[str, SubtreeDescription]
 
 
 # open github output file

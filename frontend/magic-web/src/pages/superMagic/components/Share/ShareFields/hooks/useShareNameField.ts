@@ -2,6 +2,7 @@ import { useState, useMemo, useEffect, useCallback, useRef } from "react"
 import { useTranslation } from "react-i18next"
 import { useDebounceFn } from "ahooks"
 import { calculateDefaultShareName } from "../../utils"
+import { isAudioProjectMode } from "@/services/audioRecordings/audioProjectMode"
 
 interface UseShareNameFieldOptions {
 	value: string
@@ -11,6 +12,7 @@ interface UseShareNameFieldOptions {
 	attachments: Array<{ name?: string; fileName?: string }>
 	shareProject: boolean
 	projectName?: string
+	projectMode?: string | null
 }
 
 interface UseShareNameFieldReturn {
@@ -36,6 +38,7 @@ export function useShareNameField(options: UseShareNameFieldOptions): UseShareNa
 		attachments,
 		shareProject,
 		projectName,
+		projectMode,
 	} = options
 
 	const { t } = useTranslation("super")
@@ -43,9 +46,13 @@ export function useShareNameField(options: UseShareNameFieldOptions): UseShareNa
 	const [touched, setTouched] = useState(false)
 	const isInitializedRef = useRef(false)
 
-	// 性能优化: 缓存文件分享前缀
+	// Cache i18n-derived prefixes so locale changes do not require hardcoded string checks.
 	const fileSharePrefix = useMemo(
 		() => t("share.singleFileShareName", { fileName: "" }).split("_")[0],
+		[t],
+	)
+	const recordingSharePrefix = useMemo(
+		() => t("share.recordingShareName", { projectName: "" }).split("_")[0],
 		[t],
 	)
 
@@ -67,8 +74,9 @@ export function useShareNameField(options: UseShareNameFieldOptions): UseShareNa
 			t,
 			shareProject,
 			projectName,
+			projectMode,
 		)
-	}, [defaultOpenFileId, selectedFiles, attachments, t, shareProject, projectName])
+	}, [defaultOpenFileId, selectedFiles, attachments, t, shareProject, projectName, projectMode])
 
 	// 初始化默认值
 	useEffect(() => {
@@ -91,7 +99,12 @@ export function useShareNameField(options: UseShareNameFieldOptions): UseShareNa
 		() => {
 			if (!value || !selectedFiles || selectedFiles.length === 0) return
 
-			if (!shareProject && value.startsWith(fileSharePrefix + "_")) {
+			const isRecordingDefaultName =
+				isAudioProjectMode(projectMode) && value.startsWith(`${recordingSharePrefix}_`)
+			if (
+				!shareProject &&
+				(value.startsWith(`${fileSharePrefix}_`) || isRecordingDefaultName)
+			) {
 				const newDefaultValue = calculateDefaultShareName(
 					defaultOpenFileId,
 					selectedFiles,
@@ -99,6 +112,7 @@ export function useShareNameField(options: UseShareNameFieldOptions): UseShareNa
 					t,
 					shareProject,
 					projectName,
+					projectMode,
 				)
 				if (newDefaultValue && newDefaultValue !== value) {
 					onChange(newDefaultValue)

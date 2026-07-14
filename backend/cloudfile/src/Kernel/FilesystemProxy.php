@@ -106,6 +106,7 @@ class FilesystemProxy extends Filesystem
      */
     public function uploadByCredential(UploadFile $uploadFile, CredentialPolicy $credentialPolicy, array $options = []): void
     {
+        $options = $this->mergeOptions($options);
         $credentialPolicy->setSts(false);
         $credentialPolicy->setContentType($uploadFile->getMimeType());
         $credential = $this->getUploadTemporaryCredential($credentialPolicy, $options);
@@ -123,6 +124,7 @@ class FilesystemProxy extends Filesystem
      */
     public function uploadByChunks(ChunkUploadFile $chunkUploadFile, CredentialPolicy $credentialPolicy, array $options = []): void
     {
+        $options = $this->mergeOptions($options);
         // Force STS mode for chunk upload
         $credentialPolicy->setSts(true);
         $credentialPolicy->setContentType($chunkUploadFile->getMimeType());
@@ -142,6 +144,7 @@ class FilesystemProxy extends Filesystem
      */
     public function appendUploadByCredential(AppendUploadFile $appendUploadFile, CredentialPolicy $credentialPolicy, array $options = []): void
     {
+        $options = $this->mergeOptions($options);
         $credentialPolicy->setSts(true);
         $credentialPolicy->setContentType($appendUploadFile->getMimeType());
         $credential = $this->getUploadTemporaryCredential($credentialPolicy, $options);
@@ -159,6 +162,7 @@ class FilesystemProxy extends Filesystem
      */
     public function listObjectsByCredential(CredentialPolicy $credentialPolicy, string $prefix = '', array $options = []): array
     {
+        $options = $this->mergeOptions($options);
         $credentialPolicy->setSts(true);
         $credentialPolicy->setStsType('list_objects');
         $credential = $this->getUploadTemporaryCredential($credentialPolicy, $options);
@@ -174,6 +178,7 @@ class FilesystemProxy extends Filesystem
      */
     public function deleteObjectByCredential(CredentialPolicy $credentialPolicy, string $objectKey, array $options = []): void
     {
+        $options = $this->mergeOptions($options);
         $credentialPolicy->setSts(true);
         $credentialPolicy->setStsType('del_objects');
         $credential = $this->getUploadTemporaryCredential($credentialPolicy, $options);
@@ -191,6 +196,7 @@ class FilesystemProxy extends Filesystem
      */
     public function copyObjectByCredential(CredentialPolicy $credentialPolicy, string $sourceKey, string $destinationKey, array $options = []): void
     {
+        $options = $this->mergeOptions($options);
         $credentialPolicy->setSts(true);
         $credential = $this->getUploadTemporaryCredential($credentialPolicy, $options);
         $this->getSimpleUploadInstance($this->adapterName)->copyObjectByCredential($credential, $sourceKey, $destinationKey, $options);
@@ -201,6 +207,7 @@ class FilesystemProxy extends Filesystem
      */
     public function getUploadTemporaryCredential(CredentialPolicy $credentialPolicy, array $options = []): array
     {
+        $options = $this->mergeOptions($options);
         $isCache = (bool) ($options['cache'] ?? true);
         $cacheKey = $credentialPolicy->uniqueKey($options);
         if ($isCache && $data = $this->getCache($cacheKey)) {
@@ -235,6 +242,7 @@ class FilesystemProxy extends Filesystem
      */
     public function getPreSignedUrls(array $fileNames, int $expires = 3600, array $options = []): array
     {
+        $options = $this->mergeOptions($options);
         return $this->expand->getPreSignedUrls($fileNames, $expires, $options);
     }
 
@@ -244,6 +252,7 @@ class FilesystemProxy extends Filesystem
      */
     public function getMetas(array $paths, array $options = []): array
     {
+        $options = $this->mergeOptions($options);
         return $this->expand->getMetas($this->formatPaths($paths), $options);
     }
 
@@ -267,6 +276,7 @@ class FilesystemProxy extends Filesystem
      */
     public function getLinks(array $paths, array $downloadNames = [], int $expires = 3600, array $options = []): array
     {
+        $options = $this->mergeOptions($options);
         $paths = $this->formatPaths($paths);
         $platform = $this->config['platform'] ?? '';
 
@@ -345,6 +355,7 @@ class FilesystemProxy extends Filesystem
      */
     public function destroy(array $paths, array $options = []): void
     {
+        $options = $this->mergeOptions($options);
         $this->expand->destroy($paths, $options);
     }
 
@@ -353,6 +364,7 @@ class FilesystemProxy extends Filesystem
      */
     public function duplicate(string $source, string $destination, array $options = []): string
     {
+        $options = $this->mergeOptions($options);
         return $this->expand->duplicate($source, $destination, $options);
     }
 
@@ -367,6 +379,7 @@ class FilesystemProxy extends Filesystem
      */
     public function getHeadObjectByCredential(CredentialPolicy $credentialPolicy, string $objectKey, array $options = []): array
     {
+        $options = $this->mergeOptions($options);
         $credentialPolicy->setSts(true);
         $credential = $this->getUploadTemporaryCredential($credentialPolicy, $options);
         return $this->getSimpleUploadInstance($this->adapterName)->getHeadObjectByCredential($credential, $objectKey, $options);
@@ -381,6 +394,7 @@ class FilesystemProxy extends Filesystem
      */
     public function createObjectByCredential(CredentialPolicy $credentialPolicy, string $objectKey, array $options = []): void
     {
+        $options = $this->mergeOptions($options);
         $credentialPolicy->setSts(true);
         $credential = $this->getUploadTemporaryCredential($credentialPolicy, $options);
         $this->getSimpleUploadInstance($this->adapterName)->createObjectByCredential($credential, $objectKey, $options);
@@ -396,6 +410,7 @@ class FilesystemProxy extends Filesystem
      */
     public function getPreSignedUrlByCredential(CredentialPolicy $credentialPolicy, string $objectKey, array $options = []): string
     {
+        $options = $this->mergeOptions($options);
         $credentialPolicy->setSts(true);
         $credential = $this->getUploadTemporaryCredential($credentialPolicy, $options);
         return $this->getSimpleUploadInstance($this->adapterName)->getPreSignedUrlByCredential($credential, $objectKey, $options);
@@ -411,6 +426,7 @@ class FilesystemProxy extends Filesystem
      */
     public function deleteObjectsByCredential(CredentialPolicy $credentialPolicy, array $objectKeys, array $options = []): array
     {
+        $options = $this->mergeOptions($options);
         $credentialPolicy->setSts(true);
         $credentialPolicy->setStsType('del_objects');
         $credential = $this->getUploadTemporaryCredential($credentialPolicy, $options);
@@ -427,6 +443,7 @@ class FilesystemProxy extends Filesystem
      */
     public function setHeadObjectByCredential(CredentialPolicy $credentialPolicy, string $objectKey, array $metadata, array $options = []): void
     {
+        $options = $this->mergeOptions($options);
         $credentialPolicy->setSts(true);
         $credentialPolicy->setStsType('set_object_meta');
         $credential = $this->getUploadTemporaryCredential($credentialPolicy, $options);
@@ -444,6 +461,7 @@ class FilesystemProxy extends Filesystem
      */
     public function downloadByChunks(string $filePath, string $localPath, ?ChunkDownloadConfig $config = null, array $options = []): void
     {
+        $options = $this->mergeOptions($options);
         $credentialPolicy = new CredentialPolicy([
             'sts' => true,
             'role_session_name' => 'magic',
@@ -471,6 +489,14 @@ class FilesystemProxy extends Filesystem
     public function getOptions(): array
     {
         return $this->options;
+    }
+
+    /**
+     * 合并存储默认 options 与本次调用 options.
+     */
+    private function mergeOptions(array $options = []): array
+    {
+        return array_replace($this->options, $options);
     }
 
     protected function initSimpleUpload(): void
@@ -585,7 +611,7 @@ class FilesystemProxy extends Filesystem
                     'accessId' => $temp['access_key_id'],
                     'accessSecret' => $temp['access_key_secret'],
                     'securityToken' => $temp['sts_token'],
-                    'endpoint' => 'https://oss-' . $actualRegion . '.aliyuncs.com',
+                    'endpoint' => $temp['endpoint'] ?? 'https://oss-' . $actualRegion . '.aliyuncs.com',
                     'bucket' => $temp['bucket'],
                     'timeout' => 3600,
                     'connectTimeout' => 10,

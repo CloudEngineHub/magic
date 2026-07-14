@@ -12,12 +12,14 @@ from .factory import (
 )
 
 # API classes
+from .api.ai_ability_api import AiAbilityApi
 from .api.agent_api import AgentApi
 from .api.message_schedule_api import MessageScheduleApi
 from .api.oauth2_callback_relay_api import OAuth2CallbackRelayApi
 from .api.share_api import ShareApi
 
 # Parameter classes
+from .parameter.ai_ability_runtime_config_parameter import AiAbilityRuntimeConfigParameter
 from .parameter.get_agent_details_parameter import GetAgentDetailsParameter
 from .parameter.tool_execute_parameter import ToolExecuteParameter
 from .parameter.search_knowledge_parameter import SearchKnowledgeParameter
@@ -37,6 +39,7 @@ from .parameter.cancel_share_parameter import CancelShareParameter
 from .parameter.ingest_third_party_message_parameter import IngestThirdPartyMessageParameter
 
 # Result classes
+from .result.ai_ability_runtime_config_result import AiAbilityRuntimeConfigItem, AiAbilityRuntimeConfigResult
 from .result.agent_details_result import (
     AgentDetailsResult,
     Tool
@@ -80,12 +83,14 @@ __all__ = [
     'MagicServiceConfigError',
 
     # API classes
+    'AiAbilityApi',
     'AgentApi',
     'MessageScheduleApi',
     'OAuth2CallbackRelayApi',
     'ShareApi',
 
     # Parameter classes
+    'AiAbilityRuntimeConfigParameter',
     'GetAgentDetailsParameter',
     'ToolExecuteParameter',
     'SearchKnowledgeParameter',
@@ -104,6 +109,8 @@ __all__ = [
     'IngestThirdPartyMessageParameter',
 
     # Result classes
+    'AiAbilityRuntimeConfigResult',
+    'AiAbilityRuntimeConfigItem',
     'AgentDetailsResult',
     'ToolExecuteResult',
     'SearchKnowledgeResult',

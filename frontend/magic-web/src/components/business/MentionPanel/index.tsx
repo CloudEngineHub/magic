@@ -685,6 +685,7 @@ const MentionPanel = observer(
 						dataService={dataService}
 						catalogBehavior={catalogBehavior}
 						buildStoreRequest={buildStoreRequest}
+						canToggleMultiSelectItem={canToggleMultiSelectItem}
 						{...restProps}
 					/>
 				</Suspense>

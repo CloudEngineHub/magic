@@ -43,8 +43,27 @@ const { navigateMock } = vi.hoisted(() => ({
 	navigateMock: vi.fn(),
 }))
 
+const deviceMocks = vi.hoisted(() => ({
+	isMagicApp: false,
+	changeBottomTabMock: vi.fn(),
+}))
+
 vi.mock("@/routes/hooks/useNavigate", () => ({
 	default: () => navigateMock,
+}))
+
+vi.mock("@/utils/devices", () => ({
+	get isMagicApp() {
+		return deviceMocks.isMagicApp
+	},
+}))
+
+vi.mock("@/platform/native", () => ({
+	getNativePort: () => ({
+		navigation: {
+			changeBottomTab: deviceMocks.changeBottomTabMock,
+		},
+	}),
 }))
 
 vi.mock("../MobileShellAppLayout", () => ({
@@ -79,6 +98,13 @@ vi.mock("../MobileShellAppLayout", () => ({
 				data-testid="go-workspaces"
 			>
 				workspaces
+			</button>
+			<button
+				type="button"
+				onClick={() => menuValue.onNavigate("recording")}
+				data-testid="go-recording"
+			>
+				recording
 			</button>
 			{panel}
 		</div>
@@ -133,6 +159,8 @@ describe("SuperMobileShellRouteLayout", () => {
 		reloadRecentItemsMock.mockResolvedValue(undefined)
 		setDocumentThemeSidebarOpenMock.mockReset()
 		navigateMock.mockReset()
+		deviceMocks.changeBottomTabMock.mockReset()
+		deviceMocks.isMagicApp = false
 		vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback) => {
 			return window.setTimeout(() => callback(performance.now()), 0)
 		})
@@ -204,6 +232,40 @@ describe("SuperMobileShellRouteLayout", () => {
 			name: "MobileHome",
 			viewTransition: false,
 		})
+	})
+
+	it("navigates H5 recording menu to the shared audio recordings route", () => {
+		render(
+			<SuperMobileShellRouteLayout activeView="chats" closeSidebarAriaLabel="close">
+				<div />
+			</SuperMobileShellRouteLayout>,
+		)
+
+		fireEvent.click(screen.getByTestId("go-recording"))
+
+		expect(navigateMock).toHaveBeenCalledWith({
+			name: "AudioRecordings",
+			viewTransition: false,
+		})
+		expect(deviceMocks.changeBottomTabMock).not.toHaveBeenCalled()
+	})
+
+	it("opens native recording tab when recording menu is clicked inside Magic App", () => {
+		deviceMocks.isMagicApp = true
+
+		render(
+			<SuperMobileShellRouteLayout activeView="chats" closeSidebarAriaLabel="close">
+				<div />
+			</SuperMobileShellRouteLayout>,
+		)
+
+		fireEvent.click(screen.getByTestId("go-recording"))
+
+		expect(deviceMocks.changeBottomTabMock).toHaveBeenCalledWith({
+			tab: "ai_recording",
+			bottomTabHeight: 0,
+		})
+		expect(navigateMock).not.toHaveBeenCalled()
 	})
 
 	it("defers sidebar menu navigation until the close transition has started", async () => {

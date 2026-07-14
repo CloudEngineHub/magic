@@ -341,6 +341,7 @@ export function useFilesViewer(props: FilesViewerProps) {
 		onActiveFileChange,
 		activeFileId,
 		showFileFooter,
+		forceFullscreenMode,
 		showFileHeader: showFileHeaderProp,
 		currentTopicStatus,
 		messages,
@@ -595,6 +596,14 @@ export function useFilesViewer(props: FilesViewerProps) {
 		fileList.length === 0 ||
 		fileList.every((file) => !file.project_id || file.project_id === viewerProjectId)
 
+	const notifyActiveFileOpen = useMemoizedFn((fileId: unknown) => {
+		const normalizedFileId = normalizeFileId(fileId)
+		if (!normalizedFileId) return
+
+		lastNotifiedActiveFileIdRef.current = normalizedFileId
+		onActiveFileChange?.(normalizedFileId)
+	})
+
 	// Tab operations
 	const openFileTab = useMemoizedFn((fileItem: any, autoEdit?: boolean) => {
 		// Reset manual close flag when opening new tab
@@ -656,6 +665,7 @@ export function useFilesViewer(props: FilesViewerProps) {
 			newTab.isLoading = true
 			newTab.isDeleted = false
 		}
+		const openedFileId = newTab.fileData.file_id || newTab.id
 
 		// 当打开文件tab时，将playback tab和知识库tabs设置为非激活状态
 		if (playbackTab?.active) {
@@ -679,6 +689,7 @@ export function useFilesViewer(props: FilesViewerProps) {
 				},
 			})
 			dispatchTabs({ type: TabActionType.SWITCH_TAB, payload: { tabId: newTab.id } })
+			notifyActiveFileOpen(openedFileId)
 			return
 		}
 
@@ -690,6 +701,7 @@ export function useFilesViewer(props: FilesViewerProps) {
 		}
 
 		dispatchTabs({ type: TabActionType.ADD_TAB, payload: { tab: newTab } })
+		notifyActiveFileOpen(openedFileId)
 	})
 
 	const openWebsiteTab = useMemoizedFn((preset: WebsitePreset) => {
@@ -1814,7 +1826,8 @@ export function useFilesViewer(props: FilesViewerProps) {
 				hasUserSelectDetail: false,
 				isFromNode: false,
 				userSelectDetail,
-				isFullscreen: fullscreenFileId === tab.fileData.file_id,
+				isFullscreen:
+					Boolean(forceFullscreenMode) || fullscreenFileId === tab.fileData.file_id,
 				attachmentList,
 				viewMode,
 				onViewModeChange: (mode: "code" | "desktop" | "phone") =>

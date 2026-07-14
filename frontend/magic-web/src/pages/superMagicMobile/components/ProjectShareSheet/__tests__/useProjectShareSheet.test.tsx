@@ -18,10 +18,32 @@ const mocks = vi.hoisted(() => ({
 	successToast: vi.fn(),
 	errorToast: vi.fn(),
 	warningToast: vi.fn(),
+	canUseNativeShare: vi.fn(),
+	shareToNativeTarget: vi.fn(),
 	projectShareData: [] as ProjectShareItem[],
 	fileShareData: [] as FileShareItem[],
 	useShareDataCalls: [] as Array<{ resourceType: string; enabled?: boolean }>,
 }))
+
+vi.hoisted(() => {
+	const storageMock = {
+		getItem: () => null,
+		setItem: vi.fn(),
+		removeItem: vi.fn(),
+		clear: vi.fn(),
+		key: vi.fn(),
+		length: 0,
+	}
+
+	Object.defineProperty(globalThis, "localStorage", {
+		value: storageMock,
+		configurable: true,
+	})
+	Object.defineProperty(globalThis, "sessionStorage", {
+		value: storageMock,
+		configurable: true,
+	})
+})
 
 vi.mock("@/apis", () => ({
 	SuperMagicApi: {
@@ -55,6 +77,11 @@ vi.mock("@/components/base/MagicToaster/utils", () => ({
 		error: mocks.errorToast,
 		warning: mocks.warningToast,
 	},
+}))
+
+vi.mock("@/pages/superMagic/components/Share/utils/nativeShare", () => ({
+	canUseNativeShare: mocks.canUseNativeShare,
+	shareToNativeTarget: mocks.shareToNativeTarget,
 }))
 
 vi.mock("@/pages/superMagic/layouts/MainLayout/hooks/useShareProject", () => ({
@@ -95,6 +122,10 @@ vi.mock("@/pages/superMagic/components/ShareManagement/hooks/useShareData", () =
 }))
 
 vi.mock("react-i18next", () => ({
+	initReactI18next: {
+		type: "3rdParty",
+		init: () => undefined,
+	},
 	useTranslation: () => ({
 		t: (key: string, values?: Record<string, unknown>) =>
 			values?.days ? `${key}:${values.days}` : key,
@@ -111,6 +142,8 @@ describe("useProjectShareSheet", () => {
 		mocks.getShareResourceMembers.mockResolvedValue({ members: [] })
 		mocks.createOrUpdateShareResource.mockResolvedValue({})
 		mocks.cancelShare.mockResolvedValue(undefined)
+		mocks.canUseNativeShare.mockReturnValue(false)
+		mocks.shareToNativeTarget.mockResolvedValue("shared")
 	})
 
 	it("Sheet 关闭或无 projectId 时不启用分享列表拉取", () => {
@@ -251,6 +284,59 @@ describe("useProjectShareSheet", () => {
 		const copiedText = String(mocks.writeText.mock.calls[0]?.[0])
 		expect(copiedText).not.toMatch(/^https?:\/\//)
 		expect(copiedText.length).toBeGreaterThan(1)
+	})
+
+	it("详情页系统分享使用预先构建的分享文案", async () => {
+		mocks.canUseNativeShare.mockReturnValue(true)
+		mocks.fileShareData = [
+			{
+				resource_id: "fictional-native-share",
+				title: "Fictional Native Share",
+				project_id: "fictional-project-1",
+				project_name: "Fictional Project",
+				workspace_id: "",
+				workspace_name: "",
+				resource_type: ResourceType.FileCollection,
+				share_type: ShareType.PasswordProtected,
+				created_at: "2026-05-05",
+				has_password: true,
+				password: "FAKE12",
+				share_project: false,
+				file_ids: ["fictional-file-1"],
+				extend: { file_count: 1 },
+			},
+		]
+
+		const { result } = renderHook(() =>
+			useProjectShareSheet({
+				open: true,
+				projectId: "fictional-project-1",
+				projectName: "Fictional Project",
+				attachments: [],
+				mode: "file",
+				onClose: vi.fn(),
+			}),
+		)
+
+		act(() => {
+			result.current.goToLinkDetail("fictional-native-share")
+		})
+
+		await waitFor(() => {
+			expect(result.current.selectedShareMessageText).toBeTruthy()
+		})
+
+		await act(async () => {
+			await result.current.shareSelectedShareToSystem()
+		})
+
+		expect(mocks.shareToNativeTarget).toHaveBeenCalledWith(
+			expect.objectContaining({
+				title: "Fictional Native Share",
+				text: result.current.selectedShareMessageText,
+			}),
+		)
+		expect(mocks.errorToast).not.toHaveBeenCalled()
 	})
 
 	it("创建分享时复用现有分享资源保存契约", async () => {
@@ -438,6 +524,331 @@ describe("useProjectShareSheet", () => {
 			}),
 		])
 		expect(result.current.view).toBe("linkDetail")
+	})
+
+	it("文件模式未传默认打开文件时会从已选范围内自动计算并提交", async () => {
+		const { result } = renderHook(() =>
+			useProjectShareSheet({
+				open: true,
+				projectId: "fictional-project-1",
+				projectName: "Fictional Project",
+				attachments: [
+					{
+						file_id: "folder-1",
+						name: "Fictional Folder",
+						is_directory: true,
+						children: [
+							{
+								file_id: "file-1",
+								name: "index.html",
+								file_name: "index.html",
+								file_extension: "html",
+								is_directory: false,
+							},
+							{
+								file_id: "file-2",
+								name: "fictional-note.txt",
+								file_name: "fictional-note.txt",
+								file_extension: "txt",
+								is_directory: false,
+							},
+						],
+					},
+				],
+				mode: "file",
+				defaultSelectedFileIds: ["folder-1"],
+				onClose: vi.fn(),
+			}),
+		)
+
+		expect(result.current.defaultOpenFileId).toBe("file-1")
+		expect(result.current.defaultOpenFileItem?.file_id).toBe("file-1")
+
+		await act(async () => {
+			await result.current.submitCreateShare()
+		})
+
+		expect(mocks.createOrUpdateShareResource).toHaveBeenCalledWith(
+			expect.objectContaining({
+				file_ids: ["folder-1"],
+				default_open_file_id: "file-1",
+			}),
+		)
+	})
+
+	it("文件模式会保留已选文件夹子级中的外部默认打开文件", async () => {
+		const { result } = renderHook(() =>
+			useProjectShareSheet({
+				open: true,
+				projectId: "fictional-project-1",
+				projectName: "Fictional Project",
+				attachments: [
+					{
+						file_id: "folder-1",
+						name: "Fictional Folder",
+						is_directory: true,
+						children: [
+							{
+								file_id: "file-1",
+								name: "index.html",
+								file_name: "index.html",
+								file_extension: "html",
+								is_directory: false,
+							},
+							{
+								file_id: "file-2",
+								name: "fictional-note.txt",
+								file_name: "fictional-note.txt",
+								file_extension: "txt",
+								is_directory: false,
+							},
+						],
+					},
+				],
+				mode: "file",
+				defaultSelectedFileIds: ["folder-1"],
+				defaultOpenFileId: "file-2",
+				onClose: vi.fn(),
+			}),
+		)
+
+		expect(result.current.defaultOpenFileId).toBe("file-2")
+		expect(result.current.defaultOpenFileItem?.file_id).toBe("file-2")
+
+		await act(async () => {
+			await result.current.submitCreateShare()
+		})
+
+		expect(mocks.createOrUpdateShareResource).toHaveBeenCalledWith(
+			expect.objectContaining({
+				default_open_file_id: "file-2",
+			}),
+		)
+	})
+
+	it("文件模式外部默认打开文件为普通文件夹时会回退到文件夹内可打开文件", async () => {
+		const { result } = renderHook(() =>
+			useProjectShareSheet({
+				open: true,
+				projectId: "fictional-project-1",
+				projectName: "Fictional Project",
+				attachments: [
+					{
+						file_id: "folder-1",
+						name: "Fictional Folder",
+						is_directory: true,
+						children: [
+							{
+								file_id: "file-1",
+								name: "index.html",
+								file_name: "index.html",
+								file_extension: "html",
+								is_directory: false,
+							},
+						],
+					},
+				],
+				mode: "file",
+				defaultSelectedFileIds: ["folder-1"],
+				defaultOpenFileId: "folder-1",
+				onClose: vi.fn(),
+			}),
+		)
+
+		expect(result.current.defaultOpenFileId).toBe("file-1")
+		expect(result.current.defaultOpenFileItem?.file_id).toBe("file-1")
+
+		await act(async () => {
+			await result.current.submitCreateShare()
+		})
+
+		expect(mocks.createOrUpdateShareResource).toHaveBeenCalledWith(
+			expect.objectContaining({
+				default_open_file_id: "file-1",
+			}),
+		)
+	})
+
+	it("项目模式会从项目附件中自动计算默认打开文件并提交", async () => {
+		const { result } = renderHook(() =>
+			useProjectShareSheet({
+				open: true,
+				projectId: "fictional-project-1",
+				projectName: "Fictional Project",
+				attachments: [
+					{
+						file_id: "folder-1",
+						name: "Fictional Folder",
+						is_directory: true,
+						children: [
+							{
+								file_id: "file-1",
+								name: "index.html",
+								file_name: "index.html",
+								file_extension: "html",
+								is_directory: false,
+							},
+							{
+								file_id: "file-2",
+								name: "fictional-note.txt",
+								file_name: "fictional-note.txt",
+								file_extension: "txt",
+								is_directory: false,
+							},
+						],
+					},
+				],
+				mode: "project",
+				onClose: vi.fn(),
+			}),
+		)
+
+		expect(result.current.defaultOpenFileId).toBe("file-1")
+		expect(result.current.defaultOpenFileItem?.file_id).toBe("file-1")
+		expect(result.current.defaultOpenFileCandidates.map((item) => item.file_id)).toEqual([
+			"file-1",
+			"file-2",
+		])
+
+		await act(async () => {
+			await result.current.submitCreateShare()
+		})
+
+		expect(mocks.createOrUpdateShareResource).toHaveBeenCalledWith(
+			expect.objectContaining({
+				share_project: true,
+				default_open_file_id: "file-1",
+			}),
+		)
+	})
+
+	it("用户选择默认打开文件后会更新当前值并在提交时使用用户选择", async () => {
+		const { result } = renderHook(() =>
+			useProjectShareSheet({
+				open: true,
+				projectId: "fictional-project-1",
+				projectName: "Fictional Project",
+				attachments: [
+					{
+						file_id: "file-1",
+						name: "index.html",
+						file_name: "index.html",
+						file_extension: "html",
+						is_directory: false,
+					},
+					{
+						file_id: "file-2",
+						name: "fictional-note.txt",
+						file_name: "fictional-note.txt",
+						file_extension: "txt",
+						is_directory: false,
+					},
+				],
+				mode: "file",
+				defaultSelectedFileIds: ["file-1", "file-2"],
+				onClose: vi.fn(),
+			}),
+		)
+
+		expect(result.current.defaultOpenFileId).toBe("file-1")
+
+		act(() => {
+			result.current.selectDefaultOpenFile("file-2")
+		})
+
+		expect(result.current.defaultOpenFileId).toBe("file-2")
+		expect(result.current.defaultOpenFileItem?.file_id).toBe("file-2")
+		expect(result.current.defaultOpenFilePickerOpen).toBe(false)
+
+		await act(async () => {
+			await result.current.submitCreateShare()
+		})
+
+		expect(mocks.createOrUpdateShareResource).toHaveBeenCalledWith(
+			expect.objectContaining({
+				file_ids: ["file-1", "file-2"],
+				default_open_file_id: "file-2",
+			}),
+		)
+	})
+
+	it("录音分享场景创建分享时只会自动补齐 magic.project.js，音频仍保持默认勾选但不再强制注入", async () => {
+		const { result } = renderHook(() =>
+			useProjectShareSheet({
+				open: true,
+				projectId: "project-1",
+				projectName: "Demo Project",
+				attachments: [],
+				mode: "file",
+				projectMode: "audio",
+				fileMap: {
+					audio: { file_id: "file-audio", file_name: "session.wav" },
+					transcript: { file_id: "file-transcript", file_name: "session-transcript.md" },
+					magicProject: {
+						file_id: "file-magic-project",
+						file_name: "magic.project.js",
+					},
+					summaryFiles: [],
+				},
+				onClose: vi.fn(),
+			}),
+		)
+
+		act(() => {
+			result.current.setShareName("Recording Share")
+			result.current.setSelectedFileIds(["file-transcript"])
+		})
+
+		await act(async () => {
+			await result.current.submitCreateShare()
+		})
+
+		expect(mocks.createOrUpdateShareResource).toHaveBeenCalledWith(
+			expect.objectContaining({
+				share_project: false,
+				project_id: "project-1",
+				file_ids: ["file-transcript", "file-magic-project"],
+			}),
+		)
+	})
+
+	it("录音分享场景创建页默认使用录音分享文案，并在空名称提交时继续沿用该兜底", async () => {
+		const { result } = renderHook(() =>
+			useProjectShareSheet({
+				open: true,
+				projectId: "project-1",
+				projectName: "季度复盘",
+				attachments: [],
+				mode: "file",
+				projectMode: "audio",
+				fileMap: {
+					audio: { file_id: "file-audio", file_name: "meeting.wav" },
+					transcript: { file_id: "file-transcript", file_name: "meeting-transcript.md" },
+					magicProject: {
+						file_id: "file-magic-project",
+						file_name: "magic.project.js",
+					},
+					summaryFiles: [],
+				},
+				onClose: vi.fn(),
+			}),
+		)
+
+		expect(result.current.formState.shareName).toBe("share.recordingShareName")
+
+		act(() => {
+			result.current.setShareName("")
+		})
+
+		await act(async () => {
+			await result.current.submitCreateShare()
+		})
+
+		expect(mocks.createOrUpdateShareResource).toHaveBeenCalledWith(
+			expect.objectContaining({
+				resource_name: "share.recordingShareName",
+			}),
+		)
 	})
 
 	it("文件模式下查看整项目分享详情时，不使用当前勾选文件作为已选文件", () => {

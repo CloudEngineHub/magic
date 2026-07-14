@@ -41,7 +41,7 @@ const SecondaryLayoutMobile = (props: SecondaryLayoutProps) => {
 				return t(routeItem?.title as string)
 			}
 		}
-		return t("title")
+		return t("title", { platformName: "" })
 	}, [pathname, t])
 
 	// 获取当前页面标题

@@ -35,4 +35,6 @@ export const enum UserMenuKey {
 	ConsumptionDetails = "consumptionDetails",
 	/** 下载客户端 */
 	DownloadClient = "downloadClient",
+	/** 关于我们 */
+	AboutUs = "aboutUs",
 }

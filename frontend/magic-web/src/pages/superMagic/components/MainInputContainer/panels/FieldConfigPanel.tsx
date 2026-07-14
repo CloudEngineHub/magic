@@ -1,4 +1,4 @@
-import { useMemo, useEffect, type MouseEvent } from "react"
+import { useMemo, useEffect, type MouseEvent, type PointerEvent } from "react"
 import type { JSONContent } from "@tiptap/core"
 import { X } from "lucide-react"
 import { observer } from "mobx-react-lite"
@@ -96,6 +96,13 @@ const FieldConfigPanel = observer(
 			onFilterChange?.(store.field_items)
 		}
 
+		// Keep header filter controls from bubbling into the collapsible trigger.
+		const handleHeaderFilterInteraction = (
+			event: MouseEvent<HTMLDivElement> | PointerEvent<HTMLDivElement>,
+		) => {
+			event.stopPropagation()
+		}
+
 		const handleGroupChange = (groupKey: string) => {
 			store.setCurrentGroupKey(groupKey)
 		}
@@ -159,13 +166,19 @@ const FieldConfigPanel = observer(
 									)}
 								</span>
 							</div>
-							<FilterBar
-								filters={store.simpleFields}
-								onFilterChange={handleFilterChange}
-								variant={variant}
-								scrollContainerClassName="justify-end"
-								compact={compact}
-							/>
+							<div
+								className="min-w-0 flex-1"
+								onPointerDown={handleHeaderFilterInteraction}
+								onClick={handleHeaderFilterInteraction}
+							>
+								<FilterBar
+									filters={store.simpleFields}
+									onFilterChange={handleFilterChange}
+									variant={variant}
+									scrollContainerClassName="justify-end"
+									compact={compact}
+								/>
+							</div>
 						</div>
 					}
 				>

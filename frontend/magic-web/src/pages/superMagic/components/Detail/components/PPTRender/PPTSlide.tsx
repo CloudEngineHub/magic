@@ -33,6 +33,7 @@ import { usePPTVersionManager } from "./hooks/usePPTVersionManager"
 import { cn } from "@/lib/utils"
 import useShareRoute from "@/pages/superMagic/hooks/useShareRoute"
 import { AttachmentItem } from "../../../TopicFilesButton/hooks"
+import MagicSpin from "@/components/base/MagicSpin"
 
 interface PPTSlideProps {
 	allowDownload?: boolean
@@ -137,6 +138,9 @@ const PPTSlide = observer(function PPTSlide({
 	const [isSaving, setIsSaving] = useState(false)
 	const [isRefreshing, setIsRefreshing] = useState(false)
 	const [isAppendPicking, setIsAppendPicking] = useState(false)
+	// 跨域 shell 渲染下，setContent 后到真实绘制完成有异步空窗；
+	// 这里用 iframe renderReady 作为 PPT 幻灯片 loading 的收敛信号。
+	const [isSlideRenderReady, setIsSlideRenderReady] = useState(false)
 	// 保存 IsolatedHTMLRenderer 暴露的保存函数引用
 	const [triggerSaveRef, setTriggerSaveRef] = useState<
 		(() => Promise<SaveResult | undefined>) | null
@@ -167,6 +171,8 @@ const PPTSlide = observer(function PPTSlide({
 		content: content,
 		rawContent: rawContent,
 	})
+	const [viewMode, setViewMode] = useState<"code" | "desktop" | "phone">("desktop")
+	const [editingCodeContent, setEditingCodeContent] = useState<string>(rawContent)
 	const scaleContentDimensions = useMemo(
 		() => resolvePptScaleContentDimensions(displayContent.content, displayContent.rawContent),
 		[displayContent.content, displayContent.rawContent],
@@ -278,6 +284,29 @@ const PPTSlide = observer(function PPTSlide({
 	const handleSaveReady = useCallback((triggerSave: () => Promise<SaveResult | undefined>) => {
 		setTriggerSaveRef(() => triggerSave)
 	}, [])
+
+	const handleSlideRenderReady = useMemoizedFn(() => {
+		setIsSlideRenderReady(true)
+	})
+
+	useEffect(() => {
+		if (viewMode === "code") {
+			setIsSlideRenderReady(true)
+			return
+		}
+
+		setIsSlideRenderReady(false)
+		if (!displayContent.content) return
+
+		// 兜底：极端情况下 iframe 未回传 renderReady，避免 loading 永久卡住。
+		const fallbackTimer = window.setTimeout(() => {
+			setIsSlideRenderReady(true)
+		}, 4000)
+
+		return () => {
+			window.clearTimeout(fallbackTimer)
+		}
+	}, [displayContent.content, viewMode, fileVersion])
 
 	// 当幻灯片变为非激活状态时，检查是否需要提示保存
 	useEffect(() => {
@@ -646,9 +675,6 @@ const PPTSlide = observer(function PPTSlide({
 		}
 	})
 
-	const [viewMode, setViewMode] = useState<"code" | "desktop" | "phone">("desktop")
-	const [editingCodeContent, setEditingCodeContent] = useState<string>(displayContent.rawContent)
-
 	// 同步 editingCodeContent 和 displayContent
 	useEffect(() => {
 		setEditingCodeContent(displayContent.rawContent)
@@ -770,32 +796,40 @@ const PPTSlide = observer(function PPTSlide({
 				showLineNumbers={true}
 			/>
 		) : (
-			<IsolatedHTMLRenderer
-				ref={rendererRef as React.RefObject<IsolatedHTMLRendererRef>}
-				content={displayContent.content}
-				rawSourceCode={displayContent.rawContent}
-				sandboxType="iframe"
-				isPptRender
-				scaleContentDimensions={scaleContentDimensions}
-				isFullscreen={isFullscreen}
-				isEditMode={isEditMode}
-				isVisible={isActive}
-				isTabActive={isActive}
-				isSaving={isSaving}
-				saveEditContent={saveEditContent}
-				fileId={fileId}
-				onSaveReady={handleSaveReady}
-				filePathMapping={filePathMapping}
-				openNewTab={openNewTab}
-				htmlRelativeFolderPath={htmlRelativeFolderPath}
-				selectedProject={selectedProject}
-				attachmentList={attachmentList}
-				setSlideContents={updateSlideContents}
-				slideIndex={index}
-				isPlaybackMode={isPlaybackMode}
-				className="h-[100%-40px]"
-				onAppendPickingChange={setIsAppendPicking}
-			/>
+			<div className="relative h-full w-full">
+				<IsolatedHTMLRenderer
+					ref={rendererRef as React.RefObject<IsolatedHTMLRendererRef>}
+					content={displayContent.content}
+					rawSourceCode={displayContent.rawContent}
+					sandboxType="iframe"
+					isPptRender
+					scaleContentDimensions={scaleContentDimensions}
+					isFullscreen={isFullscreen}
+					isEditMode={isEditMode}
+					isVisible={isActive}
+					isTabActive={isActive}
+					isSaving={isSaving}
+					saveEditContent={saveEditContent}
+					fileId={fileId}
+					onSaveReady={handleSaveReady}
+					filePathMapping={filePathMapping}
+					openNewTab={openNewTab}
+					htmlRelativeFolderPath={htmlRelativeFolderPath}
+					selectedProject={selectedProject}
+					attachmentList={attachmentList}
+					setSlideContents={updateSlideContents}
+					slideIndex={index}
+					isPlaybackMode={isPlaybackMode}
+					className="h-[100%-40px]"
+					onRenderReady={handleSlideRenderReady}
+					onAppendPickingChange={setIsAppendPicking}
+				/>
+				{!isSlideRenderReady && (
+					<div className="absolute inset-0 z-10 flex items-center justify-center bg-white dark:bg-[#1c1c1c]">
+						<MagicSpin spinning />
+					</div>
+				)}
+			</div>
 		)
 	}
 

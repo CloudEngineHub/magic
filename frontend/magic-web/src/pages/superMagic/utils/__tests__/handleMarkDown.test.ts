@@ -1,10 +1,38 @@
 import { describe, expect, it } from "vitest"
 import { preprocessMarkdown } from "../handleMarkDown"
 
+const balancedBracketPath = "team/[active] 20260629/review-schedule.html"
+const unclosedBracketPath = "team/[active 20260629/review-schedule.html"
+const bareClosingBracketPath = "team/active] 20260629/review-schedule.html"
+
 describe("preprocessMarkdown", () => {
 	it("converts file path placeholders into file-path tags", () => {
 		expect(preprocessMarkdown("[@file_path:foo\"bar&baz'qux]")).toBe(
 			'<file-path path="foo&quot;bar&amp;baz&#39;qux"></file-path>',
+		)
+	})
+
+	it("converts file path placeholders with balanced brackets in the path", () => {
+		expect(preprocessMarkdown(`[@file_path:${balancedBracketPath}]`)).toBe(
+			`<file-path path="${balancedBracketPath}"></file-path>`,
+		)
+	})
+
+	it("converts file path placeholders with unclosed opening brackets in the path", () => {
+		expect(preprocessMarkdown(`[@file_path:${unclosedBracketPath}]`)).toBe(
+			`<file-path path="${unclosedBracketPath}"></file-path>`,
+		)
+	})
+
+	it("converts quoted file path placeholders when the path contains bare closing brackets", () => {
+		expect(preprocessMarkdown(`[@file_path:"${bareClosingBracketPath}"]`)).toBe(
+			`<file-path path="${bareClosingBracketPath}"></file-path>`,
+		)
+	})
+
+	it("converts unquoted file path placeholders when the path contains bare closing brackets", () => {
+		expect(preprocessMarkdown(`[@file_path:${bareClosingBracketPath}]`)).toBe(
+			`<file-path path="${bareClosingBracketPath}"></file-path>`,
 		)
 	})
 

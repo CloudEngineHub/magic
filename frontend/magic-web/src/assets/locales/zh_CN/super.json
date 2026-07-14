@@ -2517,6 +2517,13 @@
 		"exitEdit": "退出编辑",
 		"fetchFailed": "获取队列列表失败",
 		"missingInfo": "项目或话题信息缺失",
+		"mobile": {
+			"collapse": "收起队列",
+			"count": "{{count}} 条",
+			"emptyContent": "⋯",
+			"expand": "展开队列",
+			"title": "队列中"
+		},
 		"operationInProgress": "该消息正在处理中，请稍后再试",
 		"removeFromQueue": "从队列移除",
 		"sendFailed": "发送消息失败",
@@ -2678,6 +2685,146 @@
 			"shareManagement": "我的分享",
 			"title": "导航",
 			"workspace": "工作空间"
+		},
+		"recordingEntry": {
+			"active": {
+				"audioSourceUnavailable": "无法获取可用的音频输入，请检查麦克风设备后重试",
+				"backAria": "返回录音列表",
+				"browserNotSupported": "当前浏览器暂不支持录音，请更换支持麦克风录制的浏览器",
+				"cancel": "取消录音",
+				"defaultTitle": "当前录音",
+				"enableTranscription": "开启转写",
+				"enableTranscriptionFailed": "开启转写失败，请稍后重试",
+				"enablingTranscription": "开启中",
+				"finishAria": "结束录音并生成纪要",
+				"notesPlaceholder": "边录边记下关键要点...",
+				"pause": "暂停",
+				"permissionDenied": "麦克风权限被拒绝，请允许浏览器访问麦克风后重试",
+				"renameAria": "编辑录音标题",
+				"resume": "继续",
+				"startFailed": "录制启动失败，请检查麦克风权限后重试",
+				"startFailedTitle": "录制出现问题",
+				"startTimedOut": "录音启动超时，请检查麦克风权限后重试",
+				"starting": "正在启动录音",
+				"startingHint": "正在请求麦克风权限并初始化录音，请稍候...",
+				"statusPaused": "已暂停",
+				"statusRecording": "录音中",
+				"tabNotes": "笔记",
+				"tabTranscript": "转写",
+				"transcriptionDisabledDescription": "开启后将实时转写录音内容",
+				"transcriptionDisabledTitle": "实时转写"
+			},
+			"fabAria": "开始录音",
+			"fabComingSoon": "录音功能即将上线",
+			"filterSheet": {
+				"closeAria": "关闭筛选",
+				"dateRange": {
+					"all": "全部时间",
+					"label": "时间范围",
+					"month": "近 30 天",
+					"today": "今天",
+					"week": "近 7 天"
+				},
+				"resetAria": "重置筛选",
+				"title": "筛选"
+			},
+			"groupSheet": {
+				"all": "全部",
+				"backAria": "返回",
+				"closeAria": "关闭分组",
+				"confirmAria": "确认",
+				"createFailed": "分组创建失败",
+				"createSuccess": "分组创建成功",
+				"createTitle": "新建分组",
+				"deleteConfirm": "确定删除「{{name}}」？该分组下的录音将移至未分组。",
+				"deleteGroup": "删除分组",
+				"deleteGroupAria": "删除分组",
+				"deleteTitle": "删除分组",
+				"groupNameLabel": "分组名称",
+				"groupNamePlaceholder": "例如：客户访谈",
+				"manageGroups": "管理分组",
+				"manageTitle": "管理分组",
+				"moreGroupAria": "{{name}} 更多操作",
+				"moveFailed": "移动失败，请稍后重试",
+				"moveSuccess": "移动成功",
+				"newGroup": "新建分组",
+				"rename": "重命名",
+				"renameLabel": "分组名称",
+				"renamePlaceholder": "输入新名称",
+				"renameTitle": "重命名分组",
+				"title": "分组",
+				"ungrouped": "未分组",
+				"unnamedGroup": "未命名分组"
+			},
+			"importComingSoon": "导入功能即将上线",
+			"importSheet": {
+				"closeAria": "关闭",
+				"fromFiles": "从文件导入",
+				"fromFilesSub": "从本机文件中选择音频",
+				"title": "导入音频"
+			},
+			"moreSheet": {
+				"backAria": "返回",
+				"closeAria": "关闭",
+				"comingSoon": "功能即将上线",
+				"confirmAria": "确认",
+				"delete": "删除",
+				"deleteConfirm": "确定删除「{{name}}」？此操作不可撤销。",
+				"deleteTitle": "删除录音",
+				"downloadOriginal": "下载原文件",
+				"generateSummary": "生成总结",
+				"moveToGroup": "移动到分组",
+				"regenerateSummary": "重新生成总结",
+				"rename": "重命名",
+				"renameLabel": "录音名称",
+				"renamePlaceholder": "输入新名称",
+				"share": "分享",
+				"untitled": "未命名录音"
+			},
+			"moveGroupSheet": {
+				"closeAria": "关闭",
+				"title": "移动到分组"
+			},
+			"placeholder": "录音与纪要功能即将上线",
+			"progress": {
+				"transferFailed": "上传失败",
+				"uploading": "正在上传"
+			},
+			"settings": {
+				"autoSummaryEnabled": {
+					"description": "转写完成后自动生成总结",
+					"label": "自动总结"
+				},
+				"backAria": "返回",
+				"closeAria": "关闭",
+				"model": {
+					"description": "用于生成总结的 AI 模型",
+					"label": "AI 模型",
+					"title": "AI 模型"
+				},
+				"saveFailed": "保存设置失败，请稍后重试",
+				"sections": {
+					"summary": "总结",
+					"transcription": "转写"
+				},
+				"settingsAria": "录音设置",
+				"title": "录音设置",
+				"transcriptionEnabled": {
+					"description": "录制开始时自动启用转写",
+					"label": "自动转写"
+				}
+			},
+			"startMissingWorkspace": "暂时无法开始录音，请先进入一个工作区",
+			"summarySheet": {
+				"closeAria": "关闭",
+				"title": "总结状态"
+			},
+			"toolbar": {
+				"clearSearchAria": "退出搜索",
+				"filterAria": "筛选",
+				"searchAria": "搜索",
+				"uploadAria": "上传音频"
+			}
 		},
 		"recycleBin": {
 			"actions": "更多操作",
@@ -3057,6 +3204,9 @@
 		"createFolderNamePlaceholder": "输入文件夹名",
 		"createSection": "新建文档",
 		"deleteConfirm": {
+			"canvasContentLossWarning": "该操作会删除画布内容依赖的数据或资源，可能导致画布内容显示丢失。",
+			"canvasMixedWarning": "该操作会影响画布项目入口文件以及内容依赖的数据或资源，可能导致画布无法打开或内容显示丢失。",
+			"canvasOpenFailureWarning": "该操作会删除画布项目入口文件，可能导致画布无法打开。",
 			"emptyLabel": "空文件夹",
 			"fileCount": "{{count}} 个文件",
 			"intro": "将永久删除以下 {{count}} 个项目：",
@@ -3130,6 +3280,9 @@
 		"defaultNameOrganization": "组织分享",
 		"defaultNamePassword": "密码链接",
 		"defaultNamePublic": "公开链接",
+		"defaultOpenFileDescription": "选择访问链接后默认打开的文件",
+		"defaultOpenFileLabel": "默认打开文件",
+		"defaultOpenFileSearchPlaceholder": "搜索文件",
 		"deleteConfirmDescription": "取消后，已获得链接的人将无法继续访问该分享。",
 		"deleteConfirmMessage": "确定取消「{{name}}」吗？取消后，已获得链接的人将无法继续访问该分享。",
 		"deleteConfirmTitle": "取消分享链接",
@@ -3558,7 +3711,8 @@
 			"contentWillBeSavedTo": "内容将储存至「{{projectName}}」",
 			"organizingRecording": "正在为您整理录音总结，完成后将自动通知您。",
 			"title": "请耐心等候",
-			"understood": "好的"
+			"understood": "好的",
+			"viewOnAudioRecordingsPage": "完成后可在「录音与纪要」页面查看。"
 		}
 	},
 	"recycleBin": {
@@ -3922,6 +4076,7 @@
 		"moreSettings": "更多设置",
 		"multiFileShareName": "文件分享_{{mainFileName}} 等 {{count}} 个文件",
 		"name": "名称",
+		"nativeShareFailed": "分享失败，请稍后重试",
 		"navigation": "导航",
 		"newProjectDescription": "默认状态下，复制生成的项目名称会与原项目保持一致。若需要更清晰地区分不同项目，也可以根据需求自定义名称",
 		"newProjectName": "新项目名称",
@@ -3954,7 +4109,11 @@
 		"projectShareName": "项目分享_{{projectName}}",
 		"publicAccess": "公开访问",
 		"publicAccessDescription": "任何人可通过链接访问，分享内容可能会被搜索引擎收录，请注意数据安全",
+		"pureMode": "纯净模式",
+		"pureModeDescription": "全屏显示入口文件并隐藏头部",
 		"qrCode": "分享二维码",
+		"recordingShareCreateTitle": "分享",
+		"recordingShareName": "录音分享_{{projectName}}",
 		"replay": "重看",
 		"replayWillStartIn": "回放将在 {{countdown}} 秒后自动开始",
 		"resetPassword": "重置密码",
@@ -4008,6 +4167,7 @@
 		"shareProjectDescription": "开启后，访问者将可访问整个项目中的文件。",
 		"shareRange": "分享范围",
 		"shareTitle": "分享",
+		"shareToSystem": "分享至",
 		"shareTopic": "分享话题",
 		"showFileList": "显示文件列表",
 		"showFileListDescription": "开启后，访问者可查看文件列表",
@@ -4435,7 +4595,10 @@
 		],
 		"actionTitle": "若您希望主动干预",
 		"mainText": "任务执行时间过长，可能是如下原因导致：",
-		"reasonList": ["AI 处理复杂任务中", "网络连接不稳定"],
+		"reasonList": [
+			"AI 处理复杂任务中",
+			"网络连接不稳定"
+		],
 		"statusText": "若您暂不操作，AI 会继续尝试"
 	},
 	"tool": {
@@ -4571,6 +4734,15 @@
 		"batchOperation": "批量操作",
 		"batchOperations": "批量操作",
 		"cancelSelect": "取消",
+		"canvasOperationRisk": {
+			"moveContentLossContent": "该操作会移动画布内容依赖的数据或资源，可能导致画布内容显示丢失。是否继续？",
+			"moveMixedContent": "该操作会影响画布项目入口文件以及内容依赖的数据或资源，可能导致画布无法打开或内容显示丢失。是否继续？",
+			"moveOpenFailureContent": "该操作会移动画布项目入口文件，可能导致画布无法打开。是否继续？",
+			"renameContentLossContent": "该操作会重命名画布内容依赖的数据或资源，可能导致画布内容显示丢失。是否继续？",
+			"renameMixedContent": "该操作会影响画布项目入口文件以及内容依赖的数据或资源，可能导致画布无法打开或内容显示丢失。是否继续？",
+			"renameOpenFailureContent": "该操作会重命名画布项目入口文件，可能导致画布无法打开。是否继续？",
+			"title": "画布项目风险提示"
+		},
 		"clawPlaygroundTags": {
 			"aboutYou": "关于你",
 			"guidelines": "指南",
@@ -4634,6 +4806,9 @@
 			"deleteBatchSubject": "选中的 {{count}} 项",
 			"deleteBatchTipMobile": "删除操作确认",
 			"deleteBatchWithFoldersDescription": "将被永久删除，包含文件夹内容和子级未选中文件，此操作无法撤销。",
+			"deleteCanvasContentLossRiskContent": "该操作会删除画布内容依赖的数据或资源，可能导致画布内容显示丢失。是否继续删除？",
+			"deleteCanvasMixedRiskContent": "该操作会影响画布项目入口文件以及内容依赖的数据或资源，可能导致画布无法打开或内容显示丢失。是否继续删除？",
+			"deleteCanvasOpenFailureRiskContent": "该操作会删除画布项目入口文件，可能导致画布无法打开。是否继续删除？",
 			"deleteContent": "确认删除 {{name}} ?",
 			"deleteFileDescription": "将被永久删除，此操作无法撤销。",
 			"deleteFileFailed": "删除文件失败",

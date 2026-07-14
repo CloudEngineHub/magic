@@ -137,6 +137,8 @@ export enum RouteName {
 	NotAuth = "NotAuth",
 	/** 系统初始化流程 */
 	Initialization = "Initialization",
+	/** 系统维护页 */
+	Maintenance = "Maintenance",
 	/** Chat模块 - 首页 */
 	Chat = "Chat",
 	/** Chat模块 - 对话页面 */
@@ -155,6 +157,12 @@ export enum RouteName {
 	MCP = "MCP",
 	/** AI助理 - 列表管理(内聚流程、工具集、向量知识库) */
 	Flows = "Flows",
+	/** Flow框架 - 向量知识库创建 */
+	FlowVectorKnowledgeCreate = "FlowVectorKnowledgeCreate",
+	/** Flow框架 - 向量知识库详情 */
+	FlowVectorKnowledgeDetail = "FlowVectorKnowledgeDetail",
+	/** 向量知识库 - 列表 */
+	VectorKnowledge = "VectorKnowledge",
 	/** 向量知识库 - 创建 */
 	VectorKnowledgeCreate = "VectorKnowledgeCreate",
 	/** 向量知识库 - 详情 */

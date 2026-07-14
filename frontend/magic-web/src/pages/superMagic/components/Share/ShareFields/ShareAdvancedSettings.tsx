@@ -19,7 +19,7 @@ interface SwitchConfig {
 }
 
 export default memo(function ShareAdvancedSettings(props: ShareAdvancedSettingsProps) {
-	const { settings, onChange, mode } = props
+	const { settings, onChange, mode, hiddenSettingKeys = [] } = props
 
 	const { t } = useTranslation("super")
 	const [isExpanded, setIsExpanded] = useState(true)
@@ -70,6 +70,14 @@ export default memo(function ShareAdvancedSettings(props: ShareAdvancedSettingsP
 				modes: [ShareMode.File],
 			},
 			{
+				key: "pureMode",
+				labelKey: "share.pureMode",
+				descriptionKey: "share.pureModeDescription",
+				isVip: false,
+				defaultValue: false,
+				modes: [ShareMode.File],
+			},
+			{
 				key: "hideCreatorInfo",
 				labelKey: "share.hideCreatorInfo",
 				descriptionKey: "share.hideCreatorInfoDescription",
@@ -89,7 +97,9 @@ export default memo(function ShareAdvancedSettings(props: ShareAdvancedSettingsP
 	}, [])
 
 	// 根据当前模式筛选需要显示的开关配置
-	const visibleConfigs = SWITCH_CONFIGS.filter((config) => config.modes.includes(mode))
+	const visibleConfigs = SWITCH_CONFIGS.filter(
+		(config) => config.modes.includes(mode) && !hiddenSettingKeys.includes(config.key),
+	)
 
 	return (
 		<div
@@ -119,7 +129,11 @@ export default memo(function ShareAdvancedSettings(props: ShareAdvancedSettingsP
 						const checked = settings[config.key] ?? config.defaultValue
 
 						return (
-							<div key={config.key} className="flex gap-3" data-testid="share-advanced-settings-item">
+							<div
+								key={config.key}
+								className="flex gap-3"
+								data-testid="share-advanced-settings-item"
+							>
 								{config.isVip ? (
 									<VipSwitch
 										checked={checked}

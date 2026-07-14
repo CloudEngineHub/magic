@@ -10,6 +10,7 @@ import {
 } from "@/pages/superMagic/services/topicReadProgressService"
 import {
 	handleArrivedTopicStatusChange as syncArrivedTopicStatusChange,
+	shouldCheckAttachmentsOnTaskStatus,
 	syncTopicStatusPatch,
 } from "@/pages/superMagic/services/topicStatusSyncService"
 import { superMagicStore } from "@/pages/superMagic/stores"
@@ -29,6 +30,7 @@ interface UseScopedTopicReadProgressParams {
 	topicStore: TopicStore
 	selectedTopic: Topic | null
 	isSelectedTopicMessagesReady: boolean
+	onTerminalTopicStatusChange?: (nextStatus: TaskStatus, topicId: string) => void
 }
 
 function resolveReadProgressPayloadFromMessage(message?: {
@@ -55,6 +57,7 @@ export function useScopedTopicReadProgress({
 	topicStore,
 	selectedTopic,
 	isSelectedTopicMessagesReady,
+	onTerminalTopicStatusChange,
 }: UseScopedTopicReadProgressParams) {
 	const topicReadProgressService = useMemo(
 		() => createTopicReadProgressService(topicStore),
@@ -89,6 +92,10 @@ export function useScopedTopicReadProgress({
 				topicId,
 				lastReadAt,
 				lastReadMessageId,
+				onTopicStatusChanged: (changedStatus, changedTopicId) => {
+					if (!shouldCheckAttachmentsOnTaskStatus(changedStatus)) return
+					onTerminalTopicStatusChange?.(changedStatus, changedTopicId)
+				},
 			})
 		},
 	)

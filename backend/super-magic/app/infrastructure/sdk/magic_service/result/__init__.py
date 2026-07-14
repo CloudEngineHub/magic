@@ -4,6 +4,7 @@ Magic Service API Results
 Result classes for Magic Service API responses.
 """
 
+from .ai_ability_runtime_config_result import AiAbilityRuntimeConfigItem, AiAbilityRuntimeConfigResult
 from .agent_details_result import AgentDetailsResult, Tool
 from .message_schedule_result import MessageScheduleResult
 from .oauth2_callback_relay_result import OAuth2CallbackRelayResult
@@ -19,6 +20,8 @@ from .search_knowledge_result import SearchKnowledgeResult
 from .update_file_source_result import UpdateFileSourceResult
 
 __all__ = [
+    'AiAbilityRuntimeConfigResult',
+    'AiAbilityRuntimeConfigItem',
     'AgentDetailsResult',
     'Tool',
     'MessageScheduleResult',

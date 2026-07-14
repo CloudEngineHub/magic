@@ -11,6 +11,7 @@ use App\Domain\AppMenu\Entity\ValueObject\AppMenuIconType;
 use App\Domain\AppMenu\Entity\ValueObject\AppMenuStatus;
 use App\Domain\AppMenu\Entity\ValueObject\DisplayScope;
 use App\Domain\AppMenu\Entity\ValueObject\OpenMethod;
+use App\Domain\Permission\Entity\ValueObject\ResourceVisibility\VisibilityType;
 use Hyperf\Validation\Request\FormRequest;
 use Hyperf\Validation\Rule;
 
@@ -26,31 +27,40 @@ class AppMenuSaveRequest extends FormRequest
      */
     public function rules(): array
     {
+        $isOverrideOnly = $this->isOverrideOnly();
+
         return [
-            'id' => 'sometimes|string',
-            'name_i18n' => 'required|array',
+            'id' => [$isOverrideOnly ? 'required' : 'sometimes', 'string'],
+            'override_only' => 'sometimes|boolean',
+            'name_i18n' => [Rule::requiredIf(fn (): bool => ! $isOverrideOnly), 'array'],
             'icon' => [
                 'nullable',
                 'string',
                 'max:255',
-                Rule::requiredIf(fn (): bool => $this->getRequestedIconType() === AppMenuIconType::Icon),
+                Rule::requiredIf(fn (): bool => ! $this->isOverrideOnly() && $this->getRequestedIconType() === AppMenuIconType::Icon),
             ],
             'icon_url' => [
                 'nullable',
                 'string',
                 'max:2048',
-                Rule::requiredIf(fn (): bool => $this->getRequestedIconType() === AppMenuIconType::Image),
+                Rule::requiredIf(fn (): bool => ! $this->isOverrideOnly() && $this->getRequestedIconType() === AppMenuIconType::Image),
             ],
             'icon_type' => [
-                'required',
+                Rule::requiredIf(fn (): bool => ! $this->isOverrideOnly()),
                 'integer',
                 Rule::in(AppMenuIconType::getValues()),
             ],
-            'path' => 'required|string|max:255',
-            'open_method' => ['required', 'integer', Rule::in(OpenMethod::getValues())],
+            'path' => [Rule::requiredIf(fn (): bool => ! $this->isOverrideOnly()), 'string', 'max:255'],
+            'open_method' => [Rule::requiredIf(fn (): bool => ! $this->isOverrideOnly()), 'integer', Rule::in(OpenMethod::getValues())],
             'sort_order' => 'sometimes|integer|min:0',
-            'display_scope' => ['required', 'integer', Rule::in(DisplayScope::getValues())],
+            'display_scope' => [Rule::requiredIf(fn (): bool => ! $this->isOverrideOnly()), 'integer', Rule::in(DisplayScope::getValues())],
             'status' => ['sometimes', 'integer', Rule::in(AppMenuStatus::getValues())],
+            'visibility_config' => 'sometimes|array',
+            'visibility_config.visibility_type' => ['sometimes', 'integer', Rule::in(array_column(VisibilityType::cases(), 'value'))],
+            'visibility_config.users' => 'sometimes|array',
+            'visibility_config.users.*.id' => 'required_with:visibility_config.users|string|max:64',
+            'visibility_config.departments' => 'sometimes|array',
+            'visibility_config.departments.*.id' => 'required_with:visibility_config.departments|string|max:64',
         ];
     }
 
@@ -85,6 +95,9 @@ class AppMenuSaveRequest extends FormRequest
             'display_scope.in' => '可见范围不合法',
             'status.integer' => '状态必须是整数',
             'status.in' => '状态不合法',
+            'visibility_config.array' => '可见范围必须是对象',
+            'visibility_config.visibility_type.integer' => '可见范围类型必须是整数',
+            'visibility_config.visibility_type.in' => '可见范围类型不合法',
         ];
     }
 
@@ -104,6 +117,8 @@ class AppMenuSaveRequest extends FormRequest
             'sort_order' => '排序',
             'display_scope' => '可见范围',
             'status' => '状态',
+            'visibility_config' => '可见范围',
+            'visibility_config.visibility_type' => '可见范围类型',
         ];
     }
 
@@ -115,5 +130,10 @@ class AppMenuSaveRequest extends FormRequest
         }
 
         return AppMenuIconType::tryFrom((int) $iconType);
+    }
+
+    private function isOverrideOnly(): bool
+    {
+        return filter_var($this->input('override_only', false), FILTER_VALIDATE_BOOLEAN);
     }
 }

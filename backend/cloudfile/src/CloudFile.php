@@ -51,6 +51,8 @@ class CloudFile
             throw new CloudFileException("config not found | [{$storage}]");
         }
         $config = AdapterName::checkConfig($adapterName, $config);
+        $options = $storageConfig['options'] ?? [];
+        $config = AdapterName::applyEndpointOptions($adapterName, $config, $options);
         $driver = $storageConfig['driver'] ?? '';
         // 如果是自定义的适配器，需要保存能直接 new，目前的支持的 oss、tos 都支持，暂不处理其他的
         if (class_exists($driver)) {
@@ -60,7 +62,7 @@ class CloudFile
         }
 
         $proxy = new FilesystemProxy($this->container, $adapterName, $adapter, $config);
-        $proxy->setOptions($storageConfig['options'] ?? []);
+        $proxy->setOptions($options);
         $proxy->setIsPublicRead((bool) ($storageConfig['public_read'] ?? false));
         $this->resolvers[$storage] = $proxy;
         return $proxy;

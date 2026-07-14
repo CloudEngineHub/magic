@@ -11,6 +11,7 @@ import {
 } from "./utils/fetchInterceptor"
 import { createNestedIframeContentHandler } from "./utils/nested-iframe-content"
 import { createVirtualStorageMessageHandler } from "./utils/virtual-storage"
+import { HTML_IFRAME_RENDER_LIFECYCLE_EVENT } from "./telemetry/iframeRenderLifecycle"
 import type { SaveResult } from "./iframe-bridge/types"
 import { useStyles } from "./styles"
 import { useFileData } from "@/pages/superMagic/hooks/useFileData"
@@ -60,6 +61,7 @@ import { AlertTriangle, Crosshair, Terminal } from "lucide-react"
 import { Button } from "@/components/shadcn-ui/button"
 import { cn } from "@/lib/utils"
 import { env } from "@/utils/env"
+import { logger as Logger } from "@/utils/log"
 import magicToast from "@/components/base/MagicToaster/utils"
 import { type ImageExportFormat } from "@magic-web/html2image"
 import { resolvePptScaleContentDimensions } from "./utils/slide-dimensions"
@@ -76,6 +78,7 @@ import {
 
 /** 跨组件重挂载持久化调试面板开关状态（按文件 ID 存储） */
 const devConsoleStateMap = new Map<string, boolean>()
+const htmlRenderLogger = Logger.createLogger("HTMLContent")
 
 interface HTMLProps {
 	data: string | any
@@ -242,6 +245,9 @@ export default memo(function HTML(props: HTMLProps) {
 
 	const [processedContent, setProcessedContent] = useState<string>("")
 	const [filePathMapping, setFilePathMapping] = useState<Map<string, string>>(new Map()) // 记录文件的相对路径和替换后的url映射关系
+	// 跨域 shell 渲染下，数据加载完成 ≠ iframe 内容已画出来；
+	// 用 iframe 上报的渲染就绪信号来控制预览 loading 收起时机，避免"loading 没了但页面空白"。
+	const [isPreviewRenderReady, setIsPreviewRenderReady] = useState(false)
 	const [saveFunction, setSaveFunction] = useState<
 		(() => Promise<SaveResult | undefined>) | (() => void) | null
 	>(null) // 保存函数
@@ -729,6 +735,15 @@ export default memo(function HTML(props: HTMLProps) {
 				projectId: selectedProject?.id,
 				topicId: selectedProject?.current_topic_id,
 				parentTargetOrigin: window.location.origin,
+				onTelemetry: (data) => {
+					htmlRenderLogger.report(HTML_IFRAME_RENDER_LIFECYCLE_EVENT, {
+						renderMode: env("MAGIC_HTML_SANDBOX_URL") ? "cross-origin" : "same-origin",
+						shellUrl: env("MAGIC_HTML_SANDBOX_URL") || "/husky.html",
+						fileId: currentFileId || "",
+						relativeFilePath: htmlRelativeFolderPath,
+						...data,
+					})
+				},
 			},
 		)
 
@@ -986,6 +1001,23 @@ export default memo(function HTML(props: HTMLProps) {
 		},
 		[],
 	)
+
+	const handlePreviewRenderReady = useMemoizedFn(() => {
+		setIsPreviewRenderReady(true)
+	})
+
+	// 待渲染内容变化（切换文件 / 内容更新 / 重新挂载）时重置渲染就绪态，重新显示 loading；
+	// 同时设置兜底定时器，避免极端情况下 iframe 未上报就绪信号导致 loading 永久卡住。
+	useEffect(() => {
+		setIsPreviewRenderReady(false)
+		if (!processedContent) return
+		const fallbackTimer = window.setTimeout(() => {
+			setIsPreviewRenderReady(true)
+		}, 4000)
+		return () => {
+			window.clearTimeout(fallbackTimer)
+		}
+	}, [processedContent, renderKey])
 
 	// 当 viewMode 变化时，退出编辑模式
 	useEffect(() => {
@@ -1362,7 +1394,7 @@ export default memo(function HTML(props: HTMLProps) {
 					})}
 				>
 					<div
-						className={cx(styles.previewInnerBase, styles.htmlBody, {
+						className={cx(styles.previewInnerBase, styles.htmlBody, "relative", {
 							[styles.phoneModeInner]: viewMode === "phone",
 							[styles.immersivePreviewInner]: isImmersiveLayout,
 						})}
@@ -1391,28 +1423,43 @@ export default memo(function HTML(props: HTMLProps) {
 						) : htmlIsDeleted ? (
 							<Deleted data={displayData} showHeader={false} />
 						) : (
-							<IsolatedHTMLRenderer
-								ref={htmlRendererRef}
-								key={`html-${renderKey}`}
-								content={processedContent}
-								rawSourceCode={data?.content}
-								sandboxType="iframe"
-								isPptRender={isInPPTMode}
-								scaleContentDimensions={scaleContentDimensions}
-								isFullscreen={isFullscreen}
-								isEditMode={isEditMode}
-								saveEditContent={saveEditContent}
-								onSaveReady={onSaveReady}
-								fileId={displayData?.file_id}
-								filePathMapping={filePathMapping}
-								openNewTab={openNewTab}
-								htmlRelativeFolderPath={currentHtmlFileInfo.htmlRelativeFolderPath}
-								selectedProject={selectedProject}
-								attachmentList={attachmentList}
-								isPlaybackMode={isPlaybackMode}
-								onDevConsoleClose={() => setDevConsoleEnabled(false)}
-								onAppendPickingChange={setIsAppendPicking}
-							/>
+							<>
+								<IsolatedHTMLRenderer
+									ref={htmlRendererRef}
+									key={`html-${renderKey}`}
+									content={processedContent}
+									rawSourceCode={data?.content}
+									sandboxType="iframe"
+									isPptRender={isInPPTMode}
+									scaleContentDimensions={scaleContentDimensions}
+									isFullscreen={isFullscreen}
+									isEditMode={isEditMode}
+									saveEditContent={saveEditContent}
+									onSaveReady={onSaveReady}
+									fileId={displayData?.file_id}
+									filePathMapping={filePathMapping}
+									openNewTab={openNewTab}
+									htmlRelativeFolderPath={
+										currentHtmlFileInfo.htmlRelativeFolderPath
+									}
+									selectedProject={selectedProject}
+									attachmentList={attachmentList}
+									isPlaybackMode={isPlaybackMode}
+									onRenderReady={handlePreviewRenderReady}
+									onDevConsoleClose={() => setDevConsoleEnabled(false)}
+									onAppendPickingChange={setIsAppendPicking}
+								/>
+								{/* 跨域 shell 渲染期间用 loading 覆盖层填补"数据已就绪但 iframe 内容未画出"的空窗 */}
+								{!isPreviewRenderReady && (
+									<Flex
+										justify="center"
+										align="center"
+										className="absolute inset-0 z-10 bg-white dark:bg-[#1c1c1c]"
+									>
+										<MagicSpin spinning />
+									</Flex>
+								)}
+							</>
 						)}
 					</div>
 				</div>

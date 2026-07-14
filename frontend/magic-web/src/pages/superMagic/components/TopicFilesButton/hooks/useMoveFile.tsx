@@ -16,6 +16,11 @@ import { useMoveOrCopyDuplicateHandler } from "./useMoveOrCopyDuplicateHandler"
 import { useFolderConflictHandler } from "./useFolderConflictHandler"
 import { getAttachmentPathByLookupKey, type AttachmentIndex } from "../utils/attachmentIndex"
 import { collectSelectedItemIds } from "../utils/collectSelectedItemIds"
+import {
+	detectCanvasProjectOperationRisk,
+	getCanvasProjectOperationImpact,
+	type CanvasProjectOperationRisk,
+} from "../utils/canvasProjectOperationRisk"
 
 interface UseMoveFileOptions {
 	projectId?: string
@@ -323,6 +328,43 @@ export function useMoveFile(options: UseMoveFileOptions = {}) {
 		[getItemName, t],
 	)
 
+	const confirmCanvasProjectRisk = useCallback(
+		(canvasRisk: CanvasProjectOperationRisk) =>
+			new Promise<boolean>((resolve) => {
+				const impact = getCanvasProjectOperationImpact(canvasRisk)
+				MagicModal.confirm({
+					title: t("topicFiles.canvasOperationRisk.title"),
+					content: t(
+						impact === "open-failure"
+							? "topicFiles.canvasOperationRisk.moveOpenFailureContent"
+							: impact === "content-loss"
+								? "topicFiles.canvasOperationRisk.moveContentLossContent"
+								: "topicFiles.canvasOperationRisk.moveMixedContent",
+					),
+					icon: (
+						<IconAlertTriangleFilled
+							size={20}
+							color="rgba(255,125,0, 1)"
+							style={{ marginRight: 6, lineHeight: 20, flexShrink: 0 }}
+						/>
+					),
+					okButtonProps: {
+						color: "danger",
+						variant: "solid",
+					},
+					cancelButtonProps: {
+						color: "default",
+						variant: "filled",
+					},
+					okText: t("topicFiles.moveModal.confirm"),
+					cancelText: t("common.cancel"),
+					onOk: () => resolve(true),
+					onCancel: () => resolve(false),
+				})
+			}),
+		[t],
+	)
+
 	// 批量移动文件处理函数
 	const batchMoveFiles = useCallback(
 		async ({
@@ -477,6 +519,18 @@ export function useMoveFile(options: UseMoveFileOptions = {}) {
 						)
 					: new Map()
 
+			if (conflictDetectionIds.length > 0) {
+				const canvasRisk = await detectCanvasProjectOperationRisk({
+					attachments: sourceAttachments,
+					fileIds: conflictDetectionIds,
+					operation: "move",
+				})
+				if (canvasRisk.shouldWarn) {
+					const shouldContinue = await confirmCanvasProjectRisk(canvasRisk)
+					if (!shouldContinue) return
+				}
+			}
+
 			if (folderConflicts.size > 0) {
 				const folderChoice = await folderConflictHandler.checkConflicts(folderConflicts)
 				if (!folderChoice.shouldProceed) return
@@ -510,7 +564,14 @@ export function useMoveFile(options: UseMoveFileOptions = {}) {
 				keepBothFileIds,
 			})
 		},
-		[attachmentIndex, attachments, batchMoveFiles, folderConflictHandler, moveDuplicateHandler],
+		[
+			attachmentIndex,
+			attachments,
+			batchMoveFiles,
+			confirmCanvasProjectRisk,
+			folderConflictHandler,
+			moveDuplicateHandler,
+		],
 	)
 
 	// 确认移动文件
@@ -550,6 +611,18 @@ export function useMoveFile(options: UseMoveFileOptions = {}) {
 				const conflictCheckIds = batchFileIds.filter(
 					(fileId) => !sameParentKeepBothIds.includes(fileId),
 				)
+
+				if (conflictCheckIds.length > 0) {
+					const canvasRisk = await detectCanvasProjectOperationRisk({
+						attachments,
+						fileIds: conflictCheckIds,
+						operation: "move",
+					})
+					if (canvasRisk.shouldWarn) {
+						const shouldContinue = await confirmCanvasProjectRisk(canvasRisk)
+						if (!shouldContinue) return
+					}
+				}
 
 				// 检查批量移动是否存在同名冲突
 				const { hasConflict, conflictItems } = checkBatchFilesConflict(
@@ -642,6 +715,16 @@ export function useMoveFile(options: UseMoveFileOptions = {}) {
 				return
 			}
 
+			const canvasRisk = await detectCanvasProjectOperationRisk({
+				attachments,
+				items: [currentMoveItem],
+				operation: "move",
+			})
+			if (canvasRisk.shouldWarn) {
+				const shouldContinue = await confirmCanvasProjectRisk(canvasRisk)
+				if (!shouldContinue) return
+			}
+
 			// 检查单个文件移动是否存在同名冲突
 			const hasConflict = checkSingleFileConflict(currentMoveItem, targetFolderPath)
 
@@ -664,6 +747,7 @@ export function useMoveFile(options: UseMoveFileOptions = {}) {
 			batchMoveFiles,
 			checkBatchFilesConflict,
 			checkSingleFileConflict,
+			confirmCanvasProjectRisk,
 			currentMoveItem,
 			getTargetFolderPath,
 			handleMoveFile,

@@ -140,8 +140,114 @@ describe("dev script shutdown controller", () => {
 		expect(spawnCommand).not.toHaveBeenCalled()
 	})
 
+	it("reaps a stale session's process group recorded in the pid file on startup", () => {
+		const files = new Map<string, string>()
+		const processRef = createProcessRef()
+		// Simulate an orphaned session: recorded group + pids are still alive.
+		const alive = new Set([9001, -9002, 9002])
+		processRef.kill = vi.fn((target: number, signal: NodeJS.Signals | 0) => {
+			if (signal === 0) {
+				if (!alive.has(target)) throw Object.assign(new Error("ESRCH"), { code: "ESRCH" })
+				return true
+			}
+			// A real signal terminates the group and its members.
+			alive.delete(target)
+			if (target === -9002) {
+				alive.delete(9002)
+			}
+			return true
+		}) as typeof processRef.kill
+
+		const controller = devScript.createDevController({
+			cwd: "/repo/magic-web",
+			fsRef: createFsRef(files),
+			processRef,
+			spawnCommand: vi.fn(),
+			tmpDir: "/tmp",
+			sleep: vi.fn(),
+		})
+
+		const pidFilePath = controller.getPidFilePath()
+		files.set(
+			pidFilePath,
+			JSON.stringify({ pid: 9001, activeChildPid: 9002, activeChildPgid: 9002 }),
+		)
+
+		const result = controller.reapStaleSession()
+
+		expect(result.reaped).toBe(true)
+		expect(processRef.kill).toHaveBeenCalledWith(-9002, "SIGTERM")
+		expect(processRef.kill).toHaveBeenCalledWith(9001, "SIGTERM")
+		expect(files.has(pidFilePath)).toBe(false)
+	})
+
+	it("escalates a stubborn stale group to SIGKILL when SIGTERM is ignored", () => {
+		const files = new Map<string, string>()
+		const processRef = createProcessRef()
+		const alive = new Set([-9002])
+		processRef.kill = vi.fn((target: number, signal: NodeJS.Signals | 0) => {
+			if (signal === 0) {
+				if (!alive.has(target)) throw Object.assign(new Error("ESRCH"), { code: "ESRCH" })
+				return true
+			}
+			// Only SIGKILL actually terminates the group here.
+			if (signal === "SIGKILL") alive.delete(target)
+			return true
+		}) as typeof processRef.kill
+
+		const controller = devScript.createDevController({
+			cwd: "/repo/magic-web",
+			fsRef: createFsRef(files),
+			processRef,
+			spawnCommand: vi.fn(),
+			tmpDir: "/tmp",
+			sleep: vi.fn(),
+			shutdownTimeoutMs: 400,
+		})
+
+		const pidFilePath = controller.getPidFilePath()
+		files.set(pidFilePath, JSON.stringify({ pid: 9001, activeChildPgid: 9002 }))
+
+		controller.reapStaleSession()
+
+		expect(processRef.kill).toHaveBeenCalledWith(-9002, "SIGTERM")
+		expect(processRef.kill).toHaveBeenCalledWith(-9002, "SIGKILL")
+		expect(files.has(pidFilePath)).toBe(false)
+	})
+
+	it("removes the pid file without signalling when the recorded session is already gone", () => {
+		const files = new Map<string, string>()
+		const processRef = createProcessRef()
+		// No process is alive: every kill probe throws ESRCH.
+		processRef.kill = vi.fn(() => {
+			throw Object.assign(new Error("ESRCH"), { code: "ESRCH" })
+		}) as typeof processRef.kill
+
+		const controller = devScript.createDevController({
+			cwd: "/repo/magic-web",
+			fsRef: createFsRef(files),
+			processRef,
+			spawnCommand: vi.fn(),
+			tmpDir: "/tmp",
+			sleep: vi.fn(),
+		})
+
+		const pidFilePath = controller.getPidFilePath()
+		files.set(pidFilePath, JSON.stringify({ pid: 9001, activeChildPgid: 9002 }))
+
+		const result = controller.reapStaleSession()
+
+		expect(result.reaped).toBe(false)
+		expect(files.has(pidFilePath)).toBe(false)
+		// Only liveness probes (signal 0) should have run, no termination signals.
+		for (const call of processRef.kill.mock.calls) {
+			expect(call[1]).toBe(0)
+		}
+	})
+
 	it("exits through the injected exit function when a setup command fails before shutdown", async () => {
 		const controller = {
+			reapStaleSession: vi.fn(),
 			writePidFile: vi.fn(),
 			registerCleanupHandlers: vi.fn(),
 			runCommand: vi.fn().mockRejectedValue(new Error("setup failed")),

@@ -12,7 +12,10 @@ from typing import Dict, Optional, Tuple
 
 import aiohttp
 
-from app.core.entity.message.client_message import MessageSubscriptionConfig
+from app.core.config.communication_config import (
+    MessageSubscriptionAuthScheme,
+    MessageSubscriptionConfig,
+)
 from agentlang.event.event import EventType
 from app.core.stream import Stream
 from agentlang.logger import get_logger
@@ -124,6 +127,22 @@ class HTTPSubscriptionStream(Stream):
             NotImplementedError: Always raised as read is not supported.
         """
         raise NotImplementedError("HTTPSubscriptionStream does not support read operations")
+
+    def _build_headers(self, request_id: str, data_type: str) -> Dict[str, str]:
+        if self._config.auth_scheme != MessageSubscriptionAuthScheme.HEADER_TOKEN.value:
+            raise IOError(f"Unsupported message subscription auth_scheme: {self._config.auth_scheme}")
+
+        headers = dict(self._config.headers)
+        headers["Request-ID"] = request_id
+        headers["Language"] = I18nManager.get_language()
+
+        # 添加 Magic-Authorization 与 User-Authorization 请求头
+        MetadataUtil.add_magic_and_user_authorization_headers(headers)
+
+        if data_type == "json" and "Content-Type" not in headers:
+            headers["Content-Type"] = "application/json"
+
+        return headers
 
     async def _should_retry(self, response) -> bool:
         """
@@ -257,17 +276,7 @@ class HTTPSubscriptionStream(Stream):
             processed_data = self._prepare_request_data(data)
 
             # 准备请求头和内容
-            headers = dict(self._config.headers)
-            headers["Request-ID"] = request_id
-            headers["Language"] = I18nManager.get_language()
-
-            # 添加 Magic-Authorization 与 User-Authorization 请求头
-            MetadataUtil.add_magic_and_user_authorization_headers(headers)
-
-            if data_type == "json":
-                # 确保Content-Type是application/json
-                if "Content-Type" not in headers:
-                    headers["Content-Type"] = "application/json"
+            headers = self._build_headers(request_id, data_type)
 
             logger.debug(f"[{request_id}] 开始HTTP请求: {self._config.method} {self._config.url}")
 

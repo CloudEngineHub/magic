@@ -164,6 +164,7 @@ function CrewConversationPanel({
 						onSendMessage={messageQueue.sendQueuedMessage}
 						onStartEdit={messageQueue.startEditQueueItem}
 						onCancelEdit={messageQueue.cancelEditQueueItem}
+						variant={isMobile ? "mobile" : "default"}
 					/>
 				</div>
 			) : null
@@ -177,6 +178,7 @@ function CrewConversationPanel({
 		messageQueue.sendQueuedMessage,
 		messageQueue.startEditQueueItem,
 		messageQueue.cancelEditQueueItem,
+		isMobile,
 	])
 
 	const editorContext = useMemo<SceneEditorContext>(() => {

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef } from "react"
 import { useCanvasDesignI18n } from "../../../context/I18nContext"
 import { useMagic } from "../../../context/MagicContext"
+import { useOptionalCanvas } from "../../../context/CanvasContext"
 import type {
 	MentionDataServicePort,
 	ProjectAttachmentMentionNode,
@@ -78,6 +79,7 @@ export function useCanvasReferenceMentionRuntime(
 		defaultProjectAttachmentFolderName,
 		mentionDataServiceCtor,
 	} = useMagic()
+	const canvas = useOptionalCanvas()
 	const { t } = useCanvasDesignI18n()
 	const {
 		maxReferenceFiles,
@@ -130,6 +132,51 @@ export function useCanvasReferenceMentionRuntime(
 	useEffect(() => {
 		dataService?.syncProjectAttachmentRoots?.(projectAttachmentMentionTree)
 	}, [dataService, projectAttachmentMentionTree])
+
+	useEffect(() => {
+		if (!canvas || !dataService?.invalidateCanvasElementsCache) return
+
+		const invalidate = () => {
+			dataService.invalidateCanvasElementsCache?.()
+		}
+		const unsubscribes = [
+			canvas.eventEmitter.on("element:change", ({ data }) => {
+				if (data?.phase === "transient") return
+				invalidate()
+			}),
+			canvas.eventEmitter.on("canvas:clear", invalidate),
+			canvas.eventEmitter.on("element:temporary:converted", invalidate),
+			canvas.eventEmitter.on("document:loaded", invalidate),
+			canvas.eventEmitter.on("document:restored", invalidate),
+		]
+
+		return () => {
+			unsubscribes.forEach((unsubscribe) => unsubscribe())
+		}
+	}, [canvas, dataService])
+
+	useEffect(() => {
+		if (!dataService?.setCanvasReferenceElementsContext) return
+
+		if (!canvas) {
+			dataService.setCanvasReferenceElementsContext(undefined)
+			return
+		}
+
+		dataService.setCanvasReferenceElementsContext({
+			canvasName: mentionFileSubtitleParentPrefix,
+			rootFolderId: defaultProjectAttachmentFolderId,
+			getCanvasDocument: () => canvas.exportDocument({ includeTemporary: false }),
+		})
+
+		queueMicrotask(() => {
+			dataService.requestRefresh?.()
+		})
+
+		return () => {
+			dataService.setCanvasReferenceElementsContext?.(undefined)
+		}
+	}, [canvas, dataService, defaultProjectAttachmentFolderId, mentionFileSubtitleParentPrefix])
 
 	useEffect(() => {
 		if (!dataService?.requestRefresh) return

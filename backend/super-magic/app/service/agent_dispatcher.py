@@ -42,6 +42,7 @@ from app.path_manager import PathManager
 from app.service.agent_event.user_tool_call_listener_service import UserToolCallListenerService
 from app.service.agent_event.channel_startup_listener_service import ChannelStartupListenerService
 from app.core.entity.message.client_message import InitClientMessage, ChatClientMessage, AgentMode
+from app.service.cli_manager import CliManagerService
 from app.service.home_persistence_service import HomePersistenceService
 from agentlang.logger import get_logger
 from app.core.base_service import Base
@@ -86,7 +87,7 @@ class AgentDispatcher(Base):
             return
 
         self.agent_context: Optional[AgentContext] = None
-        self.http_stream: Optional[HTTPSubscriptionStream] = None
+        self.http_streams: list[HTTPSubscriptionStream] = []
         self.is_workspace_initialized: bool = False  # 工作区初始化状态标志
         self.agent_service = AgentService()  # 创建AgentService实例
         self.agents: Dict[str, Agent] = {}  # 用于存储不同类型的agent
@@ -162,7 +163,7 @@ class AgentDispatcher(Base):
         """
         if self.agent_context.get_init_client_message() is not None:
             logger.info("agent_context 已存在客户端初始化消息，跳过文件加载")
-            self._schedule_initial_cli_status_detection()
+            await CliManagerService.initialize_from_environment(self.agent_context)
             return True
 
         try:
@@ -186,7 +187,7 @@ class AgentDispatcher(Base):
         logger.info("开始工作区初始化流程")
 
         await HomePersistenceService.initialize_from_environment()
-        self._schedule_initial_cli_status_detection()
+        await CliManagerService.initialize_from_environment(self.agent_context)
 
         # ========== 配置更新阶段 - 每次都执行 ==========
         # 保存初始化消息到文件
@@ -200,6 +201,18 @@ class AgentDispatcher(Base):
             await model_config_manager.refresh_provider(MagicServiceProvider())
         except Exception as e:
             logger.error(f"MagicServiceProvider refresh failed, continuing without it: {e}")
+
+        # 阶段二：init_client_message.json 已就绪，触发 magic-service AI 能力配置加载
+        try:
+            from agentlang.config.ai_abilities.ability_config_manager import ai_ability_config_manager
+            from app.core.ai_ability_providers.magic_service_provider import MagicServiceAIAbilityProvider
+            await ai_ability_config_manager.refresh_provider(
+                MagicServiceAIAbilityProvider(
+                    (init_message.dynamic_config or {}).get("ai_abilities")
+                )
+            )
+        except Exception as e:
+            logger.error(f"MagicServiceAIAbilityProvider refresh failed, continuing without it: {e}")
 
         # 从 init_message.metadata 提取并设置关键字段
         if init_message.metadata:
@@ -253,11 +266,14 @@ class AgentDispatcher(Base):
 
         # HTTP订阅流 - 通过环境变量控制是否启用
         enable_http_stream = os.getenv("ENABLE_HTTP_SUBSCRIPTION_STREAM", "true").lower() == "true"
-        if init_message.message_subscription_config and not self.http_stream:
+        configs = init_message.message_subscription_config or []
+        if configs and not self.http_streams:
             if enable_http_stream:
-                self.http_stream = HTTPSubscriptionStream(init_message.message_subscription_config)
-                self.agent_context.add_stream(self.http_stream)
-                logger.info("创建和添加了HTTP订阅流")
+                for subscription_config in configs:
+                    stream = HTTPSubscriptionStream(subscription_config)
+                    self.http_streams.append(stream)
+                    self.agent_context.add_stream(stream)
+                logger.info(f"创建和添加了 {len(self.http_streams)} 个 HTTP订阅流")
             else:
                 logger.info("HTTP订阅流已通过环境变量 ENABLE_HTTP_SUBSCRIPTION_STREAM 禁用，跳过创建")
 
@@ -289,15 +305,6 @@ class AgentDispatcher(Base):
                 logger.info("工作区初始化完成，标记 init 事件已发送（非预启动场景）")
             else:
                 logger.info("工作区初始化完成")
-
-    def _schedule_initial_cli_status_detection(self) -> None:
-        """调度 CLI 状态探测，失败不影响主流程。"""
-        try:
-            from app.service.cli_status import CliStatusFactory
-
-            CliStatusFactory.schedule_initial_detection(self.agent_context)
-        except Exception as e:
-            logger.warning(f"CLI 状态后台检测启动失败，继续初始化流程: {e}")
 
     async def switch_agent(self, agent_mode: Union[AgentMode, str], agent_code: str = None):
         """
@@ -731,6 +738,20 @@ class AgentDispatcher(Base):
             model_config_manager.maybe_refresh_in_background(provider.provider_type)
         except Exception as e:
             logger.warning(f"dispatch_message: model provider check failed, continuing: {e}")
+
+        # 确保 magic-service AI 能力配置已加载，失败不阻断 chat。
+        try:
+            from agentlang.config.ai_abilities.ability_config_manager import ai_ability_config_manager
+            from app.core.ai_ability_providers.magic_service_provider import MagicServiceAIAbilityProvider
+            dynamic_ai_abilities = (message.dynamic_config or {}).get("ai_abilities")
+            ability_provider = MagicServiceAIAbilityProvider(dynamic_ai_abilities)
+            if isinstance(dynamic_ai_abilities, Mapping) and dynamic_ai_abilities:
+                await ai_ability_config_manager.refresh_provider(ability_provider)
+            else:
+                await ai_ability_config_manager.ensure_provider_loaded(ability_provider)
+            ai_ability_config_manager.maybe_refresh_in_background(ability_provider.provider_type)
+        except Exception as e:
+            logger.warning(f"dispatch_message: AI ability provider check failed, continuing: {e}")
 
         await self._fill_from_last_dispatch_message(message)
 

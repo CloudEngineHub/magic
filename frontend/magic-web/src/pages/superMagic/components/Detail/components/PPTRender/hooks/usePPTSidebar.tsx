@@ -22,6 +22,7 @@ import { workspaceStore, projectStore } from "@/pages/superMagic/stores/core"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import projectFilesStore from "@/stores/projectFiles"
 import { MentionItemType } from "@/components/business/MentionPanel/types"
+import { requestProjectAttachmentsFullRefresh } from "@/pages/superMagic/services/attachmentsTopicSync"
 
 interface UsePPTSidebarOptions {
 	slides: SlideItem[]
@@ -62,6 +63,13 @@ export function usePPTSidebar({
 	const isInsertingRef = useRef(false)
 	const isDeletingRef = useRef(false)
 	const [isDeleteModalOpen, setIsModalOpen] = useState(false)
+	const getMagicProjectLookupAttachments = useMemoizedFn(() => {
+		const treeAttachments = Array.isArray(attachments) ? attachments : []
+		const listAttachments = Array.isArray(attachmentList) ? attachmentList : []
+		if (treeAttachments.length === 0) return listAttachments
+		if (listAttachments.length === 0) return treeAttachments
+		return [...treeAttachments, ...listAttachments]
+	})
 
 	// Register unified sync function on mount
 	useMount(() => {
@@ -72,7 +80,7 @@ export function usePPTSidebar({
 			// Sync function: update magic.project.js
 			async (slidesToSync: SlideItem[]) => {
 				const magicProjectFile = await findMagicProjectJsFile({
-					attachments: attachments || [],
+					attachments: getMagicProjectLookupAttachments(),
 					currentFileId: mainFileId || "",
 					currentFileName: mainFileName || "",
 				})
@@ -168,7 +176,7 @@ export function usePPTSidebar({
 			try {
 				// Find magic project file
 				const magicProjectFile = await findMagicProjectJsFile({
-					attachments: attachments || [],
+					attachments: getMagicProjectLookupAttachments(),
 					currentFileId: mainFileId || "",
 					currentFileName: mainFileName || "",
 				})
@@ -185,7 +193,7 @@ export function usePPTSidebar({
 					direction,
 					currentSlides: store.slides.map((s) => s.path),
 					magicProjectFileId: magicProjectFile.fileId,
-					attachments: attachments || [],
+					attachments: getMagicProjectLookupAttachments(),
 				})
 
 				// Get download URL for the newly created file
@@ -282,6 +290,13 @@ export function usePPTSidebar({
 					onSortSave(store.slidePaths)
 				}
 
+				// 将新文件添加到 store 中，确保 mention 验证能够通过；随后触发完整刷新，回到服务端附件树状态。
+				projectFilesStore.addWorkspaceFile(result.newFile)
+				requestProjectAttachmentsFullRefresh({
+					projectId,
+					reason: "ppt-insert-slide",
+				})
+
 				// Load the new slide content and generate screenshot
 				try {
 					await store.loadSlideContentByFileId(result.newFileId, {
@@ -301,9 +316,6 @@ export function usePPTSidebar({
 						console.error("Missing newFileId, cannot insert to chat")
 						return
 					}
-
-					// 将新文件添加到 store 中,确保 mention 验证能够通过
-					projectFilesStore.addWorkspaceFile(result.newFile)
 
 					const contentToInsert = {
 						type: "doc",
@@ -447,18 +459,16 @@ export function usePPTSidebar({
 					})
 					store.setSlides(newSlides, true) // skipSync = true
 
-					// Determine new active index based on current store state
-					let newActiveIndex = store.activeIndex
-					const currentStoreIndex = store.slides.findIndex((s) => s.path === slidePath)
+					// Determine new active index from the pre-delete snapshot.
+					let newActiveIndex = previousActiveIndex
 
 					// If slide is currently active or before active, adjust activeIndex
-					if (currentStoreIndex !== -1) {
-						if (currentStoreIndex === store.activeIndex) {
-							newActiveIndex = Math.max(0, currentStoreIndex - 1)
-						} else if (currentStoreIndex < store.activeIndex) {
-							newActiveIndex = store.activeIndex - 1
-						}
+					if (currentIndex === previousActiveIndex) {
+						newActiveIndex = Math.max(0, currentIndex - 1)
+					} else if (currentIndex < previousActiveIndex) {
+						newActiveIndex = previousActiveIndex - 1
 					}
+					newActiveIndex = Math.min(newActiveIndex, newSlides.length - 1)
 
 					store.setActiveIndex(newActiveIndex)
 					setActiveIndex(newActiveIndex)
@@ -482,7 +492,7 @@ export function usePPTSidebar({
 
 					// Background API calls (deleteSlide API will update magic.project.js)
 					const magicProjectFile = await findMagicProjectJsFile({
-						attachments: attachments || [],
+						attachments: getMagicProjectLookupAttachments(),
 						currentFileId: mainFileId || "",
 						currentFileName: mainFileName || "",
 					})
@@ -600,7 +610,7 @@ export function usePPTSidebar({
 
 			// Background API calls (renameSlide API will update magic.project.js)
 			const magicProjectFile = await findMagicProjectJsFile({
-				attachments: attachments || [],
+				attachments: getMagicProjectLookupAttachments(),
 				currentFileId: mainFileId || "",
 				currentFileName: mainFileName || "",
 			})
@@ -642,6 +652,11 @@ export function usePPTSidebar({
 					onSortSave(store.slidePaths)
 				}
 			}
+
+			requestProjectAttachmentsFullRefresh({
+				projectId,
+				reason: "ppt-rename-slide",
+			})
 		} catch (error) {
 			console.error("Failed to rename slide:", error)
 

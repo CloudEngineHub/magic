@@ -66,6 +66,21 @@ interface AsrRecorderInterface
     ): AsrRecorderResponse;
 
     /**
+     * 查询 ASR 录音任务状态
+     * 对应沙箱 POST /api/asr/task/query.
+     *
+     * @param string $sandboxId 沙箱ID
+     * @param string $taskKey 任务键
+     * @param string $workspaceDir 工作区目录，默认 .workspace
+     * @return AsrRecorderResponse 响应结果
+     */
+    public function queryTask(
+        string $sandboxId,
+        string $taskKey,
+        string $workspaceDir = '.workspace'
+    ): AsrRecorderResponse;
+
+    /**
      * 取消 ASR 录音任务
      * 对应沙箱 POST /api/asr/task/cancel.
      *

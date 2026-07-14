@@ -10,6 +10,9 @@ const ITEM_HEIGHT = 48
 const FLOATING_MENU_EMPTY_ROW_CLASS =
 	"flex min-h-12 w-full items-center px-4 py-3 text-left text-base leading-5 text-muted-foreground whitespace-normal"
 
+// Shared recent floating-menu selectors are route-agnostic for cross-page sidebar tests.
+const MOBILE_SHELL_RECENT_FLOATING_MENU_TEST_ID_PREFIX = "mobile-super-shell"
+
 export interface FloatingMenuAnchor {
 	clientX: number
 	clientY: number
@@ -18,6 +21,7 @@ export interface FloatingMenuAnchor {
 export interface MobileShellRecentFloatingMenuProps {
 	actions: ActionButtonConfig[]
 	position: FloatingMenuAnchor
+	/** Kept for caller compatibility; shared sidebar selectors are intentionally route-agnostic. */
 	testIdPrefix: string
 	onClose: () => void
 }
@@ -44,7 +48,6 @@ export function computeRecentFloatingMenuPosition(anchor: FloatingMenuAnchor, ac
 export function MobileShellRecentFloatingMenu({
 	actions,
 	position,
-	testIdPrefix,
 	onClose,
 }: MobileShellRecentFloatingMenuProps) {
 	const { t } = useTranslation("super")
@@ -57,19 +60,19 @@ export function MobileShellRecentFloatingMenu({
 				className="fixed inset-0 z-[200]"
 				onClick={onClose}
 				aria-hidden
-				data-testid={`${testIdPrefix}-recent-floating-menu-backdrop`}
+				data-testid={`${MOBILE_SHELL_RECENT_FLOATING_MENU_TEST_ID_PREFIX}-recent-floating-menu-backdrop`}
 			/>
 			<div
-				className="fixed z-[201] w-max max-w-[calc(100vw-16px)] min-w-[208px] overflow-hidden rounded-2xl border border-border bg-background shadow-[0px_8px_32px_0px_rgba(0,0,0,0.36)] dark:shadow-[0px_8px_32px_0px_rgba(0,0,0,0.5)]"
+				className="fixed z-[201] w-max min-w-[208px] max-w-[calc(100vw-16px)] overflow-hidden rounded-2xl border border-border bg-background shadow-[0px_8px_32px_0px_rgba(0,0,0,0.36)] dark:shadow-[0px_8px_32px_0px_rgba(0,0,0,0.5)]"
 				style={{ top, left }}
-				data-testid={`${testIdPrefix}-recent-floating-menu`}
+				data-testid={`${MOBILE_SHELL_RECENT_FLOATING_MENU_TEST_ID_PREFIX}-recent-floating-menu`}
 				role="menu"
 			>
 				{isEmpty ? (
 					<div
 						role="status"
 						className={FLOATING_MENU_EMPTY_ROW_CLASS}
-						data-testid={`${testIdPrefix}-recent-floating-menu-empty`}
+						data-testid={`${MOBILE_SHELL_RECENT_FLOATING_MENU_TEST_ID_PREFIX}-recent-floating-menu-empty`}
 					>
 						{t("mobile.shell.noAvailableQuickActions")}
 					</div>

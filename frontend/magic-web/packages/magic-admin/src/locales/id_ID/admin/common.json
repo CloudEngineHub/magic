@@ -133,7 +133,7 @@
 	"search": "Opsi Pencarian",
 	"sortOrder": "Urutan Sortir",
 	"status": "Status",
-	"title": "$t(common:platform.name) Dasbor Admin",
+	"title": "{{platformName}} Dasbor Admin",
 	"totalItems": "Total {{total}} item",
 	"unsavedChanges": "Anda memiliki perubahan yang belum disimpan. Yakin ingin menutup?"
 }

@@ -66,4 +66,30 @@ describe("findMagicProjectJsFile", () => {
 			content: "window.magicProjectConfig = { slides: ['slides/slide-1.html'] }",
 		})
 	})
+
+	it("falls back to the only magic.project.js when the current slide is missing from attachments", async () => {
+		mockState.getFileContentById.mockResolvedValue(
+			"window.magicProjectConfig = { slides: ['missing.html'] }",
+		)
+
+		const result = await findMagicProjectJsFile({
+			attachments: [
+				{
+					file_id: "magic-file",
+					file_name: "magic.project.js",
+					relative_file_path: "deck/magic.project.js",
+					parent_id: "deck-folder",
+					is_directory: false,
+				},
+			],
+			currentFileId: "missing-slide-file",
+			currentFileName: "missing.html",
+		})
+
+		expect(result?.fileId).toBe("magic-file")
+		expect(result?.content).toContain("missing.html")
+		expect(mockState.getFileContentById).toHaveBeenCalledWith("magic-file", {
+			responseType: "text",
+		})
+	})
 })

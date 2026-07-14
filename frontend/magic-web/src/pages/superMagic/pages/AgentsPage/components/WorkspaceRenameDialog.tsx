@@ -13,6 +13,7 @@ import { Input } from "@/components/shadcn-ui/input"
 import SuperMagicService from "@/pages/superMagic/services"
 import { Workspace } from "@/pages/superMagic/pages/Workspace/types"
 import { suppressSelectionAfterWorkspaceRename } from "@/pages/superMagic/utils/workspaceRenameSelectionGuard"
+import { shouldSuppressInputAutoFocusInMagicApp } from "@/utils/inputFocusPolicy"
 
 interface WorkspaceRenameDialogProps {
 	open: boolean
@@ -28,6 +29,7 @@ export function WorkspaceRenameDialog({
 	const { t } = useTranslation("super")
 	const [renameLoading, setRenameLoading] = useState(false)
 	const [workspaceNameInput, setWorkspaceNameInput] = useState("")
+	const shouldAutoFocusInput = !shouldSuppressInputAutoFocusInMagicApp()
 
 	useEffect(() => {
 		if (open && workspace) {
@@ -65,6 +67,12 @@ export function WorkspaceRenameDialog({
 		<Dialog open={open} onOpenChange={onOpenChange}>
 			<DialogContent
 				className="sm:max-w-[425px]"
+				onOpenAutoFocus={(event) => {
+					if (!shouldAutoFocusInput) {
+						// Radix focuses the first field by default; block it in Magic App WebView.
+						event.preventDefault()
+					}
+				}}
 				onCloseAutoFocus={(event) => {
 					event.preventDefault()
 				}}
@@ -74,7 +82,8 @@ export function WorkspaceRenameDialog({
 				</DialogHeader>
 				<div>
 					<Input
-						autoFocus
+						// Keep desktop rename efficient while avoiding iPad WebView keyboard occlusion.
+						autoFocus={shouldAutoFocusInput}
 						maxLength={100}
 						value={workspaceNameInput}
 						placeholder={t("workspace.workspaceName")}

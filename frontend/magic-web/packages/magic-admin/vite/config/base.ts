@@ -1,4 +1,4 @@
-import { mkdirSync, readdirSync, copyFileSync, readFileSync } from "node:fs"
+import { existsSync, mkdirSync, readdirSync, copyFileSync, readFileSync } from "node:fs"
 import { join, resolve } from "node:path"
 import type { UserConfig } from "vite"
 
@@ -34,7 +34,7 @@ function copyDir(src: string, dest: string) {
 }
 
 /** 复制 locales 下各语言目录到 dist（库构建产物） */
-export function copyLocalesPlugin() {
+export function copyLocalesPlugin(extraLocaleDirs: string[] = []) {
 	return {
 		name: "copy-locales",
 		closeBundle() {
@@ -43,10 +43,17 @@ export function copyLocalesPlugin() {
 
 			try {
 				mkdirSync(destLocales, { recursive: true })
-				const entries = readdirSync(srcLocales, { withFileTypes: true })
-				for (const entry of entries) {
-					if (!entry.isDirectory()) continue
-					copyDir(join(srcLocales, entry.name), join(destLocales, entry.name))
+				const localeDirs = [
+					srcLocales,
+					...extraLocaleDirs.map((dir) => resolve(process.cwd(), dir)),
+				]
+				for (const localeDir of localeDirs) {
+					if (!existsSync(localeDir)) continue
+					const entries = readdirSync(localeDir, { withFileTypes: true })
+					for (const entry of entries) {
+						if (!entry.isDirectory()) continue
+						copyDir(join(localeDir, entry.name), join(destLocales, entry.name))
+					}
 				}
 				console.log("✓ Locales copied to dist/src/locales/")
 			} catch (error) {

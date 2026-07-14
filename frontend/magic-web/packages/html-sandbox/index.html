@@ -20,12 +20,138 @@
 				window.parent.postMessage(message, "*")
 			}
 
-			function sendErrorToParent(payload) {
+			var HTML_SANDBOX_TELEMETRY_MESSAGE = "MAGIC_HTML_SANDBOX_TELEMETRY"
+			var telemetrySequence = 0
+			var telemetryDedupeCounts = {}
+			var TELEMETRY_MAX_PER_DEDUPE_KEY = 5
+
+			function nextTelemetryEventId() {
+				telemetrySequence += 1
+				return "sandbox_tel_" + Date.now() + "_" + telemetrySequence
+			}
+
+			function truncateTelemetryString(value, maxLength) {
+				var text = value == null ? "" : String(value)
+				if (text.length <= maxLength) return text
+				return text.slice(0, maxLength) + "...[truncated]"
+			}
+
+			function sanitizeTelemetryText(value, maxLength) {
+				var text = truncateTelemetryString(value, maxLength)
+				if (!text) return ""
+
 				try {
-					postToParent({ type: "iframeError", payload: payload })
+					var url = new URL(text, "http://sandbox.invalid")
+					var sensitiveParams = [
+						"token",
+						"access_token",
+						"signature",
+						"x-oss-signature",
+						"Expires",
+					]
+					for (var i = 0; i < sensitiveParams.length; i += 1) {
+						if (url.searchParams.has(sensitiveParams[i])) {
+							url.searchParams.set(sensitiveParams[i], "[redacted]")
+						}
+					}
+
+					var serialized = url.toString()
+					return text.indexOf("http") === 0
+						? serialized
+						: serialized.replace("http://sandbox.invalid", "")
 				} catch (e) {
-					console.error("Failed to send iframe error to parent:", e)
+					return text.replace(
+						/([?&](?:token|access_token|signature|x-oss-signature|Expires)=)[^&#\s]+/gi,
+						"$1[redacted]",
+					)
 				}
+			}
+
+			function getTelemetryPage() {
+				return {
+					href: window.location && window.location.href ? window.location.href : "",
+					referrer: document.referrer || "",
+					readyState: document.readyState || "loading",
+				}
+			}
+
+			function getTelemetrySource() {
+				var chainFileIds = Array.isArray(window.__MAGIC_IFRAME_CHAIN__)
+					? window.__MAGIC_IFRAME_CHAIN__.slice()
+					: []
+				var fileId = window.__MAGIC_FILE_ID__ || ""
+				var depth = chainFileIds.length
+
+				return {
+					depth: depth,
+					fileId: fileId,
+					path: window.__MAGIC_RELATIVE_PATH__ || "",
+					chainFileIds: chainFileIds,
+				}
+			}
+
+			function createTelemetryDedupeKey(event) {
+				if (!event || !event.type) return ""
+				if (event.type === "runtime_error") {
+					return [
+						event.type,
+						event.errorType || "",
+						event.message || "",
+						event.source || "",
+						event.lineno || "",
+						event.colno || "",
+					].join("|")
+				}
+				if (event.type === "resource_load_failed") {
+					return [event.type, event.resourceType || "", event.url || ""].join("|")
+				}
+				return event.type
+			}
+
+			function sendTelemetryToParent(event, options) {
+				var dedupeKey = (options && options.dedupeKey) || createTelemetryDedupeKey(event)
+				var dedupeCount = dedupeKey ? (telemetryDedupeCounts[dedupeKey] || 0) + 1 : 1
+				if (dedupeKey) telemetryDedupeCounts[dedupeKey] = dedupeCount
+				if (dedupeCount > TELEMETRY_MAX_PER_DEDUPE_KEY) return
+
+				try {
+					postToParent({
+						type: HTML_SANDBOX_TELEMETRY_MESSAGE,
+						payload: {
+							eventId: nextTelemetryEventId(),
+							severity: (options && options.severity) || "error",
+							event: event,
+							source: getTelemetrySource(),
+							page: getTelemetryPage(),
+							timestamp: Date.now(),
+							dedupeKey: dedupeKey,
+							dedupeCount: dedupeCount,
+						},
+					})
+				} catch (e) {
+					console.error("Failed to send sandbox telemetry to parent:", e)
+				}
+			}
+
+			function sendRuntimeErrorTelemetry(payload) {
+				sendTelemetryToParent({
+					type: "runtime_error",
+					errorType: payload.errorType || "error",
+					message: sanitizeTelemetryText(
+						payload.message || payload.detail || "Unknown runtime error",
+						500,
+					),
+					stack: sanitizeTelemetryText(payload.stack || "", 2000),
+					source: sanitizeTelemetryText(payload.source || "", 1000),
+					lineno: payload.lineno,
+					colno: payload.colno,
+					detail: sanitizeTelemetryText(payload.detail || "", 1000),
+					runtimeUrl: sanitizeTelemetryText(payload.runtimeUrl || "", 1000),
+				})
+			}
+
+			function resetTelemetryDedupe() {
+				telemetryDedupeCounts = {}
 			}
 
 			function decodeBase64Utf8(base64Source) {
@@ -70,7 +196,7 @@
 					return !!window.MagicHtmlSandboxRuntime
 				} catch (error) {
 					console.error("[RenderSite] inline runtime install failed", error)
-					sendErrorToParent({
+					sendRuntimeErrorTelemetry({
 						errorType: "runtimeInlineInstall",
 						message: "inline iframe runtime install failed",
 						detail: error && error.message ? error.message : String(error),
@@ -83,7 +209,7 @@
 
 			function setupErrorHandler() {
 				window.onerror = function (message, source, lineno, colno, error) {
-					sendErrorToParent({
+					sendRuntimeErrorTelemetry({
 						errorType: "error",
 						message: message,
 						source: source || "",
@@ -100,12 +226,45 @@
 							? reason
 							: (reason && reason.message) || "Unknown promise rejection"
 					var stack = reason && reason.stack ? reason.stack : ""
-					sendErrorToParent({
+					sendRuntimeErrorTelemetry({
 						errorType: "unhandledrejection",
 						message: message,
 						stack: stack,
 					})
 				})
+				window.addEventListener(
+					"error",
+					function (event) {
+						var target = event && event.target
+						if (!target || target === window) return
+
+						var tagName = target.tagName ? String(target.tagName).toLowerCase() : ""
+						var url =
+							target.currentSrc ||
+							target.src ||
+							target.href ||
+							target.data ||
+							target.poster ||
+							""
+						if (!tagName || !url) return
+
+						var resourceType = "unknown"
+						if (tagName === "script") resourceType = "script"
+						else if (tagName === "link") resourceType = "stylesheet"
+						else if (tagName === "img") resourceType = "image"
+						else if (tagName === "iframe") resourceType = "iframe"
+						else if (tagName === "video" || tagName === "audio" || tagName === "source")
+							resourceType = "media"
+
+						sendTelemetryToParent({
+							type: "resource_load_failed",
+							tagName: tagName,
+							url: sanitizeTelemetryText(url, 1000),
+							resourceType: resourceType,
+						})
+					},
+					true,
+				)
 			}
 
 			var isAnimationPaused = false
@@ -166,7 +325,7 @@
 					window.MagicHtmlSandboxRuntime.startIframeRuntime()
 				} catch (error) {
 					console.error("[RenderSite] runtime restart failed", error)
-					sendErrorToParent({
+					sendRuntimeErrorTelemetry({
 						errorType: "runtimeRestart",
 						message: "iframe runtime restart failed",
 						detail: error && error.message ? error.message : String(error),
@@ -211,7 +370,7 @@
 							runtimeUrl: runtimeUrl,
 							err: err,
 						})
-						sendErrorToParent({
+						sendRuntimeErrorTelemetry({
 							errorType: "runtimeLoad",
 							message: "iframe runtime script load failed",
 							runtimeUrl: runtimeUrl,
@@ -227,7 +386,7 @@
 						runtimeUrl: runtimeUrl,
 						error: error,
 					})
-					sendErrorToParent({
+					sendRuntimeErrorTelemetry({
 						errorType: "runtimeLoad",
 						message: "iframe runtime script injection failed",
 						runtimeUrl: runtimeUrl,
@@ -535,6 +694,7 @@
 				try {
 					if (event.data && event.data.type === "setContent") {
 						var sanitizedContent = sanitizeContentForSandbox(event.data.content)
+						resetTelemetryDedupe()
 						document.open()
 						document.write(sanitizedContent)
 						document.close()

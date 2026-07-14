@@ -87,6 +87,77 @@ class AudioProjectDomainService
         return $this->audioProjectRepository->findByProjectIds($projectIds);
     }
 
+    /**
+     * Copy audio project extension data for a forked project.
+     *
+     * The fork receives a new topic and copied files, so source task identifiers
+     * and audio file references must not be reused here. The audio_file_id is
+     * patched after file migration builds the source-to-target file ID map.
+     */
+    public function copyAudioProjectForFork(
+        int $sourceProjectId,
+        int $forkProjectId,
+        ?int $forkTopicId
+    ): ?AudioProjectEntity {
+        $sourceAudioProject = $this->getAudioProjectByProjectId($sourceProjectId);
+        if ($sourceAudioProject === null) {
+            return null;
+        }
+
+        $forkAudioProject = new AudioProjectEntity();
+        $forkAudioProject->setProjectId($forkProjectId)
+            ->setTopicId($forkTopicId)
+            ->setModelId($sourceAudioProject->getModelId())
+            ->setTaskKey(null)
+            ->setAutoSummary($sourceAudioProject->isAutoSummary())
+            ->setSource($sourceAudioProject->getSource())
+            ->setAudioSource($sourceAudioProject->getAudioSource())
+            ->setAudioFileId(null)
+            ->setDeviceId($sourceAudioProject->getDeviceId())
+            ->setDuration($sourceAudioProject->getDuration())
+            ->setFileSize($sourceAudioProject->getFileSize())
+            ->setLocation($sourceAudioProject->getLocation())
+            ->setTags($sourceAudioProject->getTags())
+            ->setCurrentPhase($sourceAudioProject->getCurrentPhase())
+            ->setPhaseStatus($sourceAudioProject->getPhaseStatus())
+            ->setPhasePercent($sourceAudioProject->getPhasePercent())
+            ->setPhaseError($sourceAudioProject->getPhaseError());
+
+        $this->audioProjectRepository->save($forkAudioProject);
+
+        return $forkAudioProject;
+    }
+
+    /**
+     * Update the forked audio project to point at the copied audio file.
+     *
+     * @param array<int, int> $sourceToForkFileIdMap source file ID => fork file ID
+     */
+    public function updateForkedAudioFileIdFromMigrationMap(
+        int $sourceProjectId,
+        int $forkProjectId,
+        array $sourceToForkFileIdMap
+    ): bool {
+        $sourceAudioProject = $this->getAudioProjectByProjectId($sourceProjectId);
+        $sourceAudioFileId = $sourceAudioProject?->getAudioFileId();
+        if ($sourceAudioFileId === null) {
+            return false;
+        }
+
+        if (! array_key_exists($sourceAudioFileId, $sourceToForkFileIdMap)) {
+            return false;
+        }
+
+        $forkAudioFileId = (int) $sourceToForkFileIdMap[$sourceAudioFileId];
+        if ($forkAudioFileId <= 0) {
+            return false;
+        }
+
+        return $this->audioProjectRepository->updateByProjectId($forkProjectId, [
+            'audio_file_id' => $forkAudioFileId,
+        ]) > 0;
+    }
+
     // ========== Business Logic Methods (Extracted from *IfExists) ==========
 
     /**
@@ -112,7 +183,7 @@ class AudioProjectDomainService
     }
 
     /**
-     * Update recording metadata (duration, fileSize, audioSource, audioFileId).
+     * Update recording metadata (duration, fileSize, audioSource, audioFileId, location).
      *
      * Business Logic: Update audio file metadata after merging.
      * Extracted from: completeMergingPhaseIfExists()
@@ -122,6 +193,7 @@ class AudioProjectDomainService
      * @param null|int $fileSize File size (bytes)
      * @param null|string $audioSource Audio source (recorded/imported)
      * @param null|int $audioFileId Audio file ID
+     * @param null|string $location Recording location
      * @return bool Returns true if project exists and updated, false if not exists
      */
     public function updateRecordingMetadata(
@@ -129,7 +201,8 @@ class AudioProjectDomainService
         ?int $duration = null,
         ?int $fileSize = null,
         ?string $audioSource = null,
-        ?int $audioFileId = null
+        ?int $audioFileId = null,
+        ?string $location = null
     ): bool {
         // Build partial update payload — only include non-null fields to avoid
         // overwriting phase state (current_phase, phase_percent, etc.) that may
@@ -147,6 +220,9 @@ class AudioProjectDomainService
         if ($audioFileId !== null) {
             $data['audio_file_id'] = $audioFileId;
         }
+        if ($location !== null) {
+            $data['location'] = $location;
+        }
 
         if (empty($data)) {
             return true;
@@ -155,6 +231,28 @@ class AudioProjectDomainService
         $affected = $this->audioProjectRepository->updateByProjectId($projectId, $data);
 
         // 0 rows updated means the audio project record does not exist yet
+        return $affected >= 0;
+    }
+
+    /**
+     * Deep-merge audio project extra data without touching other columns.
+     */
+    public function mergeAudioProjectExtra(int $projectId, array $extraPatch): bool
+    {
+        if (empty($extraPatch)) {
+            return true;
+        }
+
+        $audioProject = $this->getAudioProjectByProjectId($projectId);
+        if ($audioProject === null) {
+            return false;
+        }
+
+        $mergedExtra = $this->mergeAssocRecursive($audioProject->getExtra() ?? [], $extraPatch);
+        $affected = $this->audioProjectRepository->updateByProjectId($projectId, [
+            'extra' => $mergedExtra,
+        ]);
+
         return $affected >= 0;
     }
 
@@ -269,5 +367,19 @@ class AudioProjectDomainService
     public function save(AudioProjectEntity $audioProject): void
     {
         $this->audioProjectRepository->save($audioProject);
+    }
+
+    private function mergeAssocRecursive(array $base, array $patch): array
+    {
+        foreach ($patch as $key => $value) {
+            if (is_array($value) && isset($base[$key]) && is_array($base[$key])) {
+                $base[$key] = $this->mergeAssocRecursive($base[$key], $value);
+                continue;
+            }
+
+            $base[$key] = $value;
+        }
+
+        return $base;
     }
 }

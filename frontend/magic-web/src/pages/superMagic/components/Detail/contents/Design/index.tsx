@@ -16,6 +16,7 @@ import pubsub from "@/utils/pubsub"
 import { useSuperMagicMarkerManager } from "./marker-manager"
 import { useDesignProjectManager } from "./hooks/useDesignProjectManager"
 import {
+	findFileBySrc,
 	getDesignDirectoryInfo,
 	fileItemsToProjectAttachmentMentionTree,
 	normalizePath,
@@ -45,6 +46,8 @@ import { useDesignHeaderProps } from "./components/CanvasDesignHeaderV2/useDesig
 import { CanvasDesignMentionDataService } from "./adapters/CanvasDesignMentionDataService"
 import { CanvasDesignReferenceResourcePanel } from "./adapters/CanvasDesignReferenceResourcePanel"
 import { MentionExtension } from "@/components/business/MentionPanel/tiptap-plugin"
+import mentionPanelStore from "@/components/business/MentionPanel/builtin-store"
+import { setCanvasElementResourceGetter } from "@/components/business/MentionPanel/runtime/builtin/domains/canvas-elements"
 import { useDesignDownloadPolicy } from "./hooks/useDesignDownloadPolicy"
 import { HISTORY_VERSION_BANNER_LAYOUT_HEIGHT_PX } from "@/pages/superMagic/components/Detail/components/CommonHeader/components/HistoryVersionBanner"
 import { useAiWatermarkPreference } from "@/hooks/useAiWatermarkPreference"
@@ -273,6 +276,7 @@ interface DesignViewerProps {
 	showFileHeader: boolean
 	showFooter: boolean
 	allowDownload?: boolean
+	isTabActive?: boolean
 	data?: {
 		project_path?: string
 		elements?: LayerElement[]
@@ -290,6 +294,7 @@ function DesignViewer(props: DesignViewerProps) {
 		allowEdit,
 		showFileHeader,
 		allowDownload,
+		isTabActive,
 	} = props
 
 	// 文件列表更新处理
@@ -429,9 +434,10 @@ function DesignViewer(props: DesignViewerProps) {
 		remoteUpdateListenerMode: DESIGN_REMOTE_UPDATE_LISTENER_MODE,
 		onRemoteDesignDataUpdate: useCallback(
 			(_oldDesignData: DesignData, newDesignData: DesignData) => {
-				if (newDesignData.canvas) {
+				const nextCanvas = newDesignData.canvas
+				if (nextCanvas) {
 					suppressCanvasDesignChangeEvents(() => {
-						canvasDesignRef.current?.updateData(newDesignData.canvas)
+						canvasDesignRef.current?.updateData(nextCanvas)
 					})
 				}
 			},
@@ -630,6 +636,52 @@ function DesignViewer(props: DesignViewerProps) {
 
 	// 设计项目 ID
 	const designProjectId = directoryInfo.id || currentFile?.id || ""
+
+	useEffect(() => {
+		if (!designProjectId) {
+			if (isTabActive !== false) {
+				mentionPanelStore.clearActiveCanvasElementsContext()
+			}
+			setCanvasElementResourceGetter(designProjectId, null)
+			return
+		}
+
+		if (isTabActive === false) {
+			mentionPanelStore.clearActiveCanvasElementsContext(designProjectId)
+			setCanvasElementResourceGetter(designProjectId, null)
+			return
+		}
+
+		mentionPanelStore.setActiveCanvasElementsContext({
+			designProjectId,
+			canvasName: displayName || "当前画布",
+			getCanvasDocument: () =>
+				canvasDesignRef.current?.exportCurrentDocument?.() ??
+				latestDesignDataRef.current.canvas ??
+				null,
+			resolveFileBySrc: (src) => {
+				return findFileBySrc(src, flatAttachments, designProjectBasePath, attachmentIndex, {
+					strictCanvasRelativeResource: true,
+				})
+			},
+		})
+		setCanvasElementResourceGetter(
+			designProjectId,
+			() => canvasDesignRef.current?.getCanvasInstance() ?? null,
+		)
+
+		return () => {
+			mentionPanelStore.clearActiveCanvasElementsContext(designProjectId)
+			setCanvasElementResourceGetter(designProjectId, null)
+		}
+	}, [
+		attachmentIndex,
+		designProjectBasePath,
+		designProjectId,
+		displayName,
+		flatAttachments,
+		isTabActive,
+	])
 
 	const downloadPolicy = useDesignDownloadPolicy()
 	const { isFreeTrialVersion } = useAiWatermarkPreference()
@@ -969,6 +1021,7 @@ function DesignViewer(props: DesignViewerProps) {
 	// 处理画布数据变化（用户编辑，触发自动保存）
 	const handleCanvasDesignDataChange = useCallback(
 		(canvasData: CanvasDocument, meta?: CanvasDesignDataChangeMeta) => {
+			mentionPanelStore.invalidateActiveCanvasElementsCache()
 			if (isApplyingRemoteCanvasUpdateRef.current) {
 				return
 			}
@@ -1003,6 +1056,7 @@ function DesignViewer(props: DesignViewerProps) {
 
 	const handleCanvasDesignDataPatchChange = useCallback(
 		(patch: CanvasDesignDataPatch, meta?: CanvasDesignDataChangeMeta) => {
+			mentionPanelStore.invalidateActiveCanvasElementsCache()
 			if (isApplyingRemoteCanvasUpdateRef.current) {
 				return
 			}

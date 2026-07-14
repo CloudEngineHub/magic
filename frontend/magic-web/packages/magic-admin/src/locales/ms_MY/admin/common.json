@@ -133,7 +133,7 @@
 	"search": "Pilihan Carian",
 	"sortOrder": "Susunan Isihan",
 	"status": "Status",
-	"title": "$t(common:platform.name) Papan Pemuka Admin",
+	"title": "{{platformName}} Papan Pemuka Admin",
 	"totalItems": "Jumlah {{total}} item",
 	"unsavedChanges": "Anda mempunyai perubahan yang belum disimpan. Pasti mahu tutup?"
 }

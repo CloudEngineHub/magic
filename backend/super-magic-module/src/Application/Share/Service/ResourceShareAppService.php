@@ -41,6 +41,7 @@ use Dtyq\SuperMagic\Domain\SuperAgent\Event\ProjectForkEvent;
 use Dtyq\SuperMagic\Domain\SuperAgent\Repository\Facade\ProjectForkRepositoryInterface;
 use Dtyq\SuperMagic\Domain\SuperAgent\Repository\Facade\TaskFileRepositoryInterface;
 use Dtyq\SuperMagic\Domain\SuperAgent\Repository\Facade\TopicRepositoryInterface;
+use Dtyq\SuperMagic\Domain\SuperAgent\Service\AudioProjectDomainService;
 use Dtyq\SuperMagic\Domain\SuperAgent\Service\ProjectDomainService;
 use Dtyq\SuperMagic\Domain\SuperAgent\Service\ProjectMemberDomainService;
 use Dtyq\SuperMagic\Domain\SuperAgent\Service\TaskDomainService;
@@ -114,6 +115,7 @@ class ResourceShareAppService extends AbstractShareAppService
         private readonly MagicDepartmentDomainService $magicDepartmentDomainService,
         private readonly MagicDepartmentUserDomainService $departmentUserDomainService,
         private readonly ChatAppService $chatAppService,
+        private readonly AudioProjectDomainService $audioProjectDomainService,
         private readonly Producer $producer,
         private readonly ResourceShareAccessLogDomainService $accessLogDomainService,
         private readonly ResourceShareCopyLogDomainService $copyLogDomainService,
@@ -2867,6 +2869,14 @@ class ResourceShareAppService extends AbstractShareAppService
             $forkProjectEntity->setWorkDir($workDir);
             $this->projectDomainService->saveProjectEntity($forkProjectEntity);
 
+            // Copy audio extension data for audio projects. The audio_file_id is
+            // patched after async file migration builds the source-to-target map.
+            $this->audioProjectDomainService->copyAudioProjectForFork(
+                $sourceProjectId,
+                $forkProjectEntity->getId(),
+                $topicEntity->getId()
+            );
+
             // 发布异步文件迁移事件（新增：传递文件ID列表）
             $event = new ProjectForkEvent(
                 $sourceProjectId,
@@ -2884,7 +2894,10 @@ class ResourceShareAppService extends AbstractShareAppService
             Db::commit();
 
             // 返回复制结果
-            return CopyResourceFilesResponseDTO::fromEntity($forkProjectRecordEntity)->toArray();
+            $responseDto = CopyResourceFilesResponseDTO::fromEntity($forkProjectRecordEntity);
+            $responseDto->projectMode = $forkProjectEntity->getProjectMode();
+
+            return $responseDto->toArray();
         } catch (Throwable $e) {
             Db::rollBack();
             $this->logger->error('Copy resource files failed, error: ' . $e->getMessage());

@@ -153,17 +153,19 @@ class AsrApi extends AbstractApi
             $result = $this->asrFileAppService->processSummaryWithChat($summaryRequest, $userAuthorization);
 
             if (! $result['success']) {
-                return $this->buildSummaryResponse(false, $summaryRequest, $result['error']);
+                return $this->buildSummaryResponse(false, $summaryRequest, $result);
             }
 
-            return $this->buildSummaryResponse(true, $summaryRequest, null, $result);
+            return $this->buildSummaryResponse(true, $summaryRequest, $result);
         } catch (Throwable $e) {
             $this->logger->error('ASR总结处理异常', [
                 'task_key' => $summaryRequest->taskKey,
                 'error' => $e->getMessage(),
                 'trace' => $e->getTraceAsString(),
             ]);
-            return $this->buildSummaryResponse(false, $summaryRequest, sprintf('处理异常: %s', $e->getMessage()));
+            return $this->buildSummaryResponse(false, $summaryRequest, [
+                'error' => sprintf('处理异常: %s', $e->getMessage()),
+            ]);
         }
     }
 
@@ -539,6 +541,40 @@ class AsrApi extends AbstractApi
     }
 
     /**
+     * Recover finish recording (merge audio files only).
+     * POST /api/v1/asr/tasks/{task_key}/finish-recording/recover.
+     */
+    public function recoverFinishRecording(string $task_key): array
+    {
+        $userAuthorization = $this->getAuthorization();
+        $userId = $userAuthorization->getId();
+        $organizationCode = $userAuthorization->getOrganizationCode();
+        $generatedTitle = $this->request->input('generated_title');
+        $asrStreamContent = $this->request->input('asr_stream_content', '');
+        $asrStreamContent = is_string($asrStreamContent) ? $asrStreamContent : '';
+        if (! empty($asrStreamContent)) {
+            $asrStreamContent = mb_substr($asrStreamContent, 0, 10000);
+        }
+
+        $taskStatus = $this->asrFileAppService->loadRecoverFinishRecordingTaskStatus(
+            $task_key,
+            $userId,
+            $organizationCode
+        );
+
+        if (! empty($asrStreamContent)) {
+            $taskStatus->asrStreamContent = $asrStreamContent;
+            $this->asrFileAppService->saveTaskStatusToRedis($taskStatus);
+        }
+
+        return $this->asrFileAppService->triggerRecoverFinishRecordingAsync(
+            $taskStatus,
+            $organizationCode,
+            $generatedTitle
+        );
+    }
+
+    /**
      * Manually trigger summary.
      * POST /api/v1/asr/tasks/{task_key}/summarize.
      */
@@ -557,6 +593,29 @@ class AsrApi extends AbstractApi
             $task_key,
             $topicId,
             $modelId,
+            $userAuthorization
+        );
+    }
+
+    /**
+     * Manually trigger re-summary for an existing recording project.
+     * POST /api/v1/asr/tasks/{task_key}/resummarize.
+     */
+    public function triggerResummary(string $task_key): array
+    {
+        $userAuthorization = $this->getAuthorization();
+
+        $modelId = $this->request->input('model_id');
+        $analysisScope = (string) $this->request->input('analysis_scope', 'template_analysis_files');
+        $specifiedAnalysisTypes = $this->normalizeSpecifiedAnalysisTypes(
+            $this->request->input('specified_analysis_types', [])
+        );
+
+        return $this->asrFileAppService->triggerResummary(
+            $task_key,
+            $modelId,
+            $analysisScope,
+            $specifiedAnalysisTypes,
             $userAuthorization
         );
     }
@@ -826,15 +885,16 @@ class AsrApi extends AbstractApi
     /**
      * 构建总结响应.
      */
-    private function buildSummaryResponse(bool $success, SummaryRequestDTO $request, ?string $error = null, ?array $result = null): array
+    private function buildSummaryResponse(bool $success, SummaryRequestDTO $request, ?array $result = null): array
     {
         if (! $success) {
             return [
                 'success' => false,
-                'error' => $error,
+                'error' => $result['error'] ?? null,
                 'task_key' => $request->taskKey,
                 'project_id' => $request->projectId,
                 'topic_id' => $request->topicId,
+                'sandbox_id' => $result['sandbox_id'] ?? null,
                 'topic_name' => null,
                 'project_name' => null,
                 'workspace_name' => null,
@@ -846,6 +906,7 @@ class AsrApi extends AbstractApi
             'task_key' => $request->taskKey,
             'project_id' => $request->projectId,
             'topic_id' => $request->topicId,
+            'sandbox_id' => $result['sandbox_id'] ?? null,
             'conversation_id' => $result['conversation_id'] ?? null,
             'topic_name' => $result['topic_name'] ?? null,
             'project_name' => $result['project_name'] ?? null,
@@ -1166,6 +1227,34 @@ class AsrApi extends AbstractApi
         }
 
         return (int) $topicItem->getId();
+    }
+
+    /**
+     * Normalize specified re-analysis types from array or comma-separated string.
+     *
+     * @return array<int,string>
+     */
+    private function normalizeSpecifiedAnalysisTypes(mixed $rawTypes): array
+    {
+        if ($rawTypes === null || $rawTypes === '') {
+            return [];
+        }
+
+        if (is_string($rawTypes)) {
+            $rawTypes = explode(',', $rawTypes);
+        }
+
+        if (! is_array($rawTypes)) {
+            ExceptionBuilder::throw(
+                GenericErrorCode::ParameterValidationFailed,
+                'specified_analysis_types must be an array or comma-separated string'
+            );
+        }
+
+        $types = array_map(static fn ($type) => trim((string) $type), $rawTypes);
+        $types = array_filter($types, static fn (string $type) => $type !== '');
+
+        return array_values(array_unique($types));
     }
 
     /**

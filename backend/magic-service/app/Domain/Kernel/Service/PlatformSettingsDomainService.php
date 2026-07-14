@@ -11,6 +11,7 @@ use App\Application\Contact\UserSetting\UserSettingKey;
 use App\Application\Kernel\DTO\PlatformSettings;
 use App\Domain\Contact\Entity\MagicUserSettingEntity;
 use App\Domain\Contact\Repository\Facade\MagicUserSettingRepositoryInterface;
+use App\Infrastructure\Util\Redis\GlobalConfigCacheUtil;
 use Hyperf\Redis\Redis;
 
 /**
@@ -107,6 +108,7 @@ class PlatformSettingsDomainService
         $entity->setMagicId(null);
         $this->magicUserSettingRepository->saveGlobal($entity);
         $this->redis->del(self::CACHE_KEY);
+        GlobalConfigCacheUtil::deleteGlobalConfig();
         return $settings;
     }
 }

@@ -136,6 +136,11 @@ export class TopicLayoutStore {
 		this.clearDragState()
 	}
 
+	cancelDrag() {
+		// Browser-cancelled gestures should stop resizing without committing transient widths.
+		this.clearDragState()
+	}
+
 	toggleConversationPanel() {
 		if (this.isConversationPanelCollapsed) {
 			this.expandConversationPanel()

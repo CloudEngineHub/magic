@@ -415,9 +415,12 @@ class SuperMagicAgentApi extends AbstractApi
         $requestDTO = PublishAgentRequestDTO::fromRequest($this->request);
 
         // 调用应用服务层处理业务逻辑
-        $versionEntity = $this->superMagicAgentAppService->publishAgent($authorization, $code, $requestDTO);
+        $publishResult = $this->superMagicAgentAppService->publishAgent($authorization, $code, $requestDTO);
 
-        return SuperMagicAgentAssembler::createPublishVersionResponseDTO($versionEntity)->toArray();
+        $response = SuperMagicAgentAssembler::createPublishVersionResponseDTO($publishResult->version)->toArray();
+        $response['sandbox_id'] = $publishResult->sandboxId;
+
+        return $response;
     }
 
     public function getPublishPrefill(string $code): array

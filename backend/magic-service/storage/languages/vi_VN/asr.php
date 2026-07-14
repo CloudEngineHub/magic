@@ -153,5 +153,11 @@ return [
         'summary_prefix_with_note' => 'Vui lòng giúp tôi chuyển đổi ',
         'summary_middle_with_note' => ' nội dung ghi âm và ',
         'summary_suffix_with_note' => ' nội dung ghi chú của tôi thành một sản phẩm siêu việt',
+        // i18n cho tin nhắn tóm tắt lại
+        'resummary_prefix' => 'Vui lòng tóm tắt lại dự án ghi âm hiện có này: ',
+        'resummary_note_middle' => '. Vui lòng tham chiếu tệp ghi chú/ngữ cảnh hiện có này: ',
+        'resummary_base_instruction' => '. Chỉ đọc magic.project.js, bản ghi lời nói và ghi chú làm nguồn thông tin gốc. Không chạy lại ASR, không tách âm thanh và không sửa audio, transcript hoặc notes. Không đọc các tệp phái sinh cũ như summary, topics, insights, highlights, followup, intent, power_dynamics, metrics hoặc mindmap.',
+        'resummary_scope_instruction' => 'Gọi analyze_audio_project với analysis_scope=":analysis_scope" và không truyền specified_analysis_types.',
+        'resummary_specified_instruction' => 'Gọi analyze_audio_project với specified_analysis_types=:specified_analysis_types.',
     ],
 ];

@@ -12,6 +12,7 @@ use Dtyq\ApiResponse\Annotation\ApiResponse;
 use Dtyq\SuperMagic\Application\SuperAgent\DTO\Request\CreateAudioProjectRequestDTO;
 use Dtyq\SuperMagic\Application\SuperAgent\DTO\Request\GetAudioProjectListRequestDTO;
 use Dtyq\SuperMagic\Application\SuperAgent\DTO\Request\ImportAudioFilesRequestDTO;
+use Dtyq\SuperMagic\Application\SuperAgent\DTO\Request\UpdateAudioProjectMetadataRequestDTO;
 use Dtyq\SuperMagic\Application\SuperAgent\DTO\Request\UpdateAudioProjectTagsRequestDTO;
 use Dtyq\SuperMagic\Application\SuperAgent\Service\ProjectAppService;
 use Hyperf\HttpServer\Contract\RequestInterface;
@@ -77,6 +78,20 @@ class AudioProjectApi extends AbstractApi
         $this->projectAppService->updateAudioProjectTags($requestContext, $projectId, $requestDTO);
 
         return ['message' => 'Tags updated successfully'];
+    }
+
+    /**
+     * Update audio project metadata.
+     */
+    public function updateMetadata(RequestContext $requestContext, int $projectId): array
+    {
+        $requestContext->setUserAuthorization($this->getAuthorization());
+
+        $requestDTO = UpdateAudioProjectMetadataRequestDTO::fromRequest($this->request);
+
+        $this->projectAppService->updateAudioProjectMetadata($requestContext, $projectId, $requestDTO);
+
+        return $requestDTO->toResponseArray();
     }
 
     /**

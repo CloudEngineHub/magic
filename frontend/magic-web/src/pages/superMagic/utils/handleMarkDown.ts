@@ -1,3 +1,5 @@
+import { replaceFilePathMentions } from "./filePathMention"
+
 // 常见的 HTML 标签白名单
 const HTML_TAGS = new Set([
 	"a",
@@ -118,7 +120,6 @@ const HTML_TAGS = new Set([
 	"ref",
 ])
 
-const FILE_PATH_PATTERN = /\[@file_path:(.*?)\]/g
 const FILE_PATH_TAG_PATTERN = /<file-path\s+path="[^"]*"><\/file-path>/g
 const CUSTOM_TAG_PATTERN = /<\/?([a-z][a-z0-9_-]*)((?:\s+[^>/]*)?)\s*\/?>/gi
 const UNDERSCORE_EMPHASIS_PATTERN = /_([^_`]+)_/g
@@ -131,7 +132,7 @@ export const preprocessMarkdown = (content: string) => {
 
 	// 处理 [@file_path:路径] 语法，转换为自定义标签
 	if (processedContent.includes("[@file_path:")) {
-		processedContent = processedContent.replace(FILE_PATH_PATTERN, (_, path) => {
+		processedContent = replaceFilePathMentions(processedContent, (path) => {
 			// 对路径进行 HTML 转义，避免属性值中的特殊字符问题
 			const escapedPath = path
 				.replace(/&/g, "&amp;")

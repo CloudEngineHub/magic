@@ -7,8 +7,11 @@ import { cn } from "@/lib/utils"
 import MobileShellIconButton from "./MobileShellIconButton"
 import { useOptionalSuperMobileShellOutlet } from "./SuperMobileShellRouteLayout"
 
+// Keep the same selector for both open and close states so E2E tests can reuse one target.
+const MOBILE_SHELL_MENU_BUTTON_TEST_ID = "mobile-shell-menu-button"
+
 export interface MobileShellSidebarToggleButtonProps {
-	testId: string
+	testId?: string
 	/** `header` = mobile-page-header; `icon` = shell icon button; `floating` = My Crew / MagiClaw card pill. */
 	variant?: "header" | "icon" | "floating"
 	className?: string
@@ -20,7 +23,7 @@ export interface MobileShellSidebarToggleButtonProps {
  * Prototype-aligned sidebar control: hamburger when closed, X when the drawer is open.
  */
 export function MobileShellSidebarToggleButton({
-	testId,
+	testId = "mobile-shell-menu-button",
 	variant = "header",
 	className,
 	onFallbackOpen,
@@ -42,10 +45,12 @@ export function MobileShellSidebarToggleButton({
 
 	const ariaLabel = isSidebarOpen ? t("mobile.shell.closeSidebar") : t("mobile.shell.menuAria")
 	const Icon = isSidebarOpen ? X : Menu
+	// Keep the caller-provided base stable while exposing the current click action to E2E selectors.
+	const actionTestId = `${testId}-${isSidebarOpen ? "close" : "open"}`
 
 	if (variant === "icon") {
 		return (
-			<MobileShellIconButton label={ariaLabel} onClick={handleClick} testId={testId}>
+			<MobileShellIconButton label={ariaLabel} onClick={handleClick} testId={actionTestId}>
 				<Icon size={22} className="text-foreground" aria-hidden />
 			</MobileShellIconButton>
 		)
@@ -63,7 +68,7 @@ export function MobileShellSidebarToggleButton({
 					className,
 				)}
 				aria-label={ariaLabel}
-				data-testid={testId}
+				data-testid={actionTestId}
 			>
 				<Icon className="size-[22px] text-foreground" strokeWidth={2} aria-hidden />
 			</Button>
@@ -79,7 +84,7 @@ export function MobileShellSidebarToggleButton({
 				className,
 			)}
 			aria-label={ariaLabel}
-			data-testid={testId}
+			data-testid={actionTestId}
 		>
 			<Icon className="size-[22px] text-foreground" aria-hidden />
 		</button>

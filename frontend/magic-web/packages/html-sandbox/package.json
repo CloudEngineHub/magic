@@ -3,8 +3,6 @@
 	"version": "0.1.0",
 	"private": false,
 	"description": "Self-contained HTML sandbox runtime for iframe rendering, inspection, and editor bridge workflows.",
-	"license": "Apache-2.0",
-	"type": "module",
 	"keywords": [
 		"html",
 		"iframe",
@@ -12,6 +10,9 @@
 		"runtime",
 		"postmessage"
 	],
+	"license": "Apache-2.0",
+	"sideEffects": true,
+	"type": "module",
 	"exports": {
 		".": {
 			"types": "./src/index.ts",
@@ -37,6 +38,10 @@
 			"types": "./src/utils/parentOrigin.ts",
 			"import": "./dist/utils/parentOrigin.js"
 		},
+		"./telemetry": {
+			"types": "./src/telemetry/index.ts",
+			"import": "./dist/telemetry/index.js"
+		},
 		"./index.html": "./dist/index.html"
 	},
 	"main": "./dist/index.js",
@@ -58,17 +63,16 @@
 		"test:watch": "pnpm exec vitest --config ./vitest.config.ts",
 		"typecheck": "tsc -p tsconfig.json --noEmit"
 	},
-	"engines": {
-		"node": ">=18"
-	},
 	"devDependencies": {
 		"@types/node": "^22.16.4",
 		"typescript": "^5.4.5",
 		"vite": "^8.0.3",
 		"vitest": "^3.2.4"
 	},
+	"engines": {
+		"node": ">=18"
+	},
 	"publishConfig": {
 		"access": "public"
-	},
-	"sideEffects": true
+	}
 }

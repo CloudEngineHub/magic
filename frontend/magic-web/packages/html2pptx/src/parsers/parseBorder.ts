@@ -1,29 +1,25 @@
-import type { ElementNode, PPTNodeBase, SlideConfig, PPTBorderLineNode } from "../types/index"
+import type { ElementNode } from "../ir/dom"
+import type { PPTNodeBase, PPTBorderLineNode } from "../ir/node"
+import type { SlideConfig } from "../api/options"
 import { log, LogLevel } from "../logger"
-import { colorToHex, getTransparency } from "../utils/color"
-import { hasUniformBorder } from "../utils/element"
-import { pxToInch } from "../utils/unit"
+import { colorToHex, getTransparency } from "../shared/color"
+import { hasUniformBorder } from "../shared/element-predicates"
+import { pxToInch } from "../shared/unit"
 
-/**
- * 映射边框样式
- */
+type Side = "top" | "right" | "bottom" | "left"
+
 export function mapBorderStyle(cssStyle: string): "solid" | "dashed" | "dotted" {
 	if (cssStyle === "dashed") return "dashed"
 	if (cssStyle === "dotted") return "dotted"
 	return "solid"
 }
 
-/**
- * 解析单边边框（用线条模拟）
- * 只处理非一致的单边边框，四边一致的由 parseShape 处理
- * 返回最多 4 条线（对应 top/right/bottom/left）
- */
 export function parseBorderLines(
 	node: ElementNode,
 	base: PPTNodeBase,
 	config: SlideConfig,
 ): PPTBorderLineNode[] {
-	const { style } = node
+	const { style, rect } = node
 
 	if (hasUniformBorder(style)) {
 		log(LogLevel.L1, "Uniform border detected, skipping (handled by parseShape)")
@@ -32,12 +28,16 @@ export function parseBorderLines(
 
 	const lines: PPTBorderLineNode[] = []
 
-	// 检查每条边的边框
-	const borders = [
-		{ side: "top" as const, width: style.borderTopWidth, color: style.borderTopColor, style: style.borderTopStyle },
-		{ side: "right" as const, width: style.borderRightWidth, color: style.borderRightColor, style: style.borderRightStyle },
-		{ side: "bottom" as const, width: style.borderBottomWidth, color: style.borderBottomColor, style: style.borderBottomStyle },
-		{ side: "left" as const, width: style.borderLeftWidth, color: style.borderLeftColor, style: style.borderLeftStyle },
+	const borders: Array<{
+		side: Side
+		width: string
+		color: string
+		style: string
+	}> = [
+		{ side: "top", width: style.borderTopWidth, color: style.borderTopColor, style: style.borderTopStyle },
+		{ side: "right", width: style.borderRightWidth, color: style.borderRightColor, style: style.borderRightStyle },
+		{ side: "bottom", width: style.borderBottomWidth, color: style.borderBottomColor, style: style.borderBottomStyle },
+		{ side: "left", width: style.borderLeftWidth, color: style.borderLeftColor, style: style.borderLeftStyle },
 	]
 
 	for (const border of borders) {
@@ -46,25 +46,25 @@ export function parseBorderLines(
 			continue
 		}
 
-		// 检查颜色是否可见
-		const rgbaMatch = border.color.match(/rgba?\([\d.]+,\s*[\d.]+,\s*[\d.]+,\s*([\d.]+)\)/)
-		if (rgbaMatch && parseFloat(rgbaMatch[1]) <= 0) {
+		if (getTransparency(border.color) >= 100) {
 			continue
 		}
 
 		const borderTransparency = getTransparency(border.color)
-		const borderLine = {
+		const borderColor = colorToHex(border.color)
+		const borderWidthInch = pxToInch(widthPx, config)
+
+		lines.push({
 			...base,
-			type: "borderLine" as const,
+			type: "borderLine",
 			side: border.side,
 			line: {
-				color: colorToHex(border.color),
-				width: pxToInch(widthPx, config),
+				color: borderColor,
+				width: borderWidthInch,
 				style: mapBorderStyle(border.style),
 				transparency: borderTransparency,
 			},
-		}
-		lines.push(borderLine)
+		})
 	}
 
 	return lines

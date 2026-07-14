@@ -1,20 +1,14 @@
 import { SuperMagicApi } from "@/apis"
-import { flattenAttachments, findMatchingFile } from "./index"
-import { getFileContentById } from "@/pages/superMagic/utils/api"
+import { flattenAttachments } from "./index"
 import { parseMagicProjectConfigContent } from "@/pages/superMagic/utils/magicProjectConfigParser"
 import { logger } from "@/utils/log"
 import { t } from "i18next"
 import { AttachmentItem } from "../../../../TopicFilesButton/hooks/types"
+import { loadMagicProjectJsContent } from "./magicProjectFileFinder"
+export { findMagicProjectJsFile } from "./magicProjectFileFinder"
+export type { MagicProjectJsFileInfo } from "./magicProjectFileFinder"
 
 const pptLogger = logger.createLogger("PPTSlideOperations")
-
-/**
- * magic.project.js file information
- */
-export interface MagicProjectJsFileInfo {
-	fileId: string
-	content: string
-}
 
 /**
  * Slide item in the slides array
@@ -23,135 +17,6 @@ export interface SlideItem {
 	id: string
 	path: string
 	index: number
-}
-
-function collectAttachmentNodes(items: any[] | undefined, result: any[] = []): any[] {
-	if (!Array.isArray(items)) return result
-
-	for (const item of items) {
-		if (!item) continue
-		result.push(item)
-		collectAttachmentNodes(item.children, result)
-	}
-
-	return result
-}
-
-function normalizeDirectoryPath(relativePath?: string): string {
-	if (!relativePath) return "/"
-	const path = relativePath.replace(/\/+$/, "")
-	return path ? `${path}/` : "/"
-}
-
-function getFileRelativeFolderPath(currentFile: any): string {
-	if (!currentFile?.relative_file_path) return "/"
-
-	if (currentFile.is_directory) {
-		return normalizeDirectoryPath(currentFile.relative_file_path)
-	}
-
-	const lastSlashIndex = currentFile.relative_file_path.lastIndexOf("/")
-	if (lastSlashIndex === -1) return "/"
-
-	return currentFile.relative_file_path.substring(0, lastSlashIndex + 1)
-}
-
-/**
- * Find magic.project.js file in the same directory as the HTML file
- */
-export async function findMagicProjectJsFile(params: {
-	attachments: any[]
-	currentFileId: string
-	currentFileName: string
-}): Promise<MagicProjectJsFileInfo | null> {
-	const { attachments, currentFileId, currentFileName } = params
-
-	if (!attachments || !currentFileId) {
-		return null
-	}
-
-	try {
-		const allFiles = collectAttachmentNodes(attachments)
-
-		// Find the current file
-		const currentFile = allFiles.find((file: any) => file.file_id === currentFileId)
-		if (!currentFile) {
-			console.error("findMagicProjectJsFile: Current file not found")
-			return null
-		}
-
-		// Get the folder path from the current file's relative path
-		const fileRelativeFolderPath = getFileRelativeFolderPath(currentFile)
-
-		// Construct target path: folderPath + magic.project.js
-		const targetPath = fileRelativeFolderPath + "magic.project.js"
-
-		// Method 1: If current file is directory, use parent_id relationship
-		let magicProjectJsFile: any | undefined
-		if (currentFile.is_directory) {
-			const currentDirectoryId = currentFile.file_id
-			magicProjectJsFile = allFiles.find(
-				(file: any) =>
-					file.file_name === "magic.project.js" && file.parent_id === currentDirectoryId,
-			)
-		}
-
-		// Method 2: Strict path matching
-		if (!magicProjectJsFile) {
-			magicProjectJsFile = allFiles.find(
-				(file: any) =>
-					file.file_name === "magic.project.js" && file.relative_file_path === targetPath,
-			)
-		}
-
-		// Method 3: Fallback using findMatchingFile
-		if (!magicProjectJsFile) {
-			magicProjectJsFile = findMatchingFile({
-				path: "./magic.project.js",
-				allFiles: allFiles,
-				htmlRelativeFolderPath: fileRelativeFolderPath,
-			})
-		}
-
-		if (!magicProjectJsFile) {
-			console.error("findMagicProjectJsFile: magic.project.js file not found", {
-				targetPath,
-				currentFileId,
-			})
-			return null
-		}
-
-		// Load file content
-		const content = await loadMagicProjectJsContent(magicProjectJsFile.file_id)
-
-		return {
-			fileId: magicProjectJsFile.file_id,
-			content,
-		}
-	} catch (error) {
-		console.error("Failed to load magic.project.js file:", error)
-		return null
-	}
-}
-
-/**
- * Load magic.project.js file content
- */
-async function loadMagicProjectJsContent(fileId: string): Promise<string> {
-	try {
-		const content = await getFileContentById(fileId, {
-			responseType: "text",
-		})
-
-		if (!content || (typeof content === "string" && content.trim().length === 0)) {
-			throw new Error("File content is empty")
-		}
-
-		return content as string
-	} catch (error) {
-		console.error("Failed to load magic.project.js content:", error)
-		throw error
-	}
 }
 
 /**

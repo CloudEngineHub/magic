@@ -118,9 +118,7 @@ export const SuperMobileShellRouteLayout = observer(function SuperMobileShellRou
 			{ key: "home", icon: House, label: t("mobile.shell.navSuper") },
 			{ key: "chats", icon: MessageCircle, label: t("mobile.shell.navChats") },
 			{ key: "workspaces", icon: Box, label: t("mobile.shell.navWorkspaces") },
-			...(isMagicApp
-				? [{ key: "recording", icon: Mic, label: t("mobile.shell.navRecording") }]
-				: []),
+			{ key: "recording", icon: Mic, label: t("mobile.shell.navRecording") },
 			{ key: "myCrew", icon: Bot, label: t("mobile.shell.navMyCrew") },
 			{
 				key: "magiClaw",
@@ -178,7 +176,11 @@ export const SuperMobileShellRouteLayout = observer(function SuperMobileShellRou
 				return
 			}
 			if (key === "recording") {
-				openNativeRecordingPage()
+				if (isMagicApp) {
+					openNativeRecordingPage()
+					return
+				}
+				navigateWithoutViewTransition(RouteName.AudioRecordings)
 				return
 			}
 			if (key === "magiClaw") {

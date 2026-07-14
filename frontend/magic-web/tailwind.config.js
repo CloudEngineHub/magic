@@ -1,5 +1,6 @@
 import animate from "tailwindcss-animate"
 import colors from "tailwindcss/colors"
+import plugin from "tailwindcss/plugin"
 
 function rgbColor(colorVar, alphaValue = "1") {
 	return `rgb(var(${colorVar}-rgb) / calc(${alphaValue} * <alpha-value>))`
@@ -7,6 +8,9 @@ function rgbColor(colorVar, alphaValue = "1") {
 
 const config = {
 	darkMode: ["class"],
+	future: {
+		hoverOnlyWhenSupported: true,
+	},
 	content: {
 		relative: true,
 		files: [
@@ -261,6 +265,10 @@ const config = {
 					"0%": { backgroundPosition: "200% 0%" },
 					"100%": { backgroundPosition: "-200% 0%" },
 				},
+				"maintenance-notice-marquee": {
+					"0%": { transform: "translateX(0)" },
+					"100%": { transform: "translateX(-50%)" },
+				},
 			},
 			animation: {
 				"slide-in-from-left": "slide-in-from-left 0.3s ease-out",
@@ -280,13 +288,21 @@ const config = {
 				scan: "scan 2s linear infinite",
 				"gradient-flow": "gradient-flow 20s linear infinite",
 				"spin-slow": "spin 1.5s linear infinite",
+				"maintenance-notice-marquee":
+					"maintenance-notice-marquee var(--maintenance-notice-duration, 18s) linear infinite",
 			},
 			fontFamily: {
 				poppins: ["Poppins", "sans-serif"],
 			},
 		},
 	},
-	plugins: [animate],
+	plugins: [
+		animate,
+		plugin(({ addVariant }) => {
+			// Desktop layout and input capability are separate: iPad can render desktop UI while still using coarse touch input.
+			addVariant("no-hover", "@media (hover: none) and (pointer: coarse)")
+		}),
+	],
 }
 
 export default config

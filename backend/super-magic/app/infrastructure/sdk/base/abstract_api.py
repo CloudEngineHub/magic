@@ -124,13 +124,16 @@ class AbstractApi(ABC):
     # 不打印到日志的敏感 header 名（全小写匹配）
     _SENSITIVE_HEADERS = frozenset({
         'authorization',
+        'magic-authorization',
         'proxy-authorization',
+        'token',
         'user-authorization',
         'cookie',
         'set-cookie',
         'x-api-key',
         'api-key',
         'x-auth-token',
+        'x-magic-authorization',
     })
 
     def _mask_headers(self, headers: Dict[str, Any]) -> Dict[str, Any]:

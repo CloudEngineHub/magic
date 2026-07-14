@@ -1,5 +1,5 @@
 import { observer } from "mobx-react-lite"
-import { useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { useMemoizedFn, useMount, useUpdateEffect } from "ahooks"
 import { FileText, ChevronDown } from "lucide-react"
@@ -114,6 +114,8 @@ export const ChunkPreviewStep = observer(function ChunkPreviewStep({
 	const [isDraggingSidebar, setIsDraggingSidebar] = useState(false)
 	// eslint-disable-next-line @typescript-eslint/no-unused-vars
 	const [isDraggingPreview, setIsDraggingPreview] = useState(false)
+	const cleanupSidebarDragRef = useRef<(() => void) | null>(null)
+	const cleanupPreviewDragRef = useRef<(() => void) | null>(null)
 
 	// 更新 ref
 	useEffect(() => {
@@ -159,13 +161,15 @@ export const ChunkPreviewStep = observer(function ChunkPreviewStep({
 	/**
 	 * 处理侧边栏拖拽
 	 */
-	const handleSidebarResizeStart = useMemoizedFn((e: ReactMouseEvent<HTMLDivElement>) => {
-		e.preventDefault()
+	const handleSidebarResizeStart = useMemoizedFn((clientX: number) => {
+		// Replace an unfinished sidebar drag before adding another document listener set.
+		cleanupSidebarDragRef.current?.()
 		setIsDraggingSidebar(true)
-		const startX = e.clientX
+		const startX = clientX
 		const startWidth = sidebarWidthRef.current
 
-		const onMove = (moveEvent: MouseEvent) => {
+		/** Updates the document tree sidebar width from a shared pointer drag path. */
+		const onMove = (moveEvent: PointerEvent) => {
 			const containerW = containerRef.current?.clientWidth ?? 0
 			const delta = moveEvent.clientX - startX
 			const next = clampSidebarWidth(startWidth + delta, containerW)
@@ -173,6 +177,7 @@ export const ChunkPreviewStep = observer(function ChunkPreviewStep({
 			setSidebarWidthPx(next)
 		}
 
+		/** Persists the document tree sidebar width after a completed pointer drag. */
 		const onUp = () => {
 			setIsDraggingSidebar(false)
 			try {
@@ -180,29 +185,44 @@ export const ChunkPreviewStep = observer(function ChunkPreviewStep({
 			} catch {
 				/* ignore */
 			}
-			document.removeEventListener("mousemove", onMove)
-			document.removeEventListener("mouseup", onUp)
+			cleanupSidebarDragRef.current?.()
 		}
 
-		document.addEventListener("mousemove", onMove)
-		document.addEventListener("mouseup", onUp)
+		/** Clears sidebar drag state when the browser cancels a touch gesture. */
+		const onCancel = () => {
+			setIsDraggingSidebar(false)
+			cleanupSidebarDragRef.current?.()
+		}
+
+		cleanupSidebarDragRef.current = () => {
+			document.removeEventListener("pointermove", onMove)
+			document.removeEventListener("pointerup", onUp)
+			document.removeEventListener("pointercancel", onCancel)
+			cleanupSidebarDragRef.current = null
+		}
+
+		document.addEventListener("pointermove", onMove)
+		document.addEventListener("pointerup", onUp)
+		document.addEventListener("pointercancel", onCancel)
 	})
 
 	/**
 	 * 处理预览面板拖拽
 	 */
 	// eslint-disable-next-line @typescript-eslint/no-unused-vars
-	const handlePreviewResizeStart = useMemoizedFn((e: ReactMouseEvent<HTMLDivElement>) => {
-		e.preventDefault()
-		setIsDraggingPreview(true)
-		const startX = e.clientX
+	const handlePreviewResizeStart = useMemoizedFn((clientX: number) => {
+		const startX = clientX
 		const previewContainer = previewContainerRef.current
 		if (!previewContainer) return
+		// Replace an unfinished preview drag before adding another document listener set.
+		cleanupPreviewDragRef.current?.()
+		setIsDraggingPreview(true)
 
 		const containerRect = previewContainer.getBoundingClientRect()
 		const startRatio = leftPreviewRatioRef.current
 
-		const onMove = (moveEvent: MouseEvent) => {
+		/** Updates preview split ratio from pointer movement while preserving ratio clamps. */
+		const onMove = (moveEvent: PointerEvent) => {
 			const delta = moveEvent.clientX - startX
 			const availableWidth = containerRect.width - RESIZE_HANDLE_PX
 			const deltaRatio = delta / availableWidth
@@ -211,6 +231,7 @@ export const ChunkPreviewStep = observer(function ChunkPreviewStep({
 			setLeftPreviewRatio(newRatio)
 		}
 
+		/** Persists the preview split ratio after a completed pointer drag. */
 		const onUp = () => {
 			setIsDraggingPreview(false)
 			try {
@@ -218,13 +239,34 @@ export const ChunkPreviewStep = observer(function ChunkPreviewStep({
 			} catch {
 				/* ignore */
 			}
-			document.removeEventListener("mousemove", onMove)
-			document.removeEventListener("mouseup", onUp)
+			cleanupPreviewDragRef.current?.()
 		}
 
-		document.addEventListener("mousemove", onMove)
-		document.addEventListener("mouseup", onUp)
+		/** Clears preview drag state when the browser cancels a touch gesture. */
+		const onCancel = () => {
+			setIsDraggingPreview(false)
+			cleanupPreviewDragRef.current?.()
+		}
+
+		cleanupPreviewDragRef.current = () => {
+			document.removeEventListener("pointermove", onMove)
+			document.removeEventListener("pointerup", onUp)
+			document.removeEventListener("pointercancel", onCancel)
+			cleanupPreviewDragRef.current = null
+		}
+
+		document.addEventListener("pointermove", onMove)
+		document.addEventListener("pointerup", onUp)
+		document.addEventListener("pointercancel", onCancel)
 	})
+
+	useEffect(() => {
+		return () => {
+			// Step switches during an active drag must release document listeners owned by this step.
+			cleanupSidebarDragRef.current?.()
+			cleanupPreviewDragRef.current?.()
+		}
+	}, [])
 
 	/**
 	 * 读取文件内容为文本
@@ -574,7 +616,7 @@ export const ChunkPreviewStep = observer(function ChunkPreviewStep({
 						}}
 					>
 						<TopicResizeHandle
-							onMouseDown={handleSidebarResizeStart}
+							onResizeStart={handleSidebarResizeStart}
 							className={cn(
 								"h-full w-full",
 								isDraggingSidebar && "before:opacity-100",
@@ -626,7 +668,7 @@ export const ChunkPreviewStep = observer(function ChunkPreviewStep({
 								}}
 							>
 								<TopicResizeHandle
-									onMouseDown={handlePreviewResizeStart}
+									onResizeStart={handlePreviewResizeStart}
 									className={cn(
 										"h-full w-full",
 										isDraggingPreview && "before:opacity-100",

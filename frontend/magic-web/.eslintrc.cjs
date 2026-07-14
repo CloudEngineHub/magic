@@ -1,4 +1,4 @@
-const { srcImportBoundaryOverride } = require("./eslint/src-import-boundary.cjs")
+const { layerImportBoundaryOverrides } = require("./eslint/layer-import-boundaries.cjs")
 const path = require("path")
 
 module.exports = {
@@ -88,7 +88,7 @@ module.exports = {
 		],
 	},
 	overrides: [
-		srcImportBoundaryOverride,
+		...layerImportBoundaryOverrides,
 		{
 			files: ["*.cjs"],
 			rules: {

@@ -85,7 +85,7 @@ export function ChatConversationListView({
 		>
 			{/* 顶部用绝对居中的标题布局，避免左右操作按钮变化时标题发生肉眼可见的偏移。 */}
 			<div className="mobile-page-header">
-				<MobileShellSidebarToggleButton testId="mobile-chats-page-menu-button" />
+				<MobileShellSidebarToggleButton />
 
 				<p className="mobile-page-header-title">{title}</p>
 

@@ -108,6 +108,15 @@ describe("ChatConversationSubMenuRow", () => {
 		)
 	})
 
+	it("keeps the more trigger available on coarse pointer desktop layouts", () => {
+		render(<ChatConversationSubMenuRow item={createListItem()} {...defaultRowProps} />)
+
+		expect(screen.getByTestId("sidebar-chats-submenu-more-chat-project-alpha")).toHaveClass(
+			"no-hover:pointer-events-auto",
+			"no-hover:opacity-100",
+		)
+	})
+
 	it("clears the pending row-click suppression timer on unmount", () => {
 		const clearTimeoutSpy = vi.spyOn(window, "clearTimeout")
 		const { unmount } = render(

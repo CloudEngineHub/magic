@@ -914,7 +914,7 @@ checkpoint:
 # =====================================================
 # AI能力配置管理各种AI能力（如视觉理解、信息精炼等）使用的模型和参数
 # 支持环境变量占位符: ${ENV_VAR:-default_value}
-# 配置优先级: dynamic_config.yaml > config.yaml > 环境变量 > 代码默认值
+# 配置优先级: magic-service runtime-config > config.yaml > 代码默认值
 # =====================================================
 ai_abilities:
   # Visual Understanding Ability (视觉理解能力)
@@ -958,6 +958,13 @@ ai_abilities:
   # Used for analyzing audio project content
   analysis_audio:
     model_id: "${ANALYSIS_AUDIO_MODEL_ID:-qwen3.5-flash}"
+    enabled: true
+
+  # Video Understanding Ability (视频理解能力)
+  # Used for analyzing video content
+  video_understanding:
+    model_id: "${VIDEO_UNDERSTANDING_MODEL_ID:-qwen3.5-flash}"
+    timeout: ${VIDEO_UNDERSTANDING_TIMEOUT:-600}
     enabled: true
 
   # Analysis Slide Ability (网页/幻灯片分析能力)

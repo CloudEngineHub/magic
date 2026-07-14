@@ -1006,6 +1006,8 @@ class MagicServiceClient:
             logger.info(f"✅ 配置文件加载成功，包含键: {list(config.keys())}")
 
             subscription_config = config.get("message_subscription_config", {})
+            if isinstance(subscription_config, list):
+                subscription_config = subscription_config[0] if subscription_config else {}
 
             subscription_headers = subscription_config.get("headers", {})
             if "token" in subscription_headers:

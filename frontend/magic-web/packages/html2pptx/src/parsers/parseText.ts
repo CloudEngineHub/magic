@@ -1,34 +1,39 @@
-import type { ElementNode, PPTTextNode, PPTNodeBase, SlideConfig } from "../types/index"
+import type { ElementNode } from "../ir/dom"
+import type { PPTTextNode, PPTNodeBase } from "../ir/node"
+import type { SlideConfig } from "../api/options"
 import { log, LogLevel } from "../logger"
-import { pxToInch, getGlobalTransform } from "../utils/unit"
+import { pxToInch, getGlobalTransform } from "../shared/unit"
 import {
 	DEFAULT_DPI,
 	TEXT_SAFETY_MARGIN_X,
 	TEXT_SAFETY_MARGIN_Y,
-} from "../utils/constants"
+} from "../shared/constants"
 import {
 	transformText,
 	normalizeTextByWhiteSpace,
 	hasRenderableText,
-} from "../utils/text"
+} from "../shared/text-utils"
 import { splitTextNodeByVisualLines } from "./text/layout"
-import {
-	resolveTextStyle,
-} from "./text/style"
+import { resolveTextStyle } from "./text/style"
 export type { TextStyle } from "./text/style"
 
+interface ParseTextNodesOptions {
+	mergeVisualLines?: boolean
+}
+
 /**
- * 解析元素的直接文本节点，每个 DOM Text Node 生成一个独立的 PPT 文本框
+ * Parse direct text nodes from an element; each DOM Text Node produces an independent PPT text box.
  *
- * 设计原则：
- * - 一个 DOM Text Node = 一个 PPT 文本框
- * - 样式继承自文本节点的父元素（即当前 node），CSS 继承机制保证样式正确
- * - 位置通过 Range API 精确测量每个文本节点的实际渲染区域
+ * Design principles:
+ * - One DOM Text Node maps to one PPT text box.
+ * - Styles are inherited from the text node's parent element, which is the current node.
+ * - The Range API measures each text node's actual rendered bounds precisely.
  */
 export function parseTextNodes(
 	node: ElementNode,
 	base: PPTNodeBase,
 	config: SlideConfig,
+	options: ParseTextNodesOptions = {},
 ): PPTTextNode[] {
 	const { element, style } = node
 	if (!element) return []
@@ -37,15 +42,15 @@ export function parseTextNodes(
 	const scale = config.slideWidth / (config.htmlWidth / DEFAULT_DPI)
 	const whiteSpace = style.whiteSpace || "normal"
 
-	// 预计算当前元素的文本样式（所有直接文本节点共享同一套样式）
-	// 完全依赖 x,y 物理坐标定位
+	// Precompute the current element's text style; all direct text nodes share it.
+	// Positioning relies entirely on physical x/y coordinates.
 	const textStyle = resolveTextStyle(node, scale)
 
-	// 遍历直接子节点，只处理 Text Node
+	// Iterate direct child nodes and only process Text Nodes.
 	for (const childNode of Array.from(element.childNodes)) {
 		if (childNode.nodeType !== Node.TEXT_NODE) continue
 
-		// 使用 Range API 精确测量文本节点的渲染位置
+		// Use the Range API to measure the rendered position of the text node precisely.
 		try {
 			const visualLines = splitTextNodeByVisualLines({
 				doc,
@@ -53,16 +58,84 @@ export function parseTextNodes(
 			})
 			if (visualLines.length === 0) continue
 
-			// 获取全局变换 (处理父级旋转/缩放)
+			// Get the global transform, including parent rotation and scale.
 			const { rotation, scaleX } = getGlobalTransform(node)
 			const transformScale = scaleX
 			const rotateAngle = rotation
 
-			// 修正字号
+			// Correct the font size.
 			const finalFontSize =
 				transformScale !== 1
 					? Math.round(textStyle.fontSize * transformScale)
 					: textStyle.fontSize
+
+			if (options.mergeVisualLines && visualLines.length > 1) {
+				let text = normalizeTextByWhiteSpace({
+					text: childNode.textContent ?? "",
+					whiteSpace,
+				})
+				if (!hasRenderableText({ text, whiteSpace })) continue
+
+				text = transformText(text, style.textTransform)
+
+				const bounds = unionVisualLineBounds(visualLines)
+				if (!bounds) continue
+
+				const spacingBuffer = textStyle.charSpacing
+					? textStyle.charSpacing * text.length * 0.5
+					: 0
+				const contentLeft = node.rect.x + parseCssPx(style.paddingLeft)
+				const contentRight = node.rect.x + node.rect.w - parseCssPx(style.paddingRight)
+				const hasFlowAlignment =
+					style.textAlign === "center" ||
+					style.textAlign === "right" ||
+					style.textAlign === "justify"
+
+				let x = hasFlowAlignment && contentRight > contentLeft ? contentLeft : bounds.left
+				let y = bounds.top
+				let w = Math.max(
+					0,
+					Math.max(bounds.right, contentRight > x ? contentRight : bounds.right) -
+						x +
+						TEXT_SAFETY_MARGIN_X * 2 +
+						spacingBuffer,
+				)
+				let h = Math.max(
+					0,
+					bounds.bottom - bounds.top + TEXT_SAFETY_MARGIN_Y * 2,
+				)
+
+				if (Math.abs(rotateAngle) === 90 || Math.abs(rotateAngle) === 270) {
+					const cx = x + w / 2
+					const cy = y + h / 2
+					const temp = w
+					w = h
+					h = temp
+					x = cx - w / 2
+					y = cy - h / 2
+				}
+
+				const textBase: PPTNodeBase = {
+					...base,
+					x: pxToInch(x, config),
+					y: pxToInch(y, config),
+					w: pxToInch(w, config),
+					h: pxToInch(h, config),
+				}
+
+				if (textBase.w <= 0 || textBase.h <= 0) continue
+
+				results.push({
+					...textBase,
+					type: "text",
+					text,
+					...textStyle,
+					fontSize: finalFontSize,
+					rotate: rotateAngle !== 0 ? rotateAngle : undefined,
+					wrap: true,
+				})
+				continue
+			}
 
 			for (const line of visualLines) {
 				let text = normalizeTextByWhiteSpace({
@@ -73,12 +146,12 @@ export function parseTextNodes(
 
 				text = transformText(text, style.textTransform)
 
-				// 如果有字间距，需要增加额外的宽度冗余，防止 PPT 渲染时因精度问题导致意外换行
+				// Add extra width when character spacing is present to avoid unexpected PPT wrapping caused by precision differences.
 				const spacingBuffer = textStyle.charSpacing
 					? textStyle.charSpacing * text.length * 0.5
 					: 0
 
-				// 按视觉行拆分后，每个片段都按单行处理，避免 line-height 重复作用
+				// After splitting by visual lines, treat each fragment as a single line to avoid applying line-height twice.
 				let x = line.rect.left
 				let y = line.rect.top
 				let w = Math.max(
@@ -123,10 +196,32 @@ export function parseTextNodes(
 				})
 			}
 		} catch {
-			// Range API 异常时跳过该文本节点
-				log(LogLevel.L4, "Range API 异常", { textContent: childNode.textContent })
+			// Skip this text node if the Range API fails.
+			log(LogLevel.L4, "Range API 异常", { textContent: childNode.textContent })
 		}
 	}
 
 	return results
+}
+
+function unionVisualLineBounds(
+	visualLines: Array<{ rect: { left: number; right: number; top: number; bottom: number } }>,
+): { left: number; right: number; top: number; bottom: number } | null {
+	return visualLines.reduce<{ left: number; right: number; top: number; bottom: number } | null>(
+		(bounds, line) => {
+			if (!bounds) return { ...line.rect }
+			return {
+				left: Math.min(bounds.left, line.rect.left),
+				right: Math.max(bounds.right, line.rect.right),
+				top: Math.min(bounds.top, line.rect.top),
+				bottom: Math.max(bounds.bottom, line.rect.bottom),
+			}
+		},
+		null,
+	)
+}
+
+function parseCssPx(value: string): number {
+	const parsed = Number.parseFloat(value)
+	return Number.isFinite(parsed) ? parsed : 0
 }

@@ -171,7 +171,10 @@ function SlideSelectionDialog({
 						onClick={toggleSelectAll}
 						className="h-8 text-sm"
 					>
-						<Checkbox checked={isAllSelected} className="pointer-events-none data-[state=unchecked]:bg-white shadow-sm" />
+						<Checkbox
+							checked={isAllSelected}
+							className="pointer-events-none shadow-sm data-[state=unchecked]:bg-white"
+						/>
 						{isAllSelected ? t("ppt.deselectAll") : t("ppt.selectAll")}
 					</Button>
 					<span className="text-sm text-muted-foreground">
@@ -180,7 +183,7 @@ function SlideSelectionDialog({
 				</div>
 
 				{/* 幻灯片网格：延后渲染，先出壳再出列表 */}
-				<div className="min-h-[200px] flex-1 overflow-y-auto">
+				<div className="min-h-[152px] flex-1 overflow-y-auto">
 					{!contentReady ? (
 						<div className="3xl:grid-cols-5 grid grid-cols-2 gap-4 p-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
 							{Array.from({ length: 8 }).map((_, i) => (
@@ -227,7 +230,7 @@ function SlideSelectionDialog({
 												onCheckedChange={() =>
 													isLoaded && toggleSlide(slide.path)
 												}
-												className="data-[state=unchecked]:bg-white shadow-sm"
+												className="shadow-sm data-[state=unchecked]:bg-white"
 											/>
 										</div>
 

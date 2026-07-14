@@ -19,17 +19,23 @@ use App\Domain\Chat\Entity\ValueObject\MessageType\ChatMessageType;
 use App\Domain\Chat\Event\Agent\UserCallAgentEvent;
 use App\Domain\Chat\Service\MagicConversationDomainService;
 use App\Domain\Contact\Entity\ValueObject\DataIsolation;
+use App\Infrastructure\Core\Exception\EventException;
 use App\Infrastructure\Util\Context\CoContext;
 use App\Infrastructure\Util\IdGenerator\IdGenerator;
 use App\Interfaces\Chat\Assembler\SeqAssembler;
 use Dtyq\SuperMagic\Application\SuperAgent\DTO\UserMessageDTO;
+use Dtyq\SuperMagic\Application\SuperAgent\Service\ClientMessageAppService;
 use Dtyq\SuperMagic\Application\SuperAgent\Service\HandleUserMessageAppService;
 use Dtyq\SuperMagic\Domain\SuperAgent\Entity\ValueObject\ChatInstruction;
 use Dtyq\SuperMagic\Domain\SuperAgent\Entity\ValueObject\SuperMagicExecutionSource;
 use Dtyq\SuperMagic\Domain\SuperAgent\Entity\ValueObject\TaskMode;
+use Dtyq\SuperMagic\Domain\SuperAgent\Service\TopicDomainService;
+use Dtyq\SuperMagic\Infrastructure\Utils\TaskEventUtil;
 use Hyperf\Logger\LoggerFactory;
 use Psr\Log\LoggerInterface;
 use Throwable;
+
+use function Hyperf\Translation\trans;
 
 /**
  * Super Agent Service.
@@ -43,6 +49,8 @@ class SuperAgentMessageSubscriberV2 extends MagicAgentEventAppService
     public function __construct(
         protected readonly HandleUserMessageAppService $handleUserMessageAppService,
         protected readonly MagicChatMessageAppService $magicChatMessageAppService,
+        protected readonly ClientMessageAppService $clientMessageAppService,
+        protected readonly TopicDomainService $topicDomainService,
         protected readonly LoggerFactory $loggerFactory,
         MagicConversationDomainService $magicConversationDomainService,
     ) {
@@ -80,6 +88,10 @@ class SuperAgentMessageSubscriberV2 extends MagicAgentEventAppService
 
     private function handlerSuperMagicMessage(UserCallAgentEvent $userCallAgentEvent): void
     {
+        // Notification context, populated as soon as it is parsed so the single catch
+        // below can always try to notify the client (even on parsing failures).
+        $dataIsolation = null;
+        $userMessageDTO = null;
         try {
             // 将本次链路（含下游沙箱创建/网关请求）的 request_id 统一到聊天消息的 app_message_id，
             // 便于通过同一个 id 在日志中串起 聊天 → Agent 处理 → 沙箱创建 全链路。
@@ -204,16 +216,35 @@ class SuperAgentMessageSubscriberV2 extends MagicAgentEventAppService
 
             $userToolCallMessage = $this->resolveUserToolCallMessage($messageStruct, $dynamicParams);
 
+            // Dispatch to the unified core service. The core methods stay generic and throw
+            // on failure; this subscriber owns all client (WebSocket) notifications, handled
+            // uniformly in the single catch below.
             if ($userToolCallMessage !== null) {
                 $this->handleUserMessageAppService->handleUserToolCallMessage($dataIsolation, $userMessageDTO, $userToolCallMessage);
             } elseif ($chatInstructs == ChatInstruction::Interrupted) {
-                $this->handleUserMessageAppService->handleInternalMessage($dataIsolation, $userMessageDTO);
+                $notification = $this->handleUserMessageAppService->handleInternalMessage($dataIsolation, $userMessageDTO);
+                if ($notification !== null) {
+                    $this->clientMessageAppService->sendInterruptMessageToClient(
+                        topicId: $notification->topicId,
+                        taskId: $notification->taskId,
+                        chatTopicId: $userMessageDTO->getChatTopicId(),
+                        chatConversationId: $userMessageDTO->getChatConversationId(),
+                        interruptReason: $notification->reason,
+                    );
+                }
             } else {
                 $this->handleUserMessageAppService->handleChatMessage($dataIsolation, $userMessageDTO);
             }
             $this->logger->info('Super agent message processing completed');
             return;
+        } catch (EventException $e) {
+            // Business-level failure (e.g. validation / pre-check): send a reminder to the client.
+            $this->logger->warning(sprintf('Handle super agent message, event processing failed: %s', $e->getMessage()));
+            $this->sendFailureReminderToClient($dataIsolation, $userMessageDTO, $e);
+            // Acknowledge message even on error to avoid message accumulation
         } catch (Throwable $e) {
+            // Unexpected failure (parsing / dispatch / infrastructure): log full context
+            // and surface a generic error to the client so the request is never left silent.
             $trace = $e->getTraceAsString();
             if (strlen($trace) > 2000) {
                 $trace = substr($trace, 0, 2000) . ' ...(truncated)';
@@ -233,7 +264,80 @@ class SuperAgentMessageSubscriberV2 extends MagicAgentEventAppService
                 'message_type' => $userCallAgentEvent->messageEntity?->getMessageType()?->value,
                 'trace' => $trace,
             ]);
-            return; // Acknowledge message even on error to avoid message accumulation
+            $this->sendFailureErrorToClient($dataIsolation, $userMessageDTO);
+            // Acknowledge message even on error to avoid message accumulation
+        }
+    }
+
+    /**
+     * Send a business reminder (EventException) to the client.
+     *
+     * Defensive: no-ops when notification context is not yet available (early parsing
+     * failure) and never throws, so a notification failure cannot break message ACK.
+     */
+    private function sendFailureReminderToClient(
+        ?DataIsolation $dataIsolation,
+        ?UserMessageDTO $userMessageDTO,
+        EventException $e
+    ): void {
+        if ($dataIsolation === null || $userMessageDTO === null) {
+            return;
+        }
+        try {
+            $this->clientMessageAppService->sendReminderMessageToClient(
+                topicId: $this->resolveTopicId($dataIsolation, $userMessageDTO),
+                taskId: '',
+                chatTopicId: $userMessageDTO->getChatTopicId(),
+                chatConversationId: $userMessageDTO->getChatConversationId(),
+                remind: $e->getMessage(),
+                remindEvent: TaskEventUtil::getRemindTaskEventByCode($e->getCode()),
+            );
+        } catch (Throwable $notifyError) {
+            $this->logger->error('Failed to send reminder message to client', [
+                'error' => $notifyError->getMessage(),
+            ]);
+        }
+    }
+
+    /**
+     * Send a generic error message to the client.
+     *
+     * Defensive: no-ops when notification context is not yet available (early parsing
+     * failure) and never throws, so a notification failure cannot break message ACK.
+     */
+    private function sendFailureErrorToClient(
+        ?DataIsolation $dataIsolation,
+        ?UserMessageDTO $userMessageDTO
+    ): void {
+        if ($dataIsolation === null || $userMessageDTO === null) {
+            return;
+        }
+        try {
+            $this->clientMessageAppService->sendErrorMessageToClient(
+                topicId: $this->resolveTopicId($dataIsolation, $userMessageDTO),
+                taskId: '',
+                chatTopicId: $userMessageDTO->getChatTopicId(),
+                chatConversationId: $userMessageDTO->getChatConversationId(),
+                errorMessage: trans('task.initialize_error'),
+            );
+        } catch (Throwable $notifyError) {
+            $this->logger->error('Failed to send error message to client', [
+                'error' => $notifyError->getMessage(),
+            ]);
+        }
+    }
+
+    /**
+     * Resolve the topic id for client notifications.
+     * Returns 0 when the topic cannot be resolved so notifications can still be attempted.
+     */
+    private function resolveTopicId(DataIsolation $dataIsolation, UserMessageDTO $userMessageDTO): int
+    {
+        try {
+            $topicEntity = $this->topicDomainService->getTopicByChatTopicId($dataIsolation, $userMessageDTO->getChatTopicId());
+            return $topicEntity?->getId() ?? 0;
+        } catch (Throwable) {
+            return 0;
         }
     }
 

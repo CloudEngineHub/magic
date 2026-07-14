@@ -15,10 +15,12 @@ const {
 	mockStartTopicStatusPolling,
 	mockStopTopicStatusPolling,
 	mockGetTopicDetail,
+	mockIsMagicApp,
 } = vi.hoisted(() => ({
 	mockStartTopicStatusPolling: vi.fn(),
 	mockStopTopicStatusPolling: vi.fn(),
 	mockGetTopicDetail: vi.fn(),
+	mockIsMagicApp: vi.fn(() => false),
 }))
 let latestTopicStatusPollingHandler: ((items: SuperAgentTopicStatusItem[]) => void) | null = null
 
@@ -79,6 +81,12 @@ vi.mock("@/pages/superMagic/services", () => ({
 			// Keep topic detail lookup inert in tests so row selection focuses on panel behavior.
 			getTopicDetail: mockGetTopicDetail,
 		},
+	},
+}))
+
+vi.mock("@/utils/devices", () => ({
+	get isMagicApp() {
+		return mockIsMagicApp()
 	},
 }))
 
@@ -408,6 +416,8 @@ describe("TopicHistoryPanelContent", () => {
 		mockStartTopicStatusPolling.mockClear()
 		mockStopTopicStatusPolling.mockClear()
 		mockGetTopicDetail.mockReset()
+		mockIsMagicApp.mockReset()
+		mockIsMagicApp.mockReturnValue(false)
 		latestTopicStatusPollingHandler = null
 		mockUsePaginatedTopics.mockImplementation(
 			(options?: { storeTopics?: Topic[]; searchKeyword?: string }) => {
@@ -599,6 +609,57 @@ describe("TopicHistoryPanelContent", () => {
 			expect(
 				screen.queryByTestId("message-header-history-item-menu-topic-topic-2"),
 			).not.toBeInTheDocument()
+		})
+	})
+
+	it("keeps desktop topic actions hidden until the row is hovered", () => {
+		renderComponent()
+
+		expect(
+			screen.queryByTestId("message-header-history-item-menu-button-topic-2"),
+		).not.toBeInTheDocument()
+		expect(
+			screen.queryByTestId("message-header-history-item-pin-button-topic-2"),
+		).not.toBeInTheDocument()
+
+		fireEvent.mouseEnter(screen.getByTestId("message-header-history-item-topic-2"))
+
+		expect(
+			screen.getByTestId("message-header-history-item-menu-button-topic-2"),
+		).toBeInTheDocument()
+		expect(
+			screen.getByTestId("message-header-history-item-pin-button-topic-2"),
+		).toBeInTheDocument()
+	})
+
+	it("shows app topic actions without hover and moves pin into the more menu", async () => {
+		const handlePinTopic = vi.fn().mockResolvedValue(undefined)
+		mockIsMagicApp.mockReturnValue(true)
+
+		renderComponent({
+			onPinTopic: handlePinTopic,
+		})
+
+		expect(screen.getAllByTestId("mock-status-icon")).toHaveLength(2)
+		expect(
+			screen.queryByTestId("message-header-history-item-pin-button-topic-2"),
+		).not.toBeInTheDocument()
+		expect(
+			screen.getByTestId("message-header-history-item-menu-button-topic-2"),
+		).toBeInTheDocument()
+
+		fireEvent.click(screen.getByTestId("message-header-history-item-menu-button-topic-2"))
+		expect(
+			screen
+				.getByTestId("message-header-history-item-menu-topic-topic-2")
+				.querySelector("button"),
+		).toBe(screen.getByTestId("message-header-history-item-pin"))
+		fireEvent.click(screen.getByTestId("message-header-history-item-pin"))
+
+		await waitFor(() => {
+			expect(handlePinTopic).toHaveBeenCalledTimes(1)
+			expect(handlePinTopic).toHaveBeenCalledWith("topic-2")
+			expect(mockReloadTopics).toHaveBeenCalledTimes(1)
 		})
 	})
 

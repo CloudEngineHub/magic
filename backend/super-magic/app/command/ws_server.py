@@ -44,6 +44,36 @@ ws_server = None
 _app = None  # 存储FastAPI应用实例的内部变量
 _LOCAL_IM_AUTO_CONNECT_ENV = "ENABLE_LOCAL_IM_CHANNEL_AUTO_CONNECT"
 _TRUE_ENV_VALUES = {"true", "1", "yes", "on"}
+_API_PORT_ENV = "SUPER_MAGIC_API_PORT"
+_DEFAULT_API_PORT = 8002
+_resolved_api_port: Optional[int] = None
+
+
+def get_api_port() -> int:
+    """读取 HTTP API 服务监听端口，配置为空或非法时回退到默认端口。"""
+    global _resolved_api_port
+    if _resolved_api_port is not None:
+        return _resolved_api_port
+
+    raw_port = os.getenv(_API_PORT_ENV, "").strip()
+    if not raw_port:
+        _resolved_api_port = _DEFAULT_API_PORT
+        return _resolved_api_port
+
+    try:
+        port = int(raw_port)
+    except ValueError:
+        logger.warning(f"{_API_PORT_ENV}={raw_port!r} 不是有效端口，回退到 {_DEFAULT_API_PORT}")
+        _resolved_api_port = _DEFAULT_API_PORT
+        return _resolved_api_port
+
+    if port < 1 or port > 65535:
+        logger.warning(f"{_API_PORT_ENV}={raw_port!r} 超出端口范围，回退到 {_DEFAULT_API_PORT}")
+        _resolved_api_port = _DEFAULT_API_PORT
+        return _resolved_api_port
+
+    _resolved_api_port = port
+    return _resolved_api_port
 
 
 async def maybe_auto_connect_im_channels_for_local_dev() -> None:
@@ -127,10 +157,20 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.error(f"模型配置管理器初始化失败: {e}")
 
+    # 初始化 AI 能力配置管理器（阶段一：加载 config.yaml 静态配置）
+    try:
+        from agentlang.config.ai_abilities.ability_config_manager import ai_ability_config_manager
+        from agentlang.config.ai_abilities.providers.config_yaml_provider import ConfigYamlAIAbilityProvider
+        from app.core.ai_ability_configs import create_ai_ability_config
+        await ai_ability_config_manager.initialize([ConfigYamlAIAbilityProvider(create_ai_ability_config)])
+        logger.info("AI 能力配置管理器初始化完成")
+    except Exception as e:
+        logger.error(f"AI 能力配置管理器初始化失败: {e}")
+
     # 执行启动时残留文件清理检查
     await cleanup_stale_files_on_startup()
 
-    logger.info("HTTP API服务将监听端口：8002")
+    logger.info(f"HTTP API服务将监听端口：{get_api_port()}")
     yield
     # 关闭时
     logger.info("服务正在关闭...")
@@ -335,7 +375,7 @@ def start_ws_server():
 
         # 使用与原main()函数相似的代码，但只启动WebSocket服务
         # 创建并配置WebSocket socket
-        ws_port = 8002
+        ws_port = get_api_port()
         ws_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         ws_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         ws_socket.bind(("0.0.0.0", ws_port))
@@ -386,7 +426,7 @@ def start_ws_server():
             # 启动主HTTP API服务
             ws_task = asyncio.create_task(ws_server.serve(sockets=[ws_socket]))
 
-            logger.info("✅ 主API服务已启动 (0.0.0.0:8002)，静态文件服务将按需启动")
+            logger.info(f"✅ 主API服务已启动 (0.0.0.0:{ws_port})，静态文件服务将按需启动")
             await maybe_auto_connect_im_channels_for_local_dev()
 
             # 等待关闭事件

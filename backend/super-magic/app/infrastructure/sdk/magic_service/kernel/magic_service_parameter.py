@@ -150,19 +150,13 @@ class MagicServiceAbstractParameter(AbstractParameter):
         """
         Load authentication configuration from init client message
 
-        This method tries to automatically get token, user_id, and user_authorization from
+        This method tries to automatically get user_id and user_authorization from
         InitClientMessageUtil. If it fails, the values remain None.
         """
         try:
             from app.utils.init_client_message_util import InitClientMessageUtil
 
-            # Get full config to access message_subscription_config
             full_config = InitClientMessageUtil.get_full_config()
-
-            # Get token from message_subscription_config.headers.token
-            message_config = full_config.get('message_subscription_config', {})
-            headers = message_config.get('headers', {})
-            self.token = headers.get('token')
 
             # Get user_id from metadata
             metadata = full_config.get('metadata', {})

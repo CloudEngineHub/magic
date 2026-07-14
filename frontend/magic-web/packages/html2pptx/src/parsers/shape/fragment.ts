@@ -1,16 +1,17 @@
-import type { ElementNode, PPTFill } from "../../types/index"
+import type { ElementNode } from "../../ir/dom"
+import type { PPTFill } from "../../ir/style"
 import {
 	colorToHex,
 	getTransparency,
 	hasVisibleBackground,
 	isGradientBackground,
 	parseGradient,
-} from "../../utils/color"
-import { hasUniformBorder } from "../../utils/element"
+} from "../../shared/color"
+import { hasUniformBorder } from "../../shared/element-predicates"
 
 export function canUseFragmentedBackground(node: ElementNode): boolean {
 	const { style } = node
-	// 边框/阴影/滤镜/变换仍使用整块几何，避免分片后样式失真
+	// Borders, shadows, filters, and transforms still use whole geometry to avoid style distortion after fragmentation
 	if (hasUniformBorder(style)) return false
 	if (style.boxShadow && style.boxShadow !== "none") return false
 	if (style.filter && style.filter !== "none") return false

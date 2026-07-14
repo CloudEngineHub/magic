@@ -43,6 +43,38 @@ class OSSTest extends CloudFileBaseTest
         $this->assertArrayHasKey('expires', $credential);
     }
 
+    /**
+     * 验证 OSS 临时上传凭证支持切换内网 endpoint.
+     */
+    public function testGetUploadTemporaryCredentialWithInternalEndpoint()
+    {
+        $filesystem = $this->getFilesystem();
+        $options = [
+            'internal_endpoint' => true,
+            'cache' => false,
+        ];
+
+        $credentialPolicy = new CredentialPolicy([
+            'sts' => false,
+            'roleSessionName' => 'test',
+        ]);
+        $res = $filesystem->getUploadTemporaryCredential($credentialPolicy, $options);
+        $credential = $res['temporary_credential'];
+        $this->assertArrayHasKey('host', $credential);
+        $this->assertStringContainsString('-internal.aliyuncs.com', $credential['host']);
+
+        $credentialPolicy = new CredentialPolicy([
+            'sts' => true,
+            'roleSessionName' => 'test',
+        ]);
+        $res = $filesystem->getUploadTemporaryCredential($credentialPolicy, $options);
+        $credential = $res['temporary_credential'];
+        $this->assertArrayHasKey('endpoint', $credential);
+        $this->assertArrayHasKey('region', $credential);
+        $this->assertStringContainsString('-internal.aliyuncs.com', $credential['endpoint']);
+        $this->assertStringNotContainsString('-internal', $credential['region']);
+    }
+
     public function testUpload()
     {
         $filesystem = $this->getFilesystem();
@@ -118,6 +150,37 @@ class OSSTest extends CloudFileBaseTest
         ]);
         var_dump($link);
         $this->assertIsString($link);
+    }
+
+    /**
+     * 验证 OSS 直签链接支持切换内网 endpoint.
+     */
+    public function testGetLinkWithInternalEndpoint()
+    {
+        $filesystem = $this->getFilesystem();
+
+        $link = $filesystem->getLink('easy-file/easy.jpeg', '', 7200, [
+            'internal_endpoint' => true,
+            'cache' => false,
+        ]);
+
+        $this->assertStringContainsString('-internal.aliyuncs.com', $link->getUrl());
+    }
+
+    /**
+     * 验证 OSS 临时凭证签名链接支持切换内网 endpoint.
+     */
+    public function testGetPreSignedUrlByCredentialWithInternalEndpoint()
+    {
+        $filesystem = $this->getFilesystem();
+        $credentialPolicy = new CredentialPolicy([]);
+
+        $url = $filesystem->getPreSignedUrlByCredential($credentialPolicy, 'easy-file/easy.jpeg', [
+            'internal_endpoint' => true,
+            'cache' => false,
+        ]);
+
+        $this->assertStringContainsString('-internal.aliyuncs.com', $url);
     }
 
     public function testDestroy()

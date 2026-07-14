@@ -23,6 +23,7 @@ import { useTopicConversationLoading } from "@/pages/superMagic/hooks/useTopicCo
 import { useTopicMessages } from "@/pages/superMagic/hooks/useTopicMessages"
 import { resolveMessageSendContext } from "@/pages/superMagic/services/messageSendPreparation"
 import { createMessageSendService } from "@/pages/superMagic/services/messageSendFlowService"
+import { shouldCheckAttachmentsOnTaskStatus } from "@/pages/superMagic/services/topicStatusSyncService"
 import { useTopicDetailPanelController } from "@/pages/superMagic/pages/TopicPage/hooks/useTopicDetailPanelController"
 import { useTopicFiles } from "@/pages/superMagic/pages/TopicPage/hooks/useTopicFiles"
 import { isReadOnlyProject } from "@/pages/superMagic/utils/permission"
@@ -89,12 +90,19 @@ interface ClawMobileConversationPanelProps {
 	detailPanelVisible: boolean
 	onOpenFilesDrawer: () => void
 	onOpenSkillsDrawer: () => void
+	onTerminalTopicStatusChange?: () => void
 }
 
 const ClawMobileConversationPanel = observer(
 	forwardRef<ClawMobileConversationPanelRef, ClawMobileConversationPanelProps>(
 		function ClawMobileConversationPanel(
-			{ clawCode, detailPanelVisible, onOpenFilesDrawer, onOpenSkillsDrawer },
+			{
+				clawCode,
+				detailPanelVisible,
+				onOpenFilesDrawer,
+				onOpenSkillsDrawer,
+				onTerminalTopicStatusChange,
+			},
 			ref,
 		) {
 			const { t } = useTranslation("sidebar")
@@ -104,6 +112,7 @@ const ClawMobileConversationPanel = observer(
 			const selectedProject = store.selectedProject
 			const selectedTopic = store.selectedTopic
 			const topicStore = store.topicStore
+			const attachments = store.projectFilesStore.workspaceFileTree
 			const [stopEventLoading, setStopEventLoading] = useState(false)
 			const sharedTopicModelStore = useMemo(() => createSuperMagicTopicModelStore(), [])
 			const scopedMessageSendService = useMemo(
@@ -118,8 +127,13 @@ const ClawMobileConversationPanel = observer(
 				selectedTopic,
 				onConversationGeneratingChange: store.setConversationGenerating,
 				onTopicMessagesChange: ({ lastMessageNode, selectedTopic: currentTopic }) => {
-					if (currentTopic?.id && lastMessageNode?.status) {
-						store.updateTopicStatus(currentTopic.id, lastMessageNode?.status)
+					const nextStatus = lastMessageNode?.status as TaskStatus | undefined
+					if (currentTopic?.id && nextStatus) {
+						const hasStatusChanged = nextStatus !== currentTopic.task_status
+						store.updateTopicStatus(currentTopic.id, nextStatus)
+						if (hasStatusChanged && shouldCheckAttachmentsOnTaskStatus(nextStatus)) {
+							onTerminalTopicStatusChange?.()
+						}
 					}
 				},
 			})
@@ -299,6 +313,7 @@ const ClawMobileConversationPanel = observer(
 								onSendMessage={messageQueue.sendQueuedMessage}
 								onStartEdit={messageQueue.startEditQueueItem}
 								onCancelEdit={messageQueue.cancelEditQueueItem}
+								variant="mobile"
 							/>
 						</div>
 					) : null
@@ -336,6 +351,7 @@ const ClawMobileConversationPanel = observer(
 					handleInterrupt,
 					mentionPanelStore: store.mentionPanelStore,
 					projectFilesStore: store.projectFilesStore,
+					attachments,
 					topicModelStore,
 					enableMessageSendByContent: true,
 					mergeSendParams: ({ defaultParams }) => {
@@ -361,6 +377,7 @@ const ClawMobileConversationPanel = observer(
 				handleInterrupt,
 				store.mentionPanelStore,
 				store.projectFilesStore,
+				attachments,
 				store.projectStore.setSelectedProject,
 				store.selectedWorkspace,
 				store.workspaceStore.setSelectedWorkspace,
@@ -460,7 +477,14 @@ function ClawPlaygroundMobile() {
 	const shellOutlet = useOptionalSuperMobileShellOutlet()
 	const clawBrandValues = getClawBrandTranslationValues()
 	const navigate = useNavigate()
-	const { code, store, selectedProject, attachments, attachmentList } = useClawPlaygroundCore()
+	const {
+		code,
+		store,
+		selectedProject,
+		attachments,
+		attachmentList,
+		checkAttachmentsNowDebounced,
+	} = useClawPlaygroundCore()
 	const { dialog, handleConfirmUpgradeSandbox } = useClawSandboxUpgradeAction({ store })
 
 	const previewDetailPopupRef = useRef<PreviewDetailPopupRef>(null)
@@ -779,6 +803,7 @@ function ClawPlaygroundMobile() {
 					detailPanelVisible={false}
 					onOpenFilesDrawer={() => setFilesDrawerOpen(true)}
 					onOpenSkillsDrawer={() => setSkillsDrawerOpen(true)}
+					onTerminalTopicStatusChange={checkAttachmentsNowDebounced}
 				/>
 			</div>
 

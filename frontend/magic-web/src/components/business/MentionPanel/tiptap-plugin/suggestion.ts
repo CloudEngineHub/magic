@@ -209,10 +209,14 @@ export function createMentionPanelSuggestion(
 				}
 
 				const insertContent = getInsertedContent(item)
-				const inserted = runActiveEditor(editor, (activeEditor) => {
-					activeEditor.chain().focus().insertContentAt(range, insertContent).run()
-					return true
-				}, false)
+				const inserted = runActiveEditor(
+					editor,
+					(activeEditor) => {
+						activeEditor.chain().focus().insertContentAt(range, insertContent).run()
+						return true
+					},
+					false,
+				)
 				if (!inserted) return
 
 				const insertedSize = getInsertedContentSize(editor, insertContent)

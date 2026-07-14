@@ -25,7 +25,7 @@ function RecycleBinHeader(props: RecycleBinHeaderProps) {
 
 	return (
 		<div className="mobile-page-header" data-testid="mobile-recycle-bin-header">
-			<MobileShellSidebarToggleButton testId="mobile-recycle-bin-menu-button" />
+			<MobileShellSidebarToggleButton />
 
 			<div className="min-w-0 flex-1 px-2 text-center" data-testid="mobile-recycle-bin-title">
 				<h1 className="truncate font-poppins text-[19px] font-semibold tracking-tight text-foreground">

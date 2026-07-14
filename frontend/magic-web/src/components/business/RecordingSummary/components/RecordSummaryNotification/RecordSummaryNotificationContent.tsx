@@ -1,6 +1,5 @@
 import type { RecordSummaryNotificationContentProps } from "./types"
 import { RecordSummaryActionButton, RecordSummaryAlertCard } from "../RecordSummaryAlertCard"
-import { genProjectTopicUrl } from "@/pages/superMagic/utils/project"
 import { Check, TriangleAlert } from "lucide-react"
 
 function RecordSummaryNotificationContent({
@@ -11,9 +10,6 @@ function RecordSummaryNotificationContent({
 	viewText,
 	ignoreText,
 	success = false,
-	workspaceId,
-	projectId,
-	topicId,
 }: RecordSummaryNotificationContentProps) {
 	return (
 		<RecordSummaryAlertCard
@@ -33,19 +29,11 @@ function RecordSummaryNotificationContent({
 						{ignoreText}
 					</RecordSummaryActionButton>
 					<RecordSummaryActionButton
-						asChild
 						appearance="primary"
+						onClick={onViewClick}
 						data-testid="record-summary-notification-view-button"
 					>
-						<a
-							href={genProjectTopicUrl(workspaceId, projectId, topicId)}
-							target="_blank"
-							rel="noreferrer"
-							className="hover:text-primary-foreground"
-							onClick={onViewClick}
-						>
-							{viewText}
-						</a>
+						{viewText}
 					</RecordSummaryActionButton>
 				</>
 			}

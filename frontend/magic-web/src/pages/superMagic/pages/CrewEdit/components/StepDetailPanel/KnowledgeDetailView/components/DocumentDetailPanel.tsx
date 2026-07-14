@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from "react"
+import { useEffect, useRef, useState } from "react"
 import { observer } from "mobx-react-lite"
 import { useMemoizedFn, useMount } from "ahooks"
 import { useTranslation } from "react-i18next"
@@ -52,6 +52,7 @@ function OriginalPreviewSplitBody({
 	const [sourceWidthPx, setSourceWidthPx] = useState(readStoredSourcePreviewWidth)
 	const sourceWidthRef = useRef(sourceWidthPx)
 	const [isDraggingSplit, setIsDraggingSplit] = useState(false)
+	const cleanupSplitDragRef = useRef<(() => void) | null>(null)
 
 	useEffect(() => {
 		sourceWidthRef.current = sourceWidthPx
@@ -86,13 +87,15 @@ function OriginalPreviewSplitBody({
 		return () => ro.disconnect()
 	}, [clampToContainer])
 
-	const handleSplitResizeStart = useMemoizedFn((e: ReactMouseEvent<HTMLDivElement>) => {
-		e.preventDefault()
+	const handleSplitResizeStart = useMemoizedFn((clientX: number) => {
+		// Replace any unfinished split drag before registering a new document-level listener set.
+		cleanupSplitDragRef.current?.()
 		setIsDraggingSplit(true)
-		const startX = e.clientX
+		const startX = clientX
 		const startWidth = sourceWidthRef.current
 
-		const onMove = (moveEvent: MouseEvent) => {
+		/** Keeps source and formatted previews in sync with a unified pointer drag path. */
+		const onMove = (moveEvent: PointerEvent) => {
 			const parentW = containerRef.current?.clientWidth ?? 0
 			const delta = moveEvent.clientX - startX
 			const next = clampSourceWidthToParent(startWidth + delta, parentW)
@@ -100,6 +103,7 @@ function OriginalPreviewSplitBody({
 			setSourceWidthPx(next)
 		}
 
+		/** Persists the source preview width when the pointer drag completes normally. */
 		const onUp = () => {
 			setIsDraggingSplit(false)
 			try {
@@ -107,13 +111,33 @@ function OriginalPreviewSplitBody({
 			} catch {
 				/* ignore */
 			}
-			document.removeEventListener("mousemove", onMove)
-			document.removeEventListener("mouseup", onUp)
+			cleanupSplitDragRef.current?.()
 		}
 
-		document.addEventListener("mousemove", onMove)
-		document.addEventListener("mouseup", onUp)
+		/** Clears dragging state when the browser cancels a touch gesture. */
+		const onCancel = () => {
+			setIsDraggingSplit(false)
+			cleanupSplitDragRef.current?.()
+		}
+
+		cleanupSplitDragRef.current = () => {
+			document.removeEventListener("pointermove", onMove)
+			document.removeEventListener("pointerup", onUp)
+			document.removeEventListener("pointercancel", onCancel)
+			cleanupSplitDragRef.current = null
+		}
+
+		document.addEventListener("pointermove", onMove)
+		document.addEventListener("pointerup", onUp)
+		document.addEventListener("pointercancel", onCancel)
 	})
+
+	useEffect(() => {
+		return () => {
+			// Route changes during a drag should not leave document listeners targeting this component.
+			cleanupSplitDragRef.current?.()
+		}
+	}, [])
 
 	const splitTransition = isDraggingSplit ? "none" : KNOWLEDGE_ORIGINAL_PREVIEW_SPLIT_TRANSITION
 
@@ -144,7 +168,7 @@ function OriginalPreviewSplitBody({
 						}}
 					>
 						<TopicResizeHandle
-							onMouseDown={handleSplitResizeStart}
+							onResizeStart={handleSplitResizeStart}
 							className={cn("h-full w-full", isDraggingSplit && "before:opacity-100")}
 						/>
 					</div>

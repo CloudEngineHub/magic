@@ -449,6 +449,8 @@ async def test_convert_document_format_allows_format_mismatch_before_conversion(
     assert result.ok
     assert calls == [(source, output_dir, "docx", None)]
     assert str(converted) in result.content
+    assert result.data["output_files"] == [str(converted)]
+    assert result.data["converted_files"] == [str(converted)]
     assert result.extra_info["output_files"] == [str(converted)]
     assert result.extra_info["converted_files"] == [str(converted)]
 

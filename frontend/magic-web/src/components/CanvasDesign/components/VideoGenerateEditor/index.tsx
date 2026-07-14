@@ -64,6 +64,7 @@ export default function VideoGenerateEditor() {
 					isDragging={isDragging}
 					retryEditingElementId={retryEditingElementId}
 					setRetryEditingElementId={setRetryEditingElementId}
+					onPreviewMediaResource={setPreviewingMediaResource}
 				/>
 			) : null}
 			{previewingMediaResource != null ? (
@@ -81,6 +82,7 @@ interface ActiveVideoGenerateEditorProps {
 	isDragging: boolean
 	retryEditingElementId: string | null
 	setRetryEditingElementId: (id: string | null) => void
+	onPreviewMediaResource: (resource: MediaResourceFullscreenPreviewItem) => void
 }
 
 function ActiveVideoGenerateEditor({
@@ -88,6 +90,7 @@ function ActiveVideoGenerateEditor({
 	isDragging,
 	retryEditingElementId,
 	setRetryEditingElementId,
+	onPreviewMediaResource,
 }: ActiveVideoGenerateEditorProps) {
 	const { canvas } = useCanvas()
 	const [hiddenAfterSubmit, setHiddenAfterSubmit] = useState(false)
@@ -156,7 +159,11 @@ function ActiveVideoGenerateEditor({
 		hasSrc && hasGenerateVideoRequest && !isDragging && !isGenerating && !isTemporaryElement
 
 	const resultSecondEditNode = showResultSecondEdit ? (
-		<VideoSecondEdit key={`${videoElement.id}-result-regenerate`} videoElement={videoElement} />
+		<VideoSecondEdit
+			key={`${videoElement.id}-result-regenerate`}
+			videoElement={videoElement}
+			onPreviewMediaResource={onPreviewMediaResource}
+		/>
 	) : null
 
 	const editorNode = showEditor ? (
@@ -166,6 +173,7 @@ function ActiveVideoGenerateEditor({
 			autoFocus={isRetryEditing}
 			autoFocusAtDocumentEnd={isRetryEditing}
 			onGenerateSubmitSucceeded={handleGenerateSubmitSucceeded}
+			onPreviewMediaResource={onPreviewMediaResource}
 		/>
 	) : null
 

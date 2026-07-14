@@ -27,6 +27,8 @@ import { getClawBrandTranslationValues } from "@/pages/superMagic/utils/clawBran
 import { observer } from "mobx-react-lite"
 import useResourceStatusPolling from "@/pages/superMagic/hooks/useResourceStatusPolling"
 import { useNavigateToSuperHome } from "./hooks/useNavigateToSuperHome"
+import { isMagicApp } from "@/utils/devices"
+import { openAudioRecordingsInMagicApp } from "@/layouts/BaseLayout/utils/magicAppNavigation"
 
 const CollaborationProjectsPanel = lazy(
 	() =>
@@ -61,6 +63,13 @@ function SidebarContent({ collapsed }: SidebarContentProps) {
 	function handleNavigateToRoute(routeName: RouteName, event: MouseEvent<HTMLAnchorElement>) {
 		if (!shouldHandleAnchorClick(event)) return
 		event.preventDefault()
+
+		// Magic App should hand audio recordings back to the native recording tab even on desktop UI.
+		if (routeName === RouteName.AudioRecordings && isMagicApp) {
+			openAudioRecordingsInMagicApp()
+			return
+		}
+
 		if (routesPathMatch(routeName, location.pathname)) return
 		navigate({ name: routeName })
 	}

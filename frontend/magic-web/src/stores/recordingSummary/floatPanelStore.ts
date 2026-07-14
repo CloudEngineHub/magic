@@ -50,6 +50,16 @@ class FloatPanelStore {
 	expandedAiChat = false
 
 	/**
+	 * 由外部业务模块控制的可见性抑制开关。
+	 * 该状态只表达“是否抑制显示”，不承载任何业务语义。
+	 */
+	isExternallyHidden = false
+
+	setExternallyHidden(hidden: boolean) {
+		this.isExternallyHidden = hidden
+	}
+
+	/**
 	 * 用户偏好位置（拖动后的位置）
 	 */
 	private userPreferredPosition: { x: number; y: number } = { x: 0, y: 0 }
@@ -677,6 +687,7 @@ class FloatPanelStore {
 	reset = action(() => {
 		this.cleanup()
 		this.isExpanded = true
+		this.isExternallyHidden = false
 		const defaultPos = this.defaultPosition
 
 		if (this.isMobile) {

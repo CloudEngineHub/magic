@@ -7,7 +7,10 @@ const SINGLE_ACTION_SCROLL_SPACER = "calc(3.5rem+max(var(--safe-area-inset-botto
 /** Tailwind arbitrary value: two stacked buttons (~104px) + gaps + safe bottom. */
 const DUAL_ACTION_SCROLL_SPACER = "calc(6.75rem+max(var(--safe-area-inset-bottom),16px))"
 
-export type ProjectShareActionBarVariant = "single" | "dual"
+/** Tailwind arbitrary value: three stacked buttons (~160px) + gaps + safe bottom. */
+const TRIPLE_ACTION_SCROLL_SPACER = "calc(10.25rem+max(var(--safe-area-inset-bottom),16px))"
+
+export type ProjectShareActionBarVariant = "single" | "dual" | "triple"
 
 interface ProjectShareScrollSpacerProps {
 	/** Matches the fixed footer height so the last form row stays visible above the bar. */
@@ -23,7 +26,11 @@ export function ProjectShareScrollSpacer({
 	testId,
 }: ProjectShareScrollSpacerProps) {
 	const scrollSpacerHeight =
-		variant === "dual" ? DUAL_ACTION_SCROLL_SPACER : SINGLE_ACTION_SCROLL_SPACER
+		variant === "triple"
+			? TRIPLE_ACTION_SCROLL_SPACER
+			: variant === "dual"
+				? DUAL_ACTION_SCROLL_SPACER
+				: SINGLE_ACTION_SCROLL_SPACER
 
 	return (
 		<div
