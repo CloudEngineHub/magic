@@ -7,12 +7,13 @@ import type { CanvasEvent } from "../../canvas/EventEmitter"
 import { ElementTypeEnum, type ImageElement, CanvasDesignPlugin } from "../../canvas/types"
 import { useImageLowUrl } from "../../hooks/useImageUrls"
 import {
-	pluginHasCapability,
 	createCanvasAssetDragSessionId,
+	pluginHasCapability,
 	type PluginCanvasAssetDragTargetMode,
 	type PluginRuntimeMessage,
 } from "./runtime/v1"
 import { resolveCanvasImageDragAssets } from "./canvasImageDragAssets"
+import { getIframePoint, getPluginWindowHoverState } from "./dragGeometry"
 import styles from "./index.module.css"
 
 type CanvasAssetDragTargetMessage = Extract<
@@ -62,46 +63,6 @@ interface UseCanvasImageExternalDragToPluginParams {
 	iframeRef: RefObject<HTMLIFrameElement | null>
 	plugin: CanvasDesignPlugin
 	pluginWindowRef: RefObject<HTMLDivElement | null>
-}
-
-/** 判断窗口坐标是否落在指定 DOMRect 内 */
-function isPointInRect(clientX: number, clientY: number, rect: DOMRect): boolean {
-	return (
-		clientX >= rect.left &&
-		clientX <= rect.right &&
-		clientY >= rect.top &&
-		clientY <= rect.bottom
-	)
-}
-
-/**
- * 将窗口坐标转换为 iframe 内部坐标。
- *
- * 返回 null 表示当前指针不在 iframe 范围内，插件侧应退出 hover/drop 状态。
- */
-function getIframePoint(
-	iframe: HTMLIFrameElement | null,
-	clientX: number,
-	clientY: number,
-): { x: number; y: number } | null {
-	if (!iframe) return null
-	const rect = iframe.getBoundingClientRect()
-	if (!isPointInRect(clientX, clientY, rect)) return null
-	// 画布事件给的是窗口坐标，插件 iframe 只认识自己的局部坐标。
-	return {
-		x: clientX - rect.left,
-		y: clientY - rect.top,
-	}
-}
-
-/** 判断当前指针窗口坐标是否悬停在插件浮窗范围内 */
-function getPluginWindowHoverState(
-	pluginWindow: HTMLDivElement | null,
-	clientX: number,
-	clientY: number,
-): boolean {
-	if (!pluginWindow) return false
-	return isPointInRect(clientX, clientY, pluginWindow.getBoundingClientRect())
 }
 
 /** 获取拖拽预览所需的图片元素元信息，缩略图 URL 由 useImageLowUrl 异步解析。 */
@@ -181,13 +142,18 @@ function getPreviewItems(canvas: Canvas, elementIds: string[]): DragPreviewItem[
 }
 
 /**
- * 连接画布图片外部拖拽和插件 iframe。
- *
+ * 处理画布图片外部拖拽和插件 iframe 的事件。
  * 画布侧只负责发出 start/move/end；这个 hook 负责：
  * 1. 将窗口坐标转换为 iframe 坐标并通知插件；
  * 2. 接收插件上报的当前 drop target；
  * 3. 在 mouseup/pointerup 后解析图片文件并投递给插件；
  * 4. 渲染宿主层的拖拽预览。
+ * @param canvas - 画布实例
+ * @param channelToken - 插件通道 token
+ * @param iframeRef - iframe 引用
+ * @param plugin - 插件实例
+ * @param pluginWindowRef - 插件浮窗引用
+ * @returns 处理画布图片外部拖拽和插件 iframe 的事件的函数
  */
 export function useCanvasImageExternalDragToPlugin({
 	canvas,
@@ -389,9 +355,9 @@ export function useCanvasImageExternalDragToPlugin({
 			void resolveCanvasImageDragAssets(canvas, elementIds)
 				.then((files) => {
 					// 会话已失效：新拖拽开始 / 组件卸载 / 会话已结束
-					if (dragSessionIdRef.current !== sessionId) return
-					if (!files.length) {
-						throw new Error("No image asset resolved.")
+					if (dragSessionIdRef.current !== sessionId || !files.length) {
+						toast.dismiss(toastId)
+						throw new Error("Session expired or no image asset resolved.")
 					}
 					postPluginMessage({
 						type: "magic-canvas-plugin:canvas-asset-drop",

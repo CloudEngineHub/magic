@@ -15,6 +15,18 @@ import type { ReferenceResourceTypeFilter } from "../MessageEditor/reference-ass
 import type { PluginPickFilesOptions } from "./runtime/v1"
 import type { PluginFileAsset, PluginFilePickerType } from "./types"
 
+export const IMAGE_FILE_EXTENSIONS = new Set([
+	"avif",
+	"bmp",
+	"gif",
+	"ico",
+	"jpeg",
+	"jpg",
+	"png",
+	"svg",
+	"webp",
+])
+
 /** 上传本地文件并返回插件文件资产
  * params:
  * - canvas: 画布
@@ -130,6 +142,7 @@ export async function resolvePluginFileAssets(
 		),
 	)
 
+	console.log("resolved", resolved)
 	return resolved.filter((asset) => validatePluginPickedFileType(asset.type, options))
 }
 
@@ -238,7 +251,7 @@ function inferPluginFileType(file: File | undefined): PluginFilePickerType {
 /** 从 path 后缀推断 type；resolve 路径无 File 对象时使用。 */
 function inferPluginFileTypeFromPath(path: string): PluginFilePickerType {
 	const extension = path.split(".").pop()?.toLowerCase()
-	if (extension && ["png", "jpg", "jpeg", "webp", "gif", "svg"].includes(extension)) {
+	if (extension && IMAGE_FILE_EXTENSIONS.has(extension)) {
 		return "image"
 	}
 	if (extension && ["mp4", "webm", "mov", "m4v"].includes(extension)) {

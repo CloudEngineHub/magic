@@ -143,11 +143,7 @@
 .mpk-image-slot-upload.is-drag-over,
 .mpk-image-slot-preview.is-drag-over {
 	border: 1px dashed var(--mpk-ring);
-	background: linear-gradient(
-		180deg,
-		rgb(var(--mpk-accent-rgb) / 0.88),
-		rgb(var(--mpk-background-rgb) / 0.94)
-	);
+	background: white;
 }
 
 .mpk-image-grid.is-drag-over::after,
@@ -155,7 +151,7 @@
 .mpk-image-slot-preview.is-drag-over::after {
 	content: attr(data-drop-hint);
 	position: absolute;
-	inset: 8px;
+	inset: 0;
 	display: flex;
 	align-items: center;
 	justify-content: center;
@@ -165,7 +161,8 @@
 	font-size: 12px;
 	line-height: 1.5;
 	text-align: center;
-	border-radius: 12px;
+	/* border-radius: 12px; */
+	border-radius: inherit;
 	pointer-events: none;
 	backdrop-filter: blur(2px);
 }
