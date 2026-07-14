@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 	"strings"
 	"time"
 
@@ -48,7 +49,11 @@ import (
 	"magic/internal/pkg/tokenizer"
 )
 
-const defaultDocumentResyncTaskTimeout = 30 * time.Minute
+const (
+	defaultDocumentResyncTaskTimeout = 30 * time.Minute
+	appEnvSaaSPre                    = "saas-pre"
+	documentResyncSaaSPreQueueSuffix = ".saas-pre"
+)
 
 // ProvideEmbeddingCacheCleanupService 提供缓存清理服务
 // 使用默认配置自动启动定时清理任务
@@ -479,8 +484,16 @@ func newDocumentResyncRabbitMQSchedulerConfig(
 	cfg *autoloadcfg.Config,
 	defaults documentsync.RabbitMQSchedulerConfig,
 ) documentsync.RabbitMQSchedulerConfig {
+	return newDocumentResyncRabbitMQSchedulerConfigForAppEnv(cfg, defaults, os.Getenv("APP_ENV"))
+}
+
+func newDocumentResyncRabbitMQSchedulerConfigForAppEnv(
+	cfg *autoloadcfg.Config,
+	defaults documentsync.RabbitMQSchedulerConfig,
+	appEnv string,
+) documentsync.RabbitMQSchedulerConfig {
 	return documentsync.RabbitMQSchedulerConfig{
-		QueueName: strings.TrimSpace(cfg.RabbitMQ.Queues.DocumentResync),
+		QueueName: documentResyncQueueNameForAppEnv(cfg.RabbitMQ.Queues.DocumentResync, appEnv),
 		ConsumerPrefetch: intOrDefault(
 			cfg.RabbitMQ.DocumentResync.ConsumerPrefetch,
 			defaults.ConsumerPrefetch,
@@ -498,6 +511,20 @@ func newDocumentResyncRabbitMQSchedulerConfig(
 			defaults.MaxRequeueAttempts,
 		),
 	}
+}
+
+func documentResyncQueueNameForAppEnv(queueName string, appEnv string) string {
+	normalizedQueueName := strings.TrimSpace(queueName)
+	if normalizedQueueName == "" {
+		return ""
+	}
+	if !strings.EqualFold(strings.TrimSpace(appEnv), appEnvSaaSPre) {
+		return normalizedQueueName
+	}
+	if strings.HasSuffix(normalizedQueueName, documentResyncSaaSPreQueueSuffix) {
+		return normalizedQueueName
+	}
+	return normalizedQueueName + documentResyncSaaSPreQueueSuffix
 }
 
 func documentSyncResourceLimitsFromConfig(cfg *autoloadcfg.Config) documentdomain.ResourceLimits {

@@ -110,6 +110,71 @@ func TestDocumentResyncRabbitMQSchedulerConfigDefaultConsumerConcurrency(t *test
 	}
 }
 
+func TestDocumentResyncRabbitMQSchedulerConfigAppendsSaaSPreQueueSuffix(t *testing.T) {
+	t.Parallel()
+
+	cfg := &autoloadcfg.Config{}
+	cfg.RabbitMQ.Queues.DocumentResync = "knowledge.document.resync"
+
+	got := newDocumentResyncRabbitMQSchedulerConfigForAppEnv(
+		cfg,
+		documentsync.DefaultRabbitMQSchedulerConfig(),
+		"saas-pre",
+	)
+
+	if got.QueueName != "knowledge.document.resync.saas-pre" {
+		t.Fatalf("expected saas-pre queue suffix, got %q", got.QueueName)
+	}
+}
+
+func TestDocumentResyncQueueNameForAppEnv(t *testing.T) {
+	t.Parallel()
+
+	testCases := []struct {
+		name      string
+		queueName string
+		appEnv    string
+		want      string
+	}{
+		{
+			name:      "saas pre appends suffix",
+			queueName: "knowledge.document.resync",
+			appEnv:    "saas-pre",
+			want:      "knowledge.document.resync.saas-pre",
+		},
+		{
+			name:      "saas pre is idempotent",
+			queueName: "knowledge.document.resync.saas-pre",
+			appEnv:    "saas-pre",
+			want:      "knowledge.document.resync.saas-pre",
+		},
+		{
+			name:      "production keeps original",
+			queueName: "knowledge.document.resync",
+			appEnv:    "saas-prod",
+			want:      "knowledge.document.resync",
+		},
+		{
+			name:      "empty env keeps original",
+			queueName: "knowledge.document.resync",
+			appEnv:    "",
+			want:      "knowledge.document.resync",
+		},
+	}
+
+	for _, tc := range testCases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			got := documentResyncQueueNameForAppEnv(tc.queueName, tc.appEnv)
+			if got != tc.want {
+				t.Fatalf("queue name = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
 func TestDocumentSyncSchedulerAdapterForcesAsync(t *testing.T) {
 	t.Parallel()
 
