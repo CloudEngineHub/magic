@@ -270,7 +270,8 @@ export function useSlidesTemplateCatalogState({
 				...(selectedTagCodes.length > 0
 					? {
 							tag_codes: selectedTagCodes,
-							tag_match: selectedCategoryCode ? ("all" as const) : ("any" as const),
+							// tag_match: selectedCategoryCode ? ("all" as const) : ("any" as const),
+							tag_match: "any" as const,
 						}
 					: {}),
 			}
