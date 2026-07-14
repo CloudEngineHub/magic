@@ -144,6 +144,18 @@ export const RequestUrl = {
 	getAgentMarketList: "/api/v2/admin/super-magic/agents/markets/queries",
 	/** 更新员工市场信息 */
 	updateAgentMarketInfo: "/api/v2/admin/super-magic/agents/markets/${id}",
+	/** 更新员工市场分类 */
+	updateAgentMarketCategoryRelation: "/api/v2/admin/super-magic/agents/markets/${id}/category",
+	/** 员工市场分类列表 */
+	getAgentMarketCategoryList: "/api/v2/admin/super-magic/agents/categories/queries",
+	/** 员工市场分类详情 */
+	getAgentMarketCategoryDetail: "/api/v2/admin/super-magic/agents/categories/${id}",
+	/** 创建员工市场分类 */
+	createAgentMarketCategory: "/api/v2/admin/super-magic/agents/categories",
+	/** 更新员工市场分类 */
+	updateAgentMarketCategory: "/api/v2/admin/super-magic/agents/categories/${id}",
+	/** 删除员工市场分类 */
+	deleteAgentMarketCategory: "/api/v2/admin/super-magic/agents/categories/${id}",
 	/** Skill版本列表 */
 	getSkillVersionList: "/api/v1/admin/skills/versions/queries",
 	/** Skill 市场列表 */
