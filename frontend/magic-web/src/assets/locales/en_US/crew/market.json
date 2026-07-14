@@ -1,7 +1,4 @@
 {
-	"aiSearch": "Search",
-	"aiSearchPlaceholder": "Enter keywords or describe your needs to get the digital employee you want",
-	"back": "Back",
 	"categories": {
 		"adminOps": "Admin & Ops",
 		"allCrew": "All Crew",
@@ -13,6 +10,9 @@
 		"starCrew": "Star Crew",
 		"techDev": "Tech & Dev"
 	},
+	"aiSearch": "Search",
+	"aiSearchPlaceholder": "Enter keywords or describe your needs to get the digital employee you want",
+	"back": "Back",
 	"chat": "Chat",
 	"createCrew": "Create Crew",
 	"crewConversation": {

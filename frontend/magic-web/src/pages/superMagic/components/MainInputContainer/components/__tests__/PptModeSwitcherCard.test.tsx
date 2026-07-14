@@ -79,9 +79,7 @@ describe("PptModeSwitcherCard", () => {
 	it("renders the template cumulative usage count as the delivered count", () => {
 		render(<PptModeSwitcherCard modeItem={modeItem} isSelected onSelect={vi.fn()} />)
 
-		expect(screen.getByTestId("ppt-mode-switcher-delivered-count")).toHaveTextContent(
-			"7,293",
-		)
+		expect(screen.getByTestId("ppt-mode-switcher-delivered-count")).toHaveTextContent("7,293")
 	})
 
 	it("does not render the delivered count before the backend returns the new field", () => {
