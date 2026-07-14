@@ -19,7 +19,7 @@ describe("useSlidesTemplateTotal", () => {
 	it("reads the shared total from the existing slides template count API", async () => {
 		getSlidesTemplateCountMock.mockResolvedValue({
 			total: 101582,
-			template_total_usage_count: 7293,
+			total_usage_count: 7293,
 		})
 		const { result } = renderHook(() => useSlidesTemplateTotal(), {
 			wrapper: ({ children }) => (

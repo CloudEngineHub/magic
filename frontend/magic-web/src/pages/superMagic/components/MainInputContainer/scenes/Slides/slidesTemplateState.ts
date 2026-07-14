@@ -69,7 +69,7 @@ export interface SlidesTemplateCountResponse {
 	/**
 	 * 模板累计使用量。服务端灰度发布前可能不返回；前端不能用模板数量替代它。
 	 */
-	template_total_usage_count?: number
+	total_usage_count?: number
 }
 
 /** 列表只提供封面；打开预览时再读取详情中的大图资源。 */

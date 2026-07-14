@@ -24,7 +24,7 @@ export function useSlidesTemplateStatistics(): SlidesTemplateStatistics | undefi
 
 	return {
 		templateTotal: data.total,
-		templateTotalUsageCount: data.template_total_usage_count,
+		templateTotalUsageCount: data.total_usage_count,
 	}
 }
 
