@@ -140,6 +140,7 @@ return [
         'skill_code_must_be_string' => '技能编码必须是字符串',
         'category_id_must_be_integer' => '分类 ID 必须是整数',
         'category_id_must_be_greater_than_zero' => '分类 ID 必须大于 0',
+        'market_category_invalid' => '分类不存在或不属于当前组织',
         'ids_required' => 'ID 列表不能为空',
         'ids_must_be_array' => 'ID 列表必须是数组',
         'playbook_id_required' => 'Playbook ID 不能为空',

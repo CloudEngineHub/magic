@@ -140,6 +140,7 @@ return [
         'skill_code_must_be_string' => 'Skill code must be a string',
         'category_id_must_be_integer' => 'Category ID must be an integer',
         'category_id_must_be_greater_than_zero' => 'Category ID must be greater than 0',
+        'market_category_invalid' => 'Category does not exist or does not belong to current organization',
         'ids_required' => 'ID list is required',
         'ids_must_be_array' => 'ID list must be an array',
         'playbook_id_required' => 'Playbook ID is required',

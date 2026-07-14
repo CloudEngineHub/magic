@@ -387,7 +387,7 @@ class SuperMagicAgentVersionDomainService
             $storeAgentEntity->setIcon($versionEntity->getIcon());
             $storeAgentEntity->setPublisherId($versionEntity->getCreator());
             $storeAgentEntity->setPublisherType($publisherTypeEnum);
-            $storeAgentEntity->setCategoryId(null);
+            $storeAgentEntity->setCategoryId($versionEntity->getCategoryId());
             $storeAgentEntity->setPublishStatus(PublishStatus::PUBLISHED);
             $storeAgentEntity->setOrganizationCode($versionEntity->getOrganizationCode());
 

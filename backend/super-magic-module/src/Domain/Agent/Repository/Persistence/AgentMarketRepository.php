@@ -91,6 +91,17 @@ class AgentMarketRepository extends AbstractRepository implements AgentMarketRep
         return $result;
     }
 
+    public function findById(int $id): ?AgentMarketEntity
+    {
+        /** @var null|AgentMarketModel $model */
+        $model = $this->agentMarketModel::query()->find($id);
+        if ($model === null) {
+            return null;
+        }
+
+        return new AgentMarketEntity($model->toArray());
+    }
+
     public function countByCategoryId(int $categoryId): int
     {
         return $this->agentMarketModel::query()

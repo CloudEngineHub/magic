@@ -561,6 +561,7 @@ class AgentVersionRepository extends SuperMagicAbstractRepository implements Age
         $entity->setReviewRemark($data['review_remark'] ?? null);
         $entity->setPublishTargetType($data['publish_target_type'] ?? PublishTargetType::MARKET->value);
         $entity->setPublishTargetValue(PublishTargetValue::fromArray($publishTargetValue));
+        $entity->setCategoryId($data['category_id'] ?? null);
         $entity->setVersionDescriptionI18n($versionDescriptionI18n);
         $entity->setPublisherUserId($data['publisher_user_id'] ?? null);
         $entity->setPublishedAt(isset($data['published_at']) ? (is_string($data['published_at']) ? $data['published_at'] : $data['published_at']?->format('Y-m-d H:i:s')) : null);
@@ -609,6 +610,7 @@ class AgentVersionRepository extends SuperMagicAbstractRepository implements Age
             'review_remark' => $entity->getReviewRemark(),
             'publish_target_type' => $entity->getPublishTargetType()->value,
             'publish_target_value' => $entity->getPublishTargetValue()?->toArray(),
+            'category_id' => $entity->getCategoryId(),
             'version_description_i18n' => $entity->getVersionDescriptionI18n(),
             'publisher_user_id' => $entity->getPublisherUserId(),
             'published_at' => $entity->getPublishedAt(),

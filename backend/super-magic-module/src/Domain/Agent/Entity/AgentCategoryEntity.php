@@ -8,6 +8,7 @@ declare(strict_types=1);
 namespace Dtyq\SuperMagic\Domain\Agent\Entity;
 
 use App\Infrastructure\Core\AbstractEntity;
+use App\Infrastructure\ExternalAPI\Sms\Enum\LanguageEnum;
 
 /**
  * Agent 分类实体.
@@ -133,6 +134,37 @@ class AgentCategoryEntity extends AbstractEntity
     {
         $this->nameI18n = $nameI18n;
         return $this;
+    }
+
+    public function getI18nName(string $language): string
+    {
+        if (empty($this->nameI18n)) {
+            return '';
+        }
+
+        if (! empty($this->nameI18n[$language])) {
+            return $this->nameI18n[$language];
+        }
+
+        if (! empty($this->nameI18n[LanguageEnum::DEFAULT->value])) {
+            return $this->nameI18n[LanguageEnum::DEFAULT->value];
+        }
+
+        if (! empty($this->nameI18n['en_US'])) {
+            return $this->nameI18n['en_US'];
+        }
+
+        if (! empty($this->nameI18n['zh_CN'])) {
+            return $this->nameI18n['zh_CN'];
+        }
+
+        foreach ($this->nameI18n as $name) {
+            if (! empty($name)) {
+                return $name;
+            }
+        }
+
+        return '';
     }
 
     public function getLogo(): ?string

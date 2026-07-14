@@ -42,6 +42,11 @@ interface AgentMarketRepositoryInterface
     public function findByIds(array $ids): array;
 
     /**
+     * 根据市场记录 ID 查询市场记录（不限制发布状态）。
+     */
+    public function findById(int $id): ?AgentMarketEntity;
+
+    /**
      * 查询引用指定分类的有效市场 Agent 数量。
      */
     public function countByCategoryId(int $categoryId): int;
