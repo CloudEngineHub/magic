@@ -1,4 +1,4 @@
-import { createContext, useContext, useMemo, useEffect, useState } from "react"
+import { createContext, useContext, useMemo, useEffect, useRef, useState } from "react"
 import type { PropsWithChildren } from "react"
 import { ConfigProvider } from "antd"
 import { I18nextProvider } from "react-i18next"
@@ -18,6 +18,20 @@ import { adminI18n, initAdminI18n } from "@admin/locales"
 
 const defaultLanguage = LanguageType.zh_CN
 const defaultTheme = ThemeType.LIGHT
+const runtimeCommonNamespaces = ["common", "admin/common"]
+
+function syncRuntimeCommonResources(language: string, platformName?: string) {
+	const resources = {
+		platform: {
+			name: platformName || "",
+		},
+	}
+
+	runtimeCommonNamespaces.forEach((namespace) => {
+		adminI18n.addResourceBundle(language, namespace, resources, true, true)
+	})
+	adminI18n.emit("languageChanged", language)
+}
 
 const defaultContext: AdminProviderContextType = {
 	apiClients: {
@@ -51,11 +65,16 @@ const defaultContext: AdminProviderContextType = {
 const AdminProviderContext = createContext<AdminProviderContextType>(defaultContext)
 
 function AdminProvider(props: PropsWithChildren<AdminProviderProps>) {
-	const { theme, language, children, ...rest } = props
+	const { theme, language, children, platformName, ...rest } = props
 	const [i18nReady, setI18nReady] = useState(adminI18n.isInitialized)
+	const platformNameRef = useRef(platformName)
 
 	const safeLanguage =
 		language && Object.keys(locales).includes(language) ? language : defaultLanguage
+
+	useEffect(() => {
+		platformNameRef.current = platformName
+	}, [platformName])
 
 	// 同步语言到全局 languageManager，供 openModal 等使用
 	useEffect(() => {
@@ -66,7 +85,9 @@ function AdminProvider(props: PropsWithChildren<AdminProviderProps>) {
 		let cancelled = false
 		setI18nReady(false)
 		initAdminI18n(safeLanguage).then(() => {
-			if (!cancelled) setI18nReady(true)
+			if (cancelled) return
+			syncRuntimeCommonResources(safeLanguage, platformNameRef.current)
+			setI18nReady(true)
 		})
 
 		return () => {
@@ -74,17 +95,23 @@ function AdminProvider(props: PropsWithChildren<AdminProviderProps>) {
 		}
 	}, [safeLanguage])
 
+	useEffect(() => {
+		if (!i18nReady) return
+		syncRuntimeCommonResources(safeLanguage, platformName)
+	}, [i18nReady, platformName, safeLanguage])
+
 	const value = useMemo(() => {
 		return {
 			theme: theme || defaultContext.theme,
 			language: safeLanguage,
+			platformName,
 			getLocale: <T extends keyof LocaleType>(namespace: T): LocaleType[T] => {
 				return locales[safeLanguage][namespace]
 			},
 
 			...rest,
 		}
-	}, [theme, safeLanguage, rest])
+	}, [theme, safeLanguage, platformName, rest])
 
 	const locale = languageManager.getAntdLocale()
 
