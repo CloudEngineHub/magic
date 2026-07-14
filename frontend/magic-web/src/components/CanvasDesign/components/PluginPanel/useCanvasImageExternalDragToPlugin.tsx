@@ -46,9 +46,14 @@ interface DragState {
 }
 
 interface DropTarget {
+	/** 投放目标 ID */
 	targetId: string
+	/** 投放目标模式 */
 	mode: PluginCanvasAssetDragTargetMode
+	/** 是否可投放 */
 	canDrop: boolean
+	/** grid 投放区剩余可导入张数 */
+	importRemaining?: number
 }
 
 interface UseCanvasImageExternalDragToPluginParams {
@@ -279,6 +284,7 @@ export function useCanvasImageExternalDragToPlugin({
 							targetId: target.targetId,
 							mode: target.mode,
 							canDrop: true,
+							importRemaining: target.importRemaining,
 						}
 					: null
 				: null
@@ -302,6 +308,7 @@ export function useCanvasImageExternalDragToPlugin({
 			const { data } = event
 			const sessionId = createCanvasAssetDragSessionId()
 			dragSessionIdRef.current = sessionId
+			setIsDropResolving(false)
 			const nextState: DragState = {
 				sessionId,
 				originElementId: data.originElementId,
@@ -360,9 +367,20 @@ export function useCanvasImageExternalDragToPlugin({
 			}
 
 			// slot 是单图替换位，只导入拖拽起点；grid 支持把选区里的图片批量导入。
-			const elementIds =
+			let elementIds =
 				target.mode === "slot" ? [current.originElementId] : current.imageElementIds
+			const maxResolveCount =
+				target.mode === "slot"
+					? 1
+					: Math.max(0, target.importRemaining ?? elementIds.length)
+			if (maxResolveCount <= 0) {
+				finishDragSession()
+				return
+			}
+			elementIds = elementIds.slice(0, maxResolveCount)
+
 			const sessionId = current.sessionId
+
 			setIsDropResolving(true)
 			const toastId = toast.loading(
 				canvas.t?.("plugin.canvasAssetDrop.loading", "正在导入图片...") ||
@@ -425,13 +443,18 @@ export function useCanvasImageExternalDragToPlugin({
 		}
 	}, [sendDragLeave])
 
-	const canvasAssetDragGhost = dragState ? <CanvasAssetDragGhost dragState={dragState} /> : null
+	// resolve 期间保留 dragState / session，但关闭 ghost 与遮罩，让用户继续操作插件面板。
+	const showCanvasAssetDragOverlay = Boolean(dragState) && !isDropResolving
+	const canvasAssetDragGhost =
+		showCanvasAssetDragOverlay && dragState ? (
+			<CanvasAssetDragGhost dragState={dragState} />
+		) : null
 
 	return {
 		canvasAssetDragGhost,
 		handleCanvasAssetDragTarget,
-		isCanvasAssetDragActive: Boolean(dragState),
-		isCanvasAssetDragOverPlugin: Boolean(dragState?.isOverPlugin),
+		isCanvasAssetDragActive: showCanvasAssetDragOverlay,
+		isCanvasAssetDragOverPlugin: Boolean(dragState?.isOverPlugin) && !isDropResolving,
 		isCanvasAssetDropResolving: isDropResolving,
 	}
 }

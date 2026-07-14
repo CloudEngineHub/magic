@@ -178,6 +178,31 @@ describe("plugin runtime protocol", () => {
 			targetId: "product-grid",
 			mode: "grid",
 			canDrop: true,
+			importRemaining: undefined,
+		})
+	})
+
+	it("parses canvas-asset-drag-target importRemaining for grid drop limits", () => {
+		expect(
+			parsePluginRuntimeMessage(
+				{
+					channelToken: "active-token",
+					type: "magic-canvas-plugin:canvas-asset-drag-target",
+					targetId: "product-grid",
+					mode: "grid",
+					canDrop: true,
+					dragSessionId: "session-1",
+					importRemaining: 5,
+				},
+				"active-token",
+			),
+		).toEqual({
+			type: "magic-canvas-plugin:canvas-asset-drag-target",
+			dragSessionId: "session-1",
+			targetId: "product-grid",
+			mode: "grid",
+			canDrop: true,
+			importRemaining: 5,
 		})
 	})
 

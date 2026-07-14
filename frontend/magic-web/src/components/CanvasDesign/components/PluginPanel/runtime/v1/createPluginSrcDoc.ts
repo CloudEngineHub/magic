@@ -352,6 +352,7 @@ export function createPluginSrcDocV1(
 						targetId: typeof target.targetId === "string" ? target.targetId : null,
 						mode: target.mode,
 						canDrop: target.canDrop === true,
+						importRemaining: target.importRemaining,
 					});
 				},
 			},

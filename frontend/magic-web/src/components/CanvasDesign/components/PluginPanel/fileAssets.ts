@@ -2,8 +2,8 @@
  * 插件文件资产 Host 侧实现。
  *
  * 三条路径：
- * - pickPluginFiles：本地 File → upload → PluginFileAsset
- * - resolvePluginFileByPath / resolvePluginFileAssets：已有项目 path → getFileInfo，不上传
+ * - pickPluginFiles：本地文件 → upload → PluginFileAsset
+ * - resolvePluginFileAssets -> resolvePluginFileByPath ：已有项目 path → getFileInfo，不上传
  * - resolveProjectPluginFile：资源面板选中项 → 同上（path 来自 panel item）
  *
  * PluginFileAsset 同时含 path（稳定标识）与 url/src（当前可访问签名 URL）。
@@ -15,7 +15,13 @@ import type { ReferenceResourceTypeFilter } from "../MessageEditor/reference-ass
 import type { PluginPickFilesOptions } from "./runtime/v1"
 import type { PluginFileAsset, PluginFilePickerType } from "./types"
 
-/** 上传本地文件并返回插件文件资产 */
+/** 上传本地文件并返回插件文件资产
+ * params:
+ * - canvas: 画布
+ * - files: 本地文件
+ * - options: 选项
+ * return: 插件文件资产数组
+ */
 export async function pickPluginFiles(
 	canvas: Canvas,
 	files: File[],
@@ -58,14 +64,18 @@ export async function pickPluginFiles(
 }
 
 /**
- * 按项目 path 解析已有资源，不触发 upload。
- * 画布 copy-elements 粘贴复用 sourceRef.src 同源。
+ *【单 path 换链】按项目内 path 解析已有资源，不上传。命中。
  * 图片会 useImageProcess: true 换链，并尝试读 naturalWidth/Height。
+ * params:
+ * - canvas: 画布
+ * - path: 项目路径
+ * - options: 选项
+ * return: 插件文件资产
  */
 export async function resolvePluginFileByPath(
 	canvas: Canvas,
 	path: string,
-	options?: PluginPickFilesOptions & { fileName?: string },
+	options?: PluginPickFilesOptions & { fileName?: string; skipImageDimensions?: boolean },
 ): Promise<PluginFileAsset> {
 	const getFileInfo = canvas.magicConfigManager.config?.methods?.getFileInfo
 	if (!getFileInfo) {
@@ -75,7 +85,7 @@ export async function resolvePluginFileByPath(
 	const type = options?.type ?? inferPluginFileTypeFromPath(path)
 	const fileInfo = await getFileInfo(path, { useImageProcess: type === "image" })
 	const dimensions =
-		type === "image"
+		type === "image" && !options?.skipImageDimensions
 			? await getImageDimensionsFromUrl(fileInfo.src).catch(
 					(): { width: number; height: number } | undefined => undefined,
 				)
@@ -95,8 +105,12 @@ export async function resolvePluginFileByPath(
 }
 
 /**
- * 批量 resolvePluginFileByPath。
- * options.type 有值时过滤类型（与 pickFiles 的 type 约束对齐）；未传则不过滤。
+ * 【多 path 换链】批量 resolvePluginFileByPath 的批量封装 + 类型过滤。。
+ * params:
+ * - canvas: 画布
+ * - files: 项目路径数组
+ * - options: 选项，options.type 有值时过滤类型（与 pickFiles 的 type 约束对齐）；未传则不过滤。
+ * return: 插件文件资产数组
  */
 export async function resolvePluginFileAssets(
 	canvas: Canvas,
@@ -128,7 +142,13 @@ function validatePluginPickedFileType(
 	return type === options.type
 }
 
-/** 项目面板选中项 插入插件资源。 */
+/** 【资源面板项】把「从项目资源面板选中的一项」解析成已有资源。
+ * params:
+ * - canvas: 画布
+ * - item: 项目面板选中项
+ * - options: 选项
+ * return: 插件文件资产
+ */
 export async function resolveProjectPluginFile(
 	canvas: Canvas,
 	item: ReferenceResourcePanelItem,

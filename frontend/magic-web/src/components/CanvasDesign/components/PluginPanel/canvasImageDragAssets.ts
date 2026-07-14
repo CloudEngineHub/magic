@@ -4,6 +4,7 @@ import { pickPluginFiles, resolvePluginFileByPath } from "./fileAssets"
 import type { PluginFileAsset } from "./types"
 
 const PNG_MIME_TYPE = "image/png"
+const DRAG_RESOLVE_CONCURRENCY = 3
 
 /** 根据画布图片名称生成插件侧上传时使用的 PNG 文件名 */
 function getPngFilename(element: ImageElement): string {
@@ -15,6 +16,40 @@ function getPngFilename(element: ImageElement): string {
 /** 判断图片在画布上是否存在需要重新渲染的视觉修改 */
 function hasVisualImageModification(element: ImageElement): boolean {
 	return Boolean(element.crop)
+}
+
+/** 获取画布图片元素的显示尺寸 */
+function getCanvasImageDisplayDimensions(
+	element: ImageElement,
+): { width: number; height: number } | undefined {
+	const width = element.width
+	const height = element.height
+	if (
+		typeof width === "number" &&
+		typeof height === "number" &&
+		Number.isFinite(width) &&
+		Number.isFinite(height) &&
+		width > 0 &&
+		height > 0
+	) {
+		return { width, height }
+	}
+	return undefined
+}
+
+/** 批量解析图片元素，使用并发控制 */
+async function resolveInBatches<T>(
+	items: T[],
+	worker: (item: T) => Promise<PluginFileAsset>,
+	concurrency: number,
+): Promise<PluginFileAsset[]> {
+	const results: PluginFileAsset[] = []
+	for (let index = 0; index < items.length; index += concurrency) {
+		const chunk = items.slice(index, index + concurrency)
+		const resolvedChunk = await Promise.all(chunk.map(worker))
+		results.push(...resolvedChunk)
+	}
+	return results
 }
 
 /**
@@ -40,12 +75,14 @@ async function exportImageElementAsAsset(
 	if (!asset) {
 		throw new Error("Failed to upload exported image.")
 	}
-	return asset
+	const displayDimensions = getCanvasImageDisplayDimensions(element)
+	return displayDimensions
+		? { ...asset, width: displayDimensions.width, height: displayDimensions.height }
+		: asset
 }
 
 /**
  * 将画布图片元素解析为插件文件资产。
- *
  * 未被裁剪的图片直接复用原始资源；存在裁剪时重新导出 PNG，
  * 保证插件拿到的是用户当前在画布上看到的结果。
  */
@@ -61,10 +98,15 @@ async function resolveImageElementAsAsset(
 		return exportImageElementAsAsset(canvas, element)
 	}
 
-	return resolvePluginFileByPath(canvas, element.src, {
+	const displayDimensions = getCanvasImageDisplayDimensions(element)
+	const asset = await resolvePluginFileByPath(canvas, element.src, {
 		type: "image",
 		fileName: element.name,
+		skipImageDimensions: true,
 	})
+	return displayDimensions
+		? { ...asset, width: displayDimensions.width, height: displayDimensions.height }
+		: asset
 }
 
 /** 批量解析外部拖拽中的图片元素，非图片元素会直接视为非法拖拽数据 */
@@ -82,5 +124,10 @@ export async function resolveCanvasImageDragAssets(
 		throw new Error("Only image elements can be dropped into plugins.")
 	}
 
-	return Promise.all(imageElements.map((element) => resolveImageElementAsAsset(canvas, element)))
+	// return Promise.all(imageElements.map((element) => resolveImageElementAsAsset(canvas, element)))
+	return resolveInBatches(
+		imageElements,
+		(element) => resolveImageElementAsAsset(canvas, element),
+		DRAG_RESOLVE_CONCURRENCY,
+	)
 }

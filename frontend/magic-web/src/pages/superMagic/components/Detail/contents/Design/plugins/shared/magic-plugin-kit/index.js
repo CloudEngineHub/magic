@@ -1301,12 +1301,21 @@
 		}
 
 		/** 把插件内部命中的投放目标回报给宿主，宿主会在 mouseup 时决定是否真正 drop。 */
-		function reportCanvasAssetDropTarget(targetId, mode, canDrop) {
+		function reportCanvasAssetDropTarget(targetId, mode, canDrop, importRemaining) {
 			ctx.assets?.reportCanvasAssetDragTarget?.({
 				targetId: targetId ?? null,
 				mode,
-				canDrop: Boolean(canDrop),
+				canDrop,
+				importRemaining: canDrop ? importRemaining : undefined,
 			})
+		}
+
+		function getCanvasAssetImportRemaining(section, mode) {
+			if (mode !== "grid") return 1
+			const currentAssets = Array.isArray(state[section.stateKey])
+				? state[section.stateKey]
+				: []
+			return getSectionImportLimit(section, currentAssets.length).remaining
 		}
 
 		/** 根据 iframe 内局部坐标找到当前指针下的画布图片投放区。 */
@@ -1392,7 +1401,12 @@
 			}
 
 			setActiveCanvasAssetDropTarget(entry.target)
-			reportCanvasAssetDropTarget(entry.targetId, entry.mode, true)
+			reportCanvasAssetDropTarget(
+				entry.targetId,
+				entry.mode,
+				true,
+				getCanvasAssetImportRemaining(entry.section, entry.mode),
+			)
 		}
 
 		/** 指针离开 iframe 或拖拽结束时清理投放状态。 */

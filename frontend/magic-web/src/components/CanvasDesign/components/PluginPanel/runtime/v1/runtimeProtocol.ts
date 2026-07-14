@@ -70,6 +70,8 @@ export type PluginRuntimeMessage =
 			targetId: string | null
 			mode?: PluginCanvasAssetDragTargetMode
 			canDrop: boolean
+			/** grid 模式下当前投放区剩余可导入数量，供宿主截断 resolve */
+			importRemaining?: number
 	  }
 	| {
 			type: "magic-canvas-plugin:get-image-models"
@@ -265,12 +267,17 @@ export function parsePluginRuntimeMessage(
 		if (!dragSessionId) return null
 		// 对 iframe 传回的目标信息做收窄，避免宿主保存非法 mode/targetId。
 		const mode = record.mode === "slot" || record.mode === "grid" ? record.mode : undefined
+		const importRemaining =
+			typeof record.importRemaining === "number" && Number.isFinite(record.importRemaining)
+				? Math.max(0, Math.floor(record.importRemaining))
+				: undefined
 		return {
 			type: "magic-canvas-plugin:canvas-asset-drag-target",
 			dragSessionId,
 			targetId: typeof record.targetId === "string" ? record.targetId : null,
 			mode,
 			canDrop: record.canDrop === true,
+			importRemaining,
 		}
 	}
 	if (
