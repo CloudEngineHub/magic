@@ -36,6 +36,7 @@ use Dtyq\SuperMagic\Infrastructure\Utils\AccessTokenUtil;
 use Hyperf\Di\Annotation\Inject;
 use Hyperf\HttpServer\Contract\RequestInterface;
 use RuntimeException;
+use Throwable;
 
 #[ApiResponse('low_code')]
 class MagicBaseApi extends AbstractApi
@@ -402,7 +403,7 @@ class MagicBaseApi extends AbstractApi
             $this->denyRuntimeAccess();
         }
 
-        $currentAuthorization = RequestCoContext::getUserAuthorization();
+        $currentAuthorization = $this->getOptionalCurrentAuthorization();
         if ($shareEntity->getShareType() === ShareAccessType::TeamShare->value) {
             if ($currentAuthorization === null) {
                 $this->denyRuntimeAccess();
@@ -426,6 +427,21 @@ class MagicBaseApi extends AbstractApi
         return (new MagicUserAuthorization())
             ->setId('')
             ->setOrganizationCode($shareEntity->getOrganizationCode());
+    }
+
+    private function getOptionalCurrentAuthorization(): ?MagicUserAuthorization
+    {
+        $authorization = RequestCoContext::getUserAuthorization();
+        if ($authorization instanceof MagicUserAuthorization && $authorization->getId() !== '') {
+            return $authorization;
+        }
+
+        try {
+            $authorization = $this->checkAndGetAuthorization();
+            return $authorization instanceof MagicUserAuthorization ? $authorization : null;
+        } catch (Throwable) {
+            return null;
+        }
     }
 
     /**
