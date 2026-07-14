@@ -27,6 +27,8 @@ interface SlidesTemplateRepositoryInterface
 
     public function count(SlidesTemplateDataIsolation $dataIsolation, SlidesTemplateQuery $query): int;
 
+    public function sumTotalUsageCount(SlidesTemplateDataIsolation $dataIsolation, SlidesTemplateQuery $query): int;
+
     public function save(SlidesTemplateDataIsolation $dataIsolation, SlidesTemplateEntity $entity): SlidesTemplateEntity;
 
     public function updateStatus(SlidesTemplateDataIsolation $dataIsolation, int|string $id, int $status, string $updatedUid): bool;

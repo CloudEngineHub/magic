@@ -33,9 +33,12 @@ class SlidesTemplateApi extends AbstractApi
     public function count(PublicQuerySlidesTemplateRequest $request): array
     {
         $request->validated();
-        $total = $this->slidesTemplateAppService->count($this->getAuthorization(), $request);
+        $result = $this->slidesTemplateAppService->count($this->getAuthorization(), $request);
 
-        return SlidesTemplateAssembler::createCountDTO($total)->toArray();
+        return SlidesTemplateAssembler::createCountDTO(
+            $result['total'],
+            $result['total_usage_count']
+        )->toArray();
     }
 
     public function detail(string $code): array

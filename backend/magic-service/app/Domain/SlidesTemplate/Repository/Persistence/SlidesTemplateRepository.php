@@ -69,6 +69,11 @@ class SlidesTemplateRepository extends AbstractRepository implements SlidesTempl
         return $this->createQueryBuilder($dataIsolation, $query)->count();
     }
 
+    public function sumTotalUsageCount(SlidesTemplateDataIsolation $dataIsolation, SlidesTemplateQuery $query): int
+    {
+        return (int) $this->createQueryBuilder($dataIsolation, $query)->sum('total_usage_count');
+    }
+
     public function save(SlidesTemplateDataIsolation $dataIsolation, SlidesTemplateEntity $entity): SlidesTemplateEntity
     {
         if ($entity->getOrganizationCode() === '') {

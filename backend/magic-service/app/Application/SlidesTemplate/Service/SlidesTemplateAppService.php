@@ -53,12 +53,16 @@ class SlidesTemplateAppService extends AbstractSlidesTemplateAppService
         ];
     }
 
-    public function count(Authenticatable|BaseDataIsolation $authorization, PublicQuerySlidesTemplateRequest $request): int
+    public function count(Authenticatable|BaseDataIsolation $authorization, PublicQuerySlidesTemplateRequest $request): array
     {
         $dataIsolation = $this->createSlidesTemplateDataIsolation($authorization);
         $dataIsolation->setContainOfficialOrganization(true);
+        $query = $this->createPublicQuery($request);
 
-        return $this->slidesTemplateDomainService->count($dataIsolation, $this->createPublicQuery($request));
+        return [
+            'total' => $this->slidesTemplateDomainService->count($dataIsolation, $query),
+            'total_usage_count' => $this->slidesTemplateDomainService->sumTotalUsageCount($dataIsolation, $query),
+        ];
     }
 
     public function detail(Authenticatable|BaseDataIsolation $authorization, string $code): SlidesTemplateEntity

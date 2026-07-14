@@ -13,9 +13,12 @@ class SlidesTemplateCountDTO extends AbstractDTO
 {
     public int $total = 0;
 
-    public function __construct(int $total)
+    public int $totalUsageCount = 0;
+
+    public function __construct(int $total, int $totalUsageCount = 0)
     {
         $this->setTotal($total);
+        $this->setTotalUsageCount($totalUsageCount);
         parent::__construct();
     }
 
@@ -27,5 +30,15 @@ class SlidesTemplateCountDTO extends AbstractDTO
     public function setTotal(null|int|string $total): void
     {
         $this->total = $total === null ? 0 : (int) $total;
+    }
+
+    public function getTotalUsageCount(): int
+    {
+        return $this->totalUsageCount;
+    }
+
+    public function setTotalUsageCount(null|int|string $totalUsageCount): void
+    {
+        $this->totalUsageCount = $totalUsageCount === null ? 0 : (int) $totalUsageCount;
     }
 }

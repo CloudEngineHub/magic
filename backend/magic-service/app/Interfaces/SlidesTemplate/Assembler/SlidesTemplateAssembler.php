@@ -165,9 +165,9 @@ class SlidesTemplateAssembler
         return $dto;
     }
 
-    public static function createCountDTO(int $total): SlidesTemplateCountDTO
+    public static function createCountDTO(int $total, int $totalUsageCount = 0): SlidesTemplateCountDTO
     {
-        return new SlidesTemplateCountDTO($total);
+        return new SlidesTemplateCountDTO($total, $totalUsageCount);
     }
 
     public static function createPublicItemDTO(SlidesTemplateEntity $template): SlidesTemplatePublicItemDTO

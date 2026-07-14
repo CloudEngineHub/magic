@@ -151,10 +151,13 @@ class SlidesTemplateAssemblerTest extends TestCase
 
     public function testCreateCountDTO(): void
     {
-        $dto = SlidesTemplateAssembler::createCountDTO(1780);
+        $dto = SlidesTemplateAssembler::createCountDTO(1780, 56000);
 
         $this->assertInstanceOf(SlidesTemplateCountDTO::class, $dto);
-        $this->assertSame(['total' => 1780], $dto->toArray());
+        $this->assertSame([
+            'total' => 1780,
+            'total_usage_count' => 56000,
+        ], $dto->toArray());
     }
 
     public function testCreateAdminDetailAndFileUrlDTO(): void

@@ -58,6 +58,11 @@ class SlidesTemplateDomainService
         return $this->slidesTemplateRepository->count($dataIsolation, $query);
     }
 
+    public function sumTotalUsageCount(SlidesTemplateDataIsolation $dataIsolation, SlidesTemplateQuery $query): int
+    {
+        return $this->slidesTemplateRepository->sumTotalUsageCount($dataIsolation, $query);
+    }
+
     public function create(SlidesTemplateDataIsolation $dataIsolation, SlidesTemplateEntity $entity): SlidesTemplateEntity
     {
         $this->prepareRestoreDeletedTemplate($dataIsolation, $entity);
