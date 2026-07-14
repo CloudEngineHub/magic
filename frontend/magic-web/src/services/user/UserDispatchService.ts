@@ -12,6 +12,7 @@ import { appService } from "../app/AppService"
 import { interfaceStore } from "@/stores/interface"
 import type { UserService } from "./UserService"
 import type { AccountService } from "./AccountService"
+import { refreshAccountContextPage } from "@/broadcastChannel/eventFactory/accountContextRefresh"
 
 const UserDispatchService = {
 	/**
@@ -36,10 +37,12 @@ const UserDispatchService = {
 			} finally {
 				interfaceStore.setIsSwitchingOrganization(false)
 			}
+			return true
 		} catch (err) {
 			// 切换失败，恢复当前组织
 			userService.setUserInfo(oldUserInfo)
 			userService.setMagicOrganizationCode(oldMagicOrganizationCode)
+			return false
 		}
 	},
 
@@ -143,6 +146,8 @@ const UserDispatchService = {
 					query: convertSearchParams(url.searchParams),
 				})
 			}
+			// Rebuild account-scoped stores after add-account login has switched the active account.
+			refreshAccountContextPage()
 			// if (userStore.user.authorization !== data.userAccount.deployCode) {
 			//
 			// }

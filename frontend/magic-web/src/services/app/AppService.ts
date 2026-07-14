@@ -37,6 +37,7 @@ import { interfaceStore } from "@/stores/interface"
 import { BroadcastChannelSender } from "@/broadcastChannel"
 import { defaultClusterCode } from "@/routes/helpers"
 import { DEFAULT_MAINTENANCE_CONFIG, shouldForceSiteClose } from "@/constants/maintenance"
+import { refreshAccountContextPage } from "@/broadcastChannel/eventFactory/accountContextRefresh"
 
 interface PlatformServiceFactory {
 	(context: AppServiceContext): Promise<PlatformServiceInterface>
@@ -865,6 +866,7 @@ class AppService extends AbstractAppService<AppInitResultData> {
 		})
 		try {
 			interfaceStore.setIsSwitchingOrganization(true)
+			let shouldRefreshAccountContext = false
 			// 账号不一致下要切换账号(切换账号下优先判断集群是否一致，不一致情况下优先切换路由上集群再调用切换账号逻辑，这里必须先切换帐号后重定向路由!!!)
 			if (accountInfo?.magic_id !== userInfo?.magic_id) {
 				this.logger.log("检测到账号不一致，开始切换账号")
@@ -906,6 +908,7 @@ class AppService extends AbstractAppService<AppInitResultData> {
 					this.logger.log("账号切换完成，开始初始化用户切换后的流程")
 					await this.platformService?.initUserData(user)
 				}
+				shouldRefreshAccountContext = true
 			} else if (organizationInfo?.magic_organization_code !== userInfo?.organization_code) {
 				this.logger.log("检测到组织不一致，开始切换组织")
 				try {
@@ -923,6 +926,7 @@ class AppService extends AbstractAppService<AppInitResultData> {
 						this.logger.log("组织切换完成，开始初始化用户切换后的流程")
 						await this.platformService?.initUserData(user)
 					}
+					shouldRefreshAccountContext = true
 				} catch (err) {
 					this.logger.error("组织切换失败，恢复当前组织", err)
 					// 切换失败，恢复当前组织
@@ -935,6 +939,10 @@ class AppService extends AbstractAppService<AppInitResultData> {
 				this.logger.log("账号和组织均一致，无需切换")
 			}
 			onSwitchAfter?.()
+			// Let panel cleanup finish first, then reload so account-scoped stores rebuild under the new account.
+			if (shouldRefreshAccountContext) {
+				refreshAccountContextPage()
+			}
 			this.logger.log("组织切换流程完成")
 		} catch (err) {
 			this.logger.error("切换组织过程中发生错误", err)
