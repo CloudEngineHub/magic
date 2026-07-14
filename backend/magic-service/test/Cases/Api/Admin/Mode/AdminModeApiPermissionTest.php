@@ -21,7 +21,19 @@ class AdminModeApiPermissionTest extends TestCase
 {
     public function testGetModesAllowsOfficialAgentAndLegacyAiModePermissions(): void
     {
-        $method = new ReflectionMethod(AdminModeApi::class, 'getModes');
+        $this->assertMethodAllowsOfficialAgentAndLegacyAiModePermissions('getModes');
+    }
+
+    public function testReadModeDetailApisAllowOfficialAgentAndLegacyAiModePermissions(): void
+    {
+        $this->assertMethodAllowsOfficialAgentAndLegacyAiModePermissions('getMode');
+        $this->assertMethodAllowsOfficialAgentAndLegacyAiModePermissions('getOriginMode');
+        $this->assertMethodAllowsOfficialAgentAndLegacyAiModePermissions('getDefaultMode');
+    }
+
+    private function assertMethodAllowsOfficialAgentAndLegacyAiModePermissions(string $methodName): void
+    {
+        $method = new ReflectionMethod(AdminModeApi::class, $methodName);
         $attributes = $method->getAttributes(CheckPermission::class);
 
         $this->assertCount(1, $attributes);
