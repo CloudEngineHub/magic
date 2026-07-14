@@ -147,8 +147,11 @@ for imagePrefix in json.loads(imagePrefixies):
         imageFullTags.append(imagePrefix + imageName + ":" + tag)
 
 if len(imageFullTags) == 0:
-    print("no image tags to build, are secrets set?", file=sys.stderr)
-    sys.exit(1)
+    # build image only, skip image push
+    print("push=false", file=githubOutput)
+else:
+    print("push=true", file=githubOutput)
+
 print(f"tags={','.join(imageFullTags)}", file=githubOutput)
 
 githubOutput.close()

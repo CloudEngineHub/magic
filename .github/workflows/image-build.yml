@@ -73,7 +73,7 @@ jobs:
           platforms: ${{ steps.prepare.outputs.platforms }}
           context: ${{ steps.prepare.outputs.context }}
           pull: true
-          push: true
+          push: ${{ steps.prepare.outputs.push }}
           provenance: mode=max
           build-args: ${{ steps.prepare.outputs.buildArgs }}
           tags: ${{ steps.prepare.outputs.tags }}
