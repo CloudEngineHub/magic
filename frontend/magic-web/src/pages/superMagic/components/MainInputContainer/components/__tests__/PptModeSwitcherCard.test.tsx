@@ -1,6 +1,11 @@
 import { fireEvent, render, screen } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import type { ModeItem } from "@/pages/superMagic/pages/Workspace/types"
+import {
+	SLIDES_TEMPLATE_RANDOM_DRAG_END_EVENT,
+	SLIDES_TEMPLATE_RANDOM_DRAG_START_EVENT,
+	SLIDES_TEMPLATE_RANDOM_DRAG_TYPE,
+} from "../../constants"
 import PptModeSwitcherCard from "../PptModeSwitcherCard"
 
 vi.mock("react-i18next", () => ({
@@ -42,8 +47,16 @@ describe("PptModeSwitcherCard", () => {
 		)
 
 		const card = screen.getByTestId("ppt-mode-switcher-card")
+		const trigger = screen.getByTestId("ppt-mode-switcher-trigger")
 		expect(card).toHaveClass("h-10")
 		expect(card).not.toHaveClass("h-[76px]")
+		expect(trigger).toHaveClass(
+			"bg-background",
+			"text-foreground",
+			"hover:bg-foreground",
+			"hover:text-background",
+		)
+		expect(trigger).toHaveAttribute("data-accent-state", "idle")
 		expect(screen.getByTestId("ppt-mode-switcher-preview")).toHaveClass(
 			"bottom-9",
 			"scale-[0.78]",
@@ -54,32 +67,81 @@ describe("PptModeSwitcherCard", () => {
 
 		expect(card).toHaveClass("h-10")
 		expect(card).not.toHaveClass("h-[76px]")
-		expect(screen.getByTestId("ppt-mode-switcher-trigger")).toHaveClass(
+		expect(trigger).toHaveClass(
 			"h-10",
 			"rounded-full",
 			"p-[3px]",
 			"shadow-none",
+			"bg-foreground",
+			"text-background",
 		)
+		expect(trigger).toHaveAttribute("data-accent-state", "selected")
 	})
 
 	it("does not change layout height on hover", () => {
 		render(<PptModeSwitcherCard modeItem={modeItem} isSelected={false} onSelect={vi.fn()} />)
 
 		const trigger = screen.getByTestId("ppt-mode-switcher-trigger")
+		const preview = screen.getByTestId("ppt-mode-switcher-preview")
+		const previewFrames = screen.getAllByTestId("ppt-mode-switcher-preview-frame")
+		const previewImages = preview.querySelectorAll("img")
+
+		expect(trigger).toHaveAttribute("data-accent-state", "idle")
+		expect(previewFrames[0]).toHaveClass("left-0", "-rotate-[12.69deg]")
+		expect(previewFrames[1]).toHaveClass("left-[25.69px]", "rotate-[15deg]")
+		expect(previewFrames[2]).toHaveClass("left-[57px]", "-rotate-[12.69deg]")
+		expect(previewFrames.every((frame) => frame.dataset.active === "false")).toBe(true)
+		expect(previewImages).toHaveLength(3)
+
 		fireEvent.mouseEnter(trigger)
 
 		expect(screen.getByTestId("ppt-mode-switcher-card")).toHaveClass("h-10")
-		expect(screen.getByTestId("ppt-mode-switcher-preview")).toHaveClass(
-			"translate-y-0.5",
-			"scale-100",
-			"opacity-100",
-		)
+		expect(preview).toHaveClass("translate-y-0.5", "scale-100", "opacity-100")
+		expect(previewFrames[0]).toHaveClass("-translate-x-2", "-rotate-[18deg]")
+		expect(previewFrames[1]).toHaveClass("translate-x-[3px]", "rotate-0")
+		expect(previewFrames[2]).toHaveClass("translate-x-2", "rotate-[18deg]")
+		expect(trigger).toHaveAttribute("data-accent-state", "hovered")
+		expect(previewFrames.every((frame) => frame.dataset.active === "true")).toBe(true)
+
+		fireEvent.mouseLeave(trigger)
+
+		expect(trigger).toHaveAttribute("data-accent-state", "idle")
+	})
+
+	it("marks each preview slide as a random-template drag source", () => {
+		render(<PptModeSwitcherCard modeItem={modeItem} isSelected onSelect={vi.fn()} />)
+
+		const previewFrames = screen.getAllByTestId("ppt-mode-switcher-preview-frame")
+		const setData = vi.fn()
+		const dataTransfer = {
+			effectAllowed: "none",
+			setData,
+		}
+		const handleDragStart = vi.fn()
+		const handleDragEnd = vi.fn()
+		window.addEventListener(SLIDES_TEMPLATE_RANDOM_DRAG_START_EVENT, handleDragStart)
+		window.addEventListener(SLIDES_TEMPLATE_RANDOM_DRAG_END_EVENT, handleDragEnd)
+
+		expect(previewFrames).toHaveLength(3)
+		expect(previewFrames.every((frame) => frame.draggable)).toBe(true)
+		fireEvent.dragStart(previewFrames[1], { dataTransfer })
+		fireEvent.dragEnd(previewFrames[1], { dataTransfer })
+
+		expect(dataTransfer.effectAllowed).toBe("copy")
+		expect(setData).toHaveBeenCalledWith(SLIDES_TEMPLATE_RANDOM_DRAG_TYPE, "1")
+		expect(handleDragStart).toHaveBeenCalledTimes(1)
+		expect(handleDragEnd).toHaveBeenCalledTimes(1)
+
+		window.removeEventListener(SLIDES_TEMPLATE_RANDOM_DRAG_START_EVENT, handleDragStart)
+		window.removeEventListener(SLIDES_TEMPLATE_RANDOM_DRAG_END_EVENT, handleDragEnd)
 	})
 
 	it("renders the template cumulative usage count as the delivered count", () => {
 		render(<PptModeSwitcherCard modeItem={modeItem} isSelected onSelect={vi.fn()} />)
 
-		expect(screen.getByTestId("ppt-mode-switcher-delivered-count")).toHaveTextContent("7,293")
+		const deliveredCount = screen.getByTestId("ppt-mode-switcher-delivered-count")
+		expect(deliveredCount).toHaveTextContent("7,293")
+		expect(deliveredCount).toHaveClass("text-background/70")
 	})
 
 	it("does not render the delivered count before the backend returns the new field", () => {

@@ -5,6 +5,7 @@ import { SuperMagicApi } from "@/apis"
 import {
 	SLIDES_TEMPLATE_IMAGE_PROCESS,
 	SLIDES_TEMPLATE_PAGE_SIZE,
+	SYSTEM_SLIDES_TEMPLATE_TAG_GROUP_CODE,
 	createSlidesTemplateCategoryGroupKey,
 	createSlidesTemplateTagGroupKey,
 	type SlidesTemplateCategoryItem,
@@ -152,7 +153,10 @@ describe("useSlidesTemplateCatalogState", () => {
 			detail = await result.current.loadTemplateDetail(businessTemplate.code)
 		})
 
-		expect(SuperMagicApi.getSlidesTemplateDetail).toHaveBeenCalledWith(businessTemplate.code)
+		expect(SuperMagicApi.getSlidesTemplateDetail).toHaveBeenCalledWith(
+			businessTemplate.code,
+			slidesTemplateImageOptions,
+		)
 		expect(detail?.preview_image_urls?.[0]).toContain("https://example.com/preview.png")
 		expect(result.current.templateOptions[0]).toBe(listTemplateBeforeDetail)
 	})
@@ -197,7 +201,7 @@ describe("useSlidesTemplateCatalogState", () => {
 		vi.mocked(SuperMagicApi.getSlidesTemplateTagGroups).mockResolvedValue([
 			{
 				id: "featured-group",
-				code: "featured_group",
+				code: SYSTEM_SLIDES_TEMPLATE_TAG_GROUP_CODE,
 				name_i18n: { zh_CN: "精选", en_US: "Featured" },
 				sort: 100,
 				tags: [featuredTag, businessStyleTag],
@@ -241,14 +245,38 @@ describe("useSlidesTemplateCatalogState", () => {
 			slidesTemplateImageOptions,
 		)
 		expect(SuperMagicApi.getSlidesTemplateTagGroups).toHaveBeenCalledWith({})
+		expect(result.current.tagGroups).toHaveLength(1)
 		expect(result.current.templateOptions.map((template) => template.value)).toEqual([
 			businessTemplate.code,
 		])
 		expect(result.current.groups.map((group) => group.group_key)).toEqual([
 			"all",
 			createSlidesTemplateTagGroupKey(featuredTag.code),
+			createSlidesTemplateTagGroupKey(businessStyleTag.code),
 			createSlidesTemplateCategoryGroupKey(businessCategory.code),
 		])
+	})
+
+	it("queries all templates by tags selected from the filter panel", async () => {
+		const { result } = renderHook(() => useSlidesTemplateCatalogState())
+
+		await waitFor(() => expect(result.current.tagGroups).toHaveLength(1))
+
+		act(() => {
+			result.current.setSelectedChildTagCodes([businessStyleTag.code])
+		})
+
+		await waitFor(() =>
+			expect(SuperMagicApi.getSlidesTemplates).toHaveBeenLastCalledWith(
+				{
+					page: 1,
+					page_size: SLIDES_TEMPLATE_PAGE_SIZE,
+					tag_codes: [businessStyleTag.code],
+					tag_match: "any",
+				},
+				slidesTemplateImageOptions,
+			),
+		)
 	})
 
 	it("deduplicates the initial template request in StrictMode", async () => {
@@ -471,6 +499,22 @@ describe("useSlidesTemplateCatalogState", () => {
 					page_size: SLIDES_TEMPLATE_PAGE_SIZE,
 					tag_codes: [featuredTag.code],
 					tag_match: "any",
+				},
+				slidesTemplateImageOptions,
+			),
+		)
+
+		act(() => {
+			result.current.setSelectedChildTagCodes([businessStyleTag.code])
+		})
+
+		await waitFor(() =>
+			expect(SuperMagicApi.getSlidesTemplates).toHaveBeenLastCalledWith(
+				{
+					page: 1,
+					page_size: SLIDES_TEMPLATE_PAGE_SIZE,
+					tag_codes: [featuredTag.code, businessStyleTag.code],
+					tag_match: "all",
 				},
 				slidesTemplateImageOptions,
 			),

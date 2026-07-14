@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react"
-import { ChevronDown, ChevronUp, Search, X } from "lucide-react"
+import { ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Search, X } from "lucide-react"
 import { useTranslation } from "react-i18next"
+import HeadlessHorizontalScroll from "@/components/base/HeadlessHorizontalScroll"
 import { Button } from "@/components/shadcn-ui/button"
 import { Input } from "@/components/shadcn-ui/input"
 import { cn } from "@/lib/utils"
@@ -20,6 +21,38 @@ interface SlidesTemplatePanelContentProps {
 	gridClassName?: string
 	showHoverDetails?: boolean
 	hoverDetailsContainer?: HTMLElement | null
+	disableEntryAnimation?: boolean
+}
+
+interface TagScrollControlProps {
+	direction: "left" | "right"
+	onClick: () => void
+}
+
+function TagScrollControl({ direction, onClick }: TagScrollControlProps) {
+	const isLeft = direction === "left"
+	const Icon = isLeft ? ChevronLeft : ChevronRight
+
+	return (
+		<div
+			className={cn(
+				"pointer-events-none absolute inset-y-0 z-10 flex w-10 items-center",
+				isLeft
+					? "left-0 justify-start bg-[linear-gradient(to_right,_var(--control-background)_35%,_transparent_100%)] pl-0.5"
+					: "right-0 justify-end bg-[linear-gradient(to_left,_var(--control-background)_35%,_transparent_100%)] pr-0.5",
+			)}
+		>
+			<Button
+				type="button"
+				variant="outline"
+				size="icon"
+				className="pointer-events-auto !size-6 rounded-full border-border/70 bg-background/95 text-muted-foreground shadow-xs hover:text-foreground [&_svg]:size-3.5"
+				onClick={onClick}
+			>
+				<Icon />
+			</Button>
+		</div>
+	)
 }
 
 function SlidesTemplatePanelContent({
@@ -31,6 +64,7 @@ function SlidesTemplatePanelContent({
 	gridClassName,
 	showHoverDetails = true,
 	hoverDetailsContainer,
+	disableEntryAnimation = false,
 }: SlidesTemplatePanelContentProps) {
 	const { t } = useTranslation("crew/create")
 	const lt = useLocaleText()
@@ -41,8 +75,11 @@ function SlidesTemplatePanelContent({
 	const searchInputRef = useRef<HTMLInputElement>(null)
 	const isComposingRef = useRef(false)
 	const selectorGroups = slidesState.groups
+	const selectedGroupKey = slidesState.selectedGroupKey
+	const setSelectedGroupKey = slidesState.setSelectedGroupKey
 	const hasGroups = selectorGroups.length > 1
 	const hasAdditionalTagGroups = slidesState.tagGroups.length > 1
+	const hasSelectedChildTags = slidesState.selectedChildTagCodes.length > 0
 	const visibleTagGroups = isTagGroupsExpanded
 		? slidesState.tagGroups
 		: slidesState.tagGroups.slice(0, 1)
@@ -56,13 +93,11 @@ function SlidesTemplatePanelContent({
 	)
 	const handlePrimaryGroupChange = useCallback(
 		(groupKey: string) => {
-			slidesState.setSelectedGroupKey(
-				groupKey === slidesState.selectedGroupKey
-					? ALL_SLIDES_TEMPLATE_GROUP_KEY
-					: groupKey,
+			setSelectedGroupKey(
+				groupKey === selectedGroupKey ? ALL_SLIDES_TEMPLATE_GROUP_KEY : groupKey,
 			)
 		},
-		[slidesState.selectedGroupKey, slidesState.setSelectedGroupKey],
+		[selectedGroupKey, setSelectedGroupKey],
 	)
 
 	useEffect(() => {
@@ -79,10 +114,6 @@ function SlidesTemplatePanelContent({
 		if (isComposingRef.current) return
 		setSearchValue(slidesState.keyword)
 	}, [slidesState.keyword])
-
-	useEffect(() => {
-		setIsTagGroupsExpanded(false)
-	}, [slidesState.selectedCategoryCode])
 
 	useEffect(() => {
 		if (slidesState.selectedChildTagCodes.length === 0) return
@@ -145,7 +176,6 @@ function SlidesTemplatePanelContent({
 							groups={selectorGroups}
 							selectedGroupKey={slidesState.selectedGroupKey}
 							onGroupChange={handlePrimaryGroupChange}
-							controlBackground="transparent"
 							showEmptyGroups
 							className="flex-1"
 						/>
@@ -171,21 +201,34 @@ function SlidesTemplatePanelContent({
 						{isSearchOpen ? <X className="size-4" /> : <Search className="size-4" />}
 					</Button>
 				</div>
-				{slidesState.selectedCategoryCode && slidesState.tagGroups.length > 0 ? (
-					<div
-						className="flex items-start gap-2"
-						data-testid="slides-template-category-tag-filters"
-					>
-						<div className="flex min-w-0 flex-1 flex-col gap-1.5">
-							{visibleTagGroups.map((tagGroup) => (
+				{slidesState.tagGroups.length > 0 ? (
+					<div className="min-w-0" data-testid="slides-template-category-tag-filters">
+						<div className="flex w-full min-w-0 flex-col gap-1.5">
+							{visibleTagGroups.map((tagGroup, index) => (
 								<div
 									key={tagGroup.code}
-									className="flex min-w-0 items-center gap-1.5"
+									className="flex min-w-0 items-center gap-3"
 								>
 									<span className="shrink-0 text-[11px] leading-4 text-muted-foreground">
 										{lt(tagGroup.name_i18n)}
 									</span>
-									<div className="no-scrollbar flex min-w-0 gap-1.5 overflow-x-auto py-0.5">
+									<HeadlessHorizontalScroll
+										className="min-w-0 flex-1"
+										data-testid={`slides-template-tag-options-${tagGroup.code}`}
+										scrollContainerClassName="flex min-w-0 gap-1.5 py-0.5"
+										renderLeftControl={({ scroll }) => (
+											<TagScrollControl
+												direction="left"
+												onClick={() => scroll("left")}
+											/>
+										)}
+										renderRightControl={({ scroll }) => (
+											<TagScrollControl
+												direction="right"
+												onClick={() => scroll("right")}
+											/>
+										)}
+									>
 										{tagGroup.tags.map((tag) => {
 											const isSelected =
 												slidesState.selectedChildTagCodes.includes(tag.code)
@@ -221,32 +264,52 @@ function SlidesTemplatePanelContent({
 												</Button>
 											)
 										})}
-									</div>
+									</HeadlessHorizontalScroll>
+									{index === 0 &&
+									(hasAdditionalTagGroups || hasSelectedChildTags) ? (
+										<div className="flex shrink-0 items-center gap-1">
+											{hasAdditionalTagGroups ? (
+												<Button
+													type="button"
+													variant="ghost"
+													size="sm"
+													className="h-7 shrink-0 gap-1 rounded-full px-2.5 text-xs font-normal text-muted-foreground hover:text-foreground"
+													aria-expanded={isTagGroupsExpanded}
+													data-testid="slides-template-tag-groups-toggle"
+													onClick={handleTagGroupsToggle}
+												>
+													{t(
+														isTagGroupsExpanded
+															? "playbook.edit.presets.form.collapseFilters"
+															: "playbook.edit.presets.form.moreFilters",
+													)}
+													{isTagGroupsExpanded ? (
+														<ChevronUp className="size-3.5" />
+													) : (
+														<ChevronDown className="size-3.5" />
+													)}
+												</Button>
+											) : null}
+											{hasSelectedChildTags ? (
+												<Button
+													type="button"
+													variant="outline"
+													size="sm"
+													className="h-7 shrink-0 gap-1 rounded-full border-border/80 bg-background px-2.5 text-xs font-normal text-muted-foreground shadow-none hover:border-destructive/30 hover:bg-destructive/5 hover:text-destructive"
+													data-testid="slides-template-tag-clear-selection"
+													onClick={() =>
+														slidesState.setSelectedChildTagCodes([])
+													}
+												>
+													<X className="size-3.5" />
+													{t("playbook.edit.presets.clearSelection")}
+												</Button>
+											) : null}
+										</div>
+									) : null}
 								</div>
 							))}
 						</div>
-						{hasAdditionalTagGroups ? (
-							<Button
-								type="button"
-								variant="ghost"
-								size="sm"
-								className="ml-auto h-7 shrink-0 gap-1 rounded-full px-2.5 text-xs font-normal text-muted-foreground hover:text-foreground"
-								aria-expanded={isTagGroupsExpanded}
-								data-testid="slides-template-tag-groups-toggle"
-								onClick={handleTagGroupsToggle}
-							>
-								{t(
-									isTagGroupsExpanded
-										? "playbook.edit.presets.form.collapseFilters"
-										: "playbook.edit.presets.form.moreFilters",
-								)}
-								{isTagGroupsExpanded ? (
-									<ChevronUp className="size-3.5" />
-								) : (
-									<ChevronDown className="size-3.5" />
-								)}
-							</Button>
-						) : null}
 					</div>
 				) : null}
 				{isSearchOpen ? (
@@ -280,6 +343,7 @@ function SlidesTemplatePanelContent({
 				className={gridClassName}
 				showHoverDetails={showHoverDetails}
 				hoverDetailsContainer={hoverDetailsContainer}
+				disableEntryAnimation={disableEntryAnimation}
 			/>
 		</div>
 	)

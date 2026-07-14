@@ -12,6 +12,7 @@ import { useTranslation } from "react-i18next"
 import HeadlessHorizontalScroll from "@/components/base/HeadlessHorizontalScroll"
 import { Button } from "@/components/shadcn-ui/button"
 import { cn } from "@/lib/utils"
+import { formatNumber } from "@/utils/format"
 import { useCenteredHorizontalScroll } from "@/pages/superMagic/components/MainInputContainer/hooks/useCenteredHorizontalScroll"
 import {
 	useSlidesPreviewNavigation,
@@ -147,10 +148,15 @@ export default function SlidesTemplateInlinePreview({
 			en_US: tag.code,
 		}),
 	}))
+	const featuredTagLabel = tagLabels.find((tag) => tag.code === FEATURED_SLIDES_TEMPLATE_TAG_CODE)
+	const regularTagLabels = tagLabels.filter(
+		(tag) => tag.code !== FEATURED_SLIDES_TEMPLATE_TAG_CODE,
+	)
 	const description =
 		lt(template.preview_description) ?? lt(template.description) ?? lt(template.sub_text)
 	const showUsageCount = hasSlidesTemplateUsageCount(template)
 	const usageCount = Math.max(0, template.usage_count ?? 0)
+	const formattedUsageCount = formatNumber(usageCount)
 	const previewImageUrl = focus.tile.imageUrl ?? colorImageUrl
 	const templateKey = getTemplateKey(template)
 	const isSelected = selectedTemplate ? getTemplateKey(selectedTemplate) === templateKey : false
@@ -243,27 +249,48 @@ export default function SlidesTemplateInlinePreview({
 							)}
 						</div>
 						<div className="min-w-0 flex-1">
-							<div className="flex min-w-0 flex-wrap items-center gap-2">
-								<div
-									className="min-w-0 truncate text-base font-semibold leading-6 text-white"
-									data-testid="slides-template-inline-preview-title"
-								>
-									{title}
-								</div>
-								{tagLabels.length > 0 ? (
+							<div className="flex min-w-0 flex-col items-start gap-1.5">
+								<div className="flex w-full min-w-0 items-center gap-2">
 									<div
-										className="flex max-w-full shrink-0 flex-wrap items-center gap-1"
+										className="min-w-0 truncate text-base font-semibold leading-6 text-white"
+										data-testid="slides-template-inline-preview-title"
+									>
+										{title}
+									</div>
+									{featuredTagLabel || showUsageCount ? (
+										<div className="flex shrink-0 items-center gap-2">
+											{featuredTagLabel ? (
+												<span
+													className="inline-flex max-w-24 shrink-0 truncate rounded-full border border-amber-200/50 bg-amber-300/20 px-1.5 py-0.5 text-[10px] font-medium leading-3 text-amber-100 backdrop-blur-md"
+													data-testid="slides-template-inline-preview-featured-tag"
+												>
+													{featuredTagLabel.label}
+												</span>
+											) : null}
+											{showUsageCount ? (
+												<div
+													className="inline-flex items-center gap-1 text-xs font-medium text-white/[0.72]"
+													data-testid="slides-template-inline-preview-usage-count"
+												>
+													<MousePointerClick
+														className="size-3.5"
+														aria-hidden="true"
+													/>
+													<span>{formattedUsageCount}</span>
+												</div>
+											) : null}
+										</div>
+									) : null}
+								</div>
+								{regularTagLabels.length > 0 ? (
+									<div
+										className="flex max-w-full flex-wrap items-center gap-1"
 										data-testid="slides-template-inline-preview-tags"
 									>
-										{tagLabels.map((tag) => (
+										{regularTagLabels.map((tag) => (
 											<span
 												key={tag.code}
-												className={cn(
-													"inline-flex max-w-24 shrink-0 truncate rounded-full border px-1.5 py-0.5 text-[10px] font-medium leading-3 backdrop-blur-md",
-													tag.code === FEATURED_SLIDES_TEMPLATE_TAG_CODE
-														? "border-amber-200/50 bg-amber-300/20 text-amber-100"
-														: "border-white/[0.16] bg-black/[0.18] text-white/[0.82]",
-												)}
+												className="inline-flex max-w-24 shrink-0 truncate rounded-full border border-white/[0.16] bg-black/[0.18] px-1.5 py-0.5 text-[10px] font-medium leading-3 text-white/[0.82] backdrop-blur-md"
 											>
 												{tag.label}
 											</span>
@@ -271,15 +298,6 @@ export default function SlidesTemplateInlinePreview({
 									</div>
 								) : null}
 							</div>
-							{showUsageCount ? (
-								<div
-									className="mt-1.5 inline-flex items-center gap-1 text-xs font-medium text-white/[0.72]"
-									data-testid="slides-template-inline-preview-usage-count"
-								>
-									<MousePointerClick className="size-3.5" aria-hidden="true" />
-									<span>{usageCount}</span>
-								</div>
-							) : null}
 							{description ? (
 								<div
 									className="mt-1 line-clamp-2 text-sm leading-5 text-white/[0.68]"

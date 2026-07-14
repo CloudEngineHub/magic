@@ -37,6 +37,29 @@ const CollaborationProjectsPanel = lazy(
 		import("@/pages/superMagic/components/WorkspacesMenu/components/CollaborationProjectsPanel"),
 )
 
+function SlidesTemplateCountBadge({
+	templateCount,
+	testId,
+}: {
+	templateCount: string
+	testId?: string
+}) {
+	return (
+		<span
+			className="flex h-6 shrink-0 items-center gap-1 rounded-full bg-[#fff2ec] px-2 text-sm font-medium leading-none text-[#ff6a1f]"
+			data-testid={testId}
+		>
+			<img
+				src={slidesTemplateFireIcon}
+				alt=""
+				aria-hidden="true"
+				className="h-4 w-4 object-contain"
+			/>
+			{templateCount}
+		</span>
+	)
+}
+
 function SidebarContent({ collapsed }: SidebarContentProps) {
 	const { t } = useTranslation(["sidebar", "super"])
 	useResourceStatusPolling()
@@ -83,20 +106,40 @@ function SidebarContent({ collapsed }: SidebarContentProps) {
 	}: (typeof sidebarMarketMenuItems)[number]) {
 		const title =
 			titleKey === "sidebar:superLobster.title" ? t(titleKey, clawBrandValues) : t(titleKey)
+		const isSlidesTemplateMenuItem = routeName === RouteName.SuperSlidesTemplates
 		const templateCount =
-			routeName === RouteName.SuperSlidesTemplates && slidesTemplateTotal !== undefined
+			isSlidesTemplateMenuItem && slidesTemplateTotal !== undefined
 				? t("slidesTemplates.templateCount", {
 						count: formatNumber(slidesTemplateTotal),
 					})
 				: null
+		const tooltip = collapsed
+			? templateCount
+				? {
+						children: (
+							<div
+								className="flex items-center gap-2 text-sm"
+								data-testid="sidebar-content-slides-templates-tooltip"
+							>
+								<span>{title}</span>
+								<SlidesTemplateCountBadge templateCount={templateCount} />
+							</div>
+						),
+					}
+				: title
+			: undefined
 
 		return (
 			<SidebarMenuItem key={routeName}>
 				<SidebarMenuButton
 					asChild
-					tooltip={collapsed ? title : undefined}
+					tooltip={tooltip}
 					data-testid={testId}
-					className="text-sidebar-foreground"
+					className={
+						collapsed && isSlidesTemplateMenuItem
+							? "!bg-[#fff2ec] !text-[#ff6a1f] hover:!bg-[#ffe6da] hover:!text-[#ff6a1f]"
+							: "text-sidebar-foreground"
+					}
 				>
 					<a
 						href={getRoutePath({ name: routeName }) || "#"}
@@ -104,23 +147,17 @@ function SidebarContent({ collapsed }: SidebarContentProps) {
 						className="text-current no-underline"
 					>
 						<Icon className="h-4 w-4 shrink-0" />
-						<span className="flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-left text-sm leading-5">
+						<span
+							className={`${templateCount ? "min-w-0" : "flex-1"} overflow-hidden text-ellipsis whitespace-nowrap text-left text-sm leading-5`}
+						>
 							{title}
 						</span>
 						{!collapsed && templateCount && (
-							// 标题优先截断，数量提示始终留在菜单尾部，避免长语言文本压缩提示内容。
-							<span
-								className="ml-auto flex h-6 shrink-0 items-center gap-1 rounded-full bg-[#fff2ec] px-2 text-sm font-medium leading-none text-[#ff6a1f]"
-								data-testid="sidebar-content-slides-templates-count"
-							>
-								<img
-									src={slidesTemplateFireIcon}
-									alt=""
-									aria-hidden="true"
-									className="h-4 w-4 object-contain"
-								/>
-								{templateCount}
-							</span>
+							// 数量提示紧跟标题，标题过长时由 flex 收缩并截断。
+							<SlidesTemplateCountBadge
+								templateCount={templateCount}
+								testId="sidebar-content-slides-templates-count"
+							/>
 						)}
 					</a>
 				</SidebarMenuButton>

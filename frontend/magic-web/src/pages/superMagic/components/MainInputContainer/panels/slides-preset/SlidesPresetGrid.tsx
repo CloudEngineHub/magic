@@ -26,6 +26,7 @@ interface SlidesPresetGridProps {
 	onPreviewDetailLoad?: (template: OptionItem) => Promise<OptionItem | null>
 	showHoverDetails?: boolean
 	hoverDetailsContainer?: HTMLElement | null
+	disableEntryAnimation?: boolean
 }
 
 const containerVariants = {
@@ -80,6 +81,7 @@ const SlidesPresetGrid = observer(
 		onPreviewDetailLoad,
 		showHoverDetails = true,
 		hoverDetailsContainer,
+		disableEntryAnimation = false,
 	}: SlidesPresetGridProps) => {
 		const { t } = useTranslation("crew/create")
 		const [previewTemplate, setPreviewTemplate] = useState<OptionItem | null>(null)
@@ -238,9 +240,9 @@ const SlidesPresetGrid = observer(
 						"scrollbar-hide relative grid w-full grid-cols-2 content-start gap-4 overflow-y-auto overflow-x-hidden p-4 md:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5",
 						className,
 					)}
-					variants={containerVariants}
-					initial="hidden"
-					animate="visible"
+					variants={disableEntryAnimation ? undefined : containerVariants}
+					initial={disableEntryAnimation ? false : "hidden"}
+					animate={disableEntryAnimation ? undefined : "visible"}
 					onScroll={handleScroll}
 				>
 					{isRefreshing && templates.length > 0 ? (
@@ -274,12 +276,18 @@ const SlidesPresetGrid = observer(
 						return (
 							<motion.div
 								key={value}
-								variants={itemVariants}
-								whileInView="visible"
-								initial="hidden"
-								viewport={{ once: true, amount: 0.1 }}
+								variants={disableEntryAnimation ? undefined : itemVariants}
+								whileInView={disableEntryAnimation ? undefined : "visible"}
+								initial={disableEntryAnimation ? false : "hidden"}
+								viewport={
+									disableEntryAnimation ? undefined : { once: true, amount: 0.1 }
+								}
 								whileHover={canUseHoverPreview ? hoverAnimation : undefined}
-								transition={{ type: "spring", stiffness: 300, damping: 20 }}
+								transition={
+									disableEntryAnimation
+										? undefined
+										: { type: "spring", stiffness: 300, damping: 20 }
+								}
 								className={cn(
 									"relative flex size-full [contain-intrinsic-size:260px] [content-visibility:auto]",
 									canUseHoverPreview && "will-change-transform",

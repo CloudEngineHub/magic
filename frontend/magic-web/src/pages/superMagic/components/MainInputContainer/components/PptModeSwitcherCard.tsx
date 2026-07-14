@@ -1,4 +1,4 @@
-import { useState, type MouseEvent } from "react"
+import { useState, type DragEvent, type MouseEvent } from "react"
 import { Trans, useTranslation } from "react-i18next"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/shadcn-ui/button"
@@ -9,6 +9,12 @@ import pptSlide2 from "./assets/ppt-slide-2.png"
 import pptSlide3 from "./assets/ppt-slide-3.png"
 import { useSlidesTemplateStatistics } from "@/pages/superMagic/hooks/useSlidesTemplateTotal"
 import { formatNumber } from "@/utils/format"
+import {
+	SLIDES_TEMPLATE_RANDOM_DRAG_END_EVENT,
+	SLIDES_TEMPLATE_RANDOM_DRAG_START_EVENT,
+	SLIDES_TEMPLATE_RANDOM_DRAG_TYPE,
+} from "../constants"
+import styles from "./PptModeSwitcherCard.module.css"
 
 // Local fallback preview slides shown behind the PPT crew pill.
 const PPT_PREVIEW_IMAGES = [pptSlide1, pptSlide2, pptSlide3] as const
@@ -34,11 +40,22 @@ export default function PptModeSwitcherCard({
 	const slidesTemplateStatistics = useSlidesTemplateStatistics()
 	const templateTotalUsageCount = slidesTemplateStatistics?.templateTotalUsageCount
 	const isExpanded = isSelected || isHovered || isFocused
+	const pillAccentState = isHovered ? "hovered" : isSelected ? "selected" : "idle"
 	const modeName = modeItem.mode.name || t("detailDialog.emptyName")
 
 	function stopPreviewClick(event: MouseEvent<HTMLButtonElement>) {
 		event.stopPropagation()
 		onSelect()
+	}
+
+	function handlePreviewDragStart(event: DragEvent<HTMLSpanElement>, index: number) {
+		event.dataTransfer.effectAllowed = "copy"
+		event.dataTransfer.setData(SLIDES_TEMPLATE_RANDOM_DRAG_TYPE, String(index))
+		window.dispatchEvent(new Event(SLIDES_TEMPLATE_RANDOM_DRAG_START_EVENT))
+	}
+
+	function handlePreviewDragEnd() {
+		window.dispatchEvent(new Event(SLIDES_TEMPLATE_RANDOM_DRAG_END_EVENT))
 	}
 
 	return (
@@ -49,28 +66,52 @@ export default function PptModeSwitcherCard({
 		>
 			<div
 				className={cn(
-					"pointer-events-none absolute bottom-9 left-1/2 h-[30px] w-[112px] origin-bottom -translate-x-1/2 transition-[transform,opacity] duration-300 ease-out",
+					"absolute bottom-9 left-1/2 h-[30px] w-[112px] origin-bottom -translate-x-1/2 transition-[transform,opacity] duration-300 ease-out",
 					isExpanded
 						? "translate-y-0.5 scale-100 opacity-100"
 						: "translate-y-1 scale-[0.78] opacity-70",
 				)}
 				aria-hidden
 				data-testid="ppt-mode-switcher-preview"
+				onMouseEnter={() => setIsHovered(true)}
+				onMouseLeave={() => setIsHovered(false)}
 			>
 				<div className="relative h-full w-full">
 					{PPT_PREVIEW_IMAGES.map((src, index) => (
-						<img
+						<span
 							key={src}
-							src={src}
-							alt=""
 							className={cn(
-								"absolute left-0 top-0 h-7 w-[50px] rounded-[2px] border-[0.5px] border-[#e5e5e5] object-cover transition-transform duration-300",
-								index === 0 && "left-0 top-px -rotate-[12.69deg]",
-								index === 1 && "left-[25.69px] rotate-[15deg]",
-								index === 2 && "left-[57px] top-px -rotate-[12.69deg]",
+								styles.previewFrame,
+								isExpanded && styles.previewFrameExpanded,
+								"absolute top-0 h-7 w-[50px] cursor-grab transition-transform duration-300 ease-out active:cursor-grabbing",
+								index === 0 &&
+									(isExpanded
+										? "left-0 top-px -translate-x-2 -rotate-[18deg]"
+										: "left-0 top-px -rotate-[12.69deg]"),
+								index === 1 &&
+									(isExpanded
+										? "left-[25.69px] translate-x-[3px] rotate-0"
+										: "left-[25.69px] rotate-[15deg]"),
+								index === 2 &&
+									(isExpanded
+										? "left-[57px] top-px translate-x-2 rotate-[18deg]"
+										: "left-[57px] top-px -rotate-[12.69deg]"),
 							)}
-							loading="lazy"
-						/>
+							data-active={isExpanded}
+							data-preview-index={index}
+							data-testid="ppt-mode-switcher-preview-frame"
+							draggable
+							onDragEnd={handlePreviewDragEnd}
+							onDragStart={(event) => handlePreviewDragStart(event, index)}
+						>
+							<img
+								src={src}
+								alt=""
+								className="h-full w-full rounded-[2px] border-[0.5px] border-[#e5e5e5] object-cover"
+								draggable={false}
+								loading="lazy"
+							/>
+						</span>
 					))}
 				</div>
 			</div>
@@ -80,13 +121,17 @@ export default function PptModeSwitcherCard({
 				variant={isSelected ? "outline" : "secondary"}
 				size="default"
 				className={cn(
-					"relative z-10 h-10 gap-[calc(0.5rem-3px)] overflow-hidden rounded-full border p-[3px] pr-4 text-sm font-medium text-foreground shadow-none transition-colors",
+					"group relative isolate z-10 h-10 gap-[calc(0.5rem-3px)] rounded-full border p-[3px] pr-4 text-sm font-medium shadow-none transition-colors",
+					styles.pillAccent,
+					isSelected && styles.pillAccentSelected,
+					isHovered && styles.pillAccentHovered,
 					isSelected
-						? "border-2 border-foreground bg-background hover:bg-background"
-						: "bg-background hover:bg-secondary",
+						? "border-2 border-foreground bg-foreground text-background hover:bg-foreground hover:text-background"
+						: "bg-background text-foreground hover:border-foreground hover:bg-foreground hover:text-background",
 				)}
 				aria-label={modeName}
 				aria-pressed={isSelected}
+				data-accent-state={pillAccentState}
 				data-testid="ppt-mode-switcher-trigger"
 				onClick={stopPreviewClick}
 				onFocus={() => setIsFocused(true)}
@@ -94,25 +139,22 @@ export default function PptModeSwitcherCard({
 				onMouseEnter={() => setIsHovered(true)}
 				onMouseLeave={() => setIsHovered(false)}
 			>
-				{isSelected && (
-					<span
-						aria-hidden
-						className="pointer-events-none absolute inset-0 rounded-full bg-[radial-gradient(circle_at_1px_1px,rgba(10,10,10,0.12)_1px,transparent_0)] bg-[length:6px_6px] opacity-40"
-					/>
-				)}
 				<ModeAvatar
 					mode={modeItem.mode}
-					iconSize={28}
-					className={cn("relative", isSelected ? "border-2" : "border-[3px]")}
+					iconSize={26}
+					className={cn("relative z-10", isSelected ? "border-2" : "border-[3px]")}
 				/>
-				<span className="relative flex min-w-0 flex-col justify-center">
+				<span className="relative z-10 flex min-w-0 flex-col justify-center">
 					<span className="truncate whitespace-nowrap leading-5">{modeName}</span>
 					{typeof templateTotalUsageCount === "number" &&
 						Number.isFinite(templateTotalUsageCount) &&
 						templateTotalUsageCount >= 0 && (
 							<span
 								className={cn(
-									"overflow-hidden text-[10px] leading-3 text-[#737373] transition-[max-height,opacity] duration-300",
+									"overflow-hidden text-[10px] leading-3 transition-[max-height,opacity,color] duration-300",
+									isSelected
+										? "text-background/70"
+										: "text-[#737373] group-hover:text-background/70",
 									isExpanded ? "max-h-3 opacity-100" : "max-h-0 opacity-0",
 								)}
 								data-testid="ppt-mode-switcher-delivered-count"

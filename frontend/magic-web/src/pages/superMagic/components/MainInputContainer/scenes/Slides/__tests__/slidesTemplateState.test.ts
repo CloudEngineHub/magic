@@ -250,6 +250,10 @@ describe("slides template state", () => {
 
 		expect(option?.value).toBe(template.code)
 		expect(option?.label).toEqual(template.label)
+		expect(option?.preset_value).toEqual({
+			zh_CN: `组织模板（${template.code}）`,
+			en_US: `Organization Template (${template.code})`,
+		})
 		expect(option?.description).toEqual(template.description)
 		expect(option?.thumbnail_url).toBeUndefined()
 		expect(option?.collage_url).toBeUndefined()

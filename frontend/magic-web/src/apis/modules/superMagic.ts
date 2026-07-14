@@ -740,9 +740,16 @@ export const generateSuperMagicApi = (fetch: HttpClient) => ({
 		)
 	},
 
-	getSlidesTemplateDetail(code: string) {
+	getSlidesTemplateDetail(code: string, options?: { xMagicImageProcess?: ImageProcessOptions }) {
 		return fetch.get<SlidesTemplateDetail>(
 			genRequestUrl("/api/v1/slides-templates/${code}", { code }),
+			{
+				headers: {
+					...(options?.xMagicImageProcess && {
+						"X-Magic-Image-Process": buildImageProcessQuery(options.xMagicImageProcess),
+					}),
+				},
+			},
 		)
 	},
 

@@ -377,6 +377,10 @@ export function toTemplateOption(template: SlidesTemplateItem) {
 	return {
 		value: template.code,
 		label: template.label,
+		preset_value: {
+			zh_CN: `${template.label.zh_CN}（${template.code}）`,
+			en_US: `${template.label.en_US} (${template.code})`,
+		},
 		thumbnail_url: markSlidesTemplateImageUrl(template.thumbnail_url) ?? undefined,
 		collage_url: markSlidesTemplateImageUrl(template.collage_url) ?? undefined,
 		// 每页 PPT 预览图 URL 列表；为空时由前端 UI 降级使用 collage_url

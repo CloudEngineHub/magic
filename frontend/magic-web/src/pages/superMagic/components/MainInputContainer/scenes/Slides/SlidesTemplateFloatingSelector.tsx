@@ -116,6 +116,7 @@ function SlidesTemplateFloatingSelector({
 						isMobile ? "p-2" : "p-0 pt-1 2xl:!grid-cols-4",
 					)}
 					hoverDetailsContainer={hoverDetailsContainer}
+					disableEntryAnimation={isMobile}
 				/>
 			</div>
 		),
@@ -128,13 +129,16 @@ function SlidesTemplateFloatingSelector({
 			<MagicPopup
 				visible={open}
 				onClose={() => setOpen(false)}
-				className="rounded-t-[14px] border-0 bg-muted"
-				bodyClassName="rounded-t-[14px] border-0 bg-muted p-0 overflow-hidden"
+				className={cn(
+					"flex h-[min(98dvh,calc(100dvh-var(--safe-area-inset-top)-0.5rem))] max-h-[calc(100dvh-var(--safe-area-inset-top)-0.5rem)] flex-col overflow-hidden rounded-t-[14px] border-0 bg-muted",
+					"data-[vaul-drawer-direction=bottom]:!mt-[max(0.5rem,var(--safe-area-inset-top))]",
+				)}
+				bodyClassName="flex max-h-none min-h-0 flex-1 flex-col overflow-hidden rounded-t-[14px] border-0 bg-muted p-0"
 				handlerClassName="bg-muted-foreground mb-1.5 h-1 w-20 rounded-full"
 				title={title}
 			>
 				<div
-					className="flex h-[min(640px,calc(100vh-var(--safe-area-inset-top)-var(--safe-area-inset-bottom)-44px))] min-h-0 flex-col gap-2 overflow-hidden bg-muted"
+					className="flex min-h-0 flex-1 flex-col gap-2 overflow-hidden bg-muted"
 					data-testid="slides-template-floating-selector-mobile-popup"
 				>
 					<div className="relative flex h-14 shrink-0 flex-row items-center justify-center">

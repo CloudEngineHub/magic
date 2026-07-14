@@ -3,6 +3,10 @@ import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import type { JSONContent } from "@tiptap/core"
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest"
 import { SuperMagicApi } from "@/apis"
+import {
+	SLIDES_TEMPLATE_RANDOM_DRAG_START_EVENT,
+	SLIDES_TEMPLATE_RANDOM_DRAG_TYPE,
+} from "../../../constants"
 import { getPromptRichTextPlainText } from "../../../panels/promptRichText"
 import type { OptionItem } from "../../../panels/types"
 import { ScenePanelVariant } from "../../../components/LazyScenePanel/types"
@@ -11,6 +15,7 @@ import SlidesTemplatePanelContent from "../SlidesTemplatePanelContent"
 import SlidesTemplateHomeSelectionPreview from "../SlidesTemplateHomeSelectionPreview"
 import {
 	createSlidesTemplateCategoryGroupKey,
+	createSlidesTemplateTagGroupKey,
 	createSlidesPresetPanelConfig,
 	type SlidesTemplateCategoryItem,
 	type SlidesTemplateItem,
@@ -30,6 +35,12 @@ const sceneStateStoreMock = vi.hoisted(() => ({
 	inputScopeKey: "",
 	sendCount: 0,
 }))
+
+const useResolvedTemplateColorsMock = vi.hoisted(() =>
+	vi.fn(({ colors }: { colors?: string[] }) =>
+		colors?.length ? colors : ["#315ECA", "#7AA7FF", "#182A5A"],
+	),
+)
 
 vi.mock("@/apis", () => ({
 	SuperMagicApi: apiMock,
@@ -54,6 +65,10 @@ vi.mock("i18next", () => ({
 
 vi.mock("../../../stores", () => ({
 	useOptionalSceneStateStore: () => sceneStateStoreMock,
+}))
+
+vi.mock("@/pages/superMagic/pages/SlidesTemplates/useResolvedTemplateColors", () => ({
+	useResolvedTemplateColors: useResolvedTemplateColorsMock,
 }))
 
 const businessCategory: SlidesTemplateCategoryItem = {
@@ -194,7 +209,7 @@ describe("SlidesTemplatePanel", () => {
 			)
 			const lastContent = contentCalls.at(-1)?.[0] as JSONContent | undefined
 			expect(getPromptRichTextPlainText(lastContent)).toBe(
-				"Use slide template: PPT-business.",
+				"Use slide template: Business Template (PPT-business).",
 			)
 		})
 	})
@@ -215,6 +230,10 @@ describe("SlidesTemplatePanel", () => {
 		const selectedTemplate = {
 			value: businessTemplate.code,
 			label: businessTemplate.label,
+			preset_value: {
+				zh_CN: `商务模板（${businessTemplate.code}）`,
+				en_US: `Business Template (${businessTemplate.code})`,
+			},
 			thumbnail_url: businessTemplate.thumbnail_url ?? undefined,
 		}
 		const { rerender } = render(
@@ -231,7 +250,7 @@ describe("SlidesTemplatePanel", () => {
 			)
 			const lastContent = contentCalls.at(-1)?.[0] as JSONContent | undefined
 			expect(getPromptRichTextPlainText(lastContent)).toBe(
-				"Use slide template: PPT-business.",
+				"Use slide template: Business Template (PPT-business).",
 			)
 		})
 
@@ -288,6 +307,30 @@ describe("SlidesTemplatePanel", () => {
 		expect(screen.getByTestId("slides-preset-preview-dialog-content")).toBeInTheDocument()
 	})
 
+	it("resolves selected template colors from its cover when API colors are missing", () => {
+		render(
+			<SlidesTemplateHomeSelectionPreview
+				template={{
+					value: "woodland",
+					label: "Woodland Storybook",
+					thumbnail_url: "https://example.com/woodland.png",
+				}}
+				filters={[]}
+				onFilterChange={vi.fn()}
+			/>,
+		)
+
+		expect(useResolvedTemplateColorsMock).toHaveBeenLastCalledWith({
+			colors: undefined,
+			enabled: true,
+			imageUrl: "https://example.com/woodland.png",
+			priority: "interactive",
+		})
+		expect(screen.getByTitle("#315ECA")).toHaveStyle({ backgroundColor: "#315ECA" })
+		expect(screen.getByTitle("#7AA7FF")).toHaveStyle({ backgroundColor: "#7AA7FF" })
+		expect(screen.getByTitle("#182A5A")).toHaveStyle({ backgroundColor: "#182A5A" })
+	})
+
 	it("shows the AI automatic template placeholder when no template is selected", async () => {
 		render(<SlidesTemplateHomeSelectionPreview filters={[]} onFilterChange={vi.fn()} />)
 
@@ -297,6 +340,7 @@ describe("SlidesTemplatePanel", () => {
 		expect(screen.getByText("playbook.edit.presets.form.autoSelectTemplate")).toHaveClass(
 			"whitespace-normal",
 		)
+		expect(screen.getByTestId("slides-template-ai-visual")).toBeInTheDocument()
 		expect(screen.queryByTestId("slides-template-home-clear-selected-template")).toBeNull()
 
 		render(
@@ -310,7 +354,88 @@ describe("SlidesTemplatePanel", () => {
 			.getAllByTestId("slides-template-home-choose-template")
 			.at(-1)
 		expect(chooseTemplateButton).toBeDefined()
+		expect(chooseTemplateButton).toHaveTextContent(
+			"playbook.edit.presets.form.selectOrAutoSelectTemplate",
+		)
 		expect(chooseTemplateButton).toHaveAttribute("aria-haspopup", "menu")
+	})
+
+	it("highlights the template area and requests a random template on drop", () => {
+		const handleRandomTemplateRequest = vi.fn()
+		render(
+			<SlidesTemplateHomeSelectionPreview
+				filters={[]}
+				onFilterChange={vi.fn()}
+				onRandomTemplateRequest={handleRandomTemplateRequest}
+			/>,
+		)
+
+		const dropTarget = screen.getByTestId("slides-template-home-selected-template")
+		const dataTransfer = {
+			dropEffect: "none",
+			types: [SLIDES_TEMPLATE_RANDOM_DRAG_TYPE],
+		}
+
+		act(() => window.dispatchEvent(new Event(SLIDES_TEMPLATE_RANDOM_DRAG_START_EVENT)))
+		expect(dropTarget).toHaveAttribute("data-random-drag-active", "true")
+		expect(screen.getByTestId("slides-template-random-drag-feedback")).toHaveClass(
+			"border-dashed",
+		)
+		fireEvent.dragEnter(dropTarget, { dataTransfer })
+		expect(dropTarget).toHaveAttribute("data-random-drop-active", "true")
+		expect(screen.getByTestId("slides-template-random-drag-feedback")).toHaveClass(
+			"border-violet-500",
+		)
+		fireEvent.dragOver(dropTarget, { dataTransfer })
+		expect(dataTransfer.dropEffect).toBe("copy")
+		fireEvent.drop(dropTarget, { dataTransfer })
+
+		expect(handleRandomTemplateRequest).toHaveBeenCalledTimes(1)
+		expect(dropTarget).toHaveAttribute("data-random-drag-active", "false")
+		expect(dropTarget).toHaveAttribute("data-random-drop-active", "false")
+	})
+
+	it("requests a random template from the home action button", () => {
+		const handleRandomTemplateRequest = vi.fn()
+		render(
+			<SlidesTemplateHomeSelectionPreview
+				filters={[]}
+				onFilterChange={vi.fn()}
+				onRandomTemplateRequest={handleRandomTemplateRequest}
+			/>,
+		)
+
+		const randomButton = screen.getByTestId("slides-template-home-random-template")
+		expect(randomButton.previousElementSibling).not.toHaveClass("flex-1")
+		fireEvent.click(randomButton)
+
+		expect(handleRandomTemplateRequest).toHaveBeenCalledTimes(1)
+	})
+
+	it("selects a random loaded template through the registered request handler", async () => {
+		const handleTemplateSelect = vi.fn()
+		let requestRandomTemplate: (() => void) | null = null
+		render(
+			<SlidesTemplatePanel
+				config={createSlidesPresetPanelConfig([])}
+				onRandomTemplateRequestChange={(handler) => {
+					requestRandomTemplate = handler
+				}}
+				onTemplateSelect={handleTemplateSelect}
+			/>,
+		)
+
+		await screen.findByText("Business Template")
+		await waitFor(() => expect(requestRandomTemplate).toBeTypeOf("function"))
+		act(() => requestRandomTemplate?.())
+
+		await waitFor(() =>
+			expect(handleTemplateSelect).toHaveBeenCalledWith(
+				expect.objectContaining({
+					value: businessTemplate.code,
+				}),
+			),
+		)
 	})
 
 	it("does not mount the template dropdown until the clear click has completed", async () => {
@@ -482,6 +607,23 @@ describe("SlidesTemplatePanel", () => {
 		filterTriggers.forEach((filterTrigger) => {
 			expect(scrollItemContainer).toContainElement(filterTrigger)
 		})
+
+		fireEvent.click(trigger)
+		const mobilePopup = await screen.findByTestId(
+			"slides-template-floating-selector-mobile-popup",
+		)
+		const mobileCardContainer = (await screen.findByTestId("slides-preset-card")).parentElement
+		const popupBody = mobilePopup.parentElement
+		const drawerContent = popupBody?.parentElement
+
+		expect(mobileCardContainer).not.toHaveAttribute("style")
+		expect(mobilePopup).toHaveClass("min-h-0", "flex-1")
+		expect(popupBody).toHaveClass("max-h-none", "min-h-0", "flex-1", "overflow-hidden")
+		expect(drawerContent).toHaveClass(
+			"h-[min(98dvh,calc(100dvh-var(--safe-area-inset-top)-0.5rem))]",
+			"max-h-[calc(100dvh-var(--safe-area-inset-top)-0.5rem)]",
+			"data-[vaul-drawer-direction=bottom]:!mt-[max(0.5rem,var(--safe-area-inset-top))]",
+		)
 	})
 
 	it("expands search input when keyword already exists", () => {
@@ -583,12 +725,20 @@ describe("SlidesTemplatePanel", () => {
 
 		expect(screen.getByTestId("slides-template-category-tag-filters")).toBeInTheDocument()
 		expect(screen.getByText("Purpose")).toBeInTheDocument()
+		expect(screen.getByTestId("slides-template-tag-options-purpose_group")).toBeInTheDocument()
 		expect(screen.queryByText("Style")).not.toBeInTheDocument()
 
 		const toggle = screen.getByTestId("slides-template-tag-groups-toggle")
+		const clearSelection = screen.getByTestId("slides-template-tag-clear-selection")
+		expect(toggle.nextElementSibling).toBe(clearSelection)
+		expect(clearSelection).toBeEnabled()
+		fireEvent.click(clearSelection)
+		expect(setSelectedChildTagCodes).toHaveBeenCalledWith([])
+		setSelectedChildTagCodes.mockClear()
 		expect(toggle).toHaveAttribute("aria-expanded", "false")
 		fireEvent.click(toggle)
 		expect(screen.getByText("Style")).toBeInTheDocument()
+		expect(screen.getByTestId("slides-template-tag-options-style_group")).toBeInTheDocument()
 		expect(toggle).toHaveAttribute("aria-expanded", "true")
 		fireEvent.click(screen.getByTestId("slides-template-tag-option-style-business"))
 		expect(setSelectedChildTagCodes).toHaveBeenCalledWith([
@@ -602,6 +752,98 @@ describe("SlidesTemplatePanel", () => {
 		fireEvent.click(screen.getByTestId("slides-template-tag-option-purpose-annual-report"))
 		expect(setSelectedChildTagCodes).toHaveBeenCalledWith([])
 	})
+
+	it("keeps tag groups expanded when switching categories", () => {
+		const tagGroups: SlidesTemplateTagGroupItem[] = [
+			{
+				id: "purpose-group",
+				code: "purpose_group",
+				name_i18n: { zh_CN: "用途与交付物", en_US: "Purpose" },
+				sort: 100,
+				tags: [],
+			},
+			{
+				id: "style-group",
+				code: "style_group",
+				name_i18n: { zh_CN: "视觉风格", en_US: "Style" },
+				sort: 90,
+				tags: [],
+			},
+		]
+		const { rerender } = render(
+			<SlidesTemplatePanelContent
+				slidesState={createSlidesTemplatePanelContentState({
+					selectedCategoryCode: businessCategory.code,
+					tagGroups,
+				})}
+				onTemplateClick={vi.fn()}
+			/>,
+		)
+
+		fireEvent.click(screen.getByTestId("slides-template-tag-groups-toggle"))
+		expect(screen.getByTestId("slides-template-tag-groups-toggle")).toHaveAttribute(
+			"aria-expanded",
+			"true",
+		)
+		expect(screen.getByText("Style")).toBeInTheDocument()
+
+		rerender(
+			<SlidesTemplatePanelContent
+				slidesState={createSlidesTemplatePanelContentState({
+					selectedCategoryCode: "PPT-CATE-healthcare",
+					tagGroups,
+				})}
+				onTemplateClick={vi.fn()}
+			/>,
+		)
+
+		expect(screen.getByTestId("slides-template-tag-groups-toggle")).toHaveAttribute(
+			"aria-expanded",
+			"true",
+		)
+		expect(screen.getByText("Style")).toBeInTheDocument()
+	})
+
+	it.each(["all", createSlidesTemplateTagGroupKey("featured")])(
+		"renders tag filters for the %s group",
+		(selectedGroupKey) => {
+			const setSelectedChildTagCodes = vi.fn()
+
+			render(
+				<SlidesTemplatePanelContent
+					slidesState={createSlidesTemplatePanelContentState({
+						selectedGroupKey,
+						tagGroups: [
+							{
+								id: "style-group",
+								code: "style_group",
+								name_i18n: { zh_CN: "视觉风格", en_US: "Style" },
+								sort: 90,
+								tags: [
+									{
+										id: "business-style",
+										code: "style-business",
+										name_i18n: { zh_CN: "商务", en_US: "Business" },
+										sort: 90,
+										template_count: 1,
+										is_official: true,
+									},
+								],
+							},
+						],
+						setSelectedChildTagCodes,
+					})}
+					onTemplateClick={vi.fn()}
+				/>,
+			)
+
+			expect(screen.getByTestId("slides-template-category-tag-filters")).toBeInTheDocument()
+			expect(screen.getByText("Style")).toBeInTheDocument()
+			expect(screen.queryByTestId("slides-template-tag-clear-selection")).toBeNull()
+			fireEvent.click(screen.getByTestId("slides-template-tag-option-style-business"))
+			expect(setSelectedChildTagCodes).toHaveBeenCalledWith(["style-business"])
+		},
+	)
 
 	it("hides the toolbar without an exit transition while preview is open", async () => {
 		render(

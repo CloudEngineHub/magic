@@ -76,11 +76,11 @@ function mockRect(left: number, width: number) {
 }
 
 describe("SlidesTemplateInlinePreview", () => {
-	it("shows usage above the template description", () => {
+	it("shows usage to the right of the title", () => {
 		const templateWithUsage = {
 			...template,
 			description: "Template description",
-			usage_count: 23,
+			usage_count: 3500,
 		}
 
 		renderPreview({
@@ -91,13 +91,16 @@ describe("SlidesTemplateInlinePreview", () => {
 		})
 
 		const usage = screen.getByTestId("slides-template-inline-preview-usage-count")
+		const title = screen.getByTestId("slides-template-inline-preview-title")
 		const description = screen.getByTestId("slides-template-inline-preview-description")
 
-		expect(usage).toHaveTextContent("23")
+		expect(usage).toHaveTextContent("3,500")
+		expect(title.parentElement).toContainElement(usage)
+		expect(title.compareDocumentPosition(usage) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
 		expect(usage.compareDocumentPosition(description)).toBe(Node.DOCUMENT_POSITION_FOLLOWING)
 	})
 
-	it("shows localized template tags after the title", () => {
+	it("shows localized template tags below the title", () => {
 		const taggedTemplate = {
 			...template,
 			tags: [
@@ -123,11 +126,15 @@ describe("SlidesTemplateInlinePreview", () => {
 
 		const title = screen.getByTestId("slides-template-inline-preview-title")
 		const tags = screen.getByTestId("slides-template-inline-preview-tags")
+		const featuredTag = screen.getByTestId("slides-template-inline-preview-featured-tag")
 
-		expect(tags).toHaveTextContent("Featured")
+		expect(featuredTag).toHaveTextContent("Featured")
 		expect(tags).toHaveTextContent("Finance")
+		expect(tags).not.toHaveTextContent("Featured")
+		expect(title.parentElement).toContainElement(featuredTag)
 		expect(title.compareDocumentPosition(tags) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
 		expect(title).not.toHaveClass("flex-1")
+		expect(title.nextElementSibling).toContainElement(featuredTag)
 	})
 
 	it("closes when clicking the empty preview background", () => {

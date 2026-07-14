@@ -11,6 +11,7 @@ import { useTranslation } from "react-i18next"
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/shadcn-ui/hover-card"
 import { Button } from "@/components/shadcn-ui/button"
 import { cn } from "@/lib/utils"
+import { formatNumber } from "@/utils/format"
 import type { OptionItem } from "../types"
 import { useLocaleText } from "../hooks/useLocaleText"
 import { localeTextToDisplayString } from "../utils"
@@ -83,6 +84,7 @@ function SlidesPresetCard({
 	})
 	const showUsageCount = hasSlidesTemplateUsageCount(template)
 	const usageCount = Math.max(0, template.usage_count ?? 0)
+	const formattedUsageCount = formatNumber(usageCount)
 	const testIdSuffix = getTemplateTestIdSuffix(template)
 	const canPreview = Boolean(
 		template.preview_image_urls?.length ||
@@ -225,7 +227,9 @@ function SlidesPresetCard({
 							data-usage-count={usageCount}
 						>
 							<MousePointerClick className="size-3 shrink-0" aria-hidden="true" />
-							{t("playbook.edit.presets.form.usageCount", { count: usageCount })}
+							{t("playbook.edit.presets.form.usageCount", {
+								count: formattedUsageCount,
+							})}
 						</span>
 					</>
 				) : null}
@@ -376,7 +380,7 @@ function SlidesPresetCard({
 											aria-hidden="true"
 										/>
 										{t("playbook.edit.presets.form.usageCount", {
-											count: usageCount,
+											count: formattedUsageCount,
 										})}
 									</span>
 								)}

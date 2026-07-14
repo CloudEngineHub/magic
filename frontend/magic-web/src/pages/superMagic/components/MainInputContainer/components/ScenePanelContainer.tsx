@@ -27,6 +27,7 @@ interface ScenePanelContainerProps {
 	onSlidesFilterChangeRequestChange?: (
 		handler: ((filterId: string, value: string) => void) | null,
 	) => void
+	onSlidesRandomTemplateRequestChange?: (handler: (() => void) | null) => void
 	slidesTemplatePickerContainer?: HTMLDivElement | null
 	onTemplateSelect?: (template: OptionItem | null) => void
 	onFilterChange?: (filters: FieldItem[]) => void
@@ -40,6 +41,7 @@ function ScenePanelContainer({
 	compact = false,
 	selectedTemplate,
 	onSlidesFilterChangeRequestChange,
+	onSlidesRandomTemplateRequestChange,
 	slidesTemplatePickerContainer,
 	onTemplateSelect,
 	onFilterChange,
@@ -138,6 +140,9 @@ function ScenePanelContainer({
 									config={config}
 									selectedTemplate={selectedTemplate}
 									onFilterChangeRequestChange={onSlidesFilterChangeRequestChange}
+									onRandomTemplateRequestChange={
+										onSlidesRandomTemplateRequestChange
+									}
 									hideTemplateSelector={variant === ScenePanelVariant.TopicPage}
 									templatePickerContainer={slidesTemplatePickerContainer}
 									onTemplateSelect={onTemplateSelect}
@@ -189,6 +194,9 @@ function ScenePanelContainer({
 										selectedTemplate={selectedTemplate}
 										onFilterChangeRequestChange={
 											onSlidesFilterChangeRequestChange
+										}
+										onRandomTemplateRequestChange={
+											onSlidesRandomTemplateRequestChange
 										}
 										hideTemplateSelector={
 											variant === ScenePanelVariant.TopicPage

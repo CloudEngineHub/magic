@@ -8,6 +8,7 @@ import {
 	type PointerEvent,
 } from "react"
 import type { JSONContent } from "@tiptap/core"
+import { useMemoizedFn } from "ahooks"
 import { observer } from "mobx-react-lite"
 import { useTranslation } from "react-i18next"
 import CollapsiblePanel from "../../panels/CollapsiblePanel"
@@ -39,6 +40,7 @@ interface SlidesTemplatePanelProps {
 	onFilterChangeRequestChange?: (
 		handler: ((filterId: string, value: string) => void) | null,
 	) => void
+	onRandomTemplateRequestChange?: (handler: (() => void) | null) => void
 	templatePickerContainer?: HTMLDivElement | null
 	onTemplateSelect?: (template: OptionItem | null) => void
 	onFilterChange?: (filters: FieldItem[]) => void
@@ -79,6 +81,7 @@ function SlidesTemplatePanel({
 	selectedTemplate: controlledSelectedTemplate,
 	hideTemplateSelector = false,
 	onFilterChangeRequestChange,
+	onRandomTemplateRequestChange,
 	templatePickerContainer,
 	onTemplateSelect,
 	onFilterChange,
@@ -151,9 +154,18 @@ function SlidesTemplatePanel({
 		() => fieldItems.filter((item) => !isComplexField(item)),
 		[fieldItems],
 	)
+	const presetFieldItems = useMemo(
+		() =>
+			selectedTemplate
+				? fieldItems.map((item) =>
+						isComplexField(item) ? { ...item, options: [selectedTemplate] } : item,
+					)
+				: fieldItems,
+		[fieldItems, selectedTemplate],
+	)
 	const concatenatedContent = useMemo(
-		() => buildConcatenatedPresetContent(fieldItems),
-		[fieldItems],
+		() => buildConcatenatedPresetContent(presetFieldItems),
+		[presetFieldItems],
 	)
 
 	useEffect(() => {
@@ -184,7 +196,7 @@ function SlidesTemplatePanel({
 		return () => onFilterChangeRequestChange?.(null)
 	}, [handleFilterChange, onFilterChangeRequestChange])
 
-	const handleTemplateClick = (template: OptionItem) => {
+	const handleTemplateClick = useMemoizedFn((template: OptionItem) => {
 		if (readOnly) return
 		const requestSeq = templateDetailRequestSeqRef.current + 1
 		templateDetailRequestSeqRef.current = requestSeq
@@ -206,7 +218,27 @@ function SlidesTemplatePanel({
 			.catch((error) => {
 				console.error("Failed to fetch slides template detail", error)
 			})
-	}
+	})
+
+	const handleRandomTemplateRequest = useMemoizedFn(() => {
+		if (readOnly || slidesState.templateOptions.length === 0) return
+
+		const selectedValue = selectedTemplate
+			? localeTextToDisplayString(selectedTemplate.value)
+			: ""
+		const unselectedTemplates = slidesState.templateOptions.filter(
+			(template) => localeTextToDisplayString(template.value) !== selectedValue,
+		)
+		const candidates =
+			unselectedTemplates.length > 0 ? unselectedTemplates : slidesState.templateOptions
+		const template = candidates[Math.floor(Math.random() * candidates.length)]
+		if (template) handleTemplateClick(template)
+	})
+
+	useEffect(() => {
+		onRandomTemplateRequestChange?.(handleRandomTemplateRequest)
+		return () => onRandomTemplateRequestChange?.(null)
+	}, [handleRandomTemplateRequest, onRandomTemplateRequestChange])
 
 	const handleHeaderFilterInteraction = (
 		event: MouseEvent<HTMLDivElement> | PointerEvent<HTMLDivElement>,

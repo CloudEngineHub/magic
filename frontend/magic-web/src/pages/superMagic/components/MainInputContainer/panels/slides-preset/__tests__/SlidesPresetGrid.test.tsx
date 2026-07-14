@@ -140,6 +140,13 @@ describe("SlidesPresetGrid", () => {
 		expect(screen.getByText("Tech Dark")).toBeInTheDocument()
 	})
 
+	it("does not apply the card entry animation when it is disabled", () => {
+		render(<SlidesPresetGrid templates={mockTemplates} disableEntryAnimation />)
+
+		const firstCardContainer = screen.getAllByTestId("slides-preset-card")[0].parentElement
+		expect(firstCardContainer).not.toHaveAttribute("style")
+	})
+
 	it("shows the featured icon before the title and usage in the card corner", () => {
 		render(<SlidesPresetGrid templates={mockTemplates} />)
 

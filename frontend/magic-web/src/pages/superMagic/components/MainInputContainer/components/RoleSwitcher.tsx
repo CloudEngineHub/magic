@@ -59,7 +59,7 @@ function RoleSwitcher({ role, onActionClick }: ModeSwitcherProps) {
 			data-testid="role-switcher"
 		>
 			<HeadlessHorizontalScroll
-				className="-mt-8 h-[76px] min-w-0 flex-1 [&>div.absolute]:!top-auto [&>div.absolute]:bottom-0 [&>div.absolute]:h-11"
+				className="-mt-8 h-[76px] min-w-0 flex-1 rounded-[20px] [&>div.absolute]:!top-auto [&>div.absolute]:bottom-0 [&>div.absolute]:z-20 [&>div.absolute]:h-11"
 				data-testid="role-switcher-mode-selector"
 				scrollContainerClassName="no-scrollbar flex h-full min-w-0 items-end gap-2 overflow-x-auto overflow-y-hidden"
 				scrollContainerRef={scrollContainerRef}

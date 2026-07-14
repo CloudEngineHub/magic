@@ -1,7 +1,11 @@
 import usePortalTarget from "@/hooks/usePortalTarget"
-import { SCENE_INPUT_IDS, SCENE_ANIMATION_CONFIG } from "../../constants"
+import {
+	SCENE_INPUT_IDS,
+	SCENE_ANIMATION_CONFIG,
+	hasSlidesTemplateRandomDragType,
+} from "../../constants"
 import { createPortal } from "react-dom"
-import { useCallback, useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useRef, useState, type DragEvent } from "react"
 import type { OptionItem, FieldItem } from "../../panels/types"
 import { AnimatePresence, motion } from "framer-motion"
 import ScenePanelContainer from "../../components/ScenePanelContainer"
@@ -25,6 +29,7 @@ function DefaultInputContainer({ editorContext, editorNodes }: DefaultInputConta
 	const [selectedSlidesTemplate, setSelectedSlidesTemplate] = useState<OptionItem | null>(null)
 	const [selectedSlidesFilters, setSelectedSlidesFilters] = useState<FieldItem[]>([])
 	const slidesFilterChangeRef = useRef<((filterId: string, value: string) => void) | null>(null)
+	const slidesRandomTemplateRequestRef = useRef<(() => void) | null>(null)
 	const [slidesTemplatePickerContainer, setSlidesTemplatePickerContainer] =
 		useState<HTMLDivElement | null>(null)
 	const isSlidesMode = editorContext?.topicMode === TopicMode.PPT
@@ -84,6 +89,23 @@ function DefaultInputContainer({ editorContext, editorNodes }: DefaultInputConta
 		slidesFilterChangeRef.current?.(filterId, value)
 	}
 
+	const handleRandomTemplateRequest = () => {
+		slidesRandomTemplateRequestRef.current?.()
+	}
+
+	const handleEditorRandomDragOver = (event: DragEvent<HTMLDivElement>) => {
+		if (!hasSlidesTemplateRandomDragType(event.dataTransfer)) return
+		event.preventDefault()
+		event.stopPropagation()
+		event.dataTransfer.dropEffect = "none"
+	}
+
+	const handleEditorRandomDrop = (event: DragEvent<HTMLDivElement>) => {
+		if (!hasSlidesTemplateRandomDragType(event.dataTransfer)) return
+		event.preventDefault()
+		event.stopPropagation()
+	}
+
 	const handleSlidesTemplatePickerContainerChange = useCallback(
 		(container: HTMLDivElement | null) => {
 			setSlidesTemplatePickerContainer(container)
@@ -104,17 +126,24 @@ function DefaultInputContainer({ editorContext, editorNodes }: DefaultInputConta
 					transition={SCENE_ANIMATION_CONFIG.transition}
 				>
 					<div className="flex flex-col gap-2">
-						<DefaultMessageEditorContainer
-							editorContext={{
-								...editorContext,
-								placeholder,
-							}}
-							editorNodes={editorNodes}
-						/>
+						<div
+							onDragEnterCapture={handleEditorRandomDragOver}
+							onDragOverCapture={handleEditorRandomDragOver}
+							onDropCapture={handleEditorRandomDrop}
+						>
+							<DefaultMessageEditorContainer
+								editorContext={{
+									...editorContext,
+									placeholder,
+								}}
+								editorNodes={editorNodes}
+							/>
+						</div>
 						{isSlidesMode ? (
 							<SlidesTemplateHomeSelectionPreview
 								template={selectedSlidesTemplate}
 								filters={selectedSlidesFilters}
+								onRandomTemplateRequest={handleRandomTemplateRequest}
 								onClear={
 									selectedSlidesTemplate
 										? () => setSelectedSlidesTemplate(null)
@@ -143,6 +172,9 @@ function DefaultInputContainer({ editorContext, editorNodes }: DefaultInputConta
 				selectedTemplate={isSlidesMode ? selectedSlidesTemplate : undefined}
 				onSlidesFilterChangeRequestChange={(handler) => {
 					slidesFilterChangeRef.current = handler
+				}}
+				onSlidesRandomTemplateRequestChange={(handler) => {
+					slidesRandomTemplateRequestRef.current = handler
 				}}
 				slidesTemplatePickerContainer={slidesTemplatePickerContainer}
 				onTemplateSelect={handleTemplateSelect}

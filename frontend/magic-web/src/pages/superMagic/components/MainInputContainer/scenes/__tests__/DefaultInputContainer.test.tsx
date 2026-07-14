@@ -1,9 +1,12 @@
 import { fireEvent, render, screen } from "@testing-library/react"
 import { afterEach, describe, expect, it, vi } from "vitest"
 import { TopicMode } from "@/pages/superMagic/pages/Workspace/TopicMode"
+import { SLIDES_TEMPLATE_RANDOM_DRAG_TYPE } from "../../constants"
 import { ScenePanelVariant } from "../../components/LazyScenePanel/types"
 
-const { mockPublish } = vi.hoisted(() => ({
+const { mockEditorDragEnter, mockEditorDrop, mockPublish } = vi.hoisted(() => ({
+	mockEditorDragEnter: vi.fn(),
+	mockEditorDrop: vi.fn(),
 	mockPublish: vi.fn(),
 }))
 
@@ -32,7 +35,14 @@ vi.mock("../../stores", () => ({
 }))
 
 vi.mock("../../components/editors/DefaultMessageEditorContainer", () => ({
-	default: () => <div data-testid="default-message-editor" />,
+	default: () => (
+		<div
+			data-testid="default-message-editor"
+			contentEditable
+			onDragEnter={mockEditorDragEnter}
+			onDrop={mockEditorDrop}
+		/>
+	),
 }))
 
 vi.mock("../../components/ScenePanelContainer", () => ({
@@ -78,5 +88,29 @@ describe("DefaultInputContainer", () => {
 
 		fireEvent.click(screen.getByRole("button", { name: "选择模板" }))
 		expect(mockPublish).not.toHaveBeenCalled()
+	})
+
+	it("阻止 PPT 预览图拖入输入框", () => {
+		render(
+			<DefaultInputContainer
+				editorContext={{
+					topicMode: TopicMode.PPT,
+					editorRef: { current: null },
+				}}
+			/>,
+		)
+
+		const editor = screen.getByTestId("default-message-editor")
+		const dataTransfer = {
+			dropEffect: "copy",
+			types: [SLIDES_TEMPLATE_RANDOM_DRAG_TYPE],
+		}
+
+		expect(fireEvent.dragEnter(editor, { dataTransfer })).toBe(false)
+		expect(mockEditorDragEnter).not.toHaveBeenCalled()
+		expect(fireEvent.dragOver(editor, { dataTransfer })).toBe(false)
+		expect(dataTransfer.dropEffect).toBe("none")
+		expect(fireEvent.drop(editor, { dataTransfer })).toBe(false)
+		expect(mockEditorDrop).not.toHaveBeenCalled()
 	})
 })
