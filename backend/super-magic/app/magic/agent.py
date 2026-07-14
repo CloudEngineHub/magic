@@ -50,6 +50,11 @@ from openai.types.chat import ChatCompletion, ChatCompletionMessage, ChatComplet
 
 from app.core.ai_abilities import get_compact_model_id
 from app.core.context.agent_context import AgentContext
+from app.core.horizon.workspace_tree_display import (
+    WORKSPACE_FILES_DISPLAY_MAX_CHARS,
+    WORKSPACE_TREE_SCAN_DEPTH,
+    build_workspace_tree_display_text,
+)
 from app.magic.background_compact import (
     BackgroundCompactState,
     start_background_compact,
@@ -75,9 +80,10 @@ from app.service.todo_service import TodoService
 from app.tools.core.app_tool_validator import app_tool_validator
 from app.tools.core.tool_factory import tool_factory
 from app.tools.list_dir import ListDir
-from app.infrastructure.magic_service.client import MagicServiceClient
-from app.infrastructure.magic_service.config import MagicServiceConfigLoader
-from app.utils.file_utils import convert_file_tree_to_string, extract_paths_from_local_tree, extract_paths_from_magic_tree, WorkspaceSnapshot
+from app.utils.file_utils import (
+    WorkspaceSnapshot,
+    extract_workspace_entries,
+)
 from agentlang.environment import Environment
 from app.core.skill_manager import generate_skills_prompt
 from app.core.skill_utils.skill_sources import get_system_skills_dir, get_workspace_skills_dir
@@ -534,68 +540,22 @@ class Agent(BaseAgent):
 
         return variables
 
-    async def _get_file_tree_from_magic_service(self) -> Optional[WorkspaceSnapshot]:
-        """从 Magic Service 获取文件目录树，失败时返回 None。"""
-        try:
-            # 获取 sandbox_id 和 topic_id
-            sandbox_id = self.agent_context.get_metadata().get("sandbox_id")
-            topic_id = self.agent_context.get_metadata().get("topic_id")
-
-            if not sandbox_id:
-                logger.warning("未找到 sandbox_id，无法从 Magic Service 获取目录树")
-                return None
-
-            if not topic_id:
-                logger.warning("未找到 topic_id，无法从 Magic Service 获取目录树")
-                return None
-
-            # 加载 Magic Service 配置
-            magic_service_config = MagicServiceConfigLoader.load_with_fallback()
-            logger.debug(f"Magic Service API Base URL: {magic_service_config.api_base_url}")
-
-            # 使用 Magic Service Client 获取目录树
-            magic_client = MagicServiceClient(magic_service_config)
-            file_tree_root = await magic_client.get_file_tree(
-                sandbox_id=sandbox_id,
-                topic_id=topic_id,
-                depth=5  # 使用相同的层级深度
-            )
-
-            display = convert_file_tree_to_string(file_tree_root, show_file_size=True)
-            entries = extract_paths_from_magic_tree(file_tree_root)
-            logger.info("成功从 Magic Service 获取目录树")
-            return WorkspaceSnapshot(display=display, entries=entries)
-
-        except Exception as e:
-            logger.warning(f"从 Magic Service 获取目录树失败: {e}")
-            logger.debug(f"详细错误: {traceback.format_exc()}")
-            return None
-
-    async def _get_file_tree_from_local_filesystem(self) -> WorkspaceSnapshot:
-        """从本地文件系统扫描获取文件目录树。"""
-        logger.info("使用本地文件系统扫描获取目录树")
+    async def _get_workspace_snapshot(self) -> WorkspaceSnapshot:
+        """扫描工作区文件树并生成快照。"""
+        logger.info("扫描工作区文件树")
         list_dir_tool = ListDir()
         content = await list_dir_tool.get_file_tree_async(
             relative_workspace_path=".",
-            level=5,
+            level=WORKSPACE_TREE_SCAN_DEPTH,
             filter_binary=False,
         )
-        display = list_dir_tool._convert_file_tree_to_string(content)
-        entries = extract_paths_from_local_tree(content.tree)
+        entries = extract_workspace_entries(content.tree)
+        display = build_workspace_tree_display_text(
+            entries,
+            max_chars=WORKSPACE_FILES_DISPLAY_MAX_CHARS,
+            scan_depth=WORKSPACE_TREE_SCAN_DEPTH,
+        )
         return WorkspaceSnapshot(display=display, entries=entries)
-
-    async def _get_workspace_snapshot(self) -> WorkspaceSnapshot:
-        """统一入口：获取工作区文件树快照。
-
-        生产环境优先走 Magic Service API（S3 文件系统必须通过 API 获取），
-        失败或开发环境降级为本地扫描。
-        """
-        snapshot: Optional[WorkspaceSnapshot] = None
-        snapshot = await self._get_file_tree_from_local_filesystem()
-
-        if not snapshot.display or "目录为空，没有文件" in snapshot.display:
-            return WorkspaceSnapshot(display="当前工作目录为空，没有文件", entries=[])
-        return snapshot
 
     async def async_complete_dynamic_init(self) -> None:
         """异步完成动态初始化，将 workspace 文件树、memory、用户语言同步到 AgentHorizon。
