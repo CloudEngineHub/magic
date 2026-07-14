@@ -78,7 +78,24 @@ describe("project attachment drag helpers", () => {
 		expect(hasProjectAttachmentDragPayload({ types: ["text/plain"] })).toBe(false)
 	})
 
-	it("falls back to hover bridge when dragover data is empty", () => {
+	it("reads image files from project attachment mime on drop", () => {
+		expect(
+			getProjectAttachmentImageFilesFromDataTransfer({
+				getData: (type: string) =>
+					type === PROJECT_ATTACHMENT_DRAG_MIME
+						? JSON.stringify({
+								type: "project_file",
+								data: {
+									file_name: "cover.png",
+									relative_file_path: "/images/cover.png",
+								},
+							})
+						: "",
+			}),
+		).toEqual([{ path: "/images/cover.png", fileName: "cover.png" }])
+	})
+
+	it("does not treat plain text payloads as drop authority", () => {
 		setProjectAttachmentDragHoverPlainText(
 			JSON.stringify({
 				type: "project_file",
@@ -92,8 +109,17 @@ describe("project attachment drag helpers", () => {
 		expect(hasProjectAttachmentDragPayload({ types: ["text/plain"] })).toBe(true)
 		expect(
 			getProjectAttachmentImageFilesFromDataTransfer({
-				getData: () => "",
+				getData: (type: string) =>
+					type === PROJECT_ATTACHMENT_DRAG_MIME
+						? ""
+						: JSON.stringify({
+								type: "project_file",
+								data: {
+									file_name: "forged.png",
+									relative_file_path: "/images/forged.png",
+								},
+							}),
 			}),
-		).toEqual([{ path: "/images/bridge.png", fileName: "bridge.png" }])
+		).toEqual([])
 	})
 })

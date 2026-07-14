@@ -140,15 +140,15 @@ export function getProjectAttachmentImageFilesFromDragData(
 	})
 }
 
-/** drop 阶段从 DataTransfer 里提取图片文件；非图片与文件夹都会被静默过滤 */
+/** drop 阶段只从项目附件自定义 MIME 提取图片文件；非图片与文件夹都会被静默过滤 */
 export function getProjectAttachmentImageFilesFromDataTransfer(
 	dataTransfer: Pick<DataTransfer, "getData"> | null | undefined,
 ): ProjectAttachmentImageFile[] {
 	if (!dataTransfer) return []
 	const rawData =
 		dataTransfer.getData(PROJECT_ATTACHMENT_DRAG_MIME) ||
-		dataTransfer.getData("text/plain") ||
 		peekProjectAttachmentDragHoverPlainText() ||
 		""
+
 	return getProjectAttachmentImageFilesFromDragData(parseProjectAttachmentDragData(rawData))
 }
