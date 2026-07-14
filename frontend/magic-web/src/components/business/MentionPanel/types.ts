@@ -498,8 +498,6 @@ export interface MentionPanelProps<TCatalogId extends string = string> extends B
 	initialNavigationStack?: NavigationItem<TCatalogId>[]
 	searchPlaceholder?: string
 	triggerRef?: React.RefObject<HTMLElement | null>
-	/** Portal mount node for floating panel content. Useful inside native fullscreen containers. */
-	portalContainer?: HTMLElement | null
 	language?: LocaleInput
 	disableKeyboardShortcuts?: boolean
 	/**

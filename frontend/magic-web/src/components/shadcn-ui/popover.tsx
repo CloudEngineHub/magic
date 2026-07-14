@@ -15,14 +15,10 @@ function PopoverContent({
 	className,
 	align = "center",
 	sideOffset = 4,
-	container,
 	...props
-}: React.ComponentProps<typeof PopoverPrimitive.Content> & {
-	/** Portal mount node (e.g. fullscreen stacking). */
-	container?: HTMLElement | null
-}) {
+}: React.ComponentProps<typeof PopoverPrimitive.Content>) {
 	return (
-		<PopoverPrimitive.Portal {...(container != null ? { container } : {})}>
+		<PopoverPrimitive.Portal>
 			<PopoverPrimitive.Content
 				data-slot="popover-content"
 				align={align}

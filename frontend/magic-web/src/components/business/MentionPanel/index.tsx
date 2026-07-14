@@ -68,7 +68,6 @@ const MentionPanel = observer(
 			initialNavigationStack,
 			searchPlaceholder,
 			triggerRef,
-			portalContainer,
 			language,
 			className,
 			style,
@@ -678,7 +677,6 @@ const MentionPanel = observer(
 						initialNavigationStack={initialNavigationStack}
 						searchPlaceholder={searchPlaceholder}
 						triggerRef={triggerRef}
-						portalContainer={portalContainer}
 						language={language}
 						className={className}
 						lastHistoryIndex={lastHistoryIndex}
@@ -1004,7 +1002,6 @@ const MentionPanel = observer(
 				<PopoverContent
 					ref={internalRef}
 					data-mention-panel
-					container={portalContainer}
 					className={cn(panelClassName, "p-0")}
 					side="bottom"
 					align="start"
