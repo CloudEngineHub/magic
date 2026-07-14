@@ -269,7 +269,6 @@ export function useProjectAttachmentDragToPlugin({
 						toast.dismiss(toastId)
 						throw new Error("Session expired or no image asset resolved.")
 					}
-					console.log("files", files)
 					postPluginMessage({
 						type: "magic-canvas-plugin:canvas-asset-drop",
 						dragSessionId: sessionId,

@@ -142,7 +142,6 @@ export async function resolvePluginFileAssets(
 		),
 	)
 
-	console.log("resolved", resolved)
 	return resolved.filter((asset) => validatePluginPickedFileType(asset.type, options))
 }
 

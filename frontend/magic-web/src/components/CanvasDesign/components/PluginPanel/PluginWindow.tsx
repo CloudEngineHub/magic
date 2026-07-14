@@ -60,7 +60,7 @@ export const PluginWindow = memo(function PluginWindow({
 	plugin: CanvasDesignPlugin
 	sessionId: number
 }) {
-	const channelToken = useMemo(() => createPluginChannelToken(), [])
+	const channelToken = useMemo(() => createPluginChannelToken(), [plugin.name, sessionId])
 	const [position, setPosition] = useState<PluginWindowPosition>(() =>
 		getInitialPosition(canvas.container),
 	)
