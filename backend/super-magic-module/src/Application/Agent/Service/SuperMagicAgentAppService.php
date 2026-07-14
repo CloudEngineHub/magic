@@ -2405,86 +2405,6 @@ class SuperMagicAgentAppService extends AbstractSuperMagicAppService
     }
 
     /**
-     * Save the visibility configuration for an agent.
-     *
-     * @param array<string> $userIds
-     * @param array<string> $departmentIds
-     */
-    private function saveAgentVisibility(
-        SuperMagicAgentDataIsolation $dataIsolation,
-        string $code,
-        VisibilityType $visibilityType,
-        array $userIds = [],
-        array $departmentIds = []
-    ): void {
-        $this->resourceVisibilityDomainService->saveVisibilityByPrincipals(
-            $this->createPermissionDataIsolation($dataIsolation),
-            ResourceVisibilityResourceType::SUPER_MAGIC_AGENT,
-            $code,
-            $visibilityType,
-            $userIds,
-            $departmentIds
-        );
-    }
-
-    /**
-     * 根据最新发布版本，重新同步 Agent 的可见范围和市场分发状态。
-     *
-     * 这里的职责是把“发布语义”真正落成存储状态：
-     * - `MARKET` 在当前提交阶段不动现有范围，审核通过后由后台审核链路同步
-     * - `PRIVATE / MEMBER / ORGANIZATION` 会重建组织内可见范围
-     *
-     * 注意：
-     * - 从 `MARKET` 切回组织内范围时，需要把历史市场记录统一下线，并回收市场安装关系
-     * - 真正的可见范围由 `saveAgentVisibility()` 决定，而它底层会先删掉该资源的全部旧可见记录，再写入新配置
-     * - 因此这里不需要额外单独删除“非创建者可见范围”；重新保存时已经会整体覆盖
-     */
-    private function syncPublishedAgentScope(
-        SuperMagicAgentDataIsolation $dataIsolation,
-        SuperMagicAgentEntity $agentEntity,
-        AgentVersionEntity $versionEntity
-    ): void {
-        $publishTargetType = $versionEntity->getPublishTargetType();
-        if ($publishTargetType === PublishTargetType::MARKET) {
-            return;
-        }
-
-        $this->superMagicAgentDomainService->offlineMarketPublishings($dataIsolation, $agentEntity->getCode());
-
-        if ($publishTargetType === PublishTargetType::ORGANIZATION) {
-            // 组织内全员可见，不需要单独保留创建者用户记录。
-            $this->saveAgentVisibility($dataIsolation, $agentEntity->getCode(), VisibilityType::ALL);
-            return;
-        }
-
-        if ($publishTargetType === PublishTargetType::MEMBER) {
-            $publishTargetValue = $versionEntity->getPublishTargetValue();
-            // 创建者要始终保留可见，否则“只选部门/成员但没选自己”时，发布者自己会失去访问权限。
-            // 这里的 user_ids 只负责“显式成员可见”，部门范围仍然通过 department_ids 单独保存。
-            $userIds = array_values(array_unique(array_merge(
-                [$agentEntity->getCreator()],
-                $publishTargetValue?->getUserIds() ?? []
-            )));
-
-            $this->saveAgentVisibility(
-                $dataIsolation,
-                $agentEntity->getCode(),
-                VisibilityType::SPECIFIC,
-                $userIds,
-                $publishTargetValue?->getDepartmentIds() ?? []
-            );
-            return;
-        }
-
-        $this->saveAgentVisibility(
-            $dataIsolation,
-            $agentEntity->getCode(),
-            VisibilityType::SPECIFIC,
-            [$agentEntity->getCreator()]
-        );
-    }
-
-    /**
      * 发布准备智能体版本.
      */
     private function publishPreparedAgentVersion(
@@ -2519,9 +2439,19 @@ class SuperMagicAgentAppService extends AbstractSuperMagicAppService
 
         Db::beginTransaction();
         try {
+            $previousVersion = $this->superMagicAgentVersionDomainService->getCurrentVersionByCodeForUpdate(
+                $dataIsolation,
+                $code
+            );
             $versionEntity = $this->superMagicAgentVersionDomainService->publishAgent($dataIsolation, $agentEntity, $versionEntity);
             if ($versionEntity->getPublishStatus()->isPublished()) {
-                $this->syncPublishedAgentScope($dataIsolation, $agentEntity, $versionEntity);
+                // 只有当前版本已经生效时，才需要切换权限和市场状态。
+                $this->syncAgentPublishScopeTransition(
+                    $dataIsolation,
+                    $agentEntity,
+                    $previousVersion,
+                    $versionEntity
+                );
             }
             Db::commit();
         } catch (Throwable $throwable) {

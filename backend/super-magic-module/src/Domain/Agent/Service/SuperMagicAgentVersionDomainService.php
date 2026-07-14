@@ -73,6 +73,13 @@ class SuperMagicAgentVersionDomainService
         return $this->agentVersionRepository->findCurrentOrLatestByCode($dataIsolation, $code);
     }
 
+    public function getCurrentVersionByCodeForUpdate(
+        SuperMagicAgentDataIsolation $dataIsolation,
+        string $code
+    ): ?AgentVersionEntity {
+        return $this->agentVersionRepository->findCurrentVersionByCodeForUpdate($dataIsolation, $code);
+    }
+
     public function findByIdWithoutOrganizationFilter(int $id): ?AgentVersionEntity
     {
         return $this->agentVersionRepository->findById($id);

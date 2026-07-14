@@ -78,6 +78,26 @@ class AgentVersionRepository extends SuperMagicAbstractRepository implements Age
         return $this->toEntity($model->toArray());
     }
 
+    public function findCurrentVersionByCodeForUpdate(
+        SuperMagicAgentDataIsolation $dataIsolation,
+        string $code
+    ): ?AgentVersionEntity {
+        $builder = $this->createBuilder($dataIsolation, $this->agentVersionModel::query());
+        /** @var null|AgentVersionModel $model */
+        $model = $builder
+            ->where('code', $code)
+            ->where('is_current_version', 1)
+            ->whereNull('deleted_at')
+            ->lockForUpdate()
+            ->first();
+
+        if (! $model) {
+            return null;
+        }
+
+        return $this->toEntity($model->toArray());
+    }
+
     public function findCurrentOrLatestByCodes(SuperMagicAgentDataIsolation $dataIsolation, array $codes): array
     {
         $codes = array_values(array_unique(array_filter($codes)));
