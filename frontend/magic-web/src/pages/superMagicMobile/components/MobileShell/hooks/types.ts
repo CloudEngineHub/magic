@@ -1,9 +1,11 @@
 import type { Dispatch, SetStateAction } from "react"
 
+import type { FUNCTION_PERMISSION_CODE } from "@/apis/modules/function-permission"
 import type { RouteName } from "@/routes/constants"
 import type { MobileShellMenuContextValue, MobileShellMenuNavItem } from "../MobileShellMenuContext"
 
 export type SuperMobileShellNativeRecordingTab = "ai_recording"
+type SuperMobileShellSupportedPermissionCode = typeof FUNCTION_PERMISSION_CODE.MagicClawAccess
 
 export interface SuperMobileShellNavConfigItem {
 	/** Stable menu key shared by UI test ids, grouping, and route lookup. */
@@ -16,6 +18,8 @@ export interface SuperMobileShellNavConfigItem {
 	routeName: RouteName
 	/** Optional Magic App native recording tab override for recording-style menu entries. */
 	nativeRecordingTab?: SuperMobileShellNativeRecordingTab
+	/** Optional function permission required before the menu item can be shown. */
+	requiredPermissionCode?: SuperMobileShellSupportedPermissionCode
 }
 
 export interface SuperMobileShellResolvedNavItem extends MobileShellMenuNavItem {

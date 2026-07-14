@@ -3,11 +3,17 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 
 import { useSuperMobileShellNavigation } from "../useSuperMobileShellNavigation"
 
-const { navigateMock, deviceMocks, userStoreMock } = vi.hoisted(() => ({
+const { navigateMock, deviceMocks, envMock, permissionMock, userStoreMock } = vi.hoisted(() => ({
 	navigateMock: vi.fn(),
 	deviceMocks: {
 		isMagicApp: false,
 		changeBottomTabMock: vi.fn(),
+	},
+	envMock: {
+		isPrivateDeployment: false,
+	},
+	permissionMock: {
+		canAccessMagicClaw: true,
 	},
 	userStoreMock: {
 		user: {
@@ -24,10 +30,30 @@ vi.mock("@/models/user", () => ({
 	userStore: userStoreMock,
 }))
 
+vi.mock("@/hooks/useFunctionPermission", () => ({
+	useFunctionPermission: () => ({
+		isAllowed: permissionMock.canAccessMagicClaw,
+		isLoading: false,
+	}),
+}))
+
 vi.mock("@/utils/devices", () => ({
 	get isMagicApp() {
 		return deviceMocks.isMagicApp
 	},
+}))
+
+vi.mock("@/utils/env", () => ({
+	env: () => "",
+	getPrivateDeploymentConfig: () => null,
+	isCommercial: () => false,
+	isDev: false,
+	isInternationalEnv: () => false,
+	isLoginAuthorizationWhitelist: () => false,
+	isPreEnv: () => false,
+	isPrivateDeployment: () => envMock.isPrivateDeployment,
+	isProductionEnv: () => false,
+	isTestEnv: () => true,
 }))
 
 vi.mock("@/platform/native", () => ({
@@ -86,6 +112,8 @@ describe("useSuperMobileShellNavigation", () => {
 		navigateMock.mockReset()
 		deviceMocks.changeBottomTabMock.mockReset()
 		deviceMocks.isMagicApp = false
+		envMock.isPrivateDeployment = false
+		permissionMock.canAccessMagicClaw = true
 		userStoreMock.user.isPersonalOrganization = false
 	})
 
