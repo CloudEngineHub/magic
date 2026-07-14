@@ -1,5 +1,23 @@
+import { useState } from "react"
 import { observer } from "mobx-react-lite"
 import { useTranslation } from "react-i18next"
+import {
+	AlertDialog,
+	AlertDialogAction,
+	AlertDialogCancel,
+	AlertDialogContent,
+	AlertDialogDescription,
+	AlertDialogFooter,
+	AlertDialogHeader,
+	AlertDialogTitle,
+} from "@/components/shadcn-ui/alert-dialog"
+import {
+	Select,
+	SelectContent,
+	SelectItem,
+	SelectTrigger,
+	SelectValue,
+} from "@/components/shadcn-ui/select"
 import { cn } from "@/lib/utils"
 import { usePublishPanelStore } from "../context"
 import { getPublishToCopyKeys, getPublishToUiKey } from "../publishCopy"
@@ -17,41 +35,138 @@ export default observer(function PublishTargetFields({
 }: PublishTargetFieldsProps) {
 	const { t } = useTranslation("crew/market")
 	const store = usePublishPanelStore()
+	const [pendingPublishTo, setPendingPublishTo] = useState<PublishTo | null>(null)
 	const availablePublishTo = publishToOrder.filter((item) =>
 		store.availablePublishTo.includes(item),
 	)
+	const handleSelectPublishTo = (nextPublishTo: PublishTo) => {
+		if (store.isPublishToSelected(nextPublishTo)) return
+		if (store.currentPublishTo && nextPublishTo !== store.currentPublishTo) {
+			setPendingPublishTo(nextPublishTo)
+			return
+		}
+
+		store.selectPublishTo(nextPublishTo)
+	}
 
 	return (
-		<div className="flex flex-col gap-4" data-testid="skill-publish-target-fields">
-			<div className="flex items-center justify-between gap-3">
+		<>
+			<div className="flex flex-col gap-4" data-testid="skill-publish-target-fields">
 				<p className="flex items-center gap-1 text-base font-medium text-foreground">
 					{t("skillEditPage.publishPanel.create.fields.target.label")}
 					<span className="text-destructive" aria-hidden="true">
 						*
 					</span>
 				</p>
-				<p className="text-xs leading-4 text-muted-foreground">
-					{t("skillEditPage.publishPanel.create.fields.target.helper")}
-				</p>
-			</div>
 
-			<div className="grid gap-5 md:grid-cols-2">
-				{availablePublishTo.map((publishTo) => (
-					<PublishToCard
-						key={publishTo}
-						publishTo={publishTo}
-						selected={store.isPublishToSelected(publishTo)}
-						onSelect={store.selectPublishTo}
-						disabled={disabled}
+				<div className="grid gap-5 md:grid-cols-2">
+					{availablePublishTo.map((publishTo) => (
+						<PublishToCard
+							key={publishTo}
+							publishTo={publishTo}
+							selected={store.isPublishToSelected(publishTo)}
+							onSelect={handleSelectPublishTo}
+							disabled={disabled}
+						/>
+					))}
+				</div>
+
+				{store.draft.publishTo === "INTERNAL" ? (
+					<PublishInternalTargetSection disabled={disabled} />
+				) : (
+					<>
+						<MarketCategoryField disabled={disabled} />
+						<PublishingProcess />
+					</>
+				)}
+			</div>
+			<AlertDialog
+				open={Boolean(pendingPublishTo)}
+				onOpenChange={(open) => {
+					if (!open) setPendingPublishTo(null)
+				}}
+			>
+				<AlertDialogContent size="sm">
+					<AlertDialogHeader>
+						<AlertDialogTitle>
+							{t("skillEditPage.publishPanel.create.channelChangeConfirm.title")}
+						</AlertDialogTitle>
+						<AlertDialogDescription>
+							{t("skillEditPage.publishPanel.create.channelChangeConfirm.content")}
+						</AlertDialogDescription>
+					</AlertDialogHeader>
+					<AlertDialogFooter>
+						<AlertDialogCancel>
+							{t("skillEditPage.publishPanel.actions.cancel")}
+						</AlertDialogCancel>
+						<AlertDialogAction
+							onClick={() => {
+								if (pendingPublishTo) store.selectPublishTo(pendingPublishTo)
+								setPendingPublishTo(null)
+							}}
+						>
+							{t("skillEditPage.publishPanel.create.channelChangeConfirm.confirm")}
+						</AlertDialogAction>
+					</AlertDialogFooter>
+				</AlertDialogContent>
+			</AlertDialog>
+		</>
+	)
+})
+
+const CATEGORY_PLACEHOLDER = "__placeholder__"
+
+const MarketCategoryField = observer(function MarketCategoryField({
+	disabled = false,
+}: {
+	disabled?: boolean
+}) {
+	const { t } = useTranslation("crew/market")
+	const store = usePublishPanelStore()
+
+	if (store.marketCategories.length === 0) return null
+
+	return (
+		<div className="flex flex-col gap-1.5" data-testid="skill-publish-category-field">
+			<label className="flex items-center gap-1 text-base font-medium text-foreground">
+				{t("skillEditPage.publishPanel.create.fields.category.label")}
+				<span className="text-destructive" aria-hidden="true">
+					*
+				</span>
+				<span className="sr-only">
+					{t("skillEditPage.publishPanel.create.fields.category.required")}
+				</span>
+			</label>
+			<Select
+				value={store.draft.categoryId || CATEGORY_PLACEHOLDER}
+				onValueChange={(value) => {
+					if (value === CATEGORY_PLACEHOLDER) return
+					store.setCategoryId(value)
+				}}
+				disabled={disabled}
+			>
+				<SelectTrigger
+					className="h-9 w-full"
+					aria-required="true"
+					data-testid="skill-publish-category-select"
+				>
+					<SelectValue
+						placeholder={t(
+							"skillEditPage.publishPanel.create.fields.category.placeholder",
+						)}
 					/>
-				))}
-			</div>
-
-			{store.draft.publishTo === "INTERNAL" ? (
-				<PublishInternalTargetSection disabled={disabled} />
-			) : (
-				<PublishingProcess />
-			)}
+				</SelectTrigger>
+				<SelectContent className="max-h-64">
+					<SelectItem value={CATEGORY_PLACEHOLDER} disabled>
+						{t("skillEditPage.publishPanel.create.fields.category.placeholder")}
+					</SelectItem>
+					{store.marketCategories.map((category) => (
+						<SelectItem key={category.id} value={category.id}>
+							{category.name}
+						</SelectItem>
+					))}
+				</SelectContent>
+			</Select>
 		</div>
 	)
 })

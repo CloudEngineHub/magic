@@ -339,6 +339,7 @@ export interface PublishAgentPrefillResponse {
 	version_description_i18n: PublishAgentPrefillDescriptionI18n | null
 	publish_target_type: AgentPublishTargetType | null
 	publish_target_value?: PublishAgentTargetValue | null
+	category_id?: string | number | null
 }
 
 export interface PublishAgentParams {
@@ -348,6 +349,7 @@ export interface PublishAgentParams {
 	publish_to_type?: AgentPublishToType
 	publish_target_type: AgentPublishTargetType
 	publish_target_value?: PublishAgentTargetValue | null
+	category_id?: string | number | null
 }
 
 /** Response for publish agent (API 17) */

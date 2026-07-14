@@ -6,6 +6,7 @@ import type {
 	PublishAgentPrefillResponse,
 	PublishAgentTargetValue,
 } from "@/apis/modules/crew"
+import type { CategoryView } from "@/services/crew/CrewService"
 import type {
 	PublishDraft,
 	PublishInternalTarget,
@@ -61,30 +62,41 @@ export function createInitialCrewEditPublishPanelData({
 		},
 		availablePublishTo: availability.availablePublishTo,
 		availableInternalTargets: availability.availableInternalTargets,
+		currentPublishTo: null,
+		marketCategories: [],
 	}
 }
 
 export function createCrewEditPublishPanelData({
 	agentDetail,
 	versions,
+	categories = [],
 	locale,
 	canPublishPrivate = true,
 	canPublishTeam = true,
 }: {
 	agentDetail: AgentDetailResponse
 	versions: AgentVersionItem[]
+	categories?: CategoryView[]
 	locale: string
 	canPublishPrivate?: boolean
 	canPublishTeam?: boolean
 }): PublishPanelData {
 	const availability = resolvePublishAvailability({
-		publishType: agentDetail.publish_type,
-		allowedPublishTargetTypes: agentDetail.allowed_publish_target_types,
+		publishType: null,
+		allowedPublishTargetTypes: [],
 		fallbackPublishTo: [...defaultCrewPublishTo],
 		fallbackInternalTargets: [...defaultCrewInternalTargets],
 		canPublishPrivate,
 		canPublishTeam,
 	})
+	const draft = createDraftForAvailability(availability)
+	if (
+		agentDetail.publish_type &&
+		availability.availablePublishTo.includes(agentDetail.publish_type)
+	) {
+		draft.publishTo = agentDetail.publish_type
+	}
 
 	return {
 		hasUnpublishedChanges: getHasUnpublishedChanges(agentDetail),
@@ -92,7 +104,7 @@ export function createCrewEditPublishPanelData({
 			versions.find((version) => version.publisher?.name)?.publisher?.name ?? "",
 		historyRecords: versions.map((version) => mapAgentVersion(version, locale)),
 		draft: {
-			...createDraftForAvailability(availability),
+			...draft,
 			version: resolveInitialPublishVersion({
 				versions,
 				fallbackVersion: agentDetail.version_code,
@@ -107,6 +119,11 @@ export function createCrewEditPublishPanelData({
 		},
 		availablePublishTo: availability.availablePublishTo,
 		availableInternalTargets: availability.availableInternalTargets,
+		currentPublishTo: agentDetail.publish_type ?? null,
+		marketCategories: categories.map((category) => ({
+			id: category.id,
+			name: category.name,
+		})),
 	}
 }
 
@@ -118,6 +135,9 @@ export function buildPublishParamsFromDraft(draft: PublishDraft): PublishAgentPa
 		version_description_i18n: buildPublishDetailsI18nText(submissionDraft.details),
 		publish_target_type: mapPanelTargetToApi(submissionDraft),
 		publish_target_value: buildPublishTargetValue(submissionDraft),
+		...(submissionDraft.publishTo === "MARKET" && submissionDraft.categoryId
+			? { category_id: submissionDraft.categoryId }
+			: {}),
 	}
 }
 

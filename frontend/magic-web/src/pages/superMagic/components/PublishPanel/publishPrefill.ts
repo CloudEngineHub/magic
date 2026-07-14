@@ -24,6 +24,7 @@ export interface PublishPrefillPayload {
 	version_description_i18n: Record<string, string> | [] | null
 	publish_target_type: PublishPrefillTargetType
 	publish_target_value?: PublishPrefillTargetValue | null
+	category_id?: string | number | null
 }
 
 export interface PublishPrefillVersionReference {
@@ -42,6 +43,7 @@ export function createPublishPrefillDraft({
 	const targetDraft = resolvePrefillTargetDraft({
 		publishTargetType: prefill.publish_target_type,
 		publishTargetValue: prefill.publish_target_value,
+		categoryId: prefill.category_id,
 		versions,
 		fallbackDraft,
 	})
@@ -56,11 +58,13 @@ export function createPublishPrefillDraft({
 function resolvePrefillTargetDraft({
 	publishTargetType,
 	publishTargetValue,
+	categoryId,
 	versions,
 	fallbackDraft,
 }: {
 	publishTargetType: PublishPrefillPayload["publish_target_type"]
 	publishTargetValue: PublishPrefillPayload["publish_target_value"]
+	categoryId: PublishPrefillPayload["category_id"]
 	versions: PublishPrefillVersionReference[]
 	fallbackDraft: PublishDraft
 }): PublishDraft {
@@ -70,6 +74,9 @@ function resolvePrefillTargetDraft({
 			...fallbackDraft,
 			publishTo: "MARKET",
 			specificMembers: [],
+			...(normalizeCategoryId(categoryId)
+				? { categoryId: normalizeCategoryId(categoryId) }
+				: {}),
 		}
 
 	if (publishTargetType === "ORGANIZATION")
@@ -149,4 +156,9 @@ function formatDraftVersion(version: string) {
 	const trimmed = version.trim()
 	if (!trimmed) return ""
 	return /^v/i.test(trimmed) ? trimmed : `v${trimmed}`
+}
+
+function normalizeCategoryId(categoryId: PublishPrefillPayload["category_id"]) {
+	if (categoryId === null || categoryId === undefined) return ""
+	return String(categoryId)
 }

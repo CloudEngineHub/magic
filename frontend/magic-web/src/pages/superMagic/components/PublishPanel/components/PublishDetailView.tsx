@@ -81,14 +81,9 @@ export default observer(function PublishDetailView({ onClose }: PublishDetailVie
 					/>
 
 					<div className="flex flex-col gap-2">
-						<div className="flex items-center justify-between gap-3">
-							<p className="text-base font-medium text-foreground">
-								{t("skillEditPage.publishPanel.create.fields.target.label")}
-							</p>
-							<p className="text-xs leading-4 text-muted-foreground">
-								{t("skillEditPage.publishPanel.create.fields.target.helper")}
-							</p>
-						</div>
+						<p className="text-base font-medium text-foreground">
+							{t("skillEditPage.publishPanel.create.fields.target.label")}
+						</p>
 						<ReadonlyPublishToCard publishTo={record.publishTo} />
 					</div>
 

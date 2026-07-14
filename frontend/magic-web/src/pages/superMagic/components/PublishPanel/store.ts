@@ -2,6 +2,7 @@ import { makeAutoObservable } from "mobx"
 import { localeTextToDisplayString } from "@/pages/superMagic/components/MainInputContainer/panels/utils"
 import { normalizeDraftForAvailability, sanitizeDraftForSubmission } from "./publishAvailability"
 import type {
+	PublishCategoryOption,
 	PublishDraft,
 	PublishHistoryRecord,
 	PublishInternalTarget,
@@ -28,6 +29,8 @@ export class PublishPanelStore {
 	currentPublisherName = ""
 	historyRecords: PublishHistoryRecord[] = []
 	selectedHistoryRecord: PublishHistoryRecord | null = null
+	currentPublishTo: PublishTo | null = null
+	marketCategories: PublishCategoryOption[] = []
 	marketCopy: PublishMarketCopy = {
 		publishToLabelKey: "skillEditPage.publishPanel.publishToOptions.skills_library.label",
 		publishToDescriptionKey:
@@ -73,10 +76,15 @@ export class PublishPanelStore {
 		)
 			return false
 		if (this.draft.version.trim().length === 0) return false
+		if (this.requiresMarketCategory) return Boolean(this.draft.categoryId?.trim())
 
 		if (this.requiresSpecificMembers) return this.draft.specificMembers.length > 0
 
 		return true
+	}
+
+	get requiresMarketCategory() {
+		return this.draft.publishTo === "MARKET" && this.marketCategories.length > 0
 	}
 
 	get requiresSpecificMembers() {
@@ -100,6 +108,8 @@ export class PublishPanelStore {
 		const { preserveDraft = false, preserveView = false } = options
 		this.hasUnpublishedChanges = data.hasUnpublishedChanges
 		this.currentPublisherName = data.currentPublisherName
+		this.currentPublishTo = data.currentPublishTo ?? null
+		this.marketCategories = [...(data.marketCategories ?? [])]
 		this.marketCopy = data.marketCopy ?? this.marketCopy
 		this.historyRecords = data.historyRecords.map((record) => ({
 			...record,
@@ -164,9 +174,14 @@ export class PublishPanelStore {
 		if (!this.availablePublishTo.includes(publishTo)) return
 		if (this.draft.publishTo === publishTo) return
 
+		const categoryId = this.draft.categoryId
+		const draftWithoutCategory = { ...this.draft }
+		delete draftWithoutCategory.categoryId
 		this.draft = {
-			...this.draft,
+			...draftWithoutCategory,
 			publishTo,
+			specificMembers: [],
+			...(publishTo === "MARKET" && categoryId ? { categoryId } : {}),
 		}
 	}
 
@@ -174,8 +189,10 @@ export class PublishPanelStore {
 		if (!this.availableInternalTargets.includes(target)) return
 		if (this.draft.internalTarget === target) return
 
+		const draftWithoutCategory = { ...this.draft }
+		delete draftWithoutCategory.categoryId
 		this.draft = {
-			...this.draft,
+			...draftWithoutCategory,
 			publishTo: "INTERNAL",
 			internalTarget: target,
 		}
@@ -185,6 +202,13 @@ export class PublishPanelStore {
 		this.draft = {
 			...this.draft,
 			specificMembers,
+		}
+	}
+
+	setCategoryId(categoryId: string) {
+		this.draft = {
+			...this.draft,
+			categoryId,
 		}
 	}
 
@@ -226,16 +250,16 @@ export class PublishPanelStore {
 						publishedAt: formatPublishTimestamp(new Date()),
 						specificMembers:
 							submissionDraft.publishTo === "INTERNAL" &&
-								submissionDraft.internalTarget === "MEMBER"
+							submissionDraft.internalTarget === "MEMBER"
 								? [...submissionDraft.specificMembers]
 								: undefined,
 						skillsLibraryReview:
 							submissionDraft.publishTo === "MARKET"
 								? {
-									submit: "done",
-									review: "current",
-									published: "pending",
-								}
+										submit: "done",
+										review: "current",
+										published: "pending",
+									}
 								: undefined,
 					},
 					...this.historyRecords,
@@ -251,7 +275,7 @@ export class PublishPanelStore {
 	}
 
 	private normalizeDraft(draft: PublishDraft) {
-		return normalizeDraftForAvailability({
+		const normalized = normalizeDraftForAvailability({
 			draft: {
 				...draft,
 				specificMembers: [...draft.specificMembers],
@@ -259,6 +283,18 @@ export class PublishPanelStore {
 			availablePublishTo: this.availablePublishTo,
 			availableInternalTargets: this.availableInternalTargets,
 		})
+		const categoryId =
+			normalized.publishTo === "MARKET" &&
+			this.marketCategories.some((category) => category.id === normalized.categoryId)
+				? normalized.categoryId
+				: undefined
+		const normalizedWithoutCategory = { ...normalized }
+		delete normalizedWithoutCategory.categoryId
+
+		return {
+			...normalizedWithoutCategory,
+			...(categoryId ? { categoryId } : {}),
+		}
 	}
 }
 

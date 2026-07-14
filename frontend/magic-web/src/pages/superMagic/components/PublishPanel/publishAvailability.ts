@@ -94,25 +94,38 @@ export function normalizeDraftForAvailability({
 		publishTo === "INTERNAL" && !availableInternalTargets.includes(draft.internalTarget)
 			? (availableInternalTargets[0] ?? "PRIVATE")
 			: draft.internalTarget
+	const normalizedDraft = { ...draft }
+	if (publishTo !== "MARKET" || !draft.categoryId) {
+		delete normalizedDraft.categoryId
+	}
 
 	return {
-		...draft,
+		...normalizedDraft,
 		publishTo,
 		internalTarget,
 		specificMembers: [...draft.specificMembers],
+		...(publishTo === "MARKET" && draft.categoryId ? { categoryId: draft.categoryId } : {}),
 	}
 }
 
 export function sanitizeDraftForSubmission(draft: PublishDraft): PublishDraft {
 	if (draft.publishTo === "INTERNAL" && draft.internalTarget === "MEMBER") {
+		const submissionDraft = { ...draft }
+		delete submissionDraft.categoryId
+
 		return {
-			...draft,
+			...submissionDraft,
 			specificMembers: [...draft.specificMembers],
 		}
 	}
 
+	const submissionDraft = { ...draft }
+	if (submissionDraft.publishTo !== "MARKET" || !submissionDraft.categoryId) {
+		delete submissionDraft.categoryId
+	}
+
 	return {
-		...draft,
+		...submissionDraft,
 		specificMembers: [],
 	}
 }

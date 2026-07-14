@@ -19,6 +19,11 @@ export interface PublishSpecificMember {
 	type: "user" | "department"
 }
 
+export interface PublishCategoryOption {
+	id: string
+	name: string
+}
+
 export interface PublishReviewProgress {
 	submit: PublishReviewStepState
 	review: PublishReviewStepState
@@ -46,6 +51,7 @@ export interface PublishDraft {
 	publishTo: PublishTo
 	internalTarget: PublishInternalTarget
 	specificMembers: PublishSpecificMember[]
+	categoryId?: string
 }
 
 export interface PublishMarketCopy {
@@ -63,4 +69,6 @@ export interface PublishPanelData {
 	marketCopy: PublishMarketCopy
 	availablePublishTo: PublishTo[]
 	availableInternalTargets: PublishInternalTarget[]
+	currentPublishTo?: PublishTo | null
+	marketCategories?: PublishCategoryOption[]
 }
