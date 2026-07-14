@@ -43,7 +43,7 @@ readonly class MagicBaseRowAppService
                 $authorization->getOrganizationCode(),
                 $projectId,
                 $tableId,
-                $authorization->getId(),
+                $context->getActor()->getUserId(),
                 $context->getActor(),
                 $data,
             ));

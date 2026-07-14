@@ -68,7 +68,7 @@ readonly class MagicBaseAccessControl
     public function requireProjectManager(MagicUserAuthorization $authorization, int $projectId): ActorContext
     {
         $this->requireManageableProject($authorization, $projectId);
-        return $this->buildActorContext($authorization);
+        return $this->buildActorContext($authorization, $projectId);
     }
 
     public function requireReadableProject(MagicUserAuthorization $authorization, int $projectId): void
@@ -196,7 +196,7 @@ readonly class MagicBaseAccessControl
 
     public function loadTableContext(MagicUserAuthorization $authorization, int $projectId, int $tableId): MagicBaseTableAccessContext
     {
-        $actor = $this->buildActorContext($authorization);
+        $actor = $this->buildActorContext($authorization, $projectId);
         $table = $this->getTableOrFail($authorization, $projectId, $tableId);
         $table = $this->enrichTableScope($table);
         $access = $this->loadAccessContext($authorization, $projectId, $tableId, $actor);
@@ -204,15 +204,25 @@ readonly class MagicBaseAccessControl
         return new MagicBaseTableAccessContext($projectId, $tableId, $actor, $table, $access);
     }
 
-    private function buildActorContext(MagicUserAuthorization $authorization): ActorContext
+    private function buildActorContext(MagicUserAuthorization $authorization, int $projectId): ActorContext
     {
-        if ($authorization->getId() === '') {
-            return new ActorContext('', $authorization->getOrganizationCode(), []);
+        $shareActor = MagicBaseRuntimeProjectAccessContext::getShareActor($projectId);
+        if ($shareActor !== null) {
+            return $this->createActorContext($shareActor['user_id'], $shareActor['organization_code']);
         }
 
-        $dataIsolation = DataIsolation::simpleMake($authorization->getOrganizationCode(), $authorization->getId());
-        $departmentIds = $this->departmentUserDomainService->getDepartmentIdsByUserId($dataIsolation, $authorization->getId(), true);
-        return new ActorContext($authorization->getId(), $authorization->getOrganizationCode(), $departmentIds);
+        return $this->createActorContext($authorization->getId(), $authorization->getOrganizationCode());
+    }
+
+    private function createActorContext(string $userId, string $organizationCode): ActorContext
+    {
+        if ($userId === '') {
+            return new ActorContext('', $organizationCode, []);
+        }
+
+        $dataIsolation = DataIsolation::simpleMake($organizationCode, $userId);
+        $departmentIds = $this->departmentUserDomainService->getDepartmentIdsByUserId($dataIsolation, $userId, true);
+        return new ActorContext($userId, $organizationCode, $departmentIds);
     }
 
     private function loadAccessContext(MagicUserAuthorization $authorization, int $projectId, int $tableId, ActorContext $actor): MagicBaseAccessContext
@@ -293,11 +303,11 @@ readonly class MagicBaseAccessControl
         string $deniedMessage,
     ): ProjectEntity {
         $project = $this->getProjectOrFail($projectId);
-        if (! $this->isSameOrganization($authorization, $project)) {
-            $this->forbidden($deniedMessage);
-        }
         if (MagicBaseRuntimeProjectAccessContext::hasShareAccess($projectId)) {
             return $project;
+        }
+        if (! $this->isSameOrganization($authorization, $project)) {
+            $this->forbidden($deniedMessage);
         }
         if ($this->isProjectOwner($authorization, $project)) {
             return $project;

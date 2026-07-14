@@ -415,18 +415,26 @@ class MagicBaseApi extends AbstractApi
                 $currentAuthorization->getOrganizationCode(),
                 $shareEntity->getShareCode()
             );
-            MagicBaseRuntimeProjectAccessContext::allowShareAccess($projectId);
-            return $currentAuthorization;
+            return $this->buildShareRuntimeAuthorization($projectId, $shareEntity->getOrganizationCode(), $currentAuthorization);
         }
 
-        MagicBaseRuntimeProjectAccessContext::allowShareAccess($projectId);
-        if ($currentAuthorization !== null) {
-            return $currentAuthorization;
-        }
+        return $this->buildShareRuntimeAuthorization($projectId, $shareEntity->getOrganizationCode(), $currentAuthorization);
+    }
+
+    private function buildShareRuntimeAuthorization(
+        int $projectId,
+        string $dataOrganizationCode,
+        ?MagicUserAuthorization $actorAuthorization
+    ): MagicUserAuthorization {
+        MagicBaseRuntimeProjectAccessContext::allowShareAccess(
+            $projectId,
+            $actorAuthorization?->getId() ?? '',
+            $actorAuthorization?->getOrganizationCode() ?? ''
+        );
 
         return (new MagicUserAuthorization())
-            ->setId('')
-            ->setOrganizationCode($shareEntity->getOrganizationCode());
+            ->setId($actorAuthorization?->getId() ?? '')
+            ->setOrganizationCode($dataOrganizationCode);
     }
 
     private function getOptionalCurrentAuthorization(): ?MagicUserAuthorization
