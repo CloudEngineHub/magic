@@ -1057,6 +1057,11 @@ class AsrFileAppService extends AbstractAppService
 
             // Already in progress, return current status
             if ($taskStatus->currentPhase === AsrTaskStatusDTO::PHASE_MERGING) {
+                if ($taskStatus->phaseStatus === AsrTaskStatusDTO::PHASE_STATUS_COMPLETED
+                    && ! empty($taskStatus->audioFileId)) {
+                    $this->completeRecoverFromExistingAudioFileIfPossible($taskStatus);
+                }
+
                 return [
                     'success' => true,
                     'task_key' => $taskKey,
@@ -1110,6 +1115,8 @@ class AsrFileAppService extends AbstractAppService
         }
 
         if (! empty($taskStatus->audioFileId)) {
+            $this->completeRecoverFromExistingAudioFileIfPossible($taskStatus);
+
             return $this->buildRecoverAlreadyCompletedResponse($taskStatus);
         }
 
@@ -1133,6 +1140,9 @@ class AsrFileAppService extends AbstractAppService
         if ($taskStatus->phaseStatus === AsrTaskStatusDTO::PHASE_STATUS_IN_PROGRESS) {
             $lockName = sprintf(AsrRedisKeys::FINISH_RECORDING_LOCK, $taskKey);
             if ($this->redis->exists($lockName)) {
+                $taskStatus->updateStatus(AsrTaskStatusEnum::PROCESSING);
+                $this->asrTaskDomainService->saveTaskStatusWithDatabaseSync($taskStatus);
+
                 return [
                     'success' => true,
                     'task_key' => $taskKey,
@@ -1158,11 +1168,8 @@ class AsrFileAppService extends AbstractAppService
             ExceptionBuilder::throw(AsrErrorCode::InvalidTaskStatus);
         }
 
-        $taskStatus->currentPhase = AsrTaskStatusDTO::PHASE_MERGING;
-        $taskStatus->phaseStatus = AsrTaskStatusDTO::PHASE_STATUS_IN_PROGRESS;
-        $taskStatus->phasePercent = 0;
-        $taskStatus->phaseError = null;
-        $this->asrTaskDomainService->saveTaskStatus($taskStatus);
+        $taskStatus->updateStatus(AsrTaskStatusEnum::PROCESSING);
+        $this->asrTaskDomainService->startMergingPhase($taskStatus);
 
         $this->executeAsyncRecoverFinishRecording($taskStatus, $organizationCode, $generatedTitle);
 
@@ -1315,6 +1322,8 @@ class AsrFileAppService extends AbstractAppService
             if ($taskStatus->phaseStatus === AsrTaskStatusDTO::PHASE_STATUS_COMPLETED
                 && $taskStatus->currentPhase === AsrTaskStatusDTO::PHASE_MERGING
                 && ! empty($taskStatus->audioFileId)) {
+                $this->completeRecoverFromExistingAudioFileIfPossible($taskStatus);
+
                 $this->logger->info('Finish recording recovery already completed', [
                     'task_key' => $taskKey,
                 ]);
@@ -1424,7 +1433,10 @@ class AsrFileAppService extends AbstractAppService
 
         // ── 2. Idempotent guard ───────────────────────────────────────────────
         if ($taskStatus->currentPhase === AsrTaskStatusDTO::PHASE_MERGING
-            && $taskStatus->phaseStatus === AsrTaskStatusDTO::PHASE_STATUS_COMPLETED) {
+            && $taskStatus->phaseStatus === AsrTaskStatusDTO::PHASE_STATUS_COMPLETED
+            && ! empty($taskStatus->audioFileId)) {
+            $this->completeRecoverFromExistingAudioFileIfPossible($taskStatus);
+
             $this->logger->info('recoverCompletedMerging: already completed, skipping', [
                 'task_key' => $taskKey,
             ]);
@@ -1718,6 +1730,16 @@ class AsrFileAppService extends AbstractAppService
     private function completeRecoverFromExistingAudioFileIfPossible(AsrTaskStatusDTO $taskStatus): bool
     {
         if (! empty($taskStatus->audioFileId)) {
+            $taskStatus->updateStatus(AsrTaskStatusEnum::AUDIO_PROCESSED);
+            $this->audioProjectDomainService->updateRecordingMetadata(
+                (int) $taskStatus->projectId,
+                null,
+                null,
+                'recorded',
+                (int) $taskStatus->audioFileId
+            );
+            $this->asrTaskDomainService->completeMergingPhase($taskStatus);
+
             return true;
         }
 
@@ -1797,8 +1819,8 @@ class AsrFileAppService extends AbstractAppService
             'task_key' => $taskStatus->taskKey,
             'sandbox_id' => $taskStatus->sandboxId,
             'phase' => $taskStatus->currentPhase,
-            'status' => AsrTaskStatusDTO::PHASE_STATUS_COMPLETED,
-            'percent' => 100,
+            'status' => $taskStatus->phaseStatus,
+            'percent' => $taskStatus->phasePercent,
             'action' => 'already_completed',
             'message' => 'Finish recording is already completed',
         ];
