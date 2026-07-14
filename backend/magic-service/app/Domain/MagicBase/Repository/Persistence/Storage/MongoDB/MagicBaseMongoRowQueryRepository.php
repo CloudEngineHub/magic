@@ -28,12 +28,12 @@ readonly class MagicBaseMongoRowQueryRepository implements MagicBaseRowQueryRepo
     ) {
     }
 
-    public function getRow(string $organizationCode, int $projectId, int $tableId, int $recordId): ?MagicBaseRowEntity
+    public function getRow(string $dataOrganizationCode, int $projectId, int $tableId, int $recordId): ?MagicBaseRowEntity
     {
-        $route = $this->router->route($organizationCode, $projectId);
+        $route = $this->router->route($dataOrganizationCode, $projectId);
         try {
             $document = $this->client->collection($route->getMongoCollection())->findOne([
-                'organization_code' => $organizationCode,
+                'data_organization_code' => $dataOrganizationCode,
                 'project_id' => $projectId,
                 'table_id' => $tableId,
                 'record_id' => $recordId,
@@ -53,7 +53,7 @@ readonly class MagicBaseMongoRowQueryRepository implements MagicBaseRowQueryRepo
 
     public function queryRows(MagicBaseRowQuery $query): MagicBaseRowQueryResult
     {
-        $route = $this->router->route($query->getOrganizationCode(), $query->getProjectId());
+        $route = $this->router->route($query->getDataOrganizationCode(), $query->getProjectId());
         $filter = $this->buildFilter($query);
         $options = [
             'sort' => $this->buildSort($query),
@@ -82,11 +82,11 @@ readonly class MagicBaseMongoRowQueryRepository implements MagicBaseRowQueryRepo
         return new MagicBaseRowQueryResult(new MagicBaseEntityCollection($entities), (int) $total);
     }
 
-    public function listRows(string $organizationCode, int $projectId, int $tableId, bool $includeDeleted = false): MagicBaseEntityCollection
+    public function listRows(string $dataOrganizationCode, int $projectId, int $tableId, bool $includeDeleted = false): MagicBaseEntityCollection
     {
-        $route = $this->router->route($organizationCode, $projectId);
+        $route = $this->router->route($dataOrganizationCode, $projectId);
         $filter = [
-            'organization_code' => $organizationCode,
+            'data_organization_code' => $dataOrganizationCode,
             'project_id' => $projectId,
             'table_id' => $tableId,
         ];
@@ -122,7 +122,7 @@ readonly class MagicBaseMongoRowQueryRepository implements MagicBaseRowQueryRepo
     private function buildFilter(MagicBaseRowQuery $query): array
     {
         $filter = [
-            'organization_code' => $query->getOrganizationCode(),
+            'data_organization_code' => $query->getDataOrganizationCode(),
             'project_id' => $query->getProjectId(),
             'table_id' => $query->getTableId(),
         ];
@@ -230,6 +230,8 @@ readonly class MagicBaseMongoRowQueryRepository implements MagicBaseRowQueryRepo
     {
         return match ($field) {
             'id', 'record_id' => 'record_id',
+            'data_organization_code' => 'data_organization_code',
+            'organization_code' => 'organization_code',
             'created_at' => 'created_at',
             'updated_at' => 'updated_at',
             'created_by' => 'created_by',

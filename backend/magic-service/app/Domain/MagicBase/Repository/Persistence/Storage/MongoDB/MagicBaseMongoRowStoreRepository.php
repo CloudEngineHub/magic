@@ -32,9 +32,13 @@ readonly class MagicBaseMongoRowStoreRepository implements MagicBaseRowStoreRepo
             MagicBaseExceptionBuilder::storageUnavailable('MagicBase row project_id, table_id and record_id are required for MongoDB storage.');
             throw new LogicException('Unreachable');
         }
+        if ($entity->getDataOrganizationCode() === '') {
+            MagicBaseExceptionBuilder::storageUnavailable('MagicBase row data_organization_code is required for MongoDB storage.');
+            throw new LogicException('Unreachable');
+        }
 
         $document = $this->toDocument($entity);
-        $route = $this->router->route($entity->getOrganizationCode(), $projectId);
+        $route = $this->router->route($entity->getDataOrganizationCode(), $projectId);
         try {
             $this->client->collection($route->getMongoCollection())->replaceOne(
                 ['_id' => $document['_id']],
@@ -64,7 +68,8 @@ readonly class MagicBaseMongoRowStoreRepository implements MagicBaseRowStoreRepo
         $recordId = (int) $entity->getRecordId();
 
         return [
-            '_id' => $this->documentId($entity->getOrganizationCode(), $projectId, $tableId, $recordId),
+            '_id' => $this->documentId($entity->getDataOrganizationCode(), $projectId, $tableId, $recordId),
+            'data_organization_code' => $entity->getDataOrganizationCode(),
             'organization_code' => $entity->getOrganizationCode(),
             'project_id' => $projectId,
             'table_id' => $tableId,

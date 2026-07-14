@@ -17,7 +17,7 @@ readonly class MagicBaseRowQuery
      * @param array<string, string> $fieldTypes data type keyed by dynamic column_key
      */
     public function __construct(
-        private string $organizationCode,
+        private string $dataOrganizationCode,
         private int $projectId,
         private int $tableId,
         private array $filters,
@@ -35,9 +35,9 @@ readonly class MagicBaseRowQuery
     ) {
     }
 
-    public function getOrganizationCode(): string
+    public function getDataOrganizationCode(): string
     {
-        return $this->organizationCode;
+        return $this->dataOrganizationCode;
     }
 
     public function getProjectId(): int

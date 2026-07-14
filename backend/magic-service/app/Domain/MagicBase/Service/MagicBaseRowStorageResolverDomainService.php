@@ -30,9 +30,9 @@ readonly class MagicBaseRowStorageResolverDomainService implements MagicBaseRowS
         return MagicBaseConst::ROW_STORAGE_DRIVER_MONGODB;
     }
 
-    public function getRow(string $organizationCode, int $projectId, int $tableId, int $recordId): ?MagicBaseRowEntity
+    public function getRow(string $dataOrganizationCode, int $projectId, int $tableId, int $recordId): ?MagicBaseRowEntity
     {
-        return $this->queryRepository()->getRow($organizationCode, $projectId, $tableId, $recordId);
+        return $this->queryRepository()->getRow($dataOrganizationCode, $projectId, $tableId, $recordId);
     }
 
     public function queryRows(MagicBaseRowQuery $query): MagicBaseRowQueryResult
@@ -41,9 +41,9 @@ readonly class MagicBaseRowStorageResolverDomainService implements MagicBaseRowS
     }
 
     /** @return MagicBaseEntityCollection<MagicBaseRowEntity> */
-    public function listRows(string $organizationCode, int $projectId, int $tableId, bool $includeDeleted = false): MagicBaseEntityCollection
+    public function listRows(string $dataOrganizationCode, int $projectId, int $tableId, bool $includeDeleted = false): MagicBaseEntityCollection
     {
-        return $this->queryRepository()->listRows($organizationCode, $projectId, $tableId, $includeDeleted);
+        return $this->queryRepository()->listRows($dataOrganizationCode, $projectId, $tableId, $includeDeleted);
     }
 
     public function saveRow(MagicBaseRowEntity $payload): MagicBaseRowEntity

@@ -21,7 +21,7 @@ readonly class MagicBaseRowQueryCriteriaDomainService
      * @param list<int> $staticReadableRecordIds record ids readable through static row permissions
      */
     public function buildReadableQuery(
-        string $organizationCode,
+        string $dataOrganizationCode,
         MagicBaseTableEntity $table,
         MagicBaseAccessContext $access,
         ActorContext $actor,
@@ -33,7 +33,7 @@ readonly class MagicBaseRowQueryCriteriaDomainService
         array $staticReadableRecordIds = [],
     ): MagicBaseRowQuery {
         return new MagicBaseRowQuery(
-            $organizationCode,
+            $dataOrganizationCode,
             (int) $table->getProjectId(),
             (int) $table->getId(),
             $filters,

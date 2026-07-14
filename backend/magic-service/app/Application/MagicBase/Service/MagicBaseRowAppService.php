@@ -41,6 +41,7 @@ readonly class MagicBaseRowAppService
             );
             $row = $this->rowStorageResolver->saveRow($this->rowDomainService->buildCreatePayload(
                 $authorization->getOrganizationCode(),
+                $context->getActor()->getOrganizationCode(),
                 $projectId,
                 $tableId,
                 $context->getActor()->getUserId(),

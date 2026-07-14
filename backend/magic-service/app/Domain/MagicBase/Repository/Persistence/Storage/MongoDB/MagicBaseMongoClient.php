@@ -64,43 +64,53 @@ class MagicBaseMongoClient
 
         $collection = $this->client()->selectCollection($this->databaseName(), $collectionName);
         $collection->createIndex([
-            'organization_code' => 1,
+            'data_organization_code' => 1,
             'project_id' => 1,
             'table_id' => 1,
             'record_id' => 1,
         ], [
-            'name' => 'uk_magicbase_row_identity',
+            'name' => 'uk_magicbase_row_data_identity',
             'unique' => true,
             'background' => true,
         ]);
         $collection->createIndex([
-            'organization_code' => 1,
+            'data_organization_code' => 1,
             'project_id' => 1,
             'table_id' => 1,
             'deleted' => 1,
             'created_at' => -1,
         ], [
-            'name' => 'idx_magicbase_row_list',
+            'name' => 'idx_magicbase_row_data_list',
             'background' => true,
         ]);
         $collection->createIndex([
-            'organization_code' => 1,
+            'data_organization_code' => 1,
             'project_id' => 1,
             'table_id' => 1,
             'deleted' => 1,
             'created_by' => 1,
         ], [
-            'name' => 'idx_magicbase_row_private_user',
+            'name' => 'idx_magicbase_row_data_private_user',
             'background' => true,
         ]);
         $collection->createIndex([
-            'organization_code' => 1,
+            'data_organization_code' => 1,
             'project_id' => 1,
             'table_id' => 1,
             'deleted' => 1,
             'owner_department_ids' => 1,
         ], [
-            'name' => 'idx_magicbase_row_private_department',
+            'name' => 'idx_magicbase_row_data_private_department',
+            'background' => true,
+        ]);
+        $collection->createIndex([
+            'data_organization_code' => 1,
+            'project_id' => 1,
+            'table_id' => 1,
+            'deleted' => 1,
+            'organization_code' => 1,
+        ], [
+            'name' => 'idx_magicbase_row_data_private_org',
             'background' => true,
         ]);
 

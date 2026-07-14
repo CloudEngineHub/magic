@@ -13,6 +13,8 @@ class MagicBaseRowEntity extends AbstractEntity
 {
     protected ?int $recordId = null;
 
+    protected string $dataOrganizationCode = '';
+
     protected string $organizationCode = '';
 
     protected ?int $projectId = null;
@@ -39,6 +41,16 @@ class MagicBaseRowEntity extends AbstractEntity
     public function setRecordId(null|int|string $value): void
     {
         $this->recordId = is_numeric($value) ? (int) $value : null;
+    }
+
+    public function getDataOrganizationCode(): string
+    {
+        return $this->dataOrganizationCode;
+    }
+
+    public function setDataOrganizationCode(null|int|string $value): void
+    {
+        $this->dataOrganizationCode = $value === null ? '' : (string) $value;
     }
 
     public function getOrganizationCode(): string

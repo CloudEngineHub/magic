@@ -59,11 +59,12 @@ class MagicBaseRowDomainService
     /**
      * @param array<string, mixed> $data dynamic row values keyed by MagicBase column_key
      */
-    public function buildCreatePayload(string $organizationCode, int $projectId, int $tableId, string $userId, ActorContext $actor, array $data): MagicBaseRowEntity
+    public function buildCreatePayload(string $dataOrganizationCode, string $organizationCode, int $projectId, int $tableId, string $userId, ActorContext $actor, array $data): MagicBaseRowEntity
     {
         $now = new DateTime();
         return new MagicBaseRowEntity([
             'record_id' => IdGenerator::getSnowId(),
+            'data_organization_code' => $dataOrganizationCode,
             'organization_code' => $organizationCode,
             'project_id' => $projectId,
             'table_id' => $tableId,
