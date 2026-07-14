@@ -1,9 +1,34 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
-import { User } from "@/opensource/types/user"
+import { User } from "@/types/user"
+
+const { refreshAccountContextPage } = vi.hoisted(() => ({
+	refreshAccountContextPage: vi.fn(),
+}))
+
+vi.mock("@/broadcastChannel/eventFactory/accountContextRefresh", () => ({
+	refreshAccountContextPage,
+}))
+
+vi.mock("@/services/chat/message/MessageDispatchService", () => ({
+	default: {
+		addSendMessage: vi.fn(),
+		updateSendMessage: vi.fn(),
+		applyMessage: vi.fn(),
+		updateMessageStatus: vi.fn(),
+		updateMessageId: vi.fn(),
+	},
+}))
+
+vi.mock("@/services/chat/conversation/ConversationDispatchService", () => ({
+	default: {
+		setTopConversationStatus: vi.fn(),
+		setNotDisturbStatus: vi.fn(),
+	},
+}))
 
 // IMPORTANT: Mock OrganizationDotsDbService FIRST before any other imports
 // because it's a singleton that runs constructor on import and tries to observe userStore
-vi.mock("@/opensource/services/chat/dots/OrganizationDotsDbService", () => ({
+vi.mock("@/services/chat/dots/OrganizationDotsDbService", () => ({
 	default: {
 		magicId: undefined,
 		getPersistenceData: vi.fn(() => ({})),
@@ -13,7 +38,7 @@ vi.mock("@/opensource/services/chat/dots/OrganizationDotsDbService", () => ({
 	},
 }))
 
-vi.mock("@/opensource/stores/chatNew/dots/OrganizationDotsStore", () => ({
+vi.mock("@/stores/chatNew/dots/OrganizationDotsStore", () => ({
 	default: {
 		reset: vi.fn(),
 		setOrganizationDots: vi.fn(),
@@ -26,14 +51,14 @@ vi.mock("@/opensource/stores/chatNew/dots/OrganizationDotsStore", () => ({
 	},
 }))
 
-vi.mock("@/opensource/services/chat/dots/OrganizationDispatchService", () => ({
+vi.mock("@/services/chat/dots/OrganizationDispatchService", () => ({
 	default: {
 		updateOrganizationDot: vi.fn(),
 	},
 }))
 
 // Mock BroadcastChannelSender
-vi.mock("@/opensource/broadcastChannel", () => ({
+vi.mock("@/broadcastChannel", () => ({
 	BroadcastChannelSender: {
 		switchOrganization: vi.fn(),
 		switchAccount: vi.fn(),
@@ -73,17 +98,17 @@ const { mockUserStore } = vi.hoisted(() => {
 	return { mockUserStore: mockStore }
 })
 
-vi.mock("@/opensource/models/user", () => ({
+vi.mock("@/models/user", () => ({
 	userStore: mockUserStore,
 }))
 
-vi.mock("@/opensource/components/base/MagicModal", () => ({
+vi.mock("@/components/base/MagicModal", () => ({
 	default: {
 		confirm: vi.fn(),
 	},
 }))
 
-vi.mock("@/opensource/services/user/UserDispatchService", () => ({
+vi.mock("@/services/user/UserDispatchService", () => ({
 	default: {
 		switchOrganization: vi.fn(),
 		switchAccount: vi.fn(),
@@ -99,18 +124,18 @@ vi.mock("@/apis", () => ({
 	},
 }))
 
-vi.mock("@/opensource/routes/history/helpers", () => ({
+vi.mock("@/routes/history/helpers", () => ({
 	routesMatch: vi.fn(() => null),
 	convertSearchParams: vi.fn(() => ({})),
 }))
 
-vi.mock("@/opensource/routes/history", () => ({
+vi.mock("@/routes/history", () => ({
 	history: {
 		replace: vi.fn(),
 	},
 }))
 
-vi.mock("@/opensource/routes/helpers", () => ({
+vi.mock("@/routes/helpers", () => ({
 	defaultClusterCode: "default",
 }))
 
@@ -118,7 +143,7 @@ vi.mock("lodash-es", () => ({
 	has: vi.fn(() => false),
 }))
 
-vi.mock("@/opensource/models/user/transformers", () => ({
+vi.mock("@/models/user/transformers", () => ({
 	userTransformer: vi.fn((user: any) => user),
 }))
 
@@ -135,10 +160,10 @@ import { ModalStateManager } from "../modalStateManager"
 import { EVENTS } from "../events"
 import eventFactory from "../index"
 // userStore is mocked, using mockUserStore instead
-import MagicModal from "@/opensource/components/base/MagicModal"
-import UserDispatchService from "@/opensource/services/user/UserDispatchService"
+import MagicModal from "@/components/base/MagicModal"
+import UserDispatchService from "@/services/user/UserDispatchService"
 
-vi.mock("@/opensource/utils/log", () => ({
+vi.mock("@/utils/log", () => ({
 	logger: {
 		createLogger: () => ({
 			log: vi.fn(),
@@ -192,7 +217,7 @@ vi.mock("i18next-resources-to-backend", () => ({
 	})),
 }))
 
-vi.mock("@/opensource/assets/locales/create", () => ({
+vi.mock("@/assets/locales/create", () => ({
 	createI18nNext: vi.fn(() => ({
 		init: vi.fn(),
 		instance: {
@@ -204,7 +229,7 @@ vi.mock("@/opensource/assets/locales/create", () => ({
 	})),
 }))
 
-vi.mock("@/opensource/models/config/stores/i18n.store", () => ({
+vi.mock("@/models/config/stores/i18n.store", () => ({
 	I18nStore: vi.fn().mockImplementation(() => ({
 		language: "en",
 		languages: [],
@@ -372,11 +397,19 @@ describe("多 Tab 事件监听管理 - 自动化测试", () => {
 						targetOrgCode,
 					)
 
-					let onOkCallback: (() => void) | undefined
+					let resolveSwitchOrganization: (() => void) | undefined
+					const switchOrganizationPromise = new Promise<void>((resolve) => {
+						resolveSwitchOrganization = resolve
+					})
+					vi.mocked(UserDispatchService.switchOrganization).mockReturnValueOnce(
+						switchOrganizationPromise.then(() => true),
+					)
+
+					let onOkCallback: (() => Promise<void>) | undefined
 
 					vi.mocked(MagicModal.confirm).mockImplementation(
 						(options: Parameters<typeof MagicModal.confirm>[0]) => {
-							onOkCallback = options.onOk
+							onOkCallback = options.onOk as () => Promise<void>
 							return mockModal as ReturnType<typeof MagicModal.confirm>
 						},
 					)
@@ -387,7 +420,62 @@ describe("多 Tab 事件监听管理 - 自动化测试", () => {
 						magicOrganizationCode: targetOrgCode,
 					})
 
-					// Simulate clicking OK
+					// Simulate clicking OK; refresh must wait for the async organization switch.
+					const confirmPromise = onOkCallback?.()
+					expect(refreshAccountContextPage).not.toHaveBeenCalled()
+					resolveSwitchOrganization?.()
+					if (confirmPromise) {
+						await confirmPromise
+					}
+
+					// Assert
+					expect(UserDispatchService.switchOrganization).toHaveBeenCalledWith({
+						userInfo: targetUserInfo,
+						magicOrganizationCode: targetOrgCode,
+					})
+					expect(refreshAccountContextPage).toHaveBeenCalledTimes(1)
+				})
+
+				it("Tab2 点击确认但组织切换失败 → Tab2 不刷新页面", async () => {
+					// Arrange
+					const currentMagicId = "magic-1"
+					const currentUserId = "user-1"
+					const currentOrgCode = "org-1"
+					const targetOrgCode = "org-2"
+
+					mockUserStore.user.userInfo = createMockUserInfo(
+						currentMagicId,
+						currentUserId,
+						currentOrgCode,
+					)
+					mockUserStore.user.organizationCode = currentOrgCode
+					mockUserStore.account.accounts = [
+						createMockAccount(currentMagicId, currentOrgCode),
+					]
+
+					const targetUserInfo = createMockUserInfo(
+						currentMagicId,
+						currentUserId,
+						targetOrgCode,
+					)
+
+					vi.mocked(UserDispatchService.switchOrganization).mockResolvedValueOnce(false)
+
+					let onOkCallback: (() => Promise<void>) | undefined
+
+					vi.mocked(MagicModal.confirm).mockImplementation(
+						(options: Parameters<typeof MagicModal.confirm>[0]) => {
+							onOkCallback = options.onOk as () => Promise<void>
+							return mockModal as ReturnType<typeof MagicModal.confirm>
+						},
+					)
+
+					// Act
+					await eventFactory.dispatch(EVENTS.SWITCH_ORGANIZATION, {
+						userInfo: targetUserInfo,
+						magicOrganizationCode: targetOrgCode,
+					})
+
 					if (onOkCallback) {
 						await onOkCallback()
 					}
@@ -397,6 +485,7 @@ describe("多 Tab 事件监听管理 - 自动化测试", () => {
 						userInfo: targetUserInfo,
 						magicOrganizationCode: targetOrgCode,
 					})
+					expect(refreshAccountContextPage).not.toHaveBeenCalled()
 				})
 
 				it("Tab2 点击取消 → Tab2 发送当前状态到其他 tab，弹窗关闭", async () => {
@@ -431,7 +520,7 @@ describe("多 Tab 事件监听管理 - 自动化测试", () => {
 						},
 					)
 
-					const { BroadcastChannelSender } = await import("@/opensource/broadcastChannel")
+					const { BroadcastChannelSender } = await import("@/broadcastChannel")
 					vi.mocked(BroadcastChannelSender.switchOrganization).mockImplementation(vi.fn())
 
 					// Act
@@ -681,6 +770,9 @@ describe("多 Tab 事件监听管理 - 自动化测试", () => {
 
 					vi.mocked(mockUserStore.account.getAccountByMagicId).mockImplementation(
 						(magicId: string) => {
+							if (magicId === currentMagicId) {
+								return createMockAccount(currentMagicId, currentOrgCode)
+							}
 							if (magicId === targetMagicId) {
 								return createMockAccount(targetMagicId, targetOrgCode)
 							}
@@ -712,6 +804,7 @@ describe("多 Tab 事件监听管理 - 自动化测试", () => {
 						magicId: targetMagicId,
 						magicOrganizationCode: targetOrgCode,
 					})
+					expect(refreshAccountContextPage).toHaveBeenCalledTimes(1)
 				})
 
 				it("Tab1 在弹窗显示期间再次切换 → 验证事件去重", async () => {
@@ -1043,6 +1136,9 @@ describe("多 Tab 事件监听管理 - 自动化测试", () => {
 
 					vi.mocked(mockUserStore.account.getAccountByMagicId).mockImplementation(
 						(magicId: string) => {
+							if (magicId === currentMagicId) {
+								return createMockAccount(currentMagicId, currentOrgCode)
+							}
 							if (magicId === targetMagicId) {
 								return createMockAccount(targetMagicId, targetOrgCode)
 							}
@@ -1061,16 +1157,19 @@ describe("多 Tab 事件监听管理 - 自动化测试", () => {
 					mockUserStore.account.accounts = [
 						createMockAccount(targetMagicId, targetOrgCode),
 					]
-					mockUserStore.user.userInfo = null
-					mockUserStore.user.organizationCode = null
 					await eventFactory.dispatch(EVENTS.DELETE_ACCOUNT, {
 						magicId: currentMagicId,
 					})
+					mockUserStore.user.userInfo = null
+					mockUserStore.user.organizationCode = null
 
 					// Assert - Should force switch to target account
 					expect(UserDispatchService.switchAccount).toHaveBeenCalledWith({
 						magicId: targetMagicId,
 						magicOrganizationCode: targetOrgCode,
+					})
+					expect(UserDispatchService.deleteAccount).toHaveBeenCalledWith({
+						magicId: currentMagicId,
 					})
 					const modalStateManager = ModalStateManager.getInstance()
 					expect(modalStateManager.getAccountModal()).toBeNull()
