@@ -14,9 +14,9 @@ _IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".svg", ".avif"
 _VIDEO_EXTS = {".mp4", ".mov", ".avi", ".webm", ".mkv", ".flv", ".wmv"}
 
 _TEMPORARY_FILE_NOTIFICATION = (
-    "The referenced file is stored under `.tmp` and is temporary. "
-    "It will be deleted automatically after it reaches the expiration time defined by its policy. "
-    "If this file or any derived result must persist, move or copy it to a workspace path outside `.tmp` "
+    "Files referenced from `.tmp` are temporary and will be deleted automatically after reaching "
+    "the expiration time defined by their policies. "
+    "If any referenced file or derived result must persist, move or copy it to a workspace path outside `.tmp` "
     "before completing the task."
 )
 
@@ -64,6 +64,10 @@ def _is_temporary_workspace_path(file_path: str) -> bool:
 class FileHandler(BaseMentionHandler):
     """处理文件类型的mention（file、project_file、upload_file）"""
 
+    def __init__(self) -> None:
+        """初始化当前构建周期内的临时文件路径集合。"""
+        self._temporary_file_paths: List[str] = []
+
     def get_type(self) -> str:
         return "file"
 
@@ -71,23 +75,43 @@ class FileHandler(BaseMentionHandler):
         original_file_path = str(mention.get("file_path") or "")
         file_path = self.normalize_path(original_file_path)
         if _is_temporary_workspace_path(original_file_path):
-            notification = f"Temporary file: `{file_path}`. {_TEMPORARY_FILE_NOTIFICATION}"
-            if agent_context is not None:
-                try:
-                    agent_context.horizon.push_notification("temporary_file_mention", notification)
-                    return ""
-                except Exception as error:
-                    logger.warning(f"推送临时文件 Horizon 通知失败: {error}")
-            return f"{notification} Read and understand the referenced file before proceeding."
+            return ""
 
         _, project_type = await find_parent_canvas_project(file_path)
         if project_type and project_type in _PROJECT_TYPE_TIPS:
             return _PROJECT_TYPE_TIPS[project_type]
         return "Read and understand the referenced file or directory before proceeding"
 
+    async def get_final_tip(self, agent_context: Optional["AgentContext"] = None) -> str:
+        """在全部文件 mention 处理完成后统一生成临时文件提示。"""
+        if not self._temporary_file_paths:
+            return ""
+
+        notification = self._build_temporary_file_notification()
+        self._temporary_file_paths.clear()
+        if agent_context is not None:
+            try:
+                agent_context.horizon.push_notification(
+                    "temporary_file_mention",
+                    notification,
+                )
+                return ""
+            except Exception as error:
+                logger.warning(f"推送临时文件 Horizon 通知失败: {error}")
+        return f"{notification}\n\nRead and understand the referenced files before proceeding."
+
+    def _build_temporary_file_notification(self) -> str:
+        """构建包含临时文件列表的统一英文提示。"""
+        file_list = "\n".join(f"- `{file_path}`" for file_path in self._temporary_file_paths)
+        return f"Temporary files referenced in this request:\n{file_list}\n\n{_TEMPORARY_FILE_NOTIFICATION}"
+
     async def handle(self, mention: Dict[str, Any], index: int, agent_context: Optional["AgentContext"] = None) -> List[str]:
-        file_path = self.normalize_path(mention.get("file_path", ""))
+        original_file_path = str(mention.get("file_path") or "")
+        file_path = self.normalize_path(original_file_path)
         file_url = mention.get("file_url", "")
+
+        if _is_temporary_workspace_path(original_file_path) and file_path not in self._temporary_file_paths:
+            self._temporary_file_paths.append(file_path)
 
         context_lines = [f"{index}. [@file_path:{file_path}]"]
 

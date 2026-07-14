@@ -2,10 +2,11 @@
 
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from app.service.mention.builder import MentionContextBuilder
 from app.service.mention.handlers import file_handler as file_handler_module
 from app.service.mention.handlers.file_handler import FileHandler, _is_temporary_workspace_path
 
@@ -25,6 +26,11 @@ def mock_workspace_paths(monkeypatch: pytest.MonkeyPatch) -> None:
         file_handler_module.PathManager,
         "get_tmp_dir",
         MagicMock(return_value=MOCK_TEMPORARY_DIRECTORY),
+    )
+    monkeypatch.setattr(
+        file_handler_module,
+        "find_parent_canvas_project",
+        AsyncMock(return_value=(None, None)),
     )
 
 
@@ -53,10 +59,12 @@ async def test_temporary_file_tip_is_pushed_to_horizon() -> None:
     agent_context = SimpleNamespace(horizon=horizon)
     handler = FileHandler()
 
-    tip = await handler.get_tip(
+    await handler.handle(
         {"file_path": ".tmp/copied-image.png"},
+        1,
         agent_context,
     )
+    tip = await handler.get_final_tip(agent_context)
 
     assert tip == ""
     horizon.push_notification.assert_called_once()
@@ -65,6 +73,7 @@ async def test_temporary_file_tip_is_pushed_to_horizon() -> None:
     assert "temporary" in notification.lower()
     assert "will be deleted automatically" in notification
     assert "outside `.tmp`" in notification
+    assert "- `.tmp/copied-image.png`" in notification
 
 
 @pytest.mark.asyncio
@@ -75,14 +84,42 @@ async def test_temporary_file_tip_falls_back_when_horizon_push_fails() -> None:
     agent_context = SimpleNamespace(horizon=horizon)
     handler = FileHandler()
 
-    tip = await handler.get_tip(
+    await handler.handle(
         {"file_path": ".tmp/pasted-text-20260714-120000.txt"},
+        1,
         agent_context,
     )
+    tip = await handler.get_final_tip(agent_context)
 
     assert "temporary" in tip.lower()
     assert "outside `.tmp`" in tip
+    assert "- `.tmp/pasted-text-20260714-120000.txt`" in tip
     assert "Read and understand" in tip
+
+
+@pytest.mark.asyncio
+async def test_multiple_temporary_files_share_one_horizon_notification() -> None:
+    """验证同一轮引用多个临时文件时只生成一条 Horizon 通知。"""
+    horizon = MagicMock()
+    agent_context = SimpleNamespace(horizon=horizon)
+    builder = MentionContextBuilder()
+
+    mentions_context = await builder.build(
+        [
+            {"type": "project_file", "file_path": ".tmp/first-image.png"},
+            {"type": "project_file", "file_path": ".tmp/second-image.png"},
+            {"type": "project_file", "file_path": ".tmp/first-image.png"},
+        ],
+        agent_context,
+    )
+
+    horizon.push_notification.assert_called_once()
+    source, notification = horizon.push_notification.call_args.args
+    assert source == "temporary_file_mention"
+    assert notification.count("- `.tmp/first-image.png`") == 1
+    assert "- `.tmp/second-image.png`" in notification
+    assert "[@file_path:.tmp/first-image.png]" in mentions_context
+    assert "[@file_path:.tmp/second-image.png]" in mentions_context
 
 
 @pytest.mark.asyncio
@@ -90,7 +127,9 @@ async def test_temporary_file_tip_falls_back_without_agent_context() -> None:
     """验证缺少 AgentContext 时直接返回可进入模型上下文的英文提示。"""
     handler = FileHandler()
 
-    tip = await handler.get_tip({"file_path": ".tmp/copied-image.png"})
+    await handler.handle({"file_path": ".tmp/copied-image.png"}, 1)
+    tip = await handler.get_final_tip()
 
     assert "temporary" in tip.lower()
     assert "outside `.tmp`" in tip
+    assert "- `.tmp/copied-image.png`" in tip
