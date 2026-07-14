@@ -1823,13 +1823,129 @@
         "zh_CN": "安装完成：{{ok}} 成功，{{failed}} 失败",
         "en_US": "Installation complete: {{ok}} succeeded, {{failed}} failed"
     },
-    "upgrade_sandbox.success": {
-        "zh_CN": "沙箱升级请求已提交",
-        "en_US": "Sandbox upgrade initiated"
+    "get_sandbox_info.before": {
+        "zh_CN": "正在查看当前沙箱信息",
+        "en_US": "Inspecting the current sandbox"
+    },
+    "get_sandbox_info.success": {
+        "zh_CN": "已获取当前沙箱信息",
+        "en_US": "Current sandbox information retrieved"
+    },
+    "get_sandbox_info.error": {
+        "zh_CN": "当前沙箱信息获取失败",
+        "en_US": "Failed to inspect the current sandbox"
+    },
+    "get_sandbox_info.detail_title": {
+        "zh_CN": "当前沙箱信息",
+        "en_US": "Current sandbox information"
+    },
+    "get_sandbox_info.detail_failed_title": {
+        "zh_CN": "沙箱信息获取失败",
+        "en_US": "Sandbox inspection failed"
+    },
+    "upgrade_sandbox.before": {
+        "zh_CN": "正在检查并安排当前沙箱升级",
+        "en_US": "Checking and scheduling an upgrade for the current sandbox"
+    },
+    "upgrade_sandbox.scheduled": {
+        "zh_CN": "当前沙箱升级已安排，将在 {{delay_seconds}} 秒后重启",
+        "en_US": "The current sandbox upgrade is scheduled and will restart in {{delay_seconds}} seconds"
+    },
+    "upgrade_sandbox.already_current": {
+        "zh_CN": "当前沙箱已是最新版本，无需重启",
+        "en_US": "The current sandbox is already up to date; no restart is needed"
     },
     "upgrade_sandbox.error": {
         "zh_CN": "沙箱升级失败",
         "en_US": "Sandbox upgrade failed"
+    },
+    "upgrade_sandbox.detail_title": {
+        "zh_CN": "沙箱升级结果",
+        "en_US": "Sandbox upgrade result"
+    },
+    "upgrade_sandbox.detail_failed_title": {
+        "zh_CN": "沙箱升级失败",
+        "en_US": "Sandbox upgrade failed"
+    },
+    "restart_sandbox.before": {
+        "zh_CN": "正在安排当前沙箱重启",
+        "en_US": "Scheduling a restart for the current sandbox"
+    },
+    "restart_sandbox.scheduled": {
+        "zh_CN": "当前沙箱重启已安排，将在 {{delay_seconds}} 秒后执行",
+        "en_US": "The current sandbox restart is scheduled and will begin in {{delay_seconds}} seconds"
+    },
+    "restart_sandbox.error": {
+        "zh_CN": "沙箱重启失败",
+        "en_US": "Sandbox restart failed"
+    },
+    "restart_sandbox.detail_title": {
+        "zh_CN": "沙箱重启结果",
+        "en_US": "Sandbox restart result"
+    },
+    "restart_sandbox.detail_failed_title": {
+        "zh_CN": "沙箱重启失败",
+        "en_US": "Sandbox restart failed"
+    },
+    "sandbox.detail.sandbox_id": {
+        "zh_CN": "沙箱 ID",
+        "en_US": "Sandbox ID"
+    },
+    "sandbox.detail.status": {
+        "zh_CN": "运行状态",
+        "en_US": "Status"
+    },
+    "sandbox.detail.current_version": {
+        "zh_CN": "当前 Agent 镜像版本",
+        "en_US": "Current Agent image version"
+    },
+    "sandbox.detail.latest_version": {
+        "zh_CN": "最新 Agent 镜像版本",
+        "en_US": "Latest Agent image version"
+    },
+    "sandbox.detail.needs_update": {
+        "zh_CN": "是否需要升级",
+        "en_US": "Update needed"
+    },
+    "sandbox.detail.operation": {
+        "zh_CN": "执行结果",
+        "en_US": "Operation"
+    },
+    "sandbox.detail.delay_seconds": {
+        "zh_CN": "预计延迟秒数",
+        "en_US": "Scheduled delay in seconds"
+    },
+    "sandbox.detail.error": {
+        "zh_CN": "错误",
+        "en_US": "Error"
+    },
+    "sandbox.detail.unknown": {
+        "zh_CN": "未知",
+        "en_US": "Unknown"
+    },
+    "sandbox.detail.yes": {
+        "zh_CN": "是",
+        "en_US": "Yes"
+    },
+    "sandbox.detail.no": {
+        "zh_CN": "否",
+        "en_US": "No"
+    },
+    "sandbox.detail.service_error": {
+        "zh_CN": "沙箱服务暂时不可用，请稍后重试",
+        "en_US": "The sandbox service is temporarily unavailable. Please try again later."
+    },
+    "sandbox.operation.upgrade_scheduled": {
+        "zh_CN": "升级已安排",
+        "en_US": "Upgrade scheduled"
+    },
+    "sandbox.operation.already_current": {
+        "zh_CN": "已是最新版本，未重启",
+        "en_US": "Already current; no restart"
+    },
+    "sandbox.operation.restart_scheduled": {
+        "zh_CN": "重启已安排",
+        "en_US": "Restart scheduled"
     },
     "manage_cron.status": {
         "zh_CN": "查看定时任务状态",

@@ -27,6 +27,7 @@ from app.tools.multi_edit_file import MultiEditFile
 from app.tools.multi_edit_file_range import MultiEditFileRange
 from app.tools.file_search import FileSearch
 from app.tools.get_js_cdn_address import GetJsCdnAddress
+from app.tools.get_sandbox_info import GetSandboxInfo
 from app.tools.grep_search import GrepSearch
 
 from app.tools.generate_images import GenerateImages
@@ -49,6 +50,7 @@ from app.tools.todo_read import TodoRead
 from app.tools.todo_create import TodoCreate
 from app.tools.todo_update import TodoUpdate
 from app.tools.update_memory import UpdateMemory
+from app.tools.restart_sandbox import RestartSandbox
 from app.tools.upgrade_sandbox import UpgradeSandbox
 from app.tools.use_browser import UseBrowser
 from app.tools.write_file import WriteFile
@@ -215,6 +217,7 @@ __all__ = [
     "MultiEditFileRange",
     "FileSearch",
     "GetJsCdnAddress",
+    "GetSandboxInfo",
     "GrepSearch",
     "ImageSearch",
     "GenerateImages",
@@ -240,6 +243,8 @@ __all__ = [
     "TodoCreate",
     "TodoUpdate",
     "UpdateMemory",
+    "RestartSandbox",
+    "UpgradeSandbox",
     "UseBrowser",
     "VisualUnderstanding",
     "VisualUnderstandingWebpage",

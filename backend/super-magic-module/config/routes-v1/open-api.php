@@ -46,6 +46,10 @@ Router::addGroup(
 Router::addGroup(
     '/api/v1/open-api/sandbox',
     static function () {
+        // 获取当前沙箱状态及镜像版本信息
+        Router::get('/info', [InternalSandboxApi::class, 'getSandboxInfo']);
+        // 无条件重启当前沙箱
+        Router::put('/restart', [InternalSandboxApi::class, 'restartSandbox']);
         // 沙箱自我升级
         Router::put('/upgrade', [InternalSandboxApi::class, 'upgradeSandbox']);
         // 检查沙箱镜像版本（当前版本 vs 最新版本）
