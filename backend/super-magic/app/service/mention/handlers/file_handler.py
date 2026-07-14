@@ -1,7 +1,9 @@
 """File mention handler"""
+import os
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
+from app.path_manager import PathManager
 from app.service.mention.base import BaseMentionHandler, logger
 
 if TYPE_CHECKING:
@@ -10,6 +12,13 @@ from app.service.mention.utils.canvas_project_detector import find_parent_canvas
 
 _IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".svg", ".avif"}
 _VIDEO_EXTS = {".mp4", ".mov", ".avi", ".webm", ".mkv", ".flv", ".wmv"}
+
+_TEMPORARY_FILE_NOTIFICATION = (
+    "The referenced file is stored under `.tmp` and is temporary. "
+    "It will be deleted automatically after it reaches the expiration time defined by its policy. "
+    "If this file or any derived result must persist, move or copy it to a workspace path outside `.tmp` "
+    "before completing the task."
+)
 
 _PROJECT_TYPE_LABELS = {
     "design": "canvas",
@@ -37,6 +46,21 @@ def _file_category(file_path: str) -> str:
     return "file"
 
 
+def _is_temporary_workspace_path(file_path: str) -> bool:
+    """判断文件路径是否位于 PathManager 定义的工作区临时目录下。"""
+    path = Path(file_path)
+    if not path.is_absolute():
+        path = PathManager.get_workspace_dir() / path
+
+    normalized_path = Path(os.path.normpath(str(path)))
+    temporary_directory = Path(os.path.normpath(str(PathManager.get_tmp_dir())))
+    try:
+        normalized_path.relative_to(temporary_directory)
+        return True
+    except ValueError:
+        return False
+
+
 class FileHandler(BaseMentionHandler):
     """处理文件类型的mention（file、project_file、upload_file）"""
 
@@ -44,7 +68,18 @@ class FileHandler(BaseMentionHandler):
         return "file"
 
     async def get_tip(self, mention: Dict[str, Any], agent_context: Optional["AgentContext"] = None) -> str:
-        file_path = self.normalize_path(mention.get("file_path", ""))
+        original_file_path = str(mention.get("file_path") or "")
+        file_path = self.normalize_path(original_file_path)
+        if _is_temporary_workspace_path(original_file_path):
+            notification = f"Temporary file: `{file_path}`. {_TEMPORARY_FILE_NOTIFICATION}"
+            if agent_context is not None:
+                try:
+                    agent_context.horizon.push_notification("temporary_file_mention", notification)
+                    return ""
+                except Exception as error:
+                    logger.warning(f"推送临时文件 Horizon 通知失败: {error}")
+            return f"{notification} Read and understand the referenced file before proceeding."
+
         _, project_type = await find_parent_canvas_project(file_path)
         if project_type and project_type in _PROJECT_TYPE_TIPS:
             return _PROJECT_TYPE_TIPS[project_type]
