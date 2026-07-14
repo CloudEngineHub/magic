@@ -42,6 +42,16 @@ VALIDATION_ERROR_NOT_READ = "File must be read before editing. Please read the f
 VALIDATION_ERROR_CHANGED = "File changed since last read. Please read the file again."
 FILE_CONTENT_SNAPSHOT_MAX_BYTES = 64 * 1024   # 64 KB — 整文件快照上限
 HORIZON_CONTEXT_MAX_CHARS = 32 * 1024          # 32 KB — 单条 horizon 注入上限
+HORIZON_CONTEXT_OVERSIZED_NOTICE = (
+    "<system_injected_context>\n"
+    '<horizon_update_status status="omitted" reason="size_limit_exceeded">\n'
+    "The latest Horizon context update exceeded the safety limit and was omitted before delivery. "
+    "The omitted data is unavailable to you, not merely hidden in the user interface. "
+    "Environment context such as the workspace file tree may therefore be missing or stale. "
+    "Use the available tools to inspect the current state before relying on previously injected context.\n"
+    "</horizon_update_status>\n"
+    "</system_injected_context>"
+)
 STRING_DIFF_DETAIL_MAX_LINES = 30
 
 # context usage 注入灵敏度规则：
@@ -944,7 +954,7 @@ class AgentHorizon:
             f"largest_notification_len={largest_notification_len:,}"
         )
 
-    async def build_context_update(self, injection_point: str = "unknown") -> Optional[str]:
+    async def build_context_update(self, injection_point: str = "unknown") -> str:
         """
         编排所有动态上下文，返回完整的 <system_injected_context> XML 文本，每次调用均输出。
 
@@ -962,7 +972,7 @@ class AgentHorizon:
           <file_changes>     — 文件有变化时
           <notifications>    — 有待注入通知时
 
-        超过安全上限时返回 None，并保留当前 baseline，避免模型没看到内容却推进状态。
+        超过安全上限时丢弃原始内容，返回轻量状态消息，并保留当前 baseline。
         """
         await self._ensure_loaded()
 
@@ -1208,7 +1218,7 @@ class AgentHorizon:
 
         if len(context_update) > HORIZON_CONTEXT_MAX_CHARS:
             self._log_oversized_context_update(context_update, injection_point)
-            return None
+            return HORIZON_CONTEXT_OVERSIZED_NOTICE
 
         # 只有确认本轮上下文会进入 ChatHistory，才推进运行时标志和持久化 baseline。
         if was_first_injection:
