@@ -131,6 +131,7 @@ class SlidesTemplateAssembler
         $dto->setLabel(I18nTextDTO::fromArray($template->getLabel()));
         $dto->setDescription(I18nTextDTO::fromArray($template->getDescription()));
         $dto->setThumbnailUrl($template->getThumbnailUrl());
+        $dto->setCollageUrl($template->getCollageUrl());
         $dto->setSort($template->getSort());
         $dto->setUsageCount($template->getUsageCount());
         $dto->setIsOfficial(OfficialOrganizationUtil::isOfficialOrganization($template->getOrganizationCode()));

@@ -44,7 +44,7 @@ class SlidesTemplateAppService extends AbstractSlidesTemplateAppService
         $page = $this->createListPage($request->getPage(), $request->getPageSize());
         $page->setTotal(false);
         $result = $this->slidesTemplateDomainService->queries($dataIsolation, $query, $page);
-        $this->resolveThumbnailUrls($result['list']);
+        $this->resolveListImageUrls($result['list']);
         $this->fillPublicTemplateTags($dataIsolation, $result['list']);
 
         return [

@@ -23,6 +23,8 @@ class SlidesTemplatePublicListItemDTO extends AbstractDTO
 
     public ?string $thumbnailUrl = null;
 
+    public ?string $collageUrl = null;
+
     public int $sort = 0;
 
     public int $usageCount = 0;
@@ -96,6 +98,16 @@ class SlidesTemplatePublicListItemDTO extends AbstractDTO
     public function setThumbnailUrl(?string $thumbnailUrl): void
     {
         $this->thumbnailUrl = $thumbnailUrl;
+    }
+
+    public function getCollageUrl(): ?string
+    {
+        return $this->collageUrl;
+    }
+
+    public function setCollageUrl(?string $collageUrl): void
+    {
+        $this->collageUrl = $collageUrl;
     }
 
     public function getSort(): int

@@ -94,7 +94,7 @@ abstract class AbstractSlidesTemplateAppService extends AbstractKernelAppService
     /**
      * @param SlidesTemplateEntity[] $templates
      */
-    protected function resolveThumbnailUrls(array $templates): void
+    protected function resolveListImageUrls(array $templates): void
     {
         if ($templates === []) {
             return;
@@ -103,6 +103,7 @@ abstract class AbstractSlidesTemplateAppService extends AbstractKernelAppService
         $publicPathsByOrg = [];
         foreach ($templates as $template) {
             $this->appendFilePath($publicPathsByOrg, $template->getOrganizationCode(), $template->getThumbnailFileKey());
+            $this->appendFilePath($publicPathsByOrg, $template->getOrganizationCode(), $template->getCollageFileKey());
         }
 
         $publicLinksByOrg = [];
@@ -113,6 +114,7 @@ abstract class AbstractSlidesTemplateAppService extends AbstractKernelAppService
         foreach ($templates as $template) {
             $organizationCode = $template->getOrganizationCode();
             $template->setThumbnailUrl($this->resolveUrl($publicLinksByOrg, $organizationCode, $template->getThumbnailFileKey()));
+            $template->setCollageUrl($this->resolveUrl($publicLinksByOrg, $organizationCode, $template->getCollageFileKey()));
         }
     }
 
