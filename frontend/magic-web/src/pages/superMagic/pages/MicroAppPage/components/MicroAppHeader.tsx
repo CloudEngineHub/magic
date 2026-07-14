@@ -1,4 +1,4 @@
-import { ArrowLeft, Files, PanelLeftClose } from "lucide-react"
+import { ArrowLeft, Files, PanelLeftClose, UserRoundPlus } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { Button } from "@/components/shadcn-ui/button"
 import {
@@ -21,6 +21,8 @@ interface MicroAppHeaderProps {
 	onBack: () => void
 	onToggleSidebar: () => void
 	onEntryChange: (fileId: string) => void
+	canManageCollaborators?: boolean
+	onManageCollaborators?: () => void
 }
 
 function getEntryName(item: AttachmentItem): string {
@@ -35,10 +37,13 @@ export default function MicroAppHeader({
 	onBack,
 	onToggleSidebar,
 	onEntryChange,
+	canManageCollaborators,
+	onManageCollaborators,
 }: MicroAppHeaderProps) {
 	const { t } = useTranslation("super")
 	const projectName = selectedProject?.project_name || t("project.unnamedProject")
 	const hasEntries = htmlFiles.length > 0
+	const showCollaboratorAction = Boolean(canManageCollaborators && onManageCollaborators)
 
 	return (
 		<header
@@ -82,6 +87,25 @@ export default function MicroAppHeader({
 			<div className="min-w-0 flex-1">
 				<p className="truncate text-sm font-medium text-foreground">{projectName}</p>
 			</div>
+
+			{showCollaboratorAction && (
+				<Tooltip>
+					<TooltipTrigger asChild>
+						<Button
+							type="button"
+							variant="outline"
+							size="icon"
+							className="size-8 shrink-0"
+							aria-label={t("project.addCollaborators")}
+							data-testid="micro-app-manage-collaborators"
+							onClick={() => onManageCollaborators?.()}
+						>
+							<UserRoundPlus size={16} />
+						</Button>
+					</TooltipTrigger>
+					<TooltipContent side="bottom">{t("project.addCollaborators")}</TooltipContent>
+				</Tooltip>
+			)}
 
 			<div className="flex min-w-[220px] max-w-[360px] shrink-0 items-center gap-2">
 				<span className="shrink-0 text-xs text-muted-foreground">

@@ -23,6 +23,7 @@ import {
 import { SuperMagicApi } from "@/apis"
 import { useDefaultModeModelListRefreshOnMount } from "@/pages/superMagic/hooks"
 import { useCreateTopicListener } from "@/pages/superMagic/components/TopicMode"
+import useCollaboratorUpdatePanel from "@/pages/superMagic/components/WithCollaborators/hooks/useCollaboratorUpdatePanel"
 import { RouteName } from "@/routes/constants"
 import { AppStoreProvider, useAppStore } from "./context"
 import AppConversationPanel from "./components/AppConversationPanel"
@@ -255,6 +256,16 @@ function MicroAppPageInner({ projectId }: { projectId: string }) {
 		})
 	})
 
+	const { openManageModal, CollaboratorUpdatePanel, canManageCollaborators } =
+		useCollaboratorUpdatePanel({
+			selectedProject,
+		})
+
+	const handleManageCollaborators = useMemoizedFn(() => {
+		if (!selectedProject || !canManageCollaborators) return
+		openManageModal()
+	})
+
 	if (store.initLoading) {
 		return (
 			<div className="flex h-full w-full items-center justify-center">
@@ -313,6 +324,8 @@ function MicroAppPageInner({ projectId }: { projectId: string }) {
 						onBack={handleBackToMicroApps}
 						onToggleSidebar={toggleSidebarCollapse}
 						onEntryChange={setSelectedEntryFileId}
+						canManageCollaborators={canManageCollaborators}
+						onManageCollaborators={handleManageCollaborators}
 					/>
 					<div className="min-h-0 flex-1 overflow-hidden">
 						<MicroAppHtmlPreview
@@ -354,6 +367,7 @@ function MicroAppPageInner({ projectId }: { projectId: string }) {
 						if (!open) setPreviewFile(null)
 					}}
 				/>
+				{CollaboratorUpdatePanel}
 			</div>
 		</FileActionVisibilityProvider>
 	)
