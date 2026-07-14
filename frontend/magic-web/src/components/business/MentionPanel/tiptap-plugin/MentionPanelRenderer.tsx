@@ -39,7 +39,6 @@ const MentionPanelRenderer = observer(
 			onExit,
 			disableKeyboardShortcuts = false,
 			dataService,
-			portalContainer,
 		} = props
 
 		// Panel ref for positioning
@@ -129,7 +128,6 @@ const MentionPanelRenderer = observer(
 						onClose={handleClose}
 						searchPlaceholder={t.searchPlaceholder}
 						triggerRef={triggerRefObject}
-						portalContainer={portalContainer}
 						language={language}
 						disableKeyboardShortcuts={disableKeyboardShortcuts}
 						runtime={{ dataService }}
