@@ -48,8 +48,8 @@ class SaveSlidesTemplateRequestTest extends TestCase
         $regex = $matches[1] ?? '';
 
         $this->assertSame(1, preg_match($regex, 'PPT-business-minimal'));
-        $this->assertSame(1, preg_match($regex, 'SLD-business-minimal'));
         $this->assertSame(1, preg_match($regex, 'SLIDE-business-minimal'));
+        $this->assertSame(0, preg_match($regex, 'SLD-business-minimal'));
         $this->assertSame(0, preg_match($regex, 'PDF-business-minimal'));
         $this->assertSame(0, preg_match($regex, 'PPTX-business-minimal'));
     }
