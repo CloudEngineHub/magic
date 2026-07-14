@@ -35,12 +35,13 @@ class OpenProjectApi extends AbstractApi
 
     /**
      * Get project basic info (name, etc.) - no authentication required.
+     * Uses cached project name to avoid database pressure from public access.
      */
     public function show(string $id): array
     {
-        $projectEntity = $this->projectAppService->getProjectNotUserId((int) $id);
+        $projectName = $this->projectAppService->getProjectNameNotUserId((int) $id);
 
-        return ['project_name' => $projectEntity?->getProjectName()];
+        return ['project_name' => $projectName];
     }
 
     /**
