@@ -81,8 +81,8 @@ Use a JSON array for files that will be created or changed. Each item should hav
     )
     data_model: Union[List[PlanDataModelItem], str] = Field(
         default_factory=list,
-        description="""<!--zh: MagicBase 数据表计划。字段必须由计划中的完整功能反推，不能只建最小表；涉及当前用户、创建人、负责人或权限时，必须包含稳定 user_id 字段，并说明用户展示名来自 window.Magic.getContext()；只有纯展示、纯静态、纯计算器、没有用户数据或用户明确不要保存数据时才为空。-->
-Use a JSON array for the MagicBase data model plan. Derive fields from the full planned feature loop, not from the smallest possible CRUD table. Include stable user_id fields when the app involves current users, creators, owners, assignees, or permissions, and state that user display names come from window.Magic.getContext(). Leave it empty only for pure showcase/static/calculator apps, apps with no user data, or when the user explicitly says not to persist data.""",
+        description="""<!--zh: MagicBase 数据表计划。字段必须由计划中的完整功能反推，不能只建最小表；涉及当前用户、创建人、负责人或权限时，必须包含稳定 user_id 字段，并说明用户展示名来自 window.Magic.getContext()。涉及权限时，说明该规则是 enforceable_by_magicbase、ui_only_not_secure 还是 requires_backend；不要把状态流转、跨表关系、层级、阈值、时间窗口、配额、审批、支付、库存、财务、积分等后端业务规则伪装成纯前端可安全实现。只有纯展示、纯静态、纯计算器、没有用户数据或用户明确不要保存数据时才为空。-->
+Use a JSON array for the MagicBase data model plan. Derive fields from the full planned feature loop, not from the smallest possible CRUD table. Include stable user_id fields when the app involves current users, creators, owners, assignees, or permissions, and state that user display names come from window.Magic.getContext(). For permissioned data, state whether the rule is enforceable_by_magicbase, ui_only_not_secure, or requires_backend; do not model complex backend-only permission rules as if front-end code can secure them. Leave it empty only for pure showcase/static/calculator apps, apps with no user data, or when the user explicitly says not to persist data.""",
     )
     acceptance_criteria: Union[List[str], str] = Field(
         default_factory=list,
@@ -91,8 +91,8 @@ Use a JSON array for verifiable acceptance criteria. Cover the key product capab
     )
     assumptions: Union[List[str], str] = Field(
         default_factory=list,
-        description="""<!--zh: 为了推进计划而采用的具体默认假设。说明哪些能力是根据一句话需求合理补全的；不要写“简单易用”等空泛描述。-->
-Use a JSON array for concrete defaults assumed to move the plan forward. State which capabilities were reasonably added from a short request. Avoid vague assumptions such as "simple and easy to use".""",
+        description="""<!--zh: 为了推进计划而采用的具体默认假设。说明哪些能力是根据一句话需求合理补全的；涉及 MagicBase 或多用户权限时，必须包含 permission_feasibility，值为 enforceable_by_magicbase、ui_only_not_secure 或 requires_backend。若权限依赖状态流转、跨表关系、层级、阈值、时间窗口、配额、审批、支付、库存、财务、积分或其他后端业务逻辑，明确说明纯前端 + MagicBase 无法强制安全实现。不要写“简单易用”等空泛描述。-->
+Use a JSON array for concrete defaults assumed to move the plan forward. State which capabilities were reasonably added from a short request. For MagicBase or multi-user permissions, include permission_feasibility with one of enforceable_by_magicbase, ui_only_not_secure, or requires_backend. If permission rules depend on state transitions, cross-table relationships, hierarchy, thresholds, time windows, quotas, approvals, payments, inventory, finance, points, or other backend business logic, explicitly say pure front-end + MagicBase cannot enforce them. Avoid vague assumptions such as "simple and easy to use".""",
     )
     timeout: int = Field(
         default=INTERNAL_TIMEOUT,
@@ -117,9 +117,9 @@ class PlanTool(BaseUserToolCallTool[PlanParams]):
         return """\
 <!--zh
 何时调用 plan：
-- 新建 HTML 微应用、较大改动、改动文件结构、或涉及 MagicBase 建表/加字段时，必须先调用 plan 并等待用户确认。
+- 新建 HTML 微应用、较大改动、改动文件结构、或涉及 MagicBase 建表、改表权限、删表、加字段、改字段、删字段等 schema 变更时，必须先调用 plan 并等待用户确认。
 - 是否调用 ask_user 由你判断：只有缺少会显著改变产品方向的信息，且无法用合理默认值安全推进时才提问；短需求可以合理推断时，直接带明确假设进入 plan。
-- 用户确认 plan 之前，不要写文件，不要建表，不要加字段，不要声称已开始开发。
+- 用户确认 plan 之前，不要写文件，不要建表、改表权限、删表、加字段、改字段、删字段，不要声称已开始开发。
 - 若方案涉及 MagicBase 表结构变更，计划中要说明 MagicBase schema 工具会自动维护 `.magicbase/migrations.json`，并在成功后刷新 `MICRO-APP.md` 的最新表结构；agent 不需要单独编辑文件写 Pending/Success/Failed。
 - 用户要求修改 plan 时，不要实现；根据用户意见调整方案后再次调用 plan。
 - 用户取消或超时时，不要继续实现。

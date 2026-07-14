@@ -25,8 +25,13 @@ from .search_knowledge_parameter import SearchKnowledgeParameter
 from .update_file_source_parameter import UpdateFileSourceParameter, FileSource
 from .create_magicbase_column_parameter import CreateMagicBaseColumnParameter
 from .create_magicbase_table_parameter import CreateMagicBaseTableParameter
+from .delete_magicbase_column_parameter import DeleteMagicBaseColumnParameter
+from .delete_magicbase_table_parameter import DeleteMagicBaseTableParameter
 from .get_magicbase_table_parameter import GetMagicBaseTableParameter
 from .query_magicbase_tables_parameter import QueryMagicBaseTablesParameter
+from .update_magicbase_column_parameter import UpdateMagicBaseColumnParameter
+from .update_magicbase_table_permissions_parameter import UpdateMagicBaseTablePermissionsParameter
+
 
 __all__ = [
     'AiAbilityRuntimeConfigParameter',
@@ -53,6 +58,10 @@ __all__ = [
     'FileSource',
     'CreateMagicBaseColumnParameter',
     'CreateMagicBaseTableParameter',
+    'DeleteMagicBaseColumnParameter',
+    'DeleteMagicBaseTableParameter',
     'GetMagicBaseTableParameter',
     'QueryMagicBaseTablesParameter',
+    'UpdateMagicBaseColumnParameter',
+    'UpdateMagicBaseTablePermissionsParameter',
 ]

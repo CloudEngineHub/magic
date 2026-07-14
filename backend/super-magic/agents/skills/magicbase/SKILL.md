@@ -9,7 +9,7 @@ Use this skill when an HTML micro-app needs persistent data, current-user identi
 
 MagicBase has two layers:
 
-- Schema work is done by agent tools before HTML generation: `query_magicbase_tables`, `get_magicbase_table`, `create_magicbase_table`, and `create_magicbase_column`.
+- Schema work is done by agent tools before HTML generation: `query_magicbase_tables`, `get_magicbase_table`, `create_magicbase_table`, `create_magicbase_column`, `update_magicbase_table_permissions`, `delete_magicbase_table`, `update_magicbase_column`, and `delete_magicbase_column`.
 - Runtime row operations are done inside HTML with `window.Magic.db`, using real table IDs returned by MagicBase tools.
 
 Do not expose schema creation inside HTML pages. HTML code should only read and write rows on tables that already exist.
@@ -206,7 +206,12 @@ Field-level permissions:
 - Business ownership, assignment, review, status-transition, audit, and statistics fields should not be publicly editable unless the user explicitly asks for open collaboration.
 - If a field is for display only, derived data, review state, ownership, or system-like metadata, either set an appropriate `dynamic_permission` for the column or do not render an edit control for it. Backend row permissions are still the security boundary.
 
-If `query_magicbase_tables` or `get_magicbase_table` finds an existing table whose row permissions are `public`, do not claim that backend private permissions are already enforced. If there is no tool available to update table dynamic permissions, explain that the current implementation can only add frontend filtering and UI checks for the existing table, and recommend adding a MagicBase permission-update tool before claiming full backend enforcement.
+If `query_magicbase_tables` or `get_magicbase_table` finds an existing table whose row permissions do not match the user's permission intent, use `update_magicbase_table_permissions` before claiming backend enforcement. Do not describe frontend filtering, hidden buttons, or disabled controls as secure permission enforcement unless MagicBase dynamic permissions are updated to match the requirement.
+
+Destructive schema changes:
+
+- `delete_magicbase_table` and `delete_magicbase_column` are destructive. Use them only after the user explicitly confirms the deletion in the approved plan or follow-up instruction.
+- `update_magicbase_column` expects the complete desired column definition. Call `get_magicbase_table` first, preserve unchanged values, and then pass the final `column_key`, `column_name`, `data_type`, `is_required`, default value, and any field `dynamic_permission` that should remain in effect.
 
 ---
 

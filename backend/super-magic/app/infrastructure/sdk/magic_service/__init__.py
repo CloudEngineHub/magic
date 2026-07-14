@@ -40,8 +40,12 @@ from .parameter.cancel_share_parameter import CancelShareParameter
 from .parameter.ingest_third_party_message_parameter import IngestThirdPartyMessageParameter
 from .parameter.create_magicbase_column_parameter import CreateMagicBaseColumnParameter
 from .parameter.create_magicbase_table_parameter import CreateMagicBaseTableParameter
+from .parameter.delete_magicbase_column_parameter import DeleteMagicBaseColumnParameter
+from .parameter.delete_magicbase_table_parameter import DeleteMagicBaseTableParameter
 from .parameter.get_magicbase_table_parameter import GetMagicBaseTableParameter
 from .parameter.query_magicbase_tables_parameter import QueryMagicBaseTablesParameter
+from .parameter.update_magicbase_column_parameter import UpdateMagicBaseColumnParameter
+from .parameter.update_magicbase_table_permissions_parameter import UpdateMagicBaseTablePermissionsParameter
 
 # Result classes
 from .result.ai_ability_runtime_config_result import AiAbilityRuntimeConfigItem, AiAbilityRuntimeConfigResult
@@ -117,8 +121,12 @@ __all__ = [
     'IngestThirdPartyMessageParameter',
     'CreateMagicBaseColumnParameter',
     'CreateMagicBaseTableParameter',
+    'DeleteMagicBaseColumnParameter',
+    'DeleteMagicBaseTableParameter',
     'GetMagicBaseTableParameter',
     'QueryMagicBaseTablesParameter',
+    'UpdateMagicBaseColumnParameter',
+    'UpdateMagicBaseTablePermissionsParameter',
 
     # Result classes
     'AiAbilityRuntimeConfigResult',

@@ -7,8 +7,12 @@ API wrapper for MagicBase endpoints hosted by Magic Service.
 from ..kernel.magic_service_api import MagicServiceAbstractApi
 from ..parameter.create_magicbase_column_parameter import CreateMagicBaseColumnParameter
 from ..parameter.create_magicbase_table_parameter import CreateMagicBaseTableParameter
+from ..parameter.delete_magicbase_column_parameter import DeleteMagicBaseColumnParameter
+from ..parameter.delete_magicbase_table_parameter import DeleteMagicBaseTableParameter
 from ..parameter.get_magicbase_table_parameter import GetMagicBaseTableParameter
 from ..parameter.query_magicbase_tables_parameter import QueryMagicBaseTablesParameter
+from ..parameter.update_magicbase_column_parameter import UpdateMagicBaseColumnParameter
+from ..parameter.update_magicbase_table_permissions_parameter import UpdateMagicBaseTablePermissionsParameter
 from ..result.magicbase_column_result import MagicBaseColumnResult
 from ..result.magicbase_table_result import MagicBaseTableResult, MagicBaseTablesResult
 
@@ -39,3 +43,34 @@ class MagicBaseApi(MagicServiceAbstractApi):
         endpoint_path = f"/api/v1/magicbase/projects/{parameter.project_id}/tables/{parameter.table_id}/columns"
         data = await self.request_by_parameter_async(parameter, "POST", endpoint_path)
         return MagicBaseColumnResult(data)
+
+    async def update_table_permissions_async(
+        self,
+        parameter: UpdateMagicBaseTablePermissionsParameter,
+    ) -> MagicBaseTableResult:
+        """Update dynamic permissions for an existing MagicBase table."""
+        endpoint_path = f"/api/v1/magicbase/projects/{parameter.project_id}/tables/{parameter.table_id}"
+        data = await self.request_by_parameter_async(parameter, "PATCH", endpoint_path)
+        return MagicBaseTableResult(data)
+
+    async def delete_table_async(self, parameter: DeleteMagicBaseTableParameter) -> None:
+        """Delete a MagicBase table."""
+        endpoint_path = f"/api/v1/magicbase/projects/{parameter.project_id}/tables/{parameter.table_id}"
+        await self.request_by_parameter_async(parameter, "DELETE", endpoint_path)
+
+    async def update_column_async(self, parameter: UpdateMagicBaseColumnParameter) -> MagicBaseColumnResult:
+        """Update an existing MagicBase column."""
+        endpoint_path = (
+            f"/api/v1/magicbase/projects/{parameter.project_id}"
+            f"/tables/{parameter.table_id}/columns/{parameter.column_id}"
+        )
+        data = await self.request_by_parameter_async(parameter, "PATCH", endpoint_path)
+        return MagicBaseColumnResult(data)
+
+    async def delete_column_async(self, parameter: DeleteMagicBaseColumnParameter) -> None:
+        """Delete a MagicBase column."""
+        endpoint_path = (
+            f"/api/v1/magicbase/projects/{parameter.project_id}"
+            f"/tables/{parameter.table_id}/columns/{parameter.column_id}"
+        )
+        await self.request_by_parameter_async(parameter, "DELETE", endpoint_path)

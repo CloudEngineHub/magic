@@ -11,8 +11,12 @@ from app.infrastructure.sdk.magic_service.kernel.magic_service_exception import 
 from app.infrastructure.sdk.magic_service.parameter import (
     CreateMagicBaseColumnParameter,
     CreateMagicBaseTableParameter,
+    DeleteMagicBaseColumnParameter,
+    DeleteMagicBaseTableParameter,
     GetMagicBaseTableParameter,
     QueryMagicBaseTablesParameter,
+    UpdateMagicBaseColumnParameter,
+    UpdateMagicBaseTablePermissionsParameter,
 )
 from app.service.html_app_memory_service import (
     append_pending_migration,
@@ -110,6 +114,77 @@ def _merge_columns(existing: List[Dict[str, Any]], incoming: List[Dict[str, Any]
     return merged
 
 
+def _remove_table_model(data_model: Dict[str, Any], target_table_id: str) -> None:
+    tables = data_model.setdefault("tables", [])
+    data_model["tables"] = [table for table in tables if str(table.get("table_id") or "") != target_table_id]
+
+
+def _remove_column_model(data_model: Dict[str, Any], target_table_id: str, target_column_id: str) -> None:
+    for table in data_model.setdefault("tables", []):
+        if str(table.get("table_id") or "") != target_table_id:
+            continue
+        table["columns"] = [
+            column
+            for column in table.get("columns") or []
+            if str(column.get("column_id") or "") != target_column_id
+        ]
+        return
+
+
+async def _record_table_update_success(migration_id: str, table: Dict[str, Any]) -> None:
+    state = await read_migrations_state()
+    upsert_table_model(state["data_model"], table)
+    for migration in state["migrations"]:
+        if migration.get("migration_id") == migration_id:
+            migration["status"] = "Success"
+            migration["applied_at"] = _now_text()
+            migration["result_table_id"] = _table_id(table)
+            migration["result"] = _json_safe(table)
+            break
+    await write_migrations_state(state)
+    await sync_html_app_magicbase_model(state["data_model"])
+
+
+async def _record_table_delete_success(migration_id: str, target_table_id: str) -> None:
+    state = await read_migrations_state()
+    _remove_table_model(state["data_model"], target_table_id)
+    for migration in state["migrations"]:
+        if migration.get("migration_id") == migration_id:
+            migration["status"] = "Success"
+            migration["applied_at"] = _now_text()
+            migration["result_table_id"] = target_table_id
+            break
+    await write_migrations_state(state)
+    await sync_html_app_magicbase_model(state["data_model"])
+
+
+async def _record_column_update_success(migration_id: str, target_table_id: str, column: Dict[str, Any]) -> None:
+    state = await read_migrations_state()
+    upsert_column_model(state["data_model"], target_table_id, column)
+    for migration in state["migrations"]:
+        if migration.get("migration_id") == migration_id:
+            migration["status"] = "Success"
+            migration["applied_at"] = _now_text()
+            migration["result_column_id"] = _column_id(column)
+            migration["result"] = _json_safe(column)
+            break
+    await write_migrations_state(state)
+    await sync_html_app_magicbase_model(state["data_model"])
+
+
+async def _record_column_delete_success(migration_id: str, target_table_id: str, target_column_id: str) -> None:
+    state = await read_migrations_state()
+    _remove_column_model(state["data_model"], target_table_id, target_column_id)
+    for migration in state["migrations"]:
+        if migration.get("migration_id") == migration_id:
+            migration["status"] = "Success"
+            migration["applied_at"] = _now_text()
+            migration["result_column_id"] = target_column_id
+            break
+    await write_migrations_state(state)
+    await sync_html_app_magicbase_model(state["data_model"])
+
+
 def _upsert_table_model(
     data_model: Dict[str, Any],
     table: Dict[str, Any],
@@ -155,18 +230,6 @@ def _upsert_column_model(data_model: Dict[str, Any], table_id: str, column: Dict
             table["columns"] = _merge_columns(table.get("columns") or [], [column])
             return
     tables.append({"table_id": table_id, "columns": [_normalize_column(column)]})
-
-
-def _new_migration(operation: str, target: Dict[str, Any], planned_schema: Dict[str, Any], reason: str) -> Dict[str, Any]:
-    return {
-        "migration_id": f"mb_{operation}_{uuid.uuid4().hex[:8]}",
-        "status": "Pending",
-        "operation": operation,
-        "target": _json_safe(target),
-        "planned_schema": _json_safe(planned_schema),
-        "reason": reason,
-        "created_at": _now_text(),
-    }
 
 
 def _find_table(tables: List[Dict[str, Any]], target: Dict[str, Any]) -> Optional[Dict[str, Any]]:
@@ -688,3 +751,356 @@ Do not call file-editing tools just to maintain schema migrations. Ordinary proj
             f"{memory_warning}"
         )
         return ToolResult(content=content, data={"project_id": project_id, "table_id": params.table_id, "column": column})
+
+
+class UpdateMagicbaseTablePermissionsParams(BaseToolParams):
+    table_id: str = Field(
+        description="""<!--zh: MagicBase 返回的真实 table.id，不是 table_key 或 table_name。-->
+Real MagicBase table.id returned by MagicBase tools. Do not pass table_key or table_name."""
+    )
+    dynamic_permissions: Dict[str, Any] = Field(
+        description="""<!--zh
+        新的完整表动态权限配置。用于修改已有表的 table/row/columns dynamic_permissions。
+        必须传完整对象，不要只传局部字段；未包含的部分会按 MagicBase 后端默认规则归一化。
+        修改权限前应先用 get_magicbase_table 确认当前表结构和真实 table_id。
+        -->
+Full replacement dynamic permissions object for an existing table. Use this to update table/row/columns dynamic_permissions. Pass the complete object, not a partial patch; missing parts are normalized by MagicBase backend defaults. Call get_magicbase_table first to confirm the real table_id and current schema before changing permissions."""
+    )
+
+    @field_validator("dynamic_permissions", mode="before")
+    @classmethod
+    def _validate_dynamic_permissions(cls, value: Any) -> Dict[str, Any]:
+        parsed = _coerce_permission_object(value, "dynamic_permissions")
+        if parsed is None:
+            raise ValueError("dynamic_permissions is required")
+        return parsed
+
+
+@tool(name="update_magicbase_table_permissions")
+class UpdateMagicTablePermissions(BaseTool[UpdateMagicbaseTablePermissionsParams]):
+    """<!--zh
+    修改当前项目内已有 MagicBase 表的动态权限。
+
+    只用于更新 table/row/columns dynamic_permissions，不修改字段结构。
+    -->
+    Update dynamic permissions for an existing MagicBase table in the current project.
+
+    This only updates table/row/columns dynamic_permissions and does not change columns.
+    """
+    name = "update_magicbase_table_permissions"
+
+    def get_prompt_hint(self) -> str:
+        return """\
+<!--zh
+修改已有表权限前，必须先确认权限意图和真实 table_id。传入完整 dynamic_permissions 对象，不要只传局部 patch。
+如果用户只是要求前端隐藏按钮但后端权限也需要强制生效，优先调用本工具更新 MagicBase 动态权限。
+-->
+Before updating an existing table's permissions, confirm the permission intent and real table_id. Pass a complete dynamic_permissions object, not a partial patch. If the user needs backend-enforced permissions rather than only hidden buttons, use this tool to update MagicBase dynamic permissions.
+"""
+
+    async def execute(self, tool_context: ToolContext, params: UpdateMagicbaseTablePermissionsParams) -> ToolResult:
+        project_id = _get_project_id()
+        if not project_id:
+            return ToolResult.error("Project ID is not available in the current session. Cannot update MagicBase table permissions.")
+
+        await _try_reconcile_pending_migrations(project_id)
+        migration = new_migration(
+            operation="update_table_permissions",
+            target={"table_id": params.table_id},
+            planned_schema={"dynamic_permissions": params.dynamic_permissions},
+            reason="Update dynamic permissions for an existing MagicBase table.",
+        )
+        try:
+            await append_pending_migration(migration)
+        except Exception as e:
+            return ToolResult.error(f"Failed to update .magicbase/migrations.json before updating MagicBase table permissions: {e}")
+
+        try:
+            result = await get_magic_service_sdk().magicbase.update_table_permissions_async(
+                UpdateMagicBaseTablePermissionsParameter(
+                    project_id=project_id,
+                    table_id=params.table_id,
+                    dynamic_permissions=params.dynamic_permissions,
+                )
+            )
+        except (MagicServiceException, ValueError) as e:
+            try:
+                await complete_migration(migration["migration_id"], "Failed", error_summary=str(e))
+            except Exception:
+                pass
+            return ToolResult.error(f"Failed to update MagicBase table permissions: {e}")
+
+        table = result.to_dict()
+        memory_warning = ""
+        try:
+            await _record_table_update_success(migration["migration_id"], table)
+        except Exception as e:
+            memory_warning = f" MagicBase memory update failed after table permission update: {e}."
+        content = f"Updated MagicBase table permissions. {_table_summary(table)}.{memory_warning}"
+        return ToolResult(content=content, data={"project_id": project_id, "table": table})
+
+
+class DeleteMagicbaseTableParams(BaseToolParams):
+    table_id: str = Field(
+        description="""<!--zh: 要删除的 MagicBase 真实 table.id。删除表会删除表结构及其字段元数据，属于破坏性操作。-->
+Real MagicBase table.id to delete. This is destructive and removes the table schema and column metadata."""
+    )
+    confirm_delete: bool = Field(
+        default=False,
+        description="""<!--zh: 删除表前必须已有用户明确确认；确认后传 true。-->
+Set to true only after the user explicitly confirms deleting this table."""
+    )
+
+
+@tool(name="delete_magicbase_table")
+class DeleteMagicTable(BaseTool[DeleteMagicbaseTableParams]):
+    """<!--zh
+    删除当前项目内已有 MagicBase 表。
+
+    这是破坏性 schema 操作，必须在用户明确确认后使用。
+    -->
+    Delete an existing MagicBase table in the current project.
+
+    This is a destructive schema operation and must only be used after explicit user confirmation.
+    """
+    name = "delete_magicbase_table"
+
+    async def execute(self, tool_context: ToolContext, params: DeleteMagicbaseTableParams) -> ToolResult:
+        if not params.confirm_delete:
+            return ToolResult.error("Deleting a MagicBase table requires confirm_delete=true after explicit user confirmation.")
+
+        project_id = _get_project_id()
+        if not project_id:
+            return ToolResult.error("Project ID is not available in the current session. Cannot delete MagicBase table.")
+
+        await _try_reconcile_pending_migrations(project_id)
+        migration = new_migration(
+            operation="delete_table",
+            target={"table_id": params.table_id},
+            planned_schema={},
+            reason="Delete an existing MagicBase table after explicit user confirmation.",
+        )
+        try:
+            await append_pending_migration(migration)
+        except Exception as e:
+            return ToolResult.error(f"Failed to update .magicbase/migrations.json before deleting MagicBase table: {e}")
+
+        try:
+            await get_magic_service_sdk().magicbase.delete_table_async(
+                DeleteMagicBaseTableParameter(project_id=project_id, table_id=params.table_id)
+            )
+        except (MagicServiceException, ValueError) as e:
+            try:
+                await complete_migration(migration["migration_id"], "Failed", error_summary=str(e))
+            except Exception:
+                pass
+            return ToolResult.error(f"Failed to delete MagicBase table: {e}")
+
+        memory_warning = ""
+        try:
+            await _record_table_delete_success(migration["migration_id"], params.table_id)
+        except Exception as e:
+            memory_warning = f" MagicBase memory update failed after table deletion: {e}."
+        content = f"Deleted MagicBase table table_id={params.table_id}.{memory_warning}"
+        return ToolResult(content=content, data={"project_id": project_id, "table_id": params.table_id})
+
+
+class UpdateMagicbaseColumnParams(BaseToolParams):
+    table_id: str = Field(
+        description="""<!--zh: MagicBase 返回的真实 table.id。-->
+Real MagicBase table.id returned by MagicBase tools."""
+    )
+    column_id: str = Field(
+        description="""<!--zh: MagicBase 返回的真实 column.id，不是 column_key。-->
+Real MagicBase column.id returned by MagicBase tools. Do not pass column_key."""
+    )
+    column_key: str = Field(
+        description="""<!--zh: 更新后的完整字段 key。更新字段时必须传完整目标字段定义。-->
+Complete desired column key after update. Updating a column requires the full target column definition."""
+    )
+    column_name: str = Field(
+        description="""<!--zh: 更新后的完整字段名。-->
+Complete desired human-readable column name after update."""
+    )
+    data_type: str = Field(
+        description="""<!--zh: 更新后的完整字段类型。必须使用 MagicBase MySQL-like 类型。-->
+Complete desired column data type after update. Must be one of the MagicBase MySQL-like types: text, number, datetime, boolean, json."""
+    )
+    is_required: bool = Field(
+        default=False,
+        description="""<!--zh: 更新后的是否必填。-->
+Whether this column should be required after update."""
+    )
+    default_value: Any = Field(
+        default=None,
+        description="""<!--zh: 更新后的默认值，不需要默认值时留空。-->
+Default value after update. Leave empty when no default is needed."""
+    )
+    dynamic_permission: Optional[Dict[str, Any]] = Field(
+        default=None,
+        description="""<!--zh: 更新后的字段动态权限配置，可选。若要保留原字段权限，先 get_magicbase_table 确认后传入相同配置；只有确认该字段不需要字段级权限时才省略。-->
+Optional column dynamic permission after update. To preserve existing permissions, call get_magicbase_table first and pass the same permission object. Omit this field only when the column should not carry field-level dynamic permissions."""
+    )
+
+    @field_validator("data_type")
+    @classmethod
+    def _validate_data_type(cls, value: str) -> str:
+        return _validate_mysql_like_data_type(value)
+
+    @field_validator("dynamic_permission", mode="before")
+    @classmethod
+    def _validate_dynamic_permission(cls, value: Any) -> Optional[Dict[str, Any]]:
+        return _coerce_permission_object(value, "dynamic_permission")
+
+
+@tool(name="update_magicbase_column")
+class UpdateMagicColumn(BaseTool[UpdateMagicbaseColumnParams]):
+    """<!--zh
+    修改当前项目内已有 MagicBase 字段。
+
+    更新字段时传完整目标字段定义。建议先 get_magicbase_table 确认当前字段。
+    -->
+    Update an existing MagicBase column in the current project.
+
+    Pass the complete desired column definition. Prefer calling get_magicbase_table first.
+    """
+    name = "update_magicbase_column"
+
+    async def execute(self, tool_context: ToolContext, params: UpdateMagicbaseColumnParams) -> ToolResult:
+        project_id = _get_project_id()
+        if not project_id:
+            return ToolResult.error("Project ID is not available in the current session. Cannot update MagicBase column.")
+
+        await _try_reconcile_pending_migrations(project_id)
+        planned_column = _normalize_column(
+            {
+                "column_id": params.column_id,
+                "column_key": params.column_key,
+                "column_name": params.column_name,
+                "data_type": params.data_type,
+                "is_required": params.is_required,
+                "default_value": params.default_value,
+                "dynamic_permission": params.dynamic_permission,
+            }
+        )
+        migration = new_migration(
+            operation="update_column",
+            target={"table_id": params.table_id, "column_id": params.column_id},
+            planned_schema={"column": planned_column},
+            reason="Update an existing MagicBase column for the HTML micro-app data model.",
+        )
+        try:
+            await append_pending_migration(migration)
+        except Exception as e:
+            return ToolResult.error(f"Failed to update .magicbase/migrations.json before updating MagicBase column: {e}")
+
+        try:
+            result = await get_magic_service_sdk().magicbase.update_column_async(
+                UpdateMagicBaseColumnParameter(
+                    project_id=project_id,
+                    table_id=params.table_id,
+                    column_id=params.column_id,
+                    column_key=params.column_key,
+                    column_name=params.column_name,
+                    data_type=params.data_type,
+                    is_required=params.is_required,
+                    default_value=params.default_value,
+                    dynamic_permission=params.dynamic_permission,
+                )
+            )
+        except (MagicServiceException, ValueError) as e:
+            try:
+                await complete_migration(migration["migration_id"], "Failed", error_summary=str(e))
+            except Exception:
+                pass
+            return ToolResult.error(f"Failed to update MagicBase column: {e}")
+
+        column = result.to_dict()
+        memory_warning = ""
+        try:
+            await _record_column_update_success(migration["migration_id"], params.table_id, column)
+        except Exception as e:
+            memory_warning = f" MagicBase memory update failed after column update: {e}."
+        content = (
+            f"Updated MagicBase column column_id={column.get('column_id')}, "
+            f"column_key={column.get('column_key')}, column_name={column.get('column_name')}, "
+            f"data_type={column.get('data_type')} for table_id={params.table_id}."
+            f"{memory_warning}"
+        )
+        return ToolResult(content=content, data={"project_id": project_id, "table_id": params.table_id, "column": column})
+
+
+class DeleteMagicbaseColumnParams(BaseToolParams):
+    table_id: str = Field(
+        description="""<!--zh: MagicBase 返回的真实 table.id。-->
+Real MagicBase table.id returned by MagicBase tools."""
+    )
+    column_id: str = Field(
+        description="""<!--zh: 要删除的 MagicBase 真实 column.id。删除字段属于破坏性操作。-->
+Real MagicBase column.id to delete. This is a destructive schema operation."""
+    )
+    confirm_delete: bool = Field(
+        default=False,
+        description="""<!--zh: 删除字段前必须已有用户明确确认；确认后传 true。-->
+Set to true only after the user explicitly confirms deleting this column."""
+    )
+
+
+@tool(name="delete_magicbase_column")
+class DeleteMagicColumn(BaseTool[DeleteMagicbaseColumnParams]):
+    """<!--zh
+    删除当前项目内已有 MagicBase 字段。
+
+    这是破坏性 schema 操作，必须在用户明确确认后使用。
+    -->
+    Delete an existing MagicBase column in the current project.
+
+    This is a destructive schema operation and must only be used after explicit user confirmation.
+    """
+    name = "delete_magicbase_column"
+
+    async def execute(self, tool_context: ToolContext, params: DeleteMagicbaseColumnParams) -> ToolResult:
+        if not params.confirm_delete:
+            return ToolResult.error("Deleting a MagicBase column requires confirm_delete=true after explicit user confirmation.")
+
+        project_id = _get_project_id()
+        if not project_id:
+            return ToolResult.error("Project ID is not available in the current session. Cannot delete MagicBase column.")
+
+        await _try_reconcile_pending_migrations(project_id)
+        migration = new_migration(
+            operation="delete_column",
+            target={"table_id": params.table_id, "column_id": params.column_id},
+            planned_schema={},
+            reason="Delete an existing MagicBase column after explicit user confirmation.",
+        )
+        try:
+            await append_pending_migration(migration)
+        except Exception as e:
+            return ToolResult.error(f"Failed to update .magicbase/migrations.json before deleting MagicBase column: {e}")
+
+        try:
+            await get_magic_service_sdk().magicbase.delete_column_async(
+                DeleteMagicBaseColumnParameter(
+                    project_id=project_id,
+                    table_id=params.table_id,
+                    column_id=params.column_id,
+                )
+            )
+        except (MagicServiceException, ValueError) as e:
+            try:
+                await complete_migration(migration["migration_id"], "Failed", error_summary=str(e))
+            except Exception:
+                pass
+            return ToolResult.error(f"Failed to delete MagicBase column: {e}")
+
+        memory_warning = ""
+        try:
+            await _record_column_delete_success(migration["migration_id"], params.table_id, params.column_id)
+        except Exception as e:
+            memory_warning = f" MagicBase memory update failed after column deletion: {e}."
+        content = f"Deleted MagicBase column column_id={params.column_id} for table_id={params.table_id}.{memory_warning}"
+        return ToolResult(
+            content=content,
+            data={"project_id": project_id, "table_id": params.table_id, "column_id": params.column_id},
+        )

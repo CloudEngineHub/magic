@@ -7,8 +7,12 @@ from app.infrastructure.sdk.magic_service.api.magicbase_api import MagicBaseApi
 from app.infrastructure.sdk.magic_service.parameter import (
     CreateMagicBaseColumnParameter,
     CreateMagicBaseTableParameter,
+    DeleteMagicBaseColumnParameter,
+    DeleteMagicBaseTableParameter,
     GetMagicBaseTableParameter,
     QueryMagicBaseTablesParameter,
+    UpdateMagicBaseColumnParameter,
+    UpdateMagicBaseTablePermissionsParameter,
 )
 from app.infrastructure.sdk.magic_service.result import MagicBaseTableResult, MagicBaseTablesResult
 from app.tools.magicbase_tools import (
@@ -62,6 +66,33 @@ async def test_magicbase_api_uses_expected_endpoint_paths():
         )
     )
     assert api.call[1:] == ("POST", "/api/v1/magicbase/projects/100/tables/200/columns")
+
+    await api.update_table_permissions_async(
+        UpdateMagicBaseTablePermissionsParameter(
+            project_id="100",
+            table_id="200",
+            dynamic_permissions={"row": {"read_scope": "public", "edit_scope": "private_user"}},
+        )
+    )
+    assert api.call[1:] == ("PATCH", "/api/v1/magicbase/projects/100/tables/200")
+
+    await api.delete_table_async(DeleteMagicBaseTableParameter(project_id="100", table_id="200"))
+    assert api.call[1:] == ("DELETE", "/api/v1/magicbase/projects/100/tables/200")
+
+    await api.update_column_async(
+        UpdateMagicBaseColumnParameter(
+            project_id="100",
+            table_id="200",
+            column_id="300",
+            column_key="name",
+            column_name="Name",
+            data_type="text",
+        )
+    )
+    assert api.call[1:] == ("PATCH", "/api/v1/magicbase/projects/100/tables/200/columns/300")
+
+    await api.delete_column_async(DeleteMagicBaseColumnParameter(project_id="100", table_id="200", column_id="300"))
+    assert api.call[1:] == ("DELETE", "/api/v1/magicbase/projects/100/tables/200/columns/300")
 
 
 def test_magicbase_result_normalizes_camel_and_snake_case():
