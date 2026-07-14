@@ -271,6 +271,7 @@ class AgentMarketRepository extends AbstractRepository implements AgentMarketRep
         ?string $agentCode,
         ?string $startTime,
         ?string $endTime,
+        ?array $categoryIds,
         string $orderBy,
         Page $page
     ): array {
@@ -311,6 +312,10 @@ class AgentMarketRepository extends AbstractRepository implements AgentMarketRep
         $endTime = trim((string) $endTime);
         if ($endTime !== '') {
             $builder->where('created_at', '<=', DateFormatUtil::normalizeQueryRangeEnd($endTime));
+        }
+
+        if (! empty($categoryIds)) {
+            $builder->whereIn('category_id', $categoryIds);
         }
 
         $idOrder = strtolower($orderBy) === 'asc' ? 'asc' : 'desc';

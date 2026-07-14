@@ -59,6 +59,7 @@ class SuperMagicAgentMarketDomainService
         ?string $agentCode,
         ?string $startTime,
         ?string $endTime,
+        ?array $categoryIds,
         string $orderBy,
         Page $page
     ): array {
@@ -70,6 +71,7 @@ class SuperMagicAgentMarketDomainService
             $agentCode,
             $startTime,
             $endTime,
+            $categoryIds,
             $orderBy,
             $page
         );

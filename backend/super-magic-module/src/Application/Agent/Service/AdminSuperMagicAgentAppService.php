@@ -96,6 +96,7 @@ class AdminSuperMagicAgentAppService extends AbstractSuperMagicAppService
             $requestDTO->getAgentCode(),
             $requestDTO->getStartTime(),
             $requestDTO->getEndTime(),
+            $requestDTO->getCategoryIds(),
             $requestDTO->getOrderBy(),
             $page
         );

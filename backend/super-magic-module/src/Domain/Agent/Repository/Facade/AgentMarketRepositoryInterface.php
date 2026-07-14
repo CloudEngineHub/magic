@@ -108,6 +108,7 @@ interface AgentMarketRepositoryInterface
         ?string $agentCode,
         ?string $startTime,
         ?string $endTime,
+        ?array $categoryIds,
         string $orderBy,
         Page $page
     ): array;
