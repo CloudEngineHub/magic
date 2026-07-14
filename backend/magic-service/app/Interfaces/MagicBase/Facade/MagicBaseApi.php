@@ -420,7 +420,7 @@ class MagicBaseApi extends AbstractApi
         }
 
         MagicBaseRuntimeProjectAccessContext::allowShareAccess($projectId);
-        if ($currentAuthorization !== null && $currentAuthorization->getOrganizationCode() === $shareEntity->getOrganizationCode()) {
+        if ($currentAuthorization !== null) {
             return $currentAuthorization;
         }
 
