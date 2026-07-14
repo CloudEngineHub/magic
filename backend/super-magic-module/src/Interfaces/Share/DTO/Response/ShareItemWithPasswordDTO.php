@@ -58,6 +58,9 @@ class ShareItemWithPasswordDTO extends ShareItemDTO
         $dto->expireAt = $baseDto->expireAt;
         $dto->expireDays = $baseDto->expireDays;
         $dto->mainFileName = $baseDto->mainFileName;
+        $dto->createdAt = $baseDto->createdAt;
+        $dto->updatedAt = $baseDto->updatedAt;
+        $dto->viewCount = $baseDto->viewCount;
 
         return $dto;
     }
