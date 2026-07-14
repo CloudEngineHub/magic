@@ -138,6 +138,9 @@ function FileShareModals({
 							shareType={existingShareInfo.share_type}
 							shareProject={existingShareInfo.share_project}
 							fileIds={existingShareInfo.file_ids}
+							createdAt={existingShareInfo.created_at}
+							updatedAt={existingShareInfo.updated_at}
+							viewCount={existingShareInfo.view_count}
 						/>
 					)}
 				</>

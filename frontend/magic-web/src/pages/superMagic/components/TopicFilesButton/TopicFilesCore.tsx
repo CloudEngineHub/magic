@@ -2083,6 +2083,9 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 							shareType={shareSuccessInfo.shareInfo.share_type}
 							shareProject={shareSuccessInfo.shareInfo.share_project}
 							fileIds={shareSuccessInfo.shareInfo.file_ids}
+							createdAt={shareSuccessInfo.shareInfo.created_at}
+							updatedAt={shareSuccessInfo.shareInfo.updated_at}
+							viewCount={shareSuccessInfo.shareInfo.view_count}
 						/>
 					)}
 				</>
