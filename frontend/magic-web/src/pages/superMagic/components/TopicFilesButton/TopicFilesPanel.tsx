@@ -1,4 +1,12 @@
-import { memo, useState, useRef, useEffect, forwardRef, useImperativeHandle } from "react"
+import {
+	memo,
+	useState,
+	useRef,
+	useEffect,
+	forwardRef,
+	useImperativeHandle,
+	type ReactNode,
+} from "react"
 import { useTranslation } from "react-i18next"
 import TopicFilesCore, { type TopicFilesCoreRef } from "./TopicFilesCore"
 import { useDownloadAll } from "./useDownloadAll"
@@ -65,6 +73,7 @@ interface TopicFilesPanelProps {
 	resolveTopicFileRowDecoration?: TopicFileRowDecorationResolver
 	mobileViewVariant?: "default" | "project-detail" | "chat-sheet"
 	refreshAttachments?: () => Promise<void> | void
+	headerTrailingAction?: ReactNode
 }
 
 export interface TopicFilesPanelRef {
@@ -101,6 +110,7 @@ const TopicFilesPanel = forwardRef<TopicFilesPanelRef, TopicFilesPanelProps>(
 			resolveTopicFileRowDecoration,
 			mobileViewVariant = "default",
 			refreshAttachments,
+			headerTrailingAction,
 		},
 		ref,
 	) {
@@ -487,7 +497,8 @@ const TopicFilesPanel = forwardRef<TopicFilesPanelRef, TopicFilesPanelProps>(
 									searchValue={rawSearchValue}
 									onSearchChange={handleSearchChange}
 									onSearchCommit={handleSearchCommit}
-							onClose={handleCloseSearch}
+									onClose={handleCloseSearch}
+									headerTrailingAction={headerTrailingAction}
 									className="duration-200 animate-in fade-in"
 								/>
 							) : isSelectMode ? (
@@ -498,6 +509,7 @@ const TopicFilesPanel = forwardRef<TopicFilesPanelRef, TopicFilesPanelProps>(
 									onSelectAll={handleSelectAll}
 									onDeselectAll={handleDeselectAll}
 									onCancel={handleCancelSelect}
+									headerTrailingAction={headerTrailingAction}
 									className="duration-200 animate-in fade-in"
 								/>
 							) : (
@@ -517,6 +529,7 @@ const TopicFilesPanel = forwardRef<TopicFilesPanelRef, TopicFilesPanelProps>(
 									onUploadFolder={handleCustomUploadFolder}
 									onImportFromOtherProject={handleImportFromOtherProject}
 									onEnterSelectMode={handleEnterSelectMode}
+									headerTrailingAction={headerTrailingAction}
 									className="duration-200 animate-in fade-in"
 								/>
 							)}

@@ -1,4 +1,5 @@
 import { memo, useRef, useState, useEffect } from "react"
+import type { ReactNode } from "react"
 import { useTranslation } from "react-i18next"
 import { Search, X } from "lucide-react"
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/shadcn-ui/input-group"
@@ -10,6 +11,7 @@ interface SearchModeHeaderProps {
 	onSearchChange: (value: string) => void
 	onSearchCommit?: (value: string) => void
 	onClose: () => void
+	headerTrailingAction?: ReactNode
 	className?: string
 }
 
@@ -18,6 +20,7 @@ function SearchModeHeader({
 	onSearchChange,
 	onSearchCommit,
 	onClose,
+	headerTrailingAction,
 	className,
 }: SearchModeHeaderProps) {
 	const { t } = useTranslation("super")
@@ -81,6 +84,9 @@ function SearchModeHeader({
 			>
 				<X size={16} />
 			</Button>
+			{headerTrailingAction ? (
+				<div className="flex items-center">{headerTrailingAction}</div>
+			) : null}
 		</div>
 	)
 }

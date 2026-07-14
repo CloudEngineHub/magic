@@ -8,6 +8,7 @@ import {
 	SquareCheckBig,
 } from "lucide-react"
 import { memo } from "react"
+import type { ReactNode } from "react"
 import { useTranslation } from "react-i18next"
 import MagicTooltip from "@/components/base/MagicTooltip"
 import { useIsMobile } from "@/hooks/use-mobile"
@@ -31,6 +32,7 @@ interface NormalModeHeaderProps {
 	onUploadFolder?: () => void
 	onImportFromOtherProject?: () => void
 	onEnterSelectMode?: () => void
+	headerTrailingAction?: ReactNode
 	className?: string
 }
 
@@ -49,6 +51,7 @@ function NormalModeHeader({
 	onUploadFolder,
 	onImportFromOtherProject,
 	onEnterSelectMode,
+	headerTrailingAction,
 	className,
 }: NormalModeHeaderProps) {
 	const { t } = useTranslation("super")
@@ -155,6 +158,9 @@ function NormalModeHeader({
 						</button>
 					</MagicTooltip>
 				)}
+				{headerTrailingAction ? (
+					<div className="ml-1 flex items-center">{headerTrailingAction}</div>
+				) : null}
 			</div>
 		</div>
 	)

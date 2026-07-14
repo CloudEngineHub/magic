@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next"
 import HtmlPreviewContent from "@/pages/superMagic/components/Detail/contents/HTML"
 import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks"
 import type { ProjectListItem, Topic } from "@/pages/superMagic/pages/Workspace/types"
+import type { MicroAppPreviewMode } from "./MicroAppHeader"
 
 interface MicroAppHtmlPreviewProps {
 	entryFile: AttachmentItem | null
@@ -12,6 +13,8 @@ interface MicroAppHtmlPreviewProps {
 	selectedTopic: Topic | null
 	projectId?: string
 	isLoading: boolean
+	previewMode: MicroAppPreviewMode
+	onPreviewModeChange: (mode: MicroAppPreviewMode) => void
 	onOpenPreview: (fileItem?: AttachmentItem) => void
 }
 
@@ -51,6 +54,8 @@ export default function MicroAppHtmlPreview({
 	selectedTopic,
 	projectId,
 	isLoading,
+	previewMode,
+	onPreviewModeChange,
 	onOpenPreview,
 }: MicroAppHtmlPreviewProps) {
 	if (!entryFile?.file_id) {
@@ -77,6 +82,8 @@ export default function MicroAppHtmlPreview({
 				selectedTopic={selectedTopic}
 				showFileHeader={false}
 				showFooter={false}
+				viewMode={previewMode}
+				onViewModeChange={onPreviewModeChange}
 				activeFileId={entryFile.file_id}
 				projectId={projectId}
 				openFileTab={onOpenPreview}

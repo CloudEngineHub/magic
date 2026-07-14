@@ -57,7 +57,7 @@ export default function MicroAppPreviewDialog({
 
 	return (
 		<Dialog open={open} onOpenChange={onOpenChange}>
-			<DialogContent className="flex h-[86vh] max-w-[min(1120px,calc(100vw-48px))] grid-rows-none flex-col gap-3 p-0">
+			<DialogContent className="flex h-[90vh] !max-w-[min(1480px,80vw)] grid-rows-none flex-col gap-0 p-0">
 				<DialogHeader className="border-b border-border px-4 py-3">
 					<DialogTitle className="truncate pr-8 text-sm font-medium">
 						{getFileTitle(file) || t("microAppPage.previewDialog.title")}
@@ -66,8 +66,9 @@ export default function MicroAppPreviewDialog({
 						{t("microAppPage.previewDialog.description")}
 					</DialogDescription>
 				</DialogHeader>
-				<div className="min-h-0 flex-1 overflow-hidden px-3 pb-3">
+				<div className="min-h-0 flex-1 overflow-hidden">
 					<Detail
+						key={file?.file_id || "micro-app-preview-empty"}
 						ref={detailRef}
 						disPlayDetail={userSelectDetail}
 						userSelectDetail={userSelectDetail}
@@ -84,6 +85,7 @@ export default function MicroAppPreviewDialog({
 						activeFileId={activeFileId}
 						onActiveFileChange={setActiveFileId}
 						projectId={projectId}
+						hideTabBar
 						showFallbackWhenEmpty
 					/>
 				</div>

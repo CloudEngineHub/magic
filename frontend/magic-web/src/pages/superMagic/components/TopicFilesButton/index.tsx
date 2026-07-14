@@ -1,4 +1,4 @@
-import { forwardRef, useImperativeHandle, useRef } from "react"
+import { forwardRef, useImperativeHandle, useRef, type ReactNode } from "react"
 import { useStyles } from "./style"
 import TopicFilesPanel, { TopicFilesPanelRef } from "./TopicFilesPanel"
 import type { AttachmentItem } from "./hooks/types"
@@ -42,6 +42,7 @@ export interface TopicFilesButtonProps {
 	resolveTopicFileRowDecoration?: TopicFileRowDecorationResolver
 	mobileViewVariant?: "default" | "project-detail" | "chat-sheet"
 	refreshAttachments?: () => Promise<void> | void
+	headerTrailingAction?: ReactNode
 }
 
 export interface TopicFilesButtonRef {
@@ -78,6 +79,7 @@ const TopicFilesButton = forwardRef<TopicFilesButtonRef, TopicFilesButtonProps>(
 			resolveTopicFileRowDecoration,
 			mobileViewVariant = "default",
 			refreshAttachments,
+			headerTrailingAction,
 		},
 		ref,
 	) {
@@ -131,6 +133,7 @@ const TopicFilesButton = forwardRef<TopicFilesButtonRef, TopicFilesButtonProps>(
 					resolveTopicFileRowDecoration={resolveTopicFileRowDecoration}
 					mobileViewVariant={mobileViewVariant}
 					refreshAttachments={refreshAttachments}
+					headerTrailingAction={headerTrailingAction}
 				/>
 			</div>
 		)
