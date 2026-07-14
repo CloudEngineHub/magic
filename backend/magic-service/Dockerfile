@@ -1,6 +1,7 @@
 ARG GOLANG_VERSION=1.26
+ARG GOLANG_BASE_IMAGE=golang:${GOLANG_VERSION}-alpine
 ARG BASE_IMAGE=ghcr.io/dtyq/php-dockerfile:8.4-alpine-3.23-swow-ci-jsonpath-parle-xlswriter
-FROM --platform=$BUILDPLATFORM golang:${GOLANG_VERSION}-alpine AS go-builder
+FROM --platform=$BUILDPLATFORM ${GOLANG_BASE_IMAGE} AS go-builder
 
 ARG TARGETARCH
 ARG APK_MIRROR=mirrors.aliyun.com
@@ -73,7 +74,8 @@ WORKDIR /opt/www
 COPY composer.json composer.lock ./
 
 ARG COMPOSER_MIRROR=https://mirrors.aliyun.com/composer/
-RUN --mount=type=cache,id=composer-cache-v1-${TARGETARCH},target=/root/.composer/cache \
+RUN --mount=type=secret,id=composer,target=/root/.composer/auth.json \
+    --mount=type=cache,id=composer-cache-v1-${TARGETARCH},target=/root/.composer/cache \
     --mount=type=cache,id=composer-cache-v2-${TARGETARCH},target=/root/.cache/composer \
     # 配置 composer 镜像
     { \

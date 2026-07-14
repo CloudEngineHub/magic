@@ -305,6 +305,7 @@ def build_ask_user_result_builder(
             answers: dict = json.loads(answer_json) if answer_json else {}
         except (json.JSONDecodeError, TypeError):
             answers = {}
+        answers = _normalize_answer_keys(parsed_questions, answers)
         if policy_blocked:
             content = _humanize_policy_blocked(policy_source)
         else:
@@ -323,6 +324,27 @@ def build_ask_user_result_builder(
         return content, extra_info
 
     return result_builder
+
+
+def _normalize_answer_keys(parsed_questions: List[dict], answers: dict) -> dict:
+    """将旧 sub_id 或重建后不匹配的答案按题目顺序归一到当前问题 ID。"""
+    if not isinstance(answers, dict) or not answers or not parsed_questions:
+        return answers
+
+    current_ids = [q.get("sub_id", "") for q in parsed_questions]
+    if any(sub_id and sub_id in answers for sub_id in current_ids):
+        return answers
+
+    if len(answers) != len(parsed_questions):
+        return answers
+
+    normalized = {}
+    for question, answer in zip(parsed_questions, answers.values()):
+        sub_id = question.get("sub_id", "")
+        if not sub_id:
+            return answers
+        normalized[sub_id] = answer
+    return normalized
 
 
 def _humanize_policy_blocked(policy_source: str) -> str:

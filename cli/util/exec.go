@@ -18,6 +18,7 @@ type Command struct {
 	Args       []string
 	Env        map[string]string
 	Dir        string
+	Stdin      io.Reader
 	Stdout     io.Writer
 	Stderr     io.Writer
 	StopSignal syscall.Signal
@@ -32,6 +33,7 @@ func (c *Command) prepareCommand(ctx context.Context) {
 		cmd.Env = append(cmd.Env, fmt.Sprintf("%s=%s", key, value))
 	}
 	cmd.Dir = c.Dir
+	cmd.Stdin = c.Stdin
 	cmd.Stdout = c.Stdout
 	cmd.Stderr = c.Stderr
 	if c.WaitDelay > 0 {
