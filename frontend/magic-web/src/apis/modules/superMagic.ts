@@ -2563,11 +2563,13 @@ export const generateSuperMagicApi = (fetch: HttpClient) => ({
 	 * @description 复制分享资源（新接口）
 	 * @param params.resource_id 资源ID
 	 * @param params.target_workspace_id 目标工作区ID
+	 * @param params.target_project_name 目标项目名称（可选）
 	 * @param params.password 访问密码（可选）
 	 */
 	copyShareResource(params: {
 		resource_id: string
 		target_workspace_id: string
+		target_project_name?: string
 		password?: string
 	}) {
 		return fetch.post<{
