@@ -292,6 +292,8 @@ export function createMentionPanelSuggestion(
 						})
 					}
 
+					const parentContainer = getParentContainer?.() ?? null
+
 					// Create and mount the renderer component
 					component = new ReactRenderer(MentionPanelRenderer, {
 						props: {
@@ -308,17 +310,15 @@ export function createMentionPanelSuggestion(
 							onExit: handleExit,
 							disableKeyboardShortcuts,
 							dataService,
+							portalContainer: parentContainer,
 						},
 						// Mount to parent container or document body
 						editor: props.editor,
 					})
 
 					// Mount to specific container if provided
-					if (getParentContainer) {
-						const container = getParentContainer()
-						if (container) {
-							container.appendChild(component.element)
-						}
+					if (parentContainer) {
+						parentContainer.appendChild(component.element)
 					}
 				},
 
@@ -356,6 +356,14 @@ export function createMentionPanelSuggestion(
 
 					// Update component props with new query
 					if (component) {
+						const parentContainer = getParentContainer?.() ?? null
+						if (
+							parentContainer &&
+							component.element.parentElement !== parentContainer
+						) {
+							parentContainer.appendChild(component.element)
+						}
+
 						component.updateProps({
 							editor: props.editor,
 							query: props.query,
@@ -369,6 +377,8 @@ export function createMentionPanelSuggestion(
 							onSelect: handleSelect,
 							onExit: handleExit,
 							disableKeyboardShortcuts,
+							dataService,
+							portalContainer: parentContainer,
 						})
 					}
 				},

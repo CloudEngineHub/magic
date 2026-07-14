@@ -71,6 +71,7 @@ export interface MentionPanelRendererProps {
 	onExit: () => void
 	disableKeyboardShortcuts?: boolean
 	dataService: DataService
+	portalContainer?: HTMLElement | null
 }
 
 // MentionPanel Renderer ref interface

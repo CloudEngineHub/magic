@@ -1,4 +1,4 @@
-import { createElement, useMemo, useRef } from "react"
+import { createElement, useCallback, useMemo, useRef } from "react"
 import { NodeViewWrapper } from "@tiptap/react"
 import { useMagic } from "../../context/MagicContext"
 import type {
@@ -71,6 +71,13 @@ export function useCanvasReferenceMention(options?: UseCanvasReferenceMentionOpt
 	// nodeView 点击时读取最新宿主方法，避免因宿主回传新引用而重建 nodeView renderer。
 	const locateProjectFileRef = useRef(methods?.locateProjectFile)
 	locateProjectFileRef.current = methods?.locateProjectFile
+
+	const getMentionPanelContainer = useCallback(() => {
+		if (typeof document === "undefined") return null
+		const fullscreenElement = document.fullscreenElement
+		if (fullscreenElement instanceof HTMLElement) return fullscreenElement
+		return document.body
+	}, [])
 
 	const referenceFileInfos = useMemo(
 		() =>
@@ -211,7 +218,7 @@ export function useCanvasReferenceMention(options?: UseCanvasReferenceMentionOpt
 		if (!mentionDataService || !MentionExtensionClass) return null
 		return MentionExtensionClass.configure({
 			language: "zh-CN",
-			getParentContainer: () => document.body,
+			getParentContainer: getMentionPanelContainer,
 			dataService: mentionDataService,
 			getInitialLoadOptions,
 			getInitialNavigationStack,
@@ -228,6 +235,7 @@ export function useCanvasReferenceMention(options?: UseCanvasReferenceMentionOpt
 		catalogBehavior,
 		canSelectItem,
 		mentionNodeViewRenderers,
+		getMentionPanelContainer,
 	])
 
 	const mentionEnabledByModel = !isLoadingImageModelList && imageModelList.length > 0
