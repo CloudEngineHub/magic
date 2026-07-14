@@ -11,6 +11,20 @@ interface ShareTypeIconSize {
 	team?: number
 }
 
+const SHARE_NAME_PREFIXES = {
+	file: ["文件分享_", "File Share_"],
+	project: ["项目分享_", "Project Share_"],
+} as const
+
+/**
+ * Removes only the generated prefix for the matching share kind. Both locale
+ * variants are accepted because users can switch languages after creation.
+ */
+export function getShareDisplayName(name: string, kind: "file" | "project"): string {
+	const prefix = SHARE_NAME_PREFIXES[kind].find((candidate) => name.startsWith(candidate))
+	return prefix ? name.slice(prefix.length) : name
+}
+
 /**
  * 获取分享类型图标
  * @param shareType 分享类型

@@ -1,4 +1,5 @@
 import { memo, useCallback, useMemo, useRef, useState } from "react"
+import dayjs from "dayjs"
 import { clipboard } from "@/utils/clipboard-helpers"
 import { useTranslation } from "react-i18next"
 import { QRCode } from "antd"
@@ -52,6 +53,15 @@ interface ShareSuccessModalProps {
 	projectName?: string // 项目原始名称（用于项目分享时显示）
 	fileIds?: string[] // 文件ID列表，用于查询文件详情
 	hideManageShareLinks?: boolean // 录音等专用分享场景会使用自己的管理入口
+	createdAt?: string
+	updatedAt?: string
+	viewCount?: number
+}
+
+function formatShareMetadataDate(value?: string): string {
+	if (!value) return "-"
+	const parsed = dayjs(value)
+	return parsed.isValid() ? parsed.format("YYYY-MM-DD HH:mm") : value
 }
 
 const useStyles = createStyles(({ token }) => ({
@@ -97,9 +107,9 @@ const useStyles = createStyles(({ token }) => ({
 		background: token.colorFillQuaternary,
 	},
 	mobileInfoRow: {
-		display: "flex",
-		justifyContent: "space-between",
-		alignItems: "center",
+		display: "grid",
+		gridTemplateColumns: "72px minmax(0, 1fr)",
+		alignItems: "flex-start",
 		gap: 12,
 	},
 	mobileInfoLabel: {
@@ -111,6 +121,7 @@ const useStyles = createStyles(({ token }) => ({
 		fontSize: 14,
 		color: token.colorText,
 		textAlign: "right" as const,
+		minWidth: 0,
 		wordBreak: "break-all" as const,
 	},
 	mobileShareLinkSection: {
@@ -203,6 +214,9 @@ export default memo(function ShareSuccessModal(props: ShareSuccessModalProps) {
 		projectName,
 		fileIds,
 		hideManageShareLinks,
+		createdAt,
+		updatedAt,
+		viewCount,
 	} = props
 
 	// 使用 hook 获取文件详情配置
@@ -213,6 +227,11 @@ export default memo(function ShareSuccessModal(props: ShareSuccessModalProps) {
 	const qrCodeRef = useRef<HTMLDivElement>(null)
 	const isMobile = useIsMobile()
 	const [actionsPopupVisible, setActionsPopupVisible] = useState(false)
+	const showShareMetadata =
+		createdAt !== undefined || updatedAt !== undefined || viewCount !== undefined
+	const createdAtText = formatShareMetadataDate(createdAt)
+	const updatedAtText = formatShareMetadataDate(updatedAt)
+	const viewCountText = String(viewCount ?? 0)
 
 	// ===== 共享的计算逻辑 =====
 
@@ -504,6 +523,34 @@ export default memo(function ShareSuccessModal(props: ShareSuccessModalProps) {
 									{shareTypeText}
 								</MagicEllipseWithTooltip>
 							</div>
+							{showShareMetadata && (
+								<>
+									<div className={styles.mobileInfoRow}>
+										<div className={styles.mobileInfoLabel}>
+											{t("share.createdDate")}
+										</div>
+										<div className={styles.mobileInfoValue}>
+											{createdAtText}
+										</div>
+									</div>
+									<div className={styles.mobileInfoRow}>
+										<div className={styles.mobileInfoLabel}>
+											{t("share.modifiedDate")}
+										</div>
+										<div className={styles.mobileInfoValue}>
+											{updatedAtText}
+										</div>
+									</div>
+									<div className={styles.mobileInfoRow}>
+										<div className={styles.mobileInfoLabel}>
+											{t("share.accessCount")}
+										</div>
+										<div className={styles.mobileInfoValue}>
+											{viewCountText}
+										</div>
+									</div>
+								</>
+							)}
 						</div>
 
 						{/* Share Link Section */}
@@ -596,44 +643,75 @@ export default memo(function ShareSuccessModal(props: ShareSuccessModalProps) {
 					{/* Info Card */}
 					<div className="flex flex-col gap-3 self-stretch rounded-lg bg-muted p-3">
 						{/* Share Name */}
-						<div className="flex items-center justify-between gap-3 self-stretch">
+						<div className="grid grid-cols-[88px_minmax(0,1fr)] items-start gap-3 self-stretch">
 							<div className="text-xs leading-normal text-muted-foreground">
 								{t("share.shareName")}
 							</div>
-							<div className="text-sm leading-normal text-foreground">
+							<div className="min-w-0 break-words text-right text-sm leading-normal text-foreground">
 								{shareName}
 							</div>
 						</div>
 
 						{/* Included Files */}
-						<div className="flex items-center justify-between gap-3 self-stretch">
+						<div className="grid grid-cols-[88px_minmax(0,1fr)] items-start gap-3 self-stretch">
 							<div className="text-xs leading-normal text-muted-foreground">
 								{t("share.includedFiles")}
 							</div>
-							<div className="text-sm leading-normal text-foreground">
+							<div className="min-w-0 break-words text-right text-sm leading-normal text-foreground">
 								{fileSummaryText}
 							</div>
 						</div>
 
 						{/* Expiry */}
-						<div className="flex items-center justify-between gap-3 self-stretch">
+						<div className="grid grid-cols-[88px_minmax(0,1fr)] items-start gap-3 self-stretch">
 							<div className="text-xs leading-normal text-muted-foreground">
 								{t("share.shareExpiry")}
 							</div>
-							<div className="text-sm leading-normal text-foreground">
+							<div className="min-w-0 break-words text-right text-sm leading-normal text-foreground">
 								{expiryText}
 							</div>
 						</div>
 
 						{/* Share Method */}
-						<div className="flex items-center justify-between gap-3 self-stretch">
+						<div className="grid grid-cols-[88px_minmax(0,1fr)] items-start gap-3 self-stretch">
 							<div className="text-xs leading-normal text-muted-foreground">
 								{t("share.shareMethod")}
 							</div>
-							<div className="text-sm leading-normal text-foreground">
+							<div className="min-w-0 break-words text-right text-sm leading-normal text-foreground">
 								{shareTypeText}
 							</div>
 						</div>
+
+						{showShareMetadata && (
+							<>
+								<div className="grid grid-cols-[88px_minmax(0,1fr)] items-start gap-3 self-stretch">
+									<div className="text-xs leading-normal text-muted-foreground">
+										{t("share.createdDate")}
+									</div>
+									<div className="min-w-0 break-words text-right text-sm leading-normal text-foreground">
+										{createdAtText}
+									</div>
+								</div>
+
+								<div className="grid grid-cols-[88px_minmax(0,1fr)] items-start gap-3 self-stretch">
+									<div className="text-xs leading-normal text-muted-foreground">
+										{t("share.modifiedDate")}
+									</div>
+									<div className="min-w-0 break-words text-right text-sm leading-normal text-foreground">
+										{updatedAtText}
+									</div>
+								</div>
+
+								<div className="grid grid-cols-[88px_minmax(0,1fr)] items-start gap-3 self-stretch">
+									<div className="text-xs leading-normal text-muted-foreground">
+										{t("share.accessCount")}
+									</div>
+									<div className="min-w-0 break-words text-right text-sm leading-normal text-foreground">
+										{viewCountText}
+									</div>
+								</div>
+							</>
+						)}
 					</div>
 
 					{/* Share Link and QR Code Section */}
@@ -693,8 +771,8 @@ export default memo(function ShareSuccessModal(props: ShareSuccessModalProps) {
 				</div>
 
 				{/* Footer */}
-				<DialogFooter 
-					className="border-t border-border px-3 py-3" 
+				<DialogFooter
+					className="border-t border-border px-3 py-3"
 					data-testid="share-success-modal-footer"
 				>
 					<div

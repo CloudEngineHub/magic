@@ -1,7 +1,7 @@
 import { memo, useState, useCallback, useEffect } from "react"
 import { useTranslation } from "react-i18next"
 import { useDebounce } from "ahooks"
-import { Search } from "lucide-react"
+import { Funnel, Search } from "lucide-react"
 import { SharedResourceType, SharedTopicFilterStatus, ShareListRefreshType } from "./types"
 import MobileProjectShareList from "./MobileProjectShareList"
 import MobileFileShareList from "./MobileFileShareList"
@@ -9,13 +9,7 @@ import MobileTopicShareList from "./MobileTopicShareList"
 import ShareManagementTabs from "./components/ShareManagementTabs"
 import { getSearchPlaceholder } from "./utils/searchPlaceholder"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
-import {
-	Select,
-	SelectContent,
-	SelectItem,
-	SelectTrigger,
-	SelectValue,
-} from "@/components/shadcn-ui/select"
+import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/shadcn-ui/select"
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/shadcn-ui/input-group"
 
 interface ShareManagementPanelProps {
@@ -93,10 +87,14 @@ function ShareManagementPanel({ projectId }: ShareManagementPanelProps) {
 						value={filterStatus}
 						onValueChange={(val) => handleStatusChange(val as SharedTopicFilterStatus)}
 					>
-						<SelectTrigger className="!h-7 w-[90px] overflow-hidden text-ellipsis border-input bg-transparent text-foreground hover:bg-accent">
-							<SelectValue />
+						<SelectTrigger
+							className="!h-7 !w-7 justify-center gap-0 p-0 text-foreground hover:bg-accent [&>svg:last-child]:hidden"
+							aria-label={t("shareManagement.filter")}
+							title={t("shareManagement.filter")}
+						>
+							<Funnel height={16} width={16} strokeWidth={1.75} />
 						</SelectTrigger>
-						<SelectContent>
+						<SelectContent align="start">
 							<SelectItem value={SharedTopicFilterStatus.Active}>
 								{t("shareManagement.filterStatus.active")}
 							</SelectItem>

@@ -3948,6 +3948,7 @@
 		"workspace": "工作空间"
 	},
 	"share": {
+		"accessCount": "访问次数",
 		"accessPassword": "访问密码",
 		"addMembers": "添加成员",
 		"advancedOptions": "高级选项",
@@ -3997,6 +3998,7 @@
 			"prefix": "由",
 			"suffix": "创造"
 		},
+		"createdDate": "创建日期",
 		"days": "天",
 		"departmentOrMemberFileShare": "指定成员可访问文件",
 		"departmentOrMemberFileShareDescription": "指定人员可访问文件：{{fileName}}",
@@ -4073,6 +4075,7 @@
 		"login": "登录",
 		"manage": "管理",
 		"manageShareLinks": "管理分享链接",
+		"modifiedDate": "修改日期",
 		"moreSettings": "更多设置",
 		"multiFileShareName": "文件分享_{{mainFileName}} 等 {{count}} 个文件",
 		"name": "名称",
@@ -4238,6 +4241,7 @@
 		"fileShare": "分享的文件",
 		"fileShareDesc": "管理分享过的所有文件",
 		"files": "个文件",
+		"filter": "筛选",
 		"filterStatus": {
 			"active": "分享中",
 			"all": "全部",
