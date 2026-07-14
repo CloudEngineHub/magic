@@ -9,11 +9,15 @@ from typing import Callable, ClassVar, Optional
 
 from agentlang.logger import get_logger
 from app.path_manager import PathManager
+from app.service.temporary_file_expiration.activation_marker_store import (
+    TemporaryFileExpirationActivationMarkerStore,
+)
 from app.service.temporary_file_expiration.cleanup_result import TemporaryFileCleanupResult
 from app.service.temporary_file_expiration.policy_registry import TemporaryFileExpirationPolicyRegistry
 from app.utils.async_file_utils import (
     async_exists,
     async_is_symlink,
+    async_mkdir,
     async_rmdir,
     async_scandir,
     async_stat,
@@ -33,11 +37,13 @@ class TemporaryFileExpirationManager:
         policy_registry: Optional[TemporaryFileExpirationPolicyRegistry] = None,
         temporary_directory: Optional[Path] = None,
         clock: Callable[[], float] = time.time,
+        activation_marker_store: Optional[TemporaryFileExpirationActivationMarkerStore] = None,
     ) -> None:
-        """初始化过期策略、临时目录和时钟。"""
+        """初始化过期策略、临时目录、时钟和启用标记存储。"""
         self._policy_registry = policy_registry or TemporaryFileExpirationPolicyRegistry.create_default()
         self._temporary_directory = temporary_directory
         self._clock = clock
+        self._activation_marker_store = activation_marker_store
         self._cleanup_task: Optional[asyncio.Task[TemporaryFileCleanupResult]] = None
 
     @classmethod
@@ -66,11 +72,27 @@ class TemporaryFileExpirationManager:
             return result
 
         if not await async_exists(temporary_directory):
-            logger.debug(f"临时目录不存在，跳过过期检查: {temporary_directory}")
-            return result
+            try:
+                await async_mkdir(temporary_directory, parents=True, exist_ok=True)
+            except Exception as error:
+                logger.warning(f"创建临时目录失败，跳过过期检查: {temporary_directory}, 错误: {error}")
+                return result
 
         current_time = self._clock()
-        await self._cleanup_directory(temporary_directory, current_time, result)
+        activation_marker_store = self._activation_marker_store or TemporaryFileExpirationActivationMarkerStore(
+            temporary_directory
+        )
+        cleanup_boundary = await activation_marker_store.resolve_cleanup_boundary(current_time)
+        if cleanup_boundary is None:
+            return result
+
+        await self._cleanup_directory(
+            temporary_directory,
+            current_time,
+            cleanup_boundary,
+            activation_marker_store.marker_path,
+            result,
+        )
 
         if result.deleted_files > 0 or result.deleted_directories > 0 or result.failed_files > 0:
             logger.info(
@@ -86,17 +108,20 @@ class TemporaryFileExpirationManager:
         self,
         directory: Path,
         current_time: float,
+        cleanup_boundary: float,
+        activation_marker_path: Path,
         result: TemporaryFileCleanupResult,
-    ) -> None:
-        """递归扫描目录并清理过期文件，不跟随软链接。"""
+    ) -> bool:
+        """递归清理受管文件，并返回当前子树是否发生过文件删除。"""
         try:
             entries = await async_scandir(directory)
         except FileNotFoundError:
-            return
+            return False
         except Exception as error:
             logger.warning(f"扫描临时目录失败，跳过当前目录: {directory}, 错误: {error}")
-            return
+            return False
 
+        deleted_in_subtree = False
         for entry in entries:
             entry_path = Path(entry.path)
             try:
@@ -104,19 +129,31 @@ class TemporaryFileExpirationManager:
                     logger.warning(f"临时目录中存在软链接，跳过处理: {entry_path}")
                     continue
                 if entry.is_dir():
-                    await self._cleanup_directory(entry_path, current_time, result)
-                    await self._remove_directory_if_empty(entry_path, result)
+                    child_deleted = await self._cleanup_directory(
+                        entry_path,
+                        current_time,
+                        cleanup_boundary,
+                        activation_marker_path,
+                        result,
+                    )
+                    if child_deleted:
+                        await self._remove_directory_if_empty(entry_path, result)
+                        deleted_in_subtree = True
                     continue
                 if not entry.is_file():
                     continue
+                if entry_path == activation_marker_path:
+                    continue
 
                 result.scanned_files += 1
-                await self._cleanup_file(entry_path, current_time, result)
+                if await self._cleanup_file(entry_path, current_time, cleanup_boundary, result):
+                    deleted_in_subtree = True
             except FileNotFoundError:
                 continue
             except Exception as error:
                 result.failed_files += 1
                 logger.warning(f"处理临时文件失败: {entry_path}, 错误: {error}")
+        return deleted_in_subtree
 
     async def _remove_directory_if_empty(
         self,
@@ -141,17 +178,22 @@ class TemporaryFileExpirationManager:
         self,
         file_path: Path,
         current_time: float,
+        cleanup_boundary: float,
         result: TemporaryFileCleanupResult,
-    ) -> None:
-        """按匹配策略判断并删除单个过期临时文件。"""
+    ) -> bool:
+        """仅对启用边界后的文件应用过期策略，并返回是否完成删除。"""
         file_stat = await async_stat(file_path)
+        if file_stat.st_mtime <= cleanup_boundary:
+            return False
+
         policy = self._policy_registry.resolve(file_path)
         if not policy.is_expired(file_stat.st_mtime, current_time):
-            return
+            return False
 
         await async_unlink(file_path)
         result.deleted_files += 1
         logger.info(f"已删除过期临时文件: {file_path.name}, 策略: {policy.name}")
+        return True
 
     @staticmethod
     def _handle_cleanup_done(task: asyncio.Task[TemporaryFileCleanupResult]) -> None:

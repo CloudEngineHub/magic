@@ -484,6 +484,35 @@ async def async_write_json(file_path: Union[str, Path], data: Dict[str, Any], **
         raise
 
 
+async def async_create_json(file_path: Union[str, Path], data: Dict[str, Any], **kwargs) -> None:
+    """以排他方式异步创建 JSON 文件，目标已存在时抛出 FileExistsError。
+
+    Args:
+        file_path: 文件路径
+        data: 要写入的数据
+        **kwargs: json.dumps 的额外参数
+
+    Raises:
+        FileExistsError: 目标文件已经存在
+        PermissionError: 权限不足
+        IOError: IO 操作失败
+        TypeError: 数据无法序列化
+    """
+    path_obj = Path(file_path)
+
+    try:
+        await async_mkdir(path_obj.parent, parents=True, exist_ok=True)
+        json_str = await asyncio.to_thread(json.dumps, data, **kwargs)
+        async with aiofiles.open(path_obj, 'x', encoding='utf-8') as file:
+            await file.write(json_str)
+    except FileExistsError:
+        logger.debug(f"排他创建 JSON 文件时目标已存在: {path_obj}")
+        raise
+    except Exception as error:
+        logger.error(f"排他创建 JSON 文件失败 {path_obj}: {error}")
+        raise
+
+
 async def async_read_json(file_path: Union[str, Path]) -> Dict[str, Any]:
     """
     异步读取JSON文件
