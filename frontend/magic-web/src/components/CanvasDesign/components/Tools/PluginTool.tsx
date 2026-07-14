@@ -201,6 +201,7 @@ export default function PluginTool() {
 												className={styles.pluginItem}
 												onClick={() => {
 													canvas?.pluginManager.open(plugin.name)
+													setOpen(false)
 												}}
 											>
 												<div className={styles.pluginIcon}>
