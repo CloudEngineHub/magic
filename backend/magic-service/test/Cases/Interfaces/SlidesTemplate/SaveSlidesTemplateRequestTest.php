@@ -37,4 +37,20 @@ class SaveSlidesTemplateRequestTest extends TestCase
         $this->assertArrayNotHasKey('actual_usage_count', $rules);
         $this->assertArrayNotHasKey('total_usage_count', $rules);
     }
+
+    public function testTemplateCodeAllowsSlidesTemplatePrefixes(): void
+    {
+        /** @var SaveSlidesTemplateRequest $request */
+        $request = (new ReflectionClass(SaveSlidesTemplateRequest::class))->newInstanceWithoutConstructor();
+        $rules = $request->rules();
+
+        preg_match('/regex:(.+)$/', (string) $rules['code'], $matches);
+        $regex = $matches[1] ?? '';
+
+        $this->assertSame(1, preg_match($regex, 'PPT-business-minimal'));
+        $this->assertSame(1, preg_match($regex, 'SLD-business-minimal'));
+        $this->assertSame(1, preg_match($regex, 'SLIDE-business-minimal'));
+        $this->assertSame(0, preg_match($regex, 'PDF-business-minimal'));
+        $this->assertSame(0, preg_match($regex, 'PPTX-business-minimal'));
+    }
 }
