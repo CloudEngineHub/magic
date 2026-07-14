@@ -1,10 +1,19 @@
 import { renderHook } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
+import { FUNCTION_PERMISSION_CODE } from "@/apis/modules/function-permission"
 import { RouteName } from "@/routes/constants"
 import { useSuperMobileShellNavItems } from "../useSuperMobileShellNavItems"
 
-const { userStoreMock } = vi.hoisted(() => ({
+const { envMock, permissionMock, useFunctionPermissionMock, userStoreMock } = vi.hoisted(() => ({
+	envMock: {
+		isPrivateDeployment: false,
+	},
+	permissionMock: {
+		canAccessMagicClaw: true,
+		isLoading: false,
+	},
+	useFunctionPermissionMock: vi.fn(),
 	userStoreMock: {
 		user: {
 			isPersonalOrganization: false,
@@ -14,6 +23,23 @@ const { userStoreMock } = vi.hoisted(() => ({
 
 vi.mock("@/models/user", () => ({
 	userStore: userStoreMock,
+}))
+
+vi.mock("@/hooks/useFunctionPermission", () => ({
+	useFunctionPermission: useFunctionPermissionMock,
+}))
+
+vi.mock("@/utils/env", () => ({
+	env: () => "",
+	getPrivateDeploymentConfig: () => null,
+	isCommercial: () => false,
+	isDev: false,
+	isInternationalEnv: () => false,
+	isLoginAuthorizationWhitelist: () => false,
+	isPreEnv: () => false,
+	isPrivateDeployment: () => envMock.isPrivateDeployment,
+	isProductionEnv: () => false,
+	isTestEnv: () => true,
 }))
 
 vi.mock("@/layouts/BaseLayoutMobile/components/MobileTabBar/constants/tabsConfig.shared", () => ({
@@ -41,6 +67,14 @@ vi.mock("@/pages/superMagicMobile/components/icons/MagiClawNavIcon", () => ({
 
 describe("useSuperMobileShellNavItems", () => {
 	beforeEach(() => {
+		envMock.isPrivateDeployment = false
+		permissionMock.canAccessMagicClaw = true
+		permissionMock.isLoading = false
+		useFunctionPermissionMock.mockReset()
+		useFunctionPermissionMock.mockReturnValue({
+			isAllowed: permissionMock.canAccessMagicClaw,
+			isLoading: permissionMock.isLoading,
+		})
 		userStoreMock.user.isPersonalOrganization = false
 	})
 
@@ -112,5 +146,40 @@ describe("useSuperMobileShellNavItems", () => {
 		const { result } = renderHook(() => useSuperMobileShellNavItems())
 
 		expect(result.current.map(({ key }) => key)).not.toContain("apps")
+	})
+
+	it("hides MagiClaw entry when MagicClawAccess is denied", () => {
+		permissionMock.canAccessMagicClaw = false
+		useFunctionPermissionMock.mockReturnValue({
+			isAllowed: permissionMock.canAccessMagicClaw,
+			isLoading: permissionMock.isLoading,
+		})
+
+		const { result } = renderHook(() => useSuperMobileShellNavItems())
+
+		expect(result.current.map(({ key }) => key)).not.toContain("magiClaw")
+	})
+
+	it("hides MagiClaw entry while MagicClawAccess is loading", () => {
+		permissionMock.isLoading = true
+		useFunctionPermissionMock.mockReturnValue({
+			isAllowed: true,
+			isLoading: permissionMock.isLoading,
+		})
+
+		const { result } = renderHook(() => useSuperMobileShellNavItems())
+
+		expect(useFunctionPermissionMock).toHaveBeenCalledWith(
+			FUNCTION_PERMISSION_CODE.MagicClawAccess,
+		)
+		expect(result.current.map(({ key }) => key)).not.toContain("magiClaw")
+	})
+
+	it("hides recording entry in private deployment", () => {
+		envMock.isPrivateDeployment = true
+
+		const { result } = renderHook(() => useSuperMobileShellNavItems())
+
+		expect(result.current.map(({ key }) => key)).not.toContain("recording")
 	})
 })

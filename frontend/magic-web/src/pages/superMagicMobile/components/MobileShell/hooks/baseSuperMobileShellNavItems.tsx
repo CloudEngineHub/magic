@@ -1,5 +1,6 @@
 import { Bot, Box, House, LayoutGrid, MessageCircle, Mic, Trash2 } from "lucide-react"
 
+import { FUNCTION_PERMISSION_CODE } from "@/apis/modules/function-permission"
 import { MagiClawNavIcon } from "@/pages/superMagicMobile/components/icons/MagiClawNavIcon"
 import { RouteName } from "@/routes/constants"
 
@@ -43,6 +44,7 @@ export const BASE_SUPER_MOBILE_SHELL_NAV_ITEMS: SuperMobileShellNavConfigItem[] 
 		icon: MagiClawNavIcon,
 		labelKey: "mobile.shell.navMagiClaw",
 		routeName: RouteName.MagiClaw,
+		requiredPermissionCode: FUNCTION_PERMISSION_CODE.MagicClawAccess,
 	},
 	{
 		key: "apps",
