@@ -11,7 +11,8 @@ import {
 } from "react"
 import type { CSSProperties, RefObject } from "react"
 import { observer } from "mobx-react-lite"
-import { Virtuoso, VirtuosoGrid, VirtuosoHandle } from "react-virtuoso"
+import { Virtuoso, VirtuosoGrid } from "react-virtuoso"
+import type { VirtuosoGridHandle, VirtuosoHandle } from "react-virtuoso"
 
 // Types
 import type { MentionItem, MentionPanelProps, MentionPanelRef } from "./types"
@@ -58,6 +59,7 @@ const GalleryPreviewDialog = lazy(() => import("./components/GalleryPreviewDialo
 const LIST_PANEL_WIDTH = 320
 const GALLERY_PANEL_WIDTH = 600
 const GALLERY_PANEL_HEIGHT = 468
+const GALLERY_GRID_COLUMN_COUNT = 4
 const GALLERY_GRID_INCREASE_VIEWPORT_BY = {
 	top: GALLERY_PANEL_HEIGHT,
 	bottom: GALLERY_PANEL_HEIGHT,
@@ -166,6 +168,8 @@ const MentionPanel = observer(
 			onKeyboardEnterFolder: !isMobile
 				? () => keyboardEnterFolderHandlerRef.current()
 				: undefined,
+			keyboardNavigationMode: isGalleryMode ? "grid" : "list",
+			keyboardGridColumnCount: GALLERY_GRID_COLUMN_COUNT,
 			dataService: resolvedRuntime.dataService,
 			t,
 			catalogBehavior: resolvedRuntime.catalogBehavior,
@@ -291,6 +295,7 @@ const MentionPanel = observer(
 		const internalRef = useRef<HTMLDivElement>(null)
 		const menuListRef = useRef<HTMLDivElement>(null)
 		const virtuosoRef = useRef<VirtuosoHandle>(null)
+		const virtuosoGridRef = useRef<VirtuosoGridHandle>(null)
 
 		const menuListStyle = useMemo(() => {
 			const searchHeaderHeight = defaultConfig.headerHeight
@@ -307,11 +312,13 @@ const MentionPanel = observer(
 
 		// Auto-scroll to selected item when selectedIndex changes
 		useEffect(() => {
-			if (isGalleryMode || !virtuosoRef.current || state.selectedIndex < 0) {
+			if (state.selectedIndex < 0) {
 				return
 			}
 
-			const element = virtuosoRef.current
+			const element = isGalleryMode ? virtuosoGridRef.current : virtuosoRef.current
+			if (!element) return
+
 			const frame = requestAnimationFrame(() => {
 				element.scrollToIndex({
 					index: state.selectedIndex,
@@ -993,6 +1000,7 @@ const MentionPanel = observer(
 							</div>
 						) : isGalleryMode ? (
 							<VirtuosoGrid
+								ref={virtuosoGridRef}
 								totalCount={displayItems.length}
 								itemContent={renderGalleryItem}
 								computeItemKey={(index) => displayItems[index]?.id ?? index}
@@ -1020,12 +1028,14 @@ const MentionPanel = observer(
 					{/* Keyboard Hints */}
 					<div className="mx-1 mb-1 flex flex-nowrap items-center gap-1.5 rounded bg-accent px-1.5 py-1.5">
 						<div className="flex items-center gap-0.5">
-							<div className="flex min-h-[16px] min-w-[16px] items-center justify-center rounded border border-border bg-background font-['Geist'] text-[10px] text-secondary-foreground">
-								↓
-							</div>
-							<div className="flex min-h-[16px] min-w-[16px] items-center justify-center rounded border border-border bg-background font-['Geist'] text-[10px] text-secondary-foreground">
-								↑
-							</div>
+							{(isGalleryMode ? ["↑", "↓", "←", "→"] : ["↓", "↑"]).map((key) => (
+								<div
+									key={key}
+									className="flex min-h-[16px] min-w-[16px] items-center justify-center rounded border border-border bg-background font-['Geist'] text-[10px] text-secondary-foreground"
+								>
+									{key}
+								</div>
+							))}
 							<span className="whitespace-nowrap font-['Geist'] text-[10px] leading-[13px] text-foreground">
 								{t.keyboardHints.navigate}
 							</span>
@@ -1038,7 +1048,7 @@ const MentionPanel = observer(
 								{t.keyboardHints.confirm}
 							</span>
 						</div>
-						{computed.canNavigateBack && (
+						{!isGalleryMode && computed.canNavigateBack && (
 							<div className="flex items-center gap-0.5">
 								<div className="flex min-h-[16px] min-w-[16px] items-center justify-center rounded border border-border bg-background font-['Geist'] text-[10px] text-secondary-foreground">
 									<MagicIcon component={IconArrowNarrowLeft} size={12} />
@@ -1050,7 +1060,7 @@ const MentionPanel = observer(
 								</span>
 							</div>
 						)}
-						{computed.canEnterFolder && (
+						{!isGalleryMode && computed.canEnterFolder && (
 							<div className="flex items-center gap-0.5">
 								<div className="flex min-h-[16px] min-w-[16px] items-center justify-center rounded border border-border bg-background font-['Geist'] text-[10px] text-secondary-foreground">
 									<MagicIcon component={IconArrowNarrowRight} size={12} />

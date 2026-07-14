@@ -27,6 +27,8 @@ interface UseMentionPanelProps<TCatalogId extends string = string> {
 	enabled?: boolean
 	/** 为 false 时仍加载数据，但禁用键盘 Enter/方向键等（移动端多选面板需避免 Enter 直接插入） */
 	keyboardShortcutsEnabled?: boolean
+	keyboardNavigationMode?: "list" | "grid"
+	keyboardGridColumnCount?: number
 	onKeyboardConfirm?: () => boolean | void
 	onKeyboardMetaEnter?: () => boolean | void
 	onKeyboardNavigateBack?: () => void
@@ -160,6 +162,8 @@ export function useMentionPanel<TCatalogId extends string = string>(
 		dataService,
 		enabled = true,
 		keyboardShortcutsEnabled = true,
+		keyboardNavigationMode = "list",
+		keyboardGridColumnCount = 1,
 		onKeyboardConfirm,
 		onKeyboardMetaEnter,
 		onKeyboardNavigateBack,
@@ -373,6 +377,41 @@ export function useMentionPanel<TCatalogId extends string = string>(
 				selectedIndex: newIndex,
 			}
 		})
+	})
+
+	const selectByOffset = useMemoizedFn((offset: number) => {
+		setPanelState((prev) => {
+			if (prev.items.length === 0 || offset === 0) return prev
+
+			let newIndex = prev.selectedIndex + offset
+
+			while (newIndex >= 0 && newIndex < prev.items.length) {
+				if (!prev.items[newIndex]?.unSelectable) {
+					return {
+						...prev,
+						selectedIndex: newIndex,
+					}
+				}
+
+				newIndex += offset
+			}
+
+			return prev
+		})
+	})
+
+	const gridColumnCount = Math.max(1, Math.floor(keyboardGridColumnCount))
+	const selectGridPreviousRow = useMemoizedFn(() => {
+		selectByOffset(-gridColumnCount)
+	})
+	const selectGridNextRow = useMemoizedFn(() => {
+		selectByOffset(gridColumnCount)
+	})
+	const selectGridPreviousColumn = useMemoizedFn(() => {
+		selectByOffset(-1)
+	})
+	const selectGridNextColumn = useMemoizedFn(() => {
+		selectByOffset(1)
 	})
 
 	// Navigation stack management
@@ -931,9 +970,13 @@ export function useMentionPanel<TCatalogId extends string = string>(
 	})
 
 	// Keyboard navigation
+	const isGridKeyboardNavigation = keyboardNavigationMode === "grid"
+
 	useKeyboardNav({
-		onSelectPrevious: selectPrevious,
-		onSelectNext: selectNext,
+		onSelectPrevious: isGridKeyboardNavigation ? selectGridPreviousRow : selectPrevious,
+		onSelectNext: isGridKeyboardNavigation ? selectGridNextRow : selectNext,
+		onSelectLeft: isGridKeyboardNavigation ? selectGridPreviousColumn : undefined,
+		onSelectRight: isGridKeyboardNavigation ? selectGridNextColumn : undefined,
 		onConfirm: confirmSelection,
 		onBeforeConfirm: onKeyboardConfirm,
 		onMetaEnter: onKeyboardMetaEnter,
