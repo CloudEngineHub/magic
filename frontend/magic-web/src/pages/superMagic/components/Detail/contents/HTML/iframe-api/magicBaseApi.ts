@@ -11,7 +11,7 @@ function withMagicBaseShareToken() {
 	if (!token) return undefined
 	return {
 		headers: {
-			"x-magic-share-token": token,
+			token,
 		},
 	}
 }

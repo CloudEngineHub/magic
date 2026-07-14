@@ -379,7 +379,7 @@ class MagicBaseApi extends AbstractApi
 
     private function resolveRuntimeAuthorization(int $projectId): MagicUserAuthorization
     {
-        $shareToken = trim((string) $this->request->header('x-magic-share-token', ''));
+        $shareToken = trim((string) $this->request->header('token', ''));
         if ($shareToken === '') {
             return $this->getAuthorization();
         }
