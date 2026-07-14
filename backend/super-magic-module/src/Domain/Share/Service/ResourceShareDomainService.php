@@ -295,6 +295,9 @@ class ResourceShareDomainService
                 } elseif ($field === 'expire_at') {
                     // expire_at 字段：格式化日期为 Y/m/d 格式
                     $filteredItem[$field] = DateFormatUtil::formatExpireAt($itemArray[$field] ?? null);
+                } elseif (in_array($field, ['created_at', 'updated_at'], true)) {
+                    // created_at / updated_at 字段：统一格式化为 Y/m/d H:i:s
+                    $filteredItem[$field] = DateFormatUtil::formatExpireAt($itemArray[$field] ?? null);
                 } elseif ($field === 'extra') {
                     // extra 字段：分享扩展配置
                     $extra = $itemArray[$field] ?? [];
