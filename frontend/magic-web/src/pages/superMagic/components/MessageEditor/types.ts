@@ -127,6 +127,10 @@ export interface MessageEditorProps {
 	onFileUpload?: (files: FileData[]) => void
 	/** task running state - controls send/interrupt button */
 	isTaskRunning?: boolean
+	/** Interrupt callback override */
+	onInterrupt?: () => void
+	/** Extra interrupt button loading state */
+	stopEventLoading?: boolean
 	/** Selected topic */
 	selectedTopic?: Topic | null
 	/** Selected project */

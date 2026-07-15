@@ -12,6 +12,7 @@ import {
 } from "./listener-registry"
 import { persistMessageToStorage } from "./persistence"
 import { notifyAskUserV2BrowserNotificationFromMessageNode } from "../services/askUserBrowserNotificationService"
+import { ASK_USER_TOOL } from "../components/MessageList/utils/askUserConstants"
 import {
 	getRawMessageNode,
 	transformRawMessage,
@@ -1067,14 +1068,8 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 			}
 
 			validToolCalls.forEach((tc) => {
-				if (tc.id && !toolResponseMap.has(tc.id)) {
-					toolResponseMap.set(tc.id, {
-						...tc.tool,
-						id: tc.id,
-						name: tc.tool?.name || tc.function?.name || "",
-						status: "suspended",
-						remark: "任务已中断",
-					} satisfies ToolResponseState)
+				if (tc.id && !toolResponseMap.has(tc.id) && !this.isAskUserToolCall(tc)) {
+					toolResponseMap.set(tc.id, this.createInterruptedToolResponse(tc))
 				}
 			})
 
@@ -1083,6 +1078,10 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 
 		this.fillInterruptedToolResponses(topicId, toolResponseMap)
 		this.toolResponseMap.set(topicId, toolResponseMap)
+	}
+
+	private isAskUserToolCall(tc: ToolCall) {
+		return tc.function?.name === ASK_USER_TOOL.name || tc.tool?.name === ASK_USER_TOOL.name
 	}
 
 	/**
@@ -1106,19 +1105,23 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 
 			let hasUnresolved = false
 			toolCalls.forEach((tc) => {
-				if (tc.id && !toolResponseMap.has(tc.id)) {
+				if (tc.id && !toolResponseMap.has(tc.id) && !this.isAskUserToolCall(tc)) {
 					hasUnresolved = true
-					toolResponseMap.set(tc.id, {
-						...tc.tool,
-						id: tc.id,
-						name: tc.tool?.name || tc.function?.name || "",
-						status: "suspended",
-						remark: "任务已中断",
-					} satisfies ToolResponseState)
+					toolResponseMap.set(tc.id, this.createInterruptedToolResponse(tc))
 				}
 			})
 
 			if (!hasUnresolved) break
+		}
+	}
+
+	private createInterruptedToolResponse(tc: ToolCall): ToolResponseState {
+		return {
+			...tc.tool,
+			id: tc.id,
+			name: tc.tool?.name || tc.function?.name || "",
+			status: "suspended",
+			remark: "任务已中断",
 		}
 	}
 

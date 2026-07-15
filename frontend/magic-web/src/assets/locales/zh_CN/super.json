@@ -216,6 +216,7 @@
 		"validation": {
 			"incomplete": "请完成当前问题",
 			"multiSelectRange": "至少选择 {{min}} 项，最多选择 {{max}} 项",
+			"required": "此项为必填项",
 			"unlimited": "不限"
 		}
 	},

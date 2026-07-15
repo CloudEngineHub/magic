@@ -217,6 +217,7 @@
 		"validation": {
 			"incomplete": "Please complete this question",
 			"multiSelectRange": "Select at least {{min}} item(s) and at most {{max}} item(s)",
+			"required": "This field is required",
 			"unlimited": "unlimited"
 		}
 	},
