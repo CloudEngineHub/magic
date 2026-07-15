@@ -54,7 +54,7 @@ class SuperMagicAgentMarketAssembler
     }
 
     /**
-     * @param array<int, array{id:int, name_i18n:array, logo:?string, sort_order:int, crew_count:int}> $items
+     * @param array<int, array{id:int, name_i18n:array, logo:?string, sort_order:int, status:int, crew_count:int}> $items
      * @return array<int, CategoryListItemDTO>
      */
     public static function createCategoryListItemDTOs(array $items): array
@@ -66,6 +66,7 @@ class SuperMagicAgentMarketAssembler
                 nameI18n: $item['name_i18n'],
                 logo: $item['logo'],
                 sortOrder: $item['sort_order'],
+                status: $item['status'],
                 crewCount: $item['crew_count'],
             );
         }

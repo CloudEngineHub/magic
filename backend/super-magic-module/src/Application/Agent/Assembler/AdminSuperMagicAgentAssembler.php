@@ -12,8 +12,10 @@ use App\Domain\Contact\Service\MagicUserDomainService;
 use App\Domain\OrganizationEnvironment\Entity\OrganizationEntity;
 use App\Domain\OrganizationEnvironment\Service\OrganizationDomainService;
 use App\Infrastructure\Core\ValueObject\Page;
+use Dtyq\SuperMagic\Domain\Agent\Entity\AgentCategoryEntity;
 use Dtyq\SuperMagic\Domain\Agent\Entity\AgentMarketEntity;
 use Dtyq\SuperMagic\Domain\Agent\Entity\AgentVersionEntity;
+use Dtyq\SuperMagic\Domain\Agent\Service\SuperMagicAgentCategoryDomainService;
 use Dtyq\SuperMagic\Interfaces\Agent\DTO\Response\AgentMarketListItemAdminDTO;
 use Dtyq\SuperMagic\Interfaces\Agent\DTO\Response\AgentVersionListItemAdminDTO;
 use Dtyq\SuperMagic\Interfaces\Agent\DTO\Response\QueryAgentMarketsResponseAdminDTO;
@@ -30,6 +32,7 @@ class AdminSuperMagicAgentAssembler
     public function __construct(
         private readonly MagicUserDomainService $magicUserDomainService,
         private readonly OrganizationDomainService $organizationDomainService,
+        private readonly SuperMagicAgentCategoryDomainService $categoryDomainService,
     ) {
     }
 
@@ -67,9 +70,10 @@ class AdminSuperMagicAgentAssembler
     ): QueryAgentMarketsResponseAdminDTO {
         $publisherUserMap = $this->buildPublisherUserMapByMarket($markets);
         $organizationMap = $this->buildOrganizationMapByMarket($markets);
+        $categoryMap = $this->buildCategoryMapByMarket($markets);
 
         $list = array_map(
-            fn (AgentMarketEntity $entity) => $this->createMarketListItemDTO($entity, $publisherUserMap, $organizationMap),
+            fn (AgentMarketEntity $entity) => $this->createMarketListItemDTO($entity, $publisherUserMap, $organizationMap, $categoryMap),
             $markets
         );
 
@@ -176,6 +180,37 @@ class AdminSuperMagicAgentAssembler
     }
 
     /**
+     * @param AgentMarketEntity[] $entities
+     * @return array<int, AgentCategoryEntity>
+     */
+    private function buildCategoryMapByMarket(array $entities): array
+    {
+        $categoryIds = array_values(array_unique(array_filter(array_map(
+            static fn (AgentMarketEntity $entity) => $entity->getCategoryId(),
+            $entities
+        ))));
+
+        if ($categoryIds === []) {
+            return [];
+        }
+
+        try {
+            $categories = $this->categoryDomainService->findByIds($categoryIds);
+        } catch (Throwable) {
+            return [];
+        }
+
+        $categoryMap = [];
+        foreach ($categories as $category) {
+            if ($category->getId() !== null) {
+                $categoryMap[$category->getId()] = $category;
+            }
+        }
+
+        return $categoryMap;
+    }
+
+    /**
      * @param array<string, MagicUserEntity> $publisherUserMap
      * @param array<string, OrganizationEntity> $organizationMap
      */
@@ -224,11 +259,13 @@ class AdminSuperMagicAgentAssembler
     /**
      * @param array<string, MagicUserEntity> $publisherUserMap
      * @param array<string, OrganizationEntity> $organizationMap
+     * @param array<int, AgentCategoryEntity> $categoryMap
      */
     private function createMarketListItemDTO(
         AgentMarketEntity $entity,
         array $publisherUserMap,
-        array $organizationMap
+        array $organizationMap,
+        array $categoryMap
     ): AgentMarketListItemAdminDTO {
         $publisher = PublisherInfoAdminDTO::empty();
         $publisherUserId = $entity->getPublisherId();
@@ -260,6 +297,7 @@ class AdminSuperMagicAgentAssembler
             publisherId: $entity->getPublisherId(),
             publisherType: $entity->getPublisherType()->value,
             categoryId: $entity->getCategoryId(),
+            category: $this->createCategoryInfo($entity->getCategoryId(), $categoryMap),
             publishStatus: $entity->getPublishStatus()->value,
             installCount: $entity->getInstallCount(),
             sortOrder: $entity->getSortOrder(),
@@ -269,5 +307,24 @@ class AdminSuperMagicAgentAssembler
             createdAt: $entity->getCreatedAt(),
             updatedAt: $entity->getUpdatedAt()
         );
+    }
+
+    /**
+     * @param array<int, AgentCategoryEntity> $categoryMap
+     * @return null|array{id: string, name_i18n: array, logo: ?string, status: int}
+     */
+    private function createCategoryInfo(?int $categoryId, array $categoryMap): ?array
+    {
+        if ($categoryId === null || ! isset($categoryMap[$categoryId])) {
+            return null;
+        }
+
+        $category = $categoryMap[$categoryId];
+        return [
+            'id' => (string) ($category->getId() ?? ''),
+            'name_i18n' => $category->getNameI18n(),
+            'logo' => $category->getLogo(),
+            'status' => $category->getStatus(),
+        ];
     }
 }
