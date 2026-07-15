@@ -13,7 +13,6 @@ export { ResourceMonitorPlugin } from "./ResourceMonitorPlugin"
 export { ErrorMonitorPlugin } from "./ErrorMonitorPlugin"
 export { PageDwellTimePlugin } from "./PageDwellTimePlugin"
 export { DeviceMonitorPlugin } from "./DeviceMonitorPlugin"
-export { AgentDebugLogPlugin } from "./AgentDebugLogPlugin"
 
 // 插件工厂函数
 export { createSensitiveDataPlugin } from "./SensitiveDataPlugin"
@@ -26,7 +25,6 @@ export { createResourceMonitorPlugin } from "./ResourceMonitorPlugin"
 export { createErrorMonitorPlugin } from "./ErrorMonitorPlugin"
 export { createPageDwellTimePlugin } from "./PageDwellTimePlugin"
 export { createDeviceMonitorPlugin } from "./DeviceMonitorPlugin"
-export { createAgentDebugLogPlugin } from "./AgentDebugLogPlugin"
 
 // 配置类型
 export type { SensitiveDataPluginOptions } from "./SensitiveDataPlugin"
