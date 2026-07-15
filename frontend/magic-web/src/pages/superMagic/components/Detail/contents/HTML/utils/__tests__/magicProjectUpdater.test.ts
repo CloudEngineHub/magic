@@ -33,10 +33,10 @@ describe("findMagicProjectJsFile", () => {
 		mockState.getFileContentById.mockReset()
 	})
 
-	it("finds magic.project.js when the current PPT entry is a directory", async () => {
-		mockState.getFileContentById.mockResolvedValue(
-			"window.magicProjectConfig = { slides: ['slides/slide-1.html'] }",
-		)
+	it("finds the matching magic.project.js for a directory among multiple projects", async () => {
+		mockState.getFileContentById.mockImplementation(async (fileId: string) => {
+			return `window.magicProjectConfig = { fileId: '${fileId}' }`
+		})
 
 		const result = await findMagicProjectJsFile({
 			currentFileId: "deck-folder",
@@ -55,15 +55,29 @@ describe("findMagicProjectJsFile", () => {
 						},
 					],
 				},
+				{
+					file_id: "other-deck-folder",
+					file_name: "其他演示文稿",
+					is_directory: true,
+					relative_file_path: "other-deck",
+					children: [
+						{
+							file_id: "other-magic-project-file",
+							file_name: "magic.project.js",
+							relative_file_path: "other-deck/magic.project.js",
+						},
+					],
+				},
 			],
 		})
 
 		expect(mockState.getFileContentById).toHaveBeenCalledWith("magic-project-file", {
 			responseType: "text",
 		})
+		expect(mockState.getFileContentById).toHaveBeenCalledTimes(1)
 		expect(result).toEqual({
 			fileId: "magic-project-file",
-			content: "window.magicProjectConfig = { slides: ['slides/slide-1.html'] }",
+			content: "window.magicProjectConfig = { fileId: 'magic-project-file' }",
 		})
 	})
 
