@@ -113,7 +113,7 @@ class AgentDomainService
         $agentInitContext->setType(MessageType::Init->value);
         // 设置对象存储的 sts token
         $projectDir = WorkDirectoryUtil::getRootDir($dataIsolation->getCurrentUserId(), $projectEntity->getId());
-        $stsConfig = di(FileAppService::class)->getStsTemporaryCredentialV2(
+        $stsConfig = di(FileAppService::class)->getDualEndpointStsCredentialV2(
             $projectEntity->getUserOrganizationCode(),
             StorageBucketType::SandBox->value,
             $projectDir,
