@@ -60,7 +60,7 @@ skills:
   system_skills:      # 内置 Skill，位于 agents/skills/
     - name: using-mcp
   crew_skills: "*"    # 当前 Agent 私有 Skill（"*" 表示全部扫描）
-  workspace_skills: "*" # 用户安装/创建的 Skill
+  workspace_skills: "*" # 当前项目安装/创建的 Skill
   excluded_skills:    # 从 system_skills 中排除
     - some-skill
   preload:            # 预加载（可来自任意来源）
@@ -73,16 +73,18 @@ skills:
 |------|---------|------|
 | `system_skills` | `agents/skills/` | 内置，随项目发布 |
 | `crew_skills` | `agents/<agent-name>/skills/` | 当前 Agent 私有 |
-| `workspace_skills` | 工作区 skills 目录 | 用户安装/创建，或从外部安装后落地的位置 |
+| `workspace_skills` | `.workspace/.magic/skills/` | 当前项目安装/创建，由 `.agent` 配置控制 |
+| `personal` | `~/.magic/skills/` | 当前用户安装，切换项目后仍可使用，不受 `workspace_skills` 配置控制 |
 | `preload` | 任意来源均可 | 启动时注入，不进列表 |
 
-**外部安装**：Agent 通过 `find_skills` 检索、`install_skills` 安装外部 Skill，安装完成后统一落在 workspace_skills 目录。来源有三条：
+**外部安装**：Agent 通过 `find_skills` 检索、`install_skills` 安装外部 Skill。`install_skills.items[].scope` 决定每条 Skill 的安装范围：
 
-| 外部来源 | 获取方式 |
-|---------|---------|
-| 平台技能市场 | `find_skills` 检索后，`install_skills(provider="magic_market", ...)` |
-| my_library | `find_skills` 检索后，`install_skills(provider="my_library", ...)` |
-| GitHub | `install_skills(provider="github", id="<repo-url>")` |
+| scope | 安装目录 | 默认值 |
+|------|---------|-------|
+| `workspace` | `.workspace/.magic/skills/` | 是 |
+| `personal` | `~/.magic/skills/` | 否 |
+
+同一批次的不同 item 可以分别选择 `workspace` 和 `personal`。未传 `scope` 的旧调用继续安装到当前项目。
 
 安装后通过 `read_skills` 加载使用，安装前建议先用 `skill-vetter` 进行安全审查。
 
@@ -95,7 +97,8 @@ skills:
         │
         ▼
   系统提示词组装阶段
-  ├── 收集 system / crew / workspace skills 元数据
+  ├── 按 .agent 配置收集 system / crew / workspace skills 元数据
+  ├── 独立扫描 personal skills（不受 workspace_skills 配置影响）
   ├── 排除 excluded_skills
   ├── 构建 <available_skills> 块（name + description，供模型选读）
   └── 构建 <preloaded_skills> 块（指定文件正文，直接注入）
