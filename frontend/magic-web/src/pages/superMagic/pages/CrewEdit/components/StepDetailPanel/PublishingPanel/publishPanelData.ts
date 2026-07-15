@@ -102,7 +102,7 @@ export function createCrewEditPublishPanelData({
 		hasUnpublishedChanges: getHasUnpublishedChanges(agentDetail),
 		currentPublisherName:
 			versions.find((version) => version.publisher?.name)?.publisher?.name ?? "",
-		historyRecords: versions.map((version) => mapAgentVersion(version, locale)),
+		historyRecords: versions.map((version) => mapAgentVersion(version, locale, categories)),
 		draft: {
 			...draft,
 			version: resolveInitialPublishVersion({
@@ -179,7 +179,13 @@ function resolveInitialPublishVersion({
 	return resolveNextCrewPublishVersion(latestPublishedVersion)
 }
 
-function mapAgentVersion(version: AgentVersionItem, locale: string): PublishHistoryRecord {
+function mapAgentVersion(
+	version: AgentVersionItem,
+	locale: string,
+	categories: CategoryView[] = [],
+): PublishHistoryRecord {
+	const categoryId = normalizeCategoryId(version.category_id ?? version.category?.id)
+
 	return {
 		id: version.id,
 		version: version.version,
@@ -187,6 +193,10 @@ function mapAgentVersion(version: AgentVersionItem, locale: string): PublishHist
 		status: mapAgentVersionStatus(version),
 		publishTo: mapApiTargetToPublishTo(version.publish_target_type),
 		internalTarget: mapApiTargetToInternalTarget(version.publish_target_type),
+		...(categoryId ? { categoryId } : {}),
+		...(categoryId
+			? { categoryName: resolveVersionCategoryName(version, categoryId, categories, locale) }
+			: {}),
 		publisherName: version.publisher?.name ?? "",
 		publishedAt: version.display_time || version.published_at || "",
 		reviewRemark: version.review_remark ?? "",
@@ -282,13 +292,17 @@ function buildPublishDetailsI18nText(
 	}
 
 	const fallback = localeTextToDisplayString(details).trim()
-	const zh = (details.zh_CN ?? details[DEFAULT_LOCALE_KEY] ?? fallback).trim()
-	const en = (details.en_US ?? details[DEFAULT_LOCALE_KEY] ?? fallback).trim()
+	const zh = pickPublishDetailsText(details.zh_CN, details[DEFAULT_LOCALE_KEY], fallback)
+	const en = pickPublishDetailsText(details.en_US, details[DEFAULT_LOCALE_KEY], fallback)
 
 	return {
 		zh_CN: zh,
 		en_US: en,
 	}
+}
+
+function pickPublishDetailsText(...values: Array<string | undefined>) {
+	return values.map((value) => value?.trim() ?? "").find(Boolean) ?? ""
 }
 
 function buildPublishTargetValue(draft: PublishDraft): PublishAgentTargetValue | null {
@@ -321,6 +335,25 @@ function mapPanelTargetToApi(draft: PublishDraft): PublishAgentParams["publish_t
 function mapApiTargetToPublishTo(apiTarget: AgentVersionItem["publish_target_type"]) {
 	if (apiTarget === "MARKET") return "MARKET" as const
 	return "INTERNAL" as const
+}
+
+function normalizeCategoryId(categoryId?: string | number | null) {
+	if (categoryId === null || categoryId === undefined) return ""
+	return String(categoryId)
+}
+
+function resolveVersionCategoryName(
+	version: AgentVersionItem,
+	categoryId: string,
+	categories: CategoryView[],
+	locale: string,
+) {
+	return pickPublishDetailsText(
+		version.category?.name ?? undefined,
+		resolveCrewI18nText(version.category?.name_i18n, locale),
+		categories.find((category) => category.id === categoryId)?.name ?? undefined,
+		categoryId,
+	)
 }
 
 function mapApiTargetToInternalTarget(

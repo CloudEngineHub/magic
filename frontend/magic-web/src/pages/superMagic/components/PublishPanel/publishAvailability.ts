@@ -94,17 +94,12 @@ export function normalizeDraftForAvailability({
 		publishTo === "INTERNAL" && !availableInternalTargets.includes(draft.internalTarget)
 			? (availableInternalTargets[0] ?? "PRIVATE")
 			: draft.internalTarget
-	const normalizedDraft = { ...draft }
-	if (publishTo !== "MARKET" || !draft.categoryId) {
-		delete normalizedDraft.categoryId
-	}
 
 	return {
-		...normalizedDraft,
+		...draft,
 		publishTo,
 		internalTarget,
 		specificMembers: [...draft.specificMembers],
-		...(publishTo === "MARKET" && draft.categoryId ? { categoryId: draft.categoryId } : {}),
 	}
 }
 

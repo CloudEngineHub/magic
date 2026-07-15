@@ -531,6 +531,12 @@ export interface AgentVersionItem {
 	version_description_i18n: CrewI18nText | null
 	review_remark?: string | null
 	publish_target_value?: AgentPublishTargetValueResolved | null
+	category_id?: string | number | null
+	category?: {
+		id?: string | number | null
+		name_i18n?: CrewI18nText | null
+		name?: string | null
+	} | null
 }
 
 export interface GetAgentVersionsResponse {

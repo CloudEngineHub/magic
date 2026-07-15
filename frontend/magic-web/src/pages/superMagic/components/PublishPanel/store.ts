@@ -174,14 +174,9 @@ export class PublishPanelStore {
 		if (!this.availablePublishTo.includes(publishTo)) return
 		if (this.draft.publishTo === publishTo) return
 
-		const categoryId = this.draft.categoryId
-		const draftWithoutCategory = { ...this.draft }
-		delete draftWithoutCategory.categoryId
 		this.draft = {
-			...draftWithoutCategory,
+			...this.draft,
 			publishTo,
-			specificMembers: [],
-			...(publishTo === "MARKET" && categoryId ? { categoryId } : {}),
 		}
 	}
 
@@ -189,10 +184,8 @@ export class PublishPanelStore {
 		if (!this.availableInternalTargets.includes(target)) return
 		if (this.draft.internalTarget === target) return
 
-		const draftWithoutCategory = { ...this.draft }
-		delete draftWithoutCategory.categoryId
 		this.draft = {
-			...draftWithoutCategory,
+			...this.draft,
 			publishTo: "INTERNAL",
 			internalTarget: target,
 		}
@@ -246,6 +239,14 @@ export class PublishPanelStore {
 							submissionDraft.publishTo === "INTERNAL"
 								? submissionDraft.internalTarget
 								: undefined,
+						categoryId:
+							submissionDraft.publishTo === "MARKET"
+								? submissionDraft.categoryId
+								: undefined,
+						categoryName:
+							submissionDraft.publishTo === "MARKET" && submissionDraft.categoryId
+								? this.resolveCategoryName(submissionDraft.categoryId)
+								: undefined,
 						publisherName: this.currentPublisherName,
 						publishedAt: formatPublishTimestamp(new Date()),
 						specificMembers:
@@ -283,11 +284,7 @@ export class PublishPanelStore {
 			availablePublishTo: this.availablePublishTo,
 			availableInternalTargets: this.availableInternalTargets,
 		})
-		const categoryId =
-			normalized.publishTo === "MARKET" &&
-			this.marketCategories.some((category) => category.id === normalized.categoryId)
-				? normalized.categoryId
-				: undefined
+		const categoryId = normalized.categoryId
 		const normalizedWithoutCategory = { ...normalized }
 		delete normalizedWithoutCategory.categoryId
 
@@ -295,6 +292,10 @@ export class PublishPanelStore {
 			...normalizedWithoutCategory,
 			...(categoryId ? { categoryId } : {}),
 		}
+	}
+
+	private resolveCategoryName(categoryId: string) {
+		return this.marketCategories.find((category) => category.id === categoryId)?.name
 	}
 }
 

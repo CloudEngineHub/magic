@@ -38,6 +38,8 @@ export interface PublishHistoryRecord {
 	status: PublishRecordStatus
 	publishTo: PublishTo
 	internalTarget?: PublishInternalTarget
+	categoryId?: string
+	categoryName?: string
 	publisherName: string
 	publishedAt: string
 	reviewRemark?: string

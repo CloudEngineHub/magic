@@ -94,7 +94,10 @@ export default observer(function PublishDetailView({ onClose }: PublishDetailVie
 						{record.publishTo === "INTERNAL" ? (
 							<ReadonlyInternalTargetSection record={record} />
 						) : (
-							<ReadonlySkillsLibraryCard record={record} />
+							<>
+								<ReadonlyMarketCategoryField record={record} />
+								<ReadonlySkillsLibraryCard record={record} />
+							</>
 						)}
 					</div>
 				</div>
@@ -156,6 +159,30 @@ function ReadonlyPublishToCard({ publishTo }: { publishTo: PublishTo }) {
 				</div>
 			</div>
 		</div>
+	)
+}
+
+function ReadonlyMarketCategoryField({
+	record,
+}: {
+	record: NonNullable<ReturnType<typeof usePublishPanelStore>["selectedHistoryRecord"]>
+}) {
+	const { t } = useTranslation("crew/market")
+	const store = usePublishPanelStore()
+	const categoryName =
+		record.categoryName ??
+		store.marketCategories.find((category) => category.id === record.categoryId)?.name ??
+		record.categoryId ??
+		""
+
+	if (!categoryName) return null
+
+	return (
+		<ReadonlyTextField
+			label={t("skillEditPage.publishPanel.create.fields.category.label")}
+			value={categoryName}
+			testId="skill-publish-detail-category"
+		/>
 	)
 }
 
