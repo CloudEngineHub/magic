@@ -218,7 +218,11 @@ describe("useSlidesTemplateCatalogState", () => {
 	it("loads initial templates and exposes catalog groups", async () => {
 		const { result } = renderHook(() => useSlidesTemplateCatalogState())
 
+		expect(result.current.isPrimaryFilterLoading).toBe(true)
+		expect(result.current.isTagFilterLoading).toBe(true)
 		await waitFor(() => expect(result.current.isLoading).toBe(false))
+		await waitFor(() => expect(result.current.isPrimaryFilterLoading).toBe(false))
+		expect(result.current.isTagFilterLoading).toBe(false)
 		await waitFor(() =>
 			expect(
 				result.current.groups.some(

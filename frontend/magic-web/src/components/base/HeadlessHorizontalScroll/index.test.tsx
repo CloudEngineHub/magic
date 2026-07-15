@@ -10,13 +10,17 @@ function makeScrollable(element: HTMLElement) {
 }
 
 function firePointerEvent(
-	element: HTMLElement,
+	element: HTMLElement | Window,
 	type: "pointerdown" | "pointermove" | "pointerup",
-	init: MouseEventInit & { pointerId: number },
+	init: MouseEventInit & { pointerId: number; pointerType?: string },
 ) {
 	const event = new MouseEvent(type, { bubbles: true, cancelable: true, ...init })
-	Object.defineProperty(event, "pointerId", { value: init.pointerId })
+	Object.defineProperties(event, {
+		pointerId: { value: init.pointerId },
+		pointerType: { value: init.pointerType ?? "" },
+	})
 	fireEvent(element, event)
+	return event
 }
 
 describe("HeadlessHorizontalScroll", () => {
@@ -35,13 +39,56 @@ describe("HeadlessHorizontalScroll", () => {
 			clientX: 120,
 			clientY: 20,
 		})
-		firePointerEvent(scroller, "pointermove", { pointerId: 1, clientX: 70, clientY: 22 })
+		firePointerEvent(scroller, "pointermove", {
+			pointerId: 1,
+			buttons: 1,
+			clientX: 70,
+			clientY: 22,
+		})
 
 		expect(scroller.scrollLeft).toBe(50)
 		expect(scroller).toHaveClass("cursor-grabbing")
 
 		firePointerEvent(scroller, "pointerup", { pointerId: 1 })
 		expect(scroller).not.toHaveClass("cursor-grabbing")
+	})
+
+	it("keeps the final position when the pointer returns quickly after release", () => {
+		render(
+			<HeadlessHorizontalScroll scrollContainerProps={{ "data-testid": "scroller" }}>
+				<div>Content</div>
+			</HeadlessHorizontalScroll>,
+		)
+		const scroller = screen.getByTestId("scroller")
+		makeScrollable(scroller)
+		scroller.style.scrollBehavior = "smooth"
+
+		firePointerEvent(scroller, "pointerdown", {
+			pointerId: 1,
+			button: 0,
+			clientX: 120,
+			clientY: 20,
+		})
+		firePointerEvent(scroller, "pointermove", {
+			pointerId: 1,
+			buttons: 1,
+			clientX: 70,
+			clientY: 22,
+		})
+
+		expect(scroller.scrollLeft).toBe(50)
+		expect(scroller.style.scrollBehavior).toBe("auto")
+
+		firePointerEvent(window, "pointerup", { pointerId: 1, clientX: 70, clientY: 22 })
+		firePointerEvent(scroller, "pointermove", {
+			pointerId: 1,
+			buttons: 1,
+			clientX: 120,
+			clientY: 22,
+		})
+
+		expect(scroller.scrollLeft).toBe(50)
+		expect(scroller.style.scrollBehavior).toBe("smooth")
 	})
 
 	it("keeps a click when the pointer does not become a horizontal drag", () => {
@@ -95,11 +142,88 @@ describe("HeadlessHorizontalScroll", () => {
 			clientX: 120,
 			clientY: 20,
 		})
-		firePointerEvent(item, "pointermove", { pointerId: 1, clientX: 70, clientY: 22 })
+		firePointerEvent(item, "pointermove", {
+			pointerId: 1,
+			buttons: 1,
+			clientX: 70,
+			clientY: 22,
+		})
 		firePointerEvent(item, "pointerup", { pointerId: 1, clientX: 70, clientY: 22 })
 		fireEvent.click(item)
 
 		expect(handleClick).not.toHaveBeenCalled()
+	})
+
+	it("suppresses a fast drag click even when no pointer move is delivered", () => {
+		const handleClick = vi.fn()
+		render(
+			<HeadlessHorizontalScroll scrollContainerProps={{ "data-testid": "scroller" }}>
+				<button type="button" onClick={handleClick}>
+					Item
+				</button>
+			</HeadlessHorizontalScroll>,
+		)
+		const scroller = screen.getByTestId("scroller")
+		const item = screen.getByRole("button", { name: "Item" })
+		makeScrollable(scroller)
+
+		firePointerEvent(item, "pointerdown", {
+			pointerId: 1,
+			button: 0,
+			clientX: 120,
+			clientY: 20,
+		})
+		firePointerEvent(window, "pointerup", {
+			pointerId: 1,
+			clientX: 70,
+			clientY: 22,
+		})
+		fireEvent.click(item)
+
+		expect(scroller.scrollLeft).toBe(50)
+		expect(handleClick).not.toHaveBeenCalled()
+	})
+
+	it("leaves touch scrolling and item clicks to the browser", () => {
+		const handleClick = vi.fn()
+		render(
+			<HeadlessHorizontalScroll scrollContainerProps={{ "data-testid": "scroller" }}>
+				<button type="button" onClick={handleClick}>
+					Item
+				</button>
+			</HeadlessHorizontalScroll>,
+		)
+		const scroller = screen.getByTestId("scroller")
+		const item = screen.getByRole("button", { name: "Item" })
+		makeScrollable(scroller)
+
+		firePointerEvent(item, "pointerdown", {
+			pointerId: 1,
+			pointerType: "touch",
+			button: 0,
+			clientX: 120,
+			clientY: 20,
+		})
+		const moveEvent = firePointerEvent(item, "pointermove", {
+			pointerId: 1,
+			pointerType: "touch",
+			buttons: 1,
+			clientX: 70,
+			clientY: 22,
+		})
+		firePointerEvent(item, "pointerup", {
+			pointerId: 1,
+			pointerType: "touch",
+			clientX: 70,
+			clientY: 22,
+		})
+		fireEvent.click(item)
+
+		expect(moveEvent.defaultPrevented).toBe(false)
+		expect(scroller.scrollLeft).toBe(0)
+		expect(scroller).not.toHaveClass("touch-pan-y")
+		expect(scroller).not.toHaveClass("cursor-grabbing")
+		expect(handleClick).toHaveBeenCalledOnce()
 	})
 
 	it("no longer maps vertical wheel movement to horizontal scrolling", () => {

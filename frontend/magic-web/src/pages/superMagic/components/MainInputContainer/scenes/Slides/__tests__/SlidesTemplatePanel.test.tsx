@@ -42,6 +42,8 @@ const useResolvedTemplateColorsMock = vi.hoisted(() =>
 	),
 )
 
+const useIsMobileMock = vi.hoisted(() => vi.fn(() => false))
+
 vi.mock("@/apis", () => ({
 	SuperMagicApi: apiMock,
 }))
@@ -49,7 +51,11 @@ vi.mock("@/apis", () => ({
 vi.mock("react-i18next", () => ({
 	useTranslation: () => ({
 		t: (key: string, options?: { count?: string }) =>
-			key === "playbook.edit.presets.templateCount" ? `${options?.count} 套` : key,
+			key === "playbook.edit.presets.templateCount"
+				? `${options?.count} 套`
+				: key === "playbook.edit.presets.unselected"
+					? "Not selected"
+					: key,
 		i18n: { language: "en_US" },
 	}),
 }))
@@ -69,6 +75,10 @@ vi.mock("../../../stores", () => ({
 
 vi.mock("@/pages/superMagic/pages/SlidesTemplates/useResolvedTemplateColors", () => ({
 	useResolvedTemplateColors: useResolvedTemplateColorsMock,
+}))
+
+vi.mock("@/hooks/useIsMobile", () => ({
+	useIsMobile: useIsMobileMock,
 }))
 
 const businessCategory: SlidesTemplateCategoryItem = {
@@ -108,6 +118,8 @@ function createSlidesTemplatePanelContentState(
 		hasAnyTemplate: true,
 		hasCheckedAnyTemplate: true,
 		hasMore: false,
+		isPrimaryFilterLoading: false,
+		isTagFilterLoading: false,
 		isLoading: false,
 		isRefreshing: false,
 		isLoadingMore: false,
@@ -144,6 +156,7 @@ describe("SlidesTemplatePanel", () => {
 
 	beforeEach(() => {
 		vi.clearAllMocks()
+		useIsMobileMock.mockReturnValue(false)
 		sceneStateStoreMock.inputScopeKey = ""
 		sceneStateStoreMock.sendCount = 0
 		vi.mocked(SuperMagicApi.getSlidesTemplateCategories).mockResolvedValue({
@@ -637,6 +650,23 @@ describe("SlidesTemplatePanel", () => {
 		expect(screen.getByTestId("slides-template-search-input")).toHaveValue("business")
 	})
 
+	it("renders filter skeletons while filter metadata initializes", () => {
+		render(
+			<SlidesTemplatePanelContent
+				slidesState={createSlidesTemplatePanelContentState({
+					isPrimaryFilterLoading: true,
+					isTagFilterLoading: true,
+				})}
+				onTemplateClick={vi.fn()}
+			/>,
+		)
+
+		expect(screen.getByTestId("slides-template-primary-filters-skeleton")).toBeInTheDocument()
+		expect(screen.getByTestId("slides-template-tag-filters-skeleton")).toBeInTheDocument()
+		expect(screen.queryByTestId("template-group-selector")).toBeNull()
+		expect(screen.queryByTestId("slides-template-tag-groups")).toBeNull()
+	})
+
 	it("renders the business report category in the template selector", () => {
 		const businessReportGroupKey = createSlidesTemplateCategoryGroupKey(
 			"PPT-CATE-business-report",
@@ -674,7 +704,7 @@ describe("SlidesTemplatePanel", () => {
 		expect(setSelectedGroupKey).toHaveBeenCalledWith("all")
 	})
 
-	it("renders category tags beneath the primary category selector", () => {
+	it("renders each tag group as a multi-select dropdown", () => {
 		const setSelectedChildTagCodes = vi.fn()
 		const tagGroups: SlidesTemplateTagGroupItem[] = [
 			{
@@ -688,6 +718,14 @@ describe("SlidesTemplatePanel", () => {
 						code: "purpose-annual-report",
 						name_i18n: { zh_CN: "年度报告", en_US: "Annual Report" },
 						sort: 100,
+						template_count: 1,
+						is_official: true,
+					},
+					{
+						id: "monthly-report",
+						code: "purpose-monthly-report",
+						name_i18n: { zh_CN: "月度汇报", en_US: "Monthly Report" },
+						sort: 90,
 						template_count: 1,
 						is_official: true,
 					},
@@ -724,84 +762,226 @@ describe("SlidesTemplatePanel", () => {
 		)
 
 		expect(screen.getByTestId("slides-template-category-tag-filters")).toBeInTheDocument()
-		expect(screen.getByText("Purpose")).toBeInTheDocument()
-		expect(screen.getByTestId("slides-template-tag-options-purpose_group")).toBeInTheDocument()
-		expect(screen.queryByText("Style")).not.toBeInTheDocument()
+		const purposeTrigger = screen.getByTestId("slides-template-tag-group-trigger-purpose_group")
+		expect(purposeTrigger).toHaveTextContent("Purpose：Annual Report")
+		expect(purposeTrigger).toHaveClass(
+			"h-8",
+			"rounded-lg",
+			"border-0",
+			"bg-transparent",
+			"shadow-none",
+		)
+		expect(purposeTrigger).not.toHaveClass("rounded-full")
+		expect(
+			screen.getByTestId("slides-template-tag-group-selected-value-purpose-annual-report"),
+		).toHaveClass("rounded-full", "bg-primary/10", "text-primary")
+		expect(
+			screen.getByTestId("slides-template-tag-group-trigger-style_group"),
+		).toHaveTextContent("Style")
+		expect(
+			screen.getByTestId("slides-template-tag-group-trigger-style_group"),
+		).not.toHaveTextContent("Not selected")
 
-		const toggle = screen.getByTestId("slides-template-tag-groups-toggle")
 		const clearSelection = screen.getByTestId("slides-template-tag-clear-selection")
-		expect(toggle.nextElementSibling).toBe(clearSelection)
+		const tagGroupsLayout = screen.getByTestId("slides-template-tag-groups")
+		expect(tagGroupsLayout).toHaveClass("flex-wrap")
+		expect(tagGroupsLayout).not.toHaveClass("overflow-x-auto")
+		expect(tagGroupsLayout).not.toContainElement(clearSelection)
+		expect(tagGroupsLayout.parentElement).toContainElement(clearSelection)
 		expect(clearSelection).toBeEnabled()
 		fireEvent.click(clearSelection)
 		expect(setSelectedChildTagCodes).toHaveBeenCalledWith([])
 		setSelectedChildTagCodes.mockClear()
-		expect(toggle).toHaveAttribute("aria-expanded", "false")
-		fireEvent.click(toggle)
-		expect(screen.getByText("Style")).toBeInTheDocument()
-		expect(screen.getByTestId("slides-template-tag-options-style_group")).toBeInTheDocument()
-		expect(toggle).toHaveAttribute("aria-expanded", "true")
+
+		fireEvent.keyDown(screen.getByTestId("slides-template-tag-group-trigger-style_group"), {
+			key: "Enter",
+		})
 		fireEvent.click(screen.getByTestId("slides-template-tag-option-style-business"))
 		expect(setSelectedChildTagCodes).toHaveBeenCalledWith([
 			"purpose-annual-report",
 			"style-business",
 		])
 		setSelectedChildTagCodes.mockClear()
-		fireEvent.click(toggle)
-		expect(screen.queryByText("Style")).not.toBeInTheDocument()
 
+		fireEvent.keyDown(screen.getByTestId("slides-template-tag-group-trigger-purpose_group"), {
+			key: "Enter",
+		})
 		fireEvent.click(screen.getByTestId("slides-template-tag-option-purpose-annual-report"))
 		expect(setSelectedChildTagCodes).toHaveBeenCalledWith([])
 	})
 
-	it("keeps tag groups expanded when switching categories", () => {
+	it("shows up to three selected options and reveals remaining items from the count", async () => {
 		const tagGroups: SlidesTemplateTagGroupItem[] = [
 			{
 				id: "purpose-group",
 				code: "purpose_group",
 				name_i18n: { zh_CN: "用途与交付物", en_US: "Purpose" },
 				sort: 100,
-				tags: [],
-			},
-			{
-				id: "style-group",
-				code: "style_group",
-				name_i18n: { zh_CN: "视觉风格", en_US: "Style" },
-				sort: 90,
-				tags: [],
+				tags: [
+					{
+						id: "annual-report",
+						code: "purpose-annual-report",
+						name_i18n: { zh_CN: "年度报告", en_US: "Annual Report" },
+						sort: 100,
+						template_count: 1,
+						is_official: true,
+					},
+					{
+						id: "monthly-report",
+						code: "purpose-monthly-report",
+						name_i18n: { zh_CN: "月度汇报", en_US: "Monthly Report" },
+						sort: 90,
+						template_count: 1,
+						is_official: true,
+					},
+					{
+						id: "quarterly-report",
+						code: "purpose-quarterly-report",
+						name_i18n: { zh_CN: "季度汇报", en_US: "Quarterly Report" },
+						sort: 80,
+						template_count: 1,
+						is_official: true,
+					},
+					{
+						id: "project-report",
+						code: "purpose-project-report",
+						name_i18n: { zh_CN: "项目汇报", en_US: "Project Report" },
+						sort: 70,
+						template_count: 1,
+						is_official: true,
+					},
+				],
 			},
 		]
 		const { rerender } = render(
 			<SlidesTemplatePanelContent
 				slidesState={createSlidesTemplatePanelContentState({
-					selectedCategoryCode: businessCategory.code,
+					selectedChildTagCodes: ["purpose-annual-report"],
 					tagGroups,
 				})}
 				onTemplateClick={vi.fn()}
 			/>,
 		)
 
-		fireEvent.click(screen.getByTestId("slides-template-tag-groups-toggle"))
-		expect(screen.getByTestId("slides-template-tag-groups-toggle")).toHaveAttribute(
-			"aria-expanded",
-			"true",
-		)
-		expect(screen.getByText("Style")).toBeInTheDocument()
+		expect(
+			screen.getByTestId("slides-template-tag-group-trigger-purpose_group"),
+		).toHaveTextContent("Purpose：Annual Report")
 
 		rerender(
 			<SlidesTemplatePanelContent
 				slidesState={createSlidesTemplatePanelContentState({
-					selectedCategoryCode: "PPT-CATE-healthcare",
+					selectedChildTagCodes: ["purpose-annual-report", "purpose-monthly-report"],
 					tagGroups,
 				})}
 				onTemplateClick={vi.fn()}
 			/>,
 		)
 
-		expect(screen.getByTestId("slides-template-tag-groups-toggle")).toHaveAttribute(
-			"aria-expanded",
-			"true",
+		const trigger = screen.getByTestId("slides-template-tag-group-trigger-purpose_group")
+		expect(trigger).toHaveTextContent("Purpose：Annual ReportMonthly Report")
+		expect(
+			screen.getByTestId("slides-template-tag-group-selected-value-purpose-annual-report"),
+		).toHaveClass("rounded-full", "bg-primary/10", "text-primary")
+		expect(
+			screen.getByTestId("slides-template-tag-group-selected-value-purpose-monthly-report"),
+		).toBeInTheDocument()
+		expect(
+			screen.queryByTestId("slides-template-tag-group-selected-overflow-purpose_group"),
+		).toBeNull()
+
+		rerender(
+			<SlidesTemplatePanelContent
+				slidesState={createSlidesTemplatePanelContentState({
+					selectedChildTagCodes: [
+						"purpose-annual-report",
+						"purpose-monthly-report",
+						"purpose-quarterly-report",
+						"purpose-project-report",
+					],
+					tagGroups,
+				})}
+				onTemplateClick={vi.fn()}
+			/>,
 		)
-		expect(screen.getByText("Style")).toBeInTheDocument()
+
+		expect(trigger).toHaveTextContent("Purpose：Annual ReportMonthly ReportQuarterly Report+1")
+		expect(trigger).not.toHaveTextContent("Project Report")
+		const overflow = screen.getByTestId(
+			"slides-template-tag-group-selected-overflow-purpose_group",
+		)
+		expect(overflow).toHaveTextContent("+1")
+		fireEvent.focus(overflow)
+		const overflowTooltips = await screen.findAllByTestId(
+			"slides-template-tag-group-overflow-tooltip-purpose_group",
+		)
+		expect(overflowTooltips[0]).toHaveTextContent("Project Report")
+	})
+
+	it("uses a confirmable bottom panel for mobile multi-selection", () => {
+		useIsMobileMock.mockReturnValue(true)
+		const setSelectedChildTagCodes = vi.fn()
+
+		render(
+			<SlidesTemplatePanelContent
+				slidesState={createSlidesTemplatePanelContentState({
+					selectedChildTagCodes: ["style-business"],
+					setSelectedChildTagCodes,
+					tagGroups: [
+						{
+							id: "purpose-group",
+							code: "purpose_group",
+							name_i18n: { zh_CN: "用途与交付物", en_US: "Purpose" },
+							sort: 100,
+							tags: [
+								{
+									id: "annual-report",
+									code: "purpose-annual-report",
+									name_i18n: {
+										zh_CN: "年度报告",
+										en_US: "Annual Report",
+									},
+									sort: 100,
+									template_count: 1,
+									is_official: true,
+								},
+							],
+						},
+						{
+							id: "style-group",
+							code: "style_group",
+							name_i18n: { zh_CN: "视觉风格", en_US: "Style" },
+							sort: 90,
+							tags: [
+								{
+									id: "business-style",
+									code: "style-business",
+									name_i18n: { zh_CN: "商务", en_US: "Business" },
+									sort: 90,
+									template_count: 1,
+									is_official: true,
+								},
+							],
+						},
+					],
+				})}
+				onTemplateClick={vi.fn()}
+			/>,
+		)
+
+		fireEvent.click(screen.getByTestId("slides-template-tag-group-trigger-purpose_group"))
+		expect(
+			screen.getByTestId("slides-template-tag-mobile-panel-purpose_group"),
+		).toBeInTheDocument()
+		fireEvent.click(
+			screen.getByTestId("slides-template-tag-mobile-option-purpose-annual-report"),
+		)
+		expect(setSelectedChildTagCodes).not.toHaveBeenCalled()
+
+		fireEvent.click(screen.getByRole("button", { name: "playbook.edit.presets.form.confirm" }))
+		expect(setSelectedChildTagCodes).toHaveBeenCalledWith([
+			"style-business",
+			"purpose-annual-report",
+		])
 	})
 
 	it.each(["all", createSlidesTemplateTagGroupKey("featured")])(
@@ -838,8 +1018,16 @@ describe("SlidesTemplatePanel", () => {
 			)
 
 			expect(screen.getByTestId("slides-template-category-tag-filters")).toBeInTheDocument()
-			expect(screen.getByText("Style")).toBeInTheDocument()
+			expect(
+				screen.getByTestId("slides-template-tag-group-trigger-style_group"),
+			).toHaveTextContent("Style")
+			expect(
+				screen.getByTestId("slides-template-tag-group-trigger-style_group"),
+			).not.toHaveTextContent("Not selected")
 			expect(screen.queryByTestId("slides-template-tag-clear-selection")).toBeNull()
+			fireEvent.keyDown(screen.getByTestId("slides-template-tag-group-trigger-style_group"), {
+				key: "Enter",
+			})
 			fireEvent.click(screen.getByTestId("slides-template-tag-option-style-business"))
 			expect(setSelectedChildTagCodes).toHaveBeenCalledWith(["style-business"])
 		},

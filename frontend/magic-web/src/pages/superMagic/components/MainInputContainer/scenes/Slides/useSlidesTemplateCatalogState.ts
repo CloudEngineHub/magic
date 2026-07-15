@@ -58,7 +58,11 @@ export function useSlidesTemplateCatalogState({
 	const [operationalTags, setOperationalTags] = useState<SlidesTemplateTagItem[]>([])
 	const [allTagGroups, setAllTagGroups] = useState<SlidesTemplateTagGroupItem[]>([])
 	const [categoryTagGroups, setCategoryTagGroups] = useState<SlidesTemplateTagGroupItem[]>([])
+	const [categoryTagGroupsCode, setCategoryTagGroupsCode] = useState<string | null>(null)
 	const [categoryLoadFailed, setCategoryLoadFailed] = useState(false)
+	const [isCategoryLoading, setIsCategoryLoading] = useState(true)
+	const [isAllTagGroupsLoading, setIsAllTagGroupsLoading] = useState(true)
+	const [isCategoryTagGroupsLoading, setIsCategoryTagGroupsLoading] = useState(false)
 	const [selectedGroupKey, setSelectedPrimaryGroupKey] = useState(ALL_SLIDES_TEMPLATE_GROUP_KEY)
 	const [selectedChildTagCodes, setSelectedChildTagCodes] = useState<string[]>([])
 	const [keyword, setKeyword] = useState("")
@@ -124,6 +128,10 @@ export function useSlidesTemplateCatalogState({
 				setCategories([])
 				setCategoryLoadFailed(true)
 			})
+			.finally(() => {
+				if (cancelled) return
+				setIsCategoryLoading(false)
+			})
 
 		return () => {
 			cancelled = true
@@ -158,6 +166,10 @@ export function useSlidesTemplateCatalogState({
 				console.error("Failed to fetch operational slides template tags", error)
 				setOperationalTags([])
 			})
+			.finally(() => {
+				if (cancelled) return
+				setIsAllTagGroupsLoading(false)
+			})
 
 		return () => {
 			cancelled = true
@@ -167,10 +179,13 @@ export function useSlidesTemplateCatalogState({
 	useEffect(() => {
 		if (!selectedCategoryCode) {
 			setCategoryTagGroups([])
+			setCategoryTagGroupsCode(null)
+			setIsCategoryTagGroupsLoading(false)
 			return
 		}
 
 		let cancelled = false
+		setIsCategoryTagGroupsLoading(true)
 
 		SuperMagicApi.getSlidesTemplateTagGroups({ category_code: selectedCategoryCode })
 			.then((response) => {
@@ -181,6 +196,11 @@ export function useSlidesTemplateCatalogState({
 				if (cancelled) return
 				console.error("Failed to fetch category slides template tags", error)
 				setCategoryTagGroups([])
+			})
+			.finally(() => {
+				if (cancelled) return
+				setCategoryTagGroupsCode(selectedCategoryCode)
+				setIsCategoryTagGroupsLoading(false)
 			})
 
 		return () => {
@@ -449,6 +469,10 @@ export function useSlidesTemplateCatalogState({
 		hasAnyTemplate,
 		hasCheckedAnyTemplate,
 		hasMore,
+		isPrimaryFilterLoading: isCategoryLoading || isAllTagGroupsLoading,
+		isTagFilterLoading: selectedCategoryCode
+			? isCategoryTagGroupsLoading || categoryTagGroupsCode !== selectedCategoryCode
+			: isAllTagGroupsLoading,
 		isLoading,
 		isRefreshing,
 		isLoadingMore,

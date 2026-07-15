@@ -28,8 +28,17 @@ vi.mock(
 	"@/pages/superMagic/components/MainInputContainer/components/editors/DefaultMessageEditorContainer",
 	() => ({
 		__esModule: true,
-		default: ({ editorContext }: { editorContext: { topicMode: string } }) => (
-			<div data-testid="mock-default-message-editor">{editorContext.topicMode}</div>
+		default: ({
+			editorContext,
+		}: {
+			editorContext: { topicMode: string; placeholder?: unknown }
+		}) => (
+			<div
+				data-testid="mock-default-message-editor"
+				data-has-placeholder={String(editorContext.placeholder !== undefined)}
+			>
+				{editorContext.topicMode}
+			</div>
 		),
 	}),
 )
@@ -162,5 +171,9 @@ describe("SlidesTemplatePromptDock", () => {
 		render(<SlidesTemplatePromptDock selectedTemplate={null} />)
 
 		expect(sceneStateStoreMock.setPresetSuffixContent).toHaveBeenLastCalledWith(undefined)
+		expect(screen.getByTestId("mock-default-message-editor")).toHaveAttribute(
+			"data-has-placeholder",
+			"false",
+		)
 	})
 })

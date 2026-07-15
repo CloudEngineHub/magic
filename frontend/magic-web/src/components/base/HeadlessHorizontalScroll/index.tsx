@@ -18,6 +18,7 @@ interface DragState {
 	startY: number
 	startScrollLeft: number
 	isDragging: boolean
+	originalScrollBehavior: string
 }
 
 interface HeadlessHorizontalScrollRenderProps {
@@ -156,6 +157,7 @@ function HeadlessHorizontalScroll({
 		window.addEventListener("resize", checkScrollPosition)
 
 		function handlePointerDown(event: PointerEvent) {
+			if (event.pointerType === "touch") return
 			if (event.isPrimary === false || event.button !== 0) return
 			if (container.scrollWidth <= container.clientWidth) return
 
@@ -165,40 +167,63 @@ function HeadlessHorizontalScroll({
 				startY: event.clientY,
 				startScrollLeft: container.scrollLeft,
 				isDragging: false,
+				originalScrollBehavior: container.style.scrollBehavior,
+			}
+		}
+
+		function isHorizontalDrag(event: PointerEvent) {
+			if (!dragState) return false
+
+			const deltaX = event.clientX - dragState.startX
+			const deltaY = event.clientY - dragState.startY
+			return Math.abs(deltaX) >= DRAG_START_DISTANCE && Math.abs(deltaX) > Math.abs(deltaY)
+		}
+
+		function activateDrag(pointerId: number, capturePointer: boolean) {
+			if (!dragState || dragState.isDragging) return
+
+			dragState.isDragging = true
+			container.style.scrollBehavior = "auto"
+			if (capturePointer) {
+				container.setPointerCapture?.(pointerId)
+				setIsDragging(true)
 			}
 		}
 
 		function handlePointerMove(event: PointerEvent) {
 			if (!dragState || dragState.pointerId !== event.pointerId) return
+			if ((event.buttons & 1) === 0) {
+				resetDrag(false)
+				return
+			}
 
 			const deltaX = event.clientX - dragState.startX
-			const deltaY = event.clientY - dragState.startY
 
 			if (!dragState.isDragging) {
-				if (Math.abs(deltaX) < DRAG_START_DISTANCE) return
-				if (Math.abs(deltaX) <= Math.abs(deltaY)) return
-
-				dragState.isDragging = true
-				container.setPointerCapture?.(event.pointerId)
-				setIsDragging(true)
+				if (!isHorizontalDrag(event)) return
+				activateDrag(event.pointerId, true)
 			}
 
 			event.preventDefault()
 			container.scrollLeft = dragState.startScrollLeft - deltaX
 		}
 
-		function finishDrag(event: PointerEvent, shouldSuppressClick: boolean) {
-			if (!dragState || dragState.pointerId !== event.pointerId) return
+		function resetDrag(shouldSuppressClick: boolean) {
+			if (!dragState) return
 
-			const didDrag = dragState.isDragging
+			const completedDrag = dragState
 			dragState = null
 			setIsDragging(false)
 
-			if (container.hasPointerCapture?.(event.pointerId)) {
-				container.releasePointerCapture(event.pointerId)
+			if (completedDrag.isDragging) {
+				container.style.scrollBehavior = completedDrag.originalScrollBehavior
 			}
 
-			if (didDrag && shouldSuppressClick) {
+			if (container.hasPointerCapture?.(completedDrag.pointerId)) {
+				container.releasePointerCapture(completedDrag.pointerId)
+			}
+
+			if (completedDrag.isDragging && shouldSuppressClick) {
 				suppressClick = true
 				clearClickSuppressionTimer = setTimeout(() => {
 					suppressClick = false
@@ -207,12 +232,28 @@ function HeadlessHorizontalScroll({
 			}
 		}
 
+		function finishDrag(event: PointerEvent, shouldSuppressClick: boolean) {
+			if (!dragState || dragState.pointerId !== event.pointerId) return
+
+			if (shouldSuppressClick && !dragState.isDragging && isHorizontalDrag(event)) {
+				activateDrag(event.pointerId, false)
+				container.scrollLeft =
+					dragState.startScrollLeft - (event.clientX - dragState.startX)
+			}
+
+			resetDrag(shouldSuppressClick)
+		}
+
 		function handlePointerUp(event: PointerEvent) {
 			finishDrag(event, true)
 		}
 
 		function handlePointerCancel(event: PointerEvent) {
 			finishDrag(event, false)
+		}
+
+		function handleWindowBlur() {
+			resetDrag(false)
 		}
 
 		function handleClick(event: MouseEvent) {
@@ -229,19 +270,24 @@ function HeadlessHorizontalScroll({
 
 		container.addEventListener("pointerdown", handlePointerDown)
 		container.addEventListener("pointermove", handlePointerMove)
-		container.addEventListener("pointerup", handlePointerUp)
-		container.addEventListener("pointercancel", handlePointerCancel)
 		container.addEventListener("lostpointercapture", handlePointerCancel)
 		container.addEventListener("click", handleClick, true)
+		window.addEventListener("pointerup", handlePointerUp, true)
+		window.addEventListener("pointercancel", handlePointerCancel, true)
+		window.addEventListener("blur", handleWindowBlur)
 
 		return () => {
+			if (dragState?.isDragging) {
+				container.style.scrollBehavior = dragState.originalScrollBehavior
+			}
 			container.removeEventListener("scroll", checkScrollPosition)
 			container.removeEventListener("pointerdown", handlePointerDown)
 			container.removeEventListener("pointermove", handlePointerMove)
-			container.removeEventListener("pointerup", handlePointerUp)
-			container.removeEventListener("pointercancel", handlePointerCancel)
 			container.removeEventListener("lostpointercapture", handlePointerCancel)
 			container.removeEventListener("click", handleClick, true)
+			window.removeEventListener("pointerup", handlePointerUp, true)
+			window.removeEventListener("pointercancel", handlePointerCancel, true)
+			window.removeEventListener("blur", handleWindowBlur)
 			if (clearClickSuppressionTimer) clearTimeout(clearClickSuppressionTimer)
 			resizeObserver?.disconnect()
 			window.removeEventListener("resize", checkScrollPosition)
@@ -277,7 +323,7 @@ function HeadlessHorizontalScroll({
 				ref={scrollContainerRef}
 				className={cn(
 					hideScrollbar && "no-scrollbar",
-					"min-w-0 touch-pan-y overflow-x-auto",
+					"min-w-0 overflow-x-auto",
 					(showLeftArrow || showRightArrow) && "cursor-grab",
 					isDragging && "cursor-grabbing select-none",
 					scrollContainerClassName,

@@ -1,15 +1,18 @@
-import { useCallback, useEffect, useRef, useState } from "react"
-import { ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Search, X } from "lucide-react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { Search, X } from "lucide-react"
 import { useTranslation } from "react-i18next"
-import HeadlessHorizontalScroll from "@/components/base/HeadlessHorizontalScroll"
 import { Button } from "@/components/shadcn-ui/button"
 import { Input } from "@/components/shadcn-ui/input"
 import { cn } from "@/lib/utils"
 import TemplateGroupSelector from "../../panels/TemplateGroupSelector"
-import { useLocaleText } from "../../panels/hooks/useLocaleText"
 import SlidesPresetGrid from "../../panels/slides-preset/SlidesPresetGrid"
 import type { OptionItem } from "../../panels/types"
 import { ALL_SLIDES_TEMPLATE_GROUP_KEY } from "./slidesTemplateState"
+import {
+	SlidesTemplatePrimaryFiltersSkeleton,
+	SlidesTemplateTagFiltersSkeleton,
+} from "./SlidesTemplateFilterSkeleton"
+import SlidesTemplateTagGroupSelect from "./SlidesTemplateTagGroupSelect"
 import type { SlidesTemplatePanelState } from "./useSlidesTemplatePanelState"
 
 interface SlidesTemplatePanelContentProps {
@@ -24,37 +27,6 @@ interface SlidesTemplatePanelContentProps {
 	disableEntryAnimation?: boolean
 }
 
-interface TagScrollControlProps {
-	direction: "left" | "right"
-	onClick: () => void
-}
-
-function TagScrollControl({ direction, onClick }: TagScrollControlProps) {
-	const isLeft = direction === "left"
-	const Icon = isLeft ? ChevronLeft : ChevronRight
-
-	return (
-		<div
-			className={cn(
-				"pointer-events-none absolute inset-y-0 z-10 flex w-10 items-center",
-				isLeft
-					? "left-0 justify-start bg-[linear-gradient(to_right,_var(--control-background)_35%,_transparent_100%)] pl-0.5"
-					: "right-0 justify-end bg-[linear-gradient(to_left,_var(--control-background)_35%,_transparent_100%)] pr-0.5",
-			)}
-		>
-			<Button
-				type="button"
-				variant="outline"
-				size="icon"
-				className="pointer-events-auto !size-6 rounded-full border-border/70 bg-background/95 text-muted-foreground shadow-xs hover:text-foreground [&_svg]:size-3.5"
-				onClick={onClick}
-			>
-				<Icon />
-			</Button>
-		</div>
-	)
-}
-
 function SlidesTemplatePanelContent({
 	slidesState,
 	selectedTemplate,
@@ -67,22 +39,20 @@ function SlidesTemplatePanelContent({
 	disableEntryAnimation = false,
 }: SlidesTemplatePanelContentProps) {
 	const { t } = useTranslation("crew/create")
-	const lt = useLocaleText()
 	const [isSearchOpen, setIsSearchOpen] = useState(() => Boolean(slidesState.keyword.trim()))
 	const [searchValue, setSearchValue] = useState(slidesState.keyword)
 	const [isPreviewOpen, setIsPreviewOpen] = useState(false)
-	const [isTagGroupsExpanded, setIsTagGroupsExpanded] = useState(false)
 	const searchInputRef = useRef<HTMLInputElement>(null)
 	const isComposingRef = useRef(false)
 	const selectorGroups = slidesState.groups
 	const selectedGroupKey = slidesState.selectedGroupKey
 	const setSelectedGroupKey = slidesState.setSelectedGroupKey
 	const hasGroups = selectorGroups.length > 1
-	const hasAdditionalTagGroups = slidesState.tagGroups.length > 1
 	const hasSelectedChildTags = slidesState.selectedChildTagCodes.length > 0
-	const visibleTagGroups = isTagGroupsExpanded
-		? slidesState.tagGroups
-		: slidesState.tagGroups.slice(0, 1)
+	const selectedChildTagCodeSet = useMemo(
+		() => new Set(slidesState.selectedChildTagCodes),
+		[slidesState.selectedChildTagCodes],
+	)
 	const loadTemplateDetail = slidesState.loadTemplateDetail
 	const handlePreviewDetailLoad = useCallback(
 		(template: OptionItem) => {
@@ -115,16 +85,6 @@ function SlidesTemplatePanelContent({
 		setSearchValue(slidesState.keyword)
 	}, [slidesState.keyword])
 
-	useEffect(() => {
-		if (slidesState.selectedChildTagCodes.length === 0) return
-		const isSelectedTagInAdditionalGroup = slidesState.tagGroups
-			.slice(1)
-			.some((group) =>
-				group.tags.some((tag) => slidesState.selectedChildTagCodes.includes(tag.code)),
-			)
-		if (isSelectedTagInAdditionalGroup) setIsTagGroupsExpanded(true)
-	}, [slidesState.selectedChildTagCodes, slidesState.tagGroups])
-
 	function handleSearchToggle() {
 		if (isSearchOpen) {
 			setSearchValue("")
@@ -153,10 +113,6 @@ function SlidesTemplatePanelContent({
 		slidesState.setKeyword(value)
 	}
 
-	function handleTagGroupsToggle() {
-		setIsTagGroupsExpanded((expanded) => !expanded)
-	}
-
 	return (
 		<div className={cn("flex min-h-0 flex-col gap-3", className)}>
 			<div
@@ -171,7 +127,9 @@ function SlidesTemplatePanelContent({
 				aria-hidden={isPreviewOpen}
 			>
 				<div className="flex min-w-0 items-center gap-2">
-					{hasGroups ? (
+					{slidesState.isPrimaryFilterLoading ? (
+						<SlidesTemplatePrimaryFiltersSkeleton />
+					) : hasGroups ? (
 						<TemplateGroupSelector
 							groups={selectorGroups}
 							selectedGroupKey={slidesState.selectedGroupKey}
@@ -201,115 +159,57 @@ function SlidesTemplatePanelContent({
 						{isSearchOpen ? <X className="size-4" /> : <Search className="size-4" />}
 					</Button>
 				</div>
-				{slidesState.tagGroups.length > 0 ? (
-					<div className="min-w-0" data-testid="slides-template-category-tag-filters">
-						<div className="flex w-full min-w-0 flex-col gap-1.5">
-							{visibleTagGroups.map((tagGroup, index) => (
-								<div
-									key={tagGroup.code}
-									className="flex min-w-0 items-center gap-3"
-								>
-									<span className="shrink-0 text-[11px] leading-4 text-muted-foreground">
-										{lt(tagGroup.name_i18n)}
-									</span>
-									<HeadlessHorizontalScroll
-										className="min-w-0 flex-1"
-										data-testid={`slides-template-tag-options-${tagGroup.code}`}
-										scrollContainerClassName="flex min-w-0 gap-1.5 py-0.5"
-										renderLeftControl={({ scroll }) => (
-											<TagScrollControl
-												direction="left"
-												onClick={() => scroll("left")}
-											/>
-										)}
-										renderRightControl={({ scroll }) => (
-											<TagScrollControl
-												direction="right"
-												onClick={() => scroll("right")}
-											/>
-										)}
-									>
-										{tagGroup.tags.map((tag) => {
-											const isSelected =
-												slidesState.selectedChildTagCodes.includes(tag.code)
+				{slidesState.isTagFilterLoading ? (
+					<SlidesTemplateTagFiltersSkeleton />
+				) : slidesState.tagGroups.length > 0 ? (
+					<div
+						className="flex min-w-0 items-start gap-2"
+						data-testid="slides-template-category-tag-filters"
+					>
+						<div
+							className="flex min-w-0 flex-1 flex-wrap items-center gap-2 py-0.5"
+							data-testid="slides-template-tag-groups"
+						>
+							{slidesState.tagGroups.map((tagGroup) => {
+								const selectedGroupTagCodes = tagGroup.tags
+									.filter((tag) => selectedChildTagCodeSet.has(tag.code))
+									.map((tag) => tag.code)
 
-											return (
-												<Button
-													key={tag.code}
-													type="button"
-													variant={isSelected ? "outline" : "secondary"}
-													size="sm"
-													className={cn(
-														"h-7 shrink-0 rounded-full border border-transparent px-2.5 text-xs font-normal shadow-none",
-														isSelected &&
-															"border-primary bg-background text-primary",
-													)}
-													aria-pressed={isSelected}
-													data-testid={`slides-template-tag-option-${tag.code}`}
-													onClick={() =>
-														slidesState.setSelectedChildTagCodes(
-															isSelected
-																? slidesState.selectedChildTagCodes.filter(
-																		(tagCode) =>
-																			tagCode !== tag.code,
-																	)
-																: [
-																		...slidesState.selectedChildTagCodes,
-																		tag.code,
-																	],
-														)
-													}
-												>
-													{lt(tag.name_i18n)}
-												</Button>
+								return (
+									<SlidesTemplateTagGroupSelect
+										key={tagGroup.code}
+										tagGroup={tagGroup}
+										selectedTagCodes={selectedGroupTagCodes}
+										onSelectedTagCodesChange={(nextGroupTagCodes) => {
+											const groupTagCodeSet = new Set(
+												tagGroup.tags.map((tag) => tag.code),
 											)
-										})}
-									</HeadlessHorizontalScroll>
-									{index === 0 &&
-									(hasAdditionalTagGroups || hasSelectedChildTags) ? (
-										<div className="flex shrink-0 items-center gap-1">
-											{hasAdditionalTagGroups ? (
-												<Button
-													type="button"
-													variant="ghost"
-													size="sm"
-													className="h-7 shrink-0 gap-1 rounded-full px-2.5 text-xs font-normal text-muted-foreground hover:text-foreground"
-													aria-expanded={isTagGroupsExpanded}
-													data-testid="slides-template-tag-groups-toggle"
-													onClick={handleTagGroupsToggle}
-												>
-													{t(
-														isTagGroupsExpanded
-															? "playbook.edit.presets.form.collapseFilters"
-															: "playbook.edit.presets.form.moreFilters",
-													)}
-													{isTagGroupsExpanded ? (
-														<ChevronUp className="size-3.5" />
-													) : (
-														<ChevronDown className="size-3.5" />
-													)}
-												</Button>
-											) : null}
-											{hasSelectedChildTags ? (
-												<Button
-													type="button"
-													variant="outline"
-													size="sm"
-													className="h-7 shrink-0 gap-1 rounded-full border-border/80 bg-background px-2.5 text-xs font-normal text-muted-foreground shadow-none hover:border-destructive/30 hover:bg-destructive/5 hover:text-destructive"
-													data-testid="slides-template-tag-clear-selection"
-													onClick={() =>
-														slidesState.setSelectedChildTagCodes([])
-													}
-												>
-													<X className="size-3.5" />
-													{t("playbook.edit.presets.clearSelection")}
-												</Button>
-											) : null}
-										</div>
-									) : null}
-								</div>
-							))}
+											const otherGroupTagCodes =
+												slidesState.selectedChildTagCodes.filter(
+													(tagCode) => !groupTagCodeSet.has(tagCode),
+												)
+											slidesState.setSelectedChildTagCodes([
+												...otherGroupTagCodes,
+												...nextGroupTagCodes,
+											])
+										}}
+									/>
+								)
+							})}
 						</div>
+						{hasSelectedChildTags ? (
+							<Button
+								type="button"
+								variant="ghost"
+								size="sm"
+								className="mt-0.5 h-8 shrink-0 gap-1 rounded-full px-2.5 text-xs font-normal text-muted-foreground hover:text-destructive"
+								data-testid="slides-template-tag-clear-selection"
+								onClick={() => slidesState.setSelectedChildTagCodes([])}
+							>
+								<X className="size-3.5" />
+								{t("playbook.edit.presets.clearSelection")}
+							</Button>
+						) : null}
 					</div>
 				) : null}
 				{isSearchOpen ? (

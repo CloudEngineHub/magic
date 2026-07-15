@@ -371,10 +371,6 @@ export function createSlidesFixedSceneConfig(
 	const panels: SkillPanelConfig[] = [createSlidesPresetPanelConfig(templates, categories, tags)]
 
 	return {
-		placeholder: {
-			zh_CN: "描述你想要生成的 PPT 主题和内容...",
-			en_US: "Describe the PPT theme and content you want to generate...",
-		},
 		config: {
 			scenes_config: {
 				...(panels[0] ? { presets: panels[0] } : {}),

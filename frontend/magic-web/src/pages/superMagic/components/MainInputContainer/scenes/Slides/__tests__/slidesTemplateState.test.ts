@@ -218,6 +218,12 @@ describe("slides template state", () => {
 		expect(sceneConfig.config.scenes_config.presets).toBeDefined()
 	})
 
+	it("leaves the input placeholder to the selected crew configuration", () => {
+		const sceneConfig = createSlidesFixedSceneConfig([])
+
+		expect(sceneConfig).not.toHaveProperty("placeholder")
+	})
+
 	it("preserves static page, size, and language fields when templates exist", () => {
 		const panel = createSlidesPresetPanelConfig([officialTemplate])
 		const items = panel.field?.items ?? []

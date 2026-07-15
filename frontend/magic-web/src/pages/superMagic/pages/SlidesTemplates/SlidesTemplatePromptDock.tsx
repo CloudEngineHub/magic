@@ -12,10 +12,7 @@ import { createMessageEditorDraftKey } from "@/pages/superMagic/components/Messa
 import type { MessageEditorRef } from "@/pages/superMagic/components/MessageEditor/MessageEditor"
 import { ToolbarButton } from "@/pages/superMagic/components/MessageEditor/types"
 import type { OptionItem } from "@/pages/superMagic/components/MainInputContainer/panels/types"
-import {
-	buildSlidesTemplatePresetContent,
-	createSlidesFixedSceneConfig,
-} from "@/pages/superMagic/components/MainInputContainer/scenes/Slides/slidesTemplateState"
+import { buildSlidesTemplatePresetContent } from "@/pages/superMagic/components/MainInputContainer/scenes/Slides/slidesTemplateState"
 import { roleStore } from "@/pages/superMagic/stores"
 import { projectStore, topicStore, workspaceStore } from "@/pages/superMagic/stores/core"
 import SuperMagicService from "@/pages/superMagic/services"
@@ -69,7 +66,6 @@ function SlidesTemplatePromptDock({
 	const selectedTopic = topicStore.selectedTopic
 	const selectedProject = projectStore.selectedProject
 	const selectedWorkspace = workspaceStore.selectedWorkspace ?? workspaceStore.firstWorkspace
-	const placeholder = useMemo(() => createSlidesFixedSceneConfig().placeholder, [])
 
 	useEffect(() => {
 		sceneStateStore.setInputScopeKey(
@@ -103,7 +99,6 @@ function SlidesTemplatePromptDock({
 			setTopicMode: roleStore.setCurrentRole,
 			topicExamplesMode: TopicMode.PPT,
 			enableMessageSendByContent: true,
-			placeholder,
 			editorRef,
 			skipInitialDraftRestore: true,
 			containerClassName: SLIDES_TEMPLATE_EDITOR_CONTAINER_CLASS_NAME,
@@ -137,7 +132,7 @@ function SlidesTemplatePromptDock({
 				})
 			},
 		}),
-		[selectedProject, selectedTopic, selectedWorkspace, placeholder],
+		[selectedProject, selectedTopic, selectedWorkspace],
 	)
 
 	return (

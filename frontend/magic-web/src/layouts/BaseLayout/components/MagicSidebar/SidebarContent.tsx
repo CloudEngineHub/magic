@@ -137,7 +137,7 @@ function SidebarContent({ collapsed }: SidebarContentProps) {
 					data-testid={testId}
 					className={
 						collapsed && isSlidesTemplateMenuItem
-							? "!bg-[#fff2ec] !text-[#ff6a1f] hover:!bg-[#ffe6da] hover:!text-[#ff6a1f]"
+							? "!text-[#ff6a1f] hover:!bg-[#fff2ec]  hover:!text-[#ff6a1f]"
 							: "text-sidebar-foreground"
 					}
 				>
