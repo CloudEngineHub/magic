@@ -33,9 +33,15 @@ export class UserActionRegistry {
 	/**
 	 * 检查动作是否可执行
 	 * @param id 动作ID
+	 * @param options 可选的执行选项（用于需要上下文判断的动作）
 	 * @returns 是否可执行
 	 */
-	public canExecute(id: string): boolean {
+	public canExecute<TId extends keyof UserActionOptionsMap>(
+		id: TId,
+		options?: UserActionOptionsMap[TId],
+	): boolean
+	public canExecute(id: string, options?: unknown): boolean
+	public canExecute(id: string, options?: unknown): boolean {
 		const action = this.actions.get(id)
 		if (!action) {
 			console.warn(`UserAction with id "${id}" not found`)
@@ -43,7 +49,7 @@ export class UserActionRegistry {
 		}
 
 		try {
-			return action.canExecute(this.canvas)
+			return action.canExecute(this.canvas, options)
 		} catch (error) {
 			console.error(`Error checking canExecute for action "${id}":`, error)
 			return false
@@ -69,7 +75,7 @@ export class UserActionRegistry {
 		}
 
 		// 双重检查：即使是快捷键触发，也要验证是否可执行
-		const canExecute = this.canExecute(id)
+		const canExecute = this.canExecute(id, options)
 		if (!canExecute) {
 			// 静默返回，不执行
 			return

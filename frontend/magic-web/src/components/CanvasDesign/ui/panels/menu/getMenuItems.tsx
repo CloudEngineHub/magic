@@ -8,6 +8,7 @@ import {
 	Eye,
 	EyeClosed,
 	FileDown,
+	FolderSearch,
 	Frame,
 	LockKeyhole,
 	LockOpen,
@@ -208,6 +209,22 @@ export function getMenuItems({
 					}
 				: basicDownloadMenuItem
 
+	const locateProjectFileMenuItem: MenuItem = {
+		id: "locate-project-file",
+		label: translate("menu.locateProjectFile", "定位到项目文件"),
+		icon: FolderSearch,
+		onClick: async () => {
+			await canvas.userActionRegistry.execute("view.locate-project-file", {
+				elementId: currentElementId ?? undefined,
+			})
+		},
+		visible: () => {
+			return canvas.userActionRegistry.canExecute("view.locate-project-file", {
+				elementId: currentElementId ?? undefined,
+			})
+		},
+	}
+
 	const addToCurrentConversationMenuItem: MenuItem = {
 		id: "add-to-current-conversation",
 		label: translate("menu.addToCurrentConversation", "添加至当前对话"),
@@ -237,7 +254,13 @@ export function getMenuItems({
 	// 只读：复制/下载；可选添加至对话（与可编辑菜单一致，由 canExecute 控制显隐）
 	if (readonly) {
 		if (!includeConversationMenuItems) {
-			return [copyMenuItem, copyPngMenuItem, { type: "separator" }, downloadMenuItem]
+			return [
+				copyMenuItem,
+				copyPngMenuItem,
+				{ type: "separator" },
+				downloadMenuItem,
+				locateProjectFileMenuItem,
+			]
 		}
 		return [
 			copyMenuItem,
@@ -247,6 +270,7 @@ export function getMenuItems({
 			addToNewConversationMenuItem,
 			{ type: "separator" },
 			downloadMenuItem,
+			locateProjectFileMenuItem,
 		]
 	}
 
@@ -394,6 +418,7 @@ export function getMenuItems({
 		{ type: "separator" },
 		...conversationBlock,
 		downloadMenuItem,
+		locateProjectFileMenuItem,
 		{ type: "separator" },
 		{
 			id: "delete",

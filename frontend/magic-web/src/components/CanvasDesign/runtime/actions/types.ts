@@ -35,12 +35,18 @@ export interface ViewActionOptions {
 	elementIds?: string[]
 }
 
+export interface LocateProjectFileActionOptions {
+	/** 要定位项目文件的媒体元素 ID；省略时回退到当前单选元素 */
+	elementId?: string
+}
+
 /**
  * 根据动作 ID 映射到对应的选项类型
  */
 export interface UserActionOptionsMap {
 	"edit.paste": EditActionOptions
 	"view.focus-element": ViewActionOptions
+	"view.locate-project-file": LocateProjectFileActionOptions
 }
 
 /**
@@ -57,7 +63,7 @@ export interface UserAction<
 	category: UserActionCategory
 
 	/** 判断当前是否可执行 */
-	canExecute: (canvas: Canvas) => boolean
+	canExecute: (canvas: Canvas, options?: TOptions) => boolean
 
 	/** 执行动作 */
 	execute: (canvas: Canvas, options?: TOptions) => void | Promise<void>

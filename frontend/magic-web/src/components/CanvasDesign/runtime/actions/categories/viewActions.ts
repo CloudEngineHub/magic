@@ -1,4 +1,55 @@
-import type { UserAction, ViewActionOptions } from "../types"
+import type { LocateProjectFileActionOptions, UserAction, ViewActionOptions } from "../types"
+import type { Canvas } from "../../core/Canvas"
+import { ElementTypeEnum } from "../../document/types"
+
+interface SelectedMediaFile {
+	src: string
+	fileName?: string
+}
+
+function isLocatableProjectFilePath(path: string): boolean {
+	const normalized = path.trim()
+	if (!normalized) return false
+	if (normalized.startsWith("blob:") || normalized.startsWith("data:")) return false
+	if (/^[a-z]:[\\/]/i.test(normalized)) return true
+	if (normalized.startsWith("//")) return false
+	if (/^[a-z][a-z0-9+.-]*:/i.test(normalized)) return false
+	return true
+}
+
+function resolveMediaElementFile(
+	canvas: Canvas,
+	elementId?: string | null,
+): SelectedMediaFile | null {
+	const selectedIds = canvas.selectionManager.getSelectedIds()
+	const resolvedElementId = elementId ?? (selectedIds.length === 1 ? selectedIds[0] : null)
+	if (!resolvedElementId) return null
+
+	const element = canvas.elementManager.getElementData(resolvedElementId)
+	if (!element) return null
+	if (element.type !== ElementTypeEnum.Image && element.type !== ElementTypeEnum.Video)
+		return null
+	if (!element.src) return null
+	if (!isLocatableProjectFilePath(element.src)) return null
+
+	const entry =
+		element.type === ElementTypeEnum.Image
+			? canvas.imageResourceManager.getEntry(element.src)
+			: undefined
+	const fileName = entry?.fileName || element.src.split("/").pop() || undefined
+
+	return {
+		src: element.src,
+		fileName,
+	}
+}
+
+export function resolveProjectFileLocationTarget(
+	canvas: Canvas,
+	elementId?: string | null,
+): SelectedMediaFile | null {
+	return resolveMediaElementFile(canvas, elementId)
+}
 
 /**
  * 视图操作相关的用户动作
@@ -65,4 +116,27 @@ export const viewActions: UserAction[] = [
 			}
 		},
 	} satisfies UserAction<"view.focus-element", ViewActionOptions>,
+	{
+		id: "view.locate-project-file",
+		category: "view",
+		canExecute: (canvas, options?: LocateProjectFileActionOptions) => {
+			return (
+				!!canvas.magicConfigManager.config?.methods?.locateProjectFile &&
+				resolveMediaElementFile(canvas, options?.elementId) !== null
+			)
+		},
+		execute: async (canvas, options?: LocateProjectFileActionOptions) => {
+			const locateProjectFile = canvas.magicConfigManager.config?.methods?.locateProjectFile
+			if (!locateProjectFile) return
+
+			const file = resolveMediaElementFile(canvas, options?.elementId)
+			if (!file) return
+
+			await locateProjectFile({
+				filePath: file.src,
+				fileName: file.fileName,
+				locateInTree: true,
+			})
+		},
+	} satisfies UserAction<"view.locate-project-file">,
 ]
