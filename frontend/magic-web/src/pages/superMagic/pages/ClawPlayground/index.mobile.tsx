@@ -28,7 +28,7 @@ import { useTopicDetailPanelController } from "@/pages/superMagic/pages/TopicPag
 import { useTopicFiles } from "@/pages/superMagic/pages/TopicPage/hooks/useTopicFiles"
 import { isReadOnlyProject } from "@/pages/superMagic/utils/permission"
 import { TopicMode } from "@/pages/superMagic/pages/Workspace/TopicMode"
-import { type TaskStatus } from "@/pages/superMagic/pages/Workspace/types"
+import { TaskStatus } from "@/pages/superMagic/pages/Workspace/types"
 import useTopicModel from "@/pages/superMagic/components/MessageEditor/hooks/useTopicModel"
 import { createMessageEditorDraftKey } from "@/pages/superMagic/components/MessageEditor/utils/draftKey"
 import { userStore } from "@/models/user"
@@ -137,6 +137,8 @@ const ClawMobileConversationPanel = observer(
 					}
 				},
 			})
+			const canInterruptTask =
+				showLoading || selectedTopic?.task_status === TaskStatus.WAITING_FOR_USER
 
 			const {
 				handlePullMoreMessage,
@@ -298,7 +300,7 @@ const ClawMobileConversationPanel = observer(
 				userId: userStore.user.userInfo?.user_id,
 				isStopping: stopEventLoading,
 				setIsStopping: setStopEventLoading,
-				canInterrupt: showLoading,
+				canInterrupt: canInterruptTask,
 			})
 
 			const mobileEditorNodes = useMemo<SceneEditorNodes>(() => {
@@ -346,7 +348,7 @@ const ClawMobileConversationPanel = observer(
 					layoutConfig: MOBILE_LAYOUT_CONFIG,
 					placeholder: tSuper("messageEditor.placeholderLoading"),
 					showLoading,
-					isTaskRunning: showLoading,
+					isTaskRunning: canInterruptTask,
 					stopEventLoading,
 					handleInterrupt,
 					mentionPanelStore: store.mentionPanelStore,
@@ -372,6 +374,7 @@ const ClawMobileConversationPanel = observer(
 				selectedProject,
 				selectedTopic,
 				showLoading,
+				canInterruptTask,
 				tSuper,
 				stopEventLoading,
 				handleInterrupt,
