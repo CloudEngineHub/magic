@@ -226,3 +226,390 @@ export function findNextImageVideoPlaceholderPositionNearViewport(
 		})
 	)
 }
+
+/** 计算批量生成结果组成网格后占据的整体尺寸。 */
+function getGridDimensions(
+	count: number,
+	columns: number,
+	elementWidth: number,
+	elementHeight: number,
+	spacing: number,
+): { width: number; height: number; rows: number } {
+	const rows = Math.max(1, Math.ceil(count / columns))
+	return {
+		width: columns * elementWidth + Math.max(0, columns - 1) * spacing,
+		height: rows * elementHeight + Math.max(0, rows - 1) * spacing,
+		rows,
+	}
+}
+
+/** 从左上角原点按行优先生成一组网格矩形。 */
+function createGridRects(
+	origin: { x: number; y: number },
+	count: number,
+	columns: number,
+	elementWidth: number,
+	elementHeight: number,
+	spacing: number,
+): Rect[] {
+	return Array.from({ length: count }, (_, index) => {
+		const col = index % columns
+		const row = Math.floor(index / columns)
+		return createRect(
+			origin.x + col * (elementWidth + spacing),
+			origin.y + row * (elementHeight + spacing),
+			elementWidth,
+			elementHeight,
+		)
+	})
+}
+
+/**
+ * 判断候选矩形是否满足视口约束，并与已有障碍物保持 spacing 间距。
+ *
+ * @param rect - 候选矩形
+ * @param obstacles - 障碍矩形
+ * @param spacing - 间距
+ * @param viewportRect - 视口区域
+ * @param requireInsideViewport - 是否要求在视口内
+ * @returns 是否可以放置矩形
+ */
+function canPlaceRect(
+	rect: Rect,
+	obstacles: Rect[],
+	spacing: number,
+	viewportRect: Rect,
+	requireInsideViewport: boolean,
+): boolean {
+	if (requireInsideViewport && !isRectInsideViewport(rect, viewportRect)) {
+		return false
+	}
+	return !obstacles.some((obstacle) => isOverlappingWithSpacing(rect, obstacle, spacing))
+}
+
+/** 插件结果默认按视口可容纳列数收敛，避免无来源图时首屏横向铺太远。 */
+function resolveGridColumns(options: {
+	count: number
+	elementWidth: number
+	spacing: number
+	viewportWidth: number
+	maxColumns: number
+}): number {
+	return Math.max(1, Math.min(options.count, resolveViewportGridSlotColumns(options)))
+}
+
+/** 根据当前视口宽度计算最多能完整展示多少个网格单元。 */
+function resolveViewportGridSlotColumns(options: {
+	elementWidth: number
+	spacing: number
+	viewportWidth: number
+	maxColumns: number
+}): number {
+	const maxColumnsByViewport = Math.max(
+		1,
+		Math.floor(
+			(options.viewportWidth + options.spacing) / (options.elementWidth + options.spacing),
+		),
+	)
+	return Math.max(1, Math.min(options.maxColumns, maxColumnsByViewport))
+}
+
+/**
+ * 从指定 base 开始按行优先扫描可用网格单元。
+ * 会把本次已选位置追加到 occupied，保证同一批结果之间也不互相重叠。
+ * @param options - 选项
+ * @param options.base - 起始点
+ * @param options.count - 生成数量
+ * @param options.columns - 列数
+ * @param options.elementWidth - 元素宽度
+ * @param options.elementHeight - 元素高度
+ * @param options.obstacles - 障碍矩形
+ * @param options.spacing - 间距
+ * @param options.viewportRect - 视口区域
+ * @param options.maxSearchRings - 最大搜索圈数
+ * @param options.requireInsideViewport - 是否要求在视口内
+ * @param options.minRows - 最小行数
+ * @returns 可用网格单元
+ */
+function scanRowMajorGridCells(options: {
+	base: { x: number; y: number }
+	count: number
+	columns: number
+	elementWidth: number
+	elementHeight: number
+	obstacles: Rect[]
+	spacing: number
+	viewportRect: Rect
+	maxSearchRings: number
+	requireInsideViewport: boolean
+	minRows?: number
+}): Rect[] | null {
+	const stepX = options.elementWidth + options.spacing
+	const stepY = options.elementHeight + options.spacing
+	const rects: Rect[] = []
+	const occupied = [...options.obstacles]
+	// 计算需要扫描的行数
+	const rows = Math.max(
+		Math.ceil(options.count / options.columns),
+		options.maxSearchRings + 1,
+		options.minRows ?? 0,
+	)
+
+	// 固定从左到右、从上到下补网格单元；已有结果占住前面的格子时，后续结果继续补同一行的下一个空位。
+	for (let row = 0; row < rows; row++) {
+		for (let col = 0; col < options.columns; col++) {
+			const rect = createRect(
+				options.base.x + col * stepX,
+				options.base.y + row * stepY,
+				options.elementWidth,
+				options.elementHeight,
+			)
+			if (
+				canPlaceRect(
+					rect,
+					occupied,
+					options.spacing,
+					options.viewportRect,
+					options.requireInsideViewport,
+				)
+			) {
+				rects.push(rect)
+				occupied.push(rect)
+				if (rects.length === options.count) {
+					return rects
+				}
+			}
+		}
+	}
+	return null
+}
+
+/** 从已有结果矩形反推出网格左上角，用于没有来源图时延续同一组生成结果。 */
+function getGridOriginFromRects(rects: Rect[]): { x: number; y: number } | null {
+	if (rects.length === 0) return null
+	return rects.reduce(
+		(origin, rect) => ({
+			x: Math.min(origin.x, rect.x),
+			y: Math.min(origin.y, rect.y),
+		}),
+		{ x: rects[0].x, y: rects[0].y },
+	)
+}
+
+/**
+ * 围绕视口锚点螺旋扫描整组网格的原点。
+ * 这里要求整组 rects 同时可放置，避免一批生成结果被拆散到不同区域。
+ */
+function scanViewportGridOrigins(options: {
+	count: number
+	columns: number
+	elementWidth: number
+	elementHeight: number
+	obstacles: Rect[]
+	spacing: number
+	viewportRect: Rect
+	anchor: { x: number; y: number }
+	maxSearchRings: number
+	requireInsideViewport: boolean
+}): Rect[] | null {
+	const grid = getGridDimensions(
+		options.count,
+		options.columns,
+		options.elementWidth,
+		options.elementHeight,
+		options.spacing,
+	)
+	const stepX = options.elementWidth + options.spacing
+	const stepY = options.elementHeight + options.spacing
+	// 没有可靠来源图时，以当前视口锚点为中心向外搜索，让生成结果优先出现在用户正在看的区域。
+	for (const offset of buildSpiralOffsets(options.maxSearchRings)) {
+		const rects = createGridRects(
+			{
+				x: options.anchor.x + offset.dx * stepX - grid.width / 2,
+				y: options.anchor.y + offset.dy * stepY - grid.height / 2,
+			},
+			options.count,
+			options.columns,
+			options.elementWidth,
+			options.elementHeight,
+			options.spacing,
+		)
+		if (
+			rects.every((rect) =>
+				canPlaceRect(
+					rect,
+					options.obstacles,
+					options.spacing,
+					options.viewportRect,
+					options.requireInsideViewport,
+				),
+			)
+		) {
+			return rects
+		}
+	}
+	return null
+}
+
+/**
+ * 为插件生成结果计算批量网格落点。
+ * 搜索顺序：来源图右侧行优先补位 -> 来源图下方行优先补位 -> 视口锚点附近 -> 后端兼容的末行布局。
+ * 返回值是画布左上角坐标，调用方再按这些位置创建图片元素。
+ * @param obstacles - 障碍矩形
+ * @param options - 选项
+ * @param options.count - 生成数量
+ * @param options.elementWidth - 元素宽度
+ * @param options.elementHeight - 元素高度
+ * @param options.viewportRect - 视口区域
+ * @param options.sourceRect - 来源图矩形
+ * @param options.existingGridRects - 已有网格矩形（没有来源图时，同参数历史生成图的位置）
+ * @param options.anchor - 视口中心点
+ * @param options.spacing - 间距
+ * @param options.maxColumns - 最大列数
+ * @param options.maxSearchRings - 最大搜索圈数
+ * @returns 落点坐标
+ */
+export function findGeneratedMediaGridPositions(
+	obstacles: Rect[],
+	options: {
+		count: number
+		elementWidth: number
+		elementHeight: number
+		viewportRect: Rect
+		sourceRect?: Rect | null
+		existingGridRects?: Rect[]
+		anchor?: { x: number; y: number }
+		spacing?: number
+		maxColumns?: number
+		maxSearchRings?: number
+	},
+): Array<{ x: number; y: number }> {
+	const count = Math.max(1, Math.floor(options.count))
+	const spacing = options.spacing ?? AGENT_PLACEHOLDER_ELEMENT_SPACING
+	const maxColumns = Math.max(1, Math.floor(options.maxColumns ?? 4))
+	const maxSearchRings = Math.max(
+		0,
+		Math.floor(options.maxSearchRings ?? DEFAULT_VIEWPORT_SEARCH_RINGS),
+	)
+	const columns = resolveGridColumns({
+		count,
+		elementWidth: options.elementWidth,
+		spacing,
+		viewportWidth: options.viewportRect.width,
+		maxColumns,
+	})
+	const sourceColumns = maxColumns
+	// 视口中心点
+	const anchor = options.anchor ?? {
+		x: options.viewportRect.x + options.viewportRect.width / 2,
+		y: options.viewportRect.y + options.viewportRect.height / 2,
+	}
+
+	// 计算来源图右侧和下方的基点
+	const sourceRightBase = options.sourceRect
+		? {
+				x: options.sourceRect.x + options.sourceRect.width + spacing,
+				y: options.sourceRect.y,
+			}
+		: null
+	const sourceBottomBase = options.sourceRect
+		? {
+				x: options.sourceRect.x,
+				y: options.sourceRect.y + options.sourceRect.height + spacing,
+			}
+		: null
+
+	// 插件结果通常要和来源图做横向对比：先沿来源图右侧按行补位，单张连续生成也能继续补下一列。
+	// 来源图附近的网格不受当前 viewport 宽度截断，生成后会自动定位到新元素。
+	const buildSearchOptions = (
+		base: { x: number; y: number },
+		requireInsideViewport: boolean,
+	) => ({
+		base,
+		count,
+		columns: sourceColumns,
+		elementWidth: options.elementWidth,
+		elementHeight: options.elementHeight,
+		obstacles,
+		spacing,
+		viewportRect: options.viewportRect,
+		maxSearchRings,
+		requireInsideViewport,
+	})
+
+	// 优先扫描来源图右侧
+	const sourceRightRects =
+		sourceRightBase && scanRowMajorGridCells(buildSearchOptions(sourceRightBase, false))
+	if (sourceRightRects) return sourceRightRects.map(({ x, y }) => ({ x, y }))
+
+	// 优先扫描来源图下方
+	const sourceBottomRects =
+		sourceBottomBase && scanRowMajorGridCells(buildSearchOptions(sourceBottomBase, false))
+	if (sourceBottomRects) return sourceBottomRects.map(({ x, y }) => ({ x, y }))
+
+	// 没有来源图时，优先续接已有同组生成网格
+	const existingGridRects = options.existingGridRects ?? []
+	const existingGridOrigin = getGridOriginFromRects(existingGridRects)
+	if (!options.sourceRect && existingGridOrigin) {
+		// 外部引用图不在画布上时，连续生成应接在上一批同参数结果后面，而不是跟随新的视口中心跳走。
+		const existingGridPositions = scanRowMajorGridCells({
+			base: existingGridOrigin,
+			count,
+			columns: sourceColumns,
+			elementWidth: options.elementWidth,
+			elementHeight: options.elementHeight,
+			obstacles,
+			spacing,
+			viewportRect: options.viewportRect,
+			maxSearchRings,
+			requireInsideViewport: false,
+			minRows: Math.ceil((existingGridRects.length + count) / sourceColumns),
+		})
+		if (existingGridPositions) return existingGridPositions.map(({ x, y }) => ({ x, y }))
+	}
+
+	// 绕视口中心找一整组网格
+	const viewportInsideRects = scanViewportGridOrigins({
+		count,
+		columns,
+		elementWidth: options.elementWidth,
+		elementHeight: options.elementHeight,
+		obstacles,
+		spacing,
+		viewportRect: options.viewportRect,
+		anchor,
+		maxSearchRings,
+		requireInsideViewport: true,
+	})
+	if (viewportInsideRects) return viewportInsideRects.map(({ x, y }) => ({ x, y }))
+
+	// 超出视口时，继续向外搜索
+	const viewportOutsideRects = scanViewportGridOrigins({
+		count,
+		columns,
+		elementWidth: options.elementWidth,
+		elementHeight: options.elementHeight,
+		obstacles,
+		spacing,
+		viewportRect: options.viewportRect,
+		anchor,
+		maxSearchRings,
+		requireInsideViewport: false,
+	})
+	if (viewportOutsideRects) return viewportOutsideRects.map(({ x, y }) => ({ x, y }))
+
+	// 兜底保持和旧占位符策略一致，避免极端拥挤场景下找不到落点。
+	const fallback = findNextImageVideoPlaceholderPosition(obstacles, {
+		spacing,
+		maxPerRow: columns,
+	})
+	// 创建网格矩形
+	return createGridRects(
+		fallback,
+		count,
+		columns,
+		options.elementWidth,
+		options.elementHeight,
+		spacing,
+	).map(({ x, y }) => ({ x, y }))
+}

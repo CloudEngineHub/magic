@@ -295,6 +295,30 @@ export class ImageGeneratorTool extends BaseTool {
 		)
 	}
 
+	/** 暴露图片元素尺寸解析，供外部落点算法先计算占位框。 */
+	public resolveImageElementSize(
+		width?: number,
+		height?: number,
+	): { width: number; height: number } {
+		return this.getImageElementSize(width, height)
+	}
+
+	/** 按画布左上角坐标批量创建图片占位符；落点和视口聚焦由调用方控制。 */
+	public createImageElementsAtPositions(
+		positions: Array<{ x: number; y: number }>,
+		width?: number,
+		height?: number,
+	): string[] {
+		const imageSize = this.getImageElementSize(width, height)
+		return positions.map((position) =>
+			this.createImageElementAt(position.x, position.y, imageSize.width, imageSize.height, {
+				select: false,
+				ensureInViewport: false,
+				completeTask: false,
+			}),
+		)
+	}
+
 	private getImageElementSize(
 		width?: number,
 		height?: number,
