@@ -8,6 +8,7 @@ import type {
 } from "./canvasLayout"
 import {
 	SLIDES_TEMPLATE_CANVAS_MAX_SCALE,
+	SLIDES_TEMPLATE_CANVAS_DEFAULT_SCALE,
 	SLIDES_TEMPLATE_CANVAS_MIN_SCALE,
 	clampTemplateCanvasScale,
 } from "./canvasZoom"
@@ -48,7 +49,7 @@ export function useSlidesTemplateCanvasNavigation({
 	viewportInsetsRef,
 	viewportRef,
 }: UseSlidesTemplateCanvasNavigationInput) {
-	const [canvasScale, setCanvasScale] = useState(1)
+	const [canvasScale, setCanvasScale] = useState(SLIDES_TEMPLATE_CANVAS_DEFAULT_SCALE)
 	const hasAutoFittedRef = useRef(false)
 
 	const handleControlZoom = useCallback(
@@ -68,8 +69,8 @@ export function useSlidesTemplateCanvasNavigation({
 
 	const handleResetView = useCallback(() => {
 		stopAnimation()
-		scaleRef.current = 1
-		setCanvasScale(1)
+		scaleRef.current = SLIDES_TEMPLATE_CANVAS_DEFAULT_SCALE
+		setCanvasScale(SLIDES_TEMPLATE_CANVAS_DEFAULT_SCALE)
 		setCanvasOffset({ x: 0, y: 0 })
 	}, [scaleRef, setCanvasOffset, stopAnimation])
 
@@ -124,8 +125,8 @@ export function useSlidesTemplateCanvasNavigation({
 
 	useLayoutEffect(() => {
 		hasAutoFittedRef.current = false
-		scaleRef.current = 1
-		setCanvasScale(1)
+		scaleRef.current = SLIDES_TEMPLATE_CANVAS_DEFAULT_SCALE
+		setCanvasScale(SLIDES_TEMPLATE_CANVAS_DEFAULT_SCALE)
 	}, [resetKey, scaleRef])
 
 	useLayoutEffect(() => {
@@ -148,7 +149,7 @@ export function useSlidesTemplateCanvasNavigation({
 		}
 
 		const nextScale = Math.max(
-			1,
+			SLIDES_TEMPLATE_CANVAS_DEFAULT_SCALE,
 			Math.min(
 				MAX_SPARSE_CANVAS_SCALE,
 				(availableWidth * SPARSE_CANVAS_WIDTH_RATIO) / contentWidth,

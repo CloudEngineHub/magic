@@ -8,6 +8,7 @@ import SlidesTemplateCanvasLoopColumn, {
 	type SlidesTemplateCanvasColumnItem,
 } from "./SlidesTemplateCanvasLoopColumn"
 import { resolveSlidesTemplateCanvasIdleLoops } from "./canvasIdleLoop"
+import { SLIDES_TEMPLATE_CANVAS_DEFAULT_SCALE } from "./canvasZoom"
 
 interface SlidesTemplateCanvasItemsLayerProps {
 	canvasItems: Array<TemplateCanvasItem<SlidesTemplateCanvasTile>>
@@ -27,8 +28,8 @@ interface SlidesTemplateCanvasItemsLayerProps {
 }
 
 const contentStyle = {
-	transform: "translate3d(0px, 0px, 0) scale(1)",
-	"--slides-template-canvas-action-scale": "1",
+	transform: `translate3d(0px, 0px, 0) scale(${SLIDES_TEMPLATE_CANVAS_DEFAULT_SCALE})`,
+	"--slides-template-canvas-action-scale": String(1 / SLIDES_TEMPLATE_CANVAS_DEFAULT_SCALE),
 } as CSSProperties
 
 function SlidesTemplateCanvasItemsLayer({

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest"
 import {
+	SLIDES_TEMPLATE_CANVAS_DEFAULT_SCALE,
 	SLIDES_TEMPLATE_CANVAS_MAX_SCALE,
 	SLIDES_TEMPLATE_CANVAS_MIN_SCALE,
 	clampTemplateCanvasScale,
@@ -12,6 +13,10 @@ describe("slides template canvas zoom", () => {
 		expect(SLIDES_TEMPLATE_CANVAS_MIN_SCALE).toBe(0.6)
 		expect(clampTemplateCanvasScale(0.1)).toBe(SLIDES_TEMPLATE_CANVAS_MIN_SCALE)
 		expect(getNextTemplateCanvasScale(1, 10_000)).toBe(SLIDES_TEMPLATE_CANVAS_MIN_SCALE)
+	})
+
+	it("uses 80% as the default canvas scale", () => {
+		expect(SLIDES_TEMPLATE_CANVAS_DEFAULT_SCALE).toBe(0.8)
 	})
 
 	it("keeps the existing maximum zoom limit", () => {

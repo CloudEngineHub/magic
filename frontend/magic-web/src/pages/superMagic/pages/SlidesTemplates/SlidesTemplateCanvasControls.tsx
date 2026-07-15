@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next"
 import { Button } from "@/components/shadcn-ui/button"
 import { cn } from "@/lib/utils"
 import type { TemplateCanvasDirection } from "./canvasLayout"
+import { SLIDES_TEMPLATE_CANVAS_DEFAULT_SCALE } from "./canvasZoom"
 
 interface SlidesTemplateCanvasControlsProps {
 	canZoomIn: boolean
@@ -115,7 +116,7 @@ export default function SlidesTemplateCanvasControls({
 					variant="ghost"
 					className={cn(
 						"rounded-lg text-white/75 hover:bg-white/10 hover:text-white",
-						scale === 1 && "text-white/45",
+						scale === SLIDES_TEMPLATE_CANVAS_DEFAULT_SCALE && "text-white/45",
 					)}
 					aria-label={t("playbook.edit.presets.form.resetCanvasView")}
 					onClick={onReset}
