@@ -474,6 +474,13 @@ function MicroAppPageInner({ projectId }: { projectId: string }) {
 					open={publishDialogOpen}
 					projectId={selectedProject?.id}
 					projectName={selectedProject?.project_name}
+					onProjectNameChange={(projectName) => {
+						if (!selectedProject) return
+						conversation.setSelectedProject({
+							...selectedProject,
+							project_name: projectName,
+						})
+					}}
 					onOpenChange={setPublishDialogOpen}
 				/>
 				{CollaboratorUpdatePanel}

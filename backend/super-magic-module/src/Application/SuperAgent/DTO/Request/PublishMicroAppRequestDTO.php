@@ -11,6 +11,8 @@ use App\Infrastructure\Core\AbstractRequestDTO;
 
 class PublishMicroAppRequestDTO extends AbstractRequestDTO
 {
+    public string $projectName = '';
+
     public int $shareType = 0;
 
     public ?string $shareRange = null;
@@ -18,6 +20,16 @@ class PublishMicroAppRequestDTO extends AbstractRequestDTO
     public array $targetIds = [];
 
     public ?string $password = null;
+
+    public function getProjectName(): string
+    {
+        return $this->projectName;
+    }
+
+    public function setProjectName(?string $projectName): void
+    {
+        $this->projectName = trim($projectName ?? '');
+    }
 
     public function getShareType(): int
     {
@@ -62,6 +74,7 @@ class PublishMicroAppRequestDTO extends AbstractRequestDTO
     protected static function getHyperfValidationRules(): array
     {
         return [
+            'project_name' => 'required|string|max:100|regex:/.*\\S.*/u',
             'share_type' => 'required|integer|in:2,4,5',
             'share_range' => 'required_if:share_type,2|nullable|string|in:all,designated',
             'target_ids' => 'nullable|array',
@@ -74,6 +87,8 @@ class PublishMicroAppRequestDTO extends AbstractRequestDTO
     protected static function getHyperfValidationMessage(): array
     {
         return [
+            'project_name.required' => 'Micro app name is required',
+            'project_name.regex' => 'Micro app name cannot be blank',
             'share_type.required' => 'Share type is required',
             'share_type.in' => 'Share type must be 2, 4, or 5',
             'share_range.required_if' => 'Share range is required for team share',

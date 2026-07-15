@@ -22,13 +22,16 @@ use Dtyq\SuperMagic\Domain\SuperAgent\Entity\ProjectEntity;
 use Dtyq\SuperMagic\Domain\SuperAgent\Entity\ValueObject\MicroAppPublishStatus;
 use Dtyq\SuperMagic\Domain\SuperAgent\Entity\ValueObject\ProjectMode;
 use Dtyq\SuperMagic\Domain\SuperAgent\Entity\ValueObject\WorkspaceType;
+use Dtyq\SuperMagic\Domain\SuperAgent\Event\ProjectUpdatedEvent;
 use Dtyq\SuperMagic\Domain\SuperAgent\Repository\Facade\MicroAppRepositoryInterface;
 use Dtyq\SuperMagic\Domain\SuperAgent\Repository\Facade\ProjectRepositoryInterface;
 use Dtyq\SuperMagic\Domain\SuperAgent\Repository\Facade\WorkspaceRepositoryInterface;
+use Dtyq\SuperMagic\Domain\SuperAgent\Service\ProjectDomainService;
 use Dtyq\SuperMagic\ErrorCode\SuperAgentErrorCode;
 use Dtyq\SuperMagic\Infrastructure\Utils\ShareUrlBuilder;
 use Dtyq\SuperMagic\Interfaces\Share\DTO\Request\CreateShareRequestDTO;
 use Hyperf\DbConnection\Db;
+use Psr\EventDispatcher\EventDispatcherInterface;
 use Throwable;
 
 class MicroAppProjectAppService extends AbstractAppService
@@ -40,6 +43,8 @@ class MicroAppProjectAppService extends AbstractAppService
         private readonly ResourceShareAppService $resourceShareAppService,
         private readonly ResourceShareDomainService $resourceShareDomainService,
         private readonly ShareUrlBuilder $shareUrlBuilder,
+        private readonly ProjectDomainService $projectDomainService,
+        private readonly EventDispatcherInterface $eventDispatcher,
     ) {
     }
 
@@ -47,6 +52,12 @@ class MicroAppProjectAppService extends AbstractAppService
     {
         $authorization = $requestContext->getUserAuthorization();
         $project = $this->getValidatedMicroAppProject($projectId, $authorization->getOrganizationCode());
+        $this->getAccessibleProjectWithManager(
+            $projectId,
+            $authorization->getId(),
+            $authorization->getOrganizationCode()
+        );
+        $projectNameChanged = $project->getProjectName() !== $requestDTO->getProjectName();
 
         $record = $this->microAppRepository->findByProjectId($projectId);
         if ($record !== null && $record->getOrganizationCode() !== $authorization->getOrganizationCode()) {
@@ -62,25 +73,32 @@ class MicroAppProjectAppService extends AbstractAppService
                 ->setUserId($authorization->getId());
         }
 
-        $shareDTO = CreateShareRequestDTO::fromArray([
-            'resource_id' => $record->getResourceId(),
-            'resource_type' => ResourceType::Project->value,
-            'resource_name' => $project->getProjectName(),
-            'project_id' => (string) $projectId,
-            'share_type' => $requestDTO->getShareType(),
-            'share_range' => $requestDTO->getShareType() === ShareAccessType::TeamShare->value ? $requestDTO->getShareRange() : null,
-            'target_ids' => $requestDTO->getShareType() === ShareAccessType::TeamShare->value && $requestDTO->getShareRange() === 'designated'
-                ? $requestDTO->getTargetIds()
-                : [],
-            'password' => $requestDTO->getShareType() === ShareAccessType::PasswordProtected->value ? $requestDTO->getPassword() : null,
-            'share_project' => true,
-            'expire_days' => null,
-            'extra' => [],
-            'show_share_url' => true,
-        ]);
-
         Db::beginTransaction();
         try {
+            if ($projectNameChanged) {
+                $project
+                    ->setProjectName($requestDTO->getProjectName())
+                    ->setUpdatedUid($authorization->getId())
+                    ->setUpdatedAt($now);
+                $project = $this->projectDomainService->saveProjectEntity($project);
+            }
+
+            $shareDTO = CreateShareRequestDTO::fromArray([
+                'resource_id' => $record->getResourceId(),
+                'resource_type' => ResourceType::Project->value,
+                'resource_name' => $project->getProjectName(),
+                'project_id' => (string) $projectId,
+                'share_type' => $requestDTO->getShareType(),
+                'share_range' => $requestDTO->getShareType() === ShareAccessType::TeamShare->value ? $requestDTO->getShareRange() : null,
+                'target_ids' => $requestDTO->getShareType() === ShareAccessType::TeamShare->value && $requestDTO->getShareRange() === 'designated'
+                    ? $requestDTO->getTargetIds()
+                    : [],
+                'password' => $requestDTO->getShareType() === ShareAccessType::PasswordProtected->value ? $requestDTO->getPassword() : null,
+                'share_project' => true,
+                'expire_days' => null,
+                'extra' => [],
+                'show_share_url' => true,
+            ]);
             $shareItem = $this->resourceShareAppService->createShare($authorization, $shareDTO);
             $accessUrl = $this->shareUrlBuilder->buildMicroAppShareUrl($record->getResourceId());
 
@@ -102,13 +120,17 @@ class MicroAppProjectAppService extends AbstractAppService
             throw $e;
         }
 
-        return $this->formatPublishRecord($record);
+        if ($projectNameChanged) {
+            $this->eventDispatcher->dispatch(new ProjectUpdatedEvent($project, $authorization));
+        }
+
+        return $this->formatPublishRecord($record, $project->getProjectName());
     }
 
     public function unpublish(RequestContext $requestContext, int $projectId): array
     {
         $authorization = $requestContext->getUserAuthorization();
-        $this->getValidatedMicroAppProject($projectId, $authorization->getOrganizationCode());
+        $project = $this->getValidatedMicroAppProject($projectId, $authorization->getOrganizationCode());
 
         $record = $this->microAppRepository->findByProjectId($projectId);
         if ($record === null || $record->getOrganizationCode() !== $authorization->getOrganizationCode()) {
@@ -132,7 +154,7 @@ class MicroAppProjectAppService extends AbstractAppService
             throw $e;
         }
 
-        return $this->formatPublishRecord($record);
+        return $this->formatPublishRecord($record, $project->getProjectName());
     }
 
     public function publishedList(RequestContext $requestContext, PublishedMicroAppListRequestDTO $requestDTO): array
@@ -170,7 +192,7 @@ class MicroAppProjectAppService extends AbstractAppService
 
             $items[] = [
                 'project' => $this->formatProject($project),
-                'publish' => $this->formatPublishRecord($record),
+                'publish' => $this->formatPublishRecord($record, $project->getProjectName()),
             ];
         }
 
@@ -231,10 +253,11 @@ class MicroAppProjectAppService extends AbstractAppService
         }
     }
 
-    private function formatPublishRecord(MicroAppEntity $record): array
+    private function formatPublishRecord(MicroAppEntity $record, ?string $projectName = null): array
     {
         return [
             'project_id' => $record->getProjectId(),
+            'project_name' => $projectName,
             'resource_id' => $record->getResourceId(),
             'share_id' => $record->getShareId(),
             'share_code' => $record->getShareCode(),

@@ -29,10 +29,12 @@ interface MicroAppPublishDialogProps {
 	open: boolean
 	projectId?: string
 	projectName?: string
+	onProjectNameChange?: (projectName: string) => void
 	onOpenChange: (open: boolean) => void
 }
 
 interface MicroAppPublishFormState {
+	projectName: string
 	shareType: MicroAppPublishShareType
 	shareRange: MicroAppPublishShareRange
 	targets: MicroAppPublishTarget[]
@@ -45,8 +47,9 @@ const MICRO_APP_PUBLISH_TYPES = [
 	ShareType.PasswordProtected,
 ]
 
-function createDefaultFormState(): MicroAppPublishFormState {
+function createDefaultFormState(projectName = ""): MicroAppPublishFormState {
 	return {
+		projectName,
 		shareType: ShareType.Organization,
 		shareRange: "all",
 		targets: [],
@@ -58,6 +61,7 @@ export function buildMicroAppPublishPayload(
 	formState: MicroAppPublishFormState,
 ): PublishMicroAppProjectBody {
 	const payload: PublishMicroAppProjectBody = {
+		project_name: formState.projectName.trim(),
 		share_type: formState.shareType,
 	}
 
@@ -190,8 +194,10 @@ async function loadPublishedMicroAppProject(projectId: string, projectName?: str
 
 function createFormStateFromPublishedItem(
 	item: PublishedMicroAppProjectItem,
+	projectName?: string,
 ): MicroAppPublishFormState {
 	return {
+		projectName: item.project_name || projectName || "",
 		shareType: item.share_type,
 		shareRange: item.share_range || "all",
 		targets: item.target_ids || [],
@@ -233,6 +239,7 @@ export default function MicroAppPublishDialog({
 	open,
 	projectId,
 	projectName,
+	onProjectNameChange,
 	onOpenChange,
 }: MicroAppPublishDialogProps) {
 	const { t } = useTranslation("super")
@@ -265,14 +272,14 @@ export default function MicroAppPublishDialog({
 				setPublishedItem(matchedItem)
 				setFormState(
 					matchedItem
-						? createFormStateFromPublishedItem(matchedItem)
-						: createDefaultFormState(),
+						? createFormStateFromPublishedItem(matchedItem, projectName)
+						: createDefaultFormState(projectName),
 				)
 			} catch (error) {
 				if (ignore) return
 				console.error("Failed to load micro app publish info:", error)
 				setPublishedItem(null)
-				setFormState(createDefaultFormState())
+				setFormState(createDefaultFormState(projectName))
 				magicToast.error(t("microAppPage.publish.loadFailed"))
 			} finally {
 				if (!ignore) setLoading(false)
@@ -305,6 +312,13 @@ export default function MicroAppPublishDialog({
 						: prev.password,
 			}
 		})
+	}, [])
+
+	const handleProjectNameChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
+		setFormState((prev) => ({
+			...prev,
+			projectName: event.target.value,
+		}))
 	}, [])
 
 	const handleShareRangeChange = useCallback((shareRange: ShareRange) => {
@@ -352,17 +366,33 @@ export default function MicroAppPublishDialog({
 				: ""
 		clipboard.writeText(
 			buildMicroAppShareText({
-				projectName,
+				projectName: formState.projectName.trim() || projectName,
 				accessUrl,
 				password,
 				passwordLabel: t("microAppPage.publish.password"),
 			}),
 		)
 		magicToast.success(t("microAppPage.publish.shareTextCopySuccess"))
-	}, [accessUrl, projectName, publishedItem?.password, publishedItem?.share_type, t])
+	}, [
+		accessUrl,
+		formState.projectName,
+		projectName,
+		publishedItem?.password,
+		publishedItem?.share_type,
+		t,
+	])
 
 	const handleSave = useCallback(async () => {
 		if (!projectId || saving) return
+		const nextProjectName = formState.projectName.trim()
+		if (!nextProjectName) {
+			magicToast.error(t("microAppPage.publish.projectNameRequired"))
+			return
+		}
+		if (nextProjectName.length > 100) {
+			magicToast.error(t("microAppPage.publish.projectNameTooLong"))
+			return
+		}
 		if (formState.shareType === ShareType.PasswordProtected) {
 			const passwordLength = formState.password.trim().length
 			if (passwordLength < 4 || passwordLength > 32) {
@@ -378,14 +408,18 @@ export default function MicroAppPublishDialog({
 				buildMicroAppPublishPayload(formState),
 			)
 			const nextItem = getPublishedItemFromResponse(response)
+			const savedProjectName = nextItem.project_name?.trim() || nextProjectName
 			setPublishedItem({
 				...nextItem,
 				project_id: nextItem.project_id || projectId,
+				project_name: savedProjectName,
 				share_type: nextItem.share_type || formState.shareType,
 				share_range: nextItem.share_range || formState.shareRange,
 				target_ids: nextItem.target_ids || formState.targets,
 				password: nextItem.password || formState.password,
 			})
+			setFormState((prev) => ({ ...prev, projectName: savedProjectName }))
+			onProjectNameChange?.(savedProjectName)
 			magicToast.success(t("microAppPage.publish.saveSuccess"))
 		} catch (error) {
 			console.error("Failed to publish micro app:", error)
@@ -393,7 +427,7 @@ export default function MicroAppPublishDialog({
 		} finally {
 			setSaving(false)
 		}
-	}, [formState, projectId, saving, t])
+	}, [formState, onProjectNameChange, projectId, saving, t])
 
 	const handleUnpublish = useCallback(() => {
 		if (!projectId || unpublishing) return
@@ -409,7 +443,7 @@ export default function MicroAppPublishDialog({
 				try {
 					await SuperMagicApi.unpublishMicroAppProject(projectId)
 					setPublishedItem(null)
-					setFormState(createDefaultFormState())
+					setFormState(createDefaultFormState(formState.projectName))
 					magicToast.success(t("microAppPage.publish.unpublishSuccess"))
 				} catch (error) {
 					console.error("Failed to unpublish micro app:", error)
@@ -419,7 +453,7 @@ export default function MicroAppPublishDialog({
 				}
 			},
 		})
-	}, [projectId, t, unpublishing])
+	}, [formState.projectName, projectId, t, unpublishing])
 
 	return (
 		<MagicModal
@@ -432,9 +466,17 @@ export default function MicroAppPublishDialog({
 		>
 			<div className="flex flex-col gap-4" data-testid="micro-app-publish-dialog">
 				<div className="rounded-lg border border-border bg-muted/30 p-3">
-					<p className="truncate text-sm font-medium text-foreground">
-						{projectName || t("project.unnamedProject")}
-					</p>
+					<Label htmlFor="micro-app-publish-project-name">
+						{t("microAppPage.publish.projectName")}
+					</Label>
+					<Input
+						id="micro-app-publish-project-name"
+						value={formState.projectName}
+						onChange={handleProjectNameChange}
+						maxLength={100}
+						className="mt-2 h-9 bg-background"
+						data-testid="micro-app-publish-project-name"
+					/>
 					<p className="mt-1 text-xs text-muted-foreground">
 						{t("microAppPage.publish.description")}
 					</p>

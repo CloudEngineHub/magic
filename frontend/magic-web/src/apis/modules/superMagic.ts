@@ -87,6 +87,7 @@ export interface MicroAppPublishTarget {
 }
 
 export interface PublishMicroAppProjectBody {
+	project_name: string
 	share_type: MicroAppPublishShareType
 	share_range?: MicroAppPublishShareRange
 	target_ids?: MicroAppPublishTarget[]

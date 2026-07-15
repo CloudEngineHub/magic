@@ -135,12 +135,17 @@ vi.mock("@/pages/superMagic/components/Share/ShareFields", async () => {
 	}
 })
 
-function renderDialog() {
+function renderDialog({
+	onProjectNameChange,
+}: {
+	onProjectNameChange?: (projectName: string) => void
+} = {}) {
 	return render(
 		<MicroAppPublishDialog
 			open
 			projectId="project-1"
 			projectName="Demo App"
+			onProjectNameChange={onProjectNameChange}
 			onOpenChange={vi.fn()}
 		/>,
 	)
@@ -166,24 +171,28 @@ describe("MicroAppPublishDialog", () => {
 	it("builds publish payloads for supported share types", () => {
 		expect(
 			buildMicroAppPublishPayload({
+				projectName: "  Demo App  ",
 				shareType: ShareType.Organization,
 				shareRange: "all",
 				targets: [{ target_type: "User", target_id: "usi_001" }],
 				password: "123456",
 			}),
 		).toEqual({
+			project_name: "Demo App",
 			share_type: ShareType.Organization,
 			share_range: "all",
 		})
 
 		expect(
 			buildMicroAppPublishPayload({
+				projectName: "Demo App",
 				shareType: ShareType.Organization,
 				shareRange: "designated",
 				targets: [{ target_type: "User", target_id: "usi_001" }],
 				password: "123456",
 			}),
 		).toEqual({
+			project_name: "Demo App",
 			share_type: ShareType.Organization,
 			share_range: "designated",
 			target_ids: [{ target_type: "User", target_id: "usi_001" }],
@@ -191,23 +200,27 @@ describe("MicroAppPublishDialog", () => {
 
 		expect(
 			buildMicroAppPublishPayload({
+				projectName: "Demo App",
 				shareType: ShareType.Public,
 				shareRange: "all",
 				targets: [],
 				password: "123456",
 			}),
 		).toEqual({
+			project_name: "Demo App",
 			share_type: ShareType.Public,
 		})
 
 		expect(
 			buildMicroAppPublishPayload({
+				projectName: "Demo App",
 				shareType: ShareType.PasswordProtected,
 				shareRange: "all",
 				targets: [],
 				password: "  abcd  ",
 			}),
 		).toEqual({
+			project_name: "Demo App",
 			share_type: ShareType.PasswordProtected,
 			password: "abcd",
 		})
@@ -243,6 +256,7 @@ describe("MicroAppPublishDialog", () => {
 
 		await waitFor(() => {
 			expect(mocks.publishMicroAppProject).toHaveBeenCalledWith("project-1", {
+				project_name: "Demo App",
 				share_type: ShareType.Organization,
 				share_range: "designated",
 				target_ids: [{ target_type: "User", target_id: "usi_001" }],
@@ -260,6 +274,7 @@ describe("MicroAppPublishDialog", () => {
 
 		await waitFor(() => {
 			expect(mocks.publishMicroAppProject).toHaveBeenCalledWith("project-1", {
+				project_name: "Demo App",
 				share_type: ShareType.Public,
 			})
 		})
@@ -278,9 +293,30 @@ describe("MicroAppPublishDialog", () => {
 
 		await waitFor(() => {
 			expect(mocks.publishMicroAppProject).toHaveBeenCalledWith("project-1", {
+				project_name: "Demo App",
 				share_type: ShareType.PasswordProtected,
 				password: "123456",
 			})
+		})
+	})
+
+	it("publishes the edited project name and notifies the page", async () => {
+		const onProjectNameChange = vi.fn()
+		renderDialog({ onProjectNameChange })
+
+		await screen.findByTestId("share-type-field")
+		fireEvent.change(screen.getByTestId("micro-app-publish-project-name"), {
+			target: { value: "库存管理助手" },
+		})
+		fireEvent.click(screen.getByTestId("micro-app-publish-save"))
+
+		await waitFor(() => {
+			expect(mocks.publishMicroAppProject).toHaveBeenCalledWith("project-1", {
+				project_name: "库存管理助手",
+				share_type: ShareType.Organization,
+				share_range: "all",
+			})
+			expect(onProjectNameChange).toHaveBeenCalledWith("库存管理助手")
 		})
 	})
 

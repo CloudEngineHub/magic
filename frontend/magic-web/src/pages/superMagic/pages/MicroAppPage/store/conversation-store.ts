@@ -28,6 +28,10 @@ export class AppConversationStore {
 		this.topicStore.setSelectedTopic(targetTopic || topics[0])
 	}
 
+	setSelectedProject(project: ProjectListItem | null) {
+		this.selectedProject = project
+	}
+
 	async loadProjectContext(projectId: string): Promise<void> {
 		const project = await SuperMagicApi.getProjectDetail({ id: projectId })
 		if (!project) {
