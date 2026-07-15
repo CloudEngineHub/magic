@@ -10,11 +10,11 @@ on:
       - 'backend/easy-dingtalk/**'
       - 'backend/flow-expr-engine/**'
       - 'backend/rule-engine-core/**'
-      - 'backend/sandbox/**'
       - 'backend/sandbox-components/**'
       - 'backend/sdk-base/**'
       - 'backend/super-magic-module/**'
       - 'backend/task-scheduler/**'
+      - 'thirdparty/PHPSandbox/**'
       - 'thirdparty/tiptap/**'
   workflow_dispatch:
     inputs:
