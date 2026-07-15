@@ -65,6 +65,8 @@ class MagicPermissionEnumTest extends HttpTestCase
         $this->assertContains('platform.agent.official.query', $permissionKeys);
         $this->assertContains('platform.agent.review.edit', $permissionKeys);
         $this->assertContains('platform.skill.market.edit', $permissionKeys);
+        $this->assertContains('platform.setting.slides_template.query', $permissionKeys);
+        $this->assertContains('platform.setting.slides_template.edit', $permissionKeys);
         $this->assertNotContains('platform.agent.official.edit', $permissionKeys);
     }
 
@@ -81,6 +83,8 @@ class MagicPermissionEnumTest extends HttpTestCase
         $this->assertTrue($this->permission->isValidPermission('platform.agent.official.query'));
         $this->assertTrue($this->permission->isValidPermission('platform.agent.review.edit'));
         $this->assertTrue($this->permission->isValidPermission('platform.skill.market.query'));
+        $this->assertTrue($this->permission->isValidPermission('platform.setting.slides_template.query'));
+        $this->assertTrue($this->permission->isValidPermission('platform.setting.slides_template.edit'));
         $this->assertFalse($this->permission->isValidPermission('admin.ai.model_management.query'));
         $this->assertFalse($this->permission->isValidPermission('workspace.ai.model_management.manage'));
         $this->assertFalse($this->permission->isValidPermission('platform.agent.official.edit'));
@@ -162,11 +166,22 @@ class MagicPermissionEnumTest extends HttpTestCase
             MagicResourceEnum::PLATFORM_SETTING_APPLICATION->value,
             MagicOperationEnum::QUERY->value
         );
+        $slidesTemplateQueryPermission = $this->permission->buildPermission(
+            MagicResourceEnum::PLATFORM_SLIDES_TEMPLATE->value,
+            MagicOperationEnum::QUERY->value
+        );
+        $slidesTemplateEditPermission = $this->permission->buildPermission(
+            MagicResourceEnum::PLATFORM_SLIDES_TEMPLATE->value,
+            MagicOperationEnum::EDIT->value
+        );
 
         $this->assertTrue($this->containsPermissionKey($tree, 'menu.platform_management'));
         $this->assertTrue($this->containsPermissionKey($tree, 'menu.platform_management.platform_console_management'));
         $this->assertTrue($this->containsPermissionKey($tree, 'menu.platform_management.platform_console_management.application_menu'));
         $this->assertTrue($this->containsPermissionKey($tree, $applicationQueryPermission));
+        $this->assertTrue($this->containsPermissionKey($tree, 'menu.platform_management.platform_console_management.slides_template'));
+        $this->assertTrue($this->containsPermissionKey($tree, $slidesTemplateQueryPermission));
+        $this->assertTrue($this->containsPermissionKey($tree, $slidesTemplateEditPermission));
     }
 
     /**

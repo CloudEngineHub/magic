@@ -72,6 +72,7 @@ enum MagicResourceEnum: string
     case PLATFORM_SETTING_PLATFORM_INFO = 'platform.setting.platform_info'; # 平台管理 - 系统设置 - 平台信息
     case PLATFORM_SETTING_MAINTENANCE = 'platform.setting.maintenance'; # 平台管理 - 系统信息 - 维护管理
     case PLATFORM_SETTING_APPLICATION = 'platform.setting.application'; # 平台管理 - 系统设置 - 应用菜单
+    case PLATFORM_SLIDES_TEMPLATE = 'platform.setting.slides_template'; # 平台管理 - 系统设置 - 幻灯片模板
     case PLATFORM_ORGANIZATION_LIST = 'platform.organization.list'; # 平台管理 - 组织管理 - 组织列表
     case PLATFORM_USER_LIST = 'platform.organization.user_list'; # 平台管理 - 组织管理 - 平台用户列表
     case WORKSPACE_ADMIN_AI_AGENT = 'workspace.ai.agent_management'; # AI管理-数字员工
@@ -129,6 +130,7 @@ enum MagicResourceEnum: string
             self::PLATFORM_SETTING_PLATFORM_INFO => 'permission.resource.platform_setting_platform_info',
             self::PLATFORM_SETTING_MAINTENANCE => 'permission.resource.platform_setting_maintenance',
             self::PLATFORM_SETTING_APPLICATION => 'permission.resource.platform_setting_application',
+            self::PLATFORM_SLIDES_TEMPLATE => 'permission.resource.platform_slides_template',
             self::PLATFORM_ORGANIZATION => 'permission.resource.platform_organization',
             self::PLATFORM_ORGANIZATION_LIST => 'permission.resource.platform_organization_list',
             self::PLATFORM_USER_LIST => 'permission.resource.platform_user_list',
@@ -192,6 +194,7 @@ enum MagicResourceEnum: string
             self::PLATFORM_SETTING_PLATFORM_INFO => self::PLATFORM_SETTING,
             self::PLATFORM_SETTING_MAINTENANCE => self::PLATFORM_SETTING,
             self::PLATFORM_SETTING_APPLICATION => self::PLATFORM_SETTING,
+            self::PLATFORM_SLIDES_TEMPLATE => self::PLATFORM_SETTING,
             self::PLATFORM_ORGANIZATION_LIST => self::PLATFORM_ORGANIZATION,
             self::PLATFORM_USER_LIST => self::PLATFORM_ORGANIZATION,
         };

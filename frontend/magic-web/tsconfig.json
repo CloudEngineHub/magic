@@ -4,17 +4,13 @@
 		"baseUrl": ".",
 		"isolatedModules": true,
 		"jsx": "react-jsx",
-
 		"lib": ["ES2022", "DOM", "DOM.Iterable", "WebWorker"],
 		"module": "ESNext",
-		/* Bundler mode */
 		"moduleResolution": "bundler",
 		"noEmit": true,
 		"noFallthroughCasesInSwitch": true,
-
 		"noUnusedLocals": true,
 		"noUnusedParameters": true,
-		/* alias */
 		"paths": {
 			"@/*": ["./src/*"],
 			"@admin-components": ["./packages/magic-admin/components/index.ts"],
@@ -46,17 +42,14 @@
 			"@dtyq/x-markdown/*": ["./packages/x-markdown/src/*"],
 			"@enterprise/*": ["./enterprise/src/*"],
 			"@magic-web/html2image": ["./packages/html2image/src/index.ts"],
+			"@magic-web/html2pdf": ["./packages/html2pdf/src/index.ts"],
 			"@magic/html2pptx": ["./packages/html2pptx/src/index.ts"]
 		},
 		"resolveJsonModule": true,
 		"skipLibCheck": true,
-
-		/* Linting */
 		"strict": true,
 		"target": "ES2020",
-		/* type */
 		"typeRoots": ["./types"],
-
 		"useDefineForClassFields": true
 	},
 	"exclude": [
@@ -79,5 +72,12 @@
 		"vite/**/*.ts",
 		"enterprise/src/Demo.tsx"
 	],
-	"references": [{ "path": "./tsconfig.node.json" }, { "path": "./tsconfig.test.json" }]
+	"references": [
+		{
+			"path": "./tsconfig.node.json"
+		},
+		{
+			"path": "./tsconfig.test.json"
+		}
+	]
 }

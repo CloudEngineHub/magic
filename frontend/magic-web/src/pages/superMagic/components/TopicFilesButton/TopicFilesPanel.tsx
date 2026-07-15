@@ -516,7 +516,7 @@ const TopicFilesPanel = forwardRef<TopicFilesPanelRef, TopicFilesPanelProps>(
 									searchValue={rawSearchValue}
 									onSearchChange={handleSearchChange}
 									onSearchCommit={handleSearchCommit}
-							onClose={handleCloseSearch}
+									onClose={handleCloseSearch}
 									className="duration-200 animate-in fade-in"
 								/>
 							) : isSelectMode ? (

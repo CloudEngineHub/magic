@@ -872,6 +872,19 @@
 				"unknownError": "未知错误",
 				"untitledPost": "未命名帖子"
 			},
+			"coverGeneration": {
+				"prompt": {
+					"heroCover": "21:9 横向封面（heroCover）",
+					"instruction": "先读取 post.json 和文章 HTML。仅使用 generate_image 生成本次缺少的封面，视觉风格需要与文章内容一致；将图片保存到当前文章的 assets 目录，并更新 post.json 中对应的 heroCover 或 thumbnailCover 路径。heroCover 使用 21:9，thumbnailCover 使用 1:1。不要覆盖本次未要求生成的已有封面。",
+					"metadata": "标题：{{title}}\n需要生成：{{coverTypes}}",
+					"opening": "加载并执行 self-media-composer Skill，为 {{mention}} 生成缺少的微信公众号封面。",
+					"thumbnailCover": "1:1 方形封面（thumbnailCover）",
+					"topicName": "[生成封面] {{title}}"
+				},
+				"startFailed": "封面生成任务启动失败",
+				"startFailedWithReason": "封面生成任务启动失败：{{reason}}",
+				"started": "已创建封面生成任务"
+			},
 			"edit": {
 				"addArticleFileToChat": "添加文章文件到输入框",
 				"addCurrentPageToChat": "添加本卡片到当前对话",
@@ -945,11 +958,20 @@
 					"copySuccess": "HTML 已复制",
 					"coverDescription": "将方形封面和横向封面拼接成一张图片，适合上传到公众号素材。",
 					"coverTitle": "封面拼图",
+					"emptyDescription": "根据文章标题和正文，自动生成 1:1 方形封面和 21:9 横向封面。",
+					"emptyTitle": "还没有封面图片",
 					"exportCover": "导出封面图",
+					"generateBoth": "生成封面",
+					"generateHorizontal": "生成横向封面",
+					"generateSquare": "生成方形封面",
+					"generating": "正在创建任务...",
 					"horizontalCover": "横向封面",
 					"htmlCopied": "已复制",
 					"htmlDescription": "复制处理后的文章 HTML，可直接粘贴到微信公众号编辑器。",
 					"htmlTitle": "公众号 HTML",
+					"missingHorizontalTitle": "缺少 21:9 横向封面",
+					"missingSquareTitle": "缺少 1:1 方形封面",
+					"partialDescription": "生成缺少的图片后即可导出完整封面拼图。",
 					"squareCover": "方形封面"
 				}
 			},

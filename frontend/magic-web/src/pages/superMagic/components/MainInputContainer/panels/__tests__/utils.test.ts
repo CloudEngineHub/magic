@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 import { getPromptRichTextPlainText, serializePromptRichTextLocaleValue } from "../promptRichText"
-import { buildConcatenatedPresetContent } from "../utils"
+import { buildConcatenatedPresetContent, hasSelectableOptions } from "../utils"
 import type { FieldItem } from "../types"
 
 function expectPresetContentText(fields: FieldItem[], locale: string, expected: string) {
@@ -105,6 +105,40 @@ describe("MainInputContainer panel utils", () => {
 		expectPresetContentText(fields, "en_US", "Lighting: soft.")
 	})
 
+	it("uses a localized preset value without changing the stable option value", () => {
+		const fields: FieldItem[] = [
+			{
+				data_key: "style",
+				label: { zh_CN: "模板", en_US: "Preset" },
+				current_value: "PPT-mobile-app-feature-launch-plan",
+				options: [
+					{
+						value: "PPT-mobile-app-feature-launch-plan",
+						preset_value: {
+							zh_CN: "移动应用功能发布计划（PPT-mobile-app-feature-launch-plan）",
+							en_US: "Mobile App Feature Launch Plan (PPT-mobile-app-feature-launch-plan)",
+						},
+					},
+				],
+				preset_content: {
+					zh_CN: "使用 PPT 模板：{preset_value}",
+					en_US: "Use slide template: {preset_value}",
+				},
+			},
+		]
+
+		expectPresetContentText(
+			fields,
+			"zh_CN",
+			"使用 PPT 模板：移动应用功能发布计划（PPT-mobile-app-feature-launch-plan）。",
+		)
+		expectPresetContentText(
+			fields,
+			"en_US",
+			"Use slide template: Mobile App Feature Launch Plan (PPT-mobile-app-feature-launch-plan).",
+		)
+	})
+
 	it("keeps prompt rich text preset_content as JSON while replacing preset value", () => {
 		const fields: FieldItem[] = [
 			{
@@ -193,5 +227,21 @@ describe("MainInputContainer panel utils", () => {
 			},
 		})
 		expect(getPromptRichTextPlainText(content)).toBe("@Render with Oil painting.")
+	})
+
+	it("treats empty option groups as no selectable options", () => {
+		const field: FieldItem = {
+			data_key: "template",
+			label: { default: "Template" },
+			options: [
+				{
+					group_key: "empty",
+					group_name: { default: "Empty" },
+					children: [],
+				},
+			],
+		}
+
+		expect(hasSelectableOptions(field)).toBe(false)
 	})
 })

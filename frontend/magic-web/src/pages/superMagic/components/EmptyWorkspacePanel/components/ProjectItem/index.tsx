@@ -262,7 +262,7 @@ function ProjectItem<T extends ProjectListItem | CollaborationProjectListItem>({
 							"h-[183px]",
 							!!WithCollaborators && "h-[222px] w-full",
 							isListMode &&
-							"h-14 w-full flex-row items-center justify-start [&_.project-item-actions]:right-2 [&_.project-item-actions]:top-2 [&_.project-item-actions]:border-none [&_.project-item-actions]:bg-muted [&_.project-item-actions]:text-foreground [&_.project-item-content]:max-w-[calc(100%-50px)] [&_.project-item-content]:flex-1 [&_.project-item-icon]:h-10 [&_.project-item-icon]:w-10 [&_.project-item-icon]:flex-none [&_.project-item-title]:pr-5 [&_.project-item-updated-at]:overflow-hidden [&_.project-item-updated-at]:text-ellipsis [&_.project-item-updated-at]:whitespace-nowrap",
+								"h-14 w-full flex-row items-center justify-start [&_.project-item-actions]:right-2 [&_.project-item-actions]:top-2 [&_.project-item-actions]:border-none [&_.project-item-actions]:bg-muted [&_.project-item-actions]:text-foreground [&_.project-item-content]:max-w-[calc(100%-50px)] [&_.project-item-content]:flex-1 [&_.project-item-icon]:h-10 [&_.project-item-icon]:w-10 [&_.project-item-icon]:flex-none [&_.project-item-title]:pr-5 [&_.project-item-updated-at]:overflow-hidden [&_.project-item-updated-at]:text-ellipsis [&_.project-item-updated-at]:whitespace-nowrap",
 						)}
 						onClick={() => onClick(item)}
 						onMouseEnter={onMouseEnter}
@@ -304,6 +304,7 @@ function ProjectItem<T extends ProjectListItem | CollaborationProjectListItem>({
 								<FlexBox
 									align="center"
 									gap={4}
+									className="min-w-0"
 									data-testid="project-item-title-wrapper"
 								>
 									{item.is_pinned && <PinnedTag className="" showText={false} />}
@@ -316,7 +317,7 @@ function ProjectItem<T extends ProjectListItem | CollaborationProjectListItem>({
 									)}
 									<SmartTooltip
 										className={cn(
-											"project-item-title rounded text-sm font-semibold leading-5 text-foreground",
+											"project-item-title min-w-0 flex-1 rounded text-sm font-semibold leading-5 text-foreground",
 											!onRenameProject && "hover:bg-transparent",
 											isListMode && "cursor-pointer",
 											!isListMode && "cursor-text",

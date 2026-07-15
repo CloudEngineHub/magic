@@ -1,6 +1,9 @@
 import { fireEvent, render, screen } from "@testing-library/react"
 import { describe, expect, it, vi } from "vitest"
-import { ALL_RECORDING_GROUP_ID, UNGROUPED_RECORDING_GROUP_ID } from "@/services/audioRecordings/RecordingGroupsConstants"
+import {
+	ALL_RECORDING_GROUP_ID,
+	UNGROUPED_RECORDING_GROUP_ID,
+} from "@/services/audioRecordings/RecordingGroupsConstants"
 import { MobileRecordingMoveGroupSheet } from "../MobileRecordingMoveGroupSheet"
 import type { MobileRecordingGroup } from "../MobileRecordingGroupSheet"
 

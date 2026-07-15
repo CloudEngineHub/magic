@@ -294,6 +294,36 @@ describe("SelfMediaHomePage styles", () => {
 		getBoundingClientRect.mockRestore()
 	})
 
+	it("keeps the spacious single-column layout compact", () => {
+		const getBoundingClientRect = vi
+			.spyOn(HTMLElement.prototype, "getBoundingClientRect")
+			.mockReturnValue({
+				x: 0,
+				y: 0,
+				left: 0,
+				top: 0,
+				right: 800,
+				bottom: 420,
+				width: 800,
+				height: 420,
+				toJSON: () => ({}),
+			})
+
+		render(<SelfMediaHomePage posts={[createPostItem()]} onOpenPost={vi.fn()} />)
+
+		expect(screen.getByTestId("self-media-home-ops-overview")).toHaveAttribute(
+			"data-ops-layout",
+			"spacious",
+		)
+		expect(screen.getByTestId("self-media-home-ops-content")).toHaveClass("p-5", "gap-5")
+		expect(screen.getByTestId("self-media-home-ops-health")).toHaveClass("w-[108px]")
+		expect(screen.getByTestId("self-media-home-ops-completion").lastElementChild).toHaveClass(
+			"grid-cols-2",
+		)
+
+		getBoundingClientRect.mockRestore()
+	})
+
 	it("keeps the wide suggestion panel pinned to the measured left column height", async () => {
 		const getBoundingClientRect = vi
 			.spyOn(HTMLElement.prototype, "getBoundingClientRect")
@@ -430,8 +460,13 @@ describe("SelfMediaHomePage styles", () => {
 		expect(screen.getByTestId("self-media-home-ops-aside")).toHaveClass("flex", "min-h-0")
 		expect(actionList).toHaveClass("self-media-ops-action-scroll")
 		expect(actionList).toHaveClass("flex-1", "min-h-0")
-		expect(actionList).not.toHaveStyle({ maxHeight: "260px" })
-		expect(actionList).toHaveStyle({ minHeight: "260px" })
+		expect(actionList).not.toHaveStyle({ maxHeight: "163px" })
+		expect(actionList).toHaveStyle({ minHeight: "163px" })
+		expect(screen.getByTestId("self-media-home-ops-content")).toHaveClass("p-5", "gap-5")
+		expect(screen.getByTestId("self-media-home-ops-data-summary")).toHaveClass("p-3")
+		expect(screen.getByTestId("self-media-home-ops-completion").lastElementChild).toHaveClass(
+			"grid-cols-2",
+		)
 
 		getBoundingClientRect.mockRestore()
 	})
@@ -525,10 +560,10 @@ describe("SelfMediaHomePage styles", () => {
 		})
 		expect(screen.getByTestId("self-media-home-ops-side-toolbar")).toBeInTheDocument()
 		expect(screen.getByTestId("self-media-home-ops-side-panel-intro")).toBeInTheDocument()
-		expect(sideColumn).toHaveStyle({ minHeight: "528px" })
+		expect(sideColumn).toHaveStyle({ minHeight: "407px" })
 		expect(actionList).toHaveClass("self-media-ops-action-scroll", "flex-1", "min-h-0")
-		expect(actionList).not.toHaveStyle({ maxHeight: "260px" })
-		expect(actionList).toHaveStyle({ minHeight: "260px" })
+		expect(actionList).not.toHaveStyle({ maxHeight: "163px" })
+		expect(actionList).toHaveStyle({ minHeight: "163px" })
 
 		getBoundingClientRect.mockRestore()
 	})
@@ -1008,12 +1043,12 @@ describe("SelfMediaHomePage styles", () => {
 
 		const actionList = screen.getByTestId("self-media-home-ops-next-actions")
 		expect(actionList).toHaveClass("self-media-ops-action-scroll")
-		expect(actionList).toHaveClass("-mx-4")
-		expect(actionList).toHaveClass("px-4")
+		expect(actionList).toHaveClass("-mx-3.5")
+		expect(actionList).toHaveClass("px-3.5")
 		expect(actionList).toHaveStyle({
 			maxHeight: "260px",
 		})
-		expect(screen.getByTestId("self-media-home-ops-next-actions-inner")).toHaveClass("py-4")
+		expect(screen.getByTestId("self-media-home-ops-next-actions-inner")).toHaveClass("py-3.5")
 		fireEvent.click(screen.getByLabelText("移除建议：优化弱互动文章"))
 
 		expect(screen.queryByText("优化弱互动文章")).not.toBeInTheDocument()

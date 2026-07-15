@@ -474,12 +474,18 @@ export const MessageEditorContainer = observer(
 			])
 
 			const focus = useMemoizedFn(
-				({ enableWhenIsMobile = false }: { enableWhenIsMobile?: boolean } = {}) => {
+				({
+					enableWhenIsMobile = false,
+					preventScroll = false,
+				}: {
+					enableWhenIsMobile?: boolean
+					preventScroll?: boolean
+				} = {}) => {
 					if (!enableWhenIsMobile && isMobile) {
 						return
 					}
 					runActiveEditor(activeEditorRef.current, (editor) => {
-						editor.commands.focus()
+						editor.commands.focus(undefined, { scrollIntoView: !preventScroll })
 						if (isMobile) {
 							editor.commands.scrollIntoView()
 						}

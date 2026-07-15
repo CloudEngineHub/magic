@@ -1,0 +1,129 @@
+import { memo } from "react"
+import { Flex, Image, Switch, Tag } from "antd"
+import { useTranslation } from "react-i18next"
+import { MagicButton, MobileCard, StatusTag } from "@admin-components"
+import { SlidesTemplate } from "@admin/types/slidesTemplate"
+import {
+	getSlidesTemplateStatusColor,
+	isSystemSlidesTemplate,
+	resolveSlidesTemplateCategoryName,
+	resolveSlidesTemplateTagName,
+} from "../utils"
+
+interface SlidesTemplateCardProps {
+	data?: SlidesTemplate.Item
+	onClick?: (data: SlidesTemplate.Item) => void
+	statusLoadingIds: Set<string>
+	hasEditRight: boolean
+	sourceTypeLabel: (sourceType?: SlidesTemplate.SourceType) => string
+	handleStatusChange: (record: SlidesTemplate.Item, checked: boolean) => void
+	handleEdit: (record: SlidesTemplate.Item) => void
+	handleDelete: (record: SlidesTemplate.Item) => void
+}
+
+function SlidesTemplateCard({
+	data,
+	onClick,
+	statusLoadingIds,
+	hasEditRight,
+	sourceTypeLabel,
+	handleStatusChange,
+	handleEdit,
+	handleDelete,
+}: SlidesTemplateCardProps) {
+	const { t } = useTranslation("admin/common")
+
+	if (!data) return null
+
+	const title = data.label?.zh_CN || data.label?.en_US || "-"
+	const editDisabled = !hasEditRight || isSystemSlidesTemplate(data)
+	const categoryName = data.category
+		? resolveSlidesTemplateCategoryName(data.category)
+		: (data.category_code ?? "-")
+
+	return (
+		<MobileCard title={title} onClick={() => onClick?.(data)}>
+			<Flex vertical gap={8}>
+				{data.thumbnail_url ? (
+					<Image
+						src={data.thumbnail_url}
+						alt={data.label?.zh_CN || data.label?.en_US || ""}
+						width="100%"
+						height={120}
+						style={{ objectFit: "cover", borderRadius: 8 }}
+						preview={false}
+					/>
+				) : null}
+				<span>
+					{t("slidesTemplate.columns.code")}: {data.code}
+				</span>
+				<span>
+					{t("sortOrder")}: {data.sort ?? 0}
+				</span>
+				<span>
+					{t("slidesTemplate.columns.source")}: {sourceTypeLabel(data.source_type)}
+				</span>
+				<span>
+					{t("slidesTemplate.columns.category")}: {categoryName}
+				</span>
+				<span>
+					{t("slidesTemplate.columns.usageCount")}: {data.usage_count ?? 0}
+				</span>
+				{data.tags?.length ? (
+					<Flex align="center" gap={6} wrap="wrap">
+						<span>{t("slidesTemplate.columns.tags")}:</span>
+						{data.tags.slice(0, 4).map((tag) => (
+							<Tag key={tag.id || tag.code} style={{ marginInlineEnd: 0 }}>
+								{resolveSlidesTemplateTagName(tag)}
+							</Tag>
+						))}
+						{data.tags.length > 4 ? (
+							<Tag style={{ marginInlineEnd: 0 }}>+{data.tags.length - 4}</Tag>
+						) : null}
+					</Flex>
+				) : null}
+				{data.category ? (
+					<Flex align="center" gap={8}>
+						<span>{t("slidesTemplate.category.columns.status")}:</span>
+						<StatusTag
+							color={getSlidesTemplateStatusColor(data.category.status)}
+							bordered={false}
+						>
+							{data.category.status === SlidesTemplate.StatusMap.enabled
+								? t("slidesTemplate.status.enabled")
+								: t("slidesTemplate.status.disabled")}
+						</StatusTag>
+					</Flex>
+				) : null}
+				<Flex align="center" gap={8}>
+					<span>{t("slidesTemplate.columns.status")}:</span>
+					<Switch
+						checked={data.status === SlidesTemplate.StatusMap.enabled}
+						loading={statusLoadingIds.has(data.id)}
+						disabled={!hasEditRight || statusLoadingIds.has(data.id)}
+						onChange={(checked) => handleStatusChange(data, checked)}
+					/>
+				</Flex>
+				<Flex justify="end" gap={8}>
+					<MagicButton
+						type="link"
+						disabled={editDisabled}
+						onClick={() => handleEdit(data)}
+					>
+						{t("button.edit")}
+					</MagicButton>
+					<MagicButton
+						type="link"
+						danger
+						disabled={editDisabled}
+						onClick={() => handleDelete(data)}
+					>
+						{t("button.delete")}
+					</MagicButton>
+				</Flex>
+			</Flex>
+		</MobileCard>
+	)
+}
+
+export default memo(SlidesTemplateCard)

@@ -53,7 +53,7 @@ import magicToast from "@/components/base/MagicToaster/utils"
 export interface RecordingSummaryFloatPanelProps {}
 
 export function RecordingSummaryFloatPanel() {
-	const { t } = useTranslation("super")
+	const { t } = useTranslation(["super", "recordSummary"])
 	const isMobile = useIsMobile()
 	const location = useLocation()
 	const navigate = useNavigate()

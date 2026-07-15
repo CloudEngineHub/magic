@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest"
 import {
+	createPptxSlideConfig,
 	DEFAULT_PPT_CONTENT_DIMENSIONS,
 	extractSlideContainerDimensionsFromHtml,
 	resolvePptScaleContentDimensions,
@@ -20,6 +21,25 @@ describe("extractSlideContainerDimensionsFromHtml", () => {
 				<div class="slide-container" style="width: 1280px; height: 720px"></div>
 			`),
 		).toEqual({ width: 1280, height: 720 })
+	})
+
+	it("extracts dimensions from a slide container CSS rule", () => {
+		expect(
+			extractSlideContainerDimensionsFromHtml(`
+				<style>
+					html, body, .slide-container { width: 1080px; height: 1920px; }
+				</style>
+				<div class="slide-container"></div>
+			`),
+		).toEqual({ width: 1080, height: 1920 })
+	})
+
+	it("extracts dimensions from the HTML sandbox canvas", () => {
+		expect(
+			extractSlideContainerDimensionsFromHtml(
+				'<main class="ft-canvas" style="width: 1080px; height: 1080px"></main>',
+			),
+		).toEqual({ width: 1080, height: 1080 })
 	})
 
 	it("returns null when no canonical slide dimensions are available", () => {
@@ -58,5 +78,16 @@ describe("resolvePptScaleContentDimensions", () => {
 		expect(resolvePptScaleContentDimensions("<div>plain html</div>")).toEqual(
 			DEFAULT_PPT_CONTENT_DIMENSIONS,
 		)
+	})
+})
+
+describe("createPptxSlideConfig", () => {
+	it("uses the slide canvas dimensions for the PPTX layout", () => {
+		expect(createPptxSlideConfig({ width: 1080, height: 1920 })).toEqual({
+			htmlWidth: 1080,
+			htmlHeight: 1920,
+			slideWidth: 11.25,
+			slideHeight: 20,
+		})
 	})
 })

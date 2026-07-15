@@ -195,6 +195,32 @@ describe("registerAppServiceWorker", () => {
 		expect(options).toEqual({ scope: "/" })
 	})
 
+	it("reports the registration URL when Service Worker registration fails", async () => {
+		const register = vi.fn().mockRejectedValue(new Error("registration failed"))
+		const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined)
+
+		Object.defineProperty(document, "readyState", {
+			configurable: true,
+			value: "complete",
+		})
+
+		Object.defineProperty(navigator, "serviceWorker", {
+			configurable: true,
+			value: { register },
+		})
+
+		registerAppServiceWorker()
+		await flushMicrotasks()
+
+		expect(consoleError).toHaveBeenCalledWith(
+			"[sw] Failed to register app service worker",
+			expect.objectContaining({
+				error: expect.any(Error),
+				serviceWorkerUrl: expect.stringContaining("/sw.js?"),
+			}),
+		)
+	})
+
 	it("still registers in development when force enable flag is true", async () => {
 		const register = vi.fn().mockResolvedValue({})
 		vi.stubEnv("MAGIC_MOCK", "false")

@@ -21,12 +21,12 @@ export interface LiveAudioWaveformProps {
 }
 
 /**
-	* LiveAudioWaveform: Renders a real-time rolling microphone amplitude waveform.
-	* New bars flow in from the right; historical bars roll off to the left.
-	* Under the hood, this uses Canvas + requestAnimationFrame for high performance.
-	* It auto-gracefully falls back to simulated pseudo-random voice waves if microphone
-	* permissions are denied or unavailable (e.g., non-secure context or user rejection).
-	*/
+ * LiveAudioWaveform: Renders a real-time rolling microphone amplitude waveform.
+ * New bars flow in from the right; historical bars roll off to the left.
+ * Under the hood, this uses Canvas + requestAnimationFrame for high performance.
+ * It auto-gracefully falls back to simulated pseudo-random voice waves if microphone
+ * permissions are denied or unavailable (e.g., non-secure context or user rejection).
+ */
 export function LiveAudioWaveform({
 	active,
 	color,
@@ -39,16 +39,6 @@ export function LiveAudioWaveform({
 	className,
 }: LiveAudioWaveformProps) {
 	const isTestEnv = typeof process !== "undefined" && process.env.NODE_ENV === "test"
-
-	if (isTestEnv) {
-		return (
-			<div
-				className={className}
-				style={{ height }}
-				data-testid="live-audio-waveform-mock"
-			/>
-		)
-	}
 
 	const containerRef = useRef<HTMLDivElement>(null)
 	const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -72,6 +62,8 @@ export function LiveAudioWaveform({
 
 	// Effect: Manage microphone stream lifetime, request on active, clean up on inactive
 	useEffect(() => {
+		if (isTestEnv) return
+
 		if (!active) {
 			// Clean up all audio nodes and stream tracks when inactive to release hardware resources
 			const { stream, audioCtx } = stateRef.current
@@ -123,10 +115,12 @@ export function LiveAudioWaveform({
 			stateRef.current.audioCtx = null
 			stateRef.current.analyser = null
 		}
-	}, [active])
+	}, [active, isTestEnv])
 
 	// Effect: Canvas rendering loop and resize observation
 	useEffect(() => {
+		if (isTestEnv) return
+
 		const canvas = canvasRef.current
 		const container = containerRef.current
 		if (!canvas || !container) return
@@ -256,7 +250,13 @@ export function LiveAudioWaveform({
 			cancelAnimationFrame(stateRef.current.rafId)
 			ro.disconnect()
 		}
-	}, [height, barWidth, barGap, sampleIntervalMs, color])
+	}, [height, barWidth, barGap, sampleIntervalMs, color, isTestEnv])
+
+	if (isTestEnv) {
+		return (
+			<div className={className} style={{ height }} data-testid="live-audio-waveform-mock" />
+		)
+	}
 
 	return (
 		<div

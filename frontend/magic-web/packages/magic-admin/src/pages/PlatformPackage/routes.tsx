@@ -27,6 +27,7 @@ const SkillMarketPage = lazy(() => import("./SkillMarket/index.page"))
 const EmployeeMarketPage = lazy(() => import("./EmployeeMarket/index.page"))
 const AppMenuPage = lazy(() => import("./AppMenu/index.page"))
 const ProviderAccessPage = lazy(() => import("./ProviderAccess/index.page"))
+const SlidesTemplatePage = lazy(() => import("./SlidesTemplate/index.page"))
 
 export default {
 	name: RouteName.AdminPlatformLayout,
@@ -198,6 +199,19 @@ export default {
 							isSuperAdmin ||
 							permissions.includes(PERMISSION_KEY_MAP.AI_ABILITY_MANAGEMENT_QUERY) ||
 							permissions.includes(PERMISSION_KEY_MAP.AI_ABILITY_MANAGEMENT_EDIT)
+						)
+					},
+				},
+				{
+					name: RouteName.AdminSlidesTemplate,
+					path: RoutePath.PlatformSlidesTemplate,
+					element: <SlidesTemplatePage />,
+					title: "nav.platformSubMenu.slidesTemplate",
+					validate: (permissions: string[], isSuperAdmin?: boolean) => {
+						return (
+							isSuperAdmin ||
+							permissions.includes(PERMISSION_KEY_MAP.SLIDES_TEMPLATE_QUERY) ||
+							permissions.includes(PERMISSION_KEY_MAP.SLIDES_TEMPLATE_EDIT)
 						)
 					},
 				},

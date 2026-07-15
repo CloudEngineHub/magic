@@ -1,8 +1,9 @@
 import { render, screen, waitFor, within } from "@testing-library/react"
-import { describe, expect, it, vi } from "vitest"
+import { beforeEach, describe, expect, it, vi } from "vitest"
 
-const { getCollaborationProjects } = vi.hoisted(() => ({
+const { getCollaborationProjects, viewModeState } = vi.hoisted(() => ({
 	getCollaborationProjects: vi.fn(),
+	viewModeState: { value: "grid" },
 }))
 
 vi.mock("react-i18next", async (importOriginal) => ({
@@ -122,7 +123,7 @@ vi.mock(
 	"@/pages/superMagic/components/WorkspacesMenu/components/CollaborationProjectsPanel/components/ViewToggle/hooks",
 	() => ({
 		useViewTogglePersistValue: () => ({
-			viewMode: "grid",
+			viewMode: viewModeState.value,
 			setViewMode: vi.fn(),
 		}),
 	}),
@@ -190,6 +191,11 @@ vi.mock("@/pages/superMagic/pages/Assistant/components/TopicPanel/hooks/useSearc
 }))
 
 describe("CollaborationProjectsPanel", () => {
+	beforeEach(() => {
+		getCollaborationProjects.mockReset()
+		viewModeState.value = "grid"
+	})
+
 	it("adds stable data-testid attributes to the PC shared workspace dialog", async () => {
 		const { default: CollaborationProjectsPanel } = await import("../index")
 
@@ -233,5 +239,61 @@ describe("CollaborationProjectsPanel", () => {
 
 		expect(row).toBeTruthy()
 		expect(within(row as HTMLElement).getByText("项目一")).not.toBeNull()
+	})
+
+	it("keeps breakpoint-based adaptive grid columns without horizontal overflow", async () => {
+		const { default: CollaborationProjectsPanel } = await import("../index")
+
+		getCollaborationProjects.mockResolvedValue({
+			list: [{ id: "project-1", project_name: "项目一", is_pinned: false }],
+		})
+
+		render(
+			<CollaborationProjectsPanel
+				open
+				workspaces={[]}
+				selectedWorkspace={null}
+				fetchProjects={vi.fn()}
+				fetchWorkspaces={vi.fn()}
+				onCollaborationProjectClick={vi.fn()}
+				onClose={vi.fn()}
+			/>,
+		)
+
+		await waitFor(() => expect(getCollaborationProjects).toHaveBeenCalled())
+
+		const layout = screen.getAllByTestId("shared-workspace-dialog-project-list-layout")[0]
+		expect(layout).toHaveAttribute("data-view-mode", "grid")
+		expect(layout.className).toContain("repeat(6,minmax(0,1fr))")
+		expect(layout.className).toContain("max-[1250px]")
+		expect(layout.className).not.toContain("repeat(6,1fr)")
+	})
+
+	it("keeps the adaptive grid wrapper in list view", async () => {
+		viewModeState.value = "list"
+		const { default: CollaborationProjectsPanel } = await import("../index")
+
+		getCollaborationProjects.mockResolvedValue({
+			list: [{ id: "project-1", project_name: "项目一", is_pinned: false }],
+		})
+
+		render(
+			<CollaborationProjectsPanel
+				open
+				workspaces={[]}
+				selectedWorkspace={null}
+				fetchProjects={vi.fn()}
+				fetchWorkspaces={vi.fn()}
+				onCollaborationProjectClick={vi.fn()}
+				onClose={vi.fn()}
+			/>,
+		)
+
+		await waitFor(() => expect(getCollaborationProjects).toHaveBeenCalled())
+
+		const layout = screen.getAllByTestId("shared-workspace-dialog-project-list-layout")[0]
+		expect(layout).toHaveAttribute("data-view-mode", "list")
+		expect(layout.className).toContain("grid")
+		expect(layout.className).toContain("repeat(6,minmax(0,1fr))")
 	})
 })

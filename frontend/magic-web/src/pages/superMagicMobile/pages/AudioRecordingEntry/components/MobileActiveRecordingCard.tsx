@@ -75,14 +75,22 @@ export function MobileActiveRecordingCard({
 				<span
 					className="inline-block size-1.5 shrink-0 rounded-full"
 					style={{
-						background: isPaused ? "var(--color-muted-foreground)" : "var(--color-destructive, #ef4444)",
-						animation: isPaused ? undefined : "recording-pulse 1.4s ease-in-out infinite",
+						background: isPaused
+							? "var(--color-muted-foreground)"
+							: "var(--color-destructive, #ef4444)",
+						animation: isPaused
+							? undefined
+							: "recording-pulse 1.4s ease-in-out infinite",
 					}}
 					aria-hidden
 				/>
 				<span
 					className="text-[12px] font-medium leading-4"
-					style={{ color: isPaused ? "var(--color-muted-foreground)" : "var(--color-foreground)" }}
+					style={{
+						color: isPaused
+							? "var(--color-muted-foreground)"
+							: "var(--color-foreground)",
+					}}
 				>
 					{stateLabel}
 				</span>
@@ -123,7 +131,11 @@ export function MobileActiveRecordingCard({
 					onClick={handleTogglePause}
 					disabled={isBusy}
 					className="flex size-8 shrink-0 items-center justify-center rounded-full bg-card shadow-[0px_1px_4px_0px_rgba(0,0,0,0.06)] transition-opacity active:opacity-70 disabled:opacity-50"
-					aria-label={isPaused ? t("super:mobile.recordingEntry.active.resume") : t("super:mobile.recordingEntry.active.pause")}
+					aria-label={
+						isPaused
+							? t("super:mobile.recordingEntry.active.resume")
+							: t("super:mobile.recordingEntry.active.pause")
+					}
 					data-testid="mobile-active-recording-toggle"
 				>
 					{isPaused ? (
@@ -154,4 +166,3 @@ export function MobileActiveRecordingCard({
 		</div>
 	)
 }
-

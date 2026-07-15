@@ -36,6 +36,7 @@ function SkillMarketCard({
 	getLocalizedText,
 }: SkillMarketCardProps) {
 	const { t } = useTranslation("admin/platform/skillMarket")
+	const { t: tCommon } = useTranslation("admin/common")
 
 	if (!data) return null
 
@@ -97,7 +98,7 @@ function SkillMarketCard({
 					</Flex>
 				</Flex>
 				<Flex align="center" gap={6}>
-					<span>{t("sortOrder")}:</span>
+					<span>{tCommon("sortOrder")}:</span>
 					<InputNumber
 						min={0}
 						precision={0}
