@@ -106,6 +106,19 @@ def _largest_xml_block(content: str, tag: str, path_attr: str) -> tuple[int, str
     return count, largest_value, largest_len
 
 
+# 合成占位 tool_result 的统一前缀。
+# 两处补占位逻辑（load 时 / 运行时 dict 路径）都以此前缀起始：
+#   "[Tool result missing — call was likely interrupted or truncated]"
+#   "[Tool result missing — call was likely truncated by output token limit]"
+# 当同一 tool_call_id 出现多条 ToolMessage 时，以此前缀识别合成占位并优先移除。
+_SYNTHETIC_TOOL_RESULT_PREFIX = "[Tool result missing"
+
+
+def _is_synthetic_tool_result(content: Any) -> bool:
+    """判断一段 tool_result content 是否为系统补的合成占位。"""
+    return isinstance(content, str) and content.startswith(_SYNTHETIC_TOOL_RESULT_PREFIX)
+
+
 @dataclass
 class RuleResult:
     """单条序列修复规则的执行结果。"""
@@ -864,7 +877,9 @@ class ChatHistory:
     def _sanitize_message_sequences(self) -> int:
         """Load 时对 self.messages 执行全量序列修复并持久化。
 
-        覆盖 4 类修复，与 _fix_message_sequence_errors（运行时 dict 副本兜底）对齐：
+        覆盖 5 类修复，与 _fix_message_sequence_errors（运行时 dict 副本兜底）对齐：
+        4. 同 ID 去重：同一 tool_call_id 出现多条 ToolMessage 时，优先移除合成占位、
+           保留真实结果；必须先于重排执行，否则重排会将多余 tool_result 挤到末尾
         0. 重排工具调用序列：确保 assistant(tool_calls) 紧跟其所有 tool_result，
            同时处理 tool_result 位移和夹缝 user 消息两类问题
         1. 为缺失的 tool_result 补合成占位 ToolMessage
@@ -874,8 +889,10 @@ class ChatHistory:
         Returns:
             int: 修复操作总数
         """
-        # 各规则修复计数
+        # 各规则修复计数；规则4 必须先于规则0 重排，否则重排只认首条 tool_result、
+        # 多余条会被挤到末尾变成孤立消息
         rules = [
+            RuleResult("规则4·同ID去重", self._sanitize_duplicate_tool_results()),
             RuleResult("规则0·重排",    self._sanitize_displaced_tool_results()),
             RuleResult("规则1·补占位",  self._sanitize_incomplete_tool_sequences()),
             RuleResult("规则2·孤立转换", self._sanitize_orphaned_tool_messages()),
@@ -1035,6 +1052,60 @@ class ChatHistory:
 
             i += 1
         return fixes
+
+    def _sanitize_duplicate_tool_results(self) -> int:
+        """移除同一 tool_call_id 的重复 ToolMessage，优先保留真实结果、移除合成占位。
+
+        场景：并发竞态下，reload 时补入的合成占位 ToolMessage 与随后到达的真实工具
+        结果共存，导致同一 tool_call_id 出现多条内容不同的 ToolMessage，后续 LLM
+        请求因 tool_call_id 对应多条 tool 结果而持续 400。
+
+        策略：按 tool_call_id 分组，多于一条时：
+        - 优先保留非合成占位的真实结果（移除占位及多余真实）
+        - 若全部是合成占位（理论上不应发生，reload 后迟早会有真实结果）则保留最后一条
+        - 保留项选多个真实结果中的最后一条（与"后到的真实结果更可信"语义一致）
+
+        Returns:
+            int: 移除的消息条数
+        """
+        id_to_indices: Dict[str, List[int]] = {}
+        for idx, msg in enumerate(self.messages):
+            if isinstance(msg, ToolMessage) and msg.tool_call_id:
+                id_to_indices.setdefault(msg.tool_call_id, []).append(idx)
+
+        to_remove: set = set()
+        for tid, indices in id_to_indices.items():
+            if len(indices) < 2:
+                continue
+            real_indices = [
+                i for i in indices
+                if not _is_synthetic_tool_result(self.messages[i].content)
+            ]
+            if real_indices:
+                keep = real_indices[-1]
+            else:
+                keep = indices[-1]
+            for i in indices:
+                if i != keep:
+                    to_remove.add(i)
+
+        if not to_remove:
+            return 0
+
+        removed_details = []
+        for i in sorted(to_remove):
+            msg = self.messages[i]
+            is_syn = _is_synthetic_tool_result(msg.content)
+            removed_details.append(
+                f"msg[{i}] tool(id={msg.tool_call_id}) "
+                f"{'synthetic' if is_syn else 'duplicate'}"
+            )
+        self.messages = [m for i, m in enumerate(self.messages) if i not in to_remove]
+        logger.warning(
+            f"[ChatHistory·规则4·同ID去重] 移除 {len(to_remove)} 条重复 tool_result: "
+            + "; ".join(removed_details)
+        )
+        return len(to_remove)
 
     def _sanitize_orphaned_tool_messages(self) -> int:
         """将孤立的 tool 消息（找不到对应 assistant(tool_calls)）转为 assistant 消息。"""
@@ -1534,17 +1605,65 @@ class ChatHistory:
         )
         return result
 
+    def _dedup_duplicate_tool_results(self, llm_messages: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """运行时 dict 路径：移除同一 tool_call_id 的重复 tool_result，优先保留真实结果。
+
+        与 load 时 (_sanitize_duplicate_tool_results) 策略对齐：
+        - 同 tool_call_id 多条 tool 消息时，优先保留非合成占位的真实结果
+        - 全是占位则保留最后一条
+        - 多个真实结果也只保留最后一条
+
+        必须先于 _reorder_displaced_tool_results 执行：重排只认首条 tool_result，
+        多余条会被当作孤立消息推到末尾，反而加剧污染。
+        """
+        if not llm_messages:
+            return llm_messages
+
+        id_to_indices: Dict[str, List[int]] = {}
+        for idx, msg in enumerate(llm_messages):
+            if msg.get("role") == "tool" and msg.get("tool_call_id"):
+                id_to_indices.setdefault(msg["tool_call_id"], []).append(idx)
+
+        to_remove: set = set()
+        for tid, indices in id_to_indices.items():
+            if len(indices) < 2:
+                continue
+            real_indices = [
+                i for i in indices
+                if not _is_synthetic_tool_result(llm_messages[i].get("content"))
+            ]
+            if real_indices:
+                keep = real_indices[-1]
+            else:
+                keep = indices[-1]
+            for i in indices:
+                if i != keep:
+                    to_remove.add(i)
+
+        if not to_remove:
+            return llm_messages
+
+        result = [m for i, m in enumerate(llm_messages) if i not in to_remove]
+        logger.warning(
+            f"[ChatHistory·规则4·同ID去重] 移除 {len(to_remove)} 条重复 tool_result "
+            f"(tool_call_ids affected: "
+            f"{', '.join(sorted({llm_messages[i].get('tool_call_id', '') for i in to_remove}))})"
+        )
+        return result
+
     def _fix_message_sequence_errors(self, llm_messages: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """
         修复历史消息中的序列错误，确保tool_use和tool_result正确匹配
 
         修复策略：
+        4. 同 ID 去重：同一 tool_call_id 出现多条 tool_result 时优先移除合成占位、
+           保留真实结果；必须先于重排执行，否则重排只认首条、多余条挤到末尾变孤立
         0. 重排工具调用序列：确保每个 assistant(tool_calls) 紧跟其所有 tool_result，
            同时处理 tool_result 位移和夹缝 user 消息两类问题
         1. 为缺少 tool_result 的 tool_call 补合成占位（保留 assistant 消息结构）
         2. 将孤立的tool消息转换为assistant消息（保持语义合理性）
         3. 去除连续重复的相同内容消息，只保留一条
-        4. 记录修复操作以供调试
+        5. 记录修复操作以供调试
 
         Args:
             llm_messages: 原始的LLM消息列表
@@ -1554,6 +1673,9 @@ class ChatHistory:
         """
         if not llm_messages:
             return llm_messages
+
+        # 步骤4：同 tool_call_id 去重（先于重排，避免多余 tool_result 被挤到末尾）
+        llm_messages = self._dedup_duplicate_tool_results(llm_messages)
 
         # 步骤0：重排工具调用序列（一步到位处理 tool_result 位移 + 夹缝 user 消息）
         llm_messages = self._reorder_displaced_tool_results(llm_messages)
