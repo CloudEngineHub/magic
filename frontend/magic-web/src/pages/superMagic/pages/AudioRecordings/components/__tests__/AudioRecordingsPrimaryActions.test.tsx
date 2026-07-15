@@ -18,25 +18,6 @@ vi.mock("react-i18next", () => ({
 	}),
 }))
 
-vi.mock("@/components/shadcn-ui/dropdown-menu", () => ({
-	DropdownMenu: ({ children }: { children: ReactNode }) => <div>{children}</div>,
-	DropdownMenuTrigger: ({ children }: { children: ReactNode }) => <>{children}</>,
-	DropdownMenuContent: ({ children }: { children: ReactNode }) => <div>{children}</div>,
-	DropdownMenuItem: ({
-		children,
-		onClick,
-		"data-testid": dataTestId,
-	}: {
-		children: ReactNode
-		onClick?: () => void
-		"data-testid"?: string
-	}) => (
-		<button type="button" data-testid={dataTestId} onClick={onClick}>
-			{children}
-		</button>
-	),
-}))
-
 vi.mock("@/components/business/RecordingSummary/AudioUploadAction", () => ({
 	default: ({
 		handler,
@@ -45,8 +26,7 @@ vi.mock("@/components/business/RecordingSummary/AudioUploadAction", () => ({
 		handler: (onUpload: () => void) => ReactNode
 		onFileChange?: (files: FileList) => void
 	}) => {
-		// Split "open picker" from "files selected" to mirror the real desktop flow:
-		// the menu click happens first, the file callback returns later.
+		// Split picker opening from file delivery to mirror the native file input timing.
 		const trigger = handler(() => {
 			openUploadPickerSpy()
 			emitSelectedFiles = () => {
@@ -112,6 +92,9 @@ describe("AudioRecordingsPrimaryActions", () => {
 		expect(screen.getByTestId("audio-recordings-start-recording-button")).toHaveTextContent(
 			"Start Recording",
 		)
+		expect(screen.getByTestId("audio-recordings-import-audio-button")).toHaveTextContent(
+			"Imported audio",
+		)
 		expect(screen.getByTestId("audio-recordings-settings-button")).toHaveTextContent(
 			"Recording Settings",
 		)
@@ -124,24 +107,18 @@ describe("AudioRecordingsPrimaryActions", () => {
 		expect(handlers.onStartRecording).toHaveBeenCalledTimes(1)
 	})
 
-	it("shows the upload menu item and opens the stable picker callback", () => {
+	it("opens the stable file picker when clicking the import audio button", () => {
 		const handlers = renderPrimaryActions()
 
-		fireEvent.click(screen.getByTestId("audio-recordings-start-recording-menu-trigger"))
-		expect(screen.getByTestId("audio-recordings-import-menu-item")).toHaveTextContent(
-			"Imported audio",
-		)
-
-		fireEvent.click(screen.getByTestId("audio-recordings-import-menu-item"))
+		fireEvent.click(screen.getByTestId("audio-recordings-import-audio-button"))
 		expect(openUploadPickerSpy).toHaveBeenCalledTimes(1)
 		expect(handlers.onImportFiles).not.toHaveBeenCalled()
 	})
 
-	it("forwards imported files after the menu trigger has already run", () => {
+	it("forwards imported files after the file picker has been triggered", () => {
 		const handlers = renderPrimaryActions()
 
-		fireEvent.click(screen.getByTestId("audio-recordings-start-recording-menu-trigger"))
-		fireEvent.click(screen.getByTestId("audio-recordings-import-menu-item"))
+		fireEvent.click(screen.getByTestId("audio-recordings-import-audio-button"))
 		fireEvent.click(screen.getByTestId("audio-upload-action-file-change"))
 
 		expect(handlers.onImportFiles).toHaveBeenCalledTimes(1)
