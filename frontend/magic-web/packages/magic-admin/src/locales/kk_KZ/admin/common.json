@@ -15,6 +15,7 @@
 		"remove": "Алу",
 		"reset": "Қалпына келтіру",
 		"save": "Сақтау",
+		"search": "Іздеу",
 		"upload": "Жүктеу"
 	},
 	"confirmClose": "Жабуды растау",
@@ -130,6 +131,7 @@
 	"pleaseSelectPlaceholder": "{{name}} таңдаңыз",
 	"prePage": "Алдыңғы бет",
 	"search": "Іздеу параметрлері",
+	"sortOrder": "Сұрыптау реті",
 	"status": "Күйі",
 	"title": "{{platformName}} Әкімшілік бақылау тақтасы",
 	"totalItems": "Жалпы {{total}} элемент",

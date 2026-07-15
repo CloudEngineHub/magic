@@ -253,7 +253,7 @@ window.magicProjectConfigure(window.magicProjectConfig)
 1. 外层使用 `PhoneShell`（393×852）+ 状态栏 + 自绘顶部导航栏（返回 / 公众号 / 搜索 / 个人头像）。
 2. 列表中每条 post 都渲染成同一篇文章的「双样式」卡片：
    - 账号行：品牌绿圆角头像（取 `author` 首字母）+ 作者名 + 右侧相对时间。
-   - 大图区：`heroCover` 按 16:9 裁切，底部深色渐变覆盖 `feedTitle`。
+   - 大图区：`heroCover` 按 21:9 裁切，底部深色渐变覆盖 `feedTitle`。
    - 副卡区：左侧 `title`（2 行省略）+ 右侧 72×72 方形 `thumbnailCover`。
 3. 两个点击热区（大图 / 副卡）都会切换到该 post 的 `detail` 视图。
 4. 列表项启用 `IntersectionObserver` 懒加载，首屏外的 post 延迟请求 `post.json`。

@@ -203,6 +203,58 @@
         "zh_CN": "文档格式转换",
         "en_US": "Document Format Conversion"
     },
+    "convert_pptx_to_slide_template.before": {
+        "zh_CN": "正在将 {{file_name}} 转换为幻灯片模板",
+        "en_US": "Converting {{file_name}} to a slide template"
+    },
+    "convert_pptx_to_slide_template.after_success": {
+        "zh_CN": "已生成模板草稿 {{template_id}}（{{slide_count}} 页）",
+        "en_US": "Generated template draft {{template_id}} ({{slide_count}} slides)"
+    },
+    "convert_pptx_to_slide_template.error": {
+        "zh_CN": "PPTX 转幻灯片模板失败：{{error}}",
+        "en_US": "PPTX to slide template conversion failed: {{error}}"
+    },
+    "convert_pptx_to_slide_template.detail_title": {
+        "zh_CN": "PPTX 转幻灯片模板",
+        "en_US": "PPTX to Slide Template"
+    },
+    "convert_pptx_to_slide_template.detail_error_title": {
+        "zh_CN": "PPTX 转幻灯片模板失败",
+        "en_US": "PPTX to Slide Template Failed"
+    },
+    "install_slides_template.before": {
+        "zh_CN": "正在安装模板 {{template_code}}",
+        "en_US": "Installing template {{template_code}}"
+    },
+    "install_slides_template.after_success": {
+        "zh_CN": "已安装模板 {{template_code}}",
+        "en_US": "Installed template {{template_code}}"
+    },
+    "install_slides_template.after_failed": {
+        "zh_CN": "模板 {{template_code}} 安装失败",
+        "en_US": "Failed to install template {{template_code}}"
+    },
+    "install_slides_template.detail_title": {
+        "zh_CN": "幻灯片模板安装结果",
+        "en_US": "Slide Template Install Result"
+    },
+    "install_slides_template.detail_code": {
+        "zh_CN": "模板 code",
+        "en_US": "Template code"
+    },
+    "install_slides_template.detail_label": {
+        "zh_CN": "模板名称",
+        "en_US": "Template name"
+    },
+    "install_slides_template.detail_directory": {
+        "zh_CN": "安装目录",
+        "en_US": "Installed directory"
+    },
+    "install_slides_template.detail_error": {
+        "zh_CN": "安装失败，请检查模板 code 或稍后重试",
+        "en_US": "Install failed. Check the template code or try again later"
+    },
     "export_document_markdown.before": {
         "zh_CN": "正在导出 {{file_name}}",
         "en_US": "Exporting {{file_name}}"

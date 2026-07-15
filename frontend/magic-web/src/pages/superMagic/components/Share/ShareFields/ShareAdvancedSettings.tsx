@@ -129,7 +129,11 @@ export default memo(function ShareAdvancedSettings(props: ShareAdvancedSettingsP
 						const checked = settings[config.key] ?? config.defaultValue
 
 						return (
-							<div key={config.key} className="flex gap-3" data-testid="share-advanced-settings-item">
+							<div
+								key={config.key}
+								className="flex gap-3"
+								data-testid="share-advanced-settings-item"
+							>
 								{config.isVip ? (
 									<VipSwitch
 										checked={checked}

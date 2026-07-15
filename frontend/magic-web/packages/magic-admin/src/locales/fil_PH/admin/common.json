@@ -15,6 +15,7 @@
 		"remove": "Alisin",
 		"reset": "I-reset",
 		"save": "I-save",
+		"search": "Maghanap",
 		"upload": "Mag-upload"
 	},
 	"confirmClose": "Kumpirmahin ang Pagsara",
@@ -130,6 +131,7 @@
 	"pleaseSelectPlaceholder": "Pakiusap pumili ng {{name}}",
 	"prePage": "Nakaraang Pahina",
 	"search": "Mga Opsyon sa Paghahanap",
+	"sortOrder": "Pagkakasunod-sunod ng Pag-uuri",
 	"status": "Katayuan",
 	"title": "{{platformName}} Dashboard ng Admin",
 	"totalItems": "Kabuuang {{total}} items",

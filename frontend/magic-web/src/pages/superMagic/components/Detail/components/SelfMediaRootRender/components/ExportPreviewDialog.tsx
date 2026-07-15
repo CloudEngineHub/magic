@@ -1,5 +1,4 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { Check, Clipboard, ImageDown } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { Button } from "@/components/shadcn-ui/button"
 import { Checkbox } from "@/components/shadcn-ui/checkbox"
@@ -12,7 +11,6 @@ import {
 	DialogTitle,
 } from "@/components/shadcn-ui/dialog"
 import { Label } from "@/components/shadcn-ui/label"
-import { RadioGroup, RadioGroupItem } from "@/components/shadcn-ui/radio-group"
 import {
 	Select,
 	SelectContent,
@@ -21,12 +19,13 @@ import {
 	SelectValue,
 } from "@/components/shadcn-ui/select"
 import { cn } from "@/lib/utils"
-import type { ImageProcessOptions } from "@/utils/image-processing"
 import CardFrame from "./CardFrame"
 import type { CardFrameRef } from "./CardFrame"
+import ExportOptionsSections from "./ExportOptionsSections"
+import { persistPixelRatio, readStoredPixelRatio } from "./exportPixelRatioStorage"
 import { selfMediaOverlayStyles } from "./selfMediaOverlayStyles"
-import type { SelfMediaAttachmentNode, SelfMediaPost } from "../types"
-import { useCoverImageUrl } from "../platforms/wechat-official-accounts/useCoverImageUrl"
+import WechatExportProducts from "./WechatExportProducts"
+import type { SelfMediaAttachmentNode, SelfMediaPost, SelfMediaWechatCoverType } from "../types"
 
 export type SelfMediaExportType = "cardsZip" | "longImage" | "wechatCoverImage"
 export type SelfMediaExportMode = "cards" | "wechatOfficial"
@@ -58,130 +57,23 @@ interface ExportPreviewDialogProps {
 	exportMode?: SelfMediaExportMode
 	onCopyWechatHtml?: () => Promise<void> | void
 	isCopyingWechatHtml?: boolean
+	onGenerateWechatCovers?: (args: {
+		postIndex: number
+		coverTypes: SelfMediaWechatCoverType[]
+	}) => Promise<boolean | void> | boolean | void
 }
 
-const PIXEL_RATIO_OPTIONS = [1, 2, 4] as const
-const EXPORT_TYPE_OPTIONS: SelfMediaExportType[] = ["cardsZip", "longImage"]
 const PREVIEW_INITIAL_BATCH = 8
 const PREVIEW_BATCH_SIZE = 8
-/** localStorage key for last chosen export scale (1/2/4). */
-const EXPORT_PIXEL_RATIO_STORAGE_KEY = "dtyq:self-media:export-pixel-ratio"
 /**
  * Self-media card canvas (3:4). Capture size = this × pixelRatio
  * (e.g. 2x → 2160×2880). Varies if card HTML has different body size.
  */
 const EXPORT_SIZE_HINT_CSS = { width: 1080, height: 1440 } as const
-const WECHAT_COVER_SQUARE_PREVIEW_PROCESS: ImageProcessOptions = {
-	resize: { w: 240, h: 240, m: "fill" },
-	quality: 82,
-	format: "webp",
-}
-const WECHAT_COVER_HORIZONTAL_PREVIEW_PROCESS: ImageProcessOptions = {
-	resize: { w: 640, m: "lfit" },
-	quality: 82,
-	format: "webp",
-}
-
-function isPixelRatioOption(value: number): value is (typeof PIXEL_RATIO_OPTIONS)[number] {
-	return (PIXEL_RATIO_OPTIONS as readonly number[]).includes(value)
-}
-
-function readStoredPixelRatio(): number {
-	if (typeof window === "undefined") return 2
-	try {
-		const raw = window.localStorage.getItem(EXPORT_PIXEL_RATIO_STORAGE_KEY)
-		const parsed = raw === null || raw === "" ? NaN : Number(raw)
-		if (isPixelRatioOption(parsed)) return parsed
-	} catch {
-		// ignore quota / private mode
-	}
-	return 2
-}
-
-function persistPixelRatio(ratio: number): void {
-	if (typeof window === "undefined") return
-	if (!isPixelRatioOption(ratio)) return
-	try {
-		window.localStorage.setItem(EXPORT_PIXEL_RATIO_STORAGE_KEY, String(ratio))
-	} catch {
-		// ignore
-	}
-}
-
-function isExportTypeOption(value: string): value is SelfMediaExportType {
-	return (EXPORT_TYPE_OPTIONS as readonly string[]).includes(value)
-}
 
 function buildAllCardIndexes(post: SelfMediaPost | undefined): Set<number> {
 	if (!post) return new Set()
 	return new Set(post.cards.map((_, idx) => idx))
-}
-
-function WechatCoverPreviewImage({
-	url,
-	loading,
-	alt,
-	className,
-	testId,
-}: {
-	url: string | null
-	loading: boolean
-	alt: string
-	className?: string
-	testId?: string
-}) {
-	return (
-		<div className={cn("overflow-hidden bg-white", className)} data-testid={testId}>
-			{url ? (
-				<img src={url} alt={alt} className="h-full w-full object-cover" draggable={false}  data-testid="export-preview-dialog-image"/>
-			) : (
-				<div
-					className={cn(
-						"h-full w-full bg-gradient-to-b from-[#fafafa] to-[#e4e4e7]",
-						loading && "animate-pulse",
-					)}
-					aria-label={alt}
-				/>
-			)}
-		</div>
-	)
-}
-
-function WechatCoverExportPreview({ post }: { post?: SelfMediaPost }) {
-	const { t } = useTranslation("super")
-	const squareFileId = post?.thumbnailCover?.fileId || post?.heroCover?.fileId
-	const horizontalFileId = post?.heroCover?.fileId || post?.thumbnailCover?.fileId
-	const { url: squareUrl, loading: squareLoading } = useCoverImageUrl(
-		squareFileId,
-		Boolean(squareFileId),
-		WECHAT_COVER_SQUARE_PREVIEW_PROCESS,
-	)
-	const { url: horizontalUrl, loading: horizontalLoading } = useCoverImageUrl(
-		horizontalFileId,
-		Boolean(horizontalFileId),
-		WECHAT_COVER_HORIZONTAL_PREVIEW_PROCESS,
-	)
-
-	return (
-		<div
-			className="mt-4 grid aspect-[335/100] w-full grid-cols-[100fr_235fr] overflow-hidden rounded-[14px] bg-[#f4f4f5]"
-			data-testid="self-media-export-wechat-cover-preview"
-		>
-			<WechatCoverPreviewImage
-				url={squareUrl}
-				loading={squareLoading}
-				alt={t("detail.selfMedia.export.wechat.squareCover")}
-				className="aspect-square h-full min-w-0"
-			/>
-			<WechatCoverPreviewImage
-				url={horizontalUrl}
-				loading={horizontalLoading}
-				alt={t("detail.selfMedia.export.wechat.horizontalCover")}
-				className="aspect-[235/100] h-full min-w-0"
-				testId="self-media-export-wechat-horizontal-preview"
-			/>
-		</div>
-	)
 }
 
 function ExportPreviewDialog({
@@ -197,6 +89,7 @@ function ExportPreviewDialog({
 	exportMode = "cards",
 	onCopyWechatHtml,
 	isCopyingWechatHtml = false,
+	onGenerateWechatCovers,
 }: ExportPreviewDialogProps) {
 	const { t } = useTranslation("super")
 
@@ -206,7 +99,6 @@ function ExportPreviewDialog({
 	)
 	const [pixelRatio, setPixelRatio] = useState<number>(() => readStoredPixelRatio())
 	const [exportType, setExportType] = useState<SelfMediaExportType>("cardsZip")
-	const [wechatHtmlCopied, setWechatHtmlCopied] = useState(false)
 	const [previewVersion, setPreviewVersion] = useState(0)
 	const [loadedPreviewCards, setLoadedPreviewCards] = useState<Set<number>>(() => new Set())
 	const previewCardRefs = useRef<Record<number, CardFrameRef | null>>({})
@@ -219,7 +111,6 @@ function ExportPreviewDialog({
 		setSelectedCards(buildAllCardIndexes(posts[safeIndex]))
 		setPixelRatio(readStoredPixelRatio())
 		setExportType(exportMode === "wechatOfficial" ? "wechatCoverImage" : "cardsZip")
-		setWechatHtmlCopied(false)
 		setPreviewVersion((prev) => prev + 1)
 		setLoadedPreviewCards(new Set())
 		previewCardRefs.current = {}
@@ -323,15 +214,15 @@ function ExportPreviewDialog({
 				cardIndex < visiblePreviewCount &&
 				loadedPreviewCards.has(cardIndex),
 		)
-	const hasWechatCoverAsset = Boolean(
-		selectedPost?.thumbnailCover?.fileId || selectedPost?.heroCover?.fileId,
+	const hasWechatCoverAssets = Boolean(
+		selectedPost?.thumbnailCover?.fileId && selectedPost?.heroCover?.fileId,
 	)
 	const dialogSizeClass = isWechatOfficialMode
 		? "max-h-[720px] !max-w-5xl"
 		: "h-[85vh] max-h-[900px] !max-w-6xl"
 	const disableConfirm =
 		isExporting ||
-		(isWechatOfficialMode ? !hasWechatCoverAsset : orderedCardIndexes.length === 0) ||
+		(isWechatOfficialMode ? !hasWechatCoverAssets : orderedCardIndexes.length === 0) ||
 		!isLongImageReady
 
 	const handleConfirm = useCallback(async () => {
@@ -353,17 +244,6 @@ function ExportPreviewDialog({
 		pixelRatio,
 		selectedPostIndex,
 	])
-
-	const handleCopyWechatHtml = useCallback(async () => {
-		if (!onCopyWechatHtml || isCopyingWechatHtml) return
-		setWechatHtmlCopied(false)
-		try {
-			await onCopyWechatHtml()
-			setWechatHtmlCopied(true)
-		} catch {
-			setWechatHtmlCopied(false)
-		}
-	}, [isCopyingWechatHtml, onCopyWechatHtml])
 
 	const handleCancel = useCallback(() => {
 		if (isExporting) return
@@ -552,178 +432,29 @@ function ExportPreviewDialog({
 						) : null}
 					</div>
 				) : (
-					<div
-						className="mx-4 mt-4 grid shrink-0 grid-cols-1 gap-3 rounded-[24px] bg-white/90 p-3 shadow-[inset_0_1px_rgba(255,255,255,0.82)] sm:mx-6 md:grid-cols-2"
-						data-testid="self-media-export-wechat-products"
-					>
-						<section
-							className="flex min-h-[160px] flex-col justify-between rounded-[18px] border border-[#e4e4e7] bg-white p-4"
-							data-testid="self-media-export-wechat-cover-product"
-						>
-							<div className="flex items-start gap-3">
-								<span className="flex size-10 shrink-0 items-center justify-center rounded-[14px] bg-[#07c160]/10 text-[#07c160]">
-									<ImageDown className="h-5 w-5" aria-hidden />
-								</span>
-								<div className="min-w-0">
-									<h3 className="text-sm font-[800] text-[#18181b]">
-										{t("detail.selfMedia.export.wechat.coverTitle")}
-									</h3>
-									<p className="mt-1 text-xs leading-5 text-muted-foreground">
-										{t("detail.selfMedia.export.wechat.coverDescription")}
-									</p>
-								</div>
-							</div>
-							<WechatCoverExportPreview post={selectedPost} />
-						</section>
-
-						<section
-							className="flex min-h-[160px] flex-col justify-between rounded-[18px] border border-[#e4e4e7] bg-white p-4"
-							data-testid="self-media-export-wechat-html-product"
-						>
-							<div className="flex items-start gap-3">
-								<span className="flex size-10 shrink-0 items-center justify-center rounded-[14px] bg-[#18181b]/10 text-[#18181b]">
-									<Clipboard className="h-5 w-5" aria-hidden />
-								</span>
-								<div className="min-w-0">
-									<h3 className="text-sm font-[800] text-[#18181b]">
-										{t("detail.selfMedia.export.wechat.htmlTitle")}
-									</h3>
-									<p className="mt-1 text-xs leading-5 text-muted-foreground">
-										{t("detail.selfMedia.export.wechat.htmlDescription")}
-									</p>
-								</div>
-							</div>
-							<Button
-								type="button"
-								variant="outline"
-								className={cn(
-									"mt-4 h-10 rounded-[14px]",
-									selfMediaOverlayStyles.secondaryButton,
-								)}
-								onClick={handleCopyWechatHtml}
-								disabled={!onCopyWechatHtml || isCopyingWechatHtml}
-								data-testid="self-media-export-copy-html"
-							>
-								{wechatHtmlCopied ? (
-									<Check className="h-4 w-4" />
-								) : (
-									<Clipboard className="h-4 w-4" />
-								)}
-								{wechatHtmlCopied
-									? t("detail.selfMedia.export.wechat.htmlCopied")
-									: t("detail.selfMedia.export.wechat.copyHtml")}
-							</Button>
-						</section>
-					</div>
+					<WechatExportProducts
+						post={selectedPost}
+						postIndex={selectedPostIndex}
+						onCopyWechatHtml={onCopyWechatHtml}
+						isCopyingWechatHtml={isCopyingWechatHtml}
+						onGenerateWechatCovers={onGenerateWechatCovers}
+						generationDisabled={isExporting}
+					/>
 				)}
 
-				{!isWechatOfficialMode ? (
-					<div
-						className="flex shrink-0 flex-col gap-2 px-4 pt-4 sm:px-6"
-						data-testid="self-media-export-type-section"
-					>
-						<Label className="text-xs font-medium text-muted-foreground">
-							{t("detail.selfMedia.export.typeLabel")}
-						</Label>
-						<RadioGroup
-							value={exportType}
-							onValueChange={(value) => {
-								if (isExportTypeOption(value)) setExportType(value)
-							}}
-							className="grid grid-cols-1 gap-2 sm:grid-cols-2"
-							data-testid="self-media-export-type-group"
-						>
-							{EXPORT_TYPE_OPTIONS.map((type) => {
-								const id = `self-media-export-type-${type}`
-								const checked = exportType === type
-								return (
-									<Label
-										key={type}
-										htmlFor={id}
-										data-testid={
-											type === "longImage"
-												? "self-media-export-type-long-image"
-												: "self-media-export-type-cards-zip"
-										}
-										className={cn(
-											"flex cursor-pointer items-start gap-3 rounded-md border border-border bg-background p-3 text-sm transition-colors",
-											checked &&
-												"border-primary bg-primary/5 ring-1 ring-primary/40",
-											isExporting && "cursor-not-allowed opacity-60",
-										)}
-									>
-										<RadioGroupItem
-											id={id}
-											value={type}
-											disabled={isExporting}
-											className="mt-0.5"
-										/>
-										<span className="flex min-w-0 flex-col gap-1">
-											<span className="font-medium text-foreground">
-												{t(`detail.selfMedia.export.type.${type}.title`)}
-											</span>
-											<span className="text-xs leading-5 text-muted-foreground">
-												{t(
-													`detail.selfMedia.export.type.${type}.description`,
-												)}
-											</span>
-										</span>
-									</Label>
-								)
-							})}
-						</RadioGroup>
-					</div>
-				) : null}
-
-				<div
-					className="flex w-full shrink-0 flex-wrap items-center justify-end gap-x-3 gap-y-2 px-4 py-3 text-xs font-medium text-muted-foreground sm:px-6"
-					data-testid="self-media-export-scale-section"
-				>
-					{t("detail.selfMedia.export.scaleLabel")}
-					<RadioGroup
-						value={String(pixelRatio)}
-						onValueChange={(value) => {
-							const next = Number(value)
-							setPixelRatio(next)
-							persistPixelRatio(next)
-						}}
-						className="flex shrink-0 flex-wrap justify-end gap-x-4 gap-y-2"
-						data-testid="self-media-export-scale-group"
-					>
-						{PIXEL_RATIO_OPTIONS.map((ratio) => {
-							const id = `self-media-export-scale-${ratio}x`
-							const outW = hintW * ratio
-							const outH = hintH * ratio
-							return (
-								<div key={ratio} className="flex items-center gap-2">
-									<RadioGroupItem
-										id={id}
-										value={String(ratio)}
-										disabled={isExporting}
-										data-testid={`self-media-export-scale-option-${ratio}x`}
-									/>
-									<Label
-										htmlFor={id}
-										className="flex cursor-pointer items-center gap-2 text-sm"
-									>
-										<span>
-											{t("detail.selfMedia.export.scaleOption", { ratio })}
-										</span>
-										<span
-											className="text-xs font-normal tabular-nums text-muted-foreground"
-											data-testid={`self-media-export-scale-size-${ratio}x`}
-										>
-											{t("detail.selfMedia.export.scaleOutputSize", {
-												width: outW,
-												height: outH,
-											})}
-										</span>
-									</Label>
-								</div>
-							)
-						})}
-					</RadioGroup>
-				</div>
+				<ExportOptionsSections
+					isWechatOfficialMode={isWechatOfficialMode}
+					exportType={exportType}
+					onExportTypeChange={setExportType}
+					pixelRatio={pixelRatio}
+					onPixelRatioChange={(next) => {
+						setPixelRatio(next)
+						persistPixelRatio(next)
+					}}
+					isExporting={isExporting}
+					hintW={hintW}
+					hintH={hintH}
+				/>
 
 				<DialogFooter
 					className={cn("shrink-0", selfMediaOverlayStyles.dialogFooter)}

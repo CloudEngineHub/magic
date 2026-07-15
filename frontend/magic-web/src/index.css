@@ -560,9 +560,9 @@
 		--icon-topic: 0.68 0.14 232;
 		--icon-topic-rgb: 0 166 222;
 		/* App-level icon semantic colors matching the prototype's icon set */
-		--icon-chat: 0.70 0.19 290;
+		--icon-chat: 0.7 0.19 290;
 		--icon-chat-rgb: 159 136 255;
-		--icon-recording: 0.66 0.20 25;
+		--icon-recording: 0.66 0.2 25;
 		--icon-recording-rgb: 244 81 79;
 		--icon-app-knowledge: 0.62 0.17 280;
 		--icon-app-knowledge-rgb: 117 117 233;
@@ -724,7 +724,7 @@
 		--info-foreground: 0.15 0 0;
 		--info-foreground-rgb: 11 11 11;
 		/* Semantic status colors — dark variants */
-		--warning: 0.80 0.15 76;
+		--warning: 0.8 0.15 76;
 		--warning-rgb: 244 175 56;
 		--warning-foreground: 0.15 0 0;
 		--warning-foreground-rgb: 11 11 11;

@@ -37,11 +37,20 @@ import { genRequestUrl } from "@/utils/http"
 import { generateRecordingSummaryApi } from "./superMagic/recordSummary"
 import { generateAudioProjectsApi } from "./superMagic/audioProjects"
 import { generateCollaborationApi } from "./superMagic/collaboration"
-import { buildImageProcessQuery } from "@/utils/image-processing"
+import { buildImageProcessQuery, type ImageProcessOptions } from "@/utils/image-processing"
 import type {
 	SuggestionRelationType,
 	SuggestionsMeta,
 } from "@/pages/superMagic/stores/suggestion-types"
+import type {
+	SlidesTemplateCategoryListResponse,
+	SlidesTemplateCategoryQueryParams,
+	SlidesTemplateCountResponse,
+	SlidesTemplateDetail,
+	SlidesTemplateTagGroupItem,
+	SlidesTemplateListResponse,
+	SlidesTemplateQueryParams,
+} from "@/pages/superMagic/components/MainInputContainer/scenes/Slides/slidesTemplateState"
 
 /** 保存文件内容的响应 */
 export interface SaveFileContentResponse {
@@ -697,6 +706,53 @@ export interface GetConvertHightConfigResponse {
 }
 
 export const generateSuperMagicApi = (fetch: HttpClient) => ({
+	getSlidesTemplates(
+		params: SlidesTemplateQueryParams,
+		options?: { xMagicImageProcess?: ImageProcessOptions },
+	) {
+		return fetch.get<SlidesTemplateListResponse>(
+			genRequestUrl("/api/v1/slides-templates", {}, params),
+			{
+				headers: {
+					...(options?.xMagicImageProcess && {
+						"X-Magic-Image-Process": buildImageProcessQuery(options.xMagicImageProcess),
+					}),
+				},
+			},
+		)
+	},
+
+	getSlidesTemplateCategories(params: SlidesTemplateCategoryQueryParams) {
+		return fetch.get<SlidesTemplateCategoryListResponse>(
+			genRequestUrl("/api/v1/slides-template-categories", {}, params),
+		)
+	},
+
+	getSlidesTemplateTagGroups(params: { category_code?: string } = {}) {
+		return fetch.get<SlidesTemplateTagGroupItem[]>(
+			genRequestUrl("/api/v1/slides-template/tags/groups", {}, params),
+		)
+	},
+
+	getSlidesTemplateCount(params: SlidesTemplateQueryParams) {
+		return fetch.get<SlidesTemplateCountResponse>(
+			genRequestUrl("/api/v1/slides-templates/count", {}, params),
+		)
+	},
+
+	getSlidesTemplateDetail(code: string, options?: { xMagicImageProcess?: ImageProcessOptions }) {
+		return fetch.get<SlidesTemplateDetail>(
+			genRequestUrl("/api/v1/slides-templates/${code}", { code }),
+			{
+				headers: {
+					...(options?.xMagicImageProcess && {
+						"X-Magic-Image-Process": buildImageProcessQuery(options.xMagicImageProcess),
+					}),
+				},
+			},
+		)
+	},
+
 	/**
 	 * @description 复制新的话题（从话题的消息节点中复制出新话题）
 	 * @param {object} params

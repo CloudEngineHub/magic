@@ -84,6 +84,69 @@ describe("useIframeScaling", () => {
 		expect(result.current.scaleRatio).toBeCloseTo(960 / 1920, 5)
 	})
 
+	it("reserves vertical space for PPT preview controls during auto-fit", async () => {
+		const container = document.createElement("div")
+		Object.defineProperties(container, {
+			offsetWidth: { value: 1600 },
+			offsetHeight: { value: 600 },
+		})
+
+		const iframe = document.createElement("iframe")
+		document.body.appendChild(iframe)
+
+		const { result } = renderHook(() =>
+			useIframeScaling({
+				containerRef: { current: container },
+				iframeRef: { current: iframe },
+				isPptRender: true,
+				iframeLoaded: true,
+				contentInjected: true,
+				scaleContentDimensions: {
+					width: 1920,
+					height: 1080,
+				},
+				autoFitVerticalPadding: 64,
+			}),
+		)
+
+		await waitFor(() => {
+			expect(result.current.scaleRatio).toBeCloseTo((600 - 64 * 2) / 1080, 5)
+		})
+	})
+
+	it("auto-fits PPT fullscreen regardless of the shared manual scale", async () => {
+		const container = document.createElement("div")
+		Object.defineProperties(container, {
+			offsetWidth: { value: 960 },
+			offsetHeight: { value: 800 },
+		})
+
+		const iframe = document.createElement("iframe")
+		document.body.appendChild(iframe)
+
+		const { result } = renderHook(() =>
+			useIframeScaling({
+				containerRef: { current: container },
+				iframeRef: { current: iframe },
+				isPptRender: true,
+				isFullscreen: true,
+				iframeLoaded: true,
+				contentInjected: true,
+				manualScale: 0.65,
+				onManualScaleChange: vi.fn(),
+				scaleContentDimensions: {
+					width: 1920,
+					height: 1080,
+				},
+			}),
+		)
+
+		await waitFor(() => {
+			expect(result.current.scaleRatio).toBeCloseTo(960 / 1920, 5)
+		})
+		expect(result.current.isManualZoom).toBe(false)
+	})
+
 	it("does not schedule delayed slide-container probes when scale dimensions are available", () => {
 		const setTimeoutSpy = vi.spyOn(window, "setTimeout")
 		const container = document.createElement("div")

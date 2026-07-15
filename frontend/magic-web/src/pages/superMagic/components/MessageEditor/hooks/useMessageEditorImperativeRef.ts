@@ -16,7 +16,7 @@ interface UseMessageEditorImperativeRefParams {
 	clearContent: () => void
 	clearContentAfterSend: () => void
 	updateContent: (content: JSONContent | undefined) => void
-	focus: (params?: { enableWhenIsMobile?: boolean }) => void
+	focus: (params?: { enableWhenIsMobile?: boolean; preventScroll?: boolean }) => void
 	addFiles: (files: File[]) => Promise<void>
 	loadDraftReady: () => Promise<void>
 	saveSuperMagicTopicModel: (params: {

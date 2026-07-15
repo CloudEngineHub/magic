@@ -111,7 +111,7 @@ export interface PcFloatPanelProps {
 
 const PcFloatPanel = function PcFloatPanel(props: PcFloatPanelProps) {
 	const { styles, cx } = useStyles()
-	const { t } = useTranslation("super")
+	const { t } = useTranslation(["super", "recordSummary"])
 
 	const {
 		isWaitingSummarize,
