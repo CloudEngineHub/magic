@@ -5,40 +5,19 @@ import { cn } from "@/lib/utils"
 import type { HTMLAttributes, MouseEventHandler, ReactNode, RefObject } from "react"
 
 type ScrollDirection = "left" | "right"
-const SCROLLABLE_OVERFLOW_Y = new Set(["auto", "scroll", "overlay"])
+const DRAG_START_DISTANCE = 4
 const CONTROL_OVERLAY_WIDTH_CLASS = "w-20"
 const LEFT_CONTROL_GRADIENT_CLASS =
 	"bg-[linear-gradient(to_left,_transparent_0%,_var(--control-background)_50%,_var(--control-background)_100%)]"
 const RIGHT_CONTROL_GRADIENT_CLASS =
 	"bg-[linear-gradient(to_right,_transparent_0%,_var(--control-background)_50%,_var(--control-background)_100%)]"
 
-function canConsumeVerticalScroll(element: HTMLElement, deltaY: number) {
-	const computedStyle = window.getComputedStyle(element)
-	if (!SCROLLABLE_OVERFLOW_Y.has(computedStyle.overflowY)) return false
-	if (element.scrollHeight <= element.clientHeight) return false
-
-	if (deltaY > 0) {
-		return element.scrollTop + element.clientHeight < element.scrollHeight
-	}
-	if (deltaY < 0) {
-		return element.scrollTop > 0
-	}
-
-	return false
-}
-
-function shouldSkipHorizontalScroll(
-	target: HTMLElement,
-	container: HTMLDivElement,
-	deltaY: number,
-) {
-	let current: HTMLElement | null = target
-	while (current && current !== container) {
-		if (canConsumeVerticalScroll(current, deltaY)) return true
-		current = current.parentElement
-	}
-
-	return false
+interface DragState {
+	pointerId: number
+	startX: number
+	startY: number
+	startScrollLeft: number
+	isDragging: boolean
 }
 
 interface HeadlessHorizontalScrollRenderProps {
@@ -62,7 +41,6 @@ interface HeadlessHorizontalScrollProps {
 	onScrollContainerContextMenu?: MouseEventHandler<HTMLDivElement>
 	children: ReactNode
 	scrollStep?: number
-	enableWheelScroll?: boolean
 	hideScrollbar?: boolean
 	renderLeftControl?: (props: HeadlessHorizontalScrollRenderProps) => ReactNode
 	renderRightControl?: (props: HeadlessHorizontalScrollRenderProps) => ReactNode
@@ -125,7 +103,6 @@ function HeadlessHorizontalScroll({
 	onScrollContainerContextMenu,
 	children,
 	scrollStep = 200,
-	enableWheelScroll = true,
 	hideScrollbar = true,
 	renderLeftControl = defaultRenderLeftControl,
 	renderRightControl = defaultRenderRightControl,
@@ -134,6 +111,7 @@ function HeadlessHorizontalScroll({
 	const scrollContainerRef = externalScrollContainerRef ?? internalScrollContainerRef
 	const [showLeftArrow, setShowLeftArrow] = useState(false)
 	const [showRightArrow, setShowRightArrow] = useState(false)
+	const [isDragging, setIsDragging] = useState(false)
 
 	const checkScrollPosition = useCallback(() => {
 		const container = scrollContainerRef.current
@@ -162,16 +140,13 @@ function HeadlessHorizontalScroll({
 		[scrollContainerRef, scrollStep],
 	)
 
-	// Use a ref to avoid stale closure in the native wheel handler
-	const enableWheelScrollRef = useRef(enableWheelScroll)
-	useEffect(() => {
-		enableWheelScrollRef.current = enableWheelScroll
-	}, [enableWheelScroll])
-
 	useEffect(() => {
 		checkScrollPosition()
 		const container = scrollContainerRef.current
 		if (!container) return
+		let dragState: DragState | null = null
+		let suppressClick = false
+		let clearClickSuppressionTimer: ReturnType<typeof setTimeout> | null = null
 
 		container.addEventListener("scroll", checkScrollPosition, { passive: true })
 		const resizeObserver =
@@ -180,42 +155,94 @@ function HeadlessHorizontalScroll({
 
 		window.addEventListener("resize", checkScrollPosition)
 
-		// Native wheel handler registered with passive:false so preventDefault works
-		function handleWheel(event: globalThis.WheelEvent) {
-			if (!container) return
-			if (!enableWheelScrollRef.current) return
+		function handlePointerDown(event: PointerEvent) {
+			if (event.isPrimary === false || event.button !== 0) return
 			if (container.scrollWidth <= container.clientWidth) return
 
-			// React portals bubble through React tree; ignore wheel events coming
-			// from outside this scroll container in the actual DOM tree.
-			const eventTarget = event.target
-			if (!(eventTarget instanceof Node) || !container.contains(eventTarget)) return
-
-			const targetElement =
-				eventTarget instanceof HTMLElement ? eventTarget : eventTarget.parentElement
-			if (!targetElement) return
-			if (shouldSkipHorizontalScroll(targetElement, container, event.deltaY)) return
-
-			const useVerticalDelta = Math.abs(event.deltaY) > Math.abs(event.deltaX)
-			if (!useVerticalDelta || event.deltaY === 0) return
-
-			const maxScrollLeft = container.scrollWidth - container.clientWidth
-			const nextScrollLeft = Math.max(
-				0,
-				Math.min(maxScrollLeft, container.scrollLeft + event.deltaY),
-			)
-			if (nextScrollLeft === container.scrollLeft) return
-
-			event.preventDefault()
-			container.scrollLeft = nextScrollLeft
-			checkScrollPosition()
+			dragState = {
+				pointerId: event.pointerId,
+				startX: event.clientX,
+				startY: event.clientY,
+				startScrollLeft: container.scrollLeft,
+				isDragging: false,
+			}
 		}
 
-		container.addEventListener("wheel", handleWheel, { passive: false })
+		function handlePointerMove(event: PointerEvent) {
+			if (!dragState || dragState.pointerId !== event.pointerId) return
+
+			const deltaX = event.clientX - dragState.startX
+			const deltaY = event.clientY - dragState.startY
+
+			if (!dragState.isDragging) {
+				if (Math.abs(deltaX) < DRAG_START_DISTANCE) return
+				if (Math.abs(deltaX) <= Math.abs(deltaY)) return
+
+				dragState.isDragging = true
+				container.setPointerCapture?.(event.pointerId)
+				setIsDragging(true)
+			}
+
+			event.preventDefault()
+			container.scrollLeft = dragState.startScrollLeft - deltaX
+		}
+
+		function finishDrag(event: PointerEvent, shouldSuppressClick: boolean) {
+			if (!dragState || dragState.pointerId !== event.pointerId) return
+
+			const didDrag = dragState.isDragging
+			dragState = null
+			setIsDragging(false)
+
+			if (container.hasPointerCapture?.(event.pointerId)) {
+				container.releasePointerCapture(event.pointerId)
+			}
+
+			if (didDrag && shouldSuppressClick) {
+				suppressClick = true
+				clearClickSuppressionTimer = setTimeout(() => {
+					suppressClick = false
+					clearClickSuppressionTimer = null
+				}, 0)
+			}
+		}
+
+		function handlePointerUp(event: PointerEvent) {
+			finishDrag(event, true)
+		}
+
+		function handlePointerCancel(event: PointerEvent) {
+			finishDrag(event, false)
+		}
+
+		function handleClick(event: MouseEvent) {
+			if (!suppressClick) return
+
+			suppressClick = false
+			if (clearClickSuppressionTimer) {
+				clearTimeout(clearClickSuppressionTimer)
+				clearClickSuppressionTimer = null
+			}
+			event.preventDefault()
+			event.stopPropagation()
+		}
+
+		container.addEventListener("pointerdown", handlePointerDown)
+		container.addEventListener("pointermove", handlePointerMove)
+		container.addEventListener("pointerup", handlePointerUp)
+		container.addEventListener("pointercancel", handlePointerCancel)
+		container.addEventListener("lostpointercapture", handlePointerCancel)
+		container.addEventListener("click", handleClick, true)
 
 		return () => {
 			container.removeEventListener("scroll", checkScrollPosition)
-			container.removeEventListener("wheel", handleWheel)
+			container.removeEventListener("pointerdown", handlePointerDown)
+			container.removeEventListener("pointermove", handlePointerMove)
+			container.removeEventListener("pointerup", handlePointerUp)
+			container.removeEventListener("pointercancel", handlePointerCancel)
+			container.removeEventListener("lostpointercapture", handlePointerCancel)
+			container.removeEventListener("click", handleClick, true)
+			if (clearClickSuppressionTimer) clearTimeout(clearClickSuppressionTimer)
 			resizeObserver?.disconnect()
 			window.removeEventListener("resize", checkScrollPosition)
 		}
@@ -250,7 +277,9 @@ function HeadlessHorizontalScroll({
 				ref={scrollContainerRef}
 				className={cn(
 					hideScrollbar && "no-scrollbar",
-					"min-w-0 overflow-x-auto",
+					"min-w-0 touch-pan-y overflow-x-auto",
+					(showLeftArrow || showRightArrow) && "cursor-grab",
+					isDragging && "cursor-grabbing select-none",
 					scrollContainerClassName,
 				)}
 				onContextMenu={onScrollContainerContextMenu}

@@ -155,6 +155,7 @@ function DefaultInputContainer({ editorContext, editorNodes }: DefaultInputConta
 										? handleSlidesTemplatePickerContainerChange
 										: undefined
 								}
+								className={isProjectScene ? "gap-2 p-2" : undefined}
 							/>
 						) : null}
 					</div>

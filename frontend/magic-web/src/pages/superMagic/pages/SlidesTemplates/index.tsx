@@ -2,7 +2,7 @@ import { MousePointerClick, Palette, Search, X } from "lucide-react"
 import { useSize } from "ahooks"
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion"
 import { observer } from "mobx-react-lite"
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { Button } from "@/components/shadcn-ui/button"
 import { Input } from "@/components/shadcn-ui/input"
@@ -22,111 +22,66 @@ import {
 	normalizeTemplateColors,
 	templateColorToRgba,
 } from "./templateColors"
-import {
-	clearTemplateColorExtractionBackgroundQueue,
-	getExtractedTemplateColors,
-	requestTemplateColorExtraction,
-	subscribeTemplateColorExtractionSettled,
-} from "./templateColorExtractionStore"
-import { useTemplateColorExtractionVersion } from "./useResolvedTemplateColors"
-import {
-	preserveExistingTemplateOrder,
-	reuseUnchangedTemplateOptions,
-	SIMILAR_TEMPLATE_PAGE_SIZE as CANVAS_TEMPLATE_PAGE_SIZE,
-	shouldLoadMoreSimilarColorTemplates,
-} from "./similarTemplateLoading"
+import { getExtractedTemplateColors } from "./templateColorExtractionStore"
 
 const BOTTOM_TOOLS_OFFSET = 24
+const CANVAS_TEMPLATE_PAGE_SIZE = 40
 const CANVAS_EDGE_GAP = 40
 const GROUP_SCROLL_CONTROL_CLASS_NAME =
 	"[&_button]:border-white/20 [&_button]:bg-zinc-800/[0.86] [&_button]:text-white [&_button]:shadow-[0_4px_14px_rgba(0,0,0,0.28),inset_0_1px_0_rgba(255,255,255,0.12)] [&_button]:backdrop-blur-lg [&_button:hover]:bg-zinc-700/[0.92]"
 
-function getAvailableTemplateColors(template: OptionItem, cacheVersion?: number) {
-	// cacheVersion 仅用于让相似结果在 Worker 写入缓存后重新派生。
-	void cacheVersion
+function getAvailableTemplateColors(template: OptionItem) {
 	const backendColors = normalizeTemplateColors(template.colors)
 	if (backendColors.length > 0) return backendColors
 	return getExtractedTemplateColors(getTemplateCoverUrl(template))
+}
+
+function getSimilarTemplateOptions(source: OptionItem, candidates: OptionItem[]) {
+	const sourceKey = getTemplateKey(source)
+	const sourceColors = getAvailableTemplateColors(source)
+
+	return candidates
+		.map((template, originalIndex) => ({
+			distance:
+				getTemplateKey(template) === sourceKey
+					? -1
+					: getTemplatePaletteDistance(
+							sourceColors,
+							getAvailableTemplateColors(template),
+						),
+			originalIndex,
+			template,
+		}))
+		.filter(({ distance }) => distance < 0 || distance <= MAX_SIMILAR_TEMPLATE_COLOR_DISTANCE)
+		.sort((left, right) => {
+			if (left.distance !== right.distance) return left.distance - right.distance
+			const sortDifference = (right.template.sort ?? 0) - (left.template.sort ?? 0)
+			return sortDifference || left.originalIndex - right.originalIndex
+		})
+		.map(({ template }) => template)
 }
 
 function SlidesTemplatesPage() {
 	const { t } = useTranslation("crew/create")
 	const lt = useLocaleText()
 	const slidesState = useSlidesTemplateCatalogState({ pageSize: CANVAS_TEMPLATE_PAGE_SIZE })
-	const {
-		hasMore: hasMoreTemplates,
-		isLoading: isLoadingTemplates,
-		isLoadingMore: isLoadingMoreTemplates,
-		isRefreshing: isRefreshingTemplates,
-		loadedTemplateCount,
-		loadMore: loadMoreTemplates,
-	} = slidesState
+	const { loadMore: loadMoreTemplates } = slidesState
 	const [searchValue, setSearchValue] = useState(slidesState.keyword)
 	const [selectedTemplate, setSelectedTemplate] = useState<OptionItem | null>(null)
 	const [similarColorSource, setSimilarColorSource] = useState<OptionItem | null>(null)
+	const [similarColorTemplates, setSimilarColorTemplates] = useState<OptionItem[] | null>(null)
 	const [isInlinePreviewOpen, setIsInlinePreviewOpen] = useState(false)
 	const isComposingRef = useRef(false)
 	const canvasRef = useRef<SlidesTemplateCanvasHandle>(null)
 	const bottomToolsRef = useRef<HTMLDivElement | null>(null)
-	const visibleTemplateOptionsRef = useRef(slidesState.templateOptions)
-	const similarColorSourceKeyRef = useRef("")
-	const similarColorLoadCountRef = useRef(0)
-	const similarColorLoadSourceKeyRef = useRef("")
 	const templateDetailRequestSeqRef = useRef(0)
 	const bottomToolsSize = useSize(bottomToolsRef)
 	const reduceMotion = useReducedMotion()
 	const hasGroups = slidesState.groups.length > 1
 	const isSimilarColorFilterActive = Boolean(similarColorSource)
-	const colorCacheVersion = useTemplateColorExtractionVersion(isSimilarColorFilterActive)
-	const visibleTemplateOptions = useMemo(() => {
-		let nextTemplateOptions = slidesState.templateOptions
-
-		if (similarColorSource) {
-			const sourceKey = getTemplateKey(similarColorSource)
-			const sourceColors = getAvailableTemplateColors(similarColorSource, colorCacheVersion)
-			nextTemplateOptions = slidesState.templateOptions
-				.map((template, originalIndex) => ({
-					distance:
-						getTemplateKey(template) === sourceKey
-							? -1
-							: getTemplatePaletteDistance(
-									sourceColors,
-									getAvailableTemplateColors(template, colorCacheVersion),
-								),
-					originalIndex,
-					template,
-				}))
-				.filter(
-					({ distance }) =>
-						distance < 0 || distance <= MAX_SIMILAR_TEMPLATE_COLOR_DISTANCE,
-				)
-				.sort((left, right) => {
-					if (left.distance !== right.distance) return left.distance - right.distance
-					const sortDifference = (right.template.sort ?? 0) - (left.template.sort ?? 0)
-					return sortDifference || left.originalIndex - right.originalIndex
-				})
-				.map(({ template }) => template)
-
-			if (similarColorSourceKeyRef.current === sourceKey) {
-				// 新完成的颜色结果追加到现有布局末尾，避免已有卡片跨列换位。
-				nextTemplateOptions = preserveExistingTemplateOrder(
-					visibleTemplateOptionsRef.current,
-					nextTemplateOptions,
-				)
-			}
-			similarColorSourceKeyRef.current = sourceKey
-		} else {
-			similarColorSourceKeyRef.current = ""
-		}
-
-		const stableTemplateOptions = reuseUnchangedTemplateOptions(
-			visibleTemplateOptionsRef.current,
-			nextTemplateOptions,
-		)
-		// 未命中的颜色结果不会改变成员或顺序，继续复用数组可避免画布重建布局。
-		visibleTemplateOptionsRef.current = stableTemplateOptions
-		return stableTemplateOptions
-	}, [colorCacheVersion, similarColorSource, slidesState.templateOptions])
+	const visibleTemplateOptions = similarColorSource
+		? (similarColorTemplates ?? [])
+		: slidesState.templateOptions
 	const similarColorSourceName = similarColorSource
 		? (lt(similarColorSource.label) ?? lt(similarColorSource.value) ?? "")
 		: ""
@@ -156,87 +111,10 @@ function SlidesTemplatesPage() {
 		setSearchValue(slidesState.keyword)
 	}, [slidesState.keyword])
 
-	const queueMissingTemplateColors = useCallback(() => {
-		if (!similarColorSource) return
-
-		slidesState.templateOptions.forEach((template) => {
-			if (getAvailableTemplateColors(template).length > 0) return
-			requestTemplateColorExtraction(getTemplateCoverUrl(template), "background")
-		})
-	}, [similarColorSource, slidesState.templateOptions])
-
-	useEffect(() => {
-		if (!isSimilarColorFilterActive) return
-
-		// 队列进度只用于继续补充后台任务，不触发模板墙重新渲染。
-		queueMissingTemplateColors()
-		return subscribeTemplateColorExtractionSettled(queueMissingTemplateColors)
-	}, [isSimilarColorFilterActive, queueMissingTemplateColors])
-
-	useEffect(() => {
-		if (!isSimilarColorFilterActive) {
-			clearTemplateColorExtractionBackgroundQueue()
-			return
-		}
-
-		return clearTemplateColorExtractionBackgroundQueue
-	}, [isSimilarColorFilterActive])
-
-	useEffect(() => {
-		const sourceKey = similarColorSource ? getTemplateKey(similarColorSource) : ""
-		if (similarColorLoadSourceKeyRef.current === sourceKey) return
-
-		similarColorLoadSourceKeyRef.current = sourceKey
-		similarColorLoadCountRef.current = 0
-	}, [similarColorSource])
-
-	const canLoadMoreSimilarColorTemplates =
-		isSimilarColorFilterActive &&
-		shouldLoadMoreSimilarColorTemplates({
-			loadCount: similarColorLoadCountRef.current,
-			hasMore: hasMoreTemplates,
-			isLoading: isLoadingTemplates,
-			isLoadingMore: isLoadingMoreTemplates,
-			isRefreshing: isRefreshingTemplates,
-			loadedTemplateCount,
-			similarTemplateCount: visibleTemplateOptions.length,
-		})
 	const handleLoadMoreTemplates = useCallback(() => {
-		if (!isSimilarColorFilterActive) {
-			loadMoreTemplates()
-			return
-		}
-		if (
-			!shouldLoadMoreSimilarColorTemplates({
-				loadCount: similarColorLoadCountRef.current,
-				hasMore: hasMoreTemplates,
-				isLoading: isLoadingTemplates,
-				isLoadingMore: isLoadingMoreTemplates,
-				isRefreshing: isRefreshingTemplates,
-				loadedTemplateCount,
-				similarTemplateCount: visibleTemplateOptions.length,
-			})
-		) {
-			return
-		}
-
-		similarColorLoadCountRef.current += 1
+		if (isSimilarColorFilterActive) return
 		loadMoreTemplates()
-	}, [
-		hasMoreTemplates,
-		isSimilarColorFilterActive,
-		isLoadingMoreTemplates,
-		isLoadingTemplates,
-		isRefreshingTemplates,
-		loadedTemplateCount,
-		loadMoreTemplates,
-		visibleTemplateOptions.length,
-	])
-
-	useEffect(() => {
-		if (!isSimilarColorFilterActive) return
-		handleLoadMoreTemplates()
-	}, [handleLoadMoreTemplates, isSimilarColorFilterActive])
+	}, [isSimilarColorFilterActive, loadMoreTemplates])
 
 	const resetKey = `${slidesState.selectedGroupKey}:${slidesState.keyword.trim()}:${
 		similarColorSource ? getTemplateKey(similarColorSource) : "all-colors"
@@ -244,6 +122,7 @@ function SlidesTemplatesPage() {
 
 	function handleSearchChange(value: string) {
 		setSimilarColorSource(null)
+		setSimilarColorTemplates(null)
 		setSearchValue(value)
 		if (isComposingRef.current) return
 
@@ -256,6 +135,7 @@ function SlidesTemplatesPage() {
 
 	function handleCompositionEnd(value: string) {
 		setSimilarColorSource(null)
+		setSimilarColorTemplates(null)
 		isComposingRef.current = false
 		setSearchValue(value)
 		slidesState.setKeyword(value)
@@ -263,6 +143,7 @@ function SlidesTemplatesPage() {
 
 	function handleClearSearch() {
 		setSimilarColorSource(null)
+		setSimilarColorTemplates(null)
 		setSearchValue("")
 		slidesState.setKeyword("")
 	}
@@ -297,14 +178,20 @@ function SlidesTemplatesPage() {
 		canvasRef.current?.focusRandomTemplate()
 	}
 
-	const handleFindSimilarColors = useCallback((template: OptionItem) => {
-		const colors = getAvailableTemplateColors(template)
-		if (colors.length === 0) return
-		setSimilarColorSource({ ...template, colors })
-	}, [])
+	const handleFindSimilarColors = useCallback(
+		(template: OptionItem) => {
+			const colors = getAvailableTemplateColors(template)
+			if (colors.length === 0) return
+			const source = { ...template, colors }
+			setSimilarColorTemplates(getSimilarTemplateOptions(source, slidesState.templateOptions))
+			setSimilarColorSource(source)
+		},
+		[slidesState.templateOptions],
+	)
 
 	function handleGroupChange(groupKey: string) {
 		setSimilarColorSource(null)
+		setSimilarColorTemplates(null)
 		slidesState.setSelectedGroupKey(groupKey)
 	}
 
@@ -318,11 +205,7 @@ function SlidesTemplatesPage() {
 				templates={visibleTemplateOptions}
 				selectedTemplate={selectedTemplate}
 				onTemplateSelect={handleTemplateSelect}
-				hasMore={
-					isSimilarColorFilterActive
-						? canLoadMoreSimilarColorTemplates
-						: slidesState.hasMore
-				}
+				hasMore={isSimilarColorFilterActive ? false : slidesState.hasMore}
 				isLoading={slidesState.isLoading}
 				isLoadingMore={slidesState.isLoadingMore}
 				isRefreshing={slidesState.isRefreshing}
@@ -486,7 +369,10 @@ function SlidesTemplatesPage() {
 										aria-label={t(
 											"playbook.edit.presets.form.clearSimilarColors",
 										)}
-										onClick={() => setSimilarColorSource(null)}
+										onClick={() => {
+											setSimilarColorSource(null)
+											setSimilarColorTemplates(null)
+										}}
 										data-testid="slides-templates-page-clear-similar-colors"
 									>
 										<X className="size-3.5" />

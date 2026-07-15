@@ -101,7 +101,7 @@ export function createI18nInstance(
 				// 有一些场景下，不是通过 useTranslation 来获取翻译，而是直接通过 i18n.t 来获取翻译
 				// 默认加载一些全局通用命名空间，不需要手动加载；但适用于全局都用到的命名空间；独立模块的还是建议手动加载，或者使用 useTranslation 来获取翻译
 				// 如果不配置的话，可能会出现第一次显示没有国际化，第二次加载的时候才显示正常
-				ns: ["common", "shadcn-ui"],
+				ns: ["common", "shadcn-ui", "recordSummary"],
 				defaultNS: "common",
 				...(options.fallbackNS === undefined ? {} : { fallbackNS: options.fallbackNS }),
 				fallbackLng: resolveFallbackLng,

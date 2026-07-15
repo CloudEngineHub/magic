@@ -6,11 +6,6 @@ import type {
 	OptionItem,
 } from "@/pages/superMagic/components/MainInputContainer/panels/types"
 import SlidesTemplatesPage from "../index"
-import {
-	preserveExistingTemplateOrder,
-	reuseUnchangedTemplateOptions,
-	shouldLoadMoreSimilarColorTemplates,
-} from "../similarTemplateLoading"
 
 const {
 	catalogStateMock,
@@ -227,6 +222,7 @@ describe("SlidesTemplatesPage", () => {
 		catalogStateMock.isLoadingMore = false
 		catalogStateMock.isRefreshing = false
 		catalogStateMock.loadedTemplateCount = 3
+		catalogStateMock.templateOptions = [businessTemplate, relatedTemplate, unrelatedTemplate]
 		findSimilarCallbackHistory.length = 0
 	})
 
@@ -240,75 +236,6 @@ describe("SlidesTemplatesPage", () => {
 		expect(findSimilarCallbackHistory[findSimilarCallbackHistory.length - 1]).toBe(
 			initialCallback,
 		)
-	})
-
-	it("reuses the previous canvas options when filter membership and order are unchanged", () => {
-		const previous = [businessTemplate, relatedTemplate]
-
-		expect(reuseUnchangedTemplateOptions(previous, [...previous])).toBe(previous)
-		expect(
-			reuseUnchangedTemplateOptions(previous, [relatedTemplate, businessTemplate]),
-		).not.toBe(previous)
-	})
-
-	it("appends newly resolved matches without moving existing canvas items", () => {
-		const previous = [businessTemplate, relatedTemplate]
-		const newlyResolved = { colors: ["#315ECA"], value: "PPT-new" }
-
-		expect(
-			preserveExistingTemplateOrder(previous, [
-				businessTemplate,
-				newlyResolved,
-				relatedTemplate,
-			]),
-		).toEqual([businessTemplate, relatedTemplate, newlyResolved])
-	})
-
-	it("auto-loads a limited number of pages for short similar-color result sets", () => {
-		expect(
-			shouldLoadMoreSimilarColorTemplates({
-				loadCount: 0,
-				hasMore: true,
-				isLoading: false,
-				isLoadingMore: false,
-				isRefreshing: false,
-				loadedTemplateCount: 40,
-				similarTemplateCount: 2,
-			}),
-		).toBe(true)
-		expect(
-			shouldLoadMoreSimilarColorTemplates({
-				loadCount: 3,
-				hasMore: true,
-				isLoading: false,
-				isLoadingMore: false,
-				isRefreshing: false,
-				loadedTemplateCount: 120,
-				similarTemplateCount: 2,
-			}),
-		).toBe(false)
-		expect(
-			shouldLoadMoreSimilarColorTemplates({
-				loadCount: 0,
-				hasMore: true,
-				isLoading: false,
-				isLoadingMore: false,
-				isRefreshing: false,
-				loadedTemplateCount: 40,
-				similarTemplateCount: 24,
-			}),
-		).toBe(false)
-		expect(
-			shouldLoadMoreSimilarColorTemplates({
-				loadCount: 2,
-				hasMore: true,
-				isLoading: false,
-				isLoadingMore: false,
-				isRefreshing: false,
-				loadedTemplateCount: 160,
-				similarTemplateCount: 2,
-			}),
-		).toBe(false)
 	})
 
 	it("keeps search and filters at the bottom while the prompt is hidden before selection", () => {
@@ -408,35 +335,34 @@ describe("SlidesTemplatesPage", () => {
 		)
 	})
 
-	it("loads more templates when similar-color results are scarce", () => {
+	it("keeps similar-color results stable when catalog data changes", () => {
 		catalogStateMock.hasMore = true
 		catalogStateMock.loadedTemplateCount = 40
 		const { rerender } = render(<SlidesTemplatesPage />)
 
 		fireEvent.click(screen.getByTestId("mock-slides-template-find-similar-colors"))
-
-		expect(catalogStateMock.loadMore).toHaveBeenCalledTimes(1)
-		catalogStateMock.isLoadingMore = true
-		rerender(<SlidesTemplatesPage />)
-		catalogStateMock.isLoadingMore = false
+		const initialResults = screen.getByTestId("mock-slides-template-canvas-options").textContent
+		catalogStateMock.templateOptions = [
+			businessTemplate,
+			relatedTemplate,
+			unrelatedTemplate,
+			{ value: "PPT-new-related", colors: ["#315ECA", "#7AA7FF"] },
+		]
 		catalogStateMock.loadedTemplateCount = 80
 		rerender(<SlidesTemplatesPage />)
-		expect(catalogStateMock.loadMore).toHaveBeenCalledTimes(2)
-		catalogStateMock.isLoadingMore = true
-		rerender(<SlidesTemplatesPage />)
-		catalogStateMock.isLoadingMore = false
-		catalogStateMock.loadedTemplateCount = 120
-		rerender(<SlidesTemplatesPage />)
-		expect(catalogStateMock.loadMore).toHaveBeenCalledTimes(3)
-		catalogStateMock.loadedTemplateCount = 160
-		rerender(<SlidesTemplatesPage />)
 
+		expect(screen.getByTestId("mock-slides-template-canvas-options")).toHaveTextContent(
+			initialResults ?? "",
+		)
+		expect(screen.getByTestId("mock-slides-template-canvas-options")).not.toHaveTextContent(
+			"PPT-new-related",
+		)
 		expect(screen.getByTestId("mock-slides-template-canvas-options")).toHaveAttribute(
 			"data-has-more",
 			"false",
 		)
 		fireEvent.click(screen.getByTestId("mock-slides-template-canvas-load-more"))
-		expect(catalogStateMock.loadMore).toHaveBeenCalledTimes(3)
+		expect(catalogStateMock.loadMore).not.toHaveBeenCalled()
 	})
 
 	it("hides bottom tools while the inline preview is open and restores them after close", async () => {
