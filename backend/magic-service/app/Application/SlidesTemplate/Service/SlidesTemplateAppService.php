@@ -59,10 +59,7 @@ class SlidesTemplateAppService extends AbstractSlidesTemplateAppService
         $dataIsolation->setContainOfficialOrganization(true);
         $query = $this->createPublicQuery($request);
 
-        return [
-            'total' => $this->slidesTemplateDomainService->count($dataIsolation, $query),
-            'total_usage_count' => $this->slidesTemplateDomainService->sumTotalUsageCount($dataIsolation, $query),
-        ];
+        return $this->slidesTemplateDomainService->getCount($dataIsolation, $query);
     }
 
     public function detail(Authenticatable|BaseDataIsolation $authorization, string $code): SlidesTemplateEntity

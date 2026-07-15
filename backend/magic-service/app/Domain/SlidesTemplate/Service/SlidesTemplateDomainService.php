@@ -53,14 +53,12 @@ class SlidesTemplateDomainService
         return $this->slidesTemplateRepository->queries($dataIsolation, $query, $page);
     }
 
-    public function count(SlidesTemplateDataIsolation $dataIsolation, SlidesTemplateQuery $query): int
+    /**
+     * @return array{total: int, total_usage_count: int}
+     */
+    public function getCount(SlidesTemplateDataIsolation $dataIsolation, SlidesTemplateQuery $query): array
     {
-        return $this->slidesTemplateRepository->count($dataIsolation, $query);
-    }
-
-    public function sumTotalUsageCount(SlidesTemplateDataIsolation $dataIsolation, SlidesTemplateQuery $query): int
-    {
-        return $this->slidesTemplateRepository->sumTotalUsageCount($dataIsolation, $query);
+        return $this->usageCountPolicy->getCount($dataIsolation, $query);
     }
 
     public function create(SlidesTemplateDataIsolation $dataIsolation, SlidesTemplateEntity $entity): SlidesTemplateEntity
