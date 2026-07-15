@@ -6,7 +6,7 @@ import { Button } from "@/components/shadcn-ui/button"
 import { Badge } from "@/components/shadcn-ui/badge"
 import type { FileShareItem, ProjectShareItem } from "../types"
 import ProjectNameBadge from "./ProjectNameBadge"
-import { ShareMode, ShareType, type FileShareUiConfig } from "../../Share/types"
+import { ResourceType, ShareMode, ShareType, type FileShareUiConfig } from "../../Share/types"
 import ShareModal from "../../Share/Modal"
 import ShareSuccessModal from "../../Share/FileShareModal/ShareSuccessModal"
 import {
@@ -17,6 +17,7 @@ import {
 	getRemainingDays,
 	formatExpireAt,
 	convertFileShareItemToShareItem,
+	getShareDisplayName,
 } from "../utils/shareTypeHelpers"
 import { cn } from "@/lib/utils"
 import MagicEllipseWithTooltip from "@/components/base/MagicEllipseWithTooltip/MagicEllipseWithTooltip"
@@ -128,6 +129,12 @@ function FileShareListNew({
 					const showActions = (isHovered || isMagicApp) && !item.deleted_at
 					const badgeStyles = getShareTypeBadgeStyles(item.share_type)
 					const remainingDays = getRemainingDays(item.expire_at)
+					const isProjectShare =
+						item.resource_type === ResourceType.Project || item.share_project === true
+					const displayName = getShareDisplayName(
+						item.title,
+						isProjectShare ? "project" : "file",
+					)
 
 					return (
 						<div
@@ -153,7 +160,7 @@ function FileShareListNew({
 									<div className="flex min-w-0 flex-1 items-center gap-2">
 										{/* 文件名 */}
 										<span className="truncate text-sm font-medium leading-5 text-gray-900">
-											{item.title}
+											{displayName}
 										</span>
 
 										<div className="flex min-w-0 flex-1 items-center justify-between gap-2">
@@ -281,6 +288,9 @@ function FileShareListNew({
 						shareSuccessModal.currentItem.main_file_name || t("share.untitled")
 					}
 					fileIds={(shareSuccessModal.currentItem as any).file_ids}
+					createdAt={shareSuccessModal.currentItem.created_at}
+					updatedAt={shareSuccessModal.currentItem.updated_at}
+					viewCount={shareSuccessModal.currentItem.view_count}
 					hideManageShareLinks={fileShareUiConfig?.hideManageShareLinks}
 					onEditShare={() => {
 						const item = shareSuccessModal.currentItem

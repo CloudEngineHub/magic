@@ -124,4 +124,27 @@ describe("ShareSuccessModal", () => {
 		expect(screen.queryByText("share.manageShareLinks")).not.toBeInTheDocument()
 		expect(screen.getByTestId("share-success-modal-footer-actions")).toHaveClass("justify-end")
 	})
+
+	it("hides share metadata when the current success flow has not provided it", () => {
+		renderShareSuccessModal()
+
+		expect(screen.queryByText("share.createdDate")).not.toBeInTheDocument()
+		expect(screen.queryByText("share.modifiedDate")).not.toBeInTheDocument()
+		expect(screen.queryByText("share.accessCount")).not.toBeInTheDocument()
+	})
+
+	it("shows share creation, modification, and access metadata", () => {
+		renderShareSuccessModal({
+			createdAt: "2026-07-14 09:30:00",
+			updatedAt: "2026-07-14 10:45:00",
+			viewCount: 12,
+		})
+
+		expect(screen.getByText("share.createdDate")).toBeInTheDocument()
+		expect(screen.getByText("2026-07-14 09:30:00")).toBeInTheDocument()
+		expect(screen.getByText("share.modifiedDate")).toBeInTheDocument()
+		expect(screen.getByText("2026-07-14 10:45:00")).toBeInTheDocument()
+		expect(screen.getByText("share.accessCount")).toBeInTheDocument()
+		expect(screen.getByText("12")).toBeInTheDocument()
+	})
 })

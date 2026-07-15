@@ -3921,6 +3921,7 @@
 		"workspace": "Workspace"
 	},
 	"share": {
+		"accessCount": "Visits",
 		"accessPassword": "Password",
 		"addMembers": "Add Members",
 		"advancedOptions": "Advanced Options",
@@ -3970,6 +3971,7 @@
 			"prefix": "Created by ",
 			"suffix": ""
 		},
+		"createdDate": "Created",
 		"days": "days",
 		"departmentOrMemberFileShare": "Specified members can access the file",
 		"departmentOrMemberFileShareDescription": "Specified members can access the file: {{fileName}}",
@@ -4046,6 +4048,7 @@
 		"login": "Login",
 		"manage": "Manage",
 		"manageShareLinks": "Manage Share Links",
+		"modifiedDate": "Modified",
 		"moreSettings": "Settings",
 		"multiFileShareName": "File Share_{{mainFileName}} and {{count}} files",
 		"name": "Name",
@@ -4211,6 +4214,7 @@
 		"fileShare": "Shared Files",
 		"fileShareDesc": "Manage all shared files",
 		"files": "files",
+		"filter": "Filter",
 		"filterStatus": {
 			"active": "Active",
 			"all": "All",
@@ -4859,6 +4863,7 @@
 		"dataCorrectionDescription": "AI checks for errors in tables and data and corrects them",
 		"dataCorrectionPrompt": "Please check the data in the content through trusted data sources. The data must come from a reliable data source and be cross-verified through multiple sources. Ensure the data is accurate and reliable.",
 		"download": "Download",
+		"downloadAbort": "Cancel Download",
 		"downloadAllTitle": "Download All",
 		"downloadFailed": "Download failed",
 		"downloadSelected": "Download Selected ({{count}})",

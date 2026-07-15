@@ -140,6 +140,9 @@ export default memo(function ShareModel(props: ShareModalProps) {
 		shareProject?: boolean // 是否分享整个项目
 		projectName?: string // 项目原始名称（用于项目分享时显示）
 		fileIds?: string[] // 文件ID列表，用于查询文件详情
+		createdAt?: string
+		updatedAt?: string
+		viewCount?: number
 	} | null>(null)
 
 	// Reset modal key when modal opens to force remount
@@ -590,7 +593,10 @@ export default memo(function ShareModel(props: ShareModalProps) {
 				className="flex max-h-[92dvh] flex-col overflow-hidden bg-[#F7F7F6]"
 				data-testid="mobile-topic-share-sheet"
 			>
-				<div className="min-h-0 flex-1 overflow-y-auto" data-testid="mobile-topic-share-content">
+				<div
+					className="min-h-0 flex-1 overflow-y-auto"
+					data-testid="mobile-topic-share-content"
+				>
 					<MobileTopicShare
 						shareContext={shareContext}
 						extraData={extraData}
