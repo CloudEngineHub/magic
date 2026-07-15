@@ -16,7 +16,11 @@ interface SmartTooltipProps {
 	 */
 	maxLines?: number
 	content?: ReactNode
+	forceShowTooltip?: boolean
+	tooltipContentClassName?: string
+	tooltipContentStyle?: React.CSSProperties
 	trigger?: ActionType[]
+	onOpenChange?: (open: boolean) => void
 	onClick?: (e: React.MouseEvent<HTMLElement>) => void
 	onDoubleClick?: (e: React.MouseEvent<HTMLElement>) => void
 	sideOffset?: number
@@ -35,7 +39,11 @@ const SmartTooltip = memo(function SmartTooltip({
 	maxWidth,
 	maxLines = 1,
 	content,
+	forceShowTooltip = false,
+	tooltipContentClassName,
+	tooltipContentStyle,
 	trigger = ["hover"],
+	onOpenChange,
 	onClick,
 	onDoubleClick,
 	sideOffset = 0,
@@ -49,6 +57,7 @@ const SmartTooltip = memo(function SmartTooltip({
 	// Convert trigger array to open state management for shadcn/ui
 	const [open, setOpen] = useState(false)
 	const shouldUseControlled = trigger.includes("click")
+	const effectiveShowTooltip = forceShowTooltip || showTooltip
 
 	useEffect(() => {
 		const checkOverflow = () => {
@@ -91,8 +100,15 @@ const SmartTooltip = memo(function SmartTooltip({
 		}
 	}, [children, maxLines])
 
+	const handleOpenChange = (nextOpen: boolean) => {
+		if (shouldUseControlled) {
+			setOpen(nextOpen)
+		}
+		onOpenChange?.(nextOpen)
+	}
+
 	const handleTriggerClick = (e: React.MouseEvent<HTMLElement>) => {
-		if (trigger.includes("click") && showTooltip) {
+		if (trigger.includes("click") && effectiveShowTooltip) {
 			setOpen(!open)
 		}
 		onClick?.(e)
@@ -131,8 +147,8 @@ const SmartTooltip = memo(function SmartTooltip({
 
 	return (
 		<Tooltip
-			open={shouldUseControlled ? (showTooltip ? open : false) : undefined}
-			onOpenChange={shouldUseControlled ? setOpen : undefined}
+			open={shouldUseControlled ? (effectiveShowTooltip ? open : false) : undefined}
+			onOpenChange={handleOpenChange}
 		>
 			<TooltipTrigger asChild>
 				{elementType === "div" ? (
@@ -145,11 +161,13 @@ const SmartTooltip = memo(function SmartTooltip({
 					</span>
 				)}
 			</TooltipTrigger>
-			{showTooltip && (
+			{effectiveShowTooltip && (
 				<TooltipContent
 					className={cn(
 						"z-tooltip max-w-[min(20rem,var(--radix-tooltip-content-available-width,100vw))] whitespace-normal text-wrap break-words",
+						tooltipContentClassName,
 					)}
+					style={tooltipContentStyle}
 					sideOffset={sideOffset}
 					side={placement}
 				>
