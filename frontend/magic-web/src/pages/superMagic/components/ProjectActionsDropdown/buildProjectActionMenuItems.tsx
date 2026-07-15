@@ -45,6 +45,8 @@ export function buildProjectActionMenuItems<T extends ProjectItemLike>({
 	const isCollaborationProjectStatus = isCollaborationProject(item)
 	const isOwnerStatus = isOwner(item.user_role)
 	const isWorkspaceShortcutProjectStatus = isWorkspaceShortcutProject(item)
+	// Managers edit the source collaboration project even when it is shown through a workspace binding.
+	const canRenameWorkspaceShortcut = canManageProject(item.user_role)
 	const hasBoundWorkspace = Boolean(item.bind_workspace_id && item.bind_workspace_id !== "0")
 	// Magic App WebView has no stable multi-window desktop semantics, so hide this browser-only action.
 	const canOpenInNewWindow = !isMagicApp && !!onOpenInNewWindow
@@ -96,7 +98,10 @@ export function buildProjectActionMenuItems<T extends ProjectItemLike>({
 					<span>{t("project.rename")}</span>
 				</div>
 			),
-			visible: !!onRenameStart && !!onRenameProject && !isWorkspaceShortcutProjectStatus,
+			visible:
+				!!onRenameStart &&
+				!!onRenameProject &&
+				(!isWorkspaceShortcutProjectStatus || canRenameWorkspaceShortcut),
 		},
 		{
 			key: ProjectActionMenuKey.MoveTo,

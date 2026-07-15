@@ -96,15 +96,18 @@ const CanvasDesignContent = forwardRef<CanvasDesignRef, CanvasDesignProps>((prop
 
 	// 更新视口偏移量
 	const updatePadding = useCallback(
-		(instance: Canvas | null) => {
+		(instance: Canvas | null, options?: { preserveViewportCenter?: boolean }) => {
 			if (!instance) return
 			const left = layersCollapsed ? 0 : layersWidth + 8
-			instance.viewportController.setDefaultViewportPadding({
-				left,
-				right: 0,
-				top: 0,
-				bottom: 0,
-			})
+			instance.viewportController.setDefaultViewportPadding(
+				{
+					left,
+					right: 0,
+					top: 0,
+					bottom: 0,
+				},
+				options,
+			)
 		},
 		[layersCollapsed, layersWidth],
 	)
@@ -203,7 +206,7 @@ const CanvasDesignContent = forwardRef<CanvasDesignRef, CanvasDesignProps>((prop
 	}, [methods, permissions, canvas, t])
 
 	useUpdateEffect(() => {
-		updatePadding(canvas)
+		updatePadding(canvas, { preserveViewportCenter: true })
 	}, [layersCollapsed, layersWidth, canvas, updatePadding])
 
 	return (

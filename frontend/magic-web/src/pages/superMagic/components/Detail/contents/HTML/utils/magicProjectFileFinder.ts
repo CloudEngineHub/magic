@@ -102,7 +102,9 @@ export async function findMagicProjectJsFile(params: {
 		}
 
 		let fileRelativeFolderPath = "/"
-		if (currentFile.relative_file_path) {
+		if (currentFile.is_directory) {
+			fileRelativeFolderPath = `${currentFile.relative_file_path?.replace(/\/+$/, "") || ""}/`
+		} else if (currentFile.relative_file_path) {
 			const lastSlashIndex = currentFile.relative_file_path.lastIndexOf("/")
 			if (lastSlashIndex !== -1) {
 				fileRelativeFolderPath = currentFile.relative_file_path.substring(

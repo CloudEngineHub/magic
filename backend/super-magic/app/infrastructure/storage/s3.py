@@ -131,7 +131,7 @@ class S3Uploader(AbstractStorage, BaseFileProcessor):
         return part_size
 
     def _get_s3_client(self):
-        """获取S3客户端"""
+        """获取S3客户端（下载/上传用，优先走内网 endpoint）"""
         if not self.credentials:
             raise ValueError("未设置凭证")
 
@@ -142,10 +142,14 @@ class S3Uploader(AbstractStorage, BaseFileProcessor):
         tc = credentials.temporary_credential
         creds = tc.credentials
 
+        # 优先使用内网 endpoint，回退到公网 endpoint
+        endpoint = tc.internal_endpoint or tc.endpoint
+        logger.info(f"Creating S3 client with endpoint: {endpoint} (internal={tc.internal_endpoint is not None})")
+
         # 创建S3客户端
         s3_client = boto3.client(
             's3',
-            endpoint_url=tc.endpoint,
+            endpoint_url=endpoint,
             aws_access_key_id=creds.access_key_id,
             aws_secret_access_key=creds.secret_access_key,
             aws_session_token=creds.session_token,
@@ -160,6 +164,36 @@ class S3Uploader(AbstractStorage, BaseFileProcessor):
         )
 
         return s3_client
+
+    def _get_public_s3_client(self):
+        """获取S3客户端（presigned URL 用，走公网 endpoint）"""
+        if not self.credentials:
+            raise ValueError("未设置凭证")
+
+        if not isinstance(self.credentials, S3Credentials):
+            raise ValueError("凭证类型错误")
+
+        credentials: S3Credentials = self.credentials
+        tc = credentials.temporary_credential
+        creds = tc.credentials
+
+        logger.info(f"Creating S3 client with public endpoint: {tc.endpoint}")
+
+        return boto3.client(
+            's3',
+            endpoint_url=tc.endpoint,
+            aws_access_key_id=creds.access_key_id,
+            aws_secret_access_key=creds.secret_access_key,
+            aws_session_token=creds.session_token,
+            region_name=tc.region,
+            config=Config(
+                s3={"addressing_style": "path"},
+                signature_version='s3v4',
+                connect_timeout=self.CONNECT_TIMEOUT,
+                read_timeout=self.READ_TIMEOUT,
+                retries={'max_attempts': self.MAX_RETRIES}
+            )
+        )
 
     async def _simple_upload(self, file_obj, key: str, file_size: int, bucket_name: str):
         """简单上传，适用于小文件"""
@@ -628,8 +662,8 @@ class S3Uploader(AbstractStorage, BaseFileProcessor):
             # 获取凭证信息
             tc = credentials.temporary_credential
 
-            # 创建S3客户端
-            s3_client = self._get_s3_client()
+            # 创建S3客户端（presigned URL 必须走公网 endpoint，否则集群外无法访问）
+            s3_client = self._get_public_s3_client()
 
             try:
                 # 异步生成预签名URL

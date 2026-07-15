@@ -38,6 +38,7 @@ export interface ShareResourceApiItem {
 	resource_name: string
 	resource_type: number
 	created_at: string
+	updated_at?: string
 	created_uid: string
 	share_type: number
 	project_id?: string
@@ -110,6 +111,7 @@ export interface FileShareItem {
 	expire_days?: number // 有效时间（天数）
 	expire_at?: string // 过期时间（格式：xxxx/xx/xx）
 	created_at: string // 创建时间
+	updated_at?: string // 修改时间
 	share_project?: boolean
 	deleted_at?: string // 删除时间（如果存在则表示已删除，不允许操作）
 	share_scope?: ShareScopeInfo
@@ -132,6 +134,8 @@ export interface ProjectShareItem {
 	expire_days?: number // 有效时间（天数）
 	expire_at?: string // 过期时间（格式：xxxx/xx/xx）
 	created_at: string // 创建时间
+	updated_at?: string // 修改时间
+	share_project?: boolean
 	deleted_at?: string // 删除时间（如果存在则表示已删除，不允许操作）
 	extend?: {
 		file_count?: number

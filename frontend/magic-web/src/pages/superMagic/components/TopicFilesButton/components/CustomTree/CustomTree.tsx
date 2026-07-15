@@ -196,6 +196,7 @@ interface CustomTreeProps {
 	scrollToKey?: React.Key | null
 	virtualThreshold?: number
 	isMobile?: boolean
+	onMountedRowsChange?: (rows: VisibleTreeNodeRow[]) => void
 	// 拖拽事件处理器
 	onDragEnter?: (e: React.DragEvent, node: TreeNodeData) => void
 	onDragLeave?: (e: React.DragEvent, node: TreeNodeData) => void
@@ -221,6 +222,7 @@ function CustomTree({
 	scrollToKey,
 	virtualThreshold = DEFAULT_VIRTUAL_THRESHOLD,
 	isMobile = false,
+	onMountedRowsChange,
 	onDragEnter,
 	onDragLeave,
 	onDragOver,
@@ -271,6 +273,13 @@ function CustomTree({
 		}
 	}, [dragTargetBlockRange, rowEstimateSize])
 	const shouldShowDragTargetBlock = Boolean(dragTargetBlockStyle && dragTargetNodeClass)
+	const mountedRows = useMemo(() => {
+		if (!shouldVirtualize) return visibleRows
+
+		return virtualItems
+			.map((virtualItem) => visibleRows[virtualItem.index])
+			.filter((row): row is VisibleTreeNodeRow => Boolean(row))
+	}, [shouldVirtualize, virtualItems, visibleRows])
 
 	useCustomTreePerfMetrics({
 		rootNodeCount,
@@ -280,6 +289,10 @@ function CustomTree({
 		mountedNodeCount: shouldVirtualize ? virtualItems.length : visibleNodes.length,
 		virtualized: shouldVirtualize,
 	})
+
+	useEffect(() => {
+		onMountedRowsChange?.(mountedRows)
+	}, [mountedRows, onMountedRowsChange])
 
 	const updateScrollAnchor = useCallback(() => {
 		const scrollElement = scrollElementRef?.current

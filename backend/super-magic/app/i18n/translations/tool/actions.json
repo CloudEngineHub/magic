@@ -71,6 +71,14 @@
         "zh_CN": "转换文档格式",
         "en_US": "Convert document format"
     },
+    "convert_pptx_to_slide_template": {
+        "zh_CN": "转换 PPTX 为幻灯片模板",
+        "en_US": "Convert PPTX to slide template"
+    },
+    "install_slides_template": {
+        "zh_CN": "安装幻灯片模板",
+        "en_US": "Install slide template"
+    },
     "export_document_markdown": {
         "zh_CN": "导出 Markdown",
         "en_US": "Export Markdown"
@@ -454,6 +462,14 @@
     "find_skills": {
         "zh_CN": "搜索技能",
         "en_US": "Search skills"
+    },
+    "find_skills.local": {
+        "zh_CN": "查看本地技能",
+        "en_US": "List local skills"
+    },
+    "find_skills.online": {
+        "zh_CN": "搜索互联网技能",
+        "en_US": "Search online skills"
     },
     "install_skills": {
         "zh_CN": "安装技能",

@@ -217,6 +217,7 @@
 		"validation": {
 			"incomplete": "Please complete this question",
 			"multiSelectRange": "Select at least {{min}} item(s) and at most {{max}} item(s)",
+			"required": "This field is required",
 			"unlimited": "unlimited"
 		}
 	},
@@ -870,6 +871,19 @@
 				"unknownError": "Unknown error",
 				"untitledPost": "Untitled post"
 			},
+			"coverGeneration": {
+				"prompt": {
+					"heroCover": "21:9 horizontal cover (heroCover)",
+					"instruction": "Read post.json and the article HTML first. Generate only the requested missing covers with generate_image and keep their visual language consistent with the article. Save them under the current post assets folder and update the matching heroCover or thumbnailCover path in post.json. Use 21:9 for heroCover and 1:1 for thumbnailCover. Preserve every existing cover that was not requested.",
+					"metadata": "Title: {{title}}\nGenerate: {{coverTypes}}",
+					"opening": "Load and execute the self-media-composer Skill to generate missing WeChat cover images for {{mention}}.",
+					"thumbnailCover": "1:1 square cover (thumbnailCover)",
+					"topicName": "[Generate covers] {{title}}"
+				},
+				"startFailed": "Failed to start cover generation",
+				"startFailedWithReason": "Failed to start cover generation: {{reason}}",
+				"started": "Cover generation task created"
+			},
 			"edit": {
 				"addArticleFileToChat": "Add article file to input",
 				"addCurrentPageToChat": "Add this card to chat",
@@ -943,11 +957,20 @@
 					"copySuccess": "HTML copied",
 					"coverDescription": "Stitch the square cover and horizontal cover into one image for WeChat Official Account assets.",
 					"coverTitle": "Cover image",
+					"emptyDescription": "Generate a 1:1 square cover and a 21:9 horizontal cover from the article title and body.",
+					"emptyTitle": "No cover images yet",
 					"exportCover": "Export cover",
+					"generateBoth": "Generate covers",
+					"generateHorizontal": "Generate horizontal cover",
+					"generateSquare": "Generate square cover",
+					"generating": "Creating task...",
 					"horizontalCover": "Horizontal cover",
 					"htmlCopied": "Copied",
 					"htmlDescription": "Copy the processed article HTML and paste it into the WeChat Official Account editor.",
 					"htmlTitle": "WeChat HTML",
+					"missingHorizontalTitle": "21:9 horizontal cover missing",
+					"missingSquareTitle": "1:1 square cover missing",
+					"partialDescription": "Generate the missing image to export the complete cover composition.",
 					"squareCover": "Square cover"
 				}
 			},
@@ -3838,32 +3861,6 @@
 		},
 		"title": "Recycle Bin"
 	},
-	"saasKK": {
-		"bottomHint": "If you still need to use the current service, you can temporarily close this window.",
-		"closeButton": "Close Temporarily",
-		"closeGuide": "Close",
-		"copyFailed": "Copy failed",
-		"copySuccess": "Copied successfully",
-		"deployCodeGuide": {
-			"step1Description": "Open 「https://www.letsmagic.cn/login」 in your browser, click 「Private Deployment」",
-			"step2Description": "Enter 「KK」 in the 「Private Deployment Code」",
-			"title": "Private Deployment Code Guide"
-		},
-		"dialogTitle": "$t(common:platform.name) Login Guide",
-		"dingtalkGuide": {
-			"description": "After opening 「DingTalk」, navigate to 「Workbench」 through the left sidebar, find 「$t(common:platform.name)」 in the workbench and open it.",
-			"title": "DingTalk Workbench Guide"
-		},
-		"loginMethod": "Login Methods",
-		"method1Desc": "Open and auto-login from 「DingTalk Workbench - All Staff」",
-		"method1Title": "Method 1: DingTalk Workbench",
-		"method2Desc": "Copy the link and open it in your browser",
-		"method2Title": "Method 2: Login via URL",
-		"method3Desc": "Enter \"KK\" in the 「Private Deployment」 configuration on the login page",
-		"method3Title": "Method 3: Private Deployment Code",
-		"viewGuide": "View Guide",
-		"warningMessage": "This SaaS environment is only for 「KK Group」 organization to use 「Sinan」 and other applications. To use $t(common:platform.name), please follow the methods below."
-	},
 	"scheduleTask": {
 		"clearSearch": "Clear search",
 		"configTask": "Task Config",
@@ -3946,6 +3943,7 @@
 		"workspace": "Workspace"
 	},
 	"share": {
+		"accessCount": "Visits",
 		"accessPassword": "Password",
 		"addMembers": "Add Members",
 		"advancedOptions": "Advanced Options",
@@ -3995,6 +3993,7 @@
 			"prefix": "Created by ",
 			"suffix": ""
 		},
+		"createdDate": "Created",
 		"days": "days",
 		"departmentOrMemberFileShare": "Specified members can access the file",
 		"departmentOrMemberFileShareDescription": "Specified members can access the file: {{fileName}}",
@@ -4071,6 +4070,7 @@
 		"login": "Login",
 		"manage": "Manage",
 		"manageShareLinks": "Manage Share Links",
+		"modifiedDate": "Modified",
 		"moreSettings": "Settings",
 		"multiFileShareName": "File Share_{{mainFileName}} and {{count}} files",
 		"name": "Name",
@@ -4236,6 +4236,7 @@
 		"fileShare": "Shared Files",
 		"fileShareDesc": "Manage all shared files",
 		"files": "files",
+		"filter": "Filter",
 		"filterStatus": {
 			"active": "Active",
 			"all": "All",
@@ -4592,10 +4593,7 @@
 		],
 		"actionTitle": "If you want to actively intervene",
 		"mainText": "Task execution is taking too long, which may be due to the following reasons:",
-		"reasonList": [
-			"AI is processing complex tasks",
-			"Network connection is unstable"
-		],
+		"reasonList": ["AI is processing complex tasks", "Network connection is unstable"],
 		"statusText": "If you don't take any action, AI will continue trying"
 	},
 	"tool": {
@@ -4887,6 +4885,7 @@
 		"dataCorrectionDescription": "AI checks for errors in tables and data and corrects them",
 		"dataCorrectionPrompt": "Please check the data in the content through trusted data sources. The data must come from a reliable data source and be cross-verified through multiple sources. Ensure the data is accurate and reliable.",
 		"download": "Download",
+		"downloadAbort": "Cancel Download",
 		"downloadAllTitle": "Download All",
 		"downloadFailed": "Download failed",
 		"downloadSelected": "Download Selected ({{count}})",

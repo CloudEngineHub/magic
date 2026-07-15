@@ -82,6 +82,11 @@ interface CollectedClipboardFiles {
 	native?: CanvasElementClipboardNativeExposure
 }
 
+export interface CanvasPngExportResult {
+	blob: Blob
+	filename: string
+}
+
 type CanvasContainerElement = Extract<LayerElement, { children?: LayerElement[] }>
 
 interface PreparedClipboardTreeElement {
@@ -279,6 +284,24 @@ export class ClipboardManager {
 	}
 
 	/**
+	 * 导出指定元素为 PNG Blob，供非剪贴板场景复用。
+	 *
+	 * 插件图片拖拽需要拿到真实 File/Blob 上传给插件；这里复用剪贴板导出链路，
+	 * 但只暴露 Blob 和文件名，避免把 clipboard-only 的内部字段泄漏出去。
+	 */
+	public async exportElementsAsPNGBlob(
+		elementIds: string[],
+		options?: { preferOriginalSingleImage?: boolean },
+	): Promise<CanvasPngExportResult | null> {
+		const exportResult = await this.exportElementsAsPNG(elementIds, options)
+		if (!exportResult) return null
+		return {
+			blob: exportResult.blob,
+			filename: exportResult.filename,
+		}
+	}
+
+	/**
 	 * 获取 PNG 文件名
 	 */
 	private getPngFilename(filename: string): string {
@@ -423,7 +446,16 @@ export class ClipboardManager {
 		}
 	}
 
-	private async exportElementsAsPNG(elementIds: string[]): Promise<{
+	/**
+	 * 导出元素 PNG。
+	 *
+	 * preferOriginalSingleImage 默认开启：单张未裁剪图片可直接复用原图资源。
+	 * 外部拖拽导入插件时会关闭它，以确保裁剪等画布视觉效果被烘焙进导出结果。
+	 */
+	private async exportElementsAsPNG(
+		elementIds: string[],
+		options: { preferOriginalSingleImage?: boolean } = {},
+	): Promise<{
 		blob: Blob
 		filename: string
 		sourceFile?: CanvasFileBlobData
@@ -498,6 +530,7 @@ export class ClipboardManager {
 
 		// 6. 单选图片时优先复用原图 blob，避免额外重渲染
 		if (
+			options.preferOriginalSingleImage !== false &&
 			!shouldDrawBorder &&
 			filteredIds.length === 1 &&
 			firstElementData?.type === ElementTypeEnum.Image

@@ -1,0 +1,164 @@
+import {
+	SLIDES_TEMPLATE_CANVAS_CARD_HEIGHT,
+	SLIDES_TEMPLATE_CANVAS_CARD_WIDTH,
+	SLIDES_TEMPLATE_CANVAS_STEP_X,
+	SLIDES_TEMPLATE_CANVAS_STEP_Y,
+	type TemplateCanvasItem,
+	type TemplateCanvasPoint,
+} from "./canvasLayout"
+
+const VISIBLE_OVERSCAN_X = SLIDES_TEMPLATE_CANVAS_CARD_WIDTH
+const VISIBLE_OVERSCAN_Y = SLIDES_TEMPLATE_CANVAS_CARD_HEIGHT * 2
+const MIN_VISIBLE_OVERSCAN_RATIO = 0.35
+const MIN_VISIBLE_OVERSCAN_SCALE = 0.75
+export const MAX_VISIBLE_TEMPLATE_CANVAS_ITEMS = 144
+
+interface TemplateCanvasViewportWindowInput {
+	offset: TemplateCanvasPoint
+	overscanX?: number
+	overscanY?: number
+	scale?: number
+	viewportHeight: number
+	viewportWidth: number
+}
+
+interface TemplateCanvasVisibleItemInput<T> extends TemplateCanvasViewportWindowInput {
+	getItemRenderPriority?: (item: TemplateCanvasItem<T>) => number
+	items: Array<TemplateCanvasItem<T>>
+	maxItems?: number
+}
+
+export interface TemplateCanvasViewportWindow {
+	bottom: number
+	left: number
+	right: number
+	top: number
+}
+
+export function getTemplateCanvasViewportOverscan(scale = 1) {
+	const normalizedScale = Math.max(scale, MIN_VISIBLE_OVERSCAN_SCALE)
+	const scaleProgress = Math.min(
+		1,
+		(normalizedScale - MIN_VISIBLE_OVERSCAN_SCALE) / (1 - MIN_VISIBLE_OVERSCAN_SCALE),
+	)
+	const ratio = MIN_VISIBLE_OVERSCAN_RATIO + (1 - MIN_VISIBLE_OVERSCAN_RATIO) * scaleProgress
+
+	// 缩小时屏幕内卡片数会明显增加。同步缩小预渲染区，避免大量临界区外的封面参与本轮缩放渲染。
+	return {
+		overscanX: VISIBLE_OVERSCAN_X * ratio,
+		overscanY: VISIBLE_OVERSCAN_Y * ratio,
+	}
+}
+
+export function getTemplateCanvasViewportWindow({
+	offset,
+	overscanX,
+	overscanY,
+	scale = 1,
+	viewportHeight,
+	viewportWidth,
+}: TemplateCanvasViewportWindowInput): TemplateCanvasViewportWindow {
+	const resolvedOverscan = getTemplateCanvasViewportOverscan(scale)
+	const resolvedOverscanX = overscanX ?? resolvedOverscan.overscanX
+	const resolvedOverscanY = overscanY ?? resolvedOverscan.overscanY
+	const halfWidth = viewportWidth / 2
+	const halfHeight = viewportHeight / 2
+	const normalizedScale = Math.max(scale, 0.01)
+
+	return {
+		left: (-offset.x - halfWidth - resolvedOverscanX) / normalizedScale,
+		right: (-offset.x + halfWidth + resolvedOverscanX) / normalizedScale,
+		top: (-offset.y - halfHeight - resolvedOverscanY) / normalizedScale,
+		bottom: (-offset.y + halfHeight + resolvedOverscanY) / normalizedScale,
+	}
+}
+
+export function isTemplateCanvasItemInWindow<T>(
+	item: TemplateCanvasItem<T>,
+	windowBounds: TemplateCanvasViewportWindow,
+) {
+	const halfWidth = item.size.width / 2
+	const halfHeight = item.size.height / 2
+	const itemLeft = item.position.x - halfWidth
+	const itemRight = item.position.x + halfWidth
+	const itemTop = item.position.y - halfHeight
+	const itemBottom = item.position.y + halfHeight
+
+	return (
+		itemRight >= windowBounds.left &&
+		itemLeft <= windowBounds.right &&
+		itemBottom >= windowBounds.top &&
+		itemTop <= windowBounds.bottom
+	)
+}
+
+function clampVisibleItemLimit(limit: number) {
+	return Math.min(Math.max(1, limit), MAX_VISIBLE_TEMPLATE_CANVAS_ITEMS)
+}
+
+export function getTemplateCanvasVisibleItemLimit({
+	scale = 1,
+	viewportHeight,
+	viewportWidth,
+}: Omit<TemplateCanvasViewportWindowInput, "offset">) {
+	const normalizedScale = Math.max(scale, 0.01)
+	const columnCount = Math.ceil(viewportWidth / (SLIDES_TEMPLATE_CANVAS_STEP_X * normalizedScale))
+	const rowCount = Math.ceil(viewportHeight / (SLIDES_TEMPLATE_CANVAS_STEP_Y * normalizedScale))
+
+	// 当前视口外只预留一个网格环。低缩放时不再以固定最小数量扩大渲染范围。
+	return clampVisibleItemLimit((columnCount + 1) * (rowCount + 1))
+}
+
+export function getVisibleTemplateCanvasItems<T>({
+	getItemRenderPriority,
+	items,
+	maxItems,
+	offset,
+	overscanX,
+	overscanY,
+	scale,
+	viewportHeight,
+	viewportWidth,
+}: TemplateCanvasVisibleItemInput<T>) {
+	const windowBounds = getTemplateCanvasViewportWindow({
+		offset,
+		overscanX,
+		overscanY,
+		scale,
+		viewportHeight,
+		viewportWidth,
+	})
+
+	const visibleItemLimit =
+		maxItems ??
+		getTemplateCanvasVisibleItemLimit({
+			overscanX,
+			overscanY,
+			scale,
+			viewportHeight,
+			viewportWidth,
+		})
+	const visibleItems = items.filter((item) => isTemplateCanvasItemInWindow(item, windowBounds))
+	if (visibleItems.length <= visibleItemLimit) return visibleItems
+
+	const centerX = (windowBounds.left + windowBounds.right) / 2
+	const centerY = (windowBounds.top + windowBounds.bottom) / 2
+
+	return visibleItems
+		.map((item, order) => ({ item, order }))
+		.sort((a, b) => {
+			const priorityA = getItemRenderPriority?.(a.item) ?? 0
+			const priorityB = getItemRenderPriority?.(b.item) ?? 0
+			if (priorityA !== priorityB) return priorityA - priorityB
+
+			const distanceA =
+				Math.pow(a.item.position.x - centerX, 2) + Math.pow(a.item.position.y - centerY, 2)
+			const distanceB =
+				Math.pow(b.item.position.x - centerX, 2) + Math.pow(b.item.position.y - centerY, 2)
+			if (distanceA !== distanceB) return distanceA - distanceB
+
+			return a.order - b.order
+		})
+		.slice(0, visibleItemLimit)
+		.map(({ item }) => item)
+}

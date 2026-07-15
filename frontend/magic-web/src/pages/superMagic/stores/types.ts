@@ -205,6 +205,10 @@ export interface StreamSnapshot {
 	tool_calls: ToolCall[]
 }
 
+export type TopicSyncState = "idle" | "syncing"
+
+export type TopicRenderPolicy = "live" | "catchup" | "instant"
+
 export interface TopicMeta {
 	/** 当前是否正在处于流式开启中 */
 	isStream: boolean
@@ -216,4 +220,20 @@ export interface TopicMeta {
 	content: Map<string, StreamState>
 	/** 不可见期间已完成的流式快照（用于切回后回放打字机） */
 	streamSnapshots: Map<string, StreamSnapshot>
+	/** 已由最终消息或服务端快照确认完成的流，晚到 chunk 不得重新启动动画 */
+	finalizedCorrelationIds: Set<string>
+	/** 最近一次成为可见话题的时间，用于区分短暂切换和长时间离开 */
+	lastActiveAt: number | null
+	/** 最近一次离开可见态的时间 */
+	inactiveAt: number | null
+	/** 最近一次成功完成服务端权威同步的时间 */
+	lastSyncedAt: number | null
+	/** 最近一次权威同步确认的最大消息序列号 */
+	lastSyncedSeqId: string
+	/** 当前话题最新一次全量同步代次；旧代次响应不得写回 */
+	syncGeneration: number
+	/** 当前话题是否正在进行权威同步 */
+	syncState: TopicSyncState
+	/** 当前话题恢复时采用的渲染策略 */
+	renderPolicy: TopicRenderPolicy
 }

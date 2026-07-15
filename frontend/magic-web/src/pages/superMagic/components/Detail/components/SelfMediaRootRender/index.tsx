@@ -45,6 +45,7 @@ import {
 	buildFolderMention,
 	sendSelfMediaPostPublishDataRefresh,
 } from "./services/selfMediaPostPublishDataRefresh"
+import { sendSelfMediaWechatCoverGeneration } from "./services/selfMediaWechatCoverGeneration"
 import { clearPostPublishStatusAfterPublishedLinkBind } from "./services/selfMediaPostPublishStatus"
 import {
 	buildSelfMediaPostAutoSyncTaskData,
@@ -56,6 +57,7 @@ import type {
 	SelfMediaPostEntry,
 	SelfMediaPostPublishStatus,
 	SelfMediaRootRenderProps,
+	SelfMediaWechatCoverType,
 } from "./types"
 import type { SelfMediaPlatformPostItem } from "./stores/SelfMediaStore"
 
@@ -784,6 +786,60 @@ const SelfMediaRootRenderInner = observer(function SelfMediaRootRenderInner({
 			index: store.activePostIndex,
 		})
 	}, [handleRequestPrePublishAnalysis, platform, store.activePostIndex])
+	const handleRequestWechatCoverGeneration = useCallback(
+		async ({
+			index,
+			coverTypes,
+		}: {
+			index: number
+			coverTypes: SelfMediaWechatCoverType[]
+		}) => {
+			try {
+				const targetItem = store.allPosts.find(
+					(item) => item.platform === "wechat-official-accounts" && item.index === index,
+				)
+				const post =
+					(await store.ensurePlatformPostLoaded("wechat-official-accounts", index)) ||
+					targetItem?.post
+				const missingCoverTypes = coverTypes.filter(
+					(coverType) => !post?.[coverType]?.fileId,
+				)
+				const mentionFileId = resolveSelfMediaPostMentionFileId(post)
+				const postDirectoryItem = resolveSelfMediaPostDirectoryAttachmentItem(
+					attachmentList,
+					mentionFileId,
+					targetItem?.entry.entry,
+				)
+				if (!post || !postDirectoryItem) {
+					showActionStartFailed(
+						t,
+						"detail.selfMedia.coverGeneration.startFailed",
+						undefined,
+						"detail.selfMedia.errors.postDirectoryMissing",
+					)
+					return false
+				}
+				if (missingCoverTypes.length === 0) {
+					await store.init({ preserveNavigation: true })
+					return false
+				}
+				await sendSelfMediaWechatCoverGeneration({
+					selectedProject,
+					selectedModel: selectedAnalysisModel,
+					post,
+					postDirectoryItem,
+					coverTypes: missingCoverTypes,
+				})
+				magicToast.success(t("detail.selfMedia.coverGeneration.started"))
+				return true
+			} catch (error) {
+				console.error("Self-media WeChat cover generation failed:", error)
+				showActionStartFailed(t, "detail.selfMedia.coverGeneration.startFailed", error)
+				return false
+			}
+		},
+		[attachmentList, selectedAnalysisModel, selectedProject, store, t],
+	)
 	const handleConfirmPrePublishAnalysis = useCallback(
 		async (analysisGoal: SelfMediaPrePublishAnalysisGoal, selectedModel: ModelItem | null) => {
 			if (!analysisTarget) return
@@ -985,7 +1041,12 @@ const SelfMediaRootRenderInner = observer(function SelfMediaRootRenderInner({
 			return (
 				<div className={cn("h-full w-full", className)}>
 					<UnsupportedPlatform platform={platform} />
-					<button type="button" className="sr-only" onClick={handleShowPlatform} data-testid="handle-show-platform">
+					<button
+						type="button"
+						className="sr-only"
+						onClick={handleShowPlatform}
+						data-testid="handle-show-platform"
+					>
 						{t("detail.selfMedia.home.openPlatform")}
 					</button>
 				</div>
@@ -1069,6 +1130,9 @@ const SelfMediaRootRenderInner = observer(function SelfMediaRootRenderInner({
 							onUpdatePostTitle={allowEdit ? handleUpdatePostTitle : undefined}
 							onRequestPrePublishAnalysis={
 								allowEdit ? handleRequestActivePrePublishAnalysis : undefined
+							}
+							onRequestWechatCoverGeneration={
+								allowEdit ? handleRequestWechatCoverGeneration : undefined
 							}
 						/>
 					</Suspense>

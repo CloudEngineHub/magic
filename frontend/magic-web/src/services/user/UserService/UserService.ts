@@ -103,6 +103,18 @@ export class UserService {
 	}
 
 	/**
+	 * Persist and switch authorization data.
+	 * Use this before reloading after an account switch so the new token is persisted first.
+	 */
+	async setAuthorizationAndWait(authorization: string | null) {
+		const normalizedAuthorization = authorization ?? ""
+		const user = new UserRepository()
+
+		await user.setAuthorization(normalizedAuthorization)
+		userStore.user.setAuthorization(authorization)
+	}
+
+	/**
 	 * @description 获取当前组织下当前用户信息
 	 */
 	fetchUserInfo = async (

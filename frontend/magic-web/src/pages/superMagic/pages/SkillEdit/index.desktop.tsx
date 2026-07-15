@@ -129,7 +129,12 @@ function SkillEditErrorFallback({ onBack }: { onBack: () => void }) {
 			data-testid="skill-edit-error"
 		>
 			<p className="text-sm text-destructive">{t("editSkill.errors.fetchFailed")}</p>
-			<button type="button" className="text-sm text-primary hover:underline" onClick={onBack} data-testid="on-back">
+			<button
+				type="button"
+				className="text-sm text-primary hover:underline"
+				onClick={onBack}
+				data-testid="on-back"
+			>
 				{t("back")}
 			</button>
 		</div>

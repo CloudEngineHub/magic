@@ -79,8 +79,8 @@ const SMART_SHOT_TYPE_OPTIONS = [
 			en: "selling-point image",
 		},
 		promptInstruction: {
-			zh: "围绕一个核心卖点主题组织卖点图，重点表达功能亮点、利益点、对比关系或结构优势。允许多模块拼接、局部放大、图文组合或信息分区，但整张图必须服务于同一个卖点主题，不要把多个无关任务混在一起。",
-			en: "Create a selling-point image organized around one core benefit theme. Focus on functional highlights, customer benefits, comparisons, or structural advantages. Multi-module layouts, close-up callouts, mixed image-and-text composition, or segmented information areas are allowed, but the full image must serve one coherent selling-point theme rather than multiple unrelated tasks.",
+			zh: "围绕一个核心卖点主题组织卖点图。每张图只表达一个卖点，可以从功能亮点、利益点、对比关系或结构优势中选择最适合当前任务的一个方向。允许局部放大、标注、图文组合或小范围信息分区，但所有元素都必须服务同一个卖点，不要在一张图里罗列多个卖点。",
+			en: "Create a selling-point image around one core benefit theme. Each image should communicate only one selling point, choosing the most suitable angle from a functional highlight, customer benefit, comparison, or structural advantage. Close-up callouts, labels, image-and-text composition, or small segmented areas are allowed, but every element must support the same selling point instead of listing multiple benefits in one image.",
 		},
 	},
 	{
@@ -92,8 +92,8 @@ const SMART_SHOT_TYPE_OPTIONS = [
 			en: "detail / A+ image",
 		},
 		promptInstruction: {
-			zh: "以详情说明为主的详情图或 A+ 图，重点展示材质、结构、工艺、功能说明、使用方式或局部特写。允许多分区排版、细节拆解和信息模块化表达，但整体仍应是一张结构清晰的详情说明图，而不是多张独立图片的随意拼贴。",
-			en: "Create a detail or A+ image focused on explanatory presentation. Emphasize materials, construction, craftsmanship, functional explanation, usage guidance, or close-up details. Multi-section layouts, exploded detail blocks, and modular information presentation are allowed, but the result should still read as one coherent detail image rather than a loose collage of unrelated standalone pictures.",
+			zh: "生成一张详情图或 A+ 图，但每张图只讲一个详情主题，例如材质、结构、工艺、尺寸、功能说明、使用方式或局部特写中的一个。允许围绕该主题做少量分区、细节拆解或图文说明，但不要把多个详情主题、多个参数和多个场景堆在同一张图里。",
+			en: "Create a detail or A+ image, but each image should explain only one detail topic, such as material, construction, craftsmanship, dimensions, functional explanation, usage guidance, or one close-up detail. Small sections, detail breakdowns, or image-and-text explanations are allowed when they support that topic, but do not pack multiple detail topics, specifications, and scenarios into one image.",
 		},
 	},
 ]
@@ -284,7 +284,11 @@ function buildSmartShotPlan(state) {
 	const plan = []
 	SMART_SHOT_TYPE_OPTIONS.forEach((option) => {
 		for (let index = 0; index < composition[option.value]; index += 1) {
-			plan.push({ shotType: option.value })
+			plan.push({
+				shotType: option.value,
+				shotTypeIndex: index + 1,
+				shotTypeTotal: composition[option.value],
+			})
 		}
 	})
 	return plan.map((item, index, list) => ({
@@ -1408,6 +1412,109 @@ function buildSmartExtraPromptCompletionUserPrompt({ state, currentText, t }) {
 	].join("\n")
 }
 
+function getShotFocusOptions(shotType) {
+	if (shotType === "detail") {
+		return [
+			{ zh: "材质质感", en: "material texture" },
+			{ zh: "结构设计", en: "structural design" },
+			{ zh: "尺寸规格", en: "dimensions and specifications" },
+			{ zh: "工艺细节", en: "craftsmanship details" },
+			{ zh: "功能说明", en: "functional explanation" },
+			{ zh: "使用方式", en: "usage guidance" },
+			{ zh: "局部特写", en: "close-up detail" },
+			{ zh: "场景适配", en: "scenario fit" },
+			{ zh: "安装或收纳方式", en: "installation or storage method" },
+			{ zh: "品质可靠性", en: "quality and reliability" },
+		]
+	}
+	if (shotType === "selling") {
+		return [
+			{ zh: "功能亮点", en: "functional highlight" },
+			{ zh: "用户利益", en: "customer benefit" },
+			{ zh: "对比优势", en: "comparison advantage" },
+			{ zh: "结构优势", en: "structural advantage" },
+			{ zh: "使用价值", en: "usage value" },
+			{ zh: "材质或工艺卖点", en: "material or craftsmanship selling point" },
+			{ zh: "场景痛点解决", en: "scenario pain-point solution" },
+			{ zh: "便捷性或效率", en: "convenience or efficiency" },
+			{ zh: "品质信任感", en: "quality trust" },
+			{ zh: "目标人群适配", en: "target audience fit" },
+		]
+	}
+	if (shotType === "hero" || shotType === "main") {
+		return [
+			{ zh: "商品标准主视觉", en: "standard product hero visual" },
+			{ zh: "模特或使用场景主视觉", en: "model or usage-scene hero visual" },
+			{ zh: "品牌氛围主视觉", en: "brand mood hero visual" },
+			{ zh: "活动入口视觉", en: "campaign entry visual" },
+			{ zh: "商品角度变化", en: "product angle variation" },
+			{ zh: "局部质感辅助主视觉", en: "texture-led supporting hero visual" },
+			{ zh: "平台列表图视觉", en: "platform listing visual" },
+			{ zh: "简洁留白主视觉", en: "minimal copy-space hero visual" },
+			{ zh: "场景氛围变化", en: "scenario mood variation" },
+			{ zh: "核心人群表达", en: "core audience expression" },
+		]
+	}
+	return [
+		{ zh: "商品主体", en: "product subject" },
+		{ zh: "场景氛围", en: "scene mood" },
+		{ zh: "卖点表达", en: "selling-point expression" },
+		{ zh: "细节说明", en: "detail explanation" },
+		{ zh: "构图变化", en: "composition variation" },
+		{ zh: "文案信息", en: "copy information" },
+		{ zh: "目标人群", en: "target audience" },
+		{ zh: "使用方式", en: "usage method" },
+		{ zh: "品牌调性", en: "brand tone" },
+		{ zh: "平台适配", en: "platform fit" },
+	]
+}
+
+function buildSmartShotFocusInstruction(shotPlanItem, locale) {
+	const shotTypeTotal = shotPlanItem?.shotTypeTotal ?? 1
+	const shotType = shotPlanItem?.shotType
+	if (shotTypeTotal <= 1 && shotType !== "detail" && shotType !== "selling") return ""
+	const isChinese = MagicPromptLocale.isChinese(locale)
+	const focusOptions = getShotFocusOptions(shotType)
+	const focus = MagicPromptLocale.pickText(
+		focusOptions[(Math.max(shotPlanItem?.shotTypeIndex ?? 1, 1) - 1) % focusOptions.length],
+		locale,
+	)
+	const isSingleTypeShot = shotTypeTotal <= 1
+
+	if (isChinese) {
+		if (isSingleTypeShot) {
+			return (
+				`这是当前图片类型的唯一一张。` +
+				`本张默认主题槽位：${focus}；如果额外描述另有明确详情或卖点主题，以额外描述为准。` +
+				"请把画面做成单图单主题的信息说明图，不要做成居中商品展示、整体氛围海报或主图版式。" +
+				"如果商品信息偏向主图描述，请只把它作为商品外观参考，不要沿用其中的主图构图和背景表达。"
+			)
+		}
+		return (
+			`这是当前图片类型中的第 ${shotPlanItem.shotTypeIndex}/${shotTypeTotal} 张。` +
+			`本张的主题槽位：${focus}。` +
+			"请围绕这个主题槽位生成单图单主题内容，并与同类型的其它图片保持主题不重复。" +
+			"如果额外描述已经指定了具体主题，则保持该主题，但从不同证据、场景、角度或版式重点切入，不要只是生成近似变体。"
+		)
+	}
+
+	if (isSingleTypeShot) {
+		return (
+			"This is the only image for the current image type. " +
+			`Default theme slot for this image: ${focus}; if the extra prompt specifies a concrete detail or selling-point topic, follow the extra prompt instead. ` +
+			"Create a single-topic informational image, not a centered product showcase, atmospheric poster, or hero-image layout. " +
+			"If the product information reads like a hero-image description, use it only as product appearance reference and do not follow its hero composition or background direction. "
+		)
+	}
+
+	return (
+		`This is image ${shotPlanItem.shotTypeIndex}/${shotTypeTotal} within the current image type. ` +
+		`Theme slot for this image: ${focus}. ` +
+		"Create a single-topic image around this theme slot, and keep it distinct from the other images of the same type. " +
+		"If the extra prompt already specifies a concrete topic, keep that topic but use a different proof point, scenario, angle, or layout emphasis instead of producing a near-duplicate variation. "
+	)
+}
+
 function buildSmartModePrompt({ state, shotPlanItem, locale, t }) {
 	const isChinese = MagicPromptLocale.isChinese(locale)
 	const productReferences = MagicPromptLocale.joinReferenceLabels(
@@ -1424,6 +1531,7 @@ function buildSmartModePrompt({ state, shotPlanItem, locale, t }) {
 	const extraPrompt = state.smartExtraPrompt?.trim()
 	const extraProductInfo = state.productInfo.trim()
 	const shotInstruction = MagicPromptLocale.pickText(shotDefinition.promptInstruction, locale)
+	const shotFocusInstruction = buildSmartShotFocusInstruction(shotPlanItem, locale)
 	const shotIndex = shotPlanItem?.shotIndex ?? 1
 	const shotTotal = shotPlanItem?.shotTotal ?? getSmartShotCount(state)
 
@@ -1433,6 +1541,7 @@ function buildSmartModePrompt({ state, shotPlanItem, locale, t }) {
 			(extraProductInfo ? `商品信息如下：${extraProductInfo}。` : "") +
 			`当前图片类型：${imageType}。` +
 			shotInstruction +
+			shotFocusInstruction +
 			(state.smartCopyEnabled
 				? "请自动生成适合营销传播与平台展示的文案元素。"
 				: "不要自动添加营销文案，除非额外描述中明确要求。") +
@@ -1449,6 +1558,7 @@ function buildSmartModePrompt({ state, shotPlanItem, locale, t }) {
 		(extraProductInfo ? `Product information: ${extraProductInfo}. ` : "") +
 		`Current image type: ${imageType}. ` +
 		`${shotInstruction} ` +
+		shotFocusInstruction +
 		(state.smartCopyEnabled
 			? "Generate suitable marketing copy elements when helpful for the target platforms. "
 			: "Do not add marketing copy unless explicitly requested in the extra prompt. ") +
@@ -1502,7 +1612,97 @@ function buildCustomReferenceConstraintPrompt(styleItem, locale) {
 	)
 }
 
-function buildCustomStylePrompt({ state, styleItem, locale, t }) {
+function buildCustomStyleTypeInstruction(styleItem, locale, t) {
+	const isChinese = MagicPromptLocale.isChinese(locale)
+	const styleTypeLabel = getLabelByValue(CUSTOM_STYLE_TYPE_OPTIONS, styleItem.styleType, t)
+
+	if (isChinese) {
+		if (styleItem.styleType === "detail") {
+			return (
+				`当前图片类型：${styleTypeLabel}。` +
+				"这张图只讲一个详情主题。若样式描述已指定主题，以该主题为准；否则从材质、结构、尺寸、工艺、功能说明、使用方式、局部特写或场景说明中选择一个最适合商品的信息点。" +
+				"可以围绕这个主题做少量分区、局部放大、标注或图文说明，但不要把多个详情主题、多个参数和多个场景堆在同一张图里，也不要做成单一主图海报。"
+			)
+		}
+		if (styleItem.styleType === "selling") {
+			return (
+				`当前图片类型：${styleTypeLabel}。` +
+				"这张图只表达一个核心卖点。若样式描述已指定卖点，以该卖点为准；否则从功能亮点、利益点、对比关系、结构优势或使用价值中选择一个最有营销价值的点。" +
+				"可以使用局部放大、标注、图文组合、对比区域或小范围信息模块，但所有内容都必须服务同一个卖点，不要在一张图里堆叠多个卖点，也不要做成单纯主视觉海报。"
+			)
+		}
+		if (styleItem.styleType === "main") {
+			return (
+				`当前图片类型：${styleTypeLabel}。` +
+				"以商品主体、模特展示或核心场景为主视觉，构图简洁、主体突出，适合商品首图、列表图、活动入口或营销首屏。" +
+				"允许少量辅助文案、局部细节或功能提示，但不要做成信息密集的卖点图或多分区详情页。"
+			)
+		}
+		return (
+			`当前图片类型：${styleTypeLabel}。` +
+			"按照样式描述确定画面用途，但仍需保持商品主体清晰、版式目标明确，避免同时混合主图、卖点图和详情页图的表达方式。"
+		)
+	}
+
+	if (styleItem.styleType === "detail") {
+		return (
+			`Current image type: ${styleTypeLabel}. ` +
+			"This image should explain only one detail topic. If the style description specifies a topic, follow it; otherwise choose one suitable information point from material, structure, dimensions, craftsmanship, functional explanation, usage guidance, close-up detail, or scenario note. " +
+			"Small sections, close-ups, labels, or image-and-text explanations are allowed when they support that topic, but do not pack multiple detail topics, specifications, and scenarios into one image, and do not make it a simple hero poster. "
+		)
+	}
+	if (styleItem.styleType === "selling") {
+		return (
+			`Current image type: ${styleTypeLabel}. ` +
+			"This image should communicate only one core selling point. If the style description specifies a benefit, follow it; otherwise choose one strongest marketing point from a functional highlight, customer benefit, comparison, structural advantage, or usage value. " +
+			"Close-up callouts, labels, image-and-text composition, comparison zones, or small information modules are allowed, but every element must support the same selling point. Do not stack multiple benefits in one image, and do not make it a pure hero poster. "
+		)
+	}
+	if (styleItem.styleType === "main") {
+		return (
+			`Current image type: ${styleTypeLabel}. ` +
+			"Create a clear hero or support image led by the product, model presentation, or core usage scene. Keep the composition focused and suitable for a listing image, first product image, campaign entry, or marketing opening visual. " +
+			"Small supporting copy, detail highlights, or feature cues are allowed, but do not turn it into an information-heavy selling-point image or a multi-section detail page. "
+		)
+	}
+	return (
+		`Current image type: ${styleTypeLabel}. ` +
+		"Use the style description to determine the image purpose while keeping the product clear and the layout goal specific. Avoid mixing hero, selling-point, and detail-page expressions in the same image. "
+	)
+}
+
+function getCustomStyleFocusOptions(styleItem) {
+	return getShotFocusOptions(styleItem.styleType)
+}
+
+function buildCustomStyleShotInstruction({ styleItem, shotIndex, shotTotal, locale }) {
+	if (styleItem.kind !== "custom-style") return ""
+	if (!shotTotal || shotTotal <= 1) return ""
+	const isChinese = MagicPromptLocale.isChinese(locale)
+	const focusOptions = getCustomStyleFocusOptions(styleItem)
+	const focus = MagicPromptLocale.pickText(
+		focusOptions[(Math.max(shotIndex, 1) - 1) % focusOptions.length],
+		locale,
+	)
+
+	if (isChinese) {
+		return (
+			`这是该样式卡的第 ${shotIndex}/${shotTotal} 张。` +
+			`本张的主题槽位：${focus}。` +
+			"请围绕这个主题槽位生成单图单主题内容，并与同一样式卡里的其它图片保持主题不重复。" +
+			"如果样式描述已经指定了一个很具体的主题，则保持该主题，但从不同证据、场景、角度或版式重点切入，不要只是生成同一主题的近似变体。"
+		)
+	}
+
+	return (
+		`This is image ${shotIndex}/${shotTotal} for this style card. ` +
+		`Theme slot for this image: ${focus}. ` +
+		"Create a single-topic image around this theme slot, and keep it distinct from the other images in the same style card. " +
+		"If the style description already specifies one very specific topic, keep that topic but use a different proof point, scenario, angle, or layout emphasis instead of producing a near-duplicate variation. "
+	)
+}
+
+function buildCustomStylePrompt({ state, styleItem, locale, t, shotIndex = 1, shotTotal = 1 }) {
 	const isChinese = MagicPromptLocale.isChinese(locale)
 	const baseReferenceCount = state.productImages.length
 	const productReferences = MagicPromptLocale.joinReferenceLabels(baseReferenceCount, locale)
@@ -1517,11 +1717,19 @@ function buildCustomStylePrompt({ state, styleItem, locale, t }) {
 	const businessText = buildBusinessSettingPrompt(state.moreSettings, locale, t)
 	const extraProductInfo = state.productInfo.trim()
 	const customReferenceConstraint = buildCustomReferenceConstraintPrompt(styleItem, locale)
+	const customStyleTypeInstruction = buildCustomStyleTypeInstruction(styleItem, locale, t)
+	const customStyleShotInstruction = buildCustomStyleShotInstruction({
+		styleItem,
+		shotIndex,
+		shotTotal,
+		locale,
+	})
 
 	if (isChinese) {
 		if (styleItem.kind === "uploaded-style") {
 			return (
 				`使用${productReferences}中的商品图生成商品营销图，并参考上传样式图完成版式与视觉风格迁移。` +
+				customStyleShotInstruction +
 				(extraProductInfo ? `商品信息如下：${extraProductInfo}。` : "") +
 				`样式参考图：${styleReferenceLabels}。` +
 				(styleItem.notes ? `样式说明：${styleItem.notes}。` : "") +
@@ -1532,7 +1740,9 @@ function buildCustomStylePrompt({ state, styleItem, locale, t }) {
 		}
 
 		return (
-			`使用${productReferences}中的商品图，生成一张${getLabelByValue(CUSTOM_STYLE_TYPE_OPTIONS, styleItem.styleType, t)}风格的商品营销图。` +
+			`使用${productReferences}中的商品图，生成一张商品营销图。` +
+			customStyleTypeInstruction +
+			customStyleShotInstruction +
 			(extraProductInfo ? `商品信息如下：${extraProductInfo}。` : "") +
 			(styleItem.typeDescription ? `样式描述：${styleItem.typeDescription}。` : "") +
 			(styleItem.subjectConsistency
@@ -1548,6 +1758,7 @@ function buildCustomStylePrompt({ state, styleItem, locale, t }) {
 	if (styleItem.kind === "uploaded-style") {
 		return (
 			`Use the product references from ${productReferences} to generate a marketing image that follows the uploaded style reference. ` +
+			customStyleShotInstruction +
 			(extraProductInfo ? `Product information: ${extraProductInfo}. ` : "") +
 			`Style reference images: ${styleReferenceLabels}. ` +
 			(styleItem.notes ? `Style notes: ${styleItem.notes}. ` : "") +
@@ -1558,7 +1769,9 @@ function buildCustomStylePrompt({ state, styleItem, locale, t }) {
 	}
 
 	return (
-		`Use the product references from ${productReferences} to generate a ${getLabelByValue(CUSTOM_STYLE_TYPE_OPTIONS, styleItem.styleType, t)} style product marketing image. ` +
+		`Use the product references from ${productReferences} to generate a product marketing image. ` +
+		customStyleTypeInstruction +
+		customStyleShotInstruction +
 		(extraProductInfo ? `Product information: ${extraProductInfo}. ` : "") +
 		(styleItem.typeDescription ? `Style description: ${styleItem.typeDescription}. ` : "") +
 		(styleItem.subjectConsistency
@@ -1573,7 +1786,16 @@ function buildCustomStylePrompt({ state, styleItem, locale, t }) {
 	)
 }
 
-function buildSmartModeRequest({ state, shotPlanItem, helpers, locale, width, height, t }) {
+function buildSmartModeRequest({
+	state,
+	shotPlanItem,
+	helpers,
+	locale,
+	width,
+	height,
+	t,
+	select = false,
+}) {
 	return {
 		model_id: state.modelId,
 		prompt: buildSmartModePrompt({
@@ -1588,7 +1810,7 @@ function buildSmartModeRequest({ state, shotPlanItem, helpers, locale, width, he
 		width,
 		height,
 		count: 1,
-		select: false,
+		select,
 	}
 }
 
@@ -1601,6 +1823,10 @@ function buildCustomStyleRequest({
 	height,
 	t,
 	resolution,
+	shotIndex,
+	shotTotal,
+	count = 1,
+	select = false,
 }) {
 	return {
 		model_id: state.modelId,
@@ -1609,6 +1835,8 @@ function buildCustomStyleRequest({
 			styleItem,
 			locale,
 			t,
+			shotIndex,
+			shotTotal,
 		}),
 		reference_images: helpers.collectReferenceIds([
 			...state.productImages,
@@ -1618,8 +1846,8 @@ function buildCustomStyleRequest({
 		resolution: resolution || state.scale || undefined,
 		width,
 		height,
-		count: styleItem.count,
-		select: false,
+		count,
+		select,
 	}
 }
 
@@ -1979,7 +2207,8 @@ registerMagicCanvasPlugin({
 						const height = selectedSize.genH
 						const results = []
 						const shotPlan = buildSmartShotPlan(state)
-						for (const shotPlanItem of shotPlan) {
+						for (let index = 0; index < shotPlan.length; index += 1) {
+							const shotPlanItem = shotPlan[index]
 							results.push(
 								await generateAndPlace(
 									buildSmartModeRequest({
@@ -1990,6 +2219,7 @@ registerMagicCanvasPlugin({
 										width,
 										height,
 										t,
+										select: index === shotPlan.length - 1,
 									}),
 								),
 							)
@@ -1997,25 +2227,59 @@ registerMagicCanvasPlugin({
 						return results
 					}
 					const results = []
-					for (const styleItem of state.styleItems) {
+					let lastGeneratableStyleIndex = -1
+					state.styleItems.forEach((styleItem, index) => {
+						if (Math.max(0, Number(styleItem.count) || 0) > 0) {
+							lastGeneratableStyleIndex = index
+						}
+					})
+					for (let styleIndex = 0; styleIndex < state.styleItems.length; styleIndex += 1) {
+						const styleItem = state.styleItems[styleIndex]
 						const resolvedSize = resolveCustomStyleSize(state, styleItem, helpers)
 						if (!resolvedSize?.genW || !resolvedSize?.genH) {
 							throw new Error(t("error.noSize", "当前模型缺少可用尺寸配置"))
 						}
-						results.push(
-							await generateAndPlace(
-								buildCustomStyleRequest({
-									state,
-									styleItem,
-									helpers,
-									locale: promptLocale,
-									width: resolvedSize.genW,
-									height: resolvedSize.genH,
-									t,
-									resolution: resolvedSize.scale,
-								}),
-							),
-						)
+						const shotTotal = Math.max(0, Number(styleItem.count) || 0)
+						if (!shotTotal) continue
+						const shouldSelectStyle = styleIndex === lastGeneratableStyleIndex
+						if (styleItem.kind === "uploaded-style") {
+							results.push(
+								await generateAndPlace(
+									buildCustomStyleRequest({
+										state,
+										styleItem,
+										helpers,
+										locale: promptLocale,
+										width: resolvedSize.genW,
+										height: resolvedSize.genH,
+										t,
+										resolution: resolvedSize.scale,
+										count: shotTotal,
+										select: shouldSelectStyle,
+									}),
+								),
+							)
+							continue
+						}
+						for (let shotIndex = 1; shotIndex <= shotTotal; shotIndex += 1) {
+							results.push(
+								await generateAndPlace(
+									buildCustomStyleRequest({
+										state,
+										styleItem,
+										helpers,
+										locale: promptLocale,
+										width: resolvedSize.genW,
+										height: resolvedSize.genH,
+										t,
+										resolution: resolvedSize.scale,
+										shotIndex,
+										shotTotal,
+										select: shouldSelectStyle && shotIndex === shotTotal,
+									}),
+								),
+							)
+						}
 					}
 					return results
 				},

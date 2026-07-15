@@ -56,6 +56,26 @@ function getPrevMessageFilePathAttachments(
 	return buildFilePathAttachments(prevContent)
 }
 
+function isOpenableAttachment(attachment: {
+	file_id?: string
+	file_extension?: string
+	is_directory?: boolean
+	display_config?: { type?: string }
+}) {
+	if (!attachment?.file_id) return false
+
+	if (attachment.is_directory) {
+		return Boolean(attachment.display_config?.type)
+	}
+
+	// 部分目录附件是浅层数据，只暴露空扩展名。
+	if (attachment.file_extension === "" && !attachment.display_config?.type) {
+		return false
+	}
+
+	return true
+}
+
 /**
  * 根据消息 / 切换话题自动打开附件 tab（任务已完成、有附件、且无已打开文件时）
  */
@@ -131,16 +151,7 @@ export function useAutoOpenFile() {
 			// Fallback to the first file from the original attachments.
 			const attachments = lastDetailMessageNode?.attachments || []
 
-			const firstFileAttachment = attachments.find(
-				(attachment: { file_id?: string; file_extension?: string }) => {
-					const fileId = attachment?.file_id
-					if (!fileId) return false
-
-					// Folders have empty file_extension
-					const isFolder = attachment.file_extension === ""
-					return !isFolder
-				},
-			)
+			const firstFileAttachment = attachments.find(isOpenableAttachment)
 			const firstFileId = firstFileAttachment?.file_id
 
 			if (!firstFileId) return

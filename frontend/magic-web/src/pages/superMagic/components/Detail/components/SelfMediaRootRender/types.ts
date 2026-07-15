@@ -111,6 +111,8 @@ export interface SelfMediaPostManifest {
 	thumbnailCover?: string
 }
 
+export type SelfMediaWechatCoverType = "heroCover" | "thumbnailCover"
+
 /** Per-platform block inside the root `self-media` object */
 export interface SelfMediaPlatformBlock {
 	posts: Array<SelfMediaPost | SelfMediaPostEntry>
@@ -155,6 +157,11 @@ export interface PlatformComponentProps {
 	) => Promise<boolean | void> | boolean | void
 	/** Open the pre-publish AI diagnosis flow for the active post. */
 	onRequestPrePublishAnalysis?: () => void
+	/** Generate missing WeChat cover assets for the selected post. */
+	onRequestWechatCoverGeneration?: (target: {
+		index: number
+		coverTypes: SelfMediaWechatCoverType[]
+	}) => Promise<boolean> | boolean
 }
 
 /** Component contract every platform implementation must follow */

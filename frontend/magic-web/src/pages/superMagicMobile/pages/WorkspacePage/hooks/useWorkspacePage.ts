@@ -91,6 +91,8 @@ export function useWorkspacePage(): UseWorkspacePageReturn {
 	// 分页状态：追踪服务端总数和当前已加载到第几页
 	const [projectsTotal, setProjectsTotal] = useState(0)
 	const [currentPage, setCurrentPage] = useState(1)
+	// Blocks InfiniteScroll while project mutations are replacing page 1 with server data.
+	const [isReplacingFirstProjectPage, setIsReplacingFirstProjectPage] = useState(false)
 
 	/**
 	 * 进入新重构详情页时优先按路由参数恢复工作区，保证刷新后仍能拿到正确上下文。
@@ -381,6 +383,7 @@ export function useWorkspacePage(): UseWorkspacePageReturn {
 		onProjectChanged: () => handleRefreshProjects({ silent: true }),
 		onDeleteProjectConfirmed: async (project) => {
 			try {
+				setIsReplacingFirstProjectPage(true)
 				setPendingRemoveIds((prev) => new Set([...prev, project.id]))
 				await SuperMagicService.deleteProject(project, {
 					selectedProjectBehavior: "switch-next",
@@ -391,6 +394,8 @@ export function useWorkspacePage(): UseWorkspacePageReturn {
 				await handleRefreshProjects({ silent: true })
 				magicToast.error(t("project.deleteProjectFailed"))
 				throw new Error("delete project failed")
+			} finally {
+				setIsReplacingFirstProjectPage(false)
 			}
 		},
 	})
@@ -431,6 +436,7 @@ export function useWorkspacePage(): UseWorkspacePageReturn {
 	 */
 	const loadMore = useMemoizedFn(async () => {
 		if (!activeWorkspaceId || !isListReady) return
+		if (isReplacingFirstProjectPage) return
 		// 搜索态不加载更多，保持一次性全量本地过滤行为
 		if (debouncedSearchValue) return
 		const nextPage = currentPage + 1
@@ -453,7 +459,10 @@ export function useWorkspacePage(): UseWorkspacePageReturn {
 	})
 
 	// 是否还有更多项目（搜索态禁用加载更多，结果为本地全量过滤）
-	const hasMore = !debouncedSearchValue && displayProjects.length < projectsTotal
+	const hasMore =
+		!isReplacingFirstProjectPage &&
+		!debouncedSearchValue &&
+		displayProjects.length < projectsTotal
 
 	return {
 		selectedWorkspace,

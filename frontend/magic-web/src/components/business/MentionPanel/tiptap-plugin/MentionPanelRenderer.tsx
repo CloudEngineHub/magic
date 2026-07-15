@@ -35,6 +35,8 @@ const MentionPanelRenderer = observer(
 			initialLoadOptions,
 			initialNavigationStack,
 			catalogBehavior,
+			viewMode,
+			galleryOptions,
 			onSelect,
 			onExit,
 			disableKeyboardShortcuts = false,
@@ -124,6 +126,8 @@ const MentionPanelRenderer = observer(
 						initialLoadOptions={initialLoadOptions}
 						initialNavigationStack={initialNavigationStack}
 						catalogBehavior={catalogBehavior}
+						viewMode={viewMode}
+						galleryOptions={galleryOptions}
 						onSelect={handleSelect}
 						onClose={handleClose}
 						searchPlaceholder={t.searchPlaceholder}

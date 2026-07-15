@@ -24,4 +24,14 @@ export type {
 	SuperMobileShellOutletContext,
 	SuperMobileShellRouteLayoutProps,
 } from "./SuperMobileShellRouteLayout"
+export type {
+	SuperMobileShellNativeRecordingTab,
+	SuperMobileShellNavConfigItem,
+	SuperMobileShellNavigationOptions,
+	SuperMobileShellNavigationResult,
+	SuperMobileShellResolvedNavItem,
+} from "./hooks/types"
+export { BASE_SUPER_MOBILE_SHELL_NAV_ITEMS } from "./hooks/baseSuperMobileShellNavItems"
+export { useSuperMobileShellNavItems } from "./hooks/useSuperMobileShellNavItems"
+export { useSuperMobileShellNavigation } from "./hooks/useSuperMobileShellNavigation"
 export { MobileShellThemeToggle } from "./MobileShellThemeToggle"

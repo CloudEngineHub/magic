@@ -1,5 +1,16 @@
 export const AGENT_INPUT_CONTAINER_HEADER_ID = "agent-input-container-header" as const
 
+export const SLIDES_TEMPLATE_RANDOM_DRAG_TYPE =
+	"application/x-magic-slides-template-random" as const
+export const SLIDES_TEMPLATE_RANDOM_DRAG_START_EVENT =
+	"magic:slides-template-random-drag-start" as const
+export const SLIDES_TEMPLATE_RANDOM_DRAG_END_EVENT =
+	"magic:slides-template-random-drag-end" as const
+
+export function hasSlidesTemplateRandomDragType(dataTransfer: Pick<DataTransfer, "types">) {
+	return Array.from(dataTransfer.types).includes(SLIDES_TEMPLATE_RANDOM_DRAG_TYPE)
+}
+
 /**
  * Scene input container IDs
  */

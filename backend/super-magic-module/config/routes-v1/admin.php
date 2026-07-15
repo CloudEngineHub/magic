@@ -6,17 +6,33 @@ declare(strict_types=1);
  */
 use App\Infrastructure\Util\Middleware\RequestContextMiddleware;
 use Dtyq\SuperMagic\Interfaces\Agent\Facade\Admin\AdminSuperMagicAgentApi;
+use Dtyq\SuperMagic\Interfaces\Agent\Facade\Admin\AdminSuperMagicCategoryApi;
 use Dtyq\SuperMagic\Interfaces\Skill\Facade\Admin\AdminSkillApi;
 use Hyperf\HttpServer\Router\Router;
 
 Router::addGroup('/api/v2/admin', static function () {
     Router::addGroup('/super-magic/agents', static function () {
-        Router::post('/versions/queries', [AdminSuperMagicAgentApi::class, 'queryVersions']);
-        Router::post('/markets/queries', [AdminSuperMagicAgentApi::class, 'queryMarkets']);
-        Router::put('/markets/{id}', [AdminSuperMagicAgentApi::class, 'updateMarket']);
-        Router::put('/markets/{id}/sort-order', [AdminSuperMagicAgentApi::class, 'updateMarketSortOrder']);
+        Router::addGroup('/categories', static function () {
+            Router::post('/queries', [AdminSuperMagicCategoryApi::class, 'queries']);
+            Router::post('', [AdminSuperMagicCategoryApi::class, 'create']);
+            Router::get('/{id:\d+}', [AdminSuperMagicCategoryApi::class, 'show']);
+            Router::put('/{id:\d+}', [AdminSuperMagicCategoryApi::class, 'update']);
+            Router::delete('/{id:\d+}', [AdminSuperMagicCategoryApi::class, 'delete']);
+        });
+
+        Router::addGroup('/versions', static function () {
+            Router::post('/queries', [AdminSuperMagicAgentApi::class, 'queryVersions']);
+            Router::put('/{id}/review', [AdminSuperMagicAgentApi::class, 'reviewAgentVersion']);
+        });
+
+        Router::addGroup('/markets', static function () {
+            Router::post('/queries', [AdminSuperMagicAgentApi::class, 'queryMarkets']);
+            Router::put('/{id}', [AdminSuperMagicAgentApi::class, 'updateMarket']);
+            Router::put('/{id}/category', [AdminSuperMagicAgentApi::class, 'updateMarketCategory']);
+            Router::put('/{id}/sort-order', [AdminSuperMagicAgentApi::class, 'updateMarketSortOrder']);
+        });
+
         Router::get('/{code}', [AdminSuperMagicAgentApi::class, 'getDetailByCode']);
-        Router::put('/versions/{id}/review', [AdminSuperMagicAgentApi::class, 'reviewAgentVersion']);
     });
 }, ['middleware' => [RequestContextMiddleware::class]]);
 

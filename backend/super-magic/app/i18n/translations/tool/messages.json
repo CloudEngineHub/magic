@@ -203,6 +203,58 @@
         "zh_CN": "文档格式转换",
         "en_US": "Document Format Conversion"
     },
+    "convert_pptx_to_slide_template.before": {
+        "zh_CN": "正在将 {{file_name}} 转换为幻灯片模板",
+        "en_US": "Converting {{file_name}} to a slide template"
+    },
+    "convert_pptx_to_slide_template.after_success": {
+        "zh_CN": "已生成模板草稿 {{template_id}}（{{slide_count}} 页）",
+        "en_US": "Generated template draft {{template_id}} ({{slide_count}} slides)"
+    },
+    "convert_pptx_to_slide_template.error": {
+        "zh_CN": "PPTX 转幻灯片模板失败：{{error}}",
+        "en_US": "PPTX to slide template conversion failed: {{error}}"
+    },
+    "convert_pptx_to_slide_template.detail_title": {
+        "zh_CN": "PPTX 转幻灯片模板",
+        "en_US": "PPTX to Slide Template"
+    },
+    "convert_pptx_to_slide_template.detail_error_title": {
+        "zh_CN": "PPTX 转幻灯片模板失败",
+        "en_US": "PPTX to Slide Template Failed"
+    },
+    "install_slides_template.before": {
+        "zh_CN": "正在安装模板 {{template_code}}",
+        "en_US": "Installing template {{template_code}}"
+    },
+    "install_slides_template.after_success": {
+        "zh_CN": "已安装模板 {{template_code}}",
+        "en_US": "Installed template {{template_code}}"
+    },
+    "install_slides_template.after_failed": {
+        "zh_CN": "模板 {{template_code}} 安装失败",
+        "en_US": "Failed to install template {{template_code}}"
+    },
+    "install_slides_template.detail_title": {
+        "zh_CN": "幻灯片模板安装结果",
+        "en_US": "Slide Template Install Result"
+    },
+    "install_slides_template.detail_code": {
+        "zh_CN": "模板 code",
+        "en_US": "Template code"
+    },
+    "install_slides_template.detail_label": {
+        "zh_CN": "模板名称",
+        "en_US": "Template name"
+    },
+    "install_slides_template.detail_directory": {
+        "zh_CN": "安装目录",
+        "en_US": "Installed directory"
+    },
+    "install_slides_template.detail_error": {
+        "zh_CN": "安装失败，请检查模板 code 或稍后重试",
+        "en_US": "Install failed. Check the template code or try again later"
+    },
     "export_document_markdown.before": {
         "zh_CN": "正在导出 {{file_name}}",
         "en_US": "Exporting {{file_name}}"
@@ -687,6 +739,10 @@
         "zh_CN": "不支持的音频文件格式: {{format}}",
         "en_US": "Unsupported audio file format: {{format}}"
     },
+    "audio_understanding.file_corrupted": {
+        "zh_CN": "音频文件 {{file_name}} 已损坏，无法转录。可能是录制或上传过程中断导致文件不完整，请重新导出或重新录制后再试。具体细节：{{reason}}",
+        "en_US": "Audio file {{file_name}} is corrupted and cannot be transcribed. The recording or upload was likely interrupted, leaving the file incomplete. Please re-export or re-record and try again. Details: {{reason}}"
+    },
     "audio_understanding.project_folder_not_exists": {
         "zh_CN": "需要创建项目文件夹，正在处理...",
         "en_US": "Folder creation needed, processing..."
@@ -700,8 +756,8 @@
         "en_US": "Unknown audio file"
     },
     "audio_understanding.unknown_status_code": {
-        "zh_CN": "转译错误：未知的状态码 - {{status_code}}: {{status_message}}",
-        "en_US": "Transcription error: Unknown status code - {{status_code}}: {{status_message}}"
+        "zh_CN": "转译错误：未知的状态码 - {{status_code}}: {{status_message}}。请使用相同参数重试音频转译一次；若再次失败再向用户说明。",
+        "en_US": "Transcription error: Unknown status code - {{status_code}}: {{status_message}}. Retry the audio transcription once with the same inputs; if it fails again, explain the situation to the user."
     },
     "audio_understanding.transcription_progress_message": {
         "zh_CN": "{{percentage}}%",
@@ -958,6 +1014,22 @@
     "create_slide_project.empty_project": {
         "zh_CN": "空项目",
         "en_US": "empty project"
+    },
+    "create_self_media_project.success": {
+        "zh_CN": "自媒体项目 {{project_name}} 创建成功（平台：{{platform}}，文章 {{posts_count}} 篇）",
+        "en_US": "Self-media project {{project_name}} created (platform: {{platform}}, posts: {{posts_count}})"
+    },
+    "create_self_media_project.exception": {
+        "zh_CN": "自媒体项目创建异常，请重试",
+        "en_US": "Self-media project creation failed, please retry"
+    },
+    "create_self_media_post.success": {
+        "zh_CN": "自媒体内容 {{post_name}}（{{post_id}}）就绪",
+        "en_US": "Self-media post {{post_name}} ({{post_id}}) ready"
+    },
+    "create_self_media_post.exception": {
+        "zh_CN": "自媒体内容创建异常，请重试",
+        "en_US": "Self-media post creation failed, please retry"
     },
     "create_slide.rewrite_success_with_file": {
         "zh_CN": "重写 {{file_name}} 成功",
@@ -1236,8 +1308,8 @@
         "en_US": "Sub-agent call failed: {{error}}"
     },
     "call_subagent.assign": {
-        "zh_CN": "{{agent_name}} 子智能体",
-        "en_US": "{{agent_name}} sub-agent"
+        "zh_CN": "{{agent_name}}",
+        "en_US": "{{agent_name}}"
     },
     "call_subagent.running": {
         "zh_CN": "{{agent_name}} 正在执行任务",
@@ -1647,37 +1719,89 @@
         "zh_CN": "路径有误，将尝试解决...",
         "en_US": "Path error, attempting to resolve..."
     },
-    "find_skills.searching": {
-        "zh_CN": "正在检索「{{keywords}}」",
-        "en_US": "Searching for \"{{keywords}}\""
+    "find_skills.searching.local": {
+        "zh_CN": "正在查看本地可用技能",
+        "en_US": "Listing locally available skills"
     },
-    "find_skills.searched": {
-        "zh_CN": "已检索「{{keywords}}」，共找到 {{total}} 个候选",
-        "en_US": "Searched \"{{keywords}}\", found {{total}} candidates"
+    "find_skills.searching.local_keyword": {
+        "zh_CN": "正在查看本地技能「{{keywords}}」",
+        "en_US": "Listing local skills for \"{{keywords}}\""
     },
-    "find_skills.searched_with_providers": {
-        "zh_CN": "已检索「{{keywords}}」（来源：{{providers}}），共找到 {{total}} 个候选",
-        "en_US": "Searched \"{{keywords}}\" (sources: {{providers}}), found {{total}} candidates"
+    "find_skills.searching.online": {
+        "zh_CN": "正在搜索互联网技能「{{keywords}}」",
+        "en_US": "Searching online skills for \"{{keywords}}\""
+    },
+    "find_skills.searching.auto": {
+        "zh_CN": "正在检索技能「{{keywords}}」",
+        "en_US": "Searching skills for \"{{keywords}}\""
+    },
+    "find_skills.searched.local": {
+        "zh_CN": "已查看本地可用技能，共找到 {{total}} 个",
+        "en_US": "Listed locally available skills, {{total}} found"
+    },
+    "find_skills.searched.local_keyword": {
+        "zh_CN": "已查看本地技能「{{keywords}}」，共找到 {{total}} 个",
+        "en_US": "Listed local skills for \"{{keywords}}\", {{total}} found"
+    },
+    "find_skills.searched.online": {
+        "zh_CN": "已搜索互联网技能「{{keywords}}」，共找到 {{total}} 个候选",
+        "en_US": "Searched online skills for \"{{keywords}}\", found {{total}} candidates"
+    },
+    "find_skills.searched.auto": {
+        "zh_CN": "已检索技能「{{keywords}}」，共找到 {{total}} 个候选",
+        "en_US": "Searched skills for \"{{keywords}}\", found {{total}} candidates"
     },
     "find_skills.keywords_all": {
         "zh_CN": "全部",
         "en_US": "all"
     },
     "install_skills.installing": {
-        "zh_CN": "正在安装：{{ids}}",
-        "en_US": "Installing: {{ids}}"
+        "zh_CN": "正在安装技能：{{ids}}",
+        "en_US": "Installing skills: {{ids}}"
+    },
+    "install_skills.installing.workspace": {
+        "zh_CN": "正在往当前项目安装技能：{{ids}}",
+        "en_US": "Installing skills to current project: {{ids}}"
+    },
+    "install_skills.installing.personal": {
+        "zh_CN": "正在往个人目录安装技能：{{ids}}",
+        "en_US": "Installing skills to personal directory: {{ids}}"
     },
     "install_skills.success": {
-        "zh_CN": "成功安装 {{count}} 个 skill",
+        "zh_CN": "成功安装 {{count}} 个技能",
         "en_US": "Installed {{count}} skill(s) successfully"
     },
+    "install_skills.success.workspace": {
+        "zh_CN": "成功安装 {{count}} 个技能到当前项目",
+        "en_US": "Installed {{count}} skill(s) to current project"
+    },
+    "install_skills.success.personal": {
+        "zh_CN": "成功安装 {{count}} 个技能到个人目录",
+        "en_US": "Installed {{count}} skill(s) to personal directory"
+    },
     "install_skills.upgraded": {
-        "zh_CN": "成功升级 {{count}} 个 skill",
+        "zh_CN": "成功升级 {{count}} 个技能",
         "en_US": "Upgraded {{count}} skill(s) successfully"
     },
+    "install_skills.upgraded.workspace": {
+        "zh_CN": "成功升级 {{count}} 个技能（当前项目）",
+        "en_US": "Upgraded {{count}} skill(s) in current project"
+    },
+    "install_skills.upgraded.personal": {
+        "zh_CN": "成功升级 {{count}} 个技能（个人目录）",
+        "en_US": "Upgraded {{count}} skill(s) in personal directory"
+    },
     "install_skills.mixed_success": {
-        "zh_CN": "安装 {{installed}} 个、升级 {{upgraded}} 个 skill",
+        "zh_CN": "安装 {{installed}} 个、升级 {{upgraded}} 个技能",
         "en_US": "Installed {{installed}} and upgraded {{upgraded}} skill(s)"
+    },
+    "install_skills.mixed_success.workspace": {
+        "zh_CN": "安装 {{installed}} 个、升级 {{upgraded}} 个技能（当前项目）",
+        "en_US": "Installed {{installed}} and upgraded {{upgraded}} skill(s) in current project"
+    },
+    "install_skills.mixed_success.personal": {
+        "zh_CN": "安装 {{installed}} 个、升级 {{upgraded}} 个技能（个人目录）",
+        "en_US": "Installed {{installed}} and upgraded {{upgraded}} skill(s) in personal directory"
     },
     "install_skills.failed": {
         "zh_CN": "安装失败（共 {{count}} 个）",
@@ -1686,6 +1810,14 @@
     "install_skills.partial": {
         "zh_CN": "安装完成：{{ok}} 成功，{{failed}} 失败",
         "en_US": "Installation complete: {{ok}} succeeded, {{failed}} failed"
+    },
+    "install_skills.partial.workspace": {
+        "zh_CN": "安装完成：{{ok}} 成功，{{failed}} 失败（当前项目）",
+        "en_US": "Installation complete: {{ok}} succeeded, {{failed}} failed (current project)"
+    },
+    "install_skills.partial.personal": {
+        "zh_CN": "安装完成：{{ok}} 成功，{{failed}} 失败（个人目录）",
+        "en_US": "Installation complete: {{ok}} succeeded, {{failed}} failed (personal directory)"
     },
     "upgrade_sandbox.success": {
         "zh_CN": "沙箱升级请求已提交",

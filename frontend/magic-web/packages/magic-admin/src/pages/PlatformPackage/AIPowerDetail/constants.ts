@@ -205,6 +205,12 @@ export const DefaultProviderListMap: Record<string, PlatformPackage.ProviderConf
 	[PlatformPackage.PowerCode.WEATHER_FORECAST]: DefaultWeatherForecastProviderList,
 }
 
+// 已下线服务商列表。兼容后端暂未过滤的历史 provider，前端展示和保存时都会过滤掉。
+export const DeprecatedProviderMap: Partial<Record<PlatformPackage.PowerCode, Set<string>>> = {
+	[PlatformPackage.PowerCode.WEB_SEARCH]: new Set(["magic", "bing"]),
+	[PlatformPackage.PowerCode.IMAGE_SEARCH]: new Set(["doubao"]),
+}
+
 // 服务配置列表
 export const ServiceConfigList = [
 	PlatformPackage.PowerCode.OCR,

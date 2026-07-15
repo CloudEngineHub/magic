@@ -9,7 +9,9 @@ import type {
 	MentionItem,
 	MentionPanelCatalogBehavior,
 	PanelState,
+	MentionPanelGalleryOptions,
 	MentionPanelLoadStateOptions,
+	MentionPanelViewMode,
 	NavigationItem,
 	UploadFileMentionData,
 	CloudFileMentionData,
@@ -67,6 +69,8 @@ export interface MentionPanelRendererProps {
 	initialLoadOptions?: MentionPanelLoadStateOptions
 	initialNavigationStack?: NavigationItem[]
 	catalogBehavior?: MentionPanelCatalogBehavior
+	viewMode?: MentionPanelViewMode
+	galleryOptions?: MentionPanelGalleryOptions
 	onSelect: (item: MentionItem, context?: MentionSelectContext) => void
 	onExit: () => void
 	disableKeyboardShortcuts?: boolean
@@ -98,6 +102,8 @@ export interface MentionPanelPluginOptions {
 	getInitialLoadOptions?: () => MentionPanelLoadStateOptions | undefined
 	getInitialNavigationStack?: () => NavigationItem[] | undefined
 	catalogBehavior?: MentionPanelCatalogBehavior
+	viewMode?: MentionPanelViewMode
+	galleryOptions?: MentionPanelGalleryOptions
 	onInsert?: (item: MentionItem) => void
 	onInsertItems?: (items: MentionItem[]) => void
 	onRemove?: (item: TiptapMentionAttributes, stillExists: boolean) => void

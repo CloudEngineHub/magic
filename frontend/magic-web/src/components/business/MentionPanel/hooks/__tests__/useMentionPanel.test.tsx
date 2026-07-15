@@ -259,6 +259,86 @@ describe("useMentionPanel", () => {
 		})
 	})
 
+	it("should keep catalog search results after filtering current items", async () => {
+		const catalogAgents: MentionItem[] = [
+			{
+				id: "agent-alpha",
+				type: MentionItemType.AGENT,
+				name: "Alpha Agent",
+				data: {
+					agent_id: "agent-alpha",
+					agent_name: "Alpha Agent",
+					agent_avatar: "",
+					agent_description: "Plans weekly work",
+				},
+			},
+			{
+				id: "agent-beta",
+				type: MentionItemType.AGENT,
+				name: "Beta Agent",
+				data: {
+					agent_id: "agent-beta",
+					agent_name: "Beta Agent",
+					agent_avatar: "",
+					agent_description: "Writes release notes",
+				},
+			},
+		]
+		const dataService: MockDataService = {
+			preLoadList: vi.fn(),
+			removeFromHistory: vi.fn(),
+			dispatch: vi.fn(async (request: MentionStoreRequest) => {
+				if (request.kind === "default") {
+					return {
+						items: defaultItems,
+					}
+				}
+				if (
+					request.kind === "catalog" &&
+					request.catalogId === MentionPanelCatalogId.AGENTS
+				) {
+					return {
+						items: catalogAgents,
+					}
+				}
+				return {}
+			}),
+		}
+		const { result } = renderHook(() =>
+			useMentionPanel({
+				dataService,
+				t: en,
+				catalogBehavior: defaultMentionPanelCatalogBehavior,
+			}),
+		)
+
+		await waitFor(() => {
+			expect(result.current.state.items).toHaveLength(defaultItems.length)
+		})
+
+		act(() => {
+			result.current.actions.selectItem(2)
+		})
+
+		await act(async () => {
+			await result.current.actions.confirmSelection()
+		})
+
+		await waitFor(() => {
+			expect(result.current.state.currentState).toBe(PanelState.CATALOG)
+			expect(result.current.state.items).toEqual(catalogAgents)
+		})
+
+		await act(async () => {
+			await result.current.actions.search("beta")
+		})
+
+		await waitFor(() => {
+			expect(result.current.state.searchQuery).toBe("beta")
+			expect(result.current.state.items).toEqual([catalogAgents[1]])
+		})
+	})
+
 	it("should navigate back from catalog to default state", async () => {
 		const dataService = createDataService()
 		const { result } = renderHook(() =>

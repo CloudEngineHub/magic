@@ -11,10 +11,10 @@ import type { StoreAgentView } from "@/services/crew/CrewService"
 import {
 	formatVersionBadge,
 	isEmployeeMarketPrimaryActionDisabled,
-	isOfficialBuiltinPublisherType,
 	isOfficialPublisherType,
 	resolveEmployeeMarketPrimaryActionLabel,
 	resolvePublisherLabel,
+	shouldHideEmployeeMarketPrimaryAction,
 } from "./employee-card-shared"
 
 interface EmployeeCardProps {
@@ -47,7 +47,7 @@ function EmployeeCard({
 		company: publisherLabel,
 	})
 	const isOfficialPublisher = isOfficialPublisherType(employee.publisherType)
-	const hidePrimaryAction = isOfficialBuiltinPublisherType(employee.publisherType)
+	const hidePrimaryAction = shouldHideEmployeeMarketPrimaryAction(employee)
 
 	const versionLabel = useMemo(
 		() => formatVersionBadge(employee.latestVersionCode) ?? "",

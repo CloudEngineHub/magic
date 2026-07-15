@@ -26,6 +26,10 @@ const WECHAT_COMPUTED_STYLE_PROPERTIES = [
 	"background",
 	"background-color",
 	"background-image",
+	"background-position",
+	"background-repeat",
+	"background-size",
+	"box-shadow",
 	"color",
 	"font",
 	"font-family",
@@ -37,18 +41,38 @@ const WECHAT_COMPUTED_STYLE_PROPERTIES = [
 	"text-align",
 	"text-decoration",
 	"text-indent",
+	"text-shadow",
+	"text-transform",
 	"white-space",
 	"word-break",
 	"overflow-wrap",
 	"vertical-align",
 	"list-style",
+	"object-fit",
+	"object-position",
 	"opacity",
 	"flex",
+	"flex-basis",
 	"flex-direction",
+	"flex-grow",
+	"flex-shrink",
 	"flex-wrap",
 	"align-items",
+	"align-content",
+	"align-self",
 	"justify-content",
+	"justify-items",
+	"justify-self",
 	"gap",
+	"column-gap",
+	"row-gap",
+	"grid-auto-columns",
+	"grid-auto-flow",
+	"grid-auto-rows",
+	"grid-column",
+	"grid-row",
+	"grid-template-columns",
+	"grid-template-rows",
 ] as const
 
 function parseInlineStyle(styleText: string | null): Map<string, string> {
@@ -94,8 +118,8 @@ function parseDeclarationBlock(block: string): Map<string, string> {
 }
 
 function inlineStyleRules(sourceDocument: Document, targetBody: HTMLElement): void {
-	const sourceElements = Array.from(sourceDocument.body.querySelectorAll("*"))
-	const targetElements = Array.from(targetBody.querySelectorAll("*"))
+	const sourceElements = [sourceDocument.body, ...sourceDocument.body.querySelectorAll("*")]
+	const targetElements = [targetBody, ...targetBody.querySelectorAll("*")]
 	if (!sourceElements.length || !targetElements.length) return
 
 	const sourceToTarget = new Map<Element, Element>()
@@ -120,7 +144,11 @@ function inlineStyleRules(sourceDocument: Document, targetBody: HTMLElement): vo
 				const selector = rawSelector.trim()
 				if (!selector || selector.includes(":")) return
 				try {
-					sourceDocument.body.querySelectorAll(selector).forEach((sourceElement) => {
+					const matches = [
+						...(sourceDocument.body.matches(selector) ? [sourceDocument.body] : []),
+						...sourceDocument.body.querySelectorAll(selector),
+					]
+					matches.forEach((sourceElement) => {
 						const targetElement = sourceToTarget.get(sourceElement)
 						if (targetElement) applyStyleMap(targetElement, declarations)
 					})
@@ -136,8 +164,8 @@ function inlineComputedStyles(sourceDocument: Document, targetBody: HTMLElement)
 	const sourceWindow = sourceDocument.defaultView
 	if (!sourceWindow?.getComputedStyle) return
 
-	const sourceElements = Array.from(sourceDocument.body.querySelectorAll("*"))
-	const targetElements = Array.from(targetBody.querySelectorAll("*"))
+	const sourceElements = [sourceDocument.body, ...sourceDocument.body.querySelectorAll("*")]
+	const targetElements = [targetBody, ...targetBody.querySelectorAll("*")]
 	sourceElements.forEach((sourceElement, index) => {
 		const targetElement = targetElements[index]
 		if (!targetElement) return
@@ -152,15 +180,69 @@ function inlineComputedStyles(sourceDocument: Document, targetBody: HTMLElement)
 	})
 }
 
-function removeUnsafeClipboardNodes(targetBody: HTMLElement): void {
-	targetBody
-		.querySelectorAll("script,style,link[rel='stylesheet'],meta,title")
-		.forEach((node) => node.remove())
-	targetBody.querySelectorAll("*").forEach((element) => {
+function removeEventHandlerAttributes(root: ParentNode): void {
+	root.querySelectorAll("*").forEach((element) => {
 		Array.from(element.attributes).forEach((attribute) => {
 			if (/^on/i.test(attribute.name)) element.removeAttribute(attribute.name)
 		})
 	})
+}
+
+function sanitizeSourceBeforeRender(root: ParentNode): void {
+	root.querySelectorAll("script,iframe,object,embed,base,meta[http-equiv='refresh']").forEach(
+		(node) => node.remove(),
+	)
+	removeEventHandlerAttributes(root)
+}
+
+function removeUnsafeClipboardNodes(root: ParentNode): void {
+	root.querySelectorAll(
+		"script,style,link[rel='stylesheet'],meta,title,iframe,object,embed,base",
+	).forEach((node) => node.remove())
+	removeEventHandlerAttributes(root)
+}
+
+function serializeTargetBody(targetBody: HTMLElement): string | null {
+	const wrapper = targetBody.ownerDocument.createElement("section")
+	const bodyStyle = targetBody.getAttribute("style")
+	if (bodyStyle) wrapper.setAttribute("style", bodyStyle)
+	while (targetBody.firstChild) wrapper.appendChild(targetBody.firstChild)
+
+	const html = wrapper.outerHTML.trim()
+	return html || null
+}
+
+function createRenderedSourceDocument(html: string): {
+	document: Document
+	dispose: () => void
+} | null {
+	if (typeof document === "undefined" || !document.body) return null
+
+	const iframe = document.createElement("iframe")
+	iframe.setAttribute("sandbox", "allow-same-origin")
+	iframe.setAttribute("aria-hidden", "true")
+	iframe.style.cssText =
+		"position:fixed;left:-100000px;top:0;width:760px;height:1000px;visibility:hidden;pointer-events:none"
+	document.body.appendChild(iframe)
+
+	const sourceDocument = iframe.contentDocument
+	if (!sourceDocument) {
+		iframe.remove()
+		return null
+	}
+
+	try {
+		sourceDocument.open()
+		sourceDocument.write(html)
+		sourceDocument.close()
+		return {
+			document: sourceDocument,
+			dispose: () => iframe.remove(),
+		}
+	} catch {
+		iframe.remove()
+		return null
+	}
 }
 
 export function buildWechatClipboardHtmlFromDocument(sourceDocument: Document): string | null {
@@ -172,8 +254,7 @@ export function buildWechatClipboardHtmlFromDocument(sourceDocument: Document): 
 	inlineComputedStyles(sourceDocument, targetBody)
 	removeUnsafeClipboardNodes(targetBody)
 
-	const html = targetBody.innerHTML.trim()
-	return html || null
+	return serializeTargetBody(targetBody)
 }
 
 export function buildWechatClipboardHtmlFromIframe(
@@ -187,6 +268,15 @@ export function buildWechatClipboardHtmlFromIframe(
 export function buildWechatClipboardHtmlFromSource(html: string): string {
 	if (!html) return html
 	if (typeof DOMParser === "undefined") return html
-	const sourceDocument = new DOMParser().parseFromString(html, "text/html")
-	return buildWechatClipboardHtmlFromDocument(sourceDocument) || html
+
+	const parsedDocument = new DOMParser().parseFromString(html, "text/html")
+	sanitizeSourceBeforeRender(parsedDocument)
+	const renderedSource = createRenderedSourceDocument(parsedDocument.documentElement.outerHTML)
+	if (!renderedSource) return buildWechatClipboardHtmlFromDocument(parsedDocument) || html
+
+	try {
+		return buildWechatClipboardHtmlFromDocument(renderedSource.document) || html
+	} finally {
+		renderedSource.dispose()
+	}
 }

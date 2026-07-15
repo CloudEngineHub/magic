@@ -292,7 +292,15 @@ function isProjectReferenceFolderEntryFile(
 		getDeclaredProjectReferenceEntryPath(file.display_config)
 	const displayType = folder.display_config?.type || file.display_config?.type
 
-	if (displayType === "slide") return true
+	if (displayType === "slide") {
+		return matchesProjectReferenceEntryPath(
+			file,
+			folder,
+			declaredEntryPath || "index.html",
+			fallbackPath,
+			fallbackName,
+		)
+	}
 
 	if (declaredEntryPath) {
 		return matchesProjectReferenceEntryPath(

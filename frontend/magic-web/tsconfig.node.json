@@ -1,10 +1,10 @@
 {
 	"compilerOptions": {
+		"allowSyntheticDefaultImports": true,
 		"composite": true,
-		"skipLibCheck": true,
 		"module": "ESNext",
 		"moduleResolution": "bundler",
-		"allowSyntheticDefaultImports": true,
+		"skipLibCheck": true,
 		"strict": true
 	},
 	"include": [
@@ -17,6 +17,8 @@
 		"./plugins/**/*.ts",
 		"./vite/**/*.ts",
 		"./packages/magic-admin/**/*.ts",
+		"./packages/html2pptx/vite.config.ts",
+		"./packages/html2pptx/vite/**/*.ts",
 		"tailwind.config.js",
 		"postcss.config.ts"
 	]

@@ -1172,6 +1172,65 @@ describe("ImageResourceManager image resources", () => {
 
 		expect(getVariantsToRefresh(entry)).toEqual(["preview"])
 	})
+
+	it("persists preview display resources for reload-time natural scheduling", () => {
+		const { manager } = createManager()
+		const put = vi.fn()
+		const previewResource = createImageResource("preview")
+		const displayBlob = new Blob(["preview-display"], { type: "image/webp" })
+		const entry = createEntry({
+			resourceVersion: "generated:generated.png",
+			sourceUpdatedAt: "2026-07-13T08:00:00Z",
+			contentLength: 2048,
+			sourceUrl: "https://example.test/generated.png",
+			ossSrc: "https://example.test/generated.png",
+		})
+		const managerInternals = manager as unknown as {
+			displayVariantPersistentCache: { put: typeof put }
+			persistDisplayResourceFromWorkerResult: (
+				path: string,
+				entry: typeof entry,
+				variant: ImageResourceVariant,
+				result: {
+					persistentDisplay?: {
+						blob: Blob
+						width: number
+						height: number
+					}
+				},
+				imageInfo: TestImageResource["imageInfo"],
+			) => void
+		}
+		managerInternals.displayVariantPersistentCache = { put }
+
+		managerInternals.persistDisplayResourceFromWorkerResult(
+			"images/generated.png",
+			entry,
+			"preview",
+			{
+				persistentDisplay: {
+					blob: displayBlob,
+					width: 512,
+					height: 384,
+				},
+			},
+			previewResource.imageInfo,
+		)
+
+		expect(put).toHaveBeenCalledWith({
+			path: "images/generated.png",
+			variant: "preview",
+			blob: displayBlob,
+			width: 512,
+			height: 384,
+			imageInfo: previewResource.imageInfo,
+			resourceVersion: "generated:generated.png",
+			sourceUpdatedAt: "2026-07-13T08:00:00Z",
+			contentLength: 2048,
+			sourceUrl: "https://example.test/generated.png",
+			maxEdge: 1536,
+		})
+	})
 })
 
 describe("ImageResourceManager load priority defaults", () => {

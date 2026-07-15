@@ -227,8 +227,9 @@ class AsrSandboxService extends AbstractAppService
             'full_workdir' => $fullWorkdir,
         ]);
 
-        // 调用沙箱 finish 并轮询等待完成（会通过响应处理器自动创建/更新文件记录）
+        // 调用沙箱 finish 并轮询等待完成
         $mergeResult = $this->callSandboxFinishAndWait($taskStatus, $fileTitle);
+        $this->handleMergeResultFiles($taskStatus, $mergeResult);
 
         $this->logger->info('沙箱返回的文件信息', [
             'task_key' => $taskStatus->taskKey,
@@ -315,20 +316,22 @@ class AsrSandboxService extends AbstractAppService
 
                 return $mergeResult;
             } catch (Throwable $e) {
-                $errorMessage = $queryResponse->getErrorMessage() ?? '沙箱不可达且重建失败';
                 $this->logger->error('恢复 finish-recording 时沙箱重建失败', [
                     'task_key' => $taskStatus->taskKey,
-                    'sandbox_id' => $sandboxId,
+                    'old_sandbox_id' => $sandboxId,
+                    'new_sandbox_id' => $taskStatus->sandboxId,
+                    'original_query_error' => $queryResponse->getErrorMessage(),
+                    'audio_file_path' => $taskStatus->filePath,
                     'error' => $e->getMessage(),
                 ]);
-                ExceptionBuilder::throw(AsrErrorCode::SandboxMergeFailed, '', ['message' => $errorMessage]);
+                throw $e;
             }
         }
 
         $statusString = $queryResponse->getStatus();
         $status = SandboxAsrStatusEnum::fromString($statusString) ?? SandboxAsrStatusEnum::ERROR;
 
-        $completedResult = $this->checkAndHandleResponseStatus(
+        $completedResult = $this->checkResponseStatus(
             $queryResponse,
             $status,
             $taskStatus,
@@ -356,6 +359,17 @@ class AsrSandboxService extends AbstractAppService
         $taskStatus->updateStatus($targetStatus);
 
         return $mergeResult;
+    }
+
+    /**
+     * 处理沙箱 completed 响应中的文件记录。
+     * 恢复流程会在调用本方法之前先持久化沙箱完成检查点。
+     */
+    public function handleMergeResultFiles(
+        AsrTaskStatusDTO $taskStatus,
+        AsrSandboxMergeResultDTO $mergeResult
+    ): void {
+        $this->responseHandler->handleFinishResponse($taskStatus, $mergeResult->responseData);
     }
 
     /**
@@ -465,7 +479,7 @@ class AsrSandboxService extends AbstractAppService
             $status = SandboxAsrStatusEnum::fromString($statusString) ?? SandboxAsrStatusEnum::ERROR;
 
             // 检查完成状态或错误状态
-            $result = $this->checkAndHandleResponseStatus(
+            $result = $this->checkResponseStatus(
                 $response,
                 $status,
                 $taskStatus,
@@ -521,7 +535,7 @@ class AsrSandboxService extends AbstractAppService
         // 时间即将耗尽，进行最后一次检查
         $statusString = $response->getStatus();
         $status = SandboxAsrStatusEnum::fromString($statusString) ?? SandboxAsrStatusEnum::ERROR;
-        $result = $this->checkAndHandleResponseStatus(
+        $result = $this->checkResponseStatus(
             $response,
             $status,
             $taskStatus,
@@ -564,7 +578,7 @@ class AsrSandboxService extends AbstractAppService
      * @return null|AsrSandboxMergeResultDTO 如果完成则返回结果，否则返回null
      * @throws BusinessException 如果是错误状态则抛出异常
      */
-    private function checkAndHandleResponseStatus(
+    private function checkResponseStatus(
         AsrRecorderResponse $response,
         SandboxAsrStatusEnum $status,
         AsrTaskStatusDTO $taskStatus,
@@ -587,18 +601,14 @@ class AsrSandboxService extends AbstractAppService
                 'total_elapsed_time_seconds' => $totalElapsedTime,
             ]);
 
-            // 处理沙箱响应，更新文件和目录记录
             $responseData = $response->getData();
-            $this->responseHandler->handleFinishResponse(
-                $taskStatus,
-                $responseData,
-            );
 
             return AsrSandboxMergeResultDTO::fromSandboxResponse([
                 'status' => $status->value,
                 'file_path' => $response->getFilePath(),
                 'duration' => $response->getDuration(),
                 'file_size' => $response->getFileSize(),
+                'response_data' => $responseData,
             ]);
         }
 

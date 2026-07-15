@@ -1038,9 +1038,9 @@ function Share() {
 							showCreatedByBadge={data?.extra?.hide_created_by_super_magic === false}
 							allowDownloadProjectFile={allowDownloadProjectFile}
 							forceFullscreenMode={shareDisplayOptions.forceFullscreenMode}
-						hidePreviewHeader={shareDisplayOptions.hideHeader}
-						showFileHeader={shareDisplayOptions.showFileHeader}
-						onPreviewFileChange={setCurrentPreviewFileId}
+							hidePreviewHeader={shareDisplayOptions.hideHeader}
+							showFileHeader={shareDisplayOptions.showFileHeader}
+							onPreviewFileChange={setCurrentPreviewFileId}
 							onPreviewFullscreenChange={setPreviewIsFullscreen}
 						/>
 					)

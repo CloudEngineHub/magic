@@ -5,6 +5,7 @@ import { downloadFileWithAnchor } from "@/pages/superMagic/utils/handleFIle"
 import type { RecordingDetailFileMap } from "../types/recording-detail"
 import { getAttachmentFileName } from "./recording-detail-files"
 import { downloadRecordingAttachmentFile } from "./download-recording-attachment"
+import type { DownloadProgressController } from "@/pages/superMagic/hooks/useDownloadProgress"
 export { collectExportableFileIds } from "./build-recording-share-selection"
 
 const BATCH_POLL_INTERVAL_MS = 2000
@@ -19,6 +20,8 @@ interface DownloadRecordingFilesBatchParams {
 	fileIds: string[]
 	projectId?: string
 	fileNameById?: Record<string, string>
+	startDownload?: DownloadProgressController["startDownload"]
+	onCancel?: () => void
 }
 
 /**
@@ -73,6 +76,8 @@ export async function downloadRecordingFilesBatch({
 	fileIds,
 	projectId,
 	fileNameById = {},
+	startDownload,
+	onCancel,
 }: DownloadRecordingFilesBatchParams): Promise<boolean> {
 	if (fileIds.length === 0) return false
 
@@ -81,6 +86,22 @@ export async function downloadRecordingFilesBatch({
 		return downloadRecordingAttachmentFile({
 			fileId,
 			fileName: fileNameById[fileId],
+		})
+	}
+
+	if (startDownload) {
+		return startDownload({
+			fileIds,
+			projectId,
+			label: i18next.t("detail.packing", { ns: "audioRecordings" }),
+			onSuccess: () => {
+				toast.success(i18next.t("detail.packSuccess", { ns: "audioRecordings" }))
+			},
+			onError: (error) => {
+				console.error("Failed to batch download recording files:", error)
+				toast.error(i18next.t("detail.loadFailed", { ns: "audioRecordings" }))
+			},
+			onCancel,
 		})
 	}
 
