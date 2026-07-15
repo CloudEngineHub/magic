@@ -2,20 +2,29 @@
 import asyncio
 import concurrent.futures
 from pathlib import Path
-from typing import List, Optional
+from typing import Dict, List, Optional
 
-from typing import Dict
-
-from agentlang.skills.models import SkillMetadata
-from agentlang.skills.loader import SkillLoader
 from agentlang.agent.define import SkillsConfig
-from agentlang.logger import get_logger
 from agentlang.agent.syntax import SyntaxProcessor
 from agentlang.environment import Environment
+from agentlang.logger import get_logger
+from agentlang.skills.loader import SkillLoader
+from agentlang.skills.models import SkillMetadata
+from app.core.skill_utils.manager import GlobalSkillManager, find_skill, get_global_skill_manager
+from app.core.skill_utils.skill_directory_scan import (
+    discover_skills_in_directory,
+    discover_skills_in_personal,
+    discover_skills_in_workspace,
+)
+from app.core.skill_utils.skill_sources import (
+    get_agents_dir,
+    get_crew_skills_dir,
+    get_skills_instructions_prompt_file,
+    get_system_skills_dir,
+    get_workspace_skills_dir,
+)
 from app.utils.async_file_utils import async_exists, async_read_text, async_try_read_text
-from app.core.skill_utils.manager import GlobalSkillManager, get_global_skill_manager, find_skill
-from app.core.skill_utils.skill_directory_scan import discover_skills_in_directory, discover_skills_in_workspace
-from app.core.skill_utils.skill_sources import get_agents_dir, get_system_skills_dir, get_skills_instructions_prompt_file, get_workspace_skills_dir, get_crew_skills_dir
+
 logger = get_logger(__name__)
 
 MAX_SKILLS = 150
@@ -35,9 +44,6 @@ def generate_skills_prompt(
     Returns:
         str: 生成的完整 skills prompt，如果失败则返回 None
     """
-    if skills_config.is_empty():
-        return None
-
     try:
         def _run_in_thread():
             return asyncio.run(_do_generate(skills_config, agent_name))
@@ -57,6 +63,12 @@ async def _do_generate(
     agent_name: str,
 ) -> Optional[str]:
     """在独立事件循环中完成 skills 加载、XML 构建和 prompt 渲染"""
+    personal_skills = await discover_skills_in_personal()
+
+    # 个人 Skill 是独立来源；仅在配置为空且个人目录也为空时跳过整个 Skill prompt。
+    if skills_config.is_empty() and not personal_skills:
+        return None
+
     if agent_name:
         GlobalSkillManager.set_current_agent_type(agent_name)
 
@@ -142,7 +154,14 @@ async def _do_generate(
             else:
                 logger.warning(f"Workspace skill 不存在: {entry.name}")
 
-    # ── 3a. 区域过滤（大陆环境屏蔽国际平台 skill）──
+    # ── 3a. personal_skills（独立来源，不受 workspace_skills 配置影响）──
+    for personal_skill in personal_skills:
+        if personal_skill.name not in loaded_names:
+            skills_metadata.append(personal_skill)
+            loaded_names.add(personal_skill.name)
+            logger.info(f"扫描追加 personal skill: {personal_skill.name}")
+
+    # ── 3b. 区域过滤（大陆环境屏蔽国际平台 skill）──
     region_filtered_names: list[str] = []
     if Environment.is_mainland():
         region_filtered_names = [s.name for s in skills_metadata if s.region == "international"]
@@ -150,7 +169,7 @@ async def _do_generate(
             skills_metadata = [s for s in skills_metadata if s.region != "international"]
             logger.info(f"大陆环境已屏蔽 {len(region_filtered_names)} 个国际平台 skill: {region_filtered_names}")
 
-    # ── 3b. 过滤 excluded_skills（仅针对 system 来源，crew/workspace 不受影响）──
+    # ── 3c. 过滤 excluded_skills（仅针对 system 来源，crew/workspace 不受影响）──
     excluded_names = set(skills_config.excluded_skills)
     if excluded_names:
         before_names = {s.name for s in skills_metadata}
@@ -159,18 +178,18 @@ async def _do_generate(
         if actually_excluded:
             logger.info(f"已排除 {len(actually_excluded)} 个 system skill: {actually_excluded}")
 
-    # ── 3c. 永久挂载 compact-chat-history（excluded_skills 之后追加，确保始终可见）──
-    _ALWAYS_MOUNT_SKILL = "compact-chat-history"
-    if _ALWAYS_MOUNT_SKILL not in loaded_names:
-        compact_skill = await skill_manager.get_skill(_ALWAYS_MOUNT_SKILL, search_path=system_skills_dir)
+    # ── 3d. 永久挂载 compact-chat-history（excluded_skills 之后追加，确保始终可见）──
+    always_mount_skill = "compact-chat-history"
+    if always_mount_skill not in loaded_names:
+        compact_skill = await skill_manager.get_skill(always_mount_skill, search_path=system_skills_dir)
         if compact_skill:
             skills_metadata.append(compact_skill)
-            loaded_names.add(_ALWAYS_MOUNT_SKILL)
-            logger.info(f"永久挂载 compact skill: {_ALWAYS_MOUNT_SKILL}")
+            loaded_names.add(always_mount_skill)
+            logger.info(f"永久挂载 compact skill: {always_mount_skill}")
         else:
-            logger.warning(f"永久挂载 skill 未找到，跳过: {_ALWAYS_MOUNT_SKILL}")
+            logger.warning(f"永久挂载 skill 未找到，跳过: {always_mount_skill}")
 
-    # ── 3d. 补齐 preload 中未被任何来源加载的 skill ──────────────────────
+    # ── 3e. 补齐 preload 中未被任何来源加载的 skill ──────────────────────
     # preload 不需要在 system_skills 里重复声明，此处自动兜底加载
     for skill_name in preload_map:
         if skill_name in loaded_names:
@@ -269,7 +288,7 @@ async def _do_generate(
 
         # ── 6. 大陆 SaaS 环境：注入国际平台引导语 ──
         if region_filtered_names:
-            from app.utils.deployment_util import is_saas_deployment, SAAS_INTERNATIONAL_SITE_URL
+            from app.utils.deployment_util import SAAS_INTERNATIONAL_SITE_URL, is_saas_deployment
             if is_saas_deployment():
                 filtered_list = ", ".join(region_filtered_names)
                 notice = (
@@ -357,7 +376,7 @@ async def _build_preloaded_skills_xml(
             parts.append(f"<skill_dir>{meta.skill_dir}</skill_dir>")
         parts.append("")
         parts.extend(file_blocks)
-        parts.append(f"</skill>")
+        parts.append("</skill>")
         skill_parts.append("\n".join(parts))
 
     if not skill_parts:
