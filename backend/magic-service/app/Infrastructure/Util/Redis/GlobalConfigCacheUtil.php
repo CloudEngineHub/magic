@@ -119,7 +119,6 @@ class GlobalConfigCacheUtil
         return $redis->del($cacheKey);
     }
 
-
     /**
      * Delete global data queries cache.
      *

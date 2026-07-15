@@ -23,6 +23,10 @@ class SlidesTemplatePublicListItemDTO extends AbstractDTO
 
     public ?string $thumbnailUrl = null;
 
+    public ?string $color = null;
+
+    public array $colors = [];
+
     public ?string $collageUrl = null;
 
     public int $sort = 0;
@@ -98,6 +102,32 @@ class SlidesTemplatePublicListItemDTO extends AbstractDTO
     public function setThumbnailUrl(?string $thumbnailUrl): void
     {
         $this->thumbnailUrl = $thumbnailUrl;
+    }
+
+    public function getColor(): ?string
+    {
+        return $this->color;
+    }
+
+    public function setColor(?string $color): void
+    {
+        $this->color = $color;
+    }
+
+    public function getColors(): array
+    {
+        return $this->colors;
+    }
+
+    public function setColors(?array $colors): void
+    {
+        $this->colors = [];
+        foreach ($colors ?? [] as $color) {
+            if (is_string($color) && $color !== '') {
+                $this->colors[] = $color;
+            }
+        }
+        $this->color = $this->colors[0] ?? null;
     }
 
     public function getCollageUrl(): ?string
