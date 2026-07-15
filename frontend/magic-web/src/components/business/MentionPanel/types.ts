@@ -488,6 +488,18 @@ export interface MentionSelectContext {
 	}
 }
 
+export enum MentionPanelViewMode {
+	/* 列表模式 */
+	LIST = "list",
+	/* 画廊模式 */
+	GALLERY = "gallery",
+}
+
+export interface MentionPanelGalleryOptions {
+	/* 是否启用预览弹窗 */
+	enablePreviewModal?: boolean
+}
+
 // Component props interfaces
 export interface MentionPanelProps<TCatalogId extends string = string> extends BaseComponentProps {
 	visible?: boolean
@@ -506,6 +518,10 @@ export interface MentionPanelProps<TCatalogId extends string = string> extends B
 	 */
 	lockDismissToExplicitClose?: boolean
 	canToggleMultiSelectItem?: (item: MentionItem) => boolean
+	/* 面板模式 */
+	viewMode?: MentionPanelViewMode
+	/* 画廊模式相关选项 */
+	galleryOptions?: MentionPanelGalleryOptions
 	lastHistoryIndex?: number
 	runtime?: MentionPanelRuntime<TCatalogId>
 	/**
