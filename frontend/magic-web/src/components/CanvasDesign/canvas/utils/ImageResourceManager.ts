@@ -1569,7 +1569,7 @@ export class ImageResourceManager {
 	private isPersistentDisplayVariant(
 		variant: ImageResourceVariant,
 	): variant is PersistentImageDisplayVariant {
-		return variant === "low"
+		return variant === "low" || variant === "preview"
 	}
 
 	private async loadPersistentDisplayResource(

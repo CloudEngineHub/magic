@@ -1774,26 +1774,69 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 			}
 		})
 		// 处理 iframe 内容更新：同源 /husky.html 和跨域渲染站都必须等 shell ready。
+		const injectIframeContent = useMemoizedFn(
+			(reason: "content_changed" | "visible_resume") => {
+				hasRenderedOnceRef.current = false
+				try {
+					refreshIframeContent()
+					setContentInjected(true)
+					reportRenderLifecycleStage(
+						"content_injected",
+						{
+							reason,
+						},
+						{ once: reason !== "visible_resume" },
+					)
+				} catch (error) {
+					reportRenderLifecycleStage("content_inject_failed", {
+						reason: "refresh_iframe_content_failed",
+						errorMessage: error instanceof Error ? error.message : String(error),
+						errorStack: error instanceof Error ? error.stack : undefined,
+					})
+					console.error("处理iframe内容时出错:", error)
+					setContentInjected(false)
+				}
+			},
+		)
+
 		useDeepCompareEffect(() => {
 			if (sandboxType !== "iframe" || !iframeRef.current || !content) return
 			if (!iframeLoaded) return
 			if (!virtualStorageContext) return
 
-			hasRenderedOnceRef.current = false
-			try {
-				refreshIframeContent()
-				setContentInjected(true)
-				reportRenderLifecycleStage("content_injected")
-			} catch (error) {
-				reportRenderLifecycleStage("content_inject_failed", {
-					reason: "refresh_iframe_content_failed",
-					errorMessage: error instanceof Error ? error.message : String(error),
-					errorStack: error instanceof Error ? error.stack : undefined,
-				})
-				console.error("处理iframe内容时出错:", error)
-				setContentInjected(false)
-			}
-		}, [content, iframeLoaded, htmlSandboxShellUrl, virtualStorageContext])
+			injectIframeContent("content_changed")
+		}, [
+			content,
+			iframeLoaded,
+			htmlSandboxShellUrl,
+			injectIframeContent,
+			sandboxType,
+			virtualStorageContext,
+		])
+
+		const previousIsVisibleRef = useRef(Boolean(isVisible))
+		useEffect(() => {
+			const wasVisible = previousIsVisibleRef.current
+			const nextVisible = Boolean(isVisible)
+			previousIsVisibleRef.current = nextVisible
+
+			if (!isPptRender) return
+			if (!nextVisible || wasVisible) return
+			if (hasNotifiedRenderReadyRef.current) return
+			if (sandboxType !== "iframe" || !iframeRef.current || !content) return
+			if (!iframeLoaded) return
+			if (!virtualStorageContext) return
+
+			injectIframeContent("visible_resume")
+		}, [
+			content,
+			iframeLoaded,
+			injectIframeContent,
+			isPptRender,
+			isVisible,
+			sandboxType,
+			virtualStorageContext,
+		])
 
 		useEffect(() => {
 			if (!isPptRender) return

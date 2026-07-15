@@ -112,6 +112,10 @@ function ActiveImageMessageEditor({
 		!hasResultImage &&
 		(imageElement.status === GenerationStatus.Pending ||
 			imageElement.status === GenerationStatus.Processing)
+	const hasTerminalImageGenerationState =
+		hasResultImage ||
+		imageElement.status === GenerationStatus.Completed ||
+		imageElement.status === GenerationStatus.Failed
 
 	const hasPendingImageTask =
 		!!imageElement.imageGenerationTaskMeta &&
@@ -119,11 +123,11 @@ function ActiveImageMessageEditor({
 		imageElement.status !== GenerationStatus.Failed
 
 	const isGenerating = useMemo(() => {
-		if (!canvas) return false
+		if (!canvas || hasTerminalImageGenerationState) return false
 		const imageInstance = canvas.elementManager.getElementInstance(imageElement.id)
 		if (!(imageInstance instanceof ImageElementClass)) return false
 		return imageInstance.isImageGenerating()
-	}, [canvas, imageElement.id])
+	}, [canvas, imageElement.id, hasTerminalImageGenerationState])
 
 	useEffect(() => {
 		setHiddenAfterSubmit(false)

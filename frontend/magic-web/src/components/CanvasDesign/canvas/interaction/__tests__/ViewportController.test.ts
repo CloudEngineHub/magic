@@ -41,6 +41,10 @@ function createController(options: {
 	layout?: CanvasDeviceInfo["layout"]
 	coarsePointer?: boolean
 	hover?: boolean
+	width?: number
+	height?: number
+	scale?: number
+	position?: { x: number; y: number }
 }) {
 	const listeners = new Map<string, Set<Listener>>()
 	const canvasEventHandlers = new Map<string, Set<CanvasEventHandler>>()
@@ -58,13 +62,23 @@ function createController(options: {
 		}),
 	}
 
-	let stagePosition = { x: 0, y: 0 }
+	let stagePosition = options.position ?? { x: 0, y: 0 }
+	let stageWidth = options.width ?? 1000
+	let stageHeight = options.height ?? 800
+	let stageScale = options.scale ?? 0.3
 	let pointerPosition: { x: number; y: number } | null = null
 
 	const stage = {
 		id: () => "",
-		scale: vi.fn(),
-		scaleX: vi.fn(() => 0.3),
+		scale: vi.fn((next?: { x: number; y: number }) => {
+			if (next) {
+				stageScale = next.x
+				return undefined
+			}
+			return { x: stageScale, y: stageScale }
+		}),
+		scaleX: vi.fn(() => stageScale),
+		scaleY: vi.fn(() => stageScale),
 		position: vi.fn((next?: { x: number; y: number }) => {
 			if (next) {
 				stagePosition = next
@@ -74,12 +88,34 @@ function createController(options: {
 		}),
 		x: vi.fn(() => stagePosition.x),
 		y: vi.fn(() => stagePosition.y),
-		width: vi.fn(() => 1000),
-		height: vi.fn(() => 800),
+		width: vi.fn((next?: number) => {
+			if (typeof next === "number") {
+				stageWidth = next
+				return undefined
+			}
+			return stageWidth
+		}),
+		height: vi.fn((next?: number) => {
+			if (typeof next === "number") {
+				stageHeight = next
+				return undefined
+			}
+			return stageHeight
+		}),
 		draggable: vi.fn(() => false),
 		on: vi.fn(),
 		off: vi.fn(),
 		container: vi.fn(() => container),
+		getAbsoluteTransform: vi.fn(() => ({
+			copy: () => ({
+				invert: () => ({
+					point: (point: { x: number; y: number }) => ({
+						x: (point.x - stagePosition.x) / stageScale,
+						y: (point.y - stagePosition.y) / stageScale,
+					}),
+				}),
+			}),
+		})),
 		setPointersPositions: vi.fn((event: TouchEvent) => {
 			const touch = event.touches[0]
 			pointerPosition = touch ? { x: touch.clientX, y: touch.clientY } : null
@@ -138,6 +174,9 @@ function createController(options: {
 	} as unknown as Canvas
 
 	const controller = new ViewportController({ canvas })
+	if (options.scale !== undefined) {
+		stage.scale({ x: options.scale, y: options.scale })
+	}
 
 	return {
 		canvas,
@@ -283,5 +322,73 @@ describe("ViewportController touch pan", () => {
 		})
 
 		expect(container.addEventListener).toHaveBeenCalledTimes(12)
+	})
+})
+
+describe("ViewportController layout center preservation", () => {
+	afterEach(() => {
+		vi.restoreAllMocks()
+	})
+
+	it("keeps the default viewport world center when the stage size changes", () => {
+		const { canvas, controller, stage } = createController({
+			touch: false,
+			width: 1000,
+			height: 800,
+			scale: 0.5,
+			position: { x: -100, y: -80 },
+		})
+
+		controller.setDefaultViewportPadding({
+			left: 200,
+			right: 0,
+			top: 0,
+			bottom: 0,
+		})
+
+		controller.preserveViewportCenterDuringLayoutChange(
+			() => {
+				stage.width(1400)
+				stage.height(900)
+			},
+			{ source: "resize", reason: "test-resize" },
+		)
+
+		expect(stage.position).toHaveBeenLastCalledWith({ x: 100, y: -30 })
+		expect(canvas.eventEmitter.emit).toHaveBeenCalledWith({
+			type: "viewport:pan",
+			data: { x: 100, y: -30 },
+		})
+		expect(canvas.eventEmitter.emit).toHaveBeenCalledWith({
+			type: "viewport:changed",
+			data: {
+				scale: 0.5,
+				position: { x: 100, y: -30 },
+				source: "resize",
+				phase: "end",
+			},
+		})
+	})
+
+	it("keeps the default viewport world center when default padding changes", () => {
+		const { controller, stage } = createController({
+			touch: false,
+			width: 1000,
+			height: 800,
+			scale: 0.5,
+			position: { x: -100, y: -80 },
+		})
+
+		controller.setDefaultViewportPadding(
+			{
+				left: 250,
+				right: 0,
+				top: 0,
+				bottom: 0,
+			},
+			{ preserveViewportCenter: true },
+		)
+
+		expect(stage.position).toHaveBeenLastCalledWith({ x: 25, y: -80 })
 	})
 })

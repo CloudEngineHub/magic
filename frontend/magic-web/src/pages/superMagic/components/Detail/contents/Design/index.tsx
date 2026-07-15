@@ -277,6 +277,8 @@ interface DesignViewerProps {
 	showFooter: boolean
 	allowDownload?: boolean
 	isTabActive?: boolean
+	isFullscreen?: boolean
+	onFullscreen?: () => void
 	data?: {
 		project_path?: string
 		elements?: LayerElement[]
@@ -295,6 +297,8 @@ function DesignViewer(props: DesignViewerProps) {
 		showFileHeader,
 		allowDownload,
 		isTabActive,
+		isFullscreen,
+		onFullscreen,
 	} = props
 
 	// 文件列表更新处理
@@ -703,16 +707,11 @@ function DesignViewer(props: DesignViewerProps) {
 		waterMarkFreeModalInitialized,
 	} = downloadPolicy
 
-	// 退出全屏函数
 	const handleExitFullscreen = useCallback(async () => {
-		if (document.fullscreenElement) {
-			try {
-				await document.exitFullscreen()
-			} catch (error) {
-				//
-			}
+		if (isFullscreen) {
+			onFullscreen?.()
 		}
-	}, [])
+	}, [isFullscreen, onFullscreen])
 
 	// 获取 executeDownload 方法（用于协议弹窗确认后的直接下载）
 	const { executeDownload } = useConversationAndDownload({
@@ -999,7 +998,8 @@ function DesignViewer(props: DesignViewerProps) {
 		fileVersionsList,
 		allowEdit,
 		allowDownload,
-		containerRef,
+		isFullscreen,
+		onFullscreen,
 		handleReinitialize,
 		handleChangeFileVersion: handleChangeFileVersionWithLoading,
 		handleReturnLatest: handleReturnLatestWithLoading,

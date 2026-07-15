@@ -11,6 +11,7 @@ import {
 } from "@/pages/superMagic/components/TopicFilesButton/utils/getAttachmentKey"
 import { isEmpty } from "lodash-es"
 import { CustomFolderMagicIcon } from "./CustomFolderMagicIcon"
+import { ProjectFileImageThumbnailIcon } from "./ProjectFileImageThumbnailIcon"
 import { TopicFileIcon, type TopicFileMagicVariant } from "./TopicFileIcon"
 import { isMagicSystemFolder } from "../utils/magic-system-folder"
 
@@ -137,14 +138,24 @@ export function MobileAttachmentRowIcon({
 		)
 	}
 
+	const magicVariant = resolveAttachmentMagicVariant(item)
+
 	return (
-		<TopicFileIcon
-			isDirectory={item.is_directory}
-			magicVariant={resolveAttachmentMagicVariant(item)}
-			hasChildren={getVisibleAttachmentChildren(item).length > 0}
-			fileExtension={item.file_extension}
+		<ProjectFileImageThumbnailIcon
+			item={item}
+			size={size}
 			className={className}
 			dataTestId={dataTestId}
+			fallback={
+				<TopicFileIcon
+					isDirectory={item.is_directory}
+					magicVariant={magicVariant}
+					hasChildren={getVisibleAttachmentChildren(item).length > 0}
+					fileExtension={item.file_extension}
+					className={className}
+					dataTestId={dataTestId}
+				/>
+			}
 		/>
 	)
 }
