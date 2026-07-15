@@ -186,10 +186,15 @@ vi.mock("../components/ExportPreviewDialog", () => ({
 		open,
 		exportMode,
 		onCopyWechatHtml,
+		onGenerateWechatCovers,
 	}: {
 		open: boolean
 		exportMode?: string
 		onCopyWechatHtml?: () => void | Promise<void>
+		onGenerateWechatCovers?: (args: {
+			postIndex: number
+			coverTypes: Array<"heroCover" | "thumbnailCover">
+		}) => void | Promise<void>
 	}) =>
 		open ? (
 			<div data-testid="self-media-export-dialog" data-export-mode={exportMode || "cards"}>
@@ -197,6 +202,16 @@ vi.mock("../components/ExportPreviewDialog", () => ({
 					type="button"
 					data-testid="mock-copy-wechat-html"
 					onClick={() => void onCopyWechatHtml?.()}
+				/>
+				<button
+					type="button"
+					data-testid="mock-generate-wechat-covers"
+					onClick={() =>
+						void onGenerateWechatCovers?.({
+							postIndex: 0,
+							coverTypes: ["thumbnailCover", "heroCover"],
+						})
+					}
 				/>
 			</div>
 		) : null,
@@ -524,6 +539,42 @@ describe("platform shells", () => {
 		)
 	})
 
+	it("forwards missing WeChat cover generation requests from the export dialog", async () => {
+		const onRequestWechatCoverGeneration = vi.fn().mockResolvedValue(true)
+		renderWithStore(
+			<WechatOfficialShell
+				platform="wechat-official-accounts"
+				attachmentList={[]}
+				allowEdit
+				onRequestWechatCoverGeneration={onRequestWechatCoverGeneration}
+			/>,
+			{
+				platform: "wechat-official-accounts",
+				view: "edit",
+				posts: [
+					{
+						meta: { id: "wechat-post-1", title: "公众号文章" },
+						cards: [],
+						article: { path: "article.html", fileId: "article-file-1" },
+					},
+				],
+			},
+		)
+
+		fireEvent.click(screen.getByTestId("self-media-export-panel"))
+		fireEvent.click(await screen.findByTestId("mock-generate-wechat-covers"))
+
+		await waitFor(() => {
+			expect(onRequestWechatCoverGeneration).toHaveBeenCalledWith({
+				index: 0,
+				coverTypes: ["thumbnailCover", "heroCover"],
+			})
+		})
+		await waitFor(() => {
+			expect(screen.queryByTestId("self-media-export-dialog")).not.toBeInTheDocument()
+		})
+	})
+
 	it("copies WeChat article HTML as text/html clipboard data", async () => {
 		class MockBlob {
 			readonly parts: unknown[]
@@ -580,12 +631,15 @@ describe("platform shells", () => {
 		await waitFor(() => expect(clipboardWriteMock).toHaveBeenCalledTimes(1))
 		expect(clipboardWriteMock).toHaveBeenCalledWith([expect.any(MockClipboardItem)])
 		expect(clipboardWriteTextMock).not.toHaveBeenCalled()
-		expect(Object.keys(clipboardItemPayloads[0])).toEqual(["text/html"])
+		expect(Object.keys(clipboardItemPayloads[0])).toEqual(["text/html", "text/plain"])
 		const htmlBlob = clipboardItemPayloads[0]["text/html"] as unknown as MockBlob
 		expect(htmlBlob.type).toBe("text/html")
-		expect(htmlBlob.parts).toEqual([
-			'<section class="fallback" style="color:red;font-weight:700">fallback html</section>',
-		])
+		expect(htmlBlob.parts[0]).toContain("fallback html")
+		expect(htmlBlob.parts[0]).toContain("color:rgb(255, 0, 0)")
+		expect(htmlBlob.parts[0]).toContain("font-weight:700")
+		const textBlob = clipboardItemPayloads[0]["text/plain"] as unknown as MockBlob
+		expect(textBlob.type).toBe("text/plain")
+		expect(textBlob.parts).toEqual(["fallback html"])
 	})
 
 	it("adds a scroll card to the current chat from the action strip", () => {

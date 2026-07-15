@@ -124,7 +124,7 @@ function HeroImage({
 	)
 
 	return (
-		<div className="relative aspect-[16/9] w-full overflow-hidden bg-[#1f1f1f]">
+		<div className="relative aspect-[21/9] w-full overflow-hidden bg-[#1f1f1f]">
 			{url ? (
 				<img
 					src={url}
@@ -173,7 +173,13 @@ function ThumbnailImage({ fileId, enabled }: { fileId?: string; enabled: boolean
 	return (
 		<div className="aspect-square w-[72px] flex-shrink-0 overflow-hidden rounded-sm bg-[#f0f0f0]">
 			{url ? (
-				<img src={url} alt="" className="h-full w-full object-cover" draggable={false}  data-testid="cover-image-2"/>
+				<img
+					src={url}
+					alt=""
+					className="h-full w-full object-cover"
+					draggable={false}
+					data-testid="cover-image-2"
+				/>
 			) : (
 				<div
 					className={cn(

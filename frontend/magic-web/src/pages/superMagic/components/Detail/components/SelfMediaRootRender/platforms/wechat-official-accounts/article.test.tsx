@@ -276,7 +276,7 @@ describe("WechatArticleView", () => {
 		)
 
 		await waitFor(() => {
-			expect(ref.current?.getArticleHtml()).toBe("<main>article</main>")
+			expect(ref.current?.getArticleHtml()).toBe("<section><main>article</main></section>")
 		})
 	})
 
