@@ -21,6 +21,7 @@ import { appService } from "@/services/app/AppService"
 import magicToast from "@/components/base/MagicToaster/utils"
 import { RouteName } from "@/routes/constants"
 import { isNil } from "lodash-es"
+import { refreshAccountContextPage } from "@/broadcastChannel/eventFactory/accountContextRefresh"
 
 interface AccountModalProps {
 	onClose: () => void
@@ -133,12 +134,14 @@ function AccountModal(props: AccountModalProps) {
 						name: routeMeta.route.name,
 						params: {
 							...routeMeta?.params,
-							clusterCode,
+							clusterCode: clusterConfig.clusterCode,
 						},
 						query,
 					})
 				}
 				redirectUrlStep()
+				// Rebuild account-scoped stores after this tab has switched to the newly added account.
+				refreshAccountContextPage()
 			} catch (error: unknown) {
 				console.error("login error", error)
 				if (
