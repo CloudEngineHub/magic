@@ -280,6 +280,19 @@ class MagicBaseTableRepository implements MagicBaseTableRepositoryInterface, Mag
             ->delete();
     }
 
+    public function deleteTablePermissionsBySubjectTypes(string $organizationCode, int $tableId, array $subjectTypes): void
+    {
+        if ($subjectTypes === []) {
+            return;
+        }
+
+        MagicBaseTablePermissionModel::query()
+            ->where('organization_code', $organizationCode)
+            ->where('table_id', $tableId)
+            ->whereIn('subject_type', $subjectTypes)
+            ->delete();
+    }
+
     public function listColumnPermissions(string $organizationCode, int $tableId, ?int $columnId = null): MagicBaseEntityCollection
     {
         $query = MagicBaseColumnPermissionModel::query()
@@ -317,6 +330,20 @@ class MagicBaseTableRepository implements MagicBaseTableRepositoryInterface, Mag
             ->delete();
     }
 
+    public function deleteColumnPermissionsByColumnIdsAndSubjectTypes(string $organizationCode, int $tableId, array $columnIds, array $subjectTypes): void
+    {
+        if ($columnIds === [] || $subjectTypes === []) {
+            return;
+        }
+
+        MagicBaseColumnPermissionModel::query()
+            ->where('organization_code', $organizationCode)
+            ->where('table_id', $tableId)
+            ->whereIn('column_id', $columnIds)
+            ->whereIn('subject_type', $subjectTypes)
+            ->delete();
+    }
+
     public function listRowPermissions(string $organizationCode, int $tableId, ?int $recordId = null): MagicBaseEntityCollection
     {
         $query = MagicBaseRowPermissionModel::query()
@@ -351,6 +378,20 @@ class MagicBaseTableRepository implements MagicBaseTableRepositoryInterface, Mag
             ->where('organization_code', $organizationCode)
             ->where('table_id', $tableId)
             ->where('id', $permissionId)
+            ->delete();
+    }
+
+    public function deleteRowPermissionsByRecordIdsAndSubjectTypes(string $organizationCode, int $tableId, array $recordIds, array $subjectTypes): void
+    {
+        if ($recordIds === [] || $subjectTypes === []) {
+            return;
+        }
+
+        MagicBaseRowPermissionModel::query()
+            ->where('organization_code', $organizationCode)
+            ->where('table_id', $tableId)
+            ->whereIn('record_id', $recordIds)
+            ->whereIn('subject_type', $subjectTypes)
             ->delete();
     }
 

@@ -33,6 +33,9 @@ interface MagicBasePermissionRepositoryInterface
 
     public function deleteTablePermission(string $organizationCode, int $tableId, int $permissionId): void;
 
+    /** @param list<string> $subjectTypes */
+    public function deleteTablePermissionsBySubjectTypes(string $organizationCode, int $tableId, array $subjectTypes): void;
+
     /** @return MagicBaseEntityCollection<MagicBaseColumnPermissionEntity> */
     public function listColumnPermissions(string $organizationCode, int $tableId, ?int $columnId = null): MagicBaseEntityCollection;
 
@@ -40,10 +43,16 @@ interface MagicBasePermissionRepositoryInterface
 
     public function deleteColumnPermission(string $organizationCode, int $tableId, int $permissionId): void;
 
+    /** @param list<int> $columnIds @param list<string> $subjectTypes */
+    public function deleteColumnPermissionsByColumnIdsAndSubjectTypes(string $organizationCode, int $tableId, array $columnIds, array $subjectTypes): void;
+
     /** @return MagicBaseEntityCollection<MagicBaseRowPermissionEntity> */
     public function listRowPermissions(string $organizationCode, int $tableId, ?int $recordId = null): MagicBaseEntityCollection;
 
     public function upsertRowPermission(MagicBaseRowPermissionEntity $entity): MagicBaseRowPermissionEntity;
 
     public function deleteRowPermission(string $organizationCode, int $tableId, int $permissionId): void;
+
+    /** @param list<int> $recordIds @param list<string> $subjectTypes */
+    public function deleteRowPermissionsByRecordIdsAndSubjectTypes(string $organizationCode, int $tableId, array $recordIds, array $subjectTypes): void;
 }

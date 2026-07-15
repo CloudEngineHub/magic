@@ -84,6 +84,13 @@ export type MagicBasePermissionSubjectType = "user" | "department" | "organizati
 
 export type MagicBaseTablePermissionLevel = "read" | "insert" | "manage"
 
+export type MagicBasePermissionTargetType = "table" | "column" | "row"
+
+export type MagicBaseAssignablePermissionSubjectType = Extract<
+	MagicBasePermissionSubjectType,
+	"user" | "department"
+>
+
 export interface MagicBaseTablePermission {
 	id: string
 	table_id: string
@@ -120,19 +127,24 @@ export interface MagicBasePermissionsResponse {
 }
 
 export interface MagicBaseBatchPermissionRequest {
-	subject_type: MagicBasePermissionSubjectType
-	subject_id?: string
-	table_permissions?: MagicBaseTablePermissionLevel[]
-	column_permissions?: Array<{
-		column_ids: string[]
-		can_read: boolean
-		can_edit: boolean
-	}>
-	row_permissions?: Array<{
-		record_ids: string[]
-		can_read: boolean
-		can_edit: boolean
-		can_delete: boolean
+	target_type: MagicBasePermissionTargetType
+	target_ids?: string[]
+	permissions: Array<{
+		subject_type: MagicBaseAssignablePermissionSubjectType
+		subject_id: string
+		target_type: MagicBasePermissionTargetType
+		table_permissions: MagicBaseTablePermissionLevel[]
+		column_permissions: Array<{
+			column_ids: string[]
+			can_read: boolean
+			can_edit: boolean
+		}>
+		row_permissions: Array<{
+			record_ids: string[]
+			can_read: boolean
+			can_edit: boolean
+			can_delete: boolean
+		}>
 	}>
 }
 
@@ -375,22 +387,6 @@ export function generateMagicBaseApi(fetch: HttpClient) {
 				largeIntConfig,
 			)
 			return normalizePermissions(data)
-		},
-
-		deletePermission(
-			projectId: string,
-			tableId: string,
-			type: "table" | "column" | "row",
-			permissionId: string,
-		): Promise<void> {
-			return fetch.delete<void>(
-				genRequestUrl(
-					"/api/v1/magicbase/projects/${projectId}/tables/${tableId}/permissions/${type}/${permissionId}",
-					{ projectId, tableId, type, permissionId },
-				),
-				{},
-				largeIntConfig,
-			)
 		},
 	}
 }

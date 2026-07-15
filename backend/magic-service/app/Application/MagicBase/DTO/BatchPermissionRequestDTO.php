@@ -10,16 +10,20 @@ namespace App\Application\MagicBase\DTO;
 readonly class BatchPermissionRequestDTO
 {
     /**
-     * @param list<string> $tablePermissions
-     * @param list<array{column_ids: list<string>, can_read: bool, can_edit: bool}> $columnPermissions
-     * @param list<array{record_ids: list<string>, can_read: bool, can_edit: bool, can_delete: bool}> $rowPermissions
+     * @param list<string> $targetIds
+     * @param list<array{
+     *     subject_type: ?string,
+     *     subject_id: null|int|string,
+     *     target_type: string,
+     *     table_permissions: list<string>,
+     *     column_permissions: list<array{column_ids: list<string>, can_read: bool, can_edit: bool}>,
+     *     row_permissions: list<array{record_ids: list<string>, can_read: bool, can_edit: bool, can_delete: bool}>
+     * }> $permissions
      */
     public function __construct(
-        private ?string $subjectType = null,
-        private null|int|string $subjectId = null,
-        private array $tablePermissions = [],
-        private array $columnPermissions = [],
-        private array $rowPermissions = [],
+        private string $targetType = '',
+        private array $targetIds = [],
+        private array $permissions = [],
     ) {
     }
 
@@ -29,53 +33,36 @@ readonly class BatchPermissionRequestDTO
     public static function fromArray(array $payload): self
     {
         return new self(
-            array_key_exists('subject_type', $payload) ? (string) $payload['subject_type'] : null,
-            $payload['subject_id'] ?? null,
-            self::normalizeStringList($payload['table_permissions'] ?? []),
-            self::normalizeColumnPermissions($payload['column_permissions'] ?? []),
-            self::normalizeRowPermissions($payload['row_permissions'] ?? []),
+            is_scalar($payload['target_type'] ?? null) ? trim((string) $payload['target_type']) : '',
+            self::normalizeStringList($payload['target_ids'] ?? []),
+            self::normalizePermissions($payload['permissions'] ?? []),
         );
     }
 
-    public function getSubjectType(): ?string
+    public function getTargetType(): string
     {
-        return $this->subjectType;
-    }
-
-    public function getSubjectId(): null|int|string
-    {
-        return $this->subjectId;
-    }
-
-    /** @return array{subject_type?: string, subject_id?: null|int|string} */
-    public function subjectPayload(): array
-    {
-        $payload = [];
-        if ($this->subjectType !== null) {
-            $payload['subject_type'] = $this->subjectType;
-        }
-        if ($this->subjectId !== null) {
-            $payload['subject_id'] = $this->subjectId;
-        }
-        return $payload;
+        return $this->targetType;
     }
 
     /** @return list<string> */
-    public function getTablePermissions(): array
+    public function getTargetIds(): array
     {
-        return $this->tablePermissions;
+        return $this->targetIds;
     }
 
-    /** @return list<array{column_ids: list<string>, can_read: bool, can_edit: bool}> */
-    public function getColumnPermissions(): array
+    /**
+     * @return list<array{
+     *     subject_type: ?string,
+     *     subject_id: null|int|string,
+     *     target_type: string,
+     *     table_permissions: list<string>,
+     *     column_permissions: list<array{column_ids: list<string>, can_read: bool, can_edit: bool}>,
+     *     row_permissions: list<array{record_ids: list<string>, can_read: bool, can_edit: bool, can_delete: bool}>
+     * }>
+     */
+    public function getPermissions(): array
     {
-        return $this->columnPermissions;
-    }
-
-    /** @return list<array{record_ids: list<string>, can_read: bool, can_edit: bool, can_delete: bool}> */
-    public function getRowPermissions(): array
-    {
-        return $this->rowPermissions;
+        return $this->permissions;
     }
 
     /**
@@ -133,6 +120,38 @@ readonly class BatchPermissionRequestDTO
                 'can_read' => (bool) ($item['can_read'] ?? false),
                 'can_edit' => (bool) ($item['can_edit'] ?? false),
                 'can_delete' => (bool) ($item['can_delete'] ?? false),
+            ];
+        }
+        return $result;
+    }
+
+    /**
+     * @return list<array{
+     *     subject_type: ?string,
+     *     subject_id: null|int|string,
+     *     target_type: string,
+     *     table_permissions: list<string>,
+     *     column_permissions: list<array{column_ids: list<string>, can_read: bool, can_edit: bool}>,
+     *     row_permissions: list<array{record_ids: list<string>, can_read: bool, can_edit: bool, can_delete: bool}>
+     * }>
+     */
+    private static function normalizePermissions(mixed $value): array
+    {
+        $items = is_array($value) ? $value : [];
+        $result = [];
+        foreach ($items as $item) {
+            if (! is_array($item)) {
+                continue;
+            }
+
+            $subjectType = $item['subject_type'] ?? null;
+            $result[] = [
+                'subject_type' => is_scalar($subjectType) ? trim((string) $subjectType) : null,
+                'subject_id' => is_scalar($item['subject_id'] ?? null) ? $item['subject_id'] : null,
+                'target_type' => is_scalar($item['target_type'] ?? null) ? trim((string) $item['target_type']) : '',
+                'table_permissions' => self::normalizeStringList($item['table_permissions'] ?? []),
+                'column_permissions' => self::normalizeColumnPermissions($item['column_permissions'] ?? []),
+                'row_permissions' => self::normalizeRowPermissions($item['row_permissions'] ?? []),
             ];
         }
         return $result;

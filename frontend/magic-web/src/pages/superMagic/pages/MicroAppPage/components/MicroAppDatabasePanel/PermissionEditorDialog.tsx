@@ -47,7 +47,6 @@ interface PermissionEditorDialogProps {
 }
 
 type AssignableSubjectType = Extract<MagicBasePermissionSubjectType, "user" | "department">
-type TargetPermissionType = "table" | "column" | "row"
 
 const TABLE_LEVELS: MagicBaseTablePermissionLevel[] = ["read", "insert", "manage"]
 const ROW_ACTIONS = ["read", "edit", "delete"] as const
@@ -78,11 +77,6 @@ interface SubjectLookup {
 	key: string
 	users: string[]
 	departments: string[]
-}
-
-interface TargetPermissionRef {
-	type: TargetPermissionType
-	id: string
 }
 
 function getNodeId(node: TreeNode, type: AssignableSubjectType): string {
@@ -196,33 +190,6 @@ function sortDrafts(drafts: PermissionDraft[]): PermissionDraft[] {
 		if (a.type !== b.type) return a.type === "user" ? -1 : 1
 		return a.name.localeCompare(b.name)
 	})
-}
-
-function getTargetPermissionRefs(
-	permissions: MagicBasePermissionsResponse | undefined,
-	target: PermissionEditorTarget | null,
-): TargetPermissionRef[] {
-	if (!target) return []
-
-	if (target.mode === "table") {
-		return (permissions?.table_permissions || [])
-			.filter(matchesSubject)
-			.map((permission) => ({ type: "table", id: permission.id }))
-	}
-
-	if (target.mode === "column") {
-		const columnIds = new Set(target.columnIds || [])
-		return (permissions?.column_permissions || [])
-			.filter(matchesSubject)
-			.filter((permission) => columnIds.has(permission.column_id))
-			.map((permission) => ({ type: "column", id: permission.id }))
-	}
-
-	const rowIds = new Set(target.rowIds || [])
-	return (permissions?.row_permissions || [])
-		.filter(matchesSubject)
-		.filter((permission) => rowIds.has(permission.record_id))
-		.map((permission) => ({ type: "row", id: permission.id }))
 }
 
 export default function PermissionEditorDialog({
@@ -544,51 +511,47 @@ export default function PermissionEditorDialog({
 			return
 		}
 
-		const existingPermissionRefs = getTargetPermissionRefs(permissions, target)
 		const draftsToSave = permissionDrafts.filter((draft) => hasDraftPermission(draft, target))
+		const targetIds =
+			target.mode === "column"
+				? target.columnIds || []
+				: target.mode === "row"
+					? target.rowIds || []
+					: undefined
 
 		setSaving(true)
 		try {
-			await Promise.all(
-				existingPermissionRefs.map((permission) =>
-					MagicBaseApi.deletePermission(
-						projectId,
-						table.id,
-						permission.type,
-						permission.id,
-					),
-				),
-			)
-			await Promise.all(
-				draftsToSave.map((draft) =>
-					MagicBaseApi.batchSavePermissions(projectId, table.id, {
-						subject_type: draft.type,
-						subject_id: draft.id,
-						table_permissions: target.mode === "table" ? draft.tableLevels : [],
-						column_permissions:
-							target.mode === "column"
-								? [
-										{
-											column_ids: target.columnIds || [],
-											can_read: draft.canRead,
-											can_edit: draft.canEdit,
-										},
-									]
-								: [],
-						row_permissions:
-							target.mode === "row"
-								? [
-										{
-											record_ids: target.rowIds || [],
-											can_read: draft.canRead,
-											can_edit: draft.canEdit,
-											can_delete: draft.canDelete,
-										},
-									]
-								: [],
-					}),
-				),
-			)
+			await MagicBaseApi.batchSavePermissions(projectId, table.id, {
+				target_type: target.mode,
+				...(targetIds ? { target_ids: targetIds } : {}),
+				permissions: draftsToSave.map((draft) => ({
+					subject_type: draft.type,
+					subject_id: draft.id,
+					target_type: target.mode,
+					table_permissions: target.mode === "table" ? draft.tableLevels : [],
+					column_permissions:
+						target.mode === "column"
+							? [
+									{
+										column_ids: target.columnIds || [],
+										can_read: draft.canRead,
+										can_edit: draft.canEdit,
+									},
+								]
+							: [],
+					row_permissions:
+						target.mode === "row"
+							? [
+									{
+										record_ids: target.rowIds || [],
+										can_read: draft.canRead,
+										can_edit: draft.canEdit,
+										can_delete: draft.canDelete,
+									},
+								]
+							: [],
+				})),
+			})
 			toast.success(t("microAppPage.databasePanel.permissionSaveSuccess"))
 			onSaved()
 			onOpenChange(false)

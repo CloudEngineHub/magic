@@ -154,6 +154,12 @@ readonly class MagicBaseMetadataDomainService
         $this->permissionRepository->deleteTablePermission($organizationCode, $tableId, $permissionId);
     }
 
+    /** @param list<string> $subjectTypes */
+    public function deleteTablePermissionsBySubjectTypes(string $organizationCode, int $tableId, array $subjectTypes): void
+    {
+        $this->permissionRepository->deleteTablePermissionsBySubjectTypes($organizationCode, $tableId, $subjectTypes);
+    }
+
     /** @return MagicBaseEntityCollection<MagicBaseColumnPermissionEntity> */
     public function listColumnPermissions(string $organizationCode, int $tableId, ?int $columnId = null): MagicBaseEntityCollection
     {
@@ -171,6 +177,12 @@ readonly class MagicBaseMetadataDomainService
         $this->permissionRepository->deleteColumnPermission($organizationCode, $tableId, $permissionId);
     }
 
+    /** @param list<int> $columnIds @param list<string> $subjectTypes */
+    public function deleteColumnPermissionsByColumnIdsAndSubjectTypes(string $organizationCode, int $tableId, array $columnIds, array $subjectTypes): void
+    {
+        $this->permissionRepository->deleteColumnPermissionsByColumnIdsAndSubjectTypes($organizationCode, $tableId, $columnIds, $subjectTypes);
+    }
+
     /** @return MagicBaseEntityCollection<MagicBaseRowPermissionEntity> */
     public function listRowPermissions(string $organizationCode, int $tableId, ?int $recordId = null): MagicBaseEntityCollection
     {
@@ -186,6 +198,12 @@ readonly class MagicBaseMetadataDomainService
     public function deleteRowPermission(string $organizationCode, int $tableId, int $permissionId): void
     {
         $this->permissionRepository->deleteRowPermission($organizationCode, $tableId, $permissionId);
+    }
+
+    /** @param list<int> $recordIds @param list<string> $subjectTypes */
+    public function deleteRowPermissionsByRecordIdsAndSubjectTypes(string $organizationCode, int $tableId, array $recordIds, array $subjectTypes): void
+    {
+        $this->permissionRepository->deleteRowPermissionsByRecordIdsAndSubjectTypes($organizationCode, $tableId, $recordIds, $subjectTypes);
     }
 
     public function createMigrationLog(MagicBaseMigrationLogEntity $entity): MagicBaseMigrationLogEntity
