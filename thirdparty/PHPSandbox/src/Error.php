@@ -1,148 +1,237 @@
 <?php
-    /** Error class declaration
-     * @package PHPSandbox
-     */
-    namespace PHPSandbox;
 
-    use Exception,
-        PhpParser\Node,
-        Throwable;
+declare(strict_types=1);
+/**
+ * Copyright (c) The Magic , Distributed under the software license
+ */
+
+namespace PHPSandbox;
+
+use Exception;
+use PhpParser\Node;
+use Throwable;
+
+/**
+ * Error class for PHP Sandboxes.
+ *
+ * This class extends Exception to allow for catching PHPSandbox-specific exceptions.
+ *
+ * @namespace PHPSandbox
+ *
+ * @version 3.0
+ */
+class Error extends Exception
+{
+    /* START ERROR CODES */
+    /* MISC ERRORS                      (1-99) */
+    public const PARSER_ERROR = 1;
+
+    public const ESCAPE_ERROR = 2;
+
+    public const HALT_ERROR = 3;
+
+    public const CAST_ERROR = 4;
+
+    public const CLOSURE_ERROR = 5;
+
+    public const BYREF_ERROR = 6;
+
+    public const GENERATOR_ERROR = 7;
+
+    public const GLOBALS_ERROR = 8;
+
+    public const DYNAMIC_VAR_ERROR = 9;
+
+    public const STATIC_VAR_ERROR = 10;
+
+    public const ERROR_SUPPRESS_ERROR = 11;
+
+    public const BACKTICKS_ERROR = 12;
+
+    public const IMPORT_ERROR = 13;
+
+    public const INCLUDE_ERROR = 14;
+
+    public const DYNAMIC_STATIC_VAR_ERROR = 20;
+
+    public const DYNAMIC_CONST_ERROR = 21;
+
+    public const DYNAMIC_CLASS_ERROR = 22;
+
+    public const SANDBOX_ACCESS_ERROR = 30;
+
+    public const GLOBAL_CONST_ERROR = 31;
+
+    public const CREATE_OBJECT_ERROR = 32;
+
+    /* VALIDATION ERRORS                (100-199) */
+    public const VALID_FUNC_ERROR = 100;
+
+    public const VALID_KEYWORD_ERROR = 101;
+
+    public const VALID_CONST_ERROR = 102;
+
+    public const VALID_VAR_ERROR = 103;
+
+    public const VALID_GLOBAL_ERROR = 104;
+
+    public const VALID_SUPERGLOBAL_ERROR = 105;
+
+    public const VALID_MAGIC_CONST_ERROR = 106;
+
+    public const VALID_CLASS_ERROR = 107;
+
+    public const VALID_TYPE_ERROR = 108;
+
+    public const VALID_INTERFACE_ERROR = 109;
+
+    public const VALID_TRAIT_ERROR = 110;
+
+    public const VALID_NAMESPACE_ERROR = 111;
+
+    public const VALID_ALIAS_ERROR = 112;
+
+    public const VALID_OPERATOR_ERROR = 113;
+
+    public const VALID_PRIMITIVE_ERROR = 114;
+
+    /* DEFINITION ERRORS                (200-299) */
+    public const DEFINE_FUNC_ERROR = 200;
+
+    public const DEFINE_KEYWORD_ERROR = 201;
+
+    public const DEFINE_CONST_ERROR = 202;
+
+    public const DEFINE_VAR_ERROR = 203;
+
+    public const DEFINE_GLOBAL_ERROR = 204;
+
+    public const DEFINE_SUPERGLOBAL_ERROR = 205;
+
+    public const DEFINE_MAGIC_CONST_ERROR = 206;
+
+    public const DEFINE_CLASS_ERROR = 207;
+
+    public const DEFINE_TYPE_ERROR = 208;
+
+    public const DEFINE_INTERFACE_ERROR = 209;
+
+    public const DEFINE_TRAIT_ERROR = 210;
+
+    public const DEFINE_NAMESPACE_ERROR = 211;
+
+    public const DEFINE_ALIAS_ERROR = 212;
+
+    public const DEFINE_OPERATOR_ERROR = 213;
+
+    public const DEFINE_PRIMITIVE_ERROR = 214;
+
+    /* WHITELIST ERRORS                     (300-399) */
+    public const WHITELIST_FUNC_ERROR = 300;
+
+    public const WHITELIST_KEYWORD_ERROR = 301;
+
+    public const WHITELIST_CONST_ERROR = 302;
+
+    public const WHITELIST_VAR_ERROR = 303;
+
+    public const WHITELIST_GLOBAL_ERROR = 304;
+
+    public const WHITELIST_SUPERGLOBAL_ERROR = 305;
+
+    public const WHITELIST_MAGIC_CONST_ERROR = 306;
+
+    public const WHITELIST_CLASS_ERROR = 307;
+
+    public const WHITELIST_TYPE_ERROR = 308;
+
+    public const WHITELIST_INTERFACE_ERROR = 309;
+
+    public const WHITELIST_TRAIT_ERROR = 310;
+
+    public const WHITELIST_NAMESPACE_ERROR = 311;
+
+    public const WHITELIST_ALIAS_ERROR = 312;
+
+    public const WHITELIST_OPERATOR_ERROR = 313;
+
+    public const WHITELIST_PRIMITIVE_ERROR = 314;
+
+    /* BLACKLIST ERRORS                     (400-499) */
+    public const BLACKLIST_FUNC_ERROR = 400;
+
+    public const BLACKLIST_KEYWORD_ERROR = 401;
+
+    public const BLACKLIST_CONST_ERROR = 402;
+
+    public const BLACKLIST_VAR_ERROR = 403;
+
+    public const BLACKLIST_GLOBAL_ERROR = 404;
+
+    public const BLACKLIST_SUPERGLOBAL_ERROR = 405;
+
+    public const BLACKLIST_MAGIC_CONST_ERROR = 406;
+
+    public const BLACKLIST_CLASS_ERROR = 407;
+
+    public const BLACKLIST_TYPE_ERROR = 408;
+
+    public const BLACKLIST_INTERFACE_ERROR = 409;
+
+    public const BLACKLIST_TRAIT_ERROR = 410;
+
+    public const BLACKLIST_NAMESPACE_ERROR = 411;
+
+    public const BLACKLIST_ALIAS_ERROR = 412;
+
+    public const BLACKLIST_OPERATOR_ERROR = 413;
+
+    public const BLACKLIST_PRIMITIVE_ERROR = 414;
+
+    /* END ERROR CODES */
+    /**
+     * @var null|Node The node of the Error
+     */
+    protected ?Node $node;
 
     /**
-     * Error class for PHP Sandboxes.
-     *
-     * This class extends Exception to allow for catching PHPSandbox-specific exceptions.
-     *
-     * @namespace PHPSandbox
-     *
-     * @author  Elijah Horton <elijah@corveda.com>
-     * @version 3.0
+     * @var mixed The data of the Error
      */
-    class Error extends Exception {
-        /* START ERROR CODES */
-        /* MISC ERRORS                      (1-99)    */
-        const PARSER_ERROR              =       1;
-        const ESCAPE_ERROR              =       2;
-        const HALT_ERROR                =       3;
-        const CAST_ERROR                =       4;
-        const CLOSURE_ERROR             =       5;
-        const BYREF_ERROR               =       6;
-        const GENERATOR_ERROR           =       7;
-        const GLOBALS_ERROR             =       8;
-        const DYNAMIC_VAR_ERROR         =       9;
-        const STATIC_VAR_ERROR          =       10;
-        const ERROR_SUPPRESS_ERROR      =       11;
-        const BACKTICKS_ERROR           =       12;
-        const IMPORT_ERROR              =       13;
-        const INCLUDE_ERROR             =       14;
+    protected $data;
 
-        const DYNAMIC_STATIC_VAR_ERROR  =       20;
-        const DYNAMIC_CONST_ERROR       =       21;
-        const DYNAMIC_CLASS_ERROR       =       22;
-        const SANDBOX_ACCESS_ERROR      =       30;
-        const GLOBAL_CONST_ERROR        =       31;
-        const CREATE_OBJECT_ERROR       =       32;
-        /* VALIDATION ERRORS                (100-199) */
-        const VALID_FUNC_ERROR          =       100;
-        const VALID_KEYWORD_ERROR       =       101;
-        const VALID_CONST_ERROR         =       102;
-        const VALID_VAR_ERROR           =       103;
-        const VALID_GLOBAL_ERROR        =       104;
-        const VALID_SUPERGLOBAL_ERROR   =       105;
-        const VALID_MAGIC_CONST_ERROR   =       106;
-        const VALID_CLASS_ERROR         =       107;
-        const VALID_TYPE_ERROR          =       108;
-        const VALID_INTERFACE_ERROR     =       109;
-        const VALID_TRAIT_ERROR         =       110;
-        const VALID_NAMESPACE_ERROR     =       111;
-        const VALID_ALIAS_ERROR         =       112;
-        const VALID_OPERATOR_ERROR      =       113;
-        const VALID_PRIMITIVE_ERROR     =       114;
-        /* DEFINITION ERRORS                (200-299) */
-        const DEFINE_FUNC_ERROR         =       200;
-        const DEFINE_KEYWORD_ERROR      =       201;
-        const DEFINE_CONST_ERROR        =       202;
-        const DEFINE_VAR_ERROR          =       203;
-        const DEFINE_GLOBAL_ERROR       =       204;
-        const DEFINE_SUPERGLOBAL_ERROR  =       205;
-        const DEFINE_MAGIC_CONST_ERROR  =       206;
-        const DEFINE_CLASS_ERROR        =       207;
-        const DEFINE_TYPE_ERROR         =       208;
-        const DEFINE_INTERFACE_ERROR    =       209;
-        const DEFINE_TRAIT_ERROR        =       210;
-        const DEFINE_NAMESPACE_ERROR    =       211;
-        const DEFINE_ALIAS_ERROR        =       212;
-        const DEFINE_OPERATOR_ERROR     =       213;
-        const DEFINE_PRIMITIVE_ERROR    =       214;
-        /* WHITELIST ERRORS                     (300-399) */
-        const WHITELIST_FUNC_ERROR          =       300;
-        const WHITELIST_KEYWORD_ERROR       =       301;
-        const WHITELIST_CONST_ERROR         =       302;
-        const WHITELIST_VAR_ERROR           =       303;
-        const WHITELIST_GLOBAL_ERROR        =       304;
-        const WHITELIST_SUPERGLOBAL_ERROR   =       305;
-        const WHITELIST_MAGIC_CONST_ERROR   =       306;
-        const WHITELIST_CLASS_ERROR         =       307;
-        const WHITELIST_TYPE_ERROR          =       308;
-        const WHITELIST_INTERFACE_ERROR     =       309;
-        const WHITELIST_TRAIT_ERROR         =       310;
-        const WHITELIST_NAMESPACE_ERROR     =       311;
-        const WHITELIST_ALIAS_ERROR         =       312;
-        const WHITELIST_OPERATOR_ERROR      =       313;
-        const WHITELIST_PRIMITIVE_ERROR     =       314;
-        /* BLACKLIST ERRORS                     (400-499) */
-        const BLACKLIST_FUNC_ERROR          =       400;
-        const BLACKLIST_KEYWORD_ERROR       =       401;
-        const BLACKLIST_CONST_ERROR         =       402;
-        const BLACKLIST_VAR_ERROR           =       403;
-        const BLACKLIST_GLOBAL_ERROR        =       404;
-        const BLACKLIST_SUPERGLOBAL_ERROR   =       405;
-        const BLACKLIST_MAGIC_CONST_ERROR   =       406;
-        const BLACKLIST_CLASS_ERROR         =       407;
-        const BLACKLIST_TYPE_ERROR          =       408;
-        const BLACKLIST_INTERFACE_ERROR     =       409;
-        const BLACKLIST_TRAIT_ERROR         =       410;
-        const BLACKLIST_NAMESPACE_ERROR     =       411;
-        const BLACKLIST_ALIAS_ERROR         =       412;
-        const BLACKLIST_OPERATOR_ERROR      =       413;
-        const BLACKLIST_PRIMITIVE_ERROR     =       414;
-        /* END ERROR CODES */
-        /**
-         * @var Node|null      The node of the Error
-         */
-        protected ?Node $node;
-        /**
-         * @var mixed      The data of the Error
-         */
-        protected $data;
-        /** Constructs the Error
-         * @param string                $message        The message to pass to the Error
-         * @param int                   $code           The error code to pass to the Error
-         * @param Node|null             $node           The parser node to pass to the Error
-         * @param mixed                 $data           The error data to pass to the Error
-         * @param Throwable|null        $previous       The previous exception to pass to the Error
-         */
-        public function __construct($message = '', $code = 0, ?Node $node = null, $data = null, ?Throwable $previous = null){
-            $this->node = $node;
-            $this->data = $data;
-            parent::__construct($message, $code, $previous);
-        }
-        /** Returns data of the Error
-         *
-         * @alias get_data();
-         *
-         * @return  mixed  The data of the error to return
-         */
-        public function getData(){
-            return $this->data;
-        }
-        /** Returns parser node of the Error
-         *
-         * @alias get_node();
-         *
-         * @return  Node|null  The parser node of the error to return
-         */
-        public function getNode() : ?Node {
-            return $this->node;
-        }
+    /** Constructs the Error.
+     * @param string $message The message to pass to the Error
+     * @param int $code The error code to pass to the Error
+     * @param null|Node $node The parser node to pass to the Error
+     * @param mixed $data The error data to pass to the Error
+     * @param null|Throwable $previous The previous exception to pass to the Error
+     */
+    public function __construct($message = '', $code = 0, ?Node $node = null, $data = null, ?Throwable $previous = null)
+    {
+        $this->node = $node;
+        $this->data = $data;
+        parent::__construct($message, $code, $previous);
     }
+
+    /** Returns data of the Error.
+     *
+     * @alias get_data();
+     *
+     * @return mixed The data of the error to return
+     */
+    public function getData()
+    {
+        return $this->data;
+    }
+
+    /** Returns parser node of the Error.
+     *
+     * @alias get_node();
+     *
+     * @return null|Node The parser node of the error to return
+     */
+    public function getNode(): ?Node
+    {
+        return $this->node;
+    }
+}
