@@ -1,3 +1,4 @@
+# shoule match .github/workflows/build-*.yml
 images:
   magic-service:
     context: ./backend/magic-service
@@ -11,6 +12,7 @@ images:
     context: ./frontend/magic-web
   playwright-mod:
     context: ./thirdparty/playwright-mod
+# shoule match paths in .github/workflows/subtree-publish.yml
 subtrees:
   api-response:
     prefix: backend/api-response
@@ -26,8 +28,6 @@ subtrees:
     prefix: backend/flow-expr-engine
   rule-engine-core:
     prefix: backend/rule-engine-core
-  sandbox-components:
-    prefix: backend/sandbox-components
   sdk-base:
     prefix: backend/sdk-base
   super-magic-module:
