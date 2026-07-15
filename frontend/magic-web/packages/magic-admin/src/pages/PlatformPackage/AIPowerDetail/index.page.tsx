@@ -13,10 +13,14 @@ import { useIsMobile } from "@admin/hooks/useIsMobile"
 import { useDetail } from "../hooks/useDetail"
 import { useStyles } from "./styles"
 import { AiPowerLogoMap, hasLogoMap } from "../AIPower/index.page"
-import { DefaultProviderListMap, ServiceConfigList } from "./constants"
+import { DefaultProviderListMap, DeprecatedProviderMap } from "./constants"
 
 const ServiceConfig = lazy(() => import("./components/ServiceConfig"))
 const ModelConfig = lazy(() => import("./components/modelConfig"))
+
+const hasProvidersConfig = (data?: PlatformPackage.AiPowerDetail | null) => {
+	return Boolean(data?.config && Object.prototype.hasOwnProperty.call(data.config, "providers"))
+}
 
 function AIPowerDetailPage() {
 	const { handleDataLoaded } = useDetail("powerDetail")
@@ -29,11 +33,6 @@ function AIPowerDetailPage() {
 	const [form] = Form.useForm()
 
 	const hasEditRight = useRights(PERMISSION_KEY_MAP.AI_ABILITY_MANAGEMENT_EDIT)
-
-	/** 是否使用服务商配置的工具类型 */
-	const useProvidersConfig = useMemo(() => {
-		return code ? ServiceConfigList.includes(code as PlatformPackage.PowerCode) : false
-	}, [code])
 
 	const [data, setData] = useState<PlatformPackage.AiPowerDetail | null>(null)
 	const [providerList, setProviderList] = useState<PlatformPackage.ProviderConfig[]>([])
@@ -69,6 +68,29 @@ function AIPowerDetailPage() {
 		return Array.from(providerMap.values())
 	}
 
+	const filterDeprecatedProviderList = (
+		providers: PlatformPackage.ProviderConfig[],
+		powerCode?: string,
+	) => {
+		const deprecatedProviders = powerCode
+			? DeprecatedProviderMap[powerCode as PlatformPackage.PowerCode]
+			: undefined
+
+		if (!deprecatedProviders?.size) {
+			return providers
+		}
+
+		return providers.filter((item) => !deprecatedProviders.has(item.provider.toLowerCase()))
+	}
+
+	const getAvailableProviderList = (
+		powerCode?: string,
+		apiProviders?: PlatformPackage.ProviderConfig | PlatformPackage.ProviderConfig[],
+	) => {
+		const defaultList = powerCode ? DefaultProviderListMap[powerCode] || [] : []
+		return filterDeprecatedProviderList(mergeProviderList(apiProviders, defaultList), powerCode)
+	}
+
 	const { runAsync: saveDetail, loading: saveLoading } = useRequest(
 		PlatformPackageApi.updateAiPower,
 		{
@@ -84,33 +106,34 @@ function AIPowerDetailPage() {
 		manual: true,
 		onSuccess(res) {
 			const defaultList = DefaultProviderListMap[res.code] || []
-			const mergedProviders = mergeProviderList(res.config?.providers, defaultList)
+			const availableProviders = getAvailableProviderList(res.code, res.config?.providers)
 
+			const isProviders = hasProvidersConfig(res) || defaultList.length > 0
 			setData({
 				...res,
 				icon: hasLogoMap.includes(res.code as keyof typeof AiPowerLogoMap)
 					? AiPowerLogoMap[res.code as keyof typeof AiPowerLogoMap]
 					: "",
-				config: useProvidersConfig
+				config: isProviders
 					? {
 							...res.config,
-							providers: mergedProviders,
+							providers: availableProviders,
 						}
 					: res.config,
 			})
 
 			// 如果使用 providers 配置结构的工具类型
-			if (useProvidersConfig) {
-				setProviderList(mergedProviders)
+			if (isProviders) {
+				setProviderList(availableProviders)
 				setProviderOptions(
-					mergedProviders.map((item) => ({
+					availableProviders.map((item) => ({
 						label: getProviderLabel(item),
 						value: item.provider,
 					})),
 				)
 
-				const enabledProvider = mergedProviders.find((item) => item.enable)
-				const initialProvider = enabledProvider || mergedProviders[0]
+				const enabledProvider = availableProviders.find((item) => item.enable)
+				const initialProvider = enabledProvider || availableProviders[0]
 				setSelectedProvider(initialProvider?.provider || "")
 				form.setFieldValue(["config", "providers"], initialProvider)
 				form.setFieldValue("status", res.status)
@@ -128,6 +151,15 @@ function AIPowerDetailPage() {
 			handleDataLoaded(res.name)
 		},
 	})
+
+	/** 是否使用服务商配置的工具类型 */
+	const useProvidersConfig = useMemo(() => {
+		return hasProvidersConfig(data)
+	}, [data])
+
+	const currentProviderConfig = useMemo(() => {
+		return providerList.find((item) => item.provider === selectedProvider)
+	}, [providerList, selectedProvider])
 
 	useMount(() => {
 		if (!code) return
@@ -168,10 +200,7 @@ function AIPowerDetailPage() {
 	const onCancel = () => {
 		// 如果使用 providers 配置结构的工具类型，恢复配置状态
 		if (useProvidersConfig) {
-			const mergedProviders = mergeProviderList(
-				data?.config?.providers,
-				DefaultProviderListMap[data?.code || ""] || [],
-			)
+			const mergedProviders = getAvailableProviderList(data?.code, data?.config?.providers)
 			const providerConfig =
 				mergedProviders.find((item) => item.provider === selectedProvider) ||
 				mergedProviders.find((item) => item.enable) ||
@@ -219,7 +248,7 @@ function AIPowerDetailPage() {
 
 			if (!providerConfig) return
 
-			const keepKeys = ["provider", "name", "enable"]
+			const keepKeys = ["provider", "provider_code", "name", "enable"]
 			const clearedProvider = { ...providerConfig }
 			const clearedProviderRecord = clearedProvider as unknown as Record<string, unknown>
 
@@ -294,6 +323,7 @@ function AIPowerDetailPage() {
 					<ServiceConfig
 						providerOptions={providerOptions}
 						currentProvider={selectedProvider}
+						currentProviderConfig={currentProviderConfig}
 						onProviderChange={handleProviderChange}
 						onConnectivityTest={onConnectivityTest}
 					/>

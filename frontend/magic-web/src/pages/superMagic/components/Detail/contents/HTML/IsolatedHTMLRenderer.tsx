@@ -190,6 +190,24 @@ function isHtmlImagesUploadPath(path: string): boolean {
 	return normalized === "images" || normalized.startsWith("images/")
 }
 
+/**
+ * 根据目录和文件名，生成上传文件路径
+ * @param path
+ * @param fileName
+ * @returns
+ */
+function resolveImageUploadRequestPath(path: string, fileName: string): string {
+	const trimmedPath = path.trim() || "./images"
+	const pathWithoutTrailingSlash = trimmedPath.replace(/\/+$/, "")
+	const normalized = normalizeProjectPath(pathWithoutTrailingSlash.replace(/^\.\//, ""))
+	const isDirectoryPath = trimmedPath.endsWith("/") || normalized === "images"
+
+	if (!isDirectoryPath) return trimmedPath
+
+	const uploadDirectory = normalized === "images" ? "./images" : pathWithoutTrailingSlash
+	return `${uploadDirectory}/${fileName}`
+}
+
 interface MagicI18nLangSubscribeRequest {
 	type: "MAGIC_I18N_LANG_SUBSCRIBE"
 	requestId?: string
@@ -1283,9 +1301,13 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 						duration: 0,
 					})
 
+					const suggestedUploadPath = isStructuredRequest(data)
+						? data.suggestedPath
+						: "./images"
+					const uploadPath = resolveImageUploadRequestPath(suggestedUploadPath, file.name)
 					const uploadResult = await uploadImageFileToProject({
 						file,
-						path: isStructuredRequest(data) ? data.suggestedPath : "./images",
+						path: uploadPath,
 						fileSize: file.size,
 					})
 					const previewUrl = await fileToBase64(file)
