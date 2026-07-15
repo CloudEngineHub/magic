@@ -1,52 +1,84 @@
 # Custom Template Workflow
 
-Use when the user describes a style in text, provides screenshots, or gives an existing PPT project.
+Use when the user describes a style in text, provides screenshots, or provides an existing template package.
 
-1. Input:
+If the user provides an existing Super Magic slide project directory that contains `magic.project.js` with `type: "slide"` and asks to convert or extract it into a reusable template, use `project-template-workflow.md` instead.
 
-- Existing project: use `list_dir`, then read 2-3 representative HTML pages.
-- Screenshot: use `visual_understanding` to extract palette, background, font hierarchy, card/container style, decorative elements, and style keywords.
+## 1. Inputs
+
+- Existing template package: use `list_dir`, then read `template.json` if present, `visual-spec.md`, `theme.css`, and 2-3 representative slide HTML pages.
+- Screenshot: use `visual_understanding` to extract palette, background, font hierarchy, container style, decorative elements, and style keywords.
 - Text: infer the same design spec from the user's words.
 
-2. Before generating, read one built-in template spec as a quality benchmark, such as `<skill_dir>/assets/templates/monocle-editorial/visual-spec.md` or `<skill_dir>/assets/templates/ink-classic/visual-spec.md`. Match its depth and structure; do not generate a generic color-and-card stylesheet.
-3. Extract a full design system: core concept, background/text/accent colors, gradients, borders, shadows, radius, font hierarchy, decorations, layout structure, component patterns, ECharts style, image search keywords, and image generation style keywords.
-4. Ask the user for a template name, or suggest a lowercase hyphenated dir and short display name.
-5. Generate a wrapper folder at the user's workspace root, for example `<workspace>/<new-dir>/`. Do not generate custom templates under `<skill_dir>/assets/templates/` or otherwise inside this skill's install tree.
-6. Create exactly inside that folder:
+## 2. Output Structure
 
-- `visual-spec.md`
-- `theme.css`
-- `preview.html`
+Generate a standalone template package folder at the workspace root, not inside this skill:
 
-7. `visual-spec.md` must be a professional visual system specification, not a short style note. It must include these 8 sections:
+```text
+<template-dir>/
+├── template.json
+├── visual-spec.md
+├── theme.css
+├── images/
+└── slides/
+```
 
-- `1. Core Design Concept`: 3-5 specific design principles that define the style's visual thesis, spatial logic, and emotional tone.
-- `2. Color Specification`: a complete CSS `:root` block with background, text, accent, border, and chart colors. Include `*-rgb` variables for colors that need opacity control, and annotate each variable's usage.
-- `3. Typography Specification`: a table with at least 6 text levels, including font families, sizes using `clamp()` or fixed px values, weights, colors, and a required Google Fonts link.
-- `4. Decorative Element Specification`: at least 4 template-specific decorative elements or components. Each must include representative HTML markup and CSS code, not only a description.
-- `5. Dedicated Layout Page Types`: at least 6 layout types. For each layout, specify the background treatment, grid or absolute-position structure, main content zones, visual anchor, and suitable slide use cases.
-- `6. Corner Radius and Shadow Specification`: a table listing radius and shadow/glow rules for major components, plus the design principle behind those choices.
-- `7. ECharts Chart Specification`: a palette array, a reusable global config object, and complete options for at least line and bar charts. Add other chart types when the style needs them.
-- `8. AI Image Generation Specification`: style keywords, an `image_search` keyword strategy table, 2-3 `generate_images` prompt examples, and clear notes on when to prefer real photos, illustrations, or no image.
+The folder should be a lightweight reusable template package. Do not create `magic.project.js`, `index.html`, `slide-bridge.js`, `preview.html`, `template-pages.md`, `template-pages.json`, `source.css`, or a nested `packages/` directory for the default output.
 
-8. `theme.css` must implement the generated visual system:
+`previews/` may be generated only as a build or publishing artifact by a script that renders `slides/*.html`. Do not place `previews/` inside the template source folder, and do not include it in the template ZIP.
 
-- Include `:root` variables, font stacks, chart colors, and reusable spacing/radius/shadow variables.
-- Include the fixed canvas reset: `html,body,.slide-container{width:1920px;height:1080px}` with `overflow:hidden`.
-- Implement the decorative elements/components from `visual-spec.md` section 4 as reusable CSS classes.
-- Implement layout helpers and page-level variants needed by the dedicated layouts in section 5.
-- Prefer distinctive template-specific classes over generic centered text/card styles.
+## 3. Required Files
 
-9. `preview.html` must load `theme.css` and demonstrate the style:
+- `visual-spec.md`: template design rules, including palette, typography, layouts, chart rules, image rules, slot policy, and avoid rules.
+- `theme.css`: template-specific design system, including canvas reset, variables, typography, decorations, components, chart colors, and reusable visual helpers.
+- `template.json`: follow `references/template-json-spec.md`; use `source.kind` to record the template source.
+- `slides/`: independent reusable HTML pages. Default to 9 pages unless the user explicitly needs a smaller or larger template. Each page may include lightweight `data-slot` attributes for replaceable content and must be listed in `template.json.slides`.
+- `images/`: local assets only.
 
-- Show the full palette with color values and usage labels.
-- Show at least 2 layout thumbnails or mini sections that reflect the dedicated layouts.
-- Render the core decorative elements/components, not only list them.
+## 4. Style Requirements
 
-10. Quality gate before using the custom template:
+`theme.css` must implement a real visual system:
 
-- The generated files should feel comparable in depth to built-in templates: strong concept, precise typography, distinct layout patterns, and reusable CSS components.
-- Every slide created from this template should have one clear visual anchor, such as a large image area, chart, matrix, KPI block, signature decoration, or dramatic typography.
-- If the generated template looks like a generic dashboard or simple card grid, rework `visual-spec.md` and `theme.css` before creating slides.
+- Include `:root` variables for background, text, accent, border, chart colors, spacing, radius, and shadow.
+- Include the fixed canvas reset: `html, body, .slide-container { width: 1920px; height: 1080px; overflow: hidden; }`.
+- Define template-specific components and decorative classes. Avoid generic card-only styling.
+- Keep structural page layout in individual slide HTML when pages exist; `theme.css` should provide reusable parts, not force every page into one layout.
+- Every generated sample slide should have one clear visual anchor: image area, chart, KPI block, matrix, signature decoration, or dramatic typography.
+- Each slide HTML must load `../theme.css`, use a native 1920x1080 layout, and avoid legacy scaled preview structures such as `preview.html`, `legacy-frame`, `slides-grid`, or `scale(...)`.
+- Default visible content should be English.
+- If a page needs illustrations, photos, avatars, logos, or scene visuals, save the assets under `images/` and reference local `../images/...` paths. Do not leave placeholder URLs, empty image boxes, or gray demo blocks.
 
-11. Read generated `visual-spec.md`, copy generated `theme.css` to the PPT project root, and continue the built-in template workflow from step 4 (slide HTML linking `theme.css`).
+## 5. `template.json`
+
+Use `template.json` as the only metadata entrypoint:
+
+- `schema_version` must be `"1.0"`.
+- `template_id` must use the `PPT-xxxx` format.
+- `category_code` is optional. If provided, it must use an existing `PPT-CATE-xxxx` category.
+- `label.zh_CN`, `label.en_US`, `description.zh_CN`, and `description.en_US` are required.
+- `files.package_zip` is optional and points to the sibling ZIP when one is created, for example `../<template-id>-template.zip`.
+- Preview image paths belong in the publishing artifact manifest or publish state, not in the source template package.
+- `slides` records generated page files with only `file`, `title`, `layout`, and `description`. Do not write `slides[].slots`.
+- `source.kind` must be `original`, `converted`, or `derived`; custom templates normally use `original` or `derived`.
+- `source.canvas` must be 1920x1080.
+- `warnings` records non-fatal generation or conversion issues.
+
+## 6. Using The Template
+
+When creating a PPT from this template:
+
+1. Read `template.json`.
+2. Copy `theme.css` into the target PPT project.
+3. Select from `template.json.slides` according to `layout`, `title`, and `description`.
+4. Reuse `data-slot` hints from HTML when helpful, but do not expect slot metadata in `template.json`.
+5. Keep all generated assets inside the target project, usually under `images/`.
+
+## 7. Quality Checks
+
+Before finishing:
+
+- Validate `template.json` against `references/template-json.schema.json`.
+- Confirm there is no `name`, `template_dir`, `package_type`, `taxonomy`, `review_status`, `copyright_notice`, or `slides[].slots`.
+- Confirm every slide loads `../theme.css`.
+- Confirm all image references resolve to local files.
+- Run a lightweight overflow check for 1920x1080 pages and fix out-of-bounds content or obvious text clipping.

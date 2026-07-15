@@ -53,6 +53,7 @@ export function createPluginSrcDocV1(
 		let __MAGIC_CANVAS_SCOPE__ = null;
 		let __MAGIC_CANVAS_DISPOSED__ = false;
 		let __MAGIC_CANVAS_LAST_POINTER__ = null;
+		let __MAGIC_CANVAS_ACTIVE_DRAG_SESSION_ID__ = null;
 		const __MAGIC_CANVAS_STATE_BINDINGS__ = new WeakMap();
 
 		window.registerMagicCanvasPlugin = function registerMagicCanvasPlugin(plugin) {
@@ -91,6 +92,8 @@ export function createPluginSrcDocV1(
 			return new Promise((resolve, reject) => {
 				const requestId = createRequestId();
 				function handleHostResult(event) {
+					// 只接受来自宿主窗口的回包，避免同页其他 frame 伪造 request 结果。
+					if (event.source !== window.parent) return;
 					const data = event.data;
 					if (
 						!data ||
@@ -316,11 +319,43 @@ export function createPluginSrcDocV1(
 						).then((data) => data.file);
 					});
 				},
+				resolveFileAssets(files, options = {}) {
+					return requestHost(
+						{
+							type: "magic-canvas-plugin:resolve-file-assets",
+							files: Array.isArray(files) ? files : [],
+							options,
+						},
+						"magic-canvas-plugin:resolve-file-assets-result"
+					).then((data) => data.files || []);
+				},
+				readCanvasClipboard() {
+					return requestHost(
+						{ type: "magic-canvas-plugin:read-canvas-clipboard" },
+						"magic-canvas-plugin:read-canvas-clipboard-result"
+					).then((data) => ({
+						payload: data.payload ?? null,
+						uploadedAssets: data.uploadedAssets || [],
+					}));
+				},
 				fetchBlob(url) {
 					return requestHost(
 						{ type: "magic-canvas-plugin:fetch-blob", url },
 						"magic-canvas-plugin:fetch-blob-result"
 					).then((data) => new Blob([data.arrayBuffer]));
+				},
+				// 插件内部命中/离开投放区时调用，宿主据此决定鼠标释放后是否 drop。
+				reportCanvasAssetDragTarget(target = {}) {
+					const dragSessionId = __MAGIC_CANVAS_ACTIVE_DRAG_SESSION_ID__;
+					if (!dragSessionId) return;
+					postHost({
+						type: "magic-canvas-plugin:canvas-asset-drag-target",
+						dragSessionId,
+						targetId: typeof target.targetId === "string" ? target.targetId : null,
+						mode: target.mode,
+						canDrop: target.canDrop === true,
+						importRemaining: target.importRemaining,
+					});
 				},
 			},
 			storage: (() => {
@@ -425,6 +460,29 @@ export function createPluginSrcDocV1(
 			};
 			postHost({ type: "magic-canvas-plugin:pointer-down" });
 		}, true);
+
+		// 宿主只把画布图片拖拽相关消息转成 iframe 内的 CustomEvent，插件代码无需监听 postMessage。
+		window.addEventListener("message", (event) => {
+			// 只接受宿主下发的拖拽消息，避免同页其他 frame 伪造 move/leave/drop。
+			if (event.source !== window.parent) return;
+			const data = event.data;
+			if (!data || data.channelToken !== __MAGIC_CANVAS_BOOTSTRAP__.channelToken) return;
+			if (
+				data.type !== "magic-canvas-plugin:canvas-asset-drag-move" &&
+				data.type !== "magic-canvas-plugin:canvas-asset-drag-leave" &&
+				data.type !== "magic-canvas-plugin:canvas-asset-drop"
+			) {
+				return;
+			}
+			if (data.type === "magic-canvas-plugin:canvas-asset-drag-move") {
+				const dragSessionId =
+					typeof data.dragSessionId === "string" ? data.dragSessionId.trim() : "";
+				__MAGIC_CANVAS_ACTIVE_DRAG_SESSION_ID__ = dragSessionId || null;
+			} else if (data.type === "magic-canvas-plugin:canvas-asset-drag-leave") {
+				__MAGIC_CANVAS_ACTIVE_DRAG_SESSION_ID__ = null;
+			}
+			window.dispatchEvent(new CustomEvent(data.type, { detail: data }));
+		});
 	</script>
 	${runtimeScript}
 	<script>

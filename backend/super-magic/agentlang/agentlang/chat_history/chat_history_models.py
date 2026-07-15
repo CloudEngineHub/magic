@@ -697,6 +697,26 @@ class ToolMessage:
 ChatMessage = Union[SystemMessage, UserMessage, AssistantMessage, ToolMessage]
 
 
+def chat_message_from_dict(data: Dict[str, Any]) -> Optional[ChatMessage]:
+    """将聊天记录字典转换为对应的结构化消息对象。"""
+    role = data.get("role")
+    try:
+        if role == "system":
+            return SystemMessage.from_dict(data)
+        if role == "user":
+            return UserMessage.from_dict(data)
+        if role == "assistant":
+            return AssistantMessage.from_dict(data)
+        if role == "tool":
+            return ToolMessage.from_dict(data)
+    except Exception as e:
+        logger.warning(f"聊天记录消息结构化失败: {data}，错误: {e}")
+        return None
+
+    logger.warning(f"聊天记录消息角色未知: {role}")
+    return None
+
+
 # ==============================================================================
 # 对外暴露的上下文容量查值入口
 # ==============================================================================

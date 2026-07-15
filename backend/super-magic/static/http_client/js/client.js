@@ -1273,6 +1273,36 @@ document.addEventListener('DOMContentLoaded', () => {
                 closeMentionPicker();
             }, 180);
         });
+        messageInputEl.addEventListener('paste', async (e) => {
+            const clipboardData = e.clipboardData;
+            if (!clipboardData) return;
+
+            const clipboardFiles = Array.from(clipboardData.files || []);
+            if (clipboardFiles.length > 0) {
+                e.preventDefault();
+                e.stopPropagation();
+                try {
+                    await enqueueMessageInputUpload(clipboardFiles);
+                } catch (error) {
+                    console.error('聊天框粘贴文件上传失败', error);
+                    showSystemMessage(`上传失败：${error.message || error}`);
+                }
+                return;
+            }
+
+            if (!shouldConvertPastedTextToAttachment(clipboardData)) return;
+
+            const text = clipboardData.getData('text/plain');
+            const textFile = createPastedTextFile(text);
+            e.preventDefault();
+            e.stopPropagation();
+            try {
+                await enqueueMessageInputUpload([textFile], { targetDir: MESSAGE_INPUT_TEMPORARY_DIR });
+            } catch (error) {
+                console.error('聊天框长文本上传失败', error);
+                showSystemMessage(`上传失败：${error.message || error}`);
+            }
+        });
         messageInputEl.addEventListener('dragover', (e) => {
             if (!hasDraggedFiles(e)) return;
             e.preventDefault();
@@ -1282,11 +1312,12 @@ document.addEventListener('DOMContentLoaded', () => {
         });
         messageInputEl.addEventListener('drop', async (e) => {
             if (!e.dataTransfer || !e.dataTransfer.files || !e.dataTransfer.files.length) return;
+            const droppedFiles = Array.from(e.dataTransfer.files);
             e.preventDefault();
             e.stopPropagation();
             clearMessageInputDropTarget();
             try {
-                await uploadFilesFromMessageInput(e.dataTransfer.files);
+                await enqueueMessageInputUpload(droppedFiles);
             } catch (error) {
                 console.error('聊天框拖拽上传失败', error);
                 showSystemMessage(`上传失败：${error.message || error}`);
@@ -5644,6 +5675,12 @@ function createDebugWorkspaceApiClient() {
             const query = new URLSearchParams({ path });
             return `${getDebugWorkspaceApiBase()}/raw?${query.toString()}`;
         },
+        /** 构造保留目录层级的原始文件地址，供 HTML 相对资源解析使用。 */
+        rawPathUrl(path) {
+            const normalizedPath = String(path || '').replace(/\\/g, '/').replace(/^\/+/, '');
+            const encodedPath = normalizedPath.split('/').map(encodeURIComponent).join('/');
+            return `${getDebugWorkspaceApiBase()}/raw/${encodedPath}`;
+        },
         downloadUrl(path) {
             const query = new URLSearchParams({ path });
             return `${getDebugWorkspaceApiBase()}/download?${query.toString()}`;
@@ -5759,7 +5796,10 @@ function buildFileUrl(filePath) {
  */
 function openCurrentPreviewInNewTab() {
     if (!currentPreviewFile && currentPreviewPath) {
-        window.open(debugWorkspaceApi.rawUrl(currentPreviewPath), '_blank');
+        const rawUrl = isHtmlPreviewable(currentPreviewPath)
+            ? debugWorkspaceApi.rawPathUrl(currentPreviewPath)
+            : debugWorkspaceApi.rawUrl(currentPreviewPath);
+        window.open(rawUrl, '_blank');
         return;
     }
     if (!currentPreviewFile) return;
@@ -5886,13 +5926,149 @@ function clearMessageInputDropTarget() {
     messageInputPanel?.classList.remove('message-input-drag-over');
 }
 
-async function uploadFilesFromMessageInput(files) {
+const MESSAGE_INPUT_TEMPORARY_DIR = '.tmp';
+const MESSAGE_INPUT_DEFAULT_UPLOAD_DIR = 'uploads';
+const LONG_PLAIN_TEXT_PASTE_THRESHOLD = 4000;
+const MAGIC_CLIPBOARD_TYPES = new Set([
+    'text/x-magic-message-rich-text',
+    'text/x-magic-message-mentions',
+]);
+const IMAGE_UPLOAD_EXTENSIONS = new Set([
+    'avif',
+    'bmp',
+    'gif',
+    'heic',
+    'heif',
+    'ico',
+    'jpeg',
+    'jpg',
+    'png',
+    'svg',
+    'tif',
+    'tiff',
+    'webp',
+]);
+let messageInputUploadQueue = Promise.resolve();
+
+/** 判断聊天输入区上传的文件是否属于图片类型。 */
+function isImageUploadFile(file) {
+    const mimeType = String(file?.type || '').toLowerCase();
+    if (mimeType.startsWith('image/')) return true;
+
+    const fileName = String(file?.name || '');
+    const extensionIndex = fileName.lastIndexOf('.');
+    if (extensionIndex < 0) return false;
+    return IMAGE_UPLOAD_EXTENSIONS.has(fileName.slice(extensionIndex + 1).toLowerCase());
+}
+
+/** 按正式前端规则判断剪贴板纯文本是否需要转换为临时 TXT 文件。 */
+function shouldConvertPastedTextToAttachment(clipboardData) {
+    if (!clipboardData || clipboardData.files?.length > 0) return false;
+
+    const text = clipboardData.getData('text/plain');
+    if (text.trim().length < LONG_PLAIN_TEXT_PASTE_THRESHOLD) return false;
+
+    const types = Array.from(clipboardData.types || []);
+    if (types.length === 0) return true;
+    if (!types.includes('text/plain')) return false;
+    if (types.some(type => MAGIC_CLIPBOARD_TYPES.has(type))) return false;
+
+    const html = clipboardData.getData('text/html');
+    return !html.includes('data-magic-clipboard');
+}
+
+/** 使用本地时间生成与正式前端一致的粘贴文本文件名。 */
+function formatPastedTextTimestamp(date) {
+    const padDatePart = value => String(value).padStart(2, '0');
+    const year = date.getFullYear();
+    const month = padDatePart(date.getMonth() + 1);
+    const day = padDatePart(date.getDate());
+    const hour = padDatePart(date.getHours());
+    const minute = padDatePart(date.getMinutes());
+    const second = padDatePart(date.getSeconds());
+    return `${year}${month}${day}-${hour}${minute}${second}`;
+}
+
+/** 将长纯文本转换为可上传到临时目录的 UTF-8 TXT 文件。 */
+function createPastedTextFile(text, now = new Date()) {
+    return new File([text], `pasted-text-${formatPastedTextTimestamp(now)}.txt`, {
+        type: 'text/plain;charset=utf-8',
+        lastModified: now.getTime(),
+    });
+}
+
+/** 根据显式目录或文件类型决定聊天输入区文件的上传目录。 */
+function resolveMessageInputUploadTarget(file, forcedTargetDir = '') {
+    if (forcedTargetDir) return forcedTargetDir;
+    return isImageUploadFile(file) ? MESSAGE_INPUT_TEMPORARY_DIR : MESSAGE_INPUT_DEFAULT_UPLOAD_DIR;
+}
+
+/** 为聊天输入区文件生成不覆盖工作区现有文件的名称。 */
+function createUniqueMessageInputFile(file, targetDir, reservedPaths) {
+    const normalizedTargetDir = String(targetDir || '').replace(/\\/g, '/').replace(/^\/+|\/+$/g, '');
+    const originalName = file.name;
+    const extensionIndex = originalName.lastIndexOf('.');
+    const hasExtension = extensionIndex > 0;
+    const nameStem = hasExtension ? originalName.slice(0, extensionIndex) : originalName;
+    const extension = hasExtension ? originalName.slice(extensionIndex) : '';
+    let candidateName = originalName;
+    let duplicateIndex = 1;
+
+    const buildCandidatePath = name => normalizeMentionFilePath(
+        normalizedTargetDir ? `${normalizedTargetDir}/${name}` : name,
+    );
+    while (reservedPaths.has(buildCandidatePath(candidateName))) {
+        candidateName = `${nameStem} (${duplicateIndex})${extension}`;
+        duplicateIndex += 1;
+    }
+    reservedPaths.add(buildCandidatePath(candidateName));
+
+    if (candidateName === originalName) return file;
+    return new File([file], candidateName, {
+        type: file.type,
+        lastModified: file.lastModified,
+    });
+}
+
+/** 串行执行聊天附件上传，确保同名判断使用上一次上传后的最新文件索引。 */
+function enqueueMessageInputUpload(files, options = {}) {
+    const runUpload = () => uploadFilesFromMessageInput(files, options);
+    const queuedUpload = messageInputUploadQueue.then(runUpload, runUpload);
+    messageInputUploadQueue = queuedUpload.catch(() => undefined);
+    return queuedUpload;
+}
+
+/** 上传聊天输入区文件，刷新工作区后在当前光标位置插入文件引用。 */
+async function uploadFilesFromMessageInput(files, options = {}) {
     const list = Array.from(files || []).filter(file => file && file.name);
     if (!list.length) return;
-    const targetDir = 'uploads';
-    showSystemMessage(`开始上传 ${list.length} 个文件到 uploads`);
-    const uploaded = await uploadWorkspaceFilesToDirectory(list, targetDir);
-    expandedDirs.add(targetDir);
+
+    const forcedTargetDir = String(options.targetDir || '').replace(/\\/g, '/').replace(/^\/+|\/+$/g, '');
+    const reservedPaths = new Set(
+        workspaceMentionIndex
+            .filter(item => item.kind === 'file')
+            .map(item => normalizeMentionFilePath(item.path)),
+    );
+    const uploadItems = list.map(file => {
+        const targetDir = resolveMessageInputUploadTarget(file, forcedTargetDir);
+        return {
+            file: createUniqueMessageInputFile(file, targetDir, reservedPaths),
+            targetDir,
+        };
+    });
+    const targetDirectories = new Set(uploadItems.map(item => item.targetDir));
+    const targetLabel = targetDirectories.size === 1
+        ? Array.from(targetDirectories)[0]
+        : '按文件类型对应的目录';
+    showSystemMessage(`开始上传 ${list.length} 个文件到 ${targetLabel}`);
+
+    const uploaded = [];
+    for (const item of uploadItems) {
+        const entries = await uploadWorkspaceFilesToDirectory([item.file], item.targetDir);
+        uploaded.push(...entries);
+        expandedDirs.add(item.targetDir);
+    }
+
     await renderFileTree();
     await refreshWorkspaceMentionIndex();
     const snippets = uploaded
@@ -5902,7 +6078,9 @@ async function uploadFilesFromMessageInput(files) {
     if (snippets) {
         insertMentionAtCursor(snippets);
     }
-    showSystemMessage(`已上传 ${uploaded.length} 个文件，并插入文件引用`);
+    const temporaryFileCount = uploadItems.filter(item => item.targetDir === MESSAGE_INPUT_TEMPORARY_DIR).length;
+    const temporaryHint = temporaryFileCount > 0 ? `，其中 ${temporaryFileCount} 个位于 .tmp` : '';
+    showSystemMessage(`已上传 ${uploaded.length} 个文件${temporaryHint}，并插入文件引用`);
 }
 
 function isWorkspacePreviewPathAffected(targetPath, previewPath) {
@@ -7463,10 +7641,11 @@ if (messageInputPanel) {
     });
     messageInputPanel.addEventListener('drop', async (e) => {
         if (!e.dataTransfer || !e.dataTransfer.files || !e.dataTransfer.files.length) return;
+        const droppedFiles = Array.from(e.dataTransfer.files);
         e.preventDefault();
         clearMessageInputDropTarget();
         try {
-            await uploadFilesFromMessageInput(e.dataTransfer.files);
+            await enqueueMessageInputUpload(droppedFiles);
         } catch (error) {
             console.error('聊天输入区拖拽上传失败', error);
             showSystemMessage(`上传失败：${error.message || error}`);
@@ -7542,7 +7721,9 @@ async function renderApiFilePreviewTab(tab) {
     const filePath = entry.path || tab.path;
     const kindProbe = buildApiFilePreviewDescriptor(entry, '');
     const kind = isHtmlPreviewable(filePath, kindProbe) ? 'html' : getWorkspacePreviewKind(filePath, kindProbe);
-    const rawUrl = debugWorkspaceApi.rawUrl(filePath);
+    const rawUrl = kind === 'html'
+        ? debugWorkspaceApi.rawPathUrl(filePath)
+        : debugWorkspaceApi.rawUrl(filePath);
     resetActivePreviewSurface();
     currentPreviewFile = null;
     currentPreviewPath = filePath;

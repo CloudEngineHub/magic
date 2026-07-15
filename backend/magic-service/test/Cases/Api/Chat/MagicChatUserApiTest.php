@@ -129,6 +129,7 @@ class MagicChatUserApiTest extends AbstractHttpTest
         $userData = $payload['items'][0];
         $this->assertIsArray($userData, '用户详情应为数组');
         $this->assertArrayHasKey('timezone', $userData, '用户详情应包含timezone字段');
+        $this->assertArrayHasKey('employee_no', $userData, '用户详情应包含employee_no字段');
     }
 
     /**

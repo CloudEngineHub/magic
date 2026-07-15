@@ -7,6 +7,7 @@ import {
 	resolveEmployeeMarketDetailPrimaryActionLabel,
 	resolveEmployeeMarketPrimaryActionLabel,
 	resolvePublisherLabel,
+	shouldHideEmployeeMarketPrimaryAction,
 } from "./employee-card-shared"
 
 function createT() {
@@ -54,6 +55,40 @@ describe("isOfficialBuiltinPublisherType", () => {
 		expect(isOfficialBuiltinPublisherType("OFFICIAL_BUILTIN")).toBe(true)
 		expect(isOfficialBuiltinPublisherType("OFFICIAL")).toBe(false)
 		expect(isOfficialBuiltinPublisherType("USER")).toBe(false)
+	})
+})
+
+describe("shouldHideEmployeeMarketPrimaryAction", () => {
+	const agent = (overrides: Record<string, unknown>) =>
+		({
+			publisherType: "USER",
+			isAdded: false,
+			allowDelete: false,
+			...overrides,
+		}) as import("@/services/crew/CrewService").StoreAgentView
+
+	it("keeps only conversation for an added official agent that cannot be removed", () => {
+		expect(
+			shouldHideEmployeeMarketPrimaryAction(
+				agent({ publisherType: "OFFICIAL", isAdded: true, allowDelete: false }),
+			),
+		).toBe(true)
+	})
+
+	it("keeps the market action for a removable added official agent", () => {
+		expect(
+			shouldHideEmployeeMarketPrimaryAction(
+				agent({ publisherType: "OFFICIAL", isAdded: true, allowDelete: true }),
+			),
+		).toBe(false)
+	})
+
+	it("keeps built-in agents single-action", () => {
+		expect(
+			shouldHideEmployeeMarketPrimaryAction(
+				agent({ publisherType: "OFFICIAL_BUILTIN", isAdded: false }),
+			),
+		).toBe(true)
 	})
 })
 
@@ -121,9 +156,9 @@ describe("market detail primary action", () => {
 	})
 
 	it("shows dismiss action for removable agent", () => {
-		expect(canShowEmployeeMarketDetailPrimaryAction(agent({ isAdded: true, allowDelete: true }))).toBe(
-			true,
-		)
+		expect(
+			canShowEmployeeMarketDetailPrimaryAction(agent({ isAdded: true, allowDelete: true })),
+		).toBe(true)
 		expect(
 			resolveEmployeeMarketDetailPrimaryActionLabel(
 				agent({ isAdded: true, allowDelete: true }),

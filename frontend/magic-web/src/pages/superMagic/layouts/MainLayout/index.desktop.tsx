@@ -20,9 +20,7 @@ import { useShareProject } from "./hooks/useShareProject"
 import { generateShareUrl } from "../../components/ShareManagement/utils/shareTypeHelpers"
 import magicToast from "@/components/base/MagicToaster/utils"
 
-const ShortcutKeysList = lazy(
-	() => import("@/pages/superMagic/components/ShortcutKeysList"),
-)
+const ShortcutKeysList = lazy(() => import("@/pages/superMagic/components/ShortcutKeysList"))
 
 const ShareModal = lazy(() => import("@/pages/superMagic/components/Share/Modal"))
 
@@ -183,6 +181,9 @@ function MainLayout() {
 						shareType={shareProject.shareSuccessInfo.shareInfo.share_type}
 						shareProject={shareProject.shareSuccessInfo.shareInfo.share_project}
 						projectName={shareProject.shareSuccessInfo.shareInfo.project_name}
+						createdAt={shareProject.shareSuccessInfo.shareInfo.created_at}
+						updatedAt={shareProject.shareSuccessInfo.shareInfo.updated_at}
+						viewCount={shareProject.shareSuccessInfo.shareInfo.view_count}
 					/>
 				</Suspense>
 			)}

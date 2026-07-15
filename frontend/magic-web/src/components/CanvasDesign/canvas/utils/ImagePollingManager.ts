@@ -133,6 +133,7 @@ export class ImagePollingManager {
 		this.config.canvas.imageResourceManager.primeCache(path, {
 			src: fileUrl,
 			fileName,
+			resource_version: `generated:${fileName}`,
 		})
 	}
 
@@ -179,13 +180,6 @@ export class ImagePollingManager {
 			this.config.canvas.elementManager.update(this.config.elementId, updateData, {
 				silent: false,
 			})
-
-			if (updateData.src && result.file_url) {
-				this.config.canvas.imageResourceManager.loadResource(updateData.src, {
-					variant: "preview",
-					priority: "critical",
-				})
-			}
 
 			// 发出图片结果更新事件
 			this.config.canvas.eventEmitter.emit({

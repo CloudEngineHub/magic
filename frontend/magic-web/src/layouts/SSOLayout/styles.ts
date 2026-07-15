@@ -3,7 +3,8 @@ import { createStyles } from "antd-style"
 export const useStyles = createStyles(({ css, token }) => {
 	return {
 		layout: css`
-			width: 100vw;
+			/* Use parent width so embedded WKWebView resume does not keep a stale viewport width. */
+			width: 100%;
 			height: 100%;
 			background: ${token.magicColorUsages.bg[0]};
 			background-size: cover;
@@ -73,7 +74,8 @@ export const useStyles = createStyles(({ css, token }) => {
 			margin-bottom: auto;
 
 			@media (max-width: 700px) {
-				width: 100vw;
+				/* Keep mobile login content tied to the restored WebView container width. */
+				width: 100%;
 				min-width: 375px;
 				border: none;
 				overflow: hidden;

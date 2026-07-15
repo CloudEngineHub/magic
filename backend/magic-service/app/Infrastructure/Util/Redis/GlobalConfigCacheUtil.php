@@ -86,6 +86,9 @@ class GlobalConfigCacheUtil
         return self::set(self::getGlobalConfigKey(), $data, self::TTL_GLOBAL_CONFIG);
     }
 
+    /**
+     * Delete global config data to cache.
+     */
     public static function deleteGlobalConfig(): int
     {
         return self::delete(self::getGlobalConfigKey());
@@ -116,13 +119,6 @@ class GlobalConfigCacheUtil
         return $redis->del($cacheKey);
     }
 
-    /**
-     * Delete global config cache.
-     */
-    public static function deleteGlobalConfig(): int
-    {
-        return self::delete(self::getGlobalConfigKey());
-    }
 
     /**
      * Delete global data queries cache.

@@ -27,6 +27,7 @@ import { createMessageEditorDraftKey } from "../MessageEditor/utils/draftKey"
 import { userStore } from "@/models/user"
 import { useTaskInterrupt } from "@/pages/superMagic/hooks/useTaskInterrupt"
 import { isCachedChatWorkspaceProject } from "@/pages/superMagic/utils/isChatWorkspaceProject"
+import { TaskStatus } from "@/pages/superMagic/pages/Workspace/types"
 
 /**
  * 这个组件作为项目页的编辑器组件
@@ -72,6 +73,8 @@ const ProjectPageInputContainerComponent: React.FC<ProjectPageInputContainerProp
 	const [sceneStateStore] = useState(() => createSceneStateStore())
 	const organizationCode = userStore.user.organizationCode
 	const userId = userStore.user.userInfo?.user_id
+	const canInterruptTask =
+		showLoading || selectedTopic?.task_status === TaskStatus.WAITING_FOR_USER
 	/**
 	 * 首页的话题模式选择Tab，用于创建新项目时指定项目的话题模式
 	 */
@@ -94,7 +97,7 @@ const ProjectPageInputContainerComponent: React.FC<ProjectPageInputContainerProp
 		userId,
 		isStopping: stopEventLoading,
 		setIsStopping: setStopEventLoading,
-		canInterrupt: showLoading,
+		canInterrupt: canInterruptTask,
 	})
 
 	/** 消息队列 */
@@ -201,7 +204,7 @@ const ProjectPageInputContainerComponent: React.FC<ProjectPageInputContainerProp
 			className: editPanelClassName,
 			containerClassName: editPanelContainerClassName,
 			showLoading: !!showLoading,
-			isTaskRunning: !!showLoading,
+			isTaskRunning: !!canInterruptTask,
 			stopEventLoading,
 			handleInterrupt,
 			isEmptyStatus: !!isEmptyStatus,
@@ -250,6 +253,7 @@ const ProjectPageInputContainerComponent: React.FC<ProjectPageInputContainerProp
 		editPanelClassName,
 		editPanelContainerClassName,
 		showLoading,
+		canInterruptTask,
 		stopEventLoading,
 		handleInterrupt,
 		isEmptyStatus,

@@ -107,7 +107,9 @@ export function useTopicDetailPanelController({
 			const payload = data as { fileId: string; fileData?: unknown }
 			window.setTimeout(() => {
 				// Allow messages to pass temporary fileData through the detail panel open flow.
-				detailRef.current?.openFileTab?.(payload.fileData ?? payload.fileData ?? { file_id: payload.fileId })
+				detailRef.current?.openFileTab?.(
+					payload.fileData ?? payload.fileData ?? { file_id: payload.fileId },
+				)
 			}, DETAIL_OPEN_DELAY_MS)
 			scheduleFileOpenFallback()
 		}

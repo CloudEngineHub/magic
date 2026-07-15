@@ -105,6 +105,7 @@ use Hyperf\DbConnection\Db;
 use Hyperf\Logger\LoggerFactory;
 use Psr\EventDispatcher\EventDispatcherInterface;
 use Psr\Log\LoggerInterface;
+use Psr\SimpleCache\CacheInterface;
 use RuntimeException;
 use Throwable;
 
@@ -458,8 +459,12 @@ class ProjectAppService extends AbstractAppService
 
         $projectId = (int) $requestDTO->getId();
 
-        // 获取项目信息
-        $projectEntity = $this->projectDomainService->getProject($projectId, $dataIsolation->getCurrentUserId());
+        // 获取项目信息，项目所有者和协作管理者均可更新项目基础信息
+        $projectEntity = $this->getAccessibleProjectWithManager(
+            $projectId,
+            $dataIsolation->getCurrentUserId(),
+            $dataIsolation->getCurrentOrganizationCode()
+        );
 
         if (! is_null($requestDTO->getProjectName())) {
             $projectEntity->setProjectName($requestDTO->getProjectName());
@@ -714,6 +719,34 @@ class ProjectAppService extends AbstractAppService
     public function getProjectNotUserId(int $projectId): ?ProjectEntity
     {
         return $this->projectDomainService->getProjectNotUserId($projectId);
+    }
+
+    /**
+     * 获取项目名称（带缓存），供公开免鉴权接口使用，避免高频请求直达数据库.
+     */
+    public function getProjectNameNotUserId(int $projectId): string
+    {
+        $cacheKey = 'super_magic:project:name:' . $projectId;
+        $cache = di(CacheInterface::class);
+
+        try {
+            $cached = $cache->get($cacheKey);
+            if ($cached !== null) {
+                return (string) $cached;
+            }
+        } catch (Throwable $e) {
+            $this->logger->warning('Failed to get project name cache', ['project_id' => $projectId, 'error' => $e->getMessage()]);
+        }
+
+        $projectName = $this->projectDomainService->getProjectNotUserId($projectId)->getProjectName() ?? '';
+
+        try {
+            $cache->set($cacheKey, $projectName, 60);
+        } catch (Throwable $e) {
+            $this->logger->warning('Failed to set project name cache', ['project_id' => $projectId, 'error' => $e->getMessage()]);
+        }
+
+        return $projectName;
     }
 
     public function getProjectForkCount(int $projectId): int

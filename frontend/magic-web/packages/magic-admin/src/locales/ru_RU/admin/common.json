@@ -15,6 +15,7 @@
 		"remove": "Убрать",
 		"reset": "Сбросить",
 		"save": "Сохранить",
+		"search": "Поиск",
 		"upload": "Загрузить"
 	},
 	"confirmClose": "Подтвердить закрытие",
@@ -130,6 +131,7 @@
 	"pleaseSelectPlaceholder": "Пожалуйста, выберите {{name}}",
 	"prePage": "Предыдущая страница",
 	"search": "Параметры поиска",
+	"sortOrder": "Порядок сортировки",
 	"status": "Статус",
 	"title": "{{platformName}} Административная панель",
 	"totalItems": "Всего {{total}} элементов",

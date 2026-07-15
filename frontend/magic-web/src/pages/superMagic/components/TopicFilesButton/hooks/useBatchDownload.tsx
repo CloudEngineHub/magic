@@ -18,6 +18,7 @@ import {
 } from "@tabler/icons-react"
 import { useTranslation } from "react-i18next"
 import { downloadFileWithAnchor } from "../../../utils/handleFIle"
+import type { DownloadProgressController } from "@/pages/superMagic/hooks/useDownloadProgress"
 import { getParentPathFromFileId } from "../../SelectPathModal/utils/attachmentUtils"
 import MagicModal from "@/components/base/MagicModal"
 import { MagicSystemFolderIcon } from "../components/MagicSystemFolderIcon"
@@ -69,6 +70,7 @@ interface UseBatchDownloadOptions {
 	onBatchShareClick?: (fileIds: string[]) => void
 	// 是否在项目内
 	isInProject?: boolean
+	downloadProgress?: DownloadProgressController
 }
 
 /**
@@ -101,6 +103,7 @@ export function useBatchDownload(options: UseBatchDownloadOptions) {
 		allowEdit,
 		onBatchShareClick,
 		isInProject,
+		downloadProgress,
 	} = options
 	const [batchLoading, setBatchLoading] = useState(false)
 	const { t } = useTranslation("super")
@@ -249,7 +252,7 @@ export function useBatchDownload(options: UseBatchDownloadOptions) {
 	const handleBatchDownload = async () => {
 		if (selectedItems.size === 0 || !projectId) return
 		setBatchLoading(true)
-		const toastId = createRandomUuidV4()
+		let keepLoadingForPolling = false
 		try {
 			// 收集选中的文件ID（只收集直接选中的项目，不递归展开文件夹）
 			const selectedFileIds = collectSelectedItemIds(filteredFiles, selectedItems, getItemId)
@@ -260,6 +263,39 @@ export function useBatchDownload(options: UseBatchDownloadOptions) {
 				return
 			}
 
+			const token =
+				isShareRoute || isFileShare
+					? ((window as unknown as { temporary_token?: string }).temporary_token ?? "")
+					: undefined
+
+			if (downloadProgress) {
+				await downloadProgress.startDownload({
+					projectId,
+					fileIds: selectedFileIds,
+					token,
+					label: t("topicFiles.downloading"),
+					onSuccess: () => {
+						magicToast.success({
+							content: t("topicFiles.downloadSuccess"),
+							duration: 1000,
+						})
+						exitSelectMode()
+					},
+					onError: (error) => {
+						const message = error instanceof Error ? error.message : undefined
+						magicToast.error({
+							content: message || t("topicFiles.downloadFailed"),
+							duration: 1000,
+						})
+					},
+					onCancel: () => {
+						magicToast.info(t("topicFiles.downloadAbort"))
+					},
+				})
+				return
+			}
+
+			const toastId = createRandomUuidV4()
 			magicToast.loading({
 				key: toastId,
 				content: t("topicFiles.downloading"),
@@ -270,8 +306,7 @@ export function useBatchDownload(options: UseBatchDownloadOptions) {
 			const data = await SuperMagicApi.createBatchDownload({
 				project_id: projectId,
 				file_ids: selectedFileIds,
-				// @ts-ignore
-				...(isShareRoute || isFileShare ? { token: window.temporary_token || "" } : {}),
+				token,
 			})
 
 			if (data.status === "ready" && data.download_url) {
@@ -281,12 +316,12 @@ export function useBatchDownload(options: UseBatchDownloadOptions) {
 					content: t("topicFiles.downloadSuccess"),
 					duration: 1000,
 				})
-				setBatchLoading(false)
 				exitSelectMode()
 				return
 			}
 
 			if (data.status === "processing") {
+				keepLoadingForPolling = true
 				// 每2秒轮询批量状态
 				const timer = setInterval(async () => {
 					try {
@@ -328,20 +363,21 @@ export function useBatchDownload(options: UseBatchDownloadOptions) {
 				return
 			}
 
-			setBatchLoading(false)
 			magicToast.error({
 				key: toastId,
 				content: t("topicFiles.downloadFailed"),
 				duration: 1000,
 			})
 		} catch (error) {
-			setBatchLoading(false)
 			console.error("Batch download failed:", error)
 			magicToast.error({
-				key: toastId,
 				content: t("topicFiles.downloadFailed"),
 				duration: 1000,
 			})
+		} finally {
+			if (!keepLoadingForPolling) {
+				setBatchLoading(false)
+			}
 		}
 	}
 

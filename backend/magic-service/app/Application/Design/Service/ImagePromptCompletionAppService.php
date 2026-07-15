@@ -437,7 +437,7 @@ class ImagePromptCompletionAppService extends DesignAppService
      */
     private function buildLinkOptionsFromImageOptions(array $imageOptions): array
     {
-        $imageProcessOptions = new ImageProcessOptions()->quality(80)->format('webp');
+        $imageProcessOptions = (new ImageProcessOptions())->quality(80)->format('webp');
         $crop = $imageOptions['crop'] ?? null;
         if (is_array($crop) && $crop !== []) {
             $width = (int) round((float) ($crop['width'] ?? 0));

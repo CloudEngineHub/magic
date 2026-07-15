@@ -28,6 +28,7 @@ import { CodeEditor } from "@/components/base"
 import { shadow } from "@/utils/shadow"
 import { useMemoizedFn } from "ahooks"
 import { processHtmlContent, type ProcessHtmlContentInput } from "../../contents/HTML/htmlProcessor"
+import { HTML_PREVIEW_IMAGE_PROCESS } from "../../contents/HTML/previewImageProcess"
 import { resolvePptScaleContentDimensions } from "../../contents/HTML/utils/slide-dimensions"
 import { usePPTVersionManager } from "./hooks/usePPTVersionManager"
 import { cn } from "@/lib/utils"
@@ -87,6 +88,9 @@ interface PPTSlideProps {
 	mainFileName?: string
 	/** 附件列表 */
 	attachments?: AttachmentItem[]
+	manualScale?: number | null
+	onManualScaleChange?: (scale: number | null) => void
+	onScaleRatioChange?: (scale: number) => void
 }
 
 interface PerformSaveOptions {
@@ -127,6 +131,9 @@ const PPTSlide = observer(function PPTSlide({
 	mainFileName,
 	attachments,
 	allowDownload = true,
+	manualScale,
+	onManualScaleChange,
+	onScaleRatioChange,
 }: PPTSlideProps) {
 	const { t } = useTranslation("super")
 	const isMobile = useIsMobile()
@@ -197,6 +204,7 @@ const PPTSlide = observer(function PPTSlide({
 				fileName: `slide_${index}.html`,
 				attachmentList: attachmentList,
 				html_relative_path: htmlRelativeFolderPath,
+				xMagicImageProcess: HTML_PREVIEW_IMAGE_PROCESS,
 			}
 
 			const result = await processHtmlContent(input)
@@ -807,6 +815,7 @@ const PPTSlide = observer(function PPTSlide({
 					isFullscreen={isFullscreen}
 					isEditMode={isEditMode}
 					isVisible={isActive}
+					isTabActive={isActive}
 					isSaving={isSaving}
 					saveEditContent={saveEditContent}
 					fileId={fileId}
@@ -820,6 +829,10 @@ const PPTSlide = observer(function PPTSlide({
 					slideIndex={index}
 					isPlaybackMode={isPlaybackMode}
 					className="h-[100%-40px]"
+					autoFitVerticalPadding={64}
+					manualScale={manualScale}
+					onManualScaleChange={isEditMode ? undefined : onManualScaleChange}
+					onScaleRatioChange={isActive ? onScaleRatioChange : undefined}
 					onRenderReady={handleSlideRenderReady}
 					onAppendPickingChange={setIsAppendPicking}
 				/>

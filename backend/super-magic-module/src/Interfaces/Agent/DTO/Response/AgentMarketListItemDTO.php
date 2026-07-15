@@ -115,7 +115,7 @@ class AgentMarketListItemDTO extends AbstractDTO
             'playbooks' => $this->playbooks,
             'publisher_type' => $this->publisherType,
             'publisher' => $this->publisher,
-            'category_id' => (string) $this->categoryId,
+            'category_id' => $this->categoryId === null ? null : (string) $this->categoryId,
             'is_featured' => $this->isFeatured,
             'is_added' => $this->isAdded,
             'latest_version_code' => $this->latestVersionCode,

@@ -157,13 +157,13 @@ export namespace Login {
 		authorization_code: string
 	}
 
-	export interface AppleLoginFormValues extends LoginFormCommonValues { }
+	export interface AppleLoginFormValues extends LoginFormCommonValues {}
 
-	export interface GoogleLoginFormValues extends LoginFormCommonValues { }
+	export interface GoogleLoginFormValues extends LoginFormCommonValues {}
 
-	export interface LarkRedirectFormValues extends LoginFormCommonValues { }
+	export interface LarkRedirectFormValues extends LoginFormCommonValues {}
 
-	export interface RedirectFormValues extends LoginFormCommonValues { }
+	export interface RedirectFormValues extends LoginFormCommonValues {}
 
 	/**  图片验证码账号类型 */
 	export type AccountParams =

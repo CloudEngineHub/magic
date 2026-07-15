@@ -33,8 +33,8 @@ function getJsonSignature(value: unknown): string {
 function getAttachmentListSignature(attachmentList: any[] | undefined): string {
 	if (!Array.isArray(attachmentList)) return ""
 
-	return getJsonSignature(
-		attachmentList.map((item) => ({
+	const normalize = (items: any[]): any[] =>
+		items.map((item) => ({
 			file_id: item?.file_id,
 			file_name: item?.file_name,
 			parent_id: item?.parent_id,
@@ -42,8 +42,10 @@ function getAttachmentListSignature(attachmentList: any[] | undefined): string {
 			updated_at: item?.updated_at,
 			file_version: item?.file_version,
 			display_config: item?.display_config,
-		})),
-	)
+			children: Array.isArray(item?.children) ? normalize(item.children) : undefined,
+		}))
+
+	return getJsonSignature(normalize(attachmentList))
 }
 
 /**

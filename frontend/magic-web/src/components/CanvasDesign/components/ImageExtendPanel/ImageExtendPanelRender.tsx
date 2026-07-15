@@ -459,7 +459,7 @@ export default function ImageExtendPanelRender(props: ImageExtendPanelRenderProp
 							>
 								{option.children.map((child) => (
 									<CollapsibleBlindsItem
-										key={`${option.value}-${child.label}-${
+										key={`${option.value}-${child.label}-${child.ratioValue}-${
 											child.description ?? ""
 										}`}
 										onClick={() => handlePresetSelect(child.ratioValue)}

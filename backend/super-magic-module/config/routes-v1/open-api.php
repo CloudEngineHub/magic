@@ -192,8 +192,6 @@ Router::addGroup(
         Router::addGroup('/projects', static function () {
             // 获取项目列表
             Router::get('/queries', [OpenProjectApi::class, 'index']);
-            // 获取项目基本信息
-            Router::get('/{id}', [OpenProjectApi::class, 'show']);
             // 获取项目附件列表
             Router::post('/{id}/attachments', [OpenProjectApi::class, 'getProjectAttachments']);
         });
@@ -209,3 +207,6 @@ Router::addGroup(
     },
     ['middleware' => [ApiKeyMiddleware::class]]
 );
+
+// 获取项目基本信息（公开接口，无需鉴权；放在 super-magic 鉴权分组之后，确保 /queries 静态路由先于 {id} 动态路由注册，避免 FastRoute 路由遮蔽冲突）
+Router::get('/api/v1/open-api/super-magic/projects/{id}', [OpenProjectApi::class, 'show']);

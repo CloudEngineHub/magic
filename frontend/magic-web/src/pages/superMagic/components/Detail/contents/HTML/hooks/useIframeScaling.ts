@@ -11,7 +11,8 @@ export interface IframeScalingConfig {
 	contentInjected?: boolean
 	enableHeightCalculation?: boolean
 	isVisible?: boolean
-	manualScale?: number // Manual scale factor (1.0 = 100%, null = auto)
+	manualScale?: number | null // Manual scale factor (1.0 = 100%, null = auto)
+	onManualScaleChange?: (scale: number | null) => void
 	scaleContentDimensions?: CanonicalContentDimensions | null
 	contentMetricsOverride?: {
 		contentWidth: number
@@ -20,6 +21,7 @@ export interface IframeScalingConfig {
 	} | null
 	waitForSettledContentMetrics?: boolean
 	autoFitScalePaddingFactor?: number
+	autoFitVerticalPadding?: number
 }
 
 export interface IframeScalingResult {
@@ -53,10 +55,12 @@ export function useIframeScaling(config: IframeScalingConfig): IframeScalingResu
 		enableHeightCalculation = true,
 		isVisible = true,
 		manualScale,
+		onManualScaleChange,
 		scaleContentDimensions,
 		contentMetricsOverride,
 		waitForSettledContentMetrics = false,
 		autoFitScalePaddingFactor = 1,
+		autoFitVerticalPadding = 0,
 	} = config
 
 	const [internalScaleRatio, setInternalScaleRatio] = useState(1)
@@ -73,8 +77,10 @@ export function useIframeScaling(config: IframeScalingConfig): IframeScalingResu
 	const slideCheckTimerRef = useRef<number | null>(null)
 	const heightMeasureTimerRef = useRef<number | null>(null)
 
-	// Use manual scale if provided (from prop or local state)
-	const effectiveManualScale = manualScale ?? localManualScale
+	// A parent that handles scale changes owns the manual scale, including its auto-fit null value.
+	const isManualScaleControlled = onManualScaleChange !== undefined
+	const effectiveManualScale = isManualScaleControlled ? manualScale : localManualScale
+	const shouldAutoFitFullscreenPpt = Boolean(isPptRender && isFullscreen)
 
 	const scaleRatio = internalScaleRatio
 	const verticalOffset = internalVerticalOffset
@@ -208,13 +214,19 @@ export function useIframeScaling(config: IframeScalingConfig): IframeScalingResu
 
 			let newScaleRatio: number
 
-			// Use manual scale if set, otherwise calculate auto scale
-			if (effectiveManualScale !== null && effectiveManualScale !== undefined) {
+			// Fullscreen ignores the shared manual scale and fits the complete slide to the viewport.
+			if (
+				!shouldAutoFitFullscreenPpt &&
+				effectiveManualScale !== null &&
+				effectiveManualScale !== undefined
+			) {
 				newScaleRatio = effectiveManualScale
 			} else {
 				// Calculate scale ratio based on width and height separately
 				const scaleByWidth = containerWidth / actualWidth
-				const scaleByHeight = containerHeight / actualHeight
+				const verticalPadding = Math.min(autoFitVerticalPadding, containerHeight / 3)
+				const scaleByHeight =
+					Math.max(0, containerHeight - verticalPadding * 2) / actualHeight
 
 				// Leave some breathing room on initial auto-fit.
 				newScaleRatio = Math.min(scaleByWidth, scaleByHeight) * autoFitScalePaddingFactor
@@ -248,12 +260,14 @@ export function useIframeScaling(config: IframeScalingConfig): IframeScalingResu
 			effectiveManualScale,
 			enableHeightCalculation,
 			hasSlideContainer,
+			shouldAutoFitFullscreenPpt,
 			isPptRender,
 			isVisible,
 			scaleContentDimensions,
 			contentMetricsOverride,
 			waitForSettledContentMetrics,
 			autoFitScalePaddingFactor,
+			autoFitVerticalPadding,
 			updateContainerDimensions,
 		],
 	)
@@ -468,9 +482,17 @@ export function useIframeScaling(config: IframeScalingConfig): IframeScalingResu
 	}, [calculateScaleAndDimensions, isPptRender, hasSlideContainer, scaleContentDimensions])
 
 	// Set manual scale function
-	const setManualScale = useCallback((scale: number | null) => {
-		setLocalManualScale(scale)
-	}, [])
+	const setManualScale = useCallback(
+		(scale: number | null) => {
+			if (shouldAutoFitFullscreenPpt) return
+			if (onManualScaleChange) {
+				onManualScaleChange(scale)
+				return
+			}
+			setLocalManualScale(scale)
+		},
+		[onManualScaleChange, shouldAutoFitFullscreenPpt],
+	)
 
 	// Reset to auto scale
 	const resetScale = useCallback(() => {
@@ -479,11 +501,18 @@ export function useIframeScaling(config: IframeScalingConfig): IframeScalingResu
 		if (container && (container.scrollTop !== 0 || container.scrollLeft !== 0)) {
 			container.scrollTo({ top: 0, left: 0, behavior: "instant" })
 		}
+		if (onManualScaleChange) {
+			onManualScaleChange(null)
+			return
+		}
 		setLocalManualScale(null)
-	}, [containerRef])
+	}, [containerRef, onManualScaleChange])
 
 	// Check if currently in manual zoom mode
-	const isManualZoom = effectiveManualScale !== null && effectiveManualScale !== undefined
+	const isManualZoom =
+		!shouldAutoFitFullscreenPpt &&
+		effectiveManualScale !== null &&
+		effectiveManualScale !== undefined
 
 	return {
 		scaleRatio,

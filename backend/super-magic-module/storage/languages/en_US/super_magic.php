@@ -93,6 +93,7 @@ return [
         'publish_target_value_required' => 'publish_target_value is required for current publish target type',
         'store_agent_not_found' => 'Store agent not found',
         'store_agent_already_added' => 'This store agent has already been added, duplicate addition is not allowed',
+        'category_used_by_market' => 'This category is used by market agents. Please remove the associations first.',
         // Migrated from crew.php
         'validate_failed' => 'Validation failed',
         'not_found' => 'Crew not found',
@@ -139,6 +140,7 @@ return [
         'skill_code_must_be_string' => 'Skill code must be a string',
         'category_id_must_be_integer' => 'Category ID must be an integer',
         'category_id_must_be_greater_than_zero' => 'Category ID must be greater than 0',
+        'market_category_invalid' => 'Category does not exist or does not belong to current organization',
         'ids_required' => 'ID list is required',
         'ids_must_be_array' => 'ID list must be an array',
         'playbook_id_required' => 'Playbook ID is required',

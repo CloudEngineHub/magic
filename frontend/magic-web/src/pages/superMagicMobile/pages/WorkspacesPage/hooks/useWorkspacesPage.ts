@@ -69,9 +69,15 @@ export function useWorkspacesPage(): UseWorkspacesPageReturn {
 	// 分页状态：追踪服务端总数和当前已加载到第几页
 	const [workspacesTotal, setWorkspacesTotal] = useState(0)
 	const [currentPage, setCurrentPage] = useState(1)
+	// Blocks InfiniteScroll while delete-triggered page 1 replacement is still in flight.
+	const [isReplacingFirstPageAfterDelete, setIsReplacingFirstPageAfterDelete] = useState(false)
 
 	// 加载工作空间列表（第 1 页，触发服务层的 store 更新与 isLoading 管理）
-	const { run: fetchWorkspacesPage1, loading: isLoading } = useRequest(
+	const {
+		run: fetchWorkspacesPage1,
+		runAsync: fetchWorkspacesPage1Async,
+		loading: isLoading,
+	} = useRequest(
 		async () => {
 			// 直接调 API 以便同时拿到 total，避免二次请求；手动维护 store 侧效果。
 			const res = await SuperMagicApi.getWorkspaces({
@@ -100,7 +106,7 @@ export function useWorkspacesPage(): UseWorkspacesPageReturn {
 		fetchWorkspacesPage1()
 	}, [fetchWorkspacesPage1])
 
-	// 当前工作空间列表遵循 page_size: 999 + 前端本地搜索，原始数据与过滤结果要分别保留。
+	// Current mobile list uses page_size 100; keep raw data and filtered data separate.
 	const allWorkspaces = workspaceStore.workspaces
 	const unnamedWorkspaceName = t("workspace.unnamedWorkspace")
 	const filteredWorkspaces = !debouncedSearchValue
@@ -170,7 +176,10 @@ export function useWorkspacesPage(): UseWorkspacesPageReturn {
 			const isDeletingSelectedWorkspace = workspaceStore.selectedWorkspace?.id === id
 
 			try {
-				await SuperMagicService.workspace.deleteWorkspace(id)
+				setIsReplacingFirstPageAfterDelete(true)
+				await SuperMagicService.workspace.deleteWorkspace(id, { refreshAfterDelete: false })
+				// Mobile workspace page owns page size and total state, so it must refresh page 1 itself.
+				await fetchWorkspacesPage1Async()
 				if (isDeletingSelectedWorkspace) {
 					// 列表页删除只更新当前列表，不跳详情；但若删的是当前选中工作区，
 					// 仍需清空项目/话题，避免后续页面继续引用已删除工作区下的旧上下文。
@@ -180,16 +189,18 @@ export function useWorkspacesPage(): UseWorkspacesPageReturn {
 				closeMoreSheet()
 			} catch (error) {
 				console.error("删除工作区失败:", error)
+			} finally {
+				setIsReplacingFirstPageAfterDelete(false)
 			}
 		},
-		[t, closeMoreSheet],
+		[t, closeMoreSheet, fetchWorkspacesPage1Async],
 	)
 
 	const handlePinWorkspace = useCallback(
 		async (workspace: Workspace) => {
 			try {
 				await SuperMagicService.workspace.pinWorkspace(workspace.id, !workspace.is_pinned)
-				await fetchWorkspacesPage1()
+				await fetchWorkspacesPage1Async()
 				magicToast.success(
 					workspace.is_pinned
 						? t("workspace.unpinWorkspaceSuccess")
@@ -199,7 +210,7 @@ export function useWorkspacesPage(): UseWorkspacesPageReturn {
 				console.error("置顶工作区失败:", error)
 			}
 		},
-		[t, fetchWorkspacesPage1],
+		[t, fetchWorkspacesPage1Async],
 	)
 
 	/**
@@ -233,13 +244,14 @@ export function useWorkspacesPage(): UseWorkspacesPageReturn {
 	 * 下拉刷新：重置到第 1 页并重新拉取工作空间列表。
 	 */
 	const handleRefresh = useCallback(async () => {
-		await fetchWorkspacesPage1()
-	}, [fetchWorkspacesPage1])
+		await fetchWorkspacesPage1Async()
+	}, [fetchWorkspacesPage1Async])
 
 	/**
 	 * 加载更多：请求下一页并追加到列表，不影响已选工作区。
 	 */
 	const loadMore = useCallback(async () => {
+		if (isReplacingFirstPageAfterDelete) return
 		const nextPage = currentPage + 1
 		try {
 			const res = await SuperMagicApi.getWorkspaces({
@@ -256,10 +268,13 @@ export function useWorkspacesPage(): UseWorkspacesPageReturn {
 		} catch (error) {
 			console.error("加载更多工作区失败:", error)
 		}
-	}, [currentPage, workspacesTotal])
+	}, [currentPage, isReplacingFirstPageAfterDelete, workspacesTotal])
 
 	// 是否还有更多：当前已加载数量小于服务端总数（搜索态禁用加载更多）
-	const hasMore = !debouncedSearchValue && workspaceStore.workspaces.length < workspacesTotal
+	const hasMore =
+		!isReplacingFirstPageAfterDelete &&
+		!debouncedSearchValue &&
+		workspaceStore.workspaces.length < workspacesTotal
 
 	return {
 		isLoading,

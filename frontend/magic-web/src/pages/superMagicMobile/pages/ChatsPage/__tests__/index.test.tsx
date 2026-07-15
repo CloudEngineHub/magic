@@ -217,7 +217,9 @@ vi.mock("@/pages/superMagicMobile/components/MobileShell/MobileShellSidebar", ()
 }))
 
 vi.mock("@/pages/superMagicMobile/components/MobileShell/MobileShellAppLayout", () => ({
-	MobileShellAppLayout: ({ panel }: { panel: ReactNode }) => <div data-testid="shell">{panel}</div>,
+	MobileShellAppLayout: ({ panel }: { panel: ReactNode }) => (
+		<div data-testid="shell">{panel}</div>
+	),
 }))
 
 describe("ChatsPage", () => {

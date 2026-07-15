@@ -42,7 +42,6 @@ import { useMediaScenario } from "./media/useMediaScenario"
 import { handleMediaImageUrlRequest, MEDIA_MESSAGE_TYPES } from "./media/utils"
 import { cn } from "@/lib/utils"
 import { StylePanel } from "./components/StylePanel"
-import { ZoomControls } from "./components/StylePanel/controls"
 import type { HTMLEditorV2Ref, SaveResult } from "./iframe-bridge/types/props"
 import type {
 	ImageUploadRequestPayload,
@@ -170,6 +169,10 @@ interface IsolatedHTMLRendererProps {
 	scaleContentDimensions?: CanonicalContentDimensions | null
 	waitForSettledContentMetrics?: boolean
 	autoFitScalePaddingFactor?: number
+	autoFitVerticalPadding?: number
+	manualScale?: number | null
+	onManualScaleChange?: (scale: number | null) => void
+	onScaleRatioChange?: (scale: number) => void
 	disableDynamicResourceInterception?: boolean
 	disableIframeDocumentClickBridge?: boolean // **重要** 控制HTML预览增强组件内部是否禁用 iframe 到父层的通用 DOM_CLICK 桥接
 	onRenderReady?: () => void //控制HTML预览组件的skeleton结束时机
@@ -188,6 +191,24 @@ interface IsolatedHTMLRendererProps {
 function isHtmlImagesUploadPath(path: string): boolean {
 	const normalized = normalizeProjectPath(path.trim().replace(/^\.\//, ""))
 	return normalized === "images" || normalized.startsWith("images/")
+}
+
+/**
+ * 根据目录和文件名，生成上传文件路径
+ * @param path
+ * @param fileName
+ * @returns
+ */
+function resolveImageUploadRequestPath(path: string, fileName: string): string {
+	const trimmedPath = path.trim() || "./images"
+	const pathWithoutTrailingSlash = trimmedPath.replace(/\/+$/, "")
+	const normalized = normalizeProjectPath(pathWithoutTrailingSlash.replace(/^\.\//, ""))
+	const isDirectoryPath = trimmedPath.endsWith("/") || normalized === "images"
+
+	if (!isDirectoryPath) return trimmedPath
+
+	const uploadDirectory = normalized === "images" ? "./images" : pathWithoutTrailingSlash
+	return `${uploadDirectory}/${fileName}`
 }
 
 interface MagicI18nLangSubscribeRequest {
@@ -270,6 +291,10 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 			scaleContentDimensions,
 			waitForSettledContentMetrics = false,
 			autoFitScalePaddingFactor = 1,
+			autoFitVerticalPadding = 0,
+			manualScale,
+			onManualScaleChange,
+			onScaleRatioChange,
 			disableDynamicResourceInterception = false,
 			disableIframeDocumentClickBridge = false,
 			onRenderReady,
@@ -357,7 +382,6 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 			isScaleReady,
 			isManualZoom,
 			handleScaleChange,
-			handleResetZoom,
 			getContentWrapperStyle,
 			getIframeStyle,
 		} = useZoomControls({
@@ -375,7 +399,16 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 			contentMetricsOverride: scalingContentMetrics,
 			waitForSettledContentMetrics: shouldWaitForSettledContentMetrics,
 			autoFitScalePaddingFactor,
+			autoFitVerticalPadding,
+			manualScale,
+			onManualScaleChange,
 		})
+
+		useEffect(() => {
+			if (isPptRender && isScaleReady) {
+				onScaleRatioChange?.(scaleRatio)
+			}
+		}, [isPptRender, isScaleReady, onScaleRatioChange, scaleRatio])
 
 		const buildRenderLifecycleContext = useMemoizedFn((): IframeRenderLifecycleContext => {
 			const lifecycle = renderLifecycleRef.current
@@ -1283,9 +1316,13 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 						duration: 0,
 					})
 
+					const suggestedUploadPath = isStructuredRequest(data)
+						? data.suggestedPath
+						: "./images"
+					const uploadPath = resolveImageUploadRequestPath(suggestedUploadPath, file.name)
 					const uploadResult = await uploadImageFileToProject({
 						file,
-						path: isStructuredRequest(data) ? data.suggestedPath : "./images",
+						path: uploadPath,
 						fileSize: file.size,
 					})
 					const previewUrl = await fileToBase64(file)
@@ -1445,6 +1482,7 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 				Boolean(messageType) &&
 				[
 					"iframeReady",
+					"pageLoaded",
 					"contentLoaded",
 					"domReady",
 					"renderComplete",
@@ -1507,13 +1545,7 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 						origin: event.origin,
 					})
 					setIframeLoaded(true)
-				} else if (
-					event.data &&
-					event.data.type === "pageLoaded" &&
-					(externalRenderSiteOrigin
-						? event.origin === externalRenderSiteOrigin
-						: isExpectedSource)
-				) {
+				} else if (event.data && event.data.type === "pageLoaded") {
 					// Shell load 后再次兜底置为 ready，避免早期 iframeReady 丢失。
 					reportRenderLifecycleStage("page_loaded", {
 						origin: event.origin,
@@ -1941,17 +1973,6 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 								toolbarClassName,
 							)}
 						/>
-						{/* 缩放控件 - 绝对定位在工具栏下方 */}
-						{isPptRender && (
-							<div className="absolute bottom-[10px] right-[10px] z-50 rounded-lg border border-border bg-card/95 p-2 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-card/60">
-								<ZoomControls
-									currentScale={scaleRatio}
-									onScaleChange={handleScaleChange}
-									onResetZoom={handleResetZoom}
-									disabled={isSaving}
-								/>
-							</div>
-						)}
 					</>
 				)}
 

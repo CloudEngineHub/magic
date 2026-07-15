@@ -158,6 +158,7 @@ function CopyProjectModal({ open, onCancel, projectData, onCopySuccess }: CopyPr
 			const response = await SuperMagicApi.copyShareResource({
 				resource_id: resourceIdToUse,
 				target_workspace_id: selectedWorkspace.id,
+				target_project_name: newProjectName.trim(),
 				password: projectData.password,
 			})
 

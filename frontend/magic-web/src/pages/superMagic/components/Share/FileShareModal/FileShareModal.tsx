@@ -63,6 +63,9 @@ interface FileShareModalProps {
 		shareProject?: boolean // 是否分享整个项目
 		projectName?: string // 项目原始名称（用于项目分享时显示）
 		fileIds?: string[] // 文件ID列表，用于查询文件详情
+		createdAt?: string
+		updatedAt?: string
+		viewCount?: number
 	}) => void // 保存成功回调，传递成功数据
 	onCancelShareSuccess?: () => void // 取消分享成功回调
 	fileShareUiConfig?: FileShareUiConfig
@@ -747,6 +750,9 @@ export default memo(function FileShareModal(props: FileShareModalProps) {
 				shareProject: effectiveShareProject, // 传递 shareProject
 				projectName: projectName, // 传递项目原始名称
 				fileIds: apiResult?.file_ids || submittedFileIds, // 传递实际提交的 file_ids
+				createdAt: apiResult?.created_at ?? apiResult?.data?.created_at,
+				updatedAt: apiResult?.updated_at ?? apiResult?.data?.updated_at,
+				viewCount: apiResult?.view_count ?? apiResult?.data?.view_count,
 			})
 		} catch (error) {
 			console.error("Failed to save share settings:", error)
@@ -837,7 +843,10 @@ export default memo(function FileShareModal(props: FileShareModalProps) {
 			<>
 				<div className={styles.mobileContainer} data-testid="file-share-modal-mobile">
 					{/* Share configuration fields */}
-					<div className={styles.mobileShareOptions} data-testid="file-share-mobile-options">
+					<div
+						className={styles.mobileShareOptions}
+						data-testid="file-share-mobile-options"
+					>
 						<div className="flex flex-col gap-3" data-testid="file-share-mobile-fields">
 							{/* File Selection Card - 单文件模式下不显示 */}
 							<div
@@ -965,9 +974,9 @@ export default memo(function FileShareModal(props: FileShareModalProps) {
 		<div className="flex flex-col" data-testid="file-share-modal">
 			<div className={styles.body} data-testid="file-share-modal-body">
 				{/* Left: File selector - 单文件模式下不显示 */}
-				<div 
-					className={styles.fileListSection} 
-					style={{ width: leftPanelWidth }} 
+				<div
+					className={styles.fileListSection}
+					style={{ width: leftPanelWidth }}
 					data-testid="file-share-file-list-section"
 				>
 					{!hideShareProjectToggle ? (
@@ -1007,17 +1016,27 @@ export default memo(function FileShareModal(props: FileShareModalProps) {
 					/>
 
 					{/* Resize Handle */}
-					<div className={styles.resizeHandle} onMouseDown={handleResizeMouseDown} data-testid="handle-resize-mouse-down">
+					<div
+						className={styles.resizeHandle}
+						onMouseDown={handleResizeMouseDown}
+						data-testid="handle-resize-mouse-down"
+					>
 						<div className="resize-bar" />
 						<div className="resize-bar" style={{ marginLeft: 2 }} />
 					</div>
 				</div>
 
 				{/* Right: Statistics + Share type selector */}
-				<div className={styles.shareOptionsSection} data-testid="file-share-options-section">
+				<div
+					className={styles.shareOptionsSection}
+					data-testid="file-share-options-section"
+				>
 					{/* Share configuration fields */}
 					<div className={styles.selectorContainer}>
-						<div className="flex flex-col gap-3" data-testid="file-share-settings-fields">
+						<div
+							className="flex flex-col gap-3"
+							data-testid="file-share-settings-fields"
+						>
 							{/* Share Name */}
 							<ShareNameField
 								value={shareName}

@@ -10,11 +10,11 @@ import { downloadFileWithAnchor } from "@/pages/superMagic/utils/handleFIle"
 import { DownloadImageMode } from "../../../pages/Workspace/types"
 import magicToast from "@/components/base/MagicToaster/utils"
 import { toast } from "sonner"
-import { SuperMagicApi } from "@/apis"
 import {
 	documentExportService,
 	type DocumentExport,
 } from "@/pages/superMagic/services/documentExport"
+import { useDownloadProgress } from "@/pages/superMagic/hooks/useDownloadProgress"
 
 interface Attachment {
 	file_id?: string
@@ -86,6 +86,7 @@ function useFileExport({
 	const [isExporting, setIsExporting] = useState(false)
 	const [exportProgress, setExportProgress] = useState(0)
 	const toastIdRef = useRef<string | number | null>(null)
+	const downloadProgress = useDownloadProgress()
 
 	const startExport = () => {
 		setIsExporting(true)
@@ -160,55 +161,21 @@ function useFileExport({
 
 		// 如果是文件夹或多个文件，使用批量下载
 		if (isFolder || fileIds.length > 1) {
-			startExport()
-
-			try {
-				const data = await SuperMagicApi.createBatchDownload({
-					project_id: selectedProject?.id || projectId,
-					file_ids: fileIds,
-				})
-
-				if (data.status === "ready" && data.download_url) {
-					downloadFileWithAnchor(data.download_url)
-					endExport()
-					return
-				}
-
-				if (data.status === "processing") {
-					// 轮询批量下载状态
-					const timer = setInterval(async () => {
-						try {
-							const checkData = await SuperMagicApi.checkBatchDownloadStatus(
-								data.batch_key,
-							)
-
-							if (checkData.status === "processing") {
-								onProgress(checkData.progress || 0)
-							}
-
-							if (checkData?.status === "ready") {
-								clearInterval(timer)
-								if (checkData.download_url) {
-									downloadFileWithAnchor(checkData.download_url)
-									endExport()
-								}
-							}
-
-							if (checkData?.status === "failed") {
-								clearInterval(timer)
-								onError()
-							}
-						} catch (error) {
-							clearInterval(timer)
-							console.error("Batch download check failed:", error)
-							onError()
-						}
-					}, 2000)
-				}
-			} catch (error) {
-				console.error("Batch download failed:", error)
-				onError()
-			}
+			await downloadProgress.startDownload({
+				projectId: selectedProject?.id || projectId,
+				fileIds,
+				label: t("topicFiles.downloading"),
+				onSuccess: () => {
+					magicToast.success(t("topicFiles.downloadSuccess"))
+				},
+				onError: (error) => {
+					console.error("Batch download failed:", error)
+					magicToast.error(t("topicFiles.downloadFailed"))
+				},
+				onCancel: () => {
+					magicToast.info(t("topicFiles.downloadAbort"))
+				},
+			})
 		} else {
 			// 单文件直接下载
 			getTemporaryDownloadUrl({
@@ -341,7 +308,7 @@ function useFileExport({
 	}
 
 	return {
-		isExporting,
+		isExporting: isExporting || downloadProgress.isDownloading,
 		exportProgress,
 		exportFile,
 		exportPdf,

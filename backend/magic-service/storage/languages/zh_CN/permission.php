@@ -56,6 +56,7 @@ return [
         'platform_setting_platform_info' => '平台信息',
         'platform_setting_maintenance' => '维护管理',
         'platform_setting_application' => '应用菜单',
+        'platform_slides_template' => '幻灯片模板',
         'platform_organization' => '组织管理',
         'platform_organization_list' => '组织列表',
         'platform_user_list' => '平台用户列表',

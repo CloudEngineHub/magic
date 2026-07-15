@@ -15,6 +15,7 @@
 		"remove": "Gỡ bỏ",
 		"reset": "Đặt lại",
 		"save": "Lưu",
+		"search": "Tìm kiếm",
 		"upload": "Tải lên"
 	},
 	"confirmClose": "Xác nhận Đóng",
@@ -130,6 +131,7 @@
 	"pleaseSelectPlaceholder": "Vui lòng chọn {{name}}",
 	"prePage": "Trang Trước",
 	"search": "Tùy chọn Tìm kiếm",
+	"sortOrder": "Thứ tự sắp xếp",
 	"status": "Trạng thái",
 	"title": "{{platformName}} Bảng Điều Khiển Quản Trị",
 	"totalItems": "Tổng {{total}} mục",

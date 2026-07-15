@@ -1,18 +1,13 @@
 import { useMemo } from "react"
-import type { SkillPanelConfig } from "../panels/types"
 import { useSceneStateStore } from "../stores"
-import { SceneEditorKey } from "../../../types/skill"
 import { TopicMode } from "@/pages/superMagic/pages/Workspace/TopicMode"
-
-/** Config with panels (SkillConfig) or scenes_config (PlaybookConfig) */
-interface ConfigWithPanels {
-	panels?: SkillPanelConfig[]
-	config?: {
-		scenes_config?: Record<string, SkillPanelConfig | undefined>
-		editor_type?: SceneEditorKey
-	}
-	placeholder?: string
-}
+import { roleStore } from "@/pages/superMagic/stores/RoleStore"
+import {
+	deriveCurrentSceneConfig,
+	resolveCurrentSceneConfigSource,
+	shouldUseSlidesFixedScene,
+} from "./currentSceneConfigResolver"
+import { useSlidesTemplateState } from "../scenes/Slides/useSlidesTemplateState"
 
 /**
  * Returns current scene skill config, loading state, and derived panels.
@@ -25,23 +20,20 @@ interface UseCurrentSceneSkillOptions {
 export function useCurrentSceneConfig(options: UseCurrentSceneSkillOptions = {}) {
 	const sceneStateStore = useSceneStateStore()
 
-	const isRecordSummaryMode = options.topicMode === TopicMode.RecordSummary
-	const sceneConfig = sceneStateStore.currentSceneConfig as ConfigWithPanels | undefined
-	const isConfigLoading = sceneStateStore.isLoading
+	const effectiveTopicMode = options.topicMode ?? roleStore.currentRole
+	const isSlidesFixedScene = shouldUseSlidesFixedScene(effectiveTopicMode)
+	const slidesTemplateState = useSlidesTemplateState(isSlidesFixedScene)
+	const { sceneConfig, isConfigLoading } = resolveCurrentSceneConfigSource({
+		isSlidesFixedScene,
+		sceneStoreConfig: sceneStateStore.currentSceneConfig,
+		sceneStoreLoading: sceneStateStore.isLoading,
+		slidesSceneConfig: slidesTemplateState.sceneConfig,
+		slidesSceneLoading: slidesTemplateState.isLoading,
+	})
 
 	const configs = useMemo(() => {
-		return {
-			panels: Object.values(sceneConfig?.config?.scenes_config || {}).filter(
-				Boolean,
-			) as SkillPanelConfig[],
-			editorType: sceneConfig
-				? (sceneConfig.config?.editor_type ?? SceneEditorKey.General)
-				: isRecordSummaryMode
-					? SceneEditorKey.RecordSummary
-					: undefined,
-			placeholder: sceneConfig?.placeholder,
-		}
-	}, [isRecordSummaryMode, sceneConfig])
+		return deriveCurrentSceneConfig(sceneConfig, effectiveTopicMode)
+	}, [effectiveTopicMode, sceneConfig])
 
 	return {
 		sceneConfig,

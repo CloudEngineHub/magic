@@ -16,72 +16,67 @@
  * (`no-restricted-imports`, catches `@enterprise/x`) are declared, so the
  * boundary holds regardless of how the import is written.
  *
- * To adjust a boundary, edit ONLY the `LAYER_ALIASES` / `LAYERS` tables
- * below — the ESLint overrides are generated from them.
+ * To adjust a boundary, edit ONLY the `RUNTIME_LAYERS` /
+ * `FORBIDDEN_NON_RUNTIME_DIRS_BY_LAYER` tables below — the ESLint overrides
+ * are generated from them.
  */
 
 /**
- * Maps a logical layer to its physical directory + the path alias that
- * points at that layer. `@/*` intentionally resolves to `src` (see tsconfig).
+ * Ordered from baseline to most specific. Later layers may depend on earlier
+ * layers; earlier layers must not depend on later layers.
+ *
+ * `@/*` intentionally resolves to `src` (see tsconfig), while overlay aliases
+ * point at explicit layer roots.
  */
-const LAYER_ALIASES = {
-	src: { dir: "src", alias: "@" },
-	enterprise: { dir: "enterprise", alias: "@enterprise" },
-	customer: { dir: "customer", alias: "@customer" },
-}
-
-/**
- * Non-source directories that application code must never import from.
- * These are build/test tooling zones, not runtime layers.
- */
-const NON_SOURCE_ZONES = ["plugins", "scripts", "test", "types", "vite"]
-
-/**
- * Declares, per layer:
- *   - `forbidLayers`: which OTHER runtime layers it may not import from.
- *   - `forbidDirs`:   which non-source directories it may not import from.
- * Anything not listed is allowed, so `customer` (may reach every layer) only
- * inherits the shared non-source restriction.
- */
-const LAYERS = [
-	{
-		name: "src",
-		forbidLayers: ["enterprise", "customer"],
-		forbidDirs: NON_SOURCE_ZONES,
-	},
+const RUNTIME_LAYERS = [
+	{ name: "src", sourceDir: "src", rootDir: "src", alias: "@" },
 	{
 		name: "enterprise",
-		forbidLayers: ["customer"],
-		forbidDirs: [],
+		sourceDir: "enterprise/src",
+		rootDir: "enterprise",
+		alias: "@enterprise",
 	},
 	{
 		name: "customer",
-		forbidLayers: [],
-		forbidDirs: [],
+		sourceDir: "customer/src",
+		rootDir: "customer",
+		alias: "@customer",
 	},
 ]
 
+/**
+ * Non-runtime directories blocked per source layer. Today this only protects
+ * the open-source baseline from reaching tooling zones; add layer-specific keys
+ * if enterprise/customer source should share the same restriction.
+ */
+const FORBIDDEN_NON_RUNTIME_DIRS_BY_LAYER = {
+	src: ["plugins", "scripts", "test", "types", "vite"],
+}
+
+function getForbiddenRuntimeLayers(layerIndex) {
+	return RUNTIME_LAYERS.slice(layerIndex + 1)
+}
+
 function buildRestrictedImportPatterns(forbiddenLayers, targetLabel) {
-	return forbiddenLayers.flatMap((layerName) => {
-		const { alias, dir } = LAYER_ALIASES[layerName]
+	return forbiddenLayers.flatMap(({ alias, rootDir }) => {
 		return [
 			{
 				group: [alias, `${alias}/*`, `${alias}/**`],
 				message: `Files in "${targetLabel}" cannot import from "${alias}/*".`,
 			},
 			{
-				group: [dir, `${dir}/*`, `${dir}/**`],
-				message: `Files in "${targetLabel}" cannot import from "${dir}/".`,
+				group: [rootDir, `${rootDir}/*`, `${rootDir}/**`],
+				message: `Files in "${targetLabel}" cannot import from "${rootDir}/".`,
 			},
 		]
 	})
 }
 
 function buildRestrictedPathZones(forbiddenLayers, forbiddenDirs, targetLabel, targetSrcDir) {
-	const layerZones = forbiddenLayers.map((layerName) => ({
+	const layerZones = forbiddenLayers.map(({ rootDir }) => ({
 		target: `./${targetSrcDir}`,
-		from: `./${LAYER_ALIASES[layerName].dir}`,
-		message: `Files in "${targetLabel}" cannot import from "${LAYER_ALIASES[layerName].dir}/".`,
+		from: `./${rootDir}`,
+		message: `Files in "${targetLabel}" cannot import from "${rootDir}/".`,
 	}))
 
 	const dirZones = forbiddenDirs.map((dirName) => ({
@@ -93,22 +88,27 @@ function buildRestrictedPathZones(forbiddenLayers, forbiddenDirs, targetLabel, t
 	return [...layerZones, ...dirZones]
 }
 
-function createLayerOverride({ name, forbidLayers, forbidDirs }) {
-	// `src` lives at the repo root (files: "src/**"); the overlay layers live
-	// under "<layer>/src/**". Path zones always target the concrete src dir.
-	const targetSrcDir = name === "src" ? "src" : `${LAYER_ALIASES[name].dir}/src`
+function createLayerOverride(layer, layerIndex) {
+	const forbiddenLayers = getForbiddenRuntimeLayers(layerIndex)
+	const forbiddenDirs = FORBIDDEN_NON_RUNTIME_DIRS_BY_LAYER[layer.name] ?? []
+	const targetSrcDir = layer.sourceDir
 	const targetLabel = `${targetSrcDir}/`
 	const rules = {}
 
-	const zones = buildRestrictedPathZones(forbidLayers, forbidDirs, targetLabel, targetSrcDir)
+	const zones = buildRestrictedPathZones(
+		forbiddenLayers,
+		forbiddenDirs,
+		targetLabel,
+		targetSrcDir,
+	)
 	if (zones.length > 0) {
 		rules["import/no-restricted-paths"] = ["error", { zones }]
 	}
 
-	if (forbidLayers.length > 0) {
+	if (forbiddenLayers.length > 0) {
 		rules["no-restricted-imports"] = [
 			"error",
-			{ patterns: buildRestrictedImportPatterns(forbidLayers, targetLabel) },
+			{ patterns: buildRestrictedImportPatterns(forbiddenLayers, targetLabel) },
 		]
 	}
 
@@ -118,17 +118,12 @@ function createLayerOverride({ name, forbidLayers, forbidDirs }) {
 	}
 }
 
-const layerImportBoundaryOverrides = LAYERS.map(createLayerOverride).filter(
+const layerImportBoundaryOverrides = RUNTIME_LAYERS.map(createLayerOverride).filter(
 	(override) => Object.keys(override.rules).length > 0,
 )
 
 module.exports = {
-	LAYER_ALIASES,
-	LAYERS,
-	NON_SOURCE_ZONES,
+	RUNTIME_LAYERS,
+	FORBIDDEN_NON_RUNTIME_DIRS_BY_LAYER,
 	layerImportBoundaryOverrides,
-	// Backward-compatible / explicit named exports.
-	srcImportBoundaryOverride: createLayerOverride(LAYERS[0]),
-	enterpriseImportBoundaryOverride: createLayerOverride(LAYERS[1]),
-	customerImportBoundaryOverride: createLayerOverride(LAYERS[2]),
 }
