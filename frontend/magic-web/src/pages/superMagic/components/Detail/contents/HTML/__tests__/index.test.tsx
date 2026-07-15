@@ -5,6 +5,7 @@ import {
 	isDashboardTemplateShellReferencePath,
 	resolveHtmlPreviewBundledTemplate,
 } from "../html-preview-bundled-shell"
+import { HTML_PREVIEW_IMAGE_PROCESS } from "../previewImageProcess"
 import HTML from "../index"
 
 const mockIsolatedHTMLRendererProps = vi.hoisted(() => vi.fn())
@@ -557,6 +558,7 @@ describe("HTML", () => {
 		expect(mockProcessHtmlContent).toHaveBeenCalledWith(
 			expect.objectContaining({
 				htmlPreviewBundledTemplate: "dashboard",
+				xMagicImageProcess: HTML_PREVIEW_IMAGE_PROCESS,
 			}),
 		)
 	})
@@ -589,6 +591,7 @@ describe("HTML", () => {
 		expect(mockProcessHtmlContent).toHaveBeenCalledWith(
 			expect.objectContaining({
 				htmlPreviewBundledTemplate: undefined,
+				xMagicImageProcess: HTML_PREVIEW_IMAGE_PROCESS,
 			}),
 		)
 	})

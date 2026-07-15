@@ -28,6 +28,7 @@ import { CodeEditor } from "@/components/base"
 import { shadow } from "@/utils/shadow"
 import { useMemoizedFn } from "ahooks"
 import { processHtmlContent, type ProcessHtmlContentInput } from "../../contents/HTML/htmlProcessor"
+import { HTML_PREVIEW_IMAGE_PROCESS } from "../../contents/HTML/previewImageProcess"
 import { resolvePptScaleContentDimensions } from "../../contents/HTML/utils/slide-dimensions"
 import { usePPTVersionManager } from "./hooks/usePPTVersionManager"
 import { cn } from "@/lib/utils"
@@ -197,6 +198,7 @@ const PPTSlide = observer(function PPTSlide({
 				fileName: `slide_${index}.html`,
 				attachmentList: attachmentList,
 				html_relative_path: htmlRelativeFolderPath,
+				xMagicImageProcess: HTML_PREVIEW_IMAGE_PROCESS,
 			}
 
 			const result = await processHtmlContent(input)
