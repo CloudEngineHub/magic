@@ -8,6 +8,7 @@ import {
 import type { PluginWindowPosition } from "./types"
 
 const PLUGIN_LIST_PANEL_SELECTOR = "[data-canvas-plugin-list-panel]"
+const PLUGIN_WINDOW_SELECTOR = "[data-canvas-plugin-window]"
 const SHARED_POSITION_CACHE_KEY = `${PLUGIN_PANEL_POSITION_CACHE_PREFIX}shared`
 
 export function getInitialPosition(container: HTMLElement): PluginWindowPosition {
@@ -29,6 +30,23 @@ export function saveCachedPosition(position: PluginWindowPosition): void {
 	} catch (error) {
 		console.warn("[PluginPanel] Failed to cache plugin panel position.", error)
 	}
+}
+
+export function resetCachedPositionIfCoveredByPluginList(): boolean {
+	if (typeof document === "undefined") return false
+	const pluginWindow = document.querySelector<HTMLElement>(PLUGIN_WINDOW_SELECTOR)
+	const pluginListPanel = document.querySelector<HTMLElement>(PLUGIN_LIST_PANEL_SELECTOR)
+	if (!pluginWindow || !pluginListPanel) return false
+	if (
+		!areRectsOverlapping(
+			pluginWindow.getBoundingClientRect(),
+			pluginListPanel.getBoundingClientRect(),
+		)
+	) {
+		return false
+	}
+	clearCachedPosition()
+	return true
 }
 
 export function clampPositionToContainer(
@@ -53,6 +71,24 @@ export function clampPositionToContainer(
 		x: Math.min(Math.max(PLUGIN_WINDOW_MARGIN, position.x), maxX),
 		y: Math.min(Math.max(PLUGIN_WINDOW_MARGIN, position.y), maxY),
 	}
+}
+
+function clearCachedPosition(): void {
+	if (typeof window === "undefined") return
+	try {
+		window.localStorage.removeItem(SHARED_POSITION_CACHE_KEY)
+	} catch (error) {
+		console.warn("[PluginPanel] Failed to clear cached plugin panel position.", error)
+	}
+}
+
+function areRectsOverlapping(first: DOMRect, second: DOMRect): boolean {
+	return (
+		first.left < second.right &&
+		first.right > second.left &&
+		first.top < second.bottom &&
+		first.bottom > second.top
+	)
 }
 
 /* 获取插件列表面板锚点位置 */

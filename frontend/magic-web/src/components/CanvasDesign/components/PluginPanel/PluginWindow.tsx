@@ -347,6 +347,7 @@ export const PluginWindow = memo(function PluginWindow({
 			className={styles.pluginWindow}
 			style={{ transform: `translate3d(${position.x}px, ${position.y}px, 0)` }}
 			data-canvas-ui-component
+			data-canvas-plugin-window
 			onPointerDown={handlePluginWindowPointerDown}
 		>
 			<input
