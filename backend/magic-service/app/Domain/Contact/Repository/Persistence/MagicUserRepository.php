@@ -440,6 +440,7 @@ readonly class MagicUserRepository implements MagicUserRepositoryInterface
     {
         $users = $this->userModel::query()
             ->whereIn('magic_id', $magicIds)
+            ->where('status', AccountStatus::Normal->value)
             ->whereNull('deleted_at');
         $users = Db::select($users->toSql(), $users->getBindings());
         $userEntities = [];
