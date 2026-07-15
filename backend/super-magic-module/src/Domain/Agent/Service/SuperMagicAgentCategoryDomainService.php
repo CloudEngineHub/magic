@@ -72,12 +72,9 @@ class SuperMagicAgentCategoryDomainService
     /** @return array<array{id:int, name_i18n:array, logo:?string, sort_order:int, status:int, crew_count:int}> */
     public function getCategoriesWithCrewCount(): array
     {
-        $categories = $this->categoryRepository->findAll();
+        $categories = $this->categoryRepository->findEnabled();
         $categoryIds = [];
         foreach ($categories as $category) {
-            if ($category->getStatus() !== 1) {
-                continue;
-            }
             if ($category->getId() !== null) {
                 $categoryIds[] = $category->getId();
             }
@@ -86,11 +83,9 @@ class SuperMagicAgentCategoryDomainService
         $crewCounts = $this->marketRepository->countPublishedByCategoryIds($categoryIds);
         $result = [];
         foreach ($categories as $category) {
-            if ($category->getStatus() !== 1) {
-                continue;
-            }
             $categoryId = $category->getId();
-            if ($categoryId === null) {
+            $crewCount = $crewCounts[$categoryId] ?? 0;
+            if ($crewCount === 0) {
                 continue;
             }
 
@@ -100,7 +95,7 @@ class SuperMagicAgentCategoryDomainService
                 'logo' => $category->getLogo(),
                 'sort_order' => $category->getSortOrder(),
                 'status' => $category->getStatus(),
-                'crew_count' => $crewCounts[$categoryId] ?? 0,
+                'crew_count' => $crewCount,
             ];
         }
 

@@ -23,6 +23,9 @@ interface AgentCategoryRepositoryInterface
     /** @return AgentCategoryEntity[] */
     public function findByQuery(AgentCategoryQuery $query): array;
 
+    /** @return AgentCategoryEntity[] */
+    public function findEnabled(): array;
+
     public function save(AgentCategoryEntity $entity): AgentCategoryEntity;
 
     public function deleteById(int $id): bool;
