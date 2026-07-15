@@ -1,5 +1,4 @@
 import { memo, useCallback, useMemo, useRef, useState } from "react"
-import dayjs from "dayjs"
 import { clipboard } from "@/utils/clipboard-helpers"
 import { useTranslation } from "react-i18next"
 import { QRCode } from "antd"
@@ -56,12 +55,6 @@ interface ShareSuccessModalProps {
 	createdAt?: string
 	updatedAt?: string
 	viewCount?: number
-}
-
-function formatShareMetadataDate(value?: string): string {
-	if (!value) return "-"
-	const parsed = dayjs(value)
-	return parsed.isValid() ? parsed.format("YYYY-MM-DD HH:mm") : value
 }
 
 const useStyles = createStyles(({ token }) => ({
@@ -229,8 +222,8 @@ export default memo(function ShareSuccessModal(props: ShareSuccessModalProps) {
 	const [actionsPopupVisible, setActionsPopupVisible] = useState(false)
 	const showShareMetadata =
 		createdAt !== undefined || updatedAt !== undefined || viewCount !== undefined
-	const createdAtText = formatShareMetadataDate(createdAt)
-	const updatedAtText = formatShareMetadataDate(updatedAt)
+	const createdAtText = createdAt || "-"
+	const updatedAtText = updatedAt || "-"
 	const viewCountText = String(viewCount ?? 0)
 
 	// ===== 共享的计算逻辑 =====
