@@ -22,7 +22,7 @@ import { cn } from "@/lib/utils"
 import MagicEllipseWithTooltip from "@/components/base/MagicEllipseWithTooltip/MagicEllipseWithTooltip"
 import { useShareItemActions } from "../hooks/useShareItemActions"
 import { useShareSuccessModal } from "../hooks/useShareSuccessModal"
-import { isMagicApp } from "@/utils/devices"
+import { isNoHoverCoarsePointer } from "@/utils/devices"
 
 // 垂直分隔线组件
 function VerticalSeparator() {
@@ -59,6 +59,8 @@ function FileShareListNew({
 	const [selectedItem, setSelectedItem] = useState<FileShareItem | ProjectShareItem | null>(null)
 	const [hoveredId, setHoveredId] = useState<string | null>(null)
 	const containerRef = useRef<HTMLDivElement>(null)
+	// No-hover touch layouts need the row action trigger pinned without waiting for hover.
+	const shouldShowRowActionsWithoutHover = isNoHoverCoarsePointer()
 
 	// 使用 ShareSuccessModal hook
 	const shareSuccessModal = useShareSuccessModal()
@@ -124,8 +126,8 @@ function FileShareListNew({
 			<div ref={containerRef} className="flex flex-col gap-2">
 				{data.map((item) => {
 					const isHovered = hoveredId === item.resource_id
-					// Magic App desktop layout has no dependable hover, so pin the action at row end.
-					const showActions = (isHovered || isMagicApp) && !item.deleted_at
+					const showActions =
+						(isHovered || shouldShowRowActionsWithoutHover) && !item.deleted_at
 					const badgeStyles = getShareTypeBadgeStyles(item.share_type)
 					const remainingDays = getRemainingDays(item.expire_at)
 

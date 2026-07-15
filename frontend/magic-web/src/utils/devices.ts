@@ -43,6 +43,14 @@ export const isMobile = (() => {
 	return userAgentMobile || (hasTouchScreen && isSmallViewport())
 })()
 
+/**
+ * Detects touch-first layouts that cannot rely on CSS hover to reveal row actions.
+ */
+export function isNoHoverCoarsePointer(): boolean {
+	if (typeof window === "undefined" || typeof window.matchMedia !== "function") return false
+	return window.matchMedia("(hover: none) and (pointer: coarse)").matches
+}
+
 /** * 是否在 Magic 移动客户端下 * */
 export const isMagicApp = (() => {
 	return /magic-ios|magic-android/i.test(navigator.userAgent)
@@ -154,7 +162,8 @@ export async function getDeviceInfo(i18n: i18n): Promise<Common.DeviceInfo> {
 	let deviceInfo = [
 		device.vendor,
 		device.model,
-		`${currentPlatform ? platformMapping[currentPlatform as keyof typeof platformMapping] : ""
+		`${
+			currentPlatform ? platformMapping[currentPlatform as keyof typeof platformMapping] : ""
 		}`,
 	]
 		.filter((attr) => !!attr)

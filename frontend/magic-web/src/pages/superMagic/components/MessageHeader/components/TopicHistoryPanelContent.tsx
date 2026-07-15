@@ -48,7 +48,7 @@ import { useTopicHistoryGroupedViewModel } from "./useTopicHistoryGroupedViewMod
 import { resolveTopicTaskStatus } from "@/pages/superMagic/utils/topicHistory"
 import statusPollingService from "@/pages/superMagic/services/statusPollingService"
 import type { SuperAgentTopicStatusItem } from "@/apis/modules/superMagic"
-import { isMagicApp } from "@/utils/devices"
+import { isNoHoverCoarsePointer } from "@/utils/devices"
 
 export interface TopicHistoryPanelContentProps {
 	topics: Topic[]
@@ -127,8 +127,8 @@ function TopicHistoryPanelContentInner({
 	const [topicStatusPatches, setTopicStatusPatches] = useState<
 		Record<string, Pick<Topic, "task_status" | "status" | "has_unread">>
 	>({})
-	// Magic App WebView on iPad keeps the desktop layout, but touch input has no reliable hover state.
-	const useAppTouchActions = isMagicApp
+	// Touch-first desktop layouts need row actions without relying on hover.
+	const shouldShowTopicActionsWithoutHover = isNoHoverCoarsePointer()
 	const topicStatusPollerIdRef = useRef(
 		`topic-history-panel-${Math.random().toString(36).slice(2)}`,
 	)
@@ -350,7 +350,7 @@ function TopicHistoryPanelContentInner({
 	function renderTopicActions(topic: Topic, isActionVisible: boolean) {
 		const patchedTopic = getTopicWithStatusPatch(topic)
 		const isDeleteDisabled = !canDeleteTopic || recordSummaryStore.isRecordingTopic(topic.id)
-		const canShowPinMenuItem = useAppTouchActions && !topic.is_archived
+		const canShowPinMenuItem = shouldShowTopicActionsWithoutHover && !topic.is_archived
 
 		return (
 			<div
@@ -501,7 +501,7 @@ function TopicHistoryPanelContentInner({
 		// 已归档话题不开放置顶入口，避免用户对归档数据执行排序类操作。
 		const canShowPinAction = !topic.is_archived
 		const isActionVisible =
-			(useAppTouchActions && editingTopicId !== topic.id) ||
+			(shouldShowTopicActionsWithoutHover && editingTopicId !== topic.id) ||
 			hoveredTopicId === topic.id ||
 			openMenuTopicId === topic.id ||
 			openContextMenuTopicId === topic.id ||
@@ -549,11 +549,11 @@ function TopicHistoryPanelContentInner({
 							setOpenMenuTopicId(null)
 						}}
 						onMouseEnter={() => {
-							if (useAppTouchActions) return
+							if (shouldShowTopicActionsWithoutHover) return
 							setHoveredTopicId(topic.id)
 						}}
 						onMouseLeave={() => {
-							if (useAppTouchActions) return
+							if (shouldShowTopicActionsWithoutHover) return
 							if (
 								openMenuTopicId !== topic.id &&
 								openContextMenuTopicId !== topic.id
@@ -565,7 +565,7 @@ function TopicHistoryPanelContentInner({
 						data-selected={topic.id === selectedTopicId}
 					>
 						<div className="flex size-4 shrink-0 items-center justify-center">
-							{!useAppTouchActions &&
+							{!shouldShowTopicActionsWithoutHover &&
 							canShowPinAction &&
 							isActionVisible &&
 							editingTopicId !== topic.id ? (

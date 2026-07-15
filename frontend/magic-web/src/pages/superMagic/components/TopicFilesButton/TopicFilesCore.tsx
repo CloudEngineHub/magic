@@ -100,7 +100,7 @@ import { useSelfMediaTreeNavigation } from "./hooks/useSelfMediaTreeNavigation"
 import { useAICardTreeNavigation } from "./hooks/useAICardTreeNavigation"
 import { isMagicSystemFolder } from "./utils/magic-system-folder"
 import { useAICardCreateDialog } from "../Detail/components/SelfMediaRootRender/components/AICardCreateDialog"
-import { isMagicApp } from "@/utils/devices"
+import { isNoHoverCoarsePointer } from "@/utils/devices"
 
 interface TopicFilesCoreProps {
 	className?: string
@@ -205,8 +205,8 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 	const { t, i18n } = useTranslation("super")
 	const { styles, cx } = useStyles({ isExpanded: true })
 	const isMobile = useResponsive().md === false
-	// Magic App can render the desktop layout on iPad, so keep row actions reachable without hover.
-	const shouldShowInlineFileAction = isMobile || isMagicApp
+	// Mobile layouts and no-hover desktop touch layouts must keep file actions reachable.
+	const shouldShowInlineFileAction = isMobile || isNoHoverCoarsePointer()
 	const fileListAreaRef = useRef<HTMLDivElement>(null)
 	const { organizationCode } = useOrganization()
 	// 有userId，认为有登录状态
