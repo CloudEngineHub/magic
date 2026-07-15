@@ -33,6 +33,8 @@ class PathManager(BasePathManager):
                 skills/      ← skills 配置
                 .env         ← Magic 全局环境变量
             .tmp/            ← 临时文件（按需创建）
+        ~/.magic/            ← 个人 Magic 目录（按需创建）
+            skills/          ← 个人 skills（按需创建）
 
     目录创建约定：
     - 框架层预创建目录由父类负责
@@ -455,6 +457,12 @@ class PathManager(BasePathManager):
         """获取 skills 配置目录路径（.workspace/.magic/skills，按需创建）"""
         cls._ensure_app_initialization()
         return cls._magic_skills_dir
+
+    @classmethod
+    def get_personal_skills_dir(cls) -> Path:
+        """获取个人 skills 目录路径（~/.magic/skills，按需创建）"""
+        cls._ensure_app_initialization()
+        return Path.home() / cls._magic_dir_name / cls._magic_skills_dir_name
 
     @classmethod
     def get_agents_skills_dir(cls) -> Path:
