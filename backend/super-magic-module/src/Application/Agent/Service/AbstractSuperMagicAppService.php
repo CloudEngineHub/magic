@@ -165,6 +165,7 @@ abstract class AbstractSuperMagicAppService extends AbstractKernelAppService
             );
         }
 
+        $dataIsolation->disabled();
         $this->syncInternalAgentVisibility($dataIsolation, $agentEntity, $currentVersion);
     }
 
@@ -674,8 +675,11 @@ abstract class AbstractSuperMagicAppService extends AbstractKernelAppService
         }
 
         // PRIVATE 只保留创建者可见。
+        $privateDataIsolation = clone $dataIsolation;
+        $privateDataIsolation->disabled();
+
         $this->saveAgentVisibility(
-            $dataIsolation,
+            $privateDataIsolation,
             $agentEntity->getCode(),
             VisibilityType::SPECIFIC,
             [$agentEntity->getCreator()]
