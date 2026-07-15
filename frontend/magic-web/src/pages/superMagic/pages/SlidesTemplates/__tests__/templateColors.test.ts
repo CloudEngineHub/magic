@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest"
 import {
 	applyResolvedTemplateColors,
+	getTemplateColorFamily,
 	getTemplatePaletteDistance,
 	MAX_SIMILAR_TEMPLATE_COLOR_DISTANCE,
 	normalizeTemplateColors,
@@ -51,6 +52,22 @@ describe("slides template colors", () => {
 			getTemplatePaletteDistance(source, unrelated),
 		)
 		expect(getTemplatePaletteDistance(source, source)).toBeCloseTo(0)
+	})
+
+	it("classifies colors into stable visual families", () => {
+		expect(getTemplateColorFamily("#EF4444")).toBe("red")
+		expect(getTemplateColorFamily("#D97706")).toBe("orange")
+		expect(getTemplateColorFamily("#FACC15")).toBe("yellow")
+		expect(getTemplateColorFamily("#22C55E")).toBe("green")
+		expect(getTemplateColorFamily("#06B6D4")).toBe("cyan")
+		expect(getTemplateColorFamily("#315ECA")).toBe("blue")
+		expect(getTemplateColorFamily("#7C3AED")).toBe("purple")
+		expect(getTemplateColorFamily("#EC4899")).toBe("pink")
+		expect(getTemplateColorFamily("#F0CAD2")).toBe("pink")
+		expect(getTemplateColorFamily("#111827")).toBe("blue")
+		expect(getTemplateColorFamily("#111111")).toBe("neutral-dark")
+		expect(getTemplateColorFamily("#808080")).toBe("neutral")
+		expect(getTemplateColorFamily("#F8FAFC")).toBe("neutral-light")
 	})
 
 	it("requires multiple matching colors instead of only matching the dominant color", () => {

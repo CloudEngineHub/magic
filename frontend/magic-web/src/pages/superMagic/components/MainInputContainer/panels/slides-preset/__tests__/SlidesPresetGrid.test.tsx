@@ -260,6 +260,27 @@ describe("SlidesPresetGrid", () => {
 		)
 	})
 
+	it("notifies the parent before mounting the preview dialog", () => {
+		const handlePreviewOpenChange = vi.fn((open: boolean) => {
+			if (open) {
+				expect(
+					screen.queryByTestId("slides-preset-preview-dialog-content"),
+				).not.toBeInTheDocument()
+			}
+		})
+
+		render(
+			<SlidesPresetGrid
+				templates={mockTemplates}
+				onPreviewOpenChange={handlePreviewOpenChange}
+			/>,
+		)
+		fireEvent.click(screen.getAllByTestId("slides-preset-card-preview-button")[0])
+
+		expect(handlePreviewOpenChange).toHaveBeenCalledWith(true)
+		expect(screen.getByTestId("slides-preset-preview-dialog-content")).toBeInTheDocument()
+	})
+
 	it("shows persistent preview buttons on touch devices", () => {
 		mockPointerDevice({ canHover: false, maxTouchPoints: 5 })
 		render(<SlidesPresetGrid templates={mockTemplates} />)

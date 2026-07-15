@@ -27,6 +27,7 @@ interface SlidesTemplateFloatingSelectorProps {
 	readOnly?: boolean
 	variant?: ScenePanelVariant
 	compact?: boolean
+	onPreviewOpenChange?: (open: boolean) => void
 }
 
 function SlidesTemplateFloatingSelector({
@@ -42,10 +43,12 @@ function SlidesTemplateFloatingSelector({
 	readOnly = false,
 	variant,
 	compact = false,
+	onPreviewOpenChange,
 }: SlidesTemplateFloatingSelectorProps) {
 	const { t } = useTranslation("crew/create")
 	const lt = useLocaleText()
 	const [open, setOpen] = useState(false)
+	const [isPreviewOpen, setIsPreviewOpen] = useState(false)
 	const [hoverDetailsContainer, setHoverDetailsContainer] = useState<HTMLDivElement | null>(null)
 	const isMobile = variant === ScenePanelVariant.Mobile
 	const isCompactMobile = compact && isMobile
@@ -58,6 +61,22 @@ function SlidesTemplateFloatingSelector({
 			setOpen(false)
 		},
 		[onTemplateClick],
+	)
+
+	const handleDropdownOpenChange = useCallback(
+		(nextOpen: boolean) => {
+			if (!nextOpen && isPreviewOpen) return
+			setOpen(nextOpen)
+		},
+		[isPreviewOpen],
+	)
+
+	const handlePreviewOpenChange = useCallback(
+		(nextOpen: boolean) => {
+			setIsPreviewOpen(nextOpen)
+			onPreviewOpenChange?.(nextOpen)
+		},
+		[onPreviewOpenChange],
 	)
 
 	const trigger = (
@@ -117,10 +136,18 @@ function SlidesTemplateFloatingSelector({
 					)}
 					hoverDetailsContainer={hoverDetailsContainer}
 					disableEntryAnimation={isMobile}
+					onPreviewOpenChange={handlePreviewOpenChange}
 				/>
 			</div>
 		),
-		[handleTemplateClick, hoverDetailsContainer, isMobile, selectedTemplate, slidesState],
+		[
+			handlePreviewOpenChange,
+			handleTemplateClick,
+			hoverDetailsContainer,
+			isMobile,
+			selectedTemplate,
+			slidesState,
+		],
 	)
 
 	const selector = isMobile ? (
@@ -128,7 +155,7 @@ function SlidesTemplateFloatingSelector({
 			{trigger}
 			<MagicPopup
 				visible={open}
-				onClose={() => setOpen(false)}
+				onClose={() => handleDropdownOpenChange(false)}
 				className={cn(
 					"flex h-[min(98dvh,calc(100dvh-var(--safe-area-inset-top)-0.5rem))] max-h-[calc(100dvh-var(--safe-area-inset-top)-0.5rem)] flex-col overflow-hidden rounded-t-[14px] border-0 bg-muted",
 					"data-[vaul-drawer-direction=bottom]:!mt-[max(0.5rem,var(--safe-area-inset-top))]",
@@ -164,7 +191,7 @@ function SlidesTemplateFloatingSelector({
 		<MagicDropdown
 			trigger={["click"]}
 			open={open}
-			onOpenChange={setOpen}
+			onOpenChange={handleDropdownOpenChange}
 			popupRender={() => panelContent}
 			overlayClassName="w-[min(90vw,760px)] min-w-[360px] overflow-visible rounded-lg border border-border bg-popover p-3 shadow-xl"
 		>

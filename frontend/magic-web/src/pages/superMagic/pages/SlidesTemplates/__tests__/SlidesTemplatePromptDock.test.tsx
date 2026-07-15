@@ -31,10 +31,15 @@ vi.mock(
 		default: ({
 			editorContext,
 		}: {
-			editorContext: { topicMode: string; placeholder?: unknown }
+			editorContext: {
+				containerClassName?: string
+				placeholder?: unknown
+				topicMode: string
+			}
 		}) => (
 			<div
 				data-testid="mock-default-message-editor"
+				data-container-class-name={editorContext.containerClassName}
 				data-has-placeholder={String(editorContext.placeholder !== undefined)}
 			>
 				{editorContext.topicMode}
@@ -105,6 +110,30 @@ describe("SlidesTemplatePromptDock", () => {
 			"gap-2",
 		)
 		expect(screen.getByTestId("mock-default-message-editor")).toHaveTextContent("ppt")
+		expect(screen.getByTestId("mock-default-message-editor")).toHaveAttribute(
+			"data-container-class-name",
+			expect.stringContaining(
+				"[&_[data-testid=super-message-editor-toolbar-right]_button[data-active=true]]:!px-1.5",
+			),
+		)
+		expect(screen.getByTestId("mock-default-message-editor")).toHaveAttribute(
+			"data-container-class-name",
+			expect.stringContaining(
+				"[&_[data-testid=internet-search-button][aria-pressed=true]:hover]:!bg-white/[0.92]",
+			),
+		)
+		expect(screen.getByTestId("mock-default-message-editor")).toHaveAttribute(
+			"data-container-class-name",
+			expect.stringContaining(
+				"[&_[data-testid=super-message-editor-toolbar-right]_button[data-active=true]_[data-slot=badge]]:!text-white/[0.92]",
+			),
+		)
+		expect(screen.getByTestId("mock-default-message-editor")).not.toHaveAttribute(
+			"data-container-class-name",
+			expect.stringContaining(
+				"[&_[data-testid=super-message-editor-toolbar-right]_button]:!size-8",
+			),
+		)
 		expect(getPromptRichTextPlainText(lastPresetContent)).toBe(
 			"Use slide template: PPT-business.",
 		)

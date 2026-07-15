@@ -48,6 +48,7 @@ interface SlidesTemplatePanelProps {
 	readOnly?: boolean
 	variant?: ScenePanelVariant
 	compact?: boolean
+	onPreviewOpenChange?: (open: boolean) => void
 }
 
 function getInitialFilterValue(item: FieldItem): string {
@@ -89,6 +90,7 @@ function SlidesTemplatePanel({
 	readOnly = false,
 	variant,
 	compact = false,
+	onPreviewOpenChange,
 }: SlidesTemplatePanelProps) {
 	const lt = useLocaleText()
 	const { t } = useTranslation("crew/create")
@@ -270,6 +272,7 @@ function SlidesTemplatePanel({
 				readOnly={readOnly}
 				variant={variant}
 				compact={compact}
+				onPreviewOpenChange={onPreviewOpenChange}
 			/>
 		)
 	}
@@ -281,6 +284,7 @@ function SlidesTemplatePanel({
 				selectedTemplate={selectedTemplate}
 				onTemplateClick={handleTemplateClick}
 				toolbarClassName="sticky top-0 z-50 bg-background/95 pb-3 backdrop-blur"
+				onPreviewOpenChange={onPreviewOpenChange}
 			/>
 		)
 	}
@@ -320,6 +324,7 @@ function SlidesTemplatePanel({
 				slidesState={slidesState}
 				selectedTemplate={selectedTemplate}
 				onTemplateClick={handleTemplateClick}
+				onPreviewOpenChange={onPreviewOpenChange}
 			/>
 		</CollapsiblePanel>
 	)

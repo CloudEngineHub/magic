@@ -30,6 +30,15 @@ const slidesTemplateImageOptions = {
 	xMagicImageProcess: SLIDES_TEMPLATE_IMAGE_PROCESS,
 }
 
+function createDeferred<T>() {
+	let resolve!: (value: T) => void
+	const promise = new Promise<T>((promiseResolve) => {
+		resolve = promiseResolve
+	})
+
+	return { promise, resolve }
+}
+
 const businessCategory: SlidesTemplateCategoryItem = {
 	id: "1",
 	code: "PPT-CATE-business",
@@ -133,6 +142,24 @@ describe("useSlidesTemplateCatalogState", () => {
 			page: 1,
 			page_size: SLIDES_TEMPLATE_PAGE_SIZE,
 		})
+	})
+
+	it("renders the template list without waiting for the auxiliary count request", async () => {
+		const countResult = createDeferred<{ total: number }>()
+		vi.mocked(SuperMagicApi.getSlidesTemplateCount).mockReturnValue(countResult.promise)
+
+		const { result } = renderHook(() => useSlidesTemplateCatalogState())
+
+		await waitFor(() => expect(result.current.isLoading).toBe(false))
+		expect(result.current.templateOptions[0]?.value).toBe(businessTemplate.code)
+		expect(result.current.total).toBe(1)
+
+		await act(async () => {
+			countResult.resolve({ total: 68 })
+			await countResult.promise
+		})
+
+		await waitFor(() => expect(result.current.total).toBe(68))
 	})
 
 	it("continues pagination when the count endpoint is inaccurate but the page is full", async () => {
