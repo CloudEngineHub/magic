@@ -218,6 +218,27 @@ export function useCanvasImageExternalDragToPlugin({
 		})
 	}, [postPluginMessage])
 
+	/**
+	 * 结束宿主拖拽会话：通知插件 leave，并同步清空 session ref 与 UI 状态。
+	 * 任何清 session 的路径都应走这里，避免 ref / dragState / resolving 不同步残留。
+	 */
+	const finishDragSession = useCallback(() => {
+		sendDragLeave()
+		dragSessionIdRef.current = null
+		setDragState(null)
+		setIsDropResolving(false)
+	}, [sendDragLeave])
+
+	/** 仅当 sessionId 仍是当前活跃会话时收尾，避免异步失败误清新开的拖拽 */
+	const finishDragSessionIfCurrent = useCallback(
+		(sessionId: string) => {
+			if (dragSessionIdRef.current !== sessionId) return false
+			finishDragSession()
+			return true
+		},
+		[finishDragSession],
+	)
+
 	/** 将当前拖拽位置同步给插件 iframe，并携带图片数量等元信息 */
 	const postDragMove = useCallback(
 		(
@@ -285,9 +306,12 @@ export function useCanvasImageExternalDragToPlugin({
 		const handleStart = (event: CanvasEvent<"image:external-drag:start">) => {
 			if (!canAcceptCanvasImageDrag) return
 			const { data } = event
+			// 新会话开始前先完整收尾旧会话，避免异步 resolve 残留或插件侧 hover 不同步。
+			if (dragSessionIdRef.current) {
+				finishDragSession()
+			}
 			const sessionId = createCanvasAssetDragSessionId()
 			dragSessionIdRef.current = sessionId
-			setIsDropResolving(false)
 			const nextState: DragState = {
 				sessionId,
 				originElementId: data.originElementId,
@@ -333,12 +357,6 @@ export function useCanvasImageExternalDragToPlugin({
 			const current = dragStateRef.current
 			const target = targetRef.current
 
-			const finishDragSession = () => {
-				sendDragLeave()
-				dragSessionIdRef.current = null
-				setDragState(null)
-			}
-
 			// 如果拖拽被取消（工具切换/Escape/多指手势/浏览器取消 pointer），或者没有可投放目标，则不进行图片导入。
 			if (!current || event.data.cancelled || !target?.canDrop) {
 				finishDragSession()
@@ -367,10 +385,15 @@ export function useCanvasImageExternalDragToPlugin({
 			)
 			void resolveCanvasImageDragAssets(canvas, elementIds)
 				.then((files) => {
-					// 会话已失效：新拖拽开始 / 组件卸载 / 会话已结束
-					if (dragSessionIdRef.current !== sessionId || !files.length) {
+					// 会话已被新拖拽/卸载接管：只关掉 loading，勿误清新会话、勿弹失败 toast。
+					if (dragSessionIdRef.current !== sessionId) {
 						toast.dismiss(toastId)
-						throw new Error("Session expired or no image asset resolved.")
+						return
+					}
+					if (!files.length) {
+						toast.dismiss(toastId)
+						finishDragSessionIfCurrent(sessionId)
+						return
 					}
 					// 拖入插件的文件可能随后作为 reference_images 回到宿主，提前记录文件 key 与画布元素的关系。
 					files.forEach((file) => {
@@ -384,8 +407,12 @@ export function useCanvasImageExternalDragToPlugin({
 					})
 					toast.dismiss(toastId)
 				})
-				.catch((error) => {
-					void error
+				.catch(() => {
+					// 会话已非当前：只 dismiss loading，避免对已顶替的新会话误弹失败与误清状态。
+					if (dragSessionIdRef.current !== sessionId) {
+						toast.dismiss(toastId)
+						return
+					}
 					toast.error(
 						canvas.t?.("plugin.canvasAssetDrop.error", "图片导入失败，请重试") ||
 							"图片导入失败，请重试",
@@ -393,10 +420,8 @@ export function useCanvasImageExternalDragToPlugin({
 					)
 				})
 				.finally(() => {
-					if (dragSessionIdRef.current === sessionId) {
-						finishDragSession()
-					}
-					setIsDropResolving(false)
+					// 兜底收尾：成功/失败路径已清则 no-op；仅仍属本会话时清理。
+					finishDragSessionIfCurrent(sessionId)
 				})
 		}
 
@@ -412,20 +437,20 @@ export function useCanvasImageExternalDragToPlugin({
 	}, [
 		canAcceptCanvasImageDrag,
 		canvas,
+		finishDragSession,
+		finishDragSessionIfCurrent,
 		pluginWindowRef,
 		postDragMove,
 		postPluginMessage,
 		sourceElementByAssetKeyRef,
-		sendDragLeave,
 	])
 
 	useEffect(() => {
 		return () => {
-			// 组件卸载时清理拖拽状态。
-			dragSessionIdRef.current = null
-			sendDragLeave()
+			// 卸载或 channel 变更导致 leave 重建时，完整结束会话，避免只清 ref 残留遮罩。
+			finishDragSession()
 		}
-	}, [sendDragLeave])
+	}, [finishDragSession])
 
 	// resolve 期间保留 dragState / session，但关闭 ghost 与遮罩，让用户继续操作插件面板。
 	const showCanvasAssetDragOverlay = Boolean(dragState) && !isDropResolving

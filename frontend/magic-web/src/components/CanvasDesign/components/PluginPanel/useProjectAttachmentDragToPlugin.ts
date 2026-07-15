@@ -258,13 +258,6 @@ export function useProjectAttachmentDragToPlugin({
 			)
 			void resolvePluginFileAssets(canvas, filesToResolve, { type: "image" })
 				.then((files) => {
-					console.log(
-						"files 0 ",
-						files,
-						"sessionId",
-						sessionId,
-						activeSessionIdRef.current,
-					)
 					if (activeSessionIdRef.current !== sessionId || !files.length) {
 						toast.dismiss(toastId)
 						throw new Error("Session expired or no image asset resolved.")
@@ -286,7 +279,6 @@ export function useProjectAttachmentDragToPlugin({
 				})
 				.finally(() => {
 					if (activeSessionIdRef.current === sessionId) {
-						console.log("resetProjectAttachmentDrag")
 						resetProjectAttachmentDrag()
 					}
 					setIsDropResolving(false)
@@ -316,9 +308,7 @@ export function useProjectAttachmentDragToPlugin({
 
 	useEffect(() => {
 		return () => {
-			if (activeSessionIdRef.current) {
-				resetProjectAttachmentDrag()
-			}
+			resetProjectAttachmentDrag()
 		}
 	}, [resetProjectAttachmentDrag])
 
