@@ -149,8 +149,13 @@ abstract class AbstractSuperMagicAppService extends AbstractKernelAppService
 
         if ($currentTargetType === PublishTargetType::MARKET) {
             if ($previousTargetType !== null && $previousTargetType !== PublishTargetType::MARKET) {
-                // 从内部切到市场时，只需要清掉原有内部可见性。
-                $this->saveAgentVisibility($dataIsolation, $agentEntity->getCode(), VisibilityType::NONE);
+                // 从内部切到市场时，清掉内部共享可见性，但保留创建者自己可见。
+                $this->saveAgentVisibility(
+                    $dataIsolation,
+                    $agentEntity->getCode(),
+                    VisibilityType::SPECIFIC,
+                    [$agentEntity->getCreator()]
+                );
             }
             return;
         }
