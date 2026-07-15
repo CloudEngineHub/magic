@@ -1,10 +1,17 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import {
 	bootstrapWorkboxCacheRuntime,
+	isCacheableFeaturedSlidesTemplateImage,
 	isCacheableSlidesTemplateImage,
 	type WorkboxRouteContext,
 } from "../cache-runtime"
-import { APP_IMAGE_CACHE_NAME, SLIDES_TEMPLATE_IMAGE_CACHE_NAME } from "../sw-constants"
+import {
+	APP_IMAGE_CACHE_NAME,
+	CACHE_TTL_15_DAYS,
+	CACHE_TTL_7_DAYS,
+	FEATURED_SLIDES_TEMPLATE_IMAGE_CACHE_NAME,
+	SLIDES_TEMPLATE_IMAGE_CACHE_NAME,
+} from "../sw-constants"
 
 function createContext(
 	url: string,
@@ -25,13 +32,17 @@ describe("slides template image cache route", () => {
 	})
 
 	it("accepts only explicitly marked image requests", () => {
-		expect(
-			isCacheableSlidesTemplateImage(
-				createContext(
-					"https://storage.example.com/template.webp?swCache=slides-template-image",
-				),
-			),
-		).toBe(true)
+		const ordinaryContext = createContext(
+			"https://storage.example.com/template.webp?swCache=slides-template-image",
+		)
+		const featuredContext = createContext(
+			"https://storage.example.com/template.webp?swCache=featured-slides-template-image",
+		)
+
+		expect(isCacheableSlidesTemplateImage(ordinaryContext)).toBe(true)
+		expect(isCacheableFeaturedSlidesTemplateImage(ordinaryContext)).toBe(false)
+		expect(isCacheableFeaturedSlidesTemplateImage(featuredContext)).toBe(true)
+		expect(isCacheableSlidesTemplateImage(featuredContext)).toBe(false)
 	})
 
 	it("rejects unmarked images and non-image requests", () => {
@@ -65,6 +76,7 @@ describe("slides template image cache route", () => {
 	it("allows opaque image responses in the dedicated cache", () => {
 		const cacheFirstOptions: Record<string, unknown>[] = []
 		const cacheableResponseOptions: Record<string, unknown>[] = []
+		const expirationOptions: Record<string, unknown>[] = []
 
 		class CacheFirst {
 			constructor(options: Record<string, unknown>) {
@@ -78,7 +90,7 @@ describe("slides template image cache route", () => {
 		}
 		class ExpirationPlugin {
 			constructor(options: Record<string, unknown>) {
-				void options
+				expirationOptions.push(options)
 			}
 		}
 		class CacheableResponsePlugin {
@@ -103,7 +115,19 @@ describe("slides template image cache route", () => {
 		} as ServiceWorkerGlobalScope)
 
 		expect(cacheFirstOptions).toContainEqual(
+			expect.objectContaining({ cacheName: FEATURED_SLIDES_TEMPLATE_IMAGE_CACHE_NAME }),
+		)
+		expect(cacheFirstOptions).toContainEqual(
 			expect.objectContaining({ cacheName: SLIDES_TEMPLATE_IMAGE_CACHE_NAME }),
+		)
+		expect(
+			cacheFirstOptions.findIndex(
+				(options) => options.cacheName === FEATURED_SLIDES_TEMPLATE_IMAGE_CACHE_NAME,
+			),
+		).toBeLessThan(
+			cacheFirstOptions.findIndex(
+				(options) => options.cacheName === SLIDES_TEMPLATE_IMAGE_CACHE_NAME,
+			),
 		)
 		expect(
 			cacheFirstOptions.findIndex(
@@ -113,5 +137,13 @@ describe("slides template image cache route", () => {
 			cacheFirstOptions.findIndex((options) => options.cacheName === APP_IMAGE_CACHE_NAME),
 		)
 		expect(cacheableResponseOptions).toContainEqual({ statuses: [0, 200] })
+		expect(expirationOptions).toContainEqual({
+			maxEntries: 300,
+			maxAgeSeconds: CACHE_TTL_15_DAYS,
+		})
+		expect(expirationOptions).toContainEqual({
+			maxEntries: 500,
+			maxAgeSeconds: CACHE_TTL_7_DAYS,
+		})
 	})
 })

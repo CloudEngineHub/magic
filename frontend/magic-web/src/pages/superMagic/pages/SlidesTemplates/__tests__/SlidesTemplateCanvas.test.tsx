@@ -158,7 +158,7 @@ describe("SlidesTemplateCanvas", () => {
 		})
 
 		expect(screen.getByTestId("slides-template-canvas-content")).toHaveStyle({
-			transform: "translate3d(50px, 25px, 0) scale(1)",
+			transform: "translate3d(50px, 25px, 0) scale(0.8)",
 		})
 		expect(setPointerCapture).toHaveBeenCalledWith(1)
 	})
@@ -440,7 +440,7 @@ describe("SlidesTemplateCanvas", () => {
 		})
 
 		expect(screen.getByTestId("slides-template-canvas-content")).toHaveStyle({
-			transform: "translate3d(50px, 25px, 0) scale(1)",
+			transform: "translate3d(50px, 25px, 0) scale(0.8)",
 		})
 	})
 
@@ -510,12 +510,12 @@ describe("SlidesTemplateCanvas", () => {
 		const canvas = screen.getByTestId("slides-template-canvas")
 		mockCanvasRect(canvas)
 
-		expect(screen.getByTestId("slides-template-canvas-scale")).toHaveTextContent("100%")
+		expect(screen.getByTestId("slides-template-canvas-scale")).toHaveTextContent("80%")
 		fireEvent.click(screen.getByTestId("slides-template-canvas-zoom-out"))
-		expect(screen.getByTestId("slides-template-canvas-scale")).toHaveTextContent("90%")
+		expect(screen.getByTestId("slides-template-canvas-scale")).toHaveTextContent("70%")
 
 		fireEvent.click(screen.getByTestId("slides-template-canvas-reset"))
-		expect(screen.getByTestId("slides-template-canvas-scale")).toHaveTextContent("100%")
+		expect(screen.getByTestId("slides-template-canvas-scale")).toHaveTextContent("80%")
 		expect(getCanvasTranslate()).toEqual({ x: 0, y: 0 })
 	})
 
@@ -558,7 +558,7 @@ describe("SlidesTemplateCanvas", () => {
 		const content = screen.getByTestId("slides-template-canvas-content")
 		const actions = getFirstTestElement("slides-template-cover-actions")
 
-		expect(content.style.getPropertyValue("--slides-template-canvas-action-scale")).toBe("1")
+		expect(content.style.getPropertyValue("--slides-template-canvas-action-scale")).toBe("1.25")
 		expect(actions.className).toContain(
 			"[transform:scale(var(--slides-template-canvas-action-scale,1))]",
 		)
@@ -750,7 +750,7 @@ describe("SlidesTemplateCanvas", () => {
 		})
 
 		expect(screen.getByTestId("slides-template-canvas-content")).toHaveStyle({
-			transform: "translate3d(0px, -24px, 0) scale(1)",
+			transform: "translate3d(0px, -24px, 0) scale(0.8)",
 		})
 	})
 
@@ -767,7 +767,7 @@ describe("SlidesTemplateCanvas", () => {
 		})
 
 		expect(screen.getByTestId("slides-template-canvas-content")).toHaveStyle({
-			transform: "translate3d(0px, -24px, 0) scale(1)",
+			transform: "translate3d(0px, -24px, 0) scale(0.8)",
 		})
 	})
 
@@ -941,7 +941,7 @@ describe("SlidesTemplateCanvas", () => {
 		})
 
 		expect(screen.getByTestId("slides-template-canvas-content")).toHaveStyle({
-			transform: "translate3d(0px, -144px, 0) scale(1)",
+			transform: "translate3d(0px, -144px, 0) scale(0.8)",
 		})
 	})
 

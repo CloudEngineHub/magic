@@ -11,10 +11,12 @@ import {
 import { TopicMode } from "@/pages/superMagic/pages/Workspace/TopicMode"
 import type { ImageProcessOptions } from "@/utils/image-processing"
 import {
+	FEATURED_SLIDES_TEMPLATE_IMAGE_CACHE_VALUE,
 	RESOURCE_CACHE_MARK_QUERY_PARAM,
 	SLIDES_TEMPLATE_IMAGE_CACHE_VALUE,
 } from "@/workers/service-worker/sw-constants"
 import { buildConcatenatedPresetContent, localeTextToDisplayString } from "../../panels/utils"
+import { FEATURED_SLIDES_TEMPLATE_TAG_CODE } from "../../panels/slides-preset/templateMeta"
 
 export interface SlidesTemplateItem {
 	code: string
@@ -144,25 +146,33 @@ export const SLIDES_TEMPLATE_IMAGE_PROCESS: ImageProcessOptions = {
 }
 
 /**
- * Only template catalog media receives this marker. The Service Worker uses it instead of
- * a storage-domain allowlist, so a storage migration does not broaden caching to other images.
+ * Only template catalog media receives these markers. Featured and ordinary resources use
+ * separate Service Worker buckets without depending on a storage-domain allowlist.
  */
-export function markSlidesTemplateImageUrl<T extends string | null | undefined>(url: T): T
-export function markSlidesTemplateImageUrl(url: string | null | undefined) {
+function markSlidesTemplateImageUrlByCacheValue<T extends string | null | undefined>(
+	url: T,
+	cacheValue: string,
+): T
+function markSlidesTemplateImageUrlByCacheValue(
+	url: string | null | undefined,
+	cacheValue: string,
+) {
 	if (!url) return url
 
 	try {
 		const parsedUrl = new URL(url)
 		if (parsedUrl.protocol !== "http:" && parsedUrl.protocol !== "https:") return url
 
-		parsedUrl.searchParams.set(
-			RESOURCE_CACHE_MARK_QUERY_PARAM,
-			SLIDES_TEMPLATE_IMAGE_CACHE_VALUE,
-		)
+		parsedUrl.searchParams.set(RESOURCE_CACHE_MARK_QUERY_PARAM, cacheValue)
 		return parsedUrl.toString()
 	} catch {
 		return url
 	}
+}
+
+export function markSlidesTemplateImageUrl<T extends string | null | undefined>(url: T): T
+export function markSlidesTemplateImageUrl(url: string | null | undefined) {
+	return markSlidesTemplateImageUrlByCacheValue(url, SLIDES_TEMPLATE_IMAGE_CACHE_VALUE)
 }
 
 export function isSlidesMode(topicMode: TopicMode | undefined) {
@@ -374,6 +384,13 @@ export function createSlidesFixedSceneConfig(
 }
 
 export function toTemplateOption(template: SlidesTemplateItem) {
+	const isFeatured = template.tags?.some((tag) => tag.code === FEATURED_SLIDES_TEMPLATE_TAG_CODE)
+	const imageCacheValue = isFeatured
+		? FEATURED_SLIDES_TEMPLATE_IMAGE_CACHE_VALUE
+		: SLIDES_TEMPLATE_IMAGE_CACHE_VALUE
+	const markTemplateImageUrl = (url: string | null | undefined) =>
+		markSlidesTemplateImageUrlByCacheValue(url, imageCacheValue)
+
 	return {
 		value: template.code,
 		label: template.label,
@@ -381,10 +398,10 @@ export function toTemplateOption(template: SlidesTemplateItem) {
 			zh_CN: `${template.label.zh_CN}（${template.code}）`,
 			en_US: `${template.label.en_US} (${template.code})`,
 		},
-		thumbnail_url: markSlidesTemplateImageUrl(template.thumbnail_url) ?? undefined,
-		collage_url: markSlidesTemplateImageUrl(template.collage_url) ?? undefined,
+		thumbnail_url: markTemplateImageUrl(template.thumbnail_url) ?? undefined,
+		collage_url: markTemplateImageUrl(template.collage_url) ?? undefined,
 		// 每页 PPT 预览图 URL 列表；为空时由前端 UI 降级使用 collage_url
-		preview_image_urls: (template.preview_image_urls ?? []).map(markSlidesTemplateImageUrl),
+		preview_image_urls: (template.preview_image_urls ?? []).map(markTemplateImageUrl),
 		description: template.description,
 		preview_url: template.preview_url ?? undefined,
 		usage_count: template.usage_count ?? 0,

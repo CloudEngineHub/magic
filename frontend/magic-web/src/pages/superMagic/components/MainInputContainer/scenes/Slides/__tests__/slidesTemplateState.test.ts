@@ -177,7 +177,7 @@ describe("slides template state", () => {
 		expect(groups[0].children?.[0].value).toBe(organizationTemplate.code)
 	})
 
-	it("only inserts the featured tag before category groups", () => {
+	it("inserts operational tags before category groups", () => {
 		const annualReportTag: SlidesTemplateTagItem = {
 			...featuredTag,
 			code: "purpose-annual-report",
@@ -205,6 +205,7 @@ describe("slides template state", () => {
 		expect(groups.map((group) => group.group_key)).toEqual([
 			"all",
 			createSlidesTemplateTagGroupKey(featuredTag.code),
+			createSlidesTemplateTagGroupKey(annualReportTag.code),
 			createSlidesTemplateCategoryGroupKey(businessCategory.code),
 		])
 		expect(groups[1].group_name).toEqual(featuredTag.name_i18n)
@@ -272,6 +273,31 @@ describe("slides template state", () => {
 
 		expect(option?.preview_image_urls).toEqual(
 			officialTemplate.preview_image_urls?.map(markSlidesTemplateImageUrl),
+		)
+	})
+
+	it("marks featured template images for the isolated cache", () => {
+		const template = {
+			...officialTemplate,
+			tags: [
+				{
+					id: featuredTag.id,
+					code: featuredTag.code,
+					name_i18n: featuredTag.name_i18n,
+					sort: featuredTag.sort,
+				},
+			],
+		}
+		const panel = createSlidesPresetPanelConfig([template])
+		const styleField = panel.field?.items.find((item) => item.data_key === "style")
+		const group = styleField?.options[0] as OptionGroup | undefined
+		const option = group?.children?.[0]
+
+		expect(new URL(option?.thumbnail_url ?? "").searchParams.get("swCache")).toBe(
+			"featured-slides-template-image",
+		)
+		expect(new URL(option?.preview_image_urls?.[0] ?? "").searchParams.get("swCache")).toBe(
+			"featured-slides-template-image",
 		)
 	})
 

@@ -36,6 +36,7 @@ import { useSlidesTemplateCanvasMotion } from "./useSlidesTemplateCanvasMotion"
 import { useSlidesTemplateCanvasNavigation } from "./useSlidesTemplateCanvasNavigation"
 import { useSlidesTemplateCanvasPointer } from "./useSlidesTemplateCanvasPointer"
 import { useSlidesTemplateCanvasWheel } from "./useSlidesTemplateCanvasWheel"
+import { SLIDES_TEMPLATE_CANVAS_DEFAULT_SCALE } from "./canvasZoom"
 import { useSlidesTemplateCanvasActiveTemplates } from "./useSlidesTemplateCanvasActiveTemplates"
 import { useSlidesTemplateCanvasAutoExplore } from "./useSlidesTemplateCanvasAutoExplore"
 import { useTemplateCanvasVisibleItems } from "./useTemplateCanvasVisibleItems"
@@ -90,7 +91,7 @@ const SlidesTemplateCanvas = forwardRef<SlidesTemplateCanvasHandle, SlidesTempla
 		const contentRef = useRef<HTMLDivElement | null>(null)
 		const offsetRef = useRef<TemplateCanvasPoint>({ x: 0, y: 0 })
 		const viewportInsetsRef = useRef(viewportInsets)
-		const scaleRef = useRef(1)
+		const scaleRef = useRef(SLIDES_TEMPLATE_CANVAS_DEFAULT_SCALE)
 		const lastLoadMoreAtRef = useRef(0)
 		const lastLoadMoreLoopKeyRef = useRef("")
 		const applyTransform = useCallback(() => {
