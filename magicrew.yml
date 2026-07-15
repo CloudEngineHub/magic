@@ -26,8 +26,6 @@ subtrees:
     prefix: backend/flow-expr-engine
   rule-engine-core:
     prefix: backend/rule-engine-core
-  sandbox:
-    prefix: backend/sandbox
   sandbox-components:
     prefix: backend/sandbox-components
   sdk-base:
@@ -36,5 +34,7 @@ subtrees:
     prefix: backend/super-magic-module
   task-scheduler:
     prefix: backend/task-scheduler
+  sandbox:
+    prefix: thirdparty/PHPSandbox
   tiptap:
     prefix: thirdparty/tiptap
