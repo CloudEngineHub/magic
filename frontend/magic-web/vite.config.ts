@@ -171,20 +171,12 @@ function getBaseViteConfig(env: NodeJS.ProcessEnv = process.env): UserConfig {
 					find: "@dtyq/x-markdown",
 					replacement: resolve(__dirname, "packages/x-markdown/src/index.ts"),
 				},
-				{
-					find: "@magic-web/html2image",
-					replacement: resolve(__dirname, "packages/html2image/src/index.ts"),
-				},
 				// packages/logger may have its own node_modules during local development.
 				// Pin ARMS to the app dependency so Vite does not resolve a nested version
 				// whose rrweb subpath imports are blocked by package exports.
 				{
 					find: "@arms/rum-browser",
 					replacement: resolve(__dirname, "node_modules/@arms/rum-browser/lib/index.js"),
-				},
-				{
-					find: "@magic/html2pptx",
-					replacement: resolve(__dirname, "packages/html2pptx/src/index.ts"),
 				},
 				{
 					find: "@magic-web/html2image",
