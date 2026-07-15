@@ -31,7 +31,7 @@ class AgentPublishPrefillResponseDTO extends AbstractDTO
             'version_description_i18n' => $this->versionDescriptionI18n,
             'publish_target_type' => $this->publishTargetType,
             'publish_target_value' => $this->publishTargetValue,
-            'category_id' => $this->categoryId,
+            'category_id' => $this->categoryId === null ? null : (string) $this->categoryId,
         ];
     }
 }
