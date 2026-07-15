@@ -431,6 +431,46 @@ describe("slides template canvas layout", () => {
 		).toEqual({ x: -90, y: -190 })
 	})
 
+	it("allows dragging short templates down toward the bottom anchor in start mode", () => {
+		// 视口(500)大于内容高度(100)，start 模式应在顶部锚点(-190)与底部锚点(170)间允许拖动。
+		const baseInput = {
+			bounds: { minX: 40, maxX: 140, minY: -20, maxY: 80 },
+			insets: { top: 40 },
+			padding: 0,
+			smallContentVerticalAlignment: "start" as const,
+			viewportHeight: 500,
+			viewportWidth: 500,
+		}
+
+		// 拖向底部但未越过下边界，保持用户位置。
+		expect(
+			constrainTemplateCanvasOffset({
+				...baseInput,
+				offset: { x: -90, y: 50 },
+			}),
+		).toEqual({ x: -90, y: 50 })
+		// 顶到底两端仍在区间内。
+		expect(
+			constrainTemplateCanvasOffset({
+				...baseInput,
+				offset: { x: -90, y: 170 },
+			}),
+		).toEqual({ x: -90, y: 170 })
+		// 越过底部锚点则夹紧，并能在释放后稳定重置回顶部。
+		expect(
+			constrainTemplateCanvasOffset({
+				...baseInput,
+				offset: { x: -90, y: 1000 },
+			}),
+		).toEqual({ x: -90, y: 170 })
+		expect(
+			constrainTemplateCanvasOffset({
+				...baseInput,
+				offset: { x: -90, y: -300 },
+			}),
+		).toEqual({ x: -90, y: -190 })
+	})
+
 	it("renders only template covers in the canvas matrix", () => {
 		const tiles = buildTemplateCanvasTiles([
 			createTemplate("business", 3),

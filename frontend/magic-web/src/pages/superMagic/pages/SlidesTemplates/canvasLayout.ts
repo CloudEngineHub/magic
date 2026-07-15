@@ -300,7 +300,12 @@ function clampAxisOffset({
 	const maxOffset = -minWorld + padding - viewportSize / 2 + startInset
 
 	if (minOffset > maxOffset) {
-		if (smallContentAlignment === "start") return maxOffset
+		// 视口比内容还大时，minOffset（底部对齐锚）> maxOffset（顶部对齐锚）。
+		// 顶部对齐语义下，允许内容在 maxOffset..minOffset 之间拖动，保留合理的可视区拖拽余量，
+		// 而不是把偏移量压成单点；拖出区间则夹紧到最近的边界并稳定重置回顶部锚点。
+		if (smallContentAlignment === "start") {
+			return Math.min(Math.max(currentOffset, maxOffset), minOffset)
+		}
 		const centeredOffset = -(minWorld + maxWorld) / 2 + (startInset - endInset) / 2
 		return Math.min(Math.max(currentOffset, centeredOffset - padding), centeredOffset + padding)
 	}
