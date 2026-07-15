@@ -70,8 +70,8 @@ async def test_temporary_file_tip_is_pushed_to_horizon() -> None:
     horizon.push_notification.assert_called_once()
     source, notification = horizon.push_notification.call_args.args
     assert source == "temporary_file_mention"
-    assert "temporary" in notification.lower()
-    assert "will be deleted automatically" in notification
+    assert "The user directly submitted" in notification
+    assert "will be removed automatically" in notification
     assert "outside `.tmp`" in notification
     assert "- `.tmp/copied-image.png`" in notification
 
@@ -91,7 +91,7 @@ async def test_temporary_file_tip_falls_back_when_horizon_push_fails() -> None:
     )
     tip = await handler.get_final_tip(agent_context)
 
-    assert "temporary" in tip.lower()
+    assert "The user directly submitted" in tip
     assert "outside `.tmp`" in tip
     assert "- `.tmp/pasted-text-20260714-120000.txt`" in tip
     assert "Read and understand" in tip
@@ -130,6 +130,6 @@ async def test_temporary_file_tip_falls_back_without_agent_context() -> None:
     await handler.handle({"file_path": ".tmp/copied-image.png"}, 1)
     tip = await handler.get_final_tip()
 
-    assert "temporary" in tip.lower()
+    assert "The user directly submitted" in tip
     assert "outside `.tmp`" in tip
     assert "- `.tmp/copied-image.png`" in tip

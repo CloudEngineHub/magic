@@ -14,10 +14,9 @@ _IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".svg", ".avif"
 _VIDEO_EXTS = {".mp4", ".mov", ".avi", ".webm", ".mkv", ".flv", ".wmv"}
 
 _TEMPORARY_FILE_NOTIFICATION = (
-    "Files referenced from `.tmp` are temporary and will be deleted automatically after reaching "
-    "the expiration time defined by their policies. "
-    "If any referenced file or derived result must persist, move or copy it to a workspace path outside `.tmp` "
-    "before completing the task."
+    "These files are stored in `.tmp` and will be removed automatically by the expiration policy. "
+    "If any file or derived result must persist, move or copy it to a workspace path outside `.tmp` before "
+    "completing the task."
 )
 
 _PROJECT_TYPE_LABELS = {
@@ -103,7 +102,10 @@ class FileHandler(BaseMentionHandler):
     def _build_temporary_file_notification(self) -> str:
         """构建包含临时文件列表的统一英文提示。"""
         file_list = "\n".join(f"- `{file_path}`" for file_path in self._temporary_file_paths)
-        return f"Temporary files referenced in this request:\n{file_list}\n\n{_TEMPORARY_FILE_NOTIFICATION}"
+        return (
+            "The user directly submitted the following files through the chat input:\n"
+            f"{file_list}\n\n{_TEMPORARY_FILE_NOTIFICATION}"
+        )
 
     async def handle(self, mention: Dict[str, Any], index: int, agent_context: Optional["AgentContext"] = None) -> List[str]:
         original_file_path = str(mention.get("file_path") or "")
