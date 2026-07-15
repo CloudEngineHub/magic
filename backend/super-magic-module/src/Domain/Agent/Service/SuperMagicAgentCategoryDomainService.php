@@ -80,7 +80,7 @@ class SuperMagicAgentCategoryDomainService
             }
         }
 
-        $crewCounts = $this->marketRepository->countPublishedByCategoryIds($categoryIds);
+        $crewCounts = $this->marketRepository->countVisiblePublishedByCategoryIds($categoryIds);
         $result = [];
         foreach ($categories as $category) {
             $categoryId = $category->getId();
