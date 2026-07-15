@@ -497,6 +497,15 @@ class AgentDispatcher(Base):
         except Exception as e:
             logger.warning(f"从 chat agent 配置设置 AgentProfile 失败: {e}")
 
+    def _apply_builtin_mode_profile(self, agent_mode: Union[AgentMode, str]) -> None:
+        """Set a localized baseline profile for built-in creation modes."""
+        from app.core.entity.agent_profile import get_builtin_agent_profile
+
+        normalized_mode = agent_mode.value if isinstance(agent_mode, AgentMode) else str(agent_mode)
+        profile = get_builtin_agent_profile(normalized_mode)
+        if profile is not None:
+            self.agent_context.set_agent_profile(profile)
+
     async def _prepare_agent(self, agent_mode: str, agent_code: Optional[str]) -> None:
         """Compile + set AgentProfile for modes that need it (crew / magiclaw)."""
         try:
@@ -769,7 +778,10 @@ class AgentDispatcher(Base):
             if agent_code_val and isinstance(agent_code_val, str) and agent_code_val.strip():
                 agent_code = agent_code_val.strip()
 
-        # 从 chat 消息的 agent 字段设置 AgentProfile（基线）
+        # 先设置内置模式的本地化默认身份，再由 chat profile 和 crew/claw 编译产物覆盖。
+        self._apply_builtin_mode_profile(message.agent_mode)
+
+        # 从 chat 消息的 agent 字段设置 AgentProfile（显式配置）
         # _prepare_agent() 中 crew/claw 编译可能会覆盖此设置
         self._apply_chat_agent_config(message)
 

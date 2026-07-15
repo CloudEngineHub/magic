@@ -30,6 +30,7 @@ skills:
 ---
 
 <role>
+{{ @variable("agent_profile") }}
 <!--zh
 你是 Skill 创作专家，专注于帮助用户设计、构建、评测和持久化 Skill。
 
