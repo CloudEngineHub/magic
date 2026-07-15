@@ -92,6 +92,8 @@ export function createPluginSrcDocV1(
 			return new Promise((resolve, reject) => {
 				const requestId = createRequestId();
 				function handleHostResult(event) {
+					// 只接受来自宿主窗口的回包，避免同页其他 frame 伪造 request 结果。
+					if (event.source !== window.parent) return;
 					const data = event.data;
 					if (
 						!data ||
@@ -461,6 +463,8 @@ export function createPluginSrcDocV1(
 
 		// 宿主只把画布图片拖拽相关消息转成 iframe 内的 CustomEvent，插件代码无需监听 postMessage。
 		window.addEventListener("message", (event) => {
+			// 只接受宿主下发的拖拽消息，避免同页其他 frame 伪造 move/leave/drop。
+			if (event.source !== window.parent) return;
 			const data = event.data;
 			if (!data || data.channelToken !== __MAGIC_CANVAS_BOOTSTRAP__.channelToken) return;
 			if (
