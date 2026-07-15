@@ -122,6 +122,10 @@ export function useSlidesTemplateCanvasMotion({
 				x: previousOffset.x + (velocity.x * elapsedSincePreviousFrame) / 1000,
 				y: previousOffset.y + (velocity.y * elapsedSincePreviousFrame) / 1000,
 			})
+			if (isSameCanvasPoint(previousOffset, nextOffset)) {
+				stopAnimation()
+				return
+			}
 			maybeRequestMore(
 				getDirectionsFromVelocity({
 					x: nextOffset.x - previousOffset.x,

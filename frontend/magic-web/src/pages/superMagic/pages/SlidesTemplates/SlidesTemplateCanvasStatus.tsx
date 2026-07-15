@@ -33,7 +33,7 @@ export default function SlidesTemplateCanvasStatus({
 						? t("playbook.edit.presets.form.loadingMore")
 						: t("playbook.edit.presets.form.refreshing")}
 			</div>
-			{!isLoading && templateCount === 0 ? (
+			{!isLoading && !isLoadingMore && !isRefreshing && templateCount === 0 ? (
 				<div
 					className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-lg border border-white/10 bg-black/50 px-5 py-4 text-sm text-white/75 shadow-xl backdrop-blur-md"
 					data-testid="slides-template-canvas-empty"

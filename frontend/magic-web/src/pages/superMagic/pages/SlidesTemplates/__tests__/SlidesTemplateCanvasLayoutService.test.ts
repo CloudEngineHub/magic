@@ -40,6 +40,23 @@ function getSourceItems(items: Array<TemplateCanvasItem<SlidesTemplateCanvasTile
 	return items.filter(({ item }) => !item.id.includes(":filler:"))
 }
 
+function getGridBounds(items: Array<TemplateCanvasItem<SlidesTemplateCanvasTile>>) {
+	return items.reduce(
+		(bounds, item) => ({
+			maxColumn: Math.max(bounds.maxColumn, item.grid.x + item.span.columns),
+			maxRow: Math.max(bounds.maxRow, item.grid.y + item.span.rows),
+			minColumn: Math.min(bounds.minColumn, item.grid.x),
+			minRow: Math.min(bounds.minRow, item.grid.y),
+		}),
+		{
+			maxColumn: Number.NEGATIVE_INFINITY,
+			maxRow: Number.NEGATIVE_INFINITY,
+			minColumn: Number.POSITIVE_INFINITY,
+			minRow: Number.POSITIVE_INFINITY,
+		},
+	)
+}
+
 describe("SlidesTemplateCanvasLayoutService", () => {
 	it("fills every cell of the finite loop unit with mixed card spans", () => {
 		const service = new SlidesTemplateCanvasLayoutService()
@@ -55,7 +72,7 @@ describe("SlidesTemplateCanvasLayoutService", () => {
 		}
 	})
 
-	it("keeps a small result set finite in multiple rows without filler or loop copies", () => {
+	it("spreads a small finite result set across six columns without filler or loop copies", () => {
 		const service = new SlidesTemplateCanvasLayoutService()
 		const snapshot = service.synchronize(
 			Array.from({ length: 6 }, (_, index) => createTemplate(index + 1)),
@@ -71,12 +88,44 @@ describe("SlidesTemplateCanvasLayoutService", () => {
 		expect(snapshot.canvasItems).toHaveLength(6)
 		expect(snapshot.loopMetrics.width).toBe(0)
 		expect(visibleItems).toHaveLength(6)
-		expect(Math.max(...snapshot.canvasItems.map(({ grid }) => grid.x))).toBe(2)
-		expect(new Set(snapshot.canvasItems.map(({ grid }) => grid.y))).toEqual(new Set([0, 1]))
+		expect(Math.max(...snapshot.canvasItems.map(({ grid }) => grid.x))).toBe(5)
+		expect(new Set(snapshot.canvasItems.map(({ grid }) => grid.y))).toEqual(new Set([0]))
 		expect(visibleItems.map(({ item }) => item.id)).toEqual(
 			snapshot.canvasItems.map(({ item }) => item.id),
 		)
 		expect(visibleItems.every(({ renderKey }) => renderKey == null)).toBe(true)
+	})
+
+	it("keeps large filtered result sets finite when the loop is disabled", () => {
+		const service = new SlidesTemplateCanvasLayoutService()
+		const snapshot = service.synchronize(
+			Array.from({ length: 55 }, (_, index) => createTemplate(index + 1, index % 5 === 0)),
+			false,
+		)
+
+		expect(snapshot.canvasItems).toHaveLength(55)
+		expect(snapshot.loopMetrics.width).toBe(0)
+		expect(snapshot.loopMetrics.height).toBe(0)
+		expect(snapshot.canvasItems.every(({ item }) => !item.id.includes(":filler:"))).toBe(true)
+		expect(
+			Math.max(...snapshot.canvasItems.map(({ grid, span }) => grid.x + span.columns)),
+		).toBe(6)
+	})
+
+	it("uses the full finite width when regular and featured templates are mixed", () => {
+		const service = new SlidesTemplateCanvasLayoutService()
+		const snapshot = service.synchronize(
+			Array.from({ length: 12 }, (_, index) =>
+				createTemplate(index + 1, index === 0 || index === 6),
+			),
+		)
+		const columnCount = Math.max(
+			...snapshot.canvasItems.map(({ grid, span }) => grid.x + span.columns),
+		)
+
+		expect(snapshot.loopMetrics.width).toBe(0)
+		expect(snapshot.canvasItems).toHaveLength(12)
+		expect(columnCount).toBe(6)
 	})
 
 	it("keeps existing source card coordinates when a page is appended", () => {
@@ -105,6 +154,39 @@ describe("SlidesTemplateCanvasLayoutService", () => {
 		})
 		expect(appendedSnapshot.canvasItems[0]).toBe(initialSnapshot.canvasItems[0])
 		expect(appendedSnapshot.loopItemQuery).toBe(initialSnapshot.loopItemQuery)
+	})
+
+	it("keeps a rectangular grid when another page is loaded", () => {
+		const service = new SlidesTemplateCanvasLayoutService()
+		const firstPage = Array.from({ length: 40 }, (_, index) =>
+			createTemplate(index + 1, index % 6 === 0),
+		)
+		const initialSnapshot = service.synchronize(firstPage)
+		const initialSourceItems = getSourceItems(initialSnapshot.canvasItems)
+		const initialBounds = getGridBounds(initialSnapshot.canvasItems)
+		const initialLocations = new Map(
+			initialSourceItems.map((item) => [item.item.id, item.grid]),
+		)
+		const appendedSnapshot = service.synchronize([
+			...firstPage,
+			...Array.from({ length: 40 }, (_, index) => createTemplate(index + 41)),
+		])
+		const appendedSourceItems = getSourceItems(appendedSnapshot.canvasItems).filter(
+			({ item }) => Number(String(item.template.value).replace("template-", "")) > 40,
+		)
+
+		initialLocations.forEach((grid, itemId) => {
+			expect(
+				appendedSnapshot.canvasItems.find(({ item }) => item.id === itemId)?.grid,
+			).toEqual(grid)
+		})
+		expect(appendedSourceItems).toHaveLength(40)
+		appendedSourceItems.forEach((item) => {
+			expect(item.grid.y).toBeGreaterThanOrEqual(initialBounds.maxRow)
+		})
+		expect(getOccupiedCells(appendedSnapshot.canvasItems).size).toBe(
+			appendedSnapshot.loopMetrics.columnStride * appendedSnapshot.loopMetrics.rowStride,
+		)
 	})
 
 	it("switches back to the full loop grid once the result set reaches the loop threshold", () => {

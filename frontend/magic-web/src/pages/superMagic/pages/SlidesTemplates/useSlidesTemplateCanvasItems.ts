@@ -3,10 +3,14 @@ import type { OptionItem } from "@/pages/superMagic/components/MainInputContaine
 import { SlidesTemplateCanvasLayoutService } from "./SlidesTemplateCanvasLayoutService"
 
 interface UseSlidesTemplateCanvasItemsInput {
+	enableInfiniteLoop?: boolean
 	templates: OptionItem[]
 }
 
-export function useSlidesTemplateCanvasItems({ templates }: UseSlidesTemplateCanvasItemsInput) {
+export function useSlidesTemplateCanvasItems({
+	enableInfiniteLoop = true,
+	templates,
+}: UseSlidesTemplateCanvasItemsInput) {
 	const layoutServiceRef = useRef<SlidesTemplateCanvasLayoutService | null>(null)
 	if (!layoutServiceRef.current) {
 		layoutServiceRef.current = new SlidesTemplateCanvasLayoutService()
@@ -15,13 +19,13 @@ export function useSlidesTemplateCanvasItems({ templates }: UseSlidesTemplateCan
 	const [snapshot, setSnapshot] = useState(() => layoutService.getSnapshot())
 
 	useLayoutEffect(() => {
-		const nextSnapshot = layoutService.synchronize(templates)
+		const nextSnapshot = layoutService.synchronize(templates, enableInfiniteLoop)
 		setSnapshot((currentSnapshot) =>
 			currentSnapshot.canvasItems === nextSnapshot.canvasItems
 				? currentSnapshot
 				: nextSnapshot,
 		)
-	}, [layoutService, templates])
+	}, [enableInfiniteLoop, layoutService, templates])
 
 	return snapshot
 }

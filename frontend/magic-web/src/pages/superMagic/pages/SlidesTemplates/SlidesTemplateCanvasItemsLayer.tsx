@@ -13,6 +13,7 @@ import { SLIDES_TEMPLATE_CANVAS_DEFAULT_SCALE } from "./canvasZoom"
 interface SlidesTemplateCanvasItemsLayerProps {
 	canvasItems: Array<TemplateCanvasItem<SlidesTemplateCanvasTile>>
 	contentRef: RefObject<HTMLDivElement | null>
+	enableIdleLoops: boolean
 	focusedAnchorTileId: string
 	isCanvasFocusSettling: boolean
 	isCanvasMoving: boolean
@@ -35,6 +36,7 @@ const contentStyle = {
 function SlidesTemplateCanvasItemsLayer({
 	canvasItems,
 	contentRef,
+	enableIdleLoops,
 	focusedAnchorTileId,
 	isCanvasFocusSettling,
 	isCanvasMoving,
@@ -54,13 +56,15 @@ function SlidesTemplateCanvasItemsLayer({
 	const shouldPlayIntro = false
 	const idleLoopsByColumn = useMemo(
 		() =>
-			new Map(
-				resolveSlidesTemplateCanvasIdleLoops(canvasItems).map((loop) => [
-					loop.column,
-					loop,
-				]),
-			),
-		[canvasItems],
+			enableIdleLoops
+				? new Map(
+						resolveSlidesTemplateCanvasIdleLoops(canvasItems).map((loop) => [
+							loop.column,
+							loop,
+						]),
+					)
+				: new Map(),
+		[canvasItems, enableIdleLoops],
 	)
 	const { columnItems, standaloneItems } = useMemo(() => {
 		const nextColumnItems = new Map<number, SlidesTemplateCanvasColumnItem[]>()

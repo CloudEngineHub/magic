@@ -396,7 +396,7 @@ export function toTemplateOption(template: SlidesTemplateItem) {
 		},
 		thumbnail_url: markTemplateImageUrl(template.thumbnail_url) ?? undefined,
 		collage_url: markTemplateImageUrl(template.collage_url) ?? undefined,
-		// 每页 PPT 预览图 URL 列表；为空时由前端 UI 降级使用 collage_url
+		// 预览页优先使用逐页图片；缺少逐页图片时不把拼接图当作 PPT 页面。
 		preview_image_urls: (template.preview_image_urls ?? []).map(markTemplateImageUrl),
 		description: template.description,
 		preview_url: template.preview_url ?? undefined,

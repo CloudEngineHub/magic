@@ -7,7 +7,7 @@ import { Button } from "@/components/shadcn-ui/button"
 import { Skeleton } from "@/components/shadcn-ui/skeleton"
 import { cn } from "@/lib/utils"
 import ModeAvatar from "../../ModeAvatar"
-import { Plus } from "lucide-react"
+import { ChevronLeft, ChevronRight, Plus } from "lucide-react"
 import { RouteName } from "@/routes/constants"
 import useNavigate from "@/routes/hooks/useNavigate"
 import { useTranslation } from "react-i18next"
@@ -22,6 +22,50 @@ interface ModeSwitcherProps {
 	role: TopicMode
 	onActionClick?: (modeIdentifier: TopicMode) => void
 	onPlaybookClick?: () => void
+}
+
+interface RoleSwitcherScrollControlProps {
+	direction: "left" | "right"
+	onClick: () => void
+}
+
+function RoleSwitcherScrollControl({ direction, onClick }: RoleSwitcherScrollControlProps) {
+	const isLeft = direction === "left"
+	const Icon = isLeft ? ChevronLeft : ChevronRight
+
+	return (
+		<div
+			className={cn(
+				"pointer-events-none absolute w-20 overflow-hidden",
+				isLeft ? "left-0" : "right-0",
+			)}
+		>
+			<div
+				className={cn(
+					"absolute inset-0",
+					isLeft
+						? "bg-[linear-gradient(to_right,_rgb(var(--background-rgb))_0%,_rgb(var(--background-rgb))_70%,_transparent_100%)]"
+						: "bg-[linear-gradient(to_left,_rgb(var(--background-rgb))_0%,_rgb(var(--background-rgb))_70%,_transparent_100%)]",
+				)}
+			/>
+			<div
+				className={cn(
+					"relative flex h-full items-center",
+					isLeft ? "justify-start pl-2" : "justify-end pr-2",
+				)}
+			>
+				<Button
+					type="button"
+					variant="outline"
+					size="icon"
+					className="pointer-events-auto !size-4 shrink-0 rounded-full border-muted-foreground/50 text-muted-foreground/50 shadow-xs [&_svg]:size-3"
+					onClick={onClick}
+				>
+					<Icon />
+				</Button>
+			</div>
+		</div>
+	)
 }
 
 function RoleSwitcher({ role, onActionClick }: ModeSwitcherProps) {
@@ -63,6 +107,12 @@ function RoleSwitcher({ role, onActionClick }: ModeSwitcherProps) {
 				data-testid="role-switcher-mode-selector"
 				scrollContainerClassName="no-scrollbar flex h-full min-w-0 items-end gap-2 overflow-x-auto overflow-y-hidden"
 				scrollContainerRef={scrollContainerRef}
+				renderLeftControl={({ scroll }) => (
+					<RoleSwitcherScrollControl direction="left" onClick={() => scroll("left")} />
+				)}
+				renderRightControl={({ scroll }) => (
+					<RoleSwitcherScrollControl direction="right" onClick={() => scroll("right")} />
+				)}
 			>
 				{modeList.map((modeItem) => {
 					const isSelected = modeItem.mode.identifier === role

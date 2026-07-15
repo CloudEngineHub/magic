@@ -1,3 +1,4 @@
+import { createRef } from "react"
 import { fireEvent, render, screen } from "@testing-library/react"
 import { describe, expect, it, vi } from "vitest"
 import HeadlessHorizontalScroll from "./index"
@@ -88,6 +89,65 @@ describe("HeadlessHorizontalScroll", () => {
 		})
 
 		expect(scroller.scrollLeft).toBe(50)
+		expect(scroller.style.scrollBehavior).toBe("smooth")
+	})
+
+	it("releases an active pointer capture when the drag effect is rebuilt", () => {
+		const firstScrollContainerRef = createRef<HTMLDivElement>()
+		const secondScrollContainerRef = createRef<HTMLDivElement>()
+		const { rerender } = render(
+			<HeadlessHorizontalScroll
+				scrollContainerRef={firstScrollContainerRef}
+				scrollContainerProps={{ "data-testid": "scroller" }}
+			>
+				<div>Content</div>
+			</HeadlessHorizontalScroll>,
+		)
+		const scroller = screen.getByTestId("scroller")
+		let capturedPointerId: number | null = null
+		const setPointerCapture = vi.fn((pointerId: number) => {
+			capturedPointerId = pointerId
+		})
+		const hasPointerCapture = vi.fn((pointerId: number) => capturedPointerId === pointerId)
+		const releasePointerCapture = vi.fn((pointerId: number) => {
+			if (capturedPointerId === pointerId) capturedPointerId = null
+		})
+		Object.defineProperties(scroller, {
+			setPointerCapture: { configurable: true, value: setPointerCapture },
+			hasPointerCapture: { configurable: true, value: hasPointerCapture },
+			releasePointerCapture: { configurable: true, value: releasePointerCapture },
+		})
+		makeScrollable(scroller)
+		scroller.style.scrollBehavior = "smooth"
+
+		firePointerEvent(scroller, "pointerdown", {
+			pointerId: 1,
+			button: 0,
+			clientX: 120,
+			clientY: 20,
+		})
+		firePointerEvent(scroller, "pointermove", {
+			pointerId: 1,
+			buttons: 1,
+			clientX: 70,
+			clientY: 22,
+		})
+
+		expect(scroller).toHaveClass("cursor-grabbing")
+		expect(scroller.style.scrollBehavior).toBe("auto")
+
+		rerender(
+			<HeadlessHorizontalScroll
+				scrollContainerRef={secondScrollContainerRef}
+				scrollContainerProps={{ "data-testid": "scroller" }}
+			>
+				<div>Content</div>
+			</HeadlessHorizontalScroll>,
+		)
+
+		expect(secondScrollContainerRef.current).toBe(scroller)
+		expect(releasePointerCapture).toHaveBeenCalledWith(1)
+		expect(scroller).not.toHaveClass("cursor-grabbing")
 		expect(scroller.style.scrollBehavior).toBe("smooth")
 	})
 

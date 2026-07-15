@@ -1,4 +1,11 @@
-import { fireEvent, render, screen, waitForElementToBeRemoved } from "@testing-library/react"
+import {
+	act,
+	fireEvent,
+	render,
+	screen,
+	waitFor,
+	waitForElementToBeRemoved,
+} from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { forwardRef, useImperativeHandle } from "react"
 import type {
@@ -9,11 +16,13 @@ import SlidesTemplatesPage from "../index"
 
 const {
 	catalogStateMock,
+	catalogOptionsHistory,
 	businessTemplate,
 	findSimilarCallbackHistory,
 	focusRandomTemplateMock,
 	openPreviewMock,
 	relatedTemplate,
+	secondaryMatchTemplate,
 	unrelatedTemplate,
 } = vi.hoisted(() => {
 	const template: OptionItem = {
@@ -35,6 +44,11 @@ const {
 		label: "Unrelated Template",
 		colors: ["#D97706", "#FACC15", "#7C2D12"],
 	}
+	const secondaryMatch: OptionItem = {
+		value: "PPT-secondary-match",
+		label: "Secondary Match",
+		colors: ["#D97706", "#7AA7FF", "#182A5A"],
+	}
 	const groups: OptionGroup[] = [
 		{
 			group_key: "all",
@@ -50,10 +64,12 @@ const {
 
 	return {
 		businessTemplate: template,
+		catalogOptionsHistory: [] as Array<{ pageSize?: number } | undefined>,
 		findSimilarCallbackHistory: [] as Array<((template: OptionItem) => void) | undefined>,
 		focusRandomTemplateMock: vi.fn(),
 		openPreviewMock: vi.fn(),
 		relatedTemplate: related,
+		secondaryMatchTemplate: secondaryMatch,
 		unrelatedTemplate: unrelated,
 		catalogStateMock: {
 			groups,
@@ -63,7 +79,9 @@ const {
 			isLoading: false,
 			isRefreshing: false,
 			isLoadingMore: false,
+			isLoadMoreFailed: false,
 			keyword: "",
+			debouncedKeyword: "",
 			loadedTemplateCount: 3,
 			loadMore: vi.fn(),
 			loadTemplateDetail: vi.fn().mockResolvedValue(null),
@@ -90,7 +108,10 @@ vi.mock("react-i18next", () => ({
 vi.mock(
 	"@/pages/superMagic/components/MainInputContainer/scenes/Slides/useSlidesTemplateCatalogState",
 	() => ({
-		useSlidesTemplateCatalogState: () => catalogStateMock,
+		useSlidesTemplateCatalogState: (options?: { pageSize?: number }) => {
+			catalogOptionsHistory.push(options)
+			return catalogStateMock
+		},
 	}),
 )
 
@@ -99,14 +120,18 @@ vi.mock("../SlidesTemplateCanvas", () => ({
 	default: forwardRef(
 		(
 			{
+				enableInfiniteLoop,
 				hasMore,
+				initialAlignment,
 				onLoadMore,
 				onFindSimilarColors,
 				onPreviewOpenChange,
 				onTemplateSelect,
 				templates,
 			}: {
+				enableInfiniteLoop?: boolean
 				hasMore: boolean
+				initialAlignment?: "center" | "top"
 				onLoadMore: () => void
 				onFindSimilarColors?: (template: OptionItem) => void
 				onPreviewOpenChange?: (isOpen: boolean) => void
@@ -132,6 +157,8 @@ vi.mock("../SlidesTemplateCanvas", () => ({
 					<div
 						data-testid="mock-slides-template-canvas-options"
 						data-has-more={String(hasMore)}
+						data-initial-alignment={initialAlignment}
+						data-loop-enabled={String(enableInfiniteLoop)}
 					>
 						{templates.map((template) => String(template.value)).join(",")}
 					</div>
@@ -220,10 +247,48 @@ describe("SlidesTemplatesPage", () => {
 		catalogStateMock.hasMore = false
 		catalogStateMock.isLoading = false
 		catalogStateMock.isLoadingMore = false
+		catalogStateMock.isLoadMoreFailed = false
 		catalogStateMock.isRefreshing = false
 		catalogStateMock.loadedTemplateCount = 3
 		catalogStateMock.templateOptions = [businessTemplate, relatedTemplate, unrelatedTemplate]
+		catalogOptionsHistory.length = 0
 		findSimilarCallbackHistory.length = 0
+	})
+
+	it("loads templates in backend-sized batches", () => {
+		render(<SlidesTemplatesPage />)
+
+		expect(catalogOptionsHistory.at(-1)).toEqual({ pageSize: 200 })
+		expect(screen.getByTestId("mock-slides-template-canvas-options")).toHaveAttribute(
+			"data-loop-enabled",
+			"true",
+		)
+	})
+
+	it("disables the infinite loop while searching and restores it after clearing", () => {
+		render(<SlidesTemplatesPage />)
+
+		fireEvent.change(screen.getByTestId("slides-templates-page-search-input"), {
+			target: { value: "business" },
+		})
+		expect(screen.getByTestId("mock-slides-template-canvas-options")).toHaveAttribute(
+			"data-loop-enabled",
+			"false",
+		)
+		expect(screen.getByTestId("mock-slides-template-canvas-options")).toHaveAttribute(
+			"data-initial-alignment",
+			"center",
+		)
+
+		fireEvent.click(screen.getByTestId("slides-templates-page-search-clear"))
+		expect(screen.getByTestId("mock-slides-template-canvas-options")).toHaveAttribute(
+			"data-loop-enabled",
+			"true",
+		)
+		expect(screen.getByTestId("mock-slides-template-canvas-options")).toHaveAttribute(
+			"data-initial-alignment",
+			"center",
+		)
 	})
 
 	it("keeps canvas callbacks stable when loading more state changes", () => {
@@ -318,6 +383,14 @@ describe("SlidesTemplatesPage", () => {
 		expect(
 			screen.getByTestId("slides-templates-page-similar-colors-filter"),
 		).toBeInTheDocument()
+		expect(screen.getByTestId("mock-slides-template-canvas-options")).toHaveAttribute(
+			"data-loop-enabled",
+			"false",
+		)
+		expect(screen.getByTestId("mock-slides-template-canvas-options")).toHaveAttribute(
+			"data-initial-alignment",
+			"top",
+		)
 		expect(screen.getByTestId("mock-slides-template-canvas-options")).toHaveTextContent(
 			`${businessTemplate.value},${relatedTemplate.value}`,
 		)
@@ -333,36 +406,89 @@ describe("SlidesTemplatesPage", () => {
 		expect(screen.getByTestId("mock-slides-template-canvas-options")).toHaveTextContent(
 			String(unrelatedTemplate.value),
 		)
+		expect(screen.getByTestId("mock-slides-template-canvas-options")).toHaveAttribute(
+			"data-loop-enabled",
+			"true",
+		)
+		expect(screen.getByTestId("mock-slides-template-canvas-options")).toHaveAttribute(
+			"data-initial-alignment",
+			"center",
+		)
 	})
 
-	it("keeps similar-color results stable when catalog data changes", () => {
-		catalogStateMock.hasMore = true
-		catalogStateMock.loadedTemplateCount = 40
+	it("prefers primary-color matches and falls back to the full palette when needed", () => {
+		catalogStateMock.templateOptions = [
+			businessTemplate,
+			relatedTemplate,
+			secondaryMatchTemplate,
+		]
 		const { rerender } = render(<SlidesTemplatesPage />)
 
 		fireEvent.click(screen.getByTestId("mock-slides-template-find-similar-colors"))
-		const initialResults = screen.getByTestId("mock-slides-template-canvas-options").textContent
+		expect(screen.getByTestId("mock-slides-template-canvas-options")).toHaveTextContent(
+			`${businessTemplate.value},${relatedTemplate.value}`,
+		)
+		expect(screen.getByTestId("mock-slides-template-canvas-options")).not.toHaveTextContent(
+			String(secondaryMatchTemplate.value),
+		)
+
+		catalogStateMock.templateOptions = [businessTemplate, secondaryMatchTemplate]
+		rerender(<SlidesTemplatesPage />)
+		expect(screen.getByTestId("mock-slides-template-canvas-options")).toHaveTextContent(
+			String(secondaryMatchTemplate.value),
+		)
+	})
+
+	it("extends similar-color results with newly loaded templates and stops at the last page", async () => {
+		catalogStateMock.hasMore = true
+		catalogStateMock.loadedTemplateCount = 200
+		const { rerender } = render(<SlidesTemplatesPage />)
+
+		fireEvent.click(screen.getByTestId("mock-slides-template-find-similar-colors"))
+		await waitFor(() => expect(catalogStateMock.loadMore).toHaveBeenCalledTimes(1))
+
 		catalogStateMock.templateOptions = [
 			businessTemplate,
 			relatedTemplate,
 			unrelatedTemplate,
 			{ value: "PPT-new-related", colors: ["#315ECA", "#7AA7FF"] },
 		]
-		catalogStateMock.loadedTemplateCount = 80
+		catalogStateMock.loadedTemplateCount = 400
+		catalogStateMock.hasMore = false
 		rerender(<SlidesTemplatesPage />)
 
 		expect(screen.getByTestId("mock-slides-template-canvas-options")).toHaveTextContent(
-			initialResults ?? "",
-		)
-		expect(screen.getByTestId("mock-slides-template-canvas-options")).not.toHaveTextContent(
 			"PPT-new-related",
 		)
 		expect(screen.getByTestId("mock-slides-template-canvas-options")).toHaveAttribute(
 			"data-has-more",
 			"false",
 		)
-		fireEvent.click(screen.getByTestId("mock-slides-template-canvas-load-more"))
-		expect(catalogStateMock.loadMore).not.toHaveBeenCalled()
+		expect(catalogStateMock.loadMore).toHaveBeenCalledTimes(1)
+	})
+
+	it("limits automatic similar-color pagination frequency", () => {
+		vi.useFakeTimers()
+		catalogStateMock.hasMore = true
+		catalogStateMock.loadedTemplateCount = 200
+		const { rerender } = render(<SlidesTemplatesPage />)
+
+		fireEvent.click(screen.getByTestId("mock-slides-template-find-similar-colors"))
+		act(() => vi.runOnlyPendingTimers())
+		expect(catalogStateMock.loadMore).toHaveBeenCalledTimes(1)
+
+		catalogStateMock.isLoadingMore = true
+		rerender(<SlidesTemplatesPage />)
+		catalogStateMock.isLoadingMore = false
+		catalogStateMock.loadedTemplateCount = 400
+		rerender(<SlidesTemplatesPage />)
+
+		act(() => vi.advanceTimersByTime(599))
+		expect(catalogStateMock.loadMore).toHaveBeenCalledTimes(1)
+		act(() => vi.advanceTimersByTime(1))
+		expect(catalogStateMock.loadMore).toHaveBeenCalledTimes(2)
+
+		vi.useRealTimers()
 	})
 
 	it("hides bottom tools while the inline preview is open and restores them after close", async () => {

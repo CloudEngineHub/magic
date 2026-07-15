@@ -98,6 +98,16 @@ function getCanvasTranslate() {
 	}
 }
 
+function getVisibleTemplateSnapshot() {
+	return screen
+		.getAllByTestId("slides-template-canvas-tile-item")
+		.map((item) => {
+			const image = item.querySelector("img")
+			return `${item.style.transform}|${image?.getAttribute("alt") ?? ""}`
+		})
+		.sort()
+}
+
 function fireCanvasPointerEvent(
 	element: HTMLElement,
 	type: "pointerdown" | "pointermove" | "pointerup",
@@ -163,7 +173,7 @@ describe("SlidesTemplateCanvas", () => {
 		expect(setPointerCapture).toHaveBeenCalledWith(1)
 	})
 
-	it("keeps dragging after templates are exhausted", () => {
+	it("constrains dragging when finite templates are exhausted", () => {
 		renderCanvas([template], vi.fn(), { hasMore: false })
 		const canvas = screen.getByTestId("slides-template-canvas")
 		mockCanvasRect(canvas)
@@ -183,10 +193,10 @@ describe("SlidesTemplateCanvas", () => {
 		})
 
 		const offset = getCanvasTranslate()
-		expect(offset).toEqual({ x: 4900, y: -4100 })
+		expect(offset).toEqual({ x: 0, y: 0 })
 	})
 
-	it("uses the same unbounded movement while more templates can load", () => {
+	it("keeps movement available while more templates can load", () => {
 		const exhaustedRender = renderCanvas([template], vi.fn(), { hasMore: false })
 		const exhaustedCanvas = screen.getByTestId("slides-template-canvas")
 		mockCanvasRect(exhaustedCanvas)
@@ -226,7 +236,108 @@ describe("SlidesTemplateCanvas", () => {
 		})
 		const loadingOffset = getCanvasTranslate()
 
-		expect(loadingOffset).toEqual(exhaustedOffset)
+		expect(exhaustedOffset).toEqual({ x: 0, y: 0 })
+		expect(loadingOffset.x).toBeLessThan(exhaustedOffset.x)
+		expect(loadingOffset.x).toBeGreaterThan(exhaustedOffset.x - 120)
+	})
+
+	it("allows finite canvas dragging within its content bounds", () => {
+		renderCanvas(
+			Array.from({ length: 12 }, (_, index) => createTemplate(index + 1)),
+			vi.fn(),
+			{
+				hasMore: false,
+			},
+		)
+		const canvas = screen.getByTestId("slides-template-canvas")
+		mockCanvasRect(canvas)
+		const initialOffset = getCanvasTranslate()
+
+		fireCanvasPointerEvent(canvas, "pointerdown", {
+			button: 0,
+			clientX: 100,
+			clientY: 100,
+			isPrimary: true,
+			pointerId: 1,
+		})
+		fireCanvasPointerEvent(canvas, "pointermove", {
+			clientX: -500,
+			clientY: 100,
+			isPrimary: true,
+			pointerId: 1,
+		})
+		const movedOffset = getCanvasTranslate()
+
+		expect(movedOffset.x).toBe(initialOffset.x - 600)
+
+		fireCanvasPointerEvent(canvas, "pointermove", {
+			clientX: -5000,
+			clientY: 100,
+			isPrimary: true,
+			pointerId: 1,
+		})
+		const boundedOffset = getCanvasTranslate()
+
+		expect(boundedOffset.x).toBeLessThan(movedOffset.x)
+		expect(boundedOffset.x).toBeGreaterThan(-2_000)
+	})
+
+	it("returns a finite canvas to its bounds when loading is exhausted", () => {
+		const props = {
+			templates: [template],
+			selectedTemplate: null,
+			onTemplateSelect: vi.fn(),
+			isLoading: false,
+			isLoadingMore: false,
+			isRefreshing: false,
+			onLoadMore: vi.fn(),
+			resetKey: "all:",
+		}
+		const { rerender } = render(<SlidesTemplateCanvas {...props} hasMore />)
+		const canvas = screen.getByTestId("slides-template-canvas")
+		mockCanvasRect(canvas)
+
+		fireCanvasPointerEvent(canvas, "pointerdown", {
+			button: 0,
+			clientX: 500,
+			clientY: 300,
+			isPrimary: true,
+			pointerId: 1,
+		})
+		fireCanvasPointerEvent(canvas, "pointermove", {
+			clientX: -5000,
+			clientY: 300,
+			isPrimary: true,
+			pointerId: 1,
+		})
+		expect(getCanvasTranslate().x).toBeLessThan(0)
+
+		rerender(<SlidesTemplateCanvas {...props} hasMore={false} />)
+
+		expect(getCanvasTranslate()).toEqual({ x: 0, y: 0 })
+	})
+
+	it("keeps looped templates draggable after the source is exhausted", () => {
+		const templates = Array.from({ length: 36 }, (_, index) => createTemplate(index + 1))
+		renderCanvas(templates, vi.fn(), { hasMore: false })
+		const canvas = screen.getByTestId("slides-template-canvas")
+		mockCanvasRect(canvas)
+
+		fireCanvasPointerEvent(canvas, "pointerdown", {
+			button: 0,
+			clientX: 100,
+			clientY: 100,
+			isPrimary: true,
+			pointerId: 1,
+		})
+		fireCanvasPointerEvent(canvas, "pointermove", {
+			clientX: 5000,
+			clientY: -4000,
+			isPrimary: true,
+			pointerId: 1,
+		})
+
+		expect(getCanvasTranslate()).toEqual({ x: 4900, y: -4100 })
 	})
 
 	it("keeps the repeated canvas DOM bounded after a distant drag", async () => {
@@ -292,14 +403,14 @@ describe("SlidesTemplateCanvas", () => {
 		const rebasedOffset = getCanvasTranslate()
 
 		fireCanvasPointerEvent(canvas, "pointermove", {
-			clientX: -5010,
+			clientX: -4990,
 			clientY: 306,
 			isPrimary: true,
 			pointerId: 1,
 		})
 
 		expect(getCanvasTranslate()).toEqual({
-			x: rebasedOffset.x - 10,
+			x: rebasedOffset.x + 10,
 			y: rebasedOffset.y + 6,
 		})
 	})
@@ -338,14 +449,14 @@ describe("SlidesTemplateCanvas", () => {
 		const loadingOffset = getCanvasTranslate()
 		fireCanvasPointerEvent(canvas, "pointermove", {
 			clientX: 270,
-			clientY: 280,
+			clientY: 240,
 			isPrimary: true,
 			pointerId: 1,
 		})
 
 		expect(getCanvasTranslate()).toEqual({
 			x: loadingOffset.x - 30,
-			y: loadingOffset.y + 20,
+			y: loadingOffset.y - 20,
 		})
 	})
 
@@ -588,7 +699,11 @@ describe("SlidesTemplateCanvas", () => {
 		const performanceNowSpy = vi.spyOn(performance, "now").mockImplementation(() => Date.now())
 
 		try {
-			renderCanvas([template], vi.fn(), { hasMore: false })
+			renderCanvas(
+				Array.from({ length: 36 }, (_, index) => createTemplate(index + 1)),
+				vi.fn(),
+				{ hasMore: false },
+			)
 			const canvas = screen.getByTestId("slides-template-canvas")
 			mockCanvasRect(canvas)
 
@@ -713,6 +828,43 @@ describe("SlidesTemplateCanvas", () => {
 			cancelAnimationFrameSpy.mockRestore()
 			rectSpy.mockRestore()
 			vi.useRealTimers()
+		}
+	})
+
+	it("keeps the current viewport unchanged when an appended page arrives", async () => {
+		const rectSpy = vi
+			.spyOn(HTMLElement.prototype, "getBoundingClientRect")
+			.mockReturnValue(CANVAS_RECT)
+		const initialTemplates = Array.from({ length: 40 }, (_, index) => createTemplate(index + 1))
+		const appendedTemplates = [
+			...initialTemplates,
+			...Array.from({ length: 40 }, (_, index) => createTemplate(index + 41)),
+		]
+		const props = {
+			selectedTemplate: null,
+			onTemplateSelect: vi.fn(),
+			hasMore: true,
+			isLoading: false,
+			isLoadingMore: false,
+			isRefreshing: false,
+			onLoadMore: vi.fn(),
+			resetKey: "all:",
+		}
+
+		try {
+			const { rerender } = render(
+				<SlidesTemplateCanvas {...props} templates={initialTemplates} />,
+			)
+			const initialSnapshot = getVisibleTemplateSnapshot()
+
+			rerender(<SlidesTemplateCanvas {...props} templates={appendedTemplates} />)
+
+			await waitFor(() => {
+				expect(getVisibleTemplateSnapshot()).toEqual(initialSnapshot)
+			})
+			expect(screen.queryByAltText("Template 41")).not.toBeInTheDocument()
+		} finally {
+			rectSpy.mockRestore()
 		}
 	})
 

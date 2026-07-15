@@ -478,6 +478,9 @@ export function useSlidesTemplateCatalogState({
 		isLoadingMore,
 		isLoadMoreFailed,
 		keyword,
+		// 这里防抖后的关键词与 templates 的实际请求/替换时机对齐。外部依赖这个值来同步 UI（例如画布 resetKey）时，
+		// 才不会和仍在防抖窗口内的原始 keyword 错开一帧，避免模板未变就先复位画布导致的错位。
+		debouncedKeyword,
 		loadMore,
 		retryLoadMore,
 		loadedTemplateCount: templates.length,

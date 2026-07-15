@@ -29,6 +29,7 @@ interface SlidesTemplateCanvasSurfaceProps {
 	isCanvasFocusSettling: boolean
 	isDragging: boolean
 	isCanvasMoving: boolean
+	enableIdleLoops: boolean
 	isIdleAnimationActive: boolean
 	isInitialLoading: boolean
 	isLoading: boolean
@@ -69,6 +70,7 @@ export default function SlidesTemplateCanvasSurface({
 	isCanvasFocusSettling,
 	isDragging,
 	isCanvasMoving,
+	enableIdleLoops,
 	isIdleAnimationActive,
 	isInitialLoading,
 	isLoading,
@@ -171,6 +173,7 @@ export default function SlidesTemplateCanvasSurface({
 				contentRef={contentRef}
 				isCanvasFocusSettling={isCanvasFocusSettling}
 				isCanvasMoving={isCanvasMoving}
+				enableIdleLoops={enableIdleLoops}
 				isIdleAnimationActive={isIdleAnimationActive}
 				keepIdleLoopsMounted={canvasScale >= 0.8}
 				prioritizeCoverLoading={!isDragging && !isCanvasMoving}

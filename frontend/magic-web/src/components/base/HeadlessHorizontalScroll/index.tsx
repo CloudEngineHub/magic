@@ -277,9 +277,7 @@ function HeadlessHorizontalScroll({
 		window.addEventListener("blur", handleWindowBlur)
 
 		return () => {
-			if (dragState?.isDragging) {
-				container.style.scrollBehavior = dragState.originalScrollBehavior
-			}
+			resetDrag(false)
 			container.removeEventListener("scroll", checkScrollPosition)
 			container.removeEventListener("pointerdown", handlePointerDown)
 			container.removeEventListener("pointermove", handlePointerMove)

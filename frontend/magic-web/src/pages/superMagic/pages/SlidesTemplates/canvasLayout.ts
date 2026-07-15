@@ -272,6 +272,7 @@ interface ConstrainTemplateCanvasOffsetInput {
 	offset: TemplateCanvasPoint
 	padding: number
 	scale?: number
+	smallContentVerticalAlignment?: "center" | "start"
 	viewportHeight: number
 	viewportWidth: number
 }
@@ -281,6 +282,7 @@ function clampAxisOffset({
 	maxWorld,
 	minWorld,
 	padding,
+	smallContentAlignment = "center",
 	startInset = 0,
 	viewportSize,
 	currentOffset,
@@ -290,6 +292,7 @@ function clampAxisOffset({
 	maxWorld: number
 	minWorld: number
 	padding: number
+	smallContentAlignment?: "center" | "start"
 	startInset?: number
 	viewportSize: number
 }) {
@@ -297,6 +300,7 @@ function clampAxisOffset({
 	const maxOffset = -minWorld + padding - viewportSize / 2 + startInset
 
 	if (minOffset > maxOffset) {
+		if (smallContentAlignment === "start") return maxOffset
 		const centeredOffset = -(minWorld + maxWorld) / 2 + (startInset - endInset) / 2
 		return Math.min(Math.max(currentOffset, centeredOffset - padding), centeredOffset + padding)
 	}
@@ -310,6 +314,7 @@ export function constrainTemplateCanvasOffset({
 	offset,
 	padding,
 	scale = 1,
+	smallContentVerticalAlignment = "center",
 	viewportHeight,
 	viewportWidth,
 }: ConstrainTemplateCanvasOffsetInput): TemplateCanvasPoint {
@@ -338,6 +343,7 @@ export function constrainTemplateCanvasOffset({
 			maxWorld: bounds.maxY * normalizedScale,
 			minWorld: bounds.minY * normalizedScale,
 			padding,
+			smallContentAlignment: smallContentVerticalAlignment,
 			startInset: normalizedInsets.top,
 			viewportSize: viewportHeight,
 		}),
