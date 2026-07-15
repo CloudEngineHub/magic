@@ -87,6 +87,14 @@ class GlobalConfigCacheUtil
     }
 
     /**
+     * Delete global config data to cache.
+     */
+    public static function deleteGlobalConfig(): int
+    {
+        return self::delete(self::getGlobalConfigKey());
+    }
+
+    /**
      * Set global data queries to cache.
      *
      * @param string $userId User ID
