@@ -88,8 +88,6 @@ class GlobalConfigCacheUtil
 
     /**
      * Delete global config data to cache.
-     *
-     * @return int
      */
     public static function deleteGlobalConfig(): int
     {
