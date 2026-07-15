@@ -198,6 +198,9 @@ function ProjectCardContainer({
 								)}
 								projectName={shareProject.shareSuccessInfo.shareInfo.project_name}
 								shareType={shareProject.shareSuccessInfo.shareInfo.share_type}
+								createdAt={shareProject.shareSuccessInfo.shareInfo.created_at}
+								updatedAt={shareProject.shareSuccessInfo.shareInfo.updated_at}
+								viewCount={shareProject.shareSuccessInfo.shareInfo.view_count}
 							/>
 						</Suspense>
 					)}

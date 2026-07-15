@@ -796,6 +796,7 @@ function EditToolbar({
 					{/* 分享按钮 */}
 					{showShareButton && (
 						<ActionButton
+							data-testid="detail-header-action-item-share"
 							icon={<Share2 size={16} />}
 							onClick={handleShare}
 							title={t("ppt.share")}

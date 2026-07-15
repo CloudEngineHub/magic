@@ -95,6 +95,7 @@ import { isCachedChatWorkspaceProject } from "@/pages/superMagic/utils/isChatWor
 
 import { useDownloadImageMenu } from "../Detail/contents/Image/hooks/useDownloadImageMenu"
 import { DownloadImageMode } from "../../pages/Workspace/types"
+import { useDownloadProgress } from "@/pages/superMagic/hooks/useDownloadProgress"
 import { userStore } from "@/models/user"
 import { MagicDropdown } from "@/components/base"
 import { detectContentTypeRender } from "../Detail/components/FilesViewer/utils/preview"
@@ -222,6 +223,7 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 	const isChatProject = isCachedChatWorkspaceProject(selectedProject)
 	const canUseDesktopCrossProjectMove = projects.length > 0 && !isChatProject && !isMobile
 	const { handleShowInfo, fileInfoPanel } = useFileInfoPanel()
+	const downloadProgress = useDownloadProgress()
 
 	// AI 卡片创建弹窗 hook
 	const { open: openAICardDialog, dialogElement: aiCardDialogElement } = useAICardCreateDialog({
@@ -343,6 +345,7 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 		getItemId,
 		selectedProject,
 		duplicateFileHandler: sharedDuplicateHandler,
+		downloadProgress,
 	})
 
 	const {
@@ -1844,6 +1847,7 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 		onBatchPptExportProgress,
 		onBatchPptExportEnd,
 		allowEdit,
+		downloadProgress,
 		// 批量分享回调
 		onBatchShareClick: async (fileIds: string[]) => {
 			if (fileIds.length > 0) {
@@ -2147,6 +2151,9 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 								shareType={shareSuccessInfo.shareInfo.share_type}
 								shareProject={shareSuccessInfo.shareInfo.share_project}
 								fileIds={shareSuccessInfo.shareInfo.file_ids}
+								createdAt={shareSuccessInfo.shareInfo.created_at}
+								updatedAt={shareSuccessInfo.shareInfo.updated_at}
+								viewCount={shareSuccessInfo.shareInfo.view_count}
 							/>
 						)}
 					</>
