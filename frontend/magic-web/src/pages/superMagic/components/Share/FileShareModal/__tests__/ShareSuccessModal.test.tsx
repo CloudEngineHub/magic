@@ -141,9 +141,9 @@ describe("ShareSuccessModal", () => {
 		})
 
 		expect(screen.getByText("share.createdDate")).toBeInTheDocument()
-		expect(screen.getByText("2026-07-14 09:30")).toBeInTheDocument()
+		expect(screen.getByText("2026-07-14 09:30:00")).toBeInTheDocument()
 		expect(screen.getByText("share.modifiedDate")).toBeInTheDocument()
-		expect(screen.getByText("2026-07-14 10:45")).toBeInTheDocument()
+		expect(screen.getByText("2026-07-14 10:45:00")).toBeInTheDocument()
 		expect(screen.getByText("share.accessCount")).toBeInTheDocument()
 		expect(screen.getByText("12")).toBeInTheDocument()
 	})
