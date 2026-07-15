@@ -218,10 +218,6 @@ export function useSlidesTemplateCatalogState({
 			]),
 		)
 	}, [selectedCategoryCode, selectedChildTagCodes, selectedGroupKey, selectedOperationalTagCode])
-	const shouldMatchAllSelectedTags =
-		Boolean(selectedCategoryCode) ||
-		(Boolean(selectedOperationalTagCode) && selectedChildTagCodes.length > 0)
-
 	useEffect(() => {
 		setSelectedChildTagCodes((currentTagCodes) => {
 			const validTagCodes = currentTagCodes.filter((tagCode) => filterTagCodeSet.has(tagCode))
@@ -276,9 +272,7 @@ export function useSlidesTemplateCatalogState({
 				...(selectedTagCodes.length > 0
 					? {
 							tag_codes: selectedTagCodes,
-							tag_match: shouldMatchAllSelectedTags
-								? ("all" as const)
-								: ("any" as const),
+							tag_match: "any" as const,
 						}
 					: {}),
 			}
@@ -346,13 +340,7 @@ export function useSlidesTemplateCatalogState({
 				}
 			}
 		},
-		[
-			debouncedKeyword,
-			pageSize,
-			selectedCategoryCode,
-			selectedTagCodes,
-			shouldMatchAllSelectedTags,
-		],
+		[debouncedKeyword, pageSize, selectedCategoryCode, selectedTagCodes],
 	)
 
 	useEffect(() => {
