@@ -38,10 +38,15 @@ export function useCenteredHorizontalScroll({
 			const maxScrollLeft = Math.max(container.scrollWidth - container.clientWidth, 0)
 			const nextScrollLeft = Math.min(Math.max(targetScrollLeft, 0), maxScrollLeft)
 
-			container.scrollTo({
-				left: nextScrollLeft,
-				behavior,
-			})
+			if (typeof container.scrollTo === "function") {
+				container.scrollTo({
+					left: nextScrollLeft,
+					behavior,
+				})
+				return
+			}
+
+			container.scrollLeft = nextScrollLeft
 		},
 		[activeKey],
 	)

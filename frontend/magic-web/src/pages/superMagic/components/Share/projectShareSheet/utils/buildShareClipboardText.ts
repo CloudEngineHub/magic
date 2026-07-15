@@ -54,7 +54,8 @@ export async function buildShareClipboardText({
 	t,
 }: BuildShareClipboardTextParams): Promise<string> {
 	const shareUrl = generateShareUrl(share.resource_id, share.password, "files")
-	const fileIds = "file_ids" in share && Array.isArray(share.file_ids) ? share.file_ids : undefined
+	const fileIds =
+		"file_ids" in share && Array.isArray(share.file_ids) ? share.file_ids : undefined
 	const fileDisplayConfig = await fetchFileDisplayConfig(fileIds)
 
 	return generateShareMessageText({

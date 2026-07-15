@@ -88,6 +88,9 @@ interface PPTSlideProps {
 	mainFileName?: string
 	/** 附件列表 */
 	attachments?: AttachmentItem[]
+	manualScale?: number | null
+	onManualScaleChange?: (scale: number | null) => void
+	onScaleRatioChange?: (scale: number) => void
 }
 
 interface PerformSaveOptions {
@@ -128,6 +131,9 @@ const PPTSlide = observer(function PPTSlide({
 	mainFileName,
 	attachments,
 	allowDownload = true,
+	manualScale,
+	onManualScaleChange,
+	onScaleRatioChange,
 }: PPTSlideProps) {
 	const { t } = useTranslation("super")
 	const isMobile = useIsMobile()
@@ -809,6 +815,7 @@ const PPTSlide = observer(function PPTSlide({
 					isFullscreen={isFullscreen}
 					isEditMode={isEditMode}
 					isVisible={isActive}
+					isTabActive={isActive}
 					isSaving={isSaving}
 					saveEditContent={saveEditContent}
 					fileId={fileId}
@@ -822,6 +829,10 @@ const PPTSlide = observer(function PPTSlide({
 					slideIndex={index}
 					isPlaybackMode={isPlaybackMode}
 					className="h-[100%-40px]"
+					autoFitVerticalPadding={64}
+					manualScale={manualScale}
+					onManualScaleChange={isEditMode ? undefined : onManualScaleChange}
+					onScaleRatioChange={isActive ? onScaleRatioChange : undefined}
 					onRenderReady={handleSlideRenderReady}
 					onAppendPickingChange={setIsAppendPicking}
 				/>

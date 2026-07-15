@@ -122,6 +122,68 @@ describe("projectReferenceMention", () => {
 		expect(folder?.file_id).toBe(microAppFolder.file_id)
 	})
 
+	it("resolves slide index entry files to their parent PPT folder", () => {
+		const slideFolder = {
+			type: "directory",
+			file_id: "slide-dir",
+			file_name: "PPT",
+			relative_file_path: "/PPT",
+			display_config: {
+				type: "slide",
+				slides: ["slides/page-1.html", "slides/page-2.html"],
+			},
+			children: [],
+		} as unknown as WorkspaceFolder
+
+		const folder = resolveFolderWorkspaceEntryFromProjectFile(
+			{
+				file_id: "slide-entry",
+				file_name: "index.html",
+				relative_file_path: "/PPT/index.html",
+				parent_id: slideFolder.file_id,
+				display_config: slideFolder.display_config,
+			},
+			createOptions([slideFolder]),
+		)
+
+		expect(folder?.file_id).toBe(slideFolder.file_id)
+	})
+
+	it("does not resolve slide page files to their parent PPT folder", () => {
+		const slideFolder = {
+			type: "directory",
+			file_id: "slide-dir",
+			file_name: "PPT",
+			relative_file_path: "/PPT",
+			display_config: {
+				type: "slide",
+				slides: ["slides/page-1.html", "slides/page-2.html"],
+			},
+			children: [],
+		} as unknown as WorkspaceFolder
+		const slidesFolder = {
+			type: "directory",
+			file_id: "slides-dir",
+			file_name: "slides",
+			relative_file_path: "/PPT/slides",
+			parent_id: slideFolder.file_id,
+			children: [],
+		} as unknown as WorkspaceFolder
+
+		const folder = resolveFolderWorkspaceEntryFromProjectFile(
+			{
+				file_id: "slide-page",
+				file_name: "page-1.html",
+				relative_file_path: "/PPT/slides/page-1.html",
+				parent_id: slidesFolder.file_id,
+				display_config: slideFolder.display_config,
+			},
+			createOptions([slideFolder, slidesFolder]),
+		)
+
+		expect(folder).toBeNull()
+	})
+
 	it("resolves legacy custom root_path entry files", () => {
 		const customFolder = {
 			type: "directory",

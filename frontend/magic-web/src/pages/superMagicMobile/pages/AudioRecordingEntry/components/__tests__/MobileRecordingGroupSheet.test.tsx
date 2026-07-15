@@ -214,10 +214,7 @@ describe("MobileRecordingGroupSheet", () => {
 		fireEvent.click(screen.getByTestId("mobile-recording-group-rename-confirm"))
 
 		await waitFor(() => {
-			expect(onRenameGroup).toHaveBeenCalledWith(
-				"workspace-audio-001",
-				"Mock renamed group",
-			)
+			expect(onRenameGroup).toHaveBeenCalledWith("workspace-audio-001", "Mock renamed group")
 		})
 		expect(screen.getByTestId("mobile-recording-group-create-trigger")).toBeInTheDocument()
 	})

@@ -224,4 +224,3 @@ export function MobileActiveRecordingIndicator({
 		</div>
 	)
 }
-

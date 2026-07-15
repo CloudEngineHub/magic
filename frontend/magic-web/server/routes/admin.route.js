@@ -108,6 +108,10 @@ const ADMIN_ROUTES = [
 		path: "/admin/platform/ai/capability/:code",
 		titleKey: "admin.nav.aiSubMenu.powerManagement",
 	},
+	{
+		path: "/admin/platform/agent/slides-template",
+		titleKey: "admin.nav.platformSubMenu.slidesTemplate",
+	},
 	// 平台 - 组织
 	{
 		path: "/admin/platform/organization",

@@ -13,8 +13,26 @@ export function isOfficialBuiltinPublisherType(publisherType: string): boolean {
 	return publisherType === "OFFICIAL_BUILTIN"
 }
 
-export function isSelfCreatedStoreAgent({ isAdded, allowDelete }: StoreAgentActionState): boolean {
+/**
+ * The market only exposes `isAdded` and removal permission here. Those fields do not
+ * identify the creator: an official agent can already exist for the user and still
+ * be non-removable.
+ */
+function isNonRemovableAddedStoreAgent({ isAdded, allowDelete }: StoreAgentActionState): boolean {
 	return isAdded && !allowDelete
+}
+
+/**
+ * An already available, non-removable agent has no valid market action. Keep only
+ * its conversation entry instead of rendering a disabled duplicate action.
+ */
+export function shouldHideEmployeeMarketPrimaryAction(
+	employee: StoreAgentActionState & { publisherType: string },
+): boolean {
+	return (
+		isOfficialBuiltinPublisherType(employee.publisherType) ||
+		isNonRemovableAddedStoreAgent(employee)
+	)
 }
 
 /** Label for hire/dismiss on store agent cards and market detail dialog. */
@@ -24,19 +42,19 @@ export function resolveEmployeeMarketPrimaryActionLabel(
 ): string {
 	if (isOfficialBuiltinPublisherType(employee.publisherType))
 		return t("employeeCard.officialBuiltin")
-	// Self-created agents can be opened for chat directly
-	if (isSelfCreatedStoreAgent(employee)) return t("chat")
+	if (isNonRemovableAddedStoreAgent(employee)) return t("chat")
 	if (employee.allowDelete) return t("dismiss")
 	return t("hire")
 }
 
-/** Dismiss: only self-created; hire: self-created or official builtin. */
+/** Prevent adding an agent that is already available locally or is built in. */
 export function isEmployeeMarketPrimaryActionDisabled(
 	employee: StoreAgentActionState & { publisherType: string },
 ): boolean {
-	if (employee.allowDelete) return isSelfCreatedStoreAgent(employee)
+	if (employee.allowDelete) return false
 	return (
-		isSelfCreatedStoreAgent(employee) || isOfficialBuiltinPublisherType(employee.publisherType)
+		isNonRemovableAddedStoreAgent(employee) ||
+		isOfficialBuiltinPublisherType(employee.publisherType)
 	)
 }
 

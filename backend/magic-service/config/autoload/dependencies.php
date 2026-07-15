@@ -59,6 +59,7 @@ use App\Domain\Audit\Contract\PermissionLabelServiceInterface;
 use App\Domain\Audit\ModelCall\Repository\Facade\AuditLogRepositoryInterface;
 use App\Domain\Audit\ModelCall\Repository\Persistence\AuditLogRepository;
 use App\Domain\Audit\Repository\Facade\AdminOperationLogRepositoryInterface;
+use App\Domain\Audit\ResourceAccess\Repository\Facade\ResourceAccessLogRepositoryInterface;
 use App\Domain\Authentication\Repository\ApiKeyProviderRepository;
 use App\Domain\Authentication\Repository\Facade\ApiKeyProviderRepositoryInterface;
 use App\Domain\Authentication\Repository\Facade\AuthenticationRepositoryInterface;
@@ -215,6 +216,16 @@ use App\Domain\Provider\Service\ModelFilter\DefaultOrganizationModelFilter;
 use App\Domain\Provider\Service\ModelFilter\DefaultPackageFilter;
 use App\Domain\Provider\Service\ModelFilter\OrganizationBasedModelFilterInterface;
 use App\Domain\Provider\Service\ModelFilter\PackageFilterInterface;
+use App\Domain\SlidesTemplate\Repository\Facade\SlidesTemplateCategoryRepositoryInterface;
+use App\Domain\SlidesTemplate\Repository\Facade\SlidesTemplateRepositoryInterface;
+use App\Domain\SlidesTemplate\Repository\Facade\SlidesTemplateTagRelationRepositoryInterface;
+use App\Domain\SlidesTemplate\Repository\Facade\SlidesTemplateTagRepositoryInterface;
+use App\Domain\SlidesTemplate\Repository\Persistence\SlidesTemplateCategoryRepository;
+use App\Domain\SlidesTemplate\Repository\Persistence\SlidesTemplateRepository;
+use App\Domain\SlidesTemplate\Repository\Persistence\SlidesTemplateTagRelationRepository;
+use App\Domain\SlidesTemplate\Repository\Persistence\SlidesTemplateTagRepository;
+use App\Domain\SlidesTemplate\Service\UsageCount\DefaultSlidesTemplateUsageCountPolicy;
+use App\Domain\SlidesTemplate\Service\UsageCount\SlidesTemplateUsageCountPolicyInterface;
 use App\Domain\SuperAgent\Service\UsageCalculator\DefaultUsageCalculator;
 use App\Domain\SuperAgent\Service\UsageCalculator\UsageCalculatorInterface;
 use App\Domain\Token\Item\MagicTokenExtra;
@@ -223,6 +234,7 @@ use App\Domain\Token\Repository\Facade\MagicTokenRepositoryInterface;
 use App\Domain\Token\Repository\Persistence\MagicTokenRepository;
 use App\Infrastructure\Audit\Permission\PermissionLabelProvider;
 use App\Infrastructure\Audit\Repository\AdminOperationLogRepository;
+use App\Infrastructure\Audit\Repository\ResourceAccessLogRepository;
 use App\Infrastructure\Core\Broadcast\Publisher\AmqpPublisher;
 use App\Infrastructure\Core\Broadcast\Publisher\PublisherInterface;
 use App\Infrastructure\Core\Broadcast\Subscriber\AmqpSubscriber;
@@ -450,6 +462,7 @@ $dependencies = [
     // audit (操作日志)
     AdminOperationLogRepositoryInterface::class => AdminOperationLogRepository::class,
     AuditLogRepositoryInterface::class => AuditLogRepository::class,
+    ResourceAccessLogRepositoryInterface::class => ResourceAccessLogRepository::class,
     PermissionLabelProviderInterface::class => PermissionLabelProvider::class,
     PermissionLabelServiceInterface::class => PermissionLabelService::class,
 
@@ -555,6 +568,13 @@ $dependencies = [
     ModeRepositoryInterface::class => ModeRepository::class,
     ModeGroupRepositoryInterface::class => ModeGroupRepository::class,
     ModeGroupRelationRepositoryInterface::class => ModeGroupRelationRepository::class,
+
+    // slides template
+    SlidesTemplateCategoryRepositoryInterface::class => SlidesTemplateCategoryRepository::class,
+    SlidesTemplateRepositoryInterface::class => SlidesTemplateRepository::class,
+    SlidesTemplateTagRepositoryInterface::class => SlidesTemplateTagRepository::class,
+    SlidesTemplateTagRelationRepositoryInterface::class => SlidesTemplateTagRelationRepository::class,
+    SlidesTemplateUsageCountPolicyInterface::class => DefaultSlidesTemplateUsageCountPolicy::class,
 
     OrganizationBasedModelFilterInterface::class => DefaultOrganizationModelFilter::class,
     ProviderControlPolicyInterface::class => DefaultProviderControlPolicy::class,

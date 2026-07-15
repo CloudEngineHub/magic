@@ -21,6 +21,11 @@ DEFAULT_SYSTEM_PROMPT = """你是一个专业的视觉理解助手，擅长依�
 用最少的字表达最多的内容，但不丢失任何细节，尽最大努力提高你回答的信息密度。
 当前时间：{current_time}"""
 
+REQUEST_TOO_LARGE_PATTERNS = (
+    re.compile(r"\b413\b", re.IGNORECASE),
+    re.compile(r"Request Entity Too Large", re.IGNORECASE),
+)
+
 
 class LLMRequestHandler:
     """处理LLM请求的工具类"""
@@ -43,6 +48,12 @@ class LLMRequestHandler:
             current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
         return DEFAULT_SYSTEM_PROMPT.format(current_time=current_time)
+
+    @staticmethod
+    def is_request_too_large_error(error: Exception) -> bool:
+        """判断是否为请求体过大错误。"""
+        message = str(error)
+        return any(pattern.search(message) for pattern in REQUEST_TOO_LARGE_PATTERNS)
 
     @staticmethod
     async def build_messages(
@@ -135,6 +146,10 @@ class LLMRequestHandler:
         except Exception as llm_error:
             # 记录具体的 LLM 调用错误
             logger.warning(f"LLM 第一次调用失败 (模型: {model_id}): {llm_error}")
+
+            if LLMRequestHandler.is_request_too_large_error(llm_error):
+                logger.warning("检测到视觉理解请求体过大，跳过base64回退")
+                raise llm_error
 
             # 检查是否有URL模式的图片可以回退
             # 通过 image_data.url 是否以 http 开头判断

@@ -871,6 +871,19 @@
 				"unknownError": "Unknown error",
 				"untitledPost": "Untitled post"
 			},
+			"coverGeneration": {
+				"prompt": {
+					"heroCover": "21:9 horizontal cover (heroCover)",
+					"instruction": "Read post.json and the article HTML first. Generate only the requested missing covers with generate_image and keep their visual language consistent with the article. Save them under the current post assets folder and update the matching heroCover or thumbnailCover path in post.json. Use 21:9 for heroCover and 1:1 for thumbnailCover. Preserve every existing cover that was not requested.",
+					"metadata": "Title: {{title}}\nGenerate: {{coverTypes}}",
+					"opening": "Load and execute the self-media-composer Skill to generate missing WeChat cover images for {{mention}}.",
+					"thumbnailCover": "1:1 square cover (thumbnailCover)",
+					"topicName": "[Generate covers] {{title}}"
+				},
+				"startFailed": "Failed to start cover generation",
+				"startFailedWithReason": "Failed to start cover generation: {{reason}}",
+				"started": "Cover generation task created"
+			},
 			"edit": {
 				"addArticleFileToChat": "Add article file to input",
 				"addCurrentPageToChat": "Add this card to chat",
@@ -944,11 +957,20 @@
 					"copySuccess": "HTML copied",
 					"coverDescription": "Stitch the square cover and horizontal cover into one image for WeChat Official Account assets.",
 					"coverTitle": "Cover image",
+					"emptyDescription": "Generate a 1:1 square cover and a 21:9 horizontal cover from the article title and body.",
+					"emptyTitle": "No cover images yet",
 					"exportCover": "Export cover",
+					"generateBoth": "Generate covers",
+					"generateHorizontal": "Generate horizontal cover",
+					"generateSquare": "Generate square cover",
+					"generating": "Creating task...",
 					"horizontalCover": "Horizontal cover",
 					"htmlCopied": "Copied",
 					"htmlDescription": "Copy the processed article HTML and paste it into the WeChat Official Account editor.",
 					"htmlTitle": "WeChat HTML",
+					"missingHorizontalTitle": "21:9 horizontal cover missing",
+					"missingSquareTitle": "1:1 square cover missing",
+					"partialDescription": "Generate the missing image to export the complete cover composition.",
 					"squareCover": "Square cover"
 				}
 			},

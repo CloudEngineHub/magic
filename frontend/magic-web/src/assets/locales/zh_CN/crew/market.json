@@ -13,6 +13,7 @@
 		"starCrew": "明星员工",
 		"techDev": "技术开发"
 	},
+	"chat": "聊天",
 	"createCrew": "创建员工",
 	"crewConversation": {
 		"back": "返回",
@@ -194,9 +195,9 @@
 				"team": "团队共享"
 			},
 			"startChat": "开始对话",
+			"title": "员工详情",
 			"unpublishedAction": "未发布",
-			"unpublishedNotice": "当前 Crew 尚未发布，暂不可用。请前往 Web 端完成发布后再使用。",
-			"title": "员工详情"
+			"unpublishedNotice": "当前 Crew 尚未发布，暂不可用。请前往 Web 端完成发布后再使用。"
 		},
 		"disable": "禁用",
 		"disableConfirm": {
@@ -309,6 +310,9 @@
 	},
 	"noMoreData": "没有更多数据。",
 	"noResults": "暂无结果。",
+	"pptEmployee": {
+		"delivered": "已交付 <strong>{{count}}</strong> 套"
+	},
 	"skillDetailDialog": {
 		"collapse": "收起",
 		"emptyName": "未命名技能",
@@ -533,6 +537,5 @@
 			"updateFailed": "更新技能失败，请稍后重试。"
 		},
 		"title": "更新技能"
-	},
-	"chat": "聊天"
+	}
 }

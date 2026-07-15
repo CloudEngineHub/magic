@@ -36,6 +36,7 @@ export enum RoutePath {
 	PlatformAgentEmployeeMarket = "/admin/platform/agent/employee-market",
 	PlatformCapability = "/admin/platform/agent/capability",
 	PlatformCapabilityDetail = "/admin/platform/agent/capability/:code",
+	PlatformSlidesTemplate = "/admin/platform/agent/slides-template",
 	PlatformManage = "/admin/platform/manage",
 	PlatformInfoManagement = "/admin/platform/manage/platform-info",
 	PlatformProviderAccess = "/admin/platform/manage/provider-access",
@@ -113,6 +114,8 @@ export enum RouteName {
 	AdminSystemCapability = "AdminSystemCapability",
 	/** 智能体增强 - 能力详情 */
 	AdminSystemCapabilityDetail = "AdminSystemCapabilityDetail",
+	/** 智能体增强 - PPT模板 */
+	AdminSlidesTemplate = "AdminSlidesTemplate",
 
 	/** 平台管理 */
 	AdminPlatformManage = "AdminPlatformManage",

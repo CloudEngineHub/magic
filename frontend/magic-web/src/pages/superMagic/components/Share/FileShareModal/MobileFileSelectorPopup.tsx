@@ -62,7 +62,7 @@ function MobileFileSelectorPopup({
 			popupProps={{
 				visible: open,
 				onClose,
-				onMaskClick: () => { }, // 禁用点击遮罩关闭
+				onMaskClick: () => {}, // 禁用点击遮罩关闭
 				stopPropagation: ["click"],
 				style: {
 					zIndex: 1030,

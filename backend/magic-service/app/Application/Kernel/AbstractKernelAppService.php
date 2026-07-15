@@ -121,6 +121,11 @@ abstract class AbstractKernelAppService
         return di(FileDomainService::class)->getLinks($organizationCode, $fileLinks, StorageBucketType::Private);
     }
 
+    public function getPublicFileLinks(string $organizationCode, array $fileLinks): array
+    {
+        return di(FileDomainService::class)->getLinks($organizationCode, $fileLinks, StorageBucketType::Public);
+    }
+
     protected function createExecutionOperator(Authenticatable|BaseDataIsolation $authorization): Operator
     {
         $flowDataIsolation = $this->createFlowDataIsolation($authorization);
