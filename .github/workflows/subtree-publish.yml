@@ -3,6 +3,7 @@ name: Publish subtree to repos
 on:
   push:
     paths:
+      # should match magicrew.yml
       - 'backend/api-response/**'
       - 'backend/async-event/**'
       - 'backend/cloudfile/**'
@@ -10,7 +11,6 @@ on:
       - 'backend/easy-dingtalk/**'
       - 'backend/flow-expr-engine/**'
       - 'backend/rule-engine-core/**'
-      - 'backend/sandbox-components/**'
       - 'backend/sdk-base/**'
       - 'backend/super-magic-module/**'
       - 'backend/task-scheduler/**'
