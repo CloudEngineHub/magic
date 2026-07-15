@@ -16,6 +16,7 @@ from app.api.http_dto.response import (
     ResponseCode
 )
 from app.service.agent_dispatcher import AgentDispatcher
+from app.service.temporary_file_expiration import TemporaryFileExpirationManager
 from app.core.context.agent_context import AgentContext
 from agentlang.config.non_human_config import NonHumanConfigManager
 from app.core.entity.event.event import AfterClientChatEventData
@@ -454,6 +455,12 @@ class MessageProcessor:
 
             # 初始化工作区
             await self.agent_dispatcher.initialize_workspace(message)
+
+            # 工作区初始化成功后异步检查临时文件，触发失败不影响 init 消息处理
+            try:
+                TemporaryFileExpirationManager.get_instance().trigger()
+            except Exception as error:
+                logger.warning(f"触发临时文件过期检查失败，跳过本次检查: {error}")
 
             logger.info("工作区初始化完成")
             return create_success_response("工作区初始化成功")

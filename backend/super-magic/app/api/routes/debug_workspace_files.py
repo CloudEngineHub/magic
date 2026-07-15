@@ -45,6 +45,20 @@ def _download_content_disposition(filename: str) -> str:
     return f"attachment; filename*=UTF-8''{quoted}"
 
 
+def _get_workspace_raw_file_response(path: str):
+    """根据工作区相对路径构造原始文件响应。"""
+    try:
+        service = _workspace_file_service()
+        target = service.resolve_path(path)
+        if not target.exists():
+            raise FileNotFoundError(f"文件不存在: {path}")
+        if not target.is_file():
+            raise ValueError(f"路径不是文件: {path}")
+        return FileResponse(target)
+    except (FileNotFoundError, ValueError) as exc:
+        return _workspace_error_response("获取调试工作区原始文件失败", exc)
+
+
 @router.get("/tree", response_model=BaseResponse)
 async def get_workspace_file_tree(
     path: str = Query("", description="Relative directory path under workspace root"),
@@ -82,17 +96,14 @@ async def read_workspace_file(request: WorkspaceFileContentRequest) -> BaseRespo
 async def get_workspace_raw_file(
     path: str = Query(..., description="Relative file path under workspace root"),
 ):
-    """Return raw file content for iframe previews and downloads."""
-    try:
-        service = _workspace_file_service()
-        target = service.resolve_path(path)
-        if not target.exists():
-            raise FileNotFoundError(f"文件不存在: {path}")
-        if not target.is_file():
-            raise ValueError(f"路径不是文件: {path}")
-        return FileResponse(target)
-    except (FileNotFoundError, ValueError) as exc:
-        return _workspace_error_response("获取调试工作区原始文件失败", exc)
+    """通过查询参数返回工作区原始文件，兼容既有调用方。"""
+    return _get_workspace_raw_file_response(path)
+
+
+@router.get("/raw/{path:path}")
+async def get_workspace_raw_file_by_path(path: str):
+    """通过路径参数返回工作区原始文件，以支持 HTML 相对资源解析。"""
+    return _get_workspace_raw_file_response(path)
 
 
 @router.get("/download")
