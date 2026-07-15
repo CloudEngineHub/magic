@@ -102,6 +102,12 @@ export function getAskUserMultiSelectRangeText({
 	return template.replace("{{min}}", String(min)).replace("{{max}}", String(max))
 }
 
+export function getAskUserRequiredValidationText(locale: AskUserLocale) {
+	return locale === "zh_CN"
+		? zhCNSuper.askUser.validation.required
+		: enUSSuper.askUser.validation.required
+}
+
 export function getAskUserUnlimitedText(locale: AskUserLocale) {
 	return locale === "zh_CN"
 		? zhCNSuper.askUser.validation.unlimited
@@ -162,7 +168,7 @@ interface AskUserOtherInputProps {
 	onChange: (event: ChangeEvent<HTMLTextAreaElement>) => void
 	onFocus: () => void
 	questionId: string
-	testIdPrefix: "select" | "multi-select"
+	testIdPrefix: "confirm" | "select" | "multi-select"
 	value: string
 }
 
