@@ -90,4 +90,33 @@ describe("plugin panel position", () => {
 		expect(resetCachedPositionIfCoveredByPluginList()).toBe(false)
 		expect(window.localStorage.getItem(CACHE_KEY)).toBe(JSON.stringify({ x: 620, y: 80 }))
 	})
+
+	it("clears cached position when reopened plugin window would be covered by plugin list", () => {
+		const container = document.createElement("div")
+		mockRect(container, {
+			left: 0,
+			top: 0,
+			right: 1200,
+			bottom: 800,
+			width: 1200,
+			height: 800,
+		})
+
+		const pluginList = document.createElement("div")
+		pluginList.setAttribute("data-canvas-plugin-list-panel", "")
+		mockRect(pluginList, {
+			left: 100,
+			top: 20,
+			right: 580,
+			bottom: 440,
+			width: 480,
+			height: 420,
+		})
+
+		document.body.append(container, pluginList)
+		saveCachedPosition({ x: 300, y: 80 })
+
+		expect(resetCachedPositionIfCoveredByPluginList(container)).toBe(true)
+		expect(window.localStorage.getItem(CACHE_KEY)).toBeNull()
+	})
 })

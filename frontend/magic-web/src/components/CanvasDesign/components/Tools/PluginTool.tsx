@@ -201,7 +201,9 @@ export default function PluginTool() {
 												type="button"
 												className={styles.pluginItem}
 												onClick={() => {
-													resetCachedPositionIfCoveredByPluginList()
+													resetCachedPositionIfCoveredByPluginList(
+														canvas?.container,
+													)
 													canvas?.pluginManager.open(plugin.name)
 												}}
 											>

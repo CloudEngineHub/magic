@@ -1,5 +1,6 @@
 import {
 	PLUGIN_PANEL_POSITION_CACHE_PREFIX,
+	PLUGIN_WINDOW_DEFAULT_HEIGHT,
 	PLUGIN_WINDOW_MARGIN,
 	PLUGIN_WINDOW_MAX_HEIGHT,
 	PLUGIN_WINDOW_MIN_HEIGHT,
@@ -32,17 +33,15 @@ export function saveCachedPosition(position: PluginWindowPosition): void {
 	}
 }
 
-export function resetCachedPositionIfCoveredByPluginList(): boolean {
+export function resetCachedPositionIfCoveredByPluginList(container?: HTMLElement): boolean {
 	if (typeof document === "undefined") return false
-	const pluginWindow = document.querySelector<HTMLElement>(PLUGIN_WINDOW_SELECTOR)
 	const pluginListPanel = document.querySelector<HTMLElement>(PLUGIN_LIST_PANEL_SELECTOR)
-	if (!pluginWindow || !pluginListPanel) return false
-	if (
-		!areRectsOverlapping(
-			pluginWindow.getBoundingClientRect(),
-			pluginListPanel.getBoundingClientRect(),
-		)
-	) {
+	if (!pluginListPanel) return false
+	const pluginWindow = document.querySelector<HTMLElement>(PLUGIN_WINDOW_SELECTOR)
+	const pluginWindowRect =
+		pluginWindow?.getBoundingClientRect() ?? getCachedPluginWindowRect(container)
+	if (!pluginWindowRect) return false
+	if (!areRectsOverlapping(pluginWindowRect, pluginListPanel.getBoundingClientRect())) {
 		return false
 	}
 	clearCachedPosition()
@@ -80,6 +79,35 @@ function clearCachedPosition(): void {
 	} catch (error) {
 		console.warn("[PluginPanel] Failed to clear cached plugin panel position.", error)
 	}
+}
+
+function getCachedPluginWindowRect(container: HTMLElement | undefined): DOMRect | null {
+	if (!container) return null
+	const cachedPosition = readCachedPosition()
+	if (!cachedPosition) return null
+	const containerRect = container.getBoundingClientRect()
+	const left = containerRect.left + cachedPosition.x
+	const top = containerRect.top + cachedPosition.y
+	return {
+		x: left,
+		y: top,
+		left,
+		top,
+		right: left + PLUGIN_WINDOW_WIDTH,
+		bottom: top + PLUGIN_WINDOW_DEFAULT_HEIGHT,
+		width: PLUGIN_WINDOW_WIDTH,
+		height: PLUGIN_WINDOW_DEFAULT_HEIGHT,
+		toJSON: () => ({
+			x: left,
+			y: top,
+			left,
+			top,
+			right: left + PLUGIN_WINDOW_WIDTH,
+			bottom: top + PLUGIN_WINDOW_DEFAULT_HEIGHT,
+			width: PLUGIN_WINDOW_WIDTH,
+			height: PLUGIN_WINDOW_DEFAULT_HEIGHT,
+		}),
+	} as DOMRect
 }
 
 function areRectsOverlapping(first: DOMRect, second: DOMRect): boolean {
