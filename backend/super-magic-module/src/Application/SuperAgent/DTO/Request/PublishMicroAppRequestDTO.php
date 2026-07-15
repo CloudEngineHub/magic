@@ -74,7 +74,7 @@ class PublishMicroAppRequestDTO extends AbstractRequestDTO
     protected static function getHyperfValidationRules(): array
     {
         return [
-            'project_name' => 'required|string|max:100|regex:/.*\\S.*/u',
+            'project_name' => 'required|string|max:100|regex:/.*\S.*/u',
             'share_type' => 'required|integer|in:2,4,5',
             'share_range' => 'required_if:share_type,2|nullable|string|in:all,designated',
             'target_ids' => 'nullable|array',
