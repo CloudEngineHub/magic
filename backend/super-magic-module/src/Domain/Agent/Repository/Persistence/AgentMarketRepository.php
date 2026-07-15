@@ -241,9 +241,10 @@ class AgentMarketRepository extends AbstractRepository implements AgentMarketRep
             $builder->where('category_id', $query->getCategoryId());
         }
 
-        // 排序：精选优先，其次 sort_order 非空优先且数值越大越靠前；为空时回落按 id
+        // 排序：精选优先，其次排序值，再按雇佣次数，最后按 id 兜底。
         $builder->orderBy('is_featured', 'DESC');
         $builder->orderBy('sort_order', 'DESC');
+        $builder->orderBy('install_count', 'DESC');
         $builder->orderBy('id', 'DESC');
 
         // 分页查询
