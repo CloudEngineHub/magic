@@ -66,10 +66,8 @@ class SlidesTemplateDomainService
         $this->prepareRestoreDeletedTemplate($dataIsolation, $entity);
 
         $this->refreshSearchText($entity);
-        $entity->setTotalUsageCount($this->usageCountPolicy->calculateTotalUsageCount(
-            $entity->getBaseUsageCount(),
-            $entity->getActualUsageCount()
-        ));
+        $totalUsageCount = max(0, $entity->getBaseUsageCount()) + max(0, $entity->getActualUsageCount());
+        $entity->setTotalUsageCount($totalUsageCount);
         try {
             return $this->slidesTemplateRepository->save($dataIsolation, $entity);
         } catch (Throwable $throwable) {
@@ -85,10 +83,8 @@ class SlidesTemplateDomainService
     {
         $this->findByIdOrFail($dataIsolation, (string) $entity->getId());
         $this->refreshSearchText($entity);
-        $entity->setTotalUsageCount($this->usageCountPolicy->calculateTotalUsageCount(
-            $entity->getBaseUsageCount(),
-            $entity->getActualUsageCount()
-        ));
+        $totalUsageCount = max(0, $entity->getBaseUsageCount()) + max(0, $entity->getActualUsageCount());
+        $entity->setTotalUsageCount($totalUsageCount);
         return $this->slidesTemplateRepository->save($dataIsolation, $entity);
     }
 
@@ -111,7 +107,7 @@ class SlidesTemplateDomainService
         $this->slidesTemplateRepository->incrementActualUsageCount(
             $dataIsolation,
             $code,
-            $this->usageCountPolicy->getActualUsageIncrement()
+            1
         );
     }
 

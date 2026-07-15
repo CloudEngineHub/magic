@@ -14,8 +14,4 @@ interface SlidesTemplateUsageCountPolicyInterface
 {
     /** @return array{total: int, total_usage_count: int} */
     public function getCount(SlidesTemplateDataIsolation $dataIsolation, SlidesTemplateQuery $query): array;
-
-    public function calculateTotalUsageCount(int $baseUsageCount, int $actualUsageCount): int;
-
-    public function getActualUsageIncrement(): int;
 }

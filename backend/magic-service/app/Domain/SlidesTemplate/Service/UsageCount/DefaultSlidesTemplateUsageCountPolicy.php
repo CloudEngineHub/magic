@@ -28,14 +28,4 @@ class DefaultSlidesTemplateUsageCountPolicy implements SlidesTemplateUsageCountP
             'total_usage_count' => $this->slidesTemplateRepository->sumTotalUsageCount($dataIsolation, $query),
         ];
     }
-
-    public function calculateTotalUsageCount(int $baseUsageCount, int $actualUsageCount): int
-    {
-        return max(0, $baseUsageCount) + max(0, $actualUsageCount);
-    }
-
-    public function getActualUsageIncrement(): int
-    {
-        return 1;
-    }
 }

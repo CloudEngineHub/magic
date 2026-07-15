@@ -254,6 +254,11 @@ class CapturingSlidesTemplateRepository implements SlidesTemplateRepositoryInter
         return 0;
     }
 
+    public function sumTotalUsageCount(SlidesTemplateDataIsolation $dataIsolation, SlidesTemplateQuery $query): int
+    {
+        return 0;
+    }
+
     public function save(SlidesTemplateDataIsolation $dataIsolation, SlidesTemplateEntity $entity): SlidesTemplateEntity
     {
         $this->savedEntity = $entity;
