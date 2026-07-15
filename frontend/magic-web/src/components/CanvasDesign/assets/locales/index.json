@@ -202,6 +202,19 @@
 		"resolution": "分辨率",
 		"size": "尺寸"
 	},
+	"imagePromptExtraction": {
+		"createText": "创建文本",
+		"emptyInput": "当前图片无法提炼提示词",
+		"emptyResult": "AI 未生成有效提示词，请重试",
+		"failed": "提示词提炼失败，请重试",
+		"generate": "提炼提示词",
+		"generating": "正在提炼提示词",
+		"regenerate": "重新提炼",
+		"retry": "重试",
+		"title": "图片提炼提示词",
+		"trigger": "提炼提示词",
+		"unavailable": "图片提炼能力暂不可用"
+	},
 	"layers": {
 		"collapse": "收起",
 		"empty": {
@@ -458,6 +471,20 @@
 	},
 	"text": {
 		"defaultName": "文本"
+	},
+	"textContentOptimization": {
+		"apply": "应用",
+		"emptyInput": "请输入文本内容后再优化",
+		"emptyResult": "AI 未生成有效文本，请重试",
+		"failed": "内容优化失败，请重试",
+		"finishEditingFirst": "完成文本编辑后再优化",
+		"generate": "内容优化",
+		"generating": "正在生成优化结果",
+		"regenerate": "重新生成",
+		"retry": "重试",
+		"title": "内容优化",
+		"trigger": "内容优化",
+		"unavailable": "内容优化能力暂不可用"
 	},
 	"tools": {
 		"frame": "画框",

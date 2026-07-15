@@ -2,6 +2,7 @@ import { useRef, forwardRef, useState, useCallback } from "react"
 import UIProvider from "../../ui/primitives/custom/UIProvider"
 import { CanvasProvider } from "../providers/CanvasProvider"
 import { CanvasUIProvider } from "../providers/CanvasUIProvider"
+import { ElementToolStateProvider } from "../providers/ElementToolStateProvider"
 import { LayersUIProvider } from "../providers/LayersUIProvider"
 import { ElementMenuProvider } from "../../ui/panels/menu/ElementMenuProvider"
 import { ConnectionMenuProvider } from "../../ui/panels/menu/ConnectionMenuProvider"
@@ -52,15 +53,17 @@ const CanvasDesign = forwardRef<CanvasDesignRef, CanvasDesignProps>((props, ref)
 								data-canvas-ui-component
 							>
 								<CanvasProvider>
-									<CanvasUIProvider readonly={props.readonly}>
-										<ElementMenuProvider>
-											<ConnectionMenuProvider>
-												<LayersUIProvider getDevice={getDevice}>
-													<CanvasDesignContent ref={ref} {...props} />
-												</LayersUIProvider>
-											</ConnectionMenuProvider>
-										</ElementMenuProvider>
-									</CanvasUIProvider>
+									<ElementToolStateProvider>
+										<CanvasUIProvider readonly={props.readonly}>
+											<ElementMenuProvider>
+												<ConnectionMenuProvider>
+													<LayersUIProvider getDevice={getDevice}>
+														<CanvasDesignContent ref={ref} {...props} />
+													</LayersUIProvider>
+												</ConnectionMenuProvider>
+											</ElementMenuProvider>
+										</CanvasUIProvider>
+									</ElementToolStateProvider>
 								</CanvasProvider>
 							</div>
 						</PortalContainerProvider>

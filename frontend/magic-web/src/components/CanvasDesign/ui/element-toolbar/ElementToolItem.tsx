@@ -13,6 +13,7 @@ import ShapeStyle from "./shape/ShapeStyle/index"
 import DownloadButton from "./download/DownloadButton/index"
 import RichTextAdvancedButton from "./text/RichTextAdvancedButton/index"
 import TextContentOptimizationButton from "./text/TextContentOptimizationButton/index"
+import ImagePromptExtractionButton from "./image/ImagePromptExtractionButton/index"
 import ImageConvertHightButton from "./image/ImageConvertHightButton/index"
 import ImageConvertHight from "./image/ImageConvertHight/index"
 import ImageCropButton from "./image/ImageCropButton/index"
@@ -55,6 +56,8 @@ export default function ElementToolItem({ type }: { type: ElementToolType }) {
 			return <RichTextAdvancedButton />
 		case ElementToolTypeEnum.TextContentOptimizationButton:
 			return <TextContentOptimizationButton />
+		case ElementToolTypeEnum.ImagePromptExtractionButton:
+			return <ImagePromptExtractionButton />
 		case ElementToolTypeEnum.ImageConvertHightButton:
 			return <ImageConvertHightButton />
 		case ElementToolTypeEnum.ImageConvertHight:

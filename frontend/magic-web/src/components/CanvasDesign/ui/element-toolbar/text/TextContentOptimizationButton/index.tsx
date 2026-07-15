@@ -5,11 +5,13 @@ import { useFloatingComponent } from "../../../../app/hooks/layout/useFloatingCo
 import { useOverflowChange } from "../../../../app/hooks/layout/useOverflowChange"
 import { useHostUiLocale } from "../../../../app/providers/HostUiLocaleProvider"
 import { useCanvas } from "../../../../app/providers/CanvasProvider"
+import { useElementToolState } from "../../../../app/providers/ElementToolStateProvider"
 import { useCanvasDesignI18n } from "../../../../app/providers/I18nProvider"
 import type {
 	CompleteImagePromptRequest,
 	CompleteTextContentRequest,
 } from "../../../../public/magic-types"
+import { ElementToolTypeEnum } from "../../../../public/props"
 import {
 	extractPlainTextFromRichText,
 	isRichTextContentEmpty,
@@ -17,12 +19,6 @@ import {
 import IconButton from "../../../primitives/custom/IconButton"
 import { Button } from "../../../primitives/shadcn/button"
 import { Popover, PopoverContent, PopoverTrigger } from "../../../primitives/shadcn/popover"
-import {
-	Tooltip,
-	TooltipContent,
-	TooltipProvider,
-	TooltipTrigger,
-} from "../../../primitives/shadcn/tooltip"
 import { useTextToolController } from "../useTextToolController"
 import {
 	buildRichTextContentFromPlainText,
@@ -31,15 +27,19 @@ import {
 import { buildTextContentOptimizationPrompt } from "./textContentOptimizationPrompt"
 import styles from "./index.module.css"
 
+interface TextContentOptimizationToolState {
+	requestKey: string
+	status: "loading" | "success" | "error"
+	optimizedText?: string
+	errorMessage?: string
+}
+
 export default function TextContentOptimizationButton() {
 	const { canvas } = useCanvas()
 	const { t } = useCanvasDesignI18n()
 	const hostUiLocale = useHostUiLocale()
 	const { selectedTextElement, isEditingText } = useTextToolController()
 	const [open, setOpen] = useState(false)
-	const [optimizedText, setOptimizedText] = useState("")
-	const [errorMessage, setErrorMessage] = useState("")
-	const [isGenerating, setIsGenerating] = useState(false)
 	const [hasBodyScrollbar, setHasBodyScrollbar] = useState(false)
 	const bodyRef = useRef<HTMLDivElement>(null)
 	const completeTextContent = canvas?.magicConfigManager.config?.methods?.completeTextContent
@@ -48,11 +48,27 @@ export default function TextContentOptimizationButton() {
 		() => extractPlainTextFromRichText(selectedTextElement?.content),
 		[selectedTextElement?.content],
 	)
-	const normalizedCurrentText = currentText.trim()
+	const requestKey = useMemo(
+		() =>
+			buildTextContentOptimizationRequestKey({
+				elementId: selectedTextElement?.id,
+				text: currentText,
+			}),
+		[currentText, selectedTextElement?.id],
+	)
+	const { state: storedToolState, setState: setToolState } =
+		useElementToolState<TextContentOptimizationToolState>(
+			selectedTextElement?.id,
+			ElementToolTypeEnum.TextContentOptimizationButton,
+		)
+	const toolState = storedToolState?.requestKey === requestKey ? storedToolState : undefined
+	const optimizedText = toolState?.status === "success" ? (toolState.optimizedText ?? "") : ""
+	const errorMessage = toolState?.status === "error" ? (toolState.errorMessage ?? "") : ""
+	const isGenerating = toolState?.status === "loading"
 	const hasOptimizedText = Boolean(optimizedText)
 	const isUnavailable = !completeTextContent && !completeImagePrompt
 	const buttonDisabled = isGenerating || isUnavailable || isEditingText
-	const tooltipLabel = isEditingText
+	const buttonLabel = isEditingText
 		? t("textContentOptimization.finishEditingFirst", "完成文本编辑后再优化")
 		: isUnavailable
 			? t("textContentOptimization.unavailable", "内容优化能力暂不可用")
@@ -62,6 +78,8 @@ export default function TextContentOptimizationButton() {
 		enableWheelForwarding: open && !hasBodyScrollbar,
 		enablePointerPanForwarding: open,
 	})
+	const latestRequestKeyRef = useRef(requestKey)
+	const mountedRef = useRef(false)
 
 	useOverflowChange({
 		targetRef: bodyRef,
@@ -71,9 +89,21 @@ export default function TextContentOptimizationButton() {
 	})
 
 	useEffect(() => {
-		setOptimizedText("")
-		setErrorMessage("")
-	}, [normalizedCurrentText, selectedTextElement?.id])
+		mountedRef.current = true
+		return () => {
+			mountedRef.current = false
+		}
+	}, [])
+
+	useEffect(() => {
+		latestRequestKeyRef.current = requestKey
+		setOpen(false)
+	}, [requestKey])
+
+	const openIfCurrent = useCallback((targetRequestKey: string) => {
+		if (!mountedRef.current || latestRequestKeyRef.current !== targetRequestKey) return
+		setOpen(true)
+	}, [])
 
 	const buildRequest = useCallback((): CompleteTextContentRequest | null => {
 		if (!selectedTextElement || isRichTextContentEmpty(selectedTextElement.content)) {
@@ -108,17 +138,22 @@ export default function TextContentOptimizationButton() {
 
 	const generateOptimizedText = useCallback(async () => {
 		if (isGenerating || isUnavailable) return
+		const requestKeyAtStart = requestKey
 		const request = buildRequest()
 		if (!request?.user_prompt?.trim()) {
-			setOpen(true)
-			setOptimizedText("")
-			setErrorMessage(t("textContentOptimization.emptyInput", "请输入文本内容后再优化"))
+			setToolState({
+				requestKey: requestKeyAtStart,
+				status: "error",
+				errorMessage: t("textContentOptimization.emptyInput", "请输入文本内容后再优化"),
+			})
+			openIfCurrent(requestKeyAtStart)
 			return
 		}
 
-		setOptimizedText("")
-		setErrorMessage("")
-		setIsGenerating(true)
+		setToolState({
+			requestKey: requestKeyAtStart,
+			status: "loading",
+		})
 		try {
 			const text = normalizeOptimizedTextLineBreaks(
 				await requestOptimizedText(request),
@@ -129,17 +164,34 @@ export default function TextContentOptimizationButton() {
 					t("textContentOptimization.emptyResult", "AI 未生成有效文本，请重试"),
 				)
 			}
-			setOptimizedText(text)
-			setOpen(true)
+			setToolState({
+				requestKey: requestKeyAtStart,
+				status: "success",
+				optimizedText: text,
+			})
+			openIfCurrent(requestKeyAtStart)
 		} catch (error) {
-			setErrorMessage(
-				getErrorMessage(error, t("textContentOptimization.failed", "内容优化失败，请重试")),
-			)
-			setOpen(true)
-		} finally {
-			setIsGenerating(false)
+			setToolState({
+				requestKey: requestKeyAtStart,
+				status: "error",
+				errorMessage: getErrorMessage(
+					error,
+					t("textContentOptimization.failed", "内容优化失败，请重试"),
+				),
+			})
+			openIfCurrent(requestKeyAtStart)
 		}
-	}, [buildRequest, currentText, isGenerating, isUnavailable, requestOptimizedText, t])
+	}, [
+		buildRequest,
+		currentText,
+		isGenerating,
+		isUnavailable,
+		openIfCurrent,
+		requestKey,
+		requestOptimizedText,
+		setToolState,
+		t,
+	])
 
 	const handleOpenChange = useCallback(
 		(nextOpen: boolean) => {
@@ -186,34 +238,26 @@ export default function TextContentOptimizationButton() {
 
 	return (
 		<Popover open={open} onOpenChange={handleOpenChange}>
-			<TooltipProvider delayDuration={200}>
-				<Tooltip>
-					<TooltipTrigger asChild>
-						<PopoverTrigger asChild>
-							<div>
-								<IconButton
-									className={styles.triggerButton}
-									disabled={buttonDisabled}
-									aria-label={tooltipLabel}
-									title={tooltipLabel}
-									data-has-result={hasOptimizedText ? "true" : undefined}
-									onMouseDown={handleMouseDown}
-								>
-									{isGenerating ? (
-										<LoaderCircle size={16} className="animate-spin" />
-									) : (
-										<Sparkles size={16} />
-									)}
-									<span className={styles.triggerButtonText}>
-										{t("textContentOptimization.trigger", "内容优化")}
-									</span>
-								</IconButton>
-							</div>
-						</PopoverTrigger>
-					</TooltipTrigger>
-					<TooltipContent className={styles.tooltip}>{tooltipLabel}</TooltipContent>
-				</Tooltip>
-			</TooltipProvider>
+			<PopoverTrigger asChild>
+				<div>
+					<IconButton
+						className={styles.triggerButton}
+						disabled={buttonDisabled}
+						aria-label={buttonLabel}
+						data-testid="text-content-optimization-button"
+						onMouseDown={handleMouseDown}
+					>
+						{isGenerating ? (
+							<LoaderCircle size={16} className="animate-spin" />
+						) : (
+							<Sparkles size={16} />
+						)}
+						<span className={styles.triggerButtonText}>
+							{t("textContentOptimization.trigger", "内容优化")}
+						</span>
+					</IconButton>
+				</div>
+			</PopoverTrigger>
 			<PopoverContent
 				ref={floatingRef}
 				align="end"
@@ -293,4 +337,14 @@ function getErrorMessage(error: unknown, fallback: string): string {
 	if (error instanceof Error && error.message) return error.message
 	if (typeof error === "string" && error) return error
 	return fallback
+}
+
+function buildTextContentOptimizationRequestKey(params: {
+	elementId?: string
+	text: string
+}): string {
+	return JSON.stringify({
+		elementId: params.elementId ?? "",
+		text: params.text,
+	})
 }

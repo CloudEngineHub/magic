@@ -10,42 +10,27 @@ import { useCanvasEvent } from "../../../app/hooks/canvas"
 import { useCanvas } from "../../../app/providers/CanvasProvider"
 import { useMagic } from "../../../app/providers/MagicProvider"
 import { useCanvasDesignI18n } from "../../../app/providers/I18nProvider"
-import type { LayerElement } from "../../../runtime/document/types"
 import { MenuItemRenderer } from "./MenuItemRenderer"
 import type { MenuItem } from "./types"
+import {
+	CREATE_ELEMENT_GAP_MIN_CANVAS_PX,
+	collectConnectedElementSiblingRects,
+	collectConnectionCreateObstacleRects,
+	resolveConnectionCreateContextWithOriginRect,
+	resolveConnectionCreateGapForElement,
+	resolveConnectedElementCreateCenterPoint,
+	resolveConnectedElementCreateTopLeftPoint,
+	type ConnectionCreatePlacementContext,
+} from "./connectionCreatePlacement"
 
 type ConnectionMenuCreateKind = "text" | "image-generator" | "video-generator"
 
-interface ConnectionMenuContext {
+interface ConnectionMenuContext extends ConnectionCreatePlacementContext {
 	connectionId?: string
 	originElementId?: string
-	originSide?: "left" | "right"
-	canvasX: number
-	canvasY: number
-	source: "handle" | "drag-empty"
 }
 
 const MENU_WIDTH = 220
-const CREATE_ELEMENT_GAP_MIN_CANVAS_PX = 1024
-const CREATE_ELEMENT_GAP_MAX_CANVAS_PX = 2048
-const CREATE_ELEMENT_GAP_SIZE_RATIO = 0.7
-
-function clampCreateElementGap(gap: number): number {
-	return Math.min(
-		CREATE_ELEMENT_GAP_MAX_CANVAS_PX,
-		Math.max(CREATE_ELEMENT_GAP_MIN_CANVAS_PX, gap),
-	)
-}
-
-function getConnectionMenuTriggerAxisSize(
-	element: LayerElement | undefined,
-	side: NonNullable<ConnectionMenuContext["originSide"]>,
-): number | null {
-	const size = side === "left" || side === "right" ? element?.width : element?.height
-	const scale = side === "left" || side === "right" ? element?.scaleX : element?.scaleY
-	const scaledSize = Math.abs((size ?? 0) * (scale ?? 1))
-	return Number.isFinite(scaledSize) && scaledSize > 0 ? scaledSize : null
-}
 
 export function ConnectionMenuProvider(props: PropsWithChildren<unknown>) {
 	const { children } = props
@@ -83,36 +68,23 @@ export function ConnectionMenuProvider(props: PropsWithChildren<unknown>) {
 			}
 
 			const originElement = canvas.elementManager.getElementData(context.originElementId)
-			const triggerAxisSize = getConnectionMenuTriggerAxisSize(
-				originElement,
-				context.originSide,
-			)
-			if (!triggerAxisSize) {
-				return CREATE_ELEMENT_GAP_MIN_CANVAS_PX
-			}
-
-			return clampCreateElementGap(triggerAxisSize * CREATE_ELEMENT_GAP_SIZE_RATIO)
+			return resolveConnectionCreateGapForElement(originElement, context.originSide)
 		},
 		[canvas],
 	)
 
-	const resolveCreateAnchorPoint = useCallback(
-		(context: ConnectionMenuContext): { x: number; y: number } => {
-			if (context.source === "drag-empty") {
-				return {
-					x: context.canvasX,
-					y: context.canvasY,
-				}
+	const resolveCreatePlacementContext = useCallback(
+		(context: ConnectionMenuContext): ConnectionCreatePlacementContext => {
+			if (!canvas || !context.originElementId || context.source !== "handle") {
+				return context
 			}
 
-			const direction = context.originSide === "left" ? -1 : 1
-			const gap = resolveCreateGap(context)
-			return {
-				x: context.canvasX + gap * direction,
-				y: context.canvasY,
-			}
+			return resolveConnectionCreateContextWithOriginRect(
+				context,
+				canvas.geometryCacheManager.getElementBounds(context.originElementId),
+			)
 		},
-		[resolveCreateGap],
+		[canvas],
 	)
 
 	const resolveCreateCenterPoint = useCallback(
@@ -120,15 +92,24 @@ export function ConnectionMenuProvider(props: PropsWithChildren<unknown>) {
 			context: ConnectionMenuContext,
 			size: { width: number; height: number },
 		): { x: number; y: number } => {
-			const anchor = resolveCreateAnchorPoint(context)
-			const direction =
-				context.source === "drag-empty" && context.originSide === "left" ? -1 : 1
-			return {
-				x: anchor.x + (size.width / 2) * direction,
-				y: anchor.y,
-			}
+			const placementContext = resolveCreatePlacementContext(context)
+			return resolveConnectedElementCreateCenterPoint(
+				placementContext,
+				size,
+				resolveCreateGap(context),
+				{
+					obstacleRects: canvas ? collectConnectionCreateObstacleRects(canvas) : [],
+					siblingRects:
+						canvas && context.originElementId && context.originSide
+							? collectConnectedElementSiblingRects(canvas, {
+									originElementId: context.originElementId,
+									originSide: context.originSide,
+								})
+							: [],
+				},
+			)
 		},
-		[resolveCreateAnchorPoint],
+		[canvas, resolveCreateGap, resolveCreatePlacementContext],
 	)
 
 	const resolveCreateTopLeftPoint = useCallback(
@@ -136,16 +117,24 @@ export function ConnectionMenuProvider(props: PropsWithChildren<unknown>) {
 			context: ConnectionMenuContext,
 			size: { width: number; height: number },
 		): { x: number; y: number } => {
-			const anchor = resolveCreateAnchorPoint(context)
-			return {
-				x:
-					context.source === "drag-empty" && context.originSide === "left"
-						? anchor.x - size.width
-						: anchor.x,
-				y: anchor.y - size.height / 2,
-			}
+			const placementContext = resolveCreatePlacementContext(context)
+			return resolveConnectedElementCreateTopLeftPoint(
+				placementContext,
+				size,
+				resolveCreateGap(context),
+				{
+					obstacleRects: canvas ? collectConnectionCreateObstacleRects(canvas) : [],
+					siblingRects:
+						canvas && context.originElementId && context.originSide
+							? collectConnectedElementSiblingRects(canvas, {
+									originElementId: context.originElementId,
+									originSide: context.originSide,
+								})
+							: [],
+				},
+			)
 		},
-		[resolveCreateAnchorPoint],
+		[canvas, resolveCreateGap, resolveCreatePlacementContext],
 	)
 
 	const connectCreatedElement = useCallback(

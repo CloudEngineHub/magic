@@ -201,6 +201,19 @@
 		"resolution": "Resolution",
 		"size": "Size"
 	},
+	"imagePromptExtraction": {
+		"createText": "Create Text",
+		"emptyInput": "The current image cannot be used to extract a prompt",
+		"emptyResult": "AI did not generate a valid prompt. Please try again",
+		"failed": "Failed to extract prompt. Please try again",
+		"generate": "Extract Prompt",
+		"generating": "Extracting prompt",
+		"regenerate": "Extract Again",
+		"retry": "Retry",
+		"title": "Extract Image Prompt",
+		"trigger": "Extract Prompt",
+		"unavailable": "Image prompt extraction is currently unavailable"
+	},
 	"layers": {
 		"collapse": "Collapse",
 		"empty": {
@@ -443,6 +456,20 @@
 	},
 	"text": {
 		"defaultName": "Text"
+	},
+	"textContentOptimization": {
+		"apply": "Apply",
+		"emptyInput": "Enter text before optimizing",
+		"emptyResult": "AI did not generate valid text. Please try again",
+		"failed": "Failed to optimize content. Please try again",
+		"finishEditingFirst": "Finish editing the text before optimizing",
+		"generate": "Optimize Content",
+		"generating": "Generating optimized result",
+		"regenerate": "Regenerate",
+		"retry": "Retry",
+		"title": "Content Optimization",
+		"trigger": "Optimize Content",
+		"unavailable": "Content optimization is currently unavailable"
 	},
 	"tools": {
 		"frame": "Frame",

@@ -49,8 +49,6 @@ export default function ElementTools() {
 			switch (firstSelectedElement?.type) {
 				case ElementTypeEnum.Text:
 					return [
-						{ type: ElementToolTypeEnum.TextContentOptimizationButton },
-						Divider,
 						{ type: ElementToolTypeEnum.RichTextFillColor },
 						Divider,
 						{ type: ElementToolTypeEnum.RichTextFontFamily },
@@ -63,6 +61,7 @@ export default function ElementTools() {
 						{ type: ElementToolTypeEnum.RichTextAdvancedButton },
 						Divider,
 						{ type: ElementToolTypeEnum.DownloadButton },
+						{ type: ElementToolTypeEnum.TextContentOptimizationButton },
 					]
 
 				case ElementTypeEnum.Frame:
@@ -100,6 +99,9 @@ export default function ElementTools() {
 							type: ElementToolTypeEnum.ImageConvertHightButton,
 						})
 					}
+					imageElementTools.push({
+						type: ElementToolTypeEnum.ImagePromptExtractionButton,
+					})
 					return imageElementTools
 
 				case ElementTypeEnum.Video:
