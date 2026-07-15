@@ -87,6 +87,8 @@ export const MessageEditorContainer = observer(
 				placeholder,
 				onFileUpload,
 				isTaskRunning = false,
+				onInterrupt,
+				stopEventLoading,
 				selectedTopic,
 				selectedProject,
 				draftKey,
@@ -322,10 +324,10 @@ export const MessageEditorContainer = observer(
 				isMountedRef,
 			})
 
-				const { tiptapEditor, domRef } = useMessageEditor({
-					value: store.editorStore.value,
-					onSend: handleSend,
-					placeholder,
+			const { tiptapEditor, domRef } = useMessageEditor({
+				value: store.editorStore.value,
+				onSend: handleSend,
+				placeholder,
 				onMentionInsertItems: (items) => {
 					syncInsertedMarkersToManager(items)
 					if (!selectedProject?.id) {
@@ -349,13 +351,13 @@ export const MessageEditorContainer = observer(
 				mentionPanelStore,
 				isAllowedMention,
 				shouldSkipRemoveSync: () => shouldSkipMentionRemoveSyncRef.current,
-					shouldRestoreRemovedMention,
-				})
-				const activeEditorRef = useLatestActiveEditor(tiptapEditor)
+				shouldRestoreRemovedMention,
+			})
+			const activeEditorRef = useLatestActiveEditor(tiptapEditor)
 
-				useEffect(() => {
-					tiptapEditorRef.current = tiptapEditor
-					store.editorStore.setEditor(tiptapEditor)
+			useEffect(() => {
+				tiptapEditorRef.current = tiptapEditor
+				store.editorStore.setEditor(tiptapEditor)
 				return () => {
 					tiptapEditorRef.current = null
 				}
@@ -414,26 +416,26 @@ export const MessageEditorContainer = observer(
 			})
 
 			const clearContent = useMemoizedFn(() => {
-					clearAllMarkers()
+				clearAllMarkers()
 
-					setValue(undefined)
-					runActiveEditor(activeEditorRef.current, (editor) => {
-						editor.commands.clearContent()
-					})
-					clearFiles()
+				setValue(undefined)
+				runActiveEditor(activeEditorRef.current, (editor) => {
+					editor.commands.clearContent()
 				})
+				clearFiles()
+			})
 
 			const clearContentAfterSend = useMemoizedFn(() => {
 				shouldSkipMentionRemoveSyncRef.current = true
 				try {
 					clearAllMarkers()
 
-						setValue(undefined)
-						runActiveEditor(activeEditorRef.current, (editor) => {
-							editor.commands.clearContent()
-						})
-						clearFilesLocalOnly()
-					} finally {
+					setValue(undefined)
+					runActiveEditor(activeEditorRef.current, (editor) => {
+						editor.commands.clearContent()
+					})
+					clearFilesLocalOnly()
+				} finally {
 					shouldSkipMentionRemoveSyncRef.current = false
 				}
 			})
@@ -473,17 +475,17 @@ export const MessageEditorContainer = observer(
 
 			const focus = useMemoizedFn(
 				({ enableWhenIsMobile = false }: { enableWhenIsMobile?: boolean } = {}) => {
-						if (!enableWhenIsMobile && isMobile) {
-							return
+					if (!enableWhenIsMobile && isMobile) {
+						return
+					}
+					runActiveEditor(activeEditorRef.current, (editor) => {
+						editor.commands.focus()
+						if (isMobile) {
+							editor.commands.scrollIntoView()
 						}
-						runActiveEditor(activeEditorRef.current, (editor) => {
-							editor.commands.focus()
-							if (isMobile) {
-								editor.commands.scrollIntoView()
-							}
-						})
-					},
-				)
+					})
+				},
+			)
 
 			const loadDraftReady = useMemoizedFn(() => {
 				return store.draftStore.waitForLoadDraft()
@@ -556,6 +558,8 @@ export const MessageEditorContainer = observer(
 				isStopping: store.stopEventLoading,
 				setIsStopping: store.setStopEventLoading,
 			})
+			const effectiveHandleInterrupt = onInterrupt ?? handleInterrupt
+			const effectiveStopEventLoading = stopEventLoading ?? store.stopEventLoading
 
 			const handleFileUploadClick = useCallback(
 				(files: FileList) => {
@@ -633,14 +637,14 @@ export const MessageEditorContainer = observer(
 						}
 					}
 
-						runActiveEditor(activeEditorRef.current, (editor) => {
-							editor.commands.insertContent({
-								type: "mention",
-								attrs: item,
-							})
+					runActiveEditor(activeEditorRef.current, (editor) => {
+						editor.commands.insertContent({
+							type: "mention",
+							attrs: item,
 						})
-					},
-				)
+					})
+				},
+			)
 
 			const handleProjectFileMentionClick = useMemoizedFn((target: EventTarget | null) => {
 				const targetElement =
@@ -727,7 +731,7 @@ export const MessageEditorContainer = observer(
 				isTaskRunning,
 				isUploadingFiles: !isAllFilesUploaded,
 				voiceInputEnabled,
-				stopEventLoading: store.stopEventLoading,
+				stopEventLoading: effectiveStopEventLoading,
 				isEditingQueueItem: isEditingQueueItem ?? false,
 				selectedTopic,
 				selectedProject,
@@ -738,7 +742,7 @@ export const MessageEditorContainer = observer(
 				handleFileUploadClick,
 				handleRemoveUploadedFile,
 				handleSend,
-				handleInterrupt,
+				handleInterrupt: effectiveHandleInterrupt,
 				handleCompressContext,
 				editorModeSwitch,
 				modelSwitch,

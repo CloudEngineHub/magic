@@ -82,6 +82,10 @@ export default function DefaultMessageEditorContainer(props: DefaultMessageEdito
 	const queueContext = editorContext?.queueContext
 	const showLoading = editorContext?.showLoading ?? false
 	const isEmptyStatus = editorContext?.isEmptyStatus ?? true
+	const isWaitingForUser = selectedTopic?.task_status === TaskStatus.WAITING_FOR_USER
+	const effectiveIsTaskRunning = Boolean(
+		editorContext?.isTaskRunning || showLoading || isWaitingForUser,
+	)
 
 	useSharedProjectMode({ setTopicMode: effectiveSetTopicMode })
 
@@ -218,13 +222,6 @@ export default function DefaultMessageEditorContainer(props: DefaultMessageEdito
 		if (!params.value || isSending || isPreparingSendRef.current) {
 			return false
 		}
-
-		/**
-		 * IMPORTANT:
-		 * waiting_for_user 是 AskUser 独有状态，表示当前轮到用户输入。
-		 * 此时用户的输入应当直接发送，不应进入消息队列排队。
-		 */
-		const isWaitingForUser = selectedTopic?.task_status === TaskStatus.WAITING_FOR_USER
 
 		const shouldQueue = showLoading && !isWaitingForUser && !params.isFromQueue && queueContext
 
@@ -449,7 +446,9 @@ export default function DefaultMessageEditorContainer(props: DefaultMessageEdito
 				{...editorStyleProps}
 				placeholder={placeholder}
 				onSend={handleSend}
-				isTaskRunning={showLoading}
+				isTaskRunning={effectiveIsTaskRunning}
+				onInterrupt={editorContext?.handleInterrupt}
+				stopEventLoading={editorContext?.stopEventLoading}
 				selectedTopic={selectedTopic}
 				selectedProject={selectedProject}
 				selectedWorkspace={selectedWorkspace}
