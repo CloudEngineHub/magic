@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"regexp"
+	"strings"
 
 	"go.yaml.in/yaml/v3"
 
@@ -125,10 +126,12 @@ func (s *subtreeSpliterCmd) Split(ctx context.Context, code *Code, subtreeSplit 
 	}
 	urlRe := regexp.MustCompile("^(https{0,1})://([^/]+).+")
 	if groups := urlRe.FindStringSubmatch(subtreeSplit.DestURL); len(groups) > 2 {
-		cred, err := util.GetGitHTTPCredential(ctx, code.Repository, groups[1], groups[2])
-		if err == nil && cred != nil {
-			options.ClientOptions = []gitClient.Option{
-				gitClient.WithHTTPAuth(cred),
+		if !strings.ContainsRune(groups[2], '@') {
+			cred, err := util.GetGitHTTPCredential(ctx, code.Repository, groups[1], groups[2])
+			if err == nil && cred != nil {
+				options.ClientOptions = []gitClient.Option{
+					gitClient.WithHTTPAuth(cred),
+				}
 			}
 		}
 	}

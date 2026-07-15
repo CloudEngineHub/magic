@@ -1,0 +1,84 @@
+name: Publish subtree to repos
+
+on:
+  push:
+    paths:
+      # should match magicrew.yml
+      - 'backend/api-response/**'
+      - 'backend/async-event/**'
+      - 'backend/cloudfile/**'
+      - 'backend/code-executor/**'
+      - 'backend/easy-dingtalk/**'
+      - 'backend/flow-expr-engine/**'
+      - 'backend/rule-engine-core/**'
+      - 'backend/sdk-base/**'
+      - 'backend/super-magic-module/**'
+      - 'backend/task-scheduler/**'
+      - 'thirdparty/PHPSandbox/**'
+      - 'thirdparty/tiptap/**'
+  workflow_dispatch:
+    inputs:
+      subtreeName:
+        description: 'Subtree name (see magicrew.yml) empty for all'
+        required: false
+        type: string
+      branch:
+        description: 'Branch name to split from and to, empty for using trigger branch'
+        required: false
+        type: string
+      force:
+        description: 'Force push, "true" for force push'
+        required: false
+        type: boolean
+
+jobs:
+  publish:
+    permissions:
+      contents: write
+      packages: write
+      id-token: write
+      attestations: write
+    name: Publish subtree repository
+    runs-on: ubuntu-latest
+    if: |
+      vars.SUBTREE_DEST_GIT_BASE != '' && (inputs.branch != '' || github.ref_type == 'branch' && github.ref_name != '')
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          fetch-tags: false
+          ref: ${{ inputs.branch != '' && inputs.branch || github.ref_name }}
+
+      - name: Cache cli
+        id: cache-cli
+        uses: actions/cache@v6
+        with:
+          path: cli/cli
+          key: ${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('cli/**') }}-cli-bin
+
+      - name: Setup golang
+        uses: actions/setup-go@v6
+        if: steps.cache-cli.outputs.cache-hit != 'true'
+        with:
+          go-version-file: 'cli/go.mod'
+          cache-dependency-path: 'cli/go.sum'
+          cache: true
+
+      - name: Build cli
+        if: steps.cache-cli.outputs.cache-hit != 'true'
+        run: |
+          cd cli
+          go build -o cli ./cmd
+
+      - name: Publish
+        run: |
+          set -xeo pipefail
+          # prepare git credential
+          destGitBase='${{ vars.SUBTREE_DEST_GIT_BASE }}'
+          destGitBase="${destGitBase%%://*}://oauth:${{ secrets.SUBTREE_PUSH_TOKEN }}@${destGitBase##*://}"
+          # do publish
+          ./cli/cli subtree \
+            --dest-git-base "$destGitBase" \
+            --branch '${{ inputs.branch != '' && inputs.branch || github.ref_name }}' \
+            publish ${{ inputs.subtree == '' && '-a' || inputs.subtree }}
