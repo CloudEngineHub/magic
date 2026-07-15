@@ -70,18 +70,21 @@ export async function readPluginCanvasClipboard(
 	}
 
 	let uploadedAssets: PluginFileAsset[] = []
-	if (
-		clipboardResult.payload.operation === "copy-as-png" &&
-		clipboardResult.files.length > 0
-	) {
-		uploadedAssets = await pickPluginFiles(
-			canvas,
-			clipboardResult.files.map((item) => item.file),
-			{
-				type: "image",
-				maxCount: clipboardResult.files.length,
-			},
-		)
+	if (clipboardResult.payload.operation === "copy-as-png" && clipboardResult.files.length > 0) {
+		uploadedAssets = (
+			await pickPluginFiles(
+				canvas,
+				clipboardResult.files.map((item) => item.file),
+				{
+					type: "image",
+					maxCount: clipboardResult.files.length,
+				},
+			)
+		).map((asset, index) => ({
+			...asset,
+			// copy-as-png 上传后会得到新的文件 asset，保留原画布元素 id 供后续生成结果靠近来源图。
+			sourceElementId: clipboardResult.payload.files[index]?.elementId,
+		}))
 	}
 
 	return { payload, uploadedAssets }

@@ -1,4 +1,12 @@
-import { type ReactNode, type RefObject, useCallback, useEffect, useRef, useState } from "react"
+import {
+	type MutableRefObject,
+	type ReactNode,
+	type RefObject,
+	useCallback,
+	useEffect,
+	useRef,
+	useState,
+} from "react"
 import { createPortal } from "react-dom"
 import { toast } from "sonner"
 
@@ -15,6 +23,7 @@ import {
 import { resolveCanvasImageDragAssets } from "./canvasImageDragAssets"
 import { getIframePoint, getPluginWindowHoverState } from "./dragGeometry"
 import styles from "./index.module.css"
+import { registerPluginFileAssetSource, type PluginSourceElementMap } from "./pluginSourceElements"
 
 type CanvasAssetDragTargetMessage = Extract<
 	PluginRuntimeMessage,
@@ -63,6 +72,8 @@ interface UseCanvasImageExternalDragToPluginParams {
 	iframeRef: RefObject<HTMLIFrameElement | null>
 	plugin: CanvasDesignPlugin
 	pluginWindowRef: RefObject<HTMLDivElement | null>
+	/** 记录拖入插件的文件 asset 与原画布元素的关系，供插件后续生成时恢复来源图。 */
+	sourceElementByAssetKeyRef: MutableRefObject<PluginSourceElementMap>
 }
 
 /** 获取拖拽预览所需的图片元素元信息，缩略图 URL 由 useImageLowUrl 异步解析。 */
@@ -153,6 +164,7 @@ function getPreviewItems(canvas: Canvas, elementIds: string[]): DragPreviewItem[
  * @param iframeRef - iframe 引用
  * @param plugin - 插件实例
  * @param pluginWindowRef - 插件浮窗引用
+ * @param sourceElementByAssetKeyRef - 插件 asset/path 到画布元素 id 的来源映射
  * @returns 处理画布图片外部拖拽和插件 iframe 的事件的函数
  */
 export function useCanvasImageExternalDragToPlugin({
@@ -161,6 +173,7 @@ export function useCanvasImageExternalDragToPlugin({
 	iframeRef,
 	plugin,
 	pluginWindowRef,
+	sourceElementByAssetKeyRef,
 }: UseCanvasImageExternalDragToPluginParams): {
 	canvasAssetDragGhost: ReactNode
 	handleCanvasAssetDragTarget: (target: CanvasAssetDragTargetMessage) => void
@@ -359,6 +372,10 @@ export function useCanvasImageExternalDragToPlugin({
 						toast.dismiss(toastId)
 						throw new Error("Session expired or no image asset resolved.")
 					}
+					// 拖入插件的文件可能随后作为 reference_images 回到宿主，提前记录文件 key 与画布元素的关系。
+					files.forEach((file) => {
+						registerPluginFileAssetSource(sourceElementByAssetKeyRef.current, file)
+					})
 					postPluginMessage({
 						type: "magic-canvas-plugin:canvas-asset-drop",
 						dragSessionId: sessionId,
@@ -398,6 +415,7 @@ export function useCanvasImageExternalDragToPlugin({
 		pluginWindowRef,
 		postDragMove,
 		postPluginMessage,
+		sourceElementByAssetKeyRef,
 		sendDragLeave,
 	])
 

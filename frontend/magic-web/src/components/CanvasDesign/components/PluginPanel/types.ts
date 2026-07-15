@@ -29,6 +29,8 @@ export interface PluginFileAsset {
 	type?: PluginFilePickerType
 	width?: number
 	height?: number
+	/** Host 内部提示字段：当 asset 来自画布图片时，记录原始画布元素 id。 */
+	sourceElementId?: string
 }
 
 export interface PluginFilePickerRequest {

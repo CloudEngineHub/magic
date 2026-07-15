@@ -76,6 +76,16 @@ export const PluginWindow = memo(function PluginWindow({
 	const filePickerRequestRef = useRef<PluginFilePickerRequest | null>(null)
 	const projectFileBatchItemsRef = useRef<Array<ReferenceResourcePanelItem | undefined>>([])
 	const pluginView = usePluginView(plugin, locale, channelToken, canvas.readonly)
+	// 单个插件窗口内维护 asset/path -> 画布元素 id 的临时映射，供后续 generate-and-place 贴近来源图。
+	const sourceElementByAssetKeyRef = useRef(new Map<string, string>())
+
+	useEffect(() => {
+		sourceElementByAssetKeyRef.current.clear()
+		return () => {
+			sourceElementByAssetKeyRef.current.clear()
+		}
+	}, [canvas, channelToken])
+
 	// 连接画布图片拖拽和插件 iframe：宿主负责预览、落点确认与最终文件投递。
 	const { canvasAssetDragGhost, handleCanvasAssetDragTarget, isCanvasAssetDragActive } =
 		useCanvasImageExternalDragToPlugin({
@@ -84,6 +94,7 @@ export const PluginWindow = memo(function PluginWindow({
 			iframeRef,
 			plugin,
 			pluginWindowRef,
+			sourceElementByAssetKeyRef,
 		})
 	// 连接项目附件拖拽和插件 iframe：宿主负责预览、落点确认与最终文件投递。
 	const { handleProjectAttachmentDragTarget, isProjectAttachmentDragActive } =
@@ -150,10 +161,12 @@ export const PluginWindow = memo(function PluginWindow({
 		plugin,
 		pluginWindowRef,
 		setFilePickerRequest,
+		sourceElementByAssetKeyRef,
 		setFrameHeight,
 	})
 
 	const handleClose = useCallback(() => {
+		sourceElementByAssetKeyRef.current.clear()
 		canvas.pluginManager.close(plugin.name)
 	}, [canvas.pluginManager, plugin.name])
 

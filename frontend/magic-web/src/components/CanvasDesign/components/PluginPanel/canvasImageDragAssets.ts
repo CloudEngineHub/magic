@@ -76,9 +76,13 @@ async function exportImageElementAsAsset(
 		throw new Error("Failed to upload exported image.")
 	}
 	const displayDimensions = getCanvasImageDisplayDimensions(element)
-	return displayDimensions
-		? { ...asset, width: displayDimensions.width, height: displayDimensions.height }
-		: asset
+	return {
+		...asset,
+		width: displayDimensions?.width ?? asset.width,
+		height: displayDimensions?.height ?? asset.height,
+		// 重新导出的 PNG 已经是新文件，仍要保留原始画布元素 id 用于后续贴源放置。
+		sourceElementId: element.id,
+	}
 }
 
 /**
@@ -104,9 +108,13 @@ async function resolveImageElementAsAsset(
 		fileName: element.name,
 		skipImageDimensions: true,
 	})
-	return displayDimensions
-		? { ...asset, width: displayDimensions.width, height: displayDimensions.height }
-		: asset
+	return {
+		...asset,
+		width: displayDimensions?.width ?? asset.width,
+		height: displayDimensions?.height ?? asset.height,
+		// 即使直接复用原图资源，也要带上来源元素 id，避免只靠 src 匹配时丢失画布位置。
+		sourceElementId: element.id,
+	}
 }
 
 /** 批量解析外部拖拽中的图片元素，非图片元素会直接视为非法拖拽数据 */
