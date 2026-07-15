@@ -1,5 +1,5 @@
 import { getFileContentById } from "@/pages/superMagic/utils/api"
-import { flattenAttachments, findMatchingFile } from "./index"
+import { findMatchingFile } from "./index"
 
 const MAGIC_PROJECT_FILE_NAME = "magic.project.js"
 
@@ -31,6 +31,26 @@ function dedupeFilesById(files: any[]) {
 	return result
 }
 
+function flattenAttachmentNodes(items: any[]): any[] {
+	const nodes: any[] = []
+	const stack = [...items].reverse()
+
+	while (stack.length > 0) {
+		const item = stack.pop()
+		if (!item) continue
+
+		// currentFileId can identify a project directory, so directory nodes must be retained.
+		nodes.push(item)
+		if (!Array.isArray(item.children)) continue
+
+		for (let index = item.children.length - 1; index >= 0; index -= 1) {
+			stack.push(item.children[index])
+		}
+	}
+
+	return nodes
+}
+
 function getSingleMagicProjectCandidate(files: any[]) {
 	return files.length === 1 ? files[0] : null
 }
@@ -56,7 +76,7 @@ export async function loadMagicProjectJsContent(fileId: string): Promise<string>
 }
 
 /**
- * Find magic.project.js file in the same directory as the HTML file.
+ * Find magic.project.js file for the current HTML file or project directory.
  * If the current slide is missing from attachments, fall back only when there is a single
  * magic.project.js candidate. This keeps delete/sort operations available without guessing
  * between multiple PPT projects.
@@ -81,7 +101,7 @@ export async function findMagicProjectJsFile(params: {
 			}
 		}
 
-		const allFiles = dedupeFilesById(flattenAttachments(attachments || []))
+		const allFiles = dedupeFilesById(flattenAttachmentNodes(attachments || []))
 		const magicProjectCandidates = allFiles.filter(
 			(file: any) => file.file_name === MAGIC_PROJECT_FILE_NAME,
 		)
