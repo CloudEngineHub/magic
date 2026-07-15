@@ -38,6 +38,11 @@ type ContextMenuPosition = {
 	y: number
 }
 
+type HeaderColumnSelection = {
+	startIndex: number
+	endIndex: number
+}
+
 function SortIcon({ columnKey, sort }: { columnKey: string; sort: MagicBaseSortRule | null }) {
 	if (sort?.field !== columnKey) {
 		return <ChevronsUpDown className="size-3.5 text-muted-foreground" />
@@ -69,6 +74,8 @@ export default function DataGrid({
 	const { t } = useTranslation("super")
 	const [selectionStart, setSelectionStart] = useState<CellCoordinate | null>(null)
 	const [selectionEnd, setSelectionEnd] = useState<CellCoordinate | null>(null)
+	const [headerColumnSelection, setHeaderColumnSelection] =
+		useState<HeaderColumnSelection | null>(null)
 	const [contextSelection, setContextSelection] = useState<MagicBaseCellSelection | null>(null)
 	const [contextMenuSelection, setContextMenuSelection] = useState<MagicBaseCellSelection | null>(
 		null,
@@ -77,6 +84,8 @@ export default function DataGrid({
 	const rootRef = useRef<HTMLDivElement | null>(null)
 	const menuRef = useRef<HTMLDivElement | null>(null)
 	const draggingRef = useRef(false)
+	const headerDraggingRef = useRef(false)
+	const suppressHeaderSortRef = useRef(false)
 	const selectionStartRef = useRef<CellCoordinate | null>(null)
 	const selectionEndRef = useRef<CellCoordinate | null>(null)
 	const currentSelectionRef = useRef<MagicBaseCellSelection>({
@@ -146,9 +155,40 @@ export default function DataGrid({
 		[buildSelectionFromBounds],
 	)
 
+	const buildHeaderColumnSelection = useCallback(
+		(selection: HeaderColumnSelection | null): MagicBaseCellSelection => {
+			if (!selection) return { rowIds: [], columnIds: [], columnKeys: [] }
+
+			const selectedColumns = columns.slice(
+				Math.min(selection.startIndex, selection.endIndex),
+				Math.max(selection.startIndex, selection.endIndex) + 1,
+			)
+			return {
+				rowIds: [],
+				columnIds: [
+					...new Set(
+						selectedColumns
+							.filter((column) => column.source === "schema" && column.id)
+							.map((column) => column.id as string),
+					),
+				],
+				columnKeys: [...new Set(selectedColumns.map((column) => column.key))],
+			}
+		},
+		[columns],
+	)
+
 	const currentSelection = useMemo<MagicBaseCellSelection>(() => {
+		if (headerColumnSelection) {
+			return buildHeaderColumnSelection(headerColumnSelection)
+		}
 		return buildSelectionFromBounds(selectionBounds)
-	}, [buildSelectionFromBounds, selectionBounds])
+	}, [
+		buildHeaderColumnSelection,
+		buildSelectionFromBounds,
+		headerColumnSelection,
+		selectionBounds,
+	])
 
 	const isCellInRefSelection = (cell: CellCoordinate) => {
 		const start = selectionStartRef.current
@@ -198,6 +238,7 @@ export default function DataGrid({
 	useEffect(() => {
 		setSelectionStart(null)
 		setSelectionEnd(null)
+		setHeaderColumnSelection(null)
 		selectionStartRef.current = null
 		selectionEndRef.current = null
 		currentSelectionRef.current = { rowIds: [], columnIds: [], columnKeys: [] }
@@ -206,6 +247,7 @@ export default function DataGrid({
 		setContextMenuPosition(null)
 		contextSelectionRef.current = null
 		draggingRef.current = false
+		headerDraggingRef.current = false
 		pointerRef.current = null
 		cancelAutoScroll()
 		onSelectionChange?.({ rowIds: [], columnIds: [], columnKeys: [] })
@@ -311,6 +353,16 @@ export default function DataGrid({
 		)
 	}
 
+	const isHeaderSelected = (columnIndex: number) => {
+		if (!headerColumnSelection) return false
+		return (
+			columnIndex >=
+				Math.min(headerColumnSelection.startIndex, headerColumnSelection.endIndex) &&
+			columnIndex <=
+				Math.max(headerColumnSelection.startIndex, headerColumnSelection.endIndex)
+		)
+	}
+
 	const selectSingleCell = (cell: CellCoordinate) => {
 		selectionStartRef.current = cell
 		selectionEndRef.current = cell
@@ -330,6 +382,58 @@ export default function DataGrid({
 		setContextMenuSelection(null)
 		setSelectionStart(cell)
 		setSelectionEnd(cell)
+		setHeaderColumnSelection(null)
+	}
+
+	const handleHeaderMouseDown = (columnIndex: number, event: MouseEvent) => {
+		if (rows.length > 0 || event.button !== 0) return
+		event.preventDefault()
+		headerDraggingRef.current = true
+		suppressHeaderSortRef.current = true
+		setHeaderColumnSelection({ startIndex: columnIndex, endIndex: columnIndex })
+		setSelectionStart(null)
+		setSelectionEnd(null)
+	}
+
+	const handleHeaderMouseEnter = (columnIndex: number) => {
+		if (!headerDraggingRef.current) return
+		setHeaderColumnSelection((current) =>
+			current ? { ...current, endIndex: columnIndex } : current,
+		)
+	}
+
+	const handleHeaderMouseUp = () => {
+		headerDraggingRef.current = false
+	}
+
+	const handleHeaderContextMenu = (columnIndex: number, event: MouseEvent) => {
+		event.preventDefault()
+		event.stopPropagation()
+
+		const isWithinCurrentSelection =
+			headerColumnSelection !== null &&
+			columnIndex >=
+				Math.min(headerColumnSelection.startIndex, headerColumnSelection.endIndex) &&
+			columnIndex <=
+				Math.max(headerColumnSelection.startIndex, headerColumnSelection.endIndex)
+		const nextHeaderSelection = isWithinCurrentSelection
+			? headerColumnSelection
+			: { startIndex: columnIndex, endIndex: columnIndex }
+		const nextSelection = buildHeaderColumnSelection(nextHeaderSelection)
+
+		if (!isWithinCurrentSelection) {
+			setHeaderColumnSelection(nextHeaderSelection)
+			setSelectionStart(null)
+			setSelectionEnd(null)
+		}
+		currentSelectionRef.current = nextSelection
+		contextSelectionRef.current = nextSelection
+		setContextSelection(nextSelection)
+		setContextMenuSelection(nextSelection)
+		setContextMenuPosition({
+			x: Math.min(event.clientX, window.innerWidth - 190),
+			y: Math.min(event.clientY, window.innerHeight - 132),
+		})
 	}
 
 	const handleCellMouseEnter = (cell: CellCoordinate) => {
@@ -368,6 +472,7 @@ export default function DataGrid({
 	const clearSelection = () => {
 		setSelectionStart(null)
 		setSelectionEnd(null)
+		setHeaderColumnSelection(null)
 		selectionStartRef.current = null
 		selectionEndRef.current = null
 		setContextSelection(null)
@@ -447,6 +552,7 @@ export default function DataGrid({
 
 		const stopDragging = () => {
 			draggingRef.current = false
+			headerDraggingRef.current = false
 			pointerRef.current = null
 			cancelAutoScroll()
 		}
@@ -478,14 +584,6 @@ export default function DataGrid({
 		)
 	}
 
-	if (rows.length === 0) {
-		return (
-			<div className="flex h-full items-center justify-center text-sm text-muted-foreground">
-				{t("microAppPage.databasePanel.noRows")}
-			</div>
-		)
-	}
-
 	const activeSelection = contextMenuSelection ?? contextSelection ?? currentSelection
 	const hasSelectedConfigurableColumns = hasConfigurableColumns(activeSelection)
 	const canEditSelectedRow = activeSelection.rowIds.length === 1
@@ -500,16 +598,33 @@ export default function DataGrid({
 			<table className="w-full min-w-max caption-bottom border-separate border-spacing-0 text-sm">
 				<thead className="sticky top-0 z-10 bg-background [&_tr]:border-b">
 					<tr className="border-b transition-colors hover:bg-muted/50 data-[state=selected]:bg-muted">
-						{columns.map((column) => (
+						{columns.map((column, columnIndex) => (
 							<th
 								key={column.key}
-								className="h-12 min-w-[180px] whitespace-nowrap border-b border-r border-border bg-background p-0 text-left align-middle font-medium text-foreground"
+								data-magicbase-header-column-index={columnIndex}
+								className={cn(
+									"h-12 min-w-[180px] whitespace-nowrap border-b border-r border-border bg-background p-0 text-left align-middle font-medium text-foreground",
+									isHeaderSelected(columnIndex) &&
+										"bg-primary/10 ring-1 ring-inset ring-primary/30",
+								)}
+								onMouseDown={(event) => handleHeaderMouseDown(columnIndex, event)}
+								onMouseEnter={() => handleHeaderMouseEnter(columnIndex)}
+								onMouseUp={handleHeaderMouseUp}
+								onContextMenu={(event) =>
+									handleHeaderContextMenu(columnIndex, event)
+								}
 							>
 								<Button
 									type="button"
 									variant="ghost"
 									className="h-full w-full justify-between rounded-none px-3 py-2 text-left"
-									onClick={() => onSortChange(column.key)}
+									onClick={() => {
+										if (suppressHeaderSortRef.current) {
+											suppressHeaderSortRef.current = false
+											return
+										}
+										onSortChange(column.key)
+									}}
 								>
 									<span className="min-w-0">
 										<span className="block truncate text-xs font-medium text-foreground">
@@ -527,66 +642,77 @@ export default function DataGrid({
 					</tr>
 				</thead>
 				<tbody className="[&_tr:last-child]:border-0">
-					{rows.map((row, rowIndex) => {
-						const recordId = getRowRecordId(row)
-						return (
-							<tr
-								key={recordId || rowIndex}
-								className="border-b transition-colors hover:bg-muted/30 data-[state=selected]:bg-muted"
+					{rows.length === 0 ? (
+						<tr>
+							<td
+								colSpan={Math.max(columns.length, 1)}
+								className="h-48 text-center text-sm text-muted-foreground"
 							>
-								{columns.map((column, columnIndex) => {
-									const value = row[column.key]
-									const selected = isCellSelected(rowIndex, columnIndex)
-									return (
-										<td
-											key={column.key}
-											data-testid="magicbase-data-cell"
-											data-magicbase-row-index={rowIndex}
-											data-magicbase-column-index={columnIndex}
-											className={cn(
-												"max-w-[280px] select-none border-b border-r border-border px-3 py-2 text-xs",
-												value == null && "text-muted-foreground",
-												selected &&
-													"bg-primary/10 ring-1 ring-inset ring-primary/30",
-											)}
-											title={formatCellValue(value)}
-											onMouseDown={(event) =>
-												handleCellMouseDown(
-													{ rowIndex, columnIndex },
-													event,
-												)
-											}
-											onMouseEnter={() =>
-												handleCellMouseEnter({
-													rowIndex,
-													columnIndex,
-												})
-											}
-											onMouseUp={handleCellMouseUp}
-											onContextMenu={(event) =>
-												handleCellContextMenu(
-													{
+								{t("microAppPage.databasePanel.noRows")}
+							</td>
+						</tr>
+					) : (
+						rows.map((row, rowIndex) => {
+							const recordId = getRowRecordId(row)
+							return (
+								<tr
+									key={recordId || rowIndex}
+									className="border-b transition-colors hover:bg-muted/30 data-[state=selected]:bg-muted"
+								>
+									{columns.map((column, columnIndex) => {
+										const value = row[column.key]
+										const selected = isCellSelected(rowIndex, columnIndex)
+										return (
+											<td
+												key={column.key}
+												data-testid="magicbase-data-cell"
+												data-magicbase-row-index={rowIndex}
+												data-magicbase-column-index={columnIndex}
+												className={cn(
+													"max-w-[280px] select-none border-b border-r border-border px-3 py-2 text-xs",
+													value == null && "text-muted-foreground",
+													selected &&
+														"bg-primary/10 ring-1 ring-inset ring-primary/30",
+												)}
+												title={formatCellValue(value)}
+												onMouseDown={(event) =>
+													handleCellMouseDown(
+														{ rowIndex, columnIndex },
+														event,
+													)
+												}
+												onMouseEnter={() =>
+													handleCellMouseEnter({
 														rowIndex,
 														columnIndex,
-													},
-													event,
-												)
-											}
-											onDoubleClick={() => {
-												if (column.source !== "schema") return
-												if (!recordId) return
-												onOpenEditRow?.(recordId)
-											}}
-										>
-											<span className="block truncate">
-												{formatCellValue(value)}
-											</span>
-										</td>
-									)
-								})}
-							</tr>
-						)
-					})}
+													})
+												}
+												onMouseUp={handleCellMouseUp}
+												onContextMenu={(event) =>
+													handleCellContextMenu(
+														{
+															rowIndex,
+															columnIndex,
+														},
+														event,
+													)
+												}
+												onDoubleClick={() => {
+													if (column.source !== "schema") return
+													if (!recordId) return
+													onOpenEditRow?.(recordId)
+												}}
+											>
+												<span className="block truncate">
+													{formatCellValue(value)}
+												</span>
+											</td>
+										)
+									})}
+								</tr>
+							)
+						})
+					)}
 				</tbody>
 			</table>
 			{contextMenuPosition ? (

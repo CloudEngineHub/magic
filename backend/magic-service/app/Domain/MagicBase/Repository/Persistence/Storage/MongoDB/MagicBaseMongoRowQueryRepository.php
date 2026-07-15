@@ -197,6 +197,7 @@ readonly class MagicBaseMongoRowQueryRepository implements MagicBaseRowQueryRepo
     private function buildFieldFilter(string $field, array $condition): ?array
     {
         $path = $this->fieldPath($field);
+        $condition = $this->normalizeSystemIdCondition($field, $condition);
         if (array_key_exists('in', $condition)) {
             $values = is_array($condition['in']) ? array_values($condition['in']) : [];
             return [$path => ['$in' => $values]];
@@ -206,6 +207,47 @@ readonly class MagicBaseMongoRowQueryRepository implements MagicBaseRowQueryRepo
         }
 
         return null;
+    }
+
+    /**
+     * API record IDs are strings to preserve JavaScript precision, while MongoDB
+     * stores the system record_id as a 64-bit integer.
+     *
+     * @param array<string, mixed> $condition
+     * @return array<string, mixed>
+     */
+    private function normalizeSystemIdCondition(string $field, array $condition): array
+    {
+        if (! in_array($field, ['id', 'record_id'], true)) {
+            return $condition;
+        }
+
+        if (array_key_exists('eq', $condition)) {
+            $condition['eq'] = $this->normalizeRecordIdValue($condition['eq']);
+        }
+
+        if (is_array($condition['in'] ?? null)) {
+            $condition['in'] = array_map(
+                fn (mixed $value): mixed => $this->normalizeRecordIdValue($value),
+                $condition['in']
+            );
+        }
+
+        return $condition;
+    }
+
+    private function normalizeRecordIdValue(mixed $value): mixed
+    {
+        if (is_int($value)) {
+            return $value;
+        }
+
+        if (! is_string($value) || ! ctype_digit($value)) {
+            return $value;
+        }
+
+        $normalized = (int) $value;
+        return (string) $normalized === $value ? $normalized : $value;
     }
 
     /**

@@ -474,24 +474,7 @@ export default function PermissionEditorDialog({
 		if (!target) return
 
 		setPermissionDrafts((current) => {
-			const nextDrafts = current.reduce<PermissionDraft[]>((result, draft) => {
-				if (draft.key !== activeDraftKey) {
-					result.push(draft)
-					return result
-				}
-
-				const nextDraft = updater(draft)
-				if (hasDraftPermission(nextDraft, target)) {
-					result.push(nextDraft)
-				}
-				return result
-			}, [])
-
-			if (!nextDrafts.some((draft) => draft.key === activeDraftKey)) {
-				setActiveDraftKey(nextDrafts[0]?.key || "")
-			}
-
-			return nextDrafts
+			return current.map((draft) => (draft.key === activeDraftKey ? updater(draft) : draft))
 		})
 	}
 

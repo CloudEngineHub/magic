@@ -84,11 +84,23 @@ export async function getMagicBaseRow(
 	recordId: string,
 	select?: string[],
 ): Promise<unknown> {
-	const params = select ? `?select=${select.join(",")}` : ""
-	return iframeClient.get(
-		`/api/v1/magicbase/projects/${projectId}/tables/${tableId}/rows/${recordId}${params}`,
+	const result = await iframeClient.post<{ list?: unknown[] }>(
+		`/api/v1/magicbase/projects/${projectId}/tables/${tableId}/query`,
+		{
+			filter: { id: { eq: recordId } },
+			page: 1,
+			page_size: 1,
+			...(select?.length ? { select: select.join(",") } : {}),
+		},
 		withMagicBaseShareToken(),
 	)
+
+	const row = result.list?.[0]
+	if (row === undefined) {
+		throw new Error("MagicBase row not found")
+	}
+
+	return row
 }
 
 /**
