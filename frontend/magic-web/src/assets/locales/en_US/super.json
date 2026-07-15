@@ -3838,32 +3838,6 @@
 		},
 		"title": "Recycle Bin"
 	},
-	"saasKK": {
-		"bottomHint": "If you still need to use the current service, you can temporarily close this window.",
-		"closeButton": "Close Temporarily",
-		"closeGuide": "Close",
-		"copyFailed": "Copy failed",
-		"copySuccess": "Copied successfully",
-		"deployCodeGuide": {
-			"step1Description": "Open 「https://www.letsmagic.cn/login」 in your browser, click 「Private Deployment」",
-			"step2Description": "Enter 「KK」 in the 「Private Deployment Code」",
-			"title": "Private Deployment Code Guide"
-		},
-		"dialogTitle": "$t(common:platform.name) Login Guide",
-		"dingtalkGuide": {
-			"description": "After opening 「DingTalk」, navigate to 「Workbench」 through the left sidebar, find 「$t(common:platform.name)」 in the workbench and open it.",
-			"title": "DingTalk Workbench Guide"
-		},
-		"loginMethod": "Login Methods",
-		"method1Desc": "Open and auto-login from 「DingTalk Workbench - All Staff」",
-		"method1Title": "Method 1: DingTalk Workbench",
-		"method2Desc": "Copy the link and open it in your browser",
-		"method2Title": "Method 2: Login via URL",
-		"method3Desc": "Enter \"KK\" in the 「Private Deployment」 configuration on the login page",
-		"method3Title": "Method 3: Private Deployment Code",
-		"viewGuide": "View Guide",
-		"warningMessage": "This SaaS environment is only for 「KK Group」 organization to use 「Sinan」 and other applications. To use $t(common:platform.name), please follow the methods below."
-	},
 	"scheduleTask": {
 		"clearSearch": "Clear search",
 		"configTask": "Task Config",
@@ -4592,10 +4566,7 @@
 		],
 		"actionTitle": "If you want to actively intervene",
 		"mainText": "Task execution is taking too long, which may be due to the following reasons:",
-		"reasonList": [
-			"AI is processing complex tasks",
-			"Network connection is unstable"
-		],
+		"reasonList": ["AI is processing complex tasks", "Network connection is unstable"],
 		"statusText": "If you don't take any action, AI will continue trying"
 	},
 	"tool": {

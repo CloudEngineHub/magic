@@ -3840,32 +3840,6 @@
 		},
 		"title": "回收站"
 	},
-	"saasKK": {
-		"bottomHint": "如您仍需使用当前服务，可暂时关闭当前窗口。",
-		"closeButton": "暂时关闭提示",
-		"closeGuide": "关闭提示",
-		"copyFailed": "复制失败",
-		"copySuccess": "复制成功",
-		"deployCodeGuide": {
-			"step1Description": "在浏览器中打开 「https://www.letsmagic.cn/login」,点击 「私有部署」",
-			"step2Description": "在 「私有部署识别码」 中输入 「KK」 即可",
-			"title": "填写私有部署识别码指引"
-		},
-		"dialogTitle": "$t(common:platform.name)登录指引",
-		"dingtalkGuide": {
-			"description": "打开 「钉钉」 后,通过左侧栏进入 「工作台」,在工作台中找到 「$t(common:platform.name)」 打开即可。",
-			"title": "钉钉工作台指引"
-		},
-		"loginMethod": "登录方式",
-		"method1Desc": "在 「钉钉工作台 - 全员」 中打开并自动登录",
-		"method1Title": "方式 1 : 钉钉工作台",
-		"method2Desc": "复制链接并在浏览器打开",
-		"method2Title": "方式 2 : 通过链接登录",
-		"method3Desc": "在登录页面「私有部署」配置中输入\"KK\"",
-		"method3Title": "方式 3 : 填写私有部署识别码",
-		"viewGuide": "查看指引",
-		"warningMessage": "当前 SaaS 环境仅供 「KK集团」 组织使用 「司南」 等应用\n如需使用$t(common:platform.name)，请根据下方方式进入使用。"
-	},
 	"scheduleTask": {
 		"clearSearch": "清空搜索",
 		"configTask": "任务配置",
@@ -4595,10 +4569,7 @@
 		],
 		"actionTitle": "若您希望主动干预",
 		"mainText": "任务执行时间过长，可能是如下原因导致：",
-		"reasonList": [
-			"AI 处理复杂任务中",
-			"网络连接不稳定"
-		],
+		"reasonList": ["AI 处理复杂任务中", "网络连接不稳定"],
 		"statusText": "若您暂不操作，AI 会继续尝试"
 	},
 	"tool": {
