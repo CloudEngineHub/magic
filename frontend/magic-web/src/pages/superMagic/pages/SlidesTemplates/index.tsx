@@ -2,7 +2,7 @@ import { MousePointerClick, Palette, Search, X } from "lucide-react"
 import { useSize } from "ahooks"
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion"
 import { observer } from "mobx-react-lite"
-import { useCallback, useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { Button } from "@/components/shadcn-ui/button"
 import { Input } from "@/components/shadcn-ui/input"
@@ -25,8 +25,12 @@ import {
 import { getExtractedTemplateColors } from "./templateColorExtractionStore"
 
 const BOTTOM_TOOLS_OFFSET = 24
-const CANVAS_TEMPLATE_PAGE_SIZE = 40
+// 接口单页上限是 200。固定使用较大的页大小，保证后续 page 分页的 offset 连续，
+// 也避免相似颜色筛选为了凑够结果频繁请求小页面。
+const CANVAS_TEMPLATE_PAGE_SIZE = 200
 const CANVAS_EDGE_GAP = 40
+const SIMILAR_COLOR_TARGET_COUNT = 20
+const SIMILAR_COLOR_LOAD_MORE_INTERVAL_MS = 600
 const GROUP_SCROLL_CONTROL_CLASS_NAME =
 	"[&_button]:border-white/20 [&_button]:bg-zinc-800/[0.86] [&_button]:text-white [&_button]:shadow-[0_4px_14px_rgba(0,0,0,0.28),inset_0_1px_0_rgba(255,255,255,0.12)] [&_button]:backdrop-blur-lg [&_button:hover]:bg-zinc-700/[0.92]"
 
@@ -39,19 +43,39 @@ function getAvailableTemplateColors(template: OptionItem) {
 function getSimilarTemplateOptions(source: OptionItem, candidates: OptionItem[]) {
 	const sourceKey = getTemplateKey(source)
 	const sourceColors = getAvailableTemplateColors(source)
+	const sourcePrimaryColor = sourceColors[0]
+	const primaryMatches = sourcePrimaryColor
+		? candidates.map((template, originalIndex) => ({
+				distance:
+					getTemplateKey(template) === sourceKey
+						? -1
+						: getTemplatePaletteDistance(
+								[sourcePrimaryColor],
+								[getAvailableTemplateColors(template)[0] ?? ""],
+							),
+				originalIndex,
+				template,
+			}))
+		: []
+	const hasPrimaryColorMatch = primaryMatches.some(
+		({ distance }) => distance >= 0 && distance <= MAX_SIMILAR_TEMPLATE_COLOR_DISTANCE,
+	)
 
-	return candidates
-		.map((template, originalIndex) => ({
-			distance:
-				getTemplateKey(template) === sourceKey
-					? -1
-					: getTemplatePaletteDistance(
-							sourceColors,
-							getAvailableTemplateColors(template),
-						),
-			originalIndex,
-			template,
-		}))
+	const matches = (
+		hasPrimaryColorMatch
+			? primaryMatches
+			: candidates.map((template, originalIndex) => ({
+					distance:
+						getTemplateKey(template) === sourceKey
+							? -1
+							: getTemplatePaletteDistance(
+									sourceColors.slice(1),
+									getAvailableTemplateColors(template).slice(1),
+								),
+					originalIndex,
+					template,
+				}))
+	)
 		.filter(({ distance }) => distance < 0 || distance <= MAX_SIMILAR_TEMPLATE_COLOR_DISTANCE)
 		.sort((left, right) => {
 			if (left.distance !== right.distance) return left.distance - right.distance
@@ -59,6 +83,8 @@ function getSimilarTemplateOptions(source: OptionItem, candidates: OptionItem[])
 			return sortDifference || left.originalIndex - right.originalIndex
 		})
 		.map(({ template }) => template)
+
+	return matches
 }
 
 function SlidesTemplatesPage() {
@@ -69,16 +95,24 @@ function SlidesTemplatesPage() {
 	const [searchValue, setSearchValue] = useState(slidesState.keyword)
 	const [selectedTemplate, setSelectedTemplate] = useState<OptionItem | null>(null)
 	const [similarColorSource, setSimilarColorSource] = useState<OptionItem | null>(null)
-	const [similarColorTemplates, setSimilarColorTemplates] = useState<OptionItem[] | null>(null)
 	const [isInlinePreviewOpen, setIsInlinePreviewOpen] = useState(false)
 	const isComposingRef = useRef(false)
 	const canvasRef = useRef<SlidesTemplateCanvasHandle>(null)
 	const bottomToolsRef = useRef<HTMLDivElement | null>(null)
 	const templateDetailRequestSeqRef = useRef(0)
+	const lastSimilarColorLoadMoreAtRef = useRef(0)
 	const bottomToolsSize = useSize(bottomToolsRef)
 	const reduceMotion = useReducedMotion()
 	const hasGroups = slidesState.groups.length > 1
 	const isSimilarColorFilterActive = Boolean(similarColorSource)
+	const enableInfiniteLoop = !searchValue.trim() && !isSimilarColorFilterActive
+	const similarColorTemplates = useMemo(
+		() =>
+			similarColorSource
+				? getSimilarTemplateOptions(similarColorSource, slidesState.templateOptions)
+				: null,
+		[similarColorSource, slidesState.templateOptions],
+	)
 	const visibleTemplateOptions = similarColorSource
 		? (similarColorTemplates ?? [])
 		: slidesState.templateOptions
@@ -111,18 +145,53 @@ function SlidesTemplatesPage() {
 		setSearchValue(slidesState.keyword)
 	}, [slidesState.keyword])
 
+	useEffect(() => {
+		if (
+			!similarColorSource ||
+			(similarColorTemplates?.length ?? 0) >= SIMILAR_COLOR_TARGET_COUNT ||
+			!slidesState.hasMore ||
+			slidesState.isLoading ||
+			slidesState.isRefreshing ||
+			slidesState.isLoadingMore ||
+			slidesState.isLoadMoreFailed
+		) {
+			return
+		}
+
+		const elapsedMs = Date.now() - lastSimilarColorLoadMoreAtRef.current
+		const delayMs = Math.max(0, SIMILAR_COLOR_LOAD_MORE_INTERVAL_MS - elapsedMs)
+		const timer = window.setTimeout(() => {
+			lastSimilarColorLoadMoreAtRef.current = Date.now()
+			loadMoreTemplates()
+		}, delayMs)
+
+		return () => window.clearTimeout(timer)
+	}, [
+		loadMoreTemplates,
+		similarColorSource,
+		similarColorTemplates?.length,
+		slidesState.hasMore,
+		slidesState.isLoading,
+		slidesState.isLoadingMore,
+		slidesState.isLoadMoreFailed,
+		slidesState.isRefreshing,
+	])
+
 	const handleLoadMoreTemplates = useCallback(() => {
 		if (isSimilarColorFilterActive) return
 		loadMoreTemplates()
 	}, [isSimilarColorFilterActive, loadMoreTemplates])
 
-	const resetKey = `${slidesState.selectedGroupKey}:${slidesState.keyword.trim()}:${
+	// resetKey 用于在模板集合整体换批时把画布复位（offset、focus、保留项）。
+	// 必须挂接在真正驱动 templates 变化的源头上（debouncedKeyword），而不是输入框内的原始 keyword：
+	// 否则每次按键 resetKey 就变化，而 templates 还在 300ms 防抖窗口里没换，会出现"画布已瞬移但卡片没换"的延迟/闪烁；
+	// 清空搜索时更会让 resetKey 先于 templates 落地，导致保留卡片被复用、与新布局重叠错位。
+	const resetKey = `${slidesState.selectedGroupKey}:${slidesState.debouncedKeyword.trim()}:${
 		similarColorSource ? getTemplateKey(similarColorSource) : "all-colors"
 	}`
 
 	function handleSearchChange(value: string) {
 		setSimilarColorSource(null)
-		setSimilarColorTemplates(null)
 		setSearchValue(value)
 		if (isComposingRef.current) return
 
@@ -135,7 +204,6 @@ function SlidesTemplatesPage() {
 
 	function handleCompositionEnd(value: string) {
 		setSimilarColorSource(null)
-		setSimilarColorTemplates(null)
 		isComposingRef.current = false
 		setSearchValue(value)
 		slidesState.setKeyword(value)
@@ -143,7 +211,6 @@ function SlidesTemplatesPage() {
 
 	function handleClearSearch() {
 		setSimilarColorSource(null)
-		setSimilarColorTemplates(null)
 		setSearchValue("")
 		slidesState.setKeyword("")
 	}
@@ -178,20 +245,14 @@ function SlidesTemplatesPage() {
 		canvasRef.current?.focusRandomTemplate()
 	}
 
-	const handleFindSimilarColors = useCallback(
-		(template: OptionItem) => {
-			const colors = getAvailableTemplateColors(template)
-			if (colors.length === 0) return
-			const source = { ...template, colors }
-			setSimilarColorTemplates(getSimilarTemplateOptions(source, slidesState.templateOptions))
-			setSimilarColorSource(source)
-		},
-		[slidesState.templateOptions],
-	)
+	const handleFindSimilarColors = useCallback((template: OptionItem) => {
+		const colors = getAvailableTemplateColors(template)
+		if (colors.length === 0) return
+		setSimilarColorSource({ ...template, colors })
+	}, [])
 
 	function handleGroupChange(groupKey: string) {
 		setSimilarColorSource(null)
-		setSimilarColorTemplates(null)
 		slidesState.setSelectedGroupKey(groupKey)
 	}
 
@@ -202,6 +263,8 @@ function SlidesTemplatesPage() {
 		>
 			<SlidesTemplateCanvas
 				ref={canvasRef}
+				enableInfiniteLoop={enableInfiniteLoop}
+				initialAlignment={isSimilarColorFilterActive ? "top" : "center"}
 				templates={visibleTemplateOptions}
 				selectedTemplate={selectedTemplate}
 				onTemplateSelect={handleTemplateSelect}
@@ -371,7 +434,6 @@ function SlidesTemplatesPage() {
 										)}
 										onClick={() => {
 											setSimilarColorSource(null)
-											setSimilarColorTemplates(null)
 										}}
 										data-testid="slides-templates-page-clear-similar-colors"
 									>

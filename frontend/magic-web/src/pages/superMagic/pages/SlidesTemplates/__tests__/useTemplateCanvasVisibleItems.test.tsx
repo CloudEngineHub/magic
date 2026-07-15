@@ -71,6 +71,7 @@ describe("useTemplateCanvasVisibleItems", () => {
 					loopMetrics,
 					onOffsetRebase,
 					offsetRef,
+					resetKey: "all:",
 					scaleRef,
 					viewportRef,
 				}),

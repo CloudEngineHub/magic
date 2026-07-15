@@ -417,6 +417,20 @@ describe("slides template canvas layout", () => {
 		).toEqual({ x: -90, y: -30 })
 	})
 
+	it("aligns short filtered results to the top inset when requested", () => {
+		expect(
+			constrainTemplateCanvasOffset({
+				bounds: { minX: 40, maxX: 140, minY: -20, maxY: 80 },
+				insets: { top: 40 },
+				offset: { x: -90, y: -230 },
+				padding: 0,
+				smallContentVerticalAlignment: "start",
+				viewportHeight: 500,
+				viewportWidth: 500,
+			}),
+		).toEqual({ x: -90, y: -190 })
+	})
+
 	it("renders only template covers in the canvas matrix", () => {
 		const tiles = buildTemplateCanvasTiles([
 			createTemplate("business", 3),
@@ -434,6 +448,16 @@ describe("slides template canvas layout", () => {
 			"business-page-2.png",
 			"business-page-3.png",
 		])
+	})
+
+	it("does not use a collage as a fallback preview page", () => {
+		expect(
+			getTemplatePreviewUrls({
+				value: "collage-only",
+				label: "Collage only",
+				collage_url: "collage.png",
+			}),
+		).toEqual([])
 	})
 
 	it("keeps one canvas tile per template even when a template has many pages", () => {

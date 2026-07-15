@@ -22,7 +22,7 @@ import {
 
 const LAYOUT_COLUMNS = 12
 const CELL_QUERY_PADDING = 1
-const FINITE_LAYOUT_COLUMNS = 3
+const FINITE_LAYOUT_COLUMNS = 6
 const MIN_LOOP_SOURCE_TILE_COUNT = LAYOUT_COLUMNS * 3
 
 interface InternalCanvasItem extends TemplateCanvasItem<SlidesTemplateCanvasTile> {
@@ -84,8 +84,8 @@ function getQueryCellRange(start: number, end: number, step: number, offset = 0)
 /**
  * 模板墙使用固定列数的完整网格作为循环单元。
  *
- * 每次追加只在已填满区域之后放置新模板，并用现有模板补齐本轮的剩余格子。
- * 因此分页到达不会移动已经展示过的卡片，循环边界也不会出现未占用的空格。
+ * 分页追加只在现有完整区域之后放置新模板，并用已有模板补齐剩余格子。
+ * 已有卡片坐标保持不变，循环边界也不会出现未占用的格子。
  */
 export class SlidesTemplateCanvasLayoutService {
 	private canvasItems: InternalCanvasItem[] = []
@@ -103,9 +103,10 @@ export class SlidesTemplateCanvasLayoutService {
 		getItemsInWindow: (input) => this.getItemsInWindow(input),
 	}
 
-	public synchronize(templates: OptionItem[]): LayoutSnapshot {
+	public synchronize(templates: OptionItem[], enableInfiniteLoop = true): LayoutSnapshot {
 		const nextTiles = buildTemplateCanvasTiles(templates)
-		const shouldUseInfiniteLoop = nextTiles.length >= MIN_LOOP_SOURCE_TILE_COUNT
+		const shouldUseInfiniteLoop =
+			enableInfiniteLoop && nextTiles.length >= MIN_LOOP_SOURCE_TILE_COUNT
 		if (
 			!hasSameSourcePrefix(this.sourceTiles, nextTiles) ||
 			shouldUseInfiniteLoop !== this.isInfiniteLoopEnabled
@@ -179,7 +180,7 @@ export class SlidesTemplateCanvasLayoutService {
 	}
 
 	private getLayoutColumnCount() {
-		// 少量搜索或筛选结果优先按 3 列换行，避免一排卡片横向拉得过长。
+		// 有限结果使用半宽网格，充分利用宽屏，同时避免少量模板铺成过长的单行。
 		return this.isInfiniteLoopEnabled ? LAYOUT_COLUMNS : FINITE_LAYOUT_COLUMNS
 	}
 

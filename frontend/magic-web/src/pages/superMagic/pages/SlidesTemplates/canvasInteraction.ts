@@ -72,7 +72,6 @@ export function getTemplatePreviewUrls(template: OptionItem | null | undefined) 
 	if (!template) return []
 	const previewImageUrls = dedupeUrls(template.preview_image_urls ?? [])
 	if (previewImageUrls.length) return previewImageUrls
-	if (template.collage_url) return [template.collage_url]
 	if (template.thumbnail_url) return [template.thumbnail_url]
 	return []
 }

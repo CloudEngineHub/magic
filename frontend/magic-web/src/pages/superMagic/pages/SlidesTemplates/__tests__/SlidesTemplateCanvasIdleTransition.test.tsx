@@ -1,5 +1,7 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react"
+import { createRef } from "react"
 import { describe, expect, it, vi } from "vitest"
+import SlidesTemplateCanvasItemsLayer from "../SlidesTemplateCanvasItemsLayer"
 import SlidesTemplateCanvasLoopColumn, {
 	type SlidesTemplateCanvasColumnItem,
 } from "../SlidesTemplateCanvasLoopColumn"
@@ -64,6 +66,39 @@ function renderColumn(
 }
 
 describe("SlidesTemplateCanvas idle transition", () => {
+	it("removes column loop copies when filtered results disable idle loops", async () => {
+		const items = [createColumnItem(0), createColumnItem(1), createColumnItem(2)]
+		const canvasItems = items.map(({ canvasItem }) => canvasItem)
+		const contentRef = createRef<HTMLDivElement>()
+		const renderLayer = (enableIdleLoops: boolean) => (
+			<SlidesTemplateCanvasItemsLayer
+				canvasItems={canvasItems}
+				contentRef={contentRef}
+				enableIdleLoops={enableIdleLoops}
+				focusedAnchorTileId=""
+				isCanvasFocusSettling={false}
+				isCanvasMoving={false}
+				isIdleAnimationActive
+				keepIdleLoopsMounted
+				prioritizeCoverLoading={false}
+				selectedTemplateValue=""
+				visibleCanvasItems={canvasItems}
+				onPreviewClick={vi.fn()}
+				onTemplateSelect={vi.fn()}
+			/>
+		)
+		const view = render(renderLayer(true))
+
+		await waitFor(() => {
+			expect(screen.getAllByTestId("slides-template-loop-cover")).toHaveLength(6)
+		})
+
+		view.rerender(renderLayer(false))
+		await waitFor(() => {
+			expect(screen.queryByTestId("slides-template-loop-cover")).not.toBeInTheDocument()
+		})
+	})
+
 	it("keeps one shared loop layer mounted and interactive while paused", async () => {
 		const onTemplateSelect = vi.fn()
 		const firstItem = createColumnItem(0)

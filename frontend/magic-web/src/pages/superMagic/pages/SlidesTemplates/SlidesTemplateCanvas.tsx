@@ -10,28 +10,21 @@ import {
 } from "react"
 import type { OptionItem } from "@/pages/superMagic/components/MainInputContainer/panels/types"
 import {
-	shouldRequestMoreTemplates,
 	type TemplateCanvasItem,
-	type TemplateCanvasDirection,
 	type TemplateCanvasInsets,
 	type TemplateCanvasPoint,
 } from "./canvasLayout"
 import {
 	type SlidesTemplateCanvasTile,
 	type SlidesTemplatePreviewFocus,
-	LOAD_MORE_INTERVAL_MS,
 	getPriorityWeightedRandomIndex,
-	getLoadMoreThreshold,
 	getTemplateKey,
 	getTemplatePreviewUrls,
 } from "./canvasInteraction"
-import {
-	getNearestLoopedSlidesTemplateCanvasItem,
-	getSlidesTemplateCanvasLoopCycle,
-} from "./canvasLoop"
+import { getNearestLoopedSlidesTemplateCanvasItem } from "./canvasLoop"
 import SlidesTemplateCanvasSurface from "./SlidesTemplateCanvasSurface"
 import { useSlidesTemplateCanvasItems } from "./useSlidesTemplateCanvasItems"
-import { useSlidesTemplateCanvasAutoLoad } from "./useSlidesTemplateCanvasAutoLoad"
+import { useSlidesTemplateCanvasLoadMore } from "./useSlidesTemplateCanvasLoadMore"
 import { useSlidesTemplateCanvasMotion } from "./useSlidesTemplateCanvasMotion"
 import { useSlidesTemplateCanvasNavigation } from "./useSlidesTemplateCanvasNavigation"
 import { useSlidesTemplateCanvasPointer } from "./useSlidesTemplateCanvasPointer"
@@ -39,10 +32,16 @@ import { useSlidesTemplateCanvasWheel } from "./useSlidesTemplateCanvasWheel"
 import { SLIDES_TEMPLATE_CANVAS_DEFAULT_SCALE } from "./canvasZoom"
 import { useSlidesTemplateCanvasActiveTemplates } from "./useSlidesTemplateCanvasActiveTemplates"
 import { useSlidesTemplateCanvasAutoExplore } from "./useSlidesTemplateCanvasAutoExplore"
+import {
+	useSlidesTemplateCanvasInitialAlignment,
+	type SlidesTemplateCanvasInitialAlignment,
+} from "./useSlidesTemplateCanvasInitialAlignment"
 import { useTemplateCanvasVisibleItems } from "./useTemplateCanvasVisibleItems"
 
 interface SlidesTemplateCanvasProps {
+	enableInfiniteLoop?: boolean
 	hasMore: boolean
+	initialAlignment?: SlidesTemplateCanvasInitialAlignment
 	isLoading: boolean
 	isLoadingMore: boolean
 	isRefreshing: boolean
@@ -66,7 +65,9 @@ export interface SlidesTemplateCanvasHandle {
 const SlidesTemplateCanvas = forwardRef<SlidesTemplateCanvasHandle, SlidesTemplateCanvasProps>(
 	function SlidesTemplateCanvas(
 		{
+			enableInfiniteLoop = true,
 			hasMore,
+			initialAlignment = "center",
 			isLoading,
 			isLoadingMore,
 			isRefreshing,
@@ -92,8 +93,6 @@ const SlidesTemplateCanvas = forwardRef<SlidesTemplateCanvasHandle, SlidesTempla
 		const offsetRef = useRef<TemplateCanvasPoint>({ x: 0, y: 0 })
 		const viewportInsetsRef = useRef(viewportInsets)
 		const scaleRef = useRef(SLIDES_TEMPLATE_CANVAS_DEFAULT_SCALE)
-		const lastLoadMoreAtRef = useRef(0)
-		const lastLoadMoreLoopKeyRef = useRef("")
 		const applyTransform = useCallback(() => {
 			const content = contentRef.current
 			if (!content) return
@@ -111,7 +110,10 @@ const SlidesTemplateCanvas = forwardRef<SlidesTemplateCanvasHandle, SlidesTempla
 			templates,
 		})
 		const { canvasItems, contentBounds, loopItemQuery, loopMetrics, templateBounds } =
-			useSlidesTemplateCanvasItems({ templates: activeTemplates })
+			useSlidesTemplateCanvasItems({
+				enableInfiniteLoop,
+				templates: activeTemplates,
+			})
 		const priorityCanvasItems = useMemo(
 			() =>
 				// 后端默认按 sort 降序返回，这里再次显式排序，保证本地分组数据也遵循同一优先级。
@@ -134,6 +136,7 @@ const SlidesTemplateCanvas = forwardRef<SlidesTemplateCanvasHandle, SlidesTempla
 				loopMetrics,
 				onOffsetRebase: applyTransform,
 				offsetRef,
+				resetKey,
 				scaleRef,
 				viewportRef,
 			})
@@ -213,98 +216,27 @@ const SlidesTemplateCanvas = forwardRef<SlidesTemplateCanvasHandle, SlidesTempla
 			[loadTemplateDetail, onTemplateDetailLoad],
 		)
 
-		const stateRef = useRef({
+		const { maybeRequestMore, setCanvasOffset } = useSlidesTemplateCanvasLoadMore({
+			applyTransform,
+			autoLoadSignal,
+			contentBounds,
+			hasDeferredTemplateUpdate,
 			hasMore,
 			isLoading,
 			isLoadingMore,
+			isPreviewOpen,
 			isRefreshing,
-			templateBounds,
-			onLoadMore,
-		})
-
-		useLayoutEffect(() => {
-			stateRef.current = {
-				hasMore,
-				isLoading,
-				isLoadingMore,
-				isRefreshing,
-				templateBounds,
-				onLoadMore,
-			}
-		}, [hasMore, isLoading, isLoadingMore, isRefreshing, onLoadMore, templateBounds])
-
-		const setCanvasOffset = useCallback(
-			(nextOffset: TemplateCanvasPoint) => {
-				offsetRef.current = nextOffset
-				applyTransform()
-				scheduleVisibleCanvasItemsUpdate()
-				return nextOffset
-			},
-			[applyTransform, scheduleVisibleCanvasItemsUpdate],
-		)
-
-		const maybeRequestMore = useCallback(
-			(directions: TemplateCanvasDirection[]) => {
-				if (isPreviewOpen) return false
-
-				const viewport = viewportRef.current
-				if (!viewport || directions.length === 0) return false
-
-				const now = Date.now()
-				if (now - lastLoadMoreAtRef.current < LOAD_MORE_INTERVAL_MS) {
-					return false
-				}
-
-				const { width, height } = viewport.getBoundingClientRect()
-				if (width <= 0 || height <= 0) return false
-
-				const state = stateRef.current
-				const loadDirection = directions.find((direction) =>
-					shouldRequestMoreTemplates({
-						bounds: state.templateBounds,
-						direction,
-						hasMore: state.hasMore,
-						isLoading: state.isLoading,
-						isLoadingMore: state.isLoadingMore,
-						isRefreshing: state.isRefreshing,
-						offset: offsetRef.current,
-						scale: scaleRef.current,
-						threshold: getLoadMoreThreshold(width, height),
-						viewportHeight: height,
-						viewportWidth: width,
-					}),
-				)
-
-				if (!loadDirection) return false
-				const loopCycle = getSlidesTemplateCanvasLoopCycle({
-					loopMetrics,
-					offset: offsetRef.current,
-					scale: scaleRef.current,
-				})
-				const loopKey = `${loadDirection}:${loopCycle.x}:${loopCycle.y}`
-				if (lastLoadMoreLoopKeyRef.current === loopKey) return false
-				lastLoadMoreAtRef.current = now
-				state.onLoadMore()
-				lastLoadMoreLoopKeyRef.current = loopKey
-				return true
-			},
-			[isPreviewOpen, loopMetrics],
-		)
-
-		useSlidesTemplateCanvasAutoLoad({
-			autoLoadSignal,
-			enabled:
-				!hasDeferredTemplateUpdate &&
-				!isPreviewOpen &&
-				hasMore &&
-				!isLoading &&
-				!isLoadingMore &&
-				!isRefreshing,
 			loopMetrics,
-			maybeRequestMore,
+			onLoadMore,
 			offsetRef,
 			resetKey,
 			scaleRef,
+			scheduleVisibleCanvasItemsUpdate,
+			smallContentVerticalAlignment: initialAlignment === "top" ? "start" : "center",
+			templateBounds,
+			viewportInsetsKey,
+			viewportInsetsRef,
+			viewportRef,
 		})
 
 		const {
@@ -467,16 +399,22 @@ const SlidesTemplateCanvas = forwardRef<SlidesTemplateCanvasHandle, SlidesTempla
 
 		useLayoutEffect(() => {
 			stopAnimation()
-			lastLoadMoreAtRef.current = 0
-			lastLoadMoreLoopKeyRef.current = ""
 			setPreviewFocus(null)
 			setRandomFocusedCanvasItem(null)
 			setCanvasOffset({ x: 0, y: 0 })
 		}, [resetKey, setCanvasOffset, stopAnimation])
 
-		useLayoutEffect(() => {
-			setCanvasOffset(offsetRef.current)
-		}, [setCanvasOffset, viewportInsetsKey])
+		useSlidesTemplateCanvasInitialAlignment({
+			canvasItems,
+			contentBounds,
+			initialAlignment,
+			resetKey,
+			scaleRef,
+			setCanvasOffset,
+			viewportInsetsRef,
+			viewportRef,
+			templates: activeTemplates,
+		})
 
 		useEffect(() => {
 			onPreviewOpenChange?.(previewFocus !== null)
@@ -519,6 +457,7 @@ const SlidesTemplateCanvas = forwardRef<SlidesTemplateCanvasHandle, SlidesTempla
 				isDragging={isDragging}
 				isCanvasFocusSettling={isCanvasFocusSettling}
 				isCanvasMoving={isCanvasMoving}
+				enableIdleLoops={enableInfiniteLoop}
 				isIdleAnimationActive={isCanvasIdle && !isCanvasIdleExploring && canvasScale >= 0.8}
 				isInitialLoading={isInitialLoading}
 				isLoading={isLoading}
