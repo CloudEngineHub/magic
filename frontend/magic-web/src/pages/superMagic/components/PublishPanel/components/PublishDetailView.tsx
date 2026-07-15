@@ -87,19 +87,21 @@ export default observer(function PublishDetailView({ onClose }: PublishDetailVie
 						<ReadonlyPublishToCard publishTo={record.publishTo} />
 					</div>
 
-					<div className="flex flex-col gap-2">
-						<p className="text-base font-medium text-foreground">
-							{t("skillEditPage.publishPanel.create.fields.permissionSettings.label")}
-						</p>
-						{record.publishTo === "INTERNAL" ? (
+					{record.publishTo === "INTERNAL" ? (
+						<div className="flex flex-col gap-2">
+							<p className="text-base font-medium text-foreground">
+								{t(
+									"skillEditPage.publishPanel.create.fields.permissionSettings.label",
+								)}
+							</p>
 							<ReadonlyInternalTargetSection record={record} />
-						) : (
-							<>
-								<ReadonlyMarketCategoryField record={record} />
-								<ReadonlySkillsLibraryCard record={record} />
-							</>
-						)}
-					</div>
+						</div>
+					) : (
+						<>
+							<ReadonlyMarketCategoryField record={record} />
+							<ReadonlyPublishingProcessSection record={record} />
+						</>
+					)}
 				</div>
 			</div>
 		</div>
@@ -183,6 +185,23 @@ function ReadonlyMarketCategoryField({
 			value={categoryName}
 			testId="skill-publish-detail-category"
 		/>
+	)
+}
+
+function ReadonlyPublishingProcessSection({
+	record,
+}: {
+	record: NonNullable<ReturnType<typeof usePublishPanelStore>["selectedHistoryRecord"]>
+}) {
+	const { t } = useTranslation("crew/market")
+
+	return (
+		<div className="flex flex-col gap-2">
+			<p className="text-base font-medium text-foreground">
+				{t("skillEditPage.publishPanel.create.fields.publishingProcess.label")}
+			</p>
+			<ReadonlySkillsLibraryCard record={record} />
+		</div>
 	)
 }
 
