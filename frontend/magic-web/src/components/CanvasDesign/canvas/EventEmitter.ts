@@ -44,6 +44,25 @@ export interface CanvasElementChangePayload {
 }
 
 /**
+ * 画布图片拖向插件窗口时的统一事件载荷。
+ *
+ * start/move/end 共用这份结构，clientX/clientY 始终是当前窗口坐标，
+ * 插件面板会再转换成 iframe 内部坐标。
+ */
+export interface CanvasImageExternalDragPayload {
+	/** 拖拽起始图片元素 ID； */
+	originElementId: string
+	/** 本次拖拽可导出的图片元素 ID 列表； */
+	imageElementIds: string[]
+	/** 当前指针窗口 X 坐标 */
+	clientX: number
+	/** 当前指针窗口 Y 坐标 */
+	clientY: number
+	/** 是否以取消状态结束，例如 Escape、工具切换或多指手势打断 */
+	cancelled?: boolean
+}
+
+/**
  * 事件映射接口 - 定义所有可能的事件及其数据类型
  */
 export interface CanvasEventMap {
@@ -157,6 +176,9 @@ export interface CanvasEventMap {
 	"element:dragstart": { elementId: string }
 	"element:dragmove": { elementId: string }
 	"element:dragend": { elementId: string }
+	"image:external-drag:start": CanvasImageExternalDragPayload
+	"image:external-drag:move": CanvasImageExternalDragPayload
+	"image:external-drag:end": CanvasImageExternalDragPayload
 
 	// 元素变换相关事件（多元素 - 通过 Transformer）
 	"elements:transform:dragstart": { elementIds: string[] }

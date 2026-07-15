@@ -149,3 +149,20 @@ pnpm --dir frontend/magic-web exec vitest run --config ./vitest.config.ts \
 ```
 
 如果改动触达 CanvasDesign 类型、PluginPanel 或 shared kit，需要补跑相关 focused 测试，并按需执行 typecheck。
+
+涉及画布 → 插件导入链路（粘贴、Alt 拖拽、空态 tooltip）时，额外运行：
+
+```bash
+pnpm --dir frontend/magic-web exec vitest run --config ./vitest.config.ts \
+  src/pages/superMagic/components/Detail/contents/Design/plugins/shared/magic-plugin-kit/__tests__/index.test.ts \
+  src/components/CanvasDesign/components/PluginPanel/__tests__/runtimeProtocol.test.ts
+```
+
+手动回归建议：
+
+1. 空态 `image-grid` / `image-slot` hover 显示导入 tooltip；上传后有图时 tooltip 消失。
+2. 画布 `Ctrl/Cmd+C` → 聚焦上传区 → `Ctrl/Cmd+V` 粘贴。
+3. 画布选中图片 → **Alt/Option + 左键拖拽** 到插件上传区；拖拽悬停显示 `dropHint`，不叠 tooltip。
+4. 拖拽 ghost 预览图正常加载（无 403）。
+
+相关 Host 模块：`readPluginCanvasClipboard.ts`、`fileAssets.ts`、`canvasImageDragAssets.ts`、`useCanvasImageExternalDragToPlugin.tsx`、`usePluginRuntimeBridge.ts`、`PluginWindow.tsx`。协议说明见 `plugin-development-paradigm.md` §10.2.2–10.2.3 与 `magic-plugin-kit/README.md`「图片导入」。
