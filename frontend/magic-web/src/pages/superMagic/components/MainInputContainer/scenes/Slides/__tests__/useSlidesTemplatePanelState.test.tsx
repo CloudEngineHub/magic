@@ -65,6 +65,17 @@ const educationTemplate: SlidesTemplateItem = {
 	},
 }
 
+function createFullTemplatePage(firstTemplate: SlidesTemplateItem): SlidesTemplateItem[] {
+	return Array.from({ length: SLIDES_TEMPLATE_PAGE_SIZE }, (_, index) =>
+		index === 0
+			? firstTemplate
+			: {
+					...firstTemplate,
+					code: `${firstTemplate.code}-${index}`,
+				},
+	)
+}
+
 function resolveCategories() {
 	vi.mocked(SuperMagicApi.getSlidesTemplateCategories).mockResolvedValue({
 		page: 1,
@@ -163,17 +174,18 @@ describe("useSlidesTemplatePanelState", () => {
 	})
 
 	it("appends the next page when loading more", async () => {
+		const firstPageTemplates = createFullTemplatePage(businessTemplate)
 		vi.mocked(SuperMagicApi.getSlidesTemplates)
 			.mockResolvedValueOnce({
 				page: 1,
 				page_size: SLIDES_TEMPLATE_PAGE_SIZE,
-				total: 2,
-				list: [businessTemplate],
+				total: firstPageTemplates.length + 1,
+				list: firstPageTemplates,
 			})
 			.mockResolvedValueOnce({
 				page: 2,
 				page_size: SLIDES_TEMPLATE_PAGE_SIZE,
-				total: 2,
+				total: firstPageTemplates.length + 1,
 				list: [educationTemplate],
 			})
 
@@ -186,13 +198,12 @@ describe("useSlidesTemplatePanelState", () => {
 		})
 
 		await waitFor(() => expect(SuperMagicApi.getSlidesTemplates).toHaveBeenCalledTimes(2))
-		expect(result.current.templateOptions.map((template) => template.value)).toEqual([
-			businessTemplate.code,
-			educationTemplate.code,
-		])
+		expect(result.current.templateOptions).toHaveLength(firstPageTemplates.length + 1)
+		expect(result.current.templateOptions.at(-1)?.value).toBe(educationTemplate.code)
 	})
 
 	it("deduplicates repeated load-more calls before React updates loading state", async () => {
+		const firstPageTemplates = createFullTemplatePage(businessTemplate)
 		const nextPageResponse = createDeferred<{
 			page: number
 			page_size: number
@@ -204,8 +215,8 @@ describe("useSlidesTemplatePanelState", () => {
 			.mockResolvedValueOnce({
 				page: 1,
 				page_size: SLIDES_TEMPLATE_PAGE_SIZE,
-				total: 2,
-				list: [businessTemplate],
+				total: firstPageTemplates.length + 1,
+				list: firstPageTemplates,
 			})
 			.mockReturnValueOnce(nextPageResponse.promise)
 
@@ -224,16 +235,14 @@ describe("useSlidesTemplatePanelState", () => {
 			nextPageResponse.resolve({
 				page: 2,
 				page_size: SLIDES_TEMPLATE_PAGE_SIZE,
-				total: 2,
+				total: firstPageTemplates.length + 1,
 				list: [educationTemplate],
 			})
 			await nextPageResponse.promise
 		})
 
-		expect(result.current.templateOptions.map((template) => template.value)).toEqual([
-			businessTemplate.code,
-			educationTemplate.code,
-		])
+		expect(result.current.templateOptions).toHaveLength(firstPageTemplates.length + 1)
+		expect(result.current.templateOptions.at(-1)?.value).toBe(educationTemplate.code)
 	})
 
 	it("keeps old templates visible while replacing results", async () => {

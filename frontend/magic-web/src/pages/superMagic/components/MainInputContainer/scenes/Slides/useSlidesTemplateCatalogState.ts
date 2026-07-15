@@ -302,7 +302,14 @@ export function useSlidesTemplateCatalogState({
 					xMagicImageProcess: SLIDES_TEMPLATE_IMAGE_PROCESS,
 				})
 				const countRequest =
-					mode === "replace" ? SuperMagicApi.getSlidesTemplateCount(queryParams) : null
+					mode === "replace"
+						? Promise.resolve(SuperMagicApi.getSlidesTemplateCount(queryParams)).catch(
+								(error) => {
+									console.error("Failed to fetch slides template count", error)
+									return null
+								},
+							)
+						: null
 				const [response, countResponse] = await Promise.all([
 					templatesRequest,
 					countRequest,
@@ -329,11 +336,12 @@ export function useSlidesTemplateCatalogState({
 				templatesRef.current = updatedTemplates
 				setTemplates(updatedTemplates)
 				setPage(response.page ?? nextPage)
-				// 服务端 total 可能短暂滞后；空页或重复页继续观察会让可见哨兵无限重试。
+				// 分页只依赖列表接口的当页数据。当页返回满 pageSize 时允许多请求一页，
+				// 下一页为空、不满 pageSize 或没有新模板时停止，避免受不准确的 count 结果影响。
 				setHasMore(
 					mode === "replace"
-						? nextTemplates.length < nextTotal
-						: appendedTemplateCount > 0 && updatedTemplates.length < nextTotal,
+						? nextTemplates.length >= pageSize
+						: appendedTemplateCount > 0 && nextTemplates.length >= pageSize,
 				)
 				if (mode === "replace" && isAllTemplatesQuery) {
 					setHasCheckedAnyTemplate(true)

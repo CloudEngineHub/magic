@@ -135,6 +135,55 @@ describe("useSlidesTemplateCatalogState", () => {
 		})
 	})
 
+	it("continues pagination when the count endpoint is inaccurate but the page is full", async () => {
+		vi.mocked(SuperMagicApi.getSlidesTemplateCount).mockResolvedValue({ total: 0 })
+		vi.mocked(SuperMagicApi.getSlidesTemplates)
+			.mockResolvedValueOnce({
+				page: 1,
+				page_size: 1,
+				list: [businessTemplate],
+			})
+			.mockResolvedValueOnce({
+				page: 2,
+				page_size: 1,
+				list: [],
+			})
+
+		const { result } = renderHook(() => useSlidesTemplateCatalogState({ pageSize: 1 }))
+
+		await waitFor(() => expect(result.current.isLoading).toBe(false))
+		expect(result.current.total).toBe(0)
+		expect(result.current.hasMore).toBe(true)
+
+		act(() => {
+			result.current.loadMore()
+		})
+
+		await waitFor(() => expect(result.current.isLoadingMore).toBe(false))
+		expect(SuperMagicApi.getSlidesTemplates).toHaveBeenLastCalledWith(
+			{ page: 2, page_size: 1 },
+			slidesTemplateImageOptions,
+		)
+		expect(result.current.hasMore).toBe(false)
+	})
+
+	it("keeps the template list available when the count endpoint fails", async () => {
+		vi.mocked(SuperMagicApi.getSlidesTemplateCount).mockRejectedValue(
+			new Error("count unavailable"),
+		)
+		vi.mocked(SuperMagicApi.getSlidesTemplates).mockResolvedValue({
+			page: 1,
+			page_size: 1,
+			list: [businessTemplate],
+		})
+
+		const { result } = renderHook(() => useSlidesTemplateCatalogState({ pageSize: 1 }))
+
+		await waitFor(() => expect(result.current.isLoading).toBe(false))
+		expect(result.current.templateOptions[0]?.value).toBe(businessTemplate.code)
+		expect(result.current.hasMore).toBe(true)
+	})
+
 	it("loads preview resources only when a template is selected", async () => {
 		vi.mocked(SuperMagicApi.getSlidesTemplateDetail).mockResolvedValue({
 			...businessTemplate,
@@ -207,6 +256,7 @@ describe("useSlidesTemplateCatalogState", () => {
 				tags: [featuredTag, businessStyleTag],
 			},
 		])
+		vi.mocked(SuperMagicApi.getSlidesTemplateCount).mockResolvedValue({ total: 1 })
 		vi.mocked(SuperMagicApi.getSlidesTemplates).mockResolvedValue({
 			page: 1,
 			page_size: SLIDES_TEMPLATE_PAGE_SIZE,
@@ -297,18 +347,18 @@ describe("useSlidesTemplateCatalogState", () => {
 		vi.mocked(SuperMagicApi.getSlidesTemplates)
 			.mockResolvedValueOnce({
 				page: 1,
-				page_size: SLIDES_TEMPLATE_PAGE_SIZE,
+				page_size: 1,
 				total: 2,
 				list: [businessTemplate],
 			})
 			.mockResolvedValueOnce({
 				page: 2,
-				page_size: SLIDES_TEMPLATE_PAGE_SIZE,
+				page_size: 1,
 				total: 2,
 				list: [businessTemplate],
 			})
 
-		const { result } = renderHook(() => useSlidesTemplateCatalogState())
+		const { result } = renderHook(() => useSlidesTemplateCatalogState({ pageSize: 1 }))
 
 		await waitFor(() => expect(result.current.isLoading).toBe(false))
 		expect(result.current.hasMore).toBe(true)
@@ -331,19 +381,19 @@ describe("useSlidesTemplateCatalogState", () => {
 		vi.mocked(SuperMagicApi.getSlidesTemplates)
 			.mockResolvedValueOnce({
 				page: 1,
-				page_size: SLIDES_TEMPLATE_PAGE_SIZE,
+				page_size: 1,
 				total: 2,
 				list: [businessTemplate],
 			})
 			.mockRejectedValueOnce(new Error("network error"))
 			.mockResolvedValueOnce({
 				page: 2,
-				page_size: SLIDES_TEMPLATE_PAGE_SIZE,
+				page_size: 1,
 				total: 2,
 				list: [educationTemplate],
 			})
 
-		const { result } = renderHook(() => useSlidesTemplateCatalogState())
+		const { result } = renderHook(() => useSlidesTemplateCatalogState({ pageSize: 1 }))
 
 		await waitFor(() => expect(result.current.isLoading).toBe(false))
 		act(() => {
