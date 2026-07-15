@@ -109,6 +109,9 @@ class SlidesTemplateAssemblerTest extends TestCase
                     'en_US' => 'For business reviews.',
                 ],
                 'thumbnail_url' => 'https://signed.example/thumb.png',
+                'color' => '#112233',
+                'colors' => ['#112233', '#445566'],
+                'collage_url' => 'https://signed.example/collage.png',
                 'sort' => 100,
                 'usage_count' => 215,
                 'is_official' => false,
@@ -137,7 +140,8 @@ class SlidesTemplateAssemblerTest extends TestCase
                 'en_US' => 'For business reviews.',
             ],
             'thumbnail_url' => 'https://signed.example/thumb.png',
-            'colors' => [],
+            'color' => '#112233',
+            'colors' => ['#112233', '#445566'],
             'collage_url' => 'https://signed.example/collage.png',
             'preview_image_urls' => [],
             'preview_url' => 'https://www.letsmagic.cn/share/files/1',
@@ -234,7 +238,7 @@ class SlidesTemplateAssemblerTest extends TestCase
             ],
             'thumbnail_file_key' => 'slides/thumb.png',
             'thumbnail_url' => 'https://signed.example/thumb.png',
-            'colors' => [],
+            'colors' => ['#112233', '#445566'],
             'collage_file_key' => 'slides/collage.png',
             'collage_url' => 'https://signed.example/collage.png',
             'preview_image_file_keys' => [],
@@ -303,6 +307,7 @@ class SlidesTemplateAssemblerTest extends TestCase
             ])
             ->setThumbnailFileKey('slides/thumb.png')
             ->setThumbnailUrl('https://signed.example/thumb.png')
+            ->setColors(['#112233', '#445566'])
             ->setCollageFileKey('slides/collage.png')
             ->setCollageUrl('https://signed.example/collage.png')
             ->setTemplateFileKey('slides/template.zip')
