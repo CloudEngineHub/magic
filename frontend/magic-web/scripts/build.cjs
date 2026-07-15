@@ -19,6 +19,7 @@ const { resolve } = require("node:path")
 const { env } = require("process")
 const { log, printBanner, writeStep, writeStepResult } = require("./lib/banner.cjs")
 const { EDITIONS, resolveEdition } = require("./lib/edition.cjs")
+const { applyLayeredEnvFiles } = require("./lib/env-overlay.cjs")
 
 const DEFAULT_SHUTDOWN_TIMEOUT_MS = 10000
 const BUILD_STEP_FILE_NAME = "build.step.cjs"
@@ -295,11 +296,15 @@ async function runBuildPlan(
 async function main(controller = createBuildController(), processExit = process.exit) {
 	try {
 		controller.registerCleanupHandlers()
+		const { env: effectiveEnv } = applyLayeredEnvFiles({
+			projectRoot: process.cwd(),
+			mode: "production",
+		})
 
 		// Resolve once and hand the edition to the Vite bundle so build steps and the
 		// bundler agree on which edition (and overlay folders) are active.
 		const edition = resolveEdition()
-		const plan = createBuildPlan({ edition, envRef: env })
+		const plan = createBuildPlan({ edition, envRef: effectiveEnv })
 
 		log(`Starting build process (edition: ${edition})...\n`, "green")
 

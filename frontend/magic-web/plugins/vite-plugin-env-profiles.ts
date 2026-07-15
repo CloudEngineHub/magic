@@ -32,6 +32,8 @@ export interface VitePluginMagicEnvProfilesOptions extends Omit<
 	"env"
 > {
 	projectRoot?: string
+	/** Pre-resolved layered env; avoids reloading the lower-priority root env directory. */
+	env?: Record<string, string | undefined>
 }
 
 export interface MagicEnvProfileRuntimeConfig {
@@ -104,10 +106,12 @@ export function vitePluginMagicEnvProfiles(
 		name: MAGIC_ENV_PROFILE_PLUGIN_NAME,
 		config(userConfig, configEnv) {
 			const projectRoot = resolve(options.projectRoot ?? userConfig.root ?? process.cwd())
-			const env = loadMagicEnvProfileVariables({
-				mode: configEnv.mode,
-				projectRoot,
-			})
+			const env =
+				options.env ??
+				loadMagicEnvProfileVariables({
+					mode: configEnv.mode,
+					projectRoot,
+				})
 			runtimeConfig = resolveMagicEnvProfileRuntimeConfig({
 				env,
 				profiles: options.profiles,

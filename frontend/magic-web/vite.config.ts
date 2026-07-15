@@ -21,30 +21,6 @@ import { codeInspectorPlugin } from "code-inspector-plugin"
 /** 环境变量前缀 */
 const ENV_PREFIX = "MAGIC_"
 
-const ALLOWED_HOSTS = process.env.MAGIC_DEV_ALLOWED_HOSTS
-	? process.env.MAGIC_DEV_ALLOWED_HOSTS.split(",")
-		.map((host) => host.trim())
-		.filter(Boolean)
-	: []
-
-/** 是否为开发环境 */
-const isDev = process.env.NODE_ENV === "development"
-
-/** 开发端口仅为 443 时才启用 mkcert，否则 Vite 以 HTTP dev server 启动 */
-const devServerPort = process.env.PORT ? Number(process.env.PORT) : undefined
-const isHttpsDevServer = isDev && devServerPort === 443
-
-/** 是否开启依赖分析 */
-const isVisualizer = process.env.VISUALIZER === "true"
-
-const isEnableDevtools = process.env.DEVTOOLS === "true"
-
-/** 是否开启sourcemap */
-const isEnableSourceMap = process.env.SOURCE_MAP === "true"
-
-/** 是否开启inspect */
-const isEnableInspect = process.env.INSPECT === "true"
-
 function formatLucideComponentImportName(componentName: string): string {
 	return `${componentName
 		.replace(/Icon$/, "")
@@ -55,7 +31,22 @@ function formatLucideComponentImportName(componentName: string): string {
 		.toLowerCase()}.js`
 }
 
-function getBaseViteConfig(): UserConfig {
+function getBaseViteConfig(env: NodeJS.ProcessEnv = process.env): UserConfig {
+	// Env overlay resolution runs before this factory so every config decision
+	// observes the same winning physical files as import.meta.env and child tasks.
+	const allowedHosts = env.MAGIC_DEV_ALLOWED_HOSTS
+		? env.MAGIC_DEV_ALLOWED_HOSTS.split(",")
+				.map((host) => host.trim())
+				.filter(Boolean)
+		: []
+	const isDev = env.NODE_ENV === "development"
+	const devServerPort = env.PORT ? Number(env.PORT) : undefined
+	const isHttpsDevServer = isDev && devServerPort === 443
+	const isVisualizer = env.VISUALIZER === "true"
+	const isEnableDevtools = env.DEVTOOLS === "true"
+	const isEnableSourceMap = env.SOURCE_MAP === "true"
+	const isEnableInspect = env.INSPECT === "true"
+
 	return {
 		devtools: {
 			enabled: isEnableDevtools,
@@ -94,12 +85,12 @@ function getBaseViteConfig(): UserConfig {
 		},
 		server: {
 			host: "0.0.0.0", // 监听所有地址
-			allowedHosts: ALLOWED_HOSTS,
+			allowedHosts,
 			proxy: {},
 		},
 		preview: {
 			host: "0.0.0.0",
-			allowedHosts: ALLOWED_HOSTS,
+			allowedHosts,
 		},
 		envPrefix: ENV_PREFIX,
 		optimizeDeps: {
@@ -148,7 +139,13 @@ function getBaseViteConfig(): UserConfig {
 		},
 		assetsInclude: ["**/*.md", "**/*.mdx", "**/*.mov", "**/*.webm", "**/*.png"],
 		resolve: {
-			// magic-flow lists react as a dep; force one React for hooks
+			// magic-flow lists react as a dep; force one React for hooks.
+			// This list also keeps the standalone enterprise/ install root safe:
+			// its packages resolve peers from enterprise/node_modules (a different
+			// realpath), and these context-carrying singletons must never fork.
+			// Other libraries (e.g. @tiptap/*) intentionally stay per-root: the
+			// @feb editors are self-contained and may need a newer copy than the
+			// app bundle ships.
 			dedupe: [
 				"react",
 				"react-dom",
@@ -245,14 +242,14 @@ function getBaseViteConfig(): UserConfig {
 				},
 				...(isDev
 					? [
-						{
-							find: "@tabler/icons-react",
-							replacement: resolve(
-								__dirname,
-								"scripts/cdn/tabler-icons-react.min.js",
-							),
-						},
-					]
+							{
+								find: "@tabler/icons-react",
+								replacement: resolve(
+									__dirname,
+									"scripts/cdn/tabler-icons-react.min.js",
+								),
+							},
+						]
 					: []),
 			],
 		},
@@ -274,22 +271,22 @@ function getBaseViteConfig(): UserConfig {
 			}),
 			keepConsole(),
 			isEnableInspect &&
-			Inspect({
-				build: true,
-				outputDir: ".vite-inspect",
-			}),
+				Inspect({
+					build: true,
+					outputDir: ".vite-inspect",
+				}),
 			// 构建分析插件
 			isVisualizer &&
-			(visualizer({
-				filename: "dist/stats.html",
-				gzipSize: true,
-				brotliSize: true,
-				// 生成的可视化文件的路径和名称
-				// 可视化的类型，可选值有 'sunburst'、'treemap'、'network' 等
-				template: "treemap",
-				// 是否打开生成的可视化文件
-				open: true,
-			}) as PluginOption),
+				(visualizer({
+					filename: "dist/stats.html",
+					gzipSize: true,
+					brotliSize: true,
+					// 生成的可视化文件的路径和名称
+					// 可视化的类型，可选值有 'sunburst'、'treemap'、'network' 等
+					template: "treemap",
+					// 是否打开生成的可视化文件
+					open: true,
+				}) as PluginOption),
 			codeInspectorPlugin({
 				bundler: "vite", // Automatically detect development or production environment
 				editor: "code",
@@ -299,6 +296,7 @@ function getBaseViteConfig(): UserConfig {
 				plugins: [
 					babelPluginAntdStyle,
 					// [
+					// 	// 等待magic-flow包升级完才能使用
 					// 	"babel-plugin-import",
 					// 	{
 					// 		libraryName: "@tabler/icons-react",
@@ -337,12 +335,12 @@ function getBaseViteConfig(): UserConfig {
 			// Critical font preload plugin for LCP optimization
 			!isDev && vitePluginCriticalFontPreload(),
 			!isDev &&
-			viteExternalsPlugin({
-				// 模块名: 全局变量名
-				react: "React",
-				"react-dom": "ReactDOM",
-				"lodash-es": "_",
-			}),
+				viteExternalsPlugin({
+					// 模块名: 全局变量名
+					react: "React",
+					"react-dom": "ReactDOM",
+					"lodash-es": "_",
+				}),
 			vitePluginImp({
 				libList: [
 					{
@@ -353,12 +351,12 @@ function getBaseViteConfig(): UserConfig {
 			// 用于本地生成HTTPS证书
 			...(isDev && isHttpsDevServer
 				? [
-					mkcert({
-						// 本地配置该地址的 host, 满足文件私有桶上传
-						hosts: ALLOWED_HOSTS,
-					}),
-					// http2Proxy({ quiet: true }),
-				]
+						mkcert({
+							// 本地配置该地址的 host, 满足文件私有桶上传
+							hosts: allowedHosts,
+						}),
+						// http2Proxy({ quiet: true }),
+					]
 				: []),
 			// optional -- suppress error logging],
 		],
@@ -377,9 +375,9 @@ function getBaseViteConfig(): UserConfig {
 	}
 }
 
-export default defineConfig((): UserConfig => {
-	const overlayViteConfig = getOverlayViteConfig({ projectRoot: __dirname })
-	const baseViteConfig = getBaseViteConfig()
+export default defineConfig(({ mode }): UserConfig => {
+	const overlayViteConfig = getOverlayViteConfig({ projectRoot: __dirname, mode })
+	const baseViteConfig = getBaseViteConfig(process.env)
 
 	if (process.env.DUMP_VITE_CONFIG === "1") {
 		const requireModule = createRequire(import.meta.url)

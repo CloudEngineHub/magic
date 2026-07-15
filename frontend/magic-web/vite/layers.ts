@@ -33,6 +33,13 @@ export interface ResolvedLayerConfig extends LayerConfig {
 	sourcePath?: string
 }
 
+/** Shared context passed to every active layer's Vite config contribution. */
+export interface LayerConfigContext {
+	projectRoot: string
+	mode: string
+	env: Record<string, string | undefined>
+}
+
 /** Keep only the layers whose config file or source dir actually exists on disk. */
 export function resolveLayerConfigs({
 	projectRoot,
@@ -94,22 +101,29 @@ export function buildOverlayFromLayers({
 export function mergeLayerConfigs({
 	projectRoot,
 	layers,
+	mode,
+	env,
 }: {
 	projectRoot: string
 	layers: ResolvedLayerConfig[]
+	mode: string
+	env: Record<string, string | undefined>
 }): UserConfig {
 	return layers
-		.map((layer) => loadLayerConfig({ projectRoot, layer }))
+		.map((layer) => loadLayerConfig({ projectRoot, layer, mode, env }))
 		.reduce<UserConfig>((acc, partial) => mergeConfig(acc, partial), {})
 }
 
 function loadLayerConfig({
 	projectRoot,
 	layer,
+	mode,
+	env,
 }: {
-	projectRoot: string
 	layer: ResolvedLayerConfig
-}): UserConfig {
+	mode: string
+	env: Record<string, string | undefined>
+} & Pick<LayerConfigContext, "projectRoot">): UserConfig {
 	if (!layer.configPath || !existsSync(layer.configPath)) return {}
 
 	try {
@@ -118,7 +132,7 @@ function loadLayerConfig({
 		const factory = mod.getConfig ?? mod.default ?? mod
 		if (typeof factory !== "function") return {}
 
-		const partial = factory({ projectRoot })
+		const partial = factory({ projectRoot, mode, env } satisfies LayerConfigContext)
 		return partial && typeof partial === "object" ? (partial as UserConfig) : {}
 	} catch (error) {
 		console.warn(`[layers] failed to load ${layer.configFile ?? layer.configPath}:`, error)

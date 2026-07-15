@@ -11,29 +11,10 @@ const os = require("os")
 const path = require("path")
 const { log, printBanner, writeStep, writeStepResult } = require("./lib/banner.cjs")
 const { resolveEdition } = require("./lib/edition.cjs")
+const { applyLayeredEnvFiles } = require("./lib/env-overlay.cjs")
 const { PNPM_COMMAND, pnpmArgs, pnpmScript } = require("./lib/pnpm.cjs")
 
 const DEFAULT_SHUTDOWN_TIMEOUT_MS = 5000
-
-/**
- * Load .env files into process.env so PORT (and friends) truly originate from the
- * environment — no port is hardcoded anywhere. Shell env wins over files, and
- * `.env.local` wins over `.env` (loadEnvFile never overrides an already-set key).
- * These values ride `...process.env` into the Vite child, which reads PORT for
- * its dev-server port.
- */
-function loadDotEnvFiles(cwd = process.cwd()) {
-	if (typeof process.loadEnvFile !== "function") return
-	for (const file of [".env.local", ".env"]) {
-		const filePath = path.join(cwd, file)
-		if (!fs.existsSync(filePath)) continue
-		try {
-			process.loadEnvFile(filePath)
-		} catch {
-			// Ignore malformed/locked env files; fall back to shell env.
-		}
-	}
-}
 
 function getPidFilePath(cwd = process.cwd(), tmpDir = os.tmpdir()) {
 	return path.join(tmpDir, `magic-web-dev-${Buffer.from(cwd).toString("hex")}.pid`)
@@ -442,9 +423,9 @@ function createDevController({
 
 async function main(controller = createDevController(), processExit = process.exit) {
 	try {
-		// Make PORT (and friends) available from .env before anything reads it, so
-		// the pid record, banner, and Vite child all agree on a single env source.
-		loadDotEnvFiles()
+		// Resolve physical env files through the same overlay stack before anything
+		// reads PORT, writes the pid record, or starts a child process.
+		applyLayeredEnvFiles({ projectRoot: process.cwd(), mode: "development" })
 
 		// Clean up any session left running by a previous abnormal shutdown before
 		// claiming the pid file for this run.

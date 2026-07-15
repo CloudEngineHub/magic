@@ -124,6 +124,7 @@ const getVitestBaseConfig = () => {
 
 export default defineConfig(
 	mergeConfig(getVitestBaseConfig(), {
-		resolve: getOverlayViteConfig({ projectRoot: __dirname }).resolve,
+		resolve: getOverlayViteConfig({ projectRoot: __dirname, mode: "test", loadEnv: false })
+			.resolve,
 	}),
 )
