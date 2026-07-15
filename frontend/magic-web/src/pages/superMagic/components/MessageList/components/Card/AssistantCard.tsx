@@ -1,6 +1,7 @@
 import type { ComponentType } from "react"
 import { observer } from "mobx-react-lite"
 import { IconGitBranch, IconLoader2 } from "@tabler/icons-react"
+import { toJS } from "mobx"
 import { superMagicStore } from "@/pages/superMagic/stores"
 import { useTranslation } from "react-i18next"
 import { useMessageListContext } from "@/pages/superMagic/components/MessageList/context"
@@ -10,9 +11,11 @@ import { lazy, memo, Suspense, useMemo, useState } from "react"
 import { MessageStatus, MessageUsageType, Topic } from "@/pages/superMagic/pages/Workspace/types"
 import { Button, MenuProps } from "antd"
 import { splitNumber } from "@/utils/number"
-import { Ellipsis } from "lucide-react"
+import { Ellipsis, FileText } from "lucide-react"
 import { MagicDropdown, MagicTooltip } from "@/components/base"
+import { logger as Logger } from "@/utils/log"
 import { StatusBadge } from "./components/StatusBadge"
+import { getCurrentConversationRound } from "./round-log"
 import { useGlobalSuggestion } from "@/components/settings/FollowUpSuggestionItems/hooks"
 import useShareRoute from "@/pages/superMagic/hooks/useShareRoute"
 import superMagicModeService from "@/services/superMagic/SuperMagicModeService"
@@ -24,9 +27,12 @@ const SuggestList = lazy(() => import("./components/SuggestList"))
 const enum MenuKey {
 	/** This round's points consumption */
 	ConsumptionPoints = "consumptionPoints",
+	/** Manually report the complete conversation round containing this card */
+	ReportConversationRound = "reportConversationRound",
 }
 
 const statusList = new Set(["error", "suspended", "finished"])
+const logger = Logger.createLogger("AssistantCard")
 
 export function withAssistantCard<
 	T extends {
@@ -196,6 +202,17 @@ export function withAssistantCard<
 					),
 					visible: true,
 				},
+				{
+					key: MenuKey.ReportConversationRound,
+					label: (
+						<div className="flex w-full items-center gap-1.5 text-foreground">
+							<FileText size={16} className="text-foreground" />
+							<span>{t("ui.reportConversationRound")}</span>
+						</div>
+					),
+					"data-testid": "assistant-round-log-report-menu-item",
+					visible: true,
+				},
 			].filter((o) => o.visible)
 		}, [t, roundConsumptionPoints, roundModels])
 
@@ -214,6 +231,38 @@ export function withAssistantCard<
 				} catch (error) {
 					console.error(error)
 				}
+			}
+		})
+
+		const reportConversationRound = useMemoizedFn(() => {
+			const topicId = selectedTopic?.chat_topic_id
+			const currentMessageId = node?.app_message_id
+			if (!topicId || !currentMessageId) return
+
+			const topicMessages = superMagicStore.messages.get(topicId) || []
+			const roundMessages = getCurrentConversationRound(topicMessages, currentMessageId)
+			if (roundMessages.length === 0) return
+
+			// Use the latest message-map nodes while retaining the topic sequence fields;
+			// this keeps streamed/final metadata in the report instead of stale list snapshots.
+			const messages = toJS(roundMessages).map((message: any) => ({
+				...message,
+				debug: toJS(
+					superMagicStore.getMessageNode(message.app_message_id) || message.debug,
+				),
+			}))
+
+			logger.report("messages", {
+				topic_id: selectedTopic?.id,
+				chat_topic_id: topicId,
+				message_id: currentMessageId,
+				messages,
+			})
+		})
+
+		const onMenuClick = useMemoizedFn(({ key }: { key: string }) => {
+			if (key === MenuKey.ReportConversationRound) {
+				reportConversationRound()
 			}
 		})
 
@@ -299,8 +348,14 @@ export function withAssistantCard<
 										</span>
 									)}
 									{roundConsumptionPoints > 0 && (
-										<MagicDropdown menu={{ items }} trigger={["click"]}>
-											<Button className="!flex h-6 w-6 flex-none cursor-pointer items-center justify-center gap-1 !rounded-md !border !border-border !bg-white !p-0 !text-xs !font-normal !leading-4 !shadow-sm hover:!bg-fill hover:!text-foreground dark:!bg-card dark:hover:!bg-fill">
+										<MagicDropdown
+											menu={{ items, onClick: onMenuClick }}
+											trigger={["click"]}
+										>
+											<Button
+												className="!flex h-6 w-6 flex-none cursor-pointer items-center justify-center gap-1 !rounded-md !border !border-border !bg-white !p-0 !text-xs !font-normal !leading-4 !shadow-sm hover:!bg-fill hover:!text-foreground dark:!bg-card dark:hover:!bg-fill"
+												data-testid="assistant-card-dropdown-trigger"
+											>
 												<Ellipsis size={16} className="text-foreground" />
 											</Button>
 										</MagicDropdown>

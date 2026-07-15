@@ -4,6 +4,23 @@ import { DingTalkLoginStrategy, isDingTalk } from "./DingTalkStrategy"
 import { LarkStrategy, isLark } from "./LarkkStrategy"
 import { WecomStrategy, isWecom } from "./WecomStrategy"
 
+/**
+ * Determine whether the current platform supports background account verification without interrupting the page.
+ * WeCom can only be probed after an OAuth callback code is present; otherwise its strategy requires a full-page redirect.
+ */
+export async function canBackgroundProbe(): Promise<boolean> {
+	if (isDingTalk() || isLark()) return true
+
+	try {
+		if (!(await isWecom())) return false
+
+		const searchParams = new URL(window.location.href).searchParams
+		return searchParams.get("state") === "wecom" && Boolean(searchParams.get("code"))
+	} catch {
+		return false
+	}
+}
+
 export async function getAuthCode(
 	deployCode: string,
 	options?: Pick<RequestConfig, "skipAppInitWait">,

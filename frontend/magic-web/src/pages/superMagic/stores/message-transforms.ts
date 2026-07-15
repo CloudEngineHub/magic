@@ -224,6 +224,14 @@ export function getDefaultTopicMeta(): TopicMeta {
 		isStreamLoading: false,
 		content: new Map(),
 		streamSnapshots: new Map(),
+		finalizedCorrelationIds: new Set(),
+		lastActiveAt: null,
+		inactiveAt: null,
+		lastSyncedAt: null,
+		lastSyncedSeqId: "",
+		syncGeneration: 0,
+		syncState: "idle",
+		renderPolicy: "live",
 	}
 }
 
