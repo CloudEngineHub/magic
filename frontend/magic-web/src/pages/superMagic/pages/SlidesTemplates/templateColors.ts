@@ -6,11 +6,26 @@ const MAX_MATCHED_COLOR_HUE_DISTANCE_DEGREES = 60
 const MIN_MATCHING_COLOR_COUNT = 2
 const MIN_MATCHING_PALETTE_WEIGHT_RATIO = 0.6
 const MIN_HUE_CHROMA = 0.025
+const COLOR_FAMILY_NEUTRAL_CHROMA = 0.025
+const COLOR_FAMILY_DARK_LIGHTNESS = 0.33
+const COLOR_FAMILY_LIGHT_LIGHTNESS = 0.84
 const UNMATCHED_TEMPLATE_COLOR_DISTANCE = 0.18
 
 export const MAX_SIMILAR_TEMPLATE_COLOR_DISTANCE = 0.13
 
 export type OklabColor = [lightness: number, a: number, b: number]
+export type TemplateColorFamily =
+	| "red"
+	| "orange"
+	| "yellow"
+	| "green"
+	| "cyan"
+	| "blue"
+	| "purple"
+	| "pink"
+	| "neutral-dark"
+	| "neutral"
+	| "neutral-light"
 
 export function normalizeTemplateColors(colors: string[] | null | undefined) {
 	const normalizedColors = new Set<string>()
@@ -75,7 +90,42 @@ function getOklabChroma(color: OklabColor) {
 }
 
 function getOklabHue(color: OklabColor) {
-	return (Math.atan2(color[2], color[1]) * 180) / Math.PI
+	return ((Math.atan2(color[2], color[1]) * 180) / Math.PI + 360) % 360
+}
+
+export function getTemplateColorDistance(
+	leftColor: string | undefined,
+	rightColor: string | undefined,
+) {
+	const left = normalizeTemplateColors(leftColor ? [leftColor] : [])[0]
+	const right = normalizeTemplateColors(rightColor ? [rightColor] : [])[0]
+	if (!left || !right) return Number.POSITIVE_INFINITY
+	return getTemplateOklabDistance(templateHexToOklab(left), templateHexToOklab(right))
+}
+
+export function getTemplateColorFamily(color: string | undefined): TemplateColorFamily | null {
+	const normalizedColor = normalizeTemplateColors(color ? [color] : [])[0]
+	if (!normalizedColor) return null
+
+	const oklabColor = templateHexToOklab(normalizedColor)
+	const [lightness] = oklabColor
+	const chroma = getOklabChroma(oklabColor)
+	if (chroma < COLOR_FAMILY_NEUTRAL_CHROMA) {
+		if (lightness < COLOR_FAMILY_DARK_LIGHTNESS) return "neutral-dark"
+		if (lightness > COLOR_FAMILY_LIGHT_LIGHTNESS) return "neutral-light"
+		return "neutral"
+	}
+
+	const hue = getOklabHue(oklabColor)
+	if (hue >= 325) return "pink"
+	if (hue < 15) return lightness >= 0.72 && chroma < 0.14 ? "pink" : "red"
+	if (hue < 45) return "red"
+	if (hue < 75) return "orange"
+	if (hue < 115) return "yellow"
+	if (hue < 190) return "green"
+	if (hue < 235) return "cyan"
+	if (hue < 285) return "blue"
+	return "purple"
 }
 
 function getHueDistance(left: OklabColor, right: OklabColor) {

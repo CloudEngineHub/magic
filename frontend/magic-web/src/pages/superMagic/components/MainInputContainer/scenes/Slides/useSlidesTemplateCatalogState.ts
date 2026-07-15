@@ -2,9 +2,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { SuperMagicApi } from "@/apis"
 import {
 	ALL_SLIDES_TEMPLATE_GROUP_KEY,
+	SLIDES_TEMPLATE_CATEGORY_GROUP_KEY_PREFIX,
 	SLIDES_TEMPLATE_CATEGORY_PAGE_SIZE,
 	SLIDES_TEMPLATE_IMAGE_PROCESS,
 	SLIDES_TEMPLATE_PAGE_SIZE,
+	SLIDES_TEMPLATE_TAG_GROUP_KEY_PREFIX,
 	SYSTEM_SLIDES_TEMPLATE_TAG_GROUP_CODE,
 	getSlidesTemplateCategoryCodeFromGroupKey,
 	getSlidesTemplateTagCodeFromGroupKey,
@@ -50,6 +52,14 @@ function getAppendedTemplateCount(
 	return appendedTemplateCount
 }
 
+function isServerBackedGroupKey(groupKey: string) {
+	return (
+		groupKey === ALL_SLIDES_TEMPLATE_GROUP_KEY ||
+		groupKey.startsWith(SLIDES_TEMPLATE_CATEGORY_GROUP_KEY_PREFIX) ||
+		groupKey.startsWith(SLIDES_TEMPLATE_TAG_GROUP_KEY_PREFIX)
+	)
+}
+
 export function useSlidesTemplateCatalogState({
 	pageSize = SLIDES_TEMPLATE_PAGE_SIZE,
 }: UseSlidesTemplateCatalogStateOptions = {}) {
@@ -74,6 +84,8 @@ export function useSlidesTemplateCatalogState({
 	const [isRefreshing, setIsRefreshing] = useState(false)
 	const [isLoadingMore, setIsLoadingMore] = useState(false)
 	const [isLoadMoreFailed, setIsLoadMoreFailed] = useState(false)
+	const [isRefreshFailed, setIsRefreshFailed] = useState(false)
+	const [templateViewRevision, setTemplateViewRevision] = useState(0)
 	const [hasCheckedAnyTemplate, setHasCheckedAnyTemplate] = useState(false)
 	const [hasAnyTemplate, setHasAnyTemplate] = useState(true)
 	const requestSeqRef = useRef(0)
@@ -248,6 +260,9 @@ export function useSlidesTemplateCatalogState({
 	const setSelectedGroupKey = useCallback((groupKey: string) => {
 		setSelectedPrimaryGroupKey(groupKey)
 		setSelectedChildTagCodes([])
+		if (!isServerBackedGroupKey(groupKey)) {
+			setTemplateViewRevision((revision) => revision + 1)
+		}
 	}, [])
 
 	const fetchTemplates = useCallback(
@@ -270,6 +285,7 @@ export function useSlidesTemplateCatalogState({
 			const requestSeq = ++requestSeqRef.current
 			if (mode === "replace") {
 				appendRequestInFlightRef.current = false
+				setIsRefreshFailed(false)
 				setPage(1)
 				setIsLoadingMore(false)
 				setIsLoadMoreFailed(false)
@@ -310,19 +326,31 @@ export function useSlidesTemplateCatalogState({
 								},
 							)
 						: null
-				const [response, countResponse] = await Promise.all([
-					templatesRequest,
-					countRequest,
-				])
+				const response = await templatesRequest
 				if (!mountedRef.current || requestSeq !== requestSeqRef.current) return
 
 				const nextTemplates = response.list ?? []
 				// 仅用于灰度期间保留旧响应的分页行为；正式接口不再返回 total。
 				const legacyTotal = (response as { total?: number }).total
-				const nextTotal = countResponse?.total ?? legacyTotal ?? totalRef.current
 				if (mode === "replace") {
-					totalRef.current = nextTotal
-					setTotal(nextTotal)
+					const fallbackTotal = legacyTotal ?? totalRef.current
+					totalRef.current = fallbackTotal
+					setTotal(fallbackTotal)
+					setTemplateViewRevision((revision) => revision + 1)
+					if (countRequest) {
+						void countRequest.then((countResponse) => {
+							if (
+								!mountedRef.current ||
+								requestSeq !== requestSeqRef.current ||
+								!countResponse
+							) {
+								return
+							}
+
+							totalRef.current = countResponse.total
+							setTotal(countResponse.total)
+						})
+					}
 				}
 				const currentTemplates = templatesRef.current
 				const appendedTemplateCount =
@@ -355,6 +383,7 @@ export function useSlidesTemplateCatalogState({
 					templatesRef.current = []
 					setTemplates([])
 				}
+				if (mode === "replace") setIsRefreshFailed(true)
 				if (mode === "append") setIsLoadMoreFailed(true)
 			} finally {
 				if (templateRequestKeyRef.current === requestKey) {
@@ -472,6 +501,11 @@ export function useSlidesTemplateCatalogState({
 		fetchTemplates(page + 1, "append")
 	}, [fetchTemplates, hasMore, isLoading, isLoadingMore, isRefreshing, page])
 
+	const retryRefresh = useCallback(() => {
+		if (isLoading || isRefreshing || isLoadingMore) return
+		fetchTemplates(1, "replace")
+	}, [fetchTemplates, isLoading, isLoadingMore, isRefreshing])
+
 	return {
 		groups,
 		hasAnyTemplate,
@@ -485,6 +519,7 @@ export function useSlidesTemplateCatalogState({
 		isRefreshing,
 		isLoadingMore,
 		isLoadMoreFailed,
+		isRefreshFailed,
 		keyword,
 		// 这里防抖后的关键词与 templates 的实际请求/替换时机对齐。外部依赖这个值来同步 UI（例如画布 resetKey）时，
 		// 才不会和仍在防抖窗口内的原始 keyword 错开一帧，避免模板未变就先复位画布导致的错位。
@@ -493,7 +528,9 @@ export function useSlidesTemplateCatalogState({
 		retryLoadMore,
 		loadedTemplateCount: templates.length,
 		total,
+		templateViewRevision,
 		loadTemplateDetail,
+		retryRefresh,
 		tagGroups,
 		selectedCategoryCode,
 		selectedChildTagCodes,

@@ -25,6 +25,7 @@ interface SlidesTemplatePanelContentProps {
 	showHoverDetails?: boolean
 	hoverDetailsContainer?: HTMLElement | null
 	disableEntryAnimation?: boolean
+	onPreviewOpenChange?: (open: boolean) => void
 }
 
 function SlidesTemplatePanelContent({
@@ -37,6 +38,7 @@ function SlidesTemplatePanelContent({
 	showHoverDetails = true,
 	hoverDetailsContainer,
 	disableEntryAnimation = false,
+	onPreviewOpenChange,
 }: SlidesTemplatePanelContentProps) {
 	const { t } = useTranslation("crew/create")
 	const [isSearchOpen, setIsSearchOpen] = useState(() => Boolean(slidesState.keyword.trim()))
@@ -60,6 +62,13 @@ function SlidesTemplatePanelContent({
 			return code ? loadTemplateDetail(code) : Promise.resolve(template)
 		},
 		[loadTemplateDetail],
+	)
+	const handlePreviewOpenChange = useCallback(
+		(open: boolean) => {
+			setIsPreviewOpen(open)
+			onPreviewOpenChange?.(open)
+		},
+		[onPreviewOpenChange],
 	)
 	const handlePrimaryGroupChange = useCallback(
 		(groupKey: string) => {
@@ -238,7 +247,7 @@ function SlidesTemplatePanelContent({
 				isLoadMoreFailed={slidesState.isLoadMoreFailed}
 				onLoadMore={slidesState.loadMore}
 				onRetryLoadMore={slidesState.retryLoadMore}
-				onPreviewOpenChange={setIsPreviewOpen}
+				onPreviewOpenChange={handlePreviewOpenChange}
 				onPreviewDetailLoad={handlePreviewDetailLoad}
 				className={gridClassName}
 				showHoverDetails={showHoverDetails}

@@ -50,4 +50,22 @@ describe("useSlidesTemplateCanvasActiveTemplates", () => {
 		})
 		expect(result.current).toBe(appendedTemplates)
 	})
+
+	it("clears templates immediately when a drag is active and the result is empty", () => {
+		const { result, rerender } = renderHook(
+			({ isDragging, templates }) =>
+				useSlidesTemplateCanvasActiveTemplates({
+					isDragging,
+					resetKey: "all:",
+					templates,
+				}),
+			{
+				initialProps: { isDragging: true, templates: initialTemplates },
+			},
+		)
+
+		rerender({ isDragging: true, templates: [] })
+
+		expect(result.current).toEqual([])
+	})
 })

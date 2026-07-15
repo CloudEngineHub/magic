@@ -32,6 +32,7 @@ function DefaultInputContainer({ editorContext, editorNodes }: DefaultInputConta
 	const slidesRandomTemplateRequestRef = useRef<(() => void) | null>(null)
 	const [slidesTemplatePickerContainer, setSlidesTemplatePickerContainer] =
 		useState<HTMLDivElement | null>(null)
+	const [isSlidesTemplatePreviewOpen, setIsSlidesTemplatePreviewOpen] = useState(false)
 	const isSlidesMode = editorContext?.topicMode === TopicMode.PPT
 	const variant = useOptionalScenePanelVariant()
 	const isProjectScene = variant === ScenePanelVariant.TopicPage
@@ -156,6 +157,7 @@ function DefaultInputContainer({ editorContext, editorNodes }: DefaultInputConta
 										: undefined
 								}
 								className={isProjectScene ? "gap-2 p-2" : undefined}
+								isTemplatePreviewOpen={isSlidesTemplatePreviewOpen}
 							/>
 						) : null}
 					</div>
@@ -177,6 +179,7 @@ function DefaultInputContainer({ editorContext, editorNodes }: DefaultInputConta
 				onSlidesRandomTemplateRequestChange={(handler) => {
 					slidesRandomTemplateRequestRef.current = handler
 				}}
+				onSlidesTemplatePreviewOpenChange={setIsSlidesTemplatePreviewOpen}
 				slidesTemplatePickerContainer={slidesTemplatePickerContainer}
 				onTemplateSelect={handleTemplateSelect}
 				onFilterChange={handleFilterChange}

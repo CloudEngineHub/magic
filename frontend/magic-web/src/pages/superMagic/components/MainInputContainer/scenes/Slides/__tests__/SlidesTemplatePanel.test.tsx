@@ -500,6 +500,35 @@ describe("SlidesTemplatePanel", () => {
 		templatePickerContainer.remove()
 	})
 
+	it("keeps the project template picker open while a nested preview is active", () => {
+		const { rerender } = render(
+			<SlidesTemplateHomeSelectionPreview
+				filters={[]}
+				onFilterChange={vi.fn()}
+				onTemplatePickerContainerChange={vi.fn()}
+				isTemplatePreviewOpen
+			/>,
+		)
+
+		const pickerTrigger = screen.getByTestId("slides-template-home-choose-template")
+		fireEvent.keyDown(pickerTrigger, { key: "Enter" })
+		expect(pickerTrigger).toHaveAttribute("aria-expanded", "true")
+
+		fireEvent.keyDown(document, { key: "Escape" })
+		expect(pickerTrigger).toHaveAttribute("aria-expanded", "true")
+
+		rerender(
+			<SlidesTemplateHomeSelectionPreview
+				filters={[]}
+				onFilterChange={vi.fn()}
+				onTemplatePickerContainerChange={vi.fn()}
+				isTemplatePreviewOpen={false}
+			/>,
+		)
+		fireEvent.keyDown(document, { key: "Escape" })
+		expect(pickerTrigger).toHaveAttribute("aria-expanded", "false")
+	})
+
 	it("shows only the template list in the home panel", async () => {
 		render(
 			<SlidesTemplatePanel

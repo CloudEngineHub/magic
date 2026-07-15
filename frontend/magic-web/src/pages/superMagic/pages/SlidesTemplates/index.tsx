@@ -17,75 +17,28 @@ import SlidesTemplateGlowBorder from "./SlidesTemplateGlowBorder"
 import SlidesTemplatePromptDock from "./SlidesTemplatePromptDock"
 import { getTemplateCoverUrl, getTemplateKey } from "./canvasInteraction"
 import {
-	getTemplatePaletteDistance,
-	MAX_SIMILAR_TEMPLATE_COLOR_DISTANCE,
-	normalizeTemplateColors,
-	templateColorToRgba,
-} from "./templateColors"
-import { getExtractedTemplateColors } from "./templateColorExtractionStore"
+	getAvailableTemplateColors,
+	getSimilarTemplateOptions,
+	preserveExistingTemplateOrder,
+	reuseUnchangedTemplateOptions,
+} from "./templateColorMatching"
+import { templateColorToRgba } from "./templateColors"
+import {
+	clearTemplateColorExtractionBackgroundQueue,
+	requestTemplateColorExtraction,
+	subscribeTemplateColorExtractionSettled,
+} from "./templateColorExtractionStore"
+import { useTemplateColorExtractionVersion } from "./useResolvedTemplateColors"
 
 const BOTTOM_TOOLS_OFFSET = 24
 // 接口单页上限是 200。固定使用较大的页大小，保证后续 page 分页的 offset 连续，
 // 也避免相似颜色筛选为了凑够结果频繁请求小页面。
 const CANVAS_TEMPLATE_PAGE_SIZE = 200
 const CANVAS_EDGE_GAP = 40
-const SIMILAR_COLOR_TARGET_COUNT = 20
+const SIMILAR_COLOR_TARGET_COUNT = 200
 const SIMILAR_COLOR_LOAD_MORE_INTERVAL_MS = 600
 const GROUP_SCROLL_CONTROL_CLASS_NAME =
 	"[&_button]:border-white/20 [&_button]:bg-zinc-800/[0.86] [&_button]:text-white [&_button]:shadow-[0_4px_14px_rgba(0,0,0,0.28),inset_0_1px_0_rgba(255,255,255,0.12)] [&_button]:backdrop-blur-lg [&_button:hover]:bg-zinc-700/[0.92]"
-
-function getAvailableTemplateColors(template: OptionItem) {
-	const backendColors = normalizeTemplateColors(template.colors)
-	if (backendColors.length > 0) return backendColors
-	return getExtractedTemplateColors(getTemplateCoverUrl(template))
-}
-
-function getSimilarTemplateOptions(source: OptionItem, candidates: OptionItem[]) {
-	const sourceKey = getTemplateKey(source)
-	const sourceColors = getAvailableTemplateColors(source)
-	const sourcePrimaryColor = sourceColors[0]
-	const primaryMatches = sourcePrimaryColor
-		? candidates.map((template, originalIndex) => ({
-				distance:
-					getTemplateKey(template) === sourceKey
-						? -1
-						: getTemplatePaletteDistance(
-								[sourcePrimaryColor],
-								[getAvailableTemplateColors(template)[0] ?? ""],
-							),
-				originalIndex,
-				template,
-			}))
-		: []
-	const hasPrimaryColorMatch = primaryMatches.some(
-		({ distance }) => distance >= 0 && distance <= MAX_SIMILAR_TEMPLATE_COLOR_DISTANCE,
-	)
-
-	const matches = (
-		hasPrimaryColorMatch
-			? primaryMatches
-			: candidates.map((template, originalIndex) => ({
-					distance:
-						getTemplateKey(template) === sourceKey
-							? -1
-							: getTemplatePaletteDistance(
-									sourceColors.slice(1),
-									getAvailableTemplateColors(template).slice(1),
-								),
-					originalIndex,
-					template,
-				}))
-	)
-		.filter(({ distance }) => distance < 0 || distance <= MAX_SIMILAR_TEMPLATE_COLOR_DISTANCE)
-		.sort((left, right) => {
-			if (left.distance !== right.distance) return left.distance - right.distance
-			const sortDifference = (right.template.sort ?? 0) - (left.template.sort ?? 0)
-			return sortDifference || left.originalIndex - right.originalIndex
-		})
-		.map(({ template }) => template)
-
-	return matches
-}
 
 function SlidesTemplatesPage() {
 	const { t } = useTranslation("crew/create")
@@ -101,21 +54,46 @@ function SlidesTemplatesPage() {
 	const bottomToolsRef = useRef<HTMLDivElement | null>(null)
 	const templateDetailRequestSeqRef = useRef(0)
 	const lastSimilarColorLoadMoreAtRef = useRef(0)
+	const visibleTemplateOptionsRef = useRef(slidesState.templateOptions)
+	const similarColorSourceKeyRef = useRef("")
 	const bottomToolsSize = useSize(bottomToolsRef)
 	const reduceMotion = useReducedMotion()
 	const hasGroups = slidesState.groups.length > 1
 	const isSimilarColorFilterActive = Boolean(similarColorSource)
+	const colorExtractionVersion = useTemplateColorExtractionVersion(isSimilarColorFilterActive)
 	const enableInfiniteLoop = !searchValue.trim() && !isSimilarColorFilterActive
-	const similarColorTemplates = useMemo(
-		() =>
-			similarColorSource
-				? getSimilarTemplateOptions(similarColorSource, slidesState.templateOptions)
-				: null,
-		[similarColorSource, slidesState.templateOptions],
-	)
-	const visibleTemplateOptions = similarColorSource
-		? (similarColorTemplates ?? [])
-		: slidesState.templateOptions
+	const visibleTemplateOptions = useMemo(() => {
+		let nextTemplateOptions = slidesState.templateOptions
+
+		if (similarColorSource) {
+			const sourceKey = getTemplateKey(similarColorSource)
+			nextTemplateOptions = getSimilarTemplateOptions(
+				similarColorSource,
+				slidesState.templateOptions,
+				colorExtractionVersion,
+			)
+			if (similarColorSourceKeyRef.current === sourceKey) {
+				// 同一次颜色匹配中，已展示模板保持原顺序，新命中项只追加。
+				nextTemplateOptions = preserveExistingTemplateOrder(
+					visibleTemplateOptionsRef.current,
+					nextTemplateOptions,
+				)
+			}
+			// sourceKey 变化时不复用旧顺序，并由 resetKey 创建一套新的颜色匹配布局。
+			similarColorSourceKeyRef.current = sourceKey
+		} else {
+			similarColorSourceKeyRef.current = ""
+		}
+
+		const stableTemplateOptions = reuseUnchangedTemplateOptions(
+			visibleTemplateOptionsRef.current,
+			nextTemplateOptions,
+		)
+		visibleTemplateOptionsRef.current = stableTemplateOptions
+		return stableTemplateOptions
+	}, [colorExtractionVersion, similarColorSource, slidesState.templateOptions])
+	// 颜色模式只派生当前可见集合，不复制或替换目录数据；模式内追加的分页退出后仍可复用。
+	const similarColorTemplateCount = similarColorSource ? visibleTemplateOptions.length : 0
 	const similarColorSourceName = similarColorSource
 		? (lt(similarColorSource.label) ?? lt(similarColorSource.value) ?? "")
 		: ""
@@ -145,10 +123,34 @@ function SlidesTemplatesPage() {
 		setSearchValue(slidesState.keyword)
 	}, [slidesState.keyword])
 
+	const queueMissingTemplateColors = useCallback(() => {
+		if (!similarColorSource) return
+
+		slidesState.templateOptions.forEach((template) => {
+			if (getAvailableTemplateColors(template).length > 0) return
+			requestTemplateColorExtraction(getTemplateCoverUrl(template), "background")
+		})
+	}, [similarColorSource, slidesState.templateOptions])
+
+	useEffect(() => {
+		if (!isSimilarColorFilterActive) {
+			clearTemplateColorExtractionBackgroundQueue()
+			return
+		}
+
+		queueMissingTemplateColors()
+		const unsubscribe = subscribeTemplateColorExtractionSettled(queueMissingTemplateColors)
+
+		return () => {
+			unsubscribe()
+			clearTemplateColorExtractionBackgroundQueue()
+		}
+	}, [isSimilarColorFilterActive, queueMissingTemplateColors])
+
 	useEffect(() => {
 		if (
 			!similarColorSource ||
-			(similarColorTemplates?.length ?? 0) >= SIMILAR_COLOR_TARGET_COUNT ||
+			similarColorTemplateCount >= SIMILAR_COLOR_TARGET_COUNT ||
 			!slidesState.hasMore ||
 			slidesState.isLoading ||
 			slidesState.isRefreshing ||
@@ -169,7 +171,7 @@ function SlidesTemplatesPage() {
 	}, [
 		loadMoreTemplates,
 		similarColorSource,
-		similarColorTemplates?.length,
+		similarColorTemplateCount,
 		slidesState.hasMore,
 		slidesState.isLoading,
 		slidesState.isLoadingMore,
@@ -182,11 +184,9 @@ function SlidesTemplatesPage() {
 		loadMoreTemplates()
 	}, [isSimilarColorFilterActive, loadMoreTemplates])
 
-	// resetKey 用于在模板集合整体换批时把画布复位（offset、focus、保留项）。
-	// 必须挂接在真正驱动 templates 变化的源头上（debouncedKeyword），而不是输入框内的原始 keyword：
-	// 否则每次按键 resetKey 就变化，而 templates 还在 300ms 防抖窗口里没换，会出现"画布已瞬移但卡片没换"的延迟/闪烁；
-	// 清空搜索时更会让 resetKey 先于 templates 落地，导致保留卡片被复用、与新布局重叠错位。
-	const resetKey = `${slidesState.selectedGroupKey}:${slidesState.debouncedKeyword.trim()}:${
+	// 服务端筛选只有在新结果真正替换后才递增 templateViewRevision。
+	// 画布复位必须与这次替换同一帧发生，不能在分类按钮或防抖关键词变化时提前复位旧模板。
+	const resetKey = `${slidesState.templateViewRevision}:${
 		similarColorSource ? getTemplateKey(similarColorSource) : "all-colors"
 	}`
 
@@ -252,6 +252,8 @@ function SlidesTemplatesPage() {
 	}, [])
 
 	function handleGroupChange(groupKey: string) {
+		templateDetailRequestSeqRef.current += 1
+		setSelectedTemplate(null)
 		setSimilarColorSource(null)
 		slidesState.setSelectedGroupKey(groupKey)
 	}
@@ -271,11 +273,13 @@ function SlidesTemplatesPage() {
 				hasMore={isSimilarColorFilterActive ? false : slidesState.hasMore}
 				isLoading={slidesState.isLoading}
 				isLoadingMore={slidesState.isLoadingMore}
+				isRefreshFailed={slidesState.isRefreshFailed}
 				isRefreshing={slidesState.isRefreshing}
 				onLoadMore={handleLoadMoreTemplates}
 				loadMoreSignal={slidesState.loadedTemplateCount}
 				onFindSimilarColors={handleFindSimilarColors}
 				onPreviewOpenChange={setIsInlinePreviewOpen}
+				onRetryRefresh={slidesState.retryRefresh}
 				onTemplateDetailLoad={handleTemplateDetailLoad}
 				resetKey={resetKey}
 				viewportInsets={canvasViewportInsets}

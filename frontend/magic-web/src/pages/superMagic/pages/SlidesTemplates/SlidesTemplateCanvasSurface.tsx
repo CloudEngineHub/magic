@@ -34,6 +34,7 @@ interface SlidesTemplateCanvasSurfaceProps {
 	isInitialLoading: boolean
 	isLoading: boolean
 	isLoadingMore: boolean
+	isRefreshFailed: boolean
 	isRefreshing: boolean
 	onCanvasClickCapture: MouseEventHandler<HTMLDivElement>
 	onCanvasActivity: () => void
@@ -49,6 +50,7 @@ interface SlidesTemplateCanvasSurfaceProps {
 	onPreviewIntent?: (template: OptionItem) => void
 	onPreviewToggle: (anchorTileId: string, tile: SlidesTemplateCanvasTile) => void
 	onResetView: () => void
+	onRetryRefresh?: () => void
 	onTemplateSelect: (template: OptionItem) => void
 	onZoomIn: () => void
 	onZoomOut: () => void
@@ -75,6 +77,7 @@ export default function SlidesTemplateCanvasSurface({
 	isInitialLoading,
 	isLoading,
 	isLoadingMore,
+	isRefreshFailed,
 	isRefreshing,
 	onCanvasClickCapture,
 	onCanvasActivity,
@@ -90,6 +93,7 @@ export default function SlidesTemplateCanvasSurface({
 	onPreviewIntent,
 	onPreviewToggle,
 	onResetView,
+	onRetryRefresh,
 	onTemplateSelect,
 	onZoomIn,
 	onZoomOut,
@@ -211,7 +215,9 @@ export default function SlidesTemplateCanvasSurface({
 				isInitialLoading={isInitialLoading}
 				isLoading={isLoading}
 				isLoadingMore={isLoadingMore}
+				isRefreshFailed={isRefreshFailed}
 				isRefreshing={isRefreshing}
+				onRetryRefresh={onRetryRefresh}
 				templateCount={templateCount}
 			/>
 		</div>

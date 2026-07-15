@@ -104,7 +104,7 @@ const SlidesPresetGrid = observer(
 		}, [hasMore, isLoadingMore, templates.length])
 
 		useEffect(() => {
-			onPreviewOpenChange?.(isPreviewOpen)
+			if (!isPreviewOpen) onPreviewOpenChange?.(false)
 		}, [isPreviewOpen, onPreviewOpenChange])
 
 		useEffect(() => {
@@ -126,6 +126,9 @@ const SlidesPresetGrid = observer(
 		}
 
 		function handlePreviewClick(template: OptionItem) {
+			// 预览 Dialog 挂载到 body。先同步通知外层选择器，避免它把 Dialog
+			// 识别成外部交互并关闭，导致预览组件随选择器一起卸载。
+			onPreviewOpenChange?.(true)
 			setPreviewTemplate(template)
 			void loadPreviewDetail(template)
 				.then((detail) => {

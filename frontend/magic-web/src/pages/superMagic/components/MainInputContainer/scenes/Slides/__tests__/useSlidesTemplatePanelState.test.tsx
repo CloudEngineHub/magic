@@ -265,6 +265,7 @@ describe("useSlidesTemplatePanelState", () => {
 		const { result } = renderHook(() => useSlidesTemplatePanelState())
 
 		await waitFor(() => expect(result.current.isLoading).toBe(false))
+		const initialTemplateViewRevision = result.current.templateViewRevision
 		await waitFor(() =>
 			expect(
 				result.current.groups.some(
@@ -282,6 +283,7 @@ describe("useSlidesTemplatePanelState", () => {
 		})
 
 		await waitFor(() => expect(result.current.isRefreshing).toBe(true))
+		expect(result.current.templateViewRevision).toBe(initialTemplateViewRevision)
 		expect(result.current.templateOptions.map((template) => template.value)).toEqual([
 			businessTemplate.code,
 		])
@@ -297,9 +299,76 @@ describe("useSlidesTemplatePanelState", () => {
 		})
 
 		await waitFor(() => expect(result.current.isRefreshing).toBe(false))
+		expect(result.current.templateViewRevision).toBeGreaterThan(initialTemplateViewRevision)
 		expect(result.current.templateOptions.map((template) => template.value)).toEqual([
 			educationTemplate.code,
 		])
+	})
+
+	it("keeps the applied view revision stable after a failed category refresh and retries it", async () => {
+		const failedResult = createDeferred<{
+			page: number
+			page_size: number
+			total: number
+			list: SlidesTemplateItem[]
+		}>()
+		vi.mocked(SuperMagicApi.getSlidesTemplates)
+			.mockResolvedValueOnce({
+				page: 1,
+				page_size: SLIDES_TEMPLATE_PAGE_SIZE,
+				total: 1,
+				list: [businessTemplate],
+			})
+			.mockReturnValueOnce(failedResult.promise)
+			.mockResolvedValueOnce({
+				page: 1,
+				page_size: SLIDES_TEMPLATE_PAGE_SIZE,
+				total: 1,
+				list: [educationTemplate],
+			})
+
+		const { result } = renderHook(() => useSlidesTemplatePanelState())
+
+		await waitFor(() => expect(result.current.isLoading).toBe(false))
+		await waitFor(() =>
+			expect(
+				result.current.groups.some(
+					(group) =>
+						group.group_key ===
+						createSlidesTemplateCategoryGroupKey(businessCategory.code),
+				),
+			).toBe(true),
+		)
+		const initialTemplateViewRevision = result.current.templateViewRevision
+
+		act(() => {
+			result.current.setSelectedGroupKey(
+				createSlidesTemplateCategoryGroupKey(businessCategory.code),
+			)
+		})
+
+		await waitFor(() => expect(result.current.isRefreshing).toBe(true))
+		await act(async () => {
+			failedResult.reject(new Error("network error"))
+			try {
+				await failedResult.promise
+			} catch {
+				// The hook converts the rejected request into refresh state.
+			}
+		})
+
+		await waitFor(() => expect(result.current.isRefreshFailed).toBe(true))
+		expect(result.current.templateViewRevision).toBe(initialTemplateViewRevision)
+		expect(result.current.templateOptions[0]?.value).toBe(businessTemplate.code)
+
+		act(() => {
+			result.current.retryRefresh()
+		})
+
+		await waitFor(() => expect(result.current.isRefreshFailed).toBe(false))
+		await waitFor(() => expect(result.current.isRefreshing).toBe(false))
+		expect(result.current.templateViewRevision).toBeGreaterThan(initialTemplateViewRevision)
+		expect(result.current.templateOptions[0]?.value).toBe(educationTemplate.code)
 	})
 
 	it("passes category and keyword params to the template query", async () => {

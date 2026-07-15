@@ -28,6 +28,7 @@ interface ScenePanelContainerProps {
 		handler: ((filterId: string, value: string) => void) | null,
 	) => void
 	onSlidesRandomTemplateRequestChange?: (handler: (() => void) | null) => void
+	onSlidesTemplatePreviewOpenChange?: (open: boolean) => void
 	slidesTemplatePickerContainer?: HTMLDivElement | null
 	onTemplateSelect?: (template: OptionItem | null) => void
 	onFilterChange?: (filters: FieldItem[]) => void
@@ -42,6 +43,7 @@ function ScenePanelContainer({
 	selectedTemplate,
 	onSlidesFilterChangeRequestChange,
 	onSlidesRandomTemplateRequestChange,
+	onSlidesTemplatePreviewOpenChange,
 	slidesTemplatePickerContainer,
 	onTemplateSelect,
 	onFilterChange,
@@ -153,6 +155,7 @@ function ScenePanelContainer({
 									readOnly={readOnly}
 									variant={variant}
 									compact={compact}
+									onPreviewOpenChange={onSlidesTemplatePreviewOpenChange}
 								/>
 							</Suspense>
 						)
@@ -210,6 +213,7 @@ function ScenePanelContainer({
 										readOnly={readOnly}
 										variant={variant}
 										compact={compact}
+										onPreviewOpenChange={onSlidesTemplatePreviewOpenChange}
 									/>
 								</Suspense>
 							)

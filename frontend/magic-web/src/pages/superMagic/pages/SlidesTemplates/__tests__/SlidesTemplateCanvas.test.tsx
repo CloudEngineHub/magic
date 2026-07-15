@@ -868,6 +868,73 @@ describe("SlidesTemplateCanvas", () => {
 		}
 	})
 
+	it("replaces preserved cards when a new filtered collection has more templates", async () => {
+		const rectSpy = vi
+			.spyOn(HTMLElement.prototype, "getBoundingClientRect")
+			.mockReturnValue(CANVAS_RECT)
+		const initialTemplates = Array.from({ length: 40 }, (_, index) => createTemplate(index + 1))
+		const replacementTemplates = Array.from({ length: 80 }, (_, index) =>
+			createTemplate(index + 101),
+		)
+		const props = {
+			selectedTemplate: null,
+			onTemplateSelect: vi.fn(),
+			hasMore: false,
+			isLoading: false,
+			isLoadingMore: false,
+			isRefreshing: false,
+			onLoadMore: vi.fn(),
+		}
+
+		try {
+			const { rerender } = render(
+				<SlidesTemplateCanvas
+					{...props}
+					resetKey="filtered:1"
+					templates={initialTemplates}
+				/>,
+			)
+
+			rerender(
+				<SlidesTemplateCanvas
+					{...props}
+					resetKey="filtered:2"
+					templates={replacementTemplates}
+				/>,
+			)
+
+			await waitFor(() => {
+				expect(screen.getAllByAltText(/Template 1\d\d/).length).toBeGreaterThan(0)
+			})
+			expect(screen.queryByAltText("Template 1")).not.toBeInTheDocument()
+		} finally {
+			rectSpy.mockRestore()
+		}
+	})
+
+	it("shows a retry action when refreshing the filtered collection fails", () => {
+		const onRetryRefresh = vi.fn()
+		render(
+			<SlidesTemplateCanvas
+				templates={[template]}
+				selectedTemplate={null}
+				onTemplateSelect={vi.fn()}
+				hasMore={false}
+				isLoading={false}
+				isLoadingMore={false}
+				isRefreshFailed
+				isRefreshing={false}
+				onLoadMore={vi.fn()}
+				onRetryRefresh={onRetryRefresh}
+				resetKey="all:"
+			/>,
+		)
+
+		fireEvent.click(screen.getByRole("button", { name: "playbook.edit.presets.form.retry" }))
+
+		expect(onRetryRefresh).toHaveBeenCalledTimes(1)
+	})
+
 	it("prefetches before the viewport reaches the loaded canvas edge", () => {
 		expect(getLoadMoreThreshold(800, 600)).toBe(640)
 		expect(getLoadMoreThreshold(1440, 900)).toBe(960)

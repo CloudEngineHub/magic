@@ -25,6 +25,7 @@ interface SlidesTemplateHomeSelectionPreviewProps {
 	onFilterChange: (filterId: string, value: string) => void
 	template?: OptionItem | null
 	className?: string
+	isTemplatePreviewOpen?: boolean
 }
 
 function getTemplateCoverUrl(template: OptionItem) {
@@ -39,6 +40,7 @@ export default function SlidesTemplateHomeSelectionPreview({
 	onFilterChange,
 	template,
 	className,
+	isTemplatePreviewOpen = false,
 }: SlidesTemplateHomeSelectionPreviewProps) {
 	const { t } = useTranslation("crew/create")
 	const lt = useLocaleText()
@@ -86,6 +88,11 @@ export default function SlidesTemplateHomeSelectionPreview({
 		setIsTemplatePickerReady(false)
 		onClear?.()
 		window.setTimeout(() => setIsTemplatePickerReady(true), 0)
+	}
+
+	const handleTemplatePickerOpenChange = (open: boolean) => {
+		if (!open && isTemplatePreviewOpen) return
+		setIsTemplatePickerOpen(open)
 	}
 
 	const isRandomTemplateDrag = (event: DragEvent<HTMLDivElement>) =>
@@ -189,7 +196,7 @@ export default function SlidesTemplateHomeSelectionPreview({
 			<MagicDropdown
 				trigger={["click"]}
 				open={isTemplatePickerOpen}
-				onOpenChange={setIsTemplatePickerOpen}
+				onOpenChange={handleTemplatePickerOpenChange}
 				placement="topRight"
 				getPopupContainer={() => document.body}
 				popupRender={() => (

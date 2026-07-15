@@ -44,11 +44,13 @@ interface SlidesTemplateCanvasProps {
 	initialAlignment?: SlidesTemplateCanvasInitialAlignment
 	isLoading: boolean
 	isLoadingMore: boolean
+	isRefreshFailed?: boolean
 	isRefreshing: boolean
 	loadMoreSignal?: number | string
 	onLoadMore: () => void
 	onFindSimilarColors?: (template: OptionItem) => void
 	onPreviewOpenChange?: (isOpen: boolean) => void
+	onRetryRefresh?: () => void
 	onTemplateDetailLoad?: (template: OptionItem) => Promise<OptionItem | null>
 	onTemplateSelect: (template: OptionItem) => void
 	resetKey: string
@@ -70,11 +72,13 @@ const SlidesTemplateCanvas = forwardRef<SlidesTemplateCanvasHandle, SlidesTempla
 			initialAlignment = "center",
 			isLoading,
 			isLoadingMore,
+			isRefreshFailed = false,
 			isRefreshing,
 			loadMoreSignal,
 			onLoadMore,
 			onFindSimilarColors,
 			onPreviewOpenChange,
+			onRetryRefresh,
 			onTemplateDetailLoad,
 			onTemplateSelect,
 			resetKey,
@@ -462,6 +466,7 @@ const SlidesTemplateCanvas = forwardRef<SlidesTemplateCanvasHandle, SlidesTempla
 				isInitialLoading={isInitialLoading}
 				isLoading={isLoading}
 				isLoadingMore={isLoadingMore}
+				isRefreshFailed={isRefreshFailed}
 				isRefreshing={isRefreshing}
 				templateCount={templates.length}
 				onPointerDown={handlePointerDown}
@@ -480,6 +485,7 @@ const SlidesTemplateCanvas = forwardRef<SlidesTemplateCanvasHandle, SlidesTempla
 				onZoomIn={handleZoomIn}
 				onZoomOut={handleZoomOut}
 				onResetView={handleResetView}
+				onRetryRefresh={onRetryRefresh}
 				onControlMove={handleControlMove}
 			/>
 		)
