@@ -88,6 +88,10 @@ Router::addGroup(
             Router::post('/create', [ShareApi::class, 'createShare']);
             // 查找相似分享（避免重复创建）
             Router::post('/find-similar', [ShareApi::class, 'findSimilarShare']);
+            // 获取当前用户的分享列表
+            Router::post('/list', [ShareApi::class, 'getShareListByStatusFilter']);
+            // 按资源 ID 获取当前用户的有效分享
+            Router::get('/{id}', [ShareApi::class, 'getShareByResourceId']);
             // 取消分享
             Router::post('/{id}/cancel', [ShareApi::class, 'cancelShareByResourceId']);
         });

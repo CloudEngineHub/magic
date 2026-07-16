@@ -384,8 +384,6 @@ class ResourceShareAppService extends AbstractShareAppService
 
         if ($dto->hasField('expire_days')) {
             $attributes['expire_days'] = $dto->expireDays;
-        } else {
-            $attributes['expire_days'] = null;
         }
         $expireDaysToSave = $attributes['expire_days'] ?? null;
         // 调用 DomainService 保存分享
@@ -641,10 +639,41 @@ class ResourceShareAppService extends AbstractShareAppService
 
     public function getShareList(MagicUserAuthorization $userAuthorization, ResourceListRequestDTO $dto): array
     {
+        $statusFilters = $dto->getResourceTypes() === [ResourceType::Topic->value]
+            ? [ShareFilterType::Active, ShareFilterType::Expired]
+            : $this->getRequestedStatusFilters($dto);
+
+        return $this->getShareListWithStatusFilters($userAuthorization, $dto, $statusFilters);
+    }
+
+    /**
+     * 获取严格按请求状态筛选的分享列表.
+     */
+    public function getShareListByStatusFilter(
+        MagicUserAuthorization $userAuthorization,
+        ResourceListRequestDTO $dto
+    ): array
+    {
+        return $this->getShareListWithStatusFilters(
+            $userAuthorization,
+            $dto,
+            $this->getRequestedStatusFilters($dto)
+        );
+    }
+
+    /**
+     * @param array<ShareFilterType> $statusFilters
+     */
+    private function getShareListWithStatusFilters(
+        MagicUserAuthorization $userAuthorization,
+        ResourceListRequestDTO $dto,
+        array $statusFilters
+    ): array
+    {
         $conditions = [
             'created_uid' => $userAuthorization->getId(),
             'resource_type' => $dto->getResourceType(), // 支持单个或数组
-            'filter_type' => $dto->getFilterType(), // 过滤类型：all, active, expired, cancelled
+            'status_filters' => $statusFilters,
         ];
         if (! empty($dto->getKeyword())) {
             $conditions['keyword'] = $dto->getKeyword();
@@ -769,10 +798,52 @@ class ResourceShareAppService extends AbstractShareAppService
         // 类型转换：将内部类型12（Project）转换为外部类型13（FileCollection）+ share_project=true
         $list = $this->convertProjectTypeForShareList($list);
 
+        // 分享链接始终由服务端域名配置生成，调用方不自行推导前端域名
+        $list = $this->addShareUrlsToList($list);
+
         return [
             'total' => $total,
             'list' => $list,
         ];
+    }
+
+    /**
+     * 将请求中的单个筛选值转换为领域层使用的状态集合；空集合表示不限制状态.
+     *
+     * @return array<ShareFilterType>
+     */
+    private function getRequestedStatusFilters(ResourceListRequestDTO $dto): array
+    {
+        $filterType = ShareFilterType::from($dto->getFilterType());
+        return $filterType === ShareFilterType::All ? [] : [$filterType];
+    }
+
+    /**
+     * 按资源 ID 获取当前用户创建的有效分享（含明文密码）.
+     *
+     * @param MagicUserAuthorization $userAuthorization 当前用户
+     * @param string $resourceId 资源 ID
+     * @return ShareItemWithPasswordDTO 分享信息
+     */
+    public function getShareByResourceId(
+        MagicUserAuthorization $userAuthorization,
+        string $resourceId
+    ): ShareItemWithPasswordDTO {
+        $shareEntity = $this->shareDomainService->getValidShareByResourceId($resourceId);
+        if ($shareEntity === null) {
+            ExceptionBuilder::throw(ShareErrorCode::RESOURCE_NOT_FOUND, 'share.not_found', [$resourceId]);
+        }
+
+        if ($shareEntity->getCreatedUid() !== $userAuthorization->getId()
+            || $shareEntity->getOrganizationCode() !== $userAuthorization->getOrganizationCode()) {
+            ExceptionBuilder::throw(ShareErrorCode::PERMISSION_DENIED, 'share.permission_denied', [$resourceId]);
+        }
+
+        $dto = $this->shareAssembler->toDtoWithPassword($shareEntity);
+        $resourceType = ResourceType::from($shareEntity->getResourceType());
+        $dto->shareUrl = $this->buildShareBaseUrl($resourceType, $resourceId);
+
+        return $dto;
     }
 
     /**
@@ -1057,7 +1128,7 @@ class ResourceShareAppService extends AbstractShareAppService
         $result = $this->buildSimilarShareResponse($shareEntities, $condition, $projectFileCountMap);
 
         // 4. 丰富扩展字段
-        return $this->enrichShareListFields($result);
+        return $this->addShareUrlsToList($this->enrichShareListFields($result));
     }
 
     /**
@@ -3925,22 +3996,10 @@ class ResourceShareAppService extends AbstractShareAppService
         ResourceShareEntity $savedEntity,
         CreateShareRequestDTO $dto
     ): ?string {
-        $frontendDomain = rtrim((string) env('MAGIC_FRONTEND_DOMAIN', ''), '/');
-        if ($frontendDomain === '') {
+        $shareUrl = $this->buildShareBaseUrl($resourceType, $resourceId);
+        if ($shareUrl === null) {
             return null;
         }
-
-        $uri = match ($resourceType) {
-            ResourceType::Topic => '/share/topic/' . $resourceId,
-            ResourceType::FileCollection, ResourceType::File, ResourceType::Project => '/share/files/' . $resourceId,
-            default => null,
-        };
-
-        if ($uri === null) {
-            return null;
-        }
-
-        $shareUrl = $frontendDomain . $uri;
 
         if (! empty($savedEntity->getPassword())) {
             // Prefer the plain-text password supplied in the current request to avoid an extra DB round-trip.
@@ -3967,5 +4026,45 @@ class ResourceShareAppService extends AbstractShareAppService
         }
 
         return $shareUrl;
+    }
+
+    /**
+     * 为分享查询结果补充服务端生成的访问链接.
+     *
+     * @param array $list 分享列表
+     * @return array 补充分享链接后的列表
+     */
+    private function addShareUrlsToList(array $list): array
+    {
+        foreach ($list as $index => $item) {
+            $resourceId = (string) ($item['resource_id'] ?? '');
+            $resourceType = ResourceType::tryFrom((int) ($item['resource_type'] ?? 0));
+            if ($resourceId === '' || $resourceType === null) {
+                $list[$index]['share_url'] = null;
+                continue;
+            }
+            $list[$index]['share_url'] = $this->buildShareBaseUrl($resourceType, $resourceId);
+        }
+
+        return $list;
+    }
+
+    /**
+     * 根据资源类型和资源 ID 生成不携带密码的分享链接.
+     */
+    private function buildShareBaseUrl(ResourceType $resourceType, string $resourceId): ?string
+    {
+        $frontendDomain = rtrim((string) env('MAGIC_FRONTEND_DOMAIN', ''), '/');
+        if ($frontendDomain === '') {
+            return null;
+        }
+
+        $uri = match ($resourceType) {
+            ResourceType::Topic => '/share/topic/' . $resourceId,
+            ResourceType::FileCollection, ResourceType::File, ResourceType::Project => '/share/files/' . $resourceId,
+            default => null,
+        };
+
+        return $uri === null ? null : $frontendDomain . $uri;
     }
 }
