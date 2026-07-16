@@ -40,6 +40,8 @@ export interface PublishHistoryRecord {
 	internalTarget?: PublishInternalTarget
 	categoryId?: string
 	categoryName?: string
+	categoryIds?: string[]
+	categoryNames?: string[]
 	publisherName: string
 	publishedAt: string
 	reviewRemark?: string
@@ -54,6 +56,7 @@ export interface PublishDraft {
 	internalTarget: PublishInternalTarget
 	specificMembers: PublishSpecificMember[]
 	categoryId?: string
+	categoryIds?: string[]
 }
 
 export interface PublishMarketCopy {

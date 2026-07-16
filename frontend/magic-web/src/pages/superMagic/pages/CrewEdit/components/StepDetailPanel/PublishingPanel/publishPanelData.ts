@@ -135,8 +135,8 @@ export function buildPublishParamsFromDraft(draft: PublishDraft): PublishAgentPa
 		version_description_i18n: buildPublishDetailsI18nText(submissionDraft.details),
 		publish_target_type: mapPanelTargetToApi(submissionDraft),
 		publish_target_value: buildPublishTargetValue(submissionDraft),
-		...(submissionDraft.publishTo === "MARKET" && submissionDraft.categoryId
-			? { category_id: submissionDraft.categoryId }
+		...(submissionDraft.publishTo === "MARKET" && submissionDraft.categoryIds?.length
+			? { category_ids: submissionDraft.categoryIds }
 			: {}),
 	}
 }
@@ -184,7 +184,10 @@ function mapAgentVersion(
 	locale: string,
 	categories: CategoryView[] = [],
 ): PublishHistoryRecord {
-	const categoryId = normalizeCategoryId(version.category_id ?? version.category?.id)
+	const categoryIds = normalizeVersionCategoryIds(version)
+	const categoryNames = categoryIds.map((categoryId) =>
+		resolveVersionCategoryName(version, categoryId, categories, locale),
+	)
 
 	return {
 		id: version.id,
@@ -193,10 +196,8 @@ function mapAgentVersion(
 		status: mapAgentVersionStatus(version),
 		publishTo: mapApiTargetToPublishTo(version.publish_target_type),
 		internalTarget: mapApiTargetToInternalTarget(version.publish_target_type),
-		...(categoryId ? { categoryId } : {}),
-		...(categoryId
-			? { categoryName: resolveVersionCategoryName(version, categoryId, categories, locale) }
-			: {}),
+		...(categoryIds.length ? { categoryId: categoryIds[0], categoryIds } : {}),
+		...(categoryNames.length ? { categoryName: categoryNames[0], categoryNames } : {}),
 		publisherName: version.publisher?.name ?? "",
 		publishedAt: version.display_time || version.published_at || "",
 		reviewRemark: version.review_remark ?? "",
@@ -342,15 +343,38 @@ function normalizeCategoryId(categoryId?: string | number | null) {
 	return String(categoryId)
 }
 
+function normalizeVersionCategoryIds(version: AgentVersionItem) {
+	const categoryIdsFromCategories = Array.isArray(version.categories)
+		? version.categories.map((category) => normalizeCategoryId(category.id)).filter(Boolean)
+		: []
+	if (categoryIdsFromCategories.length > 0) {
+		return Array.from(new Set(categoryIdsFromCategories))
+	}
+
+	const ids = Array.isArray(version.category_ids) ? version.category_ids : []
+	const fallbackId = normalizeCategoryId(version.category_id ?? version.category?.id)
+
+	return Array.from(
+		new Set([
+			...ids.map((categoryId) => normalizeCategoryId(categoryId)).filter(Boolean),
+			...(fallbackId ? [fallbackId] : []),
+		]),
+	)
+}
+
 function resolveVersionCategoryName(
 	version: AgentVersionItem,
 	categoryId: string,
 	categories: CategoryView[],
 	locale: string,
 ) {
+	const apiCategory =
+		version.categories?.find((category) => normalizeCategoryId(category.id) === categoryId) ??
+		(normalizeCategoryId(version.category?.id) === categoryId ? version.category : undefined)
+
 	return pickPublishDetailsText(
-		version.category?.name ?? undefined,
-		resolveCrewI18nText(version.category?.name_i18n, locale),
+		apiCategory?.name ?? undefined,
+		resolveCrewI18nText(apiCategory?.name_i18n, locale),
 		categories.find((category) => category.id === categoryId)?.name ?? undefined,
 		categoryId,
 	)

@@ -1,6 +1,7 @@
 import { useState } from "react"
 import { observer } from "mobx-react-lite"
 import { useTranslation } from "react-i18next"
+import { ChevronDown } from "lucide-react"
 import {
 	AlertDialog,
 	AlertDialogAction,
@@ -12,12 +13,13 @@ import {
 	AlertDialogTitle,
 } from "@/components/shadcn-ui/alert-dialog"
 import {
-	Select,
-	SelectContent,
-	SelectItem,
-	SelectTrigger,
-	SelectValue,
-} from "@/components/shadcn-ui/select"
+	DropdownMenu,
+	DropdownMenuCheckboxItem,
+	DropdownMenuContent,
+	DropdownMenuTrigger,
+} from "@/components/shadcn-ui/dropdown-menu"
+import { Button } from "@/components/shadcn-ui/button"
+import { Badge } from "@/components/shadcn-ui/badge"
 import { cn } from "@/lib/utils"
 import { usePublishPanelStore } from "../context"
 import { getPublishToCopyKeys, getPublishToUiKey } from "../publishCopy"
@@ -114,8 +116,6 @@ export default observer(function PublishTargetFields({
 	)
 })
 
-const CATEGORY_PLACEHOLDER = "__placeholder__"
-
 const MarketCategoryField = observer(function MarketCategoryField({
 	disabled = false,
 }: {
@@ -123,8 +123,23 @@ const MarketCategoryField = observer(function MarketCategoryField({
 }) {
 	const { t } = useTranslation("crew/market")
 	const store = usePublishPanelStore()
+	const selectedCategoryIds =
+		store.draft.categoryIds ?? (store.draft.categoryId ? [store.draft.categoryId] : [])
+	const selectedCategoryNames = selectedCategoryIds
+		.map(
+			(categoryId) =>
+				store.marketCategories.find((category) => category.id === categoryId)?.name,
+		)
+		.filter((name): name is string => Boolean(name))
 
 	if (store.marketCategories.length === 0) return null
+
+	const toggleCategory = (categoryId: string, checked: boolean) => {
+		const nextCategoryIds = checked
+			? [...selectedCategoryIds, categoryId]
+			: selectedCategoryIds.filter((selectedCategoryId) => selectedCategoryId !== categoryId)
+		store.setCategoryIds(nextCategoryIds)
+	}
 
 	return (
 		<div className="flex flex-col gap-1.5" data-testid="skill-publish-category-field">
@@ -137,36 +152,55 @@ const MarketCategoryField = observer(function MarketCategoryField({
 					{t("skillEditPage.publishPanel.create.fields.category.required")}
 				</span>
 			</label>
-			<Select
-				value={store.draft.categoryId || CATEGORY_PLACEHOLDER}
-				onValueChange={(value) => {
-					if (value === CATEGORY_PLACEHOLDER) return
-					store.setCategoryId(value)
-				}}
-				disabled={disabled}
-			>
-				<SelectTrigger
-					className="h-9 w-full"
-					aria-required="true"
-					data-testid="skill-publish-category-select"
+			<DropdownMenu>
+				<DropdownMenuTrigger asChild disabled={disabled}>
+					<Button
+						type="button"
+						variant="outline"
+						className="h-auto min-h-9 w-full justify-between rounded-md px-3 py-1.5 font-normal"
+						aria-required="true"
+						data-testid="skill-publish-category-select"
+					>
+						<span className="flex min-w-0 flex-1 flex-wrap items-center gap-1 overflow-hidden text-left">
+							{selectedCategoryNames.length ? (
+								selectedCategoryNames.map((categoryName) => (
+									<Badge
+										key={categoryName}
+										variant="secondary"
+										className="max-w-full rounded-md px-2 py-0.5 font-normal"
+									>
+										<span className="truncate">{categoryName}</span>
+									</Badge>
+								))
+							) : (
+								<span className="truncate text-muted-foreground">
+									{t(
+										"skillEditPage.publishPanel.create.fields.category.placeholder",
+									)}
+								</span>
+							)}
+						</span>
+						<ChevronDown className="ml-2 size-4 shrink-0 opacity-50" />
+					</Button>
+				</DropdownMenuTrigger>
+				<DropdownMenuContent
+					align="start"
+					className="max-h-64 w-[--radix-dropdown-menu-trigger-width] overflow-y-auto"
 				>
-					<SelectValue
-						placeholder={t(
-							"skillEditPage.publishPanel.create.fields.category.placeholder",
-						)}
-					/>
-				</SelectTrigger>
-				<SelectContent className="max-h-64">
-					<SelectItem value={CATEGORY_PLACEHOLDER} disabled>
-						{t("skillEditPage.publishPanel.create.fields.category.placeholder")}
-					</SelectItem>
 					{store.marketCategories.map((category) => (
-						<SelectItem key={category.id} value={category.id}>
+						<DropdownMenuCheckboxItem
+							key={category.id}
+							checked={selectedCategoryIds.includes(category.id)}
+							onCheckedChange={(checked) =>
+								toggleCategory(category.id, Boolean(checked))
+							}
+							onSelect={(event) => event.preventDefault()}
+						>
 							{category.name}
-						</SelectItem>
+						</DropdownMenuCheckboxItem>
 					))}
-				</SelectContent>
-			</Select>
+				</DropdownMenuContent>
+			</DropdownMenu>
 		</div>
 	)
 })

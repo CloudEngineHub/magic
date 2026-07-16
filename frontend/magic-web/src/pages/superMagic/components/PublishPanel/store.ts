@@ -76,7 +76,8 @@ export class PublishPanelStore {
 		)
 			return false
 		if (this.draft.version.trim().length === 0) return false
-		if (this.requiresMarketCategory) return Boolean(this.draft.categoryId?.trim())
+		if (this.requiresMarketCategory)
+			return this.draft.categoryIds?.length ? true : Boolean(this.draft.categoryId?.trim())
 
 		if (this.requiresSpecificMembers) return this.draft.specificMembers.length > 0
 
@@ -202,6 +203,16 @@ export class PublishPanelStore {
 		this.draft = {
 			...this.draft,
 			categoryId,
+			categoryIds: categoryId ? [categoryId] : [],
+		}
+	}
+
+	setCategoryIds(categoryIds: string[]) {
+		const normalizedCategoryIds = normalizeCategoryIds(categoryIds)
+		this.draft = {
+			...this.draft,
+			categoryIds: normalizedCategoryIds,
+			categoryId: normalizedCategoryIds[0],
 		}
 	}
 
@@ -243,9 +254,17 @@ export class PublishPanelStore {
 							submissionDraft.publishTo === "MARKET"
 								? submissionDraft.categoryId
 								: undefined,
+						categoryIds:
+							submissionDraft.publishTo === "MARKET"
+								? [...(submissionDraft.categoryIds ?? [])]
+								: undefined,
 						categoryName:
 							submissionDraft.publishTo === "MARKET" && submissionDraft.categoryId
 								? this.resolveCategoryName(submissionDraft.categoryId)
+								: undefined,
+						categoryNames:
+							submissionDraft.publishTo === "MARKET"
+								? this.resolveCategoryNames(submissionDraft.categoryIds ?? [])
 								: undefined,
 						publisherName: this.currentPublisherName,
 						publishedAt: formatPublishTimestamp(new Date()),
@@ -285,20 +304,34 @@ export class PublishPanelStore {
 			availableInternalTargets: this.availableInternalTargets,
 		})
 		const categoryId = normalized.categoryId
+		const categoryIds = normalizeCategoryIds(
+			normalized.categoryIds ?? (categoryId ? [categoryId] : []),
+		)
 		const normalizedWithoutCategory = { ...normalized }
 		delete normalizedWithoutCategory.categoryId
+		delete normalizedWithoutCategory.categoryIds
 
 		return {
 			...normalizedWithoutCategory,
-			...(categoryId ? { categoryId } : {}),
+			...(categoryIds.length ? { categoryId: categoryIds[0], categoryIds } : {}),
 		}
 	}
 
 	private resolveCategoryName(categoryId: string) {
 		return this.marketCategories.find((category) => category.id === categoryId)?.name
 	}
+
+	private resolveCategoryNames(categoryIds: string[]) {
+		return categoryIds
+			.map((categoryId) => this.resolveCategoryName(categoryId) ?? categoryId)
+			.filter(Boolean)
+	}
 }
 
 function formatPublishTimestamp(date: Date) {
 	return date.toISOString().slice(0, 19).replace("T", " ")
+}
+
+function normalizeCategoryIds(categoryIds?: string[]) {
+	return Array.from(new Set((categoryIds ?? []).filter(Boolean)))
 }

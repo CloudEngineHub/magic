@@ -137,6 +137,8 @@ export interface AgentMarketItem {
 	publisher_type?: SkillPublisherType
 	category_id?: string | null
 	category?: AdminMarketCategory | null
+	category_ids?: string[] | null
+	categories?: AdminMarketCategory[] | null
 	publish_status: string
 	install_count?: number
 	sort_order?: number
@@ -153,6 +155,7 @@ export interface UpdateAgentMarketInfoParams {
 	is_featured?: boolean
 	is_hidden?: boolean
 	sort_order?: number
+	category_ids?: string[]
 	category_id?: string | null
 }
 

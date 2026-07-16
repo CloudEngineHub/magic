@@ -3,6 +3,7 @@ import { BookCheck, Building2, Check, ChevronLeft, X } from "lucide-react"
 import { observer } from "mobx-react-lite"
 import { useTranslation } from "react-i18next"
 import { Button } from "@/components/shadcn-ui/button"
+import { Badge } from "@/components/shadcn-ui/badge"
 import { Separator } from "@/components/shadcn-ui/separator"
 import { cn } from "@/lib/utils"
 import { usePublishPanelStore } from "../context"
@@ -171,20 +172,44 @@ function ReadonlyMarketCategoryField({
 }) {
 	const { t } = useTranslation("crew/market")
 	const store = usePublishPanelStore()
-	const categoryName =
-		record.categoryName ??
-		store.marketCategories.find((category) => category.id === record.categoryId)?.name ??
-		record.categoryId ??
-		""
+	const categoryNames =
+		record.categoryNames && record.categoryNames.length > 0
+			? record.categoryNames
+			: (record.categoryIds ?? (record.categoryId ? [record.categoryId] : []))
+					.map(
+						(categoryId) =>
+							store.marketCategories.find((category) => category.id === categoryId)
+								?.name ?? categoryId,
+					)
+					.filter(Boolean)
+	const displayCategoryNames = categoryNames.length
+		? categoryNames
+		: record.categoryName
+			? [record.categoryName]
+			: []
 
-	if (!categoryName) return null
+	if (displayCategoryNames.length === 0) return null
 
 	return (
-		<ReadonlyTextField
-			label={t("skillEditPage.publishPanel.create.fields.category.label")}
-			value={categoryName}
-			testId="skill-publish-detail-category"
-		/>
+		<div className="flex flex-col gap-1.5">
+			<p className="text-base font-medium text-foreground">
+				{t("skillEditPage.publishPanel.create.fields.category.label")}
+			</p>
+			<div
+				className="flex min-h-9 flex-wrap items-center gap-1"
+				data-testid="skill-publish-detail-category"
+			>
+				{displayCategoryNames.map((categoryName) => (
+					<Badge
+						key={categoryName}
+						variant="secondary"
+						className="max-w-full rounded-md px-2 py-0.5 font-normal"
+					>
+						<span className="truncate">{categoryName}</span>
+					</Badge>
+				))}
+			</div>
+		</div>
 	)
 }
 

@@ -107,6 +107,7 @@ export function sanitizeDraftForSubmission(draft: PublishDraft): PublishDraft {
 	if (draft.publishTo === "INTERNAL" && draft.internalTarget === "MEMBER") {
 		const submissionDraft = { ...draft }
 		delete submissionDraft.categoryId
+		delete submissionDraft.categoryIds
 
 		return {
 			...submissionDraft,
@@ -115,8 +116,21 @@ export function sanitizeDraftForSubmission(draft: PublishDraft): PublishDraft {
 	}
 
 	const submissionDraft = { ...draft }
-	if (submissionDraft.publishTo !== "MARKET" || !submissionDraft.categoryId) {
+	if (submissionDraft.publishTo !== "MARKET") {
 		delete submissionDraft.categoryId
+		delete submissionDraft.categoryIds
+	} else {
+		const categoryIds = normalizeCategoryIds(
+			submissionDraft.categoryIds ??
+				(submissionDraft.categoryId ? [submissionDraft.categoryId] : []),
+		)
+		if (categoryIds.length) {
+			submissionDraft.categoryIds = categoryIds
+			submissionDraft.categoryId = categoryIds[0]
+		} else {
+			delete submissionDraft.categoryId
+			delete submissionDraft.categoryIds
+		}
 	}
 
 	return {
@@ -147,4 +161,8 @@ function filterInternalTargetsByPermission(
 		if (target === "PRIVATE") return canPublishPrivate
 		return canPublishTeam
 	})
+}
+
+function normalizeCategoryIds(categoryIds?: string[]) {
+	return Array.from(new Set((categoryIds ?? []).filter(Boolean)))
 }

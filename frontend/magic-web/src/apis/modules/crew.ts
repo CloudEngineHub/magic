@@ -340,6 +340,7 @@ export interface PublishAgentPrefillResponse {
 	publish_target_type: AgentPublishTargetType | null
 	publish_target_value?: PublishAgentTargetValue | null
 	category_id?: string | number | null
+	category_ids?: Array<string | number> | null
 }
 
 export interface PublishAgentParams {
@@ -350,6 +351,7 @@ export interface PublishAgentParams {
 	publish_target_type: AgentPublishTargetType
 	publish_target_value?: PublishAgentTargetValue | null
 	category_id?: string | number | null
+	category_ids?: Array<string | number>
 }
 
 /** Response for publish agent (API 17) */
@@ -537,6 +539,12 @@ export interface AgentVersionItem {
 		name_i18n?: CrewI18nText | null
 		name?: string | null
 	} | null
+	category_ids?: Array<string | number> | null
+	categories?: Array<{
+		id?: string | number | null
+		name_i18n?: CrewI18nText | null
+		name?: string | null
+	}> | null
 }
 
 export interface GetAgentVersionsResponse {

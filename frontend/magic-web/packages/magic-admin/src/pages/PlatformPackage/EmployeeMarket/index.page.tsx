@@ -30,6 +30,7 @@ const EmployeeMarketCard = lazy(() => import("./EmployeeMarketCard"))
 
 type DataType = PlatformPackage.AgentMarketItem
 type ParamsType = PlatformPackage.GetAgentMarketListParams
+const CATEGORY_SELECT_WIDTH = 220
 
 const useStyles = createStyles(({ token }) => ({
 	container: {
@@ -40,6 +41,33 @@ const useStyles = createStyles(({ token }) => ({
 		color: token.magicColorUsages.text[3],
 	},
 }))
+
+function normalizeCategoryIds(categoryIds?: string[] | null) {
+	return Array.from(new Set((categoryIds ?? []).filter(Boolean)))
+}
+
+function getAgentMarketCategoryIds(record: DataType) {
+	if (Array.isArray(record.category_ids)) return normalizeCategoryIds(record.category_ids)
+	return record.category_id ? [record.category_id] : []
+}
+
+function areSameCategoryIds(left: string[], right: string[]) {
+	const normalizedLeft = normalizeCategoryIds(left).sort()
+	const normalizedRight = normalizeCategoryIds(right).sort()
+	if (normalizedLeft.length !== normalizedRight.length) return false
+	return normalizedLeft.every((id, index) => id === normalizedRight[index])
+}
+
+function resolveAgentMarketCategories(
+	categoryIds: string[],
+	categories: PlatformPackage.AgentMarketCategoryItem[],
+) {
+	return categoryIds
+		.map((categoryId) => categories.find((category) => category.id === categoryId))
+		.filter((category): category is PlatformPackage.AgentMarketCategoryItem =>
+			Boolean(category),
+		)
+}
 
 function EmployeeMarketPage() {
 	const { t } = useTranslation("admin/platform/employeeMarket")
@@ -257,8 +285,16 @@ function EmployeeMarketPage() {
 	})
 
 	const getCategoryName = useMemoizedFn((record: DataType) => {
+		if (record.categories?.length) {
+			return record.categories.map(resolveAgentMarketCategoryName).join(" / ")
+		}
+		const categoryIds = getAgentMarketCategoryIds(record)
+		if (categoryIds.length) {
+			return categoryIds
+				.map((categoryId) => categoryMap.get(categoryId) ?? categoryId)
+				.join(" / ")
+		}
 		if (record.category) return resolveAgentMarketCategoryName(record.category)
-		if (record.category_id) return categoryMap.get(record.category_id) ?? record.category_id
 		return t("category.uncategorized")
 	})
 
@@ -286,19 +322,24 @@ function EmployeeMarketPage() {
 	})
 
 	const handleChangeCategory = useMemoizedFn(
-		async (record: DataType, nextCategoryId?: string | null) => {
-			const categoryId = nextCategoryId || null
-			if ((record.category_id ?? null) === categoryId) return
+		async (record: DataType, nextCategoryIds?: string[]) => {
+			const categoryIds = normalizeCategoryIds(nextCategoryIds)
+			if (areSameCategoryIds(getAgentMarketCategoryIds(record), categoryIds)) return
 
 			setCategorySavingIds((prev) => new Set([...prev, record.id]))
 			try {
-				await PlatformPackageApi.updateAgentMarketCategoryRelation(record.id, categoryId)
-				const nextCategory =
-					categories.find((category) => category.id === categoryId) ?? null
+				await PlatformPackageApi.updateAgentMarketCategoryRelation(record.id, categoryIds)
+				const nextCategories = resolveAgentMarketCategories(categoryIds, categories)
 				setData((prev) =>
 					prev.map((item) =>
 						item.id === record.id
-							? { ...item, category_id: categoryId, category: nextCategory }
+							? {
+									...item,
+									category_ids: categoryIds,
+									categories: nextCategories,
+									category_id: categoryIds[0] ?? null,
+									category: nextCategories[0] ?? null,
+								}
 							: item,
 					),
 				)
@@ -374,25 +415,29 @@ function EmployeeMarketPage() {
 			},
 			{
 				title: t("category.label"),
-				dataIndex: "category_id",
-				key: "category_id",
-				width: 180,
+				dataIndex: "category_ids",
+				key: "category_ids",
+				width: 240,
 				render: (_, record) => {
 					const saving = categorySavingIds.has(record.id)
 					if (!categories.length) return getCategoryName(record)
+					const categoryIds = getAgentMarketCategoryIds(record)
 
 					return (
 						<Select
 							allowClear
 							showSearch
+							mode="multiple"
+							maxTagCount="responsive"
 							optionFilterProp="label"
-							style={{ width: 160 }}
-							value={record.category_id || undefined}
+							style={{ width: CATEGORY_SELECT_WIDTH }}
+							value={categoryIds.length ? categoryIds : undefined}
 							placeholder={t("category.uncategorized")}
 							options={categoryOptions}
 							loading={categoriesLoading}
 							disabled={saving || !hasEditRight}
-							onChange={(value) => handleChangeCategory(record, value ?? null)}
+							dropdownStyle={{ maxHeight: 320, overflowY: "auto" }}
+							onChange={(value) => handleChangeCategory(record, value)}
 						/>
 					)
 				},

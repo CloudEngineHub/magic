@@ -25,6 +25,7 @@ export interface PublishPrefillPayload {
 	publish_target_type: PublishPrefillTargetType
 	publish_target_value?: PublishPrefillTargetValue | null
 	category_id?: string | number | null
+	category_ids?: Array<string | number> | null
 }
 
 export interface PublishPrefillVersionReference {
@@ -44,6 +45,7 @@ export function createPublishPrefillDraft({
 		publishTargetType: prefill.publish_target_type,
 		publishTargetValue: prefill.publish_target_value,
 		categoryId: prefill.category_id,
+		categoryIds: prefill.category_ids,
 		versions,
 		fallbackDraft,
 	})
@@ -59,25 +61,29 @@ function resolvePrefillTargetDraft({
 	publishTargetType,
 	publishTargetValue,
 	categoryId,
+	categoryIds,
 	versions,
 	fallbackDraft,
 }: {
 	publishTargetType: PublishPrefillPayload["publish_target_type"]
 	publishTargetValue: PublishPrefillPayload["publish_target_value"]
 	categoryId: PublishPrefillPayload["category_id"]
+	categoryIds: PublishPrefillPayload["category_ids"]
 	versions: PublishPrefillVersionReference[]
 	fallbackDraft: PublishDraft
 }): PublishDraft {
 	if (!publishTargetType) return { ...fallbackDraft }
-	if (publishTargetType === "MARKET")
+	if (publishTargetType === "MARKET") {
+		const normalizedCategoryIds = normalizeCategoryIds(categoryIds, categoryId)
 		return {
 			...fallbackDraft,
 			publishTo: "MARKET",
 			specificMembers: [],
-			...(normalizeCategoryId(categoryId)
-				? { categoryId: normalizeCategoryId(categoryId) }
+			...(normalizedCategoryIds.length
+				? { categoryId: normalizedCategoryIds[0], categoryIds: normalizedCategoryIds }
 				: {}),
 		}
+	}
 
 	if (publishTargetType === "ORGANIZATION")
 		return {
@@ -161,4 +167,18 @@ function formatDraftVersion(version: string) {
 function normalizeCategoryId(categoryId: PublishPrefillPayload["category_id"]) {
 	if (categoryId === null || categoryId === undefined) return ""
 	return String(categoryId)
+}
+
+function normalizeCategoryIds(
+	categoryIds: PublishPrefillPayload["category_ids"],
+	fallbackCategoryId: PublishPrefillPayload["category_id"],
+) {
+	const ids = Array.isArray(categoryIds) ? categoryIds : []
+	const fallbackId = normalizeCategoryId(fallbackCategoryId)
+	return Array.from(
+		new Set([
+			...ids.map((categoryId) => String(categoryId)).filter(Boolean),
+			...(fallbackId ? [fallbackId] : []),
+		]),
+	)
 }

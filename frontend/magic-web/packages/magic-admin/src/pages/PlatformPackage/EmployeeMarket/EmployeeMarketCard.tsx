@@ -19,13 +19,18 @@ interface EmployeeMarketCardProps {
 	debouncedAutoSaveSortOrder: (id: string, sortOrder: number, previousSortOrder?: number) => void
 	handleChangeCategory: (
 		record: PlatformPackage.AgentMarketItem,
-		nextCategoryId?: string | null,
+		nextCategoryIds?: string[],
 	) => void
 	handleChangeFeatured: (record: PlatformPackage.AgentMarketItem, nextFeatured: boolean) => void
 	handleChangeHidden: (record: PlatformPackage.AgentMarketItem, nextHidden: boolean) => void
 	getLocalizedText: (value?: PlatformPackage.NameI18N | string) => string
 	getCategoryName: (record: PlatformPackage.AgentMarketItem) => string
 	hasEditRight: boolean
+}
+
+function getAgentMarketCategoryIds(data: PlatformPackage.AgentMarketItem) {
+	if (Array.isArray(data.category_ids)) return data.category_ids.filter(Boolean)
+	return data.category_id ? [data.category_id] : []
 }
 
 function EmployeeMarketCard({
@@ -54,6 +59,7 @@ function EmployeeMarketCard({
 	if (!data) return null
 
 	const publishInfo = publishStatusMap[data.publish_status]
+	const categoryIds = getAgentMarketCategoryIds(data)
 
 	return (
 		<MobileCard title={getLocalizedText(data.name_i18n)} onClick={() => onClick?.(data)}>
@@ -85,13 +91,16 @@ function EmployeeMarketCard({
 						<Select
 							allowClear
 							showSearch
+							mode="multiple"
+							maxTagCount="responsive"
 							optionFilterProp="label"
-							style={{ minWidth: 160 }}
-							value={data.category_id || undefined}
+							style={{ minWidth: 220 }}
+							value={categoryIds.length ? categoryIds : undefined}
 							placeholder={t("category.uncategorized")}
 							options={categoryOptions}
 							disabled={categorySavingIds.has(data.id) || !hasEditRight}
-							onChange={(value) => handleChangeCategory(data, value ?? null)}
+							dropdownStyle={{ maxHeight: 320, overflowY: "auto" }}
+							onChange={(value) => handleChangeCategory(data, value)}
 						/>
 					) : (
 						<span>{getCategoryName(data)}</span>

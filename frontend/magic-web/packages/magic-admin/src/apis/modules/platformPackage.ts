@@ -120,11 +120,11 @@ export const generatePlatformPackageApi = (client: HttpClient) => {
 			return client.put<null>(genRequestUrl(RequestUrl.updateAgentMarketInfo, { id }), data)
 		},
 
-		updateAgentMarketCategoryRelation(id: string, categoryId: string | null) {
+		updateAgentMarketCategoryRelation(id: string, categoryIds: string[]) {
 			return client.put<null>(
 				genRequestUrl(RequestUrl.updateAgentMarketCategoryRelation, { id }),
 				{
-					category_id: categoryId,
+					category_ids: categoryIds,
 				},
 			)
 		},
