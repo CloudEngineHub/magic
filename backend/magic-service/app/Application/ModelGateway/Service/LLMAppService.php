@@ -36,6 +36,7 @@ use App\Domain\ModelGateway\Event\ImageGeneratedEvent;
 use App\Domain\ModelGateway\Event\ImageGenerateFailedEvent;
 use App\Domain\ModelGateway\Service\VideoGenerationConfigDomainService;
 use App\Domain\Provider\Entity\ValueObject\AiAbilityCode;
+use App\Domain\Provider\Entity\ValueObject\ProviderCode;
 use App\Domain\Provider\Entity\ValueObject\ProviderDataIsolation;
 use App\Domain\Provider\Entity\ValueObject\Status;
 use App\Domain\Provider\Service\AiAbilityDomainService;
@@ -50,12 +51,14 @@ use App\Infrastructure\Core\HighAvailability\DTO\EndpointResponseDTO;
 use App\Infrastructure\Core\HighAvailability\Entity\ValueObject\HighAvailabilityAppType;
 use App\Infrastructure\Core\HighAvailability\Interface\HighAvailabilityInterface;
 use App\Infrastructure\Core\ValueObject\StorageBucketType;
+use App\Infrastructure\ExternalAPI\ImageGenerateAPI\ImageGenerate;
 use App\Infrastructure\ExternalAPI\ImageGenerateAPI\ImageGenerateFactory;
 use App\Infrastructure\ExternalAPI\ImageGenerateAPI\ImageGenerateModelType;
 use App\Infrastructure\ExternalAPI\ImageGenerateAPI\ImageGenerateType;
 use App\Infrastructure\ExternalAPI\ImageGenerateAPI\ImageModel;
 use App\Infrastructure\ExternalAPI\ImageGenerateAPI\ImageModelConfig;
 use App\Infrastructure\ExternalAPI\ImageGenerateAPI\Model\MiracleVision\MiracleVisionModel;
+use App\Infrastructure\ExternalAPI\ImageGenerateAPI\Request\ImageGenerateRequest;
 use App\Infrastructure\ExternalAPI\ImageGenerateAPI\Request\MiracleVisionModelRequest;
 use App\Infrastructure\ExternalAPI\ImageGenerateAPI\Response\OpenAIFormatResponse;
 use App\Infrastructure\ExternalAPI\ImageSearch\DTO\ImageSearchResponseDTO;
@@ -1829,7 +1832,11 @@ class LLMAppService extends AbstractLLMAppService
             }
         }
         $imageGenerateService = ImageGenerateFactory::create($imageGenerateType, $imageModelConfig);
-        $generateImageOpenAIFormat = $imageGenerateService->generateImageOpenAIFormat($imageGenerateRequest);
+        $generateImageOpenAIFormat = $this->generateImageOpenAIFormatWithFileUrlProxy(
+            $imageGenerateService,
+            $imageGenerateRequest,
+            $imageModel->getProviderCode()
+        );
 
         try {
             // 记录日志
@@ -1914,6 +1921,30 @@ class LLMAppService extends AbstractLLMAppService
             $msgLog->setCreatedAt(new DateTime());
             $this->msgLogDomainService->create($LLMDataIsolation, $msgLog);
         });
+    }
+
+    private function generateImageOpenAIFormatWithFileUrlProxy(
+        ImageGenerate $imageGenerateService,
+        ImageGenerateRequest $imageGenerateRequest,
+        ProviderCode $providerCode
+    ): OpenAIFormatResponse {
+        $originalReferImages = $imageGenerateRequest->getReferImages();
+        $proxyUrls = [];
+
+        if ($providerCode === ProviderCode::Google && ! empty($originalReferImages)) {
+            $proxyResult = $this->temporaryFileUrlProxyManager->prepare($originalReferImages);
+            $imageGenerateRequest->setReferImages($proxyResult['urls']);
+            $proxyUrls = $proxyResult['proxy_urls'];
+        }
+
+        try {
+            return $imageGenerateService->generateImageOpenAIFormat($imageGenerateRequest);
+        } finally {
+            $imageGenerateRequest->setReferImages($originalReferImages);
+            if (! empty($proxyUrls)) {
+                $this->temporaryFileUrlProxyManager->cleanup($proxyUrls);
+            }
+        }
     }
 
     /**
