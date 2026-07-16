@@ -136,8 +136,8 @@ class AgentMarketRepository extends AbstractRepository implements AgentMarketRep
 
         $counts = [];
         foreach ($models as $model) {
-            $categoryId = (int) (is_array($model) ? $model['category_id'] : $model->category_id);
-            $agentCount = (int) (is_array($model) ? $model['agent_count'] : $model->agent_count);
+            $categoryId = (int) $model->category_id;
+            $agentCount = (int) $model->agent_count;
             $counts[$categoryId] = $agentCount;
         }
 
@@ -206,6 +206,18 @@ class AgentMarketRepository extends AbstractRepository implements AgentMarketRep
             );
 
         return true;
+    }
+
+    public function clearCategoryIdByIds(SuperMagicAgentDataIsolation $dataIsolation, array $ids): int
+    {
+        $ids = array_values(array_unique(array_filter(array_map('intval', $ids))));
+        if ($ids === []) {
+            return 0;
+        }
+
+        return $this->createBuilder($dataIsolation, $this->agentMarketModel::query())
+            ->whereIn('id', $ids)
+            ->update(['category_id' => null]);
     }
 
     public function findIdsByAgentCode(SuperMagicAgentDataIsolation $dataIsolation, string $agentCode): array
