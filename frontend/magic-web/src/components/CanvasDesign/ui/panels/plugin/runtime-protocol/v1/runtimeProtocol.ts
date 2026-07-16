@@ -38,40 +38,86 @@ export interface PluginCompleteImagePromptParams extends Omit<
 /** 插件图片投放目标类型：slot 替换单图，grid 追加多图 */
 export type PluginCanvasAssetDragTargetMode = "slot" | "grid"
 
+export const PLUGIN_RUNTIME_MESSAGE_TYPE = {
+	Toast: "magic-canvas-plugin:toast",
+	Close: "magic-canvas-plugin:close",
+	Error: "magic-canvas-plugin:error",
+	SetHeight: "magic-canvas-plugin:set-height",
+	ResolveResource: "magic-canvas-plugin:resolve-resource",
+	PickFiles: "magic-canvas-plugin:pick-files",
+	PointerDown: "magic-canvas-plugin:pointer-down",
+	CanvasAssetDragTarget: "magic-canvas-plugin:canvas-asset-drag-target",
+	GetImageModels: "magic-canvas-plugin:get-image-models",
+	GenerateAndPlace: "magic-canvas-plugin:generate-and-place",
+	CompleteImagePrompt: "magic-canvas-plugin:complete-image-prompt",
+	UploadFile: "magic-canvas-plugin:upload-file",
+	ResolveFileAssets: "magic-canvas-plugin:resolve-file-assets",
+	ReadCanvasClipboard: "magic-canvas-plugin:read-canvas-clipboard",
+	FetchBlob: "magic-canvas-plugin:fetch-blob",
+	StorageGet: "magic-canvas-plugin:storage-get",
+	StorageSet: "magic-canvas-plugin:storage-set",
+	StorageRemove: "magic-canvas-plugin:storage-remove",
+	StorageGetSharedGenerationConfig: "magic-canvas-plugin:storage-get-shared-generation-config",
+	StorageSetSharedGenerationConfig: "magic-canvas-plugin:storage-set-shared-generation-config",
+	StorageRemoveSharedGenerationConfig:
+		"magic-canvas-plugin:storage-remove-shared-generation-config",
+} as const
+
+export const PLUGIN_RUNTIME_RESULT_MESSAGE_TYPE = {
+	ResolveResource: "magic-canvas-plugin:resolve-resource-result",
+	PickFiles: "magic-canvas-plugin:pick-files-result",
+	GetImageModels: "magic-canvas-plugin:get-image-models-result",
+	GenerateAndPlace: "magic-canvas-plugin:generate-and-place-result",
+	CompleteImagePrompt: "magic-canvas-plugin:complete-image-prompt-result",
+	UploadFile: "magic-canvas-plugin:upload-file-result",
+	ResolveFileAssets: "magic-canvas-plugin:resolve-file-assets-result",
+	ReadCanvasClipboard: "magic-canvas-plugin:read-canvas-clipboard-result",
+	FetchBlob: "magic-canvas-plugin:fetch-blob-result",
+	StorageGet: "magic-canvas-plugin:storage-get-result",
+	StorageSet: "magic-canvas-plugin:storage-set-result",
+	StorageRemove: "magic-canvas-plugin:storage-remove-result",
+	StorageGetSharedGenerationConfig:
+		"magic-canvas-plugin:storage-get-shared-generation-config-result",
+	StorageSetSharedGenerationConfig:
+		"magic-canvas-plugin:storage-set-shared-generation-config-result",
+	StorageRemoveSharedGenerationConfig:
+		"magic-canvas-plugin:storage-remove-shared-generation-config-result",
+} as const
+
 export type PluginRuntimeMessage =
 	| {
-			type: "magic-canvas-plugin:toast"
+			type: typeof PLUGIN_RUNTIME_MESSAGE_TYPE.Toast
 			message: string
 			toastType?: "info" | "success" | "warning" | "error"
 	  }
 	| {
-			type: "magic-canvas-plugin:close"
+			type: typeof PLUGIN_RUNTIME_MESSAGE_TYPE.Close
 	  }
 	| {
-			type: "magic-canvas-plugin:error"
+			type: typeof PLUGIN_RUNTIME_MESSAGE_TYPE.Error
 			message: string
 	  }
 	| {
-			type: "magic-canvas-plugin:set-height"
+			type: typeof PLUGIN_RUNTIME_MESSAGE_TYPE.SetHeight
 			height: number
 	  }
 	| {
-			type: "magic-canvas-plugin:resolve-resource"
+			type: typeof PLUGIN_RUNTIME_MESSAGE_TYPE.ResolveResource
 			requestId: string
 			path: string
 	  }
 	| {
-			type: "magic-canvas-plugin:pick-files"
+			type: typeof PLUGIN_RUNTIME_MESSAGE_TYPE.PickFiles
 			requestId: string
 			options?: PluginPickFilesOptions
 			triggerPoint?: PluginPoint
 	  }
 	| {
-			type: "magic-canvas-plugin:pointer-down"
+			type: typeof PLUGIN_RUNTIME_MESSAGE_TYPE.PointerDown
 	  }
 	/** 插件 runtime 上报当前画布图片拖拽是否命中可投放目标 */
 	| {
-			type: "magic-canvas-plugin:canvas-asset-drag-target"
+			type: typeof PLUGIN_RUNTIME_MESSAGE_TYPE.CanvasAssetDragTarget
 			dragSessionId: string
 			targetId: string | null
 			mode?: PluginCanvasAssetDragTargetMode
@@ -80,114 +126,119 @@ export type PluginRuntimeMessage =
 			importRemaining?: number
 	  }
 	| {
-			type: "magic-canvas-plugin:get-image-models"
+			type: typeof PLUGIN_RUNTIME_MESSAGE_TYPE.GetImageModels
 			requestId: string
 	  }
 	| {
-			type: "magic-canvas-plugin:generate-and-place"
+			type: typeof PLUGIN_RUNTIME_MESSAGE_TYPE.GenerateAndPlace
 			requestId: string
 			params: PluginGenerateAndPlaceParams
 	  }
 	| {
-			type: "magic-canvas-plugin:complete-image-prompt"
+			type: typeof PLUGIN_RUNTIME_MESSAGE_TYPE.CompleteImagePrompt
 			requestId: string
 			params: PluginCompleteImagePromptParams
 	  }
 	| {
-			type: "magic-canvas-plugin:upload-file"
+			type: typeof PLUGIN_RUNTIME_MESSAGE_TYPE.UploadFile
 			requestId: string
 			arrayBuffer: ArrayBuffer
 			fileName: string
 			mimeType: string
 	  }
 	| {
-			type: "magic-canvas-plugin:resolve-file-assets"
+			type: typeof PLUGIN_RUNTIME_MESSAGE_TYPE.ResolveFileAssets
 			requestId: string
 			files: Array<{ path: string; fileName?: string }>
 			options?: PluginPickFilesOptions
 	  }
 	| {
-			type: "magic-canvas-plugin:read-canvas-clipboard"
+			type: typeof PLUGIN_RUNTIME_MESSAGE_TYPE.ReadCanvasClipboard
 			requestId: string
 	  }
 	| {
-			type: "magic-canvas-plugin:fetch-blob"
+			type: typeof PLUGIN_RUNTIME_MESSAGE_TYPE.FetchBlob
 			requestId: string
 			url: string
 	  }
 	| {
-			type: "magic-canvas-plugin:storage-get"
+			type: typeof PLUGIN_RUNTIME_MESSAGE_TYPE.StorageGet
 			requestId: string
 			key: string
 	  }
 	| {
-			type: "magic-canvas-plugin:storage-set"
+			type: typeof PLUGIN_RUNTIME_MESSAGE_TYPE.StorageSet
 			requestId: string
 			key: string
 			value: string
 	  }
 	| {
-			type: "magic-canvas-plugin:storage-remove"
+			type: typeof PLUGIN_RUNTIME_MESSAGE_TYPE.StorageRemove
 			requestId: string
 			key: string
 	  }
 	| {
-			type: "magic-canvas-plugin:storage-get-shared-generation-config"
+			type: typeof PLUGIN_RUNTIME_MESSAGE_TYPE.StorageGetSharedGenerationConfig
 			requestId: string
 	  }
 	| {
-			type: "magic-canvas-plugin:storage-set-shared-generation-config"
+			type: typeof PLUGIN_RUNTIME_MESSAGE_TYPE.StorageSetSharedGenerationConfig
 			requestId: string
 			value: string
 	  }
 	| {
-			type: "magic-canvas-plugin:storage-remove-shared-generation-config"
+			type: typeof PLUGIN_RUNTIME_MESSAGE_TYPE.StorageRemoveSharedGenerationConfig
 			requestId: string
 	  }
 
 export const PLUGIN_RUNTIME_RESULT_TYPE_BY_MESSAGE_TYPE = {
-	"magic-canvas-plugin:resolve-resource": "magic-canvas-plugin:resolve-resource-result",
-	"magic-canvas-plugin:pick-files": "magic-canvas-plugin:pick-files-result",
-	"magic-canvas-plugin:get-image-models": "magic-canvas-plugin:get-image-models-result",
-	"magic-canvas-plugin:generate-and-place": "magic-canvas-plugin:generate-and-place-result",
-	"magic-canvas-plugin:complete-image-prompt": "magic-canvas-plugin:complete-image-prompt-result",
-	"magic-canvas-plugin:upload-file": "magic-canvas-plugin:upload-file-result",
-	"magic-canvas-plugin:resolve-file-assets": "magic-canvas-plugin:resolve-file-assets-result",
-	"magic-canvas-plugin:read-canvas-clipboard": "magic-canvas-plugin:read-canvas-clipboard-result",
-	"magic-canvas-plugin:fetch-blob": "magic-canvas-plugin:fetch-blob-result",
-	"magic-canvas-plugin:storage-get": "magic-canvas-plugin:storage-get-result",
-	"magic-canvas-plugin:storage-set": "magic-canvas-plugin:storage-set-result",
-	"magic-canvas-plugin:storage-remove": "magic-canvas-plugin:storage-remove-result",
-	"magic-canvas-plugin:storage-get-shared-generation-config":
-		"magic-canvas-plugin:storage-get-shared-generation-config-result",
-	"magic-canvas-plugin:storage-set-shared-generation-config":
-		"magic-canvas-plugin:storage-set-shared-generation-config-result",
-	"magic-canvas-plugin:storage-remove-shared-generation-config":
-		"magic-canvas-plugin:storage-remove-shared-generation-config-result",
+	[PLUGIN_RUNTIME_MESSAGE_TYPE.ResolveResource]:
+		PLUGIN_RUNTIME_RESULT_MESSAGE_TYPE.ResolveResource,
+	[PLUGIN_RUNTIME_MESSAGE_TYPE.PickFiles]: PLUGIN_RUNTIME_RESULT_MESSAGE_TYPE.PickFiles,
+	[PLUGIN_RUNTIME_MESSAGE_TYPE.GetImageModels]: PLUGIN_RUNTIME_RESULT_MESSAGE_TYPE.GetImageModels,
+	[PLUGIN_RUNTIME_MESSAGE_TYPE.GenerateAndPlace]:
+		PLUGIN_RUNTIME_RESULT_MESSAGE_TYPE.GenerateAndPlace,
+	[PLUGIN_RUNTIME_MESSAGE_TYPE.CompleteImagePrompt]:
+		PLUGIN_RUNTIME_RESULT_MESSAGE_TYPE.CompleteImagePrompt,
+	[PLUGIN_RUNTIME_MESSAGE_TYPE.UploadFile]: PLUGIN_RUNTIME_RESULT_MESSAGE_TYPE.UploadFile,
+	[PLUGIN_RUNTIME_MESSAGE_TYPE.ResolveFileAssets]:
+		PLUGIN_RUNTIME_RESULT_MESSAGE_TYPE.ResolveFileAssets,
+	[PLUGIN_RUNTIME_MESSAGE_TYPE.ReadCanvasClipboard]:
+		PLUGIN_RUNTIME_RESULT_MESSAGE_TYPE.ReadCanvasClipboard,
+	[PLUGIN_RUNTIME_MESSAGE_TYPE.FetchBlob]: PLUGIN_RUNTIME_RESULT_MESSAGE_TYPE.FetchBlob,
+	[PLUGIN_RUNTIME_MESSAGE_TYPE.StorageGet]: PLUGIN_RUNTIME_RESULT_MESSAGE_TYPE.StorageGet,
+	[PLUGIN_RUNTIME_MESSAGE_TYPE.StorageSet]: PLUGIN_RUNTIME_RESULT_MESSAGE_TYPE.StorageSet,
+	[PLUGIN_RUNTIME_MESSAGE_TYPE.StorageRemove]: PLUGIN_RUNTIME_RESULT_MESSAGE_TYPE.StorageRemove,
+	[PLUGIN_RUNTIME_MESSAGE_TYPE.StorageGetSharedGenerationConfig]:
+		PLUGIN_RUNTIME_RESULT_MESSAGE_TYPE.StorageGetSharedGenerationConfig,
+	[PLUGIN_RUNTIME_MESSAGE_TYPE.StorageSetSharedGenerationConfig]:
+		PLUGIN_RUNTIME_RESULT_MESSAGE_TYPE.StorageSetSharedGenerationConfig,
+	[PLUGIN_RUNTIME_MESSAGE_TYPE.StorageRemoveSharedGenerationConfig]:
+		PLUGIN_RUNTIME_RESULT_MESSAGE_TYPE.StorageRemoveSharedGenerationConfig,
 } as const
 
 const PLUGIN_RUNTIME_CAPABILITY_BY_MESSAGE_TYPE: Partial<
 	Record<PluginRuntimeMessage["type"], CanvasDesignPluginCapability>
 > = {
-	"magic-canvas-plugin:toast": "ui.toast",
-	"magic-canvas-plugin:close": "ui.close",
-	"magic-canvas-plugin:set-height": "ui.setHeight",
-	"magic-canvas-plugin:resolve-resource": "resources.resolve",
-	"magic-canvas-plugin:pick-files": "assets.pickFiles",
-	"magic-canvas-plugin:canvas-asset-drag-target": "assets.pickFiles",
-	"magic-canvas-plugin:get-image-models": "ai.getImageModels",
-	"magic-canvas-plugin:generate-and-place": "ai.generateAndPlace",
-	"magic-canvas-plugin:complete-image-prompt": "ai.completeImagePrompt",
-	"magic-canvas-plugin:upload-file": "assets.uploadFile",
-	"magic-canvas-plugin:resolve-file-assets": "assets.pickFiles",
-	"magic-canvas-plugin:read-canvas-clipboard": "assets.pickFiles",
-	"magic-canvas-plugin:fetch-blob": "assets.fetchBlob",
-	"magic-canvas-plugin:storage-get": "plugin.storage",
-	"magic-canvas-plugin:storage-set": "plugin.storage",
-	"magic-canvas-plugin:storage-remove": "plugin.storage",
-	"magic-canvas-plugin:storage-get-shared-generation-config": "plugin.storage",
-	"magic-canvas-plugin:storage-set-shared-generation-config": "plugin.storage",
-	"magic-canvas-plugin:storage-remove-shared-generation-config": "plugin.storage",
+	[PLUGIN_RUNTIME_MESSAGE_TYPE.Toast]: "ui.toast",
+	[PLUGIN_RUNTIME_MESSAGE_TYPE.Close]: "ui.close",
+	[PLUGIN_RUNTIME_MESSAGE_TYPE.SetHeight]: "ui.setHeight",
+	[PLUGIN_RUNTIME_MESSAGE_TYPE.ResolveResource]: "resources.resolve",
+	[PLUGIN_RUNTIME_MESSAGE_TYPE.PickFiles]: "assets.pickFiles",
+	[PLUGIN_RUNTIME_MESSAGE_TYPE.CanvasAssetDragTarget]: "assets.pickFiles",
+	[PLUGIN_RUNTIME_MESSAGE_TYPE.GetImageModels]: "ai.getImageModels",
+	[PLUGIN_RUNTIME_MESSAGE_TYPE.GenerateAndPlace]: "ai.generateAndPlace",
+	[PLUGIN_RUNTIME_MESSAGE_TYPE.CompleteImagePrompt]: "ai.completeImagePrompt",
+	[PLUGIN_RUNTIME_MESSAGE_TYPE.UploadFile]: "assets.uploadFile",
+	[PLUGIN_RUNTIME_MESSAGE_TYPE.ResolveFileAssets]: "assets.pickFiles",
+	[PLUGIN_RUNTIME_MESSAGE_TYPE.ReadCanvasClipboard]: "assets.pickFiles",
+	[PLUGIN_RUNTIME_MESSAGE_TYPE.FetchBlob]: "assets.fetchBlob",
+	[PLUGIN_RUNTIME_MESSAGE_TYPE.StorageGet]: "plugin.storage",
+	[PLUGIN_RUNTIME_MESSAGE_TYPE.StorageSet]: "plugin.storage",
+	[PLUGIN_RUNTIME_MESSAGE_TYPE.StorageRemove]: "plugin.storage",
+	[PLUGIN_RUNTIME_MESSAGE_TYPE.StorageGetSharedGenerationConfig]: "plugin.storage",
+	[PLUGIN_RUNTIME_MESSAGE_TYPE.StorageSetSharedGenerationConfig]: "plugin.storage",
+	[PLUGIN_RUNTIME_MESSAGE_TYPE.StorageRemoveSharedGenerationConfig]: "plugin.storage",
 }
 
 export function createPluginChannelToken(): string {
@@ -232,240 +283,211 @@ export function parsePluginRuntimeMessage(
 	if (!data || typeof data !== "object") return null
 	const record = data as Record<string, unknown>
 	if (record.channelToken !== expectedChannelToken) return null
-	if (record.type === "magic-canvas-plugin:close") {
-		return {
-			type: "magic-canvas-plugin:close",
+	switch (record.type) {
+		case PLUGIN_RUNTIME_MESSAGE_TYPE.Close:
+			return {
+				type: PLUGIN_RUNTIME_MESSAGE_TYPE.Close,
+			}
+		case PLUGIN_RUNTIME_MESSAGE_TYPE.SetHeight:
+			if (typeof record.height !== "number") return null
+			return {
+				type: PLUGIN_RUNTIME_MESSAGE_TYPE.SetHeight,
+				height: record.height,
+			}
+		case PLUGIN_RUNTIME_MESSAGE_TYPE.ResolveResource:
+			if (typeof record.requestId !== "string" || typeof record.path !== "string") return null
+			return {
+				type: PLUGIN_RUNTIME_MESSAGE_TYPE.ResolveResource,
+				requestId: record.requestId,
+				path: record.path,
+			}
+		case PLUGIN_RUNTIME_MESSAGE_TYPE.PickFiles:
+			if (typeof record.requestId !== "string") return null
+			return {
+				type: PLUGIN_RUNTIME_MESSAGE_TYPE.PickFiles,
+				requestId: record.requestId,
+				options: parsePluginPickFilesOptions(record.options),
+				triggerPoint: parsePluginPoint(record.triggerPoint),
+			}
+		case PLUGIN_RUNTIME_MESSAGE_TYPE.PointerDown:
+			return {
+				type: PLUGIN_RUNTIME_MESSAGE_TYPE.PointerDown,
+			}
+		case PLUGIN_RUNTIME_MESSAGE_TYPE.CanvasAssetDragTarget: {
+			const dragSessionId =
+				typeof record.dragSessionId === "string" ? record.dragSessionId.trim() : ""
+			if (!dragSessionId) return null
+			// 对 iframe 传回的目标信息做收窄，避免宿主保存非法 mode/targetId。
+			const mode = record.mode === "slot" || record.mode === "grid" ? record.mode : undefined
+			const importRemaining =
+				typeof record.importRemaining === "number" &&
+				Number.isFinite(record.importRemaining)
+					? Math.max(0, Math.floor(record.importRemaining))
+					: undefined
+			return {
+				type: PLUGIN_RUNTIME_MESSAGE_TYPE.CanvasAssetDragTarget,
+				dragSessionId,
+				targetId: typeof record.targetId === "string" ? record.targetId : null,
+				mode,
+				canDrop: record.canDrop === true,
+				importRemaining,
+			}
 		}
+		case PLUGIN_RUNTIME_MESSAGE_TYPE.GetImageModels:
+			if (typeof record.requestId !== "string") return null
+			return {
+				type: PLUGIN_RUNTIME_MESSAGE_TYPE.GetImageModels,
+				requestId: record.requestId,
+			}
+		case PLUGIN_RUNTIME_MESSAGE_TYPE.GenerateAndPlace:
+			if (
+				typeof record.requestId !== "string" ||
+				!record.params ||
+				typeof record.params !== "object"
+			) {
+				return null
+			}
+			return {
+				type: PLUGIN_RUNTIME_MESSAGE_TYPE.GenerateAndPlace,
+				requestId: record.requestId,
+				params: record.params as PluginGenerateAndPlaceParams,
+			}
+		case PLUGIN_RUNTIME_MESSAGE_TYPE.CompleteImagePrompt:
+			if (
+				typeof record.requestId !== "string" ||
+				!record.params ||
+				typeof record.params !== "object" ||
+				typeof (record.params as Record<string, unknown>).user_prompt !== "string"
+			) {
+				return null
+			}
+			return {
+				type: PLUGIN_RUNTIME_MESSAGE_TYPE.CompleteImagePrompt,
+				requestId: record.requestId,
+				params: record.params as PluginCompleteImagePromptParams,
+			}
+		case PLUGIN_RUNTIME_MESSAGE_TYPE.UploadFile:
+			if (
+				typeof record.requestId !== "string" ||
+				!(record.arrayBuffer instanceof ArrayBuffer) ||
+				typeof record.fileName !== "string" ||
+				typeof record.mimeType !== "string"
+			) {
+				return null
+			}
+			return {
+				type: PLUGIN_RUNTIME_MESSAGE_TYPE.UploadFile,
+				requestId: record.requestId,
+				arrayBuffer: record.arrayBuffer,
+				fileName: record.fileName,
+				mimeType: record.mimeType,
+			}
+		case PLUGIN_RUNTIME_MESSAGE_TYPE.FetchBlob:
+			if (typeof record.requestId !== "string" || typeof record.url !== "string") return null
+			return {
+				type: PLUGIN_RUNTIME_MESSAGE_TYPE.FetchBlob,
+				requestId: record.requestId,
+				url: record.url,
+			}
+		case PLUGIN_RUNTIME_MESSAGE_TYPE.ReadCanvasClipboard:
+			if (typeof record.requestId !== "string") return null
+			return {
+				type: PLUGIN_RUNTIME_MESSAGE_TYPE.ReadCanvasClipboard,
+				requestId: record.requestId,
+			}
+		case PLUGIN_RUNTIME_MESSAGE_TYPE.ResolveFileAssets:
+			if (typeof record.requestId !== "string" || !Array.isArray(record.files)) return null
+			const files = record.files
+				.filter(
+					(file): file is { path: string; fileName?: string } =>
+						Boolean(file) &&
+						typeof file === "object" &&
+						typeof (file as Record<string, unknown>).path === "string",
+				)
+				.map((file) => ({
+					path: file.path,
+					fileName:
+						typeof file.fileName === "string" && file.fileName.trim()
+							? file.fileName
+							: undefined,
+				}))
+			return {
+				type: PLUGIN_RUNTIME_MESSAGE_TYPE.ResolveFileAssets,
+				requestId: record.requestId,
+				files,
+				options: parsePluginPickFilesOptions(record.options),
+			}
+		case PLUGIN_RUNTIME_MESSAGE_TYPE.StorageGet:
+			if (typeof record.requestId !== "string" || typeof record.key !== "string") return null
+			return {
+				type: PLUGIN_RUNTIME_MESSAGE_TYPE.StorageGet,
+				requestId: record.requestId,
+				key: record.key,
+			}
+		case PLUGIN_RUNTIME_MESSAGE_TYPE.StorageSet:
+			if (
+				typeof record.requestId !== "string" ||
+				typeof record.key !== "string" ||
+				typeof record.value !== "string"
+			) {
+				return null
+			}
+			return {
+				type: PLUGIN_RUNTIME_MESSAGE_TYPE.StorageSet,
+				requestId: record.requestId,
+				key: record.key,
+				value: record.value,
+			}
+		case PLUGIN_RUNTIME_MESSAGE_TYPE.StorageRemove:
+			if (typeof record.requestId !== "string" || typeof record.key !== "string") return null
+			return {
+				type: PLUGIN_RUNTIME_MESSAGE_TYPE.StorageRemove,
+				requestId: record.requestId,
+				key: record.key,
+			}
+		case PLUGIN_RUNTIME_MESSAGE_TYPE.StorageGetSharedGenerationConfig:
+			if (typeof record.requestId !== "string") return null
+			return {
+				type: PLUGIN_RUNTIME_MESSAGE_TYPE.StorageGetSharedGenerationConfig,
+				requestId: record.requestId,
+			}
+		case PLUGIN_RUNTIME_MESSAGE_TYPE.StorageSetSharedGenerationConfig:
+			if (typeof record.requestId !== "string" || typeof record.value !== "string")
+				return null
+			return {
+				type: PLUGIN_RUNTIME_MESSAGE_TYPE.StorageSetSharedGenerationConfig,
+				requestId: record.requestId,
+				value: record.value,
+			}
+		case PLUGIN_RUNTIME_MESSAGE_TYPE.StorageRemoveSharedGenerationConfig:
+			if (typeof record.requestId !== "string") return null
+			return {
+				type: PLUGIN_RUNTIME_MESSAGE_TYPE.StorageRemoveSharedGenerationConfig,
+				requestId: record.requestId,
+			}
+		case PLUGIN_RUNTIME_MESSAGE_TYPE.Error:
+			if (typeof record.message !== "string") return null
+			return {
+				type: PLUGIN_RUNTIME_MESSAGE_TYPE.Error,
+				message: record.message,
+			}
+		case PLUGIN_RUNTIME_MESSAGE_TYPE.Toast:
+			if (typeof record.message !== "string") return null
+			const toastType =
+				record.toastType === "success" ||
+				record.toastType === "warning" ||
+				record.toastType === "error" ||
+				record.toastType === "info"
+					? record.toastType
+					: undefined
+			return {
+				type: PLUGIN_RUNTIME_MESSAGE_TYPE.Toast,
+				message: record.message,
+				toastType,
+			}
+		default:
+			return null
 	}
-	if (record.type === "magic-canvas-plugin:set-height" && typeof record.height === "number") {
-		return {
-			type: "magic-canvas-plugin:set-height",
-			height: record.height,
-		}
-	}
-	if (
-		record.type === "magic-canvas-plugin:resolve-resource" &&
-		typeof record.requestId === "string" &&
-		typeof record.path === "string"
-	) {
-		return {
-			type: "magic-canvas-plugin:resolve-resource",
-			requestId: record.requestId,
-			path: record.path,
-		}
-	}
-	if (record.type === "magic-canvas-plugin:pick-files" && typeof record.requestId === "string") {
-		return {
-			type: "magic-canvas-plugin:pick-files",
-			requestId: record.requestId,
-			options: parsePluginPickFilesOptions(record.options),
-			triggerPoint: parsePluginPoint(record.triggerPoint),
-		}
-	}
-	if (record.type === "magic-canvas-plugin:pointer-down") {
-		return {
-			type: "magic-canvas-plugin:pointer-down",
-		}
-	}
-	if (record.type === "magic-canvas-plugin:canvas-asset-drag-target") {
-		const dragSessionId =
-			typeof record.dragSessionId === "string" ? record.dragSessionId.trim() : ""
-		if (!dragSessionId) return null
-		// 对 iframe 传回的目标信息做收窄，避免宿主保存非法 mode/targetId。
-		const mode = record.mode === "slot" || record.mode === "grid" ? record.mode : undefined
-		const importRemaining =
-			typeof record.importRemaining === "number" && Number.isFinite(record.importRemaining)
-				? Math.max(0, Math.floor(record.importRemaining))
-				: undefined
-		return {
-			type: "magic-canvas-plugin:canvas-asset-drag-target",
-			dragSessionId,
-			targetId: typeof record.targetId === "string" ? record.targetId : null,
-			mode,
-			canDrop: record.canDrop === true,
-			importRemaining,
-		}
-	}
-	if (
-		record.type === "magic-canvas-plugin:get-image-models" &&
-		typeof record.requestId === "string"
-	) {
-		return {
-			type: "magic-canvas-plugin:get-image-models",
-			requestId: record.requestId,
-		}
-	}
-	if (
-		record.type === "magic-canvas-plugin:generate-and-place" &&
-		typeof record.requestId === "string" &&
-		record.params &&
-		typeof record.params === "object"
-	) {
-		return {
-			type: "magic-canvas-plugin:generate-and-place",
-			requestId: record.requestId,
-			params: record.params as PluginGenerateAndPlaceParams,
-		}
-	}
-	if (
-		record.type === "magic-canvas-plugin:complete-image-prompt" &&
-		typeof record.requestId === "string" &&
-		record.params &&
-		typeof record.params === "object" &&
-		typeof (record.params as Record<string, unknown>).user_prompt === "string"
-	) {
-		return {
-			type: "magic-canvas-plugin:complete-image-prompt",
-			requestId: record.requestId,
-			params: record.params as PluginCompleteImagePromptParams,
-		}
-	}
-	if (
-		record.type === "magic-canvas-plugin:upload-file" &&
-		typeof record.requestId === "string" &&
-		record.arrayBuffer instanceof ArrayBuffer &&
-		typeof record.fileName === "string" &&
-		typeof record.mimeType === "string"
-	) {
-		return {
-			type: "magic-canvas-plugin:upload-file",
-			requestId: record.requestId,
-			arrayBuffer: record.arrayBuffer,
-			fileName: record.fileName,
-			mimeType: record.mimeType,
-		}
-	}
-	if (
-		record.type === "magic-canvas-plugin:fetch-blob" &&
-		typeof record.requestId === "string" &&
-		typeof record.url === "string"
-	) {
-		return {
-			type: "magic-canvas-plugin:fetch-blob",
-			requestId: record.requestId,
-			url: record.url,
-		}
-	}
-	if (
-		record.type === "magic-canvas-plugin:read-canvas-clipboard" &&
-		typeof record.requestId === "string"
-	) {
-		return {
-			type: "magic-canvas-plugin:read-canvas-clipboard",
-			requestId: record.requestId,
-		}
-	}
-	if (
-		record.type === "magic-canvas-plugin:resolve-file-assets" &&
-		typeof record.requestId === "string" &&
-		Array.isArray(record.files)
-	) {
-		const files = record.files
-			.filter(
-				(file): file is { path: string; fileName?: string } =>
-					Boolean(file) &&
-					typeof file === "object" &&
-					typeof (file as Record<string, unknown>).path === "string",
-			)
-			.map((file) => ({
-				path: file.path,
-				fileName:
-					typeof file.fileName === "string" && file.fileName.trim()
-						? file.fileName
-						: undefined,
-			}))
-		return {
-			type: "magic-canvas-plugin:resolve-file-assets",
-			requestId: record.requestId,
-			files,
-			options: parsePluginPickFilesOptions(record.options),
-		}
-	}
-	if (
-		record.type === "magic-canvas-plugin:storage-get" &&
-		typeof record.requestId === "string" &&
-		typeof record.key === "string"
-	) {
-		return {
-			type: "magic-canvas-plugin:storage-get",
-			requestId: record.requestId,
-			key: record.key,
-		}
-	}
-	if (
-		record.type === "magic-canvas-plugin:storage-set" &&
-		typeof record.requestId === "string" &&
-		typeof record.key === "string" &&
-		typeof record.value === "string"
-	) {
-		return {
-			type: "magic-canvas-plugin:storage-set",
-			requestId: record.requestId,
-			key: record.key,
-			value: record.value,
-		}
-	}
-	if (
-		record.type === "magic-canvas-plugin:storage-remove" &&
-		typeof record.requestId === "string" &&
-		typeof record.key === "string"
-	) {
-		return {
-			type: "magic-canvas-plugin:storage-remove",
-			requestId: record.requestId,
-			key: record.key,
-		}
-	}
-	if (
-		record.type === "magic-canvas-plugin:storage-get-shared-generation-config" &&
-		typeof record.requestId === "string"
-	) {
-		return {
-			type: "magic-canvas-plugin:storage-get-shared-generation-config",
-			requestId: record.requestId,
-		}
-	}
-	if (
-		record.type === "magic-canvas-plugin:storage-set-shared-generation-config" &&
-		typeof record.requestId === "string" &&
-		typeof record.value === "string"
-	) {
-		return {
-			type: "magic-canvas-plugin:storage-set-shared-generation-config",
-			requestId: record.requestId,
-			value: record.value,
-		}
-	}
-	if (
-		record.type === "magic-canvas-plugin:storage-remove-shared-generation-config" &&
-		typeof record.requestId === "string"
-	) {
-		return {
-			type: "magic-canvas-plugin:storage-remove-shared-generation-config",
-			requestId: record.requestId,
-		}
-	}
-	if (record.type === "magic-canvas-plugin:error" && typeof record.message === "string") {
-		return {
-			type: "magic-canvas-plugin:error",
-			message: record.message,
-		}
-	}
-	if (record.type === "magic-canvas-plugin:toast" && typeof record.message === "string") {
-		const toastType =
-			record.toastType === "success" ||
-			record.toastType === "warning" ||
-			record.toastType === "error" ||
-			record.toastType === "info"
-				? record.toastType
-				: undefined
-		return {
-			type: "magic-canvas-plugin:toast",
-			message: record.message,
-			toastType,
-		}
-	}
-	return null
 }
 
 function parsePluginPoint(point: unknown): PluginPoint | undefined {

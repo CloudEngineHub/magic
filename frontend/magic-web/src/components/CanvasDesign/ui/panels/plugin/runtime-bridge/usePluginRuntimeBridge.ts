@@ -10,7 +10,9 @@ import type { Canvas } from "../../../../runtime/core/Canvas"
 import type { CanvasDesignPlugin } from "../../../../runtime/document/types"
 import {
 	getPluginRuntimeMessageCapability,
-	getPluginRuntimeResultType,
+	PLUGIN_RUNTIME_MESSAGE_TYPE,
+	PLUGIN_RUNTIME_RESULT_MESSAGE_TYPE,
+	PLUGIN_RUNTIME_RESULT_TYPE_BY_MESSAGE_TYPE,
 	parsePluginRuntimeMessage,
 	pluginHasCapability,
 	type PluginPoint,
@@ -22,7 +24,7 @@ import {
 	registerPluginFileAssetSources,
 	type PluginSourceElementMap,
 } from "../window/pluginSourceElements"
-import { PLUGIN_WINDOW_MARGIN } from "../window/constants"
+import { PLUGIN_IFRAME_TARGET_ORIGIN, PLUGIN_WINDOW_MARGIN } from "../window/constants"
 import type { PluginFileAsset, PluginFilePickerRequest } from "../window/types"
 import { clampPluginPanelHeight } from "../window/position"
 import { resolvePluginResource, getErrorMessage } from "../assets/resourceUtils"
@@ -55,7 +57,7 @@ interface UsePluginRuntimeBridgeParams {
 	onCanvasAssetDragTarget?: (
 		target: Extract<
 			PluginRuntimeMessage,
-			{ type: "magic-canvas-plugin:canvas-asset-drag-target" }
+			{ type: typeof PLUGIN_RUNTIME_MESSAGE_TYPE.CanvasAssetDragTarget }
 		>,
 	) => void
 	/** 设置文件选择器请求 */
@@ -86,7 +88,7 @@ export function usePluginRuntimeBridge({
 					channelToken,
 					...message,
 				},
-				"*",
+				PLUGIN_IFRAME_TARGET_ORIGIN,
 				transfer,
 			)
 		}
@@ -95,14 +97,17 @@ export function usePluginRuntimeBridge({
 			result: { files?: PluginFileAsset[]; error?: string },
 		) => {
 			postPluginMessage({
-				type: "magic-canvas-plugin:pick-files-result",
+				type: PLUGIN_RUNTIME_RESULT_MESSAGE_TYPE.PickFiles,
 				requestId: request.requestId,
 				...result,
 			})
 		}
 
 		const rejectMissingCapability = (data: PluginRuntimeMessage, capability: string) => {
-			const resultType = getPluginRuntimeResultType(data.type)
+			const resultType =
+				PLUGIN_RUNTIME_RESULT_TYPE_BY_MESSAGE_TYPE[
+					data.type as keyof typeof PLUGIN_RUNTIME_RESULT_TYPE_BY_MESSAGE_TYPE
+				]
 			const message = `Plugin capability not declared: ${capability}`
 			console.warn(`[PluginPanel] ${message}`, plugin.name)
 			if (resultType && "requestId" in data) {
@@ -138,358 +143,241 @@ export function usePluginRuntimeBridge({
 				return
 			}
 
-			if (data.type === "magic-canvas-plugin:set-height") {
-				setFrameHeight(clampPluginPanelHeight(data.height))
-				return
-			}
-
-			if (data.type === "magic-canvas-plugin:close") {
-				canvas.pluginManager.close(plugin.name)
-				return
-			}
-
-			if (data.type === "magic-canvas-plugin:resolve-resource") {
-				void resolvePluginResource(plugin, data.path).then(
-					(url) => {
-						postPluginMessage({
-							type: "magic-canvas-plugin:resolve-resource-result",
-							requestId: data.requestId,
-							url,
-						})
-					},
-					(error) => {
-						postPluginMessage({
-							type: "magic-canvas-plugin:resolve-resource-result",
-							requestId: data.requestId,
-							error: getErrorMessage(error),
-						})
-					},
-				)
-				return
-			}
-
-			if (data.type === "magic-canvas-plugin:pick-files") {
-				const request = {
-					requestId: data.requestId,
-					options: data.options,
-					anchorPosition: resolvePluginFilePickerAnchorPosition(
-						iframeRef.current,
-						pluginWindowRef.current,
-						data.triggerPoint,
-					),
-				}
-				filePickerRequestRef.current = request
-				setFilePickerRequest(request)
-				return
-			}
-
-			if (data.type === "magic-canvas-plugin:pointer-down") {
-				closeFilePicker()
-				return
-			}
-
-			if (data.type === "magic-canvas-plugin:canvas-asset-drag-target") {
-				// 该消息是拖拽过程中的高频状态同步，交给外部拖拽 hook 维护当前 drop 目标。
-				onCanvasAssetDragTarget?.(data)
-				return
-			}
-
-			if (data.type === "magic-canvas-plugin:get-image-models") {
-				void getPluginImageModels(canvas).then(
-					(models) => {
-						postPluginMessage({
-							type: "magic-canvas-plugin:get-image-models-result",
-							requestId: data.requestId,
-							models,
-						})
-					},
-					(error) => {
-						postPluginMessage({
-							type: "magic-canvas-plugin:get-image-models-result",
-							requestId: data.requestId,
-							error: getErrorMessage(error),
-						})
-					},
-				)
-				return
-			}
-
-			if (data.type === "magic-canvas-plugin:generate-and-place") {
-				// 生成落点需要知道 reference 对应哪张画布图，这里把窗口级来源映射交给生成模块解析。
-				void generatePluginImages(canvas, data.params, {
-					sourceElementByAssetKey: sourceElementByAssetKeyRef.current,
-				}).then(
-					(result) => {
-						postPluginMessage({
-							type: "magic-canvas-plugin:generate-and-place-result",
-							requestId: data.requestId,
-							result,
-						})
-					},
-					(error) => {
-						postPluginMessage({
-							type: "magic-canvas-plugin:generate-and-place-result",
-							requestId: data.requestId,
-							error: getErrorMessage(error),
-						})
-					},
-				)
-				return
-			}
-
-			if (data.type === "magic-canvas-plugin:complete-image-prompt") {
-				void completePluginImagePrompt(canvas, data.params).then(
-					(result) => {
-						postPluginMessage({
-							type: "magic-canvas-plugin:complete-image-prompt-result",
-							requestId: data.requestId,
-							result,
-						})
-					},
-					(error) => {
-						postPluginMessage({
-							type: "magic-canvas-plugin:complete-image-prompt-result",
-							requestId: data.requestId,
-							error: getErrorMessage(error),
-						})
-					},
-				)
-				return
-			}
-
-			if (data.type === "magic-canvas-plugin:upload-file") {
-				const file = new File([data.arrayBuffer], data.fileName, { type: data.mimeType })
-				void pickPluginFiles(canvas, [file], { type: "image" }).then(
-					(files) => {
-						postPluginMessage({
-							type: "magic-canvas-plugin:upload-file-result",
-							requestId: data.requestId,
-							file: files[0] ?? null,
-						})
-					},
-					(error) => {
-						postPluginMessage({
-							type: "magic-canvas-plugin:upload-file-result",
-							requestId: data.requestId,
-							error: getErrorMessage(error),
-						})
-					},
-				)
-				return
-			}
-
-			if (data.type === "magic-canvas-plugin:resolve-file-assets") {
-				void resolvePluginFileAssets(canvas, data.files, data.options).then(
-					(files) => {
-						// resolve 过程会把插件传入的 path 转成新的 asset，补回来源元素后才能用于生成图贴源放置。
-						const filesWithSources = hydratePluginFileAssetSources(
-							sourceElementByAssetKeyRef.current,
-							files,
-						)
-						postPluginMessage({
-							type: "magic-canvas-plugin:resolve-file-assets-result",
-							requestId: data.requestId,
-							files: filesWithSources,
-						})
-					},
-					(error) => {
-						postPluginMessage({
-							type: "magic-canvas-plugin:resolve-file-assets-result",
-							requestId: data.requestId,
-							error: getErrorMessage(error),
-						})
-					},
-				)
-				return
-			}
-
-			if (data.type === "magic-canvas-plugin:read-canvas-clipboard") {
-				void readPluginCanvasClipboard(canvas).then(
-					(result) => {
-						// 剪贴板读出的 payload 与上传后的 asset 都登记来源，覆盖“先读剪贴板再生成”的链路。
-						registerPluginClipboardSourceElements(
-							sourceElementByAssetKeyRef.current,
-							result.payload,
-						)
-						registerPluginFileAssetSources(
-							sourceElementByAssetKeyRef.current,
-							result.uploadedAssets,
-						)
-						postPluginMessage({
-							type: "magic-canvas-plugin:read-canvas-clipboard-result",
-							requestId: data.requestId,
-							payload: result.payload,
-							uploadedAssets: result.uploadedAssets,
-						})
-					},
-					(error) => {
-						postPluginMessage({
-							type: "magic-canvas-plugin:read-canvas-clipboard-result",
-							requestId: data.requestId,
-							error: getErrorMessage(error),
-						})
-					},
-				)
-				return
-			}
-
-			if (data.type === "magic-canvas-plugin:fetch-blob") {
-				let validatedUrl: URL
-				try {
-					validatedUrl = validatePluginFetchBlobUrl(
-						plugin,
-						data.url,
-						window.location.origin,
+			switch (data.type) {
+				case PLUGIN_RUNTIME_MESSAGE_TYPE.SetHeight:
+					setFrameHeight(clampPluginPanelHeight(data.height))
+					return
+				case PLUGIN_RUNTIME_MESSAGE_TYPE.Close:
+					canvas.pluginManager.close(plugin.name)
+					return
+				case PLUGIN_RUNTIME_MESSAGE_TYPE.ResolveResource:
+					void resolvePluginResource(plugin, data.path).then(
+						(url) => {
+							postPluginMessage({
+								type: PLUGIN_RUNTIME_RESULT_MESSAGE_TYPE.ResolveResource,
+								requestId: data.requestId,
+								url,
+							})
+						},
+						(error) => {
+							postPluginMessage({
+								type: PLUGIN_RUNTIME_RESULT_MESSAGE_TYPE.ResolveResource,
+								requestId: data.requestId,
+								error: getErrorMessage(error),
+							})
+						},
 					)
-				} catch (error) {
-					postPluginMessage({
-						type: "magic-canvas-plugin:fetch-blob-result",
+					return
+				case PLUGIN_RUNTIME_MESSAGE_TYPE.PickFiles: {
+					const request = {
 						requestId: data.requestId,
-						error: getErrorMessage(error),
-					})
+						options: data.options,
+						anchorPosition: resolvePluginFilePickerAnchorPosition(
+							iframeRef.current,
+							pluginWindowRef.current,
+							data.triggerPoint,
+						),
+					}
+					filePickerRequestRef.current = request
+					setFilePickerRequest(request)
 					return
 				}
-
-				void fetch(validatedUrl.toString())
-					.then((r) => r.arrayBuffer())
-					.then((arrayBuffer) => {
-						postPluginMessage(
-							{
-								type: "magic-canvas-plugin:fetch-blob-result",
+				case PLUGIN_RUNTIME_MESSAGE_TYPE.PointerDown:
+					closeFilePicker()
+					return
+				case PLUGIN_RUNTIME_MESSAGE_TYPE.CanvasAssetDragTarget:
+					// 该消息是拖拽过程中的高频状态同步，交给外部拖拽 hook 维护当前 drop 目标。
+					onCanvasAssetDragTarget?.(data)
+					return
+				case PLUGIN_RUNTIME_MESSAGE_TYPE.GetImageModels:
+					void getPluginImageModels(canvas).then(
+						(models) => {
+							postPluginMessage({
+								type: PLUGIN_RUNTIME_RESULT_MESSAGE_TYPE.GetImageModels,
 								requestId: data.requestId,
-								arrayBuffer,
-							},
-							[arrayBuffer],
-						)
+								models,
+							})
+						},
+						(error) => {
+							postPluginMessage({
+								type: PLUGIN_RUNTIME_RESULT_MESSAGE_TYPE.GetImageModels,
+								requestId: data.requestId,
+								error: getErrorMessage(error),
+							})
+						},
+					)
+					return
+				case PLUGIN_RUNTIME_MESSAGE_TYPE.GenerateAndPlace:
+					// 生成落点需要知道 reference 对应哪张画布图，这里把窗口级来源映射交给生成模块解析。
+					void generatePluginImages(canvas, data.params, {
+						sourceElementByAssetKey: sourceElementByAssetKeyRef.current,
+					}).then(
+						(result) => {
+							postPluginMessage({
+								type: PLUGIN_RUNTIME_RESULT_MESSAGE_TYPE.GenerateAndPlace,
+								requestId: data.requestId,
+								result,
+							})
+						},
+						(error) => {
+							postPluginMessage({
+								type: PLUGIN_RUNTIME_RESULT_MESSAGE_TYPE.GenerateAndPlace,
+								requestId: data.requestId,
+								error: getErrorMessage(error),
+							})
+						},
+					)
+					return
+				case PLUGIN_RUNTIME_MESSAGE_TYPE.CompleteImagePrompt:
+					void completePluginImagePrompt(canvas, data.params).then(
+						(result) => {
+							postPluginMessage({
+								type: PLUGIN_RUNTIME_RESULT_MESSAGE_TYPE.CompleteImagePrompt,
+								requestId: data.requestId,
+								result,
+							})
+						},
+						(error) => {
+							postPluginMessage({
+								type: PLUGIN_RUNTIME_RESULT_MESSAGE_TYPE.CompleteImagePrompt,
+								requestId: data.requestId,
+								error: getErrorMessage(error),
+							})
+						},
+					)
+					return
+				case PLUGIN_RUNTIME_MESSAGE_TYPE.UploadFile: {
+					const file = new File([data.arrayBuffer], data.fileName, {
+						type: data.mimeType,
 					})
-					.catch((error) => {
+					void pickPluginFiles(canvas, [file], { type: "image" }).then(
+						(files) => {
+							postPluginMessage({
+								type: PLUGIN_RUNTIME_RESULT_MESSAGE_TYPE.UploadFile,
+								requestId: data.requestId,
+								file: files[0] ?? null,
+							})
+						},
+						(error) => {
+							postPluginMessage({
+								type: PLUGIN_RUNTIME_RESULT_MESSAGE_TYPE.UploadFile,
+								requestId: data.requestId,
+								error: getErrorMessage(error),
+							})
+						},
+					)
+					return
+				}
+				case PLUGIN_RUNTIME_MESSAGE_TYPE.ResolveFileAssets:
+					void resolvePluginFileAssets(canvas, data.files, data.options).then(
+						(files) => {
+							// resolve 过程会把插件传入的 path 转成新的 asset，补回来源元素后才能用于生成图贴源放置。
+							const filesWithSources = hydratePluginFileAssetSources(
+								sourceElementByAssetKeyRef.current,
+								files,
+							)
+							postPluginMessage({
+								type: PLUGIN_RUNTIME_RESULT_MESSAGE_TYPE.ResolveFileAssets,
+								requestId: data.requestId,
+								files: filesWithSources,
+							})
+						},
+						(error) => {
+							postPluginMessage({
+								type: PLUGIN_RUNTIME_RESULT_MESSAGE_TYPE.ResolveFileAssets,
+								requestId: data.requestId,
+								error: getErrorMessage(error),
+							})
+						},
+					)
+					return
+				case PLUGIN_RUNTIME_MESSAGE_TYPE.ReadCanvasClipboard:
+					void readPluginCanvasClipboard(canvas).then(
+						(result) => {
+							// 剪贴板读出的 payload 与上传后的 asset 都登记来源，覆盖“先读剪贴板再生成”的链路。
+							registerPluginClipboardSourceElements(
+								sourceElementByAssetKeyRef.current,
+								result.payload,
+							)
+							registerPluginFileAssetSources(
+								sourceElementByAssetKeyRef.current,
+								result.uploadedAssets,
+							)
+							postPluginMessage({
+								type: PLUGIN_RUNTIME_RESULT_MESSAGE_TYPE.ReadCanvasClipboard,
+								requestId: data.requestId,
+								payload: result.payload,
+								uploadedAssets: result.uploadedAssets,
+							})
+						},
+						(error) => {
+							postPluginMessage({
+								type: PLUGIN_RUNTIME_RESULT_MESSAGE_TYPE.ReadCanvasClipboard,
+								requestId: data.requestId,
+								error: getErrorMessage(error),
+							})
+						},
+					)
+					return
+				case PLUGIN_RUNTIME_MESSAGE_TYPE.FetchBlob: {
+					let validatedUrl: URL
+					try {
+						validatedUrl = validatePluginFetchBlobUrl(
+							plugin,
+							data.url,
+							window.location.origin,
+						)
+					} catch (error) {
 						postPluginMessage({
-							type: "magic-canvas-plugin:fetch-blob-result",
+							type: PLUGIN_RUNTIME_RESULT_MESSAGE_TYPE.FetchBlob,
 							requestId: data.requestId,
 							error: getErrorMessage(error),
 						})
-					})
-				return
-			}
+						return
+					}
 
-			if (data.type === "magic-canvas-plugin:storage-get") {
-				try {
-					const storageKey = withPluginStorageKey(data.key)
-					postPluginMessage({
-						type: "magic-canvas-plugin:storage-get-result",
-						requestId: data.requestId,
-						value: window.localStorage.getItem(storageKey),
-					})
-				} catch (error) {
-					postPluginMessage({
-						type: "magic-canvas-plugin:storage-get-result",
-						requestId: data.requestId,
-						error: getErrorMessage(error),
-					})
+					void fetch(validatedUrl.toString())
+						.then((r) => r.arrayBuffer())
+						.then(
+							(arrayBuffer) => {
+								postPluginMessage(
+									{
+										type: PLUGIN_RUNTIME_RESULT_MESSAGE_TYPE.FetchBlob,
+										requestId: data.requestId,
+										arrayBuffer,
+									},
+									[arrayBuffer],
+								)
+							},
+							(error) => {
+								postPluginMessage({
+									type: PLUGIN_RUNTIME_RESULT_MESSAGE_TYPE.FetchBlob,
+									requestId: data.requestId,
+									error: getErrorMessage(error),
+								})
+							},
+						)
+					return
 				}
-				return
-			}
-
-			if (data.type === "magic-canvas-plugin:storage-set") {
-				try {
-					const storageKey = withPluginStorageKey(data.key)
-					window.localStorage.setItem(storageKey, data.value)
-					postPluginMessage({
-						type: "magic-canvas-plugin:storage-set-result",
-						requestId: data.requestId,
-					})
-				} catch (error) {
-					postPluginMessage({
-						type: "magic-canvas-plugin:storage-set-result",
-						requestId: data.requestId,
-						error: getErrorMessage(error),
-					})
-				}
-				return
-			}
-
-			if (data.type === "magic-canvas-plugin:storage-remove") {
-				try {
-					const storageKey = withPluginStorageKey(data.key)
-					window.localStorage.removeItem(storageKey)
-					postPluginMessage({
-						type: "magic-canvas-plugin:storage-remove-result",
-						requestId: data.requestId,
-					})
-				} catch (error) {
-					postPluginMessage({
-						type: "magic-canvas-plugin:storage-remove-result",
-						requestId: data.requestId,
-						error: getErrorMessage(error),
-					})
-				}
-				return
-			}
-
-			if (data.type === "magic-canvas-plugin:storage-get-shared-generation-config") {
-				try {
-					postPluginMessage({
-						type: "magic-canvas-plugin:storage-get-shared-generation-config-result",
-						requestId: data.requestId,
-						value: window.localStorage.getItem(sharedGenerationConfigStorageKey),
-					})
-				} catch (error) {
-					postPluginMessage({
-						type: "magic-canvas-plugin:storage-get-shared-generation-config-result",
-						requestId: data.requestId,
-						error: getErrorMessage(error),
-					})
-				}
-				return
-			}
-
-			if (data.type === "magic-canvas-plugin:storage-set-shared-generation-config") {
-				try {
-					window.localStorage.setItem(sharedGenerationConfigStorageKey, data.value)
-					postPluginMessage({
-						type: "magic-canvas-plugin:storage-set-shared-generation-config-result",
-						requestId: data.requestId,
-					})
-				} catch (error) {
-					postPluginMessage({
-						type: "magic-canvas-plugin:storage-set-shared-generation-config-result",
-						requestId: data.requestId,
-						error: getErrorMessage(error),
-					})
-				}
-				return
-			}
-
-			if (data.type === "magic-canvas-plugin:storage-remove-shared-generation-config") {
-				try {
-					window.localStorage.removeItem(sharedGenerationConfigStorageKey)
-					postPluginMessage({
-						type: "magic-canvas-plugin:storage-remove-shared-generation-config-result",
-						requestId: data.requestId,
-					})
-				} catch (error) {
-					postPluginMessage({
-						type: "magic-canvas-plugin:storage-remove-shared-generation-config-result",
-						requestId: data.requestId,
-						error: getErrorMessage(error),
-					})
-				}
-				return
-			}
-
-			if (data.type === "magic-canvas-plugin:error") {
-				toast.error(data.message)
-				return
-			}
-
-			if (data.toastType === "success") {
-				toast.success(data.message)
-			} else if (data.toastType === "warning") {
-				toast.warning(data.message)
-			} else if (data.toastType === "error") {
-				toast.error(data.message)
-			} else {
-				toast(data.message)
+				case PLUGIN_RUNTIME_MESSAGE_TYPE.StorageGet:
+				case PLUGIN_RUNTIME_MESSAGE_TYPE.StorageSet:
+				case PLUGIN_RUNTIME_MESSAGE_TYPE.StorageRemove:
+				case PLUGIN_RUNTIME_MESSAGE_TYPE.StorageGetSharedGenerationConfig:
+				case PLUGIN_RUNTIME_MESSAGE_TYPE.StorageSetSharedGenerationConfig:
+				case PLUGIN_RUNTIME_MESSAGE_TYPE.StorageRemoveSharedGenerationConfig:
+					handlePluginStorageMessage(
+						data,
+						withPluginStorageKey,
+						sharedGenerationConfigStorageKey,
+						postPluginMessage,
+					)
+					return
+				case PLUGIN_RUNTIME_MESSAGE_TYPE.Error:
+					toast.error(data.message)
+					return
+				case PLUGIN_RUNTIME_MESSAGE_TYPE.Toast:
+					showPluginToast(data)
+					return
 			}
 		}
 
@@ -510,6 +398,101 @@ export function usePluginRuntimeBridge({
 		setFilePickerRequest,
 		setFrameHeight,
 	])
+}
+
+function handlePluginStorageMessage(
+	data: Extract<
+		PluginRuntimeMessage,
+		{
+			requestId: string
+			type:
+				| typeof PLUGIN_RUNTIME_MESSAGE_TYPE.StorageGet
+				| typeof PLUGIN_RUNTIME_MESSAGE_TYPE.StorageSet
+				| typeof PLUGIN_RUNTIME_MESSAGE_TYPE.StorageRemove
+				| typeof PLUGIN_RUNTIME_MESSAGE_TYPE.StorageGetSharedGenerationConfig
+				| typeof PLUGIN_RUNTIME_MESSAGE_TYPE.StorageSetSharedGenerationConfig
+				| typeof PLUGIN_RUNTIME_MESSAGE_TYPE.StorageRemoveSharedGenerationConfig
+		}
+	>,
+	resolveStorageKey: (key: string) => string,
+	sharedGenerationConfigStorageKey: string,
+	postPluginMessage: (message: Record<string, unknown>, transfer?: Transferable[]) => void,
+) {
+	const resultType =
+		PLUGIN_RUNTIME_RESULT_TYPE_BY_MESSAGE_TYPE[
+			data.type as keyof typeof PLUGIN_RUNTIME_RESULT_TYPE_BY_MESSAGE_TYPE
+		]
+	try {
+		switch (data.type) {
+			case PLUGIN_RUNTIME_MESSAGE_TYPE.StorageGet:
+				postPluginMessage({
+					type: PLUGIN_RUNTIME_RESULT_MESSAGE_TYPE.StorageGet,
+					requestId: data.requestId,
+					value: window.localStorage.getItem(resolveStorageKey(data.key)),
+				})
+				return
+			case PLUGIN_RUNTIME_MESSAGE_TYPE.StorageSet:
+				window.localStorage.setItem(resolveStorageKey(data.key), data.value)
+				postPluginMessage({
+					type: PLUGIN_RUNTIME_RESULT_MESSAGE_TYPE.StorageSet,
+					requestId: data.requestId,
+				})
+				return
+			case PLUGIN_RUNTIME_MESSAGE_TYPE.StorageRemove:
+				window.localStorage.removeItem(resolveStorageKey(data.key))
+				postPluginMessage({
+					type: PLUGIN_RUNTIME_RESULT_MESSAGE_TYPE.StorageRemove,
+					requestId: data.requestId,
+				})
+				return
+			case PLUGIN_RUNTIME_MESSAGE_TYPE.StorageGetSharedGenerationConfig:
+				postPluginMessage({
+					type: PLUGIN_RUNTIME_RESULT_MESSAGE_TYPE.StorageGetSharedGenerationConfig,
+					requestId: data.requestId,
+					value: window.localStorage.getItem(sharedGenerationConfigStorageKey),
+				})
+				return
+			case PLUGIN_RUNTIME_MESSAGE_TYPE.StorageSetSharedGenerationConfig:
+				window.localStorage.setItem(sharedGenerationConfigStorageKey, data.value)
+				postPluginMessage({
+					type: PLUGIN_RUNTIME_RESULT_MESSAGE_TYPE.StorageSetSharedGenerationConfig,
+					requestId: data.requestId,
+				})
+				return
+			case PLUGIN_RUNTIME_MESSAGE_TYPE.StorageRemoveSharedGenerationConfig:
+				window.localStorage.removeItem(sharedGenerationConfigStorageKey)
+				postPluginMessage({
+					type: PLUGIN_RUNTIME_RESULT_MESSAGE_TYPE.StorageRemoveSharedGenerationConfig,
+					requestId: data.requestId,
+				})
+				return
+		}
+	} catch (error) {
+		postPluginMessage({
+			type: resultType,
+			requestId: data.requestId,
+			error: getErrorMessage(error),
+		})
+	}
+}
+
+function showPluginToast(
+	data: Extract<PluginRuntimeMessage, { type: typeof PLUGIN_RUNTIME_MESSAGE_TYPE.Toast }>,
+) {
+	const toastType = data.toastType ?? "info"
+	if (toastType === "success") {
+		toast.success(data.message)
+		return
+	}
+	if (toastType === "warning") {
+		toast.warning(data.message)
+		return
+	}
+	if (toastType === "error") {
+		toast.error(data.message)
+		return
+	}
+	toast(data.message)
 }
 
 function resolvePluginFilePickerAnchorPosition(
