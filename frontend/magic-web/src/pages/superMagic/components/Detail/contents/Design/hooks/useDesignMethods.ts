@@ -171,6 +171,7 @@ export function useDesignMethods(options: UseDesignMethodsOptions): CanvasDesign
 		currentFile,
 		flatAttachments,
 		getFileInfoById,
+		setFileInfoCache,
 		updateAttachments,
 		getOrCreateImagesDir,
 	})

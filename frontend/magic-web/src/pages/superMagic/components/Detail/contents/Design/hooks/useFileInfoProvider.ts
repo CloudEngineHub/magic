@@ -58,7 +58,11 @@ interface UseFileInfoProviderReturn {
 		fileName?: string,
 		fileSize?: number,
 	) => Promise<GetFileInfoResponseWithFileId>
-	setFileInfoCache: (path: string, fileInfo: GetFileInfoResponse) => void
+	setFileInfoCache: (
+		path: string,
+		fileInfo: GetFileInfoResponse,
+		options?: { allowMissingAttachment?: boolean },
+	) => void
 }
 
 function createFileNotFoundByPathError(path: string, message: string): Error {
@@ -245,7 +249,11 @@ export function useFileInfoProvider(
 	 * 用于外部直接设置缓存，避免重复调用 API
 	 */
 	const setFileInfoCache = useCallback(
-		(path: string, fileInfo: GetFileInfoResponse) => {
+		(
+			path: string,
+			fileInfo: GetFileInfoResponse,
+			opts?: { allowMissingAttachment?: boolean },
+		) => {
 			setSharedFileInfoCache(
 				path,
 				fileInfo,
@@ -253,6 +261,7 @@ export function useFileInfoProvider(
 				designProjectBasePath,
 				designProjectId,
 				attachmentIndex,
+				opts,
 			)
 		},
 		[flatAttachments, designProjectBasePath, designProjectId, attachmentIndex],

@@ -481,6 +481,9 @@
 		"selection": "选择工具",
 		"space": "空格",
 		"text": "文本",
+		"upload": "上传",
+		"uploadImage": "上传图片",
+		"uploadVideo": "上传视频",
 		"videoGenerator": "视频生成"
 	},
 	"triangle": {

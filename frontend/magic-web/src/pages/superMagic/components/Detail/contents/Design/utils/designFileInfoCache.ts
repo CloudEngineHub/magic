@@ -49,6 +49,8 @@ const BATCH_REQUEST_WINDOW_MS = 100
 const MAX_GET_FILE_URL_BATCH_SIZE = 100
 // 默认缓存时间 15 分钟
 const DEFAULT_TTL_MS = 15 * 60 * 1000
+// 上传已保存但附件树尚未刷回时的短期桥接窗口。
+const OPTIMISTIC_UPLOAD_CACHE_TTL_MS = 15 * 1000
 // 旧 localStorage 存储 key：仅用于一次性迁移到 IndexedDB，后续不再写入这个大 JSON。
 const FILE_INFO_STORAGE_KEY = "MAGIC:supermagic-design:file-info-cache:v3"
 const LEGACY_FILE_INFO_STORAGE_KEY = "MAGIC:supermagic-design:file-info-cache"
@@ -69,6 +71,9 @@ interface CacheEntry {
 	cachedAt?: number
 	// 记录当前 path 在最近一次解析时对应的 file_id，用于识别“同路径文件被替换”
 	resolvedFileId?: string
+	// 上传完成但附件快照尚未刷新时，允许短暂命中当前 path。
+	allowMissingAttachment?: boolean
+	optimisticMissingAttachmentAllowedUntil?: number
 }
 
 interface PersistedFileInfoCachePayload {
@@ -162,6 +167,23 @@ function isCachedFileInfoExpired(entry: CacheEntry): boolean {
 		return false
 	}
 	return Date.now() - entry.cachedAt >= DEFAULT_TTL_MS
+}
+
+function isOptimisticMissingAttachmentAllowed(entry: CacheEntry): boolean {
+	return (
+		entry.allowMissingAttachment === true &&
+		typeof entry.optimisticMissingAttachmentAllowedUntil === "number" &&
+		Date.now() < entry.optimisticMissingAttachmentAllowedUntil
+	)
+}
+
+function isOptimisticMissingAttachmentExpired(
+	entry: CacheEntry,
+	fileItem: FileItem | null,
+): boolean {
+	if (fileItem) return false
+	if (entry.allowMissingAttachment !== true) return false
+	return !isOptimisticMissingAttachmentAllowed(entry)
 }
 
 function isPreviewWatermarkSignatureStale(entry: CacheEntry): boolean {
@@ -261,14 +283,23 @@ function setMemoryCache(
 	resolvedFileId?: string,
 	previewWatermarkSignature: string = getPreviewFileUrlWatermarkSignature(),
 	attachmentsSnapshotKey?: string,
+	options?: { allowMissingAttachment?: boolean },
 ): void {
+	const now = Date.now()
+	const allowMissingAttachment = options?.allowMissingAttachment === true
 	trackScopedCacheKey(cacheKey)
 	fileInfoCache.set(cacheKey, {
 		fileInfo,
 		previewWatermarkSignature,
 		attachmentsSnapshotKey,
 		resolvedFileId,
-		...(fileInfo.expires_at ? {} : { cachedAt: Date.now() }),
+		...(allowMissingAttachment
+			? {
+					allowMissingAttachment: true,
+					optimisticMissingAttachmentAllowedUntil: now + OPTIMISTIC_UPLOAD_CACHE_TTL_MS,
+				}
+			: {}),
+		...(fileInfo.expires_at ? {} : { cachedAt: now }),
 	})
 }
 
@@ -502,7 +533,7 @@ function shouldInvalidateCachedEntry(
 		return false
 	}
 	if (!fileItem) {
-		return true
+		return !isOptimisticMissingAttachmentAllowed(entry)
 	}
 	// 同一路径解析出了新的 file_id，说明发生了同名替换，旧 URL 必须丢弃。
 	if (entry.resolvedFileId && entry.resolvedFileId !== fileItem.file_id) {
@@ -523,6 +554,7 @@ function getCachedEntryStaleReasons(
 		isAttachmentsSnapshotStale(entry, attachmentsSnapshotKey, hasFilesContext)
 			? "attachments-snapshot"
 			: null,
+		isOptimisticMissingAttachmentExpired(entry, fileItem) ? "optimistic-upload-window" : null,
 		shouldInvalidateCachedEntry(entry, fileItem, hasFilesContext)
 			? "attachment-mismatch"
 			: null,
@@ -905,6 +937,7 @@ export function setFileInfoCache(
 	designProjectBasePath?: string,
 	designProjectId?: string,
 	attachmentIndex?: DesignAttachmentIndex | null,
+	options?: { allowMissingAttachment?: boolean },
 ): void {
 	ensureStorageCacheLoaded()
 	if (!cacheEnabled) return
@@ -920,6 +953,14 @@ export function setFileInfoCache(
 	if (!targetCandidate) return
 
 	const cacheKey = buildScopedPathKey(targetCandidate.normalizedPath, designProjectId)
+	const fileInfoFileId = (fileInfo as { file_id?: unknown }).file_id
+	const resolvedFileId =
+		lookupResult?.fileItem.file_id ??
+		(typeof fileInfoFileId === "string"
+			? fileInfoFileId
+			: typeof fileInfoFileId === "number"
+				? String(fileInfoFileId)
+				: undefined)
 	const attachmentsSnapshotKey =
 		filesList && getStoreFiles(filesList).length > 0
 			? (attachmentIndex?.attachmentsSnapshotKey ?? buildAttachmentsSnapshotKey(filesList))
@@ -927,11 +968,14 @@ export function setFileInfoCache(
 	setMemoryCache(
 		cacheKey,
 		fileInfo,
-		lookupResult?.fileItem.file_id,
+		resolvedFileId,
 		getPreviewFileUrlWatermarkSignature(),
 		attachmentsSnapshotKey,
+		{ allowMissingAttachment: options?.allowMissingAttachment },
 	)
-	persistCacheEntriesToStorage([cacheKey])
+	if (!options?.allowMissingAttachment) {
+		persistCacheEntriesToStorage([cacheKey])
+	}
 }
 
 export function getFileInfoCache(
@@ -1120,6 +1164,9 @@ export function cleanupFileInfoCache(
 
 		// 附件列表里已经不存在这个相对路径，说明缓存已经脱离当前设计目录状态。
 		if (!currentFilePaths.has(parsedKey.normalizedPath)) {
+			if (isOptimisticMissingAttachmentAllowed(entry)) {
+				return
+			}
 			keysToDelete.push(cacheKey)
 			return
 		}

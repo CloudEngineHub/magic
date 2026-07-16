@@ -237,6 +237,101 @@ describe("getFileResourceMetaByPath", () => {
 		expect(getTemporaryDownloadUrl).not.toHaveBeenCalled()
 	})
 
+	it("serves optimistic upload cache only until attachment snapshot changes", async () => {
+		const oldFiles = [
+			fileItem({
+				file_id: "file-existing",
+				relative_file_path: "images/existing.png",
+				file_name: "existing.png",
+			}),
+		]
+		const cachedSrc = "https://example.test/new.png?signature=uploaded"
+
+		setFileInfoCache(
+			"images/new.png",
+			{
+				src: cachedSrc,
+				fileName: "new.png",
+				expires_at: "2099-01-01T00:00:00Z",
+			},
+			oldFiles,
+			undefined,
+			"project-1",
+			undefined,
+			{ allowMissingAttachment: true },
+		)
+
+		const cachedInfo = await getFileInfoByPath("images/new.png", oldFiles, {
+			designProjectId: "project-1",
+			hasAttachmentSnapshot: true,
+		})
+
+		expect(cachedInfo?.src).toBe(cachedSrc)
+		expect(getTemporaryDownloadUrl).not.toHaveBeenCalled()
+
+		const nextFiles = [
+			fileItem({
+				file_id: "file-other",
+				relative_file_path: "images/other.png",
+				file_name: "other.png",
+			}),
+		]
+		await expect(
+			getFileInfoByPath("images/new.png", nextFiles, {
+				designProjectId: "project-1",
+				hasAttachmentSnapshot: true,
+			}),
+		).resolves.toBeNull()
+	})
+
+	it("expires optimistic upload cache if attachments never include the uploaded path", async () => {
+		const startTime = new Date("2026-01-01T00:00:00Z").getTime()
+		const nowSpy = vi.spyOn(Date, "now")
+		const oldFiles = [
+			fileItem({
+				file_id: "file-existing",
+				relative_file_path: "images/existing.png",
+				file_name: "existing.png",
+			}),
+		]
+		const cachedSrc = "https://example.test/new.png?signature=uploaded"
+
+		try {
+			nowSpy.mockReturnValue(startTime)
+			setFileInfoCache(
+				"images/new.png",
+				{
+					src: cachedSrc,
+					fileName: "new.png",
+					expires_at: "2099-01-01T00:00:00Z",
+				},
+				oldFiles,
+				undefined,
+				"project-1",
+				undefined,
+				{ allowMissingAttachment: true },
+			)
+			cleanupFileInfoCache(oldFiles, "project-1", { hasAttachmentSnapshot: true })
+			await expect(
+				getFileInfoByPath("images/new.png", oldFiles, {
+					designProjectId: "project-1",
+					hasAttachmentSnapshot: true,
+				}),
+			).resolves.toMatchObject({ src: cachedSrc })
+
+			nowSpy.mockReturnValue(startTime + 15_001)
+			cleanupFileInfoCache(oldFiles, "project-1", { hasAttachmentSnapshot: true })
+			await expect(
+				getFileInfoByPath("images/new.png", oldFiles, {
+					designProjectId: "project-1",
+					hasAttachmentSnapshot: true,
+				}),
+			).resolves.toBeNull()
+		} finally {
+			nowSpy.mockRestore()
+		}
+	})
+
 	it("allows a previously missing path to load after attachments are restored", async () => {
 		vi.useFakeTimers()
 

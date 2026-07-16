@@ -481,6 +481,9 @@
 		"selection": "Selection Tool",
 		"space": "Space",
 		"text": "Text",
+		"upload": "Upload",
+		"uploadImage": "Upload Image",
+		"uploadVideo": "Upload Video",
 		"videoGenerator": "Video Generator"
 	},
 	"triangle": {

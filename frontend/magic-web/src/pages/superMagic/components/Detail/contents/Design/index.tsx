@@ -308,6 +308,7 @@ function DesignViewer(props: DesignViewerProps) {
 		useAttachments({
 			attachments,
 			attachmentList,
+			projectId: selectedTopic?.project_id,
 		})
 
 	const propsElements = props.data?.elements
