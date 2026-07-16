@@ -114,7 +114,7 @@ function SlidesTemplateMobileTagFilters({
 				open={isPanelOpen}
 				onOpenChange={handlePanelOpenChange}
 				title={panelTitle}
-				className="mx-auto h-[448px] max-w-[375px] border border-border [&_.mobile-popup-action-header]:mb-0"
+				className="mx-auto h-[80dvh] max-w-[375px] border border-border [&_.mobile-popup-action-header]:mb-0"
 				contentClassName="overflow-hidden px-[10px] pb-5 pt-2"
 				headerTrailingAction={
 					selectedTagCodes.length > 0
