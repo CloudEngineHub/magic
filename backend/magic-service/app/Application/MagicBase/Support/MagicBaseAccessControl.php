@@ -71,6 +71,18 @@ readonly class MagicBaseAccessControl
         return $this->buildActorContext($authorization, $projectId);
     }
 
+    /**
+     * Determine whether the real logged-in user can manage the project.
+     *
+     * This intentionally does not use the share runtime actor. A share token
+     * proves access to the shared project, but it must never make the share
+     * creator look like the current user for administrator checks.
+     */
+    public function isProjectManager(MagicUserAuthorization $authorization, int $projectId): bool
+    {
+        return $this->hasProjectManageRole($authorization, $projectId);
+    }
+
     public function requireReadableProject(MagicUserAuthorization $authorization, int $projectId): void
     {
         $this->requireProjectRole($authorization, $projectId, MemberRole::VIEWER, '无项目访问权限');

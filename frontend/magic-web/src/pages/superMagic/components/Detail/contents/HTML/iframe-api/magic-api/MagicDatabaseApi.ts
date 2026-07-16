@@ -31,6 +31,29 @@ export class MagicDatabaseApi extends BaseRuntimeBridgeApiPlugin {
 			},
 
 			/**
+			 * 获取当前真实登录用户的项目管理员权限。
+			 * 分享 token 只用于校验分享访问，不会把分享创建者当成当前用户。
+			 */
+			getProjectAdminAccess: (): Promise<{ project_id: string; is_admin: boolean }> => {
+				return this.request<{ project_id: string; is_admin: boolean }>(
+					"MAGIC_DB_GET_PROJECT_ADMIN_ACCESS_REQUEST",
+					{},
+					15000,
+					(data) => {
+						const content = data["content"]
+						if (!content || typeof content !== "object") {
+							throw new Error("Invalid project admin access response")
+						}
+						const value = content as { project_id?: unknown; is_admin?: unknown }
+						return {
+							project_id: String(value.project_id ?? ""),
+							is_admin: value.is_admin === true,
+						}
+					},
+				)
+			},
+
+			/**
 			 * 获取单张表详情（含字段定义）。
 			 * @param tableId 表 ID
 			 */

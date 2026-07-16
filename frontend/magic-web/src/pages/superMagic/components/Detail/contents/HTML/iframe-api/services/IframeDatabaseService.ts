@@ -12,6 +12,7 @@
 import {
 	DB_MESSAGE_TYPES,
 	type DBGetTablesRequest,
+	type DBGetProjectAdminAccessRequest,
 	type DBGetTableRequest,
 	type DBCreateRowRequest,
 	type DBQueryRowsRequest,
@@ -22,6 +23,7 @@ import {
 } from "../types"
 import {
 	getMagicBaseTables,
+	getMagicBaseProjectAdminAccess,
 	getMagicBaseTable,
 	createMagicBaseRow,
 	queryMagicBaseRows,
@@ -53,6 +55,9 @@ export class IframeDatabaseService {
 		switch (type) {
 			case DB_MESSAGE_TYPES.GET_TABLES_REQUEST:
 				await this.handleGetTables(payload as DBGetTablesRequest)
+				return true
+			case DB_MESSAGE_TYPES.GET_PROJECT_ADMIN_ACCESS_REQUEST:
+				await this.handleGetProjectAdminAccess(payload as DBGetProjectAdminAccessRequest)
 				return true
 			case DB_MESSAGE_TYPES.GET_TABLE_REQUEST:
 				await this.handleGetTable(payload as DBGetTableRequest)
@@ -109,6 +114,28 @@ export class IframeDatabaseService {
 				requestId,
 				success: false,
 				error: error instanceof Error ? error.message : "Failed to get tables",
+			})
+		}
+	}
+
+	private async handleGetProjectAdminAccess(req: DBGetProjectAdminAccessRequest) {
+		const { requestId } = req
+		try {
+			const projectId = this.getProjectIdOrThrow()
+			const access = await getMagicBaseProjectAdminAccess(projectId)
+			this.cfg.postToIframe({
+				type: DB_MESSAGE_TYPES.GET_PROJECT_ADMIN_ACCESS_RESPONSE,
+				requestId,
+				success: true,
+				content: access,
+			})
+		} catch (error) {
+			this.cfg.postToIframe({
+				type: DB_MESSAGE_TYPES.GET_PROJECT_ADMIN_ACCESS_RESPONSE,
+				requestId,
+				success: false,
+				error:
+					error instanceof Error ? error.message : "Failed to check project admin access",
 			})
 		}
 	}

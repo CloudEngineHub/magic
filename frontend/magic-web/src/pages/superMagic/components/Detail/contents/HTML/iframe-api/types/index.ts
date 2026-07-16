@@ -58,6 +58,8 @@ export type LLMMessageType = (typeof LLM_MESSAGE_TYPES)[keyof typeof LLM_MESSAGE
 export const DB_MESSAGE_TYPES = {
 	GET_TABLES_REQUEST: "MAGIC_DB_GET_TABLES_REQUEST",
 	GET_TABLES_RESPONSE: "MAGIC_DB_GET_TABLES_RESPONSE",
+	GET_PROJECT_ADMIN_ACCESS_REQUEST: "MAGIC_DB_GET_PROJECT_ADMIN_ACCESS_REQUEST",
+	GET_PROJECT_ADMIN_ACCESS_RESPONSE: "MAGIC_DB_GET_PROJECT_ADMIN_ACCESS_RESPONSE",
 	GET_TABLE_REQUEST: "MAGIC_DB_GET_TABLE_REQUEST",
 	GET_TABLE_RESPONSE: "MAGIC_DB_GET_TABLE_RESPONSE",
 	CREATE_ROW_REQUEST: "MAGIC_DB_CREATE_ROW_REQUEST",
@@ -382,6 +384,22 @@ export interface DBGetTablesResponse {
 	requestId: string
 	success: boolean
 	content?: unknown[]
+	error?: string
+}
+
+export interface DBGetProjectAdminAccessRequest {
+	type: typeof DB_MESSAGE_TYPES.GET_PROJECT_ADMIN_ACCESS_REQUEST
+	requestId: string
+}
+
+export interface DBGetProjectAdminAccessResponse {
+	type: typeof DB_MESSAGE_TYPES.GET_PROJECT_ADMIN_ACCESS_RESPONSE
+	requestId: string
+	success: boolean
+	content?: {
+		project_id: string
+		is_admin: boolean
+	}
 	error?: string
 }
 

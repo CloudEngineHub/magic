@@ -53,6 +53,44 @@ For data apps with ownership or collaboration:
 - When rendering edit/delete/archive/transfer buttons for creator-owned rows, request `created_by` through `select` and compare it with `context.userId`. Display names are not permission keys.
 - If `getContext()` fails, disable user-dependent create, edit, delete, ownership, and transfer operations and show an understandable error. Never write fake identities such as `unknown`, `guest`, `visitor`, `访客`, or `未命名用户` into MagicBase.
 
+## Micro-app Administrator Pages
+
+Use this pattern when a micro-app has pages such as an administrator dashboard, aggregate statistics, exports, or management tools that ordinary users must not open:
+
+- Set `app.json.anonymous` to `false`; administrator checks require a real login.
+- Put a shared `app.js` in the app root and declare page-relative paths:
+
+```javascript
+window.MagicAppConfig = {
+  admin_pages: ["admin.html", "statistics.html"],
+};
+```
+
+- Call `window.Magic.db.getProjectAdminAccess()` during startup. It is a host-bridged request to `GET /api/v1/magicbase/projects/{projectId}/admin-access`, so the host supplies the current project context, login authorization, and share token when applicable.
+- The backend evaluates the real logged-in user. A share token only proves access to the current project share and must never be used as the current user or share creator identity.
+- Hide administrator links on the home page when `is_admin` is false. Every administrator page must repeat the guard before loading its protected data; direct URL access must not bypass it.
+- Do not call administrator data endpoints before the guard resolves. Frontend hiding is not a substitute for MagicBase dynamic/static permissions or a backend authorization check.
+
+Recommended guard:
+
+```javascript
+window.MagicAppGuard = {
+  async requireAdminPage(pagePath) {
+    const pages = window.MagicAppConfig?.admin_pages || [];
+    if (!pages.includes(pagePath)) return true;
+
+    const access = await window.Magic.db.getProjectAdminAccess();
+    if (!access?.is_admin) {
+      window.location.replace("index.html");
+      return false;
+    }
+    return true;
+  },
+};
+```
+
+If a requested administrator rule depends on workflow state, cross-table membership, approval, hierarchy, time windows, quotas, or sensitive business validation, classify it as `requires_backend`; `admin_pages` only gates pages and does not implement those business rules.
+
 Recommended pattern:
 
 ```javascript
@@ -218,6 +256,15 @@ Destructive schema changes:
 ## MagicBase Runtime Database API (`window.Magic.db`)
 
 The HTML runtime database API only supports row-level operations on existing MagicBase tables. It does not create tables, create columns, or manage schema.
+
+It also exposes the read-only administrator check for the current project:
+
+```javascript
+const access = await window.Magic.db.getProjectAdminAccess();
+// { project_id: "...", is_admin: true|false }
+```
+
+This check uses the real logged-in user from `Authorization`. In a shared micro-app, the host may also send the share token so the backend can verify the shared project, but the share token/share creator is never treated as the current user.
 
 For data-oriented micro-apps, treat MagicBase persistence as the default. Surveys, forms, todos, CRUD apps, small admin panels, dashboards, trackers, and any app with user-submitted, editable, collected, analytical, searchable, exportable, or reusable data should prepare a MagicBase table before generating HTML. Skip persistence only for pure showcase/static pages, pure calculators, apps with no user data, or when the user explicitly says not to save data.
 

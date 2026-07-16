@@ -17,6 +17,20 @@ function withMagicBaseShareToken() {
 }
 
 /**
+ * 检查当前真实登录用户是否拥有当前项目的管理员权限。
+ * 分享 token 由 host 自动携带，但不会被当作管理员身份。
+ */
+export async function getMagicBaseProjectAdminAccess(projectId: string): Promise<{
+	project_id: string
+	is_admin: boolean
+}> {
+	return iframeClient.get(
+		`/api/v1/magicbase/projects/${projectId}/admin-access`,
+		withMagicBaseShareToken(),
+	)
+}
+
+/**
  * 获取项目下所有表。
  */
 export async function getMagicBaseTables(projectId: string): Promise<unknown[]> {

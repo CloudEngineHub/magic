@@ -62,6 +62,23 @@ describe("MagicDatabaseApi", () => {
 		await expect(promise).rejects.toThrow("Permission denied")
 	})
 
+	it("getProjectAdminAccess() resolves the current user's admin result", async () => {
+		const promise = (window as any).Magic.db.getProjectAdminAccess()
+
+		expect(postMessageSpy).toHaveBeenCalledOnce()
+		const [req] = postMessageSpy.mock.calls[0]
+		expect(req.type).toBe("MAGIC_DB_GET_PROJECT_ADMIN_ACCESS_REQUEST")
+
+		simulateResponse({
+			type: "MAGIC_DB_GET_PROJECT_ADMIN_ACCESS_RESPONSE",
+			requestId: req.requestId,
+			success: true,
+			content: { project_id: "project-1", is_admin: true },
+		})
+
+		await expect(promise).resolves.toEqual({ project_id: "project-1", is_admin: true })
+	})
+
 	// ─── getTable ───────────────────────────────────────────────────────────────
 
 	it("getTable() 发送 MAGIC_DB_GET_TABLE_REQUEST", async () => {

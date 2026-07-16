@@ -10,6 +10,7 @@ use Hyperf\HttpServer\Router\Router;
 
 Router::addGroup('/api/v1', static function () {
     Router::addGroup('/magicbase/projects/{projectId}', static function () {
+        Router::get('/admin-access', [MagicBaseApi::class, 'getProjectAdminAccess']);
         Router::post('/tables', [MagicBaseApi::class, 'createTable']);
         Router::get('/tables', [MagicBaseApi::class, 'listTables']);
         Router::get('/tables/{tableId}', [MagicBaseApi::class, 'getTable']);

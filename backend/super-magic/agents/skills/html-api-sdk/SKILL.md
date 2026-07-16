@@ -39,6 +39,8 @@ description: "Complete API reference for window.Magic.* in SuperMagic HTML micro
    }
    ```
 
+10. **Administrator page access is runtime-controlled** — when an app has administrator-only pages, put `window.MagicAppConfig.admin_pages` in the shared `app.js` and call `window.Magic.db.getProjectAdminAccess()` before loading each listed page. The result is based on the real logged-in user; a share token is only an access proof and is never a user identity.
+
 ---
 
 ## HTML Interaction Safety

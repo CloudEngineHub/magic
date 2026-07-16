@@ -477,6 +477,10 @@ declare global {
 		Magic: {
 			db?: {
 				getTables?: () => Promise<unknown[]>
+				getProjectAdminAccess?: () => Promise<{
+					project_id: string
+					is_admin: boolean
+				}>
 				getTable?: (tableId: string) => Promise<unknown>
 				createRow?: (
 					tableId: string,

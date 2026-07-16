@@ -16,6 +16,7 @@ use App\Application\MagicBase\Service\MagicBaseQueryAppService;
 use App\Application\MagicBase\Service\MagicBaseRelationAppService;
 use App\Application\MagicBase\Service\MagicBaseRowAppService;
 use App\Application\MagicBase\Service\MagicBaseTableAppService;
+use App\Application\MagicBase\Support\MagicBaseAccessControl;
 use App\Application\MagicBase\Support\MagicBaseRuntimeProjectAccessContext;
 use App\Domain\MagicBase\Exception\MagicBaseExceptionBuilder;
 use App\Infrastructure\Core\AbstractApi;
@@ -31,6 +32,7 @@ use App\Interfaces\MagicBase\DTO\UpdateTableRequest;
 use Dtyq\ApiResponse\Annotation\ApiResponse;
 use Dtyq\SuperMagic\Domain\Share\Constant\ResourceType;
 use Dtyq\SuperMagic\Domain\Share\Constant\ShareAccessType;
+use Dtyq\SuperMagic\Domain\Share\Entity\ResourceShareEntity;
 use Dtyq\SuperMagic\Domain\Share\Service\ResourceShareDomainService;
 use Dtyq\SuperMagic\Infrastructure\Utils\AccessTokenUtil;
 use Hyperf\Di\Annotation\Inject;
@@ -61,6 +63,9 @@ class MagicBaseApi extends AbstractApi
 
     #[Inject]
     protected ResourceShareDomainService $resourceShareDomainService;
+
+    #[Inject]
+    protected MagicBaseAccessControl $accessControl;
 
     public function createTable(RequestInterface $request, string $projectId)
     {
@@ -370,6 +375,45 @@ class MagicBaseApi extends AbstractApi
         );
     }
 
+    /**
+     * Check whether the current real user can access micro-app administrator pages.
+     *
+     * A share token is only used to validate that the request belongs to the
+     * shared project. The administrator decision always uses Authorization's
+     * real user and never the share creator/runtime actor.
+     */
+    public function getProjectAdminAccess(string $projectId): array
+    {
+        $projectId = self::parseId($projectId, '项目ID');
+        $authorization = $this->getOptionalCurrentAuthorization();
+        $shareToken = trim((string) $this->request->header('token', ''));
+
+        if ($shareToken !== '') {
+            $shareEntity = $this->resolveProjectShare($projectId, $shareToken);
+            if ($shareEntity->getShareType() === ShareAccessType::TeamShare->value) {
+                if ($authorization === null) {
+                    return [
+                        'project_id' => (string) $projectId,
+                        'is_admin' => false,
+                    ];
+                }
+
+                $this->resourceShareDomainService->validateShareAccess(
+                    $shareEntity,
+                    $authorization->getId(),
+                    $authorization->getOrganizationCode(),
+                    $shareEntity->getShareCode()
+                );
+            }
+        }
+
+        return [
+            'project_id' => (string) $projectId,
+            'is_admin' => $authorization !== null
+                && $this->accessControl->isProjectManager($authorization, $projectId),
+        ];
+    }
+
     private static function parseId(string $id, string $label): int
     {
         if (! ctype_digit($id)) {
@@ -385,6 +429,28 @@ class MagicBaseApi extends AbstractApi
             return $this->getAuthorization();
         }
 
+        $shareEntity = $this->resolveProjectShare($projectId, $shareToken);
+
+        $currentAuthorization = $this->getOptionalCurrentAuthorization();
+        if ($shareEntity->getShareType() === ShareAccessType::TeamShare->value) {
+            if ($currentAuthorization === null) {
+                $this->denyRuntimeAccess();
+            }
+
+            $this->resourceShareDomainService->validateShareAccess(
+                $shareEntity,
+                $currentAuthorization->getId(),
+                $currentAuthorization->getOrganizationCode(),
+                $shareEntity->getShareCode()
+            );
+            return $this->buildShareRuntimeAuthorization($projectId, $shareEntity->getOrganizationCode(), $currentAuthorization);
+        }
+
+        return $this->buildShareRuntimeAuthorization($projectId, $shareEntity->getOrganizationCode(), $currentAuthorization);
+    }
+
+    private function resolveProjectShare(int $projectId, string $shareToken): ResourceShareEntity
+    {
         if (! AccessTokenUtil::validate($shareToken)) {
             $this->denyRuntimeAccess();
         }
@@ -403,22 +469,7 @@ class MagicBaseApi extends AbstractApi
             $this->denyRuntimeAccess();
         }
 
-        $currentAuthorization = $this->getOptionalCurrentAuthorization();
-        if ($shareEntity->getShareType() === ShareAccessType::TeamShare->value) {
-            if ($currentAuthorization === null) {
-                $this->denyRuntimeAccess();
-            }
-
-            $this->resourceShareDomainService->validateShareAccess(
-                $shareEntity,
-                $currentAuthorization->getId(),
-                $currentAuthorization->getOrganizationCode(),
-                $shareEntity->getShareCode()
-            );
-            return $this->buildShareRuntimeAuthorization($projectId, $shareEntity->getOrganizationCode(), $currentAuthorization);
-        }
-
-        return $this->buildShareRuntimeAuthorization($projectId, $shareEntity->getOrganizationCode(), $currentAuthorization);
+        return $shareEntity;
     }
 
     private function buildShareRuntimeAuthorization(
