@@ -30,7 +30,10 @@ import { useNavigateToSuperHome } from "./hooks/useNavigateToSuperHome"
 import { isMagicApp } from "@/utils/devices"
 import { openAudioRecordingsInMagicApp } from "@/layouts/BaseLayout/utils/magicAppNavigation"
 import { useSlidesTemplateTotal } from "@/pages/superMagic/hooks/useSlidesTemplateTotal"
-import { useAnimatedNumber } from "@/pages/superMagic/hooks/useAnimatedNumber"
+import {
+	useAnimatedNumber,
+	useAnimatedNumberPulse,
+} from "@/pages/superMagic/hooks/useAnimatedNumber"
 import { formatNumber } from "@/utils/format"
 import { cn } from "@/lib/utils"
 
@@ -60,12 +63,14 @@ function SlidesTemplateCountBadge({
 	templateCount,
 	testId,
 	showCount = true,
+	isPulsing = false,
 	className,
 	badgeRef,
 }: {
 	templateCount: string
 	testId?: string
 	showCount?: boolean
+	isPulsing?: boolean
 	className?: string
 	badgeRef?: Ref<HTMLSpanElement>
 }) {
@@ -73,7 +78,9 @@ function SlidesTemplateCountBadge({
 		<span
 			ref={badgeRef}
 			className={cn(
-				"flex h-6 shrink-0 items-center gap-1 rounded-full bg-[#fff2ec] px-2 text-sm font-medium tabular-nums leading-none text-[#ff6a1f]",
+				"flex h-6 shrink-0 origin-left items-center gap-1 rounded-full bg-[#fff2ec] px-2 text-sm font-medium tabular-nums leading-none text-[#ff6a1f] transition-[transform,box-shadow] duration-700 ease-out",
+				isPulsing &&
+					"translate-x-1 rotate-[1deg] scale-[1.06] shadow-[0_0_0_3px_rgba(255,106,31,0.14)]",
 				className,
 			)}
 			data-testid={testId}
@@ -112,6 +119,7 @@ function SidebarContent({ collapsed }: SidebarContentProps) {
 	const slidesTemplateRowRef = useRef<HTMLDivElement>(null)
 	const slidesTemplateTotal = useSlidesTemplateTotal()
 	const animatedSlidesTemplateTotal = useAnimatedNumber(slidesTemplateTotal)
+	const isSlidesTemplateCountPulsing = useAnimatedNumberPulse(slidesTemplateTotal)
 	const slidesTemplateTitleRef = useRef<HTMLSpanElement>(null)
 	const slidesTemplateCountMeasureRef = useRef<HTMLSpanElement>(null)
 	const [shouldShowSlidesTemplateCount, setShouldShowSlidesTemplateCount] = useState(true)
@@ -206,7 +214,10 @@ function SidebarContent({ collapsed }: SidebarContentProps) {
 								data-testid="sidebar-content-slides-templates-tooltip"
 							>
 								<span>{title}</span>
-								<SlidesTemplateCountBadge templateCount={templateCount} />
+								<SlidesTemplateCountBadge
+									templateCount={templateCount}
+									isPulsing={isSlidesTemplateCountPulsing}
+								/>
 							</div>
 						),
 					}
@@ -252,6 +263,7 @@ function SidebarContent({ collapsed }: SidebarContentProps) {
 												templateCount={templateCount}
 												testId="sidebar-content-slides-templates-count"
 												showCount={shouldShowSlidesTemplateCount}
+												isPulsing={isSlidesTemplateCountPulsing}
 											/>
 										)}
 										{/* 始终测量完整徽标，不让数值的显示状态反过来影响宽度判断。 */}

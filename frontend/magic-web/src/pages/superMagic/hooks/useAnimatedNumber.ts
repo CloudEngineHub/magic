@@ -9,10 +9,12 @@ interface UseAnimatedNumberOptions {
 	duration?: number
 }
 
+const DEFAULT_PULSE_DURATION = 1200
+
 /** Uses the first server value directly, then animates subsequent changes. */
 export function useAnimatedNumber(
 	value: number | undefined,
-	{ duration = 0.8 }: UseAnimatedNumberOptions = {},
+	{ duration = 1.1 }: UseAnimatedNumberOptions = {},
 ) {
 	const prefersReducedMotion = useReducedMotion()
 	const [displayValue, setDisplayValue] = useState<number | undefined>(undefined)
@@ -61,4 +63,36 @@ export function useAnimatedNumber(
 	}, [duration, prefersReducedMotion, value])
 
 	return displayValue
+}
+
+/** Adds a short visual emphasis when an already-rendered number changes. */
+export function useAnimatedNumberPulse(
+	value: number | undefined,
+	duration = DEFAULT_PULSE_DURATION,
+) {
+	const prefersReducedMotion = useReducedMotion()
+	const [isPulsing, setIsPulsing] = useState(false)
+	const previousValueRef = useRef<number | undefined>(undefined)
+
+	useEffect(() => {
+		const previousValue = previousValueRef.current
+		previousValueRef.current = isValidNumber(value) ? value : undefined
+
+		if (
+			prefersReducedMotion ||
+			!isValidNumber(value) ||
+			previousValue === undefined ||
+			previousValue === value
+		) {
+			setIsPulsing(false)
+			return
+		}
+
+		setIsPulsing(true)
+		const timeoutId = window.setTimeout(() => setIsPulsing(false), duration)
+
+		return () => window.clearTimeout(timeoutId)
+	}, [duration, prefersReducedMotion, value])
+
+	return isPulsing
 }

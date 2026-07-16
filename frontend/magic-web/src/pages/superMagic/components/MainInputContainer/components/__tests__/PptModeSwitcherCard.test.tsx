@@ -9,9 +9,9 @@ import {
 import PptModeSwitcherCard from "../PptModeSwitcherCard"
 
 vi.mock("react-i18next", () => ({
-	Trans: ({ values }: { values: { count: string } }) => <>{values.count}</>,
 	useTranslation: () => ({
-		t: (key: string) => key,
+		t: (key: string, values?: { count?: string }) =>
+			key === "pptEmployee.delivered" ? `已交付 ${values?.count} 套` : key,
 	}),
 }))
 
@@ -28,6 +28,13 @@ vi.mock("@/pages/superMagic/hooks/useSlidesTemplateTotal", () => ({
 
 vi.mock("@/pages/superMagic/hooks/useAnimatedNumber", () => ({
 	useAnimatedNumber: (value: number | undefined) => value,
+	useAnimatedNumberPulse: () => false,
+}))
+
+vi.mock("@/pages/superMagic/components/AnimatedNumberText", () => ({
+	AnimatedNumberText: ({ value }: { value: number | undefined }) => (
+		<>{value?.toLocaleString("en-US")}</>
+	),
 }))
 
 vi.mock("@/pages/superMagic/hooks/useElementVisibility", () => ({
@@ -150,7 +157,7 @@ describe("PptModeSwitcherCard", () => {
 		render(<PptModeSwitcherCard modeItem={modeItem} isSelected onSelect={vi.fn()} />)
 
 		const deliveredCount = screen.getByTestId("ppt-mode-switcher-delivered-count")
-		expect(deliveredCount).toHaveTextContent("7,293")
+		expect(deliveredCount).toHaveTextContent("已交付7,293套")
 		expect(deliveredCount).toHaveClass("text-background/70")
 	})
 

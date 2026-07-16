@@ -99,6 +99,7 @@ vi.mock("@/pages/superMagic/hooks/useSlidesTemplateTotal", () => ({
 
 vi.mock("@/pages/superMagic/hooks/useAnimatedNumber", () => ({
 	useAnimatedNumber: useAnimatedNumberMock,
+	useAnimatedNumberPulse: () => false,
 }))
 
 vi.mock("../hooks/useNavigateToSuperHome", () => ({

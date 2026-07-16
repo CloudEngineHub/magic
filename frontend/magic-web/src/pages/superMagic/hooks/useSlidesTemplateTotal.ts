@@ -3,7 +3,7 @@ import useSWR from "swr"
 import { SuperMagicApi } from "@/apis"
 
 const SLIDES_TEMPLATE_STATISTICS_CACHE_KEY = "slides-template-statistics"
-export const SLIDES_TEMPLATE_STATISTICS_REFRESH_INTERVAL = 10000
+export const SLIDES_TEMPLATE_STATISTICS_REFRESH_INTERVAL = 5000
 
 interface StatisticsPollingSubscriber {
 	interval: number

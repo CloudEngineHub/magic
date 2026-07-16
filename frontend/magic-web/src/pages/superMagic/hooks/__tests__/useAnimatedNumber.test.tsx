@@ -1,6 +1,6 @@
 import { act, renderHook, waitFor } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
-import { useAnimatedNumber } from "../useAnimatedNumber"
+import { useAnimatedNumber, useAnimatedNumberPulse } from "../useAnimatedNumber"
 
 const motionMock = vi.hoisted(() => ({
 	animate: vi.fn(),
@@ -56,7 +56,7 @@ describe("useAnimatedNumber", () => {
 		expect(motionMock.animate).toHaveBeenCalledWith(
 			100,
 			130,
-			expect.objectContaining({ duration: 0.8, ease: "easeOut" }),
+			expect.objectContaining({ duration: 1.1, ease: "easeOut" }),
 		)
 	})
 
@@ -72,7 +72,7 @@ describe("useAnimatedNumber", () => {
 		expect(motionMock.animate).toHaveBeenCalledWith(
 			140,
 			125,
-			expect.objectContaining({ duration: 0.8 }),
+			expect.objectContaining({ duration: 1.1 }),
 		)
 	})
 
@@ -98,7 +98,7 @@ describe("useAnimatedNumber", () => {
 		expect(motionMock.animate).toHaveBeenLastCalledWith(
 			115,
 			140,
-			expect.objectContaining({ duration: 0.8 }),
+			expect.objectContaining({ duration: 1.1 }),
 		)
 	})
 
@@ -157,5 +157,24 @@ describe("useAnimatedNumber", () => {
 		act(() => unmount())
 
 		expect(stop).toHaveBeenCalledTimes(1)
+	})
+
+	it("emphasizes subsequent changes without pulsing the first value", () => {
+		vi.useFakeTimers()
+		try {
+			const { result, rerender } = renderHook(
+				({ value }: { value: number }) => useAnimatedNumberPulse(value),
+				{ initialProps: { value: 100 } },
+			)
+			expect(result.current).toBe(false)
+
+			rerender({ value: 101 })
+			expect(result.current).toBe(true)
+
+			act(() => vi.advanceTimersByTime(1200))
+			expect(result.current).toBe(false)
+		} finally {
+			vi.useRealTimers()
+		}
 	})
 })

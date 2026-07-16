@@ -61,7 +61,7 @@ describe("useSlidesTemplateTotal", () => {
 	})
 
 	it("uses a ten-second default refresh interval", () => {
-		expect(SLIDES_TEMPLATE_STATISTICS_REFRESH_INTERVAL).toBe(10000)
+		expect(SLIDES_TEMPLATE_STATISTICS_REFRESH_INTERVAL).toBe(5000)
 	})
 
 	it("refreshes visible statistics using the configured interval", async () => {
