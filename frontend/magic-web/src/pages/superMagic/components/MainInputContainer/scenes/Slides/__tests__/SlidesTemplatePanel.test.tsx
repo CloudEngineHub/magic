@@ -43,6 +43,7 @@ const useResolvedTemplateColorsMock = vi.hoisted(() =>
 )
 
 const useIsMobileMock = vi.hoisted(() => vi.fn(() => false))
+const useFinePointerHoverMock = vi.hoisted(() => vi.fn(() => false))
 
 vi.mock("@/apis", () => ({
 	SuperMagicApi: apiMock,
@@ -79,6 +80,10 @@ vi.mock("@/pages/superMagic/pages/SlidesTemplates/useResolvedTemplateColors", ()
 
 vi.mock("@/hooks/useIsMobile", () => ({
 	useIsMobile: useIsMobileMock,
+}))
+
+vi.mock("../../../panels/slides-preset/useFinePointerHover", () => ({
+	useFinePointerHover: useFinePointerHoverMock,
 }))
 
 const businessCategory: SlidesTemplateCategoryItem = {
@@ -157,6 +162,7 @@ describe("SlidesTemplatePanel", () => {
 	beforeEach(() => {
 		vi.clearAllMocks()
 		useIsMobileMock.mockReturnValue(false)
+		useFinePointerHoverMock.mockReturnValue(false)
 		sceneStateStoreMock.inputScopeKey = ""
 		sceneStateStoreMock.sendCount = 0
 		vi.mocked(SuperMagicApi.getSlidesTemplateCategories).mockResolvedValue({
@@ -222,7 +228,7 @@ describe("SlidesTemplatePanel", () => {
 			)
 			const lastContent = contentCalls.at(-1)?.[0] as JSONContent | undefined
 			expect(getPromptRichTextPlainText(lastContent)).toBe(
-				"Use slide template: Business Template (PPT-business).",
+				"Use slide template: Business Template (PPT-business), Size: 16:9, Language: auto.",
 			)
 		})
 	})
@@ -238,7 +244,7 @@ describe("SlidesTemplatePanel", () => {
 		expect(screen.queryByTestId("slides-template-panel-template-clear-button")).toBeNull()
 	})
 
-	it("removes the preset content when a controlled selection is cleared", async () => {
+	it("keeps default size and language when a controlled template selection is cleared", async () => {
 		const handlePresetContentChange = vi.fn()
 		const selectedTemplate = {
 			value: businessTemplate.code,
@@ -263,7 +269,7 @@ describe("SlidesTemplatePanel", () => {
 			)
 			const lastContent = contentCalls.at(-1)?.[0] as JSONContent | undefined
 			expect(getPromptRichTextPlainText(lastContent)).toBe(
-				"Use slide template: Business Template (PPT-business).",
+				"Use slide template: Business Template (PPT-business), Size: 16:9, Language: auto.",
 			)
 		})
 
@@ -276,7 +282,10 @@ describe("SlidesTemplatePanel", () => {
 		)
 
 		await waitFor(() => {
-			expect(handlePresetContentChange.mock.calls.at(-1)?.[0]).toBeUndefined()
+			const lastContent = handlePresetContentChange.mock.calls.at(-1)?.[0] as
+				| JSONContent
+				| undefined
+			expect(getPromptRichTextPlainText(lastContent)).toBe("Size: 16:9, Language: auto.")
 		})
 	})
 
@@ -315,6 +324,12 @@ describe("SlidesTemplatePanel", () => {
 		expect(screen.getByText("16:9")).toBeInTheDocument()
 		expect(screen.getByText("语言")).toBeInTheDocument()
 		expect(screen.getByText("中文")).toBeInTheDocument()
+		expect(
+			screen.getByTestId("slides-template-home-replace-selected-template"),
+		).toBeInTheDocument()
+		expect(
+			screen.getByTestId("slides-template-home-clear-selected-template"),
+		).toBeInTheDocument()
 
 		fireEvent.click(screen.getByTestId("slides-template-home-preview-selected-template"))
 		expect(screen.getByTestId("slides-preset-preview-dialog-content")).toBeInTheDocument()
@@ -344,6 +359,25 @@ describe("SlidesTemplatePanel", () => {
 		expect(screen.getByTitle("#182A5A")).toHaveStyle({ backgroundColor: "#182A5A" })
 	})
 
+	it("keeps template actions visible on touch-first devices", () => {
+		useFinePointerHoverMock.mockReturnValue(false)
+
+		render(
+			<SlidesTemplateHomeSelectionPreview
+				template={{ value: "woodland", label: "Woodland Storybook" }}
+				filters={[]}
+				onClear={vi.fn()}
+				onFilterChange={vi.fn()}
+				onTemplatePickerContainerChange={vi.fn()}
+			/>,
+		)
+
+		const actions = screen.getByTestId("slides-template-home-actions")
+		expect(actions).toHaveAttribute("data-interaction-mode", "touch")
+		expect(actions).toHaveClass("opacity-100")
+		expect(actions).not.toHaveClass("pointer-events-none")
+	})
+
 	it("shows the AI automatic template placeholder when no template is selected", async () => {
 		render(<SlidesTemplateHomeSelectionPreview filters={[]} onFilterChange={vi.fn()} />)
 
@@ -370,7 +404,7 @@ describe("SlidesTemplatePanel", () => {
 		expect(chooseTemplateButton).toHaveTextContent(
 			"playbook.edit.presets.form.selectOrAutoSelectTemplate",
 		)
-		expect(chooseTemplateButton).toHaveAttribute("aria-haspopup", "menu")
+		expect(chooseTemplateButton).toHaveAttribute("aria-haspopup", "dialog")
 	})
 
 	it("highlights the template area and requests a random template on drop", () => {
@@ -451,34 +485,74 @@ describe("SlidesTemplatePanel", () => {
 		)
 	})
 
-	it("does not mount the template dropdown until the clear click has completed", async () => {
-		function SelectionPreview() {
-			const [template, setTemplate] = useState<OptionItem | null>({
-				value: "woodland",
-				label: "Woodland Storybook",
-			})
+	it("opens the template picker from the selected template hover action", async () => {
+		useFinePointerHoverMock.mockReturnValue(true)
+		const handleClear = vi.fn()
+		const handleTemplatePickerContainerChange = vi.fn()
+		const handleTemplatePickerOpenChange = vi.fn()
+		const { rerender } = render(
+			<SlidesTemplateHomeSelectionPreview
+				template={{ value: "woodland", label: "Woodland Storybook" }}
+				filters={[]}
+				onClear={handleClear}
+				onFilterChange={vi.fn()}
+				onTemplatePickerContainerChange={handleTemplatePickerContainerChange}
+				templatePickerOpen={false}
+				onTemplatePickerOpenChange={handleTemplatePickerOpenChange}
+			/>,
+		)
 
-			return (
-				<SlidesTemplateHomeSelectionPreview
-					template={template}
-					filters={[]}
-					onClear={() => setTemplate(null)}
-					onFilterChange={vi.fn()}
-					onTemplatePickerContainerChange={vi.fn()}
-				/>
-			)
-		}
+		const replaceButton = screen.getByTestId("slides-template-home-replace-selected-template")
+		expect(replaceButton).toHaveAttribute("aria-expanded", "false")
+		fireEvent.pointerEnter(screen.getByTestId("slides-template-home-thumbnail"))
+		fireEvent.click(replaceButton)
 
-		render(<SelectionPreview />)
+		expect(handleTemplatePickerOpenChange).toHaveBeenCalledWith(true)
+		rerender(
+			<SlidesTemplateHomeSelectionPreview
+				template={{ value: "woodland", label: "Woodland Storybook" }}
+				filters={[]}
+				onClear={handleClear}
+				onFilterChange={vi.fn()}
+				onTemplatePickerContainerChange={handleTemplatePickerContainerChange}
+				templatePickerOpen
+				onTemplatePickerOpenChange={handleTemplatePickerOpenChange}
+			/>,
+		)
 
-		const clearButton = screen.getByTestId("slides-template-home-clear-selected-template")
-		fireEvent.pointerDown(clearButton)
-		fireEvent.click(clearButton)
+		expect(
+			screen.getByTestId("slides-template-home-replace-selected-template"),
+		).toHaveAttribute("aria-expanded", "true")
+		expect(handleClear).not.toHaveBeenCalled()
+		await waitFor(() =>
+			expect(handleTemplatePickerContainerChange).toHaveBeenCalledWith(
+				expect.any(HTMLDivElement),
+			),
+		)
+		const thumbnail = screen.getByTestId("slides-template-home-thumbnail")
 
-		expect(screen.queryByTestId("slides-template-home-choose-template")).toBeNull()
-		expect(await screen.findByTestId("slides-template-home-choose-template")).toHaveAttribute(
-			"aria-expanded",
-			"false",
+		rerender(
+			<SlidesTemplateHomeSelectionPreview
+				template={{ value: "business", label: "Business Template" }}
+				filters={[]}
+				onClear={handleClear}
+				onFilterChange={vi.fn()}
+				onTemplatePickerContainerChange={handleTemplatePickerContainerChange}
+				templatePickerOpen={false}
+				onTemplatePickerOpenChange={handleTemplatePickerOpenChange}
+			/>,
+		)
+
+		await waitFor(() => expect(replaceButton).toHaveAttribute("aria-expanded", "false"))
+		expect(screen.getByTestId("slides-template-home-actions")).toHaveClass(
+			"pointer-events-none",
+			"opacity-0",
+		)
+
+		fireEvent.pointerLeave(thumbnail)
+		fireEvent.pointerEnter(thumbnail)
+		expect(screen.getByTestId("slides-template-home-actions")).not.toHaveClass(
+			"pointer-events-none",
 		)
 	})
 
@@ -511,7 +585,7 @@ describe("SlidesTemplatePanel", () => {
 		)
 
 		const pickerTrigger = screen.getByTestId("slides-template-home-choose-template")
-		fireEvent.keyDown(pickerTrigger, { key: "Enter" })
+		fireEvent.click(pickerTrigger)
 		expect(pickerTrigger).toHaveAttribute("aria-expanded", "true")
 
 		fireEvent.keyDown(document, { key: "Escape" })

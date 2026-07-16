@@ -10,10 +10,32 @@ import {
 	ContextMenuContent,
 	ContextMenuPortal,
 } from "@/components/shadcn-ui/context-menu"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/shadcn-ui/popover"
 import { cn } from "@/lib/utils"
 import { convertMenuItemsToComponents, convertPlacement } from "./utils"
 import type { MagicDropdownProps } from "./types"
 import { isUndefined } from "lodash-es"
+
+const NESTED_OVERLAY_SELECTOR = [
+	'[data-slot="dropdown-menu-content"]',
+	'[data-slot="select-content"]',
+	'[data-slot="popover-content"]',
+	'[data-slot="dialog-content"]',
+	'[data-slot="drawer-content"]',
+].join(",")
+
+function isNestedOverlayInteraction(event: Event) {
+	const outsideEvent = event as CustomEvent<{ originalEvent?: Event }>
+	const originalEvent = outsideEvent.detail?.originalEvent
+	const eventPath =
+		originalEvent && typeof originalEvent.composedPath === "function"
+			? originalEvent.composedPath()
+			: []
+
+	return [event.target, ...eventPath].some(
+		(node) => node instanceof Element && Boolean(node.closest(NESTED_OVERLAY_SELECTOR)),
+	)
+}
 
 /**
  * MagicDropdownDesktop - 桌面端下拉菜单实现
@@ -32,6 +54,8 @@ function MagicDropdownDesktop({
 	open,
 	onOpenChange,
 	onInteractOutside,
+	keepOpenOnNestedOverlay = false,
+	contentRole = "menu",
 	onEscapeKeyDown,
 	popupRender,
 	getPopupContainer,
@@ -96,6 +120,16 @@ function MagicDropdownDesktop({
 			onOpenChange?.(nextOpen)
 		},
 		[isContextMenu, isOpenControlled, onOpenChange],
+	)
+
+	const handleDropdownInteractOutside = useCallback(
+		(event: Parameters<NonNullable<MagicDropdownProps["onInteractOutside"]>>[0]) => {
+			if (keepOpenOnNestedOverlay && isNestedOverlayInteraction(event)) {
+				event.preventDefault()
+			}
+			onInteractOutside?.(event)
+		},
+		[keepOpenOnNestedOverlay, onInteractOutside],
 	)
 
 	// 合并各触发方式的 open 状态，统一传给 DropdownMenu
@@ -229,7 +263,7 @@ function MagicDropdownDesktop({
 						<ContextMenuContent
 							className={contentClassName}
 							style={overlayStyle}
-							onInteractOutside={onInteractOutside}
+							onInteractOutside={handleDropdownInteractOutside}
 							onEscapeKeyDown={onEscapeKeyDown}
 						>
 							{content}
@@ -237,6 +271,34 @@ function MagicDropdownDesktop({
 						ContextMenuPortal,
 					)}
 			</ContextMenu>
+		)
+	}
+
+	if (contentRole === "panel") {
+		return (
+			<Popover
+				open={effectiveOpen}
+				onOpenChange={handleDropdownOpenChange}
+				modal={isUndefined(model) ? false : model}
+			>
+				<PopoverTrigger asChild className={rootClassName}>
+					{children}
+				</PopoverTrigger>
+				{(hasMenuItems || popupRender) && (
+					<PopoverContent
+						container={dropdownContainer ?? undefined}
+						side={side}
+						align={align}
+						className={contentClassName}
+						style={overlayStyle}
+						onInteractOutside={handleDropdownInteractOutside}
+						onEscapeKeyDown={onEscapeKeyDown}
+						onOpenAutoFocus={(event) => event.preventDefault()}
+					>
+						{content}
+					</PopoverContent>
+				)}
+			</Popover>
 		)
 	}
 
@@ -254,7 +316,7 @@ function MagicDropdownDesktop({
 					align={align}
 					className={contentClassName}
 					style={overlayStyle}
-					onInteractOutside={onInteractOutside}
+					onInteractOutside={handleDropdownInteractOutside}
 					onEscapeKeyDown={onEscapeKeyDown}
 					onMouseEnter={isHover ? handleMouseEnter : undefined}
 					onMouseLeave={isHover ? handleMouseLeave : undefined}

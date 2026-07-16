@@ -195,6 +195,14 @@ const slidesStaticFields: NonNullable<FieldPanelConfig["field"]>["items"] = [
 		data_key: "pages",
 		label: { zh_CN: "页数", en_US: "Pages" },
 		default_value: "",
+		custom_input: {
+			type: "number",
+			min: 1,
+			step: 1,
+			integer: true,
+			placeholder: { zh_CN: "请输入页数", en_US: "Enter pages" },
+			unit: { zh_CN: "页", en_US: "pages" },
+		},
 		options: [
 			{ value: "1-5", label: "1-5" },
 			{ value: "6-10", label: "6-10" },
@@ -204,6 +212,7 @@ const slidesStaticFields: NonNullable<FieldPanelConfig["field"]>["items"] = [
 	{
 		data_key: "size",
 		label: { zh_CN: "尺寸", en_US: "Size" },
+		default_value: "16:9",
 		options: [
 			{ value: "16:9", label: "16:9" },
 			{ value: "4:3", label: "4:3" },
@@ -213,7 +222,7 @@ const slidesStaticFields: NonNullable<FieldPanelConfig["field"]>["items"] = [
 	{
 		data_key: "language",
 		label: { zh_CN: "语言", en_US: "Language" },
-		default_value: "",
+		default_value: "auto",
 		options: [
 			{ value: "auto", label: { zh_CN: "自动", en_US: "Auto" } },
 			{ value: "zh", label: { zh_CN: "中文", en_US: "Chinese" } },

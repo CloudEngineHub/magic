@@ -1,7 +1,7 @@
 import { fireEvent, render, screen } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import type { ReactNode } from "react"
-import SidebarContent from "../SidebarContent"
+import SidebarContent, { canShowSlidesTemplateCount } from "../SidebarContent"
 
 const { mockIsMagicApp, navigateMock, changeBottomTabMock } = vi.hoisted(() => ({
 	mockIsMagicApp: vi.fn(),
@@ -232,23 +232,41 @@ describe("SidebarContent slides templates count", () => {
 		renderSidebarContent(true)
 
 		expect(screen.getByTestId("sidebar-content-slides-templates-button")).toHaveClass(
-			"!bg-[#fff2ec]",
 			"!text-[#ff6a1f]",
+			"hover:!bg-[#fff2ec]",
 		)
 		expect(screen.getByTestId("sidebar-content-slides-templates-tooltip")).toHaveTextContent(
 			"sidebar:slidesTemplates.title101,582 套",
 		)
 	})
 
-	it("keeps the highlighted template count beside the title when expanded", () => {
+	it("keeps the template count badge beside the title when expanded", () => {
 		renderSidebarContent()
 
 		expect(screen.getByTestId("sidebar-content-slides-templates-count")).toHaveTextContent(
 			"101,582 套",
 		)
+		expect(screen.getByTestId("sidebar-content-slides-templates-count-value")).toBeVisible()
+		const title = screen.getByText("sidebar:slidesTemplates.title")
+		const countBadge = screen.getByTestId("sidebar-content-slides-templates-count")
+		expect(title).toHaveClass("shrink")
+		expect(title).not.toHaveClass("flex-1")
+		expect(title.nextElementSibling).toBe(countBadge)
 		expect(screen.getByTestId("sidebar-content-slides-templates-button")).not.toHaveClass(
 			"!bg-[#fff2ec]",
 		)
 		expect(screen.queryByTestId("sidebar-content-slides-templates-tooltip")).toBeNull()
+	})
+
+	it("uses the measured content width instead of a fixed sidebar breakpoint", () => {
+		const contentWidth = {
+			iconWidth: 16,
+			titleWidth: 48,
+			countWidth: 104,
+			gap: 8,
+		}
+
+		expect(canShowSlidesTemplateCount({ availableWidth: 184, ...contentWidth })).toBe(true)
+		expect(canShowSlidesTemplateCount({ availableWidth: 182, ...contentWidth })).toBe(false)
 	})
 })

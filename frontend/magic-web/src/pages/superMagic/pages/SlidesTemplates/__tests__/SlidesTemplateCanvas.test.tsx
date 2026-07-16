@@ -831,7 +831,7 @@ describe("SlidesTemplateCanvas", () => {
 		}
 	})
 
-	it("keeps the current viewport unchanged when an appended page arrives", async () => {
+	it("keeps existing cards fixed while an appended page fills a visible gap", async () => {
 		const rectSpy = vi
 			.spyOn(HTMLElement.prototype, "getBoundingClientRect")
 			.mockReturnValue(CANVAS_RECT)
@@ -860,9 +860,10 @@ describe("SlidesTemplateCanvas", () => {
 			rerender(<SlidesTemplateCanvas {...props} templates={appendedTemplates} />)
 
 			await waitFor(() => {
-				expect(getVisibleTemplateSnapshot()).toEqual(initialSnapshot)
+				const appendedSnapshot = getVisibleTemplateSnapshot()
+				expect(initialSnapshot.every((item) => appendedSnapshot.includes(item))).toBe(true)
 			})
-			expect(screen.queryByAltText("Template 41")).not.toBeInTheDocument()
+			expect(screen.getByAltText("Template 48")).toBeInTheDocument()
 		} finally {
 			rectSpy.mockRestore()
 		}

@@ -232,8 +232,18 @@ describe("slides template state", () => {
 		expect(items.map((item) => item.data_key)).toEqual(["style", "pages", "size", "language"])
 		expect(items.find((item) => item.data_key === "style")?.options).not.toEqual([])
 		expect(items.find((item) => item.data_key === "pages")?.options).not.toEqual([])
-		expect(items.find((item) => item.data_key === "size")?.options).not.toEqual([])
-		expect(items.find((item) => item.data_key === "language")?.options).not.toEqual([])
+		expect(items.find((item) => item.data_key === "pages")?.custom_input).toMatchObject({
+			type: "number",
+			min: 1,
+			step: 1,
+			integer: true,
+		})
+		const sizeField = items.find((item) => item.data_key === "size")
+		const languageField = items.find((item) => item.data_key === "language")
+		expect(sizeField?.options).not.toEqual([])
+		expect(sizeField?.default_value).toBe("16:9")
+		expect(languageField?.options).not.toEqual([])
+		expect(languageField?.default_value).toBe("auto")
 	})
 
 	it("maps API template fields and removes empty media URLs", () => {

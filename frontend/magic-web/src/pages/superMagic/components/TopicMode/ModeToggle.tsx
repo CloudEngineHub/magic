@@ -32,6 +32,7 @@ import { useIsMobile } from "@/hooks/use-mobile"
 import { MessageEditorSize } from "../MessageEditor/types"
 import { CollapsibleDescription } from "../MessageEditor/components/ModelSwitch/components/CollapsibleDescription"
 import { DrawerTitle } from "@/components/shadcn-ui/drawer"
+import { shouldSuppressInputAutoFocusOnIPad } from "@/utils/inputFocusPolicy"
 import ModeAvatar from "../ModeAvatar"
 
 const TRIGGER_SIZE_MAP: Record<MessageEditorSize, string> = {
@@ -518,7 +519,11 @@ function ModeToggle({
 				className="relative w-fit min-w-0"
 				data-testid="super-message-editor-mode-toggle-root"
 			>
-				<div className="w-fit min-w-0 rounded-md" onClick={() => setOpen(true)} data-testid="set-open">
+				<div
+					className="w-fit min-w-0 rounded-md"
+					onClick={() => setOpen(true)}
+					data-testid="set-open"
+				>
 					{currentModeItem}
 				</div>
 				<MagicPopup
@@ -572,6 +577,9 @@ function ModeToggle({
 						side="top"
 						align="start"
 						className="z-dropdown w-auto overflow-hidden p-2.5 outline-none focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0"
+						onOpenAutoFocus={(event) => {
+							if (shouldSuppressInputAutoFocusOnIPad()) event.preventDefault()
+						}}
 					>
 						{modeListContent}
 					</PopoverContent>
@@ -598,6 +606,9 @@ function ModeToggle({
 					side="top"
 					align="start"
 					className="z-dropdown w-auto overflow-hidden p-2.5 outline-none focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0"
+					onOpenAutoFocus={(event) => {
+						if (shouldSuppressInputAutoFocusOnIPad()) event.preventDefault()
+					}}
 					onInteractOutside={(event) => {
 						const target = event.target as HTMLElement | null
 						if (target?.closest?.("[data-mode-confirm-popover='true']")) {

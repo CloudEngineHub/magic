@@ -1,4 +1,4 @@
-import { Suspense, lazy, useState, type MouseEvent } from "react"
+import { Suspense, lazy, useLayoutEffect, useRef, useState, type MouseEvent, type Ref } from "react"
 import { useLocation } from "react-router"
 import { ChevronRight, Home, LayoutGrid, MessageCircle, UsersRound } from "lucide-react"
 import { useTranslation } from "react-i18next"
@@ -31,22 +31,50 @@ import { isMagicApp } from "@/utils/devices"
 import { openAudioRecordingsInMagicApp } from "@/layouts/BaseLayout/utils/magicAppNavigation"
 import { useSlidesTemplateTotal } from "@/pages/superMagic/hooks/useSlidesTemplateTotal"
 import { formatNumber } from "@/utils/format"
+import { cn } from "@/lib/utils"
 
 const CollaborationProjectsPanel = lazy(
 	() =>
 		import("@/pages/superMagic/components/WorkspacesMenu/components/CollaborationProjectsPanel"),
 )
 
+export function canShowSlidesTemplateCount({
+	availableWidth,
+	iconWidth,
+	titleWidth,
+	countWidth,
+	gap,
+}: {
+	availableWidth: number
+	iconWidth: number
+	titleWidth: number
+	countWidth: number
+	gap: number
+}) {
+	const requiredWidth = iconWidth + titleWidth + countWidth + gap * 2
+	return requiredWidth <= availableWidth + 1
+}
+
 function SlidesTemplateCountBadge({
 	templateCount,
 	testId,
+	showCount = true,
+	className,
+	badgeRef,
 }: {
 	templateCount: string
 	testId?: string
+	showCount?: boolean
+	className?: string
+	badgeRef?: Ref<HTMLSpanElement>
 }) {
 	return (
 		<span
-			className="flex h-6 shrink-0 items-center gap-1 rounded-full bg-[#fff2ec] px-2 text-sm font-medium leading-none text-[#ff6a1f]"
+			ref={badgeRef}
+			className={cn(
+				"flex h-6 shrink-0 items-center gap-1 rounded-full bg-[#fff2ec] px-2 text-sm font-medium leading-none text-[#ff6a1f]",
+				className,
+			)}
 			data-testid={testId}
 		>
 			<img
@@ -55,7 +83,15 @@ function SlidesTemplateCountBadge({
 				aria-hidden="true"
 				className="h-4 w-4 object-contain"
 			/>
-			{templateCount}
+			{showCount && (
+				<span
+					data-testid={
+						testId ? "sidebar-content-slides-templates-count-value" : undefined
+					}
+				>
+					{templateCount}
+				</span>
+			)}
 		</span>
 	)
 }
@@ -73,6 +109,51 @@ function SidebarContent({ collapsed }: SidebarContentProps) {
 	const sidebarMarketMenuItems = useSidebarMarketMenuItems()
 	const { superRouteUrl, handleNavigateToSuperHome } = useNavigateToSuperHome()
 	const slidesTemplateTotal = useSlidesTemplateTotal()
+	const slidesTemplateRowRef = useRef<HTMLDivElement>(null)
+	const slidesTemplateTitleRef = useRef<HTMLSpanElement>(null)
+	const slidesTemplateCountMeasureRef = useRef<HTMLSpanElement>(null)
+	const [shouldShowSlidesTemplateCount, setShouldShowSlidesTemplateCount] = useState(true)
+	const slidesTemplateCount =
+		slidesTemplateTotal !== undefined
+			? t("slidesTemplates.templateCount", {
+					count: formatNumber(slidesTemplateTotal),
+				})
+			: null
+
+	useLayoutEffect(() => {
+		const row = slidesTemplateRowRef.current
+		const title = slidesTemplateTitleRef.current
+		const countBadge = slidesTemplateCountMeasureRef.current
+		if (!row || !title || !countBadge || !slidesTemplateCount || collapsed) return
+
+		const updateVisibility = () => {
+			const rowStyle = window.getComputedStyle(row)
+			const gap = Number.parseFloat(rowStyle.columnGap || rowStyle.gap) || 0
+			const icon = row.firstElementChild as HTMLElement | null
+			const iconWidth = icon?.getBoundingClientRect().width ?? 0
+			const titleWidth = title.scrollWidth
+			const countWidth = countBadge.getBoundingClientRect().width
+			const nextVisible = canShowSlidesTemplateCount({
+				availableWidth: row.clientWidth,
+				iconWidth,
+				titleWidth,
+				countWidth,
+				gap,
+			})
+
+			setShouldShowSlidesTemplateCount((current) =>
+				current === nextVisible ? current : nextVisible,
+			)
+		}
+
+		updateVisibility()
+		const resizeObserver = new ResizeObserver(updateVisibility)
+		resizeObserver.observe(row)
+		resizeObserver.observe(title)
+		resizeObserver.observe(countBadge)
+
+		return () => resizeObserver.disconnect()
+	}, [collapsed, slidesTemplateCount])
 
 	function shouldHandleAnchorClick(event: MouseEvent<HTMLAnchorElement>) {
 		return (
@@ -107,12 +188,7 @@ function SidebarContent({ collapsed }: SidebarContentProps) {
 		const title =
 			titleKey === "sidebar:superLobster.title" ? t(titleKey, clawBrandValues) : t(titleKey)
 		const isSlidesTemplateMenuItem = routeName === RouteName.SuperSlidesTemplates
-		const templateCount =
-			isSlidesTemplateMenuItem && slidesTemplateTotal !== undefined
-				? t("slidesTemplates.templateCount", {
-						count: formatNumber(slidesTemplateTotal),
-					})
-				: null
+		const templateCount = isSlidesTemplateMenuItem ? slidesTemplateCount : null
 		const tooltip = collapsed
 			? templateCount
 				? {
@@ -146,18 +222,46 @@ function SidebarContent({ collapsed }: SidebarContentProps) {
 						onClick={(event) => handleNavigateToRoute(routeName, event)}
 						className="text-current no-underline"
 					>
-						<Icon className="h-4 w-4 shrink-0" />
-						<span
-							className={`${templateCount ? "min-w-0" : "flex-1"} overflow-hidden text-ellipsis whitespace-nowrap text-left text-sm leading-5`}
-						>
-							{title}
-						</span>
-						{!collapsed && templateCount && (
-							// 数量提示紧跟标题，标题过长时由 flex 收缩并截断。
-							<SlidesTemplateCountBadge
-								templateCount={templateCount}
-								testId="sidebar-content-slides-templates-count"
-							/>
+						{isSlidesTemplateMenuItem ? (
+							<div
+								ref={slidesTemplateRowRef}
+								className="relative flex min-w-0 flex-1 items-center gap-2"
+							>
+								<Icon className="h-4 w-4 shrink-0" />
+								<span
+									ref={slidesTemplateTitleRef}
+									className={cn(
+										"min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-left text-sm leading-5",
+										templateCount ? "shrink" : "flex-1",
+									)}
+								>
+									{title}
+								</span>
+								{templateCount && (
+									<>
+										{!collapsed && (
+											<SlidesTemplateCountBadge
+												templateCount={templateCount}
+												testId="sidebar-content-slides-templates-count"
+												showCount={shouldShowSlidesTemplateCount}
+											/>
+										)}
+										{/* 始终测量完整徽标，不让数值的显示状态反过来影响宽度判断。 */}
+										<SlidesTemplateCountBadge
+											templateCount={templateCount}
+											badgeRef={slidesTemplateCountMeasureRef}
+											className="pointer-events-none invisible absolute left-0 top-0"
+										/>
+									</>
+								)}
+							</div>
+						) : (
+							<>
+								<Icon className="h-4 w-4 shrink-0" />
+								<span className="flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-left text-sm leading-5">
+									{title}
+								</span>
+							</>
 						)}
 					</a>
 				</SidebarMenuButton>

@@ -1,9 +1,15 @@
 import { fireEvent, render, screen } from "@testing-library/react"
-import type { ButtonHTMLAttributes, HTMLAttributes, ReactNode } from "react"
+import type { ButtonHTMLAttributes, ReactNode } from "react"
 import { createContext, useContext } from "react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
-const { modeListMock, getModeConfigWithLegacyMock, publishMock } = vi.hoisted(() => {
+const {
+	modeListMock,
+	getModeConfigWithLegacyMock,
+	publishMock,
+	shouldSuppressInputAutoFocusOnIPadMock,
+	preventOpenAutoFocusMock,
+} = vi.hoisted(() => {
 	const modeList = [
 		{
 			mode: {
@@ -37,6 +43,8 @@ const { modeListMock, getModeConfigWithLegacyMock, publishMock } = vi.hoisted(()
 			},
 		),
 		publishMock: vi.fn(),
+		shouldSuppressInputAutoFocusOnIPadMock: vi.fn(() => false),
+		preventOpenAutoFocusMock: vi.fn(),
 	}
 })
 
@@ -96,6 +104,10 @@ vi.mock("@/utils/pubsub", () => ({
 	},
 }))
 
+vi.mock("@/utils/inputFocusPolicy", () => ({
+	shouldSuppressInputAutoFocusOnIPad: shouldSuppressInputAutoFocusOnIPadMock,
+}))
+
 vi.mock("@/components/other/BlackPurpleButton", () => ({
 	default: ({ children, ...props }: ButtonHTMLAttributes<HTMLButtonElement>) => (
 		<button type="button" {...props}>
@@ -133,10 +145,17 @@ vi.mock("@/components/shadcn-ui/popover", () => ({
 			</button>
 		)
 	},
-	PopoverContent: ({ children, ...props }: HTMLAttributes<HTMLDivElement>) => {
+	PopoverContent: ({
+		children,
+		onOpenAutoFocus,
+	}: {
+		children: ReactNode
+		onOpenAutoFocus?: (event: { preventDefault: () => void }) => void
+	}) => {
 		const context = useContext(popoverContext)
 		if (!context?.open) return null
-		return <div {...props}>{children}</div>
+		onOpenAutoFocus?.({ preventDefault: preventOpenAutoFocusMock })
+		return <div>{children}</div>
 	},
 	PopoverAnchor: () => null,
 }))
@@ -205,6 +224,18 @@ describe("ModeToggle", () => {
 	beforeEach(() => {
 		vi.clearAllMocks()
 		vi.useRealTimers()
+		shouldSuppressInputAutoFocusOnIPadMock.mockReturnValue(false)
+	})
+
+	it("prevents the search input from receiving automatic focus on iPad", () => {
+		shouldSuppressInputAutoFocusOnIPadMock.mockReturnValue(true)
+
+		render(<ModeToggle topicMode={"mode-a" as never} allowChangeMode onModeChange={vi.fn()} />)
+
+		fireEvent.click(screen.getByTestId("mock-popover-trigger"))
+
+		expect(shouldSuppressInputAutoFocusOnIPadMock).toHaveBeenCalled()
+		expect(preventOpenAutoFocusMock).toHaveBeenCalledOnce()
 	})
 
 	it("keeps the popover open when toggling a mode description", () => {

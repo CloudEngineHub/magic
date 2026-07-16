@@ -1,7 +1,13 @@
 import { describe, it, expect, vi } from "vitest"
 import { fireEvent, render, screen, waitFor } from "@testing-library/react"
+import { useState } from "react"
 import MagicDropdown from "../index"
 import type { MenuProps } from "antd"
+import {
+	DropdownMenu,
+	DropdownMenuContent,
+	DropdownMenuTrigger,
+} from "@/components/shadcn-ui/dropdown-menu"
 
 describe("MagicDropdown", () => {
 	const basicMenuItems: MenuProps["items"] = [
@@ -252,6 +258,47 @@ describe("MagicDropdown", () => {
 			await waitFor(() => {
 				expect(screen.getByText("Custom Content")).toBeInTheDocument()
 			})
+		})
+
+		it("keeps the parent open while a touch interaction enters a nested portal", async () => {
+			function NestedDropdown() {
+				const [open, setOpen] = useState(true)
+
+				return (
+					<>
+						<output data-testid="parent-dropdown-open">{String(open)}</output>
+						<MagicDropdown
+							open={open}
+							onOpenChange={setOpen}
+							keepOpenOnNestedOverlay
+							contentRole="panel"
+							popupRender={() => (
+								<DropdownMenu open modal={false}>
+									<DropdownMenuTrigger asChild>
+										<button type="button">Nested trigger</button>
+									</DropdownMenuTrigger>
+									<DropdownMenuContent>
+										<button type="button" data-testid="nested-portal-content">
+											Nested content
+										</button>
+									</DropdownMenuContent>
+								</DropdownMenu>
+							)}
+						>
+							<button type="button">Parent trigger</button>
+						</MagicDropdown>
+					</>
+				)
+			}
+
+			render(<NestedDropdown />)
+
+			const nestedContent = await screen.findByTestId("nested-portal-content")
+			fireEvent.pointerDown(nestedContent, { pointerType: "touch" })
+			fireEvent.click(nestedContent)
+
+			expect(screen.getByTestId("parent-dropdown-open")).toHaveTextContent("true")
+			expect(document.querySelector('[data-slot="popover-content"]')).not.toBeNull()
 		})
 	})
 

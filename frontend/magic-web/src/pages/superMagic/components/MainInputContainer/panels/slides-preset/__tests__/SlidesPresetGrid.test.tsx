@@ -131,6 +131,8 @@ describe("SlidesPresetGrid", () => {
 		const grid = screen.getByTestId("slides-preset-grid")
 		expect(grid).toBeInTheDocument()
 		expect(grid).toHaveClass(
+			"touch-pan-y",
+			"overscroll-y-contain",
 			"grid-cols-2",
 			"md:grid-cols-3",
 			"xl:grid-cols-4",
@@ -145,6 +147,37 @@ describe("SlidesPresetGrid", () => {
 
 		const firstCardContainer = screen.getAllByTestId("slides-preset-card")[0].parentElement
 		expect(firstCardContainer).not.toHaveAttribute("style")
+	})
+
+	it("keeps content visibility optimization by default", () => {
+		render(<SlidesPresetGrid templates={mockTemplates} />)
+
+		const firstCardContainer = screen.getAllByTestId("slides-preset-card")[0].parentElement
+		expect(firstCardContainer).toHaveClass("[content-visibility:auto]")
+		expect(firstCardContainer).toHaveClass("[contain-intrinsic-size:260px]")
+	})
+
+	it("disables content visibility optimization for mobile drawers", () => {
+		render(
+			<SlidesPresetGrid
+				templates={mockTemplates}
+				disableEntryAnimation
+				disableContentVisibility
+			/>,
+		)
+
+		const firstCardContainer = screen.getAllByTestId("slides-preset-card")[0].parentElement
+		expect(firstCardContainer).not.toHaveClass("[content-visibility:auto]")
+		expect(firstCardContainer).not.toHaveClass("[contain-intrinsic-size:260px]")
+	})
+
+	it("disables content visibility optimization for touch-first tablets", () => {
+		mockPointerDevice({ canHover: true, maxTouchPoints: 5 })
+		render(<SlidesPresetGrid templates={mockTemplates} />)
+
+		const firstCardContainer = screen.getAllByTestId("slides-preset-card")[0].parentElement
+		expect(firstCardContainer).not.toHaveClass("[content-visibility:auto]")
+		expect(firstCardContainer).not.toHaveClass("[contain-intrinsic-size:260px]")
 	})
 
 	it("shows the featured icon before the title and usage in the card corner", () => {

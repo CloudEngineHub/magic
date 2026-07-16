@@ -26,7 +26,6 @@ const FINITE_LAYOUT_COLUMNS = 6
 const MIN_LOOP_SOURCE_TILE_COUNT = LAYOUT_COLUMNS * 3
 
 interface InternalCanvasItem extends TemplateCanvasItem<SlidesTemplateCanvasTile> {
-	isFiller: boolean
 	sourceTileId: string
 }
 
@@ -82,18 +81,15 @@ function getQueryCellRange(start: number, end: number, step: number, offset = 0)
 }
 
 /**
- * 模板墙使用固定列数的完整网格作为循环单元。
+ * 模板墙使用固定列数的网格作为循环单元。
  *
- * 分页追加只在现有完整区域之后放置新模板，并用已有模板补齐剩余格子。
- * 已有卡片坐标保持不变，循环边界也不会出现未占用的格子。
+ * 分页追加优先使用现有区域的空位，再向下扩展，已有卡片坐标保持不变。
+ * 循环单元允许存在空网格，不能通过复制模板填充，否则用户会看到重复卡片。
  */
 export class SlidesTemplateCanvasLayoutService {
 	private canvasItems: InternalCanvasItem[] = []
 	private cellItemIndexes = new Map<string, Set<number>>()
 	private contentBounds: TemplateCanvasBounds = { minX: 0, maxX: 0, minY: 0, maxY: 0 }
-	private fillerCursor = 0
-	private fillerSequence = 0
-	private filledRowCount = 0
 	private loopMetrics: SlidesTemplateCanvasLoopMetrics = getSlidesTemplateCanvasLoopMetrics([])
 	private isInfiniteLoopEnabled = false
 	private sourceTiles: SlidesTemplateCanvasTile[] = []
@@ -127,9 +123,6 @@ export class SlidesTemplateCanvasLayoutService {
 		this.canvasItems = []
 		this.cellItemIndexes.clear()
 		this.contentBounds = { minX: 0, maxX: 0, minY: 0, maxY: 0 }
-		this.fillerCursor = 0
-		this.fillerSequence = 0
-		this.filledRowCount = 0
 		this.isInfiniteLoopEnabled = isInfiniteLoopEnabled
 		this.loopMetrics = getSlidesTemplateCanvasLoopMetrics([])
 		this.sourceTiles = []
@@ -168,14 +161,9 @@ export class SlidesTemplateCanvasLayoutService {
 	private appendSourceTiles(nextTiles: SlidesTemplateCanvasTile[]) {
 		if (nextTiles.length === 0) return
 
-		const startingRow = this.filledRowCount
-		nextTiles.forEach((tile) => this.placeTile(tile, tile.id, startingRow))
+		// 新分页先使用已有布局中的空位，只有放不下时才继续向下扩展。
+		nextTiles.forEach((tile) => this.placeTile(tile, tile.id, 0))
 		this.sourceTiles = [...this.sourceTiles, ...nextTiles]
-		if (this.isInfiniteLoopEnabled) {
-			this.fillOpenRows(startingRow)
-		} else {
-			this.filledRowCount = 0
-		}
 		this.refreshMetrics()
 	}
 
@@ -184,45 +172,17 @@ export class SlidesTemplateCanvasLayoutService {
 		return this.isInfiniteLoopEnabled ? LAYOUT_COLUMNS : FINITE_LAYOUT_COLUMNS
 	}
 
-	private fillOpenRows(startingRow: number) {
-		if (this.sourceTiles.length === 0) return
-
-		while (!this.areRowsFilled(startingRow, this.getMaxRow())) {
-			const maxRow = this.getMaxRow()
-			const filler = this.findFillerPlacement(startingRow, maxRow)
-			if (!filler) {
-				throw new Error("Unable to fill slides template canvas layout rows")
-			}
-
-			const fillerNumber = this.fillerSequence
-			this.fillerSequence += 1
-			this.fillerCursor = (this.fillerCursor + filler.offset + 1) % this.sourceTiles.length
-			this.placeTileAt(
-				{
-					...filler.tile,
-					id: `${filler.tile.id}:filler:${fillerNumber}`,
-				},
-				filler.tile.id,
-				filler.grid,
-				true,
-			)
-		}
-
-		this.filledRowCount = this.getMaxRow()
-	}
-
 	private placeTile(tile: SlidesTemplateCanvasTile, sourceTileId: string, startingRow: number) {
 		const span = getTileSpan(tile)
 		const grid = this.findAvailableGridPoint(span, startingRow)
 		if (!grid) throw new Error("Unable to find slides template canvas layout position")
-		this.placeTileAt(tile, sourceTileId, grid, false)
+		this.placeTileAt(tile, sourceTileId, grid)
 	}
 
 	private placeTileAt(
 		tile: SlidesTemplateCanvasTile,
 		sourceTileId: string,
 		grid: { x: number; y: number },
-		isFiller: boolean,
 	) {
 		const span = getTileSpan(tile)
 		const itemIndex = this.canvasItems.length
@@ -230,7 +190,6 @@ export class SlidesTemplateCanvasLayoutService {
 			grid,
 			index: itemIndex,
 			item: tile,
-			isFiller,
 			position: {
 				x: (grid.x + (span.columns - 1) / 2) * SLIDES_TEMPLATE_CANVAS_STEP_X,
 				y: (grid.y + (span.rows - 1) / 2) * SLIDES_TEMPLATE_CANVAS_STEP_Y,
@@ -242,17 +201,6 @@ export class SlidesTemplateCanvasLayoutService {
 
 		this.canvasItems.push(canvasItem)
 		this.addItemToSpatialIndex(canvasItem, itemIndex)
-	}
-
-	private findFillerPlacement(startingRow: number, maxRow: number) {
-		for (let offset = 0; offset < this.sourceTiles.length; offset += 1) {
-			const tile = this.sourceTiles[(this.fillerCursor + offset) % this.sourceTiles.length]
-			if (!tile) continue
-			const grid = this.findAvailableGridPoint(getTileSpan(tile), startingRow, maxRow)
-			if (grid) return { grid, offset, tile }
-		}
-
-		return null
 	}
 
 	private findAvailableGridPoint(
@@ -291,26 +239,9 @@ export class SlidesTemplateCanvasLayoutService {
 		}
 	}
 
-	private areRowsFilled(startingRow: number, maxRow: number) {
-		for (let y = startingRow; y < maxRow; y += 1) {
-			for (let x = 0; x < LAYOUT_COLUMNS; x += 1) {
-				if (!this.cellItemIndexes.has(getCellKey(x, y))) return false
-			}
-		}
-		return true
-	}
-
-	private getMaxRow() {
-		return this.canvasItems.reduce(
-			(maxRow, item) => Math.max(maxRow, item.grid.y + item.span.rows),
-			0,
-		)
-	}
-
 	private refreshMetrics() {
 		this.canvasItems = [...this.canvasItems]
-		const sourceItems = this.canvasItems.filter((item) => !item.isFiller)
-		this.contentBounds = getTemplateCanvasBounds(sourceItems)
+		this.contentBounds = getTemplateCanvasBounds(this.canvasItems)
 		this.templateBounds = getTemplateCanvasBounds(this.canvasItems)
 		this.loopMetrics = this.isInfiniteLoopEnabled
 			? getSlidesTemplateCanvasLoopMetrics(this.canvasItems)

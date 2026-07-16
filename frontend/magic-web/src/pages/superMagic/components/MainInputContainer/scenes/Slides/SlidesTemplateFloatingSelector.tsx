@@ -192,6 +192,8 @@ function SlidesTemplateFloatingSelector({
 			trigger={["click"]}
 			open={open}
 			onOpenChange={handleDropdownOpenChange}
+			keepOpenOnNestedOverlay
+			contentRole="panel"
 			popupRender={() => panelContent}
 			overlayClassName="w-[min(90vw,760px)] min-w-[360px] overflow-visible rounded-lg border border-border bg-popover p-3 shadow-xl"
 		>
