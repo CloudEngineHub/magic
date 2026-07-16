@@ -94,6 +94,46 @@ interface TransformManagerPrivate {
 	isElementInActiveTransformInteraction: (elementId: string) => boolean
 }
 
+function createSingleDragMoveManager() {
+	const emit = vi.fn()
+	const update = vi.fn()
+	const applyTransform = vi.fn((updates: Partial<LayerElement>) => updates)
+	const element = {
+		applyTransform,
+		shouldKeepRatio: () => false,
+	}
+	const node = new Konva.Group({ id: "element-1", x: 10, y: 20, width: 100, height: 100 })
+	const manager = Object.create(TransformManager.prototype) as TransformManagerPrivate
+
+	manager.canvas = {
+		readonly: false,
+		eventEmitter: { emit },
+		runtimeScheduler: { requestLayerDraw: vi.fn() },
+		isKeepRatioModifierPressed: () => false,
+		elementManager: {
+			getElementInstance: () => element,
+			update,
+			getNodeAdapter: () => ({
+				getElementsBounds: vi.fn(() => ({ x: 10, y: 20, width: 100, height: 100 })),
+			}),
+		},
+	}
+	manager.transformer = {
+		getActiveAnchor: vi.fn(() => null),
+		nodes: vi.fn(() => [node]),
+		forceUpdate: vi.fn(),
+	}
+	manager.multiSelectionProxy = null
+	manager.transformSessionElementStates = new Map([
+		["element-1", { element, shouldKeepRatio: false }],
+	])
+	manager.initialElementAspectRatios = new Map()
+	manager.initialAspectRatio = null
+	manager.transformingElementIds = new Set(["element-1"])
+
+	return { emit, manager, update }
+}
+
 function createProxySyncManager() {
 	const emit = vi.fn()
 	const update = vi.fn()
@@ -240,6 +280,32 @@ describe("TransformManager multi-selection proxy sync", () => {
 			},
 		})
 		expect(emit).not.toHaveBeenCalledWith(expect.objectContaining({ type: "element:dragmove" }))
+	})
+
+	it("emits one batched dragmove with selection bounds during realtime single movement", () => {
+		const { emit, manager, update } = createSingleDragMoveManager()
+
+		manager.handleTransformerDragmove()
+
+		expect(update).toHaveBeenCalledWith(
+			"element-1",
+			expect.objectContaining({ x: 10, y: 20 }),
+			expect.objectContaining({
+				mode: "node-only",
+				skipGeometryInvalidate: true,
+			}),
+		)
+		expect(emit).toHaveBeenCalledWith({
+			type: "elements:transform:dragmove",
+			data: {
+				elementIds: ["element-1"],
+				boundingRect: { x: 10, y: 20, width: 100, height: 100 },
+			},
+		})
+		expect(emit).toHaveBeenCalledWith({
+			type: "element:dragmove",
+			data: { elementId: "element-1" },
+		})
 	})
 
 	it("marks single-anchor scaling as an active transform", () => {

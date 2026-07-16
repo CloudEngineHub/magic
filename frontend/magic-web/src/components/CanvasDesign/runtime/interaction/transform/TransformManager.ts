@@ -648,12 +648,15 @@ export class TransformManager {
 		} else {
 			this.syncTransformerNodesToElements({ isRealtime: true, isScaling: false })
 		}
+		const boundingRect = isUsingSelectionProxy
+			? this.getProxyBounds()
+			: this.getSelectionBounds(elementIds)
 
 		this.canvas.eventEmitter.emit({
 			type: "elements:transform:dragmove",
 			data: {
 				elementIds,
-				boundingRect: isUsingSelectionProxy ? this.getProxyBounds() : undefined,
+				boundingRect,
 			},
 		})
 

@@ -6,6 +6,22 @@ import { calculateSnapThreshold } from "../transform/anchorUtils"
 import type { AlignmentInfo, AlignmentType } from "./snapGuideTypes"
 import { SnapGuideRenderer } from "./SnapGuideRenderer"
 import { SnapResolver, type SnapResolverContext } from "./SnapResolver"
+import { SequenceSpacingResolver } from "./SequenceSpacingResolver"
+import { SpacingSnapResolver } from "./SpacingSnapResolver"
+import type {
+	SpacingGuide,
+	SpacingSnapAxis,
+	SpacingSnapCandidate,
+	SpacingSnapMode,
+	SpacingSnapTarget,
+} from "./spacingSnapTypes"
+
+const COINCIDENT_ALIGNMENT_OFFSET_EPSILON = 0.01
+
+interface SpacingSnapLock {
+	mode: SpacingSnapMode
+	targetElementIds: [string, string]
+}
 
 /**
  * 吸附引导线管理器
@@ -21,6 +37,8 @@ export class SnapGuideManager implements SnapResolverContext {
 	private canvas: Canvas
 	private guideRenderer: SnapGuideRenderer
 	private snapResolver: SnapResolver
+	private spacingSnapResolver: SpacingSnapResolver
+	private sequenceSpacingResolver: SequenceSpacingResolver
 
 	// 是否启用吸附
 	private enabled = true
@@ -44,7 +62,13 @@ export class SnapGuideManager implements SnapResolverContext {
 	private cachedInteractionTargetsById: Map<string, LayerElement> | null = null
 	private cachedInteractionTargetOrder: Map<string, number> | null = null
 	private cachedInteractionSelectionKey: string | null = null
+	private cachedSequenceSpacingTargets: SpacingSnapTarget[] = []
+	private activeSpacingSnapTargets: Partial<Record<SpacingSnapAxis, SpacingSnapLock>> = {}
 	private currentDragBoundsOverride: Rect | null = null
+	/** 节点在本次 dragmove 事件中实际处于的位置，可能已被上一帧吸附过。 */
+	private currentAppliedDragBoundsOverride: Rect | null = null
+	private currentSnappedDragBoundsOverride: Rect | null = null
+	private eventUnsubscribers: Array<() => void> = []
 
 	constructor(options: { canvas: Canvas }) {
 		const { canvas } = options
@@ -53,6 +77,8 @@ export class SnapGuideManager implements SnapResolverContext {
 			overlayLayer: canvas.overlayLayer,
 		})
 		this.snapResolver = new SnapResolver(this)
+		this.spacingSnapResolver = new SpacingSnapResolver()
+		this.sequenceSpacingResolver = new SequenceSpacingResolver()
 		this.setupEventListeners()
 	}
 
@@ -76,8 +102,32 @@ export class SnapGuideManager implements SnapResolverContext {
 	private syncSnappedProxyDragBounds(snappedDraggingRect: Rect): void {
 		if (this.activeAnchor || !this.currentDragBoundsOverride) return
 
-		this.currentDragBoundsOverride = snappedDraggingRect
+		this.currentSnappedDragBoundsOverride = snappedDraggingRect
 		this.emitSelectionPositionOverride(snappedDraggingRect)
+	}
+
+	private resolveRawDragBounds(appliedBounds: Rect | null): Rect | null {
+		if (
+			!appliedBounds ||
+			!this.currentDragBoundsOverride ||
+			!this.currentSnappedDragBoundsOverride
+		) {
+			return appliedBounds
+		}
+
+		return {
+			...appliedBounds,
+			x: this.isNearlyEqual(appliedBounds.x, this.currentSnappedDragBoundsOverride.x)
+				? this.currentDragBoundsOverride.x
+				: appliedBounds.x,
+			y: this.isNearlyEqual(appliedBounds.y, this.currentSnappedDragBoundsOverride.y)
+				? this.currentDragBoundsOverride.y
+				: appliedBounds.y,
+		}
+	}
+
+	private isNearlyEqual(first: number, second: number): boolean {
+		return Math.abs(first - second) < 0.001
 	}
 
 	ensureCache(): void {
@@ -89,65 +139,84 @@ export class SnapGuideManager implements SnapResolverContext {
 	 */
 	private setupEventListeners(): void {
 		// 监听拖拽开始
-		this.canvas.eventEmitter.on("elements:transform:dragstart", () => {
-			const selectedIds = this.canvas.selectionManager.getSelectedIds()
-			this.isDragging = true
-			this.activeAnchor = null
-			this.lastSnappedAlignmentsKey = null
-			this.currentDragBoundsOverride = null
-			this.cacheVisualParams()
-			this.primeInteractionTargets(selectedIds)
-		})
+		this.eventUnsubscribers.push(
+			this.canvas.eventEmitter.on("elements:transform:dragstart", () => {
+				const selectedIds = this.canvas.selectionManager.getSelectedIds()
+				this.isDragging = true
+				this.activeAnchor = null
+				this.lastSnappedAlignmentsKey = null
+				this.clearSpacingSnapState()
+				this.currentDragBoundsOverride = null
+				this.currentAppliedDragBoundsOverride = null
+				this.currentSnappedDragBoundsOverride = null
+				this.cacheVisualParams()
+				this.primeInteractionTargets(selectedIds)
+			}),
+		)
 
 		// 监听拖拽移动
-		this.canvas.eventEmitter.on("elements:transform:dragmove", ({ data }) => {
-			if (!this.enabled || !this.isDragging) return
-			this.currentDragBoundsOverride = data.boundingRect
-				? {
-						x: data.boundingRect.x,
-						y: data.boundingRect.y,
-						width: data.boundingRect.width,
-						height: data.boundingRect.height,
-					}
-				: null
-			this.processSnap()
-		})
+		this.eventUnsubscribers.push(
+			this.canvas.eventEmitter.on("elements:transform:dragmove", ({ data }) => {
+				if (!this.enabled || !this.isDragging) return
+				const appliedBounds = data.boundingRect ? { ...data.boundingRect } : null
+				this.currentDragBoundsOverride = this.resolveRawDragBounds(appliedBounds)
+				this.currentAppliedDragBoundsOverride = appliedBounds
+				this.processSnap()
+			}),
+		)
 
 		// 监听拖拽结束
-		this.canvas.eventEmitter.on("elements:transform:dragend", () => {
-			this.isDragging = false
-			this.activeAnchor = null
-			this.lastSnappedAlignmentsKey = null
-			this.currentDragBoundsOverride = null
-			this.clearInteractionTargets()
-			this.guideRenderer.clear()
-		})
+		this.eventUnsubscribers.push(
+			this.canvas.eventEmitter.on("elements:transform:dragend", () => {
+				this.isDragging = false
+				this.activeAnchor = null
+				this.lastSnappedAlignmentsKey = null
+				this.clearSpacingSnapState()
+				this.currentDragBoundsOverride = null
+				this.currentAppliedDragBoundsOverride = null
+				this.currentSnappedDragBoundsOverride = null
+				this.clearInteractionTargets()
+				this.guideRenderer.clear()
+			}),
+		)
 
 		// 监听缩放开始
-		this.canvas.eventEmitter.on("elements:transform:anchorDragStart", ({ data }) => {
-			this.isDragging = true
-			this.activeAnchor = data.activeAnchor
-			this.lastSnappedAlignmentsKey = null
-			this.currentDragBoundsOverride = null
-			this.cacheVisualParams()
-			this.primeInteractionTargets(data.elementIds)
-		})
+		this.eventUnsubscribers.push(
+			this.canvas.eventEmitter.on("elements:transform:anchorDragStart", ({ data }) => {
+				this.isDragging = true
+				this.activeAnchor = data.activeAnchor
+				this.lastSnappedAlignmentsKey = null
+				this.clearSpacingSnapState()
+				this.currentDragBoundsOverride = null
+				this.currentAppliedDragBoundsOverride = null
+				this.currentSnappedDragBoundsOverride = null
+				this.cacheVisualParams()
+				this.primeInteractionTargets(data.elementIds)
+			}),
+		)
 
 		// 监听缩放移动
-		this.canvas.eventEmitter.on("elements:transform:anchorDragmove", () => {
-			if (!this.enabled || !this.isDragging) return
-			this.processSnap()
-		})
+		this.eventUnsubscribers.push(
+			this.canvas.eventEmitter.on("elements:transform:anchorDragmove", () => {
+				if (!this.enabled || !this.isDragging) return
+				this.processSnap()
+			}),
+		)
 
 		// 监听缩放结束
-		this.canvas.eventEmitter.on("elements:transform:anchorDragend", () => {
-			this.isDragging = false
-			this.activeAnchor = null
-			this.lastSnappedAlignmentsKey = null
-			this.currentDragBoundsOverride = null
-			this.clearInteractionTargets()
-			this.guideRenderer.clear()
-		})
+		this.eventUnsubscribers.push(
+			this.canvas.eventEmitter.on("elements:transform:anchorDragend", () => {
+				this.isDragging = false
+				this.activeAnchor = null
+				this.lastSnappedAlignmentsKey = null
+				this.clearSpacingSnapState()
+				this.currentDragBoundsOverride = null
+				this.currentAppliedDragBoundsOverride = null
+				this.currentSnappedDragBoundsOverride = null
+				this.clearInteractionTargets()
+				this.guideRenderer.clear()
+			}),
+		)
 	}
 
 	private getSelectionKey(elementIds: string[]): string {
@@ -163,6 +232,17 @@ export class SnapGuideManager implements SnapResolverContext {
 		this.cachedInteractionTargetOrder = new Map(
 			targets.map((target, index) => [target.id, index]),
 		)
+		const siblingIds = new Set(
+			selectedIds.length === 1 && selectedIds[0]
+				? this.findParentAndSiblings(selectedIds[0]).siblings.map((sibling) => sibling.id)
+				: [],
+		)
+		this.cachedSequenceSpacingTargets = targets.flatMap((target) => {
+			if (!siblingIds.has(target.id)) return []
+			const rect = this.canvas.geometryCacheManager.getElementBounds(target.id)
+			return rect && rect.width > 0 && rect.height > 0 ? [{ id: target.id, rect }] : []
+		})
+		this.sequenceSpacingResolver.prepare(this.cachedSequenceSpacingTargets)
 	}
 
 	private clearInteractionTargets(): void {
@@ -171,6 +251,8 @@ export class SnapGuideManager implements SnapResolverContext {
 		this.cachedInteractionTargetsById = null
 		this.cachedInteractionTargetOrder = null
 		this.cachedInteractionSelectionKey = null
+		this.cachedSequenceSpacingTargets = []
+		this.sequenceSpacingResolver.clear()
 	}
 
 	private getActiveInteractionTargets(selectedIds: string[], draggingRect: Rect): LayerElement[] {
@@ -211,12 +293,16 @@ export class SnapGuideManager implements SnapResolverContext {
 	 * 生成吸附结果签名，用于判断辅助线是否需要重绘
 	 * 仅当 type + targetElementId 组合变化时才重绘（脱离吸附或切换目标）
 	 */
-	private getSnappedAlignmentsKey(alignments: AlignmentInfo[]): string {
-		if (alignments.length === 0) return ""
-		return alignments
-			.map((a) => `${a.type}:${a.targetElementId}`)
+	private getSnapVisualKey(alignments: AlignmentInfo[], spacingGuides: SpacingGuide[]): string {
+		const alignmentKey = alignments
+			.map((alignment) => `${alignment.type}:${alignment.targetElementId}`)
 			.sort()
 			.join("|")
+		const spacingKey = spacingGuides
+			.map((guide) => `${guide.axis}:${guide.targetElementIds.join(":")}`)
+			.sort()
+			.join("|")
+		return `${alignmentKey};${spacingKey}`
 	}
 
 	/**
@@ -256,38 +342,284 @@ export class SnapGuideManager implements SnapResolverContext {
 					}
 				: undefined
 
-		const result = this.snapResolver.resolveInContentSpace({
+		const directResult = this.snapResolver.resolveInContentSpace({
 			draggingRect,
 			targets,
 			activeAnchor: this.activeAnchor,
 			options,
 		})
 
-		const snappedAlignments = result?.snappedAlignments ?? []
-		const snappedDraggingRect = result?.snappedRect ?? draggingRect
+		const resolvedSnap = this.resolveTranslationSnap({
+			selectedIds,
+			draggingRect,
+			targets,
+			directResult,
+		})
+		const { snappedAlignments, snappedDraggingRect, spacingGuides } = resolvedSnap
+		const appliedDragBounds = this.currentAppliedDragBoundsOverride ?? draggingRect
+		const appliedOffsetX = snappedDraggingRect.x - appliedDragBounds.x
+		const appliedOffsetY = snappedDraggingRect.y - appliedDragBounds.y
 
 		// 缩放吸附由 TransformManager.boundBoxFunc 处理；这里仅处理平移吸附的位移应用。
-		if (
-			result &&
-			!this.activeAnchor &&
-			(result.snapOffsetX !== 0 || result.snapOffsetY !== 0)
-		) {
-			this.applySnapOffset(selectedIds, result.snapOffsetX, result.snapOffsetY)
+		if (!this.activeAnchor && (appliedOffsetX !== 0 || appliedOffsetY !== 0)) {
+			this.applySnapOffset(selectedIds, appliedOffsetX, appliedOffsetY)
+		}
+		if (!this.activeAnchor && resolvedSnap.hasSnap) {
 			this.syncSnappedProxyDragBounds(snappedDraggingRect)
+		} else if (!this.activeAnchor) {
+			this.currentSnappedDragBoundsOverride = null
 		}
 
 		// 视觉：委托渲染器
-		const currentKey = this.getSnappedAlignmentsKey(snappedAlignments)
+		const currentKey = this.getSnapVisualKey(snappedAlignments, spacingGuides)
 		const getSnappedRect = () => this.getSnappedElementsRect(snappedDraggingRect)
 		if (currentKey !== this.lastSnappedAlignmentsKey) {
 			this.guideRenderer.clear()
 			this.guideRenderer.render(snappedAlignments, getSnappedRect)
+			this.guideRenderer.renderSpacing(spacingGuides)
 			this.lastSnappedAlignmentsKey = currentKey
-		} else if (snappedAlignments.length > 0) {
-			this.guideRenderer.update(snappedAlignments, getSnappedRect)
+		} else {
+			if (snappedAlignments.length > 0) {
+				this.guideRenderer.update(snappedAlignments, getSnappedRect)
+			}
+			if (spacingGuides.length > 0) {
+				this.guideRenderer.updateSpacing(spacingGuides)
+			}
 		}
 
 		this.guideRenderer.batchDraw()
+	}
+
+	private resolveTranslationSnap(params: {
+		selectedIds: string[]
+		draggingRect: Rect
+		targets: LayerElement[]
+		directResult: ReturnType<SnapResolver["resolveInContentSpace"]>
+	}): {
+		hasSnap: boolean
+		snappedAlignments: AlignmentInfo[]
+		snappedDraggingRect: Rect
+		spacingGuides: SpacingGuide[]
+		snapOffsetX: number
+		snapOffsetY: number
+	} {
+		const { selectedIds, draggingRect, targets, directResult } = params
+		if (this.activeAnchor || selectedIds.length !== 1) {
+			return {
+				hasSnap: directResult !== null,
+				snappedAlignments: directResult?.snappedAlignments ?? [],
+				snappedDraggingRect: directResult?.snappedRect ?? draggingRect,
+				spacingGuides: [],
+				snapOffsetX: directResult?.snapOffsetX ?? 0,
+				snapOffsetY: directResult?.snapOffsetY ?? 0,
+			}
+		}
+
+		const spacingTargets = this.getSpacingSnapTargets(draggingRect, targets)
+		const spacingResult = this.spacingSnapResolver.resolve({
+			draggingRect,
+			targets: spacingTargets,
+			threshold: this.cachedSnapThreshold,
+		})
+		const sequenceSpacingResult = this.sequenceSpacingResolver.resolve({
+			draggingRect,
+			threshold: this.cachedSnapThreshold,
+		})
+		const directXAlignment = directResult?.snappedAlignments.find((alignment) =>
+			this.isHorizontalAlignment(alignment.type),
+		)
+		const directYAlignment = directResult?.snappedAlignments.find(
+			(alignment) => !this.isHorizontalAlignment(alignment.type),
+		)
+		const horizontalSpacing = this.pickSpacingCandidate(
+			directResult?.snapOffsetX,
+			!!directXAlignment,
+			this.stabilizeSpacingCandidate({
+				axis: "horizontal",
+				draggingRect,
+				targets: this.cachedSequenceSpacingTargets,
+				baseCandidate: this.getClosestSpacingCandidate(
+					spacingResult.horizontal,
+					sequenceSpacingResult.horizontal,
+				),
+			}),
+		)
+		const verticalSpacing = this.pickSpacingCandidate(
+			directResult?.snapOffsetY,
+			!!directYAlignment,
+			this.stabilizeSpacingCandidate({
+				axis: "vertical",
+				draggingRect,
+				targets: this.cachedSequenceSpacingTargets,
+				baseCandidate: this.getClosestSpacingCandidate(
+					spacingResult.vertical,
+					sequenceSpacingResult.vertical,
+				),
+			}),
+		)
+		const snapOffsetX = horizontalSpacing?.offset ?? directResult?.snapOffsetX ?? 0
+		const snapOffsetY = verticalSpacing?.offset ?? directResult?.snapOffsetY ?? 0
+		const snappedAlignments = (directResult?.snappedAlignments ?? []).filter((alignment) =>
+			this.isHorizontalAlignment(alignment.type) ? !horizontalSpacing : !verticalSpacing,
+		)
+		const snappedDraggingRect = {
+			...draggingRect,
+			x: draggingRect.x + snapOffsetX,
+			y: draggingRect.y + snapOffsetY,
+		}
+		const spacingGuides = [horizontalSpacing, verticalSpacing]
+			.filter((candidate): candidate is SpacingSnapCandidate => candidate !== null)
+			.map((candidate) =>
+				this.spacingSnapResolver.createGuideForSnappedRect(candidate, snappedDraggingRect),
+			)
+
+		this.updateSpacingSnapState("horizontal", horizontalSpacing)
+		this.updateSpacingSnapState("vertical", verticalSpacing)
+
+		return {
+			hasSnap: snappedAlignments.length > 0 || spacingGuides.length > 0,
+			snappedAlignments,
+			snappedDraggingRect,
+			spacingGuides,
+			snapOffsetX,
+			snapOffsetY,
+		}
+	}
+
+	private getSpacingSnapTargets(
+		draggingRect: Rect,
+		fallbackTargets: LayerElement[],
+	): SpacingSnapTarget[] {
+		const targetIds =
+			this.cachedInteractionTargetIds ?? fallbackTargets.map((target) => target.id)
+		const targetsById =
+			this.cachedInteractionTargetsById ??
+			new Map(fallbackTargets.map((target) => [target.id, target]))
+		const candidateIds = this.canvas.geometryCacheManager.queryElementIdsByExpandedRect(
+			draggingRect,
+			this.cachedGuideThreshold * 4,
+			{ elementIds: targetIds },
+		)
+		const targetOrder = this.cachedInteractionTargetOrder
+		if (targetOrder) {
+			candidateIds.sort((a, b) => (targetOrder.get(a) ?? 0) - (targetOrder.get(b) ?? 0))
+		}
+
+		return candidateIds.flatMap((targetId) => {
+			if (!targetsById.has(targetId)) return []
+			const rect = this.canvas.geometryCacheManager.getElementBounds(targetId)
+			return rect && rect.width > 0 && rect.height > 0 ? [{ id: targetId, rect }] : []
+		})
+	}
+
+	private pickSpacingCandidate(
+		directOffset: number | undefined,
+		hasDirectAlignment: boolean,
+		spacingCandidate: SpacingSnapCandidate | null,
+	): SpacingSnapCandidate | null {
+		if (!spacingCandidate) return null
+		if (!hasDirectAlignment || directOffset === undefined) return spacingCandidate
+		return Math.abs(spacingCandidate.offset) < Math.abs(directOffset) ? spacingCandidate : null
+	}
+
+	private getClosestSpacingCandidate(
+		...candidates: Array<SpacingSnapCandidate | null>
+	): SpacingSnapCandidate | null {
+		return candidates.reduce<SpacingSnapCandidate | null>((closest, candidate) => {
+			if (!candidate || (closest && Math.abs(closest.offset) <= Math.abs(candidate.offset))) {
+				return closest
+			}
+			return candidate
+		}, null)
+	}
+
+	private stabilizeSpacingCandidate(params: {
+		axis: SpacingSnapAxis
+		draggingRect: Rect
+		targets: SpacingSnapTarget[]
+		baseCandidate: SpacingSnapCandidate | null
+	}): SpacingSnapCandidate | null {
+		const { axis, draggingRect, targets, baseCandidate } = params
+		const lock = this.activeSpacingSnapTargets?.[axis]
+		if (!lock) return baseCandidate
+
+		const lockedTargets = lock.targetElementIds
+			.map((targetId) => targets.find((target) => target.id === targetId))
+			.filter((target): target is SpacingSnapTarget => target !== undefined)
+		if (lockedTargets.length !== 2) {
+			return baseCandidate
+		}
+
+		const releaseThreshold = this.getSpacingReleaseThreshold()
+		const lockedCandidate =
+			lock.mode === "between"
+				? axis === "horizontal"
+					? this.spacingSnapResolver.resolve({
+							draggingRect,
+							targets: lockedTargets,
+							threshold: releaseThreshold,
+						}).horizontal
+					: this.spacingSnapResolver.resolve({
+							draggingRect,
+							targets: lockedTargets,
+							threshold: releaseThreshold,
+						}).vertical
+				: this.sequenceSpacingResolver.resolveForPair({
+						axis,
+						mode: lock.mode,
+						draggingRect,
+						targetElementIds: lock.targetElementIds,
+						threshold: releaseThreshold,
+					})
+		if (!lockedCandidate) {
+			return baseCandidate
+		}
+		if (!baseCandidate) {
+			return lockedCandidate
+		}
+
+		const baseKey = this.getSpacingCandidateKey(baseCandidate)
+		const lockedKey = this.getSpacingCandidateKey(lockedCandidate)
+		if (baseKey === lockedKey) {
+			return lockedCandidate
+		}
+
+		const baseDistance = Math.abs(baseCandidate.offset)
+		const lockedDistance = Math.abs(lockedCandidate.offset)
+		const shouldSwitch = baseDistance + releaseThreshold < lockedDistance
+		return shouldSwitch ? baseCandidate : lockedCandidate
+	}
+
+	private getSpacingReleaseThreshold(): number {
+		return this.cachedSnapThreshold + Math.max(1, this.cachedSnapThreshold * 0.25)
+	}
+
+	private getSpacingCandidateKey(candidate: SpacingSnapCandidate): string {
+		return `${candidate.axis}:${candidate.mode}:${candidate.referenceTargets.map((target) => target.id).join(":")}`
+	}
+
+	private updateSpacingSnapState(
+		axis: SpacingSnapAxis,
+		candidate: SpacingSnapCandidate | null,
+	): void {
+		if (!this.activeSpacingSnapTargets) {
+			this.activeSpacingSnapTargets = {}
+		}
+		if (!candidate) {
+			delete this.activeSpacingSnapTargets[axis]
+			return
+		}
+		this.activeSpacingSnapTargets[axis] = {
+			mode: candidate.mode,
+			targetElementIds: candidate.referenceTargets.map((target) => target.id) as [
+				string,
+				string,
+			],
+		}
+	}
+
+	private clearSpacingSnapState(): void {
+		this.activeSpacingSnapTargets = {}
 	}
 
 	/** @implements SnapResolverContext - 供 SnapResolver 调用 */
@@ -298,6 +630,7 @@ export class SnapGuideManager implements SnapResolverContext {
 		// 获取第一个拖拽元素（假设多选时都在同一层级）
 		const firstElementId = draggingElementIds[0]
 		if (!firstElementId) return targets
+		if (!this.areSelectedElementsInSameScope(draggingElementIds)) return targets
 
 		// 查找父元素和同级元素
 		const { parentElement, siblings } = this.findParentAndSiblings(firstElementId)
@@ -317,6 +650,16 @@ export class SnapGuideManager implements SnapResolverContext {
 		}
 
 		return targets
+	}
+
+	private areSelectedElementsInSameScope(elementIds: string[]): boolean {
+		if (elementIds.length <= 1) return true
+
+		const getScopeId = (elementId: string): string | null =>
+			this.findParentAndSiblings(elementId).parentElement?.id ?? null
+		const scopeId = getScopeId(elementIds[0])
+
+		return elementIds.every((elementId) => getScopeId(elementId) === scopeId)
 	}
 
 	/**
@@ -526,9 +869,11 @@ export class SnapGuideManager implements SnapResolverContext {
 			return new Set<AlignmentType>(["left", "center", "right", "top", "middle", "bottom"])
 		}
 
-		// 通过 TransformManager 检查是否按下了 Shift 或 Meta/Command 键
-		// 这里传入空数组，只检查键盘状态，不检查元素配置
-		const isKeepRatioKeyPressed = this.canvas.transformManager.shouldKeepRatio([])
+		// 内建比例锁定和 Shift/Meta 锁定都意味着另一轴会跟随变化，
+		// 因此两者都需要开放对应的辅助线，避免视觉提示与实际尺寸变化不一致。
+		const shouldKeepRatio = this.canvas.transformManager.shouldKeepRatio(
+			this.canvas.selectionManager.getSelectedIds(),
+		)
 
 		// 根据 anchor 位置确定允许的对齐方式
 		const allowed = new Set<AlignmentType>()
@@ -539,10 +884,9 @@ export class SnapGuideManager implements SnapResolverContext {
 				allowed.add("top")
 				break
 			case "top-center":
-				// 不按 Shift/Meta：只吸附上边
-				// 按住 Shift/Meta：吸附左上角（left + top）
+				// 未锁定比例：只吸附上边；锁定比例：吸附左上角（left + top）
 				allowed.add("top")
-				if (isKeepRatioKeyPressed) {
+				if (shouldKeepRatio) {
 					allowed.add("left")
 				}
 				break
@@ -551,18 +895,16 @@ export class SnapGuideManager implements SnapResolverContext {
 				allowed.add("top")
 				break
 			case "middle-left":
-				// 不按 Shift/Meta：只吸附左边
-				// 按住 Shift/Meta：吸附左上角（left + top）
+				// 未锁定比例：只吸附左边；锁定比例：吸附左上角（left + top）
 				allowed.add("left")
-				if (isKeepRatioKeyPressed) {
+				if (shouldKeepRatio) {
 					allowed.add("top")
 				}
 				break
 			case "middle-right":
-				// 不按 Shift/Meta：只吸附右边
-				// 按住 Shift/Meta：吸附右下角（right + bottom）
+				// 未锁定比例：只吸附右边；锁定比例：吸附右下角（right + bottom）
 				allowed.add("right")
-				if (isKeepRatioKeyPressed) {
+				if (shouldKeepRatio) {
 					allowed.add("bottom")
 				}
 				break
@@ -571,10 +913,9 @@ export class SnapGuideManager implements SnapResolverContext {
 				allowed.add("bottom")
 				break
 			case "bottom-center":
-				// 不按 Shift/Meta：只吸附下边
-				// 按住 Shift/Meta：吸附右下角（right + bottom）
+				// 未锁定比例：只吸附下边；锁定比例：吸附右下角（right + bottom）
 				allowed.add("bottom")
-				if (isKeepRatioKeyPressed) {
+				if (shouldKeepRatio) {
 					allowed.add("right")
 				}
 				break
@@ -591,8 +932,8 @@ export class SnapGuideManager implements SnapResolverContext {
 	 * 获取吸附后选中元素的边界（applySnapOffset 之后调用）
 	 */
 	private getSnappedElementsRect(fallbackRect?: Rect): Rect | null {
-		if (!this.activeAnchor && this.currentDragBoundsOverride) {
-			return { ...this.currentDragBoundsOverride }
+		if (!this.activeAnchor && this.currentSnappedDragBoundsOverride) {
+			return { ...this.currentSnappedDragBoundsOverride }
 		}
 		if (fallbackRect) {
 			return { ...fallbackRect }
@@ -670,16 +1011,75 @@ export class SnapGuideManager implements SnapResolverContext {
 			}
 		}
 
-		// 返回真正会吸附的对齐关系和偏移量
-		const snappedAlignments: AlignmentInfo[] = []
-		if (bestXAlignment) snappedAlignments.push(bestXAlignment)
-		if (bestYAlignment) snappedAlignments.push(bestYAlignment)
+		// 保持一个实际吸附偏移，但同时保留共享该偏移的所有点位关系。
+		// 例如两个等大的元素左右平行时，top/middle/bottom 都会以相同的 Y 偏移对齐。
+		const snappedAlignments = this.collectCoincidentAlignments({
+			alignments,
+			draggingRect,
+			snapOffsetX: bestXAlignment ? minXOffset : null,
+			snapOffsetY: bestYAlignment ? minYOffset : null,
+			snapThreshold,
+		})
 
 		return {
 			snappedAlignments,
 			snapOffsetX: bestXAlignment ? minXOffset : 0,
 			snapOffsetY: bestYAlignment ? minYOffset : 0,
 		}
+	}
+
+	private collectCoincidentAlignments(params: {
+		alignments: AlignmentInfo[]
+		draggingRect: Rect
+		snapOffsetX: number | null
+		snapOffsetY: number | null
+		snapThreshold: number
+	}): AlignmentInfo[] {
+		const { alignments, draggingRect, snapOffsetX, snapOffsetY, snapThreshold } = params
+		const result: AlignmentInfo[] = []
+		const seen = new Set<string>()
+
+		for (const alignment of alignments) {
+			const offset = this.getAlignmentOffset(alignment, draggingRect)
+			const expectedOffset = this.isHorizontalAlignment(alignment.type)
+				? snapOffsetX
+				: snapOffsetY
+			if (
+				expectedOffset === null ||
+				Math.abs(offset) > snapThreshold ||
+				Math.abs(offset - expectedOffset) > COINCIDENT_ALIGNMENT_OFFSET_EPSILON
+			) {
+				continue
+			}
+
+			const key = `${alignment.type}:${alignment.position.toFixed(2)}`
+			if (seen.has(key)) continue
+			seen.add(key)
+			result.push(alignment)
+		}
+
+		return result
+	}
+
+	private getAlignmentOffset(alignment: AlignmentInfo, draggingRect: Rect): number {
+		switch (alignment.type) {
+			case "left":
+				return alignment.position - draggingRect.x
+			case "center":
+				return alignment.position - (draggingRect.x + draggingRect.width / 2)
+			case "right":
+				return alignment.position - (draggingRect.x + draggingRect.width)
+			case "top":
+				return alignment.position - draggingRect.y
+			case "middle":
+				return alignment.position - (draggingRect.y + draggingRect.height / 2)
+			case "bottom":
+				return alignment.position - (draggingRect.y + draggingRect.height)
+		}
+	}
+
+	private isHorizontalAlignment(type: AlignmentType): boolean {
+		return type === "left" || type === "center" || type === "right"
 	}
 
 	/**
@@ -806,12 +1206,8 @@ export class SnapGuideManager implements SnapResolverContext {
 	 */
 	public destroy(): void {
 		this.guideRenderer.clear()
-		this.canvas.overlayLayer.destroy()
-		this.canvas.eventEmitter.off("elements:transform:dragstart")
-		this.canvas.eventEmitter.off("elements:transform:dragmove")
-		this.canvas.eventEmitter.off("elements:transform:dragend")
-		this.canvas.eventEmitter.off("elements:transform:anchorDragStart")
-		this.canvas.eventEmitter.off("elements:transform:anchorDragmove")
-		this.canvas.eventEmitter.off("elements:transform:anchorDragend")
+		this.clearInteractionTargets()
+		this.eventUnsubscribers.forEach((unsubscribe) => unsubscribe())
+		this.eventUnsubscribers = []
 	}
 }
