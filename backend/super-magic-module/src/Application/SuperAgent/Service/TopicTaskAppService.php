@@ -746,7 +746,7 @@ class TopicTaskAppService extends AbstractAppService
             $dataIsolation,
             $requestDTO,
             $source,
-            deliverToQueue: false,
+            deliverToAgent: false,
             executionSource: $this->resolveIngestExecutionSource($source)
         );
     }
@@ -924,7 +924,7 @@ class TopicTaskAppService extends AbstractAppService
         DataIsolation $dataIsolation,
         CreateTaskRequestDTO $requestDTO,
         ?array $source = null,
-        bool $deliverToQueue = true,
+        bool $deliverToAgent = true,
         ?SuperMagicExecutionSource $executionSource = null,
         ?array $messageSubscriptionConfig = null
     ): array {
@@ -966,11 +966,9 @@ class TopicTaskAppService extends AbstractAppService
                 }
             }
 
-            // 1.4 If the topic still has an active task, enqueue the message into the user
-            // message queue (serial processing) instead of creating a new task immediately.
-            // This aligns the HTTP path with the WebSocket queue semantics and avoids
-            // spawning concurrent tasks on a running topic. Returns a queue_id (no task_id).
-            if ($deliverToQueue && $this->shouldEnqueueToUserMessageQueue($topicEntity)) {
+            // A normal user message waits for the currently active task. A forced message
+            // interrupts it and starts immediately instead.
+            if ($deliverToAgent && $this->shouldEnqueueToUserMessageQueue($topicEntity, $preparedRequestDTO->isForceInterrupt())) {
                 $queueEntity = $this->enqueueUserMessage($dataIsolation, $topicEntity, $preparedRequestDTO);
                 $this->logger->info('Topic is active, message enqueued to user message queue', [
                     'topic_id' => $topicEntity->getId(),
@@ -983,6 +981,10 @@ class TopicTaskAppService extends AbstractAppService
                     'im_seq_id' => null,
                     'deduplicated' => false,
                 ];
+            }
+
+            if ($deliverToAgent && $preparedRequestDTO->isForceInterrupt()) {
+                $this->interruptCurrentTask($dataIsolation, $topicEntity);
             }
 
             $taskId = (string) IdGenerator::getSnowId();
@@ -1004,7 +1006,7 @@ class TopicTaskAppService extends AbstractAppService
                 $source
             );
 
-            if ($deliverToQueue) {
+            if ($deliverToAgent) {
                 $this->deliverMessageToQueue(
                     $dataIsolation,
                     $topicEntity,
@@ -1853,16 +1855,32 @@ class TopicTaskAppService extends AbstractAppService
      * Whether the incoming HTTP message should be enqueued into the user message queue
      * instead of starting a task immediately.
      *
-     * True when the user message queue feature is enabled and the topic currently has an
-     * active task (waiting / running / waiting_for_user), to keep topic processing serial.
+     * True when a non-interrupting message arrives while a task is active.
      */
-    private function shouldEnqueueToUserMessageQueue(TopicEntity $topicEntity): bool
+    private function shouldEnqueueToUserMessageQueue(TopicEntity $topicEntity, bool $forceInterrupt): bool
     {
-        if (! (bool) config('super-magic.user_message_queue.enabled', true)) {
-            return false;
+        return ! $forceInterrupt && $topicEntity->getCurrentTaskStatus()?->isActive() === true;
+    }
+
+    /**
+     * Stop the active topic task before immediately starting a forced message.
+     */
+    private function interruptCurrentTask(DataIsolation $dataIsolation, TopicEntity $topicEntity): void
+    {
+        $currentTaskId = $topicEntity->getCurrentTaskId();
+        if ($currentTaskId === null || ! $topicEntity->getCurrentTaskStatus()?->isActive()) {
+            return;
         }
 
-        return $topicEntity->getCurrentTaskStatus()?->isActive() === true;
+        $taskEntity = $this->checkTaskPermission($dataIsolation, $currentTaskId);
+        $this->updateTaskStatus(
+            dataIsolation: $dataIsolation,
+            task: $taskEntity,
+            status: TaskStatus::Suspended,
+            errMsg: 'User force interrupted task'
+        );
+        TaskTerminationUtil::setTerminationFlag($this->redis, $this->logger, $taskEntity->getId());
+        $this->sendInterruptToSandbox($dataIsolation, $taskEntity);
     }
 
     /**
