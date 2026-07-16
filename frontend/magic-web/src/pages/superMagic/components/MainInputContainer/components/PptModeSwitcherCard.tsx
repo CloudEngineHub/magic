@@ -1,4 +1,4 @@
-import { useState, type DragEvent, type MouseEvent } from "react"
+import { useRef, useState, type DragEvent, type MouseEvent } from "react"
 import { Trans, useTranslation } from "react-i18next"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/shadcn-ui/button"
@@ -8,6 +8,8 @@ import pptSlide1 from "./assets/ppt-slide-1.png"
 import pptSlide2 from "./assets/ppt-slide-2.png"
 import pptSlide3 from "./assets/ppt-slide-3.png"
 import { useSlidesTemplateStatistics } from "@/pages/superMagic/hooks/useSlidesTemplateTotal"
+import { useAnimatedNumber } from "@/pages/superMagic/hooks/useAnimatedNumber"
+import { useElementVisibility } from "@/pages/superMagic/hooks/useElementVisibility"
 import { formatNumber } from "@/utils/format"
 import {
 	SLIDES_TEMPLATE_RANDOM_DRAG_END_EVENT,
@@ -37,8 +39,14 @@ export default function PptModeSwitcherCard({
 	const { t } = useTranslation("crew/market")
 	const [isHovered, setIsHovered] = useState(false)
 	const [isFocused, setIsFocused] = useState(false)
-	const slidesTemplateStatistics = useSlidesTemplateStatistics()
+	const cardRef = useRef<HTMLDivElement>(null)
+	const isVisible = useElementVisibility(cardRef)
+	const slidesTemplateStatistics = useSlidesTemplateStatistics({ enabled: isVisible })
 	const templateTotalUsageCount = slidesTemplateStatistics?.templateTotalUsageCount
+	const animatedTemplateTotalUsageCount = useAnimatedNumber(
+		templateTotalUsageCount,
+		"total_usage_count",
+	)
 	const isExpanded = isSelected || isHovered || isFocused
 	const pillAccentState = isHovered ? "hovered" : isSelected ? "selected" : "idle"
 	const modeName = modeItem.mode.name || t("detailDialog.emptyName")
@@ -60,6 +68,7 @@ export default function PptModeSwitcherCard({
 
 	return (
 		<div
+			ref={cardRef}
 			className="relative flex h-10 shrink-0 items-end justify-center"
 			data-expanded={isExpanded}
 			data-testid="ppt-mode-switcher-card"
@@ -146,12 +155,12 @@ export default function PptModeSwitcherCard({
 				/>
 				<span className="relative z-10 flex min-w-0 flex-col justify-center">
 					<span className="truncate whitespace-nowrap leading-5">{modeName}</span>
-					{typeof templateTotalUsageCount === "number" &&
-						Number.isFinite(templateTotalUsageCount) &&
-						templateTotalUsageCount >= 0 && (
+					{typeof animatedTemplateTotalUsageCount === "number" &&
+						Number.isFinite(animatedTemplateTotalUsageCount) &&
+						animatedTemplateTotalUsageCount >= 0 && (
 							<span
 								className={cn(
-									"overflow-hidden text-[10px] leading-3 transition-[max-height,opacity,color] duration-300",
+									"overflow-hidden text-[10px] tabular-nums leading-3 transition-[max-height,opacity,color] duration-300",
 									isSelected
 										? "text-background/70"
 										: "text-[#737373] group-hover:text-background/70",
@@ -162,7 +171,9 @@ export default function PptModeSwitcherCard({
 								<Trans
 									i18nKey="pptEmployee.delivered"
 									ns="crew/market"
-									values={{ count: formatNumber(templateTotalUsageCount) }}
+									values={{
+										count: formatNumber(animatedTemplateTotalUsageCount),
+									}}
 									components={{ strong: <strong className="font-semibold" /> }}
 								/>
 							</span>

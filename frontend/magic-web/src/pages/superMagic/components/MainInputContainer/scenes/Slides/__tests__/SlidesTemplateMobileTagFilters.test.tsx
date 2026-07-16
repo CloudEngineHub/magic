@@ -1,4 +1,5 @@
 import { fireEvent, render, screen } from "@testing-library/react"
+import { useState } from "react"
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest"
 import { SlidesTemplateTagFiltersSkeleton } from "../SlidesTemplateFilterSkeleton"
 import SlidesTemplateMobileTagFilters from "../SlidesTemplateMobileTagFilters"
@@ -70,6 +71,18 @@ function renderFilters(selectedTagCodes: string[] = [], onSelectedTagCodesChange
 	return { onSelectedTagCodesChange }
 }
 
+function ControlledFilters() {
+	const [selectedTagCodes, setSelectedTagCodes] = useState<string[]>([])
+
+	return (
+		<SlidesTemplateMobileTagFilters
+			tagGroups={tagGroups}
+			selectedTagCodes={selectedTagCodes}
+			onSelectedTagCodesChange={setSelectedTagCodes}
+		/>
+	)
+}
+
 function expectSystemPopupHeader(title: string) {
 	const closeButton = screen.getByRole("button", {
 		name: "shadcn-ui:actionDrawer.close",
@@ -127,41 +140,41 @@ describe("SlidesTemplateMobileTagFilters", () => {
 		)
 	})
 
-	it("keeps all-filter edits as a draft until confirm", () => {
+	it("matches the split-sheet layout and applies all-filter edits immediately", () => {
 		const onSelectedTagCodesChange = vi.fn()
 		renderFilters(["style-business"], onSelectedTagCodesChange)
 
 		fireEvent.click(screen.getByTestId("slides-template-mobile-all-filters-trigger"))
 		const panel = screen.getByTestId("slides-template-mobile-all-filters-panel")
 		expect(panel).toBeInTheDocument()
-		expect(panel).toHaveClass(
-			"grid",
-			"grid-cols-[8.5rem_minmax(0,1fr)]",
-			"rounded-xl",
-			"border",
-		)
+		expect(panel).toHaveClass("flex", "h-full", "rounded-lg", "bg-card")
 		expect(screen.getByTestId("slides-template-mobile-all-filters-groups")).toHaveClass(
+			"w-[116px]",
+			"py-1",
 			"border-r",
-			"bg-muted/60",
+			"bg-card",
 		)
 		expect(screen.getByTestId("slides-template-mobile-all-filters-values")).toHaveClass(
-			"bg-background/40",
-			"p-3",
+			"px-3",
+			"py-3",
+			"overflow-y-auto",
 		)
 		expect(screen.getByRole("dialog")).toHaveClass(
-			"h-[min(720px,85dvh)]",
+			"h-[448px]",
 			"max-h-[85dvh]",
+			"max-w-[375px]",
 			"rounded-t-[14px]",
+			"border",
 		)
 		expectSystemPopupHeader("playbook.edit.presets.form.moreFilters")
 		const purposeGroup = screen.getByTestId(
 			"slides-template-mobile-all-filters-group-purpose_group",
 		)
-		expect(purposeGroup).toBeInTheDocument()
-		expect(purposeGroup.firstElementChild).toHaveClass("truncate", "whitespace-nowrap")
+		expect(purposeGroup).toHaveClass("min-h-14", "w-full", "px-3")
+		expect(purposeGroup.lastElementChild).toHaveClass("line-clamp-2")
 		expect(
 			screen.getByTestId("slides-template-mobile-all-filters-group-style_group"),
-		).toHaveAttribute("aria-pressed", "true")
+		).toHaveAttribute("aria-current", "page")
 		const styleOption = screen.getByTestId(
 			"slides-template-mobile-all-filters-option-style-business",
 		)
@@ -169,19 +182,29 @@ describe("SlidesTemplateMobileTagFilters", () => {
 			styleOption,
 		)
 		expect(styleOption.parentElement).toHaveClass("grid", "grid-cols-2")
+		expect(styleOption).toHaveClass(
+			"min-h-11",
+			"rounded-lg",
+			"border-primary",
+			"bg-primary/10",
+			"text-[14px]",
+		)
+		expect(
+			screen.getByRole("heading", {
+				name: "Style",
+			}),
+		).toHaveClass("mb-3", "text-muted-foreground")
+		expect(
+			screen.queryByRole("button", {
+				name: "playbook.edit.presets.form.confirm",
+			}),
+		).not.toBeInTheDocument()
 
 		fireEvent.click(
 			screen.getByTestId("slides-template-mobile-all-filters-group-purpose_group"),
 		)
 		fireEvent.click(
 			screen.getByTestId("slides-template-mobile-all-filters-option-purpose-annual-report"),
-		)
-		expect(onSelectedTagCodesChange).not.toHaveBeenCalled()
-
-		fireEvent.click(
-			screen.getByRole("button", {
-				name: "playbook.edit.presets.form.confirm",
-			}),
 		)
 		expect(onSelectedTagCodesChange).toHaveBeenCalledTimes(1)
 		expect(onSelectedTagCodesChange).toHaveBeenCalledWith([
@@ -190,64 +213,69 @@ describe("SlidesTemplateMobileTagFilters", () => {
 		])
 	})
 
-	it("discards unconfirmed drafts when closed and restores the current selection on reopen", () => {
+	it("shows reset after selecting a filter and hides it after reset", () => {
+		render(<ControlledFilters />)
+
+		fireEvent.click(screen.getByTestId("slides-template-mobile-all-filters-trigger"))
+		expect(
+			screen.queryByRole("button", {
+				name: "shadcn-ui:actionDrawer.reset",
+			}),
+		).not.toBeInTheDocument()
+
+		fireEvent.click(
+			screen.getByTestId("slides-template-mobile-all-filters-option-purpose-annual-report"),
+		)
+		const resetButton = screen.getByRole("button", {
+			name: "shadcn-ui:actionDrawer.reset",
+		})
+		expect(resetButton).toHaveClass("size-12", "rounded-full")
+		expect(resetButton.querySelector("svg")).toHaveClass("size-[22px]", "!size-5")
+
+		fireEvent.click(resetButton)
+		expect(
+			screen.queryByRole("button", {
+				name: "shadcn-ui:actionDrawer.reset",
+			}),
+		).not.toBeInTheDocument()
+		expect(
+			screen.getByTestId("slides-template-mobile-all-filters-option-purpose-annual-report"),
+		).toHaveAttribute("aria-pressed", "false")
+	})
+
+	it("keeps immediate selections after closing and reopening", () => {
 		const onSelectedTagCodesChange = vi.fn()
-		renderFilters(["style-business"], onSelectedTagCodesChange)
+		const { rerender } = render(
+			<SlidesTemplateMobileTagFilters
+				tagGroups={tagGroups}
+				selectedTagCodes={[]}
+				onSelectedTagCodesChange={onSelectedTagCodesChange}
+			/>,
+		)
 
 		fireEvent.click(screen.getByTestId("slides-template-mobile-all-filters-trigger"))
 		fireEvent.click(
-			screen.getByTestId("slides-template-mobile-all-filters-group-purpose_group"),
-		)
-		fireEvent.click(
 			screen.getByTestId("slides-template-mobile-all-filters-option-purpose-annual-report"),
+		)
+		expect(onSelectedTagCodesChange).toHaveBeenCalledWith(["purpose-annual-report"])
+
+		rerender(
+			<SlidesTemplateMobileTagFilters
+				tagGroups={tagGroups}
+				selectedTagCodes={["purpose-annual-report"]}
+				onSelectedTagCodesChange={onSelectedTagCodesChange}
+			/>,
 		)
 		fireEvent.click(
 			screen.getByRole("button", {
 				name: "shadcn-ui:actionDrawer.close",
 			}),
 		)
-		expect(onSelectedTagCodesChange).not.toHaveBeenCalled()
 
 		fireEvent.click(screen.getByTestId("slides-template-mobile-all-filters-trigger"))
-		fireEvent.click(
-			screen.getByTestId("slides-template-mobile-all-filters-group-purpose_group"),
-		)
 		expect(
 			screen.getByTestId("slides-template-mobile-all-filters-option-purpose-annual-report"),
-		).toHaveAttribute("aria-pressed", "false")
-		fireEvent.click(screen.getByTestId("slides-template-mobile-all-filters-group-style_group"))
-		expect(
-			screen.getByTestId("slides-template-mobile-all-filters-option-style-business"),
 		).toHaveAttribute("aria-pressed", "true")
-	})
-
-	it("resets only the draft from the footer until the user confirms", () => {
-		const onSelectedTagCodesChange = vi.fn()
-		renderFilters(["style-business"], onSelectedTagCodesChange)
-
-		fireEvent.click(screen.getByTestId("slides-template-mobile-all-filters-trigger"))
-		const resetButton = screen.getByRole("button", {
-			name: "shadcn-ui:actionDrawer.reset",
-		})
-		const confirmButton = screen.getByRole("button", {
-			name: "playbook.edit.presets.form.confirm",
-		})
-		expect(resetButton.parentElement).toBe(confirmButton.parentElement)
-		expect(
-			screen.queryByTestId("slides-template-mobile-all-filters-clear"),
-		).not.toBeInTheDocument()
-		expect(
-			screen.queryByRole("button", {
-				name: "playbook.edit.presets.form.cancel",
-			}),
-		).not.toBeInTheDocument()
-
-		fireEvent.click(resetButton)
-		expect(onSelectedTagCodesChange).not.toHaveBeenCalled()
-		expect(screen.getByTestId("slides-template-mobile-all-filters-panel")).toBeInTheDocument()
-
-		fireEvent.click(confirmButton)
-		expect(onSelectedTagCodesChange).toHaveBeenCalledWith([])
 	})
 
 	it("keeps the existing confirmable single-group selector", () => {

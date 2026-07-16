@@ -12,14 +12,24 @@ interface SlidesTemplateMobileFilterPopupAction {
 	testId?: string
 }
 
+interface SlidesTemplateMobileFilterPopupHeaderAction {
+	icon: ReactNode
+	ariaLabel: string
+	onClick: () => void
+	disabled?: boolean
+	testId?: string
+}
+
 interface SlidesTemplateMobileFilterPopupProps {
 	open: boolean
 	onOpenChange: (open: boolean) => void
 	title: string
 	children: ReactNode
 	className?: string
-	secondaryAction: SlidesTemplateMobileFilterPopupAction
-	confirmAction: SlidesTemplateMobileFilterPopupAction
+	contentClassName?: string
+	headerTrailingAction?: SlidesTemplateMobileFilterPopupHeaderAction
+	secondaryAction?: SlidesTemplateMobileFilterPopupAction
+	confirmAction?: SlidesTemplateMobileFilterPopupAction
 }
 
 function SlidesTemplateMobileFilterPopup({
@@ -28,6 +38,8 @@ function SlidesTemplateMobileFilterPopup({
 	title,
 	children,
 	className,
+	contentClassName,
+	headerTrailingAction,
 	secondaryAction,
 	confirmAction,
 }: SlidesTemplateMobileFilterPopupProps) {
@@ -52,33 +64,41 @@ function SlidesTemplateMobileFilterPopup({
 				ariaLabel: closeLabel,
 				onClick: handleClose,
 			}}
+			headerTrailingAction={headerTrailingAction}
 			className={cn("max-h-[85dvh] rounded-t-[14px] border-0 bg-muted p-0", className)}
 			bodyClassName="flex min-h-0 flex-1 flex-col overflow-hidden p-0"
 			style={{ boxShadow: "0 -4px 24px rgba(0,0,0,0.08)" }}
 		>
 			<div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-				<div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-3 pb-3 pt-2">
+				<div
+					className={cn(
+						"flex min-h-0 flex-1 flex-col overflow-y-auto px-3 pb-3 pt-2",
+						contentClassName,
+					)}
+				>
 					{children}
 				</div>
-				<div className="flex shrink-0 gap-1.5 px-3 pb-3">
-					<Button
-						variant="outline"
-						className="h-9 flex-[30%] shrink-0"
-						onClick={secondaryAction.onClick}
-						disabled={secondaryAction.disabled}
-						data-testid={secondaryAction.testId}
-					>
-						{secondaryAction.label}
-					</Button>
-					<Button
-						className="h-9 flex-[70%] shrink-0"
-						onClick={confirmAction.onClick}
-						disabled={confirmAction.disabled}
-						data-testid={confirmAction.testId}
-					>
-						{confirmAction.label}
-					</Button>
-				</div>
+				{secondaryAction && confirmAction ? (
+					<div className="flex shrink-0 gap-1.5 px-3 pb-3">
+						<Button
+							variant="outline"
+							className="h-9 flex-[30%] shrink-0"
+							onClick={secondaryAction.onClick}
+							disabled={secondaryAction.disabled}
+							data-testid={secondaryAction.testId}
+						>
+							{secondaryAction.label}
+						</Button>
+						<Button
+							className="h-9 flex-[70%] shrink-0"
+							onClick={confirmAction.onClick}
+							disabled={confirmAction.disabled}
+							data-testid={confirmAction.testId}
+						>
+							{confirmAction.label}
+						</Button>
+					</div>
+				) : null}
 			</div>
 		</MagicPopup>
 	)

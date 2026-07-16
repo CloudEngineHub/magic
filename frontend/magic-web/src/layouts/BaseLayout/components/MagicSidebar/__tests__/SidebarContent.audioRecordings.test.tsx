@@ -1,5 +1,5 @@
 import { fireEvent, render, screen } from "@testing-library/react"
-import { beforeEach, describe, expect, it, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import type { ReactNode } from "react"
 import SidebarContent, { canShowSlidesTemplateCount } from "../SidebarContent"
 
@@ -8,6 +8,11 @@ const { mockIsMagicApp, navigateMock, changeBottomTabMock } = vi.hoisted(() => (
 	navigateMock: vi.fn(),
 	changeBottomTabMock: vi.fn(),
 }))
+const useAnimatedNumberMock = vi.hoisted(() => vi.fn())
+
+afterEach(() => {
+	vi.unstubAllGlobals()
+})
 
 vi.mock("react-i18next", () => ({
 	useTranslation: () => ({
@@ -90,6 +95,10 @@ vi.mock("@/pages/superMagic/hooks/useResourceStatusPolling", () => ({
 
 vi.mock("@/pages/superMagic/hooks/useSlidesTemplateTotal", () => ({
 	useSlidesTemplateTotal: () => 101582,
+}))
+
+vi.mock("@/pages/superMagic/hooks/useAnimatedNumber", () => ({
+	useAnimatedNumber: useAnimatedNumberMock,
 }))
 
 vi.mock("../hooks/useNavigateToSuperHome", () => ({
@@ -228,6 +237,10 @@ describe("SidebarContent audio recordings entry", () => {
 })
 
 describe("SidebarContent slides templates count", () => {
+	beforeEach(() => {
+		useAnimatedNumberMock.mockReturnValue(101582)
+	})
+
 	it("shows the highlighted template count in the collapsed tooltip", () => {
 		renderSidebarContent(true)
 
@@ -256,6 +269,33 @@ describe("SidebarContent slides templates count", () => {
 			"!bg-[#fff2ec]",
 		)
 		expect(screen.queryByTestId("sidebar-content-slides-templates-tooltip")).toBeNull()
+	})
+
+	it("restores the count badge after expanding the collapsed sidebar", () => {
+		const { rerender } = renderSidebarContent(true)
+
+		rerender(<SidebarContent collapsed={false} />)
+
+		expect(screen.getByTestId("sidebar-content-slides-templates-count")).toHaveTextContent(
+			"101,582 套",
+		)
+		expect(screen.getByTestId("sidebar-content-slides-templates-count-value")).toBeVisible()
+	})
+
+	it("does not recreate the measurement observer while the number animates", () => {
+		const disconnect = vi.fn()
+		const resizeObserver = vi.fn(() => ({
+			observe: vi.fn(),
+			disconnect,
+		}))
+		vi.stubGlobal("ResizeObserver", resizeObserver)
+		useAnimatedNumberMock.mockReturnValue(100000)
+		const { rerender } = renderSidebarContent()
+
+		useAnimatedNumberMock.mockReturnValue(100100)
+		rerender(<SidebarContent collapsed={false} />)
+
+		expect(resizeObserver).toHaveBeenCalledTimes(1)
 	})
 
 	it("uses the measured content width instead of a fixed sidebar breakpoint", () => {

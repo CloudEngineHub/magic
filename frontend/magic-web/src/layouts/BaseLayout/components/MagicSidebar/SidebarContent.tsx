@@ -30,6 +30,7 @@ import { useNavigateToSuperHome } from "./hooks/useNavigateToSuperHome"
 import { isMagicApp } from "@/utils/devices"
 import { openAudioRecordingsInMagicApp } from "@/layouts/BaseLayout/utils/magicAppNavigation"
 import { useSlidesTemplateTotal } from "@/pages/superMagic/hooks/useSlidesTemplateTotal"
+import { useAnimatedNumber } from "@/pages/superMagic/hooks/useAnimatedNumber"
 import { formatNumber } from "@/utils/format"
 import { cn } from "@/lib/utils"
 
@@ -72,7 +73,7 @@ function SlidesTemplateCountBadge({
 		<span
 			ref={badgeRef}
 			className={cn(
-				"flex h-6 shrink-0 items-center gap-1 rounded-full bg-[#fff2ec] px-2 text-sm font-medium leading-none text-[#ff6a1f]",
+				"flex h-6 shrink-0 items-center gap-1 rounded-full bg-[#fff2ec] px-2 text-sm font-medium tabular-nums leading-none text-[#ff6a1f]",
 				className,
 			)}
 			data-testid={testId}
@@ -108,12 +109,19 @@ function SidebarContent({ collapsed }: SidebarContentProps) {
 	const navigate = useNavigate()
 	const sidebarMarketMenuItems = useSidebarMarketMenuItems()
 	const { superRouteUrl, handleNavigateToSuperHome } = useNavigateToSuperHome()
-	const slidesTemplateTotal = useSlidesTemplateTotal()
 	const slidesTemplateRowRef = useRef<HTMLDivElement>(null)
+	const slidesTemplateTotal = useSlidesTemplateTotal()
+	const animatedSlidesTemplateTotal = useAnimatedNumber(slidesTemplateTotal, "total")
 	const slidesTemplateTitleRef = useRef<HTMLSpanElement>(null)
 	const slidesTemplateCountMeasureRef = useRef<HTMLSpanElement>(null)
 	const [shouldShowSlidesTemplateCount, setShouldShowSlidesTemplateCount] = useState(true)
 	const slidesTemplateCount =
+		animatedSlidesTemplateTotal !== undefined
+			? t("slidesTemplates.templateCount", {
+					count: formatNumber(animatedSlidesTemplateTotal),
+				})
+			: null
+	const slidesTemplateCountForMeasure =
 		slidesTemplateTotal !== undefined
 			? t("slidesTemplates.templateCount", {
 					count: formatNumber(slidesTemplateTotal),
@@ -124,7 +132,7 @@ function SidebarContent({ collapsed }: SidebarContentProps) {
 		const row = slidesTemplateRowRef.current
 		const title = slidesTemplateTitleRef.current
 		const countBadge = slidesTemplateCountMeasureRef.current
-		if (!row || !title || !countBadge || !slidesTemplateCount || collapsed) return
+		if (!row || !title || !countBadge || !slidesTemplateCountForMeasure || collapsed) return
 
 		const updateVisibility = () => {
 			const rowStyle = window.getComputedStyle(row)
@@ -153,7 +161,7 @@ function SidebarContent({ collapsed }: SidebarContentProps) {
 		resizeObserver.observe(countBadge)
 
 		return () => resizeObserver.disconnect()
-	}, [collapsed, slidesTemplateCount])
+	}, [collapsed, slidesTemplateCountForMeasure])
 
 	function shouldHandleAnchorClick(event: MouseEvent<HTMLAnchorElement>) {
 		return (
@@ -237,7 +245,7 @@ function SidebarContent({ collapsed }: SidebarContentProps) {
 								>
 									{title}
 								</span>
-								{templateCount && (
+								{templateCount && slidesTemplateCountForMeasure && (
 									<>
 										{!collapsed && (
 											<SlidesTemplateCountBadge
@@ -248,7 +256,7 @@ function SidebarContent({ collapsed }: SidebarContentProps) {
 										)}
 										{/* 始终测量完整徽标，不让数值的显示状态反过来影响宽度判断。 */}
 										<SlidesTemplateCountBadge
-											templateCount={templateCount}
+											templateCount={slidesTemplateCountForMeasure}
 											badgeRef={slidesTemplateCountMeasureRef}
 											className="pointer-events-none invisible absolute left-0 top-0"
 										/>

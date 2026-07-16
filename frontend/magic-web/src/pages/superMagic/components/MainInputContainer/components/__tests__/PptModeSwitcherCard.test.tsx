@@ -20,9 +20,18 @@ vi.mock("../../../ModeAvatar", () => ({
 }))
 
 const useSlidesTemplateStatisticsMock = vi.hoisted(() => vi.fn())
+const useElementVisibilityMock = vi.hoisted(() => vi.fn(() => true))
 
 vi.mock("@/pages/superMagic/hooks/useSlidesTemplateTotal", () => ({
 	useSlidesTemplateStatistics: useSlidesTemplateStatisticsMock,
+}))
+
+vi.mock("@/pages/superMagic/hooks/useAnimatedNumber", () => ({
+	useAnimatedNumber: (value: number | undefined) => value,
+}))
+
+vi.mock("@/pages/superMagic/hooks/useElementVisibility", () => ({
+	useElementVisibility: useElementVisibilityMock,
 }))
 
 const modeItem = {
@@ -35,6 +44,7 @@ const modeItem = {
 
 describe("PptModeSwitcherCard", () => {
 	beforeEach(() => {
+		useElementVisibilityMock.mockReturnValue(true)
 		useSlidesTemplateStatisticsMock.mockReturnValue({
 			templateTotal: 101582,
 			templateTotalUsageCount: 7293,
@@ -149,5 +159,12 @@ describe("PptModeSwitcherCard", () => {
 		render(<PptModeSwitcherCard modeItem={modeItem} isSelected onSelect={vi.fn()} />)
 
 		expect(screen.queryByTestId("ppt-mode-switcher-delivered-count")).not.toBeInTheDocument()
+	})
+
+	it("only enables statistics while the card is visible", () => {
+		useElementVisibilityMock.mockReturnValue(false)
+		render(<PptModeSwitcherCard modeItem={modeItem} isSelected onSelect={vi.fn()} />)
+
+		expect(useSlidesTemplateStatisticsMock).toHaveBeenCalledWith({ enabled: false })
 	})
 })

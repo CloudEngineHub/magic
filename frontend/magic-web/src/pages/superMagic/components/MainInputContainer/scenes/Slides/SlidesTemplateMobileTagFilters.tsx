@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react"
-import { ListFilter } from "lucide-react"
+import { ListFilter, RotateCcw } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import HeadlessHorizontalScroll from "@/components/base/HeadlessHorizontalScroll"
 import { Button } from "@/components/shadcn-ui/button"
@@ -24,20 +24,15 @@ function SlidesTemplateMobileTagFilters({
 	const { t } = useTranslation("crew/create")
 	const lt = useLocaleText()
 	const [isPanelOpen, setIsPanelOpen] = useState(false)
-	const [draftSelectedTagCodes, setDraftSelectedTagCodes] = useState<string[]>([])
 	const [activeTagGroupCode, setActiveTagGroupCode] = useState(tagGroups[0]?.code ?? "")
 	const selectedTagCodeSet = useMemo(() => new Set(selectedTagCodes), [selectedTagCodes])
-	const draftSelectedTagCodeSet = useMemo(
-		() => new Set(draftSelectedTagCodes),
-		[draftSelectedTagCodes],
-	)
 	const activeTagGroup =
 		tagGroups.find((tagGroup) => tagGroup.code === activeTagGroupCode) ?? tagGroups[0]
 	const panelTitle = t("playbook.edit.presets.form.moreFilters")
+	const resetLabel = t("shadcn-ui:actionDrawer.reset")
 
 	function handlePanelOpenChange(open: boolean) {
 		if (open) {
-			setDraftSelectedTagCodes(selectedTagCodes)
 			const firstSelectedGroup = tagGroups.find((tagGroup) =>
 				tagGroup.tags.some((tag) => selectedTagCodeSet.has(tag.code)),
 			)
@@ -57,11 +52,11 @@ function SlidesTemplateMobileTagFilters({
 		onSelectedTagCodesChange([...otherGroupTagCodes, ...nextGroupTagCodes])
 	}
 
-	function toggleDraftSelectedTag(tagCode: string) {
-		setDraftSelectedTagCodes((currentTagCodes) =>
-			currentTagCodes.includes(tagCode)
-				? currentTagCodes.filter((code) => code !== tagCode)
-				: [...currentTagCodes, tagCode],
+	function toggleSelectedTag(tagCode: string) {
+		onSelectedTagCodesChange(
+			selectedTagCodeSet.has(tagCode)
+				? selectedTagCodes.filter((code) => code !== tagCode)
+				: [...selectedTagCodes, tagCode],
 		)
 	}
 
@@ -119,75 +114,72 @@ function SlidesTemplateMobileTagFilters({
 				open={isPanelOpen}
 				onOpenChange={handlePanelOpenChange}
 				title={panelTitle}
-				className="h-[min(720px,85dvh)]"
-				secondaryAction={{
-					label: t("shadcn-ui:actionDrawer.reset"),
-					onClick: () => setDraftSelectedTagCodes([]),
-					disabled: draftSelectedTagCodes.length === 0,
-				}}
-				confirmAction={{
-					label: t("playbook.edit.presets.form.confirm"),
-					onClick: () => {
-						onSelectedTagCodesChange(draftSelectedTagCodes)
-						handlePanelOpenChange(false)
-					},
-				}}
+				className="mx-auto h-[448px] max-w-[375px] border border-border [&_.mobile-popup-action-header]:mb-0"
+				contentClassName="overflow-hidden px-[10px] pb-5 pt-2"
+				headerTrailingAction={
+					selectedTagCodes.length > 0
+						? {
+								icon: <RotateCcw className="!size-5" />,
+								ariaLabel: resetLabel,
+								onClick: () => onSelectedTagCodesChange([]),
+								testId: "slides-template-mobile-all-filters-reset",
+							}
+						: undefined
+				}
 			>
 				<div
-					className="grid min-h-0 flex-1 grid-cols-[8.5rem_minmax(0,1fr)] overflow-hidden rounded-xl border border-border/70 bg-background/70"
+					className="flex h-full min-h-0 w-full overflow-hidden rounded-lg bg-card"
 					data-testid="slides-template-mobile-all-filters-panel"
 				>
-					<div
-						className="no-scrollbar flex min-h-0 flex-col gap-1.5 overflow-y-auto border-r border-border/70 bg-muted/60 p-2"
+					<nav
+						className="no-scrollbar w-[116px] shrink-0 overflow-y-auto border-r border-border bg-card py-1"
+						aria-label={panelTitle}
 						data-testid="slides-template-mobile-all-filters-groups"
 					>
 						{tagGroups.map((tagGroup) => {
 							const isActive = tagGroup.code === activeTagGroup?.code
-							const selectedCount = tagGroup.tags.filter((tag) =>
-								draftSelectedTagCodeSet.has(tag.code),
-							).length
 
 							return (
 								<button
 									key={tagGroup.code}
 									type="button"
 									className={cn(
-										"flex min-h-10 items-center gap-1 rounded-lg px-2.5 text-left text-sm transition-colors",
+										"relative flex min-h-14 w-full items-center px-3 text-left text-[14px] leading-5 transition-colors active:opacity-60",
 										isActive
-											? "bg-background font-medium text-foreground shadow-xs"
-											: "text-muted-foreground hover:bg-background/70 hover:text-foreground",
+											? "bg-primary/10 font-medium text-primary"
+											: "text-muted-foreground",
 									)}
-									aria-pressed={isActive}
+									aria-current={isActive ? "page" : undefined}
 									data-testid={`slides-template-mobile-all-filters-group-${tagGroup.code}`}
 									onClick={() => setActiveTagGroupCode(tagGroup.code)}
 								>
-									<span className="min-w-0 flex-1 truncate whitespace-nowrap text-[13px] leading-5">
-										{lt(tagGroup.name_i18n)}
-									</span>
-									{selectedCount > 0 ? (
-										<span className="flex size-4 shrink-0 items-center justify-center rounded-full bg-primary text-[10px] font-semibold text-primary-foreground">
-											{selectedCount}
-										</span>
+									{isActive ? (
+										<span className="absolute inset-y-0 left-0 w-[3px] rounded-r-full bg-primary" />
 									) : null}
+									<span className="line-clamp-2">{lt(tagGroup.name_i18n)}</span>
 								</button>
 							)
 						})}
-					</div>
+					</nav>
 
 					<div
-						className="no-scrollbar min-h-0 overflow-y-auto bg-background/40 p-3 pr-2"
+						className="no-scrollbar min-w-0 flex-1 overflow-y-auto px-3 py-3"
 						data-testid="slides-template-mobile-all-filters-values"
 					>
+						<h2 className="mb-3 px-0.5 text-[14px] leading-5 text-muted-foreground">
+							{activeTagGroup ? lt(activeTagGroup.name_i18n) : null}
+						</h2>
 						<div className="grid grid-cols-2 content-start gap-2">
 							{activeTagGroup?.tags.map((tag) => {
-								const isSelected = draftSelectedTagCodeSet.has(tag.code)
+								const isSelected = selectedTagCodeSet.has(tag.code)
 
 								return (
 									<SlidesTemplateMobileFilterOption
 										key={tag.code}
 										label={lt(tag.name_i18n)}
 										selected={isSelected}
-										onClick={() => toggleDraftSelectedTag(tag.code)}
+										variant="splitSheet"
+										onClick={() => toggleSelectedTag(tag.code)}
 										data-testid={`slides-template-mobile-all-filters-option-${tag.code}`}
 									/>
 								)
