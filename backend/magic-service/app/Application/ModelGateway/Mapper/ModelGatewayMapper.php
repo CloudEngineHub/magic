@@ -17,6 +17,7 @@ use App\Domain\Provider\Entity\ValueObject\ProviderDataIsolation;
 use App\Domain\Provider\Entity\ValueObject\ProviderModelType;
 use App\Infrastructure\Core\Contract\Model\RerankInterface;
 use App\Infrastructure\Core\DataIsolation\BaseDataIsolation;
+use App\Infrastructure\Core\Exception\BusinessException;
 use App\Infrastructure\ExternalAPI\ImageGenerateAPI\ImageModel;
 use App\Infrastructure\ExternalAPI\MagicAIApi\MagicAILocalModel;
 use App\Infrastructure\ExternalAPI\Proxy\ProxyConfigResolverInterface;
@@ -377,7 +378,17 @@ class ModelGatewayMapper extends ModelMapper
                 continue;
             }
             $proxy = $proxyCache[$providerModel->getServiceProviderConfigId()] ?? '';
-            $model = $this->createModelByProvider($providerDataIsolation, $providerModel, $providerConfig, $provider, $proxy);
+            try {
+                $model = $this->createModelByProvider($providerDataIsolation, $providerModel, $providerConfig, $provider, $proxy);
+            } catch (BusinessException $exception) {
+                $modelLogs['provider_implementation_unavailable'][] = "{$providerLabel}|{$providerModel->getModelId()}";
+                $this->logger->warning('模型服务商实现不可用，跳过模型', [
+                    'model_id' => $providerModel->getModelId(),
+                    'provider_config_id' => $providerConfig->getId(),
+                    'error' => $exception->getMessage(),
+                ]);
+                continue;
+            }
             if (! $model) {
                 $modelLogs['model_disabled_or_invalid'][] = "{$providerLabel}|{$providerModel->getModelId()}";
                 continue;
