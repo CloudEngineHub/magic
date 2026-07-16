@@ -1411,6 +1411,7 @@ class LLMAppService extends AbstractLLMAppService
         $modelAttributes = null;
         $accessContext = null;
         $originalModelId = $proxyModelRequest->getModel();
+        $requestExtra = $proxyModelRequest->getExtra();
         $invocationSuccessAudited = false;
         $modelAuditEnabled = false;
         try {
@@ -1460,7 +1461,7 @@ class LLMAppService extends AbstractLLMAppService
                     default => null
                 };
                 if ($model instanceof ModelEntry) {
-                    $proxyModelRequest->setExtra($model->getExtra());
+                    $proxyModelRequest->setExtra($this->mergeModelExtra($model->getExtra(), $requestExtra));
                     $modelAttributes = $model->getAttributes();
                     $impl = $model->getModel();
                     $model = $impl instanceof OdinModel ? $impl->getModel() : $impl;
@@ -1474,7 +1475,7 @@ class LLMAppService extends AbstractLLMAppService
                         default => null
                     };
                     if ($model instanceof ModelEntry) {
-                        $proxyModelRequest->setExtra($model->getExtra());
+                        $proxyModelRequest->setExtra($this->mergeModelExtra($model->getExtra(), $requestExtra));
                         $modelAttributes = $model->getAttributes();
                         $impl = $model->getModel();
                         $model = $impl instanceof OdinModel ? $impl->getModel() : $impl;
@@ -2677,5 +2678,17 @@ class LLMAppService extends AbstractLLMAppService
             MagicApiErrorCode::MODEL_RESPONSE_FAIL,
             $defaultErrorMessage
         );
+    }
+
+    /**
+     * 合并模型配置和请求级扩展参数，请求级配置拥有更高优先级。
+     */
+    private function mergeModelExtra(?array $modelExtra, ?array $requestExtra): ?array
+    {
+        if ($modelExtra === null && $requestExtra === null) {
+            return null;
+        }
+
+        return array_replace_recursive($modelExtra ?? [], $requestExtra ?? []);
     }
 }
