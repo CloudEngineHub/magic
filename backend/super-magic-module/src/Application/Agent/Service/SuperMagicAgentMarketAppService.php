@@ -55,16 +55,13 @@ class SuperMagicAgentMarketAppService extends AbstractSuperMagicAppService
     protected MagicUserDomainService $magicUserDomainService;
 
     /**
-     * Return all categories with their published crew counts.
-     */
-    /**
      * @return array<int, array{id:int, name_i18n:array, logo:?string, sort_order:int, status:int, crew_count:int}>
      */
-    public function getCategories(Authenticatable $authorization): array
+    public function getCategories(Authenticatable $authorization, bool $includeEmpty = false): array
     {
         $dataIsolation = $this->createSuperMagicDataIsolation($authorization);
 
-        $categories = $this->superMagicAgentCategoryDomainService->getCategoriesWithCrewCount();
+        $categories = $this->superMagicAgentCategoryDomainService->getCategoriesWithCrewCount($includeEmpty);
         $this->updateCategoryLogoUrls($dataIsolation, $categories);
 
         $list = [];
