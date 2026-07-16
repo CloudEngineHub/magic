@@ -7,6 +7,7 @@ declare(strict_types=1);
 
 namespace Dtyq\SuperMagic\Domain\Agent\Repository\Persistence;
 
+use App\Infrastructure\Util\IdGenerator\IdGenerator;
 use Dtyq\SuperMagic\Domain\Agent\Entity\AgentCategoryEntity;
 use Dtyq\SuperMagic\Domain\Agent\Entity\ValueObject\Query\AgentCategoryQuery;
 use Dtyq\SuperMagic\Domain\Agent\Repository\Facade\AgentCategoryRepositoryInterface;
@@ -64,11 +65,26 @@ class AgentCategoryRepository extends SuperMagicAbstractRepository implements Ag
             ->all();
     }
 
+    public function findEnabled(): array
+    {
+        $models = $this->categoryModel::query()
+            ->where('status', 1)
+            ->orderBy('sort_order', 'DESC')
+            ->orderBy('created_at', 'ASC')
+            ->get();
+
+        return $models
+            ->map(static fn (AgentCategoryModel $model) => new AgentCategoryEntity($model->toArray()))
+            ->all();
+    }
+
     public function save(AgentCategoryEntity $entity): AgentCategoryEntity
     {
-        $model = $entity->getId() === null
-            ? new AgentCategoryModel()
-            : $this->categoryModel::query()->find($entity->getId());
+        if ($entity->getId() === null) {
+            $entity->setId(IdGenerator::getSnowId());
+        }
+
+        $model = $this->categoryModel::query()->find($entity->getId());
         $model ??= new AgentCategoryModel();
         $model->fill($this->getAttributes($entity));
         $model->save();

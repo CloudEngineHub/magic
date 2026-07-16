@@ -149,8 +149,13 @@ abstract class AbstractSuperMagicAppService extends AbstractKernelAppService
 
         if ($currentTargetType === PublishTargetType::MARKET) {
             if ($previousTargetType !== null && $previousTargetType !== PublishTargetType::MARKET) {
-                // 从内部切到市场时，只需要清掉原有内部可见性。
-                $this->saveAgentVisibility($dataIsolation, $agentEntity->getCode(), VisibilityType::NONE);
+                // 从内部切到市场时，清掉内部共享可见性，但保留创建者自己可见。
+                $this->saveAgentVisibility(
+                    $dataIsolation,
+                    $agentEntity->getCode(),
+                    VisibilityType::SPECIFIC,
+                    [$agentEntity->getCreator()]
+                );
             }
             return;
         }
@@ -640,9 +645,9 @@ abstract class AbstractSuperMagicAppService extends AbstractKernelAppService
 
         // 获取后台的所有模式，用于封装数据到 Agent 中
         $query = new ModeQuery(status: true);
-        $modeEntities = $this->modeDomainService->getModes($modeDataIsolation, $query, Page::createNoPage())['list'];
+        $modeEntities = $this->modeDomainService->getOrganizationVisibleModes($modeDataIsolation, $query, Page::createNoPage())['list'];
 
-        return array_map(fn ($modeEntity) => $modeEntity->getIdentifier(), $modeEntities);
+        return array_map(fn (ModeEntity $modeEntity) => $modeEntity->getIdentifier(), $modeEntities);
     }
 
     private function syncInternalAgentVisibility(

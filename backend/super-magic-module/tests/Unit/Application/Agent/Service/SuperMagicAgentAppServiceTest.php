@@ -10,9 +10,15 @@ namespace Dtyq\SuperMagic\Tests\Unit\Application\Agent\Service;
 use App\Domain\Contact\Entity\ValueObject\DataIsolation;
 use App\Domain\Flow\Entity\ValueObject\FlowDataIsolation;
 use App\Domain\Mode\Entity\ModeDataIsolation;
+use App\Domain\Mode\Entity\ModeEntity;
 use App\Domain\Mode\Entity\ValueQuery\ModeQuery;
 use App\Domain\Mode\Service\ModeDomainService;
 use App\Domain\OrganizationEnvironment\Service\MagicOrganizationEnvDomainService;
+use App\Domain\Permission\Entity\ValueObject\PermissionDataIsolation;
+use App\Domain\Permission\Entity\ValueObject\ResourceVisibility\ResourceType as ResourceVisibilityResourceType;
+use App\Domain\Permission\Entity\ValueObject\ResourceVisibility\VisibilityType;
+use App\Domain\Permission\Service\ResourceVisibilityDomainService;
+use App\Infrastructure\Core\DataIsolation\BaseDataIsolation;
 use App\Infrastructure\Core\DataIsolation\BaseHandleDataIsolation;
 use App\Infrastructure\Core\DataIsolation\BaseOrganizationInfoManager;
 use App\Infrastructure\Core\DataIsolation\BaseSubscriptionManager;
@@ -28,6 +34,7 @@ use Dtyq\SuperMagic\Application\Agent\Service\SuperMagicAgentAppService;
 use Dtyq\SuperMagic\Application\Collaboration\Policy\ResourceAccessPolicyService;
 use Dtyq\SuperMagic\Domain\Agent\Entity\AgentVersionEntity;
 use Dtyq\SuperMagic\Domain\Agent\Entity\SuperMagicAgentEntity;
+use Dtyq\SuperMagic\Domain\Agent\Entity\ValueObject\PublishTargetType;
 use Dtyq\SuperMagic\Domain\Agent\Entity\ValueObject\SuperMagicAgentDataIsolation;
 use Dtyq\SuperMagic\Domain\Agent\Entity\ValueObject\SuperMagicAgentTool;
 use Dtyq\SuperMagic\Domain\Agent\Entity\ValueObject\SuperMagicAgentToolType;
@@ -143,6 +150,64 @@ class SuperMagicAgentAppServiceTest extends TestCase
 
         $this->expectException(BusinessException::class);
         $method->invoke($this->service, $dataIsolation, 'creator-only-agent');
+    }
+
+    public function testSyncAgentPublishScopeTransitionKeepsCreatorVisibleWhenInternalPublishesToMarket(): void
+    {
+        ApplicationContext::setContainer($this->buildContainer([]));
+
+        $visibilityCall = (object) [
+            'visibilityType' => null,
+            'userIds' => null,
+            'departmentIds' => null,
+        ];
+        $resourceVisibilityDomainService = new readonly class($visibilityCall) extends ResourceVisibilityDomainService {
+            public function __construct(private object $visibilityCall)
+            {
+            }
+
+            public function saveVisibilityByPrincipals(
+                BaseDataIsolation|PermissionDataIsolation $dataIsolation,
+                ResourceVisibilityResourceType $resourceType,
+                string $resourceCode,
+                VisibilityType $visibilityType,
+                array $userIds = [],
+                array $departmentIds = []
+            ): void {
+                TestCase::assertSame('ORG', $dataIsolation->getCurrentOrganizationCode());
+                TestCase::assertSame(ResourceVisibilityResourceType::SUPER_MAGIC_AGENT, $resourceType);
+                TestCase::assertSame('SMA-agent', $resourceCode);
+
+                $this->visibilityCall->visibilityType = $visibilityType;
+                $this->visibilityCall->userIds = $userIds;
+                $this->visibilityCall->departmentIds = $departmentIds;
+            }
+        };
+        $this->setProperty($this->service, 'resourceVisibilityDomainService', $resourceVisibilityDomainService);
+
+        $agent = new SuperMagicAgentEntity();
+        $agent->setCode('SMA-agent');
+        $agent->setCreator('creator-user');
+
+        $previousVersion = new AgentVersionEntity();
+        $previousVersion->setPublishTargetType(PublishTargetType::ORGANIZATION);
+
+        $currentVersion = new AgentVersionEntity();
+        $currentVersion->setPublishTargetType(PublishTargetType::MARKET);
+
+        $method = new ReflectionMethod($this->service, 'syncAgentPublishScopeTransition');
+        $method->setAccessible(true);
+        $method->invoke(
+            $this->service,
+            new SuperMagicAgentDataIsolation('ORG', 'reviewer-user'),
+            $agent,
+            $previousVersion,
+            $currentVersion
+        );
+
+        self::assertSame(VisibilityType::SPECIFIC, $visibilityCall->visibilityType);
+        self::assertSame(['creator-user'], $visibilityCall->userIds);
+        self::assertSame([], $visibilityCall->departmentIds);
     }
 
     public function testInitializeAgentPublishSandboxUsesProjectCurrentTopicAndPoolInitialization(): void
@@ -474,6 +539,36 @@ class SuperMagicAgentAppServiceTest extends TestCase
         ], $item);
     }
 
+    public function testGetOfficialAgentCodesFiltersOrganizationWhitelist(): void
+    {
+        $visibleMode = $this->createModeEntity('general', []);
+        $allowedMode = $this->createModeEntity('SMA-allowed', ['ORG']);
+        $blockedMode = $this->createModeEntity('SMA-blocked', ['OTHER_ORG']);
+
+        $modeDomainService = new class([$visibleMode, $allowedMode, $blockedMode]) extends ModeDomainService {
+            public function __construct(private array $modes)
+            {
+            }
+
+            public function getModes(ModeDataIsolation $dataIsolation, ModeQuery $query, Page $page): array
+            {
+                return [
+                    'total' => count($this->modes),
+                    'list' => $this->modes,
+                ];
+            }
+        };
+        $this->setProperty($this->service, 'modeDomainService', $modeDomainService);
+
+        $method = new ReflectionMethod($this->service, 'getOfficialAgentCodes');
+        $method->setAccessible(true);
+
+        $dataIsolation = new SuperMagicAgentDataIsolation('ORG', 'user-1');
+        $codes = $method->invoke($this->service, $dataIsolation);
+
+        self::assertSame(['general', 'SMA-allowed'], $codes);
+    }
+
     /**
      * @param array<string> $officialCodes
      */
@@ -489,6 +584,15 @@ class SuperMagicAgentAppServiceTest extends TestCase
                 return ['total' => 0, 'list' => []];
             }
         };
+    }
+
+    private function createModeEntity(string $identifier, array $organizationWhitelist): ModeEntity
+    {
+        $mode = new ModeEntity();
+        $mode->setIdentifier($identifier);
+        $mode->setVisibilityWhitelist($organizationWhitelist === [] ? [] : ['organizations' => $organizationWhitelist]);
+
+        return $mode;
     }
 
     private function setProperty(object $object, string $property, mixed $value): void
