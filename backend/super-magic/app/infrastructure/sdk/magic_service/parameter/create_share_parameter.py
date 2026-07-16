@@ -4,7 +4,8 @@ Create Share Parameter
 Parameter class for creating or updating a share via the Open API sandbox endpoint.
 """
 
-from typing import Dict, Any, Optional, List
+from typing import Any, Dict, List, Optional
+
 from ..kernel.magic_service_parameter import MagicServiceAbstractParameter
 
 
@@ -22,6 +23,38 @@ class TargetId:
 
     def to_dict(self) -> Dict[str, str]:
         return {'target_type': self.target_type, 'target_id': self.target_id}
+
+
+class ShareExtraParameter:
+    """Strongly typed optional settings for file, project, and topic shares."""
+
+    def __init__(
+        self,
+        allow_copy_project_files: Optional[bool] = None,
+        show_original_info: Optional[bool] = None,
+        view_file_list: Optional[bool] = None,
+        hide_created_by_super_magic: Optional[bool] = None,
+        allow_download_project_file: Optional[bool] = None,
+        pure_mode: Optional[bool] = None,
+    ):
+        self.allow_copy_project_files = allow_copy_project_files
+        self.show_original_info = show_original_info
+        self.view_file_list = view_file_list
+        self.hide_created_by_super_magic = hide_created_by_super_magic
+        self.allow_download_project_file = allow_download_project_file
+        self.pure_mode = pure_mode
+
+    def to_dict(self) -> Dict[str, bool]:
+        """Build the extra settings object, omitting settings that were not supplied."""
+        values = {
+            'allow_copy_project_files': self.allow_copy_project_files,
+            'show_original_info': self.show_original_info,
+            'view_file_list': self.view_file_list,
+            'hide_created_by_super_magic': self.hide_created_by_super_magic,
+            'allow_download_project_file': self.allow_download_project_file,
+            'pure_mode': self.pure_mode,
+        }
+        return {key: value for key, value in values.items() if value is not None}
 
 
 class CreateShareParameter(MagicServiceAbstractParameter):
@@ -42,7 +75,9 @@ class CreateShareParameter(MagicServiceAbstractParameter):
         project_id: Optional[str] = None,
         share_project: Optional[bool] = None,
         default_open_file_id: Optional[str] = None,
-        extra: Optional[Dict[str, Any]] = None,
+        extra: Optional[ShareExtraParameter] = None,
+        show_share_url: Optional[bool] = None,
+        clear_expiration: bool = False,
     ):
         """
         Args:
@@ -51,7 +86,7 @@ class CreateShareParameter(MagicServiceAbstractParameter):
             share_type: Share type enum value (2=TeamShare, 4=Internet, 5=PasswordProtected)
             resource_name: Share title; optional only for topic shares (resource_type=5)
             password: Access password (4-32 chars); required when share_type=5
-            expire_days: Valid days (1-365); omit or pass 0/None for permanent
+            expire_days: Valid days (1-365); omit to leave unchanged when updating
             share_range: Share scope for team share ('all' or 'designated'); required when share_type=2
             target_ids: Designated recipients; required when share_type=2 and share_range='designated'
             file_ids: File ID list; required when resource_type=13 or 15 on creation
@@ -60,7 +95,10 @@ class CreateShareParameter(MagicServiceAbstractParameter):
             share_project: True to share the entire project (converts resource_type to 12 internally)
             default_open_file_id: Default file to open when accessing the share
             extra: Extra config (allowed keys: allow_copy_project_files, show_original_info,
-                   view_file_list, hide_created_by_super_magic, allow_download_project_file)
+                   view_file_list, hide_created_by_super_magic, allow_download_project_file,
+                   pure_mode)
+            show_share_url: Whether the response should include the final share URL
+            clear_expiration: True to clear the existing expiration and make the share permanent
         """
         super().__init__()
         self.resource_id = resource_id
@@ -69,6 +107,7 @@ class CreateShareParameter(MagicServiceAbstractParameter):
         self.resource_name = resource_name
         self.password = password
         self.expire_days = expire_days
+        self.clear_expiration = clear_expiration
         self.share_range = share_range
         self.target_ids = target_ids
         self.file_ids = file_ids
@@ -77,6 +116,7 @@ class CreateShareParameter(MagicServiceAbstractParameter):
         self.share_project = share_project
         self.default_open_file_id = default_open_file_id
         self.extra = extra
+        self.show_share_url = show_share_url
 
     def to_body(self) -> Dict[str, Any]:
         """Build request body, omitting None fields"""
@@ -89,7 +129,9 @@ class CreateShareParameter(MagicServiceAbstractParameter):
             body['resource_name'] = self.resource_name
         if self.password is not None:
             body['password'] = self.password
-        if self.expire_days is not None:
+        if self.clear_expiration:
+            body['expire_days'] = 0
+        elif self.expire_days is not None:
             body['expire_days'] = self.expire_days
         if self.share_range is not None:
             body['share_range'] = self.share_range
@@ -106,7 +148,9 @@ class CreateShareParameter(MagicServiceAbstractParameter):
         if self.default_open_file_id is not None:
             body['default_open_file_id'] = self.default_open_file_id
         if self.extra is not None:
-            body['extra'] = self.extra
+            body['extra'] = self.extra.to_dict()
+        if self.show_share_url is not None:
+            body['show_share_url'] = self.show_share_url
         return body
 
     def to_query_params(self) -> Dict[str, Any]:
@@ -120,3 +164,5 @@ class CreateShareParameter(MagicServiceAbstractParameter):
             raise ValueError("resource_type is required")
         if self.share_type is None:
             raise ValueError("share_type is required")
+        if self.clear_expiration and self.expire_days is not None:
+            raise ValueError("clear_expiration cannot be used with expire_days")

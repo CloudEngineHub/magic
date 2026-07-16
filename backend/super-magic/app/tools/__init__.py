@@ -72,6 +72,19 @@ from app.tools.document_parse import (
 )
 from app.tools.cli_manager import CliManagerApply, CliManagerList, CliManagerRemove
 from app.tools.env_manager import GetEnv, ListEnv, SetEnv, UnsetEnv
+from app.tools.share import (
+    CreateFileShare,
+    CreateProjectShare,
+    CreateTopicShare,
+    DeleteShare,
+    GetShare,
+    ListFileShares,
+    ListProjectShares,
+    ListTopicShares,
+    UpdateFileShare,
+    UpdateProjectShare,
+    UpdateTopicShare,
+)
 from app.tools.visual_understanding import VisualUnderstanding
 from app.tools.visual_understanding_webpage import VisualUnderstandingWebpage
 from app.tools.video_understanding import VideoUnderstanding
@@ -202,6 +215,17 @@ __all__ = [
     "ListEnv",
     "SetEnv",
     "UnsetEnv",
+    "CreateFileShare",
+    "CreateProjectShare",
+    "CreateTopicShare",
+    "DeleteShare",
+    "GetShare",
+    "ListFileShares",
+    "ListProjectShares",
+    "ListTopicShares",
+    "UpdateFileShare",
+    "UpdateProjectShare",
+    "UpdateTopicShare",
     "CreateSlide",
     "CreateSlideProject",
     "CreateMemory",

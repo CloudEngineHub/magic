@@ -574,5 +574,49 @@
     "call_simple_agent": {
         "zh_CN": "调用助理",
         "en_US": "Consult Agent"
+    },
+    "create_file_share": {
+        "zh_CN": "创建文件分享",
+        "en_US": "Create file share"
+    },
+    "create_project_share": {
+        "zh_CN": "创建项目分享",
+        "en_US": "Create project share"
+    },
+    "create_topic_share": {
+        "zh_CN": "创建话题分享",
+        "en_US": "Create topic share"
+    },
+    "list_file_shares": {
+        "zh_CN": "查看文件分享",
+        "en_US": "List file shares"
+    },
+    "list_project_shares": {
+        "zh_CN": "查看项目分享",
+        "en_US": "List project shares"
+    },
+    "list_topic_shares": {
+        "zh_CN": "查看话题分享",
+        "en_US": "List topic shares"
+    },
+    "get_share": {
+        "zh_CN": "查看分享详情",
+        "en_US": "Get share details"
+    },
+    "update_file_share": {
+        "zh_CN": "更新文件分享",
+        "en_US": "Update file share"
+    },
+    "update_project_share": {
+        "zh_CN": "更新项目分享",
+        "en_US": "Update project share"
+    },
+    "update_topic_share": {
+        "zh_CN": "更新话题分享",
+        "en_US": "Update topic share"
+    },
+    "delete_share": {
+        "zh_CN": "删除分享",
+        "en_US": "Delete share"
     }
 }
