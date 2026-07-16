@@ -872,6 +872,11 @@ class FileStorageListenerService:
                 continue
             if snapshot.operation == FileOperation.DELETED:
                 continue
+            # rename 不改内容，跳过以避免触发不必要的 create_file_version；
+            # 若同一 file_id 后续在同一 checkpoint 内出现 UPDATED，仍会进列表
+            # （seen 按 file_path 去重，RENAMED 不会提前占用新路径）。
+            if snapshot.operation == FileOperation.RENAMED:
+                continue
 
             path = snapshot.file_path
             if path in seen:
