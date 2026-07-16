@@ -2,7 +2,10 @@ import * as React from "react"
 import { Drawer as DrawerPrimitive } from "vaul"
 
 import { cn } from "@/lib/utils"
-import { useOverlayInteractionScopeAttributes } from "./overlay-interaction-scope"
+import {
+	useOverlayInteractionScopeAttributes,
+	useOverlayInteractionScopeContentAttributes,
+} from "./overlay-interaction-scope"
 
 function Drawer({ ...props }: React.ComponentProps<typeof DrawerPrimitive.Root>) {
 	return <DrawerPrimitive.Root data-slot="drawer" {...props} />
@@ -54,7 +57,7 @@ function DrawerContent({
 	children,
 	...props
 }: React.ComponentProps<typeof DrawerPrimitive.Content>) {
-	const overlayScopeAttributes = useOverlayInteractionScopeAttributes()
+	const overlayScopeAttributes = useOverlayInteractionScopeContentAttributes()
 
 	return (
 		<DrawerPortal data-slot="drawer-portal">

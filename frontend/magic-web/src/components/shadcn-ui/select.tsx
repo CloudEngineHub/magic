@@ -5,7 +5,10 @@ import * as SelectPrimitive from "@radix-ui/react-select"
 import { CheckIcon, ChevronDownIcon, ChevronUpIcon } from "lucide-react"
 
 import { cn } from "@/lib/utils"
-import { useOverlayInteractionScopeAttributes } from "./overlay-interaction-scope"
+import {
+	useOverlayInteractionScopeAttributes,
+	useOverlayInteractionScopeContentAttributes,
+} from "./overlay-interaction-scope"
 
 function Select({ ...props }: React.ComponentProps<typeof SelectPrimitive.Root>) {
 	return <SelectPrimitive.Root data-slot="select" {...props} />
@@ -62,7 +65,7 @@ function SelectContent({
 	showScrollButtons?: boolean
 	viewportClassName?: string
 }) {
-	const overlayScopeAttributes = useOverlayInteractionScopeAttributes()
+	const overlayScopeAttributes = useOverlayInteractionScopeContentAttributes()
 
 	return (
 		<SelectPrimitive.Portal>

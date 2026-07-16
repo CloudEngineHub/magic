@@ -316,6 +316,7 @@ describe("SlidesPresetGrid", () => {
 
 	it("shows persistent preview buttons on touch devices", () => {
 		mockPointerDevice({ canHover: false, maxTouchPoints: 5 })
+		mockUseIsMobile.mockReturnValue(true)
 		render(<SlidesPresetGrid templates={mockTemplates} />)
 
 		const previewButtons = screen.getAllByTestId("slides-preset-card-touch-preview-button")
@@ -324,6 +325,8 @@ describe("SlidesPresetGrid", () => {
 
 		fireEvent.click(previewButtons[0])
 		expect(screen.getByTestId("slides-preset-preview-dialog-content")).toBeInTheDocument()
+		expect(screen.getByTestId("on-open-change")).toHaveClass("left-[10px]")
+		expect(screen.getByTestId("on-open-change")).not.toHaveClass("right-[10px]")
 	})
 
 	it("shows the selected status in the top-right corner on touch devices", () => {
@@ -461,7 +464,7 @@ describe("SlidesPresetGrid", () => {
 		}
 	})
 
-	it("renders the collage returned by template detail in the hover card", async () => {
+	it("shows the hover card after 1 second with the collage returned by template detail", async () => {
 		const detailTemplate = {
 			...mockTemplates[0],
 			collage_url: "https://example.com/academic-collage.png",
@@ -487,6 +490,22 @@ describe("SlidesPresetGrid", () => {
 			})
 
 			expect(onPreviewDetailLoad).toHaveBeenCalledWith(mockTemplates[0])
+			expect(
+				screen.queryByAltText("Academic Research collage preview"),
+			).not.toBeInTheDocument()
+
+			act(() => {
+				vi.advanceTimersByTime(699)
+			})
+
+			expect(
+				screen.queryByAltText("Academic Research collage preview"),
+			).not.toBeInTheDocument()
+
+			act(() => {
+				vi.advanceTimersByTime(1)
+			})
+
 			expect(screen.getByAltText("Academic Research collage preview")).toHaveAttribute(
 				"src",
 				"https://example.com/academic-collage.png",

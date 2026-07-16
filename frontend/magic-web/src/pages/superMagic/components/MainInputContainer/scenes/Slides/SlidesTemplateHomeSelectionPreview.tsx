@@ -27,6 +27,7 @@ interface SlidesTemplateHomeSelectionPreviewProps {
 	template?: OptionItem | null
 	templatePickerOpen?: boolean
 	onTemplatePickerOpenChange?: (open: boolean) => void
+	showTemplateActions?: boolean
 	className?: string
 	isTemplatePreviewOpen?: boolean
 }
@@ -44,6 +45,7 @@ export default function SlidesTemplateHomeSelectionPreview({
 	template,
 	templatePickerOpen,
 	onTemplatePickerOpenChange,
+	showTemplateActions = true,
 	className,
 	isTemplatePreviewOpen = false,
 }: SlidesTemplateHomeSelectionPreviewProps) {
@@ -191,6 +193,7 @@ export default function SlidesTemplateHomeSelectionPreview({
 					ref={templateActionsRef}
 					className="group relative flex aspect-video w-20 items-center justify-center overflow-hidden rounded-lg bg-muted ring-1 ring-inset ring-black/[0.06] transition-shadow focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2 hover:ring-black/[0.16] sm:w-24"
 					onPointerEnter={() => {
+						if (!showTemplateActions) return
 						if (!canUseHoverActions) return
 						isTemplatePointerInsideRef.current = true
 						if (!waitForTemplatePointerLeaveRef.current) {
@@ -198,6 +201,7 @@ export default function SlidesTemplateHomeSelectionPreview({
 						}
 					}}
 					onPointerLeave={() => {
+						if (!showTemplateActions) return
 						if (!canUseHoverActions) return
 						isTemplatePointerInsideRef.current = false
 						waitForTemplatePointerLeaveRef.current = false
@@ -218,46 +222,56 @@ export default function SlidesTemplateHomeSelectionPreview({
 							<ImageIcon className="size-4 text-muted-foreground" />
 						)}
 					</div>
-					<div
-						className={cn(
-							"absolute inset-0 flex items-center justify-center gap-1 bg-black/45 transition-opacity",
-							canUseHoverActions && isTemplateActionsDismissed
-								? "pointer-events-none opacity-0"
-								: canUseHoverActions
-									? "opacity-0 group-focus-within:opacity-100 group-hover:opacity-100"
-									: "opacity-100",
-						)}
-						data-interaction-mode={canUseHoverActions ? "hover" : "touch"}
-						data-testid="slides-template-home-actions"
-					>
-						{renderTemplatePicker(
+					{showTemplateActions ? (
+						<div
+							className={cn(
+								"absolute inset-0 flex items-center justify-center gap-1 bg-black/45 transition-opacity",
+								canUseHoverActions && isTemplateActionsDismissed
+									? "pointer-events-none opacity-0"
+									: canUseHoverActions
+										? "opacity-0 group-focus-within:opacity-100 group-hover:opacity-100"
+										: "opacity-100",
+							)}
+							data-interaction-mode={canUseHoverActions ? "hover" : "touch"}
+							data-testid="slides-template-home-actions"
+						>
+							{renderTemplatePicker(
+								<button
+									type="button"
+									className="h-7 rounded-md bg-white/95 px-2 text-xs font-medium text-neutral-900 shadow-sm transition-colors hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
+									aria-label={t("playbook.edit.presets.form.replaceTemplate")}
+									onClick={
+										onTemplatePickerContainerChange
+											? undefined
+											: onClear
+												? handleClear
+												: undefined
+									}
+									disabled={!onTemplatePickerContainerChange && !onClear}
+									data-testid="slides-template-home-replace-selected-template"
+								>
+									{t("playbook.edit.presets.form.replaceTemplate")}
+								</button>,
+							)}
 							<button
 								type="button"
 								className="h-7 rounded-md bg-white/95 px-2 text-xs font-medium text-neutral-900 shadow-sm transition-colors hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
-								aria-label={t("playbook.edit.presets.form.replaceTemplate")}
-								onClick={
-									onTemplatePickerContainerChange
-										? undefined
-										: onClear
-											? handleClear
-											: undefined
-								}
-								disabled={!onTemplatePickerContainerChange && !onClear}
-								data-testid="slides-template-home-replace-selected-template"
+								aria-label={t("playbook.edit.presets.form.preview")}
+								onClick={() => setIsPreviewOpen(true)}
+								data-testid="slides-template-home-preview-selected-template"
 							>
-								{t("playbook.edit.presets.form.replaceTemplate")}
-							</button>,
-						)}
+								{t("playbook.edit.presets.form.preview")}
+							</button>
+						</div>
+					) : (
 						<button
 							type="button"
-							className="h-7 rounded-md bg-white/95 px-2 text-xs font-medium text-neutral-900 shadow-sm transition-colors hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
+							className="absolute inset-0 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
 							aria-label={t("playbook.edit.presets.form.preview")}
 							onClick={() => setIsPreviewOpen(true)}
 							data-testid="slides-template-home-preview-selected-template"
-						>
-							{t("playbook.edit.presets.form.preview")}
-						</button>
-					</div>
+						/>
+					)}
 				</div>
 				{onClear ? (
 					<Button

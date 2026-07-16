@@ -12,15 +12,7 @@ import { createContext, useContext, useMemo, type ReactNode } from "react"
  */
 const OVERLAY_SCOPE_ATTRIBUTE = "data-overlay-interaction-scopes"
 const OVERLAY_SCOPE_BOUNDARY_ATTRIBUTE = "data-overlay-interaction-scope-boundary"
-// 只检查已接入作用域标记、且能够通过无障碍属性关联触发器的浮层内容。
-const OVERLAY_CONTENT_SELECTOR = [
-	'[data-slot="context-menu-content"]',
-	'[data-slot="dialog-content"]',
-	'[data-slot="drawer-content"]',
-	'[data-slot="dropdown-menu-content"]',
-	'[data-slot="popover-content"]',
-	'[data-slot="select-content"]',
-].join(",")
+const OVERLAY_CONTENT_ATTRIBUTE = "data-overlay-interaction-content"
 
 const OverlayInteractionScopeContext = createContext<readonly string[]>([])
 
@@ -57,6 +49,13 @@ function useOverlayInteractionScopeAttributes() {
 	const scopeIds = useContext(OverlayInteractionScopeContext)
 
 	return scopeIds.length > 0 ? { [OVERLAY_SCOPE_ATTRIBUTE]: scopeIds.join(" ") } : undefined
+}
+
+/** 标记浮层内容节点，并在存在 Provider 时同时写入当前作用域。 */
+function useOverlayInteractionScopeContentAttributes() {
+	const scopeAttributes = useOverlayInteractionScopeAttributes()
+
+	return { [OVERLAY_CONTENT_ATTRIBUTE]: "", ...scopeAttributes }
 }
 
 /**
@@ -112,7 +111,7 @@ function getOverlayOwnerElements(overlayContent: HTMLElement) {
 
 // Context 标记缺失时，通过「浮层内容 -> 触发器 -> 外层 DOM 边界」恢复作用域归属。
 function isOverlayOwnedByScope(node: Element, scopeId: string) {
-	const overlayContent = node.closest<HTMLElement>(OVERLAY_CONTENT_SELECTOR)
+	const overlayContent = node.closest<HTMLElement>(`[${OVERLAY_CONTENT_ATTRIBUTE}]`)
 	if (!overlayContent) return false
 
 	return Array.from(getOverlayOwnerElements(overlayContent)).some((ownerElement) =>
@@ -149,4 +148,5 @@ export {
 	getOverlayInteractionScopeBoundaryAttributes,
 	isInteractionWithinOverlayScope,
 	useOverlayInteractionScopeAttributes,
+	useOverlayInteractionScopeContentAttributes,
 }

@@ -111,7 +111,7 @@ function FilterSelectItem({
 	}, [])
 
 	const handleSubmitCustomInput = useCallback(() => {
-		if (!normalizedCustomInputValue) return
+		if (normalizedCustomInputValue === null) return
 
 		onFilterChange?.(filter.data_key, normalizedCustomInputValue)
 		setDrawerOpen(false)
@@ -139,7 +139,7 @@ function FilterSelectItem({
 				className={cn(
 					"flex min-w-0 flex-1 items-center rounded-lg border border-border bg-background focus-within:ring-2 focus-within:ring-ring/20",
 					isMobile ? "h-10" : "h-8",
-					customInputValue && !normalizedCustomInputValue && "border-destructive",
+					customInputValue && normalizedCustomInputValue === null && "border-destructive",
 				)}
 			>
 				<Input
@@ -153,7 +153,7 @@ function FilterSelectItem({
 					onChange={(event) => setCustomInputValue(event.target.value)}
 					onKeyDown={handleCustomInputKeyDown}
 					placeholder={customInputPlaceholder}
-					aria-invalid={Boolean(customInputValue && !normalizedCustomInputValue)}
+					aria-invalid={Boolean(customInputValue && normalizedCustomInputValue === null)}
 					className="h-full min-w-0 flex-1 rounded-lg border-0 bg-transparent px-3 text-sm shadow-none focus-visible:ring-0"
 				/>
 				{customInputUnit ? (
@@ -165,7 +165,7 @@ function FilterSelectItem({
 			<Button
 				type="button"
 				size="sm"
-				disabled={!normalizedCustomInputValue}
+				disabled={normalizedCustomInputValue === null}
 				onClick={handleSubmitCustomInput}
 				className={cn(
 					"shrink-0 rounded-lg px-3 text-sm font-medium shadow-none",
@@ -227,16 +227,26 @@ function FilterSelectItem({
 						</span>
 					)}
 					<span className="relative inline-flex size-4 shrink-0 items-center justify-center">
-						{hasSelection && !isCompactMobile ? (
+						{hasSelection ? (
 							<span
 								role="button"
 								tabIndex={0}
 								aria-label={clearText}
+								className={cn(
+									"inline-flex items-center justify-center rounded-full text-muted-foreground/70",
+									isCompactMobile && "-m-2 size-8 active:bg-muted",
+								)}
 								onPointerDown={(event) => {
 									event.preventDefault()
 									event.stopPropagation()
 								}}
 								onClick={(event) => {
+									event.preventDefault()
+									event.stopPropagation()
+									handleClear()
+								}}
+								onKeyDown={(event) => {
+									if (event.key !== "Enter" && event.key !== " ") return
 									event.preventDefault()
 									event.stopPropagation()
 									handleClear()

@@ -295,6 +295,7 @@ describe("MagicDropdown", () => {
 			render(<NestedDropdown />)
 
 			const nestedContent = await screen.findByTestId("nested-portal-content")
+			expect(nestedContent.closest("[data-overlay-interaction-content]")).not.toBeNull()
 			fireEvent.pointerDown(nestedContent, { pointerType: "touch" })
 			fireEvent.click(nestedContent)
 

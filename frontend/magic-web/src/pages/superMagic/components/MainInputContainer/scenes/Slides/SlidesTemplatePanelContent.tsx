@@ -46,7 +46,6 @@ function SlidesTemplatePanelContent({
 	const isMobile = useIsMobile()
 	const [isSearchOpen, setIsSearchOpen] = useState(() => Boolean(slidesState.keyword.trim()))
 	const [searchValue, setSearchValue] = useState(slidesState.keyword)
-	const [isPreviewOpen, setIsPreviewOpen] = useState(false)
 	const searchInputRef = useRef<HTMLInputElement>(null)
 	const isComposingRef = useRef(false)
 	const selectorGroups = slidesState.groups
@@ -68,7 +67,6 @@ function SlidesTemplatePanelContent({
 	)
 	const handlePreviewOpenChange = useCallback(
 		(open: boolean) => {
-			setIsPreviewOpen(open)
 			onPreviewOpenChange?.(open)
 		},
 		[onPreviewOpenChange],
@@ -129,14 +127,10 @@ function SlidesTemplatePanelContent({
 		<div className={cn("flex min-h-0 flex-col", className)}>
 			<div
 				className={cn(
-					"flex flex-col gap-3 px-4 pt-3",
+					"flex translate-y-0 flex-col gap-3 px-4 pt-3 opacity-100",
 					toolbarClassName,
-					isPreviewOpen
-						? "pointer-events-none translate-y-[calc(100%_+_24px)] opacity-0"
-						: "translate-y-0 opacity-100",
 				)}
 				data-testid="slides-template-panel-toolbar"
-				aria-hidden={isPreviewOpen}
 			>
 				<div className="flex min-w-0 items-center gap-2">
 					{slidesState.isPrimaryFilterLoading ? (

@@ -30,6 +30,14 @@ const tagGroups: SlidesTemplateTagGroupItem[] = [
 				template_count: 1,
 				is_official: true,
 			},
+			{
+				id: "long-purpose",
+				code: "purpose-long",
+				name_i18n: { zh_CN: "行业与领域综合方案", en_US: "行业领域方案" },
+				sort: 90,
+				template_count: 1,
+				is_official: true,
+			},
 		],
 	},
 	{
@@ -60,6 +68,18 @@ function renderFilters(selectedTagCodes: string[] = [], onSelectedTagCodesChange
 	)
 
 	return { onSelectedTagCodesChange }
+}
+
+function expectSystemPopupHeader(title: string) {
+	const closeButton = screen.getByRole("button", {
+		name: "shadcn-ui:actionDrawer.close",
+	})
+	const visibleTitle = screen
+		.getAllByText(title)
+		.find((element) => element.classList.contains("text-[18px]"))
+
+	expect(closeButton).toHaveClass("size-12", "rounded-full")
+	expect(visibleTitle).toHaveClass("font-medium", "text-foreground")
 }
 
 describe("SlidesTemplateMobileTagFilters", () => {
@@ -114,20 +134,41 @@ describe("SlidesTemplateMobileTagFilters", () => {
 		fireEvent.click(screen.getByTestId("slides-template-mobile-all-filters-trigger"))
 		const panel = screen.getByTestId("slides-template-mobile-all-filters-panel")
 		expect(panel).toBeInTheDocument()
-		expect(panel).toHaveClass("grid", "grid-cols-[7.5rem_minmax(0,1fr)]")
-		expect(panel.parentElement?.parentElement).toHaveClass(
-			"!h-[min(720px,85dvh)]",
-			"max-h-[85dvh]",
+		expect(panel).toHaveClass(
+			"grid",
+			"grid-cols-[8.5rem_minmax(0,1fr)]",
+			"rounded-xl",
+			"border",
 		)
-		expect(
-			screen.getByTestId("slides-template-mobile-all-filters-group-purpose_group"),
-		).toBeInTheDocument()
+		expect(screen.getByTestId("slides-template-mobile-all-filters-groups")).toHaveClass(
+			"border-r",
+			"bg-muted/60",
+		)
+		expect(screen.getByTestId("slides-template-mobile-all-filters-values")).toHaveClass(
+			"bg-background/40",
+			"p-3",
+		)
+		expect(screen.getByRole("dialog")).toHaveClass(
+			"h-[min(720px,85dvh)]",
+			"max-h-[85dvh]",
+			"rounded-t-[14px]",
+		)
+		expectSystemPopupHeader("playbook.edit.presets.form.moreFilters")
+		const purposeGroup = screen.getByTestId(
+			"slides-template-mobile-all-filters-group-purpose_group",
+		)
+		expect(purposeGroup).toBeInTheDocument()
+		expect(purposeGroup.firstElementChild).toHaveClass("truncate", "whitespace-nowrap")
 		expect(
 			screen.getByTestId("slides-template-mobile-all-filters-group-style_group"),
 		).toHaveAttribute("aria-pressed", "true")
-		expect(screen.getByTestId("slides-template-mobile-all-filters-values")).toContainElement(
-			screen.getByTestId("slides-template-mobile-all-filters-option-style-business"),
+		const styleOption = screen.getByTestId(
+			"slides-template-mobile-all-filters-option-style-business",
 		)
+		expect(screen.getByTestId("slides-template-mobile-all-filters-values")).toContainElement(
+			styleOption,
+		)
+		expect(styleOption.parentElement).toHaveClass("grid", "grid-cols-2")
 
 		fireEvent.click(
 			screen.getByTestId("slides-template-mobile-all-filters-group-purpose_group"),
@@ -149,7 +190,7 @@ describe("SlidesTemplateMobileTagFilters", () => {
 		])
 	})
 
-	it("discards cancelled drafts and restores the current selection on reopen", () => {
+	it("discards unconfirmed drafts when closed and restores the current selection on reopen", () => {
 		const onSelectedTagCodesChange = vi.fn()
 		renderFilters(["style-business"], onSelectedTagCodesChange)
 
@@ -162,7 +203,7 @@ describe("SlidesTemplateMobileTagFilters", () => {
 		)
 		fireEvent.click(
 			screen.getByRole("button", {
-				name: "playbook.edit.presets.form.cancel",
+				name: "shadcn-ui:actionDrawer.close",
 			}),
 		)
 		expect(onSelectedTagCodesChange).not.toHaveBeenCalled()
@@ -180,19 +221,32 @@ describe("SlidesTemplateMobileTagFilters", () => {
 		).toHaveAttribute("aria-pressed", "true")
 	})
 
-	it("clears only the draft until the user confirms", () => {
+	it("resets only the draft from the footer until the user confirms", () => {
 		const onSelectedTagCodesChange = vi.fn()
 		renderFilters(["style-business"], onSelectedTagCodesChange)
 
 		fireEvent.click(screen.getByTestId("slides-template-mobile-all-filters-trigger"))
-		fireEvent.click(screen.getByTestId("slides-template-mobile-all-filters-clear"))
-		expect(onSelectedTagCodesChange).not.toHaveBeenCalled()
-
-		fireEvent.click(
-			screen.getByRole("button", {
-				name: "playbook.edit.presets.form.confirm",
+		const resetButton = screen.getByRole("button", {
+			name: "shadcn-ui:actionDrawer.reset",
+		})
+		const confirmButton = screen.getByRole("button", {
+			name: "playbook.edit.presets.form.confirm",
+		})
+		expect(resetButton.parentElement).toBe(confirmButton.parentElement)
+		expect(
+			screen.queryByTestId("slides-template-mobile-all-filters-clear"),
+		).not.toBeInTheDocument()
+		expect(
+			screen.queryByRole("button", {
+				name: "playbook.edit.presets.form.cancel",
 			}),
-		)
+		).not.toBeInTheDocument()
+
+		fireEvent.click(resetButton)
+		expect(onSelectedTagCodesChange).not.toHaveBeenCalled()
+		expect(screen.getByTestId("slides-template-mobile-all-filters-panel")).toBeInTheDocument()
+
+		fireEvent.click(confirmButton)
 		expect(onSelectedTagCodesChange).toHaveBeenCalledWith([])
 	})
 
@@ -201,9 +255,14 @@ describe("SlidesTemplateMobileTagFilters", () => {
 		renderFilters(["style-business"], onSelectedTagCodesChange)
 
 		fireEvent.click(screen.getByTestId("slides-template-tag-group-trigger-purpose_group"))
-		fireEvent.click(
-			screen.getByTestId("slides-template-tag-mobile-option-purpose-annual-report"),
-		)
+		expectSystemPopupHeader("Purpose")
+		expect(screen.getByRole("dialog")).toHaveClass("max-h-[85dvh]", "rounded-t-[14px]")
+		const option = screen.getByTestId("slides-template-tag-mobile-option-purpose-annual-report")
+		expect(option.parentElement).toHaveClass("grid", "grid-cols-3")
+		expect(option).toHaveClass("h-auto", "min-h-12", "min-w-0", "justify-center", "text-center")
+		expect(option.querySelector("svg")).toBeNull()
+		expect(option.querySelector("span")).toHaveClass("truncate", "whitespace-nowrap")
+		fireEvent.click(option)
 		expect(onSelectedTagCodesChange).not.toHaveBeenCalled()
 
 		fireEvent.click(

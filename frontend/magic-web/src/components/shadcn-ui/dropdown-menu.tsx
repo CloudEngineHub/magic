@@ -5,7 +5,10 @@ import * as DropdownMenuPrimitive from "@radix-ui/react-dropdown-menu"
 import { CheckIcon, ChevronRightIcon, CircleIcon } from "lucide-react"
 
 import { cn } from "@/lib/utils"
-import { useOverlayInteractionScopeAttributes } from "./overlay-interaction-scope"
+import {
+	useOverlayInteractionScopeAttributes,
+	useOverlayInteractionScopeContentAttributes,
+} from "./overlay-interaction-scope"
 
 function DropdownMenu({ ...props }: React.ComponentProps<typeof DropdownMenuPrimitive.Root>) {
 	return <DropdownMenuPrimitive.Root data-slot="dropdown-menu" {...props} />
@@ -42,7 +45,7 @@ function DropdownMenuContent({
 	/** Portal mount node (e.g. fullscreen stacking). */
 	container?: HTMLElement | null
 }) {
-	const overlayScopeAttributes = useOverlayInteractionScopeAttributes()
+	const overlayScopeAttributes = useOverlayInteractionScopeContentAttributes()
 
 	return (
 		<DropdownMenuPrimitive.Portal {...(container != null ? { container } : {})}>
@@ -216,6 +219,8 @@ function DropdownMenuSubContent({
 	className,
 	...props
 }: React.ComponentProps<typeof DropdownMenuPrimitive.SubContent>) {
+	const overlayScopeAttributes = useOverlayInteractionScopeContentAttributes()
+
 	// PROJECT OVERRIDE — z-dropdown matches DropdownMenuContent stacking.
 	return (
 		<DropdownMenuPrimitive.SubContent
@@ -225,6 +230,7 @@ function DropdownMenuSubContent({
 				className,
 			)}
 			{...props}
+			{...overlayScopeAttributes}
 		/>
 	)
 }

@@ -2,6 +2,7 @@ import { fireEvent, render, screen } from "@testing-library/react"
 import { describe, expect, it, vi } from "vitest"
 import FilterSelectItem from "../FilterSelectItem"
 import type { FieldItem } from "../types"
+import { ScenePanelVariant } from "../../components/LazyScenePanel/types"
 
 vi.mock("react-i18next", () => ({
 	useTranslation: () => ({
@@ -65,6 +66,29 @@ describe("FilterSelectItem", () => {
 		expect(screen.getByRole("button", { name: "Confirm" })).toBeDisabled()
 	})
 
+	it("submits zero when the custom input configuration allows it", () => {
+		const handleFilterChange = vi.fn()
+
+		render(
+			<FilterSelectItem
+				filter={{
+					...pagesFilter,
+					custom_input: { ...pagesFilter.custom_input, type: "number", min: 0 },
+				}}
+				onFilterChange={handleFilterChange}
+			/>,
+		)
+
+		fireEvent.click(screen.getByRole("combobox", { name: "Pages" }))
+		fireEvent.change(screen.getByLabelText("Enter pages"), { target: { value: "0" } })
+
+		const confirmButton = screen.getByRole("button", { name: "Confirm" })
+		expect(confirmButton).toBeEnabled()
+		fireEvent.click(confirmButton)
+
+		expect(handleFilterChange).toHaveBeenCalledWith("pages", "0")
+	})
+
 	it("shows a previously selected custom page count in the trigger", () => {
 		render(
 			<FilterSelectItem
@@ -81,7 +105,7 @@ describe("FilterSelectItem", () => {
 			<FilterSelectItem
 				filter={{
 					...pagesFilter,
-					custom_input: { ...pagesFilter.custom_input!, unit: "页" },
+					custom_input: { ...pagesFilter.custom_input, type: "number", unit: "页" },
 				}}
 				onFilterChange={vi.fn()}
 			/>,
@@ -92,5 +116,23 @@ describe("FilterSelectItem", () => {
 		const customInput = screen.getByLabelText("Enter pages")
 		expect(customInput.parentElement).toHaveClass("flex-1")
 		expect(screen.getByText("页")).toBeInTheDocument()
+	})
+
+	it("clears a selected value from the compact mobile trigger without opening the popup", () => {
+		const handleFilterChange = vi.fn()
+
+		render(
+			<FilterSelectItem
+				filter={{ ...pagesFilter, current_value: "6-10" }}
+				onFilterChange={handleFilterChange}
+				variant={ScenePanelVariant.Mobile}
+				compact
+			/>,
+		)
+
+		fireEvent.click(screen.getByRole("button", { name: "select.clear" }))
+
+		expect(handleFilterChange).toHaveBeenCalledWith("pages", "")
+		expect(screen.queryByTestId("mobile-scene-panel-filter-popup")).not.toBeInTheDocument()
 	})
 })

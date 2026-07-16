@@ -6,7 +6,10 @@ import * as DialogPrimitive from "@radix-ui/react-dialog"
 import { XIcon } from "lucide-react"
 
 import { cn } from "@/lib/utils"
-import { useOverlayInteractionScopeAttributes } from "./overlay-interaction-scope"
+import {
+	useOverlayInteractionScopeAttributes,
+	useOverlayInteractionScopeContentAttributes,
+} from "./overlay-interaction-scope"
 
 function Dialog({ ...props }: React.ComponentProps<typeof DialogPrimitive.Root>) {
 	return <DialogPrimitive.Root data-slot="dialog" {...props} />
@@ -65,7 +68,7 @@ function DialogContent({
 }) {
 	// PROJECT OVERRIDE — sync overlay z-index with content style for stacking.
 	const zIndex = style?.zIndex
-	const overlayScopeAttributes = useOverlayInteractionScopeAttributes()
+	const overlayScopeAttributes = useOverlayInteractionScopeContentAttributes()
 
 	return (
 		<DialogPortal data-slot="dialog-portal">

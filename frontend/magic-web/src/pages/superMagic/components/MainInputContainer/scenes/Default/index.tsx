@@ -162,6 +162,7 @@ function DefaultInputContainer({ editorContext, editorNodes }: DefaultInputConta
 								className={isProjectScene ? "gap-2 p-2" : undefined}
 								templatePickerOpen={isSlidesTemplatePickerOpen}
 								onTemplatePickerOpenChange={setIsSlidesTemplatePickerOpen}
+								showTemplateActions={isProjectScene}
 								isTemplatePreviewOpen={isSlidesTemplatePreviewOpen}
 							/>
 						) : null}

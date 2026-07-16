@@ -2,7 +2,10 @@ import * as React from "react"
 import * as PopoverPrimitive from "@radix-ui/react-popover"
 
 import { cn } from "@/lib/utils"
-import { useOverlayInteractionScopeAttributes } from "./overlay-interaction-scope"
+import {
+	useOverlayInteractionScopeAttributes,
+	useOverlayInteractionScopeContentAttributes,
+} from "./overlay-interaction-scope"
 
 function Popover({ ...props }: React.ComponentProps<typeof PopoverPrimitive.Root>) {
 	return <PopoverPrimitive.Root data-slot="popover" {...props} />
@@ -29,7 +32,7 @@ function PopoverContent({
 }: React.ComponentProps<typeof PopoverPrimitive.Content> & {
 	container?: HTMLElement | null
 }) {
-	const overlayScopeAttributes = useOverlayInteractionScopeAttributes()
+	const overlayScopeAttributes = useOverlayInteractionScopeContentAttributes()
 
 	return (
 		<PopoverPrimitive.Portal {...(container != null ? { container } : {})}>

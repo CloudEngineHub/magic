@@ -262,6 +262,19 @@ function SlidesTemplatePanel({
 			})
 	})
 
+	const handleTemplateClear = useCallback(() => {
+		if (readOnly) return
+
+		templateDetailRequestSeqRef.current += 1
+		const nextFieldItems = updateTemplateRelatedFields(
+			updateFieldValue(fieldItems, isComplexField, ""),
+			false,
+		)
+		if (!isSelectionControlled) setInternalSelectedTemplate(null)
+		applyFieldItems(nextFieldItems)
+		onTemplateSelect?.(null)
+	}, [applyFieldItems, fieldItems, isSelectionControlled, onTemplateSelect, readOnly])
+
 	const handleRandomTemplateRequest = useMemoizedFn(() => {
 		if (readOnly || slidesState.templateOptions.length === 0) return
 
@@ -308,6 +321,7 @@ function SlidesTemplatePanel({
 				slidesState={slidesState}
 				onFilterChange={handleFilterChange}
 				onTemplateClick={handleTemplateClick}
+				onTemplateClear={handleTemplateClear}
 				templatePickerContainer={templatePickerContainer}
 				readOnly={readOnly}
 				variant={variant}

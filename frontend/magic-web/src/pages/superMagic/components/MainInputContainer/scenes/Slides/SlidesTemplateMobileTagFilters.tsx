@@ -1,12 +1,13 @@
 import { useMemo, useState } from "react"
-import { Check, ListFilter, X } from "lucide-react"
+import { ListFilter } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import HeadlessHorizontalScroll from "@/components/base/HeadlessHorizontalScroll"
-import { ActionDrawer } from "@/components/shadcn-composed/action-drawer"
 import { Button } from "@/components/shadcn-ui/button"
 import { cn } from "@/lib/utils"
 import { useLocaleText } from "../../panels/hooks/useLocaleText"
+import SlidesTemplateMobileFilterOption from "./SlidesTemplateMobileFilterOption"
 import type { SlidesTemplateTagGroupItem } from "./slidesTemplateState"
+import SlidesTemplateMobileFilterPopup from "./SlidesTemplateMobileFilterPopup"
 import SlidesTemplateTagGroupSelect from "./SlidesTemplateTagGroupSelect"
 
 interface SlidesTemplateMobileTagFiltersProps {
@@ -114,37 +115,30 @@ function SlidesTemplateMobileTagFilters({
 				) : null}
 			</Button>
 
-			<ActionDrawer
+			<SlidesTemplateMobileFilterPopup
 				open={isPanelOpen}
 				onOpenChange={handlePanelOpenChange}
 				title={panelTitle}
-				className="!h-[min(720px,85dvh)] max-h-[85dvh]"
-				cancelText={t("playbook.edit.presets.form.cancel")}
-				confirmText={t("playbook.edit.presets.form.confirm")}
-				onConfirm={() => onSelectedTagCodesChange(draftSelectedTagCodes)}
-				contentClassName="gap-3 overflow-hidden"
+				className="h-[min(720px,85dvh)]"
+				secondaryAction={{
+					label: t("shadcn-ui:actionDrawer.reset"),
+					onClick: () => setDraftSelectedTagCodes([]),
+					disabled: draftSelectedTagCodes.length === 0,
+				}}
+				confirmAction={{
+					label: t("playbook.edit.presets.form.confirm"),
+					onClick: () => {
+						onSelectedTagCodesChange(draftSelectedTagCodes)
+						handlePanelOpenChange(false)
+					},
+				}}
 			>
-				<div className="flex justify-end">
-					<Button
-						type="button"
-						variant="ghost"
-						size="sm"
-						disabled={draftSelectedTagCodes.length === 0}
-						className="h-8 gap-1 rounded-full px-2.5 text-xs font-normal text-muted-foreground hover:text-destructive"
-						data-testid="slides-template-mobile-all-filters-clear"
-						onClick={() => setDraftSelectedTagCodes([])}
-					>
-						<X className="size-3.5" />
-						{t("playbook.edit.presets.clearSelection")}
-					</Button>
-				</div>
-
 				<div
-					className="grid min-h-0 flex-1 grid-cols-[7.5rem_minmax(0,1fr)] gap-3 overflow-hidden"
+					className="grid min-h-0 flex-1 grid-cols-[8.5rem_minmax(0,1fr)] overflow-hidden rounded-xl border border-border/70 bg-background/70"
 					data-testid="slides-template-mobile-all-filters-panel"
 				>
 					<div
-						className="no-scrollbar flex min-h-0 flex-col gap-1 overflow-y-auto rounded-lg bg-muted/60 p-1"
+						className="no-scrollbar flex min-h-0 flex-col gap-1.5 overflow-y-auto border-r border-border/70 bg-muted/60 p-2"
 						data-testid="slides-template-mobile-all-filters-groups"
 					>
 						{tagGroups.map((tagGroup) => {
@@ -167,7 +161,7 @@ function SlidesTemplateMobileTagFilters({
 									data-testid={`slides-template-mobile-all-filters-group-${tagGroup.code}`}
 									onClick={() => setActiveTagGroupCode(tagGroup.code)}
 								>
-									<span className="min-w-0 flex-1 whitespace-normal leading-5">
+									<span className="min-w-0 flex-1 truncate whitespace-nowrap text-[13px] leading-5">
 										{lt(tagGroup.name_i18n)}
 									</span>
 									{selectedCount > 0 ? (
@@ -181,36 +175,27 @@ function SlidesTemplateMobileTagFilters({
 					</div>
 
 					<div
-						className="no-scrollbar min-h-0 overflow-y-auto pr-1"
+						className="no-scrollbar min-h-0 overflow-y-auto bg-background/40 p-3 pr-2"
 						data-testid="slides-template-mobile-all-filters-values"
 					>
-						<div className="flex flex-wrap content-start gap-2">
+						<div className="grid grid-cols-2 content-start gap-2">
 							{activeTagGroup?.tags.map((tag) => {
 								const isSelected = draftSelectedTagCodeSet.has(tag.code)
 
 								return (
-									<button
+									<SlidesTemplateMobileFilterOption
 										key={tag.code}
-										type="button"
-										className={cn(
-											"flex min-h-9 items-center gap-1.5 rounded-full border px-3 text-sm transition-colors",
-											isSelected
-												? "border-primary bg-primary/10 text-primary"
-												: "border-border bg-background text-foreground hover:bg-accent",
-										)}
-										aria-pressed={isSelected}
-										data-testid={`slides-template-mobile-all-filters-option-${tag.code}`}
+										label={lt(tag.name_i18n)}
+										selected={isSelected}
 										onClick={() => toggleDraftSelectedTag(tag.code)}
-									>
-										{isSelected ? <Check className="size-3.5" /> : null}
-										<span>{lt(tag.name_i18n)}</span>
-									</button>
+										data-testid={`slides-template-mobile-all-filters-option-${tag.code}`}
+									/>
 								)
 							})}
 						</div>
 					</div>
 				</div>
-			</ActionDrawer>
+			</SlidesTemplateMobileFilterPopup>
 		</div>
 	)
 }

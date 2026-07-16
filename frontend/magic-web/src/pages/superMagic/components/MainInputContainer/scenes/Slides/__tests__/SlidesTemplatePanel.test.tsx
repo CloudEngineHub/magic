@@ -395,6 +395,24 @@ describe("SlidesTemplatePanel", () => {
 		expect(actions).not.toHaveClass("pointer-events-none")
 	})
 
+	it("opens preview directly from the thumbnail on the home page", () => {
+		render(
+			<SlidesTemplateHomeSelectionPreview
+				template={{ value: "woodland", label: "Woodland Storybook" }}
+				filters={[]}
+				onClear={vi.fn()}
+				onFilterChange={vi.fn()}
+				showTemplateActions={false}
+			/>,
+		)
+
+		expect(screen.queryByTestId("slides-template-home-actions")).toBeNull()
+		expect(screen.queryByTestId("slides-template-home-replace-selected-template")).toBeNull()
+
+		fireEvent.click(screen.getByTestId("slides-template-home-preview-selected-template"))
+		expect(screen.getByTestId("slides-preset-preview-dialog-content")).toBeInTheDocument()
+	})
+
 	it("shows the AI automatic template placeholder when no template is selected", async () => {
 		render(<SlidesTemplateHomeSelectionPreview filters={[]} onFilterChange={vi.fn()} />)
 
@@ -815,6 +833,38 @@ describe("SlidesTemplatePanel", () => {
 		)
 	})
 
+	it("clears the selected template from the compact mobile trigger without opening the picker", async () => {
+		function ControlledMobileTemplatePanel() {
+			const [selectedTemplate, setSelectedTemplate] = useState<OptionItem | null>({
+				value: businessTemplate.code,
+				label: businessTemplate.label,
+			})
+			const config = useMemo(() => createSlidesPresetPanelConfig([]), [])
+
+			return (
+				<SlidesTemplatePanel
+					config={config}
+					variant={ScenePanelVariant.Mobile}
+					compact
+					selectedTemplate={selectedTemplate}
+					onTemplateSelect={setSelectedTemplate}
+				/>
+			)
+		}
+
+		render(<ControlledMobileTemplatePanel />)
+
+		const trigger = await screen.findByTestId("slides-template-floating-selector-trigger")
+		expect(trigger).toHaveTextContent("Business Template")
+
+		fireEvent.click(screen.getByTestId("slides-template-floating-selector-clear-button"))
+
+		await waitFor(() => expect(trigger).not.toHaveTextContent("Business Template"))
+		expect(
+			screen.queryByTestId("slides-template-floating-selector-mobile-popup"),
+		).not.toBeInTheDocument()
+	})
+
 	it("expands search input when keyword already exists", () => {
 		render(
 			<SlidesTemplatePanelContent
@@ -1209,7 +1259,7 @@ describe("SlidesTemplatePanel", () => {
 		},
 	)
 
-	it("hides the toolbar without an exit transition while preview is open", async () => {
+	it("keeps the toolbar visible while preview is open", async () => {
 		render(
 			<SlidesTemplatePanelContent
 				slidesState={createSlidesTemplatePanelContentState({
@@ -1239,9 +1289,14 @@ describe("SlidesTemplatePanel", () => {
 		fireEvent.click(screen.getByTestId("slides-preset-card-touch-preview-button"))
 
 		await waitFor(() => {
-			expect(toolbar).toHaveClass("pointer-events-none")
-			expect(toolbar).toHaveClass("translate-y-[calc(100%_+_24px)]")
-			expect(toolbar).toHaveClass("opacity-0")
+			expect(screen.getByTestId("slides-preset-preview-dialog-content")).toBeInTheDocument()
+			expect(toolbar).toHaveClass("translate-y-0", "opacity-100")
+			expect(toolbar).not.toHaveClass(
+				"pointer-events-none",
+				"translate-y-[calc(100%_+_24px)]",
+				"opacity-0",
+			)
+			expect(toolbar).not.toHaveAttribute("aria-hidden", "true")
 		})
 
 		fireEvent.click(screen.getByTestId("on-open-change"))
