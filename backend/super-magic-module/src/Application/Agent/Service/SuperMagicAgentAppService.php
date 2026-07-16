@@ -48,6 +48,7 @@ use Dtyq\SuperMagic\Domain\Agent\Entity\ValueObject\SuperMagicAgentType;
 use Dtyq\SuperMagic\Domain\Agent\Event\AgentSkillsAddedEvent;
 use Dtyq\SuperMagic\Domain\Agent\Event\AgentSkillsRemovedEvent;
 use Dtyq\SuperMagic\Domain\Agent\Service\SuperMagicAgentCategoryDomainService;
+use Dtyq\SuperMagic\Domain\Agent\Service\SuperMagicAgentCategoryRelationDomainService;
 use Dtyq\SuperMagic\Domain\Agent\Service\SuperMagicAgentMarketDomainService;
 use Dtyq\SuperMagic\Domain\Agent\Service\SuperMagicAgentPlaybookDomainService;
 use Dtyq\SuperMagic\Domain\Agent\Service\SuperMagicAgentSkillDomainService;
@@ -115,6 +116,9 @@ class SuperMagicAgentAppService extends AbstractSuperMagicAppService
 
     #[Inject]
     protected SuperMagicAgentCategoryDomainService $superMagicAgentCategoryDomainService;
+
+    #[Inject]
+    protected SuperMagicAgentCategoryRelationDomainService $superMagicAgentCategoryRelationDomainService;
 
     #[Inject]
     protected UserAgentDomainService $userAgentDomainService;
@@ -919,8 +923,9 @@ class SuperMagicAgentAppService extends AbstractSuperMagicAppService
 
         $versionEntity = new AgentVersionEntity();
         if ($requestDTO->getPublishTargetType() === PublishTargetType::MARKET->value) {
-            $this->assertCategoryExists($requestDTO->getCategoryId());
-            $versionEntity->setCategoryId($requestDTO->getCategoryId());
+            $categoryIds = $requestDTO->getCategoryIds();
+            $this->superMagicAgentCategoryDomainService->assertIdsExist($categoryIds);
+            $versionEntity->setCategoryIds($categoryIds);
         }
 
         $versionEntity->setCode($code);
@@ -990,6 +995,12 @@ class SuperMagicAgentAppService extends AbstractSuperMagicAppService
             publishTargetType: $publishTargetType,
             publishTargetValue: $publishTargetValue,
             categoryId: $latestVersion?->getCategoryId(),
+            categoryIds: $latestVersion === null || $latestVersion->getId() === null
+                ? []
+                : $this->superMagicAgentCategoryRelationDomainService->getVersionCategoryIds(
+                    $latestVersion->getId(),
+                    $latestVersion->getCategoryId()
+                ),
         );
     }
 
@@ -1028,6 +1039,7 @@ class SuperMagicAgentAppService extends AbstractSuperMagicAppService
 
         /** @var AgentVersionEntity[] $versions */
         $versions = $result['list'];
+        $this->fillVersionCategoryIds($versions);
         [$userMap, $memberDepartmentMap] = $this->batchLoadVersionRelatedEntities(
             $dataIsolation->getCurrentOrganizationCode(),
             $versions
@@ -1382,9 +1394,7 @@ class SuperMagicAgentAppService extends AbstractSuperMagicAppService
     {
         $categoryIds = [];
         foreach ($versions as $version) {
-            if ($version->getCategoryId() !== null) {
-                $categoryIds[] = $version->getCategoryId();
-            }
+            $categoryIds = array_merge($categoryIds, $version->getCategoryIds());
         }
 
         $categoryIds = array_values(array_unique($categoryIds));
@@ -1404,18 +1414,24 @@ class SuperMagicAgentAppService extends AbstractSuperMagicAppService
         return $categoryMap;
     }
 
-    private function assertCategoryExists(?int $categoryId): void
+    /** @param AgentVersionEntity[] $versions */
+    private function fillVersionCategoryIds(array $versions): void
     {
-        if ($categoryId === null) {
-            return;
+        $versionIds = [];
+        foreach ($versions as $version) {
+            if ($version->getId() !== null) {
+                $versionIds[] = $version->getId();
+            }
         }
 
-        if ($this->superMagicAgentCategoryDomainService->findById($categoryId) === null) {
-            ExceptionBuilder::throw(
-                SuperMagicErrorCode::NotFound,
-                'common.not_found',
-                ['label' => (string) $categoryId]
-            );
+        $categoryIdsMap = $this->superMagicAgentCategoryRelationDomainService->getVersionCategoryIdsMap($versionIds);
+        foreach ($versions as $version) {
+            $versionId = $version->getId();
+            if ($versionId === null) {
+                continue;
+            }
+
+            $version->setCategoryIds($categoryIdsMap[$versionId] ?? $version->getCategoryIds());
         }
     }
 
@@ -2440,6 +2456,13 @@ class SuperMagicAgentAppService extends AbstractSuperMagicAppService
                 $code
             );
             $versionEntity = $this->superMagicAgentVersionDomainService->publishAgent($dataIsolation, $agentEntity, $versionEntity);
+            if ($versionEntity->getId() !== null) {
+                $this->superMagicAgentCategoryRelationDomainService->replaceVersionCategories(
+                    $dataIsolation,
+                    $versionEntity->getId(),
+                    $versionEntity->getCategoryIds()
+                );
+            }
             if ($versionEntity->getPublishStatus()->isPublished()) {
                 // 只有当前版本已经生效时，才需要切换权限和市场状态。
                 $this->syncAgentPublishScopeTransition(

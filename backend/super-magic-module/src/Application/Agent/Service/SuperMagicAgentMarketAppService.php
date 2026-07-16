@@ -137,8 +137,8 @@ class SuperMagicAgentMarketAppService extends AbstractSuperMagicAppService
         $query = new AgentMarketQuery();
         $query->setKeyword(trim($requestDTO->getKeyword()));
         $query->setLanguageCode($languageCode);
-        if ($requestDTO->getCategoryId()) {
-            $query->setCategoryId((int) $requestDTO->getCategoryId());
+        if ($requestDTO->getCategoryIds() !== []) {
+            $query->setCategoryIds($requestDTO->getCategoryIds());
         }
 
         // Build the page request.
