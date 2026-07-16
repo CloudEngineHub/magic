@@ -224,7 +224,7 @@ describe("slides template state", () => {
 		expect(sceneConfig).not.toHaveProperty("placeholder")
 	})
 
-	it("preserves static page, size, and language fields when templates exist", () => {
+	it("keeps static page, size, and language fields available without preset defaults", () => {
 		const panel = createSlidesPresetPanelConfig([officialTemplate])
 		const items = panel.field?.items ?? []
 
@@ -241,9 +241,9 @@ describe("slides template state", () => {
 		const sizeField = items.find((item) => item.data_key === "size")
 		const languageField = items.find((item) => item.data_key === "language")
 		expect(sizeField?.options).not.toEqual([])
-		expect(sizeField?.default_value).toBe("16:9")
+		expect(sizeField?.default_value).toBe("")
 		expect(languageField?.options).not.toEqual([])
-		expect(languageField?.default_value).toBe("auto")
+		expect(languageField?.default_value).toBe("")
 	})
 
 	it("maps API template fields and removes empty media URLs", () => {

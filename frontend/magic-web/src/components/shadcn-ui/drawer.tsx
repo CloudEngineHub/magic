@@ -2,13 +2,22 @@ import * as React from "react"
 import { Drawer as DrawerPrimitive } from "vaul"
 
 import { cn } from "@/lib/utils"
+import { useOverlayInteractionScopeAttributes } from "./overlay-interaction-scope"
 
 function Drawer({ ...props }: React.ComponentProps<typeof DrawerPrimitive.Root>) {
 	return <DrawerPrimitive.Root data-slot="drawer" {...props} />
 }
 
 function DrawerTrigger({ ...props }: React.ComponentProps<typeof DrawerPrimitive.Trigger>) {
-	return <DrawerPrimitive.Trigger data-slot="drawer-trigger" {...props} />
+	const overlayScopeAttributes = useOverlayInteractionScopeAttributes()
+
+	return (
+		<DrawerPrimitive.Trigger
+			data-slot="drawer-trigger"
+			{...props}
+			{...overlayScopeAttributes}
+		/>
+	)
 }
 
 function DrawerPortal({ ...props }: React.ComponentProps<typeof DrawerPrimitive.Portal>) {
@@ -45,6 +54,8 @@ function DrawerContent({
 	children,
 	...props
 }: React.ComponentProps<typeof DrawerPrimitive.Content>) {
+	const overlayScopeAttributes = useOverlayInteractionScopeAttributes()
+
 	return (
 		<DrawerPortal data-slot="drawer-portal">
 			<DrawerOverlay />
@@ -60,6 +71,7 @@ function DrawerContent({
 					className,
 				)}
 				{...props}
+				{...overlayScopeAttributes}
 			>
 				<div className="mx-auto mt-4 hidden h-2 w-[100px] shrink-0 rounded-full bg-muted group-data-[vaul-drawer-direction=bottom]/drawer-content:block" />
 				{children}

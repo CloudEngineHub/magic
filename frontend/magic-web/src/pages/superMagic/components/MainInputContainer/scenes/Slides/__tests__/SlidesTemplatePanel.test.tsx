@@ -244,8 +244,9 @@ describe("SlidesTemplatePanel", () => {
 		expect(screen.queryByTestId("slides-template-panel-template-clear-button")).toBeNull()
 	})
 
-	it("keeps default size and language when a controlled template selection is cleared", async () => {
+	it("sets template defaults and clears page, size, and language with the template", async () => {
 		const handlePresetContentChange = vi.fn()
+		let handleFilterChange: ((filterId: string, value: string) => void) | null = null
 		const selectedTemplate = {
 			value: businessTemplate.code,
 			label: businessTemplate.label,
@@ -259,6 +260,9 @@ describe("SlidesTemplatePanel", () => {
 			<SlidesTemplatePanel
 				config={createSlidesPresetPanelConfig([])}
 				selectedTemplate={selectedTemplate}
+				onFilterChangeRequestChange={(handler) => {
+					handleFilterChange = handler
+				}}
 				onPresetContentChange={handlePresetContentChange}
 			/>,
 		)
@@ -273,10 +277,23 @@ describe("SlidesTemplatePanel", () => {
 			)
 		})
 
+		act(() => {
+			handleFilterChange?.("pages", "6-10")
+		})
+		await waitFor(() => {
+			const lastContent = handlePresetContentChange.mock.calls.at(-1)?.[0] as
+				| JSONContent
+				| undefined
+			expect(getPromptRichTextPlainText(lastContent)).toContain("Pages: 6-10")
+		})
+
 		rerender(
 			<SlidesTemplatePanel
 				config={createSlidesPresetPanelConfig([])}
 				selectedTemplate={null}
+				onFilterChangeRequestChange={(handler) => {
+					handleFilterChange = handler
+				}}
 				onPresetContentChange={handlePresetContentChange}
 			/>,
 		)
@@ -285,7 +302,7 @@ describe("SlidesTemplatePanel", () => {
 			const lastContent = handlePresetContentChange.mock.calls.at(-1)?.[0] as
 				| JSONContent
 				| undefined
-			expect(getPromptRichTextPlainText(lastContent)).toBe("Size: 16:9, Language: auto.")
+			expect(lastContent).toBeUndefined()
 		})
 	})
 
@@ -613,6 +630,9 @@ describe("SlidesTemplatePanel", () => {
 
 		const toolbar = await screen.findByTestId("slides-template-panel-toolbar")
 		expect(toolbar).toHaveClass("sticky", "top-0", "z-50", "bg-background/95", "backdrop-blur")
+		const grid = screen.getByTestId("slides-preset-grid")
+		expect(grid).toHaveClass("overflow-y-visible", "overscroll-y-auto")
+		expect(grid).not.toHaveClass("overflow-y-auto", "overscroll-y-contain")
 		expect(screen.queryByTestId("slides-template-panel-template-count")).toBeNull()
 	})
 
@@ -672,6 +692,59 @@ describe("SlidesTemplatePanel", () => {
 
 		expect(trigger).toHaveTextContent("Business Template")
 		expect(trigger).not.toHaveTextContent("101,582 套")
+	})
+
+	it("keeps the floating template picker open while changing a desktop tag filter", async () => {
+		vi.mocked(SuperMagicApi.getSlidesTemplateTagGroups).mockResolvedValue([
+			{
+				id: "style-group",
+				code: "style_group",
+				name_i18n: { zh_CN: "视觉风格", en_US: "Style" },
+				sort: 100,
+				tags: [
+					{
+						id: "business-style",
+						code: "style-business",
+						name_i18n: { zh_CN: "商务", en_US: "Business" },
+						sort: 100,
+						template_count: 1,
+						is_official: true,
+					},
+				],
+			},
+		])
+
+		render(
+			<SlidesTemplatePanel
+				config={createSlidesPresetPanelConfig([])}
+				variant={ScenePanelVariant.TopicPage}
+			/>,
+		)
+
+		const pickerTrigger = await screen.findByTestId("slides-template-floating-selector-trigger")
+		act(() => {
+			fireEvent.pointerDown(pickerTrigger)
+			fireEvent.click(pickerTrigger)
+		})
+
+		const tagTrigger = await screen.findByTestId(
+			"slides-template-tag-group-trigger-style_group",
+		)
+		expect(tagTrigger).toHaveAttribute("data-overlay-interaction-scopes")
+
+		act(() => {
+			fireEvent.keyDown(tagTrigger, { key: "Enter" })
+		})
+		const tagOption = await screen.findByTestId("slides-template-tag-option-style-business")
+		await act(async () => {
+			fireEvent.click(tagOption)
+			await Promise.resolve()
+		})
+
+		await waitFor(() => {
+			expect(screen.getByTestId("slides-template-search-toggle")).toBeInTheDocument()
+			expect(document.querySelector('[data-slot="popover-content"]')).not.toBeNull()
+		})
 	})
 
 	it("发送后再次选择模板时不会被旧的发送状态清空", async () => {

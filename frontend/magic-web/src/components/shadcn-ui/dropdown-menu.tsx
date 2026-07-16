@@ -5,6 +5,7 @@ import * as DropdownMenuPrimitive from "@radix-ui/react-dropdown-menu"
 import { CheckIcon, ChevronRightIcon, CircleIcon } from "lucide-react"
 
 import { cn } from "@/lib/utils"
+import { useOverlayInteractionScopeAttributes } from "./overlay-interaction-scope"
 
 function DropdownMenu({ ...props }: React.ComponentProps<typeof DropdownMenuPrimitive.Root>) {
 	return <DropdownMenuPrimitive.Root data-slot="dropdown-menu" {...props} />
@@ -19,7 +20,15 @@ function DropdownMenuPortal({
 function DropdownMenuTrigger({
 	...props
 }: React.ComponentProps<typeof DropdownMenuPrimitive.Trigger>) {
-	return <DropdownMenuPrimitive.Trigger data-slot="dropdown-menu-trigger" {...props} />
+	const overlayScopeAttributes = useOverlayInteractionScopeAttributes()
+
+	return (
+		<DropdownMenuPrimitive.Trigger
+			data-slot="dropdown-menu-trigger"
+			{...props}
+			{...overlayScopeAttributes}
+		/>
+	)
 }
 
 // PROJECT OVERRIDE — z-dropdown; optional Portal container for fullscreen stacking.
@@ -33,6 +42,8 @@ function DropdownMenuContent({
 	/** Portal mount node (e.g. fullscreen stacking). */
 	container?: HTMLElement | null
 }) {
+	const overlayScopeAttributes = useOverlayInteractionScopeAttributes()
+
 	return (
 		<DropdownMenuPrimitive.Portal {...(container != null ? { container } : {})}>
 			<DropdownMenuPrimitive.Content
@@ -44,6 +55,7 @@ function DropdownMenuContent({
 				)}
 				style={style}
 				{...props}
+				{...overlayScopeAttributes}
 			/>
 		</DropdownMenuPrimitive.Portal>
 	)

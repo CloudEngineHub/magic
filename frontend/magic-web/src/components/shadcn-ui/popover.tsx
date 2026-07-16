@@ -2,13 +2,22 @@ import * as React from "react"
 import * as PopoverPrimitive from "@radix-ui/react-popover"
 
 import { cn } from "@/lib/utils"
+import { useOverlayInteractionScopeAttributes } from "./overlay-interaction-scope"
 
 function Popover({ ...props }: React.ComponentProps<typeof PopoverPrimitive.Root>) {
 	return <PopoverPrimitive.Root data-slot="popover" {...props} />
 }
 
 function PopoverTrigger({ ...props }: React.ComponentProps<typeof PopoverPrimitive.Trigger>) {
-	return <PopoverPrimitive.Trigger data-slot="popover-trigger" {...props} />
+	const overlayScopeAttributes = useOverlayInteractionScopeAttributes()
+
+	return (
+		<PopoverPrimitive.Trigger
+			data-slot="popover-trigger"
+			{...props}
+			{...overlayScopeAttributes}
+		/>
+	)
 }
 
 function PopoverContent({
@@ -20,6 +29,8 @@ function PopoverContent({
 }: React.ComponentProps<typeof PopoverPrimitive.Content> & {
 	container?: HTMLElement | null
 }) {
+	const overlayScopeAttributes = useOverlayInteractionScopeAttributes()
+
 	return (
 		<PopoverPrimitive.Portal {...(container != null ? { container } : {})}>
 			<PopoverPrimitive.Content
@@ -31,6 +42,7 @@ function PopoverContent({
 					className,
 				)}
 				{...props}
+				{...overlayScopeAttributes}
 			/>
 		</PopoverPrimitive.Portal>
 	)

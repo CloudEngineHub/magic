@@ -140,6 +140,8 @@ export const SLIDES_TEMPLATE_CATEGORY_GROUP_KEY_PREFIX = "category:"
 export const SLIDES_TEMPLATE_TAG_GROUP_KEY_PREFIX = "tag:"
 export const SLIDES_TEMPLATE_PAGE_SIZE = 20
 export const SLIDES_TEMPLATE_CATEGORY_PAGE_SIZE = 200
+export const SLIDES_TEMPLATE_DEFAULT_SIZE = "16:9"
+export const SLIDES_TEMPLATE_DEFAULT_LANGUAGE = "auto"
 export const SLIDES_TEMPLATE_IMAGE_PROCESS: ImageProcessOptions = {
 	resize: { w: 1920 },
 	format: "webp",
@@ -212,7 +214,7 @@ const slidesStaticFields: NonNullable<FieldPanelConfig["field"]>["items"] = [
 	{
 		data_key: "size",
 		label: { zh_CN: "尺寸", en_US: "Size" },
-		default_value: "16:9",
+		default_value: "",
 		options: [
 			{ value: "16:9", label: "16:9" },
 			{ value: "4:3", label: "4:3" },
@@ -222,7 +224,7 @@ const slidesStaticFields: NonNullable<FieldPanelConfig["field"]>["items"] = [
 	{
 		data_key: "language",
 		label: { zh_CN: "语言", en_US: "Language" },
-		default_value: "auto",
+		default_value: "",
 		options: [
 			{ value: "auto", label: { zh_CN: "自动", en_US: "Auto" } },
 			{ value: "zh", label: { zh_CN: "中文", en_US: "Chinese" } },
