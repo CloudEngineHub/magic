@@ -43,10 +43,7 @@ export default function PptModeSwitcherCard({
 	const isVisible = useElementVisibility(cardRef)
 	const slidesTemplateStatistics = useSlidesTemplateStatistics({ enabled: isVisible })
 	const templateTotalUsageCount = slidesTemplateStatistics?.templateTotalUsageCount
-	const animatedTemplateTotalUsageCount = useAnimatedNumber(
-		templateTotalUsageCount,
-		"total_usage_count",
-	)
+	const animatedTemplateTotalUsageCount = useAnimatedNumber(templateTotalUsageCount)
 	const isExpanded = isSelected || isHovered || isFocused
 	const pillAccentState = isHovered ? "hovered" : isSelected ? "selected" : "idle"
 	const modeName = modeItem.mode.name || t("detailDialog.emptyName")

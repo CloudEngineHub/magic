@@ -111,7 +111,7 @@ function SidebarContent({ collapsed }: SidebarContentProps) {
 	const { superRouteUrl, handleNavigateToSuperHome } = useNavigateToSuperHome()
 	const slidesTemplateRowRef = useRef<HTMLDivElement>(null)
 	const slidesTemplateTotal = useSlidesTemplateTotal()
-	const animatedSlidesTemplateTotal = useAnimatedNumber(slidesTemplateTotal, "total")
+	const animatedSlidesTemplateTotal = useAnimatedNumber(slidesTemplateTotal)
 	const slidesTemplateTitleRef = useRef<HTMLSpanElement>(null)
 	const slidesTemplateCountMeasureRef = useRef<HTMLSpanElement>(null)
 	const [shouldShowSlidesTemplateCount, setShouldShowSlidesTemplateCount] = useState(true)
