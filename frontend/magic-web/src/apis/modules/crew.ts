@@ -126,6 +126,10 @@ export interface GetStoreCategoriesResponse {
 	list: StoreCategoryItem[]
 }
 
+export interface GetStoreCategoriesParams {
+	include_empty?: 0 | 1
+}
+
 // ======================== Store Agents (API 2) ========================
 
 /** Query params for getting store agents list */
@@ -606,9 +610,9 @@ export const generateCrewApi = (fetch: HttpClient) => ({
 	 * Get store agent category list.
 	 * Returns all categories with crew count for the current organization.
 	 */
-	getStoreAgentCategories() {
+	getStoreAgentCategories(params: GetStoreCategoriesParams = {}) {
 		return fetch.get<GetStoreCategoriesResponse>(
-			genRequestUrl("/api/v2/super-magic/agent-market/categories"),
+			genRequestUrl("/api/v2/super-magic/agent-market/categories", {}, params),
 		)
 	},
 

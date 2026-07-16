@@ -71,7 +71,7 @@ function PublishingPanel() {
 			const [agentDetail, versions, categories] = await Promise.all([
 				crewService.getAgentDetailRaw(crewCode),
 				crewService.getAgentVersions(crewCode),
-				crewService.getStoreCategories().catch((error) => {
+				crewService.getStoreCategories({ includeEmpty: true }).catch((error) => {
 					console.error("Failed to fetch agent market categories:", error)
 					return []
 				}),
