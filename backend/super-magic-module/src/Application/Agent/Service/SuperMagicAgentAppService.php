@@ -1149,7 +1149,7 @@ class SuperMagicAgentAppService extends AbstractSuperMagicAppService
         $builtinAgentCodes = array_map(fn ($agent) => $agent->getCode(), $builtinAgents);
 
         $accessibleAgentResult = $this->getAccessibleAgentCodes($dataIsolation, $authorization->getId());
-        $availableCodes = array_values(array_unique(array_merge($accessibleAgentResult['codes'], $builtinAgentCodes)));
+        $availableCodes = array_values(array_unique(array_merge($builtinAgentCodes, $accessibleAgentResult['codes'])));
 
         // Featured 区也要复用同一套排序补齐规则，避免首页和排序页行为不一致。
         $orderConfig = $this->resolveOrderConfigWithNewAgents(
