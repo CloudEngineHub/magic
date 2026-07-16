@@ -51,6 +51,19 @@ const MODE_TOGGLE_TRIGGER_CLASS = cn(
 	"data-[state=open]:outline-none data-[state=open]:ring-0",
 	"transition-all duration-200",
 )
+
+const MODE_TOGGLE_POPOVER_PROPS = {
+	side: "top" as const,
+	align: "start" as const,
+	collisionPadding: 8,
+	avoidCollisions: true,
+	className: cn(
+		"z-dropdown flex max-h-[min(90dvh,var(--radix-popover-content-available-height))] w-auto flex-col overflow-hidden p-2.5",
+		"outline-none focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0",
+	),
+}
+
+const MODE_TOGGLE_POPOVER_TEST_ID = "super-message-editor-mode-toggle-popover"
 interface ModeToggleProps {
 	topicMode?: TopicMode
 	/** custom_agent: featured mode.identifier */
@@ -378,7 +391,7 @@ function ModeToggle({
 		return (
 			<div
 				className={cn(
-					"flex flex-col gap-2.5",
+					"flex min-h-0 flex-col gap-2.5",
 					isMobile ? "w-full" : isCompactList ? "w-[240px]" : "w-[320px]",
 				)}
 				data-testid="super-message-editor-mode-toggle-content"
@@ -399,9 +412,10 @@ function ModeToggle({
 				<div
 					ref={modeListScrollRef}
 					className={cn(
-						"scrollbar-y-thin flex flex-col gap-1 overflow-y-auto",
+						"scrollbar-y-thin flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto",
 						isCompactList ? "max-h-[236px]" : "max-h-[340px]",
 					)}
+					data-testid="super-message-editor-mode-toggle-list"
 				>
 					{filteredModeList?.length ? (
 						filteredModeList.map((tab) => renderStaticModeItem(tab))
@@ -574,9 +588,8 @@ function ModeToggle({
 				>
 					<PopoverTrigger asChild>{currentModeItem}</PopoverTrigger>
 					<PopoverContent
-						side="top"
-						align="start"
-						className="z-dropdown w-auto overflow-hidden p-2.5 outline-none focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0"
+						{...MODE_TOGGLE_POPOVER_PROPS}
+						data-testid={MODE_TOGGLE_POPOVER_TEST_ID}
 						onOpenAutoFocus={(event) => {
 							if (shouldSuppressInputAutoFocusOnIPad()) event.preventDefault()
 						}}
@@ -603,9 +616,8 @@ function ModeToggle({
 			>
 				<PopoverTrigger asChild>{currentModeItem}</PopoverTrigger>
 				<PopoverContent
-					side="top"
-					align="start"
-					className="z-dropdown w-auto overflow-hidden p-2.5 outline-none focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0"
+					{...MODE_TOGGLE_POPOVER_PROPS}
+					data-testid={MODE_TOGGLE_POPOVER_TEST_ID}
 					onOpenAutoFocus={(event) => {
 						if (shouldSuppressInputAutoFocusOnIPad()) event.preventDefault()
 					}}
