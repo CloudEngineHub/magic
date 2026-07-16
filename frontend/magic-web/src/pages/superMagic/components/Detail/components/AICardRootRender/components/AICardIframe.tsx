@@ -156,7 +156,8 @@ function AICardIframe({
 	}, [onLoad])
 
 	// 数据已加载但 iframe 尚未渲染就绪时仍保持骨架屏，避免出现"loading 消失但页面空白"的间隙。
-	const showLoadingSkeleton = showSkeleton && (loading || (Boolean(processedContent) && !isRenderReady))
+	const showLoadingSkeleton =
+		showSkeleton && (loading || (Boolean(processedContent) && !isRenderReady))
 
 	if (error) {
 		return (

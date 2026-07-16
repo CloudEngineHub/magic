@@ -95,12 +95,18 @@ function ActiveVideoGenerateEditor({
 	const { canvas } = useCanvas()
 	const [hiddenAfterSubmit, setHiddenAfterSubmit] = useState(false)
 
+	const hasSrc = !!videoElement.src
+	const hasTerminalVideoGenerationState =
+		hasSrc ||
+		videoElement.status === GenerationStatus.Completed ||
+		videoElement.status === GenerationStatus.Failed
+
 	const isGenerating = useMemo(() => {
-		if (!canvas) return false
+		if (!canvas || hasTerminalVideoGenerationState) return false
 		const videoInstance = canvas.elementManager.getElementInstance(videoElement.id)
 		if (!(videoInstance instanceof VideoElementClass)) return false
 		return !!videoInstance.isGenerating
-	}, [canvas, videoElement.id])
+	}, [canvas, videoElement.id, hasTerminalVideoGenerationState])
 
 	useEffect(() => {
 		setHiddenAfterSubmit(false)
@@ -144,7 +150,6 @@ function ActiveVideoGenerateEditor({
 	const hasGenerateVideoRequest = !!videoElement.generateVideoRequest
 	const isError = videoElement.status === GenerationStatus.Failed
 	const isRetryEditing = isError && retryEditingElementId === videoElement.id
-	const hasSrc = !!videoElement.src
 
 	const showEditor =
 		!isTemporaryElement &&

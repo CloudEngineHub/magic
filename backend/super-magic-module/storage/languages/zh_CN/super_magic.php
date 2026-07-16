@@ -93,6 +93,7 @@ return [
         'publish_target_value_required' => '当前发布对象必须传 publish_target_value',
         'store_agent_not_found' => '商店员工未找到',
         'store_agent_already_added' => '该商店员工已添加，不允许重复添加',
+        'category_used_by_market' => '分类已被市场 Agent 使用，请先解除关联',
         // 从 crew.php 迁移的键
         'validate_failed' => '参数验证失败',
         'not_found' => 'Crew 未找到',
@@ -139,6 +140,7 @@ return [
         'skill_code_must_be_string' => '技能编码必须是字符串',
         'category_id_must_be_integer' => '分类 ID 必须是整数',
         'category_id_must_be_greater_than_zero' => '分类 ID 必须大于 0',
+        'market_category_invalid' => '分类不存在或不属于当前组织',
         'ids_required' => 'ID 列表不能为空',
         'ids_must_be_array' => 'ID 列表必须是数组',
         'playbook_id_required' => 'Playbook ID 不能为空',

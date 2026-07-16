@@ -2,9 +2,9 @@
 from pathlib import Path
 from typing import List, Optional
 
+from agentlang.logger import get_logger
 from agentlang.skills import SkillManager
 from agentlang.skills.models import SkillMetadata
-from agentlang.logger import get_logger
 
 logger = get_logger(__name__)
 
@@ -12,7 +12,7 @@ logger = get_logger(__name__)
 class GlobalSkillManager:
     """全局 Skill 管理器（单例）
 
-    负责维护所有 skill 目录（system、crew、workspace）并创建 SkillManager 实例。
+    负责维护所有 skill 目录（system、crew、workspace、personal）并创建 SkillManager 实例。
     skills_dir_allowlist 属于 prompt 生成层的运行时过滤策略，不在此处存储。
     """
 
@@ -43,16 +43,17 @@ class GlobalSkillManager:
     def get_skills_dirs(cls) -> List[Path]:
         """获取 skills 目录列表（供 SkillManager / skill_read / find_skill 全量解析）。
 
-        与系统提示中的「展示哪些 skill」无关：`agents/skills` 下仅 `<!-- skills: ... -->` 列出的名称会进入
-        skills prompt；`skills_dir` 只影响 prompt 内是否额外合并 workspace 扫描结果，见 generate_skills_prompt。
+        与系统提示中的「展示哪些 skill」无关：system、crew、workspace 由 Agent 配置控制，
+        personal 由 prompt 生成层作为独立来源扫描，见 generate_skills_prompt。
         """
         if cls._skills_dirs is None:
             from app.core.skill_utils.skill_sources import (
-                get_system_skills_dir,
-                get_crew_skills_dir,
-                get_workspace_skills_dir,
                 get_agents_workspace_skills_dir,
+                get_crew_skills_dir,
                 get_home_skills_dir,
+                get_personal_skills_dir,
+                get_system_skills_dir,
+                get_workspace_skills_dir,
             )
 
             skills_dirs = [get_system_skills_dir()]
@@ -65,6 +66,7 @@ class GlobalSkillManager:
                 except ValueError as e:
                     logger.warning(f"当前 agent 标识非法，跳过 crew skills 目录: {e}")
             skills_dirs.append(get_workspace_skills_dir())
+            skills_dirs.append(get_personal_skills_dir())
             skills_dirs.append(get_agents_workspace_skills_dir())
             skills_dirs.append(get_home_skills_dir())
             cls._skills_dirs = skills_dirs

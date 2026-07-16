@@ -6,4 +6,9 @@ export default {
 	th_TH: "ภาษาไทย",
 	pleaseInput: "กรุณากรอก",
 	zh_CN: "ภาษาจีน",
+	confirmClose: "ยืนยันการปิด",
+	unsavedChanges: "การเปลี่ยนแปลงที่ยังไม่ได้บันทึกจะหายไปหลังจากปิด ต้องการปิดต่อหรือไม่?",
+	discard: "ปิด",
+	continueEditing: "แก้ไขต่อ",
+	saveAndClose: "บันทึกและปิด",
 }

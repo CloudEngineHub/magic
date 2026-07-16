@@ -45,15 +45,15 @@ interface CollaborationProjectsPanelProps extends MagicModalProps {
 
 const gridClassName = cn(
 	"grid gap-2.5",
-	"[grid-template-columns:repeat(6,1fr)]",
-	"max-[1750px]:[grid-template-columns:repeat(5,1fr)]",
-	"max-[1500px]:[grid-template-columns:repeat(4,1fr)]",
-	"max-[1250px]:[grid-template-columns:repeat(3,1fr)]",
-	"max-[1000px]:[grid-template-columns:repeat(2,1fr)]",
+	"[grid-template-columns:repeat(6,minmax(0,1fr))]",
+	"max-[1750px]:[grid-template-columns:repeat(5,minmax(0,1fr))]",
+	"max-[1500px]:[grid-template-columns:repeat(4,minmax(0,1fr))]",
+	"max-[1250px]:[grid-template-columns:repeat(3,minmax(0,1fr))]",
+	"max-[1000px]:[grid-template-columns:repeat(2,minmax(0,1fr))]",
 )
 
 const contentClassName = cn(
-	"h-[70vh] overflow-y-auto rounded-b-[12px] bg-gray-50 px-5 pb-5 dark:bg-white/5",
+	"h-[70vh] overflow-y-auto overflow-x-hidden rounded-b-[12px] bg-gray-50 px-5 pb-5 dark:bg-white/5",
 	"[&::-webkit-scrollbar]:w-[6px]",
 	"[&::-webkit-scrollbar-thumb]:rounded-[4px] [&::-webkit-scrollbar-thumb]:bg-border",
 	"[&::-webkit-scrollbar-track]:bg-transparent",
@@ -107,11 +107,11 @@ const ProjectList = memo(function ProjectList({
 			<div data-testid="shared-workspace-dialog-project-list" data-tab-type={tabType}>
 				{/* Control bar */}
 				<div className="bg-gray-50 px-5 pb-2.5 pt-5 dark:bg-white/5">
-					<div className="flex items-center justify-between gap-2.5">
-						<div className="text-sm font-semibold leading-5 text-foreground/80 opacity-80">
+					<div className="flex min-w-0 flex-wrap items-center justify-between gap-2.5">
+						<div className="shrink-0 text-sm font-semibold leading-5 text-foreground/80 opacity-80">
 							{t("workspace.projects")} · {projects.length}
 						</div>
-						<div className="flex items-center gap-2.5">
+						<div className="flex min-w-0 flex-wrap items-center justify-end gap-2.5">
 							{tabType === CollaborationProjectType.Received &&
 								currentTab === CollaborationProjectType.Received &&
 								joinType === CollaborationJoinMethod.Internal && (
@@ -128,7 +128,11 @@ const ProjectList = memo(function ProjectList({
 
 				{/* Project list */}
 				<div className={contentClassName}>
-					<div className={gridClassName}>
+					<div
+						className={gridClassName}
+						data-testid="shared-workspace-dialog-project-list-layout"
+						data-view-mode={viewMode}
+					>
 						{projects.map((item, index) => {
 							const projectItemKey = [
 								item.id,

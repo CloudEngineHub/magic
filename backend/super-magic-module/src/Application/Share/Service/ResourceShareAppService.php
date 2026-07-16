@@ -51,6 +51,7 @@ use Dtyq\SuperMagic\Domain\SuperAgent\Service\WorkspaceDomainService;
 use Dtyq\SuperMagic\ErrorCode\ShareErrorCode;
 use Dtyq\SuperMagic\ErrorCode\SuperAgentErrorCode;
 use Dtyq\SuperMagic\Infrastructure\Utils\AccessTokenUtil;
+use Dtyq\SuperMagic\Infrastructure\Utils\DateFormatUtil;
 use Dtyq\SuperMagic\Infrastructure\Utils\FileMetadataUtil;
 use Dtyq\SuperMagic\Infrastructure\Utils\FileTreeUtil;
 use Dtyq\SuperMagic\Infrastructure\Utils\PasswordCrypt;
@@ -614,6 +615,11 @@ class ResourceShareAppService extends AbstractShareAppService
             'default_open_file_id' => $shareEntity->getDefaultOpenFileId() !== null ? (string) $shareEntity->getDefaultOpenFileId() : null,
             'extra' => $extra,
             'share_project' => $shareEntity->isShareProject(),
+            'share_code' => $shareEntity->getShareCode(),
+            'created_at' => DateFormatUtil::formatExpireAt($shareEntity->getCreatedAt()),
+            'updated_at' => DateFormatUtil::formatExpireAt($shareEntity->getUpdatedAt()),
+            'expire_at' => DateFormatUtil::formatExpireAt($shareEntity->getExpireAt()),
+            'view_count' => $shareEntity->getViewCount(),
             'data' => $factory->getResourceContent(
                 $actualResourceId,
                 $shareEntity->getCreatedUid(),
@@ -1636,6 +1642,8 @@ class ResourceShareAppService extends AbstractShareAppService
             // 使用 toDtoWithPassword 返回包含密码的分享信息
             $item = $this->shareAssembler->toDtoWithPassword($shareEntity)->toArray();
             $item['id'] = (string) $shareEntity->getId(); // 添加 id 字段，用于查询 view_count
+            $item['created_at'] = DateFormatUtil::formatExpireAt($shareEntity->getCreatedAt());
+            $item['updated_at'] = DateFormatUtil::formatExpireAt($shareEntity->getUpdatedAt());
 
             // 添加 file_ids 字段
             $item['file_ids'] = $this->shareDomainService->getFileIdsForShareItem($shareEntity, $condition);

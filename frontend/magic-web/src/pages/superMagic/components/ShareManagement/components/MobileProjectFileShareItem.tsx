@@ -15,12 +15,10 @@ import {
 	getRemainingDays,
 	formatExpireAt,
 	convertToShareItem,
+	getShareDisplayName,
 } from "../utils/shareTypeHelpers"
-import {
-	ActionDrawer,
-	ActionGroup,
-	ActionItem,
-} from "@/components/shadcn-composed/action-drawer"
+import { ResourceType } from "../../Share/types"
+import { ActionDrawer, ActionGroup, ActionItem } from "@/components/shadcn-composed/action-drawer"
 import MagicEllipseWithTooltip from "@/components/base/MagicEllipseWithTooltip/MagicEllipseWithTooltip"
 import ShareSuccessModal from "../../Share/FileShareModal/ShareSuccessModal"
 import { useShareItemActions } from "../hooks/useShareItemActions"
@@ -55,6 +53,9 @@ function MobileProjectFileShareItem({
 
 	// 转换为ShareItem格式
 	const shareItem = convertToShareItem(item, () => t("share.untitled"))
+	const isProjectShare =
+		item.resource_type === ResourceType.Project || item.share_project === true
+	const displayName = getShareDisplayName(item.title, isProjectShare ? "project" : "file")
 
 	// 使用通用的hook
 	const shareItemActions = useShareItemActions({
@@ -109,7 +110,7 @@ function MobileProjectFileShareItem({
 				<div className="flex min-w-0 flex-1 flex-col gap-2">
 					{/* 分享名称 - 独占一行 */}
 					<MagicEllipseWithTooltip
-						text={item.title || t("share.untitled")}
+						text={displayName || t("share.untitled")}
 						className="text-sm font-medium leading-none text-foreground"
 					/>
 
@@ -154,17 +155,17 @@ function MobileProjectFileShareItem({
 									remainingDays === 0
 										? t("shareManagement.expired")
 										: t("shareManagement.validUntil", {
-											days: remainingDays,
-											date: formatExpireAt(item.expire_at),
-										})
+												days: remainingDays,
+												date: formatExpireAt(item.expire_at),
+											})
 								}
 							>
 								{remainingDays === 0
 									? t("shareManagement.expired")
 									: t("shareManagement.validUntil", {
-										days: remainingDays,
-										date: formatExpireAt(item.expire_at),
-									})}
+											days: remainingDays,
+											date: formatExpireAt(item.expire_at),
+										})}
 							</MagicEllipseWithTooltip>
 						) : (
 							<span>{t("shareManagement.permanentValid")}</span>
@@ -252,6 +253,9 @@ function MobileProjectFileShareItem({
 					shareType={shareItem.share_type}
 					shareProject={shareItem.share_project}
 					fileIds={shareItem.file_ids}
+					createdAt={item.created_at}
+					updatedAt={item.updated_at}
+					viewCount={item.view_count}
 					onEditShare={() => {
 						shareSuccessModal.close()
 						onEdit?.(item)

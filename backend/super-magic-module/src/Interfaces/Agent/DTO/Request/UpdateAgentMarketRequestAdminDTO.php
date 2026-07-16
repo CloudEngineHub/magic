@@ -9,94 +9,102 @@ namespace Dtyq\SuperMagic\Interfaces\Agent\DTO\Request;
 
 use App\Infrastructure\Core\AbstractRequestDTO;
 
-use function Hyperf\Translation\__;
-
-/**
- * 部分更新员工市场信息请求 DTO.
- */
 class UpdateAgentMarketRequestAdminDTO extends AbstractRequestDTO
 {
-    protected ?int $categoryId = null;
+    private ?int $categoryId = null;
 
-    protected ?int $sortOrder = null;
+    private ?int $sortOrder = null;
 
-    protected ?bool $isFeatured = null;
+    private ?bool $isFeatured = null;
 
-    protected ?bool $isHidden = null;
+    private ?bool $isHidden = null;
+
+    private ?array $nameI18n = null;
+
+    private ?array $descriptionI18n = null;
+
+    private ?array $roleI18n = null;
+
+    private ?array $icon = null;
+
+    private ?int $iconType = null;
+
+    private array $provided = [];
 
     public function setCategoryId(null|int|string $value): void
     {
         $this->categoryId = $value === null ? null : (int) $value;
+        $this->provided['category_id'] = true;
     }
 
     public function setSortOrder(null|int|string $value): void
     {
         $this->sortOrder = $value === null ? null : (int) $value;
+        $this->provided['sort_order'] = true;
     }
 
     public function setIsFeatured(null|bool|int|string $value): void
     {
-        if ($value === null) {
-            $this->isFeatured = null;
-            return;
-        }
-
-        if (is_bool($value)) {
-            $this->isFeatured = $value;
-            return;
-        }
-
-        $this->isFeatured = filter_var((string) $value, FILTER_VALIDATE_BOOLEAN);
+        $this->isFeatured = $value === null ? null : filter_var($value, FILTER_VALIDATE_BOOLEAN);
+        $this->provided['is_featured'] = true;
     }
 
     public function setIsHidden(null|bool|int|string $value): void
     {
-        if ($value === null) {
-            $this->isHidden = null;
-            return;
-        }
-
-        if (is_bool($value)) {
-            $this->isHidden = $value;
-            return;
-        }
-
-        $this->isHidden = filter_var((string) $value, FILTER_VALIDATE_BOOLEAN);
+        $this->isHidden = $value === null ? null : filter_var($value, FILTER_VALIDATE_BOOLEAN);
+        $this->provided['is_hidden'] = true;
     }
 
-    /**
-     * @return array{
-     *     category_id?: int,
-     *     sort_order?: int,
-     *     is_featured?: bool,
-     *     is_hidden?: bool
-     * }
-     */
+    public function setNameI18n(?array $value): void
+    {
+        $this->nameI18n = $value;
+        $this->provided['name_i18n'] = true;
+    }
+
+    public function setDescriptionI18n(?array $value): void
+    {
+        $this->descriptionI18n = $value;
+        $this->provided['description_i18n'] = true;
+    }
+
+    public function setRoleI18n(?array $value): void
+    {
+        $this->roleI18n = $value;
+        $this->provided['role_i18n'] = true;
+    }
+
+    public function setIcon(?array $value): void
+    {
+        $this->icon = $value;
+        $this->provided['icon'] = true;
+    }
+
+    public function setIconType(null|int|string $value): void
+    {
+        $this->iconType = $value === null ? null : (int) $value;
+        $this->provided['icon_type'] = true;
+    }
+
+    /** @return array<string, null|array|bool|int> */
     public function getUpdatePayload(): array
     {
-        $payload = [];
-        if ($this->categoryId !== null) {
-            $payload['category_id'] = $this->categoryId;
-        }
-        if ($this->sortOrder !== null) {
-            $payload['sort_order'] = $this->sortOrder;
-        }
-        if ($this->isFeatured !== null) {
-            $payload['is_featured'] = $this->isFeatured;
-        }
-        if ($this->isHidden !== null) {
-            $payload['is_hidden'] = $this->isHidden;
-        }
-
-        return $payload;
+        $values = [
+            'category_id' => $this->categoryId,
+            'sort_order' => $this->sortOrder,
+            'is_featured' => $this->isFeatured,
+            'is_hidden' => $this->isHidden,
+            'name_i18n' => $this->nameI18n,
+            'description_i18n' => $this->descriptionI18n,
+            'role_i18n' => $this->roleI18n,
+            'icon' => $this->icon,
+            'icon_type' => $this->iconType,
+        ];
+        return array_filter($values, fn ($value, string $key) => isset($this->provided[$key]), ARRAY_FILTER_USE_BOTH);
     }
 
     public function hasUpdates(): bool
     {
-        return $this->categoryId !== null
-            || $this->sortOrder !== null
-            || $this->isFeatured !== null
-            || $this->isHidden !== null;
+        return $this->provided !== [];
     }
 
     protected static function getHyperfValidationRules(): array
@@ -106,16 +114,16 @@ class UpdateAgentMarketRequestAdminDTO extends AbstractRequestDTO
             'sort_order' => 'sometimes|nullable|integer',
             'is_featured' => 'sometimes|boolean',
             'is_hidden' => 'sometimes|boolean',
+            'name_i18n' => 'sometimes|array',
+            'description_i18n' => 'sometimes|nullable|array',
+            'role_i18n' => 'sometimes|nullable|array',
+            'icon' => 'sometimes|nullable|array',
+            'icon_type' => 'sometimes|integer',
         ];
     }
 
     protected static function getHyperfValidationMessage(): array
     {
-        return [
-            'category_id.integer' => __('validation.integer', ['attribute' => 'category_id']),
-            'sort_order.integer' => __('validation.integer', ['attribute' => 'sort_order']),
-            'is_featured.boolean' => __('validation.boolean', ['attribute' => 'is_featured']),
-            'is_hidden.boolean' => __('validation.boolean', ['attribute' => 'is_hidden']),
-        ];
+        return [];
     }
 }

@@ -154,9 +154,9 @@ function EditorLayout({
 
 	return (
 		<SceneStateProvider store={sceneStateStore} variant={ScenePanelVariant.HomePage}>
-			<div className={cn("flex size-full max-w-4xl flex-col items-center")}>
+			<div className={cn("flex size-full flex-col items-center")}>
 				{/* Main Input Container */}
-				<div className="w-full rounded-2xl border border-border bg-sidebar p-2">
+				<div className="w-full max-w-4xl rounded-2xl border border-border bg-sidebar p-2">
 					{/* skill editor input container with min height to prevent layout shift */}
 					<div
 						ref={editorContainerRef}
@@ -181,8 +181,10 @@ function EditorLayout({
 
 				{/* skill config container with smooth transition */}
 				<div
+					data-testid="home-scene-config-container"
 					className={cn(
 						"w-full transition-all duration-200 ease-in-out",
+						mode !== TopicMode.PPT && "max-w-4xl",
 						shouldShowSelfMediaConfig ? "px-2 pb-8 pt-0" : "p-2 pb-[40px]",
 					)}
 					style={{

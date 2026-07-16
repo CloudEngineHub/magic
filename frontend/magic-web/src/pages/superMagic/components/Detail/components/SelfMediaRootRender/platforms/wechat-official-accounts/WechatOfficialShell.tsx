@@ -10,7 +10,7 @@ import { useExportProgressToast } from "../../hooks/useExportProgressToast"
 import { useExportZip } from "../../hooks/useExportZip"
 import { useShellFileHandlers } from "../../hooks/useShellFileHandlers"
 import { SelfMediaStoreProvider, useOptionalSelfMediaStore, useSelfMediaStore } from "../../stores"
-import type { PlatformComponentProps, SelfMediaView } from "../../types"
+import type { PlatformComponentProps, SelfMediaView, SelfMediaWechatCoverType } from "../../types"
 import WechatArticleView, { type WechatArticleViewRef } from "./article"
 import WechatCodeView from "./code"
 import { WechatCoverPhonePanel } from "./WechatCoverPhonePanel"
@@ -18,6 +18,7 @@ import WechatEditView from "./edit"
 import { WechatOfficialContentGate } from "./WechatOfficialContentGate"
 import { loadWechatArticleHtml } from "./wechatArticleHtml"
 import { buildWechatClipboardHtmlFromSource } from "./wechatClipboardHtml"
+import { WECHAT_COVER_BASE_HEIGHT, WECHAT_COVER_BASE_WIDTH } from "./wechatCoverDimensions"
 
 const TAB_ORDER: SelfMediaView[] = ["feed", "detail", "edit", "code"]
 
@@ -33,8 +34,15 @@ async function writeWechatHtmlToClipboard(html: string): Promise<void> {
 	await navigator.clipboard.write([
 		new ClipboardItem({
 			"text/html": new Blob([html], { type: "text/html" }),
+			"text/plain": new Blob([htmlToPlainText(html)], { type: "text/plain" }),
 		}),
 	])
+}
+
+function htmlToPlainText(html: string): string {
+	if (typeof DOMParser === "undefined") return html
+	const sourceDocument = new DOMParser().parseFromString(html, "text/html")
+	return sourceDocument.body.textContent?.trim() || ""
 }
 
 function WechatOfficialShell(props: PlatformComponentProps) {
@@ -62,6 +70,7 @@ const WechatOfficialShellContent = observer(function WechatOfficialShellContent(
 		onBackHome,
 		onUpdatePostTitle,
 		onRequestPrePublishAnalysis,
+		onRequestWechatCoverGeneration,
 	} = props
 	const store = useSelfMediaStore()
 	const { posts, loading, error, activePostIndex, view, rootLoading } = store
@@ -277,6 +286,25 @@ const WechatOfficialShellContent = observer(function WechatOfficialShellContent(
 		}
 	}, [activePostIndex, attachmentList, attachments, isCopyingWechatHtml, store, t])
 
+	const handleGenerateWechatCovers = useCallback(
+		async ({
+			postIndex,
+			coverTypes,
+		}: {
+			postIndex: number
+			coverTypes: SelfMediaWechatCoverType[]
+		}) => {
+			if (!onRequestWechatCoverGeneration) return false
+			const started = await onRequestWechatCoverGeneration({
+				index: postIndex,
+				coverTypes,
+			})
+			if (started) setExportDialogOpen(false)
+			return started
+		},
+		[onRequestWechatCoverGeneration],
+	)
+
 	const handleSaveTitle = useCallback(
 		async (nextTitle: string) => {
 			const entry = store.activePostEntry
@@ -332,7 +360,11 @@ const WechatOfficialShellContent = observer(function WechatOfficialShellContent(
 				exportMode="wechatOfficial"
 				onCopyWechatHtml={handleCopyWechatHtml}
 				isCopyingWechatHtml={isCopyingWechatHtml}
-				exportSizeHintCss={{ width: 1500, height: 540 }}
+				onGenerateWechatCovers={allowEdit ? handleGenerateWechatCovers : undefined}
+				exportSizeHintCss={{
+					width: WECHAT_COVER_BASE_WIDTH,
+					height: WECHAT_COVER_BASE_HEIGHT,
+				}}
 			/>
 
 			<div className="relative min-h-0 flex-1 overflow-hidden">

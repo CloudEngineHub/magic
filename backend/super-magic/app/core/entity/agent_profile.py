@@ -4,6 +4,8 @@ Defines the Agent identity configuration including name and description.
 """
 from pydantic import BaseModel
 
+from app.i18n import i18n
+
 
 class AgentProfile(BaseModel):
     """Agent identity configuration
@@ -38,3 +40,20 @@ class AgentProfile(BaseModel):
 
 # Default Agent Profile
 DEFAULT_AGENT_PROFILE = AgentProfile()
+
+
+def get_builtin_agent_profile(agent_mode: str) -> AgentProfile | None:
+    """Return the localized default profile for built-in creation modes."""
+    profile_keys = {
+        "crew-creator": "crew_creator",
+        "skill-creator": "skill_creator",
+    }
+    profile_key = profile_keys.get(agent_mode)
+    if profile_key is None:
+        return None
+
+    return AgentProfile(
+        name=i18n.translate(f"agent_profile.{profile_key}.name"),
+        role=i18n.translate(f"agent_profile.{profile_key}.role"),
+        description=i18n.translate(f"agent_profile.{profile_key}.description"),
+    )

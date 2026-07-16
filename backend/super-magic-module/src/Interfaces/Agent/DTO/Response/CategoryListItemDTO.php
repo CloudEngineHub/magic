@@ -35,6 +35,11 @@ class CategoryListItemDTO extends AbstractDTO
     public int $sortOrder;
 
     /**
+     * 状态：1-显示，0-隐藏.
+     */
+    public int $status;
+
+    /**
      * 该分类下的员工数量（Crew 数量）.
      */
     public int $crewCount;
@@ -44,12 +49,14 @@ class CategoryListItemDTO extends AbstractDTO
         array $nameI18n,
         ?string $logo,
         int $sortOrder,
+        int $status,
         int $crewCount
     ) {
         $this->id = (string) $id;
         $this->nameI18n = $nameI18n;
         $this->logo = $logo;
         $this->sortOrder = $sortOrder;
+        $this->status = $status;
         $this->crewCount = $crewCount;
     }
 
@@ -60,6 +67,7 @@ class CategoryListItemDTO extends AbstractDTO
             'name_i18n' => $this->nameI18n,
             'logo' => $this->logo,
             'sort_order' => $this->sortOrder,
+            'status' => $this->status,
             'crew_count' => $this->crewCount,
         ];
     }

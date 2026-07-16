@@ -177,6 +177,14 @@ return [
             ],
             'tag' => '平台管理',
         ],
+        'platform.setting.slides_template' => [
+            'path' => [
+                ['key' => 'platform_management', 'label' => '平台管理'],
+                ['key' => 'platform_console_management', 'label' => '平台管理'],
+                ['key' => 'slides_template', 'label' => '幻灯片模板'],
+            ],
+            'tag' => '平台管理',
+        ],
         'admin.safe.sub_admin' => [
             'path' => [
                 ['key' => 'enterprise_feature', 'label' => '企业功能'],

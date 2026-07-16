@@ -58,13 +58,13 @@ class SuperMagicAgentMarketAppService extends AbstractSuperMagicAppService
      * Return all categories with their published crew counts.
      */
     /**
-     * @return array<int, array{id:int, name_i18n:array, logo:?string, sort_order:int, crew_count:int}>
+     * @return array<int, array{id:int, name_i18n:array, logo:?string, sort_order:int, status:int, crew_count:int}>
      */
     public function getCategories(Authenticatable $authorization): array
     {
         $dataIsolation = $this->createSuperMagicDataIsolation($authorization);
 
-        $categories = $this->superMagicAgentCategoryDomainService->getCategoriesWithCrewCount($dataIsolation);
+        $categories = $this->superMagicAgentCategoryDomainService->getCategoriesWithCrewCount();
         $this->updateCategoryLogoUrls($dataIsolation, $categories);
 
         $list = [];
@@ -74,6 +74,7 @@ class SuperMagicAgentMarketAppService extends AbstractSuperMagicAppService
                 'name_i18n' => $category['name_i18n'],
                 'logo' => ($category['logo'] ?? null) ?: null,
                 'sort_order' => $category['sort_order'],
+                'status' => $category['status'],
                 'crew_count' => $category['crew_count'],
             ];
         }

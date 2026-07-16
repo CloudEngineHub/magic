@@ -64,4 +64,16 @@ class UserAgentDomainService
     {
         return $this->userAgentRepository->deleteAllByAgentCode($dataIsolation, $agentCode);
     }
+
+    public function deleteUserAgentOwnershipsExceptUser(
+        SuperMagicAgentDataIsolation $dataIsolation,
+        string $agentCode,
+        string $excludedUserId
+    ): int {
+        return $this->userAgentRepository->deleteByAgentCodeExceptUser(
+            $dataIsolation,
+            $agentCode,
+            $excludedUserId
+        );
+    }
 }

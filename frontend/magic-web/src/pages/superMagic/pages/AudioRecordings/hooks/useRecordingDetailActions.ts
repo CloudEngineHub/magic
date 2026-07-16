@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react"
+import { useCallback, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { toast } from "sonner"
 import useNavigate from "@/routes/hooks/useNavigate"
@@ -22,6 +22,7 @@ import {
 } from "../utils/download-recording-batch"
 import { getAttachmentFileName } from "../utils/recording-detail-files"
 import { canGenerateSummaryFromDetail } from "../utils/summary-action-utils"
+import { useDownloadProgress } from "@/pages/superMagic/hooks/useDownloadProgress"
 
 interface UseRecordingDetailActionsInput {
 	projectId: string
@@ -42,6 +43,8 @@ export function useRecordingDetailActions(input: UseRecordingDetailActionsInput)
 	const [moving, setMoving] = useState(false)
 	const [summarySubmitting, setSummarySubmitting] = useState(false)
 	const [downloading, setDownloading] = useState(false)
+	const downloadProgress = useDownloadProgress()
+	const downloadCancelledRef = useRef(false)
 
 	const exportAvailability = useMemo(
 		() => ({
@@ -159,9 +162,10 @@ export function useRecordingDetailActions(input: UseRecordingDetailActionsInput)
 			setDownloading(true)
 			try {
 				const ok = await task()
-				if (!ok) toast.error(t("detail.loadFailed"))
+				if (!ok && !downloadCancelledRef.current) toast.error(t("detail.loadFailed"))
 				return ok
 			} finally {
+				downloadCancelledRef.current = false
 				setDownloading(false)
 			}
 		},
@@ -222,9 +226,13 @@ export function useRecordingDetailActions(input: UseRecordingDetailActionsInput)
 				fileIds,
 				projectId,
 				fileNameById,
+				startDownload: downloadProgress.startDownload,
+				onCancel: () => {
+					downloadCancelledRef.current = true
+				},
 			}),
 		)
-	}, [fileMap, projectId, recordingName, runDownload])
+	}, [downloadProgress.startDownload, fileMap, projectId, recordingName, runDownload])
 
 	const canGenerateSummary = projectItem
 		? canGenerateSummaryFromDetail({

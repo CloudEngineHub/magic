@@ -63,6 +63,8 @@ function UploadHoverPanelButtonComponent({
 									}}
 									onClick={trigger}
 									data-testid="super-message-editor-upload-button"
+									data-count={fileCount}
+									data-active={fileCount > 0}
 								>
 									<Upload size={iconSize} className="shrink-0" />
 									{fileCount > 0 && (

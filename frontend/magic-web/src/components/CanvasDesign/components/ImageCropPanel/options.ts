@@ -38,6 +38,116 @@ export const presetOptions: PresetOption[] = [
 		],
 	},
 	{
+		label: "淘宝/天猫",
+		value: "taobao-tmall",
+		children: [
+			{
+				label: "商品主图",
+				value: "800x800",
+			},
+			{
+				label: "商品长图",
+				value: "800x1200",
+			},
+			{
+				label: "详情页",
+				value: "750x1000",
+			},
+			{
+				label: "店铺海报",
+				value: "1920x600",
+			},
+		],
+	},
+	{
+		label: "京东",
+		value: "jd",
+		children: [
+			{
+				label: "商品主图",
+				value: "800x800",
+			},
+			{
+				label: "商品长图",
+				value: "800x1200",
+			},
+			{
+				label: "详情页",
+				value: "750x1000",
+			},
+			{
+				label: "店铺横幅",
+				value: "1920x500",
+			},
+		],
+	},
+	{
+		label: "拼多多",
+		value: "pinduoduo",
+		children: [
+			{
+				label: "商品主图",
+				value: "800x800",
+			},
+			{
+				label: "商品长图",
+				value: "800x1200",
+			},
+			{
+				label: "详情页",
+				value: "750x1000",
+			},
+			{
+				label: "营销横图",
+				value: "1200x600",
+			},
+		],
+	},
+	{
+		label: "抖音电商",
+		value: "douyin-ecommerce",
+		children: [
+			{
+				label: "商品主图",
+				value: "800x800",
+			},
+			{
+				label: "短视频封面",
+				value: "1080x1920",
+			},
+			{
+				label: "直播封面",
+				value: "750x1000",
+			},
+			{
+				label: "店铺头图",
+				value: "1125x633",
+			},
+		],
+	},
+	{
+		label: "小红书电商",
+		value: "rednote-ecommerce",
+		children: [
+			{
+				label: "商品方图",
+				value: "1080x1080",
+			},
+			{
+				label: "笔记封面",
+				value: "1242x1660",
+			},
+			{
+				label: "竖版图文",
+				value: "1080x1440",
+			},
+			{
+				label: "横版图文",
+				value: "1080x608",
+			},
+		],
+	},
+	{
 		label: "Instagram",
 		value: "instagram",
 		children: [

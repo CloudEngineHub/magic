@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState, useMemo } from "react"
+import { useCallback, useState, useMemo } from "react"
 import { useTranslation } from "react-i18next"
 import { BadgeCent, RefreshCw, Fullscreen } from "lucide-react"
 import type {
@@ -51,7 +51,8 @@ interface UseDesignHeaderPropsOptions {
 	fileVersionsList?: FileHistoryVersion[]
 	allowEdit?: boolean
 	allowDownload?: boolean
-	containerRef: React.RefObject<HTMLDivElement>
+	isFullscreen?: boolean
+	onFullscreen?: () => void
 	handleReinitialize: () => Promise<void>
 	handleChangeFileVersion: (version: number, isNewestVersion: boolean) => Promise<void>
 	handleReturnLatest: () => Promise<void>
@@ -70,7 +71,8 @@ export function useDesignHeaderProps(options: UseDesignHeaderPropsOptions): Comm
 		fileVersionsList,
 		allowEdit,
 		allowDownload,
-		containerRef,
+		isFullscreen = false,
+		onFullscreen,
 		handleReinitialize,
 		handleChangeFileVersion,
 		handleReturnLatest,
@@ -80,9 +82,6 @@ export function useDesignHeaderProps(options: UseDesignHeaderPropsOptions): Comm
 	const { t } = useTranslation("super")
 	const { isShareRoute } = useShareRoute()
 	const { hasGlobalAgreement } = useAiWatermarkPreference()
-
-	// 全屏状态
-	const [isFullscreen, setIsFullscreen] = useState(false)
 
 	// 刷新状态
 	const [isRefreshing, setIsRefreshing] = useState(false)
@@ -111,37 +110,9 @@ export function useDesignHeaderProps(options: UseDesignHeaderPropsOptions): Comm
 		return Boolean(designDownloadDirectoryInfo?.path && designDownloadDirectoryInfo.id)
 	}, [allowDownload, allowEdit, designDownloadDirectoryInfo])
 
-	// 全屏处理函数
-	const handleFullscreen = useCallback(async () => {
-		if (!containerRef?.current) return
-
-		try {
-			if (!document.fullscreenElement) {
-				// 进入全屏
-				await containerRef.current.requestFullscreen()
-				setIsFullscreen(true)
-			} else {
-				// 退出全屏
-				await document.exitFullscreen()
-				setIsFullscreen(false)
-			}
-		} catch (error) {
-			//
-		}
-	}, [containerRef])
-
-	// 监听全屏状态变化
-	useEffect(() => {
-		function handleFullscreenChange() {
-			const isContainerFullscreen = document.fullscreenElement === containerRef?.current
-			setIsFullscreen(isContainerFullscreen)
-		}
-
-		document.addEventListener("fullscreenchange", handleFullscreenChange)
-		return () => {
-			document.removeEventListener("fullscreenchange", handleFullscreenChange)
-		}
-	}, [containerRef])
+	const handleFullscreen = useCallback(() => {
+		onFullscreen?.()
+	}, [onFullscreen])
 
 	const handleMoreMenuOpenChange = useCallback((open: boolean) => {
 		if (open) {
@@ -286,16 +257,10 @@ export function useDesignHeaderProps(options: UseDesignHeaderPropsOptions): Comm
 		[],
 	)
 
-	// 普通模式下挂到 body，避免被消息列表等相邻区域的层叠上下文遮挡；
-	// 仅在全屏时挂到全屏容器内，确保弹层仍显示在全屏内容之上。
 	const getPopupContainer = useCallback(() => {
 		if (typeof document === "undefined") return null
-
-		const container = containerRef?.current
-		if (document.fullscreenElement === container && container) return container
-
 		return document.body
-	}, [containerRef])
+	}, [])
 
 	// 自定义按钮渲染函数（只保留需要特殊处理的）
 	const renderCustomRefresh = useCallback(

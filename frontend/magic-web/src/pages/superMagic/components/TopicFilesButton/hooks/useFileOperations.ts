@@ -31,6 +31,10 @@ import { pptxExternalLogger, reportPptxExportError } from "@/pages/superMagic/ut
 import { createPptxResourceErrorCollector } from "@/pages/superMagic/utils/pptxResourceErrors"
 import { createRandomUuidV4 } from "@/utils/create-random-uuid-v4"
 import { hasPPTMetadata } from "@/pages/superMagic/components/Detail/utils/file"
+import {
+	createPptxSlideConfig,
+	resolvePptScaleContentDimensions,
+} from "@/pages/superMagic/components/Detail/contents/HTML/utils/slide-dimensions"
 import { getAppEntryFile } from "../../MessageList/components/MessageAttachment/utils"
 import { waitForProjectAttachmentChange } from "@/pages/superMagic/utils/projectAttachments/attachmentMutationWaiter"
 import { exportHtmlToImage } from "@magic-web/html2image"
@@ -43,6 +47,7 @@ import {
 	documentExportService,
 	type DocumentExport,
 } from "@/pages/superMagic/services/documentExport"
+import type { DownloadProgressController } from "@/pages/superMagic/hooks/useDownloadProgress"
 
 // 工具函数：从attachments中递归删除指定ID的文件/文件夹
 const removeItemFromAttachments = (
@@ -237,6 +242,7 @@ export interface UseFileOperationsOptions {
 	// 新增：用于收集多个选中文件的分享
 	selectedItems?: Set<string>
 	filteredFiles?: AttachmentItem[]
+	downloadProgress?: DownloadProgressController
 }
 
 /**
@@ -258,6 +264,7 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 		duplicateFileHandler: externalDuplicateHandler,
 		selectedItems,
 		filteredFiles,
+		downloadProgress,
 	} = options
 	const { t } = useTranslation("super")
 	const waitForAttachmentMutation = useMemoizedFn(
@@ -1272,11 +1279,15 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 					displayConfig: mergedDisplayConfig,
 				})
 				const pptFontResolver = documentExportService.get()?.getPptFontResolver?.()
+				const pptxConfig = createPptxSlideConfig(
+					resolvePptScaleContentDimensions(preparedHtmlSlides[0]),
+				)
 
 				exportHandle = exportPPTX(preparedHtmlSlides, {
 					fileName: result.fileName,
 					skipFailedPages: true,
 					autoSize,
+					config: pptxConfig,
 					fontResolver: pptFontResolver,
 					logger: pptxExternalLogger,
 					logLevel: "warn",
@@ -1510,6 +1521,32 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 				}
 			} else {
 				// 多个文件使用批量下载
+				if (downloadProgress) {
+					await downloadProgress.startDownload({
+						projectId,
+						fileIds,
+						fileName: downloadName,
+						label: t("topicFiles.downloading"),
+						onSuccess: () => {
+							magicToast.success({
+								content: t("topicFiles.downloadSuccess"),
+								duration: 1000,
+							})
+						},
+						onError: (error) => {
+							const message = error instanceof Error ? error.message : undefined
+							magicToast.error({
+								content: message || t("interface:ErrorHappened"),
+								duration: 1000,
+							})
+						},
+						onCancel: () => {
+							magicToast.info(t("topicFiles.downloadAbort"))
+						},
+					})
+					return
+				}
+
 				return new Promise<void>((resolve, reject) => {
 					if (folderDownloadToastId) {
 						// Mobile folder downloads close the action sheet immediately, so the toast

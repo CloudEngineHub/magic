@@ -123,6 +123,7 @@
 		return /^.+\.(png|jpe?g|webp|gif|bmp|svg)$/i.test(String(file.name ?? ""))
 	}
 
+	/* 从dataTransfer中获取文件 */
 	function getLocalFilesFromDataTransfer(dataTransfer) {
 		if (!dataTransfer) return []
 		const directFiles = Array.from(dataTransfer.files || []).filter(Boolean)
@@ -146,6 +147,134 @@
 			return true
 		}
 		return Array.from(dataTransfer.types || []).includes("Files")
+	}
+
+	const CANVAS_ELEMENT_CLIPBOARD_SOURCE = "canvas-design"
+	const CANVAS_ELEMENT_CLIPBOARD_VERSION = 1
+
+	/**
+	 * 画布复制粘贴：插件运行在 iframe srcDoc，paste event 读不到 V2 bundle。
+	 *
+	 * 读取：
+	 * 1. paste event 中的标准图片 File（外部截图 / copy-as-png 的 image/png）
+	 * 2. Host 桥接 readCanvasClipboard（回传 source/version/operation/files，不含 elements）
+	 *
+	 * 导入：
+	 * 1. copy-as-png → Host uploadedAssets，或本地 uploadFile
+	 * 2. copy-elements + sourceRef.src → resolveFileAssets，不上传
+	 * 3. 其余 → uploadFile
+	 */
+
+	function normalizeCanvasClipboardSourceRef(sourceRef) {
+		if (!sourceRef || typeof sourceRef !== "object") return undefined
+		return {
+			src: typeof sourceRef.src === "string" ? sourceRef.src : undefined,
+			ossUrl: typeof sourceRef.ossUrl === "string" ? sourceRef.ossUrl : undefined,
+			expiresAt: typeof sourceRef.expiresAt === "string" ? sourceRef.expiresAt : undefined,
+		}
+	}
+
+	/** 校验并规范化单条画布剪贴板文件 metadata。 */
+	function normalizeCanvasClipboardFileMetadata(file) {
+		if (!file || typeof file !== "object") return null
+		const role = file.role
+		if (role !== "element-media" && role !== "canvas-export") return null
+		if (typeof file.filename !== "string" || !file.filename.trim()) return null
+		if (typeof file.mimeType !== "string" || !file.mimeType.trim()) return null
+		return {
+			id: typeof file.id === "string" ? file.id : "",
+			elementId: typeof file.elementId === "string" ? file.elementId : "",
+			filename: file.filename,
+			mimeType: file.mimeType,
+			fileSize: typeof file.fileSize === "number" ? file.fileSize : 0,
+			role,
+			sourceRef: normalizeCanvasClipboardSourceRef(file.sourceRef),
+		}
+	}
+
+	/** 校验画布剪贴板 payload 结构（Host 回传 metadata 规范化用）。 */
+	function normalizeCanvasClipboardPayload(data) {
+		if (!data || typeof data !== "object") return null
+		if (data.source !== CANVAS_ELEMENT_CLIPBOARD_SOURCE) return null
+		if (data.version !== CANVAS_ELEMENT_CLIPBOARD_VERSION) return null
+		const operation = data.operation === "copy-as-png" ? "copy-as-png" : "copy-elements"
+		const files = Array.isArray(data.files)
+			? data.files.map(normalizeCanvasClipboardFileMetadata).filter(Boolean)
+			: []
+		if (!files.length && !Array.isArray(data.elements)) return null
+		return { operation, files }
+	}
+
+	/** 通过 Host 桥接读取 V2 bundle 剪贴板；失败时向上抛出，由 paste 错误处理展示 toast。 */
+	async function readCanvasClipboardPayloadFromHost(ctx) {
+		if (!ctx.assets?.readCanvasClipboard) return null
+		const hostResult = await ctx.assets.readCanvasClipboard()
+		const payload = normalizeCanvasClipboardPayload(hostResult?.payload)
+		if (!payload && !(hostResult?.uploadedAssets?.length > 0)) {
+			return null
+		}
+		return {
+			payload,
+			uploadedAssets: Array.isArray(hostResult?.uploadedAssets)
+				? hostResult.uploadedAssets
+				: [],
+		}
+	}
+
+	/** Host 剪贴板结果是否包含可导入的图片（空剪贴板时不应 toast / 导入）。 */
+	function hasHostImportableContent(hostResult) {
+		if (!hostResult) return false
+		if (hostResult.uploadedAssets?.length > 0) return true
+		const payload = hostResult.payload
+		if (!payload) return false
+		if (payload.operation === "copy-as-png") {
+			return payload.files.length > 0
+		}
+		return getReusableCanvasClipboardFiles(payload, 1).length > 0
+	}
+
+	function isImageClipboardMimeType(mimeType) {
+		return String(mimeType ?? "")
+			.toLowerCase()
+			.startsWith("image/")
+	}
+
+	/**
+	 * 从 payload 中筛选可复用引用的图片（copy-elements + element-media + sourceRef.src）。
+	 * copy-as-png 不在此列，需走 upload 路径。
+	 */
+	function getReusableCanvasClipboardFiles(payload, maxCount) {
+		if (!payload || payload.operation === "copy-as-png") return []
+		return payload.files
+			.filter(
+				(file) =>
+					file.role === "element-media" &&
+					file.sourceRef?.src &&
+					isImageClipboardMimeType(file.mimeType),
+			)
+			.slice(0, maxCount)
+	}
+
+	/** 从 DataTransfer（paste 的 clipboardData / drag 的 dataTransfer）提取标准图片 File。 */
+	function getImageFilesFromDataTransfer(dataTransfer) {
+		return getLocalFilesFromDataTransfer(dataTransfer).filter(isImageFile)
+	}
+
+	/** 合并导入资源并按 referenceId 去重，避免同 path 重复添加。 */
+	function mergeUniqueImageAssets(currentAssets, incomingAssets, maxCount) {
+		const merged = [...(Array.isArray(currentAssets) ? currentAssets : [])]
+		const existingIds = new Set(
+			merged.map((asset) => getImageReferenceId(asset)).filter(Boolean),
+		)
+		for (const asset of incomingAssets) {
+			if (!asset) continue
+			const referenceId = getImageReferenceId(asset)
+			if (referenceId && existingIds.has(referenceId)) continue
+			if (referenceId) existingIds.add(referenceId)
+			merged.push(asset)
+			if (merged.length >= maxCount) break
+		}
+		return merged
 	}
 
 	function getErrorMessage(error) {
@@ -416,6 +545,10 @@
 		}
 		let helpers = null
 		let maskCropUploadSequence = 0
+		// 记录插件内所有可接收画布图片拖入的区域，拖拽 move 时按坐标反查。
+		const canvasAssetDropTargets = new Map()
+		let activeCanvasAssetDropTarget = null
+		let activeCanvasAssetDragSessionId = null
 
 		function createMaskCropUploadName(section, sourceAsset) {
 			maskCropUploadSequence += 1
@@ -449,6 +582,13 @@
 		function getDefaultStartMessage() {
 			const locale = String(ctx.i18n?.locale ?? navigator.language ?? "").toLowerCase()
 			return locale.startsWith("zh") ? "开始生成" : "Generation started"
+		}
+
+		function getCanvasImportHintFallback() {
+			const locale = String(ctx.i18n?.locale ?? navigator.language ?? "").toLowerCase()
+			return locale.startsWith("zh")
+				? "支持点击上传、拖入或粘贴图片；画布图片可先复制（⌘C）再点击此处粘贴（⌘V），或按住 （Alt/Option） 批量拖入"
+				: "Click to upload, drag, or paste images here. From canvas: copy (⌘C), click here and paste (⌘V), or hold (Alt/Option) to batch drag"
 		}
 
 		function normalizeTextareaValue(value, maxLength, hasMaxLength) {
@@ -776,18 +916,79 @@
 			return uploaded
 		}
 
-		async function importSectionImages(section, payload) {
-			const validationError = validateSectionAcquire(section)
-			if (validationError) return []
-			if (payload.kind === "picker") {
-				return pickImageFiles({
-					multiple: payload.maxCount > 1,
-					maxCount: payload.maxCount,
-				})
+		/** 将画布剪贴板 metadata 中的 sourceRef.src 解析为 PluginFileAsset，不 upload。 */
+		async function resolveCanvasClipboardAssets(metadataList) {
+			if (!metadataList.length) return []
+			if (!ctx.assets?.resolveFileAssets) {
+				throw new Error("ctx.assets.resolveFileAssets is not connected yet.")
 			}
-			if (payload.kind === "local") {
-				return uploadDroppedFiles(payload.files.slice(0, payload.maxCount))
+			return ctx.assets.resolveFileAssets(
+				metadataList.map((file) => ({
+					path: file.sourceRef.src,
+					fileName: file.filename,
+				})),
+				{ type: "image" },
+			)
+		}
+
+		/**
+		 * 粘贴导入的统一入口：先读 metadata，再决定 resolve 还是 upload。
+		 * 见模块顶部「画布复制粘贴」注释中的读取/导入优先级。
+		 */
+		async function resolvePastedImageAssets(maxCount, clipboardData, options = {}) {
+			if (maxCount <= 0) return []
+
+			let payload = null
+			let hostUploadedAssets = []
+			let resolveError = null
+
+			// 画布剪贴板粘贴导入
+			const hostResult =
+				options.hostResult !== undefined
+					? options.hostResult
+					: await readCanvasClipboardPayloadFromHost(ctx)
+			if (hostResult) {
+				payload = hostResult.payload
+				hostUploadedAssets = hostResult.uploadedAssets
 			}
+
+			// copy-as-png（复制为PNG） 场景，Host 已上传，直接返回
+			if (hostUploadedAssets.length) {
+				return hostUploadedAssets.slice(0, maxCount)
+			}
+
+			// copy-elements（复制画布元素） 场景，Host 未上传，需要 resolve
+			const metadataList = payload ? getReusableCanvasClipboardFiles(payload, maxCount) : []
+
+			if (metadataList.length) {
+				try {
+					const resolved = await resolveCanvasClipboardAssets(metadataList)
+					if (resolved.length) {
+						return resolved.slice(0, maxCount)
+					}
+				} catch (error) {
+					resolveError = error
+				}
+			}
+
+			// 常规本地文件复制粘贴导入
+			const imageFiles = clipboardData ? getImageFilesFromDataTransfer(clipboardData) : []
+			if (imageFiles.length) {
+				try {
+					return await uploadDroppedFiles(imageFiles.slice(0, maxCount))
+				} catch (uploadError) {
+					throw resolveError || uploadError
+				}
+			}
+
+			if (resolveError) {
+				throw resolveError
+			}
+
+			if (metadataList.length) {
+				throw new Error(t("error.pasteResolve", "粘贴失败，无法引用画布图片"))
+			}
+
 			return []
 		}
 
@@ -996,6 +1197,53 @@
 			return sectionNode
 		}
 
+		/** 图片导入区是否展示空态 hover 说明（本地上传/拖拽/粘贴 + 画布导入）。 */
+		function shouldShowCanvasImportHint(section) {
+			if (section?.importHint === false) return false
+			return Boolean(ctx.assets?.pickFiles)
+		}
+
+		/** 空态上传框 hover 说明文案。 */
+		function resolveCanvasImportHint(section) {
+			if (!shouldShowCanvasImportHint(section)) return null
+			if (typeof section.importHint === "string") return section.importHint
+			return t("imageImport.canvasHint", getCanvasImportHintFallback())
+		}
+
+		function createImportHintTooltip(section) {
+			const text = resolveCanvasImportHint(section)
+			if (!text) return null
+			const tooltip = createElement("div", "mpk-import-hint-tooltip", text)
+			tooltip.setAttribute("role", "tooltip")
+			return tooltip
+		}
+
+		function bindEmptyImportHintTooltip(target, section) {
+			if (!target) return null
+			const text = resolveCanvasImportHint(section)
+			if (!text) {
+				removeImportHintTooltip(target)
+				return null
+			}
+
+			let tooltip = target.querySelector(".mpk-import-hint-tooltip")
+			if (!tooltip) {
+				tooltip = createImportHintTooltip(section)
+				if (!tooltip) return null
+				target.append(tooltip)
+			} else {
+				tooltip.textContent = text
+			}
+			target.classList.add("has-import-hint-tooltip")
+			return tooltip
+		}
+
+		function removeImportHintTooltip(target) {
+			if (!target) return
+			target.classList.remove("has-import-hint-tooltip")
+			target.querySelector(".mpk-import-hint-tooltip")?.remove()
+		}
+
 		/** 创建图片卡片 */
 		function createImageCard(asset, altText, onRemove) {
 			const item = createElement("div", "mpk-image-card")
@@ -1020,19 +1268,193 @@
 			return pickImageFiles(options)
 		}
 
+		/** 获取画布图片投放区 ID，优先使用业务显式配置，保证重渲染后仍可匹配。 */
+		function getCanvasAssetDropTargetId(section) {
+			return section.id ?? section.stateKey
+		}
+
+		/** 判断指定 section 当前是否还能接收画布图片拖入。 */
+		function canDropCanvasAssets(section, mode, incomingCount = 1) {
+			if (!section?.stateKey) return false
+			const beforePickError = section.beforePick?.({ state, helpers, t })
+			if (beforePickError) return false
+			if (mode !== "grid") return true
+			const currentAssets = Array.isArray(state[section.stateKey])
+				? state[section.stateKey]
+				: []
+			return (
+				getSectionImportLimit(section, currentAssets.length).remaining > 0 &&
+				incomingCount > 0
+			)
+		}
+
+		/** 维护插件内部的 hover 样式，同一时间只允许一个 drop target 高亮。 */
+		function setActiveCanvasAssetDropTarget(target) {
+			if (activeCanvasAssetDropTarget === target) return
+			activeCanvasAssetDropTarget?.classList.remove("is-drag-over")
+			activeCanvasAssetDropTarget = target
+			activeCanvasAssetDropTarget?.classList.add("is-drag-over")
+		}
+
+		function clearActiveCanvasAssetDropTarget() {
+			setActiveCanvasAssetDropTarget(null)
+		}
+
+		/** 把插件内部命中的投放目标回报给宿主，宿主会在 mouseup 时决定是否真正 drop。 */
+		function reportCanvasAssetDropTarget(targetId, mode, canDrop, importRemaining) {
+			ctx.assets?.reportCanvasAssetDragTarget?.({
+				targetId: targetId ?? null,
+				mode,
+				canDrop,
+				importRemaining: canDrop ? importRemaining : undefined,
+			})
+		}
+
+		function getCanvasAssetImportRemaining(section, mode) {
+			if (mode !== "grid") return 1
+			const currentAssets = Array.isArray(state[section.stateKey])
+				? state[section.stateKey]
+				: []
+			return getSectionImportLimit(section, currentAssets.length).remaining
+		}
+
+		/** 根据 iframe 内局部坐标找到当前指针下的画布图片投放区。 */
+		function getCanvasAssetDropTargetFromPoint(clientX, clientY, incomingCount) {
+			const hit = document.elementFromPoint(clientX, clientY)
+			const target = hit?.closest?.("[data-mpk-canvas-drop-target-id]")
+			if (!target) return null
+			const targetId = target.getAttribute("data-mpk-canvas-drop-target-id")
+			if (!targetId) return null
+			const entry = canvasAssetDropTargets.get(targetId)
+			if (!entry || entry.target !== target || !entry.target.isConnected) return null
+			return {
+				...entry,
+				targetId,
+				canDrop: canDropCanvasAssets(entry.section, entry.mode, incomingCount),
+			}
+		}
+
+		/** 将宿主传入的图片文件写回对应 section：grid 追加多图，slot 替换单图。 */
+		async function importCanvasAssetFiles(section, mode, assets) {
+			const validationError = validateSectionAcquire(section)
+			if (validationError) return
+			const incomingAssets = Array.isArray(assets) ? assets.filter(Boolean) : []
+			if (!incomingAssets.length) return
+
+			const currentAssets = Array.isArray(state[section.stateKey])
+				? state[section.stateKey]
+				: []
+			const importLimit =
+				mode === "grid"
+					? getSectionImportLimit(section, currentAssets.length)
+					: { maxCount: 1, remaining: 1 }
+			const maxCount = mode === "grid" ? importLimit.remaining : 1
+			if (maxCount <= 0) return
+
+			const images = incomingAssets.slice(0, maxCount)
+			if (mode === "grid") {
+				setState({
+					[section.stateKey]: mergeUniqueImageAssets(
+						currentAssets,
+						images,
+						importLimit.maxCount,
+					),
+					error: "",
+				})
+				return
+			}
+			setState({ [section.stateKey]: images[0] ?? null, error: "" })
+		}
+
+		/** 把普通图片导入区域登记为画布图片 drop target。 */
+		function registerCanvasAssetDropTarget(target, section, mode) {
+			const targetId = getCanvasAssetDropTargetId(section)
+			if (!targetId) return
+			target.setAttribute("data-mpk-canvas-drop-target-id", targetId)
+			target.setAttribute("data-mpk-canvas-drop-target-mode", mode)
+			canvasAssetDropTargets.set(targetId, {
+				target,
+				section,
+				mode,
+			})
+		}
+
+		/** 响应宿主转发的画布图片拖拽 move，更新 hover 并回报当前可 drop 状态。 */
+		function handleCanvasAssetDragMove(event) {
+			const detail = event.detail ?? {}
+			const dragSessionId =
+				typeof detail.dragSessionId === "string" ? detail.dragSessionId.trim() : ""
+			activeCanvasAssetDragSessionId = dragSessionId || null
+			const incomingCount = Math.max(1, Number(detail.assetsMeta?.count) || 1)
+			const entry =
+				typeof detail.clientX === "number" && typeof detail.clientY === "number"
+					? getCanvasAssetDropTargetFromPoint(
+							detail.clientX,
+							detail.clientY,
+							incomingCount,
+						)
+					: null
+			if (!entry || !entry.canDrop) {
+				clearActiveCanvasAssetDropTarget()
+				reportCanvasAssetDropTarget(entry?.targetId, entry?.mode, false)
+				return
+			}
+
+			setActiveCanvasAssetDropTarget(entry.target)
+			reportCanvasAssetDropTarget(
+				entry.targetId,
+				entry.mode,
+				true,
+				getCanvasAssetImportRemaining(entry.section, entry.mode),
+			)
+		}
+
+		/** 指针离开 iframe 或拖拽结束时清理投放状态。 */
+		function handleCanvasAssetDragLeave() {
+			activeCanvasAssetDragSessionId = null
+			clearActiveCanvasAssetDropTarget()
+			reportCanvasAssetDropTarget(null, undefined, false)
+		}
+
+		/** 宿主确认 drop 后，把文件列表导入到最后一次命中的投放区。 */
+		function handleCanvasAssetDrop(event) {
+			const detail = event.detail ?? {}
+			const dragSessionId =
+				typeof detail.dragSessionId === "string" ? detail.dragSessionId.trim() : ""
+			if (
+				!dragSessionId ||
+				!activeCanvasAssetDragSessionId ||
+				dragSessionId !== activeCanvasAssetDragSessionId
+			) {
+				return
+			}
+			activeCanvasAssetDragSessionId = null
+			const targetId = typeof detail.targetId === "string" ? detail.targetId : ""
+			const entry = canvasAssetDropTargets.get(targetId)
+			clearActiveCanvasAssetDropTarget()
+			if (!entry || !entry.target.isConnected) {
+				return
+			}
+			void importCanvasAssetFiles(entry.section, entry.mode, detail.files).catch((error) => {
+				setState({
+					error:
+						getErrorMessage(error) ||
+						entry.section.pickErrorMessage ||
+						t("error.pickFiles", "图片上传失败，请重试"),
+				})
+			})
+		}
+
 		/** 绑定图片插槽事件 */
 		function bindImageImportTarget(target, section, options) {
 			if (!target) return
 
 			const mode = options.mode
 			let dragDepth = 0
+			registerCanvasAssetDropTarget(target, section, mode)
 
 			const setDragState = (isActive) => {
 				target.classList.toggle("is-drag-over", Boolean(isActive))
-			}
-
-			const getLocalImageFiles = (dataTransfer) => {
-				return getLocalFilesFromDataTransfer(dataTransfer).filter(isImageFile)
 			}
 
 			const handleImportError = (error) => {
@@ -1044,7 +1466,19 @@
 				})
 			}
 
+			const handlePasteError = (error) => {
+				const message =
+					getErrorMessage(error) ||
+					section.pasteErrorMessage ||
+					t("error.pasteFiles", "粘贴失败，请重试")
+				setState({ error: message })
+				ctx.ui?.toast?.(message, "error")
+			}
+
 			const importLocalFiles = async (files) => {
+				const validationError = validateSectionAcquire(section)
+				if (validationError) return
+
 				const currentAssets = Array.isArray(state[section.stateKey])
 					? state[section.stateKey]
 					: []
@@ -1055,16 +1489,44 @@
 				const maxCount = mode === "grid" ? importLimit.remaining : 1
 				if (maxCount <= 0) return
 
-				const images = await importSectionImages(section, {
-					kind: "local",
-					files,
-					maxCount,
-				})
+				const images = await uploadDroppedFiles(files.slice(0, maxCount))
 				if (!images?.length) return
 				if (mode === "grid") {
 					setState({
 						[section.stateKey]: [...currentAssets, ...images].slice(
 							0,
+							importLimit.maxCount,
+						),
+						error: "",
+					})
+					return
+				}
+				setState({ [section.stateKey]: images[0] ?? null, error: "" })
+			}
+
+			/* 粘贴导入资源 */
+			const importPastedAssets = async (clipboardData, options = {}) => {
+				// 检验
+				const validationError = validateSectionAcquire(section)
+				if (validationError) return
+
+				const currentAssets = Array.isArray(state[section.stateKey])
+					? state[section.stateKey]
+					: []
+				const importLimit =
+					mode === "grid"
+						? getSectionImportLimit(section, currentAssets.length)
+						: { maxCount: 1, remaining: 1 }
+				const maxCount = mode === "grid" ? importLimit.remaining : 1
+				if (maxCount <= 0) return
+
+				const images = await resolvePastedImageAssets(maxCount, clipboardData, options)
+				if (!images?.length) return
+				if (mode === "grid") {
+					setState({
+						[section.stateKey]: mergeUniqueImageAssets(
+							currentAssets,
+							images,
 							importLimit.maxCount,
 						),
 						error: "",
@@ -1108,7 +1570,7 @@
 				setDragState(false)
 				const dataTransfer = event.dataTransfer
 				if (!dataTransfer) return
-				const localFiles = getLocalImageFiles(dataTransfer)
+				const localFiles = getImageFilesFromDataTransfer(dataTransfer)
 				if (!localFiles.length) return
 
 				try {
@@ -1119,13 +1581,35 @@
 			})
 
 			target.addEventListener("paste", async (event) => {
-				const files = Array.from(event.clipboardData?.files || []).filter(isImageFile)
-				if (!files.length) return
-				event.preventDefault()
+				const clipboardData = event.clipboardData
+				const imageFiles = clipboardData ? getImageFilesFromDataTransfer(clipboardData) : []
+				const canReadCanvasClipboard = Boolean(ctx.assets?.readCanvasClipboard)
+
+				if (!imageFiles.length && !canReadCanvasClipboard) return
+
+				const showPastingToast = () => {
+					ctx.ui?.toast?.(
+						section.pasteHint ?? t("imageImport.pasting", "正在粘贴…"),
+						"info",
+					)
+				}
+
 				try {
-					await importLocalFiles(files)
+					if (imageFiles.length) {
+						event.preventDefault()
+						showPastingToast()
+						await importPastedAssets(clipboardData)
+						return
+					}
+
+					event.preventDefault()
+					const hostResult = await readCanvasClipboardPayloadFromHost(ctx)
+					if (!hasHostImportableContent(hostResult)) return
+
+					showPastingToast()
+					await importPastedAssets(clipboardData, { hostResult })
 				} catch (error) {
-					handleImportError(error)
+					handlePasteError(error)
 				}
 			})
 		}
@@ -1277,6 +1761,12 @@
 				sectionView.help.textContent = section.help ?? ""
 			}
 
+			if (assets.length === 0) {
+				bindEmptyImportHintTooltip(sectionView.grid, section)
+			} else {
+				removeImportHintTooltip(sectionView.grid)
+			}
+
 			const activeAssets = new Set(assets)
 			for (const [asset, item] of sectionView.items) {
 				if (!activeAssets.has(asset)) {
@@ -1334,16 +1824,16 @@
 			const body = createElement("div", "mpk-image-slot-body")
 
 			if (!asset) {
-				const uploadButton = createElement(
-					"button",
-					"mpk-image-slot-upload",
-					section.uploadLabel,
-				)
+				const uploadButton = createElement("button", "mpk-image-slot-upload")
 				uploadButton.type = "button"
+				uploadButton.append(
+					createElement("span", "mpk-image-slot-upload-label", section.uploadLabel),
+				)
 				uploadButton.setAttribute(
 					"data-drop-hint",
 					section.dropHint ?? t("imageSlot.dropHint", "拖拽或粘贴图片到这里"),
 				)
+				bindEmptyImportHintTooltip(uploadButton, section)
 				uploadButton.addEventListener("click", async () => {
 					try {
 						const images = await pickForSection(section, {
@@ -1718,7 +2208,13 @@
 				previewCanvas.height = Math.max(1, Math.round(cropCanvas.height * scale))
 				const previewContext = previewCanvas.getContext("2d")
 				if (!previewContext) return null
-				previewContext.drawImage(cropCanvas, 0, 0, previewCanvas.width, previewCanvas.height)
+				previewContext.drawImage(
+					cropCanvas,
+					0,
+					0,
+					previewCanvas.width,
+					previewCanvas.height,
+				)
 				return previewCanvas.toDataURL("image/png")
 			}
 
@@ -2679,6 +3175,17 @@
 			hasPendingMask,
 		}
 
+		// 这些事件由宿主 runtime 从 postMessage 转发为 iframe 内 CustomEvent。
+		window.addEventListener(
+			"magic-canvas-plugin:canvas-asset-drag-move",
+			handleCanvasAssetDragMove,
+		)
+		window.addEventListener(
+			"magic-canvas-plugin:canvas-asset-drag-leave",
+			handleCanvasAssetDragLeave,
+		)
+		window.addEventListener("magic-canvas-plugin:canvas-asset-drop", handleCanvasAssetDrop)
+
 		createLayout()
 		updateView()
 		void hydrateSharedGenerationConfigCache().finally(() => {
@@ -2699,6 +3206,20 @@
 				updateView(patch)
 			},
 			dispose() {
+				window.removeEventListener(
+					"magic-canvas-plugin:canvas-asset-drag-move",
+					handleCanvasAssetDragMove,
+				)
+				window.removeEventListener(
+					"magic-canvas-plugin:canvas-asset-drag-leave",
+					handleCanvasAssetDragLeave,
+				)
+				window.removeEventListener(
+					"magic-canvas-plugin:canvas-asset-drop",
+					handleCanvasAssetDrop,
+				)
+				clearActiveCanvasAssetDropTarget()
+				canvasAssetDropTargets.clear()
 				Object.values(view.sectionViews).forEach((sectionView) => {
 					disposeModelSelectView(sectionView)
 				})

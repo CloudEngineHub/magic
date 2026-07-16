@@ -23,6 +23,8 @@ class PublishAgentRequestDTO extends AbstractRequestDTO
 
     public ?array $publishTargetValue = null;
 
+    public ?int $categoryId = null;
+
     public function getVersion(): string
     {
         return $this->version;
@@ -41,6 +43,16 @@ class PublishAgentRequestDTO extends AbstractRequestDTO
     public function getPublishTargetValue(): ?array
     {
         return $this->publishTargetValue;
+    }
+
+    public function getCategoryId(): ?int
+    {
+        return $this->categoryId;
+    }
+
+    public function setCategoryId(null|int|string $categoryId): void
+    {
+        $this->categoryId = $categoryId === null ? null : (int) $categoryId;
     }
 
     public function toPublishTargetValue(): ?PublishTargetValue
@@ -77,6 +89,7 @@ class PublishAgentRequestDTO extends AbstractRequestDTO
             'publish_target_value.user_ids.*' => 'string|max:64',
             'publish_target_value.department_ids' => 'nullable|array',
             'publish_target_value.department_ids.*' => 'string|max:64',
+            'category_id' => 'exclude_unless:publish_target_type,MARKET|nullable|integer|min:1',
         ];
     }
 
@@ -102,6 +115,8 @@ class PublishAgentRequestDTO extends AbstractRequestDTO
             'publish_target_value.department_ids.array' => __('validation.array', ['attribute' => 'publish_target_value.department_ids']),
             'publish_target_value.department_ids.*.string' => __('validation.string', ['attribute' => 'publish_target_value.department_ids']),
             'publish_target_value.department_ids.*.max' => __('validation.max.string', ['attribute' => 'publish_target_value.department_ids', 'max' => 64]),
+            'category_id.integer' => __('super_magic.agent.category_id_must_be_integer'),
+            'category_id.min' => __('super_magic.agent.category_id_must_be_greater_than_zero'),
         ];
     }
 }

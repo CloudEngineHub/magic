@@ -358,6 +358,100 @@ export class ViewportController {
 		return normalizePosition(position.x, position.y, { precision: 2 })
 	}
 
+	private getDefaultViewportScreenCenter(width: number, height: number): ViewportPoint {
+		const {
+			left: insetLeft,
+			right: insetRight,
+			top: insetTop,
+			bottom: insetBottom,
+		} = this.getResolvedDefaultViewportPadding(width, height)
+
+		return {
+			x: insetLeft + (width - insetLeft - insetRight) / 2,
+			y: insetTop + (height - insetTop - insetBottom) / 2,
+		}
+	}
+
+	private captureDefaultViewportWorldCenter(): ViewportPoint | null {
+		const stage = this.canvas.stage
+		const width = stage.width()
+		const height = stage.height()
+		const scaleX = stage.scaleX()
+		const scaleY = stage.scaleY()
+
+		if (
+			width <= 0 ||
+			height <= 0 ||
+			!Number.isFinite(scaleX) ||
+			!Number.isFinite(scaleY) ||
+			scaleX === 0 ||
+			scaleY === 0
+		) {
+			return null
+		}
+
+		const screenCenter = this.getDefaultViewportScreenCenter(width, height)
+		const worldCenter = stage.getAbsoluteTransform().copy().invert().point(screenCenter)
+
+		return Number.isFinite(worldCenter.x) && Number.isFinite(worldCenter.y) ? worldCenter : null
+	}
+
+	public preserveViewportCenterDuringLayoutChange(
+		updateLayout: () => void,
+		options?: {
+			source?: ViewportChangeSource
+			reason?: string
+		},
+	): void {
+		const worldCenter = this.captureDefaultViewportWorldCenter()
+		updateLayout()
+
+		if (!worldCenter) {
+			return
+		}
+
+		const stage = this.canvas.stage
+		const width = stage.width()
+		const height = stage.height()
+		const scaleX = stage.scaleX()
+		const scaleY = stage.scaleY()
+
+		if (
+			width <= 0 ||
+			height <= 0 ||
+			!Number.isFinite(scaleX) ||
+			!Number.isFinite(scaleY) ||
+			scaleX === 0 ||
+			scaleY === 0
+		) {
+			return
+		}
+
+		const screenCenter = this.getDefaultViewportScreenCenter(width, height)
+		const nextPosition = {
+			x: screenCenter.x - worldCenter.x * scaleX,
+			y: screenCenter.y - worldCenter.y * scaleY,
+		}
+		const currentPosition = stage.position()
+
+		if (
+			Math.abs(nextPosition.x - currentPosition.x) < 0.01 &&
+			Math.abs(nextPosition.y - currentPosition.y) < 0.01
+		) {
+			return
+		}
+
+		stage.position(nextPosition)
+		this.requestStageDraw(options?.reason ?? "viewport-layout-change")
+		this.emitViewportChanged({
+			source: options?.source ?? "resize",
+			phase: "end",
+			emitPan: true,
+			position: nextPosition,
+			scale: scaleX,
+		})
+	}
+
 	private requestStageDraw(reason: string): void {
 		this.canvas.runtimeScheduler.requestLayerDraw("stage", {
 			source: "ViewportController",
@@ -1519,7 +1613,23 @@ export class ViewportController {
 	/**
 	 * 设置默认视口预留（支持数字与百分比字符串）
 	 */
-	setDefaultViewportPadding(padding: PaddingInsetConfig): void {
+	setDefaultViewportPadding(
+		padding: PaddingInsetConfig,
+		options?: { preserveViewportCenter?: boolean },
+	): void {
+		if (options?.preserveViewportCenter) {
+			this.preserveViewportCenterDuringLayoutChange(
+				() => {
+					this.defaultViewportPadding = padding
+				},
+				{
+					source: "resize",
+					reason: "viewport-padding-change",
+				},
+			)
+			return
+		}
+
 		this.defaultViewportPadding = padding
 	}
 

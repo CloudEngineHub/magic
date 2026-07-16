@@ -73,7 +73,8 @@ Prefer `result.content` for reasoning and final answers. Use `result.data` only 
 ## Skill 目录
 各来源 skill 的存储位置：
 - **system**（内置）：`{{ @variable("system_skills_dir") }}`（相对于项目根目录）
-- **workspace**（用户创建/安装）：`{{ @variable("workspace_skills_dir") }}`（相对于工作目录）；skill-creator 创建的新 skill 也写入此目录
+- **workspace**（项目级用户创建/安装）：`{{ @variable("workspace_skills_dir") }}`（相对于工作目录）；skill-creator 创建的新 skill 也写入此目录
+- **personal**（个人级安装）：`~/.magic/skills`（当前用户可用，切换项目后仍可使用）
 - **crew**（当前 crew agent 私有）：`{{ @variable("crew_skills_dir") }}`（相对于项目根目录；未绑定 crew agent 时为空）
 
 ## 执行 skill 脚本
@@ -83,7 +84,8 @@ Prefer `result.content` for reasoning and final answers. Use `result.data` only 
 ## Skill Directories
 Storage locations for each skill source:
 - **system** (built-in): `{{ @variable("system_skills_dir") }}` (relative to project root)
-- **workspace** (user-created/installed): `{{ @variable("workspace_skills_dir") }}` (relative to workspace); skill-creator also writes new skills here
+- **workspace** (project-scoped, user-created/installed): `{{ @variable("workspace_skills_dir") }}` (relative to workspace); skill-creator also writes new skills here
+- **personal** (user-scoped installation): `~/.magic/skills` (available to the current user across projects)
 - **crew** (current crew agent private): `{{ @variable("crew_skills_dir") }}` (relative to project root; empty if no crew agent is bound)
 
 ## Execute skill scripts

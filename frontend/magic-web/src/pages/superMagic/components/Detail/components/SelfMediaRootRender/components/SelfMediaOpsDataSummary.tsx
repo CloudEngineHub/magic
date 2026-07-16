@@ -18,6 +18,7 @@ interface SelfMediaOpsDataSummaryProps {
 	motionStates: Record<SelfMediaOpsMetricKey, SelfMediaOpsMetricMotionState>
 	loading?: boolean
 	comfortable?: boolean
+	dense?: boolean
 	className?: string
 }
 
@@ -72,6 +73,7 @@ function SelfMediaOpsDataSummary({
 	motionStates,
 	loading = false,
 	comfortable = false,
+	dense = false,
 	className,
 }: SelfMediaOpsDataSummaryProps) {
 	const synced = overview.completion.metrics.done
@@ -99,12 +101,18 @@ function SelfMediaOpsDataSummary({
 	return (
 		<section
 			className={cn(
-				"rounded-[22px] border border-[#d4dcdd]/70 bg-[linear-gradient(135deg,rgba(250,251,250,0.94)_0%,rgba(246,248,246,0.84)_52%,rgba(255,249,226,0.48)_100%)] p-4 shadow-[inset_0_1px_rgba(255,255,255,0.82),0_18px_46px_rgba(38,65,72,0.09)] backdrop-blur",
+				"rounded-[22px] border border-[#d4dcdd]/70 bg-[linear-gradient(135deg,rgba(250,251,250,0.94)_0%,rgba(246,248,246,0.84)_52%,rgba(255,249,226,0.48)_100%)] shadow-[inset_0_1px_rgba(255,255,255,0.82),0_18px_46px_rgba(38,65,72,0.09)] backdrop-blur",
+				dense ? "p-3" : "p-4",
 				className,
 			)}
 			data-testid="self-media-home-ops-data-summary"
 		>
-			<div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+			<div
+				className={cn(
+					"flex flex-wrap items-center justify-between gap-3",
+					dense ? "mb-2.5" : "mb-4",
+				)}
+			>
 				<div>
 					<h4 className="text-[13px] font-[820] text-[#18181b]">发布后数据汇总</h4>
 					<p className="mt-1 text-[11px] font-[620] text-[#71717a]">
@@ -115,9 +123,15 @@ function SelfMediaOpsDataSummary({
 					篇均阅读 {averageReads}
 				</div>
 			</div>
-			<div className={cn("grid gap-3", comfortable ? "grid-cols-3" : "grid-cols-1")}>
+			<div
+				className={cn(
+					"grid",
+					dense ? "gap-2" : "gap-3",
+					comfortable ? "grid-cols-3" : "grid-cols-1",
+				)}
+			>
 				<PrimaryMetricTile
-					icon={<Eye size={17} />}
+					icon={<Eye size={dense ? 15 : 17} />}
 					label="总阅读"
 					value={displayValues.reads}
 					statusLabel={displayStatusLabels.reads}
@@ -125,10 +139,11 @@ function SelfMediaOpsDataSummary({
 					loading={loading}
 					testId="self-media-home-ops-total-reads"
 					comfortable={comfortable}
+					dense={dense}
 					tone="reads"
 				/>
 				<PrimaryMetricTile
-					icon={<TrendingUp size={17} />}
+					icon={<TrendingUp size={dense ? 15 : 17} />}
 					label="总互动"
 					value={displayValues.engagement}
 					statusLabel={displayStatusLabels.engagement}
@@ -136,10 +151,11 @@ function SelfMediaOpsDataSummary({
 					loading={loading}
 					testId="self-media-home-ops-total-engagement"
 					comfortable={comfortable}
+					dense={dense}
 					tone="engagement"
 				/>
 				<PrimaryMetricTile
-					icon={<Activity size={17} />}
+					icon={<Activity size={dense ? 15 : 17} />}
 					label="平均互动率"
 					value={displayValues.rate}
 					statusLabel={displayStatusLabels.rate}
@@ -147,16 +163,25 @@ function SelfMediaOpsDataSummary({
 					loading={loading}
 					testId="self-media-home-ops-engagement-rate"
 					comfortable={comfortable}
+					dense={dense}
 					tone="rate"
 				/>
 			</div>
-			<div className="mt-3 grid grid-cols-2 gap-2 min-[560px]:grid-cols-4">
+			<div
+				className={cn(
+					"grid grid-cols-2 gap-2 min-[560px]:grid-cols-4",
+					dense ? "mt-2" : "mt-3",
+				)}
+			>
 				{secondaryMetrics.map((item) => {
 					const Icon = item.icon
 					return (
 						<div
 							key={item.key}
-							className="bg-white/68 min-w-0 rounded-[16px] border border-[#d7e5e4]/75 px-3 py-2.5 text-[#5f6f73] shadow-[inset_0_1px_rgba(255,255,255,0.76)]"
+							className={cn(
+								"bg-white/68 min-w-0 rounded-[16px] border border-[#d7e5e4]/75 px-3 text-[#5f6f73] shadow-[inset_0_1px_rgba(255,255,255,0.76)]",
+								dense ? "py-1.5" : "py-2.5",
+							)}
 							data-testid={`self-media-home-ops-${item.key}`}
 							data-loading={loading ? "true" : "false"}
 						>
@@ -164,7 +189,12 @@ function SelfMediaOpsDataSummary({
 								<Icon size={13} />
 								<span>{item.label}</span>
 							</div>
-							<div className="mt-1 truncate text-[16px] font-[820] leading-none text-[#18181b]">
+							<div
+								className={cn(
+									"mt-1 truncate font-[820] leading-none text-[#18181b]",
+									dense ? "text-[13px]" : "text-[16px]",
+								)}
+							>
 								{loading ? "—" : item.getValue(overview)}
 							</div>
 						</div>
@@ -173,7 +203,10 @@ function SelfMediaOpsDataSummary({
 			</div>
 			{overview.bestPost ? (
 				<div
-					className="mt-3 flex min-w-0 items-center gap-2 rounded-[16px] border border-[#d7e5e4]/70 bg-[linear-gradient(90deg,rgba(247,250,248,0.92)_0%,rgba(250,250,246,0.88)_100%)] px-3 py-2.5 text-[12px] font-[650] text-[#4f6670] shadow-[inset_0_1px_rgba(255,255,255,0.74)]"
+					className={cn(
+						"flex min-w-0 items-center gap-2 rounded-[16px] border border-[#d7e5e4]/70 bg-[linear-gradient(90deg,rgba(247,250,248,0.92)_0%,rgba(250,250,246,0.88)_100%)] px-3 text-[12px] font-[650] text-[#4f6670] shadow-[inset_0_1px_rgba(255,255,255,0.74)]",
+						dense ? "mt-2 py-1.5" : "mt-3 py-2.5",
+					)}
 					data-testid="self-media-home-ops-best-post"
 				>
 					<TrendingUp size={14} className="shrink-0 text-[#587266]" />
@@ -208,6 +241,7 @@ function PrimaryMetricTile({
 	loading,
 	testId,
 	comfortable,
+	dense,
 	tone,
 }: {
 	icon: ReactNode
@@ -218,12 +252,14 @@ function PrimaryMetricTile({
 	loading: boolean
 	testId: string
 	comfortable: boolean
+	dense: boolean
 	tone: SelfMediaOpsMetricKey
 }) {
 	return (
 		<div
 			className={cn(
-				"min-w-0 rounded-[18px] border p-3.5 shadow-[inset_0_1px_rgba(255,255,255,0.86),0_10px_24px_rgba(38,65,72,0.07)]",
+				"min-w-0 rounded-[18px] border shadow-[inset_0_1px_rgba(255,255,255,0.86),0_10px_24px_rgba(38,65,72,0.07)]",
+				dense ? "p-2.5" : "p-3.5",
 				primaryMetricToneClassName[tone],
 				motionState === "active" && "self-media-ops-metric-flow",
 			)}
@@ -233,7 +269,8 @@ function PrimaryMetricTile({
 		>
 			<div
 				className={cn(
-					"flex items-center gap-2 text-[12px] font-[740]",
+					"flex items-center gap-2 font-[740]",
+					dense ? "text-[11px]" : "text-[12px]",
 					primaryMetricAccentClassName[tone],
 				)}
 			>
@@ -242,13 +279,16 @@ function PrimaryMetricTile({
 			</div>
 			<div
 				className={cn(
-					"mt-2 truncate text-[28px] font-[840] leading-none text-[#18181b]",
-					comfortable && "text-[30px]",
+					"truncate font-[840] leading-none text-[#18181b]",
+					dense ? "mt-1.5 text-[22px]" : "mt-2 text-[28px]",
+					comfortable && !dense && "text-[30px]",
 				)}
 			>
 				{value}
 			</div>
-			<div className="mt-2 text-[11px] font-[680] text-[#71717a]">{statusLabel}</div>
+			<div className={cn("text-[11px] font-[680] text-[#71717a]", dense ? "mt-1.5" : "mt-2")}>
+				{statusLabel}
+			</div>
 		</div>
 	)
 }

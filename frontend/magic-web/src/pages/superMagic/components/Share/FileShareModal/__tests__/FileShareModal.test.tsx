@@ -260,4 +260,46 @@ describe("FileShareModal", () => {
 			)
 		})
 	})
+
+	it("passes metadata returned by save response to the success callback", async () => {
+		const onSaveSuccess = vi.fn()
+		mocks.createOrUpdateShareResource.mockResolvedValue({
+			file_ids: ["file-transcript"],
+			created_at: "2026-07-14 09:30:00",
+			updated_at: "2026-07-14 10:45:00",
+			view_count: 8,
+		})
+
+		render(
+			<FileShareModal
+				types={[ShareType.PasswordProtected]}
+				projectId="project-1"
+				projectName="Demo Project"
+				attachments={[
+					{
+						file_id: "file-transcript",
+						file_name: "session-transcript.md",
+						is_directory: false,
+					},
+				]}
+				defaultSelectedFileIds={["file-transcript"]}
+				onSaveSuccess={onSaveSuccess}
+			/>,
+		)
+
+		fireEvent.change(screen.getByTestId("share-name-input"), {
+			target: { value: "Recording Share" },
+		})
+		fireEvent.click(screen.getByTestId("save-share"))
+
+		await waitFor(() => {
+			expect(onSaveSuccess).toHaveBeenCalledWith(
+				expect.objectContaining({
+					createdAt: "2026-07-14 09:30:00",
+					updatedAt: "2026-07-14 10:45:00",
+					viewCount: 8,
+				}),
+			)
+		})
+	})
 })

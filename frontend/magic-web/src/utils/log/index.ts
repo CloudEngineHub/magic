@@ -24,7 +24,7 @@ export const logger = new Logger({
 		createPageDwellTimePlugin(),
 		createResourceMonitorPlugin(),
 		createErrorMonitorPlugin(),
-		createFetchMonitorPlugin({ excludeUrls: [/\/__agent_debug_log__/] }),
+		createFetchMonitorPlugin(),
 		createErrorParserPlugin(),
 		createSensitiveDataPlugin(),
 		createDeduplicationPlugin(),

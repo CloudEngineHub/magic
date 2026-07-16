@@ -4,6 +4,7 @@ ZIP 打包服务
 负责将指定 file_keys 对应的文件按 workspace 相对路径打包为 ZIP。
 """
 
+import asyncio
 import traceback
 import zipfile
 from pathlib import Path
@@ -15,6 +16,7 @@ from app.infrastructure.storage.base import BaseFileProcessor
 from app.infrastructure.storage.factory import StorageFactory
 from app.infrastructure.storage.types import PlatformType
 from app.path_manager import PathManager
+from app.service.convert_task_manager import task_manager
 from app.service.file_convert.base_convert_service import BaseConvertService, STSTemporaryCredential
 
 
@@ -56,9 +58,14 @@ class PackConvertService(BaseConvertService):
             zip_path = batch_dir / zip_name
             archive_entries = self._build_archive_entries(file_path_mapping)
 
-            with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zipf:
-                for source_file, archive_name in archive_entries:
-                    zipf.write(source_file, archive_name)
+            loop = asyncio.get_running_loop()
+            await asyncio.to_thread(
+                self._create_zip_sync,
+                zip_path,
+                archive_entries,
+                task_key,
+                loop,
+            )
 
             logger.info(f"ZIP 打包完成: {zip_path}，共 {len(archive_entries)} 个文件")
 
@@ -92,6 +99,41 @@ class PackConvertService(BaseConvertService):
             raise RuntimeError(f"打包失败: {e!s}")
         finally:
             logger.info(f"保留临时文件在目录: {batch_dir}")
+
+    def _create_zip_sync(
+        self,
+        zip_path: Path,
+        archive_entries: List[Tuple[Path, str]],
+        task_key: Optional[str],
+        loop: Optional[asyncio.AbstractEventLoop],
+    ) -> None:
+        """
+        在线程中同步执行 ZIP 压缩，并通过 run_coroutine_threadsafe 上报进度。
+        进度封顶 90%，剩余 10% 由 complete_task 在上传完成后设置到 100%。
+        """
+        total = len(archive_entries)
+        if total == 0:
+            return
+
+        report_interval = max(1, total // 10)
+
+        with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zipf:
+            for index, (source_file, archive_name) in enumerate(archive_entries):
+                zipf.write(source_file, archive_name)
+                completed = index + 1
+
+                if completed == 1 or completed == total or completed % report_interval == 0:
+                    rate = round(completed / total * 90, 2)
+                    if task_key and loop:
+                        try:
+                            asyncio.run_coroutine_threadsafe(
+                                task_manager.update_conversion_rate(
+                                    task_key, rate, completed, total
+                                ),
+                                loop,
+                            )
+                        except Exception:
+                            pass
 
     async def _upload_zip_to_storage(
         self,

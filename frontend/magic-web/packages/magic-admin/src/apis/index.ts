@@ -6,6 +6,7 @@ import { generatePlatformPackageApi } from "./modules/platformPackage"
 import { generatePlatformInfoApi } from "./modules/platformInfo"
 import { generateFileApi } from "./modules/file"
 import { generateAppMenuApi } from "./modules/appMenu"
+import { generateSlidesTemplateApi } from "./modules/slidesTemplate"
 
 export function useApis() {
 	const { apiClients } = useAdmin()
@@ -30,5 +31,7 @@ export function useApis() {
 		FileApi: generateFileApi(magicClient),
 		/** 应用菜单 - API */
 		AppMenuApi: generateAppMenuApi(magicClient),
+		/** PPT模板 - API */
+		SlidesTemplateApi: generateSlidesTemplateApi(magicClient),
 	}
 }
