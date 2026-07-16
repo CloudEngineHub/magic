@@ -645,9 +645,9 @@ abstract class AbstractSuperMagicAppService extends AbstractKernelAppService
 
         // 获取后台的所有模式，用于封装数据到 Agent 中
         $query = new ModeQuery(status: true);
-        $modeEntities = $this->modeDomainService->getModes($modeDataIsolation, $query, Page::createNoPage())['list'];
+        $modeEntities = $this->modeDomainService->getOrganizationVisibleModes($modeDataIsolation, $query, Page::createNoPage())['list'];
 
-        return array_map(fn ($modeEntity) => $modeEntity->getIdentifier(), $modeEntities);
+        return array_map(fn (ModeEntity $modeEntity) => $modeEntity->getIdentifier(), $modeEntities);
     }
 
     private function syncInternalAgentVisibility(

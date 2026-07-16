@@ -2363,7 +2363,7 @@ class SuperMagicAgentAppService extends AbstractSuperMagicAppService
         $modeDataIsolation = $this->createModeDataIsolation($superMagicAgentDataIsolation);
         $modeDataIsolation->setOnlyOfficialOrganization(true);
         $query = new ModeQuery(excludeDefault: true, status: true);
-        $modesResult = $this->modeDomainService->getModes($modeDataIsolation, $query, Page::createNoPage());
+        $modesResult = $this->modeDomainService->getOrganizationVisibleModes($modeDataIsolation, $query, Page::createNoPage());
 
         // 模型唯一标识
         $modeIdentifiers = array_map(fn (ModeEntity $modeEntity) => $modeEntity->getIdentifier(), $modesResult['list']);
@@ -2371,10 +2371,6 @@ class SuperMagicAgentAppService extends AbstractSuperMagicAppService
 
         /** @var ModeEntity $mode */
         foreach ($modesResult['list'] as $modeIndex => $mode) {
-            // 过滤组织不可见
-            if (! $mode->isOrganizationVisible($superMagicAgentDataIsolation->getCurrentOrganizationCode())) {
-                unset($modesResult['list'][$modeIndex]);
-            }
             // 过滤非官方agent
             if (! isset($officialAgentEntities[$mode->getIdentifier()])) {
                 unset($modesResult['list'][$modeIndex]);
