@@ -19,6 +19,7 @@ use App\Domain\Mode\Entity\ValueQuery\ModeQuery;
 use App\Domain\Mode\Service\ModeDomainService;
 use App\Domain\Permission\Entity\ValueObject\OperationPermission\Operation;
 use App\Domain\Permission\Entity\ValueObject\OperationPermission\ResourceType as OperationPermissionResourceType;
+use App\Domain\Permission\Entity\ValueObject\PermissionDataIsolation;
 use App\Domain\Permission\Entity\ValueObject\ResourceVisibility\ResourceType as ResourceVisibilityResourceType;
 use App\Domain\Permission\Entity\ValueObject\ResourceVisibility\VisibilityType;
 use App\Domain\Permission\Service\OperationPermissionDomainService;
@@ -151,7 +152,7 @@ abstract class AbstractSuperMagicAppService extends AbstractKernelAppService
             if ($previousTargetType !== null && $previousTargetType !== PublishTargetType::MARKET) {
                 // 从内部切到市场时，清掉内部共享可见性，但保留创建者自己可见。
                 $this->saveAgentVisibility(
-                    $dataIsolation,
+                    $this->createAgentPermissionDataIsolation($dataIsolation, $agentEntity),
                     $agentEntity->getCode(),
                     VisibilityType::SPECIFIC,
                     [$agentEntity->getCreator()]
@@ -175,7 +176,7 @@ abstract class AbstractSuperMagicAppService extends AbstractKernelAppService
     }
 
     protected function saveAgentVisibility(
-        SuperMagicAgentDataIsolation $dataIsolation,
+        BaseDataIsolation|PermissionDataIsolation $dataIsolation,
         string $code,
         VisibilityType $visibilityType,
         array $userIds = [],
@@ -689,5 +690,15 @@ abstract class AbstractSuperMagicAppService extends AbstractKernelAppService
             VisibilityType::SPECIFIC,
             [$agentEntity->getCreator()]
         );
+    }
+
+    private function createAgentPermissionDataIsolation(
+        BaseDataIsolation $dataIsolation,
+        SuperMagicAgentEntity $agentEntity
+    ): PermissionDataIsolation {
+        $permissionDataIsolation = $this->createPermissionDataIsolation($dataIsolation);
+        $permissionDataIsolation->setCurrentOrganizationCode($agentEntity->getOrganizationCode());
+
+        return $permissionDataIsolation;
     }
 }
