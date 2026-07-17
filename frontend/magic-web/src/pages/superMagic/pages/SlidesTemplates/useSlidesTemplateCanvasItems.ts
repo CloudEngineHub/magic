@@ -4,11 +4,13 @@ import { SlidesTemplateCanvasLayoutService } from "./SlidesTemplateCanvasLayoutS
 
 interface UseSlidesTemplateCanvasItemsInput {
 	enableInfiniteLoop?: boolean
+	resetKey: string
 	templates: OptionItem[]
 }
 
 export function useSlidesTemplateCanvasItems({
 	enableInfiniteLoop = true,
+	resetKey,
 	templates,
 }: UseSlidesTemplateCanvasItemsInput) {
 	const layoutServiceRef = useRef<SlidesTemplateCanvasLayoutService | null>(null)
@@ -16,16 +18,26 @@ export function useSlidesTemplateCanvasItems({
 		layoutServiceRef.current = new SlidesTemplateCanvasLayoutService()
 	}
 	const layoutService = layoutServiceRef.current
-	const [snapshot, setSnapshot] = useState(() => layoutService.getSnapshot())
+	// 布局在 layout effect 中更新。resetKey 必须与产出的快照一起提交，
+	// 否则下游会先用旧布局消费 reset，再把真正的新布局误判为分页追加。
+	const [snapshot, setSnapshot] = useState(() => ({
+		...layoutService.getSnapshot(),
+		resetKey,
+	}))
 
 	useLayoutEffect(() => {
 		const nextSnapshot = layoutService.synchronize(templates, enableInfiniteLoop)
-		setSnapshot((currentSnapshot) =>
-			currentSnapshot.canvasItems === nextSnapshot.canvasItems
-				? currentSnapshot
-				: nextSnapshot,
-		)
-	}, [enableInfiniteLoop, layoutService, templates])
+		setSnapshot((currentSnapshot) => {
+			if (
+				currentSnapshot.canvasItems === nextSnapshot.canvasItems &&
+				currentSnapshot.resetKey === resetKey
+			) {
+				return currentSnapshot
+			}
+
+			return { ...nextSnapshot, resetKey }
+		})
+	}, [enableInfiniteLoop, layoutService, resetKey, templates])
 
 	return snapshot
 }

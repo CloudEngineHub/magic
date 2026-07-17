@@ -27,7 +27,6 @@ interface UseSlidesTemplateCanvasNavigationInput {
 	contentBounds: TemplateCanvasBounds
 	maybeRequestMore: (directions: TemplateCanvasDirection[]) => boolean
 	offsetRef: MutableRefObject<TemplateCanvasPoint>
-	resetKey: string
 	scaleRef: MutableRefObject<number>
 	setCanvasOffset: (nextOffset: TemplateCanvasPoint) => TemplateCanvasPoint
 	stopAnimation: () => void
@@ -42,7 +41,6 @@ export function useSlidesTemplateCanvasNavigation({
 	contentBounds,
 	maybeRequestMore,
 	offsetRef,
-	resetKey,
 	scaleRef,
 	setCanvasOffset,
 	stopAnimation,
@@ -50,7 +48,7 @@ export function useSlidesTemplateCanvasNavigation({
 	viewportRef,
 }: UseSlidesTemplateCanvasNavigationInput) {
 	const [canvasScale, setCanvasScale] = useState(SLIDES_TEMPLATE_CANVAS_DEFAULT_SCALE)
-	const hasAutoFittedRef = useRef(false)
+	const hasEstablishedScaleRef = useRef(false)
 
 	const handleControlZoom = useCallback(
 		(nextScale: number) => {
@@ -60,6 +58,7 @@ export function useSlidesTemplateCanvasNavigation({
 			if (Math.abs(resolvedScale - currentScale) < 0.001) return
 
 			scaleRef.current = resolvedScale
+			hasEstablishedScaleRef.current = true
 			setCanvasScale(resolvedScale)
 			setCanvasOffset(offsetRef.current)
 			if (resolvedScale < currentScale) maybeRequestMore(AUTO_LOAD_DIRECTIONS)
@@ -70,6 +69,7 @@ export function useSlidesTemplateCanvasNavigation({
 	const handleResetView = useCallback(() => {
 		stopAnimation()
 		scaleRef.current = SLIDES_TEMPLATE_CANVAS_DEFAULT_SCALE
+		hasEstablishedScaleRef.current = true
 		setCanvasScale(SLIDES_TEMPLATE_CANVAS_DEFAULT_SCALE)
 		setCanvasOffset({ x: 0, y: 0 })
 	}, [scaleRef, setCanvasOffset, stopAnimation])
@@ -122,16 +122,14 @@ export function useSlidesTemplateCanvasNavigation({
 		},
 		[animateToOffset, scaleRef, stopAnimation, viewportInsetsRef, viewportRef],
 	)
-
-	useLayoutEffect(() => {
-		hasAutoFittedRef.current = false
-		scaleRef.current = SLIDES_TEMPLATE_CANVAS_DEFAULT_SCALE
-		setCanvasScale(SLIDES_TEMPLATE_CANVAS_DEFAULT_SCALE)
-	}, [resetKey, scaleRef])
+	const handleScaleChange = useCallback((nextScale: number) => {
+		hasEstablishedScaleRef.current = true
+		setCanvasScale(nextScale)
+	}, [])
 
 	useLayoutEffect(() => {
 		const viewport = viewportRef.current
-		if (!viewport || hasAutoFittedRef.current || canvasItemsLength === 0) return
+		if (!viewport || hasEstablishedScaleRef.current || canvasItemsLength === 0) return
 
 		const { width, height } = viewport.getBoundingClientRect()
 		const currentInsets = viewportInsetsRef.current
@@ -157,8 +155,8 @@ export function useSlidesTemplateCanvasNavigation({
 			),
 		)
 		scaleRef.current = nextScale
+		hasEstablishedScaleRef.current = true
 		setCanvasScale(nextScale)
-		hasAutoFittedRef.current = true
 		setCanvasOffset(
 			centerContent
 				? {
@@ -186,6 +184,6 @@ export function useSlidesTemplateCanvasNavigation({
 		handleResetView,
 		handleZoomIn: () => handleControlZoom(canvasScale + CONTROL_ZOOM_STEP),
 		handleZoomOut: () => handleControlZoom(canvasScale - CONTROL_ZOOM_STEP),
-		setCanvasScale,
+		setCanvasScale: handleScaleChange,
 	}
 }

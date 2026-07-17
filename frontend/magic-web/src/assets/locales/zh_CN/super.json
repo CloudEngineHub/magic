@@ -2996,13 +2996,13 @@
 		}
 	},
 	"modeToggle": {
-		"cannotSwitchModeMessage": "当前团队成员不可切换，创建新话题即可启用「<strong>{{modeName}}</strong>」。",
-		"cannotSwitchModeMessageChat": "当前团队成员不可切换，创建新对话即可启用「<strong>{{modeName}}</strong>」。",
+		"cannotSwitchModeMessage": "当前数字员工不可切换，创建新话题即可启用「<strong>{{modeName}}</strong>」。",
+		"cannotSwitchModeMessageChat": "当前数字员工不可切换，创建新对话即可启用「<strong>{{modeName}}</strong>」。",
 		"createNewChat": "创建新对话",
 		"createNewTopic": "创建新话题",
-		"emptySearchResult": "没有匹配的团队成员",
-		"searchPlaceholder": "搜索团队成员",
-		"selectCrew": "选择团队成员",
+		"emptySearchResult": "没有匹配的数字员工",
+		"searchPlaceholder": "搜索数字员工",
+		"selectCrew": "选择数字员工",
 		"selectMode": "选择模式"
 	},
 	"notification": {
