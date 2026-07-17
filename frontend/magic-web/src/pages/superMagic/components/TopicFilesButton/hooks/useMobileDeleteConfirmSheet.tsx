@@ -12,6 +12,8 @@ import { resolveMagicDeleteWarningVariant } from "../utils/magic-system-folder"
 interface MobileDeleteConfirmResolvedConfig {
 	selectedHierarchy: DeleteConfirmHierarchyGroup[]
 	magicWarningVariant: "none" | "single" | "multi"
+	canvasWarning?: boolean
+	canvasWarningContent?: string
 	onConfirm: () => void | Promise<void>
 	testIdPrefix?: string
 }
@@ -25,6 +27,8 @@ interface OpenMobileDeleteConfirmFromSelection {
 	selectedKeys: Set<string>
 	onConfirm: () => void | Promise<void>
 	testIdPrefix?: string
+	canvasWarning?: boolean
+	canvasWarningContent?: string
 }
 
 type OpenMobileDeleteConfirmParams =
@@ -44,7 +48,14 @@ function resolveDeleteConfirmConfig(
 	params: OpenMobileDeleteConfirmParams,
 ): MobileDeleteConfirmResolvedConfig {
 	if (isSelectionParams(params)) {
-		const { attachments, selectedKeys, onConfirm, testIdPrefix } = params
+		const {
+			attachments,
+			selectedKeys,
+			onConfirm,
+			testIdPrefix,
+			canvasWarning,
+			canvasWarningContent,
+		} = params
 		return {
 			selectedHierarchy: buildDeleteConfirmHierarchyFromAttachments(
 				attachments,
@@ -55,6 +66,8 @@ function resolveDeleteConfirmConfig(
 				selectedKeys,
 				getAttachmentKey,
 			),
+			canvasWarning: Boolean(canvasWarning),
+			canvasWarningContent,
 			onConfirm,
 			testIdPrefix,
 		}
@@ -90,6 +103,8 @@ export function useMobileDeleteConfirmSheet() {
 			}}
 			selectedHierarchy={config?.selectedHierarchy ?? []}
 			magicWarningVariant={config?.magicWarningVariant}
+			canvasWarning={config?.canvasWarning}
+			canvasWarningContent={config?.canvasWarningContent}
 			testIdPrefix={config?.testIdPrefix}
 		/>
 	)

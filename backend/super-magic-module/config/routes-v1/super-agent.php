@@ -131,6 +131,8 @@ Router::addGroup(
             Router::get('/ungrouped/count', [AudioProjectApi::class, 'getUngroupedCount']);
             // 更新音频项目标签
             Router::put('/{projectId}/tags', [AudioProjectApi::class, 'updateTags']);
+            // 更新音频项目元数据
+            Router::put('/{projectId}/metadata', [AudioProjectApi::class, 'updateMetadata']);
             // 导入已有音频文件到项目
             Router::post('/import-files', [AudioProjectApi::class, 'importFiles']);
 

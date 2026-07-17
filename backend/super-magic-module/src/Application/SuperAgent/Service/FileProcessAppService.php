@@ -474,14 +474,13 @@ class FileProcessAppService extends AbstractAppService
             $userAuthorization = new MagicUserAuthorization();
             $userAuthorization->setOrganizationCode($organizationCode);
 
-            // Use unified FileAppService to get STS Token
-            return $this->fileAppService->getStsTemporaryCredentialV2(
+            // Use unified FileAppService to get STS Token (with dual endpoint)
+            return $this->fileAppService->getDualEndpointStsCredentialV2(
                 $projectEntity->getUserOrganizationCode(),
                 $storageType,
                 $projectDir,
                 $expires,
-                false,
-                ['internal_endpoint' => true]
+                false
             );
         } catch (Throwable $e) {
             $this->logger->error(sprintf(

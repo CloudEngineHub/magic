@@ -15,6 +15,7 @@ export default memo(function ShareNameField(props: ShareNameFieldProps) {
 		attachments = [],
 		shareProject = false,
 		projectName,
+		projectMode,
 	} = props
 
 	const { t } = useTranslation("super")
@@ -28,11 +29,15 @@ export default memo(function ShareNameField(props: ShareNameFieldProps) {
 		attachments,
 		shareProject,
 		projectName,
+		projectMode,
 	})
 
 	return (
 		<div className="flex flex-col gap-2" data-testid="share-name-field">
-			<label className="text-sm font-medium leading-none text-foreground" data-testid="share-name-field-label">
+			<label
+				className="text-sm font-medium leading-none text-foreground"
+				data-testid="share-name-field-label"
+			>
 				{t("share.shareName")}
 				<span className="ml-1 text-destructive">*</span>
 			</label>

@@ -20,6 +20,14 @@ from app.tools.workspace_tool import WorkspaceTool
 from app.core.context.agent_context import AgentContext
 from app.core.entity.message.server_message import DisplayType, FileContent, TerminalContent, ToolDetail
 from app.utils.async_file_utils import async_copy2, async_exists, async_write_text, async_read_text, async_try_read_text
+from app.tools.audio_analysis_registry import (
+    AudioAnalysisPlan,
+    AudioAnalysisScope,
+    analysis_task_name_map,
+    apply_analysis_files_to_config,
+    build_audio_analysis_plan,
+    successful_new_analysis_updates,
+)
 
 logger = get_logger(__name__)
 
@@ -80,17 +88,7 @@ DEFAULT_MODEL_ID = "qwen3.5-flash"
 TAG_EXTRACTION_MODEL_ID = "qwen-flash"
 
 # 分析任务名称映射（中文 -> 英文）
-ANALYSIS_TASK_NAME_MAP = {
-    "topics": {"cn": "章节主题分析", "en": "Chapter Topics"},
-    "summary": {"cn": "会议总结", "en": "Summary"},
-    "followup": {"cn": "待办事项", "en": "Follow-up"},
-    "power_dynamics": {"cn": "权力动态分析", "en": "Power Dynamics"},
-    "intent": {"cn": "意图分析", "en": "Intent Analysis"},
-    "metrics": {"cn": "关键量化数据", "en": "Metrics"},
-    "mindmap": {"cn": "思维导图", "en": "Mind Map"},
-    "insights": {"cn": "深度洞察", "en": "Insights"},
-    "highlights": {"cn": "金句分析", "en": "Highlights"},
-}
+ANALYSIS_TASK_NAME_MAP = analysis_task_name_map()
 
 
 @dataclass
@@ -383,14 +381,32 @@ Few-shot:
 """
     )
 
-    specified_analysis_types: Optional[str] = Field(
+    analysis_scope: AudioAnalysisScope = Field(
+        default=AudioAnalysisScope.CONFIGURED_ANALYSIS_FILES,
+        description="""<!--zh
+分析范围（可选）。
+
+默认值 configured_analysis_files：只分析 magic.project.js 中已经配置的分析文件。
+重新总结整个项目时传 template_analysis_files：分析模板支持的全部分析维度，缺失的文件映射会在生成成功后自动追加。
+如果传入 specified_analysis_types，则 specified_analysis_types 优先，本字段不生效。
+-->
+Analysis scope (optional).
+
+Default value configured_analysis_files: analyze only analysis files already configured in magic.project.js.
+For full project reanalysis, pass template_analysis_files: analyze every template-supported analysis dimension and append missing file mappings only after successful generation.
+When specified_analysis_types is provided, it takes precedence and this field is ignored.
+"""
+    )
+
+    specified_analysis_types: Optional[str | List[str] | Dict[str, str]] = Field(
         default=None,
         description="""<!--zh
 指定要分析的类型及文件名（可选，多行 key:value 格式）
 
 **重要**：仅当用户明确提出"只分析某些类型"或"重新生成某个分析"或"新增某个分析"时才需要传递此参数。
 
-格式：每行一个 分析类型:文件名 键值对
+推荐格式：每行一个 分析类型:文件名 键值对。
+运行时也兼容分析类型数组或逗号分隔字符串；未提供文件名时，已存在维度沿用原文件名，缺失维度按项目标题生成默认文件名。
 
 可选值：
 - topics: 章节主题分析
@@ -434,7 +450,8 @@ Specify analysis types and filenames to analyze (optional, multi-line key:value 
 
 **Important**: Only pass this parameter when user explicitly requests "analyze only certain types" or "regenerate specific analysis" or "add new analysis".
 
-Format: one analysis_type:filename pair per line
+Recommended format: one analysis_type:filename pair per line.
+Runtime also accepts a list of analysis type keys or a comma-separated string. When a filename is omitted, existing dimensions reuse their configured filename and missing dimensions get a default filename based on the project title.
 
 Available values:
 - topics: Chapter topics analysis
@@ -568,8 +585,25 @@ class AnalyzeAudioProject(AbstractFileTool[AnalyzeAudioProjectParams], Workspace
             tasks = []
             task_names = []
 
-            # 可选分析函数映射
-            optional_map = {
+            try:
+                analysis_plan = self._build_analysis_plan(
+                    config=config,
+                    analysis_scope=params.analysis_scope,
+                    specified_analysis_types=params.specified_analysis_types,
+                )
+            except ValueError as e:
+                return ToolResult.error(str(e))
+
+            # 临时写入新增文件映射，供 _write_analysis_file 定位输出文件。
+            # 只有成功生成的新增分析会在后续真正写回 magic.project.js。
+            config.setdefault("files", {})
+            for analysis_type, filename in analysis_plan.new_files_mapping.items():
+                config["files"][analysis_type] = filename
+                logger.info(f"检测到新分析类型: {analysis_type} -> {filename}")
+
+            analyzer_map = {
+                "topics": lambda: self._analyze_topics(model_id, analysis_context),
+                "summary": lambda: self._analyze_summary(model_id, analysis_context, scene_type),
                 "followup": lambda: self._analyze_followup(model_id, analysis_context),
                 "power_dynamics": lambda: self._analyze_power_dynamics(model_id, analysis_context),
                 "intent": lambda: self._analyze_intent(model_id, analysis_context),
@@ -579,52 +613,12 @@ class AnalyzeAudioProject(AbstractFileTool[AnalyzeAudioProjectParams], Workspace
                 "highlights": lambda: self._analyze_highlights(model_id, analysis_context),
             }
 
-            config_files = config.get("files", {})
-
-            # 确定要执行的分析类型
-            new_files_mapping = {}  # 记录新增的文件映射
-
-            if params.specified_analysis_types is None:
-                # 默认模式：执行所有配置的分析
-                types_to_analyze = ["topics", "summary"]
-                # 添加配置中的可选分析
-                for key in optional_map.keys():
-                    if key in config_files:
-                        types_to_analyze.append(key)
-                logger.info("默认模式：分析所有配置的类型")
-            else:
-                # 指定模式：解析 key:value 格式
-                parsed_types = parse_multiline_kv(params.specified_analysis_types, "specified_analysis_types")
-                types_to_analyze = list(parsed_types.keys())
-
-                # 找出配置中不存在的新类型
-                for analysis_type, filename in parsed_types.items():
-                    if analysis_type not in config_files:
-                        new_files_mapping[analysis_type] = filename
-                        # 临时添加到 config 中（供 _write_analysis_file 使用）
-                        config["files"][analysis_type] = filename
-                        logger.info(f"检测到新分析类型: {analysis_type} -> {filename}")
-
-                logger.info(f"指定模式：分析 {types_to_analyze}，其中新增 {len(new_files_mapping)} 个类型")
-
-            # 按需添加任务
-            if "topics" in types_to_analyze:
-                tasks.append(self._analyze_topics(model_id, analysis_context))
-                task_names.append("topics")
-
-            if "summary" in types_to_analyze:
-                tasks.append(self._analyze_summary(model_id, analysis_context, scene_type))
-                task_names.append("summary")
-
-            # 添加可选分析任务
-            for analysis_type in types_to_analyze:
-                if analysis_type in optional_map:
-                    # 检查配置中是否有对应的文件定义
-                    if analysis_type in config_files:
-                        tasks.append(optional_map[analysis_type]())
-                        task_names.append(analysis_type)
-                    else:
-                        logger.warning(f"分析类型 {analysis_type} 未在项目配置中定义，已跳过")
+            for analysis_type in analysis_plan.task_names:
+                analyzer_factory = analyzer_map.get(analysis_type)
+                if not analyzer_factory:
+                    return ToolResult.error(f"Unsupported analysis type: {analysis_type}")
+                tasks.append(analyzer_factory())
+                task_names.append(analysis_type)
 
             if not tasks:
                 return ToolResult.error("没有可执行的分析任务，请检查 specified_analysis_types 参数")
@@ -689,10 +683,19 @@ class AnalyzeAudioProject(AbstractFileTool[AnalyzeAudioProjectParams], Workspace
             logger.info(f"核心任务完成情况: {completed_core_tasks}")
 
             # 12. 如果有新增的分析类型，更新配置文件
-            if new_files_mapping:
+            successful_new_files_mapping, successful_panel_entries = successful_new_analysis_updates(
+                analysis_plan,
+                failed_tasks,
+            )
+            if successful_new_files_mapping:
                 try:
-                    await self._update_config_with_new_files(tool_context, project_path, new_files_mapping)
-                    logger.info(f"配置文件已更新，新增 {len(new_files_mapping)} 个分析类型")
+                    await self._update_config_with_new_files(
+                        tool_context,
+                        project_path,
+                        successful_new_files_mapping,
+                        successful_panel_entries,
+                    )
+                    logger.info(f"配置文件已更新，新增 {len(successful_new_files_mapping)} 个分析类型")
                 except Exception as e:
                     logger.error(f"更新配置文件失败: {e}")
                     # 不影响分析结果，继续执行
@@ -782,6 +785,14 @@ class AnalyzeAudioProject(AbstractFileTool[AnalyzeAudioProjectParams], Workspace
         except Exception as e:
             logger.error(f"读取项目配置失败: {e}")
             return None
+
+    def _build_analysis_plan(
+        self,
+        config: Dict,
+        analysis_scope: AudioAnalysisScope | str,
+        specified_analysis_types: Optional[str],
+    ) -> AudioAnalysisPlan:
+        return build_audio_analysis_plan(config, analysis_scope, specified_analysis_types)
 
 
     async def _infer_scene_type(self, model_id: str, context: AnalysisContext) -> str:
@@ -888,7 +899,13 @@ if (typeof window.magicProjectConfigure === 'function') {{
             logger.error(f"更新 scene_type 失败: {e}")
             # 不抛异常，不影响分析继续
 
-    async def _update_config_with_new_files(self, tool_context: ToolContext, project_path: Path, new_files: Dict[str, str]):
+    async def _update_config_with_new_files(
+        self,
+        tool_context: ToolContext,
+        project_path: Path,
+        new_files: Dict[str, str],
+        panel_entries: Optional[List[Dict[str, Any]]] = None,
+    ):
         """
         将新增的分析文件追加到 magic.project.js
 
@@ -900,6 +917,7 @@ if (typeof window.magicProjectConfigure === 'function') {{
             project_path: 项目路径
             new_files: 新增的文件映射，格式 {analysis_type: filename}
                       例如 {"insights": "产品评审会议-洞察.md"}
+            panel_entries: 新增分析维度对应的前端面板配置
         """
         try:
             config_path = project_path / "magic.project.js"
@@ -918,12 +936,8 @@ if (typeof window.magicProjectConfigure === 'function') {{
             config_json = json_match.group(1)
             config_data = json.loads(config_json)
 
-            # 追加新文件到 files 字段
-            if "files" not in config_data:
-                config_data["files"] = {}
-
+            apply_analysis_files_to_config(config_data, new_files, panel_entries)
             for analysis_type, filename in new_files.items():
-                config_data["files"][analysis_type] = filename
                 logger.info(f"配置追加: {analysis_type} -> {filename}")
 
             # 写回文件
@@ -2599,6 +2613,7 @@ if (typeof window.magicProjectConfigure === 'function') {{
 - 所有分析文件已经生成完成，存储在项目文件夹中
 - 主题标签已自动从纪要中提取并写入配置文件
 - 除非用户明确要求查看或修改特定文件，否则无需再次读取这些文件
+- 如果用户想重新总结整个项目，使用 analysis_scope="template_analysis_files"
 - 如果用户想重新生成某个分析，使用 specified_analysis_types 参数指定要重新分析的类型即可"""
 
         return result
@@ -2631,6 +2646,7 @@ if (typeof window.magicProjectConfigure === 'function') {{
             output_language = arguments.get("output_language", "") if arguments else ""
             context_files = arguments.get("context_files", []) if arguments else []
             user_additional_requirements = arguments.get("user_additional_requirements") if arguments else None
+            analysis_scope = arguments.get("analysis_scope") if arguments else None
             specified_analysis_types = arguments.get("specified_analysis_types") if arguments else None
 
             project_name = Path(project_path).name if project_path else "audio_project"
@@ -2679,7 +2695,7 @@ if (typeof window.magicProjectConfigure === 'function') {{
             if specified_analysis_types:
                 output_lines.append(f"  Analysis Types:  {specified_analysis_types}")
             else:
-                output_lines.append(f"  Analysis Types:  All (default)")
+                output_lines.append(f"  Analysis Scope:  {analysis_scope or AudioAnalysisScope.CONFIGURED_ANALYSIS_FILES.value}")
 
             output_lines.append("")
             output_lines.append("Results:")

@@ -18,6 +18,11 @@ import type { MentionListItem } from "../../tiptap-plugin/types"
 import type { TabItem } from "@/pages/superMagic/components/Detail/components/FilesViewer/types"
 import type { WorkspaceFile, WorkspaceFolder } from "@/stores/projectFiles/types"
 import type { ProjectFilesStore } from "@/stores/projectFiles"
+import {
+	isCanvasElementsMentionItemId,
+	MentionPanelCanvasElementsStore,
+	type ActiveCanvasElementsContext,
+} from "./domains/canvas-elements"
 import { MentionPanelAgentsStore } from "./domains/agents"
 import { MentionPanelHistoryStore } from "./domains/history"
 import { MentionPanelMcpStore } from "./domains/mcp"
@@ -48,6 +53,7 @@ export class MentionPanelStore {
 	private readonly workspaceFilesStore: MentionPanelWorkspaceFilesStore
 	private readonly tabsStore: MentionPanelTabsStore
 	private readonly historyStore: MentionPanelHistoryStore
+	private readonly canvasElementsStore: MentionPanelCanvasElementsStore
 
 	constructor(projectFilesStore: ProjectFilesStore) {
 		this.projectFilesStore = projectFilesStore
@@ -66,7 +72,12 @@ export class MentionPanelStore {
 			projectFilesStore,
 			getCurrentTabs: () => this.tabsStore.currentTabs,
 		})
-		makeAutoObservable(this, {}, { autoBind: true })
+		this.canvasElementsStore = new MentionPanelCanvasElementsStore()
+		makeAutoObservable<MentionPanelStore, "projectFilesStore">(
+			this,
+			{ projectFilesStore: false },
+			{ autoBind: true },
+		)
 	}
 
 	get currentSelectedProject() {
@@ -101,6 +112,18 @@ export class MentionPanelStore {
 
 	setCurrentTabs(tabs: TabItem[]) {
 		this.tabsStore.setTabs(tabs)
+	}
+
+	setActiveCanvasElementsContext(context: ActiveCanvasElementsContext | null) {
+		this.canvasElementsStore.setActiveContext(context)
+	}
+
+	clearActiveCanvasElementsContext(designProjectId?: string) {
+		this.canvasElementsStore.clearActiveContext(designProjectId)
+	}
+
+	invalidateActiveCanvasElementsCache() {
+		this.canvasElementsStore.invalidateCache()
 	}
 
 	finishLoadAttachmentsPromise(projectId: string) {
@@ -160,6 +183,10 @@ export class MentionPanelStore {
 	}
 
 	private getFolderMentionItems(folderId: string) {
+		if (isCanvasElementsMentionItemId(folderId)) {
+			return this.canvasElementsStore.getFolderMentionItems(folderId)
+		}
+
 		return this.workspaceFilesStore.getFolderMentionItems(folderId, {
 			personalDrive: BuiltinItemId.PERSONAL_DRIVE,
 			organizationDrive: BuiltinItemId.ORGANIZATION_DRIVE,
@@ -180,7 +207,11 @@ export class MentionPanelStore {
 					items: this.buildDefaultItems(request.options.t),
 				}
 			case "search":
-				return this.searchMentionItems(request.query).then((items) => ({ items }))
+				return this.searchMentionItems(request.query, request.scopeFolderId).then(
+					(items) => ({
+						items,
+					}),
+				)
 			case "children":
 				return {
 					items: this.getFolderMentionItems(request.id),
@@ -243,6 +274,7 @@ export class MentionPanelStore {
 		let defaultItems = createDefaultItems(t)[PanelState.DEFAULT] as MentionItem[]
 		if (this.projectFilesStore.currentSelectedProject) {
 			defaultItems = defaultItems.filter((item) => item.id !== BuiltinItemId.UPLOAD_FILES)
+			defaultItems = this.injectCanvasElementsRootItem(defaultItems, t)
 
 			const historyItems = this.historyStore.getHistoryAsMentionItems({
 				count: 5,
@@ -277,15 +309,42 @@ export class MentionPanelStore {
 		return defaultItems.filter((item) => item.id !== BuiltinItemId.PROJECT_FILES)
 	}
 
+	private injectCanvasElementsRootItem(items: MentionItem[], t: I18nTexts): MentionItem[] {
+		const rootItem = this.canvasElementsStore.getRootMentionItem({
+			lazy: true,
+			label: t.defaultItems.canvasElements,
+		})
+		if (!rootItem || items.some((item) => item.id === rootItem.id)) return items
+
+		const projectFilesIndex = items.findIndex((item) => item.id === BuiltinItemId.PROJECT_FILES)
+		const insertIndex = projectFilesIndex >= 0 ? projectFilesIndex + 1 : items.length
+		const nextItems = [...items]
+		nextItems.splice(insertIndex, 0, rootItem)
+		return nextItems
+	}
+
 	matchesQuery(target: string, query: string): boolean {
 		return matchesQuery(target, query)
 	}
 
-	private async searchMentionItems(query: string): Promise<MentionItem[]> {
-		return searchBuiltinMentionItems({
+	private async searchMentionItems(
+		query: string,
+		scopeFolderId?: string,
+	): Promise<MentionItem[]> {
+		if (isCanvasElementsMentionItemId(scopeFolderId)) {
+			return this.canvasElementsStore.searchItems(query, scopeFolderId, this.matchesQuery)
+		}
+
+		const builtinItems = await searchBuiltinMentionItems({
 			query,
 			pluginHost: this.getPluginHost(),
 		})
+		if (scopeFolderId?.trim()) return builtinItems
+
+		return [
+			...this.canvasElementsStore.searchItems(query, undefined, this.matchesQuery),
+			...builtinItems,
+		]
 	}
 
 	private validateMention(item: { type: string; data?: MentionData }): boolean {

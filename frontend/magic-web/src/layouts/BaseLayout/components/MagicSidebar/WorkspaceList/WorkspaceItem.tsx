@@ -165,7 +165,7 @@ function WorkspaceItem({ workspace, className }: WorkspaceItemProps) {
 							<a
 								href={getWorkspaceRouteUrl(workspace.id)}
 								onClick={handleClick}
-								className="text-current no-underline"
+								className="text-current no-underline [-webkit-tap-highlight-color:transparent]"
 							>
 								<div
 									className="flex items-center justify-center rounded-xl hover:bg-sidebar-accent "
@@ -195,43 +195,52 @@ function WorkspaceItem({ workspace, className }: WorkspaceItemProps) {
 										data-testid={workspaceLoadingTestId}
 									/>
 								)}
-								{(isHovered || isMenuOpen) && (
-									<>
-										<div
-											className="flex h-4 w-4 shrink-0 cursor-pointer items-center justify-center rounded-full text-sidebar-foreground transition-colors hover:bg-sidebar-accent"
-											onClick={handleCreateProjectClick}
-											onPointerDown={(e) => {
-												e.stopPropagation()
-											}}
-											onMouseDown={(e) => {
-												e.stopPropagation()
-											}}
-											data-testid="workspace-item-create-project"
-										>
-											<Plus className="h-4 w-4" />
-										</div>
-										<MagicDropdown
-											menu={{ items: menuProps.items }}
-											trigger={["click"]}
-											placement={menuProps.placement}
-											onOpenChange={setIsMenuOpen}
-										>
-											<div
-												className="flex h-4 w-4 shrink-0 cursor-pointer items-center justify-center rounded-full text-sidebar-foreground transition-colors hover:bg-sidebar-accent"
-												onClick={handleMoreClick}
-												onPointerDown={(e) => {
-													e.stopPropagation()
-												}}
-												onMouseDown={(e) => {
-													e.stopPropagation()
-												}}
-												data-testid="workspace-item-more"
-											>
-												<EllipsisIcon className="h-4 w-4" />
-											</div>
-										</MagicDropdown>
-									</>
-								)}
+								{/* Keep action controls mounted; no-hover makes them visible on iPad desktop touch input. */}
+								<div
+									className={cn(
+										"flex h-4 w-4 shrink-0 cursor-pointer items-center justify-center rounded-full text-sidebar-foreground transition-opacity [-webkit-tap-highlight-color:transparent] hover:bg-sidebar-accent",
+										isHovered || isMenuOpen
+											? "opacity-100"
+											: "pointer-events-none opacity-0 [@media(hover:hover)_and_(pointer:fine)]:w-0 [@media(hover:hover)_and_(pointer:fine)]:overflow-hidden",
+										"no-hover:pointer-events-auto no-hover:opacity-100",
+									)}
+									onClick={handleCreateProjectClick}
+									onPointerDown={(e) => {
+										e.stopPropagation()
+									}}
+									onMouseDown={(e) => {
+										e.stopPropagation()
+									}}
+									data-testid="workspace-item-create-project"
+								>
+									<Plus className="h-4 w-4" />
+								</div>
+								<MagicDropdown
+									menu={{ items: menuProps.items }}
+									trigger={["click"]}
+									placement={menuProps.placement}
+									onOpenChange={setIsMenuOpen}
+								>
+									<div
+										className={cn(
+											"flex h-4 w-4 shrink-0 cursor-pointer items-center justify-center rounded-full text-sidebar-foreground transition-opacity [-webkit-tap-highlight-color:transparent] hover:bg-sidebar-accent",
+											isHovered || isMenuOpen
+												? "opacity-100"
+												: "pointer-events-none opacity-0 [@media(hover:hover)_and_(pointer:fine)]:w-0 [@media(hover:hover)_and_(pointer:fine)]:overflow-hidden",
+											"no-hover:pointer-events-auto no-hover:opacity-100",
+										)}
+										onClick={handleMoreClick}
+										onPointerDown={(e) => {
+											e.stopPropagation()
+										}}
+										onMouseDown={(e) => {
+											e.stopPropagation()
+										}}
+										data-testid="workspace-item-more"
+									>
+										<EllipsisIcon className="h-4 w-4" />
+									</div>
+								</MagicDropdown>
 							</a>
 						</SidebarMenuButton>
 					</MagicDropdown>

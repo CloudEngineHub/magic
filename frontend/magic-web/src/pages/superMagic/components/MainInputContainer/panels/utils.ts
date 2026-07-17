@@ -99,21 +99,32 @@ export function isImageIconSource(value: string | undefined): value is string {
 	)
 }
 
-/** @internal used by buildConcatenatedPresetContent */
-function valueToDisplayString(value: LocaleText | undefined): string {
-	return localeTextToDisplayString(value)
-}
-
 function getOptionValue(option: OptionItem): string {
 	return localeTextToDisplayString(option.value)
 }
 
+function getPresetDisplayValue(field: FieldItem, locale: string): string {
+	const currentValue = field.current_value
+	if (currentValue == null || currentValue === "") return ""
+
+	const selectedOption = flattenFieldOptions(field).find(
+		(option) => getOptionValue(option) === currentValue,
+	)
+	const presetValue = resolveLocaleText(selectedOption?.preset_value, locale)?.trim()
+
+	return presetValue || currentValue
+}
+
 /** Flatten OptionGroup children and flat OptionItems into a single OptionItem array */
-function flattenFieldOptions(field: FieldItem): OptionItem[] {
+export function flattenFieldOptions(field: FieldItem): OptionItem[] {
 	const groups = field.options.filter(isOptionGroup) as OptionGroup[]
 	return groups.length
 		? groups.flatMap((g) => g.children ?? [])
 		: (field.options.filter((o) => !isOptionGroup(o)) as OptionItem[])
+}
+
+export function hasSelectableOptions(field: FieldItem | undefined): boolean {
+	return Boolean(field && flattenFieldOptions(field).length > 0)
 }
 
 function getSelectedOptionLabel(field: FieldItem, locale: string): string {
@@ -233,7 +244,8 @@ function joinPresetContentDocs(parts: JSONContent[], comma: string, period: stri
 
 /**
  * Build concatenated preset content from field items.
- * - Per field with preset_content: replaces {preset_value} with current_value.
+ * - Per field with preset_content: replaces {preset_value} with the selected option's
+ *   preset_value, falling back to current_value.
  * - Per field without preset_content: uses selected option label.
  * - All picked field parts are joined with locale comma and closed with locale period.
  */
@@ -252,12 +264,7 @@ export function buildConcatenatedPresetContent(
 			const currentVal = item.current_value
 			if (currentVal == null || currentVal === "") continue
 
-			const displayVal =
-				typeof currentVal === "string"
-					? currentVal
-					: currentVal != null
-						? valueToDisplayString(currentVal as LocaleText)
-						: ""
+			const displayVal = getPresetDisplayValue(item, locale)
 			if (!displayVal.trim()) continue
 
 			parts.push(replacePresetValueInDoc(parsePromptRichText(template), displayVal))

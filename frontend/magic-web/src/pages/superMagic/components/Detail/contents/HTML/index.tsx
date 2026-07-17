@@ -65,6 +65,7 @@ import { logger as Logger } from "@/utils/log"
 import magicToast from "@/components/base/MagicToaster/utils"
 import { type ImageExportFormat } from "@magic-web/html2image"
 import { resolvePptScaleContentDimensions } from "./utils/slide-dimensions"
+import { HTML_PREVIEW_IMAGE_PROCESS } from "./previewImageProcess"
 import {
 	AlertDialog,
 	AlertDialogAction,
@@ -528,6 +529,7 @@ export default memo(function HTML(props: HTMLProps) {
 				fileName: data?.file_name,
 				attachmentList,
 				displayConfig,
+				xMagicImageProcess: HTML_PREVIEW_IMAGE_PROCESS,
 			})
 			return result.processedContent
 		} catch {
@@ -782,6 +784,7 @@ export default memo(function HTML(props: HTMLProps) {
 				displayConfig,
 				resourceFileVersions,
 				htmlPreviewBundledTemplate,
+				xMagicImageProcess: HTML_PREVIEW_IMAGE_PROCESS,
 			})
 
 			let finalProcessedContent = result.processedContent
@@ -1439,7 +1442,9 @@ export default memo(function HTML(props: HTMLProps) {
 									fileId={displayData?.file_id}
 									filePathMapping={filePathMapping}
 									openNewTab={openNewTab}
-									htmlRelativeFolderPath={currentHtmlFileInfo.htmlRelativeFolderPath}
+									htmlRelativeFolderPath={
+										currentHtmlFileInfo.htmlRelativeFolderPath
+									}
 									selectedProject={selectedProject}
 									attachmentList={attachmentList}
 									isPlaybackMode={isPlaybackMode}

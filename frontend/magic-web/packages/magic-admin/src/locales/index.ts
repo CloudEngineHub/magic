@@ -1,15 +1,7 @@
-export { createI18nNext, Language } from "./creator"
+import { createAdminI18n } from "./creator"
 
-export type LocaleResourceLoader = () => Promise<unknown>
+export type { LocaleResourceLoader, LocaleResourceLoaderMap } from "./creator"
 
-export interface AdminLocaleModules {
-	adminZhCNModules: Record<string, LocaleResourceLoader>
-	adminEnUSModules: Record<string, LocaleResourceLoader>
-}
+const localeModules = import.meta.glob("./*/**/*.json")
 
-export function getAdminLocaleModules(): AdminLocaleModules {
-	return {
-		adminZhCNModules: import.meta.glob("./zh_CN/**/*.json"),
-		adminEnUSModules: import.meta.glob("./en_US/**/*.json"),
-	}
-}
+export const { adminI18n, initAdminI18n } = createAdminI18n(localeModules)

@@ -9,13 +9,14 @@ import {
 	lazy,
 	Suspense,
 } from "react"
-import type { RefObject } from "react"
+import type { CSSProperties, RefObject } from "react"
 import { observer } from "mobx-react-lite"
-import { Virtuoso, VirtuosoHandle } from "react-virtuoso"
+import { Virtuoso, VirtuosoGrid } from "react-virtuoso"
+import type { VirtuosoGridHandle, VirtuosoHandle } from "react-virtuoso"
 
 // Types
 import type { MentionItem, MentionPanelProps, MentionPanelRef } from "./types"
-import { PanelState } from "./types"
+import { MentionPanelViewMode, PanelState } from "./types"
 
 // Hooks
 import { useMentionPanel } from "./hooks/useMentionPanel"
@@ -25,6 +26,9 @@ import { createDefaultConfig } from "./constants"
 
 // Components
 import MenuItem from "./components/MenuItem"
+import GalleryItem from "./components/GalleryItem"
+import ViewModeSwitcher from "./components/ViewModeSwitcher"
+import { isMentionPanelGalleryPreviewTarget } from "./components/GalleryPreviewDialog"
 import MagicIcon from "../../base/MagicIcon"
 import {
 	IconArrowBack,
@@ -50,6 +54,16 @@ import {
 import { prepareMentionItemForPending } from "./utils/multiSelectValidation"
 
 const MentionPanelMobile = lazy(() => import("./MentionPanelMobile"))
+const GalleryPreviewDialog = lazy(() => import("./components/GalleryPreviewDialog"))
+
+const LIST_PANEL_WIDTH = 320
+const GALLERY_PANEL_WIDTH = 600
+const GALLERY_PANEL_HEIGHT = 468
+const GALLERY_GRID_COLUMN_COUNT = 4
+const GALLERY_GRID_INCREASE_VIEWPORT_BY = {
+	top: GALLERY_PANEL_HEIGHT,
+	bottom: GALLERY_PANEL_HEIGHT,
+}
 
 /**
  * MentionPanel - Mention panel component with multi-state support
@@ -74,6 +88,8 @@ const MentionPanel = observer(
 			disableKeyboardShortcuts = false,
 			lockDismissToExplicitClose = false,
 			canToggleMultiSelectItem,
+			viewMode = MentionPanelViewMode.LIST,
+			galleryOptions,
 			runtime,
 			dataService,
 			catalogBehavior,
@@ -89,6 +105,8 @@ const MentionPanel = observer(
 		// Internal search state
 		const [internalSearchQuery, setInternalSearchQuery] = useState("")
 		const [multiSelectMode, setMultiSelectMode] = useState(false)
+		const [previewItem, setPreviewItem] = useState<MentionItem | null>(null)
+		const [internalViewMode, setInternalViewMode] = useState<MentionPanelViewMode>(viewMode)
 		const [pendingByKey, setPendingByKey] = useState<Map<string, PendingMentionEntry>>(
 			() => new Map(),
 		)
@@ -102,6 +120,20 @@ const MentionPanel = observer(
 		// Internationalization
 		const t = useI18nStatic(language)
 		const defaultConfig = useMemo(() => createDefaultConfig(t), [t])
+
+		const canSwitchViewMode = viewMode === MentionPanelViewMode.GALLERY && !isMobile
+		const activeViewMode = canSwitchViewMode ? internalViewMode : viewMode
+		const isGalleryMode = activeViewMode === MentionPanelViewMode.GALLERY && !isMobile
+
+		const panelWidth = isGalleryMode ? GALLERY_PANEL_WIDTH : LIST_PANEL_WIDTH
+		const panelHeight = isGalleryMode ? GALLERY_PANEL_HEIGHT : defaultConfig.height
+		const panelSizeStyle = useMemo<CSSProperties>(
+			() => ({
+				width: panelWidth,
+				height: panelHeight,
+			}),
+			[panelHeight, panelWidth],
+		)
 		const resolvedRuntime = useMemo(
 			() =>
 				resolveMentionPanelRuntime({
@@ -112,6 +144,10 @@ const MentionPanel = observer(
 				}),
 			[runtime, dataService, catalogBehavior, buildStoreRequest],
 		)
+
+		useEffect(() => {
+			setInternalViewMode(viewMode)
+		}, [viewMode])
 
 		// Main panel logic
 		const { state, actions, computed, dataSource, focus } = useMentionPanel({
@@ -132,6 +168,8 @@ const MentionPanel = observer(
 			onKeyboardEnterFolder: !isMobile
 				? () => keyboardEnterFolderHandlerRef.current()
 				: undefined,
+			keyboardNavigationMode: isGalleryMode ? "grid" : "list",
+			keyboardGridColumnCount: GALLERY_GRID_COLUMN_COUNT,
 			dataService: resolvedRuntime.dataService,
 			t,
 			catalogBehavior: resolvedRuntime.catalogBehavior,
@@ -192,10 +230,16 @@ const MentionPanel = observer(
 			searchInputRef.current?.focus()
 		}, [])
 
+		const handleViewModeChange = useCallback((nextViewMode: MentionPanelViewMode) => {
+			setInternalViewMode(nextViewMode)
+			if (nextViewMode !== MentionPanelViewMode.GALLERY) setPreviewItem(null)
+		}, [])
+
 		// Clear search when panel closes
 		useEffect(() => {
 			if (!visible) {
 				setInternalSearchQuery("")
+				setPreviewItem(null)
 				resetLocalMultiSelectState()
 			}
 		}, [visible, resetLocalMultiSelectState])
@@ -251,6 +295,7 @@ const MentionPanel = observer(
 		const internalRef = useRef<HTMLDivElement>(null)
 		const menuListRef = useRef<HTMLDivElement>(null)
 		const virtuosoRef = useRef<VirtuosoHandle>(null)
+		const virtuosoGridRef = useRef<VirtuosoGridHandle>(null)
 
 		const menuListStyle = useMemo(() => {
 			const searchHeaderHeight = defaultConfig.headerHeight
@@ -261,17 +306,19 @@ const MentionPanel = observer(
 				searchHeaderHeight + keyboardHintsHeight + breadcrumbHeight + panelPadding
 
 			return {
-				height: Math.max(defaultConfig.height - reservedHeight, 160),
+				height: Math.max(panelHeight - reservedHeight, 160),
 			}
-		}, [defaultConfig])
+		}, [defaultConfig, panelHeight])
 
 		// Auto-scroll to selected item when selectedIndex changes
 		useEffect(() => {
-			if (!virtuosoRef.current || state.selectedIndex < 0) {
+			if (state.selectedIndex < 0) {
 				return
 			}
 
-			const element = virtuosoRef.current
+			const element = isGalleryMode ? virtuosoGridRef.current : virtuosoRef.current
+			if (!element) return
+
 			const frame = requestAnimationFrame(() => {
 				element.scrollToIndex({
 					index: state.selectedIndex,
@@ -283,7 +330,7 @@ const MentionPanel = observer(
 			return () => {
 				cancelAnimationFrame(frame)
 			}
-		}, [state.selectedIndex, state.items.length])
+		}, [isGalleryMode, state.selectedIndex, state.items.length])
 
 		const togglePendingForItem = useCallback(
 			async (item: MentionItem) => {
@@ -660,6 +707,44 @@ const MentionPanel = observer(
 			],
 		)
 
+		const renderGalleryItem = useCallback(
+			(index: number) => {
+				const item = displayItems[index]
+				if (!item) return null
+
+				const key = getMentionItemSelectionKey(item)
+				const showCheckbox =
+					multiSelectMode &&
+					canToggleMultiSelectItemForItem(item) &&
+					!isRootDefaultCategoryScreen(state)
+
+				return (
+					<GalleryItem
+						key={item.id}
+						item={item}
+						selected={index === state.selectedIndex}
+						onClick={(e) => handleItemClick(index, e)}
+						onPreview={setPreviewItem}
+						isSearch={Boolean(state.searchQuery.trim())}
+						t={t}
+						showCheckbox={showCheckbox}
+						checkboxChecked={pendingByKey.has(key)}
+						enablePreview={galleryOptions?.enablePreviewModal}
+					/>
+				)
+			},
+			[
+				canToggleMultiSelectItemForItem,
+				displayItems,
+				galleryOptions?.enablePreviewModal,
+				handleItemClick,
+				multiSelectMode,
+				pendingByKey,
+				state,
+				t,
+			],
+		)
+
 		// Don't render if not visible
 		if (!isMobile && !visible) return null
 
@@ -685,6 +770,7 @@ const MentionPanel = observer(
 						dataService={dataService}
 						catalogBehavior={catalogBehavior}
 						buildStoreRequest={buildStoreRequest}
+						canToggleMultiSelectItem={canToggleMultiSelectItem}
 						{...restProps}
 					/>
 				</Suspense>
@@ -693,7 +779,7 @@ const MentionPanel = observer(
 
 		const panelClassName = cn(
 			// Base styles matching Figma design
-			"z-dropdown flex w-80 flex-col items-start overflow-hidden rounded-lg border border-solid border-border bg-popover shadow-md",
+			"z-dropdown flex origin-top-left flex-col items-start overflow-hidden rounded-lg border border-solid border-border bg-popover shadow-md transition-[width,height] duration-200 ease-out will-change-[width,height]",
 			className,
 		)
 
@@ -797,7 +883,10 @@ const MentionPanel = observer(
 						{/* Search area */}
 						<div className="flex min-w-0 flex-1 flex-col items-start gap-2">
 							<div
-								className="relative flex h-9 w-full cursor-text items-center gap-1 overflow-hidden rounded-t-lg border-b border-input bg-background px-3 py-1 shadow-xs"
+								className={cn(
+									"relative flex h-9 w-full cursor-text items-center gap-1 overflow-hidden border-b border-input bg-background px-3 py-1 shadow-xs",
+									canSwitchViewMode ? "rounded-tl-lg" : "rounded-t-lg",
+								)}
 								onClick={handleSearchAreaClick}
 								role="searchbox"
 								aria-label="Search input area"
@@ -855,6 +944,13 @@ const MentionPanel = observer(
 								)}
 							</div>
 						</div>
+						{canSwitchViewMode && (
+							<ViewModeSwitcher
+								isGalleryMode={isGalleryMode}
+								t={t}
+								onViewModeChange={handleViewModeChange}
+							/>
+						)}
 					</div>
 
 					{/* Search query display (when in search state) */}
@@ -872,7 +968,12 @@ const MentionPanel = observer(
 					{/* Menu Items */}
 					<div
 						ref={menuListRef}
-						className="[&_div[data-virtuoso-scroller]]:scrollbar-thin [&_div[data-virtuoso-scroller]]:scrollbar-thumb-border [&_div[data-virtuoso-scroller]]:scrollbar-track-transparent [&_div[data-virtuoso-scroller]]:scrollbar-thumb-rounded flex flex-1 flex-col gap-0 overflow-hidden p-1 transition-all duration-200 ease-out [&_div[data-virtuoso-scroller]]:mr-0.5"
+						className={cn(
+							"flex flex-1 flex-col gap-0 overflow-hidden transition-all duration-200 ease-out",
+							isGalleryMode
+								? "p-2 [&_div[data-virtuoso-scroller]::-webkit-scrollbar]:hidden [&_div[data-virtuoso-scroller]]:[-ms-overflow-style:none] [&_div[data-virtuoso-scroller]]:[scrollbar-width:none]"
+								: "[&_div[data-virtuoso-scroller]]:scrollbar-thin [&_div[data-virtuoso-scroller]]:scrollbar-thumb-border [&_div[data-virtuoso-scroller]]:scrollbar-track-transparent [&_div[data-virtuoso-scroller]]:scrollbar-thumb-rounded p-1 [&_div[data-virtuoso-scroller]]:mr-0.5",
+						)}
 						style={menuListStyle}
 						role="listbox"
 					>
@@ -897,6 +998,20 @@ const MentionPanel = observer(
 							<div className="flex flex-col items-center justify-center p-5 text-center text-xs text-muted-foreground">
 								{t.empty}
 							</div>
+						) : isGalleryMode ? (
+							<VirtuosoGrid
+								ref={virtuosoGridRef}
+								totalCount={displayItems.length}
+								itemContent={renderGalleryItem}
+								computeItemKey={(index) => displayItems[index]?.id ?? index}
+								increaseViewportBy={GALLERY_GRID_INCREASE_VIEWPORT_BY}
+								listClassName="grid auto-rows-min grid-cols-4 gap-2 pr-0.5"
+								itemClassName="min-w-0"
+								style={{
+									height: "100%",
+									width: "100%",
+								}}
+							/>
 						) : (
 							<Virtuoso
 								ref={virtuosoRef}
@@ -913,12 +1028,14 @@ const MentionPanel = observer(
 					{/* Keyboard Hints */}
 					<div className="mx-1 mb-1 flex flex-nowrap items-center gap-1.5 rounded bg-accent px-1.5 py-1.5">
 						<div className="flex items-center gap-0.5">
-							<div className="flex min-h-[16px] min-w-[16px] items-center justify-center rounded border border-border bg-background font-['Geist'] text-[10px] text-secondary-foreground">
-								↓
-							</div>
-							<div className="flex min-h-[16px] min-w-[16px] items-center justify-center rounded border border-border bg-background font-['Geist'] text-[10px] text-secondary-foreground">
-								↑
-							</div>
+							{(isGalleryMode ? ["↑", "↓", "←", "→"] : ["↓", "↑"]).map((key) => (
+								<div
+									key={key}
+									className="flex min-h-[16px] min-w-[16px] items-center justify-center rounded border border-border bg-background font-['Geist'] text-[10px] text-secondary-foreground"
+								>
+									{key}
+								</div>
+							))}
 							<span className="whitespace-nowrap font-['Geist'] text-[10px] leading-[13px] text-foreground">
 								{t.keyboardHints.navigate}
 							</span>
@@ -931,7 +1048,7 @@ const MentionPanel = observer(
 								{t.keyboardHints.confirm}
 							</span>
 						</div>
-						{computed.canNavigateBack && (
+						{!isGalleryMode && computed.canNavigateBack && (
 							<div className="flex items-center gap-0.5">
 								<div className="flex min-h-[16px] min-w-[16px] items-center justify-center rounded border border-border bg-background font-['Geist'] text-[10px] text-secondary-foreground">
 									<MagicIcon component={IconArrowNarrowLeft} size={12} />
@@ -943,7 +1060,7 @@ const MentionPanel = observer(
 								</span>
 							</div>
 						)}
-						{computed.canEnterFolder && (
+						{!isGalleryMode && computed.canEnterFolder && (
 							<div className="flex items-center gap-0.5">
 								<div className="flex min-h-[16px] min-w-[16px] items-center justify-center rounded border border-border bg-background font-['Geist'] text-[10px] text-secondary-foreground">
 									<MagicIcon component={IconArrowNarrowRight} size={12} />
@@ -955,6 +1072,15 @@ const MentionPanel = observer(
 						)}
 					</div>
 				</div>
+				{isGalleryMode && galleryOptions?.enablePreviewModal && previewItem && (
+					<Suspense fallback={null}>
+						<GalleryPreviewDialog
+							item={previewItem}
+							items={displayItems}
+							onItemChange={setPreviewItem}
+						/>
+					</Suspense>
+				)}
 			</MentionPanelRootProviders>
 		)
 
@@ -967,7 +1093,7 @@ const MentionPanel = observer(
 					className={cn("fixed", panelClassName)}
 					style={{
 						...style,
-						height: defaultConfig.height,
+						...panelSizeStyle,
 					}}
 					role="dialog"
 					aria-modal="true"
@@ -1012,6 +1138,10 @@ const MentionPanel = observer(
 					onInteractOutside={(event) => {
 						const root = internalRef.current
 						const target = event.target
+						if (isMentionPanelGalleryPreviewTarget(target)) {
+							event.preventDefault()
+							return
+						}
 						if (lockDismissToExplicitClose) {
 							event.preventDefault()
 							return
@@ -1038,7 +1168,7 @@ const MentionPanel = observer(
 					}}
 					style={{
 						...style,
-						height: defaultConfig.height,
+						...panelSizeStyle,
 					}}
 					role="dialog"
 					aria-modal="true"

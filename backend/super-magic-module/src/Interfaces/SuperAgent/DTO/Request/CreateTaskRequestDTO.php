@@ -34,6 +34,11 @@ class CreateTaskRequestDTO extends AbstractRequestDTO
      */
     public array $messageContent = [];
 
+    /**
+     * Interrupt the current task instead of queuing this message.
+     */
+    public bool $forceInterrupt = false;
+
     public function getProjectId(): string
     {
         return $this->projectId;
@@ -54,6 +59,11 @@ class CreateTaskRequestDTO extends AbstractRequestDTO
         return $this->messageContent;
     }
 
+    public function isForceInterrupt(): bool
+    {
+        return $this->forceInterrupt;
+    }
+
     protected static function getHyperfValidationRules(): array
     {
         return [
@@ -62,6 +72,7 @@ class CreateTaskRequestDTO extends AbstractRequestDTO
             'message_type' => 'required|string|in:text,rich_text',
             'message_content' => 'required|array',
             'message_content.content' => 'required|string|max:65000',
+            'force_interrupt' => 'nullable|boolean',
         ];
     }
 
@@ -75,6 +86,7 @@ class CreateTaskRequestDTO extends AbstractRequestDTO
             'message_content.required' => 'Message content is required',
             'message_content.content.required' => 'Message content cannot be empty',
             'message_content.content.max' => 'Message content cannot exceed 65000 characters',
+            'force_interrupt.boolean' => 'Force interrupt must be a boolean value',
         ];
     }
 }

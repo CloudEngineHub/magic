@@ -202,6 +202,64 @@ class AsrRecorderService extends AbstractSandboxOS implements AsrRecorderInterfa
         }
     }
 
+    public function queryTask(
+        string $sandboxId,
+        string $taskKey,
+        string $workspaceDir = '.workspace'
+    ): AsrRecorderResponse {
+        $requestData = [
+            'task_key' => $taskKey,
+            'workspace_dir' => $workspaceDir,
+        ];
+
+        try {
+            $this->logger->info('ASR Recorder: Querying task', [
+                'sandbox_id' => $sandboxId,
+                'task_key' => $taskKey,
+                'workspace_dir' => $workspaceDir,
+            ]);
+
+            $result = $this->gateway->proxySandboxRequest(
+                $sandboxId,
+                'POST',
+                SandboxEndpoints::ASR_TASK_QUERY,
+                $requestData
+            );
+
+            $response = AsrRecorderResponse::fromGatewayResult($result);
+
+            if ($response->isSuccess()) {
+                $this->logger->info('ASR Recorder: Task query request successful', [
+                    'sandbox_id' => $sandboxId,
+                    'task_key' => $taskKey,
+                    'status' => $response->getStatus(),
+                    'file_path' => $response->getFilePath(),
+                ]);
+            } else {
+                $this->logger->error('ASR Recorder: Failed to query task', [
+                    'sandbox_id' => $sandboxId,
+                    'task_key' => $taskKey,
+                    'code' => $response->code,
+                    'message' => $response->message,
+                ]);
+            }
+
+            return $response;
+        } catch (Exception $e) {
+            $this->logger->error('ASR Recorder: Unexpected error during query task', [
+                'sandbox_id' => $sandboxId,
+                'task_key' => $taskKey,
+                'error' => $e->getMessage(),
+            ]);
+
+            return AsrRecorderResponse::fromApiResponse([
+                'code' => -1,
+                'message' => 'Unexpected error: ' . $e->getMessage(),
+                'data' => [],
+            ]);
+        }
+    }
+
     public function cancelTask(
         string $sandboxId,
         string $taskKey,

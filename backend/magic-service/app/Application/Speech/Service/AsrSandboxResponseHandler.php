@@ -16,6 +16,7 @@ use App\Infrastructure\Core\Traits\HasLogger;
 use Dtyq\SuperMagic\Application\SuperAgent\Service\AbstractAppService;
 use Dtyq\SuperMagic\Domain\SuperAgent\Entity\TaskFileEntity;
 use Dtyq\SuperMagic\Domain\SuperAgent\Service\TaskFileDomainService;
+use Dtyq\SuperMagic\Infrastructure\Utils\RelativeFilePathUtil;
 use Throwable;
 
 /**
@@ -160,6 +161,9 @@ class AsrSandboxResponseHandler extends AbstractAppService
             return;
         }
 
+        // 先保留沙箱实际返回的路径；即使文件记录尚未同步，失败日志与下次恢复仍有真实路径可用。
+        $taskStatus->filePath = $relativePath;
+
         try {
             // 沙箱合并完成的音频文件被写入到「显示目录」下（如 `录音纪要_xxx/录音.wav`），
             // 显示目录在 ASR 启动录音时已经创建并把 file_id 持久化到 Redis（displayDirectoryId）。
@@ -173,8 +177,14 @@ class AsrSandboxResponseHandler extends AbstractAppService
             );
 
             if ($fileEntity !== null) {
+                $resolvedPath = $this->buildRelativeFilePathForEntity($fileEntity, (int) $taskStatus->projectId);
                 $taskStatus->audioFileId = (string) $fileEntity->getFileId();
-                $taskStatus->filePath = $relativePath;
+                $taskStatus->filePath = $resolvedPath;
+                $taskStatus->displayDirectory = $this->extractDirectoryPath(['path' => $resolvedPath]);
+                $parentId = $fileEntity->getParentId();
+                if ($parentId !== null && $parentId > 0) {
+                    $taskStatus->displayDirectoryId = $parentId;
+                }
             }
         } catch (Throwable $e) {
             $this->logger->error('查询音频文件记录失败', [
@@ -190,6 +200,18 @@ class AsrSandboxResponseHandler extends AbstractAppService
 
             ExceptionBuilder::throw(AsrErrorCode::CreateAudioFileFailed, '', ['error' => $e->getMessage()]);
         }
+    }
+
+    private function buildRelativeFilePathForEntity(TaskFileEntity $entity, int $projectId): string
+    {
+        $filesWithParents = $this->taskFileDomainService->getFilesWithParentsByIds(
+            [$entity->getFileId()],
+            $projectId
+        );
+        $fileMap = RelativeFilePathUtil::indexByFileId($filesWithParents);
+        $fileMap[$entity->getFileId()] = $entity;
+
+        return ltrim(RelativeFilePathUtil::buildPathByParentChain($entity, $fileMap), '/');
     }
 
     /**
@@ -267,7 +289,7 @@ class AsrSandboxResponseHandler extends AbstractAppService
      * - ASR 在录音启动时已经创建了显示目录与隐藏目录，并把它们的 `file_id` 持久化到
      *   Redis（`displayDirectoryId` / `tempHiddenDirectoryId`）。调用方根据文件类型
      *   传入对应的 `$parentId`，本方法只负责按 (project_id, parent_id, file_name) 轮询。
-     * - `$relativePath` 仅用于日志，便于排查；不再参与查询。
+     * - `$relativePath` 仅用于日志，便于排查；不参与查询。
      *
      * @param AsrTaskStatusDTO $taskStatus 任务状态
      * @param null|int $parentId 文件所在目录的 file_id（来自 ASR 自己创建目录时记录的 id）
@@ -304,18 +326,6 @@ class AsrSandboxResponseHandler extends AbstractAppService
             ExceptionBuilder::throw(AsrErrorCode::CreateAudioFileFailed, '', ['error' => '任务状态信息不完整']);
         }
 
-        if ($parentId === null || $parentId <= 0 || $fileName === '') {
-            $this->logger->warning(sprintf('%s 父目录或文件名缺失，跳过查询', $fileTypeName), $logContext);
-            if ($throwOnTimeout) {
-                ExceptionBuilder::throw(
-                    AsrErrorCode::CreateAudioFileFailed,
-                    '',
-                    ['error' => sprintf('%s 父目录或文件名缺失', $fileTypeName)]
-                );
-            }
-            return null;
-        }
-
         // 2. 项目访问鉴权（保持原有行为）
         $this->getAccessibleProjectWithEditor(
             (int) $taskStatus->projectId,
@@ -323,9 +333,23 @@ class AsrSandboxResponseHandler extends AbstractAppService
             $taskStatus->organizationCode
         );
 
-        // 3. 按 (project_id, parent_id, file_name) 轮询
+        $useRelativePathLookup = $parentId === null || $parentId <= 0;
+        if ($fileName === '' || ($useRelativePathLookup && $relativePath === '')) {
+            $this->logger->warning(sprintf('%s 文件名或相对路径缺失，跳过查询', $fileTypeName), $logContext);
+            if ($throwOnTimeout) {
+                ExceptionBuilder::throw(
+                    AsrErrorCode::CreateAudioFileFailed,
+                    '',
+                    ['error' => sprintf('%s 文件名或相对路径缺失', $fileTypeName)]
+                );
+            }
+            return null;
+        }
+
+        // 3. 优先按 parent_id + file_name 查询；历史任务缺少目录 ID 时按完整相对路径兜底
         $this->logger->info(sprintf('开始轮询查询%s记录', $fileTypeName), $logContext + [
             'max_wait_seconds' => AsrConfig::FILE_RECORD_QUERY_TIMEOUT,
+            'lookup_strategy' => $useRelativePathLookup ? 'relative_path' : 'parent_id_and_name',
         ]);
 
         $timeoutSeconds = AsrConfig::FILE_RECORD_QUERY_TIMEOUT;
@@ -337,11 +361,20 @@ class AsrSandboxResponseHandler extends AbstractAppService
             ++$attempt;
             $elapsedSeconds = (int) (microtime(true) - $startTime);
 
-            $existingFile = $this->taskFileDomainService->getByProjectParentAndName(
-                (int) $taskStatus->projectId,
-                $parentId,
-                $fileName
-            );
+            $existingFile = $useRelativePathLookup
+                ? $this->taskFileDomainService->findEntityByRelativePath(
+                    (int) $taskStatus->projectId,
+                    $relativePath
+                )
+                : $this->taskFileDomainService->getByProjectParentAndName(
+                    (int) $taskStatus->projectId,
+                    $parentId,
+                    $fileName
+                );
+
+            if ($existingFile !== null && $existingFile->getIsDirectory()) {
+                $existingFile = null;
+            }
 
             if ($existingFile !== null) {
                 $this->logger->info(sprintf('成功找到%s记录', $fileTypeName), $logContext + [
@@ -376,10 +409,13 @@ class AsrSandboxResponseHandler extends AbstractAppService
         ]);
 
         if ($throwOnTimeout) {
+            $error = $fileTypeName === '音频文件'
+                ? sprintf('音频合并成功，但文件记录同步超时: %s', $relativePath)
+                : sprintf('等待 %d 秒后仍未找到%s记录', $timeoutSeconds, $fileTypeName);
             ExceptionBuilder::throw(
                 AsrErrorCode::CreateAudioFileFailed,
                 '',
-                ['error' => sprintf('等待 %d 秒后仍未找到%s记录', $timeoutSeconds, $fileTypeName)]
+                ['error' => $error]
             );
         }
 

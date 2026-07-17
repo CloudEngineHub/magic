@@ -127,6 +127,8 @@ class AgentVersionEntity extends AbstractEntity
 
     protected ?PublishTargetValue $publishTargetValue = null;
 
+    protected ?int $categoryId = null;
+
     /**
      * @var null|array Version description in i18n format
      */
@@ -205,6 +207,7 @@ class AgentVersionEntity extends AbstractEntity
             'review_remark' => $this->reviewRemark,
             'publish_target_type' => $this->publishTargetType->value,
             'publish_target_value' => $this->publishTargetValue?->toArray(),
+            'category_id' => $this->categoryId,
             'version_description_i18n' => $this->versionDescriptionI18n,
             'publisher_user_id' => $this->publisherUserId,
             'published_at' => $this->publishedAt,
@@ -484,6 +487,17 @@ class AgentVersionEntity extends AbstractEntity
         } else {
             $this->publishTargetValue = $publishTargetValue;
         }
+        return $this;
+    }
+
+    public function getCategoryId(): ?int
+    {
+        return $this->categoryId;
+    }
+
+    public function setCategoryId(null|int|string $categoryId): self
+    {
+        $this->categoryId = is_string($categoryId) ? (int) $categoryId : $categoryId;
         return $this;
     }
 

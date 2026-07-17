@@ -3,6 +3,7 @@ import { useEffect, useRef } from "react"
 import { Button } from "@/components/shadcn-ui/button"
 import { Input } from "@/components/shadcn-ui/input"
 import { cn } from "@/lib/utils"
+import { shouldSuppressInputAutoFocusInMagicApp } from "@/utils/inputFocusPolicy"
 
 type SidebarCreateInputSize = "sm" | "md"
 
@@ -20,6 +21,7 @@ interface SidebarCreateInputProps {
 	cancelButtonAriaLabel: string
 	size?: SidebarCreateInputSize
 	stopKeyboardPropagation?: boolean
+	autoFocus?: boolean
 	onValueChange: (value: string) => void
 	onSubmit: () => void | Promise<void>
 	onCancel: () => void
@@ -44,6 +46,7 @@ function SidebarCreateInput({
 	cancelButtonAriaLabel,
 	size = "sm",
 	stopKeyboardPropagation = false,
+	autoFocus = true,
 	onValueChange,
 	onSubmit,
 	onCancel,
@@ -51,15 +54,19 @@ function SidebarCreateInput({
 	const inputRef = useRef<HTMLInputElement>(null)
 	const wrapperRef = useRef<HTMLDivElement>(null)
 	const hasValue = Boolean(value.trim())
+	const shouldAutoFocus = autoFocus && !shouldSuppressInputAutoFocusInMagicApp()
 
 	useEffect(() => {
+		if (!shouldAutoFocus) return undefined
+
+		// Delay selection until the inline input has mounted so desktop users can type immediately.
 		const timer = setTimeout(() => {
 			inputRef.current?.focus()
 			inputRef.current?.select()
 		}, 50)
 
 		return () => clearTimeout(timer)
-	}, [])
+	}, [shouldAutoFocus])
 
 	function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
 		if (e.key === "Enter") {
@@ -97,7 +104,7 @@ function SidebarCreateInput({
 			<div ref={wrapperRef} className="flex items-center gap-1">
 				<Input
 					ref={inputRef}
-					autoFocus
+					autoFocus={shouldAutoFocus}
 					data-testid={inputTestId}
 					value={value}
 					onChange={(e) => onValueChange(e.target.value)}
@@ -121,7 +128,7 @@ function SidebarCreateInput({
 					onClick={() => {
 						void onSubmit()
 					}}
-					className={cn("shadow-xs size-8 shrink-0 rounded-md", SIZE_CLASS_MAP[size])}
+					className={cn("size-8 shrink-0 rounded-md shadow-xs", SIZE_CLASS_MAP[size])}
 				>
 					<Check className="h-4 w-4 text-[#22c55e]" />
 				</Button>
@@ -133,7 +140,7 @@ function SidebarCreateInput({
 					aria-label={cancelButtonAriaLabel}
 					disabled={disabled}
 					onClick={onCancel}
-					className={cn("shadow-xs size-8 shrink-0 rounded-md", SIZE_CLASS_MAP[size])}
+					className={cn("size-8 shrink-0 rounded-md shadow-xs", SIZE_CLASS_MAP[size])}
 				>
 					<X className="h-4 w-4 text-[#ef4444]" />
 				</Button>

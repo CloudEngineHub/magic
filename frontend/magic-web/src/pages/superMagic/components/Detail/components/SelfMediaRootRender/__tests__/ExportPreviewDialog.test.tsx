@@ -1,5 +1,5 @@
 import { forwardRef, useEffect, useImperativeHandle } from "react"
-import { fireEvent, render, screen, within } from "@testing-library/react"
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import type { CardFrameRef } from "../components/CardFrame"
 
@@ -263,7 +263,12 @@ describe("ExportPreviewDialog", () => {
 		expect(screen.getByTestId("self-media-export-wechat-html-product")).toBeInTheDocument()
 
 		fireEvent.click(screen.getByTestId("self-media-export-copy-html"))
-		expect(onCopyHtml).toHaveBeenCalledTimes(1)
+		await waitFor(() => expect(onCopyHtml).toHaveBeenCalledTimes(1))
+		await waitFor(() => {
+			expect(screen.getByTestId("self-media-export-copy-html")).toHaveTextContent(
+				"detail.selfMedia.export.wechat.htmlCopied",
+			)
+		})
 
 		fireEvent.click(screen.getByTestId("self-media-export-confirm"))
 		expect(onConfirm).toHaveBeenCalledWith(
@@ -302,10 +307,82 @@ describe("ExportPreviewDialog", () => {
 		const horizontalFrame = screen.getByTestId("self-media-export-wechat-horizontal-preview")
 
 		expect(preview.className).toContain("w-full")
-		expect(preview.className).toContain("aspect-[335/100]")
-		expect(preview.className).toContain("grid-cols-[100fr_235fr]")
+		expect(preview.className).toContain("aspect-[10/3]")
+		expect(preview.className).toContain("grid-cols-[3fr_7fr]")
 		expect(squareImage).toHaveAttribute("src", "https://example.test/thumb-file.png")
 		expect(horizontalImage).toHaveAttribute("src", "https://example.test/hero-file.png")
-		expect(horizontalFrame.className).toContain("aspect-[235/100]")
+		expect(horizontalFrame.className).toContain("aspect-[21/9]")
+		expect(horizontalFrame.className).not.toContain("border-l")
+	})
+
+	it("guides users to generate both covers when the selected post has no images", async () => {
+		const onGenerateWechatCovers = vi.fn().mockResolvedValue(true)
+		renderDialog({
+			exportMode: "wechatOfficial",
+			onGenerateWechatCovers,
+			posts: [{ ...posts[0], thumbnailCover: undefined, heroCover: undefined }],
+		})
+
+		expect(screen.getByTestId("self-media-export-wechat-cover-empty-state")).toHaveTextContent(
+			"detail.selfMedia.export.wechat.emptyTitle",
+		)
+		expect(
+			screen.getByTestId("self-media-export-wechat-horizontal-preview").className,
+		).toContain("border-l")
+		expect(screen.getByTestId("self-media-export-confirm")).toBeDisabled()
+
+		fireEvent.click(screen.getByTestId("self-media-export-generate-wechat-covers"))
+
+		await waitFor(() => {
+			expect(onGenerateWechatCovers).toHaveBeenCalledWith({
+				postIndex: 0,
+				coverTypes: ["thumbnailCover", "heroCover"],
+			})
+		})
+	})
+
+	it("only requests the missing square cover when the horizontal cover exists", async () => {
+		const onGenerateWechatCovers = vi.fn().mockResolvedValue(true)
+		renderDialog({
+			exportMode: "wechatOfficial",
+			onGenerateWechatCovers,
+			posts: [
+				{
+					...posts[0],
+					heroCover: { path: "hero.png", fileId: "hero-file" },
+				},
+			],
+		})
+
+		expect(screen.getByTestId("self-media-export-wechat-cover-empty-state")).toHaveTextContent(
+			"detail.selfMedia.export.wechat.missingSquareTitle",
+		)
+
+		fireEvent.click(screen.getByTestId("self-media-export-generate-wechat-covers"))
+
+		await waitFor(() => {
+			expect(onGenerateWechatCovers).toHaveBeenCalledWith({
+				postIndex: 0,
+				coverTypes: ["thumbnailCover"],
+			})
+		})
+	})
+
+	it("shows the actual stitched WeChat cover output dimensions", () => {
+		renderDialog({
+			exportMode: "wechatOfficial",
+			exportSizeHintCss: { width: 1800, height: 540 },
+			posts: [
+				{
+					...posts[0],
+					thumbnailCover: { path: "thumb.png", fileId: "thumb-file" },
+					heroCover: { path: "hero.png", fileId: "hero-file" },
+				},
+			],
+		})
+
+		expect(screen.getByTestId("self-media-export-scale-size-2x")).toHaveTextContent(
+			"width=3600,height=1080",
+		)
 	})
 })

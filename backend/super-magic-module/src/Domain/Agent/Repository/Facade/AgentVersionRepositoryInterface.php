@@ -37,6 +37,14 @@ interface AgentVersionRepositoryInterface
     public function findCurrentOrLatestByCode(SuperMagicAgentDataIsolation $dataIsolation, string $code): ?AgentVersionEntity;
 
     /**
+     * 在事务内锁定并读取当前生效版本（is_current_version = 1）.
+     */
+    public function findCurrentVersionByCodeForUpdate(
+        SuperMagicAgentDataIsolation $dataIsolation,
+        string $code
+    ): ?AgentVersionEntity;
+
+    /**
      * 批量取当前生效版本（is_current_version = 1）.
      *
      * @param array<string> $codes

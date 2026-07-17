@@ -1,5 +1,5 @@
 import type { ChangeEvent, MouseEvent } from "react"
-import { memo, useRef, useState } from "react"
+import { memo, useEffect, useRef, useState } from "react"
 import { Search, X } from "lucide-react"
 
 import { cn } from "@/lib/utils"
@@ -29,13 +29,25 @@ const MobileBottomSearchBar = memo(function MobileBottomSearchBar({
 	onValueChange,
 	testIdPrefix,
 	clearButtonVisibility = "focus-or-value",
+	layout = "bottom",
+	onDismiss,
+	autoFocus = false,
+	onCompositionStart,
+	onCompositionEnd,
 	className,
 	disabled = false,
 }: MobileBottomSearchBarProps) {
 	const inputRef = useRef<HTMLInputElement>(null)
 	const [isInputFocused, setIsInputFocused] = useState(false)
 	const showClearButton =
-		!disabled && shouldShowClearButton(value, isInputFocused, clearButtonVisibility)
+		!disabled &&
+		(onDismiss != null || shouldShowClearButton(value, isInputFocused, clearButtonVisibility))
+
+	/** Toolbar inline mode focuses the input immediately when search mode opens */
+	useEffect(() => {
+		if (!autoFocus) return
+		inputRef.current?.focus()
+	}, [autoFocus])
 
 	/**
 	 * 输入变化始终回传给页面层，确保该组件保持纯受控模式，便于本地搜索和远端搜索共用。
@@ -65,20 +77,20 @@ const MobileBottomSearchBar = memo(function MobileBottomSearchBar({
 	 */
 	function handleClearMouseDown(event: MouseEvent<HTMLButtonElement>) {
 		event.preventDefault()
+		if (onDismiss) {
+			onDismiss()
+			return
+		}
 		onValueChange("")
 		setIsInputFocused(false)
 		inputRef.current?.blur()
 	}
 
+	const shellClassName =
+		layout === "inline" ? "shrink-0" : "shrink-0 bg-mobile-background px-[10px] pb-3 pt-2"
+
 	return (
-		<div
-			className={cn(
-				// Full-width shell fill so padding below the card pills matches page + GlobalSafeArea.
-				"shrink-0 bg-mobile-background px-[10px] pb-3 pt-2",
-				className,
-			)}
-			data-testid={`${testIdPrefix}-root`}
-		>
+		<div className={cn(shellClassName, className)} data-testid={`${testIdPrefix}-root`}>
 			<div className="flex items-center gap-2">
 				{/* Downward floating shadow matches prototype; dock upward shadow would darken ScrollEdgeFade above. */}
 				<div
@@ -93,6 +105,8 @@ const MobileBottomSearchBar = memo(function MobileBottomSearchBar({
 						onChange={handleValueChange}
 						onFocus={handleFocus}
 						onBlur={handleBlur}
+						onCompositionStart={onCompositionStart}
+						onCompositionEnd={onCompositionEnd}
 						placeholder={placeholder}
 						disabled={disabled}
 						className="min-w-0 flex-1 border-none bg-transparent text-[14px] leading-5 text-foreground outline-none placeholder:text-muted-foreground disabled:cursor-not-allowed disabled:opacity-60"

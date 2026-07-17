@@ -23,6 +23,7 @@ use App\ErrorCode\MCPErrorCode;
 use App\ErrorCode\ModeErrorCode;
 use App\ErrorCode\PermissionErrorCode;
 use App\ErrorCode\ServiceProviderErrorCode;
+use App\ErrorCode\SlidesTemplateErrorCode;
 use App\ErrorCode\TokenErrorCode;
 use App\ErrorCode\UserErrorCode;
 use App\ErrorCode\UserTaskErrorCode;
@@ -52,6 +53,7 @@ return [
         LongTermMemoryErrorCode::class => [45000, 45999],
         AppMenuErrorCode::class => [46000, 46999],
         MagicBaseErrorCode::class => [47000, 47999],
+        SlidesTemplateErrorCode::class => [47000, 47999],
         MCPErrorCode::class => [51500, 51599],
         SuperMagicErrorCode::class => [60000, 60999],
         DesignErrorCode::class => [14000, 14999],

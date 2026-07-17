@@ -91,6 +91,71 @@ class AgentMarketRepository extends AbstractRepository implements AgentMarketRep
         return $result;
     }
 
+    public function findById(int $id): ?AgentMarketEntity
+    {
+        /** @var null|AgentMarketModel $model */
+        $model = $this->agentMarketModel::query()->find($id);
+        if ($model === null) {
+            return null;
+        }
+
+        return new AgentMarketEntity($model->toArray());
+    }
+
+    public function countByCategoryId(int $categoryId): int
+    {
+        return $this->agentMarketModel::query()
+            ->where('category_id', $categoryId)
+            ->count();
+    }
+
+    public function countByCategoryIds(array $categoryIds): array
+    {
+        $categoryIds = array_values(array_unique(array_filter($categoryIds)));
+        if ($categoryIds === []) {
+            return [];
+        }
+
+        $models = $this->agentMarketModel::query()
+            ->select(['category_id'])
+            ->selectRaw('COUNT(*) as agent_count')
+            ->whereIn('category_id', $categoryIds)
+            ->groupBy('category_id')
+            ->get();
+
+        $counts = [];
+        foreach ($models as $model) {
+            $categoryId = (int) $model->getAttribute('category_id');
+            $counts[$categoryId] = (int) $model->getAttribute('agent_count');
+        }
+
+        return $counts;
+    }
+
+    public function countVisiblePublishedByCategoryIds(array $categoryIds): array
+    {
+        if ($categoryIds === []) {
+            return [];
+        }
+
+        $models = $this->agentMarketModel::query()
+            ->select(['category_id'])
+            ->selectRaw('COUNT(*) as crew_count')
+            ->whereIn('category_id', $categoryIds)
+            ->where('publish_status', PublishStatus::PUBLISHED->value)
+            ->where('is_hidden', false)
+            ->groupBy('category_id')
+            ->get();
+
+        $counts = [];
+        foreach ($models as $model) {
+            $categoryId = (int) $model->getAttribute('category_id');
+            $counts[$categoryId] = (int) $model->getAttribute('crew_count');
+        }
+
+        return $counts;
+    }
+
     /**
      * 根据 agent_code 查询市场记录（不限制发布状态）.
      */
@@ -177,9 +242,10 @@ class AgentMarketRepository extends AbstractRepository implements AgentMarketRep
             $builder->where('category_id', $query->getCategoryId());
         }
 
-        // 排序：精选优先，其次 sort_order 非空优先且数值越大越靠前；为空时回落按 id
+        // 排序：精选优先，其次排序值，再按雇佣次数，最后按 id 兜底。
         $builder->orderBy('is_featured', 'DESC');
         $builder->orderBy('sort_order', 'DESC');
+        $builder->orderBy('install_count', 'DESC');
         $builder->orderBy('id', 'DESC');
 
         // 分页查询
@@ -207,6 +273,7 @@ class AgentMarketRepository extends AbstractRepository implements AgentMarketRep
         ?string $agentCode,
         ?string $startTime,
         ?string $endTime,
+        ?array $categoryIds,
         string $orderBy,
         Page $page
     ): array {
@@ -247,6 +314,10 @@ class AgentMarketRepository extends AbstractRepository implements AgentMarketRep
         $endTime = trim((string) $endTime);
         if ($endTime !== '') {
             $builder->where('created_at', '<=', DateFormatUtil::normalizeQueryRangeEnd($endTime));
+        }
+
+        if (! empty($categoryIds)) {
+            $builder->whereIn('category_id', $categoryIds);
         }
 
         $idOrder = strtolower($orderBy) === 'asc' ? 'asc' : 'desc';
@@ -329,6 +400,26 @@ class AgentMarketRepository extends AbstractRepository implements AgentMarketRep
 
         if (array_key_exists('category_id', $payload)) {
             $model->category_id = $payload['category_id'];
+        }
+
+        if (array_key_exists('name_i18n', $payload)) {
+            $model->name_i18n = $payload['name_i18n'];
+        }
+
+        if (array_key_exists('description_i18n', $payload)) {
+            $model->description_i18n = $payload['description_i18n'];
+        }
+
+        if (array_key_exists('role_i18n', $payload)) {
+            $model->role_i18n = $payload['role_i18n'];
+        }
+
+        if (array_key_exists('icon', $payload)) {
+            $model->icon = $payload['icon'];
+        }
+
+        if (array_key_exists('icon_type', $payload)) {
+            $model->icon_type = $payload['icon_type'];
         }
 
         if ($model->isDirty() === false) {

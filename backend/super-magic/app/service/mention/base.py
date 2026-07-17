@@ -2,6 +2,7 @@
 from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
+
 from agentlang.logger import get_logger
 
 if TYPE_CHECKING:
@@ -51,6 +52,17 @@ class BaseMentionHandler(ABC):
             str: 提示文本，已通过 horizon 推送时返回空字符串
         """
         pass
+
+    async def get_final_tip(self, agent_context: Optional["AgentContext"] = None) -> str:
+        """返回当前 handler 完成本轮所有 mention 后的统一提示文本。
+
+        Args:
+            agent_context: 可选的 AgentContext 实例，供 handler 统一推送 Horizon 通知
+
+        Returns:
+            str: 统一提示文本，已通过 Horizon 推送或无需提示时返回空字符串
+        """
+        return ""
 
     @staticmethod
     def normalize_path(file_path: str) -> str:

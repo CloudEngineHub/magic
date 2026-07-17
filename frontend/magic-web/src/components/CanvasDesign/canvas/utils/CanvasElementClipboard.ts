@@ -25,8 +25,8 @@ export const CANVAS_ELEMENT_CLIPBOARD_MIME_TYPE = "web application/x-canvas-desi
  */
 export const CANVAS_ELEMENT_FILE_BLOB_MIME_TYPE = "web application/x-canvas-design-file"
 
-const CANVAS_ELEMENT_CLIPBOARD_SOURCE = "canvas-design"
-const CANVAS_ELEMENT_CLIPBOARD_VERSION = 1
+export const CANVAS_ELEMENT_CLIPBOARD_SOURCE = "canvas-design"
+export const CANVAS_ELEMENT_CLIPBOARD_VERSION = 1
 const DEFAULT_CLIPBOARD_FILENAME_FILE_FLAG = "__canvasDesignDefaultClipboardFilename"
 
 export type CanvasElementClipboardOperation = "copy-elements" | "copy-as-png"

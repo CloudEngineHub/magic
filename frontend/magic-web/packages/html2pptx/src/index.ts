@@ -1,50 +1,53 @@
-import type { ExportOptions, ExportHandle } from "./types/index"
-import { configureLogger } from "./logger"
-import { createSandbox } from "./renderer"
-import { DEFAULT_CONFIG } from "./utils/unit"
-import { runExport } from "./export/export-slides"
+import type { ExportOptions, ExportHandle } from "./api/options"
+import { configureLogger, resetLogger } from "./logger"
+import { HtmlRenderSandbox } from "./sandbox"
+import { DEFAULT_CONFIG } from "./shared/unit"
+import { runExport } from "./pipeline/export-slides"
+import type { Html2PptxRuntime } from "./runtime"
 
 /**
- * 导出 HTML 为 PPTX 文件
+ * Export HTML as a PPTX file
  *
- * 支持并发：每次调用返回独立的 { promise, cancel }，互不干扰。
+ * Supports concurrent exports: each call returns an independent { promise, cancel } pair.
  *
- * @param content - HTML 内容字符串，或多页 HTML 数组
- * @param options - 导出选项
- * @returns ExportHandle — promise 等待完成，cancel() 取消本次导出
+ * @param content - HTML content string, or an array of HTML pages
+ * @param options - export options
+ * @returns ExportHandle - promise waits for completion, and cancel() aborts this export
  *
  * @example
  * ```ts
- * // 基础用法
+ * // Basic usage
  * const { promise } = exportPPTX('<div class="slide">...</div>')
  * await promise
  *
- * // 接入 console
+ * // Use console logging
  * exportPPTX(html, { logger: console })
  *
- * // 只收 warn 以上
+ * // Only collect warn and above
  * exportPPTX(html, { logger: console, logLevel: "warn" })
  *
- * // 并发导出，各自独立取消
+ * // Concurrent exports with independent cancellation
  * const exportA = exportPPTX(htmlA)
  * const exportB = exportPPTX(htmlB, { fileName: 'b.pptx' })
  * exportA.cancel()
  * await exportB.promise
  * ```
  */
-export function exportPPTX(
-	content: string | string[],
-	options?: ExportOptions,
-): ExportHandle {
-	const controller = new AbortController()
-	const promise = runExportPipeline(content, options, controller.signal)
-	return { promise, cancel: () => controller.abort() }
+export function createPptxExporter(runtime: Html2PptxRuntime = {}) {
+	return function exportPPTX(content: string | string[], options?: ExportOptions): ExportHandle {
+		const controller = new AbortController()
+		const promise = runExportPipeline(content, options, controller.signal, runtime)
+		return { promise, cancel: () => controller.abort() }
+	}
 }
+
+export const exportPPTX = createPptxExporter()
 
 async function runExportPipeline(
 	content: string | string[],
 	options: ExportOptions | undefined,
 	signal: AbortSignal,
+	runtime: Html2PptxRuntime,
 ): Promise<void> {
 	configureLogger({
 		minLevel: options?.logLevel,
@@ -55,7 +58,11 @@ async function runExportPipeline(
 	const fileName = options?.fileName ?? "export.pptx"
 	const htmlSlides = Array.isArray(content) ? content : [content]
 
-	const sandbox = await createSandbox(config)
+	const sandbox = runtime.createSandbox
+		? runtime.createSandbox(config)
+		: new HtmlRenderSandbox(config, {
+				ReadyController: runtime.sandboxReadyController,
+			})
 	try {
 		await runExport({
 			config,
@@ -63,18 +70,39 @@ async function runExportPipeline(
 			htmlSlides,
 			sandbox,
 			skipFailedPages: options?.skipFailedPages ?? false,
+			autoSize: options?.autoSize ?? false,
 			onSlideProgress: options?.onSlideProgress,
+			onResourceError: options?.onResourceLoadError,
+			fontResolver: options?.fontResolver,
+			fontMissPolicy: options?.fontMissPolicy,
 			signal,
+			runtime: runtime.pipeline,
 		})
-	}
-	catch (error) {
+	} catch (error) {
 		throw error
-	}
-	finally {
+	} finally {
 		sandbox.destroy()
+		if (options?.logLevel || options?.logger) resetLogger()
 	}
 }
 
-export type { SlideConfig, ExportOptions, ExportPageContext, ExportHandle } from "./types/index"
-export { DEFAULT_CONFIG } from "./utils/unit"
+export type {
+	SlideConfig,
+	ExportOptions,
+	ExportPageContext,
+	ExportHandle,
+	ResourceLoadError,
+} from "./api/options"
+export type {
+	EmbedFontInput,
+	FontMissPolicy,
+	FontResolver,
+	UsedFont,
+} from "./api/font"
+export { DEFAULT_CONFIG } from "./shared/unit"
 export { LogLevel } from "./logger"
+export type { ExternalLogger } from "./logger"
+export {
+	captureVideoFirstFrameDataUrl,
+	type CaptureVideoFirstFrameOptions,
+} from "./materialize/video-first-frame"

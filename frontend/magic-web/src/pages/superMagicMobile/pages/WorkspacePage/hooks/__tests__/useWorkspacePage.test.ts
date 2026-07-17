@@ -10,8 +10,37 @@ import {
 import { projectStore, workspaceStore } from "@/pages/superMagic/stores/core"
 import { useWorkspacePage } from "../useWorkspacePage"
 
+vi.hoisted(() => {
+	const values = new Map<string, string>()
+	const localStorageMock = {
+		clear: () => values.clear(),
+		getItem: (key: string) => values.get(key) ?? null,
+		key: (index: number) => Array.from(values.keys())[index] ?? null,
+		removeItem: (key: string) => values.delete(key),
+		setItem: (key: string, value: string) => values.set(key, value),
+		get length() {
+			return values.size
+		},
+	}
+
+	Object.defineProperty(globalThis, "localStorage", {
+		value: localStorageMock,
+		configurable: true,
+	})
+	Object.defineProperty(globalThis.window, "localStorage", {
+		value: localStorageMock,
+		configurable: true,
+	})
+})
+
 const getProjectsMock = vi.fn()
 const navigateMock = vi.fn()
+const deleteProjectMock = vi.fn()
+const projectActionsMockState = vi.hoisted(() => ({
+	options: null as null | {
+		onDeleteProjectConfirmed?: (project: ProjectListItem) => Promise<void>
+	},
+}))
 
 let routeWorkspaceId = "workspace-a"
 
@@ -69,6 +98,22 @@ vi.mock("@/routes/hooks/useNavigate", () => ({
 	default: () => navigateMock,
 }))
 
+vi.mock("@/utils/manualPerfLogger", () => ({
+	manualPerfLogger: {
+		count: vi.fn(),
+		ensureSession: vi.fn(),
+		finishSession: vi.fn(),
+		isEnabled: () => false,
+		markEnd: vi.fn(),
+		markStart: vi.fn(),
+		measure: (_name: string, callback: () => unknown) => callback(),
+		now: () => 0,
+		recordDuration: vi.fn(),
+		recordMetric: vi.fn(),
+	},
+	measureManualPerfOperation: (_name: string, callback: () => unknown) => callback(),
+}))
+
 vi.mock("@/apis", () => ({
 	SuperMagicApi: {
 		getProjectsWithCollaboration: (...args: unknown[]) => getProjectsMock(...args),
@@ -85,18 +130,21 @@ vi.mock("@/pages/superMagic/services", () => ({
 		handleCreateProject: vi.fn(),
 		switchProjectInMobile: vi.fn(),
 		clearProjectAndTopicSelection: vi.fn(),
-		deleteProject: vi.fn(),
+		deleteProject: (...args: unknown[]) => deleteProjectMock(...args),
 	},
 }))
 
 vi.mock("@/pages/superMagicMobile/components/ProjectList/hooks/useProjectActions", () => ({
-	useProjectListActions: () => ({
-		openActionsPopup: vi.fn(),
-		openProjectDeleteConfirm: vi.fn(),
-		updateCurrentActionItem: vi.fn(),
-		handlePinProject: vi.fn(),
-		projectActionComponents: null,
-	}),
+	useProjectListActions: (options: NonNullable<typeof projectActionsMockState.options>) => {
+		projectActionsMockState.options = options
+		return {
+			openActionsPopup: vi.fn(),
+			openProjectDeleteConfirm: vi.fn(),
+			updateCurrentActionItem: vi.fn(),
+			handlePinProject: vi.fn(),
+			projectActionComponents: null,
+		}
+	},
 }))
 
 describe("useWorkspacePage", () => {
@@ -104,6 +152,8 @@ describe("useWorkspacePage", () => {
 		routeWorkspaceId = "workspace-a"
 		getProjectsMock.mockReset()
 		navigateMock.mockReset()
+		deleteProjectMock.mockReset()
+		projectActionsMockState.options = null
 
 		runInAction(() => {
 			projectStore.setProjects([
@@ -122,6 +172,8 @@ describe("useWorkspacePage", () => {
 
 	afterEach(() => {
 		vi.clearAllMocks()
+		projectStore.reset()
+		workspaceStore.reset()
 	})
 
 	it("shows loading with empty list before the active workspace fetch completes", async () => {
@@ -277,5 +329,73 @@ describe("useWorkspacePage", () => {
 
 		expect(result.current.projects).toHaveLength(1)
 		expect(result.current.projects[0]?.project_name).toBe("Project B1")
+	})
+
+	it("keeps pagination disabled while project delete refresh is replacing the first page", async () => {
+		const firstPageProjects = Array.from({ length: 100 }, (_, index) =>
+			createProject({
+				id: `project-${index + 1}`,
+				project_name: `Project ${index + 1}`,
+				workspace_id: "workspace-a",
+			}),
+		)
+		let resolveRefresh:
+			| ((value: { list: ProjectListItem[]; total: number }) => void)
+			| undefined
+
+		getProjectsMock
+			.mockResolvedValueOnce({
+				list: firstPageProjects,
+				total: 100,
+			})
+			.mockImplementationOnce(
+				() =>
+					new Promise((resolve) => {
+						resolveRefresh = resolve
+					}),
+			)
+		deleteProjectMock.mockImplementation(async (project: ProjectListItem) => {
+			// Mirror projectService.deleteProject optimistic store removal before the list refresh.
+			projectStore.removeProject(project.id)
+			return null
+		})
+
+		const { result } = renderHook(() => useWorkspacePage())
+
+		await waitFor(() => {
+			expect(result.current.projects).toHaveLength(100)
+		})
+		expect(result.current.hasMore).toBe(false)
+
+		const firstProject = firstPageProjects[0]
+		if (!firstProject) throw new Error("missing mock project")
+
+		let deletePromise!: Promise<void>
+		await act(async () => {
+			deletePromise = projectActionsMockState.options?.onDeleteProjectConfirmed?.(
+				firstProject,
+			) as Promise<void>
+		})
+
+		await waitFor(() => {
+			expect(result.current.projects).toHaveLength(99)
+		})
+		expect(result.current.hasMore).toBe(false)
+
+		await act(async () => {
+			resolveRefresh?.({
+				list: firstPageProjects.slice(1),
+				total: 99,
+			})
+			await deletePromise
+		})
+
+		expect(getProjectsMock).toHaveBeenCalledTimes(2)
+		expect(getProjectsMock).toHaveBeenNthCalledWith(2, {
+			workspace_id: "workspace-a",
+			page: 1,
+			page_size: 100,
+		})
+		expect(result.current.hasMore).toBe(false)
 	})
 })

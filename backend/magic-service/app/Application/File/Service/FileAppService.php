@@ -273,6 +273,69 @@ class FileAppService extends AbstractAppService
     }
 
     /**
+     * 获取同时包含公网和内网 endpoint 的 STS 凭证.
+     *
+     * 以公网凭证为基底，叠加内网 endpoint / host 字段，供 super-magic 区分使用：
+     *  - 下载/上传走内网 endpoint（internal_endpoint / internal_host）
+     *  - 生成 presigned URL 走公网 endpoint（endpoint / host）
+     *
+     * 参数签名与 getStsTemporaryCredentialV2 完全一致，调用方只需替换方法名。
+     *
+     * @param string $organizationCode 组织编码
+     * @param string $storage 存储类型（private/public/sandbox）
+     * @param string $dir 上传目录
+     * @param int $expires 过期时间（秒）
+     * @param bool $autoBucket 是否自动拼接 bucket 前缀
+     * @param array $options 额外选项，internal_endpoint 选项会被自动处理
+     * @return array 合并后的 STS 凭证，以公网为基底，含 internal_endpoint / internal_host 字段
+     */
+    public function getDualEndpointStsCredentialV2(
+        string $organizationCode,
+        string $storage,
+        string $dir = '',
+        int $expires = 3600,
+        bool $autoBucket = true,
+        array $options = []
+    ): array {
+        // 公网调用：去除 internal_endpoint 选项，确保获取公网 endpoint
+        $publicOptions = array_diff_key($options, ['internal_endpoint' => true]);
+
+        // 以公网为基底
+        $publicSts = $this->getStsTemporaryCredentialV2(
+            $organizationCode,
+            $storage,
+            $dir,
+            $expires,
+            $autoBucket,
+            $publicOptions
+        );
+
+        // local 存储没有内网 endpoint 概念，直接返回，避免生成无用的 local credential 污染缓存
+        if ($publicSts['platform'] === AdapterName::LOCAL) {
+            return $publicSts;
+        }
+
+        // 获取内网凭证（仅对云存储有意义）
+        $internalSts = $this->getStsTemporaryCredentialV2(
+            $organizationCode,
+            $storage,
+            $dir,
+            $expires,
+            $autoBucket,
+            array_merge($options, ['internal_endpoint' => true])
+        );
+
+        // 以公网为基底，叠加内网字段
+        $result = $publicSts;
+        $result['temporary_credential']['internal_endpoint'] = $internalSts['temporary_credential']['endpoint'] ?? null;
+        // TOS 有 host 字段，OSS 和 S3 没有
+        if (isset($internalSts['temporary_credential']['host'])) {
+            $result['temporary_credential']['internal_host'] = $internalSts['temporary_credential']['host'];
+        }
+        return $result;
+    }
+
+    /**
      * Chunk file upload - dedicated method for large file upload using chunks.
      *
      * @param ChunkUploadFile $chunkUploadFile Chunk upload file object

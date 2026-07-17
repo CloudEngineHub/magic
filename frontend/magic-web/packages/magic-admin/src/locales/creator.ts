@@ -1,78 +1,116 @@
-import i18n from "i18next"
-import type { i18n as i18nType } from "i18next"
-import { initReactI18next } from "react-i18next"
+import i18next, { type i18n as I18nInstance } from "i18next"
 import resourcesToBackend from "i18next-resources-to-backend"
+import { initReactI18next } from "react-i18next"
 
-export enum Language {
-	zhCN = "zh_CN",
-	enUS = "en_US",
+export type LocaleResourceLoader = () => Promise<unknown>
+export type LocaleResourceLoaderMap = Record<string, LocaleResourceLoader>
+
+interface ResourceModule {
+	default?: unknown
 }
 
-// 自动引入所有 json 文件
-const zhCNModules = import.meta.glob("./zh_CN/**/*.json", { eager: true })
-const enUSModules = import.meta.glob("./en_US/**/*.json", { eager: true })
+const DEFAULT_LANGUAGE = "zh_CN"
+const FALLBACK_LANGUAGE = "zh_CN"
+const NAMESPACE_ALIASES: Record<string, string> = {
+	common: "admin/common",
+}
+const DEFAULT_NAMESPACES = ["admin/common", "translation"]
 
-// 从文件路径中提取命名空间
-function extractNamespaces(modules: Record<string, any>): string[] {
-	const namespaces = new Set<string>()
+function normalizeLanguage(language?: string) {
+	return language || DEFAULT_LANGUAGE
+}
 
-	Object.keys(modules).forEach((path) => {
-		// 从路径中提取命名空间
-		// 例如: ./zh_CN/ai/model.json -> ai/model
-		const match = path.match(/\.\/[^/]+\/(.+)\.json$/)
-		if (match) {
-			namespaces.add(match[1])
-		}
+function normalizeNamespace(namespace: string) {
+	return NAMESPACE_ALIASES[namespace] ?? namespace
+}
+
+function getResourcePathSuffix(language: string, namespace: string) {
+	return `/${language}/${normalizeNamespace(namespace)}.json`
+}
+
+function getResourceNamespaces(localeModules: LocaleResourceLoaderMap) {
+	const namespaces = new Set(DEFAULT_NAMESPACES)
+
+	Object.keys(localeModules).forEach((path) => {
+		const normalizedPath = path.replace(/\\/g, "/")
+		const match = normalizedPath.match(/(?:^|\/)[a-z]{2,3}_[A-Z]{2}\/(.+)\.json$/)
+		const namespace = match?.[1]
+
+		if (!namespace?.startsWith("admin/")) return
+		namespaces.add(normalizeNamespace(namespace))
 	})
 
 	return Array.from(namespaces)
 }
 
-// 获取资源
-function getResource(langModules: Record<string, any>, ns: string) {
-	// ns 例子: user/profile
-	// 文件路径例子: ./zh_CN/user/profile.json
-	const path = Object.keys(langModules).find((key) => key.endsWith(`${ns}.json`))
-	if (path) {
-		return langModules[path].default
-	}
-	return {}
+function findResourceLoader(
+	localeModules: LocaleResourceLoaderMap,
+	language: string,
+	namespace: string,
+) {
+	const suffix = getResourcePathSuffix(language, namespace)
+	return Object.entries(localeModules).find(([path]) => path.endsWith(suffix))?.[1] ?? null
 }
 
-export const createI18nNext = (defaultLanguage: string): i18nType => {
-	// 自动发现所有命名空间
-	const zhCNNamespaces = extractNamespaces(zhCNModules)
-	const enUSNamespaces = extractNamespaces(enUSModules)
+async function loadResource(
+	localeModules: LocaleResourceLoaderMap,
+	language: string,
+	namespace: string,
+) {
+	const loader = findResourceLoader(localeModules, language, namespace)
+	if (!loader) return {}
 
-	// 合并所有命名空间，确保两种语言都有相同的命名空间
-	const allNamespaces = Array.from(new Set([...zhCNNamespaces, ...enUSNamespaces]))
+	const module = (await loader()) as ResourceModule
+	return module.default ?? module
+}
 
-	// 确保 common 命名空间在最前面
-	const sortedNamespaces = allNamespaces.sort((a, b) => {
-		if (a.includes("common")) return -1
-		if (b.includes("common")) return 1
-		return a.localeCompare(b)
-	})
+export function createAdminI18n(localeModules: LocaleResourceLoaderMap) {
+	const adminI18n = i18next.createInstance()
+	const namespaces = getResourceNamespaces(localeModules)
+	let initPromise: Promise<I18nInstance> | null = null
+	let backendRegistered = false
 
-	i18n.use(initReactI18next).use(
-		resourcesToBackend((language: string, namespace: string) => {
-			if (language === Language.zhCN) {
-				return Promise.resolve(getResource(zhCNModules, namespace))
+	const initAdminI18n = async (language?: string) => {
+		const nextLanguage = normalizeLanguage(language)
+
+		if (!initPromise) {
+			if (!backendRegistered) {
+				adminI18n.use(initReactI18next).use(
+					resourcesToBackend((lng: string, namespace: string) => {
+						return loadResource(localeModules, normalizeLanguage(lng), namespace)
+					}),
+				)
+				backendRegistered = true
 			}
-			if (language === Language.enUS) {
-				return Promise.resolve(getResource(enUSModules, namespace))
-			}
-			return Promise.resolve({})
-		}),
-	)
 
-	i18n.init({
-		lng: defaultLanguage,
-		fallbackLng: defaultLanguage,
-		defaultNS: ["translation", "common"],
-		ns: ["translation", ...sortedNamespaces],
-	}).catch((error) => {
-		console.log(error)
-	})
-	return i18n
+			initPromise = adminI18n
+				.init({
+					lng: nextLanguage,
+					fallbackLng: FALLBACK_LANGUAGE,
+					defaultNS: "admin/common",
+					ns: namespaces,
+					fallbackNS: ["translation"],
+					load: "currentOnly",
+					react: {
+						useSuspense: false,
+					},
+					interpolation: {
+						escapeValue: false,
+					},
+				})
+				.then(() => adminI18n)
+		}
+
+		await initPromise
+		if (adminI18n.language !== nextLanguage) {
+			await adminI18n.changeLanguage(nextLanguage)
+		}
+
+		return adminI18n
+	}
+
+	return {
+		adminI18n,
+		initAdminI18n,
+	}
 }

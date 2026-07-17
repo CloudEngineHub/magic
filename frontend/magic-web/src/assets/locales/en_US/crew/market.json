@@ -13,6 +13,7 @@
 		"starCrew": "Star Crew",
 		"techDev": "Tech & Dev"
 	},
+	"chat": "Chat",
 	"createCrew": "Create Crew",
 	"crewConversation": {
 		"back": "Back",
@@ -195,9 +196,9 @@
 				"team": "Team"
 			},
 			"startChat": "Start chat",
+			"title": "Crew Details",
 			"unpublishedAction": "Unpublished",
-			"unpublishedNotice": "This Crew is not published yet and is currently unavailable. Please publish it on web first.",
-			"title": "Crew Details"
+			"unpublishedNotice": "This Crew is not published yet and is currently unavailable. Please publish it on web first."
 		},
 		"disable": "Disable",
 		"disableConfirm": {
@@ -310,6 +311,9 @@
 	},
 	"noMoreData": "You've seen everything!",
 	"noResults": "No results found.",
+	"pptEmployee": {
+		"delivered": "<strong>{{count}}</strong> presentations delivered"
+	},
 	"skillDetailDialog": {
 		"collapse": "Collapse",
 		"emptyName": "Untitled Skill",
@@ -534,6 +538,5 @@
 			"updateFailed": "Failed to update skill. Please try again later."
 		},
 		"title": "Update Skill"
-	},
-	"chat": "Chat"
+	}
 }

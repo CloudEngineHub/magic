@@ -1,44 +1,48 @@
-"""find_skills 工具：多关键词聚合检索 Skill
+"""find_skills 工具：按搜索位置聚合检索 Skill
 
-对模型只暴露 keywords 参数；来源选择、排序权重、top_k 等全部内部决定。
-检索结果按关键词分组返回，附推荐项与 next_step 指引。
+对模型暴露搜索关键词和搜索位置；具体 Provider、排序权重、top_k 等由内部决定。
+检索结果按关键词分组返回，并保留 Provider 信息供后续安装使用。
 """
 from __future__ import annotations
 
 import json
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Literal, Optional
 
-from pydantic import Field, field_validator, model_validator
+from pydantic import ConfigDict, Field, field_validator, model_validator
 
-from app.i18n import i18n
 from agentlang.context.tool_context import ToolContext
 from agentlang.logger import get_logger
 from agentlang.tools.tool_result import ToolResult
 from app.core.entity.message.server_message import DisplayType, FileContent, ToolDetail
+from app.core.skill_utils.search_service import KeywordResult, SearchAggregator, SearchResult
+from app.i18n import i18n
 from app.tools.core import BaseTool, BaseToolParams, tool
-from app.core.skill_utils.search_service import SearchAggregator, SearchResult
 
 logger = get_logger(__name__)
 
 
 # npx / github 不支持搜索，不作为 find_skills 的有效来源
-# system 为内置系统 skill（agents/skills/ 目录），优先级最高
+# system 聚合本地已可用 skill，其他来源通过互联网检索
 _VALID_PROVIDERS = {"system", "my_library", "market", "skillhub", "clawhub"}
+_LOCAL_SEARCH_PROVIDERS = ("system",)
+_ONLINE_SEARCH_PROVIDERS = ("my_library", "market", "skillhub", "clawhub")
+
+SearchScope = Literal["local", "online", "auto"]
 
 
 class FindSkillsParams(BaseToolParams):
     """find_skills 工具参数"""
 
+    model_config = ConfigDict(extra="forbid")
+
     keywords: List[str] = Field(
         default_factory=list,
         description=(
             "<!--zh: 搜索关键词或意图描述（数组），每个关键词独立检索后归并去重。"
-            "若要列出我的技能库全部内容，传空数组 [] 并设置 providers=[\"my_library\"]。"
-            "若要列出全部系统内置 skill，传空数组 [] 并设置 providers=[\"system\"]。"
+            "若要列出全部本地可用 skill，传空数组 [] 并设置 search_scope=\"local\"。"
             "例如：[\"天气\", \"日历同步\"]-->\n"
             "Search keywords or intent descriptions (array); each keyword is queried independently then merged. "
-            "To list all skills in my_library, pass [] and set providers=[\"my_library\"]. "
-            "To list all built-in system skills, pass [] and set providers=[\"system\"]. "
+            "To list all locally available skills, pass [] and set search_scope=\"local\". "
             "E.g. [\"weather\", \"calendar sync\"]."
         ),
         max_length=10,
@@ -53,18 +57,16 @@ class FindSkillsParams(BaseToolParams):
             "E.g. \"I need to query real-time weather and 3-day forecast for Chinese cities\"."
         ),
     )
-    providers: Optional[List[str]] = Field(
-        None,
+    search_scope: SearchScope = Field(
+        "auto",
         description=(
-            "<!--zh: 限定搜索来源（可选）。可选值：system | my_library | market | skillhub | clawhub。"
-            "system 为内置系统 skill（优先级最高），不传则同时搜索所有来源。"
-            "keywords 为空时此字段必须且只能为 [\"my_library\"] 或 [\"system\"]。"
-            "例如：[\"market\", \"skillhub\"]-->\n"
-            "Restrict search to specific providers (optional). "
-            "Options: system | my_library | market | skillhub | clawhub. "
-            "system = built-in system skills (highest priority). "
-            "Omit to search all sources. When keywords is [], this must be [\"my_library\"] or [\"system\"]. "
-            "E.g. [\"market\", \"skillhub\"]."
+            "<!--zh: 搜索位置。local=搜索本地已可直接读取的 skill；"
+            "online=搜索互联网来源；auto=先搜索本地，没有有效候选时再搜索互联网。"
+            "本地结果无需安装；互联网结果会返回 provider 和 id，供 install_skills 使用。-->\n"
+            "Search location. local searches skills already available on this machine; "
+            "online searches internet sources; auto searches locally first and only searches online "
+            "when no relevant local candidate is found. "
+            "Local results can be read directly. Online results include provider and id for install_skills."
         ),
     )
 
@@ -78,71 +80,53 @@ class FindSkillsParams(BaseToolParams):
                 raise ValueError(f"keywords 格式无效，应为数组，收到字符串: {v!r}")
         return v
 
-    @field_validator("providers", mode="before")
-    @classmethod
-    def _validate_providers(cls, v: Optional[List[str]]) -> Optional[List[str]]:
-        if v is None:
-            return v
-        # 兼容模型将数组错误序列化为 JSON 字符串的情况，如 "[\"my_library\"]"
-        if isinstance(v, str):
-            # 空字符串视为未传参数
-            if not v.strip():
-                return None
-            try:
-                parsed = json.loads(v)
-                # JSON 解析成功后继续归一化，兼容 `"system"` 与 `"system,my_library"`
-                v = _normalize_provider_values(parsed)
-            except json.JSONDecodeError:
-                # 裸字符串（如 `system` 或 `system,my_library`），按逗号拆分后处理
-                v = _normalize_provider_values(v)
-        else:
-            v = _normalize_provider_values(v)
-        if not v:
-            return None
-        invalid = [p for p in v if p not in _VALID_PROVIDERS]
-        if invalid:
-            raise ValueError(
-                f"无效 provider：{invalid}，可选值：{sorted(_VALID_PROVIDERS)}"
-            )
-        return v
-
     @model_validator(mode="after")
     def _validate_empty_keywords(self) -> "FindSkillsParams":
-        if not self.keywords:
-            _list_all_providers = {"my_library", "system"}
-            if not self.providers or not all(p in _list_all_providers for p in self.providers):
-                raise ValueError(
-                    "keywords 为空时，providers 必须且只能为 [\"my_library\"] 或 [\"system\"]"
-                )
+        if not self.keywords and self.search_scope == "online":
+            raise ValueError(
+                "search_scope=\"online\" 时 keywords 不能为空"
+            )
         return self
+
+    def resolve_providers(self) -> List[str]:
+        """将模型填写的搜索位置转换为内部 Provider 列表。"""
+        if self.search_scope == "local":
+            return list(_LOCAL_SEARCH_PROVIDERS)
+        if self.search_scope == "online":
+            return list(_ONLINE_SEARCH_PROVIDERS)
+        return []
 
 
 @tool()
 class FindSkillsTool(BaseTool[FindSkillsParams]):
     """<!--zh
-    按关键词检索可用 skill，来源包括：系统内置（最高优先级）、我的技能库、Magic 市场、SkillHub、ClawHub。
+    按关键词在本地或互联网检索可用 skill。
+    search_scope=local 搜索本地已可用 skill；search_scope=online 搜索互联网来源；
+    search_scope=auto 先搜索本地，仅对没有本地候选的关键词继续搜索互联网。
     支持多关键词批量检索，结果按关键词分组，附带推荐项和使用指引。
     找到候选后：
-    - provider=system（builtin=true）：直接调用 read_skills 加载，无需安装；
+    - provider=system：直接调用 read_skills 加载，无需安装；
     - 其他来源：有 ≥2 个候选时先用 ask_user(multi_select) 让用户选择，再调用 install_skills 安装；
       只有 1 个强匹配时，可直接向用户确认后安装。
-    若用户想查看自己技能库的全部内容，使用 keywords=[] + providers=["my_library"]。
-    若用户想查看系统内置 skill 的全部内容，使用 keywords=[] + providers=["system"]。
+    调用 install_skills 时必须原样使用候选结果中的 provider 和 id。
+    若用户想查看全部本地可用 skill，使用 keywords=[] + search_scope="local"。
     -->
-    Search for available skills by keywords across enabled sources
-    (system built-ins with highest priority, my_library, market, skillhub, clawhub).
+    Search for available skills locally or through internet sources.
+    Use search_scope=local for skills already available on this machine, online for internet sources,
+    or auto to search locally first and only search online for keywords with no local candidates.
     Supports multiple keywords; results are grouped by keyword with recommendations and usage hints.
-    For builtin=true candidates (provider=system): load directly with read_skills, no install needed.
+    For provider=system candidates: load directly with read_skills, no install needed.
     For other candidates: when ≥2 exist, call ask_user(multi_select) before install_skills.
     For a single strong match, confirm with the user then install directly.
-    To list all skills in my_library, use keywords=[] with providers=["my_library"].
-    To list all system built-in skills, use keywords=[] with providers=["system"].
+    Pass the candidate provider and id unchanged to install_skills.
+    To list all locally available skills, use keywords=[] with search_scope="local".
     """
 
     async def get_before_tool_call_friendly_action_and_remark(
         self, tool_name: str, tool_context: ToolContext, arguments: Dict[str, Any] = None
     ) -> Dict:
         args = arguments or {}
+        scope = args.get("search_scope", "auto")
         kws = args.get("keywords", [])
         if isinstance(kws, str):
             try:
@@ -150,19 +134,25 @@ class FindSkillsTool(BaseTool[FindSkillsParams]):
             except (json.JSONDecodeError, ValueError):
                 kws = []
         kw_str = "、".join(kws) if kws else i18n.translate("find_skills.keywords_all", category="tool.messages")
+
+        action_key = "find_skills" if scope == "auto" else f"find_skills.{scope}"
+        if scope == "local":
+            searching_key = "find_skills.searching.local_keyword" if kws else "find_skills.searching.local"
+        elif scope == "online":
+            searching_key = "find_skills.searching.online"
+        else:
+            searching_key = "find_skills.searching.auto"
+
         return {
-            "action": i18n.translate("find_skills", category="tool.actions"),
-            "remark": i18n.translate("find_skills.searching", category="tool.messages", keywords=kw_str),
+            "action": i18n.translate(action_key, category="tool.actions"),
+            "remark": i18n.translate(searching_key, category="tool.messages", keywords=kw_str),
             "tool_name": tool_name,
         }
 
     async def execute(self, tool_context: ToolContext, params: FindSkillsParams) -> ToolResult:
         aggregator = SearchAggregator()
-        result: SearchResult = await aggregator.search_many(
-            params.keywords,
-            providers=params.providers,
-            query=params.query,
-        )
+        providers = params.resolve_providers()
+        result = await self._search(aggregator, params, providers)
         content = _format_result(result)
 
         total = sum(len(kr.candidates) for kr in result.keyword_results)
@@ -172,7 +162,8 @@ class FindSkillsTool(BaseTool[FindSkillsParams]):
             extra_info={
                 "total_candidates": total,
                 "keywords": params.keywords,
-                "providers": params.providers,
+                "providers": providers,
+                "search_scope": params.search_scope,
                 # 供 get_tool_detail 展示用的 Markdown，与给模型的 XML 分离
                 "md_content": _format_result_md(result),
             },
@@ -182,20 +173,18 @@ class FindSkillsTool(BaseTool[FindSkillsParams]):
         extra = result.extra_info or {}
         total = extra.get("total_candidates", 0)
         kws = extra.get("keywords", [])
-        providers = extra.get("providers")
+        scope = extra.get("search_scope", "auto")
         kw_str = "、".join(kws) if kws else i18n.translate("find_skills.keywords_all", category="tool.messages")
-        # providers 为空或等于全量来源时，不在 remark 中展示来源
-        is_partial = providers and set(providers) != _VALID_PROVIDERS
-        if is_partial:
-            return i18n.translate(
-                "find_skills.searched_with_providers",
-                category="tool.messages",
-                keywords=kw_str,
-                providers="、".join(providers),
-                total=total,
-            )
+
+        if scope == "local":
+            searched_key = "find_skills.searched.local_keyword" if kws else "find_skills.searched.local"
+        elif scope == "online":
+            searched_key = "find_skills.searched.online"
+        else:
+            searched_key = "find_skills.searched.auto"
+
         return i18n.translate(
-            "find_skills.searched",
+            searched_key,
             category="tool.messages",
             keywords=kw_str,
             total=total,
@@ -220,6 +209,74 @@ class FindSkillsTool(BaseTool[FindSkillsParams]):
                 content=md_content,
             ),
         )
+
+    async def _search(
+        self,
+        aggregator: SearchAggregator,
+        params: FindSkillsParams,
+        providers: List[str],
+    ) -> SearchResult:
+        """根据搜索位置执行单范围搜索或本地优先的自动降级搜索。"""
+        if params.search_scope != "auto":
+            return await aggregator.search_many(
+                params.keywords,
+                providers=providers,
+                query=params.query,
+            )
+
+        local_result = await aggregator.search_many(
+            params.keywords,
+            providers=list(_LOCAL_SEARCH_PROVIDERS),
+            query=params.query,
+        )
+        if not params.keywords:
+            return local_result
+
+        missing_keywords = [
+            keyword_result.keyword
+            for keyword_result in local_result.keyword_results
+            if not keyword_result.candidates
+        ]
+        if not missing_keywords:
+            return local_result
+
+        online_result = await aggregator.search_many(
+            missing_keywords,
+            providers=list(_ONLINE_SEARCH_PROVIDERS),
+            query=params.query,
+        )
+        return self._merge_auto_results(local_result, online_result)
+
+    @staticmethod
+    def _merge_auto_results(
+        local_result: SearchResult,
+        online_result: SearchResult,
+    ) -> SearchResult:
+        """将缺少本地候选的关键词替换为对应的互联网搜索结果。"""
+        online_results = iter(online_result.keyword_results)
+        merged_results: List[KeywordResult] = []
+
+        for local_keyword_result in local_result.keyword_results:
+            if local_keyword_result.candidates:
+                merged_results.append(local_keyword_result)
+                continue
+
+            online_keyword_result = next(online_results, None)
+            if online_keyword_result is None:
+                merged_results.append(local_keyword_result)
+                continue
+
+            provider_errors = dict(local_keyword_result.provider_errors)
+            provider_errors.update(online_keyword_result.provider_errors)
+            merged_results.append(
+                KeywordResult(
+                    keyword=local_keyword_result.keyword,
+                    candidates=online_keyword_result.candidates,
+                    provider_errors=provider_errors,
+                )
+            )
+
+        return SearchResult(keyword_results=merged_results)
 
 
 # ── 格式化 ────────────────────────────────────────────────────────────────────
@@ -369,20 +426,3 @@ def _format_result_md(result: SearchResult) -> str:
         lines.append("\n---\n\n> 未找到匹配的 Skill，请尝试不同的关键词。")
 
     return "\n".join(lines)
-
-
-def _normalize_provider_values(value: object) -> Optional[List[str]]:
-    """将模型可能输出的 provider 字符串归一化为 provider 列表。"""
-    if value is None:
-        return None
-    if isinstance(value, str):
-        return [item.strip() for item in value.split(",") if item.strip()]
-    if isinstance(value, list):
-        providers: List[str] = []
-        for item in value:
-            providers.extend(
-                part.strip() for part in str(item).split(",") if part.strip()
-            )
-        return providers
-    provider = str(value).strip()
-    return [provider] if provider else None

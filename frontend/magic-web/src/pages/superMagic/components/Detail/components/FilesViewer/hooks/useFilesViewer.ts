@@ -19,7 +19,13 @@ import { TabActionType } from "../types"
 import { getFileType } from "@/pages/superMagic/utils/handleFIle"
 import { copyFileContent } from "@/pages/superMagic/utils/share"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
-import { handleDuplicateTabNames, convertFileToTabItem, getFileTabTitle } from "../utils/tabUtils"
+import {
+	handleDuplicateTabNames,
+	convertFileToTabItem,
+	getFileTabTitle,
+	normalizeSlideProjectTabItem,
+	dedupeTabsById,
+} from "../utils/tabUtils"
 import { DetailType } from "../../../types"
 import useShareRoute from "@/pages/superMagic/hooks/useShareRoute"
 import mentionPanelStore from "@/components/business/MentionPanel/builtin-store"
@@ -335,6 +341,7 @@ export function useFilesViewer(props: FilesViewerProps) {
 		onActiveFileChange,
 		activeFileId,
 		showFileFooter,
+		forceFullscreenMode,
 		showFileHeader: showFileHeaderProp,
 		currentTopicStatus,
 		messages,
@@ -476,9 +483,7 @@ export function useFilesViewer(props: FilesViewerProps) {
 		const result: Array<PlaybackTabItem | KnowledgeBaseTabItem | TabItem> = []
 		if (playbackTab) result.push(playbackTab)
 		// 知识库 tabs 和文件 tabs 按 create_at 排序混排
-		const mixed = [...knowledgeBaseTabs, ...tabs].sort(
-			(a, b) => (a.create_at || 0) - (b.create_at || 0),
-		)
+		const mixed = [...knowledgeBaseTabs, ...tabs]
 		result.push(...mixed)
 		return result
 	}, [playbackTab, knowledgeBaseTabs, tabs])
@@ -591,6 +596,14 @@ export function useFilesViewer(props: FilesViewerProps) {
 		fileList.length === 0 ||
 		fileList.every((file) => !file.project_id || file.project_id === viewerProjectId)
 
+	const notifyActiveFileOpen = useMemoizedFn((fileId: unknown) => {
+		const normalizedFileId = normalizeFileId(fileId)
+		if (!normalizedFileId) return
+
+		lastNotifiedActiveFileIdRef.current = normalizedFileId
+		onActiveFileChange?.(normalizedFileId)
+	})
+
 	// Tab operations
 	const openFileTab = useMemoizedFn((fileItem: any, autoEdit?: boolean) => {
 		// Reset manual close flag when opening new tab
@@ -652,6 +665,7 @@ export function useFilesViewer(props: FilesViewerProps) {
 			newTab.isLoading = true
 			newTab.isDeleted = false
 		}
+		const openedFileId = newTab.fileData.file_id || newTab.id
 
 		// 当打开文件tab时，将playback tab和知识库tabs设置为非激活状态
 		if (playbackTab?.active) {
@@ -675,6 +689,7 @@ export function useFilesViewer(props: FilesViewerProps) {
 				},
 			})
 			dispatchTabs({ type: TabActionType.SWITCH_TAB, payload: { tabId: newTab.id } })
+			notifyActiveFileOpen(openedFileId)
 			return
 		}
 
@@ -686,6 +701,7 @@ export function useFilesViewer(props: FilesViewerProps) {
 		}
 
 		dispatchTabs({ type: TabActionType.ADD_TAB, payload: { tab: newTab } })
+		notifyActiveFileOpen(openedFileId)
 	})
 
 	const openWebsiteTab = useMemoizedFn((preset: WebsitePreset) => {
@@ -1185,9 +1201,19 @@ export function useFilesViewer(props: FilesViewerProps) {
 							}
 						})
 						.filter((tab): tab is TabItem => tab !== null)
+					const restoredTabs = dedupeTabsById(
+						processedTabs.map((tab) => normalizeSlideProjectTabItem(tab, attachments)),
+					)
+					const cachedActiveTabId = cachedState.fileState?.activeTabId
+					const activeSourceTab = cachedActiveTabId
+						? processedTabs.find((tab) => tab.id === cachedActiveTabId)
+						: undefined
+					const restoredActiveTabId = activeSourceTab
+						? normalizeSlideProjectTabItem(activeSourceTab, attachments).id
+						: cachedActiveTabId
 
 					// 如果没有任何可用的 tabs，才清理缓存
-					if (processedTabs.length === 0) {
+					if (restoredTabs.length === 0) {
 						try {
 							await projectStateRepository.updateFileState(
 								organizationCode,
@@ -1201,73 +1227,39 @@ export function useFilesViewer(props: FilesViewerProps) {
 						return
 					}
 
-					if (processedTabs.length > 0) {
-						// 恢复处理过的 tabs
+					// 恢复处理过的 tabs
+					dispatchTabs({
+						type: TabActionType.SYNC_TABS_DATA,
+						payload: { tabs: restoredTabs },
+					})
+
+					const activeTab = restoredActiveTabId
+						? restoredTabs.find((tab) => tab.id === restoredActiveTabId)
+						: undefined
+					const tabToActivate = activeTab || restoredTabs[0]
+
+					if (tabToActivate) {
 						dispatchTabs({
-							type: TabActionType.SYNC_TABS_DATA,
-							payload: { tabs: processedTabs },
+							type: TabActionType.SWITCH_TAB,
+							payload: { tabId: tabToActivate.id },
 						})
 
-						// 如果缓存中有 activeTabId，尝试切换到该 tab
-						if (cachedState.fileState?.activeTabId) {
-							const activeTab = processedTabs.find(
-								(tab) => tab.id === cachedState.fileState?.activeTabId,
+						if (tabToActivate.isDeleted) {
+							console.warn(
+								"⚠️ 激活的文件已不存在，但保持激活状态:",
+								tabToActivate.fileData.file_name,
 							)
-							if (activeTab) {
-								dispatchTabs({
-									type: TabActionType.SWITCH_TAB,
-									payload: { tabId: cachedState.fileState.activeTabId },
-								})
-								// 如果激活的tab文件已被删除，给出提示但保持激活状态
-								if (activeTab.isDeleted) {
-									console.warn(
-										"⚠️ 激活的文件已不存在，但保持激活状态:",
-										activeTab.fileData.file_name,
-									)
-								}
+						}
 
-								// 网页 tab 可恢复为 active，但不是项目文件，不向外层同步 activeFileId。
-								if (!isWebsiteTab(activeTab)) {
-									console.log(
-										"🟢 Restoring cached activeFileId (from activeTabId):",
-										cachedState.fileState.activeTabId,
-									)
-									pubsub.publish(
-										PubSubEvents.Update_Active_File_Id,
-										cachedState.fileState.activeTabId,
-									)
-								}
-							} else {
-								// 激活第一个tab
-								if (processedTabs[0]) {
-									dispatchTabs({
-										type: TabActionType.SWITCH_TAB,
-										payload: { tabId: processedTabs[0].id },
-									})
-									// 网页 tab 可恢复为 active，但不是项目文件，不向外层同步 activeFileId。
-									if (!isWebsiteTab(processedTabs[0])) {
-										pubsub.publish(
-											PubSubEvents.Update_Active_File_Id,
-											processedTabs[0].id,
-										)
-									}
-								}
+						// 网页 tab 可恢复为 active，但不是项目文件，不向外层同步 activeFileId。
+						if (!isWebsiteTab(tabToActivate)) {
+							if (activeTab) {
+								console.log(
+									"🟢 Restoring cached activeFileId (from activeTabId):",
+									tabToActivate.id,
+								)
 							}
-						} else {
-							// 没有缓存的激活tab，激活第一个tab
-							if (processedTabs[0]) {
-								dispatchTabs({
-									type: TabActionType.SWITCH_TAB,
-									payload: { tabId: processedTabs[0].id },
-								})
-								// 网页 tab 可恢复为 active，但不是项目文件，不向外层同步 activeFileId。
-								if (!isWebsiteTab(processedTabs[0])) {
-									pubsub.publish(
-										PubSubEvents.Update_Active_File_Id,
-										processedTabs[0].id,
-									)
-								}
-							}
+							pubsub.publish(PubSubEvents.Update_Active_File_Id, tabToActivate.id)
 						}
 					}
 
@@ -1834,7 +1826,8 @@ export function useFilesViewer(props: FilesViewerProps) {
 				hasUserSelectDetail: false,
 				isFromNode: false,
 				userSelectDetail,
-				isFullscreen: fullscreenFileId === tab.fileData.file_id,
+				isFullscreen:
+					Boolean(forceFullscreenMode) || fullscreenFileId === tab.fileData.file_id,
 				attachmentList,
 				viewMode,
 				onViewModeChange: (mode: "code" | "desktop" | "phone") =>

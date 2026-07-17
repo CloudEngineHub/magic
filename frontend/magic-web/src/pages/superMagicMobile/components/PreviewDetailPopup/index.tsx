@@ -89,6 +89,9 @@ interface PreviewDetailPopupProps {
 	projectId?: string
 	// 是否允许下载（用于分享页面权限控制）
 	allowDownload?: boolean
+	hideHeader?: boolean
+	showFileHeader?: boolean
+	forceFullscreenMode?: boolean
 	allowEdit?: boolean
 	onPreviewFileChange?: (fileId: string | null) => void
 	onPreviewFullscreenChange?: (isFullscreen: boolean) => void
@@ -104,6 +107,9 @@ function PreviewDetailPopup(props: PreviewDetailPopupProps, ref: Ref<PreviewDeta
 		onOpenNewPopup,
 		projectId = "",
 		allowDownload,
+		hideHeader: hideHeaderProp,
+		showFileHeader,
+		forceFullscreenMode,
 		allowEdit,
 		onPreviewFileChange,
 		onPreviewFullscreenChange,
@@ -112,11 +118,12 @@ function PreviewDetailPopup(props: PreviewDetailPopupProps, ref: Ref<PreviewDeta
 	const isMobile = useIsMobile()
 	const { pathname, search } = useLocation()
 
-	// 检查 URL 中是否有 hideHeader 参数
+	// 检查 URL 中是否有 hideHeader 参数。显式 props 优先，用于 pure_mode 等配置驱动场景。
 	const hideHeader = useMemo(() => {
+		if (hideHeaderProp !== undefined) return hideHeaderProp
 		const urlSearchParams = new URLSearchParams(search)
 		return urlSearchParams.get("hideHeader") === "true"
-	}, [search])
+	}, [hideHeaderProp, search])
 
 	const { styles, cx } = useStyles({ hideHeader })
 	const { t } = useTranslation("super")
@@ -239,6 +246,7 @@ function PreviewDetailPopup(props: PreviewDetailPopupProps, ref: Ref<PreviewDeta
 		setUserSelectDetail,
 		attachments,
 	})
+	const effectiveIsFullscreen = Boolean(forceFullscreenMode) || isFullscreen
 
 	const isShareRoute = useMemo(() => {
 		// 检查是否在分享场景，如果是分享场景则不显示下载全部文件按钮
@@ -272,8 +280,8 @@ function PreviewDetailPopup(props: PreviewDetailPopupProps, ref: Ref<PreviewDeta
 	}, [onPreviewFileChange, previewDetail?.currentFileId])
 
 	useEffect(() => {
-		onPreviewFullscreenChange?.(isFullscreen)
-	}, [isFullscreen, onPreviewFullscreenChange])
+		onPreviewFullscreenChange?.(effectiveIsFullscreen)
+	}, [effectiveIsFullscreen, onPreviewFullscreenChange])
 
 	const RenderComponent = useMemo(() => {
 		// 修正 detail 类型（如果 metadata.type 是 design 但 type 是 notSupport，需要修正）
@@ -305,7 +313,7 @@ function PreviewDetailPopup(props: PreviewDetailPopupProps, ref: Ref<PreviewDeta
 				isFromNode={isFromNode}
 				onClose={onClose}
 				userSelectDetail={userSelectDetail}
-				isFullscreen={isFullscreen}
+				isFullscreen={effectiveIsFullscreen}
 				attachmentList={attachmentList}
 				display_config={meta?.display_config}
 				// New props for ActionButtons functionality
@@ -339,13 +347,13 @@ function PreviewDetailPopup(props: PreviewDetailPopupProps, ref: Ref<PreviewDeta
 				isPlaybackMode={!!previewDetail?.isFromNode || false}
 				allowDownload={allowDownload}
 				allowEdit={allowEdit}
-				showFileHeader={!isImmersiveFullscreen}
+				showFileHeader={showFileHeader ?? !isImmersiveFullscreen}
 				// Mobile sheet: MagicPopup shows title; toolbar-only header avoids duplicate chrome.
 				headerRenderMode={isMobile ? "actions" : "full"}
 				// Mobile preview hides version footer; desktop keeps version selector when allowed.
-				showFooter={!isMobile && !isImmersiveFullscreen && !isShareRoute}
+				showFooter={!isMobile && !effectiveIsFullscreen && !isShareRoute}
 				className={
-					isImmersiveFullscreen
+					effectiveIsFullscreen
 						? "h-full min-h-0 w-full flex-1"
 						: isMobile
 							? "min-h-0 flex-1"
@@ -369,8 +377,8 @@ function PreviewDetailPopup(props: PreviewDetailPopupProps, ref: Ref<PreviewDeta
 		handlePrevious,
 		handleShare,
 		handleViewModeChange,
+		effectiveIsFullscreen,
 		isFromNode,
-		isFullscreen,
 		isImmersiveFullscreen,
 		isMobile,
 		isShareRoute,
@@ -381,6 +389,7 @@ function PreviewDetailPopup(props: PreviewDetailPopupProps, ref: Ref<PreviewDeta
 		selectedProject,
 		selectedTopic?.id,
 		setUserSelectDetail,
+		showFileHeader,
 		userSelectDetail,
 		viewMode,
 	])

@@ -60,6 +60,7 @@ from app.tools.magic_calendar import ManageCalendar, CreateCalendarProject
 from app.tools.abstract_file_tool import AbstractFileTool
 from app.tools.append_to_file import AppendToFile
 from app.tools.convert_pdf import ConvertPdf
+from app.tools.pptx_to_slide_template.tool import ConvertPptxToSlideTemplate
 from app.tools.document_parse import (
     BuildDocumentIndex,
     ConvertDocumentFormat,
@@ -131,6 +132,7 @@ from app.tools.install_skills import InstallSkillsTool
 from app.tools.read_skills import ReadSkills
 from app.tools.run_sdk_snippet import RunSdkSnippet
 from app.tools.search_knowledge import SearchKnowledge
+from app.tools.install_slides_template import InstallSlidesTemplate
 
 # MCP 工具集（code_mode_only=True，只允许通过 sdk.tool.call 调用）
 from app.tools.mcp import (
@@ -155,6 +157,15 @@ from app.tools.oauth2 import (
     OAuth2StartAuthorization,
     OAuth2UpsertApiDoc,
     OAuth2UpsertApp,
+)
+
+# 定时任务工具集（code_mode_only=True，只允许通过 sdk.tool.call 调用）
+from app.tools.scheduled_task import (
+    ScheduledTaskCreate,
+    ScheduledTaskDelete,
+    ScheduledTaskGet,
+    ScheduledTaskList,
+    ScheduledTaskUpdate,
 )
 
 # Remote 工具集（将 magic-service mention 中的 tool / agent 以本地工具形态转发）
@@ -195,6 +206,7 @@ __all__ = [
     "WaitWechatLogin",
     "CompactChatHistory",
     "ConvertPdf",
+    "ConvertPptxToSlideTemplate",
     "BuildDocumentIndex",
     "ConvertDocumentFormat",
     "ExportDocumentMarkdown",
@@ -243,6 +255,7 @@ __all__ = [
     "ReadSkills",
     "RunSdkSnippet",
     "SearchKnowledge",
+    "InstallSlidesTemplate",
     "ReadFile",
     "ReadFiles",
     "ReadWebpagesAsMarkdown",
@@ -321,6 +334,13 @@ __all__ = [
     "OAuth2StartAuthorization",
     "OAuth2UpsertApiDoc",
     "OAuth2UpsertApp",
+
+    # 定时任务工具集
+    "ScheduledTaskCreate",
+    "ScheduledTaskDelete",
+    "ScheduledTaskGet",
+    "ScheduledTaskList",
+    "ScheduledTaskUpdate",
 
     # Remote 工具集
     "CallSimpleAgent",

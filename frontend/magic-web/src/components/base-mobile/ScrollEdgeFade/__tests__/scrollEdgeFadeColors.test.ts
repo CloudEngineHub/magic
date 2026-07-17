@@ -15,4 +15,8 @@ describe("scrollEdgeFadeColors", () => {
 		expect(gradients.top).toContain("rgb(var(--muted-rgb) / 1)")
 		expect(gradients.bottom).toContain("rgb(var(--muted-rgb) / 1)")
 	})
+
+	it("maps card to the card surface RGB token for desktop recording panels", () => {
+		expect(getScrollEdgeFadeRgb("card")).toBe("rgb(var(--card-rgb) / 1)")
+	})
 })

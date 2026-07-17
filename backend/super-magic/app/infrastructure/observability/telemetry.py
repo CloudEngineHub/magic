@@ -5,10 +5,12 @@ Provides non-intrusive telemetry setup with automatic instrumentation
 """
 import os
 import logging
+import random
 import time
 from typing import Optional
 from opentelemetry import trace, metrics
-from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.trace import StatusCode
+from opentelemetry.sdk.trace import TracerProvider, SpanProcessor
 from opentelemetry.sdk.trace.export import BatchSpanProcessor, ConsoleSpanExporter, SpanExporter, SpanExportResult
 from opentelemetry.sdk.metrics import MeterProvider
 from opentelemetry.sdk.metrics.export import PeriodicExportingMetricReader, ConsoleMetricExporter
@@ -87,6 +89,98 @@ class _SafeSpanExporter(SpanExporter):
         if force_flush is None:
             return True
         return bool(force_flush(timeout_millis))
+
+
+class _CredentialAwareSpanExporter(SpanExporter):
+    """Rebuild the underlying OTLP exporter when auth headers change.
+
+    In warm-pool sandboxes the Magic-Authorization token is written into
+    .credentials/ by the gateway after telemetry has already been initialized,
+    so headers captured at construction time stay empty and every export gets a
+    401. Re-resolve headers on each export and rebuild the exporter only when the
+    resolved header set actually changes (e.g. token finally mounted or rotated).
+
+    export() runs in the BatchSpanProcessor worker thread, not the asyncio event
+    loop, so the synchronous credential file read inside get_otlp_headers() is
+    safe here and does not block the loop.
+    """
+
+    def __init__(self, build_exporter) -> None:
+        self._build_exporter = build_exporter
+        self._exporter = None
+        self._headers_key = None
+
+    def _resolve(self):
+        headers = get_otlp_headers()
+        headers_key = tuple(sorted(headers.items()))
+        if self._exporter is None or headers_key != self._headers_key:
+            new_exporter = self._build_exporter(headers)
+            old_exporter = self._exporter
+            self._exporter = new_exporter
+            self._headers_key = headers_key
+            if old_exporter is not None:
+                try:
+                    old_exporter.shutdown()
+                except Exception:
+                    pass
+        return self._exporter
+
+    def export(self, spans):
+        return self._resolve().export(spans)
+
+    def shutdown(self):
+        if self._exporter is not None:
+            return self._exporter.shutdown()
+
+    def force_flush(self, timeout_millis: int = 30000) -> bool:
+        if self._exporter is None:
+            return True
+        force_flush = getattr(self._exporter, "force_flush", None)
+        if force_flush is None:
+            return True
+        return bool(force_flush(timeout_millis))
+
+
+class _ErrorFirstSamplingProcessor(SpanProcessor):
+    """Tail-based sampler: export error/exception spans at 100%, normal spans at sample_ratio.
+
+    The sampling decision is deferred to on_end() so that the final span status (ERROR vs OK)
+    is known before deciding whether to export.  This means every span is recorded in memory
+    but only a fraction are forwarded to the inner BatchSpanProcessor for export.
+
+    OTEL_SAMPLING_RATIO (env, default 0.1): fraction of non-error spans to keep.
+    """
+
+    def __init__(self, inner_processor: SpanProcessor, sample_ratio: float = 0.1) -> None:
+        self._inner = inner_processor
+        self._sample_ratio = sample_ratio
+
+    def on_start(self, span, parent_context=None):
+        self._inner.on_start(span, parent_context)
+
+    def on_end(self, span):
+        # Always export spans whose status was explicitly set to ERROR
+        if span.status and span.status.status_code == StatusCode.ERROR:
+            self._inner.on_end(span)
+            return
+        # Always export spans that recorded an exception event
+        if span.events and any(e.name == "exception" for e in span.events):
+            self._inner.on_end(span)
+            return
+        # Probabilistically sample the remaining normal spans
+        if random.random() < self._sample_ratio:
+            self._inner.on_end(span)
+
+    def shutdown(self, timeout_millis: int = 30000) -> bool:
+        # BatchSpanProcessor.shutdown() takes no args; forward timeout only when supported.
+        try:
+            return bool(self._inner.shutdown(timeout_millis))
+        except TypeError:
+            self._inner.shutdown()
+            return True
+
+    def force_flush(self, timeout_millis: int = 30000) -> bool:
+        return bool(self._inner.force_flush(timeout_millis))
 
 
 def is_telemetry_enabled() -> bool:
@@ -206,9 +300,12 @@ def setup_telemetry(
             if OTLP_HTTP_TRACE_EXPORTER_AVAILABLE and HttpOTLPSpanExporter is not None:
                 if otlp_headers:
                     logger.info(f"[OpenTelemetry] Custom headers: {list(otlp_headers.keys())}")
-                span_exporter = HttpOTLPSpanExporter(
-                    endpoint=otlp_traces_endpoint,
-                    headers=otlp_headers if otlp_headers else None
+                logger.info("[OpenTelemetry] HTTP trace exporter with dynamic auth headers enabled")
+                span_exporter = _CredentialAwareSpanExporter(
+                    build_exporter=lambda headers: HttpOTLPSpanExporter(
+                        endpoint=otlp_traces_endpoint,
+                        headers=headers or None,
+                    ),
                 )
             else:
                 logger.warning("[OpenTelemetry] HTTP exporter not available, falling back to console")
@@ -224,7 +321,10 @@ def setup_telemetry(
         logger.warning("[OpenTelemetry] No traces endpoint configured, using console exporter")
         span_exporter = ConsoleSpanExporter()
 
-    _tracer_provider.add_span_processor(BatchSpanProcessor(_SafeSpanExporter(span_exporter)))
+    sample_ratio = float(os.getenv("OTEL_SAMPLING_RATIO", "0.1"))
+    batch_processor = BatchSpanProcessor(_SafeSpanExporter(span_exporter))
+    _tracer_provider.add_span_processor(_ErrorFirstSamplingProcessor(batch_processor, sample_ratio))
+    logger.info(f"[OpenTelemetry] Sampling: errors=100%, normal={sample_ratio * 100:.0f}% (OTEL_SAMPLING_RATIO={sample_ratio})")
     trace.set_tracer_provider(_tracer_provider)
 
     # Install non-invasive LLM cost tracking (best-effort)

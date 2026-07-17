@@ -1,5 +1,5 @@
 import { message } from "antd"
-import i18next from "i18next"
+import { adminI18n } from "@admin/locales"
 // 创建一个Image对象来获取图片的宽高,url
 export const getImageInfo = (
 	file: File,
@@ -13,7 +13,7 @@ export const getImageInfo = (
 			if (minSize) {
 				isValidSize = img.width >= minSize && img.height >= minSize
 				if (!isValidSize) {
-					message.error(i18next.t("form.uploadSizeError", { ns: "ai/model" }))
+					message.error(adminI18n.t("form.uploadSizeError", { ns: "admin/ai/model" }))
 				}
 			}
 			resolve({

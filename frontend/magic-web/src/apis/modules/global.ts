@@ -11,7 +11,9 @@ export const generateGlobalApi = (fetch: HttpClient) => ({
 			enableAuthorizationVerification: false,
 		})
 	},
-	updateGlobalConfig(data: { is_maintenance: boolean; maintenance_description: string }) {
+	updateGlobalConfig(
+		data: Pick<GlobalConfig, "is_maintenance" | "maintenance_type" | "maintenance_description">,
+	) {
 		return fetch.put(genRequestUrl("/api/v1/settings/global"), data)
 	},
 

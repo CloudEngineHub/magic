@@ -93,6 +93,14 @@ class AsrTaskStatusDTO
 
     public ?string $sandboxId = null; // 沙箱ID
 
+    public bool $sandboxMergeCompleted = false; // 沙箱合并是否已明确完成（文件记录后处理可能尚未完成）
+
+    public ?int $sandboxMergeDuration = null; // 沙箱合并返回的音频时长
+
+    public ?int $sandboxMergeFileSize = null; // 沙箱合并返回的文件大小
+
+    public ?string $sandboxFinishResponseJson = null; // 沙箱 completed 响应 data，用于重试文件关联
+
     public int $sandboxRetryCount = 0; // 沙箱启动重试次数
 
     /**
@@ -117,6 +125,10 @@ class AsrTaskStatusDTO
     public ?string $language = null; // 语种（zh_CN、en_US等），用于生成标题时使用
 
     public ?string $uploadGeneratedTitle = null; // upload-tokens 生成的标题（用于 summary 复用）
+
+    public ?string $finishOutputFilename = null; // finish 提交给沙箱的输出文件名（不含扩展名）
+
+    public ?string $expectedAudioFileName = null; // finish 预期生成的音频文件名
 
     // ===== 新增：异步阶段管理字段 =====
     public ?string $currentPhase = null; // 当前阶段：merging|summarizing
@@ -162,6 +174,10 @@ class AsrTaskStatusDTO
         $this->sandboxTaskCreated = self::getBoolValue($data, ['sandbox_task_created', 'sandboxTaskCreated']);
         $this->isPaused = self::getBoolValue($data, ['is_paused', 'isPaused']);
         $this->sandboxId = self::getStringValue($data, ['sandbox_id', 'sandboxId']);
+        $this->sandboxMergeCompleted = self::getBoolValue($data, ['sandbox_merge_completed', 'sandboxMergeCompleted']);
+        $this->sandboxMergeDuration = self::getIntValue($data, ['sandbox_merge_duration', 'sandboxMergeDuration']);
+        $this->sandboxMergeFileSize = self::getIntValue($data, ['sandbox_merge_file_size', 'sandboxMergeFileSize']);
+        $this->sandboxFinishResponseJson = self::getStringValue($data, ['sandbox_finish_response_json', 'sandboxFinishResponseJson']);
         $this->sandboxRetryCount = self::getIntValue($data, ['sandbox_retry_count', 'sandboxRetryCount'], 0);
         $this->sandboxEnsureAt = self::getIntValue($data, ['sandbox_ensure_at', 'sandboxEnsureAt'], 0);
         $this->serverSummaryRetryCount = self::getIntValue($data, ['server_summary_retry_count', 'serverSummaryRetryCount'], 0);
@@ -182,6 +198,8 @@ class AsrTaskStatusDTO
         $this->markerContent = self::getStringValue($data, ['marker_content', 'markerContent']);
         $this->language = $data['language'] ?? null;
         $this->uploadGeneratedTitle = self::getStringValue($data, ['upload_generated_title', 'uploadGeneratedTitle']);
+        $this->finishOutputFilename = self::getStringValue($data, ['finish_output_filename', 'finishOutputFilename']);
+        $this->expectedAudioFileName = self::getStringValue($data, ['expected_audio_file_name', 'expectedAudioFileName']);
 
         // 异步阶段管理字段
         $this->currentPhase = self::getStringValue($data, ['current_phase', 'currentPhase']);
@@ -228,6 +246,10 @@ class AsrTaskStatusDTO
             'sandbox_task_created' => $this->sandboxTaskCreated,
             'is_paused' => $this->isPaused,
             'sandbox_id' => $this->sandboxId,
+            'sandbox_merge_completed' => $this->sandboxMergeCompleted,
+            'sandbox_merge_duration' => $this->sandboxMergeDuration,
+            'sandbox_merge_file_size' => $this->sandboxMergeFileSize,
+            'sandbox_finish_response_json' => $this->sandboxFinishResponseJson,
             'sandbox_retry_count' => $this->sandboxRetryCount,
             'sandbox_ensure_at' => $this->sandboxEnsureAt,
             'server_summary_retry_count' => $this->serverSummaryRetryCount,
@@ -244,6 +266,8 @@ class AsrTaskStatusDTO
             'marker_content' => $this->markerContent,
             'language' => $this->language,
             'upload_generated_title' => $this->uploadGeneratedTitle,
+            'finish_output_filename' => $this->finishOutputFilename,
+            'expected_audio_file_name' => $this->expectedAudioFileName,
             // 异步阶段管理字段
             'current_phase' => $this->currentPhase,
             'phase_status' => $this->phaseStatus,

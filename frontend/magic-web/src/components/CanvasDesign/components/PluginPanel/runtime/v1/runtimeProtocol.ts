@@ -1,7 +1,4 @@
-import type {
-	CompleteImagePromptRequest,
-	GenerateImageRequest,
-} from "../../../../types.magic"
+import type { CompleteImagePromptRequest, GenerateImageRequest } from "../../../../types.magic"
 import type { CanvasDesignPlugin, CanvasDesignPluginCapability } from "../../../../canvas/types"
 
 export type PluginFilePickerType = "image" | "video" | "audio" | "file"
@@ -25,10 +22,15 @@ export interface PluginGenerateAndPlaceParams extends Partial<GenerateImageReque
 	select?: boolean
 }
 
-export interface PluginCompleteImagePromptParams
-	extends Omit<CompleteImagePromptRequest, "project_id"> {
+export interface PluginCompleteImagePromptParams extends Omit<
+	CompleteImagePromptRequest,
+	"project_id"
+> {
 	user_prompt: string
 }
+
+/** 插件图片投放目标类型：slot 替换单图，grid 追加多图 */
+export type PluginCanvasAssetDragTargetMode = "slot" | "grid"
 
 export type PluginRuntimeMessage =
 	| {
@@ -61,6 +63,16 @@ export type PluginRuntimeMessage =
 	| {
 			type: "magic-canvas-plugin:pointer-down"
 	  }
+	/** 插件 runtime 上报当前画布图片拖拽是否命中可投放目标 */
+	| {
+			type: "magic-canvas-plugin:canvas-asset-drag-target"
+			dragSessionId: string
+			targetId: string | null
+			mode?: PluginCanvasAssetDragTargetMode
+			canDrop: boolean
+			/** grid 模式下当前投放区剩余可导入数量，供宿主截断 resolve */
+			importRemaining?: number
+	  }
 	| {
 			type: "magic-canvas-plugin:get-image-models"
 			requestId: string
@@ -81,6 +93,16 @@ export type PluginRuntimeMessage =
 			arrayBuffer: ArrayBuffer
 			fileName: string
 			mimeType: string
+	  }
+	| {
+			type: "magic-canvas-plugin:resolve-file-assets"
+			requestId: string
+			files: Array<{ path: string; fileName?: string }>
+			options?: PluginPickFilesOptions
+	  }
+	| {
+			type: "magic-canvas-plugin:read-canvas-clipboard"
+			requestId: string
 	  }
 	| {
 			type: "magic-canvas-plugin:fetch-blob"
@@ -124,6 +146,8 @@ export const PLUGIN_RUNTIME_RESULT_TYPE_BY_MESSAGE_TYPE = {
 	"magic-canvas-plugin:generate-and-place": "magic-canvas-plugin:generate-and-place-result",
 	"magic-canvas-plugin:complete-image-prompt": "magic-canvas-plugin:complete-image-prompt-result",
 	"magic-canvas-plugin:upload-file": "magic-canvas-plugin:upload-file-result",
+	"magic-canvas-plugin:resolve-file-assets": "magic-canvas-plugin:resolve-file-assets-result",
+	"magic-canvas-plugin:read-canvas-clipboard": "magic-canvas-plugin:read-canvas-clipboard-result",
 	"magic-canvas-plugin:fetch-blob": "magic-canvas-plugin:fetch-blob-result",
 	"magic-canvas-plugin:storage-get": "magic-canvas-plugin:storage-get-result",
 	"magic-canvas-plugin:storage-set": "magic-canvas-plugin:storage-set-result",
@@ -144,10 +168,13 @@ const PLUGIN_RUNTIME_CAPABILITY_BY_MESSAGE_TYPE: Partial<
 	"magic-canvas-plugin:set-height": "ui.setHeight",
 	"magic-canvas-plugin:resolve-resource": "resources.resolve",
 	"magic-canvas-plugin:pick-files": "assets.pickFiles",
+	"magic-canvas-plugin:canvas-asset-drag-target": "assets.pickFiles",
 	"magic-canvas-plugin:get-image-models": "ai.getImageModels",
 	"magic-canvas-plugin:generate-and-place": "ai.generateAndPlace",
 	"magic-canvas-plugin:complete-image-prompt": "ai.completeImagePrompt",
 	"magic-canvas-plugin:upload-file": "assets.uploadFile",
+	"magic-canvas-plugin:resolve-file-assets": "assets.pickFiles",
+	"magic-canvas-plugin:read-canvas-clipboard": "assets.pickFiles",
 	"magic-canvas-plugin:fetch-blob": "assets.fetchBlob",
 	"magic-canvas-plugin:storage-get": "plugin.storage",
 	"magic-canvas-plugin:storage-set": "plugin.storage",
@@ -158,10 +185,19 @@ const PLUGIN_RUNTIME_CAPABILITY_BY_MESSAGE_TYPE: Partial<
 }
 
 export function createPluginChannelToken(): string {
+	return createOpaqueRuntimeId("plugin")
+}
+
+/** 单次画布图片外部拖拽会话 ID，由宿主生成并在 drag-move / drag-target 间传递 */
+export function createCanvasAssetDragSessionId(): string {
+	return createOpaqueRuntimeId("canvas-asset-drag")
+}
+
+function createOpaqueRuntimeId(prefix: string): string {
 	if (typeof crypto !== "undefined" && crypto.randomUUID) {
 		return crypto.randomUUID()
 	}
-	return `plugin-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`
+	return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`
 }
 
 export function getPluginRuntimeMessageCapability(
@@ -225,6 +261,25 @@ export function parsePluginRuntimeMessage(
 			type: "magic-canvas-plugin:pointer-down",
 		}
 	}
+	if (record.type === "magic-canvas-plugin:canvas-asset-drag-target") {
+		const dragSessionId =
+			typeof record.dragSessionId === "string" ? record.dragSessionId.trim() : ""
+		if (!dragSessionId) return null
+		// 对 iframe 传回的目标信息做收窄，避免宿主保存非法 mode/targetId。
+		const mode = record.mode === "slot" || record.mode === "grid" ? record.mode : undefined
+		const importRemaining =
+			typeof record.importRemaining === "number" && Number.isFinite(record.importRemaining)
+				? Math.max(0, Math.floor(record.importRemaining))
+				: undefined
+		return {
+			type: "magic-canvas-plugin:canvas-asset-drag-target",
+			dragSessionId,
+			targetId: typeof record.targetId === "string" ? record.targetId : null,
+			mode,
+			canDrop: record.canDrop === true,
+			importRemaining,
+		}
+	}
 	if (
 		record.type === "magic-canvas-plugin:get-image-models" &&
 		typeof record.requestId === "string"
@@ -283,6 +338,41 @@ export function parsePluginRuntimeMessage(
 			type: "magic-canvas-plugin:fetch-blob",
 			requestId: record.requestId,
 			url: record.url,
+		}
+	}
+	if (
+		record.type === "magic-canvas-plugin:read-canvas-clipboard" &&
+		typeof record.requestId === "string"
+	) {
+		return {
+			type: "magic-canvas-plugin:read-canvas-clipboard",
+			requestId: record.requestId,
+		}
+	}
+	if (
+		record.type === "magic-canvas-plugin:resolve-file-assets" &&
+		typeof record.requestId === "string" &&
+		Array.isArray(record.files)
+	) {
+		const files = record.files
+			.filter(
+				(file): file is { path: string; fileName?: string } =>
+					Boolean(file) &&
+					typeof file === "object" &&
+					typeof (file as Record<string, unknown>).path === "string",
+			)
+			.map((file) => ({
+				path: file.path,
+				fileName:
+					typeof file.fileName === "string" && file.fileName.trim()
+						? file.fileName
+						: undefined,
+			}))
+		return {
+			type: "magic-canvas-plugin:resolve-file-assets",
+			requestId: record.requestId,
+			files,
+			options: parsePluginPickFilesOptions(record.options),
 		}
 	}
 	if (

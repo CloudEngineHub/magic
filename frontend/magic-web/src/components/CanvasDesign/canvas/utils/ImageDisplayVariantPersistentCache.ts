@@ -1,7 +1,7 @@
 import type { ImageInfo } from "./ImageResourceManager"
 import type { MediaDisplayResourceVariant } from "./CanvasMediaViewingPolicy"
 
-export type PersistentImageDisplayVariant = Extract<MediaDisplayResourceVariant, "low">
+export type PersistentImageDisplayVariant = MediaDisplayResourceVariant
 
 export interface PersistentImageDisplayCacheRecord {
 	key: string

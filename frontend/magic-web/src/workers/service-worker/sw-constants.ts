@@ -1,6 +1,6 @@
 /**
  * Centralized Service Worker constants: cache buckets, TTLs, path rules, and registration query keys.
- * Adjust boundaries here; route/matcher logic lives in cache-runtime.ts.
+ * Adjust boundaries here; route registration and matcher logic live in the cache runtime modules.
  *
  * Also imported at build time by `plugins/collect-precache-asset-urls.ts` (plugins → src is intentional:
  * keep path/matcher rules in one module; the plugin must not import bundled `sw.js` output).
@@ -17,6 +17,12 @@ export const RESOURCE_CACHE_MARK_QUERY_PARAM = "swCache"
 
 /** Value of swCache that routes a request into the marked-runtime resource bucket. */
 export const MARKED_RUNTIME_RESOURCE_CACHE_VALUE = "runtime"
+
+/** Value of swCache reserved for images explicitly returned by the slides template catalog. */
+export const SLIDES_TEMPLATE_IMAGE_CACHE_VALUE = "slides-template-image"
+
+/** Value of swCache reserved for featured slides template images. */
+export const FEATURED_SLIDES_TEMPLATE_IMAGE_CACHE_VALUE = "featured-slides-template-image"
 
 /** Optional version query on marked resources (`markServiceWorkerCacheableResourceUrl`). */
 export const RESOURCE_CACHE_VERSION_QUERY_PARAM = "swv"
@@ -102,12 +108,16 @@ export const WARMUP_MAX_INTERVAL_MS = 10000
 const SECONDS_PER_DAY = 60 * 60 * 24
 
 export const CACHE_TTL_3_DAYS = SECONDS_PER_DAY * 3
+export const CACHE_TTL_7_DAYS = SECONDS_PER_DAY * 7
 export const CACHE_TTL_14_DAYS = SECONDS_PER_DAY * 14
+export const CACHE_TTL_15_DAYS = SECONDS_PER_DAY * 15
 export const CACHE_TTL_30_DAYS = SECONDS_PER_DAY * 30
 export const CACHE_TTL_60_DAYS = SECONDS_PER_DAY * 60
 
 export const APP_STATIC_CACHE_NAME = `${CACHE_NAMESPACE}-app-static-assets-v1`
 export const APP_IMAGE_CACHE_NAME = `${CACHE_NAMESPACE}-app-image-assets-v1`
+export const SLIDES_TEMPLATE_IMAGE_CACHE_NAME = `${CACHE_NAMESPACE}-slides-template-image-assets-v1`
+export const FEATURED_SLIDES_TEMPLATE_IMAGE_CACHE_NAME = `${CACHE_NAMESPACE}-featured-slides-template-image-assets-v1`
 export const APP_MARKED_RESOURCE_CACHE_NAME = `${CACHE_NAMESPACE}-app-marked-resource-assets-v1`
 export const PACKAGES_STATIC_CACHE_NAME = `${CACHE_NAMESPACE}-packages-static-assets-v1`
 export const EMOJIS_STATIC_CACHE_NAME = `${CACHE_NAMESPACE}-emojis-static-assets-v1`
@@ -180,6 +190,8 @@ export const API_CACHE_EXPIRATION_OPTIONS = {
 export const MANAGED_APP_CACHE_NAMES = [
 	APP_STATIC_CACHE_NAME,
 	APP_IMAGE_CACHE_NAME,
+	SLIDES_TEMPLATE_IMAGE_CACHE_NAME,
+	FEATURED_SLIDES_TEMPLATE_IMAGE_CACHE_NAME,
 	APP_MARKED_RESOURCE_CACHE_NAME,
 	PACKAGES_STATIC_CACHE_NAME,
 	EMOJIS_STATIC_CACHE_NAME,

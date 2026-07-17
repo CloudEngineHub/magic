@@ -26,9 +26,19 @@ function MobileSettingsHeaderIconButton(props: {
 	onClick: () => void
 	variant?: "surface" | "primary"
 	disabled?: boolean
+	/** Stable automation selector for the existing header action button. */
+	dataTestId?: string
 	children: React.ReactNode
 }) {
-	const { side, ariaLabel, onClick, variant = "surface", disabled = false, children } = props
+	const {
+		side,
+		ariaLabel,
+		onClick,
+		variant = "surface",
+		disabled = false,
+		dataTestId,
+		children,
+	} = props
 
 	return (
 		<Button
@@ -43,6 +53,7 @@ function MobileSettingsHeaderIconButton(props: {
 				variant === "primary" ? "bg-foreground text-background" : "bg-card text-foreground",
 			)}
 			aria-label={ariaLabel}
+			data-testid={dataTestId}
 		>
 			{children}
 		</Button>
@@ -154,6 +165,7 @@ export function MobileSettingsSheetContainer(props: {
 							side="left"
 							onClick={onCloseClick ?? (() => onOpenChange(false))}
 							ariaLabel={t("button.close")}
+							dataTestId={`${dataTestId}-close-button`}
 						>
 							<X className="size-[22px]" />
 						</MobileSettingsHeaderIconButton>

@@ -66,7 +66,10 @@ async def dispatch(payload: UserToolCallPayload) -> BaseResponse:
 
     try:
         service = UserToolCallService.get_instance()
-        pending = service.pop_pending(tool_call_id)
+        pending = await service.pop_pending_or_restore_from_latest_history(
+            tool_name=payload.name,
+            tool_call_id=tool_call_id,
+        )
         if not pending:
             logger.warning(
                 f"user_tool_call: tool_call_id={tool_call_id} not in pending, "
@@ -74,7 +77,7 @@ async def dispatch(payload: UserToolCallPayload) -> BaseResponse:
             )
             return create_error_response("问题不存在或已超时")
 
-        pending.timeout_task.cancel()
+        pending.cancel_timeout()
 
         asyncio.create_task(
             service.resume_after_user_tool_call(

@@ -80,9 +80,13 @@ const OPS_ACTION_GAP = 12
 const OPS_ACTION_SHADOW_PADDING = 16
 const OPS_VISIBLE_ACTION_COUNT = 1.5
 const OPS_VISIBLE_ACTION_GAP_COUNT = 1
-const OPS_WIDE_SIDE_COLUMN_GAP = 12
-const OPS_WIDE_SIDE_PANEL_VERTICAL_PADDING = 40
-const OPS_WIDE_ACTION_LIST_TOP_MARGIN = 20
+const OPS_DENSE_ACTION_ROW_HEIGHT = 108
+const OPS_DENSE_ACTION_GAP = 8
+const OPS_DENSE_ACTION_SHADOW_PADDING = 10
+const OPS_DENSE_VISIBLE_ACTION_COUNT = 1.25
+const OPS_WIDE_SIDE_COLUMN_GAP = 8
+const OPS_WIDE_SIDE_PANEL_VERTICAL_PADDING = 28
+const OPS_WIDE_ACTION_LIST_TOP_MARGIN = 12
 
 interface OpsOverviewCardStyle extends CSSProperties {
 	"--ops-card-pointer-x": string
@@ -210,9 +214,9 @@ function SelfMediaOpsOverviewCard({
 	const hasNextActions = displayActions.length > 0
 	const opsLayout = getOpsOverviewLayout(opsContainerWidth)
 	const isOpsWide = opsLayout === "wide"
+	const isOpsDense = opsLayout !== "compact"
 	const { elementRef: mainColumnRef, height: mainColumnHeight } =
 		useMeasuredElementHeight<HTMLDivElement>(isOpsWide)
-	const isOpsComfortable = opsLayout !== "compact"
 	// Wide layout stretches the side panel to match the left data/progress stack; let the list
 	// consume the remaining panel height instead of leaving a fixed-height scroll strip at the top.
 	const isActionListScrollable =
@@ -222,10 +226,14 @@ function SelfMediaOpsOverviewCard({
 		useMeasuredElementHeight<HTMLDivElement>(shouldStretchActionList)
 	const { elementRef: sidePanelIntroRef, height: sidePanelIntroHeight } =
 		useMeasuredElementHeight<HTMLDivElement>(shouldStretchActionList)
-	const actionListMaxHeight =
-		OPS_ACTION_ROW_HEIGHT * OPS_VISIBLE_ACTION_COUNT +
-		OPS_ACTION_GAP * OPS_VISIBLE_ACTION_GAP_COUNT +
-		OPS_ACTION_SHADOW_PADDING * 2
+	const actionRowHeight = isOpsDense ? OPS_DENSE_ACTION_ROW_HEIGHT : OPS_ACTION_ROW_HEIGHT
+	const actionListMaxHeight = isOpsDense
+		? OPS_DENSE_ACTION_ROW_HEIGHT * OPS_DENSE_VISIBLE_ACTION_COUNT +
+			OPS_DENSE_ACTION_GAP * OPS_VISIBLE_ACTION_GAP_COUNT +
+			OPS_DENSE_ACTION_SHADOW_PADDING * 2
+		: OPS_ACTION_ROW_HEIGHT * OPS_VISIBLE_ACTION_COUNT +
+			OPS_ACTION_GAP * OPS_VISIBLE_ACTION_GAP_COUNT +
+			OPS_ACTION_SHADOW_PADDING * 2
 	const sideColumnMinHeight =
 		actionListMaxHeight +
 		OPS_WIDE_SIDE_PANEL_VERTICAL_PADDING +
@@ -234,7 +242,7 @@ function SelfMediaOpsOverviewCard({
 		sideToolbarHeight +
 		(sideToolbarHeight > 0 ? OPS_WIDE_SIDE_COLUMN_GAP : 0)
 	const actionListStyle: OpsActionListStyle = {
-		"--ops-action-row-height": `${OPS_ACTION_ROW_HEIGHT}px`,
+		"--ops-action-row-height": `${actionRowHeight}px`,
 		maxHeight:
 			isActionListScrollable && !shouldStretchActionList
 				? `${actionListMaxHeight}px`
@@ -258,22 +266,20 @@ function SelfMediaOpsOverviewCard({
 		? formatSelfMediaHomeInsightGreeting(dailyInsight.greeting, "")
 		: ""
 	const opsContentClass = isOpsWide
-		? "grid-cols-[minmax(0,1.16fr)_minmax(280px,0.84fr)] items-start p-8"
-		: isOpsComfortable
-			? "p-6"
-			: "p-4"
-	const opsHeaderClass = isOpsComfortable ? "flex-row items-start justify-between" : "flex-col"
-	const opsHealthClass = isOpsComfortable ? "w-[118px]" : "w-full"
-	const opsAsideClass =
-		opsLayout === "wide"
-			? "rounded-[24px] p-5"
-			: isOpsComfortable
-				? "rounded-[24px] p-4"
-				: "rounded-[22px] p-4"
+		? "grid-cols-[minmax(0,1.16fr)_minmax(280px,0.84fr)] items-start p-5"
+		: isOpsDense
+			? "p-5"
+			: "p-3.5"
+	const opsHeaderClass = isOpsDense ? "flex-row items-start justify-between" : "flex-col"
+	const opsHealthClass = isOpsDense ? "w-[108px]" : "w-full"
+	const opsAsideClass = "rounded-[20px] p-3.5"
 	const regenerateInsightButton = onRegenerateDailyInsight ? (
 		<button
 			type="button"
-			className="bg-white/82 inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full px-3.5 text-[12px] font-[780] text-[#18181b] shadow-[inset_0_1px_rgba(255,255,255,0.85),0_12px_28px_rgba(47,43,36,0.08)] transition-[background,transform,box-shadow] hover:-translate-y-0.5 hover:bg-white hover:shadow-[inset_0_1px_rgba(255,255,255,0.92),0_16px_34px_rgba(47,43,36,0.12)] focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-[#18181b]/15 disabled:cursor-not-allowed disabled:opacity-55 disabled:hover:translate-y-0"
+			className={cn(
+				"bg-white/82 inline-flex shrink-0 items-center gap-1.5 rounded-full font-[780] text-[#18181b] shadow-[inset_0_1px_rgba(255,255,255,0.85),0_12px_28px_rgba(47,43,36,0.08)] transition-[background,transform,box-shadow] hover:-translate-y-0.5 hover:bg-white hover:shadow-[inset_0_1px_rgba(255,255,255,0.92),0_16px_34px_rgba(47,43,36,0.12)] focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-[#18181b]/15 disabled:cursor-not-allowed disabled:opacity-55 disabled:hover:translate-y-0",
+				isOpsDense ? "h-8 px-3 text-[11px]" : "h-9 px-3.5 text-[12px]",
+			)}
 			onClick={onRegenerateDailyInsight}
 			disabled={isInsightLoading}
 			aria-label="更新今日建议"
@@ -318,28 +324,44 @@ function SelfMediaOpsOverviewCard({
 			<div className="pointer-events-none absolute inset-x-5 top-0 h-px bg-gradient-to-r from-transparent via-white/95 to-transparent" />
 			<div className="pointer-events-none absolute inset-0 bg-[linear-gradient(115deg,rgba(255,255,255,0.44),rgba(255,255,255,0)_34%,rgba(24,24,27,0.035)_100%)]" />
 			<div
-				className={cn("relative grid gap-8", opsContentClass)}
+				className={cn("relative grid", isOpsDense ? "gap-5" : "gap-6", opsContentClass)}
 				data-testid="self-media-home-ops-content"
 			>
 				<div
 					ref={mainColumnRef}
-					className={cn("min-w-0", isOpsWide ? "flex flex-col gap-6" : "space-y-6")}
+					className={cn(
+						"min-w-0",
+						isOpsWide ? "flex flex-col gap-3" : isOpsDense ? "space-y-3" : "space-y-4",
+					)}
 					data-testid="self-media-home-ops-main-column"
 				>
-					<div className={cn("flex gap-4", opsHeaderClass)}>
+					<div className={cn("flex", isOpsDense ? "gap-2.5" : "gap-3", opsHeaderClass)}>
 						<div>
-							<div className="mb-3 inline-flex items-center gap-2 rounded-full border border-white/75 bg-white/55 px-3 py-1 text-[11px] font-[780] text-[#52525b] shadow-[inset_0_1px_rgba(255,255,255,0.75)] backdrop-blur">
+							<div
+								className={cn(
+									"inline-flex items-center gap-2 rounded-full border border-white/75 bg-white/55 px-3 py-1 text-[11px] font-[780] text-[#52525b] shadow-[inset_0_1px_rgba(255,255,255,0.75)] backdrop-blur",
+									isOpsDense ? "mb-1.5" : "mb-2.5",
+								)}
+							>
 								<span className="h-1.5 w-1.5 rounded-full bg-[#59b981] shadow-[0_0_0_4px_rgba(89,185,129,0.14)]" />
 								今日重点信号
 							</div>
 							<h3
-								className="m-0 max-w-[30rem] text-[20px] font-[820] leading-[1.18] text-[#18181b]"
+								className={cn(
+									"m-0 max-w-[30rem] font-[820] leading-[1.18] text-[#18181b]",
+									isOpsDense ? "text-[17px]" : "text-[19px]",
+								)}
 								data-testid="self-media-home-ops-headline"
 							>
 								{primarySignal.title}
 							</h3>
 							<p
-								className="mt-3 max-w-[29rem] text-[13px] leading-[1.75] text-[#52525b]"
+								className={cn(
+									"max-w-[29rem] text-[#52525b]",
+									isOpsDense
+										? "mt-1.5 text-[12px] leading-[1.5]"
+										: "mt-3 text-[13px] leading-[1.75]",
+								)}
 								data-testid="self-media-home-ops-summary"
 							>
 								{primarySignal.description}
@@ -347,7 +369,10 @@ function SelfMediaOpsOverviewCard({
 						</div>
 						<div
 							className={cn(
-								"flex min-h-16 shrink-0 flex-col justify-center rounded-[20px] bg-[#18181b] px-4 py-3 text-[#ffd637] shadow-[0_16px_34px_rgba(24,24,27,0.22),inset_0_1px_rgba(255,255,255,0.18)]",
+								"flex shrink-0 flex-col justify-center bg-[#18181b] text-[#ffd637] shadow-[0_16px_34px_rgba(24,24,27,0.22),inset_0_1px_rgba(255,255,255,0.18)]",
+								isOpsDense
+									? "min-h-[52px] rounded-[16px] px-3 py-2"
+									: "min-h-16 rounded-[20px] px-4 py-3",
 								opsHealthClass,
 								opsHealthScore < 100 && "self-media-ops-health-pulse",
 							)}
@@ -361,7 +386,12 @@ function SelfMediaOpsOverviewCard({
 								<BarChart3 size={13} />
 								运营健康度
 							</div>
-							<div className="mt-1 text-[24px] font-[840] leading-none text-[#ffd637]">
+							<div
+								className={cn(
+									"mt-1 font-[840] leading-none text-[#ffd637]",
+									isOpsDense ? "text-[21px]" : "text-[23px]",
+								)}
+							>
 								{isOpsHealthLoading ? "..." : opsHealthScore}
 							</div>
 							<div
@@ -384,18 +414,26 @@ function SelfMediaOpsOverviewCard({
 							statusLabels={metricStatusLabels}
 							motionStates={metricMotionStates}
 							loading={metricsLoading}
-							comfortable={isOpsComfortable}
+							comfortable={isOpsDense}
+							dense={isOpsDense}
 							className={cn(isOpsWide && "flex-1")}
 						/>
 					) : null}
 
-					<SelfMediaOpsCompletionProgress completion={overview.completion} />
+					<SelfMediaOpsCompletionProgress
+						completion={overview.completion}
+						dense={isOpsDense}
+					/>
 				</div>
 
 				<div
 					className={cn(
 						"min-w-0",
-						isOpsWide ? "flex min-h-0 flex-col gap-3" : "space-y-3",
+						isOpsWide
+							? "flex min-h-0 flex-col gap-2"
+							: isOpsDense
+								? "space-y-2"
+								: "space-y-3",
 					)}
 					style={sideColumnStyle}
 					data-testid="self-media-home-ops-side-column"
@@ -421,22 +459,46 @@ function SelfMediaOpsOverviewCard({
 							ref={sidePanelIntroRef}
 							data-testid="self-media-home-ops-side-panel-intro"
 						>
-							<div className="flex items-center justify-between gap-3">
+							<div className="flex items-center justify-between gap-2.5">
 								<div className="min-w-0 flex-1">
-									<h4 className="text-[15px] font-[800] text-[#18181b]">
+									<h4
+										className={cn(
+											"font-[800] text-[#18181b]",
+											isOpsDense ? "text-[14px]" : "text-[15px]",
+										)}
+									>
 										{asideTitle}
 									</h4>
-									<p className="mt-1 text-[12px] leading-[1.55] text-[#71717a]">
+									<p
+										className={cn(
+											"mt-1 text-[#71717a]",
+											isOpsDense
+												? "text-[11px] leading-[1.45]"
+												: "text-[12px] leading-[1.55]",
+										)}
+									>
 										{asideSubtitle}
 									</p>
 								</div>
-								<span className="rounded-full bg-white/80 px-3 py-1 text-[12px] font-[700] text-[#18181b]">
+								<span
+									className={cn(
+										"rounded-full bg-white/80 font-[700] text-[#18181b]",
+										isOpsDense
+											? "px-2.5 py-0.5 text-[11px]"
+											: "px-3 py-1 text-[12px]",
+									)}
+								>
 									{overview.totalPosts} 篇
 								</span>
 							</div>
 							{insightGreeting ? (
 								<div
-									className="mt-4 rounded-[18px] border border-white/65 bg-white/55 p-3 text-[13px] font-[760] leading-[1.55] text-[#18181b] shadow-[inset_0_1px_rgba(255,255,255,0.76)]"
+									className={cn(
+										"border border-white/65 bg-white/55 font-[760] text-[#18181b] shadow-[inset_0_1px_rgba(255,255,255,0.76)]",
+										isOpsDense
+											? "mt-3 rounded-[16px] p-2.5 text-[12px] leading-[1.45]"
+											: "mt-4 rounded-[18px] p-3 text-[13px] leading-[1.55]",
+									)}
 									data-testid="self-media-home-ops-insight-greeting"
 								>
 									{insightGreeting}
@@ -445,15 +507,22 @@ function SelfMediaOpsOverviewCard({
 						</div>
 						<div
 							className={cn(
-								"mt-5",
-								isActionListScrollable && "self-media-ops-action-scroll -mx-4 px-4",
+								isOpsDense ? "mt-3" : "mt-4",
+								isActionListScrollable &&
+									cn(
+										"self-media-ops-action-scroll",
+										isOpsDense ? "-mx-3 px-3" : "-mx-3.5 px-3.5",
+									),
 								shouldStretchActionList && "min-h-0 flex-1",
 							)}
 							style={actionListStyle}
 							data-testid="self-media-home-ops-next-actions"
 						>
 							<div
-								className={cn("space-y-3", isActionListScrollable && "py-4")}
+								className={cn(
+									isOpsDense ? "space-y-2" : "space-y-2.5",
+									isActionListScrollable && (isOpsDense ? "py-2.5" : "py-3.5"),
+								)}
 								data-testid="self-media-home-ops-next-actions-inner"
 							>
 								{hasNextActions ? (
@@ -463,43 +532,110 @@ function SelfMediaOpsOverviewCard({
 										return (
 											<div
 												key={`${action.key}-${action.postKey || action.title}`}
-												className="self-media-ops-action-card group/card relative rounded-[20px] border border-white/70 bg-white/70 shadow-[inset_0_1px_rgba(255,255,255,0.82),0_10px_28px_rgba(47,43,36,0.055)] transition-[border-color,box-shadow,transform,background] duration-200 hover:-translate-y-0.5 hover:border-[#ffd637]/70 hover:bg-white/90 hover:shadow-[inset_0_1px_rgba(255,255,255,0.9),0_16px_38px_rgba(47,43,36,0.1)]"
+												className={cn(
+													"self-media-ops-action-card group/card relative border border-white/70 bg-white/70 shadow-[inset_0_1px_rgba(255,255,255,0.82),0_10px_28px_rgba(47,43,36,0.055)] transition-[border-color,box-shadow,transform,background] duration-200 hover:-translate-y-0.5 hover:border-[#ffd637]/70 hover:bg-white/90 hover:shadow-[inset_0_1px_rgba(255,255,255,0.9),0_16px_38px_rgba(47,43,36,0.1)]",
+													isOpsDense
+														? "rounded-[16px]"
+														: "rounded-[18px]",
+												)}
 											>
 												<button
 													type="button"
 													className={cn(
-														"group/action h-full w-full rounded-[20px] p-4 text-left focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-[#18181b]/15",
+														"group/action h-full w-full text-left focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-[#18181b]/15",
+														isOpsDense
+															? "rounded-[16px] p-2.5"
+															: "rounded-[18px] p-3.5",
 														dailyInsightId && "pr-11",
 													)}
 													onClick={() => onAction?.(action)}
 													data-testid={`self-media-home-ops-action-${action.key}`}
 												>
-													<div className="flex items-start gap-3">
-														<span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[15px] bg-[#18181b] text-[#ffd637] shadow-[0_10px_22px_rgba(24,24,27,0.18)] transition-transform group-hover/action:scale-105">
-															<Icon size={16} />
+													<div
+														className={cn(
+															"flex items-start",
+															isOpsDense ? "gap-2" : "gap-2.5",
+														)}
+													>
+														<span
+															className={cn(
+																"flex shrink-0 items-center justify-center bg-[#18181b] text-[#ffd637] shadow-[0_10px_22px_rgba(24,24,27,0.18)] transition-transform group-hover/action:scale-105",
+																isOpsDense
+																	? "h-8 w-8 rounded-[12px]"
+																	: "h-9 w-9 rounded-[15px]",
+															)}
+														>
+															<Icon size={isOpsDense ? 14 : 16} />
 														</span>
 														<span className="min-w-0 flex-1">
-															<span className="flex flex-col gap-2 min-[420px]:flex-row min-[420px]:items-center min-[420px]:justify-between min-[420px]:gap-3">
-																<span className="truncate text-[13px] font-[800] text-[#18181b]">
+															<span
+																className={cn(
+																	"flex flex-col min-[420px]:flex-row min-[420px]:items-center min-[420px]:justify-between",
+																	isOpsDense
+																		? "gap-1.5 min-[420px]:gap-2"
+																		: "gap-2 min-[420px]:gap-3",
+																)}
+															>
+																<span
+																	className={cn(
+																		"truncate font-[800] text-[#18181b]",
+																		isOpsDense
+																			? "text-[12px]"
+																			: "text-[13px]",
+																	)}
+																>
 																	{action.title}
 																</span>
-																<span className="w-fit shrink-0 rounded-full bg-[#ffd637]/55 px-2.5 py-1 text-[11px] font-[780] text-[#18181b] opacity-90 transition-colors group-hover/action:bg-[#ffd637]">
+																<span
+																	className={cn(
+																		"w-fit shrink-0 rounded-full bg-[#ffd637]/55 font-[780] text-[#18181b] opacity-90 transition-colors group-hover/action:bg-[#ffd637]",
+																		isOpsDense
+																			? "px-2 py-0.5 text-[10px]"
+																			: "px-2.5 py-1 text-[11px]",
+																	)}
+																>
 																	{action.cta}
 																</span>
 															</span>
-															<span className="mt-1.5 block text-[12px] leading-[1.5] text-[#71717a]">
+															<span
+																className={cn(
+																	"block text-[#71717a]",
+																	isOpsDense
+																		? "mt-0.5 text-[11px] leading-[1.4]"
+																		: "mt-1 text-[12px] leading-[1.45]",
+																)}
+															>
 																{action.description}
 															</span>
-															<span className="mt-2 flex flex-wrap gap-1.5">
+															<span
+																className={cn(
+																	"flex flex-wrap gap-1.5",
+																	isOpsDense ? "mt-1" : "mt-1.5",
+																)}
+															>
 																{action.targetTitle ? (
-																	<span className="inline-flex max-w-full rounded-full bg-white/80 px-2.5 py-1 text-[11px] font-[780] text-[#18181b] shadow-[inset_0_1px_rgba(255,255,255,0.82)]">
+																	<span
+																		className={cn(
+																			"inline-flex max-w-full rounded-full bg-white/80 font-[780] text-[#18181b] shadow-[inset_0_1px_rgba(255,255,255,0.82)]",
+																			isOpsDense
+																				? "px-2 py-0.5 text-[10px]"
+																				: "px-2.5 py-1 text-[11px]",
+																		)}
+																	>
 																		<span className="truncate">
 																			文章：
 																			{action.targetTitle}
 																		</span>
 																	</span>
 																) : null}
-																<span className="inline-flex rounded-full bg-[#18181b]/[0.055] px-2.5 py-1 text-[11px] font-[760] text-[#52525b]">
+																<span
+																	className={cn(
+																		"inline-flex rounded-full bg-[#18181b]/[0.055] font-[760] text-[#52525b]",
+																		isOpsDense
+																			? "px-2 py-0.5 text-[10px]"
+																			: "px-2.5 py-1 text-[11px]",
+																	)}
+																>
 																	{getSelfMediaOpsActionUnlockCopy(
 																		action.key,
 																	)}
@@ -511,7 +647,12 @@ function SelfMediaOpsOverviewCard({
 												{dailyInsightId ? (
 													<button
 														type="button"
-														className="bg-white/82 absolute right-3 top-3 inline-flex h-7 w-7 items-center justify-center rounded-full text-[#71717a] shadow-[inset_0_1px_rgba(255,255,255,0.9),0_8px_18px_rgba(47,43,36,0.08)] transition-[background,color,transform] hover:-translate-y-0.5 hover:bg-white hover:text-[#18181b] focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-[#18181b]/15"
+														className={cn(
+															"bg-white/82 absolute inline-flex items-center justify-center rounded-full text-[#71717a] shadow-[inset_0_1px_rgba(255,255,255,0.9),0_8px_18px_rgba(47,43,36,0.08)] transition-[background,color,transform] hover:-translate-y-0.5 hover:bg-white hover:text-[#18181b] focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-[#18181b]/15",
+															isOpsDense
+																? "right-2 top-2 h-6 w-6"
+																: "right-3 top-3 h-7 w-7",
+														)}
 														aria-label={`移除建议：${action.title}`}
 														onClick={() =>
 															handleDismissDailyInsightAction(
@@ -520,7 +661,7 @@ function SelfMediaOpsOverviewCard({
 														}
 														data-testid="handle-dismiss-daily-insight-action"
 													>
-														<X size={14} />
+														<X size={isOpsDense ? 12 : 14} />
 													</button>
 												) : null}
 											</div>

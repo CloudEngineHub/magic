@@ -1,5 +1,8 @@
+export type MaintenanceType = "global_notice" | "site_close"
+
 export interface GlobalConfig {
 	is_maintenance: boolean
+	maintenance_type: MaintenanceType
 	maintenance_description: string
 }
 

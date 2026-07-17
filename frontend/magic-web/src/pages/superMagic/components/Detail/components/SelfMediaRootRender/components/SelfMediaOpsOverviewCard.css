@@ -16,7 +16,7 @@
 }
 
 .self-media-ops-action-scroll {
-	/* Keep long AI suggestion sets to roughly 2.5 rows so the next item peeks in and signals scroll. */
+	/* Keep long AI suggestion sets compact while leaving the next item visible as a scroll cue. */
 	overflow-y: auto;
 	overscroll-behavior: contain;
 	scrollbar-gutter: stable;

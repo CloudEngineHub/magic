@@ -30,6 +30,8 @@ class AudioProjectEntity extends AbstractEntity
 
     protected ?int $fileSize = null;
 
+    protected ?string $location = null;
+
     protected array $tags = [];
 
     // Auto summary configuration fields
@@ -49,6 +51,8 @@ class AudioProjectEntity extends AbstractEntity
     protected int $phasePercent = 0;
 
     protected ?string $phaseError = null;
+
+    protected ?array $extra = null;
 
     protected ?string $createdAt = null;
 
@@ -165,6 +169,17 @@ class AudioProjectEntity extends AbstractEntity
     public function setPhaseError(?string $phaseError): self
     {
         $this->phaseError = $phaseError;
+        return $this;
+    }
+
+    public function getExtra(): ?array
+    {
+        return $this->extra;
+    }
+
+    public function setExtra(?array $extra): self
+    {
+        $this->extra = $extra;
         return $this;
     }
 
@@ -316,6 +331,17 @@ class AudioProjectEntity extends AbstractEntity
         return $this;
     }
 
+    public function getLocation(): ?string
+    {
+        return $this->location;
+    }
+
+    public function setLocation(?string $location): self
+    {
+        $this->location = $location;
+        return $this;
+    }
+
     public function getTags(): array
     {
         return $this->tags;
@@ -404,6 +430,7 @@ class AudioProjectEntity extends AbstractEntity
             'device_id' => $this->deviceId,
             'duration' => $this->duration,
             'file_size' => $this->fileSize,
+            'location' => $this->location,
             'tags' => $this->tags,
             'auto_summary' => $this->autoSummary,
             'task_key' => $this->taskKey,
@@ -413,6 +440,7 @@ class AudioProjectEntity extends AbstractEntity
             'phase_status' => $this->phaseStatus,
             'phase_percent' => $this->phasePercent,
             'phase_error' => $this->phaseError,
+            'extra' => $this->extra,
             'created_at' => $this->createdAt,
             'updated_at' => $this->updatedAt,
         ];

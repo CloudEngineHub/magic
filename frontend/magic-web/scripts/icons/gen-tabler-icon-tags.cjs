@@ -3,7 +3,7 @@
 /**
  * Tabler Icons 标签提取器 - 本地文件版本
  * 从本地 node_modules 中的 @tabler/icons 包读取 icons.json 并转换为目标格式
- *
+ * 
  * 使用方法: node scripts/icons/gen-tabler-icon-tags.cjs
  * 输出: tabler-icons-tags.json
  */

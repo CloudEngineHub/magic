@@ -1,6 +1,7 @@
 import type { Node as TiptapNode } from "@tiptap/core"
 import type { ComponentType, RefObject } from "react"
 import type { ModifierAlias } from "./canvas/interaction/shortcuts/types"
+import type { Canvas } from "./canvas/Canvas"
 import type { MagicConfig } from "./types.magic"
 import type {
 	CanvasDeviceInfo,
@@ -116,6 +117,12 @@ export interface ReferenceResourcePanelLimitInfo {
 	mentionFileSubtitleParentPrefix?: string
 }
 
+export interface CanvasReferenceElementsContext {
+	canvasName?: string
+	rootFolderId?: string
+	getCanvasDocument: () => CanvasDocument | null | undefined
+}
+
 /**
  * MentionPanel DataService 能力 + 画布侧可选回调（CanvasDesignMentionDataService 等）。
  */
@@ -125,8 +132,12 @@ export type MentionDataServicePort = CanvasDesignMentionDataServiceBase & {
 	): void
 	setRefreshHandler?(handler: (() => void) | undefined): void
 	requestRefresh?(): void
+	/** 画布元素数据变化时清空 @ 文件面板内的画布元素快照 */
+	invalidateCanvasElementsCache?(): void
 	/** 更新项目附件根（不换实例，避免 TipTap Mention 扩展重建失焦） */
 	syncProjectAttachmentRoots?(roots: ProjectAttachmentMentionNode[]): void
+	/** 更新当前画布元素数据源；用于 @ 文件面板展示当前画布可引用元素 */
+	setCanvasReferenceElementsContext?(context: CanvasReferenceElementsContext | undefined): void
 }
 
 /** Mention 数据服务构造函数，由外部传入以实现隔离 */
@@ -319,6 +330,8 @@ export interface CanvasDesignRef {
 	updateData: (data: CanvasDocument, options?: { mode?: "smart" | "replace" }) => void
 	/** 导出当前画布文档；用于宿主在页面卸载前保存本地草稿 */
 	exportCurrentDocument: () => CanvasDocument | null
+	/** 获取当前 Canvas 实例；用于跨 React 树的画布资源预览 */
+	getCanvasInstance: () => Canvas | null
 	/** 按资源路径强制刷新画布内已缓存的图片/视频资源 */
 	refreshResources: (resources: CanvasResourceRefreshItem[]) => Promise<void>
 	/** 如果元素不在可视区域，则移动到可视区域 */

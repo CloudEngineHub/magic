@@ -1,5 +1,9 @@
 import { getFileType } from "@/pages/superMagic/utils/handleFIle"
-import { DetailType, type SelfMediaInitialNavigation, type AICardInitialNavigation } from "../../../types"
+import {
+	DetailType,
+	type SelfMediaInitialNavigation,
+	type AICardInitialNavigation,
+} from "../../../types"
 import type { FileItem } from "../types"
 import { isMagicProjectConfigFile } from "@/pages/superMagic/components/MessageList/components/MessageAttachment/utils"
 
@@ -99,6 +103,20 @@ function designDataTransformer(item: FileItem) {
 	}
 }
 
+/** PPT 项目目录转换器，通过 DetailType.Html 复用 PPTRootRender。 */
+function slideDataTransformer(item: FileItem) {
+	const fileName = item.display_filename || item.file_name || item.filename
+	return {
+		file_name: fileName,
+		name: fileName,
+		is_directory: item.is_directory,
+		children: item.children,
+		relative_file_path: item.relative_file_path,
+		parent_id: item.parent_id,
+		display_config: item.display_config,
+	}
+}
+
 /**
  * Self-media folder transformer. Platforms are now expressed as keys
  * under the top-level `self-media` map (e.g. `rednote`, `instagram`),
@@ -139,6 +157,12 @@ function aiCardDataTransformer(item: FileItem) {
  * 这些内容类型不依赖文件内容，有自己的 detail render content
  */
 const contentTypeRenderConfigs: ContentTypeRenderConfig[] = [
+	{
+		displayConfigType: "slide",
+		detailType: DetailType.Html,
+		dataTransformer: slideDataTransformer,
+		priority: 10,
+	},
 	{
 		displayConfigType: "design",
 		detailType: DetailType.Design,

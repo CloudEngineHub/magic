@@ -11,6 +11,7 @@ use App\Application\Contact\DTO\MagicUserOrganizationItemDTO;
 use App\Application\Contact\DTO\MagicUserOrganizationListDTO;
 use App\Application\Contact\Support\OrganizationProductResolver;
 use App\Domain\Contact\Entity\ValueObject\DataIsolation;
+use App\Domain\Contact\Entity\ValueObject\UserStatus;
 use App\Domain\Contact\Service\MagicUserDomainService;
 use App\Domain\OrganizationEnvironment\Service\MagicOrganizationEnvDomainService;
 use App\Domain\OrganizationEnvironment\Service\OrganizationDomainService;
@@ -97,6 +98,10 @@ class MagicUserOrganizationAppService
         foreach ($userDetails as $detail) {
             $organizationCode = $detail->getOrganizationCode();
             if ($organizationCode === '') {
+                continue;
+            }
+
+            if ($detail->getStatus() !== UserStatus::Activated->value) {
                 continue;
             }
 

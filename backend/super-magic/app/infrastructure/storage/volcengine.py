@@ -138,7 +138,7 @@ class VolcEngineUploader(AbstractStorage, BaseFileProcessor):
         return part_size
 
     def _get_tos_client(self):
-        """获取TOS客户端"""
+        """获取TOS客户端（下载/上传用，优先走内网 endpoint）"""
         if not self.credentials:
             raise ValueError("未设置凭证")
 
@@ -148,16 +148,41 @@ class VolcEngineUploader(AbstractStorage, BaseFileProcessor):
         credentials: VolcEngineCredentials = self.credentials
         tc = credentials.temporary_credential
 
+        # 优先使用内网 endpoint，回退到公网 endpoint
+        endpoint = tc.internal_endpoint or tc.endpoint
+        logger.info(f"Creating TOS client with endpoint: {endpoint} (internal={tc.internal_endpoint is not None})")
+
         # 创建TOS客户端
         tos_client = TosClientV2(
+            ak=tc.credentials.AccessKeyId,
+            sk=tc.credentials.SecretAccessKey,
+            endpoint=endpoint,
+            region=tc.region,
+            security_token=tc.credentials.SessionToken,
+        )
+
+        return tos_client
+
+    def _get_public_tos_client(self):
+        """获取TOS客户端（presigned URL 用，走公网 endpoint）"""
+        if not self.credentials:
+            raise ValueError("未设置凭证")
+
+        if not isinstance(self.credentials, VolcEngineCredentials):
+            raise ValueError("凭证类型错误")
+
+        credentials: VolcEngineCredentials = self.credentials
+        tc = credentials.temporary_credential
+
+        logger.info(f"Creating TOS client with public endpoint: {tc.endpoint}")
+
+        return TosClientV2(
             ak=tc.credentials.AccessKeyId,
             sk=tc.credentials.SecretAccessKey,
             endpoint=tc.endpoint,
             region=tc.region,
             security_token=tc.credentials.SessionToken,
         )
-
-        return tos_client
 
     async def _simple_upload(self, file_obj, key: str, file_size: int, bucket_name: str):
         """简单上传，适用于小文件"""
@@ -572,8 +597,8 @@ class VolcEngineUploader(AbstractStorage, BaseFileProcessor):
             # 获取凭证信息
             tc = credentials.temporary_credential
 
-            # 创建TOS客户端
-            tos_client = self._get_tos_client()
+            # 创建TOS客户端（presigned URL 必须走公网 endpoint，否则集群外无法访问）
+            tos_client = self._get_public_tos_client()
 
             try:
                 # Extract query parameters from options if provided

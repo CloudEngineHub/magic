@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { waitFor } from "@testing-library/react"
 import { SuperMagicApi } from "@/apis"
-import { TaskStatus, type Topic } from "@/pages/superMagic/pages/Workspace/types"
+import { TaskStatus, TopicMode, type Topic } from "@/pages/superMagic/pages/Workspace/types"
 import projectStore from "@/pages/superMagic/stores/core/project"
 import topicStore, { TopicStore } from "@/pages/superMagic/stores/core/topic"
 import workspaceStore from "@/pages/superMagic/stores/core/workspace"
@@ -9,6 +9,7 @@ import { createTopicReadProgressService } from "../topicReadProgressService"
 import {
 	applyOptimisticTopicRunningState,
 	handleArrivedTopicStatusChange,
+	shouldCheckAttachmentsOnTaskStatus,
 	syncTopicStatusPatch,
 } from "../topicStatusSyncService"
 
@@ -17,6 +18,13 @@ vi.mock("@/apis", () => ({
 		getTopicsStatus: vi.fn(),
 		markTopicReadProgress: vi.fn(),
 	},
+}))
+
+vi.mock("@/assets/locales/locale-adapters", () => ({
+	getLocaleModules: () => ({}),
+	getAdminLocaleModules: () => ({}),
+	loadMagicFlowLocale: vi.fn(),
+	loadFallbackLocale: vi.fn(),
 }))
 
 describe("topicStatusSyncService", () => {
@@ -38,7 +46,7 @@ describe("topicStatusSyncService", () => {
 			task_status: taskStatus,
 			task_mode: "chat",
 			project_id: "project-1",
-			topic_mode: "",
+			topic_mode: TopicMode.Default,
 			updated_at: "2026-04-16 10:00:00",
 			workspace_id: "workspace-1",
 			has_unread: hasUnread,
@@ -57,6 +65,15 @@ describe("topicStatusSyncService", () => {
 		topicStore.reset()
 		projectStore.reset()
 		workspaceStore.reset()
+	})
+
+	it("shouldCheckAttachmentsOnTaskStatus matches task terminal states", () => {
+		expect(shouldCheckAttachmentsOnTaskStatus(TaskStatus.FINISHED)).toBe(true)
+		expect(shouldCheckAttachmentsOnTaskStatus(TaskStatus.ERROR)).toBe(true)
+		expect(shouldCheckAttachmentsOnTaskStatus(TaskStatus.SUSPENDED)).toBe(true)
+		expect(shouldCheckAttachmentsOnTaskStatus(TaskStatus.RUNNING)).toBe(false)
+		expect(shouldCheckAttachmentsOnTaskStatus(TaskStatus.WAITING)).toBe(false)
+		expect(shouldCheckAttachmentsOnTaskStatus(TaskStatus.WAITING_FOR_USER)).toBe(false)
 	})
 
 	it("applyOptimisticTopicRunningState updates topic, project and workspace to running", () => {

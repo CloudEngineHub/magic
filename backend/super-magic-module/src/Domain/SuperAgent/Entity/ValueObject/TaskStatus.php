@@ -94,6 +94,6 @@ enum TaskStatus: string
      */
     public function isActive(): bool
     {
-        return in_array($this, [self::WAITING, self::RUNNING, self::WAITING_FOR_USER], true);
+        return in_array($this, [self::RUNNING, self::WAITING_FOR_USER], true);
     }
 }

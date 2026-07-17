@@ -196,6 +196,7 @@
 		"close": "关闭全屏预览",
 		"croppedImage": "裁剪图",
 		"imageLoadFailed": "图片加载失败",
+		"open": "预览媒体资源",
 		"originalImage": "原图",
 		"videoLoadFailed": "视频加载失败，请稍后重试",
 		"viewMode": "图片显示模式"

@@ -1,6 +1,7 @@
 import Konva from "konva"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { ExtendRenderer } from "../ExtendRenderer"
+import { getExtendResizeCursor } from "../extendAnchorCursor"
 
 describe("ExtendRenderer", () => {
 	beforeEach(() => {
@@ -21,5 +22,16 @@ describe("ExtendRenderer", () => {
 		overlayGroup.add(hitArea)
 
 		expect(ExtendRenderer.isExtendOverlayNode(hitArea)).toBe(true)
+	})
+
+	it("maps extend anchors to directional resize cursors", () => {
+		expect(getExtendResizeCursor("top-center _anchor")).toBe("n-resize")
+		expect(getExtendResizeCursor("middle-right _anchor")).toBe("e-resize")
+		expect(getExtendResizeCursor("bottom-center _anchor")).toBe("s-resize")
+		expect(getExtendResizeCursor("middle-left _anchor")).toBe("w-resize")
+		expect(getExtendResizeCursor("top-left _anchor")).toBe("nw-resize")
+		expect(getExtendResizeCursor("top-right _anchor")).toBe("ne-resize")
+		expect(getExtendResizeCursor("bottom-right _anchor")).toBe("se-resize")
+		expect(getExtendResizeCursor("bottom-left _anchor")).toBe("sw-resize")
 	})
 })

@@ -29,6 +29,7 @@ import PersonalOrganizationAvatar from "@/assets/resources/personal-organization
 import TeamOrganizationAvatar from "@/assets/resources/team-organization-avatar.svg"
 import { getAvatarUrl } from "@/utils/avatar"
 import { toTestIdSegment } from "@/utils/testid"
+import { i18nStore } from "@/models/config/stores/i18n.store"
 
 export interface OrganizationListItemProps {
 	onClose?: () => void

@@ -28,7 +28,7 @@ import { cn } from "@/lib/utils"
 import magicToast from "@/components/base/MagicToaster/utils"
 import { type PresetFileType } from "./constant"
 import type { TopicFileRowDecorationResolver } from "./topic-file-row-decoration.types"
-import { useUpdateEffect } from "ahooks"
+import { useMemoizedFn, useUpdateEffect } from "ahooks"
 import { requestProjectAttachmentsFullRefresh } from "../../services/attachmentsTopicSync"
 import { useDebouncedSearchValue } from "./hooks/useDebouncedSearchValue"
 import { useIsMobile } from "@/hooks/useIsMobile"
@@ -37,6 +37,7 @@ import { SelectDirectoryModal } from "../SelectPathModal"
 import { useBatchDownload } from "./hooks/useBatchDownload"
 import { useProjectDetailFilesController } from "./hooks/useProjectDetailFilesController"
 import { useCrossProjectFileOperation } from "./hooks/useCrossProjectFileOperation"
+import { useCrossProjectMoveCompensation } from "./hooks/useCrossProjectMoveCompensation"
 import { useMobileProjectFilesDownload } from "./hooks/useMobileProjectFilesDownload"
 import { getMobileAttachmentKey } from "./utils/get-mobile-attachment-key"
 import ProjectShareSheet from "@/pages/superMagicMobile/components/ProjectShareSheet"
@@ -179,12 +180,39 @@ const TopicFilesPanel = forwardRef<TopicFilesPanelRef, TopicFilesPanelProps>(
 			selectedTopic,
 		})
 
+		const requestAttachmentsRefreshAfterMove = useMemoizedFn((reason: string) => {
+			if (refreshAttachments) {
+				void refreshAttachments()
+				return
+			}
+
+			if (!projectId) return
+
+			requestProjectAttachmentsFullRefresh({
+				projectId,
+				reason,
+			})
+		})
+
 		const projectDetailFilesController = useProjectDetailFilesController({
 			projectId,
 			attachments,
 			selectedProject,
 			selectedTopic,
 			setIsSelectMode,
+			onMoveSuccess: () => {
+				requestAttachmentsRefreshAfterMove("topic-files-panel-mobile-move-success")
+			},
+		})
+
+		const handleProjectDetailCrossProjectSuccess = useCrossProjectMoveCompensation({
+			attachments,
+			onAttachmentsChange,
+			onUpdateAttachments: () => {
+				requestAttachmentsRefreshAfterMove(
+					"topic-files-panel-mobile-cross-project-operation-success",
+				)
+			},
 		})
 
 		const crossProjectOperation = useCrossProjectFileOperation({
@@ -192,9 +220,10 @@ const TopicFilesPanel = forwardRef<TopicFilesPanelRef, TopicFilesPanelProps>(
 			selectedWorkspace: selectedWorkspace || null,
 			selectedProject: selectedProject || null,
 			projects,
-			onSuccess: () => {
+			onSuccess: (result) => {
 				setIsSelectMode(false)
 				projectDetailFilesController.resetMobileSelection()
+				handleProjectDetailCrossProjectSuccess(result)
 			},
 		})
 
@@ -661,6 +690,7 @@ const TopicFilesPanel = forwardRef<TopicFilesPanelRef, TopicFilesPanelProps>(
 							onClose={projectDetailFilesController.closeShareModal}
 							mode="file"
 							attachments={attachments}
+							attachmentList={attachments}
 							defaultSelectedFileIds={projectDetailFilesController.shareFileIds}
 							projectName={selectedProject?.project_name}
 							projectId={projectId}

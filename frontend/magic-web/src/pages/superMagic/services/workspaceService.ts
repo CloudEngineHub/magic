@@ -18,6 +18,11 @@ export interface UpdateWorkspaceStatusParams {
 	workspaceId?: string
 }
 
+export interface DeleteWorkspaceOptions {
+	/** Keeps callers with their own pagination state from receiving a second list refresh. */
+	refreshAfterDelete?: boolean
+}
+
 class WorkspaceService {
 	fetchWorkspaces = async ({
 		isAutoSelect = true,
@@ -174,7 +179,10 @@ class WorkspaceService {
 		}
 	}
 
-	deleteWorkspace = async (id: string): Promise<Workspace | null> => {
+	deleteWorkspace = async (
+		id: string,
+		{ refreshAfterDelete = true }: DeleteWorkspaceOptions = {},
+	): Promise<Workspace | null> => {
 		try {
 			await SuperMagicApi.deleteWorkspace({ id })
 
@@ -203,12 +211,14 @@ class WorkspaceService {
 				}
 			})
 
-			this.fetchWorkspaces({
-				isSelectLast: true,
-				isEditLast: false,
-				page: 1,
-				isAutoSelect: false,
-			})
+			if (refreshAfterDelete) {
+				this.fetchWorkspaces({
+					isSelectLast: true,
+					isEditLast: false,
+					page: 1,
+					isAutoSelect: false,
+				})
+			}
 
 			return nextWorkspace || null
 		} catch (error) {

@@ -49,6 +49,9 @@ const mockState = vi.hoisted(() => ({
 	discardHandler: vi.fn(async () => true),
 	confirmConfig: null as null | Record<string, unknown>,
 	lastStoreConfig: null as null | Record<string, any>,
+	pptControlBarProps: vi.fn(),
+	pptSlideProps: vi.fn(),
+	isSlideEditing: true,
 }))
 
 vi.mock("react-i18next", () => ({
@@ -113,7 +116,23 @@ vi.mock("../PPTSidebar/index", () => ({
 }))
 
 vi.mock("../PPTControlBar", () => ({
-	PPTControlBar: () => <div data-testid="ppt-control-bar" />,
+	PPTControlBar: ({
+		scaleRatio,
+		onScaleChange,
+	}: {
+		scaleRatio: number
+		onScaleChange: (scale: number) => void
+	}) => {
+		mockState.pptControlBarProps({ scaleRatio, onScaleChange })
+		return (
+			<div data-testid="ppt-control-bar">
+				<span data-testid="ppt-control-bar-scale">{scaleRatio}</span>
+				<button type="button" onClick={() => onScaleChange(0.44)}>
+					change scale
+				</button>
+			</div>
+		)
+	},
 }))
 
 vi.mock("../PPTSlide", async () => {
@@ -121,6 +140,8 @@ vi.mock("../PPTSlide", async () => {
 
 	function MockPPTSlide({
 		isActive,
+		manualScale,
+		onScaleRatioChange,
 		onEditModeChange,
 		onRegisterSaveHandler,
 		onRegisterCloseSaveHandler,
@@ -128,6 +149,8 @@ vi.mock("../PPTSlide", async () => {
 		onManualSave,
 	}: {
 		isActive?: boolean
+		manualScale?: number | null
+		onScaleRatioChange?: (scale: number) => void
 		onEditModeChange?: (isEditing: boolean) => void
 		onRegisterSaveHandler?: (handler: (() => Promise<boolean>) | null) => void
 		onRegisterCloseSaveHandler?: (handler: (() => Promise<boolean>) | null) => void
@@ -142,10 +165,15 @@ vi.mock("../PPTSlide", async () => {
 			index: number,
 		) => Promise<void>
 	}) {
+		mockState.pptSlideProps({ manualScale })
+
 		React.useEffect(() => {
 			if (!isActive) return
 
-			onEditModeChange?.(true)
+			onScaleRatioChange?.(0.39)
+			if (mockState.isSlideEditing) {
+				onEditModeChange?.(true)
+			}
 			onRegisterSaveHandler?.(mockState.navigateSaveHandler)
 			onRegisterCloseSaveHandler?.(mockState.closeSaveHandler)
 			onRegisterDiscardHandler?.(mockState.discardHandler)
@@ -155,6 +183,7 @@ vi.mock("../PPTSlide", async () => {
 			onRegisterSaveHandler,
 			onRegisterCloseSaveHandler,
 			onRegisterDiscardHandler,
+			onScaleRatioChange,
 		])
 
 		return (
@@ -321,6 +350,9 @@ describe("PPTRender", () => {
 		)
 		mockState.store.generateSlideScreenshot.mockReset()
 		mockState.store.markSlideAsManuallySaved.mockReset()
+		mockState.pptControlBarProps.mockReset()
+		mockState.pptSlideProps.mockReset()
+		mockState.isSlideEditing = true
 		mockState.navigateSaveHandler.mockReset()
 		mockState.navigateSaveHandler.mockResolvedValue(true)
 		mockState.closeSaveHandler.mockReset()
@@ -362,6 +394,23 @@ describe("PPTRender", () => {
 			"fresh-1.html",
 			"fresh-2.html",
 		])
+	})
+
+	it("uses one manual scale for every PPT page", async () => {
+		mockState.isSlideEditing = false
+		renderPPTRender()
+
+		await waitFor(() => {
+			expect(screen.getByTestId("ppt-control-bar-scale")).toHaveTextContent("0.39")
+		})
+
+		fireEvent.click(screen.getByText("change scale"))
+
+		await waitFor(() => {
+			expect(mockState.pptSlideProps).toHaveBeenLastCalledWith(
+				expect.objectContaining({ manualScale: 0.44 }),
+			)
+		})
 	})
 
 	it("regenerates the saved slide thumbnail from processed content", async () => {

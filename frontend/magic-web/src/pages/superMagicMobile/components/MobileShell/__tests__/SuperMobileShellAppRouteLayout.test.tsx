@@ -59,6 +59,7 @@ function renderAppRouteLayout(initialPath = "/demo/super/chats") {
 					<Route path="super/chats" element={<div data-testid="child-page">child</div>} />
 					<Route path="my-crew" element={<div data-testid="child-page">child</div>} />
 					<Route path="claw" element={<div data-testid="child-page">child</div>} />
+					<Route path="recordings" element={<div data-testid="child-page">child</div>} />
 				</Route>
 			</Routes>
 		</MemoryRouter>,
@@ -93,6 +94,7 @@ describe("SuperMobileShellAppRouteLayout", () => {
 	it.each([
 		["/demo/my-crew", "myCrew", "my-crew-shell"],
 		["/demo/claw", "magiClaw", "magi-claw-shell"],
+		["/demo/recordings", "recording", "mobile-audio-recordings-page"],
 	])("resolves persistent shell state for %s", (initialPath, activeView, testIdPrefix) => {
 		vi.mocked(useIsMobile).mockReturnValue(true)
 

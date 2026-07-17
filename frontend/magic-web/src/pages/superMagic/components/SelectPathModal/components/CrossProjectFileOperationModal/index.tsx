@@ -98,7 +98,10 @@ function CrossProjectFileOperationModal({
 	fileIds,
 	sourceAttachments,
 	initialPath = [],
-	selectProjectOnly = false,
+	includeFixedWorkspaces = true,
+	closeOnSubmit = true,
+	allowWorkspaceRootSubmit = false,
+	defaultProjectName,
 	onClose,
 	onSubmit,
 }: CrossProjectFileOperationModalProps) {
@@ -121,8 +124,7 @@ function CrossProjectFileOperationModal({
 	}, [isClawContext, sourceAttachments])
 
 	const isProjectOnly =
-		selectProjectOnly ||
-		(operationType === "move" && fileIds.length === 0 && sourceAttachments.length === 0)
+		operationType === "move" && fileIds.length === 0 && sourceAttachments.length === 0
 
 	// 视图状态：workspace -> project -> directory
 	const [viewMode, setViewMode] = useState<ViewMode>("workspace")
@@ -302,9 +304,12 @@ function CrossProjectFileOperationModal({
 				page_size: 999,
 			})
 			const refreshedWorkspaces = res?.list || []
+			const nextWorkspaces = includeFixedWorkspaces
+				? refreshedWorkspaces
+				: refreshedWorkspaces.filter((workspace: Workspace) => !isFixedWorkspace(workspace))
 			// 更新内部工作区列表状态
-			setAvailableWorkspaces(refreshedWorkspaces)
-			return refreshedWorkspaces
+			setAvailableWorkspaces(nextWorkspaces)
+			return nextWorkspaces
 		} catch (error) {
 			console.error("Failed to refresh workspaces:", error)
 			return []
@@ -355,6 +360,7 @@ function CrossProjectFileOperationModal({
 	const createProjectHook = useCreateProject({
 		workspaceId: currentWorkspace?.id || "",
 		projects: availableProjects,
+		defaultProjectName,
 		onProjectCreated: async (project: ProjectListItem) => {
 			// 自动选中新创建的项目并进入目录视图
 			await handleProjectClick(project)
@@ -833,21 +839,33 @@ function CrossProjectFileOperationModal({
 	})
 
 	const submit = useMemoizedFn(() => {
-		if (!currentProject) return
+		if (!currentWorkspace) return
+		if (!currentProject && !allowWorkspaceRootSubmit) return
+
+		// Some flows, such as recording copy, let users save at workspace level so
+		// the submit handler can create a normal target project before copying.
+		const targetPath = currentProject ? path : []
+		const targetAttachments = currentProject ? attachments : []
 		onSubmit &&
 			onSubmit({
-				targetProjectId: currentProject.id,
-				targetPath: path,
-				targetAttachments: attachments,
+				targetProjectId: currentProject?.id || "",
+				targetWorkspaceId: currentWorkspace?.id,
+				targetProject: currentProject ?? undefined,
+				targetPath,
+				targetAttachments,
 				sourceAttachments: sourceAttachments,
 			})
-		onClose && onClose()
+		if (closeOnSubmit) onClose && onClose()
 	})
 
-	// 是否可以提交（必须选择了工作区和项目）
+	// Workspace-level submit is opt-in; default file operations still require a target project.
 	const canSubmit = useMemo(() => {
-		return currentWorkspace !== null && currentProject !== null
-	}, [currentWorkspace, currentProject])
+		return (
+			currentWorkspace !== null &&
+			(currentProject !== null ||
+				(allowWorkspaceRootSubmit && effectiveViewMode === "project"))
+		)
+	}, [allowWorkspaceRootSubmit, currentWorkspace, currentProject, effectiveViewMode])
 
 	const handleCancel = () => {
 		onClose && onClose()
@@ -1023,7 +1041,9 @@ function CrossProjectFileOperationModal({
 		// 创建我的龙虾工作区对象
 		const myClawWorkspace = MY_CLAW_WORKSPACE_DATA(t)
 		// 合并工作区列表和底部固定频道：共享工作区、我的龙虾
-		const allWorkspaces = [...availableWorkspaces, shareWorkspace, myClawWorkspace]
+		const allWorkspaces = includeFixedWorkspaces
+			? [...availableWorkspaces, shareWorkspace, myClawWorkspace]
+			: availableWorkspaces.filter((workspace) => !isFixedWorkspace(workspace))
 
 		// 根据搜索关键词过滤工作区（使用显示名称进行匹配，支持未命名工作区和共享工作区）
 		const filteredWorkspaces =
@@ -1134,7 +1154,13 @@ function CrossProjectFileOperationModal({
 					</EmptyStateBox>
 				) : (
 					<div className="flex w-full flex-1 flex-col items-center justify-center gap-1">
-						<img src={EmptyFilesIcon} alt="" width={200} height={200}  data-testid="cross-project-file-operation-modal-image"/>
+						<img
+							src={EmptyFilesIcon}
+							alt=""
+							width={200}
+							height={200}
+							data-testid="cross-project-file-operation-modal-image"
+						/>
 						<div className="text-sm leading-5 text-foreground/35">
 							{t("selectPathModal.noWorkspace")}
 						</div>
@@ -1277,7 +1303,13 @@ function CrossProjectFileOperationModal({
 					</EmptyStateBox>
 				) : (
 					<div className="flex w-full flex-1 flex-col items-center justify-center gap-1">
-						<img src={EmptyFilesIcon} alt="" width={200} height={200}  data-testid="cross-project-file-operation-modal-image-2"/>
+						<img
+							src={EmptyFilesIcon}
+							alt=""
+							width={200}
+							height={200}
+							data-testid="cross-project-file-operation-modal-image-2"
+						/>
 						<div className="text-sm leading-5 text-foreground/35">
 							{t("selectPathModal.noProject")}
 						</div>
@@ -1304,7 +1336,13 @@ function CrossProjectFileOperationModal({
 					>
 						<div className="flex min-w-0 flex-1 items-center gap-1">
 							<div className={folderIconClass}>
-								<img src={FoldIcon} alt="folder" width={14} height={14}  data-testid="cross-project-file-operation-modal-image-3"/>
+								<img
+									src={FoldIcon}
+									alt="folder"
+									width={14}
+									height={14}
+									data-testid="cross-project-file-operation-modal-image-3"
+								/>
 							</div>
 							<InputWithError
 								height={24}

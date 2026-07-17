@@ -35,7 +35,7 @@ readonly class AsrTaskRepository
      * @param AsrTaskStatusDTO $taskStatus 任务状态 DTO
      * @param int $ttl 过期时间（秒），默认 7 天
      */
-    public function save(AsrTaskStatusDTO $taskStatus, int $ttl = AsrConfig::TASK_STATUS_TTL): void
+    public function save(AsrTaskStatusDTO $taskStatus, int $ttl = AsrConfig::TASK_STATUS_TTL): bool
     {
         try {
             $redisKey = $this->generateTaskKey($taskStatus->taskKey, $taskStatus->userId);
@@ -45,6 +45,8 @@ readonly class AsrTaskRepository
 
             // 设置过期时间
             $this->redis->expire($redisKey, $ttl);
+
+            return true;
         } catch (Throwable $e) {
             // Redis 操作失败时记录但不抛出异常
             $this->logger->warning(trans('asr.api.redis.save_task_status_failed'), [
@@ -52,6 +54,7 @@ readonly class AsrTaskRepository
                 'user_id' => $taskStatus->userId ?? 'unknown',
                 'error' => $e->getMessage(),
             ]);
+            return false;
         }
     }
 

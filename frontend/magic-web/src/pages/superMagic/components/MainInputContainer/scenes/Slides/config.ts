@@ -539,8 +539,6 @@ export const defaultSlidesPanelConfig: SkillPanelConfig[] = [
 				{
 					data_key: "size",
 					label: { zh_CN: "尺寸", en_US: "Size" },
-					has_leading_icon: true,
-					leading_icon: "square",
 					options: [
 						{ value: "16:9", label: "16:9" },
 						{ value: "4:3", label: "4:3" },

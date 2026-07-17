@@ -168,6 +168,12 @@ return [
         'summary_prefix_with_note' => '请帮我把 ',
         'summary_middle_with_note' => ' 录音内容和 ',
         'summary_suffix_with_note' => ' 我的笔记内容转化为一份超级产物',
+        // 重新总结消息国际化
+        'resummary_prefix' => '请重新总结这个已有录音项目：',
+        'resummary_note_middle' => '。请参考这个已有笔记/上下文文件：',
+        'resummary_base_instruction' => '。只读取 magic.project.js、录音文字稿和笔记作为一手信息。不要重新转写音频，不要拆分音频，也不要修改 audio、transcript 或 notes。不要读取旧的纪要、章节主题、洞察、金句、待办、意图、权力动态、关键数据或思维导图等派生文件。',
+        'resummary_scope_instruction' => '调用 analyze_audio_project，analysis_scope 传 ":analysis_scope"，不要传 specified_analysis_types。',
+        'resummary_specified_instruction' => '调用 analyze_audio_project，specified_analysis_types 传 :specified_analysis_types。',
     ],
 
     // 异常信息国际化

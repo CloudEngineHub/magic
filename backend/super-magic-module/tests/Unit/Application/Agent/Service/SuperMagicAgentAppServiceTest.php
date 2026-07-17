@@ -10,20 +10,31 @@ namespace Dtyq\SuperMagic\Tests\Unit\Application\Agent\Service;
 use App\Domain\Contact\Entity\ValueObject\DataIsolation;
 use App\Domain\Flow\Entity\ValueObject\FlowDataIsolation;
 use App\Domain\Mode\Entity\ModeDataIsolation;
+use App\Domain\Mode\Entity\ModeEntity;
 use App\Domain\Mode\Entity\ValueQuery\ModeQuery;
 use App\Domain\Mode\Service\ModeDomainService;
+use App\Domain\OrganizationEnvironment\Service\MagicOrganizationEnvDomainService;
+use App\Domain\Permission\Entity\ValueObject\PermissionDataIsolation;
+use App\Domain\Permission\Entity\ValueObject\ResourceVisibility\ResourceType as ResourceVisibilityResourceType;
+use App\Domain\Permission\Entity\ValueObject\ResourceVisibility\VisibilityType;
+use App\Domain\Permission\Service\ResourceVisibilityDomainService;
+use App\Infrastructure\Core\DataIsolation\BaseDataIsolation;
+use App\Infrastructure\Core\DataIsolation\BaseHandleDataIsolation;
 use App\Infrastructure\Core\DataIsolation\BaseOrganizationInfoManager;
 use App\Infrastructure\Core\DataIsolation\BaseSubscriptionManager;
 use App\Infrastructure\Core\DataIsolation\BaseThirdPlatformDataIsolationManager;
+use App\Infrastructure\Core\DataIsolation\HandleDataIsolationInterface;
 use App\Infrastructure\Core\DataIsolation\OrganizationInfoManagerInterface;
 use App\Infrastructure\Core\DataIsolation\SubscriptionManagerInterface;
 use App\Infrastructure\Core\DataIsolation\ThirdPlatformDataIsolationManagerInterface;
 use App\Infrastructure\Core\Exception\BusinessException;
 use App\Infrastructure\Core\ValueObject\Page;
+use App\Interfaces\Authorization\Web\MagicUserAuthorization;
 use Dtyq\SuperMagic\Application\Agent\Service\SuperMagicAgentAppService;
 use Dtyq\SuperMagic\Application\Collaboration\Policy\ResourceAccessPolicyService;
 use Dtyq\SuperMagic\Domain\Agent\Entity\AgentVersionEntity;
 use Dtyq\SuperMagic\Domain\Agent\Entity\SuperMagicAgentEntity;
+use Dtyq\SuperMagic\Domain\Agent\Entity\ValueObject\PublishTargetType;
 use Dtyq\SuperMagic\Domain\Agent\Entity\ValueObject\SuperMagicAgentDataIsolation;
 use Dtyq\SuperMagic\Domain\Agent\Entity\ValueObject\SuperMagicAgentTool;
 use Dtyq\SuperMagic\Domain\Agent\Entity\ValueObject\SuperMagicAgentToolType;
@@ -34,8 +45,11 @@ use Dtyq\SuperMagic\Domain\SuperAgent\Entity\TopicEntity;
 use Dtyq\SuperMagic\Domain\SuperAgent\Entity\ValueObject\AgentContext;
 use Dtyq\SuperMagic\Domain\SuperAgent\Entity\ValueObject\TaskStatus;
 use Dtyq\SuperMagic\Domain\SuperAgent\Service\AgentDomainService;
+use Dtyq\SuperMagic\Domain\SuperAgent\Service\ProjectDomainService;
 use Dtyq\SuperMagic\Domain\SuperAgent\Service\TaskDomainService;
+use Dtyq\SuperMagic\Domain\SuperAgent\Service\TaskFileDomainService;
 use Dtyq\SuperMagic\Domain\SuperAgent\Service\TopicDomainService;
+use Dtyq\SuperMagic\Infrastructure\Utils\WorkDirectoryUtil;
 use Hyperf\Codec\Packer\PhpSerializerPacker;
 use Hyperf\Context\ApplicationContext;
 use Hyperf\Contract\ConfigInterface;
@@ -138,6 +152,64 @@ class SuperMagicAgentAppServiceTest extends TestCase
         $method->invoke($this->service, $dataIsolation, 'creator-only-agent');
     }
 
+    public function testSyncAgentPublishScopeTransitionKeepsCreatorVisibleWhenInternalPublishesToMarket(): void
+    {
+        ApplicationContext::setContainer($this->buildContainer([]));
+
+        $visibilityCall = (object) [
+            'visibilityType' => null,
+            'userIds' => null,
+            'departmentIds' => null,
+        ];
+        $resourceVisibilityDomainService = new readonly class($visibilityCall) extends ResourceVisibilityDomainService {
+            public function __construct(private object $visibilityCall)
+            {
+            }
+
+            public function saveVisibilityByPrincipals(
+                BaseDataIsolation|PermissionDataIsolation $dataIsolation,
+                ResourceVisibilityResourceType $resourceType,
+                string $resourceCode,
+                VisibilityType $visibilityType,
+                array $userIds = [],
+                array $departmentIds = []
+            ): void {
+                TestCase::assertSame('ORG', $dataIsolation->getCurrentOrganizationCode());
+                TestCase::assertSame(ResourceVisibilityResourceType::SUPER_MAGIC_AGENT, $resourceType);
+                TestCase::assertSame('SMA-agent', $resourceCode);
+
+                $this->visibilityCall->visibilityType = $visibilityType;
+                $this->visibilityCall->userIds = $userIds;
+                $this->visibilityCall->departmentIds = $departmentIds;
+            }
+        };
+        $this->setProperty($this->service, 'resourceVisibilityDomainService', $resourceVisibilityDomainService);
+
+        $agent = new SuperMagicAgentEntity();
+        $agent->setCode('SMA-agent');
+        $agent->setCreator('creator-user');
+
+        $previousVersion = new AgentVersionEntity();
+        $previousVersion->setPublishTargetType(PublishTargetType::ORGANIZATION);
+
+        $currentVersion = new AgentVersionEntity();
+        $currentVersion->setPublishTargetType(PublishTargetType::MARKET);
+
+        $method = new ReflectionMethod($this->service, 'syncAgentPublishScopeTransition');
+        $method->setAccessible(true);
+        $method->invoke(
+            $this->service,
+            new SuperMagicAgentDataIsolation('ORG', 'reviewer-user'),
+            $agent,
+            $previousVersion,
+            $currentVersion
+        );
+
+        self::assertSame(VisibilityType::SPECIFIC, $visibilityCall->visibilityType);
+        self::assertSame(['creator-user'], $visibilityCall->userIds);
+        self::assertSame([], $visibilityCall->departmentIds);
+    }
+
     public function testInitializeAgentPublishSandboxUsesProjectCurrentTopicAndPoolInitialization(): void
     {
         $dataIsolation = (new ReflectionClass(SuperMagicAgentDataIsolation::class))->newInstanceWithoutConstructor();
@@ -234,6 +306,158 @@ class SuperMagicAgentAppServiceTest extends TestCase
         self::assertSame('pooled-agent-sandbox-1', $sandboxId);
     }
 
+    public function testExportFileFromProjectReturnsSandboxIdUsedForSandboxExport(): void
+    {
+        $authorization = (new MagicUserAuthorization())
+            ->setId('user-1')
+            ->setOrganizationCode('ORG');
+        $magicOrganizationEnvDomainService = $this->createMock(MagicOrganizationEnvDomainService::class);
+        $magicOrganizationEnvDomainService->expects($this->once())
+            ->method('getOrganizationsEnvironmentDTO')
+            ->with('ORG')
+            ->willReturn(null);
+        ApplicationContext::setContainer($this->buildContainer([
+            HandleDataIsolationInterface::class => new BaseHandleDataIsolation(),
+            MagicOrganizationEnvDomainService::class => $magicOrganizationEnvDomainService,
+        ]));
+
+        $projectEntity = new ProjectEntity([
+            'id' => 123,
+            'workspace_id' => 456,
+            'project_name' => 'Agent Project',
+            'work_dir' => '/project_123/runtime',
+            'user_id' => 'user-1',
+            'user_organization_code' => 'ORG',
+            'current_topic_id' => 777,
+        ]);
+        $topicEntity = new TopicEntity([
+            'id' => 777,
+            'workspace_id' => 456,
+            'project_id' => 123,
+            'chat_topic_id' => 'chat-topic-777',
+            'chat_conversation_id' => 'chat-conversation-777',
+            'sandbox_id' => '777',
+            'work_dir' => '/project_123/runtime',
+            'agent_code' => 'SMA-agent',
+        ]);
+        $taskEntity = new TaskEntity([
+            'id' => 888,
+            'workspace_id' => 456,
+            'project_id' => 123,
+            'topic_id' => 777,
+            'sandbox_id' => '',
+            'prompt' => 'Agent Publish Export Task',
+        ]);
+        $agentContext = new AgentContext(
+            sandboxId: '',
+            authToken: 'auth-token',
+            projectEntity: $projectEntity,
+            topicEntity: $topicEntity,
+            taskEntity: $taskEntity,
+        );
+
+        $projectDomainService = $this->createMock(ProjectDomainService::class);
+        $projectDomainService->expects($this->once())
+            ->method('getProjectNotUserId')
+            ->with(123)
+            ->willReturn($projectEntity);
+
+        $taskFileDomainService = $this->createMock(TaskFileDomainService::class);
+        $taskFileDomainService->expects($this->once())
+            ->method('getFullPrefix')
+            ->with('ORG')
+            ->willReturn('ORG-prefix/');
+
+        $topicDomainService = $this->createMock(TopicDomainService::class);
+        $topicDomainService->expects($this->once())
+            ->method('getTopicById')
+            ->with(777)
+            ->willReturn($topicEntity);
+        $topicDomainService->expects($this->never())->method('updateTopicAgentCode');
+        $topicDomainService->expects($this->once())
+            ->method('updateTopicStatusAndSandboxId')
+            ->with(777, 888, TaskStatus::FINISHED, 'sandbox-real');
+
+        $taskDomainService = $this->createMock(TaskDomainService::class);
+        $taskDomainService->expects($this->once())
+            ->method('initDefaultTask')
+            ->with(
+                $this->isInstanceOf(DataIsolation::class),
+                $this->callback(static fn (TopicEntity $topic): bool => $topic->getSandboxId() === ''),
+                'Agent Publish Export Task'
+            )
+            ->willReturn($taskEntity);
+        $taskDomainService->expects($this->once())
+            ->method('updateTaskStatus')
+            ->with(TaskStatus::FINISHED, 888, '888', 'sandbox-real');
+
+        $agentDomainService = $this->createMock(AgentDomainService::class);
+        $agentDomainService->expects($this->once())
+            ->method('buildInitAgentContext')
+            ->with(
+                $this->isInstanceOf(DataIsolation::class),
+                $projectEntity,
+                $topicEntity,
+                $taskEntity,
+                '',
+                true
+            )
+            ->willReturn($agentContext);
+        $agentDomainService->expects($this->once())
+            ->method('ensureSandboxInitialized')
+            ->with($this->isInstanceOf(DataIsolation::class), $agentContext)
+            ->willReturn('sandbox-real');
+
+        $fullWorkdir = WorkDirectoryUtil::getFullWorkdir('ORG-prefix/', '/project_123/runtime');
+        $exportCall = (object) ['count' => 0];
+        $superMagicAgentDomainService = new readonly class($exportCall, $fullWorkdir) extends SuperMagicAgentDomainService {
+            public function __construct(private object $exportCall, private string $expectedFullWorkdir)
+            {
+            }
+
+            public function exportAgentFromSandbox(
+                SuperMagicAgentDataIsolation $dataIsolation,
+                string $code,
+                int $projectId,
+                string $fullWorkdir,
+                string $sandboxId,
+                ?string $sourcePath = null
+            ): array {
+                ++$this->exportCall->count;
+                TestCase::assertSame('ORG', $dataIsolation->getCurrentOrganizationCode());
+                TestCase::assertSame('user-1', $dataIsolation->getCurrentUserId());
+                TestCase::assertSame('SMA-agent', $code);
+                TestCase::assertSame(123, $projectId);
+                TestCase::assertSame($this->expectedFullWorkdir, $fullWorkdir);
+                TestCase::assertSame('sandbox-real', $sandboxId);
+                TestCase::assertSame('.magic', $sourcePath);
+
+                return [
+                    'file_key' => 'agent_export/SMA-agent.zip',
+                    'metadata' => ['package_name' => 'SMA-agent.zip'],
+                ];
+            }
+        };
+
+        $this->setProperty($this->service, 'projectDomainService', $projectDomainService);
+        $this->setProperty($this->service, 'taskFileDomainService', $taskFileDomainService);
+        $this->setProperty($this->service, 'topicDomainService', $topicDomainService);
+        $this->setProperty($this->service, 'taskDomainService', $taskDomainService);
+        $this->setProperty($this->service, 'agentDomainService', $agentDomainService);
+        $this->setProperty($this->service, 'superMagicAgentDomainService', $superMagicAgentDomainService);
+        $this->setProperty($this->service, 'logger', new NullLogger());
+
+        $method = new ReflectionMethod($this->service, 'exportFileFromProject');
+        $method->setAccessible(true);
+
+        $result = $method->invoke($this->service, $authorization, 'SMA-agent', 123, '.magic');
+
+        self::assertSame('agent_export/SMA-agent.zip', $result['file_key']);
+        self::assertSame(['package_name' => 'SMA-agent.zip'], $result['metadata']);
+        self::assertSame('sandbox-real', $result['sandbox_id']);
+        self::assertSame(1, $exportCall->count);
+    }
+
     public function testBuildExternalVisibleAgentsFallsBackToSourceAgentI18nWhenPublishedVersionTextIsEmpty(): void
     {
         ApplicationContext::setContainer($this->buildContainer([]));
@@ -315,6 +539,36 @@ class SuperMagicAgentAppServiceTest extends TestCase
         ], $item);
     }
 
+    public function testGetOfficialAgentCodesFiltersOrganizationWhitelist(): void
+    {
+        $visibleMode = $this->createModeEntity('general', []);
+        $allowedMode = $this->createModeEntity('SMA-allowed', ['ORG']);
+        $blockedMode = $this->createModeEntity('SMA-blocked', ['OTHER_ORG']);
+
+        $modeDomainService = new class([$visibleMode, $allowedMode, $blockedMode]) extends ModeDomainService {
+            public function __construct(private array $modes)
+            {
+            }
+
+            public function getModes(ModeDataIsolation $dataIsolation, ModeQuery $query, Page $page): array
+            {
+                return [
+                    'total' => count($this->modes),
+                    'list' => $this->modes,
+                ];
+            }
+        };
+        $this->setProperty($this->service, 'modeDomainService', $modeDomainService);
+
+        $method = new ReflectionMethod($this->service, 'getOfficialAgentCodes');
+        $method->setAccessible(true);
+
+        $dataIsolation = new SuperMagicAgentDataIsolation('ORG', 'user-1');
+        $codes = $method->invoke($this->service, $dataIsolation);
+
+        self::assertSame(['general', 'SMA-allowed'], $codes);
+    }
+
     /**
      * @param array<string> $officialCodes
      */
@@ -330,6 +584,15 @@ class SuperMagicAgentAppServiceTest extends TestCase
                 return ['total' => 0, 'list' => []];
             }
         };
+    }
+
+    private function createModeEntity(string $identifier, array $organizationWhitelist): ModeEntity
+    {
+        $mode = new ModeEntity();
+        $mode->setIdentifier($identifier);
+        $mode->setVisibilityWhitelist($organizationWhitelist === [] ? [] : ['organizations' => $organizationWhitelist]);
+
+        return $mode;
     }
 
     private function setProperty(object $object, string $property, mixed $value): void

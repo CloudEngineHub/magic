@@ -50,6 +50,7 @@ interface ConversationPanelProps {
 	onToggleHistoryPanel?: () => void
 	mentionPanelStore: MentionPanelStore
 	projectFilesStore: ProjectFilesStore
+	onTerminalTopicStatusChange?: () => void
 }
 
 function ConversationPanel({
@@ -64,9 +65,11 @@ function ConversationPanel({
 	onToggleHistoryPanel,
 	mentionPanelStore,
 	projectFilesStore,
+	onTerminalTopicStatusChange,
 }: ConversationPanelProps) {
 	const { conversation } = useSkillEditStore()
 	const selectedTopic = topicStore.selectedTopic
+	const attachments = projectFilesStore.workspaceFileTree
 
 	const sharedTopicModelStore = useMemo(() => createSuperMagicTopicModelStore(), [])
 
@@ -90,6 +93,7 @@ function ConversationPanel({
 		topicStore,
 		selectedTopic,
 		isSelectedTopicMessagesReady,
+		onTerminalTopicStatusChange,
 	})
 
 	const { messages, showLoading } = useTopicConversationLoading({
@@ -176,6 +180,7 @@ function ConversationPanel({
 			setSelectedTopic: topicStore.setSelectedTopic,
 			mentionPanelStore,
 			projectFilesStore,
+			attachments,
 			layoutConfig: DEFAULT_LAYOUT_CONFIG,
 			showLoading,
 			onSendComplete: ({ success, currentProject, currentTopic }) => {
@@ -206,6 +211,7 @@ function ConversationPanel({
 		topicStore,
 		mentionPanelStore,
 		projectFilesStore,
+		attachments,
 		showLoading,
 		messageQueue.editingQueueItem,
 		messageQueue.addToQueue,

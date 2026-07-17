@@ -29,11 +29,13 @@ use App\Infrastructure\Util\Locker\LockerInterface;
 use App\Interfaces\Chat\Assembler\MessageAssembler;
 use Carbon\Carbon;
 use Dtyq\AsyncEvent\AsyncEventUtil;
+use Dtyq\SuperMagic\Application\SuperAgent\Assembler\UserMessageDTOAssembler;
 use Dtyq\SuperMagic\Application\SuperAgent\DTO\TaskInitializationMessageDTO;
 use Dtyq\SuperMagic\Application\SuperAgent\Event\Publish\TaskInitializationPublisher;
 use Dtyq\SuperMagic\Application\SuperAgent\Event\Publish\TopicMessageProcessPublisher;
 use Dtyq\SuperMagic\Domain\SuperAgent\Constant\AgentConstant;
 use Dtyq\SuperMagic\Domain\SuperAgent\Constant\AgentEventEnum;
+use Dtyq\SuperMagic\Domain\SuperAgent\Entity\MessageQueueEntity;
 use Dtyq\SuperMagic\Domain\SuperAgent\Entity\TaskEntity;
 use Dtyq\SuperMagic\Domain\SuperAgent\Entity\TaskMessageEntity;
 use Dtyq\SuperMagic\Domain\SuperAgent\Entity\TopicEntity;
@@ -42,6 +44,7 @@ use Dtyq\SuperMagic\Domain\SuperAgent\Entity\ValueObject\MessageType;
 use Dtyq\SuperMagic\Domain\SuperAgent\Entity\ValueObject\StorageType;
 use Dtyq\SuperMagic\Domain\SuperAgent\Entity\ValueObject\SuperMagicExecutionSource;
 use Dtyq\SuperMagic\Domain\SuperAgent\Entity\ValueObject\TaskStatus;
+use Dtyq\SuperMagic\Domain\SuperAgent\Event\MessageQueueCreatedEvent;
 use Dtyq\SuperMagic\Domain\SuperAgent\Event\RunTaskAfterEvent;
 use Dtyq\SuperMagic\Domain\SuperAgent\Event\RunTaskBeforeEvent;
 use Dtyq\SuperMagic\Domain\SuperAgent\Event\RunTaskCallbackEvent;
@@ -49,6 +52,7 @@ use Dtyq\SuperMagic\Domain\SuperAgent\Event\TaskInitializationEvent;
 use Dtyq\SuperMagic\Domain\SuperAgent\Event\TopicMessageProcessEvent;
 use Dtyq\SuperMagic\Domain\SuperAgent\Repository\Model\TaskMessageModel;
 use Dtyq\SuperMagic\Domain\SuperAgent\Service\AgentDomainService;
+use Dtyq\SuperMagic\Domain\SuperAgent\Service\MessageQueueDomainService;
 use Dtyq\SuperMagic\Domain\SuperAgent\Service\ProjectDomainService;
 use Dtyq\SuperMagic\Domain\SuperAgent\Service\SandboxDomainService;
 use Dtyq\SuperMagic\Domain\SuperAgent\Service\TaskDomainService;
@@ -62,15 +66,16 @@ use Dtyq\SuperMagic\Infrastructure\Utils\TaskTerminationUtil;
 use Dtyq\SuperMagic\Infrastructure\Utils\ToolProcessor;
 use Dtyq\SuperMagic\Infrastructure\Utils\WorkDirectoryUtil;
 use Dtyq\SuperMagic\Infrastructure\Utils\WorkFileUtil;
+use Dtyq\SuperMagic\Interfaces\SuperAgent\DTO\Request\CreateOpenTaskRequestDTO;
 use Dtyq\SuperMagic\Interfaces\SuperAgent\DTO\Request\CreateTaskRequestDTO;
 use Dtyq\SuperMagic\Interfaces\SuperAgent\DTO\Response\DeliverMessageResponseDTO;
 use Dtyq\SuperMagic\Interfaces\SuperAgent\DTO\TopicTaskMessageDTO;
 use Hyperf\Amqp\Producer;
-use Hyperf\Codec\Json;
 use Hyperf\Contract\TranslatorInterface;
 use Hyperf\Logger\LoggerFactory;
 use Hyperf\Odin\Message\Role;
 use Hyperf\Redis\Redis;
+use Psr\EventDispatcher\EventDispatcherInterface;
 use Psr\Log\LoggerInterface;
 use RuntimeException;
 use Throwable;
@@ -87,9 +92,11 @@ class TopicTaskAppService extends AbstractAppService
         private readonly TaskDomainService $taskDomainService,
         private readonly TaskFileDomainService $taskFileDomainService,
         private readonly TaskMessageDomainService $taskMessageDomainService,
+        private readonly MessageQueueDomainService $messageQueueDomainService,
         private readonly SandboxDomainService $sandboxDomainService,
         private readonly AgentDomainService $agentDomainService,
         private readonly MagicChatMessageAppService $chatMessageAppService,
+        private readonly EventDispatcherInterface $eventDispatcher,
         protected MagicUserDomainService $userDomainService,
         protected MagicDepartmentUserDomainService $departmentUserDomainService,
         protected LockerInterface $locker,
@@ -690,9 +697,40 @@ class TopicTaskAppService extends AbstractAppService
             executionSource: $executionSource
         );
 
-        return [
-            'task_id' => $result['task_id'],
-        ];
+        return $this->buildCreateTaskResponse($result);
+    }
+
+    /**
+     * Create task from the simplified Open API DTO.
+     *
+     * Converts the plain-text content + model options carried by
+     * CreateOpenTaskRequestDTO into the internal rich-text message structure,
+     * then delegates to the shared createTaskByDataIsolation flow.
+     *
+     * This keeps all format-conversion logic in the service layer so the
+     * controller stays a thin auth + DTO pass-through.
+     */
+    public function createTaskFromOpenApi(
+        RequestContext $requestContext,
+        CreateOpenTaskRequestDTO $requestDTO,
+        SuperMagicExecutionSource $executionSource = SuperMagicExecutionSource::OpenApi
+    ): array {
+        $userAuthorization = $requestContext->getUserAuthorization();
+        $dataIsolation = DataIsolation::create(
+            $userAuthorization->getOrganizationCode(),
+            $userAuthorization->getId()
+        );
+
+        $internalDTO = $requestDTO->toCreateTaskRequestDTO();
+
+        $result = $this->createTaskByDataIsolation(
+            $dataIsolation,
+            $internalDTO,
+            executionSource: $executionSource,
+            messageSubscriptionConfig: $requestDTO->getMessageSubscriptionConfig()
+        );
+
+        return $this->buildCreateTaskResponse($result);
     }
 
     /**
@@ -708,7 +746,7 @@ class TopicTaskAppService extends AbstractAppService
             $dataIsolation,
             $requestDTO,
             $source,
-            deliverToQueue: false,
+            deliverToAgent: false,
             executionSource: $this->resolveIngestExecutionSource($source)
         );
     }
@@ -886,8 +924,9 @@ class TopicTaskAppService extends AbstractAppService
         DataIsolation $dataIsolation,
         CreateTaskRequestDTO $requestDTO,
         ?array $source = null,
-        bool $deliverToQueue = true,
-        ?SuperMagicExecutionSource $executionSource = null
+        bool $deliverToAgent = true,
+        ?SuperMagicExecutionSource $executionSource = null,
+        ?array $messageSubscriptionConfig = null
     ): array {
         $preparedRequestDTO = $this->createTaskRequestDTOWithSource($requestDTO, $source);
         if ($executionSource !== null) {
@@ -927,6 +966,27 @@ class TopicTaskAppService extends AbstractAppService
                 }
             }
 
+            // A normal user message waits for the currently active task. A forced message
+            // interrupts it and starts immediately instead.
+            if ($deliverToAgent && $this->shouldEnqueueToUserMessageQueue($topicEntity, $preparedRequestDTO->isForceInterrupt())) {
+                $queueEntity = $this->enqueueUserMessage($dataIsolation, $topicEntity, $preparedRequestDTO);
+                $this->logger->info('Topic is active, message enqueued to user message queue', [
+                    'topic_id' => $topicEntity->getId(),
+                    'queue_id' => $queueEntity->getId(),
+                ]);
+                return [
+                    'task_id' => '',
+                    'queue_id' => (string) $queueEntity->getId(),
+                    'message_id' => $businessMessageId,
+                    'im_seq_id' => null,
+                    'deduplicated' => false,
+                ];
+            }
+
+            if ($deliverToAgent && $preparedRequestDTO->isForceInterrupt()) {
+                $this->interruptCurrentTask($dataIsolation, $topicEntity);
+            }
+
             $taskId = (string) IdGenerator::getSnowId();
 
             $this->dispatchPreCheckEvent($dataIsolation, $topicEntity, $contentStruct, $taskId);
@@ -946,14 +1006,18 @@ class TopicTaskAppService extends AbstractAppService
                 $source
             );
 
-            if ($deliverToQueue) {
+            if ($deliverToAgent) {
                 $this->deliverMessageToQueue(
                     $dataIsolation,
                     $topicEntity,
                     $taskEntity,
-                    $preparedRequestDTO,
+                    $contentStruct,
+                    $preparedRequestDTO->getMessageType(),
                     $persistResult['agentUserId'],
-                    $persistResult['extraData']
+                    $businessMessageId,
+                    $persistResult['imSeqId'],
+                    $executionSource ?? SuperMagicExecutionSource::HumanChat,
+                    $messageSubscriptionConfig
                 );
             }
 
@@ -1703,29 +1767,51 @@ class TopicTaskAppService extends AbstractAppService
     }
 
     /**
-     * Deliver message to queue for async processing.
+     * Deliver message to the task initialization queue for async processing.
+     *
+     * Builds a UserMessageDTO via the shared assembler and serializes it into the queue
+     * payload alongside the synchronously created task id, so the consumer can converge
+     * on HandleUserMessageAppService::handleChatMessage without rebuilding context.
      */
     private function deliverMessageToQueue(
         DataIsolation $dataIsolation,
         TopicEntity $topicEntity,
         TaskEntity $taskEntity,
-        CreateTaskRequestDTO $requestDTO,
+        TextContentInterface $contentStruct,
+        string $messageType,
         string $agentUserId,
-        ?array $extraData
+        string $messageId,
+        ?int $imSeqId,
+        SuperMagicExecutionSource $executionSource,
+        ?array $messageSubscriptionConfig = null
     ): void {
-        // Create queue message DTO with all TaskContext fields
+        $language = $this->translator->getLocale() ?? 'en_US';
+
+        // Build the unified UserMessageDTO from the parsed content struct.
+        // chatConversationId is resolved later by the consumer (agent conversation lookup).
+        $userMessageDTO = UserMessageDTOAssembler::fromMessageContentStruct(
+            contentStruct: $contentStruct,
+            topicEntity: $topicEntity,
+            agentUserId: $agentUserId,
+            messageType: $messageType,
+            messageId: $messageId,
+            messageSeqId: $imSeqId !== null ? (string) $imSeqId : '',
+            language: $language,
+            executionSource: $executionSource,
+            messageSubscriptionConfig: $messageSubscriptionConfig,
+        );
+
+        // Create queue message DTO carrying the serialized UserMessageDTO and task id
         $queueMessageDTO = new TaskInitializationMessageDTO(
             organizationCode: $dataIsolation->getCurrentOrganizationCode(),
             userId: $dataIsolation->getCurrentUserId(),
             projectId: $topicEntity->getProjectId(),
             topicId: $topicEntity->getId(),
             taskId: $taskEntity->getId(),
-            messageContent: $requestDTO->getMessageContent(),
-            messageType: $requestDTO->getMessageType(),
-            language: $this->translator->getLocale() ?? 'en_US',
+            userMessage: $userMessageDTO->toArray(),
+            language: $language,
             chatTopicId: $topicEntity->getChatTopicId(),
             agentUserId: $agentUserId,
-            extraData: $extraData
         );
 
         // Publish to queue
@@ -1748,6 +1834,89 @@ class TopicTaskAppService extends AbstractAppService
             'task_id' => $taskEntity->getId(),
             'topic_id' => $topicEntity->getId(),
         ]);
+    }
+
+    /**
+     * Build the unified create-task response array.
+     *
+     * Passes through task_id when a new task was created, or queue_id when the
+     * topic was active and the message was enqueued for serial processing.
+     */
+    private function buildCreateTaskResponse(array $result): array
+    {
+        $response = ['task_id' => $result['task_id'] ?? ''];
+        if (! empty($result['queue_id'])) {
+            $response['queue_id'] = $result['queue_id'];
+        }
+        return $response;
+    }
+
+    /**
+     * Whether the incoming HTTP message should be enqueued into the user message queue
+     * instead of starting a task immediately.
+     *
+     * True when a non-interrupting message arrives while a task is active.
+     */
+    private function shouldEnqueueToUserMessageQueue(TopicEntity $topicEntity, bool $forceInterrupt): bool
+    {
+        return ! $forceInterrupt && $topicEntity->getCurrentTaskStatus()?->isActive() === true;
+    }
+
+    /**
+     * Stop the active topic task before immediately starting a forced message.
+     */
+    private function interruptCurrentTask(DataIsolation $dataIsolation, TopicEntity $topicEntity): void
+    {
+        $currentTaskId = $topicEntity->getCurrentTaskId();
+        if ($currentTaskId === null || ! $topicEntity->getCurrentTaskStatus()?->isActive()) {
+            return;
+        }
+
+        $taskEntity = $this->checkTaskPermission($dataIsolation, $currentTaskId);
+        $this->updateTaskStatus(
+            dataIsolation: $dataIsolation,
+            task: $taskEntity,
+            status: TaskStatus::Suspended,
+            errMsg: 'User force interrupted task'
+        );
+        TaskTerminationUtil::setTerminationFlag($this->redis, $this->logger, $taskEntity->getId());
+        $this->sendInterruptToSandbox($dataIsolation, $taskEntity);
+    }
+
+    /**
+     * Enqueue the incoming message into the user message queue and notify subscribers.
+     */
+    private function enqueueUserMessage(
+        DataIsolation $dataIsolation,
+        TopicEntity $topicEntity,
+        CreateTaskRequestDTO $requestDTO
+    ): MessageQueueEntity {
+        $chatMessageType = ChatMessageType::tryFrom($requestDTO->getMessageType());
+        if ($chatMessageType === null) {
+            ExceptionBuilder::throw(
+                SuperAgentErrorCode::VALIDATE_FAILED,
+                $this->translator->trans('message_queue.invalid_message_type', ['type' => $requestDTO->getMessageType()])
+            );
+        }
+
+        $messageEntity = $this->messageQueueDomainService->createMessage(
+            $dataIsolation,
+            $topicEntity->getProjectId(),
+            $topicEntity->getId(),
+            $requestDTO->getMessageContent(),
+            $chatMessageType
+        );
+
+        $this->eventDispatcher->dispatch(
+            new MessageQueueCreatedEvent(
+                $messageEntity,
+                $topicEntity,
+                $dataIsolation->getCurrentUserId(),
+                $dataIsolation->getCurrentOrganizationCode()
+            )
+        );
+
+        return $messageEntity;
     }
 
     /**

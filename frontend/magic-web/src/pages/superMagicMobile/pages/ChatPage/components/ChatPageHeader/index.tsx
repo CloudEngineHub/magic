@@ -26,10 +26,7 @@ function ChatPageHeader({
 
 	return (
 		<div className="mobile-page-header pb-0" data-testid="chat-page-header-root">
-			<MobileShellSidebarToggleButton
-				testId="chat-page-header-menu-button"
-				onFallbackOpen={onMenuClick}
-			/>
+			<MobileShellSidebarToggleButton onFallbackOpen={onMenuClick} />
 
 			{/* 标题改为绝对居中，避免右侧 loading 与禁用态切换时品牌名左右跳动。 */}
 			<h1 className="mobile-page-header-title">{brandName}</h1>

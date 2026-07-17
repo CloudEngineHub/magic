@@ -1,4 +1,4 @@
-import { lazy, Suspense, useRef, useState } from "react"
+import { lazy, Suspense, useRef, useState, type CSSProperties } from "react"
 import { useMemoizedFn, useMount } from "ahooks"
 import MemberCard from "@/components/business/MemberCard"
 import MemberCardStore from "@/stores/display/MemberCardStore"
@@ -21,6 +21,7 @@ import { useSidebarAnimation, useSidebarResponsive } from "./hooks"
 import { globalShareManagementStore } from "@/pages/superMagic/components/ShareManagement/stores"
 import { magic } from "@/enhance/magicElectron"
 import LayoutModalContainer from "./components/LayoutModalContainer"
+import MaintenanceNotice from "@/components/global/MaintenanceNotice"
 
 const isElectron = magic?.env?.isElectron?.()
 
@@ -29,6 +30,13 @@ const ElectronHeader = lazy(() => import("./components/ElectronHeader"))
 const ShareManagementContainer = lazy(
 	() => import("@/pages/superMagic/components/ShareManagement/ShareManagementContainer"),
 )
+
+const ROOT_SAFE_AREA_STYLE: CSSProperties = {
+	paddingTop: "var(--safe-area-inset-top)",
+	paddingRight: "var(--safe-area-inset-right)",
+	paddingBottom: "var(--safe-area-inset-bottom)",
+	paddingLeft: "var(--safe-area-inset-left)",
+}
 
 const BaseLayoutPc = observer(() => {
 	useMetaSet()
@@ -70,13 +78,19 @@ const BaseLayoutPc = observer(() => {
 	})
 
 	return (
-		<div className="flex h-full w-full flex-col bg-sidebar" onClick={handleClick}>
+		<div
+			className="flex h-full w-full flex-col bg-sidebar"
+			data-testid="base-layout-pc-root"
+			style={ROOT_SAFE_AREA_STYLE}
+			onClick={handleClick}
+		>
+			<MaintenanceNotice />
 			{isElectron && (
 				<Suspense fallback={null}>
 					<ElectronHeader />
 				</Suspense>
 			)}
-			<ResizablePanelGroup direction="horizontal">
+			<ResizablePanelGroup direction="horizontal" className="min-h-0 flex-1">
 				{/* Sidebar Panel - always rendered with smooth width transition */}
 				<Observer>
 					{() => (
@@ -122,8 +136,11 @@ const BaseLayoutPc = observer(() => {
 
 				{/* Main Content Panel - "被包裹"效果 */}
 				<ResizablePanel id="main-content-panel">
-					{/* pl-0: 左侧紧贴侧边栏 | pr-2 py-2: 右侧和上下各 8px 露出背景 */}
-					<div className="flex h-full flex-col py-2 pl-0 pr-2">
+					{/* The root shell already applies safe area, so this frame keeps the original desktop 8px floating gap. */}
+					<div
+						className="flex h-full flex-col py-2 pl-0 pr-2"
+						data-testid="base-layout-pc-main-frame"
+					>
 						{/* 白色容器，带圆角、边框、阴影 */}
 						<div className="flex h-full flex-col overflow-hidden">
 							<main className="flex-1 overflow-hidden">{Content}</main>

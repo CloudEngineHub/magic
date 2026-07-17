@@ -22,6 +22,10 @@ class OpenMessageScheduleDetailDTO extends AbstractDTO
 
     public string $modelId = '';
 
+    public string $topicPattern = 'general';
+
+    public string $agentCode = '';
+
     public array $timeConfig = [];
 
     public int $enabled = 1;
@@ -45,8 +49,10 @@ class OpenMessageScheduleDetailDTO extends AbstractDTO
         $dto->deadline = $entity->getDeadline();
 
         $messageContent = $entity->getMessageContent();
-        $dto->messageContent = self::extractTextFromMessageContent($messageContent);
-        $dto->modelId = self::extractModelIdFromMessageContent($messageContent);
+        $dto->messageContent = OpenMessageScheduleContentExtractor::extractText($messageContent);
+        $dto->modelId = OpenMessageScheduleContentExtractor::extractModelId($messageContent);
+        $dto->topicPattern = OpenMessageScheduleContentExtractor::extractTopicPattern($messageContent);
+        $dto->agentCode = OpenMessageScheduleContentExtractor::extractAgentCode($messageContent);
 
         return $dto;
     }
@@ -59,52 +65,13 @@ class OpenMessageScheduleDetailDTO extends AbstractDTO
             'message_content' => $this->messageContent,
             'topic_id' => $this->topicId,
             'model_id' => $this->modelId,
+            'topic_pattern' => $this->topicPattern,
+            'agent_code' => $this->agentCode,
             'time_config' => array_intersect_key($this->timeConfig, array_flip(['day', 'time', 'type'])),
             'deadline' => $this->deadline,
             'enabled' => $this->enabled,
             'completed' => $this->completed,
             'updated_at' => $this->updatedAt,
         ];
-    }
-
-    /**
-     * Extract plain text from message_content.content (JSON doc structure).
-     */
-    private static function extractTextFromMessageContent(array $messageContent): string
-    {
-        $contentJson = $messageContent['content'] ?? '';
-        if (empty($contentJson)) {
-            return '';
-        }
-
-        $doc = is_string($contentJson) ? json_decode($contentJson, true) : $contentJson;
-        if (! is_array($doc)) {
-            return is_string($contentJson) ? $contentJson : '';
-        }
-
-        $texts = [];
-        self::collectTexts($doc, $texts);
-        return implode('', $texts);
-    }
-
-    private static function collectTexts(array $node, array &$texts): void
-    {
-        if (isset($node['type']) && $node['type'] === 'text' && isset($node['text'])) {
-            $texts[] = $node['text'];
-        }
-        if (isset($node['content']) && is_array($node['content'])) {
-            foreach ($node['content'] as $child) {
-                if (is_array($child)) {
-                    self::collectTexts($child, $texts);
-                }
-            }
-        }
-    }
-
-    private static function extractModelIdFromMessageContent(array $messageContent): string
-    {
-        return (string) ($messageContent['extra']['super_agent']['model']['model_id']
-            ?? $messageContent['extra']['super_agent']['model']['provider_model_id']
-            ?? '');
     }
 }

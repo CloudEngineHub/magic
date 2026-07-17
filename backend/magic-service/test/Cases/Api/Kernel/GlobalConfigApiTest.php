@@ -8,6 +8,7 @@ declare(strict_types=1);
 namespace HyperfTest\Cases\Api\Kernel;
 
 use App\Application\Kernel\DTO\GlobalConfig;
+use App\Application\Kernel\Enum\MaintenanceType;
 use App\Application\Kernel\Service\MagicSettingAppService;
 use Hyperf\Context\ApplicationContext;
 use HyperfTest\Cases\Api\AbstractHttpTest;
@@ -39,13 +40,15 @@ class GlobalConfigApiTest extends AbstractHttpTest
 
     public function testGetGlobalConfigDefault(): void
     {
-        $this->setBootstrapStatus('');
+        $config = new GlobalConfig();
+        $this->getMagicSettingAppService()->save($config);
 
         $response = $this->get($this->url, [], $this->getCommonHeaders());
         $this->assertSame(1000, $response['code']);
         $data = $response['data'];
         $this->assertArrayValueTypesEquals([
             'is_maintenance' => false,
+            'maintenance_type' => MaintenanceType::GlobalNotice->value,
             'maintenance_description' => '',
             'need_initial' => true,
         ], $data, '默认全局配置结构不符', false, true);
@@ -101,6 +104,7 @@ class GlobalConfigApiTest extends AbstractHttpTest
 
         $payload = [
             'is_maintenance' => true,
+            'maintenance_type' => MaintenanceType::SiteClose->value,
             'maintenance_description' => 'unit test maintenance',
         ];
 
@@ -118,6 +122,55 @@ class GlobalConfigApiTest extends AbstractHttpTest
         $this->assertArrayEquals($payload, $getData, 'GET 返回数据与预期不符');
         $this->assertArrayHasKey('need_initial', $getData);
         $this->assertSame($needInitial, (bool) $getData['need_initial']);
+    }
+
+    public function testUpdateGlobalConfigRefreshesAllSettingsCache(): void
+    {
+        $initialConfig = new GlobalConfig();
+        $initialConfig->setIsMaintenance(true);
+        $initialConfig->setMaintenanceType(MaintenanceType::GlobalNotice);
+        $initialConfig->setMaintenanceDescription('cached maintenance notice');
+        $this->getMagicSettingAppService()->save($initialConfig);
+
+        $cachedResponse = $this->get('/api/v1/settings/all', [], $this->getCommonHeaders());
+        $this->assertSame(1000, $cachedResponse['code']);
+        $this->assertSame(
+            MaintenanceType::GlobalNotice->value,
+            $cachedResponse['data']['global_config']['maintenance_type'] ?? null
+        );
+
+        $payload = [
+            'is_maintenance' => true,
+            'maintenance_type' => MaintenanceType::SiteClose->value,
+            'maintenance_description' => 'site close maintenance notice',
+        ];
+        $putResponse = $this->put($this->url, $payload, $this->getCommonHeaders());
+        $this->assertSame(1000, $putResponse['code']);
+
+        $freshResponse = $this->get('/api/v1/settings/all', [], $this->getCommonHeaders());
+        $this->assertSame(1000, $freshResponse['code']);
+        $freshGlobalConfig = $freshResponse['data']['global_config'] ?? [];
+        $this->assertSame(MaintenanceType::SiteClose->value, $freshGlobalConfig['maintenance_type'] ?? null);
+        $this->assertSame('site close maintenance notice', $freshGlobalConfig['maintenance_description'] ?? null);
+    }
+
+    public function testUpdateGlobalConfigPreservesOmittedFields(): void
+    {
+        $initialConfig = new GlobalConfig();
+        $initialConfig->setIsMaintenance(true);
+        $initialConfig->setMaintenanceType(MaintenanceType::GlobalNotice);
+        $initialConfig->setMaintenanceDescription('keep existing description');
+        $this->getMagicSettingAppService()->save($initialConfig);
+
+        $putResponse = $this->put($this->url, [
+            'maintenance_type' => MaintenanceType::SiteClose->value,
+        ], $this->getCommonHeaders());
+        $this->assertSame(1000, $putResponse['code']);
+
+        $data = $putResponse['data'];
+        $this->assertTrue($data['is_maintenance'] ?? false);
+        $this->assertSame(MaintenanceType::SiteClose->value, $data['maintenance_type'] ?? null);
+        $this->assertSame('keep existing description', $data['maintenance_description'] ?? null);
     }
 
     public function testGetGlobalConfigWithPlatformSettings(): void
@@ -153,6 +206,7 @@ class GlobalConfigApiTest extends AbstractHttpTest
 
         // 验证包含维护模式配置
         $this->assertArrayHasKey('is_maintenance', $data);
+        $this->assertArrayHasKey('maintenance_type', $data);
         $this->assertArrayHasKey('maintenance_description', $data);
         $this->assertArrayHasKey('need_initial', $data);
         $this->assertArrayHasKey('bootstrap_status', $data);
@@ -185,11 +239,13 @@ class GlobalConfigApiTest extends AbstractHttpTest
         // 验证基本结构
         $this->assertIsArray($data);
         $this->assertArrayHasKey('is_maintenance', $data);
+        $this->assertArrayHasKey('maintenance_type', $data);
         $this->assertArrayHasKey('maintenance_description', $data);
         $this->assertArrayHasKey('bootstrap_status', $data);
 
         // 验证类型
         $this->assertIsBool($data['is_maintenance']);
+        $this->assertIsString($data['maintenance_type']);
         $this->assertIsString($data['maintenance_description']);
         $this->assertIsBool($data['need_initial']);
         $this->assertIsString($data['bootstrap_status']);

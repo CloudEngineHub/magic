@@ -1,4 +1,6 @@
 import { nanoid } from "nanoid"
+import { RouteName } from "@/routes/constants"
+import { FlowRouteType } from "@/types/flow"
 import type { FileData } from "../types"
 
 export function genFileData(file: File): FileData {
@@ -98,4 +100,41 @@ export function getFileExtension(fileName: string): string {
 	}
 
 	return extension
+}
+
+export function isFlowVectorKnowledgeRoute(pathname: string): boolean {
+	return pathname.includes("/flow/vector-knowledge/")
+}
+
+export function getVectorKnowledgeListRoute(pathname: string) {
+	if (isFlowVectorKnowledgeRoute(pathname)) {
+		return {
+			name: RouteName.Flows,
+			params: { type: FlowRouteType.VectorKnowledge },
+		}
+	}
+
+	return { name: RouteName.VectorKnowledge }
+}
+
+export function getVectorKnowledgeCreateRoute(pathname: string) {
+	if (isFlowVectorKnowledgeRoute(pathname)) {
+		return { name: RouteName.FlowVectorKnowledgeCreate }
+	}
+
+	return { name: RouteName.VectorKnowledgeCreate }
+}
+
+export function getVectorKnowledgeDetailRoute(pathname: string, code: string) {
+	if (isFlowVectorKnowledgeRoute(pathname)) {
+		return {
+			name: RouteName.FlowVectorKnowledgeDetail,
+			query: { code },
+		}
+	}
+
+	return {
+		name: RouteName.VectorKnowledgeDetail,
+		query: { code },
+	}
 }

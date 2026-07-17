@@ -1,0 +1,162 @@
+import { beforeEach, describe, expect, it, vi } from "vitest"
+import { fireEvent, render, screen } from "@testing-library/react"
+import type { ReactNode } from "react"
+
+const openUploadPickerSpy = vi.fn()
+let emitSelectedFiles: (() => void) | null = null
+
+vi.mock("react-i18next", () => ({
+	useTranslation: () => ({
+		t: (key: string) => {
+			const labels: Record<string, string> = {
+				"actions.startRecording": "Start Recording",
+				"card.sourceImported": "Imported audio",
+				"super:mobile.recordingEntry.settings.title": "Recording Settings",
+			}
+			return labels[key] ?? key
+		},
+	}),
+}))
+
+vi.mock("@/components/shadcn-ui/dropdown-menu", () => ({
+	DropdownMenu: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+	DropdownMenuTrigger: ({ children }: { children: ReactNode }) => <>{children}</>,
+	DropdownMenuContent: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+	DropdownMenuItem: ({
+		children,
+		onClick,
+		"data-testid": dataTestId,
+	}: {
+		children: ReactNode
+		onClick?: () => void
+		"data-testid"?: string
+	}) => (
+		<button type="button" data-testid={dataTestId} onClick={onClick}>
+			{children}
+		</button>
+	),
+}))
+
+vi.mock("@/components/business/RecordingSummary/AudioUploadAction", () => ({
+	default: ({
+		handler,
+		onFileChange,
+	}: {
+		handler: (onUpload: () => void) => ReactNode
+		onFileChange?: (files: FileList) => void
+	}) => {
+		// Split "open picker" from "files selected" to mirror the real desktop flow:
+		// the menu click happens first, the file callback returns later.
+		const trigger = handler(() => {
+			openUploadPickerSpy()
+			emitSelectedFiles = () => {
+				const file = new File(["demo"], "demo.wav", { type: "audio/wav" })
+				const files = {
+					0: file,
+					length: 1,
+					item: (index: number) => (index === 0 ? file : null),
+				} as unknown as FileList
+				onFileChange?.(files)
+			}
+		})
+		return (
+			<>
+				{trigger}
+				<button
+					type="button"
+					data-testid="audio-upload-action-file-change"
+					onClick={() => emitSelectedFiles?.()}
+				/>
+			</>
+		)
+	},
+}))
+
+import { AudioRecordingsPrimaryActions } from "../AudioRecordingsPrimaryActions"
+
+/** Renders the desktop header action cluster with isolated spies per test. */
+function renderPrimaryActions(
+	overrides: Partial<Parameters<typeof AudioRecordingsPrimaryActions>[0]> = {},
+) {
+	const onStartRecording = vi.fn()
+	const onOpenSettings = vi.fn()
+	const onImportFiles = vi.fn()
+
+	render(
+		<AudioRecordingsPrimaryActions
+			onStartRecording={onStartRecording}
+			onOpenSettings={onOpenSettings}
+			onImportFiles={onImportFiles}
+			isStartingRecording={false}
+			{...overrides}
+		/>,
+	)
+
+	return {
+		onStartRecording,
+		onOpenSettings,
+		onImportFiles,
+	}
+}
+
+beforeEach(() => {
+	openUploadPickerSpy.mockClear()
+	emitSelectedFiles = null
+})
+
+describe("AudioRecordingsPrimaryActions", () => {
+	it("renders the desktop primary action cluster", () => {
+		renderPrimaryActions()
+
+		expect(screen.getByTestId("audio-recordings-primary-actions")).toBeInTheDocument()
+		expect(screen.getByTestId("audio-recordings-start-recording-button")).toHaveTextContent(
+			"Start Recording",
+		)
+		expect(screen.getByTestId("audio-recordings-settings-button")).toHaveTextContent(
+			"Recording Settings",
+		)
+	})
+
+	it("forwards the primary recording click handler", () => {
+		const handlers = renderPrimaryActions()
+
+		fireEvent.click(screen.getByTestId("audio-recordings-start-recording-button"))
+		expect(handlers.onStartRecording).toHaveBeenCalledTimes(1)
+	})
+
+	it("shows the upload menu item and opens the stable picker callback", () => {
+		const handlers = renderPrimaryActions()
+
+		fireEvent.click(screen.getByTestId("audio-recordings-start-recording-menu-trigger"))
+		expect(screen.getByTestId("audio-recordings-import-menu-item")).toHaveTextContent(
+			"Imported audio",
+		)
+
+		fireEvent.click(screen.getByTestId("audio-recordings-import-menu-item"))
+		expect(openUploadPickerSpy).toHaveBeenCalledTimes(1)
+		expect(handlers.onImportFiles).not.toHaveBeenCalled()
+	})
+
+	it("forwards imported files after the menu trigger has already run", () => {
+		const handlers = renderPrimaryActions()
+
+		fireEvent.click(screen.getByTestId("audio-recordings-start-recording-menu-trigger"))
+		fireEvent.click(screen.getByTestId("audio-recordings-import-menu-item"))
+		fireEvent.click(screen.getByTestId("audio-upload-action-file-change"))
+
+		expect(handlers.onImportFiles).toHaveBeenCalledTimes(1)
+	})
+
+	it("forwards the settings button click", () => {
+		const handlers = renderPrimaryActions()
+
+		fireEvent.click(screen.getByTestId("audio-recordings-settings-button"))
+		expect(handlers.onOpenSettings).toHaveBeenCalledTimes(1)
+	})
+
+	it("disables recording while the startup flow is in progress", () => {
+		renderPrimaryActions({ isStartingRecording: true })
+
+		expect(screen.getByTestId("audio-recordings-start-recording-button")).toBeDisabled()
+	})
+})

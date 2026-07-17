@@ -56,6 +56,315 @@
 		scrollbar-width: none; /* Firefox */
 	}
 
+	/* Recording detail markdown prose — shared by PC/H5 summary & notes views */
+	.recording-md-prose {
+		@apply max-w-none break-words text-foreground;
+	}
+
+	.recording-md-prose--desktop {
+		font-size: 14px;
+		line-height: 1.7;
+	}
+
+	.recording-md-prose--mobile {
+		font-size: 16px;
+		line-height: 24px;
+	}
+
+	.recording-md-prose--desktop h1 {
+		font-size: 20px;
+		line-height: 28px;
+		font-weight: 700;
+		margin-top: 1.5rem;
+		margin-bottom: 0.625rem;
+	}
+
+	.recording-md-prose--desktop h2 {
+		font-size: 17px;
+		line-height: 24px;
+		font-weight: 600;
+		margin-top: 1.25rem;
+		margin-bottom: 0.5rem;
+		padding-left: 0.75rem;
+		border-left: 4px solid rgb(var(--foreground-rgb) / 0.65);
+	}
+
+	.recording-md-prose--desktop h3 {
+		font-size: 15px;
+		line-height: 22px;
+		font-weight: 600;
+		margin-top: 1rem;
+		margin-bottom: 0.375rem;
+		display: flex;
+		align-items: center;
+	}
+
+	.recording-md-prose--desktop h4 {
+		font-size: 14px;
+		line-height: 20px;
+		font-weight: 600;
+		margin-top: 0.75rem;
+		margin-bottom: 0.25rem;
+	}
+
+	.recording-md-prose--mobile h1 {
+		font-size: 22px;
+		line-height: 32px;
+		font-weight: 700;
+		margin-top: 1.5rem;
+		margin-bottom: 0.625rem;
+	}
+
+	.recording-md-prose--mobile h2 {
+		font-size: 19px;
+		line-height: 28px;
+		font-weight: 600;
+		margin-top: 1.25rem;
+		margin-bottom: 0.5rem;
+		padding-left: 0.75rem;
+		border-left: 4px solid rgb(var(--foreground-rgb) / 0.65);
+	}
+
+	.recording-md-prose--mobile h3 {
+		font-size: 17px;
+		line-height: 26px;
+		font-weight: 600;
+		margin-top: 1rem;
+		margin-bottom: 0.375rem;
+		display: flex;
+		align-items: center;
+	}
+
+	.recording-md-prose--mobile h4 {
+		font-size: 16px;
+		line-height: 24px;
+		font-weight: 600;
+		margin-top: 0.75rem;
+		margin-bottom: 0.25rem;
+	}
+
+	.recording-md-prose h1:first-child,
+	.recording-md-prose h2:first-child,
+	.recording-md-prose h3:first-child,
+	.recording-md-prose h4:first-child {
+		margin-top: 0;
+	}
+
+	.recording-md-prose h3::before {
+		content: "▸";
+		color: rgb(var(--muted-foreground-rgb));
+		margin-right: 0.375rem;
+		font-size: 0.875em;
+		flex-shrink: 0;
+	}
+
+	.recording-md-prose p {
+		margin-bottom: 0.75rem;
+	}
+
+	.recording-md-prose p:last-child {
+		margin-bottom: 0;
+	}
+
+	.recording-md-prose ul {
+		list-style-type: disc;
+		padding-left: 1.25rem;
+		margin-bottom: 0.75rem;
+	}
+
+	.recording-md-prose ol {
+		list-style-type: decimal;
+		padding-left: 1.25rem;
+		margin-bottom: 0.75rem;
+	}
+
+	.recording-md-prose ul:last-child,
+	.recording-md-prose ol:last-child {
+		margin-bottom: 0;
+	}
+
+	.recording-md-prose li {
+		margin: 0.15rem 0;
+	}
+
+	/* Bold text only — no highlight background per product feedback */
+	.recording-md-prose strong {
+		font-weight: 600;
+		padding: 0 2px;
+	}
+
+	.recording-md-prose em {
+		font-style: italic;
+		color: rgb(var(--muted-foreground-rgb));
+	}
+
+	.recording-md-prose blockquote {
+		border-left: 3px solid color-mix(in srgb, rgb(var(--foreground-rgb)) 22%, transparent);
+		padding: 0.75rem 1rem;
+		margin: 0.75rem 0;
+		color: rgb(var(--muted-foreground-rgb));
+		font-style: italic;
+		background: linear-gradient(
+			135deg,
+			color-mix(in srgb, rgb(var(--muted-rgb)) 55%, transparent) 0%,
+			color-mix(in srgb, rgb(var(--muted-rgb)) 35%, transparent) 100%
+		);
+		border-radius: 0 0.5rem 0.5rem 0;
+	}
+
+	.recording-md-prose hr {
+		border: none;
+		border-top: 1px solid rgb(var(--border-rgb) / var(--border-alpha));
+		margin: 1rem 0;
+	}
+
+	.recording-md-prose a:not([class]) {
+		color: rgb(var(--primary-rgb));
+		text-decoration: underline;
+		text-underline-offset: 2px;
+	}
+
+	.recording-md-prose code {
+		font-family: ui-monospace, monospace;
+		font-size: 0.8125em;
+		background: color-mix(in srgb, rgb(var(--muted-foreground-rgb)) 12%, transparent);
+		border-radius: 0.25rem;
+		padding: 0.1em 0.35em;
+	}
+
+	.recording-md-prose pre {
+		background: color-mix(in srgb, rgb(var(--muted-foreground-rgb)) 10%, transparent);
+		border-radius: 0.5rem;
+		padding: 0.75rem 1rem;
+		overflow-x: auto;
+		font-family: ui-monospace, monospace;
+		font-size: 13px;
+		line-height: 20px;
+		margin-bottom: 0.75rem;
+	}
+
+	.recording-md-prose pre:last-child {
+		margin-bottom: 0;
+	}
+
+	.recording-md-prose pre code {
+		background: transparent;
+		padding: 0;
+	}
+
+	.recording-md-prose img {
+		max-width: 100%;
+		height: auto;
+		border-radius: 0.5rem;
+	}
+
+	.recording-md-prose mark {
+		background-color: rgb(254 240 138 / 0.65);
+		padding: 0 0.125rem;
+		border-radius: 0.125rem;
+	}
+
+	/* Table scroll wrapper — DOM structure must be injected by the table component override */
+	.recording-md-table-wrap {
+		margin-bottom: 0.75rem;
+		overflow-x: auto;
+	}
+
+	.recording-md-table-wrap:last-child {
+		margin-bottom: 0;
+	}
+
+	.recording-md-prose .recording-md-table-wrap table {
+		min-width: 100%;
+		border-collapse: collapse;
+		font-size: 13px;
+	}
+
+	.recording-md-prose thead {
+		border-bottom: 1px solid rgb(var(--border-rgb) / var(--border-alpha));
+		background: rgb(var(--muted-rgb));
+	}
+
+	.recording-md-prose tbody tr {
+		border-bottom: 1px solid rgb(var(--border-rgb) / calc(var(--border-alpha) * 0.5));
+	}
+
+	.recording-md-prose tbody tr:last-child {
+		border-bottom: none;
+	}
+
+	.recording-md-prose th {
+		padding: 0.5rem 0.75rem;
+		text-align: left;
+		font-size: 13px;
+		font-weight: 600;
+		color: rgb(var(--foreground-rgb));
+	}
+
+	.recording-md-prose td {
+		padding: 0.5rem 0.75rem;
+		font-size: 13px;
+		line-height: 1.6;
+		color: rgb(var(--foreground-rgb));
+	}
+
+	.recording-md-prose input[type="checkbox"] {
+		margin-right: 0.5rem;
+		accent-color: rgb(var(--primary-rgb));
+	}
+
+	/* Interactive chips — rendered as buttons, not plain prose anchors */
+	.recording-time-chip {
+		margin-left: 0.125rem;
+		margin-right: 0.125rem;
+		display: inline-flex;
+		align-items: center;
+		border-radius: 0.375rem;
+		padding: 0.125rem 0.375rem;
+		vertical-align: middle;
+		font-family: ui-monospace, monospace;
+		font-size: 11px;
+		font-weight: 500;
+		line-height: 1;
+		font-variant-numeric: tabular-nums;
+		color: rgb(var(--foreground-rgb));
+		background: color-mix(in srgb, rgb(var(--foreground-rgb)) 8%, transparent);
+		border: 1px solid color-mix(in srgb, rgb(var(--foreground-rgb)) 18%, transparent);
+		transition: opacity 0.15s ease;
+	}
+
+	.recording-time-chip:hover {
+		opacity: 0.8;
+	}
+
+	.recording-speaker-chip {
+		margin-left: 0.125rem;
+		margin-right: 0.125rem;
+		display: inline-flex;
+		align-items: center;
+		gap: 0.25rem;
+		border-radius: 9999px;
+		border-width: 1px;
+		padding: 0.125rem 0.5rem;
+		vertical-align: middle;
+		font-size: 12px;
+		font-weight: 500;
+		line-height: 1rem;
+		color: rgb(var(--foreground-rgb));
+		transition: opacity 0.15s ease;
+	}
+
+	.recording-speaker-chip:hover {
+		opacity: 0.8;
+	}
+
+	.recording-speaker-chip-dot {
+		width: 0.375rem;
+		height: 0.375rem;
+		flex-shrink: 0;
+		border-radius: 9999px;
+	}
+
 	/* Topic status text shimmer - uses keyframes from _keyframe-animations.scss */
 	.topic-status-shimmer {
 		background-image: linear-gradient(
@@ -251,9 +560,9 @@
 		--icon-topic: 0.68 0.14 232;
 		--icon-topic-rgb: 0 166 222;
 		/* App-level icon semantic colors matching the prototype's icon set */
-		--icon-chat: 0.70 0.19 290;
+		--icon-chat: 0.7 0.19 290;
 		--icon-chat-rgb: 159 136 255;
-		--icon-recording: 0.66 0.20 25;
+		--icon-recording: 0.66 0.2 25;
 		--icon-recording-rgb: 244 81 79;
 		--icon-app-knowledge: 0.62 0.17 280;
 		--icon-app-knowledge-rgb: 117 117 233;
@@ -415,7 +724,7 @@
 		--info-foreground: 0.15 0 0;
 		--info-foreground-rgb: 11 11 11;
 		/* Semantic status colors — dark variants */
-		--warning: 0.80 0.15 76;
+		--warning: 0.8 0.15 76;
 		--warning-rgb: 244 175 56;
 		--warning-foreground: 0.15 0 0;
 		--warning-foreground-rgb: 11 11 11;

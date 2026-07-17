@@ -155,7 +155,7 @@ export const generatePlatformPackageApi = (client: HttpClient) => {
 			return client.get<PlatformPackage.GlobalConfig>(RequestUrl.getGlobalConfig)
 		},
 
-		updateGlobalConfig(data: { is_maintenance: boolean; maintenance_description: string }) {
+		updateGlobalConfig(data: PlatformPackage.GlobalConfig) {
 			return client.put(genRequestUrl(RequestUrl.getGlobalConfig), data)
 		},
 	}

@@ -17,6 +17,9 @@ export default function ShareContent({
 	viewFileList,
 	showCreatedByBadge,
 	allowDownloadProjectFile,
+	forceFullscreenMode,
+	hidePreviewHeader,
+	showFileHeader,
 	onPreviewFileChange,
 	onPreviewFullscreenChange,
 }: {
@@ -36,6 +39,9 @@ export default function ShareContent({
 	viewFileList?: boolean
 	showCreatedByBadge?: boolean
 	allowDownloadProjectFile?: boolean
+	forceFullscreenMode?: boolean
+	hidePreviewHeader?: boolean
+	showFileHeader?: boolean
 	onPreviewFileChange?: (fileId: string | null) => void
 	onPreviewFullscreenChange?: (isFullscreen: boolean) => void
 }) {
@@ -58,6 +64,9 @@ export default function ShareContent({
 			viewFileList={viewFileList}
 			showCreatedByBadge={showCreatedByBadge}
 			allowDownloadProjectFile={allowDownloadProjectFile}
+			forceFullscreenMode={forceFullscreenMode}
+			hidePreviewHeader={hidePreviewHeader}
+			showFileHeader={showFileHeader}
 			onPreviewFileChange={onPreviewFileChange}
 			onPreviewFullscreenChange={onPreviewFullscreenChange}
 		/>

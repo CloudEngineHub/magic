@@ -1,0 +1,134 @@
+@property --ppt-preview-flow-angle {
+	syntax: "<angle>";
+	inherits: false;
+	initial-value: 0deg;
+}
+
+.pillAccent {
+	--pill-edge-opacity: 0.06;
+	--pill-glow-opacity: 0.06;
+	--pill-glow-duration: 6.5s;
+}
+
+.pillAccent::before {
+	position: absolute;
+	z-index: 0;
+	inset: -1px;
+	padding: 1px;
+	background: linear-gradient(
+		108deg,
+		transparent 0 9%,
+		rgb(255 126 68 / 54%) 18%,
+		rgb(255 219 176 / 76%) 32%,
+		rgb(255 143 83 / 42%) 48%,
+		transparent 72% 100%
+	);
+	border-radius: inherit;
+	filter: drop-shadow(0 0 9px rgb(255 104 43 / 34%));
+	mask:
+		linear-gradient(#000 0 0) content-box,
+		linear-gradient(#000 0 0);
+	mask-composite: exclude;
+	opacity: var(--pill-edge-opacity);
+	transition: opacity 200ms ease-out;
+	content: "";
+	pointer-events: none;
+}
+
+.pillAccent::after {
+	position: absolute;
+	z-index: 0;
+	inset: 1px;
+	background:
+		radial-gradient(ellipse 62px 42px at 7% 106%, rgb(255 220 162 / 68%) 0, transparent 72%),
+		radial-gradient(ellipse 96px 42px at 38% 116%, rgb(255 99 35 / 52%) 0, transparent 76%),
+		radial-gradient(ellipse 74px 36px at 76% 112%, rgb(255 153 76 / 38%) 0, transparent 74%),
+		radial-gradient(ellipse 46px 32px at 102% 108%, rgb(255 80 27 / 34%) 0, transparent 72%);
+	border-radius: inherit;
+	filter: blur(7px) saturate(1.16);
+	opacity: var(--pill-glow-opacity);
+	animation: ppt-pill-ember-breathe var(--pill-glow-duration) ease-in-out infinite alternate;
+	transition: opacity 240ms ease-out;
+	content: "";
+	pointer-events: none;
+	will-change: transform;
+}
+
+.pillAccentSelected {
+	--pill-edge-opacity: 0.58;
+	--pill-glow-opacity: 0.44;
+	--pill-glow-duration: 4.2s;
+}
+
+.pillAccentHovered {
+	--pill-edge-opacity: 0.96;
+	--pill-glow-opacity: 0.78;
+	--pill-glow-duration: 2.4s;
+}
+
+.previewFrame {
+	position: absolute;
+	border-radius: 2px;
+}
+
+.previewFrame::before {
+	position: absolute;
+	z-index: 2;
+	inset: 0;
+	padding: 1px;
+	background: conic-gradient(
+		from var(--ppt-preview-flow-angle),
+		transparent 0 40%,
+		rgb(255 92 18 / 16%) 43%,
+		rgb(255 123 22 / 88%) 47%,
+		rgb(255 205 66 / 96%) 50%,
+		rgb(255 104 18 / 86%) 53%,
+		transparent 57% 100%
+	);
+	border-radius: 2px;
+	mask:
+		linear-gradient(#000 0 0) content-box,
+		linear-gradient(#000 0 0);
+	mask-composite: exclude;
+	opacity: 0.2;
+	animation: ppt-preview-border-glow-spin 2.4s linear infinite paused;
+	content: "";
+	pointer-events: none;
+}
+
+.previewFrame[data-preview-index="1"]::before {
+	animation-delay: -0.8s;
+}
+
+.previewFrame[data-preview-index="2"]::before {
+	animation-delay: -1.6s;
+}
+
+.previewFrameExpanded::before {
+	opacity: 0.78;
+	animation-play-state: running;
+}
+
+@keyframes ppt-preview-border-glow-spin {
+	to {
+		--ppt-preview-flow-angle: 1turn;
+	}
+}
+
+@keyframes ppt-pill-ember-breathe {
+	0% {
+		transform: translate3d(-4px, 2px, 0) scale(0.95);
+	}
+
+	100% {
+		transform: translate3d(4px, -2px, 0) scale(1.08);
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.pillAccent::after,
+	.previewFrame::before {
+		transition-duration: 0.01ms;
+		animation: none;
+	}
+}

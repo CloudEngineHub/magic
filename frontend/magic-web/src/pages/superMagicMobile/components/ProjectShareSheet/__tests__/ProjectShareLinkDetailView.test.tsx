@@ -44,13 +44,14 @@ vi.mock("react-i18next", () => ({
 				"projectShare.expiresOn": "到期于",
 				"projectShare.expiresPermanent": "永久有效",
 				"projectShare.linkLabel": "分享链接",
-					"projectShare.organizationMembersLabel": "成员 / 部门",
+				"projectShare.organizationMembersLabel": "成员 / 部门",
 				"projectShare.shareScopeAllMembers": "所有成员",
 				"projectShare.typePassword": "密码",
-					"projectShare.typeOrganizationDescription": "仅限指定成员或部门访问",
+				"projectShare.typeOrganizationDescription": "仅限指定成员或部门访问",
 				"projectShare.typePasswordDescription": "需要正确密码才能访问",
 				"share.accessPassword": "访问密码",
 				"share.copyPassword": "复制密码",
+				"share.shareToSystem": "分享至",
 				"share.hidePassword": "隐藏密码",
 				"share.showPassword": "显示密码",
 			}
@@ -76,9 +77,10 @@ function createController(
 		view: "linkDetail",
 		viewStack: ["create"],
 		mode: "project",
+		projectMode: "",
 		shareMode: ShareMode.Project,
-		projectName: "Demo Project",
-		projectId: "project-1",
+		projectName: "Fictional Project",
+		projectId: "fictional-project-1",
 		formState: {
 			shareName: "",
 			shareType: ShareType.PasswordProtected,
@@ -92,8 +94,8 @@ function createController(
 		selectedShare: {
 			resource_id: "share-1",
 			title: "客户演示",
-			project_id: "project-1",
-			project_name: "Demo Project",
+			project_id: "fictional-project-1",
+			project_name: "Fictional Project",
 			share_type: ShareType.PasswordProtected,
 			created_at: "2026-05-05T00:00:00.000Z",
 			has_password: true,
@@ -105,6 +107,9 @@ function createController(
 		isCheckingShare: false,
 		advancedOpen: false,
 		defaultSelectedFileIds: ["file-1"],
+		selectedFileIds: ["file-1"],
+		groupedShareItems: [],
+		enableInlineFileSelection: false,
 		selectedFileItems: [],
 		selectedFileHierarchy: [],
 		selectedFileCount: 0,
@@ -112,6 +117,9 @@ function createController(
 		selectedMemberNodes: [],
 		detailMemberNodes: [],
 		detailMemberLoading: false,
+		selectedShareMessageText: "",
+		canNativeShare: false,
+		shareSelectedShareToSystem: vi.fn(),
 		setShareName: vi.fn(),
 		setShareType: vi.fn(),
 		setShareExpiry: vi.fn(),
@@ -121,6 +129,8 @@ function createController(
 		setShareTargets: vi.fn(),
 		setAdvancedSettings: vi.fn(),
 		setAdvancedOpen: vi.fn(),
+		setSelectedFileIds: vi.fn(),
+		toggleShareFileId: vi.fn(),
 		openMemberSelector: vi.fn(),
 		closeMemberSelector: vi.fn(),
 		setSelectedMemberNodes: vi.fn(),
@@ -147,7 +157,7 @@ describe("ProjectShareLinkDetailView", () => {
 	it("展示原型结构的详情信息，并移除旧编辑按钮", () => {
 		const controller = createController()
 
-		render(<ProjectShareLinkDetailView controller={controller} />)
+		renderLinkDetailWithFooter(controller)
 
 		expect(screen.getByTestId("project-share-sheet-detail-type-card")).toHaveTextContent(
 			"需要正确密码才能访问",
@@ -166,8 +176,29 @@ describe("ProjectShareLinkDetailView", () => {
 		)
 		expect(screen.queryByTestId("project-share-sheet-edit-button")).not.toBeInTheDocument()
 		expect(
+			screen.queryByTestId("project-share-sheet-native-share-button"),
+		).not.toBeInTheDocument()
+		expect(
 			screen.getByTestId("project-share-sheet-detail-floating-bar-scroll-spacer"),
 		).toBeInTheDocument()
+	})
+
+	it("系统分享可用时展示分享至按钮并扩大底部留白", () => {
+		const controller = createController({
+			canNativeShare: true,
+			selectedShareMessageText: "Fictional share text",
+		})
+
+		renderLinkDetailWithFooter(controller)
+
+		expect(screen.getByTestId("project-share-sheet-native-share-button")).toHaveTextContent(
+			"分享至",
+		)
+		expect(
+			screen.getByTestId("project-share-sheet-detail-floating-bar-scroll-spacer"),
+		).toHaveStyle({
+			height: "calc(10.25rem+max(var(--safe-area-inset-bottom),16px))",
+		})
 	})
 
 	it("点击详情页底部删除按钮进入删除确认视图", () => {
@@ -376,11 +407,11 @@ describe("ProjectShareLinkDetailView", () => {
 		expect(screen.getByTestId("project-share-sheet-detail-members-section")).toHaveTextContent(
 			"成员 / 部门",
 		)
-		expect(screen.getByTestId("project-share-sheet-detail-member-row-user-1")).toHaveTextContent(
-			"张三",
-		)
-		expect(screen.getByTestId("project-share-sheet-detail-member-row-dept-1")).toHaveTextContent(
-			"设计部",
-		)
+		expect(
+			screen.getByTestId("project-share-sheet-detail-member-row-user-1"),
+		).toHaveTextContent("张三")
+		expect(
+			screen.getByTestId("project-share-sheet-detail-member-row-dept-1"),
+		).toHaveTextContent("设计部")
 	})
 })

@@ -906,8 +906,11 @@ ctx.state.patch       合并局部 state 并触发 view.update
 ctx.state.replace     替换整体 state 并触发 view.update
 ctx.panel.render      Panel Kit
 ctx.resources.resolve 插件包内资源解析
-ctx.assets.pickFiles  选择文件
-ctx.assets.uploadFile 上传文件
+ctx.assets.pickFiles  选择文件（含资源面板选图）
+ctx.assets.uploadFile 上传本地文件
+ctx.assets.resolveFileAssets 按项目 path 解析已有资源，不上传
+ctx.assets.readCanvasClipboard 由 Host 读取画布 V2 剪贴板 metadata
+ctx.assets.fetchBlob  按 URL 拉取 Blob
 ctx.ai.getImageModels 获取模型
 ctx.ai.completeImagePrompt AI 补全图片提示词
 ctx.ai.generateAndPlace 生成并放入画布
@@ -986,6 +989,98 @@ ctx.state.patch(state, {
 1. 插件可以不传 `model_id`，由后端默认模型处理。
 2. `reference_images` 走宿主资源路径，不直接传 base64。
 3. 返回值为空或异常时，应由插件自行决定错误提示与回填策略。
+
+### 10.2.2 画布剪贴板粘贴（`readCanvasClipboard` / `resolveFileAssets`）
+
+插件 iframe 无法直接读取画布 V2 私有剪贴板 bundle。当用户从画布复制元素后粘贴到插件面板时，需经 Host 桥接：
+
+```text
+插件 ctx.assets.readCanvasClipboard()
+  -> postMessage magic-canvas-plugin:read-canvas-clipboard
+  -> Host readPluginCanvasClipboard（CanvasElementClipboard.read）
+  -> 回传 { payload, uploadedAssets }
+```
+
+`payload` 结构（不含 elements / Blob）：
+
+```ts
+{
+  source: "canvas-design",
+  version: 1,
+  operation: "copy-elements" | "copy-as-png",
+  files: Array<{
+    id: string
+    elementId: string
+    filename: string
+    mimeType: string
+    fileSize: number
+    role: "element-media" | "canvas-export"
+    sourceRef?: { src?: string; ossUrl?: string; expiresAt?: string }
+  }>
+}
+```
+
+导入策略：
+
+| operation | 处理方式 |
+| --------- | -------- |
+| `copy-as-png` | Host 对 bundle 内 Blob upload，回传 `uploadedAssets`；或插件对 paste event 中的 `image/png` 走 `uploadFile` |
+| `copy-elements` | 对带 `sourceRef.src` 的 `element-media` 调用 `ctx.assets.resolveFileAssets([{ path, fileName }])`，按 path 解析、**不上传** |
+
+`resolveFileAssets` 参数示例：
+
+```js
+const assets = await ctx.assets.resolveFileAssets(
+	[{ path: "uploads/foo.png", fileName: "foo.png" }],
+	{ type: "image" },
+)
+```
+
+返回 `PluginFileAsset[]`，同时含 `path`（稳定标识）与 `url` / `src`（当前可访问 URL）。
+
+Capability 映射：
+
+- `ctx.assets.readCanvasClipboard` → 声明 `assets.pickFiles`（与 pick / resolve 共用 bridge 权限）
+- `ctx.assets.resolveFileAssets` → 声明 `assets.pickFiles`
+
+内置插件通过 `magic-plugin-kit` 的 `image-grid` / `image-slot` 已封装上述逻辑，业务插件一般无需直接调用。自定义粘贴 UI 时可参考 kit 内 `resolvePastedImageAssets`。
+
+### 10.2.3 画布图片拖拽到插件（Alt/Option + 左键）
+
+除复制粘贴外，用户可将画布图片 **按住 Alt/Option + 左键拖拽** 到插件 `image-grid` / `image-slot` 上传区。
+
+```text
+画布 SelectionTool
+  -> image:external-drag:start|move|end
+  -> Host useCanvasImageExternalDragToPlugin
+       · ghost 预览（useImageLowUrl，避免过期 ossSrc 403）
+       · iframe 坐标转换
+       · mouseup 时 exportElementsAsPNGBlob / resolve
+  -> postMessage magic-canvas-plugin:canvas-asset-drag-move|leave|drop
+  -> iframe window.dispatchEvent(CustomEvent)
+  -> kit elementFromPoint + ctx.assets.reportCanvasAssetDragTarget
+  -> kit handleCanvasAssetDrop → importCanvasAssetFiles
+```
+
+协议消息（v1 runtime）：
+
+| 方向 | type | 说明 |
+| ---- | ---- | ---- |
+| Host → iframe | `magic-canvas-plugin:canvas-asset-drag-move` | `{ clientX, clientY, assetsMeta: { count, originElementId } }` |
+| Host → iframe | `magic-canvas-plugin:canvas-asset-drag-leave` | 指针离开或拖拽结束，清理 hover |
+| Host → iframe | `magic-canvas-plugin:canvas-asset-drop` | `{ targetId, files: PluginFileAsset[] }` |
+| iframe → Host | `magic-canvas-plugin:canvas-asset-drag-target` | `{ targetId, mode: "grid"\|"slot", canDrop }` |
+
+导入策略：
+
+| 目标 mode | 行为 |
+| --------- | ---- |
+| `grid` | 批量 append，按 `referenceId` 去重，受 `maxCount` 截断 |
+| `slot` | 只取拖拽起点单图，替换当前槽位 |
+
+Capability：`ctx.assets.reportCanvasAssetDragTarget` 由 runtime v1 `createPluginSrcDoc` 注入，与 `assets.pickFiles` 共用 bridge 权限（插件需声明 `assets.pickFiles` 才能使用上传区与画布导入）。
+
+空态导入说明：kit 在空态上传框 hover 时展示 tooltip（key `imageImport.canvasHint`），详见 `magic-plugin-kit/README.md`「图片导入」。
 
 ### 10.3 分层总览
 

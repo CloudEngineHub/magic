@@ -99,7 +99,7 @@ function ChatConversationSubMenuRow({
 			>
 				<button
 					type="button"
-					className="flex min-w-0 flex-1 items-center gap-2 rounded-md text-left text-sm font-normal leading-5 outline-none"
+					className="flex min-w-0 flex-1 items-center gap-2 rounded-md text-left text-sm font-normal leading-5 outline-none [-webkit-tap-highlight-color:transparent]"
 					onClick={handleRowClick}
 				>
 					{item.isRunning ? (
@@ -162,14 +162,14 @@ function ChatConversationSubMenuRow({
 							aria-label={moreAriaLabel}
 							data-testid={`sidebar-chats-submenu-more-${item.id}`}
 							className={cn(
-								"flex h-4 w-4 shrink-0 cursor-pointer items-center justify-center rounded-full border-0 bg-transparent p-0 outline-none ring-0 transition-opacity hover:bg-sidebar-accent focus:bg-transparent focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0 active:bg-transparent",
+								"flex h-4 w-4 shrink-0 cursor-pointer items-center justify-center rounded-full border-0 bg-transparent p-0 outline-none ring-0 transition-opacity [-webkit-tap-highlight-color:transparent] hover:bg-sidebar-accent focus:bg-transparent focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0 active:bg-transparent",
 								isSelected
 									? "text-sidebar-accent-foreground"
 									: "text-sidebar-foreground",
 								// Use CSS hover instead of local state so optimistic reordering does not carry the visible menu trigger to the new row position.
 								isMenuOpen
 									? "opacity-100"
-									: "pointer-events-none opacity-0 group-hover:pointer-events-auto group-hover:opacity-100",
+									: "pointer-events-none opacity-0 group-hover:pointer-events-auto group-hover:opacity-100 no-hover:pointer-events-auto no-hover:opacity-100",
 							)}
 							onClick={(event) => {
 								blockRowClickTemporarily()

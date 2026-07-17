@@ -16,6 +16,11 @@ import { getAttachmentKey } from "../utils/getAttachmentKey"
 import { normalizeSelectionIdsForShare } from "../utils/normalizeSelectionIdsForShare"
 import { buildDeleteConfirmHierarchyFromAttachments } from "../utils/mobileAttachmentTreeSelection"
 import { resolveMagicDeleteWarningVariant } from "../utils/magic-system-folder"
+import {
+	detectCanvasProjectOperationRisk,
+	getCanvasProjectOperationImpact,
+	hasCanvasProjectInAttachments,
+} from "../utils/canvasProjectOperationRisk"
 
 interface UseProjectDetailFilesControllerOptions {
 	projectId?: string
@@ -23,6 +28,7 @@ interface UseProjectDetailFilesControllerOptions {
 	selectedProject?: any
 	selectedTopic?: any
 	setIsSelectMode: (value: boolean) => void
+	onMoveSuccess?: () => void
 }
 
 /**
@@ -34,6 +40,7 @@ export function useProjectDetailFilesController({
 	selectedProject,
 	selectedTopic,
 	setIsSelectMode,
+	onMoveSuccess,
 }: UseProjectDetailFilesControllerOptions) {
 	const { t } = useTranslation("super")
 	const [shareModalVisible, setShareModalVisible] = useState(false)
@@ -67,16 +74,17 @@ export function useProjectDetailFilesController({
 		onMoveSuccess: () => {
 			setIsSelectMode(false)
 			setSelectionResetKey((prev) => prev + 1)
+			onMoveSuccess?.()
 		},
 	})
 
 	const copyFileSelector = useCopyFileSelector({
 		projectId,
 		attachments,
-		onCopySuccess: async () => {
-			await refreshAttachments?.()
+		onCopySuccess: () => {
 			setIsSelectMode(false)
 			setSelectionResetKey((prev) => prev + 1)
+			onMoveSuccess?.()
 		},
 	})
 
@@ -180,7 +188,7 @@ export function useProjectDetailFilesController({
 		setShareModalVisible(true)
 	}
 
-	const batchDelete = (selectedKeys: Set<string>) => {
+	const batchDelete = async (selectedKeys: Set<string>) => {
 		const fileIds = collectOperationFileIds(selectedKeys)
 		if (fileIds.length === 0) return
 
@@ -193,10 +201,28 @@ export function useProjectDetailFilesController({
 			selectedKeys,
 			getAttachmentKey,
 		)
+		const canvasRisk = hasCanvasProjectInAttachments(attachments)
+			? await detectCanvasProjectOperationRisk({
+					attachments,
+					fileIds,
+					operation: "delete",
+				})
+			: { shouldWarn: false, riskTypes: [], affectedProjectNames: [] }
+		const canvasImpact = getCanvasProjectOperationImpact(canvasRisk)
 
 		openDeleteConfirm({
 			selectedHierarchy,
 			magicWarningVariant,
+			canvasWarning: canvasRisk.shouldWarn,
+			canvasWarningContent: canvasRisk.shouldWarn
+				? t(
+						canvasImpact === "open-failure"
+							? "projectDetail.deleteConfirm.canvasOpenFailureWarning"
+							: canvasImpact === "content-loss"
+								? "projectDetail.deleteConfirm.canvasContentLossWarning"
+								: "projectDetail.deleteConfirm.canvasMixedWarning",
+					)
+				: undefined,
 			testIdPrefix: "project-detail-files-batch-delete-confirm",
 			onConfirm: async () => {
 				try {

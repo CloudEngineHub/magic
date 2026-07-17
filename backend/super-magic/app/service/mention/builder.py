@@ -1,14 +1,15 @@
 """Mention context builder"""
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
+
 from app.service.mention.base import BaseMentionHandler
 from app.service.mention.handlers import (
+    AgentHandler,
+    DesignMarkerHandler,
     FileHandler,
     MCPHandler,
-    AgentHandler,
-    ToolHandler,
-    DesignMarkerHandler,
     ProjectDirectoryHandler,
     SkillHandler,
+    ToolHandler,
 )
 
 if TYPE_CHECKING:
@@ -21,25 +22,23 @@ class MentionContextBuilder:
     # 文件类型的mention类型列表
     FILE_TYPES = ['file', 'project_file', 'upload_file']
 
-    def __init__(self):
-        """初始化builder，注册所有handlers"""
-        self._handlers: Dict[str, BaseMentionHandler] = {}
-        self._register_handlers()
+    def _create_handlers(self) -> Dict[str, BaseMentionHandler]:
+        """为当前构建创建独立的 mention handler，避免并发请求共享聚合状态。"""
+        handlers: Dict[str, BaseMentionHandler] = {}
 
-    def _register_handlers(self):
-        """注册所有mention处理器"""
         # 文件处理器处理多种文件类型
         file_handler = FileHandler()
         for file_type in self.FILE_TYPES:
-            self._handlers[file_type] = file_handler
+            handlers[file_type] = file_handler
 
         # 其他处理器
-        self._handlers['mcp'] = MCPHandler()
-        self._handlers['agent'] = AgentHandler()
-        self._handlers['tool'] = ToolHandler()
-        self._handlers['design_marker'] = DesignMarkerHandler()
-        self._handlers['project_directory'] = ProjectDirectoryHandler()
-        self._handlers['skill'] = SkillHandler()
+        handlers['mcp'] = MCPHandler()
+        handlers['agent'] = AgentHandler()
+        handlers['tool'] = ToolHandler()
+        handlers['design_marker'] = DesignMarkerHandler()
+        handlers['project_directory'] = ProjectDirectoryHandler()
+        handlers['skill'] = SkillHandler()
+        return handlers
 
     async def build(self, mentions: List[Dict[str, Any]], agent_context: Optional["AgentContext"] = None) -> str:
         """构建mentions的系统上下文信息（异步）
@@ -54,6 +53,8 @@ class MentionContextBuilder:
         if not mentions:
             return ""
 
+        handlers = self._create_handlers()
+
         # 初始化上下文行
         context_lines = [
             "<mentions>",
@@ -62,14 +63,21 @@ class MentionContextBuilder:
 
         # 收集所有 tip 文本（保留顺序，后续去重）
         tip_texts = []
+        used_handlers = []
+        used_handler_ids = set()
 
         # 处理每个mention（异步）
         for i, mention in enumerate(mentions, 1):
             mention_type = mention.get('type', 'unknown')
 
             # 使用对应的handler处理mention（异步）
-            handler = self._handlers.get(mention_type)
+            handler = handlers.get(mention_type)
             if handler:
+                handler_id = id(handler)
+                if handler_id not in used_handler_ids:
+                    used_handler_ids.add(handler_id)
+                    used_handlers.append(handler)
+
                 # 收集 tip 文本，将 agent_context 传给 handler 以支持 horizon push_notification
                 tip_text = await handler.get_tip(mention, agent_context)
                 if tip_text:  # 只添加非空的 tip
@@ -81,6 +89,12 @@ class MentionContextBuilder:
             else:
                 # 未知类型的mention
                 context_lines.append(f"{i}. reference: {mention}")
+
+        # handler 完成本轮所有 mention 后，收集需要统一生成的提示文本
+        for handler in used_handlers:
+            final_tip_text = await handler.get_final_tip(agent_context)
+            if final_tip_text:
+                tip_texts.append(final_tip_text)
 
         # 添加结束标签
         context_lines.append("")

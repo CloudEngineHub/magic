@@ -85,6 +85,14 @@ export function applyOptimisticTopicRunningState({
 	}
 }
 
+export function shouldCheckAttachmentsOnTaskStatus(status?: TaskStatus): boolean {
+	return (
+		status === TaskStatus.FINISHED ||
+		status === TaskStatus.ERROR ||
+		status === TaskStatus.SUSPENDED
+	)
+}
+
 /**
  * 统一处理消息到达后的话题状态收敛：先本地更新状态，再同步 unread，终态时补记一次即时已读。
  */

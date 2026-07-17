@@ -32,6 +32,12 @@ const PRIMARY_NAV_KEYS = new Set(["home", "chats", "workspaces", "recording"])
 
 const ACCOUNT_PILL_BOX_SHADOW = "rgb(0 0 0 / 17%) 0px 10px 20px -12px"
 
+// Keep the account trigger stable across page-specific shell prefixes for shared E2E flows.
+const MOBILE_SHELL_ACCOUNT_BUTTON_TEST_ID = "mobile-shell-account-pill"
+
+// Keep shared sidebar selectors route-agnostic because these entries exist on every shell page.
+const MOBILE_SHELL_SHARED_TEST_ID_PREFIX = "mobile-super-shell"
+
 /** 统一计算侧栏导航行样式；导航项不展示路由选中或点击激活高亮。 */
 function navRowClass() {
 	return cn(
@@ -178,7 +184,7 @@ const MobileShellSidebarView = observer(function MobileShellSidebarView({
 					className="flex h-9 items-center gap-1 text-left"
 					onClick={onGoHome}
 					aria-label={t("mobile.shell.brandGoHome")}
-					data-testid={`${testIdPrefix}-brand-button`}
+					data-testid={`${MOBILE_SHELL_SHARED_TEST_ID_PREFIX}-brand-button`}
 				>
 					<div className="relative flex h-9 w-9 shrink-0 items-center justify-center">
 						<MobileBrandLogo
@@ -201,7 +207,7 @@ const MobileShellSidebarView = observer(function MobileShellSidebarView({
 									key={key}
 									type="button"
 									onClick={() => onNavigate(key)}
-									data-testid={`${testIdPrefix}-nav-${key}`}
+									data-testid={`${MOBILE_SHELL_SHARED_TEST_ID_PREFIX}-nav-${key}`}
 									className={navRowClass()}
 								>
 									<NavMenuIcon icon={Icon} />
@@ -220,7 +226,7 @@ const MobileShellSidebarView = observer(function MobileShellSidebarView({
 									key={key}
 									type="button"
 									onClick={() => onNavigate(key)}
-									data-testid={`${testIdPrefix}-nav-${key}`}
+									data-testid={`${MOBILE_SHELL_SHARED_TEST_ID_PREFIX}-nav-${key}`}
 									className={navRowClass()}
 								>
 									<NavMenuIcon icon={Icon} />
@@ -245,7 +251,7 @@ const MobileShellSidebarView = observer(function MobileShellSidebarView({
 											onClick={() => void handleRefreshRecent()}
 											disabled={isRefreshingRecent}
 											aria-label={t("mobile.shell.refreshRecentlyUsed")}
-											data-testid={`${testIdPrefix}-recent-refresh`}
+											data-testid={`${MOBILE_SHELL_SHARED_TEST_ID_PREFIX}-recent-refresh`}
 											className={cn(
 												"flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground [-webkit-tap-highlight-color:transparent]",
 												isRefreshingRecent &&
@@ -292,7 +298,7 @@ const MobileShellSidebarView = observer(function MobileShellSidebarView({
 						onClick={openSettings}
 						className="flex min-w-0 items-center gap-[6px] rounded-full bg-card py-[6px] pl-[6px] pr-[10px] text-left transition-opacity active:opacity-60"
 						style={{ boxShadow: ACCOUNT_PILL_BOX_SHADOW }}
-						data-testid={`${testIdPrefix}-account-pill`}
+						data-testid={MOBILE_SHELL_ACCOUNT_BUTTON_TEST_ID}
 					>
 						{/* Prefer real avatar; colored initial fallback matches prototype when image is missing. */}
 						<Avatar className="size-6">
@@ -317,7 +323,7 @@ const MobileShellSidebarView = observer(function MobileShellSidebarView({
 				{isUpgradeVisible && (
 					<button
 						type="button"
-						data-testid={`${testIdPrefix}-upgrade-button`}
+						data-testid={`${MOBILE_SHELL_SHARED_TEST_ID_PREFIX}-upgrade-button`}
 						className={cn(
 							"flex h-10 shrink-0 items-center justify-center rounded-full border border-border bg-card px-[14px] text-sm font-medium leading-5 text-foreground transition-opacity active:opacity-70",
 							"dark:ring-white/12 dark:bg-black dark:shadow-none dark:ring-1",

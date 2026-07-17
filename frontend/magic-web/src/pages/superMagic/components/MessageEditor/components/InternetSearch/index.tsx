@@ -53,6 +53,7 @@ const InternetSearch = function InternetSearch({
 						className,
 					)}
 					onClick={handleClick}
+					aria-pressed={isChecked}
 					data-testid="internet-search-button"
 				>
 					{isChecked ? <Globe size={iconSize} /> : <GlobeX size={iconSize} />}

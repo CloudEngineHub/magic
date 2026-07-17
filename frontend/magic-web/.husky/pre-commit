@@ -13,6 +13,8 @@ export PATH="$HOME/Library/pnpm:/opt/homebrew/bin:/usr/local/bin:$PATH"
 MAGIC_WEB_DIR="$(cd "$(dirname -- "$0")/.." && pwd)"
 cd "$MAGIC_WEB_DIR"
 
+. "$MAGIC_WEB_DIR/.husky/node-env.sh"
+
 # Check for hardcoded tokens
 echo "🔍 Checking for hardcoded tokens..."
 if ! node scripts/git-hooks/check-hardcoded-tokens.cjs; then
@@ -26,4 +28,4 @@ if ! pnpm generate:theme-rgb-tokens:check; then
 fi
 
 # Run lint-staged for code formatting
-NODE_OPTIONS="--max-old-space-size=8192" npx lint-staged
+NODE_OPTIONS="--max-old-space-size=8192" pnpm exec lint-staged

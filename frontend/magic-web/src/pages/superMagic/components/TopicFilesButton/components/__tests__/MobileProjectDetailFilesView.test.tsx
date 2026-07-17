@@ -3,13 +3,36 @@ import { describe, expect, it, vi } from "vitest"
 import MobileProjectDetailFilesView from "../MobileProjectDetailFilesView"
 import type { AttachmentItem } from "../../hooks/types"
 
+vi.mock("@/models/repository/Cache", () => ({
+	Storage: {
+		get: vi.fn(),
+		set: vi.fn(),
+		remove: vi.fn(),
+		allClear: vi.fn(),
+		key: vi.fn(),
+		getAll: vi.fn(() => []),
+		clearById: vi.fn(),
+		length: 0,
+	},
+}))
+
 vi.mock("react-i18next", () => ({
 	useTranslation: () => ({
-		t: (key: string) => key,
+		// Keep this focused mock close to the empty-state copy used by the view under test.
+		t: (key: string) => {
+			if (key === "mobile.emptyState.variants.chatFilesSearch.title") {
+				return "No matching files"
+			}
+			if (key === "mobile.emptyState.variants.chatFilesSearch.description") {
+				return "Try a different search term."
+			}
+
+			return key
+		},
 	}),
 	initReactI18next: {
 		type: "3rdParty",
-		init: () => {},
+		init: vi.fn(),
 	},
 }))
 
@@ -70,12 +93,27 @@ vi.mock("@/pages/superMagic/components/TopicFilesButton/hooks/fileSelectionUtils
 }))
 
 vi.mock("@/pages/superMagicMobile/components/MobileBottomSearchBar", () => ({
-	default: () => <div />,
+	// Preserve the search input contract so the view test exercises real state updates.
+	default: ({
+		value,
+		onValueChange,
+		testIdPrefix,
+	}: {
+		value: string
+		onValueChange: (value: string) => void
+		testIdPrefix: string
+	}) => (
+		<input
+			value={value}
+			onChange={(event) => onValueChange(event.target.value)}
+			data-testid={`${testIdPrefix}-input`}
+		/>
+	),
 }))
 
 vi.mock("@/components/base-mobile/ScrollEdgeFade", () => ({
 	ScrollEdgeFadeContainer: ({ children }: { children?: React.ReactNode }) => (
-		<div>{children}</div>
+		<div data-testid="mobile-files-scroll-edge-fade">{children}</div>
 	),
 }))
 
@@ -95,9 +133,12 @@ vi.mock("../TopicFileIcon", () => ({
 	TopicFileIcon: () => <div />,
 }))
 
-vi.mock("@/pages/superMagic/components/TopicFilesButton/utils/build-single-file-download-menu", () => ({
-	menuItemsIncludeNoWaterMarkDownload: vi.fn(() => false),
-}))
+vi.mock(
+	"@/pages/superMagic/components/TopicFilesButton/utils/build-single-file-download-menu",
+	() => ({
+		menuItemsIncludeNoWaterMarkDownload: vi.fn(() => false),
+	}),
+)
 
 vi.mock("@/pages/superMagic/components/TopicFilesButton/utils/magic-system-folder", () => ({
 	isMagicSystemFolder: vi.fn(() => false),
@@ -109,19 +150,54 @@ vi.mock("@/pages/superMagic/components/TopicFilesButton/utils/getAttachmentKey",
 	getVisibleAttachmentChildren: (item: AttachmentItem) => item.children || [],
 }))
 
-vi.mock("@/pages/superMagic/components/TopicFilesButton/utils/mobileAttachmentTreeSelection", () => ({
-	collectAttachmentsBySelectedKeys: vi.fn(() => []),
-	collectCurrentViewSelectableKeys: vi.fn(() => ["mock-file-id"]),
-	getAttachmentNodeSelectionState: vi.fn(() => "none"),
-	toggleAllInCurrentView: vi.fn((_: string[], selected: Set<string>) => selected),
-	toggleAttachmentSelection: vi.fn((_: string, selected: Set<string>) => selected),
-}))
+vi.mock(
+	"@/pages/superMagic/components/TopicFilesButton/utils/mobileAttachmentTreeSelection",
+	() => ({
+		collectAttachmentsBySelectedKeys: vi.fn(() => []),
+		collectCurrentViewSelectableKeys: vi.fn(() => ["mock-file-id"]),
+		getAttachmentNodeSelectionState: vi.fn(() => "none"),
+		toggleAllInCurrentView: vi.fn((_: string[], selected: Set<string>) => selected),
+		toggleAttachmentSelection: vi.fn((_: string, selected: Set<string>) => selected),
+	}),
+)
 
 vi.mock("../MobileFileSelectionCheckbox", () => ({
 	default: () => null,
 }))
 
 describe("MobileProjectDetailFilesView", () => {
+	it("为移动端文件列表的每一行提供稳定的自动化选择器", () => {
+		const attachments: AttachmentItem[] = [
+			{
+				file_id: "folder-alpha",
+				name: "测试目录",
+				is_directory: true,
+				children: [],
+			},
+			{
+				file_id: "file-beta",
+				file_name: "sample-doc.md",
+				is_directory: false,
+				file_extension: "md",
+			},
+		]
+
+		render(
+			<MobileProjectDetailFilesView
+				attachments={attachments}
+				mobileViewVariant="project-detail"
+			/>,
+		)
+
+		const rows = screen.getAllByTestId("project-detail-mobile-file-row")
+
+		expect(rows).toHaveLength(2)
+		expect(rows[0]).toHaveAttribute("data-file-id", "folder-alpha")
+		expect(rows[0]).toHaveAttribute("data-file-kind", "folder")
+		expect(rows[1]).toHaveAttribute("data-file-id", "file-beta")
+		expect(rows[1]).toHaveAttribute("data-file-kind", "file")
+	})
+
 	it("深层路径栏支持横向滚动并放宽单段文本展示宽度", () => {
 		const attachments: AttachmentItem[] = [
 			{
@@ -134,8 +210,7 @@ describe("MobileProjectDetailFilesView", () => {
 						file_id: "folder-2",
 						name: ".magic-第二层超长目录",
 						is_directory: true,
-						relative_file_path:
-							"/测试特殊长目录名称第一层/.magic-第二层超长目录",
+						relative_file_path: "/测试特殊长目录名称第一层/.magic-第二层超长目录",
 						children: [
 							{
 								file_id: "folder-3",
@@ -152,18 +227,17 @@ describe("MobileProjectDetailFilesView", () => {
 		]
 
 		const { container } = render(
-			<MobileProjectDetailFilesView attachments={attachments} mobileViewVariant="project-detail" />,
+			<MobileProjectDetailFilesView
+				attachments={attachments}
+				mobileViewVariant="project-detail"
+			/>,
 		)
 
 		expect(screen.getByTestId("project-detail-mobile-back-button")).toBeInTheDocument()
 		expect(screen.getByTestId("project-detail-mobile-home-button")).toBeInTheDocument()
 
-		fireEvent.click(
-			screen.getAllByRole("button", { name: /测试特殊长目录名称第一层/ })[0],
-		)
-		fireEvent.click(
-			screen.getAllByRole("button", { name: /\.magic-第二层超长目录/ })[0],
-		)
+		fireEvent.click(screen.getAllByRole("button", { name: /测试特殊长目录名称第一层/ })[0])
+		fireEvent.click(screen.getAllByRole("button", { name: /\.magic-第二层超长目录/ })[0])
 
 		const scrollContainer = container.querySelector(".overflow-x-auto")
 		expect(scrollContainer).toBeTruthy()
@@ -178,5 +252,54 @@ describe("MobileProjectDetailFilesView", () => {
 			throw new Error("Expected breadcrumb button to be rendered")
 		}
 		expect(breadcrumbButton.className).toContain("max-w-[168px]")
+	})
+
+	it("添加按钮脱离滚动渐隐容器以避免被底部搜索栏阴影遮挡", () => {
+		render(
+			<MobileProjectDetailFilesView
+				attachments={[]}
+				allowEdit
+				mobileViewVariant="chat-sheet"
+			/>,
+		)
+
+		const addButton = screen.getByTestId("project-detail-files-add-button")
+		const scrollFadeContainer = screen.getByTestId("mobile-files-scroll-edge-fade")
+
+		expect(scrollFadeContainer).not.toContainElement(addButton)
+		expect(addButton.className).toContain("z-30")
+	})
+
+	it("搜索无结果时还原原型空态并在剩余区域居中展示", () => {
+		const attachments: AttachmentItem[] = [
+			{
+				file_id: "file-report-001",
+				file_name: "summary-note.md",
+				is_directory: false,
+				file_extension: "md",
+			},
+		]
+
+		render(
+			<MobileProjectDetailFilesView
+				attachments={attachments}
+				mobileViewVariant="project-detail"
+			/>,
+		)
+
+		fireEvent.change(screen.getByTestId("project-detail-files-search-input"), {
+			target: { value: "missing-keyword" },
+		})
+
+		const emptyState = screen.getByTestId("mobile-files-search-empty")
+
+		expect(emptyState).toHaveTextContent("No matching files")
+		expect(emptyState).toHaveTextContent("Try a different search term.")
+		expect(emptyState).toHaveAttribute("role", "status")
+		expect(emptyState.className).toContain("flex-1")
+		expect(emptyState.className).toContain("justify-center")
+		expect(emptyState.querySelector("svg")).toBeInTheDocument()
+		expect(emptyState).not.toHaveTextContent("projectDetail.searchEmptyDescription")
+		expect(emptyState).not.toHaveTextContent("search.searchEmptyDescription")
 	})
 })

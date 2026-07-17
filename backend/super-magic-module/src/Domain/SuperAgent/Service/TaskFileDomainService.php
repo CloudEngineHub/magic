@@ -2409,9 +2409,10 @@ class TaskFileDomainService
      * @param ProjectEntity $forkProjectEntity 目标项目实体
      * @param ProjectForkEntity $projectForkRecordEntity Fork记录实体
      * @param null|array $fileIds 要复制的文件ID列表（null表示复制所有文件）
+     * @return array<int, int> source file ID => fork file ID
      * @throws Throwable
      */
-    public function migrateProjectFile(DataIsolation $dataIsolation, ProjectEntity $sourceProjectEntity, ProjectEntity $forkProjectEntity, ProjectForkEntity $projectForkRecordEntity, ?array $fileIds = null): void
+    public function migrateProjectFile(DataIsolation $dataIsolation, ProjectEntity $sourceProjectEntity, ProjectEntity $forkProjectEntity, ProjectForkEntity $projectForkRecordEntity, ?array $fileIds = null): array
     {
         // 初始化基本参数
         $pageSize = 200; // Process 200 files at a time
@@ -2434,7 +2435,7 @@ class TaskFileDomainService
         // Ensure the fork process is still running
         if (! $projectForkRecordEntity->getStatus()->isRunning()) {
             $this->logger->warning(sprintf('Fork process %d is not in running status, current status: %s. Skipping file migration.', $projectForkRecordEntity->getId(), $projectForkRecordEntity->getStatus()->value));
-            return;
+            return [];
         }
 
         // 预计算工作目录路径（避免重复计算）
@@ -2475,7 +2476,7 @@ class TaskFileDomainService
             if ($totalCount > 0 && $processedCount >= $totalCount) {
                 $this->logger->info(sprintf('Fork record %d: All %d files already processed, skipping migration', $forkRecordId, $totalCount));
                 $this->projectForkRepository->updateStatus($forkRecordId, ForkStatus::FINISHED->value, 100, '');
-                return;
+                return [];
             }
 
             // 分批获取和处理文件
@@ -2610,6 +2611,7 @@ class TaskFileDomainService
             // Mark as finished
             $this->projectForkRepository->updateStatus($forkRecordId, ForkStatus::FINISHED->value, 100, '');
             $this->logger->info(sprintf('File migration finished for fork record %d.', $forkRecordId));
+            return $sourceToNewIdMap;
         } catch (Throwable $e) {
             $this->logger->error(sprintf('File migration failed for fork record %d: %s', $forkRecordId, $e->getMessage()));
             $this->projectForkRepository->updateStatus($forkRecordId, ForkStatus::FAILED->value, 0, 'File migration failed');

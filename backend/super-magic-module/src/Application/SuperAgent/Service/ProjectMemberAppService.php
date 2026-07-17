@@ -258,7 +258,7 @@ class ProjectMemberAppService extends AbstractAppService
         $result = $this->projectDomainService->getProjectsByConditions(
             ['project_ids' => $projectIds],
             $requestDTO->getPage(),
-            $requestDTO->getPageSize()
+            10000
         );
 
         return $this->buildCollaborationProjectResponse($dataIsolation, $result['list'], $collaborationProjects['list'], $totalCount);

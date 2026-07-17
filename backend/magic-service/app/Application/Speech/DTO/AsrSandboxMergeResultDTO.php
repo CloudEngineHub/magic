@@ -19,7 +19,8 @@ readonly class AsrSandboxMergeResultDTO
         public string $filePath,
         public ?int $duration = null,
         public ?int $fileSize = null,
-        public ?string $errorMessage = null
+        public ?string $errorMessage = null,
+        public array $responseData = [],
     ) {
     }
 
@@ -36,7 +37,8 @@ readonly class AsrSandboxMergeResultDTO
             filePath: $response['file_path'] ?? '',
             duration: $response['duration'] ?? null,
             fileSize: $response['file_size'] ?? null,
-            errorMessage: $response['error_message'] ?? null
+            errorMessage: $response['error_message'] ?? null,
+            responseData: is_array($response['response_data'] ?? null) ? $response['response_data'] : [],
         );
     }
 
@@ -67,6 +69,7 @@ readonly class AsrSandboxMergeResultDTO
             'duration' => $this->duration,
             'file_size' => $this->fileSize,
             'error_message' => $this->errorMessage,
+            'response_data' => $this->responseData,
         ];
     }
 }

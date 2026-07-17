@@ -2,6 +2,7 @@ import CommonPopup from "@/pages/superMagicMobile/components/CommonPopup"
 import ShareModal from "@/pages/superMagic/components/Share/Modal"
 import { ShareType } from "@/pages/superMagic/components/Share/types"
 import { cn } from "@/lib/utils"
+import DefaultOpenFilePicker from "./components/DefaultOpenFilePicker"
 import ProjectShareCreateView from "./components/ProjectShareCreateView"
 import ProjectShareDeleteConfirmView from "./components/ProjectShareDeleteConfirmView"
 import ProjectShareExpiryView from "./components/ProjectShareExpiryView"
@@ -83,6 +84,14 @@ export default function ProjectShareSheet(props: ProjectShareSheetProps) {
 					</div>
 				</div>
 			</CommonPopup>
+
+			<DefaultOpenFilePicker
+				open={controller.defaultOpenFilePickerOpen}
+				candidateTree={controller.defaultOpenFileCandidateTree}
+				selectedFileId={controller.defaultOpenFileId}
+				onClose={controller.closeDefaultOpenFilePicker}
+				onSelectFile={controller.selectDefaultOpenFile}
+			/>
 
 			{controller.editResourceId ? (
 				<ShareModal
