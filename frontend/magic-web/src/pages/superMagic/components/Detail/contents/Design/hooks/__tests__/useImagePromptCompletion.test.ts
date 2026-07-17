@@ -22,9 +22,8 @@ vi.mock("@/apis", () => ({
 	},
 }))
 
-vi.mock("../../utils/designDslPathUtils", () => ({
-	createDesignWorkspacePathExists: vi.fn(() => vi.fn(() => true)),
-	resolveDesignDslPathToWorkspaceAbsoluteByCandidates: vi.fn((imagePath: string) =>
+vi.mock("../../utils/designPath", () => ({
+	toWorkspaceAbsoluteApiPathForOperation: vi.fn((imagePath: string) =>
 		imagePath.startsWith("./") ? `/workspace/${imagePath.slice(2)}` : imagePath,
 	),
 }))

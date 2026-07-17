@@ -16,7 +16,6 @@ import pubsub from "@/utils/pubsub"
 import { useSuperMagicMarkerManager } from "./marker-manager"
 import { useDesignProjectManager } from "./hooks/useDesignProjectManager"
 import {
-	findFileBySrc,
 	getDesignDirectoryInfo,
 	fileItemsToProjectAttachmentMentionTree,
 	normalizePath,
@@ -24,6 +23,7 @@ import {
 	resolveActualDesignCurrentFile,
 	resolveDesignProjectBasePathFromAttachments,
 } from "./utils/utils"
+import { resolveDesignAttachment } from "./utils/designPath"
 import { FlexBox } from "@/components/base"
 import { observer } from "mobx-react-lite"
 import workspaceStore from "@/pages/superMagic/stores/core/workspace"
@@ -679,9 +679,16 @@ function DesignViewer(props: DesignViewerProps) {
 				latestDesignDataRef.current.canvas ??
 				null,
 			resolveFileBySrc: (src) => {
-				return findFileBySrc(src, flatAttachments, designProjectBasePath, attachmentIndex, {
-					strictCanvasRelativeResource: true,
-				})
+				const resolvedFile = resolveDesignAttachment(
+					src,
+					{
+						flatAttachments,
+						designProjectBasePath,
+						attachmentIndex,
+					},
+					{ mode: "strict-current-canvas" },
+				)
+				return resolvedFile.status === "found" ? resolvedFile.fileItem : null
 			},
 		})
 		setCanvasElementResourceGetter(

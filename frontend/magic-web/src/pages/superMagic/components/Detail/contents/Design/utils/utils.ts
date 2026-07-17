@@ -17,16 +17,14 @@ import {
 	ImageGenerationTaskMeta,
 	ImageGenerationTaskTypeMap,
 } from "@/components/CanvasDesign/public/magic-types"
+import { toDesignProjectBasePath, toDesignDslPath } from "./designPath"
 import {
-	isDesignDslCanvasRelativeResourcePath,
-	normalizeDesignAttachmentPathForCanvas,
-	rewriteLayerElementsPathsForMagicProjectSave,
-	resolveDesignDslPathCandidatesToWorkspaceRelative,
-	resolveStrictDesignDslCanvasResourceCandidates,
-	normalizeMagicProjectDirToBase,
-} from "./designDslPathUtils"
-import { getDesignProjectCurrentFileByProjectPath } from "./toolDesignProjectInfo"
+	migrateLoadedDesignDataPaths,
+	normalizeDesignPathForTransitionMigration,
+	rewriteDesignLayerPathsForTransitionMigration,
+} from "./designPathTransitionMigration"
 import type { DesignAttachmentIndex } from "./designAttachmentIndex"
+import { getDesignProjectCurrentFileByProjectPath } from "./toolDesignProjectInfo"
 import { cloneDeep } from "lodash-es"
 import {
 	MAGIC_PROJECT_VERSION_V1,
@@ -131,7 +129,11 @@ export async function loadMagicProjectJsContent(
  */
 export function generateMagicProjectJsContent(
 	designData: DesignData,
-	options?: { projectBasePath?: string },
+	options?: {
+		projectBasePath?: string
+		flatAttachments?: FileItem[]
+		attachmentIndex?: DesignAttachmentIndex | null
+	},
 ): string {
 	const rawElements = designData.canvas?.elements || []
 	const connections = getCanvasConnections(designData.canvas)
@@ -145,7 +147,11 @@ export function generateMagicProjectJsContent(
 		elements = cloneDeep(rawElements)
 	}
 	if (needPathRewrite) {
-		rewriteLayerElementsPathsForMagicProjectSave(elements, basePath as string)
+		rewriteDesignLayerPathsForTransitionMigration(elements, {
+			designProjectBasePath: basePath,
+			flatAttachments: options?.flatAttachments,
+			attachmentIndex: options?.attachmentIndex,
+		})
 	}
 
 	let canvasField: unknown
@@ -1301,7 +1307,7 @@ export function resolveDesignProjectBasePathFromAttachments(options: {
 			: flattenAttachmentsList(attachments ?? [])
 	if (!list.length) return undefined
 	const info = getDesignDirectoryInfo(actualCurrentFile, list)
-	return normalizeMagicProjectDirToBase(info.path)
+	return toDesignProjectBasePath(info.path)
 }
 
 /**
@@ -1329,16 +1335,24 @@ export function resolveDesignDirectoryNameFromAttachments(options: {
 }
 
 /**
- * 画布加载后把图层里的旧绝对路径（如 `/画布名/images/x`）统一为 `./images/x`（与落盘规则一致，就地改写内存数据）
+ * 加载后执行历史路径过渡修复：仅在附件树可确认归属时将旧路径收口为显式 DSL 路径。
  */
 export function normalizeDesignDataPathsAfterLoad(
 	designData: DesignData,
 	projectBasePath: string | undefined,
+	options?: {
+		flatAttachments?: FileItem[]
+		attachmentIndex?: DesignAttachmentIndex | null
+	},
 ): void {
 	if (!projectBasePath?.trim()) return
 	const elements = designData.canvas?.elements
 	if (!elements?.length) return
-	rewriteLayerElementsPathsForMagicProjectSave(elements, projectBasePath.trim())
+	migrateLoadedDesignDataPaths(designData, {
+		designProjectBasePath: projectBasePath,
+		flatAttachments: options?.flatAttachments,
+		attachmentIndex: options?.attachmentIndex,
+	})
 }
 
 /**
@@ -1978,128 +1992,6 @@ export function flattenAttachmentsList(items: FileItem[]): FileItem[] {
 }
 
 /**
- * 从 flatAttachments 中根据 src 找到对应的文件
- * @param src 文件路径或 URL
- * @param flatAttachments 已扁平化的附件列表
- */
-export function findFileBySrc(
-	src: string,
-	flatAttachments: FileItem[],
-	designProjectBasePath?: string,
-	attachmentIndex?: DesignAttachmentIndex | null,
-	options?: {
-		strictCanvasRelativeResource?: boolean
-	},
-): FileItem | null {
-	if (!src || !flatAttachments || flatAttachments.length === 0) {
-		return null
-	}
-	const shouldUseStrictCanvasResourceMatch =
-		options?.strictCanvasRelativeResource === true &&
-		Boolean(designProjectBasePath) &&
-		isDesignDslCanvasRelativeResourcePath(src)
-	const strictCanvasResourceCandidates = shouldUseStrictCanvasResourceMatch
-		? resolveStrictDesignDslCanvasResourceCandidates(src, designProjectBasePath)
-		: null
-	let resolvedCandidates: string[]
-	if (strictCanvasResourceCandidates?.workspaceRelative.length) {
-		resolvedCandidates = strictCanvasResourceCandidates.workspaceRelative
-	} else if (designProjectBasePath && src) {
-		resolvedCandidates = resolveDesignDslPathCandidatesToWorkspaceRelative(
-			src,
-			designProjectBasePath,
-		)
-	} else {
-		resolvedCandidates = [src]
-	}
-	const normalizedCandidates = resolvedCandidates.map((candidate) => normalizePath(candidate))
-	const normalizedSrc = normalizedCandidates[0] || normalizePath(src)
-
-	let fileItem: FileItem | undefined
-
-	if (attachmentIndex) {
-		for (const candidate of normalizedCandidates) {
-			const direct = attachmentIndex.byNormalizedPath.get(candidate)
-			if (direct && !direct.is_directory) {
-				fileItem = direct
-				break
-			}
-			const tail = candidate.startsWith("/") ? candidate.slice(1) : candidate
-			const relaxed = attachmentIndex.byPathWithoutLeadingSlash.get(tail)
-			if (relaxed && !relaxed.is_directory) {
-				fileItem = relaxed
-				break
-			}
-		}
-	}
-
-	// 方法1: 尝试通过 relative_file_path 匹配
-	if (!fileItem) {
-		fileItem = flatAttachments.find((item) => {
-			if (!item.relative_file_path || item.is_directory) return false
-			const itemPath = normalizePath(item.relative_file_path)
-			return normalizedCandidates.includes(itemPath)
-		})
-	}
-
-	if (shouldUseStrictCanvasResourceMatch) {
-		return fileItem || null
-	}
-
-	// 方法1.5: 如果目录名变化，尝试按多段后缀匹配（至少目录 + 文件名）
-	if (!fileItem && normalizedSrc.includes("/")) {
-		const pathParts = normalizedSrc.split("/").filter(Boolean)
-		for (let i = pathParts.length; i > 1; i--) {
-			const pathSuffix = pathParts.slice(-i).join("/")
-			fileItem = flatAttachments.find((item) => {
-				if (!item.relative_file_path || item.is_directory) return false
-				const itemPath = normalizePath(item.relative_file_path)
-				return itemPath.endsWith("/" + pathSuffix) || itemPath === pathSuffix
-			})
-			if (fileItem) break
-		}
-	}
-
-	// 方法2: 如果 src 是 URL，尝试从 URL 中提取路径或文件名
-	if (!fileItem && src.includes("/")) {
-		// 尝试从 URL 中提取文件名
-		const urlParts = src.split("/")
-		const fileName = urlParts[urlParts.length - 1]?.split("?")[0] // 移除查询参数
-
-		if (fileName) {
-			const lower = fileName.trim().toLowerCase()
-			const bucket = attachmentIndex?.byFileName.get(lower)
-			if (bucket?.length) {
-				fileItem = bucket.find((item) => !item.is_directory)
-			}
-			if (!fileItem) {
-				fileItem = flatAttachments.find((item) => {
-					return (
-						!item.is_directory &&
-						(item.file_name === fileName ||
-							item.display_filename === fileName ||
-							item.filename === fileName)
-					)
-				})
-			}
-		}
-	}
-
-	// 方法3: 如果 src 是 file_id，直接匹配
-	if (!fileItem && src && !src.includes("/") && !src.includes("\\")) {
-		const byId = attachmentIndex?.byFileId.get(src)
-		if (byId && !byId.is_directory) fileItem = byId
-		if (!fileItem) {
-			fileItem = flatAttachments.find((item) => {
-				return !item.is_directory && item.file_id === src
-			})
-		}
-	}
-
-	return fileItem || null
-}
-
-/**
  * 将 FileItem 转换为 AttachmentItem 格式
  */
 export function convertFileItemToAttachmentItem(fileItem: FileItem): AttachmentItem {
@@ -2124,7 +2016,11 @@ function mapFileItemToProjectAttachmentMentionNode(
 ): ProjectAttachmentMentionNode | null {
 	const isDir = Boolean(item.is_directory)
 	const rawPath = item.relative_file_path || ""
-	const path = isDir ? rawPath : normalizeDesignAttachmentPathForCanvas(rawPath, projectBasePath)
+	const path = isDir
+		? rawPath
+		: normalizeDesignPathForTransitionMigration(rawPath, {
+				designProjectBasePath: projectBasePath,
+			})
 	const name = (item.file_name || item.display_filename || "").trim()
 	if (!isDir && !name) return null
 	if (isDir && !name && !path && !item.file_id) return null

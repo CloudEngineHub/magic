@@ -4,6 +4,7 @@ import { ImageElement as ImageElementClass } from "../../../runtime/elements/ima
 import { VideoElement as VideoElementClass } from "../../../runtime/elements/video/VideoElement"
 import type { UploadFileResponse } from "../../../public/magic-types"
 import type { MatchableMentionItem } from "./tiptap/contentUtils"
+import { getCanvasResourceFileName } from "../../../runtime/shared/path/canvasResourcePath"
 
 interface UseMentionSyncOptions {
 	canvas: Canvas | null
@@ -111,7 +112,7 @@ export function useMentionSync(options: UseMentionSyncOptions) {
 					}
 					elementInstance.saveReferenceImageInfo(newInfo)
 				} else {
-					const fileName = path.split("/").pop() || path
+					const fileName = getCanvasResourceFileName(path) || path
 					elementInstance.saveReferenceImageInfo({
 						path,
 						fileName,

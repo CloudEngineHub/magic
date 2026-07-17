@@ -5,7 +5,7 @@ import type {
 	VideoGenerationResultResponse,
 } from "../../../public/magic-types"
 import { VIDEO_CONFIG } from "../../elements/video/VideoElement.config"
-import { joinUploadStoragePath } from "../../shared/path/pathUtils"
+import { toCanvasUploadStoragePath } from "../../shared/path/canvasResourcePath"
 import {
 	extractSmartNameFromFileName,
 	shouldContinueGenerationPolling,
@@ -135,7 +135,7 @@ export class VideoPollingManager {
 		}
 
 		if (result.file_dir && result.file_name) {
-			updateData.src = joinUploadStoragePath(result.file_dir, result.file_name)
+			updateData.src = toCanvasUploadStoragePath(result.file_dir, result.file_name)
 			updateData.name = extractSmartNameFromFileName(result.file_name)
 		}
 

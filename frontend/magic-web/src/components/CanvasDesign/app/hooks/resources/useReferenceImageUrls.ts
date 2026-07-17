@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react"
 import { useCanvas } from "../../providers/CanvasProvider"
 import { useCanvasEvent } from "../canvas"
-import { resolveCanonicalResourcePath } from "../../../runtime/shared/path/pathUtils"
+import { toCanonicalCanvasResourcePath } from "../../../runtime/shared/path/canvasResourcePath"
 import type { ImageInfo } from "../../../runtime/resources/image/ImageResourceManager"
 import { TOOLTIP_PREVIEW_MIN_SIZE } from "../../../runtime/resources/image/imagePreviewUtils"
 
@@ -232,8 +232,8 @@ export function useReferenceImageUrls(
 				if (!canvas || !enabled) return
 				const resolveAbs = canvas.magicConfigManager.config?.methods?.resolveAbsolutePath
 				if (
-					resolveCanonicalResourcePath(path, resolveAbs) !==
-					resolveCanonicalResourcePath(data.path, resolveAbs)
+					toCanonicalCanvasResourcePath(path, resolveAbs) !==
+					toCanonicalCanvasResourcePath(data.path, resolveAbs)
 				) {
 					return
 				}
@@ -253,8 +253,8 @@ export function useReferenceImageUrls(
 				if (!canvas || !enabled) return
 				const resolveAbs = canvas.magicConfigManager.config?.methods?.resolveAbsolutePath
 				if (
-					resolveCanonicalResourcePath(path, resolveAbs) !==
-					resolveCanonicalResourcePath(data.path, resolveAbs)
+					toCanonicalCanvasResourcePath(path, resolveAbs) !==
+					toCanonicalCanvasResourcePath(data.path, resolveAbs)
 				) {
 					return
 				}
@@ -282,8 +282,8 @@ export function useReferenceImageUrls(
 				if (!canvas || !enabled) return
 				const resolveAbs = canvas.magicConfigManager.config?.methods?.resolveAbsolutePath
 				if (
-					resolveCanonicalResourcePath(path, resolveAbs) !==
-					resolveCanonicalResourcePath(data.path, resolveAbs)
+					toCanonicalCanvasResourcePath(path, resolveAbs) !==
+					toCanonicalCanvasResourcePath(data.path, resolveAbs)
 				) {
 					return
 				}

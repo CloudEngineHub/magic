@@ -5,6 +5,7 @@ import type { MatchableMentionItem } from "../message/tiptap/contentUtils"
 import { ImageElement as ImageElementClass } from "../../../runtime/elements/image/ImageElement"
 import { VideoElement as VideoElementClass } from "../../../runtime/elements/video/VideoElement"
 import type { ReferenceResourceFileInfo } from "../message/reference-assets/reference-resource.types"
+import { getCanvasResourceFileName } from "../../../runtime/shared/path/canvasResourcePath"
 
 interface UseReferenceImagesStateOptions {
 	/** Canvas 实例，用于请求 Resource */
@@ -96,7 +97,7 @@ export function useReferenceImagesState(options: UseReferenceImagesStateOptions)
 
 			for (const { info, ossInfo } of results) {
 				const ossSrc = ossInfo?.ossSrc ?? info.path
-				const fileName = info.path.split("/").pop() || info.path
+				const fileName = getCanvasResourceFileName(info.path) || info.path
 
 				infos.push({
 					path: info.path,
@@ -214,7 +215,7 @@ export function useReferenceImagesState(options: UseReferenceImagesStateOptions)
 				reorderedInfos.push(existingInfo)
 			} else {
 				// 新增的项，创建基本信息
-				const fileName = path.split("/").pop() || path
+				const fileName = getCanvasResourceFileName(path) || path
 				reorderedInfos.push({
 					path,
 					src: path, // 先用 path，Resource 加载后会更新

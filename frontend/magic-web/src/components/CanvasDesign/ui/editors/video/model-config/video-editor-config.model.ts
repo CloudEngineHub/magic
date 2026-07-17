@@ -3,6 +3,7 @@ import {
 	SUPPORTED_IMAGE_EXTENSIONS,
 	SUPPORTED_VIDEO_EXTENSIONS,
 } from "../../../../runtime/shared/ids"
+import { getCanvasResourceFileName } from "../../../../runtime/shared/path/canvasResourcePath"
 import type {
 	DefaultGenerateVideoConfig,
 	GenerateVideoFrameInput,
@@ -614,7 +615,7 @@ export function createUploadFileInfo(path: string): UploadFileResponse {
 	return {
 		path,
 		src: path,
-		fileName: path.split("/").pop() || path,
+		fileName: getCanvasResourceFileName(path) || path,
 	}
 }
 

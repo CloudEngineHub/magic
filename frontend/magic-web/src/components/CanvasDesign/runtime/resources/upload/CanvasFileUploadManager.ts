@@ -18,11 +18,9 @@ import {
 	isAudioFile,
 } from "../../shared/ids"
 import {
-	isRemoteOrSpecialPath,
-	normalizePathLocal,
-	normalizeUploadFileResponse,
-	stripCurrentDirectoryPrefix,
-} from "../../shared/path/pathUtils"
+	normalizeCanvasUploadFileResponsePath,
+	toRemoteLoadDeferralKey,
+} from "../../shared/path/canvasResourcePath"
 import { getAllExistingNames } from "../../shared/placement/elementUtils"
 import { ImageElement as ImageElementClass } from "../../elements/image/ImageElement"
 import { VideoElement as VideoElementClass } from "../../elements/video/VideoElement"
@@ -284,16 +282,7 @@ export class CanvasFileUploadManager {
 	}
 
 	public getRemoteResourceLoadDeferralKey(path?: string | null): string | null {
-		const rawPath = path?.trim()
-		if (!rawPath || isRemoteOrSpecialPath(rawPath)) {
-			return null
-		}
-
-		const key = stripCurrentDirectoryPrefix(normalizePathLocal(rawPath))
-		if (!key || key === ".") {
-			return null
-		}
-		return key
+		return toRemoteLoadDeferralKey(path)
 	}
 
 	public shouldDeferRemoteResourceLoad(path: string): boolean {
@@ -537,7 +526,7 @@ export class CanvasFileUploadManager {
 			uploadSubDir: this.getUploadSubDir(file),
 			overwrite: this.getUploadFileOverwrite(file, files),
 			onUploadComplete: (result) => {
-				callbacks?.onUploadComplete?.(normalizeUploadFileResponse(result), index)
+				callbacks?.onUploadComplete?.(normalizeCanvasUploadFileResponsePath(result), index)
 			},
 			onUploadFailed: (error) => {
 				callbacks?.onUploadFailed?.(error, index)
@@ -551,7 +540,7 @@ export class CanvasFileUploadManager {
 			throw new Error("Upload failed: no result returned")
 		}
 
-		return uploadResults.map((r) => normalizeUploadFileResponse(r))
+		return uploadResults.map((r) => normalizeCanvasUploadFileResponsePath(r))
 	}
 
 	/**
@@ -576,7 +565,7 @@ export class CanvasFileUploadManager {
 					uploadSubDir: this.getUploadSubDir(file),
 					overwrite: this.getUploadFileOverwrite(file, [file]),
 					onUploadComplete: (result) => {
-						const normalizedResult = normalizeUploadFileResponse(result)
+						const normalizedResult = normalizeCanvasUploadFileResponsePath(result)
 						onUploadComplete(normalizedResult)
 					},
 					onUploadFailed: (error) => {
@@ -641,7 +630,7 @@ export class CanvasFileUploadManager {
 				uploadSubDir: this.getUploadSubDir(req.file),
 				overwrite: this.getUploadFileOverwrite(req.file, requestFiles),
 				onUploadComplete: (result) => {
-					const normalizedResult = normalizeUploadFileResponse(result)
+					const normalizedResult = normalizeCanvasUploadFileResponsePath(result)
 					settleUploadComplete(req, normalizedResult)
 				},
 				onUploadFailed: (error) => {
@@ -1148,7 +1137,7 @@ export class CanvasFileUploadManager {
 			throw new RemoteResourceTransferError("upload", "Upload failed: no result returned")
 		}
 
-		const normalizedResult = normalizeUploadFileResponse(uploadResults[0])
+		const normalizedResult = normalizeCanvasUploadFileResponsePath(uploadResults[0])
 
 		return normalizedResult
 	}

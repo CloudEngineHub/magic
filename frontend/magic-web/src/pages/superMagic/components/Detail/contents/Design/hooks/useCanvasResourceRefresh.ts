@@ -14,7 +14,7 @@ import type { FileItem } from "@/pages/superMagic/components/Detail/components/F
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import type { SuperMagicFileChangeMessage } from "@/types/chat/intermediate_message"
 import type { SeqResponse } from "@/types/request"
-import { resolveDesignDslPathCandidatesToWorkspaceRelative } from "../utils/designDslPathUtils"
+import { resolveDesignAttachment, toWorkspaceRelativeCandidates } from "../utils/designPath"
 import {
 	findAttachmentByNormalizedWorkspacePath,
 	normalizeCanvasAttachmentLookupPath,
@@ -200,17 +200,26 @@ function addCanvasResourceSnapshot(params: {
 	const resourcePath = normalizeCanvasResourcePath(src)
 	if (!resourcePath) return
 
-	const resolvedCandidates = resolveDesignDslPathCandidatesToWorkspaceRelative(
+	const resolvedAttachment = resolveDesignAttachment(
 		src,
-		designProjectBasePath,
+		{
+			flatAttachments,
+			attachmentIndex,
+			designProjectBasePath,
+		},
+		{ mode: "strict-current-canvas" },
 	)
+	const resolvedCandidates = toWorkspaceRelativeCandidates(src, {
+		designProjectBasePath,
+	})
 	const resolvedPath =
-		resolvedCandidates.find((candidate) =>
-			findCanvasResourceAttachment(candidate, flatAttachments, attachmentIndex),
-		) ??
-		resolvedCandidates[0] ??
-		src
-	const attachment = findCanvasResourceAttachment(resolvedPath, flatAttachments, attachmentIndex)
+		resolvedAttachment.status === "found"
+			? resolvedAttachment.resolvedPath
+			: (resolvedCandidates[0] ?? src)
+	const attachment =
+		resolvedAttachment.status === "found"
+			? resolvedAttachment.fileItem
+			: findCanvasResourceAttachment(resolvedPath, flatAttachments, attachmentIndex)
 	const key = `${mediaType}\0${resourcePath}`
 	const signature = [
 		normalizeCanvasResourcePath(resolvedPath),

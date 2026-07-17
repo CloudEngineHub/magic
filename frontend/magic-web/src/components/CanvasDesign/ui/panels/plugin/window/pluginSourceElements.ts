@@ -1,7 +1,7 @@
 import {
-	normalizePathLocal,
+	toWeakCanvasResourcePath,
 	stripCurrentDirectoryPrefix,
-} from "../../../../runtime/shared/path/pathUtils"
+} from "../../../../runtime/shared/path/canvasResourcePath"
 import type { PluginCanvasClipboardPayload, PluginFileAsset } from "./types"
 
 // 宿主侧、单插件窗口内的临时映射：插件只感知文件/path/id，落点算法需要原始画布元素 id。
@@ -21,7 +21,7 @@ function getSourceKeys(value: unknown): string[] {
 
 	// 同一资源在拖拽、剪贴板、resolve-file-assets 链路里可能带 ./ 前缀或被规范化，注册多种 key 提高命中率。
 	const keys = new Set<string>([trimmed])
-	const normalized = normalizePathLocal(trimmed)
+	const normalized = toWeakCanvasResourcePath(trimmed)
 	if (normalized) {
 		keys.add(normalized)
 		keys.add(stripCurrentDirectoryPrefix(normalized))

@@ -23,6 +23,7 @@ import {
 	filterRedundantElements,
 	getCanvasCenter,
 } from "../../shared/placement/elementUtils"
+import { getCanvasResourceFileName } from "../../shared/path/canvasResourcePath"
 import {
 	CanvasElementClipboard,
 	type CanvasElementClipboardBrowserOptions,
@@ -828,7 +829,7 @@ export class ClipboardManager {
 
 	private getFilenameFromPath(path: string, fallback: string): string {
 		const cleanPath = path.split("?")[0]
-		const filename = cleanPath.split("/").pop()
+		const filename = getCanvasResourceFileName(cleanPath)
 		return filename || fallback
 	}
 

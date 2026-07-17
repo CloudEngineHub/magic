@@ -1,6 +1,9 @@
 import type { ImageElement, LayerElement, VideoElement } from "../../document/types"
 import { ElementTypeEnum } from "../../document/types"
-import { normalizePathLocal, stripCurrentDirectoryPrefix } from "../../shared/path/pathUtils"
+import {
+	toWeakCanvasResourcePath,
+	stripCurrentDirectoryPrefix,
+} from "../../shared/path/canvasResourcePath"
 
 export interface ClipboardResourceReference {
 	path: string
@@ -26,7 +29,7 @@ function normalizeResourcePath(value: unknown): string | null {
 export function getClipboardResourcePathKey(value: unknown): string | null {
 	const path = normalizeResourcePath(value)
 	if (!path) return null
-	return stripCurrentDirectoryPrefix(normalizePathLocal(path))
+	return stripCurrentDirectoryPrefix(toWeakCanvasResourcePath(path))
 }
 
 function addPath(

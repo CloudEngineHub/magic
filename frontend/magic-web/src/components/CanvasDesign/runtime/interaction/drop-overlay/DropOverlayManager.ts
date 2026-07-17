@@ -15,6 +15,7 @@ import {
 	SUPPORTED_VIDEO_EXTENSIONS,
 } from "../../shared/ids"
 import { getAllExistingNames } from "../../shared/placement/elementUtils"
+import { getCanvasResourceFileName } from "../../shared/path/canvasResourcePath"
 import type { ImageElement, VideoElement } from "../../document/types"
 import { ElementTypeEnum } from "../../document/types"
 
@@ -915,7 +916,7 @@ export class DropOverlayManager {
 		existingNames: Set<string>,
 	): string {
 		// 从文件路径提取文件名（去掉扩展名）
-		const fileName = fileInfo.fileName || filePath.split("/").pop() || "image"
+		const fileName = fileInfo.fileName || getCanvasResourceFileName(filePath) || "image"
 		const baseName = fileName.replace(/\.[^/.]+$/, "")
 		const uniqueName = generateUniqueElementName(baseName, existingNames)
 		existingNames.add(uniqueName)
@@ -961,7 +962,7 @@ export class DropOverlayManager {
 		zIndex: number,
 		existingNames: Set<string>,
 	): string {
-		const fileName = fileInfo.fileName || filePath.split("/").pop() || "video"
+		const fileName = fileInfo.fileName || getCanvasResourceFileName(filePath) || "video"
 		const baseName = fileName.replace(/\.[^/.]+$/, "")
 		const uniqueName = generateUniqueElementName(baseName, existingNames)
 		existingNames.add(uniqueName)

@@ -6,6 +6,11 @@ import type {
 } from "../reference-assets/reference-resource.types"
 import { filterReferenceResourcePanelBatchItems } from "../reference-assets/referenceResourceSelection"
 import { CANVAS_REFERENCE_MENTION_ITEM_TYPE } from "../reference-assets/canvasReferenceMention.constants"
+import {
+	checkProjectReferenceResourceDrop,
+	getProjectFilePathCandidates,
+	normalizeProjectDropFiles,
+} from "../reference-assets/useReferenceResourcePanelDataService"
 
 function panelItem(
 	path: string,
@@ -28,6 +33,20 @@ const mediaLimits: ReferenceAssetPerTypeLimits = {
 	reference_videos: { min: 0, max: 1 },
 	reference_audios: { min: 0, max: 1 },
 	total: { min: 0, max: 3 },
+}
+
+function resolveDesignAResourceCandidates(path: string): string[] {
+	if (path === "/画布A/images/cat.png") {
+		return [path, "画布A/images/cat.png", "./images/cat.png", "images/cat.png"]
+	}
+	if (path === "/画布B/images/cat.png") {
+		return [path, "画布B/images/cat.png"]
+	}
+	return [path]
+}
+
+function resolveAmbiguousBareResourceCandidates(path: string): string[] {
+	return [path]
 }
 
 describe("filterReferenceResourcePanelBatchItems", () => {
@@ -89,5 +108,75 @@ describe("filterReferenceResourcePanelBatchItems", () => {
 		})
 
 		expect(selected.map((item) => item.data.file_path)).toEqual(["project/a.png"])
+	})
+})
+
+describe("project reference resource path candidates", () => {
+	it("keeps canvas-relative paths compatible without suffix guessing", () => {
+		expect(getProjectFilePathCandidates("./images/cat.png")).toEqual(
+			expect.arrayContaining(["./images/cat.png", "images/cat.png"]),
+		)
+		expect(getProjectFilePathCandidates("images/cat.png")).toEqual(
+			expect.arrayContaining(["./images/cat.png", "images/cat.png"]),
+		)
+
+		const otherCanvasCandidates = getProjectFilePathCandidates("/画布B/images/cat.png")
+		expect(otherCanvasCandidates).toContain("/画布B/images/cat.png")
+		expect(otherCanvasCandidates).not.toContain("./images/cat.png")
+		expect(otherCanvasCandidates).not.toContain("images/cat.png")
+	})
+
+	it("uses host-safe candidates to match current canvas absolute paths", () => {
+		const files = [{ path: "/画布A/images/cat.png", fileName: "cat.png" }]
+		const normalized = normalizeProjectDropFiles(files, [{ path: "./images/cat.png" }], [], {
+			resolveResourcePathCandidates: resolveDesignAResourceCandidates,
+		})
+
+		expect(normalized).toEqual([{ path: "./images/cat.png", fileName: "cat.png" }])
+		expect(
+			checkProjectReferenceResourceDrop({
+				isDropEnabled: true,
+				files,
+				matchableItems: [{ path: "./images/cat.png" }],
+				currentReferenceFiles: [],
+				resolveResourcePathCandidates: resolveDesignAResourceCandidates,
+			}).accepted,
+		).toBe(true)
+	})
+
+	it("does not match other canvas resources by same file name", () => {
+		const files = [{ path: "/画布B/images/cat.png", fileName: "cat.png" }]
+		const normalized = normalizeProjectDropFiles(files, [{ path: "./images/cat.png" }], [], {
+			resolveResourcePathCandidates: resolveDesignAResourceCandidates,
+		})
+
+		expect(normalized).toEqual(files)
+		expect(
+			checkProjectReferenceResourceDrop({
+				isDropEnabled: true,
+				files,
+				matchableItems: [{ path: "./images/cat.png" }],
+				currentReferenceFiles: [],
+				resolveResourcePathCandidates: resolveDesignAResourceCandidates,
+			}).accepted,
+		).toBe(false)
+	})
+
+	it("does not turn an attachment-ambiguous bare resource into a current-canvas reference", () => {
+		const files = [{ path: "images/cat.png", fileName: "cat.png" }]
+		const normalized = normalizeProjectDropFiles(files, [{ path: "./images/cat.png" }], [], {
+			resolveResourcePathCandidates: resolveAmbiguousBareResourceCandidates,
+		})
+
+		expect(normalized).toEqual(files)
+		expect(
+			checkProjectReferenceResourceDrop({
+				isDropEnabled: true,
+				files,
+				matchableItems: [{ path: "./images/cat.png" }],
+				currentReferenceFiles: [],
+				resolveResourcePathCandidates: resolveAmbiguousBareResourceCandidates,
+			}).accepted,
+		).toBe(false)
 	})
 })

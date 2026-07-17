@@ -13,6 +13,7 @@ import type {
 import { getPersistedSourceCrop } from "@/components/CanvasDesign/runtime/resources/image/imageCropUtils"
 import { drawMarkerOnCanvas } from "./markerDrawers"
 import { generateUUID } from "@/components/CanvasDesign/runtime/shared/ids"
+import { getDesignPathFileName } from "../../utils/designPath"
 
 /** 用于合成的图片信息 */
 interface ImageInfoForComposite {
@@ -233,7 +234,7 @@ async function loadImageFromUrl(
 	const naturalHeight = image.naturalHeight
 
 	const urlPath = url.split("?")[0] || ""
-	const filename = urlPath.split("/").pop() || "image.png"
+	const filename = getDesignPathFileName(urlPath) || "image.png"
 
 	return {
 		image,

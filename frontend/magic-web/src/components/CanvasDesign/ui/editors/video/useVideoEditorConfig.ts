@@ -12,6 +12,7 @@ import type {
 	VideoInputMode,
 } from "../../../public/magic-types"
 import { VideoElement as VideoElementClass } from "../../../runtime/elements/video/VideoElement"
+import { getCanvasResourceFileName } from "../../../runtime/shared/path/canvasResourcePath"
 import { useFileInput } from "../message/useFileInput"
 import { removeMentionFromString } from "../message/tiptap/contentUtils"
 import {
@@ -715,7 +716,10 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 				next[slotIndex] = {
 					path: fileInfo.path,
 					src: fileInfo.src || fileInfo.path,
-					fileName: fileInfo.fileName || fileInfo.path.split("/").pop() || fileInfo.path,
+					fileName:
+						fileInfo.fileName ||
+						getCanvasResourceFileName(fileInfo.path) ||
+						fileInfo.path,
 				}
 				return next
 			})
@@ -765,7 +769,8 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 			const normalizedFileInfo: VideoReferenceAssetInfo = {
 				path: fileInfo.path,
 				src: fileInfo.src || fileInfo.path,
-				fileName: fileInfo.fileName || fileInfo.path.split("/").pop() || fileInfo.path,
+				fileName:
+					fileInfo.fileName || getCanvasResourceFileName(fileInfo.path) || fileInfo.path,
 				assetType,
 			}
 			const deduped = referenceImageInfos.filter((info) => info.path !== fileInfo.path)
@@ -1191,7 +1196,7 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 					return {
 						path,
 						src: path,
-						fileName: matchedItem?.name || path.split("/").pop() || path,
+						fileName: matchedItem?.name || getCanvasResourceFileName(path) || path,
 						assetType,
 					} satisfies VideoReferenceAssetInfo
 				})

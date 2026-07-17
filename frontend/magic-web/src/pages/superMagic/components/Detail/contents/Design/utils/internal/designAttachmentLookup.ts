@@ -1,14 +1,16 @@
+/**
+ * @internal
+ * 仅供 `../designPath` 门面内部使用；生产业务代码请统一从 `designPath` 导入路径解析能力。
+ */
 import type { FileItem } from "@/pages/superMagic/components/Detail/components/FilesViewer/types"
-import { normalizePath } from "./utils"
-import { resolveDesignDslPathCandidatesToWorkspaceRelative } from "./designDslPathUtils"
-import type { DesignAttachmentIndex } from "./designAttachmentIndex"
+import type { DesignAttachmentIndex } from "../designAttachmentIndex"
 
 /**
  * 设计附件路径 → FileItem 解析（单一职责：仅负责「DSL path / workspace 相对路径」如何落到附件表）。
  *
  * 原则：
  * - 多候选若解析到不同 file_id，优先唯一 strict 命中；否则失败关闭，避免「串路径」误绑资源。
- * - 按 file_id 解析仅在 DSL 单段看起来像是服务端 id（UUID / 足够长的 opaque id）时启用。
+ * - 按 file_id 解析仅在 DSL 单段符合服务端长数字 id 形态时启用。
  */
 
 export interface ResolvedPathCandidate {
@@ -27,19 +29,22 @@ interface AttachmentPathMatch {
 	matchKind: AttachmentPathMatchKind
 }
 
-interface CandidateMatch extends ResolvedPathCandidate {
+export interface CandidateMatch extends ResolvedPathCandidate {
 	fileItem: FileItem
 	matchKind: AttachmentPathMatchKind
 }
 
-/** DSL 中单段路径仅在形似服务端 file_id 时参与按 id 解析，避免短字符串误命中其它附件 */
+/** 与 `utils.normalizePath` 保持一致，避免路径门面与大 utils 之间形成循环依赖。 */
+function normalizePath(path: string): string {
+	if (!path) return ""
+	return path.replace(/^\/+|\/+$/g, "")
+}
+
+/** DSL 中单段路径仅在形似服务端长数字 file_id 时参与按 id 解析，避免短字符串误命中其它附件 */
 export function isDslPathPlausibleFileIdSegment(path: string): boolean {
 	const p = path.trim()
 	if (!p || p.includes("/") || p.includes("\\")) return false
-	if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(p)) return true
-	if (/^[0-9a-f]{32}$/i.test(p)) return true
-	if (p.length >= 16 && /^[a-zA-Z0-9_-]+$/.test(p)) return true
-	return false
+	return /^\d{16,}$/.test(p)
 }
 
 function resolveAttachmentForWorkspacePath(
@@ -115,26 +120,6 @@ function isStrictNormalizedAttachmentMatch(
 }
 
 /**
- * 将 DSL 中的路径展开为与工作区 relative_file_path 一致的候选，并去重。
- */
-export function getResolvedPathCandidates(
-	filePath: string,
-	designProjectBasePath?: string,
-): ResolvedPathCandidate[] {
-	const seen = new Set<string>()
-	return resolveDesignDslPathCandidatesToWorkspaceRelative(filePath, designProjectBasePath)
-		.map((resolvedPath) => ({
-			resolvedPath,
-			normalizedPath: normalizePath(resolvedPath),
-		}))
-		.filter((candidate) => {
-			if (!candidate.normalizedPath || seen.has(candidate.normalizedPath)) return false
-			seen.add(candidate.normalizedPath)
-			return true
-		})
-}
-
-/**
  * 已知单个 normalized workspace 路径时的附件解析（内存缓存校验等）。
  */
 export function lookupAttachmentForSingleNormalizedPath(
@@ -152,15 +137,12 @@ export function lookupAttachmentForSingleNormalizedPath(
 	return match?.fileItem ?? null
 }
 
-/**
- * 多候选路径下解析附件：歧义（指向不同 file_id）时返回 null，避免误绑。
- */
-export function lookupAttachmentAmongCandidates(
+export function collectAttachmentMatchesAmongCandidates(
 	candidates: ResolvedPathCandidate[],
 	dslPath: string,
 	storeFiles: FileItem[],
 	attachmentIndex?: DesignAttachmentIndex | null,
-): FileItemLookupResult | null {
+): CandidateMatch[] {
 	const matches: CandidateMatch[] = []
 
 	for (const candidate of candidates) {
@@ -178,6 +160,25 @@ export function lookupAttachmentAmongCandidates(
 			matchKind: resolved.matchKind,
 		})
 	}
+
+	return matches
+}
+
+/**
+ * 多候选路径下解析附件：歧义（指向不同 file_id）时返回 null，避免误绑。
+ */
+export function lookupAttachmentAmongCandidates(
+	candidates: ResolvedPathCandidate[],
+	dslPath: string,
+	storeFiles: FileItem[],
+	attachmentIndex?: DesignAttachmentIndex | null,
+): FileItemLookupResult | null {
+	const matches = collectAttachmentMatchesAmongCandidates(
+		candidates,
+		dslPath,
+		storeFiles,
+		attachmentIndex,
+	)
 
 	if (matches.length === 0) return null
 	if (matches.length === 1) {

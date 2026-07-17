@@ -6,6 +6,7 @@ import { useReferenceVideoPoster } from "../../previews/reference-media/useRefer
 import { computeReferenceImageCroppedDisplayLayout } from "../../../runtime/resources/image/imageCropUtils"
 import type { CropConfig } from "../../../runtime/document/types"
 import { getMediaResourcePathKind } from "../../../runtime/resources/media-common/mediaResourcePathKind"
+import { getCanvasResourceFileName } from "../../../runtime/shared/path/canvasResourcePath"
 import type { MediaResourceFullscreenPreviewItem } from "../../fullscreen/media-resource/index"
 import {
 	CanvasFileIcon,
@@ -51,7 +52,7 @@ function ReferenceImageItemVideo(props: {
 	const { path, onPreviewMediaResource } = props
 	const { loadState, posterClone } = useReferenceVideoPoster(path)
 	const canvasRef = useRef<HTMLCanvasElement>(null)
-	const displayName = useMemo(() => path.split("/").pop() ?? path, [path])
+	const displayName = useMemo(() => getCanvasResourceFileName(path) || path, [path])
 	const previewItem = useMemo(() => buildPreviewMediaResourceItem(path), [path])
 
 	const openPreview = useCallback(() => {

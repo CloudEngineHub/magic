@@ -1,12 +1,16 @@
+/**
+ * @internal
+ * 仅供 `../designPath` 门面内部使用；生产业务代码请统一从 `designPath` 导入路径能力。
+ */
 import type { LayerElement } from "@/components/CanvasDesign/runtime/document/types"
 import {
 	formatCanvasRelativeResourcePath,
 	hasCurrentDirectoryPrefix,
-	isCanvasRelativeResourcePath,
+	isCanvasResourceRootPath,
 	isRemoteOrSpecialPath,
 	stripCurrentDirectoryPrefix,
 	stripPathEdgeSlashes,
-} from "@/components/CanvasDesign/runtime/shared/path/pathUtils"
+} from "@/components/CanvasDesign/runtime/shared/path/canvasResourcePath"
 
 /**
  * 与 {@link normalizePath}（Design）一致：去掉首尾 `/`，用于与 relative_file_path 比对
@@ -16,7 +20,7 @@ function stripEdgeSlashes(path: string): string {
 }
 
 function isLikelyLegacyCanvasRelativePath(path: string): boolean {
-	return isCanvasRelativeResourcePath(path)
+	return isCanvasResourceRootPath(path)
 }
 
 export function isDesignDslCanvasRelativeResourcePath(path: string): boolean {
@@ -232,7 +236,9 @@ export function resolveDesignDslPathToWorkspaceRelative(
 /**
  * 读取历史裸路径时提供候选：
  * - `images/a.png` 先按当前画布相对路径找，再按工作区绝对路径找
- * - 新语义的裸工作区路径（如 `其他画布/images/a.png`）优先按绝对路径找
+ * - 带目录前缀的项目路径（如 `其他画布/images/a.png`）始终从项目根解析
+ *
+ * 后者不是相对当前画布的路径，不能再拼接当前画布目录作为回退候选。
  */
 export function resolveDesignDslPathCandidatesToWorkspaceRelative(
 	storedPath: string,
@@ -256,15 +262,14 @@ export function resolveDesignDslPathCandidatesToWorkspaceRelative(
 
 	if (norm === base || norm.startsWith(`${base}/`)) return [norm]
 
-	const relativeCandidate = stripEdgeSlashes(`${base}/${norm}`)
-	const absoluteCandidate = norm
 	// 历史数据中的 `images/a.png` 无法仅凭字符串区分语义：
-	// 画布资源根先按当前画布找，非画布资源根先按工作区路径找。
-	const candidates = isLikelyLegacyCanvasRelativePath(norm)
-		? [relativeCandidate, absoluteCandidate]
-		: [absoluteCandidate, relativeCandidate]
+	// 仅资源根裸路径允许在“当前画布”和“项目根”之间恢复。
+	if (isLikelyLegacyCanvasRelativePath(norm)) {
+		return Array.from(new Set([stripEdgeSlashes(`${base}/${norm}`), norm].filter(Boolean)))
+	}
 
-	return Array.from(new Set(candidates.filter(Boolean)))
+	// `foo/bar.png` 明确从项目根开始；不允许退回到 `${base}/foo/bar.png`。
+	return [norm]
 }
 
 export function resolveDesignDslPathToWorkspaceAbsoluteByCandidates(
@@ -403,16 +408,24 @@ export function normalizeDesignApiPath(
 	return normalized
 }
 
-function setPathFieldForDsl(target: Record<string, unknown>, key: string, base: string): void {
+export type DesignDslPathRewrite = (path: string, projectBasePath: string) => string
+
+function setPathFieldForDsl(
+	target: Record<string, unknown>,
+	key: string,
+	base: string,
+	rewritePath: DesignDslPathRewrite,
+): void {
 	const v = target[key]
 	if (typeof v !== "string" || !v) return
-	target[key] = toDesignDslRelativeStoragePath(v, base)
+	target[key] = rewritePath(v, base)
 }
 
 function setReferenceImageOptionsForDsl(
 	target: Record<string, unknown>,
 	key: string,
 	base: string,
+	rewritePath: DesignDslPathRewrite,
 ): void {
 	const value = target[key]
 	if (!Array.isArray(value) || !value.length) return
@@ -424,7 +437,7 @@ function setReferenceImageOptionsForDsl(
 		if (typeof path !== "string" || !path) return raw
 		return {
 			...entry,
-			path: toDesignDslRelativeStoragePath(path, base),
+			path: rewritePath(path, base),
 		}
 	})
 }
@@ -435,15 +448,17 @@ function setReferenceImageOptionsForDsl(
 export function rewriteLayerElementsPathsForMagicProjectSave(
 	elements: LayerElement[],
 	projectBasePath: string,
+	options?: { rewritePath?: DesignDslPathRewrite },
 ): void {
 	const base = stripEdgeSlashes(projectBasePath)
 	if (!base || !elements?.length) return
+	const rewritePath = options?.rewritePath ?? toDesignDslRelativeStoragePath
 
 	function walk(element: Record<string, unknown>): void {
 		if (!element || typeof element !== "object") return
 
 		if (element.type === "image") {
-			setPathFieldForDsl(element, "src", base)
+			setPathFieldForDsl(element, "src", base, rewritePath)
 
 			const generateImageRequest = element.generateImageRequest as
 				| {
@@ -457,6 +472,7 @@ export function rewriteLayerElementsPathsForMagicProjectSave(
 					generateImageRequest as Record<string, unknown>,
 					"file_dir",
 					base,
+					rewritePath,
 				)
 				if (
 					Array.isArray(generateImageRequest.reference_images) &&
@@ -464,15 +480,14 @@ export function rewriteLayerElementsPathsForMagicProjectSave(
 				) {
 					generateImageRequest.reference_images =
 						generateImageRequest.reference_images.map((ref) =>
-							typeof ref === "string"
-								? toDesignDslRelativeStoragePath(ref, base)
-								: ref,
+							typeof ref === "string" ? rewritePath(ref, base) : ref,
 						)
 				}
 				setReferenceImageOptionsForDsl(
 					generateImageRequest as Record<string, unknown>,
 					"reference_image_options",
 					base,
+					rewritePath,
 				)
 			}
 
@@ -480,14 +495,15 @@ export function rewriteLayerElementsPathsForMagicProjectSave(
 				| Record<string, unknown>
 				| undefined
 			if (imageGenerationTaskMeta && typeof imageGenerationTaskMeta === "object") {
-				setPathFieldForDsl(imageGenerationTaskMeta, "file_path", base)
-				setPathFieldForDsl(imageGenerationTaskMeta, "canvas_path", base)
-				setPathFieldForDsl(imageGenerationTaskMeta, "mask_path", base)
-				setPathFieldForDsl(imageGenerationTaskMeta, "mark_path", base)
+				setPathFieldForDsl(imageGenerationTaskMeta, "file_path", base, rewritePath)
+				setPathFieldForDsl(imageGenerationTaskMeta, "canvas_path", base, rewritePath)
+				setPathFieldForDsl(imageGenerationTaskMeta, "mask_path", base, rewritePath)
+				setPathFieldForDsl(imageGenerationTaskMeta, "mark_path", base, rewritePath)
 				setReferenceImageOptionsForDsl(
 					imageGenerationTaskMeta,
 					"reference_image_options",
 					base,
+					rewritePath,
 				)
 			}
 
@@ -495,18 +511,19 @@ export function rewriteLayerElementsPathsForMagicProjectSave(
 				| Record<string, unknown>
 				| undefined
 			if (generateHightImageRequest && typeof generateHightImageRequest === "object") {
-				setPathFieldForDsl(generateHightImageRequest, "file_path", base)
-				setPathFieldForDsl(generateHightImageRequest, "file_dir", base)
+				setPathFieldForDsl(generateHightImageRequest, "file_path", base, rewritePath)
+				setPathFieldForDsl(generateHightImageRequest, "file_dir", base, rewritePath)
 				setReferenceImageOptionsForDsl(
 					generateHightImageRequest,
 					"reference_image_options",
 					base,
+					rewritePath,
 				)
 			}
 		}
 
 		if (element.type === "video") {
-			setPathFieldForDsl(element, "src", base)
+			setPathFieldForDsl(element, "src", base, rewritePath)
 
 			const generateVideoRequest = element.generateVideoRequest as
 				| {
@@ -528,44 +545,45 @@ export function rewriteLayerElementsPathsForMagicProjectSave(
 					generateVideoRequest as Record<string, unknown>,
 					"file_dir",
 					base,
+					rewritePath,
 				)
 
 				if (Array.isArray(generateVideoRequest.inputs?.frames)) {
 					generateVideoRequest.inputs.frames.forEach((frame) => {
 						if (frame?.uri && typeof frame.uri === "string") {
-							frame.uri = toDesignDslRelativeStoragePath(frame.uri, base)
+							frame.uri = rewritePath(frame.uri, base)
 						}
 					})
 				}
 				if (Array.isArray(generateVideoRequest.inputs?.reference_images)) {
 					generateVideoRequest.inputs.reference_images.forEach((item) => {
 						if (item?.uri && typeof item.uri === "string") {
-							item.uri = toDesignDslRelativeStoragePath(item.uri, base)
+							item.uri = rewritePath(item.uri, base)
 						}
 					})
 				}
 				if (Array.isArray(generateVideoRequest.inputs?.reference_videos)) {
 					generateVideoRequest.inputs.reference_videos.forEach((item) => {
 						if (item?.uri && typeof item.uri === "string") {
-							item.uri = toDesignDslRelativeStoragePath(item.uri, base)
+							item.uri = rewritePath(item.uri, base)
 						}
 					})
 				}
 				if (Array.isArray(generateVideoRequest.inputs?.reference_audios)) {
 					generateVideoRequest.inputs.reference_audios.forEach((item) => {
 						if (item?.uri && typeof item.uri === "string") {
-							item.uri = toDesignDslRelativeStoragePath(item.uri, base)
+							item.uri = rewritePath(item.uri, base)
 						}
 					})
 				}
 				if (generateVideoRequest.inputs?.video?.uri) {
-					generateVideoRequest.inputs.video.uri = toDesignDslRelativeStoragePath(
+					generateVideoRequest.inputs.video.uri = rewritePath(
 						generateVideoRequest.inputs.video.uri,
 						base,
 					)
 				}
 				if (generateVideoRequest.inputs?.mask?.uri) {
-					generateVideoRequest.inputs.mask.uri = toDesignDslRelativeStoragePath(
+					generateVideoRequest.inputs.mask.uri = rewritePath(
 						generateVideoRequest.inputs.mask.uri,
 						base,
 					)
@@ -573,7 +591,7 @@ export function rewriteLayerElementsPathsForMagicProjectSave(
 				if (Array.isArray(generateVideoRequest.inputs?.audio)) {
 					generateVideoRequest.inputs.audio.forEach((item) => {
 						if (item?.uri && typeof item.uri === "string") {
-							item.uri = toDesignDslRelativeStoragePath(item.uri, base)
+							item.uri = rewritePath(item.uri, base)
 						}
 					})
 				}

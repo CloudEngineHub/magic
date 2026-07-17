@@ -18,10 +18,7 @@ import type {
 } from "@/components/CanvasDesign/public/magic-types"
 import { normalizePath } from "../utils/utils"
 import { useTranslation } from "react-i18next"
-import {
-	createDesignWorkspacePathExists,
-	resolveDesignDslPathToWorkspaceAbsoluteByCandidates,
-} from "../utils/designDslPathUtils"
+import { toWorkspaceAbsoluteApiPathForOperation } from "../utils/designPath"
 import { syncFileInfoAfterGenerationComplete } from "../utils/syncFileInfoAfterGenerationComplete"
 import {
 	calculateUploadDirectory,
@@ -403,13 +400,10 @@ function ensureDesignAbsolutePath(
 	pathUnresolvedMessage?: string,
 ): string {
 	if (!path) return path
-	const resolved = resolveDesignDslPathToWorkspaceAbsoluteByCandidates(
-		path,
+	const resolved = toWorkspaceAbsoluteApiPathForOperation(path, {
 		designProjectBasePath,
-		{
-			pathExists: createDesignWorkspacePathExists(flatAttachments),
-		},
-	)
+		flatAttachments,
+	})
 	if (!resolved) throw new Error(pathUnresolvedMessage || "Design resource path unresolved")
 	return resolved
 }

@@ -2,7 +2,7 @@ import type { Canvas } from "../../core/Canvas"
 import type { ImageElement as ImageElementData } from "../../document/types"
 import type { GetImageGenerationResultParams } from "../../../public/magic-types"
 import { IMAGE_CONFIG } from "../../elements/image/ImageElement.config"
-import { joinUploadStoragePath } from "../../shared/path/pathUtils"
+import { toCanvasUploadStoragePath } from "../../shared/path/canvasResourcePath"
 import {
 	getImageGenerationTaskMeta,
 	isBatchImageGenerationTaskMeta,
@@ -162,7 +162,7 @@ export class ImagePollingManager {
 			}
 
 			if (result.file_dir && result.file_name) {
-				updateData.src = joinUploadStoragePath(result.file_dir, result.file_name)
+				updateData.src = toCanvasUploadStoragePath(result.file_dir, result.file_name)
 				this.primeGeneratedImageResource(updateData.src, result.file_url, result.file_name)
 
 				const elementData = this.config.getElementData()

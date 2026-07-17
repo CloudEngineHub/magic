@@ -1,5 +1,6 @@
 import type { JSONContent } from "@tiptap/react"
 import { CANVAS_REFERENCE_MENTION_ITEM_TYPE } from "../reference-assets/canvasReferenceMention.constants"
+import { getCanvasResourceFileName } from "../../../../runtime/shared/path/canvasResourcePath"
 
 /** 项目 MentionExtension 使用的 PROJECT_FILE 类型标识 */
 const PROJECT_FILE_TYPE = CANVAS_REFERENCE_MENTION_ITEM_TYPE.projectFile
@@ -191,7 +192,7 @@ export function getContentFromString(
  * 从 prompt 字符串中移除指定 path 对应的 @ 提及
  */
 export function removeMentionFromString(prompt: string, path: string, fileName?: string): string {
-	const name = fileName ?? path.split("/").pop() ?? ""
+	const name = fileName ?? getCanvasResourceFileName(path)
 	if (!name) return prompt
 	const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
 
@@ -215,7 +216,7 @@ export function promptContainsMentionForFile(prompt: string, fileName?: string):
  * 注意：同名不同路径在文本层无法区分，不能按文件名去重。
  */
 export function appendMentionToString(prompt: string, path: string, fileName?: string): string {
-	const name = fileName ?? path.split("/").pop() ?? ""
+	const name = fileName ?? getCanvasResourceFileName(path)
 	if (!name) return prompt
 	if (!prompt.trim()) return `@${name}`
 	return `${prompt.trim()} @${name}`

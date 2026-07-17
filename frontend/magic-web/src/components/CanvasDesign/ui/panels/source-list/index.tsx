@@ -17,6 +17,7 @@ import { usePortalContainer } from "../../primitives/custom/PortalContainerConte
 import styles from "./SourceList.module.css"
 import { cn } from "../../../runtime/shared/lib/utils"
 import { getMediaResourcePathKind } from "../../../runtime/resources/media-common/mediaResourcePathKind"
+import { getCanvasResourceFileName } from "../../../runtime/shared/path/canvasResourcePath"
 import type { MediaResourceFullscreenPreviewItem } from "../../fullscreen/media-resource/index"
 import type { CropConfig } from "../../../runtime/document/types"
 
@@ -181,7 +182,7 @@ export default function SourceList(props: SourceListProps) {
 					const resourceDisplayName =
 						resourcePath != null
 							? (entry.resourceFileName ??
-									resourcePath.split("/").pop() ??
+									getCanvasResourceFileName(resourcePath) ??
 									resourcePath) ||
 								""
 							: ""

@@ -1,6 +1,6 @@
 import type { Canvas } from "../../core/Canvas"
 import { isOssExpired } from "../offline-cache/ossExpiryUtils"
-import { resolveCanonicalResourcePath } from "../../shared/path/pathUtils"
+import { toCanonicalCanvasResourcePath } from "../../shared/path/canvasResourcePath"
 
 /** 播放会话归属（由 consumerId 前缀推断） */
 export type VideoPlaybackOwnerKind = "inline" | "fullscreen" | "unknown"
@@ -119,19 +119,19 @@ export class VideoPlaybackManager {
 	}
 
 	public getGroup(path: string): PathPlaybackGroupSnapshot | undefined {
-		const key = resolveCanonicalResourcePath(path, this.getResolveAbsolutePath())
+		const key = toCanonicalCanvasResourcePath(path, this.getResolveAbsolutePath())
 		const group = this.groupsByPath.get(key)
 		return group ? this.buildGroupSnapshot(group) : undefined
 	}
 
 	public getConsumersByPath(path: string): VideoPlaybackSession[] {
-		const key = resolveCanonicalResourcePath(path, this.getResolveAbsolutePath())
+		const key = toCanonicalCanvasResourcePath(path, this.getResolveAbsolutePath())
 		const group = this.groupsByPath.get(key)
 		return group ? Array.from(group.consumers.values()) : []
 	}
 
 	public getActiveConsumerCount(path: string): number {
-		const key = resolveCanonicalResourcePath(path, this.getResolveAbsolutePath())
+		const key = toCanonicalCanvasResourcePath(path, this.getResolveAbsolutePath())
 		return this.groupsByPath.get(key)?.activeConsumerIds.size ?? 0
 	}
 
@@ -140,7 +140,7 @@ export class VideoPlaybackManager {
 		consumerId: string,
 		options?: AcquirePlaybackOptions,
 	): Promise<VideoPlaybackSession | null> {
-		const normalizedPath = resolveCanonicalResourcePath(path, this.getResolveAbsolutePath())
+		const normalizedPath = toCanonicalCanvasResourcePath(path, this.getResolveAbsolutePath())
 		const existing = this.sessionsByConsumer.get(consumerId)
 		if (existing && existing.path === normalizedPath) {
 			existing.ownerKind = this.inferOwnerKind(consumerId)

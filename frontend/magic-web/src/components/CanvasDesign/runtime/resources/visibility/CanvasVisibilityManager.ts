@@ -7,7 +7,7 @@ import {
 	type MediaDisplayResourceVariant,
 } from "./CanvasMediaViewingPolicy"
 import { getViewportCanvasRect } from "../../shared/placement/elementUtils"
-import { resolveCanonicalResourcePath } from "../../shared/path/pathUtils"
+import { toCanonicalCanvasResourcePath } from "../../shared/path/canvasResourcePath"
 import type { ResourceLoadFailureReason } from "../media-common/resourceLoadFailure"
 import {
 	CanvasRenderVisibilityController,
@@ -691,8 +691,8 @@ export class CanvasVisibilityManager {
 		const resolveAbsolutePath =
 			this.canvas.magicConfigManager.config?.methods?.resolveAbsolutePath
 		return (
-			resolveCanonicalResourcePath(left, resolveAbsolutePath) ===
-			resolveCanonicalResourcePath(right, resolveAbsolutePath)
+			toCanonicalCanvasResourcePath(left, resolveAbsolutePath) ===
+			toCanonicalCanvasResourcePath(right, resolveAbsolutePath)
 		)
 	}
 

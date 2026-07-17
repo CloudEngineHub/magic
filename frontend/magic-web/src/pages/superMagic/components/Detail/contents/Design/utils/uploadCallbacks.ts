@@ -6,7 +6,7 @@ import type {
 } from "@/components/CanvasDesign/public/magic-types"
 import type { BatchSaveInfo } from "@/stores/folderUpload/types"
 import magicToast from "@/components/base/MagicToaster/utils"
-import { normalizeDesignAttachmentPathForCanvas } from "./designDslPathUtils"
+import { toDesignDslPath } from "./designPath"
 
 /**
  * 包含 file_id 的上传图片响应类型
@@ -23,7 +23,7 @@ function normalizeUploadResponsePath(params: {
 	designProjectBasePath?: string
 }): string {
 	const { rawPath, uploadSubDir, fileName, designProjectBasePath } = params
-	const normalized = normalizeDesignAttachmentPathForCanvas(rawPath, designProjectBasePath)
+	const normalized = toDesignDslPath(rawPath, { designProjectBasePath })
 	const uploadSubDirPath = `${uploadSubDir}/${fileName}`.replace(/\/+/g, "/")
 	if (normalized === uploadSubDirPath || normalized.startsWith(`${uploadSubDir}/`)) {
 		return normalized.startsWith("./") ? normalized : `./${normalized}`

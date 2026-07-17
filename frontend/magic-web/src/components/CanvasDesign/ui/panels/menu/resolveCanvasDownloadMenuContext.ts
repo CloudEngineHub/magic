@@ -1,7 +1,10 @@
 import type { Canvas } from "../../../runtime/core/Canvas"
 import { AttachmentSource } from "../../../public/magic-types"
 import { getLoadedFileElements, getLoadedImageElements } from "../../../runtime/shared/ids"
-import { resolveCanonicalResourcePath } from "../../../runtime/shared/path/pathUtils"
+import {
+	getCanvasResourceFileName,
+	toCanonicalCanvasResourcePath,
+} from "../../../runtime/shared/path/canvasResourcePath"
 
 /**
  * 画布下载菜单判定「图片」扩展名（语义与宿主 Topic isImage 对齐；枚举值见 types.magic 的 AttachmentSource）。
@@ -28,8 +31,10 @@ export interface CanvasDownloadMenuContext {
 
 function extensionFromFileNameOrPath(fileName: string, path?: string): string {
 	const withDot =
-		fileName && fileName.includes(".") ? fileName : (path?.split("/").pop() ?? path ?? "")
-	const base = withDot.split("/").pop() ?? withDot
+		fileName && fileName.includes(".")
+			? fileName
+			: getCanvasResourceFileName(path) || path || ""
+	const base = getCanvasResourceFileName(withDot) || withDot
 	const dot = base.lastIndexOf(".")
 	return dot >= 0
 		? base
@@ -89,7 +94,7 @@ export async function resolveCanvasDownloadMenuContext(
 			if (!img.src) return false
 			const entry = await canvas.imageResourceManager.getEntry(img.src)
 			if (!entry?.fileName) return false
-			const normalizedSrc = resolveCanonicalResourcePath(img.src, resolveAbs)
+			const normalizedSrc = toCanonicalCanvasResourcePath(img.src, resolveAbs)
 			const isImage = isRasterImageFile(entry.fileName, normalizedSrc)
 			const isAi = entry.source === AttachmentSource.AI
 			return isImage && isAi

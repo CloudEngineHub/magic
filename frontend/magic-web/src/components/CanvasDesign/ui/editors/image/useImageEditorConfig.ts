@@ -54,6 +54,10 @@ import {
 	unprotectPromptBoundReferencePaths,
 	type ReferenceBindingMode,
 } from "../message/reference-assets/referenceBinding"
+import {
+	areCanvasResourcePathsSame,
+	getCanvasResourceFileName,
+} from "../../../runtime/shared/path/canvasResourcePath"
 
 interface UseImageEditorConfigOptions {
 	imageElement: ImageElement
@@ -379,8 +383,8 @@ export function useImageEditorConfig(options: UseImageEditorConfigOptions): Imag
 		[imageModelList],
 	)
 
-	// 跟踪待添加到 prompt 的文件名（用于等待 matchableItems 更新）
-	const pendingFileNameRef = useRef<string | null>(null)
+	// 跟踪待添加到 prompt 的资源（用于等待 matchableItems 更新）
+	const pendingUploadReferenceRef = useRef<PromptPlaceholderReference | null>(null)
 	const promptPlaceholderTokenConfig = useMemo(() => resolvePromptPlaceholderTokenConfig(t), [t])
 	const buildImagePromptPlaceholderToken = useMemo(
 		() =>
@@ -426,7 +430,7 @@ export function useImageEditorConfig(options: UseImageEditorConfigOptions): Imag
 			)
 			return paths
 				.map((path) => {
-					const fileName = pathToFileName.get(path) || path.split("/").pop() || ""
+					const fileName = pathToFileName.get(path) || getCanvasResourceFileName(path)
 					if (!fileName) return null
 					return { path, fileName }
 				})
@@ -455,7 +459,10 @@ export function useImageEditorConfig(options: UseImageEditorConfigOptions): Imag
 				{
 					path: fileInfo.path,
 					src: fileInfo.src || fileInfo.path,
-					fileName: fileInfo.fileName || fileInfo.path.split("/").pop() || fileInfo.path,
+					fileName:
+						fileInfo.fileName ||
+						getCanvasResourceFileName(fileInfo.path) ||
+						fileInfo.path,
 				},
 			])
 			syncFromElement()
@@ -493,7 +500,8 @@ export function useImageEditorConfig(options: UseImageEditorConfigOptions): Imag
 			const normalizedInfo: ReferenceResourceFileInfo = {
 				path: fileInfo.path,
 				src: fileInfo.src || fileInfo.path,
-				fileName: fileInfo.fileName || fileInfo.path.split("/").pop() || fileInfo.path,
+				fileName:
+					fileInfo.fileName || getCanvasResourceFileName(fileInfo.path) || fileInfo.path,
 			}
 			const nextInfos = [...currentInfos]
 			nextInfos[slotIndex] = normalizedInfo
@@ -563,9 +571,12 @@ export function useImageEditorConfig(options: UseImageEditorConfigOptions): Imag
 				if (!didAppend) return
 
 				// 记录待添加的文件名，等待 matchableItems 更新后再添加到 prompt
-				const fileName = result.fileName || result.path?.split("/").pop() || ""
+				const fileName = result.fileName || getCanvasResourceFileName(result.path)
 				if (fileName) {
-					pendingFileNameRef.current = fileName
+					pendingUploadReferenceRef.current = {
+						path: result.path,
+						fileName,
+					}
 				}
 			},
 			[appendReferenceFile, replaceReferenceFileAt],
@@ -597,22 +608,22 @@ export function useImageEditorConfig(options: UseImageEditorConfigOptions): Imag
 
 	// 监听 matchableItems 的变化，当检测到新上传的文件时，自动追加到 prompt
 	useEffect(() => {
-		const pendingFileName = pendingFileNameRef.current
-		if (!pendingFileName) return
+		const pendingReference = pendingUploadReferenceRef.current
+		if (!pendingReference) return
 
-		// 检查 matchableItems 中是否包含待添加的文件
+		// 检查 matchableItems 中是否包含待添加的资源，避免按同名文件 suffix 猜测。
 		const matchedItem = matchableItems.find(
-			(item) => item.name === pendingFileName || item.path?.endsWith(pendingFileName),
+			(item) => !!item.path && areCanvasResourcePathsSame(item.path, pendingReference.path),
 		)
 
 		if (matchedItem && !matchedItem.disabled) {
 			// matchableItems 已更新，可以安全地添加到 prompt
 			setPrompt((prev) => {
 				const trimmed = prev.trimEnd()
-				return trimmed + (trimmed ? " " : "") + `@${pendingFileName}`
+				return trimmed + (trimmed ? " " : "") + `@${pendingReference.fileName}`
 			})
 			// 清空待添加的文件名
-			pendingFileNameRef.current = null
+			pendingUploadReferenceRef.current = null
 			// 延迟一帧聚焦，确保 prompt 更新后编辑器已渲染
 			setTimeout(() => editorFocusRef?.current?.focus(), 0)
 		}
@@ -658,7 +669,8 @@ export function useImageEditorConfig(options: UseImageEditorConfigOptions): Imag
 					const escapeRegex = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
 					let newPrompt = prompt
 					for (const path of pathsToRemove) {
-						const fileName = pathToFileName[path] || path.split("/").pop() || path
+						const fileName =
+							pathToFileName[path] || getCanvasResourceFileName(path) || path
 						newPrompt = newPrompt.replace(
 							// 仅移除一次，避免同名不同路径被全部清空。
 							new RegExp(`@${escapeRegex(fileName)}`),
@@ -970,7 +982,7 @@ export function useImageEditorConfig(options: UseImageEditorConfigOptions): Imag
 			originalImageSrc && supportsReferenceImages(restoredModel),
 		)
 		const quickEditReferenceName =
-			originalImageName || originalImageSrc?.split("/").pop() || undefined
+			originalImageName || getCanvasResourceFileName(originalImageSrc) || undefined
 
 		setSelectedModelId(restoredModelId)
 		applyQuickEditReferencePreset(restoredModelId)
@@ -1088,7 +1100,7 @@ export function useImageEditorConfig(options: UseImageEditorConfigOptions): Imag
 			if (requestToRestore.reference_images && requestToRestore.reference_images.length > 0) {
 				const restoredReferenceFileInfos: ReferenceResourceFileInfo[] =
 					requestToRestore.reference_images.map((path) => {
-						const fileName = path.split("/").pop() || path
+						const fileName = getCanvasResourceFileName(path) || path
 						return {
 							path,
 							src: path,

@@ -1,5 +1,11 @@
-import { resolveCanonicalResourcePath, normalizePathLocal } from "../../shared/path/pathUtils"
 import {
+	toCanonicalCanvasResourcePath,
+	toWeakCanvasResourcePath,
+} from "../../shared/path/canvasResourcePath"
+import {
+	CANVAS_MEDIA_CACHE_NAME,
+	CANVAS_MEDIA_DB_NAME,
+	CANVAS_MEDIA_OFFLINE_CACHE_VERSION,
 	getCacheKey,
 	normalizeResourceNamespace,
 	normalizeResourcePathForLookup,
@@ -114,14 +120,8 @@ interface EnsureServiceWorkerOptions {
  * path normalization, IndexedDB schema, or CacheStorage key semantics change.
  * Versioned names keep new code from reading incompatible local SW cache data.
  */
-const OFFLINE_CACHE_VERSION = 1
-const DB_BASE_NAME = "canvas-media-resource-offline-cache"
-const DB_VERSION = OFFLINE_CACHE_VERSION
-const DB_NAME = `${DB_BASE_NAME}-v${OFFLINE_CACHE_VERSION}`
 const STORE_NAME = "resources"
-const CACHE_BASE_NAME = "canvas-media-resources"
-const CACHE_NAME = `${CACHE_BASE_NAME}-v${OFFLINE_CACHE_VERSION}`
-const HEALTH_STORAGE_KEY = `${CACHE_BASE_NAME}-health-v${OFFLINE_CACHE_VERSION}`
+const HEALTH_STORAGE_KEY = `canvas-media-resources-health-v${CANVAS_MEDIA_OFFLINE_CACHE_VERSION}`
 const DEFAULT_MAX_BYTES = 1024 * 1024 * 1024
 const VIRTUAL_RESOURCE_FAILURE_WINDOW_MS = 10_000
 const VIRTUAL_RESOURCE_FAILURE_THRESHOLD = 3
@@ -180,7 +180,7 @@ function joinUrlPathSegments(...segments: string[]): string {
 		.join("/")
 }
 
-/** 与 pathUtils 中 `trim` 约定对齐：避免非字符串入参导致 `path.trim is not a function` */
+/** 与 canvasResourcePath 中 `trim` 约定对齐：避免非字符串入参导致 `path.trim is not a function` */
 function coerceToPathString(value: unknown): string {
 	if (typeof value === "string") return value
 	if (value == null) return ""
@@ -273,7 +273,7 @@ export class MediaResourceOfflineCacheManager {
 	}
 
 	private resolveStoredCanonicalPath(path: string): string {
-		return resolveCanonicalResourcePath(
+		return toCanonicalCanvasResourcePath(
 			coerceToPathString(path),
 			this.getResolveAbsolutePath?.(),
 		)
@@ -283,7 +283,7 @@ export class MediaResourceOfflineCacheManager {
 		const canonicalPath = this.resolveStoredCanonicalPath(path)
 		const resolveAbsolutePath = this.getResolveAbsolutePath?.()
 		if (!resolveAbsolutePath) return canonicalPath
-		return normalizePathLocal(coerceToPathString(resolveAbsolutePath(canonicalPath)))
+		return toWeakCanvasResourcePath(coerceToPathString(resolveAbsolutePath(canonicalPath)))
 	}
 
 	private getResourceNamespace(): string {
@@ -507,7 +507,7 @@ export class MediaResourceOfflineCacheManager {
 		const entry = await this.getEntry(path, mediaType)
 		if (!entry) return null
 
-		const cache = await caches.open(CACHE_NAME)
+		const cache = await caches.open(CANVAS_MEDIA_CACHE_NAME)
 		const response = await cache.match(this.getCacheKey(entry))
 		if (!response) {
 			this.stats.cacheMissCount += 1
@@ -744,7 +744,7 @@ export class MediaResourceOfflineCacheManager {
 		if (this.dbPromise) return this.dbPromise
 
 		this.dbPromise = new Promise((resolve, reject) => {
-			const request = indexedDB.open(DB_NAME, DB_VERSION)
+			const request = indexedDB.open(CANVAS_MEDIA_DB_NAME, CANVAS_MEDIA_OFFLINE_CACHE_VERSION)
 			request.onupgradeneeded = () => {
 				const db = request.result
 				const tx = request.transaction
@@ -858,7 +858,7 @@ export class MediaResourceOfflineCacheManager {
 			store.delete(buildResourceId(namespace, params.mediaType, resourcePathForDelete)),
 		)
 
-		const cache = await caches.open(CACHE_NAME)
+		const cache = await caches.open(CANVAS_MEDIA_CACHE_NAME)
 		await cache.delete(cacheKey)
 	}
 
@@ -869,7 +869,7 @@ export class MediaResourceOfflineCacheManager {
 			if (!raw) return null
 			const parsed = JSON.parse(raw) as Partial<VirtualResourceHealthState>
 			if (
-				parsed.version !== OFFLINE_CACHE_VERSION ||
+				parsed.version !== CANVAS_MEDIA_OFFLINE_CACHE_VERSION ||
 				typeof parsed.unhealthyUntil !== "number" ||
 				typeof parsed.lastRepairAt !== "number" ||
 				typeof parsed.repairAttempts !== "number"
@@ -894,7 +894,7 @@ export class MediaResourceOfflineCacheManager {
 			!previous?.lastRepairAt ||
 			now - previous.lastRepairAt >= VIRTUAL_RESOURCE_REPAIR_THROTTLE_MS
 		const state: VirtualResourceHealthState = {
-			version: OFFLINE_CACHE_VERSION,
+			version: CANVAS_MEDIA_OFFLINE_CACHE_VERSION,
 			unhealthyUntil: Math.max(unhealthyUntil, previous?.unhealthyUntil ?? 0),
 			lastRepairAt: shouldRepair ? now : (previous?.lastRepairAt ?? 0),
 			repairAttempts: (previous?.repairAttempts ?? 0) + (shouldRepair ? 1 : 0),

@@ -1591,12 +1591,22 @@ export class DesignProjectManager implements DesignProjectManagerAPI {
 		if (hasRemoteVersionAdvanced || hasRemoteFingerprintChanged) {
 			const draftData = cloneDeep(draft.designData) as DesignData
 			const dslBase = this.getDesignProjectBasePath()
-			if (dslBase) normalizeDesignDataPathsAfterLoad(draftData, dslBase)
+			if (dslBase) {
+				normalizeDesignDataPathsAfterLoad(draftData, dslBase, {
+					flatAttachments: this.options.flatAttachments,
+					attachmentIndex: this.options.attachmentIndex,
+				})
+			}
 			const draftBaseData = draft.baseRemoteData
 				? (cloneDeep(draft.baseRemoteData) as DesignData)
 				: null
 			if (draftBaseData) {
-				if (dslBase) normalizeDesignDataPathsAfterLoad(draftBaseData, dslBase)
+				if (dslBase) {
+					normalizeDesignDataPathsAfterLoad(draftBaseData, dslBase, {
+						flatAttachments: this.options.flatAttachments,
+						attachmentIndex: this.options.attachmentIndex,
+					})
+				}
 				if (
 					this.tryMergeRemoteAdvancedDraft({
 						draft,
@@ -1628,7 +1638,12 @@ export class DesignProjectManager implements DesignProjectManagerAPI {
 
 		const restoredData = cloneDeep(draft.designData) as DesignData
 		const dslBase = this.getDesignProjectBasePath()
-		if (dslBase) normalizeDesignDataPathsAfterLoad(restoredData, dslBase)
+		if (dslBase) {
+			normalizeDesignDataPathsAfterLoad(restoredData, dslBase, {
+				flatAttachments: this.options.flatAttachments,
+				attachmentIndex: this.options.attachmentIndex,
+			})
+		}
 
 		const oldData = this.stateBag.getDesignData()
 		this.stateBag.setters.setDesignData(restoredData)

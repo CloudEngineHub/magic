@@ -86,6 +86,26 @@ describe("getFileResourceMetaByPath", () => {
 		})
 	})
 
+	it("does not classify an ambiguous historical bare path as deleted", async () => {
+		const files = [
+			fileItem({
+				file_id: "canvas-file",
+				relative_file_path: "画布A/images/a.png",
+			}),
+			fileItem({
+				file_id: "workspace-file",
+				relative_file_path: "images/a.png",
+			}),
+		]
+
+		await expect(
+			getFileResourceMetaByPath("images/a.png", files, {
+				designProjectBasePath: "画布A",
+				hasAttachmentSnapshot: true,
+			}),
+		).resolves.toEqual({ status: "unknown" })
+	})
+
 	it("preserves raw get-file-url version but uses metadata-visible version for comparison", async () => {
 		vi.mocked(getTemporaryDownloadUrl).mockResolvedValueOnce([
 			{

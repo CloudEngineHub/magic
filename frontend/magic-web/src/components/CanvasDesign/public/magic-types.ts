@@ -1483,6 +1483,11 @@ export interface CanvasDesignMethods {
 	 */
 	resolveAbsolutePath: (path: string) => string
 	/**
+	 * 返回与原始资源路径指向同一文件的宿主安全候选路径。
+	 * 宿主必须避免返回可能跨画布串线的 suffix 猜测。
+	 */
+	resolveResourcePathCandidates?: (path: string) => string[]
+	/**
 	 * 获取画布虚拟媒体资源的宿主 scope，用于在同源虚拟链接中隔离工作区/项目上下文。
 	 * @returns 例如：/global/super/{workspaceId}/{projectId}
 	 */

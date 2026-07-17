@@ -55,7 +55,7 @@ import { TextEditingManager } from "../interaction/text-editing/TextEditingManag
 import { TextFormattingManager } from "../interaction/text-editing/TextFormattingManager"
 import { CanvasInputManager } from "../interaction/input/index"
 import { isCanvasUIComponentNode } from "../shared/dom/domGuards"
-import { buildVirtualResourceScope } from "../shared/path/pathUtils"
+import { buildVirtualResourceScope } from "../shared/path/canvasResourcePath"
 import { ConnectionManager } from "../interaction/connection/ConnectionManager"
 import { ConnectionDragManager } from "../interaction/connection/ConnectionDragManager"
 import { ConnectionHandleOverlayManager } from "../interaction/connection/ConnectionHandleOverlayManager"

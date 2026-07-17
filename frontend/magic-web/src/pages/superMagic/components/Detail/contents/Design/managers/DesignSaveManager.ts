@@ -350,6 +350,8 @@ export class DesignSaveManager {
 			const fp = hashDesignDataComparable(designDataToSave)
 			const content = generateMagicProjectJsContent(designDataToSave, {
 				projectBasePath: this.getProjectBasePathForDsl(),
+				flatAttachments: this.options.flatAttachments,
+				attachmentIndex: this.options.attachmentIndex,
 			})
 			if (!content?.trim()) {
 				this.stateBag.setters.setIsSaving(false)
@@ -452,6 +454,8 @@ export class DesignSaveManager {
 	generateContent(data?: DesignData): string {
 		return generateMagicProjectJsContent(this.getDesignDataForSave(data), {
 			projectBasePath: this.getProjectBasePathForDsl(),
+			flatAttachments: this.options.flatAttachments,
+			attachmentIndex: this.options.attachmentIndex,
 		})
 	}
 }

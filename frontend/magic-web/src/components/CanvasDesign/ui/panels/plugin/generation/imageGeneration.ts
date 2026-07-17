@@ -25,10 +25,10 @@ import {
 	type LayerElement,
 } from "../../../../runtime/document/types"
 import {
-	normalizePathLocal,
-	pathsReferToSameResource,
+	toWeakCanvasResourcePath,
+	areCanvasResourcePathsSame,
 	stripCurrentDirectoryPrefix,
-} from "../../../../runtime/shared/path/pathUtils"
+} from "../../../../runtime/shared/path/canvasResourcePath"
 import type { Rect } from "../../../../runtime/shared/ids"
 import {
 	resolvePluginSourceElementId,
@@ -237,7 +237,7 @@ function resolveImageElementByReference(canvas: Canvas, reference: string): Imag
 	return (
 		getImageElements(canvas).find((element) => {
 			if (!element.src) return false
-			return pathsReferToSameResource(element.src, reference, resolveAbsolutePath)
+			return areCanvasResourcePathsSame(element.src, reference, resolveAbsolutePath)
 		}) ?? null
 	)
 }
@@ -274,7 +274,7 @@ function getPluginReferenceKeys(params: PluginGenerateAndPlaceParams): string[] 
 
 /** 归一化引用 key，避免 "./foo.png" 与 "foo.png" 被识别成两组生成结果。 */
 function normalizePluginReferenceKey(reference: string): string {
-	return stripCurrentDirectoryPrefix(normalizePathLocal(reference.trim()))
+	return stripCurrentDirectoryPrefix(toWeakCanvasResourcePath(reference.trim()))
 }
 
 /** 去重并排序后的引用 key 用于生成稳定的落点分组 key。 */

@@ -21,20 +21,20 @@ import {
 import {
 	formatCanvasRelativeResourcePath,
 	hasCurrentDirectoryPrefix,
-	isCanvasRelativeResourcePath,
+	isCanvasResourceRootPath,
 	isRemoteOrSpecialPath,
-	normalizePathLocal,
+	toWeakCanvasResourcePath,
 	stripCurrentDirectoryPrefix,
 	stripPathEdgeSlashes,
-} from "@/components/CanvasDesign/runtime/shared/path/pathUtils"
+} from "@/components/CanvasDesign/runtime/shared/path/canvasResourcePath"
 import {
-	findFileBySrc,
 	loadMagicProjectJsContent,
 	parseMagicProjectJsContent,
 	resolveDesignProjectBasePathFromAttachments,
 	normalizeDesignDataPathsAfterLoad,
 } from "../utils/utils"
 import { buildDesignAttachmentIndex } from "../utils/designAttachmentIndex"
+import { resolveDesignAttachment } from "../utils/designPath"
 import { hydrateDesignDataDetails } from "../utils/elementDetailsIo"
 import { SuperMagicApi } from "@/apis"
 
@@ -58,7 +58,8 @@ interface ToolDesignData {
 
 /**
  * 画布图片/视频 src 仅两类语义：
- * - 当前设计目录内：`./images|videos|audios/...`（含历史裸 `images/...`，在此收口为 `./...`）
+ * - 当前设计目录内：`./images|videos|audios/...`
+ * - 历史裸路径：`images|videos|audios/...`（保留原值，交由过渡迁移按附件树判定）
  * - 工作区路径：`path/to/file` 或 `/path/to/file`（与附件 relative_file_path 对齐时去掉首尾 `/`）
  * 其余（http、blob、data、`//`、file: 等）不参与附件缺失判断。
  */
@@ -68,16 +69,15 @@ function normalizeCanvasMediaSrcForAttachmentWalk(raw: string): string | null {
 	if (isRemoteOrSpecialPath(trimmed)) return null
 	if (/^file:/i.test(trimmed)) return null
 
-	const local = normalizePathLocal(trimmed)
-
-	if (hasCurrentDirectoryPrefix(local)) {
-		const rest = stripCurrentDirectoryPrefix(local)
+	if (hasCurrentDirectoryPrefix(trimmed)) {
+		const rest = stripCurrentDirectoryPrefix(trimmed)
 		if (!rest) return null
 		return formatCanvasRelativeResourcePath(rest)
 	}
 
-	if (isCanvasRelativeResourcePath(local)) {
-		return formatCanvasRelativeResourcePath(stripPathEdgeSlashes(local))
+	const local = toWeakCanvasResourcePath(trimmed)
+	if (isCanvasResourceRootPath(local)) {
+		return stripPathEdgeSlashes(local)
 	}
 
 	if (local.includes("/")) return stripPathEdgeSlashes(local)
@@ -118,7 +118,16 @@ function designDataHasMediaMissingFromAttachments(
 	let missing = false
 	walkCanvasMediaSources(designData.canvas?.elements, (src) => {
 		if (missing) return
-		if (!findFileBySrc(src, storeFiles, designProjectBasePath, index)) missing = true
+		const resolvedFile = resolveDesignAttachment(
+			src,
+			{
+				flatAttachments: storeFiles,
+				designProjectBasePath,
+				attachmentIndex: index,
+			},
+			{ mode: "legacy-recovery" },
+		)
+		if (resolvedFile.status === "not-found") missing = true
 	})
 	return missing
 }
@@ -646,7 +655,12 @@ export class DesignRemoteListener {
 		}
 
 		if (!parsed) return null
-		if (dslBase) normalizeDesignDataPathsAfterLoad(parsed, dslBase)
+		if (dslBase) {
+			normalizeDesignDataPathsAfterLoad(parsed, dslBase, {
+				flatAttachments: this.options.flatAttachments,
+				attachmentIndex: this.options.attachmentIndex,
+			})
+		}
 		await hydrateDesignDataDetails(parsed, {
 			attachments: this.options.attachments,
 			flatAttachments: this.options.flatAttachments,
@@ -674,7 +688,12 @@ export class DesignRemoteListener {
 			const content = await loadMagicProjectJsContent(fid)
 			const again = parseMagicProjectJsContent(content)
 			if (again) {
-				if (dslBase) normalizeDesignDataPathsAfterLoad(again, dslBase)
+				if (dslBase) {
+					normalizeDesignDataPathsAfterLoad(again, dslBase, {
+						flatAttachments: this.options.flatAttachments,
+						attachmentIndex: this.options.attachmentIndex,
+					})
+				}
 				await hydrateDesignDataDetails(again, {
 					attachments: this.options.attachments,
 					flatAttachments: this.options.flatAttachments,

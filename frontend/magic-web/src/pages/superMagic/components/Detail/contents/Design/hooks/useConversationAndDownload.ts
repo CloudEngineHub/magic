@@ -16,9 +16,9 @@ import { downloadFileWithAnchor } from "@/pages/superMagic/utils/handleFIle"
 import {
 	packAndDownloadFiles,
 	getZipFileNameFromFiles,
-	findFileBySrc,
 	convertFileItemToAttachmentItem,
 } from "../utils/utils"
+import { resolveDesignAttachment } from "../utils/designPath"
 import { useTranslation } from "react-i18next"
 import { addFileToCurrentChat, addMultipleFilesToNewChat } from "@/pages/superMagic/utils/topics"
 import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks/types"
@@ -204,19 +204,22 @@ export function useConversationAndDownload(options: UseConversationAndDownloadOp
 				}
 
 				// 从 flatAttachments 中查找对应的文件
-				const fileItem = findFileBySrc(
+				const resolvedFile = resolveDesignAttachment(
 					item.src,
-					flatAttachments,
-					designProjectBasePath,
-					attachmentIndex,
+					{
+						flatAttachments,
+						designProjectBasePath,
+						attachmentIndex,
+					},
+					{ mode: "strict-current-canvas" },
 				)
 
-				if (!fileItem || !fileItem.file_id) {
+				if (resolvedFile.status !== "found" || !resolvedFile.fileItem.file_id) {
 					throw new Error(t("design.errors.fileNotFoundBySrc", { src: item.src }))
 				}
 
 				// 将 FileItem 转换为 AttachmentItem 格式
-				const attachmentItem = convertFileItemToAttachmentItem(fileItem)
+				const attachmentItem = convertFileItemToAttachmentItem(resolvedFile.fileItem)
 				attachmentItems.push(attachmentItem)
 			}
 			// 参考文件列表的实现：使用 addFileToCurrentChat 或 addMultipleFilesToNewChat
@@ -297,19 +300,22 @@ export function useConversationAndDownload(options: UseConversationAndDownloadOp
 				}
 
 				// 从 flatAttachments 中查找对应的文件
-				const fileItem = findFileBySrc(
+				const resolvedFile = resolveDesignAttachment(
 					item.src,
-					flatAttachments,
-					designProjectBasePath,
-					attachmentIndex,
+					{
+						flatAttachments,
+						designProjectBasePath,
+						attachmentIndex,
+					},
+					{ mode: "strict-current-canvas" },
 				)
 
-				if (!fileItem || !fileItem.file_id) {
+				if (resolvedFile.status !== "found" || !resolvedFile.fileItem.file_id) {
 					throw new Error(t("design.errors.fileNotFoundBySrc", { src: item.src }))
 				}
 
-				fileIds.push(fileItem.file_id)
-				fileItemMap.set(fileItem.file_id, fileItem)
+				fileIds.push(resolvedFile.fileItem.file_id)
+				fileItemMap.set(resolvedFile.fileItem.file_id, resolvedFile.fileItem)
 			}
 
 			// 如果只有一个文件，直接下载（可带 crop 的图片处理参数，仅单文件时传入 crop）
@@ -361,17 +367,20 @@ export function useConversationAndDownload(options: UseConversationAndDownloadOp
 			for (const fileElement of data) {
 				if (!fileElement.src) continue
 
-				const fileItem = findFileBySrc(
+				const resolvedFile = resolveDesignAttachment(
 					fileElement.src,
-					flatAttachments,
-					designProjectBasePath,
-					attachmentIndex,
+					{
+						flatAttachments,
+						designProjectBasePath,
+						attachmentIndex,
+					},
+					{ mode: "strict-current-canvas" },
 				)
-				if (!fileItem?.file_id) continue
+				if (resolvedFile.status !== "found" || !resolvedFile.fileItem.file_id) continue
 
 				const xMagicImageProcess = buildImageProcessOptions({
 					fileElement,
-					fileItem,
+					fileItem: resolvedFile.fileItem,
 					sourceDimensionsByElementId: downloadOptions?.sourceDimensionsByElementId,
 				})
 

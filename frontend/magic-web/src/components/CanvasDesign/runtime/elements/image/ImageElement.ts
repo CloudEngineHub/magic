@@ -17,7 +17,7 @@ import type {
 } from "../../../public/magic-types"
 import { GenerationStatus, ImageGenerationTaskTypeMap } from "../../../public/magic-types"
 import { generateUUID, collectElementsByType, type Rect } from "../../shared/ids"
-import { resolveCanonicalResourcePath } from "../../shared/path/pathUtils"
+import { toCanonicalCanvasResourcePath } from "../../shared/path/canvasResourcePath"
 import type { ResourceLoadFailureReason } from "../../resources/media-common/resourceLoadFailure"
 import { TransformBehavior } from "../../interaction/transform/TransformManager"
 import type { Canvas } from "../../core/Canvas"
@@ -946,10 +946,10 @@ export class ImageElement extends BaseElement<ImageElementData> {
 
 		const path = this.data.src
 		const resolveAbs = this.canvas.magicConfigManager.config?.methods?.resolveAbsolutePath
-		const canonicalPath = resolveCanonicalResourcePath(path, resolveAbs)
+		const canonicalPath = toCanonicalCanvasResourcePath(path, resolveAbs)
 		const isCurrentResourcePath = (resourcePath: string): boolean =>
 			resourcePath === path ||
-			resolveCanonicalResourcePath(resourcePath, resolveAbs) === canonicalPath
+			toCanonicalCanvasResourcePath(resourcePath, resolveAbs) === canonicalPath
 
 		this.resourceLoadedHandler = ({ data }) => {
 			if (isCurrentResourcePath(data.path)) {
@@ -1012,7 +1012,7 @@ export class ImageElement extends BaseElement<ImageElementData> {
 			resource &&
 			!this.loadedImage &&
 			(this.data.src === path ||
-				resolveCanonicalResourcePath(this.data.src || "", resolveAbs) === canonicalPath)
+				toCanonicalCanvasResourcePath(this.data.src || "", resolveAbs) === canonicalPath)
 		) {
 			this.applyResourceFromEvent(resource)
 		}

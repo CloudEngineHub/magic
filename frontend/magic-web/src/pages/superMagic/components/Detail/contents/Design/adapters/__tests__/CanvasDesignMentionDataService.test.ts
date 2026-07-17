@@ -303,6 +303,40 @@ describe("CanvasDesignMentionDataService", () => {
 		expect(result.items).toEqual([])
 	})
 
+	it("does not guess other design resources by basename when strict lookup misses", async () => {
+		const service = new CanvasDesignMentionDataService([
+			folderNode("design-a", "Design A", [
+				folderNode("design-a/images", "images", [
+					fileNode("cat.png", "design-a/images/cat.png"),
+				]),
+			]),
+		])
+		service.setCanvasReferenceElementsContext({
+			canvasName: "Design A",
+			rootFolderId: "design-a",
+			getCanvasDocument: () => ({
+				elements: [
+					{
+						id: "hero",
+						type: ElementTypeEnum.Image,
+						name: "Hero Layer",
+						src: "design-b/images/cat.png",
+						zIndex: 1,
+					},
+				],
+			}),
+		})
+
+		const result = await Promise.resolve(
+			service.dispatch({
+				kind: "children",
+				id: "canvas-elements",
+			}),
+		)
+
+		expect(result.items).toEqual([])
+	})
+
 	it("keeps video canvas elements visible when the current picker only accepts images", async () => {
 		const service = new CanvasDesignMentionDataService([
 			folderNode("design-a", "Design A", [

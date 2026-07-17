@@ -56,6 +56,7 @@ import {
 	type PromptOptimizationReferenceContext,
 } from "../prompt-optimization/promptOptimizationUserPrompt"
 import type { CompleteImagePromptRequest, GenerateImageRequest } from "../../../public/magic-types"
+import { getCanvasResourceFileName } from "../../../runtime/shared/path/canvasResourcePath"
 import {
 	createPromptPlaceholderTokenFactory,
 	resolvePromptPlaceholderTokenConfig,
@@ -100,6 +101,8 @@ export default function ImageEditorSurface(props: ImageEditorSurfaceProps) {
 		isMediaResourcePreviewOpen = false,
 	} = props
 	const { canvas } = useCanvas()
+	const resolveResourcePathCandidates =
+		canvas.magicConfigManager.config?.methods?.resolveResourcePathCandidates
 	const { t } = useCanvasDesignI18n()
 	const hostUiLocale = useHostUiLocale()
 	const [hasScrollbar, setHasScrollbar] = useState(false)
@@ -248,9 +251,16 @@ export default function ImageEditorSurface(props: ImageEditorSurfaceProps) {
 				matchableItems,
 				currentReferenceFiles: effectiveCurrentReferenceFiles,
 				maxReferenceFiles,
+				resolveResourcePathCandidates,
 			})
 		},
-		[canAcceptReferenceDrop, matchableItems, effectiveCurrentReferenceFiles, maxReferenceFiles],
+		[
+			canAcceptReferenceDrop,
+			matchableItems,
+			effectiveCurrentReferenceFiles,
+			maxReferenceFiles,
+			resolveResourcePathCandidates,
+		],
 	)
 
 	const canAcceptLocalFiles = useCallback(
@@ -304,12 +314,13 @@ export default function ImageEditorSurface(props: ImageEditorSurfaceProps) {
 				files,
 				matchableItems,
 				effectiveCurrentReferenceFiles,
+				{ resolveResourcePathCandidates },
 			)
 			editorRef.current?.insertMentionItems(
 				normalizedFiles.map((file) => createReferenceResourcePanelItemFromDropFile(file)),
 			)
 		},
-		[effectiveCurrentReferenceFiles, editorRef, matchableItems],
+		[effectiveCurrentReferenceFiles, editorRef, matchableItems, resolveResourcePathCandidates],
 	)
 
 	const handlePaste = useCallback(
@@ -347,7 +358,7 @@ export default function ImageEditorSurface(props: ImageEditorSurfaceProps) {
 			const currentPrompt = editorRef.current?.getCurrentPrompt() ?? prompt
 			const fileName =
 				config.referenceFileInfos.find((info) => info.path === path)?.fileName ??
-				path.split("/").pop()
+				getCanvasResourceFileName(path)
 			handlers.setPrompt(removeMentionFromString(currentPrompt, path, fileName))
 			handlers.handleReferenceFileRemove(path)
 		},
@@ -505,7 +516,7 @@ function buildImagePromptOptimizationReferences(
 		kind: "image",
 		placeholder: buildToken(index + 1),
 		label: `图片参考 ${index + 1}`,
-		fileName: fileNameByPath.get(path) || path.split("/").pop() || path,
+		fileName: fileNameByPath.get(path) || getCanvasResourceFileName(path) || path,
 		isVisualInput: true,
 		visualReferenceIndex: index + 1,
 	}))

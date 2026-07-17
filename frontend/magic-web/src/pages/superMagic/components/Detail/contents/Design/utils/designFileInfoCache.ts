@@ -15,9 +15,10 @@ import projectFilesStore from "@/stores/projectFiles"
 import { normalizePath } from "./utils"
 import {
 	getResolvedPathCandidates,
-	lookupAttachmentAmongCandidates,
-	lookupAttachmentForSingleNormalizedPath,
-} from "./designAttachmentPathLookup"
+	resolveDesignPathForOperation,
+	resolveDesignAttachmentFromCandidates,
+	resolveDesignAttachmentForNormalizedPath,
+} from "./designPath"
 import { GetFileInfoResponseWithFileId } from "./uploadCallbacks"
 import { getPreviewFileUrlWatermarkSignature } from "@/utils/aiWatermarkPreviewFileUrlMode"
 import type { ImageProcessOptions } from "@/utils/image-processing"
@@ -712,7 +713,23 @@ export async function getFileInfoByPath(
 ): Promise<GetFileInfoResponse | null> {
 	ensureStorageCacheLoaded()
 
-	const candidates = getResolvedPathCandidates(filePath, options?.designProjectBasePath)
+	const operationResolution = resolveDesignPathForOperation(filePath, {
+		designProjectBasePath: options?.designProjectBasePath,
+		flatAttachments: getStoreFiles(filesList),
+		attachmentIndex: options?.attachmentIndex,
+		attachmentsReady: options?.hasAttachmentSnapshot === true,
+	})
+	// 历史裸路径同时命中工作区根和当前画布时，不能命中任一侧的缓存或发请求。
+	if (operationResolution.status === "ambiguous") return null
+	const candidates =
+		operationResolution.status === "found"
+			? [
+					{
+						resolvedPath: operationResolution.resolvedPath,
+						normalizedPath: operationResolution.normalizedPath,
+					},
+				]
+			: operationResolution.candidates
 	const fallbackCandidate = candidates[0]
 	if (!fallbackCandidate) {
 		return null
@@ -736,11 +753,13 @@ export async function getFileInfoByPath(
 			const cachedEntry = fileInfoCache.get(cacheKey)
 			if (!cachedEntry) continue
 
-			const cachedFileItem = lookupAttachmentForSingleNormalizedPath(
+			const cachedFileItem = resolveDesignAttachmentForNormalizedPath(
 				candidate.normalizedPath,
 				filePath,
-				getStoreFiles(filesList),
-				options?.attachmentIndex,
+				{
+					flatAttachments: getStoreFiles(filesList),
+					attachmentIndex: options?.attachmentIndex,
+				},
 			)
 			const staleReasons = getCachedEntryStaleReasons(
 				cachedEntry,
@@ -766,12 +785,10 @@ export async function getFileInfoByPath(
 			return cachedRequest.then((result) =>
 				mergeFileItemMetaIntoFileInfo(
 					result,
-					lookupAttachmentForSingleNormalizedPath(
-						candidate.normalizedPath,
-						filePath,
-						getStoreFiles(filesList),
-						options?.attachmentIndex,
-					),
+					resolveDesignAttachmentForNormalizedPath(candidate.normalizedPath, filePath, {
+						flatAttachments: getStoreFiles(filesList),
+						attachmentIndex: options?.attachmentIndex,
+					}),
 				),
 			)
 		}
@@ -791,11 +808,13 @@ export async function getFileInfoByPath(
 			const cachedEntry = toMemoryCacheEntry(persistedEntry)
 			fileInfoCache.set(cacheKey, cachedEntry)
 			trackScopedCacheKey(cacheKey)
-			const cachedFileItem = lookupAttachmentForSingleNormalizedPath(
+			const cachedFileItem = resolveDesignAttachmentForNormalizedPath(
 				candidate.normalizedPath,
 				filePath,
-				getStoreFiles(filesList),
-				options?.attachmentIndex,
+				{
+					flatAttachments: getStoreFiles(filesList),
+					attachmentIndex: options?.attachmentIndex,
+				},
 			)
 			const staleReasons = getCachedEntryStaleReasons(
 				cachedEntry,
@@ -812,12 +831,10 @@ export async function getFileInfoByPath(
 		}
 	}
 
-	let lookupResult = lookupAttachmentAmongCandidates(
-		candidates,
-		filePath,
-		getStoreFiles(filesList),
-		options?.attachmentIndex,
-	)
+	let lookupResult = resolveDesignAttachmentFromCandidates(candidates, filePath, {
+		flatAttachments: getStoreFiles(filesList),
+		attachmentIndex: options?.attachmentIndex,
+	})
 	if (!lookupResult) {
 		if (hasAttachmentSnapshot) {
 			const latestStoreFiles = getStoreFiles(undefined)
@@ -826,12 +843,10 @@ export async function getFileInfoByPath(
 				? buildAttachmentsSnapshotKey(latestStoreFiles)
 				: undefined
 			if (latestHasFilesContext && latestSnapshotKey !== attachmentsSnapshotKey) {
-				lookupResult = lookupAttachmentAmongCandidates(
-					candidates,
-					filePath,
-					latestStoreFiles,
-					options?.attachmentIndex,
-				)
+				lookupResult = resolveDesignAttachmentFromCandidates(candidates, filePath, {
+					flatAttachments: latestStoreFiles,
+					attachmentIndex: options?.attachmentIndex,
+				})
 			}
 			if (!lookupResult) {
 				// 附件列表已有快照：当前 path 在列表中不存在即视为不存在，不再阻塞等待
@@ -842,12 +857,10 @@ export async function getFileInfoByPath(
 		// 列表尚未就绪（本地仍为空）：上传/重命名与 workspaceFilesList 填充存在时序，仅在此场景重试
 		for (let i = 0; i < 2; i++) {
 			await new Promise((resolve) => setTimeout(resolve, 3000))
-			lookupResult = lookupAttachmentAmongCandidates(
-				candidates,
-				filePath,
-				getStoreFiles(undefined),
-				options?.attachmentIndex,
-			)
+			lookupResult = resolveDesignAttachmentFromCandidates(candidates, filePath, {
+				flatAttachments: getStoreFiles(undefined),
+				attachmentIndex: options?.attachmentIndex,
+			})
 			if (lookupResult) break
 		}
 		if (!lookupResult) {
@@ -897,29 +910,40 @@ export async function getFileResourceMetaByPath(
 		hasAttachmentSnapshot?: boolean
 	},
 ): Promise<CanvasFileResourceMeta> {
-	const candidates = getResolvedPathCandidates(filePath, options?.designProjectBasePath)
+	const operationResolution = resolveDesignPathForOperation(filePath, {
+		designProjectBasePath: options?.designProjectBasePath,
+		flatAttachments: getStoreFiles(filesList),
+		attachmentIndex: options?.attachmentIndex,
+		attachmentsReady: options?.hasAttachmentSnapshot === true,
+	})
+	if (operationResolution.status === "ambiguous") return { status: "unknown" }
+	const candidates =
+		operationResolution.status === "found"
+			? [
+					{
+						resolvedPath: operationResolution.resolvedPath,
+						normalizedPath: operationResolution.normalizedPath,
+					},
+				]
+			: operationResolution.candidates
 	if (candidates.length === 0) return { status: "unknown" }
 
 	const storeFiles = getStoreFiles(filesList)
 	const hasFilesContext = storeFiles.length > 0
 	const hasAttachmentSnapshot = hasFilesContext || options?.hasAttachmentSnapshot === true
-	let lookupResult = lookupAttachmentAmongCandidates(
-		candidates,
-		filePath,
-		storeFiles,
-		options?.attachmentIndex,
-	)
+	let lookupResult = resolveDesignAttachmentFromCandidates(candidates, filePath, {
+		flatAttachments: storeFiles,
+		attachmentIndex: options?.attachmentIndex,
+	})
 
 	if (!lookupResult && hasAttachmentSnapshot) {
 		const latestStoreFiles = getStoreFiles(undefined)
 		const latestHasFilesContext = latestStoreFiles.length > 0
 		if (latestHasFilesContext && latestStoreFiles !== storeFiles) {
-			lookupResult = lookupAttachmentAmongCandidates(
-				candidates,
-				filePath,
-				latestStoreFiles,
-				options?.attachmentIndex,
-			)
+			lookupResult = resolveDesignAttachmentFromCandidates(candidates, filePath, {
+				flatAttachments: latestStoreFiles,
+				attachmentIndex: options?.attachmentIndex,
+			})
 		}
 	}
 
@@ -943,12 +967,10 @@ export function setFileInfoCache(
 	if (!cacheEnabled) return
 
 	const candidates = getResolvedPathCandidates(path, designProjectBasePath)
-	const lookupResult = lookupAttachmentAmongCandidates(
-		candidates,
-		path,
-		getStoreFiles(filesList),
+	const lookupResult = resolveDesignAttachmentFromCandidates(candidates, path, {
+		flatAttachments: getStoreFiles(filesList),
 		attachmentIndex,
-	)
+	})
 	const targetCandidate = lookupResult ?? candidates[0]
 	if (!targetCandidate) return
 

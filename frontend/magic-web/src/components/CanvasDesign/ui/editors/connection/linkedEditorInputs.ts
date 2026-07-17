@@ -10,6 +10,7 @@ import {
 	extractPlainTextFromRichText,
 	extractPromptTextFromRichText,
 } from "../../../runtime/text/richText"
+import { getCanvasResourceFileName } from "../../../runtime/shared/path/canvasResourcePath"
 import { getLinkedTextPromptText, type LinkedTextConnection } from "./linkedTextPrompt"
 
 export type LinkedEditorTargetKind = "image" | "video"
@@ -68,7 +69,7 @@ interface ResolveLinkedEditorInputsOptions {
 }
 
 function getFileName(path: string): string {
-	return path.split("/").pop() || path
+	return getCanvasResourceFileName(path) || path
 }
 
 function getMediaSourceTypeUnsupportedReason(

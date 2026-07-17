@@ -1,7 +1,10 @@
 import type { Canvas } from "../../core/Canvas"
 import { type CanvasDocument, ElementTypeEnum, type LayerElement } from "../../document/types"
 import { parseExpiresAt, isOssExpired } from "../offline-cache/ossExpiryUtils"
-import { getCanonicalResourcePathInfo, isRemoteOrSpecialPath } from "../../shared/path/pathUtils"
+import {
+	getCanvasResourcePathInfo,
+	isRemoteOrSpecialPath,
+} from "../../shared/path/canvasResourcePath"
 import {
 	getFailureReasonFromGetFileInfoError,
 	type ResourceLoadFailureReason,
@@ -258,7 +261,7 @@ export class CanvasResourceUrlWarmupManager {
 
 		const resolveAbsolutePath =
 			this.canvas.magicConfigManager.config?.methods?.resolveAbsolutePath
-		const pathInfo = getCanonicalResourcePathInfo(path, resolveAbsolutePath)
+		const pathInfo = getCanvasResourcePathInfo(path, resolveAbsolutePath)
 		const key = `${ref.mediaType}\0${pathInfo.canonicalPath}`
 		let entry = this.entries.get(key)
 		if (!entry) {

@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from "react"
 import { useCanvas } from "../../providers/CanvasProvider"
 import type { ImageElement } from "../../../runtime/document/types"
 import { useCanvasEvent } from "../canvas"
-import { resolveCanonicalResourcePath } from "../../../runtime/shared/path/pathUtils"
+import { toCanonicalCanvasResourcePath } from "../../../runtime/shared/path/canvasResourcePath"
 
 /**
  * 检查图片元素的 ossSrc 是否已加载
@@ -49,8 +49,8 @@ export function useImageOssSrc(imageElement: ImageElement | null) {
 			if (data.resource.variant === "low") return
 			const resolveAbs = canvas.magicConfigManager.config?.methods?.resolveAbsolutePath
 			if (
-				resolveCanonicalResourcePath(data.path, resolveAbs) ===
-				resolveCanonicalResourcePath(path, resolveAbs)
+				toCanonicalCanvasResourcePath(data.path, resolveAbs) ===
+				toCanonicalCanvasResourcePath(path, resolveAbs)
 			) {
 				setOssSrc(data.resource.ossSrc)
 			}

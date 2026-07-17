@@ -18,7 +18,7 @@ import { TransformBehavior } from "../../interaction/transform/TransformManager"
 import type { TransformContext } from "../core/BaseElement"
 import { VideoRenderer } from "./VideoRenderer"
 import { VideoPollingManager } from "../../resources/polling/VideoPollingManager"
-import { resolveCanonicalResourcePath } from "../../shared/path/pathUtils"
+import { toCanonicalCanvasResourcePath } from "../../shared/path/canvasResourcePath"
 import {
 	buildFullscreenVideoPlaybackConsumerId,
 	buildInlineVideoPlaybackConsumerId,
@@ -342,8 +342,8 @@ export class VideoElement extends BaseElement<VideoElementData> {
 			const currentPath = this.data.src
 			if (!currentPath) return
 			if (
-				resolveCanonicalResourcePath(data.path, resolveAbs) !==
-				resolveCanonicalResourcePath(currentPath, resolveAbs)
+				toCanonicalCanvasResourcePath(data.path, resolveAbs) !==
+				toCanonicalCanvasResourcePath(currentPath, resolveAbs)
 			) {
 				return
 			}
@@ -375,8 +375,8 @@ export class VideoElement extends BaseElement<VideoElementData> {
 			const currentPath = this.data.src
 			if (!currentPath) return
 			if (
-				resolveCanonicalResourcePath(data.path, resolveAbs) !==
-				resolveCanonicalResourcePath(currentPath, resolveAbs)
+				toCanonicalCanvasResourcePath(data.path, resolveAbs) !==
+				toCanonicalCanvasResourcePath(currentPath, resolveAbs)
 			) {
 				return
 			}

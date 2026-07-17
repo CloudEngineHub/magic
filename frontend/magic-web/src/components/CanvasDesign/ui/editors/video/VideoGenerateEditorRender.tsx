@@ -31,6 +31,7 @@ import type {
 } from "./video-editor-config.types"
 import { VideoElement as VideoElementClass } from "../../../runtime/elements/video/VideoElement"
 import { generateUUID } from "../../../runtime/shared/ids"
+import { getCanvasResourceFileName } from "../../../runtime/shared/path/canvasResourcePath"
 import MessageEditor, { type MessageEditorRef } from "../message/MessageEditor"
 import { useCanvasReferenceMention } from "../message/useCanvasReferenceMention"
 import VideoEditorControls from "./VideoEditorControls"
@@ -130,6 +131,8 @@ export default function VideoGenerateEditorRender(props: VideoGenerateEditorRend
 	)
 	const { selectedElements } = useCanvasSelectionUI()
 	const { canvas } = useCanvas()
+	const resolveResourcePathCandidates =
+		canvas.magicConfigManager.config?.methods?.resolveResourcePathCandidates
 	const editorRef = useRef<MessageEditorRef>(null)
 	const [hasEditorScrollbar, setHasEditorScrollbar] = useState(false)
 	const [hasSourceListScrollbar, setHasSourceListScrollbar] = useState(false)
@@ -432,6 +435,7 @@ export default function VideoGenerateEditorRender(props: VideoGenerateEditorRend
 				matchableItems,
 				currentReferenceFiles: effectiveReferencePaths,
 				maxReferenceFiles: effectiveMaxReferenceFiles,
+				resolveResourcePathCandidates,
 			})
 		},
 		[
@@ -439,6 +443,7 @@ export default function VideoGenerateEditorRender(props: VideoGenerateEditorRend
 			effectiveReferencePaths,
 			effectiveMaxReferenceFiles,
 			matchableItems,
+			resolveResourcePathCandidates,
 		],
 	)
 
@@ -509,6 +514,7 @@ export default function VideoGenerateEditorRender(props: VideoGenerateEditorRend
 				files,
 				matchableItems,
 				effectiveReferencePaths,
+				{ resolveResourcePathCandidates },
 			)
 			const existingReferencePathSet = new Set(effectiveReferencePaths)
 			const nextFiles: ReferenceDropProjectFile[] = []
@@ -528,7 +534,13 @@ export default function VideoGenerateEditorRender(props: VideoGenerateEditorRend
 				})
 			})
 		},
-		[config.currentReferenceImages.length, effectiveReferencePaths, handlers, matchableItems],
+		[
+			config.currentReferenceImages.length,
+			effectiveReferencePaths,
+			handlers,
+			matchableItems,
+			resolveResourcePathCandidates,
+		],
 	)
 
 	const handlePaste = useCallback(
@@ -851,7 +863,7 @@ export default function VideoGenerateEditorRender(props: VideoGenerateEditorRend
 }
 
 function getFileNameFromPath(path: string): string {
-	return path.split("/").pop() || path
+	return getCanvasResourceFileName(path) || path
 }
 
 function buildVideoReferenceAssetInfoFromReference(

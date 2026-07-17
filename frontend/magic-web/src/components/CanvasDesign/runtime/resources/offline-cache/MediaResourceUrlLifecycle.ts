@@ -9,7 +9,10 @@ import type {
 	MediaResourceOfflineCacheMediaType,
 } from "./MediaResourceOfflineCacheManager"
 import { parseExpiresAt, isOssExpired } from "./ossExpiryUtils"
-import { resolveCanonicalResourcePath, normalizePathLocal } from "../../shared/path/pathUtils"
+import {
+	toCanonicalCanvasResourcePath,
+	toWeakCanvasResourcePath,
+} from "../../shared/path/canvasResourcePath"
 import {
 	getFailureReasonFromGetFileInfoError,
 	type ResourceLoadFailureReason,
@@ -72,13 +75,13 @@ export class MediaResourceUrlLifecycle<TEntry extends MediaResourceUrlEntry> {
 	constructor(private readonly options: MediaResourceUrlLifecycleOptions<TEntry>) {}
 
 	public canonicalResourcePath(path: string): string {
-		const canonical = resolveCanonicalResourcePath(path, this.getResolveAbsolutePath())
+		const canonical = toCanonicalCanvasResourcePath(path, this.getResolveAbsolutePath())
 		this.rememberPathAlias(path, canonical)
 		return canonical
 	}
 
 	public getCanonicalFromAlias(path: string): string {
-		const weak = normalizePathLocal(path)
+		const weak = toWeakCanvasResourcePath(path)
 		return this.pathAliasToCanonical.get(weak) ?? weak
 	}
 
@@ -501,7 +504,7 @@ export class MediaResourceUrlLifecycle<TEntry extends MediaResourceUrlEntry> {
 	}
 
 	private rememberPathAlias(rawPath: string, canonical: string): void {
-		const weak = normalizePathLocal(rawPath)
+		const weak = toWeakCanvasResourcePath(rawPath)
 		this.pathAliasToCanonical.set(weak, canonical)
 		this.pathAliasToCanonical.set(canonical, canonical)
 	}

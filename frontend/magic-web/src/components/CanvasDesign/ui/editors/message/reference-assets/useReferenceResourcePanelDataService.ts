@@ -8,7 +8,7 @@ import type {
 	ReferenceResourceTypeFilter,
 } from "./reference-resource.types"
 import { classifyReferenceAssetFile } from "./referenceResourceSelection"
-import { isCanvasRelativeResourcePath } from "../../../../runtime/shared/path/pathUtils"
+import { toReferenceResourcePathCandidates } from "../../../../runtime/shared/path/canvasResourcePath"
 import { useCanvasReferenceMentionRuntime } from "./useCanvasReferenceMentionRuntime"
 import { CANVAS_REFERENCE_MENTION_ITEM_TYPE } from "./canvasReferenceMention.constants"
 
@@ -57,6 +57,10 @@ export interface ReferenceResourceDropOverlayState {
 export interface ReferenceDropMatchableItem {
 	path?: string
 	disabled?: boolean
+}
+
+export interface ReferenceResourcePathCandidateOptions {
+	resolveResourcePathCandidates?: (path: string) => string[]
 }
 
 interface UseReferenceResourceDropOptions {
@@ -513,52 +517,11 @@ function parseProjectFilesFromTextPayload(payload: string): ReferenceDropProject
 	}
 }
 
-export function getProjectFilePathCandidates(path: string): string[] {
-	if (!path) return []
-
-	const candidates = new Set<string>()
-	const trimmedPath = path.trim()
-	if (!trimmedPath) return []
-
-	addProjectFilePathCandidate(candidates, trimmedPath)
-
-	const withoutLeadingSlash = trimmedPath.replace(/^\/+/, "")
-	if (withoutLeadingSlash) {
-		addProjectFilePathCandidate(candidates, withoutLeadingSlash)
-		const segments = withoutLeadingSlash.split("/").filter(Boolean)
-		if (segments.length >= 2) {
-			addProjectFilePathCandidate(candidates, segments.slice(1).join("/"))
-		}
-
-		// 兼容设计项目内附件拖入：拖拽数据常是工作区绝对路径，
-		// 而当前设计附件树可能是 DSL 相对路径（如 ./images/x.png）。
-		for (let index = 0; index < segments.length; index += 1) {
-			const suffix = segments.slice(index).join("/")
-			if (!suffix) continue
-			addProjectFilePathCandidate(candidates, suffix)
-			if (isCanvasRelativeResourcePath(suffix)) {
-				addProjectFilePathCandidate(candidates, `./${suffix}`)
-			}
-		}
-	}
-
-	return Array.from(candidates)
-}
-
-function addProjectFilePathCandidate(candidates: Set<string>, path: string): void {
-	const normalizedPath = path.replace(/\\/g, "/")
-	if (!normalizedPath) return
-	candidates.add(normalizedPath)
-
-	const withoutCurrentDirectoryPrefix = normalizedPath.replace(/^\.\/+/, "")
-	if (withoutCurrentDirectoryPrefix !== normalizedPath) {
-		candidates.add(withoutCurrentDirectoryPrefix)
-	}
-
-	if (isCanvasRelativeResourcePath(withoutCurrentDirectoryPrefix)) {
-		// 参考资源面板需要同时识别历史裸路径和新 DSL 的 `./` 相对路径。
-		candidates.add(`./${withoutCurrentDirectoryPrefix}`)
-	}
+export function getProjectFilePathCandidates(
+	path: string,
+	options?: ReferenceResourcePathCandidateOptions,
+): string[] {
+	return toReferenceResourcePathCandidates(path, options)
 }
 
 export function getRemainingReferenceResourceSlots(
@@ -573,6 +536,7 @@ export function normalizeProjectDropFiles(
 	files: ReferenceDropProjectFile[],
 	matchableItems: ReferenceDropMatchableItem[],
 	currentReferenceFiles: string[],
+	options?: ReferenceResourcePathCandidateOptions,
 ): ReferenceDropProjectFile[] {
 	const matchableItemMap = new Map(
 		matchableItems
@@ -583,7 +547,7 @@ export function normalizeProjectDropFiles(
 
 	return files.map((file) => {
 		const resolvedPath =
-			getProjectFilePathCandidates(file.path).find(
+			getProjectFilePathCandidates(file.path, options).find(
 				(candidate) =>
 					matchableItemMap.has(candidate) || currentReferenceFileSet.has(candidate),
 			) || file.path
@@ -602,6 +566,7 @@ export function checkProjectReferenceResourceDrop(options: {
 	currentReferenceFiles: string[]
 	maxReferenceFiles?: number
 	rejectExistingFiles?: boolean
+	resolveResourcePathCandidates?: (path: string) => string[]
 }): ReferenceResourceDropCheckResult {
 	const {
 		isDropEnabled,
@@ -610,6 +575,7 @@ export function checkProjectReferenceResourceDrop(options: {
 		currentReferenceFiles,
 		maxReferenceFiles,
 		rejectExistingFiles = false,
+		resolveResourcePathCandidates,
 	} = options
 	if (!isDropEnabled) {
 		return {
@@ -624,7 +590,14 @@ export function checkProjectReferenceResourceDrop(options: {
 			.filter((entry) => Boolean(entry[0])),
 	)
 	const currentReferenceFileSet = new Set(currentReferenceFiles)
-	const normalizedFiles = normalizeProjectDropFiles(files, matchableItems, currentReferenceFiles)
+	const normalizedFiles = normalizeProjectDropFiles(
+		files,
+		matchableItems,
+		currentReferenceFiles,
+		{
+			resolveResourcePathCandidates,
+		},
+	)
 	const nextNewFileCount = normalizedFiles.filter(
 		(file) => !currentReferenceFileSet.has(file.path),
 	).length

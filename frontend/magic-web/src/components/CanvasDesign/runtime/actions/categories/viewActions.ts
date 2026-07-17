@@ -1,6 +1,7 @@
 import type { LocateProjectFileActionOptions, UserAction, ViewActionOptions } from "../types"
 import type { Canvas } from "../../core/Canvas"
 import { ElementTypeEnum } from "../../document/types"
+import { getCanvasResourceFileName } from "../../shared/path/canvasResourcePath"
 
 interface SelectedMediaFile {
 	src: string
@@ -36,7 +37,7 @@ function resolveMediaElementFile(
 		element.type === ElementTypeEnum.Image
 			? canvas.imageResourceManager.getEntry(element.src)
 			: undefined
-	const fileName = entry?.fileName || element.src.split("/").pop() || undefined
+	const fileName = entry?.fileName || getCanvasResourceFileName(element.src) || undefined
 
 	return {
 		src: element.src,

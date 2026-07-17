@@ -2,7 +2,7 @@ import { useState, useCallback, useEffect, useRef } from "react"
 import { useCanvas } from "../../providers/CanvasProvider"
 import { useCanvasEvent } from "../canvas"
 import { ElementTypeEnum } from "../../../runtime/document/types"
-import { resolveCanonicalResourcePath } from "../../../runtime/shared/path/pathUtils"
+import { toCanonicalCanvasResourcePath } from "../../../runtime/shared/path/canvasResourcePath"
 import type { ImageInfo } from "../../../runtime/resources/image/ImageResourceManager"
 
 export interface UseImageLowUrlOptions {
@@ -119,8 +119,8 @@ export function useImageLowUrl(options: UseImageLowUrlOptions): UseImageLowUrlRe
 			({ data }) => {
 				if (!canvas || !enabled || !src) return
 				const resolveAbs = canvas.magicConfigManager.config?.methods?.resolveAbsolutePath
-				const normalizedPath = resolveCanonicalResourcePath(data.path, resolveAbs)
-				if (resolveCanonicalResourcePath(src, resolveAbs) !== normalizedPath) return
+				const normalizedPath = toCanonicalCanvasResourcePath(data.path, resolveAbs)
+				if (toCanonicalCanvasResourcePath(src, resolveAbs) !== normalizedPath) return
 
 				const currentRequestId = requestIdRef.current + 1
 				requestIdRef.current = currentRequestId

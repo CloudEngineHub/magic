@@ -17,6 +17,7 @@ import {
 	calculateNewElementPosition,
 	getDefaultImageSize,
 } from "../../../runtime/shared/ids"
+import { getCanvasResourceFileName } from "../../../runtime/shared/path/canvasResourcePath"
 import { getImageProcessRequestPayload } from "../../../runtime/resources/image/imageCropUtils"
 import type { GenerateImageRequest } from "../../../public/magic-types"
 import { useImageEditorConfig } from "./useImageEditorConfig"
@@ -47,7 +48,7 @@ export default function SecondEdit(props: SecondEditProps) {
 		editorFocusRef: editorRef,
 		originalImageName:
 			// 从 src 字段提取文件名（例如："/超级画布/images/111.jpg" -> "111.jpg"）
-			(props.imageElement.src ? props.imageElement.src.split("/").pop() : undefined) ||
+			getCanvasResourceFileName(props.imageElement.src) ||
 			props.imageElement.name ||
 			t("imageEditor.originalImage", "原图"), // 从 src 提取文件名，否则使用 name，最后使用默认值
 	})

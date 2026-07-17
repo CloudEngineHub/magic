@@ -11,7 +11,7 @@ import {
 	extractSmartNameFromFileName,
 	shouldContinueGenerationPolling,
 } from "./generationPollingUtils"
-import { joinUploadStoragePath } from "../../shared/path/pathUtils"
+import { toCanvasUploadStoragePath } from "../../shared/path/canvasResourcePath"
 
 export interface ImageBatchPollingManagerConfig {
 	canvas: Canvas
@@ -228,7 +228,7 @@ export class ImageBatchPollingManager {
 		}
 
 		if (result.file_dir && image.file_name) {
-			updateData.src = joinUploadStoragePath(result.file_dir, image.file_name)
+			updateData.src = toCanvasUploadStoragePath(result.file_dir, image.file_name)
 			updateData.name = extractSmartNameFromFileName(image.file_name)
 			this.primeGeneratedImageResource(updateData.src, image.file_url, image.file_name)
 		}

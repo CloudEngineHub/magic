@@ -12,6 +12,7 @@ import type { CompleteImagePromptRequest } from "../../../../public/magic-types"
 import { ElementToolTypeEnum } from "../../../../public/props"
 import { ElementTypeEnum, type ImageElement } from "../../../../runtime/document/types"
 import { ImageElement as ImageElementClass } from "../../../../runtime/elements/image/ImageElement"
+import { getCanvasResourceFileName } from "../../../../runtime/shared/path/canvasResourcePath"
 import {
 	buildReferenceImageOptions,
 	getImageProcessRequestPayload,
@@ -136,7 +137,7 @@ export default function ImagePromptExtractionButton() {
 		const request: CompleteImagePromptRequest = {
 			user_prompt: buildImagePromptExtractionPrompt({
 				hostUiLocale,
-				fileName: selectedImageElement.name || filePath.split("/").pop(),
+				fileName: selectedImageElement.name || getCanvasResourceFileName(filePath),
 				hasCrop: Boolean(referenceImageOptions?.length),
 			}),
 			reference_images: [filePath],

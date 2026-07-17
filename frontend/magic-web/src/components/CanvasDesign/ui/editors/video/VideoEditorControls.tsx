@@ -27,6 +27,7 @@ import { cn } from "../../../runtime/shared/lib/utils"
 import { useOverflowChange } from "../../../app/hooks/layout/useOverflowChange"
 import type { MediaResourceFullscreenPreviewItem } from "../../fullscreen/media-resource/index"
 import type { TFunction } from "../../../public/i18n-types"
+import { getCanvasResourceFileName } from "../../../runtime/shared/path/canvasResourcePath"
 import type {
 	LinkedEditorMediaInactiveReason,
 	LinkedEditorMediaItem,
@@ -199,7 +200,7 @@ function countLinkedMediaItemsByKind(items: Array<LinkedEditorMediaItem & { path
 }
 
 function getLinkedMediaFileName(item: LinkedEditorMediaItem & { path: string }): string {
-	return item.fileName || item.path.split("/").pop() || item.path
+	return item.fileName || getCanvasResourceFileName(item.path) || item.path
 }
 
 function createLinkedMediaSourceListOption(options: {

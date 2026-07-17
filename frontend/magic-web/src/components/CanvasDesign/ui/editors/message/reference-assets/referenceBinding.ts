@@ -3,6 +3,7 @@ import {
 	type PromptPlaceholderTokenConfig,
 	type PromptPlaceholderTokenKind,
 } from "./promptPlaceholderTokenConfig"
+import { getCanvasResourceFileName } from "../../../../runtime/shared/path/canvasResourcePath"
 import { getMatchablePathsFromValue } from "../tiptap/contentUtils"
 
 export type ReferenceBindingMode = "prompt-linked" | "detached-legacy" | "mixed"
@@ -25,7 +26,7 @@ function resolveAssetType(info: ReferenceBindingResourceInfo): PromptPlaceholder
 
 function buildPromptMatchableItems(referenceFileInfos: ReferenceBindingResourceInfo[]) {
 	return referenceFileInfos.map((info) => ({
-		name: info.fileName || info.path.split("/").pop() || info.path,
+		name: info.fileName || getCanvasResourceFileName(info.path) || info.path,
 		path: info.path,
 	}))
 }
