@@ -44,14 +44,14 @@ class FileHandler(BaseMentionHandler):
         return "file"
 
     async def get_tip(self, mention: Dict[str, Any], agent_context: Optional["AgentContext"] = None) -> str:
-        file_path = self.normalize_path(mention.get("file_path", ""))
+        file_path = mention.get("file_path", "") or ""
         _, project_type = await find_parent_canvas_project(file_path)
         if project_type and project_type in _PROJECT_TYPE_TIPS:
             return _PROJECT_TYPE_TIPS[project_type]
         return "Read and understand the referenced file or directory before proceeding"
 
     async def handle(self, mention: Dict[str, Any], index: int, agent_context: Optional["AgentContext"] = None) -> List[str]:
-        file_path = self.normalize_path(mention.get("file_path", ""))
+        file_path = mention.get("file_path", "") or ""
         file_url = mention.get("file_url", "")
 
         context_lines = [f"{index}. [@file_path:{file_path}]"]
