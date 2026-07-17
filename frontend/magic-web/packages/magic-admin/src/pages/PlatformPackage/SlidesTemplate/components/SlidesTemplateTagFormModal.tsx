@@ -119,17 +119,21 @@ export const SlidesTemplateTagFormModal = memo(
 			setLangErrors(DEFAULT_LANG_ERRORS)
 		}, [form, initialValues, rest.open])
 
-		useEffect(() => {
-			if (!rest.open || isGroup) return
-
-			SlidesTemplateApi.tag
+		const loadGroups = useMemoizedFn(() => {
+			return SlidesTemplateApi.tag
 				.tree()
 				.then((tree) => setGroups(tree))
 				.catch((error) => {
 					console.error("Failed to fetch slides template tag tree", error)
 					setGroups([])
 				})
-		}, [SlidesTemplateApi.tag, isGroup, rest.open])
+		})
+
+		useEffect(() => {
+			if (!rest.open || isGroup) return
+
+			loadGroups()
+		}, [isGroup, loadGroups, rest.open])
 
 		const updateLangField = useMemoizedFn((value: Lang) => {
 			form.setFieldsValue({
