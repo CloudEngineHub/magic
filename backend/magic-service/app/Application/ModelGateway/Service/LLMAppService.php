@@ -1931,7 +1931,7 @@ class LLMAppService extends AbstractLLMAppService
         $originalReferImages = $imageGenerateRequest->getReferImages();
         $proxyUrls = [];
 
-        if ($providerCode === ProviderCode::Google && ! empty($originalReferImages)) {
+        if (in_array($providerCode, [ProviderCode::Google, ProviderCode::OpenRouter]) && ! empty($originalReferImages)) {
             $proxyResult = $this->temporaryFileUrlProxyManager->prepare($originalReferImages);
             $imageGenerateRequest->setReferImages($proxyResult['urls']);
             $proxyUrls = $proxyResult['proxy_urls'];
