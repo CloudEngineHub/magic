@@ -5,6 +5,10 @@ import * as SelectPrimitive from "@radix-ui/react-select"
 import { CheckIcon, ChevronDownIcon, ChevronUpIcon } from "lucide-react"
 
 import { cn } from "@/lib/utils"
+import {
+	useOverlayInteractionScopeAttributes,
+	useOverlayInteractionScopeContentAttributes,
+} from "./overlay-interaction-scope"
 
 function Select({ ...props }: React.ComponentProps<typeof SelectPrimitive.Root>) {
 	return <SelectPrimitive.Root data-slot="select" {...props} />
@@ -26,6 +30,8 @@ function SelectTrigger({
 }: React.ComponentProps<typeof SelectPrimitive.Trigger> & {
 	size?: "sm" | "default"
 }) {
+	const overlayScopeAttributes = useOverlayInteractionScopeAttributes()
+
 	return (
 		<SelectPrimitive.Trigger
 			data-slot="select-trigger"
@@ -36,6 +42,7 @@ function SelectTrigger({
 				className,
 			)}
 			{...props}
+			{...overlayScopeAttributes}
 		>
 			{children}
 			<SelectPrimitive.Icon asChild>
@@ -58,6 +65,8 @@ function SelectContent({
 	showScrollButtons?: boolean
 	viewportClassName?: string
 }) {
+	const overlayScopeAttributes = useOverlayInteractionScopeContentAttributes()
+
 	return (
 		<SelectPrimitive.Portal>
 			<SelectPrimitive.Content
@@ -72,6 +81,7 @@ function SelectContent({
 				position={position}
 				align={align}
 				{...props}
+				{...overlayScopeAttributes}
 			>
 				{showScrollButtons && <SelectScrollUpButton />}
 				<SelectPrimitive.Viewport
