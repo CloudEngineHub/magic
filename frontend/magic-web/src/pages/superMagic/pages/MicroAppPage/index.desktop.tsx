@@ -1,4 +1,4 @@
-import { Suspense, lazy, useCallback, useEffect, useMemo, useState } from "react"
+import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useParams } from "react-router"
 import { observer } from "mobx-react-lite"
 import { useTranslation } from "react-i18next"
@@ -9,34 +9,36 @@ import useNavigate from "@/routes/hooks/useNavigate"
 import useResizablePanel from "@/pages/superMagic/hooks/useResizablePanel"
 import TopicResizeHandle from "@/pages/superMagic/pages/TopicPage/components/TopicResizeHandle"
 import TopicFilesButton from "@/pages/superMagic/components/TopicFilesButton"
+import Detail, { type DetailRef } from "@/pages/superMagic/components/Detail"
 import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks"
 import { useAttachmentsPolling } from "@/pages/superMagic/hooks/useAttachmentsPolling"
 import { AttachmentDataProcessor } from "@/pages/superMagic/utils/attachmentDataProcessor"
 import {
+	normalizeUpdateAttachmentsPayload,
 	releaseAttachmentsRefreshWaitersWithoutFetch,
+	type SuperMagicUpdateAttachmentsRequest,
 	withAttachmentsRefreshWaitersResolved,
 } from "@/pages/superMagic/services/attachmentsTopicSync"
-import {
-	FileActionVisibilityProvider,
-	HIDE_COPY_MOVE_SHARE_FILE_AND_TOPIC_ACTIONS,
-} from "@/pages/superMagic/providers/file-action-visibility-provider"
+import { FileActionVisibilityProvider } from "@/pages/superMagic/providers/file-action-visibility-provider"
 import { SuperMagicApi } from "@/apis"
 import { useDefaultModeModelListRefreshOnMount } from "@/pages/superMagic/hooks"
 import { useCreateTopicListener } from "@/pages/superMagic/components/TopicMode"
+import { MessageHeaderTopicHistoryPanel } from "@/pages/superMagic/components/MessageHeader"
+import { useScopedMessageHeaderTopicActions } from "@/pages/superMagic/hooks/useScopedMessageHeaderTopicActions"
 import useCollaboratorUpdatePanel from "@/pages/superMagic/components/WithCollaborators/hooks/useCollaboratorUpdatePanel"
+import { isReadOnlyProject } from "@/pages/superMagic/utils/permission"
+import {
+	TOPIC_HISTORY_PANEL_OPEN_STORAGE_KEYS,
+	useTopicHistoryLayoutState,
+} from "@/pages/superMagic/pages/TopicPage/hooks/useTopicHistoryLayoutState"
+import { TOPIC_HISTORY_PANEL_WIDTH } from "@/pages/superMagic/constants/resizablePanel"
 import { RouteName } from "@/routes/constants"
 import { AppStoreProvider, useAppStore } from "./context"
 import AppConversationPanel from "./components/AppConversationPanel"
-import MicroAppHeader, { type MicroAppPreviewMode } from "./components/MicroAppHeader"
-import MicroAppHtmlPreview from "./components/MicroAppHtmlPreview"
+import MicroAppHeader from "./components/MicroAppHeader"
 import MicroAppPanelToggleButton from "./components/MicroAppPanelToggleButton"
-import MicroAppPreviewDialog from "./components/MicroAppPreviewDialog"
 import MicroAppPublishDialog from "./components/MicroAppPublishDialog"
-import {
-	collectRootHtmlFiles,
-	getAttachmentId,
-	resolveSelectedHtmlEntry,
-} from "./utils/microAppFiles"
+import { resolveDefaultHtmlEntry } from "./utils/microAppFiles"
 
 const SIDEBAR_DEFAULT_PX = 280
 const SIDEBAR_MIN_PX = 220
@@ -59,13 +61,26 @@ function MicroAppPageInner({ projectId }: { projectId: string }) {
 	const { conversation } = store
 	const navigate = useNavigate()
 	const [isInitialAttachmentsLoaded, setIsInitialAttachmentsLoaded] = useState(false)
-	const [selectedEntryFileId, setSelectedEntryFileId] = useState<string | null>(null)
-	const [previewFile, setPreviewFile] = useState<AttachmentItem | null>(null)
+	const [activeFileId, setActiveFileId] = useState<string | null>(null)
+	const [userSelectDetail, setUserSelectDetail] = useState<unknown>(null)
+	const [isFileTabsCacheLoaded, setIsFileTabsCacheLoaded] = useState(false)
 	const [publishDialogOpen, setPublishDialogOpen] = useState(false)
 	const [isDatabasePanelOpen, setIsDatabasePanelOpen] = useState(false)
-	const [previewMode, setPreviewMode] = useState<MicroAppPreviewMode>("desktop")
+	const detailRef = useRef<DetailRef>(null)
+	const defaultEntryOpenedKeyRef = useRef<string | null>(null)
 	const selectedProject = conversation.selectedProject
 	const selectedTopic = conversation.topicStore.selectedTopic
+	const isReadOnly = isReadOnlyProject(selectedProject?.user_role)
+	const topicActions = useScopedMessageHeaderTopicActions({
+		selectedProject,
+		selectedTopic,
+		topicStore: conversation.topicStore,
+	})
+	const { isTopicHistoryPanelOpen, closeTopicHistoryPanel, toggleTopicHistoryPanel } =
+		useTopicHistoryLayoutState({
+			storageKey: TOPIC_HISTORY_PANEL_OPEN_STORAGE_KEYS.microApp,
+			isEnabled: !isReadOnly,
+		})
 	const attachments = store.projectFilesStore.workspaceFileTree
 	const attachmentList = store.projectFilesStore.workspaceFilesList
 
@@ -80,8 +95,10 @@ function MicroAppPageInner({ projectId }: { projectId: string }) {
 	}, [projectId, store])
 
 	useEffect(() => {
-		setSelectedEntryFileId(null)
-		setPreviewFile(null)
+		setActiveFileId(null)
+		setUserSelectDetail(null)
+		setIsFileTabsCacheLoaded(false)
+		defaultEntryOpenedKeyRef.current = null
 		setPublishDialogOpen(false)
 		setIsDatabasePanelOpen(false)
 	}, [projectId])
@@ -131,24 +148,31 @@ function MicroAppPageInner({ projectId }: { projectId: string }) {
 		{ wait: 500 },
 	).run
 
-	const htmlFiles = useMemo(() => collectRootHtmlFiles(attachmentList), [attachmentList])
-	const selectedEntryFile = useMemo(
-		() =>
-			resolveSelectedHtmlEntry({
-				items: attachmentList,
-				selectedFileId: selectedEntryFileId,
-			}),
-		[attachmentList, selectedEntryFileId],
+	const defaultEntryFile = useMemo(
+		() => resolveDefaultHtmlEntry(attachmentList),
+		[attachmentList],
+	)
+
+	const nonClosableFileIds = useMemo(
+		() => (defaultEntryFile?.file_id ? [String(defaultEntryFile.file_id)] : []),
+		[defaultEntryFile?.file_id],
 	)
 
 	useEffect(() => {
-		if (!isInitialAttachmentsLoaded) return
-
-		const nextEntryId = selectedEntryFile ? getAttachmentId(selectedEntryFile) : null
-		if (nextEntryId !== selectedEntryFileId) {
-			setSelectedEntryFileId(nextEntryId)
+		if (!isInitialAttachmentsLoaded || !isFileTabsCacheLoaded || !defaultEntryFile?.file_id) {
+			return
 		}
-	}, [isInitialAttachmentsLoaded, selectedEntryFile, selectedEntryFileId])
+
+		// FilesViewer restores cached tabs asynchronously. Open the default entry afterwards so
+		// index.html is the visible initial tab instead of being overwritten by cache restoration.
+		const entryId = String(defaultEntryFile.file_id)
+		const openKey = `${projectId}:${entryId}`
+		if (defaultEntryOpenedKeyRef.current === openKey) return
+
+		defaultEntryOpenedKeyRef.current = openKey
+		setActiveFileId(entryId)
+		detailRef.current?.openFileTab(defaultEntryFile)
+	}, [defaultEntryFile, isFileTabsCacheLoaded, isInitialAttachmentsLoaded, projectId])
 
 	const [isSidebarCollapsed, setIsSidebarCollapsed] = useLocalStorageState<boolean>(
 		MICRO_APP_SIDEBAR_COLLAPSED_KEY,
@@ -166,6 +190,11 @@ function MicroAppPageInner({ projectId }: { projectId: string }) {
 
 	const toggleMessagePanelCollapse = useMemoizedFn(() => {
 		setIsMessagePanelCollapsed((prev) => !prev)
+	})
+
+	const handleToggleMessagePanelCollapse = useMemoizedFn(() => {
+		if (!isMessagePanelCollapsed) closeTopicHistoryPanel()
+		toggleMessagePanelCollapse()
 	})
 
 	const {
@@ -237,14 +266,17 @@ function MicroAppPageInner({ projectId }: { projectId: string }) {
 	}, [selectedProject?.id])
 
 	useEffect(() => {
-		const handleUpdateAttachments = (callback?: () => void) => {
+		const handleUpdateAttachments = (
+			payloadOrCallback?: SuperMagicUpdateAttachmentsRequest,
+		) => {
+			const payload = normalizeUpdateAttachmentsPayload(payloadOrCallback)
 			const pid = selectedProject?.id
 			if (!pid) {
-				callback?.()
+				payload.callback?.()
 				releaseAttachmentsRefreshWaitersWithoutFetch()
 				return
 			}
-			updateAttachments(pid, callback)
+			updateAttachments(pid, payload.callback)
 		}
 
 		pubsub.subscribe(PubSubEvents.Update_Attachments, handleUpdateAttachments)
@@ -253,21 +285,25 @@ function MicroAppPageInner({ projectId }: { projectId: string }) {
 		}
 	}, [selectedProject?.id, updateAttachments])
 
-	const handleOpenPreview = useMemoizedFn((fileItem?: AttachmentItem) => {
-		if (!fileItem) return
-		setPreviewFile(fileItem)
+	const handleOpenFile = useMemoizedFn((fileItem?: AttachmentItem) => {
+		if (!fileItem?.file_id) return
+		detailRef.current?.openFileTab(fileItem)
+	})
+
+	const handleActiveFileChange = useMemoizedFn((fileId: string | null) => {
+		setActiveFileId(fileId)
 	})
 
 	const topicFilesProps = useMemo(
 		() => ({
 			attachments,
 			setUserSelectDetail: () => undefined,
-			onFileClick: handleOpenPreview,
+			onFileClick: handleOpenFile,
 			projectId: selectedProject?.id,
-			activeFileId: previewFile?.file_id || selectedEntryFile?.file_id || null,
+			activeFileId,
 			selectedTopic,
 			onAttachmentsChange: setAttachments,
-			allowEdit: true,
+			allowEdit: !isReadOnly,
 			selectedWorkspace: undefined,
 			selectedProject,
 			projects: [],
@@ -276,9 +312,9 @@ function MicroAppPageInner({ projectId }: { projectId: string }) {
 		}),
 		[
 			attachments,
-			handleOpenPreview,
-			previewFile?.file_id,
-			selectedEntryFile?.file_id,
+			handleOpenFile,
+			activeFileId,
+			isReadOnly,
 			selectedProject,
 			selectedTopic,
 			setAttachments,
@@ -292,13 +328,19 @@ function MicroAppPageInner({ projectId }: { projectId: string }) {
 	})
 
 	const handleOpenPublishDialog = useMemoizedFn(() => {
-		if (!selectedProject?.id || htmlFiles.length === 0) return
+		if (!selectedProject?.id || !defaultEntryFile) return
 		setPublishDialogOpen(true)
 	})
 
 	const handleToggleDatabasePanel = useMemoizedFn(() => {
 		if (!selectedProject?.id) return
 		setIsDatabasePanelOpen((current) => !current)
+	})
+
+	const handleFileTabsCacheLoaded = useMemoizedFn((loadedProjectId: string) => {
+		if (loadedProjectId === selectedProject?.id) {
+			setIsFileTabsCacheLoaded(true)
+		}
 	})
 
 	const { openManageModal, CollaboratorUpdatePanel, canManageCollaborators } =
@@ -335,23 +377,17 @@ function MicroAppPageInner({ projectId }: { projectId: string }) {
 	}
 
 	return (
-		<FileActionVisibilityProvider value={HIDE_COPY_MOVE_SHARE_FILE_AND_TOPIC_ACTIONS}>
+		<FileActionVisibilityProvider>
 			<div
 				className="flex h-full w-full flex-col overflow-hidden rounded-sm border border-border bg-background"
 				data-testid="micro-app-page"
 			>
 				<MicroAppHeader
 					selectedProject={selectedProject}
-					htmlFiles={htmlFiles}
-					selectedEntryId={
-						selectedEntryFile ? getAttachmentId(selectedEntryFile) : selectedEntryFileId
-					}
+					hasEntries={Boolean(defaultEntryFile)}
 					isDatabasePanelOpen={isDatabasePanelOpen}
-					previewMode={previewMode}
 					onBack={handleBackToMicroApps}
 					onToggleDatabasePanel={handleToggleDatabasePanel}
-					onEntryChange={setSelectedEntryFileId}
-					onPreviewModeChange={setPreviewMode}
 					onPublish={handleOpenPublishDialog}
 					canManageCollaborators={canManageCollaborators}
 					onManageCollaborators={handleManageCollaborators}
@@ -404,17 +440,28 @@ function MicroAppPageInner({ projectId }: { projectId: string }) {
 					) : null}
 
 					<main className="flex h-full min-w-0 flex-1 flex-col overflow-hidden">
-						<MicroAppHtmlPreview
-							entryFile={selectedEntryFile}
+						<Detail
+							className="my-2"
+							ref={detailRef}
+							disPlayDetail={userSelectDetail}
+							userSelectDetail={userSelectDetail}
+							setUserSelectDetail={setUserSelectDetail}
 							attachments={attachments}
 							attachmentList={attachmentList}
-							selectedProject={selectedProject}
+							topicId={selectedTopic?.id}
+							baseShareUrl={`${window.location.origin}/share`}
+							currentTopicStatus={selectedTopic?.task_status}
+							messages={[]}
+							allowEdit={!isReadOnly}
 							selectedTopic={selectedTopic}
+							selectedProject={selectedProject}
+							activeFileId={activeFileId}
+							onActiveFileChange={handleActiveFileChange}
 							projectId={selectedProject?.id}
-							isLoading={!isInitialAttachmentsLoaded}
-							previewMode={previewMode}
-							onPreviewModeChange={setPreviewMode}
-							onOpenPreview={handleOpenPreview}
+							showFileHeader
+							showFallbackWhenEmpty
+							nonClosableFileIds={nonClosableFileIds}
+							onFileTabsCacheLoaded={handleFileTabsCacheLoaded}
 						/>
 					</main>
 
@@ -437,12 +484,34 @@ function MicroAppPageInner({ projectId }: { projectId: string }) {
 									mentionPanelStore={store.mentionPanelStore}
 									projectFilesStore={store.projectFilesStore}
 									detailPanelVisible
-									isConversationPanelCollapsed={false}
-									onToggleConversationPanel={toggleMessagePanelCollapse}
+									isConversationPanelCollapsed={isMessagePanelCollapsed}
+									onToggleConversationPanel={handleToggleMessagePanelCollapse}
+									onExpandConversationPanel={() =>
+										setIsMessagePanelCollapsed(false)
+									}
+									historyTriggerMode="layout"
+									isHistoryPanelOpen={isTopicHistoryPanelOpen}
+									onToggleHistoryPanel={toggleTopicHistoryPanel}
 								/>
 							</aside>
 						</>
 					)}
+					{isTopicHistoryPanelOpen && !isMessagePanelCollapsed ? (
+						<aside
+							className="h-full min-w-0 shrink-0 overflow-hidden border-l border-border bg-background"
+							style={{ width: TOPIC_HISTORY_PANEL_WIDTH }}
+							data-testid="micro-app-topic-history-panel"
+						>
+							<MessageHeaderTopicHistoryPanel
+								selectedProject={selectedProject}
+								topicStore={conversation.topicStore}
+								topicActions={topicActions}
+								isConversationPanelCollapsed={isMessagePanelCollapsed}
+								onExpandConversationPanel={() => setIsMessagePanelCollapsed(false)}
+								onClose={closeTopicHistoryPanel}
+							/>
+						</aside>
+					) : null}
 					{isMessagePanelCollapsed ? (
 						<aside
 							className="flex h-full shrink-0 justify-center border-l border-border bg-background py-2"
@@ -460,16 +529,6 @@ function MicroAppPageInner({ projectId }: { projectId: string }) {
 					) : null}
 				</div>
 
-				<MicroAppPreviewDialog
-					open={previewFile != null}
-					file={previewFile}
-					attachments={attachments}
-					attachmentList={attachmentList}
-					selectedProject={selectedProject}
-					selectedTopic={selectedTopic}
-					projectId={selectedProject?.id}
-					onOpenChange={(open) => !open && setPreviewFile(null)}
-				/>
 				<MicroAppPublishDialog
 					open={publishDialogOpen}
 					projectId={selectedProject?.id}

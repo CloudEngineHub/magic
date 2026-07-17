@@ -6,6 +6,7 @@ export const TOPIC_HISTORY_PANEL_OPEN_STORAGE_KEYS = {
 	topicPage: "super-magic.topic-history.open.topic-page",
 	skillEdit: "super-magic.topic-history.open.skill-edit",
 	crewEdit: "super-magic.topic-history.open.crew-edit",
+	microApp: "super-magic.topic-history.open.micro-app",
 } as const
 
 interface UseTopicHistoryLayoutStateOptions {

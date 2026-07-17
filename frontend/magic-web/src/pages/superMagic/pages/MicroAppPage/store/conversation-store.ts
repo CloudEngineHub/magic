@@ -22,10 +22,11 @@ export class AppConversationStore {
 		this.selectedProject = project
 		this.topicStore.setTopics(topics)
 
-		if (topics.length === 0 || this.topicStore.selectedTopic) return
-
-		const targetTopic = topics.find((topic) => topic.id === selectedTopicId)
-		this.topicStore.setSelectedTopic(targetTopic || topics[0])
+		// Route changes reload the project context. Replace the selected topic as well so the
+		// history panel and message list never keep a topic from the previous project.
+		const targetTopic =
+			topics.find((topic) => topic.id === selectedTopicId) || topics[0] || null
+		this.topicStore.setSelectedTopic(targetTopic)
 	}
 
 	setSelectedProject(project: ProjectListItem | null) {
