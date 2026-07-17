@@ -34,6 +34,7 @@ import { userStore } from "@/models/user"
 import { downloadFileWithAnchor } from "../../../utils/handleFIle"
 import { useFileDisplayConfig } from "../hooks/useFileDisplayConfig"
 import { generateShareMessageText } from "../utils/generateShareMessageText"
+import { cn } from "@/lib/utils"
 
 interface ShareSuccessModalProps {
 	open: boolean
@@ -50,6 +51,10 @@ interface ShareSuccessModalProps {
 	shareProject?: boolean // 是否分享整个项目
 	projectName?: string // 项目原始名称（用于项目分享时显示）
 	fileIds?: string[] // 文件ID列表，用于查询文件详情
+	hideManageShareLinks?: boolean // 录音等专用分享场景会使用自己的管理入口
+	createdAt?: string
+	updatedAt?: string
+	viewCount?: number
 }
 
 const useStyles = createStyles(({ token }) => ({
@@ -95,9 +100,9 @@ const useStyles = createStyles(({ token }) => ({
 		background: token.colorFillQuaternary,
 	},
 	mobileInfoRow: {
-		display: "flex",
-		justifyContent: "space-between",
-		alignItems: "center",
+		display: "grid",
+		gridTemplateColumns: "72px minmax(0, 1fr)",
+		alignItems: "flex-start",
 		gap: 12,
 	},
 	mobileInfoLabel: {
@@ -109,6 +114,7 @@ const useStyles = createStyles(({ token }) => ({
 		fontSize: 14,
 		color: token.colorText,
 		textAlign: "right" as const,
+		minWidth: 0,
 		wordBreak: "break-all" as const,
 	},
 	mobileShareLinkSection: {
@@ -200,6 +206,10 @@ export default memo(function ShareSuccessModal(props: ShareSuccessModalProps) {
 		shareProject,
 		projectName,
 		fileIds,
+		hideManageShareLinks,
+		createdAt,
+		updatedAt,
+		viewCount,
 	} = props
 
 	// 使用 hook 获取文件详情配置
@@ -210,6 +220,11 @@ export default memo(function ShareSuccessModal(props: ShareSuccessModalProps) {
 	const qrCodeRef = useRef<HTMLDivElement>(null)
 	const isMobile = useIsMobile()
 	const [actionsPopupVisible, setActionsPopupVisible] = useState(false)
+	const showShareMetadata =
+		createdAt !== undefined || updatedAt !== undefined || viewCount !== undefined
+	const createdAtText = createdAt || "-"
+	const updatedAtText = updatedAt || "-"
+	const viewCountText = String(viewCount ?? 0)
 
 	// ===== 共享的计算逻辑 =====
 
@@ -270,7 +285,16 @@ export default memo(function ShareSuccessModal(props: ShareSuccessModalProps) {
 			fileDisplayConfig,
 			t,
 		})
-	}, [fileCount, mainFileName, shareName, projectName, shareProject, shareUrl, fileDisplayConfig, t])
+	}, [
+		fileCount,
+		mainFileName,
+		shareName,
+		projectName,
+		shareProject,
+		shareUrl,
+		fileDisplayConfig,
+		t,
+	])
 
 	// Render share message with clickable links
 	const renderShareMessage = useCallback(() => {
@@ -365,7 +389,8 @@ export default memo(function ShareSuccessModal(props: ShareSuccessModalProps) {
 			canvas.toBlob((blob) => {
 				if (!blob) return
 				const url = URL.createObjectURL(blob)
-				downloadFileWithAnchor(url, filename)
+				// Keep the derived download prompt above the share success dialog.
+				downloadFileWithAnchor(url, filename, undefined, { modalZIndex: 1300 })
 				magicToast.success(t("share.downloadSuccess"))
 			})
 		}
@@ -393,8 +418,9 @@ export default memo(function ShareSuccessModal(props: ShareSuccessModalProps) {
 	// ===== Mobile 特有的逻辑 =====
 
 	// Mobile actions popup config
-	const mobileActions = useMemo<ActionsPopup.ActionButtonConfig[]>(
-		() => [
+	const mobileActions = useMemo<ActionsPopup.ActionButtonConfig[]>(() => {
+		if (hideManageShareLinks) return []
+		return [
 			{
 				key: "manageShare",
 				label: t("share.manageShareLinks"),
@@ -408,9 +434,8 @@ export default memo(function ShareSuccessModal(props: ShareSuccessModalProps) {
 					onClose()
 				},
 			},
-		],
-		[t, shareProject, onClose],
-	)
+		]
+	}, [hideManageShareLinks, t, shareProject, onClose])
 
 	const handleOpenActionsPopup = useCallback(() => {
 		setActionsPopupVisible(true)
@@ -491,13 +516,45 @@ export default memo(function ShareSuccessModal(props: ShareSuccessModalProps) {
 									{shareTypeText}
 								</MagicEllipseWithTooltip>
 							</div>
+							{showShareMetadata && (
+								<>
+									<div className={styles.mobileInfoRow}>
+										<div className={styles.mobileInfoLabel}>
+											{t("share.createdDate")}
+										</div>
+										<div className={styles.mobileInfoValue}>
+											{createdAtText}
+										</div>
+									</div>
+									<div className={styles.mobileInfoRow}>
+										<div className={styles.mobileInfoLabel}>
+											{t("share.modifiedDate")}
+										</div>
+										<div className={styles.mobileInfoValue}>
+											{updatedAtText}
+										</div>
+									</div>
+									<div className={styles.mobileInfoRow}>
+										<div className={styles.mobileInfoLabel}>
+											{t("share.accessCount")}
+										</div>
+										<div className={styles.mobileInfoValue}>
+											{viewCountText}
+										</div>
+									</div>
+								</>
+							)}
 						</div>
 
 						{/* Share Link Section */}
 						<div className={styles.mobileShareLinkSection}>
 							<div className={styles.mobileLabel}>{t("share.shareLink")}</div>
 							<div className={styles.mobileShareLinkBox}>{renderShareMessage()}</div>
-							<div className={styles.mobileCopyButton} onClick={handleCopyShareLink} data-testid="handle-copy-share-link">
+							<div
+								className={styles.mobileCopyButton}
+								onClick={handleCopyShareLink}
+								data-testid="handle-copy-share-link"
+							>
 								<Copy size={16} />
 								{t("share.copy")}
 							</div>
@@ -548,7 +605,10 @@ export default memo(function ShareSuccessModal(props: ShareSuccessModalProps) {
 				data-testid="on-pointer-down-outside"
 			>
 				{/* Header */}
-				<DialogHeader className="border-b border-border px-3 py-3" data-testid="share-success-modal-header">
+				<DialogHeader
+					className="border-b border-border px-3 py-3"
+					data-testid="share-success-modal-header"
+				>
 					<DialogTitle className="text-base font-semibold">
 						{t("share.successModalTitle")}
 					</DialogTitle>
@@ -576,44 +636,75 @@ export default memo(function ShareSuccessModal(props: ShareSuccessModalProps) {
 					{/* Info Card */}
 					<div className="flex flex-col gap-3 self-stretch rounded-lg bg-muted p-3">
 						{/* Share Name */}
-						<div className="flex items-center justify-between gap-3 self-stretch">
+						<div className="grid grid-cols-[88px_minmax(0,1fr)] items-start gap-3 self-stretch">
 							<div className="text-xs leading-normal text-muted-foreground">
 								{t("share.shareName")}
 							</div>
-							<div className="text-sm leading-normal text-foreground">
+							<div className="min-w-0 break-words text-right text-sm leading-normal text-foreground">
 								{shareName}
 							</div>
 						</div>
 
 						{/* Included Files */}
-						<div className="flex items-center justify-between gap-3 self-stretch">
+						<div className="grid grid-cols-[88px_minmax(0,1fr)] items-start gap-3 self-stretch">
 							<div className="text-xs leading-normal text-muted-foreground">
 								{t("share.includedFiles")}
 							</div>
-							<div className="text-sm leading-normal text-foreground">
+							<div className="min-w-0 break-words text-right text-sm leading-normal text-foreground">
 								{fileSummaryText}
 							</div>
 						</div>
 
 						{/* Expiry */}
-						<div className="flex items-center justify-between gap-3 self-stretch">
+						<div className="grid grid-cols-[88px_minmax(0,1fr)] items-start gap-3 self-stretch">
 							<div className="text-xs leading-normal text-muted-foreground">
 								{t("share.shareExpiry")}
 							</div>
-							<div className="text-sm leading-normal text-foreground">
+							<div className="min-w-0 break-words text-right text-sm leading-normal text-foreground">
 								{expiryText}
 							</div>
 						</div>
 
 						{/* Share Method */}
-						<div className="flex items-center justify-between gap-3 self-stretch">
+						<div className="grid grid-cols-[88px_minmax(0,1fr)] items-start gap-3 self-stretch">
 							<div className="text-xs leading-normal text-muted-foreground">
 								{t("share.shareMethod")}
 							</div>
-							<div className="text-sm leading-normal text-foreground">
+							<div className="min-w-0 break-words text-right text-sm leading-normal text-foreground">
 								{shareTypeText}
 							</div>
 						</div>
+
+						{showShareMetadata && (
+							<>
+								<div className="grid grid-cols-[88px_minmax(0,1fr)] items-start gap-3 self-stretch">
+									<div className="text-xs leading-normal text-muted-foreground">
+										{t("share.createdDate")}
+									</div>
+									<div className="min-w-0 break-words text-right text-sm leading-normal text-foreground">
+										{createdAtText}
+									</div>
+								</div>
+
+								<div className="grid grid-cols-[88px_minmax(0,1fr)] items-start gap-3 self-stretch">
+									<div className="text-xs leading-normal text-muted-foreground">
+										{t("share.modifiedDate")}
+									</div>
+									<div className="min-w-0 break-words text-right text-sm leading-normal text-foreground">
+										{updatedAtText}
+									</div>
+								</div>
+
+								<div className="grid grid-cols-[88px_minmax(0,1fr)] items-start gap-3 self-stretch">
+									<div className="text-xs leading-normal text-muted-foreground">
+										{t("share.accessCount")}
+									</div>
+									<div className="min-w-0 break-words text-right text-sm leading-normal text-foreground">
+										{viewCountText}
+									</div>
+								</div>
+							</>
+						)}
 					</div>
 
 					{/* Share Link and QR Code Section */}
@@ -673,23 +764,34 @@ export default memo(function ShareSuccessModal(props: ShareSuccessModalProps) {
 				</div>
 
 				{/* Footer */}
-				<DialogFooter className="border-t border-border px-3 py-3" data-testid="share-success-modal-footer">
-					<div className="flex w-full items-center justify-between gap-1.5">
-						<Button
-							variant="outline"
-							onClick={() => {
-								// 根据 shareProject 决定打开的 tab
-								const defaultTab = shareProject
-									? SharedResourceType.Project
-									: SharedResourceType.File
-								openShareManagementModal(undefined, { defaultTab })
-								onClose()
-							}}
-							className="shadow-xs"
-							data-testid="open-share-management-modal"
-						>
-							{t("share.manageShareLinks")}
-						</Button>
+				<DialogFooter
+					className="border-t border-border px-3 py-3"
+					data-testid="share-success-modal-footer"
+				>
+					<div
+						className={cn(
+							"flex w-full items-center gap-1.5",
+							hideManageShareLinks ? "justify-end" : "justify-between",
+						)}
+						data-testid="share-success-modal-footer-actions"
+					>
+						{!hideManageShareLinks && (
+							<Button
+								variant="outline"
+								onClick={() => {
+									// 根据 shareProject 决定打开的 tab
+									const defaultTab = shareProject
+										? SharedResourceType.Project
+										: SharedResourceType.File
+									openShareManagementModal(undefined, { defaultTab })
+									onClose()
+								}}
+								className="shadow-xs"
+								data-testid="open-share-management-modal"
+							>
+								{t("share.manageShareLinks")}
+							</Button>
+						)}
 						<div className="flex items-center gap-1.5">
 							{onCancelShare && (
 								<Button

@@ -11,7 +11,8 @@ import { KnowledgeApi } from "@/apis"
 import type { Knowledge } from "@/types/knowledge"
 import KnowledgeContent from "./components/KnowledgeContent"
 import LoadingState from "./components/LoadingState"
-import { RouteName } from "@/routes/constants"
+import { useLocation } from "react-router"
+import { getVectorKnowledgeDetailRoute } from "@/pages/vectorKnowledge/utils"
 
 interface VectorKnowledgeEmbedProps {
 	knowledgeBaseCode: string
@@ -21,6 +22,7 @@ export default function VectorKnowledgeEmbed({ knowledgeBaseCode }: VectorKnowle
 	const { styles } = useVectorKnowledgeEmbedStyles()
 	const { t } = useTranslation("flow")
 	const navigate = useNavigate()
+	const location = useLocation()
 
 	/** 知识库详情 */
 	const [createdKnowledge, setCreatedKnowledge] = useState<Knowledge.Detail>()
@@ -35,10 +37,7 @@ export default function VectorKnowledgeEmbed({ knowledgeBaseCode }: VectorKnowle
 
 	/** 查看知识库 - 跳转至详情页 */
 	const handleViewKnowledge = useMemoizedFn(() => {
-		navigate({
-			name: RouteName.VectorKnowledgeDetail,
-			query: { code: knowledgeBaseCode },
-		})
+		navigate(getVectorKnowledgeDetailRoute(location.pathname, knowledgeBaseCode))
 	})
 
 	/** 获取文档同步状态图标 */
@@ -64,13 +63,13 @@ export default function VectorKnowledgeEmbed({ knowledgeBaseCode }: VectorKnowle
 				setDocumentList(res.list)
 				setIsEmbed(
 					res.list.length > 0 &&
-					res.list.every(
-						(item: Knowledge.EmbedDocumentDetail) =>
-							![
-								documentSyncStatusMap.Pending,
-								documentSyncStatusMap.Processing,
-							].includes(item.sync_status),
-					),
+						res.list.every(
+							(item: Knowledge.EmbedDocumentDetail) =>
+								![
+									documentSyncStatusMap.Pending,
+									documentSyncStatusMap.Processing,
+								].includes(item.sync_status),
+						),
 				)
 			}
 		} catch (error) {

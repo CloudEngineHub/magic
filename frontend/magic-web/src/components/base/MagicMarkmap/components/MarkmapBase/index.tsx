@@ -27,6 +27,21 @@ export type MarkmapBaseProps = HTMLAttributes<SVGSVGElement> & {
 export type MarkmapBaseRef = {
 	instance: RefObject<Markmap | null>
 	dom: RefObject<SVGSVGElement | null>
+	/** Sync SVG pixel dimensions to the current layout box, then refit the viewport. */
+	resize: () => void
+}
+
+/** Aligns SVG width/height attributes with the element's laid-out client box. */
+function syncSvgDimensions(svg: SVGSVGElement): boolean {
+	const svgWidth = svg.clientWidth || 0
+	const svgHeight = svg.clientHeight || 0
+	if (svgWidth <= 0 || svgHeight <= 0) return false
+
+	svg.setAttribute("width", `${svgWidth}px`)
+	svg.setAttribute("height", `${svgHeight}px`)
+	svg.style.width = `${svgWidth}px`
+	svg.style.height = `${svgHeight}px`
+	return true
 }
 
 const MarkmapBase = memo(
@@ -47,6 +62,12 @@ const MarkmapBase = memo(
 			useImperativeHandle(ref, () => ({
 				instance: refMm,
 				dom: refSvg,
+				resize: () => {
+					const svg = refSvg.current
+					if (!svg || !refMm.current) return
+					if (!syncSvgDimensions(svg)) return
+					void refMm.current.fit()
+				},
 			}))
 
 			// Keep refData in sync with data prop
@@ -57,16 +78,7 @@ const MarkmapBase = memo(
 			useEffect(() => {
 				const svg = refSvg.current
 				if (svg && !refMm.current) {
-					// Ensure SVG has explicit dimensions before creating Markmap instance
-					const svgWidth = svg.clientWidth || 0
-					const svgHeight = svg.clientHeight || 0
-					if (svgWidth > 0 && svgHeight > 0) {
-						// Use 'px' unit like in utils.ts
-						svg.setAttribute("width", `${svgWidth}px`)
-						svg.setAttribute("height", `${svgHeight}px`)
-						svg.style.width = `${svgWidth}px`
-						svg.style.height = `${svgHeight}px`
-					}
+					syncSvgDimensions(svg)
 					ensureMarkmapInitialized().then(async () => {
 						// Double-check instance doesn't exist to avoid duplicates
 						if (refMm.current) return
@@ -78,16 +90,7 @@ const MarkmapBase = memo(
 						requestAnimationFrame(async () => {
 							if (refMm.current && refData.current) {
 								const svgElement = refSvg.current
-								const svgWidth = svgElement?.clientWidth || 0
-								const svgHeight = svgElement?.clientHeight || 0
-								// Ensure SVG has explicit width and height attributes (required by markmap-view)
-								if (svgElement && svgWidth > 0 && svgHeight > 0) {
-									// Use 'px' unit like in utils.ts
-									svgElement.setAttribute("width", `${svgWidth}px`)
-									svgElement.setAttribute("height", `${svgHeight}px`)
-									svgElement.style.width = `${svgWidth}px`
-									svgElement.style.height = `${svgHeight}px`
-								}
+								if (svgElement) syncSvgDimensions(svgElement)
 								const { root } = transformer.transform(refData.current)
 								if (refMm.current) {
 									// setData is async in markmap-view 0.18.0+, must await it
@@ -120,16 +123,7 @@ const MarkmapBase = memo(
 					requestAnimationFrame(async () => {
 						if (!refMm.current) return
 						const svgElement = refSvg.current
-						const svgWidth = svgElement?.clientWidth || 0
-						const svgHeight = svgElement?.clientHeight || 0
-						// Ensure SVG has explicit width and height attributes (required by markmap-view)
-						if (svgElement && svgWidth > 0 && svgHeight > 0) {
-							// Use 'px' unit like in utils.ts
-							svgElement.setAttribute("width", `${svgWidth}px`)
-							svgElement.setAttribute("height", `${svgHeight}px`)
-							svgElement.style.width = `${svgWidth}px`
-							svgElement.style.height = `${svgHeight}px`
-						}
+						if (svgElement) syncSvgDimensions(svgElement)
 						const { root } = transformer.transform(data)
 						if (refMm.current) {
 							// setData is async in markmap-view 0.18.0+, must await it

@@ -69,4 +69,31 @@ export const generateFileApi = (fetch: HttpClient) => ({
 			},
 		})
 	},
+
+	/**
+	 * 获取上传临时凭证（与 @dtyq/upload-sdk 的凭证请求一致）
+	 * 返回的 `temporary_credential.dir` 可在前端按业务目录前缀改写后再交给 SDK，
+	 * SDK 在 customCredentials 模式下会跳过自身凭证请求直接使用调用方提供的凭证。
+	 * 注意：仅当下游对象存储后端不强校验 dir 进签名 policy 时（如 MinIO 预签名），
+	 * 客户端改写 dir 才能成功上传；否则需后端代签。
+	 */
+	getTemporaryCredential(params: {
+		storage: "private" | "public"
+		content_type?: string
+		sts?: boolean
+	}) {
+		return fetch.post<{
+			platform: string
+			expires?: number
+			temporary_credential: {
+				dir: string
+				[key: string]: unknown
+			}
+			[key: string]: unknown
+		}>(RequestUrl.getUploadCredentials, {
+			storage: params.storage,
+			sts: params.sts ?? false,
+			...(params.content_type ? { content_type: params.content_type } : {}),
+		})
+	},
 })

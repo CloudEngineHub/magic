@@ -400,6 +400,8 @@ class VisualUnderstanding(WorkspaceTool[VisualUnderstandingParams]):
                 return ToolResult.error("图片格式不受支持，请尝试使用 JPEG、PNG 等常见格式的图片")
             elif "InvalidParameter" in str(llm_error):
                 return ToolResult.error("图片参数无效，请检查图片是否完整或格式是否正确")
+            elif LLMRequestHandler.is_request_too_large_error(llm_error):
+                return ToolResult.error("视觉理解请求体过大，请减少图片数量、降低图片尺寸，或分批调用视觉理解")
             else:
                 return ToolResult.error("Visual understanding service temporarily unavailable")
 

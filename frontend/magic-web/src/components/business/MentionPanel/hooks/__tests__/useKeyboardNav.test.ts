@@ -189,6 +189,28 @@ describe("useKeyboardNav", () => {
 			expect(mockHandlers.onNavigateBack).toHaveBeenCalledTimes(1)
 		})
 
+		it("should use the custom ArrowLeft selection handler when provided", () => {
+			const onSelectLeft = vi.fn()
+			const { result } = renderHook(() => useKeyboardNav({ ...mockHandlers, onSelectLeft }))
+
+			const event = new KeyboardEvent("keydown", { key: "ArrowLeft" })
+			Object.defineProperty(event, "preventDefault", {
+				value: vi.fn(),
+				writable: true,
+			})
+			Object.defineProperty(event, "stopPropagation", {
+				value: vi.fn(),
+				writable: true,
+			})
+
+			act(() => {
+				result.current.handleKeyDown(event)
+			})
+
+			expect(onSelectLeft).toHaveBeenCalledTimes(1)
+			expect(mockHandlers.onNavigateBack).not.toHaveBeenCalled()
+		})
+
 		it("should run the pre-navigation hook before ArrowLeft navigates back", () => {
 			const onBeforeNavigateBack = vi.fn()
 			const { result } = renderHook(() =>
@@ -226,6 +248,28 @@ describe("useKeyboardNav", () => {
 			})
 
 			expect(mockHandlers.onEnterFolder).toHaveBeenCalledTimes(1)
+		})
+
+		it("should use the custom ArrowRight selection handler when provided", () => {
+			const onSelectRight = vi.fn()
+			const { result } = renderHook(() => useKeyboardNav({ ...mockHandlers, onSelectRight }))
+
+			const event = new KeyboardEvent("keydown", { key: "ArrowRight" })
+			Object.defineProperty(event, "preventDefault", {
+				value: vi.fn(),
+				writable: true,
+			})
+			Object.defineProperty(event, "stopPropagation", {
+				value: vi.fn(),
+				writable: true,
+			})
+
+			act(() => {
+				result.current.handleKeyDown(event)
+			})
+
+			expect(onSelectRight).toHaveBeenCalledTimes(1)
+			expect(mockHandlers.onEnterFolder).not.toHaveBeenCalled()
 		})
 
 		it("should allow intercepting ArrowRight key before entering folder", () => {

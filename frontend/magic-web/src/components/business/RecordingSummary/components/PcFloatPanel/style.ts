@@ -589,6 +589,73 @@ export const useStyles = createStyles(({ token, css, prefixCls }) => {
 			}
 		`,
 
+		transcriptionDisabledState: css`
+			/* Center the CTA inside the transcript pane without changing splitter sizing. */
+			height: 100%;
+			min-height: 260px;
+			display: flex;
+			flex-direction: column;
+			align-items: center;
+			justify-content: center;
+			gap: 10px;
+			padding: 24px;
+			text-align: center;
+			box-sizing: border-box;
+		`,
+
+		transcriptionDisabledLogo: css`
+			width: 48px;
+			height: 48px;
+			border-radius: 12px;
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			color: #336df4;
+			background: rgba(51, 109, 244, 0.1);
+		`,
+
+		transcriptionDisabledTitle: css`
+			color: ${token.magicColorUsages.text[0]};
+			font-size: 16px;
+			font-weight: 600;
+			line-height: 22px;
+		`,
+
+		transcriptionDisabledDescription: css`
+			max-width: 240px;
+			color: ${token.magicColorUsages.text[2]};
+			font-size: 13px;
+			font-weight: 400;
+			line-height: 18px;
+		`,
+
+		transcriptionEnableButton: css`
+			margin-top: 6px;
+			min-width: 96px;
+			height: 32px;
+			border: none;
+			border-radius: 8px;
+			padding: 0 14px;
+			cursor: pointer;
+			background: #315cec;
+			color: #fff;
+			font-size: 13px;
+			font-weight: 500;
+			line-height: 18px;
+			transition:
+				background 0.2s ease,
+				opacity 0.2s ease;
+
+			&:hover:not(:disabled) {
+				background: #2547c8;
+			}
+
+			&:disabled {
+				cursor: not-allowed;
+				opacity: 0.6;
+			}
+		`,
+
 		// 底部区域 - 可动画的
 		footer: css`
 			height: ${SIZES.FOOTER_HEIGHT}px;

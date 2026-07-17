@@ -32,6 +32,7 @@ use App\Domain\Provider\Service\ModelFilter\PackageFilterInterface;
 use App\Domain\Provider\Service\ProviderModelDomainService;
 use App\ErrorCode\MagicApiErrorCode;
 use App\Infrastructure\Core\Exception\ExceptionBuilder;
+use App\Infrastructure\ExternalAPI\FileUrlProxy\TemporaryFileUrlProxyManager;
 use App\Infrastructure\ImageGenerate\ImageWatermarkProcessor;
 use App\Infrastructure\Util\Context\CoContext;
 use App\Infrastructure\Util\IdGenerator\IdGenerator;
@@ -65,7 +66,8 @@ abstract class AbstractLLMAppService extends AbstractKernelAppService
         protected ProviderModelDomainService $providerModelDomainService,
         protected AggregateModelResolverService $aggregateModelResolverService,
         protected ModelGatewayModelAccessService $modelGatewayModelAccessService,
-        protected FileCleanupDomainService $fileCleanupDomainService
+        protected FileCleanupDomainService $fileCleanupDomainService,
+        protected TemporaryFileUrlProxyManager $temporaryFileUrlProxyManager,
     ) {
         $this->logger = $this->loggerFactory->get(static::class);
     }

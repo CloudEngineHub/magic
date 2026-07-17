@@ -146,7 +146,7 @@ export function AppsPageView(props: AppsPageViewProps) {
 			data-testid="super-apps-page-mobile"
 		>
 			<header className="mobile-page-header" data-testid="super-apps-top-bar">
-				<MobileShellSidebarToggleButton testId="super-apps-menu-button" />
+				<MobileShellSidebarToggleButton />
 				<p
 					className="min-w-0 flex-1 truncate px-2 text-center font-poppins text-[18px] font-medium leading-6 text-foreground"
 					data-testid="super-apps-title"

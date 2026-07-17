@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
 import { render, screen, fireEvent, waitFor } from "@testing-library/react"
+import type { ReactNode } from "react"
 import FileDownloadModal from "../index"
 import type { OpenableProps } from "@/utils/react"
 
@@ -10,6 +11,7 @@ vi.mock("react-i18next", () => ({
 			const translations: Record<string, string> = {
 				"share.download.modalTitle": "文件下载",
 				"share.download.downloading": "文件下载中...",
+				"share.download.thankYou": "文件下载中...",
 				"share.download.downloadInstruction":
 					"如果您的下载没有自动开始，请点击按钮进行下载",
 				"share.download.fileName": "下载文件",
@@ -30,6 +32,11 @@ vi.mock("@/components/base/MagicToaster/utils", () => ({
 	default: {
 		success: vi.fn(),
 	},
+}))
+
+vi.mock("@/components/base/MagicEllipseWithTooltip/MagicEllipseWithTooltip", () => ({
+	// Keep this modal test focused on download dialog behavior instead of antd Tooltip wiring.
+	default: ({ children }: { children: ReactNode }) => <>{children}</>,
 }))
 
 describe("FileDownloadModal", () => {
@@ -65,7 +72,7 @@ describe("FileDownloadModal", () => {
 		expect(screen.getByText("test-file.pdf")).toBeInTheDocument()
 	})
 
-	it("calls onDownload and onClose when download button is clicked", async () => {
+	it("calls onDownload without closing when download button is clicked", async () => {
 		render(<FileDownloadModal {...defaultProps} />)
 
 		const downloadButton = screen.getByRole("button", { name: /下载文件/ })
@@ -73,11 +80,11 @@ describe("FileDownloadModal", () => {
 
 		await waitFor(() => {
 			expect(mockOnDownload).toHaveBeenCalledTimes(1)
-			expect(mockOnClose).toHaveBeenCalledTimes(1)
+			expect(mockOnClose).not.toHaveBeenCalled()
 		})
 	})
 
-	it("calls onCopyLink and onClose when copy link button is clicked", async () => {
+	it("calls onCopyLink without closing when copy link button is clicked", async () => {
 		render(<FileDownloadModal {...defaultProps} />)
 
 		const copyButton = screen.getByRole("button", { name: /复制链接/ })
@@ -85,7 +92,7 @@ describe("FileDownloadModal", () => {
 
 		await waitFor(() => {
 			expect(mockOnCopyLink).toHaveBeenCalledTimes(1)
-			expect(mockOnClose).toHaveBeenCalledTimes(1)
+			expect(mockOnClose).not.toHaveBeenCalled()
 		})
 	})
 
@@ -99,5 +106,12 @@ describe("FileDownloadModal", () => {
 		render(<FileDownloadModal {...defaultProps} open={false} />)
 
 		expect(screen.queryByText("文件下载中...")).not.toBeInTheDocument()
+	})
+
+	it("applies optional desktop modal z-index to the dialog content", () => {
+		render(<FileDownloadModal {...defaultProps} modalZIndex={1300} />)
+
+		const dialogContent = document.querySelector('[data-slot="dialog-content"]')
+		expect(dialogContent).toHaveStyle({ zIndex: "1300" })
 	})
 })

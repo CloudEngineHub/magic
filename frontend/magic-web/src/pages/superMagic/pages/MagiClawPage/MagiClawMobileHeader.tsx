@@ -23,10 +23,7 @@ export function MagiClawMobileHeader({
 			className="mobile-floating-page-header relative z-10 flex h-14 shrink-0 items-center gap-2 px-[10px]"
 			data-testid="magi-claw-mobile-header"
 		>
-			<MobileShellSidebarToggleButton
-				variant="floating"
-				testId="magi-claw-mobile-menu-button"
-			/>
+			<MobileShellSidebarToggleButton variant="floating" />
 
 			<p
 				className="pointer-events-none absolute inset-x-0 truncate px-[64px] text-center font-poppins text-[18px] font-medium leading-6 text-foreground"

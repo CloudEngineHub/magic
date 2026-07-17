@@ -20,7 +20,7 @@ const MobileHeader = memo(() => {
 				onClick={() => navigate({ name: RouteName.AdminHome })}
 			>
 				<img src={AtLogo} alt="atLogo" width={32} height={32} />
-				<div className={styles.title}>{t("title")}</div>
+				<div className={styles.title}>{t("title", { platformName: "" })}</div>
 			</Flex>
 		</header>
 	)

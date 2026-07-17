@@ -55,6 +55,13 @@ function MenuGroup({ children }: { children: React.ReactNode }) {
 	return <div className="w-full shrink-0 overflow-hidden rounded-lg bg-card">{children}</div>
 }
 
+/**
+ * Sheet titles use the display fallback, while rename input keeps the raw persisted name.
+ */
+function getWorkspaceDisplayName(workspace: Workspace | null, fallbackName: string) {
+	return workspace?.name?.trim() || fallbackName
+}
+
 export function WorkspaceMoreSheet({
 	isOpen,
 	onClose,
@@ -63,7 +70,9 @@ export function WorkspaceMoreSheet({
 	onRequestDelete,
 }: WorkspaceMoreSheetProps) {
 	const { t } = useTranslation("super")
-	const title = workspace?.name ?? t("workspace.workspace")
+	const title = workspace
+		? getWorkspaceDisplayName(workspace, t("workspace.unnamedWorkspace"))
+		: t("workspace.workspace")
 	const { showTransferEntry, transferEntryLabel, handleOpenTransfer, transferNode } =
 		useWorkspaceTransferEntry({
 			workspace,

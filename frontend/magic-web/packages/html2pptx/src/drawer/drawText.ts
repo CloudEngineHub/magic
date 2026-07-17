@@ -1,11 +1,11 @@
-import type { PPTTextNode, Slide } from "../types/index"
+import type { PPTTextNode, PPTTextRun, Slide } from "../ir/node"
 
-/** 下划线样式类型 */
+/** Underline style type */
 type UnderlineStyle = "sng" | "dbl" | "dash" | "dotted" | "none"
 
 /**
- * 绘制文本到幻灯片
- * 每个 PPTTextNode 对应一个独立的纯文本框
+ * Draw text onto the slide
+ * Each PPTTextNode maps to one text box; rich text runs can preserve local styling
  */
 export function drawText(slide: Slide, node: PPTTextNode): void {
 	const {
@@ -40,15 +40,15 @@ export function drawText(slide: Slide, node: PPTTextNode): void {
 		italic,
 		underline: underline ? { style: "sng" as UnderlineStyle } : undefined,
 		strike: strike ? true : undefined,
-		charSpacing, // 应用字间距
-		lineSpacingMultiple: lineSpacing ?? undefined, // 单行文本禁用，避免 line-height 二次生效
+		charSpacing, // Apply character spacing
+		lineSpacingMultiple: lineSpacing ?? undefined, // Disable this for single-line text to avoid applying line-height twice
 		margin: margin ?? [0, 0, 0, 0],
 		wrap: node.wrap ?? true,
-		rotate: rotate, // 应用旋转角度
-		outline, // 应用文本描边
+		rotate: rotate, // Apply rotation
+		outline, // Apply text outline
 	}
 
-	// 颜色处理
+	// Color handling
 	if (typeof color !== "string" && color.type === "gradient") {
 		const stops = color.stops.map((s) => ({
 			position: Math.round(s.position * 100),
@@ -80,10 +80,39 @@ export function drawText(slide: Slide, node: PPTTextNode): void {
 		options.color = color
 	}
 
-	// 透明度
+	// Transparency
 	if (transparency && transparency > 0) {
 		options.transparency = transparency
 	}
-	
-	slide.addText(text, options)
+
+	slide.addText(resolveTextInput(text), options)
+}
+
+function resolveTextInput(
+	text: PPTTextNode["text"],
+): string | Array<{ text: string; options?: Record<string, unknown> }> {
+	if (typeof text === "string") return text
+	return text.map((run) => ({
+		text: run.text,
+		options: resolveRunOptions(run),
+	}))
+}
+
+function resolveRunOptions(run: PPTTextRun): Record<string, unknown> | undefined {
+	const options = run.options
+	if (!options) return undefined
+
+	const {
+		fontWeight,
+		underline,
+		strike,
+		...rest
+	} = options
+	void fontWeight
+
+	const output: Record<string, unknown> = { ...rest }
+	if (underline) output.underline = { style: "sng" as UnderlineStyle }
+	if (strike) output.strike = true
+
+	return Object.keys(output).length > 0 ? output : undefined
 }

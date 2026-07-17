@@ -28,6 +28,18 @@ export interface UploadModalRef {
 	resetState: () => void
 }
 
+const isEditableKeyboardTarget = (target: EventTarget | null) => {
+	if (!(target instanceof HTMLElement)) return false
+
+	const tagName = target.tagName.toLowerCase()
+	return (
+		target.isContentEditable ||
+		tagName === "input" ||
+		tagName === "textarea" ||
+		tagName === "select"
+	)
+}
+
 const UploadModal = forwardRef<UploadModalRef, UploadModalProps>(function UploadModal(
 	{
 		uploadFiles,
@@ -154,15 +166,32 @@ const UploadModal = forwardRef<UploadModalRef, UploadModalProps>(function Upload
 	const handleKeyDown = useMemoizedFn((event: KeyboardEvent) => {
 		if (event.key === "Escape") {
 			exitSearchMode()
+			return
 		}
+
+		if (event.key !== "Enter" || event.isComposing) {
+			return
+		}
+
+		if (isSearch || createDirectoryShown || fileList.length === 0) {
+			return
+		}
+
+		if (isEditableKeyboardTarget(event.target)) {
+			return
+		}
+
+		event.preventDefault()
+		event.stopPropagation()
+		submit()
 	})
 
 	useEffect(() => {
 		if (visible) {
-			window.addEventListener("keydown", handleKeyDown)
-			return () => window.removeEventListener("keydown", handleKeyDown)
+			window.addEventListener("keydown", handleKeyDown, true)
+			return () => window.removeEventListener("keydown", handleKeyDown, true)
 		} else {
-			window.removeEventListener("keydown", handleKeyDown)
+			window.removeEventListener("keydown", handleKeyDown, true)
 		}
 	}, [visible, handleKeyDown, exitSearchMode])
 

@@ -6,10 +6,10 @@ import { Flex } from "antd"
 import { createStyles } from "antd-style"
 import { useCountDown } from "ahooks"
 import { logger as Logger } from "@/utils/log"
-import MagicButton from "@/components/base/MagicButton"
 import { isDev } from "@/utils/env"
 import UpdateBg from "@/assets/resources/defaultImages/update_bg.svg"
 import { getNativePort } from "@/platform/native"
+import { i18nStore } from "@/models/config/stores/i18n.store"
 import { Button } from "../shadcn-ui/button"
 
 const logger = Logger.createLogger("errorBoundary")
@@ -78,7 +78,9 @@ const useStyles = createStyles(({ css, isDarkMode, token }) => {
 })
 
 function GlobalErrorBoundary({ children }: PropsWithChildren) {
-	const { t } = useTranslation("interface")
+	const { t } = useTranslation("interface", {
+		i18n: i18nStore.i18n.instance,
+	})
 
 	const { styles } = useStyles()
 	const [targetDate, setTargetDate] = useState<number>()

@@ -50,8 +50,12 @@ export interface FieldItem {
 export interface OptionItem {
 	value: LocaleText
 	label?: LocaleText
+	/** Replaces {preset_value} in the message while keeping value as the stable option ID. */
+	preset_value?: LocaleText
 	thumbnail_url?: string
 	collage_url?: string
+	/** 每页 PPT 预览图访问 URL 列表；为空时前端可降级使用 collage_url */
+	preview_image_urls?: string[]
 	description?: LocaleText
 	icon_url?: string
 	sub_text?: LocaleText
@@ -61,6 +65,17 @@ export interface OptionItem {
 	width?: number
 	height?: number
 	aspect_ratio?: number
+	usage_count?: number
+	sort?: number
+	colors?: string[]
+	tags?: OptionItemTag[]
+}
+
+export interface OptionItemTag {
+	id?: string
+	code: string
+	name_i18n?: LocaleTextMap
+	sort?: number
 }
 
 /**

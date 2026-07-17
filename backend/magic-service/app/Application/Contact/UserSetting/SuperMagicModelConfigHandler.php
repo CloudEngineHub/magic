@@ -65,7 +65,7 @@ class SuperMagicModelConfigHandler extends AbstractUserSettingHandler
                 ];
             } else {
                 $result['image_model'] = [
-                    'model_id' => $modelId,
+                    'model_id' => $imageModelId,
                 ];
             }
         }

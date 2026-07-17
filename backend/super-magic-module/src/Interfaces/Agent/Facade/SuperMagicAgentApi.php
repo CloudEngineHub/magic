@@ -176,8 +176,6 @@ class SuperMagicAgentApi extends AbstractApi
             skills: $result['skills'],
             isStoreOffline: $result['is_store_offline'],
             withFileUrl: false,
-            publishType: $result['publish_type'],
-            allowedPublishTargetTypes: $result['allowed_publish_target_types'],
             operation: $result['operation'] ?? null
         );
 
@@ -302,7 +300,7 @@ class SuperMagicAgentApi extends AbstractApi
             page: $requestDTO->getPage(),
             pageSize: $requestDTO->getPageSize(),
             total: $result['total'],
-            publisherUserMap: $result['publisher_user_map'] ?? []
+            publisherUserMap: []
         );
 
         return $responseDTO->toArray();
@@ -415,9 +413,12 @@ class SuperMagicAgentApi extends AbstractApi
         $requestDTO = PublishAgentRequestDTO::fromRequest($this->request);
 
         // 调用应用服务层处理业务逻辑
-        $versionEntity = $this->superMagicAgentAppService->publishAgent($authorization, $code, $requestDTO);
+        $publishResult = $this->superMagicAgentAppService->publishAgent($authorization, $code, $requestDTO);
 
-        return SuperMagicAgentAssembler::createPublishVersionResponseDTO($versionEntity)->toArray();
+        $response = SuperMagicAgentAssembler::createPublishVersionResponseDTO($publishResult->version)->toArray();
+        $response['sandbox_id'] = $publishResult->sandboxId;
+
+        return $response;
     }
 
     public function getPublishPrefill(string $code): array
@@ -440,6 +441,7 @@ class SuperMagicAgentApi extends AbstractApi
             pageSize: $result['page_size'],
             total: $result['total'],
             memberDepartmentMap: $result['memberDepartmentMap'],
+            categoryMap: $result['categoryMap'] ?? [],
         )->toArray();
     }
 

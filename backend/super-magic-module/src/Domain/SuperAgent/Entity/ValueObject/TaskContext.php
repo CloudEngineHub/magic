@@ -53,6 +53,7 @@ class TaskContext
         private bool $isFirstTask = false,
         private ?SuperAgentExtra $extra = null,
         private string $agentCode = '',
+        private ?array $messageSubscriptionConfig = null,
     ) {
     }
 
@@ -344,6 +345,17 @@ class TaskContext
     public function setAgentCode(string $agentCode): self
     {
         $this->agentCode = $agentCode;
+        return $this;
+    }
+
+    public function getMessageSubscriptionConfig(): ?array
+    {
+        return $this->messageSubscriptionConfig;
+    }
+
+    public function setMessageSubscriptionConfig(?array $messageSubscriptionConfig): self
+    {
+        $this->messageSubscriptionConfig = $messageSubscriptionConfig;
         return $this;
     }
 }

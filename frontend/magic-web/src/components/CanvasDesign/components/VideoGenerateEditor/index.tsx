@@ -64,6 +64,7 @@ export default function VideoGenerateEditor() {
 					isDragging={isDragging}
 					retryEditingElementId={retryEditingElementId}
 					setRetryEditingElementId={setRetryEditingElementId}
+					onPreviewMediaResource={setPreviewingMediaResource}
 				/>
 			) : null}
 			{previewingMediaResource != null ? (
@@ -81,6 +82,7 @@ interface ActiveVideoGenerateEditorProps {
 	isDragging: boolean
 	retryEditingElementId: string | null
 	setRetryEditingElementId: (id: string | null) => void
+	onPreviewMediaResource: (resource: MediaResourceFullscreenPreviewItem) => void
 }
 
 function ActiveVideoGenerateEditor({
@@ -88,16 +90,23 @@ function ActiveVideoGenerateEditor({
 	isDragging,
 	retryEditingElementId,
 	setRetryEditingElementId,
+	onPreviewMediaResource,
 }: ActiveVideoGenerateEditorProps) {
 	const { canvas } = useCanvas()
 	const [hiddenAfterSubmit, setHiddenAfterSubmit] = useState(false)
 
+	const hasSrc = !!videoElement.src
+	const hasTerminalVideoGenerationState =
+		hasSrc ||
+		videoElement.status === GenerationStatus.Completed ||
+		videoElement.status === GenerationStatus.Failed
+
 	const isGenerating = useMemo(() => {
-		if (!canvas) return false
+		if (!canvas || hasTerminalVideoGenerationState) return false
 		const videoInstance = canvas.elementManager.getElementInstance(videoElement.id)
 		if (!(videoInstance instanceof VideoElementClass)) return false
 		return !!videoInstance.isGenerating
-	}, [canvas, videoElement.id])
+	}, [canvas, videoElement.id, hasTerminalVideoGenerationState])
 
 	useEffect(() => {
 		setHiddenAfterSubmit(false)
@@ -141,7 +150,6 @@ function ActiveVideoGenerateEditor({
 	const hasGenerateVideoRequest = !!videoElement.generateVideoRequest
 	const isError = videoElement.status === GenerationStatus.Failed
 	const isRetryEditing = isError && retryEditingElementId === videoElement.id
-	const hasSrc = !!videoElement.src
 
 	const showEditor =
 		!isTemporaryElement &&
@@ -156,7 +164,11 @@ function ActiveVideoGenerateEditor({
 		hasSrc && hasGenerateVideoRequest && !isDragging && !isGenerating && !isTemporaryElement
 
 	const resultSecondEditNode = showResultSecondEdit ? (
-		<VideoSecondEdit key={`${videoElement.id}-result-regenerate`} videoElement={videoElement} />
+		<VideoSecondEdit
+			key={`${videoElement.id}-result-regenerate`}
+			videoElement={videoElement}
+			onPreviewMediaResource={onPreviewMediaResource}
+		/>
 	) : null
 
 	const editorNode = showEditor ? (
@@ -166,6 +178,7 @@ function ActiveVideoGenerateEditor({
 			autoFocus={isRetryEditing}
 			autoFocusAtDocumentEnd={isRetryEditing}
 			onGenerateSubmitSucceeded={handleGenerateSubmitSucceeded}
+			onPreviewMediaResource={onPreviewMediaResource}
 		/>
 	) : null
 

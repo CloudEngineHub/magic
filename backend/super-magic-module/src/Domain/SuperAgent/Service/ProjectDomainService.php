@@ -335,9 +335,10 @@ class ProjectDomainService
         int $sourceProjectId,
         ?int $targetWorkspaceId,
         string $userId,
-        ?string $targetProjectName = null
+        ?string $targetProjectName = null,
+        ?string $projectMode = null
     ): ProjectEntity {
-        return Db::transaction(function () use ($sourceProjectId, $targetWorkspaceId, $userId, $targetProjectName) {
+        return Db::transaction(function () use ($sourceProjectId, $targetWorkspaceId, $userId, $targetProjectName, $projectMode) {
             $currentTime = date('Y-m-d H:i:s');
 
             // Get the source project first to return updated entity
@@ -365,6 +366,9 @@ class ProjectDomainService
             ];
             if ($projectNameChanged) {
                 $projectUpdateData['project_name'] = $targetProjectName;
+            }
+            if ($projectMode !== null) {
+                $projectUpdateData['project_mode'] = $projectMode;
             }
 
             $projectUpdateResult = $this->projectRepository->updateProjectByCondition(
@@ -458,6 +462,23 @@ class ProjectDomainService
         }
 
         return $result;
+    }
+
+    public function getCurrentTopicSandboxId(int $projectId): ?string
+    {
+        $project = $this->getProjectNotUserId($projectId);
+        $topicId = $project->getCurrentTopicId();
+        if (empty($topicId)) {
+            return null;
+        }
+
+        $topic = $this->topicRepository->getTopicById((int) $topicId);
+        if ($topic === null) {
+            return null;
+        }
+
+        $sandboxId = $topic->getSandboxId();
+        return $sandboxId === '' ? null : $sandboxId;
     }
 
     /**

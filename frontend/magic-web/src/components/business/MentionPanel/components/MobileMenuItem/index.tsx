@@ -18,6 +18,7 @@ const MobileMenuItem = memo(function MobileMenuItem(props: MenuItemProps) {
 		item,
 		selected = false,
 		onClick,
+		onCheckboxClick,
 		onDelete,
 		className,
 		style,
@@ -40,15 +41,33 @@ const MobileMenuItem = memo(function MobileMenuItem(props: MenuItemProps) {
 		filePreviewById,
 	}
 	const hasRightArrow =
-		!item.tags?.includes("history") && Boolean(item.hasChildren || item.children?.length)
+		!item.tags?.includes("history") &&
+		Boolean(item.hasChildren || item.children?.length || item.type === MentionItemType.FOLDER)
 
 	const handleRowClick = useCallback(
 		(event: React.MouseEvent) => {
+			// Checkbox toggles selection while the rest of a folder row drills into children.
+			if ((event.target as HTMLElement).closest("[data-mobile-checkbox]")) return
 			if ((event.target as HTMLElement).closest("[data-right-arrow]")) return
+			if (item.unSelectable) {
+				event.preventDefault()
+				event.stopPropagation()
+				return
+			}
 			event.stopPropagation()
 			onClick?.(event)
 		},
-		[onClick],
+		[item.unSelectable, onClick],
+	)
+
+	// Isolate checkbox taps from row navigation so folder rows can support both actions.
+	const handleCheckboxClick = useCallback(
+		(event: React.MouseEvent<HTMLButtonElement>) => {
+			event.preventDefault()
+			event.stopPropagation()
+			onCheckboxClick?.(event)
+		},
+		[onCheckboxClick],
 	)
 
 	const handleArrowClick = useCallback(
@@ -95,8 +114,13 @@ const MobileMenuItem = memo(function MobileMenuItem(props: MenuItemProps) {
 						{rootPendingBadgeCount > 99 ? "99+" : rootPendingBadgeCount}
 					</span>
 				) : null}
-				<div className={styles.rightArrow} role="button" onClick={handleArrowClick}>
-					<TSIcon type="ts-arrow-right" data-right-arrow size="24" />
+				<div
+					className={styles.rightArrow}
+					role="button"
+					onClick={handleArrowClick}
+					data-right-arrow
+				>
+					<TSIcon type="ts-arrow-right" size="24" />
 				</div>
 			</div>
 		)
@@ -119,32 +143,48 @@ const MobileMenuItem = memo(function MobileMenuItem(props: MenuItemProps) {
 	const skillSourceLabel = getMentionItemSkillSourceLabel(rendererContext)
 
 	const renderCheckbox = () => {
-		if (hasRightArrow) return null
 		if (!showCheckbox) return null
 		return (
-			<span
+			<button
+				type="button"
 				className={cx(
 					"flex h-4 w-4 shrink-0 items-center justify-center rounded border border-border bg-card shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] transition-colors",
 					checkboxChecked && "border-primary bg-primary",
 				)}
-				aria-hidden
+				role="checkbox"
+				aria-checked={Boolean(checkboxChecked)}
+				aria-label={item.name}
+				data-mobile-checkbox
+				data-testid="mention-panel-menu-item-checkbox"
+				data-checked={checkboxChecked ? "true" : "false"}
+				onClick={handleCheckboxClick}
 			>
 				{checkboxChecked ? (
-					<Check className="h-2.5 w-2.5 text-primary-foreground" strokeWidth={3} />
+					<Check
+						className="h-2.5 w-2.5 text-primary-foreground"
+						strokeWidth={3}
+						aria-hidden
+					/>
 				) : null}
-			</span>
+			</button>
 		)
 	}
 
 	return (
 		<div
 			key={item.id}
-			className={cx(styles.menuItem, selected && "selected", className)}
+			className={cx(
+				styles.menuItem,
+				selected && "selected",
+				item.unSelectable && "disabled",
+				className,
+			)}
 			style={style}
 			onClick={handleRowClick}
 			role="option"
 			aria-selected={selected}
-			tabIndex={selected ? 0 : -1}
+			aria-disabled={item.unSelectable}
+			tabIndex={selected && !item.unSelectable ? 0 : -1}
 			data-testid="mention-panel-menu-item"
 			{...restProps}
 		>

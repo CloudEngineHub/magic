@@ -121,7 +121,7 @@ class AliyunOSSUploader(AbstractStorage, BaseFileProcessor):
                     return
 
     def _get_bucket_client(self):
-        """获取OSS Bucket客户端"""
+        """获取OSS Bucket客户端（下载/上传用，优先走内网 endpoint）"""
         if not self.credentials:
             raise ValueError("未设置凭证")
 
@@ -138,10 +138,36 @@ class AliyunOSSUploader(AbstractStorage, BaseFileProcessor):
             oss_creds.SecurityToken
         )
 
+        # 优先使用内网 endpoint，回退到公网 endpoint
+        endpoint = credentials.internal_endpoint or credentials.endpoint
+        logger.info(f"Creating OSS bucket client with endpoint: {endpoint} (internal={credentials.internal_endpoint is not None})")
+
         # 创建OSS Bucket对象
-        bucket = oss2.Bucket(auth, credentials.endpoint, credentials.bucket)
+        bucket = oss2.Bucket(auth, endpoint, credentials.bucket)
 
         return bucket
+
+    def _get_public_bucket_client(self):
+        """获取OSS Bucket客户端（presigned URL 用，走公网 endpoint）"""
+        if not self.credentials:
+            raise ValueError("未设置凭证")
+
+        if not isinstance(self.credentials, AliyunCredentials):
+            raise ValueError("凭证类型错误")
+
+        credentials: AliyunCredentials = self.credentials
+        oss_creds = credentials.credentials
+
+        # 创建OSS身份验证对象
+        auth = oss2.StsAuth(
+            oss_creds.AccessKeyId,
+            oss_creds.AccessKeySecret,
+            oss_creds.SecurityToken
+        )
+
+        logger.info(f"Creating OSS bucket client with public endpoint: {credentials.endpoint}")
+
+        return oss2.Bucket(auth, credentials.endpoint, credentials.bucket)
 
     async def _simple_upload(self, file_obj, key: str, file_size: int):
         """简单上传，适用于小文件"""
@@ -546,7 +572,8 @@ class AliyunOSSUploader(AbstractStorage, BaseFileProcessor):
             options = {}
 
         try:
-            bucket = self._get_bucket_client()
+            # presigned URL 必须走公网 endpoint，否则集群外无法访问
+            bucket = self._get_public_bucket_client()
 
             try:
                 # 异步生成预签名URL

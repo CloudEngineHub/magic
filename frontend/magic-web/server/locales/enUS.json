@@ -1,57 +1,18 @@
 {
-	"site": {
-		"title": "{{title}} - {{platformTitle}}",
-		"keywords": "{{keywords}}, {{platformKeywords}}",
-		"description": "{{description}} - {{platformDescription}}",
-		"author": "{{platformTitle}}"
-	},
-	"superMagic": {
-		"collaborationProject": "Collaboration Project",
-		"project": "Project"
-	},
-	"approval": {
-		"title": "Approval"
-	},
-	"login": {
-		"title": "Login"
-	},
-	"drive": {
-		"personal": "Personal Cloud Drive",
-		"mine": "Created by Me",
-		"recent": "Frequently Used",
-		"shared": "Enterprise Cloud Drive",
-		"folder": "Folder",
-		"sharedForm": "Shared Form"
-	},
-	"file": {
-		"docs": "Cloud Document",
-		"pivotTable": "Pivot Table",
-		"document": "Document"
-	},
 	"admin": {
-		"routes": {
-			"admin": "Admin Console",
-			"home": "Admin Console"
-		},
-		"noAuth": {
-			"title": "Unauthorized Access"
-		},
 		"capability": {
 			"approvalDesign": "Approval Design"
 		},
 		"nav": {
 			"ai": "AI Management",
-			"application": "Application Management",
-			"capability": "Capability Management",
-			"enterprise": "Enterprise Management",
-			"platform": "Platform Management",
-			"security": "Security Control",
 			"aiSubMenu": {
 				"controlStrategy": "Control Strategy",
 				"intelligentDrawing": "AI Drawing Management",
 				"modelManagement": "LLM Management",
 				"powerManagement": "Capability Management"
 			},
+			"application": "Application Management",
+			"capability": "Capability Management",
 			"capabilitySubMenu": {
 				"oaApproval": "OA Approval",
 				"oaApprovalDataView": "Data View",
@@ -60,11 +21,13 @@
 				"oaApprovalTemplateHandover": "Template Handover",
 				"oaApprovalWorkflowHandover": "Workflow Handover"
 			},
+			"enterprise": "Enterprise Management",
 			"enterpriseSubMenu": {
 				"memberAndDepartment": "Members and Departments",
 				"organization": "Organization Structure",
 				"userGroup": "User Groups"
 			},
+			"platform": "Platform Management",
 			"platformSubMenu": {
 				"audit": "AI Content Audit",
 				"infoManagement": "Maintenance Info Management",
@@ -78,13 +41,51 @@
 				"paidPackage": "Paid Package",
 				"platformInfo": "Platform Information",
 				"proxyServer": "Proxy Server",
+				"slidesTemplate": "Slide Templates",
 				"system": "System Settings"
 			},
+			"security": "Security Control",
 			"securitySubMenu": {
 				"adminAuthority": "Admin Authority",
 				"adminLog": "Admin Operation Log",
 				"authorityControl": "Authority Control"
 			}
+		},
+		"noAuth": {
+			"title": "Unauthorized Access"
+		},
+		"routes": {
+			"admin": "Admin Console",
+			"home": "Admin Console"
 		}
+	},
+	"approval": {
+		"title": "Approval"
+	},
+	"drive": {
+		"folder": "Folder",
+		"mine": "Created by Me",
+		"personal": "Personal Cloud Drive",
+		"recent": "Frequently Used",
+		"shared": "Enterprise Cloud Drive",
+		"sharedForm": "Shared Form"
+	},
+	"file": {
+		"docs": "Cloud Document",
+		"document": "Document",
+		"pivotTable": "Pivot Table"
+	},
+	"login": {
+		"title": "Login"
+	},
+	"site": {
+		"author": "{{platformTitle}}",
+		"description": "{{description}} - {{platformDescription}}",
+		"keywords": "{{keywords}}, {{platformKeywords}}",
+		"title": "{{title}} - {{platformTitle}}"
+	},
+	"superMagic": {
+		"collaborationProject": "Collaboration Project",
+		"project": "Project"
 	}
 }

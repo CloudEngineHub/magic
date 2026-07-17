@@ -138,7 +138,7 @@ window.magicProjectConfig = {
   card_path_or_link: "https://example.com/global/super/{project_id}/{topic_id}?ai_card=stable_id_from_creation_message",
   cards: [{ file: "latest/index.html", label: "Latest" }],
   template: "template/index.html",
-  schedule_id: "", // Will be filled after cron task creation
+  schedule_id: "", // Will be filled after scheduled task creation
   notification: {
     channels: [
       {
@@ -350,26 +350,32 @@ Recommended iframe pattern:
 
 ## Integration with using-cron
 
-After creating a card, if scheduled updates are needed, use using-cron to create a scheduled task. Use `shell_exec` from `agents/skills/using-cron`; do not use `run_sdk_snippet`. For long update instructions, write the message to a temporary file and pass `--message-content-file` to avoid shell parsing issues with punctuation, quotes, or brackets.
+After creating a card, if scheduled updates are needed, use using-cron to create a scheduled task through Code Mode. For long update instructions, pass a Python triple-quoted string as `message_content`.
 
 ```python
-shell_exec(
-    command='''cat > /tmp/ai-card-cron-message.txt <<'EOF'
-Update the AI card {card_name}. Read {card_directory}/magic.project.js for
+run_sdk_snippet(python_code="""
+from sdk.tool import tool
+
+message = \"\"\"Update the AI card {card_name}. Read {card_directory}/magic.project.js for
 configuration and prompts. Steps:
 1. Archive: copy ALL files in latest/ to history/YYYY-MM-DD_HH-mm/
 2. Copy template: copy ALL files from template/ to latest/ (overwrite)
 3. Fetch fresh data based on the prompt in magic.project.js
 4. Modify only the DATA_SECTION in latest/index.html with the new data
 5. Update last_generated and generation_count in magic.project.js
-Fallback for legacy single-file mode: use template.html → latest.html.
-EOF
-cd /app/agents/skills/using-cron &&
-python scripts/create.py --task-name "AI Card: {card_name}" --message-content-file /tmp/ai-card-cron-message.txt --type daily_repeat --time "9:00" --topic-pattern ip-manager'''
-)
+Fallback for legacy single-file mode: use template.html -> latest.html.\"\"\"
+
+result = tool.call("scheduled_task_create", {
+    "task_name": "AI Card: {card_name}",
+    "message_content": message,
+    "schedule_type": "daily_repeat",
+    "time": "09:00"
+})
+print(result.content)
+""")
 ```
 
-After successful creation, write the returned schedule_id into magic.project.js.
+After successful creation, write the returned `id` into `schedule_id` in magic.project.js.
 
 ## User Template Modification
 

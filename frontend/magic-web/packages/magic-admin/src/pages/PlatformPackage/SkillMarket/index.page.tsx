@@ -1,15 +1,14 @@
 import { lazy, useEffect, useMemo, useRef, useState } from "react"
 import { createStyles } from "antd-style"
 import { debounce } from "lodash-es"
-import type { SearchItem } from "@admin-components"
 import {
 	getSyncedTimeFilterValue,
 	SearchItemType,
 	StatusTag,
 	TableWithFilters,
 	MobileList,
-	type TimeRangeValue,
 } from "@admin-components"
+import type { SearchItem, TimeRangeValue } from "@admin-components"
 import { useMemoizedFn, useMount, useRequest } from "ahooks"
 import { useTranslation } from "react-i18next"
 import { Flex, InputNumber, Switch, Tooltip, message, type TableProps } from "antd"
@@ -354,7 +353,7 @@ function SkillMarketPage() {
 				render: (value: number) => value ?? "-",
 			},
 			{
-				title: t("sortOrder"),
+				title: tCommon("sortOrder"),
 				dataIndex: "sort_order",
 				key: "sort_order",
 				width: 180,
@@ -398,6 +397,7 @@ function SkillMarketPage() {
 		],
 		[
 			t,
+			tCommon,
 			getLocalizedText,
 			renderDescriptionText,
 			styles.desc,

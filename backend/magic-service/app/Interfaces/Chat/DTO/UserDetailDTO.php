@@ -38,6 +38,8 @@ class UserDetailDTO extends AbstractDTO
 
     protected string $realName;
 
+    protected string $employeeNo = '';
+
     protected int $accountType;
 
     protected string $aiCode;
@@ -270,6 +272,17 @@ class UserDetailDTO extends AbstractDTO
     public function setRealName(string $realName): UserDetailDTO
     {
         $this->realName = $realName;
+        return $this;
+    }
+
+    public function getEmployeeNo(): string
+    {
+        return $this->employeeNo;
+    }
+
+    public function setEmployeeNo(string $employeeNo): UserDetailDTO
+    {
+        $this->employeeNo = $employeeNo;
         return $this;
     }
 

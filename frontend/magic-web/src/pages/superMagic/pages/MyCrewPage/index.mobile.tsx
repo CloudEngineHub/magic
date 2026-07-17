@@ -212,10 +212,7 @@ function MyCrewPageMobilePanelBase() {
 					className="mobile-page-header relative z-10 flex h-14 shrink-0 items-center gap-2 px-[10px]"
 					data-testid="my-crew-mobile-top-bar"
 				>
-					<MobileShellSidebarToggleButton
-						variant="floating"
-						testId="my-crew-menu-button"
-					/>
+					<MobileShellSidebarToggleButton variant="floating" />
 
 					<p
 						className="pointer-events-none absolute inset-x-0 truncate px-[124px] text-center font-poppins text-[18px] font-medium leading-6 text-foreground"

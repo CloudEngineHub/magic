@@ -18,6 +18,7 @@ import type { SlideItem } from "../PPTRender/PPTSidebar/types"
 import { observer } from "mobx-react-lite"
 import { TSIcon } from "@/components/base"
 import FileSlicesIcon from "./FileSlicesIcon"
+import { resolvePptScaleContentDimensions } from "../../contents/HTML/utils/slide-dimensions"
 
 import { Image as ImageIcon } from "lucide-react"
 
@@ -153,7 +154,7 @@ function SlideSelectionDialog({
 
 	return (
 		<Dialog open={open} onOpenChange={onOpenChange}>
-			<DialogContent className="flex max-h-[85vh] w-fit !max-w-[unset] flex-col">
+			<DialogContent className="flex max-h-[calc(100vh-2rem)] w-[calc(100%-2rem)] !max-w-[calc(100vw-2rem)] flex-col p-6 xl:!max-w-[1100px]">
 				<DialogHeader>
 					<DialogTitle>{t("ppt.selectSlidesToExport")}</DialogTitle>
 					<DialogDescription>
@@ -171,7 +172,10 @@ function SlideSelectionDialog({
 						onClick={toggleSelectAll}
 						className="h-8 text-sm"
 					>
-						<Checkbox checked={isAllSelected} className="pointer-events-none data-[state=unchecked]:bg-white shadow-sm" />
+						<Checkbox
+							checked={isAllSelected}
+							className="pointer-events-none shadow-sm data-[state=unchecked]:bg-white"
+						/>
 						{isAllSelected ? t("ppt.deselectAll") : t("ppt.selectAll")}
 					</Button>
 					<span className="text-sm text-muted-foreground">
@@ -180,18 +184,18 @@ function SlideSelectionDialog({
 				</div>
 
 				{/* 幻灯片网格：延后渲染，先出壳再出列表 */}
-				<div className="min-h-[200px] flex-1 overflow-y-auto">
+				<div className="min-h-0 flex-1 overflow-y-auto px-1">
 					{!contentReady ? (
-						<div className="3xl:grid-cols-5 grid grid-cols-2 gap-4 p-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
+						<div className="grid grid-cols-[repeat(auto-fill,minmax(160px,1fr))] gap-4 py-2">
 							{Array.from({ length: 8 }).map((_, i) => (
 								<div
 									key={i}
-									className="relative h-[135px] w-[150px] rounded-lg border-2 border-border bg-card"
+									className="relative overflow-hidden rounded-lg border-2 border-border bg-card"
 								>
 									<div className="absolute left-2 top-2 z-10">
 										<Skeleton className="size-4 rounded-sm" />
 									</div>
-									<Skeleton className="rounded-t-md" />
+									<Skeleton className="h-[160px] rounded-none" />
 									<div className="space-y-1.5 border-t p-2">
 										<Skeleton className="h-3.5 w-3/4 rounded" />
 										<Skeleton className="h-3 w-1/2 rounded" />
@@ -200,16 +204,20 @@ function SlideSelectionDialog({
 							))}
 						</div>
 					) : (
-						<div className="3xl:grid-cols-5 grid grid-cols-2 gap-4 p-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
+						<div className="grid grid-cols-[repeat(auto-fill,minmax(160px,1fr))] gap-4 py-2">
 							{slides.map((slide, index) => {
 								const isSelected = selectedIds.has(slide.path)
 								const isLoaded = slide.loadingState === "loaded"
+								const slideDimensions = resolvePptScaleContentDimensions(
+									slide.content,
+									slide.rawContent,
+								)
 								return (
 									<div
 										key={slide.id}
 										onClick={() => isLoaded && toggleSlide(slide.path)}
 										className={cn(
-											"w-30 relative rounded-lg border-2 transition-all",
+											"relative min-w-0 overflow-hidden rounded-lg border-2 transition-all",
 											!isLoaded
 												? "cursor-not-allowed opacity-50"
 												: "cursor-pointer hover:shadow-md",
@@ -227,17 +235,20 @@ function SlideSelectionDialog({
 												onCheckedChange={() =>
 													isLoaded && toggleSlide(slide.path)
 												}
-												className="data-[state=unchecked]:bg-white shadow-sm"
+												className="shadow-sm data-[state=unchecked]:bg-white"
 											/>
 										</div>
 
 										{/* 幻灯片缩略图 */}
-										<div className="aspect-[16/9] overflow-hidden rounded-t-md bg-muted">
+										<div className="flex h-[160px] items-center justify-center overflow-hidden rounded-t-md bg-muted p-1">
 											{slide.thumbnailUrl ? (
 												<img
 													src={slide.thumbnailUrl}
 													alt={slide.title || `Slide ${index + 1}`}
-													className="h-full w-full object-cover"
+													className="max-h-full max-w-full object-contain"
+													style={{
+														aspectRatio: `${slideDimensions.width} / ${slideDimensions.height}`,
+													}}
 													data-testid="slide-selection-dialog-image"
 												/>
 											) : (

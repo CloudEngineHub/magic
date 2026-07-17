@@ -9,6 +9,7 @@ export const useVectorKnowledgeCreateStyles = createStyles(
 			container: css`
 				height: 100%;
 				overflow: hidden;
+				background: ${isDarkMode ? "transparent" : token.magicColorUsages.white};
 			`,
 			content: css`
 				flex: 1;

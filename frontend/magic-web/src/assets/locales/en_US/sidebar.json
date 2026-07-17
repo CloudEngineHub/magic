@@ -103,6 +103,10 @@
 	"skillsLibrary": {
 		"title": "Skills Library"
 	},
+	"slidesTemplates": {
+		"templateCount": "{{count}} templates",
+		"title": "Slide Templates"
+	},
 	"superLobster": {
 		"card": {
 			"betaAccess": "Limited Beta Access",

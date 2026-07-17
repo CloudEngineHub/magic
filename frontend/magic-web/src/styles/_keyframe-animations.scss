@@ -137,3 +137,12 @@
     stroke-dashoffset: 237;
   }
 }
+
+@keyframes linear-progress-stripes {
+  from {
+    background-position: 0 0;
+  }
+  to {
+    background-position: 32px 0;
+  }
+}

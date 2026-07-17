@@ -8,12 +8,12 @@ interface UserSchema {
 	id?: string
 	key: string
 	value:
-	| string
-	| User.UserInfo
-	| OrganizationResponse
-	| null
-	| Array<User.UserOrganization>
-	| Record<string, User.MagicOrganization>
+		| string
+		| User.UserInfo
+		| OrganizationResponse
+		| null
+		| Array<User.UserOrganization>
+		| Record<string, User.MagicOrganization>
 	enabled?: boolean
 	createdAt?: number
 	updatedAt?: number
@@ -51,7 +51,7 @@ export class UserRepository extends GlobalBaseRepository<UserSchema> {
 
 	async setAuthorization(token: string): Promise<void> {
 		try {
-			this.put({
+			await this.put({
 				key: "authorization",
 				value: token,
 			})

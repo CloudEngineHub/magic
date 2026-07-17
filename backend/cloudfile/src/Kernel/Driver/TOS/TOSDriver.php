@@ -7,6 +7,7 @@ declare(strict_types=1);
 
 namespace Dtyq\CloudFile\Kernel\Driver\TOS;
 
+use Dtyq\CloudFile\Kernel\AdapterName;
 use Dtyq\CloudFile\Kernel\Exceptions\CloudFileException;
 use League\Flysystem\Config;
 use League\Flysystem\FileAttributes;
@@ -44,6 +45,7 @@ class TOSDriver implements FilesystemAdapter
      */
     public function __construct(array $config = [])
     {
+        $config = AdapterName::applyEndpointOptions(AdapterName::TOS, $config, $config);
         $this->configParser = new ConfigParser($config);
         $this->config = $config;
         $this->client = new TosClient($this->configParser);

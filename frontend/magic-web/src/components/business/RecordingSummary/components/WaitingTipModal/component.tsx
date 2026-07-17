@@ -14,10 +14,12 @@ function WaitingTipModal({
 	onClose,
 	projectName,
 	workspaceName,
+	presentation = "default",
 }: WaitingTipModalProps) {
 	const { t } = useTranslation("super")
 	const displayProjectName = projectName || t("project.unnamedProject")
 	const displayWorkspaceName = workspaceName || t("workspace.unnamedWorkspace")
+	const isAudioRecordingsPresentation = presentation === "audioRecordings"
 
 	return (
 		<AlertDialog
@@ -44,11 +46,19 @@ function WaitingTipModal({
 							<p className="m-0">
 								{t("recordingSummary.waitingTipModal.organizingRecording")}
 							</p>
-							<p className="m-0">
-								{t("recordingSummary.waitingTipModal.contentWillBeSavedTo", {
-									projectName: `${displayWorkspaceName} - ${displayProjectName}`,
-								})}
-							</p>
+							{isAudioRecordingsPresentation ? (
+								<p className="m-0">
+									{t(
+										"recordingSummary.waitingTipModal.viewOnAudioRecordingsPage",
+									)}
+								</p>
+							) : (
+								<p className="m-0">
+									{t("recordingSummary.waitingTipModal.contentWillBeSavedTo", {
+										projectName: `${displayWorkspaceName} - ${displayProjectName}`,
+									})}
+								</p>
+							)}
 						</AlertDialogDescription>
 					</div>
 				</div>

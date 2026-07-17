@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { useMemoizedFn } from "ahooks"
 import { useTranslation } from "react-i18next"
 import magicToast from "@/components/base/MagicToaster/utils"
 import {
+	ASK_USER_CARD_STATUS,
 	ASK_USER_INTERACTION_TYPE,
 	ASK_USER_RESPONSE_STATUS,
 	ASK_USER_TOOL,
@@ -18,7 +19,80 @@ import {
 	type AskUserCardData,
 	type AskUserQuestionData,
 } from "@/pages/superMagic/components/MessageList/utils/askUser"
+import {
+	buildAskUserDraftCacheKey,
+	clearAskUserDraftAnswers,
+	readAskUserDraftAnswers,
+	writeAskUserDraftAnswers,
+	type AskUserDraftAnswers,
+} from "@/pages/superMagic/components/MessageList/utils/askUserDraftCache"
 import { sendAskUserToolReply } from "@/pages/superMagic/services/askUserToolReplyService"
+
+function getOtherOption(options: readonly string[]) {
+	return options.find((option) => isAskUserOtherOption(option)) || ""
+}
+
+function buildDraftState(
+	questions: readonly AskUserQuestionData[],
+	answers: AskUserDraftAnswers | null,
+) {
+	const inputValues: Record<string, string> = {}
+	const selectedValues: Record<string, string> = {}
+	const selectedOptionsMap: Record<string, string[]> = {}
+	const otherTexts: Record<string, string> = {}
+
+	if (!answers) {
+		return {
+			inputValues,
+			otherTexts,
+			selectedOptionsMap,
+			selectedValues,
+		}
+	}
+
+	for (const question of questions) {
+		const answer = answers[question.subId]
+		const otherOption = getOtherOption(question.options)
+
+		if (question.interactionType === ASK_USER_INTERACTION_TYPE.input) {
+			inputValues[question.subId] = typeof answer === "string" ? answer : ""
+			continue
+		}
+
+		if (question.interactionType === ASK_USER_INTERACTION_TYPE.multiSelect) {
+			const selectedOptions: string[] = []
+			const values = Array.isArray(answer) ? answer : []
+			for (const value of values) {
+				if (question.options.includes(value)) {
+					selectedOptions.push(value)
+					continue
+				}
+				if (otherOption && value.trim()) {
+					if (!selectedOptions.includes(otherOption)) selectedOptions.push(otherOption)
+					if (!otherTexts[question.subId]) otherTexts[question.subId] = value
+				}
+			}
+			selectedOptionsMap[question.subId] = selectedOptions
+			continue
+		}
+
+		const value = typeof answer === "string" ? answer : ""
+		if (question.options.includes(value) || !otherOption || !value.trim()) {
+			selectedValues[question.subId] = value
+			continue
+		}
+
+		selectedValues[question.subId] = otherOption
+		otherTexts[question.subId] = value
+	}
+
+	return {
+		inputValues,
+		otherTexts,
+		selectedOptionsMap,
+		selectedValues,
+	}
+}
 
 export function useAskUserActions({
 	askUser,
@@ -39,14 +113,28 @@ export function useAskUserActions({
 	const [selectedOptionsMap, setSelectedOptionsMap] = useState<Record<string, string[]>>({})
 	const [otherTexts, setOtherTexts] = useState<Record<string, string>>({})
 	const [pendingAction, setPendingAction] = useState<AskUserPendingAction>(null)
+	const skipNextDraftWriteRef = useRef(true)
+	const draftCacheKey = useMemo(
+		() =>
+			buildAskUserDraftCacheKey({
+				questionId: askUser.questionId,
+				topicId: context?.topicId,
+			}),
+		[askUser.questionId, context?.topicId],
+	)
 
 	useEffect(() => {
-		setInputValues({})
-		setSelectedValues({})
-		setSelectedOptionsMap({})
-		setOtherTexts({})
+		const draftState = buildDraftState(
+			askUser.questions,
+			readAskUserDraftAnswers(draftCacheKey),
+		)
+		skipNextDraftWriteRef.current = true
+		setInputValues(draftState.inputValues)
+		setSelectedValues(draftState.selectedValues)
+		setSelectedOptionsMap(draftState.selectedOptionsMap)
+		setOtherTexts(draftState.otherTexts)
 		setPendingAction(null)
-	}, [askUser.questionId])
+	}, [askUser.questionId, askUser.questions, draftCacheKey])
 
 	const answer = useMemo(() => {
 		const answers: Record<string, string | string[]> = {}
@@ -131,7 +219,27 @@ export function useAskUserActions({
 			detail,
 			isAnswered: responseStatus === ASK_USER_RESPONSE_STATUS.answered,
 		})
+		clearAskUserDraftAnswers(draftCacheKey)
 	})
+
+	useEffect(() => {
+		if (!draftCacheKey) return
+		if (askUser.status !== ASK_USER_CARD_STATUS.pending) {
+			clearAskUserDraftAnswers(draftCacheKey)
+			return
+		}
+		if (skipNextDraftWriteRef.current) {
+			skipNextDraftWriteRef.current = false
+			return
+		}
+		if (isDisabled) return
+
+		try {
+			writeAskUserDraftAnswers(draftCacheKey, JSON.parse(answer) as AskUserDraftAnswers)
+		} catch (error) {
+			console.error(error)
+		}
+	}, [answer, askUser.status, draftCacheKey, isDisabled])
 
 	const handleSubmit = useMemoizedFn(async () => {
 		if (isDisabled || pendingAction || !isValid) return

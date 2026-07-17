@@ -47,7 +47,15 @@ export function useWebRecordingEditorRuntime(): RecordingEditorRuntime {
 	const state = useWebRecordingEditorRuntimeState()
 
 	const startRecording = useMemoizedFn(
-		async ({ workspace, project, topic, model, audioSource }: RecordingEditorStartParams) => {
+		async ({
+			workspace,
+			project,
+			topic,
+			model,
+			audioSource,
+			sessionId,
+			transcriptionEnabled,
+		}: RecordingEditorStartParams) => {
 			await recordSummaryService.startRecording({
 				workspace,
 				model,
@@ -56,6 +64,8 @@ export function useWebRecordingEditorRuntime(): RecordingEditorRuntime {
 				audioSource: {
 					source: audioSource,
 				},
+				sessionId,
+				transcriptionEnabled,
 			})
 		},
 	)
@@ -63,6 +73,7 @@ export function useWebRecordingEditorRuntime(): RecordingEditorRuntime {
 	const finishRecording = useMemoizedFn(async (options?: RecordingEditorFinishOptions) => {
 		await new Promise<void>((resolve, reject) => {
 			recordSummaryService.completeRecordingWithSummary({
+				skipSummary: options?.skipSummary,
 				onSuccess: (result) => {
 					options?.onSuccess?.(result)
 					resolve()

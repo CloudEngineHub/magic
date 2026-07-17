@@ -26,6 +26,8 @@ import { useFlowStore } from "@/stores/flow"
 import { pick } from "lodash-es"
 import { RouteName } from "@/routes/constants"
 import magicToast from "@/components/base/MagicToaster/utils"
+import { useLocation } from "react-router"
+import { getVectorKnowledgeDetailRoute } from "@/pages/vectorKnowledge/utils"
 
 interface FlowListHooksProps {
 	flowType: FlowRouteType
@@ -60,6 +62,7 @@ interface DeleteFlowModalPayload {
 export default function useFlowList({ flowType }: FlowListHooksProps) {
 	const { t: globalT } = useTranslation()
 	const navigate = useNavigate()
+	const location = useLocation()
 
 	const { t } = useTranslation("interface")
 
@@ -523,7 +526,7 @@ export default function useFlowList({ flowType }: FlowListHooksProps) {
 
 	/** 跳转向量知识库详情 */
 	const goToKnowledgeDetail = useMemoizedFn((code: string) => {
-		navigate({ name: RouteName.VectorKnowledgeDetail, query: { code } })
+		navigate(getVectorKnowledgeDetailRoute(location.pathname, code))
 	})
 
 	const getDropdownItems = useMemoizedFn(

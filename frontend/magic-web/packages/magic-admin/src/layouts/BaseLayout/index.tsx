@@ -65,7 +65,7 @@ function BaseLayoutPc() {
 				<div className={styles.header}>
 					<Flex gap={8} align="center" className={styles.logo}>
 						<img src={AtLogo} alt="atLogo" width={40} />
-						<div className={styles.title}>{t("title")}</div>
+						<div className={styles.title}>{t("title", { platformName: "" })}</div>
 					</Flex>
 					<div className={styles.menuWrapper}>
 						<TopMenu items={items} pathname={location.pathname} navigate={navigate} />

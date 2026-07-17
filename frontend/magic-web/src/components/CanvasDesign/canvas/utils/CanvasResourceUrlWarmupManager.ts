@@ -2,6 +2,10 @@ import type { Canvas } from "../Canvas"
 import { type CanvasDocument, ElementTypeEnum, type LayerElement } from "../types"
 import { parseExpiresAt, isOssExpired } from "./ossExpiryUtils"
 import { getCanonicalResourcePathInfo, isRemoteOrSpecialPath } from "./pathUtils"
+import {
+	getFailureReasonFromGetFileInfoError,
+	type ResourceLoadFailureReason,
+} from "./resourceLoadFailure"
 
 type WarmupMediaType = "image" | "video"
 type WarmupStatus = "queued" | "warming" | "ready" | "failed"
@@ -345,7 +349,7 @@ export class CanvasResourceUrlWarmupManager {
 	private async warmupEntry(entry: WarmupEntry): Promise<void> {
 		const getFileInfo = this.canvas.magicConfigManager.config?.methods?.getFileInfo
 		if (!getFileInfo) {
-			this.markFailed(entry, "getFileInfo unavailable")
+			this.markFailed(entry, "getFileInfo unavailable", "load-error")
 			return
 		}
 
@@ -357,7 +361,7 @@ export class CanvasResourceUrlWarmupManager {
 			if (this.destroyed) return
 			this.warmingKeys.delete(entry.key)
 			if (!fileInfo?.src) {
-				this.markFailed(entry, "empty fileInfo src")
+				this.markFailed(entry, "empty fileInfo src", "load-error")
 				return
 			}
 			entry.status = "ready"
@@ -371,16 +375,27 @@ export class CanvasResourceUrlWarmupManager {
 		} catch (error) {
 			if (this.destroyed) return
 			this.statsSnapshot.failedRequestCount += 1
-			this.markFailed(entry, getErrorMessage(error))
+			this.markFailed(
+				entry,
+				getErrorMessage(error),
+				getFailureReasonFromGetFileInfoError(error),
+			)
 		}
 	}
 
-	private markFailed(entry: WarmupEntry, errorMessage: string): void {
+	private markFailed(
+		entry: WarmupEntry,
+		errorMessage: string,
+		reason: ResourceLoadFailureReason,
+	): void {
 		this.warmingKeys.delete(entry.key)
 		entry.status = "failed"
 		entry.lastError = errorMessage
 		entry.failedAt = Date.now()
 		entry.retryAfterAt = entry.failedAt + URL_WARMUP_FAILED_RETRY_DELAY_MS
+		if (entry.mediaType === "image") {
+			this.canvas.imageResourceManager?.markResourceLoadFailed(entry.path, reason)
+		}
 	}
 
 	private refreshSnapshotCounts(): void {

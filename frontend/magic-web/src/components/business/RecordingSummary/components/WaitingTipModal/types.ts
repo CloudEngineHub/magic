@@ -7,6 +7,8 @@ export interface WaitingTipModalProps {
 	projectName?: string
 	/** 工作空间名称 */
 	workspaceName?: string
+	/** Legacy summary projects show workspace/project destination; audio mode does not. */
+	presentation?: "default" | "audioRecordings"
 }
 
 export interface ShowWaitingTipModalOptions {
@@ -14,6 +16,8 @@ export interface ShowWaitingTipModalOptions {
 	projectName?: string
 	/** 工作空间名称 */
 	workspaceName?: string
+	/** Legacy summary projects show workspace/project destination; audio mode does not. */
+	presentation?: "default" | "audioRecordings"
 	/** 模态框关闭时的回调函数 */
 	onClose?: () => void
 }

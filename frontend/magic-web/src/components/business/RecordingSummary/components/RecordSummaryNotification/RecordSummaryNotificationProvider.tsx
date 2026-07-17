@@ -7,9 +7,10 @@ import type {
 	RecordSummaryNotificationProviderProps,
 	RecordSummaryNotificationOptions,
 } from "./types"
-import { useMemoizedFn, useMount } from "ahooks"
+import { useMemoizedFn } from "ahooks"
 import { TAB_COORDINATOR_EVENTS } from "@/services/recordSummary/TabCoordinator"
 import { getTabCoordinator } from "@/services/recordSummary/tabCoordinatorInstance"
+import { isAudioProjectMode, navigateToRecordSummaryResult } from "@/services/audioRecordings"
 
 // Context for notification API
 const RecordSummaryNotificationContext = createContext<RecordSummaryNotificationContextType | null>(
@@ -42,6 +43,7 @@ export function RecordSummaryNotificationProvider({
 			description,
 			workspaceId,
 			projectId,
+			projectMode,
 			topicId,
 			duration = 0, // Don't auto-close by default
 			success,
@@ -54,12 +56,15 @@ export function RecordSummaryNotificationProvider({
 			}
 
 			const handleViewClick = () => {
-				// if (!workspaceId || !projectId || !topicId) {
-				// 	console.error("workspaceId, projectId, topicId is required")
-				// 	return
-				// }
-				// const url = genProjectTopicUrl(workspaceId, projectId, topicId)
-				// openInNewTab(url)
+				navigateToRecordSummaryResult({
+					workspaceId,
+					projectId,
+					projectMode,
+					topicId,
+					projectName,
+					// Keep legacy expert-mode links in a new tab; audio projects navigate in-place.
+					openInNewTab: !isAudioProjectMode(projectMode),
+				})
 				api.destroy(key)
 				tabCoordinator.sendRecordSummaryNotificationClose(workspaceId, projectId, topicId)
 			}
@@ -82,11 +87,11 @@ export function RecordSummaryNotificationProvider({
 							description ||
 							(success
 								? t("recordingSummary.notification.successDescription", {
-									projectName: projectName || t("project.unnamedProject"),
-								})
+										projectName: projectName || t("project.unnamedProject"),
+									})
 								: t("recordingSummary.notification.failureDescription", {
-									projectName: projectName || t("project.unnamedProject"),
-								}))
+										projectName: projectName || t("project.unnamedProject"),
+									}))
 						}
 						viewText={
 							success
@@ -96,6 +101,7 @@ export function RecordSummaryNotificationProvider({
 						ignoreText={t("recordingSummary.notification.ignoreText")}
 						workspaceId={workspaceId}
 						projectId={projectId}
+						projectMode={projectMode}
 						topicId={topicId}
 					/>
 				),

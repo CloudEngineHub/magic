@@ -71,6 +71,7 @@
 		"remove": "移除",
 		"reset": "重置",
 		"save": "保存",
+		"search": "搜索",
 		"upload": "上传"
 	},
 	"confirmClose": "确认关闭",
@@ -94,6 +95,7 @@
 		"actionFailed": "操作失败",
 		"actionSuccess": "操作成功",
 		"addSuccess": "添加成功",
+		"codeConflictRetry": "模板编码冲突，已自动重新生成",
 		"copyFailed": "复制失败",
 		"copySuccess": "复制成功",
 		"createSuccess": "创建成功",
@@ -174,6 +176,7 @@
 			"providerAccess": "运营管控",
 			"proxyServer": "代理服务器",
 			"skillMarket": "Skill市场",
+			"slidesTemplate": "PPT 模板",
 			"systemAgent": "官方内置员工",
 			"systemCapability": "能力管理",
 			"systemSkill": "Skill审核",
@@ -199,8 +202,145 @@
 	"pleaseSelectPlaceholder": "请选择{{name}}",
 	"prePage": "上一页",
 	"search": "搜索选项",
+	"slidesTemplate": {
+		"addButton": "新增模板",
+		"addTitle": "新增 PPT 模板",
+		"category": {
+			"addButton": "新增分类",
+			"addTitle": "新增 PPT 模板分类",
+			"codeRule": "分类编码格式为 PPT-CATE-xxx，后缀仅支持小写字母、数字和中划线",
+			"columns": {
+				"code": "分类编码",
+				"name": "分类名称",
+				"status": "状态",
+				"templateCount": "模板数",
+				"updatedAt": "更新时间"
+			},
+			"editTitle": "编辑 PPT 模板分类",
+			"fields": {
+				"code": "分类编码",
+				"name": "分类名称",
+				"sort": "排序值",
+				"status": "启用状态"
+			},
+			"filters": {
+				"code": "分类编码",
+				"keyword": "关键词",
+				"status": "状态"
+			},
+			"manageButton": "分类管理",
+			"manageTitle": "分类管理"
+		},
+		"columns": {
+			"category": "分类",
+			"code": "模板编码",
+			"name": "模板名称",
+			"sort": "排序",
+			"source": "来源",
+			"status": "状态",
+			"tags": "标签",
+			"thumbnail": "封面",
+			"updatedAt": "更新时间",
+			"usageCount": "使用次数"
+		},
+		"editTitle": "编辑 PPT 模板",
+		"featuredTagUnavailable": "标签管理中未启用 featured 标签，无法设置精选",
+		"fields": {
+			"category": "所属分类",
+			"collage": "预览拼图",
+			"description": "模板描述",
+			"featured": "开启精选",
+			"label": "模板名称",
+			"previewImages": "每页预览图",
+			"previewUrl": "预览链接",
+			"sort": "排序值",
+			"status": "启用状态",
+			"tags": "模板标签",
+			"templateFile": "模板 ZIP",
+			"thumbnail": "封面图"
+		},
+		"filters": {
+			"category": "分类",
+			"code": "模板编码",
+			"keyword": "关键词",
+			"status": "状态",
+			"tagMatch": "标签匹配",
+			"tags": "标签"
+		},
+		"preview": {
+			"empty": "上传每页预览图后可在此查看",
+			"nextPage": "下一页",
+			"previousPage": "上一页"
+		},
+		"source": {
+			"official": "官方模板",
+			"system": "系统内置"
+		},
+		"status": {
+			"disabled": "禁用",
+			"enabled": "启用"
+		},
+		"tag": {
+			"addButton": "新增标签",
+			"addGroupButton": "新增",
+			"addGroupTitle": "新增 PPT 模板标签组",
+			"addTitle": "新增 PPT 模板标签",
+			"childrenTitle": "子标签",
+			"codeRule": "标签编码仅支持小写字母、数字和中划线",
+			"columns": {
+				"code": "标签编码",
+				"name": "标签名称",
+				"status": "状态",
+				"templateCount": "模板数",
+				"updatedAt": "更新时间"
+			},
+			"editGroupTitle": "编辑 PPT 模板标签组",
+			"editTitle": "编辑 PPT 模板标签",
+			"fields": {
+				"code": "标签编码",
+				"enabled": "开启",
+				"name": "标签名称",
+				"nodeType": "节点类型",
+				"parent": "所属标签组",
+				"sort": "排序值",
+				"status": "启用状态"
+			},
+			"filters": {
+				"code": "标签编码",
+				"keyword": "关键词",
+				"status": "状态"
+			},
+			"groupCodeRule": "标签组编码必须以 _group 结尾",
+			"groupsTitle": "标签组",
+			"manageButton": "标签管理",
+			"manageTitle": "标签管理",
+			"nodeTypes": {
+				"group": "标签组",
+				"tag": "子标签"
+			},
+			"quickCreateGroup": "新建标签组",
+			"systemBuiltIn": "系统内置"
+		},
+		"tagMatch": {
+			"all": "全部",
+			"any": "任意"
+		},
+		"upload": {
+			"imageDescription": "支持点击、拖拽或粘贴图片上传",
+			"imageUploadedDescription": "图片已上传，可点击、拖拽或粘贴替换",
+			"onlyImage": "仅支持上传图片文件",
+			"onlyZip": "仅支持上传 ZIP 文件",
+			"previewImagesDescription": "支持点击、拖拽或粘贴多图上传，可拖拽缩略图调整每页顺序",
+			"previewImagesEmpty": "暂无每页预览图，点击或拖拽图片上传",
+			"previewImagesUploadedDescription": "已上传 {{count}} 张，可继续添加或拖拽排序",
+			"removePreviewImage": "移除该页预览图",
+			"zipDescription": "支持点击或拖拽 ZIP 文件上传",
+			"zipUploadedDescription": "ZIP 已上传，可点击或拖拽替换"
+		}
+	},
+	"sortOrder": "排序值",
 	"status": "状态",
-	"title": "$t(common:platform.name)管理后台",
+	"title": "{{platformName}}管理后台",
 	"totalItems": "共{{total}}条",
 	"unsavedChanges": "您有未保存的更改，确定要关闭吗？"
 }

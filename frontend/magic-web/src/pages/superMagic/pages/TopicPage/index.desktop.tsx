@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useMessageChanges } from "../../hooks/useMessageChanges"
 import Detail, { type DetailRef } from "../../components/Detail"
 import { SendMessageOptions } from "../../components/MessagePanel/types"
+import { shouldCheckAttachmentsOnTaskStatus } from "../../services/topicStatusSyncService"
 import useStyles from "../Workspace/style"
 import { JSONContent } from "@tiptap/core"
 import GlobalMentionPanelStore from "@/components/business/MentionPanel/builtin-store"
@@ -43,7 +44,7 @@ import { useTopicMessages } from "../../hooks/useTopicMessages"
 import { useCreateTopicListener } from "../../components/TopicMode/useCreateTopicListener"
 import { useTopicFiles } from "./hooks/useTopicFiles"
 import TopicSidebar from "./components/TopicSidebar"
-import { isAudioProjectMode } from "../AudioRecordings/utils/is-audio-project-mode"
+import { isAudioProjectMode } from "@/services/audioRecordings"
 import TopicMessagePanel from "./components/TopicMessagePanel"
 import { ChatConversationActionsSlot } from "@/pages/superMagic/pages/ChatProjectPage/components/ChatConversationActionsSlot"
 import TopicDesktopPanels from "./components/TopicDesktopPanels"
@@ -341,6 +342,29 @@ function TopicPage({ pageVariant = "default" }: TopicPageDesktopProps) {
 	selectedProjectRef.current = selectedProject
 	selectedWorkspaceRef.current = selectedWorkspace
 
+	const { checkNowDebounced } = useAttachmentsPolling({
+		projectId: selectedProject?.id,
+		autoStart: false,
+		onAttachmentsChange: useCallback(({ tree, list }: { tree: any[]; list: any[] }) => {
+			// 统一处理 metadata，内部自闭环处理验证和返回逻辑
+			const processedData = AttachmentDataProcessor.processAttachmentData(
+				{ tree, list },
+				{ preserveList: true },
+			)
+			projectFilesStore.setWorkspaceFileTree(processedData.tree, {
+				list: processedData.list,
+				source: "TopicPage.taskStatusCheck",
+			})
+		}, []),
+		onError: useMemoizedFn((error: any) => {
+			if (isCollaborationWorkspace(selectedWorkspace)) {
+				// 团队共享项目，如果权限不足，回到首页
+				handleNoPermissionCollaborationProject(error)
+				return
+			}
+		}),
+	})
+
 	/**
 	 * 处理到达消息引发的话题状态变化：
 	 * 1) 仅在状态真正变化时更新本地话题状态；
@@ -374,6 +398,12 @@ function TopicPage({ pageVariant = "default" }: TopicPageDesktopProps) {
 			const syncPromise = syncTopicStatusPatch(topicId).catch((error) => {
 				console.warn("[TopicPage] 同步话题 unread 状态失败:", error)
 			})
+
+			currentTopicStatusRef.current = nextStatus
+			void SuperMagicService.topic.updateTopicStatus(topicId, nextStatus)
+			if (shouldCheckAttachmentsOnTaskStatus(nextStatus)) {
+				checkNowDebounced()
+			}
 
 			const latestWorkspaceId = selectedWorkspaceRef.current?.id
 			const latestProjectId = selectedProjectRef.current?.id
@@ -523,30 +553,6 @@ function TopicPage({ pageVariant = "default" }: TopicPageDesktopProps) {
 		clearActiveDetailTabType()
 	}, [selectedTopic?.id, selectedTopic?.chat_topic_id])
 
-	// 集成轮询hook（需在 useTopicMessages 之前，以注入 checkNowDebounced）
-	const { checkNowDebounced } = useAttachmentsPolling({
-		projectId: selectedProject?.id,
-		autoStart: false,
-		onAttachmentsChange: useCallback(({ tree, list }: { tree: any[]; list: any[] }) => {
-			// 统一处理 metadata，内部自闭环处理验证和返回逻辑
-			const processedData = AttachmentDataProcessor.processAttachmentData(
-				{ tree, list },
-				{ preserveList: true },
-			)
-			projectFilesStore.setWorkspaceFileTree(processedData.tree, {
-				list: processedData.list,
-				source: "TopicPage.polling",
-			})
-		}, []),
-		onError: useMemoizedFn((error: any, _projectId: string) => {
-			if (isCollaborationWorkspace(selectedWorkspace)) {
-				// 团队共享项目，如果权限不足，回到首页
-				handleNoPermissionCollaborationProject(error)
-				return
-			}
-		}),
-	})
-
 	useProjectAttachmentsChangeRealtime({
 		projectId: selectedProject?.id,
 		onFallbackError: useMemoizedFn((error: unknown) => {
@@ -561,7 +567,6 @@ function TopicPage({ pageVariant = "default" }: TopicPageDesktopProps) {
 	const { handlePullMoreMessage, isMessagesInitialLoading, isSelectedTopicMessagesReady } =
 		useTopicMessages({
 			selectedTopic,
-			checkNowDebounced,
 		})
 
 	useUpdateEffect(() => {

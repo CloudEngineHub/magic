@@ -1,10 +1,13 @@
-import { useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import { useCanvasModeUI, useCanvasSelectionUI } from "../../context/CanvasUIContext"
 import { useCanvas } from "../../context/CanvasContext"
 import { ElementTypeEnum, type ImageElement } from "../../canvas/types"
 import { GenerationStatus } from "../../types.magic"
 import { useImageOssSrc } from "../../hooks/useImageOssSrc"
 import { useCanvasEvent } from "../../hooks/useCanvasEvent"
+import MediaResourceFullscreenPreview, {
+	type MediaResourceFullscreenPreviewItem,
+} from "../MediaResourceFullscreenPreview"
 import ImageMessageEditorRender from "./ImageMessageEditorRender"
 import SecondEdit from "./SecondEdit"
 import { ImageElement as ImageElementClass } from "../../canvas/element/elements/ImageElement"
@@ -13,6 +16,8 @@ export default function ImageMessageEditor() {
 	const { selectedElements, isSelecting, isDragging, subElementTooltip } = useCanvasSelectionUI()
 	const { croppingElementId, extendingElementId, erasingElementId } = useCanvasModeUI()
 	const [retryEditingElementId, setRetryEditingElementId] = useState<string | null>(null)
+	const [previewingMediaResource, setPreviewingMediaResource] =
+		useState<MediaResourceFullscreenPreviewItem | null>(null)
 
 	const [targetElement] = selectedElements
 	const imageElement =
@@ -40,24 +45,40 @@ export default function ImageMessageEditor() {
 		}
 	}, [imageElement?.id, retryEditingElementId])
 
-	// 如果没有图片元素或正在选择元素或图片元素被锁定，则不显示图片编辑器, 或者正在裁剪、扩展、橡皮擦元素
-	if (
-		!imageElement ||
-		isSelecting ||
-		imageElement.locked ||
-		!!croppingElementId ||
-		!!extendingElementId ||
-		!!erasingElementId ||
-		!!subElementTooltip
-	)
+	const editorEligible =
+		!!imageElement &&
+		!isSelecting &&
+		!imageElement.locked &&
+		!croppingElementId &&
+		!extendingElementId &&
+		!erasingElementId &&
+		!subElementTooltip
+
+	const handleCloseMediaResourcePreview = useCallback(() => {
+		setPreviewingMediaResource(null)
+	}, [])
+
+	if (!editorEligible && !previewingMediaResource) {
 		return null
+	}
 
 	return (
-		<ActiveImageMessageEditor
-			imageElement={imageElement}
-			isDragging={isDragging}
-			retryEditingElementId={retryEditingElementId}
-		/>
+		<>
+			{editorEligible ? (
+				<ActiveImageMessageEditor
+					imageElement={imageElement}
+					isDragging={isDragging}
+					retryEditingElementId={retryEditingElementId}
+					onPreviewMediaResource={setPreviewingMediaResource}
+				/>
+			) : null}
+			{previewingMediaResource != null ? (
+				<MediaResourceFullscreenPreview
+					resource={previewingMediaResource}
+					onClose={handleCloseMediaResourcePreview}
+				/>
+			) : null}
+		</>
 	)
 }
 
@@ -65,12 +86,14 @@ interface ActiveImageMessageEditorProps {
 	imageElement: ImageElement
 	isDragging: boolean
 	retryEditingElementId: string | null
+	onPreviewMediaResource: (resource: MediaResourceFullscreenPreviewItem) => void
 }
 
 function ActiveImageMessageEditor({
 	imageElement,
 	isDragging,
 	retryEditingElementId,
+	onPreviewMediaResource,
 }: ActiveImageMessageEditorProps) {
 	const { canvas } = useCanvas()
 	const [hiddenAfterSubmit, setHiddenAfterSubmit] = useState(false)
@@ -89,6 +112,10 @@ function ActiveImageMessageEditor({
 		!hasResultImage &&
 		(imageElement.status === GenerationStatus.Pending ||
 			imageElement.status === GenerationStatus.Processing)
+	const hasTerminalImageGenerationState =
+		hasResultImage ||
+		imageElement.status === GenerationStatus.Completed ||
+		imageElement.status === GenerationStatus.Failed
 
 	const hasPendingImageTask =
 		!!imageElement.imageGenerationTaskMeta &&
@@ -96,11 +123,11 @@ function ActiveImageMessageEditor({
 		imageElement.status !== GenerationStatus.Failed
 
 	const isGenerating = useMemo(() => {
-		if (!canvas) return false
+		if (!canvas || hasTerminalImageGenerationState) return false
 		const imageInstance = canvas.elementManager.getElementInstance(imageElement.id)
 		if (!(imageInstance instanceof ImageElementClass)) return false
 		return imageInstance.isImageGenerating()
-	}, [canvas, imageElement.id])
+	}, [canvas, imageElement.id, hasTerminalImageGenerationState])
 
 	useEffect(() => {
 		setHiddenAfterSubmit(false)
@@ -156,13 +183,20 @@ function ActiveImageMessageEditor({
 				imageElement={imageElement}
 				autoFocus={isRetryEditing}
 				autoFocusAtDocumentEnd={isRetryEditing}
+				onPreviewMediaResource={onPreviewMediaResource}
 			/>
 		)
 	}
 
 	// 如果有结果图片且 ossSrc 已加载，则显示二次编辑
 	if (hasResultImage && hasOssSrc) {
-		return <SecondEdit key={imageElement.id} imageElement={imageElement} />
+		return (
+			<SecondEdit
+				key={imageElement.id}
+				imageElement={imageElement}
+				onPreviewMediaResource={onPreviewMediaResource}
+			/>
+		)
 	}
 
 	return null

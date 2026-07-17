@@ -7,7 +7,7 @@ import { Button } from "@/components/shadcn-ui/button"
 import { Skeleton } from "@/components/shadcn-ui/skeleton"
 import { cn } from "@/lib/utils"
 import ModeAvatar from "../../ModeAvatar"
-import { Plus } from "lucide-react"
+import { ChevronLeft, ChevronRight, Plus } from "lucide-react"
 import { RouteName } from "@/routes/constants"
 import useNavigate from "@/routes/hooks/useNavigate"
 import { useTranslation } from "react-i18next"
@@ -16,11 +16,56 @@ import { useCenteredHorizontalScroll } from "../hooks/useCenteredHorizontalScrol
 import superMagicModeService from "@/services/superMagic/SuperMagicModeService"
 import { GuideTourElementId } from "@/pages/superMagic/components/LazyGuideTour"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
+import PptModeSwitcherCard from "./PptModeSwitcherCard"
 
 interface ModeSwitcherProps {
 	role: TopicMode
 	onActionClick?: (modeIdentifier: TopicMode) => void
 	onPlaybookClick?: () => void
+}
+
+interface RoleSwitcherScrollControlProps {
+	direction: "left" | "right"
+	onClick: () => void
+}
+
+function RoleSwitcherScrollControl({ direction, onClick }: RoleSwitcherScrollControlProps) {
+	const isLeft = direction === "left"
+	const Icon = isLeft ? ChevronLeft : ChevronRight
+
+	return (
+		<div
+			className={cn(
+				"pointer-events-none absolute w-20 overflow-hidden",
+				isLeft ? "left-0" : "right-0",
+			)}
+		>
+			<div
+				className={cn(
+					"absolute inset-0",
+					isLeft
+						? "bg-[linear-gradient(to_right,_rgb(var(--background-rgb))_0%,_rgb(var(--background-rgb))_70%,_transparent_100%)]"
+						: "bg-[linear-gradient(to_left,_rgb(var(--background-rgb))_0%,_rgb(var(--background-rgb))_70%,_transparent_100%)]",
+				)}
+			/>
+			<div
+				className={cn(
+					"relative flex h-full items-center",
+					isLeft ? "justify-start pl-2" : "justify-end pr-2",
+				)}
+			>
+				<Button
+					type="button"
+					variant="outline"
+					size="icon"
+					className="pointer-events-auto !size-4 shrink-0 rounded-full border-muted-foreground/50 text-muted-foreground/50 shadow-xs [&_svg]:size-3"
+					onClick={onClick}
+				>
+					<Icon />
+				</Button>
+			</div>
+		</div>
+	)
 }
 
 function RoleSwitcher({ role, onActionClick }: ModeSwitcherProps) {
@@ -54,17 +99,40 @@ function RoleSwitcher({ role, onActionClick }: ModeSwitcherProps) {
 	return (
 		<div
 			id={GuideTourElementId.RoleSwitcher}
-			className="flex w-auto min-w-0 max-w-full items-center gap-2"
+			className="flex h-11 w-auto min-w-0 max-w-full items-end gap-2"
 			data-testid="role-switcher"
 		>
 			<HeadlessHorizontalScroll
-				className="min-w-0 flex-1"
+				className="-mt-8 h-[76px] min-w-0 flex-1 rounded-[20px] [&>div.absolute]:!top-auto [&>div.absolute]:bottom-0 [&>div.absolute]:z-20 [&>div.absolute]:h-11"
 				data-testid="role-switcher-mode-selector"
-				scrollContainerClassName="no-scrollbar flex min-w-0 items-center gap-2 overflow-x-auto overflow-y-hidden"
+				scrollContainerClassName="no-scrollbar flex h-full min-w-0 items-end gap-2 overflow-x-auto overflow-y-hidden"
 				scrollContainerRef={scrollContainerRef}
+				renderLeftControl={({ scroll }) => (
+					<RoleSwitcherScrollControl direction="left" onClick={() => scroll("left")} />
+				)}
+				renderRightControl={({ scroll }) => (
+					<RoleSwitcherScrollControl direction="right" onClick={() => scroll("right")} />
+				)}
 			>
 				{modeList.map((modeItem) => {
 					const isSelected = modeItem.mode.identifier === role
+					if (modeItem.mode.identifier === TopicMode.PPT) {
+						return (
+							<div
+								key={modeItem.mode.identifier}
+								ref={(element) => setItemRef(modeItem.mode.identifier, element)}
+								className="shrink-0"
+							>
+								<PptModeSwitcherCard
+									modeItem={modeItem}
+									isSelected={isSelected}
+									onSelect={() =>
+										onActionClick?.(modeItem.mode.identifier as TopicMode)
+									}
+								/>
+							</div>
+						)
+					}
 
 					return (
 						<div

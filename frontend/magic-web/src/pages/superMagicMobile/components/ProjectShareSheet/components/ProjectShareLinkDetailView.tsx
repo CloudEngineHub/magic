@@ -189,7 +189,7 @@ export default function ProjectShareLinkDetailView({
 			) : null}
 
 			<ProjectShareScrollSpacer
-				variant="dual"
+				variant={controller.canNativeShare ? "triple" : "dual"}
 				testId="project-share-sheet-detail-floating-bar"
 			/>
 		</div>

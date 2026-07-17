@@ -173,7 +173,18 @@ class ExportDocumentMarkdown(AbstractFileTool[ExportDocumentMarkdownParams], Wor
         extra["combined_path"] = combined_path_str
         extra["artifact_mode"] = "progressive"
         extra["structure"] = structure.to_dict()
-        return ToolResult(content=prepend_correction_note("\n".join(content_lines), correction_note), extra_info=extra)
+        data = self._build_sdk_data(
+            artifact_mode="progressive",
+            file_type=structure.file_type,
+            unit_type=structure.unit_type,
+            total_units=structure.total_units,
+            output_dir=output_dir_str,
+            combined_path=combined_path_str,
+            index_path=extra["index_path"],
+            outline_path=extra["outline_path"],
+            reading_state_path=f"{output_dir_str}/document.reading_state.json",
+        )
+        return ToolResult(content=prepend_correction_note("\n".join(content_lines), correction_note), data=data, extra_info=extra)
 
     async def _write_existing_progressive_export(
         self,
@@ -200,6 +211,13 @@ class ExportDocumentMarkdown(AbstractFileTool[ExportDocumentMarkdownParams], Wor
         ]
         return ToolResult(
             content=prepend_correction_note("\n".join(content_lines), correction_note),
+            data=self._build_sdk_data(
+                artifact_mode="progressive",
+                output_dir=output_dir_str,
+                combined_path=combined_path_str,
+                index_path=f"{output_dir_str}/document.index.json",
+                outline_path=f"{output_dir_str}/document.outline.md",
+            ),
             extra_info={
                 "chunks": [asdict(chunk) for chunk in chunks],
                 "index_path": f"{output_dir_str}/document.index.json",
@@ -238,6 +256,7 @@ class ExportDocumentMarkdown(AbstractFileTool[ExportDocumentMarkdownParams], Wor
             await MarkdownWriter.write_combined(combined_path, extraction.chunks, input_path.stem)
             await self._copy_simple_optional_dir(temp_dir, output_dir, ASSETS_DIRNAME)
             await self._copy_simple_optional_dir(temp_dir, output_dir, VISUAL_RESULTS_DIRNAME)
+            structure = await DocumentIndexer().build_simple_from_extraction(input_path, output_dir, extraction, combined_path)
         finally:
             if await async_exists(temp_dir):
                 await async_rmtree(temp_dir)
@@ -253,6 +272,7 @@ class ExportDocumentMarkdown(AbstractFileTool[ExportDocumentMarkdownParams], Wor
             f"- Output directory: `{output_dir}`",
             f"- Main Markdown: `{combined_path}`",
             f"- Chunk count: {len(extraction.chunks)}",
+            f"- Index: `{output_dir / INDEX_FILENAME}`",
         ]
         if file_type == "spreadsheet":
             content_lines.append("- Note: spreadsheet files may need targeted sheet/range extraction for large tables.")
@@ -263,16 +283,33 @@ class ExportDocumentMarkdown(AbstractFileTool[ExportDocumentMarkdownParams], Wor
         extra["artifact_mode"] = "simple"
         extra["combined_path"] = str(combined_path)
         extra["main_markdown_path"] = str(combined_path)
-        extra["index_path"] = None
+        extra["index_path"] = str(output_dir / INDEX_FILENAME)
         extra["outline_path"] = None
         extra["reading_state_path"] = None
-        return ToolResult(content=prepend_correction_note("\n".join(content_lines), correction_note), extra_info=extra)
+        extra["structure"] = structure.to_dict()
+        data = self._build_sdk_data(
+            artifact_mode="simple",
+            file_type=structure.file_type,
+            unit_type=structure.unit_type,
+            total_units=structure.total_units,
+            output_dir=str(output_dir),
+            combined_path=str(combined_path),
+            main_markdown_path=str(combined_path),
+            index_path=str(output_dir / INDEX_FILENAME),
+        )
+        return ToolResult(content=prepend_correction_note("\n".join(content_lines), correction_note), data=data, extra_info=extra)
 
     @staticmethod
     async def _copy_simple_optional_dir(temp_dir: Path, output_dir: Path, dirname: str) -> None:
         source = temp_dir / dirname
         if await async_exists(source) and await async_is_dir(source):
             await async_copytree(source, output_dir / dirname, on_conflict=CopyConflict.OVERWRITE)
+
+    @staticmethod
+    def _build_sdk_data(**values: Any) -> dict[str, Any]:
+        """构建给 SDK 代码片段读取的轻量结构化结果。"""
+
+        return {key: value for key, value in values.items() if value is not None}
 
     async def _load_existing_chunks_for_export(
         self,

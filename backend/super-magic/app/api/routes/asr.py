@@ -553,50 +553,18 @@ async def finish_asr_task(
         logger.info(f"📦 [asrmerge] finish 请求体: {request.model_dump()}")
         workspace_dir = request.workspace_dir or ".workspace"
 
+        # 1. 查询任务状态。已完成/已失败/不存在的任务直接返回，不触发分片扫描。
+        error_response, existing_task = await _get_task_and_check_completed_or_error(task_key)
+        if error_response:
+            return error_response
+
+        # 类型断言：如果 error_response 为 None，则 existing_task 一定不为 None
+        assert existing_task is not None, "existing_task should not be None when error_response is None"
+
         effective_file_shard_count = await _resolve_finish_file_shard_count(request.audio, workspace_dir)
         logger.info(
             f"[asrmerge] finish effective_file_shard_count={effective_file_shard_count}, task_key={task_key}"
         )
-
-        # 1. 查询任务状态
-        task_manager = AsrMergeTaskManager.instance()
-        existing_task = await task_manager.get_task(task_key)
-        if not existing_task:
-            logger.warning(f"[asrmerge] 任务不存在: {task_key}")
-            return create_error_response(
-                message=f"任务不存在: {task_key}",
-                data={"task_key": task_key},
-                code=4004,
-            )
-
-        # 1.1 成功（completed/finished）才直接返回
-        if existing_task.status in [AsrTaskStatus.COMPLETED.value, AsrTaskStatus.FINISHED.value]:
-            response_data = _build_task_response(existing_task)
-            logger.info(f"📤 [asrmerge] 任务已完成(幂等finish): task_key={task_key}, status={existing_task.status}")
-            return create_success_response(message="音频合并已完成", data=response_data.model_dump())
-
-        # 1.2 失败/异常：进入重试流程（最多 10 次）
-        if existing_task.status == AsrTaskStatus.ERROR.value:
-            ok, retry_count, max_retries = await task_manager.request_retry(task_key)
-            if not ok:
-                # 达到重试上限：返回错误
-                logger.error(
-                    f"❌ [asrmerge] task_key={task_key} 重试次数已达上限，拒绝继续重试: "
-                    f"{retry_count}/{max_retries} error_message={existing_task.error_message}"
-                )
-                return create_error_response(
-                    message=existing_task.error_message or f"任务失败且已达最大重试次数({max_retries})",
-                    data={
-                        "task_key": task_key,
-                        "retry_count": retry_count,
-                        "max_retries": max_retries,
-                        "error_message": existing_task.error_message,
-                    },
-                )
-            # 重试已触发：读取最新任务状态（error 已被清空并拉回 waiting）
-            refreshed = await task_manager.get_task(task_key)
-            if refreshed:
-                existing_task = refreshed
 
         # 2. 原子性地保存配置并标记上传完成（解决多次更新的原子性问题）
         success = await AsrMergeTaskManager.instance().finalize_task_config(

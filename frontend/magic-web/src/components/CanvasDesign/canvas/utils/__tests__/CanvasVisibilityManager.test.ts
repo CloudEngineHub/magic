@@ -238,6 +238,263 @@ describe("CanvasVisibilityManager video load requests", () => {
 })
 
 describe("CanvasVisibilityManager image load requests", () => {
+	it("downgrades full candidates to preview while viewport movement is active", () => {
+		const manager = Object.create(CanvasVisibilityManager.prototype) as CanvasVisibilityManager
+		const deferFullImageCandidateIfNeeded = (
+			manager as unknown as {
+				deferFullImageCandidateIfNeeded: (
+					candidate: ImageCandidate,
+					shouldDeferFullImageLoads: boolean,
+				) => ImageCandidate
+			}
+		).deferFullImageCandidateIfNeeded
+		const candidate = {
+			...createImageCandidate("image-1", "visible"),
+			variant: "full" as ImageResourceVariant,
+			screenLongEdge: 2000,
+		}
+
+		expect(deferFullImageCandidateIfNeeded.call(manager, candidate, true)).toEqual(
+			expect.objectContaining({
+				variant: "preview",
+				screenLongEdge: 2000,
+			}),
+		)
+		expect(deferFullImageCandidateIfNeeded.call(manager, candidate, false)).toEqual(
+			expect.objectContaining({
+				variant: "full",
+			}),
+		)
+	})
+
+	it("limits admitted full candidates per refresh", () => {
+		const manager = Object.create(
+			CanvasVisibilityManager.prototype,
+		) as CanvasVisibilityManager & {
+			canvas: {
+				imageResourceManager: {
+					getFullAdmissionSnapshot: () => {
+						fullDecodedBytes: number
+						fullLoadingCount: number
+						fullBudgetBytes: number
+					}
+				}
+			}
+			admitOrDowngradeFullCandidates: (candidates: ImageCandidate[]) => ImageCandidate[]
+		}
+		manager.canvas = {
+			imageResourceManager: {
+				getFullAdmissionSnapshot: () => ({
+					fullDecodedBytes: 0,
+					fullLoadingCount: 0,
+					fullBudgetBytes: 10_000,
+				}),
+			},
+		}
+		const candidates = ["image-1", "image-2", "image-3", "image-4", "image-5"].map((id) => ({
+			...createImageCandidate(id, "visible"),
+			variant: "full" as ImageResourceVariant,
+		}))
+
+		const admitted = manager.admitOrDowngradeFullCandidates(candidates)
+
+		expect(admitted.map((candidate) => candidate.variant)).toEqual([
+			"full",
+			"full",
+			"full",
+			"full",
+			"preview",
+		])
+	})
+
+	it("admits viewport-centered full candidates before larger distant full candidates", () => {
+		const manager = Object.create(
+			CanvasVisibilityManager.prototype,
+		) as CanvasVisibilityManager & {
+			canvas: {
+				imageResourceManager: {
+					getFullAdmissionSnapshot: () => {
+						fullDecodedBytes: number
+						fullLoadingCount: number
+						fullBudgetBytes: number
+					}
+				}
+			}
+			admitOrDowngradeFullCandidates: (candidates: ImageCandidate[]) => ImageCandidate[]
+		}
+		manager.canvas = {
+			imageResourceManager: {
+				getFullAdmissionSnapshot: () => ({
+					fullDecodedBytes: 0,
+					fullLoadingCount: 0,
+					fullBudgetBytes: 10_000,
+				}),
+			},
+		}
+		const farLarge = {
+			...createImageCandidate("image-1", "visible"),
+			variant: "full" as ImageResourceVariant,
+			screenArea: 100_000,
+			screenLongEdge: 1000,
+			distanceToViewportCenter: 500,
+		}
+		const centeredSmall = {
+			...createImageCandidate("image-2", "visible"),
+			variant: "full" as ImageResourceVariant,
+			screenArea: 100,
+			screenLongEdge: 100,
+			distanceToViewportCenter: 0,
+		}
+		const nearMedium = {
+			...createImageCandidate("image-3", "visible"),
+			variant: "full" as ImageResourceVariant,
+			screenArea: 10_000,
+			screenLongEdge: 500,
+			distanceToViewportCenter: 20,
+		}
+		const nearLarge = {
+			...createImageCandidate("image-4", "visible"),
+			variant: "full" as ImageResourceVariant,
+			screenArea: 20_000,
+			screenLongEdge: 700,
+			distanceToViewportCenter: 30,
+		}
+		const nearSmall = {
+			...createImageCandidate("image-5", "visible"),
+			variant: "full" as ImageResourceVariant,
+			screenArea: 200,
+			screenLongEdge: 120,
+			distanceToViewportCenter: 40,
+		}
+
+		const admitted = manager.admitOrDowngradeFullCandidates([
+			farLarge,
+			centeredSmall,
+			nearMedium,
+			nearLarge,
+			nearSmall,
+		])
+
+		expect(admitted.map((candidate) => candidate.variant)).toEqual([
+			"preview",
+			"full",
+			"full",
+			"full",
+			"full",
+		])
+	})
+
+	it("allows one top full candidate when the full budget is reached", () => {
+		const manager = Object.create(
+			CanvasVisibilityManager.prototype,
+		) as CanvasVisibilityManager & {
+			canvas: {
+				imageResourceManager: {
+					getFullAdmissionSnapshot: () => {
+						fullDecodedBytes: number
+						fullLoadingCount: number
+						fullBudgetBytes: number
+					}
+				}
+			}
+			admitOrDowngradeFullCandidates: (candidates: ImageCandidate[]) => ImageCandidate[]
+		}
+		manager.canvas = {
+			imageResourceManager: {
+				getFullAdmissionSnapshot: () => ({
+					fullDecodedBytes: 10_000,
+					fullLoadingCount: 0,
+					fullBudgetBytes: 10_000,
+				}),
+			},
+		}
+		const candidates = ["image-1", "image-2"].map((id) => ({
+			...createImageCandidate(id, "visible"),
+			variant: "full" as ImageResourceVariant,
+		}))
+
+		const admitted = manager.admitOrDowngradeFullCandidates(candidates)
+
+		expect(admitted.map((candidate) => candidate.variant)).toEqual(["full", "preview"])
+	})
+
+	it("downgrades full candidates when full loads are already saturated", () => {
+		const manager = Object.create(
+			CanvasVisibilityManager.prototype,
+		) as CanvasVisibilityManager & {
+			canvas: {
+				imageResourceManager: {
+					getFullAdmissionSnapshot: () => {
+						fullDecodedBytes: number
+						fullLoadingCount: number
+						fullBudgetBytes: number
+					}
+				}
+			}
+			admitOrDowngradeFullCandidates: (candidates: ImageCandidate[]) => ImageCandidate[]
+		}
+		manager.canvas = {
+			imageResourceManager: {
+				getFullAdmissionSnapshot: () => ({
+					fullDecodedBytes: 0,
+					fullLoadingCount: 4,
+					fullBudgetBytes: 10_000,
+				}),
+			},
+		}
+		const candidates = ["image-1", "image-2"].map((id) => ({
+			...createImageCandidate(id, "visible"),
+			variant: "full" as ImageResourceVariant,
+		}))
+
+		const admitted = manager.admitOrDowngradeFullCandidates(candidates)
+
+		expect(admitted.map((candidate) => candidate.variant)).toEqual(["preview", "preview"])
+	})
+
+	it("allows idle full refreshes to bypass the rapid variant switch cooldown", () => {
+		const manager = Object.create(
+			CanvasVisibilityManager.prototype,
+		) as CanvasVisibilityManager & {
+			lastRequestedLoadState: Map<
+				string,
+				{
+					priority: ImageResourceLoadPriority
+					variant: ImageResourceVariant
+					requestedAt: number
+				}
+			>
+			shouldRequestImageCandidate: (
+				candidate: ImageCandidate,
+				options?: { reason?: string },
+			) => boolean
+			scheduleRefresh: ReturnType<typeof vi.fn>
+		}
+		manager.lastRequestedLoadState = new Map([
+			[
+				"image-1",
+				{
+					priority: "visible",
+					variant: "preview",
+					requestedAt: performance.now(),
+				},
+			],
+		])
+		manager.scheduleRefresh = vi.fn()
+
+		expect(
+			manager.shouldRequestImageCandidate(
+				{
+					...createImageCandidate("image-1", "visible"),
+					variant: "full",
+					screenLongEdge: 2000,
+				},
+				{ reason: "viewport:idle-full" },
+			),
+		).toBe(true)
+		expect(manager.scheduleRefresh).not.toHaveBeenCalled()
+	})
+
 	it("passes display target metadata to image resource loads", () => {
 		const emitImageResourceDisplayTarget = vi.fn()
 		const loadResource = vi.fn()
@@ -257,11 +514,13 @@ describe("CanvasVisibilityManager image load requests", () => {
 				}
 			>
 			requestImageLoad: (candidate: ImageCandidate, reason: string, force?: boolean) => void
+			viewportResourceEpoch: number
 		}
 		manager.canvas = {
 			imageResourceManager: { emitImageResourceDisplayTarget, loadResource },
 		}
 		manager.lastRequestedLoadState = new Map()
+		manager.viewportResourceEpoch = 7
 		const requestImageLoad = manager.requestImageLoad.bind(manager)
 
 		requestImageLoad(
@@ -289,6 +548,51 @@ describe("CanvasVisibilityManager image load requests", () => {
 			priority: "visible",
 			displayTargetElementId: "image-1",
 			displayTargetReason: "viewport:scale",
+			viewportEpoch: 7,
+			dropIfViewportStale: true,
+		})
+	})
+
+	it("does not bind non-viewport image load requests to a viewport epoch", () => {
+		const emitImageResourceDisplayTarget = vi.fn()
+		const loadResource = vi.fn()
+		const manager = Object.create(CanvasVisibilityManager.prototype) as {
+			canvas: {
+				imageResourceManager: {
+					emitImageResourceDisplayTarget: typeof emitImageResourceDisplayTarget
+					loadResource: typeof loadResource
+				}
+			}
+			lastRequestedLoadState: Map<
+				string,
+				{
+					priority: ImageResourceLoadPriority
+					variant: ImageResourceVariant
+					requestedAt: number
+				}
+			>
+			requestImageLoad: (candidate: ImageCandidate, reason: string, force?: boolean) => void
+			viewportResourceEpoch: number
+		}
+		manager.canvas = {
+			imageResourceManager: { emitImageResourceDisplayTarget, loadResource },
+		}
+		manager.lastRequestedLoadState = new Map()
+		manager.viewportResourceEpoch = 7
+
+		manager.requestImageLoad(
+			{
+				...createImageCandidate("image-1", "critical"),
+				path: "./images/a.png",
+			},
+			"selection:container",
+		)
+
+		expect(loadResource).toHaveBeenCalledWith("./images/a.png", {
+			variant: "preview",
+			priority: "critical",
+			displayTargetElementId: "image-1",
+			displayTargetReason: "selection:container",
 		})
 	})
 
@@ -632,7 +936,7 @@ describe("CanvasVisibilityManager decoded image retention hints", () => {
 				performance.now(),
 			)
 
-			vi.advanceTimersByTime(1499)
+			vi.advanceTimersByTime(4999)
 			expect(manager.getDecodedImageRetentionSnapshot()).toHaveLength(1)
 
 			vi.advanceTimersByTime(2)
@@ -644,6 +948,27 @@ describe("CanvasVisibilityManager decoded image retention hints", () => {
 })
 
 describe("CanvasVisibilityManager content layer hit graph suppression", () => {
+	it("schedules an idle full refresh after viewport movement settles", () => {
+		vi.useFakeTimers()
+		try {
+			const { handlers, manager } = createConstructedManager()
+			const scheduleRefresh = vi.fn()
+			;(manager as unknown as { scheduleRefresh: typeof scheduleRefresh }).scheduleRefresh =
+				scheduleRefresh
+
+			handlers.get("viewport:pan")?.[0]?.({})
+
+			expect(scheduleRefresh).toHaveBeenCalledWith("viewport:pan", false)
+			vi.advanceTimersByTime(239)
+			expect(scheduleRefresh).not.toHaveBeenCalledWith("viewport:idle-full", true)
+			vi.advanceTimersByTime(1)
+			expect(scheduleRefresh).toHaveBeenCalledWith("viewport:idle-full", true)
+			manager.destroy()
+		} finally {
+			vi.useRealTimers()
+		}
+	})
+
 	it("disables content layer listening during viewport movement and restores it after idle", () => {
 		vi.useFakeTimers()
 		try {
@@ -840,6 +1165,8 @@ describe("CanvasVisibilityManager immediate media loading", () => {
 			}
 			registeredImages: Map<string, { elementId: string; path: string }>
 			requestImmediateImageLoad: typeof requestImmediateImageLoad
+			viewportResourceEpoch: number
+			isViewportResourceEpochCurrent: (epoch: number) => boolean
 		}
 		manager.canvas = {
 			elementManager: {
@@ -853,6 +1180,7 @@ describe("CanvasVisibilityManager immediate media loading", () => {
 			["image-2", { elementId: "image-2", path: "./images/b.png" }],
 			["direct-image", { elementId: "direct-image", path: "./images/direct.png" }],
 		])
+		manager.viewportResourceEpoch = 0
 		manager.requestImmediateImageLoad = requestImmediateImageLoad
 		return { manager, requestImmediateImageLoad }
 	}
@@ -920,6 +1248,25 @@ describe("CanvasVisibilityManager immediate media loading", () => {
 			reason: "selection",
 			priority: "critical",
 		})
+	})
+
+	it("advances the viewport resource epoch for viewport focus requests", () => {
+		const { manager } = createImmediateMediaManager({
+			"direct-image": {
+				id: "direct-image",
+				type: ElementTypeEnum.Image,
+				src: "./images/direct.png",
+			},
+		})
+
+		expect(manager.isViewportResourceEpochCurrent(0)).toBe(true)
+
+		manager.requestImmediateMediaLoadForElements(["direct-image"], {
+			reason: "viewport:focus-elements",
+		})
+
+		expect(manager.isViewportResourceEpochCurrent(0)).toBe(false)
+		expect(manager.isViewportResourceEpochCurrent(1)).toBe(true)
 	})
 })
 

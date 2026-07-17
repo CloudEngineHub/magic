@@ -22,6 +22,11 @@
 	"mainAgentPrompt": "Main Agent Prompt",
 	"maintainDesc": "Maintenance Description",
 	"maintainStatus": "Maintenance Status",
+	"maintainType": "Maintenance Type",
+	"maintenanceTypeOptions": {
+		"fullSiteShutdown": "Full Site Shutdown",
+		"globalNotice": "Global Notice"
+	},
 	"otherInfo": "Other Information",
 	"platformDefaultLanguage": "Platform Default Language",
 	"platformDefaultLanguageTip": "The language set is the default language when the platform is initialized. All functions that support multiple languages will use this default language",

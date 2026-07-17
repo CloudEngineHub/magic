@@ -103,6 +103,10 @@
 	"skillsLibrary": {
 		"title": "技能库"
 	},
+	"slidesTemplates": {
+		"templateCount": "{{count}} 套",
+		"title": "PPT 模板"
+	},
 	"superLobster": {
 		"card": {
 			"betaAccess": "限量邀测中",

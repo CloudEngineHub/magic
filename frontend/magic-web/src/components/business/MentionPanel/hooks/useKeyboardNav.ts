@@ -6,6 +6,8 @@ import { KeyboardAction, KeyboardEventHandler } from "../types"
 interface UseKeyboardNavProps {
 	onSelectPrevious: () => void
 	onSelectNext: () => void
+	onSelectLeft?: () => void
+	onSelectRight?: () => void
 	onConfirm: () => void
 	onBeforeConfirm?: () => boolean | void
 	onMetaEnter?: () => boolean | void
@@ -32,6 +34,8 @@ export function useKeyboardNav(props: UseKeyboardNavProps): UseKeyboardNavReturn
 	const {
 		onSelectPrevious,
 		onSelectNext,
+		onSelectLeft,
+		onSelectRight,
 		onConfirm,
 		onBeforeConfirm,
 		onMetaEnter,
@@ -52,6 +56,8 @@ export function useKeyboardNav(props: UseKeyboardNavProps): UseKeyboardNavReturn
 	// Memoized action handlers
 	const handleSelectPrevious = useMemoizedFn(onSelectPrevious)
 	const handleSelectNext = useMemoizedFn(onSelectNext)
+	const handleSelectLeft = useMemoizedFn(() => onSelectLeft?.())
+	const handleSelectRight = useMemoizedFn(() => onSelectRight?.())
 	const handleConfirm = useMemoizedFn(() => {
 		const now = Date.now()
 		if (now - lastConfirmTimeRef.current < confirmDebounceDelay) {
@@ -128,6 +134,22 @@ export function useKeyboardNav(props: UseKeyboardNavProps): UseKeyboardNavReturn
 				return
 			}
 
+			let horizontalSelectHandler: (() => void) | null = null
+			if (key === "ArrowLeft" && onSelectLeft) {
+				horizontalSelectHandler = handleSelectLeft
+			} else if (key === "ArrowRight" && onSelectRight) {
+				horizontalSelectHandler = handleSelectRight
+			}
+
+			if (horizontalSelectHandler) {
+				if (preventDefault) {
+					event.preventDefault()
+					event.stopPropagation()
+				}
+				horizontalSelectHandler()
+				return
+			}
+
 			// Get action from keyboard mapping
 			const action = KEYBOARD_MAPPING[key]
 			if (!action) return
@@ -145,7 +167,17 @@ export function useKeyboardNav(props: UseKeyboardNavProps): UseKeyboardNavReturn
 			// Execute handler
 			handler()
 		},
-		[enabled, preventDefault, actionHandlers, handleMetaEnter, onMetaEnter],
+		[
+			enabled,
+			preventDefault,
+			actionHandlers,
+			handleMetaEnter,
+			onMetaEnter,
+			onSelectLeft,
+			onSelectRight,
+			handleSelectLeft,
+			handleSelectRight,
+		],
 	)
 
 	// Add global keyboard event listener

@@ -1,4 +1,4 @@
-import { useCallback, useMemo, type MouseEvent, lazy } from "react"
+import { useCallback, useMemo, type MouseEvent, lazy, Suspense } from "react"
 import { observer } from "mobx-react-lite"
 import DefaultTool from "./tools/DefaultTool"
 import KnowledgeSearchTool from "./tools/KnowledgeSearchTool"
@@ -187,16 +187,18 @@ export const ToolCall = observer(function ToolCall(props: ToolCallProps) {
 
 	if (toolCall?.function?.name === "ask_user") {
 		return (
-			<AskUserToolCall
-				toolData={toolData}
-				loading={!toolResponse}
-				classNames={classNames}
-				selectedTopic={selectedTopic}
-				isShare={isShare}
-				onSelectDetail={onSelectDetail}
-				onMouseEnter={onMouseEnter}
-				onMouseLeave={onMouseLeave}
-			/>
+			<Suspense fallback={null}>
+				<AskUserToolCall
+					toolData={toolData}
+					loading={!toolResponse}
+					classNames={classNames}
+					selectedTopic={selectedTopic}
+					isShare={isShare}
+					onSelectDetail={onSelectDetail}
+					onMouseEnter={onMouseEnter}
+					onMouseLeave={onMouseLeave}
+				/>
+			</Suspense>
 		)
 	}
 	if (toolCall?.function?.name === "plan") {

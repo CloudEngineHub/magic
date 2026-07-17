@@ -98,7 +98,7 @@ class AgentDomainService
         $this->logger = $loggerFactory->get('sandbox');
     }
 
-    public function buildInitAgentContext(DataIsolation $dataIsolation, ProjectEntity $projectEntity, TopicEntity $topicEntity, TaskEntity $taskEntity, string $sandboxId = '', bool $skipInitMessage = false, array $memories = [])
+    public function buildInitAgentContext(DataIsolation $dataIsolation, ProjectEntity $projectEntity, TopicEntity $topicEntity, TaskEntity $taskEntity, string $sandboxId = '', bool $skipInitMessage = false, array $memories = [], array $extraSubscriptionConfigs = [])
     {
         if (empty($sandboxId)) {
             // 默认使用话题id
@@ -113,7 +113,7 @@ class AgentDomainService
         $agentInitContext->setType(MessageType::Init->value);
         // 设置对象存储的 sts token
         $projectDir = WorkDirectoryUtil::getRootDir($dataIsolation->getCurrentUserId(), $projectEntity->getId());
-        $stsConfig = di(FileAppService::class)->getStsTemporaryCredentialV2(
+        $stsConfig = di(FileAppService::class)->getDualEndpointStsCredentialV2(
             $projectEntity->getUserOrganizationCode(),
             StorageBucketType::SandBox->value,
             $projectDir,
@@ -121,15 +121,22 @@ class AgentDomainService
             false
         );
         $agentInitContext->setUploadConfig($stsConfig);
-        // 设置消息回调接口
-        $subscriptionConfig = [
+        // 设置消息回调接口（数组格式，支持多个订阅目标）
+        $systemSubscriptionItem = [
             'method' => 'POST',
             'url' => config('super-magic.sandbox.callback_host', '') . '/api/v1/super-agent/tasks/deliver-message',
+            'auth_scheme' => 'header_token',
             'headers' => [
                 'token' => config('super-magic.sandbox.token', ''),
             ],
         ];
-        $agentInitContext->setMessageSubscriptionConfig($subscriptionConfig);
+        if (count($extraSubscriptionConfigs) > 0) {
+            $agentInitContext->setMessageSubscriptionConfig(
+                array_merge([$systemSubscriptionItem], $extraSubscriptionConfigs)
+            );
+        } else {
+            $agentInitContext->setMessageSubscriptionConfig($systemSubscriptionItem);
+        }
         // 设置 sts refresh 接口
         $refreshConfig = [
             'method' => 'POST',

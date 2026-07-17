@@ -1,0 +1,115 @@
+<?php
+
+declare(strict_types=1);
+/**
+ * Copyright (c) The Magic , Distributed under the software license
+ */
+
+namespace App\Interfaces\SlidesTemplate\DTO\Request;
+
+use Hyperf\Validation\Request\FormRequest;
+
+use function Hyperf\Translation\__;
+
+class AdminQuerySlidesTemplateRequest extends FormRequest
+{
+    public function authorize(): bool
+    {
+        return true;
+    }
+
+    public function rules(): array
+    {
+        return [
+            'page' => 'nullable|integer|min:1',
+            'page_size' => 'nullable|integer|min:1|max:200',
+            'keyword' => 'nullable|string|max:100',
+            'code' => 'nullable|string|max:64',
+            'category_code' => 'nullable|string|max:64',
+            'status' => 'nullable|integer|in:0,1',
+            'tag_codes' => 'nullable|array',
+            'tag_codes.*' => 'string|max:64|regex:/^[a-z0-9]+(-[a-z0-9]+)*$/',
+            'tag_match' => 'nullable|string|in:any,all',
+        ];
+    }
+
+    public function messages(): array
+    {
+        return [
+            'page.integer' => __('slides_template.page_integer'),
+            'page.min' => __('slides_template.page_min'),
+            'page_size.integer' => __('slides_template.page_size_integer'),
+            'page_size.min' => __('slides_template.page_size_min'),
+            'page_size.max' => __('slides_template.page_size_max'),
+            'keyword.max' => __('slides_template.keyword_max'),
+            'code.max' => __('slides_template.code_max'),
+            'category_code.max' => __('slides_template.category_code_max'),
+            'status.in' => __('slides_template.status_in'),
+            'tag_codes.array' => __('slides_template.tag_codes_array'),
+            'tag_codes.*.string' => __('slides_template.tag_codes_string'),
+            'tag_codes.*.max' => __('slides_template.tag_code_max'),
+            'tag_codes.*.regex' => __('slides_template.tag_code_regex'),
+            'tag_match.in' => __('slides_template.tag_match_in'),
+        ];
+    }
+
+    public function getPage(): int
+    {
+        return (int) $this->input('page', 1);
+    }
+
+    public function getPageSize(): int
+    {
+        return (int) $this->input('page_size', 20);
+    }
+
+    public function getKeyword(): ?string
+    {
+        $keyword = trim((string) $this->input('keyword', ''));
+        return $keyword === '' ? null : $keyword;
+    }
+
+    public function getCode(): ?string
+    {
+        $code = trim((string) $this->input('code', ''));
+        return $code === '' ? null : $code;
+    }
+
+    public function getCategoryCode(): ?string
+    {
+        $categoryCode = trim((string) $this->input('category_code', ''));
+        return $categoryCode === '' ? null : $categoryCode;
+    }
+
+    public function getStatus(): ?int
+    {
+        $status = $this->input('status');
+        return $status === null || $status === '' ? null : (int) $status;
+    }
+
+    public function getTagCodes(): array
+    {
+        $tagCodes = $this->input('tag_codes', []);
+        if (! is_array($tagCodes)) {
+            return [];
+        }
+
+        $result = [];
+        foreach ($tagCodes as $tagCode) {
+            if (! is_string($tagCode)) {
+                continue;
+            }
+            $tagCode = trim($tagCode);
+            if ($tagCode !== '') {
+                $result[$tagCode] = $tagCode;
+            }
+        }
+        return array_values($result);
+    }
+
+    public function getTagMatch(): string
+    {
+        $tagMatch = trim((string) $this->input('tag_match', 'any'));
+        return in_array($tagMatch, ['any', 'all'], true) ? $tagMatch : 'any';
+    }
+}

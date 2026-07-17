@@ -20,24 +20,46 @@ import { PLUGIN_WINDOW_MARGIN } from "./constants"
 import type { PluginFileAsset, PluginFilePickerRequest } from "./types"
 import { clampPluginPanelHeight } from "./position"
 import { resolvePluginResource, getErrorMessage } from "./resourceUtils"
-import { pickPluginFiles } from "./fileAssets"
+import { pickPluginFiles, resolvePluginFileAssets } from "./fileAssets"
+import { readPluginCanvasClipboard } from "./readPluginCanvasClipboard"
 import { generatePluginImages, getPluginImageModels } from "./imageGeneration"
 import { completePluginImagePrompt } from "./imagePromptCompletion"
-import {
-	resolvePluginStorageKey,
-	resolveSharedGenerationConfigStorageKey,
-} from "./pluginStorage"
+import { resolvePluginStorageKey, resolveSharedGenerationConfigStorageKey } from "./pluginStorage"
 import { validatePluginFetchBlobUrl } from "./pluginFetchBlob"
+import {
+	hydratePluginFileAssetSources,
+	registerPluginClipboardSourceElements,
+	registerPluginFileAssetSources,
+	type PluginSourceElementMap,
+} from "./pluginSourceElements"
 
 interface UsePluginRuntimeBridgeParams {
+	/* 是否正在等待本地文件对话框 */
 	awaitingLocalFileDialogRef: MutableRefObject<boolean>
+	/** 画布 */
 	canvas: Canvas
+	/** 通道 token */
 	channelToken: string
+	/** 文件选择器请求引用 */
 	filePickerRequestRef: MutableRefObject<PluginFilePickerRequest | null>
+	/** iframe 引用 */
 	iframeRef: RefObject<HTMLIFrameElement | null>
+	/** 插件 */
 	plugin: CanvasDesignPlugin
+	/** 插件窗口引用 */
 	pluginWindowRef: RefObject<HTMLDivElement | null>
+	/** 插件 iframe 上报画布图片拖拽投放目标时，由 PluginWindow 透传给专门的拖拽 hook */
+	onCanvasAssetDragTarget?: (
+		target: Extract<
+			PluginRuntimeMessage,
+			{ type: "magic-canvas-plugin:canvas-asset-drag-target" }
+		>,
+	) => void
+	/** 设置文件选择器请求 */
 	setFilePickerRequest: Dispatch<SetStateAction<PluginFilePickerRequest | null>>
+	/** 插件来源元素映射 */
+	sourceElementByAssetKeyRef: MutableRefObject<PluginSourceElementMap>
+	/** 设置框架高度 */
 	setFrameHeight: Dispatch<SetStateAction<number>>
 }
 
@@ -49,7 +71,9 @@ export function usePluginRuntimeBridge({
 	iframeRef,
 	plugin,
 	pluginWindowRef,
+	onCanvasAssetDragTarget,
 	setFilePickerRequest,
+	sourceElementByAssetKeyRef,
 	setFrameHeight,
 }: UsePluginRuntimeBridgeParams) {
 	useEffect(() => {
@@ -161,6 +185,12 @@ export function usePluginRuntimeBridge({
 				return
 			}
 
+			if (data.type === "magic-canvas-plugin:canvas-asset-drag-target") {
+				// 该消息是拖拽过程中的高频状态同步，交给外部拖拽 hook 维护当前 drop 目标。
+				onCanvasAssetDragTarget?.(data)
+				return
+			}
+
 			if (data.type === "magic-canvas-plugin:get-image-models") {
 				void getPluginImageModels(canvas).then(
 					(models) => {
@@ -182,7 +212,10 @@ export function usePluginRuntimeBridge({
 			}
 
 			if (data.type === "magic-canvas-plugin:generate-and-place") {
-				void generatePluginImages(canvas, data.params).then(
+				// 生成落点需要知道 reference 对应哪张画布图，这里把窗口级来源映射交给生成模块解析。
+				void generatePluginImages(canvas, data.params, {
+					sourceElementByAssetKey: sourceElementByAssetKeyRef.current,
+				}).then(
 					(result) => {
 						postPluginMessage({
 							type: "magic-canvas-plugin:generate-and-place-result",
@@ -242,10 +275,69 @@ export function usePluginRuntimeBridge({
 				return
 			}
 
+			if (data.type === "magic-canvas-plugin:resolve-file-assets") {
+				void resolvePluginFileAssets(canvas, data.files, data.options).then(
+					(files) => {
+						// resolve 过程会把插件传入的 path 转成新的 asset，补回来源元素后才能用于生成图贴源放置。
+						const filesWithSources = hydratePluginFileAssetSources(
+							sourceElementByAssetKeyRef.current,
+							files,
+						)
+						postPluginMessage({
+							type: "magic-canvas-plugin:resolve-file-assets-result",
+							requestId: data.requestId,
+							files: filesWithSources,
+						})
+					},
+					(error) => {
+						postPluginMessage({
+							type: "magic-canvas-plugin:resolve-file-assets-result",
+							requestId: data.requestId,
+							error: getErrorMessage(error),
+						})
+					},
+				)
+				return
+			}
+
+			if (data.type === "magic-canvas-plugin:read-canvas-clipboard") {
+				void readPluginCanvasClipboard(canvas).then(
+					(result) => {
+						// 剪贴板读出的 payload 与上传后的 asset 都登记来源，覆盖“先读剪贴板再生成”的链路。
+						registerPluginClipboardSourceElements(
+							sourceElementByAssetKeyRef.current,
+							result.payload,
+						)
+						registerPluginFileAssetSources(
+							sourceElementByAssetKeyRef.current,
+							result.uploadedAssets,
+						)
+						postPluginMessage({
+							type: "magic-canvas-plugin:read-canvas-clipboard-result",
+							requestId: data.requestId,
+							payload: result.payload,
+							uploadedAssets: result.uploadedAssets,
+						})
+					},
+					(error) => {
+						postPluginMessage({
+							type: "magic-canvas-plugin:read-canvas-clipboard-result",
+							requestId: data.requestId,
+							error: getErrorMessage(error),
+						})
+					},
+				)
+				return
+			}
+
 			if (data.type === "magic-canvas-plugin:fetch-blob") {
 				let validatedUrl: URL
 				try {
-					validatedUrl = validatePluginFetchBlobUrl(plugin, data.url, window.location.origin)
+					validatedUrl = validatePluginFetchBlobUrl(
+						plugin,
+						data.url,
+						window.location.origin,
+					)
 				} catch (error) {
 					postPluginMessage({
 						type: "magic-canvas-plugin:fetch-blob-result",
@@ -408,7 +500,9 @@ export function usePluginRuntimeBridge({
 		channelToken,
 		filePickerRequestRef,
 		iframeRef,
+		onCanvasAssetDragTarget,
 		plugin,
+		sourceElementByAssetKeyRef,
 		pluginWindowRef,
 		setFilePickerRequest,
 		setFrameHeight,

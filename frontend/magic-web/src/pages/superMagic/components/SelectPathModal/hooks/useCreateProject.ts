@@ -9,13 +9,15 @@ import magicToast from "@/components/base/MagicToaster/utils"
 interface UseCreateProjectOptions {
 	workspaceId: string
 	projects: ProjectListItem[]
+	defaultProjectName?: string
 	onProjectCreated?: (project: ProjectListItem) => Promise<void>
 	onProjectsRefresh?: () => Promise<void>
 }
 
 export function useCreateProject(options: UseCreateProjectOptions) {
 	const { t } = useTranslation("super")
-	const { workspaceId, projects, onProjectCreated, onProjectsRefresh } = options
+	const { workspaceId, projects, defaultProjectName, onProjectCreated, onProjectsRefresh } =
+		options
 
 	const [createProjectShown, setCreateProjectShown] = useState(false)
 	const [createProjectName, setCreateProjectName] = useState("")
@@ -28,7 +30,7 @@ export function useCreateProject(options: UseCreateProjectOptions) {
 			return
 		}
 		setCreateProjectShown(true)
-		setCreateProjectName(t("selectPathModal.defaultProjectName"))
+		setCreateProjectName(defaultProjectName?.trim() || t("selectPathModal.defaultProjectName"))
 		setCreateProjectErrorMessage("")
 	})
 

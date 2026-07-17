@@ -188,7 +188,7 @@ function ProjectItem({
 						}}
 						onFocus={handlePreloadPage}
 						onMouseLeave={() => setIsHovered(false)}
-						className="w-full min-w-0 text-left text-current no-underline"
+						className="w-full min-w-0 text-left text-current no-underline [-webkit-tap-highlight-color:transparent]"
 					>
 						<div className="flex w-full min-w-0 items-center">
 							<div className="min-w-0 flex-1">
@@ -223,13 +223,15 @@ function ProjectItem({
 									)}
 								</div>
 							</div>
+							{/* The menu trigger must stay tappable on coarse pointer desktop layouts. */}
 							<div
 								data-project-more-trigger="true"
 								className={cn(
-									"ml-1 flex h-4 w-4 shrink-0 cursor-pointer items-center justify-center rounded-full text-sidebar-foreground transition-opacity hover:bg-sidebar-accent",
+									"ml-1 flex h-4 w-4 shrink-0 cursor-pointer items-center justify-center rounded-full text-sidebar-foreground transition-opacity [-webkit-tap-highlight-color:transparent] hover:bg-sidebar-accent",
 									isHovered || open
 										? "opacity-100"
 										: "pointer-events-none opacity-0",
+									"no-hover:pointer-events-auto no-hover:opacity-100",
 								)}
 								onClick={(e) => {
 									blockItemClickTemporarily()

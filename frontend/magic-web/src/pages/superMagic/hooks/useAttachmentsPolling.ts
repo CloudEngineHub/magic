@@ -2,6 +2,8 @@ import { useEffect, useRef, useCallback } from "react"
 import { useDebounceFn } from "ahooks"
 import { SuperMagicApi } from "@/apis"
 import { measureManualPerfAsyncOperation } from "@/utils/manualPerfLogger"
+import projectFilesStoreDefault, { type ProjectFilesStore } from "@/stores/projectFiles"
+import type { AttachmentItem } from "../components/TopicFilesButton/hooks"
 import { measureAttachmentFetch } from "../utils/attachmentPerf"
 import { loadProjectAttachments } from "../services"
 import {
@@ -15,6 +17,8 @@ import { isAbortError, useLatestAbortableRequest } from "./useLatestAbortableReq
 interface UseAttachmentsPollingOptions {
 	/** 项目ID */
 	projectId?: string
+	/** Source of the current local attachment list. Defaults to the global project file store. */
+	store?: Pick<ProjectFilesStore, "workspaceFilesList">
 	/** 轮询间隔，默认5秒 */
 	interval?: number
 	/** 是否启用轮询，默认true */
@@ -23,32 +27,33 @@ interface UseAttachmentsPollingOptions {
 	autoStart?: boolean
 	/** 当附件发生变化时的回调函数 */
 	onAttachmentsChange?: (data: {
-		tree: any[]
-		list: any[]
+		tree: AttachmentItem[]
+		list: AttachmentItem[]
 		last_updated_at: string
 		projectId: string
 	}) => void
 	/** 错误回调 */
-	onError?: (error: any, projectId: string) => void
+	onError?: (error: unknown, projectId: string) => void
 }
 
 export interface AttachmentsResponse {
-	tree?: any[]
-	list?: any[]
+	tree?: AttachmentItem[]
+	list?: AttachmentItem[]
 	last_updated_at?: string
 }
 
 /**
- * Fallback attachment change check hook.
- * With autoStart=true, checks last_updated_at on an interval. WS realtime pages pass
- * autoStart=false and keep checkNow/checkNowDebounced for manual triggers.
+ * Fallback attachment consistency check hook.
+ * Event-driven pages call checkNow/checkNowDebounced after task terminal status changes.
+ * startPolling remains available only for explicit legacy callers.
  */
 export function useAttachmentsPolling(options: UseAttachmentsPollingOptions = {}) {
 	const {
 		projectId,
-		interval = 10000, // 默认10秒
+		store = projectFilesStoreDefault,
+		interval = 5000, // 默认5秒，仅显式开启轮询时使用
 		enabled = true,
-		autoStart = true,
+		autoStart = false,
 		onAttachmentsChange,
 		onError,
 	} = options
@@ -70,34 +75,71 @@ export function useAttachmentsPolling(options: UseAttachmentsPollingOptions = {}
 			isMountedRef.current && currentProjectId === projectId && request.isCurrent()
 
 		try {
-			const res: { last_updated_at: string } = await measureManualPerfAsyncOperation(
-				"last_update_fetch_ms",
+			const countRes = await measureManualPerfAsyncOperation(
+				"attachments_count_probe_ms",
 				() =>
-					SuperMagicApi.getLastFileUpdateTime(
+					SuperMagicApi.getProjectAttachmentsCount(
 						{
-							project_id: currentProjectId,
+							projectId: currentProjectId,
 						},
 						{ signal: request.signal },
 					),
 				{
-					source: "useAttachmentsPolling.getLastFileUpdateTime",
+					source: "useAttachmentsPolling.getProjectAttachmentsCount",
 					has_project_id: true,
 				},
 			)
 
 			if (!isLatestRequest()) {
-				console.log("ProjectId changed during API call, ignoring result:", {
+				console.log("ProjectId changed during count API call, ignoring result:", {
 					started: currentProjectId,
 					current: projectId,
 				})
 				return
 			}
 
-			const newLastUpdatedAt = res?.last_updated_at || ""
-			const cachedLastUpdatedAt = instanceLastUpdatedRef.current
+			const serverCount = Number(countRes?.total ?? 0)
+			const localCount = store.workspaceFilesList.length
+			let shouldRefresh = serverCount !== localCount
+			let newLastUpdatedAt = instanceLastUpdatedRef.current
+			const shouldHydrateLastUpdatedAfterRefresh = shouldRefresh
 
-			// Load the tree only when last_updated_at changes; otherwise this is a cheap probe.
-			if (newLastUpdatedAt && newLastUpdatedAt !== cachedLastUpdatedAt) {
+			if (!shouldRefresh) {
+				const res: { last_updated_at: string } = await measureManualPerfAsyncOperation(
+					"last_update_fetch_ms",
+					() =>
+						SuperMagicApi.getLastFileUpdateTime(
+							{
+								project_id: currentProjectId,
+							},
+							{ signal: request.signal },
+						),
+					{
+						source: "useAttachmentsPolling.getLastFileUpdateTime",
+						has_project_id: true,
+					},
+				)
+
+				if (!isLatestRequest()) {
+					console.log(
+						"ProjectId changed during last updated API call, ignoring result:",
+						{
+							started: currentProjectId,
+							current: projectId,
+						},
+					)
+					return
+				}
+
+				newLastUpdatedAt = res?.last_updated_at || ""
+				const cachedLastUpdatedAt = instanceLastUpdatedRef.current
+				shouldRefresh = Boolean(
+					newLastUpdatedAt && newLastUpdatedAt !== cachedLastUpdatedAt,
+				)
+			}
+
+			// Load the tree only when count or last_updated_at changes; otherwise this is a cheap probe.
+			if (shouldRefresh) {
 				const attachmentRes: AttachmentsResponse = await measureAttachmentFetch(
 					"useAttachmentsPolling.loadProjectAttachments",
 					() =>
@@ -113,6 +155,45 @@ export function useAttachmentsPolling(options: UseAttachmentsPollingOptions = {}
 						current: projectId,
 					})
 					return
+				}
+
+				if (shouldHydrateLastUpdatedAfterRefresh) {
+					try {
+						const res: { last_updated_at: string } =
+							await measureManualPerfAsyncOperation(
+								"last_update_fetch_ms",
+								() =>
+									SuperMagicApi.getLastFileUpdateTime(
+										{
+											project_id: currentProjectId,
+										},
+										{ signal: request.signal },
+									),
+								{
+									source: "useAttachmentsPolling.getLastFileUpdateTimeAfterCountRefresh",
+									has_project_id: true,
+								},
+							)
+
+						if (!isLatestRequest()) {
+							console.log(
+								"ProjectId changed during post-refresh last updated API call, ignoring result:",
+								{
+									started: currentProjectId,
+									current: projectId,
+								},
+							)
+							return
+						}
+
+						newLastUpdatedAt = res?.last_updated_at || newLastUpdatedAt
+					} catch (error) {
+						if (isAbortError(error) || !isLatestRequest()) return
+						console.warn(
+							`Failed to hydrate last_updated_at after count refresh for project ${currentProjectId}:`,
+							error,
+						)
+					}
 				}
 
 				// Update the cache only after a successful load so canceled requests cannot hide changes.
@@ -143,7 +224,7 @@ export function useAttachmentsPolling(options: UseAttachmentsPollingOptions = {}
 		} finally {
 			request.release()
 		}
-	}, [projectId, enabled, onAttachmentsChange, onError, startPollingRequest])
+	}, [projectId, enabled, onAttachmentsChange, onError, startPollingRequest, store])
 
 	const checkAttachmentsDebounced = useDebounceFn(checkAttachments, {
 		wait: 1000,

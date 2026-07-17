@@ -11,14 +11,19 @@ vi.mock("react-i18next", () => ({
 				"filters.summaryAll": "All",
 				"filters.summaryNotDone": "Not summarized",
 				"filters.summaryDone": "Summarized",
-				"filters.dateRange": "Created",
-				"filters.dateAll": "All time",
-				"filters.dateLast7Days": "Last 7 days",
-				"filters.dateLast30Days": "Last 30 days",
-				"filters.dateLast90Days": "Last 90 days",
+				"super:mobile.recordingEntry.filterSheet.dateRange.label": "Date range",
+				"super:mobile.recordingEntry.filterSheet.dateRange.all": "All time",
+				"super:mobile.recordingEntry.filterSheet.dateRange.today": "Today",
+				"super:mobile.recordingEntry.filterSheet.dateRange.week": "Last 7 days",
+				"super:mobile.recordingEntry.filterSheet.dateRange.month": "Last 30 days",
 				"filters.sort": "Sort",
 				"filters.sortByUpdatedDesc": "By last updated",
 				"filters.sortByCreatedDesc": "By created time",
+				"actions.startRecording": "Start Recording",
+				"super:mobile.recordingEntry.groupSheet.all": "All",
+				"super:mobile.recordingEntry.groupSheet.ungrouped": "Ungrouped",
+				"super:mobile.recordingEntry.groupSheet.manageGroups": "Manage groups",
+				"super:mobile.recordingEntry.groupSheet.unnamedGroup": "Unnamed group",
 			}
 			return labels[key] ?? key
 		},
@@ -34,6 +39,7 @@ vi.mock("@/components/shadcn-ui/dropdown-menu", () => ({
 	DropdownMenu: ({ children }: { children: ReactNode }) => <div>{children}</div>,
 	DropdownMenuTrigger: ({ children }: { children: ReactNode }) => <>{children}</>,
 	DropdownMenuContent: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+	DropdownMenuSeparator: () => <hr />,
 	DropdownMenuItem: ({
 		children,
 		onClick,
@@ -50,6 +56,7 @@ vi.mock("@/components/shadcn-ui/dropdown-menu", () => ({
 }))
 
 import AudioRecordingsFilters from "../AudioRecordingsFilters"
+import { ALL_RECORDING_GROUP_ID } from "@/services/audioRecordings/RecordingGroupsConstants"
 
 /** Default props for filter bar rendering and interaction tests */
 function renderFilters(overrides: Partial<Parameters<typeof AudioRecordingsFilters>[0]> = {}) {
@@ -61,6 +68,8 @@ function renderFilters(overrides: Partial<Parameters<typeof AudioRecordingsFilte
 	const onSearchCompositionStart = vi.fn()
 	const onSearchCompositionEnd = vi.fn()
 	const onRefresh = vi.fn()
+	const onGroupChange = vi.fn()
+	const onManageGroups = vi.fn()
 
 	render(
 		<AudioRecordingsFilters
@@ -71,6 +80,12 @@ function renderFilters(overrides: Partial<Parameters<typeof AudioRecordingsFilte
 			sortOrder="desc"
 			searchKeyword=""
 			isRefreshing={false}
+			groups={[]}
+			totalGroupCount={3}
+			ungroupedCount={3}
+			currentGroupId={ALL_RECORDING_GROUP_ID}
+			onGroupChange={onGroupChange}
+			onManageGroups={onManageGroups}
 			onSummaryFilterChange={onSummaryFilterChange}
 			onDatePresetChange={onDatePresetChange}
 			onSortByChange={onSortByChange}
@@ -90,6 +105,8 @@ function renderFilters(overrides: Partial<Parameters<typeof AudioRecordingsFilte
 		onSortOrderChange,
 		onSearchKeywordChange,
 		onRefresh,
+		onGroupChange,
+		onManageGroups,
 	}
 }
 
@@ -103,16 +120,15 @@ describe("AudioRecordingsFilters", () => {
 		expect(screen.getByTestId("audio-recordings-sort-filter")).toBeInTheDocument()
 		expect(screen.getByTestId("audio-recordings-search-input")).toBeInTheDocument()
 		expect(screen.getByTestId("audio-recordings-refresh-button")).toBeInTheDocument()
-		expect(screen.getByTestId("audio-recordings-summary-filter-count")).toHaveTextContent("3")
+		expect(screen.getByTestId("audio-recordings-group-filter-trigger")).toHaveTextContent("3")
 	})
 
-	it("shows the active summary option label and count on the trigger", () => {
+	it("shows the active summary option label on the trigger", () => {
 		renderFilters({ summaryFilter: "summarized", listCount: 7 })
 
 		expect(screen.getByTestId("audio-recordings-summary-filter")).toHaveTextContent(
 			"Summarized",
 		)
-		expect(screen.getByTestId("audio-recordings-summary-filter-count")).toHaveTextContent("7")
 	})
 
 	it("calls onSummaryFilterChange when a summary menu item is selected", () => {
@@ -122,5 +138,59 @@ describe("AudioRecordingsFilters", () => {
 		fireEvent.click(screen.getByTestId("audio-recordings-summary-not_summarized"))
 
 		expect(onSummaryFilterChange).toHaveBeenCalledWith("not_summarized")
+	})
+
+	it("calls onDatePresetChange when a date menu item is selected", () => {
+		const { onDatePresetChange } = renderFilters()
+
+		fireEvent.click(screen.getByTestId("audio-recordings-date-filter"))
+		fireEvent.click(screen.getByTestId("audio-recordings-date-week"))
+
+		expect(onDatePresetChange).toHaveBeenCalledWith("week")
+	})
+
+	it("renders group switcher and supports changing group and opening group management", () => {
+		const groups = [
+			{ id: "group-1", name: "Work", projectCount: 2, isVirtual: false },
+			{ id: "group-2", name: "Life", projectCount: 1, isVirtual: false },
+		]
+		const { onGroupChange, onManageGroups } = renderFilters({
+			groups,
+			totalGroupCount: 3,
+			ungroupedCount: 1,
+			currentGroupId: "group-1",
+		})
+
+		// 1. Should display current active group name
+		expect(screen.getByTestId("audio-recordings-group-filter-trigger")).toHaveTextContent(
+			"Work",
+		)
+
+		// 2. Click trigger and click custom group items
+		fireEvent.click(screen.getByTestId("audio-recordings-group-filter-trigger"))
+		fireEvent.click(screen.getByTestId("audio-recordings-group-custom-group-2"))
+		expect(onGroupChange).toHaveBeenCalledWith("group-2")
+
+		// 3. Click virtual "All" item
+		fireEvent.click(screen.getByTestId("audio-recordings-group-all"))
+		expect(onGroupChange).toHaveBeenCalledWith(ALL_RECORDING_GROUP_ID)
+
+		// 4. Click manage groups button
+		fireEvent.click(screen.getByTestId("audio-recordings-group-manage-trigger"))
+		expect(onManageGroups).toHaveBeenCalled()
+	})
+
+	it("falls back to all recordings when the current group id is missing from loaded groups", () => {
+		renderFilters({
+			groups: [
+				{ id: "mock-group-id", name: "Mock group", projectCount: 2, isVirtual: false },
+			],
+			totalGroupCount: 5,
+			ungroupedCount: 3,
+			currentGroupId: "mock-stale-group-id",
+		})
+
+		expect(screen.getByTestId("audio-recordings-group-filter-trigger")).toHaveTextContent("All")
+		expect(screen.getByTestId("audio-recordings-group-filter-trigger")).toHaveTextContent("5")
 	})
 })

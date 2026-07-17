@@ -94,6 +94,21 @@
 	},
 	"sendVerificationCode": "发送验证码",
 	"serviceAgreement": "用户协议",
+	"thirdPartyAccountConflict": {
+		"confirmSelection": "使用当前账号",
+		"currentAccount": "当前账号",
+		"description": "检测到当前 {{platform}} 账号与页面中正在使用的账号不一致，请选择接下来使用的账号。",
+		"keepCurrent": "继续使用当前账号",
+		"newAccount": "新检测到的账号",
+		"platform": {
+			"dingTalk": "钉钉",
+			"lark": "飞书",
+			"wecom": "企业微信"
+		},
+		"selectionLabel": "选择登录账号",
+		"title": "检测到平台账号已切换",
+		"useCandidate": "使用新账号"
+	},
 	"verification": {
 		"codeInput": "验证码输入框",
 		"codeInvalid": "验证码错误，请重新输入"

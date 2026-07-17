@@ -44,6 +44,8 @@ export function createMentionPanelSuggestion(
 		getInitialLoadOptions,
 		getInitialNavigationStack,
 		catalogBehavior,
+		viewMode,
+		galleryOptions,
 		trailingTextAfterInsert,
 		canSelectItem,
 	} = options
@@ -209,10 +211,14 @@ export function createMentionPanelSuggestion(
 				}
 
 				const insertContent = getInsertedContent(item)
-				const inserted = runActiveEditor(editor, (activeEditor) => {
-					activeEditor.chain().focus().insertContentAt(range, insertContent).run()
-					return true
-				}, false)
+				const inserted = runActiveEditor(
+					editor,
+					(activeEditor) => {
+						activeEditor.chain().focus().insertContentAt(range, insertContent).run()
+						return true
+					},
+					false,
+				)
 				if (!inserted) return
 
 				const insertedSize = getInsertedContentSize(editor, insertContent)
@@ -300,6 +306,8 @@ export function createMentionPanelSuggestion(
 							initialLoadOptions: resolveInitialLoadOptions(),
 							initialNavigationStack: resolveInitialNavigationStack(),
 							catalogBehavior,
+							viewMode,
+							galleryOptions,
 							onSelect: handleSelect,
 							onExit: handleExit,
 							disableKeyboardShortcuts,
@@ -362,6 +370,8 @@ export function createMentionPanelSuggestion(
 							initialLoadOptions: resolveInitialLoadOptions(),
 							initialNavigationStack: resolveInitialNavigationStack(),
 							catalogBehavior,
+							viewMode,
+							galleryOptions,
 							onSelect: handleSelect,
 							onExit: handleExit,
 							disableKeyboardShortcuts,

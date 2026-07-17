@@ -1,6 +1,6 @@
 import { fireEvent, render, screen } from "@testing-library/react"
 import { describe, expect, it, vi } from "vitest"
-import { ShareType } from "@/pages/superMagic/components/Share/types"
+import { ShareMode, ShareType } from "@/pages/superMagic/components/Share/types"
 import ProjectShareManageView from "../components/ProjectShareManageView"
 import type { ProjectShareSheetController } from "../types"
 
@@ -11,12 +11,14 @@ vi.mock("react-i18next", () => ({
 			const labels: Record<string, string> = {
 				"projectShare.empty": "暂无分享链接",
 				"mobile.emptyState.variants.shareLink.title": "还没有分享链接",
-				"mobile.emptyState.variants.shareLink.description": "返回上一页创建第一个分享链接。",
+				"mobile.emptyState.variants.shareLink.description":
+					"返回上一页创建第一个分享链接。",
 				"projectShare.defaultNameOrganization": "组织分享",
 				"projectShare.defaultNamePassword": "密码链接",
 				"projectShare.defaultNamePublic": "公开链接",
 				"projectShare.manageOrganizationDepartmentsOnly": "{{departmentCount}} 个部门",
-				"projectShare.manageOrganizationMembersAndDepartments": "{{userCount}} 个成员，{{departmentCount}} 个部门",
+				"projectShare.manageOrganizationMembersAndDepartments":
+					"{{userCount}} 个成员，{{departmentCount}} 个部门",
 				"projectShare.manageOrganizationMembersOnly": "{{userCount}} 个成员",
 				"projectShare.manageOrganizationSummary": "组织成员可访问",
 				"projectShare.managePasswordSummary": "需要密码访问",
@@ -51,6 +53,9 @@ function createController(
 		open: true,
 		view: "manage",
 		viewStack: ["create"],
+		mode: "project",
+		projectMode: "",
+		shareMode: ShareMode.Project,
 		projectName: "Demo Project",
 		projectId: "project-1",
 		formState: {
@@ -81,8 +86,19 @@ function createController(
 		isCheckingShare: false,
 		advancedOpen: false,
 		defaultSelectedFileIds: [],
+		selectedFileIds: [],
+		groupedShareItems: [],
+		enableInlineFileSelection: false,
+		selectedFileItems: [],
+		selectedFileHierarchy: [],
+		selectedFileCount: 0,
 		memberSelectorOpen: false,
 		selectedMemberNodes: [],
+		detailMemberNodes: [],
+		detailMemberLoading: false,
+		selectedShareMessageText: "",
+		canNativeShare: false,
+		shareSelectedShareToSystem: vi.fn(),
 		setShareName: vi.fn(),
 		setShareType: vi.fn(),
 		setShareExpiry: vi.fn(),
@@ -92,6 +108,8 @@ function createController(
 		setShareTargets: vi.fn(),
 		setAdvancedSettings: vi.fn(),
 		setAdvancedOpen: vi.fn(),
+		setSelectedFileIds: vi.fn(),
+		toggleShareFileId: vi.fn(),
 		openMemberSelector: vi.fn(),
 		closeMemberSelector: vi.fn(),
 		setSelectedMemberNodes: vi.fn(),

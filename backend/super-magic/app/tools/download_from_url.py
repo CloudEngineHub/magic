@@ -259,7 +259,13 @@ class DownloadFromUrl(AbstractFileTool[DownloadFromUrlParams], WorkspaceTool[Dow
 
         return result
 
-    async def execute_purely(self, params: DownloadFromUrlParams, cache_only: bool = False, tool_context: ToolContext = None) -> ToolResult:
+    async def execute_purely(
+        self,
+        params: DownloadFromUrlParams,
+        cache_only: bool = False,
+        tool_context: ToolContext = None,
+        timeout_seconds: Optional[int] = None,
+    ) -> ToolResult:
         """
         Pure execution without tool context - allows clean invocation without context
 
@@ -267,17 +273,25 @@ class DownloadFromUrl(AbstractFileTool[DownloadFromUrlParams], WorkspaceTool[Dow
             params: 参数对象，包含URL和文件保存路径
             cache_only: 如果为True且file_path为空，则只下载到缓存并返回缓存路径
             tool_context: 可选的工具上下文，用于事件分发
+            timeout_seconds: 内部调用方可选的下载超时时间，不暴露到工具参数
 
         Returns:
             ToolResult: 包含操作结果
         """
         try:
+            resolved_timeout_seconds = self._resolve_timeout_seconds(timeout_seconds)
+
             # Check if cache-only mode is requested
             if cache_only and not params.file_path.strip():
                 # Cache-only mode: download to cache and return cache path
                                 # Create a dummy path that won't be used
                 dummy_path = Path("dummy")
-                download_result = await self._download_file(params.url, dummy_path, cache_only=True)
+                download_result = await self._download_file(
+                    params.url,
+                    dummy_path,
+                    cache_only=True,
+                    timeout_seconds=resolved_timeout_seconds,
+                )
 
                 if download_result.file_size > 0:
                     cache_path = self.cache_manager.get_cache_path(params.url)
@@ -345,9 +359,19 @@ class DownloadFromUrl(AbstractFileTool[DownloadFromUrlParams], WorkspaceTool[Dow
             # 使用 versioning context 下载文件（无需更新时间戳，因为是工具下载的文件）
             if tool_context:
                 async with self._file_versioning_context(tool_context, file_path, update_timestamp=False):
-                    download_result = await self._download_file(params.url, file_path, cache_only=False)
+                    download_result = await self._download_file(
+                        params.url,
+                        file_path,
+                        cache_only=False,
+                        timeout_seconds=resolved_timeout_seconds,
+                    )
             else:
-                download_result = await self._download_file(params.url, file_path, cache_only=False)
+                download_result = await self._download_file(
+                    params.url,
+                    file_path,
+                    cache_only=False,
+                    timeout_seconds=resolved_timeout_seconds,
+                )
 
             # Generate formatted output
             output = (
@@ -392,11 +416,25 @@ class DownloadFromUrl(AbstractFileTool[DownloadFromUrlParams], WorkspaceTool[Dow
             await asyncio.to_thread(os.makedirs, directory, exist_ok=True)
             logger.info(f"创建目录: {directory}")
 
+    def _resolve_timeout_seconds(self, timeout_seconds: Optional[int]) -> int:
+        """解析内部下载超时时间，默认保留全局下载超时。"""
+        if timeout_seconds is None:
+            return DOWNLOAD_TIMEOUT_SECONDS
+        if timeout_seconds <= 0:
+            raise ValueError("timeout_seconds must be greater than 0")
+        return timeout_seconds
+
     async def download_file(self, url: str, file_path: Path, cache_only: bool = False) -> DownloadResult:
         """下载文件到指定路径，支持缓存和并发锁，供外部调用方复用。"""
         return await self._download_file(url, file_path, cache_only)
 
-    async def _download_file(self, url: str, file_path: Path, cache_only: bool = False) -> DownloadResult:
+    async def _download_file(
+        self,
+        url: str,
+        file_path: Path,
+        cache_only: bool = False,
+        timeout_seconds: int = DOWNLOAD_TIMEOUT_SECONDS,
+    ) -> DownloadResult:
         """Download file with caching mechanism"""
         # 获取或创建此 URL 的锁，防止并发下载同一个 URL
         if url not in self._url_locks:
@@ -404,9 +442,15 @@ class DownloadFromUrl(AbstractFileTool[DownloadFromUrlParams], WorkspaceTool[Dow
 
         # 使用锁确保同一 URL 只有一个任务在下载
         async with self._url_locks[url]:
-            return await self._download_file_with_lock(url, file_path, cache_only)
+            return await self._download_file_with_lock(url, file_path, cache_only, timeout_seconds)
 
-    async def _download_file_with_lock(self, url: str, file_path: Path, cache_only: bool = False) -> DownloadResult:
+    async def _download_file_with_lock(
+        self,
+        url: str,
+        file_path: Path,
+        cache_only: bool = False,
+        timeout_seconds: int = DOWNLOAD_TIMEOUT_SECONDS,
+    ) -> DownloadResult:
         """Download file with caching mechanism (executed within lock)"""
         final_url = url
         content_type = ""
@@ -472,7 +516,7 @@ class DownloadFromUrl(AbstractFileTool[DownloadFromUrlParams], WorkspaceTool[Dow
 
         try:
             # 使用驱动下载到缓存路径
-            result = await self._driver.download(url, cache_path, timeout=DOWNLOAD_TIMEOUT_SECONDS)
+            result = await self._driver.download(url, cache_path, timeout=timeout_seconds)
 
             file_size = result.file_size
             content_type = result.content_type

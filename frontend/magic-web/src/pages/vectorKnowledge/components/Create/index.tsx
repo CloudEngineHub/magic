@@ -7,7 +7,7 @@ import DEFAULT_KNOWLEDGE_ICON from "@/assets/logos/knowledge-avatar.png"
 import { useTranslation } from "react-i18next"
 import useNavigate from "@/routes/hooks/useNavigate"
 import { useSearchParams } from "react-router-dom"
-import { FlowRouteType } from "@/types/flow"
+import { useLocation } from "react-router"
 import MagicIcon from "@/components/base/MagicIcon"
 import { useVectorKnowledgeCreateStyles } from "./styles"
 import VectorKnowledgeEmbed from "../Embed"
@@ -23,6 +23,10 @@ import { DataSourceType, externalFileTypeMap } from "../../constant"
 import { Knowledge } from "@/types/knowledge"
 import { RouteName } from "@/routes/constants"
 import magicToast from "@/components/base/MagicToaster/utils"
+import {
+	getVectorKnowledgeDetailRoute,
+	getVectorKnowledgeListRoute,
+} from "@/pages/vectorKnowledge/utils"
 
 type FormDataType = {
 	name: string
@@ -46,6 +50,7 @@ export default function VectorKnowledgeCreate() {
 	const { t } = useTranslation("flow")
 
 	const navigate = useNavigate()
+	const location = useLocation()
 
 	// 获取路由参数，用于跳转文档配置页面
 	const [searchParams] = useSearchParams()
@@ -92,15 +97,9 @@ export default function VectorKnowledgeCreate() {
 	const handleBack = useMemoizedFn(() => {
 		// 如果处于文档配置状态，则返回至文档列表页面
 		if (isDocumentConfig) {
-			navigate({
-				name: RouteName.VectorKnowledgeDetail,
-				query: { code: queryKnowledgeBaseCode },
-			})
+			navigate(getVectorKnowledgeDetailRoute(location.pathname, queryKnowledgeBaseCode))
 		} else {
-			navigate({
-				name: RouteName.Flows,
-				params: { type: FlowRouteType.VectorKnowledge },
-			})
+			navigate(getVectorKnowledgeListRoute(location.pathname))
 		}
 	})
 
@@ -111,26 +110,26 @@ export default function VectorKnowledgeCreate() {
 			const documentFiles =
 				dataSourceType === DataSourceType.Local
 					? localFileList
-						.filter((item) => !!item.path)
-						.map((item) => ({
-							id: "",
+							.filter((item) => !!item.path)
+							.map((item) => ({
+								id: "",
+								name: item.name,
+								key: item.path!,
+								type: Knowledge.CreateKnowledgeFileType.EXTERNAL_FILE,
+								third_file_id: "",
+								file_type: externalFileTypeMap.UNKNOWN,
+								is_embed: false,
+							}))
+					: enterpriseFileList.map((item) => ({
+							id: item.id,
 							name: item.name,
-							key: item.path!,
-							type: Knowledge.CreateKnowledgeFileType.EXTERNAL_FILE,
-							third_file_id: "",
-							file_type: externalFileTypeMap.UNKNOWN,
+							type: Knowledge.CreateKnowledgeFileType.THIRD_PLATFORM_FILE,
+							platform_type: Knowledge.FilePlatformType.TEAMSHARE,
+							third_file_id: item.id,
+							file_type: item.file_type,
+							space_type: item.space_type,
 							is_embed: false,
 						}))
-					: enterpriseFileList.map((item) => ({
-						id: item.id,
-						name: item.name,
-						type: Knowledge.CreateKnowledgeFileType.THIRD_PLATFORM_FILE,
-						platform_type: Knowledge.FilePlatformType.TEAMSHARE,
-						third_file_id: item.id,
-						file_type: item.file_type,
-						space_type: item.space_type,
-						is_embed: false,
-					}))
 			setTemporaryConfig({
 				name: values.name,
 				icon: uploadIconUrl,
@@ -152,10 +151,7 @@ export default function VectorKnowledgeCreate() {
 	const handleConfigurationBack = useMemoizedFn(() => {
 		// 如果处于文档配置状态，则返回至文档列表页面
 		if (isDocumentConfig) {
-			navigate({
-				name: RouteName.VectorKnowledgeDetail,
-				query: { code: queryKnowledgeBaseCode },
-			})
+			navigate(getVectorKnowledgeDetailRoute(location.pathname, queryKnowledgeBaseCode))
 		} else {
 			setIsPendingConfiguration(false)
 		}
@@ -206,9 +202,9 @@ export default function VectorKnowledgeCreate() {
 		if ((temporaryConfig && isPendingConfiguration) || isDocumentConfig) {
 			const documentConfig = isDocumentConfig
 				? {
-					knowledgeBaseCode: queryKnowledgeBaseCode,
-					documentCode: queryDocumentCode,
-				}
+						knowledgeBaseCode: queryKnowledgeBaseCode,
+						documentCode: queryDocumentCode,
+					}
 				: undefined
 			return (
 				<VectorKnowledgeConfiguration
@@ -298,7 +294,7 @@ export default function VectorKnowledgeCreate() {
 									className={cx(
 										styles.dataSourceItem,
 										dataSourceType === DataSourceType.Local &&
-										styles.dataSourceItemActive,
+											styles.dataSourceItemActive,
 									)}
 									onClick={() => setDataSourceType(DataSourceType.Local)}
 								>
@@ -313,7 +309,7 @@ export default function VectorKnowledgeCreate() {
 									className={cx(
 										styles.dataSourceItem,
 										dataSourceType === DataSourceType.Enterprise &&
-										styles.dataSourceItemActive,
+											styles.dataSourceItemActive,
 									)}
 									onClick={() => setDataSourceType(DataSourceType.Enterprise)}
 								>

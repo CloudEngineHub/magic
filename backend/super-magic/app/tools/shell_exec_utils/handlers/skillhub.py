@@ -31,7 +31,7 @@ def _make_forbidden_result(command: str, provider: str, skill_id: str = "<id>") 
         f"示例：\n"
         f'  install_skills(items=[{{"provider": "{provider}", "id": "{skill_id}", "mode": "install"}}])\n\n'
         "支持的 provider：my_library | market | skillhub | clawhub | npx | github\n"
-        "如需搜索 skill，请使用 find_skills(keywords=[\"关键词\"]) 工具。"
+        "如需搜索互联网 skill，请使用 find_skills(keywords=[\"关键词\"], search_scope=\"online\") 工具。"
     )
     return TerminalToolResult(content=msg, command=command, exit_code=1)
 
@@ -66,4 +66,3 @@ async def handle_skillhub(command: str) -> Optional[TerminalToolResult]:
 
     logger.info(f"[skillhub handler] 拦截安装类命令，引导使用 install_skills: {command}")
     return _make_forbidden_result(command, provider="skillhub", skill_id=skill_id)
-

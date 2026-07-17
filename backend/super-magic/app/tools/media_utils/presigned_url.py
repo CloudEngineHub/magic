@@ -1,37 +1,18 @@
 """预签名 URL 生成工具函数。"""
 
 import mimetypes
-import os
 
 from agentlang.logger import get_logger
+from .video_format_utils import get_video_mime_type
 
 logger = get_logger(__name__)
-
-# 视频文件扩展名到 MIME 类型的映射（补充 mimetypes 标准库可能缺失的类型）
-_VIDEO_MIME_TYPES: dict[str, str] = {
-    ".mp4": "video/mp4",
-    ".m4v": "video/mp4",
-    ".mov": "video/quicktime",
-    ".avi": "video/x-msvideo",
-    ".wmv": "video/x-ms-wmv",
-    ".flv": "video/x-flv",
-    ".webm": "video/webm",
-    ".mkv": "video/x-matroska",
-    ".ts": "video/mp2t",
-    ".m3u8": "application/x-mpegURL",
-    ".3gp": "video/3gpp",
-    ".3g2": "video/3gpp2",
-    ".ogv": "video/ogg",
-    ".mpeg": "video/mpeg",
-    ".mpg": "video/mpeg",
-}
 
 
 def _get_content_type(file_path: str) -> str | None:
     """根据文件扩展名推断 MIME 类型，优先返回视频类型。"""
-    ext = os.path.splitext(file_path)[1].lower()
-    if ext in _VIDEO_MIME_TYPES:
-        return _VIDEO_MIME_TYPES[ext]
+    video_mime_type = get_video_mime_type(file_path)
+    if video_mime_type:
+        return video_mime_type
     mime_type, _ = mimetypes.guess_type(file_path)
     return mime_type
 

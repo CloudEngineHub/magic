@@ -13,6 +13,7 @@ import { TopicMode } from "@/pages/superMagic/pages/Workspace/TopicMode"
 import { convertTopicShareItemToShareItem } from "../utils/shareTypeHelpers"
 import { useShareItemActions } from "../hooks/useShareItemActions"
 import { useTopicSharePopover } from "../hooks/useTopicSharePopover"
+import { isMagicApp } from "@/utils/devices"
 
 interface TopicShareListNewProps {
 	data: TopicShareItem[]
@@ -98,6 +99,8 @@ function TopicShareListNew({ data, loading, onCancelShare, onRefresh }: TopicSha
 			<div ref={containerRef} className="flex flex-col gap-2">
 				{data.map((item) => {
 					const isHovered = hoveredId === item.resource_id
+					// Magic App desktop layout has no dependable hover, so pin the action at row end.
+					const showActions = (isHovered || isMagicApp) && !item.deleted_at
 
 					return (
 						<div
@@ -137,9 +140,13 @@ function TopicShareListNew({ data, loading, onCancelShare, onRefresh }: TopicSha
 										/>
 									</div>
 
-									{/* 右侧：悬浮显示操作按钮，非悬浮显示分享时间 */}
-									<div className="flex h-5 flex-shrink-0 items-center">
-										{isHovered && !item.deleted_at ? (
+									{/* 右侧：分享时间与操作按钮 */}
+									<div className="flex h-5 flex-shrink-0 items-center gap-2">
+										<span className="text-xs leading-none text-neutral-500">
+											{t("shareManagement.sharedAt")}:{" "}
+											{item.shared_at ? formatDate(item.shared_at) : "-"}
+										</span>
+										{showActions && (
 											<Dropdown
 												menu={{
 													items: shareItemActions.getDropdownItems(
@@ -158,16 +165,12 @@ function TopicShareListNew({ data, loading, onCancelShare, onRefresh }: TopicSha
 													variant="ghost"
 													size="icon"
 													className="h-5 w-5"
+													aria-label={t("shareManagement.more")}
 													onClick={(e) => e.stopPropagation()}
 												>
 													<IconDots size={16} />
 												</Button>
 											</Dropdown>
-										) : (
-											<span className="text-xs leading-none text-neutral-500">
-												{t("shareManagement.sharedAt")}:{" "}
-												{item.shared_at ? formatDate(item.shared_at) : "-"}
-											</span>
 										)}
 									</div>
 								</div>

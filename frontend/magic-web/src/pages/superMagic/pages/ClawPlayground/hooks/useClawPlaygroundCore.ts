@@ -81,8 +81,9 @@ export function useClawPlaygroundCore() {
 	).run
 
 	// -- attachment polling --
-	useAttachmentsPolling({
+	const { checkNowDebounced: checkAttachmentsNowDebounced } = useAttachmentsPolling({
 		projectId: selectedProject?.id,
+		store: store.projectFilesStore,
 		autoStart: false,
 		onAttachmentsChange: useCallback(
 			({ tree, list }: { tree: AttachmentItem[]; list: AttachmentItem[] }) => {
@@ -145,5 +146,6 @@ export function useClawPlaygroundCore() {
 		attachments,
 		attachmentList,
 		updateAttachments,
+		checkAttachmentsNowDebounced,
 	}
 }

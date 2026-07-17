@@ -13,6 +13,7 @@ export interface ShareNameFieldProps {
 	attachments?: any[] // 用于查找文件名称
 	shareProject?: boolean // 是否分享整个项目
 	projectName?: string // 项目名称
+	projectMode?: string | null // 复用 project_mode 语义区分录音分享
 }
 
 /**
@@ -52,6 +53,7 @@ export interface ShareAdvancedSettingsData {
 	hideCreatorInfo?: boolean // 隐藏创建者信息
 	view_file_list?: boolean // 可查看文件列表（话题分享模式）
 	allowDownloadProjectFile?: boolean // 允许下载及导出（后端字段: allow_download_project_file）
+	pureMode?: boolean // 纯净模式（后端字段: pure_mode）
 }
 
 /**
@@ -61,6 +63,7 @@ export interface ShareAdvancedSettingsProps {
 	settings: ShareAdvancedSettingsData
 	onChange: (settings: ShareAdvancedSettingsData) => void
 	mode: ShareMode // file or topic
+	hiddenSettingKeys?: (keyof ShareAdvancedSettingsData)[]
 }
 
 /**

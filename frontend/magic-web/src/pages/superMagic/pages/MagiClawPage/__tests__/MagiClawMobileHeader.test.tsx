@@ -4,7 +4,7 @@ import { MagiClawMobileHeader } from "../MagiClawMobileHeader"
 
 vi.mock("@/pages/superMagicMobile/components/MobileShell", () => ({
 	MobileShellSidebarToggleButton: () => (
-		<button type="button" data-testid="magi-claw-mobile-menu-button">
+		<button type="button" data-testid="mobile-shell-menu-button">
 			menu
 		</button>
 	),

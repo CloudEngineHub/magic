@@ -14,7 +14,17 @@ export type AudioProjectPhase = "waiting" | "merging" | "summarizing" | (string 
 export type AudioProjectAudioSource = "recorded" | "imported" | (string & {})
 
 /** PC list card status — only items past APP upload/merge pipeline reach these states */
-export type AudioRecordingCardStatus = "not_summarized" | "summarizing" | "summarized"
+export type AudioRecordingCardStatus =
+	| "uploading"
+	| "upload_failed"
+	| "waiting"
+	| "processing"
+	| "merge_failed"
+	| "merging"
+	| "not_summarized"
+	| "summarizing"
+	| "summary_failed"
+	| "summarized"
 
 export interface QueryAudioProjectsParams {
 	page: number
@@ -33,6 +43,8 @@ export interface QueryAudioProjectsParams {
 /** Nested metadata from the real audio-projects queries API */
 export interface AudioProjectExtra {
 	duration?: number
+	/** Backend may hydrate recorded task duration under progress-compatible field naming */
+	duration_seconds?: number
 	device_id?: string
 	tags?: string[]
 	current_phase?: AudioProjectPhase
@@ -45,6 +57,8 @@ export interface AudioProjectExtra {
 	audio_file_id?: string | number
 	file_size?: number
 	auto_summary?: boolean
+	/** Whether this recording task should run realtime transcription */
+	transcription_enabled?: boolean
 	task_key?: string
 	/** Backend returns integer; parsed as string when parseJsonLargeIntAsString is enabled */
 	topic_id?: string | number
@@ -70,10 +84,19 @@ export interface AudioProjectApiItem {
 	device_id?: string
 	create_timestamp?: string
 	duration?: number
+	/** Progress-compatible duration field used before legacy duration is backfilled */
+	duration_seconds?: number
 	tags?: string[]
 }
 
-/** Normalized view model consumed by list UI components */
+/**
+ * Normalized view model consumed by list UI components (H5 + PC shared).
+ *
+ * TODO: Split into platform-specific types once field divergence grows:
+ *   - `MobileAudioProjectListItem` — H5-only fields (e.g. source icon, swipe actions)
+ *   - `PcAudioProjectListItem`     — PC-only fields (e.g. column sort metadata)
+ * Keep this shared base for fields that are truly common to both platforms.
+ */
 export interface AudioProjectListItem {
 	id: string
 	project_name: string
@@ -90,11 +113,27 @@ export interface AudioProjectListItem {
 	is_summarized: boolean
 	project_status?: string
 	current_topic_status?: string
+	workspace_id?: string | null
+	workspace_name?: string | null
 	/** ASR task key required for summarize/progress APIs */
 	task_key?: string
 	topic_id?: string
 	audio_file_id?: string
 	model_id?: string
+	/** Frozen recording preference captured when the task was created */
+	transcription_enabled?: boolean
+	/**
+	 * Recording source from extra.source:
+	 * - 'app': recorded via mobile app (Smartphone icon, shows device name)
+	 * - 'device': recorded via Bluetooth/external device (Bluetooth icon, shows device name)
+	 * - 'h5': recorded via H5 mobile web (Smartphone icon, fixed label)
+	 * - 'pc': recorded via PC web (Monitor icon, fixed label)
+	 */
+	source?: string | null
+	/** Upload progress fields aligned with prototype UI */
+	transferStatus?: "transferring" | "failed" | "done" | "queued"
+	transferProgress?: number
+	uploadSpeedKBps?: number
 }
 
 export interface QueryAudioProjectsResponse {

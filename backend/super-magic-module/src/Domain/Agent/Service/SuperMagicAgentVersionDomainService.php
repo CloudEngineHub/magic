@@ -73,6 +73,13 @@ class SuperMagicAgentVersionDomainService
         return $this->agentVersionRepository->findCurrentOrLatestByCode($dataIsolation, $code);
     }
 
+    public function getCurrentVersionByCodeForUpdate(
+        SuperMagicAgentDataIsolation $dataIsolation,
+        string $code
+    ): ?AgentVersionEntity {
+        return $this->agentVersionRepository->findCurrentVersionByCodeForUpdate($dataIsolation, $code);
+    }
+
     public function findByIdWithoutOrganizationFilter(int $id): ?AgentVersionEntity
     {
         return $this->agentVersionRepository->findById($id);
@@ -387,12 +394,14 @@ class SuperMagicAgentVersionDomainService
             $storeAgentEntity->setIcon($versionEntity->getIcon());
             $storeAgentEntity->setPublisherId($versionEntity->getCreator());
             $storeAgentEntity->setPublisherType($publisherTypeEnum);
-            $storeAgentEntity->setCategoryId(null);
+            $storeAgentEntity->setCategoryId($versionEntity->getCategoryId());
             $storeAgentEntity->setPublishStatus(PublishStatus::PUBLISHED);
             $storeAgentEntity->setOrganizationCode($versionEntity->getOrganizationCode());
 
             if ($existingStoreAgent) {
                 $storeAgentEntity->setId($existingStoreAgent->getId());
+                $storeAgentEntity->setInstallCount($existingStoreAgent->getInstallCount());
+                $storeAgentEntity->setIsHidden($existingStoreAgent->isHidden());
             }
 
             if ($marketIsFeatured !== null) {

@@ -18,9 +18,12 @@ import { Input } from "@/components/shadcn-ui/input"
 import { Switch } from "@/components/shadcn-ui/switch"
 import { cn } from "@/lib/utils"
 import { ShareType } from "@/pages/superMagic/components/Share/types"
+import { MobileAttachmentRowIcon } from "@/pages/superMagic/components/TopicFilesButton/components/MobileAttachmentRowIcon"
+import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks/types"
 import type { ProjectShareSheetController } from "../types"
 import SelectedFilesHierarchySection from "./SelectedFilesHierarchySection"
 import { ProjectShareScrollSpacer } from "./ProjectShareFloatingActionBar"
+import { RecordingShareContentPicker } from "@/pages/superMagic/pages/AudioRecordings/components/recording-share/RecordingShareContentPicker"
 
 interface ProjectShareCreateViewProps {
 	controller: ProjectShareSheetController
@@ -44,6 +47,10 @@ function CardGroup({ children }: { children: ReactNode }) {
  * 文件模式下展示已选文件列表，默认折叠，避免创建页首屏过长。
  */
 function SelectedFilesSection({ controller }: { controller: ProjectShareSheetController }) {
+	if (controller.enableInlineFileSelection) {
+		return null
+	}
+
 	if (controller.mode !== "file" || controller.selectedFileCount === 0) {
 		return null
 	}
@@ -54,6 +61,67 @@ function SelectedFilesSection({ controller }: { controller: ProjectShareSheetCon
 			totalCount={controller.selectedFileCount}
 			testId="project-share-sheet-selected-files-trigger"
 		/>
+	)
+}
+
+/**
+ * Reads the best human-facing name from an attachment item for compact mobile rows.
+ */
+function getAttachmentDisplayName(item: AttachmentItem): string {
+	return item.name || item.file_name || item.display_filename || item.filename || ""
+}
+
+/**
+ * Shows the current default-open file and delegates selection to the picker shell.
+ */
+function DefaultOpenFileSection({ controller }: { controller: ProjectShareSheetController }) {
+	const { t } = useTranslation("super")
+	const defaultOpenFile = controller.defaultOpenFileItem
+	// Use the same attachment tree context as the picker so custom folder icons can resolve metadata assets.
+	const defaultOpenIconAttachments =
+		controller.defaultOpenFileCandidateTree.length > 0
+			? controller.defaultOpenFileCandidateTree
+			: controller.defaultOpenFileCandidates
+
+	if (controller.enableInlineFileSelection || !defaultOpenFile) {
+		return null
+	}
+
+	return (
+		<div className="space-y-2">
+			<SectionLabel>{t("projectShare.defaultOpenFileLabel")}</SectionLabel>
+			<CardGroup>
+				<button
+					type="button"
+					onClick={controller.openDefaultOpenFilePicker}
+					disabled={controller.defaultOpenFileCandidates.length === 0}
+					className="flex min-h-[52px] w-full items-center gap-3 px-3.5 py-3 text-left active:opacity-75 disabled:opacity-50"
+					data-testid="project-share-sheet-default-open-file-trigger"
+				>
+					<div className="min-w-0 flex-1">
+						<div className="text-[16px] leading-5 text-foreground">
+							{t("projectShare.defaultOpenFileLabel")}
+						</div>
+						<div className="mt-1 truncate text-[13px] leading-[18px] text-muted-foreground">
+							{t("projectShare.defaultOpenFileDescription")}
+						</div>
+					</div>
+					<div className="flex min-w-0 shrink items-center gap-2">
+						<MobileAttachmentRowIcon
+							item={defaultOpenFile}
+							attachments={defaultOpenIconAttachments}
+							size={16}
+							className="block size-4 shrink-0 object-contain"
+							dataTestId="project-share-sheet-default-open-file-icon"
+						/>
+						<span className="max-w-[112px] truncate text-[14px] leading-5 text-foreground">
+							{getAttachmentDisplayName(defaultOpenFile)}
+						</span>
+					</div>
+					<ChevronRight className="h-[18px] w-[18px] shrink-0 text-[#8A8A8A]" />
+				</button>
+			</CardGroup>
+		</div>
 	)
 }
 
@@ -134,6 +202,14 @@ export default function ProjectShareCreateView({ controller }: ProjectShareCreat
 
 	return (
 		<div className="flex flex-col gap-2.5" data-testid="project-share-sheet-create-view">
+			{controller.enableInlineFileSelection ? (
+				<RecordingShareContentPicker
+					groupedItems={controller.groupedShareItems}
+					selectedFileIds={controller.selectedFileIds}
+					onToggleFileId={controller.toggleShareFileId}
+					onSetSelectedFileIds={controller.setSelectedFileIds}
+				/>
+			) : null}
 			<SelectedFilesSection controller={controller} />
 			<div className="space-y-2">
 				<SectionLabel>{t("projectShare.typeLabel")}</SectionLabel>
@@ -179,6 +255,8 @@ export default function ProjectShareCreateView({ controller }: ProjectShareCreat
 					/>
 				</CardGroup>
 			</div>
+
+			<DefaultOpenFileSection controller={controller} />
 
 			<div className="space-y-2">
 				<SectionLabel>{t("projectShare.expiryLabel")}</SectionLabel>
@@ -330,19 +408,21 @@ export default function ProjectShareCreateView({ controller }: ProjectShareCreat
 								showDivider
 								testId="project-share-sheet-allow-download-row"
 							/>
-							<AdvancedSwitchRow
-								label={t("share.viewFileList")}
-								description={t("share.viewFileListDescription")}
-								checked={formState.advancedSettings.showFileList ?? true}
-								onCheckedChange={(value) =>
-									controller.setAdvancedSettings({
-										...formState.advancedSettings,
-										showFileList: value,
-									})
-								}
-								showDivider
-								testId="project-share-sheet-show-file-list-row"
-							/>
+							{!controller.enableInlineFileSelection ? (
+								<AdvancedSwitchRow
+									label={t("share.viewFileList")}
+									description={t("share.viewFileListDescription")}
+									checked={formState.advancedSettings.showFileList ?? true}
+									onCheckedChange={(value) =>
+										controller.setAdvancedSettings({
+											...formState.advancedSettings,
+											showFileList: value,
+										})
+									}
+									showDivider
+									testId="project-share-sheet-show-file-list-row"
+								/>
+							) : null}
 							<AdvancedSwitchRow
 								label={t("share.showOriginalInfo")}
 								description={t("share.showOriginalInfoDescription")}

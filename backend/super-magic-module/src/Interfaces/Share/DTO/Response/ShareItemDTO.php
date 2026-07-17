@@ -105,6 +105,21 @@ class ShareItemDTO
     public ?string $shareUrl = null;
 
     /**
+     * @var null|string 创建时间
+     */
+    public ?string $createdAt = null;
+
+    /**
+     * @var null|string 修改时间
+     */
+    public ?string $updatedAt = null;
+
+    /**
+     * @var int 查看次数
+     */
+    public int $viewCount = 0;
+
+    /**
      * 从数组创建DTO实例.
      *
      * @param array $data 数组数据
@@ -131,6 +146,9 @@ class ShareItemDTO
         $dto->expireDays = isset($data['expire_days']) ? (int) $data['expire_days'] : null;
         $dto->mainFileName = isset($data['main_file_name']) ? (string) $data['main_file_name'] : null;
         $dto->shareUrl = isset($data['share_url']) ? (string) $data['share_url'] : null;
+        $dto->createdAt = isset($data['created_at']) ? (string) $data['created_at'] : null;
+        $dto->updatedAt = isset($data['updated_at']) ? (string) $data['updated_at'] : null;
+        $dto->viewCount = (int) ($data['view_count'] ?? 0);
 
         return $dto;
     }
@@ -160,6 +178,9 @@ class ShareItemDTO
             'expire_at' => DateFormatUtil::formatExpireAt($this->expireAt),
             'expire_days' => $this->expireDays,
             'main_file_name' => $this->mainFileName,
+            'created_at' => DateFormatUtil::formatExpireAt($this->createdAt),
+            'updated_at' => DateFormatUtil::formatExpireAt($this->updatedAt),
+            'view_count' => $this->viewCount,
         ];
 
         if ($this->shareUrl !== null) {

@@ -36,6 +36,12 @@ class MoveProjectRequestDTO extends AbstractRequestDTO
     public ?string $targetProjectName = null;
 
     /**
+     * Project mode.
+     * Null means keep the current project mode.
+     */
+    public ?string $projectMode = null;
+
+    /**
      * Get source project ID.
      */
     public function getSourceProjectId(): int
@@ -82,6 +88,18 @@ class MoveProjectRequestDTO extends AbstractRequestDTO
     }
 
     /**
+     * Get project mode.
+     */
+    public function getProjectMode(): ?string
+    {
+        if ($this->projectMode === '' || $this->projectMode === null) {
+            return null;
+        }
+
+        return $this->projectMode;
+    }
+
+    /**
      * Get validation rules.
      */
     protected static function getHyperfValidationRules(): array
@@ -90,6 +108,7 @@ class MoveProjectRequestDTO extends AbstractRequestDTO
             'source_project_id' => 'required|numeric',
             'target_workspace_id' => 'present|string|max:64',
             'target_project_name' => 'nullable|string|max:100',
+            'project_mode' => 'nullable|string|in:general,ppt,data_analysis,report,meeting,summary,super_magic,audio,agent_creator,skill_creator,custom_agent,custom_skill,magiclaw,chat',
         ];
     }
 

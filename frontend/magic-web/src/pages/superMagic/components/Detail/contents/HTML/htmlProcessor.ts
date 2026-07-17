@@ -12,6 +12,7 @@ import {
 	processInlineStyles,
 	processAudioArray,
 	handleHtCdnUrl,
+	removeRootHtmlXhtmlNamespace,
 } from "./utils"
 import { processDashboardArray } from "./dashboard/utils"
 import {
@@ -105,7 +106,9 @@ function restoreSerializedEntities(html: string): string {
 
 /** 将 Document 序列化为 HTML 字符串并还原实体，保证输出格式与 DOM 语义一致 */
 function serializeDocToHtml(doc: Document): string {
-	return restoreSerializedEntities(new XMLSerializer().serializeToString(doc))
+	return removeRootHtmlXhtmlNamespace(
+		restoreSerializedEntities(new XMLSerializer().serializeToString(doc)),
+	)
 }
 
 function finalizeHtmlPreviewBundledShell(html: string, input: ProcessHtmlContentInput): string {
@@ -535,12 +538,30 @@ export async function processHtmlContent(
 
 					if (input.preloadedUrlMapping) {
 						const preloadedUrlMapping = input.preloadedUrlMapping
-						return fileIds
+						const preloadedUrls = fileIds
+							// PPT 预加载映射中的图片是原始 URL；启用图片处理后，
+							// 仅复用非图片资源，避免 CSS/脚本等资源被错误转换。
+							.filter((fileId) =>
+								input.xMagicImageProcess ? !imageFileIds.has(fileId) : true,
+							)
 							.map((fileId) => ({
 								file_id: fileId,
 								url: preloadedUrlMapping.get(fileId),
 							}))
 							.filter((item) => item.url) as GetTemporaryDownloadUrlItem[]
+
+						if (!input.xMagicImageProcess) return preloadedUrls
+
+						const imageFileIdsToProcess = fileIds.filter((fileId) =>
+							imageFileIds.has(fileId),
+						)
+						if (imageFileIdsToProcess.length === 0) return preloadedUrls
+
+						const processedImageUrls = await getTemporaryDownloadUrl({
+							file_ids: imageFileIdsToProcess,
+							options: { xMagicImageProcess: input.xMagicImageProcess },
+						})
+						return [...preloadedUrls, ...(processedImageUrls || [])]
 					}
 
 					const { cached, missing } = urlCacheManager.getCachedUrls(
@@ -610,7 +631,7 @@ export async function processHtmlContent(
 								if (!magicProjectJSConfig.geo) {
 									magicProjectJSConfig.geo = []
 								}
-								; (magicProjectJSConfig as any).geo.push({
+								;(magicProjectJSConfig as any).geo.push({
 									name: resourceInfo.fileName.split(".")[0],
 									url: item.url,
 								})
@@ -619,7 +640,7 @@ export async function processHtmlContent(
 								if (!magicProjectJSConfig.dataSources) {
 									magicProjectJSConfig.dataSources = []
 								}
-								; (magicProjectJSConfig as any).dataSources.push({
+								;(magicProjectJSConfig as any).dataSources.push({
 									name: resourceInfo.fileName.split(".")[0],
 									url: item.url,
 								})

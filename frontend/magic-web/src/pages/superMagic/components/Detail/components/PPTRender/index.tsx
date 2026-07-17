@@ -199,8 +199,17 @@ const PPTRenderInner = observer(function PPTRenderInner({
 
 	const [isAnySlideEditing, setIsAnySlideEditing] = useState(false)
 	const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false)
+	const [manualScale, setManualScale] = useState<number | null>(null)
+	const [activeSlideScaleRatio, setActiveSlideScaleRatio] = useState(1)
 	const activeSlideCloseSaveHandlerRef = useRef<(() => Promise<boolean>) | null>(null)
 	const activeSlideDiscardHandlerRef = useRef<(() => Promise<boolean>) | null>(null)
+
+	const handleManualScaleChange = useMemoizedFn((scale: number | null) => {
+		setManualScale(scale)
+		if (scale !== null) {
+			setActiveSlideScaleRatio(scale)
+		}
+	})
 
 	const { sidebarWidth, isResizing, handleResizeStart } = useResizableSidebar({
 		containerRef,
@@ -698,6 +707,9 @@ const PPTRenderInner = observer(function PPTRenderInner({
 											loadingError={slide.loadingError}
 											isFullscreen={isFullscreen}
 											isPlaybackMode={isPlaybackMode}
+											manualScale={manualScale}
+											onManualScaleChange={handleManualScaleChange}
+											onScaleRatioChange={setActiveSlideScaleRatio}
 											saveEditContent={saveEditContent}
 											fileId={slideFileId}
 											projectId={resolvedProjectId}
@@ -767,6 +779,9 @@ const PPTRenderInner = observer(function PPTRenderInner({
 									onRefreshSlides={handleRefreshAllSlides}
 									onJumpToPage={handleJumpToPage}
 									onToggleFullscreen={toggleFullscreen}
+									scaleRatio={activeSlideScaleRatio}
+									onScaleChange={handleManualScaleChange}
+									onResetScale={() => handleManualScaleChange(null)}
 									t={t}
 								/>
 							)}

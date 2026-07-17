@@ -34,7 +34,7 @@ describe("ImageElement mounted image node sync", () => {
 			data: { id: string; width: number; height: number }
 			canvas: { cropManager: { getCroppingElementId: () => string | null } }
 			getSourceCrop: () => { x: number; y: number; width: number; height: number }
-			syncMountedImageContentNodeWithLoadedResource: () => void
+			patchMountedImageContentNodeWithLoadedResource: () => { type: string }
 		}
 		element.node = group
 		element.loadedImage = newImage
@@ -46,12 +46,141 @@ describe("ImageElement mounted image node sync", () => {
 		}
 		element.getSourceCrop = vi.fn(() => ({ x: 1, y: 2, width: 3, height: 4 }))
 
-		element.syncMountedImageContentNodeWithLoadedResource()
+		const result = element.patchMountedImageContentNodeWithLoadedResource()
 
+		expect(result).toEqual({ type: "patched-content" })
 		expect(imageNode.image()).toBe(newImage)
 		expect(imageNode.width()).toBe(200)
 		expect(imageNode.height()).toBe(120)
 		expect(imageNode.crop()).toEqual({ x: 1, y: 2, width: 3, height: 4 })
+	})
+
+	it("applies resource upgrades to the mounted image node without rerendering", () => {
+		const oldImage = new Image()
+		const fullImage = new Image()
+		const imageNode = new Konva.Image({
+			image: oldImage,
+			name: "image-content",
+			width: 100,
+			height: 80,
+		})
+		const group = new Konva.Group({ width: 100, height: 80 })
+		group.add(imageNode)
+
+		const emit = vi.fn()
+		const rerenderWhenTransformIdle = vi.fn()
+		const resource = {
+			ossSrc: "https://example.test/full.png",
+			image: fullImage,
+			imageInfo: {
+				naturalWidth: 100,
+				naturalHeight: 80,
+				fileSize: 10,
+				mimeType: "image/png",
+				filename: "full.png",
+			},
+			variant: "full" as const,
+			sourceWidth: 100,
+			sourceHeight: 80,
+			isFullSize: true,
+		}
+		const element = Object.create(ImageElement.prototype) as ImageElement & {
+			node: Konva.Group
+			loadedImage: HTMLImageElement
+			loadedImageVariant: "preview"
+			data: { id: string; src: string; width: number; height: number }
+			canvas: {
+				cropManager: { getCroppingElementId: () => string | null }
+				eventEmitter: { emit: ReturnType<typeof vi.fn> }
+			}
+			getSourceCrop: () => { x: number; y: number; width: number; height: number }
+			isErrorState: boolean
+			isResourceLoading: boolean
+			lastAppliedLoadFailureSignature: string | null
+			rerenderWhenTransformIdle: ReturnType<typeof vi.fn>
+			applyResourceFromEvent: (loadedResource: typeof resource) => void
+		}
+		element.node = group
+		element.loadedImage = oldImage
+		element.loadedImageVariant = "preview"
+		element.data = { id: "image-1", src: "/image.png", width: 100, height: 80 }
+		element.canvas = {
+			cropManager: {
+				getCroppingElementId: () => null,
+			},
+			eventEmitter: { emit },
+		}
+		element.getSourceCrop = vi.fn(() => ({ x: 0, y: 0, width: 100, height: 80 }))
+		element.isErrorState = false
+		element.isResourceLoading = true
+		element.lastAppliedLoadFailureSignature = "/image.png:load-error"
+		element.rerenderWhenTransformIdle = rerenderWhenTransformIdle
+
+		element.applyResourceFromEvent(resource)
+
+		expect(imageNode.image()).toBe(fullImage)
+		expect(element.loadedImage).toBe(fullImage)
+		expect(element.isResourceLoading).toBe(false)
+		expect(element.lastAppliedLoadFailureSignature).toBeNull()
+		expect(emit).toHaveBeenCalledWith({
+			type: "element:image:ossSrcReady",
+			data: { elementId: "image-1" },
+		})
+		expect(rerenderWhenTransformIdle).not.toHaveBeenCalled()
+	})
+
+	it("rerenders when a loaded resource has no mounted image node to update", () => {
+		const previewImage = new Image()
+		const group = new Konva.Group({ width: 100, height: 80 })
+		const emit = vi.fn()
+		const rerenderWhenTransformIdle = vi.fn()
+		const resource = {
+			ossSrc: "https://example.test/preview.png",
+			image: previewImage,
+			imageInfo: {
+				naturalWidth: 100,
+				naturalHeight: 80,
+				fileSize: 10,
+				mimeType: "image/png",
+				filename: "preview.png",
+			},
+			variant: "preview" as const,
+			sourceWidth: 100,
+			sourceHeight: 80,
+			isFullSize: false,
+		}
+		const element = Object.create(ImageElement.prototype) as ImageElement & {
+			node: Konva.Group
+			loadedImage?: HTMLImageElement
+			data: { id: string; src: string; width: number; height: number }
+			canvas: {
+				cropManager: { getCroppingElementId: () => string | null }
+				eventEmitter: { emit: ReturnType<typeof vi.fn> }
+			}
+			isErrorState: boolean
+			isResourceLoading: boolean
+			lastAppliedLoadFailureSignature: string | null
+			rerenderWhenTransformIdle: ReturnType<typeof vi.fn>
+			applyResourceFromEvent: (loadedResource: typeof resource) => void
+		}
+		element.node = group
+		element.loadedImage = undefined
+		element.data = { id: "image-1", src: "/image.png", width: 100, height: 80 }
+		element.canvas = {
+			cropManager: {
+				getCroppingElementId: () => null,
+			},
+			eventEmitter: { emit },
+		}
+		element.isErrorState = false
+		element.isResourceLoading = true
+		element.lastAppliedLoadFailureSignature = null
+		element.rerenderWhenTransformIdle = rerenderWhenTransformIdle
+
+		element.applyResourceFromEvent(resource)
+
+		expect(element.loadedImage).toBe(previewImage)
+		expect(rerenderWhenTransformIdle).toHaveBeenCalledTimes(1)
 	})
 
 	it("renders the loaded image even when oss metadata is temporarily absent", () => {
@@ -149,6 +278,56 @@ describe("ImageElement mounted image node sync", () => {
 			placeholderMode: "loading",
 			text: "正在上传中...",
 		})
+	})
+
+	it("clears video generating state when terminal generation data arrives", () => {
+		const element = Object.create(VideoElement.prototype) as VideoElement & {
+			data: {
+				id: string
+				src?: string
+				status?: GenerationStatus
+				generateVideoRequest?: { video_id: string }
+				errorMessage?: string
+			}
+			isGenerating: boolean
+			cancelScheduledPreviewRefresh: ReturnType<typeof vi.fn>
+			releasePlaybackConsumers: ReturnType<typeof vi.fn>
+			renderer: { resetPreview: ReturnType<typeof vi.fn> }
+			canvas: {
+				visibilityManager: {
+					updateVideoElement: ReturnType<typeof vi.fn>
+					unregisterVideoElement: ReturnType<typeof vi.fn>
+				}
+			}
+		}
+		element.data = {
+			id: "video-1",
+			status: GenerationStatus.Processing,
+			generateVideoRequest: { video_id: "task-1" },
+		}
+		element.isGenerating = true
+		element.cancelScheduledPreviewRefresh = vi.fn()
+		element.releasePlaybackConsumers = vi.fn()
+		element.renderer = { resetPreview: vi.fn() }
+		element.canvas = {
+			visibilityManager: {
+				updateVideoElement: vi.fn(),
+				unregisterVideoElement: vi.fn(),
+			},
+		}
+
+		const shouldRerender = element.update({
+			...element.data,
+			src: "videos/result.mp4",
+			status: GenerationStatus.Completed,
+		})
+
+		expect(element.isGenerating).toBe(false)
+		expect(element.canvas.visibilityManager.updateVideoElement).toHaveBeenCalledWith(
+			"video-1",
+			"videos/result.mp4",
+		)
+		expect(shouldRerender).toBe(true)
 	})
 
 	it("resizes mounted image layout during node-only transform resize", () => {
@@ -300,6 +479,7 @@ describe("ImageElement mounted image node sync", () => {
 			sourceHeight: 80,
 			isFullSize: false,
 		}
+		const rerenderWhenTransformIdle = vi.fn()
 		const element = Object.create(ImageElement.prototype) as ImageElement & {
 			node: Konva.Group
 			loadedImage: HTMLImageElement
@@ -312,6 +492,7 @@ describe("ImageElement mounted image node sync", () => {
 				}
 			}
 			getSourceCrop: () => { x: number; y: number; width: number; height: number }
+			rerenderWhenTransformIdle: ReturnType<typeof vi.fn>
 			handleImageSourceWillClose: (image: HTMLImageElement, variant: "preview") => void
 		}
 		element.node = group
@@ -327,11 +508,13 @@ describe("ImageElement mounted image node sync", () => {
 			},
 		}
 		element.getSourceCrop = vi.fn(() => ({ x: 0, y: 0, width: 100, height: 80 }))
+		element.rerenderWhenTransformIdle = rerenderWhenTransformIdle
 
 		element.handleImageSourceWillClose(closingImage, "preview")
 
 		expect(imageNode.image()).toBe(fallbackImage)
 		expect(element.loadedImage).toBe(fallbackImage)
+		expect(rerenderWhenTransformIdle).not.toHaveBeenCalled()
 	})
 
 	it("removes mounted image node when a closing resource has no fallback", () => {
@@ -345,6 +528,7 @@ describe("ImageElement mounted image node sync", () => {
 		const group = new Konva.Group({ width: 100, height: 80 })
 		group.add(imageNode)
 
+		const rerenderWhenTransformIdle = vi.fn()
 		const element = Object.create(ImageElement.prototype) as ImageElement & {
 			node: Konva.Group
 			loadedImage?: HTMLImageElement
@@ -355,6 +539,7 @@ describe("ImageElement mounted image node sync", () => {
 					peekResource: ReturnType<typeof vi.fn>
 				}
 			}
+			rerenderWhenTransformIdle: ReturnType<typeof vi.fn>
 			handleImageSourceWillClose: (image: HTMLImageElement, variant: "preview") => void
 		}
 		element.node = group
@@ -366,11 +551,13 @@ describe("ImageElement mounted image node sync", () => {
 				peekResource: vi.fn(() => null),
 			},
 		}
+		element.rerenderWhenTransformIdle = rerenderWhenTransformIdle
 
 		element.handleImageSourceWillClose(closingImage, "preview")
 
 		expect(element.loadedImage).toBeUndefined()
 		expect(imageNode.getParent()).toBeNull()
+		expect(rerenderWhenTransformIdle).toHaveBeenCalledTimes(1)
 	})
 
 	it("clears stale not-found state when an uploaded oss src is applied", () => {
@@ -415,7 +602,7 @@ describe("ImageElement mounted image node sync", () => {
 		expect(element.lastAppliedLoadFailureSignature).toBeNull()
 		expect(loadResource).toHaveBeenCalledWith("./images/image.png", {
 			variant: "preview",
-			priority: "critical",
+			priority: "visible",
 		})
 		expect(emit).toHaveBeenCalledWith({
 			type: "element:image:ossSrcReady",

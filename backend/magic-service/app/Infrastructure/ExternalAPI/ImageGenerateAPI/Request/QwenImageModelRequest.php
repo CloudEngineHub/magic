@@ -9,8 +9,6 @@ namespace App\Infrastructure\ExternalAPI\ImageGenerateAPI\Request;
 
 class QwenImageModelRequest extends ImageGenerateRequest
 {
-    protected array $referImages = [];
-
     protected bool $promptExtend = true;
 
     protected bool $watermark = true;
@@ -48,16 +46,6 @@ class QwenImageModelRequest extends ImageGenerateRequest
     public function setWatermark(bool $watermark): void
     {
         $this->watermark = $watermark;
-    }
-
-    public function getReferImages(): array
-    {
-        return $this->referImages;
-    }
-
-    public function setReferImages(array $referImages): void
-    {
-        $this->referImages = $referImages;
     }
 
     public function toArray(?int $n = null): array

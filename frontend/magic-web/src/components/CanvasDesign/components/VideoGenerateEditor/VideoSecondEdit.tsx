@@ -20,9 +20,11 @@ import { resolveVideoGenerationSelection } from "./video-editor-config.generatio
 import { buildVideoPointsEstimateSignature } from "./video-points-estimate.utils"
 import { collectPendingVideoGenerationRequestResourcePaths } from "./video-points-estimate.resources"
 import type { GenerateVideoRequest } from "../../types.magic"
+import type { MediaResourceFullscreenPreviewItem } from "../MediaResourceFullscreenPreview"
 
 interface VideoSecondEditProps {
 	videoElement: VideoElement
+	onPreviewMediaResource?: (resource: MediaResourceFullscreenPreviewItem) => void
 }
 
 async function waitForPendingVideoGenerationResources(
@@ -227,6 +229,7 @@ export default function VideoSecondEdit(props: VideoSecondEditProps) {
 			restoreOnMount="originalRequestOnly"
 			submitTarget="new-element"
 			syncElementSize={false}
+			onPreviewMediaResource={props.onPreviewMediaResource}
 		/>
 	)
 }

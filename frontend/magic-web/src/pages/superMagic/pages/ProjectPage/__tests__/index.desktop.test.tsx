@@ -140,7 +140,7 @@ vi.mock("@/pages/superMagic/pages/TopicPage/components/TopicDesktopPanels", () =
 	default: () => <div data-testid="topic-desktop-panels" />,
 }))
 
-vi.mock("@/pages/superMagic/pages/AudioRecordings/utils/is-audio-project-mode", () => ({
+vi.mock("@/services/audioRecordings", () => ({
 	isAudioProjectMode: vi.fn(() => false),
 }))
 
