@@ -202,36 +202,6 @@ function getBaseViteConfig(env: NodeJS.ProcessEnv = process.env): UserConfig {
 					find: /^@dtyq\/html-sandbox\/(.+)$/,
 					replacement: resolve(__dirname, "packages/html-sandbox/src/$1"),
 				},
-				{
-					find: "@admin",
-					replacement: resolve(__dirname, "packages/magic-admin/src"),
-				},
-				{
-					find: "@admin-components",
-					replacement: resolve(__dirname, "packages/magic-admin/components/index.ts"),
-				},
-				{
-					find: "@dtyq/magic-admin/components",
-					replacement: resolve(__dirname, "packages/magic-admin/components/index.ts"),
-				},
-				{
-					find: "@dtyq/magic-admin/provider",
-					replacement: resolve(
-						__dirname,
-						"packages/magic-admin/src/provider/AdminProvider/index.tsx",
-					),
-				},
-				{
-					find: "@dtyq/magic-admin/ServiceIcon",
-					replacement: resolve(
-						__dirname,
-						"packages/magic-admin/src/pages/PlatformPackage/components/ServiceIcon/index.tsx",
-					),
-				},
-				{
-					find: "@dtyq/magic-admin",
-					replacement: resolve(__dirname, "packages/magic-admin/src/index.ts"),
-				},
 				...(isDev
 					? [
 							{

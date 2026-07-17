@@ -400,6 +400,8 @@ class SuperMagicAgentVersionDomainService
 
             if ($existingStoreAgent) {
                 $storeAgentEntity->setId($existingStoreAgent->getId());
+                $storeAgentEntity->setInstallCount($existingStoreAgent->getInstallCount());
+                $storeAgentEntity->setIsHidden($existingStoreAgent->isHidden());
             }
 
             if ($marketIsFeatured !== null) {

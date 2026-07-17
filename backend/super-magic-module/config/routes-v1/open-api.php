@@ -154,6 +154,13 @@ Router::addGroup(
         //  获取任务
         Router::get('/task', [OpenTaskApi::class, 'getTask']);
 
+        // 数字员工相关
+        Router::addGroup('/agents', static function () {
+            Router::get('/featured/sort-list', [OpenSuperMagicAgentApi::class, 'sortListQueries']);
+            Router::get('/{code}/models', [OpenSuperMagicAgentApi::class, 'getModels']);
+            Router::get('/{code}/default-config', [OpenSuperMagicAgentApi::class, 'getDefaultConfig']);
+        });
+
         // 任务相关
         Router::addGroup('/task', static function () {
             // 获取任务下的附件列表

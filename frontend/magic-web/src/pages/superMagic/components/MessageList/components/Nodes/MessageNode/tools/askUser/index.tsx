@@ -13,6 +13,10 @@ import {
 	resolveAskUserLocaleFromAction,
 } from "@/pages/superMagic/components/MessageList/utils/askUser"
 import {
+	buildAskUserDraftCacheKey,
+	clearAskUserDraftAnswers,
+} from "@/pages/superMagic/components/MessageList/utils/askUserDraftCache"
+import {
 	ASK_USER_CARD_STATUS,
 	ASK_USER_RESPONSE_STATUS,
 	ASK_USER_TOOL,
@@ -122,6 +126,10 @@ function AskUserToolCall(props: DefaultToolProps) {
 	const detailQuestionId = detailData?.question_id
 	const resolvedQuestionId =
 		(typeof detailQuestionId === "string" ? detailQuestionId : "") || toolId || ""
+	const draftCacheKey = buildAskUserDraftCacheKey({
+		questionId: typeof detailQuestionId === "string" ? detailQuestionId : "",
+		topicId: selectedTopic?.chat_topic_id,
+	})
 
 	const submitReply = useCallback(
 		async (responseStatus: AskUserResponseStatusValue, answers?: AskUserAnswers) => {
@@ -162,6 +170,7 @@ function AskUserToolCall(props: DefaultToolProps) {
 				toolCallId: toolId,
 				toolName: ASK_USER_TOOL.name,
 			})
+			clearAskUserDraftAnswers(draftCacheKey)
 			clearAskUserV2BrowserNotification({
 				topicId,
 				notificationKey: resolvedQuestionId || toolId,
@@ -169,6 +178,7 @@ function AskUserToolCall(props: DefaultToolProps) {
 		},
 		[
 			toolId,
+			draftCacheKey,
 			resolvedQuestionId,
 			selectedTopic?.chat_conversation_id,
 			selectedTopic?.chat_topic_id,
@@ -275,6 +285,7 @@ function AskUserToolCall(props: DefaultToolProps) {
 							streaming={isStreaming}
 							disabled={isFrozen}
 							status={askUserStatus}
+							draftCacheKey={draftCacheKey}
 							expiresAt={
 								typeof detailData?.expires_at === "number"
 									? (detailData.expires_at as number)

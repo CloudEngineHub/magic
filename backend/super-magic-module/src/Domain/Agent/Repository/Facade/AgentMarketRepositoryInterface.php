@@ -60,12 +60,12 @@ interface AgentMarketRepositoryInterface
     public function countByCategoryIds(array $categoryIds): array;
 
     /**
-     * 批量统计分类下已发布的市场 Agent 数量。
+     * 批量统计分类下已发布且未隐藏的市场 Agent 数量。
      *
      * @param int[] $categoryIds
      * @return array<int, int>
      */
-    public function countPublishedByCategoryIds(array $categoryIds): array;
+    public function countVisiblePublishedByCategoryIds(array $categoryIds): array;
 
     /**
      * 根据 agent_code 查询市场记录（不限制发布状态）.

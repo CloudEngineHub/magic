@@ -132,7 +132,7 @@ class AgentMarketRepository extends AbstractRepository implements AgentMarketRep
         return $counts;
     }
 
-    public function countPublishedByCategoryIds(array $categoryIds): array
+    public function countVisiblePublishedByCategoryIds(array $categoryIds): array
     {
         if ($categoryIds === []) {
             return [];
@@ -143,6 +143,7 @@ class AgentMarketRepository extends AbstractRepository implements AgentMarketRep
             ->selectRaw('COUNT(*) as crew_count')
             ->whereIn('category_id', $categoryIds)
             ->where('publish_status', PublishStatus::PUBLISHED->value)
+            ->where('is_hidden', false)
             ->groupBy('category_id')
             ->get();
 
