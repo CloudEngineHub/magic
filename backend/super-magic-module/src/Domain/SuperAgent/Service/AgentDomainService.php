@@ -679,7 +679,11 @@ class AgentDomainService
             'dynamic_config' => $taskDynamicConfig,
             'agent' => $agentProfile,
         ]);
-        $mentionsJsonStruct = $this->buildMentionsJsonStruct($taskContext->getTask()->getMentions());
+        $mentionsJsonStruct = $this->buildMentionsJsonStruct(
+            $taskContext->getTask()->getMentions(),
+            $taskContext->getTask()->getProjectId(),
+            (string) config('super-magic.agent.referenced_project_mount_base_path', '/mnt/agfs/magicfs/referenced-projects')
+        );
 
         // Get original prompt
         $userRequest = $taskContext->getTask()->getPrompt();
@@ -1883,15 +1887,76 @@ class AgentDomainService
     }
 
     /**
-     * @param null|string $mentionsJson mentions 的 JSON 字符串
+     * @param null|string $mentionsJson     mentions 的 JSON 字符串
+     * @param null|int $currentProjectId   当前 task 所属项目 ID（同项目 mention 不做路径转换）
+     * @param string $mountBasePath        跨项目引用挂载的容器内基础路径（来自 env AGENT_REFERENCED_PROJECT_MOUNT_BASE_PATH）
      * @return array 处理后的 mentions 数组
      */
-    private function buildMentionsJsonStruct(?string $mentionsJson): array
-    {
+    private function buildMentionsJsonStruct(
+        ?string $mentionsJson,
+        ?int $currentProjectId,
+        string $mountBasePath
+    ): array {
         if ($mentionsJson && json_validate($mentionsJson)) {
             $mentions = (array) Json::decode($mentionsJson);
         } else {
             $mentions = [];
+        }
+
+        return $this->translateCrossProjectPaths($mentions, $currentProjectId, $mountBasePath);
+    }
+
+    /**
+     * 将跨项目 mention 中的相对 file_path / directory_path 转换为容器内的绝对路径。
+     *
+     * - 仅作用于 type=project_file 和 type=project_directory
+     * - 同项目（project_id === currentProjectId）跳过，走 agent 自身 workspace
+     * - file_path/directory_path 已为绝对路径（以 / 开头）跳过，防双前缀
+     * - project_id 缺失或为空时跳过
+     *
+     * @param array $mentions
+     */
+    private function translateCrossProjectPaths(
+        array $mentions,
+        ?int $currentProjectId,
+        string $mountBasePath
+    ): array {
+        if ($mountBasePath === '' || empty($mentions)) {
+            return $mentions;
+        }
+
+        $base = rtrim($mountBasePath, '/');
+
+        foreach ($mentions as $i => $mention) {
+            if (! is_array($mention)) {
+                continue;
+            }
+            $type = $mention['type'] ?? null;
+
+            $pathKey = match ($type) {
+                'project_file' => 'file_path',
+                'project_directory' => 'directory_path',
+                default => null,
+            };
+            if ($pathKey === null || ! isset($mention[$pathKey])) {
+                continue;
+            }
+
+            $path = (string) $mention[$pathKey];
+            if ($path === '' || str_starts_with($path, '/')) {
+                continue;
+            }
+
+            $pidRaw = $mention['project_id'] ?? null;
+            if ($pidRaw === null || $pidRaw === '') {
+                continue;
+            }
+            $pidStr = (string) $pidRaw;
+            if ($currentProjectId !== null && (string) $currentProjectId === $pidStr) {
+                continue;
+            }
+
+            $mentions[$i][$pathKey] = $base . '/' . $pidStr . '/' . ltrim($path, '/');
         }
 
         return $mentions;

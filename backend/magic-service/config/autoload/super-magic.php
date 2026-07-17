@@ -43,6 +43,15 @@ return [
     'file_version' => [
         'max_versions' => \Hyperf\Support\env('FILE_VERSION_MAX_VERSIONS', 10),
     ],
+    'agent' => [
+        // Base path inside the agent sandbox where cross-project mounts live.
+        // Used to translate relative file_path/directory_path in cross-project
+        // mentions into absolute paths the agent can read.
+        'referenced_project_mount_base_path' => \Hyperf\Support\env(
+            'AGENT_REFERENCED_PROJECT_MOUNT_BASE_PATH',
+            '/mnt/agfs/magicfs/referenced-projects'
+        ),
+    ],
     'statistics' => [
         // Organization codes to exclude from statistics
         'organization_whitelist' => array_filter(explode(',', \Hyperf\Support\env('STATISTICS_ORGANIZATION_WHITELIST', ''))),
