@@ -322,6 +322,16 @@ class AgentVersionRepository extends SuperMagicAbstractRepository implements Age
         return true;
     }
 
+    public function findIdsByAgentCode(SuperMagicAgentDataIsolation $dataIsolation, string $agentCode): array
+    {
+        $builder = $this->createBuilder($dataIsolation, $this->agentVersionModel::query());
+
+        return $builder->where('code', $agentCode)
+            ->pluck('id')
+            ->map(static fn ($id) => (int) $id)
+            ->all();
+    }
+
     public function clearCurrentVersion(SuperMagicAgentDataIsolation $dataIsolation, string $code): int
     {
         $builder = $this->createBuilder($dataIsolation, $this->agentVersionModel::query());

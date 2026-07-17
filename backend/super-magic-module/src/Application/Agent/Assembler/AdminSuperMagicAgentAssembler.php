@@ -185,10 +185,11 @@ class AdminSuperMagicAgentAssembler
      */
     private function buildCategoryMapByMarket(array $entities): array
     {
-        $categoryIds = array_values(array_unique(array_filter(array_map(
-            static fn (AgentMarketEntity $entity) => $entity->getCategoryId(),
-            $entities
-        ))));
+        $categoryIds = [];
+        foreach ($entities as $entity) {
+            $categoryIds = array_merge($categoryIds, $entity->getCategoryIds());
+        }
+        $categoryIds = array_values(array_unique(array_filter($categoryIds)));
 
         if ($categoryIds === []) {
             return [];
@@ -298,6 +299,8 @@ class AdminSuperMagicAgentAssembler
             publisherType: $entity->getPublisherType()->value,
             categoryId: $entity->getCategoryId(),
             category: $this->createCategoryInfo($entity->getCategoryId(), $categoryMap),
+            categoryIds: $entity->getCategoryIds(),
+            categories: $this->createCategoryInfos($entity->getCategoryIds(), $categoryMap),
             publishStatus: $entity->getPublishStatus()->value,
             installCount: $entity->getInstallCount(),
             sortOrder: $entity->getSortOrder(),
@@ -326,5 +329,23 @@ class AdminSuperMagicAgentAssembler
             'logo' => $category->getLogo(),
             'status' => $category->getStatus(),
         ];
+    }
+
+    /**
+     * @param int[] $categoryIds
+     * @param array<int, AgentCategoryEntity> $categoryMap
+     * @return array<int, array{id: string, name_i18n: array, logo: ?string, status: int}>
+     */
+    private function createCategoryInfos(array $categoryIds, array $categoryMap): array
+    {
+        $items = [];
+        foreach ($categoryIds as $categoryId) {
+            $category = $this->createCategoryInfo($categoryId, $categoryMap);
+            if ($category !== null) {
+                $items[] = $category;
+            }
+        }
+
+        return $items;
     }
 }
