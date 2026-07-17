@@ -136,8 +136,8 @@ class AgentMarketRepository extends AbstractRepository implements AgentMarketRep
 
         $counts = [];
         foreach ($models as $model) {
-            $categoryId = (int) $model->category_id;
-            $agentCount = (int) $model->agent_count;
+            $categoryId = (int) $this->getRowValue($model, 'category_id');
+            $agentCount = (int) $this->getRowValue($model, 'agent_count');
             $counts[$categoryId] = $agentCount;
         }
 
@@ -454,5 +454,10 @@ class AgentMarketRepository extends AbstractRepository implements AgentMarketRep
                 ->whereIn('acr.category_id', $categoryIds)
                 ->whereNull('acr.deleted_at');
         });
+    }
+
+    private function getRowValue(array|object $row, string $key): mixed
+    {
+        return is_array($row) ? $row[$key] : $row->{$key};
     }
 }
