@@ -214,6 +214,8 @@ AZURE_OPENAI_EMBEDDING_DEPLOYMENT=example-text-embedding
 AZURE_OPENAI_EMBEDDING_API_VERSION=2023-05-15
 ```
 
+
+
 **重要：** `MAGIC_GATEWAY_API_KEY` 是一个关键安全凭证，仅用于 `/auth` 接口的认证。只有获取令牌时需要提供此API密钥，获取令牌后的其他请求都使用获得的令牌进行认证，不需要再提供此API密钥。
 
 **安全要求：** `JWT_SECRET` 必须至少32字符，并且必须与 `MAGIC_GATEWAY_API_KEY` 使用不同的随机值。`/status` 需要 `X-Gateway-API-Key`，只返回版本和健康状态；容器健康检查请使用无需认证且不返回配置的 `/healthz`。
