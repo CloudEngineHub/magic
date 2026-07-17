@@ -49,6 +49,7 @@ readonly class SuperMagicAgentDomainService
         protected CloudFileRepositoryInterface $cloudFileRepository,
         protected WorkspaceExporterInterface $workspaceExporter,
         protected AgentMarketRepositoryInterface $agentMarketRepository,
+        protected SuperMagicAgentCategoryRelationDomainService $categoryRelationDomainService,
     ) {
     }
 
@@ -145,12 +146,16 @@ readonly class SuperMagicAgentDomainService
             $this->userAgentDomainService->deleteUserAgentOwnership($dataIsolation, $code);
         } else {
             // LOCAL_CREATE 类型：这是资源 owner 删除，需要同时清理资源本体、版本/技能/剧本和所有用户关系。
+            $versionIds = $this->agentVersionRepository->findIdsByAgentCode($dataIsolation, $code);
+            $marketIds = $this->storeAgentRepository->findIdsByAgentCode($dataIsolation, $code);
             $result = $this->superMagicAgentRepository->delete($dataIsolation, $code);
             $this->userAgentDomainService->deleteAllUserAgentOwnershipsByCode($dataIsolation, $code);
             $this->agentSkillRepository->deleteByAgentCode($dataIsolation, $entity->getCode());
             $this->agentPlaybookRepository->deleteByAgentCode($dataIsolation, $entity->getCode());
             $this->agentVersionRepository->deleteByAgentCode($dataIsolation, $code);
             $this->storeAgentRepository->offlineByAgentCode($dataIsolation, $code);
+            $this->categoryRelationDomainService->deleteVersionCategoriesByRelationIds($versionIds);
+            $this->categoryRelationDomainService->deleteMarketCategoriesByRelationIds($marketIds);
         }
 
         if ($result) {

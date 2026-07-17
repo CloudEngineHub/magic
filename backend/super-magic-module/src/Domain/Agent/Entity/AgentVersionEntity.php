@@ -129,6 +129,9 @@ class AgentVersionEntity extends AbstractEntity
 
     protected ?int $categoryId = null;
 
+    /** @var int[] */
+    protected array $categoryIds = [];
+
     /**
      * @var null|array Version description in i18n format
      */
@@ -208,6 +211,7 @@ class AgentVersionEntity extends AbstractEntity
             'publish_target_type' => $this->publishTargetType->value,
             'publish_target_value' => $this->publishTargetValue?->toArray(),
             'category_id' => $this->categoryId,
+            'category_ids' => $this->categoryIds,
             'version_description_i18n' => $this->versionDescriptionI18n,
             'publisher_user_id' => $this->publisherUserId,
             'published_at' => $this->publishedAt,
@@ -495,9 +499,27 @@ class AgentVersionEntity extends AbstractEntity
         return $this->categoryId;
     }
 
+    /** @return int[] */
+    public function getCategoryIds(): array
+    {
+        if ($this->categoryIds !== []) {
+            return $this->categoryIds;
+        }
+
+        return $this->categoryId === null ? [] : [$this->categoryId];
+    }
+
     public function setCategoryId(null|int|string $categoryId): self
     {
         $this->categoryId = is_string($categoryId) ? (int) $categoryId : $categoryId;
+        return $this;
+    }
+
+    /** @param array<int, null|int|string> $categoryIds */
+    public function setCategoryIds(array $categoryIds): self
+    {
+        $this->categoryIds = $this->normalizeCategoryIds($categoryIds);
+        $this->categoryId = $this->categoryIds[0] ?? null;
         return $this;
     }
 
@@ -663,5 +685,20 @@ class AgentVersionEntity extends AbstractEntity
         }
 
         return '';
+    }
+
+    /** @param array<int, null|int|string> $categoryIds */
+    private function normalizeCategoryIds(array $categoryIds): array
+    {
+        $normalized = [];
+        foreach ($categoryIds as $categoryId) {
+            $categoryId = (int) $categoryId;
+            if ($categoryId <= 0 || in_array($categoryId, $normalized, true)) {
+                continue;
+            }
+            $normalized[] = $categoryId;
+        }
+
+        return $normalized;
     }
 }

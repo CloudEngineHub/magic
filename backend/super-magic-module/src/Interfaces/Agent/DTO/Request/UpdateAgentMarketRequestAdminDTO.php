@@ -13,6 +13,9 @@ class UpdateAgentMarketRequestAdminDTO extends AbstractRequestDTO
 {
     private ?int $categoryId = null;
 
+    /** @var null|array<int, null|int|string> */
+    private ?array $categoryIds = null;
+
     private ?int $sortOrder = null;
 
     private ?bool $isFeatured = null;
@@ -34,6 +37,14 @@ class UpdateAgentMarketRequestAdminDTO extends AbstractRequestDTO
     public function setCategoryId(null|int|string $value): void
     {
         $this->categoryId = $value === null ? null : (int) $value;
+        $this->provided['category_id'] = true;
+    }
+
+    public function setCategoryIds(?array $value): void
+    {
+        $this->categoryIds = $value;
+        $this->categoryId = $this->getPrimaryCategoryId();
+        $this->provided['category_ids'] = true;
         $this->provided['category_id'] = true;
     }
 
@@ -90,6 +101,7 @@ class UpdateAgentMarketRequestAdminDTO extends AbstractRequestDTO
     {
         $values = [
             'category_id' => $this->categoryId,
+            'category_ids' => $this->getCategoryIds(),
             'sort_order' => $this->sortOrder,
             'is_featured' => $this->isFeatured,
             'is_hidden' => $this->isHidden,
@@ -99,6 +111,10 @@ class UpdateAgentMarketRequestAdminDTO extends AbstractRequestDTO
             'icon' => $this->icon,
             'icon_type' => $this->iconType,
         ];
+        if (isset($this->provided['category_id']) && ! isset($this->provided['category_ids'])) {
+            $this->provided['category_ids'] = true;
+        }
+
         return array_filter($values, fn ($value, string $key) => isset($this->provided[$key]), ARRAY_FILTER_USE_BOTH);
     }
 
@@ -111,6 +127,8 @@ class UpdateAgentMarketRequestAdminDTO extends AbstractRequestDTO
     {
         return [
             'category_id' => 'sometimes|nullable|integer',
+            'category_ids' => 'sometimes|nullable|array|max:100',
+            'category_ids.*' => 'integer|min:1',
             'sort_order' => 'sometimes|nullable|integer',
             'is_featured' => 'sometimes|boolean',
             'is_hidden' => 'sometimes|boolean',
@@ -125,5 +143,35 @@ class UpdateAgentMarketRequestAdminDTO extends AbstractRequestDTO
     protected static function getHyperfValidationMessage(): array
     {
         return [];
+    }
+
+    /** @return int[] */
+    private function getCategoryIds(): array
+    {
+        if ($this->categoryIds !== null) {
+            return $this->normalizeCategoryIds($this->categoryIds);
+        }
+
+        return $this->categoryId === null ? [] : [$this->categoryId];
+    }
+
+    private function getPrimaryCategoryId(): ?int
+    {
+        return $this->getCategoryIds()[0] ?? null;
+    }
+
+    /** @param array<int, null|int|string> $categoryIds */
+    private function normalizeCategoryIds(array $categoryIds): array
+    {
+        $normalized = [];
+        foreach ($categoryIds as $categoryId) {
+            $categoryId = (int) $categoryId;
+            if ($categoryId <= 0 || in_array($categoryId, $normalized, true)) {
+                continue;
+            }
+            $normalized[] = $categoryId;
+        }
+
+        return $normalized;
     }
 }

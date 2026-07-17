@@ -284,6 +284,7 @@ class SuperMagicAgentAssembler
             isCurrentVersion: $version->isCurrentVersion(),
             publishedAt: $version->getPublishedAt(),
             categoryId: $version->getCategoryId() ? (string) $version->getCategoryId() : null,
+            categoryIds: $version->getCategoryIds(),
         );
     }
 
@@ -395,6 +396,7 @@ class SuperMagicAgentAssembler
                 versionDescriptionI18n: $version->getVersionDescriptionI18n(),
                 publishTargetValue: $enrichedPublishTargetValue,
                 category: self::buildCategoryInfoDTO($version, $categoryMap),
+                categories: self::buildCategoryInfoDTOs($version, $categoryMap),
             );
         }
 
@@ -461,6 +463,28 @@ class SuperMagicAgentAssembler
             id: (string) $categoryId,
             name: $category->getI18nName(CoContext::getLanguage()),
         );
+    }
+
+    /**
+     * @param array<int, AgentCategoryEntity> $categoryMap
+     * @return CategoryInfoDTO[]
+     */
+    private static function buildCategoryInfoDTOs(AgentVersionEntity $version, array $categoryMap): array
+    {
+        $items = [];
+        foreach ($version->getCategoryIds() as $categoryId) {
+            $category = $categoryMap[$categoryId] ?? null;
+            if ($category === null) {
+                continue;
+            }
+
+            $items[] = new CategoryInfoDTO(
+                id: (string) $categoryId,
+                name: $category->getI18nName(CoContext::getLanguage()),
+            );
+        }
+
+        return $items;
     }
 
     /**
