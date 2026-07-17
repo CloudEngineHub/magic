@@ -5,6 +5,7 @@ import { useTranslation } from "react-i18next"
 import { Button } from "@/components/shadcn-ui/button"
 import { Checkbox } from "@/components/shadcn-ui/checkbox"
 import { cn } from "@/lib/utils"
+import HeaderTrailingAction from "./HeaderTrailingAction"
 
 interface SelectModeHeaderProps {
 	selectedCount: number
@@ -40,10 +41,14 @@ function SelectModeHeader({
 
 	return (
 		<div
-			className={cn("flex h-8 w-full shrink-0 items-center justify-between px-2", className)}
+			className={cn(
+				"relative flex h-8 w-full shrink-0 items-center px-2",
+				headerTrailingAction ? "pr-10" : undefined,
+				className,
+			)}
 		>
 			<label
-				className="flex cursor-pointer items-center gap-2 p-0"
+				className="flex min-w-0 shrink-0 cursor-pointer items-center gap-2 p-0"
 				data-testid="select-mode-header-label"
 			>
 				<Checkbox
@@ -55,22 +60,22 @@ function SelectModeHeader({
 					{t("topicFiles.selectAll")}
 				</span>
 			</label>
-			<div className="flex items-center gap-1">
+			<div className="ml-auto flex min-w-0 items-center justify-end gap-1 overflow-hidden">
 				<Button
 					variant="outline"
 					size="sm"
 					onClick={onCancel}
 					data-testid="file-select-cancel-button"
-					className="h-7 px-3 py-2"
+					className="h-7 shrink-0 px-3 py-2"
 				>
 					<span className="text-sm font-medium leading-5">
 						{t("topicFiles.cancelSelect")}
 					</span>
 				</Button>
-				{headerTrailingAction ? (
-					<div className="flex items-center">{headerTrailingAction}</div>
-				) : null}
 			</div>
+			{headerTrailingAction ? (
+				<HeaderTrailingAction>{headerTrailingAction}</HeaderTrailingAction>
+			) : null}
 		</div>
 	)
 }

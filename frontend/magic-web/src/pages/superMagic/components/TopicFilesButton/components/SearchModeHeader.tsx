@@ -5,6 +5,7 @@ import { Search, X } from "lucide-react"
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/shadcn-ui/input-group"
 import { Button } from "@/components/shadcn-ui/button"
 import { cn } from "@/lib/utils"
+import HeaderTrailingAction from "./HeaderTrailingAction"
 
 interface SearchModeHeaderProps {
 	searchValue: string
@@ -58,8 +59,14 @@ function SearchModeHeader({
 	}
 
 	return (
-		<div className={cn("flex h-8 items-center gap-2 px-2", className)}>
-			<InputGroup className="h-7 flex-1 rounded-md duration-300 animate-in fade-in slide-in-from-left-4 [&:has([data-slot=input-group-control]:focus-visible)]:border-input [&:has([data-slot=input-group-control]:focus-visible)]:ring-0">
+		<div
+			className={cn(
+				"relative flex h-8 items-center gap-2 px-2",
+				headerTrailingAction ? "pr-10" : undefined,
+				className,
+			)}
+		>
+			<InputGroup className="h-7 min-w-0 flex-1 rounded-md duration-300 animate-in fade-in slide-in-from-left-4 [&:has([data-slot=input-group-control]:focus-visible)]:border-input [&:has([data-slot=input-group-control]:focus-visible)]:ring-0">
 				<InputGroupAddon align="inline-start">
 					<Search size={16} />
 				</InputGroupAddon>
@@ -77,7 +84,7 @@ function SearchModeHeader({
 			<Button
 				type="button"
 				size="icon-sm"
-				className="size-7 border bg-white text-foreground duration-300 animate-in fade-in hover:bg-accent"
+				className="size-7 shrink-0 border bg-white text-foreground duration-300 animate-in fade-in hover:bg-accent"
 				data-testid="file-search-close-button"
 				onClick={onClose}
 				aria-label={t("common.cancel")}
@@ -85,7 +92,7 @@ function SearchModeHeader({
 				<X size={16} />
 			</Button>
 			{headerTrailingAction ? (
-				<div className="flex items-center">{headerTrailingAction}</div>
+				<HeaderTrailingAction>{headerTrailingAction}</HeaderTrailingAction>
 			) : null}
 		</div>
 	)

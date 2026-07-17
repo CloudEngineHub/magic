@@ -16,6 +16,7 @@ import FileMenuDropdown from "./FileMenuDropdown"
 import UploadMenuDropdown from "./UploadMenuDropdown"
 import { type PresetFileType } from "../constant"
 import { cn } from "@/lib/utils"
+import HeaderTrailingAction from "./HeaderTrailingAction"
 
 interface NormalModeHeaderProps {
 	title?: string
@@ -58,11 +59,17 @@ function NormalModeHeader({
 	const isMobile = useIsMobile()
 
 	return (
-		<div className={cn("flex h-8 w-full items-center justify-between pl-4 pr-2", className)}>
-			<p className="whitespace-nowrap text-sm font-semibold leading-4 text-foreground">
+		<div
+			className={cn(
+				"relative flex h-8 w-full items-center pl-4",
+				headerTrailingAction ? "pr-10" : "pr-2",
+				className,
+			)}
+		>
+			<p className="shrink-0 whitespace-nowrap text-sm font-semibold leading-4 text-foreground">
 				{title || t("topicFiles.title")}
 			</p>
-			<div className="flex items-center gap-1">
+			<div className="ml-auto flex min-w-0 items-center justify-end gap-1 overflow-hidden">
 				{allowEdit && onSearch && (
 					<MagicTooltip title={t("topicFiles.search")}>
 						<button
@@ -158,10 +165,10 @@ function NormalModeHeader({
 						</button>
 					</MagicTooltip>
 				)}
-				{headerTrailingAction ? (
-					<div className="ml-1 flex items-center">{headerTrailingAction}</div>
-				) : null}
 			</div>
+			{headerTrailingAction ? (
+				<HeaderTrailingAction>{headerTrailingAction}</HeaderTrailingAction>
+			) : null}
 		</div>
 	)
 }
