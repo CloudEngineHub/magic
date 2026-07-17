@@ -18,6 +18,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -49,6 +50,7 @@ var (
 	// JWT相关安全配置
 	keyRotationInterval = 24 * time.Hour // 密钥轮换间隔
 	lastKeyRotation     time.Time
+	tokenExpireDuration = 30 * 24 * time.Hour // 令牌有效期，可通过 MAGIC_GATEWAY_TOKEN_EXPIRE_DAYS 配置
 
 	// 预编译的正则表达式
 	byteAPMAppKeyRegex = regexp.MustCompile(`X-ByteAPM-AppKey=[^\s,;]*`)
@@ -118,9 +120,22 @@ func initJWTSecurity() {
 	jwtVerifyKeys[legacyKeyID] = gatewayAPIKey
 	logger.Printf("已启用旧版JWT兼容验证，旧密钥版本: %s", legacyKeyID)
 
+	tokenExpireDuration = parseTokenExpireDuration()
 	lastKeyRotation = time.Now()
 
-	logger.Printf("JWT安全配置已初始化")
+	logger.Printf("JWT安全配置已初始化，令牌有效期: %d天", int(tokenExpireDuration.Hours()/24))
+}
+
+// parseTokenExpireDuration 从 MAGIC_GATEWAY_TOKEN_EXPIRE_DAYS 读取令牌有效期，默认 30 天
+func parseTokenExpireDuration() time.Duration {
+	const defaultDays = 30
+	raw := getEnvWithDefault("MAGIC_GATEWAY_TOKEN_EXPIRE_DAYS", strconv.Itoa(defaultDays))
+	days, err := strconv.Atoi(strings.TrimSpace(raw))
+	if err != nil || days <= 0 {
+		logger.Printf("警告: MAGIC_GATEWAY_TOKEN_EXPIRE_DAYS=%q 无效，使用默认值 %d 天", raw, defaultDays)
+		return time.Duration(defaultDays) * 24 * time.Hour
+	}
+	return time.Duration(days) * 24 * time.Hour
 }
 
 func getJWTSecretID(secret []byte) string {
@@ -517,8 +532,8 @@ func authHandler(w http.ResponseWriter, r *http.Request) {
 		RegisteredClaims: jwt.RegisteredClaims{
 			IssuedAt:  jwt.NewNumericDate(time.Now()),
 			ID:        tokenID,
-			ExpiresAt: jwt.NewNumericDate(time.Now().Add(30 * 24 * time.Hour)), // 30天后过期
-			NotBefore: jwt.NewNumericDate(time.Now()),                          // 立即生效
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(tokenExpireDuration)),
+			NotBefore: jwt.NewNumericDate(time.Now()), // 立即生效
 		},
 		ContainerID:           userID, // 保持字段名不变，但存储用户ID
 		MagicUserID:           magicUserID,

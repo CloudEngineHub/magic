@@ -190,6 +190,8 @@ JWT_SECRET=replace-with-a-random-secret-at-least-32-characters
 API_GATEWAY_VERSION=1.0.0
 DEFAULT_API_URL=https://api.default-service.com
 MAGIC_GATEWAY_API_KEY=replace-with-a-random-gateway-key
+# JWT 令牌有效期（天），默认 30
+MAGIC_GATEWAY_TOKEN_EXPIRE_DAYS=30
 
 # OpenAI 服务配置
 OPENAI_API_KEY=sk-xxxx
