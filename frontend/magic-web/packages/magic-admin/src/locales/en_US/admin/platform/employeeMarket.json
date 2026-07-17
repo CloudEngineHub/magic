@@ -1,5 +1,33 @@
 {
 	"asc": "Ascending",
+	"category": {
+		"actions": {
+			"search": "Search"
+		},
+		"addButton": "Add Category",
+		"addTitle": "Add Employee Market Category",
+		"columns": {
+			"name": "Category Name",
+			"status": "Status"
+		},
+		"editTitle": "Edit Employee Market Category",
+		"fields": {
+			"name": "Category Name",
+			"status": "Status"
+		},
+		"filters": {
+			"keyword": "Keyword",
+			"status": "Status"
+		},
+		"label": "Category",
+		"manageButton": "Categories",
+		"manageTitle": "Category Management",
+		"status": {
+			"hidden": "Hidden",
+			"visible": "Visible"
+		},
+		"uncategorized": "Uncategorized"
+	},
 	"createdAt": "Created At",
 	"desc": "Descending",
 	"description": "Description",
