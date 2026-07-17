@@ -220,6 +220,8 @@ AZURE_OPENAI_EMBEDDING_API_VERSION=2023-05-15
 
 **安全要求：** `JWT_SECRET` 必须至少32字符，并且必须与 `MAGIC_GATEWAY_API_KEY` 使用不同的随机值。`/status` 需要 `X-Gateway-API-Key`，只返回版本和健康状态；容器健康检查请使用无需认证且不返回配置的 `/healthz`。
 
+升级前的版本使用 `MAGIC_GATEWAY_API_KEY` 签发JWT。网关默认继续接受这些旧令牌，不需要额外配置；新令牌仍只使用 `JWT_SECRET` 签发。
+
 ### 容器环境变量
 
 在容器中，可以使用相同的环境变量名称，但不包含实际值。例如在容器的 `.env` 文件中：

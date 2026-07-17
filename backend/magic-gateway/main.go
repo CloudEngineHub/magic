@@ -31,6 +31,7 @@ var (
 	gatewayAPIKey []byte
 	jwtSecret     []byte
 	jwtSecretID   string // 密钥版本标识
+	jwtVerifyKeys map[string][]byte
 	envVars       map[string]string
 	logger        *log.Logger
 	debugMode     bool
@@ -108,12 +109,23 @@ func initJWTSecurity() {
 	jwtSecret = []byte(jwtSecretValue)
 
 	// 创建密钥版本标识（使用JWT密钥的哈希）
-	hash := sha256.Sum256(jwtSecret)
-	jwtSecretID = hex.EncodeToString(hash[:8]) // 使用前8字节作为版本标识
+	jwtSecretID = getJWTSecretID(jwtSecret)
+	jwtVerifyKeys = map[string][]byte{
+		jwtSecretID: jwtSecret,
+	}
+
+	legacyKeyID := getJWTSecretID(gatewayAPIKey)
+	jwtVerifyKeys[legacyKeyID] = gatewayAPIKey
+	logger.Printf("已启用旧版JWT兼容验证，旧密钥版本: %s", legacyKeyID)
 
 	lastKeyRotation = time.Now()
 
 	logger.Printf("JWT安全配置已初始化")
+}
+
+func getJWTSecretID(secret []byte) string {
+	hash := sha256.Sum256(secret)
+	return hex.EncodeToString(hash[:8])
 }
 
 // 生成防重放攻击的随机数
@@ -558,14 +570,17 @@ func validateToken(tokenString string) (*JWTClaims, bool) {
 			return nil, fmt.Errorf("意外的签名方法: %v", token.Header["alg"])
 		}
 
-		// 验证密钥版本
-		if kid, ok := token.Header["kid"].(string); ok {
-			if kid != jwtSecretID {
-				return nil, fmt.Errorf("密钥版本不匹配: %s", kid)
-			}
+		kid, ok := token.Header["kid"].(string)
+		if !ok || kid == "" {
+			return nil, fmt.Errorf("缺少密钥版本标识")
 		}
 
-		return jwtSecret, nil
+		verifyKey, exists := jwtVerifyKeys[kid]
+		if !exists {
+			return nil, fmt.Errorf("密钥版本不匹配: %s", kid)
+		}
+
+		return verifyKey, nil
 	}) // 现在验证标准声明，包括过期时间验证
 
 	if err != nil {
@@ -597,8 +612,8 @@ func validateToken(tokenString string) (*JWTClaims, bool) {
 			return nil, false
 		}
 
-		// 验证密钥版本
-		if claims.KeyID != jwtSecretID {
+		// 验证声明中的密钥版本是否属于当前或兼容旧密钥
+		if _, exists := jwtVerifyKeys[claims.KeyID]; !exists {
 			logger.Printf("令牌密钥版本不匹配: %s", claims.KeyID)
 			return nil, false
 		}
