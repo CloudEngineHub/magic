@@ -66,7 +66,9 @@ if [ ! -f .env ]; then
     echo -e "${RED}错误: 未找到.env文件!${NC}"
     echo -e "${YELLOW}创建示例.env文件...${NC}"
     cat > .env << EOF
-JWT_SECRET=your-secret-key-change-me
+# 请将下面两项替换为随机生成的独立密钥
+JWT_SECRET=replace-with-a-random-secret-at-least-32-characters
+MAGIC_GATEWAY_API_KEY=replace-with-a-random-gateway-key
 OPENAI_API_KEY=sk-xxxx
 OPENAI_API_BASE_URL=https://api.openai.com/v1
 OPENAI_MODEL=gpt-4
@@ -105,7 +107,7 @@ sleep 3
 
 # 检查 API 网关服务是否正常运行
 for i in {1..5}; do
-    if curl -s http://localhost:8001/status > /dev/null; then
+    if curl -s http://localhost:8001/healthz > /dev/null; then
         echo -e "${GREEN}API 网关服务已启动 (PID: $API_PID)${NC}"
         echo -e "${GREEN}服务已启动${NC}"
         echo -e "${YELLOW}API 网关地址: http://localhost:8001${NC}"

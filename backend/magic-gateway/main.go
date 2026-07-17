@@ -28,12 +28,13 @@ import (
 
 // 全局变量
 var (
-	jwtSecret   []byte
-	jwtSecretID string // 密钥版本标识
-	envVars     map[string]string
-	logger      *log.Logger
-	debugMode   bool
-	ctx         = context.Background()
+	gatewayAPIKey []byte
+	jwtSecret     []byte
+	jwtSecretID   string // 密钥版本标识
+	envVars       map[string]string
+	logger        *log.Logger
+	debugMode     bool
+	ctx           = context.Background()
 
 	// 支持的服务列表
 	supportedServices = []string{"OPENAI", "MAGIC", "DEEPSEEK"}
@@ -89,29 +90,30 @@ type ServiceInfo struct {
 	Model   string `json:"default_model,omitempty"`
 }
 
-// 初始化JWT安全配置 - 从MAGIC_GATEWAY_API_KEY获取密钥
+// 初始化JWT安全配置
 func initJWTSecurity() {
-	// 从MAGIC_GATEWAY_API_KEY获取JWT密钥
 	apiKey := getEnvWithDefault("MAGIC_GATEWAY_API_KEY", "")
 	if apiKey == "" {
 		logger.Fatal("错误: 必须设置MAGIC_GATEWAY_API_KEY环境变量")
 	}
+	gatewayAPIKey = []byte(apiKey)
 
-	// 验证API密钥强度
-	// if len(apiKey) < 32 {
-	// 	logger.Printf("警告: MAGIC_GATEWAY_API_KEY长度不足，建议至少32字符")
-	// }
+	jwtSecretValue := getEnvWithDefault("JWT_SECRET", "")
+	if len(jwtSecretValue) < 32 {
+		logger.Fatal("错误: 必须设置至少32字符的JWT_SECRET环境变量")
+	}
+	if subtle.ConstantTimeCompare([]byte(jwtSecretValue), gatewayAPIKey) == 1 {
+		logger.Fatal("错误: JWT_SECRET不能与MAGIC_GATEWAY_API_KEY相同")
+	}
+	jwtSecret = []byte(jwtSecretValue)
 
-	// 使用API密钥作为JWT密钥
-	jwtSecret = []byte(apiKey)
-
-	// 创建密钥版本标识（使用API密钥的哈希）
-	hash := sha256.Sum256([]byte(apiKey))
+	// 创建密钥版本标识（使用JWT密钥的哈希）
+	hash := sha256.Sum256(jwtSecret)
 	jwtSecretID = hex.EncodeToString(hash[:8]) // 使用前8字节作为版本标识
 
 	lastKeyRotation = time.Now()
 
-	logger.Printf("JWT安全配置已初始化，使用MAGIC_GATEWAY_API_KEY作为密钥")
+	logger.Printf("JWT安全配置已初始化")
 }
 
 // 生成防重放攻击的随机数
@@ -164,7 +166,6 @@ func loadEnvFile() error {
 		// 也尝试父目录（以防可执行文件在子目录中）
 		envPaths = append(envPaths, filepath.Join(filepath.Dir(exeDir), ".env"))
 	}
-
 
 	// 尝试获取当前工作目录
 	if wd, err := os.Getwd(); err == nil {
@@ -352,6 +353,7 @@ func main() {
 	http.HandleFunc("/auth", authHandler)
 	http.HandleFunc("/env", envHandler)
 	http.HandleFunc("/status", statusHandler)
+	http.HandleFunc("/healthz", healthHandler)
 	http.HandleFunc("/revoke", revokeHandler)
 	http.HandleFunc("/revoke-all", revokeAllTokensHandler) // 新增吊销所有令牌的端点
 	http.HandleFunc("/services", servicesHandler)
@@ -460,10 +462,8 @@ func authHandler(w http.ResponseWriter, r *http.Request) {
 	logger.Printf("提取的客户端IP: %s", clientIP)
 
 	// 验证 Gateway API Key (使用常量时间比较防止时序攻击)
-	gatewayAPIKey := r.Header.Get("X-Gateway-API-Key")
-	expectedAPIKey := string(jwtSecret) // 直接使用JWT密钥作为期望的API密钥
-
-	if gatewayAPIKey == "" || subtle.ConstantTimeCompare([]byte(gatewayAPIKey), []byte(expectedAPIKey)) != 1 {
+	providedAPIKey := r.Header.Get("X-Gateway-API-Key")
+	if providedAPIKey == "" || subtle.ConstantTimeCompare([]byte(providedAPIKey), gatewayAPIKey) != 1 {
 		logger.Printf("API密钥验证失败: 提供的密钥不匹配或为空")
 		http.Error(w, "无效的API密钥", http.StatusUnauthorized)
 		return
@@ -815,46 +815,46 @@ func getAvailableEnvVarNames() []string {
 	return allowedVarNames
 }
 
-// 状态处理程序 - 修改为无状态认证
+func validateGatewayAPIKey(r *http.Request) bool {
+	providedAPIKey := r.Header.Get("X-Gateway-API-Key")
+	return providedAPIKey != "" && subtle.ConstantTimeCompare([]byte(providedAPIKey), gatewayAPIKey) == 1
+}
+
+// 状态处理程序仅供受信任的运维调用
 func statusHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "方法不允许", http.StatusMethodNotAllowed)
+		return
+	}
+	if !validateGatewayAPIKey(r) {
+		http.Error(w, "无效的API密钥", http.StatusUnauthorized)
+		return
+	}
+
 	// 在调试模式下记录完整请求信息
 	if debugMode {
 		logger.Printf("STATUS请求:")
 		logFullRequest(r)
 	}
 
-	// 获取可用的环境变量名称
-	allowedVarNames := getAvailableEnvVarNames()
-
-	// 获取可用的服务
-	availableServices := []string{}
-	for _, service := range supportedServices {
-		baseUrlKey := fmt.Sprintf("%s_API_BASE_URL", service)
-		apiKeyKey := fmt.Sprintf("%s_API_KEY", service)
-
-		if _, hasBaseUrl := envVars[baseUrlKey]; hasBaseUrl {
-			if _, hasApiKey := envVars[apiKeyKey]; hasApiKey {
-				availableServices = append(availableServices, service)
-			}
-		}
-	}
-
-	// 返回状态信息
 	status := map[string]interface{}{
-		"status":                  "ok",
-		"version":                 getEnvWithDefault("API_GATEWAY_VERSION", "1.0.0"),
-		"auth_mode":               "stateless_jwt",
-		"token_validity":          "30天",
-		"env_vars_available":      allowedVarNames,
-		"services_available":      availableServices,
-		"current_token_version":   atomic.LoadInt64(&tokenVersionCounter),
-		"global_revoke_timestamp": atomic.LoadInt64(&globalRevokeTimestamp),
-		"jwt_key_id":              jwtSecretID,
-		"jwt_algorithm":           "HS256",
+		"status":  "ok",
+		"version": getEnvWithDefault("API_GATEWAY_VERSION", "1.0.0"),
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(status)
+}
+
+// 健康检查处理程序不返回任何配置或安全状态
+func healthHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "方法不允许", http.StatusMethodNotAllowed)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
 }
 
 // 吊销令牌处理程序 - 修改为基于版本吊销
