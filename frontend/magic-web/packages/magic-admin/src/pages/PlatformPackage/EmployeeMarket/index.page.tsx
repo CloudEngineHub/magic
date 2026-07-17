@@ -10,8 +10,6 @@ import {
 	type SearchItem,
 	type TableButton,
 	type TimeRangeValue,
-	SearchItem,
-	TimeRangeValue,
 } from "@admin-components"
 import { useMemoizedFn, useMount, useRequest } from "ahooks"
 import { useTranslation } from "react-i18next"
