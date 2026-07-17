@@ -8,6 +8,7 @@ import {
 } from "../useSlidesTemplateTotal"
 
 const getSlidesTemplateCountMock = vi.hoisted(() => vi.fn())
+const isPrivateDeploymentMock = vi.hoisted(() => vi.fn(() => false))
 
 vi.mock("@/apis", () => ({
 	SuperMagicApi: {
@@ -15,9 +16,14 @@ vi.mock("@/apis", () => ({
 	},
 }))
 
+vi.mock("@/utils/env", () => ({
+	isPrivateDeployment: isPrivateDeploymentMock,
+}))
+
 describe("useSlidesTemplateTotal", () => {
 	beforeEach(() => {
 		getSlidesTemplateCountMock.mockReset()
+		isPrivateDeploymentMock.mockReturnValue(false)
 	})
 
 	it("reads the shared total from the existing slides template count API", async () => {
@@ -60,8 +66,27 @@ describe("useSlidesTemplateTotal", () => {
 		expect(getSlidesTemplateCountMock).not.toHaveBeenCalled()
 	})
 
-	it("uses a ten-second default refresh interval", () => {
+	it("uses a five-second default refresh interval", () => {
 		expect(SLIDES_TEMPLATE_STATISTICS_REFRESH_INTERVAL).toBe(5000)
+	})
+
+	it("requests once without polling in private deployments", async () => {
+		isPrivateDeploymentMock.mockReturnValue(true)
+		getSlidesTemplateCountMock.mockResolvedValue({ total: 101582 })
+
+		renderHook(() => useSlidesTemplateStatistics({ refreshInterval: 20 }), {
+			wrapper: ({ children }) => (
+				<SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0 }}>
+					{children}
+				</SWRConfig>
+			),
+		})
+
+		await waitFor(() => expect(getSlidesTemplateCountMock).toHaveBeenCalledTimes(1))
+		await new Promise((resolve) => setTimeout(resolve, 60))
+
+		expect(getSlidesTemplateCountMock).toHaveBeenCalledTimes(1)
+		isPrivateDeploymentMock.mockReturnValue(false)
 	})
 
 	it("refreshes visible statistics using the configured interval", async () => {

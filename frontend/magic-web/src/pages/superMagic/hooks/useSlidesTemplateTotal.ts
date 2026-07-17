@@ -1,6 +1,7 @@
 import { useEffect } from "react"
 import useSWR from "swr"
 import { SuperMagicApi } from "@/apis"
+import { isPrivateDeployment } from "@/utils/env"
 
 const SLIDES_TEMPLATE_STATISTICS_CACHE_KEY = "slides-template-statistics"
 export const SLIDES_TEMPLATE_STATISTICS_REFRESH_INTERVAL = 5000
@@ -95,11 +96,12 @@ export function useSlidesTemplateStatistics({
 			revalidateOnReconnect: false,
 		},
 	)
+	const shouldPoll = !isPrivateDeployment()
 
 	useEffect(() => {
-		if (!enabled) return
+		if (!enabled || !shouldPoll) return
 		return subscribeStatisticsPolling(refreshInterval, () => mutate())
-	}, [enabled, mutate, refreshInterval])
+	}, [enabled, mutate, refreshInterval, shouldPoll])
 
 	if (!data) return undefined
 
