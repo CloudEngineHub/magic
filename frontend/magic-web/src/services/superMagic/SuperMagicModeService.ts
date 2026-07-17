@@ -552,6 +552,19 @@ class SuperMagicModeService {
 	}
 
 	/**
+	 * Prefer a mode when it has available language models; otherwise use the fallback mode.
+	 */
+	resolveLanguageModelMode<T extends string>(
+		preferredMode: T,
+		fallbackMode: T,
+		agentCode?: string | null,
+	): T {
+		return this.getModelListByMode(preferredMode, agentCode).length > 0
+			? preferredMode
+			: fallbackMode
+	}
+
+	/**
 	 * 获取模式生图模型分组列表
 	 * @param mode 模式标识
 	 * @param agentCode custom_agent 时与 featured mode.identifier 一致

@@ -353,6 +353,25 @@ describe("SuperMagicModeService", () => {
 		expect(resolved?.model_name).toBe("Custom Shared Image Model")
 	})
 
+	it("prefers the requested mode when it has language models", () => {
+		const modeWithModels = superMagicModeService._modeMap.get("general")
+		expect(modeWithModels).toBeDefined()
+		if (!modeWithModels) return
+		superMagicModeService._modeMap.set("micro-app", modeWithModels)
+
+		expect(superMagicModeService.resolveLanguageModelMode("micro-app", "default")).toBe(
+			"micro-app",
+		)
+	})
+
+	it("falls back when the requested mode has no language models", () => {
+		superMagicModeService._modeMap.set("micro-app", createCrewList("micro-app").list[0])
+
+		expect(superMagicModeService.resolveLanguageModelMode("micro-app", "default")).toBe(
+			"default",
+		)
+	})
+
 	it("fetches again when force is true despite fresh cache", async () => {
 		vi.mocked(SuperMagicApi.getCrewList).mockResolvedValue({
 			list: [
