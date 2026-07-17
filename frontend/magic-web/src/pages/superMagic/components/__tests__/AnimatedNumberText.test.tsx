@@ -3,8 +3,13 @@ import type { ComponentProps, ReactNode } from "react"
 import { describe, expect, it, vi } from "vitest"
 import { AnimatedNumberText } from "../AnimatedNumberText"
 
+const motionMock = vi.hoisted(() => ({
+	prefersReducedMotion: false,
+}))
+
 vi.mock("framer-motion", () => ({
 	AnimatePresence: ({ children }: { children?: ReactNode }) => <>{children}</>,
+	useReducedMotion: () => motionMock.prefersReducedMotion,
 	motion: {
 		span: ({
 			children,
@@ -44,5 +49,17 @@ describe("AnimatedNumberText", () => {
 		expect(container).toHaveTextContent("5,433")
 		expect(container.firstElementChild).toHaveClass("origin-center")
 		expect(screen.getAllByText("3")).toHaveLength(2)
+	})
+
+	it("shows the final value directly when reduced motion is enabled", () => {
+		motionMock.prefersReducedMotion = true
+
+		const { container, rerender } = render(<AnimatedNumberText value={100} isEmphasized />)
+		rerender(<AnimatedNumberText value={200} isEmphasized />)
+
+		expect(container).toHaveTextContent("200")
+		expect(container.querySelectorAll("[class*='perspective']")).toHaveLength(3)
+
+		motionMock.prefersReducedMotion = false
 	})
 })

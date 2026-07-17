@@ -1,4 +1,4 @@
-import { AnimatePresence, motion } from "framer-motion"
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion"
 import { useEffect, useRef } from "react"
 import { cn } from "@/lib/utils"
 import { formatNumber } from "@/utils/format"
@@ -15,6 +15,7 @@ export function AnimatedNumberText({
 	isEmphasized = false,
 	className,
 }: AnimatedNumberTextProps) {
+	const prefersReducedMotion = useReducedMotion()
 	const previousValueRef = useRef<number | undefined>(value)
 	const directionRef = useRef<1 | -1>(1)
 
@@ -34,13 +35,14 @@ export function AnimatedNumberText({
 
 	const direction = directionRef.current
 	const formattedValue = formatNumber(value)
+	const shouldEmphasize = isEmphasized && !prefersReducedMotion
 
 	return (
 		<motion.span
 			className={cn("inline-flex origin-center items-center whitespace-nowrap", className)}
 			initial={false}
 			animate={
-				isEmphasized
+				shouldEmphasize
 					? {
 							x: 0,
 							scale: 1.12,
@@ -49,7 +51,10 @@ export function AnimatedNumberText({
 						}
 					: { x: 0, scale: 1, rotate: 0, filter: "drop-shadow(0 0 0 rgba(255,106,31,0))" }
 			}
-			transition={{ duration: 1.05, ease: [0.22, 1, 0.36, 1] }}
+			transition={{
+				duration: prefersReducedMotion ? 0 : 1.05,
+				ease: [0.22, 1, 0.36, 1],
+			}}
 		>
 			{formattedValue.split("").map((character, index) => (
 				<span
@@ -59,17 +64,24 @@ export function AnimatedNumberText({
 						/\d/.test(character) ? "min-w-[0.56em]" : "min-w-[0.28em]",
 					)}
 				>
-					<AnimatePresence initial={false} mode="popLayout">
+					<AnimatePresence
+						initial={false}
+						mode={prefersReducedMotion ? "sync" : "popLayout"}
+					>
 						<motion.span
 							key={`${index}-${character}`}
 							className="absolute inset-0 flex items-center justify-center text-center leading-none"
-							initial={{
-								y: direction * 115 + "%",
-								opacity: 0,
-								scale: 1.35,
-								rotateX: direction * 80,
-								filter: "blur(5px)",
-							}}
+							initial={
+								prefersReducedMotion
+									? false
+									: {
+											y: direction * 115 + "%",
+											opacity: 0,
+											scale: 1.35,
+											rotateX: direction * 80,
+											filter: "blur(5px)",
+										}
+							}
 							animate={{
 								y: "0%",
 								opacity: 1,
@@ -77,14 +89,21 @@ export function AnimatedNumberText({
 								rotateX: 0,
 								filter: "blur(0px)",
 							}}
-							exit={{
-								y: direction * -115 + "%",
-								opacity: 0,
-								scale: 0.78,
-								rotateX: direction * -80,
-								filter: "blur(5px)",
+							exit={
+								prefersReducedMotion
+									? undefined
+									: {
+											y: direction * -115 + "%",
+											opacity: 0,
+											scale: 0.78,
+											rotateX: direction * -80,
+											filter: "blur(5px)",
+										}
+							}
+							transition={{
+								duration: prefersReducedMotion ? 0 : 0.72,
+								ease: [0.22, 1, 0.36, 1],
 							}}
-							transition={{ duration: 0.72, ease: [0.22, 1, 0.36, 1] }}
 						>
 							{character}
 						</motion.span>

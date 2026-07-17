@@ -1,14 +1,15 @@
 import { fireEvent, render, screen } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import type { ReactNode } from "react"
-import SidebarContent, { canShowSlidesTemplateCount } from "../SidebarContent"
+import SidebarContent from "../SidebarContent"
+import { canShowSlidesTemplateCount } from "../SlidesTemplateSidebarMenuItem"
 
 const { mockIsMagicApp, navigateMock, changeBottomTabMock } = vi.hoisted(() => ({
 	mockIsMagicApp: vi.fn(),
 	navigateMock: vi.fn(),
 	changeBottomTabMock: vi.fn(),
 }))
-const useAnimatedNumberMock = vi.hoisted(() => vi.fn())
+const animatedNumberTextMock = vi.hoisted(() => vi.fn())
 
 afterEach(() => {
 	vi.unstubAllGlobals()
@@ -97,9 +98,11 @@ vi.mock("@/pages/superMagic/hooks/useSlidesTemplateTotal", () => ({
 	useSlidesTemplateTotal: () => 101582,
 }))
 
-vi.mock("@/pages/superMagic/hooks/useAnimatedNumber", () => ({
-	useAnimatedNumber: useAnimatedNumberMock,
-	useAnimatedNumberPulse: () => false,
+vi.mock("@/pages/superMagic/components/AnimatedNumberText", () => ({
+	AnimatedNumberText: ({ value }: { value: number }) => {
+		animatedNumberTextMock(value)
+		return <>{value.toLocaleString("en-US")}</>
+	},
 }))
 
 vi.mock("../hooks/useNavigateToSuperHome", () => ({
@@ -239,7 +242,7 @@ describe("SidebarContent audio recordings entry", () => {
 
 describe("SidebarContent slides templates count", () => {
 	beforeEach(() => {
-		useAnimatedNumberMock.mockReturnValue(101582)
+		animatedNumberTextMock.mockClear()
 	})
 
 	it("shows the highlighted template count in the collapsed tooltip", () => {
@@ -250,7 +253,7 @@ describe("SidebarContent slides templates count", () => {
 			"hover:!bg-[#fff2ec]",
 		)
 		expect(screen.getByTestId("sidebar-content-slides-templates-tooltip")).toHaveTextContent(
-			"sidebar:slidesTemplates.title101,582 套",
+			"sidebar:slidesTemplates.title101,582套",
 		)
 	})
 
@@ -258,11 +261,13 @@ describe("SidebarContent slides templates count", () => {
 		renderSidebarContent()
 
 		expect(screen.getByTestId("sidebar-content-slides-templates-count")).toHaveTextContent(
-			"101,582 套",
+			"101,582套",
 		)
 		expect(screen.getByTestId("sidebar-content-slides-templates-count-value")).toBeVisible()
+		expect(animatedNumberTextMock).toHaveBeenCalledWith(101582)
 		const title = screen.getByText("sidebar:slidesTemplates.title")
 		const countBadge = screen.getByTestId("sidebar-content-slides-templates-count")
+		expect(countBadge.className).not.toMatch(/scale|translate|rotate/)
 		expect(title).toHaveClass("shrink")
 		expect(title).not.toHaveClass("flex-1")
 		expect(title.nextElementSibling).toBe(countBadge)
@@ -278,25 +283,24 @@ describe("SidebarContent slides templates count", () => {
 		rerender(<SidebarContent collapsed={false} />)
 
 		expect(screen.getByTestId("sidebar-content-slides-templates-count")).toHaveTextContent(
-			"101,582 套",
+			"101,582套",
 		)
 		expect(screen.getByTestId("sidebar-content-slides-templates-count-value")).toBeVisible()
 	})
 
-	it("does not recreate the measurement observer while the number animates", () => {
+	it("does not animate or recreate the observer for the hidden measurement badge", () => {
 		const disconnect = vi.fn()
 		const resizeObserver = vi.fn(() => ({
 			observe: vi.fn(),
 			disconnect,
 		}))
 		vi.stubGlobal("ResizeObserver", resizeObserver)
-		useAnimatedNumberMock.mockReturnValue(100000)
 		const { rerender } = renderSidebarContent()
 
-		useAnimatedNumberMock.mockReturnValue(100100)
 		rerender(<SidebarContent collapsed={false} />)
 
 		expect(resizeObserver).toHaveBeenCalledTimes(1)
+		expect(animatedNumberTextMock).toHaveBeenCalledTimes(2)
 	})
 
 	it("uses the measured content width instead of a fixed sidebar breakpoint", () => {

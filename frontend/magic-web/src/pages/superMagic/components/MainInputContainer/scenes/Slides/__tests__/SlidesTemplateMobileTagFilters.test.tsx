@@ -160,8 +160,8 @@ describe("SlidesTemplateMobileTagFilters", () => {
 			"overflow-y-auto",
 		)
 		expect(screen.getByRole("dialog")).toHaveClass(
-			"h-[80dvh]",
-			"max-h-[85dvh]",
+			"h-[648px]",
+			"max-h-[90dvh]",
 			"max-w-[375px]",
 			"rounded-t-[14px]",
 			"border",

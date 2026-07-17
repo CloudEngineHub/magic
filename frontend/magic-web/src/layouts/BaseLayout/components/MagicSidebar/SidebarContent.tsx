@@ -1,10 +1,10 @@
-import { Suspense, lazy, useLayoutEffect, useRef, useState, type MouseEvent, type Ref } from "react"
+import { Suspense, lazy, useState, type MouseEvent } from "react"
 import { useLocation } from "react-router"
 import { ChevronRight, Home, LayoutGrid, MessageCircle, UsersRound } from "lucide-react"
 import { useTranslation } from "react-i18next"
-import slidesTemplateFireIcon from "@/assets/resources/icons/fire.webp"
 import { WorkspaceList } from "./WorkspaceList"
 import CollapsedWorkspaceMenu from "./CollapsedWorkspaceMenu"
+import { SidebarMarketMenuItem } from "./SidebarMarketMenuItem"
 import type { SidebarContentProps } from "./types"
 import {
 	SidebarGroup,
@@ -20,7 +20,7 @@ import AppsSubMenu from "./AppsSubMenu"
 import ChatsSubMenu from "./ChatsSubMenu"
 import useNavigate from "@/routes/hooks/useNavigate"
 import { RouteName } from "@/routes/constants"
-import { getRoutePath, routesPathMatch } from "@/routes/history/helpers"
+import { routesPathMatch } from "@/routes/history/helpers"
 import Divider from "@/components/other/Divider"
 import { useSidebarMarketMenuItems } from "./hooks/useSidebarMarketMenuItems"
 import { getClawBrandTranslationValues } from "@/pages/superMagic/utils/clawBrand"
@@ -29,80 +29,11 @@ import useResourceStatusPolling from "@/pages/superMagic/hooks/useResourceStatus
 import { useNavigateToSuperHome } from "./hooks/useNavigateToSuperHome"
 import { isMagicApp } from "@/utils/devices"
 import { openAudioRecordingsInMagicApp } from "@/layouts/BaseLayout/utils/magicAppNavigation"
-import { useSlidesTemplateTotal } from "@/pages/superMagic/hooks/useSlidesTemplateTotal"
-import {
-	useAnimatedNumber,
-	useAnimatedNumberPulse,
-} from "@/pages/superMagic/hooks/useAnimatedNumber"
-import { formatNumber } from "@/utils/format"
-import { cn } from "@/lib/utils"
 
 const CollaborationProjectsPanel = lazy(
 	() =>
 		import("@/pages/superMagic/components/WorkspacesMenu/components/CollaborationProjectsPanel"),
 )
-
-export function canShowSlidesTemplateCount({
-	availableWidth,
-	iconWidth,
-	titleWidth,
-	countWidth,
-	gap,
-}: {
-	availableWidth: number
-	iconWidth: number
-	titleWidth: number
-	countWidth: number
-	gap: number
-}) {
-	const requiredWidth = iconWidth + titleWidth + countWidth + gap * 2
-	return requiredWidth <= availableWidth + 1
-}
-
-function SlidesTemplateCountBadge({
-	templateCount,
-	testId,
-	showCount = true,
-	isPulsing = false,
-	className,
-	badgeRef,
-}: {
-	templateCount: string
-	testId?: string
-	showCount?: boolean
-	isPulsing?: boolean
-	className?: string
-	badgeRef?: Ref<HTMLSpanElement>
-}) {
-	return (
-		<span
-			ref={badgeRef}
-			className={cn(
-				"flex h-6 shrink-0 origin-left items-center gap-1 rounded-full bg-[#fff2ec] px-2 text-sm font-medium tabular-nums leading-none text-[#ff6a1f] transition-[transform,box-shadow] duration-700 ease-out",
-				isPulsing &&
-					"translate-x-1 rotate-[1deg] scale-[1.06] shadow-[0_0_0_3px_rgba(255,106,31,0.14)]",
-				className,
-			)}
-			data-testid={testId}
-		>
-			<img
-				src={slidesTemplateFireIcon}
-				alt=""
-				aria-hidden="true"
-				className="h-4 w-4 object-contain"
-			/>
-			{showCount && (
-				<span
-					data-testid={
-						testId ? "sidebar-content-slides-templates-count-value" : undefined
-					}
-				>
-					{templateCount}
-				</span>
-			)}
-		</span>
-	)
-}
 
 function SidebarContent({ collapsed }: SidebarContentProps) {
 	const { t } = useTranslation(["sidebar", "super"])
@@ -116,61 +47,6 @@ function SidebarContent({ collapsed }: SidebarContentProps) {
 	const navigate = useNavigate()
 	const sidebarMarketMenuItems = useSidebarMarketMenuItems()
 	const { superRouteUrl, handleNavigateToSuperHome } = useNavigateToSuperHome()
-	const slidesTemplateRowRef = useRef<HTMLDivElement>(null)
-	const slidesTemplateTotal = useSlidesTemplateTotal()
-	const animatedSlidesTemplateTotal = useAnimatedNumber(slidesTemplateTotal)
-	const isSlidesTemplateCountPulsing = useAnimatedNumberPulse(slidesTemplateTotal)
-	const slidesTemplateTitleRef = useRef<HTMLSpanElement>(null)
-	const slidesTemplateCountMeasureRef = useRef<HTMLSpanElement>(null)
-	const [shouldShowSlidesTemplateCount, setShouldShowSlidesTemplateCount] = useState(true)
-	const slidesTemplateCount =
-		animatedSlidesTemplateTotal !== undefined
-			? t("slidesTemplates.templateCount", {
-					count: formatNumber(animatedSlidesTemplateTotal),
-				})
-			: null
-	const slidesTemplateCountForMeasure =
-		slidesTemplateTotal !== undefined
-			? t("slidesTemplates.templateCount", {
-					count: formatNumber(slidesTemplateTotal),
-				})
-			: null
-
-	useLayoutEffect(() => {
-		const row = slidesTemplateRowRef.current
-		const title = slidesTemplateTitleRef.current
-		const countBadge = slidesTemplateCountMeasureRef.current
-		if (!row || !title || !countBadge || !slidesTemplateCountForMeasure || collapsed) return
-
-		const updateVisibility = () => {
-			const rowStyle = window.getComputedStyle(row)
-			const gap = Number.parseFloat(rowStyle.columnGap || rowStyle.gap) || 0
-			const icon = row.firstElementChild as HTMLElement | null
-			const iconWidth = icon?.getBoundingClientRect().width ?? 0
-			const titleWidth = title.scrollWidth
-			const countWidth = countBadge.getBoundingClientRect().width
-			const nextVisible = canShowSlidesTemplateCount({
-				availableWidth: row.clientWidth,
-				iconWidth,
-				titleWidth,
-				countWidth,
-				gap,
-			})
-
-			setShouldShowSlidesTemplateCount((current) =>
-				current === nextVisible ? current : nextVisible,
-			)
-		}
-
-		updateVisibility()
-		const resizeObserver = new ResizeObserver(updateVisibility)
-		resizeObserver.observe(row)
-		resizeObserver.observe(title)
-		resizeObserver.observe(countBadge)
-
-		return () => resizeObserver.disconnect()
-	}, [collapsed, slidesTemplateCountForMeasure])
-
 	function shouldHandleAnchorClick(event: MouseEvent<HTMLAnchorElement>) {
 		return (
 			event.button === 0 &&
@@ -193,100 +69,6 @@ function SidebarContent({ collapsed }: SidebarContentProps) {
 
 		if (routesPathMatch(routeName, location.pathname)) return
 		navigate({ name: routeName })
-	}
-
-	function renderSidebarMarketMenuItem({
-		titleKey,
-		routeName,
-		testId,
-		Icon,
-	}: (typeof sidebarMarketMenuItems)[number]) {
-		const title =
-			titleKey === "sidebar:superLobster.title" ? t(titleKey, clawBrandValues) : t(titleKey)
-		const isSlidesTemplateMenuItem = routeName === RouteName.SuperSlidesTemplates
-		const templateCount = isSlidesTemplateMenuItem ? slidesTemplateCount : null
-		const tooltip = collapsed
-			? templateCount
-				? {
-						children: (
-							<div
-								className="flex items-center gap-2 text-sm"
-								data-testid="sidebar-content-slides-templates-tooltip"
-							>
-								<span>{title}</span>
-								<SlidesTemplateCountBadge
-									templateCount={templateCount}
-									isPulsing={isSlidesTemplateCountPulsing}
-								/>
-							</div>
-						),
-					}
-				: title
-			: undefined
-
-		return (
-			<SidebarMenuItem key={routeName}>
-				<SidebarMenuButton
-					asChild
-					tooltip={tooltip}
-					data-testid={testId}
-					className={
-						collapsed && isSlidesTemplateMenuItem
-							? "!text-[#ff6a1f] hover:!bg-[#fff2ec]  hover:!text-[#ff6a1f]"
-							: "text-sidebar-foreground"
-					}
-				>
-					<a
-						href={getRoutePath({ name: routeName }) || "#"}
-						onClick={(event) => handleNavigateToRoute(routeName, event)}
-						className="text-current no-underline"
-					>
-						{isSlidesTemplateMenuItem ? (
-							<div
-								ref={slidesTemplateRowRef}
-								className="relative flex min-w-0 flex-1 items-center gap-2"
-							>
-								<Icon className="h-4 w-4 shrink-0" />
-								<span
-									ref={slidesTemplateTitleRef}
-									className={cn(
-										"min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-left text-sm leading-5",
-										templateCount ? "shrink" : "flex-1",
-									)}
-								>
-									{title}
-								</span>
-								{templateCount && slidesTemplateCountForMeasure && (
-									<>
-										{!collapsed && (
-											<SlidesTemplateCountBadge
-												templateCount={templateCount}
-												testId="sidebar-content-slides-templates-count"
-												showCount={shouldShowSlidesTemplateCount}
-												isPulsing={isSlidesTemplateCountPulsing}
-											/>
-										)}
-										{/* 始终测量完整徽标，不让数值的显示状态反过来影响宽度判断。 */}
-										<SlidesTemplateCountBadge
-											templateCount={slidesTemplateCountForMeasure}
-											badgeRef={slidesTemplateCountMeasureRef}
-											className="pointer-events-none invisible absolute left-0 top-0"
-										/>
-									</>
-								)}
-							</div>
-						) : (
-							<>
-								<Icon className="h-4 w-4 shrink-0" />
-								<span className="flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-left text-sm leading-5">
-									{title}
-								</span>
-							</>
-						)}
-					</a>
-				</SidebarMenuButton>
-			</SidebarMenuItem>
-		)
 	}
 
 	return (
@@ -333,7 +115,22 @@ function SidebarContent({ collapsed }: SidebarContentProps) {
 								</SidebarMenuButton>
 							</ChatsSubMenu>
 						</SidebarMenuItem>
-						{sidebarMarketMenuItems.map(renderSidebarMarketMenuItem)}
+						{sidebarMarketMenuItems.map((item) => {
+							const title =
+								item.titleKey === "sidebar:superLobster.title"
+									? t(item.titleKey, clawBrandValues)
+									: t(item.titleKey)
+
+							return (
+								<SidebarMarketMenuItem
+									key={item.routeName}
+									item={item}
+									title={title}
+									collapsed={collapsed}
+									onNavigate={handleNavigateToRoute}
+								/>
+							)
+						})}
 						<SidebarMenuItem>
 							<AppsSubMenu>
 								<SidebarMenuButton
