@@ -76,6 +76,7 @@ export class MagicLLMApi extends BaseRuntimeBridgeApiPlugin {
 							this.logger.info("getModels:success", {
 								requestId,
 								modelCount: event.data.models?.length ?? 0,
+								result: event.data.models ?? [],
 							})
 							resolve(event.data.models ?? [])
 						} else {
@@ -136,6 +137,7 @@ export class MagicLLMApi extends BaseRuntimeBridgeApiPlugin {
 							this.logger.info("chat:success", {
 								requestId,
 								content: MagicApiLogger.summarizeText(event.data.content ?? ""),
+								result: event.data.content ?? "",
 							})
 							resolve(event.data.content ?? "")
 						} else {
