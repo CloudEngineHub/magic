@@ -127,7 +127,7 @@ class AgentDomainService
             'url' => config('super-magic.sandbox.callback_host', '') . '/api/v1/super-agent/tasks/deliver-message',
             'auth_scheme' => 'header_token',
             'headers' => [
-                'token' => config('super-magic.sandbox.token', ''),
+                'token' => '',
             ],
         ];
         if (count($extraSubscriptionConfigs) > 0) {
@@ -142,7 +142,7 @@ class AgentDomainService
             'method' => 'POST',
             'url' => config('super-magic.sandbox.callback_host', '') . '/api/v1/super-agent/file/refresh-sts-token',
             'headers' => [
-                'token' => config('super-magic.sandbox.token', ''),
+                'token' => '',
             ],
         ];
         $agentInitContext->setStsTokenRefresh($refreshConfig);
