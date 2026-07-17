@@ -10,6 +10,7 @@ namespace Dtyq\SuperMagic\Infrastructure\ExternalAPI\SandboxOS\Workspace;
 use Dtyq\SuperMagic\Infrastructure\ExternalAPI\SandboxOS\AbstractSandboxOS;
 use Dtyq\SuperMagic\Infrastructure\ExternalAPI\SandboxOS\Constants\SandboxEndpoints;
 use Dtyq\SuperMagic\Infrastructure\ExternalAPI\SandboxOS\Gateway\SandboxGatewayInterface;
+use Dtyq\SuperMagic\Infrastructure\ExternalAPI\SandboxOS\Gateway\UserContext;
 use Dtyq\SuperMagic\Infrastructure\ExternalAPI\SandboxOS\Workspace\Request\ImportWorkspaceRequest;
 use Dtyq\SuperMagic\Infrastructure\ExternalAPI\SandboxOS\Workspace\Response\ImportWorkspaceResponse;
 use Exception;
@@ -31,7 +32,7 @@ class WorkspaceImporterService extends AbstractSandboxOS implements WorkspaceImp
     /**
      * Import workspace from remote ZIP URL via sandbox proxy.
      */
-    public function import(string $sandboxId, ImportWorkspaceRequest $request): ImportWorkspaceResponse
+    public function import(UserContext $userCtx, string $sandboxId, ImportWorkspaceRequest $request): ImportWorkspaceResponse
     {
         $this->logger->info('[Sandbox][Workspace] Importing workspace', [
             'sandbox_id' => $sandboxId,
@@ -41,6 +42,7 @@ class WorkspaceImporterService extends AbstractSandboxOS implements WorkspaceImp
 
         try {
             $result = $this->gateway->proxySandboxRequest(
+                $userCtx,
                 $sandboxId,
                 'POST',
                 SandboxEndpoints::WORKSPACE_IMPORT,

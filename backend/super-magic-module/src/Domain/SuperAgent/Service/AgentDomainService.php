@@ -62,6 +62,7 @@ use Dtyq\SuperMagic\Infrastructure\ExternalAPI\SandboxOS\Gateway\Result\BatchSta
 use Dtyq\SuperMagic\Infrastructure\ExternalAPI\SandboxOS\Gateway\Result\GatewayResult;
 use Dtyq\SuperMagic\Infrastructure\ExternalAPI\SandboxOS\Gateway\Result\SandboxStatusResult;
 use Dtyq\SuperMagic\Infrastructure\ExternalAPI\SandboxOS\Gateway\SandboxGatewayInterface;
+use Dtyq\SuperMagic\Infrastructure\ExternalAPI\SandboxOS\Gateway\UserContext;
 use Dtyq\SuperMagic\Infrastructure\Utils\WorkDirectoryUtil;
 use Hyperf\Codec\Json;
 use Hyperf\Context\ApplicationContext;
@@ -430,8 +431,18 @@ class AgentDomainService
      */
     public function createSandbox(DataIsolation $dataIsolation, string $projectId, string $sandboxID, string $workDir, string $projectSpaceRootFileId = '', string $userSpaceRootFileId = '', ?int $topicId = null, ?string $agentCode = null): string
     {
-        // 获取用户 authorization token，用于沙箱创建时的身份验证
-        $authorization = $this->getAuthorizationByUserId($dataIsolation->getCurrentUserId());
+        // Per-call user identity (userId / orgCode / authorization) is
+        // a per-request value that the SandboxGatewayInterface forwards
+        // to the gateway. The token here is fetched from the magic_tokens
+        // stable user-token table (NOT from inbound HTTP header) so the
+        // same call works whether it's an HTTP-driven controller or a
+        // background warm-pool worker that explicitly fetched the
+        // token via the same DB lookup.
+        $userCtx = new UserContext(
+            $dataIsolation->getCurrentUserId(),
+            $dataIsolation->getCurrentOrganizationCode(),
+            $this->getAuthorizationByUserId($dataIsolation->getCurrentUserId()),
+        );
 
         $this->logger->debug('[Sandbox][App] Creating sandbox', [
             'project_id' => $projectId,
@@ -439,10 +450,9 @@ class AgentDomainService
             'project_oss_path' => $workDir,
             'project_space_root_file_id' => $projectSpaceRootFileId,
             'user_space_root_file_id' => $userSpaceRootFileId,
-            'authorization_provided' => $authorization !== '',
+            'authorization_provided' => $userCtx->authorization !== null && $userCtx->authorization !== '',
         ]);
 
-        $this->gateway->setUserContext($dataIsolation->getCurrentUserId(), $dataIsolation->getCurrentOrganizationCode());
         // Stamp the topic id onto the pod labels so the sandbox can be
         // correlated back to its topic (warm pool stamps it at mount time).
         $labels = $topicId !== null ? ['topic-id' => (string) $topicId] : [];
@@ -451,7 +461,7 @@ class AgentDomainService
         if ($agentCode !== null && $agentCode !== '') {
             $labels['agent-code'] = $agentCode;
         }
-        $result = $this->gateway->createSandbox($projectId, $sandboxID, $workDir, $projectSpaceRootFileId, $userSpaceRootFileId, $authorization, $labels);
+        $result = $this->gateway->createSandbox($userCtx, $projectId, $sandboxID, $workDir, $projectSpaceRootFileId, $userSpaceRootFileId, $labels);
 
         // 添加详细的调试日志，检查 result 对象
         $this->logger->debug('[Sandbox][App] Gateway result analysis', [
@@ -1296,10 +1306,12 @@ class AgentDomainService
             ]);
         }
 
-        // Create sandbox container
-        $authorization = $this->getAuthorizationByUserId($userId);
-        $this->gateway->setUserContext($userId, $orgCode);
-        $createResult = $this->gateway->createSandbox($projectId, $sandboxId, $workDir, $projectSpaceRootFileId, '', $authorization);
+        // Create sandbox container. Per-call user identity flows through
+        // as a UserContext value object – the gateway forwards the
+        // authorization token on the HTTP request so the in-pod
+        // agfs-server / super-magic agent auth middleware can validate it.
+        $userCtx = new UserContext($userId, $orgCode, $this->getAuthorizationByUserId($userId));
+        $createResult = $this->gateway->createSandbox($userCtx, $projectId, $sandboxId, $workDir, $projectSpaceRootFileId, '');
 
         if (! $createResult->isSuccess()) {
             $this->logger->error('[Sandbox][Domain] Failed to create sandbox container', [

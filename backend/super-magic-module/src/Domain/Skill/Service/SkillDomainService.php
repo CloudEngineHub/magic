@@ -26,6 +26,7 @@ use Dtyq\SuperMagic\Domain\SuperAgent\Entity\ValueObject\ProjectMode;
 use Dtyq\SuperMagic\ErrorCode\SkillErrorCode;
 use Dtyq\SuperMagic\ErrorCode\SuperMagicErrorCode;
 use Dtyq\SuperMagic\Infrastructure\ExternalAPI\SandboxOS\Gateway\SandboxGatewayInterface;
+use Dtyq\SuperMagic\Infrastructure\ExternalAPI\SandboxOS\Gateway\UserContext;
 use Dtyq\SuperMagic\Infrastructure\ExternalAPI\SandboxOS\Workspace\Request\ExportWorkspaceRequest;
 use Dtyq\SuperMagic\Infrastructure\ExternalAPI\SandboxOS\Workspace\Request\ImportWorkspaceRequest;
 use Dtyq\SuperMagic\Infrastructure\ExternalAPI\SandboxOS\Workspace\WorkspaceExporterInterface;
@@ -170,10 +171,25 @@ class SkillDomainService
         string $fileUrl,
         string $targetDir = ''
     ): array {
-        $this->sandboxGateway->setUserContext($dataIsolation->getCurrentUserId(), $dataIsolation->getCurrentOrganizationCode());
+        // Per-call user identity flows through UserContext. Previously
+        // this called setUserContext() on the sandbox-gateway instance
+        // owned by THIS service, but the actual downstream gateway call
+        // happens inside WorkspaceImporterService which has a SEPARATE
+        // gateway instance, so the prior call was a no-op (real bug).
+        // We now plumb UserContext all the way through.
+        $userCtx = new UserContext(
+            $dataIsolation->getCurrentUserId(),
+            $dataIsolation->getCurrentOrganizationCode(),
+            // Workspace import is typically triggered by the agent's
+            // own outbound token flow rather than directly from a
+            // user-bound request; pass null to keep the wire format
+            // identical to the previous behaviour (no User-Authorization
+            // header on the import path). If a caller has a token to
+            // forward, it can still populate this through a wrapper.
+        );
 
         $request = new ImportWorkspaceRequest($fileUrl, $targetDir);
-        $response = $this->workspaceImporter->import($sandboxId, $request);
+        $response = $this->workspaceImporter->import($userCtx, $sandboxId, $request);
 
         if (! $response->isSuccess()) {
             ExceptionBuilder::throw(SuperMagicErrorCode::OperationFailed, $response->getMessage());

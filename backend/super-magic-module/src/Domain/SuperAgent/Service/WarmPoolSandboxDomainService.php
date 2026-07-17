@@ -12,6 +12,7 @@ use Dtyq\SuperMagic\Domain\SuperAgent\Entity\ValueObject\WarmPoolSandboxStatus;
 use Dtyq\SuperMagic\Domain\SuperAgent\Entity\WarmPoolSandboxEntity;
 use Dtyq\SuperMagic\Domain\SuperAgent\Repository\Facade\WarmPoolSandboxRepositoryInterface;
 use Dtyq\SuperMagic\Infrastructure\ExternalAPI\SandboxOS\Gateway\SandboxGatewayInterface;
+use Dtyq\SuperMagic\Infrastructure\ExternalAPI\SandboxOS\Gateway\UserContext;
 use Hyperf\Logger\LoggerFactory;
 use Psr\Log\LoggerInterface;
 use Throwable;
@@ -276,6 +277,18 @@ class WarmPoolSandboxDomainService
         array $labels = [],
         ?string $topicId = null
     ): ?string {
+        // Per-call user identity for mountWarmPoolSandbox — that call
+        // reaches into a user-bound pod (agfs /api/v1/mount) so the
+        // pod's in-pod middleware expects User-Authorization.
+        // orgCode is intentionally null — the warm-pool mount path does
+        // not need it (it isn't currently passed through to the
+        // gateway's /mount endpoint), and callers don't track orgCode at
+        // this layer. If a downstream consumer ever needs it, widen
+        // UserContext collection in the caller.
+        $userCtx = new UserContext($userId, null, $authorization);
+
+        // getLatestImages only hits the gateway's global image-version
+        // endpoint, no per-user identity required.
         $images = $this->gateway->getLatestImages();
         $latestImage = $images['agent_image'];
         $latestAgfsImage = $images['agfs_image'];
@@ -297,11 +310,11 @@ class WarmPoolSandboxDomainService
 
         try {
             $mountResult = $this->gateway->mountWarmPoolSandbox(
+                $userCtx,
                 $sandboxId,
                 $projectId,
                 $projectSpaceRootFileId,
                 $userSpaceRootFileId,
-                $authorization,
                 $labels
             );
         } catch (Throwable $e) {
@@ -334,7 +347,12 @@ class WarmPoolSandboxDomainService
     /**
      * Tear down a claimed-but-broken row: mark dead in DB, best-effort
      * delete pod via gateway, then drop the DB entry. Used by
-     * {@see tryAcquireAndMount()} after a failed mount.
+     * {@see tryAcquireAndMount()} after a failed mount, and by the
+     * reconcile crontab (system-level, no bound user).
+     *
+     * The underlying gateway call ({@see SandboxGatewayInterface::deleteSandbox()})
+     * is a control-plane call (k8s API) and does not need a
+     * UserContext.
      */
     public function retireClaimed(WarmPoolSandboxEntity $row, string $reason): void
     {

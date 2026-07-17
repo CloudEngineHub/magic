@@ -41,6 +41,7 @@ use Dtyq\SuperMagic\Domain\SuperAgent\Entity\ProjectEntity;
 use Dtyq\SuperMagic\Domain\SuperAgent\Entity\TaskFileEntity;
 use Dtyq\SuperMagic\Domain\SuperAgent\Entity\ValueObject\TaskStatus as SuperAgentTaskStatus;
 use Dtyq\SuperMagic\Domain\SuperAgent\Event\ProjectHiddenStatusUpdatedEvent;
+use Dtyq\SuperMagic\Domain\SuperAgent\Service\AgentDomainService;
 use Dtyq\SuperMagic\Domain\SuperAgent\Service\AudioProjectDomainService;
 use Dtyq\SuperMagic\Domain\SuperAgent\Service\MessageQueueDomainService;
 use Dtyq\SuperMagic\Domain\SuperAgent\Service\ProjectDomainService;
@@ -100,10 +101,40 @@ class AsrFileAppService extends AbstractAppService
         private readonly AsrSandboxService $asrSandboxService,
         private readonly AsrPresetFileService $presetFileService,
         private readonly LockerInterface $locker,
+        // Used by resolveAuthorization() to look up the user's stable
+        // sandbox-token from the magic_tokens table. The token is then
+        // forwarded to the in-pod super-magic agent (and agfs-server)
+        // as the User-Authorization HTTP header on every gateway call.
+        private readonly AgentDomainService $agentDomainService,
         private readonly CloudFileRepositoryInterface $cloudFileRepository,
         LoggerFactory $loggerFactory
     ) {
         $this->logger = $loggerFactory->get('AsrFileAppService');
+    }
+
+    /**
+     * Resolve the stable sandbox-token (User-Authorization) for a given user.
+     *
+     * Most of the public entry points (controllers) only carry a
+     * MagicUserAuthorization (session token). Once the user is
+     * authenticated we look up — or lazily create — that user's
+     * long-lived MagicToken (MagicTokenType::User) and forward it as
+     * User-Authorization on every SandboxGatewayInterface call inside
+     * the request.
+     *
+     * Returning '' would silently disable auth on the gateway side,
+     * so we throw if the token is missing: every AsrFileAppService
+     * call that needs to talk to the sandbox MUST have a token.
+     */
+    private function resolveAuthorization(string $userId): string
+    {
+        $authorization = $this->agentDomainService->getAuthorizationByUserId($userId);
+        if ($authorization === '') {
+            throw new RuntimeException(
+                sprintf('Failed to resolve sandbox-token for user_id=%s', $userId)
+            );
+        }
+        return $authorization;
     }
 
     /**
@@ -523,13 +554,21 @@ class AsrFileAppService extends AbstractAppService
         // 保存 model_id、ASR 内容、笔记内容、标记内容和语种
         $this->updateTaskStatusFromReport($taskStatus, $modelId, $asrStreamContent, $noteContent, $noteFileType, $markerContent, $language);
 
+        // Per-call authorization token. Sourced from the magic_tokens
+        // stable user-token table (NOT from the inbound HTTP header),
+        // so the same call works for both HTTP-driven and async /
+        // cron paths. Required (no nullable): every downstream
+        // SandboxGatewayInterface call in the matched branch must
+        // carry User-Authorization.
+        $authorization = $this->resolveAuthorization($userId);
+
         // 根据状态处理
         return match ($status) {
-            AsrRecordingStatusEnum::START => $this->handleStartRecording($taskStatus, $userId, $organizationCode),
-            AsrRecordingStatusEnum::RECORDING => $this->handleRecordingHeartbeat($taskStatus, $userId, $organizationCode),
-            AsrRecordingStatusEnum::PAUSED => $this->handlePauseRecording($taskStatus),
-            AsrRecordingStatusEnum::STOPPED => $this->handleStopRecording($taskStatus),
-            AsrRecordingStatusEnum::CANCELED => $this->handleCancelRecording($taskStatus),
+            AsrRecordingStatusEnum::START => $this->handleStartRecording($taskStatus, $authorization, $userId, $organizationCode),
+            AsrRecordingStatusEnum::RECORDING => $this->handleRecordingHeartbeat($taskStatus, $authorization, $userId, $organizationCode),
+            AsrRecordingStatusEnum::PAUSED => $this->handlePauseRecording($taskStatus, $authorization),
+            AsrRecordingStatusEnum::STOPPED => $this->handleStopRecording($taskStatus, $authorization),
+            AsrRecordingStatusEnum::CANCELED => $this->handleCancelRecording($taskStatus, $authorization),
         };
     }
 
@@ -599,11 +638,14 @@ class AsrFileAppService extends AbstractAppService
             }
             $this->setFinishRecoverableContext($taskStatus, $fileTitle);
 
+            // Resolve the user-token for downstream sandbox calls.
+            $authorization = $this->resolveAuthorization($userId);
+
             // ===== Phase 1: 状态管理 - 开始合并 =====
             $this->asrTaskDomainService->startMergingPhase($taskStatus);
 
             // 合并音频（沙箱会重命名目录但不会通知文件变动）
-            $this->asrSandboxService->mergeAudioFiles($taskStatus, $fileTitle, $organizationCode, AsrTaskStatusEnum::COMPLETED);
+            $this->asrSandboxService->mergeAudioFiles($taskStatus, $authorization, $fileTitle, $organizationCode, AsrTaskStatusEnum::COMPLETED);
             $this->syncAsrRecoverableContextToDatabase($taskStatus);
 
             // ===== Phase 1: 状态管理 - 完成合并 =====
@@ -1084,7 +1126,8 @@ class AsrFileAppService extends AbstractAppService
         $this->asrTaskDomainService->saveTaskStatus($taskStatus);
 
         // Execute async
-        $this->executeAsyncFinishRecording($taskStatus, $organizationCode, $generatedTitle);
+        $authorization = $this->resolveAuthorization($userId);
+        $this->executeAsyncFinishRecording($taskStatus, $organizationCode, $generatedTitle, $authorization);
 
         return [
             'success' => true,
@@ -1105,6 +1148,7 @@ class AsrFileAppService extends AbstractAppService
         string $organizationCode,
         ?string $generatedTitle = null
     ): array {
+        $authorization = $this->resolveAuthorization($taskStatus->userId);
         $taskKey = $taskStatus->taskKey;
 
         if ($taskStatus->isEmpty()) {
@@ -1195,6 +1239,15 @@ class AsrFileAppService extends AbstractAppService
         string $organizationCode,
         ?string $generatedTitle = null
     ): void {
+        // Resolve the per-user authorization token once at the entry
+        // point and pass it down explicitly. We intentionally do NOT
+        // accept this as a parameter: every call to
+        // handleFinishRecording originates from a request that
+        // already has a verified MagicUserAuthorization (the caller
+        // knows $userId by then), so we read it from the same stable
+        // user-token table downstream code uses.
+        $authorization = $this->resolveAuthorization($userId);
+
         $lockName = sprintf(AsrRedisKeys::FINISH_RECORDING_LOCK, $taskKey);
         $lockOwner = sprintf('%s:%s:%s', $userId, $taskKey, microtime(true));
         $locked = $this->locker->spinLock($lockName, $lockOwner, AsrConfig::FINISH_RECORDING_LOCK_TTL);
@@ -1255,6 +1308,7 @@ class AsrFileAppService extends AbstractAppService
 
             $mergeResult = $this->asrSandboxService->mergeAudioFiles(
                 $taskStatus,
+                $authorization,
                 $fileTitle,
                 $organizationCode,
                 AsrTaskStatusEnum::AUDIO_PROCESSED
@@ -1318,6 +1372,13 @@ class AsrFileAppService extends AbstractAppService
         }
 
         try {
+            // Resolve the per-user authorization token once we have
+            // the lock. Same pattern as handleFinishRecording — every
+            // caller already knows $userId (cron / API / MQ
+            // consumer), so we look up the stable user-token here
+            // rather than threading it through every layer.
+            $authorization = $this->resolveAuthorization($userId);
+
             $taskStatus = $this->loadRecoverFinishRecordingTaskStatus($taskKey, $userId, $organizationCode);
 
             if ($taskStatus->phaseStatus === AsrTaskStatusDTO::PHASE_STATUS_COMPLETED
@@ -1372,6 +1433,7 @@ class AsrFileAppService extends AbstractAppService
 
             $mergeResult = $this->asrSandboxService->recoverFinishRecording(
                 $taskStatus,
+                $authorization,
                 $fileTitle,
                 $organizationCode,
                 AsrTaskStatusEnum::AUDIO_PROCESSED
@@ -1416,6 +1478,7 @@ class AsrFileAppService extends AbstractAppService
         string $userId,
         string $organizationCode
     ): bool {
+        $authorization = $this->resolveAuthorization($userId);
         // ── 1. Load task status ───────────────────────────────────────────────
         $taskStatus = $this->asrTaskDomainService->findTaskByKey($taskKey, $userId);
         if ($taskStatus === null) {
@@ -2358,6 +2421,7 @@ class AsrFileAppService extends AbstractAppService
         string $organizationCode,
         ?string $customTitle = null
     ): void {
+        $authorization = $this->resolveAuthorization($taskStatus->userId);
         $fileTitle = $this->titleGeneratorService->sanitizeTitle($customTitle ?? '');
         if ($fileTitle === '') {
             $fileTitle = $this->translator->trans('asr.file_names.original_recording');
@@ -2366,7 +2430,13 @@ class AsrFileAppService extends AbstractAppService
         $this->setFinishRecoverableContext($taskStatus, $fileTitle);
 
         // Merge audio files and get merge result (includes duration and file_size)
-        $mergeResult = $this->asrSandboxService->mergeAudioFiles($taskStatus, $fileTitle, $organizationCode, AsrTaskStatusEnum::COMPLETED);
+        $mergeResult = $this->asrSandboxService->mergeAudioFiles(
+            $taskStatus,
+            $authorization,
+            $fileTitle,
+            $organizationCode,
+            AsrTaskStatusEnum::COMPLETED,
+        );
         $this->syncAsrRecoverableContextToDatabase($taskStatus);
 
         // Update audio project extension with duration and file size
@@ -2749,12 +2819,12 @@ class AsrFileAppService extends AbstractAppService
     /**
      * 处理开始录音.
      */
-    private function handleStartRecording(AsrTaskStatusDTO $taskStatus, string $userId, string $organizationCode): bool
+    private function handleStartRecording(AsrTaskStatusDTO $taskStatus, string $authorization, string $userId, string $organizationCode): bool
     {
         // 每次 start 都检查沙箱是否存在，防止沙箱被回收导致音频丢失. 原因：如果暂停超过 20 分钟，沙箱可能被回收，需要重新启动以确保音频实时合并
         $started = false;
         try {
-            $this->asrSandboxService->startRecordingTask($taskStatus, $userId, $organizationCode);
+            $this->asrSandboxService->startRecordingTask($taskStatus, $authorization, $userId, $organizationCode);
             $taskStatus->sandboxRetryCount = 0; // 成功后重置重试次数
             $taskStatus->sandboxEnsureAt = time();
             $started = true;
@@ -2783,7 +2853,7 @@ class AsrFileAppService extends AbstractAppService
     /**
      * 处理录音心跳,检测沙箱是否还在实时运行，如果没有则重新拉起。
      */
-    private function handleRecordingHeartbeat(AsrTaskStatusDTO $taskStatus, string $userId, string $organizationCode): bool
+    private function handleRecordingHeartbeat(AsrTaskStatusDTO $taskStatus, string $authorization, string $userId, string $organizationCode): bool
     {
         // running/recording 上报时：走一遍 start 流程（拉起沙箱、检查工作区可用、startTask），保证沙箱实时合并音频
         // 为避免高频心跳导致频繁 startTask，这里按 60s 节流；但若沙箱信息缺失/未创建/有失败重试，则立即尝试拉起
@@ -2800,7 +2870,7 @@ class AsrFileAppService extends AbstractAppService
             $locked = $this->locker->spinLock($lockName, $lockOwner);
             if ($locked) {
                 try {
-                    $this->asrSandboxService->startRecordingTask($taskStatus, $userId, $organizationCode);
+            $this->asrSandboxService->startRecordingTask($taskStatus, $authorization, $userId, $organizationCode);
                     $taskStatus->sandboxRetryCount = 0;
                     $taskStatus->sandboxTaskCreated = true;
                     $taskStatus->sandboxEnsureAt = $now;
@@ -2830,7 +2900,7 @@ class AsrFileAppService extends AbstractAppService
     /**
      * 处理暂停录音.
      */
-    private function handlePauseRecording(AsrTaskStatusDTO $taskStatus): bool
+    private function handlePauseRecording(AsrTaskStatusDTO $taskStatus, string $authorization): bool
     {
         // 更新状态并删除心跳（原子操作）
         $taskStatus->recordingStatus = AsrRecordingStatusEnum::PAUSED->value;
@@ -2843,7 +2913,7 @@ class AsrFileAppService extends AbstractAppService
     /**
      * 处理停止录音.
      */
-    private function handleStopRecording(AsrTaskStatusDTO $taskStatus): bool
+    private function handleStopRecording(AsrTaskStatusDTO $taskStatus, string $authorization): bool
     {
         // 幂等性检查：如果录音已停止，跳过重复处理
         if ($taskStatus->recordingStatus === AsrRecordingStatusEnum::STOPPED->value) {
@@ -2863,7 +2933,7 @@ class AsrFileAppService extends AbstractAppService
     /**
      * 处理取消录音.
      */
-    private function handleCancelRecording(AsrTaskStatusDTO $taskStatus): bool
+    private function handleCancelRecording(AsrTaskStatusDTO $taskStatus, string $authorization): bool
     {
         // 幂等性检查：如果录音已取消，跳过重复处理
         if ($taskStatus->recordingStatus === AsrRecordingStatusEnum::CANCELED->value) {
@@ -2881,7 +2951,7 @@ class AsrFileAppService extends AbstractAppService
         // 调用沙箱取消任务（如果沙箱任务已创建）
         if ($taskStatus->sandboxTaskCreated && ! empty($taskStatus->sandboxId)) {
             try {
-                $response = $this->asrSandboxService->cancelRecordingTask($taskStatus);
+                $response = $this->asrSandboxService->cancelRecordingTask($taskStatus, $authorization);
                 $this->logger->info('沙箱录音任务已取消', [
                     'task_key' => $taskStatus->taskKey,
                     'sandbox_id' => $taskStatus->sandboxId,
@@ -3148,14 +3218,17 @@ class AsrFileAppService extends AbstractAppService
     private function executeAsyncFinishRecording(
         AsrTaskStatusDTO $taskStatus,
         string $organizationCode,
-        ?string $generatedTitle
+        ?string $generatedTitle,
+        string $authorization
     ): void {
         $requestId = CoContext::getRequestId();
         $language = CoContext::getLanguage();
         $taskKey = $taskStatus->taskKey;
         $userId = $taskStatus->userId;
 
-        Coroutine::create(function () use ($taskKey, $userId, $organizationCode, $generatedTitle, $language, $requestId) {
+        $authToken = $authorization;
+
+        Coroutine::create(function () use ($taskKey, $userId, $organizationCode, $generatedTitle, $language, $requestId, $authToken) {
             di(TranslatorInterface::class)->setLocale($language);
             CoContext::setLanguage($language);
             CoContext::setRequestId($requestId);

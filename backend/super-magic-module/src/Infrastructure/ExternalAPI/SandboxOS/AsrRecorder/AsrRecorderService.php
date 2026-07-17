@@ -15,11 +15,18 @@ use Dtyq\SuperMagic\Infrastructure\ExternalAPI\SandboxOS\AsrRecorder\Config\AsrT
 use Dtyq\SuperMagic\Infrastructure\ExternalAPI\SandboxOS\AsrRecorder\Response\AsrRecorderResponse;
 use Dtyq\SuperMagic\Infrastructure\ExternalAPI\SandboxOS\Constants\SandboxEndpoints;
 use Dtyq\SuperMagic\Infrastructure\ExternalAPI\SandboxOS\Gateway\SandboxGatewayInterface;
+use Dtyq\SuperMagic\Infrastructure\ExternalAPI\SandboxOS\Gateway\UserContext;
 use Exception;
 use Hyperf\Logger\LoggerFactory;
 
 /**
  * ASR 录音服务实现.
+ *
+ * Every method takes a UserContext as its FIRST parameter so the
+ * sandbox-gateway call underneath forwards User-Authorization to
+ * the in-pod super-magic agent's AuthMiddleware. The downstream
+ * agent's HTTP API requires that header; the request will 401
+ * otherwise.
  */
 class AsrRecorderService extends AbstractSandboxOS implements AsrRecorderInterface
 {
@@ -31,6 +38,7 @@ class AsrRecorderService extends AbstractSandboxOS implements AsrRecorderInterfa
     }
 
     public function startTask(
+        UserContext $userCtx,
         string $sandboxId,
         string $taskKey,
         string $sourceDir,
@@ -79,6 +87,7 @@ class AsrRecorderService extends AbstractSandboxOS implements AsrRecorderInterfa
 
             // 调用沙箱 API
             $result = $this->gateway->proxySandboxRequest(
+                $userCtx,
                 $sandboxId,
                 'POST',
                 SandboxEndpoints::ASR_TASK_START,
@@ -119,6 +128,7 @@ class AsrRecorderService extends AbstractSandboxOS implements AsrRecorderInterfa
     }
 
     public function finishTask(
+        UserContext $userCtx,
         string $sandboxId,
         string $taskKey,
         string $workspaceDir,
@@ -162,6 +172,7 @@ class AsrRecorderService extends AbstractSandboxOS implements AsrRecorderInterfa
 
             // 调用沙箱 API
             $result = $this->gateway->proxySandboxRequest(
+                $userCtx,
                 $sandboxId,
                 'POST',
                 SandboxEndpoints::ASR_TASK_FINISH,
@@ -203,6 +214,7 @@ class AsrRecorderService extends AbstractSandboxOS implements AsrRecorderInterfa
     }
 
     public function queryTask(
+        UserContext $userCtx,
         string $sandboxId,
         string $taskKey,
         string $workspaceDir = '.workspace'
@@ -220,6 +232,7 @@ class AsrRecorderService extends AbstractSandboxOS implements AsrRecorderInterfa
             ]);
 
             $result = $this->gateway->proxySandboxRequest(
+                $userCtx,
                 $sandboxId,
                 'POST',
                 SandboxEndpoints::ASR_TASK_QUERY,
@@ -261,6 +274,7 @@ class AsrRecorderService extends AbstractSandboxOS implements AsrRecorderInterfa
     }
 
     public function cancelTask(
+        UserContext $userCtx,
         string $sandboxId,
         string $taskKey,
         string $workspaceDir = '.workspace'
@@ -279,6 +293,7 @@ class AsrRecorderService extends AbstractSandboxOS implements AsrRecorderInterfa
 
             // 调用沙箱 API
             $result = $this->gateway->proxySandboxRequest(
+                $userCtx,
                 $sandboxId,
                 'POST',
                 SandboxEndpoints::ASR_TASK_CANCEL,
