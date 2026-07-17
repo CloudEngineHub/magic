@@ -46,6 +46,8 @@ interface DetailProps {
 	showFallbackWhenEmpty?: boolean
 	/** 当前项目文件 tabs 缓存一轮加载结束 */
 	onFileTabsCacheLoaded?: (projectId: string) => void
+	/** File ids whose tabs must remain open in the viewer. */
+	nonClosableFileIds?: string[]
 	/** When false, hides file preview toolbar (CommonHeaderV2) */
 	showFileHeader?: boolean
 	/** When true, hides FilesViewer tab bar for immersive read-only preview */
@@ -54,6 +56,8 @@ interface DetailProps {
 	forceFullscreenMode?: boolean
 	/** Overrides default footer visibility (mobile non-share shows footer by default) */
 	showFileFooter?: boolean
+	/** Class name for the detail container */
+	className?: string
 }
 
 // Forward ref type for Detail component
@@ -100,10 +104,12 @@ const Detail = forwardRef<DetailRef, DetailProps>((props, ref) => {
 		allowDownload,
 		showFallbackWhenEmpty,
 		onFileTabsCacheLoaded,
+		nonClosableFileIds,
 		showFileHeader,
 		hideTabBar,
 		forceFullscreenMode,
 		showFileFooter: showFileFooterProp,
+		className,
 	} = props
 
 	const filesViewerRef = useRef<FilesViewerRef>(null)
@@ -169,7 +175,7 @@ const Detail = forwardRef<DetailRef, DetailProps>((props, ref) => {
 
 	// Return unified files mode with playback tab
 	return (
-		<div className={cn("relative flex h-full flex-col overflow-hidden rounded-lg")}>
+		<div className={cn("relative flex h-full flex-col overflow-hidden rounded-lg", className)}>
 			<FilesViewer
 				ref={filesViewerRef}
 				attachments={attachments}
@@ -203,6 +209,7 @@ const Detail = forwardRef<DetailRef, DetailProps>((props, ref) => {
 				allowDownload={allowDownload}
 				showFallbackWhenEmpty={showFallbackWhenEmpty}
 				onFileTabsCacheLoaded={onFileTabsCacheLoaded}
+				nonClosableFileIds={nonClosableFileIds}
 			/>
 		</div>
 	)
