@@ -13,6 +13,7 @@ return [
             ? \Hyperf\Support\env('APP_WS_HOST', '')
             : \Hyperf\Support\env('APP_HOST', ''),
         'gateway' => \Hyperf\Support\env('SANDBOX_GATEWAY', ''),
+        'token' => \Hyperf\Support\env('SANDBOX_TOKEN', ''),
         'enabled' => \Hyperf\Support\env('SANDBOX_ENABLE', true),
         'message_mode' => \Hyperf\Support\env('SANDBOX_MESSAGE_MODE', 'consume'),
         'callback_host' => \Hyperf\Support\env('APP_HOST', ''),
