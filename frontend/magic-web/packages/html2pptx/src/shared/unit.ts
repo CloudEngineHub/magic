@@ -11,7 +11,7 @@ export const MAX_PPT_PAGE_PX = MAX_PPT_PAGE_INCH * DEFAULT_DPI
 export const DEFAULT_CONFIG: SlideConfig = {
 	htmlWidth: 1920,
 	htmlHeight: 1080,
-	slideWidth: 1920 / DEFAULT_DPI,  // 20 inches
+	slideWidth: 1920 / DEFAULT_DPI, // 20 inches
 	slideHeight: 1080 / DEFAULT_DPI, // 11.25 inches
 }
 
@@ -74,11 +74,7 @@ export function parseCSSSize(
  * Parse border-radius and return a pixel value
  * For multi-value radii, return the smallest non-zero value to avoid huge corners
  */
-export function parseBorderRadius(
-	value: string,
-	width: number,
-	height: number,
-): number {
+export function parseBorderRadius(value: string, width: number, height: number): number {
 	if (!value || value === "0px") return 0
 
 	const matches = value.match(/([\d.]+)(px|%|em|rem)?/g)
@@ -120,7 +116,10 @@ export function parseBorderRadius(
 export function resolveEffectiveRadius(node: {
 	style: { borderRadius: string; overflow?: string }
 	rect: { w: number; h: number }
-	parent?: { style: { borderRadius: string; overflow?: string }; rect: { w: number; h: number } } | null
+	parent?: {
+		style: { borderRadius: string; overflow?: string }
+		rect: { w: number; h: number }
+	} | null
 }): number {
 	let radiusPx = parseBorderRadius(node.style.borderRadius, node.rect.w, node.rect.h)
 	if (radiusPx === 0 && node.parent) {
@@ -145,11 +144,7 @@ export function resolveEffectiveRadius(node: {
  * Use an ellipse only when the element is nearly square and border-radius >= 50%
  * Long elements should use roundRect (pill shape) even with large corner radii
  */
-export function isFullyRounded(
-	borderRadius: string,
-	width: number,
-	height: number,
-): boolean {
+export function isFullyRounded(borderRadius: string, width: number, height: number): boolean {
 	if (!borderRadius || borderRadius === "0px") return false
 
 	const aspectRatio = width / height
@@ -202,33 +197,125 @@ export function pxToPt(px: number): number {
  * Recursively get the cumulative transform for an element, including rotation angle and scale
  * @param node Element node
  */
-export function getGlobalTransform(
-	node: ElementNode,
-): { rotation: number; scaleX: number; scaleY: number } {
+export function getGlobalTransform(node: ElementNode): {
+	rotation: number
+	scaleX: number
+	scaleY: number
+	textSafe: boolean
+} {
 	let rotation = 0
 	let scaleX = 1
 	let scaleY = 1
+	let textSafe = true
 	let current: ElementNode | null = node
 
 	while (current) {
 		const style = current.style ?? (current.element && (current.element as HTMLElement).style)
 		const transform = style?.transform
+		const individualRotate = parseIndividualRotate(style?.rotate)
+		const individualScale = parseIndividualScale(style?.scale)
+		rotation += individualRotate.rotation
+		scaleX *= individualScale.scaleX
+		scaleY *= individualScale.scaleY
+		if (
+			!individualRotate.textSafe ||
+			!individualScale.textSafe ||
+			!isIndividualTranslateTextSafe(style?.translate)
+		) {
+			textSafe = false
+		}
 
 		if (transform && transform !== "none") {
 			try {
 				const m = new DOMMatrix(transform)
-				const angle = Math.round(Math.atan2(m.b, m.a) * (180 / Math.PI))
+				const angle = Math.atan2(m.b, m.a) * (180 / Math.PI)
 				rotation += angle
 				const sx = Math.sqrt(m.a * m.a + m.b * m.b)
 				const sy = Math.sqrt(m.c * m.c + m.d * m.d)
 				scaleX *= sx
 				scaleY *= sy
+
+				const normalizedDot =
+					sx > 0 && sy > 0 ? Math.abs(m.a * m.c + m.b * m.d) / (sx * sy) : 1
+				const determinant = m.a * m.d - m.b * m.c
+				if (
+					m.is2D === false ||
+					normalizedDot > 1e-4 ||
+					determinant <= 0 ||
+					Math.abs(sx - sy) > 1e-3
+				) {
+					textSafe = false
+				}
 			} catch (e) {
+				textSafe = false
 				log(LogLevel.L3, "Invalid transform matrix", { error: String(e) })
 			}
 		}
 		current = current.parent
 	}
 
-	return { rotation, scaleX, scaleY }
+	return { rotation, scaleX, scaleY, textSafe }
+}
+
+function parseIndividualRotate(value: string | undefined): {
+	rotation: number
+	textSafe: boolean
+} {
+	if (!value || value === "none") return { rotation: 0, textSafe: true }
+	const tokens = value.trim().split(/\s+/)
+	const angleToken = tokens[tokens.length - 1]
+	const angle = angleToken ? parseCssAngleDegrees(angleToken) : undefined
+	if (angle === undefined) return { rotation: 0, textSafe: false }
+	const axis = tokens.slice(0, -1)
+	if (axis.length === 0 || (axis.length === 1 && axis[0].toLowerCase() === "z")) {
+		return { rotation: angle, textSafe: true }
+	}
+	if (axis.length === 3) {
+		const [x, y, z] = axis.map(Number)
+		const isZAxis =
+			[x, y, z].every(Number.isFinite) && Math.abs(x) <= 1e-6 && Math.abs(y) <= 1e-6 && z > 0
+		return { rotation: isZAxis ? angle : 0, textSafe: isZAxis }
+	}
+	return { rotation: 0, textSafe: false }
+}
+
+function parseCssAngleDegrees(value: string): number | undefined {
+	const parsed = Number.parseFloat(value)
+	if (!Number.isFinite(parsed)) return undefined
+	if (value.endsWith("deg")) return parsed
+	if (value.endsWith("rad")) return parsed * (180 / Math.PI)
+	if (value.endsWith("grad")) return parsed * 0.9
+	if (value.endsWith("turn")) return parsed * 360
+	return parsed === 0 ? 0 : undefined
+}
+
+function parseIndividualScale(value: string | undefined): {
+	scaleX: number
+	scaleY: number
+	textSafe: boolean
+} {
+	if (!value || value === "none") return { scaleX: 1, scaleY: 1, textSafe: true }
+	const tokens = value.trim().split(/\s+/)
+	const x = parseScaleComponent(tokens[0])
+	const y = parseScaleComponent(tokens[1] ?? tokens[0])
+	const z = tokens[2] === undefined ? 1 : parseScaleComponent(tokens[2])
+	if (![x, y, z].every(Number.isFinite)) {
+		return { scaleX: 1, scaleY: 1, textSafe: false }
+	}
+	const textSafe = x > 0 && y > 0 && z === 1 && Math.abs(x - y) <= 1e-3
+	return { scaleX: Math.abs(x), scaleY: Math.abs(y), textSafe }
+}
+
+function parseScaleComponent(value: string): number {
+	const parsed = Number.parseFloat(value)
+	if (!Number.isFinite(parsed)) return Number.NaN
+	return value.endsWith("%") ? parsed / 100 : parsed
+}
+
+function isIndividualTranslateTextSafe(value: string | undefined): boolean {
+	if (!value || value === "none") return true
+	const tokens = value.trim().split(/\s+/)
+	if (tokens.length <= 2) return true
+	const z = Number.parseFloat(tokens[2])
+	return Number.isFinite(z) && Math.abs(z) <= 1e-6
 }

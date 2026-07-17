@@ -82,6 +82,7 @@ export async function prepareSlideNodes({
 
 		const pptNodes = activeTransformElements(sortedElements, config, iWindow, {
 			textMergeMode,
+			elementNodeMap: new Map(elements.map((element) => [element.element, element])),
 		})
 		log(LogLevel.L2, `转换为 ${pptNodes.length} 个绘制节点`, {
 			totalWidth,

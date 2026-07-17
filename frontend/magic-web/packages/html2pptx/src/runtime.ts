@@ -19,7 +19,14 @@ export interface RenderSlideRuntime {
 		elements: ElementNode[],
 		config: SlideConfig,
 		iWindow: Window,
-		options?: { textMergeMode?: TextMergeMode },
+		options?: {
+			textMergeMode?: TextMergeMode
+			/**
+			 * All collected DOM nodes, including nodes filtered from drawing. Text
+			 * flow still needs these nodes for visibility and inherited styles.
+			 */
+			elementNodeMap?: Map<Element, ElementNode>
+		},
 	) => PPTNode[]
 	materializePseudoIcons?: (document: Document, window: Window) => IconBackup[]
 	restoreIcons?: (backups: IconBackup[]) => void
