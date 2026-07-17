@@ -99,7 +99,7 @@ export class SnapGuideRenderer {
 				this.overlayLayer.add(group)
 			}
 			for (const segment of guide.segments) {
-				const marker = this.createSpacingMarker(guide.axis, segment)
+				const marker = this.createSpacingMarker(segment)
 				this.spacingMarkers.push(marker)
 				this.overlayLayer.add(marker)
 			}
@@ -300,16 +300,13 @@ export class SnapGuideRenderer {
 		return group
 	}
 
-	private createSpacingMarker(
-		axis: SpacingGuide["axis"],
-		segment: SpacingGuide["segments"][number],
-	): Konva.Group {
+	private createSpacingMarker(segment: SpacingGuide["segments"][number]): Konva.Group {
 		const marker = new Konva.Group({
 			name: "spacing-marker",
 			...this.getSegmentMidpoint(segment),
 			listening: false,
 		})
-		this.addSpacingMarkerLines(marker, axis)
+		this.addSpacingMarkerLines(marker, segment.axis)
 		return marker
 	}
 

@@ -24,16 +24,17 @@ describe("SequenceSpacingResolver", () => {
 			gap: 100,
 		})
 		expect(candidate?.referenceTargets.map((target) => target.id)).toEqual(["a", "b"])
+		if (!candidate) throw new Error("expected a sequence spacing candidate")
 		expect(
-			guideResolver.createGuideForSnappedRect(candidate!, {
+			guideResolver.createGuideForSnappedRect(candidate, {
 				x: 400,
 				y: 0,
 				width: 100,
 				height: 100,
 			}).segments,
 		).toEqual([
-			{ start: { x: 100, y: 50 }, end: { x: 200, y: 50 } },
-			{ start: { x: 300, y: 50 }, end: { x: 400, y: 50 } },
+			{ axis: "horizontal", start: { x: 100, y: 50 }, end: { x: 200, y: 50 } },
+			{ axis: "horizontal", start: { x: 300, y: 50 }, end: { x: 400, y: 50 } },
 		])
 	})
 
@@ -55,16 +56,17 @@ describe("SequenceSpacingResolver", () => {
 			offset: -10,
 			gap: 100,
 		})
+		if (!candidate) throw new Error("expected a sequence spacing candidate")
 		expect(
-			guideResolver.createGuideForSnappedRect(candidate!, {
+			guideResolver.createGuideForSnappedRect(candidate, {
 				x: -200,
 				y: 0,
 				width: 100,
 				height: 100,
 			}).segments,
 		).toEqual([
-			{ start: { x: -100, y: 50 }, end: { x: 0, y: 50 } },
-			{ start: { x: 100, y: 50 }, end: { x: 200, y: 50 } },
+			{ axis: "horizontal", start: { x: -100, y: 50 }, end: { x: 0, y: 50 } },
+			{ axis: "horizontal", start: { x: 100, y: 50 }, end: { x: 200, y: 50 } },
 		])
 	})
 

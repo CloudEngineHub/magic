@@ -129,6 +129,7 @@ export class SpacingSnapResolver {
 		const desiredStart = firstEnd + equalGap
 		const offset = desiredStart - draggingStart
 		return {
+			kind: "linear",
 			axis,
 			mode: "between",
 			offset,
@@ -146,6 +147,9 @@ export class SpacingSnapResolver {
 		snappedDraggingRect: Rect,
 	): SpacingGuide {
 		const [firstTarget, secondTarget] = candidate.referenceTargets
+		if (candidate.kind === "grid") {
+			return this.createGridGuide({ candidate, snappedDraggingRect })
+		}
 		if (candidate.mode === "between") {
 			return this.createBetweenGuide({
 				axis: candidate.axis,
@@ -164,6 +168,99 @@ export class SpacingSnapResolver {
 			secondTarget,
 			snappedDraggingRect,
 		})
+	}
+
+	private createGridGuide(params: {
+		candidate: Extract<SpacingSnapCandidate, { kind: "grid" }>
+		snappedDraggingRect: Rect
+	}): SpacingGuide {
+		const { candidate, snappedDraggingRect } = params
+		const [firstTarget, secondTarget] = candidate.referenceTargets
+		const { anchorTarget, sourceAxis, axis, mode } = candidate
+		const referenceSegments = candidate.guideReferencePairs.map(
+			([referenceFirstTarget, referenceSecondTarget]) => {
+				const referencePosition = this.getCrossAxisOverlapCenter(
+					referenceFirstTarget.rect,
+					referenceSecondTarget.rect,
+					sourceAxis,
+				)
+				return sourceAxis === "horizontal"
+					? {
+							axis: "horizontal" as const,
+							start: {
+								x: this.getAxisEnd(referenceFirstTarget.rect, sourceAxis),
+								y: referencePosition,
+							},
+							end: {
+								x: this.getAxisStart(referenceSecondTarget.rect, sourceAxis),
+								y: referencePosition,
+							},
+						}
+					: {
+							axis: "vertical" as const,
+							start: {
+								x: referencePosition,
+								y: this.getAxisEnd(referenceFirstTarget.rect, sourceAxis),
+							},
+							end: {
+								x: referencePosition,
+								y: this.getAxisStart(referenceSecondTarget.rect, sourceAxis),
+							},
+						}
+			},
+		)
+		const gridPosition = this.getCrossAxisOverlapCenter(
+			anchorTarget.rect,
+			snappedDraggingRect,
+			axis,
+		)
+
+		return {
+			kind: "grid",
+			axis,
+			sourceAxis,
+			anchorTargetId: anchorTarget.id,
+			gap: candidate.gap,
+			targetElementIds: [firstTarget.id, secondTarget.id],
+			segments: [
+				...referenceSegments,
+				sourceAxis === "horizontal"
+					? {
+							axis: "vertical",
+							start: {
+								x: gridPosition,
+								y:
+									mode === "grid-after"
+										? this.getAxisEnd(anchorTarget.rect, axis)
+										: this.getAxisEnd(snappedDraggingRect, axis),
+							},
+							end: {
+								x: gridPosition,
+								y:
+									mode === "grid-after"
+										? snappedDraggingRect.y
+										: this.getAxisStart(anchorTarget.rect, axis),
+							},
+						}
+					: {
+							axis: "horizontal",
+							start: {
+								x:
+									mode === "grid-after"
+										? this.getAxisEnd(anchorTarget.rect, axis)
+										: this.getAxisEnd(snappedDraggingRect, axis),
+								y: gridPosition,
+							},
+							end: {
+								x:
+									mode === "grid-after"
+										? snappedDraggingRect.x
+										: this.getAxisStart(anchorTarget.rect, axis),
+								y: gridPosition,
+							},
+						},
+			],
+		}
 	}
 
 	private createBetweenGuide(params: {
@@ -186,15 +283,18 @@ export class SpacingSnapResolver {
 				axis,
 			)
 			return {
+				kind: "linear",
 				axis,
 				gap,
 				targetElementIds: [firstTarget.id, secondTarget.id],
 				segments: [
 					{
+						axis: "horizontal",
 						start: { x: this.getAxisEnd(firstTarget.rect, axis), y: firstGapY },
 						end: { x: snappedDraggingRect.x, y: firstGapY },
 					},
 					{
+						axis: "horizontal",
 						start: {
 							x: snappedDraggingRect.x + snappedDraggingRect.width,
 							y: secondGapY,
@@ -216,15 +316,18 @@ export class SpacingSnapResolver {
 			axis,
 		)
 		return {
+			kind: "linear",
 			axis,
 			gap,
 			targetElementIds: [firstTarget.id, secondTarget.id],
 			segments: [
 				{
+					axis: "vertical",
 					start: { x: firstGapX, y: this.getAxisEnd(firstTarget.rect, axis) },
 					end: { x: firstGapX, y: snappedDraggingRect.y },
 				},
 				{
+					axis: "vertical",
 					start: {
 						x: secondGapX,
 						y: snappedDraggingRect.y + snappedDraggingRect.height,
@@ -257,15 +360,18 @@ export class SpacingSnapResolver {
 				axis,
 			)
 			return {
+				kind: "linear",
 				axis,
 				gap,
 				targetElementIds: [firstTarget.id, secondTarget.id],
 				segments: [
 					{
+						axis: "horizontal",
 						start: { x: this.getAxisEnd(firstSegmentStart, axis), y: firstY },
 						end: { x: this.getAxisStart(firstSegmentEnd, axis), y: firstY },
 					},
 					{
+						axis: "horizontal",
 						start: { x: this.getAxisEnd(secondSegmentStart, axis), y: secondY },
 						end: { x: this.getAxisStart(secondSegmentEnd, axis), y: secondY },
 					},
@@ -276,15 +382,18 @@ export class SpacingSnapResolver {
 		const firstX = this.getCrossAxisOverlapCenter(firstSegmentStart, firstSegmentEnd, axis)
 		const secondX = this.getCrossAxisOverlapCenter(secondSegmentStart, secondSegmentEnd, axis)
 		return {
+			kind: "linear",
 			axis,
 			gap,
 			targetElementIds: [firstTarget.id, secondTarget.id],
 			segments: [
 				{
+					axis: "vertical",
 					start: { x: firstX, y: this.getAxisEnd(firstSegmentStart, axis) },
 					end: { x: firstX, y: this.getAxisStart(firstSegmentEnd, axis) },
 				},
 				{
+					axis: "vertical",
 					start: { x: secondX, y: this.getAxisEnd(secondSegmentStart, axis) },
 					end: { x: secondX, y: this.getAxisStart(secondSegmentEnd, axis) },
 				},

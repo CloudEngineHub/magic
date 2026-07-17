@@ -2,19 +2,20 @@ import type { Rect } from "../../shared/ids"
 import type {
 	SpacingSnapAxis,
 	SpacingSnapCandidate,
-	SpacingSnapMode,
 	SpacingSnapResult,
 	SpacingSnapTarget,
 } from "./spacingSnapTypes"
 
 const MIN_CROSS_AXIS_OVERLAP_RATIO = 0.5
 
-interface PreparedSequence {
+export interface PreparedSequence {
 	axis: SpacingSnapAxis
 	firstTarget: SpacingSnapTarget
 	secondTarget: SpacingSnapTarget
 	gap: number
 }
+
+export type PreparedSequences = Record<SpacingSnapAxis, PreparedSequence[]>
 
 /**
  * 从已有相邻元素对延展等间距。
@@ -23,7 +24,7 @@ interface PreparedSequence {
  * 相邻元素对仅在拖拽开始时建立，避免每个 dragmove 扫描整层元素。
  */
 export class SequenceSpacingResolver {
-	private preparedSequences: Record<SpacingSnapAxis, PreparedSequence[]> = {
+	private preparedSequences: PreparedSequences = {
 		horizontal: [],
 		vertical: [],
 	}
@@ -39,6 +40,13 @@ export class SequenceSpacingResolver {
 		this.preparedSequences = { horizontal: [], vertical: [] }
 	}
 
+	getPreparedSequences(): PreparedSequences {
+		return {
+			horizontal: [...this.preparedSequences.horizontal],
+			vertical: [...this.preparedSequences.vertical],
+		}
+	}
+
 	resolve(params: { draggingRect: Rect; threshold: number }): SpacingSnapResult {
 		const { draggingRect, threshold } = params
 		return {
@@ -49,7 +57,7 @@ export class SequenceSpacingResolver {
 
 	resolveForPair(params: {
 		axis: SpacingSnapAxis
-		mode: Exclude<SpacingSnapMode, "between">
+		mode: "extend-before" | "extend-after"
 		draggingRect: Rect
 		targetElementIds: [string, string]
 		threshold: number
@@ -125,7 +133,7 @@ export class SequenceSpacingResolver {
 
 	private createCandidate(params: {
 		sequence: PreparedSequence
-		mode: Exclude<SpacingSnapMode, "between">
+		mode: "extend-before" | "extend-after"
 		draggingRect: Rect
 		threshold: number
 	}): SpacingSnapCandidate | null {
@@ -154,6 +162,7 @@ export class SequenceSpacingResolver {
 		if (!isOnExpectedSide || Math.abs(offset) > threshold) return null
 
 		return {
+			kind: "linear",
 			axis,
 			mode,
 			offset,

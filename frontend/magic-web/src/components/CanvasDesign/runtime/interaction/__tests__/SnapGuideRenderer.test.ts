@@ -33,12 +33,13 @@ describe("SnapGuideRenderer", () => {
 			overlayLayer: overlayGroup as unknown as Konva.Layer,
 		})
 		const spacingGuide: SpacingGuide = {
+			kind: "linear",
 			axis: "horizontal",
 			gap: 100,
 			targetElementIds: ["a", "c"],
 			segments: [
-				{ start: { x: 100, y: 50 }, end: { x: 200, y: 50 } },
-				{ start: { x: 300, y: 50 }, end: { x: 400, y: 50 } },
+				{ axis: "horizontal", start: { x: 100, y: 50 }, end: { x: 200, y: 50 } },
+				{ axis: "horizontal", start: { x: 300, y: 50 }, end: { x: 400, y: 50 } },
 			],
 		}
 
@@ -60,5 +61,32 @@ describe("SnapGuideRenderer", () => {
 		expect(firstStartArrow.points()[0]).toBeGreaterThan(100)
 		expect(firstEndArrow.points()[0]).toBeLessThan(200)
 		expect(overlayGroup.find(".spacing-marker")).toHaveLength(2)
+	})
+
+	it("renders each grid guide segment with its own direction marker", () => {
+		const overlayGroup = new Konva.Group()
+		const renderer = new SnapGuideRenderer({
+			overlayLayer: overlayGroup as unknown as Konva.Layer,
+		})
+		const spacingGuide: SpacingGuide = {
+			kind: "grid",
+			axis: "vertical",
+			sourceAxis: "horizontal",
+			anchorTargetId: "b",
+			gap: 100,
+			targetElementIds: ["a", "b"],
+			segments: [
+				{ axis: "horizontal", start: { x: 100, y: 50 }, end: { x: 200, y: 50 } },
+				{ axis: "vertical", start: { x: 250, y: 100 }, end: { x: 250, y: 200 } },
+			],
+		}
+
+		renderer.cacheVisualParams(1)
+		renderer.renderSpacing([spacingGuide])
+
+		const markers = overlayGroup.find(".spacing-marker") as Konva.Group[]
+		expect(markers).toHaveLength(2)
+		expect((markers[0].getChildren()[0] as Konva.Line).points()).toEqual([-4, -2, 4, -2])
+		expect((markers[1].getChildren()[0] as Konva.Line).points()).toEqual([-2, -4, -2, 4])
 	})
 })

@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest"
 import type { Rect } from "../../shared/ids"
 import type { AlignmentInfo } from "../snap/snapGuideTypes"
+import { GridSpacingResolver } from "../snap/GridSpacingResolver"
 import { SnapGuideManager } from "../snap/SnapGuideManager"
 import { SequenceSpacingResolver } from "../snap/SequenceSpacingResolver"
 import { SpacingSnapResolver } from "../snap/SpacingSnapResolver"
@@ -204,6 +205,7 @@ describe("SnapGuideManager alignment behavior", () => {
 			cachedSnapThreshold: number
 			spacingSnapResolver: SpacingSnapResolver
 			sequenceSpacingResolver: SequenceSpacingResolver
+			gridSpacingResolver: GridSpacingResolver
 			cachedSequenceSpacingTargets: SpacingSnapTarget[]
 			getSpacingSnapTargets: () => SpacingSnapTarget[]
 			resolveTranslationSnap: (params: {
@@ -220,6 +222,7 @@ describe("SnapGuideManager alignment behavior", () => {
 		manager.cachedSnapThreshold = 8
 		manager.spacingSnapResolver = new SpacingSnapResolver()
 		manager.sequenceSpacingResolver = new SequenceSpacingResolver()
+		manager.gridSpacingResolver = new GridSpacingResolver()
 		manager.cachedSequenceSpacingTargets = []
 		manager.getSpacingSnapTargets = () => spacingTargets
 
@@ -244,6 +247,7 @@ describe("SnapGuideManager alignment behavior", () => {
 			cachedSnapThreshold: number
 			spacingSnapResolver: SpacingSnapResolver
 			sequenceSpacingResolver: SequenceSpacingResolver
+			gridSpacingResolver: GridSpacingResolver
 			cachedSequenceSpacingTargets: SpacingSnapTarget[]
 			getSpacingSnapTargets: () => SpacingSnapTarget[]
 			resolveTranslationSnap: (params: {
@@ -260,6 +264,7 @@ describe("SnapGuideManager alignment behavior", () => {
 		manager.cachedSnapThreshold = 16
 		manager.spacingSnapResolver = new SpacingSnapResolver()
 		manager.sequenceSpacingResolver = new SequenceSpacingResolver()
+		manager.gridSpacingResolver = new GridSpacingResolver()
 		manager.sequenceSpacingResolver.prepare(sequenceTargets)
 		manager.cachedSequenceSpacingTargets = sequenceTargets
 		manager.getSpacingSnapTargets = () => []
@@ -273,6 +278,71 @@ describe("SnapGuideManager alignment behavior", () => {
 
 		expect(result.snapOffsetX).toBe(10)
 		expect(result.spacingGuides).toMatchObject([{ targetElementIds: ["a", "b"] }])
+	})
+
+	it("extends a sibling sequence across axes only after the anchor directly aligns", () => {
+		const sequenceTargets: SpacingSnapTarget[] = [
+			{ id: "a", rect: { x: 0, y: 0, width: 100, height: 100 } },
+			{ id: "b", rect: { x: 200, y: 0, width: 100, height: 100 } },
+		]
+		const manager = Object.create(SnapGuideManager.prototype) as unknown as {
+			activeAnchor: string | null
+			cachedSnapThreshold: number
+			spacingSnapResolver: SpacingSnapResolver
+			sequenceSpacingResolver: SequenceSpacingResolver
+			gridSpacingResolver: GridSpacingResolver
+			cachedSequenceSpacingTargets: SpacingSnapTarget[]
+			getSpacingSnapTargets: () => SpacingSnapTarget[]
+			resolveTranslationSnap: (params: {
+				selectedIds: string[]
+				draggingRect: Rect
+				targets: []
+				directResult: {
+					snappedRect: Rect
+					snappedAlignments: AlignmentInfo[]
+					snapOffsetX: number
+					snapOffsetY: number
+					coordinateSpace: "content"
+				}
+			}) => {
+				snapOffsetY: number
+				snappedAlignments: AlignmentInfo[]
+				spacingGuides: Array<{ kind: string; targetElementIds: [string, string] }>
+			}
+		}
+		manager.activeAnchor = null
+		manager.cachedSnapThreshold = 16
+		manager.spacingSnapResolver = new SpacingSnapResolver()
+		manager.sequenceSpacingResolver = new SequenceSpacingResolver()
+		manager.sequenceSpacingResolver.prepare(sequenceTargets)
+		manager.gridSpacingResolver = new GridSpacingResolver()
+		manager.gridSpacingResolver.prepare(manager.sequenceSpacingResolver.getPreparedSequences())
+		manager.cachedSequenceSpacingTargets = sequenceTargets
+		manager.getSpacingSnapTargets = () => []
+
+		const directAlignment: AlignmentInfo = {
+			type: "left",
+			position: 200,
+			targetElementId: "b",
+			dragPoints: [],
+			targetPoints: [],
+		}
+		const result = manager.resolveTranslationSnap({
+			selectedIds: ["d"],
+			draggingRect: { x: 200, y: 190, width: 100, height: 100 },
+			targets: [],
+			directResult: {
+				snappedRect: { x: 200, y: 190, width: 100, height: 100 },
+				snappedAlignments: [directAlignment],
+				snapOffsetX: 0,
+				snapOffsetY: 0,
+				coordinateSpace: "content",
+			},
+		})
+
+		expect(result.snapOffsetY).toBe(10)
+		expect(result.snappedAlignments).toEqual([directAlignment])
+		expect(result.spacingGuides).toMatchObject([{ kind: "grid", targetElementIds: ["a", "b"] }])
 	})
 
 	it("keeps a locked spacing pair through minor movement and releases after the hysteresis window", () => {

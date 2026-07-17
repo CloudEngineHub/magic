@@ -6,22 +6,31 @@ import { calculateSnapThreshold } from "../transform/anchorUtils"
 import type { AlignmentInfo, AlignmentType } from "./snapGuideTypes"
 import { SnapGuideRenderer } from "./SnapGuideRenderer"
 import { SnapResolver, type SnapResolverContext } from "./SnapResolver"
+import { GridSpacingResolver } from "./GridSpacingResolver"
 import { SequenceSpacingResolver } from "./SequenceSpacingResolver"
 import { SpacingSnapResolver } from "./SpacingSnapResolver"
 import type {
 	SpacingGuide,
 	SpacingSnapAxis,
 	SpacingSnapCandidate,
-	SpacingSnapMode,
 	SpacingSnapTarget,
 } from "./spacingSnapTypes"
 
 const COINCIDENT_ALIGNMENT_OFFSET_EPSILON = 0.01
 
-interface SpacingSnapLock {
-	mode: SpacingSnapMode
-	targetElementIds: [string, string]
-}
+type SpacingSnapLock =
+	| {
+			kind: "linear"
+			mode: "between" | "extend-before" | "extend-after"
+			targetElementIds: [string, string]
+	  }
+	| {
+			kind: "grid"
+			mode: "grid-before" | "grid-after"
+			targetElementIds: [string, string]
+			sourceAxis: SpacingSnapAxis
+			anchorTargetId: string
+	  }
 
 /**
  * 吸附引导线管理器
@@ -39,6 +48,7 @@ export class SnapGuideManager implements SnapResolverContext {
 	private snapResolver: SnapResolver
 	private spacingSnapResolver: SpacingSnapResolver
 	private sequenceSpacingResolver: SequenceSpacingResolver
+	private gridSpacingResolver: GridSpacingResolver
 
 	// 是否启用吸附
 	private enabled = true
@@ -79,6 +89,7 @@ export class SnapGuideManager implements SnapResolverContext {
 		this.snapResolver = new SnapResolver(this)
 		this.spacingSnapResolver = new SpacingSnapResolver()
 		this.sequenceSpacingResolver = new SequenceSpacingResolver()
+		this.gridSpacingResolver = new GridSpacingResolver()
 		this.setupEventListeners()
 	}
 
@@ -243,6 +254,7 @@ export class SnapGuideManager implements SnapResolverContext {
 			return rect && rect.width > 0 && rect.height > 0 ? [{ id: target.id, rect }] : []
 		})
 		this.sequenceSpacingResolver.prepare(this.cachedSequenceSpacingTargets)
+		this.gridSpacingResolver.prepare(this.sequenceSpacingResolver.getPreparedSequences())
 	}
 
 	private clearInteractionTargets(): void {
@@ -253,6 +265,7 @@ export class SnapGuideManager implements SnapResolverContext {
 		this.cachedInteractionSelectionKey = null
 		this.cachedSequenceSpacingTargets = []
 		this.sequenceSpacingResolver.clear()
+		this.gridSpacingResolver.clear()
 	}
 
 	private getActiveInteractionTargets(selectedIds: string[], draggingRect: Rect): LayerElement[] {
@@ -299,7 +312,10 @@ export class SnapGuideManager implements SnapResolverContext {
 			.sort()
 			.join("|")
 		const spacingKey = spacingGuides
-			.map((guide) => `${guide.axis}:${guide.targetElementIds.join(":")}`)
+			.map(
+				(guide) =>
+					`${guide.kind}:${guide.axis}:${guide.sourceAxis ?? ""}:${guide.anchorTargetId ?? ""}:${guide.targetElementIds.join(":")}`,
+			)
 			.sort()
 			.join("|")
 		return `${alignmentKey};${spacingKey}`
@@ -425,6 +441,12 @@ export class SnapGuideManager implements SnapResolverContext {
 			draggingRect,
 			threshold: this.cachedSnapThreshold,
 		})
+		const gridSpacingResult = this.gridSpacingResolver.resolve({
+			draggingRect,
+			threshold: this.cachedSnapThreshold,
+			isAnchorAligned: (anchorTargetId, axis) =>
+				this.hasDirectAlignmentToTarget(directResult, anchorTargetId, axis),
+		})
 		const directXAlignment = directResult?.snappedAlignments.find((alignment) =>
 			this.isHorizontalAlignment(alignment.type),
 		)
@@ -441,7 +463,9 @@ export class SnapGuideManager implements SnapResolverContext {
 				baseCandidate: this.getClosestSpacingCandidate(
 					spacingResult.horizontal,
 					sequenceSpacingResult.horizontal,
+					gridSpacingResult.horizontal,
 				),
+				directResult,
 			}),
 		)
 		const verticalSpacing = this.pickSpacingCandidate(
@@ -454,7 +478,9 @@ export class SnapGuideManager implements SnapResolverContext {
 				baseCandidate: this.getClosestSpacingCandidate(
 					spacingResult.vertical,
 					sequenceSpacingResult.vertical,
+					gridSpacingResult.vertical,
 				),
+				directResult,
 			}),
 		)
 		const snapOffsetX = horizontalSpacing?.offset ?? directResult?.snapOffsetX ?? 0
@@ -490,8 +516,7 @@ export class SnapGuideManager implements SnapResolverContext {
 		draggingRect: Rect,
 		fallbackTargets: LayerElement[],
 	): SpacingSnapTarget[] {
-		const targetIds =
-			this.cachedInteractionTargetIds ?? fallbackTargets.map((target) => target.id)
+		const targetIds = this.cachedSequenceSpacingTargets.map((target) => target.id)
 		const targetsById =
 			this.cachedInteractionTargetsById ??
 			new Map(fallbackTargets.map((target) => [target.id, target]))
@@ -510,6 +535,19 @@ export class SnapGuideManager implements SnapResolverContext {
 			const rect = this.canvas.geometryCacheManager.getElementBounds(targetId)
 			return rect && rect.width > 0 && rect.height > 0 ? [{ id: targetId, rect }] : []
 		})
+	}
+
+	private hasDirectAlignmentToTarget(
+		directResult: ReturnType<SnapResolver["resolveInContentSpace"]>,
+		targetElementId: string,
+		spacingAxis: SpacingSnapAxis,
+	): boolean {
+		const requiresHorizontalAlignment = spacingAxis === "vertical"
+		return !!directResult?.snappedAlignments.some(
+			(alignment) =>
+				alignment.targetElementId === targetElementId &&
+				this.isHorizontalAlignment(alignment.type) === requiresHorizontalAlignment,
+		)
 	}
 
 	private pickSpacingCandidate(
@@ -538,8 +576,9 @@ export class SnapGuideManager implements SnapResolverContext {
 		draggingRect: Rect
 		targets: SpacingSnapTarget[]
 		baseCandidate: SpacingSnapCandidate | null
+		directResult: ReturnType<SnapResolver["resolveInContentSpace"]>
 	}): SpacingSnapCandidate | null {
-		const { axis, draggingRect, targets, baseCandidate } = params
+		const { axis, draggingRect, targets, baseCandidate, directResult } = params
 		const lock = this.activeSpacingSnapTargets?.[axis]
 		if (!lock) return baseCandidate
 
@@ -552,26 +591,42 @@ export class SnapGuideManager implements SnapResolverContext {
 
 		const releaseThreshold = this.getSpacingReleaseThreshold()
 		const lockedCandidate =
-			lock.mode === "between"
-				? axis === "horizontal"
-					? this.spacingSnapResolver.resolve({
-							draggingRect,
-							targets: lockedTargets,
-							threshold: releaseThreshold,
-						}).horizontal
-					: this.spacingSnapResolver.resolve({
-							draggingRect,
-							targets: lockedTargets,
-							threshold: releaseThreshold,
-						}).vertical
-				: this.sequenceSpacingResolver.resolveForPair({
+			lock.kind === "grid"
+				? this.gridSpacingResolver.resolveForReference({
 						axis,
+						sourceAxis: lock.sourceAxis,
 						mode: lock.mode,
 						draggingRect,
 						targetElementIds: lock.targetElementIds,
+						anchorTargetId: lock.anchorTargetId,
 						threshold: releaseThreshold,
 					})
+				: lock.mode === "between"
+					? axis === "horizontal"
+						? this.spacingSnapResolver.resolve({
+								draggingRect,
+								targets: lockedTargets,
+								threshold: releaseThreshold,
+							}).horizontal
+						: this.spacingSnapResolver.resolve({
+								draggingRect,
+								targets: lockedTargets,
+								threshold: releaseThreshold,
+							}).vertical
+					: this.sequenceSpacingResolver.resolveForPair({
+							axis,
+							mode: lock.mode,
+							draggingRect,
+							targetElementIds: lock.targetElementIds,
+							threshold: releaseThreshold,
+						})
 		if (!lockedCandidate) {
+			return baseCandidate
+		}
+		if (
+			lockedCandidate.kind === "grid" &&
+			!this.hasDirectAlignmentToTarget(directResult, lockedCandidate.anchorTarget.id, axis)
+		) {
 			return baseCandidate
 		}
 		if (!baseCandidate) {
@@ -595,7 +650,7 @@ export class SnapGuideManager implements SnapResolverContext {
 	}
 
 	private getSpacingCandidateKey(candidate: SpacingSnapCandidate): string {
-		return `${candidate.axis}:${candidate.mode}:${candidate.referenceTargets.map((target) => target.id).join(":")}`
+		return `${candidate.kind}:${candidate.axis}:${candidate.mode}:${candidate.kind === "grid" ? `${candidate.sourceAxis}:${candidate.anchorTarget.id}:` : ""}${candidate.referenceTargets.map((target) => target.id).join(":")}`
 	}
 
 	private updateSpacingSnapState(
@@ -609,13 +664,24 @@ export class SnapGuideManager implements SnapResolverContext {
 			delete this.activeSpacingSnapTargets[axis]
 			return
 		}
-		this.activeSpacingSnapTargets[axis] = {
-			mode: candidate.mode,
-			targetElementIds: candidate.referenceTargets.map((target) => target.id) as [
-				string,
-				string,
-			],
-		}
+		const targetElementIds = candidate.referenceTargets.map((target) => target.id) as [
+			string,
+			string,
+		]
+		this.activeSpacingSnapTargets[axis] =
+			candidate.kind === "grid"
+				? {
+						kind: "grid",
+						mode: candidate.mode,
+						targetElementIds,
+						sourceAxis: candidate.sourceAxis,
+						anchorTargetId: candidate.anchorTarget.id,
+					}
+				: {
+						kind: "linear",
+						mode: candidate.mode,
+						targetElementIds,
+					}
 	}
 
 	private clearSpacingSnapState(): void {
