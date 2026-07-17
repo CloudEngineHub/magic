@@ -1887,9 +1887,9 @@ class AgentDomainService
     }
 
     /**
-     * @param null|string $mentionsJson     mentions 的 JSON 字符串
-     * @param null|int $currentProjectId   当前 task 所属项目 ID（同项目 mention 不做路径转换）
-     * @param string $mountBasePath        跨项目引用挂载的容器内基础路径（来自 env AGENT_REFERENCED_PROJECT_MOUNT_BASE_PATH）
+     * @param null|string $mentionsJson mentions 的 JSON 字符串
+     * @param null|int $currentProjectId 当前 task 所属项目 ID（同项目 mention 不做路径转换）
+     * @param string $mountBasePath 跨项目引用挂载的容器内基础路径（来自 env AGENT_REFERENCED_PROJECT_MOUNT_BASE_PATH）
      * @return array 处理后的 mentions 数组
      */
     private function buildMentionsJsonStruct(
@@ -1913,8 +1913,6 @@ class AgentDomainService
      * - 同项目（project_id === currentProjectId）跳过，走 agent 自身 workspace
      * - file_path/directory_path 已为绝对路径（以 / 开头）跳过，防双前缀
      * - project_id 缺失或为空时跳过
-     *
-     * @param array $mentions
      */
     private function translateCrossProjectPaths(
         array $mentions,
