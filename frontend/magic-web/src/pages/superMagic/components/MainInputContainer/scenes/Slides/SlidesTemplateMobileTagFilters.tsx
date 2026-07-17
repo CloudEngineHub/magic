@@ -132,7 +132,7 @@ function SlidesTemplateMobileTagFilters({
 					data-testid="slides-template-mobile-all-filters-panel"
 				>
 					<nav
-						className="no-scrollbar w-[116px] shrink-0 overflow-y-auto border-r border-border bg-card py-1"
+						className="no-scrollbar w-[86px] shrink-0 overflow-y-auto border-r border-border bg-card py-1"
 						aria-label={panelTitle}
 						data-testid="slides-template-mobile-all-filters-groups"
 					>
