@@ -1,7 +1,7 @@
 import { memo, useEffect, useMemo, useState } from "react"
 import { useBoolean, useMemoizedFn, useUpdateEffect } from "ahooks"
 import { observer } from "mobx-react-lite"
-import { Flex, Input, Spin } from "antd"
+import { Input, Spin } from "antd"
 import { IconUpload } from "@tabler/icons-react"
 import { useTranslation } from "react-i18next"
 import { MagicUserApi } from "@/apis"
@@ -15,7 +15,6 @@ import { service } from "@/services"
 import type { UserService } from "@/services/user/UserService"
 import SettingStore from "@/stores/setting"
 import magicToast from "@/components/base/MagicToaster/utils"
-import { useStyles } from "./styles"
 
 interface EditProfileModalProps {
 	open?: boolean
@@ -25,7 +24,6 @@ interface EditProfileModalProps {
 function EditProfileModal({ open: openProp, onClose }: EditProfileModalProps) {
 	const { t } = useTranslation("accountSetting")
 	const { t: tInterface } = useTranslation("interface")
-	const { styles } = useStyles()
 	const { userInfo } = useUserInfo()
 	const [open, { setTrue, setFalse }] = useBoolean(openProp ?? false)
 	const [nickname, setNickname] = useState(userInfo?.nickname ?? "")
@@ -58,11 +56,12 @@ function EditProfileModal({ open: openProp, onClose }: EditProfileModalProps) {
 	}, [open, userInfo?.avatar])
 
 	const handleFileChange = useMemoizedFn(async (files: FileList | File[]) => {
+		if (!canUpdateAvatar) return
 		await uploadAvatar(files)
 	})
 
 	const handleSave = useMemoizedFn(async () => {
-		if (!hasChanges) {
+		if (!hasChanges || !canUpdateNickname) {
 			setFalse()
 			onClose?.()
 			return
@@ -94,9 +93,9 @@ function EditProfileModal({ open: openProp, onClose }: EditProfileModalProps) {
 		return (
 			<button
 				type="button"
-				className={styles.uploadButton}
+				className="flex h-8 cursor-pointer items-center justify-center gap-1 rounded-lg border border-border bg-background px-3 py-1.5 text-sm leading-5 text-muted-foreground transition-all duration-200 hover:border-primary hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:border-border disabled:hover:bg-background"
 				onClick={onUpload}
-				disabled={isUploading}
+				disabled={!canUpdateAvatar || isUploading}
 				data-testid="account-setting-upload-avatar-button"
 			>
 				<IconUpload size={20} />
@@ -107,7 +106,7 @@ function EditProfileModal({ open: openProp, onClose }: EditProfileModalProps) {
 
 	const footer = useMemo(
 		() => (
-			<Flex justify="flex-end" gap={10} style={{ width: "100%" }}>
+			<div className="flex w-full justify-end gap-2.5">
 				<MagicButton
 					onClick={handleCancel}
 					disabled={isSaving}
@@ -119,14 +118,14 @@ function EditProfileModal({ open: openProp, onClose }: EditProfileModalProps) {
 					type="primary"
 					onClick={handleSave}
 					loading={isSaving}
-					disabled={!hasChanges}
+					disabled={!canUpdateNickname || !hasChanges}
 					data-testid="account-setting-edit-profile-save-button"
 				>
 					{t("save") || tInterface("button.save") || tInterface("common.confirm")}
 				</MagicButton>
-			</Flex>
+			</div>
 		),
-		[handleCancel, handleSave, hasChanges, isSaving, t, tInterface],
+		[canUpdateNickname, handleCancel, handleSave, hasChanges, isSaving, t, tInterface],
 	)
 
 	return (
@@ -140,53 +139,45 @@ function EditProfileModal({ open: openProp, onClose }: EditProfileModalProps) {
 			maskClosable={!isSaving}
 			data-testid="account-setting-edit-profile-modal"
 		>
-			<div className={styles.modalContent}>
-				{canUpdateAvatar ? (
-					<div className={styles.avatarSection}>
-						<div className={styles.avatarWrapper}>
-							<MagicAvatar src={avatarUrl} size={64}>
-								{userInfo?.nickname}
-							</MagicAvatar>
-							{isUploading ? (
-								<div
-									style={{
-										position: "absolute",
-										top: "50%",
-										left: "50%",
-										transform: "translate(-50%, -50%)",
-									}}
-								>
-									<Spin size="small" />
-								</div>
-							) : null}
-						</div>
-						<UploadAction
-							handler={uploadHandler}
-							onFileChange={handleFileChange}
-							multiple={false}
-							accept="image/*"
+			<div className="flex w-full flex-col gap-6">
+				<div className="flex w-full flex-col items-center gap-2.5 rounded-lg border border-border p-5">
+					<div className="relative flex size-16 items-center justify-center p-1">
+						<MagicAvatar src={avatarUrl} size={64}>
+							{userInfo?.nickname}
+						</MagicAvatar>
+						{isUploading ? (
+							<div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
+								<Spin size="small" />
+							</div>
+						) : null}
+					</div>
+					<UploadAction
+						handler={uploadHandler}
+						onFileChange={handleFileChange}
+						multiple={false}
+						accept="image/*"
+						disabled={!canUpdateAvatar}
+					/>
+				</div>
+
+				<div className="flex w-full flex-col gap-2">
+					<label className="text-sm leading-5 text-muted-foreground">
+						{t("username") || "用户名"}
+					</label>
+					<div className="w-full">
+						<Input
+							className="h-10 w-full rounded-lg border border-input px-3 text-base leading-[22px] text-foreground transition-colors hover:border-ring focus:border-primary focus:outline-none"
+							value={nickname}
+							onChange={(event) => setNickname(event.target.value)}
+							placeholder={
+								t("usernamePlaceholder") ||
+								tInterface("setting.nickNamePlaceholder")
+							}
+							disabled={!canUpdateNickname || isSaving}
+							data-testid="account-setting-nickname-input"
 						/>
 					</div>
-				) : null}
-
-				{canUpdateNickname ? (
-					<div className={styles.formSection}>
-						<label className={styles.label}>{t("username") || "用户名"}</label>
-						<div className={styles.inputWrapper}>
-							<Input
-								className={styles.input}
-								value={nickname}
-								onChange={(event) => setNickname(event.target.value)}
-								placeholder={
-									t("usernamePlaceholder") ||
-									tInterface("setting.nickNamePlaceholder")
-								}
-								disabled={isSaving}
-								data-testid="account-setting-nickname-input"
-							/>
-						</div>
-					</div>
-				) : null}
+				</div>
 			</div>
 		</MagicModal>
 	)
