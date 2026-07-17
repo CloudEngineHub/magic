@@ -11,7 +11,7 @@ import PptModeSwitcherCard from "../PptModeSwitcherCard"
 vi.mock("react-i18next", () => ({
 	useTranslation: () => ({
 		t: (key: string, values?: { count?: string }) =>
-			key === "pptEmployee.delivered" ? `已制作 ${values?.count} 套` : key,
+			key === "pptEmployee.delivered" ? `已制作 ${values?.count} 页` : key,
 	}),
 }))
 
@@ -157,7 +157,7 @@ describe("PptModeSwitcherCard", () => {
 		render(<PptModeSwitcherCard modeItem={modeItem} isSelected onSelect={vi.fn()} />)
 
 		const deliveredCount = screen.getByTestId("ppt-mode-switcher-delivered-count")
-		expect(deliveredCount).toHaveTextContent("已制作7,293套")
+		expect(deliveredCount).toHaveTextContent("已制作7,293页")
 		expect(deliveredCount).toHaveClass("text-background/70")
 	})
 
