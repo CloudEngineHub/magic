@@ -7,9 +7,13 @@ import { UploadSource } from "../hooks/useFileUpload"
 import { SuperMagicApi } from "@/apis"
 import { logger as Logger } from "@/utils/log"
 
+const TEMP_UPLOAD_DIR_NAME = ".tmp"
+
 class UploadTokenService {
 	private readonly baseUrl = env("MAGIC_SERVICE_BASE_URL")
 	private readonly logger = Logger.createLogger("SuperMagicUploadTokenService")
+	private readonly tempUploadDirectoryIds = new Map<string, string>()
+	private readonly tempUploadDirectoryPromises = new Map<string, Promise<string>>()
 
 	/**
 	 * 上传凭证缓存
@@ -172,12 +176,70 @@ class UploadTokenService {
 	 * @param topicId
 	 * @returns
 	 */
+	private async ensureTempUploadDirectory(projectId: string) {
+		const cachedDirectoryId = this.tempUploadDirectoryIds.get(projectId)
+		if (cachedDirectoryId) return cachedDirectoryId
+		const pendingDirectory = this.tempUploadDirectoryPromises.get(projectId)
+		if (pendingDirectory) return pendingDirectory
+
+		const createDirectory = (async () => {
+			const response = await SuperMagicApi.createFile({
+				project_id: projectId,
+				file_name: TEMP_UPLOAD_DIR_NAME,
+				is_directory: true,
+				ignore_duplicate: true,
+			})
+			if (!response?.file_id) {
+				throw new Error("Failed to create temp upload directory")
+			}
+
+			this.tempUploadDirectoryIds.set(projectId, response.file_id)
+			return response.file_id
+		})()
+		this.tempUploadDirectoryPromises.set(projectId, createDirectory)
+
+		try {
+			return await createDirectory
+		} finally {
+			this.tempUploadDirectoryPromises.delete(projectId)
+		}
+	}
+
 	saveTempFilesToProject(items: UploadFileMentionData[], projectId: string, topicId?: string) {
 		return Promise.all(
-			items.map((item) => {
+			items.map(async (item) => {
 				if (!item.file_path || item.file_size === undefined) {
 					throw new Error("Invalid file data: missing file_path or file_size")
 				}
+
+				// Workspace-home images are uploaded before a project exists. Once message
+				// sending creates the project, materialize their hidden .tmp destination here.
+				if (item.is_hidden) {
+					const parentId = await this.ensureTempUploadDirectory(projectId)
+					const [saveResult] = await SuperMagicApi.batchSaveFiles({
+						project_id: projectId,
+						parent_id: parentId,
+						files: [
+							{
+								project_id: projectId,
+								topic_id: topicId,
+								task_id: "",
+								file_key: item.file_path,
+								file_name: item.file_name,
+								file_size: item.file_size,
+								file_type: "user_upload",
+								storage_type: "workspace",
+								source: UploadSource.Home,
+								relative_file_path:
+									item.relative_file_path ||
+									`${TEMP_UPLOAD_DIR_NAME}/${item.file_name}`,
+								is_hidden: true,
+							},
+						],
+					})
+					return saveResult
+				}
+
 				return this.saveFileToProject({
 					project_id: projectId,
 					topic_id: topicId,
