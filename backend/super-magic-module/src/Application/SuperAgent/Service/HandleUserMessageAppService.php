@@ -813,7 +813,7 @@ class HandleUserMessageAppService extends AbstractAppService
                 $ids[$pidStr] = true;
             }
         }
-        return array_keys($ids);
+        return array_map('strval', array_keys($ids));
     }
 
     /**
