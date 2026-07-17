@@ -1,4 +1,5 @@
 import type { PPTShapeNode, Slide } from "../ir/node"
+import { toPptxTextMargin } from "./textMargin"
 import { mapDashType } from "../shared/line"
 import { inchToPt } from "../shared/unit"
 
@@ -115,7 +116,7 @@ export function drawShape(slide: Slide, node: PPTShapeNode): void {
 	if (node.rotate) {
 		options.rotate = node.rotate
 	}
-		
+
 	const shapeName = (node.shapeType || "rect") as Parameters<typeof slide.addShape>[0]
 	if (node.text) {
 		const text = node.text
@@ -131,7 +132,7 @@ export function drawShape(slide: Slide, node: PPTShapeNode): void {
 			strike: text.strike,
 			align: text.align,
 			valign: text.valign,
-			margin: text.margin ?? [0, 0, 0, 0],
+				margin: toPptxTextMargin(text.margin ?? [0, 0, 0, 0]),
 			wrap: text.wrap ?? false,
 			fit: "shrink",
 		})

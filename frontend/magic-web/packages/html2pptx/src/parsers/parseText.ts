@@ -1,30 +1,54 @@
 import type { ElementNode } from "../ir/dom"
-import type { PPTTextNode, PPTNodeBase } from "../ir/node"
+import type { PPTNodeBase, PPTTextNode, PPTTextRun } from "../ir/node"
 import type { SlideConfig } from "../api/options"
 import { log, LogLevel } from "../logger"
-import { pxToInch, getGlobalTransform } from "../shared/unit"
-import { DEFAULT_DPI, TEXT_SAFETY_MARGIN_X, TEXT_SAFETY_MARGIN_Y } from "../shared/constants"
+import { getGlobalTransform, pxToInch, pxToPt } from "../shared/unit"
 import {
-	transformText,
-	normalizeTextByWhiteSpace,
 	hasRenderableText,
+	normalizeTextByWhiteSpace,
 	parseLineHeightPx,
+	transformTextWithFlowContext,
 } from "../shared/text-utils"
-import { splitTextNodeByVisualLines } from "./text/layout"
+import { withTransformChainDisabled } from "../shared/transform-measurement"
+import { collectTextNodesThroughDisplayContents } from "../shared/text-flow-dom"
+import { measureUniformLineAdvance, splitTextNodeByVisualLines } from "./text/layout"
+import { resolveTextVerticalAlign } from "./text/alignment"
 import { resolveTextStyle } from "./text/style"
 export type { TextStyle } from "./text/style"
 
 interface ParseTextNodesOptions {
+	/** Kept for API compatibility. All text now uses one shape with explicit visual breaks. */
 	mergeVisualLines?: boolean
+	/** Full collection map, including zero-geometry display:contents style owners. */
+	elementNodeMap?: Map<Element, ElementNode>
 }
 
+interface TextLine {
+	text: string
+	rect: { left: number; right: number; top: number; bottom: number }
+}
+
+interface TextFramePx {
+	left: number
+	top: number
+	width: number
+	height: number
+}
+
+interface ResolvedTextFrame {
+	frame: TextFramePx
+	usesElementBox: boolean
+}
+
+type GlobalTransform = ReturnType<typeof getGlobalTransform>
+
 /**
- * Parse direct text nodes from an element; each DOM Text Node produces an independent PPT text box.
+ * Parse direct text nodes (including display:contents text flow) into one
+ * editable text box per DOM text owner.
  *
- * Design principles:
- * - One DOM Text Node maps to one PPT text box.
- * - Styles are inherited from the text node's parent element, which is the current node.
- * - The Range API measures each text node's actual rendered bounds precisely.
+ * The HTML element box is authoritative for x/y/w/h. Range measurements are
+ * used only to recover browser visual lines, which are emitted as soft breaks
+ * inside the same PowerPoint shape.
  */
 export function parseTextNodes(
 	node: ElementNode,
@@ -32,174 +56,104 @@ export function parseTextNodes(
 	config: SlideConfig,
 	options: ParseTextNodesOptions = {},
 ): PPTTextNode[] {
-	const { element, style } = node
+	const { element } = node
 	if (!element) return []
+
 	const results: PPTTextNode[] = []
 	const doc = element.ownerDocument
-	const scale = config.slideWidth / (config.htmlWidth / DEFAULT_DPI)
-	const whiteSpace = style.whiteSpace || "normal"
+	// The package's coordinate contract is CSS px at 96 DPI. slideWidth and
+	// slideHeight define the page bounds; they do not independently scale text
+	// while shapes/images remain in the same CSS coordinate system.
+	const scale = 1
+	const transform = getGlobalTransform(node)
+	const textScale = transform.textSafe ? Math.abs(transform.scaleX) || 1 : 1
+	const textNodes = collectTextNodesThroughDisplayContents(element)
+	const usesElementBox = isSoleTextFlowOwner(node, textNodes)
 
-	// Precompute the current element's text style; all direct text nodes share it.
-	// Positioning relies entirely on physical x/y coordinates.
-	const textStyle = resolveTextStyle(node, scale)
+	for (const childNode of textNodes) {
 
-	// Iterate direct child nodes and only process Text Nodes.
-	for (const childNode of Array.from(element.childNodes)) {
-		if (childNode.nodeType !== Node.TEXT_NODE) continue
-
-		// Use the Range API to measure the rendered position of the text node precisely.
 		try {
-			// Get the global transform, including parent rotation and scale.
-			const { rotation, scaleX, scaleY } = getGlobalTransform(node)
-			const transformScale = scaleX
-			const rotateAngle = rotation
-
-			// Correct the font size.
-			const finalFontSize =
-				transformScale !== 1
-					? Math.round(textStyle.fontSize * transformScale)
-					: textStyle.fontSize
-
-			// Rotated text must stay as one box because Range rects are already axis-aligned after rotation;
-			// rotating per-line boxes again in PowerPoint would apply the geometry twice.
-			if (options.mergeVisualLines || Math.abs(rotateAngle) > 0.01) {
-				let text = normalizeTextByWhiteSpace({
-					text: childNode.textContent ?? "",
-					whiteSpace,
-				})
-				if (!hasRenderableText({ text, whiteSpace })) continue
-
-				text = transformText(text, style.textTransform)
-
-				const measurement = measureTextNode(doc, childNode as Text)
-				if (!measurement) continue
-
-				const contentBox = resolveTextContentBox(node, {
-					rotation,
-					scaleX,
-					scaleY,
-				})
-				const hasFlowAlignment =
-					style.textAlign === "center" ||
-					style.textAlign === "right" ||
-					style.textAlign === "justify"
-				const hasTransform =
-					Math.abs(rotation) > 0.01 ||
-					Math.abs(scaleX - 1) > 0.01 ||
-					Math.abs(scaleY - 1) > 0.01
-				const useFlowWidth =
-					hasTransform ||
-					measurement.rectCount > 1 ||
-					hasFlowAlignment ||
-					style.textTransform !== "none"
-				const verticalSafety = Math.max(
-					TEXT_SAFETY_MARGIN_Y * 2,
-					measurement.rectCount * TEXT_SAFETY_MARGIN_Y,
-				)
-				const estimatedFlowHeight =
-					measurement.rectCount *
-					parseLineHeightPx(style.lineHeight, style.fontSize) *
-					(Math.abs(scaleY) || 1)
-
-				const x = useFlowWidth ? contentBox.left : measurement.bounds.left
-				const y = hasTransform
-					? contentBox.top
-					: Math.min(measurement.bounds.top, contentBox.top)
-				const w = Math.max(
-					0,
-					(useFlowWidth
-						? contentBox.right - contentBox.left
-						: measurement.bounds.right - measurement.bounds.left) +
-						TEXT_SAFETY_MARGIN_X * 2,
-				)
-				const h = Math.max(
-					0,
-					(hasTransform
-						? Math.max(contentBox.bottom - contentBox.top, estimatedFlowHeight)
-						: Math.max(
-								contentBox.bottom - contentBox.top,
-								measurement.bounds.bottom - measurement.bounds.top,
-								estimatedFlowHeight,
-							)) + verticalSafety,
-				)
-
-				const textBase: PPTNodeBase = {
-					...base,
-					x: pxToInch(x, config),
-					y: pxToInch(y, config),
-					w: pxToInch(w, config),
-					h: pxToInch(h, config),
-				}
-
-				if (textBase.w <= 0 || textBase.h <= 0) continue
-
-				results.push({
-					...textBase,
-					type: "text",
-					text,
-					...textStyle,
-					fontSize: finalFontSize,
-					rotate: rotateAngle !== 0 ? rotateAngle : undefined,
-					wrap: true,
-				})
-				continue
-			}
-
-			const visualLines = splitTextNodeByVisualLines({
+			const rawText = childNode.textContent ?? ""
+			if (!rawText) continue
+			const styleNode = resolveTextStyleNode(childNode, node, options.elementNodeMap)
+			const style = styleNode.style
+			const whiteSpace = style.whiteSpace || node.style.whiteSpace || "normal"
+			const textStyle = resolveTextStyle(styleNode, scale)
+			const finalFontSize = textStyle.fontSize * textScale
+			const measurement = measurePlainTextLayout({
 				doc,
-				textNode: childNode as Text,
+				node,
+				textNode: childNode,
+				textStyle: style,
+				usesElementBox,
+				transform,
 			})
+			const { visualLines } = measurement
 			if (visualLines.length === 0) continue
 
-			for (const line of visualLines) {
-				let text = normalizeTextByWhiteSpace({
-					text: line.text,
-					whiteSpace,
-				})
-				if (!hasRenderableText({ text, whiteSpace })) continue
+			const runs = buildPlainTextRuns({
+				lines: visualLines,
+				whiteSpace,
+				textTransform: style.textTransform,
+			})
+			if (!runs.some((run) => run.text.length > 0)) continue
 
-				text = transformText(text, style.textTransform)
-
-				// After splitting by visual lines, treat each fragment as a single line to avoid applying line-height twice.
-				let x = line.rect.left
-				let y = line.rect.top
-				let w = Math.max(0, line.rect.right - line.rect.left + TEXT_SAFETY_MARGIN_X * 2)
-				let h = Math.max(0, line.rect.bottom - line.rect.top + TEXT_SAFETY_MARGIN_Y * 2)
-
-				if (Math.abs(rotateAngle) === 90 || Math.abs(rotateAngle) === 270) {
-					const cx = x + w / 2
-					const cy = y + h / 2
-					const temp = w
-					w = h
-					h = temp
-					x = cx - w / 2
-					y = cy - h / 2
-				}
-
-				const textBase: PPTNodeBase = {
-					...base,
-					x: pxToInch(x, config),
-					y: pxToInch(y, config),
-					w: pxToInch(w, config),
-					h: pxToInch(h, config),
-				}
-
-				if (textBase.w <= 0 || textBase.h <= 0) continue
-
-				const wrap = false
-				results.push({
-					...textBase,
-					type: "text",
-					text,
-					...textStyle,
-					lineSpacing: undefined,
-					fontSize: finalFontSize,
-					rotate: rotateAngle !== 0 ? rotateAngle : undefined,
-					wrap,
-				})
+			const resolvedFrame = resolvePlainTextFrame({
+				node,
+				lines: visualLines,
+				transform,
+				textStyle: style,
+				usesElementBox,
+				measuredOwnerFrame: measurement.ownerFrame,
+			})
+			const { frame } = resolvedFrame
+			const textBase: PPTNodeBase = {
+				...base,
+				x: pxToInch(frame.left, config),
+				y: pxToInch(frame.top, config),
+				w: pxToInch(frame.width, config),
+				h: pxToInch(frame.height, config),
 			}
+			if (textBase.w <= 0 || textBase.h <= 0) continue
+
+			const lineCount = visualLines.length
+			const lineHeightPx = resolveBrowserLineHeightPx(style, visualLines) * textScale
+			const exactLineSpacingPx = resolveExactLineSpacingPx(style, visualLines)
+			const scaledStyle = {
+				...textStyle,
+				fontSize: finalFontSize,
+				transparency: isLayoutPreservingTextHidden(styleNode.element)
+					? 100
+					: textStyle.transparency,
+				lineSpacing: undefined,
+				lineSpacingPt:
+					lineCount > 1 && exactLineSpacingPx !== undefined
+						? pxToPt(exactLineSpacingPx * textScale)
+						: undefined,
+				margin: resolvedFrame.usesElementBox
+					? resolveTextMargins(node, transform)
+					: ([0, 0, 0, 0] as [number, number, number, number]),
+				valign: resolveTextVerticalAlign({
+					node,
+					lineCount,
+					lineHeightPx,
+					frameHeightPx: frame.height,
+					verticalInsetsPx: resolvedFrame.usesElementBox
+						? resolveVerticalInsetsPx(node, transform)
+						: 0,
+				}),
+			}
+
+			results.push({
+				...textBase,
+				type: "text",
+				text: runs.length === 1 ? runs[0].text : runs,
+				...scaledStyle,
+				rotate:
+					transform.textSafe && transform.rotation !== 0 ? transform.rotation : undefined,
+				wrap: false,
+			})
 		} catch {
-			// Skip this text node if the Range API fails.
 			log(LogLevel.L4, "Range API 异常", { textContent: childNode.textContent })
 		}
 	}
@@ -207,89 +161,401 @@ export function parseTextNodes(
 	return results
 }
 
-interface TextBounds {
-	left: number
-	right: number
-	top: number
-	bottom: number
+function measurePlainTextLayout(input: {
+	doc: Document
+	node: ElementNode
+	textNode: Text
+	textStyle: Pick<ElementNode["style"], "lineHeight" | "fontSize">
+	usesElementBox: boolean
+	transform: GlobalTransform
+}): { visualLines: TextLine[]; ownerFrame?: TextFramePx } {
+	const { doc, node, textNode, textStyle, usesElementBox, transform } = input
+	const measureLines = () => splitTextNodeByVisualLines({ doc, textNode })
+	if (usesElementBox || !textNode.parentNode) {
+		return withTransformChainDisabled(node, () => ({ visualLines: measureLines() }))
+	}
+	const hasSafeTransform = transform.textSafe && !isIdentityTransform(transform)
+	if (hasSafeTransform) {
+		return withTransformChainDisabled(node, () => {
+			const untransformedNodeRect = node.element.getBoundingClientRect()
+			const measurement = measureWrappedTextOwner({
+				doc,
+				node,
+				textNode,
+				textStyle,
+				measureLines,
+			})
+			return {
+				visualLines: measurement.visualLines,
+				ownerFrame: measurement.ownerFrame
+					? mapFrameThroughTransform({
+							frame: measurement.ownerFrame,
+							untransformedNodeRect,
+							node,
+							transform,
+						})
+					: undefined,
+			}
+		})
+	}
+
+	return measureWrappedTextOwner({ doc, node, textNode, textStyle, measureLines })
 }
 
-function measureTextNode(
-	doc: Document,
-	textNode: Text,
-): { bounds: TextBounds; rectCount: number } | null {
-	const raw = textNode.textContent ?? ""
-	if (!raw) return null
+function measureWrappedTextOwner(input: {
+	doc: Document
+	node: ElementNode
+	textNode: Text
+	textStyle: Pick<ElementNode["style"], "lineHeight" | "fontSize">
+	measureLines: () => TextLine[]
+}): { visualLines: TextLine[]; ownerFrame?: TextFramePx } {
+	const { doc, node, textNode, textStyle, measureLines } = input
+	const parent = textNode.parentNode
+	if (!parent) return { visualLines: measureLines() }
+	const wrapper = doc.createElement("span")
+	Object.assign(wrapper.style, {
+		display: "inline",
+		boxSizing: "content-box",
+		margin: "0",
+		padding: "0",
+		border: "0",
+		background: "none",
+		position: "static",
+		transform: "none",
+		font: "inherit",
+		fontSize: "inherit",
+		fontFamily: "inherit",
+		fontWeight: "inherit",
+		fontStyle: "inherit",
+		lineHeight: "inherit",
+		letterSpacing: "inherit",
+		whiteSpace: "inherit",
+		textTransform: "inherit",
+		verticalAlign: "baseline",
+	})
+	parent.insertBefore(wrapper, textNode)
+	wrapper.appendChild(textNode)
 
-	const range = doc.createRange()
-	range.setStart(textNode, 0)
-	range.setEnd(textNode, raw.length)
-	const rects = Array.from(range.getClientRects())
-	if (rects.length === 0) return null
-
-	const bounds = rects.reduce<TextBounds>(
-		(result, rect) => ({
-			left: Math.min(result.left, rect.left),
-			right: Math.max(result.right, rect.right),
-			top: Math.min(result.top, rect.top),
-			bottom: Math.max(result.bottom, rect.bottom),
-		}),
-		{
-			left: rects[0].left,
-			right: rects[0].right,
-			top: rects[0].top,
-			bottom: rects[0].bottom,
-		},
-	)
-
-	return { bounds, rectCount: rects.length }
+	try {
+		const visualLines = measureLines()
+		const rect = wrapper.getBoundingClientRect()
+		const lineHeight = resolveBrowserLineHeightPx(textStyle, visualLines)
+		const lineBoxHeight = lineHeight * Math.max(1, visualLines.length)
+		const ownerFrame =
+			rect.width > 0 && rect.height > 0
+				? {
+						left: rect.left,
+						top: rect.top + (rect.height - lineBoxHeight) / 2,
+						width: rect.width,
+						height: lineBoxHeight,
+					}
+				: undefined
+		return { visualLines, ownerFrame }
+	} finally {
+		parent.insertBefore(textNode, wrapper)
+		wrapper.remove()
+	}
 }
 
 /**
- * Resolve the text container before rotation so PowerPoint receives an unrotated box plus rotate,
- * rather than a browser axis-aligned bounding box that would be rotated a second time.
+ * Map an untransformed direct-text frame to the editable PowerPoint frame.
+ * The browser client rect supplies the final transformed element center; the
+ * owner offset is transformed as a vector, so the Range AABB is never rotated
+ * a second time.
  */
-function resolveTextContentBox(
-	node: ElementNode,
-	transform: { rotation: number; scaleX: number; scaleY: number },
-): TextBounds {
-	const { rotation, scaleX, scaleY } = transform
-	const absScaleX = Math.abs(scaleX) || 1
-	const absScaleY = Math.abs(scaleY) || 1
-	const hasTransform =
-		Math.abs(rotation) > 0.01 ||
-		Math.abs(absScaleX - 1) > 0.01 ||
-		Math.abs(absScaleY - 1) > 0.01
-
-	let left = node.rect.x
-	let top = node.rect.y
-	let width = node.rect.w
-	let height = node.rect.h
-
-	if (hasTransform) {
-		width = (node.layout.offsetWidth || node.rect.w) * absScaleX
-		height = (node.layout.offsetHeight || node.rect.h) * absScaleY
-		const centerX = node.rect.x + node.rect.w / 2
-		const centerY = node.rect.y + node.rect.h / 2
-		left = centerX - width / 2
-		top = centerY - height / 2
-	}
-
-	const paddingLeft = parseCssPx(node.style.paddingLeft) * absScaleX
-	const paddingRight = parseCssPx(node.style.paddingRight) * absScaleX
-	const paddingTop = parseCssPx(node.style.paddingTop) * absScaleY
-	const paddingBottom = parseCssPx(node.style.paddingBottom) * absScaleY
-	const contentLeft = left + paddingLeft
-	const contentRight = left + width - paddingRight
-	const contentTop = top + paddingTop
-	const contentBottom = top + height - paddingBottom
+function mapFrameThroughTransform(input: {
+	frame: TextFramePx
+	untransformedNodeRect: DOMRect
+	node: ElementNode
+	transform: GlobalTransform
+}): TextFramePx {
+	const { frame, untransformedNodeRect, node, transform } = input
+	const scaleX = Math.abs(transform.scaleX) || 1
+	const scaleY = Math.abs(transform.scaleY) || 1
+	const radians = transform.rotation * (Math.PI / 180)
+	const cos = Math.cos(radians)
+	const sin = Math.sin(radians)
+	const nodeCenterX = untransformedNodeRect.left + untransformedNodeRect.width / 2
+	const nodeCenterY = untransformedNodeRect.top + untransformedNodeRect.height / 2
+	const ownerCenterX = frame.left + frame.width / 2
+	const ownerCenterY = frame.top + frame.height / 2
+	const scaledDx = (ownerCenterX - nodeCenterX) * scaleX
+	const scaledDy = (ownerCenterY - nodeCenterY) * scaleY
+	const finalNodeCenterX = node.rect.x + node.rect.w / 2
+	const finalNodeCenterY = node.rect.y + node.rect.h / 2
+	const finalOwnerCenterX = finalNodeCenterX + scaledDx * cos - scaledDy * sin
+	const finalOwnerCenterY = finalNodeCenterY + scaledDx * sin + scaledDy * cos
+	const width = frame.width * scaleX
+	const height = frame.height * scaleY
 
 	return {
-		left: contentLeft,
-		right: Math.max(contentLeft, contentRight),
-		top: contentTop,
-		bottom: Math.max(contentTop, contentBottom),
+		left: finalOwnerCenterX - width / 2,
+		top: finalOwnerCenterY - height / 2,
+		width,
+		height,
 	}
+}
+
+function buildPlainTextRuns(input: {
+	lines: TextLine[]
+	whiteSpace: string
+	textTransform: string
+}): PPTTextRun[] {
+	const { lines, whiteSpace, textTransform } = input
+	const runs: PPTTextRun[] = []
+	const transformState = { previousIsWord: false }
+
+	for (let lineIndex = 0; lineIndex < lines.length; lineIndex++) {
+		const transformedText = transformTextWithFlowContext(
+			lines[lineIndex].text,
+			textTransform,
+			transformState,
+		)
+		let text = normalizeTextByWhiteSpace({
+			text: transformedText.replace(/[\r\n]+/g, ""),
+			whiteSpace,
+		})
+
+		if (!text) {
+			if (lineIndex > 0 || lines.length > 1) {
+				runs.push({
+					text: "",
+					options: lineIndex > 0 ? { softBreakBefore: true } : undefined,
+				})
+			}
+			continue
+		}
+
+		runs.push({
+			text,
+			options: lineIndex > 0 ? { softBreakBefore: true } : undefined,
+		})
+	}
+
+	return runs
+}
+
+function resolvePlainTextFrame(input: {
+	node: ElementNode
+	lines: TextLine[]
+	transform: GlobalTransform
+	textStyle: Pick<ElementNode["style"], "lineHeight" | "fontSize">
+	usesElementBox: boolean
+	measuredOwnerFrame?: TextFramePx
+}): ResolvedTextFrame {
+	const { node, lines, transform, textStyle, usesElementBox, measuredOwnerFrame } = input
+	if (!transform.textSafe && usesElementBox) {
+		return {
+			frame: {
+				left: node.rect.x,
+				top: node.rect.y,
+				width: node.rect.w,
+				height: node.rect.h,
+			},
+			usesElementBox: true,
+		}
+	}
+	const scaleX = Math.abs(transform.scaleX) || 1
+	const scaleY = Math.abs(transform.scaleY) || 1
+	const transformed =
+		Math.abs(transform.rotation) > 0.01 ||
+		Math.abs(scaleX - 1) > 0.01 ||
+		Math.abs(scaleY - 1) > 0.01
+
+	const untransformedWidth =
+		node.layout.layoutWidth ?? (node.layout.offsetWidth || node.rect.w)
+	const untransformedHeight =
+		node.layout.layoutHeight ?? (node.layout.offsetHeight || node.rect.h)
+	const layoutWidth = untransformedWidth * scaleX
+	const layoutHeight = untransformedHeight * scaleY
+	const centerX = node.rect.x + node.rect.w / 2
+	const centerY = node.rect.y + node.rect.h / 2
+	const layoutFrame: TextFramePx = transformed
+		? {
+				left: centerX - layoutWidth / 2,
+				top: centerY - layoutHeight / 2,
+				width: layoutWidth,
+				height: layoutHeight,
+			}
+		: {
+				left: node.rect.x,
+				top: node.rect.y,
+				width: node.rect.w,
+				height: node.rect.h,
+			}
+
+	if (usesElementBox) {
+		return { frame: layoutFrame, usesElementBox: true }
+	}
+	if (measuredOwnerFrame) {
+		return { frame: measuredOwnerFrame, usesElementBox: false }
+	}
+
+	const bounds = unionTextLines(lines)
+	if (!bounds) return { frame: layoutFrame, usesElementBox: true }
+	const lineHeight = resolveBrowserLineHeightPx(textStyle, lines) * scaleY
+	const height = lineHeight * lines.length
+	const measuredTop = bounds.top + (bounds.bottom - bounds.top) / 2 - height / 2
+	const canReuseParentLineBox =
+		lines.length === 1 &&
+		Math.abs(node.rect.h - height) <= 0.5 &&
+		Math.abs(node.rect.y - measuredTop) <= 1
+	return {
+		frame: {
+			left: bounds.left,
+			top: canReuseParentLineBox ? node.rect.y : measuredTop,
+			width: Math.max(0, bounds.right - bounds.left),
+			height,
+		},
+		usesElementBox: false,
+	}
+}
+
+function resolveBrowserLineHeightPx(
+	style: Pick<ElementNode["style"], "lineHeight" | "fontSize">,
+	lines: readonly { rect: TextLine["rect"] }[],
+): number {
+	if (isNormalLineHeight(style.lineHeight)) {
+		const measured = measureUniformLineAdvance(lines)
+		if (measured !== undefined) return measured
+		const firstRect = lines[0]?.rect
+		if (firstRect) {
+			const rectHeight = firstRect.bottom - firstRect.top
+			if (rectHeight > 0) return rectHeight
+		}
+	}
+	return parseLineHeightPx(style.lineHeight, style.fontSize)
+}
+
+function resolveExactLineSpacingPx(
+	style: Pick<ElementNode["style"], "lineHeight" | "fontSize">,
+	lines: readonly { rect: TextLine["rect"] }[],
+): number | undefined {
+	if (isNormalLineHeight(style.lineHeight)) return measureUniformLineAdvance(lines)
+	return parseLineHeightPx(style.lineHeight, style.fontSize)
+}
+
+function isNormalLineHeight(lineHeight: string): boolean {
+	return !lineHeight || lineHeight === "normal"
+}
+
+function isIdentityTransform(transform: {
+	rotation: number
+	scaleX: number
+	scaleY: number
+}): boolean {
+	return (
+		Math.abs(transform.rotation) <= 0.01 &&
+		Math.abs(Math.abs(transform.scaleX) - 1) <= 0.01 &&
+		Math.abs(Math.abs(transform.scaleY) - 1) <= 0.01
+	)
+}
+
+function isSoleTextFlowOwner(node: ElementNode, textNodes: Text[]): boolean {
+	const whiteSpace = node.style.whiteSpace || "normal"
+	if (isAnonymousFlexOrGridTextOwner(node, textNodes, whiteSpace)) return false
+	const renderableTextCount = textNodes.filter((textNode) =>
+		hasRenderableText({ text: textNode.textContent ?? "", whiteSpace }),
+	).length
+	if (renderableTextCount !== 1) return false
+	if (
+		node.children.some(
+			(child) =>
+				!child.element.textContent?.replace(/\s+/g, "") &&
+				child.rect.w > 0 &&
+				child.rect.h > 0,
+		)
+	) {
+		return false
+	}
+	return !node.children.some((child) =>
+		hasRenderableText({
+			text: child.element.textContent ?? "",
+			whiteSpace: child.style.whiteSpace || whiteSpace,
+		}),
+	)
+}
+
+function isAnonymousFlexOrGridTextOwner(
+	node: ElementNode,
+	textNodes: Text[],
+	whiteSpace: string,
+): boolean {
+	if (!["flex", "inline-flex", "grid", "inline-grid"].includes(node.style.display)) return false
+	return textNodes.some((textNode) =>
+		hasRenderableText({ text: textNode.textContent ?? "", whiteSpace }),
+	)
+}
+
+function resolveTextStyleNode(
+	textNode: Text,
+	root: ElementNode,
+	elementNodeMap?: Map<Element, ElementNode>,
+): ElementNode {
+	let current = textNode.parentElement
+	while (current) {
+		const mapped = elementNodeMap?.get(current)
+		if (mapped) return mapped
+		if (current === root.element) break
+		current = current.parentElement
+	}
+	return root
+}
+
+function isLayoutPreservingTextHidden(element: Element): boolean {
+	const win = element.ownerDocument.defaultView
+	if (!win) return false
+	if (["hidden", "collapse"].includes(win.getComputedStyle(element).visibility)) return true
+
+	let current: Element | null = element
+	let opacity = 1
+	while (current) {
+		const value = Number.parseFloat(win.getComputedStyle(current).opacity)
+		opacity *= Number.isFinite(value) ? value : 1
+		if (opacity <= 0) return true
+		current = current.parentElement
+	}
+	return false
+}
+
+function unionTextLines(lines: TextLine[]): TextLine["rect"] | null {
+	if (lines.length === 0) return null
+	return lines.reduce<TextLine["rect"] | null>((bounds, line) => {
+		if (!bounds) return { ...line.rect }
+		return {
+			left: Math.min(bounds.left, line.rect.left),
+			right: Math.max(bounds.right, line.rect.right),
+			top: Math.min(bounds.top, line.rect.top),
+			bottom: Math.max(bounds.bottom, line.rect.bottom),
+		}
+	}, null)
+}
+
+function resolveTextMargins(
+	node: ElementNode,
+	transform: GlobalTransform,
+): [number, number, number, number] {
+	const scaleX = transform.textSafe ? Math.abs(transform.scaleX) || 1 : 1
+	const scaleY = transform.textSafe ? Math.abs(transform.scaleY) || 1 : 1
+	const top = (parseCssPx(node.style.borderTopWidth) + parseCssPx(node.style.paddingTop)) * scaleY
+	const right =
+		(parseCssPx(node.style.borderRightWidth) + parseCssPx(node.style.paddingRight)) * scaleX
+	const bottom =
+		(parseCssPx(node.style.borderBottomWidth) + parseCssPx(node.style.paddingBottom)) * scaleY
+	const left =
+		(parseCssPx(node.style.borderLeftWidth) + parseCssPx(node.style.paddingLeft)) * scaleX
+	return [pxToPt(top), pxToPt(right), pxToPt(bottom), pxToPt(left)]
+}
+
+function resolveVerticalInsetsPx(node: ElementNode, transform: GlobalTransform): number {
+	const scaleY = transform.textSafe ? Math.abs(transform.scaleY) || 1 : 1
+	return (
+		(parseCssPx(node.style.borderTopWidth) +
+			parseCssPx(node.style.paddingTop) +
+			parseCssPx(node.style.borderBottomWidth) +
+			parseCssPx(node.style.paddingBottom)) *
+		scaleY
+	)
 }
 
 function parseCssPx(value: string): number {
