@@ -14,7 +14,6 @@ import IconButton from "../ui/custom/IconButton"
 import { usePortalContainer } from "../ui/custom/PortalContainerContext"
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover"
 import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip"
-import { resetCachedPositionIfCoveredByPluginList } from "../PluginPanel/position"
 import styles from "./index.module.css"
 
 const noop = () => undefined
@@ -201,10 +200,8 @@ export default function PluginTool() {
 												type="button"
 												className={styles.pluginItem}
 												onClick={() => {
-													resetCachedPositionIfCoveredByPluginList(
-														canvas?.container,
-													)
 													canvas?.pluginManager.open(plugin.name)
+													setOpen(false)
 												}}
 											>
 												<div className={styles.pluginIcon}>

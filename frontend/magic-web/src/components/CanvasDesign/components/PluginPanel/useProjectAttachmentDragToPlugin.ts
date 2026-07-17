@@ -61,6 +61,7 @@ export function useProjectAttachmentDragToPlugin({
 	const [isDropResolving, setIsDropResolving] = useState(false)
 	const activeSessionIdRef = useRef<string | null>(null)
 	const isProjectAttachmentDragDetectedRef = useRef(false)
+	const isDropResolvingRef = useRef(false)
 	const isInsideIframeRef = useRef(false)
 	const targetRef = useRef<DropTarget | null>(null)
 	// 只有声明了 assets.pickFiles 能力的插件才允许接收项目附件拖拽。
@@ -190,8 +191,8 @@ export function useProjectAttachmentDragToPlugin({
 		// 移动阶段只维持会话和 hover，不在这里按文件类型拦截。
 		const handleDragMove = (event: DragEvent) => {
 			if (!isProjectAttachmentEvent(event)) {
-				if (activeSessionIdRef.current) {
-					finishDragSession()
+				if (activeSessionIdRef.current || isProjectAttachmentDragDetectedRef.current) {
+					resetProjectAttachmentDrag()
 				}
 				return
 			}
@@ -208,12 +209,13 @@ export function useProjectAttachmentDragToPlugin({
 
 			// 阻止拖拽默认行为，阻拦画布侧 dragover/drop 事件。
 			stopPluginDragEvent(event)
-			if (event.dataTransfer) {
-				event.dataTransfer.dropEffect = "copy"
-			}
 
 			const sessionId = ensureDragSession()
 			postDragMove(sessionId, event)
+			// HTML5 DnD 光标由 dropEffect 决定；仅可投放目标显示 copy，其余为 none。
+			if (event.dataTransfer) {
+				event.dataTransfer.dropEffect = targetRef.current?.canDrop ? "copy" : "none"
+			}
 		}
 
 		// drop 时再过滤图片；文件夹与非图片文件静默丢弃。
@@ -223,10 +225,7 @@ export function useProjectAttachmentDragToPlugin({
 
 			// 只有指针仍位于插件窗体范围内时，才接管这次拖拽。
 			if (!isOverPluginWindow(event)) {
-				setProjectAttachmentDragDetected(false)
-				if (activeSessionIdRef.current) {
-					finishDragSession()
-				}
+				resetProjectAttachmentDrag()
 				return
 			}
 
@@ -251,6 +250,8 @@ export function useProjectAttachmentDragToPlugin({
 				return
 			}
 
+			// 同步标记：drop 后浏览器会立刻再发 dragend，不能把 session 清掉。
+			isDropResolvingRef.current = true
 			setIsDropResolving(true)
 			const toastId = toast.loading(
 				canvas.t?.("plugin.canvasAssetDrop.loading", "正在导入图片...") ||
@@ -281,18 +282,29 @@ export function useProjectAttachmentDragToPlugin({
 					if (activeSessionIdRef.current === sessionId) {
 						resetProjectAttachmentDrag()
 					}
+					isDropResolvingRef.current = false
 					setIsDropResolving(false)
 				})
+		}
+
+		// 在插件外松手时往往只有 dragend、没有 drop；仅用于放弃场景清理遮罩。
+		const handleDragEnd = () => {
+			if (isDropResolvingRef.current) return
+			if (activeSessionIdRef.current || isProjectAttachmentDragDetectedRef.current) {
+				resetProjectAttachmentDrag()
+			}
 		}
 
 		window.addEventListener("dragenter", handleDragMove, true)
 		window.addEventListener("dragover", handleDragMove, true)
 		window.addEventListener("drop", handleDrop, true)
+		window.addEventListener("dragend", handleDragEnd, true)
 
 		return () => {
 			window.removeEventListener("dragenter", handleDragMove, true)
 			window.removeEventListener("dragover", handleDragMove, true)
 			window.removeEventListener("drop", handleDrop, true)
+			window.removeEventListener("dragend", handleDragEnd, true)
 		}
 	}, [
 		canAcceptProjectAttachmentDrag,
