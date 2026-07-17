@@ -54,6 +54,17 @@ describe("postcss dynamic viewport fallback", () => {
 		).toBe(":root { --mobile-height: 100dvh; } .layout { height: 100vh; width: 100vw; }")
 	})
 
+	it("preserves strings, URLs, and identifiers containing viewport-like text", async () => {
+		// Only CSS dimension tokens should participate in fallback generation.
+		expect(
+			await processCss(
+				'.icon { content: "100dvh"; background: url("100dvw"); mask: url(100svh); animation-name: foo100lvw; }',
+			),
+		).toBe(
+			'.icon { content: "100dvh"; background: url("100dvw"); mask: url(100svh); animation-name: foo100lvw; }',
+		)
+	})
+
 	it("is idempotent when the plugin runs more than once", async () => {
 		// Prevent repeated PostCSS passes from accumulating duplicate fallbacks.
 		const result = await postcss([
