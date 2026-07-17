@@ -2698,8 +2698,10 @@
 			"content": "\"{{appName}}\" requests permission to use: {{scope}}. Purpose: {{reason}}",
 			"contentWithoutReason": "\"{{appName}}\" requests permission to use: {{scope}}. This app did not provide a purpose.",
 			"deny": "Deny",
+			"durationLabel": "Choose how long this authorization remains valid",
 			"legacyContent": "This HTML micro-app has no permission declaration and requests permission to use: {{scope}}. This only applies briefly in the current tab.",
 			"missingScope": "\"{{appName}}\" did not declare \"{{scope}}\" ({{rawScope}}) in app.json permissions.scopes. The request was denied.",
+			"scopeSeparator": ", ",
 			"scopes": {
 				"fsProjectRead": "Read project files outside the app directory",
 				"fsProjectWrite": "Modify project files outside the app directory",
@@ -2725,6 +2727,50 @@
 				"once": "This operation"
 			}
 		},
+		"permissionManager": {
+			"appRoot": "App directory",
+			"askWhenUsed": "The app will request authorization when it uses this capability.",
+			"currentTab": "Current tab only",
+			"declared": "Declared",
+			"declaredCount": "{{count}} declared",
+			"defaultAppName": "HTML micro-app",
+			"description": "Review the permissions declared by this HTML app and the authorizations active in the current tab.",
+			"diagnostics": {
+				"manifestAbsent": "No app.json was found. This app uses the legacy short-term authorization flow.",
+				"manifestLoadError": "app.json could not be loaded. This app uses the legacy short-term authorization flow: {{error}}",
+				"scopeDuplicate": "Permission is declared more than once: {{scope}}",
+				"scopeInvalid": "permissions.scopes contains a non-string value, which was ignored.",
+				"scopeUnsupported": "This host does not support the permission: {{scope}}",
+				"scopesInvalid": "permissions.scopes must be an array of strings."
+			},
+			"diagnosticsTitle": "Permission declaration needs attention",
+			"entry": "Entry file",
+			"expiresAt": "Valid until {{time}} ({{remaining}})",
+			"granted": "Granted",
+			"grantedAt": "Granted at {{time}}",
+			"grantedCount": "{{count}} granted",
+			"loadFailed": "Failed to load authorization information",
+			"noDeclaredPermissions": "app.json does not declare any manageable permissions.",
+			"noReason": "The app did not provide a purpose.",
+			"notDeclared": "Not declared",
+			"notGranted": "Not granted",
+			"open": "Authorization",
+			"permissionsTitle": "Permissions",
+			"remainingExpired": "Expired",
+			"remainingHours": "{{count}} hours remaining",
+			"remainingLessThanMinute": "Less than 1 minute remaining",
+			"remainingMinutes": "{{count}} minutes remaining",
+			"revoke": "Revoke",
+			"revokeAll": "Revoke all",
+			"revokeAllSuccess": "All authorizations for this app were revoked",
+			"revokeFailed": "Failed to revoke authorization",
+			"revokeNote": "Revocation only affects future calls. Data already read by the app and requests already in progress are not deleted or stopped automatically.",
+			"revokeNoteTitle": "What revocation changes",
+			"revokeSuccess": "Authorization revoked",
+			"title": "HTML App Authorization",
+			"unsupported": "Unsupported",
+			"version": "App version"
+		},
 		"projectFileOperationConfirm": {
 			"cancel": "Cancel",
 			"content": "The HTML micro-app wants to {{operation}} a {{targetType}} outside the app directory: {{path}}. App directory: {{appRootDir}}.",
@@ -2748,6 +2794,12 @@
 			"contentWithoutReason": "\"{{appName}}\" requests access to: {{fields}}. This app did not provide a purpose.",
 			"deny": "Deny",
 			"fieldSeparator": ", ",
+			"fields": {
+				"identity": "user ID and Magic ID",
+				"name": "nickname and real name",
+				"organization": "organization code"
+			},
+			"legacyContent": "This HTML micro-app has no permission declaration and requests access to: {{fields}} through the legacy flow. This only applies briefly in the current tab.",
 			"title": "Authorize User Info Access"
 		}
 	},
@@ -5093,6 +5145,9 @@
 			"agentNetworkErrorTitle": "[HTML App Network Error]",
 			"agentNetworkFixPrompt": "Please analyze the network error and fix the issue in the HTML app.",
 			"agentRuntimeErrorTitle": "[HTML App Runtime Error]",
+			"apiRequest": "Request",
+			"apiResponse": "Response",
+			"apiResultTruncated": "Response truncated for performance",
 			"clear": "Clear",
 			"consolePlaceholder": "Enter JavaScript expression…",
 			"deps": {
@@ -5113,6 +5168,9 @@
 				"total": "{{count}} total"
 			},
 			"deselectAll": "Deselect All",
+			"dockSide": "Dock side",
+			"dockToBottom": "Move panel to bottom",
+			"dockToRight": "Move panel to right",
 			"error": "Error",
 			"errorTypeConsole": "Console Error",
 			"errorTypeUncaught": "Uncaught Error",

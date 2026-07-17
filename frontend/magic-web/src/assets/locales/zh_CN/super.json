@@ -2699,8 +2699,10 @@
 			"content": "「{{appName}}」请求使用：{{scope}}。用途：{{reason}}",
 			"contentWithoutReason": "「{{appName}}」请求使用：{{scope}}。该应用未提供用途说明。",
 			"deny": "拒绝",
+			"durationLabel": "选择本次授权的有效期",
 			"legacyContent": "该 HTML 微应用未声明权限，正在请求使用：{{scope}}。只在当前标签页短时生效。",
 			"missingScope": "「{{appName}}」未在 app.json 的 permissions.scopes 中声明「{{scope}}」（{{rawScope}}），请求已拒绝。",
+			"scopeSeparator": "、",
 			"scopes": {
 				"fsProjectRead": "读取应用目录外的项目文件",
 				"fsProjectWrite": "修改应用目录外的项目文件",
@@ -2726,6 +2728,50 @@
 				"once": "本次操作"
 			}
 		},
+		"permissionManager": {
+			"appRoot": "应用目录",
+			"askWhenUsed": "应用实际使用此能力时会请求授权。",
+			"currentTab": "仅当前标签页生效",
+			"declared": "已声明",
+			"declaredCount": "已声明 {{count}} 项",
+			"defaultAppName": "HTML 微应用",
+			"description": "查看此 HTML 应用声明的权限，以及当前标签页内的授权状态和有效期。",
+			"diagnostics": {
+				"manifestAbsent": "未找到 app.json，当前应用按旧版方式申请短期授权。",
+				"manifestLoadError": "app.json 读取失败，当前应用按旧版方式申请短期授权：{{error}}",
+				"scopeDuplicate": "权限声明重复：{{scope}}",
+				"scopeInvalid": "permissions.scopes 中包含非字符串权限，已忽略。",
+				"scopeUnsupported": "当前主站不支持权限：{{scope}}",
+				"scopesInvalid": "permissions.scopes 格式错误，应为字符串数组。"
+			},
+			"diagnosticsTitle": "权限声明需要检查",
+			"entry": "入口文件",
+			"expiresAt": "有效至 {{time}}（{{remaining}}）",
+			"granted": "已授权",
+			"grantedAt": "授权于 {{time}}",
+			"grantedCount": "已授权 {{count}} 项",
+			"loadFailed": "授权信息加载失败",
+			"noDeclaredPermissions": "app.json 未声明可管理的权限。",
+			"noReason": "应用未提供用途说明。",
+			"notDeclared": "未声明",
+			"notGranted": "未授权",
+			"open": "授权管理",
+			"permissionsTitle": "权限列表",
+			"remainingExpired": "已过期",
+			"remainingHours": "剩余 {{count}} 小时",
+			"remainingLessThanMinute": "剩余不足 1 分钟",
+			"remainingMinutes": "剩余 {{count}} 分钟",
+			"revoke": "撤销",
+			"revokeAll": "撤销全部授权",
+			"revokeAllSuccess": "已撤销此应用的全部授权",
+			"revokeFailed": "撤销授权失败",
+			"revokeNote": "撤销只影响后续调用。应用已经读取的数据和正在执行的请求不会自动删除或中止。",
+			"revokeNoteTitle": "撤销后的影响",
+			"revokeSuccess": "已撤销授权",
+			"title": "HTML 应用授权",
+			"unsupported": "不支持",
+			"version": "应用版本"
+		},
 		"projectFileOperationConfirm": {
 			"cancel": "取消",
 			"content": "HTML 微应用请求{{operation}}应用目录外的{{targetType}}：{{path}}。应用目录：{{appRootDir}}。",
@@ -2749,6 +2795,12 @@
 			"contentWithoutReason": "「{{appName}}」请求读取：{{fields}}。该应用未提供用途说明。",
 			"deny": "拒绝",
 			"fieldSeparator": "、",
+			"fields": {
+				"identity": "用户 ID、Magic ID",
+				"name": "昵称、真实姓名",
+				"organization": "组织编码"
+			},
+			"legacyContent": "该 HTML 微应用未声明权限，正在按旧版方式请求读取：{{fields}}。只在当前标签页短时生效。",
 			"title": "授权用户信息访问"
 		}
 	},
@@ -5095,6 +5147,9 @@
 			"agentNetworkErrorTitle": "[HTML应用网络请求错误]",
 			"agentNetworkFixPrompt": "请分析此网络错误原因并修复HTML应用中的问题。",
 			"agentRuntimeErrorTitle": "[HTML应用运行时错误]",
+			"apiRequest": "请求",
+			"apiResponse": "响应",
+			"apiResultTruncated": "响应过大，已截断显示",
 			"clear": "清空",
 			"consolePlaceholder": "输入 JavaScript 表达式…",
 			"deps": {
@@ -5115,6 +5170,9 @@
 				"total": "共 {{count}} 项"
 			},
 			"deselectAll": "取消全选",
+			"dockSide": "停靠侧",
+			"dockToBottom": "将面板移到底部",
+			"dockToRight": "将面板移到右侧",
 			"error": "错误",
 			"errorTypeConsole": "控制台错误",
 			"errorTypeUncaught": "未捕获的错误",

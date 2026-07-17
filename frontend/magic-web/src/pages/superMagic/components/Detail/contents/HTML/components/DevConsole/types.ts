@@ -93,6 +93,10 @@ export interface ApiCallEntry {
 	duration?: number
 	/** Error message if failed */
 	error?: string
+	/** Bounded response value captured by the iframe runtime. */
+	result?: unknown
+	/** Whether response serialization hit a size or depth limit. */
+	resultTruncated?: boolean
 }
 
 // ─── Message Entry (captures postMessage traffic) ───────────────────────
@@ -162,6 +166,7 @@ export type DevConsoleTab =
 	| "dependencies"
 
 export type DevConsoleMode = "basic" | "advanced"
+export type DevConsoleLayout = "bottom" | "right"
 
 // ─── Message types (keep in sync with iframe-runtime DevToolsCollector) ──
 

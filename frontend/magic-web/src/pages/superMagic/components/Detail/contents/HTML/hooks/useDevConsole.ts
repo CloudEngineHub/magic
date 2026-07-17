@@ -35,6 +35,7 @@ interface UseDevConsoleOptions {
 interface UseDevConsoleReturn {
 	enabled: boolean
 	toggle: () => void
+	setEnabled: (enabled: boolean) => void
 	consoleEntries: ConsoleEntry[]
 	networkEntries: NetworkEntry[]
 	apiCallEntries: ApiCallEntry[]
@@ -80,25 +81,35 @@ export function useDevConsole({
 	const enabledRef = useRef(enabled)
 	enabledRef.current = enabled
 
-	// Toggle devtools on/off
+	// Enable/disable DevTools idempotently. Refresh can remount the iframe, so
+	// callers must set the desired state instead of inverting an unknown state.
+	const setEnabledState = useCallback(
+		(nextEnabled: boolean) => {
+			if (enabledRef.current === nextEnabled) return
+			enabledRef.current = nextEnabled
+			setEnabled(nextEnabled)
+
+			if (!nextEnabled) {
+				// Clear state when disabling
+				setConsoleEntries([])
+				setNetworkEntries([])
+				setApiCallEntries([])
+				setMessageEntries([])
+			}
+
+			// Runtime-ready handling below re-sends this state when the new
+			// iframe runtime finishes bootstrapping.
+			iframeRef.current?.contentWindow?.postMessage(
+				{ type: DEVTOOLS_MSG.TOGGLE, enabled: nextEnabled, timestamp: Date.now() },
+				"*",
+			)
+		},
+		[iframeRef],
+	)
+
 	const toggle = useCallback(() => {
-		const nextEnabled = !enabled
-		setEnabled(nextEnabled)
-
-		if (!nextEnabled) {
-			// Clear state when disabling
-			setConsoleEntries([])
-			setNetworkEntries([])
-			setApiCallEntries([])
-			setMessageEntries([])
-		}
-
-		// Send toggle command to iframe
-		iframeRef.current?.contentWindow?.postMessage(
-			{ type: DEVTOOLS_MSG.TOGGLE, enabled: nextEnabled, timestamp: Date.now() },
-			"*",
-		)
-	}, [enabled, iframeRef])
+		setEnabledState(!enabledRef.current)
+	}, [setEnabledState])
 
 	// Clear functions
 	const clearConsole = useCallback(() => {
@@ -471,6 +482,7 @@ export function useDevConsole({
 	return {
 		enabled,
 		toggle,
+		setEnabled: setEnabledState,
 		consoleEntries,
 		networkEntries,
 		apiCallEntries,
