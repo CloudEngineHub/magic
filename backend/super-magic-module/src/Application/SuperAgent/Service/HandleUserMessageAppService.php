@@ -805,8 +805,12 @@ class HandleUserMessageAppService extends AbstractAppService
         $ids = [];
         foreach ($mentions as $mention) {
             $pid = $mention['project_id'] ?? null;
-            if ($pid !== null && $pid !== '' && (int) $pid !== $currentProjectId) {
-                $ids[$pid] = true;
+            if ($pid === null || $pid === '') {
+                continue;
+            }
+            $pidStr = (string) $pid;
+            if ((int) $pidStr !== $currentProjectId) {
+                $ids[$pidStr] = true;
             }
         }
         return array_keys($ids);
