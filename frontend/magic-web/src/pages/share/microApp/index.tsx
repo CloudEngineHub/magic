@@ -1,12 +1,11 @@
-import { useCallback, useMemo, useState } from "react"
+import { type ComponentProps, useCallback, useMemo, useState } from "react"
 import { useParams } from "react-router"
 import { useTranslation } from "react-i18next"
 import { Building2, ChevronDown, FileCode2, Loader2, LogIn, LogOut } from "lucide-react"
 import { ErrorDisplay, PasswordVerification, ShareEmptyState } from "@/pages/share/components"
 import HtmlPreviewContent from "@/pages/superMagic/components/Detail/contents/HTML"
 import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks"
-import { resolveSelectedHtmlEntry } from "@/pages/superMagic/pages/MicroAppPage/utils/microAppFiles"
-import type { MicroAppPreviewMode } from "@/pages/superMagic/pages/MicroAppPage/components/MicroAppHeader"
+import { resolveDefaultHtmlEntry } from "@/pages/superMagic/pages/MicroAppPage/utils/microAppFiles"
 import type { ProjectListItem } from "@/pages/superMagic/pages/Workspace/types"
 import MagicDropdown from "@/components/base/MagicDropdown"
 import UserAvatarRender from "@/components/business/UserAvatarRender"
@@ -17,6 +16,11 @@ import { RouteName } from "@/routes/constants"
 import { history } from "@/routes/history"
 import { buildLoginRedirectSearchParams } from "@/pages/login/utils/loginRedirect"
 import useMicroAppShareData from "./hooks/useMicroAppShareData"
+
+type MicroAppPreviewMode = NonNullable<ComponentProps<typeof HtmlPreviewContent>["viewMode"]>
+
+const transparentDropdownOverlayClassName =
+	"!rounded-none !border-0 !bg-transparent !p-0 !shadow-none data-[state=open]:!animate-none data-[state=closed]:!animate-none"
 
 function MicroAppShareEmpty() {
 	const { t } = useTranslation("super")
@@ -120,7 +124,7 @@ function MicroAppShareHeader({ appName }: { appName?: string }) {
 
 	const renderUserMenu = () => (
 		<div
-			className="w-[264px] max-w-[calc(100vw-24px)] overflow-hidden rounded-xl border border-border bg-popover p-1.5 text-popover-foreground shadow-xl"
+			className="w-[264px] max-w-[calc(100vw-24px)] overflow-hidden rounded-xl border border-border bg-popover p-1.5 text-popover-foreground"
 			data-testid="micro-app-share-user-menu"
 		>
 			<MagicDropdown
@@ -129,7 +133,7 @@ function MicroAppShareHeader({ appName }: { appName?: string }) {
 				onOpenChange={setOrganizationMenuOpen}
 				trigger={["click"]}
 				popupRender={renderOrganizationList}
-				overlayClassName="p-0"
+				overlayClassName={transparentDropdownOverlayClassName}
 			>
 				<button
 					type="button"
@@ -180,7 +184,7 @@ function MicroAppShareHeader({ appName }: { appName?: string }) {
 						onOpenChange={handleUserMenuOpenChange}
 						trigger={["click"]}
 						popupRender={renderUserMenu}
-						overlayClassName="p-0"
+						overlayClassName={transparentDropdownOverlayClassName}
 					>
 						<button
 							type="button"
@@ -243,10 +247,7 @@ export default function MicroAppSharePage() {
 		reload,
 	} = useMicroAppShareData({ resourceId })
 
-	const entryFile = useMemo(
-		() => resolveSelectedHtmlEntry({ items: attachmentList, selectedFileId: null }),
-		[attachmentList],
-	)
+	const entryFile = useMemo(() => resolveDefaultHtmlEntry(attachmentList), [attachmentList])
 
 	const selectedProject = useMemo<ProjectListItem | null>(
 		() =>

@@ -38,6 +38,7 @@ interface TestMagicDropdownProps {
 	popupRender?: () => ReactNode
 	open?: boolean
 	onOpenChange?: (open: boolean) => void
+	overlayClassName?: string
 }
 
 const mocks = vi.hoisted(() => ({
@@ -132,8 +133,14 @@ vi.mock("@/components/business/UserAvatarRender", () => ({
 }))
 
 vi.mock("@/components/base/MagicDropdown", () => ({
-	default: ({ children, popupRender, open, onOpenChange }: TestMagicDropdownProps) => (
-		<div>
+	default: ({
+		children,
+		popupRender,
+		open,
+		onOpenChange,
+		overlayClassName,
+	}: TestMagicDropdownProps) => (
+		<div data-testid="mock-magic-dropdown" data-overlay-class-name={overlayClassName}>
 			<div data-testid="mock-magic-dropdown-trigger" onClick={() => onOpenChange?.(!open)}>
 				{children}
 			</div>
@@ -343,6 +350,15 @@ describe("MicroAppSharePage", () => {
 		)
 		expect(screen.getByTestId("micro-app-share-logout")).toBeInTheDocument()
 		expect(screen.queryByTestId("mock-organization-list")).not.toBeInTheDocument()
+		expect(screen.getByTestId("micro-app-share-user-menu").className).not.toContain("shadow-xl")
+		screen.getAllByTestId("mock-magic-dropdown").forEach((dropdown) => {
+			expect(dropdown.getAttribute("data-overlay-class-name")).toContain("!bg-transparent")
+			expect(dropdown.getAttribute("data-overlay-class-name")).toContain("!border-0")
+			expect(dropdown.getAttribute("data-overlay-class-name")).toContain("!shadow-none")
+			expect(dropdown.getAttribute("data-overlay-class-name")).toContain(
+				"data-[state=open]:!animate-none",
+			)
+		})
 
 		fireEvent.click(screen.getByTestId("micro-app-share-organization-trigger"))
 
