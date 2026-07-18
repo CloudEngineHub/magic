@@ -38,7 +38,6 @@ use Dtyq\SuperMagic\Domain\SuperAgent\Repository\Facade\TopicRepositoryInterface
 use Dtyq\SuperMagic\Domain\SuperAgent\Repository\Facade\WorkspaceVersionRepositoryInterface;
 use Dtyq\SuperMagic\ErrorCode\SuperAgentErrorCode;
 use Dtyq\SuperMagic\Infrastructure\ExternalAPI\SandboxOS\Gateway\SandboxGatewayInterface;
-use Dtyq\SuperMagic\Infrastructure\ExternalAPI\SandboxOS\Gateway\UserContext;
 use Dtyq\SuperMagic\Infrastructure\Utils\FileDownloadUrlHelper;
 use Dtyq\SuperMagic\Infrastructure\Utils\FileSortUtil;
 use Dtyq\SuperMagic\Infrastructure\Utils\WorkDirectoryUtil;
@@ -2446,16 +2445,15 @@ class TaskFileDomainService
         $targetWorkDirPrefix = WorkDirectoryUtil::getPrefix($forkProjectEntity->getWorkDir());
 
         // 设置用户上下文
-        // Per-call user identity now flows through UserContext; the
+        // Per-call user identity now flows through DataIsolation; the
         // authorization token is fetched once from the magic_tokens
         // stable user-token table and reused for every gateway call in
         // this method's body. Capturing $userCtx in a local variable
         // here mirrors the previous setUserContext()/clearUserContext()
         // lifecycle (set at top of the loop, cleared at the end).
-        $userCtx = new UserContext(
-            $forkProjectEntity->getUserId(),
+        $userCtx = DataIsolation::create(
             $forkProjectEntity->getUserOrganizationCode(),
-            $this->agentDomainService->getAuthorizationByUserId($forkProjectEntity->getUserId()),
+            $forkProjectEntity->getUserId()
         );
 
         // 根节点单独处理
@@ -2628,7 +2626,7 @@ class TaskFileDomainService
             throw $e;
         } finally {
             // 确保用户上下文总是被清理
-            // Per-call UserContext above is no longer needed after
+            // Per-call DataIsolation above is no longer needed after
             // copyFiles loop; no explicit clear required (the per-call
             // value object was scoped to this method).
             unset($userCtx);
@@ -3989,10 +3987,9 @@ class TaskFileDomainService
             );
         } else {
             // Different organization: use sandbox gateway for cross-organization copy
-            $copyUserCtx = new UserContext(
-                $sourceProject->getUserId(),
+            $copyUserCtx = DataIsolation::create(
                 $sourceProject->getUserOrganizationCode(),
-                $this->agentDomainService->getAuthorizationByUserId($sourceProject->getUserId()),
+                $sourceProject->getUserId()
             );
             $copyResult = $this->sandboxGateway->copyFiles(
                 $copyUserCtx,
@@ -4044,10 +4041,9 @@ class TaskFileDomainService
             );
         } else {
             // Different organization: use sandbox gateway for cross-organization copy
-            $copyUserCtx = new UserContext(
-                $sourceProject->getUserId(),
+            $copyUserCtx = DataIsolation::create(
                 $sourceProject->getUserOrganizationCode(),
-                $this->agentDomainService->getAuthorizationByUserId($sourceProject->getUserId()),
+                $sourceProject->getUserId()
             );
             $copyResult = $this->sandboxGateway->copyFiles(
                 $copyUserCtx,

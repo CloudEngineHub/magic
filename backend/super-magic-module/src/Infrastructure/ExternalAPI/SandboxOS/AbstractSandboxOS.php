@@ -32,7 +32,7 @@ abstract class AbstractSandboxOS
      *
      * Per-request user identity (userId, orgCode, authorization) is
      * NOT stored here — it travels through method parameters as a
-     * `UserContext` value object. See SandboxGatewayInterface for the
+     * `DataIsolation` value object. See SandboxGatewayInterface for the
      * rationale: storing per-request state on this long-lived DI
      * singleton leaks across coroutines.
      */

@@ -408,7 +408,15 @@ readonly class SuperMagicAgentDomainService
 
         // Call sandbox workspace export API via proxy request
         $request = new ExportWorkspaceRequest(ProjectMode::AGENT_CREATOR->value, $code, $uploadConfig, $sourcePath);
-        $response = $this->workspaceExporter->export($sandboxId, $request);
+        // SuperMagicAgentDataIsolation is the Agent-domain isolation VO
+        // (BaseDataIsolation derivative), NOT the Contact-side DataIsolation
+        // used by the sandbox gateway. Adapt it to Contact\DataIsolation
+        // here so the export path can forward the per-user token uniformly.
+        $contactDataIsolation = \App\Domain\Contact\Entity\ValueObject\DataIsolation::create(
+            $dataIsolation->getCurrentOrganizationCode(),
+            $dataIsolation->getCurrentUserId()
+        );
+        $response = $this->workspaceExporter->export($contactDataIsolation, $sandboxId, $request);
 
         if (! $response->isSuccess()) {
             ExceptionBuilder::throw(SuperMagicErrorCode::OperationFailed, 'super_magic.agent.export_failed');

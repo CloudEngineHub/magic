@@ -7,6 +7,7 @@ declare(strict_types=1);
 
 namespace Dtyq\SuperMagic\Infrastructure\ExternalAPI\SandboxOS\Gateway;
 
+use App\Domain\Contact\Entity\ValueObject\DataIsolation;
 use Dtyq\SuperMagic\Infrastructure\ExternalAPI\SandboxOS\Gateway\Result\BatchStatusResult;
 use Dtyq\SuperMagic\Infrastructure\ExternalAPI\SandboxOS\Gateway\Result\GatewayResult;
 use Dtyq\SuperMagic\Infrastructure\ExternalAPI\SandboxOS\Gateway\Result\SandboxStatusResult;
@@ -16,7 +17,7 @@ use Dtyq\SuperMagic\Infrastructure\ExternalAPI\SandboxOS\Gateway\Result\SandboxS
  *
  * Defines sandbox lifecycle management and agent forwarding functionality.
  *
- * ## Per-method UserContext policy
+ * ## Per-method DataIsolation policy
  *
  * Earlier revisions of this interface carried per-request auth state
  * (user id, organization code, authorization token) on the gateway
@@ -33,11 +34,12 @@ use Dtyq\SuperMagic\Infrastructure\ExternalAPI\SandboxOS\Gateway\Result\SandboxS
  * groups based on what they actually do:
  *
  * **Per-pod methods that talk to a specific user-bound pod** carry a
- * `UserContext` as their FIRST parameter. The downstream super-magic
+ * `DataIsolation` as their FIRST parameter. The downstream super-magic
  * agent (inside the pod) enforces User-Authorization on its agfs +
  * internal HTTP surface, so the caller must forward the user's stable
  * sandbox-token (looked up via
- * `AgentDomainService::getAuthorizationByUserId`). The gateway's
+ * `AgentDomainService::getAuthorizationByUserId` and stamped onto the
+ * DataIsolation via `setUserAuthorizationToken`). The gateway's
  * service-to-service `Sandbox-Gateway-Token` is always present
  * regardless.
  *
@@ -50,7 +52,7 @@ use Dtyq\SuperMagic\Infrastructure\ExternalAPI\SandboxOS\Gateway\Result\SandboxS
  *
  * **Control-plane methods that only hit the gateway's k8s /
  * image-registry / status cache (never the in-pod agent):** do NOT
- * take a UserContext. They authenticate purely via
+ * take a DataIsolation. They authenticate purely via
  * `Sandbox-Gateway-Token` (the service-to-service shared secret).
  *
  *   - deleteSandbox            — k8s delete pod
@@ -61,14 +63,15 @@ use Dtyq\SuperMagic\Infrastructure\ExternalAPI\SandboxOS\Gateway\Result\SandboxS
  *   - getLatestImages          — global image version (combined)
  *   - createWarmPoolSandbox    — k8s create unbound pod
  *
- * Per-request state lives in the call signature, never on the service.
+ * Per-request state lives in the call signature (DataIsolation value
+ * object), never on the service.
  */
 interface SandboxGatewayInterface
 {
     /**
      * 创建沙箱.
      *
-     * @param UserContext $userCtx per-call user identity (see class doc)
+     * @param DataIsolation $dataIsolation per-call user identity (see class doc)
      * @param string $projectId Project ID
      * @param string $sandboxId Sandbox ID
      * @param string $workDir Sandbox working directory
@@ -76,7 +79,7 @@ interface SandboxGatewayInterface
      * @param string $userSpaceRootFileId User space root directory file ID
      * @param array<string, string> $labels Extra pod labels
      */
-    public function createSandbox(UserContext $userCtx, string $projectId, string $sandboxId, string $workDir, string $projectSpaceRootFileId = '', string $userSpaceRootFileId = '', array $labels = []): GatewayResult;
+    public function createSandbox(DataIsolation $dataIsolation, string $projectId, string $sandboxId, string $workDir, string $projectSpaceRootFileId = '', string $userSpaceRootFileId = '', array $labels = []): GatewayResult;
 
     /**
      * 删除（停止）沙箱.
@@ -102,13 +105,15 @@ interface SandboxGatewayInterface
     /**
      * Proxy request to sandbox.
      *
+     * @param DataIsolation $dataIsolation per-call user identity
+     * @param string $sandboxId Sandbox ID
      * @param string $method HTTP method
      * @param string $path Target path
      * @param array $data Request data
      * @param array $headers Additional headers
      */
     public function proxySandboxRequest(
-        UserContext $userCtx,
+        DataIsolation $dataIsolation,
         string $sandboxId,
         string $method,
         string $path,
@@ -116,14 +121,14 @@ interface SandboxGatewayInterface
         array $headers = []
     ): GatewayResult;
 
-    public function uploadFile(UserContext $userCtx, string $sandboxId, array $filePaths, string $projectId, string $organizationCode, string $taskId): GatewayResult;
+    public function uploadFile(DataIsolation $dataIsolation, string $sandboxId, array $filePaths, string $projectId, string $organizationCode, string $taskId): GatewayResult;
 
     /**
      * 复制文件（同步操作）.
      *
      * @param array $files 文件复制项目数组
      */
-    public function copyFiles(UserContext $userCtx, array $files): GatewayResult;
+    public function copyFiles(DataIsolation $dataIsolation, array $files): GatewayResult;
 
     /**
      * 升级沙箱镜像.
@@ -131,7 +136,7 @@ interface SandboxGatewayInterface
      * @param string $messageId 消息ID
      * @param string $contextType 上下文类型，通常为"continue"
      */
-    public function upgradeSandbox(UserContext $userCtx, string $messageId, string $contextType = 'continue'): GatewayResult;
+    public function upgradeSandbox(DataIsolation $dataIsolation, string $messageId, string $contextType = 'continue'): GatewayResult;
 
     /**
      * 获取沙箱网关当前部署的最新 Agent 镜像.
@@ -167,6 +172,7 @@ interface SandboxGatewayInterface
      * 把一个 warm pool 沙箱绑定到指定项目，触发 agfs-server `/api/v1/mount`
      * 并等待 versionTree 初始首次同步完成（gateway 内部会 wait_ready=1）.
      *
+     * @param DataIsolation $dataIsolation per-call user identity
      * @param string $sandboxId warm-<uuid>
      * @param string $projectId 实际项目 ID
      * @param string $projectSpaceRootFileID 项目空间 root file id（来自 task_file 表）
@@ -174,7 +180,7 @@ interface SandboxGatewayInterface
      * @param array<string, string> $labels 额外 pod 标签
      */
     public function mountWarmPoolSandbox(
-        UserContext $userCtx,
+        DataIsolation $dataIsolation,
         string $sandboxId,
         string $projectId,
         string $projectSpaceRootFileID,

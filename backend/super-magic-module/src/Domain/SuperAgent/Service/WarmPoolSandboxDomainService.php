@@ -12,9 +12,9 @@ use Dtyq\SuperMagic\Domain\SuperAgent\Entity\ValueObject\WarmPoolSandboxStatus;
 use Dtyq\SuperMagic\Domain\SuperAgent\Entity\WarmPoolSandboxEntity;
 use Dtyq\SuperMagic\Domain\SuperAgent\Repository\Facade\WarmPoolSandboxRepositoryInterface;
 use Dtyq\SuperMagic\Infrastructure\ExternalAPI\SandboxOS\Gateway\SandboxGatewayInterface;
-use Dtyq\SuperMagic\Infrastructure\ExternalAPI\SandboxOS\Gateway\UserContext;
 use Hyperf\Logger\LoggerFactory;
 use Psr\Log\LoggerInterface;
+use App\Domain\Contact\Entity\ValueObject\DataIsolation;
 use Throwable;
 
 /**
@@ -266,26 +266,27 @@ class WarmPoolSandboxDomainService
      * delete via gateway + DB row deleted), so a failed mount never
      * leaves a poisoned row in the pool.
      *
+     * @param DataIsolation $dataIsolation per-call user identity; caller
+     *        is expected to have stamped the User-Authorization token via
+     *        setUserAuthorizationToken before invoking.
+     * @param string $projectId 实际项目 ID
+     * @param string $projectSpaceRootFileId 项目空间 root file id
+     * @param string $userSpaceRootFileId 用户空间 root file id（可空）
      * @param array<string, string> $labels Extra pod labels (e.g. ['topic-id' => '123']) stamped onto the pod at mount time
      */
     public function tryAcquireAndMount(
-        string $userId,
+        DataIsolation $dataIsolation,
         string $projectId,
         string $projectSpaceRootFileId,
         string $userSpaceRootFileId,
-        string $authorization,
         array $labels = [],
         ?string $topicId = null
     ): ?string {
         // Per-call user identity for mountWarmPoolSandbox — that call
         // reaches into a user-bound pod (agfs /api/v1/mount) so the
         // pod's in-pod middleware expects User-Authorization.
-        // orgCode is intentionally null — the warm-pool mount path does
-        // not need it (it isn't currently passed through to the
-        // gateway's /mount endpoint), and callers don't track orgCode at
-        // this layer. If a downstream consumer ever needs it, widen
-        // UserContext collection in the caller.
-        $userCtx = new UserContext($userId, null, $authorization);
+        // Caller is expected to have stamped the token on $dataIsolation.
+        $userId = $dataIsolation->getCurrentUserId();
 
         // getLatestImages only hits the gateway's global image-version
         // endpoint, no per-user identity required.
@@ -310,7 +311,7 @@ class WarmPoolSandboxDomainService
 
         try {
             $mountResult = $this->gateway->mountWarmPoolSandbox(
-                $userCtx,
+                $dataIsolation,
                 $sandboxId,
                 $projectId,
                 $projectSpaceRootFileId,
@@ -352,7 +353,7 @@ class WarmPoolSandboxDomainService
      *
      * The underlying gateway call ({@see SandboxGatewayInterface::deleteSandbox()})
      * is a control-plane call (k8s API) and does not need a
-     * UserContext.
+     * DataIsolation.
      */
     public function retireClaimed(WarmPoolSandboxEntity $row, string $reason): void
     {

@@ -26,7 +26,6 @@ use Dtyq\SuperMagic\Domain\SuperAgent\Entity\ValueObject\ProjectMode;
 use Dtyq\SuperMagic\ErrorCode\SkillErrorCode;
 use Dtyq\SuperMagic\ErrorCode\SuperMagicErrorCode;
 use Dtyq\SuperMagic\Infrastructure\ExternalAPI\SandboxOS\Gateway\SandboxGatewayInterface;
-use Dtyq\SuperMagic\Infrastructure\ExternalAPI\SandboxOS\Gateway\UserContext;
 use Dtyq\SuperMagic\Infrastructure\ExternalAPI\SandboxOS\Workspace\Request\ExportWorkspaceRequest;
 use Dtyq\SuperMagic\Infrastructure\ExternalAPI\SandboxOS\Workspace\Request\ImportWorkspaceRequest;
 use Dtyq\SuperMagic\Infrastructure\ExternalAPI\SandboxOS\Workspace\WorkspaceExporterInterface;
@@ -150,7 +149,15 @@ class SkillDomainService
             $archiveRoot,
             $fileName
         );
-        $response = $this->workspaceExporter->export($sandboxId, $request);
+        // SkillDataIsolation is a BaseDataIsolation derivative and does NOT
+        // implement the Contact-side DataIsolation contract used by the
+        // sandbox gateway. Adapt it to a Contact\DataIsolation here so the
+        // export path can stamp & forward the per-user token uniformly.
+        $contactDataIsolation = \App\Domain\Contact\Entity\ValueObject\DataIsolation::create(
+            $dataIsolation->getCurrentOrganizationCode(),
+            $dataIsolation->getCurrentUserId()
+        );
+        $response = $this->workspaceExporter->export($contactDataIsolation, $sandboxId, $request);
 
         if (! $response->isSuccess()) {
             ExceptionBuilder::throw(SuperMagicErrorCode::OperationFailed, 'super_magic.skill.export_failed');
@@ -171,25 +178,26 @@ class SkillDomainService
         string $fileUrl,
         string $targetDir = ''
     ): array {
-        // Per-call user identity flows through UserContext. Previously
+        // Per-call user identity flows through DataIsolation. Previously
         // this called setUserContext() on the sandbox-gateway instance
         // owned by THIS service, but the actual downstream gateway call
         // happens inside WorkspaceImporterService which has a SEPARATE
         // gateway instance, so the prior call was a no-op (real bug).
-        // We now plumb UserContext all the way through.
-        $userCtx = new UserContext(
-            $dataIsolation->getCurrentUserId(),
+        // We now plumb DataIsolation all the way through.
+        //
+        // SkillDataIsolation is the Skill-domain isolation VO (a
+        // BaseDataIsolation derivative) and does NOT implement the
+        // Contact-side DataIsolation contract used by the sandbox
+        // gateway. Adapt it to a Contact\DataIsolation here, preserving
+        // the previous wire format: no User-Authorization on the import
+        // path (token stays null).
+        $contactDataIsolation = \App\Domain\Contact\Entity\ValueObject\DataIsolation::create(
             $dataIsolation->getCurrentOrganizationCode(),
-            // Workspace import is typically triggered by the agent's
-            // own outbound token flow rather than directly from a
-            // user-bound request; pass null to keep the wire format
-            // identical to the previous behaviour (no User-Authorization
-            // header on the import path). If a caller has a token to
-            // forward, it can still populate this through a wrapper.
+            $dataIsolation->getCurrentUserId()
         );
 
         $request = new ImportWorkspaceRequest($fileUrl, $targetDir);
-        $response = $this->workspaceImporter->import($userCtx, $sandboxId, $request);
+        $response = $this->workspaceImporter->import($contactDataIsolation, $sandboxId, $request);
 
         if (! $response->isSuccess()) {
             ExceptionBuilder::throw(SuperMagicErrorCode::OperationFailed, $response->getMessage());

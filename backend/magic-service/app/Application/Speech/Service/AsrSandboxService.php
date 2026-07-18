@@ -33,7 +33,6 @@ use Dtyq\SuperMagic\Infrastructure\ExternalAPI\SandboxOS\AsrRecorder\Config\AsrN
 use Dtyq\SuperMagic\Infrastructure\ExternalAPI\SandboxOS\AsrRecorder\Config\AsrTranscriptFileConfig;
 use Dtyq\SuperMagic\Infrastructure\ExternalAPI\SandboxOS\AsrRecorder\Response\AsrRecorderResponse;
 use Dtyq\SuperMagic\Infrastructure\ExternalAPI\SandboxOS\Gateway\SandboxGatewayInterface;
-use Dtyq\SuperMagic\Infrastructure\ExternalAPI\SandboxOS\Gateway\UserContext;
 use Dtyq\SuperMagic\Infrastructure\Utils\WorkDirectoryUtil;
 use Throwable;
 
@@ -61,24 +60,20 @@ class AsrSandboxService extends AbstractAppService
     /**
      * 启动录音任务.
      *
+     * @param DataIsolation $dataIsolation per-call user identity. Caller
+     *        must have stamped the User-Authorization token via
+     *        setUserAuthorizationToken (look it up via
+     *        AgentDomainService::getAuthorizationByUserId) before
+     *        invoking; every downstream SandboxGatewayInterface call in
+     *        this method forwards that token to the in-pod agent.
      * @param AsrTaskStatusDTO $taskStatus 任务状态
-     * @param string $authorization User-Authorization token (raw, no Bearer
-     *        prefix). Required: every downstream SandboxGatewayInterface
-     *        call in this method must carry User-Authorization, so the
-     *        caller is expected to have resolved it via
-     *        AgentDomainService::getAuthorizationByUserId before calling.
-     * @param string $userId 用户ID
-     * @param string $organizationCode 组织编码
      */
     public function startRecordingTask(
-        AsrTaskStatusDTO $taskStatus,
-        string $authorization,
-        string $userId,
-        string $organizationCode
+        DataIsolation $dataIsolation,
+        AsrTaskStatusDTO $taskStatus
     ): void {
-        // Per-call UserContext flows through every SandboxGatewayInterface
-        // call in this method. Built once and reused.
-        $userCtx = $this->buildUserCtx($userId, $organizationCode, $authorization);
+        $userId = $dataIsolation->getCurrentUserId();
+        $organizationCode = $dataIsolation->getCurrentOrganizationCode();
 
         // 获取完整工作目录路径
         $projectEntity = $this->getAccessibleProjectWithEditor((int) $taskStatus->projectId, $userId, $organizationCode);
@@ -88,11 +83,10 @@ class AsrSandboxService extends AbstractAppService
         // 创建沙箱并等待工作区可用（沙箱 id 由隐藏话题绑定的 sandbox_id 决定，
         // 未绑定则由 Domain 走 warm/cold 路径，与 chat 路径一致）
         $actualSandboxId = $this->ensureSandboxWorkspaceReady(
+            $dataIsolation,
             $taskStatus,
             $taskStatus->projectId,
-            $fullWorkdir,
-            $userId,
-            $organizationCode
+            $fullWorkdir
         );
 
         $this->logger->info('startRecordingTask ASR 录音：沙箱已就绪', [
@@ -119,7 +113,7 @@ class AsrSandboxService extends AbstractAppService
         // 调用沙箱启动任务
         // 注意：沙箱 API 只接受工作区相对路径 (如: .asr_recordings/session_xxx)
         $response = $this->asrRecorder->startTask(
-            $userCtx,
+            $dataIsolation,
             $actualSandboxId,
             $taskStatus->taskKey,
             $taskStatus->tempHiddenDirectory,  // 如: .asr_recordings/session_xxx
@@ -145,10 +139,11 @@ class AsrSandboxService extends AbstractAppService
     /**
      * 取消录音任务.
      *
+     * @param DataIsolation $dataIsolation per-call user identity (token must be stamped)
      * @param AsrTaskStatusDTO $taskStatus 任务状态
      * @return AsrRecorderResponse 响应结果
      */
-    public function cancelRecordingTask(AsrTaskStatusDTO $taskStatus, string $authorization): AsrRecorderResponse
+    public function cancelRecordingTask(DataIsolation $dataIsolation, AsrTaskStatusDTO $taskStatus): AsrRecorderResponse
     {
         $sandboxId = $taskStatus->sandboxId;
 
@@ -161,11 +156,9 @@ class AsrSandboxService extends AbstractAppService
             'sandbox_id' => $sandboxId,
         ]);
 
-        $userCtx = $this->buildUserCtx($taskStatus->userId, null, $authorization);
-
         // 调用沙箱取消任务
         $response = $this->asrRecorder->cancelTask(
-            $userCtx,
+            $dataIsolation,
             $sandboxId,
             $taskStatus->taskKey
         );
@@ -186,23 +179,21 @@ class AsrSandboxService extends AbstractAppService
     /**
      * 合并音频文件.
      *
+     * @param DataIsolation $dataIsolation per-call user identity (token must be stamped)
      * @param AsrTaskStatusDTO $taskStatus 任务状态
-     * @param string $authorization User-Authorization token (raw, no Bearer
-     *        prefix). Required: must be resolved by the caller (typically
-     *        via AgentDomainService::getAuthorizationByUserId) before
-     *        invocation.
      * @param string $fileTitle 文件标题（不含扩展名）
-     * @param string $organizationCode 组织编码
      * @param AsrTaskStatusEnum $targetStatus 目标状态，默认 COMPLETED
      * @return AsrSandboxMergeResultDTO 合并结果
      */
     public function mergeAudioFiles(
+        DataIsolation $dataIsolation,
         AsrTaskStatusDTO $taskStatus,
-        string $authorization,
         string $fileTitle,
-        string $organizationCode,
         AsrTaskStatusEnum $targetStatus = AsrTaskStatusEnum::COMPLETED
     ): AsrSandboxMergeResultDTO {
+        $organizationCode = $dataIsolation->getCurrentOrganizationCode();
+        $userId = $dataIsolation->getCurrentUserId();
+
         $this->logger->info('开始沙箱音频处理流程', [
             'task_key' => $taskStatus->taskKey,
             'project_id' => $taskStatus->projectId,
@@ -210,8 +201,6 @@ class AsrSandboxService extends AbstractAppService
             'display_directory' => $taskStatus->displayDirectory,
             'sandbox_id' => $taskStatus->sandboxId,
         ]);
-
-        $userCtx = $this->buildUserCtx($taskStatus->userId, $organizationCode, $authorization);
 
         // 获取完整工作目录路径
         $projectEntity = $this->getAccessibleProjectWithEditor((int) $taskStatus->projectId, $taskStatus->userId, $organizationCode);
@@ -221,11 +210,10 @@ class AsrSandboxService extends AbstractAppService
         // 记录调用前的沙箱 id，用于判断沙箱是否在初始化过程中发生了重建
         $requestedSandboxId = $taskStatus->sandboxId;
         $actualSandboxId = $this->ensureSandboxWorkspaceReady(
+            $dataIsolation,
             $taskStatus,
             $taskStatus->projectId,
-            $fullWorkdir,
-            $taskStatus->userId,
-            $organizationCode
+            $fullWorkdir
         );
 
         // 更新实际的沙箱ID（可能已经变化）
@@ -244,7 +232,7 @@ class AsrSandboxService extends AbstractAppService
         ]);
 
         // 调用沙箱 finish 并轮询等待完成
-        $mergeResult = $this->callSandboxFinishAndWait($taskStatus, $fileTitle, $userCtx);
+        $mergeResult = $this->callSandboxFinishAndWait($dataIsolation, $taskStatus, $fileTitle);
         $this->handleMergeResultFiles($taskStatus, $mergeResult);
 
         $this->logger->info('沙箱返回的文件信息', [
@@ -271,20 +259,20 @@ class AsrSandboxService extends AbstractAppService
      * 恢复 finish-recording 合并流程.
      *
      * 先查询沙箱真实状态：已完成则只补 magic-service 收尾；仍在处理中则重新提交一次 finish 并继续轮询。
+     *
+     * @param DataIsolation $dataIsolation per-call user identity (token must be stamped)
      */
     public function recoverFinishRecording(
+        DataIsolation $dataIsolation,
         AsrTaskStatusDTO $taskStatus,
-        string $authorization,
         string $fileTitle,
-        string $organizationCode,
         AsrTaskStatusEnum $targetStatus = AsrTaskStatusEnum::COMPLETED
     ): AsrSandboxMergeResultDTO {
+        $organizationCode = $dataIsolation->getCurrentOrganizationCode();
         $sandboxId = $taskStatus->sandboxId;
         if (empty($sandboxId)) {
             ExceptionBuilder::throw(AsrErrorCode::SandboxIdNotExist);
         }
-
-        $userCtx = $this->buildUserCtx($taskStatus->userId, $organizationCode, $authorization);
 
         $this->logger->info('开始恢复 finish-recording 沙箱合并', [
             'task_key' => $taskStatus->taskKey,
@@ -293,7 +281,7 @@ class AsrSandboxService extends AbstractAppService
         ]);
 
         $finishStartTime = microtime(true);
-        $queryResponse = $this->asrRecorder->queryTask($userCtx, $sandboxId, $taskStatus->taskKey, '.workspace');
+        $queryResponse = $this->asrRecorder->queryTask($dataIsolation, $sandboxId, $taskStatus->taskKey, '.workspace');
         if ($this->isTransportFailureResponse($queryResponse)) {
             $this->logger->warning('恢复 finish-recording 时沙箱不可达，尝试重建沙箱', [
                 'task_key' => $taskStatus->taskKey,
@@ -312,11 +300,10 @@ class AsrSandboxService extends AbstractAppService
                 $fullWorkdir = WorkDirectoryUtil::getFullWorkdir($fullPrefix, $projectEntity->getWorkDir());
 
                 $actualSandboxId = $this->ensureSandboxWorkspaceReady(
+                    $dataIsolation,
                     $taskStatus,
                     $taskStatus->projectId,
-                    $fullWorkdir,
-                    $taskStatus->userId,
-                    $organizationCode
+                    $fullWorkdir
                 );
 
                 $taskStatus->sandboxId = $actualSandboxId;
@@ -328,7 +315,7 @@ class AsrSandboxService extends AbstractAppService
                     'new_sandbox_id' => $actualSandboxId,
                 ]);
 
-                $mergeResult = $this->callSandboxFinishAndWait($taskStatus, $fileTitle, $userCtx);
+                $mergeResult = $this->callSandboxFinishAndWait($dataIsolation, $taskStatus, $fileTitle);
                 $taskStatus->updateStatus($targetStatus);
 
                 return $mergeResult;
@@ -372,7 +359,7 @@ class AsrSandboxService extends AbstractAppService
             'status' => $status->value,
         ]);
 
-        $mergeResult = $this->callSandboxFinishAndWait($taskStatus, $fileTitle, $userCtx);
+        $mergeResult = $this->callSandboxFinishAndWait($dataIsolation, $taskStatus, $fileTitle);
         $taskStatus->updateStatus($targetStatus);
 
         return $mergeResult;
@@ -392,15 +379,15 @@ class AsrSandboxService extends AbstractAppService
     /**
      * 调用沙箱 finish 并轮询等待完成.
      *
+     * @param DataIsolation $dataIsolation per-call user identity (token must be stamped)
      * @param AsrTaskStatusDTO $taskStatus 任务状态
      * @param string $intelligentTitle 智能标题（用于重命名）
-     * @param UserContext $userCtx 调用方已构造好的 UserContext
      * @return AsrSandboxMergeResultDTO 合并结果
      */
     private function callSandboxFinishAndWait(
+        DataIsolation $dataIsolation,
         AsrTaskStatusDTO $taskStatus,
-        string $intelligentTitle,
-        UserContext $userCtx,
+        string $intelligentTitle
     ): AsrSandboxMergeResultDTO {
         $sandboxId = $taskStatus->sandboxId;
 
@@ -446,7 +433,7 @@ class AsrSandboxService extends AbstractAppService
 
         // 首次调用 finish：提交“上传已完成，可以合并”的命令。
         $response = $this->asrRecorder->finishTask(
-            $userCtx,
+            $dataIsolation,
             $sandboxId,
             $taskStatus->taskKey,
             '.workspace',
@@ -465,7 +452,7 @@ class AsrSandboxService extends AbstractAppService
                 'message' => $response->message,
             ]);
 
-            $queryResponse = $this->asrRecorder->queryTask($userCtx, $sandboxId, $taskStatus->taskKey, '.workspace');
+            $queryResponse = $this->asrRecorder->queryTask($dataIsolation, $sandboxId, $taskStatus->taskKey, '.workspace');
             if ($this->isTransportFailureResponse($queryResponse)) {
                 $this->logger->error('提交沙箱 ASR 合并失败，且无法查询确认任务状态', [
                     'task_key' => $taskStatus->taskKey,
@@ -536,7 +523,7 @@ class AsrSandboxService extends AbstractAppService
             sleep($pollingInterval);
 
             // 继续轮询：finish 只提交一次，后续只查询状态。
-            $queryResponse = $this->asrRecorder->queryTask($userCtx, $sandboxId, $taskStatus->taskKey, '.workspace');
+            $queryResponse = $this->asrRecorder->queryTask($dataIsolation, $sandboxId, $taskStatus->taskKey, '.workspace');
             if ($this->isTransportFailureResponse($queryResponse)) {
                 $this->logger->warning('查询沙箱 ASR 合并状态失败，将继续轮询', [
                     'task_key' => $taskStatus->taskKey,
@@ -654,21 +641,20 @@ class AsrSandboxService extends AbstractAppService
      * 否则会触发 tryWarmPoolFastPath 的「已有 sandbox_id 跳过 warm 池」守卫。
      */
     private function ensureSandboxWorkspaceReady(
+        DataIsolation $dataIsolation,
         AsrTaskStatusDTO $taskStatus,
         ?string $projectId,
-        string $fullWorkdir,
-        string $userId,
-        string $organizationCode
+        string $fullWorkdir
     ): string {
         $projectIdString = (string) $projectId;
         if ($projectIdString === '') {
             ExceptionBuilder::throw(AsrErrorCode::SandboxTaskCreationFailed, '', ['message' => '项目ID为空，无法创建沙箱']);
         }
 
-        // 1. 创建 DataIsolation
-        $dataIsolation = DataIsolation::simpleMake($organizationCode, $userId);
+        $userId = $dataIsolation->getCurrentUserId();
+        $organizationCode = $dataIsolation->getCurrentOrganizationCode();
 
-        // 2. 为沙箱获取/创建隐藏话题（与总结用话题分离）
+        // 1. 为沙箱获取/创建隐藏话题（与总结用话题分离）
         $sandboxTopicId = $this->ensureSandboxHiddenTopic($taskStatus, $userId);
         $taskStatus->sandboxTopicId = $sandboxTopicId;
 
@@ -914,19 +900,5 @@ class AsrSandboxService extends AbstractAppService
             sourcePath: $workspaceRelativePath,
             targetPath: rtrim($sourceDirectory, '/') . '/' . $markerFilename
         );
-    }
-
-    /**
-     * Build a UserContext for the downstream SandboxGatewayInterface
-     * calls in this service.
-     *
-     * The caller is expected to have already resolved a non-empty
-     * $authorization token (typically via
-     * AgentDomainService::getAuthorizationByUserId). We propagate it
-     * into the UserContext as the User-Authorization header value.
-     */
-    private function buildUserCtx(?string $userId, ?string $organizationCode, string $authorization): UserContext
-    {
-        return new UserContext($userId, $organizationCode, $authorization);
     }
 }

@@ -7,6 +7,7 @@ declare(strict_types=1);
 
 namespace Dtyq\SuperMagic\Infrastructure\ExternalAPI\SandboxOS\Gateway;
 
+use App\Domain\Contact\Entity\ValueObject\DataIsolation;
 use App\Infrastructure\Util\Context\CoContext;
 use App\Infrastructure\Util\IdGenerator\IdGenerator;
 use Dtyq\SuperMagic\Infrastructure\ExternalAPI\SandboxOS\AbstractSandboxOS;
@@ -41,14 +42,14 @@ class SandboxGatewayService extends AbstractSandboxOS implements SandboxGatewayI
     // singleton — unrelated coroutines against the same instance
     // would see each other's user identity. The state has been
     // removed entirely; per-call identity now travels through the
-    // method signature as a UserContext value object (see the
+    // method signature as a DataIsolation value object (see the
     // interface for the contract).
 
     /**
      * 创建沙箱.
      */
     public function createSandbox(
-        UserContext $userCtx,
+        DataIsolation $dataIsolation,
         string $projectId,
         string $sandboxId,
         string $workDir,
@@ -64,7 +65,7 @@ class SandboxGatewayService extends AbstractSandboxOS implements SandboxGatewayI
                 'work_dir' => $workDir,
                 'project_space_root_file_id' => $projectSpaceRootFileId,
                 'user_space_root_file_id' => $userSpaceRootFileId,
-                'authorization_provided' => $userCtx->authorization !== null && $userCtx->authorization !== '',
+                'authorization_provided' => $dataIsolation->getUserAuthorizationToken() !== null && $dataIsolation->getUserAuthorizationToken() !== '',
             ]);
             return GatewayResult::success([
                 'sandbox_id' => $sandboxId,
@@ -77,7 +78,7 @@ class SandboxGatewayService extends AbstractSandboxOS implements SandboxGatewayI
             'project_oss_path' => $workDir,
             'project_space_root_file_id' => $projectSpaceRootFileId,
             'user_space_root_file_id' => $userSpaceRootFileId,
-            'authorization' => $userCtx->authorization ?? '',
+            'authorization' => $dataIsolation->getUserAuthorizationToken() ?? '',
         ];
         if (! empty($labels)) {
             $config['labels'] = $labels;
@@ -90,7 +91,7 @@ class SandboxGatewayService extends AbstractSandboxOS implements SandboxGatewayI
                 'project_oss_path' => $workDir,
                 'project_space_root_file_id' => $projectSpaceRootFileId,
                 'user_space_root_file_id' => $userSpaceRootFileId,
-                'authorization_provided' => $userCtx->authorization !== null && $userCtx->authorization !== '',
+                'authorization_provided' => $dataIsolation->getUserAuthorizationToken() !== null && $dataIsolation->getUserAuthorizationToken() !== '',
                 'labels' => $labels,
             ],
             'max_retries' => 5,
@@ -98,10 +99,10 @@ class SandboxGatewayService extends AbstractSandboxOS implements SandboxGatewayI
         ]);
 
         try {
-            return retry(5, function () use ($config, $sandboxId, $userCtx) {
+            return retry(5, function () use ($config, $sandboxId, $dataIsolation) {
                 try {
                     $response = $this->getClient()->post($this->buildApiPath('api/v1/sandboxes'), [
-                        'headers' => $this->getCommonHeaders($userCtx),
+                        'headers' => $this->getCommonHeaders($dataIsolation),
                         'json' => $config,
                         'timeout' => 30,
                     ]);
@@ -467,7 +468,7 @@ class SandboxGatewayService extends AbstractSandboxOS implements SandboxGatewayI
      * 代理转发请求到沙箱.
      */
     public function proxySandboxRequest(
-        UserContext $userCtx,
+        DataIsolation $dataIsolation,
         string $sandboxId,
         string $method,
         string $path,
@@ -488,10 +489,10 @@ class SandboxGatewayService extends AbstractSandboxOS implements SandboxGatewayI
 
         $maxRetries = 3;
         try {
-            return retry($maxRetries, function (int $attempt) use ($userCtx, $sandboxId, $method, $path, $data, $headers, $mode, $maxRetries) {
+            return retry($maxRetries, function (int $attempt) use ($dataIsolation, $sandboxId, $method, $path, $data, $headers, $mode, $maxRetries) {
                 try {
                     $requestOptions = [
-                        'headers' => array_merge($this->getCommonHeaders($userCtx), $headers),
+                        'headers' => array_merge($this->getCommonHeaders($dataIsolation), $headers),
                         'timeout' => 300,
                     ];
 
@@ -595,17 +596,17 @@ class SandboxGatewayService extends AbstractSandboxOS implements SandboxGatewayI
         }
     }
 
-    public function uploadFile(UserContext $userCtx, string $sandboxId, array $filePaths, string $projectId, string $organizationCode, string $taskId): GatewayResult
+    public function uploadFile(DataIsolation $dataIsolation, string $sandboxId, array $filePaths, string $projectId, string $organizationCode, string $taskId): GatewayResult
     {
         $this->logger->debug('[Sandbox][Gateway] uploadFile', ['sandbox_id' => $sandboxId, 'file_paths' => $filePaths, 'project_id' => $projectId, 'organization_code' => $organizationCode, 'task_id' => $taskId]);
 
-        return $this->proxySandboxRequest($userCtx, $sandboxId, 'POST', 'api/file/upload', ['sandbox_id' => $sandboxId, 'file_paths' => $filePaths, 'project_id' => $projectId, 'organization_code' => $organizationCode, 'task_id' => $taskId]);
+        return $this->proxySandboxRequest($dataIsolation, $sandboxId, 'POST', 'api/file/upload', ['sandbox_id' => $sandboxId, 'file_paths' => $filePaths, 'project_id' => $projectId, 'organization_code' => $organizationCode, 'task_id' => $taskId]);
     }
 
     /**
      * 复制文件（同步操作）.
      */
-    public function copyFiles(UserContext $userCtx, array $files): GatewayResult
+    public function copyFiles(DataIsolation $dataIsolation, array $files): GatewayResult
     {
         $requestData = [
             'files' => $files,
@@ -617,10 +618,10 @@ class SandboxGatewayService extends AbstractSandboxOS implements SandboxGatewayI
         ]);
 
         try {
-            return retry(3, function () use ($requestData, $userCtx) {
+            return retry(3, function () use ($requestData, $dataIsolation) {
                 try {
                     $response = $this->getClient()->post($this->buildApiPath('api/v1/files/copy'), [
-                        'headers' => $this->getCommonHeaders($userCtx),
+                        'headers' => $this->getCommonHeaders($dataIsolation),
                         'json' => $requestData,
                         'timeout' => 300, // Increased timeout for file copy operations
                     ]);
@@ -686,7 +687,7 @@ class SandboxGatewayService extends AbstractSandboxOS implements SandboxGatewayI
     /**
      * 升级沙箱镜像.
      */
-    public function upgradeSandbox(UserContext $userCtx, string $messageId, string $contextType = 'continue'): GatewayResult
+    public function upgradeSandbox(DataIsolation $dataIsolation, string $messageId, string $contextType = 'continue'): GatewayResult
     {
         $config = [
             'message_id' => $messageId,
@@ -700,10 +701,10 @@ class SandboxGatewayService extends AbstractSandboxOS implements SandboxGatewayI
         ]);
 
         try {
-            return retry(3, function () use ($config, $messageId, $userCtx) {
+            return retry(3, function () use ($config, $messageId, $dataIsolation) {
                 try {
                     $response = $this->getClient()->put($this->buildApiPath('api/v1/sandboxes/upgrade'), [
-                        'headers' => $this->getCommonHeaders($userCtx),
+                        'headers' => $this->getCommonHeaders($dataIsolation),
                         'json' => $config,
                         'timeout' => 300, // 升级可能需要更长时间
                     ]);
@@ -959,7 +960,7 @@ class SandboxGatewayService extends AbstractSandboxOS implements SandboxGatewayI
     }
 
     public function mountWarmPoolSandbox(
-        UserContext $userCtx,
+        DataIsolation $dataIsolation,
         string $sandboxId,
         string $projectId,
         string $projectSpaceRootFileID,
@@ -976,12 +977,12 @@ class SandboxGatewayService extends AbstractSandboxOS implements SandboxGatewayI
 
         // Note: project_space_root_file_id is required by sandbox-gateway,
         // so callers are expected to resolve it before invoking this method.
-        // The authorization token now lives on $userCtx (was a positional
+        // The authorization token now lives on $dataIsolation (was a positional
         // parameter pre-commit feat/sandbox-user-auth); the gateway body
         // still receives it because agfs-server's mount call needs it as a
         // JSON body field too, even though HTTP-layer User-Authorization is
-        // also emitted in headers via getCommonHeaders($userCtx).
-        $authorization = $userCtx->authorization ?? '';
+        // also emitted in headers via getCommonHeaders($dataIsolation).
+        $authorization = $dataIsolation->getUserAuthorizationToken() ?? '';
         $payload = [
             'project_id' => $projectId,
             'project_space_root_file_id' => $projectSpaceRootFileID,
@@ -1006,12 +1007,12 @@ class SandboxGatewayService extends AbstractSandboxOS implements SandboxGatewayI
             // and refuses to re-mount to a different project), so a generic
             // retry-on-any-failure policy would be dangerous. We restrict
             // retries to transient HTTP errors via isRetryableError.
-            return retry(3, function () use ($sandboxId, $payload, $userCtx) {
+            return retry(3, function () use ($sandboxId, $payload, $dataIsolation) {
                 try {
                     $response = $this->getClient()->post(
                         $this->buildApiPath(sprintf('api/v1/warm-pool-sandboxes/%s/mount', $sandboxId)),
                         [
-                            'headers' => $this->getCommonHeaders($userCtx),
+                            'headers' => $this->getCommonHeaders($dataIsolation),
                             'json' => $payload,
                             // wait_ready=1 inside the gateway blocks on the
                             // versionTree initial load; keep ample timeout.
@@ -1062,11 +1063,11 @@ class SandboxGatewayService extends AbstractSandboxOS implements SandboxGatewayI
      * the per-pod methods that talk to a specific user-bound pod.
      *
      * The user identity (userId / organizationCode / authorization)
-     * is supplied by the caller via $userCtx on every method. The
+     * is supplied by the caller via $dataIsolation on every method. The
      * gateway-token + request-id come from {@see getBaseHeaders()}.
      *
      * Skipping the magic-user-id / magic-organization-code /
-     * User-Authorization headers entirely when a UserContext field is
+     * User-Authorization headers entirely when a DataIsolation field is
      * null or empty preserves the wire format callers that legitimately
      * have no per-user identity (background workers, cron tasks) used
      * before this change. Sending a literal empty value would risk a
@@ -1095,18 +1096,22 @@ class SandboxGatewayService extends AbstractSandboxOS implements SandboxGatewayI
      * magic-organization-code, User-Authorization) on top of
      * {@see getBaseHeaders()}.
      */
-    protected function getCommonHeaders(UserContext $userCtx): array
+    protected function getCommonHeaders(DataIsolation $dataIsolation): array
     {
         $headers = $this->getBaseHeaders();
 
-        if ($userCtx->userId !== null && $userCtx->userId !== '') {
-            $headers['magic-user-id'] = $userCtx->userId;
+        $userId = $dataIsolation->getCurrentUserId();
+        $organizationCode = $dataIsolation->getCurrentOrganizationCode();
+        $authorization = $dataIsolation->getUserAuthorizationToken();
+
+        if ($userId !== null && $userId !== '') {
+            $headers['magic-user-id'] = $userId;
         }
-        if ($userCtx->organizationCode !== null && $userCtx->organizationCode !== '') {
-            $headers['magic-organization-code'] = $userCtx->organizationCode;
+        if ($organizationCode !== null && $organizationCode !== '') {
+            $headers['magic-organization-code'] = $organizationCode;
         }
-        if ($userCtx->authorization !== null && $userCtx->authorization !== '') {
-            $headers['User-Authorization'] = $userCtx->authorization;
+        if ($authorization !== null && $authorization !== '') {
+            $headers['User-Authorization'] = $authorization;
         }
 
         return $headers;

@@ -24,6 +24,7 @@ use Dtyq\SuperMagic\Domain\Agent\Repository\Facade\SuperMagicAgentRepositoryInte
 use Dtyq\SuperMagic\Domain\Agent\Repository\Persistence\Model\AgentCategoryModel;
 use Dtyq\SuperMagic\Domain\Agent\Repository\Persistence\Model\AgentMarketModel;
 use Dtyq\SuperMagic\Domain\Agent\Repository\Persistence\Model\AgentPlaybookModel;
+use App\Domain\Contact\Entity\ValueObject\DataIsolation;
 use Dtyq\SuperMagic\Domain\Agent\Repository\Persistence\Model\AgentSkillModel;
 use Dtyq\SuperMagic\Domain\Agent\Repository\Persistence\Model\AgentVersionModel;
 use Dtyq\SuperMagic\Domain\Agent\Repository\Persistence\Model\SuperMagicAgentModel;
@@ -3120,7 +3121,6 @@ class SuperMagicAgentApiTest extends AbstractApiTest
         $this->originalSuperMagicAgentDomainService ??= $container->get(SuperMagicAgentDomainService::class);
 
         $sandboxGateway = Mockery::mock(SandboxGatewayInterface::class);
-        $sandboxGateway->shouldReceive('setUserContext')->andReturnSelf();
         $sandboxGateway->shouldReceive('ensureSandboxAvailable')->andReturnUsing(
             static fn (string $sandboxId): string => $sandboxId
         );
@@ -3136,7 +3136,7 @@ class SuperMagicAgentApiTest extends AbstractApiTest
 
         $workspaceExporter = Mockery::mock(WorkspaceExporterInterface::class);
         $workspaceExporter->shouldReceive('export')->andReturnUsing(
-            static fn (string $sandboxId, ExportWorkspaceRequest $request): ExportWorkspaceResponse => new ExportWorkspaceResponse(
+            static fn (DataIsolation $dataIsolation, string $sandboxId, ExportWorkspaceRequest $request): ExportWorkspaceResponse => new ExportWorkspaceResponse(
                 true,
                 1000,
                 'OK',

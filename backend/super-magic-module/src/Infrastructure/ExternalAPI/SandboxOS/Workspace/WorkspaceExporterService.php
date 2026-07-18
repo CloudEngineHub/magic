@@ -7,6 +7,7 @@ declare(strict_types=1);
 
 namespace Dtyq\SuperMagic\Infrastructure\ExternalAPI\SandboxOS\Workspace;
 
+use App\Domain\Contact\Entity\ValueObject\DataIsolation;
 use Dtyq\SuperMagic\Infrastructure\ExternalAPI\SandboxOS\AbstractSandboxOS;
 use Dtyq\SuperMagic\Infrastructure\ExternalAPI\SandboxOS\Constants\SandboxEndpoints;
 use Dtyq\SuperMagic\Infrastructure\ExternalAPI\SandboxOS\Gateway\SandboxGatewayInterface;
@@ -32,7 +33,7 @@ class WorkspaceExporterService extends AbstractSandboxOS implements WorkspaceExp
     /**
      * Export workspace to object storage via sandbox proxy.
      */
-    public function export(string $sandboxId, ExportWorkspaceRequest $request): ExportWorkspaceResponse
+    public function export(DataIsolation $dataIsolation, string $sandboxId, ExportWorkspaceRequest $request): ExportWorkspaceResponse
     {
         $sourcePath = $request->getSourcePath();
         $hasSourcePath = $sourcePath !== null && $sourcePath !== '';
@@ -47,6 +48,7 @@ class WorkspaceExporterService extends AbstractSandboxOS implements WorkspaceExp
 
         try {
             $result = $this->gateway->proxySandboxRequest(
+                $dataIsolation,
                 $sandboxId,
                 'POST',
                 SandboxEndpoints::WORKSPACE_EXPORT,
