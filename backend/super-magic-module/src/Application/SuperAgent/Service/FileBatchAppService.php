@@ -143,10 +143,10 @@ class FileBatchAppService extends AbstractAppService
             'target_name' => $targetName,
         ]);
 
+        $dataIsolation = DataIsolation::simpleMake($organizationCode, $userId);
         $this->prepareAndSubmitSandboxPackTask(
+            $dataIsolation,
             $batchKey,
-            $userAuthorization->getId(),
-            $organizationCode,
             $projectEntity,
             $packManifest,
             $targetName,
@@ -279,10 +279,10 @@ class FileBatchAppService extends AbstractAppService
             'target_name' => $targetName,
         ]);
 
+        $dataIsolation = DataIsolation::simpleMake($organizationCode, $userId);
         $this->prepareAndSubmitSandboxPackTask(
+            $dataIsolation,
             $batchKey,
-            $userId,
-            $organizationCode,
             $projectEntity,
             $packManifest,
             $targetName,
@@ -339,7 +339,8 @@ class FileBatchAppService extends AbstractAppService
         }
 
         $organizationCode = (string) ($taskStatus['organization_code'] ?? $userAuthorization->getOrganizationCode());
-        $this->syncTaskStatusFromSandbox($batchKey, $taskStatus, $organizationCode);
+        $dataIsolation = DataIsolation::simpleMake($organizationCode, $userId);
+        $this->syncTaskStatusFromSandbox($dataIsolation, $batchKey, $taskStatus);
         $taskStatus = $this->statusManager->getTaskStatus($batchKey) ?? $taskStatus;
 
         $this->logger->info('Check batch download status', [
@@ -452,9 +453,8 @@ class FileBatchAppService extends AbstractAppService
      * } $packManifest
      */
     private function prepareAndSubmitSandboxPackTask(
+        DataIsolation $dataIsolation,
         string $batchKey,
-        string $userId,
-        string $organizationCode,
         ProjectEntity $projectEntity,
         array $packManifest,
         string $targetName,
@@ -465,6 +465,8 @@ class FileBatchAppService extends AbstractAppService
         }
 
         try {
+            $organizationCode = $dataIsolation->getCurrentOrganizationCode();
+            $userId = $dataIsolation->getCurrentUserId();
             $projectWorkDir = $projectEntity->getWorkDir();
             $fullPrefix = $this->taskFileDomainService->getFullPrefix($organizationCode);
 
@@ -490,7 +492,6 @@ class FileBatchAppService extends AbstractAppService
                 $topicId = (string) $packManifest['leaf_files'][0]->getTopicId();
             }
 
-            $authorization = $this->agentDomainService->getAuthorizationByUserId($userId);
             $stsTemporaryCredential = $this->getStsCredential($organizationCode, $projectWorkDir);
             $actualSandboxId = $sandboxId;
 
@@ -505,13 +506,12 @@ class FileBatchAppService extends AbstractAppService
                 $organizationCode,
                 $topicId,
                 $rootFileId,
-                $authorization,
+                $dataIsolation->getUserAuthorizationToken() ?? '',
                 $targetName
             );
 
             $response = $this->batchDownloadPackDomainService->submitPackTask(
-                $userId,
-                $organizationCode,
+                $dataIsolation,
                 $actualSandboxId,
                 (string) $projectEntity->getId(),
                 $request,
@@ -521,8 +521,8 @@ class FileBatchAppService extends AbstractAppService
             if (! $response->isSuccess()) {
                 if (
                     $this->recoverExistingSandboxPackTask(
+                        $dataIsolation,
                         $batchKey,
-                        $organizationCode,
                         $actualSandboxId,
                         (string) $projectEntity->getId(),
                         count($packManifest['pack_entries'])
@@ -633,8 +633,8 @@ class FileBatchAppService extends AbstractAppService
     }
 
     private function recoverExistingSandboxPackTask(
+        DataIsolation $dataIsolation,
         string $batchKey,
-        string $organizationCode,
         string $sandboxId,
         string $projectId,
         int $totalFiles
@@ -643,21 +643,22 @@ class FileBatchAppService extends AbstractAppService
             'batch_key' => $batchKey,
             'sandbox_id' => $sandboxId,
             'project_id' => $projectId,
-            'organization_code' => $organizationCode,
+            'organization_code' => $dataIsolation->getCurrentOrganizationCode(),
         ]);
 
-        return $this->syncTaskStatusFromSandbox($batchKey, [
+        return $this->syncTaskStatusFromSandbox($dataIsolation, $batchKey, [
             'sandbox_id' => $sandboxId,
             'project_id' => $projectId,
             'task_key' => $batchKey,
-            'organization_code' => $organizationCode,
+            'organization_code' => $dataIsolation->getCurrentOrganizationCode(),
             'progress' => ['total' => $totalFiles],
             'zip_bucket_type' => StorageBucketType::Private->value,
-        ], $organizationCode);
+        ]);
     }
 
-    private function syncTaskStatusFromSandbox(string $batchKey, array $taskStatus, string $organizationCode): bool
+    private function syncTaskStatusFromSandbox(DataIsolation $dataIsolation, string $batchKey, array $taskStatus): bool
     {
+        $organizationCode = $dataIsolation->getCurrentOrganizationCode();
         $sandboxId = (string) ($taskStatus['sandbox_id'] ?? '');
         $projectId = (string) ($taskStatus['project_id'] ?? '');
         $taskKey = (string) ($taskStatus['task_key'] ?? '');
@@ -674,7 +675,7 @@ class FileBatchAppService extends AbstractAppService
         }
 
         try {
-            $response = $this->batchDownloadPackDomainService->queryPackTask($sandboxId, $projectId, $taskKey);
+            $response = $this->batchDownloadPackDomainService->queryPackTask($dataIsolation, $sandboxId, $projectId, $taskKey);
         } catch (Throwable $e) {
             $this->logger->error('Query sandbox pack status failed', [
                 'batch_key' => $batchKey,

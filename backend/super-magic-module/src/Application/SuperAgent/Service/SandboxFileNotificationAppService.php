@@ -203,10 +203,7 @@ class SandboxFileNotificationAppService extends AbstractAppService
             ExceptionBuilder::throw(GenericErrorCode::ParameterValidationFailed, 'User ID and organization code are required in metadata');
         }
 
-        return new DataIsolation([
-            'current_user_id' => $userId,
-            'current_organization_code' => $organizationCode,
-        ]);
+        return DataIsolation::create($organizationCode, $userId);
     }
 
     /**

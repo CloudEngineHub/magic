@@ -113,7 +113,7 @@ class AgentAppServiceVersionCheckTest extends TestCase
             ->willReturn('920');
         $agentDomainService->expects(self::once())
             ->method('rollbackCheckpointStart')
-            ->with('920', 'seq-100')
+            ->with($dataIsolation, '920', 'seq-100')
             ->willReturn($this->makeSuccessAgentResponse([
                 ['file_id' => '1001', 'file_path' => 'docs/a.txt', 'operation' => 'update'],
                 ['file_id' => '1002', 'file_path' => 'nested/b.md', 'operation' => 'delete'],
@@ -203,7 +203,7 @@ class AgentAppServiceVersionCheckTest extends TestCase
             ->willReturn('920');
         $agentDomainService->expects(self::once())
             ->method('rollbackCheckpointUndo')
-            ->with('920')
+            ->with($dataIsolation, '920')
             ->willReturn($this->makeSuccessAgentResponse([
                 'affected_files' => [
                     ['file_id' => '1001', 'file_path' => 'docs/a.txt', 'operation' => 'update'],

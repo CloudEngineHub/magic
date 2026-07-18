@@ -64,9 +64,7 @@ class SandboxApi extends AbstractApi
         // sandbox_id 即 topic_id，直接复用 getTopic（含权限校验）
         $this->topicAppService->getTopic($requestContext, (int) $sandboxId);
 
-        $dataIsolation = new DataIsolation();
-        $dataIsolation->setCurrentUserId($authorization->getId());
-        $dataIsolation->setCurrentOrganizationCode($authorization->getOrganizationCode());
+        $dataIsolation = DataIsolation::create($authorization->getOrganizationCode(), $authorization->getId());
         $dataIsolation->setThirdPartyOrganizationCode($authorization->getOrganizationCode());
 
         $newSandboxId = $this->agentAppService->upgradeSandbox($dataIsolation, (int) $sandboxId);
