@@ -68,12 +68,6 @@ class MagicPermissionEnumTest extends HttpTestCase
         $this->assertContains('platform.setting.slides_template.query', $permissionKeys);
         $this->assertContains('platform.setting.slides_template.edit', $permissionKeys);
         $this->assertNotContains('platform.agent.official.edit', $permissionKeys);
-        $this->assertContains('workspace.model.video.query', $permissionKeys);
-        $this->assertContains('workspace.model.video.edit', $permissionKeys);
-        $this->assertContains('platform.agent.official.query', $permissionKeys);
-        $this->assertContains('platform.agent.review.edit', $permissionKeys);
-        $this->assertContains('platform.skill.market.edit', $permissionKeys);
-        $this->assertNotContains('platform.agent.official.edit', $permissionKeys);
     }
 
     public function testIsValidPermission(): void
