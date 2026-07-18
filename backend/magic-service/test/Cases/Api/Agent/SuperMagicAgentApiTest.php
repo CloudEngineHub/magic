@@ -8,6 +8,7 @@ declare(strict_types=1);
 namespace HyperfTest\Cases\Api\Agent;
 
 use App\Domain\File\Repository\Persistence\Facade\CloudFileRepositoryInterface;
+use App\Domain\Chat\Entity\ValueObject\PlatformRootDepartmentId;
 use App\Domain\Permission\Entity\ValueObject\ResourceVisibility\PrincipalType;
 use App\Domain\Permission\Entity\ValueObject\ResourceVisibility\ResourceType;
 use App\Domain\Permission\Repository\Persistence\Model\MagicOperationPermissionModel;
@@ -18,6 +19,8 @@ use Dtyq\SuperMagic\Application\Agent\Service\SuperMagicAgentAppService;
 use Dtyq\SuperMagic\Domain\Agent\Entity\ValueObject\PublishStatus;
 use Dtyq\SuperMagic\Domain\Agent\Repository\Facade\AgentMarketRepositoryInterface;
 use Dtyq\SuperMagic\Domain\Agent\Repository\Facade\AgentPlaybookRepositoryInterface;
+use Dtyq\SuperMagic\Domain\Agent\Repository\Facade\AgentCategoryRelationRepositoryInterface;
+use Dtyq\SuperMagic\Domain\Agent\Repository\Facade\AgentCategoryRepositoryInterface;
 use Dtyq\SuperMagic\Domain\Agent\Repository\Facade\AgentSkillRepositoryInterface;
 use Dtyq\SuperMagic\Domain\Agent\Repository\Facade\AgentVersionRepositoryInterface;
 use Dtyq\SuperMagic\Domain\Agent\Repository\Facade\SuperMagicAgentRepositoryInterface;
@@ -39,6 +42,7 @@ use Dtyq\SuperMagic\Domain\SuperAgent\Repository\Model\TaskFileModel;
 use Dtyq\SuperMagic\Infrastructure\ExternalAPI\SandboxOS\Workspace\Request\ExportWorkspaceRequest;
 use Dtyq\SuperMagic\Infrastructure\ExternalAPI\SandboxOS\Workspace\Response\ExportWorkspaceResponse;
 use Dtyq\SuperMagic\Infrastructure\ExternalAPI\SandboxOS\Workspace\WorkspaceExporterInterface;
+use Hyperf\DbConnection\Db;
 use Hyperf\Context\ApplicationContext;
 use HyperfTest\Cases\Api\SuperAgent\AbstractApiTest;
 use Mockery;
@@ -54,15 +58,206 @@ class SuperMagicAgentApiTest extends AbstractApiTest
 
     private ?SuperMagicAgentDomainService $originalSuperMagicAgentDomainService = null;
 
+    /**
+     * @var array<int, string>
+     */
+    private array $createdTestUserIds = [];
+
+    /**
+     * @var array<int, string>
+     */
+    private array $createdTestAccountIds = [];
+
+    /**
+     * @var array<int, string>
+     */
+    private array $createdTestDepartmentIds = [];
+
     protected function setUp(): void
     {
         parent::setUp();
+        $this->ensureTestUserFixtures();
     }
 
     protected function tearDown(): void
     {
         $this->restoreSuperMagicAgentDomainService();
+        $this->cleanupTestUserFixtures();
         parent::tearDown();
+    }
+
+    private function ensureTestUserFixtures(): void
+    {
+        $organizationCode = (string) env('TEST_ORGANIZATION_CODE');
+        $this->ensureContactUser((string) env('TEST1_USER_ID'), (string) env('TEST1_USER_ID'), $organizationCode);
+        $this->ensureContactUser('target-user-001', 'target-user-001', $organizationCode);
+        $this->ensureContactDepartment('dept-target-001', $organizationCode);
+        $this->ensureDepartmentMembership('target-user-001', 'dept-target-001', $organizationCode);
+    }
+
+    private function ensureContactUser(string $userId, string $magicId, string $organizationCode): void
+    {
+        $user = Db::table('magic_contact_users')
+            ->where('user_id', $userId)
+            ->where('organization_code', $organizationCode)
+            ->first();
+
+        if ($user === null) {
+            $now = date('Y-m-d H:i:s');
+            Db::table('magic_contact_users')->insert([
+                'magic_id' => $magicId,
+                'organization_code' => $organizationCode,
+                'user_id' => $userId,
+                'user_type' => 1,
+                'description' => 'agent api test fixture',
+                'like_num' => 0,
+                'label' => '',
+                'status' => 1,
+                'nickname' => 'Test User',
+                'i18n_name' => json_encode([
+                    'zh_CN' => '测试用户',
+                    'en_US' => 'Test User',
+                ], JSON_UNESCAPED_UNICODE) ?: '{}',
+                'avatar_url' => '',
+                'extra' => '',
+                'user_manual' => '',
+                'created_at' => $now,
+                'updated_at' => $now,
+            ]);
+            $this->createdTestUserIds[] = $userId;
+        } elseif ((int) ($user['status'] ?? 0) !== 1 || ($user['deleted_at'] ?? null) !== null) {
+            Db::table('magic_contact_users')
+                ->where('id', $user['id'])
+                ->update([
+                    'status' => 1,
+                    'deleted_at' => null,
+                    'updated_at' => date('Y-m-d H:i:s'),
+                ]);
+        }
+
+        $magicId = (string) ($user['magic_id'] ?? $magicId);
+        $accountExists = Db::table('magic_contact_accounts')
+            ->where('magic_id', $magicId)
+            ->exists();
+
+        if ($accountExists) {
+            return;
+        }
+
+        $now = date('Y-m-d H:i:s');
+        Db::table('magic_contact_accounts')->insert([
+            'magic_id' => $magicId,
+            'type' => 1,
+            'ai_code' => '',
+            'status' => 1,
+            'country_code' => '+86',
+            'phone' => '139' . substr(md5($userId), 0, 8),
+            'email' => '',
+            'real_name' => 'Test User',
+            'gender' => 0,
+            'extra' => '',
+            'magic_environment_id' => 0,
+            'password' => '',
+            'created_at' => $now,
+            'updated_at' => $now,
+        ]);
+        $this->createdTestAccountIds[] = $magicId;
+    }
+
+    private function ensureContactDepartment(string $departmentId, string $organizationCode): void
+    {
+        $exists = Db::table('magic_contact_departments')
+            ->where('department_id', $departmentId)
+            ->where('organization_code', $organizationCode)
+            ->exists();
+
+        if ($exists) {
+            return;
+        }
+
+        $now = date('Y-m-d H:i:s');
+        Db::table('magic_contact_departments')->insert([
+            'department_id' => $departmentId,
+            'parent_department_id' => PlatformRootDepartmentId::Magic,
+            'name' => 'Test Department',
+            'i18n_name' => json_encode([
+                'zh_CN' => '测试部门',
+                'en_US' => 'Test Department',
+            ], JSON_UNESCAPED_UNICODE) ?: '{}',
+            'order' => '0',
+            'leader_user_id' => '',
+            'organization_code' => $organizationCode,
+            'status' => '{"is_deleted":false}',
+            'document_id' => (string) IdGenerator::getSnowId(),
+            'level' => 1,
+            'path' => PlatformRootDepartmentId::Magic . '/' . $departmentId,
+            'employee_sum' => 1,
+            'created_at' => $now,
+            'updated_at' => $now,
+        ]);
+
+        $this->createdTestDepartmentIds[] = $departmentId;
+    }
+
+    private function ensureDepartmentMembership(string $userId, string $departmentId, string $organizationCode): void
+    {
+        $exists = Db::table('magic_contact_department_users')
+            ->where('user_id', $userId)
+            ->where('department_id', $departmentId)
+            ->where('organization_code', $organizationCode)
+            ->exists();
+
+        if ($exists) {
+            return;
+        }
+
+        $now = date('Y-m-d H:i:s');
+        Db::table('magic_contact_department_users')->insert([
+            'magic_id' => $userId,
+            'user_id' => $userId,
+            'department_id' => $departmentId,
+            'is_leader' => 0,
+            'job_title' => 'Test Member',
+            'leader_user_id' => '',
+            'organization_code' => $organizationCode,
+            'city' => '北京',
+            'country' => 'CN',
+            'join_time' => (string) time(),
+            'employee_no' => 'EMP' . substr($userId, -4),
+            'employee_type' => 1,
+            'orders' => '0',
+            'custom_attrs' => '{}',
+            'is_frozen' => 0,
+            'created_at' => $now,
+            'updated_at' => $now,
+        ]);
+    }
+
+    private function cleanupTestUserFixtures(): void
+    {
+        if ($this->createdTestDepartmentIds !== []) {
+            Db::table('magic_contact_department_users')
+                ->whereIn('department_id', $this->createdTestDepartmentIds)
+                ->delete();
+            Db::table('magic_contact_departments')
+                ->whereIn('department_id', $this->createdTestDepartmentIds)
+                ->delete();
+        }
+
+        if ($this->createdTestUserIds !== []) {
+            Db::table('magic_contact_department_users')
+                ->whereIn('user_id', $this->createdTestUserIds)
+                ->delete();
+            Db::table('magic_contact_users')
+                ->whereIn('user_id', $this->createdTestUserIds)
+                ->delete();
+        }
+
+        if ($this->createdTestAccountIds !== []) {
+            Db::table('magic_contact_accounts')
+                ->whereIn('magic_id', $this->createdTestAccountIds)
+                ->delete();
+        }
     }
 
     /**
@@ -3170,7 +3365,10 @@ class SuperMagicAgentApiTest extends AbstractApiTest
             $cloudFileRepository,
             $workspaceExporter,
             $container->get(AgentMarketRepositoryInterface::class),
-            $container->get(SuperMagicAgentCategoryRelationDomainService::class),
+            new SuperMagicAgentCategoryRelationDomainService(
+                $container->get(AgentCategoryRelationRepositoryInterface::class),
+                $container->get(AgentCategoryRepositoryInterface::class),
+            ),
         );
 
         $container->set(SuperMagicAgentDomainService::class, $domainService);

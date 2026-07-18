@@ -266,7 +266,7 @@ class SuperMagicAgentApiV2Test extends AbstractApiTest
         $agentCode = $this->createTestAgent();
 
         $response = $this->post(
-            self::BASE_URI . '/list/queries',
+            self::BASE_URI . '/queries',
             [
                 'page' => 1,
                 'page_size' => 20,
@@ -285,7 +285,7 @@ class SuperMagicAgentApiV2Test extends AbstractApiTest
         $this->assertArrayHasKey('name', $itemsByCode[$agentCode]['organization_info']);
 
         $createdResponse = $this->post(
-            self::BASE_URI . '/list/queries',
+            self::BASE_URI . '/queries',
             [
                 'page' => 1,
                 'page_size' => 20,
@@ -322,7 +322,7 @@ class SuperMagicAgentApiV2Test extends AbstractApiTest
         $this->assertEquals(1000, $hireResponse['code'], $hireResponse['message'] ?? '');
 
         $response = $this->post(
-            self::BASE_URI . '/list/queries',
+            self::BASE_URI . '/queries',
             [
                 'page' => 1,
                 'page_size' => 20,
@@ -343,7 +343,7 @@ class SuperMagicAgentApiV2Test extends AbstractApiTest
         $this->assertSame('7.0.0', $itemsByCode[$marketAgentCode]['latest_version_code']);
 
         $marketInstalledResponse = $this->post(
-            self::BASE_URI . '/list/queries',
+            self::BASE_URI . '/queries',
             [
                 'page' => 1,
                 'page_size' => 20,
