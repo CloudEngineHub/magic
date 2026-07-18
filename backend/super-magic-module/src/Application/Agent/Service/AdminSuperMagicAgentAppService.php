@@ -11,6 +11,7 @@ use App\Infrastructure\Core\Exception\ExceptionBuilder;
 use App\Infrastructure\Core\ValueObject\Page;
 use App\Infrastructure\ExternalAPI\Sms\Enum\LanguageEnum;
 use Dtyq\SuperMagic\Application\Agent\Assembler\AdminSuperMagicAgentAssembler;
+use Dtyq\SuperMagic\Domain\Agent\Entity\AgentVersionEntity;
 use Dtyq\SuperMagic\Domain\Agent\Entity\ValueObject\PublishTargetType;
 use Dtyq\SuperMagic\Domain\Agent\Entity\ValueObject\Query\AgentVersionAdminQuery;
 use Dtyq\SuperMagic\Domain\Agent\Entity\ValueObject\ReviewStatus;
@@ -69,11 +70,16 @@ class AdminSuperMagicAgentAppService extends AbstractSuperMagicAppService
             $query,
             $page
         );
+        /** @var AgentVersionEntity[] $versions */
+        $versions = $result['list'];
+        [$publishTargetUserMap, $memberDepartmentMap] = $this->batchLoadAgentVersionRelatedEntities(null, $versions);
 
         return $this->adminSuperMagicAgentAssembler->createQueryVersionsResponseDTO(
-            $result['list'],
+            $versions,
             $page,
-            $result['total']
+            $result['total'],
+            $publishTargetUserMap,
+            $memberDepartmentMap
         );
     }
 
@@ -135,11 +141,16 @@ class AdminSuperMagicAgentAppService extends AbstractSuperMagicAppService
             $query,
             $page
         );
+        /** @var AgentVersionEntity[] $versions */
+        $versions = $result['list'];
+        [$publishTargetUserMap, $memberDepartmentMap] = $this->batchLoadAgentVersionRelatedEntities(null, $versions);
 
         return $this->adminSuperMagicAgentAssembler->createQueryVersionsResponseDTO(
-            $result['list'],
+            $versions,
             $page,
-            $result['total']
+            $result['total'],
+            $publishTargetUserMap,
+            $memberDepartmentMap
         );
     }
 
