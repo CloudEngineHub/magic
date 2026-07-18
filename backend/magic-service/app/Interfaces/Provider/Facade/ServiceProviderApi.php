@@ -343,7 +343,7 @@ class ServiceProviderApi extends AbstractApi
         CheckProviderModelPermission::SOURCE_REQUEST_CATEGORY,
         MagicOperationEnum::QUERY
     )]
-    public function queriesModels(RequestInterface $request): array
+    public function queriesModels(RequestInterface $request)
     {
         $authenticatable = $this->getAuthorization();
         $providerModelQuery = new ProviderModelQuery($request->all());
