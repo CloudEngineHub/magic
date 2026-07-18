@@ -7,10 +7,10 @@ declare(strict_types=1);
 
 namespace Dtyq\SuperMagic\Infrastructure\ExternalAPI\SandboxOS\Workspace;
 
+use App\Domain\Contact\Entity\ValueObject\DataIsolation;
 use Dtyq\SuperMagic\Infrastructure\ExternalAPI\SandboxOS\AbstractSandboxOS;
 use Dtyq\SuperMagic\Infrastructure\ExternalAPI\SandboxOS\Constants\SandboxEndpoints;
 use Dtyq\SuperMagic\Infrastructure\ExternalAPI\SandboxOS\Gateway\SandboxGatewayInterface;
-use App\Domain\Contact\Entity\ValueObject\DataIsolation;
 use Dtyq\SuperMagic\Infrastructure\ExternalAPI\SandboxOS\Workspace\Request\ImportWorkspaceRequest;
 use Dtyq\SuperMagic\Infrastructure\ExternalAPI\SandboxOS\Workspace\Response\ImportWorkspaceResponse;
 use Exception;

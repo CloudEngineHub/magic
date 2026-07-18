@@ -9,6 +9,7 @@ namespace Dtyq\SuperMagic\Application\SuperAgent\Service;
 
 use App\Application\File\Service\FileAppService;
 use App\Application\File\Service\FileCleanupAppService;
+use App\Domain\Contact\Entity\ValueObject\DataIsolation;
 use App\Domain\File\Repository\Persistence\Facade\CloudFileRepositoryInterface;
 use App\Infrastructure\Core\Exception\BusinessException;
 use App\Infrastructure\Core\Exception\ExceptionBuilder;
@@ -83,7 +84,7 @@ class FileConverterAppService extends AbstractAppService
         // forwards the same User-Authorization header. The token is sourced
         // from the magic_tokens stable user-token table, NOT from the inbound
         // HTTP header - same pattern as AsrFileAppService.
-        $dataIsolation = \App\Domain\Contact\Entity\ValueObject\DataIsolation::create(
+        $dataIsolation = DataIsolation::create(
             $userAuthorization->getOrganizationCode(),
             $userId
         );
@@ -152,7 +153,7 @@ class FileConverterAppService extends AbstractAppService
         // Build the per-call DataIsolation once at the entry point so the
         // downstream fileConverterService->queryConvertResult forwards the
         // User-Authorization header to the in-pod agent's AuthMiddleware.
-        $dataIsolation = \App\Domain\Contact\Entity\ValueObject\DataIsolation::create(
+        $dataIsolation = DataIsolation::create(
             $userAuthorization->getOrganizationCode(),
             $userId
         );
@@ -219,7 +220,7 @@ class FileConverterAppService extends AbstractAppService
      * @param ConvertFilesRequestDTO $requestDTO the conversion request DTO
      * @param TaskFileEntity[] $validFiles the list of valid files
      * @param ProjectEntity $projectEntity the project entity
-     * @param \App\Domain\Contact\Entity\ValueObject\DataIsolation $dataIsolation per-call user identity (token must be stamped)
+     * @param DataIsolation $dataIsolation per-call user identity (token must be stamped)
      */
     protected function processFileConversion(
         string $taskKey,
@@ -227,7 +228,7 @@ class FileConverterAppService extends AbstractAppService
         ConvertFilesRequestDTO $requestDTO,
         array $validFiles,
         ProjectEntity $projectEntity,
-        \App\Domain\Contact\Entity\ValueObject\DataIsolation $dataIsolation
+        DataIsolation $dataIsolation
     ): void {
         $totalFiles = count($validFiles);
         $userId = $userAuthorization->getId();

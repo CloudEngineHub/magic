@@ -7,6 +7,7 @@ declare(strict_types=1);
 
 namespace Dtyq\SuperMagic\Domain\Agent\Service;
 
+use App\Domain\Contact\Entity\ValueObject\DataIsolation;
 use App\Domain\File\Repository\Persistence\Facade\CloudFileRepositoryInterface;
 use App\Infrastructure\Core\Exception\ExceptionBuilder;
 use App\Infrastructure\Core\ValueObject\Page;
@@ -412,7 +413,7 @@ readonly class SuperMagicAgentDomainService
         // (BaseDataIsolation derivative), NOT the Contact-side DataIsolation
         // used by the sandbox gateway. Adapt it to Contact\DataIsolation
         // here so the export path can forward the per-user token uniformly.
-        $contactDataIsolation = \App\Domain\Contact\Entity\ValueObject\DataIsolation::create(
+        $contactDataIsolation = DataIsolation::create(
             $dataIsolation->getCurrentOrganizationCode(),
             $dataIsolation->getCurrentUserId()
         );

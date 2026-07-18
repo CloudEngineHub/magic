@@ -7,6 +7,7 @@ declare(strict_types=1);
 
 namespace Dtyq\SuperMagic\Domain\SuperAgent\Service;
 
+use App\Domain\Contact\Entity\ValueObject\DataIsolation;
 use DateTimeImmutable;
 use Dtyq\SuperMagic\Domain\SuperAgent\Entity\ValueObject\WarmPoolSandboxStatus;
 use Dtyq\SuperMagic\Domain\SuperAgent\Entity\WarmPoolSandboxEntity;
@@ -14,7 +15,6 @@ use Dtyq\SuperMagic\Domain\SuperAgent\Repository\Facade\WarmPoolSandboxRepositor
 use Dtyq\SuperMagic\Infrastructure\ExternalAPI\SandboxOS\Gateway\SandboxGatewayInterface;
 use Hyperf\Logger\LoggerFactory;
 use Psr\Log\LoggerInterface;
-use App\Domain\Contact\Entity\ValueObject\DataIsolation;
 use Throwable;
 
 /**
@@ -266,9 +266,7 @@ class WarmPoolSandboxDomainService
      * delete via gateway + DB row deleted), so a failed mount never
      * leaves a poisoned row in the pool.
      *
-     * @param DataIsolation $dataIsolation per-call user identity; caller
-     *        is expected to have stamped the User-Authorization token via
-     *        setUserAuthorizationToken before invoking.
+     * @param DataIsolation $dataIsolation per-call user identity (token auto-fetched by create())
      * @param string $projectId 实际项目 ID
      * @param string $projectSpaceRootFileId 项目空间 root file id
      * @param string $userSpaceRootFileId 用户空间 root file id（可空）

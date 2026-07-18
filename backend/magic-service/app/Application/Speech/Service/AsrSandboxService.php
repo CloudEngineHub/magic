@@ -60,12 +60,8 @@ class AsrSandboxService extends AbstractAppService
     /**
      * 启动录音任务.
      *
-     * @param DataIsolation $dataIsolation per-call user identity. Caller
-     *        must have stamped the User-Authorization token via
-     *        setUserAuthorizationToken (look it up via
-     *        AgentDomainService::getAuthorizationByUserId) before
-     *        invoking; every downstream SandboxGatewayInterface call in
-     *        this method forwards that token to the in-pod agent.
+     * @param DataIsolation $dataIsolation per-call user identity (token auto-fetched by create());
+     *        every downstream SandboxGatewayInterface call forwards that token to the in-pod agent.
      * @param AsrTaskStatusDTO $taskStatus 任务状态
      */
     public function startRecordingTask(

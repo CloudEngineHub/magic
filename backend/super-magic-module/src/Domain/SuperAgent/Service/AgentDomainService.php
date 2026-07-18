@@ -104,7 +104,7 @@ class AgentDomainService
             // 默认使用话题id
             $sandboxId = (string) $topicEntity->getId();
         }
-        $authToken = $this->getAuthorizationByUserId($dataIsolation->getCurrentUserId());
+        $authToken = $dataIsolation->getUserAuthorizationToken() ?? '';
         // todo 初始化数据, 后续有些参数需要精简去掉
         $agentInitContext = AgentInitContext::createDefault();
         $agentInitContext->setMessageId((string) IdGenerator::getSnowId());
@@ -430,17 +430,6 @@ class AgentDomainService
      */
     public function createSandbox(DataIsolation $dataIsolation, string $projectId, string $sandboxID, string $workDir, string $projectSpaceRootFileId = '', string $userSpaceRootFileId = '', ?int $topicId = null, ?string $agentCode = null): string
     {
-        // Per-call user identity (userId / orgCode / authorization) is
-        // a per-request value that the SandboxGatewayInterface forwards
-        // to the gateway. The token here is fetched from the magic_tokens
-        // stable user-token table (NOT from inbound HTTP header) so the
-        // same call works whether it's an HTTP-driven controller or a
-        // background warm-pool worker that explicitly fetched the
-        // token via the same DB lookup.
-        $dataIsolation->setUserAuthorizationToken(
-            $this->getAuthorizationByUserId($dataIsolation->getCurrentUserId())
-        );
-
         $this->logger->debug('[Sandbox][App] Creating sandbox', [
             'project_id' => $projectId,
             'sandbox_id' => $sandboxID,
@@ -897,7 +886,7 @@ class AgentDomainService
     /**
      * 获取工作区状态.
      *
-     * @param DataIsolation $dataIsolation per-call user identity (caller stamps token via setUserAuthorizationToken)
+     * @param DataIsolation $dataIsolation per-call user identity (token auto-fetched by create())
      * @param string $sandboxId 沙箱ID
      * @return AgentResponse 工作区状态响应
      */
@@ -1245,10 +1234,7 @@ class AgentDomainService
      * Ensure sandbox container is running (without agent initialization).
      * Used for export/utility scenarios that only need the sandbox container running.
      *
-     * @param DataIsolation $dataIsolation per-call user identity; caller is
-     *        expected to have stamped the User-Authorization token via
-     *        setUserAuthorizationToken (look it up via
-     *        getAuthorizationByUserId before invoking).
+     * @param DataIsolation $dataIsolation per-call user identity (token auto-fetched by create())
      * @param string $sandboxId Sandbox ID
      * @param string $projectId Project ID
      * @param string $workDir Working directory
@@ -1497,7 +1483,7 @@ class AgentDomainService
             return null;
         }
 
-        $authorization = $this->getAuthorizationByUserId($dataIsolation->getCurrentUserId());
+        $authorization = $dataIsolation->getUserAuthorizationToken() ?? '';
         if ($authorization === '') {
             $this->logger->warning('[Sandbox][WarmPath] Skipping warm pool: no authorization for user', [
                 'user_id' => $dataIsolation->getCurrentUserId(),
@@ -1505,7 +1491,6 @@ class AgentDomainService
             ]);
             return null;
         }
-        $dataIsolation->setUserAuthorizationToken($authorization);
 
         try {
             $sandboxId = $this->getWarmPoolSandboxDomainService()->tryAcquireAndMount(
@@ -1616,8 +1601,8 @@ class AgentDomainService
             'language' => $dataIsolation->getLanguage(),
         ]);
 
-        // 获取 authorization
-        $authorization = $this->getAuthorizationByUserId($dataIsolation->getCurrentUserId());
+        // 从 DataIsolation 获取 authorization（由 create() 自动填充）
+        $authorization = $dataIsolation->getUserAuthorizationToken() ?? '';
 
         // 构建并返回 MessageMetadata 对象
         return new MessageMetadata(

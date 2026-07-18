@@ -846,7 +846,7 @@ class WorkspaceDomainService
         return $result;
     }
 
-    public function diffFileListAndVersionFile(\App\Domain\Contact\Entity\ValueObject\DataIsolation $dataIsolation, array $result, int $projectId, string $taskId, string $sandboxId, string $organizationCode = ''): bool
+    public function diffFileListAndVersionFile(DataIsolation $dataIsolation, array $result, int $projectId, string $taskId, string $sandboxId, string $organizationCode = ''): bool
     {
         $dir = '.workspace';
         $workspaceVersion = $this->getWorkspaceVersionByProjectId($projectId, $dir);

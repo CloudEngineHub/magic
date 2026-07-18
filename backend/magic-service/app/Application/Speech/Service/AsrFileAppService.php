@@ -41,7 +41,6 @@ use Dtyq\SuperMagic\Domain\SuperAgent\Entity\ProjectEntity;
 use Dtyq\SuperMagic\Domain\SuperAgent\Entity\TaskFileEntity;
 use Dtyq\SuperMagic\Domain\SuperAgent\Entity\ValueObject\TaskStatus as SuperAgentTaskStatus;
 use Dtyq\SuperMagic\Domain\SuperAgent\Event\ProjectHiddenStatusUpdatedEvent;
-use Dtyq\SuperMagic\Domain\SuperAgent\Service\AgentDomainService;
 use Dtyq\SuperMagic\Domain\SuperAgent\Service\AudioProjectDomainService;
 use Dtyq\SuperMagic\Domain\SuperAgent\Service\MessageQueueDomainService;
 use Dtyq\SuperMagic\Domain\SuperAgent\Service\ProjectDomainService;
@@ -101,40 +100,10 @@ class AsrFileAppService extends AbstractAppService
         private readonly AsrSandboxService $asrSandboxService,
         private readonly AsrPresetFileService $presetFileService,
         private readonly LockerInterface $locker,
-        // Used by resolveAuthorization() to look up the user's stable
-        // sandbox-token from the magic_tokens table. The token is then
-        // forwarded to the in-pod super-magic agent (and agfs-server)
-        // as the User-Authorization HTTP header on every gateway call.
-        private readonly AgentDomainService $agentDomainService,
         private readonly CloudFileRepositoryInterface $cloudFileRepository,
         LoggerFactory $loggerFactory
     ) {
         $this->logger = $loggerFactory->get('AsrFileAppService');
-    }
-
-    /**
-     * Resolve the stable sandbox-token (User-Authorization) for a given user.
-     *
-     * Most of the public entry points (controllers) only carry a
-     * MagicUserAuthorization (session token). Once the user is
-     * authenticated we look up — or lazily create — that user's
-     * long-lived MagicToken (MagicTokenType::User) and forward it as
-     * User-Authorization on every SandboxGatewayInterface call inside
-     * the request.
-     *
-     * Returning '' would silently disable auth on the gateway side,
-     * so we throw if the token is missing: every AsrFileAppService
-     * call that needs to talk to the sandbox MUST have a token.
-     */
-    private function resolveAuthorization(string $userId): string
-    {
-        $authorization = $this->agentDomainService->getAuthorizationByUserId($userId);
-        if ($authorization === '') {
-            throw new RuntimeException(
-                sprintf('Failed to resolve sandbox-token for user_id=%s', $userId)
-            );
-        }
-        return $authorization;
     }
 
     /**
@@ -554,16 +523,11 @@ class AsrFileAppService extends AbstractAppService
         // 保存 model_id、ASR 内容、笔记内容、标记内容和语种
         $this->updateTaskStatusFromReport($taskStatus, $modelId, $asrStreamContent, $noteContent, $noteFileType, $markerContent, $language);
 
-        // Per-call authorization token. Sourced from the magic_tokens
-        // stable user-token table (NOT from the inbound HTTP header),
-        // so the same call works for both HTTP-driven and async /
-        // cron paths. Required (no nullable): every downstream
-        // SandboxGatewayInterface call in the matched branch must
-        // carry User-Authorization. Pack it into a DataIsolation so
-        // every handle* branch / AsrSandboxService call forwards it
-        // uniformly.
+        // Per-call DataIsolation. DataIsolation::create() auto-fetches the
+        // user-authorization token from the magic_tokens stable user-token
+        // table, so every downstream SandboxGatewayInterface call in the
+        // matched branch carries User-Authorization.
         $dataIsolation = DataIsolation::create($organizationCode, $userId);
-        $dataIsolation->setUserAuthorizationToken($this->resolveAuthorization($userId));
 
         // 根据状态处理
         return match ($status) {
@@ -641,13 +605,11 @@ class AsrFileAppService extends AbstractAppService
             }
             $this->setFinishRecoverableContext($taskStatus, $fileTitle);
 
-            // Resolve the user-token for downstream sandbox calls. Pack it once
-            // into a DataIsolation so every downstream SandboxGatewayInterface
-            // call (merge / ensureSandbox / finishTask / queryTask / ...) in
+            // DataIsolation::create() auto-fetches the user-authorization
+            // token, so every downstream SandboxGatewayInterface call
+            // (merge / ensureSandbox / finishTask / queryTask / ...) in
             // AsrSandboxService forwards the same User-Authorization header.
-            $authorization = $this->resolveAuthorization($userId);
             $dataIsolation = DataIsolation::create($organizationCode, $userId);
-            $dataIsolation->setUserAuthorizationToken($authorization);
 
             // ===== Phase 1: 状态管理 - 开始合并 =====
             $this->asrTaskDomainService->startMergingPhase($taskStatus);
@@ -1247,17 +1209,11 @@ class AsrFileAppService extends AbstractAppService
         string $organizationCode,
         ?string $generatedTitle = null
     ): void {
-        // Resolve the per-user authorization token once at the entry
-        // point and pack it into a DataIsolation so every downstream
+        // DataIsolation::create() auto-fetches the user-authorization
+        // token from the stable user-token table, so every downstream
         // AsrSandboxService call (merge / ensureSandbox / finishTask
         // / queryTask) forwards the same User-Authorization header.
-        // We intentionally do NOT accept this as a separate parameter:
-        // every call to handleFinishRecording originates from a
-        // request that already has a verified MagicUserAuthorization
-        // (the caller knows $userId by then), so we read it from the
-        // same stable user-token table downstream code uses.
         $dataIsolation = DataIsolation::create($organizationCode, $userId);
-        $dataIsolation->setUserAuthorizationToken($this->resolveAuthorization($userId));
 
         $lockName = sprintf(AsrRedisKeys::FINISH_RECORDING_LOCK, $taskKey);
         $lockOwner = sprintf('%s:%s:%s', $userId, $taskKey, microtime(true));
@@ -1382,15 +1338,10 @@ class AsrFileAppService extends AbstractAppService
         }
 
         try {
-// Resolve the per-user authorization token once we have
-            // the lock. Same pattern as handleFinishRecording - every
-            // caller already knows $userId (cron / API / MQ
-            // consumer), so we look up the stable user-token here
-            // rather than threading it through every layer. Pack it
-            // into a DataIsolation so downstream AsrSandboxService
-            // forwards it as User-Authorization header uniformly.
+            // DataIsolation::create() auto-fetches the user-authorization
+            // token from the stable user-token table, so downstream
+            // AsrSandboxService forwards it as User-Authorization header.
             $dataIsolation = DataIsolation::create($organizationCode, $userId);
-            $dataIsolation->setUserAuthorizationToken($this->resolveAuthorization($userId));
 
             $taskStatus = $this->loadRecoverFinishRecordingTaskStatus($taskKey, $userId, $organizationCode);
 
@@ -2441,8 +2392,8 @@ class AsrFileAppService extends AbstractAppService
 
         // Build DataIsolation once for downstream sandbox calls. Note
         // $taskStatus->userId is the record-ownership identity here.
+        // DataIsolation::create() auto-fetches the user-authorization token.
         $dataIsolation = DataIsolation::create($organizationCode, $taskStatus->userId);
-        $dataIsolation->setUserAuthorizationToken($this->resolveAuthorization($taskStatus->userId));
 
         // Merge audio files and get merge result (includes duration and file_size)
         $mergeResult = $this->asrSandboxService->mergeAudioFiles(

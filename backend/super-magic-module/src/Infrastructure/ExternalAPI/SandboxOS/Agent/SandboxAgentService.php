@@ -52,7 +52,8 @@ class SandboxAgentService extends AbstractSandboxOS implements SandboxAgentInter
 
         try {
             // 通过Gateway转发到Agent API
-            $result = $this->gateway->proxySandboxRequest($dataIsolation,
+            $result = $this->gateway->proxySandboxRequest(
+                $dataIsolation,
                 $sandboxId,
                 'POST',
                 SandboxEndpoints::AGENT_MESSAGES_CHAT,
@@ -105,7 +106,8 @@ class SandboxAgentService extends AbstractSandboxOS implements SandboxAgentInter
 
         try {
             // 通过Gateway转发到Agent API
-            $result = $this->gateway->proxySandboxRequest($dataIsolation,
+            $result = $this->gateway->proxySandboxRequest(
+                $dataIsolation,
                 $sandboxId,
                 'POST',
                 SandboxEndpoints::AGENT_MESSAGES_CHAT,
@@ -150,7 +152,8 @@ class SandboxAgentService extends AbstractSandboxOS implements SandboxAgentInter
 
         try {
             // 通过Gateway转发到Agent API
-            $result = $this->gateway->proxySandboxRequest($dataIsolation,
+            $result = $this->gateway->proxySandboxRequest(
+                $dataIsolation,
                 $sandboxId,
                 'POST',
                 SandboxEndpoints::AGENT_MESSAGES_CHAT,
@@ -199,7 +202,8 @@ class SandboxAgentService extends AbstractSandboxOS implements SandboxAgentInter
 
         try {
             // 通过Gateway转发到Agent API
-            $result = $this->gateway->proxySandboxRequest($dataIsolation,
+            $result = $this->gateway->proxySandboxRequest(
+                $dataIsolation,
                 $sandboxId,
                 'GET',
                 SandboxEndpoints::WORKSPACE_STATUS
@@ -240,7 +244,8 @@ class SandboxAgentService extends AbstractSandboxOS implements SandboxAgentInter
 
         try {
             // 通过Gateway转发到沙箱的文件编辑API
-            $result = $this->gateway->proxySandboxRequest($dataIsolation,
+            $result = $this->gateway->proxySandboxRequest(
+                $dataIsolation,
                 $sandboxId,
                 'POST',
                 'api/v1/files/save',
@@ -286,7 +291,8 @@ class SandboxAgentService extends AbstractSandboxOS implements SandboxAgentInter
 
         try {
             // 通过Gateway转发到沙箱的文件编辑API
-            $result = $this->gateway->proxySandboxRequest($dataIsolation,
+            $result = $this->gateway->proxySandboxRequest(
+                $dataIsolation,
                 $sandboxId,
                 'POST',
                 '/api/task/script-task',
@@ -336,7 +342,8 @@ class SandboxAgentService extends AbstractSandboxOS implements SandboxAgentInter
 
         try {
             // 通过Gateway转发到沙箱的checkpoint回滚API
-            $result = $this->gateway->proxySandboxRequest($dataIsolation,
+            $result = $this->gateway->proxySandboxRequest(
+                $dataIsolation,
                 $sandboxId,
                 'POST',
                 'api/checkpoints/rollback',
@@ -388,7 +395,8 @@ class SandboxAgentService extends AbstractSandboxOS implements SandboxAgentInter
 
         try {
             // 通过Gateway转发到沙箱的checkpoint回滚开始API
-            $result = $this->gateway->proxySandboxRequest($dataIsolation,
+            $result = $this->gateway->proxySandboxRequest(
+                $dataIsolation,
                 $sandboxId,
                 'POST',
                 'api/checkpoints/rollback/start',
@@ -439,7 +447,8 @@ class SandboxAgentService extends AbstractSandboxOS implements SandboxAgentInter
 
         try {
             // 通过Gateway转发到沙箱的checkpoint回滚提交API
-            $result = $this->gateway->proxySandboxRequest($dataIsolation,
+            $result = $this->gateway->proxySandboxRequest(
+                $dataIsolation,
                 $sandboxId,
                 'POST',
                 'api/checkpoints/rollback/commit',
@@ -487,7 +496,8 @@ class SandboxAgentService extends AbstractSandboxOS implements SandboxAgentInter
 
         try {
             // 通过Gateway转发到沙箱的checkpoint回滚撤销API
-            $result = $this->gateway->proxySandboxRequest($dataIsolation,
+            $result = $this->gateway->proxySandboxRequest(
+                $dataIsolation,
                 $sandboxId,
                 'POST',
                 'api/checkpoints/rollback/undo',
@@ -536,7 +546,8 @@ class SandboxAgentService extends AbstractSandboxOS implements SandboxAgentInter
 
         try {
             // 通过Gateway转发到沙箱的checkpoint回滚检查API
-            $result = $this->gateway->proxySandboxRequest($dataIsolation,
+            $result = $this->gateway->proxySandboxRequest(
+                $dataIsolation,
                 $sandboxId,
                 'POST',
                 'api/checkpoints/rollback/check',
