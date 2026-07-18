@@ -9,6 +9,7 @@ namespace Dtyq\SuperMagic\Domain\Agent\Repository\Persistence;
 
 use App\Infrastructure\Core\ValueObject\Page;
 use Dtyq\SuperMagic\Domain\Agent\Entity\SuperMagicAgentEntity;
+use Dtyq\SuperMagic\Domain\Agent\Entity\ValueObject\Query\AgentListSort;
 use Dtyq\SuperMagic\Domain\Agent\Entity\ValueObject\Query\SuperMagicAgentQuery;
 use Dtyq\SuperMagic\Domain\Agent\Entity\ValueObject\SuperMagicAgentDataIsolation;
 use Dtyq\SuperMagic\Domain\Agent\Factory\SuperMagicAgentFactory;
@@ -90,9 +91,7 @@ class SuperMagicAgentRepository extends SuperMagicAbstractRepository implements 
             $this->applyKeywordSearch($builder, $keyword, $languageCode);
         }
 
-        $builder->orderByRaw('CASE WHEN pinned_at IS NULL THEN 1 ELSE 0 END')
-            ->orderBy('pinned_at', 'DESC')
-            ->orderBy('updated_at', 'DESC');
+        $this->applyOrder($builder, $query);
 
         $result = $this->getByPage($builder, $page, $query);
 
@@ -208,5 +207,22 @@ class SuperMagicAgentRepository extends SuperMagicAbstractRepository implements 
                 $i === 0 ? $q->whereRaw($sql, $bindings) : $q->orWhereRaw($sql, $bindings);
             }
         });
+    }
+
+    private function applyOrder(Builder $builder, SuperMagicAgentQuery $query): void
+    {
+        if ($query->getSort() === AgentListSort::CREATED_AT) {
+            $builder->orderBy('created_at', 'DESC')->orderBy('code');
+            return;
+        }
+
+        if ($query->getSort() === AgentListSort::UPDATED_AT) {
+            $builder->orderBy('updated_at', 'DESC')->orderBy('code');
+            return;
+        }
+
+        $builder->orderByRaw('CASE WHEN pinned_at IS NULL THEN 1 ELSE 0 END')
+            ->orderBy('pinned_at', 'DESC')
+            ->orderBy('updated_at', 'DESC');
     }
 }

@@ -28,15 +28,14 @@ use Dtyq\SuperMagic\Domain\Agent\Repository\Persistence\Model\AgentSkillModel;
 use Dtyq\SuperMagic\Domain\Agent\Repository\Persistence\Model\AgentVersionModel;
 use Dtyq\SuperMagic\Domain\Agent\Repository\Persistence\Model\SuperMagicAgentModel;
 use Dtyq\SuperMagic\Domain\Agent\Repository\Persistence\Model\UserAgentModel;
+use Dtyq\SuperMagic\Domain\Agent\Service\SuperMagicAgentCategoryRelationDomainService;
 use Dtyq\SuperMagic\Domain\Agent\Service\SuperMagicAgentDomainService;
 use Dtyq\SuperMagic\Domain\Agent\Service\UserAgentDomainService;
 use Dtyq\SuperMagic\Domain\Skill\Repository\Persistence\Model\SkillModel;
 use Dtyq\SuperMagic\Domain\Skill\Repository\Persistence\Model\SkillVersionModel;
-use Dtyq\SuperMagic\Domain\SuperAgent\Repository\Facade\TaskFileRepositoryInterface;
 use Dtyq\SuperMagic\Domain\SuperAgent\Repository\Model\ProjectMemberModel;
 use Dtyq\SuperMagic\Domain\SuperAgent\Repository\Model\ProjectModel;
 use Dtyq\SuperMagic\Domain\SuperAgent\Repository\Model\TaskFileModel;
-use Dtyq\SuperMagic\Infrastructure\ExternalAPI\SandboxOS\Gateway\SandboxGatewayInterface;
 use Dtyq\SuperMagic\Infrastructure\ExternalAPI\SandboxOS\Workspace\Request\ExportWorkspaceRequest;
 use Dtyq\SuperMagic\Infrastructure\ExternalAPI\SandboxOS\Workspace\Response\ExportWorkspaceResponse;
 use Dtyq\SuperMagic\Infrastructure\ExternalAPI\SandboxOS\Workspace\WorkspaceExporterInterface;
@@ -2099,6 +2098,25 @@ class SuperMagicAgentApiTest extends AbstractApiTest
         $this->assertEquals('UNDER_REVIEW', $memberResponse['data']['review_status']);
         $this->assertEquals('MEMBER', $memberResponse['data']['publish_target_type']);
 
+        $memberListResponse = $this->post(
+            '/api/v1/organization/admin/super-magic/agents/versions/queries',
+            [
+                'page' => 1,
+                'page_size' => 20,
+                'review_status' => 'UNDER_REVIEW',
+            ],
+            $headers
+        );
+        $this->assertEquals(1000, $memberListResponse['code'], $memberListResponse['message'] ?? '');
+        $memberListItem = array_values(array_filter(
+            $memberListResponse['data']['list'],
+            static fn (array $item): bool => $item['id'] === (string) $memberResponse['data']['version_id']
+        ))[0] ?? null;
+        $this->assertNotNull($memberListItem);
+        $this->assertSame('MEMBER', $memberListItem['publish_target_type']);
+        $this->assertSame($targetUserId, $memberListItem['publish_target_value']['users'][0]['id']);
+        $this->assertSame($targetDepartmentId, $memberListItem['publish_target_value']['departments'][0]['id']);
+
         $memberApproveResponse = $this->put(
             '/api/v1/organization/admin/super-magic/agents/versions/' . $memberResponse['data']['version_id'] . '/review',
             [
@@ -3119,12 +3137,6 @@ class SuperMagicAgentApiTest extends AbstractApiTest
         $container = ApplicationContext::getContainer();
         $this->originalSuperMagicAgentDomainService ??= $container->get(SuperMagicAgentDomainService::class);
 
-        $sandboxGateway = Mockery::mock(SandboxGatewayInterface::class);
-        $sandboxGateway->shouldReceive('setUserContext')->andReturnSelf();
-        $sandboxGateway->shouldReceive('ensureSandboxAvailable')->andReturnUsing(
-            static fn (string $sandboxId): string => $sandboxId
-        );
-
         $cloudFileRepository = Mockery::mock(CloudFileRepositoryInterface::class);
         $cloudFileRepository->shouldReceive('getStsTemporaryCredential')->andReturn([
             'access_key_id' => 'test-access-key',
@@ -3156,10 +3168,9 @@ class SuperMagicAgentApiTest extends AbstractApiTest
             $container->get(AgentVersionRepositoryInterface::class),
             $container->get(UserAgentDomainService::class),
             $cloudFileRepository,
-            $sandboxGateway,
             $workspaceExporter,
             $container->get(AgentMarketRepositoryInterface::class),
-            $container->get(TaskFileRepositoryInterface::class),
+            $container->get(SuperMagicAgentCategoryRelationDomainService::class),
         );
 
         $container->set(SuperMagicAgentDomainService::class, $domainService);

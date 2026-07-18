@@ -8,6 +8,7 @@ declare(strict_types=1);
 namespace Dtyq\SuperMagic\Interfaces\Agent\DTO\Request;
 
 use App\Infrastructure\Core\AbstractRequestDTO;
+use Dtyq\SuperMagic\Domain\Agent\Entity\ValueObject\Query\AgentListSort;
 
 use function Hyperf\Translation\__;
 
@@ -31,6 +32,8 @@ class QueryAgentsRequestDTO extends AbstractRequestDTO
      */
     public string $keyword = '';
 
+    public string $sort = 'updated_at';
+
     /**
      * 获取 Hyperf 验证规则.
      */
@@ -40,6 +43,7 @@ class QueryAgentsRequestDTO extends AbstractRequestDTO
             'page' => 'nullable|integer|min:1',
             'page_size' => 'nullable|integer|min:1|max:100',
             'keyword' => 'nullable|string|max:255',
+            'sort' => 'nullable|string|in:' . implode(',', AgentListSort::values()),
         ];
     }
 
@@ -56,6 +60,7 @@ class QueryAgentsRequestDTO extends AbstractRequestDTO
             'page_size.max' => __('super_magic.agent.page_size_must_not_exceed_100'),
             'keyword.string' => __('super_magic.agent.keyword_must_be_string'),
             'keyword.max' => __('super_magic.agent.keyword_must_not_exceed_255'),
+            'sort.in' => __('super_magic.agent.sort_invalid'),
         ];
     }
 
@@ -72,5 +77,10 @@ class QueryAgentsRequestDTO extends AbstractRequestDTO
     public function getKeyword(): string
     {
         return $this->keyword;
+    }
+
+    public function getSort(): AgentListSort
+    {
+        return AgentListSort::tryFrom($this->sort) ?? AgentListSort::UPDATED_AT;
     }
 }

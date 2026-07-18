@@ -120,6 +120,8 @@ return [
         'page_size_must_not_exceed_100' => '每页数量不能超过 100',
         'keyword_must_be_string' => '关键词必须是字符串',
         'keyword_must_not_exceed_255' => '关键词长度不能超过 255 字符',
+        'scope_invalid' => '查询范围无效',
+        'sort_invalid' => '排序字段无效',
         'icon_max_length_64' => '图标长度不能超过 64 字符',
         'theme_color_invalid' => '主题色格式无效，应为 #RRGGBB 格式',
         'enabled_must_be_boolean' => '启用状态必须是布尔值',
