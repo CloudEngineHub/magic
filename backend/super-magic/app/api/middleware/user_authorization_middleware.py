@@ -45,7 +45,7 @@ USER_AUTHORIZATION_HEADER = "User-Authorization"
 
 
 # 不走鉴权的路径集合。这些路径在 sandbox 还没绑定 metadata.json 时也必须
-# 可达——主要是 kubelet 探针和本地调试回调。**任何**会接触用户工作区、
+# 可达——主要是 kubelet 探针和 OAuth2 本地回调。**任何**会接触用户工作区、
 # magicfs、agfs 文件的路径都必须带 User-Authorization，**不要**加到这里。
 _AUTH_BYPASS_PATHS: Set[str] = {
     "/health",
@@ -59,8 +59,8 @@ def _is_bypass_path(path: str) -> bool:
     路径也固定。"""
     if path in _AUTH_BYPASS_PATHS:
         return True
-    # 本地调试与 OAuth2 本地回调是稳定前缀，整段放行
-    if path.startswith("/api/v1/debug") or path.startswith("/api/dev/oauth2"):
+    # OAuth2 本地回调是稳定前缀，整段放行
+    if path.startswith("/api/dev/oauth2"):
         return True
     return False
 
