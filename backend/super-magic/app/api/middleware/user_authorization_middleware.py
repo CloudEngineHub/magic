@@ -9,7 +9,7 @@ header，header 的值必须与本地 metadata.json 中的 `authorization` 字�
   路径集合、配置项（Enabled / MetadataPath）都保持一致。
 - metadata 文件在每个请求上重新读取，让 warm-pool 重绑、token 外部刷新
   立即生效，不需要重启进程。
-- bypass 仅放行 kubelet 探针和本地调试回调，其他所有 API 路径必须带
+- bypass 仅放行 kubelet 探针，其他所有 API 路径必须带
   User-Authorization。
 - 关闭鉴权（USER_AUTH_REQUIRED=false）后所有请求放行，warn 级日志留痕，
   用于本地开发。
@@ -45,7 +45,7 @@ USER_AUTHORIZATION_HEADER = "User-Authorization"
 
 
 # 不走鉴权的路径集合。这些路径在 sandbox 还没绑定 metadata.json 时也必须
-# 可达——主要是 kubelet 探针和 OAuth2 本地回调。**任何**会接触用户工作区、
+# 可达--主要是 kubelet 探针。**任何**会接触用户工作区、
 # magicfs、agfs 文件的路径都必须带 User-Authorization，**不要**加到这里。
 _AUTH_BYPASS_PATHS: Set[str] = {
     "/health",
@@ -55,14 +55,8 @@ _AUTH_BYPASS_PATHS: Set[str] = {
 
 def _is_bypass_path(path: str) -> bool:
     """判断 path 是否在 bypass 集合内。完全相等匹配（不含前缀通配），
-    因为路由前缀都集中在 routes/api.py 里的几个固定字符串，调试回调
-    路径也固定。"""
-    if path in _AUTH_BYPASS_PATHS:
-        return True
-    # OAuth2 本地回调是稳定前缀，整段放行
-    if path.startswith("/api/dev/oauth2"):
-        return True
-    return False
+    因为路由前缀都集中在 routes/api.py 里的几个固定字符串。"""
+    return path in _AUTH_BYPASS_PATHS
 
 
 class UserAuthorizationMiddleware(BaseHTTPMiddleware):
