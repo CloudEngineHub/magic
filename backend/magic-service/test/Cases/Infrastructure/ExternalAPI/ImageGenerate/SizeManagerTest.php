@@ -1078,6 +1078,43 @@ class SizeManagerTest extends TestCase
         $config = SizeManager::matchConfig('gemini-3-pro-image-preview', null);
         $this->assertNotNull($config);
         $this->assertArrayHasKey('sizes', $config);
+        $this->assertSame('2K', $config['default_scale'] ?? null);
+
+        $config = SizeManager::matchConfig('gemini-3.1-pro-image-preview', null);
+        $this->assertNotNull($config);
+        $this->assertSame('2K', $config['default_scale'] ?? null);
+
+        $config = SizeManager::matchConfig('gemini-3.1-flash-image-preview', null);
+        $this->assertNotNull($config);
+        $this->assertArrayHasKey('sizes', $config);
+        $this->assertCount(56, $config['sizes']);
+        $this->assertSame([
+            'label' => '1:4',
+            'value' => '256x1024',
+            'scale' => '512',
+        ], $config['sizes'][4]);
+        $this->assertSame([
+            'label' => '8:1',
+            'value' => '12288x1536',
+            'scale' => '4K',
+        ], $config['sizes'][43]);
+
+        $config = SizeManager::matchConfig('unknown', 'doubao-seedream-5-0-pro-260628');
+        $this->assertNotNull($config);
+        $this->assertArrayHasKey('sizes', $config);
+        $this->assertCount(16, $config['sizes']);
+        $this->assertSame('2K', $config['default_scale'] ?? null);
+        $this->assertSame([
+            'min' => 921600,
+            'max' => 4624220,
+        ], $config['total_pixels_range'] ?? null);
+        $this->assertSame(10, $config['max_reference_images'] ?? null);
+        $this->assertSame(1, $config['max_output_images'] ?? null);
+        $this->assertSame([
+            'label' => '16:9',
+            'value' => '2816x1584',
+            'scale' => '2K',
+        ], $config['sizes'][12]);
 
         // 2. 测试通过 model_id 匹配
         $config = SizeManager::matchConfig('unknown', 'seedream-4-0');
