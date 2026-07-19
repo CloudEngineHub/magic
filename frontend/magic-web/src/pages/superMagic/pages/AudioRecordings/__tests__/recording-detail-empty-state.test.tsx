@@ -7,7 +7,12 @@ import {
 
 vi.mock("react-i18next", () => ({
 	useTranslation: () => ({
-		t: (key: string) => key,
+		t: (key: string) => {
+			const labels: Record<string, string> = {
+				"detail.summarizing": "Summarizing",
+			}
+			return labels[key] ?? key
+		},
 	}),
 }))
 
@@ -26,6 +31,7 @@ describe("RecordingDetailEmptyState", () => {
 	it("renders summary generating variant with spinning loader icon", () => {
 		const { container } = render(<RecordingDetailEmptyState variant="summaryGenerating" />)
 		expect(screen.getByTestId("recording-detail-empty-summaryGenerating")).toBeInTheDocument()
+		expect(screen.getByText("Summarizing")).toBeInTheDocument()
 		expect(container.querySelector(".animate-spin")).toBeInTheDocument()
 	})
 

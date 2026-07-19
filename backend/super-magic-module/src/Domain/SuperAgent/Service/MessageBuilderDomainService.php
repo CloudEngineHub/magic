@@ -49,8 +49,12 @@ class MessageBuilderDomainService
             'fetch_workdir' => ! $isFirstTaskMessage, // As long as it's not the first creation, initialization will fetch the sandbox
             'upload_config' => $uploadCredential,
             'message_subscription_config' => [
-                'method' => 'POST',
-                'url' => config('super-magic.sandbox.callback_host', '') . '/api/v1/super-agent/tasks/deliver-message',
+                [
+                    'method' => 'POST',
+                    'url' => config('super-magic.sandbox.callback_host', '') . '/api/v1/super-agent/tasks/deliver-message',
+                    'auth_scheme' => 'header_token',
+                    'headers' => ['token' => config('super-magic.sandbox.token', '')],
+                ],
             ],
             'sts_token_refresh' => [
                 'method' => 'POST',

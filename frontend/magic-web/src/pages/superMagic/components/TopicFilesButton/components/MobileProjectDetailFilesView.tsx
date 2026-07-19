@@ -1,9 +1,9 @@
 import MagicPopup from "@/components/base-mobile/MagicPopup"
 import MagicPullToRefresh from "@/components/base-mobile/MagicPullToRefresh"
 import { ScrollEdgeFadeContainer } from "@/components/base-mobile/ScrollEdgeFade"
-import MagicFileIcon from "@/components/base/MagicFileIcon"
 import magicToast from "@/components/base/MagicToaster/utils"
 import MobilePathBreadcrumb from "@/pages/superMagic/components/MobilePathBreadcrumb"
+import { DataEmptyState } from "@/pages/superMagicMobile/components/DataEmptyState"
 import { Input } from "@/components/shadcn-ui/input"
 import { Button } from "@/components/shadcn-ui/button"
 import { cn } from "@/lib/utils"
@@ -11,24 +11,18 @@ import { isEmpty } from "lodash-es"
 import { observer } from "mobx-react-lite"
 import type { FileItem } from "@/pages/superMagic/components/Detail/components/FilesViewer/types"
 import { detectContentTypeRender } from "@/pages/superMagic/components/Detail/components/FilesViewer/utils/preview"
-import {
-	getAppEntryFile,
-	getAttachmentType,
-	getChildrenForCustomMetadataIconPath,
-} from "@/pages/superMagic/components/MessageList/components/MessageAttachment/utils"
+import { getAppEntryFile } from "@/pages/superMagic/components/MessageList/components/MessageAttachment/utils"
 import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks/types"
-import { findFileInTree } from "@/pages/superMagic/components/TopicFilesButton/hooks/fileSelectionUtils"
 import MobileBottomSearchBar from "@/pages/superMagicMobile/components/MobileBottomSearchBar"
 import { formatFileSize } from "@/utils/string"
 import { Check, Plus, Upload, X } from "lucide-react"
 import { type ReactNode, useEffect, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
 import type { PresetFileType } from "../constant"
-import { isMagicSystemFolder } from "../utils/magic-system-folder"
 import MobileFilesSelectionBar from "./MobileFilesSelectionBar"
 import { MobileFileDownloadSheet } from "./MobileFileDownloadSheet"
-import { CustomFolderMagicIcon } from "./CustomFolderMagicIcon"
-import { TopicFileIcon, type TopicFileMagicVariant } from "./TopicFileIcon"
+import { MobileAttachmentRowIcon } from "./MobileAttachmentRowIcon"
+import { TopicFileIcon } from "./TopicFileIcon"
 import {
 	menuItemsIncludeNoWaterMarkDownload,
 	type MobileDownloadMenuItem,
@@ -46,6 +40,10 @@ import {
 	toggleAttachmentSelection,
 } from "../utils/mobileAttachmentTreeSelection"
 import MobileFileSelectionCheckbox from "./MobileFileSelectionCheckbox"
+import {
+	ProjectFileImagePreviewProvider,
+	useProjectFileImagePreviewManager,
+} from "./ProjectFileImagePreviewProvider"
 
 interface MobileProjectDetailFilesViewProps {
 	attachments: AttachmentItem[]
@@ -147,45 +145,8 @@ const FILE_TYPE_LABEL_KEYS = {
 	design: "projectDetail.fileType.design",
 } as const
 
-const MAGIC_CHILD_FOLDER_VARIANTS: Record<string, TopicFileMagicVariant> = {
-	cron: "magic-cron",
-	skills: "magic-skills",
-	memory: "magic-memory",
-}
-
-const MAGIC_FILE_VARIANTS: Record<string, TopicFileMagicVariant> = {
-	skills: "magic-file-skills",
-	agents: "magic-file-agent",
-	heartbeat: "magic-file-heartbeat",
-	identity: "magic-file-identity",
-	soul: "magic-file-soul",
-	tools: "magic-file-tools",
-	user: "magic-file-user",
-	bootstrap: "magic-file-bootstrap",
-	memory: "magic-file-memory",
-}
-
 function normalizeFileExtension(fileExtension?: string): string {
 	return fileExtension?.replace(/^\./, "").toLowerCase() || ""
-}
-
-function getNormalizedPathSegments(item: AttachmentItem): string[] {
-	const pathCandidates = [item.relative_file_path, item.path]
-
-	for (const pathCandidate of pathCandidates) {
-		if (!pathCandidate) continue
-		const segments = pathCandidate
-			.replace(/\\/g, "/")
-			.split("/")
-			.map((segment) => segment.trim())
-			.filter(Boolean)
-
-		if (segments.length > 0) {
-			return segments
-		}
-	}
-
-	return []
 }
 
 function collectSearchResults(
@@ -235,30 +196,6 @@ function toFileItem(item: AttachmentItem): FileItem {
 		file_extension: item.file_extension,
 		file_size: item.file_size,
 	}
-}
-
-function resolveAttachmentMagicVariant(item: AttachmentItem): TopicFileMagicVariant | undefined {
-	if (isMagicSystemFolder(item)) {
-		return "magic-root"
-	}
-
-	const pathSegments = getNormalizedPathSegments(item)
-	if (!pathSegments.includes(".magic")) {
-		return undefined
-	}
-
-	const attachmentName = getAttachmentDisplayName(item).trim().toLowerCase()
-
-	if (item.is_directory) {
-		return MAGIC_CHILD_FOLDER_VARIANTS[attachmentName]
-	}
-
-	if (normalizeFileExtension(item.file_extension) !== "md") {
-		return undefined
-	}
-
-	const baseName = attachmentName.replace(/\.md$/i, "")
-	return MAGIC_FILE_VARIANTS[baseName]
 }
 
 /**
@@ -367,6 +304,11 @@ function MobileProjectDetailFilesView({
 
 		return [...folders, ...files]
 	}, [files, folders, isSearching, searchResults])
+	const imagePreviewManager = useProjectFileImagePreviewManager({ attachments })
+
+	useEffect(() => {
+		imagePreviewManager.setMountedItems(currentSelectableItems)
+	}, [currentSelectableItems, imagePreviewManager.setMountedItems])
 
 	const currentViewSelectableKeys = useMemo(() => {
 		if (isSearching) {
@@ -442,48 +384,6 @@ function MobileProjectDetailFilesView({
 	 */
 	function renderCreateFileIcon(fileExtension?: string) {
 		return <TopicFileIcon fileExtension={fileExtension} />
-	}
-
-	/** Resolve a node anywhere in the attachment tree by file_id (for custom folder icons). */
-	function findAttachmentInTree(fileId: string): AttachmentItem | undefined {
-		const found = findFileInTree(attachments as Record<string, unknown>[], fileId)
-		return (found as AttachmentItem | null) ?? undefined
-	}
-
-	/**
-	 * 行级图标在视图层完成业务判断，让 `.magic` 与目录状态规则更容易顺着页面阅读。
-	 */
-	function renderRowIcon(item: AttachmentItem) {
-		if (item.is_directory && !isEmpty(item.display_config)) {
-			if (item.display_config?.type === "custom") {
-				return (
-					<CustomFolderMagicIcon
-						displayConfig={item.display_config}
-						childrenItems={getChildrenForCustomMetadataIconPath(item, (id) =>
-							findAttachmentInTree(id),
-						)}
-						typeFallback="custom"
-						size={MOBILE_ATTACHMENT_ROW_ICON_SIZE}
-					/>
-				)
-			}
-
-			return (
-				<MagicFileIcon
-					type={getAttachmentType(item) || item.file_extension}
-					size={MOBILE_ATTACHMENT_ROW_ICON_SIZE}
-				/>
-			)
-		}
-
-		return (
-			<TopicFileIcon
-				isDirectory={item.is_directory}
-				magicVariant={resolveAttachmentMagicVariant(item)}
-				hasChildren={getVisibleAttachmentChildren(item).length > 0}
-				fileExtension={item.file_extension}
-			/>
-		)
 	}
 
 	/**
@@ -819,7 +719,13 @@ function MobileProjectDetailFilesView({
 						onClick={() => handleFolderRowClick(item)}
 						data-testid="mobile-folder-button"
 					>
-						{renderAttachmentIconCell(renderRowIcon(item))}
+						{renderAttachmentIconCell(
+							<MobileAttachmentRowIcon
+								item={item}
+								attachments={attachments}
+								size={MOBILE_ATTACHMENT_ROW_ICON_SIZE}
+							/>,
+						)}
 						<div className="min-w-0 flex-1">
 							<p
 								className={cn(
@@ -874,7 +780,13 @@ function MobileProjectDetailFilesView({
 						onClick={() => onFileOpen?.(item)}
 						data-testid="mobile-file-button"
 					>
-						{renderAttachmentIconCell(renderRowIcon(item))}
+						{renderAttachmentIconCell(
+							<MobileAttachmentRowIcon
+								item={item}
+								attachments={attachments}
+								size={MOBILE_ATTACHMENT_ROW_ICON_SIZE}
+							/>,
+						)}
 						<div className="min-w-0 flex-1">
 							<p
 								className={cn(
@@ -899,6 +811,7 @@ function MobileProjectDetailFilesView({
 		)
 	}
 
+	/** Selects the mobile file-list placeholder for loading, search-empty, and default-empty states. */
 	const renderEmptyState = () => {
 		if (refreshLoading) {
 			return (
@@ -913,12 +826,12 @@ function MobileProjectDetailFilesView({
 
 		if (isSearching) {
 			return (
-				<div
-					className="flex flex-1 items-center justify-center px-6 text-center text-sm text-muted-foreground"
-					data-testid="mobile-files-search-empty"
-				>
-					{t("search.searchEmptyDescription", { keyword: searchValue })}
-				</div>
+				<DataEmptyState
+					variant="chatFilesSearch"
+					compact
+					className="min-h-0 flex-1 py-12"
+					testId="mobile-files-search-empty"
+				/>
 			)
 		}
 
@@ -933,60 +846,76 @@ function MobileProjectDetailFilesView({
 	}
 
 	return (
-		<div
-			className={cn("relative flex h-full min-h-0 flex-col")}
-			data-testid="project-detail-mobile-files-view"
-		>
-			{!isSearching && (
-				<MobilePathBreadcrumb
-					className={cn(isChatSheetVariant ? "px-[10px] py-2" : "px-1 py-2")}
-					canBack={resolvedPathStack.length > 0}
-					onBack={() => handleNavigateTo(resolvedPathStack.length - 2)}
-					onGoHome={() => handleNavigateTo(-1)}
-					backLabel={t("back")}
-					homeLabel={t("home")}
-					backButtonTestId="project-detail-mobile-back-button"
-					homeButtonTestId="project-detail-mobile-home-button"
-					homeIconClassName="h-4.5 w-4.5"
-					separatorClassName="h-4 w-4 text-muted-foreground/60"
-					segmentButtonClassName="px-2 text-base leading-6"
-					scrollTestId="project-detail-files-breadcrumb-scroll"
-					segments={resolvedPathStack.map((item, index) => ({
-						key: getAttachmentKey(item),
-						label: getAttachmentDisplayName(item),
-						onClick: () => handleNavigateTo(index),
-					}))}
-				/>
-			)}
+		<ProjectFileImagePreviewProvider manager={imagePreviewManager}>
+			<div
+				className={cn("relative flex h-full min-h-0 flex-col")}
+				data-testid="project-detail-mobile-files-view"
+			>
+				{!isSearching && (
+					<MobilePathBreadcrumb
+						className={cn(isChatSheetVariant ? "px-[10px] py-2" : "px-1 py-2")}
+						canBack={resolvedPathStack.length > 0}
+						onBack={() => handleNavigateTo(resolvedPathStack.length - 2)}
+						onGoHome={() => handleNavigateTo(-1)}
+						backLabel={t("back")}
+						homeLabel={t("home")}
+						backButtonTestId="project-detail-mobile-back-button"
+						homeButtonTestId="project-detail-mobile-home-button"
+						homeIconClassName="h-4.5 w-4.5"
+						separatorClassName="h-4 w-4 text-muted-foreground/60"
+						segmentButtonClassName="px-2 text-base leading-6"
+						scrollTestId="project-detail-files-breadcrumb-scroll"
+						segments={resolvedPathStack.map((item, index) => ({
+							key: getAttachmentKey(item),
+							label: getAttachmentDisplayName(item),
+							onClick: () => handleNavigateTo(index),
+						}))}
+					/>
+				)}
 
-			{/* flex-col shell so ScrollEdgeFade flex-1 gets a bounded height (same as MobileFilesMoveSheet). */}
-			<div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
-				<ScrollEdgeFadeContainer
-					fadeColor="mobile-background"
-					className="min-h-0 flex-1"
-					scrollClassName="no-scrollbar"
-					contentDeps={[
-						attachments.length,
-						folders.length,
-						files.length,
-						searchResults.length,
-						searchValue,
-						refreshLoading,
-						hasSelection,
-					]}
-				>
-					<MagicPullToRefresh
-						embedInParentScroll
-						onRefresh={async () => {
-							await onRefresh?.()
-						}}
-						showSuccessMessage={false}
-						disabled={!onRefresh}
-						containerClassName="relative min-h-0 flex-1"
+				{/* flex-col shell so ScrollEdgeFade flex-1 gets a bounded height (same as MobileFilesMoveSheet). */}
+				<div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
+					<ScrollEdgeFadeContainer
+						fadeColor="mobile-background"
+						className="min-h-0 flex-1"
+						scrollClassName="no-scrollbar"
+						contentDeps={[
+							attachments.length,
+							folders.length,
+							files.length,
+							searchResults.length,
+							searchValue,
+							refreshLoading,
+							hasSelection,
+						]}
 					>
-						<div className="flex min-h-full flex-col pb-24">
-							{isSearching ? (
-								searchResults.length === 0 ? (
+						<MagicPullToRefresh
+							embedInParentScroll
+							onRefresh={async () => {
+								await onRefresh?.()
+							}}
+							showSuccessMessage={false}
+							disabled={!onRefresh}
+							containerClassName="relative min-h-0 flex-1"
+						>
+							<div className="flex min-h-full flex-col pb-24">
+								{isSearching ? (
+									searchResults.length === 0 ? (
+										renderEmptyState()
+									) : (
+										<div
+											className={cn(
+												"flex flex-col gap-2",
+												isChatSheetVariant ? "px-[10px] py-2.5" : "py-2",
+											)}
+											data-testid="mobile-files-search-list"
+										>
+											{searchResults.map((result) =>
+												renderFileRow(result.item, result.pathLabel || "/"),
+											)}
+										</div>
+									)
+								) : folders.length === 0 && files.length === 0 ? (
 									renderEmptyState()
 								) : (
 									<div
@@ -994,247 +923,237 @@ function MobileProjectDetailFilesView({
 											"flex flex-col gap-2",
 											isChatSheetVariant ? "px-[10px] py-2.5" : "py-2",
 										)}
-										data-testid="mobile-files-search-list"
+										data-testid="mobile-files-list"
 									>
-										{searchResults.map((result) =>
-											renderFileRow(result.item, result.pathLabel || "/"),
-										)}
+										{folders.map((item) => renderFolderRow(item))}
+										{files.map((item) => renderFileRow(item))}
 									</div>
-								)
-							) : folders.length === 0 && files.length === 0 ? (
-								renderEmptyState()
-							) : (
-								<div
-									className={cn(
-										"flex flex-col gap-2",
-										isChatSheetVariant ? "px-[10px] py-2.5" : "py-2",
-									)}
-									data-testid="mobile-files-list"
-								>
-									{folders.map((item) => renderFolderRow(item))}
-									{files.map((item) => renderFileRow(item))}
-								</div>
+								)}
+							</div>
+						</MagicPullToRefresh>
+					</ScrollEdgeFadeContainer>
+
+					{/* Keep the file action FAB outside ScrollEdgeFadeContainer's isolated stacking context so the bottom search shadow cannot cover it. */}
+					{allowEdit && !hasSelection && (
+						<Button
+							type="button"
+							size="icon"
+							className={cn(
+								"absolute bottom-1 right-2 z-30 h-12 w-12 rounded-full bg-foreground text-background hover:bg-foreground/90",
 							)}
-						</div>
-					</MagicPullToRefresh>
-				</ScrollEdgeFadeContainer>
-
-				{/* Keep the file action FAB outside ScrollEdgeFadeContainer's isolated stacking context so the bottom search shadow cannot cover it. */}
-				{allowEdit && !hasSelection && (
-					<Button
-						type="button"
-						size="icon"
-						className={cn(
-							"absolute bottom-1 right-2 z-30 h-12 w-12 rounded-full bg-foreground text-background hover:bg-foreground/90",
-						)}
-						onClick={() => setAddSheetOpen(true)}
-						aria-label={t("projectDetail.fabFilesAria")}
-						data-testid="project-detail-files-add-button"
-					>
-						<Plus className="size-[22px]" strokeWidth={2} />
-					</Button>
-				)}
-			</div>
-
-			<div className="relative z-10 shrink-0 bg-mobile-background">
-				{hasSelection ? (
-					<MobileFilesSelectionBar
-						isAllSelected={isAllSelected}
-						isPartiallySelected={isPartiallySelected}
-						onToggleAll={handleToggleAll}
-						onDownload={canSelectionDownload ? handleSelectionDownload : undefined}
-						onShare={() => onBatchShare?.(selectedIds)}
-						onCopy={() => onBatchCopy?.(selectedIds)}
-						onMove={() => onBatchMove?.(selectedIds)}
-						onDelete={() => onBatchDelete?.(selectedIds)}
-					/>
-				) : (
-					<MobileBottomSearchBar
-						value={searchValue}
-						placeholder={t("projectDetail.searchPlaceholder")}
-						clearAriaLabel={t("projectDetail.clearSearch")}
-						onValueChange={setSearchValue}
-						testIdPrefix="project-detail-files-search"
-						className={
-							isChatSheetVariant
-								? "pb-[max(var(--safe-area-inset-bottom),24px)] pt-2.5"
-								: undefined
-						}
-					/>
-				)}
-			</div>
-
-			<MagicPopup
-				visible={addSheetOpen}
-				onClose={() => setAddSheetOpen(false)}
-				title={t("projectDetail.addTitle")}
-				headerVariant="actionHeader"
-				headerTitle={t("projectDetail.addTitle")}
-				headerLeadingAction={{
-					icon: <X />,
-					ariaLabel: t("close"),
-					onClick: () => setAddSheetOpen(false),
-					testId: "project-detail-files-menu-close-button",
-				}}
-				position="bottom"
-				className="rounded-t-xl border-0 bg-muted"
-				bodyClassName="flex flex-col overflow-hidden p-0"
-				style={MOBILE_SHEET_MAX_HEIGHT}
-				destroyOnClose={false}
-			>
-				<div
-					className="flex flex-col gap-2.5 overflow-y-auto px-[10px] pb-[max(var(--safe-area-inset-bottom),16px)] pt-2"
-					data-testid="project-detail-files-menu-sheet"
-				>
-					<div className="flex flex-col gap-1.5">
-						{renderSheetGroupLabel(t("projectDetail.createSection"))}
-						<div className="w-full shrink-0 overflow-hidden rounded-lg bg-card">
-							{createActionItems.map((item, index) =>
-								renderSheetMenuItem({
-									key: item.key,
-									label: item.label,
-									icon: item.icon,
-									onClick: item.onClick,
-									dataTestId: `project-detail-files-create-${item.key}-button`,
-									showDivider: index < createActionItems.length - 1,
-								}),
-							)}
-						</div>
-					</div>
-
-					<div className="flex flex-col gap-1.5">
-						{renderSheetGroupLabel(t("projectDetail.organizeSection"))}
-						<div className="w-full shrink-0 overflow-hidden rounded-lg bg-card">
-							{renderSheetMenuItem({
-								key: "folder",
-								label: t("topicFiles.contextMenu.createFolder"),
-								icon: <TopicFileIcon isDirectory />,
-								onClick: () =>
-									openCreateDraft({
-										mode: "folder",
-										label: t("topicFiles.contextMenu.createFolder"),
-										fileName: "",
-									}),
-								dataTestId: "project-detail-files-create-folder-button",
-							})}
-						</div>
-					</div>
-
-					<div className="flex flex-col gap-1.5">
-						{renderSheetGroupLabel(t("projectDetail.importSection"))}
-						<div className="w-full shrink-0 overflow-hidden rounded-lg bg-card">
-							{renderSheetMenuItem({
-								key: "upload",
-								label: t("topicFiles.contextMenu.uploadFile"),
-								icon: (
-									<Upload
-										className="size-5.5 text-foreground/70"
-										strokeWidth={1.5}
-									/>
-								),
-								onClick: () => {
-									onUploadFile?.()
-									setAddSheetOpen(false)
-								},
-								dataTestId: "project-detail-files-upload-button",
-							})}
-						</div>
-					</div>
+							onClick={() => setAddSheetOpen(true)}
+							aria-label={t("projectDetail.fabFilesAria")}
+							data-testid="project-detail-files-add-button"
+						>
+							<Plus className="size-[22px]" strokeWidth={2} />
+						</Button>
+					)}
 				</div>
-			</MagicPopup>
 
-			<MagicPopup
-				visible={createSheetOpen}
-				onClose={closeCreateSheet}
-				title={t("projectDetail.addTitle")}
-				headerVariant="actionHeader"
-				headerTitle={t("projectDetail.addTitle")}
-				headerLeadingAction={{
-					icon: <X />,
-					ariaLabel: t("close"),
-					onClick: closeCreateSheet,
-					testId: "project-detail-files-create-close-button",
-				}}
-				headerTrailingAction={{
-					icon: <Check />,
-					ariaLabel: t("confirm"),
-					onClick: () => {
-						void handleSubmitCreateDraft()
-					},
-					disabled: !createDraft?.fileName.trim(),
-					tone: "primary",
-					testId: "project-detail-files-create-confirm-button",
-				}}
-				position="bottom"
-				className="rounded-t-xl border-0 bg-muted"
-				bodyClassName="flex flex-col overflow-hidden p-0"
-				style={MOBILE_SHEET_MAX_HEIGHT}
-				destroyOnClose={false}
-			>
-				<div
-					className="flex flex-col gap-2 px-[10px] pb-[max(var(--safe-area-inset-bottom),16px)] pt-2"
-					data-testid="project-detail-files-create-sheet"
-				>
-					<p className="px-[14px] text-sm leading-5 text-muted-foreground">
-						{createDraft?.mode === "folder"
-							? t("projectDetail.createFolderNameLabel")
-							: t("projectDetail.createFileNameLabel")}
-					</p>
-					<div className="flex h-12 items-center overflow-hidden rounded-lg bg-card">
-						<div className="pl-[14px]">
-							{createDraft?.mode === "folder" ? (
-								<TopicFileIcon isDirectory />
-							) : (
-								renderCreateFileIcon(createDraft?.extension || createDraft?.type)
-							)}
-						</div>
-						<div className="mx-3 h-5 w-px shrink-0 bg-border" aria-hidden />
-						<Input
-							value={createDraft?.fileName || ""}
-							onChange={(event) => handleCreateDraftNameChange(event.target.value)}
-							placeholder={t(
-								createDraft?.mode === "folder"
-									? "projectDetail.createFolderNamePlaceholder"
-									: "projectDetail.createFileNamePlaceholder",
-							)}
-							className="h-12 min-w-0 flex-1 rounded-none border-0 bg-transparent px-0 py-0 text-base text-foreground shadow-none focus-visible:ring-0"
-							autoFocus
-							data-testid="project-detail-files-create-name-input"
+				<div className="relative z-10 shrink-0 bg-mobile-background">
+					{hasSelection ? (
+						<MobileFilesSelectionBar
+							isAllSelected={isAllSelected}
+							isPartiallySelected={isPartiallySelected}
+							onToggleAll={handleToggleAll}
+							onDownload={canSelectionDownload ? handleSelectionDownload : undefined}
+							onShare={() => onBatchShare?.(selectedIds)}
+							onCopy={() => onBatchCopy?.(selectedIds)}
+							onMove={() => onBatchMove?.(selectedIds)}
+							onDelete={() => onBatchDelete?.(selectedIds)}
 						/>
-						{createDraft?.extension ? (
-							<span className="pr-[14px] text-base text-muted-foreground">
-								.{createDraft.extension}
-							</span>
-						) : null}
-					</div>
+					) : (
+						<MobileBottomSearchBar
+							value={searchValue}
+							placeholder={t("projectDetail.searchPlaceholder")}
+							clearAriaLabel={t("projectDetail.clearSearch")}
+							onValueChange={setSearchValue}
+							testIdPrefix="project-detail-files-search"
+							className={
+								isChatSheetVariant
+									? "pb-[max(var(--safe-area-inset-bottom),24px)] pt-2.5"
+									: undefined
+							}
+						/>
+					)}
 				</div>
-			</MagicPopup>
 
-			<MobileFileDownloadSheet
-				visible={batchDownloadSheetOpen}
-				onClose={() => setBatchDownloadSheetOpen(false)}
-				mode="batch"
-				menuItems={batchZipMenuItems}
-				selectedCount={selectedItems.length}
-				isLoading={batchDownloadLoading}
-			/>
+				<MagicPopup
+					visible={addSheetOpen}
+					onClose={() => setAddSheetOpen(false)}
+					title={t("projectDetail.addTitle")}
+					headerVariant="actionHeader"
+					headerTitle={t("projectDetail.addTitle")}
+					headerLeadingAction={{
+						icon: <X />,
+						ariaLabel: t("close"),
+						onClick: () => setAddSheetOpen(false),
+						testId: "project-detail-files-menu-close-button",
+					}}
+					position="bottom"
+					className="rounded-t-xl border-0 bg-muted"
+					bodyClassName="flex flex-col overflow-hidden p-0"
+					style={MOBILE_SHEET_MAX_HEIGHT}
+					destroyOnClose={false}
+				>
+					<div
+						className="flex flex-col gap-2.5 overflow-y-auto px-[10px] pb-[max(var(--safe-area-inset-bottom),16px)] pt-2"
+						data-testid="project-detail-files-menu-sheet"
+					>
+						<div className="flex flex-col gap-1.5">
+							{renderSheetGroupLabel(t("projectDetail.createSection"))}
+							<div className="w-full shrink-0 overflow-hidden rounded-lg bg-card">
+								{createActionItems.map((item, index) =>
+									renderSheetMenuItem({
+										key: item.key,
+										label: item.label,
+										icon: item.icon,
+										onClick: item.onClick,
+										dataTestId: `project-detail-files-create-${item.key}-button`,
+										showDivider: index < createActionItems.length - 1,
+									}),
+								)}
+							</div>
+						</div>
 
-			<MobileFileDownloadSheet
-				visible={singleDownloadSheetOpen}
-				onClose={() => {
-					setSingleDownloadSheetOpen(false)
-					setSingleDownloadTarget(null)
-				}}
-				mode="single"
-				title={
-					singleDownloadTarget
-						? getAttachmentDisplayName(singleDownloadTarget)
-						: undefined
-				}
-				menuItems={singleDownloadMenuItems}
-				preloadWaterMarkFreeModal={preloadWaterMarkFreeModal}
-			/>
-		</div>
+						<div className="flex flex-col gap-1.5">
+							{renderSheetGroupLabel(t("projectDetail.organizeSection"))}
+							<div className="w-full shrink-0 overflow-hidden rounded-lg bg-card">
+								{renderSheetMenuItem({
+									key: "folder",
+									label: t("topicFiles.contextMenu.createFolder"),
+									icon: <TopicFileIcon isDirectory />,
+									onClick: () =>
+										openCreateDraft({
+											mode: "folder",
+											label: t("topicFiles.contextMenu.createFolder"),
+											fileName: "",
+										}),
+									dataTestId: "project-detail-files-create-folder-button",
+								})}
+							</div>
+						</div>
+
+						<div className="flex flex-col gap-1.5">
+							{renderSheetGroupLabel(t("projectDetail.importSection"))}
+							<div className="w-full shrink-0 overflow-hidden rounded-lg bg-card">
+								{renderSheetMenuItem({
+									key: "upload",
+									label: t("topicFiles.contextMenu.uploadFile"),
+									icon: (
+										<Upload
+											className="size-5.5 text-foreground/70"
+											strokeWidth={1.5}
+										/>
+									),
+									onClick: () => {
+										onUploadFile?.()
+										setAddSheetOpen(false)
+									},
+									dataTestId: "project-detail-files-upload-button",
+								})}
+							</div>
+						</div>
+					</div>
+				</MagicPopup>
+
+				<MagicPopup
+					visible={createSheetOpen}
+					onClose={closeCreateSheet}
+					title={t("projectDetail.addTitle")}
+					headerVariant="actionHeader"
+					headerTitle={t("projectDetail.addTitle")}
+					headerLeadingAction={{
+						icon: <X />,
+						ariaLabel: t("close"),
+						onClick: closeCreateSheet,
+						testId: "project-detail-files-create-close-button",
+					}}
+					headerTrailingAction={{
+						icon: <Check />,
+						ariaLabel: t("confirm"),
+						onClick: () => {
+							void handleSubmitCreateDraft()
+						},
+						disabled: !createDraft?.fileName.trim(),
+						tone: "primary",
+						testId: "project-detail-files-create-confirm-button",
+					}}
+					position="bottom"
+					className="rounded-t-xl border-0 bg-muted"
+					bodyClassName="flex flex-col overflow-hidden p-0"
+					style={MOBILE_SHEET_MAX_HEIGHT}
+					destroyOnClose={false}
+				>
+					<div
+						className="flex flex-col gap-2 px-[10px] pb-[max(var(--safe-area-inset-bottom),16px)] pt-2"
+						data-testid="project-detail-files-create-sheet"
+					>
+						<p className="px-[14px] text-sm leading-5 text-muted-foreground">
+							{createDraft?.mode === "folder"
+								? t("projectDetail.createFolderNameLabel")
+								: t("projectDetail.createFileNameLabel")}
+						</p>
+						<div className="flex h-12 items-center overflow-hidden rounded-lg bg-card">
+							<div className="pl-[14px]">
+								{createDraft?.mode === "folder" ? (
+									<TopicFileIcon isDirectory />
+								) : (
+									renderCreateFileIcon(
+										createDraft?.extension || createDraft?.type,
+									)
+								)}
+							</div>
+							<div className="mx-3 h-5 w-px shrink-0 bg-border" aria-hidden />
+							<Input
+								value={createDraft?.fileName || ""}
+								onChange={(event) =>
+									handleCreateDraftNameChange(event.target.value)
+								}
+								placeholder={t(
+									createDraft?.mode === "folder"
+										? "projectDetail.createFolderNamePlaceholder"
+										: "projectDetail.createFileNamePlaceholder",
+								)}
+								className="h-12 min-w-0 flex-1 rounded-none border-0 bg-transparent px-0 py-0 text-base text-foreground shadow-none focus-visible:ring-0"
+								autoFocus
+								data-testid="project-detail-files-create-name-input"
+							/>
+							{createDraft?.extension ? (
+								<span className="pr-[14px] text-base text-muted-foreground">
+									.{createDraft.extension}
+								</span>
+							) : null}
+						</div>
+					</div>
+				</MagicPopup>
+
+				<MobileFileDownloadSheet
+					visible={batchDownloadSheetOpen}
+					onClose={() => setBatchDownloadSheetOpen(false)}
+					mode="batch"
+					menuItems={batchZipMenuItems}
+					selectedCount={selectedItems.length}
+					isLoading={batchDownloadLoading}
+				/>
+
+				<MobileFileDownloadSheet
+					visible={singleDownloadSheetOpen}
+					onClose={() => {
+						setSingleDownloadSheetOpen(false)
+						setSingleDownloadTarget(null)
+					}}
+					mode="single"
+					title={
+						singleDownloadTarget
+							? getAttachmentDisplayName(singleDownloadTarget)
+							: undefined
+					}
+					menuItems={singleDownloadMenuItems}
+					preloadWaterMarkFreeModal={preloadWaterMarkFreeModal}
+				/>
+			</div>
+		</ProjectFileImagePreviewProvider>
 	)
 }
 

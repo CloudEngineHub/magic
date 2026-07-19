@@ -10,6 +10,7 @@ import traceback
 import asyncio
 from pathlib import Path
 from typing import List, Dict, Any, Optional, cast
+from urllib.parse import quote
 
 import aiohttp
 from agentlang.logger import get_logger
@@ -233,12 +234,31 @@ class MagicServiceClient:
             operation_name="设计视频生成",
         )
 
+    async def get_slides_template_file_url(
+        self,
+        code: str,
+        access_context: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        """Resolve a slides template code into its signed package URL."""
+        normalized_code = code.strip() if isinstance(code, str) else ""
+        if not normalized_code:
+            raise ApiError("slides template code is required")
+
+        escaped_code = quote(normalized_code, safe="")
+        return await self._request_json(
+            "GET",
+            f"/api/v1/slides-templates/{escaped_code}/file-url",
+            operation_name="幻灯片模板文件链接获取",
+            params=self._filter_query_params(access_context),
+        )
+
     async def _request_json(
         self,
         method: str,
         path: str,
         payload: Optional[Dict[str, Any]] = None,
         operation_name: str = "Magic Service API",
+        params: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         url = f"{self._api_base_url()}{path}"
         headers = self._build_json_headers()
@@ -251,6 +271,7 @@ class MagicServiceClient:
                 url,
                 json=payload,
                 headers=headers,
+                params=params,
             ) as response:
                 response_text = await response.text()
                 try:
@@ -293,6 +314,20 @@ class MagicServiceClient:
         if organization_code:
             headers["organization-code"] = str(organization_code)
         return headers
+
+    @staticmethod
+    def _filter_query_params(params: Optional[Dict[str, Any]]) -> Optional[Dict[str, str]]:
+        if not params:
+            return None
+
+        filtered = {}
+        for key, value in params.items():
+            if value is None:
+                continue
+            normalized_value = str(value).strip()
+            if normalized_value:
+                filtered[key] = normalized_value
+        return filtered or None
 
     def _extract_response_data(self, body: Dict[str, Any], operation_name: str) -> Dict[str, Any]:
         if "code" not in body:
@@ -1085,6 +1120,8 @@ class MagicServiceClient:
             logger.info(f"✅ 配置文件加载成功，包含键: {list(config.keys())}")
 
             subscription_config = config.get("message_subscription_config", {})
+            if isinstance(subscription_config, list):
+                subscription_config = subscription_config[0] if subscription_config else {}
 
             subscription_headers = subscription_config.get("headers", {})
             if "token" in subscription_headers:

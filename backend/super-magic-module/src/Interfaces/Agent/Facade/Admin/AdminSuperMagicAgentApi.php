@@ -9,12 +9,15 @@ namespace Dtyq\SuperMagic\Interfaces\Agent\Facade\Admin;
 
 use App\Application\Kernel\Enum\MagicOperationEnum;
 use App\Application\Kernel\Enum\MagicResourceEnum;
+use App\ErrorCode\GenericErrorCode;
+use App\Infrastructure\Core\Exception\ExceptionBuilder;
 use App\Infrastructure\Util\Permission\Annotation\CheckPermission;
 use Dtyq\ApiResponse\Annotation\ApiResponse;
 use Dtyq\SuperMagic\Application\Agent\Service\AdminSuperMagicAgentAppService;
 use Dtyq\SuperMagic\Interfaces\Agent\DTO\Request\QueryAgentMarketsRequestAdminDTO;
 use Dtyq\SuperMagic\Interfaces\Agent\DTO\Request\QueryAgentVersionsRequestAdminDTO;
 use Dtyq\SuperMagic\Interfaces\Agent\DTO\Request\ReviewAgentVersionRequestDTO;
+use Dtyq\SuperMagic\Interfaces\Agent\DTO\Request\UpdateAgentMarketCategoryRequestAdminDTO;
 use Dtyq\SuperMagic\Interfaces\Agent\DTO\Request\UpdateAgentMarketRequestAdminDTO;
 use Dtyq\SuperMagic\Interfaces\Agent\DTO\Request\UpdateAgentMarketSortOrderRequestAdminDTO;
 use Dtyq\SuperMagic\Interfaces\Agent\Facade\AbstractSuperMagicApi;
@@ -91,6 +94,21 @@ class AdminSuperMagicAgentApi extends AbstractSuperMagicApi
         $requestDTO = UpdateAgentMarketRequestAdminDTO::fromRequest($this->request);
 
         $this->adminAgentAppService->updateMarket($authorization, $id, $requestDTO);
+        return [];
+    }
+
+    /**
+     * 单独更新市场 Agent 分类。
+     */
+    #[CheckPermission([MagicResourceEnum::PLATFORM_AGENT_MARKET], MagicOperationEnum::EDIT)]
+    public function updateMarketCategory(int $id): array
+    {
+        $authorization = $this->getAuthorization();
+        $requestDTO = UpdateAgentMarketCategoryRequestAdminDTO::fromRequest($this->request);
+        if (! $requestDTO->hasCategoryInput()) {
+            ExceptionBuilder::throw(GenericErrorCode::ParameterMissing, 'common.parameter_required', ['label' => 'category_ids']);
+        }
+        $this->adminAgentAppService->updateMarketCategory($authorization, $id, $requestDTO->getCategoryIds());
         return [];
     }
 

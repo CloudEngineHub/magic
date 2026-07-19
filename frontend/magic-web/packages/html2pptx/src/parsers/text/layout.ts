@@ -1,4 +1,4 @@
-import { unionRects } from "../../utils/geometry"
+import { unionRects } from "../../shared/geometry"
 
 export interface VisualLine {
 	text: string
@@ -6,11 +6,11 @@ export interface VisualLine {
 }
 
 /**
- * 将一个 DOM Text Node 按视觉行拆分
+ * Split one DOM Text Node into visual lines
  *
- * 算法：先用整段 Range 的 getClientRects() 得到总行数 K，
- * 再用二分查找定位每个换行点，最终 O(K·logN) 次 DOM 测量，
- * 替代原来逐字符 O(N) 的方式。
+ * Algorithm: first use getClientRects() on the full Range to get the total line count K,
+ * then use binary search to locate each line break, requiring O(K*logN) DOM measurements,
+ * instead of the previous per-character O(N) approach.
  */
 export function splitTextNodeByVisualLines(input: {
 	doc: Document
@@ -42,11 +42,11 @@ export function splitTextNodeByVisualLines(input: {
 }
 
 /**
- * 二分查找每一行的起始字符偏移量
+ * Binary-search the starting character offset of each line
  *
- * 对于第 k 行（k >= 2），找到最小的 endOffset 使得
- * Range(0, endOffset).getClientRects().length >= k，
- * 则 endOffset - 1 就是第 k 行的首字符索引。
+ * For line k (k >= 2), find the smallest endOffset such that
+ * Range(0, endOffset).getClientRects().length >= k,
+ * then endOffset - 1 is the first character index of line k.
  */
 function findLineBreaks(
 	doc: Document,
@@ -82,7 +82,7 @@ function findLineBreaks(
 }
 
 /**
- * 根据行起始偏移量，为每一行创建 Range 并获取边界矩形
+ * Create a Range for each line from line start offsets and get its bounding rectangle
  */
 function buildVisualLines(
 	doc: Document,

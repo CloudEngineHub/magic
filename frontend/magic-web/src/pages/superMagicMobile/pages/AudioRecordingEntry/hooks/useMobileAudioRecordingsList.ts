@@ -22,6 +22,7 @@ import { registerAudioRecordingsShellRefreshHandler } from "@/pages/superMagic/p
 import {
 	patchAudioRecordingsFilterSession,
 	readAudioRecordingsFilterSession,
+	resolveAvailableAudioRecordingGroupId,
 	resolveMobileAudioRecordingsSortOption,
 } from "@/pages/superMagic/pages/AudioRecordings/utils/audio-recordings-filter-session"
 
@@ -55,6 +56,7 @@ export function useMobileAudioRecordingsList() {
 	const [totalGroupCount, setTotalGroupCount] = useState(0)
 	const [ungroupedCount, setUngroupedCount] = useState(0)
 	const [currentGroupId, setCurrentGroupId] = useState(initialFilterSession.groupId)
+	const [hasLoadedGroups, setHasLoadedGroups] = useState(false)
 	const [groupsLoading, setGroupsLoading] = useState(false)
 	const [groupActionSubmitting, setGroupActionSubmitting] = useState(false)
 
@@ -81,6 +83,7 @@ export function useMobileAudioRecordingsList() {
 			setGroups(result.groups)
 			setTotalGroupCount(result.totalCount)
 			setUngroupedCount(result.ungroupedCount)
+			setHasLoadedGroups(true)
 			return true
 		} catch {
 			// Group metadata is secondary to the recording list; keep UI usable if it fails.
@@ -216,6 +219,14 @@ export function useMobileAudioRecordingsList() {
 		},
 		[store],
 	)
+
+	useEffect(() => {
+		if (!hasLoadedGroups) return
+		const availableGroupId = resolveAvailableAudioRecordingGroupId(currentGroupId, groups)
+		if (availableGroupId !== currentGroupId) {
+			handleGroupChange(availableGroupId)
+		}
+	}, [currentGroupId, groups, handleGroupChange, hasLoadedGroups])
 
 	const handleCreateGroup = useCallback(
 		async (name: string) => {

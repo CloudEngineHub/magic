@@ -1,6 +1,7 @@
 import { audioRecordingsService } from "@/services/audioRecordings/AudioRecordingsService"
+import type { RecoverFinishRecordingTaskResponse } from "@/apis/modules/superMagic/recordSummary"
 import type { AudioProjectListItem } from "@/types/audioProject"
-import { canSubmitSummary } from "./summary-action-utils"
+import { canRetryMerge, canSubmitResummary, canSubmitSummary } from "./summary-action-utils"
 
 export type SubmitAudioRecordingSummaryResult =
 	| { ok: true }
@@ -32,6 +33,25 @@ export async function submitAudioRecordingSummary(
 	}
 }
 
+/** Validates and submits a re-summary request using the shared recordings service contract. */
+export async function resubmitAudioRecordingSummary(
+	item: AudioProjectListItem,
+): Promise<SubmitAudioRecordingSummaryResult> {
+	if (!canSubmitResummary({ task_key: item.task_key })) {
+		return { ok: false, reason: "missingParams" }
+	}
+
+	const modelId = await audioRecordingsService.resolveModelIdForSubmit(item.model_id)
+	if (!modelId) return { ok: false, reason: "missingModel" }
+
+	try {
+		await audioRecordingsService.resubmitSummary(item, modelId)
+		return { ok: true }
+	} catch {
+		return { ok: false, reason: "api" }
+	}
+}
+
 /** Builds the optimistic list/detail item state that represents an in-progress summary task. */
 export function buildOptimisticSummarizingProject(
 	item: AudioProjectListItem,
@@ -41,6 +61,37 @@ export function buildOptimisticSummarizingProject(
 		current_phase: "summarizing",
 		phase_status: "in_progress",
 		card_status: "summarizing",
+		is_summarized: false,
+	}
+}
+
+export type RetryMergeAudioRecordingResult =
+	| { ok: true; response: RecoverFinishRecordingTaskResponse }
+	| { ok: false; reason: "missingParams" | "api" }
+
+/** Validates and submits a finish-recording recovery request for a merge_failed task. */
+export async function retryMergeAudioRecording(
+	item: AudioProjectListItem,
+): Promise<RetryMergeAudioRecordingResult> {
+	if (!canRetryMerge({ task_key: item.task_key })) {
+		return { ok: false, reason: "missingParams" }
+	}
+
+	try {
+		const response = await audioRecordingsService.retryMerge(item)
+		return { ok: true, response }
+	} catch {
+		return { ok: false, reason: "api" }
+	}
+}
+
+/** Builds the optimistic list item state that represents an in-progress merge recovery task. */
+export function buildOptimisticRetryMergeProject(item: AudioProjectListItem): AudioProjectListItem {
+	return {
+		...item,
+		current_phase: "merging",
+		phase_status: "in_progress",
+		card_status: "processing",
 		is_summarized: false,
 	}
 }

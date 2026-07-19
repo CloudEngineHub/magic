@@ -10,7 +10,10 @@ namespace Dtyq\SuperMagic\Application\Agent\Service;
 use App\Application\Contact\UserSetting\UserSettingKey;
 use App\Application\Kernel\AbstractKernelAppService;
 use App\Application\ModelGateway\MicroAgent\MicroAgentFactory;
+use App\Domain\Contact\Entity\MagicDepartmentEntity;
+use App\Domain\Contact\Entity\MagicUserEntity;
 use App\Domain\Contact\Entity\ValueObject\DataIsolation as ContactDataIsolation;
+use App\Domain\Contact\Service\MagicDepartmentDomainService;
 use App\Domain\Contact\Service\MagicUserSettingDomainService;
 use App\Domain\File\Service\FileDomainService;
 use App\Domain\Flow\Entity\ValueObject\FlowDataIsolation;
@@ -19,7 +22,9 @@ use App\Domain\Mode\Entity\ValueQuery\ModeQuery;
 use App\Domain\Mode\Service\ModeDomainService;
 use App\Domain\Permission\Entity\ValueObject\OperationPermission\Operation;
 use App\Domain\Permission\Entity\ValueObject\OperationPermission\ResourceType as OperationPermissionResourceType;
+use App\Domain\Permission\Entity\ValueObject\PermissionDataIsolation;
 use App\Domain\Permission\Entity\ValueObject\ResourceVisibility\ResourceType as ResourceVisibilityResourceType;
+use App\Domain\Permission\Entity\ValueObject\ResourceVisibility\VisibilityType;
 use App\Domain\Permission\Service\OperationPermissionDomainService;
 use App\Domain\Permission\Service\ResourceVisibilityDomainService;
 use App\Domain\Provider\Service\AiAbilityDomainService;
@@ -32,6 +37,7 @@ use Dtyq\SuperMagic\Application\Collaboration\Policy\ResourceAccessPolicyService
 use Dtyq\SuperMagic\Domain\Agent\Entity\AgentVersionEntity;
 use Dtyq\SuperMagic\Domain\Agent\Entity\SuperMagicAgentEntity;
 use Dtyq\SuperMagic\Domain\Agent\Entity\ValueObject\AgentSourceType;
+use Dtyq\SuperMagic\Domain\Agent\Entity\ValueObject\PublishTargetType;
 use Dtyq\SuperMagic\Domain\Agent\Entity\ValueObject\SuperMagicAgentDataIsolation;
 use Dtyq\SuperMagic\Domain\Agent\Entity\ValueObject\SuperMagicAgentType;
 use Dtyq\SuperMagic\Domain\Agent\Service\SuperMagicAgentDomainService;
@@ -99,6 +105,65 @@ abstract class AbstractSuperMagicAppService extends AbstractKernelAppService
     }
 
     /**
+     * 批量加载 Agent 版本列表关联的用户与部门信息.
+     *
+     * 传入组织编码时按该组织查询；不传时按版本所属组织分组查询，适用于管理后台跨组织列表。
+     *
+     * @param null|string $organizationCode 指定组织编码；为 null 时使用版本实体上的组织编码
+     * @param AgentVersionEntity[] $versions
+     * @return array{0: array<string, MagicUserEntity>, 1: array<string, MagicDepartmentEntity>}
+     */
+    protected function batchLoadAgentVersionRelatedEntities(?string $organizationCode, array $versions): array
+    {
+        $userIdsByOrganization = [];
+        $departmentIdsByOrganization = [];
+
+        foreach ($versions as $version) {
+            $currentOrganizationCode = $organizationCode ?? $version->getOrganizationCode();
+            if ($currentOrganizationCode === '') {
+                continue;
+            }
+
+            if (! empty($version->getPublisherUserId())) {
+                $userIdsByOrganization[$currentOrganizationCode][] = $version->getPublisherUserId();
+            }
+
+            $targetValue = $version->getPublishTargetValue();
+            if ($targetValue === null || ! $version->getPublishTargetType()->requiresTargetValue()) {
+                continue;
+            }
+
+            foreach ($targetValue->getUserIds() as $userId) {
+                $userIdsByOrganization[$currentOrganizationCode][] = $userId;
+            }
+            foreach ($targetValue->getDepartmentIds() as $departmentId) {
+                $departmentIdsByOrganization[$currentOrganizationCode][] = $departmentId;
+            }
+        }
+
+        $userMap = [];
+        foreach ($userIdsByOrganization as $currentOrganizationCode => $userIds) {
+            foreach ($this->getUsers($currentOrganizationCode, array_values(array_unique($userIds))) as $userId => $userEntity) {
+                $userMap[$userId] = $userEntity;
+            }
+        }
+
+        $memberDepartmentMap = [];
+        foreach ($departmentIdsByOrganization as $currentOrganizationCode => $departmentIds) {
+            $departmentEntities = di(MagicDepartmentDomainService::class)->getDepartmentByIds(
+                ContactDataIsolation::simpleMake($currentOrganizationCode),
+                array_values(array_unique($departmentIds)),
+                true
+            );
+            foreach ($departmentEntities as $departmentId => $departmentEntity) {
+                $memberDepartmentMap[$departmentId] = $departmentEntity;
+            }
+        }
+
+        return [$userMap, $memberDepartmentMap];
+    }
+
+    /**
      * 校验当前用户是否对 Agent 具备读取权限，返回当前用户的最高操作权限。
      *
      * 读权限采用「可见性 ∪ 操作权限」并集判定，适用于详情、版本列表、Playbook 列表等只读场景。
@@ -121,6 +186,72 @@ abstract class AbstractSuperMagicAppService extends AbstractKernelAppService
             }
             throw $throwable;
         }
+    }
+
+    /**
+     * 同步 Agent 发布目标切换后的权限状态。
+     *
+     * 规则：
+     * - MARKET -> MARKET：不处理
+     * - MARKET -> INTERNAL：清市场关系，再重建内部可见性
+     * - INTERNAL -> MARKET：清内部可见性
+     * - INTERNAL -> INTERNAL：按当前版本重建内部可见性
+     */
+    protected function syncAgentPublishScopeTransition(
+        SuperMagicAgentDataIsolation $dataIsolation,
+        SuperMagicAgentEntity $agentEntity,
+        ?AgentVersionEntity $previousVersion,
+        AgentVersionEntity $currentVersion
+    ): void {
+        $previousTargetType = $previousVersion?->getPublishTargetType();
+        $currentTargetType = $currentVersion->getPublishTargetType();
+
+        if ($previousTargetType === PublishTargetType::MARKET && $currentTargetType === PublishTargetType::MARKET) {
+            return;
+        }
+
+        if ($currentTargetType === PublishTargetType::MARKET) {
+            if ($previousTargetType !== null && $previousTargetType !== PublishTargetType::MARKET) {
+                // 从内部切到市场时，清掉内部共享可见性，但保留创建者自己可见。
+                $this->saveAgentVisibility(
+                    $this->createAgentPermissionDataIsolation($dataIsolation, $agentEntity),
+                    $agentEntity->getCode(),
+                    VisibilityType::SPECIFIC,
+                    [$agentEntity->getCreator()]
+                );
+            }
+            return;
+        }
+
+        if ($previousTargetType === PublishTargetType::MARKET) {
+            // 从市场切回内部时，先清市场分发，再回收市场安装关系。
+            $this->superMagicAgentDomainService->offlineMarketPublishings($dataIsolation, $agentEntity->getCode());
+            $this->userAgentDomainService->deleteUserAgentOwnershipsExceptUser(
+                $dataIsolation,
+                $agentEntity->getCode(),
+                $agentEntity->getCreator()
+            );
+        }
+
+        $dataIsolation->disabled();
+        $this->syncInternalAgentVisibility($dataIsolation, $agentEntity, $currentVersion);
+    }
+
+    protected function saveAgentVisibility(
+        BaseDataIsolation|PermissionDataIsolation $dataIsolation,
+        string $code,
+        VisibilityType $visibilityType,
+        array $userIds = [],
+        array $departmentIds = []
+    ): void {
+        $this->resourceVisibilityDomainService->saveVisibilityByPrincipals(
+            $this->createPermissionDataIsolation($dataIsolation),
+            ResourceVisibilityResourceType::SUPER_MAGIC_AGENT,
+            $code,
+            $visibilityType,
+            $userIds,
+            $departmentIds
+        );
     }
 
     /**
@@ -151,16 +282,18 @@ abstract class AbstractSuperMagicAppService extends AbstractKernelAppService
 
     /**
      * 获取用户可访问的智能体编码列表.
-     * @return array{accessible: array<string>, creator: array<string>, codes: array<string>}
+     * @return array{accessible: array<string>, creator: array<string>, codes: array<string>, operations: array<string, Operation>}
      */
     protected function getAccessibleAgentCodes(SuperMagicAgentDataIsolation $dataIsolation, string $userId): array
     {
-        /** @var array<string> $accessibleCodes */
-        $accessibleCodes = $this->resourceAccessPolicyService->getReadableResourceCodes(
+        /** @var array{operations: array<string, Operation>, all_codes: array<string>} $accessibleAgentResult */
+        $accessibleAgentResult = $this->resourceAccessPolicyService->getReadableResourceCodes(
             $dataIsolation,
             OperationPermissionResourceType::CustomAgent,
             ResourceVisibilityResourceType::SUPER_MAGIC_AGENT
-        )['all_codes'] ?? [];
+        );
+        /** @var array<string> $accessibleCodes */
+        $accessibleCodes = $accessibleAgentResult['all_codes'] ?? [];
         // 查询用户自己创建的智能体编码（用户创建的必然可见）
         /** @var array<string> $creatorCodes */
         $creatorCodes = $this->superMagicAgentDomainService->getCodesByCreator($dataIsolation, $userId);
@@ -173,6 +306,7 @@ abstract class AbstractSuperMagicAppService extends AbstractKernelAppService
             'accessible' => $accessibleCodes,
             'creator' => $creatorCodes,
             'codes' => array_values(array_unique(array_merge($creatorCodes, $accessibleCodes))),
+            'operations' => $accessibleAgentResult['operations'] ?? [],
         ];
     }
 
@@ -577,8 +711,59 @@ abstract class AbstractSuperMagicAppService extends AbstractKernelAppService
 
         // 获取后台的所有模式，用于封装数据到 Agent 中
         $query = new ModeQuery(status: true);
-        $modeEntities = $this->modeDomainService->getModes($modeDataIsolation, $query, Page::createNoPage())['list'];
+        $modeEntities = $this->modeDomainService->getOrganizationVisibleModes($modeDataIsolation, $query, Page::createNoPage())['list'];
 
-        return array_map(fn ($modeEntity) => $modeEntity->getIdentifier(), $modeEntities);
+        return array_map(fn (ModeEntity $modeEntity) => $modeEntity->getIdentifier(), $modeEntities);
+    }
+
+    private function syncInternalAgentVisibility(
+        SuperMagicAgentDataIsolation $dataIsolation,
+        SuperMagicAgentEntity $agentEntity,
+        AgentVersionEntity $currentVersion
+    ): void {
+        if ($currentVersion->getPublishTargetType() === PublishTargetType::ORGANIZATION) {
+            // 组织可见，直接开放全员可见。
+            $this->saveAgentVisibility($dataIsolation, $agentEntity->getCode(), VisibilityType::ALL);
+            return;
+        }
+
+        if ($currentVersion->getPublishTargetType() === PublishTargetType::MEMBER) {
+            $publishTargetValue = $currentVersion->getPublishTargetValue();
+            $userIds = array_values(array_unique(array_merge(
+                [$agentEntity->getCreator()],
+                $publishTargetValue?->getUserIds() ?? []
+            )));
+
+            // 成员发布时，保留创建者并叠加显式成员和部门。
+            $this->saveAgentVisibility(
+                $dataIsolation,
+                $agentEntity->getCode(),
+                VisibilityType::SPECIFIC,
+                $userIds,
+                $publishTargetValue?->getDepartmentIds() ?? []
+            );
+            return;
+        }
+
+        // PRIVATE 只保留创建者可见。
+        $privateDataIsolation = clone $dataIsolation;
+        $privateDataIsolation->disabled();
+
+        $this->saveAgentVisibility(
+            $privateDataIsolation,
+            $agentEntity->getCode(),
+            VisibilityType::SPECIFIC,
+            [$agentEntity->getCreator()]
+        );
+    }
+
+    private function createAgentPermissionDataIsolation(
+        BaseDataIsolation $dataIsolation,
+        SuperMagicAgentEntity $agentEntity
+    ): PermissionDataIsolation {
+        $permissionDataIsolation = $this->createPermissionDataIsolation($dataIsolation);
+        $permissionDataIsolation->setCurrentOrganizationCode($agentEntity->getOrganizationCode());
+
+        return $permissionDataIsolation;
     }
 }

@@ -101,8 +101,8 @@ const PLACEMENT_MODE_DEFINITIONS = [
 		descriptionKey: "placement.background.desc",
 		descriptionFallback: "商品角度和姿态尽量不变，只做背景与光影融合",
 		promptSuffix: {
-			zh: "摆放方式：仅换背景。尽量保持商品在原参考图中的角度、姿态、尺度、轮廓和陈列方式不变，只替换背景并做轻微光影融合，不要重新摆放、旋转、折叠或重塑商品。",
-			en: "PLACEMENT MODE: background-only replacement. Keep the product's original pose, angle, orientation, scale, outline, and display state from the product reference as much as possible. Only replace the background and lightly harmonize the lighting, shadow, and edges. ",
+			zh: "摆放方式：仅换背景。先判断 {{backgroundReference}} 中是否存在明显主体：若存在，识别该主体并用 {{productReference}} 的外观 1:1 替换，继承原主体的位置、尺度、角度、透视与接触阴影，完全移除原主体，场景其余部分完整保留；若不存在，完整保留 {{backgroundReference}} 的场景，将 {{productReference}} 中的主体融入场景，保持 {{productReference}} 的角度与姿态，仅做光影融合。主体外观始终来自 {{productReference}}，不要使用 {{backgroundReference}} 中主体的外观。",
+			en: "PLACEMENT MODE: background-only replacement. First check whether {{backgroundReference}} contains a clear subject. If it does, identify that subject and replace it 1:1 using the appearance from {{productReference}}. Inherit the original subject's position, scale, orientation, perspective, and contact shadows, remove the original subject completely, and keep the rest of the scene unchanged. If it does not, preserve the scene in {{backgroundReference}} completely, blend in the subject from {{productReference}}, keep the subject angle and pose from {{productReference}}, and harmonize only the lighting and edges. The subject appearance must always come from {{productReference}}, not from any subject visible in {{backgroundReference}}. ",
 		},
 	},
 ]
@@ -147,7 +147,10 @@ function buildPromptCompletionUserPrompt({ imageCount, placementMode, currentTex
 	].join("\n")
 }
 
-function resolvePlacementPromptSuffix(definition, { backgroundMode, backgroundReference, locale }) {
+function resolvePlacementPromptSuffix(
+	definition,
+	{ backgroundMode, backgroundReference, productReference, locale },
+) {
 	const backgroundInstruction =
 		backgroundMode === BACKGROUND_MODE.IMAGE && definition.promptSuffixBackgroundInstruction
 			? (
@@ -160,6 +163,7 @@ function resolvePlacementPromptSuffix(definition, { backgroundMode, backgroundRe
 
 	return (MagicPromptLocale.pickText(definition.promptSuffix, locale) ?? "")
 		.replace(/\{\{backgroundReference\}\}/g, backgroundReference)
+		.replace(/\{\{productReference\}\}/g, productReference)
 		.replace(/\{\{backgroundInstruction\}\}/g, backgroundInstruction)
 }
 
@@ -221,11 +225,34 @@ function getQualityOptionsForModel(model) {
 		}))
 }
 
-function buildProductIdentityInstruction({ locale, productReference }) {
+function buildProductIdentityInstruction({
+	locale,
+	productReference,
+	backgroundReference,
+	backgroundMode,
+	placementMode,
+}) {
+	const isBackgroundOnlyImageMode =
+		backgroundMode === BACKGROUND_MODE.IMAGE && placementMode === PLACEMENT_MODE.BACKGROUND
+
 	if (MagicPromptLocale.isChinese(locale)) {
+		if (isBackgroundOnlyImageMode) {
+			return (
+				`先读取 ${productReference}，识别主体类型、结构、材质、颜色与图案细节。` +
+				`将 ${productReference} 作为成品中主体外观的唯一来源，不要使用 ${backgroundReference} 中主体的外观，不要改成其他主体。`
+			)
+		}
+
 		return (
-			`先读取商品参考图 ${productReference}，识别商品类型、结构组成、轮廓比例、材质、颜色、图案细节、拍摄角度与摆放方向。` +
+			`先读取 ${productReference}，识别商品类型、结构组成、轮廓比例、材质、颜色、图案细节、拍摄角度与摆放方向。` +
 			`将 ${productReference} 作为最终结果中商品主体的唯一来源，保持商品外观、结构细节、材质质感、颜色和方向一致，不要改成其他商品。`
+		)
+	}
+
+	if (isBackgroundOnlyImageMode) {
+		return (
+			`First read ${productReference} and identify the subject type, structure, material, color, and pattern details. ` +
+			`Use ${productReference} as the ONLY source of the subject appearance in the final image. Do not use the subject appearance visible in ${backgroundReference}, and do not turn it into a different subject. `
 		)
 	}
 
@@ -235,9 +262,26 @@ function buildProductIdentityInstruction({ locale, productReference }) {
 	)
 }
 
-function buildSceneInstruction({ backgroundMode, backgroundPrompt, backgroundReference, locale }) {
+function buildSceneInstruction({
+	backgroundMode,
+	backgroundPrompt,
+	productReference,
+	backgroundReference,
+	locale,
+	placementMode,
+}) {
+	const isBackgroundOnlyImageMode =
+		backgroundMode === BACKGROUND_MODE.IMAGE && placementMode === PLACEMENT_MODE.BACKGROUND
+
 	if (MagicPromptLocale.isChinese(locale)) {
 		if (backgroundMode === BACKGROUND_MODE.IMAGE) {
+			if (isBackgroundOnlyImageMode) {
+				return (
+					`${backgroundReference} 提供场景参考，尽量完整保留其中的空间、构图、光线与背景元素。` +
+					`若其中有主体，仅替换该主体；若无主体，完整保留场景并将 ${productReference} 中的主体融入。`
+				)
+			}
+
 			return (
 				`${backgroundReference} 仅作为背景参考图，复用其环境、空间结构、景深层次、布光氛围、色彩基调和主要背景元素。` +
 				"只替换背景与环境，不改变商品本体。"
@@ -251,6 +295,13 @@ function buildSceneInstruction({ backgroundMode, backgroundPrompt, backgroundRef
 	}
 
 	if (backgroundMode === BACKGROUND_MODE.IMAGE) {
+		if (isBackgroundOnlyImageMode) {
+			return (
+				`${backgroundReference} provides the scene reference. Preserve its space, composition, lighting, and background elements as completely as possible. ` +
+				`If it contains a subject, replace only that subject. If it does not, keep the scene unchanged and blend in the subject from ${productReference}. `
+			)
+		}
+
 		return (
 			`${backgroundReference} is ONLY a background reference. Reuse its environment, spatial structure, depth layering, lighting mood, color palette, and major background elements. ` +
 			"Change only the background and environment while keeping the product itself unchanged. "
@@ -263,7 +314,13 @@ function buildSceneInstruction({ backgroundMode, backgroundPrompt, backgroundRef
 	)
 }
 
-function buildPlacementInstruction({ backgroundMode, placementMode, backgroundReference, locale }) {
+function buildPlacementInstruction({
+	backgroundMode,
+	placementMode,
+	backgroundReference,
+	productReference,
+	locale,
+}) {
 	const normalizedPlacementMode =
 		backgroundMode === BACKGROUND_MODE.PROMPT && placementMode === PLACEMENT_MODE.REPLACE
 			? PLACEMENT_MODE.SMART
@@ -272,6 +329,7 @@ function buildPlacementInstruction({ backgroundMode, placementMode, backgroundRe
 	return resolvePlacementPromptSuffix(getPlacementModeDefinition(normalizedPlacementMode), {
 		backgroundMode,
 		backgroundReference,
+		productReference,
 		locale,
 	})
 }
@@ -285,17 +343,26 @@ function buildProductBackgroundSwapPrompt({
 	const productReference = MagicPromptLocale.getReferenceLabel(1, locale)
 	const backgroundReference = MagicPromptLocale.getReferenceLabel(2, locale)
 	const prompt =
-		buildProductIdentityInstruction({ locale, productReference }) +
+		buildProductIdentityInstruction({
+			locale,
+			productReference,
+			backgroundReference,
+			backgroundMode,
+			placementMode,
+		}) +
 		buildSceneInstruction({
 			backgroundMode,
 			backgroundPrompt,
+			productReference,
 			backgroundReference,
 			locale,
+			placementMode,
 		}) +
 		buildPlacementInstruction({
 			backgroundMode,
 			placementMode,
 			backgroundReference,
+			productReference,
 			locale,
 		})
 

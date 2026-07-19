@@ -50,6 +50,8 @@ return [
         'page_size_must_not_exceed_100' => 'Page size must not exceed 100',
         'keyword_must_be_string' => 'Keyword must be a string',
         'keyword_must_not_exceed_255' => 'Keyword length cannot exceed 255 characters',
+        'scope_invalid' => 'Invalid query scope',
+        'sort_invalid' => 'Invalid sort field',
         'icon_must_be_string' => 'Icon must be a string',
         'icon_max_length_64' => 'Icon length cannot exceed 64 characters',
         'theme_color_invalid' => 'Invalid theme color format, should be #RRGGBB format',

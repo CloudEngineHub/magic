@@ -29,13 +29,13 @@ use Dtyq\SuperMagic\Domain\SuperAgent\Entity\ValueObject\TaskStatus;
 use Dtyq\SuperMagic\Domain\SuperAgent\Service\UserDomainService;
 use Dtyq\SuperMagic\ErrorCode\SuperAgentErrorCode;
 use Dtyq\SuperMagic\Infrastructure\ExternalAPI\SandboxOS\Gateway\Constant\SandboxStatus;
+use Dtyq\SuperMagic\Infrastructure\Utils\TiptapBuilder;
 use Dtyq\SuperMagic\Interfaces\Share\DTO\Request\CreateShareRequestDTO;
 use Dtyq\SuperMagic\Interfaces\SuperAgent\DTO\Request\CreateAgentTaskRequestDTO;
 use Dtyq\SuperMagic\Interfaces\SuperAgent\DTO\Request\CreateOpenTaskRequestDTO;
 use Dtyq\SuperMagic\Interfaces\SuperAgent\DTO\Request\CreateScriptTaskRequestDTO;
 use Dtyq\SuperMagic\Interfaces\SuperAgent\DTO\Request\CreateTaskRequestDTO;
 use Dtyq\SuperMagic\Interfaces\SuperAgent\DTO\Request\CreateTaskShareRequestDTO;
-use Dtyq\SuperMagic\Interfaces\SuperAgent\DTO\Request\GetTaskFilesRequestDTO;
 use Dtyq\SuperMagic\Interfaces\SuperAgent\Facade\AbstractApi;
 use Exception;
 use Hyperf\HttpServer\Contract\RequestInterface;
@@ -91,9 +91,7 @@ class OpenTaskApi extends AbstractApi
             ExceptionBuilder::throw(GenericErrorCode::ParameterMissing, 'user_not_authorized');
         }
 
-        $dataIsolation = new DataIsolation();
-        // 设置用户授权信息
-        $dataIsolation->setCurrentUserId($userAuthorization?->getId());
+        $dataIsolation = DataIsolation::create('', (string) ($userAuthorization?->getId() ?? ''));
         $status = TaskStatus::from($status);
 
         $this->topicTaskAppService->updateTaskStatus($dataIsolation, $taskEntity, $status);
@@ -117,10 +115,8 @@ class OpenTaskApi extends AbstractApi
 
         $topicDTO = $this->topicAppService->getTopic($requestContext, (int) $topicId);
 
-        $tiptapContent = $this->convertTextToTiptap($requestDTO->getPrompt());
-
         $messageContent = [
-            'content' => json_encode($tiptapContent),
+            'content' => TiptapBuilder::plainTextToJson($requestDTO->getPrompt()),
             'instructs' => [['value' => 'normal']],
             'extra' => [
                 'super_agent' => [
@@ -173,8 +169,14 @@ class OpenTaskApi extends AbstractApi
 
         $requestDTO->setSandboxId($topicDTO->getSandboxId());
 
+        $userAuthorization = $requestContext->getUserAuthorization();
+        $dataIsolation = DataIsolation::create(
+            $userAuthorization->getOrganizationCode(),
+            $userAuthorization->getId()
+        );
+
         try {
-            $this->handleTaskMessageAppService->executeScriptTask($requestDTO);
+            $this->handleTaskMessageAppService->executeScriptTask($dataIsolation, $requestDTO);
         } catch (Exception $e) {
             ExceptionBuilder::throw(GenericErrorCode::ParameterMissing, 'execute_script_task_failed');
         }
@@ -261,71 +263,15 @@ class OpenTaskApi extends AbstractApi
     #[ApiResponse('low_code')]
     public function createTask(RequestContext $requestContext): array
     {
-        // 1. Get user authorization from coroutine context
         $userAuthorization = RequestCoContext::getUserAuthorization();
         if (empty($userAuthorization)) {
             ExceptionBuilder::throw(GenericErrorCode::ParameterMissing, 'user_authorization_not_found');
         }
-
-        // 2. Set user authorization to RequestContext
         $requestContext->setUserAuthorization($userAuthorization);
 
-        // 3. Get simplified request DTO
-        $openTaskDTO = CreateOpenTaskRequestDTO::fromRequest($this->request);
+        $requestDTO = CreateOpenTaskRequestDTO::fromRequest($this->request);
 
-        // 4. Convert plain text to Tiptap format
-        $tiptapContent = $this->convertTextToTiptap($openTaskDTO->getContent());
-
-        // 5. Build complete message_content structure
-        $messageContent = [
-            'content' => json_encode($tiptapContent),
-            'instructs' => [['value' => 'normal']],
-            'extra' => [
-                'super_agent' => [
-                    'mentions' => [],
-                    'chat_mode' => 'normal',
-                    'topic_pattern' => $openTaskDTO->getAgentMode(),
-                    'enable_web_search' => $openTaskDTO->getEnableWebSearch(),
-                ],
-            ],
-        ];
-
-        // Add model configuration if provided
-        if (! empty($openTaskDTO->getModelId())) {
-            $messageContent['extra']['super_agent']['model'] = [
-                'model_id' => $openTaskDTO->getModelId(),
-            ];
-        }
-
-        // Add image model configuration if provided
-        if (! empty($openTaskDTO->getImageModelId())) {
-            $messageContent['extra']['super_agent']['image_model'] = [
-                'model_id' => $openTaskDTO->getImageModelId(),
-            ];
-        }
-
-        if (! empty($openTaskDTO->getVideoModelId())) {
-            $messageContent['extra']['super_agent']['video_model'] = [
-                'model_id' => $openTaskDTO->getVideoModelId(),
-            ];
-        }
-
-        // 6. Build complete CreateTaskRequestDTO
-        $taskRequestData = [
-            'project_id' => $openTaskDTO->getProjectId(),
-            'topic_id' => $openTaskDTO->getTopicId(),
-            'message_type' => 'rich_text',
-            'message_content' => $messageContent,
-        ];
-
-        $taskDTO = new CreateTaskRequestDTO($taskRequestData);
-
-        // 7. Call application service with converted DTO
-        return $this->topicTaskAppService->createTask(
-            $requestContext,
-            $taskDTO,
-            SuperMagicExecutionSource::OpenApi
-        );
+        return $this->topicTaskAppService->createTaskFromOpenApi($requestContext, $requestDTO);
     }
 
     /**
@@ -424,39 +370,6 @@ class OpenTaskApi extends AbstractApi
         $shareResult = $this->shareAppService->createShare($userAuthorization, $shareDTO);
 
         return $shareResult->toArray();
-    }
-
-    /**
-     * Convert plain text to Tiptap JSON format.
-     * Supports multi-line text (each line becomes a paragraph).
-     *
-     * @param string $text Plain text content
-     * @return array Tiptap JSON structure
-     */
-    private function convertTextToTiptap(string $text): array
-    {
-        // Split text by newlines
-        $lines = explode("\n", $text);
-
-        $paragraphs = [];
-        foreach ($lines as $line) {
-            // Create paragraph for each line (including empty lines)
-            $paragraphs[] = [
-                'type' => 'paragraph',
-                'attrs' => ['suggestion' => ''],
-                'content' => [
-                    [
-                        'type' => 'text',
-                        'text' => $line,
-                    ],
-                ],
-            ];
-        }
-
-        return [
-            'type' => 'doc',
-            'content' => $paragraphs,
-        ];
     }
 
     private function handRequestContext(RequestContext $requestContext): void

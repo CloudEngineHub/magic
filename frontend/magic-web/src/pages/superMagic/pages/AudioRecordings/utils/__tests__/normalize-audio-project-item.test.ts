@@ -159,6 +159,22 @@ describe("normalizeAudioProjectListItem", () => {
 		expect(item?.is_summarized).toBe(false)
 	})
 
+	it("lets summarizing in progress override stale finished flags", () => {
+		const item = normalizeAudioProjectListItem({
+			...SAMPLE_SUMMARIZED,
+			is_summarized: 1,
+			project_status: "finished",
+			current_topic_status: "finished",
+			extra: {
+				...SAMPLE_SUMMARIZED.extra,
+				phase_status: "in_progress",
+			},
+		})
+
+		expect(item?.card_status).toBe("summarizing")
+		expect(item?.is_summarized).toBe(false)
+	})
+
 	it("maps backend duration_seconds when list duration is not hydrated yet", () => {
 		const item = normalizeAudioProjectListItem({
 			...SAMPLE_SUMMARIZED,

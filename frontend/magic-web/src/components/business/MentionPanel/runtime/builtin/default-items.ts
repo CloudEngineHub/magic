@@ -13,6 +13,7 @@ export const NON_SELECTABLE_BUILTIN_ITEM_IDS = [
 	BuiltinItemId.ENTERPRISE_DRIVE,
 	BuiltinItemId.ORGANIZATION_DRIVE,
 	BuiltinItemId.PROJECT_FILES,
+	BuiltinItemId.CANVAS_ELEMENTS,
 	BuiltinItemId.MCP_EXTENSIONS,
 	BuiltinItemId.AGENTS,
 ] as const

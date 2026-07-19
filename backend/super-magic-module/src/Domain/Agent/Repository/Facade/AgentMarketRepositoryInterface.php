@@ -42,6 +42,26 @@ interface AgentMarketRepositoryInterface
     public function findByIds(array $ids): array;
 
     /**
+     * 根据市场记录 ID 查询市场记录（不限制发布状态）。
+     */
+    public function findById(int $id): ?AgentMarketEntity;
+
+    /**
+     * 查询引用指定分类的有效市场 Agent 数量。
+     */
+    public function countByCategoryId(int $categoryId): int;
+
+    /**
+     * 批量统计分类下的有效市场 Agent 数量。
+     *
+     * @param int[] $categoryIds
+     * @param bool $publishedOnly 是否只统计已发布记录
+     * @param bool $visibleOnly 是否只统计未隐藏记录
+     * @return array<int, int>
+     */
+    public function countByCategoryIds(array $categoryIds, bool $publishedOnly = false, bool $visibleOnly = false): array;
+
+    /**
      * 根据 agent_code 查询市场记录（不限制发布状态）.
      *
      * @param string $agentCode Agent code
@@ -57,6 +77,9 @@ interface AgentMarketRepositoryInterface
      * @return AgentMarketEntity 保存后的实体
      */
     public function saveOrUpdate(SuperMagicAgentDataIsolation $dataIsolation, AgentMarketEntity $entity): AgentMarketEntity;
+
+    /** @return int[] */
+    public function findIdsByAgentCode(SuperMagicAgentDataIsolation $dataIsolation, string $agentCode): array;
 
     public function offlineByAgentCode(SuperMagicAgentDataIsolation $dataIsolation, string $agentCode): bool;
 
@@ -82,6 +105,7 @@ interface AgentMarketRepositoryInterface
         ?string $agentCode,
         ?string $startTime,
         ?string $endTime,
+        ?array $categoryIds,
         string $orderBy,
         Page $page
     ): array;
@@ -116,6 +140,11 @@ interface AgentMarketRepositoryInterface
      *
      * @param array{
      *     category_id?: null|int,
+     *     name_i18n?: null|array,
+     *     description_i18n?: null|array,
+     *     role_i18n?: null|array,
+     *     icon?: null|array,
+     *     icon_type?: null|int,
      *     sort_order?: null|int,
      *     is_featured?: bool,
      *     is_hidden?: bool

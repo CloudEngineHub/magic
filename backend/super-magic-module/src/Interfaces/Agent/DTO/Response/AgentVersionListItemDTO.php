@@ -24,6 +24,8 @@ class AgentVersionListItemDTO extends AbstractDTO
         private readonly bool $isCurrentVersion,
         private readonly ?array $versionDescriptionI18n,
         private readonly ?array $publishTargetValue = null,
+        private readonly ?CategoryInfoDTO $category = null,
+        private readonly array $categories = [],
     ) {
     }
 
@@ -41,6 +43,11 @@ class AgentVersionListItemDTO extends AbstractDTO
             'is_current_version' => $this->isCurrentVersion,
             'version_description_i18n' => $this->versionDescriptionI18n,
             'publish_target_value' => $this->publishTargetValue,
+            'category' => $this->category?->toArray(),
+            'categories' => array_map(
+                static fn (CategoryInfoDTO $category): array => $category->toArray(),
+                $this->categories
+            ),
         ];
     }
 }

@@ -22,6 +22,7 @@ import {
 } from "./reference-assets/referenceResourceSelection"
 import { useCanvasReferenceMentionRuntime } from "./reference-assets/useCanvasReferenceMentionRuntime"
 import { CANVAS_REFERENCE_MENTION_ITEM_TYPE } from "./reference-assets/canvasReferenceMention.constants"
+import { MentionPanelViewMode } from "@/components/business/MentionPanel/types"
 
 interface UseCanvasReferenceMentionOptions {
 	/** 可匹配的项列表（从 referenceImagesState 派生） */
@@ -216,6 +217,8 @@ export function useCanvasReferenceMention(options?: UseCanvasReferenceMentionOpt
 			getInitialLoadOptions,
 			getInitialNavigationStack,
 			catalogBehavior,
+			viewMode: MentionPanelViewMode.GALLERY,
+			galleryOptions: { enablePreviewModal: true },
 			trailingTextAfterInsert: MENTION_CARET_GUARD_TEXT,
 			canSelectItem,
 			nodeViewRenderers: mentionNodeViewRenderers,

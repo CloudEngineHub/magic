@@ -28,6 +28,7 @@ import { service } from "@/services"
 import { Config } from "@/models/config/types"
 import type { ConfigService } from "@/services/config/ConfigService"
 import { eventFactory, logger } from "./instances"
+import { refreshAccountContextPage } from "@/broadcastChannel/eventFactory/accountContextRefresh"
 
 // 注册事件处理器
 
@@ -331,7 +332,7 @@ async function handleSwitchOrganization(data: {
 				centered: true,
 				maskClosable: false,
 				closable: false,
-				onOk: () => {
+				onOk: async () => {
 					// 重新获取最新状态并验证
 					const latestState = getLatestState()
 					const latestValidation = validateSwitchOperation(pendingOperation)
@@ -360,13 +361,16 @@ async function handleSwitchOrganization(data: {
 						return
 					}
 
-					UserDispatchService.switchOrganization({
+					const switched = await UserDispatchService.switchOrganization({
 						userInfo: data.userInfo,
 						magicOrganizationCode: data.magicOrganizationCode,
 					})
 					modalStateManager.destroyOrganizationModal()
 					modalStateManager.clearPendingOperation()
 					modalStateManager.removeEventFromQueue(eventId)
+					if (switched) {
+						refreshAccountContextPage()
+					}
 				},
 				onCancel: () => {
 					const latestState = getLatestState()
@@ -527,6 +531,7 @@ async function handleSwitchAccount(data: {
 			modalStateManager.destroyAccountModal()
 			handleRouteRedirect(newAccount)
 			modalStateManager.removeEventFromQueue(eventId)
+			refreshAccountContextPage()
 			return
 		}
 
@@ -610,6 +615,7 @@ async function handleSwitchAccount(data: {
 					modalStateManager.removeEventFromQueue(eventId)
 
 					handleRouteRedirect(newAccount || null)
+					refreshAccountContextPage()
 				},
 				onCancel: () => {
 					const latestState = getLatestState()

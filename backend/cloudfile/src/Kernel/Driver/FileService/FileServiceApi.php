@@ -70,6 +70,9 @@ class FileServiceApi
             'platform' => $this->platform,
             'key' => $this->key,
             'policy' => $policy,
+            'options' => [
+                'internal_endpoint' => (bool) ($options['internal_endpoint'] ?? false),
+            ],
         ], $options);
     }
 

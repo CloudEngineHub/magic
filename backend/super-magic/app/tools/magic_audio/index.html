@@ -3854,6 +3854,54 @@
         },
       ];
 
+      function normalizeAnalysisPanelEntry(panel) {
+        if (!panel || typeof panel !== "object") {
+          return null;
+        }
+
+        const fileKey = panel.fileKey || panel.file_key;
+        const id = panel.id || fileKey;
+        const type = panel.type || "markdown";
+        const title = panel.title || fileKey;
+
+        if (!fileKey || !id || !title) {
+          return null;
+        }
+
+        return {
+          id,
+          fileKey,
+          type,
+          title,
+          icon: panel.icon || "description",
+          placeholder: panel.placeholder || `搜索${title}...`,
+          hasEdit: panel.hasEdit !== false,
+          hasSearch: panel.hasSearch !== undefined ? panel.hasSearch : type === "markdown",
+          hasExport: panel.hasExport !== undefined ? panel.hasExport : type === "markdown",
+          useFloatingButton: panel.useFloatingButton === true,
+        };
+      }
+
+      function getAnalysisPanelsConfig(config = projectConfig) {
+        const panels = [...ANALYSIS_PANELS_CONFIG];
+        const existingFileKeys = new Set(panels.map((panel) => panel.fileKey));
+
+        if (!config || !Array.isArray(config.analysis_panels)) {
+          return panels;
+        }
+
+        config.analysis_panels.forEach((panel) => {
+          const normalized = normalizeAnalysisPanelEntry(panel);
+          if (!normalized || existingFileKeys.has(normalized.fileKey)) {
+            return;
+          }
+          panels.push(normalized);
+          existingFileKeys.add(normalized.fileKey);
+        });
+
+        return panels;
+      }
+
       /**
        * 分析内容存储 - 动态加载的 Markdown 内容
        *
@@ -4623,7 +4671,7 @@
        */
       async function loadAnalysisContent(config) {
         // 筛选需要加载的面板（元数据中配置的）
-        const panelsToLoad = ANALYSIS_PANELS_CONFIG.filter((p) => p.type !== "external" && config.files[p.fileKey]);
+        const panelsToLoad = getAnalysisPanelsConfig(config).filter((p) => p.type !== "external" && config.files[p.fileKey]);
 
         if (panelsToLoad.length === 0) {
           return;
@@ -7451,7 +7499,7 @@
        * 同时把已经打开过的面板都标记为未渲染
        */
       function reRenderAllAnalysisPanels() {
-        ANALYSIS_PANELS_CONFIG.forEach((panel) => {
+        getAnalysisPanelsConfig(projectConfig).forEach((panel) => {
           const contentElement = document.getElementById(`${panel.id}-content`);
           if (contentElement) {
             contentElement.dataset.rendered = "false";
@@ -7472,7 +7520,7 @@
        * @param {string} panelId - 面板 ID
        */
       function renderAnalysisPanel(panelId) {
-        const panelConfig = ANALYSIS_PANELS_CONFIG.find((p) => p.id === panelId);
+        const panelConfig = getAnalysisPanelsConfig(projectConfig).find((p) => p.id === panelId);
         if (!panelConfig) return;
 
         const contentElement = document.getElementById(`${panelId}-content`);

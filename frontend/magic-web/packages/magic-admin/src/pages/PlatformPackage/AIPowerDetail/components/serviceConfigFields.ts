@@ -106,6 +106,76 @@ const COMMON_FIELDS = {
 	}),
 } as const
 
+const PROVIDER_META_FIELD_KEYS = new Set(["provider", "provider_code", "name", "enable"])
+
+const COMMON_FIELD_MAP: Partial<Record<string, FieldConfig>> = {
+	request_url: COMMON_FIELDS.requestUrl,
+	api_key: COMMON_FIELDS.apiKey,
+	ak: COMMON_FIELDS.ak,
+	sk: COMMON_FIELDS.sk,
+	access_key: COMMON_FIELDS.accessKey,
+	secret_key: COMMON_FIELDS.secretKey,
+	app_key: COMMON_FIELDS.appKey,
+	timeout: COMMON_FIELDS.timeout,
+	concurrent: COMMON_FIELDS.concurrent,
+	hot_words: COMMON_FIELDS.hotWords,
+	replacement_words: COMMON_FIELDS.replacementWords,
+	model_name: COMMON_FIELDS.modelName,
+}
+
+const PASSWORD_FIELD_PATTERNS = ["key", "secret", "token", "password"]
+const TEXTAREA_FIELD_PATTERNS = ["prompt", "words", "description"]
+
+const toFieldLabel = (key: string) => {
+	return key
+		.split("_")
+		.filter(Boolean)
+		.map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+		.join(" ")
+}
+
+const inferFieldType = (key: string, value: unknown): FieldConfig["type"] => {
+	const normalizedKey = key.toLowerCase()
+
+	if (normalizedKey === "ak" || normalizedKey === "sk") {
+		return "password"
+	}
+
+	if (PASSWORD_FIELD_PATTERNS.some((pattern) => normalizedKey.includes(pattern))) {
+		return "password"
+	}
+
+	if (
+		TEXTAREA_FIELD_PATTERNS.some((pattern) => normalizedKey.includes(pattern)) ||
+		(typeof value === "string" && value.includes("\n"))
+	) {
+		return "textarea"
+	}
+
+	return "input"
+}
+
+//
+const inferProviderFields = (providerConfig?: PlatformPackage.ProviderConfig): FieldConfig[] => {
+	if (!providerConfig) return [COMMON_FIELDS.provider]
+
+	const providerFields = Object.entries(providerConfig)
+		.filter(([key]) => !PROVIDER_META_FIELD_KEYS.has(key))
+		.map(([key, value]) => {
+			const commonField = COMMON_FIELD_MAP[key]
+
+			if (commonField) {
+				return commonField
+			}
+
+			return createFieldConfig(key, toFieldLabel(key), inferFieldType(key, value), {
+				required: false,
+			})
+		})
+
+	return [COMMON_FIELDS.provider, ...providerFields]
+}
+
 /**
  * WebSearch、WebScrape、ImageSearch 服务配置
  * 所有 provider 使用相同的字段配置
@@ -200,8 +270,13 @@ export const serviceTypeConfigs: Record<string, FieldConfig[]> = {
 /**
  * 根据服务类型和provider获取配置字段
  */
-export function getServiceFields(code?: string, provider?: string): FieldConfig[] {
-	if (!code) return []
+export function getServiceFields(
+	code?: string,
+	provider?: string,
+	providerConfig?: PlatformPackage.ProviderConfig,
+): FieldConfig[] {
+	if (!code && !providerConfig) return []
+	if (!code) return inferProviderFields(providerConfig)
 
 	const list = [
 		PlatformPackage.PowerCode.WEB_SEARCH,
@@ -210,11 +285,14 @@ export function getServiceFields(code?: string, provider?: string): FieldConfig[
 	]
 	// WebSearch 特殊处理
 	if (list.includes(code as PlatformPackage.PowerCode) && provider) {
-		return webSearchConfig[provider.toLowerCase()] || []
+		return webSearchConfig[provider.toLowerCase()] || inferProviderFields(providerConfig)
 	}
 
 	if (code === PlatformPackage.PowerCode.IMAGE_REMOVE_BACKGROUND && provider) {
-		return imageRemoveBackgroundConfig[provider.toLowerCase()] || []
+		return (
+			imageRemoveBackgroundConfig[provider.toLowerCase()] ||
+			inferProviderFields(providerConfig)
+		)
 	}
 
 	if (
@@ -223,9 +301,9 @@ export function getServiceFields(code?: string, provider?: string): FieldConfig[
 		) &&
 		provider
 	) {
-		return imageEditConfig[provider.toLowerCase()] || []
+		return imageEditConfig[provider.toLowerCase()] || inferProviderFields(providerConfig)
 	}
 
 	const config = serviceTypeConfigs[code]
-	return config || []
+	return config || inferProviderFields(providerConfig)
 }

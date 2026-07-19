@@ -19,6 +19,8 @@ const SW_MODE_KILL = "kill"
 const SW_MODE_NONE = "none"
 // Wait briefly for controllerchange after posting SKIP_WAITING; then fallback to a plain reload.
 const WAITING_ACTIVATION_TIMEOUT_MS = 1500
+const AUTO_RELOAD_ACTIVATION_SESSION_KEY = "magic-web:sw:auto-reload-activation-at"
+const AUTO_RELOAD_ACTIVATION_COOLDOWN_MS = 60 * 1000
 
 // Keep the latest app SW registration so update prompts can reuse it.
 let appServiceWorkerRegistration: ServiceWorkerRegistration | null = null
@@ -170,6 +172,48 @@ function isReloadNavigation(): boolean {
 	return navigationEntry?.type === "reload"
 }
 
+/**
+ * Reads the last automatic reload activation timestamp for the current tab.
+ * Storage failures are ignored so restricted browsers keep the in-memory guard path.
+ */
+function getLastAutoReloadActivationAt(): number | null {
+	if (typeof window === "undefined") return null
+
+	try {
+		const rawValue = window.sessionStorage.getItem(AUTO_RELOAD_ACTIVATION_SESSION_KEY)
+		if (!rawValue) return null
+
+		const timestamp = Number(rawValue)
+		return Number.isFinite(timestamp) ? timestamp : null
+	} catch {
+		return null
+	}
+}
+
+/**
+ * Records that this tab already attempted automatic SW activation after a reload.
+ * The timestamp survives the reload that activation itself may trigger.
+ */
+function markAutoReloadActivationAttempted(): void {
+	if (typeof window === "undefined") return
+
+	try {
+		window.sessionStorage.setItem(AUTO_RELOAD_ACTIVATION_SESSION_KEY, String(Date.now()))
+	} catch {
+		// Ignore storage failures; the per-register in-memory guard still prevents duplicates.
+	}
+}
+
+/**
+ * Allows automatic activation only outside the short cross-reload cooldown window.
+ */
+function canAutoActivateWaitingWorkerAfterReload(): boolean {
+	const lastActivationAt = getLastAutoReloadActivationAt()
+	if (lastActivationAt === null) return true
+
+	return Date.now() - lastActivationAt >= AUTO_RELOAD_ACTIVATION_COOLDOWN_MS
+}
+
 function tryAutoActivateWaitingServiceWorkerOnReload(
 	registration: ServiceWorkerRegistration,
 	context: ReloadActivationContext,
@@ -180,8 +224,11 @@ function tryAutoActivateWaitingServiceWorkerOnReload(
 	if (context.triggered) return
 	// Nothing to activate yet.
 	if (!registration.waiting) return
+	// Avoid reload loops when the activation-triggered reload is also reported as reload navigation.
+	if (!canAutoActivateWaitingWorkerAfterReload()) return
 
 	context.triggered = true
+	markAutoReloadActivationAttempted()
 	// Trigger waiting -> active transition and reload once control is switched.
 	void activateWaitingServiceWorkerAndReload(registration)
 }
@@ -279,30 +326,37 @@ export function registerAppServiceWorker(): void {
 	const reloadActivationContext: ReloadActivationContext = { triggered: false }
 
 	async function handleRegister() {
+		const serviceWorkerUrl = getAppServiceWorkerUrl()
+
 		try {
 			appServiceWorkerRegistration = await navigator.serviceWorker.register(
-				getAppServiceWorkerUrl(),
+				serviceWorkerUrl,
 				{
 					scope: APP_SERVICE_WORKER_SCOPE,
 				},
 			)
-
-			// Cover timing gap: register() may return before waiting is available.
-			// We listen for installing/updatefound and also perform an immediate waiting check.
-			if (shouldAutoActivateWaitingWorkerOnReload()) {
-				watchInstallingWorkerForReloadActivation(
-					appServiceWorkerRegistration,
-					reloadActivationContext,
-				)
-				tryAutoActivateWaitingServiceWorkerOnReload(
-					appServiceWorkerRegistration,
-					reloadActivationContext,
-				)
-			}
-			void triggerWarmUpWhenIdle()
-		} catch {
+		} catch (error) {
 			appServiceWorkerRegistration = null
+			console.error("[sw] Failed to register app service worker", {
+				error,
+				serviceWorkerUrl,
+			})
+			return
 		}
+
+		// Cover timing gap: register() may return before waiting is available.
+		// We listen for installing/updatefound and also perform an immediate waiting check.
+		if (shouldAutoActivateWaitingWorkerOnReload()) {
+			watchInstallingWorkerForReloadActivation(
+				appServiceWorkerRegistration,
+				reloadActivationContext,
+			)
+			tryAutoActivateWaitingServiceWorkerOnReload(
+				appServiceWorkerRegistration,
+				reloadActivationContext,
+			)
+		}
+		void triggerWarmUpWhenIdle()
 	}
 
 	if (document.readyState === "complete") {
@@ -433,7 +487,9 @@ function triggerWarmUpWhenIdle(): void {
 
 	if (!navigator.serviceWorker.controller) {
 		// If there is no controller active (e.g. first load), wait for controllerchange or ready state
-		navigator.serviceWorker.ready.then((registration) => {
+		const ready = navigator.serviceWorker.ready
+		if (!ready) return
+		ready.then((registration) => {
 			if (registration.active) {
 				scheduleWarmUpPostMessage(registration.active)
 			}

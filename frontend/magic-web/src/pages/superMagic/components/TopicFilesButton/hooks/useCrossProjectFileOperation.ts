@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react"
+import { createElement, useState, useCallback } from "react"
 import { useTranslation } from "react-i18next"
 import type { AttachmentItem } from "./index"
 import type { ProjectListItem, Workspace } from "../../../pages/Workspace/types"
@@ -11,6 +11,13 @@ import {
 import { useMoveOrCopyDuplicateHandler } from "./useMoveOrCopyDuplicateHandler"
 import { useFolderConflictHandler } from "./useFolderConflictHandler"
 import magicToast from "@/components/base/MagicToaster/utils"
+import MagicModal from "@/components/base/MagicModal"
+import { IconAlertTriangleFilled } from "@tabler/icons-react"
+import {
+	detectCanvasProjectOperationRisk,
+	getCanvasProjectOperationImpact,
+	type CanvasProjectOperationRisk,
+} from "../utils/canvasProjectOperationRisk"
 
 interface UseCrossProjectFileOperationOptions {
 	projectId?: string
@@ -109,6 +116,41 @@ export function useCrossProjectFileOperation(options: UseCrossProjectFileOperati
 		[closeModal, onSuccess, t],
 	)
 
+	const confirmCanvasProjectRisk = useCallback(
+		(canvasRisk: CanvasProjectOperationRisk) =>
+			new Promise<boolean>((resolve) => {
+				const impact = getCanvasProjectOperationImpact(canvasRisk)
+				MagicModal.confirm({
+					title: t("topicFiles.canvasOperationRisk.title"),
+					content: t(
+						impact === "open-failure"
+							? "topicFiles.canvasOperationRisk.moveOpenFailureContent"
+							: impact === "content-loss"
+								? "topicFiles.canvasOperationRisk.moveContentLossContent"
+								: "topicFiles.canvasOperationRisk.moveMixedContent",
+					),
+					icon: createElement(IconAlertTriangleFilled, {
+						size: 20,
+						color: "rgba(255,125,0, 1)",
+						style: { marginRight: 6, lineHeight: 20, flexShrink: 0 },
+					}),
+					okButtonProps: {
+						color: "danger",
+						variant: "solid",
+					},
+					cancelButtonProps: {
+						color: "default",
+						variant: "filled",
+					},
+					okText: t("topicFiles.moveModal.confirm"),
+					cancelText: t("common.cancel"),
+					onOk: () => resolve(true),
+					onCancel: () => resolve(false),
+				})
+			}),
+		[t],
+	)
+
 	const executeMoveOperation = useCallback(
 		async (data: {
 			targetProjectId: string
@@ -129,6 +171,18 @@ export function useCrossProjectFileOperation(options: UseCrossProjectFileOperati
 						)
 					: []
 			const conflictDetectionIds = effectiveFileIds.filter((id) => !keepBothIds.includes(id))
+
+			if (conflictDetectionIds.length > 0) {
+				const canvasRisk = await detectCanvasProjectOperationRisk({
+					attachments: data.sourceAttachments,
+					fileIds: conflictDetectionIds,
+					operation: "move",
+				})
+				if (canvasRisk.shouldWarn) {
+					const shouldContinue = await confirmCanvasProjectRisk(canvasRisk)
+					if (!shouldContinue) return
+				}
+			}
 
 			// 1. 检测同名文件（递归检测文件夹内所有子文件）
 			const folderConflicts =
@@ -230,6 +284,7 @@ export function useCrossProjectFileOperation(options: UseCrossProjectFileOperati
 			onSuccess,
 			t,
 			handleOperationPolling,
+			confirmCanvasProjectRisk,
 			duplicateHandler,
 			folderConflictHandler,
 		],
@@ -249,12 +304,12 @@ export function useCrossProjectFileOperation(options: UseCrossProjectFileOperati
 			let keepBothIds =
 				data.targetProjectId === projectId
 					? collectSameParentOperationIds(
-							fileIds,
+							effectiveFileIds,
 							data.sourceAttachments,
 							data.targetPath,
 						)
 					: []
-			const conflictDetectionIds = fileIds.filter((id) => !keepBothIds.includes(id))
+			const conflictDetectionIds = effectiveFileIds.filter((id) => !keepBothIds.includes(id))
 
 			const folderConflicts =
 				conflictDetectionIds.length > 0
@@ -275,7 +330,7 @@ export function useCrossProjectFileOperation(options: UseCrossProjectFileOperati
 			}
 
 			// 1. Check duplicates. "Keep both" renames the top folder, so skip inner paths.
-			const duplicateDetectionIds = fileIds.filter((id) => !keepBothIds.includes(id))
+			const duplicateDetectionIds = effectiveFileIds.filter((id) => !keepBothIds.includes(id))
 			const duplicates =
 				duplicateDetectionIds.length > 0
 					? detectDuplicateFilesForMove(

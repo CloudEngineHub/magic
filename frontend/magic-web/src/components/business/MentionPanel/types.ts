@@ -213,6 +213,26 @@ export type MentionData = MentionItemDataMap[MentionDataItemType]
 export type MentionItemDataByType<T extends MentionPanelItemTypeValue> =
 	T extends MentionDataItemType ? MentionItemDataMap[T] : never
 
+export interface MentionImageSourceCrop {
+	x: number
+	y: number
+	width: number
+	height: number
+	displayWidth?: number
+	displayHeight?: number
+}
+
+export interface CanvasElementMentionSourcePreview {
+	kind: "canvas-element"
+	designProjectId?: string
+	elementId: string
+	mediaType: "image" | "video"
+	src: string
+	crop?: MentionImageSourceCrop
+}
+
+export type MentionItemSourcePreview = CanvasElementMentionSourcePreview
+
 // Generic mention result format
 export interface MentionResult<T extends MentionDataItemType = MentionDataItemType> {
 	type: T
@@ -327,6 +347,8 @@ export interface MentionItem<T extends MentionPanelItemTypeValue = MentionPanelI
 
 	// History tracking properties
 	tags?: string[] // Tags for categorization (e.g., "history", "recent")
+	metadata?: Record<string, unknown>
+	sourcePreview?: MentionItemSourcePreview
 
 	// Skill specific properties
 	package_name?: string // Package name
@@ -466,6 +488,18 @@ export interface MentionSelectContext {
 	}
 }
 
+export enum MentionPanelViewMode {
+	/* 列表模式 */
+	LIST = "list",
+	/* 画廊模式 */
+	GALLERY = "gallery",
+}
+
+export interface MentionPanelGalleryOptions {
+	/* 是否启用预览弹窗 */
+	enablePreviewModal?: boolean
+}
+
 // Component props interfaces
 export interface MentionPanelProps<TCatalogId extends string = string> extends BaseComponentProps {
 	visible?: boolean
@@ -484,6 +518,10 @@ export interface MentionPanelProps<TCatalogId extends string = string> extends B
 	 */
 	lockDismissToExplicitClose?: boolean
 	canToggleMultiSelectItem?: (item: MentionItem) => boolean
+	/* 面板模式 */
+	viewMode?: MentionPanelViewMode
+	/* 画廊模式相关选项 */
+	galleryOptions?: MentionPanelGalleryOptions
 	lastHistoryIndex?: number
 	runtime?: MentionPanelRuntime<TCatalogId>
 	/**

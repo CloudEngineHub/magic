@@ -49,7 +49,8 @@ func FindMagicrew(startPath string) (*Code, error) {
 }
 
 type MagicrewStructure struct {
-	Images map[string]image.Build `yaml:"images"`
+	Images   map[string]image.Build  `yaml:"images"`
+	Subtrees map[string]SubtreeSplit `yaml:"subtrees"`
 }
 
 func (c *Code) ReadStructure() (*MagicrewStructure, error) {

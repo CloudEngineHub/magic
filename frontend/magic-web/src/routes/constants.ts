@@ -20,6 +20,10 @@ export enum RouteName {
 	SuperDashboard = "SuperDashboard",
 	/** 超级麦吉 - 首页 */
 	Super = "Super",
+	/** 超级麦吉 - Slide Templates */
+	SuperSlidesTemplates = "SuperSlidesTemplates",
+	/** 超级麦吉 - Slide Templates 旧路径 */
+	SuperSlidesTemplatesLegacy = "SuperSlidesTemplatesLegacy",
 	/** 超级麦吉 - 移动端直接开聊首页 */
 	MobileHome = "MobileHome",
 	/** 超级麦吉 - 对话列表（移动端一级页） */
@@ -133,6 +137,8 @@ export enum RouteName {
 	NotAuth = "NotAuth",
 	/** 系统初始化流程 */
 	Initialization = "Initialization",
+	/** 系统维护页 */
+	Maintenance = "Maintenance",
 	/** Chat模块 - 首页 */
 	Chat = "Chat",
 	/** Chat模块 - 对话页面 */

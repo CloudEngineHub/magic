@@ -56,6 +56,9 @@ class ShareAssembler
         $dto->targetIds = $share->getTargetIdsArray();  // 使用 getTargetIdsArray() 返回数组
         $dto->expireAt = $share->getExpireAt();
         $dto->expireDays = $share->getExpireDays();
+        $dto->createdAt = $share->getCreatedAt();
+        $dto->updatedAt = $share->getUpdatedAt();
+        $dto->viewCount = $share->getViewCount();
 
         if ($dto->resourceType === ResourceType::Project->value) {
             $dto->resourceType = ResourceType::FileCollection->value;

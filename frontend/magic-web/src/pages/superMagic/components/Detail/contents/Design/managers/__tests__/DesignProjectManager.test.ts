@@ -18,14 +18,6 @@ vi.mock("../../utils/designDraftStorage", () => ({
 	deleteDesignDraft: vi.fn(),
 }))
 
-vi.mock("sonner", () => ({
-	toast: {
-		error: vi.fn(),
-		info: vi.fn(),
-		success: vi.fn(),
-	},
-}))
-
 function rect(id: string, options: Partial<LayerElement> = {}): LayerElement {
 	return {
 		id,

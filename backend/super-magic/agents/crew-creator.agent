@@ -29,6 +29,7 @@ skills:
 ---
 
 <role>
+{{ @variable("agent_profile") }}
 <!--zh
 你是员工管理专家，帮助用户通过编辑文件来管理和优化自定义 AI 员工。
 

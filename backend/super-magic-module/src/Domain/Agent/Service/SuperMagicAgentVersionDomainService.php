@@ -42,6 +42,7 @@ class SuperMagicAgentVersionDomainService
         protected AgentSkillRepositoryInterface $agentSkillRepository,
         protected AgentPlaybookRepositoryInterface $agentPlaybookRepository,
         protected AgentMarketRepositoryInterface $storeAgentRepository,
+        protected SuperMagicAgentCategoryRelationDomainService $categoryRelationDomainService,
     ) {
     }
 
@@ -71,6 +72,13 @@ class SuperMagicAgentVersionDomainService
     public function getCurrentOrLatestByCode(SuperMagicAgentDataIsolation $dataIsolation, string $code): ?AgentVersionEntity
     {
         return $this->agentVersionRepository->findCurrentOrLatestByCode($dataIsolation, $code);
+    }
+
+    public function getCurrentVersionByCodeForUpdate(
+        SuperMagicAgentDataIsolation $dataIsolation,
+        string $code
+    ): ?AgentVersionEntity {
+        return $this->agentVersionRepository->findCurrentVersionByCodeForUpdate($dataIsolation, $code);
     }
 
     public function findByIdWithoutOrganizationFilter(int $id): ?AgentVersionEntity
@@ -387,12 +395,14 @@ class SuperMagicAgentVersionDomainService
             $storeAgentEntity->setIcon($versionEntity->getIcon());
             $storeAgentEntity->setPublisherId($versionEntity->getCreator());
             $storeAgentEntity->setPublisherType($publisherTypeEnum);
-            $storeAgentEntity->setCategoryId(null);
+            $storeAgentEntity->setCategoryId($versionEntity->getCategoryId());
             $storeAgentEntity->setPublishStatus(PublishStatus::PUBLISHED);
             $storeAgentEntity->setOrganizationCode($versionEntity->getOrganizationCode());
 
             if ($existingStoreAgent) {
                 $storeAgentEntity->setId($existingStoreAgent->getId());
+                $storeAgentEntity->setInstallCount($existingStoreAgent->getInstallCount());
+                $storeAgentEntity->setIsHidden($existingStoreAgent->isHidden());
             }
 
             if ($marketIsFeatured !== null) {
@@ -407,7 +417,18 @@ class SuperMagicAgentVersionDomainService
                 $storeAgentEntity->setSortOrder($existingStoreAgent->getSortOrder());
             }
 
-            $this->storeAgentRepository->saveOrUpdate($dataIsolation, $storeAgentEntity);
+            $storeAgentEntity = $this->storeAgentRepository->saveOrUpdate($dataIsolation, $storeAgentEntity);
+            if ($storeAgentEntity->getId() !== null) {
+                $categoryIds = $this->categoryRelationDomainService->getVersionCategoryIds(
+                    (int) $versionEntity->getId(),
+                    $versionEntity->getCategoryId()
+                );
+                $this->categoryRelationDomainService->replaceMarketCategories(
+                    $dataIsolation,
+                    $storeAgentEntity->getId(),
+                    $categoryIds
+                );
+            }
             return;
         }
 

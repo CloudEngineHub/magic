@@ -277,7 +277,7 @@ Creates a single post directory (`posts/<post_id>/`) with `post.json` and an emp
 | `meta` | No | Object merged into `post.json.meta`. Free-form fields: `title`, `subtitle`, `tags`, `author`, `feedTitle`, `feedLikes`, `commentCount`, `comments`, `time` (wechat), `interactionReference`, etc. For `rednote`, `tags` should use the structured hashtag pyramid unless the user supplied a legacy string/array format. |
 | `cards` | No | **rednote / instagram only.** Initial value for `post.json.cards`. Paths relative to the post folder, for example `"cards/01.html"`. |
 | `article` | No | **wechat-official-accounts only.** Relative path to the single HTML article file, for example `"my-article.html"`. When provided, the post is treated as a WeChat article post; `cards` is ignored. |
-| `hero_cover` | No | **wechat-official-accounts only.** Relative path to the hero cover image (16:9), for example `"assets/cover-hero.jpg"`. Written as `heroCover` in `post.json`. |
+| `hero_cover` | No | **wechat-official-accounts only.** Relative path to the hero cover image (21:9), for example `"assets/cover-hero.jpg"`. Written as `heroCover` in `post.json`. |
 | `thumbnail_cover` | No | **wechat-official-accounts only.** Relative path to the square thumbnail cover image, for example `"assets/cover-square.jpg"`. Written as `thumbnailCover` in `post.json`. |
 | `register_in_project` | No | Default `true`. Append/update the entry in the root `magic.project.js` posts array. If the frontend prompt says the post is already pre-registered, explicitly pass `false` and do not edit the root index. |
 

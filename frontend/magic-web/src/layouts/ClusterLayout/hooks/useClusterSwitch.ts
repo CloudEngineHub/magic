@@ -14,6 +14,7 @@ import { history } from "@/routes"
 import { RouteName } from "@/routes/constants"
 import { omit } from "lodash-es"
 import { whiteListRoutes } from "@/routes/const/whiteRoutes"
+import { refreshAccountContextPage } from "@/broadcastChannel/eventFactory/accountContextRefresh"
 
 const clusterConfigLoadedCache = new Set<string>()
 
@@ -133,11 +134,17 @@ export function useClusterSwitch(options: UseClusterSwitchOptions): UseClusterSw
 			// 4. 如果找到匹配账号，自动切换
 			if (matchedAccount) {
 				setSameCluster(true)
-				await accountSwitch(
-					matchedAccount.magic_id,
-					matchedAccount.magic_user_id,
-					matchedAccount.organizationCode,
-				).catch(console.error)
+				try {
+					await accountSwitch(
+						matchedAccount.magic_id,
+						matchedAccount.magic_user_id,
+						matchedAccount.organizationCode,
+					)
+					// Rebuild account-scoped stores after the route-driven account switch succeeds.
+					refreshAccountContextPage()
+				} catch (error) {
+					console.error(error)
+				}
 			} else {
 				// 目标集群不存在已登录账号，且为非白名单
 				setSameCluster(false)

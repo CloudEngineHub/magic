@@ -1,9 +1,9 @@
-import type { CustGeomPoint } from "../../types/index"
-import { pxToInch } from "../../utils/unit"
+import type { CustGeomPoint } from "../../ir/node"
+import { pxToInch } from "../../shared/unit"
 
 /**
- * 解析 CSS clip-path: polygon(...) 为 custGeom 路径点
- * 将百分比和像素坐标转换为英寸（相对于形状自身宽高）
+ * Parse CSS clip-path: polygon(...) into custGeom path points
+ * Convert percentage and pixel coordinates to inches relative to the shape width/height
  */
 export function parseClipPathPolygon(
 	clipPath: string,

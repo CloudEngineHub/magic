@@ -27,6 +27,7 @@ use Dtyq\SuperMagic\Application\SuperAgent\DTO\Request\CreateAgentProjectRequest
 use Dtyq\SuperMagic\Application\SuperAgent\DTO\Request\CreateAudioProjectRequestDTO;
 use Dtyq\SuperMagic\Application\SuperAgent\DTO\Request\GetAudioProjectListRequestDTO;
 use Dtyq\SuperMagic\Application\SuperAgent\DTO\Request\ImportAudioFilesRequestDTO;
+use Dtyq\SuperMagic\Application\SuperAgent\DTO\Request\UpdateAudioProjectMetadataRequestDTO;
 use Dtyq\SuperMagic\Application\SuperAgent\DTO\Request\UpdateAudioProjectTagsRequestDTO;
 use Dtyq\SuperMagic\Application\SuperAgent\DTO\Response\AudioProjectExtraDTO;
 use Dtyq\SuperMagic\Application\SuperAgent\DTO\Response\AudioProjectListResponseDTO;
@@ -104,6 +105,7 @@ use Hyperf\DbConnection\Db;
 use Hyperf\Logger\LoggerFactory;
 use Psr\EventDispatcher\EventDispatcherInterface;
 use Psr\Log\LoggerInterface;
+use Psr\SimpleCache\CacheInterface;
 use RuntimeException;
 use Throwable;
 
@@ -457,8 +459,12 @@ class ProjectAppService extends AbstractAppService
 
         $projectId = (int) $requestDTO->getId();
 
-        // 获取项目信息
-        $projectEntity = $this->projectDomainService->getProject($projectId, $dataIsolation->getCurrentUserId());
+        // 获取项目信息，项目所有者和协作管理者均可更新项目基础信息
+        $projectEntity = $this->getAccessibleProjectWithManager(
+            $projectId,
+            $dataIsolation->getCurrentUserId(),
+            $dataIsolation->getCurrentOrganizationCode()
+        );
 
         if (! is_null($requestDTO->getProjectName())) {
             $projectEntity->setProjectName($requestDTO->getProjectName());
@@ -713,6 +719,34 @@ class ProjectAppService extends AbstractAppService
     public function getProjectNotUserId(int $projectId): ?ProjectEntity
     {
         return $this->projectDomainService->getProjectNotUserId($projectId);
+    }
+
+    /**
+     * 获取项目名称（带缓存），供公开免鉴权接口使用，避免高频请求直达数据库.
+     */
+    public function getProjectNameNotUserId(int $projectId): string
+    {
+        $cacheKey = 'super_magic:project:name:' . $projectId;
+        $cache = di(CacheInterface::class);
+
+        try {
+            $cached = $cache->get($cacheKey);
+            if ($cached !== null) {
+                return (string) $cached;
+            }
+        } catch (Throwable $e) {
+            $this->logger->warning('Failed to get project name cache', ['project_id' => $projectId, 'error' => $e->getMessage()]);
+        }
+
+        $projectName = $this->projectDomainService->getProjectNotUserId($projectId)->getProjectName() ?? '';
+
+        try {
+            $cache->set($cacheKey, $projectName, 60);
+        } catch (Throwable $e) {
+            $this->logger->warning('Failed to set project name cache', ['project_id' => $projectId, 'error' => $e->getMessage()]);
+        }
+
+        return $projectName;
     }
 
     public function getProjectForkCount(int $projectId): int
@@ -1215,7 +1249,15 @@ class ProjectAppService extends AbstractAppService
             ));
 
             // Standard initialization flow (steps 2-6 + 8)
-            $this->initializeProject($dataIsolation, $workspaceEntity, $forkProjectEntity);
+            $topicEntity = $this->initializeProject($dataIsolation, $workspaceEntity, $forkProjectEntity);
+
+            // Copy audio extension data for audio projects. The audio_file_id is
+            // updated after async file migration resolves the new file ID.
+            $this->audioProjectDomainService->copyAudioProjectForFork(
+                $requestDTO->getSourceProjectId(),
+                $forkProjectEntity->getId(),
+                $topicEntity->getId()
+            );
 
             // 7. Skip root directory initialization (fork uses async file migration)
 
@@ -1286,7 +1328,14 @@ class ProjectAppService extends AbstractAppService
 
             $forkProjectRecordEntity = $this->projectDomainService->getForkProjectRecordById($event->getForkRecordId());
 
-            $this->taskFileDomainService->migrateProjectFile($dataIsolation, $sourceProjectEntity, $forkProjectEntity, $forkProjectRecordEntity, $event->getFileIds());
+            $sourceToForkFileIdMap = $this->taskFileDomainService->migrateProjectFile($dataIsolation, $sourceProjectEntity, $forkProjectEntity, $forkProjectRecordEntity, $event->getFileIds());
+            if (! empty($sourceToForkFileIdMap)) {
+                $this->audioProjectDomainService->updateForkedAudioFileIdFromMigrationMap(
+                    $sourceProjectEntity->getId(),
+                    $forkProjectEntity->getId(),
+                    $sourceToForkFileIdMap
+                );
+            }
 
             $this->logger->info(sprintf(
                 'File migration batch completed for fork record ID: %d',
@@ -1343,7 +1392,8 @@ class ProjectAppService extends AbstractAppService
             $requestDTO->getSourceProjectId(),
             $targetWorkspaceId,
             $userAuthorization->getId(),
-            $requestDTO->getTargetProjectName()
+            $requestDTO->getTargetProjectName(),
+            $requestDTO->getProjectMode()
         );
 
         $this->logger->info(sprintf(
@@ -2084,6 +2134,64 @@ class ProjectAppService extends AbstractAppService
 
         // Update tags
         $this->audioProjectDomainService->updateTags($projectId, $requestDTO->getTags());
+    }
+
+    /**
+     * Update audio project metadata.
+     */
+    public function updateAudioProjectMetadata(
+        RequestContext $requestContext,
+        int $projectId,
+        UpdateAudioProjectMetadataRequestDTO $requestDTO
+    ): void {
+        $userAuthorization = $requestContext->getUserAuthorization();
+        $dataIsolation = $this->createDataIsolation($userAuthorization);
+
+        $projectEntity = $this->getAccessibleProjectWithEditor(
+            $projectId,
+            $dataIsolation->getCurrentUserId(),
+            $dataIsolation->getCurrentOrganizationCode()
+        );
+
+        if ($projectEntity->getProjectMode() !== ProjectMode::AUDIO->value) {
+            ExceptionBuilder::throw(
+                GenericErrorCode::SystemError,
+                trans('super_agent.invalid_project_mode_for_audio_import'),
+                ['project_id' => $projectId, 'expected_mode' => ProjectMode::AUDIO->value]
+            );
+        }
+
+        $audioProject = $this->audioProjectDomainService->getAudioProjectByProjectId($projectId);
+        if ($audioProject === null) {
+            ExceptionBuilder::throw(SuperAgentErrorCode::PROJECT_NOT_FOUND, 'project.project_not_found');
+        }
+
+        if (! $requestDTO->hasMetadataField()) {
+            return;
+        }
+
+        $audioFileId = $requestDTO->hasAudioFileId() ? $requestDTO->getAudioFileId() : null;
+        if ($audioFileId !== null) {
+            $files = $this->taskFileDomainService->findFilesByProjectIdAndIds($projectId, [$audioFileId]);
+            if (count($files) !== 1) {
+                ExceptionBuilder::throw(SuperAgentErrorCode::FILE_NOT_FOUND, 'file.file_not_found');
+            }
+        }
+
+        $duration = $requestDTO->hasDuration() ? $requestDTO->getDuration() : null;
+        $location = $requestDTO->hasLocation() ? $requestDTO->getLocation() : null;
+        if ($audioFileId === null && $duration === null && $location === null) {
+            return;
+        }
+
+        $this->audioProjectDomainService->updateRecordingMetadata(
+            $projectId,
+            $duration,
+            null,
+            null,
+            $audioFileId,
+            $location
+        );
     }
 
     /**

@@ -7,6 +7,7 @@ declare(strict_types=1);
 
 namespace Dtyq\SuperMagic\Infrastructure\ExternalAPI\SandboxOS\Agent;
 
+use App\Domain\Contact\Entity\ValueObject\DataIsolation;
 use Dtyq\SuperMagic\Infrastructure\ExternalAPI\SandboxOS\Agent\Request\ChatMessageRequest;
 use Dtyq\SuperMagic\Infrastructure\ExternalAPI\SandboxOS\Agent\Request\CheckpointRollbackCheckRequest;
 use Dtyq\SuperMagic\Infrastructure\ExternalAPI\SandboxOS\Agent\Request\CheckpointRollbackCommitRequest;
@@ -31,7 +32,7 @@ interface SandboxAgentInterface
      * @param array $config 初始化配置数组
      * @return AgentResponse 初始化结果
      */
-    public function initAgent(string $sandboxId, array $config): AgentResponse;
+    public function initAgent(DataIsolation $dataIsolation, string $sandboxId, array $config): AgentResponse;
 
     /**
      * 发送聊天消息给Agent.
@@ -40,7 +41,7 @@ interface SandboxAgentInterface
      * @param ChatMessageRequest $request 聊天消息请求
      * @return AgentResponse Agent响应
      */
-    public function sendChatMessage(string $sandboxId, ChatMessageRequest $request): AgentResponse;
+    public function sendChatMessage(DataIsolation $dataIsolation, string $sandboxId, ChatMessageRequest $request): AgentResponse;
 
     /**
      * 发送中断消息给Agent.
@@ -49,7 +50,7 @@ interface SandboxAgentInterface
      * @param InterruptRequest $request 中断请求
      * @return AgentResponse 中断响应
      */
-    public function sendInterruptMessage(string $sandboxId, InterruptRequest $request): AgentResponse;
+    public function sendInterruptMessage(DataIsolation $dataIsolation, string $sandboxId, InterruptRequest $request): AgentResponse;
 
     /**
      * 获取工作区状态.
@@ -57,7 +58,7 @@ interface SandboxAgentInterface
      * @param string $sandboxId 沙箱ID
      * @return AgentResponse 工作区状态响应
      */
-    public function getWorkspaceStatus(string $sandboxId): AgentResponse;
+    public function getWorkspaceStatus(DataIsolation $dataIsolation, string $sandboxId): AgentResponse;
 
     /**
      * 保存文件到沙箱.
@@ -66,7 +67,7 @@ interface SandboxAgentInterface
      * @param SaveFilesRequest $request 文件保存请求
      * @return AgentResponse 保存响应
      */
-    public function saveFiles(string $sandboxId, SaveFilesRequest $request): AgentResponse;
+    public function saveFiles(DataIsolation $dataIsolation, string $sandboxId, SaveFilesRequest $request): AgentResponse;
 
     /**
      * 执行脚本任务.
@@ -75,7 +76,7 @@ interface SandboxAgentInterface
      * @param ScriptTaskRequest $request 脚本任务请求
      * @return AgentResponse 执行响应
      */
-    public function executeScriptTask(string $sandboxId, ScriptTaskRequest $request): AgentResponse;
+    public function executeScriptTask(DataIsolation $dataIsolation, string $sandboxId, ScriptTaskRequest $request): AgentResponse;
 
     /**
      * 回滚到指定的checkpoint.
@@ -84,7 +85,7 @@ interface SandboxAgentInterface
      * @param CheckpointRollbackRequest $request checkpoint回滚请求
      * @return AgentResponse 回滚响应
      */
-    public function rollbackCheckpoint(string $sandboxId, CheckpointRollbackRequest $request): AgentResponse;
+    public function rollbackCheckpoint(DataIsolation $dataIsolation, string $sandboxId, CheckpointRollbackRequest $request): AgentResponse;
 
     /**
      * 开始回滚到指定的checkpoint（标记状态而非删除）.
@@ -93,7 +94,7 @@ interface SandboxAgentInterface
      * @param CheckpointRollbackStartRequest $request checkpoint回滚开始请求
      * @return AgentResponse 回滚响应
      */
-    public function rollbackCheckpointStart(string $sandboxId, CheckpointRollbackStartRequest $request): AgentResponse;
+    public function rollbackCheckpointStart(DataIsolation $dataIsolation, string $sandboxId, CheckpointRollbackStartRequest $request): AgentResponse;
 
     /**
      * 提交回滚到指定的checkpoint（物理删除撤回状态的消息）.
@@ -102,7 +103,7 @@ interface SandboxAgentInterface
      * @param CheckpointRollbackCommitRequest $request checkpoint回滚提交请求
      * @return AgentResponse 回滚响应
      */
-    public function rollbackCheckpointCommit(string $sandboxId, CheckpointRollbackCommitRequest $request): AgentResponse;
+    public function rollbackCheckpointCommit(DataIsolation $dataIsolation, string $sandboxId, CheckpointRollbackCommitRequest $request): AgentResponse;
 
     /**
      * 撤销回滚沙箱checkpoint（将撤回状态的消息恢复为正常状态）.
@@ -111,7 +112,7 @@ interface SandboxAgentInterface
      * @param CheckpointRollbackUndoRequest $request checkpoint回滚撤销请求
      * @return AgentResponse 回滚响应
      */
-    public function rollbackCheckpointUndo(string $sandboxId, CheckpointRollbackUndoRequest $request): AgentResponse;
+    public function rollbackCheckpointUndo(DataIsolation $dataIsolation, string $sandboxId, CheckpointRollbackUndoRequest $request): AgentResponse;
 
     /**
      * 检查回滚到指定checkpoint的可行性.
@@ -120,5 +121,5 @@ interface SandboxAgentInterface
      * @param CheckpointRollbackCheckRequest $request checkpoint回滚检查请求
      * @return AgentResponse 检查响应
      */
-    public function rollbackCheckpointCheck(string $sandboxId, CheckpointRollbackCheckRequest $request): AgentResponse;
+    public function rollbackCheckpointCheck(DataIsolation $dataIsolation, string $sandboxId, CheckpointRollbackCheckRequest $request): AgentResponse;
 }

@@ -53,8 +53,10 @@ class TemporaryCredentialData(BaseModel):
 class TemporaryCredentials(BaseModel):
     """STS临时凭证结构"""
     host: str = Field(..., description="存储服务主机URL")
+    internal_host: Optional[str] = Field(None, description="内网主机URL，为空时回退到 host")
     region: str = Field(..., description="TOS区域")
     endpoint: str = Field(..., description="TOS终端节点URL")
+    internal_endpoint: Optional[str] = Field(None, description="内网终端节点URL，为空时回退到 endpoint")
     credentials: TemporaryCredentialData = Field(..., description="STS凭证详情")
     bucket: str = Field(..., description="TOS存储桶名称")
     dir: str = Field(..., description="上传目录路径")
@@ -104,6 +106,7 @@ class S3TemporaryCredentialData(BaseModel):
 class S3TemporaryCredentials(BaseModel):
     """AWS S3 STS临时凭证结构"""
     endpoint: str = Field(..., description="S3服务终端节点URL")
+    internal_endpoint: Optional[str] = Field(None, description="内网终端节点URL，为空时回退到 endpoint")
     region: str = Field(..., description="S3区域")
     bucket: str = Field(..., description="S3存储桶名称")
     dir: str = Field(..., description="上传目录路径")
@@ -129,7 +132,7 @@ class S3TemporaryCredentials(BaseModel):
                 input_data['credentials'] = temp_cred
 
             # 提取其他字段
-            for field in ['endpoint', 'region', 'bucket', 'dir', 'expires']:
+            for field in ['endpoint', 'region', 'bucket', 'dir', 'expires', 'internal_endpoint']:
                 if field not in input_data and field in temp_cred:
                     input_data[field] = temp_cred[field]
 
@@ -153,6 +156,7 @@ class AliyunCredentials(BaseStorageCredentials):
 
     platform: Literal[PlatformType.aliyun] = Field(PlatformType.aliyun, description="存储平台类型")
     endpoint: str = Field(default=..., description="OSS终端节点URL")
+    internal_endpoint: Optional[str] = Field(None, description="内网终端节点URL，为空时回退到 endpoint")
     region: str = Field(..., description="OSS区域")
     bucket: str = Field(..., description="OSS存储桶名称")
     dir: str = Field(..., description="上传目录路径")
@@ -175,6 +179,7 @@ class AliyunCredentials(BaseStorageCredentials):
             endpoint = f"https://{region}.aliyuncs.com"
 
             input_data.setdefault('endpoint', endpoint)
+            input_data.setdefault('internal_endpoint', temp_cred_dict.get('internal_endpoint'))
             input_data.setdefault('region', region)
             input_data.setdefault('bucket', bucket)
             input_data.setdefault('dir', workdir)

@@ -5,6 +5,7 @@ import { ClusterProvider } from "@/providers/ClusterProvider"
 import GlobalErrorBoundary from "@/components/fallback/GlobalErrorBoundary"
 import LoadingFallback from "@/components/fallback/LoadingFallback"
 import AppearanceProvider from "./providers/AppearanceProvider"
+import MaintenanceGuard from "@/components/global/MaintenanceGuard"
 
 function App() {
 	return (
@@ -14,6 +15,7 @@ function App() {
 					<GlobalErrorBoundary>
 						<ClusterProvider>
 							<BrowserRouter>
+								<MaintenanceGuard />
 								<AppRoutes />
 							</BrowserRouter>
 						</ClusterProvider>

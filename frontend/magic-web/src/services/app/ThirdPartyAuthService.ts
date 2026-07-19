@@ -9,10 +9,18 @@ import { convertSearchParams, routesMatch } from "@/routes/history/helpers"
 import { defaultClusterCode } from "@/routes/helpers"
 import { userStore } from "@/models/user"
 import type { Login } from "@/types/login"
+import type { User } from "@/types/user"
 import type { LoginService } from "@/services/user/LoginService"
 import type { UserService } from "@/services/user/UserService"
 import type { ConfigService } from "@/services/config/ConfigService"
 import { thirdPartyOpenLink } from "@/layouts/middlewares/withThirdPartyAuth/utils/openLink"
+import { withTimeout } from "@/utils/promise"
+import type {
+	RequestThirdPartyAccountConflictDecision,
+	ResolveThirdPartyAccountOrganizationName,
+	ThirdPartyAccountIdentity,
+	ThirdPartyAccountReconcileResult,
+} from "@/services/app/types/thirdPartyAccountReconcile"
 
 // const logger = Logger.createLogger("thirdPartyAuthService")
 const logger = { ...console, report: console.log }
@@ -20,6 +28,9 @@ const logger = { ...console, report: console.log }
 /** Temporary authorization code in query */
 export const TempAuthorizationCodeKey = "tempAuthorizationCode"
 export const thirdPartyOrganizationCodeKey = "thirdPartyOrganizationCode"
+const thirdPartyAccountConflictSuppressionKey = "thirdPartyAccountConflictSuppression"
+const thirdPartyBackgroundProbeTimeoutMs = 10000
+const thirdPartyOrganizationLookupTimeoutMs = 3000
 
 /**
  * Get auth code function type
@@ -45,6 +56,12 @@ export interface ThirdPartyAuthServiceOptions {
 	/** Third party organization code key in query */
 	thirdPartyAuthDeployCode: string
 	onClusterCodeChange?: (clusterCode: string) => void
+	/** Determine whether the current platform supports account verification without redirecting the page. */
+	canBackgroundProbe?: () => boolean | Promise<boolean>
+	/** Request the UI layer to display the account conflict dialog. */
+	requestAccountConflictDecision?: RequestThirdPartyAccountConflictDecision
+	/** Resolve display-safe organization names without coupling the shared service to a private API. */
+	resolveAccountOrganizationName?: ResolveThirdPartyAccountOrganizationName
 }
 
 /**
@@ -56,16 +73,78 @@ class ThirdPartyAuthService {
 	private customThirdPartyOpenLink: CustomThirdPartyOpenLinkFn
 	private thirdPartyAuthDeployCode: string
 	private onClusterCodeChange?: (clusterCode: string) => void
+	private canBackgroundProbe?: () => boolean | Promise<boolean>
+	private requestAccountConflictDecision?: RequestThirdPartyAccountConflictDecision
+	private resolveAccountOrganizationName?: ResolveThirdPartyAccountOrganizationName
+	private backgroundReconcilePromise: Promise<ThirdPartyAccountReconcileResult> | null = null
 
 	constructor(options: ThirdPartyAuthServiceOptions) {
 		this.getAuthCode = options.getAuthCode
 		this.customThirdPartyOpenLink = options.customThirdPartyOpenLink || thirdPartyOpenLink
 		this.thirdPartyAuthDeployCode = options.thirdPartyAuthDeployCode
 		this.onClusterCodeChange = options.onClusterCodeChange
+		this.canBackgroundProbe = options.canBackgroundProbe
+		this.requestAccountConflictDecision = options.requestAccountConflictDecision
+		this.resolveAccountOrganizationName = options.resolveAccountOrganizationName
 		logger.log("第三方认证服务初始化完成", {
 			thirdPartyOrganizationCodeKey: this.thirdPartyAuthDeployCode,
 			hasCustomOpenLink: !!options.customThirdPartyOpenLink,
 		})
+	}
+
+	private getAccountConflictFingerprint(
+		deployCode: string,
+		platform: Login.LoginType,
+		currentUser: ThirdPartyAccountIdentity,
+		candidateUser: ThirdPartyAccountIdentity,
+	) {
+		return [deployCode, platform, currentUser.magicId, candidateUser.magicId].join(":")
+	}
+
+	private resolveMagicId(authStatus: Array<User.MagicOrganization>): string | null {
+		const magicIds = new Set(authStatus.map((item) => item.magic_id).filter(Boolean))
+		if (magicIds.size !== 1) {
+			logger.warn("候选账号 Magic ID 解析异常", { magicIdCount: magicIds.size })
+			return null
+		}
+
+		return magicIds.values().next().value ?? null
+	}
+
+	private async resolveOrganizationName(
+		authorization: string,
+		deployCode: string,
+		options?: Pick<RequestConfig, "skipAppInitWait">,
+	): Promise<string | undefined> {
+		if (!this.resolveAccountOrganizationName) return undefined
+
+		try {
+			return await withTimeout(
+				this.resolveAccountOrganizationName({ authorization, deployCode }, options),
+				thirdPartyOrganizationLookupTimeoutMs,
+				"third party account organization lookup timeout",
+			)
+		} catch (error) {
+			// Organization names are supplemental UI data and must never block account selection.
+			logger.warn("第三方平台账号组织名称获取失败", { deployCode, error })
+			return undefined
+		}
+	}
+
+	private getSuppressedAccountConflict() {
+		try {
+			return sessionStorage.getItem(thirdPartyAccountConflictSuppressionKey)
+		} catch {
+			return null
+		}
+	}
+
+	private suppressAccountConflict(fingerprint: string) {
+		try {
+			sessionStorage.setItem(thirdPartyAccountConflictSuppressionKey, fingerprint)
+		} catch {
+			// Session storage can be unavailable in restricted WebViews; the current page still remains safe.
+		}
 	}
 
 	/**
@@ -209,7 +288,51 @@ class ThirdPartyAuthService {
 	 * After replacing the temporary authorization token,
 	 * the query will be carried and redirected again
 	 */
-	async redirectUrlStep(options?: Pick<RequestConfig, "skipAppInitWait">): Promise<void> {
+	async redirectUrlStep(
+		options?: Pick<RequestConfig, "skipAppInitWait">,
+		currentAuthorization?: string,
+	): Promise<void> {
+		const { clusterCode } = this.getClusterCodeFromUrl()
+		if (currentAuthorization && clusterCode) {
+			// Verify the final account in the background for an existing session before entering either redirect branch.
+			this.scheduleExistingSessionRedirect(clusterCode, currentAuthorization, options)
+			return
+		}
+
+		await this.performRedirectUrlStep(options, false)
+	}
+
+	private scheduleExistingSessionRedirect(
+		deployCode: string,
+		currentAuthorization: string,
+		options?: Pick<RequestConfig, "skipAppInitWait">,
+	) {
+		const runReconcile = () => {
+			void this.reconcileExistingSession(deployCode, currentAuthorization, options)
+				.then(async (result) => {
+					logger.log("第三方平台账号后台校验完成", { deployCode, result })
+					if (result === "stale") return
+
+					await this.performRedirectUrlStep(options, result === "switched")
+				})
+				.catch((error) => {
+					logger.warn("第三方平台账号后台校验异常", { deployCode, error })
+				})
+		}
+
+		// Account reconciliation must not block AppService initialization, but redirect routing must wait for it to finish.
+		if ("requestIdleCallback" in window) {
+			requestIdleCallback(runReconcile, { timeout: 2000 })
+			return
+		}
+
+		window.setTimeout(runReconcile, 0)
+	}
+
+	private async performRedirectUrlStep(
+		options: Pick<RequestConfig, "skipAppInitWait"> | undefined,
+		reloadCurrentWindow: boolean,
+	): Promise<void> {
 		logger.log("开始URL重定向步骤")
 		const url = new URL(window.location.href)
 		const { searchParams } = url
@@ -226,6 +349,12 @@ class ThirdPartyAuthService {
 			logger.log("检测到同窗口登录标识，跳过重定向")
 			// Remove third-party cluster code to prevent process dead loop
 			searchParams.delete(this.thirdPartyAuthDeployCode)
+			if (reloadCurrentWindow) {
+				// The candidate token has been committed; remove the login parameters and reinitialize account state in the current window.
+				window.location.replace(url.toString())
+			} else {
+				window.history.replaceState({}, "", url.toString())
+			}
 			return
 		}
 
@@ -322,7 +451,7 @@ class ThirdPartyAuthService {
 			logger.log("登录步骤完成，获取到访问令牌")
 
 			logger.log("设置用户授权令牌")
-			service.get<UserService>("userService").setAuthorization(access_token)
+			await service.get<UserService>("userService").setAuthorizationAndWait(access_token)
 
 			// Establish a mapping relationship between cluster codes and user tokens
 			logger.log("同步魔法组织映射关系", { deployCode })
@@ -341,6 +470,142 @@ class ThirdPartyAuthService {
 			logger.log("重定向到登录页")
 			history.push({ name: RouteName.Login })
 			throw error
+		}
+	}
+
+	/**
+	 * After restoring the current session, fetch the candidate platform account in the background and compare identities.
+	 * Keep the candidate token in the current call stack until the user confirms; do not mutate global stores, cluster state, or persistence.
+	 */
+	private async reconcileExistingSession(
+		deployCode: string,
+		currentAuthorization: string,
+		options?: Pick<RequestConfig, "skipAppInitWait">,
+	): Promise<ThirdPartyAccountReconcileResult> {
+		if (this.backgroundReconcilePromise) return this.backgroundReconcilePromise
+
+		const reconcileTask = this.runExistingSessionReconcile(
+			deployCode,
+			currentAuthorization,
+			options,
+		).finally(() => {
+			this.backgroundReconcilePromise = null
+		})
+
+		this.backgroundReconcilePromise = reconcileTask
+		return reconcileTask
+	}
+
+	private async runExistingSessionReconcile(
+		deployCode: string,
+		currentAuthorization: string,
+		options?: Pick<RequestConfig, "skipAppInitWait">,
+	): Promise<ThirdPartyAccountReconcileResult> {
+		if (
+			!deployCode ||
+			!currentAuthorization ||
+			!this.canBackgroundProbe ||
+			!this.requestAccountConflictDecision
+		) {
+			return "skipped"
+		}
+
+		try {
+			if (!(await this.canBackgroundProbe())) return "unsupported"
+
+			// Load the target deployment configuration for the platform SDK without switching the current access cluster.
+			const targetConfig = await CommonApi.getPrivateConfigure(deployCode, options)
+			await service
+				.get<ConfigService>("configService")
+				.setClusterConfig(deployCode, targetConfig.config)
+
+			const identityRequestOptions = {
+				...options,
+				enableAuthorizationVerification: false,
+				enableErrorMessagePrompt: false,
+			} as const
+
+			const { authCode, platform } = await withTimeout(
+				this.getAuthCode(deployCode, options),
+				thirdPartyBackgroundProbeTimeoutMs,
+				"third party account background probe timeout",
+			)
+
+			const url = new URL(window.location.href)
+			const candidateLogin = await service.get<LoginService>("loginService").loginStep(
+				platform,
+				{
+					platform_type: platform,
+					authorization_code: authCode,
+					redirect: url.toString(),
+				},
+				targetConfig.config.orgcode,
+				options,
+			)()
+			const candidateAuthProfile = await AuthApi.getUserProfile(
+				candidateLogin.access_token,
+				deployCode,
+				identityRequestOptions,
+			)
+
+			const currentMagicId = userStore.user.userInfo?.magic_id
+			const candidateMagicId = this.resolveMagicId(candidateAuthProfile.auth_status)
+			if (!currentMagicId || !candidateMagicId) return "failed"
+
+			const currentUser: ThirdPartyAccountIdentity = {
+				magicId: currentMagicId,
+				name:
+					userStore.user.userInfo?.real_name ||
+					userStore.user.userInfo?.nickname ||
+					currentMagicId,
+				avatar: userStore.user.userInfo?.avatar,
+			}
+			const candidateUser: ThirdPartyAccountIdentity = {
+				magicId: candidateMagicId,
+				name: candidateLogin.user_info.real_name || candidateLogin.user_info.id,
+				avatar: candidateLogin.user_info.avatar,
+			}
+
+			if (currentUser.magicId === candidateUser.magicId) return "same-user"
+
+			const fingerprint = this.getAccountConflictFingerprint(
+				deployCode,
+				platform,
+				currentUser,
+				candidateUser,
+			)
+			if (this.getSuppressedAccountConflict() === fingerprint) return "kept-current"
+
+			const [currentOrganizationName, candidateOrganizationName] = await Promise.all([
+				this.resolveOrganizationName(currentAuthorization, deployCode, options),
+				this.resolveOrganizationName(candidateLogin.access_token, deployCode, options),
+			])
+
+			// Organization lookups add an async boundary, so discard the dialog if the session changed meanwhile.
+			if (userStore.user.authorization !== currentAuthorization) return "stale"
+
+			const decision = await this.requestAccountConflictDecision({
+				platform,
+				currentUser: { ...currentUser, organizationName: currentOrganizationName },
+				candidateUser: { ...candidateUser, organizationName: candidateOrganizationName },
+			})
+
+			// The session may have changed through another flow while probing, so a stale result must not overwrite it.
+			if (userStore.user.authorization !== currentAuthorization) return "stale"
+
+			if (decision === "keep-current") {
+				this.suppressAccountConflict(fingerprint)
+				return "kept-current"
+			}
+
+			await service
+				.get<UserService>("userService")
+				.setAuthorizationAndWait(candidateLogin.access_token)
+			return "switched"
+		} catch (error) {
+			// Background verification is an enhancement only; failures must preserve the valid session and initial page content.
+			logger.warn("第三方平台账号后台校验失败", { deployCode, error })
+			return "failed"
 		}
 	}
 
@@ -365,16 +630,8 @@ class ThirdPartyAuthService {
 		})
 
 		if (authorization && thirdPartyAuthDeployCode) {
-			// 优先判断当前 authorization 是否为 thirdPartyAuthDeployCode 集群，如果不是则强制走免登流程
-			const { login_code } = await AuthApi.getAccountDeployCode(options)
-			if (login_code !== thirdPartyAuthDeployCode) {
-				await this.handleAutoLogin(thirdPartyAuthDeployCode, options)
-				return
-			}
-			await service
-				.get<LoginService>("loginService")
-				.magicOrganizationSync(thirdPartyAuthDeployCode, authorization, undefined, options)
-			await this.redirectUrlStep(options)
+			// Treat the login result as a candidate for an existing session and enter redirect routing only after the final account is confirmed.
+			await this.redirectUrlStep(options, authorization)
 		} else if (tempAuthorizationCode) {
 			await this.generateAuthorizationToken(tempAuthorizationCode, options)
 		} else if (thirdPartyAuthDeployCode) {

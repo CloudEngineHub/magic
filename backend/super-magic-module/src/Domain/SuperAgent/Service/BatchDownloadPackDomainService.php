@@ -7,6 +7,7 @@ declare(strict_types=1);
 
 namespace Dtyq\SuperMagic\Domain\SuperAgent\Service;
 
+use App\Domain\Contact\Entity\ValueObject\DataIsolation;
 use Dtyq\SuperMagic\Domain\SuperAgent\Constant\ConvertStatusEnum;
 use Dtyq\SuperMagic\Domain\SuperAgent\Entity\TaskFileEntity;
 use Dtyq\SuperMagic\Domain\SuperAgent\Repository\Facade\BatchDownloadPackRepositoryInterface;
@@ -90,16 +91,14 @@ class BatchDownloadPackDomainService
     }
 
     public function submitPackTask(
-        string $userId,
-        string $organizationCode,
+        DataIsolation $dataIsolation,
         string $sandboxId,
         string $projectId,
         FileConverterRequest $request,
         string $workDir
     ): FileConverterResponse {
         return $this->batchDownloadPackRepository->submitPackTask(
-            $userId,
-            $organizationCode,
+            $dataIsolation,
             $sandboxId,
             $projectId,
             $request,
@@ -107,9 +106,9 @@ class BatchDownloadPackDomainService
         );
     }
 
-    public function queryPackTask(string $sandboxId, string $projectId, string $taskKey): FileConverterResponse
+    public function queryPackTask(DataIsolation $dataIsolation, string $sandboxId, string $projectId, string $taskKey): FileConverterResponse
     {
-        return $this->batchDownloadPackRepository->queryPackTask($sandboxId, $projectId, $taskKey);
+        return $this->batchDownloadPackRepository->queryPackTask($dataIsolation, $sandboxId, $projectId, $taskKey);
     }
 
     /**
@@ -123,7 +122,7 @@ class BatchDownloadPackDomainService
         if ($status === ConvertStatusEnum::PENDING->value || $status === ConvertStatusEnum::PROCESSING->value) {
             return [
                 'status' => 'processing',
-                'progress' => $data->progress ?? 0,
+                'progress' => (int) ($data->conversionRate ?? 0),
                 'message' => $response->getMessage() ?: 'Processing...',
                 'error' => '',
                 'zip_file_key' => '',
@@ -135,7 +134,7 @@ class BatchDownloadPackDomainService
         if ($status === ConvertStatusEnum::FAILED->value) {
             return [
                 'status' => 'failed',
-                'progress' => $data->progress ?? 0,
+                'progress' => (int) ($data->conversionRate ?? 0),
                 'message' => 'Task failed',
                 'error' => $data->errorMessage ?: ($response->getMessage() ?: 'Task failed'),
                 'zip_file_key' => '',
@@ -160,7 +159,7 @@ class BatchDownloadPackDomainService
 
         return [
             'status' => 'processing',
-            'progress' => $data->progress ?? 0,
+            'progress' => (int) ($data->conversionRate ?? 0),
             'message' => $response->getMessage() ?: 'Processing...',
             'error' => '',
             'zip_file_key' => '',

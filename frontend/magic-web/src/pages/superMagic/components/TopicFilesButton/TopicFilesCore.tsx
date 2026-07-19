@@ -68,6 +68,13 @@ import { DuplicateFileModal } from "./components/DuplicateFileModal"
 import { FolderConflictModal } from "./components/FolderConflictModal"
 import { CustomFolderMagicIcon } from "./components/CustomFolderMagicIcon"
 import { MagicSystemFolderIcon } from "./components/MagicSystemFolderIcon"
+import {
+	ProjectFileImagePreviewProvider,
+	ProjectFileImagePreviewTooltipContent,
+	resolveProjectFileImagePreviewSource,
+	useProjectFileImagePreviewManager,
+} from "./components/ProjectFileImagePreviewProvider"
+import { ProjectFileImageThumbnailIcon } from "./components/ProjectFileImageThumbnailIcon"
 import { InputWithError } from "./components"
 import {
 	getAppEntryFile,
@@ -88,6 +95,7 @@ import { isCachedChatWorkspaceProject } from "@/pages/superMagic/utils/isChatWor
 
 import { useDownloadImageMenu } from "../Detail/contents/Image/hooks/useDownloadImageMenu"
 import { DownloadImageMode } from "../../pages/Workspace/types"
+import { useDownloadProgress } from "@/pages/superMagic/hooks/useDownloadProgress"
 import { userStore } from "@/models/user"
 import { MagicDropdown } from "@/components/base"
 import { detectContentTypeRender } from "../Detail/components/FilesViewer/utils/preview"
@@ -215,6 +223,7 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 	const isChatProject = isCachedChatWorkspaceProject(selectedProject)
 	const canUseDesktopCrossProjectMove = projects.length > 0 && !isChatProject && !isMobile
 	const { handleShowInfo, fileInfoPanel } = useFileInfoPanel()
+	const downloadProgress = useDownloadProgress()
 
 	// AI 卡片创建弹窗 hook
 	const { open: openAICardDialog, dialogElement: aiCardDialogElement } = useAICardCreateDialog({
@@ -336,6 +345,7 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 		getItemId,
 		selectedProject,
 		duplicateFileHandler: sharedDuplicateHandler,
+		downloadProgress,
 	})
 
 	const {
@@ -1570,6 +1580,7 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 			exportingFiles.has(item?.file_id || "") ||
 			isFileRenaming(item) ||
 			movingFiles.has(item?.file_id || "")
+		const imagePreviewSource = resolveProjectFileImagePreviewSource(item)
 
 		return (
 			<div
@@ -1640,8 +1651,12 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 				}}
 				draggable={renamingItemId !== itemId}
 				{...fileDragHandlers}
-				onMouseEnter={() => setHoveredItem(itemId)}
-				onMouseLeave={() => setHoveredItem(null)}
+				onMouseEnter={() => {
+					setHoveredItem(itemId)
+				}}
+				onMouseLeave={() => {
+					setHoveredItem(null)
+				}}
 				onContextMenu={(e) => delegateProps.onDropdownContextMenuClick?.(e, item)}
 			>
 				<div
@@ -1681,13 +1696,19 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 								size={16}
 							/>
 						) : (
-							<MagicFileIcon
-								type={
-									getFileTreeIconType(item) ||
-									getFileIconType(item) ||
-									item?.file_extension
-								}
+							<ProjectFileImageThumbnailIcon
+								item={item}
 								size={16}
+								fallback={
+									<MagicFileIcon
+										type={
+											getFileTreeIconType(item) ||
+											getFileIconType(item) ||
+											item?.file_extension
+										}
+										size={16}
+									/>
+								}
 							/>
 						)}
 					</div>
@@ -1711,13 +1732,46 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 								}}
 							/>
 						) : (
-							<SmartTooltip
-								placement="right"
-								className={cx(styles.ellipsis, isActiveFile && "font-medium")}
-								sideOffset={20}
-							>
-								{item?.file_name}
-							</SmartTooltip>
+							<>
+								{imagePreviewSource ? (
+									<SmartTooltip
+										placement="right"
+										className={cx(
+											"min-w-0 flex-1",
+											styles.ellipsis,
+											isActiveFile && "font-medium",
+										)}
+										sideOffset={20}
+										forceShowTooltip
+										tooltipContentClassName="max-w-none whitespace-nowrap text-nowrap break-normal"
+										tooltipContentStyle={{ maxWidth: "none" }}
+										content={
+											<ProjectFileImagePreviewTooltipContent
+												source={imagePreviewSource}
+											/>
+										}
+										onOpenChange={(open) => {
+											if (open)
+												imagePreviewManager.ensurePreview(
+													imagePreviewSource,
+												)
+										}}
+									>
+										{item?.file_name}
+									</SmartTooltip>
+								) : (
+									<SmartTooltip
+										placement="right"
+										className={cx(
+											styles.ellipsis,
+											isActiveFile && "font-medium",
+										)}
+										sideOffset={20}
+									>
+										{item?.file_name}
+									</SmartTooltip>
+								)}
+							</>
 						)}
 					</div>
 					{renderDecorationTag()}
@@ -1793,6 +1847,7 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 		onBatchPptExportProgress,
 		onBatchPptExportEnd,
 		allowEdit,
+		downloadProgress,
 		// 批量分享回调
 		onBatchShareClick: async (fileIds: string[]) => {
 			if (fileIds.length > 0) {
@@ -1851,154 +1906,164 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 	const handleFileListScroll = useMemoizedFn(() => {
 		markProjectFileListScrollActivity()
 	})
+	const imagePreviewManager = useProjectFileImagePreviewManager({ attachments })
+	const handleMountedTreeRowsChange = useMemoizedFn((rows: Array<{ node: TreeNodeData }>) => {
+		imagePreviewManager.setMountedItems(rows.map((row) => row.node.item))
+	})
 
 	return (
-		<div
-			className={cx(className, "flex h-[calc(100%-32px)] overflow-auto flex-col")}
-			data-testid="topic-files-core"
-		>
-			{/* 右键菜单内容 */}
-			{(allowEdit || filterMenuItems) && dropdownContent}
-			{allowEdit && batchDownloadDropdownContent}
-			{fileInfoPanel}
-			{deleteConfirmNode}
-			{batchDeleteConfirmNode}
-			{/* Content area */}
-			{/* <div className={styles.contentArea}> */}
-			{/* File tree */}
+		<ProjectFileImagePreviewProvider manager={imagePreviewManager}>
 			<div
-				ref={fileListAreaRef}
-				className={cx(styles.fileListArea, "px-2 pb-2", {
-					[styles.dragTargetFolder]: isDragOverFileListArea || dragState.isDragOverRoot, // 添加拖拽悬停样式
-				})}
-				onScroll={handleFileListScroll}
-				onContextMenu={(e) =>
-					fileListAreaDelegateProps.onDropdownContextMenuClick?.(e, null)
-				}
-				onDragEnter={handleFileListAreaDragEnter}
-				onDragOver={handleFileListAreaDragOver}
-				onDragLeave={handleFileListAreaDragLeave}
-				onDragEnd={handleFileListAreaDragEnd}
-				onDrop={handleFileListAreaDrop}
-				data-testid="topic-files-list-area"
+				className={cx(className, "flex h-[calc(100%-32px)] overflow-auto flex-col")}
+				data-testid="topic-files-core"
 			>
-				{visibleRows.length > 0 ? (
-					<CustomTree
-						visibleRows={visibleRows}
-						visibleNodes={visibleNodes}
-						visibleNodeIndexByKey={visibleNodeIndexByKey}
-						// draggable={
-						// 	allowEdit
-						// 		? {
-						// 				icon: false,
-						// 		  }
-						// 		: false
-						// }
-						onSelect={handleSelect}
-						expandedKeys={expandedKeys}
-						selectedKeys={selectedKeys}
-						titleRender={titleRender}
-						getRowRenderVersion={getRowRenderVersion}
-						rowRenderContextVersion={rowRenderContextVersion}
-						showIcon={false}
-						blockNode
-						scrollElementRef={fileListAreaRef}
-						scrollToKey={locatingFileId}
-						isMobile={isMobile}
-						// height={treeHeight}
-						dragTargetNodeClass={styles.dragTargetFolder}
-						dragTargetKey={dragState.dropTargetFolderId}
-						isDragTargetNode={isDropTargetNode}
-						{...treeNodeDragHandlers}
-					/>
-				) : refreshLoading ? (
-					<div
-						className="flex h-full w-full items-center justify-center"
-						data-testid="topic-files-list-loading"
-					>
-						<div className="flex flex-col items-center gap-3">
-							<Loader2 size={20} className="animate-spin text-muted-foreground" />
-							<p className="text-sm text-muted-foreground">
-								{t("topicFiles.loadingFiles")}
-							</p>
+				{/* 右键菜单内容 */}
+				{(allowEdit || filterMenuItems) && dropdownContent}
+				{allowEdit && batchDownloadDropdownContent}
+				{fileInfoPanel}
+				{deleteConfirmNode}
+				{batchDeleteConfirmNode}
+				{/* Content area */}
+				{/* <div className={styles.contentArea}> */}
+				{/* File tree */}
+				<div
+					ref={fileListAreaRef}
+					className={cx(styles.fileListArea, "px-2 pb-2", {
+						[styles.dragTargetFolder]:
+							isDragOverFileListArea || dragState.isDragOverRoot, // 添加拖拽悬停样式
+					})}
+					onScroll={handleFileListScroll}
+					onContextMenu={(e) =>
+						fileListAreaDelegateProps.onDropdownContextMenuClick?.(e, null)
+					}
+					onDragEnter={handleFileListAreaDragEnter}
+					onDragOver={handleFileListAreaDragOver}
+					onDragLeave={handleFileListAreaDragLeave}
+					onDragEnd={handleFileListAreaDragEnd}
+					onDrop={handleFileListAreaDrop}
+					data-testid="topic-files-list-area"
+				>
+					{visibleRows.length > 0 ? (
+						<CustomTree
+							visibleRows={visibleRows}
+							visibleNodes={visibleNodes}
+							visibleNodeIndexByKey={visibleNodeIndexByKey}
+							// draggable={
+							// 	allowEdit
+							// 		? {
+							// 				icon: false,
+							// 		  }
+							// 		: false
+							// }
+							onSelect={handleSelect}
+							expandedKeys={expandedKeys}
+							selectedKeys={selectedKeys}
+							titleRender={titleRender}
+							getRowRenderVersion={getRowRenderVersion}
+							rowRenderContextVersion={rowRenderContextVersion}
+							showIcon={false}
+							blockNode
+							scrollElementRef={fileListAreaRef}
+							scrollToKey={locatingFileId}
+							isMobile={isMobile}
+							onMountedRowsChange={handleMountedTreeRowsChange}
+							// height={treeHeight}
+							dragTargetNodeClass={styles.dragTargetFolder}
+							dragTargetKey={dragState.dropTargetFolderId}
+							isDragTargetNode={isDropTargetNode}
+							{...treeNodeDragHandlers}
+						/>
+					) : refreshLoading ? (
+						<div
+							className="flex h-full w-full items-center justify-center"
+							data-testid="topic-files-list-loading"
+						>
+							<div className="flex flex-col items-center gap-3">
+								<Loader2 size={20} className="animate-spin text-muted-foreground" />
+								<p className="text-sm text-muted-foreground">
+									{t("topicFiles.loadingFiles")}
+								</p>
+							</div>
 						</div>
-					</div>
-				) : (
-					<EmptyState
-						onAddFile={createVirtualFile}
-						onAddDesign={createVirtualDesignProject}
-						onUploadFile={() => handleUploadFile()}
-						allowEdit={allowEdit}
-					/>
-				)}
-			</div>
-			{/* </div> */}
-			{/* Batch download layer */}
-			<div
-				className={cx(styles.batchDownloadLayer, {
-					[styles.hidden]:
-						(!isMobile && !showBatchDownload) || (isMobile && attachments.length <= 0),
-					[styles.pcBatchDownloadLayer]: !isMobile,
-				})}
-			>
-				{!isMobile && showBatchDownload && (
-					<Flex className={styles.batchOperations}>
+					) : (
+						<EmptyState
+							onAddFile={createVirtualFile}
+							onAddDesign={createVirtualDesignProject}
+							onUploadFile={() => handleUploadFile()}
+							allowEdit={allowEdit}
+						/>
+					)}
+				</div>
+				{/* </div> */}
+				{/* Batch download layer */}
+				<div
+					className={cx(styles.batchDownloadLayer, {
+						[styles.hidden]:
+							(!isMobile && !showBatchDownload) ||
+							(isMobile && attachments.length <= 0),
+						[styles.pcBatchDownloadLayer]: !isMobile,
+					})}
+				>
+					{!isMobile && showBatchDownload && (
+						<Flex className={styles.batchOperations}>
+							<MagicDropdown
+								menu={{ items: batchMenuItems, style: { width: "100%" } }}
+								placement="topLeft"
+								trigger={["click"]}
+							>
+								<div style={{ width: "100%" }}>
+									<Button
+										className={styles.batchDownloadButtonPC}
+										data-testid="batch-operations-button"
+										disabled={batchLoading}
+										style={{ flex: 1, width: "100%" }}
+									>
+										<Flex align="center" gap={2} justify="center">
+											{batchLoading ? (
+												<Loader2 className="mr-1 animate-spin" size={16} />
+											) : null}
+											<span className={styles.batchDownloadButtonPCText}>
+												{t("topicFiles.batchOperations")}
+											</span>
+											<IconChevronDown size={16} stroke={1.5} color="#fff" />
+										</Flex>
+									</Button>
+								</div>
+							</MagicDropdown>
+						</Flex>
+					)}
+					{isMobile && isSelectMode && (
+						<Button
+							variant="secondary"
+							className="h-9 px-8 py-2 text-sm font-medium shadow-xs"
+							data-testid="mobile-cancel-select-button"
+							onClick={() => pubsub.publish(PubSubEvents.Cancel_File_Selection)}
+						>
+							{t("topicFiles.cancelSelect")}
+						</Button>
+					)}
+					{isMobile && isSelectMode && (
 						<MagicDropdown
-							menu={{ items: batchMenuItems, style: { width: "100%" } }}
+							menu={{ items: batchMenuItems }}
 							placement="topLeft"
 							trigger={["click"]}
-						>
-							<div style={{ width: "100%" }}>
-								<Button
-									className={styles.batchDownloadButtonPC}
-									data-testid="batch-operations-button"
-									disabled={batchLoading}
-									style={{ flex: 1, width: "100%" }}
-								>
-									<Flex align="center" gap={2} justify="center">
-										{batchLoading ? (
-											<Loader2 className="mr-1 animate-spin" size={16} />
-										) : null}
-										<span className={styles.batchDownloadButtonPCText}>
-											{t("topicFiles.batchOperations")}
-										</span>
-										<IconChevronDown size={16} stroke={1.5} color="#fff" />
-									</Flex>
-								</Button>
-							</div>
-						</MagicDropdown>
-					</Flex>
-				)}
-				{isMobile && isSelectMode && (
-					<Button
-						variant="secondary"
-						className="h-9 px-8 py-2 text-sm font-medium shadow-xs"
-						data-testid="mobile-cancel-select-button"
-						onClick={() => pubsub.publish(PubSubEvents.Cancel_File_Selection)}
-					>
-						{t("topicFiles.cancelSelect")}
-					</Button>
-				)}
-				{isMobile && isSelectMode && (
-					<MagicDropdown
-						menu={{ items: batchMenuItems }}
-						placement="topLeft"
-						trigger={["click"]}
-						disabled={!showBatchDownload || batchLoading}
-					>
-						<Button
-							variant="default"
-							className="h-9 w-[253px] gap-2 px-4 py-2 text-sm font-medium shadow-xs"
-							data-testid="mobile-batch-operations-button"
 							disabled={!showBatchDownload || batchLoading}
 						>
-							{batchLoading ? <Loader2 className="animate-spin" size={16} /> : null}
-							<span>{t("topicFiles.batchOperation")}</span>
-							<ChevronDown size={16} />
-						</Button>
-					</MagicDropdown>
-				)}
-				{/* {isMobile && attachments.length > 0 && hasLogin && (
+							<Button
+								variant="default"
+								className="h-9 w-[253px] gap-2 px-4 py-2 text-sm font-medium shadow-xs"
+								data-testid="mobile-batch-operations-button"
+								disabled={!showBatchDownload || batchLoading}
+							>
+								{batchLoading ? (
+									<Loader2 className="animate-spin" size={16} />
+								) : null}
+								<span>{t("topicFiles.batchOperation")}</span>
+								<ChevronDown size={16} />
+							</Button>
+						</MagicDropdown>
+					)}
+					{/* {isMobile && attachments.length > 0 && hasLogin && (
 					<>
 						<div className={styles.batchDownloadSeparator} />
 						<button
@@ -2015,242 +2080,252 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 						</button>
 					</>
 				)} */}
-			</div>
-			{/* 文件分享模态框 */}
-			{isMobile ? (
-				<ProjectShareSheet
-					open={Boolean(shareFileInfo && shareModalVisible) || Boolean(shareSuccessInfo)}
-					onClose={() => {
-						setShareModalVisible(false)
-						setShareFileInfo(null)
-						closeSuccessModal()
-					}}
-					mode="file"
-					attachments={attachments}
-					projectName={shareFileInfo?.projectName || selectedProject?.project_name}
-					projectId={projectId}
-					defaultSelectedFileIds={
-						shareFileInfo?.fileIds || shareSuccessInfo?.shareInfo?.file_ids
-					}
-					defaultOpenFileId={shareFileInfo?.defaultOpenFileId}
-					initialSelectedShare={shareSuccessInfo?.shareInfo || null}
-				/>
-			) : (
-				<>
-					{shareFileInfo && (
-						<ShareModal
-							open={shareModalVisible}
-							onCancel={() => {
-								setShareModalVisible(false)
-								setShareFileInfo(null)
-							}}
-							shareMode={ShareMode.File}
-							types={[
-								ShareType.PasswordProtected,
-								ShareType.Public,
-								ShareType.Organization,
-							]}
-							attachments={attachments}
-							resourceId={
-								shareFileInfo.resourceId || shareSuccessInfo?.shareInfo?.resource_id
-							}
-							defaultSelectedFileIds={shareFileInfo.fileIds}
-							projectName={shareFileInfo.projectName}
-							projectId={projectId}
-						/>
-					)}
-					{/* 文件分享成功Modal - 用于已存在的分享 */}
-					{shareSuccessInfo && (
-						<ShareSuccessModal
-							open={true}
-							onClose={closeSuccessModal}
-							onCancelShare={handleCancelShare}
-							onEditShare={handleEditShare}
-							shareName={shareSuccessInfo.shareInfo.resource_name || ""}
-							projectName={shareSuccessInfo.shareInfo.project_name}
-							fileCount={shareSuccessInfo.shareInfo?.extend?.file_count || 1}
-							mainFileName={
-								shareSuccessInfo.shareInfo.main_file_name || t("share.untitled")
-							}
-							shareUrl={generateShareUrl(
-								shareSuccessInfo.shareInfo.resource_id,
-								shareSuccessInfo.shareInfo.password,
-								"files",
-							)}
-							password={shareSuccessInfo.shareInfo.password}
-							expire_at={shareSuccessInfo.shareInfo.expire_at}
-							shareType={shareSuccessInfo.shareInfo.share_type}
-							shareProject={shareSuccessInfo.shareInfo.share_project}
-							fileIds={shareSuccessInfo.shareInfo.file_ids}
-						/>
-					)}
-				</>
-			)}
-			{/* 相似分享Dialog/Drawer */}
-			{similarSharesInfo &&
-				(isMobile ? (
-					<SimilarSharesDrawer
-						open={true}
-						onClose={closeSimilarSharesDialog}
-						shares={similarSharesInfo.similarShares}
-						onSelectShare={handleSelectSimilarShare}
-						onCreateNew={handleCreateNewShare}
+				</div>
+				{/* 文件分享模态框 */}
+				{isMobile ? (
+					<ProjectShareSheet
+						open={
+							Boolean(shareFileInfo && shareModalVisible) || Boolean(shareSuccessInfo)
+						}
+						onClose={() => {
+							setShareModalVisible(false)
+							setShareFileInfo(null)
+							closeSuccessModal()
+						}}
+						mode="file"
+						attachments={attachments}
+						attachmentList={attachments}
+						projectName={shareFileInfo?.projectName || selectedProject?.project_name}
+						projectId={projectId}
+						defaultSelectedFileIds={
+							shareFileInfo?.fileIds || shareSuccessInfo?.shareInfo?.file_ids
+						}
+						defaultOpenFileId={shareFileInfo?.defaultOpenFileId}
+						initialSelectedShare={shareSuccessInfo?.shareInfo || null}
 					/>
 				) : (
-					<SimilarSharesDialog
-						open={true}
-						onClose={closeSimilarSharesDialog}
-						shares={similarSharesInfo.similarShares}
-						onSelectShare={handleSelectSimilarShare}
-						onCreateNew={handleCreateNewShare}
+					<>
+						{shareFileInfo && (
+							<ShareModal
+								open={shareModalVisible}
+								onCancel={() => {
+									setShareModalVisible(false)
+									setShareFileInfo(null)
+								}}
+								shareMode={ShareMode.File}
+								types={[
+									ShareType.PasswordProtected,
+									ShareType.Public,
+									ShareType.Organization,
+								]}
+								attachments={attachments}
+								resourceId={
+									shareFileInfo.resourceId ||
+									shareSuccessInfo?.shareInfo?.resource_id
+								}
+								defaultSelectedFileIds={shareFileInfo.fileIds}
+								projectName={shareFileInfo.projectName}
+								projectId={projectId}
+							/>
+						)}
+						{/* 文件分享成功Modal - 用于已存在的分享 */}
+						{shareSuccessInfo && (
+							<ShareSuccessModal
+								open={true}
+								onClose={closeSuccessModal}
+								onCancelShare={handleCancelShare}
+								onEditShare={handleEditShare}
+								shareName={shareSuccessInfo.shareInfo.resource_name || ""}
+								projectName={shareSuccessInfo.shareInfo.project_name}
+								fileCount={shareSuccessInfo.shareInfo?.extend?.file_count || 1}
+								mainFileName={
+									shareSuccessInfo.shareInfo.main_file_name || t("share.untitled")
+								}
+								shareUrl={generateShareUrl(
+									shareSuccessInfo.shareInfo.resource_id,
+									shareSuccessInfo.shareInfo.password,
+									"files",
+								)}
+								password={shareSuccessInfo.shareInfo.password}
+								expire_at={shareSuccessInfo.shareInfo.expire_at}
+								shareType={shareSuccessInfo.shareInfo.share_type}
+								shareProject={shareSuccessInfo.shareInfo.share_project}
+								fileIds={shareSuccessInfo.shareInfo.file_ids}
+								createdAt={shareSuccessInfo.shareInfo.created_at}
+								updatedAt={shareSuccessInfo.shareInfo.updated_at}
+								viewCount={shareSuccessInfo.shareInfo.view_count}
+							/>
+						)}
+					</>
+				)}
+				{/* 相似分享Dialog/Drawer */}
+				{similarSharesInfo &&
+					(isMobile ? (
+						<SimilarSharesDrawer
+							open={true}
+							onClose={closeSimilarSharesDialog}
+							shares={similarSharesInfo.similarShares}
+							onSelectShare={handleSelectSimilarShare}
+							onCreateNew={handleCreateNewShare}
+						/>
+					) : (
+						<SimilarSharesDialog
+							open={true}
+							onClose={closeSimilarSharesDialog}
+							shares={similarSharesInfo.similarShares}
+							onSelectShare={handleSelectSimilarShare}
+							onCreateNew={handleCreateNewShare}
+						/>
+					))}
+				{/* 移动文件选择器 */}
+				{
+					<SelectDirectoryModal
+						{...{
+							...moveFileHook.selectorConfig,
+							visible: moveFileHook.selectorConfig.visible,
+							mobileCrossProjectConfig:
+								isMobile && selectedProject
+									? {
+											currentProject: selectedProject,
+											currentWorkspace: selectedWorkspace,
+											sourceAttachments: attachments,
+											isChatProject,
+										}
+									: undefined,
+							onSubmit: handleBatchMoveConfirm,
+						}}
 					/>
-				))}
-			{/* 移动文件选择器 */}
-			{
-				<SelectDirectoryModal
-					{...{
-						...moveFileHook.selectorConfig,
-						visible: moveFileHook.selectorConfig.visible,
-						mobileCrossProjectConfig:
-							isMobile && selectedProject
-								? {
-										currentProject: selectedProject,
-										currentWorkspace: selectedWorkspace,
-										sourceAttachments: attachments,
-										isChatProject,
-									}
-								: undefined,
-						onSubmit: handleBatchMoveConfirm,
-					}}
-				/>
-			}
-			<CrossProjectFileOperationModal
-				visible={crossProjectOperation.visible}
-				title={
-					crossProjectOperation.operationType === "move"
-						? t("topicFiles.contextMenu.moveTo")
-						: t("topicFiles.contextMenu.copyTo")
 				}
-				operationType={crossProjectOperation.operationType}
-				selectedWorkspace={selectedWorkspace}
-				selectedProject={selectedProject}
-				workspaces={workspaces}
-				fileIds={crossProjectOperation.fileIds}
-				sourceAttachments={attachments}
-				initialPath={crossProjectOperation.initialPath}
-				onClose={crossProjectOperation.closeModal}
-				onSubmit={
-					crossProjectOperation.operationType === "move"
-						? crossProjectOperation.executeMoveOperation
-						: crossProjectOperation.executeCopyOperation
-				}
-			/>
-			{/* 从其他项目导入 Modal */}
-			{workspaces && projectId && (
-				<ImportFromOtherProjectModal
-					visible={importOperation.visible}
+				<CrossProjectFileOperationModal
+					visible={crossProjectOperation.visible}
+					title={
+						crossProjectOperation.operationType === "move"
+							? t("topicFiles.contextMenu.moveTo")
+							: t("topicFiles.contextMenu.copyTo")
+					}
+					operationType={crossProjectOperation.operationType}
+					selectedWorkspace={selectedWorkspace}
+					selectedProject={selectedProject}
 					workspaces={workspaces}
-					currentProjectId={projectId}
-					currentProject={selectedProject || null}
-					targetPath={importOperation.targetPath}
-					targetAttachments={attachments}
-					onClose={importOperation.closeModal}
-					onSubmit={importOperation.executeImportOperation}
+					fileIds={crossProjectOperation.fileIds}
+					sourceAttachments={attachments}
+					initialPath={crossProjectOperation.initialPath}
+					onClose={crossProjectOperation.closeModal}
+					onSubmit={
+						crossProjectOperation.operationType === "move"
+							? crossProjectOperation.executeMoveOperation
+							: crossProjectOperation.executeCopyOperation
+					}
 				/>
-			)}
-			{/* Duplicate file modal */}
-			<FolderConflictModal {...folderConflictModalProps} />
-			<DuplicateFileModal {...duplicateFileModalProps} />
-			{/* 移动/复制进度提示 - 使用 Portal 渲染到 body */}
-			{createPortal(
-				<MagicProgressToast
-					visible={
-						isMoving || crossProjectOperation.isOperating || importOperation.isOperating
-					}
-					progress={
-						crossProjectOperation.isOperating
-							? crossProjectOperation.operationProgress
-							: importOperation.isOperating
-								? importOperation.operationProgress
-								: moveProgress
-					}
-					text={
-						crossProjectOperation.isOperating &&
-						crossProjectOperation.operationType === "copy"
-							? t("topicFiles.copying")
-							: importOperation.isOperating
+				{/* 从其他项目导入 Modal */}
+				{workspaces && projectId && (
+					<ImportFromOtherProjectModal
+						visible={importOperation.visible}
+						workspaces={workspaces}
+						currentProjectId={projectId}
+						currentProject={selectedProject || null}
+						targetPath={importOperation.targetPath}
+						targetAttachments={attachments}
+						onClose={importOperation.closeModal}
+						onSubmit={importOperation.executeImportOperation}
+					/>
+				)}
+				{/* Duplicate file modal */}
+				<FolderConflictModal {...folderConflictModalProps} />
+				<DuplicateFileModal {...duplicateFileModalProps} />
+				{/* 移动/复制进度提示 - 使用 Portal 渲染到 body */}
+				{createPortal(
+					<MagicProgressToast
+						visible={
+							isMoving ||
+							crossProjectOperation.isOperating ||
+							importOperation.isOperating
+						}
+						progress={
+							crossProjectOperation.isOperating
+								? crossProjectOperation.operationProgress
+								: importOperation.isOperating
+									? importOperation.operationProgress
+									: moveProgress
+						}
+						text={
+							crossProjectOperation.isOperating &&
+							crossProjectOperation.operationType === "copy"
 								? t("topicFiles.copying")
-								: t("topicFiles.moving")
-					}
-					position="top"
-					width={280}
-					showPercentage={true}
-					progressHeight={4}
-					zIndex={99999}
-				/>,
-				document.body,
-			)}
-			{/* PDF 导出进度提示 - 使用 Portal 渲染到 body */}
-			{createPortal(
-				<MagicProgressToast
-					visible={isExportingPdf}
-					progress={pdfExportProgress}
-					text={t("topicFiles.exportingPdf")}
-					position="top"
-					width={280}
-					showPercentage={true}
-					progressHeight={4}
-					zIndex={99999}
-				/>,
-				document.body,
-			)}
-			{/* PPT 导出进度提示 - 使用 Portal 渲染到 body */}
-			{createPortal(
-				<MagicProgressToast
-					visible={isExportingPpt}
-					progress={pptExportProgress}
-					text={t("topicFiles.exportingPpt")}
-					position="top"
-					width={280}
-					showPercentage={true}
-					progressHeight={4}
-					zIndex={99999}
-				/>,
-				document.body,
-			)}
-			{/* 批量 PDF 导出进度提示 - 使用 Portal 渲染到 body */}
-			{createPortal(
-				<MagicProgressToast
-					visible={isBatchExportingPdf}
-					progress={batchPdfExportProgress}
-					text={t("topicFiles.batchExportingPdf")}
-					position="top"
-					width={280}
-					showPercentage={true}
-					progressHeight={4}
-					zIndex={99999}
-				/>,
-				document.body,
-			)}
-			{/* 批量 PPT 导出进度提示 - 使用 Portal 渲染到 body */}
-			{createPortal(
-				<MagicProgressToast
-					visible={isBatchExportingPpt}
-					progress={batchPptExportProgress}
-					text={t("topicFiles.batchExportingPpt")}
-					position="top"
-					width={280}
-					showPercentage={true}
-					progressHeight={4}
-					zIndex={99999}
-				/>,
-				document.body,
-			)}
-			{/* 下载无水印图片协议弹窗 */}
-			{agreementModal}
-			{/* AI 卡片创建弹窗 */}
-			{aiCardDialogElement}
-		</div>
+								: importOperation.isOperating
+									? t("topicFiles.copying")
+									: t("topicFiles.moving")
+						}
+						position="top"
+						width={280}
+						showPercentage={true}
+						progressHeight={4}
+						zIndex={99999}
+					/>,
+					document.body,
+				)}
+				{/* PDF 导出进度提示 - 使用 Portal 渲染到 body */}
+				{createPortal(
+					<MagicProgressToast
+						visible={isExportingPdf}
+						progress={pdfExportProgress}
+						text={t("topicFiles.exportingPdf")}
+						position="top"
+						width={280}
+						showPercentage={true}
+						progressHeight={4}
+						zIndex={99999}
+					/>,
+					document.body,
+				)}
+				{/* PPT 导出进度提示 - 使用 Portal 渲染到 body */}
+				{createPortal(
+					<MagicProgressToast
+						visible={isExportingPpt}
+						progress={pptExportProgress}
+						text={t("topicFiles.exportingPpt")}
+						position="top"
+						width={280}
+						showPercentage={true}
+						progressHeight={4}
+						zIndex={99999}
+					/>,
+					document.body,
+				)}
+				{/* 批量 PDF 导出进度提示 - 使用 Portal 渲染到 body */}
+				{createPortal(
+					<MagicProgressToast
+						visible={isBatchExportingPdf}
+						progress={batchPdfExportProgress}
+						text={t("topicFiles.batchExportingPdf")}
+						position="top"
+						width={280}
+						showPercentage={true}
+						progressHeight={4}
+						zIndex={99999}
+					/>,
+					document.body,
+				)}
+				{/* 批量 PPT 导出进度提示 - 使用 Portal 渲染到 body */}
+				{createPortal(
+					<MagicProgressToast
+						visible={isBatchExportingPpt}
+						progress={batchPptExportProgress}
+						text={t("topicFiles.batchExportingPpt")}
+						position="top"
+						width={280}
+						showPercentage={true}
+						progressHeight={4}
+						zIndex={99999}
+					/>,
+					document.body,
+				)}
+				{/* 下载无水印图片协议弹窗 */}
+				{agreementModal}
+				{/* AI 卡片创建弹窗 */}
+				{aiCardDialogElement}
+			</div>
+		</ProjectFileImagePreviewProvider>
 	)
 })
 

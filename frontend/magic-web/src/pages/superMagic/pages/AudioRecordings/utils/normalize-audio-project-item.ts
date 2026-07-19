@@ -33,17 +33,17 @@ export function resolveCardStatus(
 	if (transferStatus === "transferring") return "uploading"
 	if (transferStatus === "failed") return "upload_failed"
 
-	// 2. Completed states
-	if (raw.is_summarized === 1) return "summarized"
-	if (raw.project_status === "finished") return "summarized"
-	if (raw.current_topic_status === "finished") return "summarized"
-	if (currentPhase === "summarizing" && phaseStatus === "completed") return "summarized"
-
-	// 3. Summarizing failed or ongoing
+	// 2. Active summarizing states must win over stale finished flags from a previous summary.
 	if (currentPhase === "summarizing") {
+		if (phaseStatus === "completed") return "summarized"
 		if (phaseStatus === "failed") return "summary_failed"
 		return "summarizing"
 	}
+
+	// 3. Completed states
+	if (raw.is_summarized === 1) return "summarized"
+	if (raw.project_status === "finished") return "summarized"
+	if (raw.current_topic_status === "finished") return "summarized"
 
 	// 4. Audio merging phase
 	if (currentPhase === "waiting") {

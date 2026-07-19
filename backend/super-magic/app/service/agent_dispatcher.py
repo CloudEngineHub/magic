@@ -86,7 +86,7 @@ class AgentDispatcher(Base):
             return
 
         self.agent_context: Optional[AgentContext] = None
-        self.http_stream: Optional[HTTPSubscriptionStream] = None
+        self.http_streams: list[HTTPSubscriptionStream] = []
         self.is_workspace_initialized: bool = False  # 工作区初始化状态标志
         self.agent_service = AgentService()  # 创建AgentService实例
         self.agents: Dict[str, Agent] = {}  # 用于存储不同类型的agent
@@ -265,11 +265,14 @@ class AgentDispatcher(Base):
 
         # HTTP订阅流 - 通过环境变量控制是否启用
         enable_http_stream = os.getenv("ENABLE_HTTP_SUBSCRIPTION_STREAM", "true").lower() == "true"
-        if init_message.message_subscription_config and not self.http_stream:
+        configs = init_message.message_subscription_config or []
+        if configs and not self.http_streams:
             if enable_http_stream:
-                self.http_stream = HTTPSubscriptionStream(init_message.message_subscription_config)
-                self.agent_context.add_stream(self.http_stream)
-                logger.info("创建和添加了HTTP订阅流")
+                for subscription_config in configs:
+                    stream = HTTPSubscriptionStream(subscription_config)
+                    self.http_streams.append(stream)
+                    self.agent_context.add_stream(stream)
+                logger.info(f"创建和添加了 {len(self.http_streams)} 个 HTTP订阅流")
             else:
                 logger.info("HTTP订阅流已通过环境变量 ENABLE_HTTP_SUBSCRIPTION_STREAM 禁用，跳过创建")
 
@@ -496,7 +499,20 @@ class AgentDispatcher(Base):
         except Exception as e:
             logger.warning(f"从 chat agent 配置设置 AgentProfile 失败: {e}")
 
-    async def _prepare_agent(self, agent_mode: Union[AgentMode, str], agent_code: Optional[str]) -> None:
+    def _apply_builtin_mode_profile(self, agent_mode: Union[AgentMode, str]) -> None:
+        """Set a localized baseline profile for built-in creation modes."""
+        from app.core.entity.agent_profile import get_builtin_agent_profile
+
+        normalized_mode = self._agent_mode_value(agent_mode)
+        profile = get_builtin_agent_profile(normalized_mode)
+        if profile is not None:
+            self.agent_context.set_agent_profile(profile)
+
+    async def _prepare_agent(
+        self,
+        agent_mode: Union[AgentMode, str],
+        agent_code: Optional[str],
+    ) -> None:
         """Compile + set AgentProfile for modes that need it (crew / magiclaw)."""
         try:
             mode_value = self._agent_mode_value(agent_mode)
@@ -771,7 +787,10 @@ class AgentDispatcher(Base):
             if agent_code_val and isinstance(agent_code_val, str) and agent_code_val.strip():
                 agent_code = agent_code_val.strip()
 
-        # 从 chat 消息的 agent 字段设置 AgentProfile（基线）
+        # 先设置内置模式的本地化默认身份，再由 chat profile 和 crew/claw 编译产物覆盖。
+        self._apply_builtin_mode_profile(message.agent_mode)
+
+        # 从 chat 消息的 agent 字段设置 AgentProfile（显式配置）
         # _prepare_agent() 中 crew/claw 编译可能会覆盖此设置
         self._apply_chat_agent_config(message)
 

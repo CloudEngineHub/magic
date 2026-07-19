@@ -63,6 +63,51 @@ readonly class ChatMessageAssembler
     }
 
     /**
+     * 构建聊天请求对象用于重新总结任务.
+     *
+     * @param array<int,string> $specifiedAnalysisTypes
+     */
+    public function buildResummaryMessage(
+        ProcessSummaryTaskDTO $dto,
+        AsrFileDataDTO $audioFileData,
+        ?AsrFileDataDTO $noteFileData = null,
+        ?AsrFileDataDTO $markerFileData = null,
+        string $analysisScope = 'template_analysis_files',
+        array $specifiedAnalysisTypes = [],
+        ?array $dynamicParams = null
+    ): ChatRequest {
+        $translator = di(TranslatorInterface::class);
+        $translator->setLocale(CoContext::getLanguage());
+
+        $messageContent = $this->buildResummaryMessageContent(
+            $dto->modelId,
+            $audioFileData,
+            $noteFileData,
+            $markerFileData,
+            $analysisScope,
+            $specifiedAnalysisTypes,
+            $dynamicParams
+        );
+
+        $chatRequestData = [
+            'context' => [
+                'language' => $translator->getLocale(),
+            ],
+            'data' => [
+                'conversation_id' => $dto->conversationId,
+                'message' => [
+                    'type' => 'rich_text',
+                    'app_message_id' => (string) IdGenerator::getSnowId(),
+                    'send_time' => time() * 1000,
+                    'topic_id' => $dto->chatTopicId,
+                    'rich_text' => $messageContent,
+                ],
+            ],
+        ];
+        return new ChatRequest($chatRequestData);
+    }
+
+    /**
      * 构建rich_text消息内容.
      *
      * @param string $modelId 模型ID
@@ -177,6 +222,133 @@ readonly class ChatMessageAssembler
         ];
 
         // 将话题动态参数合并到 super_agent.dynamic_params 中，使其随 dynamic_config 下发到 super-magic
+        if (! empty($dynamicParams)) {
+            $superAgentExtra['dynamic_params'] = array_merge($superAgentExtra['dynamic_params'], $dynamicParams);
+        }
+
+        return [
+            'content' => Json::encode([
+                'type' => 'doc',
+                'content' => [
+                    [
+                        'type' => 'paragraph',
+                        'attrs' => ['suggestion' => ''],
+                        'content' => $messageContent,
+                    ],
+                ],
+            ]),
+            'instructs' => [
+                ['value' => 'plan'],
+            ],
+            'attachments' => [],
+            'extra' => [
+                'super_agent' => $superAgentExtra,
+            ],
+        ];
+    }
+
+    /**
+     * 构建重新总结 rich_text 消息内容.
+     *
+     * @param array<int,string> $specifiedAnalysisTypes
+     */
+    public function buildResummaryMessageContent(
+        string $modelId,
+        AsrFileDataDTO $fileData,
+        ?AsrFileDataDTO $noteData = null,
+        ?AsrFileDataDTO $markerData = null,
+        string $analysisScope = 'template_analysis_files',
+        array $specifiedAnalysisTypes = [],
+        ?array $dynamicParams = null
+    ): array {
+        $translator = di(TranslatorInterface::class);
+        $translator->setLocale(CoContext::getLanguage());
+
+        $targetInstruction = $specifiedAnalysisTypes === []
+            ? $translator->trans('asr.messages.resummary_scope_instruction', [
+                'analysis_scope' => $analysisScope,
+            ])
+            : $translator->trans('asr.messages.resummary_specified_instruction', [
+                'specified_analysis_types' => Json::encode(array_values($specifiedAnalysisTypes)),
+            ]);
+
+        $messageContent = [
+            [
+                'type' => 'text',
+                'text' => $translator->trans('asr.messages.resummary_prefix'),
+            ],
+            [
+                'type' => 'mention',
+                'attrs' => [
+                    'id' => null,
+                    'label' => null,
+                    'mentionSuggestionChar' => '@',
+                    'type' => 'project_file',
+                    'data' => $fileData->toArray(),
+                ],
+            ],
+        ];
+
+        if ($noteData !== null && ! empty($noteData->fileName) && ! empty($noteData->filePath)) {
+            $messageContent[] = [
+                'type' => 'text',
+                'text' => $translator->trans('asr.messages.resummary_note_middle'),
+            ];
+            $messageContent[] = [
+                'type' => 'mention',
+                'attrs' => [
+                    'id' => null,
+                    'label' => null,
+                    'mentionSuggestionChar' => '@',
+                    'type' => 'project_file',
+                    'data' => $noteData->toArray(),
+                ],
+            ];
+        }
+
+        $messageContent[] = [
+            'type' => 'text',
+            'text' => $translator->trans('asr.messages.resummary_base_instruction') . ' ' . $targetInstruction,
+        ];
+
+        $mentions = [
+            [
+                'type' => 'mention',
+                'attrs' => [
+                    'type' => 'project_file',
+                    'data' => $fileData->toArray(),
+                ],
+            ],
+        ];
+        if ($noteData !== null && ! empty($noteData->fileName) && ! empty($noteData->filePath)) {
+            $mentions[] = [
+                'type' => 'mention',
+                'attrs' => [
+                    'type' => 'project_file',
+                    'data' => $noteData->toArray(),
+                ],
+            ];
+        }
+
+        $superAgentExtra = [
+            'mentions' => $mentions,
+            'input_mode' => 'plan',
+            'chat_mode' => 'normal',
+            'topic_pattern' => 'summary',
+            'model' => [
+                'model_id' => $modelId,
+            ],
+            'dynamic_params' => [
+                'summary_task' => true,
+                're_summary_task' => true,
+                'analysis_scope' => $analysisScope,
+            ],
+        ];
+
+        if ($specifiedAnalysisTypes !== []) {
+            $superAgentExtra['dynamic_params']['specified_analysis_types'] = $specifiedAnalysisTypes;
+        }
+
         if (! empty($dynamicParams)) {
             $superAgentExtra['dynamic_params'] = array_merge($superAgentExtra['dynamic_params'], $dynamicParams);
         }

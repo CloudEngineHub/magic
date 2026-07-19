@@ -73,14 +73,18 @@ export function useZoomControls(config: ZoomControlsConfig): ZoomControlsResult 
 	// 跟踪前一个编辑模式以检测转换
 	const prevEditModeRef = useRef(isEditMode)
 
-	// 退出编辑模式时重置缩放
+	// 独立预览退出编辑模式时恢复自动适配；PPT 的共享缩放由外层控制栏持有。
 	useEffect(() => {
 		// 检测从编辑模式到查看模式的转换
-		if (prevEditModeRef.current && !isEditMode) {
+		if (
+			prevEditModeRef.current &&
+			!isEditMode &&
+			scalingConfig.onManualScaleChange === undefined
+		) {
 			resetScale()
 		}
 		prevEditModeRef.current = isEditMode
-	}, [isEditMode, resetScale])
+	}, [isEditMode, resetScale, scalingConfig.onManualScaleChange])
 
 	// 处理缩放变化并限制范围，支持以选中元素为中心缩放
 	const handleScaleChange = useMemoizedFn((newScale: number) => {
@@ -176,6 +180,54 @@ export function useZoomControls(config: ZoomControlsConfig): ZoomControlsResult 
 			container.removeEventListener("wheel", handleWheel)
 		}
 	}, [scalingConfig.containerRef, shouldApplyScaling, scaleRatio, handleScaleChange])
+
+	// Wheel events inside an iframe do not bubble to the host preview container.
+	// Capture pinch gestures in the same-origin sandbox so the canvas and its surrounding area
+	// provide identical zoom behavior. The iframe runtime may also listen for this event, so stop
+	// propagation after handling it here to avoid applying the delta twice.
+	useEffect(() => {
+		if (
+			!scalingConfig.isPptRender ||
+			!scalingConfig.iframeLoaded ||
+			!scalingConfig.contentInjected ||
+			!shouldApplyScaling
+		) {
+			return
+		}
+
+		try {
+			const iframeWindow = scalingConfig.iframeRef.current?.contentWindow
+			if (!iframeWindow) return
+
+			const handleIframeWheel = (event: WheelEvent) => {
+				if (!event.ctrlKey && !event.metaKey) return
+
+				event.preventDefault()
+				event.stopImmediatePropagation()
+				handleScaleChange(scaleRatio - event.deltaY * 0.002)
+			}
+
+			iframeWindow.addEventListener("wheel", handleIframeWheel, {
+				capture: true,
+				passive: false,
+			})
+
+			return () => {
+				iframeWindow.removeEventListener("wheel", handleIframeWheel, true)
+			}
+		} catch {
+			// Cross-origin sandboxes use the existing postMessage zoom bridge instead.
+			return
+		}
+	}, [
+		scalingConfig.contentInjected,
+		scalingConfig.iframeLoaded,
+		scalingConfig.iframeRef,
+		scalingConfig.isPptRender,
+		shouldApplyScaling,
+		scaleRatio,
+		handleScaleChange,
+	])
 
 	// 计算内容包装器样式
 	const getContentWrapperStyle = useMemoizedFn((): CSSProperties => {

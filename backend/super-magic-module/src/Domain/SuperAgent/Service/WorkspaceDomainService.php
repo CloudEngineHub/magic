@@ -846,7 +846,7 @@ class WorkspaceDomainService
         return $result;
     }
 
-    public function diffFileListAndVersionFile(array $result, int $projectId, string $taskId, string $sandboxId, string $organizationCode = ''): bool
+    public function diffFileListAndVersionFile(DataIsolation $dataIsolation, array $result, int $projectId, string $taskId, string $sandboxId, string $organizationCode = ''): bool
     {
         $dir = '.workspace';
         $workspaceVersion = $this->getWorkspaceVersionByProjectId($projectId, $dir);
@@ -906,7 +906,7 @@ class WorkspaceDomainService
                 # 查看沙箱是否存活
                 $sandboxStatus = $this->gateway->getSandboxStatus($sandboxId);
                 if ($sandboxStatus->isRunning()) {
-                    $gatewayResult = $this->gateway->uploadFile($sandboxId, $gitVersionNotExistResult, (string) $projectId, $organizationCode, $taskId);
+                    $gatewayResult = $this->gateway->uploadFile($dataIsolation, $sandboxId, $gitVersionNotExistResult, (string) $projectId, $organizationCode, $taskId);
                     if ($gatewayResult->isSuccess()) {
                         return true;
                     }

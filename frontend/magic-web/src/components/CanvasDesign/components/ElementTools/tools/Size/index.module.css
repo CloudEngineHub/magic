@@ -25,6 +25,13 @@
 	min-width: 0;
 }
 
+.input-wrapper.autoFillWrapper .label {
+	max-width: 40px;
+	font-size: var(--text-xs-font-size, 12px);
+	line-height: var(--text-xs-line-height, 16px);
+	white-space: nowrap;
+}
+
 .label {
 	position: absolute;
 	top: 50%;
@@ -48,6 +55,11 @@
 	height: 32px !important;
 	padding-right: var(--spacing-3, 12px) !important;
 	padding-left: 32px !important;
+}
+
+.input-wrapper.autoFillWrapper .input {
+	padding-right: var(--spacing-2, 8px) !important;
+	padding-left: 54px !important;
 }
 
 /* 隐藏 Chrome, Safari, Edge, Opera 的数字输入框箭头 */

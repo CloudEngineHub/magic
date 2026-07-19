@@ -16,6 +16,10 @@ vi.mock("react-i18next", () => ({
 vi.mock("ahooks", () => ({
 	useMemoizedFn: (fn: (...args: any[]) => any) => fn,
 	useUpdateEffect: vi.fn(),
+	useDebounceFn: (fn: (...args: any[]) => any) => ({
+		run: fn,
+		cancel: vi.fn(),
+	}),
 }))
 
 vi.mock("@/hooks/useIsMobile", () => ({
@@ -150,7 +154,7 @@ vi.mock("../hooks/useCrossProjectFileOperation", () => ({
 		return {
 			executeMoveOperation: executeMoveOperationSpy,
 			executeCopyOperation: executeCopyOperationSpy,
-		duplicateModalVisible: false,
+			duplicateModalVisible: false,
 			currentDuplicateFileName: "",
 			totalDuplicates: 0,
 			handleDuplicateCancel: vi.fn(),

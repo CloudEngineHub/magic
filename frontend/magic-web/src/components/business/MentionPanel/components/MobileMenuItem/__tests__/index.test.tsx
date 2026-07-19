@@ -107,7 +107,7 @@ describe("MobileMenuItem", () => {
 			expect(screen.getByText("Test Item")).toBeInTheDocument()
 		})
 
-		it("should render item title when description data is present", () => {
+		it("should keep description hidden", () => {
 			const itemWithDescription = {
 				...baseItem,
 				description: "Test description",
@@ -116,6 +116,7 @@ describe("MobileMenuItem", () => {
 			render(<MobileMenuItem item={itemWithDescription} onClick={mockOnClick} />)
 
 			expect(screen.getByText("Test Item")).toBeInTheDocument()
+			expect(screen.queryByText("Test description")).not.toBeInTheDocument()
 		})
 
 		it("should apply selected state", () => {

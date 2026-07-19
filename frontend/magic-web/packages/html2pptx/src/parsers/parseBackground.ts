@@ -1,8 +1,8 @@
-import type { ComputedStyleInfo } from "../types/index"
+import type { ComputedStyleInfo } from "../ir/dom"
 
 /**
- * 解析 background-size 和 background-position
- * 返回相对于元素自身的像素坐标和尺寸 (x, y, w, h)
+ * Parse background-size and background-position
+ * Return pixel coordinates and size relative to the element itself (x, y, w, h)
  */
 export function parseBackgroundLayout(
 	style: ComputedStyleInfo,
@@ -19,28 +19,28 @@ export function parseBackgroundLayout(
 	let x = 0
 	let y = 0
 
-	// 1. 解析 background-size
-	// 支持: "100% 40%", "50px 50px", "cover", "contain", "auto"
+	// 1. Parse background-size
+	// Supports: "100% 40%", "50px 50px", "cover", "contain", "auto"
 	if (backgroundSize && backgroundSize !== "auto") {
 		const parts = backgroundSize.split(" ")
 		const wStr = parts[0]
 		const hStr = parts[1] || "auto"
 
 		if (wStr === "cover" || wStr === "contain") {
-			// 暂不处理 cover/contain，保持原样
+			// Do not handle cover/contain for now; keep the original dimensions
 		} else {
-			// 解析宽度
+			// Parse width
 			if (wStr.endsWith("%")) {
 				w = (parseFloat(wStr) / 100) * elemW
 			} else if (wStr.endsWith("px")) {
 				w = parseFloat(wStr)
 			}
 			
-			// 解析高度
+			// Parse height
 			if (hStr === "auto") {
-				// 保持比例? 暂时简单处理为 elemH (如果 W 是 100%?)
-				// 如果只给一个值，第二个默认 auto。通常图片会保持比例，但对于渐变/形状，auto 行为未定义很好
-				// 用户案例是 "100% 40%"，所以主要关注这个
+				// Preserve aspect ratio? For now, simply use elemH, e.g. when W is 100%
+				// If only one value is provided, the second defaults to auto. Images usually preserve ratio, but auto is poorly defined for gradients/shapes
+				// The user case is "100% 40%", so focus on that
 				h = elemH 
 			} else if (hStr.endsWith("%")) {
 				h = (parseFloat(hStr) / 100) * elemH
@@ -50,15 +50,15 @@ export function parseBackgroundLayout(
 		}
 	}
 
-	// 2. 解析 background-position
-	// 支持: "0 85%", "10px 20px", "center center"
-	// 默认 "0% 0%"
+	// 2. Parse background-position
+	// Supports: "0 85%", "10px 20px", "center center"
+	// Default is "0% 0%"
 	if (backgroundPosition) {
 		const parts = backgroundPosition.split(" ")
 		const xStr = parts[0] || "0%"
-		const yStr = parts[1] || "50%" // 如果只有一个值，第二个默认 center (50%)
+		const yStr = parts[1] || "50%" // If there is only one value, the second defaults to center (50%)
 
-		// 解析 X
+		// Parse X
 		if (xStr.endsWith("%")) {
 			const percent = parseFloat(xStr) / 100
 			x = (elemW - w) * percent
@@ -72,7 +72,7 @@ export function parseBackgroundLayout(
 			x = (elemW - w) / 2
 		}
 
-		// 解析 Y
+		// Parse Y
 		if (yStr.endsWith("%")) {
 			const percent = parseFloat(yStr) / 100
 			y = (elemH - h) * percent
@@ -87,7 +87,7 @@ export function parseBackgroundLayout(
 		}
 	}
 
-	// 如果解析结果与原尺寸一致，返回 null 表示无需特殊处理
+	// If the parsed result matches the original size, return null to indicate no special handling is needed
 	if (Math.abs(w - elemW) < 0.1 && Math.abs(h - elemH) < 0.1 && Math.abs(x) < 0.1 && Math.abs(y) < 0.1) {
 		return null
 	}

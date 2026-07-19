@@ -107,14 +107,12 @@ class MessageQueueCompensationAppService extends AbstractAppService
      */
     private function getTopicIds(): array
     {
-        // Application layer → Domain layer → Repository layer (only get topic IDs)
         $whitelist = parse_json_config(config('super-magic.user_message_queue.whitelist', '[]'));
 
         if (! empty($whitelist)) {
             $this->logger->info('Using whitelist for topic compensation', ['whitelist' => $whitelist]);
         }
 
-        // Apply organization code filter based on whitelist
         $topicIds = $this->messageQueueDomainService->getCompensationTopics(self::BATCH_SIZE, $whitelist);
 
         $this->logger->info('Found topics for compensation', [
@@ -281,8 +279,7 @@ class MessageQueueCompensationAppService extends AbstractAppService
             $appMessageId = IdGenerator::getUniqueId32();
 
             // get agent user_id
-            $dataIsolation = new DataIsolation();
-            $dataIsolation->setCurrentOrganizationCode($message->getOrganizationCode());
+            $dataIsolation = DataIsolation::create($message->getOrganizationCode());
             $aiUserEntity = $this->userDomainService->getByAiCode($dataIsolation, AgentConstant::SUPER_MAGIC_CODE);
 
             if (empty($aiUserEntity)) {

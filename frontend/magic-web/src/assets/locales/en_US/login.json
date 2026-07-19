@@ -95,6 +95,21 @@
 	},
 	"sendVerificationCode": "Send verification code",
 	"serviceAgreement": "User Agreement",
+	"thirdPartyAccountConflict": {
+		"confirmSelection": "Use selected account",
+		"currentAccount": "Current account",
+		"description": "The current {{platform}} account is different from the account being used on this page. Choose which account to continue with.",
+		"keepCurrent": "Keep current account",
+		"newAccount": "Newly detected account",
+		"platform": {
+			"dingTalk": "DingTalk",
+			"lark": "Lark",
+			"wecom": "WeCom"
+		},
+		"selectionLabel": "Select an account to continue",
+		"title": "Platform account change detected",
+		"useCandidate": "Use new account"
+	},
 	"verification": {
 		"codeInput": "Verification code input",
 		"codeInvalid": "Verification code error, please re-enter"

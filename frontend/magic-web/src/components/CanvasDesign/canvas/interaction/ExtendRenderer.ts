@@ -14,6 +14,7 @@ import {
 	localBoxToAbsoluteBox,
 	updateFrameGridLines,
 } from "./FrameEditorShared"
+import { applyExtendAnchorCursor, applyExtendTransformerActiveCursor } from "./extendAnchorCursor"
 
 const EXTEND_OVERLAY_GROUP_NAME = "extend-overlay"
 const EXTEND_FRAME_HIT_AREA_NAME = "extend-frame-hit-area"
@@ -199,6 +200,8 @@ export class ExtendRenderer {
 
 		const anchorSize = FRAME_EDITOR_CONFIG.TRANSFORMER_ANCHOR_SIZE
 		const proxyAnchorSize = STANDARD_TRANSFORMER_STYLE.ANCHOR_SIZE
+		const frameAnchorStyleFunc = this.createExtendAnchorStyleFunc(anchorSize)
+		const imageAnchorStyleFunc = this.createExtendAnchorStyleFunc(proxyAnchorSize)
 		const enabledAnchors = [
 			"top-left",
 			"top-right",
@@ -222,7 +225,7 @@ export class ExtendRenderer {
 			anchorStrokeWidth: FRAME_EDITOR_CONFIG.TRANSFORMER_ANCHOR_STROKE_WIDTH,
 			anchorCornerRadius: anchorSize / 2,
 			ignoreStroke: true,
-			anchorStyleFunc: createFrameEditorAnchorStyleFunc(anchorSize),
+			anchorStyleFunc: frameAnchorStyleFunc,
 			boundBoxFunc: (oldBox: Box, newBox: Box): Box => {
 				if (newBox.width < 0 || newBox.height < 0) return oldBox
 
@@ -246,6 +249,7 @@ export class ExtendRenderer {
 		})
 
 		this.frameTransformer.on("transformstart", () => {
+			applyExtendTransformerActiveCursor(this.frameTransformer, this.canvas.cursorManager)
 			const frameNode = this.frameTransformer?.nodes()[0]
 			if (frameNode instanceof Konva.Rect) {
 				const width = frameNode.width() * frameNode.scaleX()
@@ -256,6 +260,7 @@ export class ExtendRenderer {
 			}
 		})
 		this.frameTransformer.on("transform", () => {
+			applyExtendTransformerActiveCursor(this.frameTransformer, this.canvas.cursorManager)
 			if (!this.frameBox) return
 
 			const scaleX = this.frameBox.scaleX()
@@ -282,6 +287,7 @@ export class ExtendRenderer {
 		})
 		this.frameTransformer.on("transformend", () => {
 			this.frameInitialAspectRatio = null
+			this.canvas.cursorManager.restoreToolCursor()
 		})
 
 		this.imageTransformer = new Konva.Transformer({
@@ -296,7 +302,7 @@ export class ExtendRenderer {
 			anchorFill: STANDARD_TRANSFORMER_STYLE.ANCHOR_FILL,
 			anchorStrokeWidth: STANDARD_TRANSFORMER_STYLE.ANCHOR_STROKE_WIDTH,
 			ignoreStroke: STANDARD_TRANSFORMER_STYLE.IGNORE_STROKE,
-			anchorStyleFunc: createFrameEditorAnchorStyleFunc(proxyAnchorSize),
+			anchorStyleFunc: imageAnchorStyleFunc,
 			boundBoxFunc: (oldBox: Box, newBox: Box): Box => {
 				if (newBox.width < 0 || newBox.height < 0) return oldBox
 
@@ -320,6 +326,7 @@ export class ExtendRenderer {
 		})
 
 		this.imageTransformer.on("transformstart", () => {
+			applyExtendTransformerActiveCursor(this.imageTransformer, this.canvas.cursorManager)
 			const imageNode = this.imageTransformer?.nodes()[0]
 			if (imageNode instanceof Konva.Image) {
 				const width = imageNode.width() * imageNode.scaleX()
@@ -330,6 +337,7 @@ export class ExtendRenderer {
 			}
 		})
 		this.imageTransformer.on("transform", () => {
+			applyExtendTransformerActiveCursor(this.imageTransformer, this.canvas.cursorManager)
 			if (!this.imageProxy) return
 
 			const scaleX = this.imageProxy.scaleX()
@@ -345,6 +353,7 @@ export class ExtendRenderer {
 		})
 		this.imageTransformer.on("transformend", () => {
 			this.imageInitialAspectRatio = null
+			this.canvas.cursorManager.restoreToolCursor()
 		})
 
 		this.canvas.controlsLayer.add(this.frameTransformer)
@@ -466,6 +475,14 @@ export class ExtendRenderer {
 		this.imageTransformer?.moveToTop()
 		this.frameTransformer?.moveToTop()
 		this.canvas.controlsLayer.batchDraw()
+	}
+
+	private createExtendAnchorStyleFunc(anchorSize: number): (anchor: Konva.Rect) => void {
+		const baseAnchorStyleFunc = createFrameEditorAnchorStyleFunc(anchorSize)
+		return (anchor) => {
+			baseAnchorStyleFunc(anchor)
+			applyExtendAnchorCursor(anchor, this.canvas.cursorManager)
+		}
 	}
 
 	private createAreaOverlay(): Konva.Group {

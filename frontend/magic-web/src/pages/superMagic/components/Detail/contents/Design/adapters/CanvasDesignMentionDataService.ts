@@ -14,7 +14,10 @@ import {
 	type MentionStoreResult,
 	type SearchRequest,
 } from "@/components/business/MentionPanel/dispatch"
-import type { ProjectAttachmentMentionNode } from "@/components/CanvasDesign/types"
+import type {
+	CanvasReferenceElementsContext,
+	ProjectAttachmentMentionNode,
+} from "@/components/CanvasDesign/types"
 import type {
 	ReferenceAssetPerTypeLimits,
 	ReferenceAssetTypeCounts,
@@ -27,6 +30,16 @@ import {
 	isReferenceResourceCurrentlySelected,
 	isReferenceResourceTypeAllowed,
 } from "@/components/CanvasDesign/components/MessageEditor/reference-assets/referenceResourceSelection"
+import {
+	isCanvasElementsMentionItemId,
+	MentionPanelCanvasElementsStore,
+	type ActiveCanvasElementsContext,
+	type CanvasElementResolvedFile,
+} from "@/components/business/MentionPanel/runtime/builtin/domains/canvas-elements"
+import {
+	isDesignDslCanvasRelativeResourcePath,
+	resolveStrictDesignDslCanvasResourceCandidates,
+} from "../utils/designDslPathUtils"
 
 function getExtension(name: string): string {
 	const idx = name.lastIndexOf(".")
@@ -40,6 +53,31 @@ function normalizeRelativePath(path: string): string {
 
 function normalizePathSlashes(path: string): string {
 	return normalizeRelativePath(path).replace(/\\/g, "/").trim()
+}
+
+function normalizeFolderLookupKey(path: string | undefined): string {
+	return normalizePathSlashes(path || "").replace(/^\/+|\/+$/g, "")
+}
+
+function normalizeCanvasElementResourcePath(path: string): string {
+	const trimmed = path.trim()
+	if (!trimmed) return ""
+
+	const withoutQuery = trimmed.split(/[?#]/)[0] ?? ""
+	const urlPath = (() => {
+		try {
+			return new URL(withoutQuery).pathname
+		} catch {
+			return withoutQuery
+		}
+	})()
+
+	return normalizePathSlashes(urlPath).replace(/^(\.\/)+/, "")
+}
+
+function getPathBasename(path: string): string {
+	const normalized = normalizeCanvasElementResourcePath(path)
+	return normalized.split("/").pop()?.toLowerCase() ?? ""
 }
 
 /**
@@ -76,8 +114,17 @@ function findFolderNode(
 	nodes: ProjectAttachmentMentionNode[],
 	folderId: string,
 ): ProjectAttachmentMentionNode | null {
+	const targetKey = normalizeFolderLookupKey(folderId)
 	for (const n of nodes) {
-		if (n.isDirectory && (n.id === folderId || n.path === folderId)) return n
+		if (
+			n.isDirectory &&
+			(n.id === folderId ||
+				n.path === folderId ||
+				normalizeFolderLookupKey(n.id) === targetKey ||
+				normalizeFolderLookupKey(n.path) === targetKey)
+		) {
+			return n
+		}
 		if (n.children?.length) {
 			const found = findFolderNode(n.children, folderId)
 			if (found) return found
@@ -86,18 +133,36 @@ function findFolderNode(
 	return null
 }
 
-function flattenAttachmentFiles(nodes: ProjectAttachmentMentionNode[]): Array<{
+interface AttachmentFileEntry {
 	name: string
 	path: string
 	extension?: string
 	fileId: string
-}> {
-	const out: Array<{
-		name: string
-		path: string
-		extension?: string
-		fileId: string
-	}> = []
+	displayConfig?: ProjectAttachmentMentionNode["display_config"]
+	ancestorFolderKeys: string[]
+}
+
+interface AttachmentFileLookup {
+	files: AttachmentFileEntry[]
+	byNormalizedPath: Map<string, AttachmentFileEntry>
+	byNormalizedPathEntries: Map<string, AttachmentFileEntry[]>
+	byNormalizedFileId: Map<string, AttachmentFileEntry>
+	byBasename: Map<string, AttachmentFileEntry[]>
+}
+
+function getFolderLookupKeys(node: ProjectAttachmentMentionNode): string[] {
+	return Array.from(
+		new Set(
+			[node.id, node.path].map((value) => normalizeFolderLookupKey(value)).filter(Boolean),
+		),
+	)
+}
+
+function flattenAttachmentFiles(
+	nodes: ProjectAttachmentMentionNode[],
+	ancestorFolderKeys: string[] = [],
+): AttachmentFileEntry[] {
+	const out: AttachmentFileEntry[] = []
 	for (const n of nodes) {
 		if (!n.isDirectory) {
 			out.push({
@@ -105,10 +170,19 @@ function flattenAttachmentFiles(nodes: ProjectAttachmentMentionNode[]): Array<{
 				path: n.path,
 				extension: n.extension,
 				fileId: n.fileId,
+				displayConfig: n.display_config,
+				ancestorFolderKeys,
 			})
 			continue
 		}
-		if (n.children?.length) out.push(...flattenAttachmentFiles(n.children))
+		if (n.children?.length) {
+			out.push(
+				...flattenAttachmentFiles(n.children, [
+					...ancestorFolderKeys,
+					...getFolderLookupKeys(n),
+				]),
+			)
+		}
 	}
 	return out
 }
@@ -141,6 +215,10 @@ export class CanvasDesignMentionDataService implements DataService {
 	private attachmentRoots: ProjectAttachmentMentionNode[]
 	private limitInfoGetter?: LimitInfoGetter
 	private refreshHandler?: () => void
+	private readonly canvasElementsStore = new MentionPanelCanvasElementsStore()
+	private canvasElementsRootFolderId?: string
+	private attachmentFileLookup: AttachmentFileLookup | null = null
+	private canvasElementsRootBasePathCache: string | null | undefined
 
 	constructor(initialAttachmentRoots: ProjectAttachmentMentionNode[]) {
 		this.attachmentRoots = initialAttachmentRoots
@@ -149,10 +227,13 @@ export class CanvasDesignMentionDataService implements DataService {
 	/** 宿主树更新时替换内存根，与「重建 DataService」等价但不换实例 */
 	syncProjectAttachmentRoots(roots: ProjectAttachmentMentionNode[]): void {
 		this.attachmentRoots = roots
+		this.invalidateAttachmentLookup()
+		this.invalidateCanvasElementsCache()
 	}
 
 	setLimitInfoGetter(getter: LimitInfoGetter | undefined): void {
 		this.limitInfoGetter = getter
+		this.invalidateCanvasElementsCache()
 	}
 
 	setRefreshHandler(handler: (() => void) | undefined): void {
@@ -160,7 +241,266 @@ export class CanvasDesignMentionDataService implements DataService {
 	}
 
 	requestRefresh(): void {
+		this.invalidateCanvasElementsCache()
 		this.refreshHandler?.()
+	}
+
+	invalidateCanvasElementsCache(): void {
+		this.canvasElementsStore.invalidateCache()
+	}
+
+	setCanvasReferenceElementsContext(context: CanvasReferenceElementsContext | undefined): void {
+		const nextRootFolderId = context?.rootFolderId
+		if (this.canvasElementsRootFolderId !== nextRootFolderId) {
+			this.canvasElementsRootBasePathCache = undefined
+		}
+		this.canvasElementsRootFolderId = nextRootFolderId
+		this.canvasElementsStore.setActiveContext(
+			context
+				? ({
+						designProjectId: context.rootFolderId || "current-canvas",
+						canvasName: context.canvasName || "当前画布",
+						getCanvasDocument: context.getCanvasDocument,
+						resolveFileBySrc: (src) => this.resolveCanvasElementFileBySrc(src),
+					} satisfies ActiveCanvasElementsContext)
+				: null,
+		)
+	}
+
+	private resolveCanvasElementFileBySrc(src: string): CanvasElementResolvedFile | null {
+		const file = this.findAttachmentFileBySrc(src)
+		if (!file) {
+			return null
+		}
+
+		const limitInfo = this.limitInfoGetter?.()
+		const ext = file.extension || getExtension(file.name)
+		const rawPath = file.path
+		const filePath = normalizeRelativePath(rawPath)
+		const unSelectable = this.isReferenceFileSelectionBlocked(
+			{
+				rawPath,
+				filePath,
+				fileExtension: ext,
+				fileId: file.fileId,
+			},
+			limitInfo,
+		)
+
+		const resolvedFile: CanvasElementResolvedFile = {
+			file_id: file.fileId,
+			file_name: file.name,
+			file_extension: ext,
+			relative_file_path: filePath || rawPath,
+			unSelectable,
+		}
+		if (file.displayConfig) resolvedFile.display_config = file.displayConfig
+		return resolvedFile
+	}
+
+	private invalidateAttachmentLookup(): void {
+		this.attachmentFileLookup = null
+		this.canvasElementsRootBasePathCache = undefined
+	}
+
+	private getAttachmentFileLookup(): AttachmentFileLookup {
+		if (this.attachmentFileLookup) return this.attachmentFileLookup
+
+		const files = flattenAttachmentFiles(this.attachmentRoots)
+		const byNormalizedPath = new Map<string, AttachmentFileEntry>()
+		const byNormalizedPathEntries = new Map<string, AttachmentFileEntry[]>()
+		const byNormalizedFileId = new Map<string, AttachmentFileEntry>()
+		const byBasename = new Map<string, AttachmentFileEntry[]>()
+
+		const addFirst = (
+			map: Map<string, AttachmentFileEntry>,
+			key: string,
+			file: AttachmentFileEntry,
+		) => {
+			if (key && !map.has(key)) map.set(key, file)
+		}
+		const addPathEntry = (key: string, file: AttachmentFileEntry) => {
+			if (!key) return
+			const bucket = byNormalizedPathEntries.get(key)
+			if (!bucket) {
+				byNormalizedPathEntries.set(key, [file])
+				return
+			}
+			if (!bucket.includes(file)) bucket.push(file)
+		}
+		const addBasename = (key: string, file: AttachmentFileEntry) => {
+			if (!key) return
+			const bucket = byBasename.get(key)
+			if (!bucket) {
+				byBasename.set(key, [file])
+				return
+			}
+			if (!bucket.includes(file)) bucket.push(file)
+		}
+
+		for (const file of files) {
+			const normalizedPath = normalizeCanvasElementResourcePath(file.path)
+			const normalizedFileId = normalizeCanvasElementResourcePath(file.fileId)
+			addFirst(byNormalizedPath, normalizedPath, file)
+			addPathEntry(normalizedPath, file)
+			addFirst(byNormalizedFileId, normalizedFileId, file)
+			addBasename(file.name.toLowerCase(), file)
+			addBasename(getPathBasename(file.path), file)
+		}
+
+		this.attachmentFileLookup = {
+			files,
+			byNormalizedPath,
+			byNormalizedPathEntries,
+			byNormalizedFileId,
+			byBasename,
+		}
+		return this.attachmentFileLookup
+	}
+
+	private isAttachmentFileInCanvasElementsRoot(file: AttachmentFileEntry): boolean {
+		const rootKeys = [
+			normalizeFolderLookupKey(this.canvasElementsRootFolderId),
+			normalizeFolderLookupKey(this.getCanvasElementsRootBasePath()),
+		].filter((key): key is string => Boolean(key))
+		if (rootKeys.length === 0) return false
+
+		return rootKeys.some((rootKey) => file.ancestorFolderKeys.includes(rootKey))
+	}
+
+	private findAttachmentFileBySrc(src: string): AttachmentFileEntry | null {
+		const normalizedSrc = normalizeCanvasElementResourcePath(src)
+		if (!normalizedSrc) return null
+
+		const attachmentLookup = this.getAttachmentFileLookup()
+		const rootBasePath = this.getCanvasElementsRootBasePath()
+		const strictCandidates =
+			rootBasePath && isDesignDslCanvasRelativeResourcePath(src)
+				? resolveStrictDesignDslCanvasResourceCandidates(src, rootBasePath)
+				: null
+
+		if (strictCandidates) {
+			for (const candidate of strictCandidates.workspaceRelative) {
+				const exact = attachmentLookup.byNormalizedPath.get(
+					normalizeCanvasElementResourcePath(candidate),
+				)
+				if (exact) return exact
+			}
+			for (const candidate of strictCandidates.rootRelative) {
+				const normalizedCandidate = normalizeCanvasElementResourcePath(candidate)
+				const exact = (
+					attachmentLookup.byNormalizedPathEntries.get(normalizedCandidate) ?? []
+				).find((file) => this.isAttachmentFileInCanvasElementsRoot(file))
+				if (exact) return exact
+			}
+			return null
+		}
+
+		const exact =
+			attachmentLookup.byNormalizedPath.get(normalizedSrc) ??
+			attachmentLookup.byNormalizedFileId.get(normalizedSrc)
+		if (exact) return exact
+
+		const suffix = attachmentLookup.files.find((file) => {
+			const normalizedPath = normalizeCanvasElementResourcePath(file.path)
+			return (
+				normalizedPath.endsWith(`/${normalizedSrc}`) ||
+				normalizedSrc.endsWith(`/${normalizedPath}`)
+			)
+		})
+		if (suffix) return suffix
+
+		const srcBasename = getPathBasename(src)
+		if (!srcBasename) return null
+
+		const basenameMatches = attachmentLookup.byBasename.get(srcBasename) ?? []
+
+		return basenameMatches.length === 1 ? basenameMatches[0] : null
+	}
+
+	private getCanvasElementsRootBasePath(): string | undefined {
+		if (this.canvasElementsRootBasePathCache !== undefined) {
+			return this.canvasElementsRootBasePathCache || undefined
+		}
+
+		const rootFolderId = this.canvasElementsRootFolderId
+		if (!rootFolderId) {
+			this.canvasElementsRootBasePathCache = null
+			return undefined
+		}
+
+		const rootFolder = findFolderNode(this.attachmentRoots, rootFolderId)
+		const basePath = normalizeCanvasElementResourcePath(rootFolder?.path || rootFolderId)
+		this.canvasElementsRootBasePathCache = basePath || null
+		return basePath || undefined
+	}
+
+	private getCanvasElementsRootItem(t?: I18nTexts): MentionItem | null {
+		return this.canvasElementsStore.getRootMentionItem({
+			lazy: true,
+			label: t?.defaultItems.canvasElements,
+		})
+	}
+
+	private getCanvasElementsRootItemForFolder(
+		folderId?: string,
+		t?: I18nTexts,
+	): MentionItem | null {
+		if (!folderId) return null
+		if (
+			!this.canvasElementsRootFolderId ||
+			normalizeFolderLookupKey(folderId) !==
+				normalizeFolderLookupKey(this.canvasElementsRootFolderId)
+		) {
+			return null
+		}
+
+		return this.getCanvasElementsRootItem(t)
+	}
+
+	private injectCanvasElementsRootItem(
+		items: MentionItem[],
+		folderId?: string,
+		t?: I18nTexts,
+	): MentionItem[] {
+		const rootItem = this.getCanvasElementsRootItemForFolder(folderId, t)
+		if (!rootItem || items.some((item) => item.id === rootItem.id)) return items
+
+		return [{ ...rootItem, description: undefined }, ...items]
+	}
+
+	private isReferenceFileSelectionBlocked(
+		file: {
+			rawPath: string
+			filePath: string
+			fileExtension: string
+			fileId: string
+		},
+		limitInfo?: LimitInfo | null,
+	): boolean {
+		const targetPath = file.rawPath || file.filePath
+		if (
+			!isReferenceResourceTypeAllowed({
+				filePath: targetPath,
+				fileExtension: file.fileExtension,
+				referenceResourceType: limitInfo?.referenceResourceType,
+			})
+		) {
+			return true
+		}
+
+		if (!limitInfo?.assetLimits || !limitInfo.currentAssetCounts) return false
+
+		return isReferenceAssetTypeCapacityBlocked({
+			fileClass: classifyReferenceAssetFile({
+				filePath: targetPath,
+				fileExtension: file.fileExtension,
+			}),
+			assetLimits: limitInfo.assetLimits,
+			currentAssetCounts: limitInfo.currentAssetCounts,
+			candidatePaths: [file.rawPath, file.filePath, file.fileId],
+			currentReferenceFiles: limitInfo.currentReferenceFiles,
+		})
 	}
 
 	private fileNodeToMentionItem(
@@ -170,24 +510,15 @@ export class CanvasDesignMentionDataService implements DataService {
 		const ext = node.extension || getExtension(node.name)
 		const rawPath = (node.path || node.id || "") as string
 		const filePath = normalizeRelativePath(rawPath)
-		const unSelectable = !isReferenceResourceTypeAllowed({
-			filePath: rawPath || filePath,
-			fileExtension: ext,
-			referenceResourceType: limitInfo?.referenceResourceType,
-		})
-		const isCapacityBlocked =
-			limitInfo?.assetLimits && limitInfo.currentAssetCounts
-				? isReferenceAssetTypeCapacityBlocked({
-						fileClass: classifyReferenceAssetFile({
-							filePath: rawPath || filePath,
-							fileExtension: ext,
-						}),
-						assetLimits: limitInfo.assetLimits,
-						currentAssetCounts: limitInfo.currentAssetCounts,
-						candidatePaths: [rawPath, filePath, node.id],
-						currentReferenceFiles: limitInfo.currentReferenceFiles,
-					})
-				: false
+		const unSelectable = this.isReferenceFileSelectionBlocked(
+			{
+				rawPath,
+				filePath,
+				fileExtension: ext,
+				fileId: node.id,
+			},
+			limitInfo,
+		)
 		const trimmedSubtitlePrefix = limitInfo?.mentionFileSubtitleParentPrefix?.trim() ?? ""
 		const attachSubtitlePrefix =
 			trimmedSubtitlePrefix.length > 0 &&
@@ -206,7 +537,7 @@ export class CanvasDesignMentionDataService implements DataService {
 			hasChildren: false,
 			isFolder: false,
 			path: filePath || rawPath,
-			unSelectable: unSelectable || isCapacityBlocked,
+			unSelectable,
 			...(attachSubtitlePrefix
 				? {
 						metadata: { mentionFileSubtitleParentPrefix: trimmedSubtitlePrefix },
@@ -253,7 +584,7 @@ export class CanvasDesignMentionDataService implements DataService {
 
 	/** 合并附件树中的文件与 referenceFileInfos，并打上 unSelectable */
 	private toMergedFlatFileItems(limitInfo?: LimitInfo | null): MentionItem[] {
-		const baseFiles = flattenAttachmentFiles(this.attachmentRoots)
+		const baseFiles = this.getAttachmentFileLookup().files
 		const itemMap = new Map<string, MentionItem>()
 
 		for (const f of baseFiles) {
@@ -359,6 +690,13 @@ export class CanvasDesignMentionDataService implements DataService {
 		const limitInfo = this.limitInfoGetter?.()
 		let items: MentionItem[]
 		const trimmedScope = scopeFolderId?.trim()
+		if (isCanvasElementsMentionItemId(trimmedScope)) {
+			return this.canvasElementsStore.searchItems(
+				query,
+				trimmedScope,
+				this.matchesCanvasElementQuery,
+			)
+		}
 		if (trimmedScope) {
 			const node = findFolderNode(this.attachmentRoots, trimmedScope)
 			items = node?.children?.length
@@ -370,7 +708,21 @@ export class CanvasDesignMentionDataService implements DataService {
 		// 与 MessageEditor @ 面板一致：不设 item.description，由 workspace-files renderer
 		// 根据 file_path / file_name 在搜索态展示父目录路径（见 getTypeDescription）
 		if (!q) return items
-		return items.filter((item) => this.itemMatchesSearchQuery(item, q))
+		const fileItems = items.filter((item) => this.itemMatchesSearchQuery(item, q))
+		if (trimmedScope) return fileItems
+
+		return [
+			...this.canvasElementsStore.searchItems(
+				query,
+				undefined,
+				this.matchesCanvasElementQuery,
+			),
+			...fileItems,
+		]
+	}
+
+	private matchesCanvasElementQuery(target: string, query: string): boolean {
+		return target.toLowerCase().includes(query.toLowerCase())
 	}
 
 	private itemMatchesSearchQuery(item: MentionItem, q: string): boolean {
@@ -385,19 +737,25 @@ export class CanvasDesignMentionDataService implements DataService {
 		return false
 	}
 
-	private getFolderItems(folderId: string): Promise<MentionItem[]> {
+	private getFolderItems(folderId: string, t?: I18nTexts): Promise<MentionItem[]> {
+		if (isCanvasElementsMentionItemId(folderId)) {
+			return Promise.resolve(this.canvasElementsStore.getFolderMentionItems(folderId))
+		}
+
 		const limitInfo = this.limitInfoGetter?.()
 		const node = findFolderNode(this.attachmentRoots, folderId)
-		if (!node?.children?.length) return Promise.resolve([])
-		return Promise.resolve(
-			this.applyReferenceSelectionLimit(
-				this.levelToMentionItems(node.children, limitInfo),
-				limitInfo,
-			),
-		)
+		const folderItems = node?.children?.length
+			? this.applyReferenceSelectionLimit(
+					this.levelToMentionItems(node.children, limitInfo),
+					limitInfo,
+				)
+			: []
+
+		return Promise.resolve(this.injectCanvasElementsRootItem(folderItems, folderId, t))
 	}
 
 	private hasFolder(folderId: string): boolean {
+		if (isCanvasElementsMentionItemId(folderId)) return true
 		return findFolderNode(this.attachmentRoots, folderId) !== null
 	}
 
@@ -420,7 +778,9 @@ export class CanvasDesignMentionDataService implements DataService {
 				}
 			}
 			case "children":
-				return this.getFolderItems(request.id).then((items) => ({ items }))
+				return this.getFolderItems(request.id, request.options?.t).then((items) => ({
+					items,
+				}))
 			case "catalog":
 				return this.resolveCatalogItems(request)
 			case "effect":

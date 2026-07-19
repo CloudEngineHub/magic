@@ -804,11 +804,33 @@ export class Canvas {
 	 * 调整画布大小
 	 */
 	public resize(): void {
+		const previousWidth = this.stage.width()
+		const previousHeight = this.stage.height()
 		const width = this.container.offsetWidth
 		const height = this.container.offsetHeight
 
-		this.stage.width(width)
-		this.stage.height(height)
+		if (
+			previousWidth > 0 &&
+			previousHeight > 0 &&
+			width > 0 &&
+			height > 0 &&
+			(previousWidth !== width || previousHeight !== height)
+		) {
+			this.viewportController.preserveViewportCenterDuringLayoutChange(
+				() => {
+					this.stage.width(width)
+					this.stage.height(height)
+				},
+				{
+					source: "resize",
+					reason: "canvas-resize",
+				},
+			)
+		} else {
+			this.stage.width(width)
+			this.stage.height(height)
+		}
+
 		this.runtimeScheduler.requestLayerDraw("stage", {
 			source: "Canvas",
 			reason: "resize",

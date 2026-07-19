@@ -10,6 +10,7 @@ namespace Dtyq\CloudFile\Kernel\Driver\OSS;
 use AlibabaCloud\Client\AlibabaCloud;
 use AlibabaCloud\Sts\Sts;
 use DateTime;
+use Dtyq\CloudFile\Kernel\AdapterName;
 use Dtyq\CloudFile\Kernel\Driver\ExpandInterface;
 use Dtyq\CloudFile\Kernel\Exceptions\ChunkDownloadException;
 use Dtyq\CloudFile\Kernel\Exceptions\CloudFileException;
@@ -40,6 +41,7 @@ class OSSExpand implements ExpandInterface
 
     public function __construct(array $config = [])
     {
+        $config = AdapterName::applyEndpointOptions(AdapterName::ALIYUN, $config, $config);
         $this->config = $config;
 
         $this->bucket = $config['bucket'];
@@ -54,7 +56,9 @@ class OSSExpand implements ExpandInterface
 
     public function getUploadCredential(CredentialPolicy $credentialPolicy, array $options = []): array
     {
-        return $credentialPolicy->isSts() ? $this->getUploadCredentialBySts($credentialPolicy) : $this->getUploadCredentialBySimple($credentialPolicy);
+        $config = $this->getConfigWithEndpointOptions($options);
+
+        return $credentialPolicy->isSts() ? $this->getUploadCredentialBySts($credentialPolicy, $config) : $this->getUploadCredentialBySimple($credentialPolicy, $config);
     }
 
     public function getPreSignedUrls(array $fileNames, int $expires = 3600, array $options = []): array
@@ -443,8 +447,11 @@ class OSSExpand implements ExpandInterface
             }
         }
 
+        $client = $this->getClientWithEndpointOptions($options);
+        unset($options['internal_endpoint'], $options['specify_endpoint']);
+
         $path = ltrim($path, '/');
-        $url = $this->client->signUrl($this->bucket, $path, $timeout, OssClient::OSS_HTTP_GET, $options);
+        $url = $client->signUrl($this->bucket, $path, $timeout, OssClient::OSS_HTTP_GET, $options);
 
         if (! empty($this->config['cdn'])) {
             $urlParse = parse_url($url);
@@ -457,7 +464,7 @@ class OSSExpand implements ExpandInterface
     /**
      * @see https://help.aliyun.com/zh/oss/use-cases/obtain-signature-information-from-the-server-and-upload-data-to-oss
      */
-    private function getUploadCredentialBySimple(CredentialPolicy $credentialPolicy): array
+    private function getUploadCredentialBySimple(CredentialPolicy $credentialPolicy, array $config): array
     {
         $expires = $credentialPolicy->getExpires();
 
@@ -467,7 +474,7 @@ class OSSExpand implements ExpandInterface
         $expiration = $this->gmtIso8601($end);
 
         $conditions = [
-            ['bucket' => $this->config['bucket']],
+            ['bucket' => $config['bucket']],
         ];
         if (! empty($credentialPolicy->getSizeMax())) {
             $conditions[] = ['content-length-range', 0, $credentialPolicy->getSizeMax()];
@@ -480,13 +487,13 @@ class OSSExpand implements ExpandInterface
         }
 
         $base64policy = base64_encode(json_encode(['expiration' => $expiration, 'conditions' => $conditions]));
-        $signature = base64_encode(hash_hmac('sha1', $base64policy, $this->config['accessSecret'], true));
+        $signature = base64_encode(hash_hmac('sha1', $base64policy, $config['accessSecret'], true));
 
-        $endpointParse = parse_url($this->config['endpoint']);
-        $host = "{$endpointParse['scheme']}://{$this->config['bucket']}.{$endpointParse['host']}";
+        $endpointParse = parse_url($config['endpoint']);
+        $host = "{$endpointParse['scheme']}://{$config['bucket']}.{$endpointParse['host']}";
 
         return [
-            'accessid' => $this->config['accessId'],
+            'accessid' => $config['accessId'],
             'host' => $host,
             'policy' => $base64policy,
             'signature' => $signature,
@@ -499,10 +506,10 @@ class OSSExpand implements ExpandInterface
     /**
      * @see https://help.aliyun.com/zh/oss/developer-reference/use-temporary-access-credentials-provided-by-sts-to-access-oss?spm=a2c4g.11186623.0.i4#concept-xzh-nzk-2gb
      */
-    private function getUploadCredentialBySts(CredentialPolicy $credentialPolicy): array
+    private function getUploadCredentialBySts(CredentialPolicy $credentialPolicy, array $config): array
     {
         $roleSessionName = $credentialPolicy->getRoleSessionName() ?: uniqid('easy_file_');
-        $roleArn = $this->config['role_arn'] ?? '';
+        $roleArn = $config['role_arn'] ?? '';
         if (empty($roleArn)) {
             throw new CloudFileException('未配置role_arn');
         }
@@ -511,13 +518,14 @@ class OSSExpand implements ExpandInterface
         $expires = max(900, min(3600, $credentialPolicy->getExpires()));
 
         // 通过endpoint获取region
-        $region = explode('.', parse_url($this->config['endpoint'])['host'])[0];
+        $region = explode('.', parse_url($config['endpoint'])['host'])[0];
+        $stsRegion = $this->normalizeOssRegion($region);
 
-        AlibabaCloud::accessKeyClient($this->config['accessId'], $this->config['accessSecret'])->regionId(ltrim($region, 'oss-'))->asDefaultClient();
+        AlibabaCloud::accessKeyClient($config['accessId'], $config['accessSecret'])->regionId($stsRegion)->asDefaultClient();
 
         // 目录限制
         $dir = $credentialPolicy->getDir();
-        $resource = "{$this->config['bucket']}/";
+        $resource = "{$config['bucket']}/";
         if (! empty($credentialPolicy->getDir())) {
             $resource = $resource . $credentialPolicy->getDir();
         }
@@ -583,8 +591,8 @@ class OSSExpand implements ExpandInterface
 
         $sts = Sts::v20150401()->assumeRole([
             'query' => [
-                'RegionId' => 'cn-shenzhen',
-                'RoleArn' => $this->config['role_arn'],
+                'RegionId' => $stsRegion,
+                'RoleArn' => $config['role_arn'],
                 'RoleSessionName' => $roleSessionName,
                 'DurationSeconds' => $expires,
                 'Policy' => json_encode($stsPolicy),
@@ -592,11 +600,12 @@ class OSSExpand implements ExpandInterface
         ])->request()->toArray();
 
         return [
-            'region' => $region,
+            'region' => 'oss-' . $stsRegion,
             'access_key_id' => $sts['Credentials']['AccessKeyId'],
             'access_key_secret' => $sts['Credentials']['AccessKeySecret'],
             'sts_token' => $sts['Credentials']['SecurityToken'],
-            'bucket' => $this->config['bucket'],
+            'endpoint' => $config['endpoint'],
+            'bucket' => $config['bucket'],
             'dir' => $credentialPolicy->getDir(),
             'expires' => $expires,
             'callback' => '',
@@ -608,6 +617,41 @@ class OSSExpand implements ExpandInterface
         $dStr = $time->format('Y-m-d H:i:s');
         $expiration = str_replace(' ', 'T', $dStr);
         return $expiration . '.000Z';
+    }
+
+    /**
+     * 根据本次调用选项获取 OSS 配置.
+     */
+    private function getConfigWithEndpointOptions(array $options = []): array
+    {
+        return AdapterName::applyEndpointOptions(AdapterName::ALIYUN, $this->config, $options);
+    }
+
+    /**
+     * 根据本次调用选项获取 OSS 客户端.
+     */
+    private function getClientWithEndpointOptions(array $options = []): OssClient
+    {
+        $config = $this->getConfigWithEndpointOptions($options);
+        if (($config['endpoint'] ?? '') === ($this->config['endpoint'] ?? '')) {
+            return $this->client;
+        }
+
+        if (! empty($config['securityToken'])) {
+            return $this->createSTSClient($config);
+        }
+
+        return $this->createClient($config);
+    }
+
+    /**
+     * 将 OSS endpoint 中的 region 归一化为 STS 可用的 region.
+     */
+    private function normalizeOssRegion(string $region): string
+    {
+        $region = preg_replace('/^oss-/', '', $region) ?? $region;
+
+        return str_replace('-internal', '', $region);
     }
 
     private function createClient(array $config): OssClient
@@ -683,7 +727,7 @@ class OSSExpand implements ExpandInterface
         // e.g., https://oss-cn-hangzhou.aliyuncs.com -> cn-hangzhou
         $host = parse_url($endpoint, PHP_URL_HOST);
         if (preg_match('/oss-(.+)\.aliyuncs\.com/', $host, $matches)) {
-            return $matches[1];
+            return $this->normalizeOssRegion($matches[1]);
         }
 
         // Default fallback

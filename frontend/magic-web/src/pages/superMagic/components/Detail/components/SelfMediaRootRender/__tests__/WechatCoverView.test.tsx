@@ -150,6 +150,24 @@ describe("WechatCoverView", () => {
 		expect(screen.queryByText("?")).not.toBeInTheDocument()
 	})
 
+	it("renders the hero cover at a 21:9 aspect ratio", () => {
+		render(
+			<WechatCoverView
+				posts={[
+					{
+						meta: { id: "post-1", title: "First post" },
+						cards: [],
+					},
+				]}
+				onSelectPost={vi.fn()}
+			/>,
+		)
+
+		expect(screen.getByTestId("wechat-cover-hero-post-1").firstElementChild).toHaveClass(
+			"aspect-[21/9]",
+		)
+	})
+
 	it("shows post loading skeleton while the cover post request is pending", async () => {
 		const deferred = createDeferred<SelfMediaPost | null>()
 		const onEnsurePostLoaded = vi.fn(() => deferred.promise)

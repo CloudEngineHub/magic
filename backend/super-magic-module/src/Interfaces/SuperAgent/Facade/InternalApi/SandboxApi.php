@@ -100,9 +100,10 @@ class SandboxApi extends AbstractApi
     private function createDataIsolation(RequestContext $requestContext): DataIsolation
     {
         $authorization = $requestContext->getUserAuthorization();
-        $dataIsolation = new DataIsolation();
-        $dataIsolation->setCurrentUserId($authorization->getId());
-        $dataIsolation->setCurrentOrganizationCode($authorization->getOrganizationCode());
+        $dataIsolation = DataIsolation::create(
+            $authorization->getOrganizationCode(),
+            $authorization->getId()
+        );
         $dataIsolation->setThirdPartyOrganizationCode($authorization->getOrganizationCode());
 
         return $dataIsolation;

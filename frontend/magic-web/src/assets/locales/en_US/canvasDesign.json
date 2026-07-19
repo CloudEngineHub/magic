@@ -196,6 +196,7 @@
 		"close": "Close fullscreen preview",
 		"croppedImage": "Cropped",
 		"imageLoadFailed": "Failed to load image",
+		"open": "Preview media resource",
 		"originalImage": "Original",
 		"videoLoadFailed": "Failed to load video. Please try again later.",
 		"viewMode": "Image display mode"

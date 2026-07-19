@@ -42,19 +42,15 @@ export function mergeAudioRecordingItems(
 		}
 	}
 
-	const authoritativeIsPreSummary =
-		authoritativeItem.card_status === "not_summarized" &&
-		authoritativeItem.current_phase === "merging" &&
-		authoritativeItem.phase_status === "completed"
 	const optimisticIsSummarizing =
 		optimisticItem.card_status === "summarizing" &&
 		optimisticItem.current_phase === "summarizing" &&
 		optimisticItem.phase_status === "in_progress"
 
-	// Imported auto-summary fires before the authoritative list row necessarily catches up.
-	// Preserve the local summarizing card until the backend row itself advances beyond
-	// merging-completed, otherwise the CTA regresses back to "Generate Summary".
-	if (optimisticIsSummarizing && authoritativeIsPreSummary) {
+	// Summary/re-summary submissions can beat the list endpoint by a few polling ticks.
+	// Preserve local summarizing while the authoritative row still reports an older state
+	// such as not_summarized, summarized, or summary_failed.
+	if (optimisticIsSummarizing && authoritativeItem.card_status !== "summarizing") {
 		return {
 			...authoritativeItem,
 			current_phase: optimisticItem.current_phase,

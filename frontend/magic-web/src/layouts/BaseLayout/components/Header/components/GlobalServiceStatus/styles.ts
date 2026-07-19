@@ -1,35 +1,6 @@
 import { createStyles } from "antd-style"
 
 export const useStyles = createStyles(({ css, token }) => ({
-	container: css`
-		display: flex;
-		align-items: center;
-		gap: 4px;
-		padding: 6px 10px;
-		background-color: ${token.magicColorUsages.dangerLight.default};
-		border-radius: 8px;
-	`,
-
-	statusDot: css`
-		width: 8px;
-		height: 8px;
-		border-radius: 50%;
-		background: linear-gradient(
-			270deg,
-			${token.magicColorUsages.danger.default} 0%,
-			${token.magicColorUsages.warning.default} 100%
-		);
-		flex-shrink: 0;
-	`,
-
-	statusText: css`
-		color: ${token.magicColorUsages.danger.default};
-		font-size: 12px;
-		line-height: 16px;
-		font-weight: 400;
-		white-space: nowrap;
-	`,
-
 	// Network offline styles
 	offlineContainer: css`
 		display: flex;

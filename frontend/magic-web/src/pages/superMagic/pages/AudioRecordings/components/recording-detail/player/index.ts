@@ -1,4 +1,8 @@
-export { RecordingDetailAudioBar, PLAYBACK_RATES, PLAYBACK_SKIP_SEC } from "./RecordingDetailAudioBar"
+export {
+	RecordingDetailAudioBar,
+	PLAYBACK_RATES,
+	PLAYBACK_SKIP_SEC,
+} from "./RecordingDetailAudioBar"
 export type { RecordingDetailAudioBarChrome } from "./RecordingDetailAudioBar"
 export { LiveAudioWaveformSeek } from "./LiveAudioWaveformSeek"
 export { StaticPeakWaveformStrip } from "./StaticPeakWaveformStrip"

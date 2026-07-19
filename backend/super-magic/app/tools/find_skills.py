@@ -4,11 +4,11 @@ from __future__ import annotations
 import asyncio
 import json
 from html import escape as escape_html
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 from xml.sax.saxutils import escape as escape_xml
 from xml.sax.saxutils import quoteattr
 
-from pydantic import Field, StringConstraints, field_validator
+from pydantic import Field, StringConstraints, field_validator, model_validator
 
 from agentlang.context.tool_context import ToolContext
 from agentlang.logger import get_logger
@@ -34,7 +34,9 @@ from app.tools.core.tool_keepalive import start_tool_keep_alive, stop_tool_keep_
 logger = get_logger(__name__)
 
 
-_VALID_PROVIDERS = {"system", "my_library", "market", "skillhub", "clawhub"}
+_LOCAL_SEARCH_PROVIDERS = ("system",)
+_ONLINE_SEARCH_PROVIDERS = ("my_library", "market", "skillhub", "clawhub")
+SearchScope = Literal["local", "online", "auto"]
 _MAX_KEYWORDS = 10
 _MARKDOWN_SPECIAL_CHARACTERS = frozenset("\\`*_{}[]()#+-.!|~")
 _MODEL_NAME_MAX_LENGTH = 160
@@ -52,27 +54,29 @@ class FindSkillsParams(BaseToolParams):
         default_factory=list,
         max_length=_MAX_KEYWORDS,
         description=(
-            "<!--zh: 用于外部 Provider 召回的短关键词或能力短语；搜索外部来源时至少提供一个，空数组只搜索 system 和 my_library；完整需求必须写入 query。-->\n"
-            "Short keywords or capability phrases used for external provider recall. "
-            "Provide at least one keyword to search external sources; an empty list "
-            "searches only system and my_library. Put the complete requirement in query."
+            "<!--zh: 搜索关键词或能力短语；每个关键词用于独立召回并归并候选。"
+            "完整需求必须写入 query。-->\n"
+            "Search keywords or capability phrases. Each keyword is used for recall and "
+            "the candidates are merged. Put the complete requirement in query."
         ),
     )
     query: str = Field(
         min_length=1,
         max_length=2000,
         description=(
-            "<!--zh: 用高信息密度概括用户目标、必要背景、期望结果和关键约束，让轻量模型判断 Skill 是否能实质帮助；删除不影响选择的过程信息。-->\n"
+            "<!--zh: 用高信息密度概括用户目标、必要背景、期望结果和关键约束。-->\n"
             "Concise, high-density summary of the user's goal, necessary context, "
-            "expected outcome, and key constraints. Include only information needed "
-            "to judge whether a Skill can materially help."
+            "expected outcome, and key constraints."
         ),
     )
-    providers: list[str] | None = Field(
-        None,
+    search_scope: SearchScope = Field(
+        "auto",
         description=(
-            "<!--zh: 可选来源：system、my_library、market、skillhub、clawhub。-->\n"
-            "Optional sources: system, my_library, market, skillhub, or clawhub."
+            "<!--zh: 搜索范围。local=只查本机可直接读取的 Skill；online=只查互联网来源；"
+            "auto=先查本地，没有合适候选时再查互联网。-->\n"
+            "Search scope. local searches Skills already readable on this machine; "
+            "online searches internet sources; auto searches locally first and only searches "
+            "online when no suitable local candidate is found."
         ),
     )
     limit: int = Field(
@@ -99,34 +103,33 @@ class FindSkillsParams(BaseToolParams):
             raise ValueError("query must not be blank")
         return normalized
 
-    @field_validator("providers", mode="before")
-    @classmethod
-    def validate_providers(cls, value: object) -> list[str] | None:
-        providers = _normalize_provider_values(value)
-        if not providers:
-            return None
-        invalid = [provider for provider in providers if provider not in _VALID_PROVIDERS]
-        if invalid:
-            raise ValueError(
-                f"Invalid providers: {invalid}. Allowed values: {sorted(_VALID_PROVIDERS)}"
-            )
-        return providers
+    @model_validator(mode="after")
+    def validate_scope(self) -> "FindSkillsParams":
+        if self.search_scope == "online" and not self.keywords:
+            raise ValueError('search_scope="online" requires at least one keyword')
+        return self
+
+    def resolve_providers(self) -> list[str]:
+        if self.search_scope == "local":
+            return list(_LOCAL_SEARCH_PROVIDERS)
+        if self.search_scope == "online":
+            return list(_ONLINE_SEARCH_PROVIDERS)
+        return []
 
 
 @tool()
 class FindSkillsTool(BaseTool[FindSkillsParams]):
     """<!--zh
-    按完整需求查找可用 Skill Candidate。query 必须概括目标、必要背景、期望结果和关键约束；keywords 只用于外部来源召回，空数组只搜索 system 和 my_library。
-    找到候选后：
-    - builtin=true：直接调用 read_skills 加载，不要安装；
-    - builtin=false（包括 my_library 和市场来源）：先获得用户确认，再调用 install_skills；多个合适候选使用 ask_user(multi_select)。
+    按搜索范围查找可用 Skill Candidate。local 只查本机已可直接读取的 Skill；
+    online 查互联网来源；auto 先查本地，没有合适候选时再查互联网。
+    system 内置 Skill 直接调用 read_skills，不要安装。其他来源安装前必须获得用户确认；
+    多个合适候选使用 ask_user(multi_select)。
     -->
-    Find Skill candidates for a complete user requirement. query must summarize the goal,
-    necessary context, expected outcome, and key constraints. keywords are only recall hints
-    for external sources; an empty list searches only system and my_library. Load
-    builtin=true candidates directly with read_skills. For
-    builtin=false candidates, including my_library and marketplace sources, obtain user
-    confirmation before install_skills; use ask_user(multi_select) when several are suitable.
+    Search for Skill candidates by scope. local searches Skills already readable on this machine;
+    online searches internet sources; auto searches locally first and only searches online when
+    no suitable local candidate is found. Load system built-ins directly with read_skills and do
+    not install them. Obtain user confirmation before installing candidates from other sources;
+    use ask_user(multi_select) when several candidates are suitable.
     """
 
     async def get_before_tool_call_friendly_action_and_remark(
@@ -135,24 +138,33 @@ class FindSkillsTool(BaseTool[FindSkillsParams]):
         tool_context: ToolContext,
         arguments: dict[str, Any] | None = None,
     ) -> dict[str, str]:
-        normalized_arguments = _normalize_tool_arguments(arguments)
-        keywords = _normalize_keyword_preview(
-            normalized_arguments.get("keywords")
+        args = _normalize_tool_arguments(arguments)
+        scope = str(args.get("search_scope") or "auto")
+        keywords = _normalize_keyword_preview(args.get("keywords"))
+        keyword_text = ", ".join(keywords) if keywords else i18n.translate(
+            "find_skills.keywords_all",
+            category="tool.messages",
         )
-        if keywords:
-            remark = i18n.translate(
-                "find_skills.searching",
-                category="tool.messages",
-                keywords=", ".join(keywords),
+
+        action_key = "find_skills" if scope == "auto" else f"find_skills.{scope}"
+        if scope == "local":
+            searching_key = (
+                "find_skills.searching.local_keyword"
+                if keywords
+                else "find_skills.searching.local"
             )
+        elif scope == "online":
+            searching_key = "find_skills.searching.online"
         else:
-            remark = i18n.translate(
-                "find_skills.searching_all",
-                category="tool.messages",
-            )
+            searching_key = "find_skills.searching.auto"
+
         return {
-            "action": i18n.translate("find_skills", category="tool.actions"),
-            "remark": remark,
+            "action": i18n.translate(action_key, category="tool.actions"),
+            "remark": i18n.translate(
+                searching_key,
+                category="tool.messages",
+                keywords=keyword_text,
+            ),
             "tool_name": tool_name,
         }
 
@@ -165,22 +177,17 @@ class FindSkillsTool(BaseTool[FindSkillsParams]):
         )
         keep_alive_task = start_tool_keep_alive(tool_context)
         try:
-            result = await SearchAggregator(
-                agent_name=(
-                    agent_context.agent_name
-                    if agent_context is not None
-                    else ""
-                ),
+            aggregator = SearchAggregator(
+                agent_name=agent_context.agent_name if agent_context is not None else "",
                 excluded_skills=(
                     agent_context.get_excluded_skills()
                     if agent_context is not None
                     else ()
                 ),
-            ).search_many(
-                params.keywords,
-                providers=params.providers,
-                query=params.query,
-                limit=params.limit,
+            )
+            result = await self._search(
+                aggregator,
+                params,
                 interruption_event=interruption_event,
             )
         except asyncio.CancelledError:
@@ -199,6 +206,7 @@ class FindSkillsTool(BaseTool[FindSkillsParams]):
         finally:
             stop_tool_keep_alive(keep_alive_task)
 
+        providers = params.resolve_providers()
         return ToolResult(
             content=_format_result(result, query=params.query, limit=params.limit),
             data={
@@ -215,7 +223,8 @@ class FindSkillsTool(BaseTool[FindSkillsParams]):
                 ],
                 "keywords": params.keywords,
                 "query": params.query,
-                "providers": params.providers or [],
+                "search_scope": params.search_scope,
+                "providers": providers,
                 "limit": params.limit,
                 "found_count": result.found_count,
                 "candidate_count": result.candidate_count,
@@ -231,7 +240,9 @@ class FindSkillsTool(BaseTool[FindSkillsParams]):
             },
             extra_info={
                 "keywords": params.keywords,
-                "providers": params.providers or [],
+                "query": params.query,
+                "search_scope": params.search_scope,
+                "providers": providers,
                 "fallback_reason": (
                     result.fallback_reason.value
                     if result.fallback_reason is not None
@@ -248,6 +259,53 @@ class FindSkillsTool(BaseTool[FindSkillsParams]):
                 ],
                 "md_content": _format_result_md(result, query=params.query),
             },
+        )
+
+    async def _search(
+        self,
+        aggregator: SearchAggregator,
+        params: FindSkillsParams,
+        *,
+        interruption_event: asyncio.Event | None,
+    ) -> SearchResult:
+        providers = params.resolve_providers()
+        if params.search_scope != "auto":
+            return await aggregator.search_many(
+                params.keywords,
+                providers=providers,
+                query=params.query,
+                limit=params.limit,
+                interruption_event=interruption_event,
+            )
+
+        local_result = await aggregator.search_many(
+            params.keywords,
+            providers=list(_LOCAL_SEARCH_PROVIDERS),
+            query=params.query,
+            limit=params.limit,
+            interruption_event=interruption_event,
+        )
+        if local_result.candidates or not params.keywords:
+            return local_result
+
+        online_result = await aggregator.search_many(
+            params.keywords,
+            providers=list(_ONLINE_SEARCH_PROVIDERS),
+            query=params.query,
+            limit=params.limit,
+            interruption_event=interruption_event,
+        )
+        return SearchResult(
+            candidates=online_result.candidates,
+            found_count=local_result.found_count + online_result.found_count,
+            candidate_count=online_result.candidate_count,
+            provider_errors=[
+                *local_result.provider_errors,
+                *online_result.provider_errors,
+            ],
+            selection_mode=online_result.selection_mode,
+            fallback_reason=online_result.fallback_reason,
+            fallback_detail=online_result.fallback_detail,
         )
 
     async def get_tool_detail(
@@ -296,7 +354,10 @@ class FindSkillsTool(BaseTool[FindSkillsParams]):
         execution_time: float,
         arguments: dict[str, Any] | None = None,
     ) -> dict[str, str]:
-        action = i18n.translate("find_skills", category="tool.actions")
+        data = result.data if isinstance(result.data, dict) else {}
+        scope = str(data.get("search_scope") or "auto")
+        action_key = "find_skills" if scope == "auto" else f"find_skills.{scope}"
+        action = i18n.translate(action_key, category="tool.actions")
         if not result.ok:
             return {
                 "action": action,
@@ -306,12 +367,11 @@ class FindSkillsTool(BaseTool[FindSkillsParams]):
                 ),
             }
 
-        data = result.data if isinstance(result.data, dict) else {}
         returned_count = _read_count(data, "returned_count")
         provider_errors = data.get("provider_errors")
         has_provider_errors = isinstance(provider_errors, list) and bool(provider_errors)
         selection_mode = str(data.get("selection_mode") or "")
-        if returned_count == 0 and isinstance(provider_errors, list) and provider_errors:
+        if returned_count == 0 and has_provider_errors:
             remark = i18n.translate(
                 "find_skills.partial_empty",
                 category="tool.messages",
@@ -338,9 +398,20 @@ class FindSkillsTool(BaseTool[FindSkillsParams]):
                 count=returned_count,
             )
         else:
+            searched_key = (
+                "find_skills.searched.local_keyword"
+                if scope == "local" and data.get("keywords")
+                else "find_skills.searched.local"
+                if scope == "local"
+                else "find_skills.searched.online"
+                if scope == "online"
+                else "find_skills.searched.auto"
+            )
             remark = i18n.translate(
-                "find_skills.searched",
+                searched_key,
                 category="tool.messages",
+                keywords=", ".join(data.get("keywords") or []),
+                total=returned_count,
                 count=returned_count,
             )
         return {"action": action, "remark": remark}
@@ -606,31 +677,6 @@ def _normalize_keyword_preview(value: object) -> list[str]:
         _single_line(keyword)[:MAX_SEARCH_KEYWORD_LENGTH]
         for keyword in _normalize_keywords(value)[:_MAX_KEYWORDS]
     ]
-
-
-def _normalize_provider_values(value: object) -> list[str] | None:
-    if value is None:
-        return None
-    if isinstance(value, str):
-        text = value.strip()
-        if not text:
-            return None
-        try:
-            parsed = json.loads(text)
-        except json.JSONDecodeError:
-            parsed = text
-        value = parsed
-
-    raw_values = value if isinstance(value, list) else [value]
-    providers: list[str] = []
-    seen: set[str] = set()
-    for item in raw_values:
-        for part in str(item).split(","):
-            provider = part.strip()
-            if provider and provider not in seen:
-                seen.add(provider)
-                providers.append(provider)
-    return providers or None
 
 
 def _normalize_tool_arguments(value: object) -> dict[str, Any]:

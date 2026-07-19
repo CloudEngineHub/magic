@@ -1,333 +1,223 @@
 ---
 name: using-cron
-description: Manage scheduled tasks — create, query, update, and delete. CRITICAL - When user message contains any future time intent (e.g. "in 2 days", "tomorrow at 8am", "every morning"), you MUST load this skill first. NEVER write custom scheduler scripts.
+description: Manage scheduled tasks — create, query, update, and delete. CRITICAL - When user message contains any future time intent (e.g. "in 2 days", "tomorrow at 8am", "every morning"), you MUST load this skill first. Use the Code Mode tools described by this skill.
 
 ---
 
-# Scheduled Message Task Management
+# Scheduled Task Management
 
-Manage scheduled message tasks through scripts, supporting create, list, get, update, and delete operations.
+Use this skill to create, list, inspect, update, and delete magic-service scheduled tasks.
 
-## Core Capabilities
+## How it works
 
-- Create one-time or recurring scheduled message tasks
-- Query and filter existing scheduled task lists
-- Get task details
-- Update task configuration (name, time, enabled status, etc.)
-- Delete tasks
-
-## Quick Start
-
-### Typical Workflow
-
-```
-1. Create task (create.py)
-   ↓ Get returned schedule_id
-2. Query list (list.py) - Optional
-   ↓ Confirm task was created
-3. Get details (get.py) - Optional
-   ↓ View complete task info
-4. Update task (update.py) - As needed
-5. Delete task (delete.py) - As needed
-```
-
-## Available Scripts
-
----
-
-### create.py - Create Scheduled Task
-
-Create a new scheduled message task.
-
-**SYNOPSIS**
-
-```bash
-python scripts/create.py --task-name <name> (--message-content <content> | --message-content-file <path>) --type <type> --time <HH:MM> [OPTIONS]
-```
-
-**DESCRIPTION**
-
-Create a scheduled message task, supporting one-time execution and daily/weekly/monthly repeat modes.
-
-**When to pass `--specify-topic 1`**: Pass 1 only when both hold: (1) the task is recurring (daily_repeat / weekly_repeat / monthly_repeat), and (2) the user intent implies that the next run time or trigger depends on the current or previous run's result (e.g. "run again 3 days after each completion", "next time based on last result"). For one-time tasks or fixed-schedule tasks that do not depend on previous results, omit this option or pass 0.
-
-**OPTIONS**
-
-| Option                             | Type    | Required    | Description                                                                                                                                                                                 |
-| ---------------------------------- | ------- | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `--task-name <name>`               | string  | Yes         | Task name                                                                                                                                                                                   |
-| `--message-content <content>`      | string  | Conditional | Message content (same as detail message_content/task_describe). Mutually exclusive with `--message-content-file`                                                                            |
-| `--message-content-file <path>`    | string  | Conditional | Read message content from a file. Prefer this for long text or content with Chinese punctuation, quotes, or brackets                                                                        |
-| `--type <type>`                    | string  | Yes         | Schedule type, see table below                                                                                                                                                              |
-| `--time <HH:MM>`                   | string  | Yes         | Execution time                                                                                                                                                                              |
-| `--day <value>`                    | string  | Conditional | Depends on schedule type, see table below                                                                                                                                                   |
-| `--deadline <YYYY-MM-DD HH:MM:SS>` | string  | No          | Expiry datetime; format YYYY-MM-DD HH:MM:SS. If only date or unclear format is given, the system will interpret and complete (e.g. to 00:00:00 that day)                                    |
-| `--specify-topic <0\|1>`           | integer | No          | Whether to specify topic; 0=no, 1=yes; default 0. Pass 1 only when the user intent is a **recurring** task whose **next run depends on the previous run's result**; otherwise use default 0 |
-| `--topic-pattern <mode>`           | string  | No          | Agent mode for the scheduled run. For built-in agents, pass the mode such as `ip-manager`; for custom agents, pass `custom_agent`; defaults to `general` when omitted                       |
-| `--agent-code <code>`              | string  | Conditional | Custom agent code. Required when `--topic-pattern custom_agent`                                                                                                                             |
-
-**Schedule type `--type` and `--day` mapping:**
-
-| `--type`         | Description                   | `--day`                                    |
-| ---------------- | ----------------------------- | ------------------------------------------ |
-| `no_repeat`      | No repeat, one-time execution | Execution date `YYYY-MM-DD` (required)     |
-| `daily_repeat`   | Repeat daily                  | Not needed                                 |
-| `weekly_repeat`  | Repeat weekly                 | Day of week `0`-`6`, `0`=Sunday (required) |
-| `monthly_repeat` | Repeat monthly                | Day of month `1`-`31` (required)           |
-
-**OUTPUT**
-
-On success: `{"id": "<schedule_id>"}`
-
-**EXAMPLES**
-
-```bash
-python scripts/create.py \
-  --task-name "Daily Briefing" \
-  --message-content "Generate today's briefing" \
-  --type daily_repeat \
-  --time "9:00" \
-  --topic-pattern general
-```
-
-```bash
-python scripts/create.py \
-  --task-name "Custom Agent Task" \
-  --message-content "Process this task with the custom agent" \
-  --type daily_repeat \
-  --time "9:00" \
-  --topic-pattern custom_agent \
-  --agent-code "SMA-custom-agent"
-```
-
-For custom agents, keep this parameter contract:
-
-- `--topic-pattern custom_agent` tells the scheduler to run in custom-agent mode.
-- `--agent-code <code>` selects the compiled employee agent, such as `SMA-custom-agent`.
-- The script reads `model_id` from `.chat_history/<agent-code><main>.session.json` first, then falls back to `.chat_history/custom_agent<main>.session.json` and `.chat_history/magic<main>.session.json`.
-
----
-
-### list.py - Query Task List
-
-Query the scheduled task list with optional filtering.
-
-**SYNOPSIS**
-
-```bash
-python scripts/list.py [OPTIONS]
-```
-
-**DESCRIPTION**
-
-Query all scheduled tasks or filter by conditions, with pagination support. Results are **scoped to the current project**; project_id is taken from the current session and must not be passed.
-
-**OPTIONS**
-
-| Option               | Type    | Required | Description                     |
-| -------------------- | ------- | -------- | ------------------------------- |
-| `--task-name <name>` | string  | No       | Fuzzy search by task name       |
-| `--enabled <0\|1>`   | integer | No       | `1`=enabled `0`=disabled        |
-| `--completed <0\|1>` | integer | No       | `1`=completed `0`=not completed |
-| `--page <n>`         | integer | No       | Page number, default 1          |
-| `--page-size <n>`    | integer | No       | Items per page, default 50      |
-
-**OUTPUT**
-
-On success: `{"total": N, "schedules": [{"id": "...", "task_name": "...", "task_describe": "...", "status": "...", "enabled": 0|1, "time_config": {...}, "deadline": ...}]}`. Each item includes: `id`, `task_name`, `task_describe`, `status`, `enabled`, `time_config`, `deadline`.
-
-**EXAMPLES**
-
-```bash
-# Query all
-python scripts/list.py
-
-# Filter by conditions
-python scripts/list.py --task-name "briefing" --enabled 1 --completed 0
-```
-
----
-
-### get.py - Get Task Details
-
-Get the complete details of a specific scheduled task.
-
-**SYNOPSIS**
-
-```bash
-python scripts/get.py --id <schedule_id>
-```
-
-**DESCRIPTION**
-
-Query complete task information by task ID.
-
-**OPTIONS**
-
-| Option               | Type   | Required | Description |
-| -------------------- | ------ | -------- | ----------- |
-| `--id <schedule_id>` | string | Yes      | Task ID     |
-
-**OUTPUT**
-
-On success: Returns complete task info including `id`, `task_name`, `task_describe`, `message_content`, `time_config`, `status`, `enabled`, `deadline`.
-
-**EXAMPLES**
-
-```bash
-python scripts/get.py --id "<schedule_id>"
-```
-
----
-
-### update.py - Update Task
-
-Update the configuration of a specific scheduled task; only pass fields to be modified.
-
-**SYNOPSIS**
-
-```bash
-python scripts/update.py --id <schedule_id> [OPTIONS]
-```
-
-**DESCRIPTION**
-
-Update scheduled task configuration. Only pass fields to be modified; unspecified fields remain unchanged. `--type` and `--time` must be provided together.
-
-**OPTIONS**
-
-| Option                             | Type    | Required | Description                                                                         |
-| ---------------------------------- | ------- | -------- | ----------------------------------------------------------------------------------- |
-| `--id <schedule_id>`               | string  | Yes      | Task ID                                                                             |
-| `--task-name <name>`               | string  | No       | New task name                                                                       |
-| `--message-content <content>`      | string  | No       | Message content (same as detail message_content/task_describe). Mutually exclusive with `--message-content-file` |
-| `--message-content-file <path>`    | string  | No       | Read message content from a file. Prefer this for long text or content with Chinese punctuation, quotes, or brackets |
-| `--type <type>`                    | string  | No       | Schedule type (must be provided with `--time`)                                      |
-| `--time <HH:MM>`                   | string  | No       | Execution time (must be provided with `--type`)                                     |
-| `--day <value>`                    | string  | No       | Date/weekday/day-of-month, depends on `--type`                                      |
-| `--deadline <YYYY-MM-DD HH:MM:SS>` | string  | No       | Expiry datetime; format YYYY-MM-DD HH:MM:SS, auto-completed if only date or unclear |
-| `--enabled <0\|1>`                 | integer | No       | `1`=enable `0`=disable                                                              |
-
-**OUTPUT**
-
-On success: `{"id": "<schedule_id>"}`
-
-**EXAMPLES**
-
-```bash
-# Update task name
-python scripts/update.py --id "<schedule_id>" --task-name "New Name"
-
-# Update task description
-python scripts/update.py --id "<schedule_id>" --message-content "Updated task description content"
-
-# Update task description from a file
-python scripts/update.py --id "<schedule_id>" --message-content-file /tmp/cron-message.txt
-
-# Update schedule time
-python scripts/update.py --id "<schedule_id>" --type daily_repeat --time "10:00"
-
-# Update deadline
-python scripts/update.py --id "<schedule_id>" --deadline "2026-12-31 23:59:59"
-
-# Disable task
-python scripts/update.py --id "<schedule_id>" --enabled 0
-
-# Re-enable task
-python scripts/update.py --id "<schedule_id>" --enabled 1
-```
-
----
-
-### delete.py - Delete Task
-
-Delete a specific scheduled task.
-
-**SYNOPSIS**
-
-```bash
-python scripts/delete.py --id <schedule_id>
-```
-
-**DESCRIPTION**
-
-Permanently delete a scheduled task by task ID.
-
-**OPTIONS**
-
-| Option               | Type   | Required | Description |
-| -------------------- | ------ | -------- | ----------- |
-| `--id <schedule_id>` | string | Yes      | Task ID     |
-
-**OUTPUT**
-
-On success: `{"id": "<schedule_id>"}`
-
-**EXAMPLES**
-
-```bash
-python scripts/delete.py --id "<schedule_id>"
-```
-
----
-
-## Usage Examples
-
-In Agent environment, use `shell_exec` tool to execute scripts:
+Scheduled task capabilities are exposed as Code Mode tools (`scheduled_task_*`). They are not directly callable as standalone tool calls. Invoke them through `run_sdk_snippet` and `sdk.tool.call`:
 
 ```python
-# Always run these scripts with shell_exec in the project Python environment.
-# Do not call them through run_sdk_snippet because they import the app package.
+run_sdk_snippet(python_code="""
+from sdk.tool import tool
 
-# Create task
-shell_exec(
-    command='python scripts/create.py --task-name "Daily Briefing" --message-content "Generate today's briefing" --type daily_repeat --time "9:00" --topic-pattern general'
-)
-
-# Create a task with a long message or special characters
-shell_exec(
-    command='''cat > /tmp/cron-message.txt <<'EOF'
-Update the AI card. Read magic.project.js, template.html, fetch fresh data,
-generate latest.html, archive the previous version, and update metadata.
-EOF
-cd /app/agents/skills/using-cron &&
-python scripts/create.py --task-name "AI Card" --message-content-file /tmp/cron-message.txt --type daily_repeat --time "9:00" --topic-pattern ip-manager'''
-)
-
-# Self-media article data auto sync
-# Fixed recurring sync does not bind to one article topic: pass --specify-topic 0 so each run creates a new topic.
-# Use the built-in ip-manager mode: pass --topic-pattern ip-manager and do not pass agent_code.
-# For frontend/direct payload flows, message_content.extra.super_agent.model uses the first available model for ip-manager. If no model is available, omit the field and let the runtime use its default policy.
-shell_exec(
-    command='''cat > /tmp/self-media-post-sync.txt <<'EOF'
-Read ops/source.json in the current article directory, visit the bound publishedUrl, and update only these operations files in the current article directory:
-- Latest metrics and history snapshots in ops/metrics.json
-- Latest feedback and history snapshots in ops/comments.json
-- ops/review.html as a polished previewable HTML operations report with a performance brief, KPI interpretation, trend and efficiency charts, engagement breakdown, comment insights, and next actions. Use inline CSS/SVG or simple chart blocks without external resources. Render next actions as buttons bound with addEventListener; on click, prefer window.Magic.project.sendMessage(message, { model: "auto" }) and fall back to window.Magic.setInputMessage(message) when unavailable.
-- fetchStatus, lastFetchedAt, failureReason, and history snapshots in ops/source.json
-Do not generate AI Cards and do not write AI Card analysis artifacts.
-EOF
-cd /app/agents/skills/using-cron &&
-python scripts/create.py --task-name "[Article Sync] Example Article" --message-content-file /tmp/self-media-post-sync.txt --type daily_repeat --time "9:00" --specify-topic 0 --topic-pattern ip-manager'''
-)
-
-# Query task list
-shell_exec(
-    command="python scripts/list.py"
-)
-
-# Get task details
-shell_exec(
-    command='python scripts/get.py --id "<schedule_id>"'
-)
-
-# Update task
-shell_exec(
-    command='python scripts/update.py --id "<schedule_id>" --enabled 0'
-)
-
-# Delete task
-shell_exec(
-    command='python scripts/delete.py --id "<schedule_id>"'
-)
+result = tool.call("scheduled_task_list")
+print(result.content)
+""")
 ```
+
+`tool.call(name, params)` returns:
+
+| Field | Meaning |
+| --- | --- |
+| `result.ok` | Whether the operation succeeded. Check this first. |
+| `result.content` | JSON text suitable for reading and reasoning. |
+| `result.data` | Structured payload for follow-up calls. |
+
+Use the Code Mode tools below for every scheduled-task operation.
+
+## Available Tools
+
+| Tool name | Purpose |
+| --- | --- |
+| `scheduled_task_create` | Create a one-time or recurring scheduled task. |
+| `scheduled_task_list` | List scheduled tasks in the current project. |
+| `scheduled_task_get` | Get one scheduled task by ID. |
+| `scheduled_task_update` | Partially update one scheduled task. |
+| `scheduled_task_delete` | Delete one scheduled task. |
+
+The tools automatically read `topic_id`, `project_id`, and current `model_id` from the current session. Do not pass those IDs yourself.
+
+## Schedule Types
+
+| `schedule_type` | Meaning | `day` |
+| --- | --- | --- |
+| `no_repeat` | One-time execution | Execution date `YYYY-MM-DD` (required) |
+| `daily_repeat` | Repeat daily | Not needed |
+| `weekly_repeat` | Repeat weekly | Weekday `0`-`6`, `0`=Sunday (required) |
+| `monthly_repeat` | Repeat monthly | Day of month `1`-`31` (required) |
+
+`time` is always required and must be `HH:MM`.
+
+`deadline` is optional for recurring tasks. Use `YYYY-MM-DD HH:MM:SS`; `YYYY-MM-DD` is normalized to `YYYY-MM-DD 00:00:00`.
+
+## Agent Modes
+
+`agent_mode` is optional. Omit it by default; the scheduled task will use the current running mode.
+
+Use `agent_mode` only when the user explicitly asks for a mode. Built-in values:
+
+| `agent_mode` | Meaning |
+| --- | --- |
+| `magic` | General mode |
+| `slider` | Slide generation mode |
+| `data-analyst` | Data analysis mode |
+| `design` | Design mode |
+| `audio` | Audio summary mode |
+
+The tool maps these friendly values to the corresponding magic-service mode identifiers internally.
+
+If the user gives a custom employee identifier/code, pass that value as `agent_mode`. The tool maps it internally.
+
+## Create
+
+```python
+run_sdk_snippet(python_code="""
+from sdk.tool import tool
+
+result = tool.call("scheduled_task_create", {
+    "task_name": "Daily Briefing",
+    "message_content": "Generate today's briefing",
+    "schedule_type": "daily_repeat",
+    "time": "09:00"
+})
+print(result.content)
+""")
+```
+
+For long content, pass a Python triple-quoted string. Do not write a temp script:
+
+```python
+run_sdk_snippet(python_code="""
+from sdk.tool import tool
+
+message = \"\"\"Read ops/source.json in the current article directory, visit the bound publishedUrl, and update only these operations files:
+- ops/metrics.json
+- ops/comments.json
+- ops/review.html
+Do not generate an AI Card.\"\"\"
+
+result = tool.call("scheduled_task_create", {
+    "task_name": "[Article Sync] Example Article",
+    "message_content": message,
+    "schedule_type": "daily_repeat",
+    "time": "09:00",
+    "specify_topic": 0
+})
+print(result.content)
+""")
+```
+
+For custom employees, keep this parameter contract:
+
+```python
+run_sdk_snippet(python_code="""
+from sdk.tool import tool
+
+result = tool.call("scheduled_task_create", {
+    "task_name": "Custom Employee Task",
+    "message_content": "Process this task with the custom employee",
+    "schedule_type": "daily_repeat",
+    "time": "09:00",
+    "agent_mode": "SMA-custom-agent"
+})
+print(result.content)
+""")
+```
+
+### `specify_topic`
+
+Pass `specify_topic=1` only when both conditions hold:
+
+1. The task is recurring: `daily_repeat`, `weekly_repeat`, or `monthly_repeat`.
+2. The next run time or trigger depends on the current or previous run result, such as "run again 3 days after each completion" or "decide next time based on last result".
+
+For one-time tasks, or fixed schedules that do not depend on previous results, keep `specify_topic=0`.
+
+## List
+
+```python
+run_sdk_snippet(python_code="""
+from sdk.tool import tool
+
+result = tool.call("scheduled_task_list", {
+    "page": 1,
+    "page_size": 50,
+    "task_name": "briefing",
+    "enabled": 1,
+    "completed": 0
+})
+print(result.content)
+""")
+```
+
+The list is scoped to the current project.
+
+## Get
+
+```python
+run_sdk_snippet(python_code="""
+from sdk.tool import tool
+
+result = tool.call("scheduled_task_get", {
+    "id": "<scheduled_task_id>"
+})
+print(result.content)
+""")
+```
+
+## Update
+
+Only pass fields that should change. When changing time configuration, pass `schedule_type` and `time` together.
+
+```python
+run_sdk_snippet(python_code="""
+from sdk.tool import tool
+
+result = tool.call("scheduled_task_update", {
+    "id": "<scheduled_task_id>",
+    "enabled": 0
+})
+print(result.content)
+""")
+```
+
+```python
+run_sdk_snippet(python_code="""
+from sdk.tool import tool
+
+result = tool.call("scheduled_task_update", {
+    "id": "<scheduled_task_id>",
+    "message_content": "Updated task details",
+    "schedule_type": "daily_repeat",
+    "time": "10:00"
+})
+print(result.content)
+""")
+```
+
+## Delete
+
+```python
+run_sdk_snippet(python_code="""
+from sdk.tool import tool
+
+result = tool.call("scheduled_task_delete", {
+    "id": "<scheduled_task_id>"
+})
+print(result.content)
+""")
+```
+
+## Rules
+
+1. Never create scheduler scripts or ask the shell to run cron scripts.
+2. Always call `scheduled_task_list` when the user asks what scheduled tasks exist.
+3. After `scheduled_task_create`, keep the returned `id`; use it for get/update/delete.
+4. Check `result.ok` before relying on `result.content` or `result.data`.
+5. Surface tool errors directly; do not silently retry with guessed workspace, topic, or project IDs.

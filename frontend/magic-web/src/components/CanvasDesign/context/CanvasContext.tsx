@@ -36,3 +36,7 @@ export function useCanvas() {
 	}
 	return context
 }
+
+export function useOptionalCanvas() {
+	return useContext(CanvasContext)?.canvas ?? null
+}

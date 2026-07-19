@@ -36,6 +36,7 @@ function EmployeeMarketCard({
 	getLocalizedText,
 }: EmployeeMarketCardProps) {
 	const { t } = useTranslation("admin/platform/employeeMarket")
+	const { t: tCommon } = useTranslation("admin/common")
 
 	if (!data) return null
 
@@ -94,7 +95,7 @@ function EmployeeMarketCard({
 					</Flex>
 				</Flex>
 				<Flex align="center" gap={6}>
-					<span>{t("sortOrder")}:</span>
+					<span>{tCommon("sortOrder")}:</span>
 					<InputNumber
 						min={0}
 						precision={0}

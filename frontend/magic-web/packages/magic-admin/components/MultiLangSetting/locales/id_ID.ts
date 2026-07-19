@@ -6,4 +6,9 @@ export default {
 	th_TH: "Bahasa Thai",
 	pleaseInput: "Silakan masukkan",
 	zh_CN: "Bahasa Mandarin",
+	confirmClose: "Konfirmasi tutup",
+	unsavedChanges: "Perubahan yang belum disimpan akan hilang setelah ditutup. Tetap tutup?",
+	discard: "Tutup",
+	continueEditing: "Lanjutkan edit",
+	saveAndClose: "Simpan dan tutup",
 }

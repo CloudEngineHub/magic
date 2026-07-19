@@ -11,6 +11,7 @@ import {
 	withFlowNamespaces,
 } from "@/routes/helpers"
 import { superMagicCrewRoutes } from "@/routes/modules/superMagicCrewRoutes"
+import { superMagicSlidesTemplateRoutes } from "@/routes/modules/superMagicSlidesTemplateRoutes"
 
 /**
  * @description 路由处理器，需要异步渲染，等待路由生成再渲染再执行对应业务流程
@@ -145,6 +146,8 @@ const AuthCallback = lazy(() => import("@/pages/auth/callback"))
 
 /** 系统初始化流程页面 */
 const InitializationPage = lazy(() => import("@/pages/initialization"))
+/** 系统维护页面 */
+const MaintenancePage = lazy(() => import("@/pages/maintenance"))
 
 /** 全局布局 */
 const ClusterLayout = lazy(() => import("@/layouts/ClusterLayout"))
@@ -473,6 +476,7 @@ export function registerRoutes(config: RouteConfig = {}): Array<RouteObject> {
 						path: `/:clusterCode${RoutePath.SuperChatProjectState}`,
 						element: <ChatProjectPage />,
 					},
+					...superMagicSlidesTemplateRoutes,
 					{
 						name: RouteName.SuperWorkspaceProjectState,
 						path: `/:clusterCode${RoutePath.SuperWorkspaceProjectState}`,
@@ -528,6 +532,11 @@ export function registerRoutes(config: RouteConfig = {}): Array<RouteObject> {
 			name: RouteName.Initialization,
 			path: RoutePath.Initialization,
 			element: <InitializationPage />,
+		},
+		{
+			name: RouteName.Maintenance,
+			path: RoutePath.Maintenance,
+			element: <MaintenancePage />,
 		},
 		{
 			name: RouteName.SuperMagicShare,

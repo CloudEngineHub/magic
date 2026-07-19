@@ -26,4 +26,6 @@ export const whiteListRoutes = [
 	"/activation/*",
 	/** 系统初始化 */
 	"/initialization",
+	/** 系统维护 */
+	"/maintenance",
 ]

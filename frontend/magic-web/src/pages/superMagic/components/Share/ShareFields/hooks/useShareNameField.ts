@@ -100,8 +100,7 @@ export function useShareNameField(options: UseShareNameFieldOptions): UseShareNa
 			if (!value || !selectedFiles || selectedFiles.length === 0) return
 
 			const isRecordingDefaultName =
-				isAudioProjectMode(projectMode) &&
-				value.startsWith(`${recordingSharePrefix}_`)
+				isAudioProjectMode(projectMode) && value.startsWith(`${recordingSharePrefix}_`)
 			if (
 				!shareProject &&
 				(value.startsWith(`${fileSharePrefix}_`) || isRecordingDefaultName)

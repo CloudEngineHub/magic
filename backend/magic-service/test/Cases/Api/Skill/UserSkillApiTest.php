@@ -1196,6 +1196,25 @@ class UserSkillApiTest extends AbstractApiTest
         $this->assertSame('3', (string) $memberVisibilityBeforeApprove[0]['principal_type']);
         $this->assertSame($organizationCode, $memberVisibilityBeforeApprove[0]['principal_id']);
 
+        $memberListResponse = $this->post(
+            '/api/v1/organization/admin/skills/versions/queries',
+            [
+                'page' => 1,
+                'page_size' => 20,
+                'review_status' => 'UNDER_REVIEW',
+            ],
+            $this->getCommonHeaders()
+        );
+        $this->assertEquals(1000, $memberListResponse['code'], $memberListResponse['message'] ?? '');
+        $memberListItem = array_values(array_filter(
+            $memberListResponse['data']['list'],
+            static fn (array $item): bool => $item['id'] === (string) $memberResponse['data']['version_id']
+        ))[0] ?? null;
+        $this->assertNotNull($memberListItem);
+        $this->assertSame('MEMBER', $memberListItem['publish_target_type']);
+        $this->assertSame($memberTargetUserId, $memberListItem['publish_target_value']['users'][0]['id']);
+        $this->assertSame([], $memberListItem['publish_target_value']['departments']);
+
         $memberApproveResponse = $this->put(
             '/api/v1/organization/admin/skills/versions/' . $memberResponse['data']['version_id'] . '/review',
             [

@@ -12,20 +12,11 @@ import tempfile
 import zipfile
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 
 import yaml
 from loguru import logger
 
-from app.infrastructure.storage.types import (
-    AliyunCredentials,
-    PlatformType,
-    S3Credentials,
-    VolcEngineCredentials,
-)
-from app.infrastructure.storage.aliyun import AliyunOSSUploader
-from app.infrastructure.storage.s3 import S3Uploader
-from app.infrastructure.storage.volcengine import VolcEngineUploader
 from app.path_manager import PathManager
 
 
@@ -91,6 +82,28 @@ def _get_field(fm: Dict[str, Any], *keys: str) -> str:
         if val is not None:
             return _str(val)
     return ""
+
+
+def _validate_path_segment(value: str, field_name: str) -> None:
+    """Validate a single path segment supplied by an upstream service."""
+    if not value:
+        return
+    if "/" in value or "\\" in value or ".." in value:
+        raise ValueError(f"{field_name} must be a plain path segment.")
+
+
+def _validate_zip_file_name(file_name: str) -> None:
+    """Validate an optional ZIP file name supplied by an upstream service."""
+    if not file_name:
+        return
+    _validate_path_segment(file_name, "file_name")
+    if not file_name.endswith(".zip"):
+        raise ValueError("file_name must end with .zip.")
+
+
+def _count_descendants(source_dir: Path) -> int:
+    """Count all descendant files and directories, excluding source_dir itself."""
+    return sum(1 for _ in source_dir.rglob("*"))
 
 
 def _zip_directory(source_dir: Path, output_path: str, arcdir: str = "") -> None:
@@ -229,6 +242,16 @@ async def _package_and_upload(
     Raises:
         ValueError: if the platform specified in upload_config is not supported.
     """
+    from app.infrastructure.storage.aliyun import AliyunOSSUploader
+    from app.infrastructure.storage.s3 import S3Uploader
+    from app.infrastructure.storage.types import (
+        AliyunCredentials,
+        PlatformType,
+        S3Credentials,
+        VolcEngineCredentials,
+    )
+    from app.infrastructure.storage.volcengine import VolcEngineUploader
+
     platform_str = upload_config.get("platform", "tos")
     try:
         platform = PlatformType(platform_str)
@@ -277,6 +300,8 @@ async def export_workspace(
     code: str,
     upload_config: Dict[str, Any],
     source_path: str = "",
+    archive_root: str = "",
+    file_name: str = "",
 ) -> Dict[str, Any]:
     """Package the workspace, upload it, and return the file key with extracted metadata.
 
@@ -287,6 +312,8 @@ async def export_workspace(
         source_path: relative path within the workspace root to export.
                      When empty, the entire workspace root is exported.
                      Path traversal (e.g. "../") is rejected with ValueError.
+        archive_root: optional root directory name inside the ZIP archive.
+        file_name: optional ZIP file name to upload.
 
     Returns:
         Dict with keys:
@@ -304,10 +331,15 @@ async def export_workspace(
         "custom_skill": "skill_creator",
     }.get(export_type, export_type)
 
+    _validate_path_segment(archive_root, "archive_root")
+    _validate_zip_file_name(file_name)
+
     if source_path:
         candidate = (workspace_root / source_path).resolve()
         workspace_root_resolved = workspace_root.resolve()
-        if not str(candidate).startswith(str(workspace_root_resolved)):
+        try:
+            candidate.relative_to(workspace_root_resolved)
+        except ValueError:
             raise ValueError(
                 f"source_path {source_path!r} resolves outside the workspace root."
             )
@@ -331,13 +363,22 @@ async def export_workspace(
     )
     if dir_prefix and not dir_prefix.endswith("/"):
         dir_prefix += "/"
-    file_key = f"{dir_prefix}{normalized_export_type}/{code}_{timestamp}.zip"
+    if file_name:
+        file_key = f"{dir_prefix}{file_name}"
+    else:
+        file_key = f"{dir_prefix}{normalized_export_type}/{code}_{timestamp}.zip"
 
     # Extract metadata (skips missing files gracefully)
     if normalized_export_type == "agent_creator":
         metadata = extract_agent_metadata(workspace_dir)
     elif normalized_export_type == "skill_creator":
+        if not (workspace_dir / "SKILL.md").exists():
+            raise ValueError("SKILL.md is required for skill_creator export.")
         metadata = extract_skill_metadata(workspace_dir)
+        skill_dir = archive_root or code
+        metadata["package_name"] = skill_dir
+        metadata["skill_dir"] = skill_dir
+        metadata["files_count"] = _count_descendants(workspace_dir)
     else:
         raise ValueError(
             f"Unknown export type: {export_type!r}. Expected 'agent_creator' or 'skill_creator'."
@@ -345,7 +386,7 @@ async def export_workspace(
 
     # Package and upload.
     # arcdir=code means the ZIP extracts to a folder named after code (without timestamp).
-    await _package_and_upload(workspace_dir, file_key, upload_config, arcdir=code)
+    await _package_and_upload(workspace_dir, file_key, upload_config, arcdir=archive_root or code)
 
     return {
         "file_key": file_key,

@@ -1,4 +1,4 @@
-"""Read Skills Tool - 批量读取项目 skills 的完整内容"""
+"""Read Skills Tool - 批量读取可用 skills 的完整内容"""
 
 import asyncio
 from pathlib import Path
@@ -12,6 +12,7 @@ from agentlang.tools.tool_result import ToolResult
 from app.core.context.agent_context import AgentContext
 from app.core.entity.message.server_message import DisplayType, FileContent, ToolDetail
 from app.core.skill_manager import find_skill
+from app.core.skill_utils.skill_sources import get_personal_skills_dir
 from app.i18n import i18n
 from app.tools.core import BaseTool, BaseToolParams, tool
 from app.tools.read_skills_hooks import (
@@ -52,12 +53,12 @@ Whether to check for skill version updates. Defaults to true. If the user has ex
 @tool()
 class ReadSkills(BaseTool[ReadSkillsParams]):
     """<!--zh
-    批量读取项目 skills 的完整内容工具
+    批量读取可用 skills 的完整内容工具
     用于一次性加载多个 skill 的详细使用说明、示例和参考文档
 
     强烈建议在需要读取多个 skills 时使用此工具一次性读取，而非多次调用工具逐个读取，这将会极大提升任务效率
     -->
-    Tool for batch reading the complete content of project skills
+    Tool for batch reading the complete content of available skills
     Used to load detailed skill instructions, examples, and reference documentation for multiple skills at once
 
     Strongly recommended to use this tool for batch reading multiple skills at once, rather than calling tools multiple times individually, which will greatly improve task efficiency
@@ -356,8 +357,8 @@ class ReadSkills(BaseTool[ReadSkillsParams]):
         from app.core.skill_utils.providers.base import SkillProviderId
         from app.core.skill_utils.providers.registry import get_registry
 
-        async def check_one(skill_name: str, skill_dir: Path) -> Optional[Tuple[str, str, str]]:
-            """检查单个 skill 版本，返回 (skill_name, current_version, latest_version) 或 None。"""
+        async def check_one(skill_name: str, skill_dir: Path) -> Optional[Tuple[str, str, str, str]]:
+            """检查单个 skill 版本，返回名称、版本和原安装范围。"""
             try:
                 manifest = await asyncio.to_thread(read_manifest, skill_dir)
                 if not manifest or not manifest.source_id or manifest.version == "unknown":
@@ -385,7 +386,7 @@ class ReadSkills(BaseTool[ReadSkillsParams]):
                 if latest is None or latest == "unknown" or latest == manifest.version:
                     return None
 
-                return skill_name, manifest.version, latest
+                return skill_name, manifest.version, latest, _get_install_scope(skill_dir)
             except asyncio.TimeoutError:
                 logger.warning(f"检查 skill '{skill_name}' 版本超时")
                 return None
@@ -403,12 +404,17 @@ class ReadSkills(BaseTool[ReadSkillsParams]):
 
             skill_list = ", ".join(
                 f"{skill_name} ({current_ver} -> {latest_ver})"
-                for skill_name, current_ver, latest_ver in updates
+                for skill_name, current_ver, latest_ver, _scope in updates
+            )
+            scope_list = ", ".join(
+                f"{skill_name}={scope}"
+                for skill_name, _current_ver, _latest_ver, scope in updates
             )
             lines = [
                 f"New versions are available for the following skills: {skill_list}.",
                 "You may use the ask_user tool to check with the user whether they would like to update. "
-                "If confirmed, call install_skills to perform the update. "
+                "If confirmed, call install_skills to perform the update and preserve each skill's current installation scope. "
+                f"Set scope on each install item as follows: {scope_list}. "
                 "If the user declines or ignores the update, pass check_updates=false in all subsequent read_skills calls to suppress further update checks.",
             ]
 
@@ -465,3 +471,13 @@ def _format_result_md(results: List[Dict[str, Any]], total_count: int, success_c
 
 def _safe_file_name(name: str) -> str:
     return "".join(c if c.isalnum() or c in "._-" else "_" for c in name)
+
+
+def _get_install_scope(skill_dir: Path) -> str:
+    """根据 Skill 目录判断升级时应保持的安装范围。"""
+    try:
+        if Path(skill_dir).is_relative_to(get_personal_skills_dir()):
+            return "personal"
+    except (TypeError, ValueError):
+        pass
+    return "workspace"

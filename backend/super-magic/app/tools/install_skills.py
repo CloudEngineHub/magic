@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+from pathlib import Path
 from typing import Any, Dict, List, Literal, Optional
 
 from pydantic import Field, field_validator, model_validator
@@ -15,19 +16,33 @@ from agentlang.context.tool_context import ToolContext
 from agentlang.logger import get_logger
 from agentlang.tools.tool_result import ToolResult
 from app.core.entity.message.server_message import DisplayType, FileContent, ToolDetail
-from app.core.skill_utils.installer import InstallService, SkillRef
+from app.core.skill_utils.installer import InstallBatchResult, InstallResult, InstallService, SkillRef
+from app.core.skill_utils.skill_sources import get_personal_skills_dir, get_workspace_skills_dir
 from app.i18n import i18n
 from app.tools.core import BaseTool, BaseToolParams, tool
+from app.utils.async_file_utils import async_exists, async_is_dir, async_iterdir
 
 logger = get_logger(__name__)
 
 _VALID_PROVIDERS = {"my_library", "market", "skillhub", "clawhub", "npx", "github"}
 _MAX_CONCURRENCY = 3
 
+InstallScope = Literal["workspace", "personal"]
+
 
 class InstallSkillItem(BaseToolParams):
     """单条安装请求"""
 
+    scope: InstallScope = Field(
+        "workspace",
+        description=(
+            "<!--zh: 当前 skill 的安装范围。workspace=当前项目；personal=当前用户的 ~/.magic/skills 目录。"
+            "默认为 workspace。-->\n"
+            "Installation scope for this skill. "
+            "workspace installs into the current project; personal installs into the current user's ~/.magic/skills directory. "
+            "Defaults to workspace."
+        ),
+    )
     provider: str = Field(
         ...,
         description=(
@@ -78,8 +93,10 @@ class InstallSkillsParams(BaseToolParams):
     items: List[InstallSkillItem] = Field(
         ...,
         description=(
-            "<!--zh: 要安装/升级的 skill 列表，并发执行，各条独立成败，最多 10 条-->\n"
-            "List of skills to install/upgrade (max 10). Executed concurrently; each item succeeds or fails independently."
+            "<!--zh: 要安装/升级的 skill 列表，按安装范围分组并在组内并发执行，"
+            "各条独立成败，最多 10 条-->\n"
+            "List of skills to install/upgrade (max 10). Grouped by installation scope and executed "
+            "with bounded concurrency; each item succeeds or fails independently."
         ),
         min_length=1,
         max_length=10,
@@ -97,13 +114,14 @@ class InstallSkillsParams(BaseToolParams):
 
     @model_validator(mode="after")
     def _check_no_dup_ids(self) -> "InstallSkillsParams":
-        """同一批次不允许相同 (provider, id) 重复"""
+        """同一安装范围内不允许相同 (provider, id) 重复。"""
         seen: set[tuple] = set()
         for item in self.items:
-            key = (item.provider, item.id)
+            key = (item.scope, item.provider, item.id)
             if key in seen:
                 raise ValueError(
-                    f"批次中存在重复条目：provider='{item.provider}' id='{item.id}'"
+                    f"批次中存在重复条目：scope='{item.scope}' "
+                    f"provider='{item.provider}' id='{item.id}'"
                 )
             seen.add(key)
         return self
@@ -112,19 +130,21 @@ class InstallSkillsParams(BaseToolParams):
 @tool()
 class InstallSkillsTool(BaseTool[InstallSkillsParams]):
     """<!--zh
-    批量安装或升级 Skill 的唯一入口。安装或升级任何外部 Skill 前必须获得用户明确确认；用户直接要求安装或升级即视为已确认，仅由 Agent 从搜索结果中自行选中不算确认。system builtin 必须通过 read_skills 直接加载，不能传给本工具。
+    批量安装或升级 skill 的**唯一入口**。
     支持来源：my_library（我的技能库）、market（Magic 市场）、
     skillhub（外部社区）、clawhub（ClawHub 生态）、npx（npm 包）、github（GitHub 仓库）。
+    每条 item 可通过 scope=workspace 安装到当前项目，或通过 scope=personal 安装到个人目录。
     mode=install：同版本已存在时跳过；mode=upgrade：升级到最新或指定版本。
     各条独立成败，不因单条失败而中止整批。
     -->
     Batch install or upgrade Skills through the only supported installation entry point.
-    Obtain explicit user confirmation before installing or upgrading any external Skill.
-    A direct user request to install or upgrade counts as confirmation; an Agent selecting
-    a search result does not. Load system built-ins directly with read_skills and never pass
-    them to this tool. Supported sources: my_library, market, skillhub, clawhub, npx, and
-    github. mode=install skips an existing identical version; mode=upgrade updates to the
-    latest version. Items succeed or fail independently.
+    Obtain explicit user confirmation before installing or upgrading any external Skill. A direct
+    user request to install or upgrade counts as confirmation; an Agent selecting a search result
+    does not. Load system built-ins directly with read_skills and never pass them to this tool.
+    Supported sources: my_library, market, skillhub, clawhub, npx, and github. Each item may use
+    scope=workspace for the current project or scope=personal for the user's personal directory.
+    mode=install skips an existing identical version; mode=upgrade updates to the latest version.
+    Items succeed or fail independently; one failure does not abort the batch.
     """
 
     async def get_before_tool_call_friendly_action_and_remark(
@@ -137,11 +157,23 @@ class InstallSkillsTool(BaseTool[InstallSkillsParams]):
                 items = json.loads(items)
             except (json.JSONDecodeError, ValueError):
                 items = []
-        ids = [item.get("id", "") for item in items if isinstance(item, dict) and item.get("id")]
+        ids = [
+            item.get("id", "")
+            for item in items
+            if isinstance(item, dict) and item.get("id")
+        ]
         ids_str = "、".join(ids) if ids else ""
+        scope = _resolve_list_items_scope(items)
+
+        installing_key = "install_skills.installing"
+        if scope == "workspace":
+            installing_key = "install_skills.installing.workspace"
+        elif scope == "personal":
+            installing_key = "install_skills.installing.personal"
+
         return {
             "action": i18n.translate("install_skills", category="tool.actions"),
-            "remark": i18n.translate("install_skills.installing", category="tool.messages", ids=ids_str),
+            "remark": i18n.translate(installing_key, category="tool.messages", ids=ids_str),
             "tool_name": tool_name,
         }
 
@@ -149,31 +181,33 @@ class InstallSkillsTool(BaseTool[InstallSkillsParams]):
         # 对 my_library / market，尝试将 skill name 自动解析为 source_id
         _sdk_providers = {"my_library", "market"}
 
-        async def _maybe_resolve(provider: str, skill_id: str) -> str:
-            if provider in _sdk_providers:
-                return await self._resolve_source_id(provider, skill_id)
-            return skill_id
+        async def _maybe_resolve(item: InstallSkillItem) -> str:
+            """在当前条目的安装范围内解析 SDK provider 的 source_id。"""
+            if item.provider in _sdk_providers:
+                install_dir = _get_install_dir(item.scope)
+                return await self._resolve_source_id(item.provider, item.id, install_dir)
+            return item.id
 
         resolved_ids = await asyncio.gather(*[
-            _maybe_resolve(item.provider, item.id) for item in params.items
+            _maybe_resolve(item) for item in params.items
         ])
 
-        refs = [
-            SkillRef(
+        grouped_refs: dict[InstallScope, list[tuple[int, SkillRef]]] = {}
+        for index, (item, resolved_id) in enumerate(zip(params.items, resolved_ids)):
+            ref = SkillRef(
                 provider=item.provider,
                 id=resolved_id,
                 mode=item.mode,
             )
-            for item, resolved_id in zip(params.items, resolved_ids)
-        ]
+            grouped_refs.setdefault(item.scope, []).append((index, ref))
 
-        service = InstallService()
-        batch_result = await service.install_many(refs, max_concurrency=_MAX_CONCURRENCY)
+        batch_result = await self._install_refs_by_scope(grouped_refs)
 
         content = _format_batch_result(batch_result)
         ok = batch_result.failed_count == 0
         upgraded_count = sum(1 for r in batch_result.items if r.status == "upgraded")
         installed_count = sum(1 for r in batch_result.items if r.status == "installed")
+        resolved_scope = _resolve_scope_from_grouped(grouped_refs)
 
         return ToolResult(
             ok=ok,
@@ -183,10 +217,32 @@ class InstallSkillsTool(BaseTool[InstallSkillsParams]):
                 "failed_count": batch_result.failed_count,
                 "installed_count": installed_count,
                 "upgraded_count": upgraded_count,
+                "scope": resolved_scope,
                 # 供 get_tool_detail 展示用的 Markdown，与给模型的 XML 分离
                 "md_content": _format_batch_result_md(batch_result),
             },
         )
+
+    async def _install_refs_by_scope(
+        self,
+        grouped_refs: dict[InstallScope, list[tuple[int, SkillRef]]],
+    ) -> InstallBatchResult:
+        """按安装范围顺序执行各组，并按原始条目顺序合并安装结果。"""
+        results_by_index: dict[int, list[InstallResult]] = {}
+        for scope, indexed_refs in grouped_refs.items():
+            refs = [ref for _, ref in indexed_refs]
+            service = InstallService(target_dir=_get_install_dir(scope))
+            scoped_result = await service.install_many(refs, max_concurrency=_MAX_CONCURRENCY)
+            split_results = _split_install_results(refs, scoped_result.items)
+            for (original_index, _), item_results in zip(indexed_refs, split_results):
+                results_by_index[original_index] = item_results
+
+        ordered_results = [
+            result
+            for index in sorted(results_by_index)
+            for result in results_by_index.get(index, [])
+        ]
+        return InstallBatchResult(items=ordered_results)
 
     async def get_tool_detail(
         self,
@@ -209,21 +265,29 @@ class InstallSkillsTool(BaseTool[InstallSkillsParams]):
             ),
         )
 
-    async def _resolve_source_id(self, provider: str, skill_id: str) -> str:
+    async def _resolve_source_id(
+        self,
+        provider: str,
+        skill_id: str,
+        install_dir: Path | None = None,
+    ) -> str:
         """将 my_library / market 的 skill name 解析为 source_id。
 
         LLM 在 read_skills 时只能获取 skill name，而这两个 provider 的安装接口需要 source_id。
-        扫描已安装 skill 目录的 manifest，若找到 name 匹配且 provider 一致的条目，返回其 source_id；
+        扫描当前安装范围内的 manifest，若找到 name 匹配且 provider 一致的条目，返回其 source_id；
         否则原值返回（兼容 LLM 直接传入正确 source_id 的场景）。
         """
-        from app.core.skill_utils.constants import get_skillhub_install_dir
         from app.core.skill_utils.manifest import read_manifest
 
-        install_dir = get_skillhub_install_dir()
+        install_dir = install_dir or get_workspace_skills_dir()
         try:
-            entries = await asyncio.to_thread(lambda: [
-                e for e in install_dir.iterdir() if e.is_dir()
-            ] if install_dir.exists() else [])
+            if not await async_exists(install_dir):
+                return skill_id
+
+            entries = []
+            for entry in await async_iterdir(install_dir):
+                if await async_is_dir(entry):
+                    entries.append(entry)
             for entry in entries:
                 manifest = await asyncio.to_thread(read_manifest, entry)
                 if (
@@ -247,15 +311,87 @@ class InstallSkillsTool(BaseTool[InstallSkillsParams]):
         failed = extra.get("failed_count", 0)
         installed = extra.get("installed_count", 0)
         upgraded = extra.get("upgraded_count", 0)
+        scope = extra.get("scope")
+        suffix = f".{scope}" if scope in ("workspace", "personal") else ""
         if failed == 0:
             if upgraded > 0 and installed == 0:
-                return i18n.translate("install_skills.upgraded", category="tool.messages", count=upgraded)
+                return i18n.translate(f"install_skills.upgraded{suffix}", category="tool.messages", count=upgraded)
             if upgraded > 0 and installed > 0:
-                return i18n.translate("install_skills.mixed_success", category="tool.messages", installed=installed, upgraded=upgraded)
-            return i18n.translate("install_skills.success", category="tool.messages", count=ok)
+                return i18n.translate(f"install_skills.mixed_success{suffix}", category="tool.messages", installed=installed, upgraded=upgraded)
+            return i18n.translate(f"install_skills.success{suffix}", category="tool.messages", count=ok)
         if ok == 0:
             return i18n.translate("install_skills.failed", category="tool.messages", count=failed)
-        return i18n.translate("install_skills.partial", category="tool.messages", ok=ok, failed=failed)
+        return i18n.translate(f"install_skills.partial{suffix}", category="tool.messages", ok=ok, failed=failed)
+
+
+def _get_install_dir(scope: InstallScope) -> Path:
+    """根据安装范围返回对应的 Skill 根目录。"""
+    if scope == "personal":
+        return get_personal_skills_dir()
+    return get_workspace_skills_dir()
+
+
+def _resolve_list_items_scope(items: List[Any]) -> Optional[str]:
+    """解析安装列表的 scope；统一时返回 scope 值，混合或缺失时返回 None。"""
+    scopes: set[str] = set()
+    for item in items:
+        if isinstance(item, dict):
+            scopes.add(item.get("scope", "workspace"))
+    if len(scopes) == 1:
+        return scopes.pop()
+    return None
+
+
+def _resolve_scope_from_grouped(
+    grouped_refs: Dict[InstallScope, List[tuple[int, "SkillRef"]]],
+) -> Optional[str]:
+    """解析分组后的安装结果 scope；统一时返回 scope 值，混合时返回 None。"""
+    if len(grouped_refs) == 1:
+        return next(iter(grouped_refs))
+    return None
+
+
+def _result_matches_ref(result: InstallResult, ref: SkillRef) -> bool:
+    """判断安装结果是否属于指定的 Skill 引用。"""
+    return (
+        result.provider == ref.provider
+        and result.skill_id == ref.id
+        and result.mode == ref.mode
+    )
+
+
+def _split_install_results(
+    refs: list[SkillRef],
+    results: list[InstallResult],
+) -> list[list[InstallResult]]:
+    """按输入引用拆分扁平安装结果，支持单个引用产生多个 Skill 结果。"""
+    if len(refs) == len(results) and all(
+        _result_matches_ref(result, ref) for ref, result in zip(refs, results)
+    ):
+        return [[result] for result in results]
+
+    split_results: list[list[InstallResult]] = []
+    cursor = 0
+    for ref in refs:
+        item_results: list[InstallResult] = []
+        while cursor < len(results) and _result_matches_ref(results[cursor], ref):
+            item_results.append(results[cursor])
+            cursor += 1
+        split_results.append(item_results)
+
+    if cursor < len(results):
+        logger.warning("安装结果与输入引用顺序不一致，按引用重新归并剩余结果")
+        for result in results[cursor:]:
+            matched = False
+            for index, ref in enumerate(refs):
+                if _result_matches_ref(result, ref):
+                    split_results[index].append(result)
+                    matched = True
+                    break
+            if not matched and split_results:
+                split_results[-1].append(result)
+
+    return split_results
 
 
 def _format_batch_result(batch_result) -> str:

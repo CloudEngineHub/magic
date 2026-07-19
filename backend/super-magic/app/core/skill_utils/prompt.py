@@ -14,7 +14,11 @@ from agentlang.agent.syntax import SyntaxProcessor
 from agentlang.environment import Environment
 from app.utils.async_file_utils import async_exists, async_read_text, async_try_read_text
 from app.core.skill_utils.manager import GlobalSkillManager, get_global_skill_manager, find_skill
-from app.core.skill_utils.skill_directory_scan import discover_skills_in_directory, discover_skills_in_workspace
+from app.core.skill_utils.skill_directory_scan import (
+    discover_skills_in_directory,
+    discover_skills_in_personal,
+    discover_skills_in_workspace,
+)
 from app.core.skill_utils.skill_sources import get_agents_dir, get_system_skills_dir, get_skills_instructions_prompt_file, get_workspace_skills_dir, get_crew_skills_dir
 logger = get_logger(__name__)
 
@@ -35,9 +39,6 @@ def generate_skills_prompt(
     Returns:
         The complete skills prompt, or None when generation fails.
     """
-    if skills_config.is_empty():
-        return None
-
     try:
         def _run_in_thread():
             return asyncio.run(_do_generate(skills_config, agent_name))
@@ -57,6 +58,13 @@ async def _do_generate(
     agent_name: str,
 ) -> Optional[str]:
     """Load skills, build XML, and render the prompt in an isolated event loop."""
+    personal_skills = await discover_skills_in_personal()
+
+    # Personal Skills are an independent source. Keep the prompt when they exist even if
+    # the Agent frontmatter does not explicitly configure system, Crew, or workspace Skills.
+    if skills_config.is_empty() and not personal_skills:
+        return None
+
     if agent_name:
         GlobalSkillManager.set_current_agent_type(agent_name)
 
@@ -142,7 +150,14 @@ async def _do_generate(
             else:
                 logger.warning(f"Workspace skill not found: {entry.name}")
 
-    # ── 3a. Region filtering: hide international-platform skills in mainland environments. ──
+    # ── 3a. personal_skills: independent of workspace_skills config. ───────
+    for personal_skill in personal_skills:
+        if personal_skill.name not in loaded_names:
+            skills_metadata.append(personal_skill)
+            loaded_names.add(personal_skill.name)
+            logger.info(f"Scanned and appended personal skill: {personal_skill.name}")
+
+    # ── 3b. Region filtering: hide international-platform skills in mainland environments. ──
     region_filtered_names: list[str] = []
     if Environment.is_mainland():
         region_filtered_names = [s.name for s in skills_metadata if s.region == "international"]
@@ -150,7 +165,7 @@ async def _do_generate(
             skills_metadata = [s for s in skills_metadata if s.region != "international"]
             logger.info(f"Filtered {len(region_filtered_names)} international skills in mainland environment: {region_filtered_names}")
 
-    # ── 3b. Filter excluded_skills; applies only to system entries, not crew/workspace. ──
+    # ── 3c. Filter excluded_skills after all configured and personal sources are loaded. ──
     excluded_names = set(skills_config.excluded_skills)
     if excluded_names:
         before_names = {s.name for s in skills_metadata}
@@ -159,9 +174,10 @@ async def _do_generate(
         if actually_excluded:
             logger.info(f"Excluded {len(actually_excluded)} system skills: {actually_excluded}")
 
-    # ── 3c. Always mount compact-chat-history after exclusions so it remains visible. ──
+    # ── 3d. Always mount compact-chat-history after exclusions so it remains visible. ──
     _ALWAYS_MOUNT_SKILL = "compact-chat-history"
-    if _ALWAYS_MOUNT_SKILL not in loaded_names:
+    visible_names = {skill.name for skill in skills_metadata}
+    if _ALWAYS_MOUNT_SKILL not in visible_names:
         compact_skill = await skill_manager.get_skill(_ALWAYS_MOUNT_SKILL, search_path=system_skills_dir)
         if compact_skill:
             skills_metadata.append(compact_skill)
@@ -170,7 +186,7 @@ async def _do_generate(
         else:
             logger.warning(f"Always-mounted skill not found; skipping: {_ALWAYS_MOUNT_SKILL}")
 
-    # ── 3d. Load skills referenced by preload but not loaded from any source. ──────────────────────
+    # ── 3e. Load skills referenced by preload but not loaded from any source. ──────────────────────
     # Preloaded skills do not need duplicate system_skills declarations; this is the fallback load.
     for skill_name in preload_map:
         if skill_name in loaded_names:
@@ -293,7 +309,7 @@ async def _do_generate(
 
 async def _load_skill_from_path(name: str, path: Path) -> Optional[SkillMetadata]:
     """Load skill metadata from a custom directory that overrides default lookup paths."""
-    skills = await asyncio.to_thread(discover_skills_in_directory, path)
+    skills = await discover_skills_in_directory(path)
     for s in skills:
         if s.name == name:
             return s

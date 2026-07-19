@@ -41,6 +41,7 @@ use Dtyq\SuperMagic\Domain\SuperAgent\Event\ProjectForkEvent;
 use Dtyq\SuperMagic\Domain\SuperAgent\Repository\Facade\ProjectForkRepositoryInterface;
 use Dtyq\SuperMagic\Domain\SuperAgent\Repository\Facade\TaskFileRepositoryInterface;
 use Dtyq\SuperMagic\Domain\SuperAgent\Repository\Facade\TopicRepositoryInterface;
+use Dtyq\SuperMagic\Domain\SuperAgent\Service\AudioProjectDomainService;
 use Dtyq\SuperMagic\Domain\SuperAgent\Service\ProjectDomainService;
 use Dtyq\SuperMagic\Domain\SuperAgent\Service\ProjectMemberDomainService;
 use Dtyq\SuperMagic\Domain\SuperAgent\Service\TaskDomainService;
@@ -50,6 +51,7 @@ use Dtyq\SuperMagic\Domain\SuperAgent\Service\WorkspaceDomainService;
 use Dtyq\SuperMagic\ErrorCode\ShareErrorCode;
 use Dtyq\SuperMagic\ErrorCode\SuperAgentErrorCode;
 use Dtyq\SuperMagic\Infrastructure\Utils\AccessTokenUtil;
+use Dtyq\SuperMagic\Infrastructure\Utils\DateFormatUtil;
 use Dtyq\SuperMagic\Infrastructure\Utils\FileMetadataUtil;
 use Dtyq\SuperMagic\Infrastructure\Utils\FileTreeUtil;
 use Dtyq\SuperMagic\Infrastructure\Utils\PasswordCrypt;
@@ -114,6 +116,7 @@ class ResourceShareAppService extends AbstractShareAppService
         private readonly MagicDepartmentDomainService $magicDepartmentDomainService,
         private readonly MagicDepartmentUserDomainService $departmentUserDomainService,
         private readonly ChatAppService $chatAppService,
+        private readonly AudioProjectDomainService $audioProjectDomainService,
         private readonly Producer $producer,
         private readonly ResourceShareAccessLogDomainService $accessLogDomainService,
         private readonly ResourceShareCopyLogDomainService $copyLogDomainService,
@@ -610,6 +613,11 @@ class ResourceShareAppService extends AbstractShareAppService
             'default_open_file_id' => $shareEntity->getDefaultOpenFileId() !== null ? (string) $shareEntity->getDefaultOpenFileId() : null,
             'extra' => $extra,
             'share_project' => $shareEntity->isShareProject(),
+            'share_code' => $shareEntity->getShareCode(),
+            'created_at' => DateFormatUtil::formatExpireAt($shareEntity->getCreatedAt()),
+            'updated_at' => DateFormatUtil::formatExpireAt($shareEntity->getUpdatedAt()),
+            'expire_at' => DateFormatUtil::formatExpireAt($shareEntity->getExpireAt()),
+            'view_count' => $shareEntity->getViewCount(),
             'data' => $factory->getResourceContent(
                 $actualResourceId,
                 $shareEntity->getCreatedUid(),
@@ -1705,6 +1713,8 @@ class ResourceShareAppService extends AbstractShareAppService
             // 使用 toDtoWithPassword 返回包含密码的分享信息
             $item = $this->shareAssembler->toDtoWithPassword($shareEntity)->toArray();
             $item['id'] = (string) $shareEntity->getId(); // 添加 id 字段，用于查询 view_count
+            $item['created_at'] = DateFormatUtil::formatExpireAt($shareEntity->getCreatedAt());
+            $item['updated_at'] = DateFormatUtil::formatExpireAt($shareEntity->getUpdatedAt());
 
             // 添加 file_ids 字段
             $item['file_ids'] = $this->shareDomainService->getFileIdsForShareItem($shareEntity, $condition);
@@ -2938,6 +2948,14 @@ class ResourceShareAppService extends AbstractShareAppService
             $forkProjectEntity->setWorkDir($workDir);
             $this->projectDomainService->saveProjectEntity($forkProjectEntity);
 
+            // Copy audio extension data for audio projects. The audio_file_id is
+            // patched after async file migration builds the source-to-target map.
+            $this->audioProjectDomainService->copyAudioProjectForFork(
+                $sourceProjectId,
+                $forkProjectEntity->getId(),
+                $topicEntity->getId()
+            );
+
             // 发布异步文件迁移事件（新增：传递文件ID列表）
             $event = new ProjectForkEvent(
                 $sourceProjectId,
@@ -2955,7 +2973,10 @@ class ResourceShareAppService extends AbstractShareAppService
             Db::commit();
 
             // 返回复制结果
-            return CopyResourceFilesResponseDTO::fromEntity($forkProjectRecordEntity)->toArray();
+            $responseDto = CopyResourceFilesResponseDTO::fromEntity($forkProjectRecordEntity);
+            $responseDto->projectMode = $forkProjectEntity->getProjectMode();
+
+            return $responseDto->toArray();
         } catch (Throwable $e) {
             Db::rollBack();
             $this->logger->error('Copy resource files failed, error: ' . $e->getMessage());

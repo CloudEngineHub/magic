@@ -16,6 +16,7 @@ def _build_skills_dirs(agent_name: str) -> list[Path]:
         get_agents_workspace_skills_dir,
         get_crew_skills_dir,
         get_home_skills_dir,
+        get_personal_skills_dir,
         get_system_skills_dir,
         get_workspace_skills_dir,
     )
@@ -31,6 +32,7 @@ def _build_skills_dirs(agent_name: str) -> list[Path]:
     skills_dirs.extend(
         [
             get_workspace_skills_dir(),
+            get_personal_skills_dir(),
             get_agents_workspace_skills_dir(),
             get_home_skills_dir(),
         ]
@@ -41,7 +43,7 @@ def _build_skills_dirs(agent_name: str) -> list[Path]:
 class GlobalSkillManager:
     """全局 Skill 管理器（单例）
 
-    负责维护所有 skill 目录（system、crew、workspace）并创建 SkillManager 实例。
+    负责维护所有 skill 目录（system、crew、workspace、personal）并创建 SkillManager 实例。
     skills_dir_allowlist 属于 prompt 生成层的运行时过滤策略，不在此处存储。
     """
 

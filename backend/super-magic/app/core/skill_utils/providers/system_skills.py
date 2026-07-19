@@ -33,6 +33,7 @@ class _SystemSkill:
     local_path: Path
     name: str
     description: str
+    search_terms: tuple[str, ...] = ()
 
 
 class SystemSkillsProvider(SkillProvider):
@@ -69,6 +70,32 @@ class SystemSkillsProvider(SkillProvider):
             logger.warning(f"[system_skills] invalid current agent name: {e}")
             return None
 
+    def _get_local_skills_roots(self) -> list[Path]:
+        """Return local Skill roots in the same priority order used by read_skills."""
+
+        from app.core.skill_utils.skill_sources import (
+            get_agents_workspace_skills_dir,
+            get_home_skills_dir,
+            get_personal_skills_dir,
+            get_system_skills_dir,
+            get_workspace_skills_dir,
+        )
+
+        roots: list[Path] = []
+        crew_root = self._get_current_crew_skills_root()
+        if crew_root is not None:
+            roots.append(crew_root)
+        roots.extend(
+            [
+                get_system_skills_dir(),
+                get_workspace_skills_dir(),
+                get_personal_skills_dir(),
+                get_agents_workspace_skills_dir(),
+                get_home_skills_dir(),
+            ]
+        )
+        return roots
+
     async def _scan_dir(self, skills_dir: Path) -> list[_SystemSkill]:
         """Scan one skills directory and return skill metadata."""
         if not await async_exists(skills_dir):
@@ -95,12 +122,19 @@ class SystemSkillsProvider(SkillProvider):
                 continue
             try:
                 meta = await _loader.load_from_file(skill_md)
+                raw_metadata = meta.raw_metadata
+                search_terms = tuple(
+                    str(raw_metadata.get(key) or "").strip()
+                    for key in ("name-cn", "description-cn", "name_cn", "description_cn")
+                    if str(raw_metadata.get(key) or "").strip()
+                )
                 results.append(
                     _SystemSkill(
                         dir_name=entry.name,
                         local_path=local_path,
                         name=meta.name or entry.name,
                         description=meta.description or "",
+                        search_terms=search_terms,
                     )
                 )
             except Exception as e:
@@ -109,12 +143,10 @@ class SystemSkillsProvider(SkillProvider):
         return results
 
     async def _load_all(self) -> list[_SystemSkill]:
-        """扫描当前 Crew 和全局 builtin；同名时 Crew 优先。"""
+        """Scan all visible local roots and keep the first matching Skill by priority."""
         scanned: list[_SystemSkill] = []
-        crew_root = self._get_current_crew_skills_root()
-        if crew_root is not None:
-            scanned.extend(await self._scan_dir(crew_root))
-        scanned.extend(await self._scan_dir(self._get_skills_root()))
+        for skills_root in self._get_local_skills_roots():
+            scanned.extend(await self._scan_dir(skills_root))
 
         results: list[_SystemSkill] = []
         seen_ids: set[str] = set()
@@ -145,7 +177,7 @@ class SystemSkillsProvider(SkillProvider):
         normalized_keyword = keyword.casefold()
         return any(
             normalized_keyword in value.casefold()
-            for value in (skill.name, skill.description, skill.dir_name)
+            for value in (skill.name, skill.description, skill.dir_name, *skill.search_terms)
         )
 
     async def search(self, keyword: str, limit: int | None = 10) -> list[SkillCandidate]:
@@ -190,10 +222,8 @@ class SystemSkillsProvider(SkillProvider):
                     source_url=f"system://{skill_id}",
                 )
 
-        # Crew Skill 与 prompt/read_skills 保持相同的覆盖优先级。
-        crew_root = self._get_current_crew_skills_root()
-        if crew_root is not None:
-            candidate = crew_root / skill_id
+        for skills_root in self._get_local_skills_roots():
+            candidate = skills_root / skill_id
             if await async_exists(candidate):
                 return FetchedSkill(
                     local_path=candidate,
@@ -201,15 +231,9 @@ class SystemSkillsProvider(SkillProvider):
                     source_url=f"system://{skill_id}",
                 )
 
-        local_path = self._get_skills_root() / skill_id
-        if await async_exists(local_path):
-            return FetchedSkill(
-                local_path=local_path,
-                version="system",
-                source_url=f"system://{skill_id}",
-            )
-
-        raise FileNotFoundError(f"[system_skills] skill '{skill_id}' is not visible to the current Agent")
+        raise FileNotFoundError(
+            f"[system_skills] skill '{skill_id}' is not visible to the current Agent"
+        )
 
     async def resolve_latest(self, ref: SkillCandidate | str) -> str | None:
         return None

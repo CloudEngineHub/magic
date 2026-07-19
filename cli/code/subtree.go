@@ -3,26 +3,34 @@ package code
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"go.yaml.in/yaml/v3"
 )
 
 type SubtreeSplit struct {
-	Prefix   string
-	DestPath string
+	Prefix string `yaml:"prefix"`
+
+	DestURL string `yaml:"destURL"`
+	Branch  string `yaml:"branch"`
+	// DestBranch string
 }
 
-type subtreeSpliter interface {
+func tempBranchName(prefix string) string {
+	return "mgaicrew-cli/" + prefix +
+		"-" + time.Now().Format("20060102150405.000000000")
+}
+
+type SubtreeSpliter interface {
 	Split(ctx context.Context, code *Code, subtreeSplit SubtreeSplit, force bool) error
 }
 
 type subtreeKind string
 
-type dummySubtreeSpliter struct {
-	Kind subtreeKind `yaml:"kind"`
-}
-
-func newSubtreeSpliter(node yaml.Node) (subtreeSpliter, error) {
+func NewSubtreeSpliter(node yaml.Node) (SubtreeSpliter, error) {
+	type dummySubtreeSpliter struct {
+		Kind subtreeKind `yaml:"kind"`
+	}
 	dummyCfg := dummySubtreeSpliter{}
 	err := node.Decode(&dummyCfg)
 	if err != nil {
@@ -30,6 +38,10 @@ func newSubtreeSpliter(node yaml.Node) (subtreeSpliter, error) {
 	}
 
 	switch dummyCfg.Kind {
+	case subtreeKindCmd:
+		return newSubtreeSpliterCmd(node)
+	case subtreeKindLite:
+		return newSubtreeSpliterLite(node)
 	default:
 		return nil, fmt.Errorf("unknown subtree spliter kind: %s", dummyCfg.Kind)
 	}

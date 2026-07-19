@@ -7,6 +7,7 @@ declare(strict_types=1);
 
 namespace Dtyq\SuperMagic\Domain\Skill\Service;
 
+use App\Domain\Contact\Entity\ValueObject\DataIsolation;
 use App\Domain\File\Repository\Persistence\Facade\CloudFileRepositoryInterface;
 use App\Infrastructure\Core\Exception\ExceptionBuilder;
 use App\Infrastructure\Core\ValueObject\Page;
@@ -30,7 +31,6 @@ use Dtyq\SuperMagic\Infrastructure\ExternalAPI\SandboxOS\Workspace\Request\Expor
 use Dtyq\SuperMagic\Infrastructure\ExternalAPI\SandboxOS\Workspace\Request\ImportWorkspaceRequest;
 use Dtyq\SuperMagic\Infrastructure\ExternalAPI\SandboxOS\Workspace\WorkspaceExporterInterface;
 use Dtyq\SuperMagic\Infrastructure\ExternalAPI\SandboxOS\Workspace\WorkspaceImporterInterface;
-use Dtyq\SuperMagic\Infrastructure\Utils\WorkDirectoryUtil;
 use Hyperf\DbConnection\Annotation\Transactional;
 use Hyperf\DbConnection\Db;
 use Throwable;
@@ -123,30 +123,42 @@ class SkillDomainService
     }
 
     /**
-     * Export agent workspace from sandbox to object storage.
+     * Export skill workspace from sandbox to private object storage.
      *
-     * @param SkillDataIsolation $dataIsolation Data isolation context
-     * @param string $code Agent code, e.g. "SMA-xxx"
-     * @param int $projectId Associated project ID
-     * @param string $fullWorkdir Full working directory path on object storage
      * @return array{file_key: string, metadata: array} Export result containing file_key and metadata
      */
-    public function exportAgentFromSandbox(SkillDataIsolation $dataIsolation, string $code, int $projectId, string $fullWorkdir): array
-    {
-        // Build sandbox ID (same strategy as file converter)
-        $sandboxId = WorkDirectoryUtil::generateUniqueCodeFromSnowflakeId($projectId . '_custom_agent');
-
-        // Build upload_config: STS credentials for private bucket, matches sandbox API contract
+    public function exportSkillFromSandbox(
+        SkillDataIsolation $dataIsolation,
+        string $code,
+        string $sandboxId,
+        string $sourcePath,
+        string $archiveRoot,
+        string $fileName
+    ): array {
         $uploadConfig = $this->cloudFileRepository->getStsTemporaryCredential(
             $dataIsolation->getCurrentOrganizationCode(),
             StorageBucketType::Private,
-            '/skill_export',
+            'skills/' . $code,
             options: ['internal_endpoint' => true]
         );
 
-        // Call sandbox workspace export API via proxy request
-        $request = new ExportWorkspaceRequest(ProjectMode::SKILL_CREATOR->value, $code, $uploadConfig);
-        $response = $this->workspaceExporter->export($sandboxId, $request);
+        $request = new ExportWorkspaceRequest(
+            ProjectMode::SKILL_CREATOR->value,
+            $code,
+            $uploadConfig,
+            $sourcePath,
+            $archiveRoot,
+            $fileName
+        );
+        // SkillDataIsolation is a BaseDataIsolation derivative and does NOT
+        // implement the Contact-side DataIsolation contract used by the
+        // sandbox gateway. Adapt it to a Contact\DataIsolation here so the
+        // export path can stamp & forward the per-user token uniformly.
+        $contactDataIsolation = DataIsolation::create(
+            $dataIsolation->getCurrentOrganizationCode(),
+            $dataIsolation->getCurrentUserId()
+        );
+        $response = $this->workspaceExporter->export($contactDataIsolation, $sandboxId, $request);
 
         if (! $response->isSuccess()) {
             ExceptionBuilder::throw(SuperMagicErrorCode::OperationFailed, 'super_magic.skill.export_failed');
@@ -167,10 +179,26 @@ class SkillDomainService
         string $fileUrl,
         string $targetDir = ''
     ): array {
-        $this->sandboxGateway->setUserContext($dataIsolation->getCurrentUserId(), $dataIsolation->getCurrentOrganizationCode());
+        // Per-call user identity flows through DataIsolation. Previously
+        // this called setUserContext() on the sandbox-gateway instance
+        // owned by THIS service, but the actual downstream gateway call
+        // happens inside WorkspaceImporterService which has a SEPARATE
+        // gateway instance, so the prior call was a no-op (real bug).
+        // We now plumb DataIsolation all the way through.
+        //
+        // SkillDataIsolation is the Skill-domain isolation VO (a
+        // BaseDataIsolation derivative) and does NOT implement the
+        // Contact-side DataIsolation contract used by the sandbox
+        // gateway. Adapt it to a Contact\DataIsolation here, preserving
+        // the previous wire format: no User-Authorization on the import
+        // path (token stays null).
+        $contactDataIsolation = DataIsolation::create(
+            $dataIsolation->getCurrentOrganizationCode(),
+            $dataIsolation->getCurrentUserId()
+        );
 
         $request = new ImportWorkspaceRequest($fileUrl, $targetDir);
-        $response = $this->workspaceImporter->import($sandboxId, $request);
+        $response = $this->workspaceImporter->import($contactDataIsolation, $sandboxId, $request);
 
         if (! $response->isSuccess()) {
             ExceptionBuilder::throw(SuperMagicErrorCode::OperationFailed, $response->getMessage());

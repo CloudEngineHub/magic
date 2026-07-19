@@ -82,9 +82,18 @@ function NodeContent(props: WithNodeProps) {
 		enableCopyMessage,
 	})
 
+	const printNode = () => {
+		try {
+			/** keep-console */
+			console.log(JSON.parse(JSON.stringify(props?.node)))
+		} catch (error) {
+			console.error(error)
+		}
+	}
+
 	if (["rich_text"].includes(props?.node?.type)) {
 		return (
-			<div className={entryClassName} style={entryStyle}>
+			<div className={entryClassName} style={entryStyle} onClick={printNode}>
 				<RichText {...props} />
 			</div>
 		)
@@ -93,7 +102,11 @@ function NodeContent(props: WithNodeProps) {
 	if (!node?.type) {
 		return (
 			<>
-				<div className={cn(entryClassName, "group relative")} style={entryStyle}>
+				<div
+					className={cn(entryClassName, "group relative")}
+					style={entryStyle}
+					onClick={printNode}
+				>
 					<MessageNode
 						{...props}
 						onMouseEnter={handleMouseEnter}
@@ -108,7 +121,11 @@ function NodeContent(props: WithNodeProps) {
 
 	return (
 		<>
-			<div className={cn(entryClassName, "group relative")} style={entryStyle}>
+			<div
+				className={cn(entryClassName, "group relative")}
+				style={entryStyle}
+				onClick={printNode}
+			>
 				<AssistantNode
 					{...props}
 					onMouseEnter={handleMouseEnter}

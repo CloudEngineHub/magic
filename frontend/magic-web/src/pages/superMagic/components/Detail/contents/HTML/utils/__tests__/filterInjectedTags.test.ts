@@ -2,6 +2,27 @@ import { describe, expect, it } from "vitest"
 import { filterInjectedTags } from "../index"
 
 describe("filterInjectedTags", () => {
+	it("should remove only the root html XHTML namespace when saving content", () => {
+		const html = `
+			<!DOCTYPE html>
+			<html xmlns="http://www.w3.org/1999/xhtml" lang="zh">
+				<body>
+					<svg xmlns="http://www.w3.org/2000/svg">
+						<foreignObject width="100" height="50">
+							<div xmlns="http://www.w3.org/1999/xhtml">sample</div>
+						</foreignObject>
+					</svg>
+				</body>
+			</html>
+		`
+
+		const result = filterInjectedTags(html, new Map())
+
+		expect(result).toContain('<html lang="zh">')
+		expect(result).not.toContain('<html xmlns="http://www.w3.org/1999/xhtml"')
+		expect(result).toContain('<div xmlns="http://www.w3.org/1999/xhtml">sample</div>')
+	})
+
 	it("should restore original relative path for inline background-image", () => {
 		const html = `
 			<!DOCTYPE html>

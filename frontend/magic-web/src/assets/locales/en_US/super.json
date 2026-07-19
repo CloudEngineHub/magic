@@ -217,6 +217,7 @@
 		"validation": {
 			"incomplete": "Please complete this question",
 			"multiSelectRange": "Select at least {{min}} item(s) and at most {{max}} item(s)",
+			"required": "This field is required",
 			"unlimited": "unlimited"
 		}
 	},
@@ -870,6 +871,19 @@
 				"unknownError": "Unknown error",
 				"untitledPost": "Untitled post"
 			},
+			"coverGeneration": {
+				"prompt": {
+					"heroCover": "21:9 horizontal cover (heroCover)",
+					"instruction": "Read post.json and the article HTML first. Generate only the requested missing covers with generate_image and keep their visual language consistent with the article. Save them under the current post assets folder and update the matching heroCover or thumbnailCover path in post.json. Use 21:9 for heroCover and 1:1 for thumbnailCover. Preserve every existing cover that was not requested.",
+					"metadata": "Title: {{title}}\nGenerate: {{coverTypes}}",
+					"opening": "Load and execute the self-media-composer Skill to generate missing WeChat cover images for {{mention}}.",
+					"thumbnailCover": "1:1 square cover (thumbnailCover)",
+					"topicName": "[Generate covers] {{title}}"
+				},
+				"startFailed": "Failed to start cover generation",
+				"startFailedWithReason": "Failed to start cover generation: {{reason}}",
+				"started": "Cover generation task created"
+			},
 			"edit": {
 				"addArticleFileToChat": "Add article file to input",
 				"addCurrentPageToChat": "Add this card to chat",
@@ -943,11 +957,20 @@
 					"copySuccess": "HTML copied",
 					"coverDescription": "Stitch the square cover and horizontal cover into one image for WeChat Official Account assets.",
 					"coverTitle": "Cover image",
+					"emptyDescription": "Generate a 1:1 square cover and a 21:9 horizontal cover from the article title and body.",
+					"emptyTitle": "No cover images yet",
 					"exportCover": "Export cover",
+					"generateBoth": "Generate covers",
+					"generateHorizontal": "Generate horizontal cover",
+					"generateSquare": "Generate square cover",
+					"generating": "Creating task...",
 					"horizontalCover": "Horizontal cover",
 					"htmlCopied": "Copied",
 					"htmlDescription": "Copy the processed article HTML and paste it into the WeChat Official Account editor.",
 					"htmlTitle": "WeChat HTML",
+					"missingHorizontalTitle": "21:9 horizontal cover missing",
+					"missingSquareTitle": "1:1 square cover missing",
+					"partialDescription": "Generate the missing image to export the complete cover composition.",
 					"squareCover": "Square cover"
 				}
 			},
@@ -2517,6 +2540,13 @@
 		"exitEdit": "Exit Edit",
 		"fetchFailed": "Failed to fetch queue list",
 		"missingInfo": "Project or topic information is missing",
+		"mobile": {
+			"collapse": "Collapse queue",
+			"count": "{{count}} items",
+			"emptyContent": "⋯",
+			"expand": "Expand queue",
+			"title": "Queued"
+		},
 		"operationInProgress": "This message is being processed, please try again later",
 		"removeFromQueue": "Remove from queue",
 		"sendFailed": "Failed to send message",
@@ -2527,13 +2557,6 @@
 		"taskPending": "Pending",
 		"taskProcessing": "Processing",
 		"title": "Task Queue",
-		"mobile": {
-			"collapse": "Collapse queue",
-			"count": "{{count}} items",
-			"emptyContent": "⋯",
-			"expand": "Expand queue",
-			"title": "Queued"
-		},
 		"updateFailed": "Failed to update queue message",
 		"updateSuccess": "Queue message updated successfully"
 	},
@@ -3202,6 +3225,9 @@
 		"createFolderNamePlaceholder": "Enter folder name",
 		"createSection": "Create document",
 		"deleteConfirm": {
+			"canvasContentLossWarning": "This operation will delete data or resources required by the canvas content. Some canvas content may disappear.",
+			"canvasMixedWarning": "This operation affects the canvas project entry file and data or resources required by the canvas content. The canvas may fail to open or lose visible content.",
+			"canvasOpenFailureWarning": "This operation will delete the canvas project entry file. The canvas may fail to open.",
 			"emptyLabel": "Empty folder",
 			"fileCount": "{{count}} files",
 			"intro": "Permanently delete the following {{count}} items:",
@@ -3275,6 +3301,9 @@
 		"defaultNameOrganization": "Organization Share",
 		"defaultNamePassword": "Password Link",
 		"defaultNamePublic": "Public Link",
+		"defaultOpenFileDescription": "Choose the file that opens by default after visiting the link",
+		"defaultOpenFileLabel": "Default open file",
+		"defaultOpenFileSearchPlaceholder": "Search files",
 		"deleteConfirmDescription": "People with this link will no longer be able to access the share after it is canceled.",
 		"deleteConfirmMessage": "Cancel \"{{name}}\"? People with this link will no longer be able to access the share.",
 		"deleteConfirmTitle": "Cancel shared link",
@@ -3832,32 +3861,6 @@
 		},
 		"title": "Recycle Bin"
 	},
-	"saasKK": {
-		"bottomHint": "If you still need to use the current service, you can temporarily close this window.",
-		"closeButton": "Close Temporarily",
-		"closeGuide": "Close",
-		"copyFailed": "Copy failed",
-		"copySuccess": "Copied successfully",
-		"deployCodeGuide": {
-			"step1Description": "Open 「https://www.letsmagic.cn/login」 in your browser, click 「Private Deployment」",
-			"step2Description": "Enter 「KK」 in the 「Private Deployment Code」",
-			"title": "Private Deployment Code Guide"
-		},
-		"dialogTitle": "$t(common:platform.name) Login Guide",
-		"dingtalkGuide": {
-			"description": "After opening 「DingTalk」, navigate to 「Workbench」 through the left sidebar, find 「$t(common:platform.name)」 in the workbench and open it.",
-			"title": "DingTalk Workbench Guide"
-		},
-		"loginMethod": "Login Methods",
-		"method1Desc": "Open and auto-login from 「DingTalk Workbench - All Staff」",
-		"method1Title": "Method 1: DingTalk Workbench",
-		"method2Desc": "Copy the link and open it in your browser",
-		"method2Title": "Method 2: Login via URL",
-		"method3Desc": "Enter \"KK\" in the 「Private Deployment」 configuration on the login page",
-		"method3Title": "Method 3: Private Deployment Code",
-		"viewGuide": "View Guide",
-		"warningMessage": "This SaaS environment is only for 「KK Group」 organization to use 「Sinan」 and other applications. To use $t(common:platform.name), please follow the methods below."
-	},
 	"scheduleTask": {
 		"clearSearch": "Clear search",
 		"configTask": "Task Config",
@@ -3940,6 +3943,7 @@
 		"workspace": "Workspace"
 	},
 	"share": {
+		"accessCount": "Visits",
 		"accessPassword": "Password",
 		"addMembers": "Add Members",
 		"advancedOptions": "Advanced Options",
@@ -3989,6 +3993,7 @@
 			"prefix": "Created by ",
 			"suffix": ""
 		},
+		"createdDate": "Created",
 		"days": "days",
 		"departmentOrMemberFileShare": "Specified members can access the file",
 		"departmentOrMemberFileShareDescription": "Specified members can access the file: {{fileName}}",
@@ -4065,6 +4070,7 @@
 		"login": "Login",
 		"manage": "Manage",
 		"manageShareLinks": "Manage Share Links",
+		"modifiedDate": "Modified",
 		"moreSettings": "Settings",
 		"multiFileShareName": "File Share_{{mainFileName}} and {{count}} files",
 		"name": "Name",
@@ -4099,10 +4105,10 @@
 		"projectFiles": "Project Files",
 		"projectShareGenerated": "Project Sharing",
 		"projectShareName": "Project Share_{{projectName}}",
-		"pureMode": "Pure Mode",
-		"pureModeDescription": "Display the entry file in fullscreen and hide the header",
 		"publicAccess": "Public Access",
 		"publicAccessDescription": "Anyone can access via link. Content may be indexed by search engines. Please be aware of data security",
+		"pureMode": "Pure Mode",
+		"pureModeDescription": "Display the entry file in fullscreen and hide the header",
 		"qrCode": "Share QR Code",
 		"recordingShareCreateTitle": "Share",
 		"recordingShareName": "Recording Share_{{projectName}}",
@@ -4230,6 +4236,7 @@
 		"fileShare": "Shared Files",
 		"fileShareDesc": "Manage all shared files",
 		"files": "files",
+		"filter": "Filter",
 		"filterStatus": {
 			"active": "Active",
 			"all": "All",
@@ -4712,6 +4719,15 @@
 		"batchOperation": "Batch Operation",
 		"batchOperations": "Batch Operations",
 		"cancelSelect": "Cancel",
+		"canvasOperationRisk": {
+			"moveContentLossContent": "This operation will move data or resources required by the canvas content. Some canvas content may disappear. Continue?",
+			"moveMixedContent": "This operation affects the canvas project entry file and data or resources required by the canvas content. The canvas may fail to open or lose visible content. Continue?",
+			"moveOpenFailureContent": "This operation will move the canvas project entry file. The canvas may fail to open. Continue?",
+			"renameContentLossContent": "This operation will rename data or resources required by the canvas content. Some canvas content may disappear. Continue?",
+			"renameMixedContent": "This operation affects the canvas project entry file and data or resources required by the canvas content. The canvas may fail to open or lose visible content. Continue?",
+			"renameOpenFailureContent": "This operation will rename the canvas project entry file. The canvas may fail to open. Continue?",
+			"title": "Canvas Project Risk"
+		},
 		"clawPlaygroundTags": {
 			"aboutYou": "About You",
 			"guidelines": "Guidelines",
@@ -4743,6 +4759,9 @@
 			"confirmBatchDelete": "Confirm Delete {{count}} Files?",
 			"confirmBatchDeleteWithFolders": "Selection includes folders, subfiles not selected will also be deleted",
 			"confirmBatchDeleteWithMagicSystemFolder": "Your selection includes the .magic system folder. After deletion, some capabilities may stop working and this cannot be undone. Proceed with caution.",
+			"copyPath": "Copy Path",
+			"copyPathFailed": "Failed to copy path",
+			"copyPathSuccess": "Path copied",
 			"copyTo": "Copy to",
 			"createAICardFailed": "Failed to create AI card project",
 			"createAICardSuccess": "AI card project created successfully",
@@ -4772,6 +4791,9 @@
 			"deleteBatchSubject": "{{count}} selected item(s)",
 			"deleteBatchTipMobile": "Delete Selection?",
 			"deleteBatchWithFoldersDescription": "will be permanently deleted, including folder contents and unselected subfiles. This action cannot be undone.",
+			"deleteCanvasContentLossRiskContent": "This operation will delete data or resources required by the canvas content. Some canvas content may disappear. Continue deleting?",
+			"deleteCanvasMixedRiskContent": "This operation affects the canvas project entry file and data or resources required by the canvas content. The canvas may fail to open or lose visible content. Continue deleting?",
+			"deleteCanvasOpenFailureRiskContent": "This operation will delete the canvas project entry file. The canvas may fail to open. Continue deleting?",
 			"deleteContent": "Confirm to delete {{name}} ?",
 			"deleteFileDescription": "will be permanently deleted. This action cannot be undone.",
 			"deleteFileFailed": "Failed to delete file",
@@ -4863,6 +4885,7 @@
 		"dataCorrectionDescription": "AI checks for errors in tables and data and corrects them",
 		"dataCorrectionPrompt": "Please check the data in the content through trusted data sources. The data must come from a reliable data source and be cross-verified through multiple sources. Ensure the data is accurate and reliable.",
 		"download": "Download",
+		"downloadAbort": "Cancel Download",
 		"downloadAllTitle": "Download All",
 		"downloadFailed": "Download failed",
 		"downloadSelected": "Download Selected ({{count}})",

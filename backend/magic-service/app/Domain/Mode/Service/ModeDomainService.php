@@ -34,11 +34,32 @@ class ModeDomainService
     }
 
     /**
+     * 过滤查询结果中对指定组织不可见的 Mode，当前用于无分页场景。
+     *
      * @return array{total: int, list: ModeEntity[]}
      */
     public function getModes(ModeDataIsolation $dataIsolation, ModeQuery $query, Page $page): array
     {
         return $this->modeRepository->queries($dataIsolation, $query, $page);
+    }
+
+    /**
+     * @return array{total: int, list: ModeEntity[]}
+     */
+    public function getOrganizationVisibleModes(
+        ModeDataIsolation $dataIsolation,
+        ModeQuery $query,
+        Page $page
+    ): array {
+        $result = $this->getModes($dataIsolation, $query, $page);
+        $organizationCode = $dataIsolation->getCurrentOrganizationCode();
+        $result['list'] = array_values(array_filter(
+            $result['list'],
+            static fn (ModeEntity $modeEntity): bool => $modeEntity->isOrganizationVisible($organizationCode)
+        ));
+        $result['total'] = count($result['list']);
+
+        return $result;
     }
 
     /**

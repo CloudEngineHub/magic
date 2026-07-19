@@ -1,5 +1,4 @@
 import { cloneDeep } from "lodash-es"
-import { toast } from "sonner"
 import type { DesignData } from "../types"
 import { MAGIC_PROJECT_VERSION_V2 } from "../utils/magicProjectCompression"
 import type {
@@ -62,7 +61,6 @@ interface LocalDraftBaseSnapshot {
 	baseRemoteData?: DesignData
 }
 
-const AUTO_MERGE_TOAST_ID = "design-auto-merge"
 const DESIGN_SAVE_GUARD_LOG_PREFIX = "[DesignSaveGuard]"
 
 function getTopLevelElementCount(data: DesignData | null | undefined): number {
@@ -508,13 +506,6 @@ export class DesignProjectManager implements DesignProjectManagerAPI {
 		)
 	}
 
-	private showAutoMergeToast(): void {
-		const t = this.options.getT?.()
-		toast.info(t?.("design.conflict.autoMerged") ?? "Canvas updates merged", {
-			id: AUTO_MERGE_TOAST_ID,
-		})
-	}
-
 	private hasUnresolvedElementConflicts(
 		conflict: DesignConflict | null = this.stateBag.getConflictState(),
 	): boolean {
@@ -952,7 +943,6 @@ export class DesignProjectManager implements DesignProjectManagerAPI {
 			if (!elementConflictRefresh.refreshed) {
 				this.persistLocalDraft(nextDesignData)
 				this.saveManager.scheduleAutoSave(undefined, { source: "remote-merge" })
-				this.showAutoMergeToast()
 			}
 			return true
 		} catch {
@@ -1278,7 +1268,6 @@ export class DesignProjectManager implements DesignProjectManagerAPI {
 			this.clearConflictState()
 			this.persistLocalDraft(mergedData, { immediate: true })
 			this.saveManager.scheduleAutoSave(undefined, { source: "draft-restore" })
-			this.showAutoMergeToast()
 			return true
 		}
 
@@ -1813,7 +1802,6 @@ export class DesignProjectManager implements DesignProjectManagerAPI {
 		})
 		if (didResolve) {
 			this.scheduleAutoSave({ source: "conflict-resolution" })
-			this.showAutoMergeToast()
 		}
 		return didResolve
 	}

@@ -587,6 +587,9 @@ class OpenMessageScheduleAppService extends AbstractAppService
         }
 
         $messageContent = $messageSchedule->getMessageContent();
+        $superAgentExtra = $this->extractSuperAgentExtra($messageContent);
+        $topicPattern = (string) ($superAgentExtra['topic_pattern'] ?? 'general');
+        $agentCode = (string) ($superAgentExtra['agent_code'] ?? '');
         if ($entity->hasModelIdInput()) {
             // 传了 model_id，查 DB 获取并验证新 model
             $model = $this->buildModelFromProviderModelId(
@@ -597,7 +600,12 @@ class OpenMessageScheduleAppService extends AbstractAppService
             if ($entity->hasMessageContentTextInput()) {
                 // 同时传了 message_content，用新 model 重建完整消息内容
                 $messageSchedule->setMessageContent(
-                    $this->buildFullMessageContent($entity->getMessageContentText() ?? '', $model)
+                    $this->buildFullMessageContent(
+                        $entity->getMessageContentText() ?? '',
+                        $model,
+                        $topicPattern,
+                        $agentCode
+                    )
                 );
                 return;
             }
@@ -617,7 +625,21 @@ class OpenMessageScheduleAppService extends AbstractAppService
         // 只传了 message_content，复用存量 model，不查 DB
         $existingModel = $messageContent['extra']['super_agent']['model'] ?? [];
         $messageSchedule->setMessageContent(
-            $this->buildFullMessageContent($entity->getMessageContentText() ?? '', $existingModel)
+            $this->buildFullMessageContent(
+                $entity->getMessageContentText() ?? '',
+                $existingModel,
+                $topicPattern,
+                $agentCode
+            )
         );
+    }
+
+    /**
+     * 从存量消息内容中提取 Super Agent 扩展配置。
+     */
+    private function extractSuperAgentExtra(array $messageContent): array
+    {
+        $extra = $messageContent['extra']['super_agent'] ?? [];
+        return is_array($extra) ? $extra : [];
     }
 }

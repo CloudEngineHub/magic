@@ -2,6 +2,7 @@ import Konva from "konva"
 import type { ToolOptions } from "./BaseTool"
 import { BaseTool } from "./BaseTool"
 import type { LayerElement } from "../../types"
+import { ElementTypeEnum } from "../../types"
 import { CropRenderer } from "../CropRenderer"
 import { ExtendRenderer } from "../ExtendRenderer"
 import {
@@ -13,6 +14,13 @@ import { getClientPointFromNativeEvent } from "../input"
 import { isMultiSelectEvent } from "../shortcuts/modifierUtils"
 
 const TOUCH_DIRECT_DRAG_DISTANCE = 8
+
+type ExternalImageDragNativeEvent = MouseEvent | PointerEvent
+
+/** 判断外部图片拖拽是否由 PointerEvent 启动，用于选择后续 window 监听类型 */
+function isPointerNativeEvent(event: ExternalImageDragNativeEvent): event is PointerEvent {
+	return "pointerId" in event
+}
 
 /**
  * 选择工具 - 提供框选功能
@@ -31,6 +39,16 @@ export class SelectionTool extends BaseTool {
 		pointerId?: number
 		pointerType?: CanvasPointerType
 		useWindowListeners: boolean
+	} | null = null
+	/** Alt + 鼠标左键把画布图片拖到插件窗口时的临时状态 */
+	private activeExternalImageDrag: {
+		originElementId: string
+		imageElementIds: string[]
+		lastClientX: number
+		lastClientY: number
+		disabledNodes: Array<{ node: Konva.Node; draggable: boolean }>
+		pointerId?: number
+		pointerType?: CanvasPointerType
 	} | null = null
 	private isViewportGestureActive = false
 	private inputUnsubscribers: Array<() => void> = []
@@ -61,6 +79,13 @@ export class SelectionTool extends BaseTool {
 		this.handleElementContextMenu = this.handleElementContextMenu.bind(this)
 		this.handlePendingDirectDragMove = this.handlePendingDirectDragMove.bind(this)
 		this.handlePendingDirectDragEnd = this.handlePendingDirectDragEnd.bind(this)
+		this.handleExternalImageDragMove = this.handleExternalImageDragMove.bind(this)
+		this.handleExternalImageDragEnd = this.handleExternalImageDragEnd.bind(this)
+		this.handleExternalImageDragPointerMove = this.handleExternalImageDragPointerMove.bind(this)
+		this.handleExternalImageDragPointerEnd = this.handleExternalImageDragPointerEnd.bind(this)
+		this.handleExternalImageDragPointerCancel =
+			this.handleExternalImageDragPointerCancel.bind(this)
+		this.handleExternalImageDragKeyDown = this.handleExternalImageDragKeyDown.bind(this)
 	}
 
 	/**
@@ -87,6 +112,8 @@ export class SelectionTool extends BaseTool {
 		this.clearToolSelectionRect()
 		this.stopEdgeScroll()
 		this.clearPendingDirectDrag()
+		// 工具被停用时要向插件侧发送取消结束，避免插件保留 hover/drop 状态。
+		this.endExternalImageDrag(undefined, { cancelled: true })
 
 		// 注意：不恢复 draggable，因为可能由其他工具控制
 	}
@@ -120,6 +147,8 @@ export class SelectionTool extends BaseTool {
 		window.removeEventListener("mouseup", this.handleWindowMouseUp)
 		window.removeEventListener("mousemove", this.handleWindowMouseMove)
 		this.clearPendingDirectDrag()
+		// 解除事件监听前统一收尾，保证 window 级拖拽监听不会泄漏。
+		this.endExternalImageDrag(undefined, { cancelled: true })
 	}
 
 	private handlePointerDown(input: CanvasPointerInput): void {
@@ -143,6 +172,8 @@ export class SelectionTool extends BaseTool {
 
 		if (input.activePointerCount > 1 || this.isViewportGestureInProgress()) {
 			this.clearPendingDirectDrag()
+			// 多指/视口手势接管时，外部图片拖拽不再可信，按取消处理。
+			this.endExternalImageDrag(input.nativeEvent, { cancelled: true })
 			this.cancelSelectionInteraction()
 			return
 		}
@@ -168,6 +199,8 @@ export class SelectionTool extends BaseTool {
 	private handlePointerCancel(): void {
 		if (!this.isActive) return
 		this.clearPendingDirectDrag()
+		// 浏览器或输入系统取消 pointer 时，同步通知插件侧退出拖拽态。
+		this.endExternalImageDrag(undefined, { cancelled: true })
 		this.cancelSelectionInteraction()
 	}
 
@@ -514,6 +547,18 @@ export class SelectionTool extends BaseTool {
 			return
 		}
 
+		// 检查是否点击了图片元素，检查是否向外拖拽图片元素
+		if (
+			elementId &&
+			this.tryStartExternalImageDrag(e.evt, elementId, {
+				cancelBubble: () => {
+					e.cancelBubble = true
+				},
+			})
+		) {
+			return
+		}
+
 		if (isValidElement || allowModifierDeselect) {
 			if (elementId) {
 				if (isMultiSelect) {
@@ -543,6 +588,20 @@ export class SelectionTool extends BaseTool {
 		// 命中多选代理矩形时，区分“元素区域拖拽”和“框内空白取消选中”
 		if (clickedNode.name() === "multi-selection-proxy") {
 			const pos = this.canvas.stage.getPointerPosition()
+			// 代理矩形自身不对应元素，需要按指针位置反查真正命中的已选元素。
+			const selectedElementId = pos
+				? pickSelectedElementIdAtStagePointer(this.canvas, pos)
+				: undefined
+			if (
+				selectedElementId &&
+				this.tryStartExternalImageDrag(e.evt, selectedElementId, {
+					cancelBubble: () => {
+						e.cancelBubble = true
+					},
+				})
+			) {
+				return
+			}
 			if (pos && this.isPointerInsideSelectedElementArea(pos)) {
 				return
 			}
@@ -680,6 +739,274 @@ export class SelectionTool extends BaseTool {
 		this.canvas.eventEmitter.emit({ type: "selection:end", data: undefined })
 		this.startPoint = null
 		this.isMultiSelectMode = false
+	}
+
+	/**
+	 * 尝试开始外部图片拖拽
+	 *
+	 * 入口只接受 Alt + 鼠标左键，避免和画布内正常移动/多选快捷键互相抢事件。
+	 * @param event - 鼠标/指针事件
+	 * @param originElementId - 拖拽起始元素 ID
+	 * @param options - 选项
+	 * @returns 是否成功开始拖拽
+	 */
+	private tryStartExternalImageDrag(
+		event: ExternalImageDragNativeEvent,
+		originElementId: string,
+		options?: { cancelBubble?: () => void },
+	): boolean {
+		if (!event.altKey || event.button !== 0 || this.canvas.readonly) {
+			return false
+		}
+
+		const originElement = this.canvas.elementManager.getElementData(originElementId)
+		if (originElement?.type !== ElementTypeEnum.Image || !originElement.src) {
+			return false
+		}
+
+		const imageElementIds = this.getExternalImageDragElementIds(originElementId)
+		if (imageElementIds.length === 0) {
+			return false
+		}
+
+		// 从未选中的图片发起拖拽时，同步选中它，让画布状态和拖拽对象一致。
+		if (!this.canvas.selectionManager.isSelected(originElementId)) {
+			this.canvas.selectionManager.replaceSelection([originElementId])
+		}
+
+		this.startExternalImageDrag(event, {
+			originElementId,
+			imageElementIds,
+		})
+		event.preventDefault()
+		options?.cancelBubble?.()
+		return true
+	}
+
+	/**
+	 * 获取外部图片拖拽目标元素 ID 列表
+	 *
+	 * 若拖拽起始元素在当前多选选区内，则尝试把选区内所有可导出的图片一起拖出；
+	 * 否则只导出拖拽起始元素。最终会过滤掉非图片、无 src 的图片和重复 ID。
+	 * @param originElementId - 拖拽起始元素 ID
+	 * @returns 可用于外部拖拽导出的图片元素 ID 列表
+	 */
+	private getExternalImageDragElementIds(originElementId: string): string[] {
+		const selectedIds = this.canvas.selectionManager.getSelectedIds()
+		const candidateIds =
+			selectedIds.length > 1 && selectedIds.includes(originElementId)
+				? selectedIds
+				: [originElementId]
+
+		const imageElementIds: string[] = []
+		const seen = new Set<string>()
+		for (const elementId of candidateIds) {
+			if (seen.has(elementId)) continue
+			const element = this.canvas.elementManager.getElementData(elementId)
+			if (element?.type !== ElementTypeEnum.Image || !element.src) continue
+			seen.add(elementId)
+			imageElementIds.push(elementId)
+		}
+		return imageElementIds
+	}
+
+	/**
+	 * 开始外部图片拖拽
+	 *
+	 * 这里不直接把文件传给插件，只广播 start/move/end 事件。
+	 * PluginPanel 会负责判断是否进入 iframe、生成拖拽预览和最终解析图片文件。
+	 * @param event - 鼠标/指针事件
+	 * @param options - 选项
+	 * @param options.originElementId - 拖拽起始元素 ID
+	 * @param options.imageElementIds - 可用于外部拖拽导出的图片元素 ID 列表
+	 */
+	private startExternalImageDrag(
+		event: ExternalImageDragNativeEvent,
+		options: { originElementId: string; imageElementIds: string[] },
+	): void {
+		this.endExternalImageDrag(undefined, { cancelled: true })
+		this.clearPendingDirectDrag()
+		this.cancelSelectionInteraction()
+
+		this.activeExternalImageDrag = {
+			originElementId: options.originElementId,
+			imageElementIds: options.imageElementIds,
+			lastClientX: event.clientX,
+			lastClientY: event.clientY,
+			// 外部拖拽期间禁用 Konva 自身拖拽，避免同一次鼠标动作同时移动画布元素。
+			disabledNodes: this.disableExternalImageDragNodes(options.imageElementIds),
+			pointerId: isPointerNativeEvent(event) ? event.pointerId : undefined,
+			pointerType: isPointerNativeEvent(event)
+				? event.pointerType === "pen" || event.pointerType === "touch"
+					? event.pointerType
+					: "mouse"
+				: "mouse",
+		}
+
+		const payload = this.getExternalImageDragPayload(event, false)
+		if (!payload) {
+			this.activeExternalImageDrag = null
+			return
+		}
+
+		this.canvas.eventEmitter.emit({
+			type: "image:external-drag:start",
+			data: payload,
+		})
+		this.addExternalImageDragWindowListeners(event)
+	}
+
+	/**
+	 * 注册外部图片拖拽期间的 window 监听。
+	 *
+	 * PointerEvent 启动时继续监听 pointer 系列事件，避免 pointerdown preventDefault 后
+	 * 浏览器不再派发兼容 mousemove/mouseup，导致插件面板收不到拖拽移动和释放。
+	 */
+	private addExternalImageDragWindowListeners(event: ExternalImageDragNativeEvent): void {
+		if (isPointerNativeEvent(event)) {
+			window.addEventListener("pointermove", this.handleExternalImageDragPointerMove)
+			window.addEventListener("pointerup", this.handleExternalImageDragPointerEnd)
+			window.addEventListener("pointercancel", this.handleExternalImageDragPointerCancel)
+		} else {
+			window.addEventListener("mousemove", this.handleExternalImageDragMove)
+			window.addEventListener("mouseup", this.handleExternalImageDragEnd)
+		}
+		window.addEventListener("keydown", this.handleExternalImageDragKeyDown)
+	}
+
+	/** 跟踪窗口级 mousemove/pointermove，并把当前指针位置同步给插件面板 */
+	private handleExternalImageDragMove(event: ExternalImageDragNativeEvent): void {
+		if (!this.activeExternalImageDrag) return
+		if (event.buttons === 0) {
+			this.endExternalImageDrag(event)
+			return
+		}
+
+		const payload = this.getExternalImageDragPayload(event, false)
+		if (!payload) return
+		event.preventDefault()
+		this.canvas.eventEmitter.emit({
+			type: "image:external-drag:move",
+			data: payload,
+		})
+	}
+
+	/** 鼠标释放时结束外部图片拖拽 */
+	private handleExternalImageDragEnd(event: MouseEvent): void {
+		this.endExternalImageDrag(event)
+	}
+
+	/** 校验当前 pointer 事件是否属于正在进行的外部图片拖拽 */
+	private isActiveExternalImagePointer(event: PointerEvent): boolean {
+		const pointerId = this.activeExternalImageDrag?.pointerId
+		return pointerId === undefined || pointerId === event.pointerId
+	}
+
+	/** PointerEvent 模式下跟踪窗口级 pointermove，避免 preventDefault 后丢失 mousemove。 */
+	private handleExternalImageDragPointerMove(event: PointerEvent): void {
+		if (!this.isActiveExternalImagePointer(event)) return
+		this.handleExternalImageDragMove(event)
+	}
+
+	/** PointerEvent 模式下结束外部图片拖拽 */
+	private handleExternalImageDragPointerEnd(event: PointerEvent): void {
+		if (!this.isActiveExternalImagePointer(event)) return
+		this.endExternalImageDrag(event)
+	}
+
+	/** PointerEvent 被浏览器取消时，按取消拖拽收尾 */
+	private handleExternalImageDragPointerCancel(event: PointerEvent): void {
+		if (!this.isActiveExternalImagePointer(event)) return
+		this.endExternalImageDrag(event, { cancelled: true })
+	}
+
+	/** Escape 取消外部图片拖拽，插件侧会收到 cancelled=true */
+	private handleExternalImageDragKeyDown(event: KeyboardEvent): void {
+		if (event.key !== "Escape") return
+		this.endExternalImageDrag(undefined, { cancelled: true })
+	}
+
+	/**
+	 * 结束外部图片拖拽
+	 *
+	 * 无论正常 drop 还是取消，都先恢复被临时禁用的 Konva draggable，
+	 * 再移除 window 监听，最后把 end 事件发给 PluginPanel 做落点判定。
+	 * @param event - 鼠标/指针事件
+	 * @param options - 选项
+	 * @param options.cancelled - 是否取消拖拽
+	 */
+	private endExternalImageDrag(
+		event?: ExternalImageDragNativeEvent | CanvasNativePointerEvent,
+		options?: { cancelled?: boolean },
+	): void {
+		if (!this.activeExternalImageDrag) return
+		const payload = this.getExternalImageDragPayload(event, Boolean(options?.cancelled))
+		this.restoreExternalImageDragNodes()
+		this.activeExternalImageDrag = null
+		window.removeEventListener("mousemove", this.handleExternalImageDragMove)
+		window.removeEventListener("mouseup", this.handleExternalImageDragEnd)
+		window.removeEventListener("pointermove", this.handleExternalImageDragPointerMove)
+		window.removeEventListener("pointerup", this.handleExternalImageDragPointerEnd)
+		window.removeEventListener("pointercancel", this.handleExternalImageDragPointerCancel)
+		window.removeEventListener("keydown", this.handleExternalImageDragKeyDown)
+		if (!payload) return
+		this.canvas.eventEmitter.emit({
+			type: "image:external-drag:end",
+			data: payload,
+		})
+	}
+
+	/**
+	 * 临时禁用参与外部拖拽的图片节点拖拽能力。
+	 *
+	 * 返回原始 draggable 状态，便于结束时精确恢复，而不是简单全部设回 true。
+	 */
+	private disableExternalImageDragNodes(
+		elementIds: string[],
+	): Array<{ node: Konva.Node; draggable: boolean }> {
+		return elementIds
+			.map((elementId) => this.canvas.elementManager.getElementInstance(elementId)?.getNode())
+			.filter((node): node is Konva.Node => Boolean(node))
+			.map((node) => {
+				const draggable = node.draggable()
+				node.draggable(false)
+				return { node, draggable }
+			})
+	}
+
+	/** 恢复外部拖拽开始前记录的 Konva draggable 状态 */
+	private restoreExternalImageDragNodes(): void {
+		const disabledNodes = this.activeExternalImageDrag?.disabledNodes ?? []
+		disabledNodes.forEach(({ node, draggable }) => {
+			node.draggable(draggable)
+		})
+	}
+
+	/**
+	 * 生成外部图片拖拽事件载荷（当前拖拽状态 + 事件坐标）。
+	 *
+	 * cancelled=true 且没有事件对象时，会沿用最后一次记录的窗口坐标，
+	 * 让插件侧仍能用一致的数据完成收尾。
+	 */
+	private getExternalImageDragPayload(
+		event: ExternalImageDragNativeEvent | CanvasNativePointerEvent | undefined,
+		cancelled: boolean,
+	) {
+		const active = this.activeExternalImageDrag
+		if (!active) return null
+
+		const client = event ? getClientPointFromNativeEvent(event) : null
+		if (client) {
+			active.lastClientX = client.x
+			active.lastClientY = client.y
+		}
+		return {
+			originElementId: active.originElementId,
+			imageElementIds: active.imageElementIds,
+			clientX: client?.x ?? active.lastClientX,
+			clientY: client?.y ?? active.lastClientY,
+			cancelled,
+		}
 	}
 
 	private armPendingDirectDrag(

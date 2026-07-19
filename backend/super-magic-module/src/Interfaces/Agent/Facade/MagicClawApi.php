@@ -269,9 +269,7 @@ class MagicClawApi extends AbstractApi
         // 权限校验：确保话题属于当前用户
         $this->topicAppService->getTopic($requestContext, (int) $topicId);
 
-        $dataIsolation = new DataIsolation();
-        $dataIsolation->setCurrentUserId($authorization->getId());
-        $dataIsolation->setCurrentOrganizationCode($authorization->getOrganizationCode());
+        $dataIsolation = DataIsolation::create($authorization->getOrganizationCode(), $authorization->getId());
         $dataIsolation->setThirdPartyOrganizationCode($authorization->getOrganizationCode());
 
         $sandboxId = $this->agentAppService->upgradeSandbox($dataIsolation, (int) $topicId);
@@ -297,9 +295,7 @@ class MagicClawApi extends AbstractApi
         // 权限校验：确保话题属于当前用户
         $this->topicAppService->getTopic($requestContext, (int) $topicId);
 
-        $dataIsolation = new DataIsolation();
-        $dataIsolation->setCurrentUserId($authorization->getId());
-        $dataIsolation->setCurrentOrganizationCode($authorization->getOrganizationCode());
+        $dataIsolation = DataIsolation::create($authorization->getOrganizationCode(), $authorization->getId());
         $dataIsolation->setThirdPartyOrganizationCode($authorization->getOrganizationCode());
 
         $sandboxId = $this->agentAppService->startSandbox($dataIsolation, (int) $topicId);
@@ -325,9 +321,7 @@ class MagicClawApi extends AbstractApi
         // 权限校验：确保话题属于当前用户
         $this->topicAppService->getTopic($requestContext, (int) $topicId);
 
-        $dataIsolation = new DataIsolation();
-        $dataIsolation->setCurrentUserId($authorization->getId());
-        $dataIsolation->setCurrentOrganizationCode($authorization->getOrganizationCode());
+        $dataIsolation = DataIsolation::create($authorization->getOrganizationCode(), $authorization->getId());
         $dataIsolation->setThirdPartyOrganizationCode($authorization->getOrganizationCode());
 
         $sandboxId = $this->agentAppService->restartSandbox($dataIsolation, (int) $topicId);

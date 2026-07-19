@@ -116,7 +116,10 @@ function AudioRecordingGroupFilter({
 		}
 		const matched = groups?.find((g) => g.id === currentGroupId)
 		const groupName = resolveRecordingGroupDisplayName(matched?.name, unnamedGroupLabel)
-		return matched ? `${groupName}（${matched.projectCount}）` : ""
+		// Fall back visually while the page layer clears stale persisted group ids after metadata loads.
+		return matched
+			? `${groupName}（${matched.projectCount}）`
+			: `${t("super:mobile.recordingEntry.groupSheet.all")}（${totalGroupCount}）`
 	}, [currentGroupId, groups, totalGroupCount, ungroupedCount, unnamedGroupLabel, t])
 
 	return (
