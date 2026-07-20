@@ -21,6 +21,7 @@ import {
 	createCrewEditPublishPanelData,
 	createCrewEditPublishPrefillDraft,
 	createInitialCrewEditPublishPanelData,
+	mapAgentPublishTargetTypeToPublishTo,
 } from "./publishPanelData"
 import { useFunctionPermission } from "@/hooks/useFunctionPermission"
 
@@ -100,6 +101,12 @@ function PublishingPanel() {
 			if (publishPrefill.publishView === "create") {
 				try {
 					const prefill = await crewService.getAgentPublishPrefill(crewCode)
+					const currentPublishTo = mapAgentPublishTargetTypeToPublishTo(
+						prefill.publish_target_type,
+					)
+					if (currentPublishTo) {
+						publishPanelStore.setCurrentPublishTo(currentPublishTo)
+					}
 					publishPanelStore.openCreateViewWithDraft(
 						createCrewEditPublishPrefillDraft({
 							prefill,
@@ -166,6 +173,12 @@ function PublishingPanel() {
 
 		try {
 			const prefill = await crewService.getAgentPublishPrefill(crewCode)
+			const currentPublishTo = mapAgentPublishTargetTypeToPublishTo(
+				prefill.publish_target_type,
+			)
+			if (currentPublishTo) {
+				publishPanelStore.setCurrentPublishTo(currentPublishTo)
+			}
 			publishPanelStore.openCreateViewWithDraft(
 				createCrewEditPublishPrefillDraft({
 					prefill,
