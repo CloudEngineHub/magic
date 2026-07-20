@@ -200,6 +200,20 @@ class TestErrorFirstSamplingProcessor:
 
         assert inner.ended == []
 
+    def test_openai_model_generation_span_with_legacy_content_is_dropped(self):
+        proc, inner = self._processor(ratio=1.0)
+        provider = _make_provider()
+        provider.add_span_processor(proc)
+        with provider.get_tracer("test").start_as_current_span("openai.chat (model)") as span:
+            span.set_attribute("langfuse.observation.type", "generation")
+            span.set_attribute("gen_ai.prompt.0.role", "user")
+            span.set_attribute("gen_ai.prompt.0.content", "hello")
+            span.set_attribute("gen_ai.completion.0.role", "assistant")
+            span.set_attribute("gen_ai.completion.0.content", "world")
+            span.set_attribute("gen_ai.usage.total_tokens", 42)
+
+        assert inner.ended == []
+
     def test_openai_span_without_generation_or_io_is_exported(self):
         proc, inner = self._processor(ratio=1.0)
         provider = _make_provider()
@@ -209,6 +223,16 @@ class TestErrorFirstSamplingProcessor:
 
         assert len(inner.ended) == 1
         assert inner.ended[0].name == "openai.chat"
+
+    def test_base_service_methods_are_not_automatically_traced(self):
+        from app.core.base_service import Base
+
+        class ExampleService(Base):
+            def execute(self):
+                return "ok"
+
+        assert ExampleService().execute() == "ok"
+        assert not hasattr(ExampleService.execute, "__wrapped__")
 
     def test_openai_observation_io_is_encoded_in_otlp_span_attributes(self):
         proc, inner = self._processor(ratio=1.0)

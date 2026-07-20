@@ -316,6 +316,9 @@ class _ErrorFirstSamplingProcessor(SpanProcessor):
             attributes.get(LangfuseAttributes.OBSERVATION_TYPE)
             or attributes.get(OpenTelemetryAttributes.OBSERVATION_TYPE)
         )
+        if name.startswith("openai.chat (") and observation_type == ObservationType.GENERATION.value:
+            return
+
         has_observation_io = any(
             attributes.get(key) not in (None, "", "null")
             for key in (
