@@ -18,13 +18,11 @@ from app.service.cli_status.common.runner import (
     CLI_STATUS_COMMAND_TIMEOUT_SECONDS,
     run_cli_command,
 )
+from app.service.runtime_cli_catalog import RUNTIME_MANAGED_CLIS
 
 logger = get_logger(__name__)
 
-TEAMSHARE_HORIZON_TEXT = (
-    "teamshare-cli is currently authenticated. It can connect to Teamshare/天书 capabilities. "
-    "To use these capabilities, call read_skills(['teamshare-cli'])."
-)
+TEAMSHARE_HORIZON_TEXT = RUNTIME_MANAGED_CLIS["teamshare-cli"].build_authenticated_horizon()
 
 
 class TeamshareCliStatusProbe(CliStatusProbe):
