@@ -2744,6 +2744,8 @@
 				"scopesInvalid": "permissions.scopes must be an array of strings."
 			},
 			"diagnosticsTitle": "Permission declaration needs attention",
+			"durationLabel": "Validity from now",
+			"durationSelect": "Adjust the authorization duration for {{scope}}",
 			"entry": "Entry file",
 			"expiresAt": "Valid until {{time}} ({{remaining}})",
 			"granted": "Granted",
@@ -2769,6 +2771,9 @@
 			"revokeSuccess": "Authorization revoked",
 			"title": "HTML App Authorization",
 			"unsupported": "Unsupported",
+			"updateDuration": "Update",
+			"updateDurationFailed": "Failed to update authorization duration",
+			"updateDurationSuccess": "Authorization duration updated",
 			"version": "App version"
 		},
 		"projectFileOperationConfirm": {

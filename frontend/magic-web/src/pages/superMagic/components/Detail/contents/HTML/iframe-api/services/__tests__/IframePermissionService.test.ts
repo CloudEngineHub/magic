@@ -368,6 +368,57 @@ describe("IframePermissionService", () => {
 		expect(grantStore.grants).toHaveLength(0)
 	})
 
+	it("updates an active grant duration from the current time", async () => {
+		let now = 1_000_000
+		const onGrantsChanged = vi.fn()
+		const { service, grantStore } = createService({
+			getNow: () => now,
+			onGrantsChanged,
+		})
+		await service.authorize("llm.use")
+		grantStore.grants.push({
+			...grantStore.grants[0],
+			projectId: "another-project",
+		})
+		now += 60_000
+
+		const snapshot = await service.updateGrantTtl("llm.use", 4 * 60 * 60 * 1000)
+
+		expect(grantStore.grants).toContainEqual(
+			expect.objectContaining({
+				scope: "llm.use",
+				grantedAt: now,
+				expiresAt: now + 4 * 60 * 60 * 1000,
+			}),
+		)
+		expect(
+			snapshot.permissions
+				.find((item) => item.scope === "llm.use")
+				?.ttlOptions.map((option) => option.ttlMs),
+		).toContain(4 * 60 * 60 * 1000)
+		expect(onGrantsChanged).toHaveBeenCalledTimes(2)
+		expect(grantStore.grants.some((grant) => grant.projectId === "another-project")).toBe(true)
+	})
+
+	it("rejects non-persistent durations when updating an active grant", async () => {
+		const { service, grantStore } = createService({
+			appConfigState: {
+				status: "loaded",
+				config: {
+					name: "Writer",
+					permissions: { scopes: ["fs.project.write"] },
+				},
+			},
+			confirmPermission: vi.fn(async () => ({ allowed: true, ttlMs: 5 * 60 * 1000 })),
+		})
+		await service.authorize("fs.project.write")
+
+		await expect(service.updateGrantTtl("fs.project.write", 0)).rejects.toThrow(
+			"Permission duration is not allowed",
+		)
+		expect(grantStore.grants[0].expiresAt).toBe(1_300_000)
+	})
+
 	it("revokes one scope or all scopes without removing other app grants", async () => {
 		const { service, grantStore } = createService({
 			appConfigState: {

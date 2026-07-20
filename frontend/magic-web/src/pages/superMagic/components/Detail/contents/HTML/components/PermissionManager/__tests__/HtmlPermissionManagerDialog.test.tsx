@@ -15,6 +15,11 @@ vi.mock("@/components/base/MagicToaster/utils", () => ({
 	default: { success: vi.fn(), error: vi.fn() },
 }))
 
+Object.defineProperty(Element.prototype, "scrollIntoView", {
+	configurable: true,
+	value: vi.fn(),
+})
+
 const activeGrant = {
 	mode: "manifest" as const,
 	userKey: "user-1",
@@ -44,16 +49,23 @@ function createSnapshot(active = true): HtmlPermissionSnapshot {
 				supported: true,
 				declarationStatus: "declared",
 				grant: active ? activeGrant : undefined,
+				ttlOptions: [
+					{ labelKey: "ttl.5m", ttlMs: 5 * 60 * 1000 },
+					{ labelKey: "ttl.15m", ttlMs: 15 * 60 * 1000 },
+					{ labelKey: "ttl.30m", ttlMs: 30 * 60 * 1000 },
+				],
 			},
 			{
 				scope: "project.message.write",
 				supported: true,
 				declarationStatus: "notDeclared",
+				ttlOptions: [],
 			},
 			{
 				scope: "future.scope",
 				supported: false,
 				declarationStatus: "unsupported",
+				ttlOptions: [],
 			},
 		],
 		diagnostics: [{ code: "scopeUnsupported", scope: "future.scope" }],
@@ -63,7 +75,10 @@ function createSnapshot(active = true): HtmlPermissionSnapshot {
 
 describe("HtmlPermissionManagerDialog", () => {
 	it("normalizes underscore locale tags before formatting dates", () => {
-		expect(() => createHtmlPermissionDateFormatter("zh_CN").format(Date.now())).not.toThrow()
+		const formatter = createHtmlPermissionDateFormatter("zh_CN")
+		expect(() => formatter.format(Date.now())).not.toThrow()
+		expect(formatter.resolvedOptions().timeZoneName).toBeUndefined()
+		expect(formatter.resolvedOptions().second).toBeUndefined()
 	})
 
 	it("renders app metadata, declarations, grants, and diagnostics", async () => {
@@ -74,6 +89,7 @@ describe("HtmlPermissionManagerDialog", () => {
 				permissionRevision={0}
 				getPermissionSnapshot={vi.fn().mockResolvedValue(createSnapshot())}
 				onRevoke={vi.fn().mockResolvedValue(createSnapshot(false))}
+				onUpdateTtl={vi.fn().mockResolvedValue(createSnapshot())}
 				onRevokeAll={vi.fn().mockResolvedValue(createSnapshot(false))}
 			/>,
 		)
@@ -82,6 +98,8 @@ describe("HtmlPermissionManagerDialog", () => {
 		expect(
 			screen.getByText("htmlEditor.permissionAuthorizationConfirm.scopes.llmUse"),
 		).toBeInTheDocument()
+		expect(screen.queryByText("htmlEditor.permissionManager.declared")).not.toBeInTheDocument()
+		expect(screen.queryByText("llm.use")).not.toBeInTheDocument()
 		expect(screen.getByText("future.scope")).toBeInTheDocument()
 		expect(
 			screen.getByText("htmlEditor.permissionManager.diagnostics.scopeUnsupported"),
@@ -107,6 +125,7 @@ describe("HtmlPermissionManagerDialog", () => {
 				permissionRevision={0}
 				getPermissionSnapshot={vi.fn().mockResolvedValue(createSnapshot())}
 				onRevoke={onRevoke}
+				onUpdateTtl={vi.fn().mockResolvedValue(createSnapshot())}
 				onRevokeAll={vi.fn().mockResolvedValue(createSnapshot(false))}
 			/>,
 		)
@@ -117,5 +136,35 @@ describe("HtmlPermissionManagerDialog", () => {
 
 		await waitFor(() => expect(onRevoke).toHaveBeenCalledWith("llm.use"))
 		expect(screen.getByText("htmlEditor.permissionManager.askWhenUsed")).toBeInTheDocument()
+	})
+
+	it("updates the selected authorization duration", async () => {
+		const onUpdateTtl = vi.fn().mockResolvedValue(createSnapshot())
+		render(
+			<HtmlPermissionManagerDialog
+				open
+				onOpenChange={vi.fn()}
+				permissionRevision={0}
+				getPermissionSnapshot={vi.fn().mockResolvedValue(createSnapshot())}
+				onRevoke={vi.fn().mockResolvedValue(createSnapshot(false))}
+				onUpdateTtl={onUpdateTtl}
+				onRevokeAll={vi.fn().mockResolvedValue(createSnapshot(false))}
+			/>,
+		)
+
+		const durationSelect = await screen.findByRole("combobox", {
+			name: "htmlEditor.permissionManager.durationSelect",
+		})
+		fireEvent.click(durationSelect)
+		fireEvent.click(
+			await screen.findByRole("option", {
+				name: "htmlEditor.permissionAuthorizationConfirm.ttl.30m",
+			}),
+		)
+		fireEvent.click(
+			screen.getByRole("button", { name: "htmlEditor.permissionManager.updateDuration" }),
+		)
+
+		await waitFor(() => expect(onUpdateTtl).toHaveBeenCalledWith("llm.use", 30 * 60 * 1000))
 	})
 })

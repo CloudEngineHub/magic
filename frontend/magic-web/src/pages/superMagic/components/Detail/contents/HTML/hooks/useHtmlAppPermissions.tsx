@@ -21,6 +21,7 @@ import {
 	type HtmlPermissionMissingDeclarationRequest,
 } from "../iframe-api/services/IframePermissionService"
 import type { HTMLAppConfig, HtmlPermissionScope } from "../iframe-api/types"
+import { hasManageableHtmlPermissionDeclarations } from "../iframe-api/services/htmlPermissionDeclarations"
 import { useHtmlPermissionI18n } from "./useHtmlPermissionI18n"
 
 interface HtmlAppFileItem {
@@ -77,6 +78,9 @@ export function useHtmlAppPermissions({
 	)
 
 	const htmlAppConfig = htmlAppConfigState.status === "loaded" ? htmlAppConfigState.config : null
+	const hasHtmlPermissionDeclarations =
+		htmlAppConfigState.status === "loaded" &&
+		hasManageableHtmlPermissionDeclarations(htmlAppConfigState.config)
 
 	const htmlAppInstance = useMemo(() => {
 		const cleanedEntryPath = (relativeFilePath || "").replace(/^\/+/, "")
@@ -280,6 +284,12 @@ export function useHtmlAppPermissions({
 		return htmlPermissionService.revoke(scope)
 	})
 
+	const updateHtmlPermissionTtl = useMemoizedFn(
+		async (scope: HtmlPermissionScope, ttlMs: number) => {
+			return htmlPermissionService.updateGrantTtl(scope, ttlMs)
+		},
+	)
+
 	const revokeAllHtmlPermissions = useMemoizedFn(async () => {
 		return htmlPermissionService.revokeAll()
 	})
@@ -355,11 +365,13 @@ export function useHtmlAppPermissions({
 	return {
 		htmlAppConfig,
 		htmlAppConfigState,
+		hasHtmlPermissionDeclarations,
 		htmlAppInstanceKey,
 		authorizeHtmlPermission,
 		authorizeHtmlPermissions,
 		getPermissionSnapshot,
 		revokeHtmlPermission,
+		updateHtmlPermissionTtl,
 		revokeAllHtmlPermissions,
 		permissionRevision: `${htmlAppInstanceKey}:${htmlAppConfigState.status}:${grantRevision}`,
 	}

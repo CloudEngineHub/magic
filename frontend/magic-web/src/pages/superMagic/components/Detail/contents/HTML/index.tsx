@@ -377,15 +377,19 @@ export default memo(function HTML(props: HTMLProps) {
 		enabled: !isDataAnalysis && !htmlIsDeleted,
 	})
 	const {
+		hasHtmlPermissionDeclarations,
 		getPermissionSnapshot,
 		revokeHtmlPermission,
+		updateHtmlPermissionTtl,
 		revokeAllHtmlPermissions,
 		permissionRevision,
 	} = htmlPermissionController
 
 	useEffect(() => {
-		if (isDataAnalysis || htmlIsDeleted) setPermissionManagerOpen(false)
-	}, [htmlIsDeleted, isDataAnalysis])
+		if (isDataAnalysis || htmlIsDeleted || !hasHtmlPermissionDeclarations) {
+			setPermissionManagerOpen(false)
+		}
+	}, [hasHtmlPermissionDeclarations, htmlIsDeleted, isDataAnalysis])
 
 	/**
 	 * 仅可视化预览：dashboard / audio / video 入口 HTML 走构建内 templates；dashboard 另换壳 CSS/JS。
@@ -1287,7 +1291,8 @@ export default memo(function HTML(props: HTMLProps) {
 					key: "html-permission-manager",
 					zone: "secondary",
 					before: "refresh",
-					visible: () => Boolean(!isDataAnalysis && !htmlIsDeleted),
+					visible: () =>
+						Boolean(!isDataAnalysis && !htmlIsDeleted && hasHtmlPermissionDeclarations),
 					render: (context) => (
 						<ActionButton
 							icon={<ShieldCheck size={16} />}
@@ -1348,6 +1353,7 @@ export default memo(function HTML(props: HTMLProps) {
 			isAppendPicking,
 			isDataAnalysis,
 			htmlIsDeleted,
+			hasHtmlPermissionDeclarations,
 			t,
 		],
 	)
@@ -1530,7 +1536,7 @@ export default memo(function HTML(props: HTMLProps) {
 					radius: 8,
 				}}
 			/>
-			{permissionManagerOpen ? (
+			{permissionManagerOpen && hasHtmlPermissionDeclarations ? (
 				<Suspense fallback={null}>
 					<HtmlPermissionManagerDialog
 						open={permissionManagerOpen}
@@ -1538,6 +1544,7 @@ export default memo(function HTML(props: HTMLProps) {
 						permissionRevision={permissionRevision}
 						getPermissionSnapshot={getPermissionSnapshot}
 						onRevoke={revokeHtmlPermission}
+						onUpdateTtl={updateHtmlPermissionTtl}
 						onRevokeAll={revokeAllHtmlPermissions}
 					/>
 				</Suspense>

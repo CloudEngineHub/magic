@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
-import { AlertCircle, Clock3, Loader2, ShieldCheck, ShieldOff, Trash2 } from "lucide-react"
+import { AlertCircle, Loader2, ShieldCheck, ShieldOff, Trash2 } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { Alert, AlertDescription, AlertTitle } from "@/components/shadcn-ui/alert"
 import { Badge } from "@/components/shadcn-ui/badge"
@@ -21,7 +21,7 @@ import type {
 	HtmlPermissionDiagnostic,
 	HtmlPermissionSnapshot,
 } from "../../iframe-api/services/IframePermissionService"
-import { useHtmlPermissionI18n } from "../../hooks/useHtmlPermissionI18n"
+import { HtmlPermissionItem } from "./HtmlPermissionItem"
 
 interface HtmlPermissionManagerDialogProps {
 	open: boolean
@@ -29,6 +29,7 @@ interface HtmlPermissionManagerDialogProps {
 	permissionRevision: string | number
 	getPermissionSnapshot: () => Promise<HtmlPermissionSnapshot>
 	onRevoke: (scope: HtmlPermissionScope) => Promise<HtmlPermissionSnapshot>
+	onUpdateTtl: (scope: HtmlPermissionScope, ttlMs: number) => Promise<HtmlPermissionSnapshot>
 	onRevokeAll: () => Promise<HtmlPermissionSnapshot>
 }
 
@@ -38,13 +39,14 @@ export default function HtmlPermissionManagerDialog({
 	permissionRevision,
 	getPermissionSnapshot,
 	onRevoke,
+	onUpdateTtl,
 	onRevokeAll,
 }: HtmlPermissionManagerDialogProps) {
 	const { t, i18n } = useTranslation("super")
-	const { getScopeLabel } = useHtmlPermissionI18n()
 	const [snapshot, setSnapshot] = useState<HtmlPermissionSnapshot | null>(null)
 	const [loading, setLoading] = useState(false)
 	const [revokingScope, setRevokingScope] = useState<string | null>(null)
+	const [updatingScope, setUpdatingScope] = useState<string | null>(null)
 	const [revokingAll, setRevokingAll] = useState(false)
 	const [now, setNow] = useState(() => Date.now())
 
@@ -98,6 +100,19 @@ export default function HtmlPermissionManagerDialog({
 		}
 	}
 
+	const handleUpdateTtl = async (scope: HtmlPermissionScope, ttlMs: number) => {
+		setUpdatingScope(scope)
+		try {
+			setSnapshot(await onUpdateTtl(scope, ttlMs))
+			setNow(Date.now())
+			magicToast.success(t("htmlEditor.permissionManager.updateDurationSuccess"))
+		} catch {
+			magicToast.error(t("htmlEditor.permissionManager.updateDurationFailed"))
+		} finally {
+			setUpdatingScope(null)
+		}
+	}
+
 	const handleRevokeAll = async () => {
 		setRevokingAll(true)
 		try {
@@ -117,19 +132,7 @@ export default function HtmlPermissionManagerDialog({
 			snapshot?.permissions.filter((item) => item.declarationStatus !== "notDeclared") ?? [],
 		[snapshot],
 	)
-	const formatRemaining = useCallback(
-		(remainingMs: number) => {
-			if (remainingMs <= 0) return t("htmlEditor.permissionManager.remainingExpired")
-			const minutes = Math.ceil(remainingMs / 60_000)
-			if (minutes <= 1) return t("htmlEditor.permissionManager.remainingLessThanMinute")
-			if (minutes < 60) {
-				return t("htmlEditor.permissionManager.remainingMinutes", { count: minutes })
-			}
-			const hours = Math.ceil(minutes / 60)
-			return t("htmlEditor.permissionManager.remainingHours", { count: hours })
-		},
-		[t],
-	)
+	const permissionMutationInProgress = Boolean(revokingScope || updatingScope || revokingAll)
 	const getDiagnosticText = useCallback(
 		(diagnostic: HtmlPermissionDiagnostic) => {
 			switch (diagnostic.code) {
@@ -266,97 +269,21 @@ export default function HtmlPermissionManagerDialog({
 											</div>
 										) : null}
 										{visiblePermissions.map((item, index) => {
-											const grant = item.grant
 											return (
-												<div key={item.scope}>
+												<div
+													key={`${item.scope}:${item.grant?.grantedAt || 0}:${item.grant?.expiresAt || 0}`}
+												>
 													{index > 0 ? <Separator /> : null}
-													<div className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
-														<div className="min-w-0 flex-1">
-															<div className="flex flex-wrap items-center gap-2">
-																<span className="text-sm font-medium">
-																	{item.supported
-																		? getScopeLabel(
-																				item.scope as HtmlPermissionScope,
-																			)
-																		: item.scope}
-																</span>
-																<DeclarationBadge
-																	status={item.declarationStatus}
-																/>
-																<GrantBadge
-																	granted={Boolean(grant)}
-																/>
-															</div>
-															{item.supported ? (
-																<code className="mt-1 block break-all text-xs text-muted-foreground">
-																	{item.scope}
-																</code>
-															) : null}
-															{grant ? (
-																<div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
-																	<span>
-																		{t(
-																			"htmlEditor.permissionManager.grantedAt",
-																			{
-																				time: dateFormatter.format(
-																					grant.grantedAt,
-																				),
-																			},
-																		)}
-																	</span>
-																	<span className="inline-flex items-center gap-1">
-																		<Clock3 size={12} />
-																		{t(
-																			"htmlEditor.permissionManager.expiresAt",
-																			{
-																				time: dateFormatter.format(
-																					grant.expiresAt,
-																				),
-																				remaining:
-																					formatRemaining(
-																						grant.expiresAt -
-																							now,
-																					),
-																			},
-																		)}
-																	</span>
-																</div>
-															) : item.supported ? (
-																<p className="mt-2 text-xs text-muted-foreground">
-																	{t(
-																		"htmlEditor.permissionManager.askWhenUsed",
-																	)}
-																</p>
-															) : null}
-														</div>
-														{grant && item.supported ? (
-															<Button
-																variant="outline"
-																size="sm"
-																className="shrink-0 gap-1.5"
-																disabled={
-																	revokingScope === item.scope
-																}
-																onClick={() =>
-																	void handleRevoke(
-																		item.scope as HtmlPermissionScope,
-																	)
-																}
-															>
-																{revokingScope === item.scope ? (
-																	<Loader2
-																		size={14}
-																		className="animate-spin"
-																	/>
-																) : (
-																	<ShieldOff size={14} />
-																)}
-																{t(
-																	"htmlEditor.permissionManager.revoke",
-																)}
-															</Button>
-														) : null}
-													</div>
+													<HtmlPermissionItem
+														item={item}
+														now={now}
+														dateFormatter={dateFormatter}
+														disabled={permissionMutationInProgress}
+														updating={updatingScope === item.scope}
+														revoking={revokingScope === item.scope}
+														onUpdateTtl={handleUpdateTtl}
+														onRevoke={handleRevoke}
+													/>
 												</div>
 											)
 										})}
@@ -389,7 +316,7 @@ export default function HtmlPermissionManagerDialog({
 					<Button
 						variant="destructive"
 						className="gap-1.5"
-						disabled={!snapshot?.activeGrantCount || revokingAll}
+						disabled={!snapshot?.activeGrantCount || permissionMutationInProgress}
 						onClick={() => void handleRevokeAll()}
 					>
 						{revokingAll ? (
@@ -416,8 +343,6 @@ export function createHtmlPermissionDateFormatter(language?: string) {
 		day: "2-digit",
 		hour: "2-digit",
 		minute: "2-digit",
-		second: "2-digit",
-		timeZoneName: "short",
 	}
 	try {
 		return new Intl.DateTimeFormat(localeTag, options)
@@ -434,34 +359,5 @@ function AppMeta({ label, value }: { label: string; value: string }) {
 				{value}
 			</dd>
 		</div>
-	)
-}
-
-function DeclarationBadge({ status }: { status: "declared" | "notDeclared" | "unsupported" }) {
-	const { t } = useTranslation("super")
-	if (status === "declared") {
-		return <Badge variant="secondary">{t("htmlEditor.permissionManager.declared")}</Badge>
-	}
-	if (status === "unsupported") {
-		return (
-			<Badge
-				variant="outline"
-				className="border-amber-300 text-amber-700 dark:text-amber-300"
-			>
-				{t("htmlEditor.permissionManager.unsupported")}
-			</Badge>
-		)
-	}
-	return <Badge variant="outline">{t("htmlEditor.permissionManager.notDeclared")}</Badge>
-}
-
-function GrantBadge({ granted }: { granted: boolean }) {
-	const { t } = useTranslation("super")
-	return granted ? (
-		<Badge className="bg-emerald-600 text-white hover:bg-emerald-600">
-			{t("htmlEditor.permissionManager.granted")}
-		</Badge>
-	) : (
-		<Badge variant="outline">{t("htmlEditor.permissionManager.notGranted")}</Badge>
 	)
 }

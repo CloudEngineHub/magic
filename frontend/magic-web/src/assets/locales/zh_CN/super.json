@@ -2745,6 +2745,8 @@
 				"scopesInvalid": "permissions.scopes 格式错误，应为字符串数组。"
 			},
 			"diagnosticsTitle": "权限声明需要检查",
+			"durationLabel": "有效期（从现在起）",
+			"durationSelect": "调整「{{scope}}」的授权时长",
 			"entry": "入口文件",
 			"expiresAt": "有效至 {{time}}（{{remaining}}）",
 			"granted": "已授权",
@@ -2770,6 +2772,9 @@
 			"revokeSuccess": "已撤销授权",
 			"title": "HTML 应用授权",
 			"unsupported": "不支持",
+			"updateDuration": "更新",
+			"updateDurationFailed": "授权时长更新失败",
+			"updateDurationSuccess": "授权时长已更新",
 			"version": "应用版本"
 		},
 		"projectFileOperationConfirm": {

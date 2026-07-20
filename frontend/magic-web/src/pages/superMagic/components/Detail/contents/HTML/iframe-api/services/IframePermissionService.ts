@@ -66,6 +66,7 @@ export interface HtmlPermissionSnapshotItem {
 	supported: boolean
 	declarationStatus: "declared" | "notDeclared" | "unsupported"
 	grant?: HtmlPermissionGrant
+	ttlOptions: HtmlPermissionTtlOption[]
 }
 
 export interface HtmlPermissionSnapshot {
@@ -226,6 +227,49 @@ export class IframePermissionService {
 		return this.getPermissionSnapshot()
 	}
 
+	async updateGrantTtl(
+		scope: HtmlPermissionScope,
+		ttlMs: number,
+	): Promise<HtmlPermissionSnapshot> {
+		const now = this.getNow()
+		this.cfg.grantStore.prune(now)
+
+		const context = await this.resolveContext()
+		if (!context) throw new Error("Permission context is not ready")
+
+		const { mode, appFingerprint, declaration } = context
+		if (mode === "manifest" && !declaration.declaredScopes.includes(scope)) {
+			throw new Error("Permission scope is not declared")
+		}
+
+		const ttlOptions = getSharedHtmlPermissionTtlOptions([scope], mode).filter(
+			(option) => option.ttlMs > 0,
+		)
+		if (!Number.isFinite(ttlMs) || !ttlOptions.some((option) => option.ttlMs === ttlMs)) {
+			throw new Error("Permission duration is not allowed")
+		}
+
+		const identity = this.buildGrantIdentity(mode, appFingerprint)
+		const existingGrant = this.cfg.grantStore
+			.list()
+			.find(
+				(grant) =>
+					grant.scope === scope &&
+					this.matchesGrantIdentity(grant, identity) &&
+					grant.expiresAt > now,
+			)
+		if (!existingGrant) throw new Error("Active permission grant was not found")
+
+		this.cfg.grantStore.save({
+			...identity,
+			scope,
+			grantedAt: now,
+			expiresAt: now + ttlMs,
+		})
+		this.cfg.onGrantsChanged?.()
+		return this.getPermissionSnapshot()
+	}
+
 	async revokeAll(): Promise<HtmlPermissionSnapshot> {
 		const context = await this.resolveContext()
 		if (context) {
@@ -276,11 +320,17 @@ export class IframePermissionService {
 						? ("declared" as const)
 						: ("notDeclared" as const),
 					grant: grantsByScope.get(scope),
+					ttlOptions: mode
+						? getSharedHtmlPermissionTtlOptions([scope], mode).filter(
+								(option) => option.ttlMs > 0,
+							)
+						: [],
 				})),
 				...declaration.unsupportedScopes.map((scope) => ({
 					scope,
 					supported: false,
 					declarationStatus: "unsupported" as const,
+					ttlOptions: [],
 				})),
 			],
 			diagnostics,
