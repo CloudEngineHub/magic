@@ -9,6 +9,7 @@ namespace App\Domain\Contact\Entity\ValueObject;
 
 use App\Domain\Contact\Repository\Facade\MagicUserRepositoryInterface;
 use App\Infrastructure\Core\AbstractObject;
+use Hyperf\Logger\LoggerFactory;
 
 /**
  * 数据隔离 SaaS化
@@ -100,11 +101,28 @@ class DataIsolation extends AbstractObject
 
     public static function create(string $currentOrganizationCode = '', string $userId = ''): self
     {
+        $logger = \Hyperf\Context\ApplicationContext::getContainer()->get(LoggerFactory::class)->get('DataIsolation');
+        $logger->info('[DataIsolation] create called', [
+            'organization_code' => $currentOrganizationCode,
+            'user_id' => $userId,
+        ]);
+
         $static = new self();
         $static->setCurrentOrganizationCode(currentOrganizationCode: $currentOrganizationCode);
         $static->setCurrentUserId(currentUserId: $userId);
-        $agentDomainService = di(\Dtyq\SuperMagic\Domain\SuperAgent\Service\AgentDomainService::class);
-        $static->setUserAuthorizationToken($agentDomainService->getAuthorizationByUserId($userId));
+        if ($userId !== '') {
+            $agentDomainService = di(\Dtyq\SuperMagic\Domain\SuperAgent\Service\AgentDomainService::class);
+            $token = $agentDomainService->getAuthorizationByUserId($userId);
+            if ($token === '') {
+                $logger->error('[DataIsolation] Failed to obtain User-Authorization token', [
+                    'user_id' => $userId,
+                ]);
+                throw new \RuntimeException(sprintf('Failed to obtain User-Authorization token for user [%s]', $userId));
+            }
+            $static->setUserAuthorizationToken($token);
+        } else {
+            $logger->warning('[DataIsolation] create called with empty userId, skipping token');
+        }
         return $static;
     }
 
