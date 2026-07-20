@@ -17,6 +17,7 @@ import { observer } from "mobx-react-lite"
 import type { ReactNode } from "react"
 import { useCallback, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
+import PlanDataModelFields from "./PlanDataModelFields"
 
 const PLAN_TOOL_NAME = "plan"
 
@@ -483,7 +484,7 @@ function PlanToolCall(props: DefaultToolProps) {
 							{plan.dataModel.map((table) => (
 								<div
 									key={`${table.tableName}-${table.purpose}`}
-									className="rounded-md border border-border bg-muted/30 px-3 py-2"
+									className="min-w-0 rounded-md border border-border bg-muted/30 px-3 py-2"
 								>
 									<div className="text-xs font-medium leading-5 text-foreground">
 										{table.tableName || t("plan.fields.unnamedTable")}
@@ -493,19 +494,7 @@ function PlanToolCall(props: DefaultToolProps) {
 											{table.purpose}
 										</div>
 									)}
-									{table.fields.length > 0 && (
-										<div className="mt-2 flex flex-wrap gap-1.5">
-											{table.fields.map((field) => (
-												<Badge
-													key={field}
-													variant="secondary"
-													className="rounded-md font-normal"
-												>
-													{field}
-												</Badge>
-											))}
-										</div>
-									)}
+									<PlanDataModelFields fields={table.fields} />
 								</div>
 							))}
 						</div>
