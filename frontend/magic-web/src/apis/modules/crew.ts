@@ -491,6 +491,7 @@ export interface AgentDetailResponse {
 	updated_at: string
 	project_id: string | null
 	publish_type?: AgentPublishToType | null
+	publish_target_type?: AgentPublishTargetType | null
 	allowed_publish_target_types?: AgentAllowedPublishTargetType[]
 }
 
