@@ -1974,15 +1974,14 @@ class AgentDomainService
         string $sandboxId,
         string $projectId
     ): void {
-        $authorization = $this->getAuthorizationByUserId($dataIsolation->getCurrentUserId());
         $taskFileDomainService = ApplicationContext::getContainer()->get(TaskFileDomainService::class);
         $rootFileId = (string) $taskFileDomainService->getProjectRootFileId((int) $projectId);
 
         $result = $this->gateway->mountReferencedProject(
+            $dataIsolation,
             $sandboxId,
             $projectId,
-            $rootFileId,
-            $authorization
+            $rootFileId
         );
 
         if (! $result->isSuccess()) {

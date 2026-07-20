@@ -1059,10 +1059,10 @@ class SandboxGatewayService extends AbstractSandboxOS implements SandboxGatewayI
     }
 
     public function mountReferencedProject(
+        DataIsolation $dataIsolation,
         string $sandboxId,
         string $projectId,
-        string $projectSpaceRootFileId,
-        string $authorization
+        string $projectSpaceRootFileId
     ): GatewayResult {
         if (! $this->isEnabledSandbox()) {
             $this->logger->debug('[Sandbox][Gateway] Local debugging mode: skipping referenced project mount', [
@@ -1075,7 +1075,7 @@ class SandboxGatewayService extends AbstractSandboxOS implements SandboxGatewayI
         $payload = [
             'project_id' => $projectId,
             'project_space_root_file_id' => $projectSpaceRootFileId,
-            'authorization' => $authorization,
+            'authorization' => $dataIsolation->getUserAuthorizationToken() ?? '',
         ];
 
         $this->logger->info('[Sandbox][Gateway] Mounting referenced project', [
@@ -1084,12 +1084,12 @@ class SandboxGatewayService extends AbstractSandboxOS implements SandboxGatewayI
         ]);
 
         try {
-            return retry(3, function () use ($sandboxId, $projectId, $payload) {
+            return retry(3, function () use ($sandboxId, $projectId, $payload, $dataIsolation) {
                 try {
                     $response = $this->getClient()->post(
                         $this->buildApiPath(sprintf('api/v1/sandboxes/%s/referenced-projects', $sandboxId)),
                         [
-                            'headers' => $this->getCommonHeaders(),
+                            'headers' => $this->getCommonHeaders($dataIsolation),
                             'json' => $payload,
                             'timeout' => 60,
                         ]

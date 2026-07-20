@@ -190,13 +190,11 @@ interface SandboxGatewayInterface
 
     /**
      * 挂载引用项目（被 @ 艾特的外部项目）到指定沙箱作为只读空间.
-     *
-     * @param string $authorization 用户 MagicToken
      */
     public function mountReferencedProject(
+        DataIsolation $dataIsolation,
         string $sandboxId,
         string $projectId,
-        string $projectSpaceRootFileId,
-        string $authorization
+        string $projectSpaceRootFileId
     ): GatewayResult;
 }
