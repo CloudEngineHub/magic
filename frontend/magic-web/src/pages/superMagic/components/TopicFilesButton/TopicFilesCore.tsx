@@ -303,10 +303,6 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 		pdfExportProgress,
 		isExportingPpt,
 		pptExportProgress,
-		isBatchExportingPdf,
-		batchPdfExportProgress,
-		isBatchExportingPpt,
-		batchPptExportProgress,
 		createFileAndUpload,
 		createFolderAndUpload,
 		createDesignProject,
@@ -2284,34 +2280,6 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 						visible={isExportingPpt}
 						progress={pptExportProgress}
 						text={t("topicFiles.exportingPpt")}
-						position="top"
-						width={280}
-						showPercentage={true}
-						progressHeight={4}
-						zIndex={99999}
-					/>,
-					document.body,
-				)}
-				{/* 批量 PDF 导出进度提示 - 使用 Portal 渲染到 body */}
-				{createPortal(
-					<MagicProgressToast
-						visible={isBatchExportingPdf}
-						progress={batchPdfExportProgress}
-						text={t("topicFiles.batchExportingPdf")}
-						position="top"
-						width={280}
-						showPercentage={true}
-						progressHeight={4}
-						zIndex={99999}
-					/>,
-					document.body,
-				)}
-				{/* 批量 PPT 导出进度提示 - 使用 Portal 渲染到 body */}
-				{createPortal(
-					<MagicProgressToast
-						visible={isBatchExportingPpt}
-						progress={batchPptExportProgress}
-						text={t("topicFiles.batchExportingPpt")}
 						position="top"
 						width={280}
 						showPercentage={true}

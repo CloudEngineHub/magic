@@ -8,6 +8,7 @@ import type {
 	PPTTextNode,
 } from "./node"
 import type { SlideConfig } from "../api/options"
+import type { ResourceLoadError } from "../api/options"
 import type { EmbedFontInput } from "../api/font"
 
 /**
@@ -61,6 +62,8 @@ export interface PackagePresentationWorkerRequest {
 export interface PackagePresentationWorkerSuccess {
 	type: "success"
 	buffer: ArrayBuffer
+	/** Recoverable image/resource failures collected inside the packaging worker. */
+	resourceErrors?: ResourceLoadError[]
 }
 
 export interface PackagePresentationWorkerError {
