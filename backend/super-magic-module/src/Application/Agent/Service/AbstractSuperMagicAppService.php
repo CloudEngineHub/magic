@@ -29,6 +29,7 @@ use App\Domain\Permission\Service\OperationPermissionDomainService;
 use App\Domain\Permission\Service\ResourceVisibilityDomainService;
 use App\Domain\Provider\Service\AiAbilityDomainService;
 use App\Infrastructure\Core\DataIsolation\BaseDataIsolation;
+use App\Infrastructure\Core\Exception\ExceptionBuilder;
 use App\Infrastructure\Core\ValueObject\Page;
 use App\Infrastructure\Util\File\EasyFileTools;
 use DateTime;
@@ -45,6 +46,7 @@ use Dtyq\SuperMagic\Domain\Agent\Service\UserAgentDomainService;
 use Dtyq\SuperMagic\Domain\Skill\Entity\SkillEntity;
 use Dtyq\SuperMagic\Domain\Skill\Entity\SkillVersionEntity;
 use Dtyq\SuperMagic\Domain\Skill\Entity\ValueObject\BuiltinSkill;
+use Dtyq\SuperMagic\ErrorCode\SuperMagicErrorCode;
 use Hyperf\Di\Annotation\Inject;
 use Hyperf\Logger\LoggerFactory;
 use Psr\Log\LoggerInterface;
@@ -73,6 +75,15 @@ abstract class AbstractSuperMagicAppService extends AbstractKernelAppService
         protected AiAbilityDomainService $aiAbilityDomainService,
     ) {
         $this->logger = $this->loggerFactory->get(get_class($this));
+    }
+
+    public function assertAgentUsable(SuperMagicAgentDataIsolation $dataIsolation, string $code): void
+    {
+        if (in_array($code, $this->getUsableAgentCodes($dataIsolation)['codes'], true)) {
+            return;
+        }
+
+        ExceptionBuilder::throw(SuperMagicErrorCode::OperationFailed, 'super_magic.agent.agent_not_available');
     }
 
     protected function createFlowDataIsolation(Authenticatable|BaseDataIsolation $authorization): FlowDataIsolation
@@ -189,6 +200,31 @@ abstract class AbstractSuperMagicAppService extends AbstractKernelAppService
     }
 
     /**
+     * 校验完整员工详情的读取权限。
+     *
+     * 市场货架只用于发现和市场预览，不能直接读取 prompt、技能等完整配置。
+     * 完整详情仅允许已雇佣/创建者、协作者及官方员工。
+     */
+    protected function assertAgentDetailReadable(SuperMagicAgentDataIsolation $dataIsolation, string $code): ?Operation
+    {
+        $operation = $this->resourceAccessPolicyService->getCurrentOperation(
+            $dataIsolation,
+            OperationPermissionResourceType::CustomAgent,
+            $code
+        );
+        if ($operation !== null) {
+            return $operation;
+        }
+
+        if ($this->userAgentDomainService->findUserAgentOwnershipByCode($dataIsolation, $code) !== null
+            || in_array($code, $this->getOfficialAgentCodes($dataIsolation), true)) {
+            return null;
+        }
+
+        ExceptionBuilder::throw(SuperMagicErrorCode::NotFound, 'common.not_found', ['label' => $code]);
+    }
+
+    /**
      * 同步 Agent 发布目标切换后的权限状态。
      *
      * 规则：
@@ -212,12 +248,24 @@ abstract class AbstractSuperMagicAppService extends AbstractKernelAppService
 
         if ($currentTargetType === PublishTargetType::MARKET) {
             if ($previousTargetType !== null && $previousTargetType !== PublishTargetType::MARKET) {
-                // 从内部切到市场时，清掉内部共享可见性，但保留创建者自己可见。
+                if (in_array($previousTargetType, [PublishTargetType::ORGANIZATION, PublishTargetType::MEMBER], true)) {
+                    $this->clearOrganizationMarketShelf($dataIsolation, $agentEntity->getCode());
+                }
+                $hiredUserIds = [];
+                $markets = $this->superMagicAgentDomainService->getStoreAgentsByAgentCodes([$agentEntity->getCode()]);
+                $market = $markets[$agentEntity->getCode()] ?? null;
+                if ($market !== null && $market->getId() !== null) {
+                    $hiredUserIds = array_map(
+                        static fn ($ownership): string => $ownership->getUserId(),
+                        $this->userAgentDomainService->findUserAgentOwnershipsByMarketSource($dataIsolation, $market->getId())
+                    );
+                }
+                // 从内部切到公开市场时，清掉内部共享可见性，但保留创建者和已雇佣用户的兼容可见。
                 $this->saveAgentVisibility(
                     $this->createAgentPermissionDataIsolation($dataIsolation, $agentEntity),
                     $agentEntity->getCode(),
                     VisibilityType::SPECIFIC,
-                    [$agentEntity->getCreator()]
+                    array_values(array_unique(array_merge([$agentEntity->getCreator()], $hiredUserIds)))
                 );
             }
             return;
@@ -225,6 +273,18 @@ abstract class AbstractSuperMagicAppService extends AbstractKernelAppService
 
         if ($previousTargetType === PublishTargetType::MARKET) {
             // 从市场切回内部时，先清市场分发，再回收市场安装关系。
+            $this->superMagicAgentDomainService->offlineMarketPublishings($dataIsolation, $agentEntity->getCode());
+            $this->userAgentDomainService->deleteUserAgentOwnershipsExceptUser(
+                $dataIsolation,
+                $agentEntity->getCode(),
+                $agentEntity->getCreator()
+            );
+        }
+
+        if (in_array($previousTargetType, [PublishTargetType::ORGANIZATION, PublishTargetType::MEMBER], true)
+            && $currentTargetType === PublishTargetType::PRIVATE) {
+            // 组织共享下架为个人发布：同步撤销货架及所有非创建者的该货架雇佣。
+            $this->clearOrganizationMarketShelf($dataIsolation, $agentEntity->getCode());
             $this->superMagicAgentDomainService->offlineMarketPublishings($dataIsolation, $agentEntity->getCode());
             $this->userAgentDomainService->deleteUserAgentOwnershipsExceptUser(
                 $dataIsolation,
@@ -307,6 +367,26 @@ abstract class AbstractSuperMagicAppService extends AbstractKernelAppService
             'creator' => $creatorCodes,
             'codes' => array_values(array_unique(array_merge($creatorCodes, $accessibleCodes))),
             'operations' => $accessibleAgentResult['operations'] ?? [],
+        ];
+    }
+
+    /**
+     * 获取当前用户真正可使用的员工编码。
+     *
+     * 可用性与可读性不同：协作权限和资源可见性只用于读取/管理，不能让未雇佣用户执行员工。
+     *
+     * @return array{codes: array<string>}
+     */
+    protected function getUsableAgentCodes(SuperMagicAgentDataIsolation $dataIsolation): array
+    {
+        $ownedCodes = $this->userAgentDomainService->findAgentCodesBySourceTypes(
+            $dataIsolation,
+            [AgentSourceType::LOCAL_CREATE->value, AgentSourceType::MARKET->value]
+        );
+        $officialCodes = $this->getOfficialAgentCodes($dataIsolation);
+
+        return [
+            'codes' => array_values(array_unique(array_merge($ownedCodes, $officialCodes))),
         ];
     }
 
@@ -762,8 +842,32 @@ abstract class AbstractSuperMagicAppService extends AbstractKernelAppService
         SuperMagicAgentEntity $agentEntity
     ): PermissionDataIsolation {
         $permissionDataIsolation = $this->createPermissionDataIsolation($dataIsolation);
-        $permissionDataIsolation->setCurrentOrganizationCode($agentEntity->getOrganizationCode());
+        $agentOrganizationCode = $agentEntity->getOrganizationCode();
+        if ($agentOrganizationCode !== '') {
+            $permissionDataIsolation->setCurrentOrganizationCode($agentOrganizationCode);
+        }
 
         return $permissionDataIsolation;
+    }
+
+    /**
+     * Clear a previously organization-scoped shelf while retaining the market
+     * record itself. This is used when a publication changes back to public or
+     * private; individual employee visibility is handled separately.
+     */
+    private function clearOrganizationMarketShelf(SuperMagicAgentDataIsolation $dataIsolation, string $agentCode): void
+    {
+        $markets = $this->superMagicAgentDomainService->getStoreAgentsByAgentCodes([$agentCode]);
+        $market = $markets[$agentCode] ?? null;
+        if ($market === null || $market->getId() === null) {
+            return;
+        }
+
+        $this->resourceVisibilityDomainService->saveVisibilityByPrincipals(
+            $this->createPermissionDataIsolation($dataIsolation),
+            ResourceVisibilityResourceType::SUPER_MAGIC_AGENT_MARKET,
+            (string) $market->getId(),
+            VisibilityType::NONE
+        );
     }
 }

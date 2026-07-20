@@ -26,6 +26,11 @@ type superMagicAgentAccessibleCodesData struct {
 	MissingCodes    []string `json:"missing_codes"`
 }
 
+type superMagicAgentUsableCodesData struct {
+	UsableCodes  []string `json:"usable_codes"`
+	MissingCodes []string `json:"missing_codes"`
+}
+
 type superMagicAgentListCodesRequest struct {
 	method       string
 	logMessage   string
@@ -89,6 +94,28 @@ func (c *PHPSuperMagicAgentRPCClient) ListAccessibleCodes(
 			agentCodes:   codes,
 		},
 		func(data superMagicAgentAccessibleCodesData) []string { return data.AccessibleCodes },
+	)
+}
+
+// ListUsableCodes 列出当前用户在指定组织下可使用的数字员工编码。
+func (c *PHPSuperMagicAgentRPCClient) ListUsableCodes(
+	ctx context.Context,
+	organizationCode string,
+	userID string,
+	codes []string,
+) (map[string]struct{}, error) {
+	return listSuperMagicAgentCodes(
+		ctx,
+		c.server,
+		c.logger,
+		superMagicAgentListCodesRequest{
+			method:       constants.MethodKnowledgeSuperMagicAgentListUsableCodes,
+			logMessage:   "调用 PHP 数字员工可用校验失败",
+			organization: organizationCode,
+			userID:       userID,
+			agentCodes:   codes,
+		},
+		func(data superMagicAgentUsableCodesData) []string { return data.UsableCodes },
 	)
 }
 

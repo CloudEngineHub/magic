@@ -41,6 +41,11 @@ class SuperMagicAgentMarketDomainService
         return $agentMarket;
     }
 
+    public function getById(int $id): ?AgentMarketEntity
+    {
+        return $this->agentMarketRepository->findById($id);
+    }
+
     /**
      * Query the published market list.
      *

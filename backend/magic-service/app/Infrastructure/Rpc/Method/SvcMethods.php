@@ -153,6 +153,8 @@ final class SvcMethods
 
     public const string METHOD_LIST_ACCESSIBLE_CODES = 'listAccessibleCodes';
 
+    public const string METHOD_LIST_USABLE_CODES = 'listUsableCodes';
+
     public const string METHOD_LIST_OPERATIONS = 'listOperations';
 
     public const string METHOD_INITIALIZE = 'initialize';

@@ -26,6 +26,7 @@ return [
         ],
         'limit_exceeded' => 'ถึงขีดจำกัด Agent แล้ว (:limit), ไม่สามารถสร้างเพิ่มได้',
         'builtin_not_allowed' => 'การดำเนินการนี้ไม่รองรับสำหรับ Agent ที่สร้างไว้แล้ว',
+        'agent_not_available' => 'คุณไม่มีสิทธิ์ใช้ Agent นี้',
         // Migrated from crew.php
         'validate_failed' => 'การตรวจสอบล้มเหลว',
         'not_found' => 'ไม่พบ Crew',

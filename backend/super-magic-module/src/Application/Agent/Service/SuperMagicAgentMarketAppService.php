@@ -9,6 +9,7 @@ namespace Dtyq\SuperMagic\Application\Agent\Service;
 
 use App\Domain\Contact\Entity\MagicUserEntity;
 use App\Domain\Contact\Service\MagicUserDomainService;
+use App\Domain\Permission\Entity\ValueObject\ResourceVisibility\ResourceType as ResourceVisibilityResourceType;
 use App\Infrastructure\Core\Exception\ExceptionBuilder;
 use App\Infrastructure\Core\ValueObject\Page;
 use App\Infrastructure\ExternalAPI\Sms\Enum\LanguageEnum;
@@ -17,7 +18,6 @@ use Dtyq\SuperMagic\Domain\Agent\Entity\AgentMarketEntity;
 use Dtyq\SuperMagic\Domain\Agent\Entity\AgentPlaybookEntity;
 use Dtyq\SuperMagic\Domain\Agent\Entity\AgentVersionEntity;
 use Dtyq\SuperMagic\Domain\Agent\Entity\UserAgentEntity;
-use Dtyq\SuperMagic\Domain\Agent\Entity\ValueObject\AgentSourceType;
 use Dtyq\SuperMagic\Domain\Agent\Entity\ValueObject\PublisherType;
 use Dtyq\SuperMagic\Domain\Agent\Entity\ValueObject\Query\AgentMarketQuery;
 use Dtyq\SuperMagic\Domain\Agent\Entity\ValueObject\SuperMagicAgentDataIsolation;
@@ -96,6 +96,8 @@ class SuperMagicAgentMarketAppService extends AbstractSuperMagicAppService
             ExceptionBuilder::throw(SuperMagicErrorCode::NotFound, 'common.not_found', ['label' => $code]);
         }
 
+        $this->assertMarketShelfVisible($dataIsolation, $agentMarket);
+
         $agentVersion = $this->superMagicAgentVersionDomainService->findByIdWithoutOrganizationFilter(
             $agentMarket->getAgentVersionId()
         );
@@ -138,6 +140,16 @@ class SuperMagicAgentMarketAppService extends AbstractSuperMagicAppService
             $query->setCategoryIds($requestDTO->getCategoryIds());
         }
 
+        $visibleMarketIds = $this->resourceVisibilityDomainService->getUserAccessibleResourceCodes(
+            $this->createPermissionDataIsolation($dataIsolation),
+            $dataIsolation->getCurrentUserId(),
+            ResourceVisibilityResourceType::SUPER_MAGIC_AGENT_MARKET
+        );
+        $query->setVisibleOrganizationShelf(
+            $dataIsolation->getCurrentOrganizationCode(),
+            array_map('intval', $visibleMarketIds)
+        );
+
         // Build the page request.
         $page = new Page($requestDTO->getPage(), $requestDTO->getPageSize());
 
@@ -166,9 +178,6 @@ class SuperMagicAgentMarketAppService extends AbstractSuperMagicAppService
 
         // load user agents map
         $userAgentsMap = $this->superMagicUserAgentDomainService->findUserAgentOwnershipsByCodes($dataIsolation, $agentCodes);
-
-        // merge visible agent ownerships
-        $userAgentsMap = $this->mergeVisibleAgentOwnerships($dataIsolation, $agentCodes, $userAgentsMap);
 
         // load latest versions map
         $latestVersionsMap = $this->superMagicAgentVersionDomainService->getLatestPublishedByCodes($dataIsolation, $agentCodes);
@@ -259,35 +268,30 @@ class SuperMagicAgentMarketAppService extends AbstractSuperMagicAppService
         }
     }
 
-    /**
-     * Merge visible non-market agents into the ownership map so the UI can treat
-     * them as already added while keeping delete disabled.
-     *
-     * @param string[] $agentCodes
-     * @param array<string, UserAgentEntity> $userAgentsMap
-     * @return array<string, UserAgentEntity>
-     */
-    private function mergeVisibleAgentOwnerships(
-        SuperMagicAgentDataIsolation $dataIsolation,
-        array $agentCodes,
-        array $userAgentsMap
-    ): array {
-        $accessibleAgentResult = $this->getAccessibleAgentCodes($dataIsolation, $dataIsolation->getCurrentUserId());
-        $visibleAgentCodes = array_intersect($agentCodes, $accessibleAgentResult['codes']);
+    private function assertMarketShelfVisible(SuperMagicAgentDataIsolation $dataIsolation, AgentMarketEntity $market): void
+    {
+        if (! $this->isMarketShelfVisible($dataIsolation, $market)) {
+            ExceptionBuilder::throw(SuperMagicErrorCode::NotFound, 'common.not_found', ['label' => $market->getAgentCode()]);
+        }
+    }
 
-        foreach ($visibleAgentCodes as $agentCode) {
-            if (isset($userAgentsMap[$agentCode])) {
-                continue;
-            }
-
-            $userAgentsMap[$agentCode] = (new UserAgentEntity())
-                ->setOrganizationCode($dataIsolation->getCurrentOrganizationCode())
-                ->setUserId($dataIsolation->getCurrentUserId())
-                ->setAgentCode($agentCode)
-                ->setSourceType(AgentSourceType::LOCAL_CREATE);
+    private function isMarketShelfVisible(SuperMagicAgentDataIsolation $dataIsolation, AgentMarketEntity $market): bool
+    {
+        if ($market->getOrganizationCode() === null || $market->getOrganizationCode() === '') {
+            return true;
+        }
+        if ($market->getOrganizationCode() !== $dataIsolation->getCurrentOrganizationCode() || $market->getId() === null) {
+            return false;
         }
 
-        return $userAgentsMap;
+        $visibleMarketIds = $this->resourceVisibilityDomainService->getUserAccessibleResourceCodes(
+            $this->createPermissionDataIsolation($dataIsolation),
+            $dataIsolation->getCurrentUserId(),
+            ResourceVisibilityResourceType::SUPER_MAGIC_AGENT_MARKET,
+            [(string) $market->getId()]
+        );
+
+        return in_array((string) $market->getId(), $visibleMarketIds, true);
     }
 
     /**

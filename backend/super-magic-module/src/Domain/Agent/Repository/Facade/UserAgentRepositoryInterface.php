@@ -38,6 +38,16 @@ interface UserAgentRepositoryInterface
      */
     public function findAllByAgentCode(SuperMagicAgentDataIsolation $dataIsolation, string $agentCode): array;
 
+    /**
+     * @return UserAgentEntity[]
+     */
+    public function findAllByMarketSource(SuperMagicAgentDataIsolation $dataIsolation, int $marketId): array;
+
+    /**
+     * @param array<string> $userIds
+     */
+    public function deleteByMarketSourceAndUsers(SuperMagicAgentDataIsolation $dataIsolation, int $marketId, array $userIds): int;
+
     public function deleteByAgentCodeExceptUser(SuperMagicAgentDataIsolation $dataIsolation, string $agentCode, string $excludedUserId): int;
 
     public function deleteAllByAgentCode(SuperMagicAgentDataIsolation $dataIsolation, string $agentCode): int;

@@ -60,6 +60,25 @@ class UserAgentDomainService
         return $this->userAgentRepository->deleteByAgentCode($dataIsolation, $agentCode);
     }
 
+    /**
+     * @return UserAgentEntity[]
+     */
+    public function findUserAgentOwnershipsByMarketSource(SuperMagicAgentDataIsolation $dataIsolation, int $marketId): array
+    {
+        return $this->userAgentRepository->findAllByMarketSource($dataIsolation, $marketId);
+    }
+
+    /**
+     * @param array<string> $userIds
+     */
+    public function deleteUserAgentOwnershipsByMarketSourceAndUsers(
+        SuperMagicAgentDataIsolation $dataIsolation,
+        int $marketId,
+        array $userIds
+    ): int {
+        return $this->userAgentRepository->deleteByMarketSourceAndUsers($dataIsolation, $marketId, $userIds);
+    }
+
     public function deleteAllUserAgentOwnershipsByCode(SuperMagicAgentDataIsolation $dataIsolation, string $agentCode): int
     {
         return $this->userAgentRepository->deleteAllByAgentCode($dataIsolation, $agentCode);

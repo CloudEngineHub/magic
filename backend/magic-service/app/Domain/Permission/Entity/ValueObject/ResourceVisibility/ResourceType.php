@@ -26,6 +26,11 @@ enum ResourceType: int
     case APPLICATION_MENU = 3;
 
     /**
+     * 组织共享数字员工在市场上的货架记录。
+     */
+    case SUPER_MAGIC_AGENT_MARKET = 4;
+
+    /**
      * Skill resource.
      */
     case SKILL = 2;

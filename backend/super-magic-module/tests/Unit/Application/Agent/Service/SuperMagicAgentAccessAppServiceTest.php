@@ -14,11 +14,14 @@ use App\Domain\Mode\Service\ModeDomainService;
 use App\Domain\Permission\Entity\ValueObject\PermissionDataIsolation;
 use App\Domain\Permission\Entity\ValueObject\ResourceVisibility\ResourceType as ResourceVisibilityResourceType;
 use App\Domain\Permission\Service\ResourceVisibilityDomainService;
+use App\Infrastructure\Core\Exception\BusinessException;
 use App\Infrastructure\Core\ValueObject\Page;
 use Dtyq\SuperMagic\Application\Agent\Service\SuperMagicAgentAccessAppService;
 use Dtyq\SuperMagic\Domain\Agent\Entity\SuperMagicAgentEntity;
+use Dtyq\SuperMagic\Domain\Agent\Entity\UserAgentEntity;
 use Dtyq\SuperMagic\Domain\Agent\Entity\ValueObject\SuperMagicAgentDataIsolation;
 use Dtyq\SuperMagic\Domain\Agent\Service\SuperMagicAgentDomainService;
+use Dtyq\SuperMagic\Domain\Agent\Service\UserAgentDomainService;
 use PHPUnit\Framework\TestCase;
 use ReflectionClass;
 use ReflectionProperty;
@@ -78,6 +81,42 @@ class SuperMagicAgentAccessAppServiceTest extends TestCase
         self::assertSame([], $result['missing_codes']);
     }
 
+    public function testListUsableAgentCodesOnlyReturnsInstalledAndOfficialAgents(): void
+    {
+        $this->setProperty($this->service, 'superMagicAgentDomainService', $this->createAgentDomainService([
+            $this->createAgentEntity('installed-agent'),
+            $this->createAgentEntity('visible-only-agent'),
+        ]));
+        $this->setProperty($this->service, 'userAgentDomainService', $this->createUserAgentDomainService([
+            'installed-agent',
+        ]));
+        $this->setProperty($this->service, 'modeDomainService', $this->createModeDomainService(['official-agent']));
+
+        $result = $this->service->listUsableAgentCodes(
+            'DT001',
+            'user-1',
+            ['installed-agent', 'visible-only-agent', 'official-agent', 'unknown-agent']
+        );
+
+        self::assertSame(['installed-agent', 'official-agent'], $result['usable_codes']);
+        self::assertSame(['unknown-agent'], $result['missing_codes']);
+    }
+
+    public function testAssertAgentUsableRejectsVisibleButUninstalledAgent(): void
+    {
+        $this->setProperty($this->service, 'superMagicAgentDomainService', $this->createAgentDomainService([
+            $this->createAgentEntity('visible-only-agent'),
+        ]));
+        $this->setProperty($this->service, 'userAgentDomainService', $this->createUserAgentDomainService([]));
+        $this->setProperty($this->service, 'modeDomainService', $this->createModeDomainService([]));
+
+        $this->expectException(BusinessException::class);
+        $this->service->assertAgentUsable(
+            SuperMagicAgentDataIsolation::create('DT001', 'user-1'),
+            'visible-only-agent'
+        );
+    }
+
     /**
      * @param array<SuperMagicAgentEntity> $entities
      */
@@ -111,6 +150,37 @@ class SuperMagicAgentAccessAppServiceTest extends TestCase
                 ResourceVisibilityResourceType $resourceType,
                 ?array $resourceIds = null
             ): array {
+                return $this->codes;
+            }
+        };
+    }
+
+    /**
+     * @param array<string> $codes
+     */
+    private function createUserAgentDomainService(array $codes): UserAgentDomainService
+    {
+        return new class($codes) extends UserAgentDomainService {
+            public function __construct(private array $codes)
+            {
+            }
+
+            public function findUserAgentOwnershipsByCodes(SuperMagicAgentDataIsolation $dataIsolation, array $agentCodes): array
+            {
+                $result = [];
+                foreach ($agentCodes as $agentCode) {
+                    if (! in_array($agentCode, $this->codes, true)) {
+                        continue;
+                    }
+                    $result[$agentCode] = (new UserAgentEntity())
+                        ->setAgentCode($agentCode);
+                }
+
+                return $result;
+            }
+
+            public function findAgentCodesBySourceTypes(SuperMagicAgentDataIsolation $dataIsolation, array $sourceTypes): array
+            {
                 return $this->codes;
             }
         };

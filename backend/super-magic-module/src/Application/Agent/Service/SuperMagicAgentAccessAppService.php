@@ -18,6 +18,45 @@ class SuperMagicAgentAccessAppService extends AbstractSuperMagicAppService
 {
     /**
      * @param array<string> $agentCodes
+     * @return array{usable_codes: array<string>, missing_codes: array<string>}
+     */
+    public function listUsableAgentCodes(string $organizationCode, string $userId, array $agentCodes): array
+    {
+        $agentCodes = $this->normalizeAgentCodes($agentCodes);
+        if ($agentCodes === []) {
+            return [
+                'usable_codes' => [],
+                'missing_codes' => [],
+            ];
+        }
+
+        $foundAgentCodes = $this->findExistingAgentCodes($organizationCode, $userId, $agentCodes);
+        $dataIsolation = SuperMagicAgentDataIsolation::create($organizationCode, $userId);
+        $officialAgentCodes = array_values(array_intersect($agentCodes, $this->getOfficialAgentCodes($dataIsolation)));
+        $ownerships = $foundAgentCodes === []
+            ? []
+            : $this->userAgentDomainService->findUserAgentOwnershipsByCodes($dataIsolation, $foundAgentCodes);
+        $usableLookup = array_fill_keys(array_merge(array_keys($ownerships), $officialAgentCodes), true);
+
+        $usableAgentCodes = [];
+        foreach ($agentCodes as $agentCode) {
+            if (isset($usableLookup[$agentCode])) {
+                $usableAgentCodes[] = $agentCode;
+            }
+        }
+        sort($usableAgentCodes, SORT_STRING);
+
+        return [
+            'usable_codes' => $usableAgentCodes,
+            'missing_codes' => $this->collectMissingCodes(
+                $agentCodes,
+                array_values(array_unique(array_merge($foundAgentCodes, $officialAgentCodes)))
+            ),
+        ];
+    }
+
+    /**
+     * @param array<string> $agentCodes
      * @return array{manageable_codes: array<string>, missing_codes: array<string>}
      */
     public function listManageableAgentCodes(string $organizationCode, string $userId, array $agentCodes): array

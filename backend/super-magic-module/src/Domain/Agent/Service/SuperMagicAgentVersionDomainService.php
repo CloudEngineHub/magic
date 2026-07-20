@@ -308,6 +308,48 @@ class SuperMagicAgentVersionDomainService
         return $this->agentVersionRepository->save($dataIsolation, $versionEntity);
     }
 
+    /**
+     * 将已通过组织审核的版本写入组织共享市场。
+     */
+    public function publishOrganizationSharedMarket(
+        SuperMagicAgentDataIsolation $dataIsolation,
+        AgentVersionEntity $versionEntity
+    ): AgentMarketEntity {
+        $existingMarket = $this->storeAgentRepository->findByAgentCodeWithoutStatus($versionEntity->getCode());
+
+        $marketEntity = new AgentMarketEntity();
+        $marketEntity->setAgentCode($versionEntity->getCode());
+        $marketEntity->setAgentVersionId((int) $versionEntity->getId());
+        $marketEntity->setNameI18n($versionEntity->getNameI18n());
+        $marketEntity->setDescriptionI18n($versionEntity->getDescriptionI18n());
+        $marketEntity->setRoleI18n($versionEntity->getRoleI18n());
+        $marketEntity->setSearchText(MarketSearchTextBuilder::build(
+            [$versionEntity->getName(), $versionEntity->getDescription(), $versionEntity->getVersion()],
+            [
+                $versionEntity->getNameI18n() ?? [],
+                $versionEntity->getRoleI18n() ?? [],
+                $versionEntity->getDescriptionI18n() ?? [],
+                $versionEntity->getVersionDescriptionI18n() ?? [],
+            ]
+        ));
+        $marketEntity->setIcon($versionEntity->getIcon());
+        $marketEntity->setPublisherId($versionEntity->getCreator());
+        $marketEntity->setPublisherType(PublisherType::USER);
+        $marketEntity->setCategoryId($versionEntity->getCategoryId());
+        $marketEntity->setPublishStatus(PublishStatus::PUBLISHED);
+        $marketEntity->setOrganizationCode($versionEntity->getOrganizationCode());
+
+        if ($existingMarket !== null) {
+            $marketEntity->setId($existingMarket->getId());
+            $marketEntity->setInstallCount($existingMarket->getInstallCount());
+            $marketEntity->setIsHidden($existingMarket->isHidden());
+            $marketEntity->setIsFeatured($existingMarket->isFeatured());
+            $marketEntity->setSortOrder($existingMarket->getSortOrder());
+        }
+
+        return $this->storeAgentRepository->saveOrUpdate($dataIsolation, $marketEntity);
+    }
+
     #[Transactional]
     public function reviewAgentVersion(
         SuperMagicAgentDataIsolation $dataIsolation,
@@ -397,7 +439,8 @@ class SuperMagicAgentVersionDomainService
             $storeAgentEntity->setPublisherType($publisherTypeEnum);
             $storeAgentEntity->setCategoryId($versionEntity->getCategoryId());
             $storeAgentEntity->setPublishStatus(PublishStatus::PUBLISHED);
-            $storeAgentEntity->setOrganizationCode($versionEntity->getOrganizationCode());
+            // 公开市场不绑定组织；组织共享市场由组织审核链路单独写入组织编码。
+            $storeAgentEntity->setOrganizationCode(null);
 
             if ($existingStoreAgent) {
                 $storeAgentEntity->setId($existingStoreAgent->getId());

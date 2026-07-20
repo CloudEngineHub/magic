@@ -20,6 +20,16 @@ class AgentMarketQuery extends AbstractQuery
     /** @var int[] */
     protected array $categoryIds = [];
 
+    /**
+     * Organization market records are visible only when their shelf id is in this list.
+     * Public records are always included by the repository independently of this field.
+     *
+     * @var int[]
+     */
+    protected array $visibleOrganizationMarketIds = [];
+
+    protected ?string $visibleOrganizationCode = null;
+
     public function getKeyword(): ?string
     {
         return $this->keyword;
@@ -65,5 +75,28 @@ class AgentMarketQuery extends AbstractQuery
     {
         $this->categoryIds = array_values(array_unique(array_filter($categoryIds)));
         $this->categoryId = $this->categoryIds[0] ?? $this->categoryId;
+    }
+
+    /**
+     * @param int[] $marketIds
+     */
+    public function setVisibleOrganizationShelf(string $organizationCode, array $marketIds): void
+    {
+        $this->visibleOrganizationCode = trim($organizationCode);
+        $this->visibleOrganizationMarketIds = array_values(array_unique(array_filter(
+            array_map('intval', $marketIds),
+            static fn (int $marketId): bool => $marketId > 0
+        )));
+    }
+
+    public function getVisibleOrganizationCode(): ?string
+    {
+        return $this->visibleOrganizationCode;
+    }
+
+    /** @return int[] */
+    public function getVisibleOrganizationMarketIds(): array
+    {
+        return $this->visibleOrganizationMarketIds;
     }
 }

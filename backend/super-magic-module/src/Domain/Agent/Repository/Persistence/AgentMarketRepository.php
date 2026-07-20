@@ -173,9 +173,10 @@ class AgentMarketRepository extends AbstractRepository implements AgentMarketRep
             ->first();
 
         $attributes = $this->getAttributes($entity);
-        if ($entity->getOrganizationCode()) {
-            $attributes['organization_code'] = $entity->getOrganizationCode();
-        }
+        // Keep NULL for public records. Omitting this attribute would retain a
+        // previous organization code when an organization-shared record is
+        // approved into the public market.
+        $attributes['organization_code'] = $entity->getOrganizationCode();
         if ($existingModel) {
             // 更新
             $existingModel->fill($attributes);
@@ -240,6 +241,23 @@ class AgentMarketRepository extends AbstractRepository implements AgentMarketRep
         $builder = $this->agentMarketModel::query()
             ->where('publish_status', PublishStatus::PUBLISHED->value)
             ->where('is_hidden', false);
+
+        // Public market records have no organization code. Organization-shared records
+        // must be limited to the current organization's explicitly visible shelf ids,
+        // before pagination is applied.
+        $visibleOrganizationCode = $query->getVisibleOrganizationCode();
+        $visibleOrganizationMarketIds = $query->getVisibleOrganizationMarketIds();
+        $builder->where(function ($visibilityQuery) use ($visibleOrganizationCode, $visibleOrganizationMarketIds) {
+            $visibilityQuery->whereNull('organization_code')
+                ->orWhere('organization_code', '');
+
+            if ($visibleOrganizationCode !== null && $visibleOrganizationCode !== '' && $visibleOrganizationMarketIds !== []) {
+                $visibilityQuery->orWhere(function ($organizationQuery) use ($visibleOrganizationCode, $visibleOrganizationMarketIds) {
+                    $organizationQuery->where('organization_code', $visibleOrganizationCode)
+                        ->whereIn('id', $visibleOrganizationMarketIds);
+                });
+            }
+        });
 
         // 关键词搜索优先使用统一搜索字段；旧数据无该字段时回退到历史 JSON 搜索。
         if (! empty($query->getKeyword()) && ! empty($query->getLanguageCode())) {

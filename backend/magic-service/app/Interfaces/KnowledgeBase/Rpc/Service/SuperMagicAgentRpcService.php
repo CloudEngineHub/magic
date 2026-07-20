@@ -95,6 +95,40 @@ readonly class SuperMagicAgentRpcService
         }
     }
 
+    #[RpcMethod(name: SvcMethods::METHOD_LIST_USABLE_CODES)]
+    public function listUsableCodes(array $params): array
+    {
+        ['organization_code' => $organizationCode, 'user_id' => $userId, 'agent_codes' => $agentCodes] = $this->resolveAccessContext($params);
+
+        if ($organizationCode === '' || $userId === '') {
+            return $this->buildMissingIdentityResponse();
+        }
+
+        try {
+            return [
+                'code' => 0,
+                'message' => 'success',
+                'data' => $this->superMagicAgentAccessAppService->listUsableAgentCodes(
+                    $organizationCode,
+                    $userId,
+                    $agentCodes,
+                ),
+            ];
+        } catch (Throwable $throwable) {
+            $this->logger->error('IPC SuperMagicAgent listUsableCodes failed', [
+                'organization_code' => $organizationCode,
+                'user_id' => $userId,
+                'agent_codes' => $agentCodes,
+                'error' => $throwable->getMessage(),
+            ]);
+
+            return [
+                'code' => 500,
+                'message' => $throwable->getMessage(),
+            ];
+        }
+    }
+
     /**
      * @param array<string, mixed> $params
      * @return array{
