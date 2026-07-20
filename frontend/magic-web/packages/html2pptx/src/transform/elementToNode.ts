@@ -30,6 +30,7 @@ export function elementToNode(
 	node: ElementNode,
 	config: SlideConfig,
 	iWindow: Window,
+	options: { elementNodeMap?: Map<Element, ElementNode> } = {},
 ): PPTNode[] {
 	const nodes: PPTNode[] = []
 	const { rect } = node
@@ -74,7 +75,9 @@ export function elementToNode(
 	if (borderLines.length > 0) nodes.push(...borderLines)
 
 	const textBase = { ...base, zOrder: base.zOrder + 1 }
-	const textNodes = parseTextNodes(node, textBase, config)
+	const textNodes = parseTextNodes(node, textBase, config, {
+		elementNodeMap: options.elementNodeMap,
+	})
 	if (textNodes.length > 0) nodes.push(...textNodes)
 
 	return nodes
@@ -87,12 +90,15 @@ export function transformElements(
 	elements: ElementNode[],
 	config: SlideConfig,
 	iWindow: Window,
-	_options: { textMergeMode?: unknown } = {},
+	_options: {
+		textMergeMode?: unknown
+		elementNodeMap?: Map<Element, ElementNode>
+	} = {},
 ): PPTNode[] {
 	const allNodes: PPTNode[] = []
 
 	for (const el of elements) {
-		const nodes = elementToNode(el, config, iWindow)
+		const nodes = elementToNode(el, config, iWindow, _options)
 		allNodes.push(...nodes)
 	}
 

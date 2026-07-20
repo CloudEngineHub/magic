@@ -1,5 +1,6 @@
 import { memo, useEffect, useMemo, useState } from "react"
 import { Flex, Form, InputNumber, Select, Switch, message } from "antd"
+import { createStyles } from "antd-style"
 import { useMemoizedFn } from "ahooks"
 import { useTranslation } from "react-i18next"
 import {
@@ -13,7 +14,12 @@ import {
 } from "@admin-components"
 import { useApis } from "@admin/apis"
 import { SlidesTemplate } from "@admin/types/slidesTemplate"
-import { buildSlidesTemplateTagSaveParams, isSystemSlidesTemplateTagGroup } from "../utils"
+import {
+	SLIDES_TEMPLATE_TAG_CODE_PATTERN,
+	SLIDES_TEMPLATE_TAG_GROUP_CODE_PATTERN,
+	buildSlidesTemplateTagSaveParams,
+	isSystemSlidesTemplateTagGroup,
+} from "../utils"
 
 interface SlidesTemplateTagFormModalProps extends MagicModalProps {
 	info?: SlidesTemplate.TagItem | null
@@ -33,8 +39,15 @@ type FormValidationError = {
 const DEFAULT_LANG_ERRORS: TagLangErrorState = {
 	name_i18n: false,
 }
-const TAG_CODE_PATTERN = /^[a-z0-9]+(-[a-z0-9]+)*$/
-const TAG_GROUP_CODE_PATTERN = /^[a-z0-9]+(-[a-z0-9]+)*_group$/
+
+const useStyles = createStyles(() => ({
+	codeFormItem: {
+		// Ant Design 默认会同时显示 extra 和错误信息；校验失败时只保留错误信息。
+		"&.ant-form-item-has-error .ant-form-item-extra": {
+			display: "none",
+		},
+	},
+}))
 
 const getSelectPopupContainer = (triggerNode: HTMLElement): HTMLElement =>
 	(triggerNode.closest(".ant-modal-wrap") as HTMLElement | null) ?? document.body
@@ -61,6 +74,7 @@ export const SlidesTemplateTagFormModal = memo(
 		...rest
 	}: SlidesTemplateTagFormModalProps) => {
 		const { t } = useTranslation("admin/common")
+		const { styles } = useStyles()
 		const { SlidesTemplateApi } = useApis()
 		const [form] = Form.useForm()
 		const [loading, setLoading] = useState(false)
@@ -70,9 +84,19 @@ export const SlidesTemplateTagFormModal = memo(
 		const effectiveNodeType = info?.node_type ?? nodeType
 		const isGroup = effectiveNodeType === "group"
 		const isSystemGroup = Boolean(info && isSystemSlidesTemplateTagGroup(info))
+		const codeHint = isGroup
+			? t("slidesTemplate.tag.groupCodeHint")
+			: t("slidesTemplate.tag.codeHint")
+		const codeRuleMessage = isGroup
+			? t("slidesTemplate.tag.groupCodeRule")
+			: t("slidesTemplate.tag.codeRule")
 		const modalTitle = info
-			? t(isGroup ? "slidesTemplate.tag.editGroupTitle" : "slidesTemplate.tag.editTitle")
-			: t(isGroup ? "slidesTemplate.tag.addGroupTitle" : "slidesTemplate.tag.addTitle")
+			? isGroup
+				? t("slidesTemplate.tag.editGroupTitle")
+				: t("slidesTemplate.tag.editTitle")
+			: isGroup
+				? t("slidesTemplate.tag.addGroupTitle")
+				: t("slidesTemplate.tag.addTitle")
 
 		const initialValues = useMemo(
 			() => ({
@@ -95,17 +119,21 @@ export const SlidesTemplateTagFormModal = memo(
 			setLangErrors(DEFAULT_LANG_ERRORS)
 		}, [form, initialValues, rest.open])
 
-		useEffect(() => {
-			if (!rest.open || isGroup) return
-
-			SlidesTemplateApi.tag
+		const loadGroups = useMemoizedFn(() => {
+			return SlidesTemplateApi.tag
 				.tree()
 				.then((tree) => setGroups(tree))
 				.catch((error) => {
 					console.error("Failed to fetch slides template tag tree", error)
 					setGroups([])
 				})
-		}, [SlidesTemplateApi.tag, isGroup, rest.open])
+		})
+
+		useEffect(() => {
+			if (!rest.open || isGroup) return
+
+			loadGroups()
+		}, [isGroup, loadGroups, rest.open])
 
 		const updateLangField = useMemoizedFn((value: Lang) => {
 			form.setFieldsValue({
@@ -167,17 +195,17 @@ export const SlidesTemplateTagFormModal = memo(
 						<MagicInput />
 					</Form.Item>
 					<Form.Item
+						className={styles.codeFormItem}
+						extra={codeHint}
 						label={t("slidesTemplate.tag.fields.code")}
 						name="code"
 						rules={[
 							{ required: true, message: "" },
 							{
-								pattern: isGroup ? TAG_GROUP_CODE_PATTERN : TAG_CODE_PATTERN,
-								message: t(
-									isGroup
-										? "slidesTemplate.tag.groupCodeRule"
-										: "slidesTemplate.tag.codeRule",
-								),
+								pattern: isGroup
+									? SLIDES_TEMPLATE_TAG_GROUP_CODE_PATTERN
+									: SLIDES_TEMPLATE_TAG_CODE_PATTERN,
+								message: codeRuleMessage,
 							},
 						]}
 					>

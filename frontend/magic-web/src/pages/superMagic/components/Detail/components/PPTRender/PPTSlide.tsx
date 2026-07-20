@@ -804,7 +804,10 @@ const PPTSlide = observer(function PPTSlide({
 				showLineNumbers={true}
 			/>
 		) : (
-			<div className="relative h-full w-full">
+			<div
+				data-testid="ppt-slide-render-content"
+				className={cn("relative min-h-0 w-full", isFullscreen ? "h-full" : "flex-1")}
+			>
 				<IsolatedHTMLRenderer
 					ref={rendererRef as React.RefObject<IsolatedHTMLRendererRef>}
 					content={displayContent.content}
@@ -828,7 +831,7 @@ const PPTSlide = observer(function PPTSlide({
 					setSlideContents={updateSlideContents}
 					slideIndex={index}
 					isPlaybackMode={isPlaybackMode}
-					className="h-[100%-40px]"
+					className="h-full"
 					autoFitVerticalPadding={64}
 					manualScale={manualScale}
 					onManualScaleChange={isEditMode ? undefined : onManualScaleChange}

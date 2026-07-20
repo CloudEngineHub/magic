@@ -1,7 +1,9 @@
 import {
 	memo,
 	type ChangeEvent,
+	type Dispatch,
 	type PointerEventHandler,
+	type SetStateAction,
 	useCallback,
 	useEffect,
 	useLayoutEffect,
@@ -18,7 +20,6 @@ import {
 	type ReferenceResourceSourceType,
 } from "../MessageEditor/reference-assets/reference-resource.types"
 import { createPluginChannelToken, type PluginRuntimeMessage } from "./runtime/v1"
-import { PLUGIN_WINDOW_DEFAULT_HEIGHT } from "./constants"
 import {
 	getPluginFilePickerAccept,
 	getPluginReferenceResourceType,
@@ -54,17 +55,20 @@ export const PluginWindow = memo(function PluginWindow({
 	locale,
 	plugin,
 	sessionId,
+	frameHeight,
+	setFrameHeight,
 }: {
 	canvas: Canvas
 	locale: string
 	plugin: CanvasDesignPlugin
 	sessionId: number
+	frameHeight: number
+	setFrameHeight: Dispatch<SetStateAction<number>>
 }) {
 	const channelToken = useMemo(() => createPluginChannelToken(), [plugin.name, sessionId])
 	const [position, setPosition] = useState<PluginWindowPosition>(() =>
 		getInitialPosition(canvas.container),
 	)
-	const [frameHeight, setFrameHeight] = useState(PLUGIN_WINDOW_DEFAULT_HEIGHT)
 	const dragStartRef = useRef({ pointerX: 0, pointerY: 0, windowX: 0, windowY: 0 })
 	const draggingRef = useRef(false)
 	const positionRef = useRef(position)

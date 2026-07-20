@@ -68,13 +68,18 @@ function PublishingPanel() {
 		}
 
 		try {
-			const [agentDetail, versions] = await Promise.all([
+			const [agentDetail, versions, categories] = await Promise.all([
 				crewService.getAgentDetailRaw(crewCode),
 				crewService.getAgentVersions(crewCode),
+				crewService.getStoreCategories({ includeEmpty: true }).catch((error) => {
+					console.error("Failed to fetch agent market categories:", error)
+					return []
+				}),
 			])
 			const panelData = createCrewEditPublishPanelData({
 				agentDetail,
 				versions: versions.list,
+				categories,
 				locale: i18n.resolvedLanguage ?? i18n.language,
 				canPublishPrivate: canCreateAgent,
 				canPublishTeam: canPublishAgentTeam,

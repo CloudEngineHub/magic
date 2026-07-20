@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo, useCallback, memo } from "react"
+import { useState, useEffect, useRef, useMemo, useCallback, memo, useId } from "react"
 import {
 	DropdownMenu,
 	DropdownMenuTrigger,
@@ -10,6 +10,12 @@ import {
 	ContextMenuContent,
 	ContextMenuPortal,
 } from "@/components/shadcn-ui/context-menu"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/shadcn-ui/popover"
+import {
+	OverlayInteractionScopeProvider,
+	getOverlayInteractionScopeBoundaryAttributes,
+	isInteractionWithinOverlayScope,
+} from "@/components/shadcn-ui/overlay-interaction-scope"
 import { cn } from "@/lib/utils"
 import { convertMenuItemsToComponents, convertPlacement } from "./utils"
 import type { MagicDropdownProps } from "./types"
@@ -32,6 +38,8 @@ function MagicDropdownDesktop({
 	open,
 	onOpenChange,
 	onInteractOutside,
+	keepOpenOnNestedOverlay = false,
+	contentRole = "menu",
 	onEscapeKeyDown,
 	popupRender,
 	getPopupContainer,
@@ -39,6 +47,7 @@ function MagicDropdownDesktop({
 	children,
 	model,
 }: MagicDropdownProps) {
+	const overlayScopeId = useId()
 	// 判断当前触发方式
 	const isContextMenu = useMemo(() => trigger?.includes("contextMenu"), [trigger])
 	const isHover = useMemo(() => trigger?.includes("hover"), [trigger])
@@ -96,6 +105,17 @@ function MagicDropdownDesktop({
 			onOpenChange?.(nextOpen)
 		},
 		[isContextMenu, isOpenControlled, onOpenChange],
+	)
+
+	const handleDropdownInteractOutside = useCallback(
+		(event: Parameters<NonNullable<MagicDropdownProps["onInteractOutside"]>>[0]) => {
+			// 只拦截属于当前面板的内层浮层交互，页面上其他无关浮层仍按 Radix 默认行为关闭当前面板。
+			if (keepOpenOnNestedOverlay && isInteractionWithinOverlayScope(event, overlayScopeId)) {
+				event.preventDefault()
+			}
+			onInteractOutside?.(event)
+		},
+		[keepOpenOnNestedOverlay, onInteractOutside, overlayScopeId],
 	)
 
 	// 合并各触发方式的 open 状态，统一传给 DropdownMenu
@@ -166,6 +186,26 @@ function MagicDropdownDesktop({
 		})
 	}, [popupRender, menu, isContextMenu])
 
+	// Provider 让 content 中创建的各类 Portal 浮层继承当前下拉面板的作用域标记。
+	// 这样用户操作内层筛选菜单、Select 或 Popover 时，外层面板不会被误判为点击外部。
+	const scopedContent = useMemo(
+		() =>
+			keepOpenOnNestedOverlay ? (
+				<OverlayInteractionScopeProvider scopeId={overlayScopeId}>
+					{content}
+				</OverlayInteractionScopeProvider>
+			) : (
+				content
+			),
+		[content, keepOpenOnNestedOverlay, overlayScopeId],
+	)
+
+	// 标记外层面板的实际 DOM 边界。业务层再次 Portal content 时，作用域判断会通过
+	// 内层浮层的 aria 关联找到触发器，并用该边界确认它是否属于当前下拉面板。
+	const overlayScopeBoundaryAttributes = getOverlayInteractionScopeBoundaryAttributes(
+		keepOpenOnNestedOverlay ? overlayScopeId : undefined,
+	)
+
 	// 若传入 getPopupContainer，将容器传给 DropdownMenuContent 内部的 Portal（外层 Portal 无效，因 Content 内部另有 Portal 挂到 body）
 	const dropdownContainer = getPopupContainer?.() ?? null
 	const renderContextMenuWithPortal = useCallback(
@@ -227,16 +267,46 @@ function MagicDropdownDesktop({
 				{(hasMenuItems || popupRender) &&
 					renderContextMenuWithPortal(
 						<ContextMenuContent
+							{...overlayScopeBoundaryAttributes}
 							className={contentClassName}
 							style={overlayStyle}
-							onInteractOutside={onInteractOutside}
+							onInteractOutside={handleDropdownInteractOutside}
 							onEscapeKeyDown={onEscapeKeyDown}
 						>
-							{content}
+							{scopedContent}
 						</ContextMenuContent>,
 						ContextMenuPortal,
 					)}
 			</ContextMenu>
+		)
+	}
+
+	if (contentRole === "panel") {
+		return (
+			<Popover
+				open={effectiveOpen}
+				onOpenChange={handleDropdownOpenChange}
+				modal={isUndefined(model) ? false : model}
+			>
+				<PopoverTrigger asChild className={rootClassName}>
+					{children}
+				</PopoverTrigger>
+				{(hasMenuItems || popupRender) && (
+					<PopoverContent
+						{...overlayScopeBoundaryAttributes}
+						container={dropdownContainer ?? undefined}
+						side={side}
+						align={align}
+						className={contentClassName}
+						style={overlayStyle}
+						onInteractOutside={handleDropdownInteractOutside}
+						onEscapeKeyDown={onEscapeKeyDown}
+						onOpenAutoFocus={(event) => event.preventDefault()}
+					>
+						{scopedContent}
+					</PopoverContent>
+				)}
+			</Popover>
 		)
 	}
 
@@ -249,17 +319,18 @@ function MagicDropdownDesktop({
 			{triggerWrapper}
 			{(hasMenuItems || popupRender) && (
 				<DropdownMenuContent
+					{...overlayScopeBoundaryAttributes}
 					container={dropdownContainer ?? undefined}
 					side={side}
 					align={align}
 					className={contentClassName}
 					style={overlayStyle}
-					onInteractOutside={onInteractOutside}
+					onInteractOutside={handleDropdownInteractOutside}
 					onEscapeKeyDown={onEscapeKeyDown}
 					onMouseEnter={isHover ? handleMouseEnter : undefined}
 					onMouseLeave={isHover ? handleMouseLeave : undefined}
 				>
-					{content}
+					{scopedContent}
 				</DropdownMenuContent>
 			)}
 		</DropdownMenu>

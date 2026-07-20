@@ -10,7 +10,7 @@
 		"more": "更多"
 	},
 	"audioRecordings": {
-		"title": "录音与纪要"
+		"title": "AI 录音"
 	},
 	"chats": {
 		"empty": "暂无对话",
@@ -104,7 +104,7 @@
 	},
 	"slidesTemplates": {
 		"templateCount": "{{count}} 套",
-		"title": "PPT 模板"
+		"title": "AI PPT"
 	},
 	"superLobster": {
 		"card": {

@@ -49,7 +49,6 @@ class TemporaryFileUrlProxyManager
 
         $urls = [];
         $proxyUrls = [];
-        $proxyManageUrls = [];
 
         try {
             foreach ($fileUrls as $key => $fileUrl) {
@@ -61,16 +60,15 @@ class TemporaryFileUrlProxyManager
                 $createUrl = $this->buildCreateUrl($fileUrl);
                 if (! isset($proxyUrls[$createUrl])) {
                     $proxyUrls[$createUrl] = $this->createProxy($createUrl);
-                    $proxyManageUrls[$createUrl] = $createUrl;
                 }
                 $urls[$key] = $proxyUrls[$createUrl];
             }
         } catch (Throwable $throwable) {
-            $createdProxyManageUrls = array_values($proxyManageUrls);
-            $this->cleanup($createdProxyManageUrls);
+            $createdProxyUrls = array_values($proxyUrls);
+            $this->cleanup($createdProxyUrls);
             $this->logger->warning('Temporary file URL proxy prepare failed, fallback to original URLs', [
-                'created_proxy_count' => count($createdProxyManageUrls),
-                'created_proxy_url_sha256' => array_map(static fn (string $proxyUrl): string => hash('sha256', $proxyUrl), $createdProxyManageUrls),
+                'created_proxy_count' => count($createdProxyUrls),
+                'created_proxy_url_sha256' => array_map(static fn (string $proxyUrl): string => hash('sha256', $proxyUrl), $createdProxyUrls),
                 'error_class' => $throwable::class,
                 'error_code' => $throwable->getCode(),
                 'error' => $this->sanitizeErrorMessage($throwable->getMessage()),
@@ -84,7 +82,7 @@ class TemporaryFileUrlProxyManager
 
         return [
             'urls' => $urls,
-            'proxy_urls' => array_values($proxyManageUrls),
+            'proxy_urls' => array_values($proxyUrls),
         ];
     }
 

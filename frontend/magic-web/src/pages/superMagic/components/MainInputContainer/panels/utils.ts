@@ -133,10 +133,12 @@ function getSelectedOptionLabel(field: FieldItem, locale: string): string {
 
 	const flat = flattenFieldOptions(field)
 	const selected = flat.find((opt) => getOptionValue(opt) === currentVal)
-	if (!selected) return ""
+	if (!selected && !field.custom_input) return ""
 
 	const label = resolveLocaleText(field.label, locale)?.trim()
-	const value = resolveLocaleText(selected.value, locale)?.trim() ?? ""
+	const value = selected
+		? (resolveLocaleText(selected.value, locale)?.trim() ?? "")
+		: currentVal.trim()
 
 	if (!label) return value
 	if (!value) return label
