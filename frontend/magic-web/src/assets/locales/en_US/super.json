@@ -3193,6 +3193,25 @@
 			"showDatabase": "Show database",
 			"showFiles": "Show files"
 		},
+		"mobileConversation": {
+			"emptyDescription": "Enter a message below to continue improving this micro app.",
+			"emptyTitle": "Start a conversation",
+			"noTopics": "There are no topics available in this project.",
+			"open": "Open conversation",
+			"switchTopic": "Tap to switch topics",
+			"title": "Micro app conversation",
+			"topicCount": "{{count}} topics"
+		},
+		"mobileDatabase": {
+			"backToTables": "Back to tables",
+			"readOnlyHint": "Mobile currently supports viewing data, structure, and permission summaries. Use desktop to create or edit rows and configure permissions."
+		},
+		"mobileTabs": {
+			"ariaLabel": "Micro app page",
+			"conversation": "Chat",
+			"files": "Files",
+			"preview": "Preview"
+		},
 		"preview": {
 			"emptyDescription": "Add an HTML file to the project root, or select an entry file in the header.",
 			"emptyTitle": "No entry HTML found"
@@ -3693,6 +3712,7 @@
 			"navApps": "Apps",
 			"navChats": "Chats",
 			"navMagiClaw": "MagiClaw",
+			"navMicroApps": "Micro Apps",
 			"navMyCrew": "My Crew",
 			"navRecording": "Recordings & summaries",
 			"navSuper": "Home",

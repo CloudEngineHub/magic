@@ -36,8 +36,8 @@ import useTopicModel from "@/pages/superMagic/components/MessageEditor/hooks/use
 import { useRefreshTopicDetailOnTaskComplete } from "@/pages/superMagic/hooks/useRefreshTopicDetailOnTaskComplete"
 import { useScopedTopicReadProgress } from "@/pages/superMagic/hooks/useScopedTopicReadProgress"
 import { applyOptimisticTopicRunningState } from "@/pages/superMagic/services/topicStatusSyncService"
-import superMagicModeService from "@/services/superMagic/SuperMagicModeService"
 import { useAppStore } from "../context"
+import { resolveMicroAppModelSelectionMode } from "../utils/microAppModelMode"
 
 interface AppConversationPanelProps {
 	selectedProject: ProjectListItem | null
@@ -68,10 +68,7 @@ function AppConversationPanel({
 }: AppConversationPanelProps) {
 	const { conversation } = useAppStore()
 	const selectedTopic = topicStore.selectedTopic
-	const modelTopicMode = superMagicModeService.resolveLanguageModelMode(
-		TopicMode.MicroApp,
-		TopicMode.Default,
-	)
+	const modelTopicMode = resolveMicroAppModelSelectionMode()
 
 	const sharedTopicModelStore = useMemo(() => createSuperMagicTopicModelStore(), [])
 

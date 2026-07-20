@@ -1,44 +1,33 @@
-import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { lazy, Suspense, useEffect } from "react"
 import { useParams } from "react-router"
 import { observer } from "mobx-react-lite"
 import { useTranslation } from "react-i18next"
 import { File, Loader2, PanelLeftClose, PanelRightOpen } from "lucide-react"
-import { useDebounceFn, useDeepCompareEffect, useLocalStorageState, useMemoizedFn } from "ahooks"
-import pubsub, { PubSubEvents } from "@/utils/pubsub"
-import useNavigate from "@/routes/hooks/useNavigate"
-import useResizablePanel from "@/pages/superMagic/hooks/useResizablePanel"
-import TopicResizeHandle from "@/pages/superMagic/pages/TopicPage/components/TopicResizeHandle"
-import TopicFilesButton from "@/pages/superMagic/components/TopicFilesButton"
-import Detail, { type DetailRef } from "@/pages/superMagic/components/Detail"
-import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks"
-import { useAttachmentsPolling } from "@/pages/superMagic/hooks/useAttachmentsPolling"
-import { AttachmentDataProcessor } from "@/pages/superMagic/utils/attachmentDataProcessor"
-import {
-	normalizeUpdateAttachmentsPayload,
-	releaseAttachmentsRefreshWaitersWithoutFetch,
-	type SuperMagicUpdateAttachmentsRequest,
-	withAttachmentsRefreshWaitersResolved,
-} from "@/pages/superMagic/services/attachmentsTopicSync"
+import { useLocalStorageState, useMemoizedFn } from "ahooks"
+
+import Detail from "@/pages/superMagic/components/Detail"
 import { FileActionVisibilityProvider } from "@/pages/superMagic/providers/file-action-visibility-provider"
-import { SuperMagicApi } from "@/apis"
-import { useDefaultModeModelListRefreshOnMount } from "@/pages/superMagic/hooks"
-import { useCreateTopicListener } from "@/pages/superMagic/components/TopicMode"
 import { MessageHeaderTopicHistoryPanel } from "@/pages/superMagic/components/MessageHeader"
+import TopicFilesButton from "@/pages/superMagic/components/TopicFilesButton"
+import { TOPIC_HISTORY_PANEL_WIDTH } from "@/pages/superMagic/constants/resizablePanel"
+import useResizablePanel from "@/pages/superMagic/hooks/useResizablePanel"
 import { useScopedMessageHeaderTopicActions } from "@/pages/superMagic/hooks/useScopedMessageHeaderTopicActions"
-import useCollaboratorUpdatePanel from "@/pages/superMagic/components/WithCollaborators/hooks/useCollaboratorUpdatePanel"
-import { isReadOnlyProject } from "@/pages/superMagic/utils/permission"
+import TopicResizeHandle from "@/pages/superMagic/pages/TopicPage/components/TopicResizeHandle"
 import {
 	TOPIC_HISTORY_PANEL_OPEN_STORAGE_KEYS,
 	useTopicHistoryLayoutState,
 } from "@/pages/superMagic/pages/TopicPage/hooks/useTopicHistoryLayoutState"
-import { TOPIC_HISTORY_PANEL_WIDTH } from "@/pages/superMagic/constants/resizablePanel"
 import { RouteName } from "@/routes/constants"
-import { AppStoreProvider, useAppStore } from "./context"
+import useNavigate from "@/routes/hooks/useNavigate"
+
 import AppConversationPanel from "./components/AppConversationPanel"
 import MicroAppHeader from "./components/MicroAppHeader"
+import MicroAppPageOverlays from "./components/MicroAppPageOverlays"
 import MicroAppPanelToggleButton from "./components/MicroAppPanelToggleButton"
-import MicroAppPublishDialog from "./components/MicroAppPublishDialog"
-import { resolveDefaultHtmlEntry } from "./utils/microAppFiles"
+import { AppStoreProvider } from "./context"
+import { useMicroAppPageController } from "./hooks/useMicroAppPageController"
+
+const MicroAppDatabasePanel = lazy(() => import("./components/MicroAppDatabasePanel"))
 
 const SIDEBAR_DEFAULT_PX = 280
 const SIDEBAR_MIN_PX = 220
@@ -53,24 +42,40 @@ const MICRO_APP_SIDEBAR_COLLAPSED_KEY = "MAGIC:micro-app-page-sidebar-collapsed"
 const MICRO_APP_MESSAGE_PANEL_STORAGE_KEY = "MAGIC:micro-app-page-message-panel-width"
 const MICRO_APP_MESSAGE_PANEL_COLLAPSED_KEY = "MAGIC:micro-app-page-message-panel-collapsed"
 
-const MicroAppDatabasePanel = lazy(() => import("./components/MicroAppDatabasePanel"))
-
 function MicroAppPageInner({ projectId }: { projectId: string }) {
 	const { t } = useTranslation("super")
-	const store = useAppStore()
-	const { conversation } = store
 	const navigate = useNavigate()
-	const [isInitialAttachmentsLoaded, setIsInitialAttachmentsLoaded] = useState(false)
-	const [activeFileId, setActiveFileId] = useState<string | null>(null)
-	const [userSelectDetail, setUserSelectDetail] = useState<unknown>(null)
-	const [isFileTabsCacheLoaded, setIsFileTabsCacheLoaded] = useState(false)
-	const [publishDialogOpen, setPublishDialogOpen] = useState(false)
-	const [isDatabasePanelOpen, setIsDatabasePanelOpen] = useState(false)
-	const detailRef = useRef<DetailRef>(null)
-	const defaultEntryOpenedKeyRef = useRef<string | null>(null)
-	const selectedProject = conversation.selectedProject
-	const selectedTopic = conversation.topicStore.selectedTopic
-	const isReadOnly = isReadOnlyProject(selectedProject?.user_role)
+	const controller = useMicroAppPageController(projectId)
+	const {
+		store,
+		conversation,
+		selectedProject,
+		selectedTopic,
+		isReadOnly,
+		attachments,
+		attachmentList,
+		activeFileId,
+		userSelectDetail,
+		setUserSelectDetail,
+		defaultEntryFile,
+		nonClosableFileIds,
+		detailRef,
+		topicFilesProps,
+		handleActiveFileChange,
+		handleBackToMicroApps,
+		handleOpenPublishDialog,
+		handleToggleDatabasePanel,
+		handleFileTabsCacheLoaded,
+		publishDialogOpen,
+		setPublishDialogOpen,
+		isDatabasePanelOpen,
+		setIsDatabasePanelOpen,
+		CollaboratorUpdatePanel,
+		canManageCollaborators,
+		handleManageCollaborators,
+		handleProjectNameChange,
+	} = controller
+
 	const topicActions = useScopedMessageHeaderTopicActions({
 		selectedProject,
 		selectedTopic,
@@ -81,117 +86,24 @@ function MicroAppPageInner({ projectId }: { projectId: string }) {
 			storageKey: TOPIC_HISTORY_PANEL_OPEN_STORAGE_KEYS.microApp,
 			isEnabled: !isReadOnly,
 		})
-	const attachments = store.projectFilesStore.workspaceFileTree
-	const attachmentList = store.projectFilesStore.workspaceFilesList
-
-	const setAttachments = useMemoizedFn((nextAttachments: AttachmentItem[]) => {
-		store.projectFilesStore.setWorkspaceFileTree(nextAttachments)
-	})
-
-	useEffect(() => {
-		if (projectId && store.projectId !== projectId) {
-			store.initFromProjectId(projectId)
-		}
-	}, [projectId, store])
-
-	useEffect(() => {
-		setActiveFileId(null)
-		setUserSelectDetail(null)
-		setIsFileTabsCacheLoaded(false)
-		defaultEntryOpenedKeyRef.current = null
-		setPublishDialogOpen(false)
-		setIsDatabasePanelOpen(false)
-	}, [projectId])
-
-	useDefaultModeModelListRefreshOnMount()
-	useCreateTopicListener({
-		selectedProject,
-		topicStore: conversation.topicStore,
-	})
-
-	const updateAttachments = useDebounceFn(
-		(pid?: string, callback?: (didLoad: boolean) => void) => {
-			if (!pid) {
-				store.projectFilesStore.setWorkspaceFileTree([])
-				releaseAttachmentsRefreshWaitersWithoutFetch()
-				callback?.(false)
-				return
-			}
-
-			const temporaryToken =
-				(window as Window & { temporary_token?: string }).temporary_token || ""
-			let didLoad = false
-
-			pubsub.publish(PubSubEvents.Update_Attachments_Loading, true)
-			withAttachmentsRefreshWaitersResolved(
-				pid,
-				SuperMagicApi.getAttachmentsByProjectId({
-					projectId: pid,
-					temporaryToken,
-				})
-					.then((res) => {
-						const processedData = AttachmentDataProcessor.processAttachmentData(res)
-						store.projectFilesStore.setWorkspaceFileTree(processedData.tree)
-						store.mentionPanelStore.finishLoadAttachmentsPromise(pid)
-						didLoad = true
-					})
-					.catch((error) => {
-						console.error("Failed to fetch micro app attachments:", error)
-						store.projectFilesStore.setWorkspaceFileTree([])
-					})
-					.finally(() => {
-						pubsub.publish(PubSubEvents.Update_Attachments_Loading, false)
-						callback?.(didLoad)
-					}),
-			)
-		},
-		{ wait: 500 },
-	).run
-
-	const defaultEntryFile = useMemo(
-		() => resolveDefaultHtmlEntry(attachmentList),
-		[attachmentList],
-	)
-
-	const nonClosableFileIds = useMemo(
-		() => (defaultEntryFile?.file_id ? [String(defaultEntryFile.file_id)] : []),
-		[defaultEntryFile?.file_id],
-	)
-
-	useEffect(() => {
-		if (!isInitialAttachmentsLoaded || !isFileTabsCacheLoaded || !defaultEntryFile?.file_id) {
-			return
-		}
-
-		// FilesViewer restores cached tabs asynchronously. Open the default entry afterwards so
-		// index.html is the visible initial tab instead of being overwritten by cache restoration.
-		const entryId = String(defaultEntryFile.file_id)
-		const openKey = `${projectId}:${entryId}`
-		if (defaultEntryOpenedKeyRef.current === openKey) return
-
-		defaultEntryOpenedKeyRef.current = openKey
-		setActiveFileId(entryId)
-		detailRef.current?.openFileTab(defaultEntryFile)
-	}, [defaultEntryFile, isFileTabsCacheLoaded, isInitialAttachmentsLoaded, projectId])
 
 	const [isSidebarCollapsed, setIsSidebarCollapsed] = useLocalStorageState<boolean>(
 		MICRO_APP_SIDEBAR_COLLAPSED_KEY,
 		{ defaultValue: true },
 	)
-
-	const toggleSidebarCollapse = useMemoizedFn(() => {
-		setIsSidebarCollapsed((prev) => !prev)
-	})
-
 	const [isMessagePanelCollapsed, setIsMessagePanelCollapsed] = useLocalStorageState<boolean>(
 		MICRO_APP_MESSAGE_PANEL_COLLAPSED_KEY,
-		{ defaultValue: false },
+		{
+			defaultValue: false,
+		},
 	)
 
-	const toggleMessagePanelCollapse = useMemoizedFn(() => {
-		setIsMessagePanelCollapsed((prev) => !prev)
+	const toggleSidebarCollapse = useMemoizedFn(() => {
+		setIsSidebarCollapsed((previous) => !previous)
 	})
-
+	const toggleMessagePanelCollapse = useMemoizedFn(() => {
+		setIsMessagePanelCollapsed((previous) => !previous)
+	})
 	const handleToggleMessagePanelCollapse = useMemoizedFn(() => {
 		if (!isMessagePanelCollapsed) closeTopicHistoryPanel()
 		toggleMessagePanelCollapse()
@@ -208,7 +120,6 @@ function MicroAppPageInner({ projectId }: { projectId: string }) {
 		storageKey: MICRO_APP_SIDEBAR_STORAGE_KEY,
 		direction: "left",
 	})
-
 	const {
 		width: messagePanelWidthPx,
 		isDragging: isDraggingMessagePanel,
@@ -219,138 +130,6 @@ function MicroAppPageInner({ projectId }: { projectId: string }) {
 		defaultWidth: MESSAGE_PANEL_DEFAULT_PX,
 		storageKey: MICRO_APP_MESSAGE_PANEL_STORAGE_KEY,
 		direction: "right",
-	})
-
-	useEffect(() => {
-		store.projectFilesStore.setSelectedProject(selectedProject)
-		return () => {
-			store.projectFilesStore.setSelectedProject(null)
-		}
-	}, [selectedProject, store.projectFilesStore])
-
-	useAttachmentsPolling({
-		projectId: selectedProject?.id,
-		onAttachmentsChange: useCallback(
-			({ tree, list }: { tree: AttachmentItem[]; list: AttachmentItem[] }) => {
-				const processedData = AttachmentDataProcessor.processAttachmentData({ tree, list })
-				store.projectFilesStore.setWorkspaceFileTree(processedData.tree)
-				setIsInitialAttachmentsLoaded(true)
-			},
-			[store.projectFilesStore],
-		),
-		onError: useMemoizedFn((error: unknown) => {
-			console.error("Failed to poll micro app attachments:", error)
-		}),
-	})
-
-	useDeepCompareEffect(() => {
-		const pid = selectedProject?.id
-		if (!pid) {
-			setIsInitialAttachmentsLoaded(false)
-			return
-		}
-
-		let isActive = true
-		setIsInitialAttachmentsLoaded(false)
-
-		store.mentionPanelStore.initLoadAttachments(pid)
-		updateAttachments(pid, (didLoad) => {
-			if (!isActive || !didLoad) return
-			setIsInitialAttachmentsLoaded(true)
-		})
-
-		return () => {
-			isActive = false
-			store.mentionPanelStore.clearInitLoadAttachmentsPromise(pid)
-		}
-	}, [selectedProject?.id])
-
-	useEffect(() => {
-		const handleUpdateAttachments = (
-			payloadOrCallback?: SuperMagicUpdateAttachmentsRequest,
-		) => {
-			const payload = normalizeUpdateAttachmentsPayload(payloadOrCallback)
-			const pid = selectedProject?.id
-			if (!pid) {
-				payload.callback?.()
-				releaseAttachmentsRefreshWaitersWithoutFetch()
-				return
-			}
-			updateAttachments(pid, payload.callback)
-		}
-
-		pubsub.subscribe(PubSubEvents.Update_Attachments, handleUpdateAttachments)
-		return () => {
-			pubsub.unsubscribe(PubSubEvents.Update_Attachments, handleUpdateAttachments)
-		}
-	}, [selectedProject?.id, updateAttachments])
-
-	const handleOpenFile = useMemoizedFn((fileItem?: AttachmentItem) => {
-		if (!fileItem?.file_id) return
-		detailRef.current?.openFileTab(fileItem)
-	})
-
-	const handleActiveFileChange = useMemoizedFn((fileId: string | null) => {
-		setActiveFileId(fileId)
-	})
-
-	const topicFilesProps = useMemo(
-		() => ({
-			attachments,
-			setUserSelectDetail: () => undefined,
-			onFileClick: handleOpenFile,
-			projectId: selectedProject?.id,
-			activeFileId,
-			selectedTopic,
-			onAttachmentsChange: setAttachments,
-			allowEdit: !isReadOnly,
-			selectedWorkspace: undefined,
-			selectedProject,
-			projects: [],
-			workspaces: [],
-			isInProject: true,
-		}),
-		[
-			attachments,
-			handleOpenFile,
-			activeFileId,
-			isReadOnly,
-			selectedProject,
-			selectedTopic,
-			setAttachments,
-		],
-	)
-
-	const handleBackToMicroApps = useMemoizedFn(() => {
-		navigate({
-			name: RouteName.MicroApps,
-		})
-	})
-
-	const handleOpenPublishDialog = useMemoizedFn(() => {
-		if (!selectedProject?.id || !defaultEntryFile) return
-		setPublishDialogOpen(true)
-	})
-
-	const handleToggleDatabasePanel = useMemoizedFn(() => {
-		if (!selectedProject?.id) return
-		setIsDatabasePanelOpen((current) => !current)
-	})
-
-	const handleFileTabsCacheLoaded = useMemoizedFn((loadedProjectId: string) => {
-		if (loadedProjectId === selectedProject?.id) {
-			setIsFileTabsCacheLoaded(true)
-		}
-	})
-
-	const { openManageModal, CollaboratorUpdatePanel, canManageCollaborators } =
-		useCollaboratorUpdatePanel({
-			selectedProject,
-		})
-
-	const handleManageCollaborators = useMemoizedFn(() => {
-		if (!selectedProject || !canManageCollaborators) return
-		openManageModal()
 	})
 
 	if (store.initLoading) {
@@ -379,7 +158,7 @@ function MicroAppPageInner({ projectId }: { projectId: string }) {
 	return (
 		<FileActionVisibilityProvider>
 			<div
-				className="flex h-full w-full flex-col overflow-hidden rounded-sm border border-border bg-background"
+				className="flex h-full w-full flex-col overflow-hidden rounded-lg border border-border bg-background"
 				data-testid="micro-app-page"
 			>
 				<MicroAppHeader
@@ -394,7 +173,7 @@ function MicroAppPageInner({ projectId }: { projectId: string }) {
 				/>
 
 				<div className="flex min-h-0 flex-1 overflow-hidden">
-					{!isSidebarCollapsed && (
+					{!isSidebarCollapsed ? (
 						<>
 							<aside
 								className="flex h-full shrink-0 flex-col overflow-hidden border-r border-border bg-background"
@@ -422,8 +201,7 @@ function MicroAppPageInner({ projectId }: { projectId: string }) {
 								className={isDraggingSidebar ? "before:opacity-100" : undefined}
 							/>
 						</>
-					)}
-					{isSidebarCollapsed ? (
+					) : (
 						<aside
 							className="flex h-full shrink-0 justify-center border-r border-border bg-background py-2"
 							style={{ width: COLLAPSED_RAIL_WIDTH_PX }}
@@ -437,7 +215,7 @@ function MicroAppPageInner({ projectId }: { projectId: string }) {
 								onClick={toggleSidebarCollapse}
 							/>
 						</aside>
-					) : null}
+					)}
 
 					<main className="flex h-full min-w-0 flex-1 flex-col overflow-hidden">
 						<Detail
@@ -465,7 +243,7 @@ function MicroAppPageInner({ projectId }: { projectId: string }) {
 						/>
 					</main>
 
-					{!isMessagePanelCollapsed && (
+					{!isMessagePanelCollapsed ? (
 						<>
 							<TopicResizeHandle
 								onResizeStart={onMessagePanelResizeStart}
@@ -495,7 +273,7 @@ function MicroAppPageInner({ projectId }: { projectId: string }) {
 								/>
 							</aside>
 						</>
-					)}
+					) : null}
 					{isTopicHistoryPanelOpen && !isMessagePanelCollapsed ? (
 						<aside
 							className="h-full min-w-0 shrink-0 overflow-hidden border-l border-border bg-background"
@@ -528,32 +306,26 @@ function MicroAppPageInner({ projectId }: { projectId: string }) {
 						</aside>
 					) : null}
 				</div>
-
-				<MicroAppPublishDialog
-					open={publishDialogOpen}
-					projectId={selectedProject?.id}
-					projectName={selectedProject?.project_name}
-					onProjectNameChange={(projectName) => {
-						if (!selectedProject) return
-						conversation.setSelectedProject({
-							...selectedProject,
-							project_name: projectName,
-						})
-					}}
-					onOpenChange={setPublishDialogOpen}
-				/>
-				{CollaboratorUpdatePanel}
-				{isDatabasePanelOpen ? (
-					<Suspense fallback={null}>
-						<MicroAppDatabasePanel
-							open={isDatabasePanelOpen}
-							projectId={selectedProject?.id}
-							projectName={selectedProject?.project_name}
-							onOpenChange={setIsDatabasePanelOpen}
-						/>
-					</Suspense>
-				) : null}
 			</div>
+
+			<MicroAppPageOverlays
+				projectId={selectedProject?.id}
+				projectName={selectedProject?.project_name}
+				publishDialogOpen={publishDialogOpen}
+				onPublishDialogOpenChange={setPublishDialogOpen}
+				onProjectNameChange={handleProjectNameChange}
+				collaboratorPanel={CollaboratorUpdatePanel}
+			/>
+			{isDatabasePanelOpen ? (
+				<Suspense fallback={null}>
+					<MicroAppDatabasePanel
+						open={isDatabasePanelOpen}
+						projectId={selectedProject?.id}
+						projectName={selectedProject?.project_name}
+						onOpenChange={setIsDatabasePanelOpen}
+					/>
+				</Suspense>
+			) : null}
 		</FileActionVisibilityProvider>
 	)
 }

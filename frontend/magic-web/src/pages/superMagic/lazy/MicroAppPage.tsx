@@ -1,9 +1,11 @@
 import { lazy, Suspense } from "react"
 import { Loader2 } from "lucide-react"
+import { useIsMobile } from "@/hooks/useIsMobile"
 
 const MicroAppPageDesktop = lazy(
 	() => import("@/pages/superMagic/pages/MicroAppPage/index.desktop"),
 )
+const MicroAppPageMobile = lazy(() => import("@/pages/superMagic/pages/MicroAppPage/index.mobile"))
 
 function MicroAppPageFallback() {
 	return (
@@ -14,9 +16,12 @@ function MicroAppPageFallback() {
 }
 
 export default function MicroAppPage() {
+	const isMobile = useIsMobile()
+	const Content = isMobile ? MicroAppPageMobile : MicroAppPageDesktop
+
 	return (
 		<Suspense fallback={<MicroAppPageFallback />}>
-			<MicroAppPageDesktop />
+			<Content />
 		</Suspense>
 	)
 }

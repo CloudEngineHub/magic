@@ -3193,6 +3193,25 @@
 			"showDatabase": "展开数据库",
 			"showFiles": "展开文件列表"
 		},
+		"mobileConversation": {
+			"emptyDescription": "在下方输入内容，继续完善当前微应用。",
+			"emptyTitle": "开始对话",
+			"noTopics": "当前项目暂无可切换的话题。",
+			"open": "打开对话",
+			"switchTopic": "点击切换话题",
+			"title": "微应用对话",
+			"topicCount": "共 {{count}} 个话题"
+		},
+		"mobileDatabase": {
+			"backToTables": "返回数据表列表",
+			"readOnlyHint": "移动端当前支持查看数据、结构和权限摘要；新增、编辑和权限配置请在桌面端完成。"
+		},
+		"mobileTabs": {
+			"ariaLabel": "微应用页面",
+			"conversation": "对话",
+			"files": "文件",
+			"preview": "预览"
+		},
 		"preview": {
 			"emptyDescription": "请在项目根目录添加 HTML 文件，或从右上角选择入口文件。",
 			"emptyTitle": "未找到入口 HTML"
@@ -3693,6 +3712,7 @@
 			"navApps": "应用",
 			"navChats": "对话",
 			"navMagiClaw": "超级龙虾",
+			"navMicroApps": "微应用",
 			"navMyCrew": "数字员工",
 			"navRecording": "录音与纪要",
 			"navSuper": "首页",
