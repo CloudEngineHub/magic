@@ -25,9 +25,12 @@ import {
 } from "./validators"
 import { createUploadHandlers } from "./uploadHandlers"
 
-const PASTED_TEXT_TEMP_DIR_NAME = ".tmp"
+const TEMP_UPLOAD_DIR_NAME = ".tmp"
 
 export interface AddFilesOptions {
+	/** Upload directly into the hidden project temp directory. */
+	useTempDirectory?: boolean
+	/** @deprecated Use useTempDirectory. Kept for consumer compatibility. */
 	usePastedTextTempDirectory?: boolean
 	defaultRelativePathPrefix?: string
 }
@@ -91,7 +94,7 @@ export class FileUploadStore {
 	private uploadHandlers!: ReturnType<typeof createUploadHandlers>
 	private sessionUploadFileIds = new Set<string>()
 	private sessionSavedProjectFileIds = new Set<string>()
-	private pastedTextTempDirectoryIds = new Map<string, string>()
+	private tempUploadDirectoryIds = new Map<string, string>()
 	private projectFilesStore: ProjectFilesStore
 
 	constructor(options: FileUploadStoreOptions = {}) {
@@ -246,31 +249,31 @@ export class FileUploadStore {
 		)
 	}
 
-	private async ensurePastedTextTempDirectory() {
+	private async ensureTempUploadDirectory() {
 		if (!this.projectId) return undefined
 
-		const cachedDirectoryId = this.pastedTextTempDirectoryIds.get(this.projectId)
+		const cachedDirectoryId = this.tempUploadDirectoryIds.get(this.projectId)
 		if (cachedDirectoryId) return cachedDirectoryId
 
-		const existingDirectory = this.findRootDirectoryByName(PASTED_TEXT_TEMP_DIR_NAME)
+		const existingDirectory = this.findRootDirectoryByName(TEMP_UPLOAD_DIR_NAME)
 		if (existingDirectory?.file_id) {
-			this.pastedTextTempDirectoryIds.set(this.projectId, existingDirectory.file_id)
+			this.tempUploadDirectoryIds.set(this.projectId, existingDirectory.file_id)
 			return existingDirectory.file_id
 		}
 
 		const response = await SuperMagicApi.createFile({
 			project_id: this.projectId,
-			file_name: PASTED_TEXT_TEMP_DIR_NAME,
+			file_name: TEMP_UPLOAD_DIR_NAME,
 			is_directory: true,
 			ignore_duplicate: true,
 		})
 
 		if (response?.file_id) {
-			this.pastedTextTempDirectoryIds.set(this.projectId, response.file_id)
+			this.tempUploadDirectoryIds.set(this.projectId, response.file_id)
 			return response.file_id
 		}
 
-		logger.warn("create pasted text temp directory returned no file_id", {
+		logger.warn("create temp upload directory returned no file_id", {
 			projectId: this.projectId,
 			response,
 		})
@@ -333,20 +336,23 @@ export class FileUploadStore {
 	async addFiles(newFiles: File[], parentId?: string, options: AddFilesOptions | string = {}) {
 		const addFilesOptions =
 			typeof options === "string" ? { defaultRelativePathPrefix: options } : options
-		const shouldRequestPastedTextTempDirectory =
-			addFilesOptions.usePastedTextTempDirectory && Boolean(this.projectId)
-		const pastedTextTempDirectoryId = shouldRequestPastedTextTempDirectory
-			? await this.ensurePastedTextTempDirectory()
+		const shouldUseTempDirectory = Boolean(
+			addFilesOptions.useTempDirectory || addFilesOptions.usePastedTextTempDirectory,
+		)
+		const shouldRequestTempDirectory = shouldUseTempDirectory && Boolean(this.projectId)
+		const tempDirectoryId = shouldRequestTempDirectory
+			? await this.ensureTempUploadDirectory()
 			: undefined
-		const shouldUsePastedTextTempDirectory = Boolean(pastedTextTempDirectoryId)
-		const defaultRelativePathPrefix = shouldUsePastedTextTempDirectory
-			? PASTED_TEXT_TEMP_DIR_NAME
+		const defaultRelativePathPrefix = shouldUseTempDirectory
+			? TEMP_UPLOAD_DIR_NAME
 			: addFilesOptions.defaultRelativePathPrefix
-		const targetParentId = shouldUsePastedTextTempDirectory
-			? pastedTextTempDirectoryId
-			: parentId
+		const targetParentId = tempDirectoryId ?? parentId
 
-		const duplicateValidation = this.validateDuplicateFiles(newFiles, targetParentId)
+		// Temp assets may intentionally be uploaded more than once; filename generation
+		// below handles collisions without silently dropping an identical image.
+		const duplicateValidation = shouldUseTempDirectory
+			? { validFiles: newFiles, hasWarning: false }
+			: this.validateDuplicateFiles(newFiles, targetParentId)
 		let validFiles = duplicateValidation.validFiles
 
 		const sizeValidation = this.validateFileSize(validFiles)
@@ -390,7 +396,7 @@ export class FileUploadStore {
 				defaultRelativePath: defaultRelativePathPrefix
 					? `${defaultRelativePathPrefix}/${uniqueFileName}`
 					: undefined,
-				isHidden: shouldUsePastedTextTempDirectory,
+				isHidden: shouldUseTempDirectory,
 			})
 		}
 
@@ -399,10 +405,10 @@ export class FileUploadStore {
 			targetParentId,
 		)
 
-		if (shouldUsePastedTextTempDirectory && customCredentials) {
+		if (tempDirectoryId && customCredentials) {
 			customCredentials = superMagicUploadTokenService.changeDir(
 				customCredentials,
-				PASTED_TEXT_TEMP_DIR_NAME,
+				TEMP_UPLOAD_DIR_NAME,
 			)
 		}
 
@@ -473,10 +479,10 @@ export class FileUploadStore {
 						targetParentId,
 						true,
 					)
-					const retryCustomCredentials = shouldUsePastedTextTempDirectory
+					const retryCustomCredentials = tempDirectoryId
 						? superMagicUploadTokenService.changeDir(
 								newCustomCredentials,
-								PASTED_TEXT_TEMP_DIR_NAME,
+								TEMP_UPLOAD_DIR_NAME,
 							)
 						: newCustomCredentials
 

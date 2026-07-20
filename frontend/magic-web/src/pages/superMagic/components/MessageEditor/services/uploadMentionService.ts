@@ -187,6 +187,8 @@ export function replaceUploadMentionNode({
 					file_extension: uploadData.file_extension,
 					file_size: reportResult.file_size ?? uploadData.file_size ?? 0,
 					file: uploadData.file,
+					relative_file_path: uploadData.relative_file_path,
+					is_hidden: uploadData.is_hidden,
 					upload_progress: uploadData.upload_progress,
 					upload_status: uploadData.upload_status,
 					upload_error: uploadData.upload_error,
