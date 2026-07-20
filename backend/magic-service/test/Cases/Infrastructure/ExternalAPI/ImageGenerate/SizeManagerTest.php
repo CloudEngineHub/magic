@@ -1036,8 +1036,11 @@ class SizeManagerTest extends TestCase
     {
         $this->assertSame('1K', SizeManager::resolveResolutionByPixels(1024, 1024));
         $this->assertSame('1K', SizeManager::resolveResolutionByPixels(1800, 1200));
+        $this->assertSame('1K', SizeManager::resolveResolutionByPixels(2047, 1080));
+        $this->assertSame('2K', SizeManager::resolveResolutionByPixels(2048, 1080));
         $this->assertSame('2K', SizeManager::resolveResolutionByPixels(2496, 1664));
-        $this->assertSame('4K', SizeManager::resolveResolutionByPixels(4096, 4096));
+        $this->assertSame('2K', SizeManager::resolveResolutionByPixels(4096, 2159));
+        $this->assertSame('4K', SizeManager::resolveResolutionByPixels(4096, 2160));
     }
 
     /**
