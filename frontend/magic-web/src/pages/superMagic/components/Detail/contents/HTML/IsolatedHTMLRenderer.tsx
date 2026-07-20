@@ -8,6 +8,7 @@ import {
 	useImperativeHandle,
 	useMemo,
 	useLayoutEffect,
+	useCallback,
 } from "react"
 import { useDeepCompareEffect, useMemoizedFn } from "ahooks"
 import { filterInjectedTags } from "./utils"
@@ -55,7 +56,9 @@ import { useZoomControls } from "./hooks/useZoomControls"
 import { StylePanelStoreProvider } from "./iframe-bridge/contexts/StylePanelContext"
 import { TAILWIND_Z_INDEX_CLASSES } from "./constants/z-index"
 import { DevConsolePanel } from "./components/DevConsole"
+import type { DevConsoleLayout } from "./components/DevConsole/types"
 import { useDevConsole } from "./hooks/useDevConsole"
+import { platformKey } from "@/utils/storage"
 import { waitForProjectAttachmentChange } from "@/pages/superMagic/utils/projectAttachments/attachmentMutationWaiter"
 import { useCurrentHtmlFileInfo } from "./hooks/useCurrentHtmlFileInfo"
 import { useInspectorToolbarMode } from "./hooks/useInspectorToolbarMode"
@@ -115,7 +118,10 @@ import { useIframeAgent } from "./iframe-api/hooks/useIframeAgent"
 import { useIframeUserInfo } from "./iframe-api/hooks/useIframeUserInfo"
 import { useMagicFiles } from "./iframe-api/hooks/useMagicFiles"
 import { useIframeAgentActions } from "./hooks/useIframeAgentActions"
-import { useHtmlAppPermissions } from "./hooks/useHtmlAppPermissions"
+import {
+	useHtmlAppPermissions,
+	type HtmlAppPermissionController,
+} from "./hooks/useHtmlAppPermissions"
 import {
 	saveIframeFileContent,
 	createIframeFile,
@@ -182,12 +188,16 @@ interface IsolatedHTMLRendererProps {
 	onInterrupt?: () => void //新增：中断回调
 	/** 调试控制台关闭时回调（用于同步父组件状态）*/
 	onDevConsoleClose?: () => void
+	/** Parent-controlled DevTools state, kept in sync across iframe remounts. */
+	devConsoleEnabled?: boolean
 	/** AI 选取（appendToEditor）状态变化回调 */
 	onAppendPickingChange?: (picking: boolean) => void
 	/** 元素选取状态变化回调 */
 	onInspectorActiveChange?: (active: boolean) => void
 	/** Enable content-level inspector fallback for renderers without runtime support. */
 	enableInlineInspectorFallback?: boolean
+	/** Parent-owned controller used by the HTML detail toolbar and runtime. */
+	permissionController?: HtmlAppPermissionController
 }
 
 function isHtmlImagesUploadPath(path: string): boolean {
@@ -353,9 +363,11 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 			onRenderReady,
 			onContentMetrics,
 			onDevConsoleClose,
+			devConsoleEnabled,
 			onAppendPickingChange,
 			onInspectorActiveChange,
 			enableInlineInspectorFallback = false,
+			permissionController,
 		} = props
 		const externalRenderSiteUrl = useMemo(() => env("MAGIC_HTML_SANDBOX_URL"), [])
 		const htmlSandboxShellUrl = useMemo(
@@ -698,6 +710,22 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 			fileId,
 			relativeFilePath: devConsoleFilePath,
 		})
+		const setDevConsoleEnabled = devConsole.setEnabled
+		const [devConsoleLayout, setDevConsoleLayout] = useState<DevConsoleLayout>(() => {
+			return localStorage.getItem(platformKey("devConsole_layout")) === "right"
+				? "right"
+				: "bottom"
+		})
+		const handleDevConsoleLayoutChange = useCallback((layout: DevConsoleLayout) => {
+			setDevConsoleLayout(layout)
+			localStorage.setItem(platformKey("devConsole_layout"), layout)
+		}, [])
+
+		useEffect(() => {
+			if (devConsoleEnabled !== undefined) {
+				setDevConsoleEnabled(devConsoleEnabled)
+			}
+		}, [devConsoleEnabled, setDevConsoleEnabled])
 
 		// Element inspector (independent, can be triggered from DevConsole or elsewhere)
 		const elementInspector = useElementInspector({ iframeRef })
@@ -869,15 +897,16 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 			if (attachmentList?.length) flatten(attachmentList)
 			return result
 		}, [attachmentList])
-
-		const { htmlAppConfig, htmlAppConfigState, htmlAppInstanceKey, authorizeHtmlPermission } =
-			useHtmlAppPermissions({
-				content,
-				rawSourceCode,
-				relativeFilePath: htmlEntryFilePath,
-				projectId: selectedProject?.id,
-				fileList: flatFileList,
-			})
+		const fallbackPermissionController = useHtmlAppPermissions({
+			content,
+			rawSourceCode,
+			relativeFilePath: htmlEntryFilePath,
+			projectId: selectedProject?.id,
+			fileList: flatFileList,
+			enabled: !permissionController,
+		})
+		const { htmlAppConfig, authorizeHtmlPermission, authorizeHtmlPermissions } =
+			permissionController || fallbackPermissionController
 
 		const { handleFSMessage } = useIframeFS({
 			iframeRef,
@@ -999,43 +1028,11 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 					organization_code: info.organization_code || "",
 				}
 			}),
-			appConfig: htmlAppConfig,
-			appConfigState: htmlAppConfigState,
-			appInstanceKey: htmlAppInstanceKey,
-			authorizeUserInfo: useMemoizedFn(
-				({ appName, fields, reason, appConfigLoadError }) =>
-					new Promise<boolean>((resolve) => {
-						const fieldText = fields.join(
-							t("htmlEditor.userInfoAuthorizationConfirm.fieldSeparator"),
-						)
-						const contentKey = appConfigLoadError
-							? "htmlEditor.userInfoAuthorizationConfirm.appConfigUnavailableContent"
-							: reason
-								? "htmlEditor.userInfoAuthorizationConfirm.content"
-								: "htmlEditor.userInfoAuthorizationConfirm.contentWithoutReason"
-						const modal = MagicModal.confirm({
-							title: t("htmlEditor.userInfoAuthorizationConfirm.title"),
-							content: t(contentKey, {
-								appName,
-								fields: fieldText,
-								reason,
-								error: appConfigLoadError,
-							}),
-							okText: t("htmlEditor.userInfoAuthorizationConfirm.allow"),
-							cancelText: t("htmlEditor.userInfoAuthorizationConfirm.deny"),
-							closable: false,
-							maskClosable: false,
-							centered: true,
-							onOk: () => {
-								modal.destroy()
-								resolve(true)
-							},
-							onCancel: () => {
-								modal.destroy()
-								resolve(false)
-							},
-						})
-					}),
+			authorizeUserInfo: useMemoizedFn(({ scopes, reason }) =>
+				authorizeHtmlPermissions(scopes, {
+					reason,
+					presentation: "userInfo",
+				}),
 			),
 		})
 
@@ -2129,7 +2126,10 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 					className={cx(
 						hideVerticalScroll && styles.hiddenScrollbar,
 						cn(
-							"relative flex min-h-0 w-full flex-1 flex-col",
+							"relative flex min-h-0 w-full flex-1",
+							devConsole.enabled && devConsoleLayout === "right"
+								? "flex-row"
+								: "flex-col",
 							shouldApplyScaling && isFullscreen && "bg-black",
 							shouldApplyScaling && !isFullscreen && "bg-[#eee] dark:bg-[#1c1c1c]",
 						),
@@ -2148,7 +2148,7 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 					{/* 内容包装器，使用 flex 居中 iframe */}
 					<div
 						ref={contentWrapperRef}
-						className="relative min-h-0 w-full flex-1"
+						className="relative min-h-0 min-w-0 flex-1"
 						style={getContentWrapperStyle()}
 					>
 						{sandboxType === "iframe" ? (
@@ -2215,7 +2215,7 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 							<div className={styles.shadowHost} translate="no" />
 						)}
 					</div>
-					{/* DevTools 调试台 - 与 iframe 上下并排 */}
+					{/* DevTools 调试台 - 根据用户选择停靠在 iframe 底部或右侧 */}
 					{sandboxType === "iframe" && devConsole.enabled && (
 						<DevConsolePanel
 							consoleEntries={devConsole.consoleEntries}
@@ -2242,8 +2242,10 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 							consoleErrorCount={devConsole.consoleErrorCount}
 							networkErrorCount={devConsole.networkErrorCount}
 							apiCallErrorCount={devConsole.apiCallErrorCount}
+							layout={devConsoleLayout}
+							onLayoutChange={handleDevConsoleLayoutChange}
 							onClose={() => {
-								devConsole.toggle()
+								setDevConsoleEnabled(false)
 								onDevConsoleClose?.()
 							}}
 							inspectorActive={elementInspector.active}

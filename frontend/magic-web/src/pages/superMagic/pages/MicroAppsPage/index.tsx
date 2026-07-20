@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { lazy, Suspense, useState } from "react"
 import { useTranslation } from "react-i18next"
 import {
 	ArrowLeft,
@@ -6,6 +6,7 @@ import {
 	ChevronRight,
 	Globe2,
 	LoaderCircle,
+	Loader2,
 	LockKeyhole,
 	Plus,
 	RefreshCw,
@@ -24,7 +25,10 @@ import { RoutePath } from "@/constants/routes"
 import { ShareType } from "@/pages/superMagic/components/Share/types"
 import type { ProjectListItem } from "@/pages/superMagic/pages/Workspace/types"
 import { TopicMode } from "@/pages/superMagic/pages/Workspace/TopicMode"
+import { useIsMobile } from "@/hooks/useIsMobile"
 import { useMicroAppsPage } from "./hooks/useMicroAppsPage"
+
+const MicroAppsPageMobile = lazy(() => import("./index.mobile"))
 
 type MicroAppsTab = "projects" | "published"
 
@@ -130,7 +134,7 @@ function MicroAppsLoading() {
 	)
 }
 
-export default function MicroAppsPage() {
+function MicroAppsPageDesktop() {
 	const { t } = useTranslation("super")
 	const navigate = useNavigate()
 	const { workspace, projects, publishedProjects, loading, error, refresh } = useMicroAppsPage()
@@ -339,4 +343,24 @@ export default function MicroAppsPage() {
 			</main>
 		</div>
 	)
+}
+
+export default function MicroAppsPage() {
+	const isMobile = useIsMobile()
+
+	if (isMobile) {
+		return (
+			<Suspense
+				fallback={
+					<div className="flex h-full w-full items-center justify-center bg-mobile-background">
+						<Loader2 className="size-8 animate-spin text-muted-foreground" />
+					</div>
+				}
+			>
+				<MicroAppsPageMobile />
+			</Suspense>
+		)
+	}
+
+	return <MicroAppsPageDesktop />
 }

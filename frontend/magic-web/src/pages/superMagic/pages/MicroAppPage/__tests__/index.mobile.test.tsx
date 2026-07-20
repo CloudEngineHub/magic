@@ -1,0 +1,204 @@
+import { forwardRef, useImperativeHandle, type ReactNode } from "react"
+import { fireEvent, render, screen } from "@testing-library/react"
+import { beforeEach, describe, expect, it, vi } from "vitest"
+
+import MicroAppPageMobile from "../index.mobile"
+
+const previewPopupMocks = vi.hoisted(() => ({
+	open: vi.fn(),
+}))
+
+vi.mock("react-router", () => ({
+	useParams: () => ({ projectId: "project-1" }),
+}))
+
+vi.mock("react-i18next", () => ({
+	useTranslation: () => ({ t: (key: string) => key }),
+}))
+
+vi.mock("@/routes/hooks/useNavigate", () => ({
+	default: () => vi.fn(),
+}))
+
+vi.mock("@/pages/superMagic/providers/file-action-visibility-provider", () => ({
+	FileActionVisibilityProvider: ({ children }: { children: ReactNode }) => children,
+}))
+
+vi.mock("@/pages/superMagic/hooks/useMobileFilePreviewPubSub", () => ({
+	useMobileFilePreviewPubSub: vi.fn(),
+}))
+
+vi.mock("@/pages/superMagic/components/TopicFilesButton/hooks/useFileOpen", () => ({
+	useFileOpen: ({ setUserSelectDetail }: { setUserSelectDetail: (detail: unknown) => void }) => ({
+		handleOpenFile: (file: { file_id: string; file_name: string; file_extension: string }) =>
+			setUserSelectDetail({
+				type: file.file_extension,
+				currentFileId: file.file_id,
+				data: file,
+			}),
+	}),
+}))
+
+vi.mock("@/pages/superMagicMobile/components/PreviewDetailPopup", () => ({
+	default: forwardRef((_props, ref) => {
+		useImperativeHandle(ref, () => ({ open: previewPopupMocks.open }))
+		return <div data-testid="mobile-file-preview-popup" />
+	}),
+}))
+
+vi.mock("../context", () => ({
+	AppStoreProvider: ({ children }: { children: ReactNode }) => children,
+}))
+
+vi.mock("../hooks/useMicroAppPageController", () => ({
+	useMicroAppPageController: () => ({
+		store: {
+			initLoading: false,
+			initError: null,
+			mentionPanelStore: {},
+			projectFilesStore: {},
+		},
+		conversation: {
+			topicStore: {
+				selectedTopic: { id: "topic-1", topic_name: "Topic" },
+			},
+		},
+		selectedProject: { id: "project-1", project_name: "Micro App" },
+		selectedTopic: { id: "topic-1", topic_name: "Topic" },
+		isReadOnly: false,
+		attachments: [
+			{
+				file_id: "entry-1",
+				file_name: "index.html",
+				file_extension: "html",
+			},
+			{
+				file_id: "readme-1",
+				file_name: "README.md",
+				file_extension: "md",
+			},
+		],
+		attachmentList: [
+			{
+				file_id: "entry-1",
+				file_name: "index.html",
+				file_extension: "html",
+			},
+			{
+				file_id: "readme-1",
+				file_name: "README.md",
+				file_extension: "md",
+			},
+		],
+		activeFileId: null,
+		userSelectDetail: null,
+		setUserSelectDetail: vi.fn(),
+		defaultEntryFile: { file_id: "entry-1" },
+		nonClosableFileIds: ["entry-1"],
+		detailRef: { current: null },
+		topicFilesProps: {},
+		handleOpenFile: vi.fn(),
+		handleActiveFileChange: vi.fn(),
+		handleBackToMicroApps: vi.fn(),
+		handleOpenPublishDialog: vi.fn(),
+		handleToggleDatabasePanel: vi.fn(),
+		handleFileTabsCacheLoaded: vi.fn(),
+		publishDialogOpen: false,
+		setPublishDialogOpen: vi.fn(),
+		isDatabasePanelOpen: false,
+		setIsDatabasePanelOpen: vi.fn(),
+		CollaboratorUpdatePanel: null,
+		canManageCollaborators: false,
+		handleManageCollaborators: vi.fn(),
+		handleProjectNameChange: vi.fn(),
+	}),
+}))
+
+vi.mock("@/pages/superMagic/components/TopicFilesButton", () => ({
+	default: ({ onFileClick }: { onFileClick?: (file: unknown) => void }) => (
+		<button
+			type="button"
+			data-testid="mobile-files-content"
+			onClick={() =>
+				onFileClick?.({
+					file_id: "readme-1",
+					file_name: "README.md",
+					file_extension: "md",
+				})
+			}
+		>
+			open file
+		</button>
+	),
+}))
+
+vi.mock("../components/MicroAppMobileEntryPreview", () => ({
+	default: ({ entryFile }: { entryFile?: { file_id?: string } }) => (
+		<div data-testid="mobile-preview-content" data-entry-file-id={entryFile?.file_id} />
+	),
+}))
+
+vi.mock("../components/MicroAppMobileHeader", () => ({
+	default: () => <header data-testid="mobile-micro-app-header" />,
+}))
+
+vi.mock("../components/MicroAppPageOverlays", () => ({
+	default: () => null,
+}))
+
+vi.mock("../components/MicroAppDatabasePanelMobile", () => ({
+	default: () => <div data-testid="mobile-database-panel" />,
+}))
+
+vi.mock("../components/MicroAppMobileConversation", () => ({
+	default: ({ open }: { open: boolean }) =>
+		open ? <div data-testid="mobile-conversation-popup" /> : null,
+}))
+
+describe("MicroAppPageMobile", () => {
+	beforeEach(() => {
+		previewPopupMocks.open.mockClear()
+	})
+
+	it("keeps preview and files at the top level and opens conversation from a floating button", async () => {
+		render(<MicroAppPageMobile />)
+
+		expect(screen.getByTestId("micro-app-mobile-tab-preview")).toBeInTheDocument()
+		expect(screen.getByTestId("micro-app-mobile-tab-files")).toBeInTheDocument()
+		expect(
+			screen.queryByRole("tab", { name: "microAppPage.mobileTabs.conversation" }),
+		).toBeNull()
+		const entryPreview = await screen.findByTestId("mobile-preview-content")
+		expect(entryPreview).toBeInTheDocument()
+		expect(entryPreview).toHaveAttribute("data-entry-file-id", "entry-1")
+
+		fireEvent.click(screen.getByTestId("micro-app-mobile-tab-files"))
+		expect(screen.getByTestId("mobile-files-content")).toBeInTheDocument()
+
+		fireEvent.click(screen.getByTestId("micro-app-mobile-conversation-button"))
+		expect(await screen.findByTestId("mobile-conversation-popup")).toBeInTheDocument()
+	})
+
+	it("opens a mobile preview popup without replacing the entry preview", async () => {
+		render(<MicroAppPageMobile />)
+		await screen.findByTestId("mobile-preview-content")
+
+		fireEvent.click(screen.getByTestId("micro-app-mobile-tab-files"))
+		fireEvent.click(screen.getByTestId("mobile-files-content"))
+
+		expect(previewPopupMocks.open).toHaveBeenCalledWith(
+			expect.objectContaining({
+				type: "md",
+				currentFileId: "readme-1",
+				data: expect.objectContaining({
+					file_id: "readme-1",
+					file_name: "README.md",
+				}),
+			}),
+			expect.any(Array),
+			expect.any(Array),
+		)
+		expect(screen.getByTestId("micro-app-mobile-files-panel")).toBeInTheDocument()
+		expect(screen.getByTestId("mobile-preview-content")).toBeInTheDocument()
+	})
+})

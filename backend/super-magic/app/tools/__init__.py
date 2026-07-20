@@ -6,7 +6,7 @@
 # 导出工具类
 from app.tools.dummy_tool import DummyTool # DummyTool 必须在第一个位置导入，
 from app.tools.ask_user import AskUserTool
-from app.tools.plan import PlanTool
+from app.tools.plan import MicroAppPlanTool
 from app.tools.web_search import WebSearch
 from app.tools.agent_list import AgentList
 from app.tools.prepare_agent import PrepareAgent
@@ -182,7 +182,7 @@ import app.tools.design
 __all__ = [
     "DummyTool",
     "AskUserTool",
-    "PlanTool",
+    "MicroAppPlanTool",
 
     # 核心组件
     "BaseTool",

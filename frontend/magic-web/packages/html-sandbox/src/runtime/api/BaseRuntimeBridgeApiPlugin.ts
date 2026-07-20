@@ -68,6 +68,7 @@ export abstract class BaseRuntimeBridgeApiPlugin implements RuntimePlugin {
 						this.logger.info("request:success", {
 							type,
 							requestId,
+							result,
 						})
 						resolve(result)
 					} catch (error) {

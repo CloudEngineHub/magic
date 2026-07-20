@@ -86,6 +86,14 @@ const iconNameMap: Record<string, string> = {
 	create_dashboard_project: "list_dir",
 	validate_dashboard: "finish_task",
 	download_dashboard_maps: "download_from_url",
+	query_magicbase_tables: "query_table",
+	get_magicbase_table: "view_table",
+	create_magicbase_table: "create_table",
+	create_magicbase_column: "create_field",
+	update_magicbase_table_permissions: "update_table_permissions",
+	delete_magicbase_table: "delete_table",
+	update_magicbase_column: "update_field",
+	delete_magicbase_column: "delete_field",
 }
 
 /**

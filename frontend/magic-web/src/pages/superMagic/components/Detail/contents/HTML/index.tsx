@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { lazy, memo, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { isConvertibleFile } from "../../utils/file"
 import IsolatedHTMLRenderer, { type IsolatedHTMLRendererRef } from "./IsolatedHTMLRenderer"
 import {
@@ -57,7 +57,7 @@ import {
 	downloadFileContent,
 } from "@/pages/superMagic/utils/api"
 import { useTranslation } from "react-i18next"
-import { AlertTriangle, Crosshair, Terminal } from "lucide-react"
+import { AlertTriangle, Crosshair, ShieldCheck, Terminal } from "lucide-react"
 import { Button } from "@/components/shadcn-ui/button"
 import { cn } from "@/lib/utils"
 import { env } from "@/utils/env"
@@ -76,10 +76,14 @@ import {
 	AlertDialogHeader,
 	AlertDialogTitle,
 } from "@/components/shadcn-ui/alert-dialog"
+import { useHtmlAppPermissions } from "./hooks/useHtmlAppPermissions"
 
 /** 跨组件重挂载持久化调试面板开关状态（按文件 ID 存储） */
 const devConsoleStateMap = new Map<string, boolean>()
 const htmlRenderLogger = Logger.createLogger("HTMLContent")
+const HtmlPermissionManagerDialog = lazy(
+	() => import("./components/PermissionManager/HtmlPermissionManagerDialog"),
+)
 
 interface HTMLProps {
 	data: string | any
@@ -258,6 +262,7 @@ export default memo(function HTML(props: HTMLProps) {
 	const [editingCodeContent, setEditingCodeContent] = useState<string>("")
 	/** 是否正处于编辑后的状态 */
 	const [isEditingAfter, setIsEditingAfter] = useState(false)
+	const [permissionManagerOpen, setPermissionManagerOpen] = useState(false)
 	const [serverUpdatedContent, setServerUpdatedContent] = useState<string>()
 	const editSessionUpdatedAtRef = useRef<string | undefined>(undefined)
 	const serverUpdateRequestIdRef = useRef(0)
@@ -348,8 +353,7 @@ export default memo(function HTML(props: HTMLProps) {
 	})
 
 	const handleDevConsoleToggle = useMemoizedFn(() => {
-		htmlRendererRef.current?.toggleDevConsole()
-		setDevConsoleEnabled((prev) => !prev)
+		updateDevConsoleEnabled(!devConsoleEnabled)
 	})
 
 	useEffect(() => {
@@ -364,6 +368,28 @@ export default memo(function HTML(props: HTMLProps) {
 		fileId: displayData?.file_id,
 		fallbackFileName: data?.file_name || displayData?.file_name,
 	})
+	const htmlPermissionController = useHtmlAppPermissions({
+		content: processedContent,
+		rawSourceCode: data?.content,
+		relativeFilePath: currentHtmlFileInfo.relativeFilePath,
+		projectId: selectedProject?.id,
+		fileList: flattenedAttachmentList,
+		enabled: !isDataAnalysis && !htmlIsDeleted,
+	})
+	const {
+		hasHtmlPermissionDeclarations,
+		getPermissionSnapshot,
+		revokeHtmlPermission,
+		updateHtmlPermissionTtl,
+		revokeAllHtmlPermissions,
+		permissionRevision,
+	} = htmlPermissionController
+
+	useEffect(() => {
+		if (isDataAnalysis || htmlIsDeleted || !hasHtmlPermissionDeclarations) {
+			setPermissionManagerOpen(false)
+		}
+	}, [hasHtmlPermissionDeclarations, htmlIsDeleted, isDataAnalysis])
 
 	/**
 	 * 仅可视化预览：dashboard / audio / video 入口 HTML 走构建内 templates；dashboard 另换壳 CSS/JS。
@@ -426,21 +452,21 @@ export default memo(function HTML(props: HTMLProps) {
 	const fileId = displayData?.file_id as string | undefined
 	const [isAppendPicking, setIsAppendPicking] = useState(false)
 	// 从模块级 Map 恢复上次的调试面板状态（组件重挂载后仍能保持开启）
-	const [devConsoleEnabled, setDevConsoleEnabled] = useState(() =>
-		fileId ? (devConsoleStateMap.get(fileId) ?? false) : false,
-	)
-	// 当 devConsoleEnabled 变化时同步到模块级 Map
-	useEffect(() => {
-		if (fileId) devConsoleStateMap.set(fileId, devConsoleEnabled)
-	}, [fileId, devConsoleEnabled])
-	// 组件挂载后，若调试面板应处于开启状态，则通知 IsolatedHTMLRenderer 开启
-	useEffect(() => {
-		if (devConsoleEnabled) {
-			htmlRendererRef.current?.toggleDevConsole()
-		}
-		// 仅在首次挂载时执行
-		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, [])
+	const [devConsoleState, setDevConsoleState] = useState(() => ({
+		fileId,
+		enabled: fileId ? (devConsoleStateMap.get(fileId) ?? false) : false,
+	}))
+	// 使用当前文件对应的状态，避免 fileId 异步就绪或切换文件时沿用旧值。
+	const devConsoleEnabled =
+		devConsoleState.fileId === fileId
+			? devConsoleState.enabled
+			: fileId
+				? (devConsoleStateMap.get(fileId) ?? false)
+				: false
+	const updateDevConsoleEnabled = useMemoizedFn((enabled: boolean) => {
+		if (fileId) devConsoleStateMap.set(fileId, enabled)
+		setDevConsoleState({ fileId, enabled })
+	})
 
 	const getCurrentEditingContent = useMemoizedFn(async () => {
 		if (viewMode === "code") return editingCodeContent || data?.content || ""
@@ -1262,6 +1288,23 @@ export default memo(function HTML(props: HTMLProps) {
 					),
 				},
 				{
+					key: "html-permission-manager",
+					zone: "secondary",
+					before: "refresh",
+					visible: () =>
+						Boolean(!isDataAnalysis && !htmlIsDeleted && hasHtmlPermissionDeclarations),
+					render: (context) => (
+						<ActionButton
+							icon={<ShieldCheck size={16} />}
+							onClick={() => setPermissionManagerOpen(true)}
+							title={t("htmlEditor.permissionManager.open")}
+							text={t("htmlEditor.permissionManager.open")}
+							showText={context.showButtonText}
+							data-testid="html-permission-manager-button"
+						/>
+					),
+				},
+				{
 					key: "html-export-dropdown",
 					zone: "secondary",
 					after: "download",
@@ -1308,6 +1351,9 @@ export default memo(function HTML(props: HTMLProps) {
 			showExportButton,
 			showFileEditButton,
 			isAppendPicking,
+			isDataAnalysis,
+			htmlIsDeleted,
+			hasHtmlPermissionDeclarations,
 			t,
 		],
 	)
@@ -1446,10 +1492,12 @@ export default memo(function HTML(props: HTMLProps) {
 										currentHtmlFileInfo.htmlRelativeFolderPath
 									}
 									selectedProject={selectedProject}
+									devConsoleEnabled={devConsoleEnabled}
+									permissionController={htmlPermissionController}
 									attachmentList={attachmentList}
 									isPlaybackMode={isPlaybackMode}
 									onRenderReady={handlePreviewRenderReady}
-									onDevConsoleClose={() => setDevConsoleEnabled(false)}
+									onDevConsoleClose={() => updateDevConsoleEnabled(false)}
 									onAppendPickingChange={setIsAppendPicking}
 								/>
 								{/* 跨域 shell 渲染期间用 loading 覆盖层填补"数据已就绪但 iframe 内容未画出"的空窗 */}
@@ -1488,6 +1536,19 @@ export default memo(function HTML(props: HTMLProps) {
 					radius: 8,
 				}}
 			/>
+			{permissionManagerOpen && hasHtmlPermissionDeclarations ? (
+				<Suspense fallback={null}>
+					<HtmlPermissionManagerDialog
+						open={permissionManagerOpen}
+						onOpenChange={setPermissionManagerOpen}
+						permissionRevision={permissionRevision}
+						getPermissionSnapshot={getPermissionSnapshot}
+						onRevoke={revokeHtmlPermission}
+						onUpdateTtl={updateHtmlPermissionTtl}
+						onRevokeAll={revokeAllHtmlPermissions}
+					/>
+				</Suspense>
+			) : null}
 			<AlertDialog
 				open={showSaveWithUpdateConfirmDialog}
 				onOpenChange={handleSaveConflictDialogChange}

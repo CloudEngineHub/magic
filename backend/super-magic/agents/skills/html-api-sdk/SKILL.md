@@ -470,7 +470,7 @@ Notes:
 - Sensitive scopes must be present in both `app.json.permissions.scopes` and the runtime `getInfo({ scopes })` call.
 - `magic.project.js` is legacy for older HTML micro-apps and still used by other project types such as slides/design/media. It is not the HTML micro-app manifest.
 - `reason` should explain why the app needs these fields; runtime `reason` overrides the `app.json` reason in the confirmation dialog.
-- Approved sensitive scopes are cached only for the current iframe session.
+- Approved sensitive scopes use the same host authorization store as other high-risk APIs. They remain valid only in the current browser tab for the duration selected by the user, and the user can revoke them from the HTML app authorization manager.
 - Never assume identity or organization fields are available from a bare `getInfo()` call.
 
 Timeout: 15s.

@@ -1,4 +1,4 @@
-import { Bot, Box, House, LayoutGrid, MessageCircle, Mic, Trash2 } from "lucide-react"
+import { Bot, Box, Boxes, House, LayoutGrid, MessageCircle, Mic, Trash2 } from "lucide-react"
 
 import { FUNCTION_PERMISSION_CODE } from "@/apis/modules/function-permission"
 import { MagiClawNavIcon } from "@/pages/superMagicMobile/components/icons/MagiClawNavIcon"
@@ -51,6 +51,12 @@ export const BASE_SUPER_MOBILE_SHELL_NAV_ITEMS: SuperMobileShellNavConfigItem[] 
 		icon: LayoutGrid,
 		labelKey: "mobile.shell.navApps",
 		routeName: RouteName.SuperApps,
+	},
+	{
+		key: "microApps",
+		icon: Boxes,
+		labelKey: "mobile.shell.navMicroApps",
+		routeName: RouteName.MicroApps,
 	},
 	{
 		key: "trash",

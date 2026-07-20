@@ -552,6 +552,38 @@ class SuperMagicModeService {
 	}
 
 	/**
+	 * Prefer a mode when it has available language models; otherwise use the fallback mode.
+	 */
+	resolveLanguageModelMode<T extends string>(
+		preferredMode: T,
+		fallbackMode: T,
+		agentCode?: string | null,
+	): T {
+		return this.getModelListByMode(preferredMode, agentCode).length > 0
+			? preferredMode
+			: fallbackMode
+	}
+
+	/**
+	 * Resolve one mode for a combined language/image/video model picker.
+	 * Prefer the requested mode when it exposes any model category so one picker never mixes
+	 * employee-specific models with the fallback catalog.
+	 */
+	resolveModelSelectionMode<T extends string>(
+		preferredMode: T,
+		fallbackMode: T,
+		agentCode?: string | null,
+	): T {
+		const hasPreferredModels = [
+			this.getModelListByMode(preferredMode, agentCode),
+			this.getImageModelListByMode(preferredMode, agentCode),
+			this.getVideoModelListByMode(preferredMode, agentCode),
+		].some((models) => models.length > 0)
+
+		return hasPreferredModels ? preferredMode : fallbackMode
+	}
+
+	/**
 	 * 获取模式生图模型分组列表
 	 * @param mode 模式标识
 	 * @param agentCode custom_agent 时与 featured mode.identifier 一致

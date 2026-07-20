@@ -249,16 +249,18 @@ const TabItem = memo<TabItemProps>(
 							<MagicIcon component={IconLock} size={14} color="currentColor" />
 						</span>
 					)}
-					<div
-						className={cn(
-							"flex size-4 shrink-0 cursor-pointer items-center justify-center rounded-sm text-foreground transition-colors duration-200 hover:bg-black/10",
-							isActive && "text-foreground/80",
-						)}
-						onClick={handleClose}
-						data-testid="handle-close"
-					>
-						<IconX size={12} />
-					</div>
+					{tab.closeable ? (
+						<div
+							className={cn(
+								"flex size-4 shrink-0 cursor-pointer items-center justify-center rounded-sm text-foreground transition-colors duration-200 hover:bg-black/10",
+								isActive && "text-foreground/80",
+							)}
+							onClick={handleClose}
+							data-testid="handle-close"
+						>
+							<IconX size={12} />
+						</div>
+					) : null}
 				</div>
 			</Tooltip>
 		)

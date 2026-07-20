@@ -1,0 +1,13 @@
+<svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+<rect width="20" height="20" rx="4" fill="url(#delete_field_bg)"/>
+<rect x="4.5" y="5" width="10" height="10" rx="1.25" stroke="white"/>
+<path d="M8 5V15M11.5 5V15" stroke="white"/>
+<circle cx="14" cy="13.5" r="2.5" fill="#D62C5D" stroke="white"/>
+<path d="M12.75 13.5H15.25" stroke="white" stroke-linecap="round"/>
+<defs>
+<linearGradient id="delete_field_bg" x1="1" y1="1" x2="19" y2="19" gradientUnits="userSpaceOnUse">
+<stop stop-color="#FF5F91"/>
+<stop offset="1" stop-color="#B91D55"/>
+</linearGradient>
+</defs>
+</svg>

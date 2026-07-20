@@ -1,70 +1,33 @@
-import {
-	ArrowLeft,
-	Code2,
-	Database,
-	Monitor,
-	Rocket,
-	Smartphone,
-	UserRoundPlus,
-} from "lucide-react"
+import { ArrowLeft, Database, Rocket, UserRoundPlus } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { Button } from "@/components/shadcn-ui/button"
-import {
-	Select,
-	SelectContent,
-	SelectItem,
-	SelectTrigger,
-	SelectValue,
-} from "@/components/shadcn-ui/select"
-import { Tabs, TabsList, TabsTrigger } from "@/components/shadcn-ui/tabs"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/shadcn-ui/tooltip"
-import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks"
 import type { ProjectListItem } from "@/pages/superMagic/pages/Workspace/types"
-import { getAttachmentId } from "../utils/microAppFiles"
-
-export type MicroAppPreviewMode = "desktop" | "phone" | "code"
 
 interface MicroAppHeaderProps {
 	selectedProject: ProjectListItem | null
-	htmlFiles: AttachmentItem[]
-	selectedEntryId: string | null
+	hasEntries: boolean
 	isDatabasePanelOpen: boolean
-	previewMode: MicroAppPreviewMode
 	onBack: () => void
 	onToggleDatabasePanel: () => void
-	onEntryChange: (fileId: string) => void
-	onPreviewModeChange: (mode: MicroAppPreviewMode) => void
 	onPublish: () => void
 	canManageCollaborators?: boolean
 	onManageCollaborators?: () => void
 }
 
-function getEntryName(item: AttachmentItem): string {
-	return item.display_filename || item.file_name || item.filename || item.name || ""
-}
-
 export default function MicroAppHeader({
 	selectedProject,
-	htmlFiles,
-	selectedEntryId,
+	hasEntries,
 	isDatabasePanelOpen,
-	previewMode,
 	onBack,
 	onToggleDatabasePanel,
-	onEntryChange,
-	onPreviewModeChange,
 	onPublish,
 	canManageCollaborators,
 	onManageCollaborators,
 }: MicroAppHeaderProps) {
 	const { t } = useTranslation("super")
 	const projectName = selectedProject?.project_name || t("project.unnamedProject")
-	const hasEntries = htmlFiles.length > 0
 	const showCollaboratorAction = Boolean(canManageCollaborators && onManageCollaborators)
-	const handlePreviewModeChange = (value: string) => {
-		onPreviewModeChange(value as MicroAppPreviewMode)
-	}
-
 	return (
 		<header
 			className="flex h-12 shrink-0 items-center gap-2 border-b border-border bg-background px-3"
@@ -88,63 +51,6 @@ export default function MicroAppHeader({
 			<div className="min-w-0 flex-1">
 				<p className="truncate text-sm font-medium text-foreground">{projectName}</p>
 			</div>
-
-			<Tabs
-				value={previewMode}
-				onValueChange={handlePreviewModeChange}
-				data-testid="micro-app-preview-mode-tabs"
-			>
-				<TabsList className="h-8 rounded-md p-0.5">
-					<Tooltip>
-						<TooltipTrigger asChild>
-							<span className="inline-flex h-full items-center">
-								<TabsTrigger
-									value="desktop"
-									className="h-7 px-2"
-									data-testid="micro-app-preview-mode-desktop"
-								>
-									<Monitor size={16} />
-								</TabsTrigger>
-							</span>
-						</TooltipTrigger>
-						<TooltipContent side="bottom">
-							{t("microAppPage.previewMode.default")}
-						</TooltipContent>
-					</Tooltip>
-					<Tooltip>
-						<TooltipTrigger asChild>
-							<span className="inline-flex h-full items-center">
-								<TabsTrigger
-									value="phone"
-									className="h-7 px-2"
-									data-testid="micro-app-preview-mode-phone"
-								>
-									<Smartphone size={16} />
-								</TabsTrigger>
-							</span>
-						</TooltipTrigger>
-						<TooltipContent side="bottom">
-							{t("microAppPage.previewMode.phone")}
-						</TooltipContent>
-					</Tooltip>
-					<Tooltip>
-						<TooltipTrigger asChild>
-							<span className="inline-flex h-full items-center">
-								<TabsTrigger
-									value="code"
-									className="h-7 px-2"
-									data-testid="micro-app-preview-mode-code"
-								>
-									<Code2 size={16} />
-								</TabsTrigger>
-							</span>
-						</TooltipTrigger>
-						<TooltipContent side="bottom">
-							{t("microAppPage.previewMode.source")}
-						</TooltipContent>
-					</Tooltip>
-				</TabsList>
-			</Tabs>
 
 			<Tooltip>
 				<TooltipTrigger asChild>
@@ -185,35 +91,6 @@ export default function MicroAppHeader({
 					<TooltipContent side="bottom">{t("project.addCollaborators")}</TooltipContent>
 				</Tooltip>
 			) : null}
-
-			{htmlFiles.length > 1 && (
-				<div className="flex min-w-[220px] max-w-[360px] shrink-0 items-center gap-2">
-					<span className="shrink-0 text-xs text-muted-foreground">
-						{t("microAppPage.header.entryLabel")}
-					</span>
-					<Select
-						value={selectedEntryId || undefined}
-						onValueChange={onEntryChange}
-						disabled={!hasEntries}
-					>
-						<SelectTrigger className="h-8 min-w-0 flex-1 bg-background">
-							<SelectValue placeholder={t("microAppPage.header.entryPlaceholder")} />
-						</SelectTrigger>
-						<SelectContent align="end" className="max-w-[360px]">
-							{htmlFiles.map((item) => {
-								const id = getAttachmentId(item)
-								return (
-									<SelectItem key={id} value={id}>
-										<span className="block max-w-[300px] truncate">
-											{getEntryName(item)}
-										</span>
-									</SelectItem>
-								)
-							})}
-						</SelectContent>
-					</Select>
-				</div>
-			)}
 
 			{hasEntries ? (
 				<Tooltip>
