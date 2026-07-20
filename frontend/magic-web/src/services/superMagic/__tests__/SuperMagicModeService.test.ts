@@ -372,6 +372,66 @@ describe("SuperMagicModeService", () => {
 		)
 	})
 
+	it("falls back for a combined picker when the preferred mode lacks image or video models", () => {
+		const modeWithModels = superMagicModeService._modeMap.get("general")
+		expect(modeWithModels).toBeDefined()
+		if (!modeWithModels) return
+
+		const videoModel = createModelItem({
+			id: "official-video-1",
+			modelId: "shared-video-model",
+			name: "Official Shared Video Model",
+		})
+		superMagicModeService._modeMap.set("default", {
+			...modeWithModels,
+			groups: modeWithModels.groups.map((group, index) => ({
+				...group,
+				video_models: index === 0 ? [videoModel] : [],
+			})),
+		} as never)
+		superMagicModeService._modeMap.set("micro-app", {
+			...modeWithModels,
+			groups: modeWithModels.groups.map((group) => ({
+				...group,
+				image_models: [],
+				video_models: [],
+			})),
+		} as never)
+
+		expect(superMagicModeService.resolveModelSelectionMode("micro-app", "default")).toBe(
+			"default",
+		)
+	})
+
+	it("prefers the requested mode when it covers all fallback model categories", () => {
+		const modeWithModels = superMagicModeService._modeMap.get("general")
+		expect(modeWithModels).toBeDefined()
+		if (!modeWithModels) return
+
+		const completeMode = {
+			...modeWithModels,
+			groups: modeWithModels.groups.map((group, index) => ({
+				...group,
+				video_models:
+					index === 0
+						? [
+								createModelItem({
+									id: "official-video-1",
+									modelId: "shared-video-model",
+									name: "Official Shared Video Model",
+								}),
+							]
+						: [],
+			})),
+		} as never
+		superMagicModeService._modeMap.set("default", completeMode)
+		superMagicModeService._modeMap.set("micro-app", completeMode)
+
+		expect(superMagicModeService.resolveModelSelectionMode("micro-app", "default")).toBe(
+			"micro-app",
+		)
+	})
+
 	it("fetches again when force is true despite fresh cache", async () => {
 		vi.mocked(SuperMagicApi.getCrewList).mockResolvedValue({
 			list: [

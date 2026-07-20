@@ -565,6 +565,37 @@ class SuperMagicModeService {
 	}
 
 	/**
+	 * Resolve one mode for a combined language/image/video model picker.
+	 * Prefer the requested mode only when it covers every model category exposed by the fallback.
+	 */
+	resolveModelSelectionMode<T extends string>(
+		preferredMode: T,
+		fallbackMode: T,
+		agentCode?: string | null,
+	): T {
+		const preferredCapabilities = {
+			language: this.getModelListByMode(preferredMode, agentCode).length > 0,
+			image: this.getImageModelListByMode(preferredMode, agentCode).length > 0,
+			video: this.getVideoModelListByMode(preferredMode, agentCode).length > 0,
+		}
+		const fallbackCapabilities = {
+			language: this.getModelListByMode(fallbackMode, agentCode).length > 0,
+			image: this.getImageModelListByMode(fallbackMode, agentCode).length > 0,
+			video: this.getVideoModelListByMode(fallbackMode, agentCode).length > 0,
+		}
+
+		const preferredCoversFallback = Object.entries(fallbackCapabilities).every(
+			([category, isAvailable]) =>
+				!isAvailable ||
+				preferredCapabilities[category as keyof typeof preferredCapabilities],
+		)
+
+		return preferredCapabilities.language && preferredCoversFallback
+			? preferredMode
+			: fallbackMode
+	}
+
+	/**
 	 * 获取模式生图模型分组列表
 	 * @param mode 模式标识
 	 * @param agentCode custom_agent 时与 featured mode.identifier 一致

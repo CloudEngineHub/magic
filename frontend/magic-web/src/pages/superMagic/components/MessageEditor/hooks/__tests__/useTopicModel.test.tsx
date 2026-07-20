@@ -22,6 +22,7 @@ vi.mock("@/services/superMagic/SuperMagicModeService", () => ({
 		firstModeIdentifier: "general",
 		getModelGroupsByMode: vi.fn(() => []),
 		getImageModelGroupsByMode: vi.fn(() => []),
+		getVideoModelGroupsByMode: vi.fn(() => []),
 	},
 }))
 
@@ -34,6 +35,7 @@ describe("useTopicModel", () => {
 	const mockTopicModelStore = {
 		selectedLanguageModel: null,
 		selectedImageModel: null,
+		selectedVideoModel: null,
 		isLoading: false,
 		currentTopicId: "default",
 		currentProjectId: "",
@@ -42,6 +44,7 @@ describe("useTopicModel", () => {
 		setCurrentContext: vi.fn(),
 		setSelectedLanguageModel: vi.fn(),
 		setSelectedImageModel: vi.fn(),
+		setSelectedVideoModel: vi.fn(),
 		setLoading: vi.fn(),
 		reset: vi.fn(),
 	}
@@ -177,6 +180,7 @@ describe("useTopicModel", () => {
 				"project-1",
 				mockLanguageModel,
 				undefined,
+				undefined,
 				mockTopicModelStore,
 			)
 		})
@@ -202,6 +206,32 @@ describe("useTopicModel", () => {
 				"project-1",
 				undefined,
 				mockImageModel,
+				undefined,
+				mockTopicModelStore,
+			)
+		})
+
+		it("should call service.saveModel when setSelectedVideoModel is called", () => {
+			const { result } = renderHook(() =>
+				useTopicModel({ topicModelStore: mockTopicModelStore }),
+			)
+
+			const mockVideoModel: ModelItem = {
+				...mockLanguageModel,
+				model_id: "video-gen-1",
+			}
+
+			mockTopicModelStore.currentTopicId = "topic-1"
+			mockTopicModelStore.currentProjectId = "project-1"
+
+			result.current.setSelectedVideoModel(mockVideoModel)
+
+			expect(superMagicTopicModelService.saveModel).toHaveBeenCalledWith(
+				"topic-1",
+				"project-1",
+				undefined,
+				undefined,
+				mockVideoModel,
 				mockTopicModelStore,
 			)
 		})
@@ -215,6 +245,7 @@ describe("useTopicModel", () => {
 
 			expect(result.current.modelList).toBeDefined()
 			expect(result.current.imageModelList).toBeDefined()
+			expect(result.current.videoModelList).toBeDefined()
 		})
 
 		it("should return topic store instance", () => {
