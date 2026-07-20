@@ -219,11 +219,11 @@ func (p *TeamshareProvider) ResolveLatestContent(ctx context.Context, input Reso
 		return nil, nil
 	}
 
-	content := texthelper.NormalizeContent(resolved.Content)
+	content := texthelper.NormalizeContent(resolved.RawContent)
 	if content == "" {
 		content = texthelper.NormalizeContent(resolved.Content)
 	}
-	if content == "" {
+	if  content== "" {
 		return nil, shared.ErrDocumentFileEmpty
 	}
 
