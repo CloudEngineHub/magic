@@ -11,6 +11,7 @@ use App\Infrastructure\Core\AbstractRepository;
 use App\Infrastructure\Core\ValueObject\Page;
 use App\Infrastructure\Util\IdGenerator\IdGenerator;
 use Dtyq\SuperMagic\Domain\Agent\Entity\AgentMarketEntity;
+use Dtyq\SuperMagic\Domain\Agent\Entity\ValueObject\AgentMarketType;
 use Dtyq\SuperMagic\Domain\Agent\Entity\ValueObject\PublishStatus;
 use Dtyq\SuperMagic\Domain\Agent\Entity\ValueObject\Query\AgentMarketQuery;
 use Dtyq\SuperMagic\Domain\Agent\Entity\ValueObject\SuperMagicAgentDataIsolation;
@@ -173,9 +174,7 @@ class AgentMarketRepository extends AbstractRepository implements AgentMarketRep
             ->first();
 
         $attributes = $this->getAttributes($entity);
-        // Keep NULL for public records. Omitting this attribute would retain a
-        // previous organization code when an organization-shared record is
-        // approved into the public market.
+        // 组织编码保留资源归属上下文；市场性质只由 market_type 决定，不可依赖空值推断。
         $attributes['organization_code'] = $entity->getOrganizationCode();
         if ($existingModel) {
             // 更新
@@ -242,22 +241,35 @@ class AgentMarketRepository extends AbstractRepository implements AgentMarketRep
             ->where('publish_status', PublishStatus::PUBLISHED->value)
             ->where('is_hidden', false);
 
-        // Public market records have no organization code. Organization-shared records
-        // must be limited to the current organization's explicitly visible shelf ids,
-        // before pagination is applied.
+        // 市场性质只认显式 market_type，空值统一不进入市场列表。
         $visibleOrganizationCode = $query->getVisibleOrganizationCode();
         $visibleOrganizationMarketIds = $query->getVisibleOrganizationMarketIds();
-        $builder->where(function ($visibilityQuery) use ($visibleOrganizationCode, $visibleOrganizationMarketIds) {
-            $visibilityQuery->whereNull('organization_code')
-                ->orWhere('organization_code', '');
+        $marketType = $query->getMarketType();
+        $hasOrganizationShelf = $visibleOrganizationCode !== null
+            && $visibleOrganizationCode !== ''
+            && $visibleOrganizationMarketIds !== [];
+        if ($marketType === AgentMarketType::ORGANIZATION && ! $hasOrganizationShelf) {
+            // 组织内筛选没有命中货架时，避免生成空嵌套条件并确保分页总数为零。
+            $builder->whereRaw('1 = 0');
+        } else {
+            $builder->where(function ($visibilityQuery) use ($visibleOrganizationCode, $visibleOrganizationMarketIds, $marketType) {
+                if ($marketType === null || $marketType === AgentMarketType::MARKET) {
+                    $visibilityQuery->where('market_type', AgentMarketType::MARKET->value);
+                }
 
-            if ($visibleOrganizationCode !== null && $visibleOrganizationCode !== '' && $visibleOrganizationMarketIds !== []) {
-                $visibilityQuery->orWhere(function ($organizationQuery) use ($visibleOrganizationCode, $visibleOrganizationMarketIds) {
-                    $organizationQuery->where('organization_code', $visibleOrganizationCode)
-                        ->whereIn('id', $visibleOrganizationMarketIds);
-                });
-            }
-        });
+                if (($marketType === null || $marketType === AgentMarketType::ORGANIZATION)
+                    && $visibleOrganizationCode !== null
+                    && $visibleOrganizationCode !== ''
+                    && $visibleOrganizationMarketIds !== []) {
+                    $method = $marketType === AgentMarketType::ORGANIZATION ? 'where' : 'orWhere';
+                    $visibilityQuery->{$method}(function ($organizationQuery) use ($visibleOrganizationCode, $visibleOrganizationMarketIds) {
+                        $organizationQuery->where('organization_code', $visibleOrganizationCode)
+                            ->whereIn('id', $visibleOrganizationMarketIds)
+                            ->where('market_type', AgentMarketType::ORGANIZATION->value);
+                    });
+                }
+            });
+        }
 
         // 关键词搜索优先使用统一搜索字段；旧数据无该字段时回退到历史 JSON 搜索。
         if (! empty($query->getKeyword()) && ! empty($query->getLanguageCode())) {

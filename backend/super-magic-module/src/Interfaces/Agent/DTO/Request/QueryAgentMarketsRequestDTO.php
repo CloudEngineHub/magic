@@ -8,6 +8,7 @@ declare(strict_types=1);
 namespace Dtyq\SuperMagic\Interfaces\Agent\DTO\Request;
 
 use App\Infrastructure\Core\AbstractRequestDTO;
+use Dtyq\SuperMagic\Domain\Agent\Entity\ValueObject\AgentMarketType;
 
 use function Hyperf\Translation\__;
 
@@ -39,6 +40,9 @@ class QueryAgentMarketsRequestDTO extends AbstractRequestDTO
     /** @var null|array<int, null|int|string> */
     public ?array $categoryIds = null;
 
+    /** 仅筛选公共市场或当前用户可见的组织内市场。 */
+    public ?string $marketType = null;
+
     /**
      * 获取 Hyperf 验证规则.
      */
@@ -51,6 +55,7 @@ class QueryAgentMarketsRequestDTO extends AbstractRequestDTO
             'category_id' => 'nullable|integer|min:1',
             'category_ids' => 'nullable|array|max:100',
             'category_ids.*' => 'integer|min:1',
+            'market_type' => 'nullable|string|in:MARKET,ORGANIZATION',
         ];
     }
 
@@ -100,6 +105,13 @@ class QueryAgentMarketsRequestDTO extends AbstractRequestDTO
         }
 
         return $this->categoryId === null ? [] : $this->normalizeCategoryIds([$this->categoryId]);
+    }
+
+    public function getMarketType(): ?AgentMarketType
+    {
+        return $this->marketType === null || $this->marketType === ''
+            ? null
+            : AgentMarketType::from($this->marketType);
     }
 
     /** @param array<int, null|int|string> $categoryIds */

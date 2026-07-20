@@ -8,12 +8,12 @@ declare(strict_types=1);
 namespace Dtyq\SuperMagic\Command;
 
 use App\Domain\Permission\Entity\ValueObject\PermissionDataIsolation;
-use App\Domain\Permission\Entity\ValueObject\ResourceVisibility\PrincipalType;
 use App\Domain\Permission\Entity\ValueObject\ResourceVisibility\ResourceType as ResourceVisibilityResourceType;
 use App\Domain\Permission\Entity\ValueObject\ResourceVisibility\VisibilityType;
 use App\Domain\Permission\Service\ResourceVisibilityDomainService;
 use Dtyq\SuperMagic\Domain\Agent\Entity\AgentVersionEntity;
 use Dtyq\SuperMagic\Domain\Agent\Entity\UserAgentEntity;
+use Dtyq\SuperMagic\Domain\Agent\Entity\ValueObject\AgentMarketType;
 use Dtyq\SuperMagic\Domain\Agent\Entity\ValueObject\AgentSourceType;
 use Dtyq\SuperMagic\Domain\Agent\Entity\ValueObject\PublishStatus;
 use Dtyq\SuperMagic\Domain\Agent\Entity\ValueObject\PublishTargetType;
@@ -29,8 +29,11 @@ use Symfony\Component\Console\Input\InputOption;
 /**
  * 一次性历史数据迁移命令。
  *
- * 该命令在组织共享雇佣制上线时执行，完成后应从代码库删除；不能把这类业务
- * 数据修复放进 Schema migration，也不复用为任何在线接口或领域服务。
+ * 迁移顺序固定为：market_type 回填 → 组织共享市场 → 市场货架 → 历史 Topic 雇佣
+ * → 员工兼容可见性收口。命令只处理数据，不改变版本、员工或 Topic 本体。
+ *
+ * 执行前必须备份 magic_super_magic_agent_market、magic_resource_visibility 和
+ * magic_super_magic_user_agents；完成上线后应删除本命令，避免被当作在线能力复用。
  */
 #[Command]
 class MigrateOrganizationSharedAgentsCommand extends HyperfCommand
@@ -46,12 +49,12 @@ class MigrateOrganizationSharedAgentsCommand extends HyperfCommand
     public function configure(): void
     {
         parent::configure();
-        $this->setDescription('一次性迁移组织共享员工的市场货架和历史 Topic 雇佣关系');
-        $this->addOption('agent-code', null, InputOption::VALUE_REQUIRED, '仅迁移指定员工');
-        $this->addOption('page', null, InputOption::VALUE_REQUIRED, '页码', '1');
-        $this->addOption('page-size', null, InputOption::VALUE_REQUIRED, '每页数量', '100');
-        $this->addOption('dry-run', 'd', InputOption::VALUE_NONE, '仅输出统计，不写入');
-        $this->addOption('force', 'f', InputOption::VALUE_NONE, '补偿已存在的市场来源雇佣关系');
+        $this->setDescription('回填市场类型，并迁移组织共享员工的货架和历史 Topic 雇佣关系');
+        $this->addOption('agent-code', null, InputOption::VALUE_REQUIRED, '仅回填并迁移指定员工');
+        $this->addOption('page', null, InputOption::VALUE_REQUIRED, '组织共享员工页码', '1');
+        $this->addOption('page-size', null, InputOption::VALUE_REQUIRED, '组织共享员工单批数量', '100');
+        $this->addOption('dry-run', 'd', InputOption::VALUE_NONE, '仅输出影响统计，不写入任何业务数据');
+        $this->addOption('force', 'f', InputOption::VALUE_NONE, '重新绑定范围内已有 MARKET 雇佣到当前市场和版本');
     }
 
     public function handle(): void
@@ -66,16 +69,12 @@ class MigrateOrganizationSharedAgentsCommand extends HyperfCommand
         $this->line(json_encode($result, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT));
     }
 
-    /**
-     * 固定顺序：公开市场组织码修正 → 市场记录 → 货架可见性 → Topic 命中雇佣关系。
-     * dry-run 只输出受影响范围；force 只补偿已有的 MARKET 来源关系。
-     *
-     * @return array<string, mixed>
-     */
+    /** @return array<string, mixed> */
     private function migrate(?string $agentCode, int $page, int $pageSize, bool $dryRun, bool $force): array
     {
         $page = max(1, $page);
         $pageSize = min(max(1, $pageSize), 200);
+        $agentCode = trim((string) $agentCode);
         $query = Db::table('magic_super_magic_agent_versions')
             ->select(['id', 'code'])
             ->whereIn('publish_target_type', [PublishTargetType::ORGANIZATION->value, PublishTargetType::MEMBER->value])
@@ -83,7 +82,7 @@ class MigrateOrganizationSharedAgentsCommand extends HyperfCommand
             ->where('is_current_version', true)
             ->whereNull('deleted_at')
             ->orderBy('id');
-        if (($agentCode = trim((string) $agentCode)) !== '') {
+        if ($agentCode !== '') {
             $query->where('code', $agentCode);
         }
 
@@ -95,20 +94,27 @@ class MigrateOrganizationSharedAgentsCommand extends HyperfCommand
             'page' => $page,
             'page_size' => $pageSize,
             'total_candidates' => $total,
-            'public_market_records_normalized' => $this->normalizePublicMarketOrganizationCodes($dryRun),
+            // market_type 与 organization_code 解耦，历史迁移绝不再清空组织编码。
+            'market_type_backfill' => $this->backfillMarketTypes($agentCode, $dryRun),
             'processed_versions' => [],
             'market_records' => 0,
             'shelf_records' => 0,
             'topic_hit_users' => [],
+            'candidate_topic_hire_users' => [],
             'created_hires' => 0,
-            'skipped' => 0,
-            'compensated' => 0,
+            'compensated_hires' => 0,
+            'converted_legacy_ownerships' => 0,
+            'deleted_legacy_ownerships' => 0,
+            'out_of_scope_topic_users' => 0,
+            'preserved_creator_ownerships' => 0,
+            'skipped_conflicting_ownerships' => 0,
+            'skipped_versions' => 0,
         ];
 
         foreach ($rows as $row) {
             $version = $this->versionDomainService->findByIdWithoutOrganizationFilter((int) $row['id']);
             if ($version === null || ! in_array($version->getPublishTargetType(), [PublishTargetType::ORGANIZATION, PublishTargetType::MEMBER], true)) {
-                ++$stats['skipped'];
+                ++$stats['skipped_versions'];
                 continue;
             }
 
@@ -120,44 +126,90 @@ class MigrateOrganizationSharedAgentsCommand extends HyperfCommand
             $stats['market_records'] += $result['market_records'];
             $stats['shelf_records'] += $result['shelf_records'];
             $stats['created_hires'] += $result['created_hires'];
-            $stats['compensated'] += $result['compensated'];
+            $stats['compensated_hires'] += $result['compensated_hires'];
+            $stats['converted_legacy_ownerships'] += $result['converted_legacy_ownerships'];
+            $stats['deleted_legacy_ownerships'] += $result['deleted_legacy_ownerships'];
+            $stats['out_of_scope_topic_users'] += $result['out_of_scope_topic_users'];
+            $stats['preserved_creator_ownerships'] += $result['preserved_creator_ownerships'];
+            $stats['skipped_conflicting_ownerships'] += $result['skipped_conflicting_ownerships'];
             $stats['topic_hit_users'] = array_values(array_unique(array_merge($stats['topic_hit_users'], $result['topic_hit_users'])));
+            $stats['candidate_topic_hire_users'] = array_values(array_unique(array_merge(
+                $stats['candidate_topic_hire_users'],
+                $result['candidate_topic_hire_users']
+            )));
         }
 
         return $stats;
     }
 
     /**
-     * 公开市场的 organization_code 必须为 NULL；组织共享市场才保存组织 code。
-     * 这是历史数据修正，故放在一次性 Command 中而不是 Schema migration。
+     * 回填所有未标注市场类型的记录；公开市场保留发布组织，类型才是唯一业务判定。
+     *
+     * @return array{market:int, organization:int, unresolved:int, updated:int}
      */
-    private function normalizePublicMarketOrganizationCodes(bool $dryRun): int
+    private function backfillMarketTypes(string $agentCode, bool $dryRun): array
     {
-        $query = Db::table('magic_super_magic_agent_market as market')
+        $baseQuery = Db::table('magic_super_magic_agent_market as market')
             ->join('magic_super_magic_agent_versions as version', 'version.id', '=', 'market.agent_version_id')
-            ->where('version.publish_target_type', PublishTargetType::MARKET->value)
-            ->whereNotNull('market.organization_code');
-        $affected = $query->count();
-        if (! $dryRun && $affected > 0) {
-            Db::statement(
-                "UPDATE magic_super_magic_agent_market market\n"
-                . "INNER JOIN magic_super_magic_agent_versions version ON version.id = market.agent_version_id\n"
-                . "SET market.organization_code = NULL\n"
-                . "WHERE version.publish_target_type = 'MARKET' AND market.organization_code IS NOT NULL"
-            );
+            ->whereNull('market.deleted_at')
+            ->whereNull('version.deleted_at')
+            ->where(function ($query) {
+                $query->whereNull('market.market_type')->orWhere('market.market_type', '');
+            });
+        if ($agentCode !== '') {
+            $baseQuery->where('market.agent_code', $agentCode);
         }
 
-        return $affected;
+        $typeTargets = [
+            AgentMarketType::MARKET->value => [PublishTargetType::MARKET->value],
+            AgentMarketType::ORGANIZATION->value => [PublishTargetType::ORGANIZATION->value, PublishTargetType::MEMBER->value],
+        ];
+        $stats = ['market' => 0, 'organization' => 0, 'unresolved' => 0, 'updated' => 0];
+        foreach ($typeTargets as $marketType => $publishTargetTypes) {
+            $count = (clone $baseQuery)->whereIn('version.publish_target_type', $publishTargetTypes)->count();
+            $stats[strtolower($marketType)] = $count;
+            if (! $dryRun && $count > 0) {
+                (clone $baseQuery)
+                    ->whereIn('version.publish_target_type', $publishTargetTypes)
+                    ->update(['market_type' => $marketType]);
+                $stats['updated'] += $count;
+            }
+        }
+
+        $stats['unresolved'] = (clone $baseQuery)
+            ->whereNotIn('version.publish_target_type', array_merge(...array_values($typeTargets)))
+            ->count();
+
+        return $stats;
     }
 
     /** @return array<string, mixed> */
     private function previewVersion(AgentVersionEntity $version): array
     {
+        $topicHitUsers = $this->findTopicHitUserIds($version->getOrganizationCode(), $version->getCode());
+        $existingOwnerships = $this->userAgentDomainService->findAllUserAgentOwnershipsByCode(
+            SuperMagicAgentDataIsolation::create($version->getOrganizationCode(), $version->getCreator()),
+            $version->getCode()
+        );
+        $creatorOwnerships = array_filter(
+            $existingOwnerships,
+            static fn (UserAgentEntity $ownership): bool => $ownership->getUserId() === $version->getCreator()
+        );
+        $existingUserIds = array_fill_keys(array_map(
+            static fn (UserAgentEntity $ownership): string => $ownership->getUserId(),
+            $existingOwnerships
+        ), true);
+        $candidateTopicHireUsers = array_values(array_filter(
+            $topicHitUsers,
+            static fn (string $userId): bool => $userId !== $version->getCreator() && ! isset($existingUserIds[$userId])
+        ));
+
+        // dry-run 不写货架，成员共享的最终命中情况必须在真实执行时按当前部门成员关系复核。
         return $this->resultForVersion(
             $version,
-            $this->findTopicHitUserIds($version->getOrganizationCode(), $version->getCode()),
-            0,
-            0
+            $topicHitUsers,
+            $candidateTopicHireUsers,
+            preservedCreatorOwnerships: count($creatorOwnerships)
         );
     }
 
@@ -166,94 +218,99 @@ class MigrateOrganizationSharedAgentsCommand extends HyperfCommand
     {
         $dataIsolation = SuperMagicAgentDataIsolation::create($version->getOrganizationCode(), $version->getCreator());
         $permissionIsolation = PermissionDataIsolation::create($version->getOrganizationCode(), $version->getCreator());
+
+        // 按 agent_code 覆盖旧公开版本，保证一个员工只保留一个当前市场记录。
         $market = $this->versionDomainService->publishOrganizationSharedMarket($dataIsolation, $version);
         $marketId = (int) $market->getId();
         if ($marketId <= 0) {
             throw new RuntimeException('Organization shared market record was not created');
         }
+        $this->saveMarketShelfVisibility($permissionIsolation, $version, $marketId);
 
-        if ($version->getPublishTargetType() === PublishTargetType::ORGANIZATION) {
-            $this->resourceVisibilityDomainService->saveVisibilityByPrincipals(
-                $permissionIsolation,
-                ResourceVisibilityResourceType::SUPER_MAGIC_AGENT_MARKET,
-                (string) $marketId,
-                VisibilityType::ALL
-            );
-        } else {
-            $target = $version->getPublishTargetValue();
-            $this->resourceVisibilityDomainService->saveVisibilityByPrincipals(
-                $permissionIsolation,
-                ResourceVisibilityResourceType::SUPER_MAGIC_AGENT_MARKET,
-                (string) $marketId,
-                VisibilityType::SPECIFIC,
-                $target?->getUserIds() ?? [],
-                $target?->getDepartmentIds() ?? []
-            );
-        }
-
-        $createdHires = 0;
-        $compensated = 0;
         $topicHitUsers = $this->findTopicHitUserIds($version->getOrganizationCode(), $version->getCode());
+        $topicHitUserMap = array_fill_keys($topicHitUsers, true);
+        $existingOwnerships = $this->userAgentDomainService->findAllUserAgentOwnershipsByCode($dataIsolation, $version->getCode());
+        $processedUserIds = [];
+        $stats = [
+            'created_hires' => 0,
+            'compensated_hires' => 0,
+            'converted_legacy_ownerships' => 0,
+            'deleted_legacy_ownerships' => 0,
+            'out_of_scope_topic_users' => 0,
+            'preserved_creator_ownerships' => 0,
+            'skipped_conflicting_ownerships' => 0,
+        ];
+
+        foreach ($existingOwnerships as $ownership) {
+            $userId = $ownership->getUserId();
+            $processedUserIds[$userId] = true;
+            $isCreator = $userId === $version->getCreator();
+            $hasTopicUsage = isset($topicHitUserMap[$userId]);
+
+            // 创建者永远保留本地创建关系，不被 Topic 或共享范围反向撤销。
+            if ($isCreator) {
+                ++$stats['preserved_creator_ownerships'];
+                continue;
+            }
+
+            $isShelfVisible = $this->isMarketShelfVisible($permissionIsolation, $userId, $marketId);
+
+            if ($ownership->getSourceType() === AgentSourceType::LOCAL_CREATE) {
+                if ($hasTopicUsage && $isShelfVisible) {
+                    $this->saveMarketOwnership($version, $marketId, $userId, $ownership);
+                    ++$stats['converted_legacy_ownerships'];
+                    continue;
+                }
+
+                // 非创建者旧自动关系未形成有效雇佣时必须删除，防止绕过新可用性校验。
+                if ($this->deleteOwnership($version, $userId)) {
+                    ++$stats['deleted_legacy_ownerships'];
+                }
+                if ($hasTopicUsage && ! $isShelfVisible) {
+                    ++$stats['out_of_scope_topic_users'];
+                }
+                continue;
+            }
+
+            if ($ownership->getSourceType() === AgentSourceType::MARKET) {
+                // 已雇佣用户若已被移出货架，迁移时同步撤权；范围恢复后需重新雇佣。
+                if (! $isShelfVisible) {
+                    if ($this->deleteOwnership($version, $userId)) {
+                        ++$stats['deleted_legacy_ownerships'];
+                    }
+                    if ($hasTopicUsage) {
+                        ++$stats['out_of_scope_topic_users'];
+                    }
+                    continue;
+                }
+                if ($force) {
+                    $this->saveMarketOwnership($version, $marketId, $userId, $ownership);
+                    ++$stats['compensated_hires'];
+                }
+                continue;
+            }
+
+            // SYSTEM 等非市场来源不在本次规则中转换，输出统计供人工复核。
+            ++$stats['skipped_conflicting_ownerships'];
+        }
+
+        $candidateTopicHireUsers = [];
         foreach ($topicHitUsers as $userId) {
-            $visibleIds = $this->resourceVisibilityDomainService->getUserAccessibleResourceCodes(
-                $permissionIsolation,
-                $userId,
-                ResourceVisibilityResourceType::SUPER_MAGIC_AGENT_MARKET,
-                [(string) $marketId]
-            );
-            if (! in_array((string) $marketId, $visibleIds, true)) {
+            if ($userId === $version->getCreator() || isset($processedUserIds[$userId])) {
+                continue;
+            }
+            $candidateTopicHireUsers[] = $userId;
+            if (! $this->isMarketShelfVisible($permissionIsolation, $userId, $marketId)) {
+                ++$stats['out_of_scope_topic_users'];
                 continue;
             }
 
-            $userIsolation = SuperMagicAgentDataIsolation::create($version->getOrganizationCode(), $userId);
-            $existing = $this->userAgentDomainService->findUserAgentOwnershipByCode($userIsolation, $version->getCode());
-            if ($existing !== null && ! $existing->getSourceType()->isMarket()) {
-                continue;
-            }
-            if ($existing !== null && ! $force) {
-                continue;
-            }
-
-            $ownership = (new UserAgentEntity())
-                ->setOrganizationCode($version->getOrganizationCode())
-                ->setUserId($userId)
-                ->setAgentCode($version->getCode())
-                ->setAgentVersionId($version->getId())
-                ->setSourceType(AgentSourceType::MARKET)
-                ->setSourceId($marketId);
-            $this->userAgentDomainService->saveUserAgentOwnership($userIsolation, $ownership);
-            $this->resourceVisibilityDomainService->addResourceVisibilityByPrincipalsIfMissing(
-                $permissionIsolation,
-                ResourceVisibilityResourceType::SUPER_MAGIC_AGENT,
-                $version->getCode(),
-                PrincipalType::USER,
-                [$userId]
-            );
-            $existing === null ? ++$createdHires : ++$compensated;
+            // 历史补雇佣不增加 install_count，避免把兼容修复计入新的市场安装量。
+            $this->saveMarketOwnership($version, $marketId, $userId);
+            ++$stats['created_hires'];
         }
 
-        // 历史员工可见性可能仍是 ALL/部门范围；迁移后仅保留创建者和有效雇佣者，
-        // 防止“市场货架可见”经旧兼容链路升级成完整详情权限。
-        $revokedUserIds = [];
-        foreach ($this->userAgentDomainService->findUserAgentOwnershipsByMarketSource($dataIsolation, $marketId) as $ownership) {
-            $visibleIds = $this->resourceVisibilityDomainService->getUserAccessibleResourceCodes(
-                $permissionIsolation,
-                $ownership->getUserId(),
-                ResourceVisibilityResourceType::SUPER_MAGIC_AGENT_MARKET,
-                [(string) $marketId]
-            );
-            if (! in_array((string) $marketId, $visibleIds, true)) {
-                $revokedUserIds[] = $ownership->getUserId();
-            }
-        }
-        if ($revokedUserIds !== []) {
-            $this->userAgentDomainService->deleteUserAgentOwnershipsByMarketSourceAndUsers(
-                $dataIsolation,
-                $marketId,
-                array_values(array_unique($revokedUserIds))
-            );
-        }
-
+        // 员工可见记录仅保留创建者和有效 MARKET 雇佣者，旧组织/部门范围不得继续放大详情权限。
         $hiredUserIds = array_map(
             static fn (UserAgentEntity $ownership): string => $ownership->getUserId(),
             $this->userAgentDomainService->findUserAgentOwnershipsByMarketSource($dataIsolation, $marketId)
@@ -266,7 +323,90 @@ class MigrateOrganizationSharedAgentsCommand extends HyperfCommand
             array_values(array_unique(array_merge([$version->getCreator()], $hiredUserIds)))
         );
 
-        return $this->resultForVersion($version, $topicHitUsers, $createdHires, $compensated);
+        return $this->resultForVersion(
+            $version,
+            $topicHitUsers,
+            $candidateTopicHireUsers,
+            $stats['created_hires'],
+            $stats['compensated_hires'],
+            $stats['converted_legacy_ownerships'],
+            $stats['deleted_legacy_ownerships'],
+            $stats['out_of_scope_topic_users'],
+            $stats['preserved_creator_ownerships'],
+            $stats['skipped_conflicting_ownerships'],
+        );
+    }
+
+    private function saveMarketShelfVisibility(
+        PermissionDataIsolation $permissionIsolation,
+        AgentVersionEntity $version,
+        int $marketId
+    ): void {
+        if ($version->getPublishTargetType() === PublishTargetType::ORGANIZATION) {
+            $this->resourceVisibilityDomainService->saveVisibilityByPrincipals(
+                $permissionIsolation,
+                ResourceVisibilityResourceType::SUPER_MAGIC_AGENT_MARKET,
+                (string) $marketId,
+                VisibilityType::ALL
+            );
+            return;
+        }
+
+        $target = $version->getPublishTargetValue();
+        $this->resourceVisibilityDomainService->saveVisibilityByPrincipals(
+            $permissionIsolation,
+            ResourceVisibilityResourceType::SUPER_MAGIC_AGENT_MARKET,
+            (string) $marketId,
+            VisibilityType::SPECIFIC,
+            $target?->getUserIds() ?? [],
+            $target?->getDepartmentIds() ?? []
+        );
+    }
+
+    private function isMarketShelfVisible(PermissionDataIsolation $permissionIsolation, string $userId, int $marketId): bool
+    {
+        $visibleMarketIds = $this->resourceVisibilityDomainService->getUserAccessibleResourceCodes(
+            $permissionIsolation,
+            $userId,
+            ResourceVisibilityResourceType::SUPER_MAGIC_AGENT_MARKET,
+            [(string) $marketId]
+        );
+
+        return in_array((string) $marketId, $visibleMarketIds, true);
+    }
+
+    /**
+     * 写入或更新 MARKET 来源关系；特意不调用 hireAgent，避免修改 install_count。
+     */
+    private function saveMarketOwnership(
+        AgentVersionEntity $version,
+        int $marketId,
+        string $userId,
+        ?UserAgentEntity $existingOwnership = null
+    ): void {
+        $ownership = (new UserAgentEntity())
+            ->setOrganizationCode($version->getOrganizationCode())
+            ->setUserId($userId)
+            ->setAgentCode($version->getCode())
+            ->setAgentVersionId($version->getId())
+            ->setSourceType(AgentSourceType::MARKET)
+            ->setSourceId($marketId);
+        if ($existingOwnership?->getId() !== null) {
+            $ownership->setId($existingOwnership->getId());
+        }
+
+        $this->userAgentDomainService->saveUserAgentOwnership(
+            SuperMagicAgentDataIsolation::create($version->getOrganizationCode(), $userId),
+            $ownership
+        );
+    }
+
+    private function deleteOwnership(AgentVersionEntity $version, string $userId): bool
+    {
+        return $this->userAgentDomainService->deleteUserAgentOwnership(
+            SuperMagicAgentDataIsolation::create($version->getOrganizationCode(), $userId),
+            $version->getCode()
+        );
     }
 
     /** @return string[] */
@@ -282,9 +422,23 @@ class MigrateOrganizationSharedAgentsCommand extends HyperfCommand
             ->all();
     }
 
-    /** @return array<string, mixed> */
-    private function resultForVersion(AgentVersionEntity $version, array $topicHitUsers, int $createdHires, int $compensated): array
-    {
+    /**
+     * @param string[] $topicHitUsers
+     * @param string[] $candidateTopicHireUsers
+     * @return array<string, mixed>
+     */
+    private function resultForVersion(
+        AgentVersionEntity $version,
+        array $topicHitUsers,
+        array $candidateTopicHireUsers,
+        int $createdHires = 0,
+        int $compensatedHires = 0,
+        int $convertedLegacyOwnerships = 0,
+        int $deletedLegacyOwnerships = 0,
+        int $outOfScopeTopicUsers = 0,
+        int $preservedCreatorOwnerships = 0,
+        int $skippedConflictingOwnerships = 0,
+    ): array {
         return [
             'version' => [
                 'id' => $version->getId(),
@@ -294,8 +448,14 @@ class MigrateOrganizationSharedAgentsCommand extends HyperfCommand
             'market_records' => 1,
             'shelf_records' => 1,
             'topic_hit_users' => $topicHitUsers,
+            'candidate_topic_hire_users' => $candidateTopicHireUsers,
             'created_hires' => $createdHires,
-            'compensated' => $compensated,
+            'compensated_hires' => $compensatedHires,
+            'converted_legacy_ownerships' => $convertedLegacyOwnerships,
+            'deleted_legacy_ownerships' => $deletedLegacyOwnerships,
+            'out_of_scope_topic_users' => $outOfScopeTopicUsers,
+            'preserved_creator_ownerships' => $preservedCreatorOwnerships,
+            'skipped_conflicting_ownerships' => $skippedConflictingOwnerships,
         ];
     }
 }

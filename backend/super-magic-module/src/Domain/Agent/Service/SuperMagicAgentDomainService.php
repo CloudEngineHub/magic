@@ -454,7 +454,6 @@ readonly class SuperMagicAgentDomainService
         if (! $agentVersion) {
             ExceptionBuilder::throw(SuperMagicErrorCode::AgentVersionNotFound, 'super_magic.agent.agent_version_not_found');
         }
-
         // 3. 通过用户关系表判断当前用户是否已安装过这个市场 Agent，而不是再依赖本地 Agent 主表反查。
         $existingUserAgents = $this->userAgentDomainService->findUserAgentOwnershipsByVersionIds($dataIsolation, [$agentMarket->getAgentVersionId()]);
         $existingAgent = $existingUserAgents[$agentMarket->getAgentVersionId()] ?? null;

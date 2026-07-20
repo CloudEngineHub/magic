@@ -18,6 +18,7 @@ use Dtyq\SuperMagic\Domain\Agent\Entity\AgentMarketEntity;
 use Dtyq\SuperMagic\Domain\Agent\Entity\AgentPlaybookEntity;
 use Dtyq\SuperMagic\Domain\Agent\Entity\AgentVersionEntity;
 use Dtyq\SuperMagic\Domain\Agent\Entity\UserAgentEntity;
+use Dtyq\SuperMagic\Domain\Agent\Entity\ValueObject\AgentMarketType;
 use Dtyq\SuperMagic\Domain\Agent\Entity\ValueObject\PublisherType;
 use Dtyq\SuperMagic\Domain\Agent\Entity\ValueObject\Query\AgentMarketQuery;
 use Dtyq\SuperMagic\Domain\Agent\Entity\ValueObject\SuperMagicAgentDataIsolation;
@@ -96,14 +97,14 @@ class SuperMagicAgentMarketAppService extends AbstractSuperMagicAppService
             ExceptionBuilder::throw(SuperMagicErrorCode::NotFound, 'common.not_found', ['label' => $code]);
         }
 
-        $this->assertMarketShelfVisible($dataIsolation, $agentMarket);
-
         $agentVersion = $this->superMagicAgentVersionDomainService->findByIdWithoutOrganizationFilter(
             $agentMarket->getAgentVersionId()
         );
         if ($agentVersion === null) {
             ExceptionBuilder::throw(SuperMagicErrorCode::AgentVersionNotFound, 'super_magic.agent.agent_version_not_found');
         }
+
+        $this->assertMarketShelfVisible($dataIsolation, $agentMarket);
 
         $this->updateAgentMarketIcon($dataIsolation, $agentMarket);
 
@@ -139,6 +140,7 @@ class SuperMagicAgentMarketAppService extends AbstractSuperMagicAppService
         if ($requestDTO->getCategoryIds() !== []) {
             $query->setCategoryIds($requestDTO->getCategoryIds());
         }
+        $query->setMarketType($requestDTO->getMarketType());
 
         $visibleMarketIds = $this->resourceVisibilityDomainService->getUserAccessibleResourceCodes(
             $this->createPermissionDataIsolation($dataIsolation),
@@ -222,10 +224,6 @@ class SuperMagicAgentMarketAppService extends AbstractSuperMagicAppService
 
         $pathMapByOrganization = [];
         foreach ($agentMarkets as $marketEntity) {
-            if (! $marketEntity instanceof AgentMarketEntity) {
-                continue;
-            }
-
             $icon = $marketEntity->getIcon() ?? [];
             $formattedPath = EasyFileTools::formatPath($icon['url'] ?? $icon['value'] ?? '');
             if ($formattedPath === '') {
@@ -246,10 +244,6 @@ class SuperMagicAgentMarketAppService extends AbstractSuperMagicAppService
         }
 
         foreach ($agentMarkets as $marketEntity) {
-            if (! $marketEntity instanceof AgentMarketEntity) {
-                continue;
-            }
-
             $icon = $marketEntity->getIcon() ?? [];
             $formattedPath = EasyFileTools::formatPath($icon['url'] ?? $icon['value'] ?? '');
             if ($formattedPath === '') {
@@ -268,19 +262,26 @@ class SuperMagicAgentMarketAppService extends AbstractSuperMagicAppService
         }
     }
 
-    private function assertMarketShelfVisible(SuperMagicAgentDataIsolation $dataIsolation, AgentMarketEntity $market): void
-    {
+    private function assertMarketShelfVisible(
+        SuperMagicAgentDataIsolation $dataIsolation,
+        AgentMarketEntity $market
+    ): void {
         if (! $this->isMarketShelfVisible($dataIsolation, $market)) {
             ExceptionBuilder::throw(SuperMagicErrorCode::NotFound, 'common.not_found', ['label' => $market->getAgentCode()]);
         }
     }
 
-    private function isMarketShelfVisible(SuperMagicAgentDataIsolation $dataIsolation, AgentMarketEntity $market): bool
-    {
-        if ($market->getOrganizationCode() === null || $market->getOrganizationCode() === '') {
+    private function isMarketShelfVisible(
+        SuperMagicAgentDataIsolation $dataIsolation,
+        AgentMarketEntity $market
+    ): bool {
+        $marketType = $market->getMarketType();
+        if ($marketType === AgentMarketType::MARKET) {
             return true;
         }
-        if ($market->getOrganizationCode() !== $dataIsolation->getCurrentOrganizationCode() || $market->getId() === null) {
+        if ($marketType !== AgentMarketType::ORGANIZATION
+            || $market->getOrganizationCode() !== $dataIsolation->getCurrentOrganizationCode()
+            || $market->getId() === null) {
             return false;
         }
 

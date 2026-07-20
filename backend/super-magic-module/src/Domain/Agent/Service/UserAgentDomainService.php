@@ -29,6 +29,16 @@ class UserAgentDomainService
     }
 
     /**
+     * 历史迁移按员工收口时，需要枚举同组织下所有用户的现有关系。
+     *
+     * @return UserAgentEntity[]
+     */
+    public function findAllUserAgentOwnershipsByCode(SuperMagicAgentDataIsolation $dataIsolation, string $agentCode): array
+    {
+        return $this->userAgentRepository->findAllByAgentCode($dataIsolation, $agentCode);
+    }
+
+    /**
      * @param array<string> $agentCodes
      * @return array<string, UserAgentEntity>
      */

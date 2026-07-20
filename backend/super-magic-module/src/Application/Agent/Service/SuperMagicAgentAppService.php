@@ -39,6 +39,7 @@ use Dtyq\SuperMagic\Domain\Agent\Entity\AgentSkillEntity;
 use Dtyq\SuperMagic\Domain\Agent\Entity\AgentVersionEntity;
 use Dtyq\SuperMagic\Domain\Agent\Entity\SuperMagicAgentEntity;
 use Dtyq\SuperMagic\Domain\Agent\Entity\UserAgentEntity;
+use Dtyq\SuperMagic\Domain\Agent\Entity\ValueObject\AgentMarketType;
 use Dtyq\SuperMagic\Domain\Agent\Entity\ValueObject\AgentSourceType;
 use Dtyq\SuperMagic\Domain\Agent\Entity\ValueObject\PublisherType;
 use Dtyq\SuperMagic\Domain\Agent\Entity\ValueObject\PublishTargetType;
@@ -486,7 +487,6 @@ class SuperMagicAgentAppService extends AbstractSuperMagicAppService
                 AgentListScope::CREATED => $this->queriesCreated($authorization, $requestDTO),
                 AgentListScope::TEAM_SHARED => $this->queriesTeamShared($authorization, $requestDTO),
                 AgentListScope::MARKET_INSTALLED => $this->queriesMarketInstalled($authorization, $requestDTO),
-                AgentListScope::ALL => [],
             });
         }
 
@@ -1358,7 +1358,11 @@ class SuperMagicAgentAppService extends AbstractSuperMagicAppService
         if ($marketEntity === null) {
             ExceptionBuilder::throw(SuperMagicErrorCode::NotFound, 'common.not_found', ['label' => $agentMarketCode]);
         }
-        if ($marketEntity->getOrganizationCode() !== null && $marketEntity->getOrganizationCode() !== '') {
+        $marketType = $marketEntity->getMarketType();
+        if ($marketType === null) {
+            ExceptionBuilder::throw(SuperMagicErrorCode::NotFound, 'common.not_found', ['label' => $agentMarketCode]);
+        }
+        if ($marketType === AgentMarketType::ORGANIZATION) {
             if ($marketEntity->getOrganizationCode() !== $dataIsolation->getCurrentOrganizationCode() || $marketEntity->getId() === null) {
                 ExceptionBuilder::throw(SuperMagicErrorCode::NotFound, 'common.not_found', ['label' => $agentMarketCode]);
             }
@@ -1424,7 +1428,6 @@ class SuperMagicAgentAppService extends AbstractSuperMagicAppService
         if ($usableOnly) {
             $this->assertAgentUsable($dataIsolation, $code);
         }
-
         // 权限断言通过后关闭组织过滤，支持协作者读取非本人创建的 Agent
         $dataIsolation->disabled();
 
@@ -1485,7 +1488,6 @@ class SuperMagicAgentAppService extends AbstractSuperMagicAppService
         } else {
             $this->assertAgentDetailReadable($dataIsolation, $code);
         }
-
         $dataIsolation->disabled();
         $versionEntity = $this->superMagicAgentVersionDomainService->getCurrentOrLatestByCode($dataIsolation, $code);
         if ($versionEntity === null) {
@@ -1497,7 +1499,6 @@ class SuperMagicAgentAppService extends AbstractSuperMagicAppService
         }
 
         $agent = $this->buildAgentDetailFromVersion($versionEntity);
-
         if ($withToolSchema) {
             $this->hydrateToolSchemas($agent, $flowDataIsolation);
         }

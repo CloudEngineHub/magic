@@ -7,6 +7,7 @@ declare(strict_types=1);
 
 namespace Dtyq\SuperMagic\Tests\Unit\Domain\Agent\Entity\ValueObject\Query;
 
+use Dtyq\SuperMagic\Domain\Agent\Entity\ValueObject\AgentMarketType;
 use Dtyq\SuperMagic\Domain\Agent\Entity\ValueObject\Query\AgentMarketQuery;
 use PHPUnit\Framework\TestCase;
 
@@ -23,5 +24,14 @@ class AgentMarketQueryTest extends TestCase
 
         $this->assertSame('ORG-1', $query->getVisibleOrganizationCode());
         $this->assertSame([30, 10], $query->getVisibleOrganizationMarketIds());
+    }
+
+    public function testItCarriesAnOptionalMarketTypeFilter(): void
+    {
+        $query = new AgentMarketQuery();
+
+        $query->setMarketType(AgentMarketType::ORGANIZATION);
+
+        $this->assertSame(AgentMarketType::ORGANIZATION, $query->getMarketType());
     }
 }

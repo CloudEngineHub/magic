@@ -162,6 +162,7 @@ class SuperMagicAgentMarketAssembler
             categoryId: $agentMarket->getCategoryId(),
             categoryIds: $agentMarket->getCategoryIds(),
             isFeatured: $agentMarket->isFeatured(),
+            marketType: $agentMarket->getMarketType()->value,
             isAdded: $isAdded,
             latestVersionCode: $latestVersionCode,
             allowDelete: $allowDelete,

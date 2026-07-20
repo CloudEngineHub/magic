@@ -14,6 +14,7 @@ use Dtyq\SuperMagic\Domain\Agent\Entity\AgentMarketEntity;
 use Dtyq\SuperMagic\Domain\Agent\Entity\AgentSkillEntity;
 use Dtyq\SuperMagic\Domain\Agent\Entity\AgentVersionEntity;
 use Dtyq\SuperMagic\Domain\Agent\Entity\SuperMagicAgentEntity;
+use Dtyq\SuperMagic\Domain\Agent\Entity\ValueObject\AgentMarketType;
 use Dtyq\SuperMagic\Domain\Agent\Entity\ValueObject\PublisherType;
 use Dtyq\SuperMagic\Domain\Agent\Entity\ValueObject\PublishStatus;
 use Dtyq\SuperMagic\Domain\Agent\Entity\ValueObject\PublishTargetType;
@@ -338,6 +339,7 @@ class SuperMagicAgentVersionDomainService
         $marketEntity->setCategoryId($versionEntity->getCategoryId());
         $marketEntity->setPublishStatus(PublishStatus::PUBLISHED);
         $marketEntity->setOrganizationCode($versionEntity->getOrganizationCode());
+        $marketEntity->setMarketType(AgentMarketType::ORGANIZATION);
 
         if ($existingMarket !== null) {
             $marketEntity->setId($existingMarket->getId());
@@ -439,8 +441,9 @@ class SuperMagicAgentVersionDomainService
             $storeAgentEntity->setPublisherType($publisherTypeEnum);
             $storeAgentEntity->setCategoryId($versionEntity->getCategoryId());
             $storeAgentEntity->setPublishStatus(PublishStatus::PUBLISHED);
-            // 公开市场不绑定组织；组织共享市场由组织审核链路单独写入组织编码。
-            $storeAgentEntity->setOrganizationCode(null);
+            // 归属组织用于文件等资源上下文，公开性质由 market_type 明确定义。
+            $storeAgentEntity->setOrganizationCode($versionEntity->getOrganizationCode());
+            $storeAgentEntity->setMarketType(AgentMarketType::MARKET);
 
             if ($existingStoreAgent) {
                 $storeAgentEntity->setId($existingStoreAgent->getId());

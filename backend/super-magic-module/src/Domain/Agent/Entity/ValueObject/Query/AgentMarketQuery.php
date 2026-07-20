@@ -8,6 +8,7 @@ declare(strict_types=1);
 namespace Dtyq\SuperMagic\Domain\Agent\Entity\ValueObject\Query;
 
 use App\Infrastructure\Core\AbstractQuery;
+use Dtyq\SuperMagic\Domain\Agent\Entity\ValueObject\AgentMarketType;
 
 class AgentMarketQuery extends AbstractQuery
 {
@@ -29,6 +30,8 @@ class AgentMarketQuery extends AbstractQuery
     protected array $visibleOrganizationMarketIds = [];
 
     protected ?string $visibleOrganizationCode = null;
+
+    protected ?AgentMarketType $marketType = null;
 
     public function getKeyword(): ?string
     {
@@ -98,5 +101,15 @@ class AgentMarketQuery extends AbstractQuery
     public function getVisibleOrganizationMarketIds(): array
     {
         return $this->visibleOrganizationMarketIds;
+    }
+
+    public function setMarketType(?AgentMarketType $marketType): void
+    {
+        $this->marketType = $marketType;
+    }
+
+    public function getMarketType(): ?AgentMarketType
+    {
+        return $this->marketType;
     }
 }

@@ -15,6 +15,7 @@ use App\Infrastructure\Core\ValueObject\Page;
 use App\Infrastructure\ExternalAPI\Sms\Enum\LanguageEnum;
 use Dtyq\SuperMagic\Application\Agent\Assembler\AdminSuperMagicAgentAssembler;
 use Dtyq\SuperMagic\Domain\Agent\Entity\AgentVersionEntity;
+use Dtyq\SuperMagic\Domain\Agent\Entity\ValueObject\AgentMarketType;
 use Dtyq\SuperMagic\Domain\Agent\Entity\ValueObject\PublishTargetType;
 use Dtyq\SuperMagic\Domain\Agent\Entity\ValueObject\Query\AgentVersionAdminQuery;
 use Dtyq\SuperMagic\Domain\Agent\Entity\ValueObject\ReviewStatus;
@@ -473,6 +474,9 @@ class AdminSuperMagicAgentAppService extends AbstractSuperMagicAppService
     ): void {
         $market = $this->superMagicAgentMarketDomainService->getById($marketId);
         if ($market === null || $market->getOrganizationCode() === null || $market->getOrganizationCode() === '') {
+            return;
+        }
+        if ($market->getMarketType() !== AgentMarketType::ORGANIZATION) {
             return;
         }
 
