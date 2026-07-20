@@ -132,6 +132,8 @@ export interface UploadFileMentionData {
 	file_path?: string
 	file_size?: number
 	file?: File
+	relative_file_path?: string
+	is_hidden?: boolean
 	// 上传状态相关字段
 	upload_progress?: number // 上传进度 0-100
 	upload_status?: "init" | "uploading" | "done" | "error"

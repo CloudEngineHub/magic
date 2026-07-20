@@ -67,6 +67,10 @@ class AgentListItemDTO extends AbstractDTO
 
     private ?string $userRole = null;
 
+    private ?string $scope = null;
+
+    private ?array $organizationInfo = null;
+
     public function __construct(
         int $id,
         string $code,
@@ -88,7 +92,9 @@ class AgentListItemDTO extends AbstractDTO
         ?string $publisherType = null,
         ?array $publisher = null,
         ?array $creatorInfo = null,
-        ?string $userRole = null
+        ?string $userRole = null,
+        ?string $scope = null,
+        ?array $organizationInfo = null
     ) {
         $this->id = $id;
         $this->code = $code;
@@ -111,6 +117,8 @@ class AgentListItemDTO extends AbstractDTO
         $this->publisher = $publisher;
         $this->creatorInfo = $creatorInfo;
         $this->userRole = $userRole;
+        $this->scope = $scope;
+        $this->organizationInfo = $organizationInfo;
     }
 
     /**
@@ -140,6 +148,8 @@ class AgentListItemDTO extends AbstractDTO
             'publisher' => $this->publisher,
             'creator_info' => $this->creatorInfo,
             'user_role' => $this->userRole,
+            'scope' => $this->scope,
+            'organization_info' => $this->organizationInfo,
         ];
     }
 }

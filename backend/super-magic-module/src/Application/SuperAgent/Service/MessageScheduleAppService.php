@@ -1185,10 +1185,7 @@ class MessageScheduleAppService extends AbstractAppService
     private function createDataIsolationFromContext(RequestContext $requestContext): DataIsolation
     {
         $authorization = $requestContext->getUserAuthorization();
-        $dataIsolation = new DataIsolation();
-        $dataIsolation->setCurrentUserId($authorization->getId());
-        $dataIsolation->setCurrentOrganizationCode($authorization->getOrganizationCode());
-        return $dataIsolation;
+        return DataIsolation::create($authorization->getOrganizationCode(), $authorization->getId());
     }
 
     /**

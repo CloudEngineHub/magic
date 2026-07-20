@@ -9,7 +9,6 @@ namespace Dtyq\SuperMagic\Application\Skill\Service;
 
 use App\Domain\Contact\Entity\MagicDepartmentEntity;
 use App\Domain\Contact\Entity\MagicUserEntity;
-use App\Domain\Contact\Entity\ValueObject\DataIsolation as ContactDataIsolation;
 use App\Domain\Contact\Service\MagicDepartmentDomainService;
 use App\Domain\Contact\Service\MagicUserDomainService;
 use App\Domain\Permission\Entity\ValueObject\OperationPermission\Operation;
@@ -845,7 +844,7 @@ class SkillAppService extends AbstractSkillAppService
         $versions = $result['list'];
         $organizationCode = $dataIsolation->getCurrentOrganizationCode();
 
-        [$userMap, $memberDepartmentMap] = $this->batchLoadVersionRelatedEntities(
+        [$userMap, $memberDepartmentMap] = $this->batchLoadSkillVersionRelatedEntities(
             $organizationCode,
             $versions
         );
@@ -1184,53 +1183,6 @@ class SkillAppService extends AbstractSkillAppService
         }
 
         return array_values(array_unique(array_merge($skillCodes, $builtinSkillCodes)));
-    }
-
-    /**
-     * 批量加载版本列表关联的用户与部门信息.
-     *
-     * 一次遍历版本列表，收集所有需要查询的 publisherUserId、MEMBER 类型的 userIds 和 departmentIds，
-     *
-     * @param SkillVersionEntity[] $versions
-     * @return array{0: array<string, MagicUserEntity>, 1: array<string, MagicDepartmentEntity>}
-     */
-    private function batchLoadVersionRelatedEntities(string $organizationCode, array $versions): array
-    {
-        $userIds = [];
-        $memberDepartmentIds = [];
-
-        foreach ($versions as $version) {
-            if (! empty($version->getPublisherUserId())) {
-                $userIds[] = $version->getPublisherUserId();
-            }
-
-            $targetValue = $version->getPublishTargetValue();
-            if ($targetValue !== null && $version->getPublishTargetType()->requiresTargetValue()) {
-                foreach ($targetValue->getUserIds() as $userId) {
-                    $userIds[] = $userId;
-                }
-                foreach ($targetValue->getDepartmentIds() as $departmentId) {
-                    $memberDepartmentIds[] = $departmentId;
-                }
-            }
-        }
-
-        $userMap = [];
-        if ($userIds !== []) {
-            $userMap = $this->getUsers($organizationCode, array_unique($userIds));
-        }
-
-        $memberDepartmentMap = [];
-        if ($memberDepartmentIds !== []) {
-            $contactDataIsolation = ContactDataIsolation::simpleMake($organizationCode);
-            $memberDepartmentMap = $this->magicDepartmentDomainService->getDepartmentByIds(
-                $contactDataIsolation,
-                array_unique($memberDepartmentIds),
-                true
-            );
-        }
-
-        return [$userMap, $memberDepartmentMap];
     }
 
     /**

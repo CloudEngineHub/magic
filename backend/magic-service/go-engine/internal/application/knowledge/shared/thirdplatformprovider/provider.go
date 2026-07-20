@@ -215,9 +215,15 @@ func (p *TeamshareProvider) ResolveLatestContent(ctx context.Context, input Reso
 	if err != nil {
 		return nil, fmt.Errorf("resolve teamshare document: %w", err)
 	}
+	if shouldFallbackResolvedSource(resolved) {
+		return nil, nil
+	}
 
-	content := texthelper.NormalizeContent(resolved.Content)
+	content := texthelper.NormalizeContent(resolved.RawContent)
 	if content == "" {
+		content = texthelper.NormalizeContent(resolved.Content)
+	}
+	if  content== "" {
 		return nil, shared.ErrDocumentFileEmpty
 	}
 
@@ -229,6 +235,17 @@ func (p *TeamshareProvider) ResolveLatestContent(ctx context.Context, input Reso
 		ContentHash:        texthelper.HashText(content),
 		FetchedAtUnixMilli: time.Now().UnixMilli(),
 	}, nil
+}
+
+func shouldFallbackResolvedSource(resolved *thirdplatform.DocumentResolveResult) bool {
+	if resolved == nil {
+		return true
+	}
+	sourceKind := strings.ToLower(strings.TrimSpace(resolved.SourceKind))
+	if sourceKind == thirdplatform.DocumentSourceKindDownloadURL {
+		return true
+	}
+	return sourceKind == "" && thirdplatform.SelectDownloadURL("", resolved.DownloadURLs, resolved.DownloadURL) != ""
 }
 
 func resolveDocumentName(metadata map[string]any, thirdFileID string) string {

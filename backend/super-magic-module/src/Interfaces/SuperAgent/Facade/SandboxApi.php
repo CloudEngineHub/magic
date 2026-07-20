@@ -137,9 +137,7 @@ class SandboxApi extends AbstractApi
         }
 
         // 创建数据隔离对象
-        $dataIsolation = new DataIsolation();
-        $dataIsolation->setCurrentUserId($this->getAuthorization()->getId());
-        $dataIsolation->setCurrentOrganizationCode($this->getAuthorization()->getOrganizationCode());
+        $dataIsolation = DataIsolation::create($this->getAuthorization()->getOrganizationCode(), $this->getAuthorization()->getId());
         $dataIsolation->setThirdPartyOrganizationCode($this->getAuthorization()->getOrganizationCode());
         $dataIsolation->setUserType(UserType::Human);
 
@@ -168,10 +166,8 @@ class SandboxApi extends AbstractApi
         $initSandboxResponseDTO->setTopicId($requestDTO->getTopicId());
         // $initSandboxResponseDTO->setChatTopicId($requestDTO->getChatTopicId());
         // $initSandboxResponseDTO->setConversationId($requestDTO->getTopicId());
-        $dataIsolation = new DataIsolation();
-        $dataIsolation->setCurrentUserId($magicUserAuthorization->getId());
+        $dataIsolation = DataIsolation::create($magicUserAuthorization->getOrganizationCode(), $magicUserAuthorization->getId());
         $dataIsolation->setThirdPartyOrganizationCode($magicUserAuthorization->getOrganizationCode());
-        $dataIsolation->setCurrentOrganizationCode($magicUserAuthorization->getOrganizationCode());
         $dataIsolation->setUserType(UserType::Human);
 
         $userMessage = [

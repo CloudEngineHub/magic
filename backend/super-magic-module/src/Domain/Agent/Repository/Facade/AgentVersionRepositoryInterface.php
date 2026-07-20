@@ -111,6 +111,9 @@ interface AgentVersionRepositoryInterface
 
     public function deleteByAgentCode(SuperMagicAgentDataIsolation $dataIsolation, string $agentCode): bool;
 
+    /** @return int[] */
+    public function findIdsByAgentCode(SuperMagicAgentDataIsolation $dataIsolation, string $agentCode): array;
+
     public function offlineByAgentCode(SuperMagicAgentDataIsolation $dataIsolation, string $agentCode): bool;
 
     /**

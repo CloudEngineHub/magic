@@ -12,6 +12,7 @@ import urllib.request
 import urllib.error
 from typing import Dict, Any, Optional
 
+from ._auth import USER_AUTHORIZATION_HEADER, read_user_authorization_token
 from .result import Result
 
 
@@ -88,10 +89,15 @@ class ToolSDK:
         try:
             data = json.dumps(request_data).encode('utf-8')
 
+            headers = {'Content-Type': 'application/json'}
+            token = read_user_authorization_token()
+            if token:
+                headers[USER_AUTHORIZATION_HEADER] = token
+
             req = urllib.request.Request(
                 url,
                 data=data,
-                headers={'Content-Type': 'application/json'},
+                headers=headers,
                 method='POST'
             )
 

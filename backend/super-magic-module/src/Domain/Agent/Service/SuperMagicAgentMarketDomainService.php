@@ -11,8 +11,10 @@ use App\Infrastructure\Core\ValueObject\Page;
 use Dtyq\SuperMagic\Domain\Agent\Entity\AgentMarketEntity;
 use Dtyq\SuperMagic\Domain\Agent\Entity\AgentPlaybookEntity;
 use Dtyq\SuperMagic\Domain\Agent\Entity\ValueObject\Query\AgentMarketQuery;
+use Dtyq\SuperMagic\Domain\Agent\Entity\ValueObject\SuperMagicAgentDataIsolation;
 use Dtyq\SuperMagic\Domain\Agent\Repository\Facade\AgentMarketRepositoryInterface;
 use Dtyq\SuperMagic\Domain\Agent\Repository\Facade\AgentPlaybookRepositoryInterface;
+use Hyperf\DbConnection\Db;
 
 /**
  * Domain service for market agent read operations.
@@ -22,7 +24,8 @@ class SuperMagicAgentMarketDomainService
     public function __construct(
         protected AgentPlaybookRepositoryInterface $agentPlaybookRepository,
         protected AgentMarketRepositoryInterface $agentMarketRepository,
-        protected UserAgentDomainService $userAgentDomainService
+        protected UserAgentDomainService $userAgentDomainService,
+        protected SuperMagicAgentCategoryRelationDomainService $categoryRelationDomainService
     ) {
     }
 
@@ -31,7 +34,11 @@ class SuperMagicAgentMarketDomainService
      */
     public function getPublishedByAgentCode(string $agentCode): ?AgentMarketEntity
     {
-        return $this->agentMarketRepository->findByAgentCode($agentCode);
+        $agentMarket = $this->agentMarketRepository->findByAgentCode($agentCode);
+        if ($agentMarket !== null) {
+            $this->fillMarketCategoryIds([$agentMarket]);
+        }
+        return $agentMarket;
     }
 
     /**
@@ -43,7 +50,9 @@ class SuperMagicAgentMarketDomainService
      */
     public function queries(AgentMarketQuery $query, Page $page): array
     {
-        return $this->agentMarketRepository->queries($query, $page);
+        $result = $this->agentMarketRepository->queries($query, $page);
+        $this->fillMarketCategoryIds($result['list']);
+        return $result;
     }
 
     /**
@@ -63,7 +72,7 @@ class SuperMagicAgentMarketDomainService
         string $orderBy,
         Page $page
     ): array {
-        return $this->agentMarketRepository->queryAdminMarkets(
+        $result = $this->agentMarketRepository->queryAdminMarkets(
             $publishStatus,
             $organizationCode,
             $name18n,
@@ -75,6 +84,8 @@ class SuperMagicAgentMarketDomainService
             $orderBy,
             $page
         );
+        $this->fillMarketCategoryIds($result['list']);
+        return $result;
     }
 
     /**
@@ -108,11 +119,39 @@ class SuperMagicAgentMarketDomainService
      *     icon_type?: null|int,
      *     sort_order?: null|int,
      *     is_featured?: bool,
-     *     is_hidden?: bool
+     *     is_hidden?: bool,
+     *     category_ids?: int[]
      * } $payload
      */
-    public function updateInfoById(int $id, array $payload): bool
+    public function updateInfoById(SuperMagicAgentDataIsolation $dataIsolation, int $id, array $payload): bool
     {
-        return $this->agentMarketRepository->updateInfoById($id, $payload);
+        return Db::transaction(function () use ($dataIsolation, $id, $payload): bool {
+            $updated = $this->agentMarketRepository->updateInfoById($id, $payload);
+            if ($updated && array_key_exists('category_ids', $payload)) {
+                $this->categoryRelationDomainService->replaceMarketCategories($dataIsolation, $id, $payload['category_ids']);
+            }
+            return $updated;
+        });
+    }
+
+    /** @param AgentMarketEntity[] $agentMarkets */
+    private function fillMarketCategoryIds(array $agentMarkets): void
+    {
+        $marketIds = [];
+        foreach ($agentMarkets as $agentMarket) {
+            if ($agentMarket->getId() !== null) {
+                $marketIds[] = $agentMarket->getId();
+            }
+        }
+
+        $categoryIdsMap = $this->categoryRelationDomainService->getMarketCategoryIdsMap($marketIds);
+        foreach ($agentMarkets as $agentMarket) {
+            $marketId = $agentMarket->getId();
+            if ($marketId === null) {
+                continue;
+            }
+
+            $agentMarket->setCategoryIds($categoryIdsMap[$marketId] ?? $agentMarket->getCategoryIds());
+        }
     }
 }

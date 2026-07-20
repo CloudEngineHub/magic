@@ -179,6 +179,16 @@ describe("FileUploadStore", () => {
 			expect(store.isCurrentSessionUploadFile(addedFiles?.[0].id || "")).toBe(true)
 		})
 
+		it("should retain hidden temp metadata before a project exists", async () => {
+			const file = new File(["image"], "photo.png", { type: "image/png" })
+			const addedFiles = await store.addFiles([file], undefined, { useTempDirectory: true })
+
+			expect(addedFiles?.[0]).toMatchObject({
+				defaultRelativePath: ".tmp/photo.png",
+				isHidden: true,
+			})
+		})
+
 		it("should create and use hidden temp directory for pasted text files", async () => {
 			apiMocks.createFile.mockResolvedValue({ file_id: "tmp-dir-id" })
 			uploadTokenServiceMocks.getUploadToken.mockResolvedValue({
@@ -221,6 +231,34 @@ describe("FileUploadStore", () => {
 				defaultRelativePath: ".tmp/pasted.txt",
 				isHidden: true,
 			})
+		})
+
+		it("should keep repeated temp uploads and increment duplicate image names", async () => {
+			apiMocks.createFile.mockResolvedValue({ file_id: "tmp-dir-id" })
+			uploadTokenServiceMocks.getUploadToken.mockResolvedValue({
+				temporary_credential: { dir: "project/workspace" },
+			})
+			const projectFilesStore = {
+				workspaceFilesList: [],
+				getFileNamesInFolder: vi.fn(() => []),
+			}
+			store = new FileUploadStore({
+				projectId: "project-1",
+				projectFilesStore: projectFilesStore as any,
+			})
+
+			const first = new File(["image"], "photo.png", { type: "image/png", lastModified: 1 })
+			const second = new File(["image"], "photo.png", { type: "image/png", lastModified: 1 })
+			const firstUpload = await store.addFiles([first], undefined, {
+				useTempDirectory: true,
+			})
+			const secondUpload = await store.addFiles([second], undefined, {
+				useTempDirectory: true,
+			})
+
+			expect(firstUpload?.[0].name).toBe("photo.png")
+			expect(secondUpload?.[0].name).toBe("photo (1).png")
+			expect(store.files.every((file) => file.parentId === "tmp-dir-id")).toBe(true)
 		})
 
 		it("should mark pasted pending project file as virtual reference", () => {

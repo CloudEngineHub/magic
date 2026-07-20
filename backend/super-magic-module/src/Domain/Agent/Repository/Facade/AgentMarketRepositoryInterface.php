@@ -55,17 +55,11 @@ interface AgentMarketRepositoryInterface
      * 批量统计分类下的有效市场 Agent 数量。
      *
      * @param int[] $categoryIds
+     * @param bool $publishedOnly 是否只统计已发布记录
+     * @param bool $visibleOnly 是否只统计未隐藏记录
      * @return array<int, int>
      */
-    public function countByCategoryIds(array $categoryIds): array;
-
-    /**
-     * 批量统计分类下已发布且未隐藏的市场 Agent 数量。
-     *
-     * @param int[] $categoryIds
-     * @return array<int, int>
-     */
-    public function countVisiblePublishedByCategoryIds(array $categoryIds): array;
+    public function countByCategoryIds(array $categoryIds, bool $publishedOnly = false, bool $visibleOnly = false): array;
 
     /**
      * 根据 agent_code 查询市场记录（不限制发布状态）.
@@ -83,6 +77,9 @@ interface AgentMarketRepositoryInterface
      * @return AgentMarketEntity 保存后的实体
      */
     public function saveOrUpdate(SuperMagicAgentDataIsolation $dataIsolation, AgentMarketEntity $entity): AgentMarketEntity;
+
+    /** @return int[] */
+    public function findIdsByAgentCode(SuperMagicAgentDataIsolation $dataIsolation, string $agentCode): array;
 
     public function offlineByAgentCode(SuperMagicAgentDataIsolation $dataIsolation, string $agentCode): bool;
 

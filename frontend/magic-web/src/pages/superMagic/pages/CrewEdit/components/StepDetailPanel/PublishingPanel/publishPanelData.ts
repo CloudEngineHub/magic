@@ -1,11 +1,13 @@
 import type {
 	AgentDetailResponse,
+	AgentPublishTargetType,
 	AgentVersionItem,
 	CrewI18nText,
 	PublishAgentParams,
 	PublishAgentPrefillResponse,
 	PublishAgentTargetValue,
 } from "@/apis/modules/crew"
+import type { CategoryView } from "@/services/crew/CrewService"
 import type {
 	PublishDraft,
 	PublishInternalTarget,
@@ -13,6 +15,7 @@ import type {
 	PublishHistoryRecord,
 	PublishRecordStatus,
 	PublishReviewProgress,
+	PublishTo,
 } from "@/pages/superMagic/components/PublishPanel"
 import type { PublishSpecificMember } from "@/pages/superMagic/components/PublishPanel/types"
 import {
@@ -61,38 +64,47 @@ export function createInitialCrewEditPublishPanelData({
 		},
 		availablePublishTo: availability.availablePublishTo,
 		availableInternalTargets: availability.availableInternalTargets,
+		currentPublishTo: null,
+		marketCategories: [],
 	}
 }
 
 export function createCrewEditPublishPanelData({
 	agentDetail,
 	versions,
+	categories = [],
 	locale,
 	canPublishPrivate = true,
 	canPublishTeam = true,
 }: {
 	agentDetail: AgentDetailResponse
 	versions: AgentVersionItem[]
+	categories?: CategoryView[]
 	locale: string
 	canPublishPrivate?: boolean
 	canPublishTeam?: boolean
 }): PublishPanelData {
 	const availability = resolvePublishAvailability({
-		publishType: agentDetail.publish_type,
-		allowedPublishTargetTypes: agentDetail.allowed_publish_target_types,
+		publishType: null,
+		allowedPublishTargetTypes: [],
 		fallbackPublishTo: [...defaultCrewPublishTo],
 		fallbackInternalTargets: [...defaultCrewInternalTargets],
 		canPublishPrivate,
 		canPublishTeam,
 	})
+	const draft = createDraftForAvailability(availability)
+	const currentPublishTo = resolveCurrentPublishTo(agentDetail, versions)
+	if (currentPublishTo && availability.availablePublishTo.includes(currentPublishTo)) {
+		draft.publishTo = currentPublishTo
+	}
 
 	return {
 		hasUnpublishedChanges: getHasUnpublishedChanges(agentDetail),
 		currentPublisherName:
 			versions.find((version) => version.publisher?.name)?.publisher?.name ?? "",
-		historyRecords: versions.map((version) => mapAgentVersion(version, locale)),
+		historyRecords: versions.map((version) => mapAgentVersion(version, locale, categories)),
 		draft: {
-			...createDraftForAvailability(availability),
+			...draft,
 			version: resolveInitialPublishVersion({
 				versions,
 				fallbackVersion: agentDetail.version_code,
@@ -107,6 +119,11 @@ export function createCrewEditPublishPanelData({
 		},
 		availablePublishTo: availability.availablePublishTo,
 		availableInternalTargets: availability.availableInternalTargets,
+		currentPublishTo,
+		marketCategories: categories.map((category) => ({
+			id: category.id,
+			name: category.name,
+		})),
 	}
 }
 
@@ -118,6 +135,9 @@ export function buildPublishParamsFromDraft(draft: PublishDraft): PublishAgentPa
 		version_description_i18n: buildPublishDetailsI18nText(submissionDraft.details),
 		publish_target_type: mapPanelTargetToApi(submissionDraft),
 		publish_target_value: buildPublishTargetValue(submissionDraft),
+		...(submissionDraft.publishTo === "MARKET" && submissionDraft.categoryIds?.length
+			? { category_ids: submissionDraft.categoryIds }
+			: {}),
 	}
 }
 
@@ -159,7 +179,16 @@ function resolveInitialPublishVersion({
 	return resolveNextCrewPublishVersion(latestPublishedVersion)
 }
 
-function mapAgentVersion(version: AgentVersionItem, locale: string): PublishHistoryRecord {
+function mapAgentVersion(
+	version: AgentVersionItem,
+	locale: string,
+	categories: CategoryView[] = [],
+): PublishHistoryRecord {
+	const categoryIds = normalizeVersionCategoryIds(version)
+	const categoryNames = categoryIds.map((categoryId) =>
+		resolveVersionCategoryName(version, categoryId, categories, locale),
+	)
+
 	return {
 		id: version.id,
 		version: version.version,
@@ -167,6 +196,8 @@ function mapAgentVersion(version: AgentVersionItem, locale: string): PublishHist
 		status: mapAgentVersionStatus(version),
 		publishTo: mapApiTargetToPublishTo(version.publish_target_type),
 		internalTarget: mapApiTargetToInternalTarget(version.publish_target_type),
+		...(categoryIds.length ? { categoryId: categoryIds[0], categoryIds } : {}),
+		...(categoryNames.length ? { categoryName: categoryNames[0], categoryNames } : {}),
 		publisherName: version.publisher?.name ?? "",
 		publishedAt: version.display_time || version.published_at || "",
 		reviewRemark: version.review_remark ?? "",
@@ -262,13 +293,17 @@ function buildPublishDetailsI18nText(
 	}
 
 	const fallback = localeTextToDisplayString(details).trim()
-	const zh = (details.zh_CN ?? details[DEFAULT_LOCALE_KEY] ?? fallback).trim()
-	const en = (details.en_US ?? details[DEFAULT_LOCALE_KEY] ?? fallback).trim()
+	const zh = pickPublishDetailsText(details.zh_CN, details[DEFAULT_LOCALE_KEY], fallback)
+	const en = pickPublishDetailsText(details.en_US, details[DEFAULT_LOCALE_KEY], fallback)
 
 	return {
 		zh_CN: zh,
 		en_US: en,
 	}
+}
+
+function pickPublishDetailsText(...values: Array<string | undefined>) {
+	return values.map((value) => value?.trim() ?? "").find(Boolean) ?? ""
 }
 
 function buildPublishTargetValue(draft: PublishDraft): PublishAgentTargetValue | null {
@@ -299,8 +334,71 @@ function mapPanelTargetToApi(draft: PublishDraft): PublishAgentParams["publish_t
 }
 
 function mapApiTargetToPublishTo(apiTarget: AgentVersionItem["publish_target_type"]) {
-	if (apiTarget === "MARKET") return "MARKET" as const
-	return "INTERNAL" as const
+	return mapAgentPublishTargetTypeToPublishTo(apiTarget) ?? "INTERNAL"
+}
+
+export function mapAgentPublishTargetTypeToPublishTo(
+	apiTarget?: AgentPublishTargetType | null,
+): PublishTo | null {
+	if (!apiTarget) return null
+	return apiTarget === "MARKET" ? "MARKET" : "INTERNAL"
+}
+
+function resolveCurrentPublishTo(
+	agentDetail: AgentDetailResponse,
+	versions: AgentVersionItem[],
+): PublishTo | null {
+	const detailPublishTo = mapAgentPublishTargetTypeToPublishTo(agentDetail.publish_target_type)
+	if (detailPublishTo) return detailPublishTo
+
+	const versionTarget =
+		versions.find((version) => version.is_current_version)?.publish_target_type ??
+		versions.find(isPublishedAgentVersion)?.publish_target_type ??
+		versions[0]?.publish_target_type
+
+	return mapAgentPublishTargetTypeToPublishTo(versionTarget)
+}
+
+function normalizeCategoryId(categoryId?: string | number | null) {
+	if (categoryId === null || categoryId === undefined) return ""
+	return String(categoryId)
+}
+
+function normalizeVersionCategoryIds(version: AgentVersionItem) {
+	const categoryIdsFromCategories = Array.isArray(version.categories)
+		? version.categories.map((category) => normalizeCategoryId(category.id)).filter(Boolean)
+		: []
+	if (categoryIdsFromCategories.length > 0) {
+		return Array.from(new Set(categoryIdsFromCategories))
+	}
+
+	const ids = Array.isArray(version.category_ids) ? version.category_ids : []
+	const fallbackId = normalizeCategoryId(version.category_id ?? version.category?.id)
+
+	return Array.from(
+		new Set([
+			...ids.map((categoryId) => normalizeCategoryId(categoryId)).filter(Boolean),
+			...(fallbackId ? [fallbackId] : []),
+		]),
+	)
+}
+
+function resolveVersionCategoryName(
+	version: AgentVersionItem,
+	categoryId: string,
+	categories: CategoryView[],
+	locale: string,
+) {
+	const apiCategory =
+		version.categories?.find((category) => normalizeCategoryId(category.id) === categoryId) ??
+		(normalizeCategoryId(version.category?.id) === categoryId ? version.category : undefined)
+
+	return pickPublishDetailsText(
+		apiCategory?.name ?? undefined,
+		resolveCrewI18nText(apiCategory?.name_i18n, locale),
+		categories.find((category) => category.id === categoryId)?.name ?? undefined,
+		categoryId,
+	)
 }
 
 function mapApiTargetToInternalTarget(

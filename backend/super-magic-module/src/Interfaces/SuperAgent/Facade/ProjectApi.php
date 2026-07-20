@@ -56,7 +56,7 @@ class ProjectApi extends AbstractApi
 
         $requestDTO = CreateProjectRequestDTO::fromRequest($this->request);
 
-        $result = $this->projectAppService->createOrReuseProject($requestContext, $requestDTO);
+        $result = $this->projectAppService->createProject($requestContext, $requestDTO);
 
         $userAuthorization = $this->getAuthorization();
         $userId = $userAuthorization->getId();

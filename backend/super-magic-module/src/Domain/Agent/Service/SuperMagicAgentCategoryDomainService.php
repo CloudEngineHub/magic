@@ -7,10 +7,12 @@ declare(strict_types=1);
 
 namespace Dtyq\SuperMagic\Domain\Agent\Service;
 
+use App\Infrastructure\Core\Exception\ExceptionBuilder;
 use Dtyq\SuperMagic\Domain\Agent\Entity\AgentCategoryEntity;
 use Dtyq\SuperMagic\Domain\Agent\Entity\ValueObject\Query\AgentCategoryQuery;
 use Dtyq\SuperMagic\Domain\Agent\Repository\Facade\AgentCategoryRepositoryInterface;
 use Dtyq\SuperMagic\Domain\Agent\Repository\Facade\AgentMarketRepositoryInterface;
+use Dtyq\SuperMagic\ErrorCode\SuperMagicErrorCode;
 
 class SuperMagicAgentCategoryDomainService
 {
@@ -53,6 +55,48 @@ class SuperMagicAgentCategoryDomainService
         return $this->categoryRepository->deleteById($id);
     }
 
+    public function assertExists(?int $categoryId): void
+    {
+        if ($categoryId === null) {
+            return;
+        }
+
+        if ($this->findById($categoryId) === null) {
+            ExceptionBuilder::throw(
+                SuperMagicErrorCode::NotFound,
+                'common.not_found',
+                ['label' => (string) $categoryId]
+            );
+        }
+    }
+
+    /** @param int[] $categoryIds */
+    public function assertIdsExist(array $categoryIds): void
+    {
+        $categoryIds = array_values(array_unique(array_filter(array_map('intval', $categoryIds))));
+        if ($categoryIds === []) {
+            return;
+        }
+
+        $existingIds = [];
+        foreach ($this->findByIds($categoryIds) as $category) {
+            if ($category->getId() !== null) {
+                $existingIds[] = $category->getId();
+            }
+        }
+
+        $missingIds = array_values(array_diff($categoryIds, $existingIds));
+        if ($missingIds === []) {
+            return;
+        }
+
+        ExceptionBuilder::throw(
+            SuperMagicErrorCode::NotFound,
+            'common.not_found',
+            ['label' => implode(',', $missingIds)]
+        );
+    }
+
     public function isReferencedByMarket(int $categoryId): bool
     {
         return $this->marketRepository->countByCategoryId($categoryId) > 0;
@@ -66,26 +110,42 @@ class SuperMagicAgentCategoryDomainService
     /** @param int[] $categoryIds */
     public function getMarketReferenceCounts(array $categoryIds): array
     {
+        return $this->countByCategoryIds($categoryIds);
+    }
+
+    /** @param int[] $categoryIds */
+    public function countByCategoryIds(array $categoryIds): array
+    {
         return $this->marketRepository->countByCategoryIds($categoryIds);
     }
 
+    /** @param int[] $categoryIds */
+    public function countVisiblePublishedByCategoryIds(array $categoryIds): array
+    {
+        return $this->marketRepository->countByCategoryIds($categoryIds, true, true);
+    }
+
     /** @return array<array{id:int, name_i18n:array, logo:?string, sort_order:int, status:int, crew_count:int}> */
-    public function getCategoriesWithCrewCount(): array
+    public function getCategoriesWithCrewCount(bool $includeEmpty = false): array
     {
         $categories = $this->categoryRepository->findEnabled();
-        $categoryIds = [];
-        foreach ($categories as $category) {
-            if ($category->getId() !== null) {
-                $categoryIds[] = $category->getId();
+        $crewCounts = [];
+        if (! $includeEmpty) {
+            $categoryIds = [];
+            foreach ($categories as $category) {
+                if ($category->getId() !== null) {
+                    $categoryIds[] = $category->getId();
+                }
             }
+
+            $crewCounts = $this->countVisiblePublishedByCategoryIds($categoryIds);
         }
 
-        $crewCounts = $this->marketRepository->countVisiblePublishedByCategoryIds($categoryIds);
         $result = [];
         foreach ($categories as $category) {
             $categoryId = $category->getId();
             $crewCount = $crewCounts[$categoryId] ?? 0;
-            if ($crewCount === 0) {
+            if (! $includeEmpty && $crewCount === 0) {
                 continue;
             }
 

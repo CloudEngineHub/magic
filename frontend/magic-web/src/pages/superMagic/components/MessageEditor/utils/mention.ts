@@ -43,6 +43,8 @@ export function createUploadFileMentionData(fileData: FileData): UploadFileMenti
 		file_extension: extractFileExtension(fileData.file.name),
 		file_size: fileData.file.size,
 		file: fileData.file,
+		relative_file_path: fileData.defaultRelativePath,
+		is_hidden: fileData.isHidden,
 		upload_progress: fileData.progress,
 		upload_status: fileData.status,
 		upload_error: fileData.error,

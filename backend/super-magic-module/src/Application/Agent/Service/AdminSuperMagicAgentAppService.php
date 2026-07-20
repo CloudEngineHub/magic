@@ -11,6 +11,7 @@ use App\Infrastructure\Core\Exception\ExceptionBuilder;
 use App\Infrastructure\Core\ValueObject\Page;
 use App\Infrastructure\ExternalAPI\Sms\Enum\LanguageEnum;
 use Dtyq\SuperMagic\Application\Agent\Assembler\AdminSuperMagicAgentAssembler;
+use Dtyq\SuperMagic\Domain\Agent\Entity\AgentVersionEntity;
 use Dtyq\SuperMagic\Domain\Agent\Entity\ValueObject\PublishTargetType;
 use Dtyq\SuperMagic\Domain\Agent\Entity\ValueObject\Query\AgentVersionAdminQuery;
 use Dtyq\SuperMagic\Domain\Agent\Entity\ValueObject\ReviewStatus;
@@ -69,11 +70,16 @@ class AdminSuperMagicAgentAppService extends AbstractSuperMagicAppService
             $query,
             $page
         );
+        /** @var AgentVersionEntity[] $versions */
+        $versions = $result['list'];
+        [$publishTargetUserMap, $memberDepartmentMap] = $this->batchLoadAgentVersionRelatedEntities(null, $versions);
 
         return $this->adminSuperMagicAgentAssembler->createQueryVersionsResponseDTO(
-            $result['list'],
+            $versions,
             $page,
-            $result['total']
+            $result['total'],
+            $publishTargetUserMap,
+            $memberDepartmentMap
         );
     }
 
@@ -135,11 +141,16 @@ class AdminSuperMagicAgentAppService extends AbstractSuperMagicAppService
             $query,
             $page
         );
+        /** @var AgentVersionEntity[] $versions */
+        $versions = $result['list'];
+        [$publishTargetUserMap, $memberDepartmentMap] = $this->batchLoadAgentVersionRelatedEntities(null, $versions);
 
         return $this->adminSuperMagicAgentAssembler->createQueryVersionsResponseDTO(
-            $result['list'],
+            $versions,
             $page,
-            $result['total']
+            $result['total'],
+            $publishTargetUserMap,
+            $memberDepartmentMap
         );
     }
 
@@ -239,8 +250,13 @@ class AdminSuperMagicAgentAppService extends AbstractSuperMagicAppService
         }
 
         $payload = $requestDTO->getUpdatePayload();
-        $this->assertCategoryExists($payload['category_id'] ?? null);
-        if (! $this->superMagicAgentMarketDomainService->updateInfoById($id, $payload)) {
+        $categoryIds = $payload['category_ids'] ?? null;
+        if ($categoryIds !== null) {
+            $this->superMagicAgentCategoryDomainService->assertIdsExist($categoryIds);
+            $payload['category_id'] = $categoryIds[0] ?? null;
+        }
+
+        if (! $this->superMagicAgentMarketDomainService->updateInfoById($dataIsolation, $id, $payload)) {
             ExceptionBuilder::throw(SuperMagicErrorCode::NotFound, 'common.not_found', ['label' => (string) $id]);
         }
     }
@@ -359,26 +375,16 @@ class AdminSuperMagicAgentAppService extends AbstractSuperMagicAppService
         );
     }
 
-    public function updateMarketCategory(int $id, ?int $categoryId): void
+    public function updateMarketCategory(Authenticatable $authorization, int $id, array $categoryIds): void
     {
-        $this->assertCategoryExists($categoryId);
-        if (! $this->superMagicAgentMarketDomainService->updateInfoById($id, ['category_id' => $categoryId])) {
+        $this->superMagicAgentCategoryDomainService->assertIdsExist($categoryIds);
+        $dataIsolation = $this->createSuperMagicDataIsolation($authorization);
+        $dataIsolation->disabled();
+        if (! $this->superMagicAgentMarketDomainService->updateInfoById($dataIsolation, $id, [
+            'category_id' => $categoryIds[0] ?? null,
+            'category_ids' => $categoryIds,
+        ])) {
             ExceptionBuilder::throw(SuperMagicErrorCode::NotFound, 'common.not_found', ['label' => (string) $id]);
-        }
-    }
-
-    private function assertCategoryExists(?int $categoryId): void
-    {
-        if ($categoryId === null) {
-            return;
-        }
-
-        if ($this->superMagicAgentCategoryDomainService->findById($categoryId) === null) {
-            ExceptionBuilder::throw(
-                SuperMagicErrorCode::NotFound,
-                'common.not_found',
-                ['label' => (string) $categoryId]
-            );
         }
     }
 

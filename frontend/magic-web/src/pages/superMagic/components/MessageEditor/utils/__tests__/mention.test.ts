@@ -1,10 +1,31 @@
 import { describe, expect, it } from "vitest"
 import { MentionItemType } from "@/components/business/MentionPanel/types"
-import type { DataService } from "@/components/business/MentionPanel/types"
-import type { UploadFileMentionData } from "@/components/business/MentionPanel/types"
-import { isAllowedMention, transformUploadFileToProjectFile } from "../mention"
+import type { DataService, UploadFileMentionData } from "@/components/business/MentionPanel/types"
+import type { FileData } from "../../types"
+import {
+	createUploadFileMentionData,
+	isAllowedMention,
+	transformUploadFileToProjectFile,
+} from "../mention"
 
 describe("mention utils", () => {
+	it("preserves deferred temp destination metadata on upload mentions", () => {
+		const file = new File(["image"], "photo.png", { type: "image/png" })
+		const mentionData = createUploadFileMentionData({
+			id: "local-file-id",
+			name: file.name,
+			file,
+			status: "done",
+			defaultRelativePath: ".tmp/photo.png",
+			isHidden: true,
+		} satisfies FileData)
+
+		expect(mentionData).toMatchObject({
+			relative_file_path: ".tmp/photo.png",
+			is_hidden: true,
+		})
+	})
+
 	it("preserves hidden file flag when transforming upload file to project file", () => {
 		const uploadFileData: UploadFileMentionData = {
 			file_id: "local-file-id",

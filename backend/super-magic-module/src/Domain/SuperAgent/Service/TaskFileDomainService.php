@@ -85,6 +85,7 @@ class TaskFileDomainService
         protected LockerInterface $locker,
         protected TaskFileVersionRepositoryInterface $taskFileVersionRepository,
         protected CacheInterface $cache,
+        protected AgentDomainService $agentDomainService,
         LoggerFactory $loggerFactory
     ) {
         $this->logger = $loggerFactory->get(get_class($this));
@@ -2444,9 +2445,15 @@ class TaskFileDomainService
         $targetWorkDirPrefix = WorkDirectoryUtil::getPrefix($forkProjectEntity->getWorkDir());
 
         // 设置用户上下文
-        $this->sandboxGateway->setUserContext(
-            $forkProjectEntity->getUserId(),
-            $forkProjectEntity->getUserOrganizationCode()
+        // Per-call user identity now flows through DataIsolation; the
+        // authorization token is fetched once from the magic_tokens
+        // stable user-token table and reused for every gateway call in
+        // this method's body. Capturing $userCtx in a local variable
+        // here mirrors the previous setUserContext()/clearUserContext()
+        // lifecycle (set at top of the loop, cleared at the end).
+        $userCtx = DataIsolation::create(
+            $forkProjectEntity->getUserOrganizationCode(),
+            $forkProjectEntity->getUserId()
         );
 
         // 根节点单独处理
@@ -2517,12 +2524,13 @@ class TaskFileDomainService
                         } else {
                             // 文件拷贝需要通过远程沙箱处理
                             // 处理文件：调用新的沙箱 copy 接口
-                            $copyResult = $this->sandboxGateway->copyFiles([
+                            $copyResult = $this->sandboxGateway->copyFiles(
+                                $userCtx,
                                 [
                                     'source_oss_path' => $sourceFile->getFileKey(),
                                     'target_oss_path' => $newFileKey,
                                 ],
-                            ]);
+                            );
 
                             if (! $copyResult->isSuccess()) {
                                 $this->logger->error(sprintf(
@@ -2618,7 +2626,10 @@ class TaskFileDomainService
             throw $e;
         } finally {
             // 确保用户上下文总是被清理
-            $this->sandboxGateway->clearUserContext();
+            // Per-call DataIsolation above is no longer needed after
+            // copyFiles loop; no explicit clear required (the per-call
+            // value object was scoped to this method).
+            unset($userCtx);
         }
     }
 
@@ -3976,12 +3987,17 @@ class TaskFileDomainService
             );
         } else {
             // Different organization: use sandbox gateway for cross-organization copy
-            $copyResult = $this->sandboxGateway->copyFiles([
+            $copyUserCtx = DataIsolation::create(
+                $sourceProject->getUserOrganizationCode(),
+                $sourceProject->getUserId()
+            );
+            $copyResult = $this->sandboxGateway->copyFiles(
+                $copyUserCtx,
                 [
                     'source_oss_path' => $fileEntity->getFileKey(),
                     'target_oss_path' => $targetPath,
                 ],
-            ]);
+            );
 
             if (! $copyResult->isSuccess()) {
                 $this->logger->error('Failed to copy file across organizations', [
@@ -4025,12 +4041,17 @@ class TaskFileDomainService
             );
         } else {
             // Different organization: use sandbox gateway for cross-organization copy
-            $copyResult = $this->sandboxGateway->copyFiles([
+            $copyUserCtx = DataIsolation::create(
+                $sourceProject->getUserOrganizationCode(),
+                $sourceProject->getUserId()
+            );
+            $copyResult = $this->sandboxGateway->copyFiles(
+                $copyUserCtx,
                 [
                     'source_oss_path' => $fileEntity->getFileKey(),
                     'target_oss_path' => $targetPath,
                 ],
-            ]);
+            );
 
             if (! $copyResult->isSuccess()) {
                 $this->logger->error('Failed to copy file across organizations', [

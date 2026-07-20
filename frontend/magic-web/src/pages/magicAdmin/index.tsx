@@ -1,18 +1,16 @@
 import { AdminProvider, AppEnv, AdminProviderProps } from "@dtyq/magic-admin/provider"
 import { AdminComponentsProvider, LanguageType, ThemeType } from "@dtyq/magic-admin/components"
 import { Navigate } from "react-router"
+import { useTranslation } from "react-i18next"
 import { useMemo, PropsWithChildren } from "react"
 import { useAreaCodes, useGlobalLanguage, useTheme } from "@/models/config/hooks"
 import { observer } from "mobx-react-lite"
 import magicClient from "@/apis/clients/magic"
+import { i18nStore } from "@/models/config/stores/i18n.store"
 import { useClusterCode } from "@/providers/ClusterProvider"
 import { userStore } from "@/models/user"
 import { isPrivateDeployment, env } from "@/utils/env"
-import {
-	useOrganization,
-	useAccount,
-	useCurrentMagicOrganization,
-} from "@/models/user/hooks"
+import { useOrganization, useAccount, useCurrentMagicOrganization } from "@/models/user/hooks"
 import useNavigate from "@/routes/hooks/useNavigate"
 import { useSafeArea } from "@/providers/AppearanceProvider/hooks/useSafeArea"
 
@@ -25,6 +23,9 @@ const MagicAdminProvider = observer(({ children }: PropsWithChildren) => {
 	const { clusterCode } = useClusterCode()
 	const { organizationCode } = useOrganization()
 	const navigate = useNavigate()
+	const { t: tMainCommon } = useTranslation("common", {
+		i18n: i18nStore.i18n.instance,
+	})
 
 	const { userInfo, isPersonalOrganization, authorization } = userStore.user
 
@@ -36,11 +37,13 @@ const MagicAdminProvider = observer(({ children }: PropsWithChildren) => {
 	}, [accounts, userInfo])
 
 	const lang = useGlobalLanguage(false)
+	const platformName = tMainCommon("platform.name")
 
 	const config: AdminProviderProps = useMemo(
 		() => ({
 			language: lang as LanguageType,
 			theme: prefersColorScheme,
+			platformName,
 			apiClients: {
 				magicClient: magicClient as any,
 			},
@@ -55,9 +58,9 @@ const MagicAdminProvider = observer(({ children }: PropsWithChildren) => {
 				token: authorization,
 				userInfo: userInfo
 					? {
-						id: currentTsUserId,
-						...userInfo,
-					}
+							id: currentTsUserId,
+							...userInfo,
+						}
 					: null,
 				teamshareUserInfo: null,
 			},
@@ -87,6 +90,7 @@ const MagicAdminProvider = observer(({ children }: PropsWithChildren) => {
 			navigate,
 			safeArea.safeAreaInsetTop,
 			safeArea.safeAreaInsetBottom,
+			platformName,
 		],
 	)
 

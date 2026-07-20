@@ -21,6 +21,7 @@ import {
 	createCrewEditPublishPanelData,
 	createCrewEditPublishPrefillDraft,
 	createInitialCrewEditPublishPanelData,
+	mapAgentPublishTargetTypeToPublishTo,
 } from "./publishPanelData"
 import { useFunctionPermission } from "@/hooks/useFunctionPermission"
 
@@ -68,13 +69,18 @@ function PublishingPanel() {
 		}
 
 		try {
-			const [agentDetail, versions] = await Promise.all([
+			const [agentDetail, versions, categories] = await Promise.all([
 				crewService.getAgentDetailRaw(crewCode),
 				crewService.getAgentVersions(crewCode),
+				crewService.getStoreCategories({ includeEmpty: true }).catch((error) => {
+					console.error("Failed to fetch agent market categories:", error)
+					return []
+				}),
 			])
 			const panelData = createCrewEditPublishPanelData({
 				agentDetail,
 				versions: versions.list,
+				categories,
 				locale: i18n.resolvedLanguage ?? i18n.language,
 				canPublishPrivate: canCreateAgent,
 				canPublishTeam: canPublishAgentTeam,
@@ -95,6 +101,12 @@ function PublishingPanel() {
 			if (publishPrefill.publishView === "create") {
 				try {
 					const prefill = await crewService.getAgentPublishPrefill(crewCode)
+					const currentPublishTo = mapAgentPublishTargetTypeToPublishTo(
+						prefill.publish_target_type,
+					)
+					if (currentPublishTo) {
+						publishPanelStore.setCurrentPublishTo(currentPublishTo)
+					}
 					publishPanelStore.openCreateViewWithDraft(
 						createCrewEditPublishPrefillDraft({
 							prefill,
@@ -161,6 +173,12 @@ function PublishingPanel() {
 
 		try {
 			const prefill = await crewService.getAgentPublishPrefill(crewCode)
+			const currentPublishTo = mapAgentPublishTargetTypeToPublishTo(
+				prefill.publish_target_type,
+			)
+			if (currentPublishTo) {
+				publishPanelStore.setCurrentPublishTo(currentPublishTo)
+			}
 			publishPanelStore.openCreateViewWithDraft(
 				createCrewEditPublishPrefillDraft({
 					prefill,

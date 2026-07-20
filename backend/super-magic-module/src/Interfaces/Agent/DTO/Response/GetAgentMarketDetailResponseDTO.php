@@ -39,6 +39,11 @@ class GetAgentMarketDetailResponseDTO extends AbstractDTO
 
     private int $iconType;
 
+    private ?string $categoryId;
+
+    /** @var string[] */
+    private array $categoryIds;
+
     private string $versionCode;
 
     private string $createdAt;
@@ -59,6 +64,8 @@ class GetAgentMarketDetailResponseDTO extends AbstractDTO
         ?array $descriptionI18n,
         ?array $icon,
         int $iconType,
+        ?int $categoryId,
+        array $categoryIds,
         string $versionCode,
         string $createdAt,
         ?string $publishedAt
@@ -73,6 +80,8 @@ class GetAgentMarketDetailResponseDTO extends AbstractDTO
         $this->descriptionI18n = $descriptionI18n;
         $this->icon = $icon;
         $this->iconType = $iconType;
+        $this->categoryId = $categoryId === null ? null : (string) $categoryId;
+        $this->categoryIds = array_map(static fn (int $categoryId): string => (string) $categoryId, $categoryIds);
         $this->versionCode = $versionCode;
         $this->createdAt = $createdAt;
         $this->publishedAt = $publishedAt;
@@ -91,6 +100,8 @@ class GetAgentMarketDetailResponseDTO extends AbstractDTO
             'description_i18n' => $this->descriptionI18n,
             'icon' => $this->icon,
             'icon_type' => $this->iconType,
+            'category_id' => $this->categoryId,
+            'category_ids' => $this->categoryIds,
             'version_code' => $this->versionCode,
             'created_at' => $this->createdAt,
             'published_at' => $this->publishedAt,

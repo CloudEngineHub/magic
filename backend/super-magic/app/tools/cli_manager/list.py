@@ -1,4 +1,4 @@
-"""查看已持久化第三方 CLI 的 Code Mode 工具。"""
+"""查看用户持久化第三方 CLI 的 Code Mode 工具。"""
 
 from __future__ import annotations
 
@@ -15,7 +15,7 @@ from .display import as_mapping, as_sequence, format_commands, translate_action,
 
 
 class CliManagerListParams(BaseToolParams):
-    """查看已持久化 CLI 的参数。"""
+    """查看用户持久化 CLI 的参数。"""
 
     model_config = ConfigDict(populate_by_name=True)
 
@@ -29,13 +29,13 @@ class CliManagerListParams(BaseToolParams):
 
 @tool(name="cli_manager_list")
 class CliManagerList(BaseTool[CliManagerListParams], CliManagerToolMixin):
-    """<!--zh: 查看已持久化的第三方 CLI。-->
-    查看已持久化的第三方 CLI。"""
+    """<!--zh: 查看用户持久化的第三方 CLI。-->
+    查看用户持久化的第三方 CLI。运行时预置 CLI 不在此注册表中。"""
 
     code_mode_only = True
 
     async def execute(self, tool_context: ToolContext, params: CliManagerListParams) -> ToolResult:
-        """列出已持久化 CLI 的注册表记录。"""
+        """列出用户持久化 CLI 的注册表记录。"""
         try:
             info = await CliManagerService().list_items(validate=params.with_validation)
         except CliManagerError as exc:
@@ -43,10 +43,13 @@ class CliManagerList(BaseTool[CliManagerListParams], CliManagerToolMixin):
 
         items = info["items"]
         if not items:
-            content = "No persisted CLIs found."
+            content = (
+                "No user-managed persisted CLIs found. "
+                "Runtime-provided CLIs are outside cli-manager and do not require adoption."
+            )
         else:
             names = ", ".join(item["name"] for item in items)
-            content = f"Persisted CLIs: {names}."
+            content = f"User-managed persisted CLIs: {names}."
         return ToolResult(content=content, extra_info=info, data=info)
 
     async def get_before_tool_call_friendly_action_and_remark(

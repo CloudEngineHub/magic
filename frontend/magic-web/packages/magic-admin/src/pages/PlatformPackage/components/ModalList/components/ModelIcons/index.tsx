@@ -49,18 +49,19 @@ export const ModelIcons = memo(
 			if (fileList.length > 1) return false
 			const { file } = fileList[0]
 			if (!file) return false
-			const isJpgOrPng = IMAGE_TYPE.includes(file.type)
-			if (!isJpgOrPng) {
+			const isSupportedImage = IMAGE_TYPE.includes(file.type)
+			if (!isSupportedImage) {
 				message.error(t("form.uploadTypeError"))
 				return false
 			}
-			return isJpgOrPng
+			return isSupportedImage
 		})
 
 		const handleDeleteIcon = async (key: string, url: string) => {
 			openModal(WarningModal, {
 				open: true,
 				content: <MagicAvatar className={styles.avatar} src={url} size={44} border />,
+				zIndex: 9999,
 				onOk: async () => {
 					setIcons((prev) => prev.filter((icon) => icon.key !== key))
 					uploadList.current.filter((path) => path !== key)
@@ -149,6 +150,7 @@ export const ModelIcons = memo(
 						onFileChange={onFileChange}
 						icon={<IconPhotoPlus size={24} stroke={2} />}
 						multiple={false}
+						accept={IMAGE_TYPE.join(",")}
 					>
 						{t("form.uploadModalIcon")}
 					</UploadButton>
