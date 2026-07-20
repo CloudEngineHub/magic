@@ -372,7 +372,7 @@ describe("SuperMagicModeService", () => {
 		)
 	})
 
-	it("falls back for a combined picker when the preferred mode lacks image or video models", () => {
+	it("keeps the preferred catalog when any model category is available", () => {
 		const modeWithModels = superMagicModeService._modeMap.get("general")
 		expect(modeWithModels).toBeDefined()
 		if (!modeWithModels) return
@@ -399,36 +399,60 @@ describe("SuperMagicModeService", () => {
 		} as never)
 
 		expect(superMagicModeService.resolveModelSelectionMode("micro-app", "default")).toBe(
-			"default",
+			"micro-app",
 		)
 	})
 
-	it("prefers the requested mode when it covers all fallback model categories", () => {
+	it("keeps the preferred catalog when only image models are available", () => {
 		const modeWithModels = superMagicModeService._modeMap.get("general")
 		expect(modeWithModels).toBeDefined()
 		if (!modeWithModels) return
 
-		const completeMode = {
+		superMagicModeService._modeMap.set("micro-app", {
 			...modeWithModels,
-			groups: modeWithModels.groups.map((group, index) => ({
+			groups: modeWithModels.groups.map((group) => ({
 				...group,
-				video_models:
-					index === 0
-						? [
-								createModelItem({
-									id: "official-video-1",
-									modelId: "shared-video-model",
-									name: "Official Shared Video Model",
-								}),
-							]
-						: [],
+				models: [],
+				video_models: [],
 			})),
-		} as never
-		superMagicModeService._modeMap.set("default", completeMode)
-		superMagicModeService._modeMap.set("micro-app", completeMode)
+		} as never)
 
 		expect(superMagicModeService.resolveModelSelectionMode("micro-app", "default")).toBe(
 			"micro-app",
+		)
+	})
+
+	it("keeps the preferred catalog when only video models are available", () => {
+		const modeWithModels = superMagicModeService._modeMap.get("general")
+		expect(modeWithModels).toBeDefined()
+		if (!modeWithModels) return
+
+		superMagicModeService._modeMap.set("micro-app", {
+			...modeWithModels,
+			groups: modeWithModels.groups.map((group) => ({
+				...group,
+				models: [],
+				image_models: [],
+				video_models: [
+					createModelItem({
+						id: "official-video-1",
+						modelId: "shared-video-model",
+						name: "Official Shared Video Model",
+					}),
+				],
+			})),
+		} as never)
+
+		expect(superMagicModeService.resolveModelSelectionMode("micro-app", "default")).toBe(
+			"micro-app",
+		)
+	})
+
+	it("falls back only when the preferred catalog has no models", () => {
+		superMagicModeService._modeMap.set("micro-app", createCrewList("micro-app").list[0])
+
+		expect(superMagicModeService.resolveModelSelectionMode("micro-app", "default")).toBe(
+			"default",
 		)
 	})
 

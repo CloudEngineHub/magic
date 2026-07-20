@@ -566,33 +566,21 @@ class SuperMagicModeService {
 
 	/**
 	 * Resolve one mode for a combined language/image/video model picker.
-	 * Prefer the requested mode only when it covers every model category exposed by the fallback.
+	 * Prefer the requested mode when it exposes any model category so one picker never mixes
+	 * employee-specific models with the fallback catalog.
 	 */
 	resolveModelSelectionMode<T extends string>(
 		preferredMode: T,
 		fallbackMode: T,
 		agentCode?: string | null,
 	): T {
-		const preferredCapabilities = {
-			language: this.getModelListByMode(preferredMode, agentCode).length > 0,
-			image: this.getImageModelListByMode(preferredMode, agentCode).length > 0,
-			video: this.getVideoModelListByMode(preferredMode, agentCode).length > 0,
-		}
-		const fallbackCapabilities = {
-			language: this.getModelListByMode(fallbackMode, agentCode).length > 0,
-			image: this.getImageModelListByMode(fallbackMode, agentCode).length > 0,
-			video: this.getVideoModelListByMode(fallbackMode, agentCode).length > 0,
-		}
+		const hasPreferredModels = [
+			this.getModelListByMode(preferredMode, agentCode),
+			this.getImageModelListByMode(preferredMode, agentCode),
+			this.getVideoModelListByMode(preferredMode, agentCode),
+		].some((models) => models.length > 0)
 
-		const preferredCoversFallback = Object.entries(fallbackCapabilities).every(
-			([category, isAvailable]) =>
-				!isAvailable ||
-				preferredCapabilities[category as keyof typeof preferredCapabilities],
-		)
-
-		return preferredCapabilities.language && preferredCoversFallback
-			? preferredMode
-			: fallbackMode
+		return hasPreferredModels ? preferredMode : fallbackMode
 	}
 
 	/**
