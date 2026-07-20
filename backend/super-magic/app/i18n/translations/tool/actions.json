@@ -455,7 +455,7 @@
         "zh_CN": "向用户提问",
         "en_US": "Ask user"
     },
-    "plan": {
+    "micro_app_plan": {
         "zh_CN": "确认开发计划",
         "en_US": "Review implementation plan"
     },

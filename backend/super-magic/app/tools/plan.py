@@ -1,7 +1,6 @@
-"""plan 工具：向用户展示开发计划并等待确认。"""
+"""micro_app_plan 工具：向用户展示微应用开发计划并等待确认。"""
 
 import json
-import re
 import time
 from typing import Any, Dict, List, Optional, Tuple, Union
 
@@ -13,6 +12,12 @@ from app.core.entity.message.server_message import DisplayType, PlanToolContent,
 from app.tools.core.base_tool_params import BaseToolParams
 from app.tools.core.base_user_tool_call_tool import BaseUserToolCallTool, ResultBuilder, TimeoutAnswerBuilder
 from app.tools.core.tool_decorator import tool
+from app.tools.micro_app_plan_normalizers import (
+    normalize_data_model,
+    normalize_files,
+    normalize_string_list,
+    normalize_text,
+)
 
 INTERNAL_TIMEOUT = 600
 
@@ -50,7 +55,7 @@ Use a JSON array for planned fields, described briefly in natural language or as
     )
 
 
-class PlanParams(BaseToolParams):
+class MicroAppPlanParams(BaseToolParams):
     plan_title: str = Field(
         description="""<!--zh: 开发计划标题，短而具体。-->
 Short, specific title for the implementation plan.""",
@@ -101,8 +106,8 @@ How many seconds to wait for user approval (30–600).""",
     )
 
 
-@tool()
-class PlanTool(BaseUserToolCallTool[PlanParams]):
+@tool(name="micro_app_plan")
+class MicroAppPlanTool(BaseUserToolCallTool[MicroAppPlanParams]):
     """<!--zh
     向用户展示开发计划并等待确认。用于在生成或修改 HTML 微应用前获得明确批准。
     只有主 Agent 可以调用；如果你是被其他 Agent 调用的，不要使用此工具。
@@ -111,17 +116,18 @@ class PlanTool(BaseUserToolCallTool[PlanParams]):
     Only the main agent can call this tool; if you were invoked by another agent, do not use it.
     """
 
+    name = "micro_app_plan"
     user_tool_call_timeout = INTERNAL_TIMEOUT
 
     def get_prompt_hint(self) -> str:
         return """\
 <!--zh
-何时调用 plan：
-- 新建 HTML 微应用、较大改动、改动文件结构、或涉及 MagicBase 建表、改表权限、删表、加字段、改字段、删字段等 schema 变更时，必须先调用 plan 并等待用户确认。
-- 是否调用 ask_user 由你判断：只有缺少会显著改变产品方向的信息，且无法用合理默认值安全推进时才提问；短需求可以合理推断时，直接带明确假设进入 plan。
-- 用户确认 plan 之前，不要写文件，不要建表、改表权限、删表、加字段、改字段、删字段，不要声称已开始开发。
+何时调用 micro_app_plan：
+- 新建 HTML 微应用、较大改动、改动文件结构、或涉及 MagicBase 建表、改表权限、删表、加字段、改字段、删字段等 schema 变更时，必须先调用 micro_app_plan 并等待用户确认。
+- 是否调用 ask_user 由你判断：只有缺少会显著改变产品方向的信息，且无法用合理默认值安全推进时才提问；短需求可以合理推断时，直接带明确假设进入 micro_app_plan。
+- 用户确认 micro_app_plan 之前，不要写文件，不要建表、改表权限、删表、加字段、改字段、删字段，不要声称已开始开发。
 - 若方案涉及 MagicBase 表结构变更，计划中要说明 MagicBase schema 工具会自动维护 `.magicbase/migrations.json`，并在成功后刷新 `MICRO-APP.md` 的最新表结构；agent 不需要单独编辑文件写 Pending/Success/Failed。
-- 用户要求修改 plan 时，不要实现；根据用户意见调整方案后再次调用 plan。
+- 用户要求修改计划时，不要实现；根据用户意见调整方案后再次调用 micro_app_plan。
 - 用户取消或超时时，不要继续实现。
 
 不应调用：
@@ -151,12 +157,12 @@ Plan content must be concrete enough for the user to approve:
 - Keep requirements and acceptance criteria short, concrete, and verifiable.
 - Pass list fields as JSON arrays, not Markdown or YAML strings. `files` must be an array of objects with `path` and `purpose`. `data_model` must be an array of objects with `table_name`, `purpose`, and `fields`.
 -->
-When to call plan:
+When to call micro_app_plan:
 - Before creating an HTML micro-app, making a substantial change, changing file structure, or creating/changing MagicBase tables or columns.
-- Decide whether ask_user is needed. Call it only when missing information would significantly change the product direction and cannot be safely handled with reasonable defaults. If a short request is reasonably inferable, proceed to plan with explicit assumptions.
+- Decide whether ask_user is needed. Call it only when missing information would significantly change the product direction and cannot be safely handled with reasonable defaults. If a short request is reasonably inferable, call micro_app_plan with explicit assumptions.
 - Before the user approves the plan, do not write files, create tables, add columns, or claim development has started.
 - If the plan involves MagicBase schema changes, state that MagicBase schema tools will automatically maintain `.magicbase/migrations.json` and refresh the latest data model in `MICRO-APP.md` after success. The agent does not need separate file edits for Pending/Success/Failed migration records.
-- If the user requests plan changes, do not implement. Revise the plan and call plan again.
+- If the user requests plan changes, do not implement. Revise the plan and call micro_app_plan again.
 - If the user cancels or approval times out, do not continue implementation.
 
 Do not call when:
@@ -216,9 +222,11 @@ Plan content must be concrete enough for user approval:
 
     def build_pending_content(self, tool_call_id: str, tool_data: dict) -> str:
         title = (tool_data.get("plan") or {}).get("title", "Implementation plan")
-        return f"[PLAN:{tool_call_id}] Implementation plan \"{title}\" sent to user, waiting for approval."
+        return f'[PLAN:{tool_call_id}] Implementation plan "{title}" sent to user, waiting for approval.'
 
-    async def get_tool_detail(self, tool_context: ToolContext, result: ToolResult, arguments: dict = None) -> Optional[ToolDetail]:
+    async def get_tool_detail(
+        self, tool_context: ToolContext, result: ToolResult, arguments: dict = None
+    ) -> Optional[ToolDetail]:
         if not result or not result.extra_info:
             return None
 
@@ -266,7 +274,7 @@ def build_plan_result_builder(plan: Dict[str, Any], expires_at: int) -> ResultBu
         elif status == PLAN_STATUS_REVISION_REQUESTED:
             content = (
                 f'The user requested changes to the implementation plan "{title}". '
-                "Do not implement yet. Revise the plan according to the user's feedback and call plan again. "
+                "Do not implement yet. Revise the plan according to the user's feedback and call micro_app_plan again. "
                 f"User feedback: {response or '(no details provided)'}"
             )
         elif status == PLAN_STATUS_CANCELLED:
@@ -358,180 +366,3 @@ def parse_plan_response(answer_json: str) -> str:
         comment = parsed.get("comment") or parsed.get("feedback") or parsed.get("answer")
         return normalize_text(comment)
     return normalize_text(parsed)
-
-
-def normalize_text(value: Any) -> str:
-    if value is None:
-        return ""
-    if isinstance(value, str):
-        return value.strip()
-    return str(value).strip()
-
-
-def normalize_string_list(value: Any) -> List[str]:
-    if isinstance(value, str):
-        text = value.strip()
-        if not text:
-            return []
-
-        parsed = try_parse_json(text)
-        if parsed is not None and parsed is not value:
-            return normalize_string_list(parsed)
-
-        return [
-            item
-            for line in text.splitlines()
-            if (item := normalize_list_line(line))
-        ]
-
-    if not isinstance(value, list):
-        return []
-    return [text for item in value if (text := normalize_text(item))]
-
-
-def normalize_files(value: Any) -> List[Dict[str, str]]:
-    if isinstance(value, str):
-        text = value.strip()
-        if not text:
-            return []
-
-        parsed = try_parse_json(text)
-        if parsed is not None and parsed is not value:
-            return normalize_files(parsed)
-
-        structured = parse_structured_block_list(text)
-        if structured:
-            return [
-                {"path": normalize_text(item.get("path")), "purpose": normalize_text(item.get("purpose"))}
-                for item in structured
-                if normalize_text(item.get("path")) or normalize_text(item.get("purpose"))
-            ]
-
-        return [{"path": item, "purpose": ""} for item in normalize_string_list(text)]
-
-    if not isinstance(value, list):
-        return []
-
-    files: List[Dict[str, str]] = []
-    for item in value:
-        raw = to_plain_dict(item)
-        path = normalize_text(raw.get("path"))
-        purpose = normalize_text(raw.get("purpose"))
-        if path or purpose:
-            files.append({"path": path, "purpose": purpose})
-    return files
-
-
-def normalize_data_model(value: Any) -> List[Dict[str, Any]]:
-    if isinstance(value, str):
-        text = value.strip()
-        if not text:
-            return []
-
-        parsed = try_parse_json(text)
-        if parsed is not None and parsed is not value:
-            return normalize_data_model(parsed)
-
-        structured = parse_structured_block_list(text)
-        return [
-            {
-                "table_name": normalize_text(item.get("table_name") or item.get("tableName") or item.get("name")),
-                "purpose": normalize_text(item.get("purpose")),
-                "fields": normalize_string_list(item.get("fields")),
-            }
-            for item in structured
-            if (
-                normalize_text(item.get("table_name") or item.get("tableName") or item.get("name"))
-                or normalize_text(item.get("purpose"))
-                or normalize_string_list(item.get("fields"))
-            )
-        ]
-
-    if not isinstance(value, list):
-        return []
-
-    tables: List[Dict[str, Any]] = []
-    for item in value:
-        raw = to_plain_dict(item)
-        table_name = normalize_text(raw.get("table_name"))
-        purpose = normalize_text(raw.get("purpose"))
-        fields = normalize_string_list(raw.get("fields"))
-        if table_name or purpose or fields:
-            tables.append({"table_name": table_name, "purpose": purpose, "fields": fields})
-    return tables
-
-
-def to_plain_dict(value: Any) -> Dict[str, Any]:
-    if isinstance(value, dict):
-        return value
-    if isinstance(value, BaseModel):
-        return value.model_dump()
-    return {}
-
-
-def try_parse_json(text: str) -> Optional[Any]:
-    if not text or text[0] not in "[{":
-        return None
-    try:
-        return json.loads(text)
-    except json.JSONDecodeError:
-        return None
-
-
-def normalize_list_line(line: str) -> str:
-    text = line.strip()
-    if not text:
-        return ""
-    text = re.sub(r"^[-*]\s+", "", text)
-    text = re.sub(r"^\d+[.)、]\s*", "", text)
-    return text.strip()
-
-
-def parse_structured_block_list(text: str) -> List[Dict[str, Any]]:
-    items: List[Dict[str, Any]] = []
-    current: Dict[str, Any] = {}
-    last_key = ""
-
-    def flush_current() -> None:
-        nonlocal current, last_key
-        if current:
-            items.append(current)
-        current = {}
-        last_key = ""
-
-    for raw_line in text.splitlines():
-        stripped = raw_line.strip()
-        if not stripped:
-            continue
-
-        is_new_item = stripped.startswith("- ")
-        line = stripped[2:].strip() if is_new_item else stripped
-        if is_new_item and current and ":" in line:
-            flush_current()
-
-        if ":" in line:
-            key, raw_value = line.split(":", 1)
-            normalized_key = key.strip()
-            value = raw_value.strip()
-            if normalized_key:
-                if normalized_key == "fields":
-                    current[normalized_key] = normalize_string_list(value)
-                else:
-                    current[normalized_key] = value
-                last_key = normalized_key
-            continue
-
-        if not current:
-            current["path"] = normalize_list_line(line)
-            last_key = "path"
-        elif last_key:
-            previous = current.get(last_key)
-            addition = normalize_list_line(line)
-            if isinstance(previous, list):
-                if addition:
-                    previous.append(addition)
-            elif addition:
-                current[last_key] = f"{previous} {addition}".strip() if previous else addition
-
-    flush_current()
-    return items

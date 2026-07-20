@@ -201,7 +201,7 @@ export const ToolCall = observer(function ToolCall(props: ToolCallProps) {
 			</Suspense>
 		)
 	}
-	if (toolCall?.function?.name === "plan") {
+	if (toolCall?.function?.name === "micro_app_plan") {
 		return (
 			<PlanToolCall
 				toolData={toolData}
