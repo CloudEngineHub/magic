@@ -82,6 +82,27 @@ describe("MainInputContainer panel utils", () => {
 		expectPresetContentText(fields, "en_US", "Lighting: soft, Camera: close-up.")
 	})
 
+	it("uses an exact custom input value when it is not one of the predefined options", () => {
+		const fields: FieldItem[] = [
+			{
+				data_key: "pages",
+				label: { zh_CN: "页数", en_US: "Pages" },
+				current_value: "8",
+				options: [
+					{ value: "1-5", label: "1-5" },
+					{ value: "6-10", label: "6-10" },
+				],
+				custom_input: {
+					type: "number",
+					min: 1,
+				},
+			},
+		]
+
+		expectPresetContentText(fields, "zh_CN", "页数: 8。")
+		expectPresetContentText(fields, "en_US", "Pages: 8.")
+	})
+
 	it("skips fields with preset_content when current_value is undefined", () => {
 		const fields: FieldItem[] = [
 			{

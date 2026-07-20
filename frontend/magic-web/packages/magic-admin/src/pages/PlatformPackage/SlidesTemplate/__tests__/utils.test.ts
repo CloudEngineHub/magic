@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest"
 import { SlidesTemplate } from "../../../../types/slidesTemplate"
 import {
+	SLIDES_TEMPLATE_TAG_CODE_PATTERN,
+	SLIDES_TEMPLATE_TAG_GROUP_CODE_PATTERN,
 	buildSlidesTemplateCategorySaveParams,
 	buildSlidesTemplateSaveParams,
 	buildSlidesTemplateTagSaveParams,
@@ -135,6 +137,16 @@ describe("slides template page utils", () => {
 			status: SlidesTemplate.StatusMap.enabled,
 			sort: 0,
 		})
+	})
+
+	it("validates tag and tag-group code formats", () => {
+		expect(SLIDES_TEMPLATE_TAG_CODE_PATTERN.test("purpose-annual-report")).toBe(true)
+		expect(SLIDES_TEMPLATE_TAG_CODE_PATTERN.test("purpose_annual_report")).toBe(false)
+		expect(SLIDES_TEMPLATE_TAG_GROUP_CODE_PATTERN.test("purpose_group")).toBe(true)
+		expect(SLIDES_TEMPLATE_TAG_GROUP_CODE_PATTERN.test("audience_scene_group")).toBe(true)
+		expect(SLIDES_TEMPLATE_TAG_GROUP_CODE_PATTERN.test("audience-scene_group")).toBe(true)
+		expect(SLIDES_TEMPLATE_TAG_GROUP_CODE_PATTERN.test("audience_scene")).toBe(false)
+		expect(SLIDES_TEMPLATE_TAG_GROUP_CODE_PATTERN.test("audience__scene_group")).toBe(false)
 	})
 
 	it("converts switch checked state to template status", () => {

@@ -52,6 +52,8 @@ interface DetailProps {
 	hideTabBar?: boolean
 	/** When true, treats the file viewer as fullscreen without requiring URL params */
 	forceFullscreenMode?: boolean
+	/** 详情页全屏时允许 fixed 预览层脱离 Safari 的祖先裁剪边界 */
+	isFullscreen?: boolean
 	/** Overrides default footer visibility (mobile non-share shows footer by default) */
 	showFileFooter?: boolean
 }
@@ -103,6 +105,7 @@ const Detail = forwardRef<DetailRef, DetailProps>((props, ref) => {
 		showFileHeader,
 		hideTabBar,
 		forceFullscreenMode,
+		isFullscreen = false,
 		showFileFooter: showFileFooterProp,
 	} = props
 
@@ -169,7 +172,12 @@ const Detail = forwardRef<DetailRef, DetailProps>((props, ref) => {
 
 	// Return unified files mode with playback tab
 	return (
-		<div className={cn("relative flex h-full flex-col overflow-hidden rounded-lg")}>
+		<div
+			className={cn(
+				"relative flex h-full flex-col rounded-lg",
+				isFullscreen ? "overflow-visible" : "overflow-hidden",
+			)}
+		>
 			<FilesViewer
 				ref={filesViewerRef}
 				attachments={attachments}

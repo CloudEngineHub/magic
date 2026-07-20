@@ -12,6 +12,7 @@ from app.service.cli_manager import (
 )
 from app.service.cli_manager import filesystem as cli_filesystem
 from app.service.cli_manager import path_utils as cli_path_utils
+from app.service.cli_manager import validation as cli_validation
 from app.service.cli_manager.paths import CliManagerPathResolver
 from app.utils.async_file_utils import async_chmod
 
@@ -34,6 +35,32 @@ def _write_mock_command(command_path: Path, output: str = "ok") -> None:
     command_path.parent.mkdir(parents=True, exist_ok=True)
     command_path.write_text(f"#!/usr/bin/env bash\necho {output}\n", encoding="utf-8")
     command_path.chmod(0o755)
+
+
+@pytest.mark.asyncio
+async def test_apply_rejects_runtime_managed_cli(tmp_path, monkeypatch):
+    """验证运行时预置 CLI 不会进入用户持久化流程。"""
+    paths = _build_paths(tmp_path)
+    monkeypatch.setattr(
+        cli_validation,
+        "RUNTIME_MANAGED_CLI_COMMANDS",
+        frozenset({"mock-runtime-cli"}),
+    )
+
+    service = CliManagerService(paths=paths)
+    with pytest.raises(CliManagerError) as error:
+        await service.apply(
+            CliApplyRequest(
+                name="mock-runtime-cli",
+                mode="adopt",
+                commands=["mock-runtime-cli"],
+                confirmed=True,
+            )
+        )
+
+    assert error.value.code == "runtime_managed_cli"
+    assert error.value.context["management_scope"] == "runtime"
+    assert not paths.registry_file.exists()
 
 
 @pytest.mark.asyncio

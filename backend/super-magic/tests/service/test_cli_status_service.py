@@ -75,6 +75,7 @@ async def test_dws_probe_summarizes_authenticated_without_raw_identity_fields():
     assert status.has_horizon is True
     assert "DingTalk/钉钉" in status.horizon
     assert "read_skills(['dingtalk-cli'])" in status.horizon
+    assert "does not require cli-manager persistence" in status.horizon
     assert runner.calls == [("dws", "auth", "status")]
 
 
@@ -140,6 +141,7 @@ async def test_lark_probe_authenticated_summary_uses_identity_state_only():
     assert status.has_horizon is True
     assert "Lark/Feishu/飞书" in status.horizon
     assert "read_skills(['lark-cli'])" in status.horizon
+    assert "does not require cli-manager persistence" in status.horizon
     assert "mock-app" not in status.horizon
     assert "mock-open" not in status.horizon
     assert "Mock User" not in status.horizon
@@ -189,6 +191,7 @@ async def test_teamshare_probe_authenticated_summary_uses_status_only():
     assert status.has_horizon is True
     assert "Teamshare/天书" in status.horizon
     assert "read_skills(['teamshare-cli'])" in status.horizon
+    assert "does not require cli-manager persistence" in status.horizon
     assert "mock-token" not in status.horizon
     assert "mock-org" not in status.horizon
     assert "token" not in status.horizon.lower()

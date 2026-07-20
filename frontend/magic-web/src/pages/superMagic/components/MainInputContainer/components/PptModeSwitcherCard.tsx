@@ -1,5 +1,5 @@
-import { useState, type DragEvent, type MouseEvent } from "react"
-import { Trans, useTranslation } from "react-i18next"
+import { useRef, useState, type DragEvent, type MouseEvent } from "react"
+import { useTranslation } from "react-i18next"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/shadcn-ui/button"
 import type { ModeItem } from "@/pages/superMagic/pages/Workspace/types"
@@ -8,7 +8,9 @@ import pptSlide1 from "./assets/ppt-slide-1.png"
 import pptSlide2 from "./assets/ppt-slide-2.png"
 import pptSlide3 from "./assets/ppt-slide-3.png"
 import { useSlidesTemplateStatistics } from "@/pages/superMagic/hooks/useSlidesTemplateTotal"
-import { formatNumber } from "@/utils/format"
+import { useAnimatedNumberPulse } from "@/pages/superMagic/hooks/useAnimatedNumber"
+import { useElementVisibility } from "@/pages/superMagic/hooks/useElementVisibility"
+import { AnimatedNumberText } from "@/pages/superMagic/components/AnimatedNumberText"
 import {
 	SLIDES_TEMPLATE_RANDOM_DRAG_END_EVENT,
 	SLIDES_TEMPLATE_RANDOM_DRAG_START_EVENT,
@@ -18,6 +20,7 @@ import styles from "./PptModeSwitcherCard.module.css"
 
 // Local fallback preview slides shown behind the PPT crew pill.
 const PPT_PREVIEW_IMAGES = [pptSlide1, pptSlide2, pptSlide3] as const
+const DELIVERED_COUNT_MARKER = "__DELIVERED_COUNT__"
 
 interface PptModeSwitcherCardProps {
 	modeItem: ModeItem
@@ -37,11 +40,22 @@ export default function PptModeSwitcherCard({
 	const { t } = useTranslation("crew/market")
 	const [isHovered, setIsHovered] = useState(false)
 	const [isFocused, setIsFocused] = useState(false)
-	const slidesTemplateStatistics = useSlidesTemplateStatistics()
+	const cardRef = useRef<HTMLDivElement>(null)
+	const isVisible = useElementVisibility(cardRef)
+	const slidesTemplateStatistics = useSlidesTemplateStatistics({ enabled: isVisible })
 	const templateTotalUsageCount = slidesTemplateStatistics?.templateTotalUsageCount
+	const isUsageCountPulsing = useAnimatedNumberPulse(templateTotalUsageCount)
 	const isExpanded = isSelected || isHovered || isFocused
 	const pillAccentState = isHovered ? "hovered" : isSelected ? "selected" : "idle"
 	const modeName = modeItem.mode.name || t("detailDialog.emptyName")
+	const deliveredText = t("pptEmployee.delivered", { count: DELIVERED_COUNT_MARKER })
+	const deliveredMarkerIndex = deliveredText.indexOf(DELIVERED_COUNT_MARKER)
+	const deliveredPrefix =
+		deliveredMarkerIndex >= 0 ? deliveredText.slice(0, deliveredMarkerIndex).trim() : ""
+	const deliveredSuffix =
+		deliveredMarkerIndex >= 0
+			? deliveredText.slice(deliveredMarkerIndex + DELIVERED_COUNT_MARKER.length).trim()
+			: deliveredText
 
 	function stopPreviewClick(event: MouseEvent<HTMLButtonElement>) {
 		event.stopPropagation()
@@ -60,6 +74,7 @@ export default function PptModeSwitcherCard({
 
 	return (
 		<div
+			ref={cardRef}
 			className="relative flex h-10 shrink-0 items-end justify-center"
 			data-expanded={isExpanded}
 			data-testid="ppt-mode-switcher-card"
@@ -151,20 +166,36 @@ export default function PptModeSwitcherCard({
 						templateTotalUsageCount >= 0 && (
 							<span
 								className={cn(
-									"overflow-hidden text-[10px] leading-3 transition-[max-height,opacity,color] duration-300",
+									"inline-block origin-center text-[10px] tabular-nums leading-3 transition-[max-height,opacity,color,transform,filter] duration-1000 ease-out",
 									isSelected
 										? "text-background/70"
 										: "text-[#737373] group-hover:text-background/70",
-									isExpanded ? "max-h-3 opacity-100" : "max-h-0 opacity-0",
+									isExpanded
+										? "max-h-[1.3em] overflow-visible opacity-100"
+										: "max-h-0 overflow-hidden opacity-0",
+									isUsageCountPulsing &&
+										"scale-[1.04] text-[#ff6a1f] drop-shadow-[0_0_5px_rgba(255,106,31,0.35)]",
 								)}
 								data-testid="ppt-mode-switcher-delivered-count"
 							>
-								<Trans
-									i18nKey="pptEmployee.delivered"
-									ns="crew/market"
-									values={{ count: formatNumber(templateTotalUsageCount) }}
-									components={{ strong: <strong className="font-semibold" /> }}
-								/>
+								<span className="inline-flex h-[1.3em] items-center gap-1 leading-none">
+									{deliveredPrefix && (
+										<span className="inline-flex h-full items-center">
+											{deliveredPrefix}
+										</span>
+									)}
+									<strong className="inline-flex h-full items-center font-semibold">
+										<AnimatedNumberText
+											value={templateTotalUsageCount}
+											isEmphasized={isUsageCountPulsing}
+										/>
+									</strong>
+									{deliveredSuffix && (
+										<span className="inline-flex h-full items-center">
+											{deliveredSuffix}
+										</span>
+									)}
+								</span>
 							</span>
 						)}
 				</span>

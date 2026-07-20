@@ -393,7 +393,7 @@ class ImageGenerateFactory
         // 处理参考图片（用于图片编辑）
         $referenceImages = self::resolveReferenceImages($data, null, PHP_INT_MAX);
         if ($referenceImages !== null) {
-            $request->setReferenceImages($referenceImages);
+            $request->setReferImages($referenceImages);
         }
 
         return $request;

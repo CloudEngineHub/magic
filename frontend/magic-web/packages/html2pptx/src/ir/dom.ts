@@ -57,6 +57,8 @@ export interface ComputedStyleInfo {
 
 	// Layout
 	display: string
+	/** Whether the element subtree is skipped from rendering. */
+	contentVisibility?: string
 	position: string
 	opacity: string
 	visibility: string
@@ -76,6 +78,10 @@ export interface ComputedStyleInfo {
 
 	// Transform
 	transform: string
+	transformOrigin?: string
+	translate?: string
+	rotate?: string
+	scale?: string
 
 	// Filter
 	filter: string
@@ -111,6 +117,9 @@ export interface ElementNode {
 	layout: {
 		offsetWidth: number
 		offsetHeight: number
+		/** Floating-point border-box dimensions before CSS transforms. */
+		layoutWidth?: number
+		layoutHeight?: number
 	}
 	/** Computed styles */
 	style: ComputedStyleInfo
