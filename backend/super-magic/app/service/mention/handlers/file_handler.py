@@ -107,7 +107,7 @@ class FileHandler(BaseMentionHandler):
         file_path = mention.get("file_path", "") or ""
         file_url = mention.get("file_url", "")
 
-        if _is_temporary_workspace_path(original_file_path) and file_path not in self._temporary_file_paths:
+        if _is_temporary_workspace_path(file_path) and file_path not in self._temporary_file_paths:
             self._temporary_file_paths.append(file_path)
 
         context_lines = [f"{index}. [@file_path:{file_path}]"]
