@@ -203,16 +203,18 @@ export const ToolCall = observer(function ToolCall(props: ToolCallProps) {
 	}
 	if (toolCall?.function?.name === "micro_app_plan") {
 		return (
-			<MicroAppPlanToolCall
-				toolData={toolData}
-				loading={!toolResponse}
-				classNames={classNames}
-				selectedTopic={selectedTopic}
-				isShare={isShare}
-				onSelectDetail={onSelectDetail}
-				onMouseEnter={onMouseEnter}
-				onMouseLeave={onMouseLeave}
-			/>
+			<Suspense fallback={null}>
+				<MicroAppPlanToolCall
+					toolData={toolData}
+					loading={!toolResponse}
+					classNames={classNames}
+					selectedTopic={selectedTopic}
+					isShare={isShare}
+					onSelectDetail={onSelectDetail}
+					onMouseEnter={onMouseEnter}
+					onMouseLeave={onMouseLeave}
+				/>
+			</Suspense>
 		)
 	}
 	if (toolCall?.function?.name === "write_file") {
