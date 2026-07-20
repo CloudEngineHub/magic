@@ -22,7 +22,7 @@
 	"detail": "詳細",
 	"file": {
 		"maxSize": "単一ファイルの上限は{{maxSize}}MBです",
-		"onlySupportUploadImage": "png/jpg/jpeg/gif/webp形式の画像のみアップロード可能です",
+		"onlySupportUploadImage": "png/jpg/jpeg/svg/gif/webp形式の画像のみアップロード可能です",
 		"uploadFail": "ファイルのアップロードに失敗しました。もう一度お試しください"
 	},
 	"filter": "フィルター",

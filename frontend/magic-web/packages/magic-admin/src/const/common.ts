@@ -1,4 +1,4 @@
-export const IMAGE_TYPE = ["image/jpg", "image/png", "image/jpeg"]
+export const IMAGE_TYPE = ["image/jpg", "image/png", "image/jpeg", "image/svg+xml"]
 
 /** 权限key映射 */
 export const PERMISSION_KEY_MAP: Record<string, string> = {

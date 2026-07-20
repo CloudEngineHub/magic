@@ -22,7 +22,7 @@
 	"detail": "Detail",
 	"file": {
 		"maxSize": "Batas ukuran file tunggal adalah {{maxSize}}MB",
-		"onlySupportUploadImage": "Hanya mendukung unggahan gambar format png/jpg/jpeg/gif/webp",
+		"onlySupportUploadImage": "Hanya mendukung unggahan gambar format png/jpg/jpeg/svg/gif/webp",
 		"uploadFail": "Gagal mengunggah file, silakan coba lagi"
 	},
 	"filter": "Filter",
