@@ -145,7 +145,7 @@ export const AddGroupModal = memo(
 			const values = await form.validateFields()
 
 			const icon = isModel
-				? values.icon.startsWith("https")
+				? values.icon?.startsWith("https")
 					? values.icon
 					: icons.find((i) => i.key === values.icon)?.url
 				: values.icon
