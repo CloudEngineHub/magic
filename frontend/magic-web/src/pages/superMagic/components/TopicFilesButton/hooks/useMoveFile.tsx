@@ -21,6 +21,10 @@ import {
 	getCanvasProjectOperationImpact,
 	type CanvasProjectOperationRisk,
 } from "../utils/canvasProjectOperationRisk"
+import {
+	mergeHtmlStaticDependencyFileIds,
+	resolveSingleHtmlStaticDependencies,
+} from "@/pages/superMagic/utils/htmlStaticDependencies"
 
 interface UseMoveFileOptions {
 	projectId?: string
@@ -382,20 +386,37 @@ export function useMoveFile(options: UseMoveFileOptions = {}) {
 		}) => {
 			if (fileIds.length === 0 || !projectId) return
 
+			let effectiveFileIds = fileIds
+			try {
+				const { dependencyTransferFileIds } = await resolveSingleHtmlStaticDependencies({
+					fileIds,
+					attachments,
+					attachmentIndex,
+				})
+				effectiveFileIds = mergeHtmlStaticDependencyFileIds(
+					fileIds,
+					dependencyTransferFileIds,
+					true,
+				)
+			} catch (error) {
+				// Keep the legacy move usable if the optional browser-side dependency read fails.
+				console.error("Failed to resolve HTML static dependencies before moving:", error)
+			}
+
 			const moveTaskId = beginMoveTask()
 
 			try {
 				const data =
-					fileIds.length === 1
+					effectiveFileIds.length === 1
 						? await SuperMagicApi.moveFile({
-								file_id: fileIds[0],
+								file_id: effectiveFileIds[0],
 								target_parent_id: targetParentId,
 								project_id: projectId,
 								target_project_id: targetProjectId,
 								keep_both_file_ids: keepBothFileIds,
 							})
 						: await SuperMagicApi.moveFiles({
-								file_ids: fileIds,
+								file_ids: effectiveFileIds,
 								project_id: projectId,
 								target_project_id: targetProjectId,
 								target_parent_id: targetParentId,
@@ -464,7 +485,15 @@ export function useMoveFile(options: UseMoveFileOptions = {}) {
 				finishMoveTask(moveTaskId)
 			}
 		},
-		[beginMoveTask, finishMoveTask, hideMoveSelector, onMoveSuccess, t],
+		[
+			attachmentIndex,
+			attachments,
+			beginMoveTask,
+			finishMoveTask,
+			hideMoveSelector,
+			onMoveSuccess,
+			t,
+		],
 	)
 
 	const batchMoveFilesWithDuplicateCheck = useCallback(
@@ -646,6 +675,34 @@ export function useMoveFile(options: UseMoveFileOptions = {}) {
 
 			const executeSingleMove = async () => {
 				if (!currentMoveItem?.file_id) return
+
+				if (!handleMoveFile && projectId) {
+					try {
+						const { dependencyTransferFileIds } =
+							await resolveSingleHtmlStaticDependencies({
+								fileIds: [currentMoveItem.file_id],
+								attachments,
+								attachmentIndex,
+							})
+						if (dependencyTransferFileIds.length > 0) {
+							await batchMoveFiles({
+								fileIds: mergeHtmlStaticDependencyFileIds(
+									[currentMoveItem.file_id],
+									dependencyTransferFileIds,
+									true,
+								),
+								projectId,
+								targetParentId,
+							})
+							return
+						}
+					} catch (error) {
+						console.error(
+							"Failed to resolve HTML static dependencies before moving:",
+							error,
+						)
+					}
+				}
 
 				try {
 					setIsMoving(true)

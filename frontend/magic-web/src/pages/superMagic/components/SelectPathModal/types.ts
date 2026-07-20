@@ -86,6 +86,8 @@ export interface CrossProjectFileOperationModalProps {
 		targetPath: AttachmentItem[]
 		targetAttachments: AttachmentItem[]
 		sourceAttachments: AttachmentItem[]
+		includeHtmlDependencies?: boolean
+		htmlDependencyFileIds?: string[]
 	}) => void
 }
 
