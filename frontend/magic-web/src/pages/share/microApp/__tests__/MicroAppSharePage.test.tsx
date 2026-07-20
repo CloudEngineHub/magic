@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react"
-import type { ReactNode } from "react"
+import { useState, type ReactNode } from "react"
 import { MemoryRouter, Route, Routes } from "react-router"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { RoutePath } from "@/constants/routes"
@@ -30,7 +30,13 @@ interface TestOrganizationMeta {
 }
 
 interface TestPreviewFile {
+	file_id?: string
 	file_name?: string
+}
+
+interface TestHtmlPreviewProps {
+	data: TestPreviewFile
+	openFileTab?: (file: TestPreviewFile) => void
 }
 
 interface TestMagicDropdownProps {
@@ -173,9 +179,28 @@ vi.mock("@/pages/share/components", () => ({
 }))
 
 vi.mock("@/pages/superMagic/components/Detail/contents/HTML", () => ({
-	default: ({ data }: { data: TestPreviewFile }) => (
-		<div data-testid="mock-html-preview">{data.file_name}</div>
-	),
+	default: function MockHtmlPreview({ data, openFileTab }: TestHtmlPreviewProps) {
+		const [mountedFileId] = useState(data.file_id)
+
+		return (
+			<div data-testid="mock-html-preview">
+				<span>{data.file_name}</span>
+				<span data-testid="mock-mounted-file-id">{mountedFileId}</span>
+				<button
+					type="button"
+					onClick={() => openFileTab?.({ file_id: "file-2", file_name: "admin.html" })}
+				>
+					navigate-admin
+				</button>
+				<button
+					type="button"
+					onClick={() => openFileTab?.({ file_id: "file-1", file_name: "index.html" })}
+				>
+					navigate-index
+				</button>
+			</div>
+		)
+	},
 }))
 
 function renderPage(path = "/micro-app/resource-1") {
@@ -268,6 +293,66 @@ describe("MicroAppSharePage", () => {
 		})
 
 		expect(await screen.findByTestId("mock-html-preview")).toHaveTextContent("index.html")
+	})
+
+	it("replaces the current preview across repeated html navigation", async () => {
+		mocks.getShareResourceFiles.mockResolvedValue({
+			tree: [
+				{
+					file_id: "app-json-1",
+					file_name: "app.json",
+					file_extension: "json",
+					relative_file_path: "app.json",
+				},
+				{
+					file_id: "file-1",
+					file_name: "index.html",
+					file_extension: "html",
+					relative_file_path: "index.html",
+				},
+				{
+					file_id: "file-2",
+					file_name: "admin.html",
+					file_extension: "html",
+					relative_file_path: "admin.html",
+				},
+			],
+			list: [
+				{
+					file_id: "app-json-1",
+					file_name: "app.json",
+					file_extension: "json",
+					relative_file_path: "app.json",
+				},
+				{
+					file_id: "file-1",
+					file_name: "index.html",
+					file_extension: "html",
+					relative_file_path: "index.html",
+				},
+				{
+					file_id: "file-2",
+					file_name: "admin.html",
+					file_extension: "html",
+					relative_file_path: "admin.html",
+				},
+			],
+		})
+
+		renderPage()
+
+		expect(await screen.findByTestId("mock-html-preview")).toHaveTextContent("index.html")
+		expect(screen.getByTestId("mock-mounted-file-id")).toHaveTextContent("file-1")
+
+		fireEvent.click(screen.getByRole("button", { name: "navigate-admin" }))
+
+		expect(screen.getByTestId("mock-html-preview")).toHaveTextContent("admin.html")
+		expect(screen.getByTestId("mock-mounted-file-id")).toHaveTextContent("file-2")
+
+		fireEvent.click(screen.getByRole("button", { name: "navigate-index" }))
+
+		expect(screen.getByTestId("mock-html-preview")).toHaveTextContent("index.html")
+		expect(screen.getByTestId("mock-mounted-file-id")).toHaveTextContent("file-1")
 	})
 
 	it("does not render workspace file chrome around the published micro app", async () => {

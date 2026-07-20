@@ -229,6 +229,7 @@ export default function MicroAppSharePage() {
 	const { t } = useTranslation("super")
 	const { resourceId = "" } = useParams<{ resourceId: string }>()
 	const [previewMode, setPreviewMode] = useState<MicroAppPreviewMode>("desktop")
+	const [activeFileId, setActiveFileId] = useState<string | null>(null)
 	const {
 		shareData,
 		shareMeta,
@@ -247,7 +248,14 @@ export default function MicroAppSharePage() {
 		reload,
 	} = useMicroAppShareData({ resourceId })
 
-	const entryFile = useMemo(() => resolveDefaultHtmlEntry(attachmentList), [attachmentList])
+	const defaultEntryFile = useMemo(
+		() => resolveDefaultHtmlEntry(attachmentList),
+		[attachmentList],
+	)
+	const previewFile = useMemo(
+		() => attachmentList.find((item) => item.file_id === activeFileId) || defaultEntryFile,
+		[activeFileId, attachmentList, defaultEntryFile],
+	)
 
 	const selectedProject = useMemo<ProjectListItem | null>(
 		() =>
@@ -268,7 +276,11 @@ export default function MicroAppSharePage() {
 		},
 		[setError, setVerifiedPassword],
 	)
-	const handleOpenFileTab = useCallback(() => undefined, [])
+	const handleOpenFileTab = useCallback((fileItem: AttachmentItem) => {
+		if (fileItem.file_id) {
+			setActiveFileId(fileItem.file_id)
+		}
+	}, [])
 
 	if (emptyStateInfo) {
 		return (
@@ -300,7 +312,7 @@ export default function MicroAppSharePage() {
 					</div>
 				) : null}
 
-				{isNeedPassword && !shareData && !entryFile && !error && !loading ? (
+				{isNeedPassword && !shareData && !previewFile && !error && !loading ? (
 					<PasswordVerification
 						resourceId={resourceId}
 						initialPassword={passwordFromUrl}
@@ -323,15 +335,16 @@ export default function MicroAppSharePage() {
 					/>
 				) : null}
 
-				{!loading && !error && shareData && !entryFile ? <MicroAppShareEmpty /> : null}
+				{!loading && !error && shareData && !previewFile ? <MicroAppShareEmpty /> : null}
 
-				{!loading && !error && entryFile ? (
+				{!loading && !error && previewFile ? (
 					<div
 						className="h-full w-full overflow-hidden bg-background"
 						data-testid="micro-app-share-preview"
 					>
 						<HtmlPreviewContent
-							data={buildPreviewFile(entryFile)}
+							key={previewFile.file_id || previewFile.relative_file_path}
+							data={buildPreviewFile(previewFile)}
 							attachments={attachmentsTree}
 							attachmentList={attachmentList}
 							allowEdit={false}
@@ -341,7 +354,7 @@ export default function MicroAppSharePage() {
 							showFooter={false}
 							viewMode={previewMode}
 							onViewModeChange={setPreviewMode}
-							activeFileId={entryFile.file_id}
+							activeFileId={previewFile.file_id}
 							projectId={shareMeta.projectId}
 							openFileTab={handleOpenFileTab}
 							className="h-full"
