@@ -537,85 +537,69 @@ class SizeManagerTest extends TestCase
     }
 
     /**
-     * 测试 Qwen Image Edit Plus / qwen-image-2.0 / qwen-image-2.0-pro 等模型
-     * 该模型配置了 total_pixels_range [262144, 4194304]，验证同比例换算逻辑.
+     * 测试 Qwen 官方推荐尺寸配置.
      */
-    public function testQwenImageEditPlusModel()
+    public function testQwenOfficialRecommendedSizes()
     {
-        $pixelMin = 262144;
-        $pixelMax = 4194304;
-
-        // 以 qwen-image-2.0 作为代表 model_version
-        $modelVersion = 'qwen-image-2.0';
-        $modelId = null;
-
-        // 测试用例：[输入 size, 期望宽, 期望高, 说明]
-        $testCases = [
-            // 比例格式：基准 1024 换算后，P 均在范围内，直接返回
-            ['1:1', '1024', '1024', '1:1 -> 1024x1024，P=1048576 在范围内'],
-            ['3:4', '768', '1024', '3:4 -> 768x1024，P=786432 在范围内'],
-            ['4:3', '1024', '768', '4:3 -> 1024x768，P=786432 在范围内'],
-            ['9:16', '576', '1024', '9:16 -> 576x1024，P=589824 在范围内'],
-            ['16:9', '1024', '576', '16:9 -> 1024x576，P=589824 在范围内'],
-            ['21:9', '1024', '438', '21:9 -> 1024x438，P=448512 在范围内'],
-            // 标准格式：配置中的值均在范围内
-            ['1536x1536', '1536', '1536', '1536x1536，P=2359296 在范围内'],
-            ['1024x1536', '1024', '1536', '1024x1536，P=1572864 在范围内'],
-            ['1536x1024', '1536', '1024', '1536x1024，P=1572864 在范围内'],
-            ['1080x1440', '1080', '1440', '1080x1440，P=1555200 在范围内'],
-            ['1440x1080', '1440', '1080', '1440x1080，P=1555200 在范围内'],
-            ['1080x1920', '1080', '1920', '1080x1920，P=2073600 在范围内'],
-            ['1920x1080', '1920', '1080', '1920x1080，P=2073600 在范围内'],
-            ['2048x872', '2048', '872', '2048x872，P=1785856 在范围内'],
-            // 其他在范围内的标准格式
-            ['1024x1024', '1024', '1024', '1024x1024 在范围内'],
-            ['1280x720', '1280', '720', '1280x720 在范围内'],
-            // 小尺寸：P < min，放大
-            ['1x1', '512', '512', '1x1，P=1<min，放大到 512x512'],
-            ['500x500', '512', '512', '500x500，P=250000<min，放大到 512x512'],
-            // 大尺寸：P > max，缩小
-            ['10000x10000', '2048', '2048', '10000x10000，P>max，缩小到 2048x2048'],
-            ['3000x2000', '2508', '1672', '3000x2000，P=6000000>max，缩小'],
-            ['2000x3000', '1672', '2508', '2000x3000，P=6000000>max，缩小'],
-            // 乘号格式
-            ['1328*1328', '1328', '1328', '1328*1328，P=1763584 在范围内'],
-            // k 格式
-            ['1k', '1024', '1024', '1k=1024x1024，P=1048576 在范围内'],
-            ['2k', '2048', '2048', '2k=2048x2048，P=4194304 在范围内'],
-            // 无效格式 -> 1024x1024，P 在范围内
-            ['invalid', '1024', '1024', '无效格式，默认 1024x1024'],
-            ['', '1024', '1024', '空字符串，默认 1024x1024'],
+        $expectedSizesByModelVersion = [
+            'qwen-image-plus' => [
+                '1:1' => '1328x1328',
+                '3:4' => '1104x1472',
+                '4:3' => '1472x1104',
+                '9:16' => '928x1664',
+                '16:9' => '1664x928',
+            ],
+            'qwen-image-edit-plus' => [
+                '1:1' => '1536x1536',
+                '2:3' => '1024x1536',
+                '3:2' => '1536x1024',
+                '3:4' => '1080x1440',
+                '4:3' => '1440x1080',
+                '9:16' => '1080x1920',
+                '16:9' => '1920x1080',
+                '21:9' => '2048x872',
+            ],
+            'qwen-image-edit-max' => [
+                '1:1' => '1536x1536',
+                '2:3' => '1024x1536',
+                '3:2' => '1536x1024',
+                '3:4' => '1080x1440',
+                '4:3' => '1440x1080',
+                '9:16' => '1080x1920',
+                '16:9' => '1920x1080',
+                '21:9' => '2048x872',
+            ],
+            'qwen-image-2.0' => [
+                '1:1' => '2048x2048',
+                '3:4' => '1728x2368',
+                '4:3' => '2368x1728',
+                '9:16' => '1536x2688',
+                '16:9' => '2688x1536',
+            ],
+            'qwen-image-2.0-pro' => [
+                '1:1' => '2048x2048',
+                '3:4' => '1728x2368',
+                '4:3' => '2368x1728',
+                '9:16' => '1536x2688',
+                '16:9' => '2688x1536',
+            ],
         ];
 
-        foreach ($testCases as [$inputSize, $expectedW, $expectedH, $description]) {
-            $size = SizeManager::getSizeFromConfig($inputSize, $modelVersion, $modelId);
-            $this->assertEquals($expectedW, $size[0], "Width mismatch for input: {$inputSize}. {$description}");
-            $this->assertEquals($expectedH, $size[1], "Height mismatch for input: {$inputSize}. {$description}");
+        foreach ($expectedSizesByModelVersion as $modelVersion => $expectedSizes) {
+            $config = SizeManager::matchConfig($modelVersion, null);
+            $this->assertNotNull($config, "model_version={$modelVersion} should match config");
+            $this->assertArrayNotHasKey('total_pixels_range', $config, "model_version={$modelVersion} should use official recommended sizes directly");
+            $this->assertSame($expectedSizes, array_column($config['sizes'], 'value', 'label'));
 
-            $pixels = (int) $size[0] * (int) $size[1];
-            $this->assertGreaterThanOrEqual($pixelMin, $pixels, "Pixels {$pixels} below min for input: {$inputSize}");
-            $this->assertLessThanOrEqual($pixelMax, $pixels, "Pixels {$pixels} above max for input: {$inputSize}");
-        }
+            foreach ($expectedSizes as $label => $value) {
+                [$expectedWidth, $expectedHeight] = explode('x', $value);
 
-        // 验证其他 model_version 命中同一配置
-        foreach (['qwen-image-2.0-pro', 'qwen-image-edit-plus', 'qwen-image-edit-max', 'qwen-image-plus'] as $mv) {
-            $size = SizeManager::getSizeFromConfig('1536x1536', $mv, null);
-            $this->assertEquals('1536', $size[0], "model_version={$mv} should resolve 1536x1536");
-            $this->assertEquals('1536', $size[1], "model_version={$mv} should resolve 1536x1536");
-        }
+                $size = SizeManager::getSizeFromConfig($label, $modelVersion, null);
+                $this->assertSame([$expectedWidth, $expectedHeight], $size, "model_version={$modelVersion} should resolve label {$label}");
 
-        // 带空格
-        $size = SizeManager::getSizeFromConfig(' 4:3 ', $modelVersion, $modelId);
-        $this->assertEquals('1024', $size[0]);
-        $this->assertEquals('768', $size[1]);
-
-        // 验证更多输入的总像素均在合法范围内
-        $additionalInputs = ['100:1', '1:100', '3000x3000', '2:3', '3:2'];
-        foreach ($additionalInputs as $inputSize) {
-            $size = SizeManager::getSizeFromConfig($inputSize, $modelVersion, $modelId);
-            $pixels = (int) $size[0] * (int) $size[1];
-            $this->assertGreaterThanOrEqual($pixelMin, $pixels, "Pixels {$pixels} below min for input: {$inputSize}");
-            $this->assertLessThanOrEqual($pixelMax, $pixels, "Pixels {$pixels} above max for input: {$inputSize}");
+                $size = SizeManager::getSizeFromConfig($value, $modelVersion, null);
+                $this->assertSame([$expectedWidth, $expectedHeight], $size, "model_version={$modelVersion} should resolve value {$value}");
+            }
         }
     }
 
