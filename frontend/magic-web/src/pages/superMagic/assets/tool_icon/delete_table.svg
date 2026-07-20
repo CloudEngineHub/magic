@@ -1,0 +1,13 @@
+<svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+<rect width="20" height="20" rx="4" fill="url(#delete_table_bg)"/>
+<rect x="4.5" y="5" width="9" height="9.5" rx="1.25" stroke="white"/>
+<path d="M4.5 8H13.5M8.75 5V14.5" stroke="white"/>
+<circle cx="14" cy="13.5" r="2.75" fill="#D6294E" stroke="white"/>
+<path d="M12.65 12.75H15.35M13.15 12.75L13.4 14.8H14.6L14.85 12.75M13.5 12.1H14.5" stroke="white" stroke-linecap="round" stroke-linejoin="round"/>
+<defs>
+<linearGradient id="delete_table_bg" x1="1" y1="1" x2="19" y2="19" gradientUnits="userSpaceOnUse">
+<stop stop-color="#FF6A78"/>
+<stop offset="1" stop-color="#D6294E"/>
+</linearGradient>
+</defs>
+</svg>

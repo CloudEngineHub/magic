@@ -3,6 +3,7 @@ from unittest.mock import patch
 import pytest
 from pydantic import ValidationError
 
+from app.i18n import i18n
 from app.infrastructure.sdk.magic_service.api.magicbase_api import MagicBaseApi
 from app.infrastructure.sdk.magic_service.parameter import (
     CreateMagicBaseColumnParameter,
@@ -17,10 +18,16 @@ from app.infrastructure.sdk.magic_service.parameter import (
 from app.infrastructure.sdk.magic_service.result import MagicBaseTableResult, MagicBaseTablesResult
 from app.tools.magicbase_tools import (
     CreateMagicbaseTableParams,
+    CreateMagicColumn,
     CreateMagicTable,
+    DeleteMagicColumn,
+    DeleteMagicTable,
+    GetMagicTable,
     MagicbaseColumnDefinition,
     QueryMagicbaseTablesParams,
     QueryMagicTables,
+    UpdateMagicColumn,
+    UpdateMagicTablePermissions,
 )
 
 
@@ -32,6 +39,39 @@ class RecordingMagicBaseApi(MagicBaseApi):
     async def request_by_parameter_async(self, parameter, method: str, endpoint_path: str):
         self.call = (parameter, method, endpoint_path)
         return self.response
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("tool_class", "tool_name", "zh_action", "en_action"),
+    [
+        (QueryMagicTables, "query_magicbase_tables", "查询数据表", "Query tables"),
+        (GetMagicTable, "get_magicbase_table", "查看数据表", "View table"),
+        (CreateMagicTable, "create_magicbase_table", "创建数据表", "Create table"),
+        (CreateMagicColumn, "create_magicbase_column", "创建字段", "Create field"),
+        (
+            UpdateMagicTablePermissions,
+            "update_magicbase_table_permissions",
+            "更新数据表权限",
+            "Update table permissions",
+        ),
+        (DeleteMagicTable, "delete_magicbase_table", "删除数据表", "Delete table"),
+        (UpdateMagicColumn, "update_magicbase_column", "更新字段", "Update field"),
+        (DeleteMagicColumn, "delete_magicbase_column", "删除字段", "Delete field"),
+    ],
+)
+async def test_magicbase_tool_actions_are_localized(tool_class, tool_name, zh_action, en_action):
+    tool = tool_class()
+    try:
+        i18n.set_language("zh_CN")
+        zh = await tool.get_before_tool_call_friendly_action_and_remark(tool_name, None, {})
+        assert zh["action"] == zh_action
+
+        i18n.set_language("en_US")
+        en = await tool.get_before_tool_call_friendly_action_and_remark(tool_name, None, {})
+        assert en["action"] == en_action
+    finally:
+        i18n.reset_language()
 
 
 @pytest.mark.asyncio
