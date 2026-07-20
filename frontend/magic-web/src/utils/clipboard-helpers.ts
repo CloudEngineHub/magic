@@ -134,21 +134,46 @@ export const clipboard = {
 
 /** 纯文本 execCommand 降级方案 */
 function fallbackWriteText(text: string): void {
-	const textarea = document.createElement("textarea")
-	textarea.value = text
-	textarea.style.cssText = "position:fixed;top:0;left:0;opacity:0;pointer-events:none"
-	textarea.setAttribute("readonly", "")
-	document.body.appendChild(textarea)
+	// Use the contentEditable selection path that is supported by older DingTalk WebViews.
+	const container = document.createElement("div")
+	container.contentEditable = "true"
+	container.textContent = text
+	container.style.cssText =
+		"position:fixed;top:-9999px;left:-9999px;opacity:0;pointer-events:none;width:1px;height:1px;white-space:pre-wrap"
+	document.body.appendChild(container)
+	let selection: Selection | null = null
+
+	let copyHandled = false
+	const handleCopy = (event: ClipboardEvent) => {
+		if (!event.clipboardData) return
+
+		try {
+			event.clipboardData.setData("text/plain", text)
+			event.preventDefault()
+			event.stopPropagation()
+			copyHandled = true
+		} catch {
+			// Preserve the browser's default copy behavior when custom data is unavailable.
+		}
+	}
+
 	try {
-		textarea.focus()
-		textarea.select()
-		textarea.setSelectionRange(0, text.length)
+		// Focus before creating the selection so older WebViews do not reset the range.
+		container.focus()
+		const range = document.createRange()
+		range.selectNodeContents(container)
+		selection = window.getSelection()
+		selection?.removeAllRanges()
+		selection?.addRange(range)
+		document.addEventListener("copy", handleCopy)
 		const success = document.execCommand("copy")
-		if (!success) {
+		if (!success && !copyHandled) {
 			throw new Error("Clipboard text fallback failed: execCommand returned false")
 		}
 	} finally {
-		document.body.removeChild(textarea)
+		document.removeEventListener("copy", handleCopy)
+		selection?.removeAllRanges()
+		document.body.removeChild(container)
 	}
 }
 
